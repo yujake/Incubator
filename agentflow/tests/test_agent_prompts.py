@@ -2371,7 +2371,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   G 27d436f7→1994799a。
 # 十一格不是手抄：口径只取判据文件自己的 `_surface_digest`
 # （`temp/_p258_freeze_digests.py` 导入它并先 `import conftest` 钉住环境）现算。
-_FROZEN_PROMPT_VERSION = "p263"
+_FROZEN_PROMPT_VERSION = "p264"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2616,17 +2616,17 @@ _FROZEN_PROMPT_VERSION = "p263"
 #: 十一格不是手抄：`temp/_recompute_digests.py`（导入本文件的 `_surface_digest`，
 #: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "0471e545a07a7d7766049529003ed4b4079702bb76dfb37de761c43c4e992b22",
-    "B": "9215e02bce06c4f157ea4465610183d25b133b86abe4119ca75b52e693cb515b",
-    "C": "a0c27ad39738ffda167d91fe92e0a559f5d63902ba9e160963426beace748837",
-    "D": "daaa8bdf4c407a4321bacfab20d5c6908abbcc5e84dbe4d7527b3681add15356",
-    "E": "d3d10bf58534d4f4c18dea44547ca2a684c63338c57b871af6f3d14e9b5fec36",
-    "F": "df80126bb8da4691248e8c46fa860a0b9ba6a217c57e8c6ab73fb0de12b07c93",
-    "G": "31cc8d96efd7749015b521b34fcc8212b5df6351d02533fd0c3547c2561efaaa",
-    "H": "a1302b267d928ebc004cd0d5fa77814a662c7798b8cca7c9a5537c1517018d9b",
-    "L": "b54e3b2b02d2578a7b87429634f87c00834d45c8b38a557403b5052fe749836d",
-    "M": "63abea4f5c95ad5bf4f9258c164130a8966f4a62d2163c028ed4e01b2a2e5ce5",
-    "V": "5a5b6c017cc1c60f68dbb25e4ff3d919837d5d1081761738cefbcee474d750f9",
+    "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
+    "B": "d091cd6f366dad092f1b6831066e896b292670845d38638d89d18150f16eb239",
+    "C": "987c39476674f2a479ca7f5e26e6be0e05629c042639ca7bbc2acc78a39112c4",
+    "D": "25b054a3cc08dfc4fd2cb087d91065fd61a9ac66848da6c16a716ae48cb249e8",
+    "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",
+    "F": "af4916cc7319d8de8f382d6257a356d847dd837a52905be76118cb4fecb07e9e",
+    "G": "e851e09f881160357fc567cd31c8a72fc8dd8205d4e968ca5519da6c6fc31634",
+    "H": "18f91c2ed07ee4642e4fc7ea5fe7138b70d623b289bcac8aa844cda1f60b146a",
+    "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",
+    "M": "d6b1b82f6456816b78577c9f3daf05b02643b4119f67cfcf9cbeecacde7148d4",
+    "V": "0d8852bbfa1e08b51076d599c87c1ced149d5e1a19447009fc40457f936d6aa5",
 }
 
 

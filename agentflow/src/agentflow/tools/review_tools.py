@@ -2371,7 +2371,7 @@ def scan_text_integrity(root: Any, paths: Any, *, limit: Any = None) -> dict:
 
 @tool(
     "review.scan_document",
-    "对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。",
+    "全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。",
     {
            "type": "object",
            "properties": {
@@ -2438,7 +2438,7 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
 @tool(
     "review.review_document",
     (
-            "审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence）并更新文档状态；只写 review_findings 与 documents.status，不改 claims。"
+            "审一份稿件：机械发现落成 ReviewFinding（带 evidence）并更新文档状态；只写 review_findings 与 documents.status，不改 claims。"
             ),
     {
            "type": "object",
@@ -2471,7 +2471,7 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
 @tool(
     "review.verify_fixes",
     (
-            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未解决项。"
+            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未决项。"
             ),
     {
            "type": "object",
@@ -2569,7 +2569,7 @@ def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
 @tool(
     "review.record_finding",
     (
-            "把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的那类用它；`evidence` 必填。"
+            "把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的用它；`evidence` 必填。"
             ),
     {
            "type": "object",

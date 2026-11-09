@@ -230,8 +230,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                      "或 B 自己改写后的 `reports/b-proof-<命题号>.md`；"
                                      "只给 `proof_text` / 内联 `proofs` 不算交了稿。"
                                      # 2026-11-08（业主三条裁定）：D 只递指针。
-                                     "给的是**工作区相对路径**（`reports/…` / `notes/…`）"
-                                     "而 `statement_full` 留空时，这一笔按「手稿路径收录」："
+                                     "给的是**工作区相对路径**而 `statement_full` 留空时，这一笔按"
+                                     "「手稿路径收录」—— **这条指针支只收 `reports/` 下的规范名**："
+                                     "`reports/f-proof-…` / `reports/b-proof-…` / `reports/e-proof-…` / "
+                                     "`reports/e-num-…`；`notes/…` 是 `legacy` 档（目录不是 `reports/`）⇒ "
+                                     "受控拒 `manuscript_legacy_name`，要让 B 收它得走 B 自己带 "
+                                     "`statement_full` 的自登记支、并由它改写成 `reports/b-proof-…`。"
                                      "命题取 `## 命题`、证明取 `## 证明`、`kind` 取稿头"
                                      "`- 证据种类：`、`evidence_kind` 按族定（e-proof ⇒ proof、"
                                      "e-num ⇒ cross_check、F ⇒ heuristic）—— 调用方不许另传"
@@ -532,6 +536,18 @@ SPEC = AgentSpec(
             "「只递指针」）：`statement_full` 留空即可 —— 命题取稿的 `## 命题`，证明取稿的 "
             "`## 证明`，依赖面取稿的 `## 依赖`；不要求 D 另传正文，也不把正文抄进参数"
             "（D 传正文会被受控拒 `d_gives_manuscript_pointers_only`）。",
+            # 2026-11-09（提示词-工具面一致性审计 L2-3）：`## 证明` 的三态此前一个字都不在
+            # 题面里；模型只能靠一次受控拒（「缺节」/「空节」）才学会。
+            "**`## 证明` 那一节按三态读**：`present`（有这一节，可能为空）/ `absent`（没有这一节）/ "
+            "`unreadable`（文件读不出来）。**缺节不等于「证明为空」**，也不许拿整份正文或 "
+            "`## 依赖` 那一段顶替 —— 那一档按「稿不完整」受控拒。",
+            # 2026-11-09（提示词-工具面一致性审计 L2-4）：族名早就教了，五档读数没教。
+            "**手稿名是五档读数，不是「像不像手稿」**（`manuscriptfamily` 的 `classify_manuscript`）："
+            "`reports/` 下的 `f-proof-` / `b-proof-` / `e-proof-` / `e-num-` 才是 `family`；"
+            "同一个名字换到 `notes/` 或带 `-vN` ⇒ `legacy`（可列出、不可签、不可收录）；"
+            "像手稿但号解析不出（如 `f-proof-abc`）⇒ `bad_name`；`RESEARCH.md` / `notes/A.md` "
+            "这类不是手稿形 ⇒ `unrecognized`。只有 `family` 这一档可收；其中要签的 "
+            "`f/b/e-proof` 三族才可签（`e-num` 走绿色通道，不签）。",
             # 2026-11-08（业主「V 只对手稿负责」）：签的两格读数是分开的，六档各有名字。
             "**签的两格读数（稿上已签 / 已入台账）与六档各有名字**（业主 2026-11-08「V 只对手稿负责」）："
             "稿上已签看稿里的 `- V 签：` 签块（`已签` / `连续` / `正文sha`），已入台账看 "
@@ -540,6 +556,13 @@ SPEC = AgentSpec(
             "稿上已签、册里是旧版 ⇒ 正文 sha 变了，按新版收录并让那一版重新拿签（这不是"
             "「签丢了」）；其余四档 `filed` / `unsigned` / `abandoned` / `unreadable` 分别说"
             "「两格都对上」/「都没签」/「明确放弃」/「没查成」。",
+            # 2026-11-09（提示词-工具面一致性审计 L2-6）：`identity_state` 三态与 `manuscript_id`
+            # 在题面 0 次，而 B 认签失败时正是把这几格随拒信带回的。
+            "**签块第 9 格（`手稿号`）有四格读数**：`manuscript_id`（块里写的裸稿号）/ "
+            "`manuscript_key`（它所在那份稿的裸稿号）/ `identity_state` / `identity_why`。"
+            "`identity_state` 三态：`resolved`（号与所在稿相同）/ `unmatched`（号不同，或那一份稿"
+            "不是签的载体 ⇒ 块被搬过 / 号写错了）/ `legacy`（旧 8 格块，当时真的签过 —— **不许读成"
+            "「没签」**）。认签失败时先看 `identity_why` 再判是搬稿还是写错号。",
             # 2026-11-08（业主「没有判不了」）：两根轴的判不了都落受控拒，且写明改法。
             "**概念同一性 / 同种证明这两根轴判不了 ⇒ 受控拒，不是新建**：秘书判不出「这是不是"
             "在册的同一条概念」⇒ `concept_identity_unjudged`；判不出「这是不是同一种证法」⇒ "

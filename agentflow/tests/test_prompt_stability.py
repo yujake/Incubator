@@ -1015,6 +1015,20 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "params 的 query / fields description 同步改（后者不进 _surface_digest）。"
              "这件工具的 roles 是 A–H + V + L ⇒ 那十格的 tools_lines 换值，M 逐字未动。"
              "facts 键集仍 15 格。"},
+    # p263 → p264（2026-11-10，提示词 × 动作面 × 工具面一致性审计的 11 条收口）：
+    # facts 键集一格没动（还是 15 格）—— 本批只改题面正文与工具声明文字，facts 的键名与
+    # 条数都没变 ⇒ count / keys_sha256 与上一格同值。
+    {"version": "p264", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p264（2026-11-10，一致性审计 11 条收口）：题面侧 —— L1-1 E 的 "
+             "`proof_manuscript` 改成回执格（不是入参）、L1-2 V 的签载体只认 "
+             "`reports/{f,b,e}-proof-*`、L1-3 B 的指针支只收 `reports/` 规范名；"
+             "L2-1 共用段 refs 补 q:/c:、L2-2 PAPER_PACK 的 citations 补 eval:、"
+             "L2-3 `## 证明` 三态、L2-4 手稿族五档、L2-6 签块 identity_state 三态。"
+             "声明侧 —— `conductor.status_report` side_effect read→write_local（与 "
+             "review.report 同类）、`conductor.void_items` 的「系统通知」改成 D13 之后的"
+             "真实落法、`table.search` summary 点名 label/statement_full、`fs.write` "
+             "summary 点名 A/B 拒写的四族。压缩批次 6473→6343（73.49%）。facts 键集仍 15 格。"},
 
 )
 

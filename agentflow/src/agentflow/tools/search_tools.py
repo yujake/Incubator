@@ -1745,7 +1745,7 @@ def _search_providers(ctx):
 
 @tool(
     "search.shelf",
-    "**不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。",
+    "**不联网**：列出**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。",
     {
            "type": "object",
            "properties": {
@@ -1783,7 +1783,7 @@ def _search_shelf(ctx, limit=None, lit_id="", query=""):
 
 @tool(
     "search.local",
-    "**不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。",
+    "**不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。",
     {
            "type": "object",
            "properties": {
@@ -1822,7 +1822,7 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
+    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
     {
            "type": "object",
            "properties": {
@@ -1862,7 +1862,7 @@ def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTE
 
 @tool(
     "search.dedup_check",
-    "**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『这条会不会被判成已有的某篇』，并给出会命中的键。",
+    "**不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『会不会被判成已有的某篇』，并给出会命中的键。",
     {
            "type": "object",
            "properties": {
@@ -1934,7 +1934,7 @@ def _search_retry_pending(ctx, limit=RETRY_PENDING_DEFAULT_LIMIT, lit_id=""):
 
 @tool(
     "search.ingest_local",
-    "**不联网**：把本地目录里的 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
+    "**不联网**：把本地 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。",
     {
            "type": "object",
            "properties": {
@@ -1973,7 +1973,7 @@ def _search_ingest_local(ctx, books_dir, pattern="*.pdf", limit=None, max_bytes=
 
 @tool(
     "search.register",
-    "登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。",
+    "登记文献（literature 行，processed=false）：先判重，命中复用 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。",
     {
            "type": "object",
            "properties": {
@@ -2925,7 +2925,7 @@ def register(
     specs= [
         ToolSpec(
             name="search.literature",
-            summary="按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（A 不必再跑一次判重）。mode=precise 时必须给 "
+            summary="按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（不必再判重）。mode=precise 时必须给 "
             "description。",
             params={
                 "type": "object",

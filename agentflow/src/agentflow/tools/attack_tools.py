@@ -390,7 +390,7 @@ def _attack_check_budget(budget, rounds_done=0, depth=0):
 
 @tool(
     "attack.pick_next_subgoal",
-    "按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。",
+    "按确定次序选下一个要推进的子目标（开始过的优先，卡住的最后）。",
     {
            "type": "object",
            "properties": {"subgoals": {"type": "array", "items": {"type": "object"}}},
@@ -413,7 +413,7 @@ def _attack_pick_next_subgoal(subgoals):
 @tool(
     "attack.create_plan",
     (
-            "为一个难题立项（预算四类键缺一不可；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同一 problem_key 已有未终结的计划返回已有 plan_id。"
+            "为一个难题立项（预算四类键缺一不可；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同 problem_key 有未终结计划 ⇒ 回已有 plan_id。"
             ),
     {
            "type": "object",
@@ -517,7 +517,7 @@ def _attack_step(_need_store, store, plan_id):
 
 @tool(
     "attack.status",
-    "读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。",
+    "读攻坚计划的可读视图（子目标状态、预算余量、history 尾）。",
     {
            "type": "object",
            "properties": {"plan_id": {"type": "string"}},

@@ -2120,7 +2120,7 @@ def guard_result(fn: Any) -> Any:
 
 @tool(
     "doc.scan_claim",
-    "对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。",
+    "机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。",
     {
            "type": "object",
            "properties": {"claim": {"type": "object"}},
@@ -2359,7 +2359,7 @@ def _doc_build_document(_not_wired, store, workspace, actor, kind=None, title=No
     (
             "登记外部依赖（FC-23）：`closed` 前核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`"
             "/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的我方命题；`"
-            "path_group` = 第几条证明路径（组内都要、组间任一）。"
+            "path_group` = 证明路径号（组内都要、组间任一）。"
             ),
     {
            "type": "object",
@@ -3017,7 +3017,7 @@ def _register_paper_tools(registry: ToolRegistry, *, workspace: Path | None,
     registry.register(
         ToolSpec(
             name="doc.paper_compile",
-            summary="把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write 到那个落点，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
+            summary="把 out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。",
             params={
                 "type": "object",
                 "properties": {

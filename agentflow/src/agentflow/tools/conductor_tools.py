@@ -358,7 +358,7 @@ def summon_many_payload(targets: list, why: str = "") -> dict[str, Any]:
 
 @tool(
     "conductor.summon_many",
-    "一次派**一批**活：按写集分波、线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
+    "一次派**一批**活：按写集分波、线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。",
     {
         "type": "object",
         "properties": {
@@ -476,7 +476,7 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
 
 @tool(
     "conductor.ledger",
-    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（请代唤申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。",
+    "看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（代唤申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。",
     {
         "type": "object",
         "properties": {
@@ -675,7 +675,7 @@ def conductor_stop(_conductor, reason: str = "user", drain_sec: float = 30.0,
 
 @tool(
     "conductor.resume_brief",
-    "读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）。没有简报时如实说『还没有停止过』；未终态行逐条报出。",
+    "读上一次优雅停止留下的续跑简报（做了什么/剩什么/从哪继续）。没有简报时如实说『还没有停止过』；未终态行逐条报出。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
@@ -698,7 +698,7 @@ def conductor_resume_brief(_conductor, ) -> ToolResult:
 
 @tool(
     "conductor.cancel",
-    "硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；在飞任务自己收终态。与 conductor.stop 的区别是 stop 先尝试收尾。",
+    "硬取消：立刻置共享停止信号，不等在飞收尾；在飞任务自己收终态。与 conductor.stop 的区别是 stop 先尝试收尾。",
     {
         "type": "object",
         "properties": {"reason": {"type": "string", "enum": list(CANCEL_CODES)},
@@ -724,7 +724,7 @@ def conductor_cancel(_conductor, reason: str = "user", detail: str = "") -> Tool
 
 @tool(
     "conductor.ensure_project",
-    "冷启动 / 热启动：`start=auto|cold|warm`，返回四态与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
+    "冷/热启动：`start=auto|cold|warm`，返回四态与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。",
     {
         "type": "object",
         "properties": {
@@ -963,7 +963,7 @@ def _queue_backlog(store_: Any) -> dict[str, Any]:
 
 @tool(
     "conductor.state",
-    "只读状态视图：各表计数 + 猜想按状态 + 台账规模。`tasks` 是全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 未消化篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger` 的 `started_total`。`programs` 是盘上程序进程读数，巡查按它点异常。",
+    "只读状态：各表计数 + 猜想按状态 + 台账规模。`tasks` 全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 未消化篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger.started_total`。`programs` 是程序进程读数。",
     {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
     side_effect="read",
     roles=("M",),
@@ -1060,7 +1060,7 @@ def conductor_state(_conductor, ) -> ToolResult:
 
 @tool(
     "conductor.role_spec",
-    "某角色的描述（不是它的工具面）：role、summonable 与职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给它的动作表与工具名。派活前用它确认它能不能做这件事；与声明层同源。",
+    "某角色的描述（不是工具面）：role、summonable 与职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给动作表与工具名。派活前用它确认它能不能做这件事。",
     {
         "type": "object",
         "properties": {"role_name": {"type": "string", "description": "角色名（A–H / V / L）"}},
@@ -1141,7 +1141,7 @@ def _brief_of(role: str) -> dict[str, Any] | None:
 
 @tool(
     "conductor.acceptance",
-    "只读：读某项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的判据名 / 结论 / 读数。交付说明要逐条对齐。",
+    "只读：读某项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的判据名 / 结论 / 读数。交付说明逐条对齐。",
     {
         "type": "object",
         "properties": {
@@ -1282,7 +1282,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance`（内容级验收五条 + 辅助读数）与 `cap_usd`。",
+    "只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance` 与 `cap_usd`。",
     {
         "type": "object",
         "properties": {
@@ -1508,7 +1508,7 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
                               "description": "只统计这个 ISO 时间前缀之后的读数（如 2026-10-05）"},
                     "out_dir": {"type": "string", "description": "报告落哪个目录（缺省 out/review）"}},
      "required": [], "additionalProperties": False},
-    side_effect="read",
+    side_effect="write_local",
     roles=("M",),
     returns=("{'ok','md','json','tables','manuscripts','in_flight','attack_rounds',"
              "'interjections','next_steps','child_wait_invariant','note'}；"
@@ -1557,7 +1557,7 @@ def conductor_status_report(_conductor, since: str = "", out_dir: str = "") -> T
 
 @tool(
     "conductor.board",
-    "只读：板上还挂着什么。一行 = 一个工作项（`tasks` 里 `kind` 非空）；`expects=ack` 确认读过算完，`expects=work` 要交付算完。",
+    "只读：板上还挂着什么。一行 = 一个工作项（`tasks` 里 `kind` 非空）；`expects=ack` 读过算完，`expects=work` 交付算完。",
     {"type": "object",
      "properties": {"limit": {"type": "number", "description": "最多列几项（默认 20）"}},
      "required": [], "additionalProperties": False},
@@ -1585,7 +1585,7 @@ def conductor_board(_conductor, limit: int = 20) -> ToolResult:
 
 @tool(
     "conductor.broadcast",
-    "给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。",
+    "给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。",
     {"type": "object",
      "properties": {"subject": {"type": "string", "description": "一句话标题"},
                     "body": {"type": "string", "description": "正文（进板项的 detail）"}},
@@ -2612,7 +2612,7 @@ ACK_STATES: tuple[str, ...] = ("acked", "partial", "refused", "nothing", "unknow
 
 @tool(
     "conductor.void_items",
-    "把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。",
+    "把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。",
     {"type": "object",
      "properties": {
          "item_ids": {"type": "array",

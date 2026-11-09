@@ -217,7 +217,7 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
 
 @tool(
     "text.extract",
-    "把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。",
+    "把 PDF 文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（没有就交 B）；别人只读那份 `.txt`。",
     {
         "type": "object",
         "properties": {

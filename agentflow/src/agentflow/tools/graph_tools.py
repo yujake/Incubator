@@ -728,7 +728,7 @@ def _coerce_holder(graph: Any, store: Any) -> _GraphHolder:
 
 @tool(
     "graph.build",
-    "从 store 三张表构建概念图索引，返回图规模与完整性体检读数。",
+    "从 store 三张表构建概念图索引，返回规模与完整性读数。",
     {
         "type": "object",
         "properties": {},
@@ -795,9 +795,9 @@ def graph_stats(holder, top_n: int = 10) -> ToolResult:
 
 @tool(
     "graph.neighbors",
-    "返回某概念的邻居概念代号（升序）与度数信息。"
-    f"邻居列表**有界**（默认 max_neighbors={MAX_NEIGHBORS_DEFAULT}）：超过上限时 "
-    "truncated=True 并说明只给了前几个 —— 绝不静默截断。",
+    "返回邻居概念代号（升序）与度数。"
+    f"邻居列表**有界**（默认 max_neighbors={MAX_NEIGHBORS_DEFAULT}）：超限时 "
+    "truncated=True 并说明只给前几个，绝不静默截断。",
     {
         "type": "object",
         "properties": {
@@ -858,7 +858,7 @@ def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -
 
 @tool(
     "graph.relations_between",
-    "返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。",
+    "返回同时含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。",
     {
         "type": "object",
         "properties": {

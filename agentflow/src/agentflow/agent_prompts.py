@@ -3687,7 +3687,28 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p262 同值）；
 #: `docs/ROLE-GUIDE.md` 由 `python -B tools/write_system_docs.py` 重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
-PROMPT_VERSION = "p263"
+#: p263 → p264（2026-11-10，提示词 × 动作面 × 工具面一致性审计的 11 条收口）：
+#: 十一格全换（共用段 LOOP_PROTOCOL / HANDOFF_PROTOCOL 与 PAPER_PACK 都动了）。
+#: 逐条上游（编号沿用 `temp/_audit_prompt_tool_consistency.md`）：
+#:   L1-1 `specs/e.py`：`run_experiment` 的 `proof_manuscript` 不是入参，改成「回执里那一格」；
+#:   L1-2 `specs/v.py`：签的载体只认 `reports/{f,b,e}-proof-*`，`notes/` 是 legacy 档；
+#:   L1-3 `specs/b.py`：`proof_manuscript` 的指针支只收 `reports/` 下规范名；
+#:   L2-1 共用段 `refs` 补 `q:` / `c:`；L2-2 PAPER_PACK 的 citations 补 `eval:`；
+#:   L2-3 `specs/b.py` / `specs/v.py` 补 `## 证明` 的三态（present/absent/unreadable）；
+#:   L2-4 `specs/b.py` 补手稿族的五档读数；L2-5 `table.search` summary 点名两列；
+#:   L2-6 `specs/b.py` 补签块 `identity_state` 三态与 `manuscript_id`。
+#: 声明面：`tools/conductor_tools.py` 的 `conductor.status_report` 副作用 read→write_local
+#:   （与 `review.report` 同类；题面不动）；`conductor.void_items` 的「投一条系统通知」改成
+#:   D13 之后的真实落法（记在被撤那一行的 `inputs`，`revoked_recent` 读得到）；
+#:   `tools/fs_tools.py` 的 `fs.write` summary 点名 A/B 拒写的是四族（含 `e-num-`）。
+#: 压缩批次：为给上面几处腾字数，同批压掉 40 余条说明里的冗余表述（只压字、不删语义），
+#:   总量 6473 → 6343 字符（73.49%，门槛 ≤75%）；见 `temp/_p264_compress.py` 的逐条清单。
+#: 十一格不是手抄：`temp/_recompute_digests.py` 导入判据自己的 `_surface_digest` 现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p264）；契约基线追加
+#:   `conductor.status_report.side_effect` 一条 amendment；两份 golden 按现值重冻；
+#:   `docs/ROLE-GUIDE.md` / `SYSTEM-COMPONENTS.md` 由 `python -B tools/write_system_docs.py`
+#:   重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（花费见提交信息）。
+PROMPT_VERSION = "p264"
 
 
 
@@ -3860,7 +3881,7 @@ LOOP_PROTOCOL = """\
    {"final": "<给调用方的结论>", "evidence": ["<你实际用到的 id>"],
     "notify": {"to": "<名册名 / 绝对编号 / 角色名 / ALL>", "summary": "<一句话：交给对方什么>",
                "body": "<markdown：做了什么 / 依据（实验号、文献号、手稿号）/ 要对方做什么 / 我卡在哪>",
-               "refs": ["<前序手稿编号，或 stmt:/exp:/lit:/rel: 这类台账引用>"]}}
+               "refs": ["<前序手稿编号，或 stmt:/exp:/lit:/rel:/q:/c: 这类台账引用>"]}}
    —— `notify` 的 `to`/`summary`/`body` 是这一栏自己的必填项。填了且形状对：由你这一趟的
    秘书执笔写成一份交接手稿（编号由秘书分配），并把"编号 + 一句简要描述"发给 `to`
    （给 `ALL` 就是公共频道）。**没填或填错都不打回**：这一趟照常收工，只是没有手稿，
@@ -5955,7 +5976,7 @@ PAPER_PACK = """\
   登记走 A（`literature`，`search.ingest_local` / `search.register`）与 B（`statements`，
   每条带 `source_lit_id` + `page_range` + 逐字 `proof_text`，`origin="external_lit"`），
   我方修订稿才由 G 用 `doc.build_document` 另起一行 `documents`（claims 的 citations
-  引 `lit:` / `exp:` / `stmt:`）—— **顺序不能反**：H 的审阅发现挂在**我方稿件**那一行上
+  引 `lit:` / `exp:` / `stmt:` / `eval:`）—— **顺序不能反**：H 的审阅发现挂在**我方稿件**那一行上
   （`ReviewFinding.doc_id` 是必填的，挂不到 `literature` 行上），所以 G 那一行先有，
   H 才谈得上审。**不要**拿外部论文的 id 去 `G.revise` / `H.review_report`：
   `documents` 的每一行都必须是我方写的、带 claims 的稿子（`Document.validate()` 逐字要求
@@ -9748,7 +9769,7 @@ _COLLAB_NAMES_TEXT = (
 
 
 
-    "- 引用**产出**用台账引用（`stmt:` / `exp:` / `lit:` / `rel:` / 手稿编号），"
+    "- 引用**产出**用台账引用（`stmt:` / `exp:` / `lit:` / `rel:` / `eval:` / 手稿编号），"
 
 
 
@@ -11051,7 +11072,7 @@ HANDOFF_PROTOCOL = """\
   - `body`：**markdown 正文** —— 我做了什么、依据是什么（实验号 / 文献号 / 前序手稿号）、
     要你做什么、我还卡在哪 —— 必填；
   - `why`：为什么找这个人（可选，附在留言里）；
-  - `refs`：引用到的前序手稿编号（必须真实存在）；
+  - `refs`：引用到的前序手稿编号，或 `stmt:` / `exp:` / `lit:` / `rel:` / `q:` / `c:` 这类台账引用（必须真实存在）；
   - 旧名 `title` / `brief` 仍然接受（都当 `summary` 用），但新写的一律用 `summary`。
 - 框架会**同时**把留言发出去（编号 + 那句简要描述），你不需要再发一条 `message`；
   读全文用 `manuscripts.read(id="0007")`、看发给自己的用 `manuscripts.list(to="你")`

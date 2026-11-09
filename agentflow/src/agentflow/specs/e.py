@@ -152,7 +152,7 @@ SPEC = AgentSpec(
             "要不要做由**用户指定**，指定之后由 B 逐条安排、回执由 B 带回。",
             "**证明那一档的判读改走自然语言逐行审阅**：把证明过程逐字写成正文**交 B**（由 **D** 派 B 登记进 "
             "`statements`；你不直接写那张表），正文含假设、每一步依据、你接不上的那一步；你的稿落在 "
-            "`reports/e-proof-<实验号>.md`（`E.run_experiment` 的 `proof_manuscript` 那一格就是它），"
+            "`reports/e-proof-<实验号>.md`（**由 `run_experiment` 自己落**：它是回执里的 `proof_manuscript`，不是入参），"
             "交给 B / V 时都要给 `proof_manuscript` 这个路径 —— 签只落在稿里、B 从稿上读到那一签"
             "（不给它，`proof_manuscript_required` 会整份退回）；再请 V 用 `verify_proof` 逐行走查 —— "
             "两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`（**文件，不是表**；没号时先落 "

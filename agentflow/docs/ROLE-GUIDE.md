@@ -79,19 +79,19 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `lit.admit` | 正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。不清空列表（结算属于 lit.admit_all）。 | `write_local` | （无） |
 | `lit.admit_all` | 提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库：拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。 | `write_local` | （无） |
 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。 | `read` | `title` |
@@ -99,29 +99,29 @@
 | `lit.stage_list` | 查待新增列表：默认只看当前委托（列表按委托重置）。status 按三态筛：`pending` 待裁 / `admitted` 入库 / `rejected` 拒收（词表真身在 `litstage.CANDIDATE_DECISIONS`）；盘上的历史档 `cleared` / `withdrawn` 读成 `rejected` + 受控理由码，按老名字也查得到那几条。撤掉的空槽位照样在列表里（`rejected` + 理由，序号不复用）。 | `read` | （无） |
 | `lit.stage_reject` | 审内容后拒收某一槽：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。 | `write_local` | `slot`、`reason_code` |
 | `lit.stage_withdraw` | 撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，报告上同一篇会同时出现在已入库与未入库两块。 | `write_local` | `slot`、`reason_code` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
-| `search.dedup_check` | **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『这条会不会被判成已有的某篇』，并给出会命中的键。 | `read` | `title` |
-| `search.download` | 把候选的 `pdf_url` 下到 downloads/（同名不覆盖；落盘后给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。 | `write_local` | `url` |
-| `search.ingest_local` | **不联网**：把本地目录里的 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。 | `write_local` | `books_dir` |
-| `search.literature` | 按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（A 不必再跑一次判重）。mode=precise 时必须给 description。 | `read` | `topic` |
-| `search.local` | **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
+| `search.dedup_check` | **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『会不会被判成已有的某篇』，并给出会命中的键。 | `read` | `title` |
+| `search.download` | 把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。 | `write_local` | `url` |
+| `search.ingest_local` | **不联网**：把本地 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。 | `write_local` | `books_dir` |
+| `search.literature` | 按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（不必再判重）。mode=precise 时必须给 description。 | `read` | `topic` |
+| `search.local` | **不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
 | `search.providers` | 列出可用检索源并**真实探测**各自是否可用（发一次极小请求；ABFLOW_SKIP_NETWORK=1 时标为未探测而不是猜）。 | `read` | （无） |
-| `search.register` | 登记一条文献（literature 行，processed=false）：先判重，命中复用既有 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。 | `write_local` | `title`、`type_code`、`summary` |
+| `search.register` | 登记文献（literature 行，processed=false）：先判重，命中复用 lit_id；未命中则 alloc_id('lit') 并收编进 library/<lit_id>/。 | `write_local` | `title`、`type_code`、`summary` |
 | `search.retry_pending` | 把「有元数据、没全文」的文献逐条再取一次（每行一次、按源冷却退避）：四结局 got / failed / no_location / cooled_down。**下载失败 ≠ 这篇不存在**；没有地址的如实记 no_location，冷却中的源跳过而不是判失败。 | `write_local` | （无） |
-| `search.shelf` | **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
+| `search.shelf` | **不联网**：列出**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
 | `search.walk_citations` | 由一篇**已登记**的文献出发走一步引文图：backward = 它引了谁、forward = 谁引了它。候选不带判重标注，登记走 `search.dedup_check` / register。 | `read` | `lit_id` |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
-| `text.extract` | 把一篇 PDF 的文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（有那件就用，没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `text.extract` | 把 PDF 文字层转成同名 `.txt` 写进 `library/`（原 PDF 不动；页间插 `===== page N =====`，疑似乱码不写）。扫描件走 OCR（没有就交 B）；别人只读那份 `.txt`。 | `write_local` | （无） |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **54** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
@@ -175,7 +175,10 @@
   - **E 的手稿分两族，读法不同**（业主 2026-11-08）：`reports/e-proof-<实验号>.md` 是穷举档 —— `proof_text` 只原样收 `## 证明` 那一节的穷举论证（程序地址住实验行的 `code_path`、程序设计住 `observations["design"]`，都不许再塞进 `proof_text`），没有 V 签照旧受控拒 （`proof_needs_third_party_signature`）。`reports/e-num-<实验号>.md` 是普通数值档（`## 命题` + `## 数值结果`）—— 只从 `## 命题` 取命题、程序取 实验行的 `code_path`，`proof_text` 留空、`evidence_kind` 落 `cross_check`（等级 `strong_conjecture`），**不过 V**；`## 数值结果` 与别的节一个字都不录。这一档不收 `doc_id` / `line_range`（出处就是那条实验行），`kind` 写 `conjecture`；D 提交「有数值实验支持的强猜想」走的就是它。
   - **收录先查「是不是在册的同一条」**（业主 2026-11-08）：普通数值手稿在台账上永远是 `conjecture`（调用方给的 kind 不参与，等级由五元位现算）；收录前秘书会挑数学关键词在 `statements` 里检索、再认定是不是同一条 —— 查到就不新注册：普通数值手稿把那一行的数值证据流水更新（一个程序一条；同一程序再交用后一次替换，换参数也算同一程序），证明手稿把这一份作为该命题的另一条证明路径追加（`proof_no` 递增、每份签按 sha 各认各的）。
   - **D 只递手稿路径时，命题从 `## 命题` 读、证明从 `## 证明` 读**（业主 2026-11-08「只递指针」）：`statement_full` 留空即可 —— 命题取稿的 `## 命题`，证明取稿的 `## 证明`，依赖面取稿的 `## 依赖`；不要求 D 另传正文，也不把正文抄进参数（D 传正文会被受控拒 `d_gives_manuscript_pointers_only`）。
+  - **`## 证明` 那一节按三态读**：`present`（有这一节，可能为空）/ `absent`（没有这一节）/ `unreadable`（文件读不出来）。**缺节不等于「证明为空」**，也不许拿整份正文或 `## 依赖` 那一段顶替 —— 那一档按「稿不完整」受控拒。
+  - **手稿名是五档读数，不是「像不像手稿」**（`manuscriptfamily` 的 `classify_manuscript`）：`reports/` 下的 `f-proof-` / `b-proof-` / `e-proof-` / `e-num-` 才是 `family`；同一个名字换到 `notes/` 或带 `-vN` ⇒ `legacy`（可列出、不可签、不可收录）；像手稿但号解析不出（如 `f-proof-abc`）⇒ `bad_name`；`RESEARCH.md` / `notes/A.md` 这类不是手稿形 ⇒ `unrecognized`。只有 `family` 这一档可收；其中要签的 `f/b/e-proof` 三族才可签（`e-num` 走绿色通道，不签）。
   - **签的两格读数（稿上已签 / 已入台账）与六档各有名字**（业主 2026-11-08「V 只对手稿负责」）：稿上已签看稿里的 `- V 签：` 签块（`已签` / `连续` / `正文sha`），已入台账看 `statements` 里这一份正文的 sha 与第 3 位。`signed_pending_filing` = 稿上已签、册里还没有证明行（或第 3 位没翻）⇒ 你收录时认领它；`signed_stale_in_ledger` = 稿上已签、册里是旧版 ⇒ 正文 sha 变了，按新版收录并让那一版重新拿签（这不是「签丢了」）；其余四档 `filed` / `unsigned` / `abandoned` / `unreadable` 分别说「两格都对上」/「都没签」/「明确放弃」/「没查成」。
+  - **签块第 9 格（`手稿号`）有四格读数**：`manuscript_id`（块里写的裸稿号）/ `manuscript_key`（它所在那份稿的裸稿号）/ `identity_state` / `identity_why`。`identity_state` 三态：`resolved`（号与所在稿相同）/ `unmatched`（号不同，或那一份稿不是签的载体 ⇒ 块被搬过 / 号写错了）/ `legacy`（旧 8 格块，当时真的签过 —— **不许读成「没签」**）。认签失败时先看 `identity_why` 再判是搬稿还是写错号。
   - **概念同一性 / 同种证明这两根轴判不了 ⇒ 受控拒，不是新建**：秘书判不出「这是不是在册的同一条概念」⇒ `concept_identity_unjudged`；判不出「这是不是同一种证法」⇒ `proof_kind_unjudged`。改法：把能区分的材料补齐再交一次 —— 概念写清定义项（标签写具体术语，或正文写成「概念（X）」/「定义（X）」），证明写清路线与依赖面；不要换一个名字绕过去。
   - **短证明照样判，不按字数预判死**：两句话的证明也能判出两种证法（「取 δ=ε 逐点验证」≠「用有限覆盖」）；只有「没有可比的文本」（空串）才算判不了。别因为正文短就自己先判成「不同」或「同种」—— 那是折平，不是判定。
   - **这张收录表就是我们版的「综述」**：所以不产出「综述」这一件产物、不给 `documents` 另开一类；A 交来的文献由你把定理与证明收进 `statements`（`proof_text` + 逐字出处），**收录比转述强**：综述里的一句话查不到行，收录表里每一行都能。
@@ -225,34 +228,34 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。 | `write_local` | （无） |
+| `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；不下载 easyocr 模型。 | `write_local` | （无） |
 | `ocr.detect_text_layer` | 判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验**」不是「**校验失败**」。 | `read` | （无） |
-| `ocr.run` | 对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本假装成功）。可给已登记文献编号。 | `write_local` | （无） |
+| `ocr.run` | 对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本）。可给已登记文献编号。 | `write_local` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
@@ -322,7 +325,7 @@
 
 | 工具 | 做什么 | 副作用 | 必填参数 |
 |---|---|---|---|
-| `analysis.register_report` | 把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）—— 只读角色唯一写入口，不登记等于没发生。 | `write_local` | `kind`、`summary`、`markdown` |
+| `analysis.register_report` | 把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）—— 只读角色唯一写入口，不登记=没发生。 | `write_local` | `kind`、`summary`、`markdown` |
 | `clock.alarm_start` | 定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。 | `write_local` | `at` |
 | `clock.now` | 读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。 | `read` | （无） |
 | `clock.periodic_start` | 起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查（等 20 分钟 + 周期性巡查，别写成"睡 20 分钟"）。到点消息逐字是"巡查时间到：目的｜每 20 分钟一次（第 N 次）"。目的忘了填不报错。 | `write_local` | `every_sec` |
@@ -336,23 +339,23 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `graph.build` | 从 store 三张表构建概念图索引，返回图规模与完整性体检读数。 | `read` | （无） |
-| `graph.neighbors` | 返回某概念的邻居概念代号（升序）与度数信息。邻居列表**有界**（默认 max_neighbors=200）：超过上限时 truncated=True 并说明只给了前几个 —— 绝不静默截断。 | `read` | `concept_id` |
-| `graph.relations_between` | 返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
+| `graph.build` | 从 store 三张表构建概念图索引，返回规模与完整性读数。 | `read` | （无） |
+| `graph.neighbors` | 返回邻居概念代号（升序）与度数。邻居列表**有界**（默认 max_neighbors=200）：超限时 truncated=True 并说明只给前几个，绝不静默截断。 | `read` | `concept_id` |
+| `graph.relations_between` | 返回同时含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
 | `graph.stats` | 返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。 | `read` | （无） |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
-| `search.local` | **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
-| `search.shelf` | **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `search.local` | **不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
+| `search.shelf` | **不联网**：列出**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `trace.chain` | 把一条关系代号链的每一步表述串起来，缺号如实列出。 | `read` | `relation_ids` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。 | `read` | `concept_id` |
@@ -458,8 +461,8 @@
 |---|---|---|---|
 | `attack.check_budget` | 检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。 | `none` | `budget` |
 | `attack.list_plans` | 列出全部攻坚计划（可按 problem_key 过滤）。 | `read` | （无） |
-| `attack.pick_next_subgoal` | 按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
-| `attack.status` | 读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。 | `read` | `plan_id` |
+| `attack.pick_next_subgoal` | 按确定次序选下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
+| `attack.status` | 读攻坚计划的可读视图（子目标状态、预算余量、history 尾）。 | `read` | `plan_id` |
 | `clock.alarm_start` | 定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。 | `write_local` | `at` |
 | `clock.now` | 读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。 | `read` | （无） |
 | `clock.periodic_start` | 起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查（等 20 分钟 + 周期性巡查，别写成"睡 20 分钟"）。到点消息逐字是"巡查时间到：目的｜每 20 分钟一次（第 N 次）"。目的忘了填不报错。 | `write_local` | `every_sec` |
@@ -470,28 +473,28 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `conjecture.register_conjecture` | 登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。单行内判据只有一份（schema.Conjecture.validate）；被引用的实验/文献必须在库里 | `write_local` | `statement`、`origin` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
-| `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
+| `doc.scan_claim` | 机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
-| `graph.build` | 从 store 三张表构建概念图索引，返回图规模与完整性体检读数。 | `read` | （无） |
-| `graph.neighbors` | 返回某概念的邻居概念代号（升序）与度数信息。邻居列表**有界**（默认 max_neighbors=200）：超过上限时 truncated=True 并说明只给了前几个 —— 绝不静默截断。 | `read` | `concept_id` |
-| `graph.relations_between` | 返回同时包含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `graph.build` | 从 store 三张表构建概念图索引，返回规模与完整性读数。 | `read` | （无） |
+| `graph.neighbors` | 返回邻居概念代号（升序）与度数。邻居列表**有界**（默认 max_neighbors=200）：超限时 truncated=True 并说明只给前几个，绝不静默截断。 | `read` | `concept_id` |
+| `graph.relations_between` | 返回同时含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
 | `graph.stats` | 返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。 | `read` | （无） |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
@@ -501,15 +504,15 @@
 | `research.submit_gap` | 把某研究问题的知识缺口提交给 A（建 search_requests 行 + request_id 进该问题等待集）。 | `write_local` | `question_id`、`topic`、`mode` |
 | `research.write_note` | 向某研究问题追加一条研究笔记（追加而非覆盖）。 | `write_local` | `question_id`、`note` |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
-| `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `review.scan_document` | 全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.chain` | 把一条关系代号链的每一步表述串起来，缺号如实列出。 | `read` | `relation_ids` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `trace.concept` | L2 溯源：由概念代号取回定义 + 它参与的全部关系的表述（不下钻文献正文）。 | `read` | `concept_id` |
@@ -545,7 +548,7 @@
 - 政策（这一岗的规矩）：
   - **你能撤子代理的板项**：孩子名下不再需要做的项，用 `conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，不必证明叫不醒（`why` 必填、逐字进留痕）。
   - 你这一岗的凭据是实验与反例；形式化的结论以 V 的签与 B 的台账为准 —— 要不要做由**用户指定**，指定之后由 B 逐条安排、回执由 B 带回。
-  - **证明那一档的判读改走自然语言逐行审阅**：把证明过程逐字写成正文**交 B**（由 **D** 派 B 登记进 `statements`；你不直接写那张表），正文含假设、每一步依据、你接不上的那一步；你的稿落在 `reports/e-proof-<实验号>.md`（`E.run_experiment` 的 `proof_manuscript` 那一格就是它），交给 B / V 时都要给 `proof_manuscript` 这个路径 —— 签只落在稿里、B 从稿上读到那一签（不给它，`proof_manuscript_required` 会整份退回）；再请 V 用 `verify_proof` 逐行走查 —— 两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`（**文件，不是表**；没号时先落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领），是这一档**唯一**的「审过」凭据。文字证明签完等级到 `pre_theorem`；你这一岗要把等级推到 `theorem` 只有一条路：穷举（与 Lean 同级，见下面「穷举要按一份协议跑」那一条，签名者=收方秘书（`secretary:E`））；交付里不许出现凭空写下的「已证明」。
+  - **证明那一档的判读改走自然语言逐行审阅**：把证明过程逐字写成正文**交 B**（由 **D** 派 B 登记进 `statements`；你不直接写那张表），正文含假设、每一步依据、你接不上的那一步；你的稿落在 `reports/e-proof-<实验号>.md`（**由 `run_experiment` 自己落**：它是回执里的 `proof_manuscript`，不是入参），交给 B / V 时都要给 `proof_manuscript` 这个路径 —— 签只落在稿里、B 从稿上读到那一签（不给它，`proof_manuscript_required` 会整份退回）；再请 V 用 `verify_proof` 逐行走查 —— 两态结论（成立 / 有毛病）落 `verifications/<命题号>.jsonl`（**文件，不是表**；没号时先落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领），是这一档**唯一**的「审过」凭据。文字证明签完等级到 `pre_theorem`；你这一岗要把等级推到 `theorem` 只有一条路：穷举（与 Lean 同级，见下面「穷举要按一份协议跑」那一条，签名者=收方秘书（`secretary:E`））；交付里不许出现凭空写下的「已证明」。
   - **脚本要会说结论**（`REPRO_RESULT:` 协议，`draft/37` §122/§126）：数值脚本必须在 stdout 打印一行 `REPRO_RESULT: {"result": "supports"|"refutes"|"inconclusive", ...}` —— **行首就是这五个字加冒号**，后面直接跟一个 JSON 对象（单独一行；别当成某个 JSON 对象的键）。`result=refutes` 时**必须同时给 `counterexample`**（非空；框架会拒收没有反例的证否 —— 证否必须可复核）。有这一行且 `result=supports`，那条实验的等级才到 `strong_conjecture`（`evidence_kind` 历史列写 `cross_check`）；没有或格式非法一律是 `conjecture`（`evidence_kind` 历史列写 `heuristic`）。脚本不是你写的时（主控或 G 写的），先 `fs.read` 看完再跑：缺这一行就退回作者补，或按协议自己改写它。**实验的价值在于能判**：优先设计能推翻的方案，每条落库时写清它支持 / 反驳了哪条 `claim`、读数是多少（`result` / `search_bound`）；只跑通不判定的不算产出。
   - **收到叫停就把你自己起的子进程停掉**：停机开关（`.agentflow-stop`）一落盘，框架会在 0.2 s 内终止你正在跑的实验脚本，并把这一条记成「用户叫停」而不是「超时」—— 那是两件事。你要是自己起了别的后台进程（多进程实验、长跑脚本），也要一并停掉：**别把子进程留给用户**。
   - 跑实验前脚本必须先在盘上：`verify.run_experiment` 的 `script_path` 不存在时会被拒。被拒不是「做不了」—— 用 `fs.write` 自己把核验脚本写进工作区，写完再跑一次，并把「这一版脚本查的是什么」写进实验结论。**别人带着判据把它派给你时**（判据是 `criterion` / `params` / `expected_bound` 三样）就照着那份判据写：脚本要判的正是那条判据（别换成更容易算的问题），落点用 `code/`，并让它按上一段那行的协议打印结论 ——「有判据、没脚本」这一档不许原地不动。
@@ -597,34 +600,34 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
-| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
+| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
@@ -717,10 +720,10 @@
 | 工具 | 做什么 | 副作用 | 必填参数 |
 |---|---|---|---|
 | `attack.check_budget` | 检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。 | `none` | `budget` |
-| `attack.create_plan` | 为一个难题立项（预算四类键缺一不可；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同一 problem_key 已有未终结的计划返回已有 plan_id。 | `write_local` | `problem`、`problem_key` |
+| `attack.create_plan` | 为一个难题立项（预算四类键缺一不可；每条子目标必须给 testable，没写就整笔拒 subgoal_without_testable、一行都不落）。同 problem_key 有未终结计划 ⇒ 回已有 plan_id。 | `write_local` | `problem`、`problem_key` |
 | `attack.list_plans` | 列出全部攻坚计划（可按 problem_key 过滤）。 | `read` | （无） |
-| `attack.pick_next_subgoal` | 按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
-| `attack.status` | 读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。 | `read` | `plan_id` |
+| `attack.pick_next_subgoal` | 按确定次序选下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
+| `attack.status` | 读攻坚计划的可读视图（子目标状态、预算余量、history 尾）。 | `read` | `plan_id` |
 | `attack.step` | 推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实记 no_change。 | `write_local` | `plan_id` |
 | `clock.alarm_start` | 定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。 | `write_local` | `at` |
 | `clock.now` | 读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。 | `read` | （无） |
@@ -732,40 +735,40 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
-| `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
+| `doc.scan_claim` | 机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
-| `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `review.scan_document` | 全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
-| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
+| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
@@ -851,8 +854,8 @@
 |---|---|---|---|
 | `attack.check_budget` | 检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。 | `none` | `budget` |
 | `attack.list_plans` | 列出全部攻坚计划（可按 problem_key 过滤）。 | `read` | （无） |
-| `attack.pick_next_subgoal` | 按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
-| `attack.status` | 读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。 | `read` | `plan_id` |
+| `attack.pick_next_subgoal` | 按确定次序选下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
+| `attack.status` | 读攻坚计划的可读视图（子目标状态、预算余量、history 尾）。 | `read` | `plan_id` |
 | `clock.alarm_start` | 定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。 | `write_local` | `at` |
 | `clock.now` | 读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。 | `read` | （无） |
 | `clock.periodic_start` | 起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查（等 20 分钟 + 周期性巡查，别写成"睡 20 分钟"）。到点消息逐字是"巡查时间到：目的｜每 20 分钟一次（第 N 次）"。目的忘了填不报错。 | `write_local` | `every_sec` |
@@ -863,45 +866,45 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `doc.build_document` | 写一行 documents 并渲染 markdown 到工作区内（机械检查 + 核对每条 citation 指向的对象存在，两闸都过才落库；out_path 越界拒绝）。 | `write_local` | `kind`、`title`、`claims` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
 | `doc.mapping_cells` | 取对应表那一行该填的每一格（值 + 每格来源 + 逐格问题）；先调它，拿不到的格才按通道手填。 | `read` | `project` |
-| `doc.paper_compile` | 把 <项目根>/out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write 到那个落点，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。 | `write_local` | `project` |
-| `doc.register_dependency` | 登记外部依赖（FC-23）：`closed` 前核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的我方命题；`path_group` = 第几条证明路径（组内都要、组间任一）。 | `write_local` | `used_by`、`kind`、`label` |
-| `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
+| `doc.paper_compile` | 把 out/paper/main.tex 编成 out/paper/main.pdf 并写回执；正文你自己 fs.write，这一条只做编译。引擎写完 PDF 却异常退出时，产物与退出码分两栏带回。 | `write_local` | `project` |
+| `doc.register_dependency` | 登记外部依赖（FC-23）：`closed` 前核 `lit_id`/`experiment_id`/`stmt_id` 已入库；`dangling`/`external_unavailable` 必须写 `status_reason`。`source_stmt_id` = 依赖的我方命题；`path_group` = 证明路径号（组内都要、组间任一）。 | `write_local` | `used_by`、`kind`、`label` |
+| `doc.scan_claim` | 机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
 | `doc.write_mapping` | 写论文对应表三份（out/paper/MAPPING.json + MAPPING.md + mapping-appendix.tex，并把 \input 一行放进正文）。先写表、再写正文、最后 paper_compile；md 与附录由 json 渲染，别手写。凭据按通道：证明栏第 ① 段那份 `.py` 存在就填它（不要求 E 已把它签成穷举）；附加义务按档位：`numeric_evidence` / `exhaustion_note` / 索引四格 / 正文指回 E 只压定理类行（theorem / lemma / proposition / corollary）。`file` 有三种落点：理论定理行写论文包内的相对路径；数值实验定理行写程序相对仓库根；例子/实验行按通道写也相对仓库根。 | `write_local` | `project`、`rows` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
-| `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `review.scan_document` | 全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
-| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
+| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 | `verify.run_experiment` | 登记 Experiment 行；穷举 `reports/e-proof-<实验号>.md`（要 V 签），普通数值 `reports/e-num-<实验号>.md`（不需 V 签）。 | `write_local` | `claim`、`claim_key`、`script_path` |
 
@@ -977,8 +980,8 @@
 |---|---|---|---|
 | `attack.check_budget` | 检查攻坚预算是否完整、是否还允许再开一轮（四类键缺一不可）。 | `none` | `budget` |
 | `attack.list_plans` | 列出全部攻坚计划（可按 problem_key 过滤）。 | `read` | （无） |
-| `attack.pick_next_subgoal` | 按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
-| `attack.status` | 读一个攻坚计划的完整可读视图（子目标状态、预算余量、history 尾部）。 | `read` | `plan_id` |
+| `attack.pick_next_subgoal` | 按确定次序选下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
+| `attack.status` | 读攻坚计划的可读视图（子目标状态、预算余量、history 尾）。 | `read` | `plan_id` |
 | `clock.alarm_start` | 定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。 | `write_local` | `at` |
 | `clock.now` | 读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。 | `read` | （无） |
 | `clock.periodic_start` | 起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查（等 20 分钟 + 周期性巡查，别写成"睡 20 分钟"）。到点消息逐字是"巡查时间到：目的｜每 20 分钟一次（第 N 次）"。目的忘了填不报错。 | `write_local` | `every_sec` |
@@ -993,33 +996,33 @@
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
-| `doc.scan_claim` | 对一条断言做机械检查：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
+| `doc.scan_claim` | 机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
-| `review.record_finding` | 把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的那类用它；`evidence` 必填。 | `write_local` | `doc_id`、`kind`、`target`、`message`、`evidence` |
+| `review.record_finding` | 把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的用它；`evidence` 必填。 | `write_local` | `doc_id`、`kind`、`target`、`message`、`evidence` |
 | `review.report` | 产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。 | `write_local` | `doc_id`、`own_errors` |
-| `review.review_document` | 审一份稿件：把机械发现落成 ReviewFinding（每条带 evidence）并更新文档状态；只写 review_findings 与 documents.status，不改 claims。 | `write_local` | `doc_id` |
+| `review.review_document` | 审一份稿件：机械发现落成 ReviewFinding（带 evidence）并更新文档状态；只写 review_findings 与 documents.status，不改 claims。 | `write_local` | `doc_id` |
 | `review.scan` | 把一份稿件的机械读数一次拿全（七类 kinds 任选）：异常字符 / \cite 对 \bibitem / \input 目标 / \ref 对 \label / theorem 对 proof / 重复声明 / 正文与台账的数。只读、只给读数；七类各自的三态在 detail[]，没查成的在 bad[]。 | `read` | `kinds` |
-| `review.scan_document` | 对一份稿件做全量机械审校（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
+| `review.scan_document` | 全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
 | `review.scan_text_integrity` | 扫一批文本里的异常字符（CJK 正文/控制符/零宽/替换符/双向/不换行空格），逐条给 文件:行:列 与码位；读不成如实报 checked=False（不许读成『零命中』），计数不受 limit 影响。目录递归 .tex/.md/.txt/.bib。 | `read` | `paths` |
-| `review.verify_fixes` | 复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未解决项。 | `write_local` | `doc_id`、`round_no` |
-| `search.local` | **不联网**：在本地书架的全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
-| `search.shelf` | **不联网**：列出工作区里**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `review.verify_fixes` | 复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未决项。 | `write_local` | `doc_id`、`round_no` |
+| `search.local` | **不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
+| `search.shelf` | **不联网**：列出**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.code_hash` | 计算工作区内一个脚本文件的 sha256（前 16 位），用于实验的可复现性绑定。 | `read` | `path` |
 | `verify.detect_verifier` | 探测环境里可用的证明检查器（Lean/Coq/Isabelle）。返回事实，不是猜测。 | `read` | （无） |
-| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
+| `verify.evidence_for` | 查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ 查了没有**）。 | `read` | （无） |
 | `verify.list_experiments` | 按登记顺序列出实验记录（只读）。 | `read` | （无） |
 
 共 **46** 件（声明在 src/agentflow/tools/；只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的产物与簿记）。
@@ -1053,7 +1056,8 @@
   - **判「成立」的唯一判据是零 finding**：`findings` 必须为空 —— 一条要改的都没有，才写 `成立`。只要有一处要改的（哪怕只是措辞建议、`level=info`），就判 `有毛病`，并在 `defect_step` 指到那一步、在 `findings` 里写下那一条；`有毛病` 必须给 `defect_step`（从 1 起数），不许只写一句「整体没问题」，也不许把要改的那一条挂在 `成立` 后面。
   - 判「成立」不要求你证明它正确，只要求你**一处要改的都没有**：拿不准、说不清，就说明你在那一处至少看见了一条要改的 —— 把它写成 `findings` 里那一条并判 `有毛病`（指到步号），别用「大致看过」代替「没找到缺陷」。**别回「判不了 / 我无法判断」**：那不是一种结论，是**没做完审** —— 框架**不按字面折档**（不把它算成成立、也不算成有毛病），每一转的轴（clean / fault）由你的秘书读这段回复后语义判定（穷举支例外：那一支没有你的散文回复，轴由机械会审的两态读数给，`source=exhaustion_report`，不经秘书）；所以你必须把「卡在哪一步」写进 `findings`（带步号）与 `defect_step`，让秘书判得出 fault。秘书按题面判「有缺陷要指出」时，这一签不签发。**你的判词只是陈述，不是判据**；`有毛病` 时尽量给`defect_step` —— 真给不出，秘书会按这段回复的语义定出那一步并写进台账那一行。
   - **你签的是「第几条证明」**：`verify_proof` 收 `proof_no`（1 = canonical / 缺省值，2 起是该行 `proofs` 清单里的那一份）—— 逐份独立，别把 `#p1` 的那一签借给 `#p2`：读数里第 3 位与第 4 位都按 `proof_no` 分开记（第 3 位 `bits.evidence.reviewed_by_proof[证明号]`、第 4 位 `bits.evidence.formal_by_proof[证明号]`）。
-  - **在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 `proof_manuscript`（约定命名 `reports/f-proof-<命题号>.md`；`notes/…` 等别的工作区相对文件也收，只要盘上有、且有一节非空的 `## 证明`）。只给内联正文（`proof_text`）会被受控拒绝（`proof_text_needs_a_manuscript`）—— 签要落在稿上（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、稿要能被按号寻址，这三样内联正文都做不到。**命题还没在册也照样能签**（你不假定有号）：带一份稿送审，签按**正文 sha** 落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha 认领；三票（`verification_id` / `at` / `proof_sha256`）必须齐。只给内联正文、没有稿时才只给「看过、没签」的读数 —— 签块只在稿上，没有可落签的载体。
+  - **在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 `proof_manuscript`（**签的载体只认 `reports/f-proof-<命题号>.md` / `reports/b-proof-<号>.md` / `reports/e-proof-<号>.md` 这三种规范名**）。`notes/…` 收不了：目录不是 `reports/` ⇒ `classify_manuscript` 判 `legacy` 档、`sign_carrier` 判 `ok=False`（可列出、不可签、不可收录）—— 要签就先让 B 把它转正成 `reports/b-proof-<号>.md`。只给内联正文（`proof_text`）会被受控拒绝（`proof_text_needs_a_manuscript`）—— 签要落在稿上（`- V 签：` 那一行签块）、依赖面从稿的 `## 依赖` 段读、稿要能被按号寻址，这三样内联正文都做不到。**命题还没在册也照样能签**（你不假定有号）：带一份稿送审，签按**正文 sha** 落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha 认领；三票（`verification_id` / `at` / `proof_sha256`）必须齐。只给内联正文、没有稿时才只给「看过、没签」的读数 —— 签块只在稿上，没有可落签的载体。
+  - **读稿先看 `## 证明` 那一节在不在**：读数是三态 —— `present`（有这一节，可能为空）/ `absent`（没有这一节）/ `unreadable`（文件读不出来）。**缺节不等于「证明为空」**，也不许拿整份正文或 `## 依赖` 那一段顶替；看到 `absent` 就按「稿不完整」处理。
   - 只有 `成立`（它的定义就是 `findings` 为空）才轮得到发签这一步：在册档由你的秘书判、框架侧把签写进 `out/vsigns/<被审正文的 sha>.json`；未在册档由你**颁发**（把信封交给收方秘书）；真正让五元位第 3 位置真的是收方秘书的落签，不在你手上 —— 你那一格只负责把两态结论与缺陷步写清楚，别拿“我大致看过了”去替它补。“检查器自己没跑成”（输出不是合法 JSON、字段缺、取值不在词表里）不是这两个结论之一：它是没查成，要如实报出来，绝不许拿 一个假结论冒充“审过了”。
   - 每条问题都要指到那一步的编号并给理由（引用哪一条在册 id、或同段内哪一步推出它）；只写“这里不太严谨”等于把改哪儿留给作者猜。**先判哪一步承重**（结论直接从它出来的那一步）并在 `verify_proof` 的 findings 里写出它的步号与原句，单独核它；承重步含混就是 `有毛病`，不承重的漂亮步骤不加分。
   - 硬禁令逐条查：无条件前提、无依据的步骤、“易证/显然/trivial”这类缝、以及引用到一条不干净的命题（还是猜想 / 已作废 / 只是 assumption）。引到不干净的命题时，缺陷沿依赖边继续上溯 —— 这是继承的缺陷，不是这一处的笔误。
@@ -1107,17 +1111,17 @@
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 | `verify.list_verifications` | 列验证台账（只读，可按命题过滤）。 | `read` | （无） |
 | `verify.read_proof` | 按命题号读回被审的证明全文 + sha256 + 最近一次结论（只读）。 | `read` | `statement_id` |
@@ -1197,34 +1201,34 @@
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `formal.check_formal` | 把一段 Lean 源码（`source`）或工作区里的 `.lean`（`script_path`）交给检查器真跑一次。前置自检不是 usable 时如实回 unknown 并给原因：不起检查器、不抛栈。查了没通过（compile_error / uses_sorry / extra_axioms / decl_mismatch）与没查成是两件事 | `read` | `claim` |
 | `formal.formalize` | 把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，带原因：开关关着 / 自检不过 / 没有检查器 / 超时）。返回里带 `path` / `sha256` / `exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数 | `write_local` | `claim`、`source` |
 | `formal.record` | 把一次形式化检查登记成 `experiments` 表的一行（`method="formal"`）：先按 `statement_id` 读台账里那条命题的正文，再对 `code_path` 的 `.lean` **现跑一次**检查器，把现跑得到的 status / verified / checker / output_sha256 写进那一行。调用方给的读数只用于对账：与现跑不一致 ⇒ 受控拒绝 `reading_mismatch`，一行都不写。它**不动** `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签 | `write_local` | `statement_id`、`code_path` |
 | `fs.delete` | 删除文件；删目录必须显式 recursive=true（不许删工作区根）。 | `write_local` | `path` |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
 | `fs.move` | 移动或重命名（目标已存在时拒绝，不静默覆盖）。 | `write_local` | `src`、`dst` |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
-| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
-| `table.count` | 统计行数（可用 filter 做等值过滤）。 | `read` | `table` |
-| `table.create` | 新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
+| `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
+| `table.create` | 新建一行：主键由台账分配（整格别写），校验通过才落盘。 | `write_local` | `table`、`row` |
 | `table.delete` | 删除一行；被引用的 concepts/literature 会被拒绝并列出引用者。 | `write_local` | `table`、`id` |
-| `table.get` | 按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。 | `read` | `table`、`id` |
-| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。 | `read` | `table` |
+| `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
+| `table.list` | 列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。 | `read` | `table` |
 | `table.schema` | 返回 17 张表的字段名/类型/是否必填/默认值，以及全部受控词表（从 dataclass 与 schema 反射）。 | `read` | （无） |
-| `table.search` | 子串匹配；statements 按内容面，其余按标量字符串字段。 | `read` | `table`、`query` |
-| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
+| `table.search` | 子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。 | `read` | `table`、`query` |
+| `table.update` | `statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + space；都另给 abandon_basis，缺即拒。 | `write_local` | `table`、`id`、`patch` |
 | `trace.children` | 看我自己直接下级此刻在做什么：每个子任务给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。非主控角色只给一层（传 depth 更大也按一层处理），返回值里逐字写明「更深要看请向 M 请求」以及那条上行调用的原文。 | `read` | （无） |
 
 共 **39** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
@@ -1343,37 +1347,37 @@
 | `clock.timer_purpose` | 给一条已经受理的等待补上目的（同一个编号，不是新建一条）。起表时忘了写目的就走这一件：补上之后到点那条报醒里就有目的可念，purpose_missing 转 false。计时器（tm-…）与周期性巡查（pd-…）都认。所有角色都能用。 | `write_local` | `entry_id`、`purpose` |
 | `clock.timer_start` | 起一个一次性计时器：after_sec（多少秒之后）与 wait_for（等谁收口）二选一，外加一句目的 reason。到点后时钟自动落一条 notice 板项给收件人（detail 是"时间到：目的｜等了多久（起于…，到于…）"），并同时置一条唤醒标记。不自动重排：检查完成后要再起一次；周期性巡查用 clock.periodic_start。目的忘了填不报错（读数带 purpose_missing=true 并追问），补一句走 clock.timer_purpose。所有角色都能用。 | `write_local` | （无） |
 | `clock.wait_any` | 等待任意计时器返回：手上没事了，谁先回来都行，回来叫我。这是显式意图（不是「有计时器」这一件事本身）：记下之后循环这一拍不调模型；到任一计时器返回或我等的人说了话，就把「目的 + 现场等了多久 + 时间到 + 对方说的话」发给你。手上有活要接着做就别起这个意图 —— 计时器不会阻塞动作。已无事可做且一条计时器都没有时起这个意图，等于交差（框架向父代理报告）——读数里的 requested=true / waiting=false 说的就是这一档（要求过等、而没有可等的东西），它不是「没在等」。所有角色都能用。 | `write_local` | （无） |
-| `conductor.acceptance` | 只读：读某项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的判据名 / 结论 / 读数。交付说明要逐条对齐。 | `read` | （无） |
+| `conductor.acceptance` | 只读：读某项目的验收表（默认 out/paper/ACCEPTANCE.md），逐行解析出 P1–P11 的判据名 / 结论 / 读数。交付说明逐条对齐。 | `read` | （无） |
 | `conductor.ack` | 把自己名下已经读过、已经办完的板项确认掉（消项）：逐条从 seen 或 queued 推到 done，落 by_task_id 与步号，并 append-only 记一条事件。只许 ack 收件人是自己的项（别人的项 ⇒ 受控拒绝 not_yours，一条都不写）。close 与你那一条项的 expects 必须配对：要一个回执的项（expects=ack，含`conductor.post_task` 之外的信息型项）用 close="acked"；`conductor.post_task` 落的 work 项（expects=work）用 close="completed"。这是销号之前必须先走的那一步：板没清干净时销号会被拒（销号是父的决定），而 M 收工时整棵树都要销号 —— 所以这是那条链上唯一的「确认」动作。唯一的例外是 block：那一档你先 ack 不掉（block → done 在状态机里是倒退，会被拒 state_error），要等主控 `conductor.wake_blocked` 把它翻回 queued 之后你才 ack 得动 —— 而它对任何收件人都一样：block 项不会自己变成可 ack。 | `write_local` | `item_ids` |
-| `conductor.board` | 只读：板上还挂着什么。一行 = 一个工作项（`tasks` 里 `kind` 非空）；`expects=ack` 确认读过算完，`expects=work` 要交付算完。 | `read` | （无） |
-| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每个收件人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
-| `conductor.cancel` | 硬取消（协作式）：立刻置共享停止信号，不等在飞收尾；在飞任务自己收终态。与 conductor.stop 的区别是 stop 先尝试收尾。 | `write_local` | （无） |
-| `conductor.closing` | 只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance`（内容级验收五条 + 辅助读数）与 `cap_usd`。 | `read` | （无） |
-| `conductor.ensure_project` | 冷启动 / 热启动：`start=auto|cold|warm`，返回四态与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。 | `write_local` | （无） |
+| `conductor.board` | 只读：板上还挂着什么。一行 = 一个工作项（`tasks` 里 `kind` 非空）；`expects=ack` 读过算完，`expects=work` 交付算完。 | `read` | （无） |
+| `conductor.broadcast` | 给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。 | `write_local` | `subject` |
+| `conductor.cancel` | 硬取消：立刻置共享停止信号，不等在飞收尾；在飞任务自己收终态。与 conductor.stop 的区别是 stop 先尝试收尾。 | `write_local` | （无） |
+| `conductor.closing` | 只读：跑收工门（八格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance` 与 `cap_usd`。 | `read` | （无） |
+| `conductor.ensure_project` | 冷/热启动：`start=auto|cold|warm`，返回四态与 mode。`cold` 才建目录；`warm` 必须已存在且是工作区。已在工作区里又没给 `projects_dir` ⇒ 被拒（`already_a_project`）：**不要另建项目**。 | `write_local` | （无） |
 | `conductor.escalate` | 把「我需要召唤者做什么」写进**父代理的收件箱**并让本趟以 stop_reason=escalated 收工（子代理跑到一半卡住时用它，别靠返回值等下一轮、也别借别人的边绕）。收件人=运行期解析出的召唤者，**不要求**在 `edges` 里登记。顶层（没有召唤者）会被受控拒绝 `not_caller`，一行都不写。 | `write_local` | `need`、`kind` |
 | `conductor.guide` | 把 M 的一句话沿秘书链逐级转发到链上最后那一个代理：只写链尾也认（链由台账的父子关系现算）；写整条链（绝对编号 `t-NNNNNN->t-NNNNNN->t-NNNNNN`，或名册名混写 `M->D1->F2`）也认，内部一律先解析成绝对编号链。每一跳的秘书只看链头往下转，正文只到链尾：只有链尾那一跳的秘书开一条板项、把正文交给它服务的那个代理；中间的秘书只转发、不读内容。返回里的 hops 逐项给 hop / of / at / elapsed_us / delta_us / secretary_role / secretary_task_id / mode（forward 或 deliver）/ from / to / remaining_chain / content_read / item_id / relay_id；delivered_to 是列表，只有一个元素 = 链尾那一个的绝对编号（不是标量；读它要先取 [0]）。 | `write_local` | `to`、`text` |
-| `conductor.ledger` | 看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（请代唤申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。 | `read` | （无） |
+| `conductor.ledger` | 看台账：tree（层级与结局）/ stats（计数）/ issues（结构问题）/ verify（不变式）/ relays（代唤申请）。计数与召唤口径同 `conductor.state`（全量、含顶趟行）。 | `read` | （无） |
 | `conductor.patrol` | 一次拿全每个活跃子代理（在飞 / 待机 / 未读到）的状态，按名册深度优先排好：绝对编码、按名册的绝对编码链、在执行的任务、任务看板（未做完的逐条 + 现在在做哪一项）、计时器（目的 / 等谁 / 已等多久 / 还剩多久）、最近一次指导，外加异常清单。看完对每一个只说「过」或给指导意见（`conductor.patrol_verdict`）；要盯某一个用 `conductor.review_child`。读不成时 `checked=false`（不会折成『没有活跃子代理』）。 | `read` | （无） |
 | `conductor.patrol_verdict` | 对一个活跃子代理下结论：`verdict="pass"`（过）或 `verdict="guide"`（指导意见，`text` 必填）。`guide` 走的就是 `conductor.guide` 那条沿秘书链逐级转发的路（正文只到链尾），回执原样带出（`relay_id` / `delivered_to` / `hops`）；`pass` 在转发台账所在的那同一本账里落一条痕。号不合法或它此刻不活跃 ⇒ 受控拒绝并点名合法号与它在哪一档；被拒的结论不落成「巡过了」。 | `write_local` | `code`、`verdict` |
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
-| `conductor.resume_brief` | 读上一次优雅停止留下的续跑简报（做了什么 / 剩什么 / 从哪继续）。没有简报时如实说『还没有停止过』；未终态行逐条报出。 | `read` | （无） |
+| `conductor.resume_brief` | 读上一次优雅停止留下的续跑简报（做了什么/剩什么/从哪继续）。没有简报时如实说『还没有停止过』；未终态行逐条报出。 | `read` | （无） |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
 | `conductor.review_child` | 细看一个活跃子代理：给它的绝对编码，返回 `conductor.patrol` 里那一项的全部信息（同一份实现），外加整棵名册树（带绝对编码，从里面挑号）。号不合法时受控拒绝并点名哪些号合法（`legal_codes` 上限 20 条 + `legal_total` 总数）：台账里没有 ⇒ `not_in_roster`；有但不活跃（已收工 / 已销号）⇒ `not_active` 并点明它在哪一档。 | `read` | `code` |
-| `conductor.role_spec` | 某角色的描述（不是它的工具面）：role、summonable 与职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给它的动作表与工具名。派活前用它确认它能不能做这件事；与声明层同源。 | `read` | `role_name` |
-| `conductor.state` | 只读状态视图：各表计数 + 猜想按状态 + 台账规模。`tasks` 是全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 未消化篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger` 的 `started_total`。`programs` 是盘上程序进程读数，巡查按它点异常。 | `read` | （无） |
-| `conductor.status_report` | 项目**状态报告**：只读收集当前情况（产出/交接/在飞卡点/被拒与插话）→ 落 `out/review/STATUS-<ts>.{md,json}`。用户问「现在什么情况」走它：不发 ask_user、不停别人的循环（**旁路观测**）。 | `read` | （无） |
+| `conductor.role_spec` | 某角色的描述（不是工具面）：role、summonable 与职责 / 交付物 / 边界 / 政策 / 立场 / 签名错六格；不给动作表与工具名。派活前用它确认它能不能做这件事。 | `read` | `role_name` |
+| `conductor.state` | 只读状态：各表计数 + 猜想按状态 + 台账规模。`tasks` 全量（含顶趟行 `called_by=user`）；`queues.literature.unprocessed` = 未消化篇数（`run_once` 一篇一次）；召唤数看 `conductor.ledger.started_total`。`programs` 是程序进程读数。 | `read` | （无） |
+| `conductor.status_report` | 项目**状态报告**：只读收集当前情况（产出/交接/在飞卡点/被拒与插话）→ 落 `out/review/STATUS-<ts>.{md,json}`。用户问「现在什么情况」走它：不发 ask_user、不停别人的循环（**旁路观测**）。 | `write_local` | （无） |
 | `conductor.stop` | 停止：默认**优雅** —— 落停机开关 → 广播叫停（同伴收工并停掉自己起的子进程）→ 拒新召唤 → 有界收尾 → 合成终态（记未知、不重试）→ 续跑简报。`force=true` 直接停：按进程登记连子孙一起杀。给 `root_task_id` 只停那一支，不给是全工作区。幂等。 | `write_local` | （无） |
 | `conductor.summon` | 派活：把活交给某个角色（只写**是什么活**，怎么做由它定）。闸门在主控内部（边 / 动作表 / 参数接缝 / 上限 / 预算）；被拒也落台账并回 `refusal_reason`。 | `write_local` | `target_role`、`task` |
-| `conductor.summon_many` | 一次派**一批**活：按写集分波、线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省自动补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。 | `write_local` | `targets` |
-| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`，并给收件人投一条系统通知（不欠 ack；`revoked_recent` 读得到）。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
+| `conductor.summon_many` | 一次派**一批**活：按写集分波、线程池并发（上限 `max_concurrency`）；同角色多实例各要 `instance` 标签才同波（缺省补 `<角色>#N`）。读数看 `waves` / `concurrent_peak`。 | `write_local` | `targets` |
+| `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
 | `conductor.wake_blocked` | 把被优雅停止停住的活（`item_state=block` 的板项）逐条审批唤醒 —— 业主 2026-10-29 逐字：「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」。逐条审批式：默认 `dry_run=true` 只看不写（审计照跑、逐条给结论）；`approve="yes"` 才算批准，且 `dry_run=false` 才真写。没带批准的那一趟连审计结论都不给（逐条 `skip` + `not_approved`）—— 一张「没批准但可唤醒」的清单等于把绕开批准的路递到调用方手里。三档逐条：`resume`（owner 静默、未销号、仍在册、板项未终态、子树无在跑）/ `review`（任一读数没查成，交人看，不猜）/ `skip`（已销号、owner 在飞、板项已终态、子树有在跑、不是静默、没批准，逐条给 `refusal_code`）。真写时两根轴一起翻（status→running、item_state→queued）并在 `inputs` 追一条 `wake:<谁>@<iso>|<为什么>`，然后只经 `wake_on_lifeline` 叫醒 owner（那条路带「已销号 / 在飞」双闸）。两条后果写在明面上：① 唤醒清不掉板项本身 —— 它只是回到 queued，收口仍要收件人自己 `conductor.ack`（`expects=work`）或撤掉不再需要做的项（`conductor.void_items`，`expects=work` 也收）；② block 板项会一直挡收工（`retire_integrity` 的 `dirty` 非空 ⇒ `complete=false`），唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | （无） |
 | `conductor.watch` | 看任意一支任务树的行为：从 task_id（或某个角色在台账里的实例行）向下走，每个节点给状态、最近 N 步（agent_step）、被拒次数与类目、产出是否真落盘、最近一次交接手稿摘要。depth 缺省（或 0）= 整棵树；主控能想追几层追几层。 | `read` | （无） |
-| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
+| `fs.edit` | 定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。 | `write_local` | `path`、`old_string`、`new_string` |
 | `fs.list` | 列出工作区内某目录（或单个文件）的条目；recursive=true 时递归。 | `read` | （无） |
-| `fs.read` | 读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
+| `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 

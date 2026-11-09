@@ -963,7 +963,7 @@ def _pick_workspace(
 
 @tool(
     "ocr.backends",
-    "**真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；**不会**下载 easyocr 模型。",
+    "**真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；不下载 easyocr 模型。",
     {
            "type": "object",
            "properties": {"refresh": {"type": "boolean"}},
@@ -1026,7 +1026,7 @@ def _ocr_detect_text_layer(ctx, path="", lit_id=""):
 
 @tool(
     "ocr.run",
-    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本假装成功）。可给已登记文献编号。",
+    "对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本）。可给已登记文献编号。",
     {
            "type": "object",
            "properties": {

@@ -974,7 +974,7 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
 @tool(
     "verify.evidence_for",
     (
-            "查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；两个都不给 ⇒ checked=False（**没查 ≠ "
+            "查一条命题（claim_key）或研究问题（for_question_id）已有的实验证据；都不给 ⇒ checked=False（**没查 ≠ "
             "查了没有**）。"
             ),
     {

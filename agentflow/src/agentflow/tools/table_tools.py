@@ -1692,7 +1692,7 @@ def _with_proof_routes(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
 
 @tool(
     "table.list",
-    "列出某张表的行（等值过滤 + 分页）与过滤后的总数。读 `statements` 行另带 route / proof_routes；算不出来时由 proof_routes_problem 说明。",
+    "列出某张表的行（等值过滤 + 分页）与过滤后的总数。`statements` 行另带 route / proof_routes（算不出来由 proof_routes_problem 说明）。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1762,7 +1762,7 @@ def table_list(
 
 @tool(
     "table.get",
-    "按主键取一行；不存在时 ok=True 且 data=None（meta.found=False）。读 `statements` 行另带 route / proof_routes 与算不出来的说明。",
+    "按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。",
     _obj({"table": _TABLE_PROP, "id": {
         "type": "string",
         "description": (f"主键值（{S.ID_DIGITS} 位十进制字符串如 `000000`，"
@@ -1795,7 +1795,7 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
 
 @tool(
     "table.create",
-    "新建一行：主键由台账分配（这一格整格别写），校验通过才落盘。",
+    "新建一行：主键由台账分配（整格别写），校验通过才落盘。",
     _obj(
         {
             "table": _TABLE_PROP,
@@ -1907,7 +1907,7 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 
 @tool(
     "table.update",
-    "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题按四档：math_error + "
+    "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + "
     "defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + "
     "space；都另给 abandon_basis，缺即拒。",
     _obj(
@@ -2170,7 +2170,7 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
 
 @tool(
     "table.count",
-    "统计行数（可用 filter 做等值过滤）。",
+    "统计行数（filter 做等值过滤）。",
     _obj({"table": _TABLE_PROP, "filter": _FILTER_PROP}, required=("table",)),
     side_effect="read",
     roles=TOOL_ROLES,
@@ -2294,7 +2294,7 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
 # `contract_amendments`），并抬了 `PROMPT_VERSION`（summary 进 `tools_lines`）。
 @tool(
     "table.search",
-    "子串匹配；statements 按内容面，其余按标量字符串字段。",
+    "子串匹配；statements 只搜 `label`/`statement_full`，其余按标量字符串字段。",
     _obj(
         {
             "table": _TABLE_PROP,

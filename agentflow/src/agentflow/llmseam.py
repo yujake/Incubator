@@ -877,7 +877,7 @@ NOTIFY_JSON_SCHEMA: dict[str, Any] = {
                  "description": ("markdown 正文：做了什么 / 依据（实验号、文献号、手稿号）/ "
                                  "要对方做什么 / 我卡在哪")},
         "refs": {"type": "array", "items": {"type": "string"},
-                 "description": "前序手稿编号，或 stmt:/exp:/lit:/rel: 这类台账引用"},
+                 "description": "前序手稿编号，或 stmt:/exp:/lit:/rel:/q:/c: 这类台账引用"},
         "why": {"type": "string", "description": "一句话说明为什么交这一份（可选）"},
     },
     "required": ["to", "summary", "body"],
@@ -908,7 +908,7 @@ DISPATCH_NOTIFY_JSON_SCHEMA: dict[str, Any] = {
                  "description": ("markdown 正文：派了什么、依据（实验号、文献号、手稿号）/ "
                                  "要对方做什么 / 为什么")},
         "refs": {"type": "array", "items": {"type": "string"},
-                 "description": "前序手稿编号，或 stmt:/exp:/lit:/rel: 这类台账引用（会被逐条核）"},
+                 "description": "前序手稿编号，或 stmt:/exp:/lit:/rel:/q:/c: 这类台账引用（会被逐条核）"},
         "why": {"type": "string", "description": "一句话说明为什么交这一份（可选）"},
     },
     "required": ["summary", "body"],
@@ -1034,7 +1034,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
                      "description": "markdown 正文：做了什么 / 依据（实验号、文献号、手稿号）/ "
                                     "要对方做什么 / 我卡在哪"},
             "refs": {"type": "array", "items": {"type": "string"},
-                     "description": "引用到的编号（stmt:/exp:/lit:/rel: 或手稿号）—— 会被逐条核"},
+                     "description": "引用到的编号（stmt:/exp:/lit:/rel:/q:/c: 或手稿号）—— 会被逐条核"},
             "revises": {"type": "string",
                         "description": "可选：要订正的那一号手稿（旧行保留，不覆盖）"},
             "why": {"type": "string", "description": "可选：为什么写这一份"},

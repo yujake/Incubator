@@ -439,8 +439,8 @@ D_ATTACK_RECORD_MESSAGE = (
 #: 与 `_d_proof_body_refusal` 的实际判定：三处不许各写一份（summary 单独写"照拒"而不写
 #: 例外、或实现单独放宽而不改这句，都会红）。
 D_PROOF_BODY_RULE = (
-    "D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；唯一例外是 "
-    "`RESEARCH.md` 引 `reports/f-proof-<号>.md` 或带其 sha256"
+    "D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 "
+    "`RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256"
 )
 
 #: 其余任何路径上"D 自己写的 `## 证明` 节"的拒信（2026-11-05 业主裁定：教法说任何路径，
@@ -973,7 +973,7 @@ def fs_list(ctx: FsContext, *, path: str = ".", recursive: bool = False, limit: 
 
 @tool(
     "fs.read",
-    "读文本文件；二进制拒绝，超限返回截断内容并标注。大文件分段读：`start_line`（1 起）＋ `max_lines` 取那一段，`meta.next_line` 是下一段起点（EOF 为 null）。",
+    "读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -1169,8 +1169,8 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 #: 那一档由内容闸管，拒信的指路是"要落稿就派 F"）。
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*` / `*-proof.md` 对 F/D/M 拒写"
-    "（A/B 在 `reports/` 下这三族也拒；`notes/` 不算），"
+    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；"
+    "A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），"
     "`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
     _obj(
         {
@@ -1274,7 +1274,7 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含任何路径自写 `## 证明` 那一档的例外）；D 可写 `RESEARCH.md`。",
+    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},

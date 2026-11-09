@@ -8,8 +8,8 @@
 `notes/<角色>.md` 同族）都能用。
 三件工具：
 | 工具 | 谁用 | 作用 ||---|---|---|| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 
-`id` —— 它不是工具：走循环形状 `handoff` || `manuscripts.read` | A–H | 按编号读全文（留言里传的就是这个编号） || 
-`manuscripts.list` | A–H | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
+`id` —— 它不是工具：走循环形状 `handoff` || `manuscripts.read` | 全部可召唤角色 | 按编号读全文（留言里传的就是这个编号） ||
+`manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
 ## 为什么主控 M 不在这张工具面上（口径，别改回去）
 M 的工具面是"编排面 + 文件面白名单"（`draft/37` §38/§57，判据
 `tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），而 
@@ -69,7 +69,7 @@ def manuscripts_read(store, id: str) -> ToolResult:
 
 @tool(
     "manuscripts.list",
-    "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 是广播）；交接前先看这里，别重复别人的结论。",
+    "列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。",
     {"type": "object",
      "properties": {"to": {"type": "string", "description": "只看发给谁（A–H/M/ALL）"},
                     "sender": {"type": "string", "description": "只看谁写的"},

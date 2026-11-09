@@ -103,8 +103,8 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 |---|---|---|---|
 | 工具总数 | 55 | **124**（`python -m agentflow.cli tools`；Lean 关着时 121） | ⚠️ |
 | 各角色工具数 | `A20 B18 C17 D37 E21 F32 G32 H23`（§1.2） | `A54 B39 C36 D59 E40 F52 G55 H46 V28 L39 M42`（同一命令读"各角色工具数"那一行） | ⚠️ |
-| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **124 口径**：`read 59 / write_local 60 / none 5`；`external`：`none 113 / egress 6 / exec 5`（非 `none` 共 11 件；Lean 关着时 `read 58 / write_local 58 / none 5`、`none 113 / egress 6 / exec 2` ⇒ 8 件） | ⚠️ |
-| 需审批 | 17 / 55 | **64 / 124** | ⚠️ |
+| `side_effect` 分布 | `read 30 / write_local 15 / none 5 / network 0`；`external`：`none 44 / egress 4 / exec 2` | **124 口径**：`read 58 / write_local 61 / none 5`；`external`：`none 113 / egress 6 / exec 5`（非 `none` 共 11 件；Lean 关着时 `read 57 / write_local 59 / none 5`、`none 113 / egress 6 / exec 2` ⇒ 8 件） | ⚠️ |
+| 需审批 | 17 / 55 | **65 / 124** | ⚠️ |
 | 只读角色泄漏 | 0 | **36 件**：`H` 14 件（4 件落库代理 `review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding` + 10 件通用能力：`clock.*` 的七件写工具 + `conductor.ack` + `conductor.escalate` + `conductor.post_task`）+ `C` 11 件（`analysis.register_report` 一件落库代理 + 同样那 10 件通用能力）+ `V` 11 件（`verify.verify_proof` 一件自己的凭据写入面 + 那 10 件通用能力） | ⚠️ |
 | 零测试工具 | 7 个（`table.list` `table.count` `table.schema` `table.search` `fs.list` `search.register` `search.download`） | 用"工具名字符串是否出现在 `tests/`"口径，**本次未复算** | ⚠️ |
 | `INVENTORY` 未覆盖的 schema 对象 | 无 `Task`/`UsageEntry`/`EvalResult` | **有**（`schema.EvalResult`） | ❌ **INVENTORY 落后** |
@@ -332,9 +332,9 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 | 维度 | 读数 |
 |---|---|
 | 总数 | **42** |
-| `side_effect` | `read 18 / write_local 24 / none 0` |
+| `side_effect` | `read 17 / write_local 25 / none 0` |
 | `external` | `none 42` |
-| 需审批 | **24** |
+| 需审批 | **25** |
 
 **逐件清单（按模块，共 42）**：`clock.*` 9（`alarm_start` `now` `periodic_start` `periodic_stop` `timer_cancel` `timer_list` `timer_purpose` `timer_start` `wait_any`） · `conductor.*` 25 · `fs.*` 6（`edit` `list` `read` `search` `stat` `write`） · `program.*` 2（`list` `stop`）。
 

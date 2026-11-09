@@ -8,7 +8,7 @@
 - `manuscripts.OBJECT_REFS` 认 `stmt/exp/lit/rel/q/c`；
 - `schema.CITATION_PREFIXES` 认 `rel/lit/exp/eval/doc/stmt`；
 - 携带单另有一套 `stmt/exp/mss`（`depsection.CARRIED_KEYS`）；
-- 提示词只教 `stmt:/exp:/lit:/rel:`。
+- 提示词教 `stmt:/exp:/lit:/rel:/q:/c:`（2026-11-09 起，`refs` 这一侧）与 `eval:`（`citations` 那一侧）。
 
 同一个字符串在两张表里结论相反（`doc:` 在 citations 合法、在 refs 非法；`q:`/`c:` 反过来），
 而真机已经付过一次代价：收工 `notify.refs` 写 `verifications/000001.jsonl#v-000003`，

@@ -4030,7 +4030,7 @@ def notify_shape_problem(notify: Any) -> str:
                 "要对方做什么 / 我卡在哪）")
     refs = notify.get("refs")
     if refs is not None and not isinstance(refs, (list, tuple)):
-        return "notify.refs 必须是数组（前序手稿编号或 stmt:/exp:/lit:/rel: 这类台账引用）"
+        return "notify.refs 必须是数组（前序手稿编号或 stmt:/exp:/lit:/rel:/q:/c: 这类台账引用）"
     return ""
 
 
