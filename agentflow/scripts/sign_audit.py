@@ -50,24 +50,33 @@ def _workspaces(root: Path) -> list[Path]:
     """`--root` 指一个工区 / 一个 projects 目录 / 仓库根 ⇒ 工区列表（只读）。
 
     一个空的工作区（`data/statements.json` 是空表）与"这是仓库根"长得一样：
-    `agentflow/` 自己就有一套空表。所以空表那一档继续往下看 `projects/`，
-    只有那里也没有工区时才把根当成一个（空的）工区报出来。
+    `agentflow/` 自己就有一套空表。所以：
+    ① 根自己就是一个有命题的工区 ⇒ 只看它；
+    ② 否则先看 `agentflow/projects/`、再看 `projects/`（本仓的数据面在
+       `agentflow/projects/`；`D:\Incubator\projects\` 是另一套历史目录）；
+    ③ 都没有时才把根下「有命题」的子目录当工区（空表子目录不算 ——
+       否则 `--root .` 会把 `agentflow/` 那套空表当成一个工区）。
     """
     if (root / "data" / "statements.json").is_file():
         if _statements(root):
             return [root]
-        for base in (root / "projects", root / "agentflow" / "projects"):
+        for base in (root / "agentflow" / "projects", root / "projects"):
             if base.is_dir():
                 found = sorted(p for p in base.iterdir()
                                if (p / "data" / "statements.json").is_file())
                 if found:
                     return found
         return [root]
-    for base in (root, root / "projects", root / "agentflow" / "projects"):
+    for base in (root / "agentflow" / "projects", root / "projects"):
         if not base.is_dir():
             continue
         found = sorted(p for p in base.iterdir()
                        if (p / "data" / "statements.json").is_file())
+        if found:
+            return found
+    if root.is_dir():
+        found = sorted(p for p in root.iterdir()
+                       if (p / "data" / "statements.json").is_file() and _statements(p))
         if found:
             return found
     return []
