@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-09，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **278 个 `.py`、269,272 行**，**77 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
+> **278 个 `.py`、269,271 行**，**77 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -15,8 +15,8 @@
 > **2026-11-09 D11 收口再改一次**：268,334 → **268,340**（D11 ①②③ 的运行期文案、
 > 进度标记与两处撤销注释改写；另把 12-K 的原文逐字照登并标时点；净增 6 行，全在
 > `agent_loop.py` ⇒ 14,133 → **14,139**；文件数 277 与 `>800 行` 的 76 都不变）。
-> **2026-11-09 T2 收口再改一次**：269,235 → **269,272**（净 +37：`manuscriptfamily.py`
-> +6 —— `classify` 改名 `classify_manuscript`，短名让路给 `projects.classify`；
+> **2026-11-09 T2 收口再改一次**：269,235 → **269,271**（净 +36：`manuscriptfamily.py`
+> +5 —— `classify` 改名 `classify_manuscript`，短名让路给 `projects.classify`；
 > `proofregistry.py` +17 与 `verifications.py` +14 —— `proof_sha` 收成一处（前者是唯一
 > 实现，后者只转发，说明文字净增）；`agent_b/register_statement.py` 4/4、`vreceipts.py` 1/1 是改名，
 > 净 0；文件数 278 与 `>800 行` 的 77 都不变，`agent_loop.py` 14,139 不变）。

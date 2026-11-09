@@ -273,7 +273,6 @@ def classify_manuscript(rel: Any) -> dict[str, Any]:
     项目目录状态（workspace / archive …），与"这份稿属于哪一族"是两个语义；两个模块各有一个
     短名 `classify` 会让 R003（公开名在多模块里有独立实现）报两条告警，而它们本来就不该合并。
     带后缀之后短名不再撞车，读者也不会把"项目目录状态"与"手稿族"读成同一件事。
-    
 
     返回键：`tier` / `family` / `name_family` / `id` / `proof_no` / `code` / `why` /
     `checked` / `name` / `directory` / `canonical`。
