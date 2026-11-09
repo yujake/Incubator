@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-09，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **279 个 `.py`、269,377 行**，**76 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
+> **280 个 `.py`、269,417 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,139 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
@@ -13,6 +13,10 @@
 > 词表/号形那一半整段搬走，解析与存在性留在原名下、按名字回引；`tools/repo_survey.py`
 > 的软判据（`tests/test_repo_survey_does_not_get_worse.py`）量的是"不许多"，处置是拆、
 > 不是抬基线。`agent_loop.py` 14,139 行不变）。
+> **2026-11-09 拆模块（D12 的板项投影）再改一次**：269,377 → **269,417**（文件数 279 → **280**，
+> `>800 行` 76 → **75**：`statusreport.py` 808 行拆出 `boardrows.py`（板项行的状态投影
+> `tasks_row_reading` 与它的三个常量）—— 同一笔处置、同一条软判据；`statusreport.tasks_row_reading`
+> 仍可用（按名字回引），`agent_loop.py` 行数不变）。
 > 2026-11-09 再改一次：266,332 → **266,484**（两把尺统一：`textutil.py` 抽出唯一的关键词
 > 命中判据、`tools/table_tools.py` 的 statements 搜索分支改调它（+128）；同日的声明面收口
 > （`table.search` 的 summary 与 `query` / `fields` 说明改真口径、`PROMPT_VERSION` 抬到 p263）
@@ -330,7 +334,8 @@
 | `propositionkey.py` | **命题同一性与同种证明的判据**（纯函数、确定性、零模型调用；2026-10-24 业主改口径：「不用机械判据，让秘书洗定理名，让秘书判」+ 准绳「定理描述一致（什么条件推出什么结论），就是一个定理」）：本模块只在终判的上游做两件事 —— `judgeable`（够不够格当一条命题）与 `proposition_key` / `prose_similarity`（同一性的候选读数）；终判在 `secretary.Secretary.adjudicate_proposition`（一次模型调用，二档 same / different，判不了 = 没判成，按正文 sha256 缓存） |
 | `jobobject.py` | 进程树治理（`draft/39` §3.21 五 I13，D03 的根因修法）：Windows **作业对象**（`KILL_ON_JOB_CLOSE`）—— `create_job`/`assign`/`assign_tree`（根 + 现有后代；作业归属**不向前追溯**）/ `grace_then_kill`（先宽限再 `TerminateJobObject`）/ `reap`/`close`；后代枚举走 Toolhelp 快照。`stopctl` 的强制停止优先走它（`via="job"`），`taskkill` 只作退路 |
 | `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |
-| `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句） |
+| `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句）。板项行的"状态"投影不在本文件里（见下一行） |
+| `boardrows.py` | **板项行的状态投影**（D12，2026-11-09 从 `statusreport.py` 整段搬出来）：`tasks` 表里 `kind` 非空那一行的 `status` 恒为 `pending`（类型标记，不是"还没收口"），真正的收口状态在 `item_state` / `item_close` ⇒ `tasks_row_reading` 按三档投影（板项已收口 / 板项还开着 / 代理行照旧 `<status>/<outcome>`），三个 `BOARD_ITEM_*` 常量是那三档的措辞。两个调用方（`statusreport._hint_of` 与 `webui.readers` 的 `TaskRow.status_reading`）必须是同一处口径 —— `statusreport.tasks_row_reading` 按名字回引本模块 |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据 |
 | `proofreport.py` | **形式化困难的受控汇报形态**（业主 2026-10-22 晚的协作面裁定）：L→B 的汇报与 B→D 的升级，两边落点都是既有的 `agent_message` 收件箱（`agent_loop.send_message` 写 / `read_messages` 读），本模块只把"这一条汇报说的是什么"压成受控形态 —— `FAILURE_TYPES`（失败类型词表）/ `SEVERITIES`（`normal` 与 `research` 两档：B 改证明就够 / 路线可能不成立 ⇒ B 通知 D 开展研究）/ `SUGGESTIONS`（失败类型 → B 该补什么）/ `payload` / `violations` / `deliver`。自由文本没法被下游按类分派，而"漏了一步"与"命题本身不对"该做的事完全不同 |
 | `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_revise`/`handoff_query`）+ **命题写入代理**（`wash_statement`/`record_statement`，业主 2026-10-09：B 交内容、秘书落盘——洗格式 / 拿编号 / 查重 / 改表四件，写集只有 `statements` 与 `dependencies`）+ **名册**（S1k，业主 2026-10-19/20：「名册 = 父 + 子 + 绝对编号」）：落点 `out/roster/<父编号>.jsonl`（append-only，`_fold_roster` 折叠 `add`/`bind`/`retire`/`keep_alive`，另有 `<父编号>-index.jsonl` 对照表与 `<父编号>-retired.jsonl` 销号名单），`roster_view` / `parent_of` 答"我的父是谁、我的子是谁"（行里带绝对编号 `task_id` 与名册名 `name`），`brief_source` 记简介是父给的原话（`parent`）还是秘书代写（`secretary`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态**（"委托秘书洗一遍格式"是**两段式**：`wash_proposed` 请示 ⇒ 父用 `accept_proposal`/`reject_proposal` 定） |

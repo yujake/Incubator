@@ -2576,6 +2576,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "step_stability / first_difference（连续两步是否逐字节相同、从第几个字符起不同）、"
                           "dynamic_sections / unregistered_dynamic_sections（动态段白名单）、"
                           "prompt_cache_record / summarize_prompt_cache（每步与整趟的命中率、可省金额）",
+    # 2026-11-09（repo survey 的 `>800 行` 软判据，业主口径：只许降、不许抬基线）：
+    # 从 `statusreport.py`（808 行）整段拆出来的「板项行的状态投影」。为什么仍是顶层模块：
+    # 这一格的两个调用方分属两条线（状态报告的 `_hint_of` 与网页 `/api/artifacts` 的
+    # `TaskRow.status_reading`），挂在任一边都会让另一边再写一份 —— 而"同一行在报告与
+    # 网页上有两种状态"正是 D12 的形态。`statusreport.tasks_row_reading` 按名字回引它。
+    "boardrows.py": "板项行的状态投影（D12，2026-11-09 从 `statusreport.py` 拆出）："
+                    "`tasks` 表里 `kind` 非空那一行的 `status` 恒为 `pending`（类型标记），"
+                    "真正的收口状态在 `item_state` / `item_close` ⇒ `tasks_row_reading` 的"
+                    "三档投影（板项已收口 / 板项还开着 / 代理行）与 `BOARD_ITEM_STATUS_MARK` / "
+                    "`BOARD_ITEM_NOT_CLOSED` / `BOARD_ITEM_STATE_UNKNOWN` 三个常量",
     # 2026-10-21：文档面/文献台面的支撑模块（`promptstability` 之后新增的第二个"不属于任何角色"的顶层模块）。
     # 它同样只被循环面与质量面读，故按上面那条同一口径登记：事实登记，不是"批准它存在"。
     "litstage.py": "「待新增文献列表」的实现核心（业主 2026-10-20 口径）：按委托暂存 → 审 → 一键迁移 → 报告；"
