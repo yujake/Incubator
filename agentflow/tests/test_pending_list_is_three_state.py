@@ -27,8 +27,14 @@ b/c/d 打的是工具面（`lit.*` 那四件）与 `litstage` 的公开入口。
 真机读数是 33 admitted / 14 cleared(over_cap) / 1 rejected，`relevance` 48/48 全空，
 分 4 次委托（r-000001 15 行、r-000002 15 行、r-000003 3 行、r-000004 15 行），
 `admitted_at` 四个秒各 10/10/3/10 条。这一批正是"整批搬库"的产物：按"只看 pending"
-的口径它一条待裁都没有 ⇒ 改前会被直接放行。盘上有那份工作区就照读，
-没有就按上面的实测读数复刻同一形状（夹具不是判据，形状才是）。
+的口径它一条待裁都没有 ⇒ 改前会被直接放行。
+
+这 48 行现在冻在 `tests/fixtures/mp3_r3_lit_candidates_48rows.json`（git 跟踪，文件头
+`_meta` 写着来历）。真机原文件 `projects/mp3-r3/data/lit_candidates.json` 已丢失、不可
+找回（2026-11-09 全盘核过无 `mp3-r3`、无删除留痕，且 `projects/` 从来不被 git 跟踪）——
+所以按上面 2026-10-26 的实测读数复刻同一形状。业主 2026-11-09 裁 ①-A：判据从此不
+依赖任何未跟踪数据，也不再保留"盘上有就照读"那条分支（有/没有两种形态会让同一个
+commit 出现两种结论）。夹具不在或行数不是 48 ⇒ a 当场红，而不是悄悄走另一条路。
 """
 
 from __future__ import annotations
@@ -48,8 +54,9 @@ from agentflow.webui import readers as R
 #: 交付包根（`agentflow/`）。
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
-#: 真机工作区（只读；本项目不许改它，但判据可以照它的形状取证）。
-REAL = REPO / "projects" / "mp3-r3" / "data" / "lit_candidates.json"
+#: 真机那 48 行的版本化夹具（业主 2026-11-09 裁 ①-A）：git 跟踪；判据不读未跟踪的
+#: `projects/mp3-r3` —— 那会让「盘上有就照读、没有就复刻」变成同一个 commit 两态。
+REAL = REPO / "tests" / "fixtures" / "mp3_r3_lit_candidates_48rows.json"
 
 RID = "r-000001"
 TS = "2026-10-26T21:05:15+08:00"
@@ -85,43 +92,9 @@ def _put(store: Store, rows: list[dict]) -> None:
 
 
 def _real_rows() -> list[dict]:
-    """真机那 48 行：盘上有就照读，没有就按 2026-10-26 实测读数复刻同一形状。"""
-    if REAL.is_file():
-        payload = json.loads(REAL.read_text(encoding="utf-8"))
-        rows = [dict(r) for r in (payload.get("rows") or [])]
-        if rows:
-            return rows
-    # 形状复刻（读数逐条来自真机）：每委托 10 admitted + 余下 cleared(over_cap)，
-    # r-000003 只有 3 条、r-000004 多一条 rejected。
-    plan = {
-        "r-000001": {"admitted": 10, "cleared": 5, "rejected": 0},
-        "r-000002": {"admitted": 10, "cleared": 5, "rejected": 0},
-        "r-000003": {"admitted": 3, "cleared": 0, "rejected": 0},
-        "r-000004": {"admitted": 10, "cleared": 4, "rejected": 1},
-    }
-    rows: list[dict] = []
-    n = 0
-    for rid, counts in plan.items():
-        for _ in range(counts["admitted"]):
-            rows.append({"slot": S.format_id(n), "batch": 1, "status": "admitted",
-                         "title": f"Real machine admitted {n}", "request_id": rid,
-                         "relevance": "", "lit_id": S.format_id(n),
-                         "admitted_at": TS, "added_at": TS})
-            n += 1
-        for _ in range(counts["cleared"]):
-            rows.append({"slot": S.format_id(n), "batch": 1, "status": "cleared",
-                         "title": f"Real machine over cap {n}", "request_id": rid,
-                         "relevance": "", "reason_code": "over_cap",
-                         "cleared_at": TS, "clear_reason": "本次委托的入库配额已满",
-                         "added_at": TS})
-            n += 1
-        for _ in range(counts["rejected"]):
-            rows.append({"slot": S.format_id(n), "batch": 1, "status": "rejected",
-                         "title": f"Real machine rejected {n}", "request_id": rid,
-                         "relevance": "", "reason_code": "overlap_without_new_content",
-                         "reject_reason": "与本地库重叠且没有新内容", "added_at": TS})
-            n += 1
-    return rows
+    """真机那 48 行：版本化夹具（来历见模块 docstring 与夹具文件头的 `_meta`）。"""
+    payload = json.loads(REAL.read_text(encoding="utf-8"))
+    return [dict(r) for r in (payload.get("rows") or [])]
 
 
 def _delegation(rows: list[dict], rid: str) -> list[dict]:
@@ -151,8 +124,10 @@ def test_a_the_real_48_rows_are_refused_by_the_submit_gate(tmp_path: pathlib.Pat
     就这样被当成了"判完了"。
     """
     root, store = _ws(tmp_path)
+    # 夹具是版本化的（业主 2026-11-09 裁 ①-A）：它不在就当场红，不许再退回"另一条路"。
+    assert REAL.is_file(), f"48 行夹具必须存在（git 跟踪）：{REAL}"
     rows = _real_rows()
-    assert len(rows) == 48, f"真机那份候选台账该是 48 行，读到 {len(rows)} 行"
+    assert len(rows) == 48, f"真机那份 48 行夹具该是 48 行，读到 {len(rows)} 行"
     _put(store, rows)
     reg = _reg(store)
     before = len(store.rows("literature"))
