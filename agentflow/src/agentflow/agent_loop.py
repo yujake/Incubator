@@ -8262,8 +8262,10 @@ class AgentLoop:
         first_refusal: dict[str, Any] | None = None
         #: 步数上报（业主 2026-10-10 裁定 12-K 逐字：「步数上限不做为硬标准，不设机器闸，
         #: 但向父代理报告步数超限行为，由父代理决定继续放行还是刹停」）⇒
-        #: `max_steps` 从"循环自己收工的理由"变成报告阈值：跨过它只落一条上报，
+        #: `max_steps` 从"循环自己收工的理由"变成报告节奏：跨过它只落一条上报，
         #: 循环照常继续（父代理什么都不做 ⇒ 继续跑；要停由它走 `interrupt`）。
+        #: 文案是对账，不是上限（D11，2026-11-09）：正文叫「步数报告（仅上报）」、
+        #: 主题写「不是上限」—— 旧词「超限」会让人以为撞了闸，而闸本来就没有。
         #: 保留的闸只有两件 —— 预算与墙钟（它们不是"轮次预算"），以及 S-D 那道判停。
         reports_sent = 0
         next_report_at = max(1, int(self.max_steps))
@@ -8283,7 +8285,8 @@ class AgentLoop:
                 reports_sent += 1
                 next_report_at += max(1, int(self.max_steps))
                 step_note = (
-                    f"步数超限报告（第 {reports_sent} 次）：已用 {step + 1} 步（阈值 {self.max_steps}）；"
+                    f"步数报告（第 {reports_sent} 次，仅上报）：已用 {step + 1} 步"
+                    f"（阈值 {self.max_steps}，不是上限）；"
                     "最近三步：" + "；".join(_call_brief(s.shape, s.payload) for s in run.steps[-3:])
                     + f"；花销 {self._budget_text()}；到这一步为止没有 final。"
                 )
@@ -8312,7 +8315,7 @@ class AgentLoop:
                     else:
                         _mid, mproblem = send_message(
                             self.session_root, sender=self.role, to=parent_role,
-                            subject=f"步数超限：{self.role} 已用 {step + 1} 步",
+                            subject=f"步数报告：{self.role} 已用 {step + 1} 步（不是上限）",
                             body=step_note, sid=self.sid, from_task_id=my_task_id)
                         if mproblem:
                             run.notes.append(f"步数上报未送达：{mproblem}")

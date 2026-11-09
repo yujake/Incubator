@@ -101,18 +101,24 @@ def test_crossing_the_threshold_reports_and_keeps_running(tmp_path: pathlib.Path
     # ① 步数不再是收工理由：跨过阈值（3）以后照跑到第 5 步，收工理由是模型自己给的 final。
     assert len(run.steps) >= BAIT_COUNT, run.to_dict()
     assert run.stop_reason == "final", (run.stop_reason, run.to_dict())
-    # ② 上报落了盘：一条 `agent_note`，正文里点明"步数超限报告"并带上阈值读数。
+    # ② 上报落了盘：一条 `agent_note`，正文里点明「步数报告（仅上报）」并带上阈值读数。
     events, problems = SS.read_session(root, "test-run")
     assert not problems, problems
     reports = [e for e in events
-               if e.get("kind") == "agent_note" and "步数超限报告" in str(e.get("note") or "")]
+               if e.get("kind") == "agent_note" and "步数报告" in str(e.get("note") or "")]
     assert reports, [e.get("kind") for e in events]
     first = reports[0]
     assert first["threshold"] == THRESHOLD and first["steps_used"] >= THRESHOLD, first
     assert "花销" in first["note"], first["note"]
+    # 改名（D11）：文案是对账，不是上限 —— 旧的「超限」一词不许回来（反真空：
+    # 谁把名字改回「超限」，这一条立刻红）。
+    assert "仅上报" in first["note"], first["note"]
+    assert "不是上限" in first["note"], first["note"]
+    assert "超限" not in first["note"], ("报告正文又写成「超限」了：那是上限的口吻，"
+                                         "而这里只是每满 N 步的对账", first["note"])
     # ③ 顶趟不给自己发消息（`depth == 1`，上面没有人）：负控的一半。
     assert not [e for e in events if e.get("kind") == "agent_message"
-                and "步数超限" in str(e.get("subject") or "")], "顶趟给自己发了超限留言？"
+                and "步数报告" in str(e.get("subject") or "")], "顶趟给自己发了步数报告？"
 
 
 def test_a_child_reports_to_its_parent(tmp_path: pathlib.Path) -> None:
@@ -130,9 +136,12 @@ def test_a_child_reports_to_its_parent(tmp_path: pathlib.Path) -> None:
     events, problems = SS.read_session(root, "test-child")
     assert not problems, problems
     sent = [e for e in events if e.get("kind") == "agent_message"
-            and "步数超限" in str(e.get("subject") or "")]
-    assert sent, "子代理超限了却没报到父那里（`depth` 那一支判错了？）"
+            and "步数报告" in str(e.get("subject") or "")]
+    assert sent, "子代理过了报告节奏却没报到父那里（`depth` 那一支判错了？）"
     assert sent[0]["from"] == "H", sent[0]
+    # 改名（D11）：主题要写清「不是上限」，旧词「超限」不许回来（反真空）。
+    assert "不是上限" in str(sent[0].get("subject") or ""), sent[0]["subject"]
+    assert "超限" not in str(sent[0].get("subject") or ""), sent[0]["subject"]
     # 收件人：H 这一趟是 `run_role` 直接发起的顶行（台账里 `by="user"`，没有父行），
     # 于是 `_resolve_parent` 走第三条分支"落回主控"—— 子代理的上级就是主控 M。
     # 这一格钉的是"那个 `to` 真的是一个角色、且是它上面那一级"，不是"随便发给谁"。
