@@ -72,7 +72,6 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from . import depsection as _DS
 from . import manuscriptform as _MF
 from . import verifications as _VR
-from . import vsigns as _VS
 
 #: 手稿头里的元信息标记（与 `manuscriptform` 的既有标记同一个风格；只增不改）。
 SHA_MARK = "- 正文sha："
@@ -117,8 +116,23 @@ def proposition_fingerprint(proposition: Any) -> str:
 
 
 def proof_sha(proof_text: Any) -> str:
-    """`## 证明` 那一节的 sha256（与 V 签盖的是同一把尺）。"""
-    return _VR.proof_sha(_VS.manuscript_proof_body(str(proof_text or "")))
+    """`## 证明` 那一节的 sha256（与 V 签盖的是同一把尺）。
+
+    2026-11-09（D4）：入参有两种形态 —— 一份手稿（有 `## 证明` 那一节）或
+    一段证明正文（登记/重写那一笔直接把正文交进来，没有小节标题）。后者按
+    `depsection.proof_body_or_whole` 的显式回退取整份正文（`fell_back=True`
+    在那一格内部），否则 `proof_body` 严格化之后这里会把"一段正文"算成空串的 sha
+    （`e3b0c44…`），版本号与正文 sha 会一起失真。
+
+    ## 为什么这里允许"退而取全文"（这一句是给后人的）
+    `proof_sha` 的入参在登记/重写路径上就是一段没有 markdown 标题的证明正文
+    （`register_or_rewrite` 的 `proof_text`），把它当手稿切小节只会得到空串；
+    而 sha 一旦变成空串的 sha，版本记录与 V 签的对拍会同时静默失真。
+    所以这一处走显式回退，并且只在这一处用 `proof_body_or_whole`。
+    """
+    reading = _DS.proof_body_or_whole(str(proof_text or ""))
+    body = str(reading.get("body") or "").strip("\n")
+    return _VR.proof_sha(body)
 
 
 # ---------------------------------------------------------------- 分节（切 / 换 / 哈希）
@@ -559,6 +573,9 @@ def register_or_rewrite(
             text = str(template).replace("\r\n", "\n")
             # `## 证明` 的内容以参数为准：template 也可能是一份"骨架"（B 的改写拿
             # F 的稿当底稿时就是这样，正文必须换成 B 交来的那一份）。
+            # 2026-11-09（D4）：`proof_body` 缺节 ⇒ 空串（不回退到依赖段 / 全文）⇒
+            # 与参数正文的 sha 不同 ⇒ 走 `_replace_section`；基稿若没有那一节，
+            # 下面会受控拒 / 整份重渲染（`_replace_section` 的 `ok` 说了算）。
             if str(proof_text or "").strip() and not proof_sha(proof_text) == proof_sha(
                     _DS.proof_body(text)):
                 text, _ok_proof = _replace_section(text, "证明", str(proof_text))

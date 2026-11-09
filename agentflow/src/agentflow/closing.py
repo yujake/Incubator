@@ -5489,7 +5489,11 @@ def dependency_face_reading(store: Any, project_root: Any = None) -> dict[str, A
             counts["unread"] += 1
             out["rows"].append(item)
             continue
-        refs = len(_DS.stmt_refs(_DS.proof_body(body)))
+        #: 2026-11-09（D4）：`## 证明` 缺节 ⇒ 引用数 0（不拿 `## 依赖` / 全文顶替），
+        #: 但三态读数跟着这一行走 —— "稿里没有证明那一节"不许被读成"自足的证明"。
+        _proof_reading = _DS.proof_body_reading(body)
+        item["proof_body_state"] = str(_proof_reading.get("state") or "")
+        refs = len(_DS.stmt_refs(str(_proof_reading.get("body") or "")))
         item["refs"] = refs
         table_rows = len(section.get("rows") or [])
         item["table_rows"] = table_rows

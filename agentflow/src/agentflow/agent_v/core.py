@@ -436,8 +436,12 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
             continue
         rel, text = hit
         full = _DS.statement_body(text)
+        #: 2026-11-09（D4）：被引稿的 `## 证明` 三态。缺节 ⇒ 正文是空串、这一份稿
+        #: 不可能有盖住它的签（sha 对不上）；这里不拿 `## 依赖` / 全文顶替。
+        proof_reading = _DS.proof_body_reading(text)
         block = _VS.manuscript_sign_standing(
-            text, proof_sha=VR.proof_sha(_DS.proof_body(text).strip("\n")),
+            text, proof_sha=VR.proof_sha(
+                str(proof_reading.get("body") or "").strip("\n")),
             manuscript_path=rel)
         signed = str(block.get("state") or "") == "signed"
         out[sid] = {
@@ -446,6 +450,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
             "signed": signed,
             "grade": ("pre_theorem" if signed else ""),
             "evidence_kind": (_EB.kind_from_grade("pre_theorem") if signed else ""),
+            "proof_body_state": str(proof_reading.get("state") or ""),
             "why": str(block.get("why") or ""), "tried": tried,
         }
     return out
@@ -530,8 +535,16 @@ def _manuscript_facts(rel: str, raw: str, deps: Mapping[str, Any],
     statement = _DS.statement_body(raw) if raw else ""
     lines.append("- `## 命题`：" + (f"读到（{len(statement)} 字）" if statement
                                    else "没读到（这一份稿没有命题页）"))
-    body = _DS.proof_body(raw) if raw else ""
-    lines.append(f"- `## 证明`：{len(body.strip())} 字")
+    body = _DS.proof_body_reading(raw) if raw else {
+        "state": _DS.PROOF_ABSENT, "body": "", "chars": 0}
+    #: 2026-11-09（D4）：读数是三态的一句话 —— "没有这一节"不许印成"0 字"（那会被读成
+    #: "证明是空的"，而空证明与缺节在 V 的判据里是两件事）。
+    if str(body.get("state") or "") == _DS.PROOF_PRESENT:
+        lines.append(f"- `## 证明`：读到（{int(body.get('chars') or 0)} 字）")
+    elif raw:
+        lines.append("- `## 证明`：没有这一节（不拿 `## 依赖` 或整份全文顶替）")
+    else:
+        lines.append("- `## 证明`：这一趟没有给稿，读不到")
     rows = list(deps.get("rows") or [])
     groups = sorted({int(r.get("path_group") or 1) for r in rows})
     lines.append(f"- `## 依赖`：{len(rows)} 行"
@@ -2207,12 +2220,18 @@ class AgentV:
                     "reason": "manuscript_unreadable",
                     "detail": (f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ "
                                "这一格没审、不落签")}
-        body = _DS.proof_body(raw).strip("\n")
+        # 2026-11-09（D4）：`proof_body` 不再回退 —— 缺节 ⇒ `state=absent`，
+        # 这一格受控拒 `manuscript_has_no_proof_section`（"没这一节"不是"正文为空"）。
+        proof_reading = _DS.proof_body_reading(raw)
+        body = str(proof_reading.get("body") or "").strip("\n")
         if not body.strip():
+            _absent = str(proof_reading.get("state") or "") == _DS.PROOF_ABSENT
             return {"failed": True, "kind": "manuscript_has_no_proof_section",
                     "reason": "manuscript_has_no_proof_section",
-                    "detail": (f"`{rel}` 里没有 `## 证明` 那一节（或那一节是空的）⇒ "
-                               "没有可审、可签的正文：补上 `## 证明` 再送审")}
+                    "detail": (f"`{rel}` 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ "
+                               "没有可审、可签的正文：补上那一节再送审" if _absent else
+                               f"`{rel}` 的 `{_DS.SECTION_PROOF}` 那一节是空的 ⇒ "
+                               "没有可审、可签的正文：补上正文再送审")}
         # ---- 2026-11-04（审计缺陷 ③）：缺 `## 依赖` 段不许签 ------------------
         #
         # 业主点名的三样（签块 / 依赖面 / 按号命名）里，依赖面只能从稿的这一节读。
@@ -2345,10 +2364,26 @@ class AgentV:
             # 带 markdown 的空行（首尾各一个 `\n`）；而 F 交给 B 的 `proof_text` 是逐行
             # join 的那一串（没有首尾空行）。所以这里只去掉首尾换行 —— 否则签块里的 sha
             # 与 B 登记时算的 sha 永远差一个换行，签永远认不上（这条链的静默断点）。
-            on_disk = _DS.proof_body(raw_manuscript).strip("\n")
+            #
+            # 2026-11-09（D4）：缺节是三态里的一态，不是"正文短一点"：
+            # `proof_body_reading` 说 absent 时，这一份稿没有可签的对象 —— 不许拿
+            # 参数里那段内联正文顶上（那会把签盖到一份没有 `## 证明` 的稿上）。
+            proof_reading = _DS.proof_body_reading(raw_manuscript)
+            on_disk = str(proof_reading.get("body") or "").strip("\n")
+            if not on_disk.strip():
+                _absent = str(proof_reading.get("state") or "") == _DS.PROOF_ABSENT
+                return {"failed": True,
+                        "reason": ("manuscript_has_no_proof_section" if _absent
+                                   else "manuscript_empty"),
+                        "detail": (f"`{rel}` 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ "
+                                   "没有可审、可签的正文（缺节不等于「证明为空」；"
+                                   "不拿 `## 依赖` 或整份全文顶替）" if _absent else
+                                   f"`{rel}` 的 `{_DS.SECTION_PROOF}` 那一节没有正文 ⇒ "
+                                   "没有可审、可签的正文"),
+                        "passes": [], "manuscript": rel}
             if not body.strip():
                 body = on_disk
-            elif on_disk.strip() and VR.proof_sha(on_disk) != VR.proof_sha(body):
+            elif VR.proof_sha(on_disk) != VR.proof_sha(body):
                 return {"failed": True, "reason": "proof_text_mismatch",
                         "detail": (f"参数给的正文与 `{rel}` 的「## 证明」不是同一份"
                                    f"（参数 sha {VR.proof_sha(body)[:12]}…，盘上 "
@@ -2668,8 +2703,18 @@ class AgentV:
                     "passes": [], "manuscript": rel}
         on_disk = str(read.get("proof_body") or "").strip("\n")
         if not on_disk.strip():
-            return {"failed": True, "reason": "manuscript_empty",
-                    "detail": f"`{rel}` 的 `## 证明` 那一节没有正文 ⇒ 没有可审/可签的对象",
+            # 2026-11-09（D4）：缺节与空节分开说；"文件在、但没有 `## 证明`"不许被读成
+            # "证明正文是空的"（更不许拿 `## 依赖` 或整份全文顶替）。
+            _proof_state = str(read.get("proof_state") or "")
+            _absent = _proof_state == _DS.PROOF_ABSENT
+            return {"failed": True,
+                    "reason": ("manuscript_has_no_proof_section" if _absent
+                               else "manuscript_empty"),
+                    "detail": (f"`{rel}` 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ "
+                               "没有可审/可签的对象（缺节不等于「证明为空」）"
+                               if _absent else
+                               f"`{rel}` 的 `{_DS.SECTION_PROOF}` 那一节没有正文 ⇒ "
+                               "没有可审/可签的对象"),
                     "passes": [], "manuscript": rel}
         if not body.strip():
             body = on_disk
@@ -3311,6 +3356,9 @@ class AgentV:
         from .. import depsection as _DS
 
         _tried: list[str] = []
+        #: 2026-11-09（D4）：盘上那些稿里没有 `## 证明` 那一节（不是"没有这份稿"）。
+        #: 读数必须分开写 —— 否则 `read_proof` 的 `source=none` 会把两者折成一句话。
+        _no_section: list[str] = []
         for rel in (f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_STMT_PREFIX}{sid}.md",
                     f"{_DS.MANUSCRIPT_DIR}/b-proof-{sid}.md"):
             _tried.append(rel)
@@ -3318,12 +3366,19 @@ class AgentV:
                 raw = (Path(self.workspace_root) / rel).read_text(encoding="utf-8")
             except OSError:
                 continue
-            body = _DS.proof_body(raw).strip("\n")
+            reading = _DS.proof_body_reading(raw)
+            body = str(reading.get("body") or "").strip("\n")
             if body.strip():
                 text, source = body, "manuscript"
                 break
+            if str(reading.get("state") or "") == _DS.PROOF_ABSENT:
+                _no_section.append(rel)
         if source == "none":
             read_problems = [f"盘上没有这一条命题的证明手稿（找过 {' / '.join(_tried)}）"]
+            if _no_section:
+                read_problems.append(
+                    "盘上这些稿里没有 `## 证明` 那一节 ⇒ 没有可读的证明正文"
+                    "（不拿 `## 依赖` 或整份全文顶替）：" + " / ".join(_no_section))
         else:
             read_problems = []
         rows, problems = VR.list_verifications(self.workspace_root, statement_id=sid, limit=None)

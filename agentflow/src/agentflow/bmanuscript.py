@@ -265,10 +265,16 @@ def promote_formal(root: Any, *, statement_id: Any, source: Any = "",
 
 
 def read_rewrite(root: Any, rel: Any) -> dict[str, Any]:
-    """读一份 B 的改写手稿（V 与 B 用同一处口径）。"""
+    """读一份 B 的改写手稿（V 与 B 用同一处口径）。
+
+    三态：文件不在盘上 ⇒ `state=missing`；读不出来 ⇒ `state=unreadable`；
+    读到了 ⇒ `state=present`。另带 `proof_state`（2026-11-09，D4）：
+    稿里 `## 证明` 那一节是 `present` / `absent` —— 缺节时 `proof_body=""`，
+    不拿 `## 依赖` 或整份全文顶替（调用方必须自己判，不把它读成"证明为空"）。
+    """
     raw = str(rel or "").strip().replace("\\", "/")
     out: dict[str, Any] = {"ok": False, "state": "outside", "path": raw, "text": "",
-                           "proof_body": "", "why": ""}
+                           "proof_body": "", "proof_state": "", "why": ""}
     if not is_relpath(raw):
         out["why"] = f"{raw!r} 不是 B 的改写手稿形态（`reports/b-proof-<号>.md`）"
         return out
@@ -277,12 +283,13 @@ def read_rewrite(root: Any, rel: Any) -> dict[str, Any]:
         out["state"] = "missing"
         out["why"] = f"手稿不在盘上：{raw}"
         return out
-    try:
-        out["text"] = target.read_text(encoding="utf-8")
-    except OSError as exc:
+    reading = _DS.read_proof_body(root, raw)
+    if not reading.get("checked"):
         out["state"] = "unreadable"
-        out["why"] = f"手稿读不出来（{type(exc).__name__}: {exc}）"
+        out["why"] = str(reading.get("why") or "手稿读不出来")
         return out
-    out["proof_body"] = _DS.proof_body(out["text"]).strip("\n")
+    out["text"] = str(reading.get("text") or "")
+    out["proof_body"] = str(reading.get("body") or "").strip("\n")
+    out["proof_state"] = str(reading.get("state") or "")
     out.update(ok=True, state="present", why="")
     return out

@@ -264,10 +264,12 @@ def verbatim_vs_source(*, proof_text: Any = None, row: Mapping | None = None,
     原文那一段），对我们自己的证明不要求 —— 这一格把那个差别留在读数上。
 
     ## 来源取哪一段
-    取 `depsection.proof_body` 切出来的那一节（与依赖面扫描同一个切法），并同时认
-    "整份手稿"这一种写法：有人交上来的就是整份稿（含抬头元信息与 `## 依赖` 表），那
+    取 `depsection.proof_body_reading` 切出来的那一节（三态：`present` / `absent`），并
+    同时认"整份手稿"这一种写法：有人交上来的就是整份稿（含抬头元信息与 `## 依赖` 表），那
     也是逐字一致 —— 两种都算 same，`matched` 说明对上了哪一段。拿整份手稿当唯一对象
     则会每一条都判"不是逐字"，那种恒假的读数比没有更坏。
+    `source_state=absent`（来源稿没有 `## 证明`）⇒ 只剩"整份稿"那一支可比对，
+    不拿 `## 依赖` 节的正文或整份全文冒充"证明正文那一节"（2026-11-09，D4）。
 
     ## 传参的两条路
     `proof_text=` 传这一笔刚交上来的正文；或者 `row=` 传在册那一行、由它读
@@ -280,25 +282,34 @@ def verbatim_vs_source(*, proof_text: Any = None, row: Mapping | None = None,
     text = (str(proof_text) if proof_text is not None
             else str((row or {}).get("proof_text") or ""))
     whole = str(source_text or "")
-    src = _DS.proof_body(whole) if whole.strip() else ""
+    reading = _DS.proof_body_reading(whole) if whole.strip() else {}
+    src = str(reading.get("body") or "")
     out: dict = {"checked": False, "same": None, "matched": "", "source": str(source or ""),
-                 "chars": len(text), "source_chars": len(src), "why": ""}
-    if not src.strip():
+                 "chars": len(text), "source_chars": len(src), "why": "",
+                 #: 来源稿的 `## 证明` 三态（present / absent）。absent 时 `src` 是空串，
+                 #: 不拿 `## 依赖` 或整份全文顶替；"整份稿"那一档由下面的第二支显式认。
+                 "source_state": str(reading.get("state") or "")}
+    if not whole.strip():
         out["why"] = ("这一笔没有可比对的来源正文（没有手稿、也不是从文献引文来的）⇒ "
                       "这一格是「没有对象」，不是「不一致」")
         return out
     out["checked"] = True
-    if _same_manuscript_text(text, src):
+    if src.strip() and _same_manuscript_text(text, src):
         out["same"], out["matched"] = True, "proof_body"
     elif _same_manuscript_text(text, whole):
         out["same"], out["matched"] = True, "manuscript"
     else:
         out["same"] = False
-    out["why"] = (("与来源手稿逐字相同（只把换行归一，别的一字不改；对上的是 "
-                   + ("证明正文那一节" if out["matched"] == "proof_body" else "整份手稿") + "）")
-                  if out["same"] else
-                  "与来源手稿的证明正文不是逐字一致（可能是消化后的自然语言）—— "
-                  "这不是缺陷：判据只有一条，改写过就要重派 V 签")
+    if out["same"]:
+        out["why"] = ("与来源手稿逐字相同（只把换行归一，别的一字不改；对上的是 "
+                      + ("证明正文那一节" if out["matched"] == "proof_body" else "整份手稿") + "）")
+    elif out["source_state"] == _DS.PROOF_ABSENT:
+        out["why"] = (f"来源稿里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ 没有「证明正文那一节」"
+                      "可比对（不拿 `## 依赖` 或整份全文顶替），这一笔的正文只能与整份稿比；"
+                      "两者不是逐字一致 —— 这不是缺陷：判据只有一条，改写过就要重派 V 签")
+    else:
+        out["why"] = ("与来源手稿的证明正文不是逐字一致（可能是消化后的自然语言）—— "
+                      "这不是缺陷：判据只有一条，改写过就要重派 V 签")
     return out
 
 
@@ -3109,15 +3120,27 @@ class _RegisterStatement:
                               manuscript_path=manuscript_path,
                               stmt_id_now=stmt_id_now,
                               matched_by=manuscript_probe.get("matched_by")))
+        #: 这份稿的 `## 证明` 三态读数（2026-11-09，D4）。
+        #:
+        #: 为什么单独立这一格：`proof_body` 改前缺节会退到 `## 依赖` 节、再退到整份
+        #: 全文 ⇒ "没这一块"被读成"拿了别的块"。现在缺节 ⇒ `state=absent`、`body=""`：
+        #: 这一笔的 `proof_text` 保持空（不拿依赖段 / 全文顶替），而"这份稿没有证明"
+        #: 这件事进 `_deps_reading().manuscript_proof` 与顶层读数，调用方看得见。
+        #: `unreadable` 不在这一格：文件读不出来时上面（param 路径 / 携带单 / 兜底
+        #: 读盘）已经各自受控拒过 `manuscript_unreadable`，到不了这里。
+        manuscript_proof: dict = (_DS.proof_body_reading(manuscript_text)
+                                  if manuscript_text.strip() else {})
         if (not proof_text_source and manuscript_text.strip()
                 and not manuscript_foreign and _body_owner_ok
-                # 普通数值手稿没有 `## 证明` 那一节（`proof_body` 会退回整份全文）——
+                # 普通数值手稿没有 `## 证明` 那一节（`proof_body_reading` 会给 absent）——
                 # 这一档的正文按业主口径空着，不许把「数值结果」当证明正文收进来。
                 and not _green.get("ok")):
-            from_manuscript = str(_DS.proof_body(manuscript_text) or "").strip()
+            from_manuscript = str(manuscript_proof.get("body") or "").strip()
             if from_manuscript:
                 proof_text = from_manuscript
                 proof_text_source = _DS.SOURCE_MANUSCRIPT
+            # absent（或那一节是空的）⇒ `proof_text` 留空。这里刻意什么都不写：
+            # "缺 `## 证明`"不是"证明正文为空"的另一种写法，它是没有这一块。
         #: 这一笔有没有"与在册那一行不一样"的东西要写（正文或证明清单）。有就绝不走
         #: "收方读稿登记：命题行不动"那条早退支路 —— 那条支路只负责"命题已经在册、
         #: 这一笔只是把 F 的稿交过来"，它一个字都不写正文；用它去接"改在册正文"这一笔，
@@ -3230,8 +3253,14 @@ class _RegisterStatement:
             # 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用）。
             # 普通数值手稿没有 `## 证明` 节：整份稿里的别的内容（审查意见 / 后续计划）
             # 一律不参与这一笔（业主：不录入其它内容）。
+            #
+            # 2026-11-09（D4）：`manuscript_proof` 的 absent 在这里不是错误 —— 这一格
+            # 要的是 `## 依赖`（它自己那份解析在上一行，一个字没动）；证明正文缺节只让
+            # "正文引了哪些号"这一读数为 0，不拿依赖段 / 整份全文去凑引用。
+            # 于是 absent 时依赖面照常按表落边；"这份稿没有 `## 证明`"由
+            # `_deps_reading().manuscript_proof` 如实报出（不许被读成"自足的证明"）。
             manuscript_refs = ([] if _green.get("ok")
-                               else _DS.stmt_refs(_DS.proof_body(manuscript_text)))
+                               else _DS.stmt_refs(str(manuscript_proof.get("body") or "")))
             if manuscript.get("refused"):
                 # 逐条四元组（哪一行 / 想写什么 / 该是什么 / 怎么改）：读的人要照着改，
                 # 而解析器那句话说的是"这一行为什么读不懂"，不是"该改成什么"。
@@ -3383,6 +3412,13 @@ class _RegisterStatement:
                                    "依赖面建起来了（含正文写完之后补落的那几条）")
                     base["next_step"] = ""
             base["manuscript_source"] = manuscript_source
+            #: 这份稿的 `## 证明` 三态（2026-11-09，D4）：`present` / `absent`；没有稿
+            #: 时是空字典（不是 `absent` —— 没交稿与"稿里缺这一节"是两件事）。
+            #: 缺节时 `proof_text` 留空、依赖面照旧，但"这一笔没有证明正文"在这里
+            #: 有读数，不可能被读成"证明正文为空所以没问题"。
+            if manuscript_proof:
+                base["manuscript_proof"] = dict(manuscript_proof)
+                base["proof_body_state"] = str(manuscript_proof.get("state") or "")
             #: 这一份稿是不是 F 的秘书洗过的那一版（跟着文件走的读数，见上面）。
             base["manuscript_washed"] = manuscript_washed
             #: 这份稿声明自己属于哪一条命题（稿头那一行 `- 命题号：stmt:NNNNNN`），
@@ -3960,6 +3996,8 @@ class _RegisterStatement:
                 manuscript_washed = bool(
                     _DS.manuscript_wash_reading(manuscript_text).get("washed"))
                 manuscript_wash = _DS.manuscript_wash_reading(manuscript_text)
+                # 转正搬的是同一份正文 ⇒ 重新读一次三态，让读数说的是"这一份稿"。
+                manuscript_proof = _DS.proof_body_reading(manuscript_text)
         # ---- 业主 2026-11-01：B 收录时"认签"（第 3 位的第四源） -------------------
         #
         # 原话：「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入。」
@@ -5102,12 +5140,23 @@ class _RegisterStatement:
                 f"按手稿路径收录：`{rel}` 里没有 `## 命题` 那一节 ⇒ 不知道要给 B 登记哪一条"
                 "命题。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段"), "", ""
         numeric = _ER.is_numeric_manuscript_relpath(rel)
-        proof_text = "" if numeric else _DS.proof_body(text).strip("\n")
+        #: 这份稿的 `## 证明` 三态（2026-11-09，D4）：`present` / `absent`。
+        #: 普通数值档（`e-num-*`）本来就没有这一节，`proof_text` 按业主口径强制空；
+        #: 其余族缺节 ⇒ 受控拒（下面那一支），不许退回让调用方贴正文，也不许拿
+        #: `## 依赖` / 整份全文顶替。
+        proof_reading = _DS.proof_body_reading(text)
+        proof_text = "" if numeric else str(proof_reading.get("body") or "").strip("\n")
         if not numeric and not proof_text.strip():
+            _absent = str(proof_reading.get("state") or "") == _DS.PROOF_ABSENT
             return _refuse(
                 "pointer_manuscript_missing_proof",
-                f"按手稿路径收录：`{rel}` 里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文。"
-                "这一格**由 B 从稿里读**，不许调用方在参数里另贴一段"), "", ""
+                (f"按手稿路径收录：`{rel}` 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ "
+                 "没有可登记的证明正文（缺节不等于「证明为空」：不拿 `## 依赖` 或整份"
+                 "全文顶替）" if _absent else
+                 f"按手稿路径收录：`{rel}` 里 `{_DS.SECTION_PROOF}` 那一节是空的 ⇒ "
+                 "没有可登记的证明正文")
+                + "。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段",
+                proof_body_state=str(proof_reading.get("state") or "")), "", ""
         base = rel.rsplit("/", 1)[-1]
         if numeric:
             family, default_kind, evidence_kind = "e-num", "conjecture", "cross_check"

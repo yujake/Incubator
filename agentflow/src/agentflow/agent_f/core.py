@@ -1856,10 +1856,14 @@ class _Core:
         }
         if manuscript_text.strip():
             section = _DS.parse_dependency_section(manuscript_text)
-            refs = _DS.stmt_refs(_DS.proof_body(manuscript_text))
+            # 2026-11-09（D4）：缺 `## 证明` ⇒ 不数引用（不回退到别的块），
+            # `proof_body_state` 如实说 present / absent。
+            proof_reading = _DS.proof_body_reading(manuscript_text)
+            refs = _DS.stmt_refs(str(proof_reading.get("body") or ""))
             manuscript_received.update(
                 section_rows=len(section.get("rows") or []),
                 refs_in_proof=len(refs),
+                proof_body_state=str(proof_reading.get("state") or ""),
                 preview_ok=not section.get("refused"),
                 refused=str(section.get("refused") or ""),
                 why=str(section.get("reason") or ""))
@@ -2267,12 +2271,17 @@ class _Core:
             got = {"checked": False, "source": _DS.SOURCE_NONE, "text": "", "path": "",
                    "why": f"按约定路径找手稿没跑成（{type(exc).__name__}: {exc}）"}
         text = ""
+        #: 2026-11-09（D4）：稿里 `## 证明` 的三态读数（present / absent）跟着返回值走。
+        #: 缺节时下面按既有优先级退到台账（那是另一个来源，不是拿稿里别的块顶替）；
+        #: 但"稿在盘上、缺这一节"这件事必须看得见，不许被读成"稿的证明正文是空的"。
+        manuscript_proof: dict = {}
         if str(got.get("source") or "") == _DS.SOURCE_DISK and got.get("text"):
             # 与 V 签字时用的是同一把尺（`vsigns.manuscript_proof_body`：
             # `proof_body` 去掉首尾换行）—— 自己另写一遍 `.strip()` 就会让 sha 对不上，
             # 于是"签在盘上、读数说没签"（正是这一批要防的那种假读数）。
             from .. import vsigns as _VS
 
+            manuscript_proof = _DS.proof_body_reading(str(got.get("text") or ""))
             text = _VS.manuscript_proof_body(str(got.get("text") or ""))
         row = self._statement_row(sid)
         if not text.strip():
@@ -2284,6 +2293,7 @@ class _Core:
         return {"text": text, "paths": paths,
                 "source": str(got.get("source") or ""),
                 "manuscript": str(got.get("path") or ""),
+                "manuscript_proof": dict(manuscript_proof),
                 "statement": row,
                 "why": str(got.get("why") or "")}
 

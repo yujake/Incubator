@@ -516,6 +516,10 @@ def manuscript_proof_body(text: str) -> str:
     签的 sha 按"登记时那一份正文"算（`ARTIFACT_SHA_RULE`）⇒ 两边必须先归一到同一串，
     否则签块里的 sha 与 B 登记时算的 sha 永远差一个换行，签永远认不上 ——
     而这条链上的每一处都"看起来成功了"。
+
+    2026-11-09（D4）：`depsection.proof_body` 缺节时返回空串（不再退到 `## 依赖` /
+    整份全文）⇒ 这里也返回空串。调用方一律把空串读成"没有可签的正文"并受控拒
+    （见 `manuscript_body_matches` / V 的手稿闸），不许拿它当"签过空集"。
     """
     from . import depsection as _DS
 

@@ -645,21 +645,18 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
 
 
 def proof_body_of(text: Any) -> str:
-    """手稿里 `## 证明` 那一节的正文（与 `depsection.proof_body` 同一口径：去首尾换行）。
+    """手稿里 `## 证明` 那一节的正文（唯一口径：`depsection.proof_body`，去首尾换行）。
 
     为什么不自己再写一份解析：这一格是"被签的那一份正文"的唯一口径 ——
     `vsigns.manuscript_proof_body` 与 `agent_v.core._review_unregistered_prose`
-    读的都是 `depsection.proof_body(...).strip("\\n")`。本函数只是把它换个名字给
+    读的都是 `depsection.proof_body(...).strip("\\n")`。本函数只是换个名字给
     `land_manuscript` 用（那一侧在写盘后要现算 sha），口径仍只有 `depsection` 一处。
-    没有 `## 证明` 那一节 ⇒ 空串（`depsection.proof_body` 在没有那一节时会退到
-    "依赖段之前的全文"，那一档对一份手稿不是"正文"，是"整份稿"—— 这里不许它冒充）。
+    没有 `## 证明` 那一节 ⇒ 空串 —— 2026-11-09（D4）起 `depsection.proof_body`
+    自己就是严格口径（缺节不再退到依赖段 / 整份全文），这里不再另写一份切节。
     """
     from . import depsection as _DS
 
-    lines, _start = _DS.section_lines(str(text or ""), _DS.SECTION_PROOF)
-    if not lines:
-        return ""
-    return "\n".join(raw for _ln, raw in lines).strip("\n")
+    return str(_DS.proof_body(text or "")).strip("\n")
 
 
 def read_proof_manuscript(root: str | Path | None, rel: Any) -> dict[str, Any]:

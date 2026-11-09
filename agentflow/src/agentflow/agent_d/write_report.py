@@ -843,12 +843,19 @@ class _WriteReport:
             return rec
         _head, sections = _PR.split_sections(text)
         proposition = next((body.strip() for name, body in sections if name == "命题"), "")
-        proof_text = _DS.proof_body(text).strip("\n")
+        #: 2026-11-09（D4）：`## 证明` 缺节是没有这一块，不拿 `## 依赖` / 全文顶替。
+        proof_reading = _DS.proof_body_reading(text)
+        proof_text = str(proof_reading.get("body") or "").strip("\n")
         if not proposition:
             rec["error"] = f"{rel} 里没有 `## 命题` 那一节 ⇒ 不知道要给 B 登记哪一条命题"
             return rec
         if not proof_text.strip():
-            rec["error"] = f"{rel} 里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文"
+            _absent = str(proof_reading.get("state") or "") == _DS.PROOF_ABSENT
+            rec["error"] = (
+                f"{rel} 里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ 没有可登记的证明正文"
+                "（缺节不等于「证明为空」；不拿 `## 依赖` 或整份全文顶替）"
+                if _absent else
+                f"{rel} 里 `{_DS.SECTION_PROOF}` 那一节是空的 ⇒ 没有可登记的证明正文")
             return rec
         try:
             # ---- 2026-11-08（业主三条裁定）：D 只递指针 -------------------------
@@ -901,7 +908,7 @@ class _WriteReport:
         返回一条 result（键与 F 行同形，另带 `experiment_id`）；`None` = 这一行不该由本方法
         处理（反真空打桩点就落在这里：摘掉它 ⇒ B 侧收不到、`statements` 里没有那一行）。
         """
-        from .. import exhaustionreport as _ER
+        from .. import depsection as _DS
         from .. import vsigns as _VS
 
         eid = str(row.get("experiment_id") or "")
@@ -943,9 +950,15 @@ class _WriteReport:
                             f"{standing.get('why') or '没有签'}）⇒ D 不代递："
                             "没签的稿不是入库的证明，先让 E 派 V 拿签再带")
             return rec
-        proof_text = _ER.proof_body_of(text)
+        proof_reading = _DS.proof_body_reading(text)
+        proof_text = str(proof_reading.get("body") or "")
         if not proof_text.strip():
-            rec["error"] = f"exp:{eid} 的稿里 `## 证明` 那一节是空的 ⇒ 没有可登记的证明正文"
+            _absent = str(proof_reading.get("state") or "") == _DS.PROOF_ABSENT
+            rec["error"] = (
+                f"exp:{eid} 的稿里没有 `{_DS.SECTION_PROOF}` 那一节 ⇒ 没有可登记的证明正文"
+                "（缺节不等于「证明为空」；不拿 `## 依赖` 或整份全文顶替）"
+                if _absent else
+                f"exp:{eid} 的稿里 `{_DS.SECTION_PROOF}` 那一节是空的 ⇒ 没有可登记的证明正文")
             return rec
         try:
             # ---- 2026-11-08（业主三条裁定）：D 只递指针 -------------------------

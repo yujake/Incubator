@@ -291,6 +291,8 @@ def formal_shape_problem(text: Any) -> tuple[str, str]:
     if len(proofs) > 1:
         return ("multiple_proof_sections",
                 f"稿里有 {len(proofs)} 节 `## 证明`：一份正式稿只承载一条命题的一份证明")
+    # `_PROOF_HEAD_RE` 已保证这里恰好有一节 `## 证明`（present）；`proof_body` 自
+    # 2026-11-09 起缺节返回空串，所以这一句只判"这一节是不是空的"，不回退。
     if not _DS.proof_body(body).strip():
         return "empty_proof_section", "`## 证明` 那一节是空的 ⇒ 没有可签的正文"
     return "", ""
@@ -323,6 +325,9 @@ def dependency_section_problem(text: Any) -> tuple[str, str]:
         # 2026-11-05（缺陷甲）：那一节在、但表 0 行，而正文点了在册命题 ⇒ 表与正文对不上。
         # 改前这一档直接放行（`present` 就算合格），于是"正文引了、表里没写"整份静默通过。
         return _DS.dependency_consistency_problem(raw)
+    # 走到这里说明 `## 依赖` 那一节缺了。证明正文也缺节时 `proof_body` 返回空串
+    # （2026-11-09 起不再退到整份全文）⇒ refs=0 ⇒ 按"自足的证明"放行：没有证明正文
+    # 就没有"正文引了谁"可数，这一档不是"没有这一节却当成引了 0 条"。
     refs = _DS.stmt_refs(_DS.proof_body(raw))
     if refs:
         return DEPENDENCY_SECTION_MISSING, detail(

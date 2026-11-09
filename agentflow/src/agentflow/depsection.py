@@ -129,6 +129,20 @@ CARRIED_KEYS: tuple[str, ...] = ("stmt:", "exp:", "mss:")
 #: 元信息（"命题号：stmt:000002"）不是引用，把它数进来会让读数虚高）。
 SECTION_PROOF = "## 证明"
 
+#: `## 证明` 那一节的三态读数（2026-11-09，缺陷 D4）。不许折成两态：
+#:
+#: | 值 | 什么时候 | 不许读成 |
+#: |---|---|---|
+#: | `present` | 稿里有这一节（`body` 是那一节的正文；这一节可能是空的） | —— |
+#: | `absent` | 稿里没有这一节 | 「证明是空的」或者「整份稿就是证明」 |
+#: | `unreadable` | 文件读不出来（不在盘上 / 权限 / 不是 UTF-8） | 「没有这一节」—— 没读到 ≠ 没有 |
+#:
+#: `unreadable` 只在读文件那一层出现（:func:`read_proof_body`）；:func:`proof_body_reading`
+#: 拿到的已经是正文，只可能 `present` / `absent`。
+PROOF_PRESENT = "present"
+PROOF_ABSENT = "absent"
+PROOF_UNREADABLE = "unreadable"
+
 #: 命题正文那一节的段标题（2026-11-08：V 只读手稿之后，命题正文从这一节来）。
 SECTION_STATEMENT = "## 命题"
 
@@ -590,22 +604,137 @@ def statement_body(text: str) -> str:
     return "\n".join(raw for _ln, raw in body).strip("\n").strip()
 
 
-def proof_body(text: str) -> str:
-    """手稿里"证明正文"那一节的正文（没有那一节 ⇒ 去掉依赖段之后的全文）。
+def proof_body_reading(text: Any) -> dict[str, Any]:
+    """手稿里 `## 证明` 那一节的三态读数（正文这一层：`present` / `absent`）。
+
+    ## 为什么必须有这一格（2026-11-09，审计 D4）
+    改前 :func:`proof_body` 在缺节时回退到 `## 依赖` 节正文、再回退到整份全文 ⇒
+    "没这一块"变成"拿了别的块"：真机 `reports/e-num-000000.md`（没有 `## 证明`）的
+    `proof_body` 是 1597 字符的整份文件，只是被绿色通道 `_green.ok` 挡住，纯属运气。
+    回退删除之后，"缺节"必须是读数，而不是另一个块。
+
+    ## 三态（不许折平）
+    - `present`：稿里有这一节。`body` 是那一节的正文（逐字，只按行 join，不去首尾空行
+      —— 与改前的归一一致：调用方自己 `.strip("\\n")` 后算 sha）；这一节可能是空的。
+    - `absent`：稿里没有这一节。`body=""`；调用方必须自己判（受控拒 / 留空并报读数），
+      不许拿 `## 依赖` 或整份全文顶替。
+    - `unreadable`：只在这一格读文件时可能出现（:func:`read_proof_body`）——
+      本函数拿到的已经是正文，所以恒不返回这一态（"没读到"与"没有"分在两处）。
+
+    返回 `{checked, state, present, heading_line, body, chars, why}`。
+    """
+    raw = str(text or "")
+    body, heading_line = section_lines(raw, SECTION_PROOF)
+    present = bool(heading_line)
+    rendered = "\n".join(single for _ln, single in body)
+    out: dict[str, Any] = {
+        "checked": True,
+        "state": PROOF_PRESENT if present else PROOF_ABSENT,
+        "present": present,
+        "heading_line": int(heading_line or 0),
+        "body": rendered,
+        "chars": len(rendered.strip()),
+        "why": "",
+    }
+    if present:
+        out["why"] = (f"稿里有 `{SECTION_PROOF}` 那一节（第 {out['heading_line']} 行起，"
+                      f"正文 {out['chars']} 字）")
+    else:
+        out["why"] = (f"稿里没有 `{SECTION_PROOF}` 那一节 ⇒ 没有可读的证明正文"
+                      "（不拿 `## 依赖` 或整份全文顶替）")
+    return out
+
+
+def proof_body(text: Any) -> str:
+    """手稿里 `## 证明` 那一节的正文；没有这一节 ⇒ 空串（2026-11-09，D4）。
 
     为什么单独取这一节：预览要回答的是"证明正文里引了哪些在册命题"，而手稿开头的
     元信息（"命题号：stmt:000002"）不是引用 —— 把它数进来会让 `refs` 与
     `derived_from` 都虚高，而那种虚高不会让任何判据红，只会让读数难看。
+
+    ## 这里没有回退（这是本函数唯一的判据）
+    改前缺节会依次退到 `## 依赖` 节正文、再退到整份全文；那让"这份稿没有证明"变成
+    "这份稿的别的块（甚至整份文件）就是证明"。现在缺节一律 `""`，三态读数见
+    :func:`proof_body_reading`（`present` / `absent`），读文件那一层见
+    :func:`read_proof_body`（多一个 `unreadable`）。
+
+    调用方不许把 `""` 读成"证明为空所以没问题"：它同时意味着"没有这一节"。
+    需要三态的地方调用 :func:`proof_body_reading`；确实需要"退而取全文"的调用
+    :func:`proof_body_or_whole`（另一个名字，返回值带 `fell_back=True`），不许在
+    本函数里恢复静默回退。
     """
-    body, _start = section_lines(text, SECTION_PROOF)
-    if not body:
-        body, _start = section_lines(text, SECTION_HEADING)
-        if not body:
-            return str(text or "")
-        first = body[0][0]
-        lines = str(text or "").replace("\r\n", "\n").split("\n")
-        return "\n".join(lines[: max(0, first - 1)])
-    return "\n".join(raw for _ln, raw in body)
+    return str(proof_body_reading(text).get("body") or "")
+
+
+def proof_body_or_whole(text: Any) -> dict[str, Any]:
+    """显式的"退而取全文"：`## 证明` 那一节；没有这一节 ⇒ 整份正文。
+
+    这不是 `proof_body` 的隐藏回退 —— 它是一个另起的名字，返回值里带
+    `fell_back=True` / `fell_back=False`，调用方必须自己看这一格（"拿的是哪一段"
+    不许静默）。
+
+    只有一类调用方该用它：拿到的本来就是一段证明正文、而它没有 markdown 小节标题
+    （典型：`read_manuscript` 的"按证明正文认稿"要算这一笔 `proof_text` 的指纹；
+    那不要求它带 `## 证明`）。写台账 / 认签 / 落稿一律用 :func:`proof_body`
+    （缺节 ⇒ 空串），不许用这一格给"没有证明"找替身。
+
+    返回 :func:`proof_body_reading` 的键 + `fell_back`；`state` 仍是诚实的
+    `absent`（`fell_back=True` 说的才是"`body` 现在是整份正文"）。
+    """
+    reading = proof_body_reading(text)
+    if str(reading.get("state") or "") == PROOF_PRESENT:
+        return {**reading, "fell_back": False}
+    whole = str(text or "")
+    return {**reading, "state": PROOF_ABSENT, "present": False,
+            "body": whole, "chars": len(whole.strip()), "fell_back": True,
+            "why": (f"稿里没有 `{SECTION_PROOF}` 那一节 ⇒ 这一格显式退到整份正文"
+                    f"（`fell_back=true`，{len(whole)} 字符）；这不是「证明正文那一节」")}
+
+
+def read_proof_body(root: Any, rel: Any) -> dict[str, Any]:
+    """读一份手稿文件的 `## 证明` ⇒ 三态（`present` / `absent` / `unreadable`）。
+
+    与 :func:`proof_body_reading` 的分工：这一格负责"文件读不读得出来"，读出来之后
+    再交给纯函数判"有没有那一节"。两者合起来才是审计 D4 要的三态 —— 少任何一格，
+    "文件不在盘上"与"稿里没有这一节"就会折成同一句话。
+
+    返回键：`{checked, state, path, text, body, chars, heading_line, why}`。
+
+    - `present` / `absent`：`checked=True`，`text` 是整份稿（依赖段 / 签块还要用）；
+    - `unreadable`：`checked=False`。文件不在盘上、读失败、不是 UTF-8 文本、
+      或 `rel` 不是一个工作区相对路径 —— 全都落这一态，`why` 逐条点名是哪一种。
+      这一态不是 `absent`：没读到不等于"稿里没有这一节"。
+
+    绝对路径 / `..` 一律拒绝（`unreadable`）：这一格只读工作区相对路径，不给
+    "按任意路径读一盘"的口子（与 `read_manuscript` 的候选路径同一纪律）。
+    """
+    raw_rel = str(rel or "").strip().replace("\\", "/")
+    out: dict[str, Any] = {
+        "checked": False, "state": PROOF_UNREADABLE, "path": raw_rel,
+        "text": "", "body": "", "chars": 0, "heading_line": 0, "why": "",
+    }
+    root_text = str(root or "").strip()
+    if not root_text:
+        out["why"] = "没有工作区根（`root` 是空的）⇒ 这一份稿没读到（不是「没有 ## 证明」）"
+        return out
+    parts = Path(raw_rel).parts if raw_rel else ()
+    if not raw_rel or Path(raw_rel).is_absolute() or ".." in parts:
+        out["why"] = (f"{raw_rel!r} 不是工作区相对路径（绝对路径 / `..` 不收）⇒ "
+                      "这一份稿没读到（不是「没有 ## 证明」）")
+        return out
+    try:
+        text = (Path(root_text) / raw_rel).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        out["why"] = (f"手稿读不出来：{raw_rel}（{type(exc).__name__}: {exc}）⇒ "
+                      "这一份稿没读到（不是「没有 ## 证明」）")
+        return out
+    reading = proof_body_reading(text)
+    out.update(checked=True, text=text, state=str(reading.get("state") or ""),
+               body=str(reading.get("body") or ""),
+               chars=int(reading.get("chars") or 0),
+               heading_line=int(reading.get("heading_line") or 0),
+               why=str(reading.get("why") or ""))
+    return out
 
 
 def parse_dependency_section(text: str) -> dict[str, Any]:
@@ -786,6 +915,9 @@ def dependency_consistency_findings(
     if not section.get("present") or section.get("refused"):
         return []
     steps = proof_steps(raw)
+    #: 2026-11-09（D4）：缺 `## 证明` ⇒ 空串 ⇒ 正文引用集合为空（不拿 `## 依赖` /
+    #: 整份全文凑引用）。这一层只回答"正文点到的号可不可引"：没有正文可数时它不产生
+    #: finding；"表里有行而正文没点"由 V 那一侧的 `dependency_review` ④ 逐条报。
     refs = stmt_refs(proof_body(raw))
     findings: list[dict[str, Any]] = []
     known = {str(x) for x in known_ids} if known_ids is not None else None
@@ -980,8 +1112,22 @@ MATCH_BY_PATH = "path"
 MATCH_BY_PROOF_BODY = "proof_body"
 
 
+def _body_key(body: Any) -> str:
+    """一段证明正文的归一指纹（逐行去首尾空白、丢空行与洗稿标记行）。"""
+    text = str(body or "").replace("\r\n", "\n")
+    return "\n".join(line.strip() for line in text.split("\n")
+                     if line.strip() and not line.strip().startswith(WASH_MARK))
+
+
 def _proof_body_key(text: Any) -> str:
-    """一份稿 / 一段正文的"证明正文指纹"：`## 证明` 那一节逐行去首尾空白、丢空行。
+    """一段"证明正文"的指纹（`## 证明` 那一节；没有这一节 ⇒ 显式整份正文）。
+
+    ## 为什么这里允许"退而取全文"（这一句是给后人的）
+    这一格的入参不是一份手稿，而是一段证明正文（`read_manuscript` 第二段拿这一笔的
+    `proof_text` 来比）；一段正文本来就不带 `## 证明` 标题。若在这里也走严格口径，
+    "按正文认稿"这一整条路会退化成永远算空指纹（2026-11-09 实测：登记那一笔的正文 sha
+    会变成空串的 sha）。所以这里走 `proof_body_or_whole` 的显式回退
+    （`fell_back=True`），而不是在 `proof_body` 里偷偷退。
 
     为什么是逐行归一而不是逐字：手稿是渲染出来的（`agent_f/manuscript.py` 按步拼行），
     而 B 收下来的 `proof_text` 可能多/少一个尾随空行 —— 那是排版，不是另一份证明。
@@ -991,10 +1137,11 @@ def _proof_body_key(text: Any) -> str:
     "没有 `- 计划：` 那一行"的稿子上会把它插到第 2 行之后 —— 那种形状下它会落进
     `## 证明` 那一节，留着就会让"同一份证明"读成"不同"（真机手稿有页头，不会撞到；
     但判据夹具与手写稿会）。
+
+    候选稿那一侧不走这一格：先过 `proof_body_reading`，缺节的稿不按正文认（下面那段）。
     """
-    body = str(proof_body(text) or "").replace("\r\n", "\n")
-    return "\n".join(line.strip() for line in body.split("\n")
-                     if line.strip() and not line.strip().startswith(WASH_MARK))
+    reading = proof_body_or_whole(text)
+    return _body_key(reading.get("body"))
 
 
 def _plan_named_manuscripts(base: Path) -> list[str]:
@@ -1091,6 +1238,8 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
         return {"checked": True, "source": SOURCE_DISK, "text": text, "path": rel,
                 "tried": tried, "matched_by": MATCH_BY_PATH, "why": ""}
     # ---- 第 ② 段：按证明正文认（只在第 ① 段全 miss、且调用方给了正文时） -------------
+    #: 这一笔的正文可以是"一段不带标题的证明正文" ⇒ `_proof_body_key` 显式退到整份
+    #: 正文算指纹（`proof_body_or_whole` 的 `fell_back=True`，读数在这一格内部）。
     want = _proof_body_key(proof_text) if str(proof_text or "").strip() else ""
     compared = 0
     if want:
@@ -1102,8 +1251,16 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
                 tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PROOF_BODY,
                               "why": f"读不出来（{type(exc).__name__}: {exc}）"})
                 continue
+            #: 2026-11-09（D4）：候选稿缺 `## 证明` ⇒ 不按正文认（不拿依赖段 /
+            #: 整份全文当"这一份的证明正文"）。这一档只进 `tried`，不许命中。
+            cand = proof_body_reading(text)
+            if str(cand.get("state") or "") != PROOF_PRESENT:
+                tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PROOF_BODY,
+                              "why": (f"稿里没有 `{SECTION_PROOF}` 那一节 ⇒ 不按正文认"
+                                      "（缺节不等于整份稿就是证明）")})
+                continue
             compared += 1
-            if _proof_body_key(text) == want:
+            if _body_key(cand.get("body")) == want:
                 tried.append({"path": rel, "exists": True, "matched_by": MATCH_BY_PROOF_BODY,
                               "why": "`## 证明` 与这一笔的 proof_text 逐行相同"})
                 return {
@@ -1429,6 +1586,8 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
             if not text:
                 unreadable.append(dict(hit))
                 continue
+            # 2026-11-09（D4）：缺 `## 证明` ⇒ 空串 ⇒ sha 与非空正文的 want 不可能相等
+            # ⇒ 这一份不算"按正文命中的那一份"（不拿依赖段 / 全文凑一个 sha）。
             body = proof_body(text).strip("\n")
             got = hashlib.sha256(body.encode("utf-8")).hexdigest()
             if got != want:
@@ -1797,6 +1956,8 @@ def dependency_review(text: str,
     raw = str(text or "")
     ledger = [dict(r) for r in statement_rows]
     steps = proof_steps(raw)
+    #: 2026-11-09（D4）：缺 `## 证明` ⇒ 正文引用为空（不回退）。这不是"自足"的证明：
+    #: 表里每一行都会在 ④ 被报成"证明正文没有点它"，由调用方整笔拒。
     body_refs = stmt_refs(proof_body(raw))
     section = parse_dependency_section(raw)
     rows = [dict(r) for r in (section.get("rows") or [])]
@@ -2160,6 +2321,8 @@ def wash_dependency_section(text: str, *,
         # 认不出的行 / 列问题由 `section` 自己带（`problems`），这里只回放它的结论。
         "columns_ok": not bool(section.get("problems")),
     }
+    # 2026-11-09（D4）：缺 `## 证明` ⇒ refs 为空（不回退）⇒ 依赖段缺了也只按
+    # `proof_steps` 重建；"正文里引了而表里没写"这一档需要正文存在，缺节时无从谈起。
     refs = stmt_refs(proof_body(raw))
     filled = ""
     rows: list[dict[str, Any]]

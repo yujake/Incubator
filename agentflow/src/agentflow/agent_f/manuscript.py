@@ -385,10 +385,14 @@ class _Manuscript:
         section = _DS.parse_dependency_section(text)
         #: 引用只在"证明正文"那一节里数（手稿开头的元信息不是引用，见
         #: `depsection.proof_body` 的注释）—— 数进来会让 `refs` 与 `derived_from` 都虚高。
-        body = _DS.proof_body(text)
+        #: 2026-11-09（D4）：缺 `## 证明` ⇒ `proof_body=""`（不回退到依赖段 / 全文），
+        #: 这一格只做预览 ⇒ 不拒、`refs=0`，但 `proof_body_state` 如实说"没有这一节"。
+        proof_reading = _DS.proof_body_reading(text)
+        body = str(proof_reading.get("body") or "")
         out: dict[str, Any] = {"checked": True, "ok": False, "refused": "", "reason": "",
                               "section": section, "rows": section.get("rows") or [],
-                              "levels": {}, "would_write": 0, "deps_missing": {}}
+                              "levels": {}, "would_write": 0, "deps_missing": {},
+                              "proof_body_state": str(proof_reading.get("state") or "")}
         refs = _DS.stmt_refs(body)
         if section.get("refused"):
             out.update(refused=str(section.get("refused")),
