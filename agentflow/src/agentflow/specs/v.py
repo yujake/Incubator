@@ -276,13 +276,14 @@ SPEC = AgentSpec(
             # 而 D-34 起未在册那一签就落 `verifications/pending/<正文 sha>.jsonl`（业主 2026-11-05：
             # 「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签」）⇒ 这一格改成"没号先落 pending"。
             "**被审必须是 `reports/f-proof*.md`；递来别的东西先退回**：被审那一份只能是框架渲染的手稿"
-            "（F 的证明是 `reports/f-proof-<命题号>.md`；E/B 的框架稿同族 `reports/e-proof-*.md` / "
-            "`reports/b-proof-*.md`）—— 调用方递来 `reports/P*.md` / `notes/*.md` 这类章节稿或草稿时，"
+            "（F 的证明是 `reports/f-proof-<稿号>.md` —— **稿号是 F 自己发的**，与命题号、计划号都无关；"
+            "E/B 的框架稿同族 `reports/e-proof-*.md` / `reports/b-proof-*.md`）—— 调用方递来 `reports/P*.md` / "
+            "`notes/*.md` 这类章节稿或草稿时，"
             "**先回一句「这不是手稿」并让调用方改用 `F.step` 的 `manuscript_path`**；不要自己去读那份章节稿"
             "充当被审正文 —— 入口闸会拒，白烧一次调用。**入口闸拒了不要重试同一个路径**（真机里同一份"
             "章节稿被递了 5 次）：要么让调用方换稿，要么按拒信点名的那一份重来。"
             "**在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 "
-            "`proof_manuscript`（**签的载体只认 `reports/f-proof-<命题号>.md` / `reports/b-proof-<号>.md` / "
+            "`proof_manuscript`（**签的载体只认 `reports/f-proof-<稿号>.md` / `reports/b-proof-<号>.md` / "
             "`reports/e-proof-<号>.md` 这三种规范名**）。`notes/…` 收不了：目录不是 `reports/` ⇒ "
             "`classify_manuscript` 判 `legacy` 档、`sign_carrier` 判 `ok=False`（可列出、不可签、"
             "不可收录）—— 要签就先让 B 把它转正成 `reports/b-proof-<号>.md`。只给内联正文"
@@ -291,7 +292,11 @@ SPEC = AgentSpec(
             "这三样内联正文都做不到。**命题还没在册也照样能签**（你不假定有号）：带一份稿送审，"
             "签按**正文 sha** 落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha "
             "认领；三票（`verification_id` / `at` / `proof_sha256`）必须齐。只给内联正文、没有稿时"
-            "才只给「看过、没签」的读数 —— 签块只在稿上，没有可落签的载体。",
+            "才只给「看过、没签」的读数 —— 签块只在稿上，没有可落签的载体。"
+            # 2026-11-10：送审正文与稿上 `## 证明` 必须逐字同源（差一个换行就是另一份 sha）。
+            "**送审带的 `proof_text` 必须逐字是那份稿 `## 证明` 那一节的正文、并去掉首尾换行"
+            "（`strip(\"\\n\")`）**：多一个或少一个换行都算另一份正文 ⇒ 签落不到这一版上。"
+            "拿不准就**别传 `proof_text`**，只给 `proof_manuscript`（正文由框架从稿读 —— 那是最稳的一条）。",
             # 2026-11-09（提示词-工具面一致性审计 L2-3）：`## 证明` 那一节的三态此前
             # 一个字都不在题面里（只在拒信里），模型只能撞一次才学会。
             "**读稿先看 `## 证明` 那一节在不在**：读数是三态 —— `present`（有这一节，可能为空）/ "

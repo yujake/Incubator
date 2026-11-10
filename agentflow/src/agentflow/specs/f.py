@@ -142,7 +142,8 @@ SPEC = AgentSpec(
             # 判据：`tests/test_f_delivery_needs_v_sign.py` 与
             # `tests/test_v_unregistered_manuscript_review.py`。
             "**证明写完之后由你派 V 审这一份证明稿（proof manuscript）**（`framework_summon` 形状：`role=\"V\"`，`task` 写清要审**哪一份** —— "
-            "**只能点 `F.step` 返回的 `manuscript_path`**，也就是 `reports/f-proof-<命题号>.md`，**在册了也点同一份稿**）。"
+            "**只能点 `F.step` 返回的 `manuscript_path`**：`reports/f-proof-<你的稿号>.md`（**稿号是你自己的**，"
+            "不用命题号、不用计划号；同一份稿改稿仍是同一个稿号，另一份证明用 `-p2`），**收录前后都点同一份稿**）。"
             "**你自己用 `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` / `notes/*.md` 这类）不是手稿**："
             "它不是框架渲染的、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，入口闸会整笔拒（真机实测 9 次全拒、签一发未发）——"
             "章节稿可以写，但它是给你自己推演用的草稿，不是交付物。"
@@ -202,10 +203,10 @@ SPEC = AgentSpec(
             # 依赖面……让 C 从不同的依赖面起点追依赖链就能完整显示不同证明路径」。多证明机制早就在
             # （`proofs` / `used_by="stmt:<号>#pN"` / `path_group` / `reviewed_by_proof` /
             # 对应表的 `proof_no`），缺的是"要几种证明时该交什么形状"的口径 —— 这一条是 F 侧的正向政策。
-            "**一条定理要几种证明，就是一条命题的 `proof_no` 1..N，不是几条命题**：D 或用户要「几种证明"
-            "语言 / 几条独立路径」时，你把 N 份都写出来、**每份各自落成一份手稿**（`reports/f-proof-<命题号>.md`，"
-            "稿头的 `- 证明号：<N>` 说这一份是第几条），一次落成**一条 stmt** —— `statements` 那一行交给 "
-            "**B 登记**（你把命题正文与 N 份手稿一并交过去，由它读稿落那一行；你不写那张表）。"
+            "**一条定理要几种证明，就是同一份稿的第 N 份证明（`-pN`），不是几条命题、也不是几份稿**：D 或用户要「几种证明"
+            "语言 / 几条独立路径」时，你把 N 份都写出来、**每份落在同一份稿的第 N 个证明上**（`reports/f-proof-<你的稿号>-p<N>.md`，"
+            "稿头的 `- 证明号：<N>` 说这一份是第几条）—— 你始终只有**一个稿号**（同一份稿），"
+            "命题号由 **B 收录时现取**（你把稿交给 B，由它读稿落那一行；你不写那张表）。"
             "不要用内联的 `proofs=[...]` 交正文，也不要为每条路线各立一条命题。每条证明各自送 V 签"
             "（`verify_proof` 带 `proof_no=N`，V 的签按份落在 `bits.evidence.reviewed_by_proof` 里），"
             "不许拿一份的签替另一份背书。每条证明用到的依赖按 `used_by=\"stmt:<命题号>#pN\"` ＋ "
@@ -222,7 +223,7 @@ SPEC = AgentSpec(
             # `reports/f-proof-*` 还会撞 `fs` 保留表（`reserved_framework_artifact`）。
             # 所以这一条改成"你只交 cites"：渲染是框架的活，格式仍在 `agentflow.depsection`。
             "**依赖面不用你手写那一节 —— 你只交 `cites`**：你每一份证明的正文由 `F.step` 落成手稿"
-            "（`reports/f-proof-<命题号>.md`；返回里给 `manuscript_path` 与 `deps_preview`，全文不进返回值），"
+            "（`reports/f-proof-<你的稿号>.md`；返回里给 `manuscript_path` 与 `deps_preview`，全文不进返回值），"
             "手稿里那一节标题逐字为 `## 依赖` 的四列表**由框架按你的 `cites` 渲染**（引用取那一步的原话 / "
             "命题号 / 用在哪一步 / 路径号）。渲染出来长这样（**给你读的**，不用你写）：\n"
             "```\n"

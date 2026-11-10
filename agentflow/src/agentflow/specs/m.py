@@ -460,35 +460,33 @@ SPEC = AgentSpec(
             "`evidence_kind=proof` 那一行或 V 的签名）。三环各有各的欠账读数（`quote_verified_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
             "`reviewed_current_rows`）—— **每一份手稿与正文都要走过这条链**；被审对象的落点由你在派活里给，H 的 `review_report` "
             "把报告落到**框架定的** `out/review/<doc_id>-review.md`，验收表里那一行 `review_files` 数的就是它。",
-            # p271（2026-11-10，两次真机的共同病根）：没有谁把「立项 → 落稿 → 送审 → 收录」
-            # 当成一条必须走完的链 —— 第一轮 B 建了 4 条号而 V 9 次 verify_proof 里
-            # 5 次栽在"递的不是框架手稿"、签 0；第二轮 V 真的审了框架手稿（仍判「有毛病」），
-            # 而 B 一次都没跑（M 的日志逐字：「B 的派活被 deadline_exceeded 拒（一次都没跑）」）
-            # ⇒ statements 0 条、签 0 个。
-            # 业主 2026-11-10 的裁定（逐字）：「本框架的成果是台账里的条目，不是文件。一份没
-            # 登记的证明等于不存在」，以及同日的立项口径：立项用计划号（plan 号段），不建在
-            # 命题台账上。事实逐条核过（别改写）：
-            #   · `agent_f/core.py` / `agent_f/manuscript.py`：没号 ⇒ `reports/f-proof-plan-<计划号>.md`；
-            #   · `manuscriptfamily.classify_manuscript("reports/f-proof-plan-000004.md")`
-            #     ⇒ {tier: family, family: f-proof, id: plan-000004, proof_no: 1}（合法落稿名）；
-            #   · `verify_proof` 的 `statement_id` 有缺省 `""` ⇒ 不传也能送审；计划稿不是签的
-            #     载体（`vsigns.is_sign_carrier` False）：判「有毛病」落 pending 行、判「成立」
-            #     那一档只「看过、没签」（`kind=proof_reviewed_not_signed`，`temp/_p271_probe_
-            #     plan_manuscript.py` 两种判词各跑了一遍：pending 1 / 0、签文件 0 / 0）；
-            #   · `agent_b/register_statement.py`：两种名都认；拿到号那一刻稿转名成
-            #     `reports/f-proof-<命题号>.md`（「签另算」）。
-            # 判据 `tests/test_registration_is_the_hard_sequence.py`（三条字面 + 三条反真空 +
-            # 「立项看计划号、入账看命题号」那一句 + 不传 statement_id 的三条正面读数）。
-            "**立项不建在命题台账上**：立项 = 拿一个**计划号**（plan 号段），F 落 "
-            "`reports/f-proof-plan-<计划号>.md` → V 送审 "
-            "`verify_proof(proof_manuscript=\"reports/f-proof-plan-<计划号>.md\", proof_no=…)`"
-            "（**不传 statement_id**：这一轮还没有命题号）→ 判词有落点（判「有毛病」落 "
-            "`verifications/pending/<正文 sha>.jsonl`；计划稿不是签的载体，判「成立」那一档只看过没签）"
-            "→ **B 收录时才建 statements 行**（"
-            "`register_statement(proof_manuscript=\"reports/f-proof-plan-<号>.md\", …)` 或 "
-            "`own.ingest_manuscript`；拿到号那一刻稿转名成 `reports/f-proof-<命题号>.md`，签另算）。"
-            "⇒ **立项看计划号，入账看命题号；两者不是同一件事，不要为了拿号去写一行 statements**。",
-            "**决定要证某条命题的那一刻就立项**（拿计划号、落稿），不要先写一份长证明草稿再回头补手续。"
+            # p272（2026-11-10 晚，业主裁定）：「F 的稿自己维护一套号源，不依赖命题号和
+            # 计划号。停掉错误的口径。」—— 三个号各管一件事，不许再绑在一起：
+            #   · 稿号：F 自己发（`manuscriptids.next_manuscript_id`，六位、与 stmt/plan
+            #     并列）；它是**签的单位**，同一份稿改稿仍是同一个稿号，另一份证明用 `-p2`；
+            #   · 计划号：**继续 / 放弃 / 更改**的单位（`attack.create_plan`），F 在计划下
+            #     做；计划不拥有稿，一个计划期间可以产出若干份稿（各自独立编号）；
+            #   · 命题号：**B 收录时现取**（V 判成立之后），只落在 `statements` 行上。
+            # 事实逐条核过（别改写）：
+            #   · `agent_f/manuscript.py`：稿只叫 `reports/f-proof-<稿号>.md`，命题号 /
+            #     计划号都不进稿名；`publish_manuscript` 已停用改名（收录不改稿名）；
+            #   · `manuscriptfamily.sign_carrier`：老盘上的 `f-proof-plan-*` 只读兼容，
+            #     与数字名同等（可签）；新稿不再写这种名字；
+            #   · `agent_b/register_statement.py`：收录用 `proof_manuscript=<F 的稿>`，
+            #     建行时现取命题号，行上记 `manuscript_id` + `proof_no`，认签按正文 sha。
+            # 判据 `tests/test_f_manuscript_ids_are_its_own_source.py` 与
+            # `tests/test_registration_is_the_hard_sequence.py`。
+            "**三个号各管一件事，别绑在一起**：**稿号**是 F 自己发的（签的单位；同一份稿"
+            "改稿仍是同一个稿号，另一份证明用 `-p2`）；**计划号**管继续/放弃/更改（立项拿"
+            "计划号，**不建 statements 行**）；**命题号是 B 收录时现取的**（V 判成立之后才取）。"
+            "**F 的稿按自己的稿号命名**（`reports/f-proof-<稿号>.md`；不用命题号、不用计划号）"
+            "→ V 送审时点那份稿（不传 `statement_id`：此刻还没有命题号；判「成立」签就落在"
+            "这份稿上）→ **只有做出东西（V 判成立）才由 B 收录，那时才建 statements 行、"
+            "才取命题号**（`register_statement(proof_manuscript=<F 的稿>)`；**不改稿名**，"
+            "行上记 `manuscript_id` + `proof_no`）。⇒ **计划管去留、稿号管签、命题号管收录** "
+            "—— 一个计划期间可以产出若干份稿，它们各自独立编号。",
+            "**决定要证某条命题的那一刻就立项**（拿计划号），F 在计划下闷头做、按自己的稿号落稿；"
+            "不要先写一份长证明草稿再回头补手续。"
             "反过来做在真机里连续两次失败：一次是稿名对不上、一次是 B 根本没被派活。"
             "—— 这条与钟无关：分的是命题，不是时刻。",
             "**成果是台账里的条目，不是文件** —— 但那是**收录**的产物，不是立项的产物；"

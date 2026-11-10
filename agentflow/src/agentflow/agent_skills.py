@@ -779,27 +779,46 @@ C 的报告**落盘之后必须回头再派一次 D**（第一轮常常是 D 在
 （第一轮 B 建了 4 条号而 V 的 9 次送审里 5 次栽在"递的不是框架手稿"、签 0；第二轮
 V 真的审了框架手稿，而 B 一次都没跑 —— 派活被 `deadline_exceeded` 拒，`statements` 0 条、签 0 个）。
 
-### ① 立项不建在命题台账上（用计划号）
+### ① 三个号各管一件事
 
-立项拿的是**计划号**（plan 号段），不是命题号。F 的稿落在 `reports/f-proof-plan-<计划号>.md`，
-`manuscriptfamily` 认得出它（`plan-000004` 就是这一档的稿号），可签可认 —— 但这一轮
-**不碰命题台账**：不为了拿到一个号去写一行 `statements`。
+- **稿号**：F 自己发（`manuscriptids.next_manuscript_id`，六位，`data/counters.json` 的
+  `manuscript` 号段）。它是**签的单位**：同一份稿改稿仍是同一个稿号，另一份证明用 `-p2`。
+- **计划号**：**继续 / 放弃 / 更改**的单位（立项拿的那个号）。F 在计划下做；
+  **计划不拥有稿** —— 一个计划期间可以产出若干份稿，它们各自独立编号，与计划号无关。
+- **命题号**：**B 收录时现取**（V 判成立之后），只落在 `statements` 那一行上。
 
-### ② 送审：不传 `statement_id`
+⇒ 一句话：**计划管去留，稿号管签，命题号管收录**。三者不许互相顶替。
+
+### ② 落稿：F 的稿叫 `reports/f-proof-<稿号>.md`
+
+F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_path`），
+**不用命题号、不用计划号**。稿在立项之后就可以落、可以反复改，不必为了拿号去写一行
+`statements`。
+
+### ③ 送审：不传 `statement_id`
 
 这一轮手上还没有命题号，所以 `statement_id` 不传（它的缺省本来就是空串）；要说清的是
-`proof_manuscript` 与 `proof_no`（审第几份）。判词有落点：
+`proof_manuscript`（就是那份 `f-proof-<稿号>.md`）与 `proof_no`（审第几份）。判词有落点：
 
 - 判「有毛病」⇒ 判词落 `verifications/pending/<正文 sha>.jsonl` 一行（`defect_step` 有值）；
-- 判「成立」⇒ **计划稿不是签的载体**：这一档只看过没签（`proof_reviewed_not_signed`：
-  pending 0 行、签文件 0 份）。签要等稿转成 `reports/f-proof-<命题号>.md` 之后才落得上。
+- 判「成立」⇒ **签落在稿上**：pending 三行 + `out/vsigns/<正文 sha>.json` 一份 + 稿上的签块。
 
-### ③ 入账：B 收录时才建 statements 行
+### ④ 收录：B 现取命题号，不改稿名
 
-**B 收录时才建 statements 行**（带 `proof_manuscript` 的 `register_statement`，或
-`own.ingest_manuscript`）；拿到号那一刻稿转名成 `reports/f-proof-<命题号>.md`，签另算。
+**只有做出东西（V 判成立）才由 B 收录**：`register_statement(proof_manuscript=<F 的稿>)`
+建 statements 行、**那时才取命题号**；行上记 `manuscript_id` + `proof_no`。
+**稿名一个字不动** —— 收录前后是同一份 `f-proof-<稿号>.md`；认签按**正文 sha**。
 
-⇒ 一句话：**立项看计划号，入账看命题号** —— 两者不是同一件事，别为了拿号去写一行 statements。
+### 稿的三种落点（都有读数）
+
+| 这一轮到哪 | 判词/签落在哪 | 读数长什么样 |
+|---|---|---|
+| F 的稿 + 判「有毛病」 | `verifications/pending/<正文 sha>.jsonl` 一行 | `kind=proof_unregistered_rejected`、`defect_step` 有值、签文件 0 份 |
+| F 的稿 + 判「成立」 | `verifications/pending/<正文 sha>.jsonl` 三行 + `out/vsigns/<正文 sha>.json` + 稿上签块 | `kind=proof_unregistered_signed`（3/3） |
+| B 收录 | 建 `statements` 一行（现取命题号）；**稿名不变** | `statements` 多一行、行上 `manuscript_id` + `proof_no`、认签按 sha |
+
+所以"签 0 个"在还没送审时不是故障，而是**这一轮还没到收录那一步**；反过来，把
+"稿上签了"当成"已经入账"才是故障（入账是 B 的收录）。
 
 ### ④ 决定要证某条命题的那一刻就立项
 
@@ -811,17 +830,6 @@ V 真的审了框架手稿，而 B 一次都没跑 —— 派活被 `deadline_ex
 
 成果是台账里的条目，不是文件：一份没登记的证明等于不存在。但它是**收录**的产物，
 不是立项的产物 —— 「草稿已落盘」不算交付。
-
-### 计划稿的三种落点（都有读数）
-
-| 这一轮到哪 | 判词/签落在哪 | 读数长什么样 |
-|---|---|---|
-| 计划稿 + 判「有毛病」 | `verifications/pending/<正文 sha>.jsonl` 一行 | `kind=proof_unregistered_rejected`、`defect_step` 有值、签文件 0 份 |
-| 计划稿 + 判「成立」 | **不落签**：计划稿不是签的载体 | `kind=proof_reviewed_not_signed`（三转照判、pending 0 行、签文件 0 份） |
-| B 收录拿到号 | 稿转名 `reports/f-proof-<命题号>.md`，签另算 | `statements` 多一行、`promoted_manuscript` 有读数 |
-
-所以"签 0 个"在计划稿上不是故障，而是**这一轮还没到入账那一步**；反过来，把它当成
-"已经签过了"才是故障（签要盖在一条命题的证明上）。
 
 ### 为什么它是"硬序列"而不是"最后一步"
 
@@ -971,9 +979,8 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 `exp:<实验号>` / `mss:<稿号>`（F 的稿还没拿到命题号时）；**要核 `sha256`**：带过来的与
 盘上那份不是同一份，就不是同一份稿；
 **第四格是证明号** —— 交付里写了号就按它落 `#pN`，没写才回退，不要自己从"canonical
-空不空"猜号）→ 盘上 `reports/f-proof-<命题号>.md`（早期按计划号命名的
-`f-proof-plan-<plan_id>.md` 也认；按号命名的读不到时，还会拿这一笔的证明正文去认计划名
-那一份）→ 三处都没有（`source=none`）。
+空不空"猜号）→ 行上记的 `manuscript_id`（F 的稿号）指向的那份 `reports/f-proof-<稿号>.md`
+（老盘上按旧约定命名的只读兼容；**新稿不按命题号、也不按计划号命名**）→ 三处都没有（`source=none`）。
 
 - **`## 依赖` 那一节由你读出来落依赖边**，四列固定：**引用**（F 那一步的原话）/ **命题号** /
   **用在哪一步** / **路径号**（第几条证明）。缺列、列数不对、号形不对 ⇒ 整笔拒
@@ -1575,7 +1582,7 @@ def _v_skills() -> tuple[Skill, ...]:
 ## 三、你看不到审阅之外的东西
 
 **被审必须是 `reports/f-proof*.md`；递来别的东西先退回**：你只审框架渲染的手稿
-（F 的 `reports/f-proof-<命题号>.md`；E/B 的框架稿同族 `reports/e-proof-*.md` /
+（F 的 `reports/f-proof-<稿号>.md`；E/B 的框架稿同族 `reports/e-proof-*.md` /
 `reports/b-proof-*.md`）。调用方递来 `reports/P*.md` / `notes/*.md` 这类章节稿或草稿时，
 **先回一句「这不是手稿」并让它改用 `F.step` 的 `manuscript_path`** —— 不要去读那份章节稿
 充当被审正文（入口闸会拒，白烧一次调用）；**入口闸拒了不要重试同一个路径**
@@ -2130,7 +2137,8 @@ def _f_skills() -> tuple[Skill, ...]:
 
 ## 谁签那个字
 
-- **证明手稿由框架写，不是你手写的文件**（`reports/f-proof-<命题号>.md`）：`F.step` 的返回里给
+- **证明手稿由框架写，不是你手写的文件**（`reports/f-proof-<你的稿号>.md` —— 稿号是你自己的，
+  与命题号、计划号无关；同一份稿改稿仍是同一个稿号，另一份证明用 `-p2`）：`F.step` 的返回里给
   `manuscript_path` 与 `deps_preview`（全文**不进返回值** —— 它在盘上那一份里）；
   **登记 `statements` 那一行的是 B**（它读这份手稿，把命题与证明全文收进 `proof_text`、
   把 `## 依赖` 落成依赖边）—— 你不写 `statements`、也不填 `bits`；
@@ -2138,7 +2146,7 @@ def _f_skills() -> tuple[Skill, ...]:
   `## 依赖` 四列表（`引用` 取那一步的原话 / `命题号` / `用在哪一步` / `路径号`）。
   手写 `reports/f-proof-*` 会被 `reserved_framework_artifact` 拒 —— 那是框架渲染的产物；
   真身是 `agent_f/manuscript.py::proof_manuscript` 的 `dependency_rows`（只从 `cites` 取）；
-- **递审只能点 `F.step` 返回的 `manuscript_path`**（`reports/f-proof-<命题号>.md`）：你自己用
+- **递审只能点 `F.step` 返回的 `manuscript_path`**（`reports/f-proof-<你的稿号>.md`）：你自己用
   `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` / `notes/*.md` 这类）**不是手稿**
   —— 它不是框架渲染的、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，V 的入口闸会整笔拒
   （真机实测 9 次全拒、签一发未发）。章节稿可以写，但它是给你自己推演用的草稿，不是交付物；
@@ -2446,7 +2454,7 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 
 - **盘上这一份**是给人读的推进台账（D 与下一趟的你看的就是它，比 `history` 好读）；
 - **够格的中间结论走手稿登记** —— `F.step` 把这一份证明落成手稿条目
-  （`reports/f-proof-plan-<计划号>.md`），再由 **D** 向上携带给 B 读稿登记（`F → D`；
+  （`reports/f-proof-<你的稿号>.md`），再由 **D** 向上携带给 B 读稿登记（`F → D`；
   你不直接派 B），那才是**可复核**的那一份
   （有逐字证明文本、能进五元位、能被 V 逐行走查）。
 
@@ -3216,7 +3224,7 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 
 | 这一句声称 | 必须引到 |
 |---|---|
-| 「命题 P 证明了」 | **F** 的证明手稿 `reports/f-proof-<命题号>.md`（证明正文 + `## 依赖` 四列表）+ **B** 读稿登记的那一行 `statements.proof_text`；攻坚过程另有 F 的 `reports/attack-<plan_id>.md` |
+| 「命题 P 证明了」 | **F** 的证明手稿 `reports/f-proof-<稿号>.md`（证明正文 + `## 依赖` 四列表）+ **B** 读稿登记的那一行 `statements.proof_text`；攻坚过程另有 F 的 `reports/attack-<plan_id>.md` |
 | 「猜想 C 被证伪」 | 那条带 `counterexample` 的 `experiments` 行（`exp:` 号） |
 | 「做了数值实验 / 测了样例」 | **E** 的代码文件（实验行里的 `code_path`）|
 | 「存在这样的例子 / 反例」 | **描述那个例子的文件**；F 造的例子由 F 整理成**命题—证明格式**（命题写成「某某例子符合某形式」），引 F 那一份 |
