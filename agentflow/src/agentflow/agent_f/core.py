@@ -275,6 +275,99 @@ def product_kind(product: Mapping[str, Any]) -> str:
     return raw if raw in PROPOSITION_KINDS else ""
 
 
+def parse_handed_product(product: Any) -> dict[str, Any]:
+    """F 通过 `attack.step(product=…)` 交进来的那一份 ⇒ `_apply_round` 要的那一份。
+
+    ## 为什么要有这一层（真机第三轮，2026-11-11）
+
+    `attack.step` 改前只有 `plan_id` 一格（`additionalProperties=False`）⇒ F 写出来
+    的证明没有"交进来"的入口，它只能把整篇草稿落到 `reports/P1-*.md`（那份文件
+    自己头一句就写着"不是框架手稿"）。这一层把"它交的那一份"接进来，但仍然走
+    既有的产物校验：`clean_proof_steps`（每一步：正文非空 / 不许「易证/显然」/
+    推导步要么给 `cites` 要么显式声明成前提）与 `clean_new_subgoals`（1–3 条、
+    每条 `goal` + `testable` 都非空）—— 判据一条都没放宽，只是把入口补上。
+
+    ## 三态（空问题表 = 通过）
+
+    返回 `{checked, ok, kind, product, problems, label}`：
+
+    - `ok=True`：`product` 是 `_apply_round` 能直接吃的那一份（键名从
+      `parse_round` 的输出读齐：`product` / `steps` / `new_subgoals` / `reason`）；
+    - `ok=False`：`problems` 逐条列出不容的地方（`_clean_step` 的原话在里面，
+      第几步 / 哪一格都点得到），调用方据此落受控拒、不落稿、不登记；
+    - `checked=False`：`product` 整个不是对象 ⇒ 连"有没有某一格"都判不了。
+
+    `label` / `strategy` / `why_strategy` / `manuscript_id` 是可选读数：
+    `label` 只进台账（不参与命名），`strategy` 给了就必须在九招里，
+    `manuscript_id` 给了就必须是六位稿号（否则 `proof_manuscript` 会在写盘那一步
+    才拒，而那时这一轮已经动过盘了 —— 前移到入口拒，盘上一个字节都没写）。
+    """
+    from .. import manuscriptids as _MID
+    from .. import attackround as AR
+
+    out: dict[str, Any] = {"checked": True, "ok": False, "kind": "",
+                           "product": {}, "problems": [], "label": ""}
+    if not isinstance(product, Mapping):
+        out["checked"] = False
+        out["problems"] = [f"`product` 必须是对象，收到 {type(product).__name__}"]
+        return out
+
+    # ---- 声明面：多给的键不静默吞掉（工具层有 schema 门，直调 `AgentF.step` 没有）
+    allowed = set((AR.HANDED_PRODUCT_SCHEMA.get("properties") or {}))
+    problems: list[str] = []
+    extra = sorted(str(k) for k in product if str(k) not in allowed)
+    if extra:
+        problems.append(f"出现未声明的键：{extra}（这一格只收 {sorted(allowed)}）")
+
+    kind = str(product.get("kind") or "").strip()
+    if kind not in AR.HANDED_PRODUCT_KINDS:
+        problems.append(
+            f"`kind` 只能是 {' / '.join(f'`{k}`' for k in AR.HANDED_PRODUCT_KINDS)} 之一，"
+            f"收到 {kind!r}；`counterexample_request` / `dead_end` 不走这个入口"
+            "（它们是框架那一轮自己产出的，不是一份可以交进来的手稿）")
+
+    label_raw = product.get("label")
+    if label_raw is not None and not isinstance(label_raw, str):
+        problems.append(f"`label` 必须是字符串，收到 {type(label_raw).__name__}")
+    label = str(label_raw or "").strip()
+
+    strategy = str(product.get("strategy") or "").strip()
+    if strategy and strategy not in AR.STRATEGIES:
+        problems.append(
+            f"strategy 必须是通用工具箱里的一个 {AR.STRATEGIES}，收到 {strategy!r}")
+    why_strategy = str(product.get("why_strategy") or "").strip()
+
+    mid = str(product.get("manuscript_id") or "").strip()
+    if mid and not _MID.is_manuscript_id(mid):
+        problems.append(
+            "`manuscript_id` 必须是六位稿号（`manuscriptids` 发的那一个号），"
+            f"收到 {mid!r}")
+
+    clean: dict[str, Any] = {"product": kind, "label": label}
+    if strategy:
+        clean["strategy"] = strategy
+    if why_strategy:
+        clean["why_strategy"] = why_strategy
+    if mid:
+        clean["manuscript_id"] = mid
+    if kind == "proof":
+        steps, step_problems = AR.clean_proof_steps(product.get("steps"))
+        problems.extend(step_problems)
+        clean["steps"] = steps
+        # 读数（不是判据）：与 `parse_round` 同一格 —— "推导步被声明成前提"在交进来
+        # 的那一份上同样要看得见（下一轮读 history 的人据此知道哪一步被读成了没做）。
+        clean["problems"] = [str(s.get("problem") or "") for s in steps if s.get("problem")]
+    elif kind == "reduction":
+        goals, goal_problems = AR.clean_new_subgoals(product.get("new_subgoals"))
+        problems.extend(goal_problems)
+        clean["new_subgoals"] = goals
+        clean["reason"] = str(product.get("reason") or "").strip()
+
+    out.update(kind=kind, label=label, problems=problems,
+               product=({} if problems else clean), ok=not problems)
+    return out
+
+
 def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str,
                    tried: Sequence[str], evidence: Sequence[str] = (),
                    history: Sequence[str] = (), retry_note: str = "",
@@ -1340,20 +1433,30 @@ class _Core:
     #: "这一层查不了"与"这个 id 是假的"是两件事（三态纪律），不许把前者折成后者。
     _CITE_PREFIXES_NOT_VERIFIABLE: frozenset[str] = frozenset({"v"})
 
-    def _foreign_cites(self, product: Mapping[str, Any]) -> list[str]:
-        """这一轮的产物引到的 id 里有哪几个台账里根本没有（空列表 = 都真的存在）。
+    def _foreign_cite_hits(self, product: Mapping[str, Any]) -> list[dict[str, Any]]:
+        """产物里引到台账之外的 id ⇒ 逐条 `{step, id}`（空列表 = 都真的存在）。
+
+        判据与 :meth:`_foreign_cites` 是同一处（后者由它派生），多出来的只是步号：
+        F 把写好的证明交进来时没有"带原因重问"那一层，拒信必须点名"第几步不容"，
+        否则交的人只能把整份稿从头猜到尾。
 
         读台账失败不吞（"没查成"不许折成"都合法" —— 那正是伪造引用的绿色通道）。
         `#` 之后的部分（页码/锚点）按同一个 id 算（与 `closing` 的 `lit:0003#p.4` 同口径）。
+        `best_partial[].ids` 没有步号，按 `step=0` 记（它不属于任何一步）。
         """
-        cites: list[str] = []
-        for step in (product.get("steps") or []):
-            cites += [str(x) for x in (step.get("cites") or [])]
+        pairs: list[tuple[int, str]] = []
+        for i, step in enumerate(product.get("steps") or [], 1):
+            if not isinstance(step, Mapping):
+                continue
+            n = int(step.get("n") or i)
+            pairs += [(n, str(x)) for x in (step.get("cites") or [])]
         for item in (product.get("best_partial") or []):
-            cites += [str(x) for x in (item.get("ids") or [])]
-        cites = [c for c in cites
+            if not isinstance(item, Mapping):
+                continue
+            pairs += [(0, str(x)) for x in (item.get("ids") or [])]
+        pairs = [(n, c) for n, c in pairs
                  if c.split(":", 1)[0].strip() not in self._CITE_PREFIXES_NOT_VERIFIABLE]
-        if not cites:
+        if not pairs:
             return []
         known: set[str] = set()
         for table, column, prefix in self._CITE_ID_SOURCES:
@@ -1362,7 +1465,128 @@ class _Core:
                 if rid:
                     known.add(rid)
                     known.add(f"{prefix}:{rid}")
-        return sorted({c for c in cites if c.split("#", 1)[0].strip() not in known})
+        hits: list[dict[str, Any]] = []
+        seen: set[tuple[int, str]] = set()
+        for n, c in pairs:
+            if c.split("#", 1)[0].strip() in known:
+                continue
+            key = (n, c)
+            if key in seen:
+                continue
+            seen.add(key)
+            hits.append({"step": n, "id": c})
+        return hits
+
+    def _foreign_cites(self, product: Mapping[str, Any]) -> list[str]:
+        """这一轮的产物引到的 id 里有哪几个台账里根本没有（空列表 = 都真的存在）。
+
+        判据只有一处（:meth:`_foreign_cite_hits`）—— 这里只把逐条命中收成去重的 id 表，
+        于是"老路"（框架自己那一轮）的拒信与"F 交进来的那一份"的拒信同源。
+        """
+        return sorted({str(h["id"]) for h in self._foreign_cite_hits(product)})
+
+    #: F 交进来的那一份被拒时，`history[*].refusal.kind` 的那一个受控码。
+    #:
+    #: 为什么与"模型那一轮不成形"分开：那一档会带着原因重问（同一轮里换一次说法），
+    #: 而交进来的这一份没有重问 —— 它要的是一条能让人按步号改的拒信。两者混成一个码，
+    #: 读台账的人就分不出"模型没按形状说"与"人交的稿没过闸"。
+    HANDED_PRODUCT_REFUSED = "handed_product_refused"
+
+    def _handed_product_round(self, handed: Any, sg: Mapping[str, Any], *,
+                              plan: Mapping[str, Any], owner: str) -> dict:
+        """用 F 交进来的那一份跑既有的产物校验，过了就交给 `_apply_round` 落稿。
+
+        三条次序是刻意的：
+
+        ① 形状与逐步判据（`parse_handed_product`）—— 不过 ⇒ 受控拒，逐条点名；
+        ② 引用存在性（`_foreign_cite_hits`）—— R-03 的那道闸，不过 ⇒ 受控拒，
+           逐条点名"第几步引了哪个不在册的 id"，并给出本轮合法 id 清单；
+        ③ 过了才 `_apply_round`（写稿 → 秘书洗依赖面 → 登记 → 回读 V 签）。
+
+        受控拒的两支都不写盘：`_apply_round` 一步都没进，`reports/f-proof-*` 不出现，
+        `statements` / `attack_plans` 的 history 只留这一轮的拒绝读数（`refusal`）。
+        """
+        from .. import attackround as AR
+
+        sid = str(sg.get("sid") or "")
+        got = parse_handed_product(handed)
+        label = str(got.get("label") or "")
+        if not got.get("ok"):
+            problems = [str(x) for x in (got.get("problems") or [])]
+            detail = (
+                f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
+                "这一份没通过**既有的产物校验**（一条闸都没有放宽）。逐条如下：\n"
+                + "\n".join(f"- {p}" for p in problems)
+                + "\n改这几处，再把同一份交一次（这一轮**没有落稿、没有登记**，"
+                "也没有花推理的那一笔）")
+            return {
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": detail,
+                "evidence": [],
+                "status": "blocked",
+                "blocked_reason": (f"交进来的产物没过既有校验（{len(problems)} 条）："
+                                   + "；".join(problems)),
+                # 不是"这一轮之后没有新事情可做"：同一份改完就能再交 ⇒ 不封存它。
+                "in_flight": False,
+                "count_attempt": False,
+                "refusal": {
+                    "kind": self.HANDED_PRODUCT_REFUSED,
+                    "problems": problems,
+                    "next_step": ("按上面逐条改那几步 / 那几格，再把同一份 `product` "
+                                  "交一次（`attack.step(plan_id=…, product=…)`）"),
+                    "label": label,
+                },
+            }
+
+        product = dict(got.get("product") or {})
+        hits = self._foreign_cite_hits(product)
+        if hits:
+            # 合法 id 清单与提示词同源（`_evidence_digest` + `citable_statements`），
+            # 不在这一支另编一份 —— 两份清单漂开，改的人照着改还会被拒。
+            _evidence_lines, citable_ids = self._evidence_digest(sg, plan)
+            _statement_lines, statement_ids, _note = self.citable_statements()
+            citable_ids = list(dict.fromkeys([*citable_ids, *statement_ids]))
+            legal_note = "本轮的合法 id 有：" + AR.citable_ids_line(citable_ids)
+            lines = [
+                (f"第 {h['step']} 步引了 `{h['id']}` —— 台账里没有这个 id"
+                 if int(h.get("step") or 0) > 0
+                 else f"`best_partial` 引了 `{h['id']}` —— 台账里没有这个 id")
+                for h in hits
+            ]
+            detail = (
+                f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
+                "这一份引了台账里不存在的 id（R-03：伪造引用是不可逆损失）。逐条点名：\n"
+                + "\n".join(f"- {line}" for line in lines)
+                + f"\n{legal_note} —— 要么把 id 改成这些里真的那条，要么显式把这一步"
+                "声明成前提（`assumption: true`）。这一轮**没有落稿、没有登记**")
+            return {
+                "action": "no_change",
+                "outcome": "no_change",
+                "detail": detail,
+                "evidence": [],
+                "status": "blocked",
+                "blocked_reason": (f"引用了不存在的 id（逐条）："
+                                   + "；".join(f"{h['step'] or '—'}:{h['id']}" for h in hits)
+                                   + f"；{legal_note}"),
+                "in_flight": False,
+                "count_attempt": False,
+                "refusal": {
+                    "kind": self.HANDED_PRODUCT_REFUSED,
+                    "problems": [f"第 {h['step']} 步引了不在册的 {h['id']}" for h in hits],
+                    "next_step": ("把不在册的那几个 id 改成合法清单里真的那条，"
+                                  "或把那一步写成 `assumption: true`，再交一次"),
+                    "label": label,
+                },
+            }
+
+        out = self._apply_round(product, sg, plan=plan, owner=owner)
+        note = ("这一轮用的是你通过 `attack.step(product=…)` 交进来的那一份"
+                + (f"（label={label}）" if label else ""))
+        out["detail"] = (str(out.get("detail") or "").rstrip()
+                         + ("" if str(out.get("detail") or "").endswith("。") else "。")
+                         + note)
+        return out
 
     def _self_dead_end(self, sg: Mapping[str, Any], *, owner: str, reason: str,
                        evidence: str, why_strategy: str, blocked_reason: str) -> dict:
@@ -2492,8 +2716,10 @@ class _Core:
                     product: Mapping[str, Any], status: str, basis: str,
                     next_step: str) -> str:
         """攻坚台账的一行（状态 / 依据 / 下一步 —— 与 policy 第 2 条同一个三段）。"""
-        return (f"- 第 {round_no} 轮（`{kind}`，{product.get('strategy')}）状态：{status}"
-                f"｜依据：{basis}｜下一步：{next_step}")
+        # 交进来的那一份可以不声明 `strategy`（那是框架那一轮的叙述栏，不是产物判据）；
+        # 没声明就如实写"未声明"，不替它从九招里挑一个。
+        return (f"- 第 {round_no} 轮（`{kind}`，{product.get('strategy') or '（未声明）'}）"
+                f"状态：{status}｜依据：{basis}｜下一步：{next_step}")
 
     def _subgoal_manuscript_id(self, *, plan: Mapping[str, Any], sid: str) -> str:
         """这个子目标已经写过的那份稿的号（读计划 history；没有 ⇒ 空串）。
@@ -2585,7 +2811,8 @@ class _Core:
                 new_goals.append({"sid": new_sid, "text": str(item.get("goal") or ""),
                                   "owner": owner, "testable": str(item.get("testable") or ""),
                                   "status": "todo"})
-            detail = (f"归约（{product.get('strategy')}）：{product.get('why_strategy')}；"
+            detail = (f"归约（{product.get('strategy') or '（未声明）'}）："
+                      f"{product.get('why_strategy') or '（未声明）'}；"
                       f"新子目标 {[g['sid'] for g in new_goals]}（每条都带可检验形式）")
             evidence: list[str] = [g["sid"] for g in new_goals]
             status = "in_progress"
@@ -2805,7 +3032,7 @@ class _Core:
                             + ("" if _reading.get("delivered")
                                else " —— 没签 ⇒ 这一趟不算交差"
                                f"；下一步：{v_sign.get('hint') or '派 V 审这一份'}"))
-            detail = (f"论证（{product.get('strategy')}）：{len(steps)} 步；"
+            detail = (f"论证（{product.get('strategy') or '（未声明）'}）：{len(steps)} 步；"
                       f"这一轮是论证不是机器核验 ⇒ 子目标不关闭（FC-22）；{outlet_note}")
             if wash.get("changed"):
                 detail += (f"；秘书洗稿（{wash.get('actor')}）：依赖面被改过"

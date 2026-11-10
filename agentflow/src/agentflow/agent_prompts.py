@@ -3890,7 +3890,27 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 实测记录，改 sha 而不重发请求会把"没重跑"伪装成"重跑过"。
 #: 判据：`tests/test_f_does_not_work_for_a_statement_number.py`（a 签名 / b 交接口 /
 #: c 三条反真空 / d 端到端五段 / e 题面字面）。
-PROMPT_VERSION = "p274"
+#: p274 → p275（2026-11-11，真机第三轮的通道断）：一格换值 —— F。
+#: 现场逐字：F 调了 5 次 `attack.step`，0 次 proof、全部 reduction；收工话是
+#: 「数学内容写出来了，但没有拿到框架手稿，也没有 V 签」；盘上 `statements` 0、
+#: `vsigns` 0，只有一份头一句就写着"不是框架手稿"的 21KB 草稿。
+#: 根因：`attack.step` 的 schema 只有 `plan_id` 一格（`additionalProperties=False`）
+#: ⇒ F 没有"把证明正文交进来"的入口，那一轮的产物只能由框架内部的推理缝决定。
+#: 本批三处落点（都只落在 F 自己的段上）：
+#:   ① `tools/attack_tools.py` 的 `attack.step` 增加可选 `product`
+#:      （`attackround.handed_product_schema()`：`proof` / `reduction` 两档；工具摘要
+#:      写明"交进来就替你落稿、不交就照旧由框架这一轮自己产出"）；
+#:   ② `specs/f.py` 的动作表同步那一格（两层同一份 schema）＋ policy 新增一条教法
+#:      （"写好的证明可以直接交进来、`## 依赖` 不必手抄；不交也没关系"）；
+#:   ③ `agent_f` 的 `step(product=…)` 走 `parse_handed_product` + 既有产物校验，
+#:      过了照现有路径落 `reports/f-proof-<稿号>.md` —— 判据本体是
+#:      `tests/test_f_can_hand_in_its_own_proof.py`（a–e）。
+#: 十一格只换 F：`temp/_p275_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），其余十格与 p274 逐字同值。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p275）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p274 同值）；
+#: `attack.step` 的参数面变了 ⇒ 两份 golden（tool_surface_snapshot / 声明基线）按现值重冻。
+PROMPT_VERSION = "p275"
 
 
 

@@ -1150,6 +1150,21 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "agent_f 的 publish/promote 删兼容形参、登记面只递稿号 + 正文、送审提示只点稿。"
              "十一格里只有 F/G/H/M 换值（a62be58c / 6730aa37 / 4e36b38d / 47d3b555）。"
              "facts 键集仍 15 格、落点没动。"},
+    # p274 → p275（2026-11-11，真机第三轮的通道断）：facts 键集一格没动（还是 15 格）——
+    # 本批只改 F 自己的段（`attack.step` 的参数面 + 动作摘要 + `specs/f.py` 的一条教法），
+    # 外加两条实现：`agent_f.step(product=…)` 与 `attackround` 的产物 schema / 逐步判据
+    # 抽出一份给两处共用。facts 的键集与落点都没有变，所以 count / keys_sha256 与 p274 同值。
+    {"version": "p275", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p275（2026-11-11，真机第三轮的通道断）：上游 —— F 调了 5 次 "
+             "`attack.step`、0 次 proof 全部 reduction；收工话逐字「数学内容写出来了，但"
+             "没有拿到框架手稿，也没有 V 签」；根因是 `attack.step` 的 schema 只有 "
+             "`plan_id` 一格（`additionalProperties=False`）⇒ F 没有把证明正文交进来的入口。"
+             "本批给入口：`attack.step` 增加可选 `product`（`proof` / `reduction`），"
+             "`agent_f.step(product=…)` 用它跑既有的产物校验、过了照现有路径落 "
+             "`reports/f-proof-<稿号>.md`；`specs/f.py` 的动作表同步那一格 + policy 补一条"
+             "教法（「写好的证明可以直接交进来；不交也没关系，老路不变」）。"
+             "十一格里只有 F 换值（27d85b47…）。facts 键集仍 15 格、落点没动。"},
 
 )
 

@@ -113,6 +113,163 @@ PRODUCT_SPECS: dict[str, str] = {
 #: 而这一处漂了的后果正是"提示词说四选一、判据按另外四个值拒"）。
 PRODUCT_MENU: str = " / ".join(f"`{name}`" for name in PRODUCT_SPECS)
 
+#: F 通过 `attack.step(product=…)` 直接交进来的产物只允许这两档。
+#:
+#: 为什么只有两档（而 `PRODUCTS` 有四档）：这一格是「把已经写好的东西交进来」的入口。
+#: 论证（`proof`）与归约（`reduction`）是 F 自己在纸面上写得出来、也交得出手的两件事；
+#: `counterexample_request` 要的是一份能判决的实验判据（它该由 E 跑，落点是新子目标），
+#: `dead_end` 是"这一轮走不下去"的自述 —— 两者都不是"手稿"，没有"落稿"这一层。
+#: 它们照旧走框架那一轮自己产出的老路（不给 `product` 的老路一个字没变）。
+HANDED_PRODUCT_KINDS: tuple[str, ...] = ("proof", "reduction")
+
+
+#: `attack.step(product=…)` 的参数面（工具层与 `specs/f.py` 的动作表共用这一处）。
+#:
+#: 为什么这里必须是模块级字面量而不是函数：两层参数对账
+#: （`capabilities._literal`）只认字面量 / 模块级常量 / `<别名>.<常量>`，不认函数调用 ——
+#: 写成函数会让工具层那一侧读成"读不出类型"，`param_type_divergences()` 当场报红。
+#: 单一来源就是这个常量：工具层与动作表都引用它，谁也不抄第二份。
+#:
+#: `additionalProperties` 三层都是 `False`（工具层的参数门逐层读它，多给一个没声明的键
+#: 会被当场拒而不是被静默吞掉）。`required` 只钉 `kind`：其余必填栏由
+#: `agent_f.core.parse_handed_product` 走既有的产物校验器逐条说清（一次列全部问题）。
+#:
+#: 交进来的这一份写 `kind`（`proof` / `reduction`）；内部一轮的产物写 `product`
+#: （同一件事的两个名字，前者是这一格的入口名字、后者是 `parse_round` 的输出名字）。
+HANDED_PRODUCT_SCHEMA: dict[str, Any] = {
+        "type": "object",
+        "description": (
+            "写好的证明 / 归约可以直接交进来：给 `kind` 与对应的正文，框架照既有的产物"
+            "校验逐条核过，再替你落成 `reports/f-proof-<你的稿号>.md`（`## 依赖` 由"
+            "`cites` 渲染，你不必手抄）。不给这一格 ⇒ 照旧由框架这一轮自己产出。"),
+        "properties": {
+            "kind": {
+                "type": "string",
+                "enum": list(HANDED_PRODUCT_KINDS),
+                "description": (
+                    "这一份的档：`proof` = 逐步论证（给 `steps`）；`reduction` = 把目标"
+                    "归约成 1–3 条新子目标（给 `new_subgoals` 与 `reason`）。"),
+            },
+            "label": {
+                "type": "string",
+                "description": (
+                    "这一份产物的一句话标签（只进台账读数；不参与稿号 / 命题号命名）。"),
+            },
+            "steps": {
+                "type": "array",
+                "description": (
+                    "`kind=proof` 的逐步论证（非空）。每一步要么引到本轮可引的在册 id"
+                    "（`cites`），要么显式声明成前提（`assumption: true`）；"
+                    "「易证 / 显然 / trivial」那类缝会被打回。"),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {"type": "string",
+                                 "description": "这一步说了什么（必填、不许空）"},
+                        "cites": {"type": "array", "items": {"type": "string"},
+                                  "description": "这一步引到的在册 id（`stmt:` / `lit:` / `exp:` …）"},
+                        "assumption": {"type": "boolean",
+                                       "description": "这一步是前提步（true）还是推导步（缺省 false）"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            "new_subgoals": {
+                "type": "array",
+                "description": (
+                    "`kind=reduction` 的新子目标（1–3 条，不多不少）；每条要 `goal` 与"
+                    "`testable` 都非空 —— 给不出可检验形式的不是一条归约。"),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "goal": {"type": "string", "description": "归约出来的子目标"},
+                        "testable": {"type": "string",
+                                     "description": "怎么算做成了（可检验形式，必填）"},
+                    },
+                    "additionalProperties": False,
+                },
+            },
+            "reason": {
+                "type": "string",
+                "description": "`kind=reduction` 时：为什么这样归约（可选，但强烈建议写）",
+            },
+            "strategy": {
+                "type": "string",
+                "enum": list(STRATEGIES),
+                "description": (
+                    "用了通用工具箱里的哪一招（可选；给了就必须是这九招之一，"
+                    "与框架那一轮的产物同一份词表）。"),
+            },
+            "why_strategy": {
+                "type": "string",
+                "description": "为什么用这一招（可选；给了就照原话进台账）",
+            },
+            "manuscript_id": {
+                "type": "string",
+                "description": (
+                    "改同一份稿时给回上一轮的稿号（六位）；不给 ⇒ 沿用这个子目标已有的"
+                    "稿号，没有就向 F 自己的号源新取一个。"),
+            },
+        },
+        "required": ["kind"],
+        "additionalProperties": False,
+    }
+
+
+def clean_proof_steps(steps: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    """`proof` 那一档的逐步判据 ⇒ `(规范化后的步骤, 逐条问题)`。
+
+    ## 为什么抽出来给两处用
+
+    同一道闸今天有两个入口：框架那一轮自己产出（`parse_round`）与 F 把写好的证明
+    交进来（`agent_f.core.parse_handed_product`）。两处各写一份逐步判据，就必然漂；
+    而这一处漂了的后果是"交进来的那份比模型那一份松"或反过来。
+
+    ## 为什么收集全部问题而不是只报第一步
+
+    `parse_round` 那一侧有"带原因重问"这一层（模型可以改），所以从前只报第一个错
+    也能走；交进来的这一份没有重问（交的人不在这一轮里），只报第一步会逼它
+    改一处、再交一次、再撞下一处。所以这里把每一步的问题都收齐 —— 判据强度
+    一个字没变，变的是"一次说完"。
+
+    返回空问题表 = 通过；`steps` 为空 / 不是数组时也只是一条问题（与 `parse_round`
+    原来的那句逐字相同）。
+    """
+    if not isinstance(steps, (list, tuple)) or not steps:
+        return [], ["proof 要给逐步论证（steps 非空）"]
+    clean: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for i, step in enumerate(steps, 1):
+        try:
+            clean.append(_clean_step(step, i))
+        except RoundError as exc:
+            problems.append(str(exc))
+    return clean, problems
+
+
+def clean_new_subgoals(goals: Any) -> tuple[list[dict[str, str]], list[str]]:
+    """`reduction` 那一档的新子目标判据 ⇒ `(规范化后的子目标, 逐条问题)`。
+
+    与 :func:`clean_proof_steps` 同一条理由：`parse_round` 与"交进来的产物"共用
+    这一份判据，不再各写一份。
+    """
+    if not isinstance(goals, (list, tuple)) or not (1 <= len(goals) <= 3):
+        return [], ["reduction 要给 1–3 条新子目标（不多不少：超过三条就是没归约）"]
+    clean: list[dict[str, str]] = []
+    problems: list[str] = []
+    for i, g in enumerate(goals, 1):
+        if not isinstance(g, Mapping):
+            problems.append(f"new_subgoals[{i}] 必须是对象（{SUBGOAL_FIELDS}）")
+            continue
+        missing = [k for k in SUBGOAL_FIELDS if not str(g.get(k) or "").strip()]
+        if missing:
+            problems.append(
+                f"new_subgoals[{i}] 缺 {missing}：给不出可检验形式的新子目标，"
+                "不是一条归约（那种情形落 `dead_end` 并写清缺什么）")
+            continue
+        clean.append({"goal": str(g["goal"]).strip(), "testable": str(g["testable"]).strip()})
+    return clean, problems
+
 #: 提示词里的引用纪律（提示词与拒收消息共用这一处口径）。
 #:
 #: 真机读数（`projects/mp4` 的 `mp4-6` 那趟，计划 `000001` 第 1 轮）：
@@ -312,26 +469,16 @@ def parse_round(text: str) -> dict[str, Any]:
     out: dict[str, Any] = {"product": product, "strategy": strategy, "why_strategy": why}
 
     if product == "reduction":
-        goals = got.get("new_subgoals")
-        if not isinstance(goals, (list, tuple)) or not (1 <= len(goals) <= 3):
-            raise RoundError("reduction 要给 1–3 条新子目标（不多不少：超过三条就是没归约）")
-        clean: list[dict[str, str]] = []
-        for i, g in enumerate(goals, 1):
-            if not isinstance(g, Mapping):
-                raise RoundError(f"new_subgoals[{i}] 必须是对象（{SUBGOAL_FIELDS}）")
-            missing = [k for k in SUBGOAL_FIELDS if not str(g.get(k) or "").strip()]
-            if missing:
-                raise RoundError(
-                    f"new_subgoals[{i}] 缺 {missing}：给不出可检验形式的新子目标，"
-                    "不是一条归约（那种情形落 `dead_end` 并写清缺什么）")
-            clean.append({"goal": str(g["goal"]).strip(), "testable": str(g["testable"]).strip()})
+        clean, problems = clean_new_subgoals(got.get("new_subgoals"))
+        if problems:
+            raise RoundError("；".join(problems))
         out["new_subgoals"] = clean
         out["reason"] = str(got.get("reason") or "").strip()
     elif product == "proof":
-        steps = got.get("steps")
-        if not isinstance(steps, (list, tuple)) or not steps:
-            raise RoundError("proof 要给逐步论证（steps 非空）")
-        out["steps"] = [_clean_step(s, i) for i, s in enumerate(steps, 1)]
+        clean, problems = clean_proof_steps(got.get("steps"))
+        if problems:
+            raise RoundError("；".join(problems))
+        out["steps"] = clean
         # 读数（不是判据）：把"前提步"与"推导步被声明成前提"分开交回去 ——
         # 后者一进 `history` 的 `product_detail`，下一轮谁读这一轮都看得见。
         out["problems"] = [str(s["problem"]) for s in out["steps"] if s.get("problem")]

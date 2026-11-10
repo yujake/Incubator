@@ -9,6 +9,9 @@
 from __future__ import annotations
 
 from .. import schema as S
+#: 交进来的产物那一格的形状（与 `tools/attack_tools.py` 的 `attack.step` 共用一处）。
+#: 两处各写一份 schema 会漂，而漂了的形态是"动作表说收、工具层拒"或反过来。
+from .. import attackround as _AR
 from ..agentspec import (
     _ARR_I,
     _ARR_OBJ,
@@ -42,8 +45,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "F", "step",
-        "推进一轮（唯一会改计划的方法）",
-        _obj({"plan_id": _S}, ("plan_id",)),
+        # 2026-11-11：把「写好的证明怎么交进来」写进动作摘要 —— F 的题面里这一行
+        # 是它读到的第一条动作说明；只把入口加在参数面、摘要不提，模型就不会知道
+        # 那一格存在（真机第三轮 5 次 `attack.step` 全部落成 reduction 的同一个形态）。
+        ("推进一轮（唯一会改计划的方法）。**写好的证明 / 归约可以直接放进 `product` 交进来**："
+         "框架照既有产物校验逐条核过，过闸就替你落成 `reports/f-proof-<你的稿号>.md`"
+         "（`## 依赖` 由 `cites` 渲染，你不必手抄），并回 `manuscript_path` / `manuscript_id`；"
+         "**不交 `product` 就照旧由框架这一轮自己产出**。"),
+        _obj({"plan_id": _S, "product": _AR.HANDED_PRODUCT_SCHEMA}, ("plan_id",)),
         # 2026-11-03（p233）：returns 补齐实现的真返回（只加不减）—— 逐条交差读数
         # （`agent_f/delivery.py::delivery_summary`）与收工那几格（`agent_f/step.py`
         # 的 `_CLOSE_KEYS`）。键清单逐字取自实跑观测，不是猜的。
@@ -254,6 +263,27 @@ SPEC = AgentSpec(
             "一条在册引用都没有的自足证明不适用这一条（B 不拒收，`deps_missing` 读成 "
             "`not_applicable`）。你不写 `dependencies` 那张表："
             "作者的活是把引用写进 `cites`，登记是收方的活。",
+            # 2026-11-11（真机第三轮：F 写了 21KB 的完整证明，5 次 `attack.step`
+            # 全部落成 reduction，稿 0 份、签 0 个；它的原话是「数学内容写出来了，
+            # 但没有拿到框架手稿，也没有 V 签」）。根因是 `attack.step` 的 schema
+            # 只有 `plan_id` 一格（`additionalProperties: false`）⇒ F 没有"把证明正文
+            # 交进来"的入口，只能写一份自述"不是框架手稿"的草稿。这一条把入口与
+            # 它的边界一起教给它：交进来的是产物（proof / reduction），框架照既有
+            # 闸逐条核、过闸替你落稿；不交就照旧由框架那一轮自己产出。
+            "**写好的证明可以直接交进来，不必让它再生成一遍**：把 "
+            "`{\"kind\": \"proof\", \"label\": \"一句话标签（可选）\", \"steps\": "
+            "[{\"text\": \"这一步说了什么\", \"cites\": [\"stmt:000007\"], "
+            "\"assumption\": false}, …]}` 放进 `attack.step(plan_id=…, product=…)` —— "
+            "框架照**既有的产物校验**逐条核（`cites` 必须在册、不许「易证 / 显然 / trivial」、"
+            "推导步不许声明成前提；一条闸都不放宽），过闸就替你落成 "
+            "`reports/f-proof-<你的稿号>.md`（`manuscript_path` / `manuscript_id` 随返回值"
+            "回来），`## 依赖` 那一节由框架按每一步的 `cites` 渲染，**你不必手抄**。"
+            "校验不过 ⇒ **受控拒**，逐条点名第几步 / 哪一格不容（把校验器的原话带回），"
+            "改那几处再把同一份交一次 —— 那一轮不落稿、不登记。归约同理："
+            "`kind=\"reduction\"` + `new_subgoals`（1–3 条，每条 `goal` + `testable`）。"
+            "**不交 `product` 也没关系：那一轮照旧由框架从你的推理缝现生成**（老路不变）——"
+            "但证明已经写好了就别只把草稿落到 `reports/` 或 `notes/` 上：那种文件不是框架手稿，"
+            "V 不会签它，B 也不会收它。",
             # 2026-11-05（审计② 第 ⑭ 条）：`dependency_source_not_registered` 此前只拦不教。
             "**引的号必须在册**：`cites` 或 `## 依赖` 里出现一个不在 `statements` 的 `stmt:<号>` ⇒ "
             "秘书洗不动，**整份手稿退回**（`dependency_source_not_registered`，点名第几行、哪个号）—— "

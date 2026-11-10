@@ -64,6 +64,12 @@ from ..schema import ATTACK_TERMINAL_STATUSES as TERMINAL_STATUSES  # noqa: E402
 #: 子目标状态的「词表」（`pick_next_subgoal` 要在给结论之前拿它校验：
 #: 状态写错时若直接回"没有可推进的子目标"，就把输入写错读成了"确实没有待办"）。
 from ..schema import SUBGOAL_STATUSES as SUBGOAL_STATUSES  # noqa: E402
+#: `attack.step(product=…)` 的参数面与"交进来的产物"那一档的受控词表。
+#:
+#: 为什么从 `attackround` 取而不在本文件抄一份：产物校验器（`parse_round` /
+#: `clean_proof_steps` / `clean_new_subgoals`）就在那一层，这里只把它的形状
+#: 原样摆到模型面前。两处各写一份 schema，漂了的形态是"工具说收、判据说不认"。
+from .. import attackround as AR  # noqa: E402
 
 
 def check_budget(budget: dict | None) -> dict:
@@ -470,11 +476,18 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
 @tool(
     "attack.step",
     (
+            # 摘要只留一句指路（压缩批次的体量口径按全 cohort 算，见
+            # `tests/test_tool_descriptions_are_compressed.py`）：完整教法在 `product`
+            # 那一格的 description 与 `specs/f.py` 的 policy 里，不在这儿铺开。
             "推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实记 no_change。"
+            "交证明用 `product`。"
             ),
     {
            "type": "object",
-           "properties": {"plan_id": {"type": "string"}},
+           "properties": {
+            "plan_id": {"type": "string"},
+            "product": AR.HANDED_PRODUCT_SCHEMA,
+           },
            "required": ["plan_id"],
            "additionalProperties": False,
            },
@@ -507,13 +520,21 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
              "'delivery_state_plan','delivery_label_plan','self_assessment'}"),
     tags=("attack", "loop"),
 )
-def _attack_step(_need_store, store, plan_id):
+def _attack_step(_need_store, store, plan_id, product=None):
     """attack.step 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（_need_store, store）由装配期用 `partial` 绑定，
     所以模型看到的签名与搬移前逐字相同。
+
+    `product` 是 2026-11-11 新增的可选入口（`attackround.HANDED_PRODUCT_SCHEMA`）：
+    给了就把 F 写好的那一份交给 `AgentF.step` 走既有的产物校验与落稿路径；
+    不给就原样调 `step(plan_id)` —— 老路一个字节没变。
     """
-    return _need_store("attack.step") or _guard(lambda: _agent_for(store).step(plan_id))
+    if product is None:
+        return _need_store("attack.step") or _guard(lambda: _agent_for(store).step(plan_id))
+    return _need_store("attack.step") or _guard(
+        lambda: _agent_for(store).step(plan_id, product=product)
+    )
 
 @tool(
     "attack.status",

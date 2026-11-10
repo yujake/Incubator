@@ -4,7 +4,7 @@
 """
 from __future__ import annotations
 
-from ._support import AT, NO_PROGRESS_NOTE, PlanError, TERMINAL_STATUSES, _budget_left, _step_outcome
+from ._support import AT, Any, NO_PROGRESS_NOTE, PlanError, TERMINAL_STATUSES, _budget_left, _step_outcome
 
 #: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
 _CLOSE_KEYS: tuple[str, ...] = (
@@ -55,9 +55,19 @@ class _Step:
                              + f" 共 {len(open_rows)} 条")
         return out
 
-    def step(self, plan_id: str) -> dict:
+    def step(self, plan_id: str, product: Any = None) -> dict:
         """推进一轮。
         返回 ``{"plan_id","round","sid","action","outcome","status","budget_left","reason","budget_known","budget_reading"}``。
+
+        ## `product` 这一格（2026-11-11，真机第三轮的通道断）
+
+        可选。F 已经写好的那一份（`proof` / `reduction`）可以直接放进来：走
+        `_handed_product_round` —— 既有的产物校验一条都不放宽，过了就照现有路径落成
+        `reports/f-proof-<稿号>.md`（`## 依赖` 由 `cites` 渲染，F 不必手抄），
+        返回值里给 `manuscript_path` / `manuscript_id`。校验不过 ⇒ 受控拒，逐条点名。
+
+        不给（`None`）⇒ 与加这一格之前逐字同形：`_deploy` 按 owner 分派，
+        F 那一支照旧问推理缝。老路没有被替代，只是多了一个"把写好的交进来"的入口。
         `outcome` 取本模块的 :data:`STEP_OUTCOMES`（``no_change`` / ``progress`` / ``blocked``）：它说的是
         这一轮推进的结果，与 `schema.TASK_OUTCOMES`（一次任务的终局）是两套命名空间，不许互相赋值—— 裁定依据与后果写在 `STEP_OUTCOMES` 的
         注释里。写入前会过一次:func:`_step_outcome` 的收口，词表外的取值当场炸。
@@ -256,7 +266,27 @@ class _Step:
         sid = str(sg.get("sid"))
 
         # ---- [3] 分派
-        deploy = self._deploy(sg, plan=row)
+        #
+        # 2026-11-11：`product` 给了 ⇒ 这一轮用 F 交进来的那一份（既有的产物校验
+        # 与落稿路径都在 `_handed_product_round` 里），不问推理缝、也不按 owner 派活。
+        # 形式化那条子目标例外：形式化归 L、F 没有那条边 —— 这是一条权限面事实，
+        # 不是"这一份产物过不过闸"，所以它照旧走 `_formal_not_in_f_round`（受控拒
+        # + 上报），并且把"你交的那一份没有被采用"写进读数。
+        # 不给 `product` 则一个字节都不走新路（`_deploy` 原样）。
+        if product is not None:
+            from .core import _is_formal_subgoal
+
+            if _is_formal_subgoal(sg):
+                deploy = self._formal_not_in_f_round(sg, plan=row)
+                deploy["detail"] = (
+                    str(deploy.get("detail") or "")
+                    + "；⚠️ 这一轮你通过 `attack.step(product=…)` 交了产物，"
+                    "但这条子目标不在 F 的权限面上（形式化归 L）⇒ **没有采用它**")
+            else:
+                deploy = self._handed_product_round(
+                    product, sg, plan=row, owner=str(sg.get("owner") or ""))
+        else:
+            deploy = self._deploy(sg, plan=row)
 
         # ---- 把分派结果写回子目标
         if deploy.get("experiment_ids"):

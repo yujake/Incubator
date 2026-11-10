@@ -6879,6 +6879,112 @@
           "to": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
         }
       ]
+    },
+    {
+      "tools": [
+        "attack.step"
+      ],
+      "key": "params",
+      "reason": "2026-11-11 真机第三轮的通道断：`attack.step` 增加**可选** `product` —— F 写好的证明 / 归约可以直接交进来（`proof` 的 `steps`、`reduction` 的 `new_subgoals` / `reason`），框架照既有的产物校验逐条核过，过了照现有路径落 `reports/f-proof-<稿号>.md`。改前这一格只有 `plan_id`（`additionalProperties=False`）⇒ F 没有把证明正文交进来的入口（那一轮 5 次 `attack.step` 0 次 proof、盘上 statements 0 / vsigns 0）。新增的只有这一个可选键：既有 `plan_id` 与 `required` / `additionalProperties` 一字未动，其余 125 件工具的契约一个字未动；不给 `product` 时行为与改前逐字相同。",
+      "date": "2026-11-11",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/product",
+          "value": {
+            "type": "object",
+            "description": "写好的证明 / 归约可以直接交进来：给 `kind` 与对应的正文，框架照既有的产物校验逐条核过，再替你落成 `reports/f-proof-<你的稿号>.md`（`## 依赖` 由`cites` 渲染，你不必手抄）。不给这一格 ⇒ 照旧由框架这一轮自己产出。",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "proof",
+                  "reduction"
+                ],
+                "description": "这一份的档：`proof` = 逐步论证（给 `steps`）；`reduction` = 把目标归约成 1–3 条新子目标（给 `new_subgoals` 与 `reason`）。"
+              },
+              "label": {
+                "type": "string",
+                "description": "这一份产物的一句话标签（只进台账读数；不参与稿号 / 命题号命名）。"
+              },
+              "steps": {
+                "type": "array",
+                "description": "`kind=proof` 的逐步论证（非空）。每一步要么引到本轮可引的在册 id（`cites`），要么显式声明成前提（`assumption: true`）；「易证 / 显然 / trivial」那类缝会被打回。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "description": "这一步说了什么（必填、不许空）"
+                    },
+                    "cites": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "这一步引到的在册 id（`stmt:` / `lit:` / `exp:` …）"
+                    },
+                    "assumption": {
+                      "type": "boolean",
+                      "description": "这一步是前提步（true）还是推导步（缺省 false）"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "new_subgoals": {
+                "type": "array",
+                "description": "`kind=reduction` 的新子目标（1–3 条，不多不少）；每条要 `goal` 与`testable` 都非空 —— 给不出可检验形式的不是一条归约。",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "goal": {
+                      "type": "string",
+                      "description": "归约出来的子目标"
+                    },
+                    "testable": {
+                      "type": "string",
+                      "description": "怎么算做成了（可检验形式，必填）"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "reason": {
+                "type": "string",
+                "description": "`kind=reduction` 时：为什么这样归约（可选，但强烈建议写）"
+              },
+              "strategy": {
+                "type": "string",
+                "enum": [
+                  "归约",
+                  "反证",
+                  "极值与双重计数",
+                  "对称性与去同构",
+                  "构造参数族",
+                  "局部—整体",
+                  "编码为 SAT/ILP",
+                  "套用已知定理",
+                  "小情形搜索找模式"
+                ],
+                "description": "用了通用工具箱里的哪一招（可选；给了就必须是这九招之一，与框架那一轮的产物同一份词表）。"
+              },
+              "why_strategy": {
+                "type": "string",
+                "description": "为什么用这一招（可选；给了就照原话进台账）"
+              },
+              "manuscript_id": {
+                "type": "string",
+                "description": "改同一份稿时给回上一轮的稿号（六位）；不给 ⇒ 沿用这个子目标已有的稿号，没有就向 F 自己的号源新取一个。"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          }
+        }
+      ]
     }
   ],
   "summary_lens_before": {
