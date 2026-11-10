@@ -323,8 +323,22 @@ def test_f_removing_the_gate_makes_a_red(tmp_path, monkeypatch):
     got = _hand(agent, SPEC_036)
     assert got["ok"] is True, (
         "反真空失效：摘掉形态闸之后仍然被拒 ⇒ 这条用例证明不了闸在起作用")
-    assert _manuscripts(st) == ["f-proof-plan-0001.md"], (
+    # 摘掉闸之后那段作业规格会被登记成手稿 —— 这正是 a 要拦住的那件事。
+    #
+    # 2026-11-10（F 稿自建号源，88074416）：稿名只由 F 自己的稿号决定
+    # （`reports/f-proof-<稿号>.md`）；改前那条"还没有命题号时按计划名拼
+    # `f-proof-plan-<计划号>.md`"的兜底已经停用（只保留给老盘读兼容）。
+    # 空号在 `_hand_proof` 里补：这个工作区是新的 ⇒ 取到 `000000`。
+    # 判的仍是"摘掉闸 ⇒ 这段作业规格落成了一份手稿"，只是落点换成了稿号口径；
+    # 反向断言（稿名里不含计划名 / 不含命题号）钉的是新口径本身 —— 谁把兜底改回来，
+    # 这两行立刻红。
+    assert _manuscripts(st) == ["f-proof-000000.md"], (
         "摘掉闸之后那段作业规格会被登记成手稿 —— 这正是 a 要拦住的那件事")
+    assert got.get("manuscript_id") == "000000" and \
+        got.get("manuscript_id_source") == "allocated", got
+    manuscript_name = pathlib.Path(str(got.get("manuscript_path") or "")).name
+    assert manuscript_name == "f-proof-000000.md", got
+    assert "plan" not in manuscript_name and "0001" not in manuscript_name, manuscript_name
     assert _count(st) == before, "F 仍然不写 statements（登记那一步不在这一侧）"
 
 

@@ -155,13 +155,30 @@ def test_e_the_streak_lands_in_the_round_detail_and_in_history(
         AgentF, "_wash_manuscript",
         lambda self, m: {"submittable": True, "checked": True, "washed": True,
                          "actor": "secretary-F", "text": str(m.get("text") or "")})
-    monkeypatch.setattr(
-        AgentF, "_proof_outlet",
-        lambda self, product, sg, *, plan, proof_manuscript="": {
-            "ok": False, "why": "这份手稿不是框架渲染的（缺洗稿元信息），请让 F 用 proof 动作重写",
-            "refused_kind": DS.REFUSED_NOT_WASHED, "manuscript_received": {}})
+    #: 出口桩收到的交接面（2026-11-10 起是"稿号 + 正文"两样）。
+    seen: dict = {}
+
+    def _refusing_outlet(self, product, sg, *, plan, proof_manuscript="",
+                         manuscript_id=""):
+        """F 的 proof 出口的替身：受控拒（缺洗稿元信息）。
+
+        2026-11-10（F 稿自建号源，ade25081）：`_apply_round` 现在把这一轮手上的
+        稿号一并递给 `_proof_outlet`（`manuscript_id=`）—— 桩必须同形接收，否则
+        这一条走不到后面的拒信读数。变的是内部签名；这一条判的契约（拒信点名下一步
+        + 同形重试计数落进 detail 与 history）一个字没动。
+        """
+        seen["manuscript_id"] = manuscript_id
+        seen["proof_manuscript"] = proof_manuscript
+        return {"ok": False,
+                "why": "这份手稿不是框架渲染的（缺洗稿元信息），请让 F 用 proof 动作重写",
+                "refused_kind": DS.REFUSED_NOT_WASHED, "manuscript_received": {}}
+
+    monkeypatch.setattr(AgentF, "_proof_outlet", _refusing_outlet)
 
     out = agent._apply_round(PRODUCT, plan["subgoals"][0], plan=plan, owner="F")
+    # 反向断言（新口径的交接面真被走到）：出口拿到的稿号非空、且与这一轮读数是同一个。
+    assert seen.get("manuscript_id") and \
+        seen.get("manuscript_id") == out.get("manuscript_id"), (seen, out)
     refusal = dict(out.get("refusal") or {})
     assert refusal.get("kind") == DS.REFUSED_NOT_WASHED, out
     assert int(refusal.get("streak") or 0) == 2, out

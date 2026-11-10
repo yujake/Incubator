@@ -466,14 +466,29 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
     assert all(int(d.get("path_group") or 0) == 1 for d in _deps(st)), _deps(st)
 
     # V 的签按 proof_no 各签一份（既有 `reviewed_by_proof` 已经支持多维）：
-    # 两份证明各签够 3 票（业主 2026-10-29），台账六行、逐条表两张都为 true ——
+    # 两份证明各签够 3 票（业主 2026-10-29），会审台账六行、逐条表两张都为 true ——
     # 一份的签不许顶替另一份（票也各数各的：`#p1` 的 3 票不给 `#p2` 借光）。
+    # （读侧还会多一行"收录前的前提签"，见下面台账那一段。）
     signed1 = _sign_n(st, text=PROOF_A, proof_no=1)
     signed2 = _sign_n(st, text=PROOF_B, proof_no=2)
     assert signed1.get("proof_sha256") == VR.text_sha(PROOF_A), signed1
     assert signed2.get("proof_sha256") == VR.text_sha(PROOF_B), signed2
     ledger = [r for r in VR.list_verifications(st.root, statement_id=SID, limit=None)[0]]
-    assert sorted((int(r.get("proof_no") or 0) for r in ledger)) == [1, 1, 1, 2, 2, 2], ledger
+    # 2026-11-10（读侧并入，`verifications._claimed_pending_rows` / 2527e727）：这条
+    # 命题的台账现在还会带上「命题还没在册时 V 审的那一签」—— 本文件 `signed_v_handoffs`
+    # 前提签落的那一份（`u-` 前缀、PROOF_A 的正文 sha）。它不属于"两份证明各三票"的
+    # 任何一票，所以会审行（`v-`）与前提签（`u-`）分开数：`v-` 恰好六行、逐份三票
+    # （一份的签不许顶替另一份），`u-` 恰好一行、且记的是 PROOF_A。改前这里断言台账
+    # 六行；改后是"六行 + 一行前提"的精确拆分，强度没有降：少一票、多一票、或把前提
+    # 签数进某一份的三票里，下面三行都会红。
+    reviews = [r for r in ledger
+               if not str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
+    premises = [r for r in ledger
+                if str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
+    assert sorted((int(r.get("proof_no") or 0) for r in reviews)) == [1, 1, 1, 2, 2, 2], ledger
+    assert len(premises) == 1 and int(premises[0].get("proof_no") or 0) == 1, premises
+    assert str(premises[0].get("proof_sha256") or "") == VR.text_sha(PROOF_A), premises
+    assert len(ledger) == len(reviews) + len(premises) == 7, ledger
     assert EB.reviewed_by_proof(_row(st)) == {1: True, 2: True}, EB.reviewed_by_proof(_row(st))
     per = {int(p["proof_no"]): p for p in _reading(st).get("proofs") or []}
     assert per[1]["state"] == "signed" and per[2]["state"] == "signed", per

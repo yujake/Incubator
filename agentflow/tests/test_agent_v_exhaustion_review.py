@@ -211,7 +211,23 @@ def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.P
     assert got["proof_authors"] == ["E"], got
     ledger = env["v"].list_verifications(env["statement"]["stmt_id"])["items"]
     # 三次会审各落一行（连续 3 次「成立」才发签）—— 改前一次就够。
-    assert [r["verdict"] for r in ledger] == [ER.VERDICT_OK] * VR.SIGN_STREAK_NEED, ledger
+    #
+    # 2026-11-10（读侧并入，`verifications._claimed_pending_rows` / 2527e727）：这条
+    # 命题的台账现在还会带上「命题还没在册时 V 审的那一签」—— 就是本文件 `_chain`
+    # 里 `sign_before_registration` 落的那一份（`u-` 前缀、同一份正文的 sha）。
+    # 它既不是这三次会审中的任何一次、也不顶一张会审票（`_gap_from_pending` 的理由），
+    # 所以会审行（`v-`）与前提签（`u-`）必须分开数，不能混成一个"行数"。
+    # 改前这里断言台账恰好 `SIGN_STREAK_NEED` 行；改后拆成"`v-` 恰好三行" +
+    # "`u-` 恰好一行（且是这一份正文）" + "两者之和 == 台账全长"，强度没有降：
+    # 少一次会审、多一条前提签、或把前提签借来顶一次会审，都在下面三行里立刻红。
+    reviews = [r for r in ledger
+               if not str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
+    premises = [r for r in ledger
+                if str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
+    assert [r["verdict"] for r in reviews] == [ER.VERDICT_OK] * VR.SIGN_STREAK_NEED, ledger
+    assert len(premises) == 1 and premises[0]["verdict"] == ER.VERDICT_OK, ledger
+    assert str(premises[0].get("proof_sha256") or "") == VR.text_sha(env["column"]), premises
+    assert len(ledger) == len(reviews) + len(premises) == VR.SIGN_STREAK_NEED + 1, ledger
 
 
 def test_4b_a_broken_exhaustive_note_is_faulty_and_named(tmp_path: pathlib.Path) -> None:
@@ -249,11 +265,20 @@ def test_4d_a_missing_report_is_not_checked_and_never_holds(tmp_path: pathlib.Pa
     （不许判成立），只有"没查成"这一格 —— `checked=False` + `reason="missing_material"`，
     台账不留行（留一行会把"没查成"冒充成"审过了"）。会审的七项读数仍在
     `exhaustion_review` 里（它是机械读数的正本）。
+
+    2026-11-10 的读侧并入之后，这条命题的台账里本来就有一行「还没在册时 V 审的
+    那一签」（`u-`，夹具的 `sign_before_registration`）⇒ "不留行"按"这一趟不增行"判
+    （见末尾那一段），不按"台账是空的"判。
     """
     env = _chain(tmp_path)
     report = pathlib.Path(env["store"].root) / env["out"]["report_path"]
     assert report.is_file()
     report.unlink()
+    # 会审之前先把台账照一张相（"没查成不落行"要判的是"这一趟有没有多出行"，
+    # 不是"台账是不是空的"—— 见下面那段口径说明）。
+    before = [str(r.get("verification_id") or "")
+              for r in env["v"].list_verifications(env["statement"]["stmt_id"])["items"]]
+    assert before and all(v.startswith(VR.PENDING_PREFIX) for v in before), before
     got = env["v"].verify_proof(env["statement"]["stmt_id"], proof_text=env["column"],
                                          proof_manuscript=env["manuscript"])
     assert got["checked"] is False, got
@@ -267,9 +292,18 @@ def test_4d_a_missing_report_is_not_checked_and_never_holds(tmp_path: pathlib.Pa
                        "missing": reviewed["missing"], "detail": got["detail"]},
                       ensure_ascii=False)
     assert "缺" in text and ("报告" in text or "落盘" in text), text
-    # 台账里一行都没有（"没查成"不落行）
+    # 台账里一行都没多出来（"没查成"不落行）。
+    #
+    # 2026-11-10（读侧并入，`verifications._claimed_pending_rows` / 2527e727）：这条
+    # 命题的台账现在本来就带着「命题还没在册时 V 审的那一签」（本文件 `_chain` 的
+    # `sign_before_registration`，`u-` 前缀）⇒ `ledger == []` 这个形状已经不成立，
+    # 而且它判的是"台账空不空"、不是"这一次落没落行"。改成"会审前后逐行完全相同"：
+    # 既不许这一趟落新行，也不许把已有的前提签读成这一次的读数。强度比改前高：
+    # 改前只看"空/不空"，改后连"有没有换掉/删掉已有行"一起判住。
     ledger = env["v"].list_verifications(env["statement"]["stmt_id"])["items"]
-    assert ledger == [], ledger
+    assert [str(r.get("verification_id") or "") for r in ledger] == before, ledger
+    assert not any(not str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)
+                   for r in ledger), ledger
 
 
 def test_4e_a_proof_column_without_any_experiment_is_unknown(tmp_path: pathlib.Path) -> None:
