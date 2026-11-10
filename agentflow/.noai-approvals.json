@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-10T12:12:30+08:00",
+  "generated_at": "2026-11-10T13:13:08+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -283,10 +283,10 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "3d736f5dc6830920150e9e4567401999fc38bfebd78093bac05d95aa7468338c",
+      "sha256": "c05e905eb9c752e59ccf9ca8d64bb454644f779ed0d320a34a54d090c3e1d97d",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "2026-11-10 体量：不抬基线，改搬。p268 把 specs/b.py 推到 824（register_statement 加 self_authored 参数 + policy 一条教法），上一笔把 src_files_gt800_lines 从 75 抬到 76；业主口径不许抬 ⇒ 本笔撤回那一抬：把 B 的 policy 里「收录与识稿」九条逐字搬进同包的新文件 specs/b_ingest_policy.py（模块级常量 INGEST_POLICY，78 行，同样登记在 .noai-paths），specs/b.py 在原位置用 *INGEST_POLICY 摊回，渲染出来的提示词一个字没变（十一格摘要不变），specs/b.py 824 → 773 行、这一格回到 75。清单新增 1 条（新文件自己也受 FC-27 保护），.noai-paths 与 AGENTS.md 两处逐条一致。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这 4 条仍需 2 名 reviewer 逐行走查。",
+      "change_note": "p269：B 的概念良定义证明教法只说「派 V 照常签」，不再教 V 内部审几转（业主 2026-11-04 裁定逐字：「就说拿到 V 签，不需要知道 V 内部会连续三次审」）；specs/b.py 同一行把「三转签」收成「签」（删 2 字）、行数 773 不变；agent_surface_snapshot 按 p269 现值重冻（11 格 prompt 只差版本行，内容只有 B 一格变）。登记 ≠ 批准：这两条仍需 2 名 reviewer。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -530,10 +530,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "505981439b28cdb918112437b68109420e9beda013324d87a2fbc3f2771d2cdc",
+      "sha256": "0302627a76cecea03bd5d40b4f6e36aa1dd266c5f11a2137ffa7eae578d09b53",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "p268 自产概念在 B 的动作面有入口（业主亲跑概念彩排撞到的真洞）：register_statement 新增 self_authored（默认 False=不声明；True 才放行 own_result 概念并透传秘书；True+source_lit_id 受控拒）；specs/b.py 的参数面加这一格 + policy 补「自己定义的新概念要显式声明 self_authored=True」；agent_surface_snapshot 按现值重冻（B 的 prompt sha + register_statement 的 params/handler 签名），tool_surface_snapshot 逐字未变。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— specs/b.py 仍需 2 名 reviewer 逐行走查、agent_surface_snapshot.json 需逐格看过。",
+      "change_note": "p269：B 的概念良定义证明教法只说「派 V 照常签」，不再教 V 内部审几转（业主 2026-11-04 裁定逐字：「就说拿到 V 签，不需要知道 V 内部会连续三次审」）；specs/b.py 同一行把「三转签」收成「签」（删 2 字）、行数 773 不变；agent_surface_snapshot 按 p269 现值重冻（11 格 prompt 只差版本行，内容只有 B 一格变）。登记 ≠ 批准：这两条仍需 2 名 reviewer。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

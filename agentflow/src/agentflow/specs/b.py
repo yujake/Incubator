@@ -515,7 +515,7 @@ SPEC = AgentSpec(
             "**概念的良定义证明也走这条链（稿由你产出）**：概念（`kind=\"concept\"`）不是"
             "「没有证明可写」—— 它的良定义证明由你落：用 `own.land_manuscript` 把"
             "`## 命题` = 这个概念的定义、`## 证明` = 良定义证明落成 "
-            "`reports/b-proof-<命题号>.md`（**复用 b-proof 族，不新开族**），派 V 照常三转签"
+            "`reports/b-proof-<命题号>.md`（**复用 b-proof 族，不新开族**），派 V 照常签"
             "（V 只对手稿负责，不需要知道这是概念）；签回来之后用 "
             "`own.ingest_manuscript(apply, cells=[\"proof_text\"], target_stmt_id=<概念号>)` "
             "按位置与格收录 —— 那一节就进 concept 行的 `proof_text`（「良定义证明」这一格）。"

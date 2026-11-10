@@ -2406,7 +2406,15 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     → 767b69942cd90c0a3a121afbd1a18bab32c6b3da813917d97985a2fd3c310618。
 # 十一格不是手抄：`temp/_p268_recompute.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p268"
+# 2026-11-10（B 不该知道 V 内部审几次；业主 2026-11-04 裁定）：一格换值 —— B。上游一笔：
+# `specs/b.py` 概念良定义证明那一条的「派 V 照常三转签」→「派 V 照常签」（同一字面位置、
+# 同一行 ⇒ 行数 773 不变；禁令判据 `test_b_proof_review_threshold_is_signed.py` 的 s1
+# 禁用词表一个字没动）。其余十格逐字未动（只差版本行）。逐格旧值 → 新值：
+#   B 767b69942cd90c0a3a121afbd1a18bab32c6b3da813917d97985a2fd3c310618
+#     → 7705b3b4baf55b06ec488ce2205b73b682a4918e5cfa333978f09a1ab0eb4297。
+# 十一格不是手抄：`temp/_p269_recompute.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。
+_FROZEN_PROMPT_VERSION = "p269"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2652,7 +2660,7 @@ _FROZEN_PROMPT_VERSION = "p268"
 #: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
-    "B": "767b69942cd90c0a3a121afbd1a18bab32c6b3da813917d97985a2fd3c310618",
+    "B": "7705b3b4baf55b06ec488ce2205b73b682a4918e5cfa333978f09a1ab0eb4297",
     "C": "987c39476674f2a479ca7f5e26e6be0e05629c042639ca7bbc2acc78a39112c4",
     "D": "25b054a3cc08dfc4fd2cb087d91065fd61a9ac66848da6c16a716ae48cb249e8",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",

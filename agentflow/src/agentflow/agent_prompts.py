@@ -3769,7 +3769,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p267 同值）；
 #: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
 #: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
-PROMPT_VERSION = "p268"
+#: p268 → p269（2026-11-10，B 不该知道 V 内部审几次；业主 2026-11-04 裁定）：
+#: 一格换值 —— B。上游一笔：`specs/b.py` 概念良定义证明那一条里的
+#: 「派 V 照常三转签」→「派 V 照常签」（同一个字面位置、同一行，行数 773 不变）。
+#: 业主裁定逐字：「就说拿到 V 签，不需要知道 V 内部会连续三次审」⇒ B 的题面只说
+#: 「拿到 V 签才算数」，不教 V 内部怎么连判、审几转。
+#: 十一格不是手抄：`temp/_p269_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p269）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p268 同值）；
+#: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
+#: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+PROMPT_VERSION = "p269"
 
 
 
