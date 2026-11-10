@@ -106,7 +106,7 @@
 
 | 键 | 意思 |
 |---|---|
-| `found` | 被引条数（int）；`None` = 没查成。0 不是「没人引」，`None` 也不是 |
+| `found` | 被引条数（int）；`None` = 没查成。0 不是「没人引」，`None` 也不是。它数的是引用条数（依赖行），引用方个数另看 `citers_total`（详见 `cited_by` 的 docstring 那个「3 条引用 / 2 个引用方」的例子） |
 | `citations` | 每条一条：`dep_id` / `used_by` / `citer_stmt_id` / `proof_no` / `kind` / `label` / `status` / `created_at` / `path_group` / `used_by_problem` |
 | `by_status` | 按 `dependencies.status` 计数（`closed` / `dangling` / `refuted` / `disputed` …）；「那一行后来作废了」在这里看得见，但不被折成「没人引」 |
 | `citers` | `used_by` 的去重集合（逐字，含 `#pN` 尾巴；同一条命题的第 2 份证明是另一个 `used_by`） |
@@ -410,6 +410,22 @@ def cited_by(source: Any = None, *, stmt_id: Any,
     （依赖行的四格，与业主原话逐字对应）、`path_group`、`dep_id`；
     另有 `citers`（`used_by` 去重集合）与 `by_status`（按依赖行状态计数）——
     前者回答"谁引了我"，后者回答"这些引用里有没有后来作废/悬空的"。
+
+    ## `found` 与 `citers_total` 是两个数（不是同一个数的两种写法）
+
+    `found` / `hits_total` 数的是引用条数（依赖行）；`citers` / `citers_total`
+    数的是引用方（`used_by` 去重）。“同一方引两次”与“两方各引一次”在依赖账里
+    是两件事，读数必须分得开：
+
+        某命题 A 的被引面，盘上有 3 条依赖行：
+            used_by="stmt:000001"     （B 的第 1 份证明）
+            used_by="stmt:000001#p2"  （B 的第 2 份证明）
+            used_by="stmt:000007"     （C 的第 1 份证明）
+        ⇒ found = 3（3 条引用），citers_total = 3（`stmt:000001` / `stmt:000001#p2` /
+          `stmt:000007` 三个 used_by 逐字不同），而引用方命题只有 2 个（000001 / 000007）。
+        要把"2 个引用方"读出来：`sorted({one["citer_stmt_id"] for one in citations})`
+        —— 本模块不把 `#pN` 折掉（拆尾巴是 `proofloc` 的唯一职责，折平会让
+        "第 2 份证明引了它"这件事实消失）。
 
     `rows=` 可以直接给一批依赖行快照（事务里 `tx.rows("dependencies")`）；
     不给就经唯一取数口读 `store` / `tx`。不读 `statements`：这一面不判在册、
