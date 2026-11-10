@@ -33,6 +33,7 @@ import conftest  # noqa: E402
 from _credential_fixture import issue_credential  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import manuscriptintake as MI  # noqa: E402
+from agentflow import schema as S  # noqa: E402
 from agentflow import specs as SPECS  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.store import Store  # noqa: E402
@@ -773,3 +774,131 @@ def test_h6_kind_cell_receipt_reports_the_derived_upgrade(
     assert "out/vsigns/" in str(upgraded.get("basis") or ""), upgraded
     assert "verifications/000001.jsonl#" in str(upgraded.get("basis") or ""), upgraded
     assert "kind" in got["diff"]["requested_not_filled"], got["diff"]
+
+
+# ===================================================== i numeric_evidence（apply 的第 1 位）
+def _numeric_manuscript(*, sid: str = "000007", exp: str = "000001") -> str:
+    """e-num 稿：稿头实验号 + `## 数值结果`（这一格唯一的来源）。"""
+    return (f"- 实验号：exp:{exp}\n- 证据种类：conjecture\n\n"
+            "## 命题\n\n设 n<=3，则 P(n) 成立。\n\n"
+            "## 数值结果\n\n- 方法：numeric\n- 结果：ok\n")
+
+
+def _seed_experiment(st: Store, eid: str = "000001") -> dict:
+    """落一条真的 `experiments` 行（普通数值档的凭据必须指到它）。"""
+    row = S.Experiment(
+        experiment_id=eid, claim="P(n) 对 n=1..3 成立", claim_key="P(n)",
+        method="numeric", evidence_kind="cross_check", result="supports",
+        negation_kind="not_proved", code_path="code/exp.py",
+        code_hash="deadbeefdeadbeef", exit_code=0, created_at=conftest.TS)
+    row.validate()
+    with st.tx("experiments", actor="夹具") as tx:
+        tx.upsert("experiments", row.to_dict())
+    return row.to_dict()
+
+
+def test_i1_apply_writes_the_numeric_bit_and_points_at_the_experiment(
+        tmp_path: pathlib.Path) -> None:
+    """正控：e-num 稿 + 真实验行 ⇒ apply 请求 `numeric_evidence` ⇒ 第 1 位落盘。
+
+    回执（`cells.numeric_evidence`）与盘上那几格都要指得回那条实验行：
+    稿头的号 = `experiments` 的号 = 第 1 位凭据里的 `experiment_id` / `exp:` 尾巴。
+    """
+    st, b = _ws(tmp_path)
+    conftest.seed_statement_row(st, stmt_id="000007",
+                                statement_full="设 n<=3，则 P(n) 成立。",
+                                kind="conjecture")
+    _seed_experiment(st, "000001")
+    _write(st, "reports/e-num-000007.md", _numeric_manuscript())
+
+    got = b.ingest_manuscript(
+        manuscript="reports/e-num-000007.md", target_stmt_id="000007",
+        cells=["numeric_evidence"], mode="apply")
+
+    assert got["ok"] is True, got
+    assert got["refused"] == "", got
+    cell = dict(got["cells"]["numeric_evidence"])
+    assert cell["outcome"] == "filled" and cell["written"] is True, cell
+    # 回执这一格自己指得出实验行（号与稿头一致）。
+    assert (cell.get("value") or {}).get("experiment_id") == "000001", cell
+    assert got["write"]["statements"] is True, got["write"]
+    assert got["write"]["cells"] == ["numeric_evidence"], got["write"]
+    assert got["derived_write"] == ["bits", "grade"], got["derived_write"]
+
+    row = _row(st, "000007")
+    bits = dict(row.get("bits") or {})
+    assert bits.get("numeric") == "verified", bits
+    numeric = dict((bits.get("evidence") or {}).get("numeric") or {})
+    assert numeric.get("experiment_id") == "000001", numeric
+    assert [str(x) for x in (numeric.get("experiments") or [])] == ["000001"], numeric
+    entry = dict((numeric.get("entries") or [{}])[0])
+    assert entry.get("exp") == "exp:000001", entry
+    assert entry.get("script") == "code/exp.py", entry
+    assert bits.get("grade") == "strong_conjecture", bits
+    # 正文 / kind / 依赖三格一个字节不动：这一笔只写第 1 位与它的凭据。
+    assert row.get("proof_text") == "" and row.get("kind") == "conjecture", row
+    assert [dict(x) for x in st.rows("dependencies")] == []
+
+
+def test_i2_a_missing_experiment_row_is_refused_with_zero_writes(
+        tmp_path: pathlib.Path) -> None:
+    """反控：稿头的实验号指不到真的 `experiments` 行 ⇒ `numeric_experiment_missing`、零写。
+
+    受控拒要在 apply 那一侧发生（preview 只读稿、核不了台账）；被拒之后
+    statements / dependencies / 第 1 位全是原样。
+    """
+    st, b = _ws(tmp_path)
+    conftest.seed_statement_row(st, stmt_id="000007",
+                                statement_full="设 n<=3，则 P(n) 成立。",
+                                kind="conjecture")
+    _write(st, "reports/e-num-000007.md", _numeric_manuscript())
+    before_rows = _rows(st)
+    before_deps = [dict(r) for r in st.rows("dependencies")]
+
+    preview = b.ingest_manuscript(
+        manuscript="reports/e-num-000007.md", target_stmt_id="000007",
+        cells=["numeric_evidence"], mode="preview")
+    assert preview["ok"] is True, preview  # preview 不核台账：拒发生在 apply
+
+    got = b.ingest_manuscript(
+        manuscript="reports/e-num-000007.md", target_stmt_id="000007",
+        cells=["numeric_evidence"], mode="apply")
+    assert got["ok"] is False, got
+    assert got["refused"] == "numeric_experiment_missing", got
+    assert got["cells"]["numeric_evidence"]["outcome"] == "refused", got["cells"]
+    assert got["write"]["statements"] is False, got["write"]
+    assert got["write"]["written"] is False, got["write"]
+    assert _rows(st) == before_rows, "被拒的这一笔改了 statements"
+    assert [dict(r) for r in st.rows("dependencies")] == before_deps
+    assert dict(_row(st, "000007").get("bits") or {}) == {}, _row(st, "000007")
+
+
+def test_i3_removing_the_numeric_cell_gate_makes_i1_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：把这一格的凭据核 + 写口摘掉 ⇒ i1 的"第 1 位落盘"逐条不成立。
+
+    `_ingest_apply_numeric_evidence` 就是这一格唯一的实现（读 `experiments`、
+    核凭据、写第 1 位）。换成"什么都不写、也不报错"的替身之后，工具照样回
+    `ok=True`（fail-open 的形状），而 `bits.numeric` / 回执 / `write.statements`
+    全是"没写"—— 这正是 i1 要挡的那种假成功。
+    """
+    st, b = _ws(tmp_path)
+    conftest.seed_statement_row(st, stmt_id="000007",
+                                statement_full="设 n<=3，则 P(n) 成立。",
+                                kind="conjecture")
+    _seed_experiment(st, "000001")
+    _write(st, "reports/e-num-000007.md", _numeric_manuscript())
+
+    monkeypatch.setattr(
+        AgentB, "_ingest_apply_numeric_evidence",
+        lambda *a, **k: {"written": False, "code": "", "why": ""})
+    got = b.ingest_manuscript(
+        manuscript="reports/e-num-000007.md", target_stmt_id="000007",
+        cells=["numeric_evidence"], mode="apply")
+
+    assert got["ok"] is True, got
+    assert got["write"]["statements"] is False, got["write"]
+    assert got["write"]["cells"] == [], got["write"]
+    assert got["cells"]["numeric_evidence"].get("written") is not True, got["cells"]
+    bits = dict(_row(st, "000007").get("bits") or {})
+    assert bits == {}, f"第 1 位被写了 —— i1 的断言失去了对象：{bits}"
