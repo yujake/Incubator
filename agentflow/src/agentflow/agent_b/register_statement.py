@@ -223,6 +223,49 @@ def _pointer_manuscript_rel(value: Any) -> str:
     return rel if _is_manuscript_rel(rel) else ""
 
 
+def _concept_refuses_manuscript(*, kind: Any, proof_manuscript: Any) -> bool:
+    """概念行收不收证明稿 —— 唯一判据（`True` = 不收，这一笔要受控拒；2026-11-10）。
+
+    为什么单列一处：这条判据有两个读点 —— 概念口径块里的"写盘前拒"，以及"稿里的
+    `## 证明` 要不要取成正文"那一支。两处各写一份就会漂，而漂出来的形态正是审计
+    §6-① 的半笔：那一支不看 kind ⇒ 取到正文 ⇒ 撞"无签不许换 canonical 正文"那道闸
+    整笔拒，而概念行已经在更早那次秘书事务里落了盘（调用方拿到 `ok=false`，盘上多一行）。
+
+    `proof_manuscript` 收"正文"与"工作区相对路径"两种写法（这一格历史上就是两个意思，
+    见 `_is_manuscript_rel`），所以判据只看"给没给"，不解析它 —— 路径读不到那件事由
+    更靠后的 `manuscript_missing` 说，它到不了这里。
+    """
+    if str(kind or "").strip() != "concept":
+        return False
+    return bool(str(proof_manuscript or "").strip())
+
+
+def _concept_evidence_kind(bits: Mapping) -> str:
+    """概念行的 `evidence_kind` —— 由五位反算，不许自报（2026-11-10）。
+
+    ## 为什么不能直接落 `kind_from_bits` 的那一个值
+
+    `evidencebits.kind_from_bits(bits, kind="concept")` 返回「空串」：概念行经
+    `derive_grade` 短路成 `not_applicable`，反算不出档位（"反算不出来就不写"）。
+    但 `evidence_kind` 是 `statements` 的列，`schema.Statement.validate` 要求它落在
+    `schema.EVIDENCE_KINDS` 里 —— 空串会被当场拒，于是整笔登记变成一次异常。
+    所以这里落的不是"再来一套真值"，而是词表里最弱的那一档
+    （`GRADE_TO_KIND["conjecture"] = "heuristic"`）：它不声称任何一件证据位做过，
+    并且与概念行现有唯一构造口 `conceptrows.concept_statement` 逐字同一个值。
+
+    ## 读数的边界（这一格管什么、不管什么）
+
+    管的是"概念行不许出现 `cross_check` / `proof_review` / `proof` 这类档位"：
+    改前调用方的缺省值 `cross_check` 会原样落盘，而概念行的五位一件没做 ⇒ 读这一格
+    的人会读到"交叉核对过"。不管的是"证据强度"本身 —— 那由五元位与等级回答，
+    概念行在这里的答案是"没有这一档"（`GRADE_NOT_APPLICABLE`）。
+
+    反真空：判据落在这一处，测试把它打桩成 `"cross_check"`（= 改前"跟调用方走"）
+    ⇒ `tests/test_a_concept_row_claims_no_evidence_tier.py` 当场红。
+    """
+    return _EB.kind_from_bits(bits, kind="concept") or _EB.GRADE_TO_KIND["conjecture"]
+
+
 def _same_manuscript_text(left: Any, right: Any) -> bool:
     """两份手稿正文是不是同一版（只把换行归一，别的一字不改）。
 
@@ -2914,6 +2957,42 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "真机 mp3 有 1142 条带文献出处的术语被错标成了 own_result，"
                     "于是报告把它们读成“我们自己的结果”。确实是我们自己定义的新概念"
                     "走秘书载荷的 `self_authored` 那一档（那是显式声明，不是默认值）")
+            # ---- 2026-11-10（审计 §6-①）：概念 + 手稿 ⇒ 写盘前整笔受控拒 ----------
+            #
+            # 改前读数（`temp/_fix_concept_probe_before.json` 的 `1_concept_manuscript`）：
+            # `ok=false / kind=proof_without_v_sign`，而 `statements` 从 0 行变 1 行 ——
+            # 概念行在 `:4417`（改前那一版的行号）那次秘书事务里先落了盘，`## 证明`
+            # 那支才把稿里的正文取走（那一支不看 kind），撞上"没有签不许换 canonical 正文"
+            # 那道闸整笔拒。调用方照 `ok=false` 当"没写成"处理（重试 / 扫盘 / 重交），
+            # 而盘上多了一行 `active` 概念 —— 正是本仓反复点名的"静默半笔"。
+            #
+            # 处置：概念行不收证明稿 ⇒ 在接受这一笔之前就受控拒（零新行、零新文件）。
+            # 刻意不"先写后拒再删"：删与写之间有一个被收工门读到的窗口，而删除本身
+            # 也会失败（占用 / 只读 / 并发）；文件与行都不是可回滚的事务资源。
+            # 判据落在 `_concept_refuses_manuscript` 一处：下面"稿里 `## 证明` 取不取成
+            # 正文"那一支读同一个判据（否则稿从 D 携带单 / 兜底读盘进来时照样取到正文）。
+            if _concept_refuses_manuscript(kind=kind_now,
+                                           proof_manuscript=proof_manuscript):
+                return _refuse(
+                    "concept_takes_no_proof_manuscript",
+                    "概念行不收证明稿：`proof_manuscript` 是“这份证明被 V 逐行读过”的"
+                    "载体（签盖在它的 `## 证明` 正文上），而概念不参与等级链"
+                    "（`evidencebits.derive_grade` 对 `kind='concept'` 短路成"
+                    " `not_applicable`），它没有可签的正文载体 —— 递上来的稿一个字都"
+                    "落不进台账。改前这一笔会先落一行概念、再整笔回 "
+                    "`ok=false / proof_without_v_sign`（半笔：调用方按“没写成”处理，"
+                    "盘上却多了一行）。改法两条（都不是把稿塞进本动作）："
+                    "① 要登记的是**命题的证明** ⇒ 用 `kind=\"conjecture\"`（或 lemma / "
+                    "theorem）＋ `proof_manuscript=<稿的工作区相对路径>`，那才是收稿的"
+                    "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
+                    "② 要登记的是**概念的良定义性证明**（业主 2026-10-09：“proof 里就证"
+                    "这个概念为什么是良定义的”）⇒ 今天没有任何落点：构造口 "
+                    "`conceptrows.concept_statement` 对非空 `proof_text` 当场拒绝、"
+                    "秘书 `_record_statement_tx` 再清一次、`verify` 把带 `proof_text` 的"
+                    "概念行列为 error ⇒ 要先由业主裁定“概念行怎么承载良定义证明”"
+                    "（新载体 / 新入口）再落。这一笔整笔不写（`statements` 零新行、"
+                    "盘上零新文件）。",
+                    proof_manuscript=str(proof_manuscript)[:120])
             if str(proof_text or "").strip():
                 proof_text_dropped = str(proof_text)[:120]
                 proof_text = ""
@@ -3245,7 +3324,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 and not manuscript_foreign and _body_owner_ok
                 # 普通数值手稿没有 `## 证明` 那一节（`proof_body_reading` 会给 absent）——
                 # 这一档的正文按业主口径空着，不许把「数值结果」当证明正文收进来。
-                and not _green.get("ok")):
+                and not _green.get("ok")
+                # 概念行不收证明稿（2026-11-10，审计 §6-①）：这一支改前不看 kind，
+                # 于是稿里的 `## 证明` 会被取成概念行的正文 ⇒ 概念行先落盘、随后撞
+                # "无签不许换 canonical 正文"整笔拒（半笔）。判据与上面"写盘前拒"
+                # 同一个（`_concept_refuses_manuscript`），覆盖稿从 D 携带单 / 兜底读盘
+                # 进来这一档 —— 概念行的正文永远是空串（与
+                # `conceptrows.concept_statement` 同一条口径）。
+                and not _concept_refuses_manuscript(kind=kind_now,
+                                                   proof_manuscript=manuscript_text)):
             from_manuscript = str(manuscript_proof.get("body") or "").strip()
             if from_manuscript:
                 proof_text = from_manuscript
