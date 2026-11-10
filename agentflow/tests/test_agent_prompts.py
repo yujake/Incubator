@@ -2414,7 +2414,21 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     → 7705b3b4baf55b06ec488ce2205b73b682a4918e5cfa333978f09a1ab0eb4297。
 # 十一格不是手抄：`temp/_p269_recompute.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p269"
+# 2026-11-10（递审只递框架手稿：真机 9 次全拒、签一发未发）：三格换值 —— D / F / V。
+# 上游三笔都是教法（入口闸一个字没改）：`specs/f.py` 的 policy 说清「递审只能点
+# `F.step` 返回的 `manuscript_path`；自己写的论文章节稿不是手稿」；`specs/v.py` 的
+# policy 说清「被审必须是 `reports/f-proof*.md`；递来别的东西先退回、不重试同一路径」；
+# `specs/d.py` 的 policy 说清「携带只转 `manuscript_path`、不转章节稿」。其余八格
+# 逐字未动（只差版本行）。逐格旧值 → 新值：
+#   D 25b054a3cc08dfc4fd2cb087d91065fd61a9ac66848da6c16a716ae48cb249e8
+#     → a45d95a863ed2cf586c7dc813590137bba02fddf0b460e826851ec3a8b3ec272。
+#   F af4916cc7319d8de8f382d6257a356d847dd837a52905be76118cb4fecb07e9e
+#     → e66809ec1f6488e063a3a9942c4030db8b569cf305531f1aa64f3c54ec24fdd7。
+#   V 9dce764f2770a1606efb82c0cdfbaa3df923d5fcdd4fb65aefa11d0fc6e870c5
+#     → cc875eaad0c7bfa2ae425729d0a774ac867afdc33e4d940b32d362bd78afad88。
+# 十一格不是手抄：`temp/_p270_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。
+_FROZEN_PROMPT_VERSION = "p270"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2662,14 +2676,14 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
     "B": "7705b3b4baf55b06ec488ce2205b73b682a4918e5cfa333978f09a1ab0eb4297",
     "C": "987c39476674f2a479ca7f5e26e6be0e05629c042639ca7bbc2acc78a39112c4",
-    "D": "25b054a3cc08dfc4fd2cb087d91065fd61a9ac66848da6c16a716ae48cb249e8",
+    "D": "a45d95a863ed2cf586c7dc813590137bba02fddf0b460e826851ec3a8b3ec272",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",
-    "F": "af4916cc7319d8de8f382d6257a356d847dd837a52905be76118cb4fecb07e9e",
+    "F": "e66809ec1f6488e063a3a9942c4030db8b569cf305531f1aa64f3c54ec24fdd7",
     "G": "e851e09f881160357fc567cd31c8a72fc8dd8205d4e968ca5519da6c6fc31634",
     "H": "18f91c2ed07ee4642e4fc7ea5fe7138b70d623b289bcac8aa844cda1f60b146a",
     "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",
     "M": "d6b1b82f6456816b78577c9f3daf05b02643b4119f67cfcf9cbeecacde7148d4",
-    "V": "9dce764f2770a1606efb82c0cdfbaa3df923d5fcdd4fb65aefa11d0fc6e870c5",
+    "V": "cc875eaad0c7bfa2ae425729d0a774ac867afdc33e4d940b32d362bd78afad88",
 }
 
 

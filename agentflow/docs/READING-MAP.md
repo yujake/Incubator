@@ -4,13 +4,17 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **283 个 `.py`、274,251 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **283 个 `.py`、274,299 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-10 体量：不抬基线，改搬（撤回 p268 那一抬）**：`specs/b.py` 824 → 773 行 ——
 > policy 里「收录与识稿」九条逐字搬进同包的 `specs/b_ingest_policy.py`（新文件 78 行，同样登记在
 > `.noai-paths`），`specs/b.py` 在原位置用 `*INGEST_POLICY` 摊回，渲染出来的提示词一个字没变。
 > 文件数 +1（282 → 283）、`>800 行` 的 76 → 75（回到原值）；总行数见上面那句当次读数。
+> **2026-11-10 递审只递框架手稿（p270）**：274,251 → **274,299**（净 +48：`specs/f.py` +4、
+> `specs/v.py` +6、`specs/d.py` +3、`agent_skills.py` +18、`agent_prompts.py` +17 的版本账；
+> 三处教法都只进题面 / 手册，入口闸一个字没改）。文件数 283、`>800 行` 的 75 都不变；
+> 全仓最大 `secretary.py` 14,205、`agent_loop.py` 14,189 不变。
 > **2026-11-10 自产概念在 B 的动作面有入口（p268）**：273,939 → **274,029**（净 +90：
 > `agent_b/register_statement.py` +48（`self_authored` 参数与概念 origin 三档处置）、
 > `specs/b.py` +24（参数面一格 + policy 一条教法；800 → 824 ⇒ **首次越过 800 行**）、

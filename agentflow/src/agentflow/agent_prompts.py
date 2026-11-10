@@ -3780,7 +3780,24 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p268 同值）；
 #: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
 #: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
-PROMPT_VERSION = "p269"
+#: p269 → p270（2026-11-10，递审只递框架手稿：真机 9 次全拒、签一发未发）：
+#: 三格换值 —— D / F / V。上游三笔都是教法（入口闸一个字没改）：
+#:   ① `specs/f.py` 的 policy：递审只能点 `F.step` 返回的 `manuscript_path`；
+#:      自己用 `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` /
+#:      `notes/*.md` 这类）不是手稿（没有 `## 命题` / `## 证明` / `## 依赖` 这三节，
+#:      入口闸整笔拒；真机实测 9 次全拒、签一发未发）；
+#:   ② `specs/v.py` 的 policy：被审必须是 `reports/f-proof*.md`；递来别的东西先退回、
+#:      让调用方改用 `F.step` 的 `manuscript_path`，入口闸拒了不许重试同一路径；
+#:   ③ `specs/d.py` 的 policy：携带时只转 `manuscript_path`、不转章节稿。
+#: 同批 `agent_skills` 的 F / V / D 手册正文同步（手册只落盘、不进十一格）。
+#: 十一格不是手抄：`temp/_p270_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p270）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p269 同值）；
+#: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
+#: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+#: 判据：`tests/test_only_the_framework_manuscript_goes_to_review.py`（三条 + 反真空）。
+PROMPT_VERSION = "p270"
 
 
 

@@ -1081,6 +1081,20 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "policy 只说「派 V 照常签」，不再教 V 内部会连续审几次（业主逐字：「就说"
              "拿到 V 签，不需要知道 V 内部会连续三次审」）；「拿到 V 签才算数」这一条"
              "原样保留。十一格里只有 B 换值（7705b3b4…）。facts 键集仍 15 格。"},
+    # p269 → p270（2026-11-10，递审只递框架手稿：真机 9 次全拒、签一发未发）：
+    # facts 键集一格没动（还是 15 格）—— 本批只改三份 spec 的 policy 教法
+    # （F 递审只点 manuscript_path / V 见别的东西先退回 / D 只转 manuscript_path）
+    # 与 agent_skills 的 F/V/D 手册正文（手册只落盘、不进 facts）。
+    {"version": "p270", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p270（2026-11-10，递审只递框架手稿）：上游 —— 真机 9 次 verify_proof 全拒、"
+             "签一发未发，5 次是同一条「只收 F 的证明手稿，收到 reports/P1-MCT.md」——"
+             "F 把 fs.write 写的论文章节稿当手稿递给了 V。三处教法（入口闸一个字没改）："
+             "① specs/f.py 的 policy 说清「只能点 F.step 返回的 manuscript_path；章节稿不是手稿」；"
+             "② specs/v.py 的 policy 说清「被审必须是 reports/f-proof*.md；递来别的东西先退回、"
+             "入口闸拒了不许重试同一路径」；③ specs/d.py 的 policy 说清「携带只转 manuscript_path、"
+             "不转章节稿」。十一格里 D / F / V 三格换值（a45d95a8… / e66809ec… / cc875eaa…）。"
+             "facts 键集仍 15 格。"},
 
 )
 
