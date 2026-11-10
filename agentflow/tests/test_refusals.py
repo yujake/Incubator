@@ -137,7 +137,12 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "子结果：`preview_dependencies()` 的 `out` 是「这一节读不出依赖边」的读数，"
         "被 `agent_f/core.py` 折进 `detail` / `history`，从不冒充动作的终态拒绝，"
         "也没有受控 `kind` 可记（同族的写盘失败已搬进 `manuscriptform.commit_manuscript`，"
-        "那一层不是角色动作模块、不归本表）",
+        "那一层不是角色动作模块、不归本表）。"
+        "2026-11-10（稿号口径，p272/p274/p275）：`proof_manuscript()` 另有两处同形的返回骨架 ——"
+        "「手稿号不是六位号 ⇒ 这一份稿不落盘」与「手稿号拼不出规范路径 ⇒ 这一份稿不落盘」。"
+        "号由框架的号源（`manuscriptids.next_manuscript_id`）发，坏号是内部数据不一致"
+        "（执行了、没成功），不是调用方的参数错 ⇒ 它们仍是子结果，由 `_wash_manuscript` / "
+        "detail 折进返回值，不走 `refusals.refuse`（走它会给内部读数错贴 `invalid_params`）。",
     ("agent_f/core.py", ""):
         "子结果：手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给调用方"
         "看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 payload，"
@@ -173,9 +178,10 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串；2026-11-09 多出第十二处
     # （按号取待形式化改走查口之后，`statements` 读不出来那一档）。
     ("agent_l/formalize.py", ""): 12,
-    # 只剩 `preview_dependencies()` 的读数一条（2026-11-05 复核：`proof_manuscript()` 的
-    # 写盘失败已随 910b3031 搬进 `manuscriptform.commit_manuscript`，不再是这里的字面量）。
-    ("agent_f/manuscript.py", ""): 1,
+    # 2026-11-10（稿号口径）：`proof_manuscript()` 多出两处同形的返回骨架
+    # （手稿号不是六位号 / 拼不出规范路径，各一处），加上 `preview_dependencies()` 的
+    # 读数一条 ⇒ 1 → 3。三处都是子结果，理由见 `_FAILURES_NOT_REFUSALS` 里那一格。
+    ("agent_f/manuscript.py", ""): 3,
     # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
     # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
     ("agent_v/core.py", ""): 3,

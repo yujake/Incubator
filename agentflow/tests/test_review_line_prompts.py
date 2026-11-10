@@ -14,7 +14,7 @@ P2 的改动全在提示词里（三条总原则的第①条：提示词优先�
 
 取的是能被下游判定的那句话，不是整段原文：例如 A 的 `mismatch`（文献行的命中校验第三态，§2 R1b）、`exact / partial / none`（文内定位三态，§2 R14）、`none 不许交给 B`（R14
 负控①的处置）；B 的 `statement_full` / `proof_text` /`quote_reason` / `origin=own_result`（P1 那张表的四件套）；C 的
-`submit_requests=true`（缺口→检索请求的闭环）；D 的 `初步数学审阅` + `可挽救性评估`；H 的 `逐字一致` +`等级到 theorem`（采信规则的两条）；M 的
+`submit_requests=true`（缺口→检索请求的闭环）与 `ledger.expand` / `污染面是一种查询模式`（2026-11-10 起的第二样读数：局部树上向下展开，不再手算）；D 的 `初步数学审阅` + `可挽救性评估`；H 的 `逐字一致` +`等级到 theorem`（采信规则的两条）；M 的
 `每一跳都要写清提示词` + `ask_user`。
 """
 from __future__ import annotations
@@ -41,8 +41,14 @@ FACTS: tuple[tuple[str, str, str], ...] = (
     # ---- C：缺口 → 检索请求（闭环）+ 依赖链读数
     ("C", "submit_requests=true", "缺口落成检索请求的开关（默认 false）"),
     ("C", "最短依赖链", "被问「这条结论靠什么站着」时的第一样读数"),
-    ("C", "从依赖面反向",
-     "第二样读数：污染面不是框架给的，要从依赖面反向多跳自己算（业主 2026-11-04 裁定）"),
+    # 2026-11-10（`draft/181` A+B 批，业主口径：C 不建全图，自己定层数按需展开）：
+    # 第二样读数从"从依赖面反向多跳自己算"改写成"从局部树上向下展开"的查询模式。
+    # 判据钉的是改写后的两样硬东西 —— 工具名与那条口径本身：
+    ("C", "ledger.expand",
+     "第二样读数：污染面不是手算出来的，是从局部树上按自己定的层数展开出来的"
+     "（2026-11-10 起 `ledger.resolve` 选根、`ledger.expand(direction=\"down\")` 展开）"),
+    ("C", "污染面是一种查询模式",
+     "同一件事的另半句：污染面不是一件工具（旧口径「从依赖面反向多跳自己算」已被它取代）"),
     # ---- D：两条新职责
     ("D", "初步数学审阅", "职责①（对 B 的文字版证明）"),
     ("D", "可挽救性评估", "职责②：差什么 / 要多少预算 / 连累谁"),
@@ -95,6 +101,25 @@ def test_the_criterion_judge_is_not_vacuous() -> None:
 
     everything = _missing("", FACTS)
     assert len(everything) == len(FACTS), (len(everything), len(FACTS))
+
+
+def test_the_retired_hand_computed_reverse_reading_does_not_come_back() -> None:
+    """反向（契约变更的反面）：C 的第二样读数改由局部树给出之后，旧句子不许回来。
+
+    2026-11-10 之前 C 被教成"从依赖面反向多跳自己算"（业主 2026-11-04 裁定，手算口径）。
+    `draft/181` 的 A+B 批之后 C 不建全图：`ledger.resolve` 选根、
+    `ledger.expand(direction="down")` 按自己定的层数展开局部树。旧句子若回到提示词里，
+    C 会被同时教成"手算"与"用局部树读" —— 两种口径都在，模型只能猜。
+    """
+    prompt = _prompts()["C"]
+    stale = [needle for needle in ("从依赖面反向", "多跳自己算") if needle in prompt]
+    assert not stale, (
+        f"C 的提示词里又出现了手算口径的旧句子 {stale} —— 现在第二样读数是局部树上的"
+        "查询模式（`ledger.expand(direction=\"down\")`），不是自己多跳算出来的")
+    fresh = [needle for needle in ("ledger.resolve", "ledger.expand") if needle in prompt]
+    assert len(fresh) == 2, (
+        f"C 的提示词里读不到两件台账工具（读到 {fresh}）—— 旧句子删了而新句子没接上，"
+        "同样是把这条口径教丢了")
 
 
 def test_the_prompt_version_moved_with_the_sections() -> None:

@@ -126,6 +126,15 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # 数字来自盘上实测；它们都是"看不清的分支"（ok 里没有 await/return 那种显式键）。
     "cache_tools.py": 2,
     "formal_tools.py": 3,
+    # 2026-11-10（`draft/181` A+B 批，C 的两件台账工具）：2 处 ——
+    # `ledger_resolve` 的 `return ok(got, **got)` 与 `ledger_expand` 的
+    # `return ok(tree, checked=True, node=..., depth=..., direction=..., truncated=...)`。
+    # 两处的键集都由 `ledgerindex.LedgerIndex.resolve` / `.expand` 的返回值决定，
+    # 静态扫描在工具层读不出字面量键 —— 与 `conductor_tools` / `trace_tools` 那几格同族。
+    # 为什么不把键抄成字面量：`ledger.expand` 的 payload 是"局部树 + 预算/增量读数"，
+    # 在调用点再抄一份就是第二套"该交哪几格"的口径；`returns=` 已逐字声明两件的键格，
+    # 由 `tests/test_tools_returns_declaration.py` 的实跑核钉住。补的是登记，不是口径。
+    "ledger_tools.py": 2,
     # 2026-10-26（H3）：时钟九件落地时这一栏没有登记 —— 盘上实测 4 处
     # （`clock_alarm_start` / `clock_periodic_start` / `clock_timer_start` /
     # `clock_wait_any` 各一处，`ok(reading)` 的键由 `Clock` 那一侧决定）。

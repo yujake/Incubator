@@ -15,11 +15,20 @@
 
 ## 判据两条
 
-1. 正控（④）：三个角色各自渲染出来的提示词里，同一条政策里能读到
-   "一条 stmt" ＋ `proof_no` 1..N ＋ `path_group` ＋ 各自 V 签（`reviewed_by_proof`）
-   ＋ 反向判据（不要把同一条定理拆成多条命题）。逐角色逐条判，缺一条就点名缺哪条；
+1. 正控（④）：三个角色各自渲染出来的提示词里，同一条政策里能读到该角色那种形状
+   的几样硬东西（见下面的 `REQUIRED`）。逐角色逐条判，缺一条就点名缺哪条；
 2. 反真空（⑤）：把某个角色那条政策从它的声明里删掉 ⇒ 该角色的渲染结果必须缺词（红），
    其余角色的不动。三个角色各做一遍 —— 只做其中一个的话，另外两处可以静默烂掉。
+
+## 2026-11-10 契约变更（p272 / p274 / p275：F 的稿自建号源）
+
+改前：三个角色共用一份硬词表（"一条 stmt" ＋ `proof_no` 1..N ＋ `path_group` ＋
+`reviewed_by_proof` ＋ 反向判据）。那时 F 也被要求写"一条 stmt"。
+
+改后（业主：「F 的稿自己维护一套号源，不依赖命题号和计划号」；命题号由 B 收录时现取）：
+台账口径（一条 stmt 装 1..N 份证明）只在 B / D 侧成立；F 侧的形状是稿口径
+（同一个稿号 `f-proof-<稿号>` ＋ 第 N 份证明 `-pN` ＋ 命题号由 B 收录时现取）。
+判据因此逐角色分开钉，并加一条反向断言：F 的政策里不许退回台账口径的旧句子。
 
 ## 边界
 
@@ -37,15 +46,43 @@ import pytest
 from agentflow import agent_prompts as AP
 from agentflow.tools import build_registry
 
-#: 三处都要能读到的硬东西（一条 stmt / proof_no 1..N / path_group / 各自 V 签 / 反向判据）。
-REQUIRED = (
-    "一条 stmt",
-    "proof_no",
-    "1..N",
-    "path_group",
-    "reviewed_by_proof",
-    "不要把同一条定理拆成多条命题",
-)
+#: 每个角色那条政策必须聚齐的硬东西。
+#:
+#: 2026-11-10（p272/p274/p275 的稿号口径）之后三个角色不再共用同一句话：
+#: - B / D 那条政策说的是台账里的形状：一条 stmt 装 1..N 份证明（`proof_no` 1..N）；
+#: - F 那条政策说的是稿上的形状：同一个稿号（`f-proof-<稿号>`）下第 N 份证明（`-pN`），
+#:   命题号由 B 收录时现取 —— F 既不立命题、也不写号。
+#: 改前这里是一份全局元组：F 也必须含「一条 stmt / 1..N」⇒ 它钉的其实是 B/D 的话，
+#: 会把 F 按新口径写对的政策判成红。改后逐角色钉各自的形状：B/D 一条不少，F 的检查项
+#: 从 0（它本来就不该有那两条）变成 8 条（稿号口径的每一样都在）。
+REQUIRED: dict[str, tuple[str, ...]] = {
+    "B": (
+        "一条 stmt",
+        "proof_no",
+        "1..N",
+        "path_group",
+        "reviewed_by_proof",
+        "不要把同一条定理拆成多条命题",
+    ),
+    "D": (
+        "一条 stmt",
+        "proof_no",
+        "1..N",
+        "path_group",
+        "reviewed_by_proof",
+        "不要把同一条定理拆成多条命题",
+    ),
+    "F": (
+        "一个稿号",
+        "-pN",
+        "f-proof-",
+        "命题号由 **B 收录时现取**",
+        "proof_no",
+        "path_group",
+        "reviewed_by_proof",
+        "不要把同一条定理拆成多条命题",
+    ),
+}
 
 #: 每个角色那条政策的识别句（删它 = 反真空；也是"这条政策真的在它的声明里"的正控）。
 MARKERS: dict[str, str] = {
@@ -57,8 +94,15 @@ MARKERS: dict[str, str] = {
 _ROLES = ("B", "D", "F")
 
 
-def _missing(text: str) -> list[str]:
-    return [token for token in REQUIRED if token not in text]
+def _missing(role: str, text: str) -> list[str]:
+    return [token for token in REQUIRED[role] if token not in text]
+
+
+def _policy_item(role: str) -> str | None:
+    """角色声明里那一条多证明政策（应当恰好一条；不唯一时返回 `None`）。"""
+    brief = AP.ROLE_BRIEFS[role]
+    items = [item for item in brief.policy if MARKERS[role] in item]
+    return items[0] if len(items) == 1 else None
 
 
 def _prompt(role: str, registry: object) -> str:
@@ -73,9 +117,9 @@ def prompts() -> dict[str, str]:
 
 
 def test_each_role_renders_the_multi_proof_shape(prompts: dict[str, str]) -> None:
-    """④ B / D / F 三处渲染提示词都能读到同一形状（缺哪一样就点名）。"""
-    problems = [f"{role}：缺 {_missing(text)}" for role, text in prompts.items()
-                if _missing(text)]
+    """④ B / D / F 三处渲染提示词都能读到各自那种形状（缺哪一样就点名）。"""
+    problems = [f"{role}：缺 {_missing(role, text)}" for role, text in prompts.items()
+                if _missing(role, text)]
     assert problems == [], (
         "多证明口径没有写进这些角色的提示词（用户要「几种证明」时它们会各立一条命题）：\n  "
         + "\n  ".join(problems))
@@ -89,16 +133,39 @@ def test_the_policy_sentence_itself_carries_every_piece(prompts: dict[str, str])
     """
     problems: list[str] = []
     for role in _ROLES:
-        brief = AP.ROLE_BRIEFS[role]
         marker = MARKERS[role]
-        items = [item for item in brief.policy if marker in item]
-        if len(items) != 1:
-            problems.append(f"{role}：含 {marker!r} 的政策条目应当恰好 1 条，实际 {len(items)} 条")
+        item = _policy_item(role)
+        if item is None:
+            brief = AP.ROLE_BRIEFS[role]
+            n = sum(1 for entry in brief.policy if marker in entry)
+            problems.append(f"{role}：含 {marker!r} 的政策条目应当恰好 1 条，实际 {n} 条")
             continue
-        missing = _missing(items[0])
+        missing = _missing(role, item)
         if missing:
             problems.append(f"{role}：那一条政策里缺 {missing}")
     assert problems == [], "\n  ".join(["多证明政策没有聚在同一条里："] + problems)
+
+
+def test_the_old_ledger_shape_does_not_come_back_into_f() -> None:
+    """反向（契约变更的反面）：F 那条政策不许退回 B/D 的台账口径。
+
+    2026-11-10 之前 F 也按「一条 stmt / 1..N」写；现在 F 的稿自建号源
+    （`f-proof-<稿号>`）、命题号由 B 收录时现取。旧句子贴回 F 的政策里 ⇒ 本判据红，
+    因为那会把 F 重新教成"自己立命题、自己编号"。
+    """
+    item = _policy_item("F")
+    assert item is not None, "F 的多证明政策应当恰好一条（先看上面那条判据）"
+    stale = [token for token in ("一条 stmt", "1..N") if token in item]
+    assert not stale, (
+        f"F 的多证明政策里又出现了台账口径的旧句子 {stale} —— F 不立命题、不写命题号，"
+        "它只维护自己的稿号（`f-proof-<稿号>`），命题号由 B 收录时现取")
+    # 正控：B / D 仍是台账口径 —— 这条反向断言不是把三个角色一起放宽成"谁都不用写"。
+    for role in ("B", "D"):
+        other = _policy_item(role)
+        assert other is not None, f"{role} 的多证明政策应当恰好一条"
+        for token in ("一条 stmt", "1..N"):
+            assert token in other, (
+                f"{role} 的台账口径里不再有 {token!r} ⇒ 旧形状被一起删掉了（反向断言的两端都要在）")
 
 
 def test_deleting_one_roles_policy_makes_that_role_red(
@@ -114,9 +181,10 @@ def test_deleting_one_roles_policy_makes_that_role_red(
         with monkeypatch.context() as patch:
             patch.setitem(AP.ROLE_BRIEFS, role, replace(brief, policy=kept))
             broken = _prompt(role, registry)
-        assert _missing(broken), (
+        assert _missing(role, broken), (
             f"把 {role} 的多证明政策删掉之后，它的提示词仍然读得到那几样东西 "
             f"⇒ ⑤ 这条判据在自说自话（它读的是别处的措辞）")
     # 正控：同一批渲染里，另外两个角色（未被删）仍然是全的。
     for role in _ROLES:
-        assert not _missing(prompts[role]), f"{role} 的基线提示词本来就缺词：{_missing(prompts[role])}"
+        assert not _missing(role, prompts[role]), (
+            f"{role} 的基线提示词本来就缺词：{_missing(role, prompts[role])}")

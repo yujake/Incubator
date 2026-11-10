@@ -308,7 +308,7 @@ def expand(index: Any, node: Any, depth: int, direction: str = "both", *,
     nodes_out: list[dict[str, Any]] = []
     for sid_i in visited:
         reading = index._read_node(sid_i, relations[sid_i])
-        size = len(json.dumps(reading, ensure_ascii=False))
+        size = len(json.dumps(reading, ensure_ascii=False, default=str))
         if chars + size > max_chars and nodes_out:
             if "char_budget" not in reasons:
                 reasons.append("char_budget")
