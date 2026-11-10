@@ -13,6 +13,19 @@
 
 零模型调用：三条成果走真的 `_apply_round`（proof 档）落进 `statements`，
 签由生产的写口 `vsigns.write_manuscript_sign` 盖在「已发布的那份手稿」上。
+
+## 2026-11-10：夹具跟上「F 只认稿号」
+
+业主裁定之后稿名只按 F 自己的稿号（`reports/f-proof-<稿号>.md`），与命题号不再绑定；
+B 收录时把稿号记在 statements 行的 `manuscript_id` 格上（
+`secretary.STATEMENT_LAND_OPS["attach_proofs"]`），而读侧（`AgentF._output_body`）
+只按这一格回找那份稿。本文件的夹具是直接铺行的（绕开 B 的收录），所以这两件
+"收录回执"要自己补上：`_record_manuscript` 记稿号、`_sign` 按稿号取那份稿再签。
+
+改的是夹具，不是断言：期望值（1/3、3/3、逐条点名）一个字没动。改前那版夹具把签盖在
+`reports/f-proof-<命题号>.md` 上 —— 那个名字现在是上一轮发的那份稿（第 1 条成果
+的发布稿是 `f-proof-000001.md`、第 2 条是 `f-proof-000003.md`），于是第 2、3 条读到
+的是别人的正文：签读到 0/少一不是读签漏签，是夹具盖错了稿。
 """
 from __future__ import annotations
 
@@ -22,6 +35,7 @@ import pathlib
 import pytest
 from conftest import seed_statement_row
 from agentflow import depsection as _DS
+from agentflow import manuscriptids as _MID
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_f import AgentF
@@ -114,20 +128,57 @@ def _proof_round(f: AgentF, plan: dict, *, sid: str, text: str) -> dict:
             quote_reason="F 交来的论证，V 还没签（历史形态：直接铺行）")
     deploy = f._apply_round(product, sg, plan=plan, owner="F")
     assert str(deploy.get("statement_id") or "") == str(seeded["stmt_id"]), deploy
+    _record_manuscript(f.store, str(seeded["stmt_id"]), deploy)
     plan["history"].append({"round": len(plan["history"]) + 1, "sid": sid,
                             "action": deploy.get("action"),
                             "outcome": deploy.get("outcome"),
                             "detail": deploy.get("detail"),
                             "evidence": list(deploy.get("evidence") or []),
                             "statement_id": str(deploy.get("statement_id") or ""),
+                            # 2026-11-10：稿号与落点要进 history（同 `step.py`）——
+                            # 改同一份稿沿用同一个稿号，靠的就是这两格。
+                            "manuscript_id": str(deploy.get("manuscript_id") or ""),
+                            "manuscript_path": str(deploy.get("manuscript_path") or ""),
                             "at": AT})
     plan["rounds"] = len(plan["history"])
     return deploy
 
 
+def _record_manuscript(store: Store, sid: str, deploy: dict) -> None:
+    """把「这一条成果落在哪一份稿上」记进 statements 行 —— B 收录回执的同形那两格。
+
+    `manuscript_id` 是读侧的唯一回找口（`AgentF._output_body`）：没有它就只能退到旧
+    约定名 `reports/f-proof-<命题号>.md`，而 2026-11-10 之后那个名字指不到这一条成果
+    的稿。夹具直接铺行（绕开 B 的收录）⇒ 这两格要自己补，与 `attach_proofs` 同形。
+    """
+    mid = str(deploy.get("manuscript_id") or "")
+    rel = str(deploy.get("manuscript_path") or "")
+    assert mid and rel, deploy
+    row = next(dict(r) for r in store.rows("statements")
+               if str(r.get("stmt_id")) == str(sid))
+    row.update(manuscript_id=mid, manuscript_path=rel)
+    with store.tx("statements", actor="secretary-B") as tx:
+        tx.upsert("statements", row)
+
+
+def _manuscript_rel(st: Store, sid: str) -> str:
+    """这一条成果的那份稿（行上 `manuscript_id` → 落点）—— 读侧同一个回找口。"""
+    row = next((dict(r) for r in st.rows("statements")
+                if str(r.get("stmt_id")) == str(sid)), {})
+    mid = str(row.get("manuscript_id") or "")
+    assert mid, f"夹具：stmt:{sid} 行上没有 manuscript_id（B 收录回执那一格）"
+    rel = str(_MID.canonical_rel(mid))
+    assert rel, mid
+    return rel
+
+
 def _sign(st: Store, sid: str) -> None:
-    """V 在「已发布的那份手稿」上签（D268 批 2：三票同源 + 发签，块当视图）。"""
-    rel = f"reports/f-proof-{sid}.md"
+    """V 在「这一条成果的那份已发布手稿」上签（D268 批 2：三票同源 + 发签，块当视图）。
+
+    2026-11-10：稿名只按 F 自己的稿号，所以签的落点从 statements 行的 `manuscript_id`
+    取（与读侧的 `_output_body` 同一个回找口），不再按命题号拼一个名字。
+    """
+    rel = _manuscript_rel(st, sid)
     path = pathlib.Path(st.root) / rel
     assert path.is_file(), f"手稿没发布：{rel}"
     body = _DS.proof_body(path.read_text(encoding="utf-8")).strip("\n")
@@ -188,7 +239,13 @@ def test_a_one_of_three_signed_is_not_a_delivery(tmp_path):
     for sid in sids[1:]:
         assert by_sid[sid]["signed"] is False, by_sid[sid]
         assert by_sid[sid]["state"] == "waiting", by_sid[sid]
-        assert by_sid[sid]["manuscript"] == f"reports/f-proof-{sid}.md", by_sid[sid]
+        # 2026-11-10：稿名只按 F 的稿号（`f-proof-<稿号>.md`），不再与命题号绑定 ——
+        # 逐条点名的仍是「这一条自己的那份稿」，名字由行上的 `manuscript_id` 决定。
+        want = _manuscript_rel(st, sid)
+        assert by_sid[sid]["manuscript"] == want, by_sid[sid]
+        assert (pathlib.Path(st.root) / want).is_file(), want
+    # 三条成果各自落在各自的那份稿上（不是同一个名字被读三遍）。
+    assert len({str(by_sid[sid]["manuscript"]) for sid in sids}) == 3, by_sid
 
 
 # ============================================================ b：3 条全签

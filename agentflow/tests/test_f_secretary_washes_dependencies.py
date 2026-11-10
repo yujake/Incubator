@@ -363,11 +363,12 @@ def test_the_wash_happens_before_the_outlet_and_marks_the_manuscript(
         order.append("wash")
         return real_wash(self, manuscript, **kw)
 
-    def outlet_spy(self, product, sg, *, plan, proof_manuscript=""):
+    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
         order.append("outlet")
         received["text"] = str(proof_manuscript or "")
         return real_outlet(self, product, sg, plan=plan,
-                           proof_manuscript=proof_manuscript)
+                           proof_manuscript=proof_manuscript,
+                           manuscript_id=manuscript_id)
 
     monkeypatch.setattr(SEC.Secretary, "wash_dependency_face", wash_spy)
     monkeypatch.setattr(AgentF, "_proof_outlet", outlet_spy)
@@ -393,15 +394,16 @@ def test_a_refused_wash_stops_the_round_before_v_and_reaches_the_next_prompt(
     outlets: list[str] = []
     real_outlet = AgentF._proof_outlet
 
-    def outlet_spy(self, product, sg, *, plan, proof_manuscript=""):
+    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
         outlets.append(str(proof_manuscript or ""))
         return real_outlet(self, product, sg, plan=plan,
-                           proof_manuscript=proof_manuscript)
+                           proof_manuscript=proof_manuscript,
+                           manuscript_id=manuscript_id)
 
-    def bad_manuscript(self, product, *, sg, statement_id="", plan):
+    def bad_manuscript(self, product, *, sg, statement_id="", plan, manuscript_id=""):
         return {"ok": True, "path": "reports/f-proof-plan-000000.md",
                 "text": _bad_manuscript(), "rows": [], "preview": {},
-                "named_by": "plan", "why": ""}
+                "named_by": "plan", "why": "", "manuscript_id": str(manuscript_id or "")}
 
     monkeypatch.setattr(AgentF, "_proof_outlet", outlet_spy)
     monkeypatch.setattr(AgentF, "proof_manuscript", bad_manuscript)
@@ -446,15 +448,17 @@ def test_stubbing_the_wash_out_turns_b_and_c_red(tmp_path: pathlib.Path,
     outlets: list[str] = []
     real_outlet = AgentF._proof_outlet
 
-    def outlet_spy(self, product, sg, *, plan, proof_manuscript=""):
+    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
         outlets.append(str(proof_manuscript or ""))
         return real_outlet(self, product, sg, plan=plan,
-                           proof_manuscript=proof_manuscript)
+                           proof_manuscript=proof_manuscript,
+                           manuscript_id=manuscript_id)
 
-    def bad_manuscript(self, product, *, sg, statement_id="", plan):
+    def bad_manuscript(self, product, *, sg, statement_id="", plan, manuscript_id=""):
         text = _bad_manuscript()
         return {"ok": True, "path": "reports/f-proof-plan-000000.md", "text": text,
-                "rows": [], "preview": {}, "named_by": "plan", "why": ""}
+                "rows": [], "preview": {}, "named_by": "plan", "why": "",
+                "manuscript_id": str(manuscript_id or "")}
 
     monkeypatch.setattr(AgentF, "_proof_outlet", outlet_spy)
     monkeypatch.setattr(AgentF, "proof_manuscript", bad_manuscript)

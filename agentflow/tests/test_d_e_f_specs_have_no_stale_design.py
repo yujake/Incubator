@@ -21,7 +21,7 @@
 | E5 | 技能书索引末尾那句形式化口径不再发给 E |
 | E6 | `exhaustive` 是顶格参数，不在 `observations` 里 |
 | E8 | E 的工具面 0 件 `formal.*` / `detect_verifier`；它的提示词里也没有 `formal.` 记号 |
-| D6 / F3 / F5 | F 只写证明手稿与那一节 `## 依赖`；`statements` 那一行交给 B 登记（2026-10-26 裁定：作者只写内容，登记由收方读稿产生） |
+| D6 / F3 / F5 | F 只写证明手稿与那一节 `## 依赖`；`statements` 那一行由 B 登记（2026-10-26 裁定：作者只写内容，登记由收方读稿产生），而稿要经 D 携带给 B（2026-11-07 A4 裁边：删 F→B 直连边，F 只向上走 D） |
 | F6 | 形式化那一档只能由用户指定 |
 | F7 | 「收件板」→「工作项板」 |
 | F8 | E 的职责句不再带「攻坚」 |
@@ -263,20 +263,42 @@ _F_STALE_STATEMENTS: tuple[str, ...] = (
     "你落 `statements` 那一行",
 )
 
+#: 2026-11-07（业主 A4 裁边）之后「交稿」那条路的三句原文：路（向上走 D）、怎么到 B
+#: （D 携带）、谁登记（B 读稿登记）。它替掉了 2026-10-26 那句「交给 B 登记」——
+#: 后者是 F→B 直连时代的说法，而那条边已被裁掉（「防止向下交稿，F 只能向上通过 D 向 B 交稿」）。
+_F_ROAD_TELLINGS: tuple[str, ...] = (
+    "交稿向上走 D",
+    "经 D 携带给 B",
+    "B 读稿登记",
+)
+
+#: 直连 B 的旧说法（F→B 那条边已裁掉）：policy 与渲染提示词里都不许留。
+_F_ROAD_STALE = "交给 **B 登记**"
+
 #: D 那一侧被推翻的那一句（同一批裁定：F 自产的证明也由 B 登记）。
 _D_STALE_STATEMENT = "F 自己产出的证明由 F 自己落那一行"
 
 
 def _f_statement_problems(policy: str, prompt: str, d_policy: str) -> list[str]:
-    """D6 / F3 / F5 的尺子（正控与负控共用同一份 —— 负控要证明的正是"它在这种形态下必红"）。"""
+    """D6 / F3 / F5 的尺子（正控与负控共用同一份 —— 负控要证明的正是"它在这种形态下必红"）。
+
+    两头都判：新路那几句在不在（缺了 = "把话删掉"冒充"改好了"），旧路那句在不在
+    （在 = 改回了直连 B，那是一句照做就撞墙的话）。policy 与渲染提示词各判一遍 ——
+    只判 policy 时，渲染面漂了照样绿。
+    """
     problems: list[str] = []
-    if not _has(policy, "交给 **B 登记**"):
-        problems.append("[F3/F5] F 的 policy 里读不到「交给 B 登记」"
-                        "（2026-10-26：作者只写内容，登记由收方读稿产生）")
+    for line in _F_ROAD_TELLINGS:
+        if not _has(policy, line):
+            problems.append(
+                f"[F3/F5] F 的 policy 里读不到「{line}」"
+                "（2026-11-07 裁定：F 只向上走 D，D 携带给 B、B 读稿登记）")
+        if not _has(prompt, line):
+            problems.append(f"[F3/F5] F 的渲染提示词里读不到「{line}」"
+                            "（policy 有、渲染面没有 ⇒ 模型看不到）")
     if not _has(policy, "你不写那张表"):
         problems.append("[F3/F5] F 的 policy 里读不到「你不写那张表」"
                         "⇒ 读的人还会以为 `statements` 在它的写集里")
-    for line in _F_STALE_STATEMENTS:
+    for line in (_F_ROAD_STALE, *_F_STALE_STATEMENTS):
         if _has(policy, line):
             problems.append(f"[F3/F5] F 的 policy 里还有旧口径原话 {line!r}")
         if _has(prompt, line):
@@ -292,31 +314,26 @@ def _f_statement_problems(policy: str, prompt: str, d_policy: str) -> list[str]:
 
 
 def test_d6_f3_f5_f_hands_the_statements_row_to_b(prompts) -> None:
-    """D6/F3/F5：F 不自己落 `statements` 那一行 —— 它交给 B 登记。
+    """D6/F3/F5：F 不自己落 `statements` 那一行 —— 登记是 B 的活，且稿要经 D 携带给 B。
 
-    ## 改前那一条守着什么，它为什么过期了
+    ## 这一条改过两回，两回都是契约变了、不是实现坏了
 
-    本条改前叫 `test_d6_f3_f5_f_writes_the_statements_row_itself`：它断言 F 的 policy 里有
-    「你自己落成 `statements` 一行」，并且断言提示词里不许出现「由 B 登记」。那是 2026-10-25
+    改前叫 `test_d6_f3_f5_f_writes_the_statements_row_itself`：它断言 F 的 policy 里有
+    「你自己落成 `statements` 一行」、且提示词里不许出现「由 B 登记」。那是 2026-10-25
     的口径（B 只收文献侧，F 自产的证明由 F 自己落那一行）。
 
-    2026-10-26 的裁定把它整个翻了过来：作者只写内容，登记由收方读稿产生 —— 与「V 读你的
-    手稿再签字」同一个逻辑。于是 `specs/f.py` 的三处 policy 改成「交给 B 登记」，
-    `WRITE_SETS["F"]` 也拿掉了 `statements` 那一格（秘书那一层只认
-    `secretary.STATEMENT_WRITER_ROLES = ("B",)`）。
+    2026-10-26 的裁定把它翻过来：作者只写内容，登记由收方读稿产生 —— 与「V 读你的手稿
+    再签字」同一个逻辑。当时的写法是「交给 B 登记」。
 
-    代码没有回退：policy 与写集两处都按新口径改了，而且
-    `tests/test_f_hands_propositions_to_b.py` 在正面钉着它。红的是本判据 —— 它断的是被推翻
-    的旧口径的原话，于是 HEAD 上它一直红着、而没有人回来管。那正是这类判据最贵的死法：
-    红着的判据与坏掉的代码在报告里长得一样。所以这一格改成钉新口径。
+    2026-11-07（业主 A4 裁边）又改了路：「裁去 F 到 B 的直接出边，防止向下交稿，
+    F 只能向上通过 D 向 B 交稿」。于是现在的原文是三句：
+    `交稿向上走 D` / `经 D 携带给 B` / `B 读稿登记`（登记仍是 B 的活，F 仍不写那张表）。
+    「交给 B 登记」现在是一句照做就撞墙的话：那条边不存在。
 
-    ## 新口径钉三件
+    判据钉两半：新路那三句在 policy 与渲染提示词两个面都在；直连 B 的旧说法两个面都不在。
+    D 那一侧照旧：文献侧由 B 收进、F 自产的证明也由 B 登记。
 
-    ① F 的 policy 里读得到「交给 B 登记」与「你不写那张表」；
-    ② 那三句旧原话一句都不许留（policy 与渲染提示词两个面都判）；
-    ③ D 那一侧同一口径：文献侧由 B 收进、F 自产的证明也由 B 登记。
-
-    负控：把旧原话塞进这份文本的副本 ⇒ 同一个尺子必须点红
+    负控：把新路那句抠掉 ⇒ 红；把直连 B 的旧说法塞回去 ⇒ 红；把旧原话塞回去 ⇒ 红
     （`test_d6_putting_the_old_wording_back_goes_red`）。
     """
     problems = _f_statement_problems(_policy("F"), prompts["F"], _policy("D"))
@@ -324,7 +341,7 @@ def test_d6_f3_f5_f_hands_the_statements_row_to_b(prompts) -> None:
 
 
 def test_d6_putting_the_old_wording_back_goes_red(prompts) -> None:
-    """负控：把旧口径的原话塞回去 ⇒ 上面那个尺子必须点红（三类各一次）。
+    """负控：把旧原话塞回去 / 把新路抠掉 ⇒ 上面那个尺子必须点红（逐类各一次）。
 
     只断言"今天的文本里没有某个串"无法区分"改好了"与"这句话本来就不在这份文本里" ——
     改前那条判据正是后者：它要的串在改后的 policy 里永远不会有，所以它只会一直红。
@@ -335,7 +352,8 @@ def test_d6_putting_the_old_wording_back_goes_red(prompts) -> None:
     # ① 把 F 那三句旧原话塞回 policy 的副本
     dirty_f = _policy("F") + "\n" + "\n".join(_F_STALE_STATEMENTS)
     problems = _f_statement_problems(dirty_f, prompts["F"], _policy("D"))
-    stale_hits = [p for p in problems if "旧口径原话" in p]
+    stale_hits = [p for p in problems
+                  if "旧口径原话" in p and any(line in p for line in _F_STALE_STATEMENTS)]
     assert len(stale_hits) == len(_F_STALE_STATEMENTS), (
         f"塞回 {len(_F_STALE_STATEMENTS)} 句旧原话，尺子只点出 {len(stale_hits)} 句：{problems}")
 
@@ -345,11 +363,20 @@ def test_d6_putting_the_old_wording_back_goes_red(prompts) -> None:
     assert any(_D_STALE_STATEMENT in p for p in problems), (
         f"D 的 policy 里塞回了那句被推翻的话，尺子却没点出来：{problems}")
 
-    # ③ 把「交给 B 登记」从副本里抠掉 ⇒ "缺新口径"这一半也要点红（不是只判旧串）
-    cut = _policy("F").replace("交给 **B 登记**", "自己处理")
+    # ③ 把新路那三句从副本里抠掉 ⇒ "缺新口径"这一半也要逐句点红（不是只判旧串）
+    cut = _policy("F")
+    for line in _F_ROAD_TELLINGS:
+        cut = cut.replace(line, "（已删）")
     problems = _f_statement_problems(cut, prompts["F"], _policy("D"))
-    assert any("交给 B 登记" in p for p in problems), (
-        f"把新口径那句抠掉之后尺子没点红，说明它只在判旧串：{problems}")
+    missing_hits = [p for p in problems if "读不到「" in p and "policy" in p]
+    assert len(missing_hits) == len(_F_ROAD_TELLINGS), (
+        f"把新路 {len(_F_ROAD_TELLINGS)} 句抠掉之后尺子只点出 {len(missing_hits)} 句：{problems}")
+
+    # ④ 把直连 B 的旧说法塞回 policy 的副本 ⇒ 反面那一条必须点红
+    back = _policy("F") + "\n" + _F_ROAD_STALE
+    problems = _f_statement_problems(back, prompts["F"], _policy("D"))
+    assert any(_F_ROAD_STALE in p for p in problems), (
+        f"把直连 B 的旧说法塞回 policy，尺子却没点出来（F→B 边已被裁掉）：{problems}")
 
 
 # ============================================================ F6

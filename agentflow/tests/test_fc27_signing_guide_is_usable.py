@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import subprocess
@@ -69,12 +70,22 @@ def test_the_cli_actually_supports_what_the_guide_promises() -> None:
     这一条是"文档与实现同源"的机械核：文档里出现 `--xxx`，CLI 的 help 里就必须有它。
     只核说明书正文里出现的那几个（`--all` / `--scope-template` / `--report-out` /
     `--status-json` / `--dry-run` / `--reviewer` / `--batch`），不去解析全量 help。
+
+    2026-11-10：子进程的 stdout 编码必须显式钉住。改前是 `text=True, encoding="utf-8"`，
+    而 Windows 上子进程按控制台代码页（cp936）写管道 ⇒ 父进程解码在第一个汉字处炸掉，
+    `stdout` 变成 `None`（异常在 `subprocess` 的读线程里被吞掉，只留一条 warning），
+    于是这一条以 `TypeError: argument of type 'NoneType' is not iterable` 红 ——
+    它看起来像"判据红了"，其实是"这一格没查成"（三态纪律最忌讳的那种折叠）。
+    `PYTHONIOENCODING` 是 Python 自己的标准行为、与产品无关，钉它不降强度：
+    `returncode` 与"每个承诺的开关都在 stdout 里"一个字都没改。
     """
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     help_text = subprocess.run(
         [sys.executable, str(SIGN), "--help"],
-        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8",
+        cwd=str(ROOT), capture_output=True, text=True, encoding="utf-8", env=env,
     )
-    assert help_text.returncode == 0, help_text.stderr[-400:]
+    assert help_text.returncode == 0, (help_text.stderr or "")[-400:]
+    assert help_text.stdout, "CLI 的 --help 一个字都没输出 ⇒ 这一格没查成（不是「没有缺开关」）"
     promised = sorted(set(re.findall(r"`?(--[a-z][a-z-]+)`?", _doc())))
     checked = [p for p in promised if p in {
         "--all", "--paths", "--scope", "--scope-template", "--batch", "--note",
