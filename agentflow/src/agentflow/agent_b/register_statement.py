@@ -5248,6 +5248,38 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 v_sign["why"] = (str(v_sign.get("why") or "")
                                  + "；并已把 statement_id 回写到 pending 台账行"
                                    "（同一份正文只认领一次）")
+        # ---- 2026-11-11（p283）：「认领完成之后」按本条命题的签再评一次 kind ----------
+        #
+        # 位置必须在 `bind_pending_claim` 之后：第一笔 `_attach_proofs`（上面）跑在认领
+        # 之前，那时这一签还是"命题还没在册时审的那一签" —— 按 2026-10-24 / 2026-11-10
+        # 的裁量只够过准入闸，kind 停在 conjecture（d37 ⑥ 钉的就是这一档，旧射程不变）。
+        # 认领把 `statement_id` 回写进 pending 台账行之后，这一签已经绑在本条命题上：
+        # `verifications.proof_review_gap` 报 `pending=False / claimed=True`（载体稿号与
+        # 行上 `manuscript_id` 一致时），`_kind_upgrade_from_evidence` 的
+        # `allow_pending=False` 于是照样认它 —— 同一份稿在收录这一笔里就升到 theorem，
+        # 不用等下一次"没有人会回头做"的重写。
+        #
+        # 为什么不并进第一笔 / 不把认领提前：认领是文件写，`_attach_proofs` 那一笔在
+        # 事务里（文件写不进事务）；而认领提前到正文落盘之前，一旦正文写失败就白占掉
+        # 一份别人还能用的签（上面那一段的理由，d37 ⑥ 的反向控制也踩过这一档）。
+        # 这一笔只写 kind / `_kind_upgrade`：正文、位、回执在上一笔已经落定，
+        # `_grade_recomputed` 的回执按幂等判据不再写第二遍。
+        _claim_kind: dict = {}
+        if (bool(dict(v_sign.get("claim") or {}).get("bound"))
+                and str(data.get("kind") or "") == "conjecture"):
+            _claimed = self._attach_proofs(
+                stmt_id, [], canonical="", proof_no=int(proof_no_placement),
+                manuscript_id=_manuscript_id_now)
+            if _claimed.get("kind_upgraded"):
+                _claim_kind = dict(_claimed.get("kind_upgraded") or {})
+            if _claimed.get("written") or _claim_kind:
+                _claimed_got = SL.by_id(self.store, stmt_id=stmt_id)
+                if not _claimed_got["checked"]:
+                    _err = _claimed_got.get("error") or {}
+                    raise RuntimeError(
+                        f"`statements` 读不出来（{_err.get('type') or '?'}: "
+                        f"{_err.get('message') or _claimed_got.get('reason') or '?'}）")
+                data = _claimed_got["row"] or data
         #: 刚挂上去的那几份证明（#p2 及以后）的依赖面：秘书那一条正路只扫 `proof_text`
         #: （#p1），这里把它补上 —— 一行都没有补的时候返回空字典（老返回值逐字不变）。
         proof_deps = self._write_attached_proof_deps(sec, stmt_id, proofs_listed, attach)
@@ -5310,6 +5342,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 #: 静默把一句"通过了"改成 unknown 与静默放过它同样是坏。
                 "quote_evidence": evidence_reading,
                 "evidence_kind": evidence_kind, "row": data,
+                #: 2026-11-11（p283）：认领完成之后按本条命题的签再评出来的升档留痕
+                #: （只在真升了时出现；旧返回值逐字不变）。
+                **({"kind_upgraded": dict(_claim_kind)} if _claim_kind else {}),
                 #: 2026-11-08：收录时的两格读数（稿上已签 / 已入台账；四态在 `state`）。
                 "sign_filing": dict(sign_filing),
                 #: 2026-11-08：普通数值通道的读数（只在真走了那条通道时出现）。

@@ -1324,10 +1324,14 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
 
     `allow_pending`（2026-11-10，业主裁量 ② 的补口）只影响 V 那一签的来路：
     默认 True = 认 D-34 的"命题还没在册时审的那一签"（读侧 / 秘书那一支的既有口径）；
-    False = 升档只认 `verifications/<命题号>.jsonl` 里那一签（B 的登记 / 收录路：
-    新行连台账行都还没有时，pending 那一签只能过准入闸，不能当"这条命题的定理凭据"）。
-    三态不变：`allow_pending=False` 而只有 pending 时是 `held`（查过了、不够），
-    不是 `unreadable`（没查成）。
+    False = 升档不认“未认领”的 pending 那一签（B 的登记 / 收录路：新行连台账行都
+    还没有时，pending 那一签只能过准入闸，不能当"这条命题的定理凭据"）。
+    2026-11-11（p283）：认领（`bind_pending_claim` 回写 `statement_id`）完成之后，
+    这一签已经是本条命题自己的签 —— `verifications.proof_review_gap` 会报
+    `pending=False / claimed=True`，于是 `allow_pending=False` 也照样认它；
+    "只是 pending（没认领）仍不够升"的旧射程一个字没动。
+    三态不变：`allow_pending=False` 而只有未认领的 pending 时是 `held`
+    （查过了、不够），不是 `unreadable`（没查成）。
 
     `root` 是工作区根（读 `verifications/` 台账用）。不给 ⇒ 那一签这一格
     没查成（`shortfall` 里写明"没查成"，不许折成"没签"）；形式化那一条依据
@@ -1444,6 +1448,9 @@ def _signature_basis(row: Mapping[str, Any], root: Any, *,
     `allow_pending=False`（B 的登记 / 收录路）时，`proof_review_gap` 认到的若是
     "命题还没在册时审的那一签"，这里报 `signed=False` + `pending_only=True`：
     它不是"没查成"（`checked` 照旧），而是"查过了、这一签指不出这条命题自己的台账"。
+    2026-11-11（p283）：`proof_review_gap` 把"已认领给本命题"的 pending 行读成
+    `pending=False / claimed=True` ⇒ 这一格按 `signed=True` 走（认领完成之后它就是
+    本条命题自己的签）；未认领的 pending 仍是 `pending_only=True`。
     """
     if root is None:
         return {"checked": False, "signed": False, "ledger": "",

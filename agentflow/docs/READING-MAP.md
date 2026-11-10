@@ -4,13 +4,20 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **289 个 `.py`、276,662 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **289 个 `.py`、276,749 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-11 拆模块后按现盘重算（本批记账）**：276,432 → **276,662**（净 +230：另一条 lane
 > 两笔并入 +188 —— d3ba5285「V 的在册闸认稿号」+152 与 07d263bb「被引稿也认稿号」+36；
 > 本批 +42 —— `agent_v/core.py` 把 `manuscript_identity` 移进 `verify_proof` 的初值
 > （`fail_closed_manuscript_identity`）＋ `tools/verify_tools.py` 的 `returns=` 补这一格）。
+> 文件数 289、`>800 行` 的 75、全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
+> **2026-11-11 p283（先签后收录：认领之后升 kind）**：276,662 → **276,749**（净 +87：
+> `verifications._gap_from_pending` 把「已认领给本命题、载体稿号与行上一致」的 pending 签
+> 读成 `pending=False / claimed=True`（未认领的仍是 pending）；`agent_b/register_statement.py`
+> 在认领回写之后补一次 kind 重评（`_attach_proofs` → `allow_pending=False` 照样认它）；
+> `evidencebits` 两条 docstring 跟着改口径。判据是新文件
+> `tests/test_the_first_sign_before_registration_still_lifts_the_kind.py`）。
 > 文件数 289、`>800 行` 的 75、全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
 > **2026-11-10 F 侧撤"按命题号写证明"（p274，本批）**：276,029 → **276,185**（净 +156：
 > `specs/f.py` 的送审参数表删掉"在册后给号"那一格并改写四处按号教法、`agent_f/manuscript.py`

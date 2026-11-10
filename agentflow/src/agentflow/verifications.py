@@ -4759,7 +4759,8 @@ def _pending_signed(root: str | Path, proof_text: Any) -> dict[str, Any] | None:
 
 
 def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
-                      got: Mapping[str, Any], *, statement_id: str) -> dict[str, Any]:
+                      got: Mapping[str, Any], *, statement_id: str,
+                      manuscript_id: str = "") -> dict[str, Any]:
     """:func:`_pending_signed` 认到那一签之后，把 `proof_review_gap` 的读数摊开。
 
     判据与"台账那一路"同一条（`signs_bit3`）：`成立` 且没有未解决 error、且引用核实
@@ -4770,6 +4771,22 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     于是"成立 + 有未解决 error"与"成立 + 引用核实判不了"在这一路上都读成签住了，
     而同一行内容放进 `verifications/<命题号>.jsonl` 会被 `signs_bit3` 拒。同一份证据、
     两个落点、两套判定 —— 这就是要收掉的那条缝。
+
+    ## 2026-11-11（p283）：认领完成之后，这一签不再是"待登记的那一签"
+
+    2026-11-10 的裁量是「pending 只够过准入闸、不够升 kind」—— 它说的是“命题还没在册
+    时” V 审的那一签（`pending` 行上还没有号，升档留痕指不出"这条命题的哪一签"）。
+    认领（`vsigns.bind_pending_claim`）把 `statement_id` 回写之后，这一签已经绑在这条
+    命题上了：来路仍是 pending 台账（文件不搬），但它就是“本条命题自己的签”。
+    所以 `pending` 这一格按三态写：
+
+    - `pending=True`：还没认领（行上没有 `statement_id`），或者认给的是“别的”号；
+    - `pending=False` + `claimed=True`：认给的就是本条命题，且载体稿号与行上的
+      `manuscript_id` 对得上（两边都有号时；老行没记稿号 ⇒ 认领本身就够）；
+    - 载体稿号与行上稿号不一致 ⇒ 仍算 `pending`：那一签签的是另一份稿，
+      不是这一条命题的稿上的签（判据 `vsigns.manuscript_id_of`，与签块第 9 格同源）。
+
+    三态不变：`ok` / `state` / `checked` 一个都不动，只把"来路"这一格读准。
     """
     row = dict(got.get("row") or {})
     row.setdefault("verdict", str(got.get("verdict") or ""))
@@ -4801,7 +4818,24 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     out["checked"] = True
     #: 来路那一格：这一份凭据是"命题还没在册时审的那一签"（纯读数；`ok` 的判据不变）。
     #: 升 `kind` 的那一格在 B 的登记 / 收录路上靠它把这一档分出来（`allow_pending=False`）。
-    out["pending"] = True
+    #:
+    #: 2026-11-11（p283）：已认领给本条命题的那一签不是"待登记的一签" —— 认领回写的
+    #: `statement_id` 与载体稿号都对得上时 `pending=False`、`claimed=True`（见 docstring）。
+    claimed = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
+    claimed_here = bool(claimed) and claimed == str(statement_id or "").strip()
+    carrier_mid = ""
+    if claimed_here:
+        try:
+            from . import vsigns as _VS
+
+            carrier_mid = _VS.manuscript_id_of(str(row.get("object_path") or ""))
+        except Exception:  # noqa: BLE001 —— 认不出载体号 ⇒ 不做第二道比较（认领本身仍算）
+            carrier_mid = ""
+    row_mid = str(manuscript_id or "").strip()
+    own = bool(claimed_here) and (not row_mid or not carrier_mid or row_mid == carrier_mid)
+    out["claimed"] = bool(own)
+    out["carried_manuscript_id"] = carrier_mid
+    out["pending"] = not bool(own)
     # 签不住有两种来路，拒信必须分开说：结论压根不是「成立」，还是判了「成立」却
     # 被 `signs_bit3` 的三条（未解决 error / 引用核实 / 没查成）之一挡住。
     if verdict_word != "成立":
@@ -4823,7 +4857,9 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     out["ok"] = True
     out["why"] = (f"命题 {statement_id} 的凭据在 `{out['ledger']}`：V 在命题还没在册时"
                   "审过这一份并判「成立」，按这一份正文的 sha 认领到"
-                  "（「先签后登记」与「先登记后签」是同一件事）")
+                  + ("（这一签已经认给本命题、载体稿号与行上一致 ⇒ 算本条命题自己的签，"
+                     "不再是「待登记的那一签」）" if own else
+                     "（「先签后登记」与「先登记后签」是同一件事）"))
     return out
 
 
@@ -4887,9 +4923,12 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
     （`[{"item", "ok", "detail"}]`，三条与上面一一对应），只为拒信存在（业主 2026-10-19 的口径：
     "拒收消息要让人/模型一眼看出该补哪一项"），不参与判据 —— 写错只改可读性。
     `pending` 是"来路"那一格（纯读数，不参与 `ok`）：True = 这一份凭据取自
-    `verifications/pending/<正文 sha>.jsonl`（命题还没在册时审的那一签），False = 取自
-    `verifications/<命题号>.jsonl` 那一行。两者都算"签过"，但升 `kind` 的那一格在 B 的
-    登记 / 收录路上只认后者（`evidencebits.kind_following_grade(allow_pending=False)`）。
+    `verifications/pending/<正文 sha>.jsonl` 且“还没有认领”（命题还没在册时审的那一签，
+    行上没有 `statement_id`），False = 取自 `verifications/<命题号>.jsonl` 那一行“或”
+    取自一条已经认领给本条命题的 pending 行（2026-11-11 p283：认领之后它就是本条命题
+    自己的签；`claimed` 那一格把这两种来路分开）。两者都算"签过"，但升 `kind` 的那一格
+    在 B 的登记 / 收录路上不认“未认领”的 pending
+    （`evidencebits.kind_following_grade(allow_pending=False)`）。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
     out: dict[str, Any] = {
@@ -4903,9 +4942,11 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         #: 这一份凭据是不是"命题还没在册时审的那一签"（`verifications/pending/`）。
         #: 它与台账那一行同等算"签过"（D-34：「先签后登记」与「先登记后签」是同一件事），
         #: 但来路不同必须读得出来：升 `kind` 的那一格（`kind_following_grade`）
-        #: 在 B 的登记 / 收录路上只认这一条命题自己的台账（`allow_pending=False`），
+        #: 在 B 的登记 / 收录路上不认未认领的 pending（`allow_pending=False`），
         #: 否则新行会在同一笔里变成 theorem 而它连台账行都还没有。
-        "pending": False,
+        #: 2026-11-11（p283）：认领回写了 `statement_id`（且载体稿号与行上一致）之后
+        #: 这一格是 False、`claimed=True` —— 那时它已经是本条命题自己的签。
+        "pending": False, "claimed": False, "carried_manuscript_id": "",
     }
     checks: list[dict[str, Any]] = [
         {"item": "proof_text 非空（有被审的那份证明）", "ok": False, "detail": "还没判到"},
@@ -5000,7 +5041,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
     if not path.is_file():
         pending = _pending_signed(root, text)
         if pending is not None:
-            return _gap_from_pending(out, checks, pending, statement_id=sid)
+            return _gap_from_pending(
+                out, checks, pending, statement_id=sid,
+                manuscript_id=str(row.get("manuscript_id") or ""))
         out["checked"] = True
         checks[1]["detail"] = f"`{out['ledger']}` 不在盘上（一次审校都没有）"
         checks[2]["detail"] = "没有那一行，无从比"
@@ -5023,7 +5066,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
     if not rows:
         pending = _pending_signed(root, text)
         if pending is not None:
-            return _gap_from_pending(out, checks, pending, statement_id=sid)
+            return _gap_from_pending(
+                out, checks, pending, statement_id=sid,
+                manuscript_id=str(row.get("manuscript_id") or ""))
         out["checked"] = True
         checks[1]["detail"] = "台账是空文件"
         checks[2]["detail"] = "同上"
