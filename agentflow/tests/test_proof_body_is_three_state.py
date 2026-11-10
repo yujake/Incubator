@@ -24,9 +24,11 @@
 from __future__ import annotations
 
 import pathlib
+import re
 
 from agentflow import depsection as DS
 from agentflow import exhaustionreport as ER
+from agentflow import manuscriptform as MF
 from agentflow import proofregistry as PR
 from agentflow.agent_b import register_statement as RS
 
@@ -293,6 +295,32 @@ def test_split_sections_shares_the_same_boundary_rule() -> None:
     assert "## 记号与约定" in proof and "## 第一步：f 可积" in proof
     assert set(PR.section_hashes(WITH_LEVEL2_SUBHEADS)) == {
         "## 命题", "## 证明", "## 依赖"}
+
+
+def test_the_three_readers_share_one_section_table() -> None:
+    """② `SECTION_TITLES` 是框架渲染节名的单一来源：三处读的是同一张表。
+
+    钉三件事：
+    1. 名单只有一处（`depsection.SECTION_TITLES`），节序是 命题/证明/依赖/数值结果；
+    2. `manuscriptform` 的形状正则与渲染都从这张表取名字（没有第二份 `## 命题` /
+       `## 证明` 字面量）；
+    3. 同一份样稿在渲染 / 切节 / 形状闸三处得到同一组节名。
+    """
+    names = [title.lstrip("# ").strip() for title in DS.SECTION_TITLES]
+    assert names == ["命题", "证明", "依赖", "数值结果"], names
+    assert MF._DS is DS and PR._DS is DS, "两处引用的不是同一个 depsection 模块"
+    assert MF._PROPOSITION_HEAD_RE.pattern == r"^##\s*" + re.escape(names[0])
+    assert MF._PROOF_HEAD_RE.pattern == r"^##\s*" + re.escape(names[1])
+    rendered = MF.render_proof_manuscript(
+        family=MF.FAMILY_F, title="样稿", statement_id="000001",
+        proposition="命题正文。", proof_text="## 记号与约定\n证明正文。",
+        dependency_section=DS.render_dependency_section([]))
+    for title in DS.SECTION_TITLES[:3]:
+        assert f"\n{title}\n" in rendered, (title, rendered)
+    _head, sections = PR.split_sections(rendered)
+    assert [name for name, _body in sections] == names[:3], sections
+    assert DS.proof_body(rendered).strip(), "渲染出来的证明正文是空串"
+    assert MF.formal_shape_problem(rendered) == ("", "")
 
 
 # ---------------------------------------------------------------- d 反真空

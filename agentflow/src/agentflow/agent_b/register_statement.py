@@ -6398,15 +6398,37 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
 
     @staticmethod
-    def _ingest_diff(out: Mapping, requested: Sequence[str]) -> dict:
-        """`diff` 的单一算点：请求格 vs 实填格（不信任任何一方的自报）。"""
+    def _ingest_derived_satisfied(cells: Mapping) -> set[str]:
+        """被派生证据"满足"的请求格（目前只有 `kind`，2026-11-10 业主裁量 ④）。
+
+        `kind` 是派生格：稿头没有 `- 证据种类：` 时它不会"从稿里写"，但证据重算
+        可能把它升到 theorem / lemma，并在同一格留 `kind_upgraded={from,to,basis}`。
+        这一格记 `outcome="kept"`（没有从稿里写）但对 `diff.requested_not_filled`
+        来说它已经被派生证据满足了 ⇒ 不列进去；`diff` 只留真的没满足的格。
+
+        反真空：把本函数打桩成空集 ⇒ `kind` 会重新出现在 diff 里
+        （`tests/test_t1_ingest_manuscript_specifies_position_and_cells.py` 的 h6b）。
+        """
+        return {str(name) for name, one in dict(cells or {}).items()
+                if isinstance(one, Mapping)
+                and str((one.get("kind_upgraded") or {}).get("to") or "")}
+
+    @classmethod
+    def _ingest_diff(cls, out: Mapping, requested: Sequence[str]) -> dict:
+        """`diff` 的单一算点：请求格 vs 实填格（不信任任何一方的自报）。
+
+        `classmethod` 而不是 `staticmethod`：`_ingest_derived_satisfied` 要按调用方
+        那个类去取（`AgentB` 组合了本 mixin），判据打桩才能生效（h6b 反真空）。
+        """
         cells = dict(out.get("cells") or {})
+        derived_satisfied = cls._ingest_derived_satisfied(cells)
         filled = sorted(name for name, one in cells.items()
                         if isinstance(one, Mapping)
                         and bool(one.get("requested"))
                         and str(one.get("outcome") or "") in ("filled", "unchanged"))
         not_filled = sorted(name for name in requested
-                            if str((cells.get(name) or {}).get("outcome") or "")
+                            if name not in derived_satisfied
+                            and str((cells.get(name) or {}).get("outcome") or "")
                             not in ("filled", "unchanged"))
         stray = sorted(name for name, one in cells.items()
                        if isinstance(one, Mapping)
@@ -6928,11 +6950,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "proof_text",
                     str(evidence.get("refused") or "evidence_recompute_failed"),
                     str(evidence.get("reason") or ""))
-            # ---- 7) `kind` 格的 receipt 反映派生升档（业主裁量 ③） -----------------
+            # ---- 7) `kind` 格的 receipt 反映派生升档（业主裁量 ③ / 2026-11-10 裁量 ④） ---
             #
-            # `outcome` 保持原样（稿头没有 `- 证据种类：` ⇒ 这一格确实没被"从稿里写"，
-            # 仍是 not_applicable）；但派生升档在同一格留 `kind_upgraded={from,to,basis}`，
-            # 免得 `diff.requested_not_filled=["kind"]` 被读成"什么都没发生"。
+            # 稿头没有 `- 证据种类：` ⇒ 这一格没有"从稿里写"：`outcome` 记 `kept`
+            # （不是 not_applicable —— 它确实被派生证据满足了一部分），并带
+            # `kind_upgraded={from,to,basis}`；`_ingest_diff` 会把它从
+            # `requested_not_filled` 里排除（见 `_ingest_derived_satisfied`），diff 只留
+            # 真的没满足的格。已 filled / unchanged 的格保持原 outcome，只补这一格读数。
             _kind_cell = cells.get("kind")
             if isinstance(_kind_cell, Mapping):
                 _up = dict(evidence.get("kind_upgraded") or {})
@@ -6943,14 +6967,23 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                             and not bool(_trace.get("downgraded"))):
                         _up = dict(_trace)
                 if str(_up.get("to") or "") in _EB.KIND_UPGRADE_TARGETS:
-                    cells["kind"] = {
-                        **dict(_kind_cell),
-                        "kind_upgraded": {
-                            "from": str(_up.get("from") or ""),
-                            "to": str(_up.get("to") or ""),
-                            "basis": str(_up.get("basis") or ""),
-                        },
+                    one = dict(_kind_cell)
+                    one["kind_upgraded"] = {
+                        "from": str(_up.get("from") or ""),
+                        "to": str(_up.get("to") or ""),
+                        "basis": str(_up.get("basis") or ""),
                     }
+                    if (bool(one.get("requested"))
+                            and str(one.get("outcome") or "") not in ("filled", "unchanged")):
+                        one["outcome"] = "kept"
+                        one["writable"] = False
+                        one.pop("code", None)
+                        one["reason"] = (
+                            "稿头没有声明更强的档 ⇒ 这一格没有从稿里写；但派生证据把它"
+                            f"升到 {one['kind_upgraded']['to']}"
+                            f"（依据 {one['kind_upgraded']['basis'] or '（未记录）'}）"
+                            "⇒ 回执记 kept + kind_upgraded，不计入 diff.requested_not_filled")
+                    cells["kind"] = one
                     out["cells"] = cells
         out["diff"] = self._ingest_diff(out, requested)
         problem = self._ingest_invariant_problem(out)

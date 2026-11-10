@@ -175,6 +175,9 @@ def split_sections(text: Any) -> tuple[str, list[tuple[str, str]]]:
 
     节边界只认手稿的节（`depsection.SECTION_TITLES`）：`## 证明` 下面的
     `## 记号与约定` 一类同级小标题留在证明正文里，不再另起一节。
+
+    只认框架节名；作者自己的 `##` 小标题属于上一节，不单独出键。将来需要"附录"这类
+    新节，先把节名加进 `SECTION_TITLES`，不要改切节算法。
     """
     lines = str(text or "").replace("\r\n", "\n").split("\n")
     starts = _section_start_indices(lines)

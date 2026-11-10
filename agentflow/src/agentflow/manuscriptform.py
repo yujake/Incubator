@@ -113,8 +113,12 @@ DETAILS: dict[str, str] = {
         "依赖边没有落成（{reason}）⇒ 这一笔整笔回滚：稿也回到写前，不留半截",
 }
 
-_PROPOSITION_HEAD_RE = re.compile(r"^##\s*命题", re.M)
-_PROOF_HEAD_RE = re.compile(r"^##\s*证明", re.M)
+#: 两个节名从 `depsection.SECTION_TITLES` 派生（框架渲染节名的单一来源，
+#: 2026-11-10 业主裁量 ②）：本模块不另写一份 `## 命题` / `## 证明` 字面量。
+_PROPOSITION_NAME = _DS.SECTION_STATEMENT.lstrip("# ").strip()
+_PROOF_NAME = _DS.SECTION_PROOF.lstrip("# ").strip()
+_PROPOSITION_HEAD_RE = re.compile(r"^##\s*" + re.escape(_PROPOSITION_NAME), re.M)
+_PROOF_HEAD_RE = re.compile(r"^##\s*" + re.escape(_PROOF_NAME), re.M)
 
 
 def detail(code: str, **kw: Any) -> str:
@@ -275,11 +279,11 @@ def render_proof_manuscript(
         head.append(f"{LABEL_MARK}{label_text}")
     head.extend([
         "",
-        "## 命题",
+        _DS.SECTION_STATEMENT,
         "",
         str(proposition or "").strip(),
         "",
-        "## 证明",
+        _DS.SECTION_PROOF,
         "",
         str(proof_text or "").strip(),
         "",

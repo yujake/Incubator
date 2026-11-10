@@ -569,7 +569,11 @@ def _is_separator(cells: Sequence[str]) -> bool:
         cell and set(cell) <= set("-: ") and "-" in cell for cell in cells)
 
 
-#: 手稿里"节"的标题闭集（同级标题只有落在这一张表里才算下一节）。
+#: 手稿里"节"的标题闭集 —— 框架渲染节名的单一来源（2026-11-10，业主裁量 ②）。
+#:
+#: `depsection`（切节 / 形状读数）、`manuscriptform`（渲染与形状正则）、
+#: `proofregistry`（分节哈希与"只换 `## 证明`"）三处都读这一张表；将来加节名
+#: （例如"附录"）只改这一处，不改任何切节算法。
 #:
 #: ## 为什么层级规则之外还要这一张表（2026-11-10，真机 DCT 彩排）
 #:
@@ -579,8 +583,6 @@ def _is_separator(cells: Sequence[str]) -> bool:
 #: 同级的已知节名才是下一节，同级的自由小标题算本节内容；更高级的标题（`# `）
 #: 无论叫什么都是新的一节（手稿若用 `# 命题` 一级标题，`# ` 就是边界）。
 #:
-#: 这一张表是解析侧的唯一名单；`manuscriptintake` 与 `proofregistry` 的切节都从
-#: :func:`is_section_heading` / :func:`section_lines` 取同一份口径。
 #: 末位的 `## 数值结果` 与 `exhaustionreport.NUMERIC_RESULT_HEADING` 是同一字面量
 #: （那一侧是渲染、这一侧是解析；两侧互相 import 会成环，所以这里留字面并在此点名）。
 SECTION_TITLES: tuple[str, ...] = (

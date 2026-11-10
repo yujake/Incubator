@@ -756,8 +756,9 @@ def test_h5_replay_anti_vacuum_without_recompute_the_old_theorem_stays(
 
 def test_h6_kind_cell_receipt_reports_the_derived_upgrade(
         tmp_path: pathlib.Path) -> None:
-    """裁量 ③：稿头没有 `- 证据种类：` ⇒ kind 格 outcome 仍 not_applicable，
-    但同一格带 `kind_upgraded={from,to,basis}`（派生升档不是"什么都没发生"）。"""
+    """裁量 ④：稿头没有 `- 证据种类：` ⇒ kind 格 outcome 记 kept（没从稿里写），
+    同一格带 `kind_upgraded={from,to,basis}`，且不再进 `diff.requested_not_filled`
+    （派生证据已经把它满足了；diff 只留真的没满足的格）。"""
     st, b = _ws(tmp_path)
     _signed_row(st)
     _write(st, "reports/f-proof-000001.md",
@@ -767,13 +768,40 @@ def test_h6_kind_cell_receipt_reports_the_derived_upgrade(
         cells=["proof_text", "kind"], mode="apply")
     assert got["ok"] is True, got
     kind_cell = dict(got["cells"]["kind"])
-    assert kind_cell["outcome"] == "not_applicable", kind_cell
+    assert kind_cell["outcome"] == "kept", kind_cell
+    assert kind_cell.get("writable") is False, kind_cell
+    assert "kind_upgraded" in str(kind_cell.get("reason") or ""), kind_cell
     upgraded = dict(kind_cell.get("kind_upgraded") or {})
     assert upgraded.get("from") == "conjecture", kind_cell
     assert upgraded.get("to") == "theorem", kind_cell
     assert "out/vsigns/" in str(upgraded.get("basis") or ""), upgraded
     assert "verifications/000001.jsonl#" in str(upgraded.get("basis") or ""), upgraded
+    assert "kind" not in got["diff"]["requested_not_filled"], got["diff"]
+
+
+def test_h6b_removing_the_derived_satisfied_rule_puts_kind_back_in_diff(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """裁量 ④ 的反真空：把"派生格满足"这一格摘掉 ⇒ h6 第一条必红（kind 回到 diff）。"""
+    def _run(base: pathlib.Path) -> dict:
+        st, b = _ws(base)
+        _signed_row(st)
+        _write(st, "reports/f-proof-000001.md",
+               _manuscript().replace("- 证据种类：conjecture\n", ""))
+        return b.ingest_manuscript(
+            manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
+            cells=["proof_text", "kind"], mode="apply")
+
+    baseline = _run(tmp_path / "a")
+    assert baseline["ok"] is True, baseline
+    assert "kind" not in baseline["diff"]["requested_not_filled"], baseline["diff"]
+    monkeypatch.setattr(AgentB, "_ingest_derived_satisfied",
+                        staticmethod(lambda cells: set()))
+    got = _run(tmp_path / "b")
     assert "kind" in got["diff"]["requested_not_filled"], got["diff"]
+    # 差别只在那一条排除规则：格读数仍是 kept + kind_upgraded（不是被改回了异常）。
+    cell = dict(got["cells"]["kind"])
+    assert cell["outcome"] == "kept", cell
+    assert (cell.get("kind_upgraded") or {}).get("to") == "theorem", cell
 
 
 # ===================================================== i numeric_evidence（apply 的第 1 位）
