@@ -1246,8 +1246,10 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
 
     ## 两段认法（第二段 2026-11-04 补：业主批的那一条）
 
-    ① 按名字（`manuscript_relpaths`）：`reports/f-proof-<命题号>.md` 优先，
-       其次 `reports/f-proof-plan-<计划号>.md`；命中 ⇒ `matched_by="path"`。
+    ① 按名字：调用方点名的那一份（`reports/f-proof-<稿号>.md` —— 稿号由 F 自己发，
+       与命题号、计划号无关）排在最前（`manuscript_paths`）；其次
+       `manuscript_relpaths` 的兼容候选（按命题号 / 计划号拼出的旧名）；
+       命中 ⇒ `matched_by="path"`。
     ② 按内容（`proof_text` 非空、且第 ① 段一个都没命中时）：扫
        `reports/f-proof-plan-*.md`，把每一份的 `## 证明` 那一节与这一笔的 `proof_text`
        逐行归一后比 —— 相同才认，命中 ⇒ `matched_by="proof_body"`。
@@ -1255,6 +1257,8 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
     ## 为什么必须补第 ② 段（真机读数，ramsey-4-4-87）
     F 的稿在拿到命题号之前叫 `f-proof-plan-<计划号>.md`，而"登记成功之后改名成
     `f-proof-<命题号>.md`"只发生在 F 自己的 outlet 登记成功那一笔（`publish_manuscript`）。
+    （2026-11-10 后：稿按稿号命名 —— F 的稿从写到收录都叫 `f-proof-<稿号>.md`，
+    下面这一段按命题号改名是那一代的读数。）
     87 里六份稿全叫 plan 名、按号命名的 0 份（outlet 因"没有覆盖正文的 V 签"整笔拒），
     于是 B 的兜底读盘永远只查 `f-proof-<号>.md` ⇒ 读到 0 份 ⇒ 依赖面 0 行。第 ② 段补的
     就是"盘上那份稿还在、只是叫计划名"这一档。
@@ -1529,7 +1533,8 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
     if not count:
         lines.append("")
         lines.append("（这一趟没有可携带的证明手稿：不是省略，是确实没有 —— 盘上没有"
-                     "任何一条按命号命名的 `reports/f-proof-<命题号>.md`，也没有一份"
+                     "任何一条按稿号命名的 `reports/f-proof-<稿号>.md`（稿号由 F 自己发，"
+                     "与命题号、计划号无关），也没有一份"
                      "已签的 `reports/e-proof-<实验号>.md`。）")
     if str(note or "").strip():
         lines.append("")

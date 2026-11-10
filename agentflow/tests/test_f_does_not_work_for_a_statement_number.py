@@ -442,6 +442,174 @@ def test_e2_the_name_literal_criterion_is_not_a_rubber_stamp() -> None:
         "旧字面 `f-proof-<stmt` 没被判红 ⇒ 这条判据是空的")
 
 
+# ================================================================== e3 全仓字面白名单
+
+#: 全仓白名单：两族旧字面只许留在这几个文件里，逐条写「为什么留」与「该文件几条」。
+#:
+#: 口径（业主 2026-11-10 裁定「F 的稿自己维护一套号源」）：源码里的说明文字按稿号写；
+#: 旧字面只许留在四档：`历史`（讲某次事故 / 旧行为，就地已注明「2026-11-10 后：稿
+#: 按稿号命名」）· `文档`（文档层，待到文档批统一）· `待裁`（本 lane 碰不了或要重冻
+#: 的那几行，理由写在条目里）。`判据` 与 `冻结` 两档不在扫描面上，见下面那一段。
+#:
+#: 为什么按「文件 + 条数」而不是「文件 + 行号」：本仓库并行开发，行号几十分钟就漂
+#: （`AGENTS.md` 自己记过这一条）。条数照样抓得住「把任一处改回旧字面」——那些路径
+#: 要么不在表里（0 → 1），要么条数会变；行号只在判据红时作为读数打出来。
+_REPO_LITERAL_WHITELIST: dict[str, tuple[int, str, str]] = {
+    # ---- 文档层（不是本批的处理面：本批只动源码 docstring / 注释）
+    "agentflow/docs/AUDIT-VSIGN-CHANNELS-AND-PROMPTS-2026-11-04.md": (
+        1, "历史", "2026-11-04 的审计记录，写的是当时的口径"),
+    "agentflow/docs/ROLE-SPECS.md": (
+        2, "文档",
+        "F 写集那一段（:279）与 F-7（:1150，自带「2026-10-27 口径」标注）；待到文档批统一"),
+    # ---- 源码：历史记录（保留原文，就地已注明现行口径）
+    "agentflow/src/agentflow/agent_b/register_statement.py": (
+        1, "历史",
+        "2026-10-26「三段传递路径」的读数；已就地在下一行注明 2026-11-10 后稿按稿号命名"),
+    "agentflow/src/agentflow/agent_f/core.py": (
+        1, "历史", "点名「被停掉的旧口径」，同一句已写明收方现在按稿号读盘"),
+    "agentflow/src/agentflow/agent_f/manuscript.py": (
+        1, "历史", "publish_manuscript 的旧改名口径；紧接的下一句就是现行稿号口径"),
+    "agentflow/src/agentflow/agent_prompts.py": (
+        4, "历史",
+        "2026-11 的变更日志四行（:3145 / :3810 / :3874 / :3877；业主明示保留，不当漏网）"),
+    "agentflow/src/agentflow/depsection.py": (
+        1, "历史",
+        "ramsey-4-4-87 真机读数；同一段已就地在上面注明 2026-11-10 后稿按稿号命名"),
+    # ---- 源码：本 lane 碰不了 / 要重冻的那几行（见报告「要业主再裁的」）
+    "agentflow/src/agentflow/agent_v/core.py": (
+        1, "待裁",
+        "另一条 lane 在飞（agent_v/core.py 有未提交改动），本 lane 不碰；这句拒信里"
+        "的旧名还没按 2026-11-10 口径改"),
+    "agentflow/src/agentflow/tools/verify_tools.py": (
+        1, "待裁",
+        "冻结工具面：这一格是 verify.verify_proof 的参数说明，改它要重冻 "
+        "tests/golden/tool_surface_snapshot.json 与 tests/fixtures/tool_declaration_baseline.json"
+        "（FC-27 eval-criteria）⇒ 本批停手"),
+    "agentflow/src/agentflow/proofregistry.py": (
+        1, "待裁",
+        "另一条 lane 正在改这个文件（legacy 读兼容批，工作树里有它的未提交改动），本 lane "
+        "不碰；模块 docstring 那一处旧名等它收口时一并按稿号改"),
+}
+
+#: 扫描面要排除的目录：`agentflow/tests/` 是判据本体与负控夹具的家 —— e / e2 就在那里
+#: 拿旧字面当负控针（`_STALE_NAME_LITERALS` / `F_OLD`），把测试面纳入扫描等于让这条
+#: 判据判它自己。测试文件里有没有新的旧口径描述，由各自那一份判据与 review 管。
+_SCAN_EXCLUDE_PREFIXES: tuple[str, ...] = ("agentflow/tests/",)
+
+
+def _git_grep_fixed(literal: str) -> list[tuple[str, int, str]]:
+    """`git grep -n -F` 全仓扫一个字面 ⇒ `[(仓库根相对路径, 行号, 整行)]`。
+
+    三态纪律：退出码 1 = 查过了、没有（空表）；其它非 0 = 没查成（抛，
+    不许折成"干净"）。不 skip：这不是可选步骤。
+    """
+    import subprocess
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    top = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace")
+    assert top.returncode == 0, (
+        f"`git rev-parse --show-toplevel` 没查成（退出码 {top.returncode}）："
+        f"{top.stderr.strip()[:300]} —— 这条判据不知道仓库根在哪，本次没有真正检查")
+    proc = subprocess.run(
+        ["git", "grep", "-n", "-F", literal],
+        cwd=top.stdout.strip(), capture_output=True, text=True,
+        encoding="utf-8", errors="replace")
+    if proc.returncode == 1:
+        return []
+    assert proc.returncode == 0, (
+        f"`git grep` 没查成（退出码 {proc.returncode}）：{proc.stderr.strip()[:300]}")
+    out: list[tuple[str, int, str]] = []
+    for line in proc.stdout.splitlines():
+        path, _, rest = line.partition(":")
+        num, _, text = rest.partition(":")
+        if not num.isdigit():
+            continue
+        if path.startswith(_SCAN_EXCLUDE_PREFIXES):
+            continue
+        out.append((path, int(num), text))
+    return out
+
+
+def _repo_stale_hits() -> dict[tuple[str, int], str]:
+    """扫描面上两族旧字面 ⇒ `{(路径, 行号): 整行}`（同一行命中两族只记一次）。"""
+    hits: dict[tuple[str, int], str] = {}
+    for literal in _STALE_NAME_LITERALS:
+        for path, num, text in _git_grep_fixed(literal):
+            hits.setdefault((path, num), text)
+    return hits
+
+
+def _hits_by_path(hits: dict[tuple[str, int], str]) -> dict[str, list[int]]:
+    """`{(路径, 行号): …}` ⇒ `{路径: [行号…]}`（升序；只用于读数与逐文件比条数）。"""
+    out: dict[str, list[int]] = {}
+    for path, num in hits:
+        out.setdefault(path, []).append(num)
+    return {path: sorted(nums) for path, nums in out.items()}
+
+
+def _whitelist_problems(hits: dict[tuple[str, int], str]) -> list[str]:
+    """观测到的命中分布与白名单逐文件比 ⇒ 差异描述（空表 = 只剩该留的）。
+
+    三个方向都报：白名单外的文件 / 条数对不上的文件 / 白名单里已经没有命中的文件。
+    比条数（而不是比行号）是因为行号在并行开发下会漂；而条数仍然抓得住
+    「新加一处旧字面」——那一定让某个文件的条数变。
+    """
+    seen = _hits_by_path(hits)
+    problems: list[str] = []
+    for path in sorted(set(seen) | set(_REPO_LITERAL_WHITELIST)):
+        want = _REPO_LITERAL_WHITELIST.get(path)
+        got = seen.get(path, [])
+        if want is None:
+            problems.append(f"{path}: 白名单之外（命中行 {got}）")
+        elif not got:
+            problems.append(
+                f"{path}: 白名单里有，盘上一处命中都没有了（旧字面被改掉，或者登记过期）")
+        elif len(got) != want[0]:
+            problems.append(
+                f"{path}: 白名单写 {want[0]} 条，盘上有 {len(got)} 条（命中行 {got}）"
+                f"；档：{want[1]}；理由：{want[2]}")
+    return problems
+
+
+def test_e3_the_old_literal_only_survives_where_it_is_logged() -> None:
+    """e3：扫描面（全仓去掉 `agentflow/tests/`）上两族旧字面 ⇒ 白名单之外不许有。
+
+    为什么不扫 `tests/`：那一面是判据本体与负控夹具的家（`_STALE_NAME_LITERALS`、
+    `F_OLD` 都拿旧字面当针），把它纳入等于让判据判自己；测试文件里的旧口径描述由
+    各自那一份判据与 review 管。
+
+    反真空三条（都打在同一条判据函数上）：① 白名单之外多一个文件 ⇒ 红；② 白名单
+    内的文件多一处 ⇒ 红（条数变了）；③ 白名单里那一处被改掉 ⇒ 也红（惰性白名单
+    同样要报，否则这张账可以越挂越多而没人看）。
+    """
+    hits = _repo_stale_hits()
+    assert hits, (
+        "扫描面上一处旧字面都没扫到 ⇒ 要么 `git grep` 没查成、要么判据的对象没了 —— "
+        "这不是干净（三态：没查成 ≠ 查过了没问题）")
+    assert len(_REPO_LITERAL_WHITELIST) >= 8 and sum(
+        n for n, _kind, _why in _REPO_LITERAL_WHITELIST.values()) >= 10, (
+        "白名单短得不像话（文件或条数）⇒ 先查是不是扫描口径被改窄了（改窄等于放宽这一条）")
+    problems = _whitelist_problems(hits)
+    assert problems == [], (
+        "旧字面分布与白名单对不上：\n  " + "\n  ".join(problems)
+        + "\n\n逐条重看它是哪一档；档与理由都对不上就改口径，对得上才照现值更新白名单。")
+
+    injected = dict(hits)
+    injected[("agentflow/src/agentflow/agent_f/nowhere.py", 1)] = "落成一份按旧号命名的稿"
+    assert _whitelist_problems(injected), (
+        "白名单之外新增一个文件没被判红 ⇒ 这条判据是空的")
+    bumped = dict(hits)
+    bumped[("agentflow/src/agentflow/agent_f/core.py", 424242)] = "又一处旧名"
+    assert _whitelist_problems(bumped), (
+        "白名单内的文件多出一处旧字面没被判红 ⇒ 条数那一半没在核")
+    dead = dict(hits)
+    dead.pop(sorted(hits)[0])
+    assert _whitelist_problems(dead), (
+        "白名单里的死条目没被报出来 ⇒ 这张账只会长、不会缩")
+
+
 # ================================================================== d 端到端五段
 
 def test_d_the_whole_chain_reads_five_ways(tmp_path: pathlib.Path) -> None:

@@ -487,8 +487,10 @@ class _WriteReport:
         于是"带没带"在盘上是可判的，不靠记性。
 
         ## 携带谁
-        `statements` 里 `origin=own_result` 且 `status=active`、并且盘上真有一份按它的命题号
-        命名的 `reports/f-proof-<命题号>.md` 的那些行。散文里的声称不算：手稿文件才是要带的
+        `statements` 里 `origin=own_result` 且 `status=active`、并且盘上真有一份按它的稿号
+        命名的 `reports/f-proof-<稿号>.md`（稿号由 F 自己发，与命题号、计划号无关；
+        行上的 `manuscript_id` 与稿内登记条目两处都读，按命题号拼名只当兜底）的那些行。
+        散文里的声称不算：手稿文件才是要带的
         那一件东西。读不到台账 / 一份都没有时如实说（不是省略 —— 见渲染器的空表那一句）。
 
         ## 2026-11-04：E 的穷举证明手稿也走同一张单（业主：「E 的穷举论证和 V 签也是委托入库」）

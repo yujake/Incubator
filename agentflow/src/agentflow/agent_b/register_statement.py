@@ -422,8 +422,9 @@ def _rewrite_note(reading: Mapping) -> str:
     state = str(got.get("state") or "")
     call = ("`V.verify_proof`（`statement_id` 必填；要审第几条证明就带 "
             "`proof_no`；`proof_manuscript` 必须给 —— 在册也要给稿，V 只从稿的 "
-            "`## 证明` 读正文、签块也落回稿，如 `reports/f-proof-<命题号>.md` / "
-            "B 的改写稿 `reports/b-proof-<命题号>.md`）。")
+            "`## 证明` 读正文、签块也落回稿，如 F 的 `reports/f-proof-<稿号>.md` / "
+            "B 的改写稿 `reports/b-proof-<命题号>.md`）；稿号由 F 自己发，与命题号、"
+            "计划号无关。")
     where = ("读数是读侧现算的（`verifications.review_standing`：拿现行正文的 sha 与"
              "台账里那一签比）；台账那一行不删、旧签仍然可查，只是不再算数。")
     if state == "signed":
@@ -3172,6 +3173,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #      这是主路：携带者 D、收方 B；
         #   ③ `disk`：前两处都没有（历史调用 / 直调），按约定路径去盘上找 F 的稿
         #      （两种名都认：`reports/f-proof-<命题号>.md` 与 `reports/f-proof-plan-<plan>.md`）。
+        #      （2026-11-10 后：稿按稿号命名 —— F 的新稿叫 `f-proof-<稿号>.md`，这两种旧名
+        #      只读兼容；这一段的按命题号改名是那一代的读数。）
         # 三处都没有时按下面那一条（有引用就整笔拒收）处置。
         # 读数写清稿是从哪来的（`manuscript_source=param|carried_by_D|disk|none`）。
         manuscript_source = _DS.SOURCE_NONE
@@ -3918,8 +3921,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse(
                 "proof_manuscript_required",
                 ("这一笔要写证明正文 / 依赖面，却没有带 `proof_manuscript` ⇒ 整笔不写。"
-                 "正文必须由一份稿承载：先落一份 `reports/f-proof-<命题号>.md`"
-                 "（B 的改写稿是 `reports/b-proof-<命题号>.md`），三节 "
+                 "正文必须由一份稿承载：先落一份 `reports/f-proof-<稿号>.md`（稿号由 F "
+                 "自己发，与命题号、计划号无关；B 的改写稿是 "
+                 "`reports/b-proof-<命题号>.md`），三节 "
                  "`## 命题` / `## 证明` / `## 依赖` 写全，再把这一份稿原文传进 "
                  "`proof_manuscript`。签行里记过 `manuscript` 也不能替代这一格："
                  "这一笔带了哪份稿，必须是本笔当场说得出的。"))
@@ -5470,7 +5474,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse(
                 self.F_CALLER_REFUSED,
                 ("F 交来的命题不能直接走 `B.register_statement`：请把它登记成手稿条目"
-                 "（`reports/f-proof-<命题号>.md`，新命题会过 F 秘书的形态闸），"
+                 "（`reports/f-proof-<稿号>.md` —— 稿号由 F 自己发，与命题号、计划号"
+                 "无关；新命题会过 F 秘书的形态闸），"
                  "B 在 V 签之后按正文 sha 收录。这条派活路径不再绕开手稿登记"))
         rel = _pointer_manuscript_rel(proof_manuscript)
         if _caller_is_d():
