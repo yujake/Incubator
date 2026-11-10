@@ -1165,6 +1165,14 @@ _ROLES_V = ("V",)
             # 为什么不复用 `secretary_judge` / `sign_issuance`：那两格只装最后一趟，读不出
             # 这一趟判了几次、从第几次开始不行 —— 而那是这一批口径的正题。
             "'review_passes',"
+            # 2026-11-11（本批）：稿号口径新增的身份读数 —— 「这一份稿是不是这一条命题的稿」
+            # （`matched_by` / `fallback` / `manuscript_id` / `row_manuscript_id` /
+            # `row_checked` / `found` / `problem` / `why` / `statement_id` / `checked`）。
+            # 三条返回路径键集合相同：初值在 `agent_v/core.py` 的 `out` 里就有
+            # （`fail_closed_manuscript_identity`，早退给一套"没读稿"的空值），
+            # 有稿那一支整格覆盖它 ⇒ 声明它可以走 `test_declared_keys_are_a_subset…`
+            # 那条探针（那里走的是"没查成"那一支）。
+            "'manuscript_identity',"
             "'ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`"
             "（`有毛病` 时 `defect_step` 指到第几步）。"
             # 2026-11-05 走查 D13/D14：`kind` / `reason` 两个词表从实现的唯一真身

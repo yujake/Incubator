@@ -889,6 +889,37 @@ def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
     }
 
 
+def fail_closed_manuscript_identity(*, statement_id: str = "",
+                                    manuscript_id: str = "") -> dict[str, Any]:
+    """`verify_proof` 初值里 `manuscript_identity` 那一格的 fail-closed 形状（键无条件存在）。
+
+    ## 为什么要有它（2026-11-11，与 `fail_closed_sign_issuance` 同一条纪律）
+
+    这一格是 2026-11-10 稿号口径新增的读数（「这一份稿是不是这一条命题的稿」），
+    但它改前只在"载体在手"那一支里赋值 ⇒ 早退路径（`bad_statement_id` /
+    `bad_proof_no` / 手稿闸 / 未在册那几支 / 没给稿）的返回值里根本没有这一格。
+    于是工具声明（`tools/verify_tools.py` 的 `returns=`）只能二选一：要么不写它
+    （模型不知道这一格存在 —— `test_verify_proof_declares_every_key_of_its_success_branch`
+    与 `test_c_tool_entry_reports_keys_its_declaration_does_not_promise` 会红），
+    要么写了它而"声明 ⊆ 实跑"在早退那一支假红。根因是键集合按分支不同，
+    不是声明落后。
+
+    修法与 `sign_issuance` 那一格逐字同形：键在初值里就存在，早退给一套"没读稿"的
+    空值（`checked=False` / 空串 / `found=None`）；任何一条真路径仍会整格覆盖它
+    （`out["manuscript_identity"] = dict(_ms.get("identity") or {})`），所以这里只影响早退。
+
+    形状与 :meth:`AgentV._registered_manuscript_body` 里那个初值逐键相同 —— 两处都走
+    本函数，免得同一个格子在两个地方各写一遍（`manuscript_id` 只有那个方法知道，
+    由参数递进来）。
+    """
+    return {
+        "checked": False, "statement_id": str(statement_id or ""),
+        "manuscript_id": str(manuscript_id or ""),
+        "row_manuscript_id": "", "matched_by": "", "fallback": False,
+        "row_checked": False, "found": None, "problem": "", "why": "",
+    }
+
+
 class AgentV:
     """验证者。三个 handler 与 `specs/v.py` 的 `handler_name` 逐字同名。
 
@@ -1258,6 +1289,12 @@ class AgentV:
             # 业主 2026-10-30：这一趟自己连判了几次、每一转的判定档与连续次数。
             # 同理无条件存在（一次都没判成时是空数组 —— "没判过"与"判了 0 转"不靠少给键分）。
             "review_passes": [],
+            #: 2026-11-11：「这一份稿是不是这一条命题的稿」的读数（稿号口径）。
+            #: 与 `review_write` / `sign_issuance` 同一条纪律：键在初值里就存在 ——
+            #: 早退路径没有身份读数，给的是 fail-closed 那一套空值，不是"少给键"。
+            #: 形状见 :func:`fail_closed_manuscript_identity`。
+            "manuscript_identity": fail_closed_manuscript_identity(
+                statement_id=str(statement_id or "").strip()),
         }
         # ---- 2026-11-02 业主定稿：一次送审 = 同一次调用内连判三轮，跨调用绝不累计 ----
         #
@@ -2562,11 +2599,8 @@ class AgentV:
         # 的 sha 相符在调用方 `manuscript_sign_standing` 那一格）、载体合法（上面两道）、
         # 「不许借光」（`vsigns` 读签那一侧按命题号认凭据，别条命题的签不算）。
         _sid = str(statement_id or "").strip()
-        identity: dict[str, Any] = {
-            "checked": False, "statement_id": _sid, "manuscript_id": _mid,
-            "row_manuscript_id": "", "matched_by": "", "fallback": False,
-            "row_checked": False, "found": None, "problem": "", "why": "",
-        }
+        identity: dict[str, Any] = fail_closed_manuscript_identity(
+            statement_id=_sid, manuscript_id=_mid)
         if _sid:
             _owner = self._statement_manuscript_reading(_sid)
             identity.update(row_checked=bool(_owner.get("checked")),
