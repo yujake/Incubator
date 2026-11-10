@@ -4,9 +4,13 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、274,029 行**，**76 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **283 个 `.py`、274,056 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 体量：不抬基线，改搬（撤回 p268 那一抬）**：`specs/b.py` 824 → 773 行 ——
+> policy 里「收录与识稿」九条逐字搬进同包的 `specs/b_ingest_policy.py`（新文件 78 行，同样登记在
+> `.noai-paths`），`specs/b.py` 在原位置用 `*INGEST_POLICY` 摊回，渲染出来的提示词一个字没变。
+> 文件数 +1（282 → 283）、`>800 行` 的 76 → 75（回到原值）；总行数见上面那句当次读数。
 > **2026-11-10 自产概念在 B 的动作面有入口（p268）**：273,939 → **274,029**（净 +90：
 > `agent_b/register_statement.py` +48（`self_authored` 参数与概念 origin 三档处置）、
 > `specs/b.py` +24（参数面一格 + policy 一条教法；800 → 824 ⇒ **首次越过 800 行**）、
@@ -563,7 +567,7 @@
 | `cli.py` | 5939 | 27 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
 | `claimanatomy.py` | 1891 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
 | `agent_b/core.py` | 1376 | B 的 9 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员（含 core 自身共 1376 行）；`agent_b/_support.py` 是模块级 helper 与常量，273 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 / 显式落稿 / 按位置与格收录 | 回验是"每条关系都要过"，代码密度高 |
-| `verify.py` | 2101 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
+| `verify.py` | 2126 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
 | `tools/text_tools.py` | 282 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
 
 ---

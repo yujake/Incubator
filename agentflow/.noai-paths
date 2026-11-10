@@ -131,6 +131,7 @@ src/agentflow/interactions.py    [category: auth-audit] 跨智能体交互的冻
 src/agentflow/specs/__init__.py    [category: auth-audit] `specs/` 包的收表入口：`builtin_specs` / `action_table` / `edges` / `write_sets` / `non_summonable` —— capabilities 的四张表与 agentspec 的注册表都从这里取 ⇒ 改它等于改「权限面怎么被读出来」
 src/agentflow/specs/a.py    [category: auth-audit] 角色 A 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/b.py    [category: auth-audit] 角色 B 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
+src/agentflow/specs/b_ingest_policy.py  [category: auth-audit] B 的 policy 里「收录与识稿」那一段的模块级常量（`INGEST_POLICY`：E 手稿两族 / 收录先查 / D 只递指针 / 三态 / 手稿名五档 / 签的两格读数 / 签块第 9 格 / 两根轴判不了 / 短证明照样判）—— 2026-11-10 从 `specs/b.py` 逐字搬出，只为把那份声明文件拉回 800 行线内（业主口径：不许抬体量软基线）；它承载的是 B 的声明正文，模型按它行动 ⇒ 改它等于改口径
 src/agentflow/specs/c.py    [category: auth-audit] 角色 C 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/d.py    [category: auth-audit] 角色 D 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」
 src/agentflow/specs/e.py    [category: auth-audit] 角色 E 的声明真身（M3 起）：`ACTIONS`（动作表）与 `SPEC`（职责与门面 / 官能轻重 / 边 / 写集 / 实现类）—— capabilities 那四张表全部由它派生 ⇒ 改这里等于改权限面本身，而判据守的是「两层一致」，不是「这一改该不该由人批」。2026-10-22 划线：形式化那一路归 L（本文件的形式化动作与代码不删、仍是函数级复用的来源），「形式化交给谁」那一层文案归 L 承担
