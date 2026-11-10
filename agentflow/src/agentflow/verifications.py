@@ -1747,6 +1747,14 @@ def list_verifications(root: str | Path, *, statement_id: str = "",
     把已认领的 pending 行并进来（口径见 :func:`_claimed_pending_rows`）：
     未认领的行仍不属于任何命题，不会被算到任何号头上。
 
+    ## 返回行混着两处：看 id 前缀（2026-11-10 业主确认的口径）
+
+    这一口返回的行里，已认领的 pending 行会一起出现，它们的 `verification_id` 以
+    `u-` 开头；顶层在册台账（`verifications/<号>.jsonl`）的行是 `v-` 开头。
+    这是要的口径 ——「一条命题有谁审过」只读这一处，读的人不必再自己去 pending
+    目录里翻。只要顶层在册行、不要 pending 行的人，请自己按 `u-` 前缀过滤
+    （或直接读 :func:`verification_ledger_path`）；不要把混着 `u-` 行当成 bug。
+
     ## `limit=None` 与 `limit=0` 必须分开（V1，`draft/44` J-14）
 
     实现此前写的是 `out[-limit:]`，而 `-0 == 0` ⇒ `limit=0` 恰好等于全量。
