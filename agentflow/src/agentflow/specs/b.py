@@ -170,6 +170,17 @@ ACTIONS: tuple[ActionSpec, ...] = (
                            "**并且**交一份证明手稿（`proof_manuscript`；在册命题也给稿）；"
                            "交的是 E 的普通数值手稿（`reports/e-num-<实验号>.md`）时例外："
                            "出处就是那条实验行，不用 doc_id / line_range，把那份稿交给 `proof_manuscript` 即可"},
+                # 2026-11-10（自产概念在动作面没有入口）：业主亲跑概念彩排撞到的真洞 ——
+                # `kind="concept"` + `origin="own_result"` 被硬拒，而本动作的参数面没有
+                # `self_authored` 可传，于是「从零起的工作区自己定义的新概念」登记不了。
+                # 底层能力一直在（`Secretary.write_concept_row` / `conceptrows`），
+                # 这里只是把那一格接到动作参数上：默认 False = 不声明（照旧拒）。
+                "self_authored": {**_B, "description":
+                                  "只在 `kind=\"concept\"` + `origin=\"own_result\"` 时有意义："
+                                  "声明这是我们自己定义的新概念（不是从文献里摘的术语）。"
+                                  "默认不传 = 不声明 ⇒ 整笔受控拒 `concept_origin_refused`"
+                                  "（零新行）；显式 true 才放行。**与 source_lit_id 同时给是"
+                                  "自相矛盾**（定义来自文献就不是我们造的）⇒ 同样受控拒"},
                 "page_range": {**_OBJ, "description":
                                "origin='external_lit' 必需：出处页码（start，或 label —— "
                                "如「全文未分页」；只给空的 start/end 等于没给）"},
@@ -510,6 +521,19 @@ SPEC = AgentSpec(
             "**概念没有等级轴**（等级现算函数 `derive_grade` 对 `kind=\"concept\"` 短路成 "
             "`not_applicable`）：不要给它报等级、也不要说它是哪一级定理；这一格要的是「良定义证明有没有 V 签」，不是「它在等级链上排第几」。没有签就先把稿送去签、"
             "签回来再收录，别把正文直接塞进 `proof_text`（写入期会清空并留读数）。",
+            # 2026-11-10（业主亲跑概念彩排撞到的真洞）：概念行的两道 origin 口径此前只教了
+            # 一半 —— 教了"文献术语要 external_lit"，没教"自己定义的新概念要显式声明"。
+            # 于是 `kind="concept"` + `origin="own_result"` 在动作面被硬拒，而题面里没有
+            # 任何一句说该传什么。这一条把三档一次教全（与 `conceptrows.concept_origin_problem`
+            # 逐条同口径：external_lit 要出处 / own_result 要显式声明 / 两者同时给是矛盾）。
+            "**自己定义的新概念要显式声明 `self_authored=True`**：概念行的 `origin` 只有两档 —— "
+            "文献里来的术语写 `external_lit`（必须给 `source_lit_id` + `page_range`）；"
+            "我们自己从零定义的新概念（例如证明 DCT 时自己立的「一致可积」）写 `own_result`，"
+            "**并且必须在登记时显式传 `self_authored=True`**。它不是默认值：不传 ⇒ 受控拒 "
+            "`concept_origin_refused`（零新行），拒信会写「要声明就传 `self_authored=True`」；"
+            "`self_authored=True` 又给 `source_lit_id` 是自相矛盾（定义来自文献就不是我们造的）"
+            "⇒ 同样受控拒。别把文献术语标成 `own_result`：真机 mp3 那 1142 条带出处的术语就是"
+            "这么被读成「我们自己的结果」的。",
             # 2026-11-05（D1 严格版 1912d3ed，审计② 第 ⑯ 条）：稿所有权此前只拦不教。
             "**这一笔的稿必须是「这一行自己的」**：本行还没在册（还没有号）⇒ 没有「自己的稿」，"
             "拿别人号的稿来读正文 / 签 / 依赖面都不行；本行在册 ⇒ 稿头 `- 命题号：stmt:<号>`"

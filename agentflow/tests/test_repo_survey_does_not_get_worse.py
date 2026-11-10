@@ -102,7 +102,13 @@ BASELINE: dict[str, int] = {
     # 搬到 `conceptrows.py`（概念行的唯一读写口），`propositionkey` 只回引两个 public
     # 名字。搬完 823 → 786 行，这一格仍是 75。同一笔里函数那一格也是拆（95 不动）——
     # 逐条见下面那一格上方的点名。判据语义一个字没动：只许降、不许再涨。
-    "src_files_gt800_lines": 75,
+    # 2026-11-10（p268，自产概念在 B 的动作面有入口）：75 → 76。一格，能点名：
+    # `src/agentflow/specs/b.py` 800 → 824（FC-27 声明真身：`register_statement` 的参数面
+    # 加 `self_authored` 一格，policy 补一条「自己定义的新概念要显式声明 self_authored=True」
+    # 的教法）。这是「既有文件被这一批的必需声明/必需教法推过线」，不是把无关模块写胖；
+    # 没有别的文件新过线（逐条对 `tools/repo_survey.py --json` 的 `big_files.files` 看过）。
+    # 抬这一格 = 明确接受「B 的声明文件在 800+ 行」，仍需 2 名 reviewer 逐行走查（FC-27）。
+    "src_files_gt800_lines": 76,
     # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
     # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
     # 既有函数被写胖，也没有一条掉回线下）：
@@ -233,7 +239,11 @@ BASELINE: dict[str, int] = {
 #: 函数那一格仍是 95（四条越过 200 的函数各拆一块出来，见 `BASELINE` 里那一格上方的
 #: 逐条点名）。`BASELINE_OBSERVED` 因此仍是 2026-11-04 —— 这两个数是那一天的读数，
 #: 今天再量还是它。
-BASELINE_OBSERVED = "2026-11-04"
+#: 2026-11-10：只抬文件那一格 75 → 76（`specs/b.py` 800 → 824：FC-27 声明真身多了
+#: `register_statement.self_authored` 与它在 policy 里的必需教法）。这一格长大是有意的、
+#: 且点得出是哪一个文件；函数那一格仍是 95、dup 仍是 5（今天现量过）。判据语义一个字
+#: 没动：抬完仍然只许降、不许再涨。
+BASELINE_OBSERVED = "2026-11-10"
 
 
 def _load_survey():

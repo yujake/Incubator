@@ -84,6 +84,7 @@ from ._support import S
 from ._support import _is_manuscript_rel, _norm_manuscript_rel
 from .ingest_manuscript import _IngestManuscript
 from .land_manuscript import _LandManuscript
+from .. import conceptrows as _CR   # 概念 origin 口径的唯一判据（自产声明 / 自相矛盾）
 from .. import depsection as _DS
 from .. import evidencebits as _EB
 from .. import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
@@ -2904,6 +2905,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         label: str = "",
         statement_text: str = "",
         origin: str = "external_lit",
+        #: 「这是我们自己定义的新概念」（2026-11-10）：只在 `kind="concept"` +
+        #: `origin="own_result"` 时有意义。默认 `False` = 不声明（照旧受控拒）；
+        #: 显式 `True` 才把这条自产概念放进台账（秘书那一层落 `self_authored`）。
+        #: 与 `source_lit_id` 同时给 ⇒ 自相矛盾，受控拒（判据在 `conceptrows`）。
+        self_authored: bool = False,
         page_range: dict | None = None,
         evidence_kind: str = "cross_check",
         quote_verified: bool | None = None,
@@ -3025,13 +3031,42 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         _concept_ms: dict[str, Any] = {}
         if kind_now == "concept":
             if origin == "own_result":
-                return _refuse(
-                    "concept_origin_refused",
-                    "概念行的 origin 不许是 own_result：文献里来的术语是 "
-                    "`external_lit`（给 `source_lit_id` + `page_range`）—— "
-                    "真机 mp3 有 1142 条带文献出处的术语被错标成了 own_result，"
-                    "于是报告把它们读成“我们自己的结果”。确实是我们自己定义的新概念"
-                    "走秘书载荷的 `self_authored` 那一档（那是显式声明，不是默认值）")
+                # ---- 2026-11-10（自产概念在动作面没有入口）：`self_authored` ----------
+                #
+                # 真洞（业主亲跑概念彩排撞到）：`kind="concept"` + `origin="own_result"`
+                # 在这一格被硬拒，而本动作的参数面没有 `self_authored` 可传 ——
+                # 底层能力一直在（`Secretary.write_concept_row(…, origin="own_result",
+                # self_authored=True)` 与 `conceptrows.concept_origin_problem` 都支持），
+                # 只是没接到 B 的动作参数上。于是"从零起的工作区自己定义的新概念"
+                # （例如证明 DCT 时自己立的「一致可积」）在动作面没有入口，只有文献概念
+                # （external_lit + source_lit_id + page_range）能登记。
+                #
+                # 三档处置（判据本体不在这里另写一份）：
+                #   ① `self_authored=True` ⇒ 放行，并把 True 透传给秘书（payload 那一格）；
+                #   ② 不给（默认 False = 不声明）⇒ 照旧 `concept_origin_refused`，
+                #      拒信补一句"要声明就传 `self_authored=True`"；
+                #   ③ `self_authored=True` 却给了 `source_lit_id` ⇒ 自相矛盾，受控拒
+                #      （来自文献就不是我们造的）—— 文案直接取 `conceptrows` 那一份，
+                #      "动作面读得到秘书层已有的校验"，不抄第二份。
+                if not bool(self_authored):
+                    return _refuse(
+                        "concept_origin_refused",
+                        "概念行的 origin 不许是 own_result：文献里来的术语是 "
+                        "`external_lit`（给 `source_lit_id` + `page_range`）—— "
+                        "真机 mp3 有 1142 条带文献出处的术语被错标成了 own_result，"
+                        "于是报告把它们读成“我们自己的结果”。确实是我们自己定义的新概念"
+                        "走秘书载荷的 `self_authored` 那一档（那是显式声明，不是默认值）；"
+                        "要声明就传 `self_authored=True`（本动作的参数面从 2026-11-10 起"
+                        "收这一格，见 `specs/b.py`）")
+                _contradiction = _CR.concept_origin_problem(
+                    origin="own_result",
+                    source_lit_id=str(source_lit_id or "").strip(),
+                    self_authored=True)
+                if _contradiction:
+                    return _refuse(
+                        "concept_origin_refused",
+                        _contradiction + "。整笔不写：要登记文献里来的术语就用 "
+                        "`origin=\"external_lit\"`（并给 `source_lit_id` + `page_range`）")
             # ---- 2026-11-10（审计 §6-①）：概念 + 手稿 ⇒ 写盘前整笔受控拒 ----------
             #
             # 改前读数（`temp/_fix_concept_probe_before.json` 的 `1_concept_manuscript`）：
@@ -4428,6 +4463,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            manuscript_landed=_manuscript_landed)
         payload = {
             "origin": origin, "kind": kind_now, "label": str(label or ""),
+            # 「自己定义的新概念」这一声明要透传给秘书：秘书那一层按同一个
+            # `conceptrows.concept_origin_problem` 复核（动作面放行 ⇒ 这里也必须看得到，
+            # 否则到了秘书层又会被当成"没声明"拒掉）。非概念行秘书不读它。
+            "self_authored": bool(self_authored),
             "statement_text": str(statement_text or ""), "statement_full": full,
             "proof_text": str(proof_text or ""), "source_lit_id": lit_id,
             "page_range": dict(page_norm), "quote_verified": quote_verified,
@@ -5379,6 +5418,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            label: str = "",
                            statement_text: str = "",
                            origin: str = "",
+                           self_authored: bool = False,
                            page_range: dict | None = None,
                            evidence_kind: str = "",
                            quote_verified: bool | None = None,
@@ -5406,6 +5446,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         D 把稿里的内容抄进参数，等于让"登记的那一份"与"稿里的那一份"分成两个来源，
         而没有任何东西保证它们逐字相同；这一笔的承重证据是 E/F 的成果，那就只能由
         收方从成果里读。拒信逐字点名「只递指针」，并说清改法。
+
+        ## `self_authored`（2026-11-10）：自产概念在动作面的入口
+
+        只在 `kind="concept"` + `origin="own_result"` 时有意义：默认 `False` = 不声明，
+        照旧 `concept_origin_refused`（零新行）；显式 `True` ⇒ 放行，并把 True 透传给
+        秘书（`Secretary.write_concept_row` 的 `self_authored`）。`self_authored=True`
+        又给 `source_lit_id` ⇒ 自相矛盾，受控拒（判据本体是
+        `conceptrows.concept_origin_problem`，动作面读同一份，不抄第二遍）。
         """
         caller = _caller_role()
         if caller == "F":
@@ -5452,7 +5500,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             statement_full=statement_full, source_lit_id=source_lit_id,
             proof_text=proof_text, proofs=proofs, proof_manuscript=proof_manuscript,
             kind=str(kind or "theorem"), label=label, statement_text=statement_text,
-            origin=str(origin or "external_lit"),
+            origin=str(origin or "external_lit"), self_authored=bool(self_authored),
             page_range=page_range, evidence_kind=str(evidence_kind or "cross_check"),
             quote_verified=quote_verified, quote_reason=quote_reason,
             quote_mode=quote_mode, quote_span=quote_span,

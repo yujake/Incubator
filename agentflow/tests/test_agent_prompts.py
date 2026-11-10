@@ -2394,7 +2394,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     → 65b7ff4627cc779541606cc68e89c7b15e7aa4a6ba45e55aa93424428583207b。
 # 十一格不是手抄：`temp/_p267_recompute.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p267"
+# 2026-11-10（自产概念在 B 的动作面有入口）：一格换值 —— B。上游两笔：
+# ① `agent_b/register_statement.py` 的 `register_statement` / `_register_statement_impl`
+#    新增参数 `self_authored`（默认 False = 不声明）：`kind="concept"` + `origin="own_result"`
+#    时显式 True 才放行并把 True 透传给秘书，不传仍 `concept_origin_refused`，
+#    True 又给 `source_lit_id` ⇒ 受控拒；② `specs/b.py` 的参数面加这一格 + policy 补
+#    「自己定义的新概念要显式声明 `self_authored=True`」（题面此前只教了文献那一档）。
+#    参数说明与动作 summary 不进 `tools_lines`（`B.register_statement` 没有同名工具）⇒
+#    其余十格逐字未动（只差版本行）。逐格旧值 → 新值：
+#   B 65b7ff4627cc779541606cc68e89c7b15e7aa4a6ba45e55aa93424428583207b
+#     → 767b69942cd90c0a3a121afbd1a18bab32c6b3da813917d97985a2fd3c310618。
+# 十一格不是手抄：`temp/_p268_recompute.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。
+_FROZEN_PROMPT_VERSION = "p268"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2640,7 +2652,7 @@ _FROZEN_PROMPT_VERSION = "p267"
 #: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
-    "B": "65b7ff4627cc779541606cc68e89c7b15e7aa4a6ba45e55aa93424428583207b",
+    "B": "767b69942cd90c0a3a121afbd1a18bab32c6b3da813917d97985a2fd3c310618",
     "C": "987c39476674f2a479ca7f5e26e6be0e05629c042639ca7bbc2acc78a39112c4",
     "D": "25b054a3cc08dfc4fd2cb087d91065fd61a9ac66848da6c16a716ae48cb249e8",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",

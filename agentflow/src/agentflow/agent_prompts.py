@@ -3751,7 +3751,25 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p267）；`tests/test_prompt_stability.py` 的
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p266 同值）；
 #: 两份 golden 按现值重冻；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
-PROMPT_VERSION = "p267"
+#: p267 → p268（2026-11-10，自产概念在 B 的动作面有入口）：
+#: 一格换值 —— B。上游两笔：
+#:   ① `agent_b/register_statement.py`：`register_statement` / `_register_statement_impl`
+#:      新增参数 `self_authored`（默认 False = 不声明）；`kind="concept"` + `origin="own_result"`
+#:      时显式 True ⇒ 放行并把 True 透传给秘书（`Secretary.write_concept_row`）；不传 ⇒ 仍
+#:      `concept_origin_refused`（拒信补「要声明就传 `self_authored=True`」）；True 又给
+#:      `source_lit_id` ⇒ 受控拒（判据取 `conceptrows.concept_origin_problem`，动作面读同一份）。
+#:   ② `specs/b.py`：`register_statement` 的参数面加 `self_authored`（布尔 + 说明），
+#:      并修正策一句「自己定义的新概念要显式声明 `self_authored=True`」—— 题面此前只教了
+#:      文献那一档（`external_lit` + `source_lit_id`），没教自产那一档。
+#: 参数说明与动作 summary 不进 `tools_lines`（`B.register_statement` 没有同名工具）⇒
+#: 十一格里只有 B 换值；那一格的变化来自 policy 新增的这一条教法。
+#: 十一格不是手抄：`temp/_p268_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p268）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p267 同值）；
+#: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
+#: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+PROMPT_VERSION = "p268"
 
 
 

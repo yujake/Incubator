@@ -1062,6 +1062,16 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "签回来用 `own.ingest_manuscript(apply, cells=[\"proof_text\"])` 收录；"
              "概念没有等级轴（`derive_grade` 短路成 `not_applicable`，不改）。"
              "十一格里只有 B 换值（65b7ff46…）。facts 键集仍 15 格。"},
+    # p267 → p268（2026-11-10，自产概念在 B 的动作面有入口）：
+    # facts 键集一格没动（还是 15 格）—— 本批只改 `specs/b.py` 的 policy 一段
+    # （自己定义的新概念要显式声明 `self_authored=True`）与动作参数面（不进 system）。
+    {"version": "p268", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p268（2026-11-10，自产概念有入口）：上游 —— `specs/b.py` 的 policy"
+             "新增「自己定义的新概念要显式声明 `self_authored=True`」（origin=own_result "
+             "必须显式声明、不传仍受控拒、与 source_lit_id 同时给是自相矛盾）；"
+             "`AgentB.register_statement` 的参数面同时收这一格（参数说明不进 system）。"
+             "十一格里只有 B 换值（767b6994…）。facts 键集仍 15 格。"},
 
 )
 

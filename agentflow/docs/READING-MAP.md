@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、273,939 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **282 个 `.py`、274,029 行**，**76 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 自产概念在 B 的动作面有入口（p268）**：273,939 → **274,029**（净 +90：
+> `agent_b/register_statement.py` +48（`self_authored` 参数与概念 origin 三档处置）、
+> `specs/b.py` +24（参数面一格 + policy 一条教法；800 → 824 ⇒ **首次越过 800 行**）、
+> `agent_prompts.py` +18（p268 版本那一段说明）。文件数 282 不变、`>800 行` 的 75 → **76**
+> （多出来的就是 `specs/b.py`）；`agent_loop.py` 14,189 与全仓最大 `secretary.py` 14,205 都不变）。
 > **2026-11-10 概念良定义证明有落点（业主裁定 甲）**：273,454 → **273,913**（净 +459：
 > `conceptrows.py` 的良定义证明三态读数与构造口、`secretary.py` 的签判据与五元位委托、
 > `agent_b/register_statement.py` 的 concept 证据重算与未签闸、`verify.py` 的审计改口径、
