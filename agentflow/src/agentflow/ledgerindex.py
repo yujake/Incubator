@@ -678,6 +678,12 @@ class LedgerIndex:
             chars += size
             nodes_out.append(reading)
 
+        # 边只连交回的那批节点（外部根例外：它们没有节点、本身就是边的读数）。
+        # 预算/深度截到边界上的那些目标不进 `nodes`，只由 `frontier` 交接。
+        delivered = {r["stmt_id"] for r in nodes_out}
+        edges_out = [e for e in edges_out
+                     if (not e["to_is_statement"]) or e["to_id"] in delivered]
+
         known = _delivered_get(self.root, sid, max_depth, direction)
         added = [r["stmt_id"] for r in nodes_out if r["stmt_id"] not in known]
         already = [{"stmt_id": r["stmt_id"], "kind": r["kind"],
@@ -688,8 +694,11 @@ class LedgerIndex:
             # 边也只留与新增节点相连的那些（到旧节点的接缝保留，免得"接不上"）。
             added_set = set(added)
             nodes_out = [r for r in nodes_out if r["stmt_id"] in added_set]
+            # 边跟着"新交付的节点"走：外部根没有节点，它挂在哪条边上就由那条边的
+            # 展开方带出来；展开方没新增 ⇒ 这条外部读数也不该再塞一遍。
             edges_out = [e for e in edges_out
-                         if e["to"] in added_set or e["from"] in added_set]
+                         if e["to_id"] in added_set
+                         or e["from"].split(":")[-1] in added_set]
         _delivered_add(self.root, sid, max_depth, direction, set(visited))
 
         frontier = self._frontier(visited, expanded, relations, direction, max_depth)

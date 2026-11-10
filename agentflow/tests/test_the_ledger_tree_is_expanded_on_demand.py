@@ -354,6 +354,12 @@ def _node_field_problem(tree: dict[str, Any]) -> list[str]:
         for key in ("direction", "distance", "via", "via_text"):
             if key not in rel:
                 problems.append(f"{node.get('stmt_id')}：relation 缺 {key}")
+    # 边只许连交回的那批节点（外部根没有节点、例外）：指向树外的边会让 C 以为
+    # 那个节点在上下文里，而它其实没交 —— 那种"半条边"比少给一条更坏。
+    node_ids = {str(n.get("stmt_id") or "") for n in nodes}
+    for edge in tree.get("edges") or []:
+        if edge.get("to_is_statement") and str(edge.get("to_id") or "") not in node_ids:
+            problems.append(f"边 {edge.get('from')}→{edge.get('to')} 指向树外节点")
     payload = json.dumps(tree, ensure_ascii=False)
     if PROOF_MARKER in payload:
         problems.append("证明正文进了树（哨兵出现在返回值里）")
@@ -507,11 +513,17 @@ def test_g_second_expand_of_the_same_node_returns_only_the_increment(
     first_ids = {n["stmt_id"] for n in first.data["nodes"]}
     assert first_ids == {"000001", "000002", "000003"}, first_ids
     assert first.data["already_known"] == [], first.data["already_known"]
+    # 树里的边都连在交回的那批节点上（外部根例外）：不许出现"指向树外"的半条边。
+    assert first.data["edges"], "树里一条边都没有 ⇒ 判据失去对象"
+    for edge in first.data["edges"]:
+        if edge["to_is_statement"]:
+            assert edge["to_id"] in first_ids, (edge, first_ids)
 
     second = reg.call("ledger.expand", role="C", node="stmt:000002", depth=1)
     assert second.ok, second.error
     assert second.data["added_nodes"] == [], second.data["added_nodes"]
     assert second.data["nodes"] == [], second.data["nodes"]
+    assert second.data["edges"] == [], second.data["edges"]
     known = {one["stmt_id"] for one in second.data["already_known"]}
     assert known == first_ids, known
     # 不重复同一批字段：already_known 只有身份四格，没有正文 / 依赖面。

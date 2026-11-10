@@ -4,10 +4,10 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **286 个 `.py`、276,020 行**，**78 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **286 个 `.py`、276,029 行**，**78 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
-> **2026-11-10 C 的关系推断：局部树的按需展开（p273，A + B 批）**：274,431 → **276,020**
+> **2026-11-10 C 的关系推断：局部树的按需展开（p273，A + B 批）**：274,431 → **276,029**
 > （本批新增 `ledgerindex.py`（只读索引 + 局部树，约 900 行）与 `tools/ledger_tools.py`
 > （`ledger.resolve` / `ledger.expand` 两件），`specs/c.py` 的关系推断教法由"手算多跳"
 > 改成"选根 → 按层展开 → 对 frontier 拼接"，`agent_prompts.py` 记 p273 的版本账；
