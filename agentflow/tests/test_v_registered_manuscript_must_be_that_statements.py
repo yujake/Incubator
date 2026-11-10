@@ -36,6 +36,7 @@ B 收录那一笔把稿号写进 `statements` 行的 `manuscript_id`（
 | c | 老盘行（没有 `manuscript_id`）+ 稿名里的号 == 命题号 | 仍认（`identity.fallback=True`、`matched_by="statement_id"`、`why` 写退回理由） |
 | d | 反真空：把"认稿号"摘掉（只留号名 == statement_id） | a 的同一现场必须红 —— a 的绿来自这一格 |
 | e | 端到端「改了证明再重签」：F 落稿（稿号 000123）→ V 未在册签 → B 按稿号收录（行上 `manuscript_id=000123`）→ F 同稿号改写 `## 证明` → V 在册重签 | 新签落下来：签块 sha == 新正文、`sign_reading.state="signed"`、稿名与稿号一个字节没变 |
+| f | ③ 的三处之外顺手核出来的第四处：被引命题的稿按它自己的稿号命名（`f-proof-000789.md`），行上 `manuscript_id=000789`；反真空把那一格摘掉 | 有稿号 ⇒ 引用闸读得到（`manuscript_missing=False`、`grade=pre_theorem`、签落下）；摘掉 ⇒ 按命题号拼名找不到、引用闸挡签（这一格的绿来自"先读行上稿号"） |
 
 零模型钱：V 的审阅缝与秘书缝全是预置读数，不联网。
 """
@@ -51,6 +52,7 @@ from agentflow import conductor as CND
 from agentflow import depsection as DS
 from agentflow import manuscriptform as MF
 from agentflow import proofregistry as PR
+from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
@@ -364,3 +366,117 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
     assert pathlib.Path(st.root, rel).is_file()
     assert [p.name for p in (pathlib.Path(st.root) / "reports").glob("f-proof-*.md")] == [
         pathlib.Path(rel).name]
+
+# ====================================================================== f 被引命题的稿
+CITED = "000002"
+CITED_MID = "000789"
+CITED_FULL = "引理乙：每个有限群都有极大子群。"
+CITED_PROOF = "1. 取阶最大的真子群即为极大子群。"
+
+
+def _clean_with_a_citation() -> str:
+    """V 的审阅缝：成立 + 对 stmt:000002 给一条 consistent 的引用核实。"""
+    return json.dumps({
+        "verdict": "成立", "defect_step": None, "why": "", "findings": [],
+        "citation_checks": [{"stmt_id": CITED, "verdict": "consistent",
+                             "quote_verbatim": False,
+                             "note": "由引理乙那一步，用法一致"}]}, ensure_ascii=False)
+
+
+def _cited_manuscript_with_a_real_sign(st: Store, *, mid: str) -> str:
+    """被引命题的稿：按它自己的稿号命名，盖一枚真签（pending 台账 + 九格块）。
+
+    与 `tests/test_d_to_b_carried_road.py::_cited_manuscript_with_a_real_sign` 同一
+    口径（那一份按命题号命名；这一份按稿号命名 —— 正是本判据要量的差别）。
+    """
+    rel = f"reports/f-proof-{mid}.md"
+    text = ("# F 的证明手稿（被引命题）\n\n"
+            f"- 命题号：stmt:{CITED}\n\n"
+            "## 命题\n\n" + CITED_FULL + "\n\n"
+            "## 证明\n\n" + CITED_PROOF + "\n\n"
+            + DS.render_dependency_section([]) + "\n")
+    _write(st, rel, text)
+    row = VR.record_pending_sign(
+        st.root, proof_text=CITED_PROOF, verdict={"verdict": "成立", "findings": []},
+        verifier="agent-V", object_path=rel,
+        secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
+                         "reason": "夹具：clean"})
+    key = str(row.get("object_sha256") or row.get("proof_sha256") or "")
+    anchor = (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl"
+              f"#{row.get('verification_id')}")
+    wrote = VS.write_manuscript_sign(
+        st.root, rel, proof_sha=VR.text_sha(CITED_PROOF),
+        streak=int(VR.SIGN_STREAK_NEED), need=int(VR.SIGN_STREAK_NEED),
+        verdict="成立", signer="V", at=S.now_iso(), ledger=anchor,
+        statement_id=CITED, signed=True)
+    assert wrote.get("state") == "written", wrote
+    return rel
+
+
+def _target_manuscript_citing(*, proof: str = "") -> str:
+    proof = proof or ("1. 由引理乙直接得到（依据：stmt:000002）。\n"
+                      "2. 于是结论成立。")
+    deps = ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+            "|---|---|---|---|\n"
+            f"| 引理乙 | stmt:{CITED} | 1 | 1 |\n")
+    return ("# F 的证明手稿：定理甲\n\n"
+            f"- 命题号：stmt:{SID}\n\n"
+            "## 命题\n\n" + FULL + "\n\n"
+            "## 证明\n\n" + proof + "\n\n## 依赖\n\n" + deps)
+
+
+class _CitationSeam:
+    """只答"成立 + 一条 consistent 引用核实"的 V 审阅缝。"""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+
+    def ask(self, prompt: str = "", **_kw):
+        from types import SimpleNamespace
+
+        self.prompts.append(prompt)
+        return SimpleNamespace(text=_clean_with_a_citation(), problem="")
+
+
+def test_f_a_cited_manuscript_is_found_by_the_cited_rows_manuscript_id(
+        tmp_path: pathlib.Path) -> None:
+    """被引命题的稿按它自己的稿号命名时，引用闸仍读得到它（V 才签得下去）。
+
+    同一条结构洞的第四处（③ 的三处之外，顺手核出来的）：`_cited_manuscripts` 改前
+    只按被引命题号拼名。稿号与命题号是两个号段 ⇒ 被引命题的稿叫
+    `reports/f-proof-<它的稿号>.md`，按命题号找不到 ⇒ 引用闸判 `inadmissible`
+    ⇒ 正文没问题也签不下去。现在先读被引行上记的 `manuscript_id`。
+
+    两向都在这一条里：行上有稿号 ⇒ 找到（签落下来）；同一个现场把那一格摘掉
+    （老盘形态）⇒ 仍按命题号拼名，找不到 ⇒ 引用闸挡签。后者是这一格的反真空：
+    它证明前者的绿来自"先读行上稿号"。
+    """
+    for label, with_mid in (("pos", True), ("vacuum", False)):
+        st = _ws(tmp_path / label)
+        _put_row(st, sid=CITED, manuscript_id=(CITED_MID if with_mid else ""),
+                 proof="")
+        _put_row(st)
+        _cited_manuscript_with_a_real_sign(st, mid=CITED_MID)
+        _write(st, REL, _target_manuscript_citing())
+        seam = _CitationSeam()
+        v = _agent(st, seam)  # type: ignore[arg-type]
+        with _submitted_by_f(f"t-v-00000{6 if with_mid else 7}"):
+            got = v.verify_proof(SID, proof_manuscript=REL)
+        cited = dict((got.get("citations") or [{}])[0])
+        if with_mid:
+            assert got.get("checked") is True, got
+            assert cited.get("manuscript_missing") is False, cited
+            assert cited.get("grade") == "pre_theorem", cited
+            assert cited.get("admissible") is True, cited
+            assert str(got.get("kind") or "") != "bad_manuscript_name", got
+            text = (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
+            assert VS.manuscript_sign_reading(text, manuscript_path=REL)["signed"] is True
+        else:
+            assert cited.get("manuscript_missing") is True, cited
+            assert cited.get("admissible") is False, cited
+            # 审阅照跑完（checked=True），但引用闸挡下这一签：issue/issued 都是假，
+            # 稿上也没有块 —— 这才是"这一格在挡签"的读数（不是"没查成"）。
+            assert dict(got.get("sign_issuance") or {}).get("issue") is False, got
+            assert dict(got.get("sign_issuance") or {}).get("issued") is False, got
+            text = (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
+            assert VS.manuscript_sign_reading(text, manuscript_path=REL)["signed"] is False

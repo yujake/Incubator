@@ -523,13 +523,25 @@ def _manuscript_digest(text: str) -> str:
     return body[:limit].rstrip() + f"……（以下截断，全文共 {len(body)} 字）"
 
 
-def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
-                       ) -> dict[str, dict[str, Any]]:
+def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
+                       *, store: Any = None) -> dict[str, dict[str, Any]]:
     """被引命题的手稿（V 只读手稿之后，引用核实的正文与可引资格都从这里来）。
 
     每条被引 `stmt:<号>` 按两族约定命名在盘上找：`reports/f-proof-<号>.md` 先、
     `reports/b-proof-<号>.md` 后（F 的原稿 / B 的改写稿；谁在盘上用谁）。
     找不到 ⇒ `found=False`（读数里如实写"盘上没有这一条命题的手稿"），不退回台账。
+
+    ## 2026-11-10（业主裁定：稿号与命题号是两个号段）
+
+    改前只按「被引命题号」拼名。而稿名里的号是稿号（F 自己的号段 / B 改写稿的号），
+    被引命题的稿叫 `reports/f-proof-<它的稿号>.md` ⇒ 按命题号拼名读成"盘上没有这一条
+    的手稿"，引用闸据此判 `inadmissible`，把这一签挡掉（真机形态：引一条已收录的 F
+    定理就签不下去）。现在先读被引命题那一行上记的 `manuscript_id`（一个号一格，
+    不读别的），按它拼名排在最前；行上没有这一格（老盘）⇒ 仍按命题号那两条旧名找。
+    读数里 `row_manuscript_id` 写明这一格读到什么（空串 = 退回按命题号拼名）。
+
+    `store` 只用来读被引行的 `manuscript_id` 这一格；不给 ⇒ 与改前逐字一致
+    （只按命题号 / 族拼名）。
 
     `signed` = :func:`vsigns.manuscript_sign_standing` 对这份稿现在这一份正文
     判出的 `signed`：可引门槛 `pre_theorem` 的口径就是"有 V 签"，所以这一格同时回答
@@ -537,6 +549,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
     """
     from .. import depsection as _DS
     from .. import evidencebits as _EB
+    from .. import statementledger as _SL
     from .. import vsigns as _VS
 
     wanted: list[str] = []
@@ -548,8 +561,28 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
     for sid in wanted:
         tried: list[str] = []
         hit: tuple[str, str] | None = None
+        #: 被引命题行上记的稿号（读不到 ⇒ 空串，退回按命题号拼名）。
+        row_mid = ""
+        if store is not None:
+            try:
+                got = _SL.by_id(store, stmt_id=sid)
+            except Exception:  # noqa: BLE001 —— 读不成按"没有这一格"退回（下面读数照给）
+                got = {"checked": False}
+            if got.get("checked") and got.get("found"):
+                row_mid = str((dict(got.get("row") or {})).get("manuscript_id") or "").strip()
         # 2026-11-09（T2 收编）：拼名只走 `manuscriptfamily.relpath`（设计 3.2 第 11 处）。
-        for rel in (_MFAM.relpath("f-proof", sid), _MFAM.relpath("b-proof", sid)):
+        # 2026-11-10：行上稿号的 f/b 两族排在最前（稿号只说"哪一份"，不说"哪一族"）。
+        cands: list[str] = []
+        if row_mid:
+            for _family in ("f-proof", "b-proof"):
+                _rel = _MFAM.relpath(_family, row_mid)
+                if _rel and _rel not in cands:
+                    cands.append(_rel)
+        for _family in ("f-proof", "b-proof"):
+            _rel = _MFAM.relpath(_family, sid)
+            if _rel and _rel not in cands:
+                cands.append(_rel)
+        for rel in cands:
             tried.append(rel)
             try:
                 text = (Path(root) / rel).read_text(encoding="utf-8")
@@ -562,6 +595,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
                 "found": False, "manuscript": "", "statement_full": "",
                 "statement_digest": "", "signed": False, "grade": "",
                 "evidence_kind": "", "tried": tried,
+                "row_manuscript_id": row_mid,
                 "why": ("盘上没有这一条命题的手稿（找过 "
                         + " / ".join(f"`{one}`" for one in tried) + "）"),
             }
@@ -583,6 +617,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]]
             "grade": ("pre_theorem" if signed else ""),
             "evidence_kind": (_EB.kind_from_grade("pre_theorem") if signed else ""),
             "proof_body_state": str(proof_reading.get("state") or ""),
+            "row_manuscript_id": row_mid,
             "why": str(block.get("why") or ""), "tried": tried,
         }
     return out
@@ -1568,7 +1603,7 @@ class AgentV:
             signed_row = _ledger_row_for_sha(self.workspace_root, sid, _PR.proof_sha(text))
             signed_id = str(signed_row.get("verification_id") or "")
             _deps = _DS.parse_dependency_section(manuscript_raw)
-            _cited = _cited_manuscripts(self.workspace_root, _deps.get("rows") or [])
+            _cited = _cited_manuscripts(self.workspace_root, _deps.get("rows") or [], store=self.store)
             citations, citations_problem = _citation_material(
                 rel=manuscript_rel, deps=_deps, cited=_cited, proof_no=no)
             for item in citations:
@@ -1719,7 +1754,7 @@ class AgentV:
         # 因为"第几次读"而变。每一转各自去读一遍盘只会多三次 IO，还会让三转的审阅对象
         # 有可能不同 —— 那正好把"同一份证明的连续三次判断"悄悄变成"三份不同东西的判断"。
         _deps = _DS.parse_dependency_section(manuscript_raw)
-        _cited = _cited_manuscripts(self.workspace_root, _deps.get("rows") or [])
+        _cited = _cited_manuscripts(self.workspace_root, _deps.get("rows") or [], store=self.store)
         citations, citations_problem = _citation_material(
             rel=manuscript_rel, deps=_deps, cited=_cited, proof_no=no)
         for item in citations:
@@ -2784,7 +2819,8 @@ class AgentV:
         #: （只有内联正文）时这一格不核。
         _deps = _DS.parse_dependency_section(raw_manuscript) if raw_manuscript else {}
         _cited = _cited_manuscripts(
-            self.workspace_root, (_deps.get("rows") or [])) if _deps else {}
+            self.workspace_root, (_deps.get("rows") or []),
+            store=self.store) if _deps else {}
         dependency_audit = self._dependency_audit(raw_manuscript, _cited)
         sha = _PR.proof_sha(body)
         if raw_manuscript:
