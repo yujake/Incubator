@@ -771,10 +771,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     "experiments.search_bound": "台账字段（experiments 表的 search_bound 列），不是工具",
     # 2026-11-04（p235 收口）：今晚三处新写的说明面点名了台账 / 读数里的字段名，不是工具 ——
     # 三条都是「表.列」或「行.键」形态，模型照着念读数不会拿到 `unknown_action`。
-    # `statements.derived_from`：`schema.py` 的 statements 表那一列（C 的污染面说明用它做对照）；
     # `observations.e_signature`：experiments 行的 observations 里那一格（E 的结构标记，不是签）；
     # `v_signature.sha256`：对应表那一行 v_signature 里的 sha256 键（G 的 `doc.mapping_cells` 读数）。
-    "statements.derived_from": "台账字段（statements 表的 derived_from 列），不是工具",
+    # 2026-11-10（p273）：`statements.derived_from` 那一条退场 —— 它能被豁免是因为旧 C 题面的
+    # 污染面说明拿它做对照，而 p273 把那一段换成了 `ledger.resolve` / `ledger.expand`
+    # （局部树的依赖面由代码侧给，不再教 C 去比 `derived_from`）。豁免表腐烂会红，所以删掉。
     "observations.e_signature": "台账字段（experiments 行的 observations 里那一格：结构标记），不是工具",
     "v_signature.sha256": "对应表那一行的 v_signature 里的 sha256 键，不是工具",
     # 2026-11-01（审计 171 D-08 的修法）：D 的跨趟记忆落点。它与 `research.set_status` 同型 ——
@@ -2441,7 +2442,25 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     → 6996deb9a3cd5a64ca96e4c2e563b49116fa65acf41536f42c46182592ef401c。
 # 十一格不是手抄：`temp/_p271_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p271"
+# 2026-11-10 晚（业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号。停掉错误的口径。」）：
+# 四格换值 —— M / F / V / B（三个号各管一件事：稿号是签的单位、计划号管去留、命题号 B 收录
+# 时现取；稿名只按稿号、收录不改名、旧约定名只读兼容可签）。其余七格逐字未动（只差版本行）。
+# 逐格旧值 → 新值：
+#   B 7705b3b4… → bff2b0ec09bda00105237caaac176a9c05e261fec25d983a55da2146698e11b1。
+#   F e66809ec… → 0a2de44fe28529c48c7c73c21ea555f87456bf1e7e9b79e0e7a7b45e25d3ce31。
+#   M 6996deb9… → 4d85c06c1f3dd2d4b625ab29fc7c426bba8b614a88d4912ef4eccf816addff94。
+#   V cc875eaa… → 12872e74dc49673b71d7d1eac497507e4cfb34d903fca34e6402b1b73160cdda。
+# 十一格不是手抄：`temp/_p272_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。
+# 2026-11-10 晚（`draft/181` 的 A + B 批 + 题面并入）：一格换值 —— C。上游是
+# `specs/c.py` 的 policy 把"污染面手算多跳（`table.list(table="dependencies", …)`）"
+# 换成"`ledger.resolve` 选根 → `ledger.expand(node=…, depth=…)`（层数由你决定、必填）
+# → 对 `frontier` 拼接"，并把污染面写成一种查询模式（不是工具）。其余十格逐字未动
+# （只差版本行）。逐格旧值 → 新值：
+#   C 987c39476674f2a4… → de99ae26130ec76a7ada77f230a6e7e7e1f0687b2822e5427191f261ebe7a560。
+# 十一格不是手抄：`temp/_p273_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。
+_FROZEN_PROMPT_VERSION = "p273"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2687,16 +2706,16 @@ _FROZEN_PROMPT_VERSION = "p271"
 #: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
-    "B": "7705b3b4baf55b06ec488ce2205b73b682a4918e5cfa333978f09a1ab0eb4297",
-    "C": "987c39476674f2a479ca7f5e26e6be0e05629c042639ca7bbc2acc78a39112c4",
+    "B": "bff2b0ec09bda00105237caaac176a9c05e261fec25d983a55da2146698e11b1",
+    "C": "de99ae26130ec76a7ada77f230a6e7e7e1f0687b2822e5427191f261ebe7a560",
     "D": "a45d95a863ed2cf586c7dc813590137bba02fddf0b460e826851ec3a8b3ec272",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",
-    "F": "e66809ec1f6488e063a3a9942c4030db8b569cf305531f1aa64f3c54ec24fdd7",
+    "F": "0a2de44fe28529c48c7c73c21ea555f87456bf1e7e9b79e0e7a7b45e25d3ce31",
     "G": "e851e09f881160357fc567cd31c8a72fc8dd8205d4e968ca5519da6c6fc31634",
     "H": "18f91c2ed07ee4642e4fc7ea5fe7138b70d623b289bcac8aa844cda1f60b146a",
     "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",
-    "M": "6996deb9a3cd5a64ca96e4c2e563b49116fa65acf41536f42c46182592ef401c",
-    "V": "cc875eaad0c7bfa2ae425729d0a774ac867afdc33e4d940b32d362bd78afad88",
+    "M": "4d85c06c1f3dd2d4b625ab29fc7c426bba8b614a88d4912ef4eccf816addff94",
+    "V": "12872e74dc49673b71d7d1eac497507e4cfb34d903fca34e6402b1b73160cdda",
 }
 
 

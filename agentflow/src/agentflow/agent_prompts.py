@@ -3826,7 +3826,47 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 判据：`tests/test_registration_is_the_hard_sequence.py`（三条 + 三条反真空 +
 #: 「不传 statement_id 也能送审」的三条正面读数与它的反真空 +
 #: 「业主两次驳回的那两种写法不许回来」+ 它的反真空）。
-PROMPT_VERSION = "p271"
+#: p271 → p272（2026-11-10 晚，业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号。
+#: 停掉错误的口径。」）：
+#: 三个号各管一件事 —— 稿号（F 自己发，`data/counters.json` 的 `manuscript` 号段；
+#: 签的单位，同一份稿改稿仍是同一个稿号、另一份证明用 `-p<N>`）/ 计划号（继续 / 放弃 /
+#: 更改的单位；计划不拥有稿，一个计划期间可产出若干份独立编号的稿）/ 命题号（B 收录时现取）。
+#: 上游六笔（全是教法 + 编号实现；V 的入口闸 / B 的收录闸 / closing 的判定一个字没改）：
+#:   ① `agentflow/manuscriptids.py` 新增 `next_manuscript_id(root)`：`counters.manuscript`
+#:      + 1、在 `reports/f-proof-<号>.md` 上核占用（已存在 ⇒ 推进，绝不覆盖）、
+#:      同一进程内串行、六位用尽受控抛 `ManuscriptIdError`；
+#:   ② `AgentF.manuscript_path` 只按 F 的稿号命名（命题号 / 计划号 / 子目标号三条回退删除）；
+#:   ③ `publish_manuscript` 停用改名，`promote_manuscript` 改按稿号转正；
+#:   ④ `manuscriptfamily.sign_carrier` 撤掉 `f-proof-plan-*` 的排除（老盘只读兼容可签；
+#:      `CODE_PLAN_NOT_SIGN` 常量保留供老读数解释）；
+#:   ⑤ `B.register_statement` 收录 F 的稿时现取命题号、行上记 `manuscript_id` + `proof_no`、
+#:      不改稿名，认签仍按正文 sha；
+#:   ⑥ 题面四处（M / F / V / B）与 `agent_skills` 的「研究攻坚链」按三层号改写，
+#:      不写任何按钟 / 催办条件。
+#: 判据：`tests/test_f_manuscript_ids_are_its_own_source.py`（分配器 + a–d 四条反真空）。
+#: p272 → p273（2026-11-10 晚，`draft/181` 的 A + B 批 + 题面并入本批）：
+#: 一格换值 —— C。上游是 `specs/c.py` 的 policy 那一段（业主逐字：「污染面查询是指一个
+#: 命题被验证为错误后，通过被引面查询所有依赖其上的命题并反馈，这只是一种需求模式，
+#: 不是一种工具」）：
+#:   ① 改前（已废）教 C 自己用 `table.list(table="dependencies", …)` 读依赖行、反向走
+#:      多跳、去掉 `#pN` 尾巴、去重 —— 那是把代码侧的活交给模型，且每次都要重算；
+#:   ② 现在：代码侧一次建好索引（`ledgerindex.LedgerIndex`，本次唤醒缓存一次、不进
+#:      上下文）；C 先 `ledger.resolve(query=…)` 选根（只给候选节点，不是树），再
+#:      `ledger.expand(node=…, depth=…)` —— 层数由 C 自己决定、必填（不填会被拒并给
+#:      可照抄的例子）；每个节点带七样（相对关系 / 号 / 类别 / 内容 / 等级 / 依赖面
+#:      全路径分组 / 被引面一层）；不够就对 `frontier` 里的节点再 expand（拼接），
+#:      同一问第二次只给增量；
+#:   ③ 污染面写成一种查询模式（从被判错的命题向下展开 = `direction="down"`），不是工具。
+#: 同批 `tools/ledger_tools.py` 新增两件只读工具（`roles=("C",)`），`tools/__init__.py`
+#: 的 `_MODULES` 加 `ledger_tools` ⇒ C 的 `tools_lines` 也换值（工具说明那一行进提示词）。
+#: 十一格不是手抄：`temp/_p273_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p273）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p272 同值）；
+#: 两份 golden 按现值重冻；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+#: 判据：`tests/test_the_ledger_tree_is_expanded_on_demand.py`（a–h + 题面三条）与
+#: `tests/test_c_prompt_teaches_only_what_c_can_do.py`（关系推断那一段改成选根-展开-拼接）。
+PROMPT_VERSION = "p273"
 
 
 
