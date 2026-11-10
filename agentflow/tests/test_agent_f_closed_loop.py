@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -239,18 +240,19 @@ def test_the_retry_budget_is_read_from_the_plan_not_hardcoded(store: Store):
 # ============================================================ P3-6：proof 的出口
 #
 # 2026-11-07（解耦 + 裁边）：F 的 proof 档不再直接把命题交给 B 登记（`F→B` 那条边已
-# 被裁去）。出口现在是手稿登记条目：F 落 `reports/f-proof-plan-<计划号>.md`，
-# 命题号由 B 在 V 签之后按正文 sha 认领时才发。下面两条按新链路钉同等强度：
-# 生成的是"一条命题、一行台账"，只是那一行由 B 在认领时写。
+# 被裁去）。出口现在是手稿登记条目：F 落 `reports/f-proof-<稿号>.md`（F 自己的稿号，
+# 业主 2026-11-10），命题号由 B 在 V 签之后按正文 sha 认领时才发。下面两条按新链路钉
+# 同等强度：生成的是"一条命题、一行台账"，只是那一行由 B 在认领时写。
 
 def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
     """判据：`proof` 之后 F 落的是手稿登记条目；B 在 V 签之后按 sha 认领才有一行。
 
     改前（旧链）：F 的出口直接调 `B.register_statement` 当场落 statements 一行。
     改后（业主 2026-11-07）：「F只能向上通过D向B交稿」⇒ F 这一侧只有手稿；
-    这一条把整条链走完（手稿 → pending 签 → B 认领），并逐条保留旧判据要防的东西：
-    那一行不是 F 直写的（`created_by=secretary-B`）、五元位由 B 算出来、
-    首次登记按 B-2 从猜想起步、label 不再是 F 的派活工作名。
+    2026-11-10（业主）：「F 的稿自己维护一套号源」⇒ 稿名是 `f-proof-<稿号>`，不是
+    计划名、也不是命题名。这一条把整条链走完（手稿 → pending 签 → B 认领），并逐条
+    保留旧判据要防的东西：那一行不是 F 直写的（`created_by=secretary-B`）、五元位由 B
+    算出来、首次登记按 B-2 从猜想起步、label 不再是 F 的派活工作名、收录不改稿名。
     """
     from agentflow.agent_b import AgentB
     from conftest import sign_before_registration
@@ -264,7 +266,10 @@ def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
     assert store.rows("statements") == [], store.rows("statements")
     assert out.get("proof_mode") == "registered", out
     rel = str(out.get("manuscript_path") or "")
-    assert rel == f"reports/f-proof-plan-{pid}.md", out
+    mid = str(out.get("manuscript_id") or "")
+    assert re.fullmatch(r"\d{6}", mid), out
+    assert rel == f"reports/f-proof-{mid}.md", out
+    assert "plan" not in rel, out
     manuscript = (Path(store.root) / rel).read_text(encoding="utf-8")
     assert "这是第一步" in manuscript
     assert "- 证明号：1" in manuscript and "- 正文sha：" in manuscript, manuscript[:600]
@@ -277,7 +282,7 @@ def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
         statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
         origin="own_result", kind="conjecture",
         label=str(out.get("proof_label") or ""), proof_text=body,
-        # 给路径（而不是正文）：B 据此知道这份稿落在哪，拿到号之后才能把它转正。
+        # 给路径（而不是正文）：B 据此知道这份稿落在哪。
         proof_manuscript=rel, evidence_kind="heuristic",
         line_range={"label": rel},
         quote_reason="夹具：F 的手稿登记条目在 V 签之后由 B 认领")
@@ -293,16 +298,21 @@ def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
     assert dict(row.get("bits") or {}), row
     assert "F 攻坚" not in str(row.get("label") or ""), row["label"]
     assert row["quote_reason"], row
+    # 行上记 F 的稿号（稿名与本行命题号不再绑定，回找只能靠这一格）
+    assert str(row.get("manuscript_id") or "") == mid, row
 
-    # ③ 拿到号之后那份计划名的手稿转正成按号命名的正式稿（同一份，不第二份）
-    formal = f"reports/f-proof-{row['stmt_id']}.md"
-    assert (Path(store.root) / formal).is_file(), (
-        formal, sorted(p.name for p in (Path(store.root) / "reports").glob("f-proof*.md")))
+    # ③ 收录不改稿名：同一份稿还在原名上；盘上仍然只有那一份（没有按命题号命名的第二份）
+    assert (Path(store.root) / rel).is_file(), rel
+    assert rel == f"reports/f-proof-{str(row.get('manuscript_id') or '')}.md", row
+    _ms = sorted(p.name for p in (Path(store.root) / "reports").glob("f-proof-*.md"))
+    _stmt_named = f"f-proof-{row['stmt_id']}.md"
+    assert _stmt_named not in _ms or _stmt_named == Path(rel).name, _ms
 
     # ④ 这一轮的读数面：F 的 history 记的是手稿登记条目（命题号由 B 认领那一笔发出）
     rec = store.rows("attack_plans")[0]["history"][-1]
     assert rec.get("proof_mode") == "registered", rec
     assert rec.get("manuscript_path") == rel, rec
+    assert rec.get("manuscript_id") == mid, rec
     assert "statement_id" not in rec, rec
     assert str(got.get("stmt_id")) == str(row["stmt_id"]), got
 
@@ -314,7 +324,7 @@ def test_the_proof_outlet_is_what_hands_the_statement_to_b(store: Store, monkeyp
     （判据见 `tests/test_dependency_wiring_is_live.py` 的 a0）。不带就是 `TypeError`，
     那红的是"桩没跟上形参"，不是这条负控要证明的事。
     """
-    def gone(self, product, sg, *, plan, proof_manuscript=""):
+    def gone(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
         return {"ok": False, "statement_id": "", "reused": False,
                 "why": "（负控：出口被摘掉）", "cites": [],
                 "manuscript_received": {}}
@@ -364,9 +374,11 @@ def test_the_same_proof_twice_does_not_grow_the_manuscript_or_the_rows(store: St
         proof_text=body, proof_manuscript=rel, evidence_kind="heuristic",
         line_range={"label": rel}, quote_reason="夹具：同一份证明认领两次")
     assert got.get("ok") is True, got
-    # 第一次认领之后那份稿已经转正成按号命名的正式稿（同一份稿换了名字）
-    rel = f"reports/f-proof-{got['stmt_id']}.md"
+    # 收录不改稿名：第一次认领之后同一份稿仍在 F 的稿号上（盘上仍然只有那一份）
     assert (Path(store.root) / rel).is_file(), rel
+    _ms = sorted(p.name for p in (Path(store.root) / "reports").glob("f-proof-*.md"))
+    _stmt_named = f"f-proof-{got['stmt_id']}.md"
+    assert _stmt_named not in _ms or _stmt_named == Path(rel).name, _ms
     got = b.register_statement(
         statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
         origin="own_result", kind="conjecture", label="同一条命题",

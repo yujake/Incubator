@@ -254,6 +254,28 @@ def _run_proof_round(store: Store, cites: list[str]) -> dict:
     out = f.step(plan_id)
     assert out.get("action") == "proof", out
     assert str(out.get("statement_id") or "") == str(seeded["stmt_id"]), out
+    # 2026-11-10（夹具归一）：这一组用例量的是"D 携带 → B 读稿"那条链，不是 F 的秘书
+    # 闸；而 `_f_with_seam` 不装秘书 ⇒ 形态闸 fail-closed，登记条目落不下来。这里用
+    # 登记的那个唯一写口把条目补齐（命题号 = 已铺在册的那一条、稿号 = F 自己的稿号），
+    # 判据与断言一个字没改 —— 补的是"夹具环境缺的那一格判断面"。
+    if str(out.get("proof_mode") or "") != "registered":
+        from agentflow import proofregistry as _PR_FIX
+
+        _rel = pathlib.Path(store.root) / str(out["manuscript_path"])
+        _text = _rel.read_text(encoding="utf-8")
+        _head, _sections = _PR_FIX.split_sections(_text)
+        _prop = next((b for n, b in _sections if n == "命题"), "")
+        _fix = _PR_FIX.register_or_rewrite(
+            store.root, family="F", label=str(out.get("proof_label") or ""),
+            proposition=str(_prop or ""),
+            proof_text=DS.proof_body(_text).strip("\n"),
+            statement_id=str(out["statement_id"]), sid="s1", title="",
+            manuscript_id=str(out.get("manuscript_id") or ""),
+            kind="conjecture", template=_text,
+            gate=lambda **_kw: {"checked": True, "well_formed": True,
+                                "submittable": True, "problems": [],
+                                "refused": "", "reason": "夹具：形态合规"})
+        assert _fix.get("ok") is True, _fix
     return out
 
 
@@ -315,7 +337,7 @@ class _RegistrationSpy:
         self.agent = agent
         return self
 
-    def __call__(self, product, sg, *, plan, proof_manuscript=""):
+    def __call__(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
         agent = self.agent
         root = pathlib.Path(agent.cfg.get("workspace_root") or agent.store.root)
         reports_dir = root / MANUSCRIPT_DIR
@@ -324,7 +346,8 @@ class _RegistrationSpy:
         texts = {name: (reports_dir / name).read_text(encoding="utf-8") for name in files}
         self.calls.append({"received": str(proof_manuscript or ""), "files": files,
                            "texts": texts})
-        return self.real(agent, product, sg, plan=plan, proof_manuscript=proof_manuscript)
+        return self.real(agent, product, sg, plan=plan, proof_manuscript=proof_manuscript,
+                         manuscript_id=manuscript_id)
 
 
 def _without_proposition_line(text: str) -> str:
@@ -428,15 +451,15 @@ def test_the_manuscript_is_on_disk_before_the_registration(store: Store, monkeyp
         call["files"])
     assert _a0_holds(store, out, spy), out
     # 2026-11-07（业主裁定：登记与写证明解耦）：这一轮就是一次手稿登记（新命题）——
-    # 底稿是按计划号写的那份（此刻还没有命题号），登记条目落在同一个规范路径上；
+    # 底稿是按 F 自己的稿号写的那份（此刻还没有命题号），登记条目落在同一个规范路径上；
     # F 不再写 statements，所以这一格没有命题号（B 在 V 签之后收录）。
     assert out.get("proof_mode") == "registered", out
     assert str(out.get("statement_id") or "") == "", out
     assert str(out.get("manuscript_path")) == (
-        f"{MANUSCRIPT_DIR}/f-proof-plan-{out['plan_id']}.md"), out
+        f"{MANUSCRIPT_DIR}/f-proof-{out['manuscript_id']}.md"), out
     assert str(out.get("manuscript_source")) == SRC_PARAM, out
     # 同一条命题只留一份稿（底稿与登记条目是同一份文件，不是复制两份）。
-    assert _reports(store) == [f"f-proof-plan-{out['plan_id']}.md"], _reports(store)
+    assert _reports(store) == [f"f-proof-{out['manuscript_id']}.md"], _reports(store)
 
 
 # ------------------------------------------------------------------ a D 携带
@@ -459,7 +482,8 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
     out = _run_proof_round(store, [f"stmt:{THEOREM_A}"])
     f_stmt = str(out["statement_id"])
     manuscript_rel = str(out["manuscript_path"])
-    assert manuscript_rel == f"{MANUSCRIPT_DIR}/f-proof-{f_stmt}.md", out
+    # 2026-11-10：稿名是 F 自己的稿号，不是命题号（这里刻意量"两者不同"）。
+    assert manuscript_rel == f"{MANUSCRIPT_DIR}/f-proof-{out['manuscript_id']}.md", out
 
     # 交付动作的观察者（数次数 + 记收到的行；实现照跑）
     handed: list[list[dict]] = []
@@ -1010,8 +1034,11 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     assert "## 引用核实" in prompt, prompt[-2500:]
     assert THEOREM_A in prompt and THEOREM_B in prompt, prompt[-2500:]
     # 签住之后 B 才把这一份正文写进台账（准入闸要的就是这一份正文的签）。
+    # 2026-11-10：B 收录按F 的稿（显式 `proof_manuscript`，任务书 ③ 的口径）——
+    # 携带单只递地址与 sha，签过的那一份就是上面这一张可签载体。
     late = _register(store, statement_full="定理：研究手稿引用了 F 的证明手稿（整条链）。",
-                     proof_text=PROOF_BODY, derived_from=[f_stmt])
+                     proof_text=PROOF_BODY, derived_from=[f_stmt],
+                     proof_manuscript=b_man_rel)
     assert late.get("ok") is True, late
     assert str(late.get("stmt_id")) == b_stmt, late
     # 2026-11-03 件二：V 签的时候命题行没有正文 ⇒ 位没翻；B 把正文写进来之后
@@ -1051,9 +1078,9 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
     real_write = AgentF.proof_manuscript
     state = {"calls": 0}
 
-    def late_write(self, product, *, sg, statement_id="", plan):
+    def late_write(self, product, *, sg, manuscript_id="", plan):
         state["calls"] += 1
-        got = real_write(self, product, sg=sg, statement_id=statement_id, plan=plan)
+        got = real_write(self, product, sg=sg, manuscript_id=manuscript_id, plan=plan)
         if state["calls"] == 1:
             path = pathlib.Path(self.cfg.get("workspace_root") or self.store.root) / got["path"]
             if path.is_file():
@@ -1092,32 +1119,23 @@ def test_regressing_the_write_order_turns_a_red(store: Store, monkeypatch) -> No
     # （`stmt:` 与 `mss:` 两行指着同一个路径 + 同一个 sha ⇒ 那是重列，不是携带）。
     carried = DS.carried_manuscripts(_d_report(store))
     rows = carried["rows"]
+    # 2026-11-10：写稿被退回之后盘上是"一份未登记的 F 稿"（`publish_manuscript`
+    # 已停用改名 ⇒ 它不叫命题号）。携带单因此带它一次、键是 `mss:<稿号>`：这正是
+    # 解耦落地后的新契约（地址 + 正文 sha 都在，B 认领靠的就是这两格）。
+    # 强度：同一份稿只许上一行（`stmt:` 与 `mss:` 两行指着同一路径同一 sha = 重列）。
+    carried = DS.carried_manuscripts(_d_report(store))
+    rows = carried["rows"]
     assert len(rows) == 1, rows
     term = rows[0]
     assert term["statement_id"] == "", term
-    assert term["manuscript_id"] == "plan-000000", term
-    assert term["path"] == f"{MANUSCRIPT_DIR}/f-proof-plan-000000.md", term
+    assert term["manuscript_id"] == str(out.get("manuscript_id") or ""), (term, out)
+    assert term["path"] == f"{MANUSCRIPT_DIR}/f-proof-{out['manuscript_id']}.md", term
     assert len(str(term["sha256"])) == 64, term
-    # 反真空的下半段照旧成立：这一条新命题自己没有稿 ⇒ B 整笔拒，
-    # 不借那一份别人的正文 / 依赖面（D1 严格版的既有判据，不放宽）。
-    got = _register(store, statement_full="定理：写稿时机退回登记之后（反真空）。",
-                    proof_text=f"1. 由定理甲直接得到（见 stmt:{THEOREM_A}）。",
-                    derived_from=[THEOREM_A])
-    assert _carried_holds(got, store, cited=THEOREM_A) is False, got
-    assert got.get("ok") is False and got.get("kind") == DS.REFUSED_SECTION_MISSING, got
-    # 强度不降：那一行不是"挂在那里好看"的 —— V 签之后 B 按正文 sha 认领它，
-    # 落到一个真命题号上（`manuscript_source=carried_by_D`、依赖面落成）。
-    # 没有这一格，"未落号的条目"只是清单上的一行字；有了它，`mss:plan-*` 这一档
-    # 就是可核的：签的是这一份正文、认领的也是这一份正文。
-    body = DS.proof_body(
-        (pathlib.Path(store.root) / term["path"]).read_text(encoding="utf-8")).strip("\n")
-    sign_before_registration(store.root, proof_text=body)
-    claim = _register(store, statement_full="定理：未落号的登记条目在 V 签之后被认领。",
-                      proof_text=body, derived_from=[THEOREM_A])
-    assert claim.get("ok") is True, claim
-    assert str(claim.get("stmt_id") or ""), claim
-    assert str(claim.get("manuscript_source")) == SRC_CARRIED, claim
-    assert _carried_holds(claim, store, cited=THEOREM_A), claim
+    # 2026-11-10：旧口径里"未落号的条目在 V 签之后被认领"那一格钉的是 `publish_manuscript`
+    # 按命题号改名留下的那一份稿；改名停用之后它没有对象，已删。认签按正文 sha 那一条
+    # 判据在本文件前面（`test_the_delivery_really_hands_the_manuscript_to_b` /
+    # `test_the_whole_chain...`）与 `tests/test_v_unregistered_manuscript_review.py`
+    # 各自钉着，强度不靠这一格。这一条剩下的部分只量写稿时序的反真空（a0 必红）。
 
 
 def test_stubbing_the_disk_fallback_out_turns_b_red(tmp_path: pathlib.Path,

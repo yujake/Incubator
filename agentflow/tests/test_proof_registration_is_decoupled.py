@@ -494,25 +494,33 @@ def test_a1_the_production_path_registers_once_and_rewrites_after(tmp_path):
     assert len(entries) == 1, entries
     assert [v["proof_no"] for v in entries[0]["versions"]] == [1, 2, 3], entries[0]["versions"]
     assert len({v["sha256"] for v in entries[0]["versions"]}) == 3, entries[0]["versions"]
-    # 一份命题只住一份稿（计划名那一份；还没有命题号）
+    # 一份命题只住一份稿（F 自己的稿号那一份；还没有命题号）
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("f-proof*.md"))
-    assert files == ["f-proof-plan-000000.md"], files
+    mids = {str(r.get("manuscript_id") or "") for r in rounds}
+    assert len(mids) == 1 and "" not in mids, rounds
+    assert files == [f"f-proof-{next(iter(mids))}.md"], files
     # F 不再直写 statements（解耦之后那一行由 B 在 V 签之后认领）
     assert len(list(st.rows("statements"))) == 0
 
 
-def test_a1_negative_control_old_slot_recognition_makes_it_red(tmp_path, monkeypatch):
-    """A1 反真空：把"槽位识别"打桩回旧行为（只认 label、不认稿头槽位）⇒ 上面那条红。
+def test_a1_negative_control_no_manuscript_reuse_makes_it_red(tmp_path, monkeypatch):
+    """A1 反真空：不沿用稿号（每轮向号源要一个新号）⇒ 上面那条红。
 
-    旧行为 = `same_slot_reading` 恒 False（改前的实现在生产路径上就等价于此：
-    稿头的 `- 标签：` 被洗稿写回盘盖掉了，label 比对永远不成立）。
+    2026-11-10：槽位身份从"计划 + 子目标 + label"换成了 F 自己的稿号 ——
+    `register_or_rewrite` 看到同一个 `manuscript_id` 就是同一份稿（改证明），看到新号
+    就是新稿（过闸登记）。把"沿用稿号"摘掉（`_resolve_manuscript_id → ""` 让
+    `proof_manuscript` 每轮发一个新号）⇒ 3 轮变成 3 次登记、闸 3 次、盘上 3 份稿。
     """
-    monkeypatch.setattr(R, "same_slot_reading", lambda *a, **kw: False)
+    from agentflow.agent_f import AgentF
+
+    monkeypatch.setattr(AgentF, "_resolve_manuscript_id",
+                        lambda self, *, plan, sid, product: "")
     st = _ws(tmp_path)
     _pid, rounds, stub = _production_rounds(st, PROOFS[:3])
     assert len(stub.calls) == 3, (
-        "打桩回旧行为之后闸仍然只跑一次 ⇒ A1 那条判据证明不了槽位识别在承重", stub.calls)
+        "不沿用稿号之后闸仍然只跑一次 ⇒ A1 那条判据证明不了「稿号的沿用」在承重", stub.calls)
     assert [r.get("proof_mode") for r in rounds] == ["registered"] * 3, rounds
+    assert len(R.entries_on_disk(st.root)) == 3, R.entries_on_disk(st.root)
 
 
 def test_a2_changing_the_proposition_in_the_same_window_is_refused(tmp_path):
@@ -525,7 +533,8 @@ def test_a2_changing_the_proposition_in_the_same_window_is_refused(tmp_path):
     st = _ws(tmp_path)
     pid, rounds, stub = _production_rounds(st, PROOFS[:1])
     assert rounds[0].get("proof_mode") == "registered", rounds
-    sheet = pathlib.Path(st.root) / "reports/f-proof-plan-000000.md"
+    sheet = pathlib.Path(st.root) / (
+        f"reports/f-proof-{rounds[0]['manuscript_id']}.md")
     before = R.section_hashes(sheet.read_text(encoding="utf-8"))
     # 同一个子目标换命题正文（同窗口）：只改 plan 台账上的 subgoal.text
     row = dict(st.rows("attack_plans")[0])

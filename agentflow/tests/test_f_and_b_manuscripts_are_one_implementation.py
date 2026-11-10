@@ -45,6 +45,8 @@ SID = "000002"
 DEP = "000001"
 PLAN = "000000"
 SGID = "s1"
+#: F 自己的稿号（与命题号无关；2026-11-10 口径）。
+MID = "000900"
 PROPOSITION = "对任意正整数 n，R(3,4)=9。"
 STEP_TEXT = "由定理甲直接得到"
 PROOF_TEXT = f"1. {STEP_TEXT}（依据：stmt:{DEP}）"
@@ -144,12 +146,26 @@ def _product() -> dict:
 
 def _f_text(st: Store) -> str:
     f = AgentF(st, config={"workspace_root": st.root})
+    # 2026-11-10：F 的稿按自己的稿号命名（不传命题号）。命题号由 B 收录时现取，
+    # 所以 F 这一份的稿头是 `- 命题号：stmt:（还没落号）` —— 那正是这一轮的真实形态。
     got = f.proof_manuscript(
         _product(), sg={"sid": SGID, "text": PROPOSITION, "testable": ""},
-        statement_id=SID, plan={"plan_id": PLAN},
+        plan={"plan_id": PLAN}, manuscript_id=MID,
         label=PROPOSITION, proof_no=1)
     assert got.get("ok") is True, got
     return str(got["text"])
+
+
+def _number_normalized(text: str) -> str:
+    """把页头 `- 命题号：` 那一行抹成同一个占位：F 的稿在收录前还没有命题号。
+
+    两族比的是"同一段渲染骨架"；稿头那一格按新口径本来就可以不同（F 的稿号与命题号
+    是两件事），把它当差异会让这条判据量错对象。
+    """
+    import re
+
+    body = _role_normalized(text)
+    return re.sub(r"^- 命题号：.*$", "- 命题号：stmt:<号>", body, flags=re.M)
 
 
 def _role_normalized(text: str) -> str:
@@ -184,13 +200,14 @@ def test_a_the_two_families_land_the_same_manuscript(tmp_path: pathlib.Path) -> 
     assert bout.get("ok") is True, bout
     assert bout["path"] == f"reports/b-proof-{SID}.md", bout
     b_text = _read(st, bout["path"])
-    assert _role_normalized(f_text) == _role_normalized(b_text), (
+    assert _number_normalized(f_text) == _number_normalized(b_text), (
         "两族的稿不是同一段渲染出来的：\n--- F ---\n"
         f"{f_text}\n--- B ---\n{b_text}")
     # 骨架顺序也是同一条（不是"两稿刚好都含这三节"）。
     for text in (f_text, b_text):
         assert text.index("## 命题") < text.index("## 证明") < text.index("## 依赖"), text
-        assert f"- 命题号：stmt:{SID}" in text, text
+    assert f"- 命题号：stmt:{SID}" in b_text, b_text
+    assert f"- 命题号：stmt:{SID}" not in f_text, f_text
     # 洗稿行由同一段代码产出、落在同一个位置（`- 计划：` 的下一行）。
     rows = [{"stmt_id": DEP, "quote": "由定理甲", "step": "第 1 步",
              "path_group": 1}]
@@ -264,7 +281,9 @@ def test_b_naming_and_parsing_are_one_function(
     # 入口层：乱名两族都受控拒、零写入。
     st = _ws(tmp_path)
     _write(st, f"notes/乱名稿.md", _draft())
-    fout = promote_f(st.root, statement_id="abc", source="notes/乱名稿.md")
+    # F 的稿号形不对（不是六位号）⇒ 受控拒、零写入（2026-11-10：F 的稿按稿号命名，
+    # 命题号不再参与命名 ⇒ 这里要用 `manuscript_id` 而不是 `statement_id` 才量得到）。
+    fout = promote_f(st.root, manuscript_id="abc", source="notes/乱名稿.md")
     assert fout.get("promoted") is False, fout
     assert dict(fout.get("problem") or {}).get("kind") == "bad_manuscript_name", fout
     bout = BM.land_rewrite(st.root, statement_id="abc",
@@ -276,21 +295,30 @@ def test_b_naming_and_parsing_are_one_function(
 
 # ------------------------------------------------------------------ c 同一份搬签块
 def test_c_the_sign_block_moves_for_both_families(tmp_path: pathlib.Path) -> None:
-    """c：两族各改名一次 ⇒ 签块跟着搬、第 9 格按新名重算；sha 不符 ⇒ 不搬。"""
+    """c：两族各搬一次稿 ⇒ 签块跟着搬、第 9 格按新名重算；sha 不符 ⇒ 不搬。
+
+    2026-11-10：F 的那一档按稿号搬（`manuscript_id=MID`），B 的那一档照旧按命题号。
+    """
     for fam, promote in ((MF.FAMILY_F, promote_f), (MF.FAMILY_B, BM.promote_formal)):
         st = _ws(tmp_path / fam)
         rel = f"notes/{fam}-draft.md"
         _write(st, rel, _draft())
         sha = _sign(st, rel)
-        got = promote(st.root, statement_id=SID, source=rel)
+        if fam == MF.FAMILY_F:
+            got = promote(st.root, manuscript_id=MID, source=rel)
+            target = f"reports/f-proof-{MID}.md"
+            want_id = MID
+        else:
+            got = promote(st.root, statement_id=SID, source=rel)
+            target = f"reports/b-proof-{SID}.md"
+            want_id = SID
         assert got.get("promoted") is True, (fam, got)
-        target = f"reports/{fam.lower()}-proof-{SID}.md"
         assert got.get("path") == target, (fam, got)
         assert got.get("sign_moved") is True, (fam, got)
         block = VS.manuscript_sign_reading(_read(st, target), manuscript_path=target)
         assert block.get("found") is True and block.get("signed") is True, (fam, block)
         assert block.get("proof_sha256") == sha, (fam, block)
-        assert block.get("manuscript_id") == SID, (fam, block)
+        assert block.get("manuscript_id") == want_id, (fam, block)
         assert block.get("identity_state") == "resolved", (fam, block)
 
         # sha 不符 ⇒ 不搬（新稿从"没有签块"开始）。
@@ -298,7 +326,8 @@ def test_c_the_sign_block_moves_for_both_families(tmp_path: pathlib.Path) -> Non
         rel2 = f"notes/{fam}-stale.md"
         _write(st2, rel2, _draft())
         _sign(st2, rel2, sha="0" * 64)
-        got2 = promote(st2.root, statement_id=SID, source=rel2)
+        got2 = (promote(st2.root, manuscript_id=MID, source=rel2)
+                if fam == MF.FAMILY_F else promote(st2.root, statement_id=SID, source=rel2))
         assert got2.get("promoted") is True, (fam, got2)
         assert dict(got2.get("problem") or {}).get("kind") == "sign_sha_mismatch", (
             fam, got2)
@@ -620,9 +649,12 @@ def _real_entries_run(st: Store) -> tuple[str, str, str]:
     assert got.get("ok") is True, got
     # F 的秘书在 proof_manuscript 之后、publish 之前洗一遍（真实入口的次序）。
     got["text"] = DS.mark_washed(str(got["text"]), actor="secretary-F")
+    # 2026-11-10：收录不改稿名 ⇒ 洗过的那一份要自己写回 F 的稿号（`publish` 不再改名）。
+    rel_f = str(got["path"])
+    (pathlib.Path(st.root) / rel_f).write_text(str(got["text"]), encoding="utf-8")
     published = f.publish_manuscript(got, statement_id=SID)
-    assert published.get("published") is True, published
-    rel_f = str(published["path"])
+    assert published.get("published") is False, published
+    assert str(published.get("path") or "") == rel_f, published
     f_unsigned = (pathlib.Path(st.root) / rel_f).read_text(encoding="utf-8")
     body = DS.proof_body(f_unsigned).strip("\n")
     # B 的入库闸要一份盖住正文的签（签块在稿上；签另算）。
@@ -645,7 +677,7 @@ def test_a2_the_real_entries_land_the_same_manuscript(tmp_path: pathlib.Path) ->
     逐字相同（只差标题里的角色名）。"""
     st = _ws(tmp_path)
     f_unsigned, b_text, _rel_b = _real_entries_run(st)
-    assert _role_only(f_unsigned) == _role_only(b_text), (
+    assert _number_normalized(f_unsigned) == _number_normalized(b_text), (
         "两族经真实入口落下来的稿不是同一个骨架：\n--- F ---\n"
         f"{f_unsigned}\n--- B ---\n{b_text}")
     # 三行页头与三节都在（改前 B 缺 `- 计划：` / 洗稿行、多 `- 标签：`）

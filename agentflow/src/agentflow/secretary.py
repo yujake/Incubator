@@ -2059,6 +2059,7 @@ STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
         "_kind_upgrade",        # 升档留痕
         "proof_no",             # 收录回执（这一行现在是第几份证明）
         "proof_sha256",         # 收录回执（这一份正文的指纹）
+        "manuscript_id",        # 收录回执（这份稿的 F 稿号；稿名不再与命题号绑定）
         "_grade_recomputed",    # 按签重算等级的读数（`verifications.GRADE_RECOMPUTED_KEY`）
     ),
     "numeric_evidence": ("bits",),

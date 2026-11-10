@@ -510,6 +510,29 @@ class _WriteReport:
                         "一次 `write_report`。）")
         rows: list[dict] = []
         seen: set[str] = set()
+        #: 同一个文件只许上一行（`stmt:` 与 `mss:` 两行指着同一份稿 = 重列，不是携带）。
+        seen_paths: set[str] = set()
+        # ---- 登记条目先读一次：F 的稿按自己的稿号命名，按命题号拼路径找不到它 ---
+        #
+        # 2026-11-10：稿名与命题号不再绑定 ⇒ "这一条的稿在哪"有两处可靠来源：
+        # ① `statements` 行上的 `manuscript_id`（B 收录时记）；② 稿里登记条目的
+        # `statement_id`（F 重写那一路会把它写在稿头）。两处都读，按命题号拼名只当兜底。
+        note_prefix = ""
+        try:
+            from .. import proofregistry as _PR_CARRIED
+
+            _entries = _PR_CARRIED.entries_on_disk(self.store.root)
+        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有稿"
+            _entries = []
+            note_prefix = (f"（手稿登记条目这一趟读不出来：{type(exc).__name__}: {exc} ⇒ "
+                           "这张携带单可能少列了还没拿到命题号的那几份。）")
+        _by_stmt: dict[str, str] = {}
+        for _one in _entries:
+            _sid_e = str(_one.get("statement_id") or "")
+            if _sid_e and _sid_e not in _by_stmt:
+                _by_stmt[_sid_e] = str(_one.get("path") or "")
+        from .. import manuscriptids as _MID_CARRIED
+
         for row in statements:
             if str(row.get("origin") or "") != "own_result":
                 continue
@@ -519,7 +542,15 @@ class _WriteReport:
             key = _carried_key("stmt", sid)
             if not sid or key in seen:
                 continue
-            got = _DS.read_manuscript(self.store.root, statement_ids=[sid])
+            _mid_rel = _MID_CARRIED.canonical_rel(str(row.get("manuscript_id") or ""))
+            _cands = tuple(x for x in (_mid_rel, _by_stmt.get(sid, "")) if x)
+            if not _cands:
+                # 2026-11-10：`reports/f-proof-<号>.md` 里的号现在是 F 的稿号，
+                # 不再是命题号 —— 按命题号拼这个名字会把"恰好同号"的、或还没登记的
+                # 草稿带上来。找不到"这一条自己的稿"（行上的 `manuscript_id` /
+                # 登记条目的稿头）就不带：携带单不是"所有命题"，更不是"同号即我的"。
+                continue
+            got = _DS.read_manuscript(self.store.root, manuscript_paths=_cands)
             if str(got.get("source") or "") != _DS.SOURCE_DISK:
                 continue
             try:
@@ -536,6 +567,7 @@ class _WriteReport:
             if no >= 1:
                 one["proof_no"] = int(no)
             rows.append(one)
+            seen_paths.add(str(one.get("path") or ""))
         # ---- 2026-11-07（解耦落地）：F 的「登记条目」（还没拿到命题号的那一份） -----
         #
         # 上面那一圈按 `statements` 行找稿；而解耦之后 F 先落手稿登记条目、命题号由 B
@@ -546,16 +578,8 @@ class _WriteReport:
         # 也上携带单，键用稿号（`mss:<稿号>`，`depsection.CARRIED_KEYS` 的第三档）。
         # 只带 `checked` 的登记条目（`proofregistry.parse_entry`）—— 手写稿没有登记
         # 元信息，不是"等 B 收录的那一份"。
-        note_prefix = ""
         from .. import vsigns as _VS
-        try:
-            from .. import proofregistry as _PR
 
-            _entries = _PR.entries_on_disk(self.store.root)
-        except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有稿"
-            _entries = []
-            note_prefix = (f"（手稿登记条目这一趟读不出来：{type(exc).__name__}: {exc} ⇒ "
-                           "这张携带单可能少列了还没拿到命题号的那几份。）")
         # 号集合的构造只有一处（查口 `index_by_id`）；没号的行由它跳过。
         _known_stmt_ids = set(SL.index_by_id(statements))
         for one in _entries:
@@ -566,7 +590,7 @@ class _WriteReport:
                 continue
             rel = str(one.get("path") or "")
             msid = str(_VS.manuscript_id_of(rel) or "")
-            if not rel or not msid:
+            if not rel or not msid or rel in seen_paths:
                 continue
             key = _carried_key("mss", msid)
             if key in seen:
@@ -602,7 +626,7 @@ class _WriteReport:
             pocket = (facts or {}).get("proof_manuscript") if isinstance(facts, Mapping) else None
             rel = str((pocket or {}).get("path") or "") if isinstance(pocket, Mapping) else ""
             key = _carried_key("exp", eid)
-            if not eid or not rel or key in seen:
+            if not eid or not rel or key in seen or rel in seen_paths:
                 continue
             try:
                 blob = (Path(self.store.root) / rel).read_bytes()
@@ -621,6 +645,7 @@ class _WriteReport:
             if no >= 1:
                 one["proof_no"] = int(no)
             rows.append(one)
+            seen_paths.add(str(one.get("path") or ""))
         note = ""
         if len(rows) > _DS.CARRIED_LIMIT:
             note = (f"另有 {len(rows) - _DS.CARRIED_LIMIT} 条没列出来（这张单只列前 "
