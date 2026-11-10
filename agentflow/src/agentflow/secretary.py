@@ -8885,10 +8885,8 @@ class Secretary:
                       sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """概念行的五元位（唯一实现：`conceptrows.concept_bits`）。
 
-        为什么概念行也要算这一格（2026-10-26，真机 mp3-r3）：那 30 条概念行是直写进来的，
-        `bits` 全空 —— 而同一批里秘书落的那一条（000002 theorem）有 `bits`。空 `bits` 不是
-        "这一行没有证据"，是"没有人替它算过"：读侧（`evidencebits.bits_from_row`、
-        `clean_statement_ids`、页面那一格五元位）都拿它当"五位一件没做"读。
+        为什么概念行也要算这一格：见 `conceptrows.concept_bits` 的 docstring（空 `bits`
+        不是"没有证据"，是"没有人替它算过"）—— 这一层只转调，不抄第二份理由。
 
         2026-11-10（业主裁定 甲）起这一格多了「良定义证明」一档：`proof_text` 有正文且
         `sign.state == "signed"`（`vsigns.sign_reading` 的结论）⇒ 第 2/3 位按同一套
@@ -8899,6 +8897,63 @@ class Secretary:
 
         return CR.concept_bits(origin=origin, source_lit_id=source_lit_id,
                                proof_text=proof_text, sign=sign)
+
+    def _concept_row_payload(self, *, existing: Mapping[str, Any] | None,
+                             sid: str, name: str, full: str,
+                             alias_list: list[str], lit: str, doc_id: str,
+                             origin: str, self_authored: bool,
+                             proof_text: str) -> tuple[dict[str, Any], str]:
+        """这一笔要写进 `statements` 的那份行数据，以及它的来路（`create` / `sync`）。
+
+        `existing is None` = 新建：良定义证明这一格只在 V 签回来时保留正文（判据是既有
+        唯一读口 `vsigns.sign_reading`，这里不新写一套），五元位随之现算。给了
+        `existing` = 过渡同步改那一行：只改"从老表推得出来的那几格"，新标准独有的
+        `proof_text` / `doc_id` / `created_at` / 已算好的 `bits` 一格不覆盖（老行里
+        根本没有它们；已有的五元位也不整份重算 —— 签名那一族的凭据会被同步抹掉）。
+        """
+        from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
+
+        if existing is None:
+            sign: dict[str, Any] = {}
+            if str(proof_text or "").strip():
+                from . import vsigns as _VS
+                sign = dict(_VS.sign_reading(
+                    (getattr(self.store, "root", "") or ""), statement_id=sid,
+                    proof_text=str(proof_text), proof_no=1, store=self.store))
+            data = CR.concept_statement(stmt_id=sid, label=name, definition=full,
+                                        aliases=alias_list, source_lit_id=lit,
+                                        doc_id=doc_id, actor=f"secretary-{self.role}",
+                                        origin=origin, self_authored=self_authored,
+                                        # 概念行不新写第二份判据：有没有签由上面那一读
+                                        # 决定，构造口只按 `sign.state` 留 / 清。
+                                        proof_text=proof_text, sign=sign
+                                        ).to_dict()
+            data["bits"] = self._concept_bits(
+                origin=str(data.get("origin") or ""), source_lit_id=lit,
+                proof_text=str(data.get("proof_text") or ""), sign=sign)
+            return data, "create"
+        data = dict(existing)
+        # 只改"从老表推得出来的那几格"：新标准独有的 `proof_text` / `doc_id` /
+        # `created_at` / 已算好的 `bits` 一格不覆盖（老行里根本没有它们）。
+        data["label"] = name
+        data["statement_text"] = full
+        data["statement_full"] = full
+        data["aliases"] = alias_list
+        data["source_lit_id"] = lit or None
+        if not dict(data.get("bits") or {}):
+            # 老行本来没有五元位（这次才是它第一次经秘书的手）⇒ 补上一份；
+            # 已经有了的那一份不整份重算（签名那一族的凭据会被同步抹掉）。
+            _body = str(data.get("proof_text") or "")
+            _sign: dict[str, Any] = {}
+            if _body.strip():
+                from . import vsigns as _VS
+                _sign = dict(_VS.sign_reading(
+                    (getattr(self.store, "root", "") or ""), statement_id=sid,
+                    proof_text=_body, proof_no=1, store=self.store))
+            data["bits"] = self._concept_bits(
+                origin=str(data.get("origin") or ""), source_lit_id=lit,
+                proof_text=_body, sign=_sign)
+        return data, "sync"
 
     def write_concept_row(self, tx: Any, *, stmt_id: str, label: str,
                           definition: str = "", aliases: Iterable[str] = (),
@@ -8980,50 +9035,10 @@ class Secretary:
             if out is not None:
                 out["canonical_name"] = name
                 out["label_washed"] = dict(working, stmt_id=sid)
-        if existing is None:
-            # 良定义证明这一格（2026-11-10 业主裁定 甲）：只有 V 签回来才保留正文。
-            # 判据是既有唯一读口 `vsigns.sign_reading`（D268 批 2），这里不新写一套。
-            sign: dict[str, Any] = {}
-            if str(proof_text or "").strip():
-                from . import vsigns as _VS
-                sign = dict(_VS.sign_reading(
-                    (getattr(self.store, "root", "") or ""), statement_id=sid,
-                    proof_text=str(proof_text), proof_no=1, store=self.store))
-            data = CR.concept_statement(stmt_id=sid, label=name, definition=full,
-                                        aliases=alias_list, source_lit_id=lit,
-                                        doc_id=doc_id, actor=f"secretary-{self.role}",
-                                        origin=origin, self_authored=self_authored,
-                                        # 概念行不新写第二份判据：有没有签由上面那一读
-                                        # 决定，构造口只按 `sign.state` 留 / 清。
-                                        proof_text=proof_text, sign=sign
-                                        ).to_dict()
-            data["bits"] = self._concept_bits(
-                origin=str(data.get("origin") or ""), source_lit_id=lit,
-                proof_text=str(data.get("proof_text") or ""), sign=sign)
-            creator = "create"
-        else:
-            data = dict(existing)
-            # 只改"从老表推得出来的那几格"：新标准独有的 `proof_text` / `doc_id` /
-            # `created_at` / 已算好的 `bits` 一格不覆盖（老行里根本没有它们）。
-            data["label"] = name
-            data["statement_text"] = full
-            data["statement_full"] = full
-            data["aliases"] = alias_list
-            data["source_lit_id"] = lit or None
-            if not dict(data.get("bits") or {}):
-                # 老行本来没有五元位（这次才是它第一次经秘书的手）⇒ 补上一份；
-                # 已经有了的那一份不整份重算（签名那一族的凭据会被同步抹掉）。
-                _body = str(data.get("proof_text") or "")
-                _sign: dict[str, Any] = {}
-                if _body.strip():
-                    from . import vsigns as _VS
-                    _sign = dict(_VS.sign_reading(
-                        (getattr(self.store, "root", "") or ""), statement_id=sid,
-                        proof_text=_body, proof_no=1, store=self.store))
-                data["bits"] = self._concept_bits(
-                    origin=str(data.get("origin") or ""), source_lit_id=lit,
-                    proof_text=_body, sign=_sign)
-            creator = "sync"
+        data, creator = self._concept_row_payload(
+            existing=existing, sid=sid, name=name, full=full,
+            alias_list=alias_list, lit=lit, doc_id=doc_id, origin=origin,
+            self_authored=self_authored, proof_text=proof_text)
         if str(status or "").strip():
             data["status"] = str(status)
         if str(quote_reason or "").strip():

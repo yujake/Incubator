@@ -6716,62 +6716,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "证据也无处重算")}}
             row = dict(found)
             if str(row.get("kind") or "") == "concept":
-                # 概念的良定义证明（2026-11-10 业主裁定 甲）：第 2 位 = 正文在不在、
-                # 第 3 位 = V 的签到没到（唯一判据 `vsigns.bits_after_sign` ⇒
-                # `sign_reading`）。等级恒 `not_applicable`（概念没有等级轴，短路不改），
-                # `evidence_kind` 一个字不碰（由登记路落 `heuristic`）。
-                body = str(_VR.proof_text_of(row, int(proof_no)) or "")
-                if not body.strip():
-                    return {"write": False, "result": {
-                        "checked": True, "written": False,
-                        "reason": ("概念行没有良定义证明正文 ⇒ 证据面不重算"
-                                   "（第 2/3 位按'没有正文'读）")}}
-                from .. import conceptrows as _CR
-
-                base = _CR.concept_bits(
-                    origin=str(row.get("origin") or "own_result"),
-                    source_lit_id=str(row.get("source_lit_id") or ""),
-                    proof_text=body)
-                try:
-                    delivered, sign_claim = _VS.bits_after_sign(
-                        base, root=getattr(self.store, "root", ""),
-                        proof_text=body, statement_id=str(stmt_id),
-                        proof_no=int(proof_no), kind="concept", store=self.store)
-                except Exception as exc:  # noqa: BLE001 —— 读不出签不许折成"没签"
-                    return {"write": False, "result": {
-                        "checked": False, "written": False,
-                        "refused": "sign_reading_unreadable",
-                        "reason": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
-                                   "⇒ 良定义证明的证据面没做成（没查成 ≠ 没签）")}}
-                signed = bool(dict(delivered or {}).get("reviewed"))
-                if not signed and not bool(dict(sign_claim or {}).get("checked")):
-                    return {"write": False, "result": {
-                        "checked": False, "written": False,
-                        "refused": "sign_reading_unreadable",
-                        "reason": (str(dict(sign_claim or {}).get("why") or "")
-                                   or "认签那一格没查成（没查成 ≠ 没签）⇒ 证据不降档")}}
-                new = dict(row)
-                new["bits"] = dict(delivered or base)
-                changed = sorted(k for k in (set(row) | set(new))
-                                 if row.get(k) != new.get(k))
-                reading = {
-                    "checked": True, "written": bool(changed),
-                    "changed": changed,
-                    "proof": bool(dict(new.get("bits") or {}).get("proof")),
-                    "reviewed": signed,
-                    "grade": _EB.GRADE_NOT_APPLICABLE,
-                    "kind": str(row.get("kind") or ""),
-                    "kind_upgraded": {}, "kind_downgraded": {},
-                    "kind_trace": dict(new.get("_kind_upgrade") or {}),
-                    "grade_recomputed": {}, "sign_claim": dict(sign_claim or {}),
-                    "reason": ("" if changed else
-                               "按现行事实重算：良定义证明的证据面与盘上逐字相同 ⇒ "
-                               "一个字节都没写" if signed else
-                               "V 的签没到这一版 ⇒ 第 3 位保持假（良定义证明未签）"),
-                }
-                if not changed:
-                    return {"write": False, "result": reading}
-                return {"write": True, "row": new, "result": reading}
+                return self._concept_evidence_replay(
+                    row, stmt_id=str(stmt_id), proof_no=int(proof_no))
             body = str(_VR.proof_text_of(row, int(proof_no)) or "")
             if not body.strip():
                 # 普通数值档（e-num）没有证明正文：证据面只有第 1 位，不在这里重算。
@@ -6885,6 +6831,71 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         result.setdefault("checked", True)
         result["written"] = bool(landed.get("written"))
         return result
+
+    def _concept_evidence_replay(self, row: Mapping, *, stmt_id: str,
+                                 proof_no: int) -> dict:
+        """概念行的派生证据重算（`_ingest_apply_evidence` 里 `kind == "concept"` 那一支）。
+
+        概念的良定义证明（2026-11-10 业主裁定 甲）：第 2 位 = 正文在不在、第 3 位 =
+        V 的签到没到（唯一判据 `vsigns.bits_after_sign` ⇒ `sign_reading`）。等级恒
+        `not_applicable`（概念没有等级轴，短路不改），`evidence_kind` 一个字不碰
+        （由登记路落 `heuristic`）。返回与 `_transition` 同形的 `{"write", "row"?, "result"}`：
+        `checked=False` 是"没查成"（读不出签），不是"没签"。
+        """
+        from .. import vsigns as _VS
+
+        body = str(_VR.proof_text_of(row, int(proof_no)) or "")
+        if not body.strip():
+            return {"write": False, "result": {
+                "checked": True, "written": False,
+                "reason": ("概念行没有良定义证明正文 ⇒ 证据面不重算"
+                           "（第 2/3 位按'没有正文'读）")}}
+        from .. import conceptrows as _CR
+
+        base = _CR.concept_bits(
+            origin=str(row.get("origin") or "own_result"),
+            source_lit_id=str(row.get("source_lit_id") or ""),
+            proof_text=body)
+        try:
+            delivered, sign_claim = _VS.bits_after_sign(
+                base, root=getattr(self.store, "root", ""),
+                proof_text=body, statement_id=str(stmt_id),
+                proof_no=int(proof_no), kind="concept", store=self.store)
+        except Exception as exc:  # noqa: BLE001 —— 读不出签不许折成"没签"
+            return {"write": False, "result": {
+                "checked": False, "written": False,
+                "refused": "sign_reading_unreadable",
+                "reason": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
+                           "⇒ 良定义证明的证据面没做成（没查成 ≠ 没签）")}}
+        signed = bool(dict(delivered or {}).get("reviewed"))
+        if not signed and not bool(dict(sign_claim or {}).get("checked")):
+            return {"write": False, "result": {
+                "checked": False, "written": False,
+                "refused": "sign_reading_unreadable",
+                "reason": (str(dict(sign_claim or {}).get("why") or "")
+                           or "认签那一格没查成（没查成 ≠ 没签）⇒ 证据不降档")}}
+        new = dict(row)
+        new["bits"] = dict(delivered or base)
+        changed = sorted(k for k in (set(row) | set(new))
+                         if row.get(k) != new.get(k))
+        reading = {
+            "checked": True, "written": bool(changed),
+            "changed": changed,
+            "proof": bool(dict(new.get("bits") or {}).get("proof")),
+            "reviewed": signed,
+            "grade": _EB.GRADE_NOT_APPLICABLE,
+            "kind": str(row.get("kind") or ""),
+            "kind_upgraded": {}, "kind_downgraded": {},
+            "kind_trace": dict(new.get("_kind_upgrade") or {}),
+            "grade_recomputed": {}, "sign_claim": dict(sign_claim or {}),
+            "reason": ("" if changed else
+                       "按现行事实重算：良定义证明的证据面与盘上逐字相同 ⇒ "
+                       "一个字节都没写" if signed else
+                       "V 的签没到这一版 ⇒ 第 3 位保持假（良定义证明未签）"),
+        }
+        if not changed:
+            return {"write": False, "result": reading}
+        return {"write": True, "row": new, "result": reading}
 
     def _evidence_bits_for_replay(self, row: Mapping, *, body: str, signed: bool,
                                   delivered: Mapping | None) -> dict:
