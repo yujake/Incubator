@@ -487,8 +487,8 @@ _REPO_LITERAL_WHITELIST: dict[str, tuple[int, str, str]] = {
         "（FC-27 eval-criteria）⇒ 本批停手"),
     "agentflow/src/agentflow/proofregistry.py": (
         1, "待裁",
-        "另一条 lane 正在改这个文件（legacy 读兼容批，工作树里有它的未提交改动），本 lane "
-        "不碰；模块 docstring 那一处旧名等它收口时一并按稿号改"),
+        "另一条 lane 收口了 legacy 读兼容标注（9ecce80c）但没动模块 docstring 这一处旧名；"
+        "本 lane 没碰这个文件，留待那条 lane 或业主一并按稿号改"),
 }
 
 #: 扫描面要排除的目录：`agentflow/tests/` 是判据本体与负控夹具的家 —— e / e2 就在那里
