@@ -154,10 +154,9 @@ def test_every_family_suffix_and_directory_round_trips(
         if family == "e-num":
             assert carrier["ok"] is False
             assert carrier["code"] == MF.CODE_NUMERIC_NOT_SIGN
-        elif family == "f-proof" and manuscript_id.startswith("plan-"):
-            assert carrier["ok"] is False
-            assert carrier["code"] == MF.CODE_PLAN_NOT_SIGN
         else:
+            # 2026-11-10 业主裁定：`f-proof-plan-*` 是老盘上的只读兼容名，与数字名同等
+            # （可签）。新稿不再写这种名字（`AgentF.manuscript_path` 只按稿号）。
             assert carrier["ok"] is True, carrier
             assert carrier["code"] == ""
     else:
@@ -288,7 +287,7 @@ def test_sign_carrier_is_exactly_three_families_in_reports() -> None:
         "reports/f-proof-000000-p2.md": True,
         "reports/b-proof-000000.md": True,
         "reports/e-proof-000012.md": True,
-        "reports/f-proof-plan-0001.md": False,
+        "reports/f-proof-plan-0001.md": True,
         "reports/e-num-000012.md": False,
         "notes/f-proof-000000.md": False,
         "notes/b-proof-000000.md": False,

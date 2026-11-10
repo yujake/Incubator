@@ -402,7 +402,8 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
       把历史档当合法载体）；新 `ok=False`、码 `legacy_manuscript_name`；
     - `e-num`：旧 `ok=True`（回落到"不是计划稿就能签"）；新 `ok=False`
       （绿色通道不签，业主 2026-11-08）；
-    - `f-proof-plan-*`：计划稿是合法落稿名，但不是签的载体（既有裁定，码不变）。
+    - `f-proof-plan-*`：老盘上的只读兼容名，与数字名同等（`ok=True`，可签）——
+      2026-11-10 业主裁定之后不再新写这种名字；`CODE_PLAN_NOT_SIGN` 只留给老读数解释。
 
     返回 `{ok, code, why, name, family, tier}`；`ok=False` 不许折成"可以签"。
     """
@@ -413,11 +414,6 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"ok": False, "code": "", "why": "", "name": name,
                            "family": family, "tier": tier}
     if tier == TIER_FAMILY and family in ("f-proof", "b-proof", "e-proof"):
-        if family == "f-proof" and str(reading["manuscript_id"]).startswith("plan-"):
-            out.update(code=CODE_PLAN_NOT_SIGN,
-                       why=(f"`{name}` 是计划稿（f-proof-plan-<数字>）：合法的落稿名，"
-                            "但不是签的载体 —— 签要盖在一条命题的证明上"))
-            return out
         out.update(ok=True, why=f"`{name}` 是 {family} 的签载体（reports/ 下的规范名）")
         return out
     if tier == TIER_FAMILY and family == "e-num":

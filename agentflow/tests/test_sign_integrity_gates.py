@@ -146,21 +146,25 @@ def test_c_three_empty_passes_are_not_a_streak(tmp_path: pathlib.Path) -> None:
     assert "三格全空" in got["reason"], got["reason"]
 
 
-# ====================================================================== d 计划稿
+# ====================================================================== d 计划稿(老盘)
+#
+# 2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号。停掉错误的口径。」
+# ⇒ `f-proof-plan-*` 是老盘上的只读兼容名：与数字名同等（可签、身份 resolved），
+# 但新稿不再写这种名字（`AgentF.manuscript_path` 只按稿号）。
 
-def test_d_a_plan_manuscript_is_not_a_sign_carrier(tmp_path: pathlib.Path) -> None:
-    """d：计划稿是合法落稿名，但不是签的载体（身份不得 `resolved`）。"""
+def test_d_a_plan_manuscript_is_a_sign_carrier_now(tmp_path: pathlib.Path) -> None:
+    """d：老盘上的计划名与数字名同等 —— 是合法落稿名，也是签的载体。"""
     st = _ws(tmp_path)
     rel = _manuscript(st, SID, plan=True)
-    assert VS.is_sign_carrier(rel) is False, rel
-    assert VS.sign_carrier_reading(rel)["code"] == VS.MANUSCRIPT_NAME_PLAN
+    assert VS.is_sign_carrier(rel) is True, rel
+    assert VS.sign_carrier_reading(rel)["ok"] is True
 
-    # 落稿名这一半必须照旧成立（F 的「先落计划名、拿到号再改名」工作流）。
+    # 落稿名这一半照旧成立（老盘的只读兼容：能分类、能读正文）。
     named = MF.name_reading("F", plan_id=SID)
     assert named["ok"] is True and named["path"] == rel, named
     assert VS.parse_manuscript_name(rel)["family"] == "f-proof", VS.parse_manuscript_name(rel)
 
-    # 一块「已签 3/3」盖在计划稿上 ⇒ 身份不许 resolved（真机 883c3097）。
+    # 一块「已签 3/3」盖在老盘的计划名上 ⇒ 身份 resolved（它现在就是这一阶段的载体）。
     sha = VR.text_sha(PROOF)
     mark = VS.render_manuscript_sign(
         proof_sha=sha, streak=3, need=3, at="2026-11-05T00:00:00+08:00",
@@ -172,8 +176,8 @@ def test_d_a_plan_manuscript_is_not_a_sign_carrier(tmp_path: pathlib.Path) -> No
         pathlib.Path(st.root, rel).read_text(encoding="utf-8"),
         manuscript_path=rel)
     assert reading["found"] is True and reading["signed"] is True, reading
-    assert reading["identity_state"] == "unmatched", reading
-    assert "不是签的载体" in str(reading.get("identity_why") or ""), reading
+    assert reading["identity_state"] == "resolved", reading
+    assert "与这一份稿相同" in str(reading.get("identity_why") or ""), reading
 
 
 # ====================================================================== e 签成即升档

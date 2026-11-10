@@ -125,27 +125,21 @@ DERIVED_COLUMNS: tuple[str, ...] = (
 
 
 def _should_promote_to_formal(rel: str) -> bool:
-    """这一份稿该不该在"登记成功"那一刻转成 `reports/f-proof-<号>.md`。
+    """这一份稿该不该在"登记成功"那一刻搬到 `reports/f-proof-<稿号>.md`。
 
-    三种情形不转：已经是按号命名的正式稿（目标就是它自己）、B 的改写稿
-    （`reports/b-proof-*` —— 那不是 F 的稿）、以及不认识的路径。
+    2026-11-10 业主裁定之后只剩一种情形：`notes/…`（作者自己的攻坚草稿）——
+    它还没有正式稿号，搬到 F 自己的号下是"第一次编号"，不是"按命题号改名"。
 
-    2026-11-09（T2 收编，设计 3.2 附）：族判定改读 `manuscriptfamily.classify_manuscript`，
-    不再手写前缀比较。行为逐字不变：
-
-    - `reports/f-proof-plan-<计划号>.md` ⇒ 转（立项那一轮还没有命题号）；
-    - `reports/f-proof-<号>.md` ⇒ 不转（已经是正式稿）；
-    - `reports/{b,e}-proof-*` / `reports/e-num-*` ⇒ 不转（不是 F 的稿）；
-    - `notes/…` ⇒ 转（作者的攻坚稿；`notes/` 里名字不像手稿的也照旧转）。
+    不搬的三种：已经是 `reports/f-proof-*`（它已经有 F 的稿号，收录不改名）、
+    `reports/{b,e}-proof-*` / `reports/e-num-*`（不是 F 的稿）、不认识的路径。
+    `reports/f-proof-plan-*` 是老盘上的只读兼容名：不再新写、也不再搬。
     """
     text = _norm_manuscript_rel(rel)
     if not text:
         return False
     reading = _MFAM.classify_manuscript(text)
     if reading.get("tier") == _MFAM.TIER_FAMILY:
-        if reading.get("family") != "f-proof":
-            return False
-        return str(reading.get("id") or "").startswith("plan-")
+        return False
     return text.startswith("notes/")
 
 
@@ -1907,7 +1901,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
                        canonical: str = "", bits: Mapping | None = None,
-                       proof_no: Any = 1) -> dict:
+                       proof_no: Any = 1, manuscript_id: str = "") -> dict:
         """把证明清单与 canonical 正文写回既有那一行（同一把 `statements` 锁）。
 
         为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
@@ -2171,12 +2165,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # "第 1 份证明"。
             if _body_present:
                 _want_sha = _PR.proof_sha(_body_now)
+                _mid = str(manuscript_id or row.get("manuscript_id") or "")
                 if (str(row.get("proof_sha256") or "") != _want_sha
-                        or int(row.get("proof_no") or 0) != int(_no_receipt)):
+                        or int(row.get("proof_no") or 0) != int(_no_receipt)
+                        or (bool(_mid) and str(row.get("manuscript_id") or "") != _mid)):
                     row["proof_no"] = int(_no_receipt)
                     row["proof_sha256"] = _want_sha
                     out["proof_receipt"] = {"proof_no": int(_no_receipt),
                                             "proof_sha256": _want_sha}
+                    # ---- 2026-11-10：行上记 `manuscript_id`（F 自己的稿号）--------
+                    #
+                    # 稿名与命题号不再绑定 ⇒ "这一行是哪一份稿"只能由这一格回答。
+                    # F 的稿号与命题号不同形（前者是 F 自己发的六位号），D 的携带单、
+                    # F 的交差读数、B 的签块闸都按它回找那份稿。
+                    if _mid:
+                        row["manuscript_id"] = _mid
+                        out["proof_receipt"]["manuscript_id"] = _mid
             # ---- 2026-11-05（业主）：签成之后就升档，不再等第二条命令 --------------
             #
             # 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §二.3 / A-1）：
@@ -4619,20 +4623,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             _DS.SOURCE_PARAM, _DS.SOURCE_CARRIED)
         if (not stmt_id_now and not manuscript_foreign and _explicit_manuscript
                 and str(manuscript_text or "").strip()):
-            from agentflow import vsigns as _VS_CAND
-
-            _from_path = _VS_CAND.manuscript_id_of(str(manuscript_path or ""))
-            _from_head = _DS.manuscript_statement_id(str(manuscript_text))
+            # ---- 2026-11-10：候选号只从稿头那一行取，不再从稿名取 --------------
+            #
+            # 旧口径（口径①「稿名优先」）成立的前提是"稿名就是命题号"。2026-11-10
+            # 业主裁定之后稿名是 F 自己的稿号（`f-proof-<稿号>.md`），与命题号
+            # 是两个号段 —— 再把稿名当命题候选，遇到"稿号恰好等于某条在册命题号"
+            # 就会把别人的号借来用（`stmt_id_taken` 整笔拒，主链断掉）。
+            # 稿头那一行 `- 命题号：stmt:<id>` 才是"这份稿说自己是哪一条命题"。
+            _from_head = _DS.manuscript_statement_id(str(manuscript_text or ""))
             # 被引命题的稿不是本笔的稿（2026-11-06）：`derived_from` / 正文的
             # `stmt:` 引用把它们的号带进来是正常的；拿那个号当候选号会撞在被引
             # 命题自己头上（`stmt_id_taken`），主链整笔拒（D 携带 F 稿 → B 登记）。
             _cited_manuscript = _manuscript_belongs_to_a_cited_statement(
-                declared_id=(_from_path or _from_head),
+                declared_id=_from_head,
                 derived_from=derived_from, proof_text=proof_text)
             if not _cited_manuscript:
-                if _from_path and S.is_valid_id(_from_path):
-                    candidate_stmt_id, candidate_source = str(_from_path), "manuscript_name"
-                elif _from_head and S.is_valid_id(_from_head):
+                if _from_head and S.is_valid_id(_from_head):
                     candidate_stmt_id, candidate_source = str(_from_head), "manuscript_head"
         written = sec.record_statement(payload, role="B",
                                        candidate_id=candidate_stmt_id,
@@ -5145,10 +5151,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             stmt_id=stmt_id, rel=(manuscript_path or ""), text=manuscript_text,
             source=str(manuscript_source or ""))
         data = dict(written.get("row") or {})
+        from .. import vsigns as _VS_MID
+
+        _manuscript_id_now = _VS_MID.manuscript_id_of(str(manuscript_path or ""))
         attach = self._attach_proofs(stmt_id, attach_entries,
                                      canonical=attach_canonical,
                                      bits=bits,
-                                     proof_no=int(proof_no_placement))
+                                     proof_no=int(proof_no_placement),
+                                     manuscript_id=_manuscript_id_now)
         if attach.get("refused"):
             # 换正文那一笔被拒（`optimized_blocked`：没有签 / 签的不是这一份）⇒ 不许当
             # 成功返回：盘上那一份 `proof_text` 一个字都没动，读数在 `_optimized_reading`。
@@ -5901,19 +5911,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         hits = SL.duplicate_hits(rows, text=full)["hits"]
         return hits[0] if hits else None
 
-    def _promote_formal_manuscript(self, *, stmt_id: str, rel: str, text: str,
+    def _promote_formal_manuscript(self, *, stmt_id: str = "", rel: str, text: str,
                                    source: str = "") -> dict:
-        """登记拿到号之后，把盘上那一份稿转成 `reports/f-proof-<号>.md`（能转才转）。
+        """登记拿到号之后，把还没有正式稿号的攻坚草稿搬到 `reports/f-proof-<稿号>.md`。
 
-        业主 2026-11-04 的口径是「登记成功（拿到命题号）就改名，签另算」。改前这一步
-        只发生在 F 自己的 proof 档里（`publish_manuscript`，改的是它手上那一份）；
-        盘上已经存在的攻坚稿（真机 `notes/F-conj000000-proof.md`）没有任何代码把它
-        变成正式稿 ⇒ `reports/f-proof-*.md` 0 份。本方法就是那个缺口的外壳：判据本体
-        只有一处（`agent_f.manuscript.promote_manuscript`），这里只回答"这一份要不要转"。
-
-        不转的三种：没有地址（正文是直递的，B 不知道它落在哪）、已经是按号命名的
-        正式稿、B 自己的改写稿（`reports/b-proof-*`）。转正失败不许让整笔登记
-        回滚：命题行已经落了，转正是它的后续读数（`promoted_manuscript` 里如实报）。
+        2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」——
+        所以这一步只对 `notes/…` 生效（草稿第一次拿到 F 的稿号）；已经叫
+        `reports/f-proof-<稿号>.md` 的稿一个字都不改名，`stmt_id` 也不参与命名。
+        判据本体只有一处（`agent_f.manuscript.promote_manuscript`），这里只回答
+        "这一份要不要搬"。搬失败不许让整笔登记回滚：命题行已经落了，搬是它的后续读数
+        （`promoted_manuscript` 里如实报）。
         """
         rel_now = _norm_manuscript_rel(rel)
         if not rel_now or not _should_promote_to_formal(rel_now):
@@ -5922,17 +5929,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             from ..agent_f.manuscript import promote_manuscript as _promote
 
             got = dict(_promote(
-                getattr(self.store, "root", ""), statement_id=str(stmt_id),
-                source=rel_now, text=str(text or ""),
-                # 计划名那份稿是同一份稿的旧名（`rename` 语义）⇒ 转正后删旧名；
-                # `notes/…` 是作者的草稿 ⇒ 留着（删掉不可逆）。
-                delete_source=rel_now.startswith(
-                    f"{_DS.MANUSCRIPT_DIR}/{_DS.MANUSCRIPT_PLAN_PREFIX}")))
-        except Exception as exc:  # noqa: BLE001 —— 转正失败要留读数，不带走登记
+                getattr(self.store, "root", ""), source=rel_now, text=str(text or ""),
+                # 草稿留着（删掉不可逆）；搬的是同一份正文，签块按新名重算第 9 格。
+                delete_source=False))
+        except Exception as exc:  # noqa: BLE001 —— 搬失败要留读数，不带走登记
             return {"promoted": False, "source": rel_now,
                     "problem": {"kind": "promotion_failed", "stage": "call",
                                 "why": f"{type(exc).__name__}: {exc}"}}
         got["manuscript_source"] = str(source or "")
+        got["statement_id"] = str(stmt_id or "")
         return got
 
     def _receive_carried_manuscript(self, row: Mapping[str, Any], *, deps_groups: Any,
@@ -6695,7 +6700,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return result
 
     def _ingest_apply_proof(self, cells: dict, row: Mapping, want_no: int,
-                            target: str) -> dict:
+                            target: str, manuscript_id: str = "") -> dict:
         """写 `proof_text` 那一格（签闸 → `_attach_proofs`），就地把回执写回 `cells`。"""
         text = str((cells.get("proof_text") or {}).get("value") or "")
         gate = self._unsigned_proof_gate(
@@ -6712,7 +6717,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             target,
             entries=([{"proof_no": want_no, "text": text}]
                      if want_no >= 2 else []),
-            canonical=(text if want_no == 1 else ""), proof_no=want_no)
+            canonical=(text if want_no == 1 else ""), proof_no=want_no,
+            manuscript_id=str(manuscript_id or ""))
         if attach.get("refused"):
             return {"written": False, "code": str(attach["refused"]),
                     "why": str(attach.get("reason") or "")}
@@ -7091,7 +7097,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         # ---- 1) proof_text（签闸不松；#pN 逐份认签，不许借 #p1 的光）
         if str((cells.get("proof_text") or {}).get("outcome") or "") == "filled":
-            got = self._ingest_apply_proof(cells, row, want_no, target)
+            from .. import vsigns as _VS_MID2
+
+            got = self._ingest_apply_proof(
+                cells, row, want_no, target,
+                manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")))
             if got["code"]:
                 return _cell_refused("proof_text", got["code"], got["why"])
             if got["written"]:
