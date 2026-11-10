@@ -19,6 +19,13 @@
 > `evidencebits` 两条 docstring 跟着改口径。判据是新文件
 > `tests/test_the_first_sign_before_registration_still_lifts_the_kind.py`）。
 > 文件数 289、`>800 行` 的 75、全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
+> **2026-11-11 p284（认领只解除来路，不解除票数）**：276,749 → **276,877**（净 +128：
+> `verifications._pending_claim_streak` 数一叠 pending 台账的尾部连续票数与"最新一票的
+> sha 是不是本条正文"（计数仍复用 `_hold_run_lengths`），`pending_sign` 交回那一叠的
+> 全部行（`passes`），`_gap_from_pending` 于是要求认领之后仍满 `SIGN_STREAK_NEED` 票、
+> 同一份正文才 `ok=True`（一票 / 两票 / 票数够但 sha 不一 ⇒ `holding`）；
+> `evidencebits.kind_following_grade` 把"还差门槛"与"一次都没签"分开说）。
+> 文件数 289、`>800 行` 的 75、全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
 > **2026-11-10 F 侧撤"按命题号写证明"（p274，本批）**：276,029 → **276,185**（净 +156：
 > `specs/f.py` 的送审参数表删掉"在册后给号"那一格并改写四处按号教法、`agent_f/manuscript.py`
 > 两个"兼容形参" `statement_id` 删掉、`agent_f/core.py` 的登记面改成交稿号 ＋ 正文、

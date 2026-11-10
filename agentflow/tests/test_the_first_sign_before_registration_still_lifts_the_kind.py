@@ -24,10 +24,26 @@ kind」。那条裁定管的是“命题还没在册时” V 审的那一签（p
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | 稿号立项 → 未在册签 → B 收录（现取命题号） | `kind=theorem`、`grade=pre_theorem`、`reviewed=true`、`manuscript_id` 在行上、兜底稿 `f-proof-<命题号>.md` 不出现 |
+| a | 稿号立项 → 未在册签（满三票）→ B 收录（现取命题号） | `kind=theorem`、`grade=pre_theorem`、`reviewed=true`、`manuscript_id` 在行上、兜底稿 `f-proof-<命题号>.md` 不出现 |
 | b | 只是 pending（没认领）⇒ 收录一份同正文 | `kind` 仍 `conjecture`（旧射程不变） |
 | c | 认领后把凭据删掉再重写 | 降回 `conjecture`（不是"一升不降"） |
 | d | 反真空：把「认领后按本条签评」改回「仍按 pending 评」 | a 红（kind 停在 conjecture） |
+
+## 2026-11-11（p284）：认领之后仍要满三票、同一份正文
+
+p283 的处置让"认领完成的 pending 签"成了升档依据，但 `_gap_from_pending` 的 `ok` 当时
+只问行局部（`row_signable`）⇒ 一票就抬档（全量：`test_mapping_shows_ledger_kind_and_
+signature` 三条红）。规定是：抬档必须挂在满 `SIGN_STREAK_NEED` 票、同一份正文 sha 的真签
+上。所以本文件再加三条：
+
+| # | 造什么 | 期望 |
+|---|---|---|
+| e | 认领后只有 1 票 | `kind` 仍 `conjecture`；`proof_review_gap` 给 `state=holding`、`streak=1/3`、`why` 说清还差几票 |
+| f | 同一叠 pending 台账里有 3 票，但最新一票签的是另一份正文 | `kind` 仍 `conjecture`；`gap.streak_ok=False`，`why` 点出 sha 对不上 |
+| g | 反真空：把「三票同 sha」那一条摘掉（打桩 `_pending_claim_streak` 恒 ok） | e / f 的现场当场变成 `theorem`（那两条的绿灯确实由这一条判据撑着） |
+
+正控 a 的夹具因此补够票数（`_pending_sign` 落 `SIGN_STREAK_NEED` 行）：它不是被放宽，
+而是把"签满"这个前提如实造出来 —— 只有一票的现场本来就不该升档（那正是 e）。
 
 ## 不碰真机
 
@@ -100,14 +116,29 @@ def _manuscript(*, manuscript_id: str = MANUSCRIPT_ID) -> tuple[str, str]:
     return rel, text
 
 
-def _pending_sign(st: Store, *, rel: str) -> dict:
-    """V 在命题还没在册时审的那一签（真写口：`record_pending_sign`）。"""
-    return VR.record_pending_sign(
-        str(st.root), proof_text=PROOF,
-        verdict={"verdict": "成立", "findings": []},
-        verifier="agent-V", object_path=rel,
-        secretary_judge={"checked": True, "axis": "clean",
-                         "decision": "没问题", "reason": "夹具：秘书判 clean"})
+def _pending_sign(st: Store, *, rel: str, votes: int | None = None,
+                  proof_text: str = PROOF, object_sha256: str = "") -> dict:
+    """V 在命题还没在册时审的那一签（真写口：`record_pending_sign`）。
+
+    缺省落满 `SIGN_STREAK_NEED` 票（p284：认领之后抬档要挂在"满三票、同一份正文"的
+    真签上；只落一票的现场本来就不该抬档 —— 那是 e）。要造票数不够的现场就传更小的
+    `votes`。
+
+    `object_sha256` / `proof_text` 两个 sha 是分开的参数：传同一个 `object_sha256`
+    而换 `proof_text`，落出来的就是"同一份载体台账里、最新一票签的却是另一版正文"
+    那一种形态（f 用它量"三票不同 sha"）。
+    """
+    need = int(votes if votes is not None else VR.SIGN_STREAK_NEED)
+    out: dict = {}
+    for _ in range(max(1, need)):
+        out = VR.record_pending_sign(
+            str(st.root), proof_text=proof_text,
+            object_sha256=str(object_sha256 or ""),
+            verdict={"verdict": "成立", "findings": []},
+            verifier="agent-V", object_path=rel,
+            secretary_judge={"checked": True, "axis": "clean",
+                             "decision": "没问题", "reason": "夹具：秘书判 clean"})
+    return out
 
 
 def _pending_rows(st: Store) -> list[dict]:
@@ -124,12 +155,16 @@ def _row(st: Store, sid: str) -> dict:
     return hit[0]
 
 
-def _register_first_signed(tmp_path: pathlib.Path) -> dict:
-    """a 的现场：稿号立项 → 未在册签 → B 收录（现取命题号）。"""
+def _register_first_signed(tmp_path: pathlib.Path, *, votes: int | None = None) -> dict:
+    """a 的现场：稿号立项 → 未在册签 → B 收录（现取命题号）。
+
+    `votes` 落到 `_pending_sign`：缺省签满 `SIGN_STREAK_NEED` 票（a 的正控前提）；
+    传 1 就是 e 的现场（一票）。
+    """
     st = _store(tmp_path)
     rel, text = _manuscript()
     _put(st, rel, text)
-    signed = _pending_sign(st, rel=rel)
+    signed = _pending_sign(st, rel=rel, votes=votes)
     filed = _b(st).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
         origin="own_result", kind="conjecture", doc_id=S.format_id(0),
@@ -168,6 +203,10 @@ def test_a_the_sign_before_registration_lifts_the_kind_in_the_collection_write(
              if str(r.get("verification_id") or "") ==
              str(dict(got["signed"]).get("verification_id") or "")]
     assert claim and claim[0].get("statement_id") == sid, claim
+    # 夹具前提：这一签是"满三票、同一份正文"的真签 —— p284 之后抬档就挂在这上面
+    # （只有一票的现场是 e，它不该抬）。这不是放宽：把"签满"这个前提如实造出来。
+    assert len(claim) == 1, claim
+    assert len(_pending_rows(st)) == int(VR.SIGN_STREAK_NEED), _pending_rows(st)
 
     # 兜底稿不出现：稿名是稿号，不许再生成一份按命题号命名的 `f-proof-<sid>.md`。
     fallback = pathlib.Path(st.root) / "reports" / f"f-proof-{sid}.md"
@@ -276,3 +315,105 @@ def test_d_anti_vacuum_treating_the_claimed_sign_as_pending_turns_a_red(
     assert got["filed"].get("ok") is True, got["filed"]
     assert str(got["row"].get("kind") or "conjecture") == "conjecture", got["row"]
     assert "_kind_upgrade" not in got["row"], got["row"]
+
+
+# ============================================================ e 一票（认领后）不抬档
+
+def test_e_a_single_claimed_vote_still_leaves_the_kind_a_conjecture(
+        tmp_path: pathlib.Path) -> None:
+    """e：认领之后只有 1 票 ⇒ `kind` 仍 `conjecture`，且 gap 说清还差几票。
+
+    改前红（全量 `test_mapping_shows_ledger_kind_and_signature` 的三条）：p283 之后
+    `_gap_from_pending` 对已认领的 pending 行只问 `row_signable` ⇒ 一票就 `ok=True`，
+    同一笔收录把 `conjecture` 抬成 `theorem`。规定是「抬档必须挂在满
+    `SIGN_STREAK_NEED` 票、同一份正文 sha 的真签上」。
+    """
+    got = _register_first_signed(tmp_path, votes=1)
+    st, row = got["store"], got["row"]
+    assert got["filed"].get("ok") is True, got["filed"]
+    assert row["kind"] == "conjecture", row
+    assert "_kind_upgrade" not in row, row
+
+    gap = VR.proof_review_gap(st.root, row)
+    assert gap.get("claimed") is True and gap.get("pending") is False, gap
+    assert gap.get("ok") is False and gap.get("state") == "holding", gap
+    assert (int(gap.get("streak") or 0), int(gap.get("need") or 0),
+            bool(gap.get("streak_ok"))) == (1, int(VR.SIGN_STREAK_NEED), False), gap
+    # "差几票"要写在读数里（不是只说一句"不够"）。
+    assert "还差" in str(gap.get("why")) and "2" in str(gap.get("why")), gap["why"]
+    held = EB.kind_following_grade(row, root=st.root, allow_pending=False)
+    assert held.get("state") == "held" and held.get("kind") == "conjecture", held
+
+
+# ============================================================ f 票数够但sha不一
+
+#: 另一版正文（f 用：同一份载体被改过又换回，最新一票签的是这一版）。
+OTHER_PROOF = PROOF + "（第二版：第 2 步的常数换成 2）。"
+
+
+def _register_three_votes_not_one_body(tmp_path: pathlib.Path) -> dict:
+    """f 的现场：同一叠 pending 台账里 3 票成立，但最新一票签的是另一版正文。"""
+    st = _store(tmp_path)
+    rel, text = _manuscript()
+    _put(st, rel, text)
+    # 同一个载体对象（同一份 pending 台账文件）：两票签本条正文，第三票签另一版。
+    carrier = "a" * 64
+    _pending_sign(st, rel=rel, votes=2, proof_text=PROOF, object_sha256=carrier)
+    _pending_sign(st, rel=rel, votes=1, proof_text=OTHER_PROOF, object_sha256=carrier)
+    filed = _b(st).register_statement(
+        statement_full=FULL, statement_text=LABEL, label=LABEL,
+        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+        line_range={"start": 1}, quote_verified=False,
+        quote_reason="own_result：我方推导，没有第二份文本可比对",
+        proof_text=PROOF, proof_manuscript=rel)
+    sid = str(filed.get("stmt_id") or "")
+    return {"store": st, "sid": sid, "filed": filed, "row": _row(st, sid)}
+
+
+def test_f_three_votes_not_on_one_body_do_not_lift_the_kind(
+        tmp_path: pathlib.Path) -> None:
+    """f：3 票都在，但最新一票签的不是本条正文 ⇒ `kind` 仍 `conjecture`。
+
+    改前红：p283 之后 `_gap_from_pending` 只认"有一行成立 + 已认领"，票数与 sha
+    都不看 ⇒ 这一形态也会抬档。规定要的是「三票同一 `proof_sha256`，且与行上正文 sha
+    一致」—— 票数够、正文不一致，仍 held。
+    """
+    got = _register_three_votes_not_one_body(tmp_path)
+    st, row = got["store"], got["row"]
+    assert got["filed"].get("ok") is True, got["filed"]
+    assert len(_pending_rows(st)) == int(VR.SIGN_STREAK_NEED), _pending_rows(st)
+    assert row["kind"] == "conjecture", row
+    assert "_kind_upgrade" not in row, row
+    gap = VR.proof_review_gap(st.root, row)
+    assert gap.get("claimed") is True and gap.get("state") == "holding", gap
+    assert gap.get("ok") is False and gap.get("streak_ok") is False, gap
+    assert "不是本条正文" in str(gap.get("why")), gap["why"]
+
+
+# ============================================================ g 反真空
+
+def test_g_anti_vacuum_without_the_same_body_streak_rule_e_and_f_go_red(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """g 反真空：把「满三票、同一份正文」那一条判据摘掉 ⇒ e / f 的现场当场变成 theorem。
+
+    打的是 `verifications._pending_claim_streak`（p284 新加的闸本体）：它一旦恒报
+    `ok=True`，一票的现场（e）与"三票不同 sha"的现场（f）都会抬成 theorem ——
+    这正是 e / f 断言不许发生的事。于是 e / f 的绿灯确实由这一条判据撑着。
+    """
+    real = VR._pending_claim_streak
+
+    def _always_ok(passes, proof_sha256):
+        read = dict(real(passes, proof_sha256))
+        read.update(checked=True, same_sha=True, ok=True,
+                    votes=int(VR.SIGN_STREAK_NEED),
+                    need=int(VR.SIGN_STREAK_NEED))
+        return read
+
+    monkeypatch.setattr(VR, "_pending_claim_streak", _always_ok)
+
+    one = _register_first_signed(tmp_path / "one", votes=1)
+    assert one["row"]["kind"] == "theorem", (
+        "摘掉票数闸之后一票仍然没抬档 ⇒ e 那条判据不是由这一闸撑着的", one["row"])
+    three = _register_three_votes_not_one_body(tmp_path / "three")
+    assert three["row"]["kind"] == "theorem", (
+        "摘掉同一份正文闸之后三票不同 sha 仍然没抬档 ⇒ f 那条判据是空的", three["row"])

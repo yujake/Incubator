@@ -604,52 +604,76 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     return row
 
 
-def pending_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
-    """pending 台账的全部行（按落盘顺序；坏行照实报出，不静默跳过）。"""
+def _pending_ledgers(
+    root: str | Path,
+) -> tuple[list[tuple[Path, list[dict[str, Any]]]], list[str]]:
+    """`verifications/pending/` 的逐份台账（按文件名序；行序 = 追加序），坏行照实报。
+
+    为什么单列这一格（2026-11-11，p284）：`pending` 的一"份"台账就是同一份正文
+    的那一叠签（文件名 = 正文 sha 或载体对象的 sha）。票数与"是不是同一份正文"
+    只能在同一份文件里数 —— 摊平成一张跨文件的行表之后，两张 sha 不同的台账会被
+    读成一条连续序列。:func:`pending_rows` 仍是"全部行"那一口（跨文件，给只问
+    "有没有这一签"的调用方），本函数是"哪一叠"那一口的唯一入口。
+    """
     base = pending_dir(root)
-    out: list[dict[str, Any]] = []
+    ledgers: list[tuple[Path, list[dict[str, Any]]]] = []
     problems: list[str] = []
     if not base.is_dir():
-        return out, problems
+        return ledgers, problems
     for file in sorted(base.glob("*.jsonl")):
         rows, bad = JF.read_jsonl(file)
         problems.extend(f"{PENDING_DIR_NAME}/{file.name}: {b}" for b in bad)
-        out.extend(rows)
-    return out, problems
+        ledgers.append((file, [dict(r) for r in rows]))
+    return ledgers, problems
+
+
+def pending_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
+    """pending 台账的全部行（按落盘顺序；坏行照实报出，不静默跳过）。"""
+    ledgers, problems = _pending_ledgers(root)
+    return [dict(row) for _file, rows in ledgers for row in rows], problems
 
 
 def pending_sign(root: str | Path, *, object_sha256: Any = "",
                  proof_shas: Sequence[str] = ()) -> dict[str, Any]:
     """按对象内容的 sha 认领 pending 台账里的那一签（最近一次审校说了算）。
 
-    返回 `{"found","verdict","proof_sha256","object_sha256","ledger","row","why"}`。
-    `found=False` 只表示"pending 里没有盖住这一份的签"，不是"没查成"；
+    返回 `{"found","verdict","proof_sha256","object_sha256","ledger","row","passes",
+    "why"}`。`found=False` 只表示"pending 里没有盖住这一份的签"，不是"没查成"；
     读不出来时才抛 `VerificationError`（三态：没查成不许折成没有签）。
 
     `row` 是认到的那一整行（`found=True` 时非空）：判据在调用方那一侧，而它们要的
     `unresolved_errors` / `citation_checks` / `citation_gate` 三格只在行上 ——
     交半行出去等于逼调用方退回"只看 verdict 那个词"。
+
+    `passes`（2026-11-11，p284）是那一签所在的那一叠台账的全部行（行序 = 追加序）。
+    为什么要交出去：票数与"三票同一份正文"只能在同一份 pending 台账里数
+    （见 :func:`_pending_ledgers`）；只交最后那一行，调用方就只数得出"有一票"，
+    于是"一票也抬档"（`_gap_from_pending` 的 p284 注释）。
     """
     out: dict[str, Any] = {"found": False, "verdict": "", "proof_sha256": "",
-                           "object_sha256": "", "ledger": "", "row": {}, "why": ""}
+                           "object_sha256": "", "ledger": "", "row": {},
+                           "passes": [], "why": ""}
     obj = str(object_sha256 or "").strip().lower()
     wants = {str(s or "").strip().lower() for s in (proof_shas or ()) if str(s or "").strip()}
-    rows, problems = pending_rows(root)
+    ledgers, problems = _pending_ledgers(root)
     if problems:
         raise VerificationError("；".join(problems[:3]))
     hit: dict[str, Any] | None = None
-    for row in rows:
-        got_obj = str(row.get("object_sha256") or "").strip().lower()
-        got_proof = str(row.get("proof_sha256") or "").strip().lower()
-        if obj:
-            if got_obj != obj:
+    hit_rows: list[dict[str, Any]] = []
+    for _file, rows in ledgers:
+        for row in rows:
+            got_obj = str(row.get("object_sha256") or "").strip().lower()
+            got_proof = str(row.get("proof_sha256") or "").strip().lower()
+            if obj:
+                if got_obj != obj:
+                    continue
+            elif wants:
+                if got_proof not in wants:
+                    continue
+            else:
                 continue
-        elif wants:
-            if got_proof not in wants:
-                continue
-        else:
-            continue
-        hit = row
+            hit = row
+            hit_rows = rows
     if hit is None:
         where = (f"对象 sha256 {obj[:12]}…" if obj else f"证明正文 sha {sorted(wants)[:1]}")
         out["why"] = (f"`{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/` 里没有盖住这一份"
@@ -663,6 +687,8 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
                #: 改前在这一格里被丢掉了 ⇒ 调用方只能退回"看 verdict 那个词"，
                #: 于是同一行内容在 pending 与命题台账两处被两套判据读。
                row=dict(hit),
+               #: 这一签所在那一叠台账的全部行（票数 / 同一份正文的判据处，p284）。
+               passes=[dict(r) for r in hit_rows],
                ledger=(f"{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/"
                        f"{str(hit.get('object_sha256') or hit.get('proof_sha256') or '')[:64]}"
                        f".jsonl#{hit.get('verification_id') or '?'}"))
@@ -4758,6 +4784,44 @@ def _pending_signed(root: str | Path, proof_text: Any) -> dict[str, Any] | None:
     return got
 
 
+def _pending_claim_streak(passes: Sequence[Mapping[str, Any]],
+                          proof_sha256: Any) -> dict[str, Any]:
+    """一叠 pending 台账的尾部连续票数 / 是不是同一份正文（纯读；p284）。
+
+    ## 为什么这一格必须存在（根因）
+
+    p283 把"已认领给本命题"的 pending 行读成 `pending=False / claimed=True`，好让
+    `allow_pending=False` 的收录路认它 —— 但 `_gap_from_pending` 的 `ok` 原先只问
+    `row_signable`（行局部），并在注释里写"连续闸在这一档不适用"。那句在 p283 之前
+    成立（未认领的 pending 只够过准入闸、从不抬 kind），p283 之后就不成立了：
+    同一份凭据现在真的会被当作升档依据 ⇒ 一票就能把 conjecture 抬成 theorem
+    （2026-11-11 全量：`test_mapping_shows_ledger_kind_and_signature` 三条红）。
+    台账那一路从来不是"有一行成立就发签"：`signs_bit3` 要 `SIGN_STREAK_NEED` 票、
+    且这几票签的是同一份正文（`_hold_run_lengths` 在 sha 变化处清零）。这一格就是
+    把那同一道闸搬到 pending 这一支上 —— 计数实现仍只有 :func:`_hold_run_lengths`
+    一处（不新造第二套"怎么数"）。
+
+    ## 返回
+
+    `checked`（这一格读成了）/ `votes`（尾部连续成立几票）/ `need` / `same_sha`
+    （最新一票的 `proof_sha256` 是不是本条命题正文的 sha）/ `ok`（够不够当定理凭据
+    = `same_sha and votes >= need`）/ `tail_sha`。`votes=0` 是"读到了、一票没有"，
+    与"没查成"（`checked=False`）不同 —— 不过 pending 这一支的行是刚读出来的，
+    坏行在读 `pending` 台账时已经由调用方抛成"没查成"。
+    """
+    rows = [dict(r) for r in (passes or ()) if isinstance(r, Mapping)]
+    runs = _hold_run_lengths(rows)
+    votes = int(runs[-1]) if runs else 0
+    tail_sha = str(rows[-1].get("proof_sha256") or "").strip().lower() if rows else ""
+    want_sha = str(proof_sha256 or "").strip().lower()
+    same_sha = bool(tail_sha) and bool(want_sha) and tail_sha == want_sha
+    need = int(SIGN_STREAK_NEED)
+    return {
+        "checked": True, "votes": votes, "need": need, "tail_sha": tail_sha,
+        "same_sha": bool(same_sha), "ok": bool(same_sha and votes >= need),
+    }
+
+
 def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
                       got: Mapping[str, Any], *, statement_id: str,
                       manuscript_id: str = "") -> dict[str, Any]:
@@ -4786,14 +4850,24 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     - 载体稿号与行上稿号不一致 ⇒ 仍算 `pending`：那一签签的是另一份稿，
       不是这一条命题的稿上的签（判据 `vsigns.manuscript_id_of`，与签块第 9 格同源）。
 
-    三态不变：`ok` / `state` / `checked` 一个都不动，只把"来路"这一格读准。
+    ## 2026-11-11（p284）：认领只解除「来路」那一层，不解除「票数与 sha」那一层
+
+    p283 之后 `ok` 不再只由 `row_signable` 说了算 —— 认领过的 pending 行会真的被当作
+    升档依据（`evidencebits.kind_following_grade(allow_pending=False)`）。所以它必须过
+    台账那一路的同一道闸（:func:`_pending_claim_streak`）：尾部连续
+    `SIGN_STREAK_NEED` 票「成立」、这几票签的是同一份正文、且与行上正文的 sha 一致
+    ⇒ 才 `ok=True`。一票 / 两票 / 票数够但最新一票签的是别的正文 ⇒ `state="holding"`、
+    `ok=False`，`why` 里写清还差几票（或哪一份 sha 对不上）。
+
+    未认领的 pending（`pending=True`）仍是旧口径：`ok` 只走行局部（D-34 的准入闸面），
+    抬档那一格由 `pending=True` 自己挡住 —— 那条路一个字没动。
     """
     row = dict(got.get("row") or {})
     row.setdefault("verdict", str(got.get("verdict") or ""))
-    # pending 那一签按对象 sha 认领，没有命题台账可数连续次数（它审的时候命题还没
-    # 登记，那条台账还不存在）⇒ 连续闸在这一档不适用，判据只走行局部那一半
-    # （`row_signable`：成立 + 无未解决 error + 引用不挡）。这不是放宽：连续闸要读的
-    # 东西在 pending 这条路上根本不存在，硬套只会把"先签后登记"这条合法路整条堵死。
+    # pending 那一签按对象 sha 认领，它审的时候命题还没登记 —— 命题台账那一路的
+    # "连续 3 票"在盘上没有等价物，但同一叠 pending 台账里就有（同一份正文的
+    # 那几行）：票数与"是不是同一份正文"由 `_pending_claim_streak` 数。
+    # `row_ok` 仍只判行局部那一半（成立 + 无未解决 error + 引用不挡）。
     row_ok = row_signable(row)
     verdict_word = str(got.get("verdict") or "")
     out["ledger"] = str(got.get("ledger") or "")
@@ -4836,6 +4910,12 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     out["claimed"] = bool(own)
     out["carried_manuscript_id"] = carrier_mid
     out["pending"] = not bool(own)
+    # 票数与"三票同一份正文"（p284）：认领之后这一签会被当作升档依据，所以它必须过
+    # 台账那一路的同一道闸。未认领那一档只作读数（抬档由 `pending=True` 挡住）。
+    streak_read = _pending_claim_streak(got.get("passes") or (), row.get("proof_sha256"))
+    out["streak"] = int(streak_read.get("votes") or 0)
+    out["need"] = int(streak_read.get("need") or SIGN_STREAK_NEED)
+    out["streak_ok"] = bool(streak_read.get("ok"))
     # 签不住有两种来路，拒信必须分开说：结论压根不是「成立」，还是判了「成立」却
     # 被 `signs_bit3` 的三条（未解决 error / 引用核实 / 没查成）之一挡住。
     if verdict_word != "成立":
@@ -4853,10 +4933,35 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
         out["why"] = (f"命题 {statement_id} 的证明在 pending 台账里那一签：{blocked}"
                       "⇒ 复核过、签不住")
         return out
+    if own and not bool(streak_read.get("ok")):
+        # 认领完成 = 这一签会被当成"本条命题自己的签" ⇒ 它必须与台账那一路同门槛：
+        # 满 `SIGN_STREAK_NEED` 票、同一份正文。一票 / 两票 / 票数够但 sha 不一 ⇒ 不抬。
+        votes = int(streak_read.get("votes") or 0)
+        need = int(streak_read.get("need") or SIGN_STREAK_NEED)
+        if not bool(streak_read.get("same_sha")):
+            blocked = (f"认给本命题的这一叠 pending 签里，最新一票签的不是本条正文"
+                       f"（签的是 sha {str(streak_read.get('tail_sha') or '')[:12] or '（空）'}…，"
+                       f"本条正文是 sha "
+                       f"{str(row.get('proof_sha256') or '')[:12] or '（空）'}…）"
+                       f"⇒ 不抬 kind：抬档要挂在满 {need} 票、同一份正文 sha 的真签上")
+        else:
+            blocked = (f"认给本命题的连续「成立」只有 {votes}/{need} 票"
+                       f"（还差 {max(0, need - votes)} 票）⇒ 不抬 kind："
+                       f"抬档要挂在满 {need} 票、同一份正文 sha 的真签上"
+                       f"（这一签只落台账、不发签）")
+        out["state"] = "holding"
+        out["why"] = (f"命题 {statement_id} 的凭据在 `{out['ledger']}`：V 判过「成立」，"
+                      + blocked)
+        checks[1].update(ok=False, detail=(f"{out['ledger']}：{blocked}"))
+        checks[2].update(ok=False, detail=("票数与正文 sha 还没同时到门槛："
+                                           "这一签不算本条命题的定理凭据"))
+        return out
     out["state"] = "signed"
     out["ok"] = True
     out["why"] = (f"命题 {statement_id} 的凭据在 `{out['ledger']}`：V 在命题还没在册时"
-                  "审过这一份并判「成立」，按这一份正文的 sha 认领到"
+                  f"审过这一份并判「成立」（连续 {int(streak_read.get('votes') or 0)} 票、"
+                  f"门槛 {int(streak_read.get('need') or SIGN_STREAK_NEED)} 票），"
+                  "按这一份正文的 sha 认领到"
                   + ("（这一签已经认给本命题、载体稿号与行上一致 ⇒ 算本条命题自己的签，"
                      "不再是「待登记的那一签」）" if own else
                      "（「先签后登记」与「先登记后签」是同一件事）"))
@@ -4919,16 +5024,20 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
 
     返回键：`ok` / `checked` / `why` / `state` / `proof_no` / `statement_id` /
     `verification_id` / `verdict` / `round` / `unresolved_errors` / `sha_matches` /
-    `ledger` / `rows` / `problems` / `checklist` / `pending`；`checklist` 是逐项过关读数
+    `ledger` / `rows` / `problems` / `checklist` / `pending` / `streak` / `need` /
+    `streak_ok`；`checklist` 是逐项过关读数
     （`[{"item", "ok", "detail"}]`，三条与上面一一对应），只为拒信存在（业主 2026-10-19 的口径：
     "拒收消息要让人/模型一眼看出该补哪一项"），不参与判据 —— 写错只改可读性。
-    `pending` 是"来路"那一格（纯读数，不参与 `ok`）：True = 这一份凭据取自
+    `pending` 是"来路"那一格：True = 这一份凭据取自
     `verifications/pending/<正文 sha>.jsonl` 且“还没有认领”（命题还没在册时审的那一签，
     行上没有 `statement_id`），False = 取自 `verifications/<命题号>.jsonl` 那一行“或”
     取自一条已经认领给本条命题的 pending 行（2026-11-11 p283：认领之后它就是本条命题
     自己的签；`claimed` 那一格把这两种来路分开）。两者都算"签过"，但升 `kind` 的那一格
     在 B 的登记 / 收录路上不认“未认领”的 pending
     （`evidencebits.kind_following_grade(allow_pending=False)`）。
+    `streak` / `need` / `streak_ok`（2026-11-11 p284）是 pending 那一支的票数读数：
+    认领之后 `ok` 还要求 `streak >= SIGN_STREAK_NEED` 且那几票是同一份正文
+    （`_pending_claim_streak`）；未认领那一支这三个数只作读数（`ok` 仍只走行局部）。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
     out: dict[str, Any] = {
@@ -4947,6 +5056,9 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         #: 2026-11-11（p283）：认领回写了 `statement_id`（且载体稿号与行上一致）之后
         #: 这一格是 False、`claimed=True` —— 那时它已经是本条命题自己的签。
         "pending": False, "claimed": False, "carried_manuscript_id": "",
+        #: pending 那一支的票数读数（2026-11-11 p284）：认领之后 `ok` 要求
+        #: `streak_ok`（满 `SIGN_STREAK_NEED` 票且同一份正文 sha），见 `_gap_from_pending`。
+        "streak": 0, "need": int(SIGN_STREAK_NEED), "streak_ok": False,
     }
     checks: list[dict[str, Any]] = [
         {"item": "proof_text 非空（有被审的那份证明）", "ok": False, "detail": "还没判到"},

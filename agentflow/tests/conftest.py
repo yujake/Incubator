@@ -510,9 +510,16 @@ def sign_before_registration(root, *, proof_text: str,
     B 登记时按 sha 认领（`vsigns.bits_after_sign` 的 pending 那一档）。
 
     这不是"绕过闸"的开关：它写的是真的 pending 台账（走 `record_pending_sign`），
-    认领与否由正文 sha 决定 —— 改一个字就认不到。`times` 只为与
-    :func:`sign_for_the_gate` 同形，pending 这一档不看连续次数（见
-    `verifications._gap_from_pending` 的理由）。
+    认领与否由正文 sha 决定 —— 改一个字就认不到。
+
+    ## `times`（2026-11-11，p284）：票数现在也数
+
+    改前 pending 这一档"不看连续次数"（认领只够过准入闸、不抬 kind），所以 `times`
+    只是与 :func:`sign_for_the_gate` 同形的占位。p283 起已认领的 pending 签会被当作
+    升档依据，`verifications._gap_from_pending` 于是要求满 `SIGN_STREAK_NEED` 票、
+    同一份正文 sha —— 夹具要造"够升档的先签"就必须真落够票数。缺省仍落 1 行
+    （旧调用点的盘上形状一个字不变）；要造"签满"的现场传
+    `times=VR.SIGN_STREAK_NEED`。返回最后那一行（`record_pending_sign` 的返回值）。
     """
     from agentflow import verifications as VR
 
@@ -530,14 +537,16 @@ def sign_before_registration(root, *, proof_text: str,
         "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
         "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
         encoding="utf-8")
-    out = VR.record_pending_sign(
-        str(root), proof_text=str(proof_text),
-        verdict={"verdict": "成立", "findings": []},
-        object_path=rel,
-        #: p247：轴只由秘书给；夹具给 clean（不是由 `verdict` 字面推）。
-        secretary_judge={"checked": True, "axis": "clean",
-                         "decision": "没问题", "reason": "夹具：clean"})
-    _ = times  # pending 档不数连续次数（那一档结构上没有"同一趟三行"）
+    need = int(times if times is not None else 1)
+    out: dict = {}
+    for _ in range(max(1, need)):
+        out = VR.record_pending_sign(
+            str(root), proof_text=str(proof_text),
+            verdict={"verdict": "成立", "findings": []},
+            object_path=rel,
+            #: p247：轴只由秘书给；夹具给 clean（不是由 `verdict` 字面推）。
+            secretary_judge={"checked": True, "axis": "clean",
+                             "decision": "没问题", "reason": "夹具：clean"})
     return out
 
 

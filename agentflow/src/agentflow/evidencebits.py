@@ -1330,6 +1330,9 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     这一签已经是本条命题自己的签 —— `verifications.proof_review_gap` 会报
     `pending=False / claimed=True`，于是 `allow_pending=False` 也照样认它；
     "只是 pending（没认领）仍不够升"的旧射程一个字没动。
+    同日（p284）：认领只解除"它是 pending 台账"这一层 —— `proof_review_gap` 对已认领的
+    pending 行仍要求满 `SIGN_STREAK_NEED` 票、同一份正文 sha（`state="holding"` 时
+    `signed=False`），所以一票 / 两票 / 票数够但 sha 不一的"先签后登记"仍不升 kind。
     三态不变：`allow_pending=False` 而只有未认领的 pending 时是 `held`
     （查过了、不够），不是 `unreadable`（没查成）。
 
@@ -1398,6 +1401,15 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
         missing.append("V 的一签（`verifications/<命题号>.jsonl` 里没有盖住现行正文、"
                        "判「成立」的签；命题还没在册时审的那一签只够过准入闸，"
                        "不够升 kind —— 它指不出这条命题自己的台账那一行）")
+    elif str(sig.get("state") or "") == "holding":
+        # 2026-11-11（p284）：认领之后那一签仍是"判过成立、票数/正文没到门槛"。
+        # 这一格必须把它与"一次都没签"分开说 —— 否则 shortfall 说"没有判成立的签"，
+        # 而盘上明明已经有 1、2 票成立（只是不够发签）。
+        from . import verifications as _VR   # 惰性：门槛只有一处定义
+
+        missing.append(f"V 的签还差门槛（满 {int(_VR.SIGN_STREAK_NEED)} 票「成立」"
+                       "且这几票是同一份正文）："
+                       + str(sig.get("why") or "连续票数 / 正文 sha 还没到门槛"))
     elif not sig.get("checked"):
         missing.append("V 的那一签这一格没查成（没给 root / 台账读不出来）—— "
                        "没查成不是「没签」，补齐 root 再判")
@@ -1451,6 +1463,10 @@ def _signature_basis(row: Mapping[str, Any], root: Any, *,
     2026-11-11（p283）：`proof_review_gap` 把"已认领给本命题"的 pending 行读成
     `pending=False / claimed=True` ⇒ 这一格按 `signed=True` 走（认领完成之后它就是
     本条命题自己的签）；未认领的 pending 仍是 `pending_only=True`。
+    同日（p284）：认领只解除"来路"那一层 —— 已认领的 pending 行还要满
+    `SIGN_STREAK_NEED` 票、同一份正文 sha，`proof_review_gap` 才会给 `ok`。票数不够时
+    这里 `signed=False`、`state="holding"`（`pending` 也已是 False）：调用方按
+    "认了、还差几票"读，而不是"没有签"。
     """
     if root is None:
         return {"checked": False, "signed": False, "ledger": "",
