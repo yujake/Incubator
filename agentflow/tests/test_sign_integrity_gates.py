@@ -10,7 +10,7 @@
 | a | 8 条 3/3 签里 4 条 `statement_id=""` | 没有号不是拒签理由（业主 2026-11-05 晚：`命题号=未在册` 合法）；拒的是"连 pending 台账都没有" | 打桩 `sign_object_gate` 恒放行 ⇒ 签文件出现 |
 | b | 4 条 `ledger` 是稿头自引（`reports/<稿>#V签`） | 台账只认 `verifications/<号>.jsonl#v-…` 与 `verifications/pending/<正文sha>.jsonl#u-…` | 同上（同一道闸） |
 | c | 那 4 条的 `passes` 是三个空占位 | 每一转都要 `verification_id`/`at`/`proof_sha256` | 同上 |
-| d | `f-proof-plan-000011.md` 拿到 3/3 签、`identity_state=resolved` | 计划稿是合法落稿名、但不是签的载体；身份不得 `resolved` | 打桩 `sign_carrier_reading` 恒 ok ⇒ 身份又 `resolved` |
+| d | `f-proof-plan-000011.md` 拿到 3/3 签、`identity_state=resolved`（2026-11-10 裁定前被读成缺陷） | 计划稿是合法落稿名、也是签的载体（老盘只读兼容；新稿不再写计划名）；但计划号不是命题号 —— 载体 ≠ 在册，签块第 8 格仍 `未在册` | 打桩 `sign_carrier_reading` 恒 ok ⇒ `notes/` / 缺 `.md` 的名字也读到 `resolved`（载体闸不再拦） |
 | e | 000014/000016 只跑了第一步，`evidence_kind` 停在 `heuristic` | 签成之后同一笔里重算 `evidence_kind`（不必第二条命令） | 打桩 `_grade_recomputed_from_signature` ⇒ 停在旧档 |
 | g | 000013/000017 两步都跑 ⇒ `proof_review` | 在册那一支（正控）仍然升档 | —— |
 | 丙 | `b-register@` 是 `expects=work` 的义务 | `ack`/`completed` 关不掉它（收口只认证据或明确放弃） | 打桩前缀表为空 ⇒ 被 ack 关掉 |
@@ -180,6 +180,48 @@ def test_d_a_plan_manuscript_is_a_sign_carrier_now(tmp_path: pathlib.Path) -> No
     assert "与这一份稿相同" in str(reading.get("identity_why") or ""), reading
 
 
+#: d 的反真空形状（2026-11-10 换）。
+#:
+#: 旧形状是 `f-proof-plan-*`：d 改口径之后计划名是合法载体，打桩与不打桩都读
+#: `resolved` —— 那条反真空量不到载体闸（看着绿、其实什么都测不到）。
+#: 现在换成两个仍然会被载体闸拒的名字，签块与正文都对得上号，于是 `identity_state`
+#: 只由载体闸那一格决定：
+#:
+#: - `notes/f-proof-000013.md`：目录不是 `reports/`（老盘历史档，`tier=legacy`）；
+#: - `reports/f-proof-000013`：缺 `.md`，不是一份真文件的名字（`tier=family`）。
+#:
+#: 两个方向都实测：不打桩 ⇒ `unmatched`（下面那条正控）；打桩 ⇒ `resolved`（f_d）。
+_NON_CARRIER_RELS = ("notes/f-proof-000013.md", "reports/f-proof-000013")
+
+
+def _non_carrier_signed_text(st: Store, rel: str) -> str:
+    """非载体稿的正文 + 一块号对得上的 3/3 签块（读侧是纯读，不必真落一份稿）。
+
+    正文取 `_manuscript(st, SID)` 写出来的那一份（`## 证明` 节齐），签块第 9 格按
+    `rel` 现算的裸稿号写 —— 于是"号对得上"成立，身份只剩载体闸这一格可拦。
+    """
+    body = pathlib.Path(st.root, _manuscript(st, SID)).read_text(encoding="utf-8")
+    mark = VS.render_manuscript_sign(
+        proof_sha=VR.text_sha(PROOF), streak=3, need=3,
+        ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
+        manuscript_id=VS.manuscript_id_of(rel), signer="secretary:F")
+    return body + "\n" + mark + "\n"
+
+
+def test_d_a_non_carrier_manuscript_is_not_resolved(tmp_path: pathlib.Path) -> None:
+    """d 的另一半：非载体名（`notes/` 历史档 / 缺 `.md`）⇒ 身份不许 `resolved`。
+
+    与 `test_f_d_*` 同一个签块、同一份正文，只换名字：名字不是载体 ⇒ `unmatched`，
+    且 `identity_why` 写明"不是签的载体"。
+    """
+    st = _ws(tmp_path)
+    for rel in _NON_CARRIER_RELS:
+        reading = VS.manuscript_sign_reading(_non_carrier_signed_text(st, rel),
+                                             manuscript_path=rel)
+        assert reading["identity_state"] == "unmatched", (rel, reading)
+        assert "不是签的载体" in str(reading.get("identity_why") or ""), (rel, reading)
+
+
 # ====================================================================== e 签成即升档
 
 def test_e_signing_then_registering_the_body_upgrades_the_grade(tmp_path: pathlib.Path) -> None:
@@ -318,20 +360,21 @@ def test_f_c_without_the_gate_three_empty_passes_write_a_sign(tmp_path, monkeypa
     assert VS.sign_path(st.root, sha).is_file()
 
 
-def test_f_d_without_the_carrier_gate_a_plan_block_is_resolved(tmp_path, monkeypatch) -> None:
-    """f-d：把载体判定摘掉 ⇒ d 当场红（计划稿的签块又读成 `identity_state=resolved`）。"""
+def test_f_d_without_the_carrier_gate_a_non_carrier_is_resolved(tmp_path, monkeypatch) -> None:
+    """f-d：把载体判定摘掉 ⇒ d 的另一半当场红（非载体名也读成 `identity_state=resolved`）。
+
+    2026-11-10 换掉了旧形状（计划名）：计划名现在是合法载体，拿它打桩与不打桩都读
+    `resolved`，量不到载体闸。现在的形状见 `_NON_CARRIER_RELS`；正控是不打桩的那条
+    (`test_d_a_non_carrier_manuscript_is_not_resolved` ⇒ `unmatched`)。
+    """
     monkeypatch.setattr(VS, "sign_carrier_reading",
                         lambda path: {"ok": True, "code": "", "reason": "",
                                       "name": str(path)})
     st = _ws(tmp_path)
-    rel = _manuscript(st, SID, plan=True)
-    mark = VS.render_manuscript_sign(
-        proof_sha=VR.text_sha(PROOF), streak=3, need=3,
-        ledger=f"verifications/{SID}.jsonl#v-000003", statement_id=SID,
-        manuscript_id=f"plan-{SID}", signer="secretary:F")
-    text = pathlib.Path(st.root, rel).read_text(encoding="utf-8") + "\n" + mark + "\n"
-    reading = VS.manuscript_sign_reading(text, manuscript_path=rel)
-    assert reading["identity_state"] == "resolved", reading
+    for rel in _NON_CARRIER_RELS:
+        reading = VS.manuscript_sign_reading(_non_carrier_signed_text(st, rel),
+                                             manuscript_path=rel)
+        assert reading["identity_state"] == "resolved", (rel, reading)
 
 
 def test_f_e_without_the_backfill_the_grade_stays_heuristic(tmp_path, monkeypatch) -> None:

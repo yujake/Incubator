@@ -116,10 +116,13 @@ def row_of(st: Store, sid: str) -> dict:
 def run_f_example(st: Store) -> dict:
     """F：先立猜想行 → 登记 example 手稿（过形态闸一次）→ V 三转 → B 收录。
 
-    为什么要先立一条猜想行：新的 F 命题在拿到命题号之前手稿只能叫
-    `f-proof-plan-0001.md`，而 V 的未在册入口只收按号命名的那一族（计划稿是
-    「看过、没签」）。立一行猜想（B-2 允许 `conjecture` 起步）就有了号，F 的手稿
-    于是落在 `reports/f-proof-<号>.md` —— 与真机上「先立猜想、再补证明」同一条路。
+    为什么要先立一条猜想行：老盘上未拿号的手稿曾叫 `f-proof-plan-0001.md`；2026-11-10
+    裁定之后它也是合法载体（老盘只读兼容，与数字名同等），但计划号不是命题号 ——
+    签块第 8 格「命题号」仍落 `未在册`。这条链要的是"按号命名、签块带号"的形态
+    （下面 V 的在册入口按 `statement_id` 签、B 按号收录），所以先立一行猜想
+    （B-2 允许 `conjecture` 起步）拿号，F 的手稿落在 `reports/f-proof-<号>.md` ——
+    与真机上「先立猜想、再补证明」同一条路；新 F 也不再写计划名（p272 之后只按自己的
+    稿号命名，见 `manuscriptids`）。
     """
     agent_b = b(st)
     seeded = agent_b.register_statement(

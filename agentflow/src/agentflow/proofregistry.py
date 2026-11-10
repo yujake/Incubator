@@ -356,20 +356,28 @@ def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_
     三种身份键，按优先级取第一个两边都有的：
 
     1. 命题号（`- 命题号：stmt:<号>`）：拿到号之后，号就是身份；
-    2. `（计划号，子目标）`（`- 计划：<plan> · 子目标：<sid>`）：F 还没有号时，
-       这是唯一稳定的槽位键 —— 计划稿的路径里没有子目标，光看路径会把同一计划下
-       的不同子目标读成同一槽；
+    2. `（计划号，子目标）`（`- 计划：<plan> · 子目标：<sid>`）：legacy 读兼容
+       —— p272（2026-11-10 业主裁定）之后 F 不再新写计划名（`manuscriptids` 只发
+       六位稿号），这一支只为读老盘上 `f-proof-plan-*` 与带 `- 计划：` 头的登记条目。
+       老盘上 F 还没有号时，这是唯一稳定的槽位键 —— 计划稿的路径里没有子目标，
+       光看路径会把同一计划下的不同子目标读成同一槽；
     3. `- 标签：`：只有前两样都缺时才用（旧稿 / 手写稿的兜底）。
 
     调用方必须先确认 `entry["checked"]`（有正文 sha / 命题指纹 / 版本记录）：
     手写稿可以给自己写一行 `- 标签：`，但它没有登记元信息，不是登记条目
     （A3 的判据 `test_a_handwritten_labelled_head_is_not_an_entry`）。
 
-    为什么要有这一格：改前 `register_or_rewrite` 只比 label，而生产路径
+    为什么要有这一格：改前 `register_or_rewrite` 只比 label，而当时的生产路径
     （`agent_f/core.py::_apply_round` → `proof_manuscript` 先写一份计划稿）那一份
     稿头没有 `- 标签：`（渲染时 `label=""`）⇒ 每一轮都读成"新命题" ⇒ 每轮重新登记
     （实测 3 轮 `modes=[registered×3]`、闸 3 次、`proof_no=[1,1,1]`）。
     槽位从稿头元信息取，于是"传不传 `manuscript_text`"不再决定解耦成不成立。
+
+    legacy 读兼容（2026-11-10 业主要求如实标注）：上面那段"生产路径先写计划稿"
+    是改前 / 老盘的现场。p272 之后 F 不再新写计划名 —— `agent_f/manuscript.py::
+    proof_manuscript` 只按 `manuscript_id` 命名（`manuscriptids.canonical_rel` ⇒
+    `reports/f-proof-<六位稿号>.md`）。所以「计划号 + 子目标」这一支只为读老盘上的
+    登记条目；新写路径不会走到它。不改行为，只把"计划稿 = 证明底稿"标成历史读法。
     """
     want_sid = str(statement_id or "").strip()
     have_sid = str(entry.get("statement_id") or "").strip()
@@ -474,6 +482,11 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
     `entries_on_disk` 把这一条读成"未落号的登记条目"，D 的携带单于是把同一份稿再列一遍
     （`mss:<号>` 与 `stmt:<号>` 两行、路径与 sha 相同），而按号核对携带单的那一侧找不到
     它。号已经拿到 ⇒ 这一行必须写它。
+
+    legacy 读兼容（2026-11-10 业主裁定）：上面"底稿是先写的计划稿"是改前 / 老盘的现场；
+    p272 之后 F 不再新写计划名（`manuscriptids` 只发六位稿号），登记条的底稿是按稿号
+    命名的那一份；这一支只为读老盘上按计划名落的登记条目 —— 行为一个字没改，只是把
+    "计划稿 = 证明底稿"标注成历史读法。
 
     这一段是纯搬移：`register_or_rewrite` 原来内联在这里的几行原样搬进来，
     入参与返回值都是原来的那几格（拆分只为了把 210 行压回 200 行以内）。

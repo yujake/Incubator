@@ -138,11 +138,12 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
 
     # 稿名必须让 `vsigns.manuscript_id_of` 认得出裸稿号（`reports/f-proof-<号>.md`）：
     # 签块第 9 格「手稿号」按它写，认不出号的块 B 不认（2026-11-04 裁定 乙-2）。
-    # 2026-11-06：计划稿不是签的载体 —— `f-proof-plan-<数字>` 是合法落稿名（F 先按
-    # 计划落稿、拿到命题号再改名），但 V 的签只盖在"一条命题的证明"上，计划稿写的是
-    # 下一步怎么做 ⇒ 拿计划稿送审会落 `proof_reviewed_not_signed`（看过、没签，一个字
-    # 节都不写）。这一步要的是"未在册先签"的真实形态，所以稿名按命题号形态写：本工作区
-    # 此前没有 `statements` 行，第一条命题登记的号就是 000000（下面 B 的登记沿用它）。
+    # 2026-11-10 业主裁定之后：计划名 `f-proof-plan-<数字>` 也是合法载体（老盘只读兼容，
+    # 与数字名同等），拿它送审不再落 `proof_reviewed_not_signed`；但「是载体」说的是
+    # 第 9 格认得出稿号 —— 计划号不是命题号，第 8 格「命题号」仍写 `未在册`。这一步要的是
+    # "未在册先签"的真实现场，稿名按命题号形态写：本工作区此前没有 `statements` 行，
+    # 第一条命题登记的号就是 000000（下面 B 的登记沿用它）。新稿不再写计划名：p272
+    # 之后 F 只按自己的稿号命名（`manuscriptids`）。
     man_rel = DS.manuscript_relpath(statement_id="000000")
     man_path = ws / man_rel
     man_path.parent.mkdir(parents=True, exist_ok=True)
