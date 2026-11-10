@@ -20,10 +20,12 @@
 
 ## 与既有实现的关系
 
-设计 0.3 的硬约束 1 要求接线时复用 `depsection.read_proof_body` 的三态，不再自己写
-切节。本批不能 import 既有模块，所以 `_section` 是那份切节语义的纯函数镜像；接线时
-把 `_section` 换成 `depsection.proof_body_reading` / `read_proof_body`（TODO 在设计
-2.11 / 6.1，未接线前两处由判据的"同一节不许顶替"钉住）。
+设计 0.3 的硬约束 1 要求接线时复用 `depsection` 的切节语义，不再自己写。2026-11-10
+（真机 DCT 彩排的空证明缺陷）把这件事收口：`_section` 只是
+`depsection.section_lines` 的转发，判据（`## 证明` 到下一个同级或更高级的标题为止，
+`### ` 及更深的小标题算节内）只有 `depsection.heading_level` / `section_lines` 一处。
+改前这里抄了一份"任何 `#` 都截断"的镜像 ⇒ 同一份稿在 V 稿闸里读得到正文、在逐格提取
+里被截成空串，两处读数对不上。
 
 ## 冲突矩阵
 
@@ -38,6 +40,8 @@ import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
+
+from . import depsection as _DS  # 切节的唯一实现（`section_lines` / `heading_level`）
 
 #: 收录格的闭集（与 `manuscriptfamily.INGEST_CELLS` 同一份口径；判据钉住两处相等）。
 INGEST_CELLS: tuple[str, ...] = (
@@ -154,29 +158,13 @@ def _normalise(text: Any) -> tuple[str | None, str]:
 def _section(text: str, heading: str) -> tuple[list[tuple[int, str]], int]:
     """取某一节的正文行 ⇒ `([(行号, 原文)], 标题所在行号)`；没有这一节 ⇒ `([], 0)`。
 
-    语义是 `depsection.section_lines` 的纯函数镜像：标题行必须逐字以 `heading` 开头
-    （后面可以跟括号说明或空白），节从标题下一行开始、到下一个 Markdown 标题或文末
-    为止。镜像不 import 既有模块是为本批的零冲突约束；接线时换掉（模块开头已写明）。
+    唯一实现是 :func:`depsection.section_lines`（2026-11-10：本模块不再自己切节）。
+    标题行必须逐字以 `heading` 开头（后面可以跟括号说明或空白）；节从标题下一行开始、
+    到下一个同级或更高级的标题或文末为止，`### ` 及更深的小标题算节内内容。
+    入参已由 :func:`_normalise` 规范过换行，所以这里直接交给它。
     """
-    lines = text.split("\n")
-    start = 0
-    for index, line in enumerate(lines, 1):
-        norm = line.strip()
-        if not norm.startswith(heading):
-            continue
-        rest = norm[len(heading):]
-        if rest and not rest.startswith(("（", "(", " ", "\t")):
-            continue
-        start = index
-        break
-    if not start:
-        return [], 0
-    body: list[tuple[int, str]] = []
-    for index, line in enumerate(lines[start:], start + 1):
-        if line.strip().startswith("#"):
-            break
-        body.append((index, line))
-    return body, start
+    body, start = _DS.section_lines(text, heading)
+    return list(body), start
 
 
 def _head_lines(text: str) -> list[tuple[int, str]]:

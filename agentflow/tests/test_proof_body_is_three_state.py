@@ -27,6 +27,7 @@ import pathlib
 
 from agentflow import depsection as DS
 from agentflow import exhaustionreport as ER
+from agentflow import proofregistry as PR
 from agentflow.agent_b import register_statement as RS
 
 #: 有一节 `## 证明`：present。
@@ -64,6 +65,60 @@ WITHOUT_PROOF = (
 
 #: `## 证明` 里那一节的正文（present 时应当逐字拿到的这一串）。
 PROOF_BODY = "第一步：由定义直接推出。\n第二步：两步合起来就是结论。\n"
+
+#: 真机 DCT 彩排的形状（2026-11-10）：`## 证明` 下面用同级的 `## 记号` /
+#: `## 第一步` 分小节 —— 真实数学写作最常见的样子。改前这些行每一行都被当成
+#: "下一节的标题" ⇒ 证明正文被截成空串 ⇒ 落稿闸报 `empty_proof_section`。
+WITH_LEVEL2_SUBHEADS = (
+    "- 命题号：stmt:000000\n"
+    "\n"
+    "## 命题\n"
+    "命题正文（这一行不是证明）。\n"
+    "\n"
+    "## 证明\n"
+    "\n"
+    "## 记号与约定\n"
+    "以下所有不等式均按 μ-几乎处处理解。\n"
+    "\n"
+    "## 第一步：f 可积\n"
+    "由控制函数 g 直接得到。\n"
+    "\n"
+    "## 依赖\n"
+    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+    "|---|---|---|---|\n"
+    "| 第一步用了它 | stmt:000001 | 1 | 1 |\n"
+)
+LEVEL2_PROOF_BODY = ("\n## 记号与约定\n"
+                     "以下所有不等式均按 μ-几乎处处理解。\n"
+                     "\n"
+                     "## 第一步：f 可积\n"
+                     "由控制函数 g 直接得到。\n")
+
+#: 更深的 `###` 小标题：按层级它本来就比 `## 证明` 深，改前也不该截断（回归钉）。
+WITH_LEVEL3_SUBHEADS = (
+    "## 命题\n"
+    "命题正文。\n"
+    "\n"
+    "## 证明\n"
+    "第一步：分两种情形。\n"
+    "\n"
+    "### 情形一：g 有界\n"
+    "由控制收敛直接得到。\n"
+    "\n"
+    "### 情形二：g 无界\n"
+    "用截断逼近。\n"
+    "\n"
+    "## 依赖\n"
+    "| 引用 | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号 |\n"
+    "|---|---|---|---|\n"
+)
+LEVEL3_PROOF_BODY = ("第一步：分两种情形。\n"
+                     "\n"
+                     "### 情形一：g 有界\n"
+                     "由控制收敛直接得到。\n"
+                     "\n"
+                     "### 情形二：g 无界\n"
+                     "用截断逼近。\n")
 
 
 def test_present_reads_only_the_proof_section() -> None:
@@ -179,3 +234,83 @@ def test_exhaustionreport_proof_body_of_has_the_same_strict_reading() -> None:
     assert ER.proof_body_of(WITH_PROOF) == DS.proof_body(WITH_PROOF).strip("\n")
     assert ER.proof_body_of(WITH_PROOF) == PROOF_BODY.rstrip("\n")
     assert ER.proof_body_of(WITHOUT_PROOF) == ""
+
+
+# ============================================================ 2026-11-10：按层级 / 按"是不是一节"切
+def test_level_two_subheads_inside_a_proof_are_body_not_boundaries() -> None:
+    """真机 DCT 彩排：`## 证明` 下用 `## 记号` / `## 第一步` 分小节 ⇒ 正文非空且逐字全取。
+
+    这些标题与 `## 证明` 同级；只按层级判结束仍会截空。判据是"同级 ∧ 是手稿的
+    一节"才算边界，所以它们留在正文里，`## 依赖` 照旧结束这一节。
+    """
+    reading = DS.proof_body_reading(WITH_LEVEL2_SUBHEADS)
+    assert reading["state"] == DS.PROOF_PRESENT, reading
+    assert reading["present"] is True
+    assert reading["chars"] > 0, reading
+    assert reading["body"] == LEVEL2_PROOF_BODY, reading["body"]
+    assert DS.proof_body(WITH_LEVEL2_SUBHEADS) == LEVEL2_PROOF_BODY
+    for line in ("## 记号与约定", "## 第一步：f 可积"):
+        assert line in DS.proof_body(WITH_LEVEL2_SUBHEADS), line
+    # 边界仍然只在 `## 依赖` 前：依赖段的表与标题一个字节都不进正文。
+    body = DS.proof_body(WITH_LEVEL2_SUBHEADS)
+    assert "## 依赖" not in body
+    assert "| 第一步用了它" not in body
+    # `## 命题` 那一节同样不被小标题截断（同一份切节口径）。
+    assert DS.statement_body(WITH_LEVEL2_SUBHEADS) == "命题正文（这一行不是证明）。"
+
+
+def test_level_three_subheads_inside_a_proof_are_body_not_boundaries() -> None:
+    """`### ` 比 `## 证明` 深 ⇒ 节内内容；正控是 `## 依赖` 仍结束这一节。"""
+    body = DS.proof_body(WITH_LEVEL3_SUBHEADS)
+    assert body == LEVEL3_PROOF_BODY, body
+    assert "### 情形一：g 有界" in body and "### 情形二：g 无界" in body
+    assert "## 依赖" not in body
+
+
+def test_the_known_dependency_section_still_ends_the_proof_section() -> None:
+    """原来的行为不变：`## 证明` 之后接 `## 依赖` ⇒ 正文到 `## 依赖` 前为止。"""
+    # 与上面两份夹具同一形状，但没有小标题：正文就是那两行，依赖段不进正文。
+    assert DS.proof_body(WITH_PROOF) == PROOF_BODY
+    assert "## 依赖" not in DS.proof_body(WITH_PROOF)
+    assert DS.proof_body_reading(WITH_PROOF)["chars"] == len(PROOF_BODY.strip())
+
+
+def test_a_higher_level_heading_always_ends_the_section() -> None:
+    """更高级的标题一定是新的一节：`## 证明` 之后接 `# 附录`（无论叫什么名）。"""
+    text = "## 证明\n证明正文。\n\n# 附录\n附录正文。\n"
+    assert DS.proof_body(text) == "证明正文。\n"
+
+
+def test_split_sections_shares_the_same_boundary_rule() -> None:
+    """`proofregistry.split_sections` 是同一份口径：同级小标题不另起一节。
+
+    它是第三处按 `##` 切块的地方（`section_hashes` / 重写只换 `## 证明` 都走它）：
+    改前一份 DCT 形状的证明会被切成 `## 证明`（空）+ `## 记号` + `## 第一步` 三节。
+    """
+    _head, sections = PR.split_sections(WITH_LEVEL2_SUBHEADS)
+    assert [name for name, _body in sections] == ["命题", "证明", "依赖"]
+    proof = dict(sections)["证明"]
+    assert "## 记号与约定" in proof and "## 第一步：f 可积" in proof
+    assert set(PR.section_hashes(WITH_LEVEL2_SUBHEADS)) == {
+        "## 命题", "## 证明", "## 依赖"}
+
+
+# ---------------------------------------------------------------- d 反真空
+def _old_any_hash_truncates(line: str) -> int:
+    """改前的口径：任何以 `#` 开头的行都算边界（所有标题同权）。"""
+    return 1 if str(line or "").lstrip().startswith("#") else 0
+
+
+def test_d_old_any_hash_rule_truncates_the_first_case(monkeypatch) -> None:
+    """d 反真空：把切节打桩成"任何 `#` 都截断" ⇒ 第一条（二级小标题）必红。
+
+    基线先证明不打桩时它是绿的；再只换掉"层级 + 是不是一节"这两格，`## 记号与约定`
+    立刻变成边界、证明正文回到空串 —— 于是 `test_level_two_subheads_...` 的第一条
+    断言会红。打桩不碰 `section_lines` 本身，判据仍在看那两格。
+    """
+    baseline = DS.proof_body(WITH_LEVEL2_SUBHEADS)
+    assert baseline == LEVEL2_PROOF_BODY, baseline
+    monkeypatch.setattr(DS, "heading_level", _old_any_hash_truncates)
+    monkeypatch.setattr(DS, "is_section_heading", lambda line: True)
+    assert DS.proof_body(WITH_LEVEL2_SUBHEADS) == "", (
+        "把规则改回「任何 # 都截断」之后证明正文仍非空 ⇒ 判据没在看切节")

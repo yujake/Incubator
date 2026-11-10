@@ -569,10 +569,75 @@ def _is_separator(cells: Sequence[str]) -> bool:
         cell and set(cell) <= set("-: ") and "-" in cell for cell in cells)
 
 
+#: 手稿里"节"的标题闭集（同级标题只有落在这一张表里才算下一节）。
+#:
+#: ## 为什么层级规则之外还要这一张表（2026-11-10，真机 DCT 彩排）
+#:
+#: 真实数学写作会在 `## 证明` 下面直接用 `## 记号与约定` / `## 第一步` 分小节 ——
+#: 这与 `## 证明` 是同一级。只按"标题层级 ≤ 本节层级"判结束，正文仍会被截成
+#: 空串；而 `## 依赖` 必须照旧是边界。两者只能靠"这一行是不是手稿的一节"区分：
+#: 同级的已知节名才是下一节，同级的自由小标题算本节内容；更高级的标题（`# `）
+#: 无论叫什么都是新的一节（手稿若用 `# 命题` 一级标题，`# ` 就是边界）。
+#:
+#: 这一张表是解析侧的唯一名单；`manuscriptintake` 与 `proofregistry` 的切节都从
+#: :func:`is_section_heading` / :func:`section_lines` 取同一份口径。
+#: 末位的 `## 数值结果` 与 `exhaustionreport.NUMERIC_RESULT_HEADING` 是同一字面量
+#: （那一侧是渲染、这一侧是解析；两侧互相 import 会成环，所以这里留字面并在此点名）。
+SECTION_TITLES: tuple[str, ...] = (
+    SECTION_STATEMENT, SECTION_PROOF, SECTION_HEADING, "## 数值结果")
+
+
+def heading_level(line: str) -> int:
+    """一行 Markdown 标题的层级（行首 `#` 连写的个数）；不是标题 ⇒ 0。
+
+    ## 为什么按层级而不是"任何 `#` 都算边界"（2026-11-10，真机 DCT 彩排）
+
+    真实的数学写作几乎都会在 `## 证明` 下面再分小节（`## 记号与约定` / `## 第一步` …，
+    或更深的 `### 情形一`）。改前 :func:`section_lines` 遇到任何以 `#` 开头的行就结束
+    这一节 ⇒ `## 证明` 的下一行若是 `## 记号与约定`，正文立刻被截成空串，落稿闸报
+    `empty_proof_section`（"`## 证明` 那一节是空的 ⇒ 没有可签的正文"）—— 稿其实写满了，
+    只是切节切错了。
+
+    ## 判据
+
+    层级只看行首那一段连续的 `#`：`#` ⇒ 1、`##` ⇒ 2、`###` ⇒ 3 …… 到第一个非 `#`
+    为止；空行 / 非标题 ⇒ 0。`##命题`（标题后没有空格）也按 2 算：本仓的手稿标题是
+    中文直写，历史上就允许 `## 命题` 与 `##命题` 两种写法（:func:`section_lines` 的
+    匹配口径不变），这一格只负责数 `#` 的个数。
+    """
+    level = 0
+    for ch in str(line or "").lstrip():
+        if ch != "#":
+            break
+        level += 1
+    return level
+
+
+def is_section_heading(line: str) -> bool:
+    """这一行是不是手稿的一节标题（:data:`SECTION_TITLES` 之一，逐字前缀）。
+
+    只认标题文字，不看层级：层级由 :func:`heading_level` 单独给。调用方按
+    "同级 ∧ 是一节 ⇒ 边界；更高级 ⇒ 边界；更深 ⇒ 节内内容" 组合这两格。
+    """
+    norm = str(line or "").strip()
+    return any(norm.startswith(title) for title in SECTION_TITLES)
+
+
 def section_lines(text: str, heading: str = SECTION_HEADING) -> tuple[list[tuple[int, str]], int]:
     """取出某一节的正文行 ⇒ `([(行号, 原文)], 段标题所在行号)`；没有这一节 ⇒ `([], 0)`。
 
-    段从标题行下一行开始，到下一个 Markdown 标题（`#` 开头）或文末为止。
+    段从标题行下一行开始，到下一个同级或更高级的标题，或文末为止：`## 证明`（二级）
+    这一节的边界是 `## ` 或 `# `，而 `### ` 及更深的小标题算节内内容（不截断）。
+    边界按 :func:`heading_level` 现算，不写死 `##` —— 手稿若用 `# 命题`（一级），那
+    `# ` 也是边界。
+
+    ## 同级的自由小标题算节内（2026-11-10，真机 DCT 彩排）
+
+    真实写作会在 `## 证明` 下面用 `## 记号与约定` / `## 第一步` 分小节 —— 同级、
+    但不是手稿的一节。只按层级判，它们的正文仍会被截成空串（落稿闸报
+    `empty_proof_section`）。所以同级还要求"这一行是 :data:`SECTION_TITLES` 之一"
+    才算边界；`## 依赖` 在同一张表里，所以它照旧结束证明那一节。标题参数本身不是
+    `#` 标题时（历史调用没有这种）退回"任何标题都算边界"的老口径。
     """
     lines = str(text or "").replace("\r\n", "\n").split("\n")
     start = 0
@@ -587,9 +652,13 @@ def section_lines(text: str, heading: str = SECTION_HEADING) -> tuple[list[tuple
         break
     if not start:
         return [], 0
+    section_level = heading_level(heading)
     body: list[tuple[int, str]] = []
     for i, line in enumerate(lines[start:], start + 1):
-        if line.strip().startswith("#"):
+        level = heading_level(line)
+        if level and (section_level <= 0
+                      or level < section_level
+                      or (level == section_level and is_section_heading(line))):
             break
         body.append((i, line))
     return body, start
@@ -2215,17 +2284,18 @@ def _rows_from_proof(text: str) -> list[dict[str, Any]]:
 
 
 def _replace_section(text: str, section_text: str) -> str:
-    """把 `## 依赖` 那一节整段换成 `section_text`（没有那一节就接在文末）。"""
+    """把 `## 依赖` 那一节整段换成 `section_text`（没有那一节就接在文末）。
+
+    边界与 :func:`section_lines` 同一份口径（2026-11-10：同级 / 更高级的标题才是边界，
+    `### ` 算节内）—— 改前这里另抄了一遍"任何 `#` 都截断"，收成一份之后洗稿不会
+    把 `## 依赖` 下面更深的小标题当成下一节而留在原地。
+    """
     raw = str(text or "").replace("\r\n", "\n")
     lines = raw.split("\n")
-    _body, start = section_lines(raw)
+    body, start = section_lines(raw)
     if not start:
         return raw.rstrip("\n") + "\n\n" + section_text
-    end = len(lines)
-    for i in range(start, len(lines)):
-        if lines[i].strip().startswith("#"):
-            end = i
-            break
+    end = start + len(body)
     head = lines[: start - 1]
     tail = lines[end:]
     while head and not head[-1].strip():

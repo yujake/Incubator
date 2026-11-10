@@ -12,7 +12,9 @@
 4. 冲突矩阵（设计 2.6）与两条对拍不变量 I1 / I2（设计 2.4）；
 5. 反真空：把 `absent` 判成 `present`（拿依赖段顶替证明段）必须让同一条判据红。
 
-全部纯函数，不读写盘、不 import 任何既有模块。
+切节只有一份实现（`depsection.section_lines`）：`## 证明` 下面的 `## 记号与约定` /
+`## 第一步` 一类同级小标题是节内正文，不是下一节（2026-11-10，真机 DCT 彩排）。
+全部纯函数，不读写盘。
 """
 from __future__ import annotations
 
@@ -20,6 +22,7 @@ import hashlib
 
 import pytest
 
+from agentflow import depsection as DS
 from agentflow import manuscriptfamily as MF
 from agentflow import manuscriptintake as MI
 
@@ -196,6 +199,47 @@ def test_empty_proof_section_is_present_not_absent() -> None:
                          {"proof_text": reading}, "refuse", family="f-proof")
     assert plan["ok"] is False
     assert plan["refused"] == MI.CODE_PROOF_EMPTY
+
+
+def test_level_two_subheads_do_not_truncate_the_proof_cell() -> None:
+    """`## 证明` 下的同级小标题是节内正文（与 `depsection.proof_body` 同一份切节）。
+
+    真机 DCT 彩排的形状：改前这里按"任何 `#` 都截断"切，证明格拿到空串 ⇒ apply 报
+    `manuscript_proof_empty`，而稿其实写满了。
+    """
+    text = (
+        "- 命题号：stmt:000001\n"
+        "\n"
+        "## 命题\n"
+        "P\n"
+        "\n"
+        "## 证明\n"
+        "\n"
+        "## 记号与约定\n"
+        "以下按 μ-几乎处处理解。\n"
+        "\n"
+        "## 第一步\n"
+        "由控制函数得到。\n"
+        "\n"
+        "### 情形一\n"
+        "细节。\n"
+        "\n"
+        "## 依赖\n"
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
+        "|---|---|---|---|\n"
+        "| 第一步用了它 | stmt:000002 | 1 | 1 |\n"
+    )
+    reading = MI.extract_cells(text, "f-proof", ["proof_text"])["proof_text"]
+    assert reading["outcome"] == MI.EXTRACT_PRESENT, reading
+    value = str(reading["value"])
+    assert value.strip(), reading
+    for line in ("## 记号与约定", "## 第一步", "### 情形一"):
+        assert line in value, line
+    # 与签的正文同一份口径（不做第二套切节）。
+    assert value.strip() == DS.proof_body(text).strip()
+    # `## 依赖` 仍是边界：依赖段一个字节都不进证明格。
+    assert "## 依赖" not in value
+    assert "| 第一步用了它" not in value
 
 
 def test_dependencies_parse_four_columns_and_report_problems() -> None:

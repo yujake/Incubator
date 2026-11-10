@@ -18,6 +18,7 @@ F 的稿落在 `notes/F-conj000000-proof.md`（14 KB，F 自己 `fs.write` 写�
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
 | a | `promote_manuscript(notes/稿, 号)` ⇒ `reports/f-proof-<号>.md` 生成、稿头写号、签块跟着搬、第 9 格手稿号=号 | 没有这个函数：盘上那份稿与正式稿之间没有代码 |
+| a3 | `## 证明` 下用同级 `## 第一步` 分小节的散文证明也能落稿（2026-11-10 真机 DCT 彩排） | 切节按"任何 `#` 都截断" ⇒ 证明那一节空串 ⇒ `empty_proof_section` |
 | c | 多命题的攻坚稿（两个 `## 命题`）不许被机械转正 ⇒ 受控拒绝 `multiple_propositions`、零写入 | 没有判据；硬转会产出一份"只属于第一条、却带着别条证明"的正式稿 |
 | d | 没有 `## 证明` 的稿 ⇒ 受控拒绝 `no_proof_section` | 同上 |
 | e | 正式稿已经签住另一版正文时，没签的草稿不许覆盖它 | 转正会毁掉已有的签（"签另算"不是"毁签"） |
@@ -52,6 +53,27 @@ DEP_TABLE = (
     "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
     "|---|---|---|---|\n"
     "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n"
+)
+
+#: 真机 DCT 彩排（2026-11-10）的形状：`## 证明` 下面用同级的 `## 记号` /
+#: `## 第一步` 分小节 —— 真实数学写作几乎都这么写。改前切节把 `## 记号` 当成下一节
+#: ⇒ 证明那一节被截成空串 ⇒ 落稿闸报 `empty_proof_section`（真机会当场卡死）。
+DCT_PROOF = (
+    "## 记号与约定\n"
+    "\n"
+    "以下所有不等式与极限均在 μ-几乎处处意义下理解。\n"
+    "\n"
+    "## 第一步：f 可积\n"
+    "\n"
+    "几乎处处有 |f_n| ≤ g，令 n → ∞ 得 |f| ≤ g，故 ∫|f| dμ ≤ ∫g dμ < ∞。\n"
+    "\n"
+    "## 第二步：整理不等式\n"
+    "\n"
+    "由 Fatou 引理得 limsup_n ∫|f_n − f| dμ ≤ 0。\n"
+    "\n"
+    "### 情形一：g 有界\n"
+    "\n"
+    "由控制收敛假设直接就得到。\n"
 )
 
 
@@ -148,6 +170,45 @@ def test_a2_promotion_is_idempotent(tmp_path):
     assert second.get("promoted") is True, second
     assert _read(st, FORMAL_REL) == once, "第二次转正改动了正式稿"
     assert first.get("path") == second.get("path") == FORMAL_REL
+
+
+def test_a3_a_proof_with_level_two_subheads_is_promoted(tmp_path):
+    """a3（2026-11-10 真机 DCT 彩排）：散文证明用同级 `## 第一步` 分小节也能落稿。
+
+    改前 `section_lines` 遇到任何 `#` 就结束证明那一节，`## 证明` 的下一行是
+    `## 记号与约定` ⇒ `formal_shape_problem` 报 `empty_proof_section`，整笔拒。
+    这里钉"稿能落成正式稿、签块跟着搬、被签正文含全部小节"，不判数学对错。
+    """
+    st = _ws(tmp_path)
+    text = "".join([
+        "# F 的证明手稿：勒贝格控制收敛定理\n",
+        "- 命题号：stmt:（还没落号）\n",
+        "- 计划：000000 · 子目标：s1\n",
+        "\n## 命题\n\n",
+        "设 (X, A, μ) 为测度空间，f_n → f μ-几乎处处；若存在可积 g 使 "
+        "|f_n| ≤ g，则 f 可积且 ∫ f_n dμ → ∫ f dμ。\n",
+        "\n## 证明\n\n",
+        DCT_PROOF,
+        "\n" + DEP_TABLE,
+    ])
+    text = DS.mark_washed(text, actor="secretary-F")
+    _write(st, NOTES_REL, text)
+    sha = _sign(st, NOTES_REL)
+
+    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+
+    assert out.get("promoted") is True, out
+    assert out.get("path") == FORMAL_REL, out
+    assert dict(out.get("problem") or {}) == {}, out
+    final = _read(st, FORMAL_REL)
+    for line in ("## 记号与约定", "## 第一步：f 可积", "### 情形一：g 有界"):
+        assert line in final, line
+    body = VS.manuscript_proof_body(final)
+    assert body.strip(), "正式稿的 `## 证明` 那一节被切成了空串"
+    assert "## 记号与约定" in body and "## 第一步：f 可积" in body, body
+    block = _block(st, FORMAL_REL)
+    assert block.get("signed") is True, block
+    assert block.get("proof_sha256") == sha, block
 
 
 # ============================================================ c/d 负控（形状）

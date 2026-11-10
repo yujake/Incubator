@@ -158,10 +158,26 @@ def proof_sha(proof_text: Any) -> str:
 
 # ---------------------------------------------------------------- 分节（切 / 换 / 哈希）
 
+def _section_start_indices(lines: Sequence[str]) -> list[int]:
+    """`## ` 标题里"是手稿一节"的那些行下标（同级自由小标题不算新的一节）。
+
+    与 `depsection.section_lines` 同一份口径（2026-11-10，真机 DCT 彩排的空证明）：
+    证明正文里 `## 记号与约定` / `## 第一步` 这类同级小标题是节内内容，只有
+    `## 依赖` 一类已知节名才开启下一节。改前这里按"任何 `## `"切，`## 证明` 那一节
+    会被切成空的，分节哈希里出现 `## 记号` 这种并不存在的"节"。
+    """
+    return [i for i, line in enumerate(lines)
+            if _SECTION_RE.match(line) and _DS.is_section_heading(line)]
+
+
 def split_sections(text: Any) -> tuple[str, list[tuple[str, str]]]:
-    """把手稿切成 `(头部, [(节名, 节内容), …])`；内容不含节标题那一行。"""
+    """把手稿切成 `(头部, [(节名, 节内容), …])`；内容不含节标题那一行。
+
+    节边界只认手稿的节（`depsection.SECTION_TITLES`）：`## 证明` 下面的
+    `## 记号与约定` 一类同级小标题留在证明正文里，不再另起一节。
+    """
     lines = str(text or "").replace("\r\n", "\n").split("\n")
-    starts = [i for i, line in enumerate(lines) if line.startswith("## ")]
+    starts = _section_start_indices(lines)
     if not starts:
         return "\n".join(lines), []
     head = "\n".join(lines[: starts[0]])
@@ -191,9 +207,14 @@ def section_hashes(text: Any) -> dict[str, str]:
 
 
 def _replace_section(text: str, name: str, body: str) -> tuple[str, bool]:
-    """只换 `## <name>` 那一节的内容，其余字节原样（判据 i 的"只动那一块"）。"""
+    """只换 `## <name>` 那一节的内容，其余字节原样（判据 i 的"只动那一块"）。
+
+    节的起止与 :func:`split_sections` 同一份口径（同级自由小标题算节内内容）：
+    替换 `## 证明` 时，它下面的 `## 记号` 一类小标题跟着旧证明一起被换掉，不会留在
+    原地变成半截。
+    """
     lines = str(text or "").replace("\r\n", "\n").split("\n")
-    starts = [i for i, line in enumerate(lines) if _SECTION_RE.match(line)]
+    starts = _section_start_indices(lines)
     for k, i in enumerate(starts):
         if _SECTION_RE.match(lines[i]).group("name").strip() != name:
             continue
