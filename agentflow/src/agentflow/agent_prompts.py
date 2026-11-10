@@ -3881,13 +3881,13 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
 #: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p274）+ `_VOLATILE_FACT_SETS` 末尾追加一格
 #: （facts 键集仍 15 格、count / keys_sha256 与 p273 同值 —— 本批没有哪一格事实换落点）。
-#: 本批**没有**改工具声明 / 动作表 ⇒ 两份 golden 逐字未变。
-#: ⚠️ **未做**：`tests/fixtures/prompt_cache_warm.json` 的"两档重跑"（那要真机调上游）。
+#: 本批没有改工具声明 / 动作表 ⇒ 两份 golden 逐字未变。
+#: 未做：`tests/fixtures/prompt_cache_warm.json` 的"两档重跑"（那要真机调上游）。
 #: 抬版本之后每一个角色的 `prompt_sha256` 都会变（版本那一行在提示词里）⇒
-#: `tests/test_prompt_cache_warm.py` 的两条新鲜度判据在本批是**红的**，处置是跑
+#: `tests/test_prompt_cache_warm.py` 的两条新鲜度判据在本批是红的，处置是跑
 #: `python scripts/warm_prompt_cache.py --roles <全集> --hit-sample <样本>` 两档
 #: （`AGENTFLOW_LEAN_ENABLED=0/1` 各一趟）。本批不伪造那份读数：它是上游缓存命中的
-#: **实测**记录，改 sha 而不重发请求会把"没重跑"伪装成"重跑过"。
+#: 实测记录，改 sha 而不重发请求会把"没重跑"伪装成"重跑过"。
 #: 判据：`tests/test_f_does_not_work_for_a_statement_number.py`（a 签名 / b 交接口 /
 #: c 三条反真空 / d 端到端五段 / e 题面字面）。
 PROMPT_VERSION = "p274"

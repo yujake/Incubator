@@ -494,7 +494,7 @@ class _Manuscript:
         这是 `publish_manuscript` 的盘上稿入口：这一件读盘上那一份（`notes/…`），
         把它搬到F 自己的稿号下（没给号 ⇒ 向号源要一个）；签块跟着搬、第 9 格手稿号
         按新名重算、形状不对就受控拒绝 —— 判据本体只有一处
-        （`manuscriptform.promote_formal`）。签名里**没有** `statement_id`
+        （`manuscriptform.promote_formal`）。签名里没有 `statement_id`
         （2026-11-10 第二刀）：转正不是"按命题号改名"，它按稿号落。
         """
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
@@ -538,7 +538,7 @@ def promote_manuscript(root: Any, *, manuscript_id: str = "", source: str = "",
 
     `manuscript_id` 是F 自己的稿号；不给 ⇒ 向 :func:`manuscriptids.next_manuscript_id`
     要一个新号（转正是"这份草稿第一次拿到正式稿号"，不是"按命题号改名"）。
-    签名里**没有** `statement_id`（2026-11-10 第二刀，业主裁定）：这一层收不到命题号，
+    签名里没有 `statement_id`（2026-11-10 第二刀，业主裁定）：这一层收不到命题号，
     于是"按命题号转正"在结构上不可能。
 
     返回 `{promoted, path, source, renamed_from, retitled, sign_moved, sign_step,

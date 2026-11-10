@@ -64,7 +64,7 @@ def _read(store: Store, rel: str) -> str:
 def test_a_publish_never_renames(store: Store) -> None:
     """a：拿到命题号也不改名（`published=False`、path 原样）。
 
-    2026-11-10 第二刀把这一条从"拿到号也不改名"升成"**根本收不到号**"：
+    2026-11-10 第二刀把这一条从"拿到号也不改名"升成"根本收不到号"：
     `publish_manuscript` 的签名里没有 `statement_id`，递进去是 `TypeError`。
     """
     got = _round(store)

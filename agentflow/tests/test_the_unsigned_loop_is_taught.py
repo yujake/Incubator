@@ -8,7 +8,7 @@
 |---|---|---|
 | u1 | `closing.statements_unsigned_reading` + `closing` 的 blocker（`machine_pass` 还要 `not blockers`）；`statementabandon` 的 `abandoned@<ISO>@<理由>`；`vreceipts.close_resubmits_for` | M/D/F 提示词里 `statements_unsigned` / `abandoned` 各 0 次；M 那一格还写着已作废的「0 不是失败，静默的 0 才是」 |
 | u2 | `vreceipts` 的重送义务板项：幂等键 `v-resubmit@<命题号>@<proof_sha256>`、`expects="work"`、关闭条件是更新的干净「成立」行（`settle_resubmitted`），不是 ack | `specs/f.py` 与 `_f_skills()` 全文 `resubmit` 0 次 |
-| u3 | `verify.verify_proof` 交出去的是 `proof_manuscript` / `proof_no` / `readonly_facts` 三格（2026-11-10 第二刀之后**没有** `statement_id`：命题号由 B 收录时现取） | F 只说"唤起 V 的 verify_proof，把 proof_text 与只读读数交过去" —— 一个真键名都没写 |
+| u3 | `verify.verify_proof` 交出去的是 `proof_manuscript` / `proof_no` / `readonly_facts` 三格（2026-11-10 第二刀之后没有 `statement_id`：命题号由 B 收录时现取） | F 只说"唤起 V 的 verify_proof，把 proof_text 与只读读数交过去" —— 一个真键名都没写 |
 | u4 | 手稿由 `agent_f/manuscript.py::proof_manuscript` 写、`## 依赖` 由 `dependency_rows` 按 `steps[].cites` 渲染；`fs` 保留表拒 F 写 `f-proof-*` | F 教「手稿里必须有一节 `## 依赖` ……引用一条就写进这一节」 |
 | u5 | 项目级 `reports/RESEARCH.md` 是 D 的研究手稿（七节、先读后改；2026-11-04 的补充裁定把它从"保留面"翻回既有交付物）；自己写的 `## 证明` 节才被 `fs` 拒 | D 教「`RESEARCH.md` 是保留面、别手写」 |
 
@@ -115,7 +115,7 @@ def test_f_knows_verify_proof_requires_statement_id() -> None:
     改前这一条钉的是「`statement_id` 是必填」——那是 2026-11-10 业主裁定要撤掉的东西：
     「撤去所有有关对某个给定命题号进行攻坚或写证明的逻辑」。现在钉三件事：
     ① 三个真键名（`proof_manuscript` / `proof_no` / `readonly_facts`）一个不许少；
-    ② **不许**把"在册后给号"教成 F 的义务（两句改前的原话逐字禁掉）；
+    ② 不许把"在册后给号"教成 F 的义务（两句改前的原话逐字禁掉）；
     ③ 反真空：把改前那句原话喂进同一个读法 ⇒ 必须报红。
     """
     old = ("`statement_id`（在册后给这条命题的号；还没在册就不给，"

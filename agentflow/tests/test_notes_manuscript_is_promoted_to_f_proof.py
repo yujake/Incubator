@@ -5,10 +5,10 @@
 
 裁定逐字：「对于 F 侧，在实现方面彻底通畅后，撤去所有有关对某个给定命题号进行攻坚或
 写证明的逻辑。」转正这一笔此前还收 `statement_id`（旧口径「按命题号改名」的接口）；
-现在它只收**稿号**：`promote_manuscript(notes/稿, manuscript_id=<稿号>)` ⇒
-`reports/f-proof-<稿号>.md`。**稿头不写命题号**（草稿那一行原样保留）——
+现在它只收稿号：`promote_manuscript(notes/稿, manuscript_id=<稿号>)` ⇒
+`reports/f-proof-<稿号>.md`。稿头不写命题号（草稿那一行原样保留）——
 命题号是 B 收录时现取的，不是转正的输入。判据强度：改前钉"转正写上了那个号"，
-现在钉"转正**不**写号、且收不到号"（更严，不是放宽）。
+现在钉"转正不写号、且收不到号"（更严，不是放宽）。
 
 ## 为什么要有这一份（真机读数，2026-11-04 `projects/paper-rewrite-big`）
 
@@ -26,7 +26,7 @@ F 的稿落在 `notes/F-conj000000-proof.md`（14 KB，F 自己 `fs.write` 写�
 
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
-| a | `promote_manuscript(notes/稿, manuscript_id=<稿号>)` ⇒ `reports/f-proof-<稿号>.md` 生成、稿头**不写命题号**（草稿那一行原样）、签块跟着搬、第 9 格手稿号=稿号 | 没有这个函数：盘上那份稿与正式稿之间没有代码 |
+| a | `promote_manuscript(notes/稿, manuscript_id=<稿号>)` ⇒ `reports/f-proof-<稿号>.md` 生成、稿头不写命题号（草稿那一行原样）、签块跟着搬、第 9 格手稿号=稿号 | 没有这个函数：盘上那份稿与正式稿之间没有代码 |
 | a3 | `## 证明` 下用同级 `## 第一步` 分小节的散文证明也能落稿（2026-11-10 真机 DCT 彩排） | 切节按"任何 `#` 都截断" ⇒ 证明那一节空串 ⇒ `empty_proof_section` |
 | c | 多命题的攻坚稿（两个 `## 命题`）不许被机械转正 ⇒ 受控拒绝 `multiple_propositions`、零写入 | 没有判据；硬转会产出一份"只属于第一条、却带着别条证明"的正式稿 |
 | d | 没有 `## 证明` 的稿 ⇒ 受控拒绝 `no_proof_section` | 同上 |
@@ -51,8 +51,8 @@ from agentflow.agent_f.manuscript import promote_manuscript
 from agentflow.store import Store
 
 SID = "000011"
-#: 这一份攻坚稿的**稿号**（F 自己的号源）；转正只认它。`SID` 留着当"命题号"的反例：
-#: 转正之后稿头**不**该出现它（命题号是 B 收录时现取的，见判据 a）。
+#: 这一份攻坚稿的稿号（F 自己的号源）；转正只认它。`SID` 留着当"命题号"的反例：
+#: 转正之后稿头不该出现它（命题号是 B 收录时现取的，见判据 a）。
 MID = "000123"
 NOTES_REL = "notes/F-conj000000-proof.md"
 FORMAL_REL = f"reports/f-proof-{MID}.md"
@@ -147,7 +147,7 @@ def _block(st: Store, rel: str) -> dict:
 def test_a_a_signed_notes_draft_becomes_the_numbered_manuscript(tmp_path):
     """a：`notes/` 攻坚稿 + 签 ⇒ `reports/f-proof-<稿号>.md`（签块跟着搬、手稿号=稿号）。
 
-    2026-11-10 第二刀：稿头**不**写命题号（草稿那一行原样保留）。
+    2026-11-10 第二刀：稿头不写命题号（草稿那一行原样保留）。
     """
     st = _ws(tmp_path)
     _write(st, NOTES_REL, _draft())

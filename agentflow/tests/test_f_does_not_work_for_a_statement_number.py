@@ -8,21 +8,21 @@
 
 前置已满足：`temp/_f_chain_rehearsal.py` 亲自跑通（稿号 000001 → 送审签出 → 收录现取
 命题号 000000 → 稿上签块 true → V 台账 3 行 → 稿名不变）。于是这一刀只做"撤"：
-`statement_id` 不再是 F 的**输入**，也不再出现在 F **交出去的东西**里。
+`statement_id` 不再是 F 的输入，也不再出现在 F 交出去的东西里。
 
 ## 撤的是什么（三处，逐条对应本文件的 a/b/c）
 
 | # | 撤的东西 | 这一份钉什么 |
 |---|---|---|
-| a | `publish_manuscript` / `promote_manuscript` 的"兼容形参" `statement_id` | 四个产稿/攻坚入口的参数表里**没有** `statement_id`；递进去是 `TypeError` |
-| b | `register_or_rewrite(statement_id=…)` 与送审提示里的 `stmt:<号>` | 打桩记录调用参数 ⇒ 交出去的 kwargs 里**没有** `statement_id`；提示里点的是稿路径 |
+| a | `publish_manuscript` / `promote_manuscript` 的"兼容形参" `statement_id` | 四个产稿/攻坚入口的参数表里没有 `statement_id`；递进去是 `TypeError` |
+| b | `register_or_rewrite(statement_id=…)` 与送审提示里的 `stmt:<号>` | 打桩记录调用参数 ⇒ 交出去的 kwargs 里没有 `statement_id`；提示里点的是稿路径 |
 | c | 反真空三条（否则上面两条可以靠"把接口删空"变绿） | ① 把 `statement_id` 加回任一入口 ⇒ a 红；② 送审时偷偷带上 ⇒ b 红；③ 命名又按命题号 ⇒ 红 |
 | d | 端到端五段读数 | 稿号 → 送审签出 → 收录现取命题号（≠ 稿号）→ 稿上签块 → V 台账，五段都读得出来 |
 | e | 题面里的稿名字面（p272 的字面漏网） | F 的题面（含共用段）里没有 `f-proof-<命题号>` / `f-proof-<stmt`；写的是 `f-proof-<你的稿号>.md` |
 
 ## 为什么这不是"把功能删掉"（读数保留的边界）
 
-`statement_id` 在 F 侧还剩三类用法，**刻意保留**（它们是读数，不是攻坚输入）：
+`statement_id` 在 F 侧还剩三类用法，刻意保留（它们是读数，不是攻坚输入）：
 
 1. `_read_sign` / `delivery_reading` 里"读哪一本 V 台账"（已收录的签住在
    `verifications/<命题号>.jsonl`）—— 读签必须点名问哪一条；
@@ -30,11 +30,11 @@
 3. `delivery.py` 的逐条交差读数（一条成果 = 一个在册命题号）与 `settle` 的点名。
 
 它们都不决定"下一步证哪条 / 怎么证"：F 选目标读的是 `plan.subgoals`
-（`attack.pick_next_subgoal`），写稿读的是稿号与 `cites`。本条判据只钉**输入与交接面**。
+（`attack.pick_next_subgoal`），写稿读的是稿号与 `cites`。本条判据只钉输入与交接面。
 
 ## 反真空的写法
 
-三条负控都在**判据本体**上做（不是断言字符串）：`_entry_violations` / `_handoff_violations`
+三条负控都在判据本体上做（不是断言字符串）：`_entry_violations` / `_handoff_violations`
 / `_naming_problems` 是本文件里的纯函数，各配一条"喂坏读数 ⇒ 非空"的控制；另有两条
 活体控制（monkeypatch 真入口 / 真 signatuce 传参）。零模型调用、零真机。
 """
@@ -65,7 +65,7 @@ from agentflow.store import Store                # noqa: E402
 
 AT = "2026-11-10T22:00:00+08:00"
 MID = "000123"
-#: 一个**不会被这一份用到的**命题号：夹具里它只当"那个不该出现的号"。
+#: 一个不会被这一份用到的命题号：夹具里它只当"那个不该出现的号"。
 #: 为什么不用 `000000`：新工作区里 `manuscriptids` 与 `statements` 两个号段都从 0 起，
 #: 拿 000000 当反例会在"两边都刚起步"时撞上同一个字面（那是夹具巧合，不是口径）。
 SID = "000042"
@@ -124,7 +124,7 @@ def _stamp(st: Store, rel: str, sha: str) -> None:
 
 # ------------------------------------------------------------------ 判据本体（纯函数）
 
-#: F 的产稿 / 攻坚入口（含同名的方法版与模块版）。**这几件是"写证明"的入口**，
+#: F 的产稿 / 攻坚入口（含同名的方法版与模块版）。这几件是"写证明"的入口，
 #: 它们收不到命题号 ⇒ "对着某个命题号写证明"没有接口。
 def _entries() -> dict[str, object]:
     return {
@@ -159,7 +159,7 @@ def _entry_violations(entries: dict[str, object] | None = None) -> dict[str, lis
     return out
 
 
-#: 一个**具体的**命题号（六位）。`## 依赖` 那张表的表头写的是 `stmt:NNNNNN`（字母占位）、
+#: 一个具体的命题号（六位）。`## 依赖` 那张表的表头写的是 `stmt:NNNNNN`（字母占位）、
 #: 稿头写的是 `stmt:（还没落号）` —— 那两处是格式，不是号，所以只认数字。
 _STMT_NUMBER = re.compile(r"stmt:\d{6}")
 
@@ -251,7 +251,7 @@ def test_b_the_registration_handoff_carries_no_statement_number(
     """b（B 那一侧）：`register_or_rewrite` 收到的 kwargs 里没有 `statement_id`。
 
     打桩记录调用参数 ⇒ 断言不含它；同时正面读数两格：`manuscript_id` 在、
-    **正文 sha** 就是这一份正文的 sha（交接面 = 稿号 ＋ 正文）。
+    正文 sha 就是这一份正文的 sha（交接面 = 稿号 ＋ 正文）。
     """
     st = _ws(tmp_path)
     got = _round(st)
@@ -292,7 +292,7 @@ def test_b2_the_review_hint_points_at_the_manuscript(
     """b（V 那一侧）：送审提示那一笔的 kwargs 里没有 `statement_id`，提示里点的是稿路径。
 
     为什么盯 `next_step_hint`：F 不进程内送审（业主 2026-11-02：「F 不是直接能派 V 吗」），
-    F 交出去的那一份**就是这个字符串**（`framework_summon` 的 `task`）。它若带
+    F 交出去的那一份就是这个字符串（`framework_summon` 的 `task`）。它若带
     `stmt:<号>`，就是"F 拿着收方的号去指认要审哪一份"。
     """
     st = _ws(tmp_path)
@@ -415,7 +415,7 @@ def _stale_name_problems(surfaces: dict[str, str]) -> dict[str, list[str]]:
 def test_e_the_surface_never_names_a_manuscript_by_a_statement_number() -> None:
     """e：F 的题面（含共用段）里没有 `f-proof-<命题号>` / `f-proof-<stmt`，且写的是稿号名。
 
-    为什么单列：命名改了、题面没改，模型会照着旧字面去找 / 去写一份**不存在**的稿 ——
+    为什么单列：命名改了、题面没改，模型会照着旧字面去找 / 去写一份不存在的稿 ——
     那正是"实现已通畅、教法还在按号"的形态（p272 的字面漏网）。
     """
     surfaces = _f_surface()
