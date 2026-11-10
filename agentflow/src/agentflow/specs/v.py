@@ -275,6 +275,12 @@ SPEC = AgentSpec(
             # 2026-11-06（等级是唯一的轴 · 签的正统路）：改前这一格教"命题还没在册 ⇒ 不签发"，
             # 而 D-34 起未在册那一签就落 `verifications/pending/<正文 sha>.jsonl`（业主 2026-11-05：
             # 「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签」）⇒ 这一格改成"没号先落 pending"。
+            "**被审必须是 `reports/f-proof*.md`；递来别的东西先退回**：被审那一份只能是框架渲染的手稿"
+            "（F 的证明是 `reports/f-proof-<命题号>.md`；E/B 的框架稿同族 `reports/e-proof-*.md` / "
+            "`reports/b-proof-*.md`）—— 调用方递来 `reports/P*.md` / `notes/*.md` 这类章节稿或草稿时，"
+            "**先回一句「这不是手稿」并让调用方改用 `F.step` 的 `manuscript_path`**；不要自己去读那份章节稿"
+            "充当被审正文 —— 入口闸会拒，白烧一次调用。**入口闸拒了不要重试同一个路径**（真机里同一份"
+            "章节稿被递了 5 次）：要么让调用方换稿，要么按拒信点名的那一份重来。"
             "**在册命题只经手稿过审**：`verify_proof` 带 `statement_id` 时必须给 "
             "`proof_manuscript`（**签的载体只认 `reports/f-proof-<命题号>.md` / `reports/b-proof-<号>.md` / "
             "`reports/e-proof-<号>.md` 这三种规范名**）。`notes/…` 收不了：目录不是 `reports/` ⇒ "
