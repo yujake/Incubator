@@ -2384,9 +2384,17 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # `tools_lines` ⇒ 其余十格逐字未动（只差版本行）。逐格旧值 → 新值：
 #   B d091cd6f366dad092f1b6831066e896b292670845d38638d89d18150f16eb239
 #     → 0a45243ea4adbe6a285d495147c685ddd9eadf98cb61b1987c89088bfc36a254。
-# 十一格不是手抄：`temp/_p266_recompute.py`（导入本文件的 `_surface_digest`，先钉
+# 2026-11-10（概念的良定义证明有落点，业主裁定 甲）：一格换值 —— B。上游是
+# `specs/b.py` 的 policy 新增一条「概念的良定义证明也走这条链（稿由你产出）」：
+# 概念行不是"没有证明可写"，B 用 `own.land_manuscript` 落 `reports/b-proof-<号>.md`、
+# 派 V 签、签回来用 `own.ingest_manuscript(apply, cells=["proof_text"])` 收录；
+# 概念没有等级轴（`derive_grade` 对 concept 短路成 `not_applicable`）。其余十格逐字未动
+# （只差版本行）。逐格旧值 → 新值：
+#   B 0a45243ea4adbe6a285d495147c685ddd9eadf98cb61b1987c89088bfc36a254
+#     → 65b7ff4627cc779541606cc68e89c7b15e7aa4a6ba45e55aa93424428583207b。
+# 十一格不是手抄：`temp/_p267_recompute.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p266"
+_FROZEN_PROMPT_VERSION = "p267"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2632,7 +2640,7 @@ _FROZEN_PROMPT_VERSION = "p266"
 #: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
-    "B": "0a45243ea4adbe6a285d495147c685ddd9eadf98cb61b1987c89088bfc36a254",
+    "B": "65b7ff4627cc779541606cc68e89c7b15e7aa4a6ba45e55aa93424428583207b",
     "C": "987c39476674f2a479ca7f5e26e6be0e05629c042639ca7bbc2acc78a39112c4",
     "D": "25b054a3cc08dfc4fd2cb087d91065fd61a9ac66848da6c16a716ae48cb249e8",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",

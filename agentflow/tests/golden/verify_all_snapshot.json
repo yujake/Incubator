@@ -43,28 +43,28 @@
    {
     "code": "concept_row_carries_proof_text",
     "level": "error",
-    "message": "概念行 0000 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate）⇒ 概念行的 `proof_text` 只该是空的：定义不需要证明，而写进去的每一段都会被下游当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。存量行审计改不动 ⇒ 要么把这一格清空，要么按真结论改回概念/定理的归属",
+    "message": "概念行 0000 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate；well_definedness=unsigned）⇒ 这一格是「良定义证明」，**没有 V 签**就不许非空：V 没签，下游会把它当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。改法两条：① 把这一格清空（原始概念就是空）；② 要保留良定义证明 ⇒ B 落 `reports/b-proof-<号>.md` → V 三转签 → 按位置与格收录（`own.ingest_manuscript(apply, cells=['proof_text'])`）。存量行审计改不动 ⇒ 要么清空，要么按真结论改回概念/定理的归属",
     "row_id": "0000",
     "table": "statements"
    },
    {
     "code": "concept_row_carries_proof_text",
     "level": "error",
-    "message": "概念行 0001 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate）⇒ 概念行的 `proof_text` 只该是空的：定义不需要证明，而写进去的每一段都会被下游当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。存量行审计改不动 ⇒ 要么把这一格清空，要么按真结论改回概念/定理的归属",
+    "message": "概念行 0001 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate；well_definedness=unsigned）⇒ 这一格是「良定义证明」，**没有 V 签**就不许非空：V 没签，下游会把它当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。改法两条：① 把这一格清空（原始概念就是空）；② 要保留良定义证明 ⇒ B 落 `reports/b-proof-<号>.md` → V 三转签 → 按位置与格收录（`own.ingest_manuscript(apply, cells=['proof_text'])`）。存量行审计改不动 ⇒ 要么清空，要么按真结论改回概念/定理的归属",
     "row_id": "0001",
     "table": "statements"
    },
    {
     "code": "concept_row_carries_proof_text",
     "level": "error",
-    "message": "概念行 0002 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate）⇒ 概念行的 `proof_text` 只该是空的：定义不需要证明，而写进去的每一段都会被下游当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。存量行审计改不动 ⇒ 要么把这一格清空，要么按真结论改回概念/定理的归属",
+    "message": "概念行 0002 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate；well_definedness=unsigned）⇒ 这一格是「良定义证明」，**没有 V 签**就不许非空：V 没签，下游会把它当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。改法两条：① 把这一格清空（原始概念就是空）；② 要保留良定义证明 ⇒ B 落 `reports/b-proof-<号>.md` → V 三转签 → 按位置与格收录（`own.ingest_manuscript(apply, cells=['proof_text'])`）。存量行审计改不动 ⇒ 要么清空，要么按真结论改回概念/定理的归属",
     "row_id": "0002",
     "table": "statements"
    },
    {
     "code": "concept_row_carries_proof_text",
     "level": "error",
-    "message": "概念行 0003 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate）⇒ 概念行的 `proof_text` 只该是空的：定义不需要证明，而写进去的每一段都会被下游当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。存量行审计改不动 ⇒ 要么把这一格清空，要么按真结论改回概念/定理的归属",
+    "message": "概念行 0003 带 `proof_text`（'concept:primitive'，17 字；来源 created_by=migrate；well_definedness=unsigned）⇒ 这一格是「良定义证明」，**没有 V 签**就不许非空：V 没签，下游会把它当成'这一条有证明'（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。改法两条：① 把这一格清空（原始概念就是空）；② 要保留良定义证明 ⇒ B 落 `reports/b-proof-<号>.md` → V 三转签 → 按位置与格收录（`own.ingest_manuscript(apply, cells=['proof_text'])`）。存量行审计改不动 ⇒ 要么清空，要么按真结论改回概念/定理的归属",
     "row_id": "0003",
     "table": "statements"
    }

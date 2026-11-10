@@ -4,10 +4,15 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、273,454 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
-> §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
+> **282 个 `.py`、273,886 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,190 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 概念良定义证明有落点（业主裁定 甲）**：273,454 → **273,886**（净 +432：
+> `conceptrows.py` 的良定义证明三态读数与构造口、`secretary.py` 的签判据与五元位委托、
+> `agent_b/register_statement.py` 的 concept 证据重算与未签闸、`verify.py` 的审计改口径；
+> 新判据 `tests/test_concept_well_definedness_has_a_landing.py` 不在 `src/` 里 ⇒ 不进文件数）。
+> 文件数 282、`>800 行` 的 75 都不变（`specs/b.py` 净 +11 但停在 800 行整，未越过）。
+> 全仓最大改为 `secretary.py` 14,190（本批 +61 行量级；`agent_loop.py` 14,189 紧随其后）。
 > **2026-11-10 被引面读数（现盘读数并计同期 concept / 手稿切节两条 lane）**：273,014 → **273,454**（`statementledger.py` 加反向读数 `cited_by`：给定一条命题 ⇒
 > `dependencies` 里 `source_stmt_id == 它` 的那些 `used_by`（逐条带 `kind` / `label` / `status` /
 > `created_at`，另有 `by_status`）；`rows_of` 加 `table=` 让 `statements` / `dependencies` 走同一份

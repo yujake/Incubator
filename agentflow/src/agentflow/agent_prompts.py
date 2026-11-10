@@ -3736,7 +3736,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p266）；`tests/test_prompt_stability.py` 的
 #: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p265 同值）；
 #: 两份 golden 按现值重冻；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
-PROMPT_VERSION = "p266"
+#: p266 → p267（2026-11-10，概念的良定义证明有落点；业主裁定 甲）：
+#: 一格换值 —— B。上游一笔：`specs/b.py` 的 policy 新增一整条教法「概念的良定义证明也走
+#: 这条链（稿由你产出）」：
+#:   ① 概念不是"没有证明可写"：B 用 `own.land_manuscript` 把 `## 命题` = 定义、
+#:      `## 证明` = 良定义证明落成 `reports/b-proof-<号>.md`（复用 b-proof 族，不新开族）；
+#:   ② 派 V 照常三转签（V 只对手稿负责，不需要知道这是概念）；
+#:   ③ 签回来用 `own.ingest_manuscript(apply, cells=["proof_text"], target_stmt_id=<概念号>)`
+#:      收录 —— 那一节进 concept 行的 `proof_text`（「良定义证明」这一格）；
+#:   ④ 概念没有等级轴：`evidencebits.derive_grade` 对 concept 短路成 `not_applicable`
+#:      （这一条一个字不改），所以题面明说"不要给它报等级"。
+#: 十一格不是手抄：`temp/_p267_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （B 0a45243e… → 65b7ff46…，其余十格逐字未动）。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p267）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p266 同值）；
+#: 两份 golden 按现值重冻；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+PROMPT_VERSION = "p267"
 
 
 

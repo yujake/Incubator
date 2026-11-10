@@ -1051,6 +1051,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "「位置与格由你指定、工具按块回填」（`target_stmt_id` 权威、`cells` 闭集、"
              "派生列不许指定）。`own.*` 只在被派那一趟的循环注册表里现装，不进"
              "`tools_lines` ⇒ 十一格里只有 B 换值（0a45243e…）。facts 键集仍 15 格。"},
+    # p266 → p267（2026-11-10，概念的良定义证明有落点；业主裁定 甲）：
+    # facts 键集一格没动（还是 15 格）—— 本批只改 `specs/b.py` 的 policy 一段
+    # （概念也走 land → 派 V → ingest 这条链，稿由 B 产出）。
+    {"version": "p267", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p267（2026-11-10，概念良定义证明）：上游 —— `specs/b.py` 的 policy"
+             "新增「概念的良定义证明也走这条链（稿由你产出）」：概念不是没有证明可写，"
+             "B 用 `own.land_manuscript` 落 `reports/b-proof-<号>.md`、派 V 三转签、"
+             "签回来用 `own.ingest_manuscript(apply, cells=[\"proof_text\"])` 收录；"
+             "概念没有等级轴（`derive_grade` 短路成 `not_applicable`，不改）。"
+             "十一格里只有 B 换值（65b7ff46…）。facts 键集仍 15 格。"},
 
 )
 
