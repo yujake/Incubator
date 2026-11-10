@@ -222,6 +222,11 @@ _MODULES: tuple[str, ...] = (
     # 自建表（`agent_d/_support.py::install_d_tools`），两张表内容不同（自建那张没有
     # clock / conductor 那批通用件），所以"注册表只许一张"这件事还没做到。
     "conjecture_tools",
+    # 2026-11-10（`draft/181` 的 A + B 批）：C 的关系推断——局部树的按需展开。
+    # 两件只读工具 `ledger.resolve`（选根：候选节点，不是树）/ `ledger.expand`
+    # （`depth` 必填的局部树）。它们只挂给 C（`roles=("C",)`），索引在
+    # `agentflow.ledgerindex`（一次建好、不进上下文），本模块只做工具层的参数判据。
+    "ledger_tools",
 )
 
 #: `_MODULES` 里每个模块产出的工具名组前缀（`verify_tools` ⇒ `verify`）。

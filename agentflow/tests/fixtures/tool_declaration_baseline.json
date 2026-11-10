@@ -1,7 +1,7 @@
 {
   "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。 2026-11-05（p242 契约台账追账）：补记七格新演进（table.list.params / table.list.returns / table.search.params / table.search.returns 的字段投影与 meta 那一格；fs.write / fs.edit 的失败 kind；doc.mapping_cells 的空串两种含义），按现值重记四格（doc.write_mapping.params / returns、verify.run_experiment.params、verify.verify_proof.returns —— 前三条与第四条各自把 2026-10-26 / 2026-11-04 的旧账合入），清掉两条过期账（lit_candidates 那条的差异已烘进基线、doc.write_mapping.params 的 2026-10-26 那条被现值重记完全覆盖），并给 search.shelf / search.literature 两条补上原日期。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-05（`conductor.escalate` 的 `side_effect` 说真，业主裁定「乙」）：它往父的收件箱与会话事件流追加 `agent_message` + `agent_escalation` ⇒ 通信事件也是工作区写，声明从 `read` 改 `write_local`，`contract_amendments` 增一条（内容寻址：`side_effect` 的 `read → write_local`）；可达性不受影响（`UNIVERSAL_TOOLS` 不按副作用等级剥离，既有先例 `clock.timer_start`），`READONLY_CALL_EXCEPTIONS` 与 `READ_ONLY_WRITE_EXCEPTIONS` 一格未动，登记写集仍是空集。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-08 p262：verify.verify_proof.params 按现值重记 —— `readonly_facts` 的说明改成手稿事实（命题正文 / 证明 / 依赖 / 签块）；同一格其余演进不变，MAX_RATIO / 分母 / 名单一格未动。 2026-11-08 p262：verify.run_experiment.params 按现值重记 —— `claim` 多一格 description（summary 里那句「自报 proof 降 cross_check / 崩溃记 inconclusive」挪到参数面，summary 腾出位置写两类 E 手稿）；MAX_RATIO / 分母 / 名单一格未动。 2026-11-10 p264：`conductor.status_report.side_effect` read→write_local 记一条 amendment（与 review.report 同类对齐）；压缩批次总量 6473→6343（73.49%），MAX_RATIO / 分母 / 名单一格未动。 2026-11-10：doc.build_document.returns 补 eval:（citation_coverage 把 eval_results 数进去，业主裁定 ③）。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 124,
+  "n_tools": 126,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -93,7 +93,7 @@
     "verify.verify_proof"
   ],
   "added_after_compression": {
-    "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。\n2026-10-28 新增 `conductor.void_items`（D-08 那个死锁的出口）：它只作废「收件人已静默/退役」的 ack-only 通知，说明是新写的、从未压缩过，因此与同批新增件一样不计入压缩比例。 2026-10-28（阶段 ③ 2B）：又加 1 件 —— `search.retry_pending`（把「有元数据、没全文」的文献逐条再取一次，四结局 got/failed/no_location/cooled_down）；同一口径：它从未压缩过，不进 compression_cohort，也不进比例的分母。 2026-10-29（业主逐字：「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」）：再起 1 件 —— `conductor.wake_blocked`（逐条审批式唤醒 `item_state=block` 的板项）。同一口径：它的说明是新写的、从未压缩过，不在 compression_cohort 里，也不进比例的分母；登记行上的 added_after_compression: true 就是这条登记本身。",
+    "note": "2026-10-20 新增（`lit.*` 七件与 `conductor.escalate`）与 2026-10-22 新增（`doc.write_mapping`），共 9 件，不计入压缩比例：它们的说明是新写的、从未压缩过，既不在 compression_cohort 里，也不进比例的分母。它们必须在基线里登记（判据 ③），登记行上的 added_after_compression: true 就是这条登记本身，没有它下一轮没人知道这 9 件不该进比例。2026-10-26 又起了 20 件（clock.* 九件、conductor.* 五件、formal.* 三件、program.* 两件、trace.children），同一口径：它们从未被压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（L1 巡查）：又起 3 件（conductor.patrol / conductor.review_child / conductor.patrol_verdict），同一口径 —— 它们的说明是新写的、从未压过，既不在 compression_cohort 里，也不进比例的分母。 2026-10-27（R-BE4 D1 Phase A）：再起 1 件（conjecture.register_conjecture —— D 的主力动作此前只被 capabilities 读到、build_registry 从不装配，业主批准后进 tools._MODULES），同一口径：说明没被压过，不进比例。\n2026-10-28 新增 `conductor.void_items`（D-08 那个死锁的出口）：它只作废「收件人已静默/退役」的 ack-only 通知，说明是新写的、从未压缩过，因此与同批新增件一样不计入压缩比例。 2026-10-28（阶段 ③ 2B）：又加 1 件 —— `search.retry_pending`（把「有元数据、没全文」的文献逐条再取一次，四结局 got/failed/no_location/cooled_down）；同一口径：它从未压缩过，不进 compression_cohort，也不进比例的分母。 2026-10-29（业主逐字：「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」）：再起 1 件 —— `conductor.wake_blocked`（逐条审批式唤醒 `item_state=block` 的板项）。同一口径：它的说明是新写的、从未压缩过，不在 compression_cohort 里，也不进比例的分母；登记行上的 added_after_compression: true 就是这条登记本身。2026-11-10（`draft/181` 的 A + B 批）：又起 2 件 —— `ledger.resolve`（C 选根：候选节点，不是树）/ `ledger.expand`（C 的局部树：`depth` 必填、有界、可增量；概念与命题平权）。它们从未被压过，既不在 compression_cohort 里，也不进比例的分母；既有 124 件的契约一个字未改。",
     "tools": [
       "clock.alarm_start",
       "clock.now",
@@ -133,7 +133,9 @@
       "review.scan",
       "review.scan_text_integrity",
       "search.retry_pending",
-      "trace.children"
+      "trace.children",
+      "ledger.resolve",
+      "ledger.expand"
     ]
   },
   "declarations": {
@@ -5663,6 +5665,73 @@
         "read",
         "gate"
       ],
+      "handler_name": "functools.partial",
+      "added_after_compression": true
+    },
+    "ledger.resolve": {
+      "summary": "按号 / 按标签关键字查命题台账，返回候选节点（命题号 / 类别 / 状态 / 等级 / 标签），不是树。找不到时明确说『没有这个号 / 没有命中』。选根之后再用 ledger.expand 展开。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "description": "命题号（stmt:000123 / 000123）或标签 / 关键字"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      },
+      "returns": "{'query','checked','mode','found','hits_total','scanned','candidates':[{'stmt_id','kind','status','grade','label'}],'why','reason'}",
+      "side_effect": "read",
+      "external": "none",
+      "roles": [
+        "C"
+      ],
+      "tags": [],
+      "handler_name": "functools.partial",
+      "added_after_compression": true
+    },
+    "ledger.expand": {
+      "summary": "从选定节点起按 depth 层上下展开局部树：每个节点带相对关系 / 号 / 类别 / 内容 / 等级 / 依赖面（全路径按证明路径分组）/ 被引面（一层），并有界、可增量。depth 必填、由你决定。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "node": {
+            "type": "string",
+            "minLength": 1,
+            "description": "要展开的节点号（stmt:000123 / 000123）；先用 ledger.resolve 选"
+          },
+          "depth": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 6,
+            "description": "必填：展开几层（由你决定；1 = 只看直接父 / 直接引用者）"
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "up",
+              "down",
+              "both"
+            ],
+            "description": "展开方向：up（依赖谁）/ down（谁引用它）/ both（默认）"
+          }
+        },
+        "required": [
+          "node"
+        ],
+        "additionalProperties": false
+      },
+      "returns": "{'checked','node','depth','direction','nodes':[{'stmt_id','kind','status','grade','label','statement_full','proof_no','proof_nos','relation','dependency_face','cited_face'}],'edges':[{'from','to','dir','dep_id','path_no','path_group','used_at','used_at_known','status','to_is_statement','external_root'}],'frontier':[{'stmt_id','kind','label','distance','directions'}],'truncated','reasons','budget_used':{'nodes','added','edges','chars','node_budget','char_budget','depth_max'},'added_nodes','already_known','why'}",
+      "side_effect": "read",
+      "external": "none",
+      "roles": [
+        "C"
+      ],
+      "tags": [],
       "handler_name": "functools.partial",
       "added_after_compression": true
     }

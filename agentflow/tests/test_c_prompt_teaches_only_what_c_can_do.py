@@ -1,22 +1,28 @@
-# -*- coding: utf-8 -*-
-"""判据：C 的提示词只教它真做得到的事（三处，外加污染面怎么查）。
+# -- coding: utf-8 --
+"""判据：C 的提示词只教它真做得到的事（外加"关系推断"该怎么查）。
 
 ## 改前实测的三处"教做不到的事"
 
 1. `specs/c.py` 的 policy 教"报一个数（度数 / 割点 / 结构洞 / 绕行）"，而全仓
-   没有 articulation 读数（没有这个工具、没有这个动作，`graph.*` 也没有割点）——
+   没有 articulation 读数（没有这个工具、没有这个动作，`graph.` 也没有割点）——
    教了也报不出来；
 2. 同一处 boundary 写"知识表（文献 / 概念 / 关系）"，而 `concepts` 表已经不存在
    （S1r 并表：概念行住 `statements`，`kind="concept"`）—— 点名一张不存在的表；
-3. 同一处把"污染面"当读数报，却没教怎么查；业主 2026-11-04 裁定：污染面指的就
-   是"依赖一个错误命题的其他命题号"，从依赖面查，C 完全做得到 —— 所以要教它自己
-   用 `table.list` / `table.get` 读 `dependencies` 行反向走多跳，而不是等框架给读数。
+3. 同一处把"污染面"当读数报，却没教怎么查。2026-11-10 的裁定把第 3 处的修法换掉了
+   （`draft/181`，业主逐字：「污染面查询是指一个命题被验证为错误后，通过被引面查询所有
+   依赖其上的命题并反馈，这只是一种需求模式，不是一种工具」）：
+   - 改前（已废）：教 C 自己用 `table.list(table="dependencies", …)` 读依赖行、
+     反向走多跳、去重 —— 那是把代码侧的活交给模型，且每次都要 C 重算；
+   - 现在：代码侧一次建好索引（不进上下文），C 按需 `ledger.resolve` 选根 →
+     `ledger.expand(node=…, depth=…)`（层数由你决定、必填）→ 不够就对 `frontier`
+     里的节点再 expand（拼接）。污染面只是一种查询模式（从被判错的命题向下展开），
+     不是一件工具。
 
 ## 判据（两面）
 
-a. 正面：这些"做不到的教法"都不在了；污染面那一段把"从依赖面反向多跳、用 `table.*`
-   读 `dependencies` 的 `source_stmt_id` / `used_by`"教清楚，并明说框架不给这个读数；
-b. 反面（反真空）：把旧句逐处回灌 / 把污染面那段抽掉，检查函数必须点名报出来 ——
+a. 正面：这些"做不到的教法"都不在了；关系推断那一段教的是"选根 → 按层展开 → 拼接"，
+   并明说污染面是查询模式、不是工具；
+b. 反面（反真空）：把旧句逐处回灌 / 把关系推断那段抽掉，检查函数必须点名报出来 ——
    否则"提示词里没有 X"与"检查函数永远返回空"长得一模一样。
 """
 from __future__ import annotations
@@ -40,31 +46,35 @@ def _problems(text: str) -> list[str]:
     if "kind=concept" not in text:
         out.append("没有说清概念行的真身（`statements` 里的 `kind=concept`）")
     for needle, why in (
-        ("污染面不是框架给你的读数", "没明说污染面不是框架给的（会把 C 该算的活推给框架）"),
-        ("依赖面", "没点名从依赖面查污染面"),
-        ("从依赖面反向", "没点名从依赖面反向走（业主 2026-11-04 的原话）"),
-        ("多跳", "没点名要反向走多跳（直接 + 间接）"),
-        ("table.list", "没点名用哪件工具读依赖行"),
-        ("dependencies", "没点名读哪张表"),
-        ("source_stmt_id", "没教从依赖行上取被依赖的那条命题"),
-        ("used_by", "没教从依赖行上取用到它的那一方"),
-        ("stmt:", "没教只取 `stmt:` 前缀的命题依赖（doc/relation/experiment 不是命题）"),
-        ("#pN", "没教去掉 `#pN` 证明号尾巴（同一命题的第 2 份依赖会算两次）"),
-        ("空集", "没教空集也是诚实读数（不是'工具坏了'，也不是'没有问题'）"),
+        ("ledger.resolve", "没教选根（`ledger.resolve` 只给候选节点）"),
+        ("ledger.expand", "没教按层展开局部树（`ledger.expand`）"),
+        ("层数由你决定、必填", "没写清层数由 C 自己定、且必填（不填会被拒）"),
+        ("frontier", "没教不够就对 frontier 里的节点拼接"),
+        ("污染面是一种查询模式", "没把污染面写成一种查询模式"),
+        ("不是一件工具", "没明说污染面不是一件工具"),
+        ("空面", "没教空面也是诚实读数（不是『没查成』）"),
     ):
         if needle not in text:
-            out.append(f"污染面那一段缺「{needle}」：{why}")
+            out.append(f"关系推断那一段缺「{needle}」：{why}")
+    for banned, why in (
+        ('table.list(table="dependencies"',
+         "还留着按 dependencies 表手算的多跳指令（代码侧已给索引与局部树）"),
+        ("污染面不是框架给你的读数",
+         "还在说污染面要 C 自己算（框架不给读数）—— 现在框架给的是局部树"),
+    ):
+        if banned in text:
+            out.append(f"关系推断那一段还留着旧教法「{banned}」：{why}")
     return out
 
 
 def test_c_prompt_does_not_teach_the_impossible() -> None:
-    """a：三处都按裁定改过了；污染面那段是真教法，不是一句"给个读数"。"""
+    """a：三处都按裁定改过了；关系推断那段教的是"选根 → 展开 → 拼接"。"""
     bad = _problems(_c_text())
-    assert not bad, "C 的提示词还在教做不到的事 / 没把污染面教清：\n  " + "\n  ".join(bad)
+    assert not bad, "C 的提示词还在教做不到的事 / 没把关系推断教清：\n  " + "\n  ".join(bad)
 
 
 def test_the_checker_is_not_vacuous() -> None:
-    """b：逐处回灌旧句 / 抽掉污染面那段 ⇒ 检查函数必须点名（不是永远返回空）。"""
+    """b：逐处回灌旧句 / 抽掉关系推断那段 ⇒ 检查函数必须点名（不是永远返回空）。"""
     text = _c_text()
 
     # ① 回灌"割点"
@@ -79,19 +89,19 @@ def test_the_checker_is_not_vacuous() -> None:
     hit = _problems(doctored)
     assert any("concepts" in one for one in hit), hit
 
-    # ③ 抽掉"不是框架给的"那句 ⇒ 必须点名（把 C 该算的活推给框架）
-    cut = text.replace("污染面不是框架给你的读数", "")
-    assert cut != text, "夹具前提：污染面那一段在提示词里"
-    hit = _problems(cut)
-    assert any("污染面不是框架给的" in one for one in hit), hit
+    # ③ 回灌改前那段手算指令 ⇒ 必须点名（`table.list` 那种多跳计算已废）
+    old = ('用 `table.list(table="dependencies", filter={"source_stmt_id": "<号>"})` '
+           "读依赖行，反向走多跳、去重。")
+    hit = _problems(text + old)
+    assert any("table.list" in one for one in hit), hit
 
-    # ③' 把"依赖面"抹掉（教法退化成"报个读数"）⇒ 必须点名依赖面那两条
-    cut = text.replace("依赖面", "图")
+    # ③' 把"选根"抹掉（教法退化成回到手算）⇒ 必须点名
+    cut = text.replace("ledger.resolve", "查表")
     hit = _problems(cut)
-    assert any("没点名从依赖面" in one for one in hit), hit
+    assert any("ledger.resolve" in one for one in hit), hit
 
     # ④ 空串 ⇒ 全部事实都报缺（检查函数不是对任何串都返回空）
-    assert len(_problems("")) >= 12, _problems("")
+    assert len(_problems("")) >= 8, _problems("")
 
 
 # ---------------------------------------------------------------- 手册三句（同一件）

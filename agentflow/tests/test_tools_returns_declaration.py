@@ -10,7 +10,7 @@
 1. `test_every_tool_returns_declaration_is_machine_readable`
 —— 声明必须能被 `parse_declared_keys` 判成 `parsed`（键集合非空），除非它在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么它没有键集合」的理由）。它不能证明「声明的键是对的」
 —— 那是第 2 条的事。`test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
-—— 对全部 124 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
+—— 对全部 126 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
 LLM 少看到有用的键，但不会让调用方读错。这条不对称关系写在 `SUBSET_CHECK_SCOPE` 里，免得下一个人以为它更强。负控（`test_negative_control_*`）—— 没有负控的门就是橡皮图章：
 - 声明里塞一个实现不返回的键 ⇒ 第 2 条必须红；
 - 把某个 `returns=` 换回不带引号的写法 ⇒ 第 1 条必须红；
@@ -136,7 +136,12 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 的 g2 钉着，两条判据分工不同（这一条问"实现到底给不给这些键"）。
 #: 2026-11-04：123 → 124（`doc.mapping_cells` —— 业主逐字「如果数据位置都知道，要给 G
 #: 开发辅助工具直接拿到」：G 按命题号直接取对应表那一行该填的每一格，只读）。
-TOOL_COUNT = 124
+#: 2026-11-10：124 → 126（`draft/181` 的 A + B 批：C 的关系推断由"手算多跳"改成
+#: "选根 → 按层展开局部树 → 对 frontier 拼接"—— `ledger.resolve`（选根，候选节点）
+#: 与 `ledger.expand`（`depth` 必填的局部树）两件只读工具。它们的探针真跑到了
+#: `ok=True` 那一支（前置在 `_PREREQS` 里铺一条命题 9001 与两条依赖边 ⇒ 树里有
+#: 节点 / 边 / frontier 三样），所以键名读自实跑观测。
+TOOL_COUNT = 126
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -149,12 +154,12 @@ SUBSET_CHECK_SCOPE = (
     "所以『元素 A 有、元素 B 没有』这种漂移**这一条**抓不到。"
     "⚠️ 2026-10-15 起，那两个盲区**各有一条判据**了（三条各管一件事，别把强度混起来）：\n"
     "  ① 『给了却没声明』：`test_no_tool_returns_a_top_level_key_it_does_not_declare`"
-    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 124 个工具**零缺键**）。"
+    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 126 个工具**零缺键**）。"
     "为什么它值得单独一条：`tools/base.py:721` 把 `returns` 拼进 function-calling 的 "
     "`description` ⇒ **模型看得到**，于是「声明里没有」= 「模型不知道这个字段存在」"
     "（`doc.scan_claim` 的 `status_axis`/`undecided_reason` 就是这一类 —— 那两格**正是三态**）；\n"
     "  ② 『数组里逐元素不一致』：`test_every_element_of_an_array_carries_the_same_top_level_keys`"
-    "（实测全 124 个工具里只有 `table.schema` 犯过，132 处，已修）。"
+    "（实测全 126 个工具里只有 `table.schema` 犯过，132 处，已修）。"
 )
 
 # ---------------------------------------------------------------- 豁免清单
@@ -398,6 +403,12 @@ _PREREQS: dict[str, Any] = {
     # 对应表逐格取数（2026-11-04，业主「如果数据位置都知道，要给 G 开发辅助工具直接拿到」）：
     # 现场见 `_seed_mapping_cells_probe`（另起一个项目根，不往 `p2` 里加定理环境）。
     "doc.mapping_cells": _seed_mapping_cells_probe,
+    # 局部树两件（2026-11-10，`draft/181` 的 A + B 批）：`ledger.expand` 的树要有
+    # 节点 / 边 / frontier 三样才验得全声明键 ⇒ 先铺一条命题 9001（`_seed_a_proof_statement`
+    # 已经落过它，幂等）与两条依赖边：9001 向上依赖文献 0000（外部根）、9002 向下引用 9001，
+    # 而 9003 又引用 9002（于是 depth=1 时 9002 落在 frontier 上）。
+    "ledger.resolve": lambda reg: _seed_ledger_probe(reg),
+    "ledger.expand": lambda reg: _seed_ledger_probe(reg),
 }
 
 
@@ -416,12 +427,65 @@ def _write_integrity_probe(root: Path) -> None:
                       encoding="utf-8", newline="")
 
 
+def _seed_ledger_probe(registry: "ToolRegistry") -> None:
+    """给 `ledger.*` 两件的探针铺一棵最小局部树（命题 9001 ← 9002 ← 9003）。
+
+    为什么要铺：`ledger.expand` 的返回里，`edges[]` / `frontier[]` / 依赖面那几组的
+    嵌套键只在"树里真有边、边界上真还有下一层"时才会出现；空树会让那些声明键
+    全部观察不到，判据退化成空集比较（`G-21`）。三条边刚好让 depth=1 的树有：
+    一个外部根（文献 0000）、一个子节点（9002）、一个边界节点（9002 还能向下看 9003）。
+    """
+    _seed_a_proof_statement(registry)          # 命题 9001（幂等：doc.write_mapping 也用它）
+    store = registry.probe_store
+    extra = [
+        S.Statement(stmt_id="9002", origin="own_result", kind="lemma",
+                    label="Lemma 0.2 (probe)", statement_text="探针命题二",
+                    statement_full="探针命题二：由 9001 直接得到。",
+                    proof_text="Proof. 由 9001 得到。", quote_verified=None,
+                    quote_reason="还没校验：探针没有可比全文",
+                    status="active", created_at=S.now_iso()),
+        S.Statement(stmt_id="9003", origin="own_result", kind="theorem",
+                    label="Theorem 0.3 (probe)", statement_text="探针命题三",
+                    statement_full="探针命题三：由 9002 直接得到。",
+                    proof_text="Proof. 由 9002 得到。", quote_verified=None,
+                    quote_reason="还没校验：探针没有可比全文",
+                    status="active", created_at=S.now_iso()),
+    ]
+    with store.tx("statements", actor="probe", note="ledger 探针的前置") as tx:
+        for row in extra:
+            row.validate()
+            tx.upsert("statements", row.to_dict(), note="ledger probe")
+    deps = [
+        S.Dependency(dep_id="990001", used_by="stmt:9001", kind="theorem",
+                     label="探针：依赖文献 0000", status="closed",
+                     source_lit_id="0000", path_group=1,
+                     created_at=S.now_iso(), created_by="probe"),
+        S.Dependency(dep_id="990002", used_by="stmt:9002", kind="theorem",
+                     label="探针：9002 依赖 9001", status="closed",
+                     source_stmt_id="9001", path_group=1,
+                     created_at=S.now_iso(), created_by="probe"),
+        S.Dependency(dep_id="990003", used_by="stmt:9003", kind="theorem",
+                     label="探针：9003 依赖 9002", status="closed",
+                     source_stmt_id="9002", path_group=1,
+                     created_at=S.now_iso(), created_by="probe"),
+    ]
+    with store.tx("dependencies", actor="probe", note="ledger 探针的前置") as tx:
+        for dep in deps:
+            dep.validate()
+            tx.upsert("dependencies", dep.to_dict(), note="ledger probe")
+
+
 def tool_params() -> dict[str, dict]:
-    """124 个工具各自那一次调用的参数。"""
+    """126 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
     probe_root = _ALLOCATED.get("probe_task_root") or ""
     probe_child = _ALLOCATED.get("probe_task_child") or ""
     return {
+        # 局部树两件（2026-11-10，`draft/181` 的 A + B 批）：探针都打在成功支上。
+        # `resolve` 按号命中 9001（前置由 `_PREREQS` 铺好）；`expand` 从 9001 起
+        # depth=1 双向展开（树里有节点 / 边 / frontier，声明键因此都观察得到）。
+        "ledger.resolve": {"query": "9001"},
+        "ledger.expand": {"node": "stmt:9001", "depth": 1},
         # 2026-10-29（wake_blocked）：探针走默认那一支（dry_run=True、approve 空）——
         # 它必须 ok=True 且给全 returns 的键（"没批准"是受控拒绝，不是异常）。
         "conductor.wake_blocked": {"dry_run": True},
@@ -810,6 +874,9 @@ EXECUTED_KEY_SOURCE: frozenset[str] = frozenset(
         "doc.mapping_cells",
         "fs.delete", "fs.edit", "fs.list", "fs.move", "fs.read", "fs.search", "fs.stat", "fs.write",
         "graph.build", "graph.neighbors", "graph.relations_between", "graph.stats",
+        # 局部树两件（2026-11-10）：探针真跑到了 `ok=True` 那一支（前置铺了命题 9001 ← 9002
+        # ← 9003），所以键名读自实跑观测而不是读源码。
+        "ledger.resolve", "ledger.expand",
         "manuscripts.list", "manuscripts.read",
         "ocr.backends", "ocr.detect_text_layer",
         "research.list_gaps", "research.poll_waiting", "research.set_status", "research.submit_gap",
@@ -1376,7 +1443,7 @@ def _seed(store: Store, root: Path) -> None:
 class _RoleGateBypassedRegistry(ToolRegistry):
     """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
 
-    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 124 个工具 —— 那是设计意图（只读角色拿不到写工具）。
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 126 个工具 —— 那是设计意图（只读角色拿不到写工具）。
     本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写那一个谓词。
 
     为什么这是可接受的、而不是"测试把门拆了"：
@@ -1411,7 +1478,7 @@ def _every_tool_has_a_role(reg: ToolRegistry) -> list[str]:
 
 @pytest.fixture
 def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
-    """一个装齐 124 个工具的注册表（联网工具用桩注入，不动装配代码）。
+    """一个装齐 126 个工具的注册表（联网工具用桩注入，不动装配代码）。
 
     `monkeypatch` 在夹具结束时自动还原，所以打桩不会泄漏到别的测试文件 ——
     这一点很重要：判据测试里的桩若泄漏，「别的测试变成了在测桩」是没有任何报错的。
@@ -1506,7 +1573,7 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
 
 @pytest.fixture
 def observations(registry: ToolRegistry) -> dict[str, Observation]:
-    """对 124 个工具各调一次，记录观测结果。
+    """对 126 个工具各调一次，记录观测结果。
 
     调用顺序 = 非破坏性工具在前、破坏性工具在后（见 `MUTATING_LAST`）。
     """
@@ -1706,7 +1773,7 @@ def test_registry_ships_exactly_the_expected_number_of_tools(registry: ToolRegis
 
 
 def test_every_tool_returns_declaration_is_machine_readable(registry: ToolRegistry) -> None:
-    """反真空：124 个工具逐个，`returns=` 必须能被机器读出键集合。
+    """反真空：126 个工具逐个，`returns=` 必须能被机器读出键集合。
 
     放行条件只有一个：工具在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么没有键集合」）。
     失败信息带上原始 `returns=` 字符串 —— 否则人不知道该改什么。
@@ -1801,16 +1868,16 @@ def test_negative_control_folding_unparseable_into_parsed_makes_the_gate_red(
 def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """全部 124 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
+    """全部 126 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
     分开：`ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；* `ok=True` 且 data 是对象 ⇒ 做比对。不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑（「没检查」
     被读成「检查过了没问题」）。因此末尾还要断言被跳过的工具数 ≤ MAX_SKIPPED。`MAX_SKIPPED = 0` 的依据：本文件的
-    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 124 个工具全部走到 ok 分支。
+    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 126 个工具全部走到 ok 分支。
     把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。本判据只抓「声明了却没给」（见 `SUBSET_CHECK_SCOPE`），抓不到「给了却没声明」。`ok=False` 与「豁免的工具」
     是两种不同的"没法比对"：`ok=False` ⇒ 工具没查成 ⇒ 计入 `skipped`（末尾断言其数量 ≤ MAX_SKIPPED）；* 声明在 `NO_KEY_SET_EXEMPTIONS` 里（data
     是标量/行对象）⇒ 查成了，只是没有键集合可比 ⇒ 不计入 skipped（它有自己的一条负控`test_negative_control_an_exempted_tool_is_still_probed_for_real`
     盯着它的行为）。但豁免 ≠ 免检：`ok=True` 是硬要求 —— 一个标量工具若连跑都跑不起来，照样要红。`MAX_SKIPPED = 0` 的依据：本文件的
     `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/审校发现/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本，`ocr.run` 给的是真图片
-    ⇒ 124 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
+    ⇒ 126 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
     """
     mismatches: list[str] = []
     skipped: list[str] = []
@@ -2208,7 +2275,7 @@ def test_every_element_of_an_array_carries_the_same_top_level_keys(
     上一条（`declared - actual`）把同一个数组的多个元素并成一份键集合，所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对调用方不是：它按自己在别的元素上看到的形状去读 `field["enum"]`，
     在不带那一格的那些元素上会拿到 KeyError —— 那不是"这个字段没有词表"，是读数与事实不符。
     ## 实测（2026-10-15）
-    全 124 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
+    全 126 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
     那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。修法是每个元素都给这三格、不适用时给如实空值（`[]` / `None`）。
     ## 一条不许混进来的东西（我第一版判据就栽在这）
     比的是元素的顶层键，不是递归取并集之后的键集合。递归取键会把元素`default` 里嵌套的 `{"start","end","label"}` 算进那个元素，于是"两个元素的 `default` 形状不同"（合法：默认值本来就各不相同）
