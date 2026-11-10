@@ -81,12 +81,12 @@ LIVE-READINGS:BEGIN
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
 lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 49   # 同一档的 info 栏
-lint_rules_strict_warning = 86 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 87 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 48   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 45   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
-tools_star_tools_py     = 19   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
+tools_star_tools_py     = 20   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
 cli_tools_total        = 126  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）

@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **286 个 `.py`、276,281 行**，**78 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **289 个 `.py`、276,432 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-10 F 侧撤"按命题号写证明"（p274，本批）**：276,029 → **276,185**（净 +156：

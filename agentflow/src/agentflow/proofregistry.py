@@ -72,6 +72,9 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from . import depsection as _DS
 from . import manuscriptform as _MF
 from . import verifications as _VR
+from .proofrevisions import (  # 收工读数那一半（2026-11-10 拆出）
+    entries_on_disk, proof_revisions, registration_note,
+)
 
 #: 手稿头里的元信息标记（与 `manuscriptform` 的既有标记同一个风格；只增不改）。
 SHA_MARK = "- 正文sha："
@@ -508,6 +511,42 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
     return text
 
 
+def _form_gate_reading(
+    gate: Callable[..., Mapping[str, Any]], *, proposition: Any, kind: Any,
+    proof_text: Any, label: Any, entry: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """跑一次 F 秘书的形态闸 ⇒ `(闸读数, 拒收时的那几格)`；放行时第二格是 `None`。
+
+    闸自己抛了 = 没判成（fail-closed），不是"没问题"：这一格换成一条
+    `checked=False` 的拒收读数。为什么值得单独一格：`register_or_rewrite` 已经两百行，
+    这段"跑闸 / 解释拒收"是其中唯一不碰稿件字节的一段，搬成纯函数后
+    `register_or_rewrite` 只保留"调用它、拿到拒收就返回"。
+    """
+    try:
+        reading = dict(gate(statement_full=str(proposition or ""),
+                            kind=str(kind or ""), body=str(proof_text or ""),
+                            label=str(label or "")) or {})
+    except Exception as exc:  # noqa: BLE001 —— 闸自己炸了 = 没判成（fail-closed）
+        reading = {"checked": False, "well_formed": False, "submittable": False,
+                   "refused": REFUSED_GATE,
+                   "reason": f"形态闸抛了（{type(exc).__name__}: {exc}）⇒ 没判成",
+                   "problems": []}
+    if reading.get("submittable"):
+        return reading, None
+    problems = [str(x) for x in (reading.get("problems") or [])]
+    refusal = {
+        "checked": bool(reading.get("checked", False)),
+        "refused": REFUSED_GATE,
+        "problems": problems,
+        "why": ("命题形态闸没放行 ⇒ 这一条不登记、不落盘（手稿一个字节都没写）："
+                + str(reading.get("reason") or "形态不合规")
+                + ("；逐条缺什么：" + "；".join(problems[:4])
+                   if problems else "")),
+        "entry": dict(entry),
+    }
+    return reading, refusal
+
+
 def register_or_rewrite(
     root: Any, *, family: Any, label: str, proposition: str, proof_text: str,
     dependency_rows: Sequence[Mapping[str, Any]] = (),
@@ -614,26 +653,12 @@ def register_or_rewrite(
     # ---- 新命题：登记这一刻过 F 秘书的形态闸（只在这里跑；重写永不再跑） ----------
     gate_reading: dict[str, Any] = {}
     if mode == MODE_REGISTERED and gate is not None:
-        try:
-            gate_reading = dict(gate(statement_full=str(proposition or ""),
-                                     kind=str(kind or ""), body=str(proof_text or ""),
-                                     label=str(label or "")) or {})
-        except Exception as exc:  # noqa: BLE001 —— 闸自己炸了 = 没判成（fail-closed）
-            gate_reading = {"checked": False, "well_formed": False, "submittable": False,
-                            "refused": REFUSED_GATE,
-                            "reason": f"形态闸抛了（{type(exc).__name__}: {exc}）⇒ 没判成",
-                            "problems": []}
+        gate_reading, gate_refusal = _form_gate_reading(
+            gate, proposition=proposition, kind=kind, proof_text=proof_text,
+            label=label, entry=entry)
         out["gate"] = gate_reading
-        if not gate_reading.get("submittable"):
-            problems = [str(x) for x in (gate_reading.get("problems") or [])]
-            out.update(checked=bool(gate_reading.get("checked", False)),
-                       refused=REFUSED_GATE,
-                       problems=problems,
-                       why=("命题形态闸没放行 ⇒ 这一条不登记、不落盘（手稿一个字节都没写）："
-                            + str(gate_reading.get("reason") or "形态不合规")
-                            + ("；逐条缺什么：" + "；".join(problems[:4])
-                               if problems else "")),
-                       entry=entry)
+        if gate_refusal is not None:
+            out.update(gate_refusal)
             return out
     # ---- 渲染：新命题整份渲染；重写只换 `## 证明` 与它后面的 `## 依赖` -------------
     rows = [dict(r) for r in (dependency_rows or [])]
@@ -713,112 +738,6 @@ def register_or_rewrite(
                section_hashes=section_hashes(text), why="")
     return out
 
-
-# ---------------------------------------------------------------- 读数（proof_revisions）
-
-def entries_on_disk(root: Any) -> list[dict[str, Any]]:
-    """扫 `reports/` 下的证明手稿，返回逐份的登记条目（纯读）。"""
-    base = Path(str(root or "")) / _MF.MANUSCRIPT_DIR
-    out: list[dict[str, Any]] = []
-    if not base.is_dir():
-        return out
-    for family, prefix in ((_MF.FAMILY_F, _MF.PREFIX[_MF.FAMILY_F]),
-                           (_MF.FAMILY_B, _MF.PREFIX[_MF.FAMILY_B])):
-        for path in sorted(base.glob(f"{prefix}*.md")):
-            try:
-                text = path.read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            got = parse_entry(text)
-            rel = f"{_MF.MANUSCRIPT_DIR}/{path.name}"
-            if not got.get("checked"):
-                continue
-            out.append({"family": family, "path": rel, "label": str(got.get("label") or ""),
-                        "statement_id": str(got.get("statement_id") or ""),
-                        "proof_no": int(got.get("proof_no") or 0),
-                        "sha256": str(got.get("sha256") or ""),
-                        "versions": [dict(v) for v in (got.get("versions") or [])],
-                        "kind": str(got.get("kind") or "")})
-    return out
-
-
-def proof_revisions(store: Any) -> dict[str, Any]:
-    """逐命题读「登记了几次 / 挂过几次证明 / 每次的 sha 与 proof_no / 有几次被判有毛病」。
-
-    "登记了几次"按条目算（一条在册命题的手稿条目 = 一次登记；同一个 label 的手稿只有
-    一份是这次解耦的直接形态）；"被判有毛病"读两处：形态闸台账（`proposition_form`）
-    与计划历史里那些 `proposition_form_refused` / `proposition_text_changed` 的拒收行。
-    """
-    out: dict[str, Any] = {"checked": False, "propositions": [], "problems": [],
-                           "registrations": 0, "proof_versions": 0,
-                           "checked_from": f"{_MF.MANUSCRIPT_DIR}/*proof-*.md",
-                           "reason": ""}
-    root = str(getattr(store, "root", "") or "")
-    if not root:
-        out["reason"] = "这一层没有工作区根 ⇒ 手稿登记读不到（没查成）"
-        return out
-    try:
-        on_disk = entries_on_disk(root)
-    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"
-        out["reason"] = f"手稿目录读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
-        return out
-    out["checked"] = True
-    refused_by_label: dict[str, int] = {}
-    try:
-        from . import secretary as _SEC
-
-        for one in _SEC.proposition_form_rows(root):
-            # 这本台账 2026-11-07 起是 F 与 E 共用的（同一道形态闸同步到了 E 的数值
-            # 证明路线）。这一格数的是"F 的手稿登记被拒了几次" ⇒ 只认 F 自己的行
-            # （历史上 role 缺省为空的那几条也归 F）；E 的拒收进
-            # `closing.proposition_form_reading` 的 `by_role["E"]`，不在这里冒充 F。
-            if str(one.get("role") or "") not in ("", "F"):
-                continue
-            if one.get("checked") and not one.get("well_formed"):
-                key = str(one.get("label") or "")
-                refused_by_label[key] = refused_by_label.get(key, 0) + 1
-    except Exception as exc:  # noqa: BLE001 —— 台账读不到只少一格，不改"查过了"的那一半
-        out["problems"].append(f"形态闸台账读不出来：{type(exc).__name__}: {exc}")
-    for one in on_disk:
-        versions = [dict(v) for v in (one.get("versions") or [])]
-        if not versions:
-            versions = [{"proof_no": int(one.get("proof_no") or 0),
-                         "at": "", "sha256": str(one.get("sha256") or "")}]
-        label = str(one.get("label") or "")
-        out["propositions"].append({
-            "family": str(one.get("family") or ""),
-            "label": label,
-            "statement_id": str(one.get("statement_id") or ""),
-            "manuscript_path": str(one.get("path") or ""),
-            "registrations": 1,
-            "proof_count": len(versions),
-            "versions": [{"proof_no": int(v.get("proof_no") or 0),
-                          "sha256": str(v.get("sha256") or ""),
-                          "at": str(v.get("at") or "")} for v in versions],
-            "problems": int(refused_by_label.get(label, 0)),
-        })
-    out["registrations"] = sum(int(p["registrations"]) for p in out["propositions"])
-    out["proof_versions"] = sum(int(p["proof_count"]) for p in out["propositions"])
-    if not out["propositions"]:
-        out["reason"] = ("查过了：`reports/` 下没有一份带登记条目的证明手稿 ⇒ "
-                         "这个读数不是「命题登记一次、证明改 N 次」的那种形态")
-    else:
-        out["reason"] = (f"查过了：{len(out['propositions'])} 条手稿登记、"
-                         f"{out['proof_versions']} 个证明版本 —— "
-                         + "；".join(f"{p['label'] or p['manuscript_path']}：登记 "
-                                    f"{p['registrations']} 次 / 证明 {p['proof_count']} 版 / "
-                                    f"有毛病 {p['problems']} 次"
-                                    for p in out["propositions"][:6])
-                         + "（读数，不拦门）")
-    return out
-
-
-# ---------------------------------------------------------------- 手稿头的那句话（给提示词用）
-
-def registration_note() -> str:
-    """提示词里那一句（业主 2026-11-07 逐字口径的正面表述）。"""
-    return ("你登记一条**新命题**时，你的秘书会先看它是否写清了「从什么条件导出什么结论」；"
-            "已经在登记里的命题**重写证明**时不再过这一步 —— 改证明不需要重新登记。")
-
-
-
+# 收工读数（entries_on_disk / proof_revisions）与提示词那一句住在 `proofrevisions.py`
+# （从本模块拆出的那一半）；这里在模块末尾回引，既有名字（`proofregistry.proof_revisions`
+# 等）照旧可读。写入口仍在上面的 `register_or_rewrite`。

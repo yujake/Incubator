@@ -2472,6 +2472,33 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "底座 `rows_of`（store/tx/rows 同一取数口）/ `pool`（可检索池唯一实现）/ "
                           "`index_by_id`（全表→索引唯一实现）/ `duplicate_hits`（正文规范化全等，"
                           "写路径查重判据）。判定不在这里：`secretary.Secretary.judge`",
+    # 2026-11-10（C 的关系推断 A/B 批，`draft/181`）：台账索引一次建好、本次唤醒缓存一次、
+    # 不进上下文。为什么必须是顶层模块：C 的两件工具（`ledger.resolve` / `ledger.expand`）
+    # 与判据（`tests/test_the_ledger_tree_is_expanded_on_demand.py`）都要能不建角色包、
+    # 直接拿一份 `LedgerIndex`（事务快照也能传入）；它只读、零模型调用、不写盘。
+    "ledgerindex.py": "命题台账的只读索引（C 的建树 = 一次建好、按需展开）："
+                      "LedgerIndex.from_store / from_rows（节点表 + 正反双向邻接）、"
+                      "node / up_edges / down_edges、resolve（选根：按号 / 按标签关键字，"
+                      "候选五格）、summary / normalize_stmt_id、_INDEX_CACHE / "
+                      "cached_from_store / LedgerHolder（本次唤醒缓存一次）—— 不写盘、"
+                      "不开事务、零模型调用；依赖面 / 被引面 / 局部树展开在 `ledgerface.py`",
+    # 2026-11-11（体量软基线：不抬，只拆）：`ledgerindex.py` 落成时 912 行（越过 `>800`），
+    # 按职责拆成"建索引"与"从索引看出去的三张面"两个模块。为什么仍是顶层模块：
+    # 它只被 `LedgerIndex` 转发与判据直接调用，不属于任何角色包；拆出后 `ledgerindex`
+    # 回引它，公开方法面一个字没变。
+    "ledgerface.py": "台账索引的\"面\"（2026-11-11 从 `ledgerindex.py` 拆出）："
+                     "dependency_face（向上到根的全路径 + 按 `(证明号, path_group)` 分组）/ "
+                     "cited_face（被引一层）/ expand（有界局部树 + frontier + 增量账）—— "
+                     "全部是同一份 `LedgerIndex` 的第一人称读法，不建第二份邻接；"
+                     "拆出只为把 `ledgerindex` 拉回 800 行内",
+    # 2026-11-10（业主：「F 的稿自己维护一套号源，不依赖命题号和计划号」）：手稿号的
+    # 占用面是盘上的 `reports/f-proof-<号>.md` 而不是表，所以不能走 `store.alloc_id`；
+    # 为什么必须是顶层模块：F 的写路径与判据都要直接发号 / 读计数器，它不依赖任何角色包。
+    "manuscriptids.py": "F 自己的六位手稿号源（2026-11-10）：next_manuscript_id（同一把"
+                        "`data/counters.json` 锁、占用检查看 `reports/f-proof-<号>.md`）/ "
+                        "canonical_rel / manuscript_path / is_manuscript_id / "
+                        "reserved_manuscript_id / peek_manuscript_counter / ManuscriptIdError"
+                        "（号段用尽受控抛，不静默升位宽）—— 表外发号口，与 `store.alloc_id` 同形",
     # F 手稿依赖段的唯一解析点：作者只写内容、登记由收方（B）读稿产生
     # （与 V 读 F 的手稿再签字同构）⇒ 解析若有两份，"台账上是第 2 条、
     # 读出来是第 1 条"这类错没有任何东西会报。
@@ -2531,6 +2558,15 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "commit_manuscript（写稿 + 依赖段 + 落边同一事务，落边失败回滚）/ "
                          "promote_formal（转正，含签块跟搬）—— `agent_f/manuscript.py` 与 "
                          "`bmanuscript.py` 只做转发",
+    # 2026-11-11（体量软基线：不抬，只拆）：`manuscriptform.py` 在 p274 / p275 之后到 810 行
+    # （越过 `>800`），落盘事务的三件零件（原子写 / 受控拒绝形状 / 不毁签判定）搬成这一格。
+    # 为什么仍是顶层模块：三件零件都被 `commit_manuscript` 与 `proofregistry` 直接经
+    # `manuscriptform` 的名字取用，不属于任何角色包；拆出后 `manuscriptform` 回引它们。
+    "manuscriptwrite.py": "手稿落盘事务的三件零件（2026-11-11 从 `manuscriptform.py` 拆出）："
+                          "_atomic_write（同目录临时文件 + `os.replace`）/ _refusal（受控拒绝的"
+                          "统一返回形状）/ _signed_version_reading（目标名上签住的是不是别的"
+                          "正文 —— \"没查成\"不折成\"没签\"）—— 只被 `commit_manuscript` 调用；"
+                          "拆出只为把 `manuscriptform` 拉回 800 行内",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
     # 2026-11-09（D10 B1，另一条 lane 提交的纯模块；本批只补登记，不改它的实现）：
@@ -2965,9 +3001,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "proofregistry.py": "手稿登记与重写的唯一入口：register_or_rewrite（新命题过闸一次；"
                         "同槽位后续只换 `## 证明`）/ parse_entry（稿头元信息）/ "
                         "same_slot_reading（槽位识别：命题号 → 计划+子目标 → 标签，且必须有"
-                        "登记元信息）/ entries_on_disk / proof_revisions（收工读数）—— "
-                        "`manuscriptform.name_reading` 定路径、本模块定身份，两处合起来是"
-                        "「一份命题只住一份稿」的全部实现",
+                        "登记元信息）—— 收工读数（`entries_on_disk` / `proof_revisions`）在 "
+                        "`proofrevisions.py`；`manuscriptform.name_reading` 定路径、本模块定身份，"
+                        "两处合起来是「一份命题只住一份稿」的全部实现",
+    # 2026-11-11（体量软基线：不抬，只拆）：`proofregistry.py` 在 p272–p275 之后到 824 行
+    # （越过 `>800`），收工读数那一半（扫 `reports/` 的登记条目 + 逐命题的登记/证明版本）
+    # 搬成这一格。为什么仍是顶层模块：读它的两处是收工门与状态报告，都不属于 F/B 任一侧；
+    # 它只读、共用 `proofregistry.parse_entry`（不另写第二套解析）。
+    "proofrevisions.py": "手稿登记条目的收工读数（2026-11-11 从 `proofregistry.py` 拆出）："
+                         "entries_on_disk（扫 `reports/` 下逐份登记条目）/ proof_revisions"
+                         "（登记几次 / 证明几版 / 每次 sha 与 proof_no / 被形态闸拒过几次）"
+                         " / registration_note（提示词那一句）—— 纯读、不写盘；解析仍是 "
+                         "`proofregistry.parse_entry` 那一份",
     # 2026-11-08（块乙，业主逐字：「那条猜想只是参考意见，D不能直接把自己的猜想登记到
     # 命题台账，也不能命令E或F必须把它做出来，这只是研究方向参考」）：
     # D 派活文本的机械判据。为什么必须是顶层模块：它读的是 `sessions/*.jsonl` 的
