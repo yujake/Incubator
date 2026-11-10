@@ -19,7 +19,7 @@ B 新建命题时按正文 sha 去 `verifications/pending/<sha>.jsonl` 认领 V 
 | b | `object_path="reports/f-proof-<号>.md"` | 照旧认领：`bits.reviewed=True`、台账回写号 |
 | c | `object_path="out/experiments/<实验号>/exhaustion.md"` | 照旧认领（E 那一档） |
 | d | 反真空：把载体闸打桩成恒放行 | a 的裸行被认领（`bits.reviewed=True`）—— a 量的是这道闸 |
-| e | 载体形状（纯读） | 手稿三前缀 / e-proof 报告认；空串、`notes/…`、`foo.txt`、目录不认 |
+| e | 载体形状（纯读） | 手稿三前缀 / e-proof 报告 / 老盘计划名（`f-proof-plan-*`，2026-11-10 只读兼容）认；空串、`notes/…`、`foo.txt`、`b-proof` 的 plan 名不认 |
 
 零模型调用；夹具走生产的写口（`verifications.record_pending_sign` +
 `AgentB.register_statement`），不手写台账。
@@ -138,23 +138,55 @@ def test_d_without_the_carrier_gate_the_inline_row_is_claimed(
 
 # ====================================================================== e 载体形状
 def test_e_the_carrier_shapes() -> None:
-    """纯读：正式手稿三前缀 / e-proof 报告认；计划稿、空串、notes、别的路径不认。
+    """纯读：正式手稿三前缀 / e-proof 报告 / 老盘计划名认；其余不认。
 
-    2026-11-05 晚（业主）：`reports/f-proof-plan-<数字>` 与 `reports/f-proof-<数字>.md`
-    长得只差一个 `plan-`，但它是计划稿——合法的落稿名，不是签的载体。真机
-    `f-proof-plan-000011` 上那块 3/3 就是拿它当载体换来的假签，所以它从 `yes` 搬到 `no`。
+    ## 改前钉什么 / 改后钉什么
+
+    改前（业主 2026-11-05 晚）：`reports/f-proof-plan-<数字>` 是"计划稿"——合法的落稿名，
+    但不是签的载体（真机 `f-proof-plan-000011` 上那块 3/3 被读成假签），所以它在
+    `no` 这一列。
+
+    2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」「计划不拥有
+    稿件」⇒ `manuscriptfamily.sign_carrier` 撤掉了 `f-proof-plan-*` 那条排除：老盘上的
+    计划名是只读兼容名，与数字名同等（可签）。于是它从 `no` 搬回 `yes` ——
+    只搬 `f-proof` 这一族：同一个 `plan-` 号形在 `b-proof` 里仍是认不出的坏名
+    （`reports/b-proof-plan-000016.md` 留在 `no`，这是反向断言：翻转不是"凡 plan 都放行"）。
+
+    另外三条留在 `no` 当反向：目录不对（`notes/…`）、号形坏（`plan-abc`）、
+    不是手稿（`foo.txt`）—— 载体判据没有因为这一撤而变成"什么都认"。
     """
     yes = [
         "reports/f-proof-000000.md", "reports/e-proof-000001.md",
         "reports/b-proof-000002.md", "reports/f-proof-000000-p2.md",
-        "out/experiments/000000/exhaustion.md",
+        # 老盘只读兼容名（2026-11-10 裁定；新稿不再写这种名字）。
+        "reports/f-proof-plan-0001.md", "reports/f-proof-plan-0001-p2.md",
     ]
+    e_report = "out/experiments/000000/exhaustion.md"
     no = ["", "notes/proof.md", "foo.txt", "reports/f-proof-000000",
           "reports/f-proof-.md", "out/experiments/000000/report.md",
           "out/experiments//exhaustion.md", "reports/x/f-proof-000000.md",
-          "reports/f-proof-plan-0001.md", "reports/f-proof-plan-0001-p2.md",
-          "reports/b-proof-plan-000016.md"]
+          # 反向：`plan-` 号形只属于 f-proof 的老盘兼容；b-proof 里它仍是坏名。
+          "reports/b-proof-plan-000016.md",
+          # 反向：目录 / 号形不对时，计划名也不认。
+          "notes/f-proof-plan-0001.md", "reports/f-proof-plan-abc.md"]
+    #: `no` 里这几条同时也不是「手稿族的签载体」（另外两条 `f-proof-000000` /
+    #: `f-proof-.md` 是"名字像手稿、目录对、少了 `.md`"的边缘形，两条判据故意不同源，
+    #: 这里不拿 `is_sign_carrier` 断言它们 —— 免得把 `_pending_carrier_path` 的
+    #: `.md` 尾巴要求混进载体族判据）。
+    not_a_carrier = ["", "notes/proof.md", "foo.txt",
+                     "out/experiments/000000/report.md",
+                     "out/experiments//exhaustion.md",
+                     "reports/x/f-proof-000000.md",
+                     "reports/b-proof-plan-000016.md",
+                     "notes/f-proof-plan-0001.md",
+                     "reports/f-proof-plan-abc.md"]
     for path in yes:
         assert VS._pending_carrier_path({"object_path": path}) == path, path
+        assert VS.is_sign_carrier(path) is True, path
+    # E 的穷举读数报告是认领的载体，不是「手稿签载体」：两条判据不许折成一条。
+    assert VS._pending_carrier_path({"object_path": e_report}) == e_report
+    assert VS.is_sign_carrier(e_report) is False, e_report
     for path in no:
         assert VS._pending_carrier_path({"object_path": path}) == "", path
+    for path in not_a_carrier:
+        assert VS.is_sign_carrier(path) is False, path

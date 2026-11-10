@@ -28,7 +28,7 @@
 | ⑤ | 反真空（落签）：把 `vsigns.land` 摘掉 | 稿上没有块，但签与 pending 三行照旧（这一签不依赖落块） |
 | ⑥ | 第 2 转判「有毛病」 | 只问 2 次就停；不写块；判词落 pending 一行；F 读数「未通过」 |
 | ⑦ | 入口守卫 | 只收 F / E / B 那一份手稿的命名 |
-| ⑧ | 计划稿 + 三转干净（真机 `f-proof-plan-000011` 的形状） | 看过、没签：不写块、不落 pending、不颁发 |
+| ⑧ | 计划名 + 三转干净（真机 `f-proof-plan-000011` 的形状） | 老盘只读兼容：与数字名同等，照签（稿上有块、pending 三行、一份签文件），但稿名不改、第 8 格仍是「未在册」 |
 | ⑨ | 未在册三转 clean | 返回值顶层 `secretary_judge` 读得到 `axis=clean` / `source=secretary:v_reply_defect`，与 pending 行是同一份判定 |
 
 零模型调用：V 的审阅缝交出预置回复并计数（与三连判判据共用同一套替身）。
@@ -79,8 +79,8 @@ MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
 #: 被签的那一份正文 = 手稿里「## 证明」那一节（`depsection.proof_body` 的口径）：
 #: 签的 sha 按这一段算（`vsigns.ARTIFACT_SHA_RULE`），所以测试也从这里取，不另抄一份。
 PROOF = _DS.proof_body(MANUSCRIPT).strip("\n")
-#: 正式手稿名（签的载体）。改前这一格是 `reports/f-proof-plan-0000.md` ——
-#: 计划稿不是签的载体（业主 2026-11-05），正统路必须用 `<数字>` 那一档。
+#: 正式手稿名（签的载体）。2026-11-10 业主裁定之后老盘计划名也是只读兼容载体
+#: （见 ⑧），但新稿只按 F 自己的稿号落（`reports/f-proof-<稿号>.md`）—— 正统路仍是 `REL`。
 REL = "reports/f-proof-000000.md"
 
 
@@ -389,32 +389,79 @@ def test_f_only_proof_manuscripts_are_accepted(tmp_path):
     assert seam.asked() == 0, "路径被拒之后还问了模型"
 
 
-# ============================================================ ⑧ 计划稿不是载体
-def test_g_a_plan_manuscript_is_reviewed_but_never_signed(tmp_path):
-    """⑧ 计划稿 + 三转干净（真机 `f-proof-plan-000011` 的形状）⇒ 看过、没签。
+# ============================================================ ⑧ 计划名也是载体（老盘）
+def test_g_a_plan_manuscript_is_a_sign_carrier_now(tmp_path):
+    """⑧ 计划名 + 三转干净（真机 `f-proof-plan-000011` 的形状）⇒ 照签，且不改名。
 
-    计划稿是合法的落稿名（`parse_manuscript_name` 照旧认得出 `plan-000011`），
-    但它不是签的载体：这一档不写块、不落 pending、不颁发签文件。
+    ## 改前钉什么 / 改后钉什么
+
+    改前（业主 2026-11-05）：计划稿是合法落稿名（`parse_manuscript_name` 认得出
+    `plan-0000`），但不是签的载体 ⇒ 三转照判、只读「看过、没签」
+    （`kind=proof_reviewed_not_signed`、不写块、不落 pending、不颁发）。
+
+    2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」「计划不拥有
+    稿件」⇒ `manuscriptfamily.sign_carrier` 撤掉 `f-proof-plan-*` 的排除：老盘上的计划名
+    是只读兼容名，与数字名同等 ⇒ 这一档与 ① 同形（签落稿上、pending 三行三票、
+    签文件一份），且稿名一个字都不改（计划不拥有稿件：签不会把它"转正"成别人的稿）。
+
+    反向断言（强度不降）：
+    - 第 8 格仍是「未在册」（`statement_id==""`）—— 载体合法不等于计划成了命题；
+    - 盘上不出现 `statements` 行，也不出现按数字名的那一份 `f-proof-0000.md`
+      （这一签不产生第二份稿、不改名）；
+    - 签块的台账指 pending 那一行（不是稿自己）。
     """
     st = _ws(tmp_path)
     plan_rel = "reports/f-proof-plan-0000.md"
     path = pathlib.Path(st.root) / plan_rel
     path.write_text(MANUSCRIPT, encoding="utf-8")
-    before = path.read_text(encoding="utf-8")
     v, seam = _v(st, [CLEAN_REPLY])
     with _submitted_by_f():
         got = v.verify_proof(proof_manuscript=plan_rel)
 
-    assert seam.asked() == 3, seam.asked()   # 三转照判（读数照给）
-    assert got.get("kind") == "proof_reviewed_not_signed", got
-    assert "计划稿" in str(got.get("reason") or ""), got
-    assert "不是签的载体" in str(got.get("reason") or ""), got
-    assert path.read_text(encoding="utf-8") == before, "计划稿被写了签块"
-    assert _sign_files(st) == [], "计划稿却产出了签文件"
-    assert _pending_rows(st) == [], "计划稿却落了 pending 行"
-    # 落稿名这一半照旧（F 的「先落计划名、拿到号再改名」工作流没被动）。
+    assert seam.asked() == 3, seam.asked()
+    assert got.get("checked") is True, got
+    assert got.get("kind") == "proof_unregistered_signed", got
+    assert got.get("verdict") == "成立", got
+
+    # ---- 稿上的签块：与数字名那一档同形（身份 resolved、命题号=未在册）----
+    block = VS.manuscript_sign_reading(path.read_text(encoding="utf-8"),
+                                       manuscript_path=plan_rel)
+    assert block["found"] is True and block["signed"] is True, block
+    assert block["statement_id"] == "", block          # 第 8 格：未在册
+    assert block["manuscript_id"] == "plan-0000", block
+    assert block["identity_state"] == "resolved", block
+    assert block["ledger"] == (f"verifications/pending/{VR.text_sha(PROOF)}.jsonl"
+                               "#u-000003"), block
+
+    # ---- pending 三行三票：载体就是这份计划名（老盘只读兼容）----
+    rows = _pending_rows(st)
+    assert len(rows) == int(VR.SIGN_STREAK_NEED), rows
+    assert {str(r["verification_id"]) for r in rows} == {"u-000001", "u-000002", "u-000003"}
+    for row in rows:
+        for key in ("verification_id", "at", "proof_sha256"):
+            assert str(row.get(key) or "").strip(), (key, row)
+        assert row["proof_sha256"] == VR.text_sha(PROOF), row
+        assert row["object_path"] == plan_rel, row
+
+    # ---- 签文件：passes 就是那三张真票，台账指 pending（不是稿自己）----
+    files = _sign_files(st)
+    assert len(files) == 1, files
+    doc = json.loads(files[0].read_text(encoding="utf-8"))
+    assert doc["statement_id"] == "", doc
+    assert doc["ledger"] == block["ledger"], doc
+    assert [p["verification_id"] for p in doc["passes"]] == [
+        "u-000001", "u-000002", "u-000003"], doc["passes"]
+
+    # ---- F 的读数：已签 ----
+    assert FVS.delivery_reading(st.root, proof_text=PROOF,
+                                manuscript_paths=(plan_rel,))["state"] == FVS.STATE_SIGNED
+
+    # ---- 反向：载体合法 ≠ 计划成了命题 / ≠ 改出一份按数字名的稿 ----
     assert VS.parse_manuscript_name(plan_rel)["manuscript_id"] == "plan-0000"
-    assert VS.is_sign_carrier(plan_rel) is False
+    assert VS.is_sign_carrier(plan_rel) is True
+    assert st.rows("statements") == [], st.rows("statements")
+    assert not (pathlib.Path(st.root) / "reports" / "f-proof-0000.md").exists(), (
+        "签这一趟把计划名转正了（收录不改名：稿名只由 F 的稿号决定）")
 
 
 # ============================================================ ⑨ 顶层轴读数

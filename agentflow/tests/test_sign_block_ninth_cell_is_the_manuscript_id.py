@@ -98,8 +98,17 @@ def test_a_the_ninth_cell_is_the_bare_manuscript_id(tmp_path: pathlib.Path) -> N
 def test_a2_a_prefixed_manuscript_id_keeps_its_prefix(tmp_path: pathlib.Path) -> None:
     """`f-proof-plan-0001.md` ⇒ `plan-0001`（带前缀，不与 `0001` 撞车）。
 
-    2026-11-05（父裁定）：计划稿仍是合法落稿名（号照旧解析成 `plan-0001`），但不是
-    签的载体 ⇒ 签块身份只到 `unmatched`（改前这里读成 `resolved`，真机 883c3097）。
+    ## 改前钉什么 / 改后钉什么
+
+    改前（业主 2026-11-05 父裁定）：计划稿是合法落稿名，但不是签的载体 ⇒ 第 9 格
+    对得上也不许 `resolved`（只到 `unmatched`，真机 883c3097）。
+
+    2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」「计划不拥有
+    稿件」⇒ 老盘上的 `f-proof-plan-*` 是只读兼容名，与数字名同等（可签）⇒ 身份
+    `resolved`。强度不降，另加两条反向：
+    - 块里第 9 格写 `0001`（裸数字）而稿是 `plan-0001` ⇒ unmatched：前缀不是装饰，
+      `plan-0001` 与 `0001` 仍是两个号（否则"同等"就等于"撞车"）；
+    - 载体合法不等于这份稿有了命题号：`manuscript_id` 里带的是稿号，不是 `stmt_id`。
     """
     root = _ws(tmp_path)
     rel = "reports/f-proof-plan-0001.md"
@@ -108,8 +117,18 @@ def test_a2_a_prefixed_manuscript_id_keeps_its_prefix(tmp_path: pathlib.Path) ->
     assert got["state"] == "written", got
     reading = VS.manuscript_sign_reading(_text(root, rel), manuscript_path=rel)
     assert reading["manuscript_id"] == "plan-0001", reading
-    assert reading["identity_state"] == "unmatched", reading
-    assert "不是签的载体" in str(reading.get("identity_why") or ""), reading
+    assert reading["identity_state"] == "resolved", reading
+    assert "与这一份稿相同" in str(reading.get("identity_why") or ""), reading
+    # 反向 ①：写 `0001` 的块搬到 plan-0001 这份稿上 ⇒ 撞不上车，仍是 unmatched。
+    wrong = VS.stamp_manuscript_sign(
+        _text(root, rel), proof_sha=SHA, streak=3, need=3, manuscript_id="0001")
+    collided = VS.manuscript_sign_reading(wrong, manuscript_path=rel)
+    assert collided["manuscript_id"] == "0001", collided
+    assert collided["manuscript_key"] == "plan-0001", collided
+    assert collided["identity_state"] == "unmatched", collided
+    # 反向 ②：载体合法（老盘兼容）≠ plan-0001 成了命题号。
+    assert VS.parse_manuscript_name(rel)["family"] == "f-proof", VS.parse_manuscript_name(rel)
+    assert reading["statement_id"] == "", reading
     # 反真空：同一份正文换成 `f-proof-0001.md` 时它是另一个号（不许在数字上撞车）。
     assert VS.manuscript_id_of("reports/f-proof-0001.md") == "0001"
     assert VS.manuscript_id_of(rel) == "plan-0001"

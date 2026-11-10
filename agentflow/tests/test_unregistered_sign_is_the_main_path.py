@@ -13,7 +13,7 @@
 | `f-proof-000017.md` | `verifications/000017.jsonl#v-000006` | 真签 |
 | `f-proof-000019.md` | `verifications/000019.jsonl#v-000007`、`命题号=未在册` | 真签（没号是正常形态） |
 | `b-proof-000016.md` | `reports/b-proof-000016.md#V签` | 假签（自引、没有那份台账） |
-| `f-proof-plan-000011.md` | `reports/f-proof-plan-000011.md#V签`、载体是计划稿 | 假签 |
+| `f-proof-plan-000011.md` | `reports/f-proof-plan-000011.md#V签`（台账指向稿自己） | 假签 |
 
 ## 判据（先红后绿 + 反真空）
 
@@ -23,7 +23,7 @@
 | b | 有号命题 | 仍写 `verifications/<号>.jsonl#v-*`（老路不变） | 绿 |
 | c1 | 自引台账（`b-proof-000016` 的形状） | B 认签拒：`sign_without_ledger` | 红（改前 `applied=True`） |
 | c2 | 三票有空（`passes` 少一格） | 颁发拒：`passes_incomplete` | 绿 |
-| c3 | 计划稿载体（`f-proof-plan-000011` 的形状） | 认签拒 + 颁发拒（不是签的载体） | 红（改前身份 `resolved`） |
+| c3 | 计划稿载体（`f-proof-plan-000011` 的形状） | 载体认（老盘只读兼容：真签能认领、能颁发）；自引台账仍拒 | ——（2026-11-10 按新裁定重写） |
 | d | 登记出号后按 sha 认领 | 认领成功；`proof_review_gap` 认 pending 那一行 ⇒ `evidence_kind` 到 `proof_review` | 绿 |
 | d2 | sha 不一致 | 认领失败（受控拒，不是"没有签"） | 绿 |
 | e | 再认一次 | 幂等（同一号）/ `bound_elsewhere`（别的号），盘上不出现第二份 | 绿 |
@@ -230,38 +230,95 @@ def test_c2_passes_with_a_hole_are_not_three_votes(tmp_path):
     assert not VS.sign_path(st.root, SHA).exists()
 
 
-# ============================================================ c3 计划稿载体
-def test_c3_a_plan_manuscript_carries_no_sign(tmp_path):
-    """c3：`f-proof-plan-000011` 的形状（计划稿载体 + 自引）⇒ 认签拒 + 颁发拒。
+# ============================================================ c3 计划稿载体（老盘）
+def test_c3_a_plan_manuscript_is_a_legal_carrier(tmp_path):
+    """c3：`f-proof-plan-000011` 的形状（老盘计划名 + 自引台账）⇒ 载体认、假签仍拒。
 
-    计划稿仍是合法的落稿名（`parse_manuscript_name` 照旧认 `plan-000011`），
-    只是不是签的载体（业主 2026-11-05）。
+    ## 改前钉什么 / 改后钉什么
+
+    改前（业主 2026-11-05）：「计划稿是合法落稿名，但不是签的载体」⇒ 认签拒 +
+    颁发拒（`plan_is_not_a_sign_carrier`），身份只到 `unmatched`。
+
+    2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」「计划不拥有
+    稿件」⇒ `manuscriptfamily.sign_carrier` 撤掉了 `f-proof-plan-*` 那条排除：老盘上的
+    计划名是只读兼容名，与数字名同等（可分类、可读正文、可签）。所以这一条改后钉两件：
+
+    - 正控（新口径）：载体 `ok=True`；同一份正文上的真 pending 签能认领
+      （`applied=True`、第 3 位翻）、能颁发（`written=True`）；
+    - 反向（强度不降）：真机 `f-proof-plan-000011` 那块 3/3 仍是假签，但病根不是
+      载体 —— 是台账指向稿自己（`reports/…#V签`）⇒ `sign_ledger_backing` 必须
+      `SIGN_WITHOUT_LEDGER`、`issue` 必须 `LEDGER_NOT_VERIFICATION`（零字节）；
+    - 另一条反向（计划仍不是命题）：载体合法不等于 plan-000000 成了命题号 ——
+      块上第 8 格仍是「未在册」（`statement_id==""`）、第 9 格是 `plan-000000`，
+      盘上不出现任何 `statements` 行。这一条防的是"把老盘兼容读成新口径"。
     """
     st = _ws(tmp_path)
     plan_rel = f"reports/f-proof-plan-{SID}.md"
+    # ---- 落稿名这一半照旧：plan-000000 是稿号、不是命题号 ----
+    named = VS.parse_manuscript_name(plan_rel)
+    assert named["manuscript_id"] == f"plan-{SID}", named
+    assert named["family"] == "f-proof" and named["tier"] == "family", named
+    assert named["manuscript_id"] != SID, "计划名被解析成了命题号段"
+
+    # ---- 载体这一半（2026-11-10 新口径）：老盘计划名与数字名同等 ----
+    assert VS.is_sign_carrier(plan_rel) is True
+    carrier = VS.sign_carrier_reading(plan_rel)
+    assert carrier["ok"] is True and carrier["code"] == "", carrier
+
+    # ---- 身份：第 9 格 plan-000000 与所在稿相同 ⇒ resolved（块确实属于这份稿）----
+    fake_ledger = f"{plan_rel}#V签"
     text = VS.stamp_manuscript_sign(
         MANUSCRIPT, proof_sha=SHA, streak=3, need=3, verdict="成立",
         signer="secretary:B", at="2026-11-05T00:00:00+08:00",
-        ledger=f"{plan_rel}#V签", statement_id="", manuscript_id=f"plan-{SID}")
+        ledger=fake_ledger, statement_id="", manuscript_id=f"plan-{SID}")
     _put(st, plan_rel, text)
-    # 落稿名这一半照旧
-    assert VS.parse_manuscript_name(plan_rel)["manuscript_id"] == f"plan-{SID}"
-    assert VS.is_sign_carrier(plan_rel) is False
+    block = VS.manuscript_sign_reading(text, manuscript_path=plan_rel)
+    assert block["found"] is True and block["signed"] is True, block
+    assert block["manuscript_id"] == f"plan-{SID}", block
+    assert block["identity_state"] == "resolved", block
 
-    bits = EB.bits_of(origin="own_result", proof=True, proof_process=PROOF)
-    _new, reading = VS.bits_after_sign(bits, root=st.root, proof_text=PROOF,
-                                       statement_id="", manuscript_text=text,
-                                       manuscript_path=plan_rel, store=None)
-    assert reading.get("applied") is False, reading
-    # 计划稿从来不是签的载体：新读口也读不出签（块只是视图）。
-    assert VS.sign_reading(st.root, statement_id="", proof_text=PROOF,
-                           manuscript_path=plan_rel)["state"] != "signed"
+    # ---- 反向 ①：真机那块假签的病根 = 自引台账（载体合法了也照样拒它）----
+    backing = VS.sign_ledger_backing(st.root, fake_ledger, proof_sha256=SHA)
+    assert backing.get("ok") is False, backing
+    assert backing.get("code") == VS.SIGN_WITHOUT_LEDGER, backing
+    fake_wrote = VS.issue(st.root, artifact_sha=SHA, streak=3, need=3,
+                          artifact_path=plan_rel, ledger=fake_ledger,
+                          statement_id="", passes=PASSES, by="secretary:B")
+    assert fake_wrote["written"] is False, fake_wrote
+    assert fake_wrote["code"] == VS.LEDGER_NOT_VERIFICATION, fake_wrote
+    assert not VS.sign_path(st.root, SHA).exists(), "假签被拒却写下了签文件"
 
+    # ---- 正控：真 pending 台账那一签 ⇒ 认签认、颁发认 ----
+    row = VR.record_pending_sign(
+        st.root, proof_text=PROOF, verdict={"verdict": "成立", "findings": []},
+        verifier="agent-V", object_path=plan_rel,
+        secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
+                         "reason": "夹具：秘书判 clean"})
+    new, reading = _claim(st)
+    assert reading.get("applied") is True, reading
+    assert dict(reading["claim"]).get("ledger") == _pending_ref(row), reading["claim"]
+    assert dict(new).get("reviewed") is True, new
+
+    more = [VR.record_pending_sign(
+                st.root, proof_text=PROOF, verdict={"verdict": "成立", "findings": []},
+                verifier="agent-V", object_path=plan_rel,
+                secretary_judge={"checked": True, "axis": "clean",
+                                 "decision": "没问题", "reason": "夹具：秘书判 clean"})
+            for _ in range(2)]
+    passes = [{"verification_id": str(r["verification_id"]), "at": str(r["at"]),
+               "proof_sha256": str(r["proof_sha256"])} for r in (row, *more)]
     wrote = VS.issue(st.root, artifact_sha=SHA, streak=3, need=3,
-                     artifact_path=plan_rel, ledger=f"verifications/pending/{SHA}.jsonl#u-000003",
-                     statement_id="", passes=PASSES, by="secretary:B")
-    assert wrote["written"] is False, wrote
-    assert wrote["code"] == VS.MANUSCRIPT_NAME_PLAN, wrote
+                     artifact_path=plan_rel, ledger=_pending_ref(more[-1]),
+                     statement_id="", passes=passes, by="secretary:B")
+    assert wrote["written"] is True, wrote
+    assert VS.sign_path(st.root, SHA).is_file(), wrote
+
+    # ---- 反向 ②：载体合法 ≠ 计划成了命题 ----
+    block2 = VS.manuscript_sign_reading(
+        (pathlib.Path(st.root) / plan_rel).read_text(encoding="utf-8"),
+        manuscript_path=plan_rel)
+    assert block2["statement_id"] == "", block2   # 第 8 格仍是「未在册」
+    assert st.rows("statements") == [], st.rows("statements")
 
 
 # ============================================================ d 认领 ⇒ proof_review
