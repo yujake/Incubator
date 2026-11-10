@@ -4,9 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **283 个 `.py`、274,299 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **283 个 `.py`、274,431 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,205 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 立项用计划号、入账才建命题行（p271）**：274,299 → **274,431**（净 +132：
+> `specs/m.py` +33（policy 三句教法：立项不建在命题台账上 / 决定即立项 / 成果是收录的产物）、
+> `agent_skills.py` +70（M 手册那一条的镜像，含计划稿三种落点那张表）、
+> `agent_prompts.py` +29 的版本账；三处教法都只进题面 / 手册，入口闸、B 的收录闸与
+> closing 的判定一个字没改）。文件数 283、`>800 行` 的 75 都不变；
+> 全仓最大 `secretary.py` 14,205、`agent_loop.py` 14,189 不变（新判据
+> `tests/test_registration_is_the_hard_sequence.py` 不在 `src/` 里 ⇒ 不进这三格）。
 > **2026-11-10 体量：不抬基线，改搬（撤回 p268 那一抬）**：`specs/b.py` 824 → 773 行 ——
 > policy 里「收录与识稿」九条逐字搬进同包的 `specs/b_ingest_policy.py`（新文件 78 行，同样登记在
 > `.noai-paths`），`specs/b.py` 在原位置用 `*INGEST_POLICY` 摊回，渲染出来的提示词一个字没变。

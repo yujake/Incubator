@@ -460,6 +460,39 @@ SPEC = AgentSpec(
             "`evidence_kind=proof` 那一行或 V 的签名）。三环各有各的欠账读数（`quote_verified_rows` / `reviewed_proof_rows` / `reviewed_documents` / "
             "`reviewed_current_rows`）—— **每一份手稿与正文都要走过这条链**；被审对象的落点由你在派活里给，H 的 `review_report` "
             "把报告落到**框架定的** `out/review/<doc_id>-review.md`，验收表里那一行 `review_files` 数的就是它。",
+            # p271（2026-11-10，两次真机的共同病根）：没有谁把「立项 → 落稿 → 送审 → 收录」
+            # 当成一条必须走完的链 —— 第一轮 B 建了 4 条号而 V 9 次 verify_proof 里
+            # 5 次栽在"递的不是框架手稿"、签 0；第二轮 V 真的审了框架手稿（仍判「有毛病」），
+            # 而 B 一次都没跑（M 的日志逐字：「B 的派活被 deadline_exceeded 拒（一次都没跑）」）
+            # ⇒ statements 0 条、签 0 个。
+            # 业主 2026-11-10 的裁定（逐字）：「本框架的成果是台账里的条目，不是文件。一份没
+            # 登记的证明等于不存在」，以及同日的立项口径：立项用计划号（plan 号段），不建在
+            # 命题台账上。事实逐条核过（别改写）：
+            #   · `agent_f/core.py` / `agent_f/manuscript.py`：没号 ⇒ `reports/f-proof-plan-<计划号>.md`；
+            #   · `manuscriptfamily.classify_manuscript("reports/f-proof-plan-000004.md")`
+            #     ⇒ {tier: family, family: f-proof, id: plan-000004, proof_no: 1}（合法落稿名）；
+            #   · `verify_proof` 的 `statement_id` 有缺省 `""` ⇒ 不传也能送审；计划稿不是签的
+            #     载体（`vsigns.is_sign_carrier` False）：判「有毛病」落 pending 行、判「成立」
+            #     那一档只「看过、没签」（`kind=proof_reviewed_not_signed`，`temp/_p271_probe_
+            #     plan_manuscript.py` 两种判词各跑了一遍：pending 1 / 0、签文件 0 / 0）；
+            #   · `agent_b/register_statement.py`：两种名都认；拿到号那一刻稿转名成
+            #     `reports/f-proof-<命题号>.md`（「签另算」）。
+            # 判据 `tests/test_registration_is_the_hard_sequence.py`（三条字面 + 三条反真空 +
+            # 「立项看计划号、入账看命题号」那一句 + 不传 statement_id 的三条正面读数）。
+            "**立项不建在命题台账上**：立项 = 拿一个**计划号**（plan 号段），F 落 "
+            "`reports/f-proof-plan-<计划号>.md` → V 送审 "
+            "`verify_proof(proof_manuscript=\"reports/f-proof-plan-<计划号>.md\", proof_no=…)`"
+            "（**不传 statement_id**：这一轮还没有命题号）→ 判词有落点（判「有毛病」落 "
+            "`verifications/pending/<正文 sha>.jsonl`；计划稿不是签的载体，判「成立」那一档只看过没签）"
+            "→ **B 收录时才建 statements 行**（"
+            "`register_statement(proof_manuscript=\"reports/f-proof-plan-<号>.md\", …)` 或 "
+            "`own.ingest_manuscript`；拿到号那一刻稿转名成 `reports/f-proof-<命题号>.md`，签另算）。"
+            "⇒ **立项看计划号，入账看命题号；两者不是同一件事，不要为了拿号去写一行 statements**。",
+            "**决定要证某条命题的那一刻就立项**（拿计划号、落稿），不要先写一份长证明草稿再回头补手续。"
+            "反过来做在真机里连续两次失败：一次是稿名对不上、一次是 B 根本没被派活。"
+            "—— 这条与钟无关：分的是命题，不是时刻。",
+            "**成果是台账里的条目，不是文件** —— 但那是**收录**的产物，不是立项的产物；"
+            "「草稿已落盘」不算交付。",
             "**研究型任务的验收表里要有一行「文献进稿」**：`document_literature_citations` ≥ 1。而「哪里算立论」只有你能定，所以"
             "**派 G 写稿之前**先把 A 检索回来的对口文献（题名 + 结论）交给 G。",
             "**你自己写的核验脚本也要留三样读数**：`REPRO_RESULT` 里除了 `result`，还要有 `bound`（这次搜到哪个界）/ `strategy`"

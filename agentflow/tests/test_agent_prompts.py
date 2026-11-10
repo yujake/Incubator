@@ -2428,7 +2428,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     → cc875eaad0c7bfa2ae425729d0a774ac867afdc33e4d940b32d362bd78afad88。
 # 十一格不是手抄：`temp/_p270_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p270"
+# 2026-11-10（立项用计划号、入账才建命题行：两轮真机都没有谁把「立项 → 落稿 → 送审 →
+# 收录」当成一条必须走完的链）：一格换值 —— M。上游一笔（教法；入口闸 / B 的收录闸 /
+# closing 一个字没改）：`specs/m.py` 的 policy 新增三句 ——
+# ①「立项不建在命题台账上」：立项拿计划号、F 落 `reports/f-proof-plan-<计划号>.md`、
+#    V 送审不传 statement_id、判词有落点（有毛病落 pending 行；计划稿不是签的载体 ⇒
+#    成立那一档只看过没签）、B 收录时才建 statements 行；
+# ②「决定要证某条命题的那一刻就立项」：分的是命题不是时刻；
+# ③「成果是台账里的条目，不是文件 —— 但那是收录的产物，不是立项的产物」。
+# 其余十格逐字未动（只差版本行）。逐格旧值 → 新值：
+#   M d6b1b82f6456816b78577c9f3daf05b02643b4119f67cfcf9cbeecacde7148d4
+#     → 6996deb9a3cd5a64ca96e4c2e563b49116fa65acf41536f42c46182592ef401c。
+# 十一格不是手抄：`temp/_p271_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。
+_FROZEN_PROMPT_VERSION = "p271"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2682,7 +2695,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "e851e09f881160357fc567cd31c8a72fc8dd8205d4e968ca5519da6c6fc31634",
     "H": "18f91c2ed07ee4642e4fc7ea5fe7138b70d623b289bcac8aa844cda1f60b146a",
     "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",
-    "M": "d6b1b82f6456816b78577c9f3daf05b02643b4119f67cfcf9cbeecacde7148d4",
+    "M": "6996deb9a3cd5a64ca96e4c2e563b49116fa65acf41536f42c46182592ef401c",
     "V": "cc875eaad0c7bfa2ae425729d0a774ac867afdc33e4d940b32d362bd78afad88",
 }
 

@@ -3797,7 +3797,36 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
 #: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
 #: 判据：`tests/test_only_the_framework_manuscript_goes_to_review.py`（三条 + 反真空）。
-PROMPT_VERSION = "p270"
+#: p270 → p271（2026-11-10，立项用计划号、入账才建命题行：两轮真机都栽在"没有谁把
+#: 立项 → 落稿 → 送审 → 收录 当成一条必须走完的链"）：
+#: 一格换值 —— M。上游两笔（都是教法，入口闸 / B 的收录闸 / closing 的判定一个字没改）：
+#:   ① `specs/m.py` 的 policy 新增一条「立项不建在命题台账上」：立项 = 拿一个计划号
+#:      （plan 号段），F 落 `reports/f-proof-plan-<计划号>.md`；V 送审
+#:      `verify_proof(proof_manuscript="reports/f-proof-plan-<计划号>.md", proof_no=…)`
+#:      不传 statement_id（这一轮还没有命题号）；判词有落点（判「有毛病」落
+#:      `verifications/pending/<正文 sha>.jsonl`；计划稿不是签的载体 ⇒ 判「成立」那一档
+#:      只看过没签，`kind=proof_reviewed_not_signed`）；B 收录时才建 statements 行
+#:      （`register_statement(proof_manuscript="reports/f-proof-plan-<号>.md", …)` 或
+#:      `own.ingest_manuscript`，拿到号那一刻稿转名成 `reports/f-proof-<命题号>.md`）。
+#:      末句逐字：「立项看计划号，入账看命题号；两者不是同一件事，不要为了拿号去写一行
+#:      statements」。
+#:   ② 同一条 policy 再两句：「决定要证某条命题的那一刻就立项（拿计划号、落稿）」——
+#:      分的是命题，不是时刻；以及「成果是台账里的条目，不是文件 —— 但那是收录的
+#:      产物，不是立项的产物；「草稿已落盘」不算交付」。
+#:      业主同日两次驳回按钟判、催办式的写法（探索本来就可能吃掉大半预算，框架不该替 M
+#:      决定什么时候立项）⇒ 题面与手册里都不许回来。
+#: 同一个 commit 里 `agent_skills._m_skills()` 的「研究攻坚链-文献到收录证明」正文同步
+#: （手册只落盘、不进十一格；题面给口径、手册给步骤与反面形态）。
+#: 十一格不是手抄：`temp/_p271_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p271）；`tests/test_prompt_stability.py` 的
+#: `_VOLATILE_FACT_SETS` 追加一格（facts 键集仍 15 格，count / keys_sha256 与 p270 同值）；
+#: 两份 golden 按现值重冻（`tool_surface_snapshot.json` 逐字未变 —— 本批没有改任何工具
+#: 声明）；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
+#: 判据：`tests/test_registration_is_the_hard_sequence.py`（三条 + 三条反真空 +
+#: 「不传 statement_id 也能送审」的三条正面读数与它的反真空 +
+#: 「业主两次驳回的那两种写法不许回来」+ 它的反真空）。
+PROMPT_VERSION = "p271"
 
 
 
