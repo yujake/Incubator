@@ -419,6 +419,9 @@ _REFUSE_OVER_WINDOW: dict[str, int] = {
     # 这一处只在报告里点名，判据量不到它（unknown 不是通过，这一条写在这里以免读的人
     # 把「绿」读成「那一处没问题」）。
     "这一笔点名了上下文定理（`derived_fro": 408,
+    # `ca89896f`（2026-11-10，概念良定义证明 A+B）：`concept_takes_no_proof_manuscript`
+    # 的拒信把三条出路写全之后字面下界 698（`agent_b/register_statement.py`，超窗口
+    # 298 字）。按本表的纪律登记；改短它属于改拒信正文，不在记账批里顺手做。
 }
 
 

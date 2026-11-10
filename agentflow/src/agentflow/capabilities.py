@@ -1530,7 +1530,7 @@ _KNOWN_ACTION_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
             "statement_full", "source_lit_id", "proof_text", "proofs", "kind", "label",
             "statement_text", "origin", "page_range", "evidence_kind", "quote_verified",
             "quote_mode", "quote_reason", "quote_span", "quote_call_sha256", "doc_id",
-            "line_range", "derived_from", "proof_manuscript",
+            "line_range", "derived_from", "proof_manuscript", "self_authored",
         }),
         "这条动作没有同名工具：`proofs`（以及其余十七格）由 `AgentB.register_statement(proofs=...)`"
         "直接收 —— 整条动作的 schema 就是动作声明本身（`table.create` 那条通用写口被"

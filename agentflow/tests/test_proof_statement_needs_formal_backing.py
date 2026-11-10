@@ -29,6 +29,11 @@ class _Rep:
 class _Store:
     def __init__(self, rows: dict) -> None:
         self._rows = rows
+        # 2026-11-10 起 `verify._check_13` 用 `store.root` 读概念的 V 签
+        # （`concept_rows_with_proof_text`）：真 `Store` 恒有 `root`（`store.py` 的
+        # `self.root = Path(root).resolve()`），替身必须跟上这个依赖面。这里刻意给
+        # `None`（本文件没有概念行，签那一路用不到）；不是放宽断言。
+        self.root = None
 
     def rows(self, table: str) -> list:
         return list(self._rows.get(table, []))
