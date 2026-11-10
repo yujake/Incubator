@@ -396,3 +396,63 @@ def test_f_closing_the_pending_write_port_turns_a_red(tmp_path, monkeypatch):
         (pathlib.Path(st.root) / REL).read_text(encoding="utf-8"), manuscript_path=REL)
     assert block["found"] is False, block
 
+
+# ============================================================ g 洞 1：读数钉住块
+def test_g_the_issuance_reading_names_the_block_it_just_landed(tmp_path):
+    """洞 1（2026-11-10）：未在册签出来之后，发签读数必须说清稿上有没有块。
+
+    ## 量到的形态（HEAD 9a075327，真 store、模型嘴 scripted）
+
+    `vsigns.land` 一格都没拒：`by=secretary:F`、稿名 `reports/f-proof-000000.md` 是签的
+    载体、正文 sha 与签文件相同 ⇒ `write_manuscript_sign` 把九格块写进第 5 行，
+    `manuscript_write.state="written"`、`landed=True`。可 `verify_proof` 的
+    `review_write` 一直是 `{}` —— 在册那一支早就有 `manuscript_signed` 这一格，
+    未在册这一支没有；业主的探针又在送审之前读了手稿（`temp/_f_chain_rehearsal.py`
+    第 116 行那一次 `read_text`）⇒ 读到的是"没有块"的快照。"稿上签块=False" 这个读数
+    与磁盘事实不符，病根是"读数没把这一步的结果说出来"，不是"块没落"。
+
+    ## 判据（正控 + "要么"的另一半）
+
+    - 有收方秘书：块在稿上（`已签=true`、`命题号=未在册`、`手稿号=稿号`），
+      `review_write.manuscript_signed=True` + `sign_issued=True` + 行号；
+    - 没有收方秘书（不挂 `calling_as` ⇒ `parent=("","")`）：块不落，这一档必须在
+      `review_write.reason` 里说清为什么（改前是空字典 = 静默）。两者合起来才是
+      「要么稿上有块、要么 issuance 读数里有一句说明」；只钉前一半会让"不落块"重新
+      变成静默。
+    """
+    st = _ws(tmp_path)
+    _put(st, REL, MANUSCRIPT)
+    v = AgentV(st, workspace_root=st.root, llm=_ReviewSeam([CLEAN_REPLY]),
+               secretary=_clean_secretary(st))
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001", parent_role="F"):
+        got = v.verify_proof(proof_manuscript=REL)
+
+    assert got.get("kind") == "proof_unregistered_signed", got
+    text = (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
+    block = VS.manuscript_sign_reading(text, manuscript_path=REL)
+    assert block["found"] is True and block["signed"] is True, block
+    # 块上第 8 格「命题号」没有号是合法形态（未在册那一档），不许读成签失效。
+    assert block["statement_id"] == "", block
+    rw = dict(got.get("review_write") or {})
+    assert rw.get("manuscript_signed") is True, rw
+    assert rw.get("sign_issued") is True, rw
+    mw = dict(rw.get("manuscript_write") or {})
+    assert mw.get("written") is True and int(mw.get("line") or 0) >= 1, (mw, rw)
+    assert "第" in str(rw.get("reason") or ""), rw
+
+    # ---- 负控（"要么"的另一半）：没有收方秘书 ⇒ 块不落，读数必须说清为什么 ----
+    st2 = _ws(tmp_path / "no-recipient")
+    _put(st2, REL, MANUSCRIPT)
+    v2 = AgentV(st2, workspace_root=st2.root, llm=_ReviewSeam([CLEAN_REPLY]),
+                secretary=_clean_secretary(st2))
+    got2 = v2.verify_proof(proof_manuscript=REL)      # 不挂 calling_as：parent 读不到
+    assert got2.get("kind") == "proof_unregistered_signed", got2
+    text2 = (pathlib.Path(st2.root) / REL).read_text(encoding="utf-8")
+    assert VS.manuscript_sign_reading(text2, manuscript_path=REL)["found"] is False
+    rw2 = dict(got2.get("review_write") or {})
+    assert rw2.get("manuscript_signed") is False, rw2
+    assert rw2.get("sign_issued") is True, rw2        # 签颁发了，只是没人落块
+    assert str(rw2.get("reason") or "").strip(), rw2  # 静默 = 这一条红
+    assert "落" in str(rw2.get("reason") or ""), rw2
+    assert str(got2.get("detail") or "").strip(), got2
+

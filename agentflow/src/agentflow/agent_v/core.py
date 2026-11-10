@@ -778,6 +778,47 @@ def _unregistered_secretary_judge(got: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _unregistered_writeback(block_write: Mapping[str, Any], *,
+                            sign_issued: bool = False) -> dict[str, Any]:
+    """未在册那一支的 `review_write`（与在册那一支同名同义：签落在稿上没有）。
+
+    ## 为什么要有这一格（2026-11-10，读数与事实不符）
+
+    未在册路径（F 的稿还没有命题号）三转干净之后，签块确实由收方秘书落回了稿
+    （`vsigns.land` → `write_manuscript_sign`，块在 `## 证明` 之前那一行）；可
+    `verify_proof` 的 `review_write` 一直是 `{}` —— 在册那一支早就有
+    `manuscript_signed` 这一格，未在册这一支没有。读的人只能去读 `detail` 里的散文，
+    或者在送审之前读了一眼手稿，读到"没有块"就以为没落。
+
+    这一格把同一件事写成与在册那一支同形的三格：
+    `manuscript_signed`（稿上有没有那一行块）/ `manuscript_write`（落点、行号、为什么）/
+    `sign_issued`（签文件颁发了没有）。`written` 恒 False 是诚实的：没有命题行被这一趟
+    翻（第 3 位由 B 收录时认领）。
+
+    没落成时 `reason` 必须说得出"为什么"（没有收方秘书 / 没有载体 / 正文不符…），
+    不许静默 —— 这就是「要么稿上有块、要么 issuance 读数里有一句说明」的落点。
+    """
+    mw = dict(block_write or {})
+    signed = bool(mw.get("written") or mw.get("idempotent"))
+    out: dict[str, Any] = {
+        "manuscript_signed": signed,
+        "manuscript_write": mw,
+        "sign_issued": bool(sign_issued),
+        "written": False,
+        "filed": "not_read_by_v",
+        "already_signed": False,
+        "reason": "",
+    }
+    if signed:
+        out["reason"] = (f"签块在 `{mw.get('path') or '（那一份稿）'}` 第 "
+                         f"{int(mw.get('line') or 0)} 行（未在册那一档：块上命题号="
+                         "未在册、手稿号=这一份稿的稿号）")
+    else:
+        out["reason"] = str(mw.get("why") or "签没有落成（没有收方秘书 / 没有手稿落点 / "
+                                             "正文不是被签的那一份）")
+    return out
+
+
 def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
                               reason: str = "") -> dict[str, Any]:
     """`verify_proof` 初值里 `sign_issuance` 那一格的 fail-closed 形状（键无条件存在）。
@@ -3316,6 +3357,18 @@ class AgentV:
                 "review_passes": [],
                 "secretary_judge": _unregistered_secretary_judge(got),
                 "ledger": str(got.get("manuscript") or "") or str(block.get("ledger") or ""),
+                # 同一份稿已经盖着这一份正文的签块：`manuscript_signed=True` 是事实
+                # （不是这一趟写的，`written=False` + `already_signed=True` 把两件事分开）。
+                "review_write": {
+                    "manuscript_signed": True,
+                    "manuscript_write": dict(block),
+                    "sign_issued": False,
+                    "written": False,
+                    "filed": "not_read_by_v",
+                    "already_signed": True,
+                    "reason": (f"`{got.get('manuscript') or '（这一份稿）'}` 里已经有盖住"
+                               "这份正文的签块 ⇒ 这一趟不重写（块仍是一行）"),
+                },
                 "reason": str(got.get("reason") or ""),
                 "detail": (f"`{got.get('manuscript') or '（这一份稿）'}` 里已经有盖住同一份"
                            "正文的签块 ⇒ 这一趟不重复审、不重复写（签块仍是一行）。"
@@ -3393,6 +3446,11 @@ class AgentV:
             "review_passes": list(got.get("passes") or []),
             "secretary_judge": _unregistered_secretary_judge(got),
             "ledger": pending_ledger or str(got.get("manuscript") or ""),
+            # 2026-11-10：与在册那一支同形的"签落在稿上没有"读数。块落了就是
+            # `manuscript_signed=True` + 行号；没落就必须有一句为什么（不静默）。
+            "review_write": _unregistered_writeback(
+                manuscript_write,
+                sign_issued=bool(issued.get("written") or issued.get("idempotent"))),
             "reason": str(got.get("reason") or ""),
             "detail": record,
         })
