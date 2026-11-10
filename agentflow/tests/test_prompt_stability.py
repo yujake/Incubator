@@ -1136,6 +1136,20 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "（ledger.resolve 选根 / ledger.expand 层数必填的局部树）；specs/c.py 的 policy 由"
              "「table.list 读 dependencies 反向走多跳」改成「选根 → 按层展开 → 对 frontier 拼接」。"
              "十一格里只有 C 换值（de99ae26…）。facts 键集仍 15 格。"},
+    # facts 键集一格没动（还是 15 格）—— 本批只改「F 侧撤按命题号写证明」那几处教法
+    # （`specs/f.py` 的送审参数表与两处稿名、共用段 `PAPER_PACK` 与 L 的关档文案各一处
+    # `f-proof-<命题号>` → `f-proof-<稿号>`、`agent_skills` 的 F 手册）；没有哪一格事实
+    # 换过落点（system ↔ user），所以 count / keys_sha256 与 p273 同值。
+    {"version": "p274", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p274（2026-11-10，F 侧撤「按命题号写证明」）：上游 —— 业主逐字"
+             "「对于 F 侧，在实现方面彻底通畅（你亲自拿着跑跑通）后，撤去所有有关对某个"
+             "给定命题号进行攻坚或写证明的逻辑」。改动全在教法与实现接口：specs/f.py 的"
+             "送审参数表删「在册后给号」那一格、两处稿名改成稿号、交稿改走 D；"
+             "PAPER_PACK / L 的关档文案各一处旧字面；agent_skills 的 F 手册重写；"
+             "agent_f 的 publish/promote 删兼容形参、登记面只递稿号 + 正文、送审提示只点稿。"
+             "十一格里只有 F/G/H/M 换值（a62be58c / 6730aa37 / 4e36b38d / 47d3b555）。"
+             "facts 键集仍 15 格、落点没动。"},
 
 )
 

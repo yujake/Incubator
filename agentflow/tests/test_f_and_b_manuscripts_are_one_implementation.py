@@ -389,7 +389,7 @@ def test_d_dependency_edges_land_in_the_same_transaction(
     _seed(st_f, DEP, reviewed=True)
     _seed(st_f, SID)
     _write(st_f, "notes/f-dep.md", _draft())
-    fout = promote_f(st_f.root, statement_id=SID, source="notes/f-dep.md",
+    fout = promote_f(st_f.root, manuscript_id=SID, source="notes/f-dep.md",
                      store=st_f, write_dependencies=_writer(st_f, SID))
     assert fout.get("promoted") is True, fout
     f_deps = [dict(r) for r in st_f.rows("dependencies")]
@@ -420,7 +420,7 @@ def test_d_dependency_edges_land_in_the_same_transaction(
     _seed(st_f2, DEP, reviewed=True)
     _seed(st_f2, SID)
     _write(st_f2, "notes/f-dep.md", _draft())
-    fout2 = promote_f(st_f2.root, statement_id=SID, source="notes/f-dep.md",
+    fout2 = promote_f(st_f2.root, manuscript_id=SID, source="notes/f-dep.md",
                       store=st_f2, write_dependencies=_broken)
     assert fout2.get("promoted") is False, fout2
     assert dict(fout2.get("problem") or {}).get(
@@ -467,7 +467,7 @@ def test_f_the_five_refusal_codes_are_shared(tmp_path: pathlib.Path) -> None:
         "## 证明", "## 命题\n\n另一条命题。\n\n## 证明", 1)
     st = _ws(tmp_path / "multi-f")
     _write(st, "notes/two.md", two_props)
-    fout = promote_f(st.root, statement_id=SID, source="notes/two.md")
+    fout = promote_f(st.root, manuscript_id=SID, source="notes/two.md")
     assert dict(fout.get("problem") or {}).get("kind") == "multiple_propositions", fout
     st_b = _ws(tmp_path / "multi-b")
     bout = BM.land_rewrite(
@@ -483,7 +483,7 @@ def test_f_the_five_refusal_codes_are_shared(tmp_path: pathlib.Path) -> None:
     no_proof = _draft().replace("## 证明", "## 不叫证明", 1)
     st_f2 = _ws(tmp_path / "noproof-f")
     _write(st_f2, "notes/np.md", no_proof)
-    fout2 = promote_f(st_f2.root, statement_id=SID, source="notes/np.md")
+    fout2 = promote_f(st_f2.root, manuscript_id=SID, source="notes/np.md")
     assert dict(fout2.get("problem") or {}).get("kind") == "no_proof_section", fout2
     st_b2 = _ws(tmp_path / "noproof-b")
     bout2 = BM.land_rewrite(
@@ -497,7 +497,7 @@ def test_f_the_five_refusal_codes_are_shared(tmp_path: pathlib.Path) -> None:
               "## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + PROOF_TEXT + "\n")
     st_f3 = _ws(tmp_path / "nodep-f")
     _write(st_f3, "notes/nd.md", DS.mark_washed(no_dep, actor="secretary-F"))
-    fout3 = promote_f(st_f3.root, statement_id=SID, source="notes/nd.md")
+    fout3 = promote_f(st_f3.root, manuscript_id=SID, source="notes/nd.md")
     assert dict(fout3.get("problem") or {}).get(
         "kind") == "dependency_section_missing", fout3
     st_b3 = _ws(tmp_path / "nodep-b")
@@ -650,9 +650,10 @@ def _real_entries_run(st: Store) -> tuple[str, str, str]:
     # F 的秘书在 proof_manuscript 之后、publish 之前洗一遍（真实入口的次序）。
     got["text"] = DS.mark_washed(str(got["text"]), actor="secretary-F")
     # 2026-11-10：收录不改稿名 ⇒ 洗过的那一份要自己写回 F 的稿号（`publish` 不再改名）。
+    # 2026-11-10 第二刀：`publish_manuscript` 收不到命题号（签名里没有那一格）。
     rel_f = str(got["path"])
     (pathlib.Path(st.root) / rel_f).write_text(str(got["text"]), encoding="utf-8")
-    published = f.publish_manuscript(got, statement_id=SID)
+    published = f.publish_manuscript(got, manuscript_id=VS.manuscript_id_of(rel_f))
     assert published.get("published") is False, published
     assert str(published.get("path") or "") == rel_f, published
     f_unsigned = (pathlib.Path(st.root) / rel_f).read_text(encoding="utf-8")

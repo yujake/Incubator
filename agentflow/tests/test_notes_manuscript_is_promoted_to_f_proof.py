@@ -1,23 +1,32 @@
 # -*- coding: utf-8 -*-
-"""判据：攻坚手稿（`notes/…`）被签过 ⇒ 转成 `reports/f-proof-<号>.md` 正式稿。
+"""判据：攻坚手稿（`notes/…`）被签过 ⇒ 转成 `reports/f-proof-<稿号>.md` 正式稿。
+
+## 2026-11-10 第二刀（业主裁定）之后的读法
+
+裁定逐字：「对于 F 侧，在实现方面彻底通畅后，撤去所有有关对某个给定命题号进行攻坚或
+写证明的逻辑。」转正这一笔此前还收 `statement_id`（旧口径「按命题号改名」的接口）；
+现在它只收**稿号**：`promote_manuscript(notes/稿, manuscript_id=<稿号>)` ⇒
+`reports/f-proof-<稿号>.md`。**稿头不写命题号**（草稿那一行原样保留）——
+命题号是 B 收录时现取的，不是转正的输入。判据强度：改前钉"转正写上了那个号"，
+现在钉"转正**不**写号、且收不到号"（更严，不是放宽）。
 
 ## 为什么要有这一份（真机读数，2026-11-04 `projects/paper-rewrite-big`）
 
 F 的稿落在 `notes/F-conj000000-proof.md`（14 KB，F 自己 `fs.write` 写的攻坚手稿），
 而 `reports/f-proof-*.md` 0 份。追下去不是"没人写稿"，是没有一条代码把
-"盘上已经存在的一份稿"转成按号命名的正式稿：
+"盘上已经存在的一份稿"转成正式稿：
 
-- `AgentF.proof_manuscript` 只写 `reports/f-proof-plan-<计划>.md`；
+- `AgentF.proof_manuscript` 只写 `reports/f-proof-<稿号>.md`（稿号由 F 的号源发）；
 - `AgentF.publish_manuscript` 只改名它自己手上那一份（`agent_f/core.py` 的 proof
   档），盘上已有的 `notes/…` 稿它一个字节都读不到；
-- 于是 `publish_manuscript` 一次都没被调用过，按号命名的稿 0 份，B 的兜底读盘
+- 于是 `publish_manuscript` 一次都没被调用过，正式稿 0 份，B 的兜底读盘
   （`depsection.read_manuscript`，只扫 `reports/`）也读不到 F 的稿。
 
 ## 这一份钉的五条（b 的触发另有一份判据）
 
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
-| a | `promote_manuscript(notes/稿, 号)` ⇒ `reports/f-proof-<号>.md` 生成、稿头写号、签块跟着搬、第 9 格手稿号=号 | 没有这个函数：盘上那份稿与正式稿之间没有代码 |
+| a | `promote_manuscript(notes/稿, manuscript_id=<稿号>)` ⇒ `reports/f-proof-<稿号>.md` 生成、稿头**不写命题号**（草稿那一行原样）、签块跟着搬、第 9 格手稿号=稿号 | 没有这个函数：盘上那份稿与正式稿之间没有代码 |
 | a3 | `## 证明` 下用同级 `## 第一步` 分小节的散文证明也能落稿（2026-11-10 真机 DCT 彩排） | 切节按"任何 `#` 都截断" ⇒ 证明那一节空串 ⇒ `empty_proof_section` |
 | c | 多命题的攻坚稿（两个 `## 命题`）不许被机械转正 ⇒ 受控拒绝 `multiple_propositions`、零写入 | 没有判据；硬转会产出一份"只属于第一条、却带着别条证明"的正式稿 |
 | d | 没有 `## 证明` 的稿 ⇒ 受控拒绝 `no_proof_section` | 同上 |
@@ -42,8 +51,11 @@ from agentflow.agent_f.manuscript import promote_manuscript
 from agentflow.store import Store
 
 SID = "000011"
+#: 这一份攻坚稿的**稿号**（F 自己的号源）；转正只认它。`SID` 留着当"命题号"的反例：
+#: 转正之后稿头**不**该出现它（命题号是 B 收录时现取的，见判据 a）。
+MID = "000123"
 NOTES_REL = "notes/F-conj000000-proof.md"
-FORMAL_REL = f"reports/f-proof-{SID}.md"
+FORMAL_REL = f"reports/f-proof-{MID}.md"
 FULL = "设 d = 1、σ 有界 Borel 可测、两端极限存在且不等；则 N_σ ∩ L^p(R) 在 L^p(R) 中稠密。"
 PROOF = ("1. 对 c < d、λ > 0 取 f_λ := [σ(λ(x−c)) − σ(λ(x−d))]/(L+ − L−) ∈ N_σ。\n"
          "2. f_λ 逐点收敛到 1_{(c,d)}，三个区域分别估计 ⇒ L^p 收敛。\n"
@@ -133,13 +145,16 @@ def _block(st: Store, rel: str) -> dict:
 
 # ============================================================ a 机制
 def test_a_a_signed_notes_draft_becomes_the_numbered_manuscript(tmp_path):
-    """a：`notes/` 攻坚稿 + 签 ⇒ `reports/f-proof-<号>.md`（签块跟着搬、手稿号=号）。"""
+    """a：`notes/` 攻坚稿 + 签 ⇒ `reports/f-proof-<稿号>.md`（签块跟着搬、手稿号=稿号）。
+
+    2026-11-10 第二刀：稿头**不**写命题号（草稿那一行原样保留）。
+    """
     st = _ws(tmp_path)
     _write(st, NOTES_REL, _draft())
     sha = _sign(st, NOTES_REL)
     before = _read(st, NOTES_REL)
 
-    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    out = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
 
     assert out.get("promoted") is True, out
     assert out.get("path") == FORMAL_REL, out
@@ -150,12 +165,15 @@ def test_a_a_signed_notes_draft_becomes_the_numbered_manuscript(tmp_path):
     assert _read(st, NOTES_REL) == before, "转正改了攻坚稿（应一个字节都不动）"
 
     final = _read(st, FORMAL_REL)
-    assert f"- 命题号：stmt:{SID}" in final, final
+    # 转正不写命题号：草稿那行原样在，而且那个号一次都没被写进来。
+    assert "- 命题号：stmt:（还没落号）" in final, final
+    assert f"stmt:{SID}" not in final, (
+        "转正把命题号写进了稿头 ⇒ 被撤掉的那条口子回来了（命题号由 B 收录时现取）")
     block = _block(st, FORMAL_REL)
     assert block.get("found") is True, block
     assert block.get("signed") is True, block
     assert block.get("proof_sha256") == sha, block
-    assert block.get("manuscript_id") == SID, block
+    assert block.get("manuscript_id") == MID, block
     assert block.get("identity_state") == "resolved", block
 
 
@@ -164,9 +182,9 @@ def test_a2_promotion_is_idempotent(tmp_path):
     st = _ws(tmp_path)
     _write(st, NOTES_REL, _draft())
     _sign(st, NOTES_REL)
-    first = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    first = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
     once = _read(st, FORMAL_REL)
-    second = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    second = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
     assert second.get("promoted") is True, second
     assert _read(st, FORMAL_REL) == once, "第二次转正改动了正式稿"
     assert first.get("path") == second.get("path") == FORMAL_REL
@@ -195,7 +213,7 @@ def test_a3_a_proof_with_level_two_subheads_is_promoted(tmp_path):
     _write(st, NOTES_REL, text)
     sha = _sign(st, NOTES_REL)
 
-    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    out = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
 
     assert out.get("promoted") is True, out
     assert out.get("path") == FORMAL_REL, out
@@ -218,7 +236,7 @@ def test_c_a_multi_proposition_draft_is_refused_not_half_promoted(tmp_path):
     _write(st, NOTES_REL, _draft(more_propositions=True))
     _sign(st, NOTES_REL)
 
-    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    out = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
     assert out.get("promoted") is False, out
     assert dict(out.get("problem") or {}).get("kind") == "multiple_propositions", out
     assert not (pathlib.Path(st.root) / FORMAL_REL).exists(), "被拒了却仍写出正式稿"
@@ -228,7 +246,7 @@ def test_d_a_draft_without_a_proof_section_is_refused(tmp_path):
     """d：没有 `## 证明` 的稿 ⇒ 没有可签的正文，不许转正。"""
     st = _ws(tmp_path)
     _write(st, NOTES_REL, _draft(with_proof=False))
-    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    out = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
     assert out.get("promoted") is False, out
     assert dict(out.get("problem") or {}).get("kind") == "no_proof_section", out
     assert not (pathlib.Path(st.root) / FORMAL_REL).exists()
@@ -239,7 +257,7 @@ def test_f_an_unwashed_draft_is_refused(tmp_path):
     """f：没经过 F 的秘书洗稿的稿不许转正 —— 否则就是绕过 B 的洗稿闸的第二条入口。"""
     st = _ws(tmp_path)
     _write(st, NOTES_REL, _draft(washed=False))
-    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    out = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
     assert out.get("promoted") is False, out
     assert dict(out.get("problem") or {}).get("kind") == "not_washed", out
     assert not (pathlib.Path(st.root) / FORMAL_REL).exists()
@@ -259,7 +277,7 @@ def test_e_an_unsigned_draft_does_not_overwrite_a_signed_formal_version(tmp_path
                                 "3. 这一版换了一条推理（还没有签）。")
     _write(st, NOTES_REL, new_text)
 
-    out = promote_manuscript(st.root, statement_id=SID, source=NOTES_REL)
+    out = promote_manuscript(st.root, manuscript_id=MID, source=NOTES_REL)
     assert out.get("promoted") is False, out
     assert dict(out.get("problem") or {}).get(
         "kind") == "target_holds_a_signed_version", out

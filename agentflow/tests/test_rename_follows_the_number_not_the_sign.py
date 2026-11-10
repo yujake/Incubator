@@ -12,7 +12,7 @@
 
 | # | 判据 |
 |---|---|
-| a | `publish_manuscript` 拿到命题号也不改名（`published=False`、`path` 原样、`why` 说清） |
+| a | `publish_manuscript` 收不到命题号（签名里没有那一格，递进去是 `TypeError`）、也不改名（`published=False`、`path` 原样、`why` 说清） |
 | a2 | F 的登记条目落在 `f-proof-<稿号>.md`；B 收录拿到命题号之后盘上仍只有这一份、名字不变 |
 | b | 同一份正文的 V 签块在收录前后仍认得上（按正文 sha，不按号） |
 | c | 盘上只有稿名的稿（没有签）读成「未签」，不冒充已签 |
@@ -23,6 +23,8 @@
 from __future__ import annotations
 
 import pathlib
+
+import pytest
 
 from agentflow import depsection as DS
 from agentflow import proofregistry as PR
@@ -60,13 +62,19 @@ def _read(store: Store, rel: str) -> str:
 # ------------------------------------------------------------------ a 不改名
 
 def test_a_publish_never_renames(store: Store) -> None:
-    """a：拿到命题号也不改名（`published=False`、path 原样）。"""
+    """a：拿到命题号也不改名（`published=False`、path 原样）。
+
+    2026-11-10 第二刀把这一条从"拿到号也不改名"升成"**根本收不到号**"：
+    `publish_manuscript` 的签名里没有 `statement_id`，递进去是 `TypeError`。
+    """
     got = _round(store)
-    out = _f(store).publish_manuscript(got, statement_id=SID)
+    out = _f(store).publish_manuscript(got, manuscript_id=MID)
     assert out.get("published") is False, out
     assert out.get("path") == got["path"], out
     assert str(out.get("renamed_from") or "") == "", out
     assert "不改稿名" in str(out.get("why") or ""), out
+    with pytest.raises(TypeError):
+        _f(store).publish_manuscript(got, statement_id=SID)
 
 
 # ------------------------------------------------------------------ a2 收录不改名

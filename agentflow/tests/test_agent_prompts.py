@@ -2460,7 +2460,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   C 987c39476674f2a4… → de99ae26130ec76a7ada77f230a6e7e7e1f0687b2822e5427191f261ebe7a560。
 # 十一格不是手抄：`temp/_p273_recompute.py`（导入判据文件自己的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p273"
+_FROZEN_PROMPT_VERSION = "p274"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2702,19 +2702,24 @@ _FROZEN_PROMPT_VERSION = "p273"
 #: 逐格旧值 → 新值：A 7dfe78d3→0471e545 / B a424c53f→9215e02b / C 922a4275→a0c27ad3 /
 #: D 4d840d5b→daaa8bdf / E 4c7ab9c9→d3d10bf5 / F fa1e8c8c→df80126b / G 1994799a→31cc8d96 /
 #: H b2eda81b→a1302b26 / V a3d391fc→5a5b6c01 / L 9461d747→b54e3b2b；M 63abea4f 不变。
-#: 十一格不是手抄：`temp/_recompute_digests.py`（导入本文件的 `_surface_digest`，
+#: 十一格不是手抄：`temp/_p274_recompute.py`（导入本文件的 `_surface_digest`，
 #: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
+#:
+#: p274（2026-11-10，F 侧撤"按命题号写证明"）：四格换值、七格逐字不动 ——
+#:   F 0a2de44f→a62be58c / G e851e09f→6730aa37 / H 18f91c2e→4e36b38d /
+#:   M 4d85c06c→47d3b555；A/B/C/D/E/L/V 不变（G/H/M 动的是共用段 `PAPER_PACK`
+#:   那一道"F 的稿叫什么"的字面，B 的收录面一个字没改）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "c1823cb32d612518c0f9180775e72a6d6b3d0b56c0eb454ef79c28e50d682ea9",
     "B": "bff2b0ec09bda00105237caaac176a9c05e261fec25d983a55da2146698e11b1",
     "C": "de99ae26130ec76a7ada77f230a6e7e7e1f0687b2822e5427191f261ebe7a560",
     "D": "a45d95a863ed2cf586c7dc813590137bba02fddf0b460e826851ec3a8b3ec272",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",
-    "F": "0a2de44fe28529c48c7c73c21ea555f87456bf1e7e9b79e0e7a7b45e25d3ce31",
-    "G": "e851e09f881160357fc567cd31c8a72fc8dd8205d4e968ca5519da6c6fc31634",
-    "H": "18f91c2ed07ee4642e4fc7ea5fe7138b70d623b289bcac8aa844cda1f60b146a",
+    "F": "a62be58cf9e5821c26761bad619e1b1dc68be1b2933ad121dbfe293218e69880",
+    "G": "6730aa37658b17eda6ec431eba07b1abf384233b6cb92f05e9793b13b427bd97",
+    "H": "4e36b38d75464a30120bcaa5b929d686de2c974e23a4a0446f47d831d36c5dfa",
     "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",
-    "M": "4d85c06c1f3dd2d4b625ab29fc7c426bba8b614a88d4912ef4eccf816addff94",
+    "M": "47d3b555f015e567abcffbe0ef297b2c1d699d0151ed86f03b49745332b35c2a",
     "V": "12872e74dc49673b71d7d1eac497507e4cfb34d903fca34e6402b1b73160cdda",
 }
 

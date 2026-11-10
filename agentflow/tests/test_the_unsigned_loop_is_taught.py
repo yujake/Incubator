@@ -8,7 +8,7 @@
 |---|---|---|
 | u1 | `closing.statements_unsigned_reading` + `closing` 的 blocker（`machine_pass` 还要 `not blockers`）；`statementabandon` 的 `abandoned@<ISO>@<理由>`；`vreceipts.close_resubmits_for` | M/D/F 提示词里 `statements_unsigned` / `abandoned` 各 0 次；M 那一格还写着已作废的「0 不是失败，静默的 0 才是」 |
 | u2 | `vreceipts` 的重送义务板项：幂等键 `v-resubmit@<命题号>@<proof_sha256>`、`expects="work"`、关闭条件是更新的干净「成立」行（`settle_resubmitted`），不是 ack | `specs/f.py` 与 `_f_skills()` 全文 `resubmit` 0 次 |
-| u3 | `verify.verify_proof` 的必填是 `statement_id`，只读读数的键名是 `readonly_facts` | F 只说"唤起 V 的 verify_proof，把 proof_text 与只读读数交过去" —— 一个必填键都没写 |
+| u3 | `verify.verify_proof` 交出去的是 `proof_manuscript` / `proof_no` / `readonly_facts` 三格（2026-11-10 第二刀之后**没有** `statement_id`：命题号由 B 收录时现取） | F 只说"唤起 V 的 verify_proof，把 proof_text 与只读读数交过去" —— 一个真键名都没写 |
 | u4 | 手稿由 `agent_f/manuscript.py::proof_manuscript` 写、`## 依赖` 由 `dependency_rows` 按 `steps[].cites` 渲染；`fs` 保留表拒 F 写 `f-proof-*` | F 教「手稿里必须有一节 `## 依赖` ……引用一条就写进这一节」 |
 | u5 | 项目级 `reports/RESEARCH.md` 是 D 的研究手稿（七节、先读后改；2026-11-04 的补充裁定把它从"保留面"翻回既有交付物）；自己写的 `## 证明` 节才被 `fs` 拒 | D 教「`RESEARCH.md` 是保留面、别手写」 |
 
@@ -108,16 +108,39 @@ def test_f_knows_the_resubmit_item_is_not_an_ack() -> None:
 
 
 def test_f_knows_verify_proof_requires_statement_id() -> None:
-    """u3：派 V 审这一条时，`statement_id` 是必填；另两个键名也要写对。"""
-    bad: list[str] = []
+    """u3（2026-11-10 第二刀改写）：F 交出去的那三个真键名写全，`statement_id` 不再是要交的。
+
+    ## 为什么口径翻了（强度只升不降）
+
+    改前这一条钉的是「`statement_id` 是必填」——那是 2026-11-10 业主裁定要撤掉的东西：
+    「撤去所有有关对某个给定命题号进行攻坚或写证明的逻辑」。现在钉三件事：
+    ① 三个真键名（`proof_manuscript` / `proof_no` / `readonly_facts`）一个不许少；
+    ② **不许**把"在册后给号"教成 F 的义务（两句改前的原话逐字禁掉）；
+    ③ 反真空：把改前那句原话喂进同一个读法 ⇒ 必须报红。
+    """
+    old = ("`statement_id`（在册后给这条命题的号；还没在册就不给，"
+           "空号 = 还没在册 —— **没号也能签**")
     for label, text in (("prompt", _prompt("F")), ("manual", _manual("F"))):
-        if "verify_proof" not in text:
-            bad.append(f"F/{label} 连 verify_proof 都没提 ⇒ 判据没有对象")
-            continue
-        for needle in ("statement_id", "proof_no", "readonly_facts"):
-            if needle not in text:
-                bad.append(f"F/{label} 没写 {needle!r}（这三个键名是实现里的真名）")
-    assert not bad, "verify_proof 的必填键没被教全：\n  " + "\n  ".join(bad)
+        bad = _verify_key_problems(text, old=old)
+        assert not bad, f"F/{label} 的送审口径不对：\n  " + "\n  ".join(bad)
+    # 反真空：旧口径喂进同一个读法必须红（判据不是橡皮图章）
+    assert _verify_key_problems(old, old=old), "旧口径居然全绿 ⇒ 这条判据是空的"
+
+
+def _verify_key_problems(text: str, *, old: tuple[str, ...] | str = "") -> list[str]:
+    """F 的送审口径：三个真键名都在、且改前那两句"要交号"的原话都不在。"""
+    bad: list[str] = []
+    if "verify_proof" not in text:
+        bad.append("连 verify_proof 都没提 ⇒ 判据没有对象")
+        return bad
+    for needle in ("proof_manuscript", "proof_no", "readonly_facts"):
+        if needle not in text:
+            bad.append(f"没写 {needle!r}（这三个键名是实现里的真名）")
+    olds = (old,) if isinstance(old, str) else tuple(old or ())
+    for stale in (*olds, "`statement_id`（在册后给这条命题的号", "在册后再加 `statement_id`"):
+        if stale and stale in text:
+            bad.append(f"还在教「{stale}」—— 命题号不是 F 这一趟要交的东西")
+    return bad
 
 
 def test_f_is_taught_to_hand_cites_not_the_dependency_section() -> None:

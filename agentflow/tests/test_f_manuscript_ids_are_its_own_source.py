@@ -174,14 +174,19 @@ def test_b_the_manuscript_path_is_only_the_f_manuscript_number(tmp_path) -> None
 
 
 def test_b_publish_does_not_rename(tmp_path) -> None:
-    """b（改前/改后）：`publish_manuscript` 拿到命题号也不改名（它是稿号，不是命题号）。"""
+    """b（改前/改后）：`publish_manuscript` 拿不到命题号（签名里没有那一格）也不改名。
+
+    2026-11-10 第二刀：判据从"拿到号也不改名"升成"递号进去是 `TypeError`"。
+    """
     st = _ws(tmp_path)
     got = _round(st, "000009")
-    out = _f(st).publish_manuscript(got, statement_id=SID)
+    out = _f(st).publish_manuscript(got, manuscript_id="000009")
     assert out.get("published") is False, out
     assert out.get("path") == got["path"], out
     assert out.get("name_changed") is False, out
     assert "不改稿名" in str(out.get("why") or ""), out
+    with pytest.raises(TypeError):
+        _f(st).publish_manuscript(got, statement_id=SID)
 
 
 # ------------------------------------------------------------------ c 一计划两稿
