@@ -198,6 +198,20 @@ def _split_rel(rel: Any) -> tuple[str, str]:
     return "/".join(parts[:-1]), name
 
 
+def _is_file_name(rel: Any) -> bool:
+    """这个名字是不是「一份真文件的名字」：末段以 `.md` 结尾（大小写不敏感）。
+
+    只读字符串、不 stat 盘：盘上有没有这一份不是名字的问题。2026-11-10 起这一格是
+    「签的载体」判定的一部分（:func:`sign_carrier`）—— 载体是真文件的名字，
+    `reports/f-proof-000000`（缺扩展名）不是。此前这一格长在 `vsigns` 里，
+    `vsigns.sign_carrier_reading` 与 `_pending_carrier_path` 两条口都各自读它一次；
+    搬到这里之后两条口只读表这一处（判据不再有第二份 `.md` 判定）。
+    """
+    raw = str(rel or "").strip().replace("\\", "/")
+    tail = raw.rsplit("/", 1)[-1] if raw else ""
+    return tail.lower().endswith(".md")
+
+
 def _shape_of_name(name: str) -> dict[str, Any]:
     """只看文件名 ⇒ 五档读数（目录不参与；`classify_name` 与 `classify_manuscript` 共用这一处）。
 
@@ -405,6 +419,11 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
     - `f-proof-plan-*`：老盘上的只读兼容名，与数字名同等（`ok=True`，可签）——
       2026-11-10 业主裁定之后不再新写这种名字；`CODE_PLAN_NOT_SIGN` 只留给老读数解释。
 
+    外加一格（2026-11-10 晚）：`ok=True` 还要求它是一份真文件的名字（末段 `.md`，
+    见 :func:`_is_file_name`）—— `reports/f-proof-000000`（缺扩展名）不是载体。
+    这一格原先在 `vsigns.sign_carrier_reading` 里，搬进来之后 `vsigns` 的两条口
+    （签载体 / pending 载体）都只读这里，不再各写一份 `.md` 判定。
+
     返回 `{ok, code, why, name, family, tier}`；`ok=False` 不许折成"可以签"。
     """
     reading = classify_manuscript(rel)
@@ -414,6 +433,11 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
     out: dict[str, Any] = {"ok": False, "code": "", "why": "", "name": name,
                            "family": family, "tier": tier}
     if tier == TIER_FAMILY and family in ("f-proof", "b-proof", "e-proof"):
+        if not _is_file_name(rel):
+            out.update(code=CODE_BAD,
+                       why=(f"`{str(rel or '').strip()}` 缺 `.md` 扩展名 ⇒ 不是一份真文件的"
+                            "名字：签的载体只认真文件名（pending 载体同一把尺）"))
+            return out
         out.update(ok=True, why=f"`{name}` 是 {family} 的签载体（reports/ 下的规范名）")
         return out
     if tier == TIER_FAMILY and family == "e-num":
@@ -436,7 +460,14 @@ def sign_carrier(rel: Any) -> dict[str, Any]:
 
 
 def is_sign_carrier(rel: Any) -> bool:
-    """`sign_carrier(rel)["ok"]` 的布尔读法（判据只走那一个函数）。"""
+    """`sign_carrier(rel)["ok"]` 的布尔读法（判据只走那一个函数）。
+
+    这是载体判定（族 + 目录 + 真文件名），不是「名字属于签的族」这种形状判定：
+    `reports/f-proof-000000`（缺 `.md`）在 :func:`classify_manuscript` 里是 `tier=family`，
+    但它不是载体 —— 2026-11-10 晚之前这个布尔只读名字表，于是它在这里是 True、而
+    `vsigns.is_sign_carrier` 是 False；现在两条口同源到 :func:`sign_carrier`，缺 `.md`
+    在两边都是 False。
+    """
     return bool(sign_carrier(rel).get("ok"))
 
 

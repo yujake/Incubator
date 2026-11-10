@@ -2444,9 +2444,11 @@ class AgentV:
                                "`notes/…` 稿走转正那一步）再来；认不出号的签块 B 不认，"
                                "签了也白签")}
         if not _carrier.get("ok"):
-            # 2026-11-05（父裁定）：计划稿是合法的落稿名，但不是签的载体。
-            # 2026-11-09（T2）：载体判据只读表 —— `-v2` / `notes/` 手稿形名字 /
-            # `e-num` 都在这里被拒（旧读法只挡计划稿）。
+            # 2026-11-10（业主裁定「计划不拥有稿件」）：载体 = `reports/(f|b|e)-proof-<号>[-pN].md`
+            # 的真文件名字（缺 `.md` 不算）；老盘的 `f-proof-plan-*` 与数字名同等（只读
+            # 兼容），它仍不是命题号，第 8 格照旧「未在册」。判据只读表
+            # （`manuscriptfamily.sign_carrier`）：`-v2` / `notes/` 手稿形名字 / `e-num` /
+            # 认不出号的名字都在这里被拒。
             return {"failed": True, "kind": "bad_manuscript_name",
                     "reason": "bad_manuscript_name",
                     "detail": (f"`{rel}` 不是签的载体：{_carrier.get('reason')}"
@@ -2583,7 +2585,9 @@ class AgentV:
         - 任一转拿不到合法结论（没缝 / 空回复 / 解析失败）⇒ `checked=False`、一个字节都
           不写（"没查成"不许冒充"审过了"，与 `no_proof_text` 同一条纪律）；
         - 已经签过（稿里已有 sha 相符的签块）⇒ 不重复审、不重复写（同一份正文不重复判）；
-        - 计划稿（`*-proof-plan-<数字>`）是合法落稿名，但不是签的载体 ⇒ 签不落它。
+        - 载体只认 `reports/(f|b|e)-proof-<号>[-pN].md` 的真文件名字（缺 `.md` 不算）；
+          老盘的 `f-proof-plan-*` 与数字名同等（只读兼容），它仍不是命题号，
+          第 8 格照旧「未在册」。
 
         ## 为什么先判满三转再写块
 
@@ -2802,12 +2806,14 @@ class AgentV:
                     if stopped != "signed" else "没有手稿落点"),
         }
         if stopped == "signed" and rel:
-            # ---- 2026-11-05 晚（业主）：计划稿是合法落稿名，但不是签的载体 --------
+            # ---- 2026-11-10（业主裁定「计划不拥有稿件」）：载体的判据 --------------
             #
-            # 「先落计划名、拿到号再改名」是 F 的既有工作流，`parse_manuscript_name`
-            # 一个字节都不改；但签只认 `reports/(f|b|e)-proof-<数字>.md`。真机
-            # `f-proof-plan-000011` 上那块 3/3 就是从这里放进来的。判在写 pending 台账
-            # 之前：盘上不留"永远认领不了"的行。三转读数照给（看过、没签），只是不构成签。
+            # 载体 = `reports/(f|b|e)-proof-<号>[-pN].md` 的真文件名字（缺 `.md` 不算，
+            # 见 `vsigns.sign_carrier_reading`）。老盘的 `f-proof-plan-*` 与数字名同等
+            # （只读兼容：真机 `f-proof-plan-000011` 上那块 3/3 就是这一族）；它仍不是
+            # 命题号，第 8 格照旧「未在册」。`-v2` / `notes/` / `e-num` / 认不出号的名字
+            # 仍不是载体。判在写 pending 台账之前：盘上不留"永远认领不了"的行。
+            # 三转读数照给（看过、没签），只是不构成签。
             _carrier = _VS.sign_carrier_reading(rel)
             if not _carrier.get("ok"):
                 stopped = "reviewed_unsigned"
@@ -2849,9 +2855,9 @@ class AgentV:
                 passes=passes, at=at, block_write=block_write,
                 ledger=_pending_ledger_ref(pending))
         elif stopped == "reviewed_unsigned":
-            # 看过、没签：这一档一个字节都不写（没有稿 / 计划稿都没有签的落点）。
+            # 看过、没签：这一档一个字节都不写（没有稿 / 名字不是签的载体，都没有签的落点）。
             # 不落 pending：那一行按正文 sha 可认领，B 会把它当"有人签过"。
-            # 计划稿那一档的 `why` 已经在上面写好（`code` 非空）⇒ 不覆盖它。
+            # 载体被拒那一档的 `why` 已经在上面写好（`code` 非空）⇒ 不覆盖它。
             if not str(block_write.get("code") or "").strip():
                 block_write["why"] = (
                     "没有手稿（`proof_manuscript`）⇒ 只能看过、不能签："
@@ -3406,22 +3412,18 @@ class AgentV:
         elif stopped == "reviewed_unsigned":
             # 2026-11-04（甲）：没有稿 ⇒ 只能"看过"，不能签。这一档不落任何签、
             # 不落 pending 台账（按 sha 可认领的那一行会被当成第三方签）。
-            # 2026-11-05 晚：计划稿（不是签的载体）也走这一档 —— 三转读数照给、不构成签，
-            # 理由用 `block_write.why` 那一条（它点名"计划稿"），不冒充"没有手稿"。
-            from .. import vsigns as _VS2
-
-            if str(manuscript_write.get("code") or "") == _VS2.MANUSCRIPT_NAME_PLAN:
-                record = (str(manuscript_write.get("why") or "")
-                          + f"这一趟的三转判定（{got.get('verdict') or '（无结论）'}，"
-                            f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
-            else:
-                record = ("看过、没签：这一趟只给了内联正文、没给 `proof_manuscript` ⇒ "
-                          "没有可落签的载体 —— 签块、`## 依赖` 段、按号命名的稿这三样都只在"
-                          "文件上，内联正文一样都做不到，所以这一签不签发、台账里也不留 "
-                          "sign 行。要签就把这份正文落成一份稿（`reports/…` 或 `notes/…` 皆可，"
-                          "三节 `## 命题` / `## 证明` / `## 依赖`），再带 `proof_manuscript` 送审。"
-                          f"这一趟的判定（{got.get('verdict') or '（无结论）'}，"
-                          f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
+            # 2026-11-10：名字不是签的载体（老盘历史名 / `notes/` / `e-num` / 缺 `.md` /
+            # 认不出号的坏名）也走这一档 —— 三转读数照给、不构成签；那一档的理由在
+            # `block_write.why` 里，经 `review_write` 带出去（下面这句话说的是"没给稿"那一档）。
+            # 改前的另一支以 `MANUSCRIPT_NAME_PLAN` 为条件：它永远不成立
+            # （`sign_carrier_reading` 对计划名读 ok=True / code=""，见探针读数）⇒ 删。
+            record = ("看过、没签：这一趟只给了内联正文、没给 `proof_manuscript` ⇒ "
+                      "没有可落签的载体 —— 签块、`## 依赖` 段、按号命名的稿这三样都只在"
+                      "文件上，内联正文一样都做不到，所以这一签不签发、台账里也不留 "
+                      "sign 行。要签就把这份正文落成一份稿（`reports/…` 或 `notes/…` 皆可，"
+                      "三节 `## 命题` / `## 证明` / `## 依赖`），再带 `proof_manuscript` 送审。"
+                      f"这一趟的判定（{got.get('verdict') or '（无结论）'}，"
+                      f"{len(list(got.get('passes') or []))} 转）只作读数，不构成签。")
         else:
             record = (f"这一份判「{got.get('verdict') or ''}」：负判不写手稿块"
                       "（甲口径：`draft/178`「V 不写手稿里的签块」，块只由收方秘书落；"

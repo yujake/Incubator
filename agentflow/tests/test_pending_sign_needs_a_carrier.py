@@ -23,11 +23,21 @@ B 新建命题时按正文 sha 去 `verifications/pending/<sha>.jsonl` 认领 V 
 | f | `vsigns.py` 的 docstring / 注释（字面扫） | 不许再有「计划稿不是签的载体」这一类相反说法；反真空：把任一处改回旧说法 ⇒ 红 |
 | g | `vsigns.issue` 的源码段（AST 定位） | 没有以 `MANUSCRIPT_NAME_PLAN` 为条件的死分支；常量保留（老读数还要能解释） |
 | h | `reports/f-proof-000000`（缺 `.md`） | 签载体与 pending 载体两条口都是假（同源）；带上 `.md` 两条口都认 |
+| i | `agent_v/core.py` 的注释 / docstring / 代码 | 旧口径的「计划稿」措辞一条都不留；以计划码为条件的死分支删掉（AST：零引用）；反真空：把旧原句喂回扫描器 ⇒ 红 |
+| j | 两个同名口（`manuscriptfamily.is_sign_carrier` / `vsigns.is_sign_carrier`） | 9 个形状逐格一致（含缺 `.md`、plan 名、`b-proof-plan`、`notes/`、`e-num`、`exhaustion.md`）；反真空：摘掉「真文件名字」那一格 ⇒ 缺 `.md` 的形状红 |
+| k | ② 的两条运行时 reason 串 + 一条选择式 | 旧串一条不留；`_claim_pending_sign` 不再引用计划码（常量保留）；反真空：把旧串喂回扫描器 ⇒ 红 |
 
 2026-11-10（业主裁定）：「F 的稿自己维护一套号源，不依赖命题号和计划号」；
 「计划不拥有稿件」⇒ 老盘计划名是只读兼容的签载体，与数字名同等。e 的缺扩展名那一格
 与 f / g / h 是同一笔收口：旧口径的字面、`issue` 里的死分支、以及两条口对
 `reports/f-proof-000000` 的相反读法，都不许再回来。
+
+2026-11-10 晚（同一裁定的收尾 · 三处同族残留）：① `agent_v/core.py` 的旧口径字面与
+那支同样死掉的计划名分支（3413–3416）；② `vsigns.py` 里两条运行时 reason 串
+（`issue` 的兜底、`_claim_pending_sign` 的拒信）与 `_claim_pending_sign` 里以计划码为
+条件的死选择式；③ `manuscriptfamily.is_sign_carrier` 只读名字表 ⇒ 缺 `.md` 的名字在
+它那里是 True、在 `vsigns.is_sign_carrier` 是 False。i / j / k 是这三处的判据。
+②③ 只收窄「两条口同源」，没有新增放行；① 只删死分支与改注释，签的行为一个字节没动。
 
 零模型调用；夹具走生产的写口（`verifications.record_pending_sign` +
 `AgentB.register_statement`），不手写台账。
@@ -47,6 +57,10 @@ from agentflow.store import Store
 #: 判据 f 的被扫文件（与 e / h 是同一族的签载体判据）。
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow" / "vsigns.py"
 
+#: 判据 i 的被扫文件（`agent_v/core.py`：① 的旧口径字面与死分支都在这里）。
+CORE_SRC = (pathlib.Path(__file__).resolve().parents[1]
+            / "src" / "agentflow" / "agent_v" / "core.py")
+
 #: 2026-11-05 旧口径的原句（只用来做反真空与字面扫的靶）。命中任意一条 ⇒ 红。
 OLD_CLAIMS: tuple[str, ...] = (
     "计划稿不是签的载体",
@@ -55,6 +69,38 @@ OLD_CLAIMS: tuple[str, ...] = (
     "计划稿…都不算",
     "落签也不许盖到它上面",
     "把计划稿排除掉",
+)
+
+#: ① 在 `agent_v/core.py` 里的旧口径原句（2026-11-10 晚改前逐字）。
+#: 它们全部带「计划稿」这个旧措辞 ⇒ i 的字面扫以那个词为判据；这张表只做反真空。
+CORE_OLD_CLAIMS: tuple[str, ...] = (
+    "计划稿是合法的落稿名，但不是签的载体",
+    "计划稿是合法落稿名，但不是签的载体",
+    "旧读法只挡计划稿",
+    "计划稿都没有签的落点",
+    "计划稿那一档的 `why` 已经在上面写好",
+    "计划稿（不是签的载体）也走这一档",
+    '它点名"计划稿"',
+)
+
+#: ② 的两条旧运行时 reason 串（改前逐字；它们是返回读数，不是注释）。
+OLD_REASONS: tuple[str, ...] = (
+    "计划稿 / 别的文件都不是签的载体",
+    "计划稿 / 纯内联正文的 pending 行不给第 3 位",
+)
+
+#: ③ 两条同名口要逐格一致的九个形状（含缺 `.md`、plan 名、`b-proof-plan`、`notes/`、
+#: `e-num`、`exhaustion.md`）：`(路径, 是不是签的载体)`。
+MOUTH_SHAPES: tuple[tuple[str, bool], ...] = (
+    ("reports/f-proof-000000.md", True),
+    ("reports/f-proof-000000", False),              # 缺 `.md`
+    ("reports/f-proof-plan-0001.md", True),         # 老盘计划名（2026-11-10 只读兼容）
+    ("reports/b-proof-plan-0001.md", False),        # plan 号形只属于 f-proof
+    ("notes/b-proof-000003.md", False),             # 目录不对
+    ("reports/e-num-000012.md", False),             # 绿色通道，不签
+    ("out/experiments/000000/exhaustion.md", False),  # E 的穷举报告：pending 载体，不是签载体
+    ("reports/f-proof-000000-p2.md", True),
+    ("reports/e-proof-000012.md", True),
 )
 
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
@@ -310,3 +356,131 @@ def test_h2_the_same_rule_reads_both_ports_for_every_shape() -> None:
         carried = VS._pending_carrier_path({"object_path": rel})
         assert (carried == rel) is VS.is_sign_carrier(rel), (
             rel, carried, VS.sign_carrier_reading(rel))
+
+
+# ====================================================================== 共用读数
+def _plan_word_hits(text: str) -> list[int]:
+    """这段文本里「计划稿」出现的行号（旧口径的措辞；空列表 = 干净）。"""
+    return [i for i, line in enumerate(text.splitlines(), 1) if "计划稿" in line]
+
+
+def _reason_hits(text: str) -> list[str]:
+    """这段文本里命中的旧 reason 串（空列表 = 干净）。"""
+    return [one for one in OLD_REASONS if one in text]
+
+
+def _function_node(src: str, name: str) -> ast.AST:
+    """`src` 里名为 `name` 的那个函数节点（找不到就红：判据不许静默跳过）。"""
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    raise AssertionError(f"`{name}` 没找到 ⇒ 这一条判据真空")
+
+
+def _code_refs_to(node: ast.AST, name: str) -> list[str]:
+    """`node` 这段代码里引用 `name` 的 AST 位置（属性访问或裸名；注释 / 字符串不算）。"""
+    hits: list[str] = []
+    for one in ast.walk(node):
+        if isinstance(one, ast.Attribute) and one.attr == name:
+            hits.append(f"attr@{one.lineno}")
+        elif isinstance(one, ast.Name) and one.id == name:
+            hits.append(f"name@{one.lineno}")
+    return hits
+
+
+# ====================================================================== i ① core.py
+def test_i_core_has_no_plan_mouth_and_no_dead_plan_branch() -> None:
+    """i：`agent_v/core.py` 里旧口径的「计划稿」措辞与那支死分支都不许留。
+
+    2026-11-10 业主裁定「计划不拥有稿件」之后，老盘 `f-proof-plan-*` 是只读兼容的
+    名字，与数字名同等；把它叫「计划稿」并当成签的反例是 2026-11-05 旧口径的措辞。
+    这一条钉两件：
+
+    - 字面：注释 / docstring / 代码里「计划稿」一条都不许留 —— 改后说的是
+      「老盘 `f-proof-plan-*`」与「真文件名字」；
+    - 死分支：改前 3413–3416 以 `MANUSCRIPT_NAME_PLAN` 为条件，而 `sign_carrier_reading`
+      对计划名读 `ok=True / code=""`、它的码集合里没有那个值 ⇒ 这一支永不成立。
+      现在 AST 上零引用，连带那行 `from .. import vsigns as _VS2` 也一起删掉。
+    """
+    src = CORE_SRC.read_text(encoding="utf-8")
+    hits = _plan_word_hits(src)
+    assert hits == [], f"旧口径的「计划稿」措辞还在 agent_v/core.py 这些行：{hits}"
+    refs = _code_refs_to(_function_node(src, "_finish_unregistered"),
+                         "MANUSCRIPT_NAME_PLAN")
+    assert refs == [], f"`_finish_unregistered` 还有代码引用计划码（死分支）：{refs!r}"
+    assert "_VS2" not in src, "死分支带上来的 `from .. import vsigns as _VS2` 还在"
+
+
+def test_i2_the_plan_word_scan_is_not_vacuous() -> None:
+    """i 的反真空：把 2026-11-05 的七条原句逐条喂进扫描器 ⇒ 每条都命中。"""
+    for one in CORE_OLD_CLAIMS:
+        assert _plan_word_hits(f"# {one}。"), one
+    assert _plan_word_hits(
+        "# 载体 = `reports/(f|b|e)-proof-<号>.md` 的真文件名字；老盘 `f-proof-plan-*` "
+        "与数字名同等。") == []
+
+
+# ====================================================================== j ③ 两条口
+def test_j_the_two_is_sign_carrier_mouths_agree_on_nine_shapes() -> None:
+    """j：`manuscriptfamily.is_sign_carrier` 与 `vsigns.is_sign_carrier` 逐格一致。
+
+    2026-11-10 晚之前前者只读名字表（`reports/f-proof-000000` 缺 `.md` ⇒ True），
+    后者已同源到「真文件名字」（False）—— 两个同名函数对同一串说两句话。现在那一格
+    在表里（`manuscriptfamily._is_file_name`），`vsigns` 只转发（自己不再写第二份
+    `.md` 判定）：九个形状逐格相同，缺 `.md` 在两边都是 False。
+    """
+    from agentflow import manuscriptfamily as MF
+
+    for rel, want in MOUTH_SHAPES:
+        assert MF.is_sign_carrier(rel) is want, (rel, MF.sign_carrier(rel))
+        assert VS.is_sign_carrier(rel) is want, (rel, VS.sign_carrier_reading(rel))
+        assert MF.is_sign_carrier(rel) is VS.is_sign_carrier(rel), rel
+
+
+def test_j2_the_file_name_gate_is_what_makes_them_agree() -> None:
+    """j 的反真空：缺 `.md` 那一格改前在表里判 True 的根据只剩「真文件名」一格。
+
+    读数（不碰工作树）：`reports/f-proof-000000` 在表里的身份仍是 `tier=family`、
+    族 `f-proof`、目录 `reports` —— 旧读法（只读名字表）据这三格判 True；现在
+    `_is_file_name` 说它不是真文件，`sign_carrier` 因此 `ok=False`。把那一格摘掉，
+    j 的形状表里这一行立刻红（探针 `temp/probe_residue_20261110.py` 同形读数）。
+    """
+    from agentflow import manuscriptfamily as MF
+
+    rel = "reports/f-proof-000000"
+    reading = MF.classify_manuscript(rel)
+    old_verdict = (reading["tier"] == MF.TIER_FAMILY
+                   and reading["name_family"] in ("f-proof", "b-proof", "e-proof")
+                   and reading["directory"] == MF.MANUSCRIPT_DIR)
+    assert old_verdict is True, (
+        "反真空的前提不成立：名字表这一档已经判它 False，j2 量不到 `.md` 那一格", reading)
+    assert MF._is_file_name(rel) is False     # noqa: SLF001 —— 量的就是这一格
+    assert MF.sign_carrier(rel)["ok"] is False
+    assert MF.sign_carrier(rel)["code"] == MF.CODE_BAD
+    assert VS.sign_carrier_reading(rel)["code"] == VS.MANUSCRIPT_NAME_BAD
+
+
+# ====================================================================== k ② 两条 reason
+def test_k_the_two_reason_strings_and_the_dead_selection_are_gone() -> None:
+    """k：② 的两条运行时 reason 串换成现行口径；死选择式删掉（常量保留）。
+
+    两条串是返回读数（不是注释），所以看整份源码的字面；选择式用 AST 看 ——
+    `_claim_pending_sign` 里不许再有任何代码引用 `MANUSCRIPT_NAME_PLAN`。
+    常量本身保留：老盘上的旧读数还要能解释（g 已经钉了 `issue` 那一处）。
+    """
+    src = SRC.read_text(encoding="utf-8")
+    assert _reason_hits(src) == [], f"旧的 reason 串还在：{_reason_hits(src)!r}"
+    refs = _code_refs_to(_function_node(src, "_claim_pending_sign"),
+                         "MANUSCRIPT_NAME_PLAN")
+    assert refs == [], f"`_claim_pending_sign` 还引用计划码（死选择式）：{refs!r}"
+    assert VS.MANUSCRIPT_NAME_PLAN == "plan_is_not_a_sign_carrier", (
+        "历史码必须保留（老盘旧读数还要能解释）")
+    # 新口径：两条拒信都点名"真文件名字"，不再拿计划名当反例。
+    assert src.count("真文件名字") >= 2, "两条拒信没有换成现行口径"
+
+
+def test_k2_the_reason_scan_is_not_vacuous() -> None:
+    """k 的反真空：两条旧 reason 串逐条喂进扫描器 ⇒ 每条都命中。"""
+    for one in OLD_REASONS:
+        assert _reason_hits(f'out["why"] = "{one}"'), one
+    assert _reason_hits('out["why"] = "没有载体的 pending 行不给第 3 位"') == []

@@ -630,19 +630,6 @@ MANUSCRIPT_NAME_PLAN = "plan_is_not_a_sign_carrier"
 SIGN_CARRIER_DIR = _MFAM.MANUSCRIPT_DIR
 
 
-def _is_manuscript_file_name(path: Any) -> bool:
-    """这个名字是不是「一份真文件的名字」：末段以 `.md` 结尾（大小写不敏感）。
-
-    2026-11-10：签载体（:func:`sign_carrier_reading`）与 pending 载体
-    （:func:`_pending_carrier_path`）共用这一格 —— 两条口都以"是不是一份真文件的名字"
-    为准，不再一条认 `reports/f-proof-000000`（缺扩展名）、另一条拒它。
-    判据只看字符串、不 stat 盘：盘上有没有这一份不是名字的问题。
-    """
-    raw = str(path or "").strip().replace("\\", "/")
-    tail = raw.rsplit("/", 1)[-1] if raw else ""
-    return tail.lower().endswith(".md")
-
-
 def sign_carrier_reading(path: Any) -> dict[str, Any]:
     """这一份稿是不是「签的载体」（2026-11-05 起把门；2026-11-10 撤掉计划名排除）。
 
@@ -657,34 +644,28 @@ def sign_carrier_reading(path: Any) -> dict[str, Any]:
     - `f-proof-plan-*`：是合法载体（2026-11-10 业主裁定：「F 的稿自己维护一套号源，
       不依赖命题号和计划号」「计划不拥有稿件」）—— 老盘上的只读兼容名与数字名同等。
 
-    外加本模块自己那一格（2026-11-10）：名字还必须是「一份真文件的名字」（末段以
-    `.md` 结尾，见 :func:`_is_manuscript_file_name`）。`reports/f-proof-000000`
-    （缺扩展名）不是签的载体；pending 载体读同一个函数，两条口因此同源。
+    2026-11-10 晚：「名字还必须是一份真文件的名字」那一格搬进了表
+    （`manuscriptfamily._is_file_name`）—— `reports/f-proof-000000`（缺扩展名）在表里
+    就是 `ok=False`，本函数只转发，不再自己写第二份 `.md` 判定。pending 载体
+    （:func:`_pending_carrier_path`）读同一张表，两条口因此同源。
 
     返回 `{ok, code, reason, name}`；`ok=False` 不许折成"可以签"。
     """
     got = _MFAM.sign_carrier(path)
-    out = {"ok": bool(got.get("ok")), "code": str(got.get("code") or ""),
-           "reason": str(got.get("why") or ""), "name": str(got.get("name") or "")}
-    if out["ok"] and not _is_manuscript_file_name(path):
-        out.update(
-            ok=False, code=MANUSCRIPT_NAME_BAD,
-            reason=(f"`{str(path or '').strip()}` 缺 `.md` 扩展名 ⇒ 不是一份真文件的"
-                    "名字：签的载体只认真文件名（pending 载体同一把尺）"))
-    return out
+    return {"ok": bool(got.get("ok")), "code": str(got.get("code") or ""),
+            "reason": str(got.get("why") or ""), "name": str(got.get("name") or "")}
 
 
 def is_sign_carrier(path: Any) -> bool:
     """`sign_carrier_reading(path)["ok"]` 的布尔读法（判据只走那一处定义）。
 
     2026-11-09（T2）：判据不在这里写第二份，转发给 `manuscriptfamily.is_sign_carrier`。
-    2026-11-10：转发之前先过「是不是一份真文件的名字」那一格
-    （:func:`_is_manuscript_file_name`；:func:`sign_carrier_reading` 与
-    :func:`_pending_carrier_path` 读的是同一个函数）。不是文件名的名字传空串进去，
-    那一张表对空名字本来就不认。两条口因此同源（`reports/f-proof-000000`
-    缺扩展名 ⇒ 这里也是 False）。
+    2026-11-10 晚：「是不是一份真文件的名字」那一格搬进了表
+    （`manuscriptfamily._is_file_name`），缺 `.md` 的名字在表里就是 False —— 这里不再
+    自己先过一道 `.md` 门（那一层是同一句话的第二份实现）。于是两条口同源：
+    `reports/f-proof-000000` 缺扩展名 ⇒ 这里与 pending 载体都是 False。
     """
-    return _MFAM.is_sign_carrier(path if _is_manuscript_file_name(path) else "")
+    return _MFAM.is_sign_carrier(path)
 
 
 def parse_manuscript_name(path: Any) -> dict[str, Any]:
@@ -1825,10 +1806,14 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             "reason": "没号那一档的签必须落在正式手稿上（`reports/(f|b|e)-proof-<数字>.md`），"
                       "这一签没有给载体"}
         if not carrier.get("ok"):
+            # 下面那个 `or` 是兜底、不是判据：`ok=False` 的每一种形状（缺 `.md` 的名字 /
+            # 老盘历史名 / `notes/` / `e-num` / 坏名 / 没给载体）都带非空 reason
+            # （探针：12 个形状上 reason 为空的集合是空集）。兜底串不再拿"计划稿"当反例
+            # —— 2026-11-10 裁定之后老盘 `f-proof-plan-*` 与数字名同等，它是载体。
             out.update(code=str(carrier.get("code") or MANUSCRIPT_NAME_BAD), reason=(
-                f"没号那一档的载体必须是 `reports/(f|b|e)-proof-<数字>.md`，收到 "
-                f"{str(artifact_path or '')!r} ⇒ 这一签不颁发（一个字节都不写）："
-                f"{carrier.get('reason') or '计划稿 / 别的文件都不是签的载体'}"))
+                f"没号那一档的载体必须是 `reports/(f|b|e)-proof-<数字>[-pN].md` 的真文件名字，"
+                f"收到 {str(artifact_path or '')!r} ⇒ 这一签不颁发（一个字节都不写）："
+                f"{carrier.get('reason') or '它不是签的载体'}"))
             return out
     else:
         out["ledger_kind"] = "registered"
@@ -3360,14 +3345,19 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
     carrier = _pending_carrier_path(row)
     out["carrier"] = carrier
     if not carrier:
-        out.update(applied=False, code=MANUSCRIPT_NAME_PLAN
-                   if sign_carrier_reading(str(row.get("object_path") or "")).get("code")
-                   == MANUSCRIPT_NAME_PLAN else "carrier_missing")
+        # 这一格的码只有一个取值（`carrier_missing`）。改前这里是一个以
+        # `MANUSCRIPT_NAME_PLAN` 为条件的三目选择式 —— 那一支永远不成立：`sign_carrier_reading`
+        # 对计划名读 `ok=True / code=""`，而它在全部形状上产出过的码只有 "" /
+        # `bad_manuscript_name` / `legacy_manuscript_name` /
+        # `numeric_manuscript_is_not_a_sign_carrier` / `manuscript_not_in_family`
+        # （探针 temp/probe_residue_20261110.py）。选择式删掉，读数一格不差。
+        out.update(applied=False, code="carrier_missing")
         out["why"] = (
             f"{ledger} 这一行没有载体（`object_path` 不是 "
-            "`reports/(f|b|e)-proof-<数字>.md`，也不是 "
+            "`reports/(f|b|e)-proof-<数字>[-pN].md` 的真文件名字，也不是 "
             "`out/experiments/<实验号>/exhaustion.md`）⇒ 不认领："
-            "计划稿 / 纯内联正文的 pending 行不给第 3 位。处置：让 V 带 `proof_manuscript` "
+            "没有载体的 pending 行不给第 3 位（纯内联正文 / `notes/…` / `e-num` / "
+            "缺 `.md` 的名字都不算载体）。处置：让 V 带 `proof_manuscript` "
             "重审（签块落回那一份正式稿），或让 E 交 `reports/e-proof-<实验号>.md`。")
         return dict(bits), out
     if not _VR.row_signable(row):
