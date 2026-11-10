@@ -371,7 +371,13 @@ def test_f_without_source_stmt_id_the_positive_control_goes_red(
 # ===================================================== g concept 负控（现行口径）
 def test_g_a_concept_row_is_not_citable_so_its_cited_face_stays_empty(
         tmp_path: pathlib.Path) -> None:
-    """g：concept 行按现行口径不可被引 ⇒ 手稿录入受控拒，被引面仍 0 条。"""
+    """g：concept 行按现行口径不可被引 ⇒ 手稿录入受控拒，被引面仍 0 条。
+
+    这条钉的是现状（概念没有真值、没有等级 ⇒ `evidencebits.derive_grade` 对
+    `kind="concept"` 短路成 `not_applicable` ⇒ 引用门拒它），不是"概念本来就该被拒"。
+    将来业主若裁定"概念也能被依赖面引用"，这一条会被改成正控（同一个 A 被引之后
+    被引面 1 条）—— 那时要改的是引用门本身，不是这条判据的口径。
+    """
     st, b = _ws(tmp_path)
     conftest.seed_statement_row(st, stmt_id=CONCEPT_ID, statement_full=CONCEPT_FULL,
                                 kind="concept", label="互素")
