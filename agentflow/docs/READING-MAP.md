@@ -4,10 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、273,014 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
+> **282 个 `.py`、273,257 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 被引面读数**：273,014 → **273,257**（`statementledger.py` 加反向读数 `cited_by`：给定一条命题 ⇒
+> `dependencies` 里 `source_stmt_id == 它` 的那些 `used_by`（逐条带 `kind` / `label` / `status` /
+> `created_at`，另有 `by_status`）；`rows_of` 加 `table=` 让 `statements` / `dependencies` 走同一份
+> try/except —— 被引面不自己再扫一遍依赖账。写侧一个字没改（B 登记先拿号、再按那个号写 `used_by`，
+> 判据 `tests/test_the_cited_face_is_read_from_the_dependency_ledger.py`）。文件数 282、
+> `>800 行` 的 75、`agent_loop.py` 14,189 都不变。
 > **2026-11-10 体量：不抬基线，改拆函数**：272,930 → **273,014**（净 +84：`agent_b/register_statement.py`
 > 把三条越过 200 行的函数各按内部自然分段拆开 —— `_ingest_apply` 239 → 160（numeric_evidence /
 > dependencies 两格各搬成一个方法）、`_ingest_apply_evidence` 229 → 158（按现行事实重建证据面 /
@@ -387,7 +393,7 @@
 > `python -m agentflow.agent_a` 的自检入口在同目录的 `agent_a/__main__.py`。
 | `agents` 的公共零件：`claimanatomy.py` | 断言解剖学 —— `documents.claims` 每个元素的唯一判据来源 |
 | `claims.py` | 原子断言拆分（把一段答复切成可逐条回验的断言） |
-| `statementledger.py` | **命题台账的查口**（只读、零模型、不写盘、不开事务）：两种口径分开 —— `by_id`（按编号：主键逐字相等、不过滤 status/kind；0 命中 = 确定性事实）与 `by_keywords`（按内容：`label`/`statement_full` 经 `textutil.normalize` 后包含任一关键词；0 命中 ≠ 不在册）；底座 `rows_of`/`pool`/`index_by_id`/`duplicate_hits` 各一份，池与常量由调用方传（命题池与概念行池过滤条件不同，不焊死在查里）。2026-11-09 把全仓 62 处"自己扫全表拿一行/建索引"收成这 5 个入口（判据 `tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`）；同日晚第 4 步把 C/L/V 的三个库模块/B/D/F 的台账读点也接到这组入口（角色侧 `rows("statements")` 27 → 0，判据 `tests/test_each_role_queries_the_statement_ledger.py` 的「只给一种输入 + 反真空」）；`table.get` 仍是通用按号取行；`table.search` 在 `statements` 上已与这里**同一把尺**（2026-11-09 起：只搜 `label` / `statement_full`，判据是同一份 `textutil.matched_keywords`），其它表仍是通用列文本搜（`casefold`、全部标量字符串字段）—— 判据 `tests/test_the_two_rulers_agree_on_the_ledger.py` |
+| `statementledger.py` | **命题台账的查口**（只读、零模型、不写盘、不开事务）：两种口径分开 —— `by_id`（按编号：主键逐字相等、不过滤 status/kind；0 命中 = 确定性事实）与 `by_keywords`（按内容：`label`/`statement_full` 经 `textutil.normalize` 后包含任一关键词；0 命中 ≠ 不在册）；底座 `rows_of`/`pool`/`index_by_id`/`duplicate_hits` 各一份，池与常量由调用方传（命题池与概念行池过滤条件不同，不焊死在查里）。2026-11-09 把全仓 62 处"自己扫全表拿一行/建索引"收成这 5 个入口（判据 `tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`）；同日晚第 4 步把 C/L/V 的三个库模块/B/D/F 的台账读点也接到这组入口（角色侧 `rows("statements")` 27 → 0，判据 `tests/test_each_role_queries_the_statement_ledger.py` 的「只给一种输入 + 反真空」）；`table.get` 仍是通用按号取行；`table.search` 在 `statements` 上已与这里**同一把尺**（2026-11-09 起：只搜 `label` / `statement_full`，判据是同一份 `textutil.matched_keywords`），其它表仍是通用列文本搜（`casefold`、全部标量字符串字段）—— 判据 `tests/test_the_two_rulers_agree_on_the_ledger.py`。**2026-11-10 加被引面读数 `cited_by`**（业主：「在命题台账加被引面读数…把命题号打进各依赖面的被引面，是自动维护」）：它不是第三种"在 `statements` 里找行"的口径，而是 `dependencies` 的反向投影 —— `source_stmt_id == 这一条` 的那些行，逐条给 `used_by` / `citer_stmt_id` / `proof_no` / `kind` / `label` / `status` / `created_at` / `path_group`，外加 `by_status`（依赖行状态计数）与 `citers`（`used_by` 去重集合）；`found` 是三态（int / 0 / `None`，读不到 ≠ 没人引）。`rows_of` 加 `table=`（默认 `statements`）让依赖账走同一份取数口；写侧一个字没动（B 登记先拿号、再按那个号写 `used_by`）。判据 `tests/test_the_cited_face_is_read_from_the_dependency_ledger.py`（正控 / 多引用 / 三态 / 两条反真空 / concept 负控） |
 | `propositionkey.py` | **命题同一性与同种证明的判据**（纯函数、确定性、零模型调用；2026-10-24 业主改口径：「不用机械判据，让秘书洗定理名，让秘书判」+ 准绳「定理描述一致（什么条件推出什么结论），就是一个定理」）：本模块只在终判的上游做两件事 —— `judgeable`（够不够格当一条命题）与 `proposition_key` / `prose_similarity`（同一性的候选读数）；终判在 `secretary.Secretary.adjudicate_proposition`（一次模型调用，二档 same / different，判不了 = 没判成，按正文 sha256 缓存） |
 | `jobobject.py` | 进程树治理（`draft/39` §3.21 五 I13，D03 的根因修法）：Windows **作业对象**（`KILL_ON_JOB_CLOSE`）—— `create_job`/`assign`/`assign_tree`（根 + 现有后代；作业归属**不向前追溯**）/ `grace_then_kill`（先宽限再 `TerminateJobObject`）/ `reap`/`close`；后代枚举走 Toolhelp 快照。`stopctl` 的强制停止优先走它（`via="job"`），`taskkill` 只作退路 |
 | `attackround.py` | F 的**一轮真推理**形态（`draft/39` §3.16）：四种产物 `reduction`/`proof`/`counterexample_request`/`dead_end`（**没有 `no_change`**）、策略工具箱（每轮必填方法与理由）、#5 缝的两条合法出口（写出来 / 声明成前提）、花钱前的确定性闸门（I9）、缺陷继承（I11）、超预算的 `too_large`（I16） |

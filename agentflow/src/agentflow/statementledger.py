@@ -71,6 +71,23 @@
   （`secretary.PROPOSITION_VERDICT_TEXT_CHARS`）都由调用方传进来：本模块不复制
   这两份常量，也不给自己定新的阈值。
 
+## 第三种问法？不是 —— 「被引面」是依赖账的反向投影（业主 2026-11-10）
+
+业主逐字：「在命题台账加被引面读数，是手稿录入时获取依赖面和将注册的命题号，
+把命题号打进各依赖面的被引面，是自动维护，暂不研究消费者」。
+
+所以 `cited_by` 不是第三种「在 `statements` 里找行」的口径（那种口径仍然只有
+两条），而是 `dependencies` 这本账的反向读法：「谁引了我」= `source_stmt_id == 我`
+的那些行的 `used_by`。
+
+写侧一个字都不用改，这条读数是派生的：B 登记时先拿到号
+（`secretary.Secretary._record_statement_tx` 里的 `tx.alloc_id`），再在同一笔事务里
+按那个号写依赖行 —— `used_by="stmt:<刚拿到的号>"`、`source_stmt_id=<被引命题>`
+（`Secretary._write_dep_steps`，`proofloc.used_by_of` 是那个号的唯一拼法）。所以
+「录入完成后，被引的那些命题的读数里立刻能看到这一条引了它」是结构性的，不需要
+第二次维护、也没有可漏抄的一步。判据 `tests/test_the_cited_face_is_read_from_the_dependency_ledger.py`
+用正控（登记前后 0 条 → 1 条）、多引用、三态与两条反真空钉住它。
+
 ## 读数（三种结局必须分得开）
 
 两个口径的返回值都是「三态 + 读数」，不是布尔：
@@ -84,6 +101,15 @@
 | `scanned` | 在多少行里找的（0 命中与没读到必须在这个数上分得开） |
 | `matched_by` | 这一问的匹配规则（人话），让「两把尺」在读数上认得出来 |
 | `why` / `reason` | 一句话说清「凭什么」/「为什么没查成」 |
+
+被引面那一格（`cited_by`，读的是另一张表）另有四个键：
+
+| 键 | 意思 |
+|---|---|
+| `found` | 被引条数（int）；`None` = 没查成。0 不是「没人引」，`None` 也不是 |
+| `citations` | 每条一条：`dep_id` / `used_by` / `citer_stmt_id` / `proof_no` / `kind` / `label` / `status` / `created_at` / `path_group` / `used_by_problem` |
+| `by_status` | 按 `dependencies.status` 计数（`closed` / `dangling` / `refuted` / `disputed` …）；「那一行后来作废了」在这里看得见，但不被折成「没人引」 |
+| `citers` | `used_by` 的去重集合（逐字，含 `#pN` 尾巴；同一条命题的第 2 份证明是另一个 `used_by`） |
 """
 from __future__ import annotations
 
@@ -91,17 +117,28 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from . import schema as S
+from . import proofloc as PL
 from . import textutil as T
 
 #: 口径一：按编号查（读数的 `mode`）。
 MODE_ID = "id"
 #: 口径二：按内容关键字查（读数的 `mode`）。
 MODE_KEYWORDS = "keywords"
+#: 被引面（反向读 `dependencies`；读数的 `mode`）。它不是第三种查口径，见模块 docstring。
+MODE_CITED_BY = "cited_by"
 
 #: 口径一的匹配规则（一句话；进读数 `matched_by`）。
 MATCHED_BY_ID = "stmt_id 逐字相等（不过滤 kind / status）"
 #: 口径二的匹配规则（一句话；进读数 `matched_by`）。
 MATCHED_BY_KEYWORDS = "label / statement_full 经 textutil.normalize 后包含任一关键词"
+#: 被引面的匹配规则（一句话；进读数 `matched_by`）。
+MATCHED_BY_CITED_BY = "source_stmt_id 逐字相等（被引方 = 这一条；引用方 = 该行的 used_by）"
+
+#: 命题台账那本账（取数口的默认表）。
+TABLE_STATEMENTS = "statements"
+#: 依赖账：`source_stmt_id` 是被引方、`used_by` 是引用方 —— 被引面就住在这里
+#: （2026-10-09 加的第四种来源；`schema.Dependency` 的 `used_by` / `source_stmt_id`）。
+TABLE_DEPENDENCIES = "dependencies"
 
 #: 取数口的三种来源（进读数 `source`，让「查的是哪一份快照」可复核）。
 SOURCE_ROWS = "rows"
@@ -123,7 +160,8 @@ def _source_label(source: Any, rows: Any) -> str:
     return name
 
 
-def rows_of(source: Any = None, *, rows: Iterable[Mapping[str, Any]] | None = None
+def rows_of(source: Any = None, *, rows: Iterable[Mapping[str, Any]] | None = None,
+            table: str = TABLE_STATEMENTS
             ) -> tuple[list[dict[str, Any]] | None, str, dict[str, str]]:
     """唯一取数口：`store` / `tx` / 显式 `rows` ⇒ 一批台账行。
 
@@ -135,6 +173,11 @@ def rows_of(source: Any = None, *, rows: Iterable[Mapping[str, Any]] | None = No
 
     `rows=` 优先：调用方已经有一份快照（例如事务里 `tx.rows("statements")`）时，
     这一层不再读第二次 —— 一次登记里读两遍整表会拿到两个瞬间的行。
+
+    `table` 只有两个落点：`statements`（两种查口径与被引面判「在册」时读）与
+    `dependencies`（被引面自己读的那本账）。默认 `statements` ⇒ 既有调用点的
+    行为与那句话逐字不变；加这一格是因为「同一份 try/except 写两遍」正是本模块
+    要消灭的第二种实现（被引面不许自己再扫一遍依赖表）。
     """
     if rows is not None:
         return [dict(r) for r in rows if isinstance(r, Mapping)], "", {}
@@ -146,10 +189,10 @@ def rows_of(source: Any = None, *, rows: Iterable[Mapping[str, Any]] | None = No
         return None, (f"给的来源没有 `rows(table)` 读法（{type(source).__name__}）"
                       "⇒ 这一问没查成（不是「台账里没有这一行」）"), {}
     try:
-        got = reader("statements")
+        got = reader(str(table))
     except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 没查成（不是「没有」）
         return (None,
-                (f"`statements` 台账读不出来（{type(exc).__name__}: {exc}）"
+                (f"`{table}` 台账读不出来（{type(exc).__name__}: {exc}）"
                  "⇒ 这一问没查成（不是「台账里没有这一行」，也不是「0 行」）"),
                 {"type": type(exc).__name__, "message": str(exc)})
     return [dict(r) for r in (got or ()) if isinstance(r, Mapping)], "", {}
@@ -291,6 +334,127 @@ def by_keywords(source: Any = None, *,
     else:
         out["why"] = (f"查过：关键词 {'、'.join(out['keywords'])} 在 {len(got)} 行里"
                       "命中 0 条（那是「这批词没命中」，不是「台账里没有」）")
+    return out
+
+
+# ---------------------------------------------------------------- 被引面（反向读依赖账）
+
+
+def _cited_by_one(row: Mapping[str, Any]) -> dict[str, Any]:
+    """一条依赖行 ⇒ 被引面的一条引用读数（键恒定，缺的格给空值）。
+
+    `status` 刻意是依赖行的 `dependencies.status`（`closed` / `dangling` /
+    `external_unavailable` / `refuted` / `disputed`），不是被引命题自己的
+    `statements.status`：这一面读的是「某一条引用边」，不是「那一条命题现在还成不成立」。
+    将来要看「作废的引用」的人，据此按 `status` 分流即可（`by_status` 已先数好）。
+
+    `used_by` 的 `#pN` 尾巴走 `proofloc.parse_used_by_checked`（全仓唯一解析点）：
+    坏尾巴不折成 canonical，原文进 `used_by_problem` —— 留痕比"读成一个看起来
+    像的号"更重要（那也是 `proofloc` 对全仓的承诺）。坏尾巴那一档不给
+    `citer_stmt_id`：`#pabc` 不是"第几条证明"，硬折成 1 就等于替它编一个号。
+    """
+    used = str(row.get("used_by") or "")
+    head, proof_no, problem = PL.parse_used_by_checked(used)
+    kind_of_citer = head.split(":", 1)[0].strip() if ":" in head else ""
+    #: 引用方的命题号：只有干净尾巴的 `stmt:` 那一类引用方才有（`doc:` / `experiment:`
+    #: 没有命题号，留空串 —— 不许把 `doc:0001` 的 `0001` 冒充成一条命题；尾巴读不懂
+    #: 时留空串 + 原文进 `used_by_problem`，不猜）。
+    citer_stmt_id = (head.split(":", 1)[-1].strip()
+                     if (kind_of_citer == "stmt" and not problem) else "")
+    return {
+        "dep_id": str(row.get("dep_id") or ""),
+        "used_by": used,
+        "used_by_head": head,
+        "used_by_problem": problem,
+        "citer_kind": kind_of_citer,
+        "citer_stmt_id": citer_stmt_id,
+        "proof_no": int(proof_no),
+        "kind": str(row.get("kind") or ""),
+        "label": str(row.get("label") or ""),
+        "status": str(row.get("status") or ""),
+        "created_at": str(row.get("created_at") or ""),
+        "path_group": int(row.get("path_group") or 1),
+    }
+
+
+def cited_by(source: Any = None, *, stmt_id: Any,
+             rows: Iterable[Mapping[str, Any]] | None = None
+             ) -> dict[str, Any]:
+    """被引面：谁引用了 `stmt_id` 这一条（反向读 `dependencies`，只读、零模型）。
+
+    ## 它是怎么派生的（业主 2026-11-10）
+
+    一条依赖行里：`source_stmt_id` 是被引方、`used_by` 是引用方。所以
+
+        cited_by(A) = [行 for 行 in dependencies if 行.source_stmt_id == A]
+
+    这条读数没有自己的写侧：B 登记时先拿号、再按那个号写 `used_by="stmt:<号>"`
+    与 `source_stmt_id`，两个格子同时落表 ⇒ 一录完就能在这里读到。反过来，任何
+    "手工把号补进被引面"的做法都会造出第二份真相，本模块不做。
+
+    ## 三态（`found` 的三档，绝不许折平）
+
+    | 结局 | 返回 |
+    |---|---|
+    | 查成了、有人引 | `checked=True` + `found=N`（N≥1）+ `citations` 逐条 + `by_status` |
+    | 查成了、没人引 | `checked=True` + `found=0` + `citations=[]`（这是「查过、0 条」） |
+    | 没查成 | `checked=False` + `found=None` + `reason`（`dependencies` 读不出来 / 没给号） |
+
+    `found=None` 与 `found=0` 必须是两句话：把它们折平，上游就会把一次 I/O 故障读成
+    「这条命题没人引」，然后据此判它不承重（或干脆不再给它登记引用）。
+
+    ## 带哪些格
+
+    每条引用带 `used_by`（逐字，含 `#pN`）、`citer_stmt_id`（引用方命题号）、
+    `proof_no`（第几份证明）、`kind` / `label` / `status` / `created_at`
+    （依赖行的四格，与业主原话逐字对应）、`path_group`、`dep_id`；
+    另有 `citers`（`used_by` 去重集合）与 `by_status`（按依赖行状态计数）——
+    前者回答"谁引了我"，后者回答"这些引用里有没有后来作废/悬空的"。
+
+    `rows=` 可以直接给一批依赖行快照（事务里 `tx.rows("dependencies")`）；
+    不给就经唯一取数口读 `store` / `tx`。不读 `statements`：这一面不判在册、
+    也不判等级（那是引用门的活），0 条只说"这本账里没有指向它的边"。
+    """
+    sid = str(stmt_id or "").strip()
+    out: dict[str, Any] = {
+        "checked": False, "mode": MODE_CITED_BY, "stmt_id": sid,
+        "found": None, "hits_total": 0, "citations": [], "citers": [],
+        "citers_total": 0, "by_status": {}, "scanned": 0,
+        "source": _source_label(source, rows), "matched_by": MATCHED_BY_CITED_BY,
+        "why": "", "reason": "", "error": {},
+    }
+    if not sid:
+        why = ("没给编号（或给的是空白）⇒ 被引面这一问不成立"
+               "（不是「没人引它」）")
+        out.update(why=why, reason=why)
+        return out
+    got, problem, error = rows_of(source, rows=rows, table=TABLE_DEPENDENCIES)
+    if problem:
+        # 三态：表读不出来 ≠ 没人引。这句一定要带上，否则读数会被读成 0 条。
+        why = problem + "（被引面这一格没查成：这不是「没人引它」）"
+        out.update(why=why, reason=why, error=dict(error))
+        return out
+    out["scanned"] = len(got)
+    out["checked"] = True
+    citations = [_cited_by_one(row) for row in got
+                 if str(row.get("source_stmt_id") or "") == sid]
+    citations.sort(key=lambda one: (one["created_at"], one["used_by"], one["dep_id"]))
+    out["citations"] = citations
+    out["hits_total"] = len(citations)
+    out["found"] = len(citations)
+    out["citers"] = sorted({one["used_by"] for one in citations})
+    out["citers_total"] = len(out["citers"])
+    by_status: dict[str, int] = {}
+    for one in citations:
+        by_status[one["status"]] = by_status.get(one["status"], 0) + 1
+    out["by_status"] = by_status
+    if citations:
+        out["why"] = (f"查过：{len(got)} 条依赖边里 {len(citations)} 条指向 stmt:{sid}"
+                      f"（来自 {out['citers_total']} 个 used_by；"
+                      "按 created_at 升序，同刻按 used_by / dep_id）")
+    else:
+        out["why"] = (f"查过：{len(got)} 条依赖边里没有一条的 source_stmt_id 是 {sid}"
+                      "（0 条被引 —— 这是「查过、没人引」，不是「没查成」）")
     return out
 
 
