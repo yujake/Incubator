@@ -4178,6 +4178,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 否则 `#p2` 的机械录入态会记到 #p1 头上 —— 逐份表按号各记各的）。
             ([proof_no_placement] if str(proof_text or "").strip() else [])
             + [int(e.get("proof_no") or 0) for e in proofs_listed])
+        # ---- 概念行的"证据档"不是自报的（2026-11-10，审计 §6-②） ------------------
+        #
+        # 改前读数（`temp/_fix_concept_probe_before.json` 的 `2_evidence_kind`）：概念行落
+        # `evidence_kind="cross_check"`（调用方的缺省值），而它五位一件没做
+        # （`proof=false` / `reviewed=false`、等级 `not_applicable`）—— 读这一格的人
+        # （`table.get` / 报告 / 审计）会读到"交叉核对过"。
+        #
+        # 档位是等级的历史别名，唯一反算口是 `evidencebits.kind_from_bits`：概念行经
+        # `derive_grade` 短路成 `not_applicable` ⇒ 反算给空串（"反算不出来就不写"）。
+        # 但空串不是 `schema.EVIDENCE_KINDS` 的值（`Statement.validate` 会拒），所以落
+        # 词表里最弱的那一档（`GRADE_TO_KIND["conjecture"] = "heuristic"`）—— 它与概念行
+        # 现有唯一构造口 `conceptrows.concept_statement` 同一个值，且不声称任何一件证据位
+        # 做过。判据落在 `_concept_evidence_kind` 一处（反真空打桩那一格也打在它上面）。
+        if kind_now == "concept":
+            evidence_kind = _concept_evidence_kind(bits)
         # ---- 2026-11-04：号已经在册 ⇒ 先把攻坚稿转正，再认签 -------------------------
         #
         # 这一刻是"F 先拿号、V 在 `notes/…` 上签、F 把签过的稿交回 B"那条链的落点。
