@@ -312,26 +312,49 @@ def _get(base: str, path: str) -> tuple[int, dict[str, Any]]:
         conn.close()
 
 
+def _chunked_frames(body: bytes) -> bytes:
+    """把一段正文包成两个 chunk 帧 + 终止块（`0\\r\\n\\r\\n`，没有 Content-Length）。"""
+    cut = len(body) // 2
+    out = b""
+    for part in (body[:cut], body[cut:]):
+        if part:
+            out += f"{len(part):x}".encode("ascii") + b"\r\n" + part + b"\r\n"
+    return out + b"0\r\n\r\n"
+
+
 def _post_with_a_late_body(base: str, path: str, fields: dict[str, Any], *,
-                           gap: float = 0.2) -> tuple[int, dict[str, Any]]:
+                           gap: float = 0.2,
+                           framing: str = "content-length") -> tuple[int, dict[str, Any]]:
     """把"头块"与"正文"分两次发，中间隔 `gap` 秒（`http.client` 平时就是这么分两次发的）。
 
     为什么用裸 socket：`http.client.request()` 的头块与正文是两次 `send()`，但它们在
     同一个线程里背靠背，判据没法把时间差钉住。裸 socket 让"正文什么时候到"由判据
     自己说了算（同 `tests/test_webui.py::_abort_sse` 的理由）。
+
+    `framing` 两档：`content-length`（常规形状，有长度可读）与 `chunked`
+    （`Transfer-Encoding: chunked`，没有长度、只能按帧读到终止块）。
     """
     body = urllib.parse.urlencode(fields, doseq=True).encode("utf-8")
-    head = (b"POST " + path.encode("utf-8") + b" HTTP/1.1\r\n"
-            b"Host: x\r\n"
-            b"Content-Type: application/x-www-form-urlencoded\r\n"
-            b"Content-Length: " + str(len(body)).encode("utf-8") + b"\r\n"
-            b"X-CSRF-Token: " + CSRF.encode("utf-8") + b"\r\n\r\n")
+    if framing == "chunked":
+        payload = _chunked_frames(body)
+        head = (b"POST " + path.encode("utf-8") + b" HTTP/1.1\r\n"
+                b"Host: x\r\n"
+                b"Content-Type: application/x-www-form-urlencoded\r\n"
+                b"Transfer-Encoding: chunked\r\n"
+                b"X-CSRF-Token: " + CSRF.encode("utf-8") + b"\r\n\r\n")
+    else:
+        payload = body
+        head = (b"POST " + path.encode("utf-8") + b" HTTP/1.1\r\n"
+                b"Host: x\r\n"
+                b"Content-Type: application/x-www-form-urlencoded\r\n"
+                b"Content-Length: " + str(len(body)).encode("utf-8") + b"\r\n"
+                b"X-CSRF-Token: " + CSRF.encode("utf-8") + b"\r\n\r\n")
     host, port = base.split(":")
     sock = socket.create_connection((host, int(port)), timeout=20)
     try:
         sock.sendall(head)
         time.sleep(gap)          # 让服务器先把"头"处理完：正文还在路上
-        sock.sendall(body)
+        sock.sendall(payload)
         chunks = b""
         while True:
             part = sock.recv(65536)
@@ -467,8 +490,9 @@ def test_4c_the_endpoints_are_not_free_floating(
     assert code == 404, f"拿掉路由之后仍然有响应（{code}）⇒ 这条判据量的不是这两条端点"
 
 
+@pytest.mark.parametrize("framing", ("content-length", "chunked"))
 def test_4d_a_late_request_body_cannot_eat_the_404(
-        tmp_path: pathlib.Path) -> None:
+        tmp_path: pathlib.Path, framing: str) -> None:
     """④ 的另一半：正文比头块晚 0.2 秒到，那支 404 也必须真的到得了客户端。
 
     ## 改前为什么红（2026-11-10，全量四路并行里唯一一条红）
@@ -484,16 +508,24 @@ def test_4d_a_late_request_body_cannot_eat_the_404(
     这一条把时间差钉成 0.2 秒：`webui/server.py::WebHandler._drain_unread_body`
     之前是 5/5 红，之后是 5/5 绿。断言照旧只认"404 + 那支 JSON"，
     不重试、不吞异常、不造假。
+
+    ## 两档正文形状
+
+    - `content-length`：一条 POST 的常规形状（有长度可读）；
+    - `chunked`：`Transfer-Encoding: chunked`，没有长度、只能按帧读到终止块
+      （`0\\r\\n\\r\\n`）。这一档在 `_drain_unread_body` 补上 chunked 分支之前
+      同样是 5/5 红（`temp/probe_404_split_body.py 0.2 --chunked`）。
     """
     from agentflow.webui import routes
 
-    root = tmp_path / "ws-late-body"
+    root = tmp_path / f"ws-late-body-{framing}"
     root.mkdir()
     without = tuple(row for row in routes.ROUTES if "/api/cache" not in row[1])
     assert len(without) == len(routes.ROUTES) - 2, (len(routes.ROUTES), len(without))
     with _server(root, allow_writes=True, routes_table=without) as base:
         code, got = _post_with_a_late_body(
-            base, "/api/cache/warm", {"lean": "off", "confirm": "1"})
+            base, "/api/cache/warm", {"lean": "off", "confirm": "1"},
+            framing=framing)
     assert code == 404, f"正文晚到之后客户端没拿到 404（{code}）⇒ 它读到的是断连"
     assert got["tri"] == "not_applicable", got
     assert "/api/cache/warm" in got["reason"], got

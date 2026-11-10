@@ -274,6 +274,7 @@ PEER_GONE = (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)
 
 #: 回"这一支不打算读正文"的响应（404 / 401 / 405 / 500）之前，最多补读多少字节。
 #:
+#: chunked 那一档按载荷累计（帧开销不计）；两档共用这一个上限。
 #: 为什么要有上限：补读是"等客户端把它声明的那段正文发完"，不设上限等于让一个
 #: 声明了 4 GB 的请求把这条连接线程占住。未知端点上的正文超出这个量时直接回话，
 #: 客户端本来也不该往没有路由的地方贴大块正文。
@@ -418,6 +419,66 @@ class WebHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length > 0 else b""
         return parse_qs(raw.decode("utf-8", errors="replace"), keep_blank_values=True)
 
+    def _content_length(self) -> int:
+        """`Content-Length` 声明的字节数（没有 / 不是数字 ⇒ 0）。"""
+        try:
+            return max(0, int(self.headers.get("Content-Length") or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _is_chunked(self) -> bool:
+        """这一条请求的正文是不是 `Transfer-Encoding: chunked` 帧（没有长度可读）。"""
+        return "chunked" in (self.headers.get("Transfer-Encoding") or "").lower()
+
+    def _drain_declared(self, length: int) -> None:
+        """按 `Content-Length` 读掉正文（上限 :data:`UNREAD_BODY_CAP`）。"""
+        left = min(length, UNREAD_BODY_CAP)
+        while left > 0:
+            chunk = self.rfile.read(min(left, 65536))
+            if not chunk:
+                return
+            left -= len(chunk)
+
+    def _drain_chunked(self) -> None:
+        """按 chunk 帧读到终止块（`0\\r\\n\\r\\n`），两道上限同 :meth:`_drain_unread_body`。
+
+        帧解析失败（大小行没有换行 / 不是十六进制 / 帧尾不是 CRLF / 没等到终止块就
+        断了）⇒ 立刻停止补读并回话：补读是为了"别让迟到的正文变成 RST"，
+        不是为了替坏客户端把一条连接线程挂到时限。载荷累计超过
+        :data:`UNREAD_BODY_CAP` 也立刻停（帧开销不计入）。
+        """
+        total = 0
+        while True:
+            line = self.rfile.readline(1024)
+            if not line.endswith(b"\n"):
+                return
+            try:
+                size = int(line.split(b";", 1)[0].strip(), 16)
+            except ValueError:
+                return
+            if size < 0:
+                return
+            if size == 0:
+                # 终止块之后还有 trailer（可以是空的），读到空行为止；同样有上限。
+                for _ in range(64):
+                    trailer = self.rfile.readline(1024)
+                    if not trailer.endswith(b"\n"):
+                        return
+                    if trailer in (b"\r\n", b"\n"):
+                        return
+                return
+            if total + size > UNREAD_BODY_CAP:
+                return
+            left = size
+            while left > 0:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    return
+                left -= len(chunk)
+            total += size
+            if self.rfile.read(2) != b"\r\n":
+                return
+
     def _drain_unread_body(self) -> None:
         """把"这一支不打算读"的请求正文读掉，「再」回话（不读 ⇒ 客户端可能读到 RST）。
 
@@ -435,34 +496,35 @@ class WebHandler(BaseHTTPRequestHandler):
 
         ## 口径
 
-        - 只读 `Content-Length` 声明的那一段（上限 :data:`UNREAD_BODY_CAP`），
+        - `Content-Length` 那一档：只读声明的那一段（上限 :data:`UNREAD_BODY_CAP`），
           不从连接上多读一个字节（多读会吃掉下一条请求）；
-        - 时限 :data:`UNREAD_BODY_SEC` 秒：客户端声明了长度却不发，最多等这么久
-          就回话，不把这条连接线程永远挂住；
+        - `Transfer-Encoding: chunked` 那一档：按 chunk 帧读到终止块（`0\\r\\n\\r\\n`），
+          同样受 :data:`UNREAD_BODY_CAP`（按载荷累计，帧开销不计）与
+          :data:`UNREAD_BODY_SEC` 约束；帧解析失败就立刻停止补读、立即回话
+          （不许因此把连接线程挂住）；
+        - 时限 :data:`UNREAD_BODY_SEC` 秒：客户端声明了长度/开了 chunked 却不发，
+          最多等这么久就回话，不把这条连接线程永远挂住；
         - `_form()` 已经读过（或本函数补读过）⇒ `_form_read` 为真，直接返回 ——
           重复补读会去等一段已经不存在的正文，把回话拖到时限。
+
+        ## 已知限制（2026-11-10 业主裁定：登记，不补）
+
+        GET 带正文这一格不补读：HTTP 语义里 GET 正文没有定义，补它会把"未读正文"的
+        责任从客户端搬到服务端，而现无客户端这么发。若将来有，按 chunked 那一套补。
         """
         if self._form_read:
             return
-        try:
-            length = int(self.headers.get("Content-Length") or 0)
-        except (TypeError, ValueError):
-            length = 0
         self._form_read = True
-        if length <= 0:
-            return
-        left = min(length, UNREAD_BODY_CAP)
         try:
             old = self.connection.gettimeout()
             self.connection.settimeout(UNREAD_BODY_SEC)
         except OSError:
             return
         try:
-            while left > 0:
-                chunk = self.rfile.read(min(left, 65536))
-                if not chunk:
-                    break
-                left -= len(chunk)
+            if self._is_chunked():
+                self._drain_chunked()
+            else:
+                self._drain_declared(self._content_length())
         except OSError:
             # 正文没发完就对端没了 / 等超时：回话比"读完"重要，照旧回。
             pass
