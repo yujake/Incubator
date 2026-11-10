@@ -34,11 +34,16 @@
 |---|---|---|
 | a1 | 未在册手稿 + 第 2 转判「有毛病」 | 手稿逐字未动（没有 `- V 签：`）；仍返回 `kind=proof_unregistered_rejected`、判词/缺陷步/findings |
 | a2 | 在册命题 + V 判「有毛病」（手稿在盘上） | 手稿上没有块；台账恰好 1 行（有毛病）；`signed_bit3=False`；回执 intent 在 outbox |
-| b | 反真空：未在册手稿 + 三转全干净 | 块必须出现（判据不是「永远没有块」），`已签=true / 连续=3/3`、第 9 格、`resolved` |
+| b | 反真空：未在册手稿 + 三转全干净 | 签必须颁发（判据不是「永远没有签」）：`kind=proof_unregistered_signed`、`out/vsigns/<sha>.json` 在盘上、pending 三行三票；块由收方秘书落（落块正控在 `test_v_unregistered_manuscript_review.py::test_g`） |
 | c | 84 的旧 8 格块 / 85 形状的 9 格块 / 86 的 `已签=false` 块 | 前两者仍读成 `signed`（84 是 `legacy`）；86 那一档读成 `rejected`（不许读成 signed） |
 
 a1 在改前红（块被写上），a2 改前就绿（在册那一路本来就不写块 —— 见
 `agent_v/core.py::_review_pass` 的终局分支），b/c 是反真空与读侧兼容的守卫。
+
+2026-11-10（业主裁定）：「F 的稿自己维护一套号源，不依赖命题号和计划号」「计划不拥有
+稿件」⇒ 老盘计划名（`f-proof-plan-*`）是只读兼容的签载体，与数字名同等。b 那一档因此
+翻成正控（三转干净 ⇒ 块真的出现），c 里 85 / 86 那两块第 9 格读到 `resolved`（计划名
+不再被载体判据排除）—— 这两条判据此前还钉着 2026-11-05 的旧口径。
 """
 from __future__ import annotations
 
@@ -199,14 +204,20 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
     assert VS.SIGN_MARK not in after, after
 
 
-# ============================================================ b 不产签（2026-11-05）
-def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
-    """三转全干净 ⇒ 读数成立，但计划稿不是签的载体 ⇒ 不产签、不写块、不落 pending。
+# ============================================================ b 反真空（正判出块）
+def test_b_three_clean_passes_stamp_the_plan_manuscript(tmp_path):
+    """三转全干净 ⇒ 读数成立；计划名（老盘只读兼容）与数字名同等 ⇒ 签落稿上。
 
-    2026-11-05 晚（业主）：`命题号=未在册` 是合法形态、签先落稿上（正统路见
-    `test_v_unregistered_manuscript_review.py::test_a_three_clean_rounds_*`）。这一条
-    保留的是它的另一半：计划稿（真机 `f-proof-plan-000011`）拿不到签 ——
-    它是合法落稿名，不是签的载体。
+    ## 改前钉什么 / 改后钉什么
+
+    改前（业主 2026-11-05）：计划稿是合法落稿名，但不是签的载体 ⇒ 三转照判、
+    `kind=proof_reviewed_not_signed`、不写块、不落 pending。
+
+    2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」「计划不拥有
+    稿件」⇒ 老盘计划名是只读兼容的签载体，与数字名同等 ⇒ 这一档不再落到「看过、没签」：
+    签真的颁发（签文件一份、pending 三行三票）。块由收方秘书落 —— 这一组的秘书替身
+    没有落签面，落块的正控在 `test_v_unregistered_manuscript_review.py::test_g`。
+    反向断言：第 8 格仍是「未在册」、盘上零 statements 行、稿名不改。
     """
     st = _ws(tmp_path)
     path = _manuscript_file(st)
@@ -216,14 +227,23 @@ def test_b_three_clean_passes_do_not_stamp_a_plan_manuscript(tmp_path):
         got = v.verify_proof(proof_manuscript=REL)
 
     assert seam.asked() == 3, seam.asked()
-    assert got.get("kind") == "proof_reviewed_not_signed", got
-    assert "计划稿" in str(got.get("reason") or ""), got
-    text = path.read_text(encoding="utf-8")
-    assert text.count(VS.SIGN_MARK) == 0, text
-    assert not VS.sign_path(st.root, VR.text_sha(PROOF_BODY)).exists()
-    pending = pathlib.Path(st.root) / "verifications" / "pending"
-    assert not pending.is_dir() or not list(pending.glob("*.jsonl")), (
-        "计划稿却落了 pending 行（那一行会被当成可按 sha 认领的第三方签）")
+    assert got.get("kind") == "proof_unregistered_signed", got
+    assert got.get("verdict") == "成立", got
+    # 反真空：签真的颁发了（这一条量的是"干净就该签"，不是"永远没有签"）。
+    # 这一组的秘书替身没有落签面（块的正控在
+    # `test_v_unregistered_manuscript_review.py::test_g`），所以这里钉的是颁发那一半：
+    # 签文件在盘上、pending 三行三票、载体就是这份计划名。
+    assert VS.sign_path(st.root, VR.text_sha(PROOF_BODY)).exists(), (
+        "三转干净却没有签文件：计划名又被当成「不是签的载体」了")
+    rows, bad = VR.pending_rows(st.root)
+    assert not bad, bad
+    assert len(rows) == int(VR.SIGN_STREAK_NEED), rows
+    for row in rows:
+        assert row["object_path"] == REL, row
+    # 反向：载体合法 ≠ 计划成了命题 / ≠ 改出一份按数字名的稿。
+    assert st.rows("statements") == [], st.rows("statements")
+    assert not (pathlib.Path(st.root) / "reports" / "f-proof-0000.md").exists(), (
+        "签这一趟把计划名转正了（2026-11-10：计划不拥有稿件，稿名不改）")
 
 
 # ============================================================ c 读侧兼容
@@ -242,15 +262,15 @@ def test_c_legacy_and_signed_blocks_keep_reading_as_signed(tmp_path):
     assert reading["identity_state"] == "legacy", reading
     assert VS.manuscript_sign_standing(legacy_text, proof_sha=sha,
                                        manuscript_path=REL)["state"] == "signed"
-    # 85 的形状：9 格、手稿号与稿名相同。计划稿是合法落稿名，但不是签的载体
-    # （2026-11-05）⇒ 身份只到 `unmatched`，不许读成 resolved。
+    # 85 的形状：9 格、手稿号与稿名相同。计划名 2026-11-10 起是合法载体（老盘只读
+    # 兼容）⇒ 身份 `resolved`；改前 2026-11-05 的旧口径只到 `unmatched`。
     fresh = VS.stamp_manuscript_sign(
         MANUSCRIPT, proof_sha=sha, streak=3, need=3, verdict="成立", signer="V",
         at="2026-11-02T21:53:55+08:00", ledger="verifications/000004.jsonl#v-000004",
         statement_id="000004", manuscript_id="plan-0000")
     got = VS.manuscript_sign_reading(fresh, manuscript_path=REL)
-    assert got["signed"] is True and got["identity_state"] == "unmatched", got
-    assert "不是签的载体" in str(got.get("identity_why") or ""), got
+    assert got["signed"] is True and got["identity_state"] == "resolved", got
+    assert "与这一份稿相同" in str(got.get("identity_why") or ""), got
     assert VS.manuscript_sign_standing(fresh, proof_sha=sha,
                                        manuscript_path=REL)["state"] == "signed"
 
@@ -264,8 +284,9 @@ def test_c2_an_unsigned_block_is_not_read_as_signed(tmp_path):
         manuscript_id="plan-0000", signed=False)
     reading = VS.manuscript_sign_reading(unsigned, manuscript_path=REL)
     assert reading["found"] is True and reading["signed"] is False, reading
-    # 计划稿不是签的载体（2026-11-05）：号对得上也只到 `unmatched`。
-    assert reading["identity_state"] == "unmatched", reading
+    # 2026-11-10：计划名也是合法载体，第 9 格对得上 ⇒ `resolved`；「未签」是
+    # `已签=false` 那一格的事，与身份那一格无关。
+    assert reading["identity_state"] == "resolved", reading
     assert reading["verdict"] == "有毛病", reading
     standing = VS.manuscript_sign_standing(unsigned, proof_sha=sha, manuscript_path=REL)
     assert standing["state"] == "rejected", standing

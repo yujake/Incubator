@@ -19,19 +19,43 @@ B 新建命题时按正文 sha 去 `verifications/pending/<sha>.jsonl` 认领 V 
 | b | `object_path="reports/f-proof-<号>.md"` | 照旧认领：`bits.reviewed=True`、台账回写号 |
 | c | `object_path="out/experiments/<实验号>/exhaustion.md"` | 照旧认领（E 那一档） |
 | d | 反真空：把载体闸打桩成恒放行 | a 的裸行被认领（`bits.reviewed=True`）—— a 量的是这道闸 |
-| e | 载体形状（纯读） | 手稿三前缀 / e-proof 报告 / 老盘计划名（`f-proof-plan-*`，2026-11-10 只读兼容）认；空串、`notes/…`、`foo.txt`、`b-proof` 的 plan 名不认 |
+| e | 载体形状（纯读） | 手稿三前缀 / e-proof 报告 / 老盘计划名（`f-proof-plan-*`，2026-11-10 只读兼容）认；空串、`notes/…`、`foo.txt`、`b-proof` 的 plan 名、缺 `.md` 的名字不认 |
+| f | `vsigns.py` 的 docstring / 注释（字面扫） | 不许再有「计划稿不是签的载体」这一类相反说法；反真空：把任一处改回旧说法 ⇒ 红 |
+| g | `vsigns.issue` 的源码段（AST 定位） | 没有以 `MANUSCRIPT_NAME_PLAN` 为条件的死分支；常量保留（老读数还要能解释） |
+| h | `reports/f-proof-000000`（缺 `.md`） | 签载体与 pending 载体两条口都是假（同源）；带上 `.md` 两条口都认 |
+
+2026-11-10（业主裁定）：「F 的稿自己维护一套号源，不依赖命题号和计划号」；
+「计划不拥有稿件」⇒ 老盘计划名是只读兼容的签载体，与数字名同等。e 的缺扩展名那一格
+与 f / g / h 是同一笔收口：旧口径的字面、`issue` 里的死分支、以及两条口对
+`reports/f-proof-000000` 的相反读法，都不许再回来。
 
 零模型调用；夹具走生产的写口（`verifications.record_pending_sign` +
 `AgentB.register_statement`），不手写台账。
 """
 from __future__ import annotations
 
+import ast
+import io
 import pathlib
+import tokenize
 
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
+
+#: 判据 f 的被扫文件（与 e / h 是同一族的签载体判据）。
+SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow" / "vsigns.py"
+
+#: 2026-11-05 旧口径的原句（只用来做反真空与字面扫的靶）。命中任意一条 ⇒ 红。
+OLD_CLAIMS: tuple[str, ...] = (
+    "计划稿不是签的载体",
+    "计划稿是合法落稿名，但不是签的载体",
+    "计划稿与纯内联旧行都不算",
+    "计划稿…都不算",
+    "落签也不许盖到它上面",
+    "把计划稿排除掉",
+)
 
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
 PROOF = "取 δ=ε，逐点验证：|x-y|<δ ⇒ |f(x)-f(y)|<ε。"
@@ -152,6 +176,11 @@ def test_e_the_carrier_shapes() -> None:
     只搬 `f-proof` 这一族：同一个 `plan-` 号形在 `b-proof` 里仍是认不出的坏名
     （`reports/b-proof-plan-000016.md` 留在 `no`，这是反向断言：翻转不是"凡 plan 都放行"）。
 
+    2026-11-10 同一笔的第二件（与上面那条裁定无关的边缘不一致）：`reports/f-proof-000000`
+    （缺 `.md`）改前在两条口上读数不同 —— `is_sign_carrier` 说是、`_pending_carrier_path`
+    说不是。现在两条口同源（`vsigns.sign_carrier_reading` 里那一格"是不是一份真文件的
+    名字"），所以这一形状两处都不认。
+
     另外三条留在 `no` 当反向：目录不对（`notes/…`）、号形坏（`plan-abc`）、
     不是手稿（`foo.txt`）—— 载体判据没有因为这一撤而变成"什么都认"。
     """
@@ -169,11 +198,10 @@ def test_e_the_carrier_shapes() -> None:
           "reports/b-proof-plan-000016.md",
           # 反向：目录 / 号形不对时，计划名也不认。
           "notes/f-proof-plan-0001.md", "reports/f-proof-plan-abc.md"]
-    #: `no` 里这几条同时也不是「手稿族的签载体」（另外两条 `f-proof-000000` /
-    #: `f-proof-.md` 是"名字像手稿、目录对、少了 `.md`"的边缘形，两条判据故意不同源，
-    #: 这里不拿 `is_sign_carrier` 断言它们 —— 免得把 `_pending_carrier_path` 的
-    #: `.md` 尾巴要求混进载体族判据）。
-    not_a_carrier = ["", "notes/proof.md", "foo.txt",
+    #: `no` 里同时也不是「手稿族的签载体」的那几条：2026-11-10 起两条口同源，
+    #: 缺 `.md` 的 `reports/f-proof-000000` 也在这一列（改前它只在 pending 那一口被拒）。
+    not_a_carrier = ["", "notes/proof.md", "foo.txt", "reports/f-proof-000000",
+                     "reports/f-proof-.md",
                      "out/experiments/000000/report.md",
                      "out/experiments//exhaustion.md",
                      "reports/x/f-proof-000000.md",
@@ -190,3 +218,95 @@ def test_e_the_carrier_shapes() -> None:
         assert VS._pending_carrier_path({"object_path": path}) == "", path
     for path in not_a_carrier:
         assert VS.is_sign_carrier(path) is False, path
+    # 同源正控：缺扩展名的名字在两条口上都为假（2026-11-10 边缘不一致收口）。
+    assert VS.is_sign_carrier("reports/f-proof-000000") is False
+    assert VS._pending_carrier_path({"object_path": "reports/f-proof-000000"}) == ""
+
+
+# ====================================================================== f 旧字面
+def _docstrings_and_comments(src: str) -> list[tuple[int, str]]:
+    """源码里全部 docstring 与注释：`[(行号, 文本)]`（行号只用于报错定位）。"""
+    chunks: list[tuple[int, str]] = []
+    tree = ast.parse(src)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            doc = ast.get_docstring(node, clean=False)
+            if doc:
+                chunks.append((int(getattr(node, "lineno", 1)), doc))
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.COMMENT:
+            chunks.append((tok.start[0], tok.string))
+    return chunks
+
+
+def _old_claims(text: str) -> list[str]:
+    """这段文本里命中的旧口径原句（空列表 = 干净）。"""
+    return [one for one in OLD_CLAIMS if one in text]
+
+
+def test_f_no_old_claim_survives_in_docstrings_or_comments() -> None:
+    """f：`vsigns.py` 的 docstring / 注释里不许再出现旧口径。"""
+    src = SRC.read_text(encoding="utf-8")
+    hits = [f"{line}: {one}" for line, text in _docstrings_and_comments(src)
+            for one in _old_claims(text)]
+    assert hits == [], "旧口径的相反说法还在（2026-11-10 裁定已撤）：" + "; ".join(hits)
+
+
+def test_f2_the_scanner_is_not_vacuous() -> None:
+    """反真空：喂旧句子必须命中；喂新口径必须不命中。"""
+    for one in OLD_CLAIMS:
+        assert _old_claims(f"#: {one}。"), one
+    assert _old_claims("#: 老盘计划名是合法载体（2026-11-10）。") == []
+
+
+# ====================================================================== g 死分支
+def _issue_source() -> str:
+    """`issue` 这个函数的源码段（AST 定位；找不到就红，不许静默跳过）。"""
+    src = SRC.read_text(encoding="utf-8")
+    for node in ast.parse(src).body:
+        if isinstance(node, ast.FunctionDef) and node.name == "issue":
+            return ast.get_source_segment(src, node) or ""
+    raise AssertionError("`vsigns.issue` 没找到 ⇒ g 判据真空")
+
+
+def test_g_issue_has_no_branch_on_the_plan_code() -> None:
+    """g：`issue` 里没有以 `MANUSCRIPT_NAME_PLAN` 为条件的分支；常量保留。"""
+    seg = _issue_source()
+    assert seg, "取不到 `issue` 的源码段"
+    assert "MANUSCRIPT_NAME_PLAN" not in seg, (
+        "`issue` 里还留着以计划名为条件的分支：`sign_carrier` 现在对 plan 返回 "
+        "ok=True / code=\"\"，那个条件永远不成立（死分支）")
+    assert "plan_is_not_a_sign_carrier" not in seg
+    assert VS.MANUSCRIPT_NAME_PLAN == "plan_is_not_a_sign_carrier", (
+        "历史码必须保留（老盘旧读数还要能解释）")
+
+
+# ====================================================================== h 同源
+def test_h_missing_extension_is_false_on_both_ports() -> None:
+    """h：缺扩展名的名字在签载体与 pending 载体两条口上都为假（两者同源）。"""
+    truncated = "reports/f-proof-000000"
+    assert VS.is_sign_carrier(truncated) is False, VS.sign_carrier_reading(truncated)
+    assert VS.sign_carrier_reading(truncated)["ok"] is False
+    # 缺扩展名那一档的码：这个名字不是一份手稿文件名（不是「像手稿、号读不出」）。
+    assert VS.sign_carrier_reading(truncated)["code"] == VS.MANUSCRIPT_NAME_BAD
+    assert VS._pending_carrier_path({"object_path": truncated}) == ""
+    # 正控：同一份稿带上 `.md` 两条口都认（翻转不是"一律为假"）。
+    real = truncated + ".md"
+    assert VS.is_sign_carrier(real) is True
+    assert VS._pending_carrier_path({"object_path": real}) == real
+
+
+def test_h2_the_same_rule_reads_both_ports_for_every_shape() -> None:
+    """h 的同源读数：除 E 的穷举报告外，"是 pending 载体" ⇔ "是签的载体"。"""
+    shapes = (
+        "reports/f-proof-000000", "reports/f-proof-000000.md",
+        "reports/f-proof-plan-0001", "reports/f-proof-plan-0001.md",
+        "reports/f-proof-000000-p2.md", "reports/e-num-000012.md",
+        "reports/f-proof-abc.md", "reports/b-proof-plan-0001.md",
+        "notes/f-proof-000000.md",
+    )
+    for rel in shapes:
+        carried = VS._pending_carrier_path({"object_path": rel})
+        assert (carried == rel) is VS.is_sign_carrier(rel), (
+            rel, carried, VS.sign_carrier_reading(rel))
