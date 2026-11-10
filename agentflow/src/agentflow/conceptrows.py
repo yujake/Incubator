@@ -368,29 +368,177 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+#: 概念行「良定义证明」的三态（`well_definedness_reading` 的唯一词表）。
+#:
+#: 2026-11-10 业主裁定（甲）：概念的良定义证明与一般手稿走同一条链，差别只在
+#: "谁产出" —— 一般命题的稿由 F 产出，概念的良定义稿由 B 产出（`reports/b-proof-<号>.md`，
+#: 复用既有 b-proof 族），V 照常三转签，B 收录时把 `## 证明` 写进这一行的 `proof_text`。
+#: 所以这一格不是"概念有没有证明"（它没有等级轴、不参与可证链），而是"那一份良定义
+#: 证明现在到哪一步"：有签且正文在 ⇒ `signed`；正文空 ⇒ `unsigned`；V 打回 ⇒ `rejected`。
+WELL_DEFINEDNESS_SIGNED = "signed"
+WELL_DEFINEDNESS_UNSIGNED = "unsigned"
+WELL_DEFINEDNESS_REJECTED = "rejected"
+WELL_DEFINEDNESS_STATES: tuple[str, ...] = (
+    WELL_DEFINEDNESS_SIGNED, WELL_DEFINEDNESS_UNSIGNED, WELL_DEFINEDNESS_REJECTED)
+
+
+def concept_bits(*, origin: str, source_lit_id: str = "", proof_text: str = "",
+                 sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """概念行的五元位（唯一实现：`evidencebits.bits_of(..., kind="concept")`）。
+
+    为什么概念行也要算这一格（2026-10-26，真机 mp3-r3）：那 30 条概念行是直写进来的，
+    `bits` 全空 —— 而同一批里秘书落的那一条（000002 theorem）有 `bits`。空 `bits` 不是
+    "这一行没有证据"，是"没有人替它算过"：读侧（`evidencebits.bits_from_row`、
+    `clean_statement_ids`、页面那一格五元位）都拿它当"五位一件没做"读。
+
+    `kind="concept"` 是必须传的那一格：`derive_grade` 对概念短路成
+    `not_applicable`，而 `Statement.validate` 会带着这一行的 kind 重算一次等级并核对
+    —— 不传 kind 算出来的 "conjecture" 会被校验端当场拒（口径与
+    `agent_b.register_statement._statement_bits` 同一句）。
+
+    ## 良定义证明（2026-11-10 业主裁定 甲）
+
+    概念行的 `proof_text` 不再是恒空的一格：B 落 `reports/b-proof-<号>.md`、V 签回来
+    （`vsigns.sign_reading.state == "signed"`）、B 收录之后，这一格装的就是"良定义证明"。
+    于是第 2 位（有证明）与第 3 位（审过）按同一套读数翻：
+    `proof = bool(正文)`、`reviewed` 只在既有唯一判据（`sign.state == "signed"`）成立时
+    翻真，凭据由 `vsigns.bits_with_review` 写（签文件 / pending 台账那两张表与命题行同形）。
+    等级仍是 `not_applicable`（概念没有等级轴，`derive_grade` 的短路一个字不改）——
+    这两件事不矛盾：等级轴回答"它到不到定理"，良定义证明回答"这个定义立不立得住"。
+
+    无签而正文非空的调用（历史形态 / 调用方直接塞哨兵）⇒ 五个位一件都不声称：
+    `proof` 只看正文在不在，`reviewed` 保持假 —— 写入侧那一道（`concept_statement`）
+    会把没有签的正文清掉，这里是第二道读数网。
+    """
+    from . import evidencebits as _EB
+
+    text = str(proof_text or "")
+    signed = bool(str((sign or {}).get("state") or "") == "signed")
+    bits = _EB.bits_of(
+        origin=str(origin or "own_result"),
+        source_lit_id=str(source_lit_id or ""),
+        proof=bool(text.strip()),
+        proof_process=(text if text.strip() else ""),
+        quote_verified=None,
+        kind="concept")
+    if text.strip() and signed:
+        from . import proofregistry as _PR
+        from . import vsigns as _VS
+
+        cred = dict((sign or {}).get("credential") or {})
+        try:
+            no = int((sign or {}).get("proof_no") or 1)
+        except (TypeError, ValueError):
+            no = 1
+        bits = _VS.bits_with_review(
+            bits, proof_no=max(1, no),
+            proof_sha256=_PR.proof_sha(text), kind="concept",
+            verification_id=str(cred.get("verification_id") or ""),
+            evidence=str(cred.get("path") or ""))
+    problems = list(_EB.bits_shape_problems(bits, kind="concept"))
+    if problems:
+        raise ValueError("概念行的五元位形状不合规（判据取自 evidencebits."
+                         "bits_shape_problems）：" + "；".join(problems))
+    return bits
+
+
+def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
+                             manuscript_path: Any = "", proof_no: Any = None,
+                             store: Any = None,
+                             sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """概念行的「良定义证明」读数（三态 + 来源；纯读，零写）。
+
+    三态逐字是 :data:`WELL_DEFINEDNESS_STATES`：
+
+    - `signed`：这一行 `proof_text` 非空，且 `vsigns.sign_reading` 说这一版正文
+      `state == "signed"`（凭据可复算）—— 那一份良定义证明已被 V 签在稿上并收录；
+    - `unsigned`：正文空（还没有人把签回来的那一节写进这一行）；
+    - `rejected`：V 对这一版正文的最近结论不是「成立」（`sign_reading.state ==
+      "rejected"`）。
+
+    `rejected` 要读得到，正文空时也得能判：所以 `manuscript_path` 给了就按那一份稿
+    读（V 的签 / 打回记在稿与 `verifications/` 上，不在概念行的空 `proof_text` 上）。
+    来源三格（`manuscript` / `proof_no` / `verification_id`）是从签读数里取的 ——
+    "哪一份稿、哪一签"必须能点开核对，不是一句话。
+
+    这一格不新写判据：`sign` 不给就调 `vsigns.sign_reading`（D268 批 2 起
+    "有没有签"的唯一判据）。
+    """
+    from . import proofregistry as _PR
+
+    body = str((row or {}).get("proof_text") or "")
+    try:
+        no = int(proof_no if proof_no not in (None, "") else
+                 ((row or {}).get("proof_no") or 0) or 1)
+    except (TypeError, ValueError):
+        no = 1
+    got = dict(sign or {})
+    if not got:
+        from . import vsigns as _VS
+
+        got = _VS.sign_reading(
+            root, statement_id=str((row or {}).get("stmt_id") or ""),
+            proof_text=body, proof_no=no,
+            manuscript_path=str(manuscript_path or ""), store=store)
+    sign_state = str(got.get("state") or "")
+    if body.strip():
+        state = (WELL_DEFINEDNESS_SIGNED if sign_state == "signed"
+                 else (WELL_DEFINEDNESS_REJECTED if sign_state == "rejected"
+                       else WELL_DEFINEDNESS_UNSIGNED))
+    else:
+        state = (WELL_DEFINEDNESS_REJECTED if sign_state == "rejected"
+                 else WELL_DEFINEDNESS_UNSIGNED)
+    cred = dict(got.get("credential") or {})
+    source = {
+        "manuscript": str(manuscript_path or cred.get("path") or ""),
+        "proof_no": int(no),
+        "verification_id": str(cred.get("verification_id") or ""),
+        "sign_state": sign_state,
+        "credential": str(cred.get("path") or ""),
+    }
+    if state == WELL_DEFINEDNESS_SIGNED:
+        why = (f"良定义证明已由 V 签在 {source['manuscript'] or '（未记稿路径）'} "
+               f"#p{source['proof_no']} 上（凭据 {source['credential'] or '（未记）'}），"
+               f"并已收录进这一行（{len(body.strip())} 字）")
+    elif state == WELL_DEFINEDNESS_REJECTED:
+        why = (f"V 对 {source['manuscript'] or '这一版正文'} #p{source['proof_no']} 的最近结论"
+               f"不是「成立」（state={sign_state}）⇒ 良定义证明被打了回来")
+    else:
+        why = ("这一行还没有良定义证明正文（`proof_text` 空）⇒ 等 B 落 b-稿、V 签回来、"
+               "再按位置与格收录" if not body.strip()
+               else f"正文在，但 V 的签没到（state={sign_state or 'unsigned'}）⇒ "
+                    "这一行不算有已签的良定义证明")
+    return {"state": state, "body_chars": len(body.strip()),
+            "body_sha256": (_PR.proof_sha(body) if body.strip() else ""),
+            "source": source, "checked": bool(got.get("checked")),
+            "why": why}
+
+
 def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases: Iterable[str] = (),
                       source_lit_id: str = "", proof_text: str = "", doc_id: str = "",
                       actor: str = "agent-B", origin: str = "",
-                      self_authored: bool = False) -> Any:
+                      self_authored: bool = False,
+                      sign: Mapping[str, Any] | None = None) -> Any:
     """一条概念 ⇒ 一行 `Statement`（并表之后概念的落点，新标准的唯一构造口）。
 
     两档（`D12` 甲）：定义在 ⇒ `active`；定义还没抽到 ⇒ `pending_definition`
     + `quote_reason` 里的待补标记（`concept:pending_search`：等 A 检索回来，
     或基本概念由 B 自撰）。不许落成 `active` + 空定义，也不许干脆不落。
 
-    ## 概念行不带 `proof_text`（本批缺陷一的写入侧）
+    ## `proof_text` 是「良定义证明」这一格（2026-11-10 业主裁定 甲）
 
-    真机读数（`projects/mp3/data/statements.json`）：1143 条概念行，每一条都带
-    `proof_text="concept:primitive"` —— 于是任何"有没有证明"的读数（
-    `proof_review_gap` 的 `proof_text` 非空判据、收工门的 `reviewed` 档、
-    `prose_reviewed_statements`）都被虚高。那个值不是证明，是一个哨兵：
-    它当初是为了表达"这是一个原始概念、没有良定义性证明可写"，而表达式本该是
-    "`proof_text` 留空 + 这个概念不参与等级链"（`evidencebits.derive_grade` 对
-    `kind="concept"` 本来就短路成 `not_applicable`）。
+    旧口径（本批缺陷一）是"概念行永远写空、调用方传了就当场 `ValueError`"—— 理由
+    是历史 1143 条概念行都带哨兵 `concept:primitive`，把"有没有证明"的读数全顶高了。
+    业主 2026-11-10 的裁定把这一格重新定义成良定义证明的落点：B 落
+    `reports/b-proof-<号>.md` → V 三转签（签在稿上）→ B 按位置与格收录 ⇒ 这一格装
+    `## 证明` 那一节。所以判据不再是"空/非空"，而是有没有 V 的签：
 
-    所以这一格现在永远写空：调用方传了 `proof_text` 就是传错了词，当场拒绝
-    （`ValueError`，消息里写清原因），而不是悄悄丢掉 —— 静默丢会让调用方以为
-    "概念也能带证明"。历史行一个字不动（本批的边界：只堵写入侧）。
+    - `sign.state == "signed"`（既有唯一判据，`vsigns.sign_reading`）⇒ 保留原文；
+    - 其余（没签 / 打回 / 读不出来）⇒ 清空，并把这件事写进 `quote_reason`
+      （"留读数"：不静默丢，下一次读这一行的人看得出正文为什么不在）。
+
+    历史行一个字不动（只堵写入侧的那条老路），概念仍然不参与等级链
+    （`evidencebits.derive_grade` 的短路不改）。
 
     ## `origin` 按来源分档（本批缺陷一的第二处）
 
@@ -399,15 +547,13 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
     显式声明 `own_result` 必须带 `self_authored=True`。
     """
     definition = str(definition or "")
-    # 概念行不许带证明文本（唯一口径在这里，别的写口都经过本函数）。
-    if str(proof_text or "").strip():
-        raise ValueError(
-            "概念行不该带证明文本：`proof_text` 是“这段证明被逐行审阅过”的比对对象，"
-            "而概念不参与等级链（`evidencebits.derive_grade` 对 kind='concept' 短路）。"
-            f"收到的 proof_text={str(proof_text)[:60]!r} —— 概念行请留空；"
-            "要表达“这是原始概念”，落的是 `kind='concept'` + 空 proof_text，"
-            "而不是往里塞一个哨兵（真机 mp3：1143 条概念行全带 `concept:primitive`，"
-            "把“有没有证明”的读数全顶高了）")
+    proof_text = str(proof_text or "")
+    # 概念行的良定义证明只在有 V 签时保留（判据是 sign_reading 的结论，本函数不新写一套）。
+    signed = str((sign or {}).get("state") or "") == "signed"
+    proof_dropped_chars = 0
+    if proof_text.strip() and not signed:
+        proof_dropped_chars = len(proof_text.strip())
+        proof_text = ""
     explicit = bool(str(origin or "").strip())
     resolved = resolve_concept_origin(origin=origin, source_lit_id=source_lit_id,
                                       self_authored=self_authored)
@@ -422,15 +568,22 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
     if pending:
         reason = (f"概念 {label!r} 的定义还没抽到（D12 甲）：{PENDING_SEARCH} —— "
                   "由直接父/A 检索回来，或基本概念由 B 自撰；定义到了就改回 active 并清掉"
-                  "这一标记。概念没有'证明'这一档 ⇒ `proof_text` 留空")
+                  "这一标记。概念不参与等级链；它的良定义证明要落 `proof_text` 前置条件是"
+                  "V 已签（`vsigns.sign_reading.state == 'signed'`）")
     else:
-        reason = ("概念行没有'证明'这一档（不参与等级链）⇒ `proof_text` 留空；定义来自 "
+        reason = ("概念不参与等级链（`evidencebits.derive_grade` 对 concept 短路成 "
+                  "`not_applicable`）；定义来自 "
                   + (f"lit:{source_lit_id}" if source_lit_id else "B 的消化（没有外部来源，"
                      "按自己定义的新概念记）"))
+    if proof_text.strip():
+        reason += (f"；良定义证明已由 V 签在 b-稿上（{len(proof_text.strip())} 字）")
+    elif proof_dropped_chars:
+        reason += (f"；良定义证明正文（{proof_dropped_chars} 字）没有 V 签 ⇒ 这一格清空"
+                   "（要保留就先落 b-稿、让 V 签回来、再按位置与格收录）")
     return S.Statement(
         stmt_id=stmt_id, origin=resolved, kind="concept", label=str(label or ""),
         statement_text=definition, statement_full=definition,
-        proof_text="", source_lit_id=str(source_lit_id or "") or None,
+        proof_text=proof_text, source_lit_id=str(source_lit_id or "") or None,
         quote_verified=None, quote_reason=reason, evidence_kind="heuristic",
         aliases=[str(a) for a in (aliases or []) if str(a).strip()],
         status=("pending_definition" if pending else "active"),
@@ -744,8 +897,8 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
     里一份判据都不留。
 
     `origin` / `self_authored` 原样交给秘书那一层（口径在 :func:`concept_statement`，
-    这里不抄第二份）。`proof_text` 保留在签名里只为兼容既有调用点并让那句拒绝留在
-    唯一一处：概念行不许带它，传了非空值 ⇒ `ValueError`（本批缺陷一）。
+    这里不抄第二份）。`proof_text` 只在有 V 签时留（2026-11-10 业主裁定 甲）：判据与
+    "没签就清空并留读数"那一句都在 :func:`concept_statement` / 秘书那一笔，这里不另写。
 
     `mirror=True` 只在老表还在 schema 里时才有意义（落刀之后那张表不存在，
     硬写会以"未知表"整笔失败）⇒ 判断收在秘书那一格（与 `upsert` /

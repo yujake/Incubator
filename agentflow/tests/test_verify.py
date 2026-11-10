@@ -304,7 +304,7 @@ def test_removing_the_scan_makes_the_concept_proof_text_criterion_red(
                                 for r in rows if str(r.get("stmt_id") or "") == stmt_id])
     assert len(_concept_proof_issues(verify_all(clean_store))) == 1
 
-    monkeypatch.setattr(V, "concept_rows_with_proof_text", lambda rows: [])
+    monkeypatch.setattr(V, "concept_rows_with_proof_text", lambda rows, **_: [])
     assert _concept_proof_issues(verify_all(clean_store)) == [], (
         "把判据本体摘掉之后还报得出来 ⇒ 这一条不是那条扫描给的")
 

@@ -128,15 +128,23 @@ def test_negative_control_a_concept_row_with_the_old_sentinel_turns_the_criterio
         _assert_concept_has_no_proof_text(row)
 
 
-def test_the_writer_refuses_to_write_proof_text_on_a_concept():
-    """① 的第二半（写入侧闸）：`concept_statement` 收到 `proof_text` ⇒ 当场拒绝。
+def test_the_writer_clears_proof_text_on_a_concept_when_no_v_sign():
+    """① 的第二半（写入侧闸，2026-11-10 业主裁定 甲改口径）：
+    `concept_statement` 收到 `proof_text` 而没有 V 签 ⇒ 清空并留读数（不再 `ValueError`）。
 
-    静默丢掉是另一种坏：调用方会以为"概念也能带证明"，下一次还这么交。
+    改前这一格是"概念行恒空、传了就当场拒"；新口径把它定义成「良定义证明」的落点，
+    判据从"空/非空"换成"有没有签"。所以这里钉的是两件事：
+
+    - 没签 ⇒ 正文不落进这一格（静默丢也不行：`quote_reason` 里要留下"为什么不在"）；
+    - 有签（正控在 `test_concept_well_definedness_has_a_landing.py`）⇒ 保留原文。
+
+    为什么不再要求 `ValueError`：那会把"良定义证明可以走同一条链"这件事在构造口就
+    堵死，而业主 2026-11-10 的裁定正是要它有落点。
     """
-    with pytest.raises(ValueError) as exc:
-        CR.concept_statement(stmt_id="000001", label="电导", definition="d",
-                             source_lit_id="0000", proof_text="concept:primitive")
-    assert "概念行不该带证明文本" in str(exc.value), str(exc.value)
+    row = CR.concept_statement(stmt_id="000001", label="电导", definition="d",
+                               source_lit_id="0000", proof_text="concept:primitive")
+    assert row.proof_text == "", row.proof_text
+    assert "没有 V 签" in str(row.quote_reason or ""), row.quote_reason
 
 
 def test_the_register_statement_action_drops_a_concept_proof_text_but_says_so(store):

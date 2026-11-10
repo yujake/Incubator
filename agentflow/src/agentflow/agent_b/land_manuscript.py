@@ -33,6 +33,15 @@ class _LandManuscript:
         - `if_match_sha256`：并发纪律（protocol §五）—— 调用方"我以为目标稿现在是这一版"；
           不符 ⇒ 受控拒 `stale_target`，一个字节都不写。
 
+        ## 概念行也走这一格（2026-11-10 业主裁定 甲）
+
+        概念（`kind="concept"`）的良定义证明同样由 B 落稿：族仍是 `b-proof`（不新开
+        手稿族），`## 命题` 是这一行的定义（`statement_full`），`## 证明` 是良定义证明，
+        稿名 `reports/b-proof-<命题号>.md`。V 照常三转签（它只对手稿负责，不需要知道
+        这是概念）；签回来之后 B 用 `own.ingest_manuscript(apply, cells=["proof_text"])`
+        收录。这一格本身不判断这一行是不是概念 —— 只按在册那一行的正文拼稿，
+        所以概念与一般命题在这条链上逐字同形。
+
         ## 返回
 
         `{ok, path, written, preserved, signed, sha256, sha, proof_no, text, why,

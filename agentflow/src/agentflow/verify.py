@@ -1737,12 +1737,25 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
 CONCEPT_PROOF_TEXT_CODE = "concept_row_carries_proof_text"
 
 
-def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
-    """`kind == "concept"` 且 `proof_text` 非空的行 —— 这条判据的判据本体（一处口径）。
+def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]], *,
+                                 root: Any = None, store: Any = None
+                                 ) -> list[dict[str, Any]]:
+    """`kind == "concept"` 且 `proof_text` 非空、而**没有 V 签**的行（一处口径）。
 
-    返回 `[{stmt_id, proof_head, proof_chars, created_by}]`（按 `stmt_id` 排序）：
-    三态纪律在这里的落点 —— `proof_text` 是 `None` / 空串 / 全空白都算"没有"
-    （那不是"有证明"），只有真的写了字才算这一条点名的那一类。
+    2026-11-10 业主裁定（甲）：概念行的 `proof_text` 是「良定义证明」那一格 —— B 落
+    `reports/b-proof-<号>.md`、V 三转签、B 收录之后它就该非空。所以这一条判据的
+    语义从"概念行不许带 `proof_text`"改成"**没有签的** `proof_text` 才是污染"：
+
+    - 有签（`vsigns.sign_reading.state == "signed"`，既有唯一判据）⇒ 不报；
+    - 没签 / 打回 / 读不出来 ⇒ 照旧点名（哨兵 `concept:primitive` 就落在这一档）；
+    - 没给 `root` ⇒ 判不了签，按"没签"报（折的方向是点名，不是放行 —— 审计宁可
+      多说一句，也不把"没查成"折成"查过、没问题"）。
+
+    返回 `[{stmt_id, proof_head, proof_chars, created_by, well_definedness}]`
+    （按 `stmt_id` 排序）：三态纪律在这里的落点 —— `proof_text` 是 `None` / 空串 /
+    全空白都算"没有"（那不是"有证明"）。`well_definedness` 取
+    `conceptrows.well_definedness_reading` 的三态（`signed` / `unsigned` / `rejected`），
+    让读到这一条 issue 的人一眼看出"是没签、还是 V 打回了"。
 
     为什么单独抽成函数：判据（`tests/test_verify.py`）要能对它做负控
     （"把这一条摘掉 ⇒ 判据红"），而"摘掉"必须摘的是判据本体，
@@ -1755,11 +1768,24 @@ def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]]) -> list[dict
         proof = str(row.get("proof_text") or "")
         if not proof.strip():
             continue
+        state = ""
+        if root is not None:
+            try:
+                from . import conceptrows as _CR
+
+                reading = _CR.well_definedness_reading(
+                    root, row, store=store)
+                state = str(reading.get("state") or "")
+            except Exception:  # noqa: BLE001 —— 读不出来按"没签"点名（折向点名）
+                state = ""
+            if state == "signed":
+                continue
         out.append({
             "stmt_id": str(row.get("stmt_id") or ""),
             "proof_head": proof.strip()[:80],
             "proof_chars": len(proof.strip()),
             "created_by": str(row.get("created_by") or ""),
+            "well_definedness": state or "unsigned",
         })
     return sorted(out, key=lambda item: item["stmt_id"])
 
@@ -1796,7 +1822,7 @@ def _check_13(rep, store) -> None:
     5. 五元位与各自的台账对不对得上（业主 2026-10-09）：判据本体是 `evidencebits.bit_evidence_gaps`，本处只把读数翻成 `Issue`，不抄第二份口径。
     6. `evidence_kind="proof_review"` 的命题必须真有 V 那一签（`proof_review_without_verification`，error）：只按 `schema.EVIDENCE_KINDS` 那句定义判 —— `statements.proof_text` 非空 ＋ `verifications` 里最近那一签是「成立」且 `proof_sha256` 等于现行 `proof_text`；不要求在命题行里回填 `verification_id`（`statements.verification_id` 这更严的可选口径 B 本批未采用：它需要 V 签完回写 `statements`，是一道新的写路径与权限面，归人裁）。
     7. 第 6 条的反方向（`weaker_than_evidence`，warning）：凭据够 `proof_review`，这一行却登记成 `heuristic` / `cross_check`；降档是安全方向，但强度声明会长期虚低而没有任何读数指出（口径只一处：`verifications.weaker_than_evidence_gaps`）。
-    8. 概念行带 `proof_text`（`concept_row_carries_proof_text`，error）：概念行的 `proof_text` 只该为空。此前只在读侧（`verifications.proof_review_gap` 的 `why` 点名过），审计面没有它 ⇒ 装历史概念行的工作区可以"审计通过"；存量改不动，所以逐条点名（`stmt_id` + `created_by` + 开头），口径只一处：:func:`concept_rows_with_proof_text`。
+    8. 概念行带 `proof_text` 而**没有 V 签**（`concept_row_carries_proof_text`，error）：这一格是「良定义证明」，有签才许非空（2026-11-10 业主裁定 甲：B 落 b-稿 → V 签 → B 收录）；没签的（哨兵 `concept:primitive` 那一类污染）逐条点名（`stmt_id` + `created_by` + 开头），口径只一处：:func:`concept_rows_with_proof_text`。
     """
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
@@ -1946,28 +1972,27 @@ def _check_13(rep, store) -> None:
                 "weaker_than_evidence",
                 f"{gap['why']}",
             ))
-    # ---- 概念行带 `proof_text`（2026-10-21，存量那条路：审计只能点名）
+    # ---- 概念行带 `proof_text` 而**没有 V 签**（2026-10-21 立，2026-11-10 改口径）
     #
-    # 改前的分工：写入期（`conceptrows` 的闸）拒收、读侧（`proof_review_gap`）点名。
-    # 审计面没有对应的一条 ⇒ 一个装满历史概念行的工作区可以"审计通过"，而
-    # `proof_review_gap` 会为同一条行说"概念行不该带证明文本" —— 两处口径不一致，
-    # 而"审计通过"是交付面上唯一被当成"没有问题"的那一栏。
-    #
-    # 为什么是 error（而不是像 `weaker_than_evidence` 那样的 warning）：
-    # 这一条说的不是"降档"（安全方向），是"这一行在有没有证明这个问题上说了假话" ——
-    # 哨兵 `concept:primitive` 会把依赖它的每一条读数顶高（真机 mp3：1143 条）。
-    # 而它不是"来路可疑"，是"这一格本来就不该有内容"。
+    # 2026-11-10 业主裁定（甲）：概念的良定义证明与一般手稿同一条链 —— B 落 b-稿、
+    # V 三转签、B 收录进 `proof_text`。于是这一条不再问"有没有内容"，只问"有没有签"
+    # （判据是既有唯一读口 `vsigns.sign_reading.state == "signed"`）；没签的照旧是
+    # error：哨兵 `concept:primitive` 会把依赖它的每一条读数顶高（真机 mp3：1143 条）。
     #
     # 口径只一处（:func:`concept_rows_with_proof_text`）：判据的负控摘的就是它。
-    for row in concept_rows_with_proof_text(statements):
+    for row in concept_rows_with_proof_text(statements, root=store.root, store=store):
         rep.issues.append(Issue(
             "error", "statements", row["stmt_id"] or None, CONCEPT_PROOF_TEXT_CODE,
             f"概念行 {row['stmt_id'] or '（无号）'} 带 `proof_text`"
             f"（{row['proof_head']!r}，{row['proof_chars']} 字；来源 created_by="
-            f"{row['created_by'] or '（未记）'}）⇒ 概念行的 `proof_text` 只该是空的："
-            "定义不需要证明，而写进去的每一段都会被下游当成'这一条有证明'"
+            f"{row['created_by'] or '（未记）'}；well_definedness={row['well_definedness']}）"
+            "⇒ 这一格是「良定义证明」，**没有 V 签**就不许非空：V 没签，"
+            "下游会把它当成'这一条有证明'"
             "（`verifications.proof_review_gap` 的非空判据、收工门的 reviewed 档、五元位）。"
-            "存量行审计改不动 ⇒ 要么把这一格清空，要么按真结论改回概念/定理的归属",
+            "改法两条：① 把这一格清空（原始概念就是空）；② 要保留良定义证明 ⇒ "
+            "B 落 `reports/b-proof-<号>.md` → V 三转签 → 按位置与格收录"
+            "（`own.ingest_manuscript(apply, cells=['proof_text'])`）。"
+            "存量行审计改不动 ⇒ 要么清空，要么按真结论改回概念/定理的归属",
         ))
 
 

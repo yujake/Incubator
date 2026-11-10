@@ -31,6 +31,7 @@ if str(_SRC) not in sys.path:
 
 import conftest  # noqa: E402
 from _credential_fixture import issue_credential  # noqa: E402
+from _same_statement_stub import wire_for_secretary  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import manuscriptintake as MI  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -246,6 +247,68 @@ def test_a3_register_creates_a_new_statement(tmp_path: pathlib.Path) -> None:
     assert got["cells"]["dependencies"]["reason"]
     for cell in ("statement_full", "proof_text"):
         assert got["cells"][cell]["outcome"] == "filled", (cell, got["cells"][cell])
+
+
+def test_a3c_register_receipt_reports_the_dependency_rows_it_really_wrote(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """register 的写回执按盘上实际写了几行报：`dependencies=True` + `deps_written=1`。
+
+    现场（被引面那条 lane）：`mode=register` 真落了 1 条依赖行（`used_by='stmt:…'`、
+    `source_stmt_id='000090'`），而回执写死 `dependencies=False` ⇒ 调用方读到
+    "依赖面没写"，盘上却有那一行（D15/D16 那类"读数与事实不符"）。
+
+    反真空：把回执算点打桩回改前那个常量 ⇒ 同一条断言必须红 —— 否则
+    "回执说真话"这件事没有人检验过。
+    """
+    st, b = _ws(tmp_path)
+    wire_for_secretary(monkeypatch)
+    conftest.seed_statement_row(st, stmt_id="000002", statement_full="引理：…",
+                                kind="lemma", proof_text="引理：…")
+    conftest.sign_for_the_gate(st.root, statement_id="000002",
+                               proof_text="引理：…", store=st)
+    _make_citable(st, "000002", kind="lemma")
+    _write(st, "reports/f-proof-000000.md",
+           _manuscript(sid="（待登记）", proposition=OTHER_PROPOSITION,
+                       proof=OTHER_PROOF, dep_stmt="000002"))
+    conftest.sign_before_registration(st.root, proof_text=OTHER_PROOF)
+
+    got = b.ingest_manuscript(
+        manuscript="reports/f-proof-000000.md", mode="register",
+        cells=["statement_full", "proof_text", "dependencies"])
+    assert got["ok"] is True, got
+    write = dict(got.get("write") or {})
+    assert write.get("dependencies") is True, write
+    assert write.get("deps_written") == 1, write
+    deps = [dict(r) for r in st.rows("dependencies")]
+    assert len(deps) == 1, deps
+    assert str(deps[0].get("source_stmt_id")) == "000002", deps
+    assert str(deps[0].get("used_by") or "").startswith(
+        f"stmt:{got['register']['stmt_id']}"), deps
+
+    # 反真空：打桩回改前那个常量 False ⇒ 同一条读数必须红。
+    monkeypatch.setattr(
+        AgentB, "_ingest_write_receipt",
+        staticmethod(lambda _got: {"statements": True, "dependencies": False,
+                                   "written": True,
+                                   "sink": "record_statement（登记新命题）"}))
+    st2, b2 = _ws(tmp_path / "anti")
+    conftest.seed_statement_row(st2, stmt_id="000002", statement_full="引理：…",
+                                kind="lemma", proof_text="引理：…")
+    conftest.sign_for_the_gate(st2.root, statement_id="000002",
+                               proof_text="引理：…", store=st2)
+    _make_citable(st2, "000002", kind="lemma")
+    _write(st2, "reports/f-proof-000000.md",
+           _manuscript(sid="（待登记）", proposition=OTHER_PROPOSITION,
+                       proof=OTHER_PROOF, dep_stmt="000002"))
+    conftest.sign_before_registration(st2.root, proof_text=OTHER_PROOF)
+    bad = b2.ingest_manuscript(
+        manuscript="reports/f-proof-000000.md", mode="register",
+        cells=["statement_full", "proof_text", "dependencies"])
+    assert bad["ok"] is True, bad
+    bad_write = dict(bad.get("write") or {})
+    assert bad_write.get("dependencies") is False, bad_write
+    assert len([dict(r) for r in st2.rows("dependencies")]) == 1, (
+        "盘上确实写了 1 条依赖，而回执说 False —— 这就是要判红的那条读数")
 
 
 def test_a3b_register_refuses_an_incomplete_cell_set(tmp_path: pathlib.Path) -> None:

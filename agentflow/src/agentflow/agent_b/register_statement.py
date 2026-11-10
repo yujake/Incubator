@@ -223,8 +223,15 @@ def _pointer_manuscript_rel(value: Any) -> str:
     return rel if _is_manuscript_rel(rel) else ""
 
 
-def _concept_refuses_manuscript(*, kind: Any, proof_manuscript: Any) -> bool:
+def _concept_refuses_manuscript(*, kind: Any, proof_manuscript: Any,
+                                signed: bool = False) -> bool:
     """概念行收不收证明稿 —— 唯一判据（`True` = 不收，这一笔要受控拒；2026-11-10）。
+
+    2026-11-10 业主裁定（甲）：概念行也可以有良定义证明，但那一份稿必须已经由 V
+    签在一条在册概念行上（`_concept_manuscript_sign_reading` 判）。所以这条拒现在
+    只挡未签的稿：`signed=False` ⇒ 拒（写盘前拒，零新行零新文件）；已经签好的稿
+    不走这条登记路 —— 它该走 `own.ingest_manuscript(apply, cells=["proof_text"])`
+    按位置与格收录（那是 T1 给"签回来的稿"留的唯一入口）。
 
     为什么单列一处：这条判据有两个读点 —— 概念口径块里的"写盘前拒"，以及"稿里的
     `## 证明` 要不要取成正文"那一支。两处各写一份就会漂，而漂出来的形态正是审计
@@ -232,12 +239,75 @@ def _concept_refuses_manuscript(*, kind: Any, proof_manuscript: Any) -> bool:
     整笔拒，而概念行已经在更早那次秘书事务里落了盘（调用方拿到 `ok=false`，盘上多一行）。
 
     `proof_manuscript` 收"正文"与"工作区相对路径"两种写法（这一格历史上就是两个意思，
-    见 `_is_manuscript_rel`），所以判据只看"给没给"，不解析它 —— 路径读不到那件事由
-    更靠后的 `manuscript_missing` 说，它到不了这里。
+    见 `_is_manuscript_rel`），所以判据只看"给没给、签没签"，不解析它 —— 路径读不到
+    那件事由更靠后的 `manuscript_missing` 说，它到不了这里。
     """
     if str(kind or "").strip() != "concept":
         return False
-    return bool(str(proof_manuscript or "").strip())
+    if not bool(str(proof_manuscript or "").strip()):
+        return False
+    return not bool(signed)
+
+
+def _concept_manuscript_sign_reading(store: Any, *, proof_manuscript: Any
+                                     ) -> dict[str, Any]:
+    """这一份稿是不是已经由 V 签在一条在册概念行上（纯读；判据只调 `sign_reading`）。
+
+    三态：读不到稿 / 稿头没有号 / 号不是在册概念行 ⇒ `checked=False` + `why`
+    （这条判据的折向是"不收"，不是"放行"——没查成不等于签过）；读到、签在 ⇒
+    `signed=True`。`proof_text` 取稿里 `## 证明` 那一节（与 V 签的是同一把尺）。
+
+    为什么这一层要自己读稿头：`register_statement` 的参数面没有 `statement_id`
+    （声明面冻结），而"这一份稿签的是哪一条"只写在稿头 `- 命题号：stmt:<号>` 里。
+    """
+    out: dict[str, Any] = {"checked": False, "signed": False, "statement_id": "",
+                           "path": "", "proof_text": "", "state": "", "why": ""}
+    text = str(proof_manuscript or "")
+    if not text.strip():
+        out["why"] = "这一笔没有给稿"
+        return out
+    root = str(getattr(store, "root", "") or "")
+    if not root:
+        out["why"] = "这一趟没有 store ⇒ 读不了稿、判不了签（没查成）"
+        return out
+    rel = _pointer_manuscript_rel(text)
+    if rel:
+        try:
+            text = (Path(root) / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            out.update(path=rel,
+                       why=(f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                            "判不了这一份稿有没有签"))
+            return out
+        out["path"] = rel
+    sid = _DS.manuscript_statement_id(text)
+    if not sid:
+        out["why"] = ("这一份稿的稿头没有 `- 命题号：stmt:<号>` ⇒ 不知道它签的是哪一条"
+                      "（概念行没有号就没有落点）")
+        return out
+    out["statement_id"] = sid
+    got = SL.by_id(store, stmt_id=sid)
+    if not got.get("checked") or not got.get("found"):
+        out["why"] = (f"`statements` 里没有 stmt:{sid}（或读不出来）⇒ 这一份稿没有"
+                      "在册概念行可签")
+        return out
+    if str((got.get("row") or {}).get("kind") or "") != "concept":
+        out["why"] = f"stmt:{sid} 不是概念行（kind={str((got.get('row') or {}).get('kind') or '')!r}）"
+        return out
+    proof = _DS.proof_body(text)
+    out["proof_text"] = str(proof or "")
+    if not str(proof or "").strip():
+        out["why"] = "这一份稿没有 `## 证明` 正文 ⇒ 没有可签的对象"
+        return out
+    from .. import vsigns as _VS
+
+    reading = _VS.sign_reading(root, statement_id=sid, proof_text=str(proof),
+                               proof_no=1, manuscript_path=rel, store=store)
+    out.update(checked=bool(reading.get("checked")),
+               signed=(str(reading.get("state") or "") == "signed"),
+               state=str(reading.get("state") or ""),
+               why=str(reading.get("why") or ""))
+    return out
 
 
 def _concept_evidence_kind(bits: Mapping) -> str:
@@ -2532,7 +2602,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                      "⇒ 这一格不适用")
             return out
         out["applicable"] = True
-        if str(origin or "") == "external_lit" and str(lit_id or "").strip():
+        # 概念行的良定义证明不认文献占位签（2026-11-10 业主裁定 甲）：它必须是 V 对
+        # 这一份 b-稿真签过的那一签；占位签只给"命题的正文摘录自文献"那一档。
+        if (str(origin or "") == "external_lit" and str(lit_id or "").strip()
+                and str(now.get("kind") or "") != "concept"):
             out["reading"]["why"] = ("文献侧：V 签位填文献编号（占位签）⇒ 允许入台账，"
                                      "第二阶段再逐个优化重写拿真签")
             for one in out["reading"]["proofs"]:
@@ -2948,6 +3021,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ① `proof_text`：概念行不许带它 ⇒ 不写，但把"丢了什么"写进返回值（留痕）。
         proof_text_dropped = ""
         proofs_dropped: list = []
+        #: 概念 + 稿这一档的签读数（下面两处"收不收稿"共用；非概念时恒空）。
+        _concept_ms: dict[str, Any] = {}
         if kind_now == "concept":
             if origin == "own_result":
                 return _refuse(
@@ -2971,27 +3046,30 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 也会失败（占用 / 只读 / 并发）；文件与行都不是可回滚的事务资源。
             # 判据落在 `_concept_refuses_manuscript` 一处：下面"稿里 `## 证明` 取不取成
             # 正文"那一支读同一个判据（否则稿从 D 携带单 / 兜底读盘进来时照样取到正文）。
+            if str(proof_manuscript or "").strip():
+                _concept_ms = _concept_manuscript_sign_reading(
+                    self.store, proof_manuscript=proof_manuscript)
             if _concept_refuses_manuscript(kind=kind_now,
-                                           proof_manuscript=proof_manuscript):
+                                           proof_manuscript=proof_manuscript,
+                                           signed=bool(_concept_ms.get("signed"))):
                 return _refuse(
                     "concept_takes_no_proof_manuscript",
-                    "概念行不收证明稿：`proof_manuscript` 是“这份证明被 V 逐行读过”的"
-                    "载体（签盖在它的 `## 证明` 正文上），而概念不参与等级链"
+                    "概念行不收**未签的**证明稿：`proof_manuscript` 是“这份证明在稿上被 V "
+                    "逐行读过”的载体（签盖在它的 `## 证明` 正文上），而概念不参与等级链"
                     "（`evidencebits.derive_grade` 对 `kind='concept'` 短路成"
-                    " `not_applicable`），它没有可签的正文载体 —— 递上来的稿一个字都"
-                    "落不进台账。改前这一笔会先落一行概念、再整笔回 "
+                    " `not_applicable`）—— 递上来的稿还没有 V 的签，一个字都落不进台账。"
+                    "改前这一笔会先落一行概念、再整笔回 "
                     "`ok=false / proof_without_v_sign`（半笔：调用方按“没写成”处理，"
-                    "盘上却多了一行）。改法两条（都不是把稿塞进本动作）："
+                    "盘上却多了一行）。改法两条（都不是把**未签的**稿塞进本动作）："
                     "① 要登记的是**命题的证明** ⇒ 用 `kind=\"conjecture\"`（或 lemma / "
                     "theorem）＋ `proof_manuscript=<稿的工作区相对路径>`，那才是收稿的"
                     "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
-                    "② 要登记的是**概念的良定义性证明**（业主 2026-10-09：“proof 里就证"
-                    "这个概念为什么是良定义的”）⇒ 今天没有任何落点：构造口 "
-                    "`conceptrows.concept_statement` 对非空 `proof_text` 当场拒绝、"
-                    "秘书 `_record_statement_tx` 再清一次、`verify` 把带 `proof_text` 的"
-                    "概念行列为 error ⇒ 要先由业主裁定“概念行怎么承载良定义证明”"
-                    "（新载体 / 新入口）再落。这一笔整笔不写（`statements` 零新行、"
-                    "盘上零新文件）。",
+                    "② 要登记的是**概念的良定义证明**（业主 2026-10-09：“proof 里就证"
+                    "这个概念为什么是良定义的”）⇒ 先 `own.land_manuscript` 把它落成 "
+                    "`reports/b-proof-<号>.md` → 派 V 三转签 → 签回来之后用 "
+                    "`own.ingest_manuscript(apply, cells=[\"proof_text\"])` 按位置与格收录"
+                    "（2026-11-10 业主裁定 甲：概念与一般手稿同一条链，只是稿由 B 产出）。"
+                    "这一笔整笔不写（`statements` 零新行、盘上零新文件）。",
                     proof_manuscript=str(proof_manuscript)[:120])
             if str(proof_text or "").strip():
                 proof_text_dropped = str(proof_text)[:120]
@@ -3325,14 +3403,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 普通数值手稿没有 `## 证明` 那一节（`proof_body_reading` 会给 absent）——
                 # 这一档的正文按业主口径空着，不许把「数值结果」当证明正文收进来。
                 and not _green.get("ok")
-                # 概念行不收证明稿（2026-11-10，审计 §6-①）：这一支改前不看 kind，
-                # 于是稿里的 `## 证明` 会被取成概念行的正文 ⇒ 概念行先落盘、随后撞
-                # "无签不许换 canonical 正文"整笔拒（半笔）。判据与上面"写盘前拒"
-                # 同一个（`_concept_refuses_manuscript`），覆盖稿从 D 携带单 / 兜底读盘
-                # 进来这一档 —— 概念行的正文永远是空串（与
-                # `conceptrows.concept_statement` 同一条口径）。
-                and not _concept_refuses_manuscript(kind=kind_now,
-                                                   proof_manuscript=manuscript_text)):
+                # 概念行不收未签的证明稿（2026-11-10，审计 §6-① / 业主裁定 甲）：这一支
+                # 改前不看 kind，于是稿里的 `## 证明` 会被取成概念行的正文 ⇒ 概念行先落盘、
+                # 随后撞"无签不许换 canonical 正文"整笔拒（半笔）。判据与上面"写盘前拒"
+                # 同一个（`_concept_refuses_manuscript`：已签的稿放行，签好的那一份由
+                # `own.ingest_manuscript` 按位置与格收录），覆盖稿从 D 携带单 / 兜底读盘
+                # 进来这一档 —— 没签的概念稿一个字都不取。
+                and not _concept_refuses_manuscript(
+                    kind=kind_now, proof_manuscript=manuscript_text,
+                    signed=bool(_concept_ms.get("signed")))):
             from_manuscript = str(manuscript_proof.get("body") or "").strip()
             if from_manuscript:
                 proof_text = from_manuscript
@@ -6458,6 +6537,24 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                              "reason": "历史档：这一格没有提取读数"}
         return out
 
+    @staticmethod
+    def _ingest_write_receipt(got: Mapping) -> dict:
+        """`mode=register` 那一笔的写回执（唯一算点；按实际写了几行报）。
+
+        为什么单列一处：改前这里写死 `{"statements": True, "dependencies": False}`，
+        而 `record_statement` 那一笔可能真落了依赖边（被引面那条 lane 的现场：
+        `deps_written=1`、行里 `used_by='stmt:000000'`、`source_stmt_id='000090'`）——
+        回执与盘上事实相反，且不会报错。判据要能对它做负控（把本函数打桩回改前那个
+        常量 ⇒ 红），所以算点必须单独存在。
+
+        `deps_written` 原样带回（不只折成布尔）：读的人要分得清"落了 0 条"与
+        "落了 1 条"，以及"落了 3 条"。
+        """
+        deps = int(got.get("deps_written") or 0)
+        return {"statements": True, "dependencies": bool(deps > 0),
+                "deps_written": deps, "written": True,
+                "sink": "record_statement（登记新命题）"}
+
     def _ingest_register(self, *, reading: Mapping, requested: Sequence[str],
                          out: dict, family: str, path: str,
                          provenance: Any = None) -> dict:
@@ -6526,9 +6623,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         problem = self._ingest_invariant_problem(out)
         if problem:
             return self._ingest_fail(out, "ingest_invariant_violated", problem)
-        out["write"] = {"statements": True, "dependencies": False,
-                        "written": True,
-                        "sink": "record_statement（登记新命题）"}
+        # ---- 回执按盘上实际写了几行报（2026-11-10，读数撒谎） ----------------
+        #
+        # 现场：`mode=register` 真落了 1 条依赖行（`deps_written=1`），而回执写死
+        # `dependencies=False` ⇒ 调用方读到"依赖面没写"，盘上却有那一行。这是
+        # D15/D16 那一类"读数与事实不符"：不会报错，只会让下一次重交/扫盘按错的事实走。
+        # 判据只有一处：`_ingest_write_receipt`（`deps_written` 是 `record_statement`
+        # 那一笔的返回值，本函数只把它原样带回，不另算一份）。
+        out["write"] = self._ingest_write_receipt(got)
         out["register"] = {
             "stmt_id": str(got.get("stmt_id") or ""),
             "new_row": bool(got.get("new_row", got.get("created"))),
@@ -6614,9 +6716,62 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "证据也无处重算")}}
             row = dict(found)
             if str(row.get("kind") or "") == "concept":
-                return {"write": False, "result": {
-                    "checked": True, "written": False,
-                    "reason": "概念行不参与等级链 ⇒ 证据面不重算"}}
+                # 概念的良定义证明（2026-11-10 业主裁定 甲）：第 2 位 = 正文在不在、
+                # 第 3 位 = V 的签到没到（唯一判据 `vsigns.bits_after_sign` ⇒
+                # `sign_reading`）。等级恒 `not_applicable`（概念没有等级轴，短路不改），
+                # `evidence_kind` 一个字不碰（由登记路落 `heuristic`）。
+                body = str(_VR.proof_text_of(row, int(proof_no)) or "")
+                if not body.strip():
+                    return {"write": False, "result": {
+                        "checked": True, "written": False,
+                        "reason": ("概念行没有良定义证明正文 ⇒ 证据面不重算"
+                                   "（第 2/3 位按'没有正文'读）")}}
+                from .. import conceptrows as _CR
+
+                base = _CR.concept_bits(
+                    origin=str(row.get("origin") or "own_result"),
+                    source_lit_id=str(row.get("source_lit_id") or ""),
+                    proof_text=body)
+                try:
+                    delivered, sign_claim = _VS.bits_after_sign(
+                        base, root=getattr(self.store, "root", ""),
+                        proof_text=body, statement_id=str(stmt_id),
+                        proof_no=int(proof_no), kind="concept", store=self.store)
+                except Exception as exc:  # noqa: BLE001 —— 读不出签不许折成"没签"
+                    return {"write": False, "result": {
+                        "checked": False, "written": False,
+                        "refused": "sign_reading_unreadable",
+                        "reason": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
+                                   "⇒ 良定义证明的证据面没做成（没查成 ≠ 没签）")}}
+                signed = bool(dict(delivered or {}).get("reviewed"))
+                if not signed and not bool(dict(sign_claim or {}).get("checked")):
+                    return {"write": False, "result": {
+                        "checked": False, "written": False,
+                        "refused": "sign_reading_unreadable",
+                        "reason": (str(dict(sign_claim or {}).get("why") or "")
+                                   or "认签那一格没查成（没查成 ≠ 没签）⇒ 证据不降档")}}
+                new = dict(row)
+                new["bits"] = dict(delivered or base)
+                changed = sorted(k for k in (set(row) | set(new))
+                                 if row.get(k) != new.get(k))
+                reading = {
+                    "checked": True, "written": bool(changed),
+                    "changed": changed,
+                    "proof": bool(dict(new.get("bits") or {}).get("proof")),
+                    "reviewed": signed,
+                    "grade": _EB.GRADE_NOT_APPLICABLE,
+                    "kind": str(row.get("kind") or ""),
+                    "kind_upgraded": {}, "kind_downgraded": {},
+                    "kind_trace": dict(new.get("_kind_upgrade") or {}),
+                    "grade_recomputed": {}, "sign_claim": dict(sign_claim or {}),
+                    "reason": ("" if changed else
+                               "按现行事实重算：良定义证明的证据面与盘上逐字相同 ⇒ "
+                               "一个字节都没写" if signed else
+                               "V 的签没到这一版 ⇒ 第 3 位保持假（良定义证明未签）"),
+                }
+                if not changed:
+                    return {"write": False, "result": reading}
+                return {"write": True, "row": new, "result": reading}
             body = str(_VR.proof_text_of(row, int(proof_no)) or "")
             if not body.strip():
                 # 普通数值档（e-num）没有证明正文：证据面只有第 1 位，不在这里重算。
@@ -6992,6 +7147,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                      write={"statements": statements_written,
                                             "dependencies": deps_written,
                                             "written": bool(statements_written or deps_written)})
+        # 概念行的读数多一格（2026-11-10 业主裁定 甲）：「良定义证明」三态 + 来源。
+        # 口径只有 `conceptrows.well_definedness_reading` 一处；非概念行走原来的形状。
+        if str(row.get("kind") or "") == "concept":
+            from .. import conceptrows as _CR
+
+            got_row = SL.by_id(self.store, stmt_id=target)
+            if got_row["found"]:
+                out["well_definedness"] = _CR.well_definedness_reading(
+                    getattr(self.store, "root", ""), got_row["row"],
+                    manuscript_path=path, proof_no=want_no, store=self.store)
         out["ok"] = True
         out["write"] = {"statements": bool(statements_written or evidence_written),
                         "dependencies": deps_written,

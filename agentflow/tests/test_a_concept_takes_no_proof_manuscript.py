@@ -22,13 +22,16 @@ row.proof_text = ""              ← 稿里那段正文一个字都没进台账
 调用方拿到 `ok=false` 会照"没写成"处理（重试 / 扫盘 / 重交），而盘上多了一行
 `active` 概念 —— 正是本仓反复点名的"静默半笔"。
 
-## 改后口径
+## 改后口径（2026-11-10 业主裁定 甲，本条判据随之改口径）
 
-概念行不收证明稿 ⇒ 在接受这一笔之前就受控拒（`concept_takes_no_proof_manuscript`），
-零新行、零新文件；拒信说清两件事：① 要登记"命题的证明"该走 `kind="conjecture"`
-＋ `proof_manuscript`；② 要登记"概念的良定义性证明"今天没有落点（构造口拒绝
-`proof_text`、秘书再清一次、`verify` 把带 `proof_text` 的概念行列 error），
-得先由业主裁定新载体 / 新入口。
+概念行不收未签的证明稿 ⇒ 在接受这一笔之前就受控拒（`concept_takes_no_proof_manuscript`）
+只挡未签的那一档，零新行、零新文件；拒信说清两件事：① 要登记"命题的证明"该走
+`kind="conjecture"` ＋ `proof_manuscript`；② 要登记"概念的良定义证明" ⇒ 先
+`own.land_manuscript` 落 `reports/b-proof-<号>.md`、派 V 三转签、再用
+`own.ingest_manuscript(apply, cells=["proof_text"])` 按位置与格收录（已签的稿不走本动作）。
+
+（改前这一条是"概念一概不收稿、良定义证明今天没有落点"；那正是 2026-11-10 裁定要
+替换的口径 —— 判据的绿不再靠"把概念登记整体挡掉"，而是靠"未签 ⇒ 零写、已签 ⇒ 走收录"。）
 
 ## 四条判据（含两条反真空）
 
@@ -147,13 +150,14 @@ def _assert_refused_before_any_write(store: Store, got: dict, *,
     assert _files(store) == before_files, (
         f"被拒的那一笔在盘上留下文件：{[p for p in _files(store) if p not in before_files]}")
     error = str(got.get("error") or "")
-    assert "概念行不收证明稿" in error, f"拒信没说清概念不收证明稿：{error}"
+    assert "概念行不收" in error and "未签" in error, (
+        f"拒信没说清概念只收已签的稿：{error}")
     # 改法①：命题的证明走 conjecture + proof_manuscript
     assert "conjecture" in error and "proof_manuscript" in error, (
         f"拒信没给出「要登记命题的证明该走哪」：{error}")
-    # 改法②：概念的良定义证明今天没有落点（要业主裁定新载体 / 新入口）
-    assert "良定义" in error and ("业主" in error or "裁定" in error), (
-        f"拒信没说出「概念的良定义证明今天没有落点」：{error}")
+    # 改法②：概念的良定义证明走 land → V 签 → ingest（2026-11-10 业主裁定 甲）
+    assert "良定义" in error and "ingest_manuscript" in error, (
+        f"拒信没说出「概念的良定义证明该走哪」：{error}")
     assert got.get("stmt_id") in (None, ""), got
 
 

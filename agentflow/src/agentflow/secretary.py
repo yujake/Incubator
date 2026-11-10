@@ -1657,7 +1657,11 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
     out["required"] = True
     origin_now = str(origin or (row or {}).get("origin") or "")
     lit_now = str(source_lit_id or (row or {}).get("source_lit_id") or "").strip()
-    if origin_now == "external_lit" and lit_now:
+    # 概念行的良定义证明不认文献占位签（2026-11-10 业主裁定 甲）：那一份正文必须
+    # 由 V 对 b-稿真签过；占位签只给"命题正文摘录自文献"那一档（与
+    # `_unsigned_proof_gate` 同一条分界）。
+    is_concept = str((row or {}).get("kind") or "") == "concept"
+    if origin_now == "external_lit" and lit_now and not is_concept:
         out["reason"] = ("文献侧：V 签位填文献编号（占位签）⇒ 允许入台账"
                          "（与 `register_statement` 的文献档同一条口径）")
         return out
@@ -8876,31 +8880,25 @@ class Secretary:
                               if d12 else "")))
         return out
 
-    def _concept_bits(self, *, origin: str, source_lit_id: str = "") -> dict[str, Any]:
-        """概念行的五元位（唯一实现：`evidencebits.bits_of(..., kind="concept")`）。
+    def _concept_bits(self, *, origin: str, source_lit_id: str = "",
+                      proof_text: str = "",
+                      sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
+        """概念行的五元位（唯一实现：`conceptrows.concept_bits`）。
 
         为什么概念行也要算这一格（2026-10-26，真机 mp3-r3）：那 30 条概念行是直写进来的，
         `bits` 全空 —— 而同一批里秘书落的那一条（000002 theorem）有 `bits`。空 `bits` 不是
         "这一行没有证据"，是"没有人替它算过"：读侧（`evidencebits.bits_from_row`、
         `clean_statement_ids`、页面那一格五元位）都拿它当"五位一件没做"读。
 
-        `kind="concept"` 是必须传的那一格：`derive_grade` 对概念短路成
-        `not_applicable`，而 `Statement.validate` 会带着这一行的 kind 重算一次等级并核对
-        —— 不传 kind 算出来的 "conjecture" 会被校验端当场拒（口径与
-        `agent_b.register_statement._statement_bits` 同一句）。
+        2026-11-10（业主裁定 甲）起这一格多了「良定义证明」一档：`proof_text` 有正文且
+        `sign.state == "signed"`（`vsigns.sign_reading` 的结论）⇒ 第 2/3 位按同一套
+        读数翻；等级仍是 `not_applicable`（概念没有等级轴，短路不改）。口径只有一处
+        （`conceptrows.concept_bits`），这一层不抄第二份。
         """
-        from . import evidencebits as EB   # 惰性：位的唯一实现
+        from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
 
-        bits = EB.bits_of(origin=str(origin or "own_result"),
-                          source_lit_id=str(source_lit_id or ""),
-                          # 概念行没有证明这一档（`conceptrows.concept_statement` 明令
-                          # `proof_text` 留空）⇒ 第 2 位只能是 False，凭据一格为空。
-                          proof=False, proof_process="", quote_verified=None, kind="concept")
-        problems = list(EB.bits_shape_problems(bits, kind="concept"))
-        if problems:
-            raise ValueError("概念行的五元位形状不合规（判据取自 evidencebits."
-                             "bits_shape_problems）：" + "；".join(problems))
-        return bits
+        return CR.concept_bits(origin=origin, source_lit_id=source_lit_id,
+                               proof_text=proof_text, sign=sign)
 
     def write_concept_row(self, tx: Any, *, stmt_id: str, label: str,
                           definition: str = "", aliases: Iterable[str] = (),
@@ -8983,17 +8981,25 @@ class Secretary:
                 out["canonical_name"] = name
                 out["label_washed"] = dict(working, stmt_id=sid)
         if existing is None:
+            # 良定义证明这一格（2026-11-10 业主裁定 甲）：只有 V 签回来才保留正文。
+            # 判据是既有唯一读口 `vsigns.sign_reading`（D268 批 2），这里不新写一套。
+            sign: dict[str, Any] = {}
+            if str(proof_text or "").strip():
+                from . import vsigns as _VS
+                sign = dict(_VS.sign_reading(
+                    (getattr(self.store, "root", "") or ""), statement_id=sid,
+                    proof_text=str(proof_text), proof_no=1, store=self.store))
             data = CR.concept_statement(stmt_id=sid, label=name, definition=full,
                                         aliases=alias_list, source_lit_id=lit,
                                         doc_id=doc_id, actor=f"secretary-{self.role}",
                                         origin=origin, self_authored=self_authored,
-                                        # 概念行不许带证明文本：判据与那句解释的唯一出处
-                                        # 就在 `concept_statement` 里（传了非空值它当场
-                                        # `ValueError`，这一层不另写一份判据）。
-                                        proof_text=proof_text
+                                        # 概念行不新写第二份判据：有没有签由上面那一读
+                                        # 决定，构造口只按 `sign.state` 留 / 清。
+                                        proof_text=proof_text, sign=sign
                                         ).to_dict()
             data["bits"] = self._concept_bits(
-                origin=str(data.get("origin") or ""), source_lit_id=lit)
+                origin=str(data.get("origin") or ""), source_lit_id=lit,
+                proof_text=str(data.get("proof_text") or ""), sign=sign)
             creator = "create"
         else:
             data = dict(existing)
@@ -9007,13 +9013,26 @@ class Secretary:
             if not dict(data.get("bits") or {}):
                 # 老行本来没有五元位（这次才是它第一次经秘书的手）⇒ 补上一份；
                 # 已经有了的那一份不整份重算（签名那一族的凭据会被同步抹掉）。
+                _body = str(data.get("proof_text") or "")
+                _sign: dict[str, Any] = {}
+                if _body.strip():
+                    from . import vsigns as _VS
+                    _sign = dict(_VS.sign_reading(
+                        (getattr(self.store, "root", "") or ""), statement_id=sid,
+                        proof_text=_body, proof_no=1, store=self.store))
                 data["bits"] = self._concept_bits(
-                    origin=str(data.get("origin") or ""), source_lit_id=lit)
+                    origin=str(data.get("origin") or ""), source_lit_id=lit,
+                    proof_text=_body, sign=_sign)
             creator = "sync"
         if str(status or "").strip():
             data["status"] = str(status)
         if str(quote_reason or "").strip():
             data["quote_reason"] = str(quote_reason)
+        # 概念行的「良定义证明」读数（三态 + 来源）：写进来的这一笔与读回去的那一格
+        # 用同一份实现（`conceptrows.well_definedness_reading`）。
+        if out is not None:
+            out["well_definedness"] = CR.well_definedness_reading(
+                (getattr(self.store, "root", "") or ""), data, store=self.store)
         # ---- 概念同一性（唯一判据；改一条既有行时把自己排除在命中之外）
         identity = self._same_concept_candidate(tx, label=name, full=full, exclude_id=sid)
         hit = dict(identity.get("hit") or {})
@@ -9282,10 +9301,21 @@ class Secretary:
         # ② `origin` 按来源分档：有出处 ⇒ external_lit；没有 ⇒ 自己的概念；
         #    显式写 own_result 必须带 `self_authored`（判据在 `conceptrows`，不抄第二份）。
         if kind == "concept":
-            if str(body.get("proof_text") or "").strip():
-                out["concept_proof_text_dropped"] = [str(body.get("label") or "")]
-                body = dict(body)
-                body["proof_text"] = ""
+            # 良定义证明（2026-11-10 业主裁定 甲）：正文只在 V 已签时保留；没签就清空
+            # 并留读数（`concept_proof_text_dropped`）。判据仍是唯一读口
+            # `vsigns.sign_reading` —— 这一层不新写一套。
+            _body = str(body.get("proof_text") or "")
+            _sign: dict[str, Any] = {}
+            if _body.strip():
+                from . import vsigns as _VS
+                _sign = dict(_VS.sign_reading(
+                    str(getattr(self.store, "root", "") or ""),
+                    statement_id=str(candidate_id or ""), proof_text=_body,
+                    proof_no=1, store=self.store))
+                if str(_sign.get("state") or "") != "signed":
+                    out["concept_proof_text_dropped"] = [str(body.get("label") or "")]
+                    body = dict(body)
+                    body["proof_text"] = ""
             _src = str(body.get("source_lit_id") or "")
             _want = str(body.get("origin") or "")
             _self_auth = bool(body.get("self_authored"))
@@ -9304,7 +9334,15 @@ class Secretary:
                 # `bits` 时才有它，而 B 的 pipeline 那条路（`conceptrows` 的三个写口）
                 # 从来不带 ⇒ 真机 mp3-r3 的 30 条概念行 `bits` 全空。这一格与
                 # `write_concept_row` 用的是同一个 `_concept_bits`（判据不看调用方是谁）。
-                body["bits"] = self._concept_bits(origin=_resolved, source_lit_id=_src)
+                body["bits"] = self._concept_bits(
+                    origin=_resolved, source_lit_id=_src,
+                    proof_text=str(body.get("proof_text") or ""), sign=_sign)
+            if out.get("well_definedness") is None:
+                out["well_definedness"] = CR.well_definedness_reading(
+                    str(getattr(self.store, "root", "") or ""),
+                    {"stmt_id": str(candidate_id or ""),
+                     "proof_text": str(body.get("proof_text") or "")},
+                    sign=_sign, store=self.store)
         legacy = CR.legacy_present(self.store)
         with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
                            "documents",
