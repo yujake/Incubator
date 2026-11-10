@@ -1238,7 +1238,8 @@ def _plan_named_manuscripts(base: Path) -> list[str]:
 
 
 def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
-                    plan_id: str = "", proof_text: Any = "") -> dict[str, Any]:
+                    plan_id: str = "", proof_text: Any = "",
+                    manuscript_paths: Iterable[str] = ()) -> dict[str, Any]:
     """按约定路径（必要时按证明正文）在盘上找 F 的证明手稿。
 
     返回 `{checked, source, text, path, tried, why, matched_by}`。
@@ -1289,7 +1290,16 @@ def read_manuscript(root: Any, *, statement_ids: Iterable[str] = (),
                 "why": "没有工作区根（`root` 是空的）⇒ 按约定路径找手稿这一趟没查成"}
     base = Path(root_text)
     tried: list[dict[str, Any]] = []
-    for rel in manuscript_relpaths(statement_ids=statement_ids, plan_id=plan_id):
+    #: 调用方点名的候选路径排在最前（F 自己的稿号 `f-proof-<稿号>.md`、D 携带单给的
+    #: 那一份）。它们不按命题号也不按计划号命名，只靠 `manuscript_relpaths` 找不到。
+    _named: list[str] = []
+    for _rel in manuscript_paths or ():
+        _rel = str(_rel or "").strip().replace("\\", "/")
+        if _rel and _rel not in _named:
+            _named.append(_rel)
+    candidates = _named + [r for r in manuscript_relpaths(
+        statement_ids=statement_ids, plan_id=plan_id) if r not in _named]
+    for rel in candidates:
         path = base / rel
         try:
             exists = path.is_file()

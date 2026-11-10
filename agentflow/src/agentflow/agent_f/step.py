@@ -423,7 +423,7 @@ class _Step:
         # 读数与下一轮提示词的 history 摘要都读它），否则只能靠数盘上有几份稿。
         for _key in ("proof_mode", "proof_registered", "proof_rewritten", "proof_no",
                      "proof_sha256", "proof_label", "proof_section_hashes",
-                     "manuscript_migrated", "manuscript_path"):
+                     "manuscript_migrated", "manuscript_path", "manuscript_id"):
             if deploy.get(_key) not in (None, "", {}, []):
                 history_row[_key] = deploy[_key]
         history.append(history_row)
@@ -481,6 +481,9 @@ class _Step:
         # 里塞一整篇手稿不划算，而 D/B 需要时按路径读。
         if deploy.get("manuscript_path"):
             out["manuscript_path"] = str(deploy["manuscript_path"])
+        # 2026-11-10：稿号也进返回值（改同一份稿时把它给回来，不靠猜名字）。
+        if deploy.get("manuscript_id"):
+            out["manuscript_id"] = str(deploy["manuscript_id"])
         # ---- 2026-11-07（业主裁定）：手稿登记条目的身份也进返回值 ----------
         for _key in ("proof_mode", "proof_registered", "proof_rewritten", "proof_no",
                      "proof_sha256", "proof_label", "proof_section_hashes",

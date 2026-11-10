@@ -422,16 +422,24 @@ def _find_registered_text(root: Any, *, family: Any, statement_id: Any = "",
 
 # ---------------------------------------------------------------- 路径（唯一来源：manuscriptform）
 
-def entry_relpath(*, family: Any, statement_id: Any = "", plan_id: Any = "") -> str:
-    """这一条命题的手稿落点（`manuscriptform.name_reading`；认不出 ⇒ 空串，不猜）。"""
-    got = _MF.name_reading(family, statement_id=statement_id, plan_id=plan_id)
+def entry_relpath(*, family: Any, statement_id: Any = "", plan_id: Any = "",
+                  manuscript_id: Any = "") -> str:
+    """这一份手稿的落点（`manuscriptform.name_reading`；认不出 ⇒ 空串，不猜）。
+
+    `manuscript_id` 是 F 自己的稿号（2026-11-10）：给了它，F 的稿只按
+    `reports/f-proof-<稿号>.md` 命名；命题号 / 计划号不参与。`statement_id` / `plan_id`
+    保留给 b-proof / e-proof 与老盘只读兼容。
+    """
+    got = _MF.name_reading(family, statement_id=statement_id, plan_id=plan_id,
+                           manuscript_id=manuscript_id)
     return str(got.get("path") or "") if got.get("ok") else ""
 
 
 def read_entry(root: Any, *, family: Any, statement_id: Any = "",
-               plan_id: Any = "") -> dict[str, Any]:
-    """读这一条命题的登记条目（手稿 + 头部元信息）；稿不在 ⇒ `exists=False`。"""
-    rel = entry_relpath(family=family, statement_id=statement_id, plan_id=plan_id)
+               plan_id: Any = "", manuscript_id: Any = "") -> dict[str, Any]:
+    """读这一份手稿的登记条目（手稿 + 头部元信息）；稿不在 ⇒ `exists=False`。"""
+    rel = entry_relpath(family=family, statement_id=statement_id, plan_id=plan_id,
+                        manuscript_id=manuscript_id)
     out: dict[str, Any] = {"checked": True, "exists": False, "path": rel, "text": "",
                            "entry": parse_entry(""), "why": ""}
     if not rel:
@@ -491,6 +499,7 @@ def register_or_rewrite(
     root: Any, *, family: Any, label: str, proposition: str, proof_text: str,
     dependency_rows: Sequence[Mapping[str, Any]] = (),
     statement_id: Any = "", plan_id: Any = "", sid: Any = "", title: Any = "",
+    manuscript_id: Any = "",
     kind: Any = "", author: Any = "", at: Any = "", template: str = "",
     gate: Callable[..., Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -509,9 +518,12 @@ def register_or_rewrite(
     - `ok=False` 时 `refused` 是受控码，盘上一个字节都不动（`written=False`）。
     """
     at_text = str(at or "") or _now()
-    rel = entry_relpath(family=family, statement_id=statement_id, plan_id=plan_id)
+    mid = str(manuscript_id or "").strip()
+    rel = entry_relpath(family=family, statement_id=statement_id, plan_id=plan_id,
+                        manuscript_id=mid)
     out: dict[str, Any] = {
         "checked": True, "ok": False, "mode": "", "statement_id": str(statement_id or ""),
+        "manuscript_id": mid,
         "proof_no": 0, "manuscript_path": rel, "sha256": "", "deps_rows": [],
         "problems": [], "refused": "", "why": "", "entry": {}, "gate": {},
         "written": False, "section_hashes": {}, "migrated": False, "preserved": False,
@@ -519,10 +531,12 @@ def register_or_rewrite(
     }
     if not rel:
         out.update(refused=REFUSED_PATH,
-                   why=(f"手稿落点认不出（family={family!r}、statement_id={statement_id!r}、"
-                        f"plan_id={plan_id!r}）⇒ 不登记、不写盘"))
+                   why=(f"手稿落点认不出（family={family!r}、manuscript_id={mid!r}、"
+                        f"statement_id={statement_id!r}、plan_id={plan_id!r}）"
+                        "⇒ 不登记、不写盘"))
         return out
-    before = read_entry(root, family=family, statement_id=statement_id, plan_id=plan_id)
+    before = read_entry(root, family=family, statement_id=statement_id,
+                        plan_id=plan_id, manuscript_id=mid)
     if not before.get("checked"):
         out.update(checked=False, refused=REFUSED_READ,
                    why=f"登记条目读不出来 ⇒ 没查成（不是「新命题」）：{before.get('why')}")
@@ -535,10 +549,13 @@ def register_or_rewrite(
     # `checked` 是"这是不是一条登记条目"的判据（A3）：手写稿可以自己写一行
     # `- 标签：`，但它没有正文 sha / 命题指纹 / 版本记录 ⇒ 不是在册条目。
     same_slot = bool(before.get("exists") and entry.get("checked")
-                     and same_slot_reading(entry, statement_id=statement_id,
-                                           plan_id=plan_id, sid=sid, label=label))
+                     and (bool(mid)  # 稿号就是槽位：同一个号 = 同一份稿
+                          or same_slot_reading(entry, statement_id=statement_id,
+                                               plan_id=plan_id, sid=sid, label=label)))
     relocated_from = ""
-    if not same_slot:
+    if not same_slot and not mid:
+        # 老盘上的槽位搬家（`f-proof-plan-*` → `f-proof-<号>` 那一代）只在没有稿号时
+        # 才找旧落点：有了稿号，路径本身就是身份，去别处认领一份稿会是"别人的稿"。
         found = _find_registered_text(root, family=family, statement_id=statement_id,
                                       plan_id=plan_id, sid=sid, label=label,
                                       exclude=rel)

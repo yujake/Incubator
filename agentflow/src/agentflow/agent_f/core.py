@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
+from .. import vsigns as _VS_NAME    # 稿名 ⇒ 稿号（只读解析；`_resolve_manuscript_id` 用）
 from .create_plan import _CreatePlan
 from .manuscript import _Manuscript
 from .step import _Step
@@ -1804,7 +1805,8 @@ class _Core:
         return out
 
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
-                      plan: Mapping[str, Any], proof_manuscript: str = "") -> dict:
+                      plan: Mapping[str, Any], proof_manuscript: str = "",
+                      manuscript_id: str = "") -> dict:
         """把这一轮的 `proof` 交给 B 的登记正路（P3-6 的第一半）。
 
         2026-10-26（D8）：改前这一格在 F 进程里直接开一笔 `statements` 事务，落下来的行
@@ -1947,8 +1949,7 @@ class _Core:
                                       "refused": "proposition_text_changed",
                                       "reason": "命题正文与在册那一条不一致"},
                     why="命题正文与在册那一条不一致", cites=cites,
-                    manuscript_path=str(self.manuscript_path(
-                        str(row.get("stmt_id") or ""), sid, plan_id=plan_id)),
+                    manuscript_path=str(self.manuscript_path(manuscript_id)),
                     proof_no=0)
         if weak_match and existing_row:
             # 同一条命题的重跑：交给登记条目的命题正文必须是盘上那一行（canonical），
@@ -1963,6 +1964,7 @@ class _Core:
                            "按最弱一档登记（V 签完之后再交一次会升档）"}
         return self._hand_proof(
             full=full, text=text, body=body, sid=sid, plan=plan, sg=sg,
+            manuscript_id=str(manuscript_id or ""),
             manuscript_text=manuscript_text, manuscript_received=manuscript_received,
             cites=cites, tier=tier,
             dependency_rows=self.dependency_rows(product),
@@ -2070,7 +2072,8 @@ class _Core:
         return out
 
     def _hand_proof(self, *, full: str, text: str, body: str, sid: str,
-                    plan: Mapping[str, Any], sg: Mapping[str, Any] | None = None,
+                    plan: Mapping[str, Any], manuscript_id: str = "",
+                    sg: Mapping[str, Any] | None = None,
                     manuscript_text: str, manuscript_received: dict[str, Any],
                     cites: list[str], tier: Mapping[str, Any],
                     dependency_rows: list | None = None,
@@ -2082,8 +2085,8 @@ class _Core:
         > 「要让注册命题和写证明两件事解耦，不然无法做到只一遍又一遍修改证明」
         > 「F侧反复修改一个命题的证明时要直接动那个命题所指手稿的 proof 板块」
 
-        - 手稿登记里没有同 label 的条目 ⇒ 登记：过 F 秘书的形态闸一次（只在这里），
-          落 `reports/f-proof-<命题号>.md`（还没有号时 `reports/f-proof-plan-<计划号>.md`）；
+        - 手稿登记里没有这个稿号的条目 ⇒ 登记：过 F 秘书的形态闸一次（只在这里），
+          落 `reports/f-proof-<稿号>.md`（稿号由 `manuscriptids` 发，与命题号/计划号无关）；
         - 已有同 label 的条目 ⇒ 重写：只换 `## 证明` 那一节（顺手按 cites 重渲
           `## 依赖`），`proof_no` 递增、正文 sha256 重算；不过闸、不登记、不新增
           statements 行（`## 命题` 那一节逐字节不动）；
@@ -2127,6 +2130,7 @@ class _Core:
             root, family=_MF.FAMILY_F, label=label, proposition=proposition,
             proof_text=body, dependency_rows=list(dependency_rows or []),
             statement_id=stmt_id, plan_id=plan_id, sid=sid, title=text,
+            manuscript_id=str(manuscript_id or ""),
             kind=kind_now, template=str(manuscript_text or ""), gate=_gate)
 
         refused_kind = str(got.get("refused") or "")
@@ -2177,6 +2181,7 @@ class _Core:
                 "proof_rewritten": mode == "rewritten",
                 "proof_mode": mode,
                 "proof_label": label,
+                "manuscript_id": str(got.get("manuscript_id") or manuscript_id or ""),
                 "proof_no": int(got.get("proof_no") or 0),
                 "proof_sha256": str(got.get("sha256") or ""),
                 "manuscript_path": str(got.get("manuscript_path") or ""),
@@ -2201,30 +2206,35 @@ class _Core:
     # 送审是 F 自己的动作（下一步 `next_step_hint` 明写怎么派），这一层只负责
     # "现在有没有签"这一个读数。
     def _read_sign(self, *, statement_id: str, proof_text: str,
-                   proof_no: Any = 1) -> dict:
+                   proof_no: Any = 1, manuscript_path: str = "") -> dict:
         """回读这一份证明的 V 签（纯读）；返回 `{reading, hint}`。"""
         from . import vsign as _VS
 
-        plan_paths = ()
+        plan_paths: list[str] = []
         try:
             from .. import depsection as _DS
 
-            plan_paths = tuple(_DS.manuscript_relpaths(
+            plan_paths = list(_DS.manuscript_relpaths(
                 statement_ids=[statement_id] if statement_id else (),
                 plan_id=str(self.cfg.get("plan_id") or "")))
         except Exception:  # noqa: BLE001 - 定位不到手稿 ⇒ 只少读一处，不许带走这一轮
-            plan_paths = ()
+            plan_paths = []
+        #: 这一轮自己那一份稿（F 的稿号）必须是候选之一：它不按命题号也不按计划号命名，
+        #: 只靠上面的约定名找不到它。
+        _mp = str(manuscript_path or "")
+        if _mp and _mp not in plan_paths:
+            plan_paths.insert(0, _mp)
         try:
             reading = _VS.delivery_reading(
                 self.store.root, statement_id=statement_id, proof_text=proof_text,
-                proof_no=proof_no, manuscript_paths=plan_paths)
+                proof_no=proof_no, manuscript_paths=tuple(plan_paths))
         except Exception as exc:  # noqa: BLE001 - 读签这一格坏了不许带走这一轮
             reading = {"state": _VS.STATE_UNKNOWN, "label": "没查成",
                        "delivered": False, "checked": False,
                        "why": f"读签这一格没跑成（{type(exc).__name__}: {exc}）"}
         return {"reading": reading,
                 "hint": _VS.next_step_hint(reading, statement_id=statement_id,
-                                           manuscript_paths=plan_paths)}
+                                           manuscript_paths=tuple(plan_paths))}
 
     # ------------------------------------------------------ 交差读数：按条，不是按这一轮
     #
@@ -2262,11 +2272,18 @@ class _Core:
 
         sid = str(statement_id or "").strip()
         ids = (sid,) if sid else ()
+        row = self._statement_row(sid)
+        #: 这一行记着它属于哪一份稿（`manuscript_id`，F 自己的稿号）：稿名与命题号不再
+        #: 绑定 ⇒ 按命题号拼出来的 `f-proof-<号>.md` 指不到它。这一格是唯一回找口。
+        from .. import manuscriptids as _MID_BODY
+
+        _mid_path = _MID_BODY.canonical_rel(str(row.get("manuscript_id") or "")) if row else ""
         paths = tuple(_DS.manuscript_relpaths(statement_ids=ids,
                                               plan_id=str(plan_id or "")))
         try:
             got = _DS.read_manuscript(self.store.root, statement_ids=ids,
-                                      plan_id=str(plan_id or ""))
+                                      plan_id=str(plan_id or ""),
+                                      manuscript_paths=((_mid_path,) if _mid_path else ()))
         except Exception as exc:  # noqa: BLE001 - 找稿这一层坏了 ⇒ 退到台账，不带走这一趟
             got = {"checked": False, "source": _DS.SOURCE_NONE, "text": "", "path": "",
                    "why": f"按约定路径找手稿没跑成（{type(exc).__name__}: {exc}）"}
@@ -2283,7 +2300,6 @@ class _Core:
 
             manuscript_proof = _DS.proof_body_reading(str(got.get("text") or ""))
             text = _VS.manuscript_proof_body(str(got.get("text") or ""))
-        row = self._statement_row(sid)
         if not text.strip():
             text = str(row.get("proof_text") or "")
         if not text.strip():
@@ -2404,6 +2420,34 @@ class _Core:
         return (f"- 第 {round_no} 轮（`{kind}`，{product.get('strategy')}）状态：{status}"
                 f"｜依据：{basis}｜下一步：{next_step}")
 
+    def _resolve_manuscript_id(self, *, plan: Mapping[str, Any], sid: str,
+                               product: Mapping[str, Any]) -> str:
+        """这一轮该写哪一份稿：F 自己的稿号（业主 2026-11-10：不靠命题号/计划号）。
+
+        次序（一处判据，`_apply_round` 的 proof 档只调它）：
+        ① 产物显式给了 `manuscript_id`（换一份稿 / 第 N 份证明）⇒ 用它；
+        ② 这个子目标在 history 里已经写过一份稿 ⇒ 沿用同一个稿号（改稿不换号）；
+        ③ 都没有 ⇒ 向 :func:`manuscriptids.next_manuscript_id` 要一个新号。
+
+        为什么能沿用 history：那条记录是 F 自己的工作留痕（`manuscript_path` 是上一轮
+        落稿的路径），不是"计划拥有稿"—— 计划号不进稿名，也不决定稿号。
+        """
+        from .. import manuscriptids as _MID
+
+        mid = str(product.get("manuscript_id") or "").strip()
+        if mid:
+            return mid
+        for row in reversed([dict(h) for h in (plan.get("history") or [])
+                             if isinstance(h, Mapping)]):
+            if str(row.get("sid") or "") != str(sid or ""):
+                continue
+            rel = str(row.get("manuscript_path") or "")
+            got = _VS_NAME.manuscript_id_of(rel) if rel else ""
+            if _MID.is_manuscript_id(got):
+                return str(got)
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        return _MID.next_manuscript_id(root)
+
     def _apply_round(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                      plan: Mapping[str, Any], owner: str) -> dict:
         """把一轮成形产物落成"这一轮做了什么"（受控四档 → 动作/状态/新子目标）。
@@ -2421,6 +2465,8 @@ class _Core:
         round_no = int(plan.get("rounds") or 0) + 1
         new_goals: list[dict[str, Any]] = []
         statement_id = ""
+        #: 这一轮写的是 F 的哪一份稿（稿号；只有 `proof` 那一支有内容）。
+        manuscript_id = ""
         outlet_note = ""
         #: 这一轮送审与 V 签的读数（只有 `proof` 那一支有内容）：见 `_read_sign`。
         v_sign: dict[str, Any] = {}
@@ -2457,18 +2503,23 @@ class _Core:
             # 改前的次序是 `_proof_outlet` 在前、`proof_manuscript` 在后，而手稿按"已登记
             # 的命题号"命名 ⇒ 登记那一刻稿还没写 ⇒ 收方（B 读稿登记依赖面）永远读不到东西，
             # 那一份 `reports/f-proof-*.md` 在真机上 0 份。现在两段：
-            #   ① 先按计划号写一份（此刻还没有命题号）：稿在盘上、正文在手上；
-            #   ② 登记成功后再改名为 `f-proof-<命题号>.md`（`publish_manuscript`）。
+            #   ① 先按 F 自己的稿号写一份（`reports/f-proof-<稿号>.md`）：稿在盘上、
+            #      正文在手上；改同一份稿沿用同一个稿号（`_resolve_manuscript_id`）；
+            #   ② 收录拿到命题号时不改稿名（`publish_manuscript` 已停用改名）——
+            #      命题号只落在 statements 行上。
             # 登记那一笔（`_proof_outlet`）收到的 `proof_manuscript` 就是①的正文 —— 于是
             # "登记那一刻手上有稿"是结构上的事实，不是时序上撞运气。
             #
             # 依赖台账仍不在这里写：业主 2026-10-24 最终形态是"作者只写内容，登记由收方
             # 读稿产生"（F 是作者，B 是收方），写盘失败不许静默（FC-21）。
+            manuscript_id = self._resolve_manuscript_id(plan=plan, sid=sid, product=product)
             try:
-                manuscript = self.proof_manuscript(product, sg=sg, plan=plan)
+                manuscript = self.proof_manuscript(
+                    product, sg=sg, plan=plan, manuscript_id=manuscript_id)
             except Exception as exc:  # noqa: BLE001 - 手稿没写成不该让这一轮崩掉
                 manuscript = {"ok": False, "path": "", "text": "", "rows": [],
-                              "preview": {}, "named_by": "plan",
+                              "preview": {}, "named_by": "manuscript",
+                              "manuscript_id": manuscript_id,
                               "why": f"手稿没写成（{type(exc).__name__}: {exc}）"}
             # ---- F 的秘书在"提交给 V 之前"洗一遍依赖面（业主 2026-10-26 晚） -----------
             #
@@ -2543,12 +2594,13 @@ class _Core:
                     "wash_reason": str(wash.get("reason") or ""),
                     "wash_actor": str(wash.get("actor") or ""),
                 }
-            # 洗过的那一份才是"提交给 V 的证明"：把它换回手上这一份字典，后面
-            # `publish_manuscript` 按命题号改名时写的也是它（否则盘上按号命名的那份
-            # 会是没盖洗稿元信息的旧正文）。
+            # 洗过的那一份才是"提交给 V 的证明"：把它换回手上这一份字典（否则盘上
+            # 那一份会是没盖洗稿元信息的旧正文）。
             manuscript = {**dict(manuscript), "text": str(wash.get("text") or "")}
-            outlet = self._proof_outlet(product, sg, plan=plan,
-                                        proof_manuscript=str(manuscript.get("text") or ""))
+            outlet = self._proof_outlet(
+                product, sg, plan=plan,
+                proof_manuscript=str(manuscript.get("text") or ""),
+                manuscript_id=str(manuscript.get("manuscript_id") or manuscript_id))
             statement_id = str(outlet.get("statement_id") or "")
             received = dict(outlet.get("manuscript_received") or {})
             _landed = bool(outlet.get("proof_registered") or outlet.get("proof_rewritten"))
@@ -2619,27 +2671,15 @@ class _Core:
                             f" `{_DS_REFUSAL.WASH_MARK.rstrip()}` 那一行（路径 "
                             f"{refusal['manuscript_path'] or '（空）'}）⇒ 把这一条当缺陷上报，"
                             "不要原地重试")
-            # ---- 2026-11-07：手稿落点由登记条目决定（不再"登记拿到号就改名"）------
+            # ---- 2026-11-10：稿名只按 F 自己的稿号（收录不改名）--------------------
             #
-            # 改前这一格按 `statement_id` 把计划名下的稿改名成 `f-proof-<号>.md`。
-            # 现在两种情形都由 `_hand_proof` 的登记条目直接写在规范路径上：
-            # 有号 ⇒ `f-proof-<号>.md`；没号 ⇒ `f-proof-plan-<计划号>.md`。
-            # 所以这里只把登记条目说的落点写回读数；只有"登记没成"时才退回旧路径。
+            # 旧口径按 `statement_id` 把计划名下的稿改名成 `f-proof-<号>.md`。现在
+            # `_hand_proof` 的登记条目直接写在稿号上（`f-proof-<稿号>.md`），收录
+            # 拿到命题号也不改名 ⇒ 这里只把登记条目说的落点写回读数。
             if _landed:
                 _old_rel = str(manuscript.get("path") or "")
                 _new_rel = str(outlet.get("manuscript_path") or "")
                 manuscript = {**dict(manuscript), "path": _new_rel or _old_rel}
-                if _old_rel and _new_rel and _old_rel != _new_rel:
-                    # 同一条命题只留一份稿：`proof_manuscript` 刚写的计划名那一份是这一笔
-                    # 的底稿（登记条目已经落在规范路径上）⇒ 把它删掉，别在盘上留两份。
-                    try:
-                        from pathlib import Path as _P
-
-                        _root = (self.cfg.get("workspace_root")
-                                 or getattr(self.store, "root", "") or ".")
-                        (_P(_root) / _old_rel).unlink(missing_ok=True)
-                    except OSError:  # noqa: BLE001 - 删不掉只多一份稿，不改这一轮的结论
-                        pass
                 outlet_note += (
                     f"；登记那一刻手上的稿：`manuscript_source={received.get('source')}`"
                     + (f"、{int(received.get('chars') or 0)} 字、依赖段 "
@@ -2648,17 +2688,10 @@ class _Core:
                           if received.get("refs_in_proof") else "")
                        if received.get("source") == "param" else
                        "（参数是空的）"))
-            elif statement_id:
-                # 兜底（登记条目没写成、但手上有号）：仍按号命名，别让收方找不到稿。
-                manuscript = self.publish_manuscript(manuscript, statement_id=statement_id)
-                if manuscript.get("published"):
-                    outlet_note += f"；证明手稿 `{manuscript['path']}`（登记条目没写成，按号改名的旧路径）"
-                else:
-                    _why = str((manuscript.get("publish_problem") or {}).get("why")
-                               or manuscript.get("why") or "")
-                    outlet_note += f"；证明手稿没改名（{_why}）"
             else:
-                outlet_note += "；没有命题号 ⇒ 手稿保持计划名（不凭空造号）"
+                outlet_note += (f"；手稿仍在 `{manuscript.get('path') or '（空）'}`"
+                                "（这份稿按 F 自己的稿号命名；收录不改名，"
+                                "命题号由 B 收录时现取）")
             # ---- 回读 V 签（业主 2026-11-02：「拿到V签F才能交差」）-----------------
             #
             # 不在这里送审：送审是 F 自己的动作（`framework_summon`，`F -> V` 的边在）。
@@ -2667,7 +2700,8 @@ class _Core:
             # 送不了」，不许因为没送成就不给读数。
             v_sign = self._read_sign(
                 statement_id=statement_id,
-                proof_text=str(outlet.get("proof_text") or ""))
+                proof_text=str(outlet.get("proof_text") or ""),
+                manuscript_path=str(manuscript.get("path") or ""))
             _reading = dict(v_sign.get("reading") or {})
             outlet_note += (f"；V 签：{_reading.get('label') or '没查成'}"
                             f"（{_reading.get('why') or '没有读数'}）"
@@ -2812,15 +2846,18 @@ class _Core:
             "waiting_on": [str(g["sid"]) for g in new_goals],
             "new_subgoals": new_goals,
             # ---- 证明手稿（业主 2026-10-24 最终形态）：只有 `proof` 那一支有内容。
-            # `manuscript_path` 是落点（登记成功后是按命号的那个名字），`manuscript` 是全文
-            # （D/B 可以直接把它交给 `B.register_statement(proof_manuscript=...)`，不必再读盘）；
+            # `manuscript_path` 是落点（F 自己的稿号：`reports/f-proof-<稿号>.md`），
+            # `manuscript` 是全文（D/B 可以直接把它交给
+            # `B.register_statement(proof_manuscript=...)`，不必再读盘）；
             # `deps_preview` 是只读预览（依赖段解析、档位门与三态读数，一行都不写盘）；
             # `manuscript_source` 说登记那一刻手上的稿是从哪来的（param / none）。
+            "manuscript_id": str(manuscript.get("manuscript_id") or manuscript_id or ""),
             "manuscript_path": str(manuscript.get("path") or ""),
             "manuscript": str(manuscript.get("text") or ""),
             "deps_preview": dict(manuscript.get("preview") or {}),
             "manuscript_source": str(received.get("source") or ""),
             "manuscript_received": received,
+            # 2026-11-10：收录不改稿名 ⇒ `published` 恒 False；三格保留给老读数。
             "manuscript_published": bool(manuscript.get("published")),
             "manuscript_renamed_from": str(manuscript.get("renamed_from") or ""),
             # 2026-11-04（改名与签拆开）：三格分开给 —— 名字改了没有、稿头重写了没有、

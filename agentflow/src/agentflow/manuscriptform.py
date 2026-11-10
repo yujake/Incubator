@@ -45,6 +45,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import depsection as _DS
 from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
+from . import manuscriptids as _MID  # F 自己的稿号（2026-11-10）
 from . import verifications as _VR
 from . import vsigns as _VS
 from . import proofregistry as _PR
@@ -158,8 +159,12 @@ def is_safe_relpath(rel: Any, roots: Sequence[str] = PROMOTE_SOURCE_ROOTS) -> bo
 # ---------------------------------------------------------------- 命名（唯一解析入口）
 
 def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
-                 proof_no: Any = 1) -> dict[str, Any]:
+                 manuscript_id: Any = "", proof_no: Any = 1) -> dict[str, Any]:
     """这一族、这个号 ⇒ 约定路径（工作区相对）；认不出就受控拒绝。
+
+    `manuscript_id` 是 F 自己的手稿号（业主 2026-11-10 裁定）：给了它，F 的稿只按
+    `reports/f-proof-<稿号>[-p<N>].md` 命名，命题号 / 计划号都不参与。`statement_id`
+    与 `plan_id` 仍保留给 b-proof / e-proof 与老盘上的只读兼容。
 
     返回 `{"checked", "ok", "family", "path", "name", "manuscript_id",
     "proof_no", "code", "why"}`。解析本体只走 :func:`vsigns.parse_manuscript_name`
@@ -169,6 +174,7 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     prefix = family_prefix(fam)
     sid = str(statement_id or "").strip()
     pid = str(plan_id or "").strip()
+    mid = str(manuscript_id or "").strip()
     try:
         no = int(proof_no or 1)
     except (TypeError, ValueError):
@@ -186,7 +192,9 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     # 调用方读到的是同一条 `bad_manuscript_name`，不是一个异常。
     rel = ""
     try:
-        if sid and fam in _FAMILY_OF:
+        if mid and fam == FAMILY_F:
+            rel = _MID.canonical_rel(mid, no if no >= 1 else 1)
+        elif sid and fam in _FAMILY_OF:
             rel = _MFAM.relpath(_FAMILY_OF[fam], sid,
                                 no if no >= 1 else 1)
         elif pid and fam == FAMILY_F:
@@ -194,7 +202,9 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     except ValueError:
         rel = ""
     if not rel:
-        if sid:
+        if mid and fam == FAMILY_F:
+            name = f"{prefix}{mid}" + (f"-p{no}" if no >= 2 else "")
+        elif sid:
             name = f"{prefix}{sid}" + (f"-p{no}" if no >= 2 else "")
         elif pid:
             name = f"{PLAN_PREFIX.get(fam) or (prefix + 'plan-')}{pid}"
@@ -214,15 +224,25 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
                    why=(f"手稿名 {parsed.get('name')!r} 不是 {prefix} 这一族的名"
                         f"（这一笔要落的是 {prefix}proof-...）"))
         return out
-    if pid and not sid and fam != FAMILY_F:
+    if pid and not sid and not mid and fam != FAMILY_F:
         out.update(code=BAD_MANUSCRIPT_NAME,
-                   why=f"{fam} 这一族没有 `plan-` 名（计划名是 F 立项那一轮的名字）")
+                   why=f"{fam} 这一族没有 `plan-` 名（计划名只属于 F 的老盘只读兼容）")
         return out
     if out["proof_no"] != (no if no >= 1 else 1):
         out.update(code=BAD_MANUSCRIPT_NAME,
                    why=(f"证明号 {no!r} 拼不出可解析的名字（`-p<N>` 的 N 是 ≥1 的整数）"))
         return out
-    want_id = sid if sid else f"plan-{pid}"
+    if mid:
+        want_id = mid
+    elif sid:
+        want_id = sid
+    elif pid:
+        want_id = f"plan-{pid}"
+    else:
+        out.update(code=BAD_MANUSCRIPT_NAME,
+                   why=("没有给手稿号 ⇒ 这一份稿认不出落点（F 的稿按 `reports/"
+                        "f-proof-<稿号>.md` 命名，命题号 / 计划号都不参与）"))
+        return out
     if str(out["manuscript_id"]) != want_id:
         out.update(code=BAD_MANUSCRIPT_NAME,
                    why=(f"手稿名 {rel!r} 解析出来的稿号是 {out['manuscript_id']!r}，"
@@ -560,6 +580,7 @@ def _signed_version_reading(root: Any, target_rel: str, titled: str,
 def commit_manuscript(
     root: Any, *, family: Any, text: str | None = None,
     statement_id: Any = "", plan_id: Any = "", sid: Any = "",
+    manuscript_id: Any = "",
     title: Any = "", proposition: Any = "", proof_text: Any = "",
     label: Any = "", proof_no: Any = 1,
     dependency_rows: Sequence[Mapping[str, Any]] | None = None,
@@ -598,7 +619,7 @@ def commit_manuscript(
         "deps_written": 0, "rows": [],
     }
     name = name_reading(family, statement_id=statement_id, plan_id=plan_id,
-                        proof_no=proof_no)
+                        manuscript_id=manuscript_id, proof_no=proof_no)
     out["path"] = str(name.get("path") or "")
     if not name.get("ok"):
         return _refusal(out, str(name.get("code") or BAD_MANUSCRIPT_NAME),
@@ -710,24 +731,29 @@ def commit_manuscript(
 
 
 def promote_formal(root: Any, *, family: Any = FAMILY_F, statement_id: Any = "",
+                   manuscript_id: Any = "",
                    source: Any = "", text: Any = "", delete_source: bool = False,
                    store: Any = None,
                    write_dependencies: Callable[[Sequence[Mapping[str, Any]]],
                                                 Mapping[str, Any]] | None = None,
                    ) -> dict[str, Any]:
-    """把盘上已有的一份稿转成 `<prefix>-proof-<号>.md`（两族共用；签块跟着搬）。
+    """把盘上已有的一份稿转成 `<prefix>-proof-<稿号>.md`（两族共用；签块跟着搬）。
 
-    只搬不写：正文一个字不改，只补/改稿头 `- 命题号：` 那一行；源稿默认留着。
+    `manuscript_id` 是 F 自己的稿号（给了它就只按稿号命名）；`statement_id` 保留给
+    b-proof / e-proof 与老盘只读兼容。只搬不写：正文一个字不改，只补/改稿头
+    `- 命题号：` 那一行；源稿默认留着。
     """
     out: dict[str, Any] = {
         "promoted": False, "path": "", "source": _norm_rel(source),
+        "manuscript_id": str(manuscript_id or ""),
         "renamed_from": "", "retitled": False, "sign_moved": False,
         "sign_step": {"checked": False, "found": False, "sha_match": None,
                       "moved": False, "candidates": [], "why": ""},
         "problem": {}, "source_kept": False, "why": "", "refused": "",
         "deps_written": 0,
     }
-    name = name_reading(family, statement_id=statement_id)
+    name = name_reading(family, statement_id=statement_id,
+                        manuscript_id=manuscript_id)
     out["path"] = str(name.get("path") or "")
     if not name.get("ok"):
         out.update(problem={"kind": str(name.get("code") or BAD_MANUSCRIPT_NAME),
@@ -762,6 +788,7 @@ def promote_formal(root: Any, *, family: Any = FAMILY_F, statement_id: Any = "",
             return out
     got = commit_manuscript(
         root, family=family, text=body, statement_id=statement_id,
+        manuscript_id=manuscript_id,
         old_rel=rel, retitle="ensure", require_washed=True,
         delete_old=bool(delete_source), write_dependencies=write_dependencies)
     out.update(path=str(got.get("path") or out["path"]),

@@ -9,9 +9,10 @@
 ⇒ 作者只写内容，登记由收方读稿产生（与 V 读 F 的手稿再签字同一个逻辑）。所以本文件
 只做两件不写台账的事：
 
-1. `AgentF.proof_manuscript(...)`：把这一轮的论证写成一份手稿文件。两段命名（原因见方法
-   docstring 的"死结 1"）：登记之前先按计划号写成 `reports/f-proof-plan-<plan_id>.md`，
-   登记拿到命题号之后由 `publish_manuscript` 改名为 `reports/f-proof-<命题号>.md`；
+1. `AgentF.proof_manuscript(...)`：把这一轮的论证写成一份手稿文件。稿名只按 F 自己的
+   稿号（`reports/f-proof-<稿号>.md`；同一份稿的第 N 份证明是 `-p<N>`）。稿号由
+   :mod:`agentflow.manuscriptids` 发（`data/counters.json` 的 `manuscript` 号段），
+   不用命题号、也不用计划号 —— 命题号是 B 收录时现取的，计划号只管继续/放弃/更改。
    两份都含那一节固定格式的 `## 依赖`（四列表，见 `agentflow.depsection.COLUMN_KEYS`）。
 2. `AgentF.preview_dependencies(...)`：只读预览 —— 拿一份手稿正文，按 B 那条判据
    （`depsection` 的解析 ＋ 引用档位门 ＋ 三态读数）算出"如果现在入库会怎样"，
@@ -57,6 +58,7 @@ from pathlib import Path
 from .. import depsection as _DS
 from .. import evidencebits as _EB
 from .. import manuscriptform as _MF
+from .. import manuscriptids as _MID
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from ..manuscriptform import (  # noqa: F401 —— 两族唯一实现在这里，本模块只转发
     carry_sign_block,
@@ -255,8 +257,8 @@ class _Manuscript:
         return _DS.render_dependency_section(rows)
 
     def proof_manuscript(self, product: Mapping[str, Any], *, sg: Mapping[str, Any],
-                         statement_id: str = "", plan: Mapping[str, Any],
-                         label: str = "", proof_no: int = 1,
+                         plan: Mapping[str, Any], label: str = "", proof_no: int = 1,
+                         manuscript_id: str = "",
                          ) -> dict[str, Any]:
         """把这一轮的论证写成手稿文件并返回读数（写盘失败不许静默）。
 
@@ -264,14 +266,14 @@ class _Manuscript:
         数据行，`preview` 是"这份手稿交给 B 会怎样"的只读预览（`preview_dependencies`），
         `text` 是整份手稿（调用方可以直接把它交给 B 入库，不必再读盘）。
 
-        ## 为什么 `statement_id` 现在可以不给（2026-10-26，死结 1 的修法）
-        改前这个方法必须在登记之后调用（它要拿命题号命名），而登记那一刻稿还不存在 ⇒
-        B 侧读稿登记这一格永远读不到东西。现在两段：
-        ① 登记之前先写一份，按计划号命名（`reports/f-proof-plan-<plan_id>.md`）——
-           此刻手上还没有命题号，但稿已经在盘上、正文也在手上；
-        ② 登记成功之后由 :meth:`publish_manuscript` 改名为 `reports/f-proof-<命题号>.md`，
-           于是按命号找稿的读方（B 的兜底读盘）也找得到。
-        `named_by` 如实说这一份是按什么命名的（`plan` / `stmt`），读的人不必猜。
+        ## 命名（2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」）
+
+        稿名只由手稿号决定：`reports/f-proof-<稿号>.md`；同一份稿的第 N 份证明沿用
+        老后缀 `-p<N>`（`reports/f-proof-<稿号>-p2.md`）。命题号是 B 收录时现取的，
+        计划号只管继续/放弃/更改 —— 两者都不进稿名。
+        `manuscript_id` 由调用方给（同一份稿改稿给同一个号）；不给 ⇒ 向
+        :func:`manuscriptids.next_manuscript_id` 要一个新号（绝不覆盖盘上已有的稿）。
+        `named_by` 恒为 `"manuscript"`，读的人不必猜。
 
         ## 2026-11-04（业主裁定）：渲染与落盘只剩一份实现
         页头与三节的拼法在 `manuscriptform.render_proof_manuscript`（与 B 的改写稿同
@@ -280,6 +282,16 @@ class _Manuscript:
         """
         sid = str(sg.get("sid") or "")
         plan_id = str(plan.get("plan_id") or "")
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        mid = str(manuscript_id or "").strip()
+        if not mid:
+            # 没有给号 ⇒ 这是另一份稿（新稿）：向号源要一个，不猜、不借别人的号。
+            mid = _MID.next_manuscript_id(root)
+        elif not _MID.is_manuscript_id(mid):
+            return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
+                    "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
+                    "why": (f"手稿号 {mid!r} 不是六位号 ⇒ 这一份稿不落盘"
+                            "（稿号由 `manuscriptids.next_manuscript_id` 发）")}
         rows = self.dependency_rows(product)
         steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
         proof_lines = []
@@ -291,17 +303,20 @@ class _Manuscript:
             f"；这一条的可检验形式：{sg.get('testable')}" if sg.get("testable") else "")
         text = _MF.render_proof_manuscript(
             _MF.FAMILY_F, title=str(sg.get("text") or ""),
-            statement_id=statement_id, proposition=proposition,
+            statement_id="", proposition=proposition,
             proof_text="\n".join(proof_lines or ["（这一轮没有交出论证正文）"]),
             dependency_rows=rows, plan_id=plan_id, sid=sid,
             label=label, proof_no=proof_no)
-        rel = self.manuscript_path(statement_id, sid, plan_id=plan_id)
-        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        rel = self.manuscript_path(mid, proof_no=proof_no)
+        if not rel:
+            return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
+                    "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
+                    "why": f"手稿号 {mid!r} 拼不出规范路径 ⇒ 这一份稿不落盘"}
         preview = self.preview_dependencies(text)
         # ---- A1：这一份"预写"不许擦掉已经登记的那一条 ------------------------------
         #
         # 生产路径的次序是"先写稿、后登记"（死结 1 的修法），而登记条目就住在同一个
-        # 规范路径上（没有命题号时是 `reports/f-proof-plan-<计划号>.md`）⇒ 每一轮
+        # 规范路径上（`reports/f-proof-<稿号>.md`）⇒ 每一轮
         # `commit_manuscript` 都会把上一轮写进去的登记元信息（`- 正文sha：` / 命题指纹 /
         # `- 版本：`）连同 `- 标签：` 一起覆盖掉，于是 `register_or_rewrite` 每轮都读成
         # "新命题"（实测 3 轮 `modes=[registered×3]`、形态闸 3 次、`proof_no=[1,1,1]`）。
@@ -313,10 +328,11 @@ class _Manuscript:
                    "preserved": True, "text": kept, "why": ""}
         else:
             got = _MF.commit_manuscript(
-                root, family=_MF.FAMILY_F, text=text, statement_id=statement_id,
-                plan_id=plan_id, retitle="none", dependency_rows=rows)
+                root, family=_MF.FAMILY_F, text=text, manuscript_id=mid,
+                retitle="none", dependency_rows=rows)
         out = {"ok": bool(got.get("ok")), "path": rel, "text": text, "rows": rows,
-               "preview": preview, "named_by": "stmt" if statement_id else "plan",
+               "preview": preview, "named_by": "manuscript",
+               "manuscript_id": mid,
                "preserved": bool(got.get("preserved")),
                "why": str(got.get("why") or "")}
         if not got.get("ok"):
@@ -325,33 +341,20 @@ class _Manuscript:
         return out
 
     def publish_manuscript(self, manuscript: Mapping[str, Any], *,
-                           statement_id: str) -> dict[str, Any]:
-        """登记拿到命题号之后，把那一份手稿改名为 `reports/f-proof-<命题号>.md`。
+                           statement_id: str = "", manuscript_id: str = "",
+                           ) -> dict[str, Any]:
+        """停用改名：收录拿到命题号之后，稿名一个字都不动（业主 2026-11-10 裁定）。
 
-        为什么必须改名（而不是留在计划号那个名字上）：兜底读盘的第一个候选名就是
-        `f-proof-<命题号>.md`（`depsection.manuscript_relpaths`），而收方（B）手上最确切的号
-        正是它要登记的那条命题点名过的号。计划号那个名字太宽（一个计划会有好几轮），
-        只留着它，收方要么找不到、要么找到别人的稿。
+        裁定逐字：「F 的稿自己维护一套号源，不依赖命题号和计划号。停掉错误的口径。」
+        旧口径是「登记成功（拿到命题号）就改名」——它把两个号绑死：稿名从
+        `f-proof-plan-<计划号>.md` 变成 `f-proof-<命题号>.md`，于是同一份稿在收录前后
+        是两个名字，签块第 9 格、D 的携带单、按号找稿的读方全都要跟着搬。
+        现在的口径：稿号是稿号，`reports/f-proof-<稿号>.md` 从写到收录始终是同一个
+        名字；命题号由 B 收录时现取，只落在 `statements` 那一行上（记 `manuscript_id`）。
 
-        ## 2026-11-04（业主口径）：「登记成功（拿到命题号）就改名，签另算」
-
-        改前这一步与"有没有 V 签"缠在一起：登记被 `proof_without_v_sign` 整笔拒
-        ⇒ 拿不到号 ⇒ 一次也没改名（87 的 6 份稿里 0 份按号命名）。现在两条纪律：
-
-        - 改名只看号：`statement_id` 非空就改名 + 重写标题，有没有签都不影响；
-        - 搬签是可选第二步（`carry_sign_block`）：有块且 sha 相符才搬；没块只改名
-          （`sign_moved=False`、`publish_problem={}`，那是「签另算」不是失败）。
-
-        三件纪律（读数面）：
-        - 正文不再读盘：改名用的是手上这一份 `text`（登记那一刻的稿就是它）；
-        - 任何半改名都不许静默：`publish_problem` 是一个受控读数（`kind` / `stage` / `why`），
-          覆盖「改名了但标题没重写」「旧名没删掉」「签块 sha 不符」「搬块读不成」；
-          `published` / `retitled` / `sign_moved` 三格分开给，读的人不必猜成功到哪一步；
-        - 旧名与命名来源都留在读数里（`renamed_from` / `named_by`），溯源要能看出改名发生过。
+        `published` 恒为 `False`（这一笔没有改名）；`why` 把原因写死，读的人不必猜。
+        签名保留 `statement_id` 只为兼容旧调用方 —— 它不再参与命名。
         """
-        sid = str(statement_id or "").strip()
-        text = str(manuscript.get("text") or "")
-        old_rel = str(manuscript.get("path") or "")
         out = dict(manuscript)
         out["renamed_from"] = ""
         out["published"] = False
@@ -360,41 +363,13 @@ class _Manuscript:
         out["sign_step"] = {"checked": False, "found": False, "sha_match": None,
                             "moved": False, "candidates": [], "why": ""}
         out["publish_problem"] = {}
-        if not sid:
-            out["why"] = "没有命题号 ⇒ 这一份手稿不改名（它仍按计划号命名）"
-            return out
-        if not text.strip():
-            # 手上没有正文时绝不写一个空文件：空稿会被兜底读盘跳过（"文件在、正文是空的"），
-            # 而在盘上留一个空文件只会让下一个读它的人以为"稿写过、只是空的"。
-            out["why"] = "手上没有正文 ⇒ 这一份手稿不按命号落盘（写一个空文件比没有更坏）"
-            return out
-        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
-        # 改名 / 搬签 / 不毁签 / 旧名清理的判据全在 `manuscriptform.commit_manuscript`
-        # （与 B 的改写落稿同一个事务）：这里只把读数换成 F 的调用方要的形状。
-        got = _MF.commit_manuscript(
-            root, family=_MF.FAMILY_F, text=text, statement_id=sid,
-            old_rel=old_rel, retitle="replace", delete_old=True)
-        out["retitled"] = bool(got.get("retitled"))
-        out["sign_moved"] = bool(got.get("sign_moved"))
-        out["sign_step"] = dict(got.get("sign_step") or {})
-        problem = dict(got.get("problem") or {})
-        out["publish_problem"] = problem
-        if not got.get("ok"):
-            out["why"] = str(got.get("why") or "")
-            return out
-        # 半改名（有名字没标题）也要有读数：不静默，但不因此拒绝改名 ——
-        # 号是已经拿到的，按号命名对收方仍然比计划名更精确。
-        if not out["retitled"] and not out["publish_problem"]:
-            out["publish_problem"] = {
-                "kind": "renamed_without_retitle", "stage": "retitle",
-                "why": ("这一份稿头里没有 `- 命题号：` 那一行（或写了别的号）"
-                        "⇒ 名字会按号、正文认不出是哪一条；要补这一行再交"),
-            }
-        out["text"] = str(got.get("text") or text)
-        out["path"] = str(got.get("path") or self.manuscript_path(sid))
-        out["renamed_from"] = str(got.get("renamed_from") or "")
-        out["published"] = True
-        out["why"] = ""
+        out["name_changed"] = False
+        out["why"] = (
+            "稿号是稿号：收录拿到命题号不改稿名 —— 这一份仍是 "
+            f"`{str(manuscript.get('path') or '') or '（未给路径）'}`；"
+            "命题号只落在 `statements` 行上（行上记 `manuscript_id`），与稿名无关"
+            + (f"（调用方给的命题号 {str(statement_id or '').strip()!r} 不参与命名）"
+               if str(statement_id or "").strip() else ""))
         return out
 
     # -------------------------------------------------------------- 登记条目保护（A1）
@@ -505,71 +480,68 @@ class _Manuscript:
             refs=len(refs), section=section)
         return out
 
-    def promote_manuscript(self, source: str, *, statement_id: str,
-                           text: str = "", delete_source: bool = False,
+    def promote_manuscript(self, source: str, *, manuscript_id: str = "",
+                           statement_id: str = "", text: str = "",
+                           delete_source: bool = False,
                            write_dependencies: Any = None) -> dict[str, Any]:
-        """把盘上已经存在的一份攻坚稿转成 `reports/f-proof-<号>.md`（实现见模块级函数）。
+        """把盘上已经存在的一份攻坚稿转成 `reports/f-proof-<稿号>.md`（实现见模块级函数）。
 
-        这是 `publish_manuscript` 的盘上稿入口：后者只改"这一轮刚写完、手上还拿着
-        正文"的那一份；这一件读盘上那一份（`notes/…` 或 `reports/f-proof-plan-*.md`）。
-        签块跟着搬、第 9 格手稿号按新名重算、形状不对就受控拒绝 —— 判据本体只有一处
-        （`manuscriptform.promote_formal`）。
+        这是 `publish_manuscript` 的盘上稿入口：这一件读盘上那一份（`notes/…`），
+        把它搬到F 自己的稿号下（没给号 ⇒ 向号源要一个）；签块跟着搬、第 9 格手稿号
+        按新名重算、形状不对就受控拒绝 —— 判据本体只有一处
+        （`manuscriptform.promote_formal`）。`statement_id` 不再参与命名（兼容参数）。
         """
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
-        return promote_manuscript(root, statement_id=statement_id, source=source,
+        return promote_manuscript(root, manuscript_id=manuscript_id, source=source,
                                   text=text, delete_source=delete_source,
                                   store=self.store,
                                   write_dependencies=write_dependencies)
 
-    def manuscript_path(self, statement_id: str = "", sid: str = "",
-                        plan_id: str = "") -> str:
+    def manuscript_path(self, manuscript_id: str = "", *,
+                        proof_no: int = 1) -> str:
         """这一份手稿的落点（工作区相对）—— 与 `proof_manuscript` 写的是同一处。
 
-        两种名由 `manuscriptform.name_reading` 一处定义（内部只走
-        `vsigns.parse_manuscript_name`；兜底读盘读的是同一处口径）：有命题号按命题号，
-        只有计划号按计划号，都没有时退回子目标号（那一支只在调用方既没给命题号、
-        计划也没号时才会出现，绝不静默返回一个空路径）。
+        只按 F 自己的稿号命名：`reports/f-proof-<稿号>.md`；同一份稿的第 N 份证明是
+        `-p<N>`。命题号与计划号都不参与命名（业主 2026-11-10 裁定）；号形不对 ⇒
+        空串（受控，不拼一个看起来像号的路径）。
         """
-        if statement_id:
-            got = _MF.name_reading(_MF.FAMILY_F, statement_id=statement_id)
-            if got.get("ok"):
-                return str(got["path"])
-        elif plan_id:
-            got = _MF.name_reading(_MF.FAMILY_F, plan_id=plan_id)
-            if got.get("ok"):
-                return str(got["path"])
-        return f"{self.MANUSCRIPT_DIR}/{_MF.family_prefix(_MF.FAMILY_F)}{sid}.md"
+        return _MID.canonical_rel(manuscript_id, proof_no)
 
 
 
 # ---------------------------------------------------------------- 转正（攻坚稿 → 正式稿）
 #
-# 业主口径（2026-11-04 交接的那条链）：「登记成功（拿到命题号）就改名，签另算」。
-# `publish_manuscript` 覆盖的是 F 自己手上那一份（`_apply_round` 的 proof 档写完就改名）；
-# 盘上已经存在的一份稿（真机 `projects/paper-rewrite-big` 的
-# `notes/F-conj000000-proof.md`，F 自己 `fs.write` 写的攻坚稿）此前没有任何代码把它
-# 变成 `reports/f-proof-<号>.md` —— 于是按号命名的正式稿 0 份，B 的兜底读盘、D 的携带单、
-# V 的签块落点全都找不到它。
+# 业主口径（2026-11-10）：「F 的稿自己维护一套号源，不依赖命题号和计划号。」
+# `publish_manuscript` 不再改名；盘上已经存在的一份稿（`notes/F-conj000000-proof.md`
+# 一类，F 自己 `fs.write` 写的攻坚稿）要变成正式稿时，搬到F 自己的稿号下：
+# `reports/f-proof-<稿号>.md`（没给号 ⇒ 向 `manuscriptids` 要一个，绝不覆盖别人的稿）。
 #
 # 2026-11-04（业主裁定）：转正实现只有一份（`manuscriptform.promote_formal`），F 与 B
 # 两族由 `family=` 参数区分 —— 本模块这一个只做转发。
 
 #: 转正只收工作区相对路径里的这两种根：`notes/`（草稿本，攻坚手稿）与 `reports/`
-#: （正式落点；计划名那份稿也在这里）。唯一的实现在 `manuscriptform`。
+#: （正式落点）。唯一的实现在 `manuscriptform`。
 PROMOTE_SOURCE_ROOTS: tuple[str, ...] = _MF.PROMOTE_SOURCE_ROOTS
 
 
-def promote_manuscript(root: Any, *, statement_id: str, source: str = "",
+def promote_manuscript(root: Any, *, manuscript_id: str = "", source: str = "",
                        text: str = "", delete_source: bool = False,
-                       store: Any = None,
+                       store: Any = None, statement_id: str = "",
                        write_dependencies: Any = None) -> dict[str, Any]:
-    """把盘上已经存在的一份稿转成 `reports/f-proof-<号>.md`（转发，判据只在一处）。
+    """把盘上已经存在的一份稿转成 `reports/f-proof-<稿号>.md`（转发，判据只在一处）。
+
+    `manuscript_id` 是F 自己的稿号；不给 ⇒ 向 :func:`manuscriptids.next_manuscript_id`
+    要一个新号（转正是"这份草稿第一次拿到正式稿号"，不是"按命题号改名"）。
+    `statement_id` 只为兼容旧调用方保留，不参与命名。
 
     返回 `{promoted, path, source, renamed_from, retitled, sign_moved, sign_step,
-    problem, source_kept, why}`；`problem` 是受控读数（`kind`/`stage`/`why`）。
-    实现本体在 :func:`manuscriptform.promote_formal`（B 的转正也走它）。
+    problem, source_kept, why, manuscript_id}`；`problem` 是受控读数
+    （`kind`/`stage`/`why`）。实现本体在 :func:`manuscriptform.promote_formal`。
     """
+    mid = str(manuscript_id or "").strip()
+    if not mid:
+        mid = _MID.next_manuscript_id(root)
     return _MF.promote_formal(
-        root, family=_MF.FAMILY_F, statement_id=statement_id, source=source,
+        root, family=_MF.FAMILY_F, manuscript_id=mid, source=source,
         text=text, delete_source=delete_source, store=store,
         write_dependencies=write_dependencies)
