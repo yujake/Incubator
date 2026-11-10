@@ -1987,32 +1987,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 if _abort is not None:
                     return _abort
             have = {no: text for no, text in _VR.proof_list(row)}
-            listed = [dict(p) if isinstance(p, Mapping) else p
-                      for p in (row.get(_VR.PROOFS_KEY) or [])]
-            for entry in entries:
-                no = int(entry["proof_no"])
-                text = str(entry["text"])
-                if no in have:
-                    if str(have[no]).strip() == text.strip():
-                        out["already"].append(no)
-                        continue
-                    out["refused"] = "proof_no_taken"
-                    out["reason"] = (
-                        f"#{no} 已经在这条命题的证明清单里，而这一笔交来的正文与它不同 ⇒ "
-                        "整笔不写（覆盖既有的一条证明等于把它换掉，而签名可能还挂在它上面）。"
-                        "确实要换这一份：另起一个证明号，或者先由人把旧的那一条与它的签名"
-                        "一并处置")
-                    return {"write": False, "result": out}
-                listed.append({"proof_no": no, "text": text,
-                               "created_at": str(entry.get("created_at") or S.now_iso())})
-                out["attached"].append(no)
-                #: 新挂上来的一份证明 = 刚交来的机械录入那一版 ⇒ 优化态显式 `false`
-                #: （不是缺格：缺格与 false 在第二阶段读起来是两件事，见
-                #: `evidencebits.OPTIMIZED_STATES`）。翻真只发生在它被换正文那一笔。
-                row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, no, False)
-                out.setdefault("optimized", []).append(
-                    {"proof_no": int(no), "optimized": False, "state": "fresh",
-                     "why": "这一份刚挂上来（机械录入那一版），还没洗过"})
+            _entries_read = self._append_proof_entries(row, out, entries, have)
+            if _entries_read["refused"]:
+                out["refused"] = str(_entries_read["refused"])
+                out["reason"] = str(_entries_read["reason"])
+                return {"write": False, "result": out}
+            listed = list(_entries_read["listed"])
             # ---- 第 4 位（形式化，二维）从 L 的 experiments 台账同步（D28 的写侧）。
             #
             # 位置在"挂证明"之后：证明清单变了，这一位在册的路径也就变了。这一笔只
@@ -2113,32 +2093,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 row[_VR.GRADE_RECOMPUTED_KEY] = dict(_recomputed["reading"])
                 out["grade_recomputed"] = dict(_recomputed.get("reading") or {})
             # ---- 已有 kind 留痕 ⇒ 用这一笔的凭据 + 现算等级刷新（裁量 ②） -----------
-            #
-            # 秘书那一支先写 `_kind_upgrade` 时还看不到 `_grade_recomputed`：它只能拿
-            # 交付里那份 bits 判等级（常常是 conjecture），措辞也是它自己那句
-            # 「手稿签块 / bits.reviewed」。B 这一笔在正文落定、等级重算之后看得到
-            # 现行签的可复算凭据（`out/vsigns/<sha>.json` + 台账行），于是把留痕
-            # 刷成与 apply 同的一句 —— 两条路读同一个 `_kind_upgrade.basis`。
-            # 只在"留痕的 to 就是现行 kind"时刷新：作者自己写下的 theorem 不动。
-            _trace_before = row.get("_kind_upgrade")
-            if (isinstance(_trace_before, Mapping)
-                    and str(_trace_before.get("to") or "") == str(row.get("kind") or "")):
-                _trace_probe = dict(row, kind=str(_trace_before.get("from") or "conjecture"))
-                try:
-                    _trace_read = _EB.kind_following_grade(
-                        _trace_probe, root=getattr(store, "root", None))
-                except Exception:  # noqa: BLE001 —— 刷新不了就保留原留痕（不编凭据）
-                    _trace_read = {}
-                _trace_new = dict(_trace_before)
-                _basis_now = str(_trace_read.get("basis") or "")
-                _grade_now = str((row.get("bits") or {}).get("grade") or "")
-                if _basis_now and _basis_now != str(_trace_before.get("basis") or ""):
-                    _trace_new["basis"] = _basis_now
-                if _grade_now and _grade_now != str(_trace_before.get("grade") or ""):
-                    _trace_new["grade"] = _grade_now
-                if _trace_new != dict(_trace_before):
-                    row["_kind_upgrade"] = _trace_new
-                    out["kind_trace_refreshed"] = True
+            self._refresh_kind_trace_from_sign(row, out, store=store)
             # ---- D-37：证据齐了就升 `kind`（判据只有一处，落点也收到这一处） ----------
             #
             # 位置：正文已落 `row`、第 2 / 3 位已按这一笔认到的签同步、等级已按现行签
@@ -2185,6 +2140,81 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if landed.get("written"):
             out["written"] = True
         return out
+
+    def _append_proof_entries(self, row: dict, out: dict, entries: list[dict],
+                             have: Mapping) -> dict:
+        """把这一笔新交来的 #pN 挂进 `proofs` 清单（同号不同正文 ⇒ 整笔不写）。
+
+        从 `_attach_proofs._transition` 里抽出来的那一段：清单从行上读一份新的，
+        逐条与 `have`（行上现有的号 ⇒ 正文）比 —— 号在册且正文逐字相同记
+        `already`；号在册而正文不同 ⇒ `proof_no_taken`（整笔不写）；否则追加并记
+        `attached` / `optimized`（新挂上来的一份是机械录入那一版 ⇒ 优化态显式
+        `false`，翻真只发生在它被换正文那一笔）。
+
+        返回 `{"refused": 码, "reason": 话, "listed": 新清单}`：`refused` 非空时
+        调用方原样写回 `out` 并整笔返回；挂上去的 `row["bits"]` 与
+        `out["attached"]` / `out["optimized"]` 就地写（与拆前同序，块内逐字相同）。
+        """
+        listed = [dict(p) if isinstance(p, Mapping) else p
+                  for p in (row.get(_VR.PROOFS_KEY) or [])]
+        for entry in entries:
+            no = int(entry["proof_no"])
+            text = str(entry["text"])
+            if no in have:
+                if str(have[no]).strip() == text.strip():
+                    out["already"].append(no)
+                    continue
+                return {
+                    "refused": "proof_no_taken",
+                    "reason": (
+                        f"#{no} 已经在这条命题的证明清单里，而这一笔交来的正文与它不同 ⇒ "
+                        "整笔不写（覆盖既有的一条证明等于把它换掉，而签名可能还挂在它上面）。"
+                        "确实要换这一份：另起一个证明号，或者先由人把旧的那一条与它的签名"
+                        "一并处置"),
+                    "listed": listed,
+                }
+            listed.append({"proof_no": no, "text": text,
+                           "created_at": str(entry.get("created_at") or S.now_iso())})
+            out["attached"].append(no)
+            #: 新挂上来的一份证明 = 刚交来的机械录入那一版 ⇒ 优化态显式 `false`
+            #: （不是缺格：缺格与 false 在第二阶段读起来是两件事，见
+            #: `evidencebits.OPTIMIZED_STATES`）。翻真只发生在它被换正文那一笔。
+            row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, no, False)
+            out.setdefault("optimized", []).append(
+                {"proof_no": int(no), "optimized": False, "state": "fresh",
+                 "why": "这一份刚挂上来（机械录入那一版），还没洗过"})
+        return {"refused": "", "reason": "", "listed": listed}
+
+    def _refresh_kind_trace_from_sign(self, row: dict, out: dict, *,
+                                      store: Any) -> None:
+        """已有 `_kind_upgrade` 留痕 ⇒ 用这一笔的凭据 + 现算等级刷新它（裁量 ②）。
+
+        秘书那一支先写 `_kind_upgrade` 时还看不到 `_grade_recomputed`：它只能拿交付
+        里那份 bits 判等级（常常是 conjecture），措辞也是它自己那句「手稿签块 /
+        bits.reviewed」。B 这一笔在正文落定、等级重算之后看得到现行签的可复算凭据
+        （`out/vsigns/<sha>.json` + 台账行），于是把留痕刷成与 apply 同的一句 ——
+        两条路读同一个 `_kind_upgrade.basis`。只在"留痕的 to 就是现行 kind"时刷新：
+        作者自己写下的 theorem 不动。
+        """
+        _trace_before = row.get("_kind_upgrade")
+        if (isinstance(_trace_before, Mapping)
+                and str(_trace_before.get("to") or "") == str(row.get("kind") or "")):
+            _trace_probe = dict(row, kind=str(_trace_before.get("from") or "conjecture"))
+            try:
+                _trace_read = _EB.kind_following_grade(
+                    _trace_probe, root=getattr(store, "root", None))
+            except Exception:  # noqa: BLE001 —— 刷新不了就保留原留痕（不编凭据）
+                _trace_read = {}
+            _trace_new = dict(_trace_before)
+            _basis_now = str(_trace_read.get("basis") or "")
+            _grade_now = str((row.get("bits") or {}).get("grade") or "")
+            if _basis_now and _basis_now != str(_trace_before.get("basis") or ""):
+                _trace_new["basis"] = _basis_now
+            if _grade_now and _grade_now != str(_trace_before.get("grade") or ""):
+                _trace_new["grade"] = _grade_now
+            if _trace_new != dict(_trace_before):
+                row["_kind_upgrade"] = _trace_new
+                out["kind_trace_refreshed"] = True
 
     def _kind_upgrade_from_evidence(self, row: dict[str, Any], *,
                                     root: Any = None,
@@ -6502,37 +6532,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "reason": (str(dict(sign_claim or {}).get("why") or "")
                                or "认签那一格没查成（没查成 ≠ 没签）⇒ 证据不降档")}}
             # ---- 按现行事实重建"证据面"（可升可降） ------------------------------
-            #
-            # 从行上原有的 bits 出发只为保住不是这一格写的东西（第 1/4 位、优化态、
-            # `proof_history` 之外的凭据口袋）；第 2/3 位按这一趟读到的事实重写。
-            bits = dict(row.get("bits") or {})
-            ev = dict(bits.get("evidence") or {})
-            ev["proof_process"] = body
-            ev["proof_source"] = str(ev.get("proof_source") or "own")
-            if signed:
-                fresh_ev = dict(dict(delivered or {}).get("evidence") or {})
-                for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
-                            "reviewed_by", "reviewed_source"):
-                    if key in fresh_ev:
-                        ev[key] = fresh_ev[key]
-                bits["reviewed"] = True
-            else:
-                bits["reviewed"] = False
-                for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
-                            "reviewed_by", "reviewed_source"):
-                    ev.pop(key, None)
-            bits["proof"] = True
-            bits["evidence"] = ev
-            try:
-                bits = _EB.normalize_raw(
-                    bits, origin=str(row.get("origin") or "own_result"),
-                    kind=str(row.get("kind") or ""))
-            except Exception as exc:  # noqa: BLE001 —— 算不出来就是没查成
+            _bits_read = self._evidence_bits_for_replay(
+                row, body=body, signed=signed, delivered=delivered)
+            if _bits_read["error"]:
                 return {"write": False, "result": {
                     "checked": False, "written": False,
                     "refused": "bits_compute_failed",
-                    "reason": (f"五元位算不出来（{type(exc).__name__}: {exc}）"
-                               "⇒ 证据重算没做成")}}
+                    "reason": str(_bits_read["error"])}}
+            bits = dict(_bits_read["bits"])
             new = dict(row)
             new["bits"] = bits
             # ---- 等级：有签 ⇒ 登记路同一个函数；无签 ⇒ 删掉旧回执 ----------------
@@ -6556,56 +6563,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 new.pop(_VR.GRADE_RECOMPUTED_KEY, None)
             new_bits = dict(new.get("bits") or {})
             # ---- kind：双向，只碰"本框架派生上去的"那一格 -------------------------
-            trace = dict(row.get("_kind_upgrade") or {})
-            derived = (bool(trace.get("to"))
-                       and str(trace.get("to")) == str(row.get("kind") or "")
-                       and str(trace.get("from") or "") in _EB.KIND_UPGRADABLE_FROM
-                       and not bool(trace.get("downgraded")))
-            probe_kind = (str(trace.get("from") or "") if derived
-                          else str(row.get("kind") or ""))
-            probe = dict(new, bits=new_bits, kind=probe_kind)
-            try:
-                # `allow_pending=False`：与 `_attach_proofs` 同一口径 —— B 这一支写的是
-                # 这一条命题，升档依据必须是它自己的台账那一签（pending 只够过准入闸）。
-                kind_read = _EB.kind_following_grade(
-                    probe, root=getattr(self.store, "root", None),
-                    allow_pending=False)
-            except Exception as exc:  # noqa: BLE001 —— 判不了就不动（不折成"不够格"）
-                kind_read = {"checked": False, "state": "unreadable",
-                             "why": f"{type(exc).__name__}: {exc}"}
-            kind_upgraded: dict = {}
-            kind_downgraded: dict = {}
-            if str(kind_read.get("state") or "") == "upgraded":
-                target = str(kind_read.get("kind") or "")
-                before = str(row.get("kind") or "")
-                if target in _EB.KIND_UPGRADE_TARGETS and target != before:
-                    new["kind"] = target
-                    new["_kind_upgrade"] = {
-                        "from": before, "to": target,
-                        "basis": str(kind_read.get("basis") or ""),
-                        "grade": str(kind_read.get("grade") or ""),
-                        "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
-                        "at": S.now_iso(),
-                    }
-                    kind_upgraded = dict(new["_kind_upgrade"])
-            elif (derived and bool(kind_read.get("checked"))
-                    and str(kind_read.get("state") or "") == "held"):
-                restore = str(trace.get("from") or "")
-                if restore and str(new.get("kind") or "") != restore:
-                    new["kind"] = restore
-                    new["_kind_upgrade"] = {
-                        **trace,
-                        "from": str(row.get("kind") or ""), "to": restore,
-                        "downgraded": True,
-                        "basis": ("证据不再支持定理级："
-                                  + str(kind_read.get("shortfall")
-                                        or kind_read.get("why")
-                                        or "现行签不覆盖这一份正文")),
-                        "grade": str(new_bits.get("grade") or ""),
-                        "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
-                        "at": S.now_iso(),
-                    }
-                    kind_downgraded = dict(new["_kind_upgrade"])
+            new, kind_upgraded, kind_downgraded = self._kind_after_evidence_replay(
+                row, new)
             changed = sorted(k for k in (set(row) | set(new))
                              if row.get(k) != new.get(k))
             reading = {
@@ -6648,6 +6607,108 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         result["written"] = bool(landed.get("written"))
         return result
 
+    def _evidence_bits_for_replay(self, row: Mapping, *, body: str, signed: bool,
+                                  delivered: Mapping | None) -> dict:
+        """按现行事实重建证据面：第 2 位 = 有正文、第 3 位 = 这一趟认到的签。
+
+        从行上原有的 bits 出发只为保住不是这一格写的东西（第 1/4 位、优化态、
+        `proof_history` 之外的凭据口袋）；第 2/3 位按这一趟读到的事实重写，再由
+        `evidencebits.normalize_raw` 现算（唯一的等级现算口）。返回
+        `{"bits": ..., "error": ""}`；算不出来时 `error` 是给调用方的原话（调用方
+        按 `bits_compute_failed` 受控拒，绝不折成"没有证据"）。
+        """
+        bits = dict(row.get("bits") or {})
+        ev = dict(bits.get("evidence") or {})
+        ev["proof_process"] = body
+        ev["proof_source"] = str(ev.get("proof_source") or "own")
+        if signed:
+            fresh_ev = dict(dict(delivered or {}).get("evidence") or {})
+            for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
+                        "reviewed_by", "reviewed_source"):
+                if key in fresh_ev:
+                    ev[key] = fresh_ev[key]
+            bits["reviewed"] = True
+        else:
+            bits["reviewed"] = False
+            for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
+                        "reviewed_by", "reviewed_source"):
+                ev.pop(key, None)
+        bits["proof"] = True
+        bits["evidence"] = ev
+        try:
+            bits = _EB.normalize_raw(
+                bits, origin=str(row.get("origin") or "own_result"),
+                kind=str(row.get("kind") or ""))
+        except Exception as exc:  # noqa: BLE001 —— 算不出来就是没查成
+            return {"bits": {}, "error": (f"五元位算不出来（{type(exc).__name__}: {exc}）"
+                                          "⇒ 证据重算没做成")}
+        return {"bits": bits, "error": ""}
+
+    def _kind_after_evidence_replay(self, row: Mapping, new: dict
+                                    ) -> tuple[dict, dict, dict]:
+        """按现行证据面双向落回 `kind`（只碰本框架派生上去的那一格）。
+
+        升档那支与 `_attach_proofs` 同一个判据（`evidencebits.kind_following_grade`，
+        `allow_pending=False`：这一支写的是这一条命题，升档依据必须是它自己的台账
+        那一签）；降档那支只在"留痕的 to 就是现行 kind、且现算判 held"时把
+        `kind` 落回 `trace["from"]`。判不了 / 读不出来 ⇒ 不动（不折成"不够格"）。
+
+        返回 `(new, kind_upgraded, kind_downgraded)`：`new` 就地改 `kind` 与
+        `_kind_upgrade`（与拆前同序），两个回执只在真的升 / 降那一档才非空。
+        """
+        new_bits = dict(new.get("bits") or {})
+        trace = dict(row.get("_kind_upgrade") or {})
+        derived = (bool(trace.get("to"))
+                   and str(trace.get("to")) == str(row.get("kind") or "")
+                   and str(trace.get("from") or "") in _EB.KIND_UPGRADABLE_FROM
+                   and not bool(trace.get("downgraded")))
+        probe_kind = (str(trace.get("from") or "") if derived
+                      else str(row.get("kind") or ""))
+        probe = dict(new, bits=new_bits, kind=probe_kind)
+        try:
+            # `allow_pending=False`：与 `_attach_proofs` 同一口径 —— B 这一支写的是
+            # 这一条命题，升档依据必须是它自己的台账那一签（pending 只够过准入闸）。
+            kind_read = _EB.kind_following_grade(
+                probe, root=getattr(self.store, "root", None),
+                allow_pending=False)
+        except Exception as exc:  # noqa: BLE001 —— 判不了就不动（不折成"不够格"）
+            kind_read = {"checked": False, "state": "unreadable",
+                         "why": f"{type(exc).__name__}: {exc}"}
+        kind_upgraded: dict = {}
+        kind_downgraded: dict = {}
+        if str(kind_read.get("state") or "") == "upgraded":
+            target = str(kind_read.get("kind") or "")
+            before = str(row.get("kind") or "")
+            if target in _EB.KIND_UPGRADE_TARGETS and target != before:
+                new["kind"] = target
+                new["_kind_upgrade"] = {
+                    "from": before, "to": target,
+                    "basis": str(kind_read.get("basis") or ""),
+                    "grade": str(kind_read.get("grade") or ""),
+                    "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
+                    "at": S.now_iso(),
+                }
+                kind_upgraded = dict(new["_kind_upgrade"])
+        elif (derived and bool(kind_read.get("checked"))
+                and str(kind_read.get("state") or "") == "held"):
+            restore = str(trace.get("from") or "")
+            if restore and str(new.get("kind") or "") != restore:
+                new["kind"] = restore
+                new["_kind_upgrade"] = {
+                    **trace,
+                    "from": str(row.get("kind") or ""), "to": restore,
+                    "downgraded": True,
+                    "basis": ("证据不再支持定理级："
+                              + str(kind_read.get("shortfall")
+                                    or kind_read.get("why")
+                                    or "现行签不覆盖这一份正文")),
+                    "grade": str(new_bits.get("grade") or ""),
+                    "by": str(getattr(self, "actor", "agent-B") or "agent-B"),
+                    "at": S.now_iso(),
+                }
+                kind_downgraded = dict(new["_kind_upgrade"])
+        return new, kind_upgraded, kind_downgraded
+
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
                       want_no: int, target: str, path: str) -> dict:
@@ -6660,8 +6721,6 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         于是写口把正文并到调用方没点名的行上 —— 这正是 T1 要修的缺陷。
         判定只在 `mode=register`（决定"这是不是新命题"）那一趟跑，且只跑一次。
         """
-        from .. import manuscriptintake as _MI
-
         cells = dict(out.get("cells") or {})
         # fail-closed：任何一格 refused ⇒ 整笔不写（preview 式返回，理由原样）。
         if not plan.get("ok"):
@@ -6703,42 +6762,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         # ---- 2) numeric_evidence（只 e-num；凭据仍从 experiments 那一行读）
         if str((cells.get("numeric_evidence") or {}).get("outcome") or "") == "filled":
-            value = dict(cells["numeric_evidence"].get("value") or {})
-            eid = str(value.get("experiment_id") or "")
-            try:
-                experiments = [dict(x) for x in self.store.rows("experiments")]
-            except Exception as exc:  # noqa: BLE001 —— 读不到不许当成"没有实验"
-                return _cell_refused(
-                    "numeric_evidence", "experiment_ledger_unreadable",
-                    f"`experiments` 读不出来（{type(exc).__name__}: {exc}）⇒ 凭据核不了")
-            exp = next((x for x in experiments
-                        if str(x.get("experiment_id") or "") == eid), None)
-            if exp is None:
-                return _cell_refused(
-                    "numeric_evidence", "numeric_experiment_missing",
-                    f"稿头的实验号 exp:{eid or '?'} 在 `experiments` 里找不到 ⇒ "
-                    "普通数值档的凭据必须指到一条真的实验行")
-            green = {
-                "path": path, "experiment_id": eid,
-                "code_path": str(exp.get("code_path") or ""),
-                "method": str(value.get("method") or exp.get("method") or ""),
-                "result": str(value.get("result") or exp.get("result") or ""),
-                "observations": dict(exp.get("observations") or {}),
-                "params": dict(exp.get("params") or {}),
-                "counterexample": exp.get("counterexample"),
-                "experiment_row": exp,
-            }
-            numeric = self._update_numeric_evidence(row=row, green=green, same={})
-            if not numeric.get("ok"):
-                return _cell_refused(
-                    "numeric_evidence",
-                    str(numeric.get("kind") or "numeric_evidence_write_failed"),
-                    str(numeric.get("error") or numeric.get("reason") or ""))
-            wrote = bool((numeric.get("updated_statement") or {}).get("written"))
-            if wrote:
+            got = self._ingest_apply_numeric_evidence(cells, row, path=path)
+            if got["code"]:
+                return _cell_refused("numeric_evidence", got["code"], got["why"])
+            if got["written"]:
                 statements_written = True
                 written_cells.append("numeric_evidence")
-            cells["numeric_evidence"] = {**cells["numeric_evidence"], "written": wrote}
 
         # ---- 3) kind（只升不降；升要签 —— 判据仍是 `_apply_declared_manuscript_kind`）
         if str((cells.get("kind") or {}).get("outcome") or "") == "filled":
@@ -6762,60 +6791,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         # ---- 4) dependencies（集合语义：追加 + 去重；永不删）
         if str((cells.get("dependencies") or {}).get("outcome") or "") == "filled":
-            from .. import depsection as _DS
-
-            one = dict(cells["dependencies"])
-            rows = [dict(x) for x in (one.get("value") or [])]
-            refs = [str(x) for x in (one.get("refs") or [])]
-            stmt_rows, problem, error = SL.rows_of(self.store)
-            if problem:
-                return _cell_refused(
-                    "dependencies", "ledger_unreadable",
-                    f"`statements` 读不出来（{error.get('type') or '?'}: "
-                    f"{error.get('message') or problem}）⇒ 判不了这些依赖能不能引")
-            gate = _DS.gate_rows(rows, stmt_rows)
-            if not gate.get("ok"):
-                return _cell_refused("dependencies",
-                                     str(gate.get("refused") or _DS.REFUSED_LEVEL_TOO_LOW),
-                                     str(gate.get("reason") or ""))
-            index = SL.index_by_id(stmt_rows)
-            pool = _DS.citable_pool(stmt_rows)
-            for ref in refs:
-                if ref in pool:
-                    continue
-                got = _DS.uncitable_statement_finding(
-                    ref, list(index.values()), where="证明正文")
-                return _cell_refused(
-                    "dependencies",
-                    str((got or {}).get("kind") or _DS.REFUSED_UNKNOWN_SOURCE),
-                    str((got or {}).get("detail")
-                        or f"证明正文引了 stmt:{ref}，而它不在可引池里"))
-            if not rows and refs:
-                return _cell_refused(
-                    "dependencies", _DS.REFUSED_TABLE_DISAGREES,
-                    ("`## 依赖` 表是空的，而证明正文引了 "
-                     + "、".join(f"stmt:{x}" for x in refs)
-                     + " ⇒ 表与正文说的不是同一件事"))
-            kinds = {str(x.get("stmt_id") or ""): _DS.dep_kind_of(str(x.get("kind") or ""))
-                     for x in stmt_rows}
-            groups = _DS.deps_groups(rows, kinds)
-            written = dict(sec.record_manuscript_dependency_face(
-                target, groups, proof_no=want_no,
-                note=f"own.ingest_manuscript:dependencies:{target}") or {})
-            if not written.get("checked"):
-                return _cell_refused(
-                    "dependencies",
-                    str(written.get("refused") or "dependency_face_not_written"),
-                    str(written.get("reason") or ""))
-            if int(written.get("deps_written") or 0):
+            got = self._ingest_apply_dependencies(cells, sec, target=target,
+                                                  want_no=want_no)
+            if got["code"]:
+                return _cell_refused("dependencies", got["code"], got["why"])
+            if got["written"]:
                 deps_written = True
                 written_cells.append("dependencies")
-            cells["dependencies"] = {
-                **one, "written": bool(int(written.get("deps_written") or 0)),
-                "rows_written": int(written.get("deps_written") or 0),
-                "duplicates": len(written.get("duplicates") or []),
-                "path_groups": int(written.get("path_groups") or 0),
-            }
 
         # ---- 5) statement_full：在册行只读（plan 不会给 filled；这里兜底并说清）
         if str((cells.get("statement_full") or {}).get("outcome") or "") == "filled":
@@ -6887,6 +6869,108 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                 "record_manuscript_dependency_face"}
         out["reason"] = str(out.get("reason") or "逐格回填完成")
         return out
+
+    def _ingest_apply_numeric_evidence(self, cells: dict, row: Mapping, *,
+                                       path: str) -> dict:
+        """`mode=apply` 的 numeric_evidence 那一格：凭据从 experiments 台账读。
+
+        只 e-num 适用；稿头的实验号指不到一条真的实验行 ⇒ 受控拒（普通数值档的
+        凭据必须落在一行真实验上）。回填读数就地写进 `cells["numeric_evidence"]`。
+
+        返回 `{"written": bool, "code": 码, "why": 话}`：`code` 非空 ⇒ 调用方按
+        `_cell_refused` 整笔不写（理由原样）；`written` 为真才把这一格算进
+        `write.statements`。
+        """
+        value = dict(cells["numeric_evidence"].get("value") or {})
+        eid = str(value.get("experiment_id") or "")
+        try:
+            experiments = [dict(x) for x in self.store.rows("experiments")]
+        except Exception as exc:  # noqa: BLE001 —— 读不到不许当成"没有实验"
+            return {"written": False, "code": "experiment_ledger_unreadable",
+                    "why": f"`experiments` 读不出来（{type(exc).__name__}: {exc}）⇒ 凭据核不了"}
+        exp = next((x for x in experiments
+                    if str(x.get("experiment_id") or "") == eid), None)
+        if exp is None:
+            return {"written": False, "code": "numeric_experiment_missing",
+                    "why": (f"稿头的实验号 exp:{eid or '?'} 在 `experiments` 里找不到 ⇒ "
+                            "普通数值档的凭据必须指到一条真的实验行")}
+        green = {
+            "path": path, "experiment_id": eid,
+            "code_path": str(exp.get("code_path") or ""),
+            "method": str(value.get("method") or exp.get("method") or ""),
+            "result": str(value.get("result") or exp.get("result") or ""),
+            "observations": dict(exp.get("observations") or {}),
+            "params": dict(exp.get("params") or {}),
+            "counterexample": exp.get("counterexample"),
+            "experiment_row": exp,
+        }
+        numeric = self._update_numeric_evidence(row=row, green=green, same={})
+        if not numeric.get("ok"):
+            return {"written": False,
+                    "code": str(numeric.get("kind") or "numeric_evidence_write_failed"),
+                    "why": str(numeric.get("error") or numeric.get("reason") or "")}
+        wrote = bool((numeric.get("updated_statement") or {}).get("written"))
+        cells["numeric_evidence"] = {**cells["numeric_evidence"], "written": wrote}
+        return {"written": wrote, "code": "", "why": ""}
+
+    def _ingest_apply_dependencies(self, cells: dict, sec: Any, *,
+                                   target: str, want_no: int) -> dict:
+        """`mode=apply` 的 dependencies 那一格：集合语义（追加 + 去重；永不删）。
+
+        先把稿里的依赖表过 `depsection` 的闸（等级够不够、能不能引、表与正文是否
+        说同一件事），再交给秘书的 `record_manuscript_dependency_face` 落表。
+        回填写读进 `cells["dependencies"]`；返回 `{"written": bool, "code": 码,
+        "why": 话}`（`code` 非空 ⇒ 调用方按 `_cell_refused` 整笔不写，理由原样）。
+        """
+        from .. import depsection as _DS
+
+        one = dict(cells["dependencies"])
+        rows = [dict(x) for x in (one.get("value") or [])]
+        refs = [str(x) for x in (one.get("refs") or [])]
+        stmt_rows, problem, error = SL.rows_of(self.store)
+        if problem:
+            return {"written": False, "code": "ledger_unreadable",
+                    "why": (f"`statements` 读不出来（{error.get('type') or '?'}: "
+                            f"{error.get('message') or problem}）⇒ 判不了这些依赖能不能引")}
+        gate = _DS.gate_rows(rows, stmt_rows)
+        if not gate.get("ok"):
+            return {"written": False,
+                    "code": str(gate.get("refused") or _DS.REFUSED_LEVEL_TOO_LOW),
+                    "why": str(gate.get("reason") or "")}
+        index = SL.index_by_id(stmt_rows)
+        pool = _DS.citable_pool(stmt_rows)
+        for ref in refs:
+            if ref in pool:
+                continue
+            got = _DS.uncitable_statement_finding(
+                ref, list(index.values()), where="证明正文")
+            return {"written": False,
+                    "code": str((got or {}).get("kind") or _DS.REFUSED_UNKNOWN_SOURCE),
+                    "why": str((got or {}).get("detail")
+                               or f"证明正文引了 stmt:{ref}，而它不在可引池里")}
+        if not rows and refs:
+            return {"written": False, "code": _DS.REFUSED_TABLE_DISAGREES,
+                    "why": ("`## 依赖` 表是空的，而证明正文引了 "
+                            + "、".join(f"stmt:{x}" for x in refs)
+                            + " ⇒ 表与正文说的不是同一件事")}
+        kinds = {str(x.get("stmt_id") or ""): _DS.dep_kind_of(str(x.get("kind") or ""))
+                 for x in stmt_rows}
+        groups = _DS.deps_groups(rows, kinds)
+        written = dict(sec.record_manuscript_dependency_face(
+            target, groups, proof_no=want_no,
+            note=f"own.ingest_manuscript:dependencies:{target}") or {})
+        if not written.get("checked"):
+            return {"written": False,
+                    "code": str(written.get("refused") or "dependency_face_not_written"),
+                    "why": str(written.get("reason") or "")}
+        deps_written = bool(int(written.get("deps_written") or 0))
+        cells["dependencies"] = {
+            **one, "written": deps_written,
+            "rows_written": int(written.get("deps_written") or 0),
+            "duplicates": len(written.get("duplicates") or []),
+            "path_groups": int(written.get("path_groups") or 0),
+        }
+        return {"written": deps_written, "code": "", "why": ""}
 
     def _preview_b_manuscript(self, *, statement_id: str, statement_full: str,
                               proof_text: str, label: str = "",

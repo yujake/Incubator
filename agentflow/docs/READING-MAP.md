@@ -4,10 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、272,930 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
+> **282 个 `.py`、273,014 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 体量：不抬基线，改拆函数**：272,930 → **273,014**（净 +84：`agent_b/register_statement.py`
+> 把三条越过 200 行的函数各按内部自然分段拆开 —— `_ingest_apply` 239 → 160（numeric_evidence /
+> dependencies 两格各搬成一个方法）、`_ingest_apply_evidence` 229 → 158（按现行事实重建证据面 /
+> 按现行证据面双向落回 kind 各搬成一个方法）、`_attach_proofs._transition` 209 → 164（挂新证明清单 /
+> 刷新已有 kind 留痕各搬成一个方法）；六个新函数 30–64 行，行为逐字不变。文件数 282、
+> `>800 行` 的 75、`agent_loop.py` 14,189 都不变；`src_functions_gt200_lines` 仍 95。
 > **2026-11-10 T1 kind 升档凭据收口**：272,859 → **272,930**（净 +71：`evidencebits.kind_following_grade`
 > 加 `allow_pending`（B 的登记 / 收录路传 False：升档只认这一条命题自己的台账那一签；
 > "命题还没在册时审的那一签"只够过准入闸）；`verifications.proof_review_gap` 多一格
