@@ -2152,9 +2152,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # `kind` 是证据的派生格，不是调用方请求的格：apply 没请求它，也必须在
             # 写完正文之后按证据追上。判据只有一处（`evidencebits.kind_following_grade`，
             # 秘书那一支 / V 落签那一支 / 读侧共用同一个）；本格只负责"改了哪两格"。
+            #
+            # `allow_pending=False`（2026-11-10 业主裁量）：这一支写的是这一条命题，
+            # 升档依据必须是它自己的台账那一签或第 4 位 verified。"命题还没在册时审的
+            # 那一签"只够过准入闸 —— 拿它升档，新建的 conjecture 行会在同一笔里变成
+            # theorem，而这一行连自己的台账行都还没有，留痕也指不出"这条命题的哪一签"。
             if _body_present:
                 kind_upgrade = self._kind_upgrade_from_evidence(
-                    row, root=getattr(store, "root", None))
+                    row, root=getattr(store, "root", None), allow_pending=False)
                 if kind_upgrade:
                     out["kind_upgraded"] = dict(kind_upgrade)
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
@@ -2182,7 +2187,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return out
 
     def _kind_upgrade_from_evidence(self, row: dict[str, Any], *,
-                                    root: Any = None) -> dict:
+                                    root: Any = None,
+                                    allow_pending: bool = True) -> dict:
         """证据够不够把 `kind` 升上去 —— 判据在 `evidencebits.kind_following_grade`。
 
         ## 为什么是一个方法（而不是在调用点各写一遍）
@@ -2193,6 +2199,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         的 `mode=apply`（收录一份已签正文）走不到它。抽成这一格之后，B 的两条收录路
         （register / apply）都是"正文落定 → 证据重算 → 调这里"，判据与写法各一份。
 
+        ## `allow_pending=False`（2026-11-10 业主裁量：B 这一支只认本条台账那一签）
+
+        B 的登记 / 收录路写的是这一条命题；它还没在册时 V 审的那一签
+        （`verifications/pending/<正文 sha>.jsonl`）只够过准入闸。把它当升档依据，
+        新建的 conjecture 行会在同一笔登记写里变成 theorem —— 而这一行连自己的
+        台账行（`verifications/<命题号>.jsonl`）都还没有，读的人顺着留痕回不到
+        "这条命题的哪一签"。所以这一支传 False：升档只认这条命题自己的台账那一签
+        （或第 4 位 verified）。读侧 / 秘书那一支保留默认 True（D-34 的认领面不动）。
+
         ## 边界
 
         只写内存：判据 `kind_following_grade` 是纯读（会读 `verifications/` 台账），
@@ -2201,7 +2216,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         起点只认 `conjecture`（判据函数管），目标只取 `theorem` / `lemma`；不满足就
         返回空字典 —— "没判成"与"判成不用升"都不许折成"已经升了"。
         """
-        read = _EB.kind_following_grade(row, root=root)
+        read = _EB.kind_following_grade(row, root=root, allow_pending=allow_pending)
         if str(read.get("state") or "") != "upgraded":
             return {}
         before = str(row.get("kind") or "")
@@ -6550,8 +6565,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                           else str(row.get("kind") or ""))
             probe = dict(new, bits=new_bits, kind=probe_kind)
             try:
+                # `allow_pending=False`：与 `_attach_proofs` 同一口径 —— B 这一支写的是
+                # 这一条命题，升档依据必须是它自己的台账那一签（pending 只够过准入闸）。
                 kind_read = _EB.kind_following_grade(
-                    probe, root=getattr(self.store, "root", None))
+                    probe, root=getattr(self.store, "root", None),
+                    allow_pending=False)
             except Exception as exc:  # noqa: BLE001 —— 判不了就不动（不折成"不够格"）
                 kind_read = {"checked": False, "state": "unreadable",
                              "why": f"{type(exc).__name__}: {exc}"}

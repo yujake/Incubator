@@ -14,7 +14,7 @@ experiments 000001: method="formal", evidence_kind="proof"（Lean 4.7.0 + Mathli
 而行上的 `kind` 仍写着"猜想"。等级与名字分家：读的人（G 写稿 / H 审校 / 收工门）
 读的是 `kind` 那一格。
 
-## 判据（六条：五条主判据 + ③ 的反真空；每条都写明"改前红在哪"）
+## 判据（七条：六条主判据 + ③ 的反真空；每条都写明"改前红在哪"）
 
 | # | 判据 | 改前红在哪 |
 |---|---|---|
@@ -24,6 +24,7 @@ experiments 000001: method="formal", evidence_kind="proof"（Lean 4.7.0 + Mathli
 | ③b | 反真空：L 的台账写着"检查器没通过" ⇒ ③ 那一格不许升（名字停在 `conjecture`） | 没有 ③，这条无从谈起；它挡的是"反正都会升"那种假绿 |
 | ④ | 反真空：把 ② 那一签从台账里删掉 ⇒ ② 必红（读侧 `kind` 回到 `conjecture`） | 没有 ②，这条无从谈起（改前 ② 本身红） |
 | ⑤ | 历史不追溯：证据齐全而 `kind` 仍写"猜想"的老行，读一次不会被静默改写（读侧不变量） | 没有读侧口径；`kind` 只由写侧的动作改 |
+| ⑥ | 升档凭据必须指得出"这条命题的哪一签"：只有"命题还没在册时审的那一签"（pending）⇒ B 登记新行时 `kind` 仍是 `conjecture`；本条台账的签（正控）照样升 | 改前 `_attach_proofs` 统一调 `kind_following_grade`，pending 被默认认领 ⇒ 新行在同一笔里变成 `theorem` |
 
 ## D-69（2026-10-24，业主）：抬档的时刻提前到"V 那一签落盘时"
 
@@ -89,9 +90,12 @@ from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
+from agentflow.secretary import Secretary  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
-from conftest import seed_statement_row  # noqa: E402
+from _same_statement_stub import SameStatementStub  # noqa: E402
+from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
+from conftest import seed_statement_row, sign_before_registration  # noqa: E402
 
 #: 一条干净的自产命题（cube 那条的形体：立方和闭式）。
 FULL = "对任意整数 n≥0：1^3 + 2^3 + … + n^3 = (n(n+1)/2)^2。"
@@ -510,3 +514,73 @@ def test_criterion5_a_historical_row_is_read_but_never_rewritten(store: Store) -
     VR.verification_ledger_path(store.root, sid).write_text("", encoding="utf-8")
     gone = EB.kind_following_grade(_row(store, sid), root=store.root)
     assert gone["state"] == "held" and gone["kind"] == "conjecture", gone
+
+
+# --------------------------------------------------- ⑥ pending 签不够升新行的 kind
+
+def _b_with_a_secretary(store: Store) -> AgentB:
+    """按生产同形接一名秘书（离线替身只答"挑词 + 判 different"）。
+
+    为什么这一条需要它：登记一条新命题时 `_resolve_same_statement` 先问一次
+    "是不是在册的同一条"；没接秘书时那一问 fail-closed，会把判据顶掉（与
+    `test_b1_b2_b4_rulings._b` 同一个缝）。检索面与生产一致，只把判定缝换成替身。
+    """
+    return AgentB(store, extractor=None, extract_text=None, config={},
+                  secretary=Secretary("B", root=store.root, store=store,
+                                      seam=SameStatementStub(), enable_model=True))
+
+
+def test_criterion6_a_pending_sign_alone_does_not_lift_a_new_row(
+        store: Store) -> None:
+    """⑥（2026-11-10 业主裁量）：命题还没在册时审的那一签 ⇒ B 登记新行时 kind 仍是猜。
+
+    改前红（`ea6132d3` 现场）：`_attach_proofs` 在等级重算之后对"这一行有正文"统一调
+    `kind_following_grade`，而它默认认 D-34 的 pending 签 ⇒ 新建的 conjecture 行在
+    同一次登记写里变成 `theorem`，`_kind_upgrade.basis` 指向
+    `verifications/pending/<正文 sha>.jsonl#u-…` —— 这一行连自己的台账
+    （`verifications/<命题号>.jsonl`）都还没有。升档的凭据必须指得出"这条命题的
+    哪一签"，否则那不是派生、是猜。
+
+    两边都要钉：
+    - 准入闸照常放行（pending 那一签是"先签后登记"的正路凭据：`ok=True`、
+      第 3 位 `reviewed=True`、`_grade_recomputed` 按它算到 `pre_theorem`）；
+    - `kind` 停在 `conjecture`、没有 `_kind_upgrade`；读侧 `allow_pending=False` 是
+      `held`（查过了、不够，不是 `unreadable`）。
+    正控（参数不是"永远不升"的开关）：同一份正文签在这一条命题自己的台账里 ⇒
+    `allow_pending=False` 也照样 `upgraded` 到 `theorem`；且默认参数下 pending 那一签
+    仍算"签过"（D-34 的认领面一个字没动）。
+    """
+    # ---- 现场一：只有 pending 签（命题还没在册时审的）⇒ 新行仍是 conjecture ----
+    sign_before_registration(store.root, proof_text=PROOF)
+    manuscript = write_proof_manuscript(store.root, "000000", PROOF,
+                                        statement_full=FULL)
+    filed = _b_with_a_secretary(store).register_statement(
+        statement_full=FULL, statement_text=LABEL, label=LABEL,
+        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+        line_range={"start": 1}, quote_verified=False,
+        quote_reason="own_result：我方推导，没有第二份文本可比对",
+        proof_text=PROOF, proof_manuscript=manuscript)
+    assert filed.get("ok") is True, filed                    # 准入闸照常放行
+    row = _row(store, "000000")
+    assert row["kind"] == "conjecture", row                   # 改前红：这里读成 theorem
+    assert "_kind_upgrade" not in row, row
+    assert bool(dict(row.get("bits") or {}).get("reviewed")) is True, row
+    assert dict(row.get(VR.GRADE_RECOMPUTED_KEY) or {}).get("to") == "pre_theorem", row
+    held = EB.kind_following_grade(row, root=store.root, allow_pending=False)
+    assert held["state"] == "held" and held["kind"] == "conjecture", held
+    assert held["checked"] is True, held                     # 查过了、不够 ≠ 没查成
+    assert "不够升 kind" in str(held["shortfall"]), held
+    # D-34 的认领面没被拆掉：默认参数下那一签仍算"签过"（读侧口径不变）。
+    default = EB.kind_following_grade(row, root=store.root)
+    assert default["state"] == "upgraded" and default["kind"] == "theorem", default
+
+    # ---- 现场二（正控）：同一份正文签在这一条命题自己的台账里 ⇒ 照样升 ----
+    filed2 = _file(store)                                    # 新号 000001，历史形态
+    sid2 = str(filed2["stmt_id"])
+    assert _sign(store, sid2).get("verdict") == "成立"
+    probe = dict(_row(store, sid2))
+    probe["kind"] = "conjecture"                             # 按"名字还没跟上"的形态读
+    probe.pop("_kind_upgrade", None)
+    here = EB.kind_following_grade(probe, root=store.root, allow_pending=False)
+    assert here["state"] == "upgraded" and here["kind"] == "theorem", here
+    assert f"verifications/{sid2}.jsonl#v-" in str(here["basis"]), here

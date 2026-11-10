@@ -4,10 +4,17 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、272,859 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
+> **282 个 `.py`、272,930 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-10 T1 kind 升档凭据收口**：272,859 → **272,930**（净 +71：`evidencebits.kind_following_grade`
+> 加 `allow_pending`（B 的登记 / 收录路传 False：升档只认这一条命题自己的台账那一签；
+> "命题还没在册时审的那一签"只够过准入闸）；`verifications.proof_review_gap` 多一格
+> `pending` 的来路读数；`verifications.sign_statement` 把签发侧文件挪到判 kind 之前
+> （签名那一笔的 `_kind_upgrade.basis` 才能点名 witness，与 B 那一支同一句）；
+> 配套新判据 `test_d37_kind_follows_grade::test_criterion6_a_pending_sign_alone_does_not_lift_a_new_row`。
+> 文件数 282、`>800 行` 的 75、`agent_loop.py` 14,189 都不变）。
 > **2026-11-10 T1 拆包补课**：272,414 → **272,442**（净 +28：T1 把 `land_manuscript` /
 > `ingest_manuscript` 两个动作写进了 `agent_b/register_statement.py`，违反 M6/M7 的
 > 「一个动作一个文件」—— 本批把两个动作各自搬回 `agent_b/land_manuscript.py`（102 行）与

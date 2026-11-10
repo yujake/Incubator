@@ -3991,6 +3991,41 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                         f"sha {signed_sha[:12] or '（空）'}… 不符 ⇒ 第 3 位不翻"
                         "（签的不是现在这一份正文）；签照旧颁发，等正文换过来之后按 sha 认领")
             out["body_gate"] = body_gate
+            # ---- 业主 2026-11-01：签落成一份按正文 sha 命名的侧文件 -------------------
+            #
+            # 位置（2026-11-10 调整）：「翻位判据 → 签发侧文件 → 按签判 kind / 重算等级
+            # → upsert」，全在同一个事务里。改前这一步在 upsert 之后、判 kind 之后；
+            # 于是 `_kind_upgrade_from_signature` 写留痕时签文件还不存在，那一句
+            # `basis` 缺 witness（只有台账行）。之后 B 任何一次写都会把它"刷新"成
+            # 另一句 ⇒ "再交一次不改盘"的幂等被打破（D-37 criterion2 的现场）。
+            # 先落签文件之后，签名那一笔的 basis 与 B 那一支逐字同源（裁量 ②），
+            # 刷新的判据自然变成空操作。三条不变的理由照旧：
+            # ① 位与签同生共死：`<sha>.json` 写不成 ⇒ 抛出去让整个事务回滚（连同台账那
+            #    一行一起撤回）——"签没落地"与"签落了但没档"是两件事，前者要能重试；
+            # ② 归档（`issued.json`）失败「不许」回滚：签文件已经写在盘上，
+            #    删掉刚写好的签文件是抹掉发生过的事（`vsigns` 的模块 docstring 那一节）；
+            # ③ 内容全部从台账现读（`_vsign_payload`），不复制全文、不吃调用方状态。
+            sign_out = _vsigns_write_after_flip(
+                store, row=dict(row), ledger=ledger, statement_id=sid, proof_no=no,
+                sha=str(row.get("proof_sha256") or ""), holds=holds,
+                append_ledger=bool(append_ledger), by=str(by or ""),
+                # 2026-11-04（甲）：载体随台账行来（`record_verification(manuscript=…)`）。
+                manuscript=str(row.get("manuscript") or ""))
+            out["vsign"] = dict(sign_out)
+            if not (sign_out.get("written") or sign_out.get("idempotent")):
+                if sign_out.get("refused_below_need"):
+                    # 两道守卫不一致（`signs_bit3` 说够、`write_sign` 说不够）：位照它自己的
+                    # 判据翻，「不写签」，并把这件事留在 `vsign.reason` 里。
+                    #
+                    # 为什么这一档不许把整笔弄失败：`signs_bit3` 是第 3 位的「唯一」硬闸
+                    # （`tests/test_v_sign_gate_streak.py::z1` 用"把 `streak_ok` 打成恒真"
+                    # 做反真空负控）。若这里改成抛异常回滚，那道闸就再也量不出来了 ——
+                    # 一条"签没写"的读数是可见的，而一条"闸拆了也看不出来"的判据是不可修的。
+                    out["vsign"]["reason"] = str(sign_out.get("reason") or "")
+                else:
+                    # 签文件没落地（写不成 / 冲突）⇒ 整笔失败（位不许在"没有任何档"的情况下翻上去）。
+                    raise VerificationError(
+                        "签文件没写成：" + str(sign_out.get("reason") or "没有理由"))
             if body_gate == "matched":
                 new = _reviewed_statement_row(found, row, proof_text=proof_text, proof_no=no,
                                               streak=holds)
@@ -4021,35 +4056,6 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                            kind_upgrade=dict(upgraded["kind_upgrade"]),
                            upgrade_note=str(upgraded["note"]),
                            grade_recomputed=dict(recomputed["reading"]))
-            # ---- 业主 2026-11-01：签落成一份按正文 sha 命名的侧文件 -------------------
-            #
-            # 位置在这里（upsert 之后、事务里）的三个理由：
-            # ① 位与签同生共死：`<sha>.json` 写不成 ⇒ 抛出去让整个事务回滚（连同台账那
-            #    一行一起撤回）——"签没落地"与"签落了但没档"是两件事，前者要能重试；
-            # ② 归档（`issued.json`）失败「不许」回滚：位已经翻在 `statements` 里，
-            #    删掉刚写好的签文件是抹掉发生过的事（`vsigns` 的模块 docstring 那一节）；
-            # ③ 内容全部从台账现读（`_vsign_payload`），不复制全文、不吃调用方状态。
-            sign_out = _vsigns_write_after_flip(
-                store, row=dict(row), ledger=ledger, statement_id=sid, proof_no=no,
-                sha=str(row.get("proof_sha256") or ""), holds=holds,
-                append_ledger=bool(append_ledger), by=str(by or ""),
-                # 2026-11-04（甲）：载体随台账行来（`record_verification(manuscript=…)`）。
-                manuscript=str(row.get("manuscript") or ""))
-            out["vsign"] = dict(sign_out)
-            if not (sign_out.get("written") or sign_out.get("idempotent")):
-                if sign_out.get("refused_below_need"):
-                    # 两道守卫不一致（`signs_bit3` 说够、`write_sign` 说不够）：位照它自己的
-                    # 判据翻，「不写签」，并把这件事留在 `vsign.reason` 里。
-                    #
-                    # 为什么这一档不许把整笔弄失败：`signs_bit3` 是第 3 位的「唯一」硬闸
-                    # （`tests/test_v_sign_gate_streak.py::z1` 用"把 `streak_ok` 打成恒真"
-                    # 做反真空负控）。若这里改成抛异常回滚，那道闸就再也量不出来了 ——
-                    # 一条"签没写"的读数是可见的，而一条"闸拆了也看不出来"的判据是不可修的。
-                    out["vsign"]["reason"] = str(sign_out.get("reason") or "")
-                else:
-                    # 签文件没落地（写不成 / 冲突）⇒ 整笔失败（位不许在"没有任何档"的情况下翻上去）。
-                    raise VerificationError(
-                        "签文件没写成：" + str(sign_out.get("reason") or "没有理由"))
     except Exception as exc:  # noqa: BLE001 - 写位失败要如实报（签名那一行可能已经在盘上了）
         rolled = (_rollback_append(ledger, before, row)
                   if append_state == "appended" and before >= 0 else False)
@@ -4710,6 +4716,9 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     out["rows"] = 1
     out["sha_matches"] = True
     out["checked"] = True
+    #: 来路那一格：这一份凭据是"命题还没在册时审的那一签"（纯读数；`ok` 的判据不变）。
+    #: 升 `kind` 的那一格在 B 的登记 / 收录路上靠它把这一档分出来（`allow_pending=False`）。
+    out["pending"] = True
     # 签不住有两种来路，拒信必须分开说：结论压根不是「成立」，还是判了「成立」却
     # 被 `signs_bit3` 的三条（未解决 error / 引用核实 / 没查成）之一挡住。
     if verdict_word != "成立":
@@ -4791,9 +4800,13 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
 
     返回键：`ok` / `checked` / `why` / `state` / `proof_no` / `statement_id` /
     `verification_id` / `verdict` / `round` / `unresolved_errors` / `sha_matches` /
-    `ledger` / `rows` / `problems` / `checklist`；`checklist` 是逐项过关读数
+    `ledger` / `rows` / `problems` / `checklist` / `pending`；`checklist` 是逐项过关读数
     （`[{"item", "ok", "detail"}]`，三条与上面一一对应），只为拒信存在（业主 2026-10-19 的口径：
     "拒收消息要让人/模型一眼看出该补哪一项"），不参与判据 —— 写错只改可读性。
+    `pending` 是"来路"那一格（纯读数，不参与 `ok`）：True = 这一份凭据取自
+    `verifications/pending/<正文 sha>.jsonl`（命题还没在册时审的那一签），False = 取自
+    `verifications/<命题号>.jsonl` 那一行。两者都算"签过"，但升 `kind` 的那一格在 B 的
+    登记 / 收录路上只认后者（`evidencebits.kind_following_grade(allow_pending=False)`）。
     """
     sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
     out: dict[str, Any] = {
@@ -4804,6 +4817,12 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         #: `state="stale"` 是"签过、但签的是旧版"—— 它是待复核这个读数，不是"没签过"；
         #: `state="holding"` 是"签过、判成立、连续次数还没到"（业主 2026-10-29）。
         "state": "", "proof_no": None,
+        #: 这一份凭据是不是"命题还没在册时审的那一签"（`verifications/pending/`）。
+        #: 它与台账那一行同等算"签过"（D-34：「先签后登记」与「先登记后签」是同一件事），
+        #: 但来路不同必须读得出来：升 `kind` 的那一格（`kind_following_grade`）
+        #: 在 B 的登记 / 收录路上只认这一条命题自己的台账（`allow_pending=False`），
+        #: 否则新行会在同一笔里变成 theorem 而它连台账行都还没有。
+        "pending": False,
     }
     checks: list[dict[str, Any]] = [
         {"item": "proof_text 非空（有被审的那份证明）", "ok": False, "detail": "还没判到"},

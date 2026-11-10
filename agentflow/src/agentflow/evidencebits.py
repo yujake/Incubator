@@ -1253,7 +1253,8 @@ KIND_UPGRADE_TARGETS: tuple[str, ...] = ("theorem", "lemma")
 
 
 def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
-                         requested: str = "", signed_via: str = "") -> dict[str, Any]:
+                         requested: str = "", signed_via: str = "",
+                         allow_pending: bool = True) -> dict[str, Any]:
     """一条命题的 `kind` 该不该跟着证据升（D-37 的唯一口径：写侧的两个落点共用它）。
 
     （它是纯读函数，所以任何读的人 —— 报告、探针、判据 —— 都能调它问"按盘上的证据，
@@ -1275,7 +1276,9 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     2. 升档依据必须是盘上读得出来的那一行，两条路各算一条依据：
        a. `verifications/<命题号>.jsonl` 里有一条盖住现行正文、判「成立」的签
           （判据本体在 `verifications.proof_review_gap`，这里只取它的结论；
-          D-34 的"命题还没在册时审的那一签"也由它认领）；
+          D-34 的"命题还没在册时审的那一签"也由它认领 —— 但 `allow_pending=False`
+          时不认那一签：它只够过准入闸，升 `kind` 必须指得出这一条命题自己的
+          台账那一行。B 的登记 / 收录路走这一档，理由见 `_attach_proofs` 的调用点）；
        b. `bits.evidence.formal_by_proof[证明号] == "verified"`（第 4 位逐条里
           真有一条 `verified`；`stale` 不算 —— 那是"验过旧稿"）；
        c. `signed_via`（2026-11-04，缺口 ②）：调用方已经判过"有一份 V 的签覆盖
@@ -1318,6 +1321,13 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     `shortfall` / `why` / `statement_id`。`basis` 是给读的人复算的那一句
     （形如 `verifications/000000.jsonl#v-000001 判成立` 或
     `bits.evidence.formal_by_proof[1]=verified`）。
+
+    `allow_pending`（2026-11-10，业主裁量 ② 的补口）只影响 V 那一签的来路：
+    默认 True = 认 D-34 的"命题还没在册时审的那一签"（读侧 / 秘书那一支的既有口径）；
+    False = 升档只认 `verifications/<命题号>.jsonl` 里那一签（B 的登记 / 收录路：
+    新行连台账行都还没有时，pending 那一签只能过准入闸，不能当"这条命题的定理凭据"）。
+    三态不变：`allow_pending=False` 而只有 pending 时是 `held`（查过了、不够），
+    不是 `unreadable`（没查成）。
 
     `root` 是工作区根（读 `verifications/` 台账用）。不给 ⇒ 那一签这一格
     没查成（`shortfall` 里写明"没查成"，不许折成"没签"）；形式化那一条依据
@@ -1369,7 +1379,7 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     # 能点名"签文件 + 台账那一行"（`witness`），就优先用它 —— 于是秘书那一支即使传了
     # `signed_via`，`_kind_upgrade.basis` 与 B 那一支也是同一句；只有凭据指名不到
     # （例如 E 的签只在手稿块里、pending 也读不到）时才退回调用方那句人话。
-    sig = _signature_basis(outer, root)
+    sig = _signature_basis(outer, root, allow_pending=allow_pending)
     witness = str(sig.get("witness") or "")
     if str(signed_via or "").strip():
         basis.append(witness or str(signed_via).strip())
@@ -1380,6 +1390,10 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
                   else f"{ledger}#{vid}")
         basis.append(witness or (f"{anchor} 判成立" if anchor
                                  else "verifications/（台账） 判成立"))
+    elif sig.get("pending_only"):
+        missing.append("V 的一签（`verifications/<命题号>.jsonl` 里没有盖住现行正文、"
+                       "判「成立」的签；命题还没在册时审的那一签只够过准入闸，"
+                       "不够升 kind —— 它指不出这条命题自己的台账那一行）")
     elif not sig.get("checked"):
         missing.append("V 的那一签这一格没查成（没给 root / 台账读不出来）—— "
                        "没查成不是「没签」，补齐 root 再判")
@@ -1419,24 +1433,43 @@ def _first_verified_path(row: Mapping[str, Any]) -> int:
     return 0
 
 
-def _signature_basis(row: Mapping[str, Any], root: Any) -> dict[str, Any]:
+def _signature_basis(row: Mapping[str, Any], root: Any, *,
+                     allow_pending: bool = True) -> dict[str, Any]:
     """V 那一签的读数（`verifications.proof_review_gap` 的结论，纯读）。
 
     三态：`checked=False` 有两种来路 —— 没给 `root`（这一趟读不到台账）与台账读不出来；
     两种都不许折成"没签"（那会让"没查成"变成一次降级判定）。`signed=True` 只在
     `proof_review_gap` 判 `ok` 时成立（那一签盖住现行正文、判「成立」）。
+
+    `allow_pending=False`（B 的登记 / 收录路）时，`proof_review_gap` 认到的若是
+    "命题还没在册时审的那一签"，这里报 `signed=False` + `pending_only=True`：
+    它不是"没查成"（`checked` 照旧），而是"查过了、这一签指不出这条命题自己的台账"。
     """
     if root is None:
         return {"checked": False, "signed": False, "ledger": "",
-                "verification_id": "", "witness": "",
+                "verification_id": "", "witness": "", "pending": False,
+                "pending_only": False,
                 "why": "这一趟没有工作区根 ⇒ 台账读不了"}
     try:
         from . import verifications as _VR   # 惰性：签名台账的口径只有一处
         gap = _VR.proof_review_gap(root, row)
     except Exception as exc:  # noqa: BLE001 - 台账读不了 ⇒ 没查成（不许当成没签）
         return {"checked": False, "signed": False, "ledger": "",
-                "verification_id": "", "witness": "",
+                "verification_id": "", "witness": "", "pending": False,
+                "pending_only": False,
                 "why": f"`verifications` 台账读不出来（{type(exc).__name__}: {exc}）"}
+    pending = bool(gap.get("pending"))
+    # 只有"这一签本身签住了（ok）"才是"只差来路"那一档；pending 里判「有毛病」的
+    # 那一签不在这里冒充它 —— 它会落到调用方通用的"没有判「成立」的签"那一句。
+    if pending and bool(gap.get("ok")) and not allow_pending:
+        return {"checked": bool(gap.get("checked")), "signed": False,
+                "ledger": str(gap.get("ledger") or ""),
+                "verification_id": str(gap.get("verification_id") or ""),
+                "witness": "", "pending": True, "pending_only": True,
+                "state": str(gap.get("state") or ""),
+                "why": (str(gap.get("why") or "")
+                        + "；但这一格只认这一条命题自己的台账那一行 —— "
+                        "命题还没在册时审的那一签只够过准入闸，不够升 kind")}
     #: `_kind_upgrade` 留痕的唯一措辞（业主 2026-11-10 裁量 ②）：签文件 + 台账行。
     #: 这一格与 `kind_following_grade` 的 `basis` 同一处来源；读不出来就是空串，
     #: 调用方退回 ledger#vid 那句（不编一条凭据）。
@@ -1449,6 +1482,7 @@ def _signature_basis(row: Mapping[str, Any], root: Any) -> dict[str, Any]:
             "ledger": str(gap.get("ledger") or ""),
             "verification_id": str(gap.get("verification_id") or ""),
             "witness": str(witness or ""),
+            "pending": pending, "pending_only": False,
             "state": str(gap.get("state") or ""),
             "why": str(gap.get("why") or "")}
 
