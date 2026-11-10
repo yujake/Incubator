@@ -16,6 +16,13 @@
 `projects/` 这种正常部署被拦下了（`tests/test_conductor_tools.py` 里那个布局在全量套件里当场变
 红）。`test_a_workspace_root_holding_projects_is_allowed` 与`test_a_workspace_root_holding_a_stray_file_is_still_refused`
 把这条边界两侧各钉一次。
+
+`2026-11-10` 补的一格（`runs/`）：`start` 在 `init()` 之前就写 `runs/cache-active-*.json`，
+白名单漏了 `runs` ⇒ 全新空目录永远 init 不了（真机两次 exit 1）。正控
+`test_a_fresh_directory_holding_only_our_runs_is_allowed`、对偶负控
+`test_runs_do_not_excuse_a_stranger_file_next_to_them`（`runs/` + `我的资料.txt` 仍拒绝、
+点名里没有 `runs`）与反真空 `test_the_runs_entry_is_what_lets_a_fresh_directory_init`
+（摘掉 `runs` ⇒ 第一条红）一起钉住。
 """
 from __future__ import annotations
 
@@ -121,6 +128,74 @@ def test_a_workspace_root_holding_a_stray_file_is_still_refused(tmp_path: pathli
     with pytest.raises(StoreError, match="拒绝 init"):
         Store(d).init()
     assert not (d / "data").exists()
+
+
+def _runs_record(d: pathlib.Path, sid: str = "20261110") -> pathlib.Path:
+    """造一条 `start` 在 `init()` 之前会写下的运行记录（`cachectl` 的形状）。
+
+    2026-11-10 真机事故：`--root` 指向一个全新空目录时，`start` 先经
+    `cachectl.record_active_run` 写下 `runs/cache-active-<会话号>.json`，再走到
+    `Store.init()`；守卫把刚写下的 `runs/` 当外来条目 ⇒ 全新空目录永远 init 不了。
+    """
+    p = d / "runs" / f"cache-active-{sid}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text('{"schema": 1, "kind": "cache_active"}\n', encoding="utf-8")
+    return p
+
+
+def test_a_fresh_directory_holding_only_our_runs_is_allowed(tmp_path: pathlib.Path):
+    """正控⑥（`runs/`）：空目录 + 框架自己写的 `runs/cache-active-*.json` ⇒ 允许 init。
+
+    这一格就是 2026-11-10 真机两次 exit 1 的原样注入（改前 `runs` 不在白名单里，
+    `Store(root).init()` 抛"里面有 1 个不属于我们的条目：['runs']"）。
+    """
+    d = tmp_path / "ws-with-runs"
+    record = _runs_record(d)
+    assert sorted(p.name for p in d.iterdir()) == ["runs"]
+    Store(d).init()
+    assert Store(d).exists()
+    assert record.is_file(), "`runs/` 是框架自己的目录，init 不许删它/改它"
+
+
+def test_runs_do_not_excuse_a_stranger_file_next_to_them(tmp_path: pathlib.Path):
+    """负控（白名单不许放宽成"什么都收"）：`runs/` + `我的资料.txt` ⇒ 照旧拒绝。
+
+    点名里只该有 `我的资料.txt`：`runs` 进了白名单，但它不进拒绝文案。
+    """
+    d = tmp_path / "ws-root-with-runs-and-notes"
+    _runs_record(d)
+    (d / "我的资料.txt").write_text("人类的东西，不许动\n", encoding="utf-8")
+    with pytest.raises(StoreError, match="拒绝 init") as caught:
+        Store(d).init()
+    message = str(caught.value)
+    assert "['我的资料.txt']" in message, message
+    assert "'runs'" not in message, f"`runs` 已是我们自己的目录，不该被点名：{message}"
+    assert not (d / "data").exists() and not (d / "library").exists()
+    assert (d / "我的资料.txt").is_file()
+
+
+def test_the_runs_entry_is_what_lets_a_fresh_directory_init(tmp_path: pathlib.Path):
+    """反真空：把 `runs` 从白名单摘掉 ⇒ 上一条正控当场变红。
+
+    没有这一格，`_runs_record()` 那一格可以靠"别的入口恰好放行"通过而看不出
+    `runs` 这个条目是否真的在起作用。摘掉之后拒绝文案必须点名 `runs`
+    （这正是 2026-11-10 真机上那句 `['runs']`）；恢复之后同一个目录必须 init 成功。
+    """
+    from agentflow import store as S
+
+    d = tmp_path / "ws-runs-anti-vacuum"
+    _runs_record(d)
+    before = S._WORKSPACE_ROOT_ENTRIES
+    try:
+        S._WORKSPACE_ROOT_ENTRIES = before - {"runs"}
+        with pytest.raises(StoreError, match="runs") as caught:
+            Store(d).init()
+        assert "['runs']" in str(caught.value), str(caught.value)
+    finally:
+        S._WORKSPACE_ROOT_ENTRIES = before
+    assert not (d / "data").exists(), "拒绝之后一个字节都不写"
+    Store(d).init()
+    assert Store(d).exists()
 
 
 def test_the_guard_predicate_itself_answers_the_four_shapes(tmp_path: pathlib.Path):

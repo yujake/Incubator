@@ -1007,7 +1007,8 @@ def run_reading(*, path: Path | None = None,
                 key: Mapping[str, Any] | None = None,
                 lean: bool | None = None,
                 root: Path | str | None = None,
-                sid: str = "") -> dict[str, Any]:
+                sid: str = "",
+                write_record: bool = True) -> dict[str, Any]:
     """起跑前读一次"这一趟用哪一档"，折成一行读数（只读、零花费、永不抛）。
 
     ## 为什么要有这一口
@@ -1028,6 +1029,14 @@ def run_reading(*, path: Path | None = None,
     上一个会话留下来的记录不许顶掉它。写不成（工作区不可判定 / 盘写不了）照样印这一行，
     `record` 那一格如实带回去（`written=False` 与理由），页面据此退回本进程开关。
 
+    ## `write_record=False`：读数照印、盘上不落
+
+    `--dry-run` 那一档的横幅逐字承诺"一个字节都不写"，所以它用 `write_record=False`
+    调这里：档位照读、那一行照印，但 `record_active_run()` 根本不调 —— 不写
+    `runs/cache-active-*.json`。回执里 `reason="dry_run"`，`written=False`。
+    为什么是"跳过一次调用"而不是"写进去再删"：先写后删在失败/中断时仍会留下字节，
+    而在别人的目录里留下 `runs/` 正是 2026-11-10 那次 `init` 守卫事故的起点。
+
     ## 三态与两种级别（不是判定，只是读数）
 
     - `info`：这一档查到了（`tri="found"`）、新鲜（`fresh=True`）且没换过 key ⇒
@@ -1046,11 +1055,15 @@ def run_reading(*, path: Path | None = None,
     起不来"。所以这里把异常折成一行 warning —— 与"读数只加不拦"同一条纪律。
     """
     current = _lean_now() if lean is None else bool(lean)
-    try:
-        record = record_active_run(root=root, sid=str(sid or ""), lean=current)
-    except Exception as exc:  # noqa: BLE001 - 写运行记录不许拖垮起跑
-        record = {"written": False, "path": "",
-                  "reason": f"{type(exc).__name__}: {exc}"}
+    if write_record:
+        try:
+            record = record_active_run(root=root, sid=str(sid or ""), lean=current)
+        except Exception as exc:  # noqa: BLE001 - 写运行记录不许拖垮起跑
+            record = {"written": False, "path": "",
+                      "reason": f"{type(exc).__name__}: {exc}"}
+    else:
+        # `--dry-run`：一个字节都不写（连 `runs/` 都不建）。这不是失败，是这一趟的形态。
+        record = {"written": False, "path": "", "reason": "dry_run"}
     try:
         active = active_reading(path=path, renders=renders, key=key,
                                 lean=current, root=root, use_record=False)

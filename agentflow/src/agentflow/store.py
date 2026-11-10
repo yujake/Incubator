@@ -188,8 +188,15 @@ _KNOWN_NON_REPLAY_OPS: frozenset[str] = frozenset({"commit", "info", "corrupt"})
 #:
 #: 这张表刻意只列本框架自己会在根上放的东西：多列一项 = 少拦一种外来目录，
 #: 少列一项 = 多拦一种正常布局。两种代价都实测过一次，所以它是逐条登记的。
+#:
+#: 为什么 `runs/` 也必须在这里：它同样是框架自己在根上建的目录 —— cache 的档位记录
+#: （`cachectl.record_active_run`）、stopctl 的 pid / 中断信号 / 停历史、`agent_loop`
+#: 的长产出与 `autonomy` 的 checkpoint 都住在里面。
+#:
+#: 2026-11-10：`start` 在 `init()` 之前就写了 `runs/cache-active-*.json`，于是守卫把自己的文件
+#: 当外来条目，全新空目录永远 init 不了（真机实测两次 exit 1）。`runs/` 因此必须进白名单。
 _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
-    {"data", "library", "projects", ".agentflow-workspace"}
+    {"data", "library", "projects", ".agentflow-workspace", "runs"}
 )
 
 

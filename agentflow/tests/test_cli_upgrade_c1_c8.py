@@ -117,6 +117,37 @@ def test_c1_dry_run_prints_everything_and_calls_no_model(tmp_path: Path,
     assert not ws.exists() or not list(ws.rglob("*")), f"试运行写了字节：{list(ws.rglob('*'))}"
 
 
+def test_c1_dry_run_prints_the_cache_tier_but_writes_no_run_record(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """C1 的补充（2026-11-10 真机事故）：试运行照印档位，但 `runs/cache-active-*.json` 不落盘。
+
+    改前：`start --root <全新空目录>` 先经 `cachectl.record_active_run` 写下
+    `runs/cache-active-<会话号>.json`，再走到 `Store.init()`；守卫把刚写下的 `runs/`
+    当外来条目 ⇒ 全新空目录永远 init 不了（真机实测两次 exit 1）。同一份 `runs/`
+    也是"试运行一个字节都不写"那句横幅的反例。
+
+    两半各要一条证据：`record_active_run` 一次都没被调（打桩后记调用），且目标目录
+    一个条目都没有（`runs/` 也没建）。档位那一行仍然要在 stdout 里 —— 读数照印。
+    """
+    import agentflow.cachectl as CC
+
+    calls: list[str] = []
+    real = CC.record_active_run
+
+    def _spy(**kwargs):
+        calls.append(str(kwargs))
+        return real(**kwargs)
+
+    monkeypatch.setattr(CC, "record_active_run", _spy)
+    ws = tmp_path / "brand-new"
+    code, out, err = _run(["start", "--task", "t", "--root", str(ws),
+                           "--mode", "topic", "--dry-run"])
+    assert code == 0, (code, out, err)
+    assert calls == [], f"试运行调了运行记录的写入口：{calls}"
+    assert not ws.exists() or list(ws.rglob("*")) == [], f"试运行写了字节：{list(ws.rglob('*'))}"
+    assert "缓存：" in out, f"试运行少了档位那一行：\n{out}"
+
+
 def test_c1_the_dry_run_panel_renders_in_every_mode(tmp_path: Path,
                                                     monkeypatch: pytest.MonkeyPatch) -> None:
     """C1：五档都能把那份预检打出来（不只是 `--json` 那一档）。

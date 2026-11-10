@@ -1733,6 +1733,10 @@ def _print_plan(spec: RunSpec, args) -> int:
        那一格如实写"没跑"。
     2. 项目那一档复用 `projects.plan`（它自己的 docstring 就是"不建目录、不写字节"），
        而不是 `projects.run_project` 再 dry-run —— 后者第一件事就是 `create_project`。
+    3. 缓存那一行照印（`_announce_cache_line(..., write_record=False)`）：读数可以读，
+       但 `run_reading` 平时会顺手写 `runs/cache-active-*.json` —— 试运行不写它，
+       否则横幅那句"一个字节都不写"就是假的（2026-11-10 真机上那条 `runs/` 还让
+       全新空目录的 `Store.init()` 死在"外来条目"守卫上）。
     """
     from . import projects as P
     from .modelgw import spec_from_env
@@ -1797,6 +1801,13 @@ def _print_plan(spec: RunSpec, args) -> int:
                            else "（该模式的缺省值，不落盘）"))
     lean_cell = (f"开关现在{'开' if lean_on else '关'}（来源 {lean_src or '缺省'}）；"
                  f"这一趟 --lean {spec.lean}；自检没跑（试运行不启动检查器）")
+    # 档位那一行照印（真跑时也印），但这一趟不落运行记录：横幅承诺"一个字节都不写"，
+    # 而 `run_reading` 平时会写 `runs/cache-active-*.json` —— 那正是让全新空目录
+    # init 不了的 `runs/` 的来源。`--json` 那一档不印（键集合是机器契约，
+    # "这一趟用哪一档"已经在 `lean` 那一格）。
+    if not spec.as_json:
+        _announce_cache_line(spec, write_record=False,
+                             lean={"on": True, "off": False}.get(spec.lean))
     print("")
     for line in tty.panel(
         "试运行：将要发生的一切（一个字节都不写、一次模型都不调）",
@@ -1928,7 +1939,8 @@ def _dispatch(spec: RunSpec, args) -> int:
     raise SystemExit(2)
 
 
-def _announce_cache_line(spec: RunSpec) -> None:
+def _announce_cache_line(spec: RunSpec, *, write_record: bool = True,
+                         lean: bool | None = None) -> None:
     """起跑前打一行缓存读数（只加读数：读不到 / 不新鲜都不拦跑、不改退出码）。
 
     为什么在这里、而不是在三条执行体各写一遍：`_run_spec` 是五条入口（`start` /
@@ -1937,10 +1949,14 @@ def _announce_cache_line(spec: RunSpec) -> None:
 
     读的一方是 `cachectl.run_reading()`（它自己接住所有异常）：本函数因此只负责
     "印出来 + 选流"。`--json` 那一档走 stderr，免得一行人话把 stdout 的 JSON 弄坏。
+
+    `write_record=False` 是试运行那一档：读数照印，但不落 `runs/cache-active-*.json`
+    （见 `cachectl.run_reading` 的 `write_record`）。`lean` 给"将来会用的那一档"，
+    试运行里就是 `--lean` 的取值 —— 那一趟还没真起跑，不能拿本进程的开关冒充它。
     """
     from . import cachectl as CC
 
-    got = CC.run_reading()
+    got = CC.run_reading(write_record=write_record, lean=lean)
     text = str(got.get("text") or "")
     if not text:
         return
