@@ -422,6 +422,7 @@ _REFUSE_OVER_WINDOW: dict[str, int] = {
     # `ca89896f`（2026-11-10，概念良定义证明 A+B）：`concept_takes_no_proof_manuscript`
     # 的拒信把三条出路写全之后字面下界 698（`agent_b/register_statement.py`，超窗口
     # 298 字）。按本表的纪律登记；改短它属于改拒信正文，不在记账批里顺手做。
+    "概念行不收**未签的**证明稿：`proof_m": 698,
 }
 
 
