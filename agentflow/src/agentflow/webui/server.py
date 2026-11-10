@@ -272,6 +272,16 @@ def default_static_root() -> Path:
 #: 判据 `tests/test_webui_client_abort_is_not_a_500.py` 钉着"这三个名字全树只出现一次"。
 PEER_GONE = (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)
 
+#: 回"这一支不打算读正文"的响应（404 / 401 / 405 / 500）之前，最多补读多少字节。
+#:
+#: 为什么要有上限：补读是"等客户端把它声明的那段正文发完"，不设上限等于让一个
+#: 声明了 4 GB 的请求把这条连接线程占住。未知端点上的正文超出这个量时直接回话，
+#: 客户端本来也不该往没有路由的地方贴大块正文。
+UNREAD_BODY_CAP = 1 << 20
+
+#: 补读正文的时限（秒）。客户端声明了 `Content-Length` 却不发，最多等这么久就回话。
+UNREAD_BODY_SEC = 5.0
+
 
 class WebHandler(BaseHTTPRequestHandler):
     """路由表驱动的小服务（表在 :data:`agentflow.webui.routes.ROUTES`）。
@@ -298,6 +308,9 @@ class WebHandler(BaseHTTPRequestHandler):
 
     #: 本次请求解出来的路径（`_parse` 填；未知路由那一条要用它说清"是什么没找到"）。
     _path: str = ""
+    #: 这一趟请求的正文是否已经被读过（`_form()` 或 `_drain_unread_body()` 置真）。
+    #: 每个请求一个实例，所以它是逐请求的事实，不是进程级开关。
+    _form_read: bool = False
     #: 这一趟要不要在响应里种口令 cookie（`_token_ok` 在"地址栏带口令"那一档置真；
     #: 每个请求一个实例，所以它是逐请求的事实，不是进程级开关）。
     _set_token_cookie: bool = False
@@ -401,8 +414,64 @@ class WebHandler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             length = 0
+        self._form_read = True
         raw = self.rfile.read(length) if length > 0 else b""
         return parse_qs(raw.decode("utf-8", errors="replace"), keep_blank_values=True)
+
+    def _drain_unread_body(self) -> None:
+        """把"这一支不打算读"的请求正文读掉，「再」回话（不读 ⇒ 客户端可能读到 RST）。
+
+        ## 为什么必须读（2026-11-10，WinError 10053 实测）
+
+        `do_POST` 在"路由没命中"那一支直接回 404，从不碰正文；而 `http.client`
+        发请求时分两次 `send()` —— 先发头块、再发正文（`http/client.py::_send_output`
+        里 `self.send(msg)` 之后才 `for chunk in chunks: self.send(chunk)`）。
+        多任务负载下客户端可能在这两次之间被换下 CPU，服务器于是"只看到头就回 404、
+        把连接关掉"；随后到达的正文落在已关闭的连接上 ⇒ 本机发 RST，客户端
+        `getresponse()` 读到的是 `ConnectionAbortedError: [WinError 10053]`
+        而不是那支 404（全量四路并行复现：`temp/pytest-all/20261110-131802/
+        chunk-0.log`；确定性最小复现：`temp/probe_404_split_body.py 0.2`）。
+        先读完正文再回话，404 就真的到得了客户端。
+
+        ## 口径
+
+        - 只读 `Content-Length` 声明的那一段（上限 :data:`UNREAD_BODY_CAP`），
+          不从连接上多读一个字节（多读会吃掉下一条请求）；
+        - 时限 :data:`UNREAD_BODY_SEC` 秒：客户端声明了长度却不发，最多等这么久
+          就回话，不把这条连接线程永远挂住；
+        - `_form()` 已经读过（或本函数补读过）⇒ `_form_read` 为真，直接返回 ——
+          重复补读会去等一段已经不存在的正文，把回话拖到时限。
+        """
+        if self._form_read:
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except (TypeError, ValueError):
+            length = 0
+        self._form_read = True
+        if length <= 0:
+            return
+        left = min(length, UNREAD_BODY_CAP)
+        try:
+            old = self.connection.gettimeout()
+            self.connection.settimeout(UNREAD_BODY_SEC)
+        except OSError:
+            return
+        try:
+            while left > 0:
+                chunk = self.rfile.read(min(left, 65536))
+                if not chunk:
+                    break
+                left -= len(chunk)
+        except OSError:
+            # 正文没发完就对端没了 / 等超时：回话比"读完"重要，照旧回。
+            pass
+        finally:
+            try:
+                self.connection.settimeout(old)
+            except OSError:
+                # 套接字已经关了 ⇒ 没有"原时限"可恢复；本连接反正到此为止。
+                pass
 
     def _wants_html(self) -> bool:
         """客户端是不是冲着"要一张网页"来的（浏览器导航带 `Accept: text/html`）。
@@ -447,6 +516,9 @@ class WebHandler(BaseHTTPRequestHandler):
         "not_applicable", "reason": …}`；其余 → 那张 401 HTML 页（浏览器看得懂）。
         """
         reason = "口令不对或没给（?token= / Authorization: Bearer / 口令 cookie）"
+        # 401 也是"这一支不打算读正文"：POST 带正文到受口令保护的路径时，同样会
+        # 在关口那一刻被迟到的正文变成 RST（口径见 `_drain_unread_body`）。
+        self._drain_unread_body()
         if self._path.startswith("/api/"):
             self._json(401, {"ok": False, "tri": "not_applicable",
                              "reason": reason, "path": self._path})
@@ -477,6 +549,8 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         hit = routes.match("POST", path, table=self.routes_table or None)
         if hit is None:
+            # 404 之前先把这一支不打算读的正文读掉（否则它会在关口那一刻变成 RST）。
+            self._drain_unread_body()
             if path.startswith("/api/"):
                 # 与 GET 同一条口径（裁定 Q1）：`/api/*` 未知一律 JSON 404，
                 # 免得前端在读 JSON 时拿到一支 HTML。
@@ -536,6 +610,13 @@ class WebHandler(BaseHTTPRequestHandler):
                              f"{type(exc).__name__}: {exc}\n")
             traceback.print_exc(file=sys.stderr)
             sys.stderr.flush()
+            # 500 也是"这一支不打算把正文交给处理器"：处理器的正文没读过时补读，
+            # 免得迟到的正文把这一支 500 变成 RST（口径见 `_drain_unread_body`）。
+            # `_invoke` 也会被判据用最小句柄直接调用
+            # （`tests/test_a_crashing_handler_still_answers.py`），那种句柄没有这一格。
+            drain = getattr(self, "_drain_unread_body", None)
+            if drain is not None:
+                drain()
             try:
                 self._json(500, {"ok": False, "kind": "handler_crashed",
                                  "handler": str(name),
@@ -543,6 +624,9 @@ class WebHandler(BaseHTTPRequestHandler):
             except Exception:  # noqa: BLE001 —— 连回话都写不出去时只能放弃
                 pass
             return
+        drain = getattr(self, "_drain_unread_body", None)
+        if drain is not None:
+            drain()
         self._send(500, f"500 路由表登记了没有实现的处理器：{name}\n".encode("utf-8"),
                    "text/plain; charset=utf-8")
 
@@ -551,6 +635,8 @@ class WebHandler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def _reject(self) -> None:
+        """405：方法不在这一面的名单里。PUT/DELETE/PATCH 也可能带正文，先读掉。"""
+        self._drain_unread_body()
         self._send(405, b"405 method not allowed\n", "text/plain; charset=utf-8",
                    {"Allow": "GET, HEAD, POST"})
 

@@ -30,7 +30,9 @@ import contextlib
 import http.client
 import json
 import pathlib
+import socket
 import threading
+import time
 import urllib.parse
 from typing import Any, Iterator
 
@@ -260,12 +262,13 @@ def _ns(**kw: Any) -> Any:
 
 # ====================================================================== ④ 写面
 @contextlib.contextmanager
-def _server(root: pathlib.Path, *, allow_writes: bool) -> Iterator[str]:
-    """在临时端口上起一个服务（写面开关由判据钉住）。"""
+def _server(root: pathlib.Path, *, allow_writes: bool,
+            routes_table: tuple[tuple[str, str, str], ...] | None = None) -> Iterator[str]:
+    """在临时端口上起一个服务（写面开关与可注入的路由表都由判据钉住）。"""
     from agentflow import webui as W
 
     srv = W.serve(root, host="127.0.0.1", port=0, allow_writes=allow_writes,
-                  csrf_token=CSRF)
+                  csrf_token=CSRF, routes_table=routes_table)
     thread = threading.Thread(target=srv.serve_forever, daemon=True)
     thread.start()
     try:
@@ -307,6 +310,40 @@ def _get(base: str, path: str) -> tuple[int, dict[str, Any]]:
         return resp.status, json.loads(text)
     finally:
         conn.close()
+
+
+def _post_with_a_late_body(base: str, path: str, fields: dict[str, Any], *,
+                           gap: float = 0.2) -> tuple[int, dict[str, Any]]:
+    """把"头块"与"正文"分两次发，中间隔 `gap` 秒（`http.client` 平时就是这么分两次发的）。
+
+    为什么用裸 socket：`http.client.request()` 的头块与正文是两次 `send()`，但它们在
+    同一个线程里背靠背，判据没法把时间差钉住。裸 socket 让"正文什么时候到"由判据
+    自己说了算（同 `tests/test_webui.py::_abort_sse` 的理由）。
+    """
+    body = urllib.parse.urlencode(fields, doseq=True).encode("utf-8")
+    head = (b"POST " + path.encode("utf-8") + b" HTTP/1.1\r\n"
+            b"Host: x\r\n"
+            b"Content-Type: application/x-www-form-urlencoded\r\n"
+            b"Content-Length: " + str(len(body)).encode("utf-8") + b"\r\n"
+            b"X-CSRF-Token: " + CSRF.encode("utf-8") + b"\r\n\r\n")
+    host, port = base.split(":")
+    sock = socket.create_connection((host, int(port)), timeout=20)
+    try:
+        sock.sendall(head)
+        time.sleep(gap)          # 让服务器先把"头"处理完：正文还在路上
+        sock.sendall(body)
+        chunks = b""
+        while True:
+            part = sock.recv(65536)
+            if not part:
+                break
+            chunks += part
+    finally:
+        sock.close()
+    head_text, _, body_text = chunks.partition(b"\r\n\r\n")
+    first = head_text.split(b"\r\n", 1)[0].decode("latin-1", errors="replace")
+    code = int(first.split(" ")[1]) if first.startswith("HTTP/") else 0
+    return code, json.loads(body_text.decode("utf-8", errors="replace"))
 
 
 def test_4_the_web_face_requires_the_write_switch_and_a_confirmation(
@@ -428,6 +465,38 @@ def test_4c_the_endpoints_are_not_free_floating(
         srv.server_close()
         thread.join(timeout=5.0)
     assert code == 404, f"拿掉路由之后仍然有响应（{code}）⇒ 这条判据量的不是这两条端点"
+
+
+def test_4d_a_late_request_body_cannot_eat_the_404(
+        tmp_path: pathlib.Path) -> None:
+    """④ 的另一半：正文比头块晚 0.2 秒到，那支 404 也必须真的到得了客户端。
+
+    ## 改前为什么红（2026-11-10，全量四路并行里唯一一条红）
+
+    `http.client` 发一条 POST 是两次 `send()`（`http/client.py::_send_output`：
+    先发头块，再逐块发正文）。四路 pytest 并行时客户端可能在这两次之间被换下
+    CPU，服务器于是"只看到头就回 404、把连接关掉"；随后到达的正文落在已关闭的
+    连接上 ⇒ 本机发 RST，客户端 `getresponse()` 读到的是
+    `ConnectionAbortedError: [WinError 10053]`，而 404 已经写出去、日志里也留下了
+    `"POST /api/cache/warm HTTP/1.1" 404 -`（`temp/pytest-all/20261110-131802/
+    chunk-0.log`）。单跑不红只是因为那个时间差通常小到不存在。
+
+    这一条把时间差钉成 0.2 秒：`webui/server.py::WebHandler._drain_unread_body`
+    之前是 5/5 红，之后是 5/5 绿。断言照旧只认"404 + 那支 JSON"，
+    不重试、不吞异常、不造假。
+    """
+    from agentflow.webui import routes
+
+    root = tmp_path / "ws-late-body"
+    root.mkdir()
+    without = tuple(row for row in routes.ROUTES if "/api/cache" not in row[1])
+    assert len(without) == len(routes.ROUTES) - 2, (len(routes.ROUTES), len(without))
+    with _server(root, allow_writes=True, routes_table=without) as base:
+        code, got = _post_with_a_late_body(
+            base, "/api/cache/warm", {"lean": "off", "confirm": "1"})
+    assert code == 404, f"正文晚到之后客户端没拿到 404（{code}）⇒ 它读到的是断连"
+    assert got["tri"] == "not_applicable", got
+    assert "/api/cache/warm" in got["reason"], got
 
 
 # ====================================================================== ⑤ 反真空
