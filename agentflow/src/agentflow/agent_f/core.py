@@ -1778,7 +1778,8 @@ class _Core:
             path = Path(root) / rel
             # ---- A1：洗过的那一份写回盘时，也不许擦掉已登记的那一条 ---------------
             #
-            # `rel` 就是手稿登记的规范路径（还没有命题号时是计划名那一份）⇒ 直接
+            # `rel` 就是手稿登记的规范路径（`reports/f-proof-<稿号>.md`；2026-11-10 起
+            # 它只由 F 自己的稿号决定，命题号 / 计划号都不进这个名字）⇒ 直接
             # `write_text` 会把上一轮写进去的登记元信息（正文 sha / 命题指纹 / 版本）
             # 连同 `- 标签：` 一起盖掉，于是下一笔 `register_or_rewrite` 又读成"新命题"
             # —— 解耦在默认路径上失效的第二个现场（第一个在 `proof_manuscript`）。
@@ -1832,8 +1833,10 @@ class _Core:
         `manuscript_section_rows` 是登记那一刻那节依赖段读出来的行数。
         这一笔不写 `dependencies`：业主 2026-10-24 的最终形态是"作者只写内容，登记由
         收方读稿产生"，F 是作者 —— 依赖边由收方（B 读这一份手稿）落，与 V 读稿签字同构。
-        这一步的用处是：稿在登记时已经在手上，登记拿到命题号之后由 `publish_manuscript`
-        把它改名为 `reports/f-proof-<命题号>.md`，于是收方按命号的兜底读盘找得到它。
+        这一步的用处是：稿在登记时已经在手上，而**登记不再改它的名**（2026-11-10：
+        稿名只按 F 自己的稿号，`reports/f-proof-<稿号>.md`；命题号由 B 收录时现取）。
+        改前这一句还写着"登记拿到命题号之后由 `publish_manuscript` 把它改名为
+        `reports/f-proof-<命题号>.md`"—— 那是被停掉的旧口径，收方现在按稿号读盘。
         """
         from .. import depsection as _DS
 
@@ -2126,13 +2129,24 @@ class _Core:
             return self._proposition_form_gate(
                 full=full, kind=kind_now, body=body, label=label)
 
+        # ---- 交接面只有两样：F 的稿号 ＋ 正文（2026-11-10 第二刀，业主裁定）--------
+        #
+        # 裁定逐字：「对于 F 侧，在实现方面彻底通畅（你亲自拿着跑跑通）后，撤去所有有关
+        # 对某个给定命题号进行攻坚或写证明的逻辑。」
+        #
+        # 改前这一笔还递 `statement_id=stmt_id`：它只在"同一命题的第二版证明"那一档有值
+        # （`row_now` 命中一条在册行时），作用是让 `proofregistry` 把稿头的
+        # `- 命题号：` 那行改写成真号。于是 F 的写证明路径上又出现了一个"命题号输入"——
+        # 而稿名、归属、签的落点都已经只认稿号了，这一个输入只剩"把号写进别人的稿头"。
+        # 现在不递：`manuscript_id` 是这一份稿的身份，正文 sha 由 `register_or_rewrite`
+        # 自己按 `proof_text` 现算（它返回的 `sha256` 就是交接面另一半）。
+        # 稿头那一行于是如实写「还没落号」—— F 的稿本来就没有命题号（B 收录时现取）。
         got = _PR.register_or_rewrite(
             root, family=_MF.FAMILY_F, label=label, proposition=proposition,
             proof_text=body, dependency_rows=list(dependency_rows or []),
-            statement_id=stmt_id, plan_id=plan_id, sid=sid, title=text,
+            plan_id=plan_id, sid=sid, title=text,
             manuscript_id=str(manuscript_id or ""),
             kind=kind_now, template=str(manuscript_text or ""), gate=_gate)
-
         refused_kind = str(got.get("refused") or "")
         if not got.get("ok"):
             why = str(got.get("why") or "手稿登记没成")
@@ -2207,7 +2221,17 @@ class _Core:
     # "现在有没有签"这一个读数。
     def _read_sign(self, *, statement_id: str, proof_text: str,
                    proof_no: Any = 1, manuscript_path: str = "") -> dict:
-        """回读这一份证明的 V 签（纯读）；返回 `{reading, hint}`。"""
+        """回读这一份证明的 V 签（纯读）；返回 `{reading, hint}`。
+
+        ## `statement_id` 在这里只是「读哪一本台账」的定位，不是送审输入
+
+        2026-11-10 第二刀（业主裁定「撤去所有有关对某个给定命题号进行攻坚或写证明的
+        逻辑」）：这一层仍然要号 —— 因为**已收录**之后的签落在
+        `verifications/<命题号>.jsonl` 里（那是 V 的台账，读它必须点名问哪一条）。
+        但它**不进交出去的那一份**：`next_step_hint` 不再收它，F 派 V 时点的只有
+        手稿路径（下面那一句），所以"送审时偷偷带号"在结构上没有入口。
+        判据：`tests/test_f_does_not_work_for_a_statement_number.py` 的 b。
+        """
         from . import vsign as _VS
 
         plan_paths: list[str] = []
@@ -2233,7 +2257,7 @@ class _Core:
                        "delivered": False, "checked": False,
                        "why": f"读签这一格没跑成（{type(exc).__name__}: {exc}）"}
         return {"reading": reading,
-                "hint": _VS.next_step_hint(reading, statement_id=statement_id,
+                "hint": _VS.next_step_hint(reading,
                                            manuscript_paths=tuple(plan_paths))}
 
     # ------------------------------------------------------ 交差读数：按条，不是按这一轮
@@ -2676,6 +2700,8 @@ class _Core:
             # 旧口径按 `statement_id` 把计划名下的稿改名成 `f-proof-<号>.md`。现在
             # `_hand_proof` 的登记条目直接写在稿号上（`f-proof-<稿号>.md`），收录
             # 拿到命题号也不改名 ⇒ 这里只把登记条目说的落点写回读数。
+            # 2026-11-10 第二刀：这一笔也不再向 `register_or_rewrite` 递命题号
+            # （`statement_id` 在这一层只剩"这个子目标命中过哪一条在册行"这个读数）。
             if _landed:
                 _old_rel = str(manuscript.get("path") or "")
                 _new_rel = str(outlet.get("manuscript_path") or "")
@@ -2696,8 +2722,10 @@ class _Core:
             #
             # 不在这里送审：送审是 F 自己的动作（`framework_summon`，`F -> V` 的边在）。
             # 这一格只回答"这一份现在有没有签"，并把下一步（派 V）写进 detail。
-            # 登记没成（`statement_id` 空）也照样回读：那一格的读数是「待签 + 为什么
-            # 送不了」，不许因为没送成就不给读数。
+            # 还没有在册行（`statement_id` 空）也照样回读：那一格的读数是「待签 + 为什么
+            # 送不了」，不许因为没送成就不给读数。`statement_id` 传下去只是「读哪一本
+            # 台账」的定位（已收录的签在 `verifications/<号>.jsonl` 里），它**不进**
+            # 交出去的那一句 —— 见 `_read_sign` 的 docstring。
             v_sign = self._read_sign(
                 statement_id=statement_id,
                 proof_text=str(outlet.get("proof_text") or ""),

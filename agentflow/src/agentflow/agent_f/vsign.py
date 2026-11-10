@@ -190,17 +190,25 @@ def delivery_reading(root: Any, *, statement_id: str = "", proof_text: str = "",
                    f"签的读数是 {state!r}（不认识的档）⇒ 这一格没查成，不许当成「待签」")
 
 
-def next_step_hint(reading: Mapping[str, Any], *, statement_id: str = "",
+def next_step_hint(reading: Mapping[str, Any], *,
                    manuscript_paths: Sequence[str] = ()) -> str:
     """这一份证明下一步该干什么（给 `F.step` 的 `detail` 用）。
 
     已签 ⇒ 别再送（同一份正文重送只会拿到同一条结论）；其余三档各给一条可执行的话。
     送审的口径只有一个：F 自己派 V（`framework_summon`，边在）——
-    `statement_id` 有号就在 `task` 里点号，没号就点手稿路径。
+    要审的是**哪一份稿**，所以这一句点的是手稿路径。
+
+    ## 签名里没有 `statement_id`（2026-11-10 第二刀，业主裁定）
+
+    裁定逐字：「撤去所有有关对某个给定命题号进行攻坚或写证明的逻辑。」
+    改前这一句在"有号"时把任务写成「`stmt:<号>`」，没号才点稿路径 —— 于是同一趟活
+    在 F 眼里有两个身份，而命题号那一半是**收方**（B）在收录时才发的号：F 拿着它
+    去指认"要审哪一份"，等于把收录的产物当成自己的攻坚目标。
+    现在只认稿路径：F 交出去的永远是 `reports/f-proof-<稿号>.md`（另一份证明是 `-p<N>`），
+    正文 sha 由签那一侧现算。判据：`tests/test_f_does_not_work_for_a_statement_number.py`。
     """
     state = str(reading.get("state") or "")
-    target = (f"stmt:{statement_id}" if statement_id
-              else (manuscript_paths[0] if manuscript_paths else "这一份手稿"))
+    target = (manuscript_paths[0] if manuscript_paths else "这一份手稿")
     if state == STATE_SIGNED:
         return f"已签（{reading.get('ledger') or ''}）⇒ 这一份不用再送，换下一个子目标"
     if state == STATE_REJECTED:
@@ -212,8 +220,9 @@ def next_step_hint(reading: Mapping[str, Any], *, statement_id: str = "",
     if state == STATE_UNKNOWN:
         return ("签这一格没查成 ⇒ 先查为什么（签块 / 台账 / pending 读不出来），"
                 "别把它读成「没毛病」")
-    return (f"派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清 {target} "
-            "与要审什么）—— 拿到 V 签才算交差；派不出去（深度 / 边）就照实写进回报")
+    return (f"派 V 审这一份（`framework_summon` 形状：`role=\"V\"`，`task` 写清"
+            f"「审这一份证明稿 {target}」与要审什么）—— 拿到 V 签才算交差；"
+            "派不出去（深度 / 边）就照实写进回报")
 
 
 def selftest() -> int:
