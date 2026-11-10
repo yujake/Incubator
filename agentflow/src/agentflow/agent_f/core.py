@@ -298,6 +298,7 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     参数----evidence : 已经渲染好的证据正文行（`id（类型）：正文摘要`），由`_Core._evidence_digest` 现算 —— 这一层拿不到 store。 history : 已经渲染好的"上一轮/前几轮"行，由 
     `_Core._history_digest` 现算。 retry_note : 上一次交的产物为什么不成形（P3-5 的重问）； citable_ids : 这一轮可引用的 id（同样由 `_evidence_digest` 现算）—— 它是
     "只许引下面列出的 id"那句纪律的落点，与拒收消息里的"合法 id 有：…"同源。statements / statements_note : 本轮可读可引的在册命题（B 已收录）的行与一句说明，由 `_Dependency.citable_statements` 现算 ——
+    已签概念也进 statements 那一份行（可读），但不进 citable_ids（可引门只放命题）：读得到与引得成是两张表，混一张就会让人照着引一条注定被拒的号。
     业主 2026-10-24「它写证明时允许读 B 侧已收录的定理，可引用，如此产生依赖面」：读得到的前提是提示词里有它们。
     """
     from .. import attackround as AR
@@ -384,7 +385,8 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         # 模型根本不知道台账里有哪些命题可引 ⇒ "引用在册定理"在真机里没有发生的机会，
         # 依赖面于是恒 0 行。清单由 `_Dependency.citable_statements` 现算（不手工抄），
         # 与本轮 citable id 同源。
-        "### 4.1 写证明时可以读、也可以引用的在册命题（B 已收录；依赖按下面那张表写）",
+        "### 4.1 写证明时可以读、也可以引用的在册命题（B 已收录；已签概念只读不可引；"
+        "依赖按下面那张表写）",
         "业主 2026-10-24 的最终形态：作者只写内容，登记由收方读稿产生（与 V 读你的手稿再签字"
         "同一个逻辑）。所以两件事分开：① 把 `stmt:<号>` 写进那一步的 `cites`（引用在产物里的"
         "机器可读落点）；② 手稿里写一节固定格式的 `## 依赖`（四列表），**B 读这一节落依赖"
@@ -393,7 +395,9 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         "证明） |`；一行一条引用，路径号写它是第几条证明（第 2 条证明的依赖落 "
         "`stmt:<命题号>#p2` 那一组）。",
         "**引用门槛是 proof_review 级及以上**（业主同一天加码裁定，逐字："
-        "「proof_review级及以上才可引用」）：下面列出来的都是够格的；档位更低的"
+        "「proof_review级及以上才可引用」）：下面列出来的**命题**都是够格的；标着 "
+        "`kind=concept` 的那几条是**已签概念**——**可读但不可引**（可引门只放命题："
+        "概念没有等级轴，不在可引池里），别把它们的号写进 `cites`。档位更低的"
         "（cross_check / heuristic）或档位读不到的，B 读稿时会整笔拒收并点名。",
         "**引了却不写进 `cites`、也不写依赖段，B 会整笔拒收**：手稿没有 `## 依赖` 那一节而正文里"
         "引用了在册命题时，B 的受控码是 `dependency_section_missing`（补上那一节再交）；"

@@ -98,6 +98,33 @@ def _non_citable_bucket(grade: Any) -> str:
     return BUCKET_BELOW
 
 
+def _signed_row(row: Mapping[str, Any]) -> bool:
+    """这一行是不是「已签」（`reviewed=true`）—— 从五元位的唯一读入口现算。
+
+    概念没有等级轴，但良定义证明照样有第 3 位：`conceptrows.concept_bits` 只在
+    `vsigns.sign_reading.state == "signed"` 时把它翻真。所以"已签概念"读的就是与
+    "已签命题"同一个位，不另立一个布尔（另立一个就多一处会漂、而漂的方向是
+    "看起来签过"）。位读不出来 ⇒ 假（fail-closed：判不了不是"已签"）。
+    """
+    try:
+        return bool(_EB.bits_from_row(dict(row)).get("reviewed"))
+    except Exception:  # noqa: BLE001 —— 判不了按"未签"读，不猜
+        return False
+
+
+def _notes_text(counts: Sequence[str], truncations: Sequence[str]) -> str:
+    """读数末尾那一串："另有 …；另有 …；还有 N 条没列…"（空列表 ⇒ 空串）。
+
+    两段分开拼：计数句前面都加"另有"（否则后一句会读成前一句的续写），而截断句
+    自带"还有"（`CITABLE_STATEMENTS` 那一句是"没列出来"的读数，不是"另一类"）。
+    """
+    parts: list[str] = []
+    if counts:
+        parts.append("另有 " + "；另有 ".join(counts))
+    parts.extend(truncations)
+    return "；".join(parts)
+
+
 class _Manuscript:
     """F 的证明手稿（依赖段 ＋ 只读预览）＋ 提示词里那份"可引用的在册命题"。"""
 
@@ -136,6 +163,20 @@ class _Manuscript:
         不再读 `statements.evidence_kind` 那一列历史）。低于该档的、等级算不出来的
         只报条数并说清"引用它们会被受控拒绝" —— 不列出来，是因为"能引"与"列在这里"
         必须是同一件事（两份清单漂开，模型就会照着引一条注定被拒的）。
+
+        ## 已签概念：可读，但不可引（2026-11-11 补）
+
+        概念不在可引池里（`kind=concept` ⇒ `derive_grade` 短路成 `not_applicable`：
+        它没有等级轴），但它可以是「已签」的 —— V 签过它的良定义证明 ⇒ `reviewed=true`。
+        改前这一档只报"另有 N 条概念"：F 看得到条数、看不到是哪一条，签过的概念在 F
+        眼里等于不存在。现在把已签概念逐条列出来（`stmt:<号>` + `kind=concept` +
+        label + 一句正文，截断沿用 `STATEMENT_ITEM_CHARS`），并逐条写明"可读但不可引
+        （可引门只放命题）"；未签概念仍只报条数（不列 id、不列正文）—— 两侧都不静默
+        消失。概念不进 `ids`：可引清单与可读面是两张表，混一张就会让模型照着引一条
+        注定被拒的号。
+
+        计数口径不变：两份清单各自受 `CITABLE_STATEMENTS` 上限约束（这一节只服务一个
+        读数面，不另立第二个体量常数），超出上限的那一句必须带"还有 N 条没列"。
         """
         rows, unreadable = self.statement_rows()
         if unreadable:
@@ -148,9 +189,10 @@ class _Manuscript:
         usable = [r for r in rows if str(r.get("status") or "") == "active"]
         usable.sort(key=lambda r: str(r.get("stmt_id") or ""))
         eligible: list[dict[str, Any]] = []
+        signed_concepts: list[dict[str, Any]] = []
         below = 0
         unknown_level = 0
-        concepts = 0
+        unsigned_concepts = 0
         for row in usable:
             if str(row.get("stmt_id") or "") in pool:
                 eligible.append(row)
@@ -162,14 +204,21 @@ class _Manuscript:
                 # strong_conjecture。改前这一档被算进 `below`，于是提示词说"这 1 条的
                 # 等级低于 pre_theorem（conjecture / strong_conjecture 那一档）"——
                 # 读这句话的人得到的结论是"这条能用但等级不够"，而实际是一条概念。
-                concepts += 1
+                #
+                # 已签的那一条要列出来（改前只报条数 ⇒ 签过的概念在 F 眼里不可见）；
+                # 未签的仍只报条数：没有签的正文不许混进"可读面"。
+                if _signed_row(row):
+                    signed_concepts.append(row)
+                else:
+                    unsigned_concepts += 1
             elif bucket == BUCKET_UNKNOWN:
                 unknown_level += 1
             else:
                 below += 1
         lines: list[str] = []
         ids: list[str] = []
-        for row in eligible[: self.CITABLE_STATEMENTS]:
+        listed = eligible[: self.CITABLE_STATEMENTS]
+        for row in listed:
             sid = str(row.get("stmt_id") or "")
             kind = str(row.get("kind") or "")
             label = " ".join(str(row.get("label") or row.get("statement_text") or "").split())
@@ -180,32 +229,52 @@ class _Manuscript:
                 line = _short(line, self.STATEMENT_ITEM_CHARS)
             lines.append(line)
             ids.append(f"stmt:{sid}")
-        rest: list[str] = []
+        counts: list[str] = []
         if below:
-            rest.append(f"{below} 条的等级低于 {_DS.CITATION_MIN_LEVEL}（conjecture / "
-                        "strong_conjecture 那一档）—— 引用它们会被受控拒绝")
-        if concepts:
+            counts.append(f"{below} 条的等级低于 {_DS.CITATION_MIN_LEVEL}（conjecture / "
+                          "strong_conjecture 那一档）—— 引用它们会被受控拒绝")
+        if unsigned_concepts:
             # 单列一句、且明说"不是档位不够"：这句是给模型读的，它必须先知道概念不在
             # 等级轴上，才不会被诱导去"把它引上来让它够格"（那条路今天不存在）。
-            # 不自带"另有"两个字：拼接处给每一句都加（见下面 `joined`）。
-            rest.append(f"{concepts} 条概念（`kind=concept`，不参与可引等级："
-                        "概念没有等级轴，不是“档位不够”）")
+            # "未签"两个字必须在：已签的另有清单，这一句只剩未签的那一批 —— 不写清
+            # 就会读成"概念全都在这里、一条也没漏"。
+            counts.append(f"{unsigned_concepts} 条概念（未签：`reviewed=false`，只报条数、"
+                          "不列 id 也不列正文；`kind=concept`，不参与可引等级："
+                          "概念没有等级轴，不是“档位不够”）")
         if unknown_level:
-            rest.append(f"{unknown_level} 条的等级算不出来 —— 也不许引（读不到就不放行）")
-        if len(eligible) > len(lines):
-            # 这一句此前自带"另有"，而拼接处也会加一次 ⇒ 只有它出现时读数会长成
-            # "另有 另有 N 条够格…"。拼接口径改成"每一句都加"之后，这一格跟着去掉。
-            rest.append(f"{len(eligible) - len(lines)} 条够格但没列出来（这一块只列前 "
-                        f"{self.CITABLE_STATEMENTS} 条）")
-        # 每一句自带"另有"：`rest` 里可能同时有"低档命题 / 概念 / 判不了"三句，只在
-        # 第一句前加一次会让后面的句子读成前一句的续写（"…；1 条概念"看着像同一件事）。
-        joined = "；另有 ".join(rest)
-        note = f"（另有 {joined}）" if rest else ""
+            counts.append(f"{unknown_level} 条的等级算不出来 —— 也不许引（读不到就不放行）")
+        truncations: list[str] = []
+        if len(eligible) > len(listed):
+            truncations.append(f"还有 {len(eligible) - len(listed)} 条够格但没列"
+                               f"（这一块只列前 {self.CITABLE_STATEMENTS} 条）")
+        # ---- 已签概念：列出来，但只进"可读面"，不进 `ids`
+        shown_concepts = signed_concepts[: self.CITABLE_STATEMENTS]
+        if shown_concepts:
+            # 先说清这一批是什么：混在可引命题里而不加这句，模型会照着引（而那是注定
+            # 被拒的）。"可引门只放命题"是原因，"可以读"是它能做的事。
+            lines.append("以下概念已签（`reviewed=true`），**可读但不可引**：可引门只放"
+                         "命题（概念没有等级轴，不在可引池里）—— 读得到，但写进 `cites` "
+                         "会被拒。")
+            for row in shown_concepts:
+                sid = str(row.get("stmt_id") or "")
+                label = " ".join(str(row.get("label") or "").split())
+                body = " ".join(str(row.get("statement_text")
+                                    or row.get("statement_full") or "").split())
+                line = (f"stmt:{sid}（kind=concept，label={label or '（没有标签）'}；"
+                        f"可读但不可引：可引门只放命题）—— 正文：{body or '（没有正文）'}")
+                if len(line) > self.STATEMENT_ITEM_CHARS:
+                    line = _short(line, self.STATEMENT_ITEM_CHARS)
+                lines.append(line)
+        if len(signed_concepts) > len(shown_concepts):
+            truncations.append(f"还有 {len(signed_concepts) - len(shown_concepts)} 条已签概念没列"
+                               f"（这一块只列前 {self.CITABLE_STATEMENTS} 条）")
+        text = _notes_text(counts, truncations)
+        note = f"（{text}）" if text else ""
         if not eligible:
             empty = ("（台账里现在没有一条站到 "
                      f"{_DS.CITATION_MIN_LEVEL} 级及以上的在册命题 ⇒ 这一轮不许引 `stmt:`；"
                      "要声明前提就把那一步写成 `assumption: true`")
-            return [], [], empty + (f"；另有 {joined}" if rest else "") + "）"
+            return lines, ids, empty + (f"；{text}" if text else "") + "）"
         return lines, ids, note
 
     # ---------------------------------------------------------------- 写手稿

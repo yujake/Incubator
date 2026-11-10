@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **289 个 `.py`、276,877 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **289 个 `.py`、276,950 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-11 拆模块后按现盘重算（本批记账）**：276,432 → **276,662**（净 +230：另一条 lane
@@ -25,6 +25,11 @@
 > 全部行（`passes`），`_gap_from_pending` 于是要求认领之后仍满 `SIGN_STREAK_NEED` 票、
 > 同一份正文才 `ok=True`（一票 / 两票 / 票数够但 sha 不一 ⇒ `holding`）；
 > `evidencebits.kind_following_grade` 把"还差门槛"与"一次都没签"分开说）。
+> 文件数 289、`>800 行` 的 75、全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
+> **2026-11-11 F 的读数面列出已签概念（本批记账）**：276,877 → **276,950**（净 +73：
+> `agent_f/manuscript.py` 把已签（`reviewed=true`）概念逐条列进 4.1 的可读面并说清
+> "概念可读不可引（可引门只放命题）"，未签的仍只报条数；`agent_f/core.py` 的 4.1 段
+> 跟着把"下面列出来的都是够格的"改成"命题都够格、概念可读不可引"）。
 > 文件数 289、`>800 行` 的 75、全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
 > **2026-11-10 F 侧撤"按命题号写证明"（p274，本批）**：276,029 → **276,185**（净 +156：
 > `specs/f.py` 的送审参数表删掉"在册后给号"那一格并改写四处按号教法、`agent_f/manuscript.py`
