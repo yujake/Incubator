@@ -35,11 +35,15 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from agentflow import manuscriptids as _MID  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow.agent_d import AgentD  # noqa: E402
 import agentflow.agent_d.write_report as WR  # noqa: E402
 
 from test_e_proof_is_carried_by_d import FULL, _env  # noqa: E402
+
+#: F 那一份稿的稿号（2026-11-10 稿号口径：稿名带稿号，不按命题号命名）。
+F_MID = "000901"
 
 
 def _register_first_statement(env: dict) -> str:
@@ -55,14 +59,26 @@ def _register_first_statement(env: dict) -> str:
 
 
 def _put_f_manuscript(env: dict, sid: str) -> None:
-    """盘上那份按命题号命名的 F 稿（携带单扫的判据是"文件真的在盘上"）。"""
-    rel = f"reports/f-proof-{sid}.md"
+    """盘上那份按 F 自己的稿号命名的 F 稿（携带单扫的判据是"文件真的在盘上"）。
+
+    2026-11-10（稿号口径）：稿名不再等于命题号 —— 稿名带 `F_MID`，命题号只记在
+    `statements` 行的 `manuscript_id` 那一格（B 收录时写的正是它）。携带单按那一格
+    找稿，于是这一条仍然量得到"F 那一行在不在单上"。
+    """
+    rel = _MID.canonical_rel(F_MID)
+    assert rel and f"f-proof-{sid}" not in rel, (rel, sid)
     target = pathlib.Path(env["store"].root) / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        f"# F 的证明手稿：R(3,4)=9\n\n- 命题号：stmt:{sid}\n\n"
+        f"# F 的证明手稿：R(3,4)=9\n\n- 命题号：stmt:（还没落号）\n\n"
         "## 命题\n\n" + FULL + "\n\n## 证明\n\n1. 由定义直接得到。\n",
         encoding="utf-8")
+    row = dict(next(r for r in env["store"].rows("statements")
+                    if str(r.get("stmt_id")) == sid))
+    row["manuscript_id"] = F_MID
+    with env["store"].tx("statements", actor="test",
+                         note="fixture:record-manuscript-id") as tx:
+        tx.upsert("statements", row)
 
 
 def _keys(rows: list[dict]) -> list[tuple[str, str]]:

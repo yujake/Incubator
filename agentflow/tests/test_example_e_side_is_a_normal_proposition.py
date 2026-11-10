@@ -107,21 +107,38 @@ def test_c_the_same_example_passes_the_identical_chain(tmp_path):
     e_row = row_of(st, e_env["sid"])
 
     # ① 落稿：F 的登记条目在册、kind=example；E 的 e-proof 文件在盘上
-    entries = {str(x.get("statement_id")): x for x in PR.entries_on_disk(st.root)
-               if str(x.get("family")) == "F"}
-    assert entries[f_env["sid"]]["kind"] == "example", entries[f_env["sid"]]
-    assert entries[f_env["sid"]]["sha256"] == f_env["got"]["proof_sha256"], (
-        entries[f_env["sid"]], f_env["got"]["proof_sha256"])
+    #
+    # 2026-11-10（稿号口径）：F 的稿名 / 登记条目按 F 自己的稿号命名，与命题号无关 ⇒
+    # 不能再用命题号去 entries_on_disk 里取那一条（`statement_id` 那一格在 F 还没被收录
+    # 时本来就是空的）。这里改成按路径取，并把"稿名里不含命题号"一并量出来 ——
+    # 强度没降：仍是"那一份稿的登记条目在册 / kind / sha 三格对得上"。
+    f_entries = [x for x in PR.entries_on_disk(st.root)
+                 if str(x.get("family")) == "F"]
+    assert len(f_entries) == 1, f_entries
+    f_entry = f_entries[0]
+    assert str(f_entry.get("path") or "") == f_env["rel"], f_entry
+    assert f_entry["kind"] == "example", f_entry
+    assert f_entry["sha256"] == f_env["got"]["proof_sha256"], (
+        f_entry, f_env["got"]["proof_sha256"])
+    assert f"f-proof-{f_env['sid']}" not in f_env["rel"], (f_env["rel"], f_env["sid"])
     assert (pathlib.Path(st.root) / e_env["rel"]).is_file()
 
-    # ② 审：形态闸两个角色各一次；V 的台账两条链各三票
+    # ② 审：形态闸两个角色各一次；V 的三票两条链都真跑
+    #
+    # 2026-11-10（稿号口径）：F 的命题号由 B 收录时现取 ⇒ V 先按「未在册」那一支把三票
+    # 记进 pending 台账（按正文 sha），B 收录时认领；E 那条仍走在册那一本
+    # `verifications/<命题号>.jsonl`（e-proof 按实验号寻址，本来就是两个号段）。
+    # 断言没降：F 三票仍在盘上、sha 仍逐票相符，且第 3 位在 B 收录后为真。
     read = CL.proposition_form_reading(st)
     assert read["checked"] is True and read["judged"] == 2, read
     assert read["by_role"]["F"]["well_formed"] == 1, read["by_role"]
     assert read["by_role"]["E"]["well_formed"] == 1, read["by_role"]
-    assert len(verification_rows(st, f_env["sid"])) == VR.SIGN_STREAK_NEED
+    f_pending = [r for r in pending_rows(st)
+                 if str(r.get("proof_sha256") or r.get("object_sha256") or "")
+                 == VR.text_sha(f_env["body"])]
+    assert len(f_pending) == VR.SIGN_STREAK_NEED, f_pending
+    assert dict(f_row["bits"] or {}).get("reviewed") is True, f_row["bits"]
     assert len(verification_rows(st, e_env["sid"])) == VR.SIGN_STREAK_NEED
-    assert len(pending_rows(st)) >= 1
 
     # ③ 等级：现算，且换掉标签不改等级（example 与 theorem 对同一份 bits 同值）
     f_bits, e_bits = dict(f_row["bits"]), dict(e_row["bits"])

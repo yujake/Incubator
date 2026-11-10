@@ -47,8 +47,6 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from conftest import reset_bit3_cache
-
 from agentflow import capabilities as CAP
 from agentflow import conductor as CND
 from agentflow import depsection as DS
@@ -524,14 +522,22 @@ def _v_with_secretary(store: Store, llm) -> AgentV:
 
 def _v_reviews_until_signed(agent: AgentV, sid: str, text: str,
                             manuscript: str = "") -> list[dict]:
-    """同一份正文审到发签门槛（在这一趟的多转里：前几转只落台账，最后一转才签）。
+    """同一份正文审到发签门槛（"连审到门槛"发生在同一次调用里）。
 
-    2026-10-30 起"连审到门槛"发生在同一次调用里（业主口径：V 判没问题后连续再判，
-    不是 F 交三次）⇒ 正控改从 `review_passes` 的逐转 `issued` 里读，对手方没变。
+    两档都支持（2026-11-10，稿号口径）：
+
+    - `sid` 非空（在册那一档）：逐转 `issued` 读数是「前几转只落台账、最后一转才签」；
+    - `sid` 为空（F 的稿还没被 B 收录那一档）：三转成立 ⇒ `proof_unregistered_signed`，
+      三票进 `verifications/pending/<正文 sha>.jsonl`、签块盖回稿；`issued` 不是这一支的
+      读数（None），所以改判「三转都是成立」。
+
+    两档共同的两条更硬读数一字未改：`signed_bit3` 恒 False（V 不再翻命题位）、
+    `review_write.manuscript_signed` 为真（收方秘书把九格块落回稿）、
+    且稿上那一块自己读出来是 `signed`（连 streak / need 一起对上门槛）。
 
     2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 —— 签块 / `## 依赖` / 按号
     寻址三样只在文件上。`manuscript` 就是 F 那一轮已经落在盘上的那一份
-    （`_run_f_proof` 的返回给出）。判据一个字没改。
+    （`_run_f_proof` 的返回给出）。
     """
     need = int(VR.SIGN_STREAK_NEED)
     got = agent.verify_proof(sid, proof_text=text, proof_manuscript=manuscript)
@@ -539,9 +545,13 @@ def _v_reviews_until_signed(agent: AgentV, sid: str, text: str,
     passes = got.get("review_passes") or []
     assert len(passes) == need, (
         f"这一趟自己连判了 {len(passes)} 转（门槛 {need} 转）：{passes}")
-    assert [p.get("issued") for p in passes] == [False] * (need - 1) + [True], (
-        f"逐转的发签读数是 {[p.get('issued') for p in passes]} —— 2026-10-29 口径："
-        f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（前几转只落台账）")
+    if str(sid or "").strip():
+        assert [p.get("issued") for p in passes] == [False] * (need - 1) + [True], (
+            f"逐转的发签读数是 {[p.get('issued') for p in passes]} —— 2026-10-29 口径："
+            f"同一份正文连续 {need} 次「成立」且秘书判定通过才发签（前几转只落台账）")
+    else:
+        assert str(got.get("kind") or "") == "proof_unregistered_signed", got
+        assert [p.get("verdict") for p in passes] == ["成立"] * need, passes
     # 2026-11-08（业主：「V 现在只对手稿负责」）：V 不再翻命题行的第 3 位
     # （`signed_bit3` 恒 False，命题位等 B 收录时按正文 sha 认领），签只落手稿。
     # 原句断的是"签真的发生了"；新契约下同一件事改由两处更硬的读数回答：
@@ -564,36 +574,43 @@ def _v_reviews_until_signed(agent: AgentV, sid: str, text: str,
 
 
 def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> None:
-    """端到端：F 真推一轮 → 稿 → D 直接交 B → 依赖行 → V 签字。
+    """端到端：F 真推一轮 → V 在稿上签 → D 直接交 B → 依赖行 → B 按 sha 认领那一签。
 
     这一条是业主那句「D 到 B 没有路吗？加」的整条演示：四步全在真机代码路径上，
     没有一步靠模型记得去传。
+
+    ## 次序为什么改成「F 写 → V 签 → D 携带 → B 收录」（2026-11-10 稿号口径）
+
+    改前是「F 写 → D 携带 → B 收录 → V 按命题号在册签」。那条次序的前提是稿名 =
+    命题号（V 的在册入口要求稿名里的号就是命题号）。2026-11-10 裁定之后 F 的稿只按
+    F 自己的稿号命名，与命题号是两个号段 ⇒ V 必须在 B 现取命题号之前把签盖在稿上
+    （这正是真机次序：V 签在前、B 收录在后），B 收录时按同一个正文 sha 认领那一签。
+    断言没降：V 的三票仍真跑、签块仍落在这一份稿上、依赖边仍由 B 这一笔落、
+    收录后第 3 位与 `reviewed_by` 仍要指回同一份正文。
     """
     store = _ws(tmp_path)
     _add_statement(store, THEOREM_A, label="定理甲")
-    proof = _run_f_proof(store)
+    # 稿号与命题号是两个号段：F 的稿号从 manuscript 计数器发。先把计数器推过 3 个号，
+    # 免得 F 的稿恰好落在 `f-proof-000000.md`（那正是下面被引命题 THEOREM_A 的稿名）——
+    # 两份不同的稿不许共用一个名字。这是夹具环境的一格，不是判据。
+    from agentflow import manuscriptids as _MID_CHAIN
 
-    # 唯一交稿链（2026-11-07）：F 落手稿 → D 携带 → B 按 sha 认领（发号 + 落依赖边）。
-    d = _d_with_b(store)
-    d.write_report()
-    assert _a_holds(store, d.last_delivery), d.last_delivery
-    f_stmt = str(d.last_delivery["results"][0]["stmt_id"])
-    assert f_stmt, d.last_delivery
-    rows = [dict(r) for r in store.rows("dependencies")]
-    assert rows, "依赖面一条都没有落"
-    # 准入闸（2026-11-02 默认 strict）之后，F 这一笔登记是先有签才写得进去的
-    # （`signed_v_handoffs` 用一份真签放行）；而这一条要跑的是"B 登记之后 V 现场连判
-    # 3 转发签"。把读侧那格缓存退回假，V 才会真的连判（真台账、真秘书判定）——
-    # 那一份签仍在 pending 台账里，闸在 B 那一步已经用过它。
-    reset_bit3_cache(store, f_stmt)
+    for _ in range(3):
+        _MID_CHAIN.next_manuscript_id(store.root)
+    proof = _run_f_proof(store)
+    f_rel = str(proof.get("manuscript_path") or "")
+    assert f_rel == f"reports/f-proof-{proof['manuscript_id']}.md", proof
+    assert f_rel != f"reports/f-proof-{THEOREM_A}.md", (
+        "夹具撞名：F 的稿与被引命题的稿落在同一个名字上", f_rel)
 
     # 2026-11-08（业主：「V 现在只对手稿负责」）：可引资格读"被引命题那一份手稿上有
-    # 没有 V 签"，不再读 statements.bits 的等级 ⇒ 夹具必须给被引的那一条落一份带真签的稿。
-    # 这是补前提（真机上每条在册命题的证明都住在一份稿里），不是放宽引用闸。
-    # 位置放在 D 携带之后：D 的携带单会扫 `reports/*.md`，提前落这份稿会让它多交一件
-    # （那是夹具时序，不是这条判据要量的事）。
+    # 没有 V 签" ⇒ 夹具必须给被引的那一条落一份带真签的稿。这是补前提（真机上每条
+    # 在册命题的证明都住在一份稿里），不是放宽引用闸。放在 V 之前：引用闸此刻就要读它。
     _cited_manuscript_with_a_real_sign(store, THEOREM_A, label="定理甲")
 
+    # ---- ① V 在「还没被 B 收录」这一档读稿、三转、把签块盖回稿 --------------------
+    f_text = pathlib.Path(store.root, f_rel).read_text(encoding="utf-8")
+    f_body = DS.proof_body(f_text).strip("\n")
     reply = json.dumps({
         "verdict": "成立", "defect_step": None, "why": "", "findings": [],
         "citation_checks": [{"stmt_id": THEOREM_A, "verdict": "consistent",
@@ -601,43 +618,88 @@ def test_the_chain_f_proof_d_carry_b_edges_v_signs(tmp_path: pathlib.Path) -> No
                              "note": "由定理甲那一步，用法一致"}]}, ensure_ascii=False)
     v_llm = _VSeam(reply)
     v = _v_with_secretary(store, v_llm)
-    row = next(dict(r) for r in store.rows("statements")
-               if str(r.get("stmt_id")) == f_stmt)
-    # 拿到号之后 B 把 F 的计划名那份稿转正成按号命名的正式稿（同一份稿，不第二份）
-    formal_rel = f"reports/f-proof-{f_stmt}.md"
-    assert pathlib.Path(store.root, formal_rel).is_file(), (
-        "B 发号之后 F 的稿没有转正成 `reports/f-proof-<号>.md`",
-        sorted(p.name for p in (pathlib.Path(store.root) / "reports").glob("f-proof*.md")))
-    assert not pathlib.Path(store.root, str(proof.get("manuscript_path") or "")).exists(), (
-        "转正之后计划名那份还在 ⇒ 盘上会有两份同一份稿")
     # 2026-10-29 口径：同一份正文连续 3 次「成立」且秘书判定通过才落签。
     # 2026-11-08（V 只对手稿）：签块由收方秘书落回稿（`vsigns.land` 只认
     # `secretary:F/B/E`，`by` 从召唤上下文里的 `parent_role` 取）。真机上 V 总是被
-    # 某一方派出来的，所以这一趟必须在同一个召唤上下文里跑 —— 夹具此前没给，
-    # 于是落地那一步如实报 `not_a_secretary`（拒落，一个字节都不写）。
+    # 某一方派出来的，所以这一趟必须在同一个召唤上下文里跑。
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
                         parent_role="F"):
-        reviewed = _v_reviews_until_signed(v, f_stmt, str(row.get("proof_text") or ""),
-                                          formal_rel)
+        reviewed = _v_reviews_until_signed(v, "", f_body, f_rel)
     signed = reviewed[-1]
-    # 签落在稿上（`_v_reviews_until_signed` 已核过 manuscript_signed 与稿上的签块）；
-    # 命题位仍由 B 收录时按正文 sha 认领（V 不写 statements）⇒ 这里断言的是"签发生在这份稿上"。
     assert dict(signed.get("review_write") or {}).get("manuscript_signed") is True, signed
     assert signed.get("signed_bit3") is False, signed
-    assert {c["stmt_id"] for c in signed.get("citation_checks") or []} == {THEOREM_A}, signed
-    assert "## 引用核实" in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
+    # 未在册那一支只读这一份稿（正文 + 机械依赖面审计），不做 LLM 逐条引用核实 ——
+    # 引用核实那一格在「在册那一支」，本仓由 `test_dependency_wiring_is_live` 的整条链
+    # 单独量着。这里如实量这一支的两个前提：V 的题面里有这份稿的正文与依赖面，
+    # 且依赖面点名了被引的那一条（那正是 B 之后要落成 `dependencies` 的那张表）。
+    _sec = DS.parse_dependency_section(f_text)
+    assert _sec.get("present") is True and not _sec.get("refused"), _sec
+    assert {str(r.get("stmt_id") or "") for r in (_sec.get("rows") or [])} == {THEOREM_A}, _sec
+    assert str(f_body.splitlines()[0]) in v_llm.prompts[-1], v_llm.prompts[-1][-2500:]
+
+    # ---- ② D 携带同一份稿交 B；B 按正文 sha 认领那一签、现取命题号、落依赖边 -------
+    d = _d_with_b(store)
+    d.write_report()
+    assert _a_holds(store, d.last_delivery), d.last_delivery
+    f_stmt = str(d.last_delivery["results"][0]["stmt_id"])
+    assert f_stmt, d.last_delivery
+    rows = [dict(r) for r in store.rows("dependencies")]
+    assert rows, "依赖面一条都没有落"
+
+    # ---- ③ 稿名与签：收录拿到命题号不改稿名；那一签被 B 认领 ---------------------
+    # 2026-11-10（新口径）：收录拿到命题号不改稿名。F 的稿从写到收录始终是
+    # `reports/f-proof-<稿号>.md`（稿号是 F 自己的号段），命题号只落在语句行上。
+    assert pathlib.Path(store.root, f_rel).is_file(), (
+        "F 那份按稿号命名的稿在 B 收录之后不在了",
+        sorted(p.name for p in (pathlib.Path(store.root) / "reports").glob("f-proof*.md")))
+    # 反向：稿名里不含命题号（按命题号命名的稿一份都不许出现 —— 那正是被停掉的旧口径）。
+    assert not pathlib.Path(store.root, f"reports/f-proof-{f_stmt}.md").exists(), (
+        "稿名里带上了命题号（旧口径的回潮）",
+        sorted(p.name for p in (pathlib.Path(store.root) / "reports").glob("f-proof*.md")))
+    assert not pathlib.Path(store.root, f"reports/f-proof-plan-{proof['plan_id']}.md").exists(), (
+        "计划名那份稿还在 ⇒ 盘上会有另一份同一份稿",
+        sorted(p.name for p in (pathlib.Path(store.root) / "reports").glob("f-proof*.md")))
+    # 2026-11-07（唯一交稿链）：放行 B 那一笔的是 pending 台账里的「先签后登记」
+    # （按正文 sha 认领）⇒ B 收录时把认领的那几行落进这一条的在册台账。
+    # 2026-11-10（稿号口径）：V 的三票是在「还没被收录」时按正文 sha 落的 —— 与旧链
+    # 同一本 pending 账，只是事件次序变成「先签、后收录」。台账里因此应有 V 的三转
+    # （每转一行，带 V 那一转的引用核实读数）+ 1 行本文件的「V 已签」前提签
+    # （`signed_v_handoffs`：只写 pending，不带引用核实）。精确到行数，不许写成
+    # "至少几行" —— 旧链那 3 行与"3+1"在读数上是两件事。
     ledger, problems = VR.list_verifications(store.root, statement_id=f_stmt, limit=None)
-    assert problems == [] and ledger, (problems, ledger)
-    # 2026-11-07（唯一交稿链）：B 的第一笔登记是这条命题的首次登记，放行它的那一签
-    # 是 pending 台账里的「先签后登记」（按正文 sha 认领，不在 `verifications/<号>.jsonl`
-    # 里另起一行）⇒ 这一趟 V 只落 3 行（逐转一行；前两转只落台账、第三转发签）。
-    # 旧链那 `+1` 是"命题已在册、夹具补一签"那一档，本链不再发生 —— 这里不许写成 4 行。
-    assert len(ledger) == int(VR.SIGN_STREAK_NEED), (
-        "前两次「成立」也必须落在台账里（只落台账、不翻位），"
+    assert problems == [], problems
+    _signed_block = VS.manuscript_sign_reading(
+        pathlib.Path(store.root, f_rel).read_text(encoding="utf-8"),
+        manuscript_path=f_rel)
+    _f_sha = str(_signed_block.get("proof_sha256") or "")
+    assert _f_sha, _signed_block
+    assert len(ledger) == int(VR.SIGN_STREAK_NEED) + 1, (
+        "台账应有 V 的三转（每转一行）+ 夹具「V 已签」那一份前提签 1 行；"
         f"读到 {len(ledger)} 行：{[r.get('verification_id') for r in ledger]}")
-    assert [r.get("verdict") for r in ledger[-int(VR.SIGN_STREAK_NEED):]] == ["成立"] * int(
-        VR.SIGN_STREAK_NEED), ledger
-    assert str(ledger[-1].get("verdict")) == "成立", ledger[-1]
+    _v_rows = [r for r in ledger if r.get("citation_checks")]
+    assert len(_v_rows) == int(VR.SIGN_STREAK_NEED), (
+        "V 的那三转应各带一条引用核实读数",
+        [(r.get("verification_id"), r.get("citation_checks")) for r in ledger])
+    assert all(str(r.get("verdict")) == "成立" for r in _v_rows), _v_rows
+    assert all(str(r.get("proof_sha256") or "") == _f_sha for r in ledger), (
+        "台账里有人签的不是这一份正文", [(r.get("verification_id"),
+                                        r.get("proof_sha256")) for r in ledger])
+    assert {str(c.get("stmt_id")) for r in _v_rows
+            for c in (r.get("citation_checks") or [])} == {THEOREM_A}, _v_rows
+    pending, pending_problems = VR.pending_rows(store.root)
+    assert pending_problems == [], pending_problems
+    _mine = [r for r in pending
+             if str(r.get("proof_sha256") or r.get("object_sha256") or "") == _f_sha]
+    assert len(_mine) >= int(VR.SIGN_STREAK_NEED), (
+        f"F 这一份正文的三票不齐：{[(r.get('verification_id'), r.get('proof_sha256')) for r in pending]}")
+    # B 收录时按同一个 sha 认领那一签：第 3 位翻真、`reviewed_by` 指回同一份正文的 sha。
+    # 这两格是「签随稿走」的结果读数 —— 与上面 pending 三票一起，构成"签没丢"。
+    _row_chain = next(dict(r) for r in store.rows("statements")
+                      if str(r.get("stmt_id")) == f_stmt)
+    _bits_chain = dict(_row_chain.get("bits") or {})
+    assert _bits_chain.get("reviewed") is True, _bits_chain
+    assert str((dict(_bits_chain.get("evidence") or {}).get("reviewed_by") or {}
+                ).get("proof_sha256") or "") == _f_sha, _bits_chain
 
 
 def test_the_washed_flag_travels_with_the_file(tmp_path: pathlib.Path) -> None:

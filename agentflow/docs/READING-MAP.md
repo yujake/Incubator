@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **286 个 `.py`、276,185 行**，**78 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **286 个 `.py`、276,281 行**，**78 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-10 F 侧撤"按命题号写证明"（p274，本批）**：276,029 → **276,185**（净 +156：
@@ -13,6 +13,12 @@
 > `agent_f/vsign.py` 的送审提示只点稿路径、`agent_skills.py` 的 F 手册按新口径重写；
 > 另一条 lane 与判据文件的行数按现值并入）。文件数 286 不变、`>800 行` 的 78 不变；
 > 全仓最大 `secretary.py` 14,206、`agent_loop.py` 14,189 不变。
+> **2026-11-10 F 的空稿号补号（p275，本批）**：276,185 → **276,281**（净 +96：
+> `agent_f/core.py` 的 `_hand_proof` 在空稿号时按「调用方给的 / 沿用子目标的 /
+> 向 F 自己的号源新取」补号并回传 `manuscript_id_source`，于是 F 的新写路径不再
+> 落在 `f-proof-plan-*` 那一支；`agent_f/step.py` 把这一格带进返回值）；
+> 文件数 286 不变、`>800 行` 的 78 不变；全仓最大 `secretary.py` 14,206、
+> `agent_loop.py` 14,189 不变。
 > **2026-11-10 C 的关系推断：局部树的按需展开（p273，A + B 批）**：274,431 → **276,029**
 > （本批新增 `ledgerindex.py`（只读索引 + 局部树，约 900 行）与 `tools/ledger_tools.py`
 > （`ledger.resolve` / `ledger.expand` 两件），`specs/c.py` 的关系推断教法由"手算多跳"

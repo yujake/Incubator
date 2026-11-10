@@ -38,6 +38,9 @@ from agentflow.store import Store
 
 PLAN = "0000"
 SID = "s1"
+#: 这一组夹具的固定稿号（新口径：稿名只由 F 自己的稿号决定；刻意取得与命题号 000041
+#: 不同 —— 于是"稿名带的是稿号而不是命题号"是量得出来的）。
+MID = "000777"
 LABEL = f"F 攻坚 {PLAN} 子目标 {SID}"
 TEXT = "设 f 在 [0,1] 上连续，则 f 一致连续。"
 OTHER = "设 g 在 [0,1] 上可导，则 g 一致连续。"
@@ -109,6 +112,7 @@ def _hand(f: AgentF, body: str, *, text: str = TEXT, sid: str = SID,
         full=text, text=text, body=body, sid=sid,
         plan={"plan_id": PLAN, "problem_key": "PK"},
         sg={"sid": sid, "text": text},
+        manuscript_id=MID,
         manuscript_text="",
         manuscript_received={"source": "param", "chars": len(body),
                              "section_rows": len(CITES), "refs_in_proof": 0,
@@ -125,7 +129,7 @@ def _seeded(st: Store) -> dict:
 
 
 def _manuscript_text(st: Store) -> str:
-    return (pathlib.Path(st.root) / f"reports/f-proof-000041.md").read_text(encoding="utf-8")
+    return (pathlib.Path(st.root) / f"reports/f-proof-{MID}.md").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------- a：登记一次 + 重写 3 次
@@ -243,9 +247,12 @@ def test_i_rewrite_touches_only_the_proof_section(tmp_path):
         seen.append(dict(got["section_hashes"]))
         nos.append(got["proof_no"])
     assert nos == [1, 2, 3, 4], nos
-    # 盘上始终只有 1 份该命题的手稿（不许出现 -v2 / -p2 这一族新名）
+    # 盘上始终只有 1 份该命题的手稿（不许出现 -v2 / -p2 这一族新名），
+    # 而且它按 F 自己的稿号命名、不按命题号（2026-11-10 口径）。
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("*.md"))
-    assert files == ["f-proof-000041.md"], files
+    assert files == [f"f-proof-{MID}.md"], files
+    assert not any(name == f"f-proof-{row['stmt_id']}.md" for name in files), (
+        "稿名里带上了命题号（旧口径的回潮）", files, row["stmt_id"])
     for hashes in seen[1:]:
         assert hashes["## 命题"] == base["## 命题"], "命题那一节一个字都不许动"
         assert hashes["## 依赖"] == base["## 依赖"], "依赖那一节没有新引用 ⇒ 逐字节相同"
@@ -290,6 +297,7 @@ def test_h_a_lemma_lands_as_lemma_in_the_manuscript_and_b_can_read_it(tmp_path):
         full=TEXT, text=TEXT, body=PROOFS[0], sid=SID,
         plan={"plan_id": PLAN, "problem_key": "PK"},
         sg={"sid": SID, "text": TEXT, "kind": "lemma"},
+        manuscript_id=MID,
         manuscript_text="", manuscript_received={"source": "param", "chars": 1,
                                                  "section_rows": 0, "refs_in_proof": 0},
         cites=[], tier={"kind": "heuristic", "why": "夹具"},

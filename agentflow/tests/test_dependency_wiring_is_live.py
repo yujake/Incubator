@@ -11,10 +11,11 @@
 
 ## 传递路径（业主最后定下来的那一条）
 
-    F 先写手稿（登记之前就要在手上）→ F 的 outlet 登记那条命题（手稿改名为
-    reports/f-proof-<命题号>.md）→ D 交研究手稿给 B 入库时把 F 那份稿一并带上
-    （D 的报告里「## 携带的证明手稿」那张三列表：命题号 / 路径 / sha256）→
-    B 读那份稿、按 `## 依赖` 四列表落 dependencies → V 读同一份依赖面核引用并签字。
+    F 先写手稿（登记之前就要在手上）→ F 的 outlet 登记那条命题（稿按 F 自己的稿号
+    命名 `reports/f-proof-<稿号>.md`；命题号由 B 收录时现取，不改稿名）→ D 交研究
+    手稿给 B 入库时把 F 那份稿一并带上（D 的报告里「## 携带的证明手稿」那张三列表：
+    命题号 / 路径 / sha256）→ B 读那份稿、按 `## 依赖` 四列表落 dependencies →
+    V 读同一份依赖面核引用并签字。
 
 ## 两条死结（改前的形态）
 
@@ -235,8 +236,9 @@ def _run_proof_round(store: Store, cites: list[str]) -> dict:
     2026-11-07（业主裁定：登记与写证明解耦）：F 不再自己把新命题写进 `statements`；
     命题由 B 在 V 签之后收录。这一组判据量的是"B 读 F 的手稿落依赖"那条链，所以夹具
     把这一条命题先铺成已经在册（B 先收录过的那一版），于是 F 这一轮走的是
-    "已登记 ⇒ 只挂证明"那条路：手稿仍按命题号命名（`reports/f-proof-<号>.md`），
-    D 才携带得走。这与真机顺序一致（B 收录在前、F 之后反复改证明）。
+    "已登记 ⇒ 只挂证明"那条路：手稿按 F 自己的稿号命名（`reports/f-proof-<稿号>.md`，
+    2026-11-10 起与命题号是两个号段），D 才携带得走。这与真机顺序一致（B 收录在前、
+    F 之后反复改证明）。
     """
     f, _seam = _f_with_seam(store, _proof_product(cites=cites))
     plan_id = _new_plan(f)
@@ -254,6 +256,20 @@ def _run_proof_round(store: Store, cites: list[str]) -> dict:
     out = f.step(plan_id)
     assert out.get("action") == "proof", out
     assert str(out.get("statement_id") or "") == str(seeded["stmt_id"]), out
+    # 2026-11-10（夹具归一，按稿号口径）：B 收录 F 的稿时把稿号记在 `statements` 行上
+    # （`register_statement` 的 `row["manuscript_id"]`），D 的携带单之后按这一格找稿。
+    # 这一行的其余部分仍是"B 收录过的那一版"；补的只是真机上 B 收录那一步写下的那一格
+    # —— 不补它，D 只能把这份稿读成 `mss:<稿号>`（还等着收录的那一档），
+    # 于是"D 携带的是这一条命题的稿"这条断言没有可读的连接点。断言一个字没改。
+    _mid_now = str(out.get("manuscript_id") or "")
+    assert _mid_now, out
+    if str(seeded.get("manuscript_id") or "") != _mid_now:
+        _row = dict(next(r for r in store.rows("statements")
+                         if str(r.get("stmt_id")) == str(seeded["stmt_id"])))
+        _row["manuscript_id"] = _mid_now
+        _row["proof_no"] = int(out.get("proof_no") or 1)
+        with store.tx("statements", actor="test", note="fixture:record-manuscript-id") as _tx:
+            _tx.upsert("statements", _row)
     # 2026-11-10（夹具归一）：这一组用例量的是"D 携带 → B 读稿"那条链，不是 F 的秘书
     # 闸；而 `_f_with_seam` 不装秘书 ⇒ 形态闸 fail-closed，登记条目落不下来。这里用
     # 登记的那个唯一写口把条目补齐（命题号 = 已铺在册的那一条、稿号 = F 自己的稿号），
@@ -546,6 +562,19 @@ def test_a_cited_statements_carried_manuscript_does_not_lend_its_number(
     _library(store)
     out = _run_proof_round(store, [f"stmt:{THEOREM_A}"])
     f_stmt = str(out["statement_id"])
+    # 2026-11-10（夹具归一，老盘形态）：解耦之前 F 会把在册命题号写进稿头
+    # （`- 命题号：stmt:<号>`）；新口径不再写（稿号就是稿的身份）。这一条量的正是
+    # 「老盘上那种写着被引命题号的稿，不许把那个号借给本笔」—— 把那一行按老盘形态
+    # 补回去，判据（`_manuscript_belongs_to_a_cited_statement`）才有输入。
+    # 不补它，候选号两边都为空，打桩与不打桩读数相同（反真空会空转）。
+    from agentflow import manuscriptform as _MF_FIX
+
+    _rel_fix = str(out["manuscript_path"])
+    _path_fix = pathlib.Path(store.root) / _rel_fix
+    _old_fix = _path_fix.read_text(encoding="utf-8")
+    _new_fix, _applied_fix = _MF_FIX.ensure_statement_line(_old_fix, f_stmt)
+    assert _applied_fix is True, (_old_fix[:300], f_stmt)
+    _path_fix.write_text(_new_fix, encoding="utf-8")
     _d_report(store)
     body = f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。"
     sign_before_registration(store.root, proof_text=body)

@@ -26,8 +26,8 @@ from agentflow.agent_f import core as FCORE
 from agentflow.agent_f.core import AgentF
 
 from _example_chain import (
-    PLAN, SID_SLOT, FULL, manuscript_text, row_of, run_f_example, verification_rows,
-    well_formed_seam, ws,
+    F_MID, PLAN, SID_SLOT, FULL, manuscript_text, pending_rows, row_of,
+    run_f_example, well_formed_seam, ws,
 )
 
 
@@ -46,13 +46,24 @@ def test_a_f_registers_an_example_and_its_grade_is_by_the_textual_proof(tmp_path
     assert len(form) == 1, form
     assert form[0]["role"] == "F" and form[0]["kind"] == "example", form[0]
     assert form[0]["checked"] is True and form[0]["well_formed"] is True, form[0]
-    # 送 V：在册那一支三转三行，签块按正文 sha 落在稿上
-    rows = verification_rows(st, env["sid"])
-    assert len(rows) == VR.SIGN_STREAK_NEED, rows
-    assert all(str(r.get("proof_sha256") or "") == VR.text_sha(env["body"])
-               for r in rows), rows
+    # 送 V：命题号由 B 收录时现取 ⇒ V 走「未在册」那一支：三票按正文 sha 进 pending
+    # 台账、签块盖回同一份稿（第 9 格稿号）；B 收录时按同一个 sha 认领那一签。
+    # 2026-11-10（稿号口径）改的是「三票记在哪本账」：旧断言要求
+    # `verifications/<命题号>.jsonl` 三行 —— 那需要稿名等于命题号，与「F 的稿只按稿号
+    # 命名」不可兼得。强度没降：三票仍然真跑、sha 仍然逐票相符，另两条更硬的读数
+    # （B 收录后第 3 位翻真、`reviewed_by` 指回 pending 那一行）一并断在这里。
+    pending = pending_rows(st)
+    assert len(pending) == VR.SIGN_STREAK_NEED, pending
+    want_sha = VR.text_sha(env["body"])
+    assert all(str(r.get("proof_sha256") or r.get("object_sha256") or "") == want_sha
+               for r in pending), pending
+    assert env["passes"].get("kind") == "proof_unregistered_signed", env["passes"]
     assert env["block"]["signed"] is True, env["block"]
-    assert env["block"]["proof_sha256"] == VR.text_sha(env["body"]), env["block"]
+    assert env["block"]["proof_sha256"] == want_sha, env["block"]
+    _filed_bits = dict(row_of(st, env["sid"]).get("bits") or {})
+    assert _filed_bits.get("reviewed") is True, _filed_bits
+    assert str(((dict(_filed_bits.get("evidence") or {})).get("reviewed_by") or {}
+                ).get("proof_sha256") or "") == want_sha, _filed_bits
     # 等级：按文字论证算（有证明 + 有 V 签 ⇒ pre_theorem）
     row = row_of(st, env["sid"])
     assert row["kind"] == "example", row
@@ -99,10 +110,18 @@ def test_a2_the_proof_product_can_declare_example_and_the_registry_lands_it(tmp_
                "steps": [{"n": 1, "text": "由 Sylow 定理，n_3=1。", "cites": [],
                           "assumption": False}]}
     got = f._proof_outlet(product, {"sid": SID_SLOT, "text": FULL, "testable": ""},
-                          plan={"plan_id": PLAN, "problem_key": "k1"})
+                          plan={"plan_id": PLAN, "problem_key": "k1"},
+                          manuscript_id=F_MID)
     assert got.get("ok") is True, got
     rel = str(got.get("manuscript_path") or "")
-    assert rel == f"reports/f-proof-{sid}.md", rel
+    # 2026-11-10（稿号口径）：登记条目落在 F 自己的稿号上（夹具显式给号），
+    # 不按命题号 / 计划号命名。
+    assert rel == f"reports/f-proof-{F_MID}.md", rel
+    assert str(got.get("manuscript_id") or "") == F_MID, got
+    assert str(got.get("manuscript_id_source") or "") == "given", got
+    # 反向：稿名里不含命题号（旧口径 `f-proof-<命题号>` 不许出现）。
+    assert f"f-proof-{sid}" not in rel, (rel, sid)
+    assert "f-proof-plan-" not in rel, rel
     text = manuscript_text(st, rel)
     assert PR.parse_entry(text)["kind"] == "example", text[:400]
     form = dict(got.get("proposition_form") or {})

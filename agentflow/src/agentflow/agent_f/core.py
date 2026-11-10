@@ -2122,6 +2122,44 @@ class _Core:
         stmt_id = str(row_now.get("stmt_id") or "")
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
 
+        # ---- 空稿号必须在这里补上（2026-11-10 第三刀，判据 a/b）---------------------
+        #
+        # 现场：`_hand_proof(..., manuscript_id="")` 把空号原样递给
+        # `proofregistry.register_or_rewrite(manuscript_id="")`，而后者保留着老盘的读兼容
+        # 分支（`manuscriptform.name_reading` 在"没有稿号、有 plan_id"时拼
+        # `f-proof-plan-<计划号>.md`）⇒ F 的新写路径落成的是计划名。
+        # 那是读老盘的兼容面，不是 F 的新写口径（业主 2026-11-10：「F 的稿自己维护一套
+        # 号源，不依赖命题号和计划号」）。
+        #
+        # 所以 F 这一侧在这里就把号补上，三个来源按次序取（读数是 `manuscript_id_source`）：
+        # ① 调用方给了号 ⇒ 原样用（"given"）；
+        # ② 这个子目标已经有稿 ⇒ 沿用同一个号（"subgoal"）：先看 B 收录时记在
+        #    `statements` 行上的 `manuscript_id`，再看计划 history 里上一轮落稿的路径
+        #    （与 `_resolve_manuscript_id` 同一个判据；改证明不换稿）；
+        # ③ 都没有 ⇒ 向 F 自己的号源要一个（"allocated"）。
+        # 补完之后递给 `register_or_rewrite` 的 `manuscript_id` 永远非空 ⇒ 路径只由
+        # `manuscriptids.canonical_rel` 决定（`reports/f-proof-<稿号>.md`），
+        # 计划名那一支在 F 的新写路径上不可达。
+        from .. import manuscriptids as _MID_HAND
+
+        mid = str(manuscript_id or "").strip()
+        if mid:
+            mid_source = "given"
+        else:
+            mid_source = ""
+            _row_mid = str(row_now.get("manuscript_id") or "").strip()
+            if _MID_HAND.is_manuscript_id(_row_mid):
+                mid, mid_source = _row_mid, "subgoal"
+            else:
+                mid = self._subgoal_manuscript_id(plan=plan, sid=sid)
+                if mid:
+                    mid_source = "subgoal"
+            if not mid:
+                mid = _MID_HAND.next_manuscript_id(root)
+                # 号源理论上受控抛 / 给号；给不出号就不谎称"这次新取的"（读数要能
+                # 分开"发了号"与"号没发出来"）。
+                mid_source = "allocated" if mid else ""
+
         def _gate(**_kw: Any) -> Mapping[str, Any]:
             # 闸的判据只有一处（`Secretary.judge_proposition_form`）：这里只把这一条
             # 命题的描述、种类与证明正文递过去；判不过 / 没判成都在它里面折成受控读数
@@ -2145,7 +2183,7 @@ class _Core:
             root, family=_MF.FAMILY_F, label=label, proposition=proposition,
             proof_text=body, dependency_rows=list(dependency_rows or []),
             plan_id=plan_id, sid=sid, title=text,
-            manuscript_id=str(manuscript_id or ""),
+            manuscript_id=mid,
             kind=kind_now, template=str(manuscript_text or ""), gate=_gate)
         refused_kind = str(got.get("refused") or "")
         if not got.get("ok"):
@@ -2195,7 +2233,16 @@ class _Core:
                 "proof_rewritten": mode == "rewritten",
                 "proof_mode": mode,
                 "proof_label": label,
-                "manuscript_id": str(got.get("manuscript_id") or manuscript_id or ""),
+                "manuscript_id": str(got.get("manuscript_id") or mid),
+                #: 这个稿号是这一笔从哪来的（判据 a/b 的读数）：
+                #: `given` = 调用方给的 / `subgoal` = 沿用这个子目标已有的稿 /
+                #: `allocated` = 这次向 F 自己的号源新取的。空号在这里已经被补上，
+                #: 所以 F 的新写路径不会落到 `f-proof-plan-*` 那一支（老盘只读兼容）。
+                "manuscript_id_source": mid_source,
+                "manuscript_id_source_reading": (
+                    "调用方给的" if mid_source == "given"
+                    else "沿用子目标的" if mid_source == "subgoal"
+                    else "这次新取的" if mid_source == "allocated" else ""),
                 "proof_no": int(got.get("proof_no") or 0),
                 "proof_sha256": str(got.get("sha256") or ""),
                 "manuscript_path": str(got.get("manuscript_path") or ""),
@@ -2444,6 +2491,29 @@ class _Core:
         return (f"- 第 {round_no} 轮（`{kind}`，{product.get('strategy')}）状态：{status}"
                 f"｜依据：{basis}｜下一步：{next_step}")
 
+    def _subgoal_manuscript_id(self, *, plan: Mapping[str, Any], sid: str) -> str:
+        """这个子目标已经写过的那份稿的号（读计划 history；没有 ⇒ 空串）。
+
+        判据只有一处：上一轮落稿时写进 history 的 `manuscript_path` 能被
+        `vsigns.manuscript_id_of` 认出六位稿号。那是 F 自己的工作留痕（不是"计划拥有稿"），
+        计划号不进稿名、也不决定稿号。
+
+        调用点两处：`_resolve_manuscript_id`（proof 档先定这一轮写哪一份）与
+        `_hand_proof`（登记 / 改写入口拿到空号时沿用子目标的号，而不是另发一个新号）。
+        """
+        from .. import manuscriptids as _MID
+
+        want = str(sid or "").strip()
+        for row in reversed([dict(h) for h in (plan.get("history") or [])
+                             if isinstance(h, Mapping)]):
+            if str(row.get("sid") or "") != want:
+                continue
+            rel = str(row.get("manuscript_path") or "")
+            got = _VS_NAME.manuscript_id_of(rel) if rel else ""
+            if _MID.is_manuscript_id(got):
+                return str(got)
+        return ""
+
     def _resolve_manuscript_id(self, *, plan: Mapping[str, Any], sid: str,
                                product: Mapping[str, Any]) -> str:
         """这一轮该写哪一份稿：F 自己的稿号（业主 2026-11-10：不靠命题号/计划号）。
@@ -2461,14 +2531,9 @@ class _Core:
         mid = str(product.get("manuscript_id") or "").strip()
         if mid:
             return mid
-        for row in reversed([dict(h) for h in (plan.get("history") or [])
-                             if isinstance(h, Mapping)]):
-            if str(row.get("sid") or "") != str(sid or ""):
-                continue
-            rel = str(row.get("manuscript_path") or "")
-            got = _VS_NAME.manuscript_id_of(rel) if rel else ""
-            if _MID.is_manuscript_id(got):
-                return str(got)
+        found = self._subgoal_manuscript_id(plan=plan, sid=sid)
+        if found:
+            return found
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
         return _MID.next_manuscript_id(root)
 
@@ -2880,6 +2945,9 @@ class _Core:
             # `deps_preview` 是只读预览（依赖段解析、档位门与三态读数，一行都不写盘）；
             # `manuscript_source` 说登记那一刻手上的稿是从哪来的（param / none）。
             "manuscript_id": str(manuscript.get("manuscript_id") or manuscript_id or ""),
+            #: 稿号从哪来（`given` / `subgoal` / `allocated`）：`_hand_proof` 的读数字段
+            #: 原样带出来 —— 空号补号那一刀的结果必须在这一层看得见。
+            "manuscript_id_source": str(outlet.get("manuscript_id_source") or ""),
             "manuscript_path": str(manuscript.get("path") or ""),
             "manuscript": str(manuscript.get("text") or ""),
             "deps_preview": dict(manuscript.get("preview") or {}),

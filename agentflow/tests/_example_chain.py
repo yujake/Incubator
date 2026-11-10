@@ -48,6 +48,9 @@ from test_v_reviews_three_times_before_signing import (  # noqa: E402
 
 PLAN = "0001"
 SID_SLOT = "S1"
+#: F 这一份 example 手稿的稿号（判据夹具固定给一个：新口径下稿名只由 F 自己的稿号决定，
+#: 与命题号 / 计划号无关）。刻意取得与命题号不同 —— 于是"稿名带的是哪个号"是量得出来的。
+F_MID = "000901"
 FULL = "设 G 是 6 阶群；则 G 同构于 C6 或 S3。"
 PROOF = ("1. 由 Sylow 第三定理，n_3 ≡ 1 (mod 3) 且 n_3 | 2 ⇒ n_3 = 1。\n"
          "2. 于是 3-Sylow 子群正规；同法 n_2 ∈ {1,3}：n_2=3 时得到 S3，"
@@ -114,25 +117,22 @@ def row_of(st: Store, sid: str) -> dict:
 
 
 def run_f_example(st: Store) -> dict:
-    """F：先立猜想行 → 登记 example 手稿（过形态闸一次）→ V 三转 → B 收录。
+    """F：登记 example 手稿（过形态闸一次）→ V 三转（签在稿上）→ B 按 sha 收录。
 
-    为什么要先立一条猜想行：老盘上未拿号的手稿曾叫 `f-proof-plan-0001.md`；2026-11-10
-    裁定之后它也是合法载体（老盘只读兼容，与数字名同等），但计划号不是命题号 ——
-    签块第 8 格「命题号」仍落 `未在册`。这条链要的是"按号命名、签块带号"的形态
-    （下面 V 的在册入口按 `statement_id` 签、B 按号收录），所以先立一行猜想
-    （B-2 允许 `conjecture` 起步）拿号，F 的手稿落在 `reports/f-proof-<号>.md` ——
-    与真机上「先立猜想、再补证明」同一条路；新 F 也不再写计划名（p272 之后只按自己的
-    稿号命名，见 `manuscriptids`）。
+    ## 次序为什么是「先签、后收录」（2026-11-10 稿号口径）
+
+    旧次序是「先立一条猜想行拿命题号 → V 按 `statement_id` 在册签发 → B 收录」。
+    那条次序成立的前提是「稿名 = 命题号」（V 的在册入口要求稿名里的号就是命题号）。
+    2026-11-10 裁定之后 F 的稿只按自己的稿号命名（`reports/f-proof-<稿号>.md`），
+    与命题号是两个号段 ⇒ 命题还在册之前，V 先按未在册那一支读稿、三转、把签块盖回
+    稿上（`proof_unregistered_signed`，三票进 `verifications/pending/<正文 sha>.jsonl`）；
+    B 收录时按同一个正文 sha 认领那一签、现取命题号。这正是真机次序（V 签在前、B 收录
+    在后），也是 `vsigns.issue` 的「签随稿走」那一格要的形状。
+
+    夹具显式给 `F_MID`（刻意与 B 现取的命题号不同）：稿名带的是稿号，不是命题号。
+    形态闸仍然只跑一次；V 的三票仍然真跑；签块仍然落在这一份稿上。
     """
     agent_b = b(st)
-    seeded = agent_b.register_statement(
-        origin="own_result", kind="conjecture", statement_full=FULL,
-        statement_text=FULL, evidence_kind="heuristic",
-        doc_id=S.format_id(0), line_range={"start": 1},
-        quote_reason="我方猜想（还没有证明正文）")
-    assert seeded.get("ok") is True, seeded
-    sid = str(seeded.get("stmt_id") or "")
-    assert sid
 
     seam = well_formed_seam()
     f = AgentF(st, config={"workspace_root": str(st.root), "plan_id": PLAN})
@@ -142,14 +142,20 @@ def run_f_example(st: Store) -> dict:
         full=FULL, text=FULL, body=PROOF, sid=SID_SLOT,
         plan={"plan_id": PLAN, "problem_key": "k1"},
         sg={"sid": SID_SLOT, "text": FULL, "kind": "example"},
+        manuscript_id=F_MID,
         manuscript_text="",
         manuscript_received={"source": "param", "chars": 0,
                              "section_rows": 0, "refs_in_proof": 0},
         cites=[], tier={"kind": "heuristic", "why": "夹具"},
-        dependency_rows=[], existing_row=row_of(st, sid))
+        dependency_rows=[], existing_row={})
     assert got.get("ok") is True, got
     rel = str(got.get("manuscript_path") or "")
-    assert rel == f"reports/f-proof-{sid}.md", rel
+    # 2026-11-10（稿号口径）：稿名带的是 F 自己的稿号，不是命题号 / 计划号。
+    assert rel == f"reports/f-proof-{F_MID}.md", rel
+    assert str(got.get("manuscript_id") or "") == F_MID, got
+    # 反向：稿名里不许出现计划名（`f-proof-plan-*` 是 F 新写路径上不可达的老盘兼容面）；
+    # 命题号这一条的反向断言在 B 现取号之后（那时才知道号是多少）由调用方量。
+    assert "f-proof-plan-" not in rel, rel
     text = manuscript_text(st, rel)
     body = DS.proof_body(text).strip("\n")
 
@@ -157,7 +163,9 @@ def run_f_example(st: Store) -> dict:
                secretary=_v_secretary(st))
     with submitted_by_f():
         # 一次调用内部就连判到门槛（`review_passes` 是那三转的逐次读数）
-        passes = v.verify_proof(statement_id=sid, proof_manuscript=rel)
+        passes = v.verify_proof(statement_id="", proof_manuscript=rel)
+    assert str(passes.get("kind") or "") == "proof_unregistered_signed", passes
+    assert len(passes.get("review_passes") or []) == VR.SIGN_STREAK_NEED, passes
     signed_text = manuscript_text(st, rel)
     block = VS.manuscript_sign_reading(signed_text, manuscript_path=rel)
 
@@ -168,6 +176,10 @@ def run_f_example(st: Store) -> dict:
         line_range={"label": rel}, quote_verified=False,
         quote_reason="夹具：V 的签在稿上（按正文 sha）")
     assert filed.get("ok") is True, filed
+    sid = str(filed.get("stmt_id") or "")
+    assert sid
+    # 反向（2026-11-10）：稿名里不含命题号 —— B 现取的号与稿号是两个号段。
+    assert f"f-proof-{sid}" not in rel, (rel, sid)
     return {"store": st, "sid": sid, "rel": rel, "text": text,
             "signed_text": signed_text, "seam": seam, "got": got,
             "passes": passes, "block": block, "filed": filed, "body": body}

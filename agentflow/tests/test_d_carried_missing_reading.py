@@ -125,7 +125,17 @@ def test_a_present_carried_sheet_is_not_missing(tmp_path: pathlib.Path) -> None:
     _add_statement(store, THEOREM_A)
     lemma = _add_statement(store, LEMMA_B, derived_from=[THEOREM_A],
                            proof_text=f"1. 由在册定理得到（依据：stmt:{THEOREM_A}）。")
-    # 盘上放一份盖过章的稿（框架渲染的那一版）⇒ 携带单非空
+    # 盘上放一份盖过章的稿（框架渲染的那一版）⇒ 携带单非空。
+    # 2026-11-10（稿号口径）：D 不再按命题号拼稿名（`reports/f-proof-<命题号>.md`），
+    # 它读的是行上记的 `manuscript_id`（B 收录时写的那一格）。这里补的正是那一格，
+    # 稿名按 F 自己的稿号（与命题号刻意不同）落；断言的仍是"携带单非空 ⇒ 不缺"。
+    from agentflow import manuscriptids as _MID
+
+    _f_mid = "000901"
+    _lemma_row = dict(lemma)
+    _lemma_row["manuscript_id"] = _f_mid
+    with store.tx("statements", actor="test", note="fixture:record-manuscript-id") as _tx:
+        _tx.upsert("statements", _lemma_row)
     raw = (DS.SECTION_PROOF + "\n\n"
            f"1. 由在册定理得到（依据：stmt:{THEOREM_A}）。\n\n"
            + DS.SECTION_HEADING + "\n\n"
@@ -133,7 +143,8 @@ def test_a_present_carried_sheet_is_not_missing(tmp_path: pathlib.Path) -> None:
            "|---|---|---|---|\n"
            f"| 由在册定理 | stmt:{THEOREM_A} | 第 1 步 | 1 |\n")
     text = DS.mark_washed(raw, actor="secretary-F", filled="")
-    rel = DS.manuscript_relpath(statement_id=str(lemma["stmt_id"]))
+    rel = _MID.canonical_rel(_f_mid)
+    assert rel and f"f-proof-{str(lemma['stmt_id'])}" not in rel, rel
     target = pathlib.Path(store.root) / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
