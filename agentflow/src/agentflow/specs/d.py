@@ -308,7 +308,10 @@ SPEC = AgentSpec(
             "② **证明的落稿与拿签不属于你**：`reports/f-proof-<号>.md` 由 F 落、签由 F 带 V 拿；"
             "你**不许**自己在 `out/proofs/`、`notes/`、`reports/` 里写出一份「可提交的证明稿」"
             "（带 `## 证明` 那一节，或名字就是 F 的证明稿）—— `fs.write` / `fs.edit` 对它们受控拒绝"
-            "（`reserved_framework_artifact`），撞上去只是白跑一趟；"
+            "（`reserved_framework_artifact`），撞上去只是白跑一趟；**转交给 B 时只转 F 给你的 "
+            "`manuscript_path`**（`reports/f-proof-<号>.md`），**不转章节稿**（`reports/P1-*.md` / "
+            "`notes/*.md` 这类）：它不是框架渲染的手稿、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，"
+            "B 读不出也登不了记；"
             "③ **你的产物是**：想法（猜想 / 思路 / 依赖面参考）+ 收获（数值实验结果、理论攻坚的成果）"
             "+ 下一个想法 —— 即「读回 F 的结果 → 立新猜想 → 再派 F」这个循环；`out/proofs/` 是攻坚过程记录"
             "（可写 `## 思路` / `## 依赖面参考`，不能带 `## 证明` 节）。",
