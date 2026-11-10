@@ -192,3 +192,67 @@ def test_the_claim_names_a_ledger_that_really_exists(tmp_path):
     path = pathlib.Path(st.root) / rel
     assert path.is_file(), (rel, got)
     assert VR.PENDING_PREFIX in ledger, ledger
+
+
+# ---------------------------------------------------------------- ⑥ 洞 2：在册台账读得到
+def test_the_claimed_sign_is_readable_in_the_registered_ledger(tmp_path):
+    """洞 2（2026-11-10）：收录之后 `list_verifications` 必须读到那一行。
+
+    ## 量到的形态（HEAD 9a075327，真 store）
+
+    pending 三行在盘上、行行回写了 `statement_id`，签块与签文件都指着
+    `verifications/pending/<正文sha>.jsonl#u-…`；而 `list_verifications` 只 glob
+    `verifications/*.jsonl` 顶层（pending 是子目录）⇒ 不带过滤也返回 0 行。
+    台账里"这条命题有谁审过"读出来是空的 —— 任何按这个读口出的报告/收工读数
+    都会说"没有审核记录"。
+
+    ## 口径（读侧并入，唯一入口）
+
+    `verifications._claimed_pending_rows`：pending 行有 `statement_id`/`stmt_id`
+    ⇒ 已经属于那一条命题 ⇒ 算在册台账；两个都空 ⇒ 还没被收录 ⇒ 不算任何命题的
+    记录（仍由 `pending_rows` / `pending_sign` 读）。物理位置与签的锚点都不动。
+    """
+    st = _ws(tmp_path)
+    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK), object_path="reports/f-proof-000000.md", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
+    got = _register(st)
+    assert got.get("ok") is True, got
+    sid = str(got["stmt_id"])
+    proof_sha = VR.text_sha(PROOF)
+
+    rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
+    assert problems == [], problems
+    assert len(rows) >= 1, rows
+    for row in rows:
+        assert str(row.get("statement_id") or "") == sid, row
+        assert str(row.get("verification_id") or "").startswith(VR.PENDING_PREFIX), row
+        assert row.get("verdict") == "成立", row
+        assert str(row.get("proof_sha256") or "") == proof_sha, row
+    # 不带过滤也至少一行（同一份在册台账；未认领的 pending 行不会混进来）
+    all_rows, all_bad = VR.list_verifications(st.root, limit=None)
+    assert all_bad == [] and len(all_rows) >= 1, (all_bad, all_rows)
+    assert {str(r.get("statement_id") or "") for r in all_rows} == {sid}, all_rows
+    # 读数面（收工门读的那一格）要把"它在哪"说清，而不是"文件 0 份、3 行"。
+    lr = VR.ledger_reading(st.root, store=st)
+    assert int(lr.get("rows") or 0) >= 1, lr
+    assert int(lr.get("claimed_pending") or 0) >= 1, lr
+
+
+def test_the_read_side_union_is_what_makes_the_claimed_row_visible(tmp_path, monkeypatch):
+    """⑥ 的反真空：把读侧的并入口摘掉 ⇒ 上面那条判据当场红（0 行）。
+
+    这一条量的是"那一行真的由 `_claimed_pending_rows` 读出来"，不是别处凑巧
+    又写了一份到顶层台账。盘上顶层依然没有 `verifications/<号>.jsonl`。
+    """
+    st = _ws(tmp_path)
+    VR.record_pending_sign(st.root, proof_text=PROOF, verdict=dict(OK), object_path="reports/f-proof-000000.md", secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
+    got = _register(st)
+    sid = str(got["stmt_id"])
+    assert len(VR.list_verifications(st.root, statement_id=sid, limit=None)[0]) >= 1
+
+    monkeypatch.setattr(VR, "_claimed_pending_rows",
+                        lambda *_a, **_kw: ([], []))
+    rows, problems = VR.list_verifications(st.root, statement_id=sid, limit=None)
+    assert rows == [], rows
+    assert problems == [], problems
+    # 物理事实仍是"顶层没有那一份文件"：一行都读不到只因为并入口被摘掉。
+    assert not (pathlib.Path(st.root) / "verifications" / f"{sid}.jsonl").exists()

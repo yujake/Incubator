@@ -508,6 +508,11 @@ def verification_ledger_path(root: str | Path, statement_id: str) -> Path:
 #: `list_verifications` 与收工门 R10 都按顶层 `*.jsonl` 逐个命题读 —— 混进一份没有命题号的
 #: 台账会让那些读法把一行"还不属于任何命题"的签算到某个命题头上。子目录不进那条 glob，
 #: 而认领它的入口只有一个：:func:`pending_sign`（按对象内容的 sha）。
+#:
+#: 2026-11-10（缺陷：收录后 `list_verifications` 读成 0 行）：认领之后那一行已经属于
+#: 某一条命题，物理位置不变（签块 / 签文件的 `台账=` 仍指着这个文件），但
+#: `list_verifications` 的读侧会把它并进在册台账 —— 并入口只有
+#: :func:`_claimed_pending_rows` 一处（只并已认领的，未认领的不算任何命题）。
 PENDING_DIR_NAME = "pending"
 #: pending 台账里那一行的编号前缀（`u-NNNNNN`：u = 未登记）。
 PENDING_PREFIX = "u-"
@@ -1689,9 +1694,58 @@ def _mark_landed(row: dict[str, Any], writeback: Mapping[str, Any]) -> None:
                      f"{str(writeback.get('reason') or '')}")
 
 
+def _claimed_pending_rows(root: str | Path, *, statement_id: str = ""
+                          ) -> tuple[list[dict[str, Any]], list[str]]:
+    """`verifications/pending/` 里已经认领的那些行（收录之后它们属于某一条命题）。
+
+    ## 为什么要在读侧并进来（2026-11-10，缺陷：收录之后 `list_verifications` 读成 0 行）
+
+    没号先签那一档的台账行物理上住在 `verifications/pending/<正文 sha>.jsonl`（按内容
+    sha 分文件，D-34 的落点：同一份正文只认领一次）。B 收录拿到号之后，认领这一步
+    （`vsigns.bind_pending_claim`，唯一写口）只在那一行上回写 `statement_id` / `stmt_id` /
+    `claimed_at`，不搬文件：签块与签文件的 `台账=` 仍指着
+    `verifications/pending/<sha>.jsonl#u-…`，搬走就会让那块签的背书断掉。
+
+    于是"已认领的 pending 行"有两种读法：搬进 `verifications/<号>.jsonl`，或读侧把它算进
+    在册台账。这里选后者（本函数是唯一并入口）：物理位置不变、签的锚点不变，读的人按
+    「这条命题有谁审过」问 `list_verifications` 时能读到它们。
+
+    ## 口径（只认已认领的，不认未认领的）
+
+    - 有 `statement_id` / `stmt_id` ⇒ 这一行已经属于那一条命题 ⇒ 算在册台账；
+    - 两个都空 ⇒ 它还不属于任何命题（V 审过、还没被收录）⇒ 不算任何一条命题的记录，
+      继续只由 pending 那一层读（`pending_rows` / `pending_sign`）。
+
+    两套口径不并存：`list_verifications` 是"一条命题的验证记录"的唯一读口，未在册那一档
+    的读口是 `pending_rows`；本函数只把前者的射程扩到"已认领"，不改 pending 文件的
+    角色（它仍是那一签的正本）。
+    """
+    rows, problems = pending_rows(root)
+    want = str(statement_id or "").strip()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        sid = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
+        if not sid:
+            continue
+        if want and sid != want:
+            continue
+        out.append(dict(row))
+    return out, problems
+
+
 def list_verifications(root: str | Path, *, statement_id: str = "",
              limit: int | None = 50) -> tuple[list[dict[str, Any]], list[str]]:
     """列验证台账（可按命题过滤）；返回 `(行, 坏行说明)` —— 坏行照实报出，不静默跳过。
+
+    ## 收录之后，已认领的 pending 行算在这本条命题的台账里（2026-11-10）
+
+    改前只读 `verifications/*.jsonl` 顶层：没号先签那一档的行落在
+    `verifications/pending/<正文 sha>.jsonl`，B 收录时只在那一行上回写 `statement_id`
+    （`vsigns.bind_pending_claim`），文件不搬 ⇒ 收录之后
+    `list_verifications(ws, statement_id=<号>)` 仍是 0 行：盘上有签、行上
+    `reviewed_by.evidence` 也指着它，而"这条命题有谁审过"读出来是空的。现在这一口
+    把已认领的 pending 行并进来（口径见 :func:`_claimed_pending_rows`）：
+    未认领的行仍不属于任何命题，不会被算到任何号头上。
 
     ## `limit=None` 与 `limit=0` 必须分开（V1，`draft/44` J-14）
 
@@ -1712,6 +1766,12 @@ def list_verifications(root: str | Path, *, statement_id: str = "",
         rows, bad = JF.read_jsonl(p)
         problems.extend(f"{p.name}: {b}" for b in bad)
         out.extend(rows)
+    # 已认领的 pending 行（物理位置仍是 `verifications/pending/<sha>.jsonl`）：
+    # 收录之后它们属于那一条命题，读侧并入同一份在册台账（口径见
+    # `_claimed_pending_rows`；未认领的行不进来）。
+    claimed, claimed_bad = _claimed_pending_rows(root, statement_id=statement_id)
+    problems.extend(claimed_bad)
+    out.extend(claimed)
     out.sort(key=lambda r: (str(r.get("statement_id") or ""), str(r.get("verification_id") or "")))
     if limit is None:
         return out, problems
@@ -1738,8 +1798,13 @@ def ledger_reading(root: str | Path, *, store: Any = None) -> dict[str, Any]:
     - `problems` 非空 ⇒ 两面分家，`why` 说清差在哪几条。
 
     返回（键集合固定，读的人不必猜）：
-    `checked` / `source` / `files` / `file_names` / `rows` / `signed` /
-    `signed_statements` / `table` / `mirror` / `agrees` / `problems` / `why` / `next_step`。
+    `checked` / `source` / `files` / `file_names` / `rows` / `claimed_pending` /
+    `signed` / `signed_statements` / `table` / `mirror` / `agrees` / `problems` / `why` /
+    `next_step`。
+
+    `claimed_pending`（2026-11-10）：`rows` 里有几行是收录之后并入的 pending 行
+    （物理上还在 `verifications/pending/`，见 :func:`_claimed_pending_rows`）。
+    没有它，"文件 0 份、3 行"看起来像读数坏了；有了它，读的人知道那 3 行住在哪。
     """
     root_p = Path(str(root))
     out: dict[str, Any] = {
@@ -1748,6 +1813,7 @@ def ledger_reading(root: str | Path, *, store: Any = None) -> dict[str, Any]:
         "files": 0,
         "file_names": [],
         "rows": 0,
+        "claimed_pending": 0,
         "signed": 0,
         "signed_statements": [],
         "table": {"name": VERIFICATIONS_DIR, "is_store_table": False, "rows": None,
@@ -1772,6 +1838,11 @@ def ledger_reading(root: str | Path, *, store: Any = None) -> dict[str, Any]:
     out["file_names"] = sorted(p.name for p in base.glob("*.jsonl"))
     out["files"] = len(out["file_names"])
     out["rows"] = len(rows)
+    #: 收录之后并入的 pending 行（`verification_id` 的 `u-` 前缀是这一档的唯一记号；
+    #: 在册台账的行是 `v-`）。计数只为让"文件 0 份、N 行"这一形态读得懂。
+    out["claimed_pending"] = sum(
+        1 for r in rows
+        if str(r.get("verification_id") or "").startswith(PENDING_PREFIX))
     signed = signed_rows(rows)
     out["signed"] = len(signed)
     out["signed_statements"] = sorted({_statement_id_of(r) for r in signed if _statement_id_of(r)})
@@ -1810,6 +1881,10 @@ def ledger_reading(root: str | Path, *, store: Any = None) -> dict[str, Any]:
         out["why"] = (f"文件台账 {out['files']} 份、{out['rows']} 行，"
                       f"其中签「成立」且无未解决 error 的 {out['signed']} 行"
                       f"（覆盖 {len(out['signed_statements'])} 条命题）")
+        if out["claimed_pending"]:
+            out["why"] += (f"；其中 {out['claimed_pending']} 行是收录之后并入的 pending 行"
+                           f"（物理位置 `{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/`，"
+                           "行上已回写 statement_id —— 口径见 `list_verifications`）")
         if not out["table"]["is_store_table"]:
             # 表面那一格不是「0 行」，而是「这张表不存在」：读的人要能从这一格直接知道
             # 该去读文件（改前这一步没有任何落点，于是「表 0 行」被当成了「没有签」）。
