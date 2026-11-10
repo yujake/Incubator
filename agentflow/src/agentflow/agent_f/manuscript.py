@@ -55,6 +55,7 @@ from ._support import Any, Mapping, S, Sequence, _short
 from pathlib import Path
 
 from .. import depsection as _DS
+from .. import evidencebits as _EB
 from .. import manuscriptform as _MF
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from ..manuscriptform import (  # noqa: F401 —— 两族唯一实现在这里，本模块只转发
@@ -62,6 +63,37 @@ from ..manuscriptform import (  # noqa: F401 —— 两族唯一实现在这里�
     ensure_statement_line,
     formal_shape_problem,
 )
+
+#: 不在可引池里的在册行分三档（`citable_statements` 的计数口径，2026-11-10）。
+#:
+#: 为什么必须是三档而不是两档：`below` 那句话说的是"这一条能用、只是档位不够"，
+#: 而概念行「没有档位这一说」（`not_applicable`）。改前两档分流把它塞进 `below`
+#: ⇒ 提示词对模型说"另有 1 条的等级低于 pre_theorem（conjecture / strong_conjecture
+#: 那一档）"，模型读成"库里有 1 条低档命题"，于是去想办法抬它的档（那条路不存在）。
+BUCKET_BELOW = "below"
+BUCKET_UNKNOWN = "unknown"
+BUCKET_CONCEPT = "concept"
+
+
+def _non_citable_bucket(grade: Any) -> str:
+    """一条"不在可引池里"的在册行的分档 —— 唯一判据（`citable_statements` 读它）。
+
+    三档的边界逐条：
+
+    - 空串 ⇒ `BUCKET_UNKNOWN`（"判不了"不是"最弱一档"，fail-closed：也不许引）；
+    - `evidencebits.GRADE_NOT_APPLICABLE` ⇒ `BUCKET_CONCEPT`（概念没有等级轴；
+      它不是 conjecture / strong_conjecture，不许被算进"等级低"那一句）；
+    - 其余（真等级，且低于门槛）⇒ `BUCKET_BELOW`。
+
+    反真空：`tests/test_f_prompt_does_not_miscount_concepts_as_low_grade.py` 把本函数
+    打桩成恒 `BUCKET_BELOW`（= 改前那一句 `else: below += 1`）⇒ 那条判据当场红。
+    """
+    text = str(grade or "").strip()
+    if not text:
+        return BUCKET_UNKNOWN
+    if text == _EB.GRADE_NOT_APPLICABLE:
+        return BUCKET_CONCEPT
+    return BUCKET_BELOW
 
 
 class _Manuscript:
@@ -116,10 +148,20 @@ class _Manuscript:
         eligible: list[dict[str, Any]] = []
         below = 0
         unknown_level = 0
+        concepts = 0
         for row in usable:
             if str(row.get("stmt_id") or "") in pool:
                 eligible.append(row)
-            elif not _DS.statement_grade(row):
+                continue
+            bucket = _non_citable_bucket(_DS.statement_grade(row))
+            if bucket == BUCKET_CONCEPT:
+                # 概念行不是"等级低"，是「没有等级轴」：`evidencebits.derive_grade` 对
+                # `kind="concept"` 短路成 `not_applicable`，它既不是 conjecture 也不是
+                # strong_conjecture。改前这一档被算进 `below`，于是提示词说"这 1 条的
+                # 等级低于 pre_theorem（conjecture / strong_conjecture 那一档）"——
+                # 读这句话的人得到的结论是"这条能用但等级不够"，而实际是一条概念。
+                concepts += 1
+            elif bucket == BUCKET_UNKNOWN:
                 unknown_level += 1
             else:
                 below += 1
@@ -140,17 +182,28 @@ class _Manuscript:
         if below:
             rest.append(f"{below} 条的等级低于 {_DS.CITATION_MIN_LEVEL}（conjecture / "
                         "strong_conjecture 那一档）—— 引用它们会被受控拒绝")
+        if concepts:
+            # 单列一句、且明说"不是档位不够"：这句是给模型读的，它必须先知道概念不在
+            # 等级轴上，才不会被诱导去"把它引上来让它够格"（那条路今天不存在）。
+            # 不自带"另有"两个字：拼接处给每一句都加（见下面 `joined`）。
+            rest.append(f"{concepts} 条概念（`kind=concept`，不参与可引等级："
+                        "概念没有等级轴，不是“档位不够”）")
         if unknown_level:
             rest.append(f"{unknown_level} 条的等级算不出来 —— 也不许引（读不到就不放行）")
         if len(eligible) > len(lines):
-            rest.append(f"另有 {len(eligible) - len(lines)} 条够格但没列出来（这一块只列前 "
+            # 这一句此前自带"另有"，而拼接处也会加一次 ⇒ 只有它出现时读数会长成
+            # "另有 另有 N 条够格…"。拼接口径改成"每一句都加"之后，这一格跟着去掉。
+            rest.append(f"{len(eligible) - len(lines)} 条够格但没列出来（这一块只列前 "
                         f"{self.CITABLE_STATEMENTS} 条）")
-        note = f"（另有 {'；'.join(rest)}）" if rest else ""
+        # 每一句自带"另有"：`rest` 里可能同时有"低档命题 / 概念 / 判不了"三句，只在
+        # 第一句前加一次会让后面的句子读成前一句的续写（"…；1 条概念"看着像同一件事）。
+        joined = "；另有 ".join(rest)
+        note = f"（另有 {joined}）" if rest else ""
         if not eligible:
             empty = ("（台账里现在没有一条站到 "
                      f"{_DS.CITATION_MIN_LEVEL} 级及以上的在册命题 ⇒ 这一轮不许引 `stmt:`；"
                      "要声明前提就把那一步写成 `assumption: true`")
-            return [], [], empty + (f"；另有 {'；'.join(rest)}" if rest else "") + "）"
+            return [], [], empty + (f"；另有 {joined}" if rest else "") + "）"
         return lines, ids, note
 
     # ---------------------------------------------------------------- 写手稿
