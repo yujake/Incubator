@@ -941,17 +941,24 @@ def _sign_filing_reading(store: Any, *, manuscript_path: Any,
 
 
 def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
-                       stmt_id_now: Any = "", matched_by: Any = "") -> bool:
+                       stmt_id_now: Any = "", matched_by: Any = "",
+                       row_manuscript_id: Any = "") -> bool:
     """这一份稿是不是本行自己的（D1 的第二道：命中了也要问所有权）。
 
-    判据只有三句：
+    判据只有四句：
+
     - 按证明正文认出来的（`matched_by == proof_body`）⇒ 是：那一份的 `## 证明`
       与这一笔交的正文逐行相同，不存在"借别人的正文"；
     - 本行还没在册（没有号）⇒ 不是：没有"本行"可比对，就不许拿任何号去猜
       （被引命题的号不是"本行"的）—— 改前 `stmt:000001` 就是这样把
       `stmt:000000` 的稿连正文带签一起读走的；
     - 本行在册 ⇒ 稿自己的号（稿头 `- 命题号：stmt:<号>`，没有再按号的文件名）
-      必须等于本行号。稿头声明了别人号、或文件名是别人号，都不是自己的稿。
+      必须等于本行号。稿头声明了别人号、或文件名是别人号，都不是自己的稿；
+    - 2026-11-10（业主裁定：稿号与命题号是两个号段）：本行在册、且行上记着
+      `manuscript_id` ⇒ 稿自己的号等于「行上那个稿号」也算自己的稿。F 的稿按 F 自己
+      的稿号命名，命题号是 B 收录时现取的 ⇒ 拿命题号去比稿名，会让"这一条自己的稿"
+      在收录之后永远读成"别人的稿"。行上没有 `manuscript_id`（老盘）⇒ 仍按上一条
+      的命题号口径判（退回，不是放宽）。
 
     ## 2026-11-05 业主裁定：D1 取严格版
 
@@ -969,18 +976,28 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     own = str(stmt_id_now or "").strip()
     if not own:
         return False
-    declared = _DS.manuscript_statement_id(str(manuscript_text or ""))
-    named = str(declared or "").strip() or str(
-        _VS.manuscript_id_of(str(manuscript_path or "")) or "").strip()
-    return bool(named) and named == own
+    declared = str(_DS.manuscript_statement_id(str(manuscript_text or "")) or "").strip()
+    if declared:
+        # 稿头自己声明了命题号：那是作者写的归属，只按它判（声明了别人就是别人的稿）。
+        return declared == own
+    named = str(_VS.manuscript_id_of(str(manuscript_path or "")) or "").strip()
+    if not named:
+        return False
+    if named == own:
+        return True
+    # 2026-11-10（稿号口径）：本行的稿按行上那个稿号认，不按命题号认。
+    row_mid = str(row_manuscript_id or "").strip()
+    return bool(row_mid) and named == row_mid
 
 
-def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any) -> bool:
+def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any,
+                       row_manuscript_id: Any = "") -> bool:
     """兜底读盘命中的那一份稿能不能用（读数 `source=disk` 的门）。"""
     got = dict(probe or {})
     return _manuscript_is_own(
         manuscript_text=got.get("text"), manuscript_path=got.get("path"),
-        stmt_id_now=stmt_id_now, matched_by=got.get("matched_by"))
+        stmt_id_now=stmt_id_now, matched_by=got.get("matched_by"),
+        row_manuscript_id=row_manuscript_id)
 
 
 def _manuscript_belongs_to_a_cited_statement(*, declared_id: Any = "",
@@ -3330,9 +3347,24 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 2026-11-04：兜底读盘把这一笔的证明正文也交进去 —— 名字一路全 miss 时，
                 # `read_manuscript` 会按 `## 证明` 逐行归一后的内容认 `f-proof-plan-*.md`
                 # （87 的六份稿全叫计划名、按号命名的 0 份；详见 depsection 那一节）。
+                #
+                # ---- 2026-11-10（业主裁定：稿号与命题号是两个号段）------------------
+                #
+                # 改前这里只给 `statement_ids` ⇒ `read_manuscript` 按命题号拼名
+                # （`reports/f-proof-<命题号>.md`）。那在稿号口径下找不到 F 的稿：稿名用
+                # 的是 F 自己的稿号。现在先读这一行上记的 `manuscript_id`，把它当点名的
+                # 候选路径排在最前；行上没有（老盘）⇒ 仍按命题号那几条旧名找（退回）。
+                _row_mid_rel = ""
+                _row_mid_now = str((redelivery or {}).get("manuscript_id") or "").strip()
+                if _row_mid_now:
+                    from .. import manuscriptids as _MID_FALLBACK
+
+                    _row_mid_rel = _MID_FALLBACK.canonical_rel(_row_mid_now)
+                _named_kw: dict[str, Any] = (
+                    {"manuscript_paths": (_row_mid_rel,)} if _row_mid_rel else {})
                 manuscript_probe = _DS.read_manuscript(
                     getattr(self.store, "root", ""), statement_ids=probe_ids,
-                    proof_text=proof_text)
+                    proof_text=proof_text, **_named_kw)
                 # ---- D1（2026-11-05）：命中之后还要问"这是不是这一条的稿" --------
                 #
                 # 候选表里有 `derived_from` / 正文引用（那是"试哪些名字"，读数要能说清），
@@ -3345,8 +3377,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 被引命题稿里那张 `## 依赖` 表写的是它引了谁，按到新命题头上就是一条
                 # 作者从未写过的边。所以"这一笔自己带了正文"也不再放行读别人的依赖面：
                 # 号不是本行的稿，一律不读（正文 / 签 / 依赖面三样都不借）。
+                #
+                # 2026-11-10：`row_manuscript_id` 是本行记的稿号 —— 稿名里的号等于它
+                # 也算本行的稿（不然"这条自己的稿"在收录之后永远读成别人的）。
                 _hit_ok = _manuscript_usable(manuscript_probe,
-                                             stmt_id_now=stmt_id_now)
+                                             stmt_id_now=stmt_id_now,
+                                             row_manuscript_id=_row_mid_now)
                 if (str(manuscript_probe.get("source") or "") == _DS.SOURCE_DISK
                         and not _hit_ok):
                     manuscript_probe = dict(
@@ -3429,7 +3465,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                               manuscript_text=manuscript_text,
                               manuscript_path=manuscript_path,
                               stmt_id_now=stmt_id_now,
-                              matched_by=manuscript_probe.get("matched_by")))
+                              matched_by=manuscript_probe.get("matched_by"),
+                              # 2026-11-10：本行记的稿号也是"本行"的判据之一
+                              # （稿号与命题号是两个号段）。
+                              row_manuscript_id=str(
+                                  (redelivery or {}).get("manuscript_id") or "")))
         #: 这份稿的 `## 证明` 三态读数（2026-11-09，D4）。
         #:
         #: 为什么单独立这一格：`proof_body` 改前缺节会退到 `## 依赖` 节、再退到整份

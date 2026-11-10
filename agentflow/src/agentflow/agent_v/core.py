@@ -1333,6 +1333,11 @@ class AgentV:
                 # 载体在手：正文以稿为准（穷举那一支的稿里 `## 证明` 就是证明栏）。
                 _ms = self._registered_manuscript_body(
                     text=text, manuscript=manuscript_rel, statement_id=sid)
+                #: 「这一份稿是不是这一条命题的稿」的读数（2026-11-10 稿号口径）：
+                #: `matched_by=manuscript_id` = 认行上稿号；`matched_by=statement_id`
+                #: + `fallback=True` = 行上没有 `manuscript_id`、退回老口径，`why` 里
+                #: 写明退回理由（不许静默退回）。
+                out["manuscript_identity"] = dict(_ms.get("identity") or {})
                 if _ms.get("failed"):
                     out.update(checked=False,
                                kind=str(_ms.get("kind") or "manuscript_unreadable"),
@@ -2393,6 +2398,64 @@ class AgentV:
             ),
         }
 
+    def _statement_manuscript_reading(self, statement_id: str) -> dict[str, Any]:
+        """这一条命题行上记的稿号（`manuscript_id`）—— 「认稿号」要读的那一格。
+
+        ## 为什么 V 要读这一格（业主 2026-11-10 裁定）
+
+        稿号与命题号是两个号段：F 的稿用 F 自己发的号，命题号由 B 收录时现取。
+        所以「这一份稿是不是这条命题的稿」不能再问「稿名里的号 == 命题号」——
+        那一问在 F 的稿被收录之后恒假，V 的在册重签（改了证明再重签）因此结构上
+        不可达。B 收录那笔把稿号写进 `statements` 行的 `manuscript_id`（
+        `agent_b/register_statement.py::_attach_proofs`），这一格就是唯一权威。
+
+        ## 边界（V 仍然不读台账）
+
+        这里只读一行、只读一格：`manuscript_id`。命题正文、第几位、等级、
+        证明清单一个都不读（业主 2026-11-08「V 只对手稿负责」的口径不动）。
+        读不到（没有 store / 台账读失败 / 没有这一行）不是「行上没有这一格」：
+        `checked` / `found` / `problem` 三格分开说，调用方据此决定退回老口径时
+        怎么写理由，不许静默。
+
+        返回 `{checked, statement_id, found, manuscript_id, problem}`；
+        `manuscript_id` 是空串 = 这一行没有记稿号（老盘 / 收录那一笔还没写这一格）。
+        """
+        sid = str(statement_id or "").strip()
+        out: dict[str, Any] = {
+            "checked": False, "statement_id": sid, "found": None,
+            "manuscript_id": "", "problem": ""}
+        if not sid:
+            out["problem"] = ("没有命题号 ⇒ 没有行可读（未在册那一档不走「认稿号」这一格）")
+            return out
+        if self.store is None:
+            out["problem"] = ("这一趟没有 store ⇒ 读不出行上的 `manuscript_id`"
+                              "（不是「行上没有这一格」）")
+            return out
+        from .. import statementledger as _SL
+
+        try:
+            got = _SL.by_id(self.store, stmt_id=sid)
+        except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许折成「没有这一格」
+            out["problem"] = (f"读 `statements` 那一行失败（{type(exc).__name__}: {exc}）"
+                              " ⇒ 这一格没查成（不是「行上没有这一格」）")
+            return out
+        if not got.get("checked"):
+            out["problem"] = ("读 `statements` 那一行没查成"
+                              f"（{got.get('reason') or got.get('why') or '?'}）"
+                              " ⇒ 这一格没查成（不是「行上没有这一格」）")
+            return out
+        out["checked"] = True
+        out["found"] = bool(got.get("found"))
+        row = dict(got.get("row") or {})
+        out["manuscript_id"] = str(row.get("manuscript_id") or "").strip()
+        if not out["found"]:
+            out["problem"] = (f"`statements` 里没有 stmt:{sid} 这一行"
+                              " ⇒ 读不出稿号（不是「行上没有这一格」）")
+        elif not out["manuscript_id"]:
+            out["problem"] = ("这一行上没有 `manuscript_id`（老盘 / 收录那一笔还没记这一格）"
+                              " ⇒ 退回老口径「稿名里的号 == 命题号」")
+        return out
+
     def _registered_manuscript_body(self, *, text: str,
                                      manuscript: str, statement_id: str = "") -> dict[str, Any]:
         """在册命题点名的那一份手稿：读 `## 证明` 那一节（2026-11-04，业主裁定 甲）。
@@ -2453,19 +2516,67 @@ class AgentV:
                     "reason": "bad_manuscript_name",
                     "detail": (f"`{rel}` 不是签的载体：{_carrier.get('reason')}"
                                " ⇒ 这一格没审、不落签")}
-        if (str(statement_id or "").strip() and _mid != str(statement_id).strip()
-                # E 的数值证明稿按实验号寻址（`reports/e-proof-<实验号>.md`），
-                # 命题号在登记那一行上 ⇒ 这一族的稿号与命题号本来就不同名。
-                # 其余两族（F 的证明稿 / B 的改写稿）必须是同一条命题的稿。
-                and not rel.startswith("reports/e-proof")):
-            # 2026-11-05（业主）：稿号必须就是这一条命题。改前只要求"认得出一个号"，
-            # 于是 `reports/b-proof-000016.md` 可以被当成 000014 的证明签下去（第 9 格
-            # 写 000016、台账写 000014）—— 签盖错了对象，而没有任何一处会报。
-            return {"failed": True, "kind": "bad_manuscript_name",
-                    "reason": "bad_manuscript_name",
-                    "detail": (f"`{rel}` 的稿号是 {_mid}，而这一签要给 stmt:"
-                               f"{str(statement_id).strip()} ⇒ 不审、不落签：签盖的必须是"
-                               "这一条命题自己的那一份稿（`reports/{f,b,e}-proof-<命题号>.md`）")}
+        # ---- 2026-11-10（业主裁定）：在册闸认「稿号」，不认「命题号」 -------------
+        #
+        # 稿号与命题号是两个号段（F 的稿自建号源；命题号由 B 收录时现取）。B 收录那
+        # 一笔把稿号写进这一行的 `manuscript_id` —— 「这一份稿是不是这条命题的稿」
+        # 只看这一格。老盘（行上没有这一格）退回老口径「稿名里的号 == 命题号」，
+        # 退回的理由必须进读数（`identity.fallback` / `identity.why`），不许静默。
+        #
+        # 保留不动的三样：正文 sha 与参数给的正文对得上（本方法末段；签与这一份正文
+        # 的 sha 相符在调用方 `manuscript_sign_standing` 那一格）、载体合法（上面两道）、
+        # 「不许借光」（`vsigns` 读签那一侧按命题号认凭据，别条命题的签不算）。
+        _sid = str(statement_id or "").strip()
+        identity: dict[str, Any] = {
+            "checked": False, "statement_id": _sid, "manuscript_id": _mid,
+            "row_manuscript_id": "", "matched_by": "", "fallback": False,
+            "row_checked": False, "found": None, "problem": "", "why": "",
+        }
+        if _sid:
+            _owner = self._statement_manuscript_reading(_sid)
+            identity.update(row_checked=bool(_owner.get("checked")),
+                            found=_owner.get("found"),
+                            row_manuscript_id=str(_owner.get("manuscript_id") or ""),
+                            problem=str(_owner.get("problem") or ""))
+            _row_mid = str(identity["row_manuscript_id"])
+            if _row_mid:
+                # 认稿号：行上记的就是这一条命题的稿。
+                if _mid != _row_mid:
+                    # 2026-11-05（业主）的「签盖错对象」那一条照旧成立，只是判据换了：
+                    # 改前比命题号，`reports/b-proof-000016.md` 可以被当成 000014 的
+                    # 证明签下去（第 9 格写 000016、台账写 000014）。现在比的是行上的
+                    # 稿号 —— 别的命题的稿、或同一条换了一份稿，都进这一档。
+                    return {"failed": True, "kind": "bad_manuscript_name",
+                            "reason": "bad_manuscript_name",
+                            "identity": dict(identity, matched_by="manuscript_id",
+                                             checked=True),
+                            "detail": (f"`{rel}` 的稿号是 {_mid}，不是这一条命题的稿："
+                                       f"stmt:{_sid} 那一行上记的 `manuscript_id` 是 "
+                                       f"{_row_mid} ⇒ 不审、不落签：签盖的必须是这一条"
+                                       "命题自己的那一份稿（行上记的那一份稿号）")}
+                identity.update(checked=True, matched_by="manuscript_id",
+                                why=(f"稿号 {_mid} == stmt:{_sid} 行上的 "
+                                     f"`manuscript_id` ⇒ 这是这一条命题的稿"))
+            else:
+                # 退回老口径：行上没有稿号（老盘 / 收录那一笔还没写这一格 / 读不出来）。
+                # E 的数值证明稿按实验号寻址（`reports/e-proof-<实验号>.md`），命题号在
+                # 登记那一行上 ⇒ 这一族的稿号与命题号本来就不同名。其余两族（F 的证明稿
+                # / B 的改写稿）在退回口径下必须号名同名。
+                identity.update(fallback=True, checked=bool(identity["row_checked"]),
+                                matched_by="statement_id",
+                                why=("行上没有 `manuscript_id`（"
+                                     + (identity["problem"] or "这一格是空的")
+                                     + "）⇒ 退回老口径「稿名里的号 == 命题号」"))
+                if (_mid != _sid and not rel.startswith("reports/e-proof")):
+                    return {"failed": True, "kind": "bad_manuscript_name",
+                            "reason": "bad_manuscript_name",
+                            "identity": dict(identity),
+                            "detail": (f"`{rel}` 的稿号是 {_mid}，而这一签要给 stmt:"
+                                       f"{_sid} ⇒ 不审、不落签：签盖的必须是这一条命题"
+                                       "自己的那一份稿（`reports/{f,b,e}-proof-<命题号>.md`）。"
+                                       "这一条走的是退回口径：行上没有 `manuscript_id`"
+                                       f"（{identity['problem'] or '这一格是空的'}）——"
+                                       "收录那一笔要把它写上（B 收录时记 F 自己的稿号）")}
         path = Path(self.workspace_root) / rel
         if not path.is_file():
             return {"failed": True, "kind": "manuscript_missing",
@@ -2528,7 +2639,8 @@ class AgentV:
                                f"{VR.text_sha(body)[:12]}…）⇒ 拒绝：签会盖错一份正文；"
                                "在册这一档正文以稿为准，参数里那份只作核对 —— "
                                "要么把 `proof_text` 换成稿里那一份，要么把 `proof_no` 指对")}
-        return {"manuscript": rel, "body": body, "raw": raw}
+        return {"manuscript": rel, "body": body, "raw": raw,
+                "identity": dict(identity)}
 
     def _review_b_manuscript(self, *, text: str, manuscript: str = "", no: int = 1,
                              statement_full: str = "") -> dict[str, Any] | None:
