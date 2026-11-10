@@ -30,6 +30,7 @@ import pathlib
 
 import pytest
 from agentflow import verifications as VR
+from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
@@ -235,6 +236,16 @@ def test_the_claimed_sign_is_readable_in_the_registered_ledger(tmp_path):
     lr = VR.ledger_reading(st.root, store=st)
     assert int(lr.get("rows") or 0) >= 1, lr
     assert int(lr.get("claimed_pending") or 0) >= 1, lr
+    # 锚点按行的真实落点拼：`list_verifications` 并入了它，`vsigns.ledger_anchor`
+    # 不许把它写成 `verifications/<号>.jsonl#u-…`（那串路径在盘上打不开）。
+    anchor = VS.ledger_anchor(st.root, statement_id=sid, proof_no=1,
+                              artifact_sha=proof_sha, clean_only=True)
+    assert anchor.get("found") is True, anchor
+    href = str(anchor.get("ledger") or "")
+    assert href.startswith(f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/"), href
+    ledger_file = pathlib.Path(st.root) / href.split("#", 1)[0]
+    assert ledger_file.is_file(), (href, anchor)
+    assert href.endswith(f"#{anchor.get('verification_id')}"), (href, anchor)
 
 
 def test_the_read_side_union_is_what_makes_the_claimed_row_visible(tmp_path, monkeypatch):

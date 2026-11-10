@@ -1486,6 +1486,11 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
 
     `clean` 与 `verifications.signs_bit3` 同一把尺：结论词是「成立」，且秘书没有判
     fault（`vsigns.verdict_axis` 为空）—— 两档合起来才算"这一行不是打回"。
+
+    ## 锚点按行的真实落点拼（2026-11-10）
+    `list_verifications` 会把收录之后并入的已认领 pending 行读出来；它们物理上仍在
+    `verifications/pending/<sha>.jsonl` ⇒ 本函数给它们拼那一个真实路径，不拿
+    `verifications/<号>.jsonl` 冒充（那串路径打不开，`sign_ledger_backing` 也认不出）。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "ledger": "",
                            "verification_id": "", "at": "", "verdict": "",
@@ -1516,6 +1521,24 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
         return out
     out["checked"] = True
     out["ledger"] = f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl"
+
+    def _anchor_of(one: Mapping[str, Any]) -> str:
+        """这一行真实的锚点（在册行与已认领的 pending 行分开拼，不冒充）。
+
+        2026-11-10：`list_verifications` 会把收录之后并入的 pending 行读出来
+        （`verifications._claimed_pending_rows`），它们物理上仍在
+        `verifications/pending/<sha>.jsonl`。本函数拼锚点时若一律写
+        `verifications/<号>.jsonl#vid`，那一串在盘上打不开，`sign_ledger_backing`
+        也认不出（登记锚点的正则只收 `v-…`）—— 读数与事实不符，正是这一格要防的。
+        """
+        vid = str(one.get("verification_id") or "")
+        if vid.startswith(_VR.PENDING_PREFIX):
+            key = str(one.get("object_sha256") or one.get("proof_sha256") or "").strip().lower()
+            if len(key) == 64 and all(ch in _HEX for ch in key):
+                return (f"{_VR.VERIFICATIONS_DIR}/{_VR.PENDING_DIR_NAME}/"
+                        f"{key}.jsonl#{vid}")
+        return f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#{vid}"
+
     picked: dict[str, Any] | None = None
     for row in rows:
         one = dict(row)
@@ -1536,7 +1559,7 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
                verdict=_VR.read_verdict(picked),
                clean=(_VR.ledger_axis(picked) == "clean"),
                defect_steps=defect_steps(picked))
-    out["ledger"] = f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#{vid}"
+    out["ledger"] = _anchor_of(picked)
     if out["clean"]:
         out["why"] = f"台账上最后一行盖着这个 sha 的是 {vid}（成立，{out['at']}）"
     else:
