@@ -3866,7 +3866,31 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 两份 golden 按现值重冻；两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑。
 #: 判据：`tests/test_the_ledger_tree_is_expanded_on_demand.py`（a–h + 题面三条）与
 #: `tests/test_c_prompt_teaches_only_what_c_can_do.py`（关系推断那一段改成选根-展开-拼接）。
-PROMPT_VERSION = "p273"
+#: p273 → p274（2026-11-10 晚，业主裁定，逐字）：「对于 F 侧，在实现方面彻底通畅（你亲自
+#: 拿着跑跑通）后，撤去所有有关对某个给定命题号进行攻坚或写证明的逻辑。」
+#: 四格换值（F / G / H / M）；上游是"按命题号写证明"这条教法在题面上的四处落点：
+#:   ① `specs/f.py` 的送审参数表删掉「`statement_id`（在册后给这条命题的号）」那一格，
+#:      改成「你这一趟不交命题号」（F 交出去的只有稿路径 ＋ 第几条证明 ＋ 只读读数）；
+#:   ② 同文件两处「落成 `reports/f-proof-<命题号>.md`」改成 `f-proof-<你的稿号>.md`
+#:      （p272 的字面漏网：实现已按稿号命名，题面还在教按号），并把"交给 B 登记"
+#:      改成"交稿向上走 D、B 读稿登记并现取命题号"；
+#:   ③ 共用段 `PAPER_PACK` 与 L 的关档文案各一处 `f-proof-<命题号>` 改成 `f-proof-<稿号>`
+#:      （G / H / M 三格因此也换值）；
+#:   ④ `agent_skills` 的 F 手册按同一口径重写（手册只落盘、不进十一格）。
+#: 十一格不是手抄：`temp/_p274_recompute.py` 导入判据自己的 `_surface_digest` 现算
+#: （先钉 `AGENTFLOW_LEAN_ENABLED=1`），写回 `tests/test_agent_prompts.py` 那张表。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p274）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p273 同值 —— 本批没有哪一格事实换落点）。
+#: 本批**没有**改工具声明 / 动作表 ⇒ 两份 golden 逐字未变。
+#: ⚠️ **未做**：`tests/fixtures/prompt_cache_warm.json` 的"两档重跑"（那要真机调上游）。
+#: 抬版本之后每一个角色的 `prompt_sha256` 都会变（版本那一行在提示词里）⇒
+#: `tests/test_prompt_cache_warm.py` 的两条新鲜度判据在本批是**红的**，处置是跑
+#: `python scripts/warm_prompt_cache.py --roles <全集> --hit-sample <样本>` 两档
+#: （`AGENTFLOW_LEAN_ENABLED=0/1` 各一趟）。本批不伪造那份读数：它是上游缓存命中的
+#: **实测**记录，改 sha 而不重发请求会把"没重跑"伪装成"重跑过"。
+#: 判据：`tests/test_f_does_not_work_for_a_statement_number.py`（a 签名 / b 交接口 /
+#: c 三条反真空 / d 端到端五段 / e 题面字面）。
+PROMPT_VERSION = "p274"
 
 
 
@@ -6249,7 +6273,7 @@ PAPER_PACK = """\
   核不到就说核不到（`import_unavailable` / `decl_mismatch` / `unknown` 都不是证否）。
 - **「形式化已关闭」那一档的替代路线**（第一行读数说「已关闭」时走这条）：
   这条路换成**自然语言逐行审阅**，交付形状是：
-  1. 证明过程逐字由框架落成一份手稿（F 的 `reports/f-proof-<命题号>.md` / E 的
+  1. 证明过程逐字由框架落成一份手稿（F 的 `reports/f-proof-<稿号>.md` / E 的
      `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、每一步依据、
      你接不上的那一步）；
   2. 派 V 的 `verify_proof`（**`proof_manuscript` 给那一份稿 —— 在册也给**；命题号 +
@@ -9169,7 +9193,7 @@ def toolchain_facts_text() -> str:
 
 
 
-            "`reports/f-proof-<命题号>.md` / E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`），再请 V 用 `verify.verify_proof` 带 **`proof_manuscript`**（在册也给）逐行走查 —— 签块落回那一份稿，结论进 "
+            "`reports/f-proof-<稿号>.md` / E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`），再请 V 用 `verify.verify_proof` 带 **`proof_manuscript`**（在册也给）逐行走查 —— 签块落回那一份稿，结论进 "
 
 
 
@@ -9423,7 +9447,7 @@ def toolchain_formal_text() -> str:
         return ("你这一岗怎么写形式化（由上面那份读数现算；读数是这一刻的，变了它跟着变）：\n"
                 "- 本会话 Lean 形式化**已关闭**（`lean_enabled=false`（`toolchain` 段））⇒ "
                 "这一趟的证明审阅走**自然语言逐行**那条路，交付形状是：\n"
-                "  1. 把证明过程逐字交给框架落成一份手稿（F 的 `reports/f-proof-<命题号>.md` / "
+                "  1. 把证明过程逐字交给框架落成一份手稿（F 的 `reports/f-proof-<稿号>.md` / "
                 "E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、"
                 "每一步的依据、以及你没能接上的那一步）；\n"
                 "  2. 派 V（`summon` 它的 `verify.verify_proof`，交 `proof_manuscript`（在册也给）"
