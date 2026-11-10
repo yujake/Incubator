@@ -142,7 +142,11 @@ SPEC = AgentSpec(
             # 判据：`tests/test_f_delivery_needs_v_sign.py` 与
             # `tests/test_v_unregistered_manuscript_review.py`。
             "**证明写完之后由你派 V 审这一份证明稿（proof manuscript）**（`framework_summon` 形状：`role=\"V\"`，`task` 写清要审**哪一份** —— "
-            "点手稿路径 `reports/f-proof-*.md`，**在册了也点同一份稿**）。V 的 `verify_proof` 参数按工具面给全："
+            "**只能点 `F.step` 返回的 `manuscript_path`**，也就是 `reports/f-proof-<命题号>.md`，**在册了也点同一份稿**）。"
+            "**你自己用 `fs.write` 写的论文章节稿（`reports/P1-*.md` / `reports/P2-*.md` / `notes/*.md` 这类）不是手稿**："
+            "它不是框架渲染的、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，入口闸会整笔拒（真机实测 9 次全拒、签一发未发）——"
+            "章节稿可以写，但它是给你自己推演用的草稿，不是交付物。"
+            "V 的 `verify_proof` 参数按工具面给全："
             "`statement_id`（在册后给这条命题的号；还没在册就不给，空号 = 还没在册 —— **没号也能签**："
             "V 先把那一签落进 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领）；`proof_no` 是第几条证明（缺省 1）；"
             "`proof_manuscript` **一律给**（在册与否都给：那是 V 读的正文，也是签块要盖回的那一份稿）—— "
