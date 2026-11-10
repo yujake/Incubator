@@ -4,11 +4,11 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-10，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **282 个 `.py`、273,257 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
+> **282 个 `.py`、273,454 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,189 行** —— 批 R40 把它补进了 §3 的表；
 > §3 那张表里最大的一行也是 `agent_loop.py`，逐文件行数见那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
-> **2026-11-10 被引面读数**：273,014 → **273,257**（`statementledger.py` 加反向读数 `cited_by`：给定一条命题 ⇒
+> **2026-11-10 被引面读数（现盘读数并计同期 concept / 手稿切节两条 lane）**：273,014 → **273,454**（`statementledger.py` 加反向读数 `cited_by`：给定一条命题 ⇒
 > `dependencies` 里 `source_stmt_id == 它` 的那些 `used_by`（逐条带 `kind` / `label` / `status` /
 > `created_at`，另有 `by_status`）；`rows_of` 加 `table=` 让 `statements` / `dependencies` 走同一份
 > try/except —— 被引面不自己再扫一遍依赖账。写侧一个字没改（B 登记先拿号、再按那个号写 `used_by`，
@@ -469,7 +469,7 @@
 | `evidence.py` | 证据层：先检索、再逐字回验 —— 每条结论都落在某段真实原文上 |
 | `researchpending.py` | 340 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`，动作对象是 B 不是 C：概念行只由 B 经 `Secretary.write_concept_row` 写，C 的动作面只产 `AnalysisReport`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签 / 已签未收录 / 开着的题 / 无稿 —— 六档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题。这张清单是那一步的判据来源 |
 | `artifacts.py` | 产物登记：谁在哪个路径产出了什么 |
-| `depsection.py` | **F 手稿依赖段的唯一解析点 + 引用档位的唯一判据**（业主 2026-10-24：「作者只写内容，登记由收方读稿产生」）：`SECTION_HEADING` 那一节按四列表格读成 `dependencies`（`used_by="stmt:<命题号>#pN"` + `path_group` + `source_stmt_id`），`citation_levels` / `citation_level_allowed` 是引用档位本身，`read_manuscript` 按命题号找 F 的手稿。`## 证明` 那一格是**三态**（2026-11-09，D4）：`proof_body` 严格（缺节 ⇒ 空串，不再退到 `## 依赖` / 整份全文）、`proof_body_reading` 给 `present` / `absent`、`read_proof_body` 多一个文件侧的 `unreadable`；只有"入参本来就是一段无标题证明正文"的两处（`read_manuscript` 按正文认稿的指纹、`proofregistry.proof_sha`）才走显式命名的 `proof_body_or_whole`（返回值带 `fell_back=True`）。F 自己不写依赖台账、也没有写台账的工具；`secretary`、B 的入库、D 的汇报、F 的手稿四处都读这一份（与 V 读 F 的手稿再签字同构） |
+| `depsection.py` | **F 手稿依赖段的唯一解析点 + 引用档位的唯一判据**（业主 2026-10-24：「作者只写内容，登记由收方读稿产生」）：`SECTION_HEADING` 那一节按四列表格读成 `dependencies`（`used_by="stmt:<命题号>#pN"` + `path_group` + `source_stmt_id`），`citation_levels` / `citation_level_allowed` 是引用档位本身，`read_manuscript` 按命题号找 F 的手稿。`## 证明` 那一格是**三态**（2026-11-09，D4）：`proof_body` 严格（缺节 ⇒ 空串，不再退到 `## 依赖` / 整份全文）、`proof_body_reading` 给 `present` / `absent`、`read_proof_body` 多一个文件侧的 `unreadable`；只有"入参本来就是一段无标题证明正文"的两处（`read_manuscript` 按正文认稿的指纹、`proofregistry.proof_sha`）才走显式命名的 `proof_body_or_whole`（返回值带 `fell_back=True`）。2026-11-10 切节口径（真机 DCT 彩排）：`SECTION_TITLES`（手稿"节"的标题闭集）/ `heading_level`（行首 `#` 的个数）/ `is_section_heading`（这一行是不是一节）三格是唯一来源 —— `## 证明` 到下一个同级且是手稿一节的标题（或更高级标题）为止，`## 记号与约定` 这类同级自由小标题与 `###` 小标题留作正文；`manuscriptintake` 与 `proofregistry` 的切节都从这三格取同一份口径（判据 `tests/test_proof_body_is_three_state.py`）。F 自己不写依赖台账、也没有写台账的工具；`secretary`、B 的入库、D 的汇报、F 的手稿四处都读这一份（与 V 读 F 的手稿再签字同构） |
 | `papercompile.py` | 把智能体写好的 `out/paper/main.tex` 编成 `main.pdf`，并写框架自己的编译回执：判"这份 PDF 是不是盘上这份 tex 编的"（`receipt_matches_tex`） |
 | `litread.py` | 文献本地字节的**唯一解析点**（2026-11-05 加）：`resolve_literature_path` 按「先 library 基准、再 workspace 基准」两处解析并存下 `path_base` 读数（同一个 `literature.path` 曾被两个坐标系读，真机上出现过 `library/library/…` 的 file_missing）；`fulltext_tier` / `with_fulltext` 是 `download.fulltext` 三档（ok / no_text_layer / no_fulltext）的**唯一写点与清除点** |
 | `modelgw.py` | 模型网关：全仓唯一读 API key 的地方 |
