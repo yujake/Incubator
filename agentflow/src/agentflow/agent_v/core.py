@@ -1038,6 +1038,25 @@ class AgentV:
                                       "⇒ 判定与发签按 checked=False 读（不是「没问题」）")
         return got
 
+    def _producer_context(self) -> tuple[str, str]:
+        """`(父的角色, 父的名册编码)`：V 的父就是手稿产出方（业主 2026-11-11 裁定 ①）。
+
+        只读：从 V 的秘书名册真身（`Secretary.parent_of`）取「父是谁」；读不到就
+        空串（那两格仍由路径族给出，名册这一格只是对账）。不把它当事实来源 ——
+        `verifications._producer_cells` 的 `producer_role` 永远取路径族。
+        """
+        try:
+            from .. import conductor as _CND
+
+            sec = self._secretary()
+            tid = str(_CND.current_task_id() or "")
+            if sec is None or not tid:
+                return "", ""
+            got = sec.parent_of(owner=tid)
+            return str(got.get("role") or ""), str(got.get("name") or "")
+        except Exception:  # noqa: BLE001 —— 名册读不到只少一格对账，不动路径族
+            return "", ""
+
     def _judge_v_reply(self, reply: str, verdict: Mapping[str, Any],
                        no: int, *, statement_id: str = "") -> dict[str, Any]:
         """问秘书：V 这段回复有没有指出缺陷（业主 2026-10-29 的 B 段）。
@@ -1538,6 +1557,7 @@ class AgentV:
                 # 不写这一格的新行会被读成老行（`legacy_*`），读数口径就分家了。
                 _n_judge = _write_fault_cell(_n_judge, _n_verdict)
                 out["secretary_judge"] = dict(_n_judge)
+                _producer_hint, _producer_code = self._producer_context()
                 try:
                     _row = VR.record_verification(
                         self.workspace_root, statement_id=sid,
@@ -1553,6 +1573,9 @@ class AgentV:
                         # 2026-11-04（甲）：签的载体是这份 e-proof 稿；`sign_statement`
                         # 从台账行上读它，把签块落回同一份稿（`vsigns.land`）。
                         manuscript=manuscript_rel,
+                        # 甲（2026-11-11）：产出方只由路径族判；名册那只作对账。
+                        producer_path=str(manuscript_rel or ""),
+                        producer_code=_producer_code, roster_role=_producer_hint,
                         secretary_judge=_n_judge,
                         # 穷举型证据是机械七项核对（不走上文的三轮连判）：这一格按
                         # "这一趟的第 1 轮"如实记；签发仍走历史台账门（见 review_call 注释）。
@@ -2239,11 +2262,17 @@ class AgentV:
         if (str(judgment.get("axis") or "") == "fault"
                 and str(judgment.get("fault_kind") or "") not in ("procedural", "style")):
             wash = self._wash_v_reply(reply, verdict, no, statement_id=sid)
+        _producer_hint, _producer_code = self._producer_context()
         try:
             row = VR.record_verification(self.workspace_root, statement_id=sid, proof_text=text,
                                          verdict=verdict, verifier=self.actor,
                                          submission_id=str(self.cfg.get("submission_id") or ""),
                                          store=self.store, proof_no=no,
+                                         # 甲（2026-11-11）：产出方只由路径族判；
+                                         # 名册里的父角色只作对账（`roster_role`）。
+                                         producer_path=str(manuscript or ""),
+                                         producer_code=_producer_code,
+                                         roster_role=_producer_hint,
                                          # `problem` 非空（依赖台账读不出来）要随行落盘：
                                          # 否则读侧只看到空的 `citation_checks`，分不开
                                          # "没查成"与"核过、没有引用"。
@@ -3006,6 +3035,7 @@ class AgentV:
                     f"`{rel}` 不是签的载体：{_carrier.get('reason') or ''}"
                     " ⇒ 看过、没签（三转读数照给，一个签字节都不落：不落 pending 台账、"
                     "不颁发签文件、稿上不写签块）")
+        _producer_hint, _producer_code = self._producer_context()
         if stopped == "signed" and rel:
             # ---- 2026-11-05 晚（业主）：没号先签是正统主路 --------------------
             #
@@ -3021,6 +3051,8 @@ class AgentV:
                 pending_rows = [VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
                     verifier=self.actor, object_path=rel,
+                    producer_path=rel, producer_code=_producer_code,
+                    roster_role=_producer_hint,
                     secretary_judge=judged[i].get("judgment"))
                     for i in range(len(judged))]
             except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
@@ -3052,6 +3084,8 @@ class AgentV:
                 pending = VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=last,
                     verifier=self.actor, object_path=rel,
+                    producer_path=rel, producer_code=_producer_code,
+                    roster_role=_producer_hint,
                     secretary_judge=(judged[-1].get("judgment") if judged else None))
             except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
                 # 同上一支：判词没有落点也是「这一份没查成」，不许把异常抛给调用方。
@@ -3284,6 +3318,7 @@ class AgentV:
         # 真票（`verification_id` / `at` / `proof_sha256` 齐全），签的 `passes` 直接从
         # 这三行取；负判只落判词那一行（负判不是签）。改前正判也只落一行、`passes` 三格
         # 是空的 ⇒ `sign_object_gate` 的 `passes_incomplete` 会拒它。
+        _producer_hint, _producer_code = self._producer_context()
         try:
             if stopped == "signed":
                 pending_rows = [VR.record_pending_sign(
@@ -3291,6 +3326,8 @@ class AgentV:
                     verifier=self.actor,
                     object_sha256=str(reviewed.get("report_sha256") or ""),
                     object_path=(str(reviewed.get("report_path") or "") or rel),
+                    producer_path=rel, producer_code=_producer_code,
+                    roster_role=_producer_hint,
                     secretary_judge=judged[i].get("judgment"))
                     for i in range(len(judged))]
                 pending = pending_rows[-1] if pending_rows else {}
@@ -3301,6 +3338,8 @@ class AgentV:
                     verifier=self.actor,
                     object_sha256=str(reviewed.get("report_sha256") or ""),
                     object_path=(str(reviewed.get("report_path") or "") or rel),
+                    producer_path=rel, producer_code=_producer_code,
+                    roster_role=_producer_hint,
                     secretary_judge=(judged[-1].get("judgment") if judged else None))
         except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
             # 穷举那一支的 pending 写口同理：改前只收 VerificationError / OSError。

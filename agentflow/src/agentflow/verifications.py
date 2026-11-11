@@ -99,6 +99,7 @@ from typing import Any, Iterable, Mapping, Sequence
 from . import depsection as _DS  # 可引门槛的唯一定义（`CITATION_MIN_LEVEL`）
 from . import evidencebits as EB  # 等级的唯一派生口（`derive_grade` / 反算表）
 from . import jsonlfile as JF
+from . import manuscriptproducers as _MSUB  # 产出方格（路径族 × V 的父名单）
 from . import schema as S  # 编号形态的唯一来源（六位 / 旧四位读侧兼容）
 from . import statementbody as _SB  # 命题正文的唯一读口（被引命题的正文从这里取）
 from . import statementledger as SL  # 命题台账的查口（按号 / 按关键词，只读、零模型）
@@ -483,6 +484,35 @@ def _now_iso() -> str:
     return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
 
 
+def _producer_cells(path: Any, *, producer_code: Any = "",
+                    roster_role: Any = "") -> dict[str, Any]:
+    """验证行上的产出方格（业主 2026-11-11 裁定 ①，甲）。
+
+    事实来源只有手稿路径的族前缀：`manuscriptsubmission.producer_of` 用
+    `manuscriptfamily` 现判、并拿 `capabilities.ALLOWED_EDGES` 现算「V 的父名单」
+    做校验。`roster_role`（V 的秘书从名册读到的父角色）只作对账 —— 它与路径族
+    不一致时记 `producer_problem`，但不改写 `producer_role`。
+    """
+    got = _MSUB.producer_of(str(path or ""), roster_role=str(roster_role or ""),
+                            child_role="V")
+    cells: dict[str, Any] = {
+        "producer_role": str(got.get("producer_role") or _MSUB.UNKNOWN),
+        "producer_code": str(producer_code or ""),
+    }
+    if str(got.get("problem") or "").strip():
+        cells["producer_problem"] = str(got["problem"])
+    if got.get("roster_mismatch"):
+        cells["producer_problem"] = (
+            (str(cells.get("producer_problem") or "") + "；").lstrip("；")
+            + "名册里的父角色与路径族不一致（以路径族为准）")
+    return cells
+
+
+def producer_reading(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """读一条验证行的产出方格：老行没有这一格 ⇒ `unknown`（不硬填 F）。"""
+    return _MSUB.verification_producer_reading(row)
+
+
 def verifications_dir(root: str | Path) -> Path:
     """验证台账目录（工作区根下的 `verifications/`；只算路径，不建目录）。"""
     return Path(root) / VERIFICATIONS_DIR
@@ -536,6 +566,9 @@ def pending_ledger_path(root: str | Path, key: str) -> Path:
 def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[str, Any],
                         verifier: str = "V", object_sha256: Any = "",
                         object_path: Any = "",
+                        producer_path: Any = "",
+                        producer_code: Any = "",
+                        roster_role: Any = "",
                         secretary_judge: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """把"命题还没在册时"的一次审校落进 pending 台账，返回那一行。
 
@@ -588,6 +621,10 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         "round": len(rows) + 1, "used_faces": [], "submission_id": "",
         "landed": "pending", "at": _now_iso(),
     }
+    # ---- 产出方格（甲）：新行无条件写 `producer_role`，老行读侧记 unknown ----------
+    row.update(_producer_cells(str(producer_path or object_path or ""),
+                               producer_code=producer_code,
+                               roster_role=roster_role))
     if str(checked.get("verdict_raw") or "").strip():
         #: 老调用方带过来的原话（只在真带了时写）。
         row["verdict_raw"] = str(checked["verdict_raw"]).strip()
@@ -1387,6 +1424,8 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
            store: Any = None, proof_no: Any = None,
            object_sha256: Any = "", object_path: Any = "",
            manuscript: str = "",
+           producer_path: Any = "", producer_code: Any = "",
+           roster_role: Any = "",
            citation_gate: Mapping[str, Any] | None = None,
            secretary_judge: Mapping[str, Any] | None = None,
            sign_issuance: Mapping[str, Any] | None = None,
@@ -1520,6 +1559,10 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
     }
+    # ---- 产出方格（甲）：新行无条件写；老行读侧记 unknown（`producer_reading`）----
+    row.update(_producer_cells(
+        str(manuscript or producer_path or object_path or ""),
+        producer_code=producer_code, roster_role=roster_role))
     if no != DEFAULT_PROOF_NO:
         # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical（#p1）新行不再写。
         # 显式 `proof_no>1` 是旧多证明写口（一稿一份之后生产路径不再产生它）：旧读侧
