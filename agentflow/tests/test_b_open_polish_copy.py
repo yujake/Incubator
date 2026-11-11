@@ -18,6 +18,20 @@
 | d1 | 反真空：不清签 ⇒ a 红（复制件仍读成已签） | a 的绿来自清签那一步 |
 | d2 | 反真空：复制件用源稿号 ⇒ c 红 | c 的绿来自 B 自己的号段 |
 
+## 2026-11-11 补的第 ④ 条证据（本文件下半场）
+
+收录之后才出现的现场：F 的稿在收录时「不改名也不改稿头」（一稿一份的纪律），稿头仍是
+`stmt:（还没落号）`；V 的未在册签里 `statement_id` 是空串 ⇒ 改前那三条证据（点名 /
+签里的命题号 / 稿头认领）一条都够不着，`open_polish_copy` 反而在收录之后找不到那份
+已签的稿。第 ④ 条读命题行上的 `manuscript_id`，再回颁发表按 `artifact_path` 核对。
+
+| # | 判据 | 钉住的东西 |
+|---|---|---|
+| a2 | 未在册签 → 收录（行上真记 `manuscript_id`）→ `open_polish_copy` ⇒ 成功，源稿是 `reports/f-proof-<稿号>.md`，`matched_by="statement_manuscript_id"` | 第 ④ 条证据真的接上了 |
+| b2 | 行上记了稿号、但那一份「没签」⇒ 受控拒（`no_signed_manuscript`），不许拿没签的稿开副本 | 第 ④ 条不是"有号就放行" |
+| c2 | 行上没记稿号、稿头也认不出 ⇒ 仍 `no_signed_manuscript`，且 `why` 点明差的是「行上没记稿号」 | 「没查成」与「行上没记」分得清 |
+| d3 | 反真空：把第 ④ 条证据摘掉 ⇒ a2 红 | a2 的绿来自行上那一格 |
+
 ## 一句话口径：正文 sha 为什么与源相同
 
 复制件是逐字复制（优化还没开始），所以 `## 证明` 那一节的 sha 与源相同 —— 这是
@@ -224,3 +238,187 @@ def test_d2_copying_under_the_source_number_makes_c_red(
     # c 的两条判据（号来自 B 的号段 / 计数器推进了）在这里必须都不成立
     assert mid == VS.manuscript_id_of(src), got
     assert MID.peek_manuscript_counter(st, family="b-proof") == 0, got
+
+
+# ======================================================================
+# 第 ④ 条证据：命题行上的 `manuscript_id`（2026-11-11）
+# ======================================================================
+
+def _ws_bare(tmp_path: pathlib.Path) -> Store:
+    """只建工作区（不预铺 `statements`）：给"真走一遍收录"的那条判据用。"""
+    st = Store(tmp_path / "ws")
+    st.init()
+    (pathlib.Path(st.root) / "reports").mkdir(parents=True, exist_ok=True)
+    return st
+
+
+def _unregistered_manuscript(*, manuscript_id: str, signed: bool) -> str:
+    """F 的稿：稿头仍是 `stmt:（还没落号）`（收录不改稿头）；`signed` 只决定有没有签块。
+
+    签块里的 `命题号=` 是空串 —— 与 V 未在册那一档 `vsigns.issue(statement_id="")`
+    写出来的签文件同形（本文件 a2 另外用 `issue_credential(statement_id="")` 落签文件）。
+    """
+    lines = [
+        "# F 的证明手稿：夹具命题（未在册签）",
+        "",
+        "- 命题号：stmt:（还没落号）",
+    ]
+    if signed:
+        lines.append(
+            "- V 签：已签=true；判词=成立；连续=3/3；"
+            f"正文sha={PR.proof_sha(BODY)}；时间=2026-11-02T10:00:00+08:00；"
+            "签名者=V；台账=verifications/000000.jsonl#v-000003；"
+            f"命题号=stmt:；手稿号={manuscript_id}")
+    lines += [
+        "- 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无",
+        "- 证明号：1",
+        "",
+        "## 命题",
+        "",
+        "夹具命题。",
+        "",
+        "## 证明",
+        "",
+        BODY,
+        "",
+        "## 依赖",
+        "",
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |",
+        "|---|---|---|---|",
+        "（这一份证明没有引用任何在册命题 —— 空表就是声明。）",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _ingest_unregistered_signed(st: Store) -> tuple[str, str, str]:
+    """F 交卷（稿头未落号）→ V 未在册签 → B 收录（行上记 `manuscript_id`）。
+
+    - 签文件：`issue_credential(statement_id="", artifact_path=rel)` —— 与 V 的
+      `proof_unregistered_signed` 那一支写出来的签同形（命题号是空串）；
+    - 准入闸：`conftest.sign_before_registration` 落同一份正文的 pending 台账；
+    - 收录：走 B 的真入口 `ingest_manuscript(mode="register")`，不手写
+      `manuscript_id` / `bits`。
+
+    返回 `(statement_id, 稿路径, 稿号)`。
+    """
+    mid = MID.next_manuscript_id(st.root)
+    rel = MID.canonical_rel(mid)
+    (pathlib.Path(st.root) / rel).write_text(
+        _unregistered_manuscript(manuscript_id=mid, signed=True), encoding="utf-8")
+    CF.issue_credential(st.root, proof_text=BODY, statement_id="",
+                        manuscript=rel, artifact_path=rel)
+    conftest.sign_before_registration(st.root, proof_text=BODY)
+    got = _b(st).ingest_manuscript(
+        manuscript=rel, mode="register",
+        cells=("statement_full", "proof_text", "dependencies"))
+    assert got.get("ok") is True, got
+    sid = str((got.get("register") or {}).get("stmt_id") or "")
+    assert sid, got
+    return sid, rel, mid
+
+
+def test_a2_the_row_manuscript_id_finds_the_signed_source(tmp_path) -> None:
+    """第 ④ 条正控：未在册签 → 收录 → 光凭命题号就能拿到那份已签的稿。
+
+    这条用例就是彩排那次缺陷的回归：F 的稿头仍是「stmt:（还没落号）」、签文件里的
+    命题号也是空串 —— 前三条证据一条都够不着，收录之后还能不能用命题号找回它。
+    """
+    st = _ws_bare(tmp_path)
+    sid, rel, mid = _ingest_unregistered_signed(st)
+    row = next(dict(r) for r in st.rows("statements")
+               if str(r.get("stmt_id") or "") == sid)
+    # 收录那一笔真的把稿号记在行上（第 ④ 条证据的源头，不是夹具手写）
+    assert str(row.get("manuscript_id") or "") == mid, row
+    assert bool((row.get("bits") or {}).get("reviewed")) is True, row
+    # 前三条证据确实够不着：签里的命题号是空串、稿头也还不是这一条命题的号
+    table = VS.signed_manuscripts(st.root, artifact_path=rel)
+    assert table["found"] is True, table
+    assert str(table["latest"].get("statement_id") or "") == "", table
+    assert str(table["latest"].get("manuscript_id") or "") == mid, table
+    head = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
+    assert "stmt:（还没落号）" in head, head.split("\n")[:6]
+
+    got = _b(st).open_polish_copy(statement_id=sid)
+    assert got.get("ok") is True, got
+    assert got.get("refused") == "", got
+    assert got.get("source_path") == rel, got
+    assert got.get("source_manuscript_id") == mid, got
+    assert got.get("matched_by") == "statement_manuscript_id", got
+    # 复制件是 B 自己的号段、签块清掉、源稿一个字节没动
+    cp = str(got.get("path") or "")
+    assert cp == MID.canonical_rel(str(got.get("manuscript_id") or ""),
+                                   family="b-proof"), got
+    copy_text = (pathlib.Path(st.root) / cp).read_text(encoding="utf-8")
+    assert VS.SIGN_MARK not in copy_text, copy_text.split("\n")[:8]
+    assert got.get("cleared") == 1, got
+    assert (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") == head
+
+
+def test_b2_a_row_number_without_a_sign_is_refused(tmp_path) -> None:
+    """第 ④ 条反控①：行上记了稿号，但那一份没签 ⇒ 受控拒，一个文件都不新增。
+
+    第 ④ 条不是"有号就放行"：它只是把「该去哪一份稿」指出来，签还在 V 的颁发表里核。
+    """
+    st = _ws(tmp_path)
+    mid = MID.next_manuscript_id(st.root)
+    rel = MID.canonical_rel(mid)
+    (pathlib.Path(st.root) / rel).write_text(
+        _unregistered_manuscript(manuscript_id=mid, signed=False), encoding="utf-8")
+    conftest.seed_statement_row(st, stmt_id=SID, statement_full="夹具命题。",
+                                kind="conjecture", manuscript_id=mid)
+    before = _files(st)
+
+    got = _b(st).open_polish_copy(statement_id=SID)
+    assert got.get("ok") is False, got
+    assert got.get("refused") == "no_signed_manuscript", got
+    assert "记了稿号、但那一份没签" in str(got.get("why") or ""), got
+    assert got.get("matched_by") == "", got
+    assert _files(st) == before, (_files(st), before)
+
+
+def test_c2_without_a_row_number_the_why_names_the_missing_evidence(tmp_path) -> None:
+    """第 ④ 条反控②：行上没记稿号、稿头也认不出 ⇒ 仍 `no_signed_manuscript`。
+
+    `why` 必须点明差的是「行上没有记稿号」这一条 —— 不许把"行上没记"读成"没有签"，
+    也不许只说"按命题号、按稿头都找过"（那正是改前那句看不出还差什么的 why）。
+    """
+    st = _ws(tmp_path)
+    mid = MID.next_manuscript_id(st.root)
+    rel = MID.canonical_rel(mid)
+    (pathlib.Path(st.root) / rel).write_text(
+        _unregistered_manuscript(manuscript_id=mid, signed=False), encoding="utf-8")
+    conftest.seed_statement_row(st, stmt_id=SID, statement_full="夹具命题。",
+                                kind="conjecture")
+    before = _files(st)
+
+    got = _b(st).open_polish_copy(statement_id=SID)
+    assert got.get("ok") is False, got
+    assert got.get("refused") == "no_signed_manuscript", got
+    why = str(got.get("why") or "")
+    assert "差第 ④ 条证据" in why, got
+    assert "行上没有记稿号" in why, got
+    assert "没有签" in why, got
+    assert _files(st) == before, (_files(st), before)
+
+
+def test_d3_removing_the_row_number_evidence_turns_a2_red(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """第 ④ 条反真空：把它摘掉 ⇒ a2 必须红（`no_signed_manuscript`）。
+
+    打桩点就是第 ④ 条的证据源（`_statement_manuscript_id`）：其余三条原样保留。
+    """
+    st = _ws_bare(tmp_path)
+    sid, _rel, _mid = _ingest_unregistered_signed(st)
+    from agentflow.agent_b import open_polish_copy as OPC
+
+    real = OPC._OpenPolishCopy._statement_manuscript_id
+    monkeypatch.setattr(
+        OPC._OpenPolishCopy, "_statement_manuscript_id",
+        lambda self, sid: {"checked": True, "manuscript_id": "", "why": ""})
+    got = _b(st).open_polish_copy(statement_id=sid)
+    assert got.get("ok") is False, got
+    assert got.get("refused") == "no_signed_manuscript", got
+    assert got.get("matched_by") == "", got
+    assert "行上没有记稿号" in str(got.get("why") or ""), got
+    assert real is not None

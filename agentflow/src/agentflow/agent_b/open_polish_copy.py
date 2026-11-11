@@ -75,7 +75,10 @@ class _OpenPolishCopy:
         `{ok, checked, refused, why, source_path, source_manuscript_id,
         source_sign_sha, source_body_sha, source_text_sha256, path, manuscript_id,
         copy_body_sha, copy_text_sha256, cleared, cleared_lines, signed_before,
-        signed_after, sign_block}`。受控拒时 `path` 为空、盘上一个字节都没写。
+        signed_after, sign_block, matched_by}`。受控拒时 `path` 为空、盘上一个字节都没写。
+
+        `matched_by` 是"源稿是哪一条证据认出来的"：`"statement_manuscript_id"` 表示
+        第 ④ 条（命题行上的 `manuscript_id`）；前三条老证据命中时仍为空串。
 
         `cleared` 是删掉了几行 `- V 签：…`（正常是一行；历史稿可能不止一行）。
         """
@@ -86,6 +89,7 @@ class _OpenPolishCopy:
             "path": "", "manuscript_id": "", "copy_body_sha": "",
             "copy_text_sha256": "", "cleared": 0, "cleared_lines": [],
             "signed_before": False, "signed_after": False, "sign_block": {},
+            "matched_by": "",
         }
         sid = str(statement_id or "").strip()
         if not sid:
@@ -120,7 +124,8 @@ class _OpenPolishCopy:
                    source_text_sha256=hashlib.sha256(text.encode("utf-8")).hexdigest(),
                    source_body_sha=_PR.proof_sha(_VS.manuscript_proof_body(text)),
                    sign_block=block,
-                   signed_before=True)
+                   signed_before=True,
+                   matched_by=str(picked.get("matched_by") or ""))
 
         # ---- ③ 注册成 B 号（先发号：发不出来就不该动盘） -------------------------
         try:
@@ -183,7 +188,7 @@ class _OpenPolishCopy:
                        source_manuscript: str) -> dict[str, Any]:
         """找「这一条命题已拿签的那份稿」（源稿）；找不到 ⇒ `found=False` + 受控码。
 
-        三种证据按强度排：
+        四种证据按强度排（前三条的语义一个字没动；第 ④ 条是 2026-11-11 补的兜底）：
 
         1. 调用方点名了 `source_manuscript` ⇒ 只认那一份，并且它必须签过
            （`vsigns.signed_manuscripts(artifact_path=…)`）；
@@ -191,14 +196,23 @@ class _OpenPolishCopy:
            （`artifact_path` 那一格；2026-11-11 起 `issue` 会写它）；
         3. 颁发表里那些 `artifact_path` 是手稿、而签文件没记命题号（未在册那一档，
            业主 2026-11-05：「V 就不能假定有号，全签在稿上」）⇒ 读那份稿的稿头
-           `- 命题号：stmt:<号>` 认领。
+           `- 命题号：stmt:<号>` 认领；
+        4. 这一条命题的 `statements` 行上记着 `manuscript_id` ⇒ 那份稿就是它的
+           规范名（`manuscriptids.canonical_rel` 拼，不写前缀字面量），再回 V 的颁发表
+           按 `artifact_path` 核对「它确实签过」。这一条补的是收录之后才出现的现场：
+           F 的稿在收录时「不改名也不改稿头」（一稿一份的纪律），稿头仍是
+           `stmt:（还没落号）`，而未在册那一签的 `statement_id` 是空串 —— 于是 ②③
+           都够不着，只有行上那一格记得住「这条命题的稿是哪一份」。
 
-        三条都没有 ⇒ `no_signed_manuscript`：这一条还没有签，无可优化。
+        三条老证据都没有、第 ④ 条也核不上 ⇒ `no_signed_manuscript`：这一条还没有签，
+        无可优化。`why` 把第 ④ 条差在哪一格分开说清（行上没记稿号 / 记了但那一份
+        没签 / 那一格没查成），不折成同一句话。
         """
         from .. import bmanuscript as _BM
 
         out: dict[str, Any] = {"found": False, "refused": "", "why": "", "path": "",
-                               "text": "", "sign_sha": "", "block": {}}
+                               "text": "", "sign_sha": "", "block": {},
+                               "matched_by": ""}
         table = _VS.signed_table(root)
         if not table.get("checked"):
             out.update(checked=False, refused="signed_table_unreadable",
@@ -237,10 +251,63 @@ class _OpenPolishCopy:
             got = self._polish_source_of(root, entry, dict(out))
             if got.get("found"):
                 return got
+        # ④ 命题行上的 `manuscript_id`（2026-11-11：收录之后 B 反而找不到那份已签的稿）
+        row_reading = self._statement_manuscript_id(sid)
+        row_mid = str(row_reading.get("manuscript_id") or "")
+        if row_mid:
+            row_rel = _MID.canonical_rel(row_mid)   # F 的规范名（前缀由族表拼）
+            if not row_rel:
+                row_evidence_why = (
+                    f"行上记着稿号 {row_mid!r}，而它拼不出 F 那份稿的规范名"
+                    "（`reports/` 下这一族的规范前缀 + 六位稿号）⇒ 这一格核不上")
+            else:
+                hit = next((e for e in entries
+                            if str(e.get("artifact_path") or "").strip().replace("\\", "/")
+                            == row_rel), None)
+                if hit is None:
+                    row_evidence_why = (
+                        f"行上记着稿号 {row_mid}（那份稿应是 `{row_rel}`），而 V 的颁发"
+                        "表里没有一份签盖在它上面 ⇒ 记了稿号、但那一份没签")
+                else:
+                    got = self._polish_source_of(root, hit, dict(out))
+                    if got.get("found"):
+                        got["matched_by"] = "statement_manuscript_id"
+                        return got
+                    # 签表里确有这一份、但拿不到稿件（文件没了 / 签后改过）⇒
+                    # 按那一档如实拒，不折成「没有签」。
+                    return got
+        elif row_reading.get("checked"):
+            row_evidence_why = (
+                "行上没有记稿号（这条命题的 `statements` 行 `manuscript_id` 是空的）")
+        else:
+            row_evidence_why = (
+                "行上那一格没查成（`statements` 台账读不出来："
+                f"{row_reading.get('why') or '没有理由'}）")
         out.update(refused="no_signed_manuscript",
                    why=(f"查过了：V 的颁发表里没有一份签指到 stmt:{sid}"
-                        "（按命题号、按稿头都找过）⇒ 这一条还没有签，无可优化"))
+                        "（按命题号、按稿头、按行上稿号都找过）⇒ 这一条还没有签，"
+                        f"无可优化；差第 ④ 条证据：{row_evidence_why}"))
         return out
+
+    def _statement_manuscript_id(self, sid: str) -> dict[str, Any]:
+        """④ 的证据源：这条命题的 `statements` 行上记的稿号（三态，不折平）。
+
+        返回 `{checked, manuscript_id, why}`：
+
+        - `checked=True, manuscript_id=""` ⇒ 查过了，行上没有那一格；
+        - `checked=True, manuscript_id="000000"` ⇒ 行上记着这一份稿；
+        - `checked=False` ⇒ 台账读不出来（"没查成"不是"行上没记"）。
+        """
+        from .. import statementledger as _SL
+
+        got = _SL.by_id(getattr(self, "store", None), stmt_id=sid)
+        if not got.get("checked"):
+            return {"checked": False, "manuscript_id": "",
+                    "why": str(got.get("reason") or got.get("why") or "")}
+        row = dict(got.get("row") or {})
+        return {"checked": True,
+                "manuscript_id": str(row.get("manuscript_id") or "").strip(),
+                "why": ""}
 
     @staticmethod
     def _polish_source_of(root: str, entry: dict, out: dict) -> dict[str, Any]:
