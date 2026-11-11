@@ -68,13 +68,16 @@ _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 #:     「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
 #       应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
 #:
-#: 落在结构上：B 的落点永远 `reports/b-proof-<B稿号>.md`；同一命题的下一版就地改
-#: 那一份（`proofregistry` 的 `mode=rewritten` 只动头部元信息与 `## 证明`，不新名）。
-#: 稿头的 `- 证明号：N` 仍可以递增（那是台账读数，不是文件名的一部分）。
+#: 落在结构上：落点永远 `reports/<族>-proof-<稿号>.md`；改正文就地改那一份
+#: （`proofregistry` 的 `mode=rewritten` 只动 `## 证明` 与头部的元信息，不换名、
+#: 不涨 `proof_no`：一个稿号一份稿 ⇒ 稿头那一行也恒为 1）。
 #:
-#: F 不在这张表里：F 的 `-pN` 属于「一条命题多份证明」（`test_multi_proof_*` 那一批），
-#: 是另一件事、另一批裁定，本批不动它。
-NO_VERSION_SUFFIX_FAMILIES: tuple[str, ...] = (FAMILY_B,)
+#: 2026-11-11 晚（业主同一条裁定的后半）：这条对 F 与 B 都成立 ——
+#: 先前这里只写了 B，并注明"F 的 `-pN` 属于一条命题多份证明，另一批裁定"；
+#: 业主随后明确「同稿号多个版本是错误的」⇒ F 也不再产生 `-pN`，因此一并归入本表。
+#: 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）是历史，
+#: 只读兼容：`proofregistry._legacy_proof_no_of` 命中它们时沿用文件名里的 N，不改身份。
+NO_VERSION_SUFFIX_FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 
 #: 族 ⇒ 文件名前缀（命名的唯一来源；别处不许再写一遍字面量）。
 #: 2026-11-09（T2 收编）：从 `manuscriptfamily` 派生（设计 3.2 第 6 处）。

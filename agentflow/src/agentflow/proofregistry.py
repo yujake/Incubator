@@ -8,7 +8,8 @@
 > 「就是F侧登记新命题F秘书闸拦的那块」
 
 ⇒ 一次登记（过 F 秘书的形态闸）之后，反复改证明不再登记：只改同一份手稿的
-`## 证明` 那一节（顺手按 cites 重渲 `## 依赖`），把 `proof_no` 递增、`正文 sha256` 重算。
+`## 证明` 那一节（顺手按 cites 重渲 `## 依赖`），把 `正文 sha256` 重算。`proof_no` 不涨
+（业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」）。
 不新落第二个文件（不出现 `f-proof-000041-v2.md` 这类名字），也不新落 statements 行。
 
 ## 登记条目住在哪（没有新表、没有新列）
@@ -28,7 +29,8 @@
    - 命题指纹：<sha256>     （`## 命题` 那一节规范化后的 sha256，判"还是不是同一条命题"）
    - 证据种类：<kind>       （`lemma` / `theorem` / `conjecture` …，B 收录时按它落 kind）
    - 登记时间：<ISO8601>    （这一条第一次落成手稿的时刻；重写不改它）
-   - 版本：p<N>@<ISO8601>@<sha256>；p<N-1>@…   （append-only，每次重写追加一格）
+   - 版本：p<N>@<ISO8601>@<sha256>   （同一个证明号只有一格：改正文就替换它，不涨版本；
+     老盘 `-pN` 的不同号各留一格，2026-11-11 业主裁定「一个稿号一份文件一份证明」）
    ```
 
 2. `attack_plans.history` 的既有格（F 侧）：每轮那一行照旧落 `manuscript_path` /
@@ -299,8 +301,8 @@ def render_version(proof_no: Any, at: Any, sha: Any) -> str:
 def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     """就地改写头部的那几行（缺的按固定次序插在 `- 证明号：` 之后）。
 
-    `- 版本：` 是 append-only 的一整行（一次重写 append 一格），所以它与其他标记同样
-    替换：`values[VERSION_MARK]` 已经是"旧版本 + 这一版"的完整清单。
+    `- 版本：` 与其他标记同样替换：`values[VERSION_MARK]` 已经是这一笔之后的完整清单
+    （同一个证明号只留一格，见 `_versions_block`）。
     """
     lines = head.split("\n")
     order = [SHA_MARK, FINGERPRINT_MARK, KIND_MARK, REGISTERED_AT_MARK, _MF.LABEL_MARK]
@@ -336,16 +338,31 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
 
 def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
                     sha: str) -> tuple[str, list[dict[str, Any]]]:
-    """把这一版追进 `- 版本：` 那一行（一次重写只加一格；同一版重复写 ⇒ 幂等）。"""
+    """把这一版记进 `- 版本：` 那一行（同一个证明号就是同一份稿 ⇒ 就地替换那一格，不追加）。
+
+    业主 2026-11-11（逐字）：「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，
+    不再细分 version 几，应该在改正文时 edit 它」⇒ 新写路径的稿号只有一个证明号，
+    重写就是就地改这一版：版本行只留当前那一格（恰好 1 条），不涨"版本"。
+
+    老盘 `-pN`（N≥2）那几份各有自己的号：不同号仍各留一格（它们是"这一条命题的第 N 份
+    证明"，不是同一份的第 N 版）；同号重写只替换同号那一格，号与文件名一起保持身份。
+
+    同一版重复写（号与 sha 都相同）⇒ 返回空串，调用方据此不动那一行（幂等）。
+    """
     versions = [dict(v) for v in (entry.get("versions") or [])]
     if not versions and int(entry.get("proof_no") or 0) >= 1 and entry.get("sha256"):
         versions.append({"proof_no": int(entry["proof_no"]),
                          "at": str(entry.get("registered_at") or ""),
                          "sha256": str(entry.get("sha256") or "")})
-    if versions and int(versions[-1].get("proof_no") or 0) == int(proof_no) \
+    want = int(proof_no)
+    if versions and int(versions[-1].get("proof_no") or 0) == want \
             and str(versions[-1].get("sha256") or "") == str(sha):
         return "", versions
-    versions.append({"proof_no": int(proof_no), "at": str(at), "sha256": str(sha)})
+    current = {"proof_no": want, "at": str(at), "sha256": str(sha)}
+    if versions and int(versions[-1].get("proof_no") or 0) == want:
+        versions[-1] = current           # 同一个证明号 ⇒ 就地改这一版，不涨"版本"
+    else:
+        versions.append(current)
     return _VERSION_SEP.join(render_version(v.get("proof_no"), v.get("at"), v.get("sha256"))
                             for v in versions), versions
 
@@ -471,6 +488,34 @@ def read_entry(root: Any, *, family: Any, statement_id: Any = "",
 
 # ---------------------------------------------------------------- 登记 / 重写（唯一写入口）
 
+def _legacy_proof_no_of(rel: Any, entry: Mapping[str, Any]) -> int:
+    """这一份稿的「证明号」（一个稿号一份稿 ⇒ 新写恒 1；只有老盘的 `-pN` 才保留 N）。
+
+    业主 2026-11-11：「不再细分 version 几」⇒ 重写不涨号。
+    但老盘上按 `-pN` 命名的稿（`reports/f-proof-000012-p2.md` 那一族）已经在盘上了，
+    重写它时如果把号压回 1，等于把那份老稿的身份改了（文件名与稿头会打架）。
+    所以：名字里带 `-pN`（N≥2）⇒ 沿用 N；其余一律 1。
+
+    判据：`tests/test_one_manuscript_id_is_one_file.py`（新写路径恒 1）与
+          同文件里那条"老盘 `-pN` 仍按 N 读"的兼容断言。
+    """
+    raw = str(rel or "").strip().replace("\\", "/")
+    tail = raw.rsplit("/", 1)[-1]
+    stem = tail[:-3] if tail.lower().endswith(".md") else tail
+    hit = re.search(r"-p(\d+)$", stem)
+    if hit:
+        try:
+            no = int(hit.group(1))
+        except (TypeError, ValueError):
+            no = 0
+        if no >= 2:
+            return no
+    try:
+        return int(entry.get("proof_no") or 0) if str(entry.get("manuscript_path") or "") == raw and hit else 1
+    except (TypeError, ValueError):
+        return 1
+
+
 def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str,
                           label: Any, kind: Any, mode: str, entry: Mapping[str, Any],
                           at_text: str, versions_line: str,
@@ -566,7 +611,8 @@ def register_or_rewrite(
       problems, refused, why, entry, section_hashes, gate, written, migrated}`。
 
     - `mode="registered"`：这一条第一次落成手稿（过闸；`gate` 读数的原文在 `gate`）；
-    - `mode="rewritten"`：同一条命题的下一版证明（`## 证明` 就地换、`proof_no` 递增）；
+    - `mode="rewritten"`：同一条命题的下一版证明（`## 证明` 就地换；`proof_no` 恒 1，
+      老盘 `-pN` 沿用 N —— 一个稿号一份文件一份证明）；
     - `ok=False` 时 `refused` 是受控码，盘上一个字节都不动（`written=False`）。
     """
     at_text = str(at or "") or _now()
@@ -631,8 +677,8 @@ def register_or_rewrite(
         out.update(refused=REFUSED_TEXT_CHANGED,
                    why=("命题正文与登记条目里那一条不一致（指纹 "
                         f"{old_fp[:12]}… → {new_fp[:12]}…）⇒ 受控拒。"
-                        "这是**另一条新命题**（走登记），或者要走「放弃 + 换号」；"
-                        "**不要用挂证明改命题正文** —— 重写只能改 `## 证明` 那一节"),
+                        "这是另一条新命题（走登记），或者要走「放弃 + 换号」；"
+                        "不要用挂证明改命题正文 —— 重写只能改 `## 证明` 那一节"),
                    entry=entry, problems=["proposition_text_changed"])
         return out
     mode = MODE_REWRITTEN if same_slot else MODE_REGISTERED
@@ -664,7 +710,18 @@ def register_or_rewrite(
     rows = [dict(r) for r in (dependency_rows or [])]
     deps_section = _DS.render_dependency_section(rows)
     new_sha = proof_sha(proof_text)
-    proof_no = int(entry.get("proof_no") or 0) + 1 if mode == MODE_REWRITTEN else 1
+    # ---- 一个稿号 = 一份文件 = 一份证明（业主 2026-11-11，逐字） ----------------------
+    #
+    #   「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
+    #     应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
+    #
+    # ⇒ 重写不涨版本号：这一条稿的 `proof_no` 恒 1；改正文就是就地改那一节。
+    # 老盘按 `-pN`（N≥2）命名的那几份是历史：命中它们时不改身份，沿用文件名里那个 N
+    # ——否则一次重写等于把老稿改了名（那才是真正的坏账）。新写的路径不会再产生 `-pN`。
+    if mode == MODE_REWRITTEN:
+        proof_no = _legacy_proof_no_of(rel, entry)
+    else:
+        proof_no = 1
     if mode == MODE_REGISTERED:
         versions_line = render_version(1, at_text, new_sha)
         versions = [{"proof_no": 1, "at": at_text, "sha256": new_sha}]
