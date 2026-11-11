@@ -10,7 +10,7 @@
 1. `test_every_tool_returns_declaration_is_machine_readable`
 —— 声明必须能被 `parse_declared_keys` 判成 `parsed`（键集合非空），除非它在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么它没有键集合」的理由）。它不能证明「声明的键是对的」
 —— 那是第 2 条的事。`test_declared_keys_are_a_subset_of_what_the_handler_actually_returns`
-—— 对全部 126 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
+—— 对全部 127 个工具各跑一次（临时 store/workspace + 类型正确的占位参数），断言 ``declared - set(实际 data)`` 为空。它只抓「声明了却没给」，抓不到「给了却没声明」 —— 后者会让
 LLM 少看到有用的键，但不会让调用方读错。这条不对称关系写在 `SUBSET_CHECK_SCOPE` 里，免得下一个人以为它更强。负控（`test_negative_control_*`）—— 没有负控的门就是橡皮图章：
 - 声明里塞一个实现不返回的键 ⇒ 第 2 条必须红；
 - 把某个 `returns=` 换回不带引号的写法 ⇒ 第 1 条必须红；
@@ -141,6 +141,9 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 与 `ledger.expand`（`depth` 必填的局部树）两件只读工具。它们的探针真跑到了
 #: `ok=True` 那一支（前置在 `_PREREQS` 里铺一条命题 9001 与两条依赖边 ⇒ 树里有
 #: 节点 / 边 / frontier 三样），所以键名读自实跑观测。
+#: 2026-11-11：126 → 127（`manuscripts.submission_reading` —— `4f875733` 把此前
+#: src 零调用点的 `manuscriptsubmission.submission_reading` 暴露成只读工具，全部
+#: 可召唤角色一件；探针走 `_PREREQS` 里铺的那份证明稿，读到提交状态那几个键）。
 TOOL_COUNT = 127
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
@@ -154,12 +157,12 @@ SUBSET_CHECK_SCOPE = (
     "所以『元素 A 有、元素 B 没有』这种漂移**这一条**抓不到。"
     "⚠️ 2026-10-15 起，那两个盲区**各有一条判据**了（三条各管一件事，别把强度混起来）：\n"
     "  ① 『给了却没声明』：`test_no_tool_returns_a_top_level_key_it_does_not_declare`"
-    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 126 个工具**零缺键**）。"
+    "（只看**顶层**键；反真空 `DECLARED_COVERAGE_MIN`；实测全 127 个工具**零缺键**）。"
     "为什么它值得单独一条：`tools/base.py:721` 把 `returns` 拼进 function-calling 的 "
     "`description` ⇒ **模型看得到**，于是「声明里没有」= 「模型不知道这个字段存在」"
     "（`doc.scan_claim` 的 `status_axis`/`undecided_reason` 就是这一类 —— 那两格**正是三态**）；\n"
     "  ② 『数组里逐元素不一致』：`test_every_element_of_an_array_carries_the_same_top_level_keys`"
-    "（实测全 126 个工具里只有 `table.schema` 犯过，132 处，已修）。"
+    "（实测全 127 个工具里只有 `table.schema` 犯过，132 处，已修）。"
 )
 
 # ---------------------------------------------------------------- 豁免清单
@@ -476,7 +479,7 @@ def _seed_ledger_probe(registry: "ToolRegistry") -> None:
 
 
 def tool_params() -> dict[str, dict]:
-    """126 个工具各自那一次调用的参数。"""
+    """127 个工具各自那一次调用的参数。"""
     plan_id = _ALLOCATED.get("plan_id") or "0000"
     probe_root = _ALLOCATED.get("probe_task_root") or ""
     probe_child = _ALLOCATED.get("probe_task_child") or ""
@@ -1453,7 +1456,7 @@ def _seed(store: Store, root: Path) -> None:
 class _RoleGateBypassedRegistry(ToolRegistry):
     """测试专用子类：本文件的判据要逐个工具跑一遍，而工具面跨越每个角色。
 
-    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 126 个工具 —— 那是设计意图（只读角色拿不到写工具）。
+    `P-14` 把"这次是谁在调"做成调用期判据（`_callable_for`），于是没有任何一张正常注册表能调全部 127 个工具 —— 那是设计意图（只读角色拿不到写工具）。
     本文件的判据是"`returns=` 与实现逐条一致"，与权限无关，所以这里只覆写那一个谓词。
 
     为什么这是可接受的、而不是"测试把门拆了"：
@@ -1488,7 +1491,7 @@ def _every_tool_has_a_role(reg: ToolRegistry) -> list[str]:
 
 @pytest.fixture
 def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
-    """一个装齐 126 个工具的注册表（联网工具用桩注入，不动装配代码）。
+    """一个装齐 127 个工具的注册表（联网工具用桩注入，不动装配代码）。
 
     `monkeypatch` 在夹具结束时自动还原，所以打桩不会泄漏到别的测试文件 ——
     这一点很重要：判据测试里的桩若泄漏，「别的测试变成了在测桩」是没有任何报错的。
@@ -1583,7 +1586,7 @@ def registry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> ToolRegistry:
 
 @pytest.fixture
 def observations(registry: ToolRegistry) -> dict[str, Observation]:
-    """对 126 个工具各调一次，记录观测结果。
+    """对 127 个工具各调一次，记录观测结果。
 
     调用顺序 = 非破坏性工具在前、破坏性工具在后（见 `MUTATING_LAST`）。
     """
@@ -1783,7 +1786,7 @@ def test_registry_ships_exactly_the_expected_number_of_tools(registry: ToolRegis
 
 
 def test_every_tool_returns_declaration_is_machine_readable(registry: ToolRegistry) -> None:
-    """反真空：126 个工具逐个，`returns=` 必须能被机器读出键集合。
+    """反真空：127 个工具逐个，`returns=` 必须能被机器读出键集合。
 
     放行条件只有一个：工具在 `NO_KEY_SET_EXEMPTIONS` 里（每条带「为什么没有键集合」）。
     失败信息带上原始 `returns=` 字符串 —— 否则人不知道该改什么。
@@ -1878,16 +1881,16 @@ def test_negative_control_folding_unparseable_into_parsed_makes_the_gate_red(
 def test_declared_keys_are_a_subset_of_what_the_handler_actually_returns(
     registry: ToolRegistry, observations: dict[str, Observation]
 ) -> None:
-    """全部 126 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
+    """全部 127 个工具：`declared - set(实际 data)` 必须为空。三态：`ok=False` 怎么办：有些工具会因为缺前置数据而失败（`ok=False`）。这类调用必须与「查了、结果不一致」
     分开：`ok=False` ⇒ 跳过键比对，但记下来（它既不是「一致」也不是「不一致」）；* `ok=True` 且 data 是对象 ⇒ 做比对。不许把「工具跑不起来」当成「一致」—— 那正是本项目反复踩过的坑（「没检查」
     被读成「检查过了没问题」）。因此末尾还要断言被跳过的工具数 ≤ MAX_SKIPPED。`MAX_SKIPPED = 0` 的依据：本文件的
-    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 126 个工具全部走到 ok 分支。
+    `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本 ⇒ 127 个工具全部走到 ok 分支。
     把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。本判据只抓「声明了却没给」（见 `SUBSET_CHECK_SCOPE`），抓不到「给了却没声明」。`ok=False` 与「豁免的工具」
     是两种不同的"没法比对"：`ok=False` ⇒ 工具没查成 ⇒ 计入 `skipped`（末尾断言其数量 ≤ MAX_SKIPPED）；* 声明在 `NO_KEY_SET_EXEMPTIONS` 里（data
     是标量/行对象）⇒ 查成了，只是没有键集合可比 ⇒ 不计入 skipped（它有自己的一条负控`test_negative_control_an_exempted_tool_is_still_probed_for_real`
     盯着它的行为）。但豁免 ≠ 免检：`ok=True` 是硬要求 —— 一个标量工具若连跑都跑不起来，照样要红。`MAX_SKIPPED = 0` 的依据：本文件的
     `_seed()` 铺齐了每个工具需要的前置数据（概念/关系/文献/正文/稿件/审校发现/研究问题/实验行），联网工具用桩注入，`verify.run_experiment` 有真的探针脚本，`ocr.run` 给的是真图片
-    ⇒ 126 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
+    ⇒ 127 个工具全部走到 ok 分支。把它改成非零之前，请先在测试输出里逐条说明「哪个工具为什么跑不起来」。
     """
     mismatches: list[str] = []
     skipped: list[str] = []
@@ -2285,7 +2288,7 @@ def test_every_element_of_an_array_carries_the_same_top_level_keys(
     上一条（`declared - actual`）把同一个数组的多个元素并成一份键集合，所以"元素 A 有、元素 B 没有"在它眼里是合规的。而对调用方不是：它按自己在别的元素上看到的形状去读 `field["enum"]`，
     在不带那一格的那些元素上会拿到 KeyError —— 那不是"这个字段没有词表"，是读数与事实不符。
     ## 实测（2026-10-15）
-    全 126 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
+    全 127 个工具里只有 `table.schema` 有这个形态，而它有 132 处（`fields[]` 里只有带词表的那些元素才有 `literal_values` / `vocabulary` / `enum`）。
     那件工具的用途恰恰是"让智能体读受控词表"，所以这一格坏得最不是地方。修法是每个元素都给这三格、不适用时给如实空值（`[]` / `None`）。
     ## 一条不许混进来的东西（我第一版判据就栽在这）
     比的是元素的顶层键，不是递归取并集之后的键集合。递归取键会把元素`default` 里嵌套的 `{"start","end","label"}` 算进那个元素，于是"两个元素的 `default` 形状不同"（合法：默认值本来就各不相同）

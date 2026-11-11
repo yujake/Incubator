@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T17:30:58+08:00",
+  "generated_at": "2026-11-11T19:32:06+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -361,10 +361,10 @@
       "path": "src/agentflow/specs/g.py",
       "glob": "src/agentflow/specs/g.py",
       "category": "auth-audit",
-      "sha256": "d2d0a1f3f23fe3c3311a1884efbb57a58179baa25f3d121264b09be0281802f1",
+      "sha256": "d1ae7744d197f1e12232a5ea0a6dac4f2428b729e54fe604607d9e4822fb7fbd",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-11 P1（业主放行禁改区）：G 出边改 C/D/H、G 补内容走 D、G 成文前派 C 拿依赖链/无号按内容找根；H 去掉 G（下级不召唤父）；C 补无号找根题面。reviewers=0（本批业主裁定：登记≠批准）",
+      "change_note": "2026-11-11 丙组 R5：specs/g.py 的 edges 注释把判据出处从从未存在的 tests/test_g_revise_next_step_and_edges.py 改成实际落地的 tests/test_p1c_edges_and_handoff_chain.py（只改注释，不进 prompt 正文；test_prompt_stability + test_agent_prompts 86 passed 证明十一格摘要未变、p277 不动）。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

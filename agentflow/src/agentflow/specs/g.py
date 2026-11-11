@@ -606,7 +606,8 @@ SPEC = AgentSpec(
         # H 为 G 的下级不召唤 G」。再裁定：「G 想补内容都走 D」⇒ G 不再直接调 A/E/F。
         # 补内容的链：G 派 D（子任务）→ D 自已调 A/E/F 补 → D 交台账、B 收录 →
         # D 向上汇报（只带指针）→ G 去台账读。判据：
-        # `tests/test_g_revise_next_step_and_edges.py` 的 d/e/f 与转交规则那一条。
+        # `tests/test_p1c_edges_and_handoff_chain.py` 的 a/b/f（边集与旧边回注）
+        # 与 e/g/i（转交规则、revise 的 next_step、摘掉 next_step 反真空）。
         'C',
         'D',
         'H',

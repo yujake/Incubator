@@ -196,8 +196,8 @@ LIVE-READINGS:END
 
 | 字面量 | 量法（复跑命令） |
 |---|---|
-| 动作总数 **66** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-11-09 T1 收口：B 的「稿 → 签 → 录入」拆成两个显式动作 `land_manuscript` / `ingest_manuscript` ⇒ 64 → 66） |
-| 可召唤动作数 **56** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-11-09 T1 收口：B 新增两条可召唤动作 ⇒ 54 → 56；此前 2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；2026-10-20 撤 `M→V` ⇒ 57 → 54） |
+| 动作总数 **67** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-11-09 T1 收口：B 的「稿 → 签 → 录入」拆成两个显式动作 `land_manuscript` / `ingest_manuscript` ⇒ 64 → 66；2026-11-11 业主裁定：B 补 `open_polish_copy`（优化副本是冻结后的补救入口，此前不在动作表 ⇒ 冻结后不可达）⇒ 66 → 67） |
+| 可召唤动作数 **57** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-11-09 T1 收口：B 新增两条可召唤动作 ⇒ 54 → 56；2026-11-11 B 的 `open_polish_copy` ⇒ 56 → 57；此前 2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；2026-10-20 撤 `M→V` ⇒ 57 → 54） |
 | 子命令数 **29** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices。2026-10-24 加 `stats` 那一组 ⇒ 27 → 28；2026-10-27 加 `interject`（给主控 M 插话）⇒ 28 → 29） |
 
 **两条使用规矩**（与 §1.1 同源）：
