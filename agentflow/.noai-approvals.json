@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T07:12:52+08:00",
+  "generated_at": "2026-11-11T08:01:25+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -530,11 +530,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "4bb5a6026810028a14e1292bc7aa79e66d2f2b42364cb0d9d5fd72ac6794eee4",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "2026-11-10 p273（draft/181 A+B 批）：specs/c.py 的关系推断教法由手算多跳改成 ledger.resolve/expand 选根-展开-拼接（污染面=查询模式）；tools/__init__.py 的 _MODULES 加 ledger_tools（两件只读工具）；两份 golden 按现值重冻（工具面 +2 件、C 的提示词与工具清单变）。",
-      "changed_this_session": true,
+      "sha256": "43f2d5a175a4cc51646f67247f90ed20ecc85addbd247d10819a252e5a9fce74",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "p286（2026-11-11）：agent 面按现值重冻 —— 声明面只有 F.step 一格变（summary 教了 product 入口 / params 多 product 一档）+ handler 签名多 product=None；11 格 prompt 全变，其中 10 格逐字只差末行「提示词版本：p274→p275」，F 那格另加那条新教法（这是 p275 抬版本的直接连带，不是新改动）。登记 ≠ 批准：仍需 2 名 reviewer 逐格看过。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []

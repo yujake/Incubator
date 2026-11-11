@@ -144,9 +144,16 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "（执行了、没成功），不是调用方的参数错 ⇒ 它们仍是子结果，由 `_wash_manuscript` / "
         "detail 折进返回值，不走 `refusals.refuse`（走它会给内部读数错贴 `invalid_params`）。",
     ("agent_f/core.py", ""):
-        "子结果：手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给调用方"
-        "看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 payload，"
-        "只在 detail 里留一句",
+        "子结果（两处）：① 手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给"
+        "调用方看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 "
+        "payload，只在 detail 里留一句；② 2026-11-11（p286，`attack.step(product=…)` 通道）"
+        "新增的 `parse_handed_product()` 的返回骨架 `out` 初值 —— 它是三态解析器的初值"
+        "（`checked` / `ok` / `kind` / `product` / `problems` / `label`），`ok=False` 的"
+        "意思是「还没核完」，不是「这一轮被拒」：真正的受控拒由 `_handed_product_round` "
+        "在 `refusal` 里带 `kind=HANDED_PRODUCT_REFUSED` 的那一支产出（受控码 + 逐条点名 + "
+        "`next_step`，落 history 的 `refusal` 格），动作终态 payload 里根本没有 `ok` 这一格。"
+        "⇒ 两处都不是动作自己手写的终态拒绝，按处数登记，不走 `refusals.refuse`"
+        "（走它会给一份正常的解析读数贴上 `refusal_reason=invalid_params`）",
     ("agent_d/write_report.py", ""):
         "读数格：`rec` 是逐行登记的记录（`{\"statement_id\": ..., \"ok\": False, ...}`），"
         "落进报告的表格里；它不是动作的返回值，也不会被台账当成一次拒绝",
@@ -182,6 +189,11 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # （手稿号不是六位号 / 拼不出规范路径，各一处），加上 `preview_dependencies()` 的
     # 读数一条 ⇒ 1 → 3。三处都是子结果，理由见 `_FAILURES_NOT_REFUSALS` 里那一格。
     ("agent_f/manuscript.py", ""): 3,
+    # 2026-11-11（p286）：`agent_f/core.py` 的空 kind 处数 1 → 2。新增的那一处是
+    # `parse_handed_product()` 的返回骨架 `out` 初值（三态解析器的"还没核完"，不是终态
+    # 拒绝；真正的受控拒由 `_handed_product_round` 的 `refusal` 那一支产出）。
+    # 另一处仍是手稿那一支的局部 `manuscript`。两处理由同一条（见登记表那一格）。
+    ("agent_f/core.py", ""): 2,
     # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
     # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
     ("agent_v/core.py", ""): 3,

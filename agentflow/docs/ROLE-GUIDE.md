@@ -683,6 +683,7 @@
 | 由定理甲，G 有 p 阶元 | stmt:000000 | 第 1 步 | 1 |
 ```
 所以你要做的是：写证明时读 B 已收录的定理（在册 `statements` —— 提示词第 4.1 段那份现算的清单就是它们），**引到哪一条就把 `stmt:<号>` 写进那一步的 `cites`**。**不要手写 `reports/f-proof-*`**：那是框架渲染的产物，`fs` 的保留表对它是受控拒绝（`reserved_framework_artifact`）。**引用门槛是等级 `pre_theorem` 及以上**（业主同日加码裁定；**等级是唯一的轴**，`evidence_kind` 只是它的历史列名）：低于它（`conjecture` / `strong_conjecture`）或等级算不出来的，B 会整笔受控拒绝（`citation_below_proof_review` / `citation_level_unreadable`）并点名。**正文引了在册命题而一条 `cites` 都没写** ⇒ B **整笔受控拒绝** `dependency_section_missing`（拒信逐字：「依赖面必须写进手稿（四列表，列固定），B 按它入库；补上那一节再交」）—— 把 `cites` 补上再交，别指望「只报一句缺」就过关。一条在册引用都没有的自足证明不适用这一条（B 不拒收，`deps_missing` 读成 `not_applicable`）。你不写 `dependencies` 那张表：作者的活是把引用写进 `cites`，登记是收方的活。
+  - **写好的证明可以直接交进来，不必让它再生成一遍**：把 `{"kind": "proof", "label": "一句话标签（可选）", "steps": [{"text": "这一步说了什么", "cites": ["stmt:000007"], "assumption": false}, …]}` 放进 `attack.step(plan_id=…, product=…)` —— 框架照**既有的产物校验**逐条核（`cites` 必须在册、不许「易证 / 显然 / trivial」、推导步不许声明成前提；一条闸都不放宽），过闸就替你落成 `reports/f-proof-<你的稿号>.md`（`manuscript_path` / `manuscript_id` 随返回值回来），`## 依赖` 那一节由框架按每一步的 `cites` 渲染，**你不必手抄**。校验不过 ⇒ **受控拒**，逐条点名第几步 / 哪一格不容（把校验器的原话带回），改那几处再把同一份交一次 —— 那一轮不落稿、不登记。归约同理：`kind="reduction"` + `new_subgoals`（1–3 条，每条 `goal` + `testable`）。**不交 `product` 也没关系：那一轮照旧由框架从你的推理缝现生成**（老路不变）——但证明已经写好了就别只把草稿落到 `reports/` 或 `notes/` 上：那种文件不是框架手稿，V 不会签它，B 也不会收它。
   - **引的号必须在册**：`cites` 或 `## 依赖` 里出现一个不在 `statements` 的 `stmt:<号>` ⇒ 秘书洗不动，**整份手稿退回**（`dependency_source_not_registered`，点名第几行、哪个号）—— 这是整份退回、不是「打回重写那一句」；写之前先用 `table.get` 核那个号在不在册。
   - **依赖面是写证明前的动作，不是写完之后的条件**：**开始写一份证明之前，先在台账里找 1–3 条你预计会用的在册命题**（拿来当下一步的依据）。一条都列不出时先分清是哪一种情形：**这份证明真的自足**（那就写空表并说明为什么自足）、**你还没查**（那就去查——`table.list` / `table.search`，别把'没查'写成'自足'），或者**查过之后可引池里仍然没有够格的**（那就去要——直接派 A 补库，见下一段）。**推导步不许声明成前提**：`assumption: true` 只用于真正的前提步；把要推的一步声明成前提，等于这一步没做（V 会按这个读）。
   - **台账里一条够格的命题都没有，不等于你只能全篇声明前提**：把你要的那几条写清楚 —— 要什么样的命题 / 拿它推哪一步 / 查到的直接交 B 入库 —— 用 **`summon` 直接派 A**（`framework_summon` 形状，`role="A"`；`F → A` 是直接边），**不要为此收工**。A 的活是查文献、入库是 B 的活：**让 A 把查到的直接交 B 入库**（`A → B` 是直接边），A 的回执会点名新入库的号（它知道这是为你查的）—— 那就是你要等的「库已更新」；**若你直接派 B 入库，B 会直接回你**（派它的是你，它知道目的）。你每轮开工时 4.1 段那份现算的可引清单也会带上新够格的号，自己核一眼就知道到没到。等的时候**不要空转**：用 `clock.timer_start` 挂一个计时器（到点你会收到一条「时间到」），期间去推进不依赖那几条的部分；`clock.timer_list` 看还有哪些没到。**不许把"我还没查"写成"这份证明自足"**。
@@ -710,7 +711,7 @@
 | 动作 | 做什么 | 副作用 | 必填参数 |
 |---|---|---|---|
 | `create_plan` | 立项（预算不完整即拒绝，不写库） | `write_local` | `problem`、`problem_key` |
-| `step` | 推进一轮（唯一会改计划的方法） | `write_local` | `plan_id` |
+| `step` | 推进一轮（唯一会改计划的方法）。**写好的证明 / 归约可以直接放进 `product` 交进来**：框架照既有产物校验逐条核过，过闸就替你落成 `reports/f-proof-<你的稿号>.md`（`## 依赖` 由 `cites` 渲染，你不必手抄），并回 `manuscript_path` / `manuscript_id`；**不交 `product` 就照旧由框架这一轮自己产出**。 | `write_local` | `plan_id` |
 | `status` | 只读看一个攻坚计划的当前状态 | `read` | `plan_id` |
 | `list_plans` | 只读列举攻坚计划 | `read` | （无） |
 
@@ -731,7 +732,7 @@
 | `attack.list_plans` | 列出全部攻坚计划（可按 problem_key 过滤）。 | `read` | （无） |
 | `attack.pick_next_subgoal` | 按确定次序选下一个要推进的子目标（开始过的优先，卡住的最后）。 | `none` | `subgoals` |
 | `attack.status` | 读攻坚计划的可读视图（子目标状态、预算余量、history 尾）。 | `read` | `plan_id` |
-| `attack.step` | 推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实记 no_change。 | `write_local` | `plan_id` |
+| `attack.step` | 推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实记 no_change。交证明用 `product`。 | `write_local` | `plan_id` |
 | `clock.alarm_start` | 定一个一次性闹钟：到 at（ISO 时刻）时叫醒收件人。到点动作与 timer_start 相同（一条 notice 板项 + 一条唤醒标记），差别只在时间怎么给。可另给 wait_for：到点或等到谁，先到者报醒。定一个具体时刻叫醒自己就用这一件（不是睡一轮）；撤掉一条没到点的用 clock.timer_cancel(timer_id=…)。目的忘了填同样不报错（读数带 purpose_missing=true）。所有角色都能用。 | `write_local` | `at` |
 | `clock.now` | 读系统时钟：现在几点（墙钟 + 单调计数）、这一趟跑了多久、有没有等我消费的唤醒标记、等待账与'主时钟控制了所有计时类工作没有'的机器读数（waits_outside_clock）。读不到时 status=unknown、wall/monotonic 都是 null（绝不折成 0）。所有角色都能用。 | `read` | （无） |
 | `clock.periodic_start` | 起一条周期性巡查：每 every_sec 秒报醒一次，直到 clock.periodic_stop 或 until_sec 到或被等对象收口。M 的巡视就是这一类：every_sec=1200 + purpose=周期性巡查（等 20 分钟 + 周期性巡查，别写成"睡 20 分钟"）。到点消息逐字是"巡查时间到：目的｜每 20 分钟一次（第 N 次）"。目的忘了填不报错。 | `write_local` | `every_sec` |
