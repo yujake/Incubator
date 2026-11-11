@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **303 个 `.py`、282,534 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,238 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **303 个 `.py`、282,537 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,238 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-11 甲/乙/丙 + webui 真回归四批（本批记账）**：303 个 `.py` 不变（没有新
+> 模块），总行数 282,534 → **282,537**（+3，全在注释里：`capabilities.py` +2 的
+> `two_layer_reconciliation` 沿革、`specs/g.py` +1 的判据出处；`ui/` 与入库的
+> `web/static/` 不是 `.py`、不进这三格）；`>800 行` 的 **75** 与 `agent_loop.py`
+> 14,238 都不变。
 > **2026-11-11 B 收录的第二条入口也分配路径号（本批记账）**：文件数 303 不变（没有新
 > 模块），总行数 282,310 → **282,534**（+224，全在本批改的两个既有文件里：
 > `agent_b/register_statement.py` +213、`secretary.py` +11 —— ② 逐份 inline 登记也调
