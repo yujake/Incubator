@@ -17,6 +17,9 @@
 | e | 同一命题收第二份不同正文的证明 | 两条路径（1 与 2），依赖行与 verification 行同号 |
 | f | 重复收录同一份稿（同 sha） | 仍是 1/2 条路径，不新增 |
 | g | 反真空：把「分配新路径」改成「永远 1」 | e 必须红 |
+| h | 同一命题两份都已签的证明收录之后 | `reviewed_by_proof` 有 1 与 2、sha 表两格各记自己那份；两个号都认得出 `signed`（缺陷：改前只有 `{1: True}`） |
+| i | 路径号三处对齐 | `dependencies.path_group` / `used_by` 的号 / `verifications` 行的 `path_group` 是同一个号 |
+| j | 反真空：把 `borrowed` 改回按号比 | 第二笔收录受控拒，且 h 的判据报出 #2（新签不写 `proof_no`，按号比必然借光） |
 
 收取走 `ingest_manuscript(mode="apply")`（签回来之后 B 的收录正路），
 签用 conftest 的真写口（零模型调用）。
@@ -276,3 +279,111 @@ def test_g_forcing_path_one_turns_e_red(tmp_path, monkeypatch):
     deps = [dict(r) for r in st.rows("dependencies")]
     groups = sorted({int(r.get("path_group") or 1) for r in deps})
     assert groups == [1], deps
+
+
+# ============================================================ a/b：路径号一路到底
+def _per_path_problems(st: Store) -> list[str]:
+    """判据 a 的本体（正控与反真空共用同一份读数）。
+
+    两条路径都已签 ⇒ 收录之后：`reviewed_by_proof` 两格都真、`reviewed_sha_by_proof`
+    两格各记自己那份正文的 sha、`sign_reading` 对两个号都说 `signed`。空清单 = 都对。
+
+    抽成函数是为了让反真空打同一份判据：把 `borrowed` 改回按号比，它必须报出 #2
+    那一份（否则"两条路径都签"这句话可能只是没真的比过）。
+    """
+    problems: list[str] = []
+    row = next(dict(r) for r in st.rows("statements")
+               if str(r.get("stmt_id")) == SID)
+    per = EB.reviewed_by_proof(row)
+    if per != {1: True, 2: True}:
+        problems.append(f"逐条表不是两条路径都真：{per!r}（期望 {{1: True, 2: True}}）")
+    sha_by = EB.reviewed_sha_by_proof(row)
+    from agentflow import proofregistry as PR
+    from agentflow import vsigns as VS
+
+    for no, text in ((1, PROOF1), (2, PROOF2)):
+        want = PR.proof_sha(text)
+        if sha_by.get(no) != want:
+            problems.append(f"#{no} 的 sha 表不是这一份正文（{sha_by.get(no)!r}）")
+        got = VS.sign_reading(st.root, statement_id=SID, proof_text=text,
+                              proof_no=no, store=st)
+        if str(got.get("state") or "") != "signed":
+            problems.append(f"#{no} 的认签不是 signed：{got.get('state')!r}"
+                            f"（{got.get('why') or ''}）")
+    return problems
+
+
+def test_h_both_signed_paths_are_in_the_per_proof_table(tmp_path):
+    """a) 同一命题的两份已签证明收录后：逐条表有 1 和 2，各自 verdict 对。
+
+    改前红：`reviewed_by_proof` 只有 `{1: True}` —— B 收录第 2 份时用 canonical 号
+    重放证据（`_ingest_apply_evidence(proof_no=want_no)`），读的是 #p1 的正文；
+    而认签按号比又把第 2 条路径读成 `borrowed`（签文件里没有 `proof_no`）。
+    """
+    st, _b, _rel1, _rel2 = _path_fixture(tmp_path)
+    assert _per_path_problems(st) == [], _per_path_problems(st)
+
+
+def test_i_the_path_number_is_the_same_on_dependencies_and_verifications(tmp_path):
+    """b) B 写的 `dependencies.path_group` 与 `verifications` 行同号（同一份证明一个号）。
+
+    依赖行的 `used_by`（`stmt:…` / `stmt:…#p2`）与 `path_group` 是同一个号；台账里
+    覆盖那一份正文的行也必须是同一个号 —— 三处任一处按 canonical 号写，G 的映射表
+    就会把两条路径读成一维。
+    """
+    st, _b, _rel1, _rel2 = _path_fixture(tmp_path)
+    from agentflow import proofregistry as PR
+
+    deps = [dict(r) for r in st.rows("dependencies")]
+    assert {str(r.get("used_by")) for r in deps} == {f"stmt:{SID}", f"stmt:{SID}#p2"}
+    deps_by_group = {int(r.get("path_group") or 1): r for r in deps}
+    assert sorted(deps_by_group) == [1, 2], deps
+    rows, bad = VR.list_verifications(st.root, statement_id=SID, limit=None)
+    assert not bad, bad
+    ver_by_sha = {str(r.get("proof_sha256")): int(r.get("path_group") or 0)
+                  for r in rows}
+    for group, text in ((1, PROOF1), (2, PROOF2)):
+        assert int(deps_by_group[group].get("path_group") or 1) == group, deps_by_group
+        assert ver_by_sha.get(PR.proof_sha(text)) == group, (group, ver_by_sha)
+
+
+def test_j_restoring_the_number_comparison_turns_a_red(tmp_path, monkeypatch):
+    """f) 反真空：把 `borrowed` 的判据改回"按号比" ⇒ a 必红。
+
+    2026-11-11 之前 `vsigns._reading_with_credential` 比的是
+    `int(sign.get("proof_no") or 1) != no`；新签文件不写 `proof_no`，于是 #2 会被
+    读成 `borrowed`。这里把那一条打桩回老形态，走同一条收录路：第二笔必须受控拒，
+    且 a 的判据必须报出 #2。
+    """
+    st, b = _ws(tmp_path)
+    _task(st)
+    conftest.seed_statement_row(st, stmt_id=SID, statement_full=PROPOSITION,
+                                kind="theorem")
+    _citable(st)
+    rel1 = "reports/b-proof-000001.md"
+    rel2 = "reports/b-proof-000002.md"
+    _write(st, rel1, _manuscript(proof=PROOF1, dep=DEP_SID))
+    _signed_proof(st, rel1, PROOF1)
+    _write(st, rel2, _manuscript(proof=PROOF2, dep=DEP_SID))
+    _signed_proof(st, rel2, PROOF2)
+    assert _ingest(b, rel1, cells=["proof_text", "dependencies"]).get("ok") is True
+
+    def _by_number(sign, *, sid, no):
+        cred_sid = str(sign.get("statement_id") or "").strip()
+        try:
+            cred_no = int(sign.get("proof_no") or 1)
+        except (TypeError, ValueError):
+            cred_no = 0
+        if (sid and cred_sid and cred_sid != sid) or cred_no != no:
+            return False, f"打桩：按号比（{cred_no} != {no}）"
+        return True, ""
+
+    from agentflow import vsigns as VS
+
+    monkeypatch.setattr(VS, "_sign_is_for_this_path", _by_number)
+    second = _ingest(b, rel2, cells=["proof_text", "dependencies"])
+    assert second.get("ok") is False, (
+        "把 borrowed 改回按号比之后第二份已签证明仍然收进去了", second)
+    problems = _per_path_problems(st)
+    assert problems, "把 borrowed 改回按号比之后判据 a 仍然全绿 ⇒ 它没有真的比过"
+    assert any("#2" in p for p in problems), problems

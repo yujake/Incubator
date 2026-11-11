@@ -2119,6 +2119,28 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 out["reason"] = str(_entries_read["reason"])
                 return {"write": False, "result": out}
             listed = list(_entries_read["listed"])
+            # ---- 这一笔新挂的 #pN 必须在 `row` 里看得见（2026-11-11 缺陷 ①）---------
+            #
+            # `_append_proof_entries` 只把新清单交给调用方，`row` 上仍是盘上那一份；
+            # 而下面「收录回执 / 第 2 位 / 逐条表 / 第 4 位」读正文都用
+            # `proof_text_of(row, 号)` ⇒ 新挂的 #p2 在那一格读成空串，整段因此提前
+            # 退出（真机：同一命题两份证明都已签，而 `reviewed_by_proof` 只有
+            # `{1: True}`；第 4 位也看不见第二份）。清单本来就是这一笔要写的那一份，
+            # 提前挂到 `row` 上不新增任何写入面（只在真有清单时挂：空清单会把
+            # `proofs: []` 写进本来没有这一格的单证明行，改变盘上形状）。
+            if listed:
+                row[_VR.PROOFS_KEY] = listed
+            # ---- 这一行现在这一份证明是哪一号（回执 / 逐条表 / 认签共用这一个号）---
+            #
+            # 2026-11-11：号只从这一笔的落点读，而落点已经是 B 分配的路径号
+            # （`path_group`），不再退回 canonical —— 收录第 2 份已签证明时，按
+            # canonical 号重放读的是 #p1 的正文，逐条表里只会留下 `{1: True}`，
+            # #p2 那一份签没人读。
+            _no_receipt = 1
+            try:
+                _no_receipt = int(_VR.as_proof_no(proof_no) or 0) or 1
+            except (TypeError, ValueError):
+                _no_receipt = 1
             # ---- 第 4 位（形式化，二维）从 L 的 experiments 台账同步（D28 的写侧）。
             #
             # 位置在"挂证明"之后：证明清单变了，这一位在册的路径也就变了。这一笔只
@@ -2146,11 +2168,6 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # ⇒ `normalize_raw` / `derive_grade`），这里不另算一份。
             # 顶层 `proof_no` / `proof_sha256` 是收录回执（这一行现在这一份证明是哪一号、
             # 正文指纹是什么），与第 2 位同一笔写、同一次读的正文现算 —— 不是第二份真值。
-            _no_receipt = 1
-            try:
-                _no_receipt = int(_VR.as_proof_no(proof_no) or 0) or 1
-            except (TypeError, ValueError):
-                _no_receipt = 1
             _body_now = str(_VR.proof_text_of(row, _no_receipt) or "")
             #: 这一行现在真有一份正文（canonical 或 #pN）—— 回执、第 2 位、按签重算
             #: 都只在"有一份正文"时成立。E 的普通数值档（e-num）没有证明正文 ⇒ 恒假。
@@ -2162,15 +2179,26 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             _needs_proof = not bool(dict(row.get("bits") or {}).get("proof"))
             _needs_review = (bool(dict(bits or {}).get("reviewed"))
                              and not bool(dict(row.get("bits") or {}).get("reviewed")))
+            #: 2026-11-11（缺陷 ①）：第三种形态 —— 这一笔交来的签是这一号的，
+            #: 而行上的逐条表还没有这一号（第 2 位早就是真的：多证明 / 多路径的
+            #: 第 2 份证明）。改前只认 ① / ②，这一形态整笔不合并逐条表 ⇒
+            #: `reviewed_by_proof` 永远只有 `{1: True}`。判据只看"这一号在不在表里"，
+            #: 不重判签（签是调用方按 `sign_reading.state == "signed"` 认过才交进来的）。
+            _per_now = _EB.reviewed_by_proof(dict(row.get("bits") or {}))
+            _needs_per = (bool(dict(bits or {}).get("reviewed"))
+                          and not bool(_per_now.get(int(_no_receipt))))
             if (bits is not None and _body_present
-                    and (_needs_proof or _needs_review)):
+                    and (_needs_proof or _needs_review or _needs_per)):
                 _collected = _EB.bits_after_proof_recorded(
                     row.get("bits"), delivered=bits, proof_process=_body_now,
                     kind=str(row.get("kind") or ""))
                 if _collected and _collected != dict(row.get("bits") or {}):
                     row["bits"] = _collected
                     out["bits_synced"] = True
-                if bool(_collected.get("proof")):
+                if bool(_collected.get("proof")) and _needs_proof:
+                    #: 这一格只在第 2 位真的从假翻到真时才报（`_needs_proof` 是翻之前
+                    #: 的读数）：多路径 #p2 那一笔第 2 位早就是真的 ⇒ 逐条表补上了，
+                    #: 但"翻位"这件事没发生，回执不许说发生了。
                     out["proof_collected"] = True
             # ---- 收录回执（2026-11-08 缺陷 ③）：与"第 2 位这次翻没翻"解耦 -----------
             #
@@ -6850,8 +6878,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         """写 `proof_text` 那一格（签闸 → `_attach_proofs`），就地把回执写回 `cells`。
 
         `want_no` 是签闸读的证明号（稿名 / 参数给的，通常是 1）；`write_no` 是
-        B 收录时分配的路径号（业主 2026-11-11 追加裁定）—— 第二份证明落成 `#p2`
-        时，签仍按 canonical（#p1）的同一份正文认，依赖面与 verification 行才用路径号。
+        B 收录时分配的路径号（业主 2026-11-11 追加裁定）。这一份证明的「号」全走
+        路径号：写口（`_attach_proofs` 的清单项 / 顶层回执）、bits（逐条表的那一格）
+        与依赖面 / verification 行用同一个号；`want_no` 只用于签闸 —— 签是盖在正文
+        上的，签文件里没有号（见 `vsigns._sign_is_for_this_path`）。
         """
         text = str((cells.get("proof_text") or {}).get("value") or "")
         gate = self._unsigned_proof_gate(
@@ -6865,10 +6895,30 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return {"written": False, "code": str(gate["refused"]),
                     "why": str(gate.get("reason") or "")}
         no = max(int(write_no or 0), int(want_no or 1))
+        # ---- 2026-11-11（缺陷 ①）：这一号要交 bits 进写口，逐条表才补得上 ----
+        #
+        # 为什么只补 `no >= 2` 这一支：canonical（#p1）那一笔的签名早就在
+        # `_attach_proofs` 的 `_needs_proof / _needs_review` 两条路上带过去了；
+        # 第 2 份及以后是"第 2 位已经是真的、这一号还没在逐条表里"，改前那一支
+        # 根本不传 bits ⇒ `reviewed_by_proof` 只剩 `{1: True}`，而 G 的映射表会把
+        # `#p2` 读成「未通过」。
+        #
+        # 为什么走 `vsigns.bits_with_review` 而不是自己拼表：逐条表 / sha 表 /
+        # `reviewed_by` 的合并只有 `_apply_review_to_bits` 一处实现（签文件 / pending /
+        # 手稿块三条路共用），在这里另拼一份就是第二份口径。它只加这一号的一格、
+        # 从行上现有那份 bits 出发 ⇒ 别的路径的签一个字不动。它不判该不该签：
+        # 上面的 `_unsigned_proof_gate` 已经按 `sign_reading.state == "signed"` 判过。
+        attach_bits = None
+        if no >= 2:
+            from .. import vsigns as _VS
+
+            attach_bits = _VS.bits_with_review(
+                dict(row.get("bits") or {}), proof_no=no,
+                proof_sha256=_PR.proof_sha(text), kind=str(row.get("kind") or ""))
         attach = self._attach_proofs(
             target,
             entries=([{"proof_no": no, "text": text}] if no >= 2 else []),
-            canonical=(text if no == 1 else ""), proof_no=no,
+            canonical=(text if no == 1 else ""), bits=attach_bits, proof_no=no,
             manuscript_id=str(manuscript_id or ""))
         if attach.get("refused"):
             return {"written": False, "code": str(attach["refused"]),
@@ -6963,7 +7013,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                or "认签那一格没查成（没查成 ≠ 没签）⇒ 证据不降档")}}
             # ---- 按现行事实重建"证据面"（可升可降） ------------------------------
             _bits_read = self._evidence_bits_for_replay(
-                row, body=body, signed=signed, delivered=delivered)
+                row, body=body, signed=signed, delivered=delivered,
+                proof_no=int(proof_no))
             if _bits_read["error"]:
                 return {"write": False, "result": {
                     "checked": False, "written": False,
@@ -7103,7 +7154,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return {"write": True, "row": new, "result": reading}
 
     def _evidence_bits_for_replay(self, row: Mapping, *, body: str, signed: bool,
-                                  delivered: Mapping | None) -> dict:
+                                  delivered: Mapping | None, proof_no: int) -> dict:
         """按现行事实重建证据面：第 2 位 = 有正文、第 3 位 = 这一趟认到的签。
 
         从行上原有的 bits 出发只为保住不是这一格写的东西（第 1/4 位、优化态、
@@ -7111,23 +7162,53 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         `evidencebits.normalize_raw` 现算（唯一的等级现算口）。返回
         `{"bits": ..., "error": ""}`；算不出来时 `error` 是给调用方的原话（调用方
         按 `bits_compute_failed` 受控拒，绝不折成"没有证据"）。
+
+        ## 逐条表按这一号改，不整表重写（2026-11-11 缺陷 ①/②）
+
+        重放只重算这一条路径的签：签到了 ⇒ 只把 `reviewed_by_proof[号]` /
+        `reviewed_sha_by_proof[号]` 覆盖成这一趟的事实，别的路径的签一个字不动
+        （改前整表替换 ⇒ 收录 #p2 会把 #p1 的 `true` 冲掉，"两条路径都签了"在盘上
+        只剩一格）；没签到 ⇒ 只摘掉这一号的键，别的路径仍为真时汇总位保持真
+        （汇总位的老口径是"任一份仍 in-sync"）。
         """
         bits = dict(row.get("bits") or {})
         ev = dict(bits.get("evidence") or {})
         ev["proof_process"] = body
         ev["proof_source"] = str(ev.get("proof_source") or "own")
+        fresh_ev = dict(dict(delivered or {}).get("evidence") or {})
+        no_key = str(int(proof_no))
         if signed:
-            fresh_ev = dict(dict(delivered or {}).get("evidence") or {})
-            for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
-                        "reviewed_by", "reviewed_source"):
+            # 逐条那两张表：只覆盖这一号（别的号是别的路径的签，不归这一笔管）。
+            for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY):
+                if key in fresh_ev:
+                    merged = {str(n): v for n, v in dict(ev.get(key) or {}).items()}
+                    merged.update({str(n): v for n, v in dict(fresh_ev[key] or {}).items()})
+                    ev[key] = merged
+            for key in ("reviewed_by", "reviewed_source"):
                 if key in fresh_ev:
                     ev[key] = fresh_ev[key]
             bits["reviewed"] = True
         else:
-            bits["reviewed"] = False
-            for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY,
-                        "reviewed_by", "reviewed_source"):
-                ev.pop(key, None)
+            for key in (_EB.REVIEWED_BY_PROOF_KEY, _EB.REVIEWED_SHA_BY_PROOF_KEY):
+                pocket = {str(n): v for n, v in dict(ev.get(key) or {}).items()}
+                pocket.pop(no_key, None)
+                if pocket:
+                    ev[key] = pocket
+                else:
+                    ev.pop(key, None)
+            # 汇总那一格只有一签（最近那一签）：它记的正是这一号才摘，别号的不动。
+            by = dict(ev.get("reviewed_by") or {})
+            try:
+                said = int(by.get("proof_no") or 0)
+            except (TypeError, ValueError):
+                said = 0
+            per_now = _EB.reviewed_by_proof(dict(bits, evidence=ev))
+            others = any(bool(v) for k, v in per_now.items() if str(k) != no_key)
+            if said == int(proof_no) or not others:
+                ev.pop("reviewed_by", None)
+                ev.pop("reviewed_source", None)
+            #: 这一条路径没签；别的路径的签仍在表里 ⇒ 汇总位不折成"整条没审"。
+            bits["reviewed"] = bool(others)
         bits["proof"] = True
         bits["evidence"] = ev
         try:
@@ -7324,7 +7405,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `_kind_upgrade_from_evidence` / `evidencebits.kind_following_grade`）。
         proof_outcome = str((cells.get("proof_text") or {}).get("outcome") or "")
         if "proof_text" in requested and proof_outcome in ("filled", "unchanged"):
-            evidence = self._ingest_apply_evidence(target, proof_no=want_no)
+            # 2026-11-11（缺陷 ②）：重算必须读这一条路径的正文。改前传的是
+            # canonical 号（`want_no`）⇒ 收录第 2 份已签证明时，认签与逐条表读的是
+            # #p1 的正文，`#p2` 那一份签没人读（真机：`reviewed_by_proof={1:True}`）。
+            evidence = self._ingest_apply_evidence(target, proof_no=_path_no)
             out["evidence"] = dict(evidence)
             evidence_written = bool(evidence.get("written"))
             if not evidence.get("checked"):
