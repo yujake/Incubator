@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **291 个 `.py`、279,598 行**，**77 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **291 个 `.py`、279,608 行**，**77 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-11 甲/乙 两笔并入后按现盘重算（本批记账）**：279,436 → **279,531**（净 +95：
@@ -18,8 +18,8 @@
 > `vsigns.py` 的拿签稿表（`signed_table` / `signed_manuscripts`，复用颁发表、不新建账）；
 > `tools/fs_tools.py` 四个写口共用一道冻结闸。文件数 290 → **291**（两个新模块）、
 > `>800 行` 的 77 不变；全仓最大 `secretary.py` 14,206、`agent_loop.py` 14,189 都不变。
-> **2026-11-11 补第 ④ 条证据（收录之后按行上 `manuscript_id` 找回那份已签的稿）**：279,531 → **279,598**
-> （净 +67：`agent_b/open_polish_copy.py` 297 → 364 —— 第 ④ 条证据、`_statement_manuscript_id`
+> **2026-11-11 补第 ④ 条证据（收录之后按行上 `manuscript_id` 找回那份已签的稿）**：279,531 → **279,608**
+> （净 +77：`agent_b/open_polish_copy.py` 297 → 374 —— 第 ④ 条证据、`_statement_manuscript_id`
 > 与两段解释；判据补在同一份 `tests/test_b_open_polish_copy.py`）。文件数 291、`>800 行` 的 77、
 > 全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
 > **2026-11-11 拆模块后按现盘重算（本批记账）**：276,432 → **276,662**（净 +230：另一条 lane

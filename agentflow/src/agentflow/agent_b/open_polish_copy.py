@@ -277,8 +277,13 @@ class _OpenPolishCopy:
                     # 按那一档如实拒，不折成「没有签」。
                     return got
         elif row_reading.get("checked"):
-            row_evidence_why = (
-                "行上没有记稿号（这条命题的 `statements` 行 `manuscript_id` 是空的）")
+            if row_reading.get("found") is False:
+                row_evidence_why = (
+                    f"`statements` 里没有 stmt:{sid} 这一行 ⇒ 读不出稿号"
+                    "（不是「行上没记稿号」，这一格没对象）")
+            else:
+                row_evidence_why = (
+                    "行上没有记稿号（这条命题的 `statements` 行 `manuscript_id` 是空的）")
         else:
             row_evidence_why = (
                 "行上那一格没查成（`statements` 台账读不出来："
@@ -292,20 +297,25 @@ class _OpenPolishCopy:
     def _statement_manuscript_id(self, sid: str) -> dict[str, Any]:
         """④ 的证据源：这条命题的 `statements` 行上记的稿号（三态，不折平）。
 
-        返回 `{checked, manuscript_id, why}`：
+        返回 `{checked, found, manuscript_id, why}`：
 
-        - `checked=True, manuscript_id=""` ⇒ 查过了，行上没有那一格；
-        - `checked=True, manuscript_id="000000"` ⇒ 行上记着这一份稿；
+        - `checked=True, found=True, manuscript_id=""` ⇒ 查过了，行上没有那一格；
+        - `checked=True, found=True, manuscript_id="000000"` ⇒ 行上记着这一份稿；
+        - `checked=True, found=False` ⇒ 台账里没有这一行（不是「行上没记」）；
         - `checked=False` ⇒ 台账读不出来（"没查成"不是"行上没记"）。
         """
         from .. import statementledger as _SL
 
-        got = _SL.by_id(getattr(self, "store", None), stmt_id=sid)
+        try:
+            got = _SL.by_id(getattr(self, "store", None), stmt_id=sid)
+        except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许折成「没有这一格」
+            return {"checked": False, "found": None, "manuscript_id": "",
+                    "why": f"读 `statements` 那一行失败（{type(exc).__name__}: {exc}）"}
         if not got.get("checked"):
-            return {"checked": False, "manuscript_id": "",
+            return {"checked": False, "found": None, "manuscript_id": "",
                     "why": str(got.get("reason") or got.get("why") or "")}
         row = dict(got.get("row") or {})
-        return {"checked": True,
+        return {"checked": True, "found": bool(got.get("found")),
                 "manuscript_id": str(row.get("manuscript_id") or "").strip(),
                 "why": ""}
 
