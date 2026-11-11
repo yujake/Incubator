@@ -1453,6 +1453,23 @@ def _reviewed_by_of(ledger_row: Mapping[str, Any] | None) -> dict[str, Any]:
     return dict(by) if isinstance(by, Mapping) else {}
 
 
+def _proof_body_sha_of(ledger_row: Mapping[str, Any], proof_no: int) -> str:
+    """这一号证明现在的正文 sha（与签、`reviewed_sha_by_proof` 同一把尺）。
+
+    三态：这一号没有正文（清单里没有它 / 正文为空）⇒ 空串 = 判不了（不拿空串去比，
+    否则"取不到正文"会被读成"签的是旧版"）。尺只有一处：`verifications._sign_sha`
+    ⇒ `proofregistry.proof_sha`，与写侧 `_apply_review_to_bits` 落 `reviewed_sha_by_proof`
+    用的是同一把。
+    """
+    try:
+        text = str(V.proof_text_of(dict(ledger_row), int(proof_no)) or "")
+    except Exception:  # noqa: BLE001 —— 正文取不到 = 判不了，不编一个 sha
+        return ""
+    if not text.strip():
+        return ""
+    return str(V._sign_sha(text) or "")
+
+
 def reviewed_ledger_state(workspace_root: str | Path, statement_id: Any) -> str:
     """这份命题的审校台账（`verifications/<命题号>.jsonl`）在不在、读不读得出。
 
@@ -1518,14 +1535,29 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
 
     四档（业主 2026-11-02 裁定：「应该分：已签/未通过/未审/未读到」）：
 
-    - `已签（判决：<原话>）`：逐份表里这一份为真（`reviewed_by_proof[证明号] is True`）。
-      原话那一格读不到、或者它记的是另一份证明的签 ⇒ `已签（判决：未读到）`；
+    - `已签（判决：<原话>）`：逐份表里这一份为真（`reviewed_by_proof[证明号] is True`），
+      而且那一签盖的就是这一份正文（`reviewed_sha_by_proof[证明号]` 与正文现算的
+      sha 相同；老行没有那张表 ⇒ 判不了，不拿它否决）。原话那一格读不到、或者它
+      记的是另一份证明的签 ⇒ `已签（判决：未读到）`；
     - `未通过`：台账在，而这一份的键不存在或为假（审过，没拿到签 —— 含"判过有毛病"）；
     - `未审`：台账不在（从没送审）；
-    - `未读到`：台账在但读不出 / 这一格没查成 / statements 行读不到 / 证明号读不出。
+    - `未读到`：台账在但读不出 / 这一格没查成 / statements 行读不到 / 证明号读不出，
+      以及两种"表上没有这一号、可是那一签明显记在别的号上"的形态：
+      ① 这一份正文的 sha 记在 `reviewed_sha_by_proof` 的别的号上（B 收录时按
+      canonical 号落的老账 / 号错位）；② 这一号键为真而它记的 sha 不是现在这一份
+      （签的是旧版，这一版没被读过）。
 
     判「审过没审过」只认台账在不在：写侧只在真签时建 `reviewed_by_proof` 的键，
     按"没键"读会把"审过、从没签"读成"从没审过"（这一个反向形态本轮一并治掉）。
+
+    ## 为什么"没这一号"有时是「未读到」而不是「未通过」（2026-11-11 缺陷）
+
+    真机形态：同一命题的两份证明都已签，而 `reviewed_by_proof` 只有 `{1: True}`
+    （B 收录第 2 份时用了 canonical 号，见 `register_statement._ingest_apply_evidence`）。
+    这时表上给第 2 条路径写「未通过」= 替 V 下了一个假结论（V 根本没判过它）。
+    判据要能分辨"读不到"与"判过没通过"：只有这一份确实被判过才落「未通过」。
+    所以：这一份正文的 sha 在 sha 表里记在别的号上 ⇒ 那一签盖的就是这份正文、
+    只是号记错了 ⇒ 落「未读到」；否则（正文 sha 哪里都没记）⇒ 老口径「未通过」。
     """
     if not isinstance(ledger_row, Mapping):
         return LEDGER_CELL_UNREADABLE
@@ -1533,6 +1565,8 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
     if no is None or str(review_ledger) not in REVIEW_LEDGER_STATES:
         return LEDGER_CELL_UNREADABLE
     per = EB.reviewed_by_proof(ledger_row)
+    sha_by = EB.reviewed_sha_by_proof(ledger_row)
+    body_sha = _proof_body_sha_of(ledger_row, int(no))
     if per.get(int(no)) is True:
         by = _reviewed_by_of(ledger_row)
         told = str(by.get("verdict") or "").strip()
@@ -1541,11 +1575,30 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
         said = _int_or_none(by.get("proof_no"))
         if said is not None and int(said) != int(no):
             told = ""
+        # 这一号签过的"是不是现在这一份正文"：sha 表记了而记的不是它 ⇒ 签的是旧版
+        # ⇒ 这一版没有被判过 ⇒ 未读到（不折成「已签」，也不折成「未通过」）。
+        pinned = str(sha_by.get(int(no)) or "").strip().lower()
+        if body_sha and pinned and pinned != body_sha:
+            return LEDGER_CELL_UNREADABLE
         return REVIEWED_SIGNED_TEMPLATE.format(verdict=told or LEDGER_CELL_UNREADABLE)
     if str(review_ledger) == REVIEW_LEDGER_UNREADABLE:
         return LEDGER_CELL_UNREADABLE
     if str(review_ledger) == REVIEW_LEDGER_ABSENT:
         return REVIEWED_UNREVIEWED
+    # ---- 「表上没有这一号」的两种读法（不许一律折成「未通过」） ----------------
+    if body_sha:
+        # ① 正文 sha 记在别的号上（B 收录时按 canonical 号落的老账）⇒ 那一签盖的
+        #    就是这一份正文 ⇒ 号错位，不是 V 判过它 ⇒ 未读到。
+        if any(str(v or "").strip().lower() == body_sha
+               for k, v in sha_by.items() if int(k) != int(no)):
+            return LEDGER_CELL_UNREADABLE
+        # ② 汇总那一格（`reviewed_by`）记的 sha 是这一份正文、而号是别的号 ⇒ 同上。
+        by = _reviewed_by_of(ledger_row)
+        said = _int_or_none(by.get("proof_no"))
+        said_sha = str(by.get("proof_sha256") or "").strip().lower()
+        if (said is not None and int(said) != int(no)
+                and said_sha and said_sha == body_sha):
+            return LEDGER_CELL_UNREADABLE
     return REVIEWED_NOT_PASSED
 
 

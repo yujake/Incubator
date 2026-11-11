@@ -20,6 +20,10 @@
 | c | 逐份表里这一份为真 ⇒ `已签（判决：…）` | 这一档在改前存在，但它与 a/b 共用一个"没签/未读到"出口，四档分不开 |
 | d | 台账在但读不出（坏行 / 读异常）⇒ `未读到` | 读不出与"没有这一份"共用 `未读到`（这一格没查成，却被报成了一个结论） |
 | e | 反真空：四个词两两不同；把渲染器打桩成恒 `已签` ⇒ a–d 的判据必红 | 判据本身不存在，反真空无从谈起 |
+| c2 | 两条路径都签（多证明）⇒ 映射表每行各一格 `已签`；#2 的判决原话是 `成立` | 改前 `reviewed_by_proof` 只有 `{1: True}` ⇒ #2 被印成 `未通过` |
+| c3 | 正文 sha 记在别的号上（B 按 canonical 号落的老账）⇒ `未读到`，不是 `未通过` | 「没这一号」被一律折成「V 判过、没通过」 |
+| d2 | 第 2 条没签 ⇒ `未通过`（不是 `未读到`） | 把"读不到"那一档拿来盖"审过没签"，两种事实又共用一个词 |
+| e2 | 第 2 条签过而正文已改（签 sha ≠ 现 sha）⇒ `未读到`，且与 d2 的 `未通过` 可分辨 | 一张旧签被读成"这一版签过了"（或与"没签"折平） |
 
 ## 关键：判「审过没审过」认台账在不在，不认 `reviewed_by_proof` 有没有键
 
@@ -298,3 +302,138 @@ def test_g_the_83_shape_is_ten_unreviewed_and_one_not_passed(
         PM.REVIEWED_NOT_PASSED]
     assert {str(r.reviewed) for r in filled if r.ledger_id != "stmt:000000"} == {
         PM.REVIEWED_UNREVIEWED}
+
+
+# ------------------------------------------------------------------ c/d/e：多证明两条路径
+#
+# 2026-11-11 缺陷（只读审计实测）：同一命题的两份证明都已签、经 B 收录之后，
+# `statements.bits.reviewed_by_proof` 只有 `{1: True}` —— G 的映射表把第 2 条路径
+# 的 V 判词读成 `未通过`，而 V 根本没判过它（实际是"没读到"）。下面三条从映射表
+# 的写侧（`fill_ledger_cells`）现读，不手填 reviewed 那一格。
+P1 = "1. 取 G 的一个 Sylow p-子群 P。\n2. |P| = p^a > 1 ⇒ 取 1 ≠ x ∈ P。"
+P2 = "1. 对 |G| 归纳：取中心元 z。\n2. 每个共轭类大小被 p 整除或与 p 互素。"
+P2_EDITED = "1. 对 |G| 归纳（改过的版本）。\n2. 计数给出 p 阶元。"
+SHA1 = PM.V._sign_sha(P1)
+SHA2 = PM.V._sign_sha(P2)
+SHA2_EDITED = PM.V._sign_sha(P2_EDITED)
+
+
+def _two_path_row(*, per: dict, sha_by: dict, proof2: str = P2,
+                  reviewed_by: dict | None = None) -> dict:
+    """一条有两条证明路径的 statements 行（#p1 = canonical，`proofs` 里是 #p2）。"""
+    ev: dict = {"reviewed_by_proof": dict(per),
+                "reviewed_sha_by_proof": dict(sha_by)}
+    if reviewed_by is not None:
+        ev["reviewed_by"] = dict(reviewed_by)
+    return {"stmt_id": "000001", "kind": "theorem", "proof_text": P1,
+            "bits": {"evidence": ev},
+            "proofs": [{"proof_no": 2, "proof_text": str(proof2)}]}
+
+
+def _two_path_rows() -> list[PM.Row]:
+    """G 的映射表两行：同一命题的两条路径各占一行（`#p1` 与 `#p2`）。"""
+    return [PM.Row(kind="theorem", label="thm:p1", env_no=1, ledger_id="stmt:000001",
+                   proof_no=1, file="main.tex"),
+            PM.Row(kind="theorem", label="thm:p2", env_no=2,
+                   ledger_id="stmt:000001#p2", proof_no=2, file="main.tex")]
+
+
+def _two_path_ws(tmp_path: pathlib.Path, row: dict) -> pathlib.Path:
+    root = pathlib.Path(tmp_path / "ws")
+    (root / "data").mkdir(parents=True, exist_ok=True)
+    (root / "data" / "statements.json").write_text(json.dumps({
+        "rows": [row],
+    }, ensure_ascii=False), encoding="utf-8")
+    _review_ledger(root, "000001",
+                   json.dumps({"statement_id": "000001", "verification_id": "v-000001",
+                               "verdict": "成立"}, ensure_ascii=False) + "\n")
+    return root
+
+
+def _filled_cells(tmp_path: pathlib.Path, row: dict) -> list[str]:
+    root = _two_path_ws(tmp_path, row)
+    return [str(r.reviewed) for r in PM.fill_ledger_cells(root, _two_path_rows())]
+
+
+def test_c_two_signed_paths_are_both_signed_in_the_mapping(tmp_path):
+    """c) 两条路径都签 ⇒ 映射表两行都是「已签」；#2 的判决原话是「成立」。
+
+    改前红：逐条表只有 `{1: True}` ⇒ #2 那一行印成「未通过」（一个假结论：
+    V 没判过它）。#1 的判决原话读不到（`reviewed_by` 只有最近那一签 = #2），
+    如实写「判决：未读到」—— 那是原话那一格读不到，不是"没签"。
+    """
+    row = _two_path_row(
+        per={"1": True, "2": True},
+        sha_by={"1": SHA1, "2": SHA2},
+        reviewed_by={"verifier": "V", "verdict": "成立", "proof_no": 2,
+                     "proof_sha256": SHA2})
+    cells = _filled_cells(tmp_path, row)
+    assert cells[0].startswith(PM.REVIEWED_SIGNED), cells
+    assert cells[1] == PM.REVIEWED_SIGNED_TEMPLATE.format(verdict="成立"), cells
+    assert cells[0] == PM.REVIEWED_SIGNED_TEMPLATE.format(
+        verdict=PM.LEDGER_CELL_UNREADABLE), cells
+    for cell in cells:
+        assert cell != PM.REVIEWED_NOT_PASSED, cells
+        assert cell != PM.LEDGER_CELL_UNREADABLE, cells
+
+
+def test_c3_a_sign_recorded_under_another_number_reads_as_unread(tmp_path):
+    """c3) 正文 sha 记在别的号上 ⇒ `未读到`，不是 `未通过`（业主 2026-11-11）。
+
+    这是 B 收录第 2 份时按 canonical 号落老账的形状：签盖的是 #p2 的正文，而
+    `reviewed_sha_by_proof` 把它记在 1 号上。逐条表里"没有 #2 这一号"不等于
+    "V 判过 #2、没通过" —— 表上必须落 `未读到`。
+    """
+    row = _two_path_row(
+        per={"1": True}, sha_by={"1": SHA2},
+        reviewed_by={"verifier": "V", "verdict": "成立", "proof_no": 1,
+                     "proof_sha256": SHA2})
+    cells = _filled_cells(tmp_path, row)
+    assert cells == [PM.LEDGER_CELL_UNREADABLE, PM.LEDGER_CELL_UNREADABLE], cells
+
+
+def test_d2_an_unsigned_second_path_is_not_passed(tmp_path):
+    """d2) 第 2 条没签 ⇒ `未通过`（不是 `未读到`）。
+
+    反向控制：`未读到` 不许拿来盖"审过没签"这一档；只有"这一份的签记在别处 /
+    签的是旧版"才是读不到。
+    """
+    row = _two_path_row(
+        per={"1": True}, sha_by={"1": SHA1},
+        reviewed_by={"verifier": "V", "verdict": "成立", "proof_no": 1,
+                     "proof_sha256": SHA1})
+    cells = _filled_cells(tmp_path, row)
+    assert cells[0] == PM.REVIEWED_SIGNED_TEMPLATE.format(verdict="成立"), cells
+    assert cells[1] == PM.REVIEWED_NOT_PASSED, cells
+    assert cells[1] != PM.LEDGER_CELL_UNREADABLE, cells
+
+
+def test_e2_a_sign_over_an_older_body_is_unread_and_distinguishable(tmp_path):
+    """e2) 第 2 条签过但正文已改（签 sha ≠ 现 sha）⇒ `未读到`，且与 d2 可分辨。
+
+    签盖的是旧版（`reviewed_sha_by_proof[2]` 是旧正文的 sha），现行正文没有被读过
+    ⇒ 不许印「已签」，也不许印「未通过」（那会说"这一版被判过且有毛病"）。
+    三态钉法：这一档落 `未读到`；d2（真没签）落 `未通过` —— 两档词不同。
+    """
+    row = _two_path_row(
+        per={"1": True, "2": True}, sha_by={"1": SHA1, "2": SHA2},
+        proof2=P2_EDITED,
+        reviewed_by={"verifier": "V", "verdict": "成立", "proof_no": 2,
+                     "proof_sha256": SHA2})
+    cells = _filled_cells(tmp_path, row)
+    assert SHA2_EDITED != SHA2, "夹具没改正文 ⇒ 这条判据量不到 stale"
+    # #1 已签（判决原话那一格是 #2 的签 ⇒ 如实写"未读到"）；#2 签的是旧版 ⇒ 未读到。
+    assert cells[0].startswith(PM.REVIEWED_SIGNED), cells
+    assert cells[0] != PM.REVIEWED_NOT_PASSED, cells
+    assert cells[1] == PM.LEDGER_CELL_UNREADABLE, cells
+    assert cells[1] != PM.REVIEWED_NOT_PASSED, cells
+    # 与 d2 同框比较：没签是「未通过」，签的是旧版是「未读到」。
+    unsigned_row = _two_path_row(
+        per={"1": True}, sha_by={"1": SHA1},
+        reviewed_by={"verifier": "V", "verdict": "成立", "proof_no": 1,
+                     "proof_sha256": SHA1})
+    assert PM.reviewed_cell(unsigned_row, 2,
+                            review_ledger=PM.REVIEW_LEDGER_PRESENT
+                            ) == PM.REVIEWED_NOT_PASSED
+    assert cells[1] != PM.reviewed_cell(unsigned_row, 2,
+                                        review_ledger=PM.REVIEW_LEDGER_PRESENT)
