@@ -12,11 +12,11 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | 手稿登记 1 次 + 连续重写 3 次（正文各不同） | 版本历史 4 条、sha 全不同、`proof_no` 1→4；形态闸只调用 1 次；`statements` 行数不变 |
+| a | 手稿登记 1 次 + 连续重写 3 次（正文各不同） | 版本历史恰好 1 条（当前那一版，sha 对盘上 `## 证明`）、sha 全不同、`proof_no` 恒 1；形态闸只调用 1 次；`statements` 行数不变 |
 | b | 重写时改命题正文 | 受控拒 `proposition_text_changed`；盘上 `## 命题` 一个字没动 |
 | c | 98 那三条「作业规格」 | 登记那一刻被形态闸拒；手稿不落盘、版本历史不追加 |
 | d | 反真空：摘掉「已登记 ⇒ 只重写」 | a 那一组断言变红（闸调用次数从 1 变 4） |
-| i | 同一命题重写 3 次 | 盘上始终只有 1 份稿；`## 命题` / `## 依赖` 分节哈希逐次相同，`## 证明` 逐次不同；头部 `proof_no` 1→4 |
+| i | 同一命题重写 3 次 | 盘上始终只有 1 份稿；`## 命题` / `## 依赖` 分节哈希逐次相同，`## 证明` 逐次不同；头部 `proof_no` 恒 1、版本历史恰好 1 条 |
 | g | F→B 绕行 | 调用方是 F ⇒ 受控拒 `f_proposition_must_be_a_manuscript` |
 | h | lemma 死锁 | F 登记一条引理 ⇒ 手稿头 `- 证据种类：lemma`；B 的收录读得到它 |
 | — | 登记期的异常 | 形态闸抛异常 ⇒ 受控拒 + 形态台账有一行「没判成」 |
@@ -135,7 +135,7 @@ def _manuscript_text(st: Store) -> str:
 # ---------------------------------------------------------------- a：登记一次 + 重写 3 次
 
 def test_a_one_registration_and_three_rewrites(tmp_path):
-    """a：登记 1 次 + 重写 3 次 ⇒ 闸只跑 1 次、版本 4 条、statements 行数不变。"""
+    """a：登记 1 次 + 重写 3 次 ⇒ 闸只跑 1 次、一份稿一份证明、statements 行数不变。"""
     st = _ws(tmp_path)
     row = _seeded(st)
     stub = _FormStub()
@@ -148,19 +148,58 @@ def test_a_one_registration_and_three_rewrites(tmp_path):
 
     assert [r["proof_mode"] for r in rounds] == [
         "registered", "rewritten", "rewritten", "rewritten"], rounds
-    assert [r["proof_no"] for r in rounds] == [1, 2, 3, 4], rounds
+    # 业主 2026-11-11：「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，
+    # 不再细分 version 几，应该在改正文时 edit 它」⇒ `proof_no` 恒 1（重写不涨号）。
+    # 反面：谁把 bump 加回来，这一条立刻红。
+    assert [r["proof_no"] for r in rounds] == [1, 1, 1, 1], rounds
     shas = [str(r["proof_sha256"]) for r in rounds]
     assert len(set(shas)) == 4 and all(len(s) == 64 for s in shas), shas
     # 形态闸只在"登记新命题"那一次跑
     assert len(stub.calls) == 1, stub.calls
     # statements 行数全程不变
     assert len(list(st.rows("statements"))) == before_rows == 1
-    # 版本历史 4 条（手稿头的 append-only 那一行）
+    # 一个稿号 = 一份文件 = 一份证明 ⇒ 版本历史恰好 1 条（当前那一版），
+    # 且它的 sha 就是盘上 `## 证明` 那一节的 sha（同一把尺：`proof_sha`）。
     entries = R.entries_on_disk(st.root)
     assert len(entries) == 1, entries
     versions = entries[0]["versions"]
+    assert len(versions) == 1, versions
+    assert versions[0]["proof_no"] == 1, versions
+    body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
+    assert versions[0]["sha256"] == R.proof_sha(body_now), versions
+    assert versions[0]["sha256"] == str(rounds[-1]["proof_sha256"]), versions
+    # 反面：把 `proof_no` 的 bump 加回去 ⇒ 上面"恰好 1 条"必红。
+    # 反真空在 `test_a_negative_control_restoring_the_bump_makes_the_history_red`。
+
+
+def test_a_negative_control_restoring_the_bump_makes_the_history_red(
+        tmp_path, monkeypatch):
+    """反真空①：把 `proof_no` 的 bump 加回去（旧版本模型）⇒ a 的版本历史那条红。
+
+    判据 a 现在是两个合取：`len(versions) == 1` 且那一条的 sha == 盘上 `## 证明`
+    的 sha。这里把那一步换回旧口径（每次都 `+1`），然后照 a 的算法重算一遍：
+    它必须不成立 —— 否则 a 那条「恰好 1 条」证明不了"重写不涨号"在承重。
+    """
+    st = _ws(tmp_path)
+    row = _seeded(st)
+    f = _f(st)
+
+    def _bump(_rel, entry):   # 旧口径：重写就 +1（业主 2026-11-11 已作废）
+        return int(entry.get("proof_no") or 0) + 1
+
+    monkeypatch.setattr(R, "_legacy_proof_no_of", _bump)
+    for body in PROOFS:
+        _hand(f, body, stable_row=row)
+
+    versions = R.entries_on_disk(st.root)[0]["versions"]
+    body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
+    # 先量"模拟真的生效"：旧口径下号回到 1→4（否则下面那个 False 是假的）。
     assert [v["proof_no"] for v in versions] == [1, 2, 3, 4], versions
-    assert len({v["sha256"] for v in versions}) == 4, versions
+    held = (len(versions) == 1
+            and str(versions[0].get("sha256") or "") == R.proof_sha(body_now))
+    assert held is False, (
+        "把 bump 加回去之后版本历史仍然是「恰好 1 条且 sha 对得上」⇒ "
+        "a 的版本历史判据是恒真的", versions)
 
 
 # ---------------------------------------------------------------- b：改命题正文 ⇒ 受控拒
@@ -233,7 +272,7 @@ def test_d_removing_the_rewrite_branch_makes_a_red(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- i：只动 `## 证明` 那一块
 
 def test_i_rewrite_touches_only_the_proof_section(tmp_path):
-    """i：同一命题重写 3 次 ⇒ 盘上 1 份稿、分节哈希只变 `## 证明`、proof_no 递增。"""
+    """i：同一命题重写 3 次 ⇒ 盘上 1 份稿、分节哈希只变 `## 证明`、`proof_no` 恒 1。"""
     st = _ws(tmp_path)
     row = _seeded(st)
     f = _f(st)
@@ -246,7 +285,8 @@ def test_i_rewrite_touches_only_the_proof_section(tmp_path):
         got = _hand(f, body, stable_row=row)
         seen.append(dict(got["section_hashes"]))
         nos.append(got["proof_no"])
-    assert nos == [1, 2, 3, 4], nos
+    # 同上：一个稿号一份稿 ⇒ 号不随重写增长（旧口径的 [1,2,3,4] 已作废）
+    assert nos == [1, 1, 1, 1], nos
     # 盘上始终只有 1 份该命题的手稿（不许出现 -v2 / -p2 这一族新名），
     # 而且它按 F 自己的稿号命名、不按命题号（2026-11-10 口径）。
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("*.md"))
@@ -258,10 +298,44 @@ def test_i_rewrite_touches_only_the_proof_section(tmp_path):
         assert hashes["## 依赖"] == base["## 依赖"], "依赖那一节没有新引用 ⇒ 逐字节相同"
         assert hashes["## 证明"] != base["## 证明"], "证明那一节必须变"
     assert len({h["## 证明"] for h in seen}) == 4, seen
-    # 头部：proof_no 1→4、正文 sha 与版本记录一致
+    # 头部：一个稿号一份文件一份证明 ⇒ 证明号恒 1、版本历史恰好 1 条（当前那一版），
+    # 且这一条的 sha 就是盘上 `## 证明` 的 sha。
     entry = R.parse_entry(_manuscript_text(st))
-    assert entry["proof_no"] == 4, entry
-    assert [v["proof_no"] for v in entry["versions"]] == [1, 2, 3, 4], entry["versions"]
+    assert entry["proof_no"] == 1, entry
+    assert len(entry["versions"]) == 1, entry["versions"]
+    assert entry["versions"][0]["proof_no"] == 1, entry["versions"]
+    body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
+    assert entry["versions"][0]["sha256"] == R.proof_sha(body_now), entry["versions"]
+    assert entry["sha256"] == R.proof_sha(body_now), entry
+    # 反面：谁让重写落成 `-p2` / `-p3` 这一族新名 ⇒ 上面"盘上只有一份"必红。
+    # 反真空在 `test_i_negative_control_a_new_name_per_rewrite_makes_it_red`。
+
+
+def test_i_negative_control_a_new_name_per_rewrite_makes_it_red(tmp_path, monkeypatch):
+    """反真空②：让重写每轮落成新名（`-p2` / `-p3` 那一族）⇒ i 的「盘上只有一份」红。
+
+    i 的算法是 `files == [f"f-proof-{MID}.md"]`。这里把落点换成旧的"一版一文件"
+    形状（同一个稿号，第 N 轮拼上 `-pN`）—— 这正是"一个稿号多个版本"的物理形态。
+    若盘上仍然只有一份，i 那条判据就是恒真的。
+    """
+    st = _ws(tmp_path)
+    row = _seeded(st)
+    f = _f(st)
+    state = {"round": 1}
+
+    def _numbered(*, family, statement_id="", plan_id="", manuscript_id=""):
+        return f"reports/f-proof-{manuscript_id}-p{state['round']}.md"
+
+    monkeypatch.setattr(R, "entry_relpath", _numbered)
+    for i, body in enumerate(PROOFS, start=1):
+        state["round"] = i
+        _hand(f, body, stable_row=row)
+
+    files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("*.md"))
+    # 先量"模拟真的生效"：旧形状下每轮一个新名（否则下面那个不等是假的）。
+    assert files == [f"f-proof-{MID}-p{n}.md" for n in (1, 2, 3, 4)], files
+    assert files != [f"f-proof-{MID}.md"], (
+        "让重写每轮落成新名之后盘上仍然只有一份 ⇒ i 的「盘上只有一份」是恒真的", files)
 
 
 # ---------------------------------------------------------------- g：F→B 那条绕行
@@ -399,9 +473,10 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
         _mid = str(landed.get("manuscript_id") or "")
         assert _mid, landed
         assert rel == _MIDS.canonical_rel(_mid, family="b-proof"), landed
-        # 这一笔的稿头证明号：第一次落地是 #p1，第二次就地重写成 #p2（版本历史从 1 起）。
+        # 这一笔的稿头证明号：一个稿号一份文件一份证明（业主 2026-11-11）⇒
+        # 两次就地改都还是 #p1，签也按 #1 认领（旧口径的 #p1→#p2 已作废）。
         issue_credential(st.root, proof_text=body, statement_id="000041",
-                         manuscript=rel, proof_no=i - 1)
+                         manuscript=rel, proof_no=1)
         manuscript = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
         got = b.register_statement(
             statement_full=FULL, statement_text=TEXT, origin="own_result",
@@ -419,16 +494,20 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
     text = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
     assert DS.SECTION_HEADING in text, text
     assert VS.manuscript_proof_body(text).strip("\n") == bodies[-1], text
-    # 第二版开始走的是 `proofregistry`：头部有版本记录
+    # 第二版开始走的是 `proofregistry`：头部有版本记录 —— 一个稿号一份证明 ⇒
+    # 恰好 1 条（当前那一版），号恒 1，sha 就是盘上 `## 证明` 的 sha。
     entry = R.parse_entry(text)
-    assert entry["proof_no"] >= 2, entry
-    assert entry["versions"], entry
+    assert entry["proof_no"] == 1, entry
+    assert len(entry["versions"]) == 1, entry["versions"]
+    assert entry["versions"][0]["proof_no"] == 1, entry["versions"]
+    assert entry["versions"][0]["sha256"] == R.proof_sha(
+        VS.manuscript_proof_body(text).strip("\n")), entry["versions"]
 
 
 # ---------------------------------------------------------------- 收工读数
 
 def test_the_closing_reading_shows_registration_once_and_n_versions(tmp_path):
-    """收工读数 `proof_revisions`：登记 1 次 / 证明 N 版 / 逐版 sha 与 proof_no。"""
+    """收工读数 `proof_revisions`：登记 1 次 / 一份稿一份证明（版本恰好 1 条）。"""
     from agentflow import closing as CL
 
     st = _ws(tmp_path)
@@ -440,11 +519,14 @@ def test_the_closing_reading_shows_registration_once_and_n_versions(tmp_path):
         else CL._proof_revisions_reading(st)
     assert read["checked"] is True, read
     assert read["registrations"] == 1, read
-    assert read["proof_versions"] == 4, read
+    # 一个稿号 = 一份文件 = 一份证明（业主 2026-11-11）⇒ 重写不涨"版本"。
+    assert read["proof_versions"] == 1, read
     one = read["propositions"][0]
-    assert one["registrations"] == 1 and one["proof_count"] == 4, one
-    assert [v["proof_no"] for v in one["versions"]] == [1, 2, 3, 4], one
-    assert "登记 1 次" in read["reason"] and "4 版" in read["reason"], read["reason"]
+    assert one["registrations"] == 1 and one["proof_count"] == 1, one
+    assert [v["proof_no"] for v in one["versions"]] == [1], one
+    body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
+    assert one["versions"][0]["sha256"] == R.proof_sha(body_now), one
+    assert "登记 1 次" in read["reason"] and "1 版" in read["reason"], read["reason"]
 
 
 # ================================================================ A1 / A2 / A3
@@ -492,7 +574,7 @@ def _production_rounds(st: Store, bodies, monkeypatch=None):
 
 
 def test_a1_the_production_path_registers_once_and_rewrites_after(tmp_path):
-    """A1：生产路径 3 轮 ⇒ `[registered, rewritten, rewritten]`、闸 1 次、版本 3 条。
+    """A1：生产路径 3 轮 ⇒ `[registered, rewritten, rewritten]`、闸 1 次、一份稿一份证明。
 
     改前（a02d4682）读数：`[registered, registered, registered]`、闸 3 次、
     `proof_no=[1,1,1]`、版本历史 `[1]` —— 因为 `proof_manuscript` 与洗稿写回盘
@@ -503,18 +585,24 @@ def test_a1_the_production_path_registers_once_and_rewrites_after(tmp_path):
 
     assert [r.get("proof_mode") for r in rounds] == [
         "registered", "rewritten", "rewritten"], rounds
-    assert [r.get("proof_no") for r in rounds] == [1, 2, 3], rounds
+    # 一个稿号一份文件一份证明（业主 2026-11-11）⇒ 三笔都是 #p1（重写不涨号）。
+    assert [r.get("proof_no") for r in rounds] == [1, 1, 1], rounds
     # 形态闸只在"登记新命题"那一次跑（改前是 3 次）
     assert len(stub.calls) == 1, stub.calls
     entries = R.entries_on_disk(st.root)
     assert len(entries) == 1, entries
-    assert [v["proof_no"] for v in entries[0]["versions"]] == [1, 2, 3], entries[0]["versions"]
-    assert len({v["sha256"] for v in entries[0]["versions"]}) == 3, entries[0]["versions"]
+    versions = entries[0]["versions"]
+    assert len(versions) == 1, versions
+    assert versions[0]["proof_no"] == 1, versions
     # 一份命题只住一份稿（F 自己的稿号那一份；还没有命题号）
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("f-proof*.md"))
     mids = {str(r.get("manuscript_id") or "") for r in rounds}
     assert len(mids) == 1 and "" not in mids, rounds
     assert files == [f"f-proof-{next(iter(mids))}.md"], files
+    body_now = VS.manuscript_proof_body(
+        (pathlib.Path(st.root) / "reports" / files[0]).read_text(
+            encoding="utf-8")).strip("\n")
+    assert versions[0]["sha256"] == R.proof_sha(body_now), versions
     # F 不再直写 statements（解耦之后那一行由 B 在 V 签之后认领）
     assert len(list(st.rows("statements"))) == 0
 

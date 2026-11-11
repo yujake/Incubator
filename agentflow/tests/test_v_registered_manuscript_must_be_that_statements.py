@@ -288,8 +288,9 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
 
     次序就是真机次序：F 落稿（稿号 000123）→ V 在未在册档签 → B 按稿号收录
     （行上 `manuscript_id=000123`，命题号 000000 由 B 现取）→ F 改写同一份稿
-    （`proofregistry.register_or_rewrite`，mode=rewritten、proof_no 2；这就是
-    `_hand_proof` 调的那一处）→ V 在册重签。
+    （`proofregistry.register_or_rewrite`，mode=rewritten、proof_no 恒 1；一个稿号
+    一份文件一份证明，业主 2026-11-11 —— 这就是 `_hand_proof` 调的那一处）→
+    V 在册重签。
 
     改前这一条走不通：在册闸拿 000123 去比命题号 000000 ⇒ `bad_manuscript_name`。
     现在新签落回同一份稿、盖住新正文，稿名与稿号一个字节没变。
@@ -335,11 +336,18 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
     assert second.get("ok") is True, second
     assert second.get("mode") == "rewritten", second
     assert second.get("manuscript_path") == rel, second
-    assert int(second.get("proof_no") or 0) == 2, second
-    body_now = DS.proof_body((pathlib.Path(st.root) / rel).read_text(
-        encoding="utf-8")).strip("\n")
+    # 业主 2026-11-11「一个稿号 = 一份文件 = 一份证明」：重写不涨号，
+    # 版本历史也只剩当前那一版（就地改，不追加），且它的 sha 就是盘上那一版正文的 sha。
+    assert int(second.get("proof_no") or 0) == 1, second
+    text_now = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
+    entry_now = PR.parse_entry(text_now)
+    body_now = DS.proof_body(text_now).strip("\n")
     assert body_now == PROOF_V2, body_now
     assert second.get("sha256") == PR.proof_sha(PROOF_V2), second
+    assert [int(v.get("proof_no") or 0) for v in entry_now["versions"]] == [1], (
+        entry_now["versions"])
+    assert [str(v.get("sha256") or "") for v in entry_now["versions"]] \
+        == [PR.proof_sha(PROOF_V2)], entry_now["versions"]
 
     # ---- ⑤ V 在册重签：认稿号，把新签盖回同一份稿 ----------------------------
     with _submitted_by_f("t-v-000005"):
