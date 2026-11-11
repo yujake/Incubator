@@ -1230,7 +1230,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                for p in (read.get("problems") or [])] or [
                 "E 的普通数值手稿读不成（没有理由）"]
             return out
-        eid = _ER.experiment_id_of(rel)
+        eid = _ER.experiment_id_of_manuscript(self.store.root, rel)
         out["experiment_id"] = eid
         try:
             rows = [dict(r) for r in self.store.rows("experiments")]
@@ -5755,7 +5755,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             doc_id = str(row_now.get("doc_id") or "")
         else:
             proposition = statement
-            eid = str(_ER.experiment_id_of(rel) or "").strip()
+            eid = str(_ER.experiment_id_of_manuscript(self.store.root, rel) or "").strip()
             head_eid = str(reading.get("head_experiment_id") or "")
             if not eid and head_eid:
                 eid = head_eid.split(":", 1)[-1].strip()
@@ -5862,8 +5862,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return out
 
     def _land_rewrite_manuscript(self, row: Mapping, *, proof_text: str,
-                                 proof_manuscript: str) -> dict:
-        """把这一版 B 的证明落进 `reports/b-proof-<命题号>.md`（就地重写那一节）。"""
+                                 proof_manuscript: str,
+                                 manuscript_id: str = "") -> dict:
+        """把这一版 B 的证明落进 `reports/b-proof-<B稿号>.md`（就地重写那一节）。
+
+        `manuscript_id`（2026-11-11）：B 自己那条号段发的稿号 —— 落点只按它拼。
+        不给则退回老盘的只读口径（`reports/b-proof-<命题号>.md`）。
+        """
         from .. import manuscriptform as _MF
         from .. import proofregistry as _PR
 
@@ -5887,6 +5892,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             self.store.root, family=_MF.FAMILY_B, label=label,
             proposition=proposition, proof_text=str(proof_text or ""),
             dependency_rows=rows, statement_id=sid, kind=str(row.get("kind") or ""),
+            manuscript_id=str(manuscript_id or ""),
             template=template, gate=self._declared_kind_gate())
         out = dict(got)
         out["text"] = ""
@@ -6268,8 +6274,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _land_b_manuscript(self, *, statement_id: str, statement_full: str,
                            proof_text: str, label: str = "", proof_no: int = 1,
-                           source_manuscript: str = "") -> dict:
-        """把 B 的改写正文落成 `reports/b-proof-<命题号>.md`（可签的载体）。
+                           source_manuscript: str = "",
+                           manuscript_id: str = "") -> dict:
+        """把 B 的改写正文落成 `reports/b-proof-<B稿号>.md`（可签的载体）。
 
         ## 为什么在 B 的动作里落盘（而不是让 B 自己写文件）
 
@@ -6282,6 +6289,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         一个字节都不写的那几档（目标已签且是另一份正文 / 目标读不出来）不许折成
         "写成了"：签另算不是毁签。
 
+        ## 稿号（2026-11-11 业主裁定 ①：B 稿号与命题号解耦）
+
+        落点由 **B 自己那条号段** 决定（`manuscriptids.next_manuscript_id(root,
+        family="b-proof")`），不再由命题号拼。同一命题的下一版要落回**它自己那份稿**：
+        先按稿头 `- 命题号：stmt:<号>` 找回已有那份（`bmanuscript.manuscript_id_for_statement`），
+        找不到才发新号。老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
+        （不新写第二个名字）—— 那是只读兼容的既存量，改名会把它变成第二份稿。
+
         ## 页头三格从来源稿读出来传全（2026-11-05 走查 D4）
         改前这里只传 `label`，于是运行期落下来的 b-稿缺 `- 计划：`、缺洗稿行、还多
         一行 `- 标签：` —— 与 f-族不是同一个骨架。页头那几格只活在来源稿里，所以
@@ -6292,7 +6307,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         """
         from .. import bmanuscript as _BM
 
-        out: dict = {"ok": False, "checked": True, "path": "", "written": False,
+        out: dict = {"ok": False, "checked": True, "path": "", "manuscript_id": "",
+                     "written": False,
                      "preserved": False, "signed": False, "text": "",
                      "sha256": "", "proof_no": 0, "preview": False,
                      "why": "", "problem": {}}
@@ -6303,6 +6319,32 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return out
         head = _BM.header_reading(source_manuscript)
         from_source = bool(head.get("checked"))
+        from .. import proofregistry as _PR
+
+        # ---- 稿号：先找回「这一条命题自己那份 B 稿」，找不到才发新号 ---------------
+        mid = str(manuscript_id or "").strip()
+        found = _BM.manuscript_id_for_statement(root, statement_id)
+        legacy_rel = ""
+        if not mid and found.get("found"):
+            mid = str(found.get("manuscript_id") or "")
+        if not mid:
+            # 老盘上的名字（`reports/b-proof-<命题号>.md`）：就地重写，不新写第二个名字。
+            _legacy = f"reports/b-proof-{str(statement_id or '').strip()}.md"
+            if (Path(str(root)) / _legacy).is_file():
+                mid = str(statement_id or "").strip()
+                legacy_rel = _legacy
+        if not mid:
+            from .. import manuscriptids as _MID_ALLOC
+
+            try:
+                mid = _MID_ALLOC.next_manuscript_id(root, family="b-proof")
+            except Exception as exc:  # noqa: BLE001 —— 号发不出来要如实说
+                out.update(checked=False,
+                           why=(f"B 的稿号发不出来（{type(exc).__name__}: {exc}）⇒ "
+                                "这一份没有可签的载体"))
+                return out
+        out["manuscript_id"] = mid
+        out["legacy_path"] = legacy_rel
         # ---- 2026-11-07（业主裁定 ③）：已登记命题的证明重写就地动那一块 ---------
         #
         # 业主原话（逐字）：「B的重写一样（只是B不用再注册命题，命题拿已经登记的待优化的）」
@@ -6310,14 +6352,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 目标稿已经存在 ⇒ 这一笔是同一命题的下一版证明：只换 `## 证明`（按 cites
         # 重渲 `## 依赖`），`proof_no` 递增、正文 sha256 重算，不新落第二个文件
         # （不出现 `b-proof-000041-v2.md` 这类新名）。
-        from .. import proofregistry as _PR
-
-        _target = _PR.entry_relpath(family="B", statement_id=statement_id)
+        _target = _PR.entry_relpath(family="B", manuscript_id=mid)
         if _target and (Path(str(root)) / _target).is_file():
             landed = self._land_rewrite_manuscript(
                 {"stmt_id": statement_id, "statement_full": statement_full,
                  "label": label, "kind": ""},
-                proof_text=proof_text, proof_manuscript=source_manuscript)
+                proof_text=proof_text, proof_manuscript=source_manuscript,
+                manuscript_id=mid)
             if landed.get("ok"):
                 from .. import vsigns as _VS_READ
 
@@ -6360,7 +6401,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 plan_id=str(head.get("plan_id") or ""),
                 sid=str(head.get("sid") or ""),
                 wash_actor=str(head.get("wash_actor") or ""),
-                wash_filled=str(head.get("wash_filled") or ""))
+                wash_filled=str(head.get("wash_filled") or ""),
+                manuscript_id=mid)
         except Exception as exc:  # noqa: BLE001 —— 落稿失败要如实说，不许静默
             out.update(checked=False,
                        why=(f"B 的改写手稿没落成（{type(exc).__name__}: {exc}）⇒ "
@@ -6368,6 +6410,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return out
         out.update({k: got.get(k) for k in ("path", "written", "preserved",
                                             "signed", "text", "why")})
+        out["manuscript_id"] = str(got.get("manuscript_id") or mid)
         out["problem"] = dict(got.get("problem") or {})
         out["ok"] = bool(got.get("ok"))
         # 签尺（`proofregistry.proof_sha`）：这一版将来被 V 签时对拍的就是它。
@@ -6386,7 +6429,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 {"stmt_id": statement_id, "statement_full": statement_full,
                  "label": (str(head.get("label") or "") if from_source
                            else str(label or "")), "kind": ""},
-                proof_text=proof_text, proof_manuscript=str(out.get("path") or ""))
+                proof_text=proof_text, proof_manuscript=str(out.get("path") or ""),
+                manuscript_id=mid)
             if stamped.get("ok"):
                 _rel = str(stamped.get("manuscript_path") or out.get("path") or "")
                 try:

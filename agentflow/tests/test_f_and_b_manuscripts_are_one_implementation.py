@@ -34,6 +34,7 @@ if str(_SRC) not in sys.path:
 from agentflow import bmanuscript as BM  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import manuscriptform as MF  # noqa: E402
+from agentflow import manuscriptids as MIDS  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow import vsigns as VS  # noqa: E402
 from agentflow.agent_f import AgentF  # noqa: E402
@@ -668,8 +669,16 @@ def _real_entries_run(st: Store) -> tuple[str, str, str]:
         doc_id="000000", line_range={"start": 1}, quote_verified=False,
         quote_reason="判据夹具：自产命题")
     assert out.get("ok") is True, out
-    rel_b = str((out.get("b_manuscript") or {}).get("path") or "")
-    assert rel_b == f"reports/b-proof-{SID}.md", out
+    b_ms = dict(out.get("b_manuscript") or {})
+    rel_b = str(b_ms.get("path") or "")
+    b_mid = str(b_ms.get("manuscript_id") or "")
+    # 2026-11-11（业主裁定 ①「B侧稿号和命题号耦合是错的」）：B 的稿号来自 B 自己那条
+    # 号段（`counters.bmanuscript`，经 `manuscriptids.next_manuscript_id(family=...)`），
+    # 不再由命题号拼。断言从"字面等于 `b-proof-<命题号>`"换成更紧的三条：
+    #   ① 这一笔真的带了稿号；② 路径恰好是那个稿号的规范名；③ 计数器已推到 稿号+1。
+    assert b_mid, out
+    assert rel_b == MIDS.canonical_rel(b_mid, family="b-proof"), out
+    assert MIDS.peek_manuscript_counter(st, family="b-proof") == int(b_mid) + 1, out
     return f_unsigned, _read(st, rel_b), rel_b
 
 

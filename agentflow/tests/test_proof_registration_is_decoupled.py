@@ -384,17 +384,25 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
     b = AgentB(st, extractor=None, extract_text=None, config={})
     bodies = ["B 重写后的第二版：先取 ε>0。", "B 重写后的第三版：改用有限覆盖。"]
     seen: list[dict] = []
+    rel = ""
     for i, body in enumerate(bodies, start=2):
-        # 这一笔的稿头证明号：第一次落地是 #p1，第二次就地重写成 #p2（版本历史从 1 起）。
-        issue_credential(st.root, proof_text=body, statement_id="000041",
-                         manuscript="reports/b-proof-000041.md",
-                         proof_no=i - 1)
         landed = b.land_manuscript(
             statement_id="000041", statement_full=FULL, proof_text=body,
             label="B 优化 000041", proof_no=1)
         assert landed.get("ok") is True, landed
-        manuscript = (pathlib.Path(st.root)
-                      / "reports/b-proof-000041.md").read_text(encoding="utf-8")
+        rel = str(landed.get("path") or "")
+        # 2026-11-11（业主裁定 ①「B侧稿号和命题号耦合是错的」）：B 的稿号由 B 自己的
+        # 号段发 ⇒ 签的载体是**这一笔落成的那个路径**，不再写死 `b-proof-<命题号>`。
+        # 断言强度不降：仍然量"一份稿 / 同一路径 / 正文是最后一版 / 版本记录"。
+        from agentflow import manuscriptids as _MIDS
+
+        _mid = str(landed.get("manuscript_id") or "")
+        assert _mid, landed
+        assert rel == _MIDS.canonical_rel(_mid, family="b-proof"), landed
+        # 这一笔的稿头证明号：第一次落地是 #p1，第二次就地重写成 #p2（版本历史从 1 起）。
+        issue_credential(st.root, proof_text=body, statement_id="000041",
+                         manuscript=rel, proof_no=i - 1)
+        manuscript = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
         got = b.register_statement(
             statement_full=FULL, statement_text=TEXT, origin="own_result",
             kind="conjecture", label="B 优化 000041", proof_text=body,
@@ -407,8 +415,8 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
             f"第 {i} 版证明让 statements 多出了行：{list(st.rows('statements'))}")
     # 盘上仍然只有一份 B 的手稿（同一个路径、就地改）
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("b-proof-*.md"))
-    assert files == ["b-proof-000041.md"], files
-    text = (pathlib.Path(st.root) / "reports/b-proof-000041.md").read_text(encoding="utf-8")
+    assert files == [rel.rsplit("/", 1)[-1]], files
+    text = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
     assert DS.SECTION_HEADING in text, text
     assert VS.manuscript_proof_body(text).strip("\n") == bodies[-1], text
     # 第二版开始走的是 `proofregistry`：头部有版本记录

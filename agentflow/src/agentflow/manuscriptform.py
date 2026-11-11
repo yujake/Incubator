@@ -63,6 +63,19 @@ FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 #: 本模块的角色名 ⇒ 表里的族名（命名与解析都只走表；这里只做一层翻译）。
 _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 
+#: 「一个稿号一份稿」：这几族的新写路径**不带 `-pN` 后缀**（业主 2026-11-11 裁定）。
+#:
+#:     「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
+#       应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
+#:
+#: 落在结构上：B 的落点永远 `reports/b-proof-<B稿号>.md`；同一命题的下一版**就地改**
+#: 那一份（`proofregistry` 的 `mode=rewritten` 只动头部元信息与 `## 证明`，不新名）。
+#: 稿头的 `- 证明号：N` 仍可以递增（那是台账读数，不是文件名的一部分）。
+#:
+#: F 不在这张表里：F 的 `-pN` 属于「一条命题多份证明」（`test_multi_proof_*` 那一批），
+#: 是另一件事、另一批裁定，本批不动它。
+NO_VERSION_SUFFIX_FAMILIES: tuple[str, ...] = (FAMILY_B,)
+
 #: 族 ⇒ 文件名前缀（命名的唯一来源；别处不许再写一遍字面量）。
 #: 2026-11-09（T2 收编）：从 `manuscriptfamily` 派生（设计 3.2 第 6 处）。
 PREFIX = {FAMILY_F: _MFAM.prefix_of("f-proof"), FAMILY_B: _MFAM.prefix_of("b-proof")}
@@ -164,9 +177,10 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
                  manuscript_id: Any = "", proof_no: Any = 1) -> dict[str, Any]:
     """这一族、这个号 ⇒ 约定路径（工作区相对）；认不出就受控拒绝。
 
-    `manuscript_id` 是 F 自己的手稿号（业主 2026-11-10 裁定）：给了它，F 的稿只按
-    `reports/f-proof-<稿号>[-p<N>].md` 命名，命题号 / 计划号都不参与。`statement_id`
-    与 `plan_id` 仍保留给 b-proof / e-proof 与老盘上的只读兼容。
+    `manuscript_id` 是这一族自己的手稿号（业主 2026-11-10 / 2026-11-11 裁定）：给了它，
+    这一族的稿只按 `reports/<前缀><稿号>[-p<N>].md` 命名，命题号 / 计划号都不参与。
+    F 与 B 两族都走这一格（「B侧稿和F侧稿的维护方法一致」）。`statement_id` 与
+    `plan_id` 仍保留给老盘上的只读兼容（`b-proof-<命题号>` / `f-proof-plan-*`）。
 
     返回 `{"checked", "ok", "family", "path", "name", "manuscript_id",
     "proof_no", "code", "why"}`。解析本体只走 :func:`vsigns.parse_manuscript_name`
@@ -181,6 +195,12 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         no = int(proof_no or 1)
     except (TypeError, ValueError):
         no = 0
+    # 一个稿号一份稿（业主 2026-11-11）：这一族按稿号命名时不写 `-pN` —— 版本记在
+    # 稿头 `- 证明号：` 与登记条目里，不记在文件名里。
+    if mid and fam in NO_VERSION_SUFFIX_FAMILIES:
+        name_no = 1
+    else:
+        name_no = no if no >= 1 else 1
     out: dict[str, Any] = {
         "checked": True, "ok": False, "family": fam, "path": "", "name": "",
         "manuscript_id": "", "proof_no": 0, "code": "", "why": "",
@@ -194,8 +214,8 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     # 调用方读到的是同一条 `bad_manuscript_name`，不是一个异常。
     rel = ""
     try:
-        if mid and fam == FAMILY_F:
-            rel = _MID.canonical_rel(mid, no if no >= 1 else 1)
+        if mid and fam in _FAMILY_OF:
+            rel = _MID.canonical_rel(mid, name_no, family=_FAMILY_OF[fam])
         elif sid and fam in _FAMILY_OF:
             rel = _MFAM.relpath(_FAMILY_OF[fam], sid,
                                 no if no >= 1 else 1)
@@ -204,8 +224,8 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     except ValueError:
         rel = ""
     if not rel:
-        if mid and fam == FAMILY_F:
-            name = f"{prefix}{mid}" + (f"-p{no}" if no >= 2 else "")
+        if mid:
+            name = f"{prefix}{mid}" + (f"-p{no}" if no >= 2 and name_no != 1 else "")
         elif sid:
             name = f"{prefix}{sid}" + (f"-p{no}" if no >= 2 else "")
         elif pid:
@@ -230,7 +250,7 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         out.update(code=BAD_MANUSCRIPT_NAME,
                    why=f"{fam} 这一族没有 `plan-` 名（计划名只属于 F 的老盘只读兼容）")
         return out
-    if out["proof_no"] != (no if no >= 1 else 1):
+    if out["proof_no"] != name_no:
         out.update(code=BAD_MANUSCRIPT_NAME,
                    why=(f"证明号 {no!r} 拼不出可解析的名字（`-p<N>` 的 N 是 ≥1 的整数）"))
         return out

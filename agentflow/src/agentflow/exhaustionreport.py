@@ -451,13 +451,113 @@ def experiment_id_of(rel: Any) -> str:
 
 
 def proof_manuscript_relpath(experiment_id: Any) -> str:
-    """穷举那一档的证明手稿该落在哪（工作区相对）；实验号不合法 ⇒ 空串（不猜位置）。"""
+    """穷举那一档的**老盘**稿名（`reports/e-proof-<实验号>.md`）；实验号不合法 ⇒ 空串。
+
+    2026-11-11（业主裁定 ① 同一条口径推到 E）之后 E 的稿名不再由实验号拼 ——
+    每一族有自己的号段（`manuscriptids.FAMILY_COUNTERS`）。本函数只为老盘上的
+    既存量保留（分类 / 读 / 认签仍认这个形状）；新写路径请用
+    :func:`find_manuscript_relpath`（按稿头 `- 实验号：exp:<号>` 找回这一条实验的稿）。
+    """
     return _manuscript_relpath_of(experiment_id, MANUSCRIPT_PREFIX)
 
 
 def numeric_manuscript_relpath(experiment_id: Any) -> str:
-    """普通数值那一档的手稿该落在哪（`reports/e-num-<实验号>.md`；2026-11-08 新族）。"""
+    """普通数值那一档的**老盘**稿名（`reports/e-num-<实验号>.md`；2026-11-08 新族）。
+
+    与 :func:`proof_manuscript_relpath` 同一条说明：新写路径按 E 自己的稿号命名，
+    本函数只为老盘的既存量保留。
+    """
     return _manuscript_relpath_of(experiment_id, NUMERIC_PREFIX)
+
+
+#: 稿头里那一行 `- 实验号：exp:<号>` 的前缀（写侧 `compose_manuscript` /
+#: `compose_numeric_manuscript` 都写它；读侧靠它把稿钉回实验）。
+def experiment_id_from_text(text: Any) -> str:
+    """从一份 E 手稿的稿头读出实验号（`- 实验号：exp:000003` ⇒ `"000003"`）。
+
+    读侧的唯一依据（2026-11-11 之后稿名里的数字是 E 自己的稿号，不再是实验号）：
+    E 的两族稿都由框架渲染，稿头那一行是写侧与读侧的同一个约定。认不出 ⇒ 空串
+    （不猜一个号出来）。
+    """
+    for line in str(text or "").replace("\r\n", "\n").split("\n")[:20]:
+        stripped = line.strip()
+        if not stripped.startswith(f"- 实验号：{EVIDENCE_PREFIX}"):
+            continue
+        got = stripped[len(f"- 实验号：{EVIDENCE_PREFIX}"):].strip()
+        return got if _ID_RE.match(got) else ""
+    return ""
+
+
+def find_manuscript_relpath(root: str | Path | None, experiment_id: Any, *,
+                            family: Any = "e-proof") -> dict[str, Any]:
+    """这一条实验「自己那份 E 稿」是哪一份（按稿头的 `- 实验号：exp:<号>` 行找）。
+
+    ## 为什么不能按名字里的数字找（2026-11-11 业主裁定：E 侧同一把尺）
+
+    改前 E 的稿名是 `reports/e-proof-<实验号>.md`，于是"这一条实验的稿"= "名字里那个
+    数字等于实验号的那份文件"。E 的稿号独立之后，名字里那个数字是 E 的号段，与实验号
+    没有关系 —— 再按数字比就会把别人的稿当成自己的（与 B 侧 `b-proof-000016` 被当成
+    000014 的稿同一个形态）。
+
+    三态：`checked=False` ⇒ 这一趟没法查（没给根）；`found=False` ⇒ 查过了、没有；
+    `found=True` ⇒ `path` / `manuscript_id`。**"没查成"绝不折成"没有"**。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "path": "",
+                           "manuscript_id": "", "candidates": [], "why": ""}
+    eid = str(experiment_id or "").strip()
+    if not eid:
+        out.update(checked=True, why="没给实验号 ⇒ 没有可找的稿（不是「没有这份稿」）")
+        return out
+    if root is None or str(root) == "":
+        out["why"] = "这一趟没有工作区根 ⇒ 查不了（不是「没有这份稿」）"
+        return out
+    want = "e-proof" if str(family) == "e-proof" else "e-num"
+    prefix = MANUSCRIPT_PREFIX if want == "e-proof" else NUMERIC_PREFIX
+    base = Path(str(root)) / MANUSCRIPT_DIR
+    if not base.is_dir():
+        out.update(checked=True, why=f"`{MANUSCRIPT_DIR}/` 不存在 ⇒ 还没有任何 E 稿")
+        return out
+    hits: list[tuple[str, str]] = []
+    for path in sorted(base.glob(f"{prefix}*.md")):
+        rel = f"{MANUSCRIPT_DIR}/{path.name}"
+        if not is_manuscript_relpath(rel, prefix=prefix):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if experiment_id_from_text(text) == eid:
+            hits.append((rel, rel.rsplit("/", 1)[-1][len(prefix):-len(".md")]))
+    out["candidates"] = [rel for rel, _mid in hits]
+    if not hits:
+        out.update(checked=True,
+                   why=(f"`{MANUSCRIPT_DIR}/{prefix}*.md` 里没有一份稿头写着 "
+                        f"exp:{eid} ⇒ 这一条实验还没有 {want} 稿"))
+        return out
+    rel, mid = hits[0]
+    out.update(checked=True, found=True, path=rel, manuscript_id=mid,
+               why=(f"稿头 `- 实验号：exp:{eid}` 指向 `{rel}`（候选 {len(hits)} 份）"))
+    return out
+
+
+def experiment_id_of_manuscript(root: str | Path | None, rel: Any) -> str:
+    """一份 E 手稿 ⇒ 它是哪一条实验的稿（稿头那一行优先，名字只做老盘兜底）。
+
+    2026-11-11 之前稿名里就是实验号，所以 :func:`experiment_id_of` 读名字就够。
+    E 的稿号独立之后，新稿的名字里是 E 自己的号 ⇒ 必须读稿头那一行；读不到
+    （稿不在盘上 / 老盘上手写的）才退回名字（`:func:`experiment_id_of`）。
+    """
+    raw = str(rel or "").strip().replace("\\", "/")
+    target, _why = _resolve(root, raw) if raw else (None, "")
+    if target is not None and target.is_file():
+        try:
+            got = experiment_id_from_text(target.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            got = ""
+        if got:
+            return got
+    return experiment_id_of(raw)
+
 
 
 def is_manuscript_relpath(value: Any, *, prefix: Any = "") -> bool:
@@ -596,31 +696,59 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
 
 
 def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
-    """把 E 的证明手稿写进 `reports/e-proof-<实验号>.md`，读回来记下事实。
+    """把 E 的证明手稿写进 `reports/e-proof-<E稿号>.md`，读回来记下事实。
+
+    ## 稿号（2026-11-11 业主裁定 ① 推到 E：「你也再盯一下E侧稿的形状」）
+
+    改前 E 的稿名由**实验号**拼（`reports/e-proof-<实验号>.md`）—— 与 B 侧
+    `b-proof-<命题号>` 是同一种耦合。现在 E 的稿号由
+    `manuscriptids.next_manuscript_id(root, family="e-proof")` 发（`counters.emanuscript`
+    一条独立号段），稿名只回答"这是第几份 E 证明稿"。**稿与实验的对应关系记在稿头
+    那一行 `- 实验号：exp:<号>`**：同一条实验重落时靠 :func:`find_manuscript_relpath`
+    按那一行找回它自己那份稿（不新写第二份）。
 
     与 :func:`land_report` 同一条纪律：写不成就如实记进 `problems`（不抛异常 ——
     这一趟实验真的跑过了，稿没落成是"这一条拿不到 V 签"，不是"实验不算"）；
     sha256 算在字节上，与 `read_proof_manuscript` 读回来的那一格同一个值。
 
-    返回 `{"path","bytes","sha256","ok","problems","experiment_id","proof_sha256","at"}`。
+    返回 `{"path","bytes","sha256","ok","problems","experiment_id","manuscript_id",
+    "proof_sha256","at"}`。
     `proof_sha256` 是 `## 证明` 那一节正文的 sha（`proofregistry.proof_sha` 的口径）——
     签块盖的就是它，B 登记时核的也是它。
     """
+    from . import manuscriptids as _MID
     from . import verifications as _VR
 
     problems: list[str] = []
     out: dict[str, Any] = {
         "path": "", "bytes": 0, "sha256": "", "ok": False,
         "problems": problems, "experiment_id": str(facts.get("experiment_id") or "").strip(),
-        "proof_no": 0, "proof_sha256": "", "at": "",
+        "manuscript_id": "", "proof_no": 0, "proof_sha256": "", "at": "",
     }
-    rel = proof_manuscript_relpath(facts.get("experiment_id"))
-    if not rel:
+    eid = str(facts.get("experiment_id") or "").strip()
+    if not _ID_RE.match(eid):
         problems.append(
             f"实验号 {facts.get('experiment_id')!r} 不合法 ⇒ E 的证明手稿没有固定落点"
             "（这一条因此拿不到手稿签块）")
         return out
+    # 先找回「这一条实验自己那份稿」，找不到才发新号（同一句话：一条实验只住一份稿）。
+    known = find_manuscript_relpath(root, eid, family="e-proof")
+    if known.get("found"):
+        rel = str(known.get("path") or "")
+        mid = str(known.get("manuscript_id") or "")
+    else:
+        try:
+            mid = _MID.next_manuscript_id(root, family="e-proof")
+        except Exception as exc:  # noqa: BLE001 —— 号发不出来要如实说，不许静默
+            problems.append(f"E 的证明稿号发不出来（{type(exc).__name__}: {exc}）"
+                            "⇒ 这一条没有可签的手稿")
+            return out
+        rel = _MID.canonical_rel(mid, family="e-proof")
+    if not rel:
+        problems.append(f"实验号 {eid!r} 拼不出 E 证明稿的落点 ⇒ 这一条拿不到手稿签块")
+        return out
     out["path"] = rel
+    out["manuscript_id"] = mid
     text = compose_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "script_path", "script_sha256",
         "design", "enumeration", "search_space", "result", "evidence_kind", "proof_no",
@@ -835,24 +963,47 @@ def compose_numeric_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any
 
 
 def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
-    """把普通数值实验手稿写进 `reports/e-num-<实验号>.md`，读回来记下事实。
+    """把普通数值实验手稿写进 `reports/e-num-<E稿号>.md`，读回来记下事实。
+
+    `e-num` 是**第三族**、有自己的号段（`counters.enummanuscript`）——
+    与 `e-proof` 不共用计数器（两族各自的号各自自增、互不干扰；
+    业主 2026-11-11：「E 两族」）。稿与实验的对应关系同样记在稿头
+    `- 实验号：exp:<号>` 那一行。
 
     与 :func:`land_manuscript` 同一条纪律：写不成就如实记进 `problems`（不抛异常）；
-    sha256 算在字节上。返回 `{"path","bytes","sha256","ok","problems","experiment_id","at"}`。
-    没有 `proof_sha256` 那一格：这一族没有「被签的正文」。
+    sha256 算在字节上。返回 `{"path","bytes","sha256","ok","problems","experiment_id",
+    "manuscript_id","at"}`。没有 `proof_sha256` 那一格：这一族没有「被签的正文」。
     """
+    from . import manuscriptids as _MID
+
     problems: list[str] = []
     out: dict[str, Any] = {
         "path": "", "bytes": 0, "sha256": "", "ok": False,
         "problems": problems, "experiment_id": str(facts.get("experiment_id") or "").strip(),
-        "at": "",
+        "manuscript_id": "", "at": "",
     }
-    rel = numeric_manuscript_relpath(facts.get("experiment_id"))
-    if not rel:
+    eid = str(facts.get("experiment_id") or "").strip()
+    if not _ID_RE.match(eid):
         problems.append(
             f"实验号 {facts.get('experiment_id')!r} 不合法 ⇒ 普通数值手稿没有固定落点")
         return out
+    known = find_manuscript_relpath(root, eid, family="e-num")
+    if known.get("found"):
+        rel = str(known.get("path") or "")
+        mid = str(known.get("manuscript_id") or "")
+    else:
+        try:
+            mid = _MID.next_manuscript_id(root, family="e-num")
+        except Exception as exc:  # noqa: BLE001 —— 号发不出来要如实说
+            problems.append(f"E 的数值稿号发不出来（{type(exc).__name__}: {exc}）"
+                            "⇒ 这一条没有可引用的手稿")
+            return out
+        rel = _MID.canonical_rel(mid, family="e-num")
+    if not rel:
+        problems.append(f"实验号 {eid!r} 拼不出普通数值手稿的落点")
+        return out
     out["path"] = rel
+    out["manuscript_id"] = mid
     text = compose_numeric_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "method", "params", "observations",
         "search_bound", "result", "exit_code", "runtime_sec", "evidence_kind")})

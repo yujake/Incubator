@@ -1479,7 +1479,7 @@ class AgentV:
                                        experiments=_exp_rows,
                                        # 2026-11-08：程序路径不在证明栏里了，会审要钉到
                                        # 这份稿自己那条实验（稿名里那个实验号）。
-                                       experiment_id=_ER.experiment_id_of(manuscript_rel))
+                                       experiment_id=_ER.experiment_id_of_manuscript(self.workspace_root, manuscript_rel))
                 out["kind"] = "numeric_evidence"
                 out["exhaustion_review"] = dict(_reviewed)
                 out["signer"] = str(_reviewed.get("signed_by") or "")
@@ -3185,7 +3185,7 @@ class AgentV:
             return None, None
         # 这份稿属于哪条实验：稿名里那个实验号是唯一不会歧义的键（两条实验共用
         # 同一份程序时，按 `code_path` 反查会挑到第一条 —— 那样签核的是别人那份报告）。
-        eid = _ER.experiment_id_of(rel)
+        eid = _ER.experiment_id_of_manuscript(self.workspace_root, rel)
         row = next((dict(r) for r in exp_rows
                     if str(r.get("experiment_id") or "") == eid), None)
         read = _ER.read_proof_manuscript(self.workspace_root, rel)

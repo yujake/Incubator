@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from .. import statementledger as SL
 
 
@@ -37,10 +39,11 @@ class _LandManuscript:
 
         概念（`kind="concept"`）的良定义证明同样由 B 落稿：族仍是 `b-proof`（不新开
         手稿族），`## 命题` 是这一行的定义（`statement_full`），`## 证明` 是良定义证明，
-        稿名 `reports/b-proof-<命题号>.md`。V 照常三转签（它只对手稿负责，不需要知道
-        这是概念）；签回来之后 B 用 `own.ingest_manuscript(apply, cells=["proof_text"])`
-        收录。这一格本身不判断这一行是不是概念 —— 只按在册那一行的正文拼稿，
-        所以概念与一般命题在这条链上逐字同形。
+        稿名 `reports/b-proof-<B稿号>.md`（B 自己那条号段发的号，2026-11-11 业主裁定 ①；
+        稿头那一行 `- 命题号：stmt:<号>` 才是稿与命题的对应）。V 照常三转签（它只对手稿
+        负责，不需要知道这是概念）；签回来之后 B 用
+        `own.ingest_manuscript(apply, cells=["proof_text"])` 收录。这一格本身不判断这一行
+        是不是概念 —— 只按在册那一行的正文拼稿，所以概念与一般命题在这条链上逐字同形。
 
         ## 返回
 
@@ -88,19 +91,40 @@ class _LandManuscript:
             out["refused"] = "empty_statement_text"
             return out
         label_now = str(label or "").strip() or str(row.get("label") or "")
+        # ---- 稿号（2026-11-11 业主裁定 ①）：B 自己的号段 -------------------------
+        #
+        # `if_match_sha256` 要核的是「这一条命题自己那份 B 稿现在是哪一版」。改前那一格
+        # 按命题号拼名（`b-proof-<命题号>`），现在稿号与命题号解耦 ⇒ 先按稿头找回这份稿
+        # （`bmanuscript.manuscript_id_for_statement`），找不到就是"还没有这份稿"
+        # （受控拒 `stale_target`，一个字都不写）。
+        _mid_now = ""
+        _target = ""
         if str(if_match_sha256 or "").strip():
-            target = _PR.entry_relpath(family="B", statement_id=sid)
-            entry = _PR.read_entry(self.store.root, family="B", statement_id=sid)
+            from .. import bmanuscript as _BM_READ
+            from .. import proofregistry as _PR
+
+            _found = _BM_READ.manuscript_id_for_statement(self.store.root, sid)
+            _mid_now = str(_found.get("manuscript_id") or "")
+            if not _mid_now:
+                _legacy = _PR.entry_relpath(family="B", statement_id=sid)
+                if _legacy and (Path(str(self.store.root)) / _legacy).is_file():
+                    _mid_now = sid
+                    _target = _legacy
+            if _mid_now:
+                _target = _target or _PR.entry_relpath(family="B", manuscript_id=_mid_now)
+            entry = (_PR.read_entry(self.store.root, family="B", manuscript_id=_mid_now)
+                     if _mid_now else {"exists": False, "entry": {}})
             current = str((entry.get("entry") or {}).get("sha256") or "")
-            if not entry.get("exists") or current != str(if_match_sha256).strip().lower():
-                out.update(path=str(target or ""), kind="stale_target",
+            if not _mid_now or not entry.get("exists") or current != str(if_match_sha256).strip().lower():
+                out.update(path=str(_target or ""), kind="stale_target",
                            why=("`if_match_sha256` 与盘上那一版不符 ⇒ 不覆盖"
-                                f"（盘上现在 {('没有这一份稿' if not entry.get('exists') else current[:12] + '…')}）"))
+                                f"（盘上现在 {('没有这一份稿' if not _mid_now or not entry.get('exists') else current[:12] + '…')}）"))
                 out["refused"] = "stale_target"
                 return out
         out = dict(self._land_b_manuscript(
             statement_id=sid, statement_full=proposition,
             proof_text=proof_text, label=label_now, proof_no=proof_no,
+            manuscript_id=_mid_now,
             source_manuscript=source_manuscript))
         out.setdefault("ok", False)
         out["preview"] = False
