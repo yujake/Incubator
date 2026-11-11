@@ -45,14 +45,22 @@ SUBMISSION_PREFIX = "mss:"
 SUBMISSION_SEP = "#"
 
 #: 记号里字段的固定顺序（读侧按 `key=value` 取，顺序只影响可读性）。
+#:
+#: 2026-11-11 业主裁定：「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可退役，
+#: 台账不能退役」⇒ 新写的记号不再有 `proof_no` 这一格（一个稿号 = 一份文件）。
+#: 老记号里已有的 `proof_no=` 仍读得出（`parse_submission` 的字段表照收），只是不再
+#: 由这一侧写出来 —— 读能力不删，新写不产生。
 SUBMISSION_FIELDS: tuple[str, ...] = (
-    "path", "body_sha", "sign_sha", "file_sha", "proof_no",
+    "path", "body_sha", "sign_sha", "file_sha",
     "statement_id", "at", "submitted_at",
 )
 
 
 def _proof_no_of(raw: Any) -> int:
-    """证明号归一：认不出 / <1 ⇒ 1（与 `vsigns` 的缺省 `#p1` 同一口径）。"""
+    """证明号归一：认不出 / <1 ⇒ 1（与 `vsigns` 的缺省 `#p1` 同一口径）。
+
+    只给老记号的读侧兼容用（`parse_submission`）；新写的记号不带这一格。
+    """
     try:
         no = int(raw or 1)
     except (TypeError, ValueError):
@@ -74,6 +82,10 @@ def submission_token(*, manuscript_id: Any, path: Any = "", body_sha: Any = "",
     `body_sha` 是 V 签盖的那段正文的 sha（`artifact_sha`，全仓同一把尺）；
     `sign_sha` 是签文件（`out/vsigns/<body_sha>.json`）的字节 sha256 —— 它回答
     「凭的是哪一份签」；`file_sha` 是盘上那份 `.md` 的字节 sha256（D/B 认地址用）。
+
+    `proof_no` 形参保留只为旧调用点不必改签名：新记号不写它（业主 2026-11-11，
+    一稿一份之后它不携带任何身份）。老记号里已有的那一格仍可读
+    （`parse_submission` 的字段表里留着它）。
     """
     mid = str(manuscript_id or "").strip()
     if not mid:
@@ -83,7 +95,6 @@ def submission_token(*, manuscript_id: Any, path: Any = "", body_sha: Any = "",
         "body_sha": str(body_sha or "").strip().lower(),
         "sign_sha": str(sign_sha or "").strip().lower(),
         "file_sha": str(file_sha or "").strip().lower(),
-        "proof_no": str(_proof_no_of(proof_no)),
         "statement_id": str(statement_id or "").strip(),
         "at": str(at or "").strip(),
         "submitted_at": str(submitted_at or "").strip(),
@@ -113,6 +124,8 @@ def parse_submission(token: Any) -> dict[str, Any] | None:
         key, sep, value = chunk.partition("=")
         if sep and key in out:
             out[key] = value
+    # 老记号可能有 `proof_no=`（2026-11-11 之前写的）：照读，缺省按 canonical 1。
+    # 新记号不再写这一格 —— "新写不产生"不等于"读侧删掉"。
     out["proof_no"] = _proof_no_of(out.get("proof_no"))
     return out
 
@@ -186,7 +199,7 @@ def submission_candidates(root: Any) -> dict[str, Any]:
         one = by_mid.get(mid)
         if one is None:
             one = {"manuscript_id": mid, "paths": [], "signs": [],
-                   "statement_id": "", "proof_no": 0, "at": ""}
+                   "statement_id": "", "at": ""}
             by_mid[mid] = one
             order.append(mid)
         return one
@@ -234,8 +247,6 @@ def submission_candidates(root: Any) -> dict[str, Any]:
         })
         if not one["statement_id"]:
             one["statement_id"] = str(doc.get("statement_id") or "").strip()
-        if not one["proof_no"]:
-            one["proof_no"] = _proof_no_of(doc.get("proof_no"))
         if str(doc.get("at") or "") > str(one["at"] or ""):
             one["at"] = str(doc.get("at") or "")
     # ---- 还没签的稿也要点名（判据 c：「未签 ⇒ 不入提交单」必须读得到）----
@@ -260,8 +271,6 @@ def submission_candidates(root: Any) -> dict[str, Any]:
         one = _bucket(mid)
         if rel not in one["paths"]:
             one["paths"].append(rel)
-        if not one["proof_no"]:
-            one["proof_no"] = _proof_no_of(parsed.get("proof_no"))
     # ---- 每个稿号收成一格读数 ----
     for mid in order:
         one = by_mid[mid]
@@ -270,7 +279,6 @@ def submission_candidates(root: Any) -> dict[str, Any]:
         cand: dict[str, Any] = {
             "manuscript_id": mid,
             "manuscript": paths[0] if paths else "",
-            "proof_no": _proof_no_of(one.get("proof_no")),
             "statement_id": str(one.get("statement_id") or ""),
             "signed_sha": "", "sign_sha": "", "at": str(one.get("at") or ""),
             "current_sha": "", "file_sha": "",

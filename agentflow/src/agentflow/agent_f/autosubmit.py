@@ -43,11 +43,13 @@ from ._support import S, TERMINAL_STATUSES
 
 
 def _still(cand: Mapping[str, Any], state: str, why: str) -> dict[str, Any]:
-    """`still_unsubmitted` 的一行（两个 sha 与「配不配」一起给）。"""
+    """`still_unsubmitted` 的一行（两个 sha 与「配不配」一起给）。
+
+    2026-11-11 业主裁定：`proof_no` 在手稿产出侧 / 呈递侧退役 ⇒ 这一格不带它。
+    """
     return {
         "manuscript_id": str(cand.get("manuscript_id") or ""),
         "manuscript": str(cand.get("manuscript") or ""),
-        "proof_no": int(cand.get("proof_no") or 0) or 1,
         "signed": bool(cand.get("signed")),
         "signed_sha": str(cand.get("signed_sha") or ""),
         "current_sha": str(cand.get("current_sha") or ""),
@@ -93,7 +95,6 @@ def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
                 body_sha=str(cand.get("signed_sha") or ""),
                 sign_sha=str(cand.get("sign_sha") or ""),
                 file_sha=str(cand.get("file_sha") or ""),
-                proof_no=int(cand.get("proof_no") or 1),
                 statement_id=str(cand.get("statement_id") or ""),
                 # 签时刻（签文件里的 `at`）；老签 / 夹具没有这一格 ⇒ 退到提交时刻，
                 # 但两格在记号里分开写，读的人不会把"提交"读成"签发"。
@@ -230,7 +231,6 @@ def auto_submit_signed(*, store: Any, root: Any, plan_id: str, stamp: str) -> di
         out["auto_submitted"].append({
             "manuscript_id": str(rec.get("manuscript_id") or ""),
             "manuscript": str(rec.get("path") or ""),
-            "proof_no": int(rec.get("proof_no") or 0) or 1,
             "body_sha": str(rec.get("body_sha") or ""),
             "signed_sha": str(rec.get("body_sha") or ""),
             "sign_sha": str(rec.get("sign_sha") or ""),

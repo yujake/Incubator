@@ -560,14 +560,11 @@ class _WriteReport:
             except OSError:
                 continue
             seen.add(key)
-            #: 第四格（2026-11-04，缺口 ①）：这一份是第几份证明。F 的稿今天不写
-            #: `- 证明号`，所以它通常缺省（读成 #p1）；写了就照写 —— 携带单的四格
-            #: 与手稿稿头读的是同一个函数（`depsection.manuscript_proof_no`）。
-            no = _DS.manuscript_proof_no(str(got.get("text") or ""))
+            # 2026-11-11 业主裁定：`proof_no` 在呈递侧退役 —— 携带行不再带这一格。
+            # 老稿头里已有的 `- 证明号：N` / 老携带行第四列仍读得出（`depsection`
+            # 那两处一个字没动），但新写的这一行不产生它（一稿一份）。
             one = {"statement_id": sid, "path": str(got["path"]),
                    "sha256": hashlib.sha256(blob).hexdigest()}
-            if no >= 1:
-                one["proof_no"] = int(no)
             rows.append(one)
             seen_paths.add(str(one.get("path") or ""))
         # ---- 2026-11-07（解耦落地）：F 的「登记条目」（还没拿到命题号的那一份） -----
@@ -599,15 +596,11 @@ class _WriteReport:
                 continue
             try:
                 blob = (Path(self.store.root) / rel).read_bytes()
-                text = blob.decode("utf-8", errors="replace")
-            except (OSError, UnicodeDecodeError):
+            except OSError:
                 continue
             seen.add(key)
             row = {"statement_id": "", "manuscript_id": msid, "path": rel,
                    "sha256": hashlib.sha256(blob).hexdigest()}
-            no = _DS.manuscript_proof_no(text)
-            if no >= 1:
-                row["proof_no"] = int(no)
             rows.append(row)
         # ---- 2026-11-11（业主裁定 ①③）：F 收工自动提交的拿签稿 -------------------
         #
@@ -659,11 +652,8 @@ class _WriteReport:
             seen.add(key)
             one = {"statement_id": "", "experiment_id": eid, "path": rel,
                    "sha256": hashlib.sha256(blob).hexdigest()}
-            #: 第四格：E 的稿头写了 `- 证明号：N` 就照写（D 不猜；没写就不写，
-            #: 读侧按 #p1 处理）。这一格是"一命题多证明"能落到正确 #pN 的唯一来源之一。
-            no = _DS.manuscript_proof_no(text)
-            if no >= 1:
-                one["proof_no"] = int(no)
+            #: 2026-11-11 业主裁定：`proof_no` 在呈递侧退役 —— 携带行不再带这一格
+            #: （老行 / 老稿头里的号仍由 `depsection` 的读侧认，这里不再抄）。
             rows.append(one)
             seen_paths.add(str(one.get("path") or ""))
         note = auto_note
@@ -771,9 +761,7 @@ class _WriteReport:
                 continue
             one = {"statement_id": "", "manuscript_id": mid, "path": rel,
                    "sha256": file_sha}
-            no = _DS.manuscript_proof_no(text) or int(rec.get("proof_no") or 1)
-            if int(no) >= 1:
-                one["proof_no"] = int(no)
+            # 2026-11-11：呈递侧退役 `proof_no` —— 提交记号里的那一格不再抄进携带行。
             rows.append(one)
         note = ""
         if skipped:
