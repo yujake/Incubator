@@ -4,9 +4,13 @@
 """
 from __future__ import annotations
 
-from ._support import AT, Any, NO_PROGRESS_NOTE, PlanError, TERMINAL_STATUSES, _budget_left, _step_outcome
+from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, TERMINAL_STATUSES, _budget_left, _step_outcome
 
 #: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
+#:
+#: 最后三格是 2026-11-11（业主裁定 ①「F侧报告收工时自动提交其名下未提交的V签稿」）：
+#: 它们只在收工那一趟有读数（`_close_reading` 现读写进 `tasks.artifacts`），推进轮次
+#: 里 `None` / `[]` —— 那一趟不读这一格，不许读成「没有可提交的」。
 _CLOSE_KEYS: tuple[str, ...] = (
     "total", "signed_count", "pending_count", "unsigned_count",
     "proof_count", "proof_statements", "draft_count",
@@ -14,6 +18,7 @@ _CLOSE_KEYS: tuple[str, ...] = (
     "unfinished", "unfinished_count", "trail", "trail_required",
     "legal_exits", "exits_note", "legal_stop", "is_failure", "close_problems",
     "coverage", "coverage_reading", "coverage_ratio", "coverage_why",
+    "auto_submitted", "auto_submitted_count", "still_unsubmitted",
 )
 
 
@@ -32,6 +37,42 @@ class _Step:
         except Exception as exc:  # noqa: BLE001 - 收工读数坏了不许把"停"也带走
             got = _DL.empty_reading(
                 f"收工读数没跑成（{type(exc).__name__}: {exc}）⇒ 未签的那些没查成")
+        # ---- 收工自动提交（业主 2026-11-11 裁定 ①）-----------------------------
+        #
+        # 位置在交差读数之后、逐格复制之前：三格进 `_CLOSE_KEYS` 的同一排，
+        # 而完整的候选级读数另挂一份在 `out["auto_submit"]`（`still_unsubmitted`
+        # 里每条都带 `state` / `why` / 两个 sha）。
+        try:
+            auto = self._auto_submit_signed(row)
+        except Exception as exc:  # noqa: BLE001 - 自动提交坏了不许把"停"也带走
+            auto = {"checked": False, "auto_submitted": [], "auto_submitted_count": 0,
+                    "still_unsubmitted": [], "why": (
+                        f"收工自动提交没跑成（{type(exc).__name__}: {exc}）"
+                        " ⇒ 这一趟没有提交（不是「没有要提交的」）")}
+        got["auto_submitted"] = [dict(x) for x in (auto.get("auto_submitted") or [])]
+        got["auto_submitted_count"] = int(auto.get("auto_submitted_count") or 0)
+        got["still_unsubmitted"] = [dict(x) for x in (auto.get("still_unsubmitted") or [])]
+        got["auto_submit_checked"] = bool(auto.get("checked"))
+        got["auto_submit_why"] = str(auto.get("why") or "")
+        out["auto_submit"] = dict(auto)
+        if got["auto_submitted_count"]:
+            out["reason"] = (str(out.get("reason") or "").rstrip()
+                             + "；收工自动提交：这一趟真写进 `tasks.artifacts` 的拿签稿 "
+                             + "、".join(
+                                 f"mss:{x.get('manuscript_id')}"
+                                 f"（正文 sha {str(x.get('body_sha') or '')[:12]}…）"
+                                 for x in got["auto_submitted"][:8])
+                             + f" 共 {got['auto_submitted_count']} 份")
+        blocked = [x for x in got["still_unsubmitted"]
+                   if str(x.get("state") or "") in
+                   ("body_changed_after_sign", "ambiguous_path", "write_failed",
+                    "sign_unbacked")]
+        if blocked:
+            out["reason"] = (str(out.get("reason") or "").rstrip()
+                             + "；有拿签稿没提交（逐条）："
+                             + "；".join(str(x.get("why") or x.get("state") or "")
+                                        for x in blocked[:5])
+                             + (f" 等 {len(blocked)} 条" if len(blocked) > 5 else ""))
         out["delivery"] = got
         out["delivered"] = bool(got.get("delivered"))
         for key in _CLOSE_KEYS:
@@ -53,6 +94,222 @@ class _Step:
                                  + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
                                  + f"[{o.get('claim_label')}]" for o in open_rows[:8])
                              + f" 共 {len(open_rows)} 条")
+        return out
+
+    def _auto_submit_signed(self, plan: Mapping[str, Any]) -> dict:
+        """收工那一趟：把「已拿签、尚未提交」的稿写进 F 自己那一行的 `tasks.artifacts`。
+
+        ## 为什么由框架写、不读模型给的清单（业主 2026-11-11 裁定 ①）
+
+        模型只说「收工」这件事；提交哪几份是盘上的事实（V 的颁发表 × 现行文件），
+        由框架现读现写 —— 于是"提交单"不可能被模型漏报或虚报。
+
+        ## 三态（不许把「没提交」写成「提交了」）
+
+        - `auto_submitted`：这一趟真写进 artifacts 的那几份（稿号 + 正文 sha +
+          签 sha + 文件字节 sha + 时刻）；并发下别人先写的那一份不算这一趟的；
+        - `still_unsubmitted`：有文件、这一趟没提交的，逐条给理由
+          （`unsigned` / `body_changed_after_sign` / `sign_unbacked` /
+          `already_submitted` / `no_task_row` / `write_failed` / `ambiguous_path`）；
+        - `checked=False`：这一格没查成（颁发表读不出来 / 写不进去）——
+          不是「没有要提交的」。
+
+        ## 幂等
+
+        `artifacts` 里已有该稿号的 `mss:` 记号 ⇒ 一个字节都不再写（判据是稿号，
+        与版本无关 —— 业主 2026-11-11 追加裁定）。
+
+        ## 为什么写 `tasks` 而不新建表
+
+        `tasks.artifacts` 是既有的「这次召唤产出了哪些引用」那一格（`conductor.finish`
+        本来就 append-only 合并它），F 的提交单落在那里，D 才有一处可读的「已提交」。
+        """
+        from .. import conductor as CX
+        from . import delivery as _DL
+
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        out: dict[str, Any] = {
+            "checked": False, "auto_submitted": [], "auto_submitted_count": 0,
+            "still_unsubmitted": [], "problems": [],
+            "task_id": "", "plan_id": str((plan or {}).get("plan_id") or ""),
+            "why": "",
+        }
+        try:
+            scan = _DL.submission_candidates(root)
+        except Exception as exc:  # noqa: BLE001 —— 收工读数坏了不能把"停"带走
+            out["why"] = (f"拿签稿扫描没跑成（{type(exc).__name__}: {exc}）"
+                          " ⇒ 这一趟没有自动提交（不是「没有要提交的」）")
+            return out
+        out["checked"] = bool(scan.get("checked"))
+        out["problems"] = [str(x) for x in (scan.get("problems") or [])]
+        candidates = [dict(c) for c in (scan.get("candidates") or [])
+                      if isinstance(c, Mapping)]
+
+        # ---- 找「F 自己那一行」（召唤号由运行期上下文挂上；直调时没有）---------
+        task_id = str(CX.current_task_id() or "")
+        out["task_id"] = task_id
+        row: dict[str, Any] | None = None
+        row_why = ""
+        tasks: list[dict[str, Any]] = []
+        try:
+            tasks = [dict(r) for r in self.store.rows("tasks")]
+        except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没有可写的那一行
+            row_why = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）"
+        #: 「已提交」按稿号（与版本无关）判；范围是所有 F 的 task 行，不只本趟：
+        #: 一份稿交过一次就是交过了，换个 task 再收工也不该再写一遍。
+        submitted: dict[str, dict[str, Any]] = {}
+        for one in tasks:
+            if str(one.get("role") or "") != "F":
+                continue
+            got, problems = _DL.submissions_of(one.get("artifacts") or ())
+            out["problems"] += problems
+            for mid in got:
+                submitted.setdefault(mid, dict(got[mid]))
+        if not task_id:
+            row_why = ("这一趟没有召唤号（`conductor.current_task_id()` 是空的："
+                       "直调 `F.step` 的那条路）⇒ 没有「F 自己那一行」可写")
+        else:
+            found = next((r for r in tasks
+                          if str(r.get("task_id") or "") == task_id), None)
+            if found is None:
+                row_why = (f"召唤号 {task_id!r} 不在 `tasks` 表里 ⇒ "
+                           "没有「F 自己那一行」可写")
+            elif str(found.get("role") or "") != "F":
+                row_why = (f"召唤号 {task_id!r} 那一行的角色是 "
+                           f"{found.get('role')!r}，不是 F")
+            elif str(found.get("status") or "") in TERMINAL_STATUSES:
+                row_why = (f"召唤号 {task_id!r} 那一行已经是终态 "
+                           f"{found.get('status')!r} ⇒ 不再往终态行写产物"
+                           "（终态先到先得）")
+            else:
+                row = found
+
+        def _still(cand: Mapping[str, Any], state: str, why: str) -> dict[str, Any]:
+            """`still_unsubmitted` 的一行（两个 sha 与「配不配」一起给）。"""
+            return {
+                "manuscript_id": str(cand.get("manuscript_id") or ""),
+                "manuscript": str(cand.get("manuscript") or ""),
+                "proof_no": int(cand.get("proof_no") or 0) or 1,
+                "signed": bool(cand.get("signed")),
+                "signed_sha": str(cand.get("signed_sha") or ""),
+                "current_sha": str(cand.get("current_sha") or ""),
+                "sha_matches": bool(cand.get("signed_sha")
+                                    and cand.get("signed_sha") == cand.get("current_sha")),
+                "state": str(state or ""), "why": str(why or ""),
+            }
+
+        # ---- 选谁：已签、sha 与现行正文一致、artifacts 里还没有这个稿号 --------
+        pending: list[tuple[dict[str, Any], str]] = []
+        stamp = str(self._stamp() or "")
+        for cand in candidates:
+            mid = str(cand.get("manuscript_id") or "")
+            if not mid:
+                continue
+            if mid in submitted:
+                out["still_unsubmitted"].append(_still(
+                    cand, "already_submitted",
+                    f"`tasks.artifacts` 里已经有稿号 {mid} 的提交记号 ⇒ "
+                    "幂等：不重复写"))
+                continue
+            if not cand.get("signed"):
+                out["still_unsubmitted"].append(_still(
+                    cand, str(cand.get("state") or "unsigned"),
+                    str(cand.get("why") or "没有可提交的签 ⇒ 不入提交单")))
+                continue
+            if row is None:
+                out["still_unsubmitted"].append(_still(
+                    cand, "no_task_row",
+                    row_why or "没有可写的 F 台账行 ⇒ 这一份拿签稿没提交"))
+                continue
+            try:
+                token = _DL.submission_token(
+                    manuscript_id=mid,
+                    path=str(cand.get("manuscript") or ""),
+                    body_sha=str(cand.get("signed_sha") or ""),
+                    sign_sha=str(cand.get("sign_sha") or ""),
+                    file_sha=str(cand.get("file_sha") or ""),
+                    proof_no=int(cand.get("proof_no") or 1),
+                    statement_id=str(cand.get("statement_id") or ""),
+                    # 签时刻（签文件里的 `at`）；老签 / 夹具没有这一格 ⇒ 退到提交时刻，
+                    # 但两格在记号里分开写，读的人不会把"提交"读成"签发"。
+                    at=str(cand.get("at") or stamp), submitted_at=stamp)
+            except ValueError as exc:  # 稿号为空已在上面挡掉；这里只兜底
+                out["still_unsubmitted"].append(_still(cand, "bad_token", str(exc)))
+                continue
+            pending.append((cand, token))
+
+        if not pending:
+            out["why"] = (
+                "没有「已拿签、尚未提交」的稿 ⇒ 这一趟不写 artifacts"
+                if not out["still_unsubmitted"] else
+                "有稿文件，但这一趟没有一份可提交 ⇒ 逐条理由见 still_unsubmitted")
+            return out
+
+        # ---- 写：一个事务、读-判-写（`artifacts` 是 append-only）-----------------
+        fresh: list[str] = []
+        write_error = ""
+        try:
+            with self.store.tx("tasks", actor="F", note="f.step:auto_submit") as tx:
+                cur = tx.find("tasks", task_id=task_id)
+                if cur is None:
+                    write_error = f"事务里找不到 {task_id!r} 那一行"
+                else:
+                    # 锁内重算（并发下另一个收工可能刚写过；范围仍是所有 F 的行）。
+                    existing: dict[str, dict[str, Any]] = {}
+                    for one in tx.rows("tasks"):
+                        if str(one.get("role") or "") != "F":
+                            continue
+                        got, problems = _DL.submissions_of(
+                            one.get("artifacts") or ())
+                        out["problems"] += problems
+                        for mid, rec in got.items():
+                            existing.setdefault(mid, rec)
+                    fresh = [
+                        token for _cand, token in pending
+                        if str((_DL.parse_submission(token) or {}).get(
+                            "manuscript_id") or "") not in existing]
+                    if fresh:
+                        # 合并而不是覆盖：既有项一个不动（`S.sorted_unique` 只去重排序）。
+                        cur["artifacts"] = S.sorted_unique(
+                            list(cur.get("artifacts") or ()) + fresh)
+                        tx.upsert("tasks", cur, note="f.step:auto_submit")
+        except Exception as exc:  # noqa: BLE001 —— 写不进去必须如实说
+            write_error = f"{type(exc).__name__}: {exc}"
+        if write_error:
+            out["checked"] = False
+            out["why"] = f"自动提交没写成（{write_error}）⇒ 这一趟一份都没提交"
+            for cand, _token in pending:
+                out["still_unsubmitted"].append(
+                    _still(cand, "write_failed", out["why"]))
+            return out
+        fresh_set = set(fresh)
+        for token in fresh:
+            rec = dict(_DL.parse_submission(token) or {})
+            out["auto_submitted"].append({
+                "manuscript_id": str(rec.get("manuscript_id") or ""),
+                "manuscript": str(rec.get("path") or ""),
+                "proof_no": int(rec.get("proof_no") or 0) or 1,
+                "body_sha": str(rec.get("body_sha") or ""),
+                "signed_sha": str(rec.get("body_sha") or ""),
+                "sign_sha": str(rec.get("sign_sha") or ""),
+                "file_sha": str(rec.get("file_sha") or ""),
+                "at": str(rec.get("at") or ""),
+                "submitted_at": str(rec.get("submitted_at") or ""),
+                "token": token,
+            })
+        for cand, token in pending:
+            if token in fresh_set:
+                continue
+            out["still_unsubmitted"].append(_still(
+                cand, "already_submitted",
+                "写这一趟之前，同一稿号的提交记号已经被另一次收工写进 "
+                "`artifacts`（并发幂等）"))
+        out["auto_submitted_count"] = len(out["auto_submitted"])
+        out["why"] = (
+            f"这一趟自动提交 {out['auto_submitted_count']} 份拿签稿"
+            + (f"；另有 {len(out['still_unsubmitted'])} 份没提交"
+               "（逐条理由见 still_unsubmitted）"
+               if out["still_unsubmitted"] else ""))
         return out
 
     def step(self, plan_id: str, product: Any = None) -> dict:
@@ -124,7 +381,7 @@ class _Step:
                 "budget_reading": reading,
                 "reason": (
                     f"计划已是终结状态 {status!r} ⇒ 不再推进。"
-                    "**「不再推进」不是「推进了但没有进展」**：终态先到先得，"
+                    "「不再推进」不是「推进了但没有进展」：终态先到先得，"
                     "自动重入会把它当活计划重新拾起，于是终止条件形同虚设"
                 ),
             }, row)
@@ -163,7 +420,7 @@ class _Step:
                 "budget_reading": reading,
                 "reason": (
                     f"连续 {stall_after} 轮 outcome=no_change ⇒ 提前判 stalled。"
-                    "**不是失败，也不是成功**：当前最好的部分结果已写入 best_partial。"
+                    "不是失败，也不是成功：当前最好的部分结果已写入 best_partial。"
                     "（这个信号此前被生产出来却无人消费 —— 见 LESSONS 的 P4）"
                 ),
             }, row)
@@ -179,7 +436,7 @@ class _Step:
             row["best_partial"] = self._compose_best_partial(subgoals, rounds)
             detail = (
                 f"轮数已用尽（{rounds}/{budget.get('max_rounds')}）⇒ 停止并交出 best_partial。"
-                "**stalled 既不是失败也不是成功**：它表示'预算内没做出来'"
+                "stalled 既不是失败也不是成功：它表示'预算内没做出来'"
             )
             # 只有还有位子时才追加 history：`AttackPlan.validate` 要求
             # `len(history) <= max_rounds × 子目标数`（"有轮次没被预算约束"的守卫）。
@@ -281,7 +538,7 @@ class _Step:
                 deploy["detail"] = (
                     str(deploy.get("detail") or "")
                     + "；⚠️ 这一轮你通过 `attack.step(product=…)` 交了产物，"
-                    "但这条子目标不在 F 的权限面上（形式化归 L）⇒ **没有采用它**")
+                    "但这条子目标不在 F 的权限面上（形式化归 L）⇒ 没有采用它")
             else:
                 deploy = self._handed_product_round(
                     product, sg, plan=row, owner=str(sg.get("owner") or ""))
