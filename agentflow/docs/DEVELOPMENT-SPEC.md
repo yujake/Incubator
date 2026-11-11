@@ -59,12 +59,13 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 21 / info 49`（观测 2026-10-27，
-复跑 `python -B scripts/lint_rules.py`；`warning` / `info` 是当次读数，判据逐行拿它们对账。
+**linter 的当次三栏（日常档）**：`error 0 / warning 21 / info 49`（观测 2026-11-11，
+复跑 `python -B scripts/lint_rules.py`；与 2026-10-27 那次同值 —— 本批只改声明/教法与
+判据，未新增规则或 error 档；`warning` / `info` 是当次读数，判据逐行拿它们对账。
 `error` 那一格写的是发布门第 5 项的**要求值**、不是读数 —— 它按"必须为 0"强制，而并行施工期间
 同一棵树上的实测在 0–4 之间跳（那一刻是 4，全部落在 `readouts.py` / `cli.py` 与它们的判据文件的
-docstring 星号强调上，不在本批改动里）。**严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**，
-正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+docstring 星号强调上，不在本批改动里）。**严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**
+（2026-11-11 复跑仍是 `87 / 48`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
 ```powershell
 cd D:\Incubator\agentflow
