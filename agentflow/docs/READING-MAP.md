@@ -21,7 +21,7 @@
 > **2026-11-11 V 签侧退役 `proof_no`（本批记账）**：本批只动 V 签侧的四个写侧文件
 > （`vsigns.py` / `verifications.py` / `vreceipts.py` / `agent_v/core.py`）与一份新判据
 > （`tests/test_v_sign_no_proof_no.py`，a–d 四格）。文件数 291 → **294**、行数
-> 279,608 → **279,784**、`>800 行` 的 77 → **75**（按现盘重算；含并行 lane 的未提交文件）；
+> 279,608 → **279,785**、`>800 行` 的 77 → **75**（按现盘重算；含并行 lane 的未提交文件）；
 > 全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
 > **2026-11-11 补第 ④ 条证据（收录之后按行上 `manuscript_id` 找回那份已签的稿）**：279,531 → **279,608**
 > （净 +77：`agent_b/open_polish_copy.py` 297 → 374 —— 第 ④ 条证据、`_statement_manuscript_id`
