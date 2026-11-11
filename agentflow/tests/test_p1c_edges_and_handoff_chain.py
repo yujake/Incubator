@@ -113,6 +113,8 @@ def test_e_g_policy_routes_content_through_d_and_h_never_summons_g() -> None:
     assert "你能召唤的只有 A / D / E / F" not in g_text, "G 的 policy 还留着旧的可召唤面"
     # 丙 h：改完必须送回 H 复审
     assert "改完稿必须送回 H 复审" in g_text and "未复审不许交差" in g_text, g_text
+    # 业主 2026-11-11 交付口径：H 判完把判词给 G，H 不召唤 G
+    assert "H 判完把判词给你，它不召唤你" in g_text, g_text
     # H 侧：不许暗示"可以找 G"
     assert "请 G 修订" not in h_text, "H 的题面还在暗示它可以找 G"
     assert "不许召唤 G" in h_text, "H 的题面没写「不许召唤 G」"
