@@ -26,6 +26,7 @@ from ..agentspec import (
     _obj,
 )
 from .b_ingest_policy import INGEST_POLICY
+from .b_sign_policy import SIGN_SUBMIT_POLICY
 
 #: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
 ACTIONS: tuple[ActionSpec, ...] = (
@@ -507,19 +508,7 @@ SPEC = AgentSpec(
             # 它没有机器闸（没有哪一处代码能判"这段是不是照抄"），所以只能写在政策里，由 B 自己负责。
             "收录定理与证明时要改写成你能读懂的自然语言（完整句、步骤间用衔接词、难懂的一步展开），"
             "不要照抄；这一条没有机器闸，由你自己负责。改写过之后 V 那一签不算数，要再派 V 签一次。",
-            # 2026-11-04（业主裁定 A 甲，逐字）：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
-            # 只教可观察的走法（交正文 → 框架落下 b-proof 稿 → 派 V → 签到位 → 再入库），
-            # 不写 V 内部怎么连判（那是框架的事，不该由你推断）。
-            # 2026-11-10（T1 收口）：落稿不再是登记的副作用 —— 显式一步 `own.land_manuscript`。
-            # 这一段此前教的是「把正文交一次 register_statement，框架会把它落成 b-proof」，
-            # D1 之后那句话已经不成立（被拒的登记不再留下稿）。
-            "**改写之后先拿签，再入库**：用 `own.land_manuscript` 把这一版正文落成"
-            "`reports/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节；"
-            "只写文件、幂等 —— 同一份正文重放一个字节不动），然后派 V 审这一份手稿"
-            "（`framework_summon` 的 `V.verify_proof`，带 `statement_id` + `proof_manuscript`），"
-            "签到位后签块由收方秘书 `secretary:B` 落回稿里；最后用 `own.ingest_manuscript`"
-            "按 `target_stmt_id` + `cells=[\"proof_text\"]` 收录（第 3 位翻真、旧正文进 "
-            "`proof_history`）。",
+            *SIGN_SUBMIT_POLICY,
             # 2026-11-09（业主逐字）：「自动录入是 B 秘书的一个工具，需 B 秘书指定录入位置和录入格后，
             # 从稿中提取内容录入」。这是 T1 的唯一验收句 ⇒ 教法必须写清"谁指定什么、工具做什么"。
             "**收录是「你指定位置和格、工具按块回填」，不是工具替你决定录到哪一条**："

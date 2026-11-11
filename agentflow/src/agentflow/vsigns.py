@@ -2134,7 +2134,7 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
           artifact_path: str = "", ledger: str = "", statement_id: str = "",
           proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
           objections: Sequence[Mapping[str, Any]] = (), at: str = "",
-          by: str = "") -> dict[str, Any]:
+          by: str = "", store: Any = None) -> dict[str, Any]:
     """颁发一份签：`out/vsigns/<artifact_sha>.json` + `issued.json` + 信封（纯写这一半）。
 
     ## 2026-11-02：颁发与落签拆开（业主口径）
@@ -2171,11 +2171,24 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     理由串说清哪一格不同 —— 覆盖会把"先签了后来又不认"这段历史抹掉。
 
     返回键：`written` / `idempotent` / `conflict` / `path` / `archive_error` /
-    `archive_count` / `reason` / `sign` / `envelope` / `code` / `refused_below_need`。
+    `archive_count` / `reason` / `sign` / `envelope` / `code` / `refused_below_need` /
+    `submission`。
+
+    ## `store`：签成功那一刻顺手把稿置为「已提交」（2026-11-11 甲）
+
+    业主逐字：「签是事件，收工是轮询；轮询会漏掉签晚于收工」。传了 `store` 时，
+    签文件写成（或本来就在）之后调 `manuscriptsubmission.mark_sign_submitted`，
+    由它复用 `agent_f/submission.py` 的 `mss:` 记号写进产出方那一行 `tasks.artifacts`
+    （幂等：已有该稿号的记号就不重复写）。`store=None`（直调 / 旧调用点）⇒
+    `submission` 那一格是 `checked=False` 的读数，不是「已提交」。
     """
     out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
                            "path": "", "archive_error": "", "archive_count": 0,
                            "reason": "", "sign": {}, "envelope": {}, "code": "",
+                           #: 签触发提交那一笔的读数（三态；`store=None` 时是没查成）。
+                           "submission": {"checked": False, "written": False,
+                                          "already": False, "via": "",
+                                          "why": "调用方没给 store ⇒ 签触发提交这一格没查"},
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
                            "refused_below_need": False}
@@ -2291,6 +2304,23 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out["archive_error"] = str(got.get("error") or "归档没写成")
         out["reason"] = (f"{out['reason']}；但归档没更新：{out['archive_error']}"
                          "（签文件是证据，已在盘上；归档可由 rebuild 补）")
+    # ---- 签触发提交（2026-11-11 甲）：签文件已经在盘上 ⇒ 让产出方那一行知道 ----
+    #
+    # 位置在归档之后：签是既成事实；提交记号写不成只落读数，不许把这一签带走
+    # （「签了但没提交」与「没签」必须分得开）。
+    if store is not None and hasattr(store, "rows") and hasattr(store, "tx"):
+        try:
+            from . import manuscriptsubmission as _MS
+
+            out["submission"] = _MS.mark_sign_submitted(
+                store=store, root=root, artifact_sha=key,
+                artifact_path=str(doc.get("artifact_path") or ""),
+                stamp=str(doc.get("at") or ""))
+        except Exception as exc:  # noqa: BLE001 —— 提交读数坏了不许把签带走
+            out["submission"] = {
+                "checked": False, "written": False, "already": False,
+                "via": "", "why": (f"签触发提交没跑成（{type(exc).__name__}: {exc}）"
+                                   " ⇒ 这一份这次没置为已提交（不是「没签」）")}
     return out
 
 

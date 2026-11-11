@@ -7666,6 +7666,96 @@ class AgentLoop:
                 "（读数，不拦收工 —— 这一趟的结论可能不含它们的产出）"
                 + ("（注：这个读数是重算过的 —— 读数期间台账又变了）" if got.get("retried") else ""))
 
+    def _v_wait_gate_reading(self) -> dict[str, Any]:
+        """收工门（甲，2026-11-11）：送审之后有没有起 `wait_for=V` 的计时器等结论。
+
+        业主逐字：「送审之后必须用 `clock.timer_start(wait_for=<V 的名册名/编号>,
+        reason=...)` 等 V 的反馈，不许送完就收工、也不许"过一会儿再看"」。
+
+        ## 判据只有一条
+
+        这一趟派过 V（`tasks` 里 `role=V` 且 `parent_task_id` = 我的台账号）⇒ 必须有一条
+        我名下的计时器，`wait_for_resolved` 指着最近那一个 V 的 task 编号。指着更早的
+        那一次不算：送审之后又送了一版，等的是旧那一版的结论。
+
+        ## 三态
+
+        - 没派过 V ⇒ `applicable=False`（这道闸没有对象，不落噪声）；
+        - 派过且等过 ⇒ 放行（`complete=True`，`why` 空）；
+        - 派过但没等 ⇒ `complete=False` + 拒信（点名 V 的编号与处置路径）；
+        - 台账 / 时钟读不成 ⇒ `checked=False` + `complete=False`（fail-closed：
+          "有没有等"不知道的时候不许把它读成"等了"）。
+
+        返回 `{applicable, checked, complete, v_children, v_wait_timers, v_wait_for,
+        why, reason}`。
+        """
+        out: dict[str, Any] = {
+            "applicable": False, "checked": True, "complete": True,
+            "v_children": [], "v_wait_timers": [], "v_wait_for": "",
+            "why": "", "reason": "",
+        }
+        if str(self.role) not in ("F", "E", "B"):
+            out["reason"] = "这一角色不产出手稿 ⇒ 送审等签这一格没有对象"
+            return out
+        mine = str(self.my_task_id or "")
+        if self.store is None or not mine:
+            missing = "没有 store" if self.store is None else "台账号是空的"
+            out.update(applicable=True, checked=False, complete=False,
+                       reason=missing,
+                       why=(f"还没收工：送审等签这一格读不成 —— 这一趟{missing} ⇒ "
+                            "不知道有没有派过 V、也不知道有没有起过等它的计时器 ⇒ "
+                            "按『没查成』挡（不是『没送审』）"))
+            return out
+        try:
+            tasks = [dict(r) for r in self.store.rows("tasks")]
+        except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"没送审"
+            out.update(applicable=True, checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：`tasks` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                            "送审等签这一格没查成，按『没查成』挡"))
+            return out
+        vkids = [r for r in tasks
+                 if str(r.get("role") or "") == "V"
+                 and str(r.get("parent_task_id") or "") == mine]
+        out["v_children"] = [str(r.get("task_id") or "") for r in vkids]
+        if not vkids:
+            out["reason"] = "这一趟没有派 V 审过稿 ⇒ 这道闸没有对象"
+            return out
+        vkids.sort(key=lambda r: (str(r.get("started_at") or ""),
+                                  str(r.get("ended_at") or "")))
+        latest = vkids[-1]
+        vtid = str(latest.get("task_id") or "")
+        out.update(applicable=True, v_wait_for=f"task:{vtid}")
+        root = getattr(self.store, "root", None) or self.workspace_root
+        try:
+            from . import clock as CLK
+
+            timers = [t for t in CLK.timers(root)
+                      if str(getattr(t, "task_id", "")) == mine]
+        except Exception as exc:  # noqa: BLE001 —— 时钟读不成同样是"没查成"
+            out.update(checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：`out/clock/` 读不出来（{type(exc).__name__}: "
+                            f"{exc}）⇒ 送审等签这一格没查成，按『没查成』挡"))
+            return out
+        hits = [t for t in timers
+                if str(getattr(t, "wait_for_resolved", "")) == f"task:{vtid}"]
+        out["v_wait_timers"] = [str(getattr(t, "timer_id", "")) for t in hits]
+        if hits:
+            out["reason"] = (f"派了 V（{vtid}）且起过计时器等它"
+                             f"（{'、'.join(out['v_wait_timers'])}）")
+            return out
+        out["complete"] = False
+        out["reason"] = f"派了 V（{vtid}）但没起过等它的计时器"
+        out["why"] = (
+            f"还没收工：你派了 V 审这一份稿（{vtid or '（编号没读到）'}），但这一趟"
+            "**没有起过等它的计时器**。送审之后不许直接收工，也不许「过一会儿再看」："
+            "用 `clock.timer_start(wait_for=<V 的名册名或它的编号>, reason=<等它的什么结论>)` "
+            "把这一趟挂上去，等 V 的结论回来再收工 —— 判「成立」那一刻这一份稿就已经"
+            "置为已提交（`mss:` 记号，签触发），你不需要再手动提交一次；"
+            "判「有毛病」就按缺陷改稿重送、重挂计时器。")
+        return out
+
     def _final_gate_reading(self, run: "AgentLoop.LoopRun | None" = None
                             ) -> dict[str, Any]:
         """收工前的结构完整性闸：M 名下整棵树是不是已经全部销号（D-68，三态）。
@@ -7720,6 +7810,18 @@ class AgentLoop:
                          "orphans": {}, "orphan_count": 0, "reason": ""},
             "programs_ok": True,
         }
+        # ---- 送审等签（甲，2026-11-11）：F/E/B 派过 V 就必须起过 wait_for=V 的计时器 ----
+        #
+        # 位置在"是不是主控"那一条之前：非 M 一律 `applicable=False` 返回，若把这道闸
+        # 放在后面，它永远走不到（这正是它要补的那个空档）。
+        if str(self.role) in ("F", "E", "B"):
+            wait_gate = self._v_wait_gate_reading()
+            if wait_gate.get("applicable"):
+                reading.update(wait_gate)
+                if not reading.get("complete"):
+                    if run is not None:
+                        run.notes.append(str(reading.get("why") or ""))
+                    return reading
         if str(self.role) != S.CONDUCTOR_ROLE:
             reading["reason"] = "不是主控那一趟 ⇒ 名下没有整棵树可销（这道闸对它没有对象）"
             return reading

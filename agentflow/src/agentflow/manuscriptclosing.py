@@ -236,7 +236,9 @@ def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
                 file_sha=str(cand.get("file_sha") or ""),
                 proof_no=int(cand.get("proof_no") or 1),
                 statement_id=str(cand.get("statement_id") or ""),
-                at=str(cand.get("at") or stamp), submitted_at=stamp)
+                at=str(cand.get("at") or stamp), submitted_at=stamp,
+                # 收工这一条路（E）：签触发那一条写 `sign_issued`（2026-11-11 甲）。
+                via=VIA_CLOSING)
         except ValueError as exc:
             out["still_unsubmitted"].append(_still(cand, "bad_token", str(exc)))
             continue

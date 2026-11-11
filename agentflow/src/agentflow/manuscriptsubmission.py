@@ -53,9 +53,14 @@ SUBMISSION_PREFIX = "mss:"
 TERMINAL_TASK_STATUSES: tuple[str, ...] = tuple(
     s for s in S.TASK_STATUSES if s not in ("pending", "running", "block"))
 
-#: `via` 的两档（统一读口的三条读数之一）：F/E 走收工自动提交，B 走收录。
+#: `via` 的三档（统一读口的三条读数之一）：F/E 收工、B 收录、V 签发那一刻。
+#:
+#: 2026-11-11（甲）：签是事件、收工是轮询 —— 轮询会漏掉「签晚于收工」那一次，
+#: 所以签成功那一刻框架也走 `mss:` 这条路把稿置为已提交（:func:`mark_sign_submitted`）。
+#: 两条路写同一个记号格式，只差 `via=` 这一格，读的人分得清是谁置的。
 VIA_CLOSING = "closing_auto_submit"
 VIA_INGEST = "ingested_to_ledger"
+VIA_SIGN = "sign_issued"
 
 UNKNOWN = "unknown"
 
@@ -258,7 +263,7 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
                 path.read_bytes()).hexdigest(),
             proof_no=int(sign_rec.get("proof_no") or prod.get("proof_no") or 1),
             statement_id=stmt_id, at=str(sign.get("at") or ""),
-            submitted_at=str(stamp or ""))
+            submitted_at=str(stamp or ""), via=VIA_INGEST)
     except (ValueError, OSError) as exc:
         result["why"] = f"提交记号拼不出来（{type(exc).__name__}: {exc}）"
         return out
@@ -285,6 +290,159 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
         return out
     result.update(checked=True, written=True, token=token,
                   why=f"收录成功 ⇒ 稿 {mid} 置为已提交（via={VIA_INGEST}）")
+    return out
+
+
+def _producer_row(*, store: Any, role: str, task_id: str = "") -> tuple[dict[str, Any] | None,
+                                                                      str]:
+    """签触发提交要写的那一行：先按召唤链找，再退到该角色最近的一行。
+
+    与 :func:`_task_row_for` 的两点不同（都是这一条路必须的）：
+
+    1. 沿 `parent_task_id` 往上找：签那一刻的召唤是 V，而稿是它的父（F/E/B）产的；
+       收方秘书那条链让 V 的 parent 就是送审的产出方（真机：`t-000017` 的 parent 是
+       `t-000003`/F）；
+    2. 允许写到终态行：签可能晚于收工（真机就是 21:21 收工、21:37 才签）——
+       这一条路存在的理由就是补上那个次序，所以终态不是拒绝理由。`tasks.artifacts`
+       是 append-only，晚到的提交记号不改变那一行已有的任何一格。
+    """
+    tasks, why = _read_tasks(store)
+    if why:
+        return None, why
+    by_id = {str(r.get("task_id") or ""): r for r in tasks}
+    cur = str(task_id or "")
+    seen: set[str] = set()
+    while cur and cur not in seen:
+        seen.add(cur)
+        row = by_id.get(cur)
+        if row is None:
+            break
+        if str(row.get("role") or "") == str(role):
+            return dict(row), ""
+        cur = str(row.get("parent_task_id") or "")
+    mine = [dict(r) for r in tasks if str(r.get("role") or "") == str(role)]
+    if not mine:
+        return None, f"`tasks` 里没有 {role} 的行 ⇒ 签触发提交没有可写的台账行"
+    mine.sort(key=lambda r: (str(r.get("ended_at") or ""),
+                             str(r.get("started_at") or "")))
+    return mine[-1], ""
+
+
+def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
+                        artifact_path: str = "", task_id: str = "",
+                        stamp: str = "") -> dict[str, Any]:
+    """V 签发成功那一刻：把这一份稿在产出方那一行置为已提交（`via=sign_issued`）。
+
+    为什么要这一条（2026-11-11 甲，业主逐字）：「签是事件，收工是轮询；轮询会漏掉
+    "签晚于收工"这种病态」。真机 `dct-min5r` 的次序就是 F 21:21 收工、V 21:37 才签
+    ⇒ 收工那一趟扫盘时还没签（`auto_submitted=[]`、`auto_submitted_count=null`），
+    稿从此停在「已签、未提交」。这条路把「签发成功」本身当成提交事件。
+
+    复用：记号格式与解析全部来自 `agent_f/submission.py`（本模块只转发），
+    不新造第二套字符串；幂等键与收工那一条相同（稿号，与版本无关）。
+
+    三态：`checked=False` = 这一格没查成（签读不出 / 台账读不出），不是「没签」；
+    `written=False, already=True` = 之前已经有一条记号（签触发 + 收工各一次只剩一条）；
+    `written=False, checked=True` + `why` = 查过了，这一份不该提交（族不对 / 签不住 /
+    签后正文又变了 / 没有可写的行）。
+
+    返回键：`checked` / `written` / `already` / `manuscript_id` / `producer_role` /
+    `task_id` / `token` / `via` / `why`。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "written": False, "already": False,
+        "manuscript_id": "", "producer_role": "", "task_id": "",
+        "token": "", "via": VIA_SIGN, "why": "",
+    }
+    sha = str(artifact_sha or "").strip().lower()
+    sign = _sign_reading(root, sha)
+    if not sign.get("checked"):
+        out["why"] = (f"这一签没查成（{sign.get('why') or '签不在盘上'}）⇒ "
+                      "不写提交记号（不是「没签」）")
+        return out
+    if not sign.get("signed"):
+        out["why"] = (f"签这一格不是可复算的「成立」（{sign.get('why') or '?'}）⇒ "
+                      "不写提交记号：签不住就不算提交")
+        return out
+    doc = dict(sign.get("sign") or {})
+    rel = str(artifact_path or doc.get("artifact_path") or "").strip().replace("\\", "/")
+    prod = producer_of(rel)
+    role = str(prod.get("producer_role") or UNKNOWN)
+    mid = str(prod.get("manuscript_id") or "")
+    out.update(producer_role=role, manuscript_id=mid)
+    if role not in ("F", "E"):
+        out["checked"] = True
+        out["why"] = (f"`{rel or '（没有稿路径）'}` 的产出方是 {role} ⇒ "
+                      "签触发提交只认 F / E 的稿（B 的稿「提交」= 收录进台账，"
+                      "走 `mark_ingested` 那条 `via=ingested_to_ledger`）")
+        return out
+    path = Path(str(root)) / rel
+    try:
+        blob = path.read_bytes()
+        text = blob.decode("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        out["why"] = (f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                      "提交记号写不了（没查成）")
+        return out
+    body_sha = _proof_sha(text)
+    if body_sha != sha:
+        out["checked"] = True
+        out["why"] = (f"这一份签的是 `{sha}`，盘上现行正文是 `{body_sha}` ⇒ "
+                      "签后正文又变了，不提交（按只读/冻结纪律这不该发生）")
+        return out
+    tasks, tasks_why = _read_tasks(store)
+    if tasks_why:
+        out["why"] = tasks_why
+        return out
+    submitted, _owners, _bad = _task_tokens(
+        [r for r in tasks if str(r.get("role") or "") == role])
+    if mid in submitted:
+        out.update(checked=True, already=True, why=(
+            f"`tasks.artifacts` 里已经有稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"
+            f"（原有 via={submitted[mid].get('via') or '（老记号没这一格）'}）"))
+        return out
+    if not stamp:
+        stamp = S.now_iso()
+    row, row_why = _producer_row(store=store, role=role, task_id=task_id)
+    if row is None:
+        out.update(checked=True, why=f"没有可写的 task 行：{row_why}")
+        return out
+    out["task_id"] = str(row.get("task_id") or "")
+    try:
+        token = submission_token(
+            manuscript_id=mid, path=rel, body_sha=sha,
+            sign_sha=str(sign.get("sign_sha") or ""),
+            file_sha=hashlib.sha256(blob).hexdigest(),
+            statement_id=str(doc.get("statement_id") or ""),
+            at=str(doc.get("at") or ""), submitted_at=str(stamp), via=VIA_SIGN)
+    except (ValueError, OSError) as exc:
+        out["why"] = f"提交记号拼不出来（{type(exc).__name__}: {exc}）"
+        return out
+    try:
+        with store.tx("tasks", actor=str(role), note="sign:auto_submit") as tx:
+            cur = tx.find("tasks", task_id=out["task_id"])
+            if cur is None:
+                out["checked"] = True
+                out["why"] = f"事务里找不到 {out['task_id']!r} 那一行 ⇒ 提交记号没写"
+                return out
+            existing: set[str] = set()
+            for one in tx.rows("tasks"):
+                if str(one.get("role") or "") != role:
+                    continue
+                got, _bad = submissions_of(one.get("artifacts") or ())
+                existing.update(str(x) for x in got)
+            if mid in existing:
+                out.update(checked=True, already=True,
+                           why=f"并发下另一笔已经写了 {mid} 的提交记号")
+                return out
+            cur["artifacts"] = S.sorted_unique(
+                list(cur.get("artifacts") or ()) + [token])
+            tx.upsert("tasks", cur, note="sign:auto_submit")
+    except Exception as exc:  # noqa: BLE001 —— 写不进去必须如实说
+        out["why"] = f"提交记号写不进 `tasks`（{type(exc).__name__}: {exc}）"
+        return out
+    out.update(checked=True, written=True, token=token, why=(
+        f"签发成功 ⇒ 稿 {mid} 置为已提交（via={VIA_SIGN}）"))
     return out
 
 
@@ -331,7 +489,9 @@ def submission_reading(store: Any, root: Any, *, manuscript: Any = "",
         "sign_sha": "", "at": "", "why": "没有正文 sha ⇒ 签查不了"}
     role = str(prod.get("producer_role") or UNKNOWN)
     if rec:
-        via = VIA_INGEST if role == "B" else VIA_CLOSING
+        # 记号自己带着 `via`（2026-11-11 起三条路各写各的）；老记号没有这一格 ⇒
+        # 按产出方族回落（B ⇒ 收录，其余 ⇒ 收工扫到的），不把它读成「没提交」。
+        via = str(rec.get("via") or (VIA_INGEST if role == "B" else VIA_CLOSING))
         state = "submitted"
     else:
         via, state = "", "unsubmitted"

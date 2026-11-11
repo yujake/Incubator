@@ -98,7 +98,10 @@ def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
                 statement_id=str(cand.get("statement_id") or ""),
                 # 签时刻（签文件里的 `at`）；老签 / 夹具没有这一格 ⇒ 退到提交时刻，
                 # 但两格在记号里分开写，读的人不会把"提交"读成"签发"。
-                at=str(cand.get("at") or stamp), submitted_at=stamp)
+                at=str(cand.get("at") or stamp), submitted_at=stamp,
+                # 收工这一条路写 `via=closing_auto_submit`：签触发那一条写
+                # `sign_issued`（2026-11-11 甲），读侧靠这一格分清谁置的。
+                via=_DL.VIA_CLOSING)
         except ValueError as exc:  # 稿号为空已在上面挡掉；这里只兜底
             out["still_unsubmitted"].append(_still(cand, "bad_token", str(exc)))
             continue

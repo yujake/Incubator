@@ -78,6 +78,7 @@ from typing import Any, Mapping, Sequence
 
 from .submission import (  # noqa: F401 —— 回引：收工自动提交的读那一半（2026-11-11 拆出）
     FAMILY_F, SUBMISSION_FIELDS, SUBMISSION_PREFIX, SUBMISSION_SEP,
+    VIA_CLOSING, VIA_SIGN,
     parse_submission, submission_candidates, submission_token, submissions_of,
 )
 

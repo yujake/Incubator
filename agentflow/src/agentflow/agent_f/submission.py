@@ -52,8 +52,16 @@ SUBMISSION_SEP = "#"
 #: 由这一侧写出来 —— 读能力不删，新写不产生。
 SUBMISSION_FIELDS: tuple[str, ...] = (
     "path", "body_sha", "sign_sha", "file_sha",
-    "statement_id", "at", "submitted_at",
+    "statement_id", "at", "submitted_at", "via",
 )
+
+#: `via` 的取值（2026-11-11 甲：签触发 / 收工触发必须分得开）。
+#:
+#: 同一份记号格式（`mss:`），只多一格 `via=` —— 读侧（`manuscriptsubmission.
+#: submission_reading`）按它回答「这一份是签那一刻置的，还是收工扫到的」。
+#: 老记号没有这一格 ⇒ 读侧按产出方族回落（F/E ⇒ 收工、B ⇒ 收录），不是「没提交」。
+VIA_SIGN = "sign_issued"
+VIA_CLOSING = "closing_auto_submit"
 
 
 def _proof_no_of(raw: Any) -> int:
@@ -71,7 +79,7 @@ def _proof_no_of(raw: Any) -> int:
 def submission_token(*, manuscript_id: Any, path: Any = "", body_sha: Any = "",
                      sign_sha: Any = "", file_sha: Any = "", proof_no: Any = 1,
                      statement_id: Any = "", at: Any = "",
-                     submitted_at: Any = "") -> str:
+                     submitted_at: Any = "", via: Any = "") -> str:
     """一份「已提交」记号（`tasks.artifacts` 里的一项）。
 
     为什么要一格带四样东西（稿号 + 正文 sha + 签 sha + 文件字节 sha + 时刻）：
@@ -98,6 +106,9 @@ def submission_token(*, manuscript_id: Any, path: Any = "", body_sha: Any = "",
         "statement_id": str(statement_id or "").strip(),
         "at": str(at or "").strip(),
         "submitted_at": str(submitted_at or "").strip(),
+        # `via`：这一枚记号是谁置的（`sign_issued` / `closing_auto_submit` /
+        # `ingested_to_ledger`）。空串 = 老调用点没给，按产出方族回落。
+        "via": str(via or "").strip(),
     }
     parts = [f"{SUBMISSION_PREFIX}{mid}"]
     for key in SUBMISSION_FIELDS:
@@ -118,7 +129,7 @@ def parse_submission(token: Any) -> dict[str, Any] | None:
     out: dict[str, Any] = {
         "manuscript_id": mid, "token": text, "path": "", "body_sha": "",
         "sign_sha": "", "file_sha": "", "proof_no": 0, "statement_id": "",
-        "at": "", "submitted_at": "",
+        "at": "", "submitted_at": "", "via": "",
     }
     for chunk in chunks[1:]:
         key, sep, value = chunk.partition("=")

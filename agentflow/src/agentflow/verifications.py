@@ -3719,7 +3719,8 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
                              statement_id: str, proof_no: int, sha: str,
                              holds: Mapping[str, Any],
                              append_ledger: bool, by: str = "",
-                             manuscript: str = "") -> dict[str, Any]:
+                             manuscript: str = "",
+                             submit: bool = True) -> dict[str, Any]:
     """翻位之后把签落成侧文件（「永不抛」：这一格的三态由调用方读）。
 
     为什么与落签拆成两步（2026-11-02 业主口径）：V 只颁发（`vsigns.issue`），
@@ -3736,6 +3737,7 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
                            "path": "", "archive_error": "", "reason": "",
                            "sign": {}, "payload_problem": "", "envelope": {},
                            "land": {}, "manuscript_write": {},
+                           "submission": {},
                            "refused_below_need": False}
     from . import vsigns as _VS
 
@@ -3775,13 +3777,20 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
             passes=list(payload.get("passes") or []),
             objections=list(payload.get("objections") or []),
             at=str(payload.get("at") or ""),
-            by=who)
+            by=who,
+            # 签成功那一刻顺手把稿置为已提交（2026-11-11 甲，复用 `mss:` 那条路）：
+            # 只在真的有 store 时接线；直调 / 夹具传的是根路径 ⇒ 这一格如实报没查。
+            # `submit=False` 是"调用方自己在事务外补这一笔"那一档（见 `sign_statement`）：
+            # 本函数会在 `store.tx("statements")` 里被调，而提交记号要写 `tasks` ——
+            # 事务里再开一笔会撞同一把 `counters` 锁（实测挂死）。
+            store=(store if (submit and hasattr(store, "rows")
+                             and hasattr(store, "tx")) else None))
     except Exception as exc:  # noqa: BLE001 —— 写文件那一笔抛了也要如实报
         out["reason"] = f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"
         return out
     out.update({k: got.get(k) for k in ("written", "idempotent", "conflict", "path",
                                         "archive_error", "reason", "sign", "envelope",
-                                        "code", "refused_below_need")})
+                                        "code", "refused_below_need", "submission")})
     if got.get("written") or got.get("idempotent"):
         try:
             landed = _VS.land(
@@ -4173,7 +4182,10 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                 sha=str(row.get("proof_sha256") or ""), holds=holds,
                 append_ledger=bool(append_ledger), by=str(by or ""),
                 # 2026-11-04（甲）：载体随台账行来（`record_verification(manuscript=…)`）。
-                manuscript=str(row.get("manuscript") or ""))
+                manuscript=str(row.get("manuscript") or ""),
+                # 提交记号写 `tasks`，不能在 `store.tx("statements")` 里开第二笔
+                # （会撞同一把 `counters` 锁）；这一笔由下面事务外的收口补上。
+                submit=False)
             out["vsign"] = dict(sign_out)
             if not (sign_out.get("written") or sign_out.get("idempotent")):
                 if sign_out.get("refused_below_need"):
@@ -4240,6 +4252,30 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
             re_sign_required=(not rolled
                               and append_state not in ("appended", "appended_by_caller")),
             reason=reason)
+    # ---- 甲（2026-11-11）：签触发提交在事务外补（事务里写 `tasks` 会撞同一把锁）----
+    #
+    # 只在这一签真的颁发了（written / idempotent）时做；写不成只落读数，
+    # 不许把"签了"这件事带走（「签了但没提交」与「没签」必须分得开）。
+    _vsign_done = dict(out.get("vsign") or {})
+    if _vsign_done.get("written") or _vsign_done.get("idempotent"):
+        try:
+            from . import manuscriptsubmission as _MS
+
+            _sign_doc = dict(_vsign_done.get("sign") or {})
+            _sub = _MS.mark_sign_submitted(
+                store=store, root=getattr(store, "root", "") or ".",
+                artifact_sha=str(_sign_doc.get("artifact_sha")
+                                 or row.get("proof_sha256") or ""),
+                artifact_path=str(_sign_doc.get("artifact_path")
+                                  or row.get("manuscript") or ""))
+            if isinstance(out.get("vsign"), dict):
+                out["vsign"]["submission"] = dict(_sub)
+        except Exception as exc:  # noqa: BLE001 —— 提交读数坏了不许把签带走
+            if isinstance(out.get("vsign"), dict):
+                out["vsign"]["submission"] = {
+                    "checked": False, "written": False, "already": False,
+                    "via": "", "why": (f"签触发提交没跑成（{type(exc).__name__}: "
+                                       f"{exc}）⇒ 这一份这次没置为已提交（不是「没签」）")}
     # ---- 缺陷 B（2026-11-05）：签发落成之后，给 B 开一条「必须收录」义务 ----
     #
     # 位置在事务之外（理由见 `_registration_after_vsign`：事务里开板项会撞锁）。
