@@ -1285,7 +1285,7 @@ C 的产出有两类，状态语义完全不同。
 | G-3 | 写 `documents` 行并渲染 markdown | `agent_g.build_document` |
 | G-4 | 渲染（不写库、不落盘） | `agent_g.render` |
 | G-5 | 按库里当前数据重画 markdown（**不改数据行，只改文件**） | `agent_g.refresh_markdown` |
-| G-6 | 按 H 的发现修订稿件 | `agent_g.revise`；`review_rounds+1`、`status=revised` |
+| G-6 | 按 H 的发现修订稿件 | `agent_g.revise`；改稿开启/推进这一轮（`status=revised`）；「复审收过几次」看 `review_rounds` |
 | G-7 | **按体例写正文**（2026-10-18 起；2026-10-24 按 D-40 改口径）：骨架顺序固定、第 3 节每个定理类环境各带分步 `proof`（环境数量由 `statements` 里 kind 是定理类的那几条定：**一条命题对一个环境，不凑数、不拆细**；**不写死下限**）、正文禁令六项、内部编号与计算证据只进附录 A | `specs/g.py::SPEC.brief.policy` 里 2026-10-18 与 2026-10-24 那几条；`papermapping` / `texaudit` 按台账与正文现算；`tests/test_agent_prompts.py` 的冻结摘要 |
 | G-8 | **写论文对应表三份**（2026-10-22 业主逐字「G加动作」）：`MAPPING.json` + `MAPPING.md` + 正文附录，先出表、再写正文。参数：`project`（必填，项目根）与 `rows`（必填，对应表的行，正文里每个定理类环境各占一行、多证明每条各占一行）；返回：那一次"写完再读"的读数（`state` / `md_state` / `appendix_state` / `problems`）；副作用：`write_local`（只写 `<项目根>/out/paper/` 下三份并把 `\input` 一行放进正文，不入库、不起子进程） | `agent_g/write_mapping.py`；工具 `doc.write_mapping`（内部只调 `papermapping.parse_rows` + `write_package`，写完再 `mapping_reading` 现读） |
 
