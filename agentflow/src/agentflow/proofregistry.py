@@ -74,6 +74,10 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from . import depsection as _DS
 from . import manuscriptform as _MF
 from . import verifications as _VR
+from .proofoutcomes import (  # 登记这一步的两段结局读数（2026-11-11 从本模块拆出）
+    REFUSED_GATE, REFUSED_PATH, REFUSED_READ, REFUSED_SHAPE, REFUSED_TEXT_CHANGED,
+    REFUSED_WRITE, form_gate_reading, preserved_reading,
+)
 from .proofrevisions import (  # 收工读数那一半（2026-11-10 拆出）
     entries_on_disk, proof_revisions, registration_note,
 )
@@ -85,13 +89,9 @@ KIND_MARK = "- 证据种类："
 REGISTERED_AT_MARK = "- 登记时间："
 VERSION_MARK = "- 版本："
 
-#: 受控码（写读两侧共用，不另起第二套词）。
-REFUSED_TEXT_CHANGED = "proposition_text_changed"
-REFUSED_GATE = "proposition_form_refused"
-REFUSED_PATH = "manuscript_path_unavailable"
-REFUSED_READ = "manuscript_unreadable"
-REFUSED_WRITE = "manuscript_write_failed"
-REFUSED_SHAPE = "manuscript_shape_refused"
+#: 受控码（写读两侧共用，不另起第二套词）：定义点 2026-11-11 搬到 `proofoutcomes.py`
+#: （与「跑闸 / 解释拒收」和「幂等保留」两段读数同一处）。这里从它回引同样的名字，
+#: 所以 `proofregistry.REFUSED_*` 这个公开面一个字没变。
 
 #: 「新命题 / 重写」两档（读数用；不参与任何判据分支的第三档）。
 MODE_REGISTERED = "registered"
@@ -556,42 +556,6 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
     return text
 
 
-def _form_gate_reading(
-    gate: Callable[..., Mapping[str, Any]], *, proposition: Any, kind: Any,
-    proof_text: Any, label: Any, entry: Mapping[str, Any],
-) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    """跑一次 F 秘书的形态闸 ⇒ `(闸读数, 拒收时的那几格)`；放行时第二格是 `None`。
-
-    闸自己抛了 = 没判成（fail-closed），不是"没问题"：这一格换成一条
-    `checked=False` 的拒收读数。为什么值得单独一格：`register_or_rewrite` 已经两百行，
-    这段"跑闸 / 解释拒收"是其中唯一不碰稿件字节的一段，搬成纯函数后
-    `register_or_rewrite` 只保留"调用它、拿到拒收就返回"。
-    """
-    try:
-        reading = dict(gate(statement_full=str(proposition or ""),
-                            kind=str(kind or ""), body=str(proof_text or ""),
-                            label=str(label or "")) or {})
-    except Exception as exc:  # noqa: BLE001 —— 闸自己炸了 = 没判成（fail-closed）
-        reading = {"checked": False, "well_formed": False, "submittable": False,
-                   "refused": REFUSED_GATE,
-                   "reason": f"形态闸抛了（{type(exc).__name__}: {exc}）⇒ 没判成",
-                   "problems": []}
-    if reading.get("submittable"):
-        return reading, None
-    problems = [str(x) for x in (reading.get("problems") or [])]
-    refusal = {
-        "checked": bool(reading.get("checked", False)),
-        "refused": REFUSED_GATE,
-        "problems": problems,
-        "why": ("命题形态闸没放行 ⇒ 这一条不登记、不落盘（手稿一个字节都没写）："
-                + str(reading.get("reason") or "形态不合规")
-                + ("；逐条缺什么：" + "；".join(problems[:4])
-                   if problems else "")),
-        "entry": dict(entry),
-    }
-    return reading, refusal
-
-
 def register_or_rewrite(
     root: Any, *, family: Any, label: str, proposition: str, proof_text: str,
     dependency_rows: Sequence[Mapping[str, Any]] = (),
@@ -687,22 +651,17 @@ def register_or_rewrite(
     # 真机上 D 的交付动作每写一份报告都会把同一批稿再递一遍（`write_report` 每次都跑），
     # 而"同一份正文"不该被记成第 N+1 版 —— 否则 `proof_no` 会被无意义的重复递交顶高，
     # V 台账也会被同一 sha 灌满。
-    if (mode == MODE_REWRITTEN and str(entry.get("fingerprint") or "") == new_fp
-            and proof_sha(proof_text) == str(entry.get("sha256") or "")):
-        out.update(ok=True, checked=True, mode=mode,
-                   proof_no=int(entry.get("proof_no") or 1),
-                   sha256=str(entry.get("sha256") or ""),
-                   deps_rows=[dict(r) for r in (dependency_rows or [])],
-                   written=False, preserved=True, entry=dict(entry),
-                   section_hashes=section_hashes(old_text), why="")
+    preserved = preserved_reading(
+        entry, mode=mode, rewritten=(mode == MODE_REWRITTEN), new_fp=new_fp,
+        proof_text=proof_text, old_text=old_text, dependency_rows=dependency_rows)
+    if preserved is not None:
+        out.update(preserved)
         return out
     # ---- 新命题：登记这一刻过 F 秘书的形态闸（只在这里跑；重写永不再跑） ----------
-    gate_reading: dict[str, Any] = {}
     if mode == MODE_REGISTERED and gate is not None:
-        gate_reading, gate_refusal = _form_gate_reading(
+        out["gate"], gate_refusal = form_gate_reading(
             gate, proposition=proposition, kind=kind, proof_text=proof_text,
             label=label, entry=entry)
-        out["gate"] = gate_reading
         if gate_refusal is not None:
             out.update(gate_refusal)
             return out

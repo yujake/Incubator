@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **291 个 `.py`、279,608 行**，**77 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **294 个 `.py`、279,784 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-11 甲/乙 两笔并入后按现盘重算（本批记账）**：279,436 → **279,531**（净 +95：
@@ -18,6 +18,11 @@
 > `vsigns.py` 的拿签稿表（`signed_table` / `signed_manuscripts`，复用颁发表、不新建账）；
 > `tools/fs_tools.py` 四个写口共用一道冻结闸。文件数 290 → **291**（两个新模块）、
 > `>800 行` 的 77 不变；全仓最大 `secretary.py` 14,206、`agent_loop.py` 14,189 都不变。
+> **2026-11-11 V 签侧退役 `proof_no`（本批记账）**：本批只动 V 签侧的四个写侧文件
+> （`vsigns.py` / `verifications.py` / `vreceipts.py` / `agent_v/core.py`）与一份新判据
+> （`tests/test_v_sign_no_proof_no.py`，a–d 四格）。文件数 291 → **294**、行数
+> 279,608 → **279,784**、`>800 行` 的 77 → **75**（按现盘重算；含并行 lane 的未提交文件）；
+> 全仓最大 `secretary.py` 14,206 / `agent_loop.py` 14,189 都不变。
 > **2026-11-11 补第 ④ 条证据（收录之后按行上 `manuscript_id` 找回那份已签的稿）**：279,531 → **279,608**
 > （净 +77：`agent_b/open_polish_copy.py` 297 → 374 —— 第 ④ 条证据、`_statement_manuscript_id`
 > 与两段解释；判据补在同一份 `tests/test_b_open_polish_copy.py`）。文件数 291、`>800 行` 的 77、
@@ -442,6 +447,7 @@
 | `manuscriptwrite.py` | **手稿落盘事务的三件零件**（2026-11-11 从 `manuscriptform.py` 拆出，体量软基线不抬）：`_atomic_write`（同目录临时文件 + `os.replace`，读侧要么看到旧文件、要么看到新文件）、`_refusal`（落盘事务受控拒绝的返回形状：`ok=False` + `refused` + `problem{kind, stage, why}`）、`_signed_version_reading`（目标名上签住的是不是另一份正文；读不出来时 `checked=False, blocked=True` —— 「没查成」不折成「没签」）。三件都只被 `manuscriptform.commit_manuscript` 调用；`manuscriptform` 回引它们，所以 `manuscriptform._atomic_write` 这个既有名字（`proofregistry` 也在用）照旧可读。判据 `tests/test_f_and_b_manuscripts_are_one_implementation.py` |
 | `proofregistry.py` | **手稿登记与重写的唯一入口**（业主 2026-11-07：「要让注册命题和写证明两件事解耦，不然无法做到只一遍又一遍修改证明」）：`register_or_rewrite` 决定"新命题登记一次 / 同一条命题只换 `## 证明`"（新命题过 F 秘书形态闸、`proof_no` 递增、正文 sha 重算、版本 append-only）；`parse_entry` 读稿头登记元信息（命题号 / 正文 sha / 命题指纹 / 证据种类 / 登记时间 / `- 版本：`）；`same_slot_reading` 是"这一笔是不是同一条命题的槽"的判据（命题号 → 计划+子目标 → 标签，且必须有登记元信息 —— 手写带 `- 标签：` 的头不算）；`entries_on_disk` / `proof_revisions` 是收工读数（2026-11-11 搬到 `proofrevisions.py`）。路径由 `manuscriptform.name_reading` 定，身份由本模块定，合起来是「一份命题只住一份稿」的全部实现。判据 `tests/test_proof_registration_is_decoupled.py` |
 | `proofrevisions.py` | **手稿登记条目的收工读数**（2026-11-11 从 `proofregistry.py` 拆出，体量软基线不抬；本模块不写盘）：`entries_on_disk`（扫 `reports/` 下两族的稿，逐份给 `parse_entry` 的登记条目）、`proof_revisions`（「登记几次 / 证明几版」：`registrations` / `proof_versions` / 逐条的 `versions` 与形态闸拒收数；读不出来 `checked=False` 且 `reason` 说「没查成」，不折成零）、`registration_note`（提示词里「登记新命题 / 重写证明」那一句的唯一出处）。写入口仍住 `proofregistry`，两处共用同一份 `parse_entry`（不重写第二套解析）；`proofregistry` 回引它们，既有名字照旧可读。判据 `tests/test_proof_registration_is_decoupled.py` |
+| `proofoutcomes.py` | **登记 / 重写两档的结局读数**（2026-11-11 从 `proofregistry.py` 拆出，体量软基线不抬；本模块不碰稿件字节、不写盘）：`form_gate_reading`（新命题登记前跑一次 F 秘书的形态闸：放行 / 受控拒 / 闸自己炸了 fail-closed —— 三态同一形状）/ `preserved_reading`（同一份正文再挂一次 ⇒ 一个字节不动、`preserved=True`）/ `REFUSED_*` 六个受控码也在这里定义。`proofregistry` 顶层回引它们（公开名与受控码字符串一个字没变）。判据 `tests/test_proof_registration_is_decoupled.py` |
 | `manuscriptfamily.py` | **手稿族 / 号 / 后缀的唯一判定表**（T2，2026-11-09，纯函数零 I/O）：`FAMILY_ORDER` 四族（`f-proof` / `b-proof` / `e-proof` / `e-num`）、每族的目录 / 号形 / 证明号后缀 / 要不要签 / 允许格 / 派生列 / `evidence_kind` / `kind` 缺省 / 出处收成一张表；`tier` 把"这是哪一族"读成 `family` / `legacy` / `bad_name` / `unrecognized` 四档（`-v2` 一类历史后缀只读成 `legacy`、`proof_no` 恒 0）。**2026-11-09 收编后**：`vsigns` 的名字解析与签载体、`manuscriptform` 的前缀、`depsection` 的族前缀、`exhaustionreport` 的两个前缀、`vreceipts` 的载体表、`closing` 与 `agent_v` 的拼名、B 登记口的族判定都从它派生，不再各写一份字面量。判据 `tests/test_manuscript_family_is_one_table.py` |
 | `manuscriptids.py` | **F 的稿号分配器**（p272，2026-11-10，业主裁定「F 的稿自己维护一套号源，不依赖命题号和计划号」）：`next_manuscript_id(root)` 从 `data/counters.json` 的 `manuscript` 号段取下一个号、在 `reports/f-proof-<号>.md` 上核占用（已存在 ⇒ 推进，绝不覆盖）、同一进程内串行、六位用尽受控抛 `ManuscriptIdError`。三个号各管一件事：稿号是**签的单位**（F 自己发）、计划号管去留、命题号 B 收录时现取。判据 `tests/test_f_manuscript_ids_are_its_own_source.py` |
 | `manuscriptintake.py` | **手稿的逐格提取**（T1 的提取侧，2026-11-09，纯函数零 I/O）：输入（稿正文 + 族 + 要填的格），输出逐格 `{outcome, source{section,lines,sha}, value, why}`；三态 `present` / `absent` / `unreadable` 与 D4 同一口径（缺节不拿别的节顶替）；`plan_cells` 是逐格冲突矩阵（`filled` / `unchanged` / `kept` / `refused` / `not_applicable`）外加 `diff`（请求了没填 / 填了没请求）与 `derived_write`。写台账与认签不在这一层（接线后归 `Secretary.extract_manuscript` / `own.ingest_manuscript`）。判据 `tests/test_manuscript_intake_extracts_by_cell.py` |

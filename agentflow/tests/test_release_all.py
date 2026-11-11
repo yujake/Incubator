@@ -3013,6 +3013,19 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "（登记几次 / 证明几版 / 每次 sha 与 proof_no / 被形态闸拒过几次）"
                          " / registration_note（提示词那一句）—— 纯读、不写盘；解析仍是 "
                          "`proofregistry.parse_entry` 那一份",
+    # 2026-11-11（体量软基线：不抬，只拆）：`proofregistry.py` 正好在 800 行线上，
+    # 而 `register_or_rewrite` 越过 200 行 —— 所以不往那份文件里加东西，把
+    # `register_or_rewrite` 里两段「不碰稿件字节、只决定这一笔怎么读」的逻辑搬出来：
+    # 跑一次形态闸并解释拒收（`form_gate_reading`）、幂等那一格的保留读数
+    # （`preserved_reading`），受控码 `REFUSED_*` 六格也在这里定义。
+    # 为什么仍是顶层模块：它被 `proofregistry` 顶层回引（注册侧的公开面一个字没变），
+    # 而调用它的只有登记那一条链；拆成角色包里的文件会让 F/B 两族各 import 一份。
+    "proofoutcomes.py": "登记 / 重写两档的结局读数（2026-11-11 从 `proofregistry.py` 拆出）："
+                         "form_gate_reading（新命题登记前的形态闸：放行 / 受控拒 / 闸自己"
+                         "炸了 fail-closed，三态同一形状）/ preserved_reading（同一份正文再挂"
+                         "一次 ⇒ 一个字节不动、preserved=True）/ REFUSED_* 六格受控码 —— "
+                         "不碰稿件字节、不写盘；`proofregistry` 回引它们，公开名与受控码"
+                         "字符串一个字没变",
     # 2026-11-08（块乙，业主逐字：「那条猜想只是参考意见，D不能直接把自己的猜想登记到
     # 命题台账，也不能命令E或F必须把它做出来，这只是研究方向参考」）：
     # D 派活文本的机械判据。为什么必须是顶层模块：它读的是 `sessions/*.jsonl` 的
