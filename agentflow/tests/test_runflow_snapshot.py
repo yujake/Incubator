@@ -15,8 +15,10 @@
 """
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
+import os
 import pathlib
 import shutil
 import sys
@@ -80,6 +82,86 @@ def _scrub(obj, replacements: dict[str, str]):
     return obj
 
 
+#: 这一次运行可能读到的进程外配置：单价与峰谷。`modelcost.price_for` 把环境变量
+#: 压在最上面（`AGENTFLOW_MODEL_PEAK` / 三档单价），而 `run_topic` 的 `price` 是在
+#: `_phase_1` 里现读环境算出来的（`runflow.py:894`）⇒ 同一份代码在"shell 里 export
+#: 过单价"的机器上会产出另一个 `run-manifest.json`。快照要钉的是行为，不是"这台机器
+#: 的 shell 里有什么"：这一段里把它们摘掉，跑完原样放回。
+_ENV_PRICE_NAMES = (
+    "AGENTFLOW_MODEL_PEAK",
+    "AGENTFLOW_MODEL_PRICE_IN_USD_PER_M",
+    "AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M",
+    "AGENTFLOW_MODEL_PRICE_IN_HIT_USD_PER_M",
+)
+
+
+class _ClockPin:
+    """把 `modelgw` 名字空间里的 `time.monotonic` 钉成 0.0，其余属性原样转发。
+
+    ## 为什么必须钉它（4 并发实测的读数）
+
+    `elapsed_sec` 是"这一次调用花了多少墙钟秒"：`ModelGateway` 用 `time.monotonic()`
+    现读两次（`modelgw.py:798/843/857`）、`ModelReply.to_dict()` 舍到毫秒
+    （`modelgw.py:694`），然后落进 `model-transcript.jsonl` 与 `run-manifest.json`
+    的 `calls[].reply.elapsed_sec`。它是机器速度的读数，不是行为：
+
+    - 单跑：恒为 0.0（探针 24 进程 × 8 轮里非并发时全是 0.0）；
+    - 4 个 chunk 并发：同一个进程可能恰好在两次读数之间被调度走一个 Windows 时钟
+      tick。本机 CPython 3.11.4 的 `time.monotonic()` 步长实测就是 0.0156 s
+      （20 万次连续取值，非零差值只有 0.016 这一种）⇒ `elapsed_sec` 在
+      0.0 / 0.015 / 0.016 之间摇，快照的 `files` 于是逐格不等。
+    - 读数（`temp/_repro_concurrent.py`，4 进程 × 80 轮）：3/4 个进程各红 1 次，
+      红的那个快照里 `elapsed_sec=[0.0, 0.015, 0.0]`、差异格恰好是
+      `ok/files/model-transcript.jsonl` 与 `ok/files/run-manifest.json`。
+
+    这不是快照过期、也不是行为变了（重生成逐格相同，因为重生成时单跑、读数为 0.0）。
+    处置与 `now=TS` 同一条纪律：把这类"这一次跑在什么机器/什么负载下"的读数钉死。
+
+    ## 为什么不 `monkeypatch.setattr(time, "monotonic", ...)`
+
+    那会改掉整个进程的 `time` 模块（`filelock` 的超时、同进程里其它用例都读它）。
+    这里只替换 `modelgw` 模块里的 `time` 名字，产品读时钟的落点只有
+    `ModelGateway.__init__` 的 `self._clock = clock or time.monotonic` 一处。
+    """
+
+    def __init__(self, real):
+        self._real = real
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+    def monotonic(self) -> float:
+        """墙钟读数恒为 0.0 ⇒ `elapsed_sec` 恒为 0.0（见类 docstring）。"""
+        return 0.0
+
+
+@contextlib.contextmanager
+def _pinned_provider_env():
+    """把那四个会改变计价的环境变量摘掉，跑完原样放回（见 `_ENV_PRICE_NAMES`）。"""
+    saved = {name: os.environ[name] for name in _ENV_PRICE_NAMES if name in os.environ}
+    for name in _ENV_PRICE_NAMES:
+        os.environ.pop(name, None)
+    try:
+        yield
+    finally:
+        for name in _ENV_PRICE_NAMES:
+            os.environ.pop(name, None)
+        os.environ.update(saved)
+
+
+@contextlib.contextmanager
+def _pinned_clock():
+    """在 `run_topic` 跑的这一段里把墙钟钉成 0.0（理由见 `_ClockPin`）。"""
+    from agentflow import modelgw as MG
+
+    real = MG.time
+    MG.time = _ClockPin(real)
+    try:
+        yield
+    finally:
+        MG.time = real
+
+
 def _run(kind: str, tmp: pathlib.Path) -> dict:
     """跑一次 `run_topic`，把"可观察后果"收成一份可比较的 dict。"""
     from agentflow import runflow as RF
@@ -119,7 +201,11 @@ def _snapshot() -> dict:
 
     with tempfile.TemporaryDirectory(prefix="runflow-snapshot-") as td:
         tmp = pathlib.Path(td)
-        snap = {kind: _run(kind, tmp) for kind in ("ok", "no-key")}
+        # 这条判据只许依赖自己造的状态：临时目录 + 注入的 spec/transport/search/now。
+        # 反过来，凡是"这一次跑在什么机器/什么负载下"的读数都必须钉死 —— 墙钟
+        # （`elapsed_sec`）与 shell 里的计价变量，见上面两个 context manager。
+        with _pinned_clock(), _pinned_provider_env():
+            snap = {kind: _run(kind, tmp) for kind in ("ok", "no-key")}
     snap["signature"] = str(inspect.signature(RF.run_topic))
     return snap
 
@@ -137,6 +223,12 @@ def test_the_snapshot_covers_both_paths_and_all_six_artifacts() -> None:
     assert snap["ok"]["result"]["exit_code"] == 0, snap["ok"]["result"]
     assert snap["no-key"]["result"]["exit_code"] == 2, snap["no-key"]["result"]
     assert snap["ok"]["tasks"], "跑完一次运行应当留下 `tasks` 行"
+    # 装置自测：墙钟已经钉住 ⇒ 这一次运行的 `elapsed_sec` 必须是 0.0。
+    # 没有这一条，时钟钉一旦失效（产品改用别的时钟、或换了落点），核心判据又会退化成
+    # "跑多快决定的" —— 而它只会偶发地红，看起来像随机。这里让它红得有名有姓。
+    manifest = json.loads(snap["ok"]["files"]["run-manifest.json"])
+    elapsed = [c.get("reply", {}).get("elapsed_sec") for c in manifest.get("calls", [])]
+    assert elapsed and all(v == 0.0 for v in elapsed), f"时钟钉没有生效：elapsed_sec={elapsed}"
 
 
 def test_run_topic_behaviour_matches_the_frozen_snapshot() -> None:
