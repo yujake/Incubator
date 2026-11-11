@@ -1209,6 +1209,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "加闸（有 open findings 不许 accepted），returns 补 `open_findings` 读数"
              "（不进 tools_lines）。变化格 = B / E / F 三格，其余八格逐字未动。"
              "facts 键集仍 15 格、落点没动。"},
+    # p278 → p279（2026-11-12，G 的 revise 教法按新轮次口径改）：facts 键集一格没动
+    # （还是 15 格）—— 本批只改 `specs/g.py` 的一处动作说明（`revise` 的轮次账口径），
+    # 没有哪一格事实换过落点（system ↔ user），所以 count / keys_sha256 与 p278 同值。
+    {"version": "p279", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p279（2026-11-12，G 的 revise 轮次教法）：上游 —— `specs/g.py` 的 "
+             "`revise` 动作说明还把轮次账教成「review_rounds+1、status=revised」，"
+             "而 239e23a7 起轮次账跟着复审走（G.revise 只把轮次托到 max(cur,1)，"
+             "此后每次 review.review_document / review.verify_fixes 才 +1）⇒ 改成"
+             "「改稿开启/推进这一轮；「复审收过几次」看 review_rounds」。变化格 = G"
+             "（e6bcda81… → 4f8dc27e…），其余十格逐字未动（版本行已归一）。"
+             "facts 键集仍 15 格、落点没动。"},
 
 )
 

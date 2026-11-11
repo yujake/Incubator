@@ -2474,7 +2474,12 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 其余八格逐字未动（版本行已归一）。逐格旧值 → 新值：
 #   B b68b60f8… → 5ea2affa… / E bb895e8d… → 0dc0d45d… / F ee6e60db… → 163dde59…。
 # 十一格不是手抄：`temp/_p278_recompute.py` 的现算值（口径同上一支）。
-_FROZEN_PROMPT_VERSION = "p278"
+# p278 → p279（2026-11-12，G 的 revise 教法按新轮次口径改）：只有 G 那一格换值
+# （e6bcda81… → 4f8dc27e…），其余十格逐字未动（版本行已归一）。上游一处语义：
+# `specs/g.py` 的 `revise` 动作说明从「review_rounds+1、status=revised」改成
+# 「改稿开启/推进这一轮；「复审收过几次」看 review_rounds」（239e23a7 起轮次账跟着复审走）。
+# 十一格不是手抄：`temp/_p279_recompute.py` 的现算值（口径同上一支）。
+_FROZEN_PROMPT_VERSION = "p279"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2730,7 +2735,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "bc209de75aed2228473898357eb384f2406b2d885086e3e259e57acbbcc7c2f6",
     "E": "0dc0d45df4ff2f034034f7f3a07e5d5363d9ddea08d640e3d134e00ed03896fc",
     "F": "163dde5989e099b9653b4aec3a7df90a4bd1f9d8a0c4dc91b19c19a9512ebc82",
-    "G": "e6bcda81cdd3de68130542d917e769fb5388018cfb2c6a57ce05894d3f9ab100",
+    "G": "4f8dc27ea967fb0a5c917c6c65249227b2d27c30b390b1f95e0894c3e7a11790",
     "H": "6dda638560012a8d2842bddb413295b74d7e8e2ec4660e4335bee90fb1b9123a",
     "L": "cc1068bca4175f983fa323e9c853e70833e3eb2f1badfef247d54a420513770a",
     "M": "bbcad379cdcd08c99da772c041af862d46f9e1663acfa395f16405f9d482ada8",

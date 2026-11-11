@@ -130,7 +130,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "G", "revise",
-        "按 H 的发现修订稿件（review_rounds+1、status=revised）",
+        "按 H 的发现修订稿件（改稿开启/推进这一轮；「复审收过几次」看 review_rounds）",
         _obj({"doc_id": _S, "fixed_findings": _ARR_S,
               "new_claims": {"type": "array", "items": _OBJ}, "note": _S},
              ("doc_id",)),

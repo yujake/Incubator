@@ -3972,7 +3972,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （agent 面的 prompt 原文带版本行 ⇒ 十一格那一行都换；段摘要只有 B/E/F 三格换值。
 #: tool 面 `review.review_document` 的 returns 多一格 `open_findings`，summary 面未动）；
 #: 两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
-PROMPT_VERSION = "p278"
+#: p278 → p279（2026-11-12，G 的 revise 教法按新轮次口径改）：一处语义 ——
+#: `specs/g.py` 的 `revise` 动作说明还把轮次账教成「review_rounds+1、status=revised」，
+#: 而 239e23a7 起轮次账跟着复审走（`G.revise` 只把轮次托到 `max(cur, 1)`，
+#: 此后每次 `review.review_document` / `review.verify_fixes` 才 +1）⇒ 题面那句是错的教法。
+#: 新句 =「按 H 的发现修订稿件（改稿开启/推进这一轮；「复审收过几次」看 review_rounds）」。
+#: 变化格 = G（其余十格逐字未动；版本行已归一）。十一格由判据自己的 `_surface_digest`
+#: 现算（`temp/_p279_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。逐格旧值 → 新值：
+#:   G e6bcda81… → 4f8dc27e…
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p279）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p278 同值）；`agent_surface_snapshot.json`
+#: 按现值重冻（G 的 prompt 与动作摘要 + 十一格版本行；tool 面一个字没动）；
+#: 两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）；
+#: `docs/READING-MAP.md` 三格按现盘重算。
+#: 判据：`tests/test_jia_review_rounds_follow_reviews.py`（a–d，行为面已钉）与
+#: `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（题面面）。
+PROMPT_VERSION = "p279"
 
 
 

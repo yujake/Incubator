@@ -855,7 +855,7 @@
 | `build_document` | 写一行 documents 并渲染 markdown（无条件渲染） | `write_local` | `kind`、`title`、`claims` |
 | `render` | 把稿件渲染成 markdown 文本（不写库、不落盘） | `read` | `doc` |
 | `refresh_markdown` | 按库里当前数据重画稿件 markdown（不改数据行，只改文件） | `write_local` | `doc_id` |
-| `revise` | 按 H 的发现修订稿件（review_rounds+1、status=revised） | `write_local` | `doc_id` |
+| `revise` | 按 H 的发现修订稿件（改稿开启/推进这一轮；「复审收过几次」看 review_rounds） | `write_local` | `doc_id` |
 | `write_mapping` | 写论文对应表三份（json / md / 正文附录）：先出表、再写正文 | `write_local` | `project`、`rows` |
 
 ### 协作面
