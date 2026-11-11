@@ -497,8 +497,8 @@ def test_agent_g_writes_documents_only_through_normalize_claims():
     calls = _role_calls_by_function("agent_g.py")
     #: 2026-11-11 体量拆分：`_Revise.revise` 的三道闸搬进了
     #: `agent_g/revise_gates.py::checked_claims`（判断、顺序、异常类型与消息逐字未改）。
-    #: 机械判据看不见跨函数的那一层 ⇒ 这里把"委派"也纳入，但**要求被委派的函数自己
-    #: 两条都跑**。强度不变：每个写 `documents` 的事务要么体内直接跑两道闸，要么只经
+    #: 机械判据看不见跨函数的那一层 ⇒ 这里把"委派"也纳入，但要求被委派的函数自己
+    #: 两条都跑。强度不变：每个写 `documents` 的事务要么体内直接跑两道闸，要么只经
     #: 这一个已验证的闸门函数 —— "少一道"两种形态都会红。
     gate = "checked_claims"
     checked = 0

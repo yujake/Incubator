@@ -26,7 +26,7 @@
 
 业主把 `ALLOWED_EDGES['G']` 改成 `{C,D,H}`、`ALLOWED_EDGES['H']` 改成 `{A,E}` ⇒
 `H → G` 现在是 `forbidden_edge`。这一族判据守的是"扇出上限/等待/腾位"，与具体角色无关：
-上限只按**发起方**那一档取（`direct_children_limit_for(policy, by)`：M ⇒ 100、非 M ⇒
+上限只按发起方那一档取（`direct_children_limit_for(policy, by)`：M ⇒ 100、非 M ⇒
 `policy.max_direct_children`），在飞数只数父任务这一行的子行。所以把夹具路径从
 `H → G.revise` 换成 `H → A.run_once`（合法边；A 是 H 的下级，worker 档仍取 5/3/1 那几个数）：
 `_dispatch` 走 `by="H"`、主控档走 `by="M"`（M→A 同样合法）。`A.run_once` 没有参数
@@ -78,7 +78,7 @@ class FakeA(_AStub):
 
 
 class BoomA(_AStub):
-    """A 的替身：**第一次**跑了、炸了（`outcome=failed`），其余照常。
+    """A 的替身：第一次跑了、炸了（`outcome=failed`），其余照常。
 
     `A.run_once` 没有参数（`additionalProperties: false`）⇒ 替身拿不到"这一次的 key"，
     改用调用序号认那一次；这一族每条用例要的都只是"第一件炸、下一件照常"。
@@ -95,7 +95,7 @@ class BoomA(_AStub):
 
 
 class RefusingA(_AStub):
-    """A 的替身：**第一次**跑了、角色自己拒了（领域错误 ⇒ `refused/invalid_params`）。
+    """A 的替身：第一次跑了、角色自己拒了（领域错误 ⇒ `refused/invalid_params`）。
 
     这不是闸门拒绝：`_business_refusal_code` 按类名认领域错误（`DocumentError` 在
     `_BUSINESS_ERROR_NAMES` 里），与"闸门拒掉、根本没跑"是两件事（真机 `t-0006` 就是这一档）。
