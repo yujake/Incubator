@@ -1,7 +1,7 @@
 {
-  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。 2026-11-05（p242 契约台账追账）：补记七格新演进（table.list.params / table.list.returns / table.search.params / table.search.returns 的字段投影与 meta 那一格；fs.write / fs.edit 的失败 kind；doc.mapping_cells 的空串两种含义），按现值重记四格（doc.write_mapping.params / returns、verify.run_experiment.params、verify.verify_proof.returns —— 前三条与第四条各自把 2026-10-26 / 2026-11-04 的旧账合入），清掉两条过期账（lit_candidates 那条的差异已烘进基线、doc.write_mapping.params 的 2026-10-26 那条被现值重记完全覆盖），并给 search.shelf / search.literature 两条补上原日期。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-05（`conductor.escalate` 的 `side_effect` 说真，业主裁定「乙」）：它往父的收件箱与会话事件流追加 `agent_message` + `agent_escalation` ⇒ 通信事件也是工作区写，声明从 `read` 改 `write_local`，`contract_amendments` 增一条（内容寻址：`side_effect` 的 `read → write_local`）；可达性不受影响（`UNIVERSAL_TOOLS` 不按副作用等级剥离，既有先例 `clock.timer_start`），`READONLY_CALL_EXCEPTIONS` 与 `READ_ONLY_WRITE_EXCEPTIONS` 一格未动，登记写集仍是空集。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-08 p262：verify.verify_proof.params 按现值重记 —— `readonly_facts` 的说明改成手稿事实（命题正文 / 证明 / 依赖 / 签块）；同一格其余演进不变，MAX_RATIO / 分母 / 名单一格未动。 2026-11-08 p262：verify.run_experiment.params 按现值重记 —— `claim` 多一格 description（summary 里那句「自报 proof 降 cross_check / 崩溃记 inconclusive」挪到参数面，summary 腾出位置写两类 E 手稿）；MAX_RATIO / 分母 / 名单一格未动。 2026-11-10 p264：`conductor.status_report.side_effect` read→write_local 记一条 amendment（与 review.report 同类对齐）；压缩批次总量 6473→6343（73.49%），MAX_RATIO / 分母 / 名单一格未动。 2026-11-10：doc.build_document.returns 补 eval:（citation_coverage 把 eval_results 数进去，业主裁定 ③）。",
+  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。 2026-11-05（p242 契约台账追账）：补记七格新演进（table.list.params / table.list.returns / table.search.params / table.search.returns 的字段投影与 meta 那一格；fs.write / fs.edit 的失败 kind；doc.mapping_cells 的空串两种含义），按现值重记四格（doc.write_mapping.params / returns、verify.run_experiment.params、verify.verify_proof.returns —— 前三条与第四条各自把 2026-10-26 / 2026-11-04 的旧账合入），清掉两条过期账（lit_candidates 那条的差异已烘进基线、doc.write_mapping.params 的 2026-10-26 那条被现值重记完全覆盖），并给 search.shelf / search.literature 两条补上原日期。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-05（`conductor.escalate` 的 `side_effect` 说真，业主裁定「乙」）：它往父的收件箱与会话事件流追加 `agent_message` + `agent_escalation` ⇒ 通信事件也是工作区写，声明从 `read` 改 `write_local`，`contract_amendments` 增一条（内容寻址：`side_effect` 的 `read → write_local`）；可达性不受影响（`UNIVERSAL_TOOLS` 不按副作用等级剥离，既有先例 `clock.timer_start`），`READONLY_CALL_EXCEPTIONS` 与 `READ_ONLY_WRITE_EXCEPTIONS` 一格未动，登记写集仍是空集。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-08 p262：verify.verify_proof.params 按现值重记 —— `readonly_facts` 的说明改成手稿事实（命题正文 / 证明 / 依赖 / 签块）；同一格其余演进不变，MAX_RATIO / 分母 / 名单一格未动。 2026-11-08 p262：verify.run_experiment.params 按现值重记 —— `claim` 多一格 description（summary 里那句「自报 proof 降 cross_check / 崩溃记 inconclusive」挪到参数面，summary 腾出位置写两类 E 手稿）；MAX_RATIO / 分母 / 名单一格未动。 2026-11-10 p264：`conductor.status_report.side_effect` read→write_local 记一条 amendment（与 review.report 同类对齐）；压缩批次总量 6473→6343（73.49%），MAX_RATIO / 分母 / 名单一格未动。 2026-11-10：doc.build_document.returns 补 eval:（citation_coverage 把 eval_results 数进去，业主裁定 ③）。 2026-11-11 p277：新增只读工具 manuscripts.submission_reading（roles=全部可召唤角色，side_effect=read；读一份证明稿的提交状态：产出方 / 已签 / 已提交 / 时刻 / via，E/F 走收工自动提交、B 走收录；「未提交」与「没查成」分开报）⇒ n_tools 126 → 127，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）。同一批两件既有工具的 `returns` 按现值重记（attack.step 补 4 格收工自动提交读数、verify.verify_proof 去掉退役的 proof_no；同一格只留一条账，见 contract_amendments 的 date_amended）。既有 126 件其余契约一格未动，MAX_RATIO / 分母 / 压缩批次名单一格未动。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 126,
+  "n_tools": 127,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -135,7 +135,8 @@
       "search.retry_pending",
       "trace.children",
       "ledger.resolve",
-      "ledger.expand"
+      "ledger.expand",
+      "manuscripts.submission_reading"
     ]
   },
   "declarations": {
@@ -2392,6 +2393,42 @@
       ],
       "tags": [],
       "handler_name": "functools.partial"
+    },
+    "manuscripts.submission_reading": {
+      "summary": "读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。",
+      "params": {
+        "type": "object",
+        "properties": {
+          "manuscript": {
+            "type": "string",
+            "description": "证明稿的工作区相对路径（`reports/f-proof-*.md` / `e-proof-*` / `e-num-*` / `b-proof-*`）"
+          },
+          "manuscript_id": {
+            "type": "string",
+            "description": "六位稿号；与路径二选一（给了路径就以路径为准）"
+          }
+        },
+        "required": [],
+        "additionalProperties": false
+      },
+      "returns": "{'checked','manuscript','manuscript_id','producer_role','producer_code','state','submitted_at','via','signed','signed_sha','sign_sha','sign_at','token','task_id','task_role','problems','why'}",
+      "side_effect": "read",
+      "external": "none",
+      "roles": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "V",
+        "L"
+      ],
+      "tags": [],
+      "handler_name": "functools.partial",
+      "added_after_compression": true
     },
     "ocr.backends": {
       "params": {
@@ -6432,17 +6469,17 @@
         "attack.step"
       ],
       "key": "returns",
-      "reason": "p233（2026-11-03，业主 2026-11-03 放权动禁改区 · FC-27）：`attack.step` 的 `returns=` 补齐实现的真返回（只加不减）—— 唯一红 `test_tools_returns_declaration::test_no_tool_returns_a_top_level_key_it_does_not_declare` 点名它缺 27 个新键：`delivery` / `delivered` / `total` / `signed_count` / `pending_count` / `unsigned_count` / `proof_count` / `proof_statements` / `draft_count` / `abandoned_count` / `abandoned_statements` / `unfinished` / `unfinished_count` / `trail` / `trail_required` / `legal_exits` / `exits_note` / `legal_stop` / `is_failure` / `close_problems` / `coverage` / `coverage_reading` / `coverage_ratio` / `coverage_why` / `delivery_state_plan` / `delivery_label_plan` / `self_assessment`（逐条交差读数与收工几格，来自 `agent_f/step.py::_CLOSE_KEYS` 与 `agent_f/delivery.py`）；原有 10 个键一个未删。 ｜ 2026-11-04 重记（第三批，只加这三格）：`attack.step` 的 `returns=` 再补 3 个键 `v_sign` / `delivery_state` / `delivery_label`（只加不减，原有 37 个键一个未删）。这三格实现早已返回 —— `agent_f/step.py:445-448` 那三行（`if deploy.get(「v_sign」)` 之下：`out[「v_sign」] = dict(deploy[「v_sign」])` / `out[「delivery_state」] = str(...)` / `out[「delivery_label」] = str(...)`），它们上面 441-444 的注释逐字写着这三格是「这一轮这一份」的四档读数；`specs/f.py:50` 也早就声明了（证明那一支另有 v_sign / delivery_state / delivery_label），`agent_skills.py:1915-1916` 还教模型去读它们（「F.step 不替你送审，它只回读签：返回值的 v_sign 那一格与 history 里是这一轮这一份的四档 delivery_state / delivery_label」）⇒ 缺的只是工具声明这一处记账。`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值 ⇒ 本条按现值重记一次（同一格只能有一条账：`amendment_for` 按整份 edits 全等匹配）。",
+      "reason": "p233（2026-11-03，业主 2026-11-03 放权动禁改区 · FC-27）：`attack.step` 的 `returns=` 补齐实现的真返回（只加不减）—— 唯一红 `test_tools_returns_declaration::test_no_tool_returns_a_top_level_key_it_does_not_declare` 点名它缺 27 个新键：`delivery` / `delivered` / `total` / `signed_count` / `pending_count` / `unsigned_count` / `proof_count` / `proof_statements` / `draft_count` / `abandoned_count` / `abandoned_statements` / `unfinished` / `unfinished_count` / `trail` / `trail_required` / `legal_exits` / `exits_note` / `legal_stop` / `is_failure` / `close_problems` / `coverage` / `coverage_reading` / `coverage_ratio` / `coverage_why` / `delivery_state_plan` / `delivery_label_plan` / `self_assessment`（逐条交差读数与收工几格，来自 `agent_f/step.py::_CLOSE_KEYS` 与 `agent_f/delivery.py`）；原有 10 个键一个未删。 ｜ 2026-11-04 重记（第三批，只加这三格）：`attack.step` 的 `returns=` 再补 3 个键 `v_sign` / `delivery_state` / `delivery_label`（只加不减，原有 37 个键一个未删）。这三格实现早已返回 —— `agent_f/step.py:445-448` 那三行（`if deploy.get(「v_sign」)` 之下：`out[「v_sign」] = dict(deploy[「v_sign」])` / `out[「delivery_state」] = str(...)` / `out[「delivery_label」] = str(...)`），它们上面 441-444 的注释逐字写着这三格是「这一轮这一份」的四档读数；`specs/f.py:50` 也早就声明了（证明那一支另有 v_sign / delivery_state / delivery_label），`agent_skills.py:1915-1916` 还教模型去读它们（「F.step 不替你送审，它只回读签：返回值的 v_sign 那一格与 history 里是这一轮这一份的四档 delivery_state / delivery_label」）⇒ 缺的只是工具声明这一处记账。`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值 ⇒ 本条按现值重记一次（同一格只能有一条账：`amendment_for` 按整份 edits 全等匹配）。 ｜ 2026-11-11 按现值重记（业主 p277 那批「E 收工自动提交」的连带）：`returns` 再补 4 格 `auto_submit` / `auto_submitted` / `auto_submitted_count` / `still_unsubmitted`（只加不减，与实现同批落盘）；`from` 仍是压缩前那一份。",
       "date": "2026-11-03",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading'}",
-          "to": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading','delivery','delivered','v_sign','delivery_state','delivery_label','total','signed_count','pending_count','unsigned_count','proof_count','proof_statements','draft_count','abandoned_count','abandoned_statements','unfinished','unfinished_count','trail','trail_required','legal_exits','exits_note','legal_stop','is_failure','close_problems','coverage','coverage_reading','coverage_ratio','coverage_why','delivery_state_plan','delivery_label_plan','self_assessment'}"
+          "to": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading','delivery','delivered','v_sign','delivery_state','delivery_label','total','signed_count','pending_count','unsigned_count','proof_count','proof_statements','draft_count','abandoned_count','abandoned_statements','unfinished','unfinished_count','trail','trail_required','legal_exits','exits_note','legal_stop','is_failure','close_problems','coverage','coverage_reading','coverage_ratio','coverage_why','auto_submit','auto_submitted','auto_submitted_count','still_unsubmitted','delivery_state_plan','delivery_label_plan','self_assessment'}"
         }
       ],
-      "date_amended": "2026-11-04"
+      "date_amended": "2026-11-11"
     },
     {
       "tools": [
@@ -6701,16 +6738,17 @@
         "verify.verify_proof"
       ],
       "key": "returns",
-      "reason": "2026-11-05 那批（kind/reason 词表按实现现算 + 可引门槛改读等级）：`returns` 由实现现拼，词表规模随之变化。 2026-11-08 那三笔有意演进（V 只对手稿 / 穷举型证据会审 / 判定未发生读数）把同一格再往前推一步，这一条登记随之推进到现值（内容寻址：一条 (工具, 契约格) 只留一条账，旧的 `to` 不再是现值就退不回去、正控会红）：新增 `proof_manuscript_signed` 一档（签落在稿上那一档的 kind），`kind` 里去掉已不再产生的 `statement_missing`（V 只对手稿、不读 statements），`reason` 里去掉 `no_such_proof` / `statement_missing`，其余 29 格与 2026-11-05 那版逐字相同。 ｜ 2026-11-11（本批）：稿号口径的身份读数 manuscript_identity 进键集合 —— 它改前只在「载体在手」那一支赋值，早退路径（没给稿 / 手稿闸 / 未在册那几支）没有这一格，于是声明只能二选一：写上它，「声明 ⊆ 实跑」在早退那一支假红；不写它，模型不知道这一格存在（两条判据各红一边）。修法是把这一格移进 \u000berify_proof 的初值（\u0007gent_v/core.py 的 \fail_closed_manuscript_identity，早退给一套「没读稿」的空值），三条返回路径的键集合因此相同；\to 按现值重记（内容寻址：(工具, 契约格) 只留一条账，\to 不是现值就退不回去）。",
+      "reason": "2026-11-05 那批（kind/reason 词表按实现现算 + 可引门槛改读等级）：`returns` 由实现现拼，词表规模随之变化。 2026-11-08 那三笔有意演进（V 只对手稿 / 穷举型证据会审 / 判定未发生读数）把同一格再往前推一步，这一条登记随之推进到现值（内容寻址：一条 (工具, 契约格) 只留一条账，旧的 `to` 不再是现值就退不回去、正控会红）：新增 `proof_manuscript_signed` 一档（签落在稿上那一档的 kind），`kind` 里去掉已不再产生的 `statement_missing`（V 只对手稿、不读 statements），`reason` 里去掉 `no_such_proof` / `statement_missing`，其余 29 格与 2026-11-05 那版逐字相同。 ｜ 2026-11-11（本批）：稿号口径的身份读数 manuscript_identity 进键集合 —— 它改前只在「载体在手」那一支赋值，早退路径（没给稿 / 手稿闸 / 未在册那几支）没有这一格，于是声明只能二选一：写上它，「声明 ⊆ 实跑」在早退那一支假红；不写它，模型不知道这一格存在（两条判据各红一边）。修法是把这一格移进 \u000berify_proof 的初值（\u0007gent_v/core.py 的 \fail_closed_manuscript_identity，早退给一套「没读稿」的空值），三条返回路径的键集合因此相同；\to 按现值重记（内容寻址：(工具, 契约格) 只留一条账，\to 不是现值就退不回去）。 ｜ 2026-11-11 按现值重记（业主 p277 那批「V 签侧退役 proof_no」的连带）：`returns` 去掉 `proof_no` 一格 —— 新契约不再写这一格，证明身份由正文 sha + `statement_id` + `path_group` 站住；其余键集合与说明串照旧。",
       "date": "2026-11-11",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','ledger','reason','detail'}（三条返回路径键集合相同；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**；checked=False = 没查成：reason ∈ judge_not_wired / unparsable / no_proof_text / bad_statement_id —— 此时**不落台账行**，绝不拿「看不出来」冒充「审过了」）",
-          "to": "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','manuscript_identity','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_manuscript_signed / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_id_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
+          "to": "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings','unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits','exhaustion_review','checks','missing','signer','proof_authors','report_path','citations','citation_checks','citation_gate','review_write','secretary_judge','sign_issuance','review_passes','manuscript_identity','ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`（`有毛病` 时 `defect_step` 指到第几步）。（三条返回路径键集合相同；`kind` ∈ bad_manuscript_name / bad_manuscript_path / dependency_section_missing / dependency_section_unreadable / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / numeric_evidence / numeric_evidence_reviewed_not_signed / proof_manuscript_required / proof_manuscript_signed / proof_reviewed_not_signed / proof_text_mismatch / proof_unregistered_rejected / proof_unregistered_signed（空串 = 这一趟没有档；**命题不在册 ⇒ kind=statement_missing（没审、不落台账行）**）；checked=False = 没查成：reason ∈ bad_manuscript_name / bad_manuscript_path / bad_proof_no / bad_statement_id / dependency_section_missing / dependency_section_unreadable / empty_reply / internal_inconsistency / judge_not_wired / ledger_row_lost / ledger_unwritable / manuscript_empty / manuscript_has_no_proof_section / manuscript_missing / manuscript_unreadable / missing_material / no_proof_text / proof_text_mismatch / proof_text_needs_a_manuscript / secretary_unjudged / statement_id_missing / unparsable（其中 internal_inconsistency：<detail> / ledger_row_lost：<reason> / secretary_unjudged：<detail> 带冒号细则）—— 模型缝自己报的 problem（例如 timeout）原样透传，不在受控词表里；此时**不落台账行**，绝不拿「没查成」冒充「审过了」；`checked=True` 的终局 reason 另有 `already_signed`（那一份证明的第 3 位已经为真、这一趟零转），它不属于「没查成」；引用核实有一条 stronger / unrelated / inadmissible / unknown ⇒ 这一签不许落地（结论改判，`citation_gate.why` 与 findings 点名是哪一条）；`citation_gate.problem` 非空（依赖台账读不出来）同样挡住这一签：那是「这一档没查成」，不是「没有引用」）"
         }
-      ]
+      ],
+      "date_amended": "2026-11-11"
     },
     {
       "tools": [
