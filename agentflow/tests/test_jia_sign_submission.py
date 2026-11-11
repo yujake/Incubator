@@ -11,18 +11,22 @@ V 21:37 才签                                   ⇒ 稿至今「已签、未提
 两条路里选了「签触发」那一条：在 `vsigns.issue` 成功（签文件已在盘上）之后，由框架
 调 `manuscriptsubmission.mark_sign_submitted`，复用 `agent_f/submission.py` 的 `mss:`
 记号写进产出方那一行 `tasks.artifacts`（幂等：该稿号已有记号就不重复写）。
-另一条路（产出方收工前必须等到签）作为题面义务写进 F/E/B 三份 specs，并由收工门
-`_v_wait_gate_reading` 挡住「送审后没起 wait_for=V 的计时器就收工」。
+另一条路（产出方收工前必须等到签）作为题面义务写进 F/E/B 三份 specs；收工门
+`_v_wait_gate_reading` 在业主 2026-11-11 的追裁之后改成「按签拦收工」：只拦
+「计划号/稿没有现行的 V 签、也没有被明确放弃」，签了只是「可 finish」——
+不强制落签就收工。那一半的判据在 `tests/test_yi_unsigned_plan_blocks_closing.py`。
 
 ## 这一组守什么
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | F 派过 V、没起计时器 ⇒ final | 收工被拒（`complete=False`，拒信点名 V 的编号与 `clock.timer_start`） |
-| a2 | 同一次派 V，起了 `wait_for=task:<V>` 的计时器 | 放行；指着更早那一次 V 的计时器不算 |
 | b | 先收工（无签）→ 之后 V 才签 | 稿最终有 `mss:` 记号，`via=sign_issued` |
 | c | 签触发 + 收工各一次 | 只有一条记号（幂等） |
 | d | 反真空：把签触发摘掉 | b 的断言红 |
+
+收工门那一半（「未签未放弃才拦、签只是可 finish」）按业主 2026-11-11 的新裁定重写，
+判据在 `tests/test_yi_unsigned_plan_blocks_closing.py`（a/a2/a3/a4/a5）—— 本文件不再
+钉「必须有 wait_for=V 的计时器」那条旧口径。
 
 零模型调用：签用 `verifications.record_pending_sign` + `vsigns.issue` 直接造。
 """
@@ -31,8 +35,6 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from agentflow import agent_loop as AL
-from agentflow import clock as CLK
 from agentflow import conductor as CND
 from agentflow import depsection as DS
 from agentflow import manuscriptsubmission as MS
@@ -110,81 +112,6 @@ def _tokens(st: Store, *, task_id: str = "t-000001") -> list[str]:
     row = next(dict(r) for r in st.rows("tasks")
                if str(r.get("task_id")) == task_id)
     return [str(x) for x in (row.get("artifacts") or ())]
-
-
-class _Run:
-    def __init__(self) -> None:
-        self.notes: list[str] = []
-
-
-class _Shell:
-    """把 `AgentLoop._final_gate_reading` 挂到一个只有四格属性的壳上。"""
-
-    role = "F"
-    my_task_id = "t-000001"
-    max_final_refused = 3
-    conductor = None
-
-    def __init__(self, st: Store) -> None:
-        self.store = st
-        self.workspace_root = str(st.root)
-
-    def reading(self, run: _Run | None = None) -> dict:
-        return AL.AgentLoop._final_gate_reading(self, run)
-
-    def _v_wait_gate_reading(self) -> dict:
-        return AL.AgentLoop._v_wait_gate_reading(self)
-
-
-def _refused(reading: dict) -> bool:
-    return bool(reading.get("applicable")) and not bool(reading.get("complete"))
-
-
-# ============================================================ a：送审后没等 ⇒ 不许收工
-def test_a_closing_without_a_wait_for_v_timer_is_refused(tmp_path):
-    st = _ws(tmp_path)
-    _task(st)
-    _task(st, task_id="t-000002", role="V")
-    with st.tx("tasks", actor="fixture") as tx:
-        v = dict(tx.find("tasks", task_id="t-000002"))
-        v["parent_task_id"] = "t-000001"
-        v["called_by"] = "F"
-        tx.upsert("tasks", v)
-    reading = _Shell(st).reading(_Run())
-    assert _refused(reading), reading
-    why = str(reading.get("why") or "")
-    assert "t-000002" in why, why
-    assert "clock.timer_start" in why and "wait_for" in why, why
-    # 计时器那两格是读数：没起过 ⇒ 空表；等的是哪一条 ⇒ 点名最近那个 V
-    assert reading.get("v_wait_timers") == [], reading
-    assert reading.get("v_wait_for") == "task:t-000002", reading
-
-
-# ============================================================ a2：等对了就放行
-def test_a2_a_timer_waiting_for_that_v_lets_the_close_through(tmp_path):
-    st = _ws(tmp_path)
-    _task(st)
-    _task(st, task_id="t-000002", role="V")
-    _task(st, task_id="t-000003", role="V")
-    with st.tx("tasks", actor="fixture") as tx:
-        for tid in ("t-000002", "t-000003"):
-            v = dict(tx.find("tasks", task_id=tid))
-            v["parent_task_id"] = "t-000001"
-            v["called_by"] = "F"
-            v["started_at"] = ("2026-11-11T21:00:0" + tid[-1] + "+08:00")
-            tx.upsert("tasks", v)
-    # 只等了更早那一次 V ⇒ 不算（最近那一次没等）
-    CLK.start_timer(st.root, wait_for="task:t-000002", reason="等 V 的结论",
-                    task_id="t-000001", role="F")
-    refused = _Shell(st).reading(_Run())
-    assert _refused(refused), refused
-    assert refused.get("v_wait_for") == "task:t-000003", refused
-    # 等最近那一次 ⇒ 放行
-    CLK.start_timer(st.root, wait_for="task:t-000003", reason="等 V 的结论",
-                    task_id="t-000001", role="F")
-    ok = _Shell(st).reading(_Run())
-    assert not _refused(ok), ok
-    assert ok.get("v_wait_timers"), ok
 
 
 # ============================================================ b/c：签晚于收工

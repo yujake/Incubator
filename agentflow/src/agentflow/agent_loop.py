@@ -4537,6 +4537,200 @@ def _step_report_wording(max_steps: Any) -> str:
     return "步数上报已关（0 = 不上报），不会有步数报告；步数本来没有硬上限"
 
 
+# ---------------------------------------------------------------- 收工门（乙）的三个读法
+#
+# 放在类外只为体量：`src_functions_gt200_lines` 是软基线（95），这道门是「F/E/B
+# 各一条、读三张台账」的合体，塞进一个方法就顶过 200 行 —— 判据不许抬，所以三个
+# 角色的读法各落一处，方法只做「谁适用 / 三态 / 拒信」。
+
+
+def _sign_gate_entry(root: str, rel: str) -> dict[str, Any]:
+    """稿头元信息（计划号 / 命题号）的唯一读口 —— `proofregistry.parse_entry`。
+
+    读不出来给空 dict（不猜一个号）：那一份稿因此不会被算成「某个计划号的签稿」，
+    也不会被算成「已放弃」—— 两者都会让这道门静默放行。
+    """
+    if not rel:
+        return {}
+    try:
+        from . import proofregistry as _PR
+
+        text = (Path(root) / rel).read_text(encoding="utf-8")
+        return dict(_PR.parse_entry(text))
+    except Exception:  # noqa: BLE001 —— 读不出来按「没这一格」处理
+        return {}
+
+
+def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
+                 out: dict[str, Any]) -> None:
+    """F：计划号 → 它的稿 → 现行的 V 签；没有签且不是终态 abandoned ⇒ 欠签。
+
+    稿的两种痕迹都读：`history[].manuscript_id`（真机每一轮 proof 都记）与稿头
+    `- 计划：`（那一份稿自己写着属于谁）；两处取并集，少读一处就有计划号会静默放行。
+    """
+    try:
+        plans = [dict(r) for r in store.rows("attack_plans")]
+    except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed
+        out.update(checked=False, complete=False,
+                   reason=f"{type(exc).__name__}: {exc}",
+                   why=(f"还没收工：`attack_plans` 读不出来"
+                        f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+        return
+    by_plan: dict[str, list[str]] = {}
+    for mid, cand in cands.items():
+        pid = str(_sign_gate_entry(root, str(cand.get("manuscript") or "")).get(
+            "plan_id") or "")
+        if pid:
+            by_plan.setdefault(pid, []).append(mid)
+    for row in plans:
+        pid = str(row.get("plan_id") or "")
+        mids: list[str] = []
+        for hist in list(row.get("history") or []):
+            if not isinstance(hist, Mapping):
+                continue
+            one = str(hist.get("manuscript_id") or "").strip()
+            if one:
+                mids.append(one)
+        mids = list(dict.fromkeys(mids + by_plan.pop(pid, [])))
+        signed = [m for m in mids if bool(cands.get(m, {}).get("signed"))]
+        abandoned = str(row.get("status") or "") == "abandoned"
+        out["plans"].append({
+            "plan_id": pid, "abandoned": abandoned,
+            "manuscripts": mids, "signed_manuscripts": signed,
+            "missing": (not abandoned) and (not signed),
+        })
+        if abandoned or signed:
+            continue
+        lack = ("这一条计划一份稿都没有" if not mids else
+                "这些稿都不是现行的签：" + "、".join(
+                    f"{m}（{str(cands.get(m, {}).get('manuscript') or '路径没读到')}，"
+                    f"{str(cands.get(m, {}).get('state') or '稿不在盘上')}）"
+                    for m in mids))
+        out["problems"].append({
+            "where": f"计划 {pid or '（编号没读到）'}",
+            "what": (f"{lack} ⇒ 两条正路：① 继续等 V / 改稿再送 V、拿到"
+                     "「成立」（有签的计划号才算可 finish）；② 把这个计划号"
+                     "明确放弃（`attack_plans.status=abandoned`，由主控/人裁定，"
+                     "不是再推一轮）"),
+        })
+    for pid, mids in by_plan.items():
+        out["problems"].append({
+            "where": f"计划 {pid}（不在 `attack_plans` 里）",
+            "what": (f"稿头指着这个计划号（{('、'.join(mids))[:80]}），"
+                     "但计划台账里没有它 ⇒ 先把这个计划号登记进台账"),
+        })
+
+
+def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
+                 out: dict[str, Any]) -> None:
+    """B：`b-proof` 稿没有现行的签、且那条命题没有明确放弃 ⇒ 欠签。"""
+    for mid, cand in cands.items():
+        if bool(cand.get("signed")):
+            continue
+        rel = str(cand.get("manuscript") or "")
+        sid = str(_sign_gate_entry(root, rel).get("statement_id") or "")
+        abandoned = False
+        try:
+            from .agent_f import delivery as _DL
+
+            srow = next((dict(r) for r in store.rows("statements")
+                         if str(r.get("stmt_id") or "") == sid), None) if sid else None
+            abandoned = bool(srow and _DL.abandoned_of(srow).get("abandoned"))
+        except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed
+            out.update(checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：`statements` 读不出来"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+            return
+        if abandoned:
+            continue
+        out["problems"].append({
+            "where": f"稿 {mid}（{rel or '路径没读到'}）",
+            "what": (f"这一份 b-proof 没有现行的 V 签"
+                     f"（{str(cand.get('state') or 'unsigned')}），而它对应的命题"
+                     "没有明确放弃 ⇒ 两条正路：① 等 V 的签 / 改稿再送；"
+                     "② 明确放弃那一条命题（`table.update`：`status=abandoned` + "
+                     "`quote_reason=abandoned@…` 按四档给理由）"),
+        })
+
+
+def _sign_gate_e(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
+                 out: dict[str, Any]) -> None:
+    """E：`e-proof` 无签 ⇒ 拒；`e-num` 只拦无稿（无签正常）；撤销的实验不算。"""
+    try:
+        from . import exhaustionreport as _ER
+    except Exception as exc:  # noqa: BLE001
+        out.update(checked=False, complete=False,
+                   reason=f"{type(exc).__name__}: {exc}",
+                   why=f"还没收工：E 的稿读口没接上（{type(exc).__name__}: {exc}）")
+        return
+    for mid, cand in cands.items():
+        rel = str(cand.get("manuscript") or "")
+        fam = ""
+        try:
+            from . import manuscriptfamily as _MFAM
+
+            fam = str(_MFAM.classify_manuscript(rel).get("family") or "")
+        except Exception:  # noqa: BLE001 —— 认不出族 ⇒ 不在这道门的对象里
+            fam = ""
+        if fam != "e-proof" or bool(cand.get("signed")):
+            continue
+        eid = ""
+        try:
+            eid = str(_ER.experiment_id_of_manuscript(root, rel) or "")
+        except Exception:  # noqa: BLE001 —— 读不出实验号就按「没放弃」处理
+            eid = ""
+        voided = False
+        try:
+            row = next((dict(r) for r in store.rows("experiments")
+                        if str(r.get("experiment_id") or "") == eid), None) if eid else None
+            voided = bool(row and S.experiment_is_voided(row))
+        except Exception as exc:  # noqa: BLE001
+            out.update(checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：`experiments` 读不出来"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+            return
+        if voided:
+            continue
+        out["problems"].append({
+            "where": f"E 的证明稿 {mid}（{rel}）",
+            "what": (f"这一份 e-proof 没有现行的 V 签"
+                     f"（{str(cand.get('state') or 'unsigned')}）⇒ 穷举证明档要签："
+                     "等 V 的签 / 改稿再送；实验行被撤销的话不算欠签"),
+        })
+    try:
+        experiments = [dict(r) for r in store.rows("experiments")]
+    except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed
+        out.update(checked=False, complete=False,
+                   reason=f"{type(exc).__name__}: {exc}",
+                   why=(f"还没收工：`experiments` 读不出来"
+                        f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+        return
+    for row in experiments:
+        if S.experiment_is_voided(row):
+            continue
+        eid = str(row.get("experiment_id") or "")
+        out["experiments"].append(eid)
+        try:
+            num = _ER.find_manuscript_relpath(root, eid, family="e-num")
+            proof = _ER.find_manuscript_relpath(root, eid, family="e-proof")
+        except Exception as exc:  # noqa: BLE001
+            out.update(checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：实验 {eid} 的稿查不成"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+            return
+        if num.get("found") or proof.get("found"):
+            continue
+        out["problems"].append({
+            "where": f"实验 {eid}",
+            "what": ("这一条实验没有落任何 E 稿（`e-num` / `e-proof`）⇒ 普通数值"
+                     "实验也必须有稿（业主 2026-11-08）：先补 `reports/e-num-"
+                     f"{eid}.md`；这一族无签是正常的"),
+        })
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -7667,93 +7861,123 @@ class AgentLoop:
                 + ("（注：这个读数是重算过的 —— 读数期间台账又变了）" if got.get("retried") else ""))
 
     def _v_wait_gate_reading(self) -> dict[str, Any]:
-        """收工门（甲，2026-11-11）：送审之后有没有起 `wait_for=V` 的计时器等结论。
+        """收工门（乙，2026-11-11 业主裁定）：按签拦收工，不按计时器拦。
 
-        业主逐字：「送审之后必须用 `clock.timer_start(wait_for=<V 的名册名/编号>,
-        reason=...)` 等 V 的反馈，不许送完就收工、也不许"过一会儿再看"」。
+        业主逐字：「拦收工前有计划号未产出 V 签稿且未放弃。如果一个计划号有 V 签稿，
+        则被定义为可 finish 的。对于 E 和 B 同样只拦无签收工，不强制落签就收工。
+        其中 E 侧对普通数值实验是拦无稿就收工，普通数值实验无签正常」。
 
-        ## 判据只有一条
+        判据（三个角色各一条，读的都是台账上现成的痕迹，不新立字段）：
 
-        这一趟派过 V（`tasks` 里 `role=V` 且 `parent_task_id` = 我的台账号）⇒ 必须有一条
-        我名下的计时器，`wait_for_resolved` 指着最近那一个 V 的 task 编号。指着更早的
-        那一次不算：送审之后又送了一版，等的是旧那一版的结论。
+        - F：`attack_plans` 每个计划号 → 它的稿（`history[].manuscript_id` 与稿头
+          `- 计划：`）→ V 的颁发表。没有一份「现行的签」、且计划不是终态
+          `abandoned` ⇒ 收工受控拒：点名计划号与缺的那份稿。有签 ⇒ 这个计划号
+          可 finish —— 只是「可以收工」，不是「签了就替它收工」：这道门只在模型
+          发 final 时判，不放行也不提前结束。
+        - B：`b-proof` 稿没有现行的签 ⇒ 拒；那一条命题已被明确放弃
+          （`status=abandoned` + `quote_reason=abandoned@…`；
+          `agent_f.delivery.abandoned_of` 是唯一读口）⇒ 不算欠签。
+        - E：`e-proof`（穷举证明档）没有现行的签 ⇒ 拒；`e-num`（普通数值实验）只拦
+          无稿 —— 有稿无签是正常（`manuscriptfamily.needs_sign("e-num")` 是假，
+          `manuscriptfreeze` 也写「e-num 永远 state=unsigned」，业主 2026-11-08）。
+          实验行被撤销（`schema.experiment_is_voided`）⇒ 不是欠稿。
 
-        ## 三态
+        「签算不算签」只有一条口径：`manuscriptclosing.signed_candidates` 的
+        `state=="signed"`（签 sha == 现行正文 sha、签文件可复算）。
 
-        - 没派过 V ⇒ `applicable=False`（这道闸没有对象，不落噪声）；
-        - 派过且等过 ⇒ 放行（`complete=True`，`why` 空）；
-        - 派过但没等 ⇒ `complete=False` + 拒信（点名 V 的编号与处置路径）；
-        - 台账 / 时钟读不成 ⇒ `checked=False` + `complete=False`（fail-closed：
-          "有没有等"不知道的时候不许把它读成"等了"）。
+        三态：没有对象 ⇒ `applicable=False`；全都签了/放弃了/有稿 ⇒ 放行；
+        有「未签未放弃」⇒ `complete=False` + 拒信；台账读不成 ⇒ `checked=False`
+        + `complete=False`（fail-closed：不知道的时候不许读成「等了」）。
 
-        返回 `{applicable, checked, complete, v_children, v_wait_timers, v_wait_for,
+        返回 `{applicable, checked, complete, role, plans, manuscripts, problems,
         why, reason}`。
         """
         out: dict[str, Any] = {
             "applicable": False, "checked": True, "complete": True,
-            "v_children": [], "v_wait_timers": [], "v_wait_for": "",
-            "why": "", "reason": "",
+            "role": str(self.role), "plans": [], "manuscripts": [],
+            "experiments": [], "problems": [], "why": "", "reason": "",
         }
-        if str(self.role) not in ("F", "E", "B"):
+        role = str(self.role)
+        if role not in ("F", "E", "B"):
             out["reason"] = "这一角色不产出手稿 ⇒ 送审等签这一格没有对象"
             return out
-        mine = str(self.my_task_id or "")
-        if self.store is None or not mine:
-            missing = "没有 store" if self.store is None else "台账号是空的"
-            out.update(applicable=True, checked=False, complete=False,
-                       reason=missing,
+        store = self.store
+        root = str(getattr(store, "root", "") or self.workspace_root or "")
+        if store is None or not root:
+            missing = "没有 store" if store is None else "没有工作区根"
+            out.update(applicable=True, checked=False, complete=False, reason=missing,
                        why=(f"还没收工：送审等签这一格读不成 —— 这一趟{missing} ⇒ "
-                            "不知道有没有派过 V、也不知道有没有起过等它的计时器 ⇒ "
-                            "按『没查成』挡（不是『没送审』）"))
+                            "不知道有没有未签的计划/稿 ⇒ 按『没查成』挡（不是『都签了』）"))
             return out
+        families = {"F": ("f-proof",), "B": ("b-proof",),
+                    "E": ("e-proof", "e-num")}[role]
         try:
-            tasks = [dict(r) for r in self.store.rows("tasks")]
-        except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"没送审"
+            from .manuscriptclosing import signed_candidates
+
+            scan = signed_candidates(root, families=families, role=role)
+        except Exception as exc:  # noqa: BLE001 —— 读不成不许折成「都签了」
             out.update(applicable=True, checked=False, complete=False,
                        reason=f"{type(exc).__name__}: {exc}",
-                       why=(f"还没收工：`tasks` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                       why=(f"还没收工：拿签稿扫描没跑成（{type(exc).__name__}: {exc}）⇒ "
                             "送审等签这一格没查成，按『没查成』挡"))
             return out
-        vkids = [r for r in tasks
-                 if str(r.get("role") or "") == "V"
-                 and str(r.get("parent_task_id") or "") == mine]
-        out["v_children"] = [str(r.get("task_id") or "") for r in vkids]
-        if not vkids:
-            out["reason"] = "这一趟没有派 V 审过稿 ⇒ 这道闸没有对象"
+        if not scan.get("checked"):
+            why = str(scan.get("why") or "颁发表 / 稿目录读不出来")
+            out.update(applicable=True, checked=False, complete=False, reason=why,
+                       why=f"还没收工：拿签稿扫描没查成（{why}）⇒ 按『没查成』挡")
             return out
-        vkids.sort(key=lambda r: (str(r.get("started_at") or ""),
-                                  str(r.get("ended_at") or "")))
-        latest = vkids[-1]
-        vtid = str(latest.get("task_id") or "")
-        out.update(applicable=True, v_wait_for=f"task:{vtid}")
-        root = getattr(self.store, "root", None) or self.workspace_root
+        cands: dict[str, dict[str, Any]] = {}
+        for one in list(scan.get("candidates") or []):
+            if not isinstance(one, Mapping):
+                continue
+            cand = dict(one)
+            mid = str(cand.get("manuscript_id") or "")
+            if not mid:
+                continue
+            cands[mid] = cand
+            out["manuscripts"].append({
+                "manuscript_id": mid,
+                "manuscript": str(cand.get("manuscript") or ""),
+                "state": str(cand.get("state") or ""),
+                "signed": bool(cand.get("signed")),
+                "why": str(cand.get("why") or ""),
+            })
         try:
-            from . import clock as CLK
-
-            timers = [t for t in CLK.timers(root)
-                      if str(getattr(t, "task_id", "")) == mine]
-        except Exception as exc:  # noqa: BLE001 —— 时钟读不成同样是"没查成"
-            out.update(checked=False, complete=False,
+            if role == "F":
+                _sign_gate_f(store, root, cands, out)
+            elif role == "B":
+                _sign_gate_b(store, root, cands, out)
+            else:
+                _sign_gate_e(store, root, cands, out)
+        except Exception as exc:  # noqa: BLE001 —— 兜底：读口炸了按「没查成」挡
+            out.update(applicable=True, checked=False, complete=False,
                        reason=f"{type(exc).__name__}: {exc}",
-                       why=(f"还没收工：`out/clock/` 读不出来（{type(exc).__name__}: "
-                            f"{exc}）⇒ 送审等签这一格没查成，按『没查成』挡"))
+                       why=(f"还没收工：按签拦收工这一格没查成"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
             return out
-        hits = [t for t in timers
-                if str(getattr(t, "wait_for_resolved", "")) == f"task:{vtid}"]
-        out["v_wait_timers"] = [str(getattr(t, "timer_id", "")) for t in hits]
-        if hits:
-            out["reason"] = (f"派了 V（{vtid}）且起过计时器等它"
-                             f"（{'、'.join(out['v_wait_timers'])}）")
+        if not out.get("checked"):
+            out["applicable"] = True
             return out
-        out["complete"] = False
-        out["reason"] = f"派了 V（{vtid}）但没起过等它的计时器"
-        out["why"] = (
-            f"还没收工：你派了 V 审这一份稿（{vtid or '（编号没读到）'}），但这一趟"
-            "**没有起过等它的计时器**。送审之后不许直接收工，也不许「过一会儿再看」："
-            "用 `clock.timer_start(wait_for=<V 的名册名或它的编号>, reason=<等它的什么结论>)` "
-            "把这一趟挂上去，等 V 的结论回来再收工 —— 判「成立」那一刻这一份稿就已经"
-            "置为已提交（`mss:` 记号，签触发），你不需要再手动提交一次；"
-            "判「有毛病」就按缺陷改稿重送、重挂计时器。")
+        if out["problems"]:
+            out["applicable"] = True
+            out["complete"] = False
+            head = "还没收工：以下计划号 / 稿没有 V 签、也没有被明确放弃 —— "
+            body = "；".join(
+                f"{str(p.get('where') or '')}：{str(p.get('what') or '')}"
+                for p in out["problems"][:5])
+            out["why"] = head + body + (
+                f"（另有 {len(out['problems']) - 5} 条见读数）"
+                if len(out["problems"]) > 5 else "") + (
+                "。这道门只拦「未签未放弃」的收工：有签的计划号可以被 finish，"
+                "但收不收工仍由你决定；没签的要么等签 / 改稿再送，要么明确放弃。")
+            out["reason"] = f"{len(out['problems'])} 条未签未放弃"
+            return out
+        out["applicable"] = bool(out["plans"] or out["manuscripts"]
+                                 or out["experiments"])
+        out["reason"] = ("查过了：计划号都有现行的 V 签或已被放弃"
+                         if role == "F" else
+                         "查过了：没有「无签且未放弃」的稿" if role == "B" else
+                         "查过了：证明稿有签或已撤销；普通数值实验都有稿")
         return out
 
     def _final_gate_reading(self, run: "AgentLoop.LoopRun | None" = None
@@ -7810,10 +8034,12 @@ class AgentLoop:
                          "orphans": {}, "orphan_count": 0, "reason": ""},
             "programs_ok": True,
         }
-        # ---- 送审等签（甲，2026-11-11）：F/E/B 派过 V 就必须起过 wait_for=V 的计时器 ----
+        # ---- 按签拦收工（乙，2026-11-11 业主裁定）：见 `_v_wait_gate_reading` ----
         #
         # 位置在"是不是主控"那一条之前：非 M 一律 `applicable=False` 返回，若把这道闸
-        # 放在后面，它永远走不到（这正是它要补的那个空档）。
+        # 放在后面，它永远走不到（这正是它要补的那个空档）。判的是「计划号/稿有没有
+        # 现行的 V 签、或有没有被明确放弃」—— 不是「有没有起计时器」。签了只是
+        # 「可 finish」：这道门只在模型发 final 时判，不提前结束这一趟。
         if str(self.role) in ("F", "E", "B"):
             wait_gate = self._v_wait_gate_reading()
             if wait_gate.get("applicable"):
