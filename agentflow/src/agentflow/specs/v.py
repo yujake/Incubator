@@ -140,12 +140,16 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 所以这里仍不是必填项；拒绝由实现（`_manuscript_gate`）出，
                 # 码 `proof_text_needs_a_manuscript`。
                 "proof_text": _S,
-                # 业主 2026-10-22（多证明模型）：签的是"第几条证明"，1 = canonical。
+                # 2026-11-11（业主裁定：签跟着正文走）：这一格降级为**历史坐标（只读兼容）**。
+                # 签的身份是正文 sha + 稿路径（`proof_manuscript`），不是"第几条证明"；
+                # 老盘按 `-pN` 寻址的那一档仍可传它，新送审不必传。
                 # 下界 1 的真身在工具层（`verify.verify_proof` 的 `proof_no.minimum=1`，
                 # 它是 `validate_params` 真正读的那一份）；动作面原来只写 `_I` ⇒
                 # 派活面放行 `proof_no=0`，而工具层必然拒收。判据：
                 # `capabilities.assert_capabilities()` 第 [9c] 条（`_PARAMS_DERIVED_FROM_TOOL`）。
-                "proof_no": {**_I, "minimum": 1},
+                "proof_no": {**_I, "minimum": 1,
+                             "description": "历史坐标（只读兼容）：老盘按 `-pN` 寻址时用；"
+                                            "新签的身份是正文 sha + 稿路径，不靠这个号"},
                 # 只读读数（命题现状 / 文献与实验台账摘要）由调用方取好传进来：
                 # 传字符串而不是传 store，是为了让"它能碰什么"在接口上就固定下来
                 # （I12 的结构形态，见 `verifications.cold_start_prompt`）。
@@ -261,14 +265,14 @@ SPEC = AgentSpec(
             "缺记录只作报告质量读数（`report_gap`），不挡签。但「我没逐行验证 / 我判不了」"
             "仍然是没做完审（程序性），不是成立：把「核到哪一步、从哪一步起没核」写进 "
             "`findings`（带步号）与 `defect_step`。",
-            # 2026-10-25（审计 G/H/V/L 第 5 条）：这一岗签的是"第几条证明"，而提示词此前
-            # 0 次提到 `proof_no`（工具面与该动作的参数表里都有它，正文却一个字没说）。
-            # 一条命题有多份证明时，"我签的是哪一份"就是这一格凭据的全部内容。
-            "**你签的是「第几条证明」**：`verify_proof` 收 `proof_no`（1 = canonical / 缺省值，"
-            "2 起是该行 `proofs` 清单里的那一份）—— 逐份独立，别把 `#p1` 的那一签借给 `#p2`："
-            "读数里第 3 位与第 4 位都按 `proof_no` 分开记"
-            "（第 3 位 `bits.evidence.reviewed_by_proof[证明号]`、第 4 位 "
-            "`bits.evidence.formal_by_proof[证明号]`）。",
+            # 2026-11-11（业主裁定：签跟着正文走）：签的身份是**正文 sha + 稿路径**，
+            # 不是"第几条证明"。同一命题可以有多份稿，每份按自己的正文 sha 各签各的。
+            "**你签的身份是「正文 sha + 稿路径」**：`verify_proof` 的 `proof_manuscript` "
+            "指出被审的那一份稿，签认的是那份稿当前 `## 证明` 的 sha（`proof_sha256`）—— "
+            "逐份独立，别把甲稿的那一签借给乙稿：读数里第 3 位按正文 sha / 签块分开记"
+            "（`bits.evidence.reviewed_by_proof`）。同一份正文换了稿名、或同一份稿改了正文，"
+            "旧签都不算这一版（sha 对不上 = 没签）；路径号（第几条路径）归 B 收录时分配，"
+            "不在你这一侧。",
             # 2026-11-04（业主裁定 甲）：V 的可见面必须说清"什么情况下能签、什么情况下
             # 只能给看过但没签"。判据：`temp/probe_manuscript_gate.py` 的 a / c 与
             # `tests/test_v_unregistered_manuscript_review.py`（手稿那一支）。
