@@ -507,6 +507,11 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
     # `delivery_label`"）—— 声明里没有它们，模型就不知道这一格存在。
     # 与已声明的 `delivery_state_plan` / `delivery_label_plan` 是两件事：那两个是整份任务
     # 的读数（`delivery_summary` 的 `state`），这三个是"这一轮这一份"的四档。
+    # 2026-11-11（业主裁定 ①）：再补四格（只加不减）—— 收工自动提交的读数
+    # （`auto_submit` 是候选级全文；另外三格进 `_CLOSE_KEYS`，按 `_close_reading` 的
+    # 同一排复制）。它们在 `agent_f/step.py::_close_reading` 与
+    # `agent_f/autosubmit.py::auto_submit_signed` 真写；声明里没有它们时，模型
+    # （读的就是这段 `returns`）不知道收工那一趟提交了哪几份 —— 缺一格就是撒谎。
     returns=("{'plan_id','round','sid','action','outcome','status','budget_left',"
              "'reason','budget_known','budget_reading',"
              "'delivery','delivered',"
@@ -517,6 +522,7 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
              "'unfinished','unfinished_count','trail','trail_required',"
              "'legal_exits','exits_note','legal_stop','is_failure','close_problems',"
              "'coverage','coverage_reading','coverage_ratio','coverage_why',"
+             "'auto_submit','auto_submitted','auto_submitted_count','still_unsubmitted',"
              "'delivery_state_plan','delivery_label_plan','self_assessment'}"),
     tags=("attack", "loop"),
 )

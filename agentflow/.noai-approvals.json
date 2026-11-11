@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T14:00:33+08:00",
+  "generated_at": "2026-11-11T14:49:09+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -556,10 +556,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "c6811a9796a4a8abc5ee148ab23872f9b4770b639ec87ee0b373c5a1a76f0a80",
+      "sha256": "415870ac2db20dfec7664797a50584030dae07d709ec81ff3e63d204348b5601",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-11 记账：fs.edit 的 summary 随甲的窄豁免补了一句（B 仅对自己未签的 reports/b-proof-<六位号>.md 有一格；write/delete/move 仍拒），tool_surface_snapshot.json 按现值重冻。diff 只有 declarations.fs.edit.summary 一格；按 FC-27 口径『重冻必须由人逐格看过』—— reviewers 仍为空（登记≠批准）。",
+      "change_note": "2026-11-11 体量拆账（③）：attack.step 的 returns 按实现现值补齐四格（auto_submit / auto_submitted / auto_submitted_count / still_unsubmitted）—— 收工自动提交那一批加进返回值，声明没跟上；只加不减，旧 37 格一字未删。tool_surface_snapshot.json 按现值重冻，diff 只有 declarations.attack.step.returns 一格。按 FC-27 口径『重冻必须由人逐格看过』—— reviewers 仍为空（登记≠批准）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
