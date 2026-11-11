@@ -9,7 +9,7 @@
 
 ## 这一步解决什么
 
-改前 B 的"证明优化"是**就地改**那份已拿签的稿（2026-11-07 裁定 ③：只换 `## 证明`、
+改前 B 的"证明优化"是就地改那份已拿签的稿（2026-11-07 裁定 ③：只换 `## 证明`、
 `proof_no` 递增）。它在"稿 = 命题的证明"那个口径下是自洽的，但业主 2026-11-11 的
 口径变了：
 
@@ -18,19 +18,19 @@
 「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名……拿 V 签冻结后交哪份是明确的」
 ```
 
-于是"优化"必须先分叉：**已拿签的那一份只读**，要改就复制一份、注册成新的 B 号、
+于是"优化"必须先分叉：已拿签的那一份只读，要改就复制一份、注册成新的 B 号、
 把复制件里的 V 签清掉（它是另一份稿，签不该跟着走）。四步逐条对应业主那句话：
 
-1. **拿到稿件** —— 走乙的读口（`vsigns.signed_manuscripts`，复用 V 的颁发表）；
+1. 拿到稿件 —— 走乙的读口（`vsigns.signed_manuscripts`，复用 V 的颁发表）；
    这一条还没有签 ⇒ 受控拒 `no_signed_manuscript`（"无可优化"，且一个字节都不写）；
-2. **复制一份** —— 源稿**那一份文件**逐字复制（2026-11-11 追加口径：一份对一份，
+2. 复制一份 —— 源稿那一份文件逐字复制（2026-11-11 追加口径：一份对一份，
    不带 `-pN`）；
-3. **注册成 B 号** —— 号由 `manuscriptids.next_manuscript_id(root, family="b-proof")`
+3. 注册成 B 号 —— 号由 `manuscriptids.next_manuscript_id(root, family="b-proof")`
    发（B 自己那条号段），落点 `reports/b-proof-<B稿号>.md`；
-4. **清除复制版本内的 V 签** —— 删掉 `- V 签：…` 那一行（`vsigns.SIGN_MARK`）。
+4. 清除复制版本内的 V 签 —— 删掉 `- V 签：…` 那一行（`vsigns.SIGN_MARK`）。
 
 之后 B 在那份 B 稿上改正文（`fs.edit`），再走既有送审口派 V 三转签 —— 那一签盖的是
-**新正文的 sha**，与源稿的签互不相干。
+新正文的 sha，与源稿的签互不相干。
 
 ## 这一格不做什么
 
@@ -67,7 +67,7 @@ class _OpenPolishCopy:
 
         - `statement_id`：待优化的那条命题的号（必填；它是"找哪一份稿"的唯一入口）；
         - `source_manuscript`：可以不给。不给 ⇒ 从 V 的颁发表里找这一条命题签过的
-          那份稿；给了 ⇒ 必须是**签过的那一份**（否则受控拒 `source_not_signed`，
+          那份稿；给了 ⇒ 必须是签过的那一份（否则受控拒 `source_not_signed`，
           不许拿一份没签的稿当"已拿签的稿"复制）。
 
         ## 返回（键固定）
@@ -145,7 +145,7 @@ class _OpenPolishCopy:
                 why=(f"`{target_rel}` 已经在盘上 ⇒ 不覆盖（号源的占用检查本该跳过它，"
                      "走到这里说明盘在发号之后被改过）；换一个号再试"))
 
-        # ---- ④ 清掉复制件里的 V 签（清的是**复制件**，源稿一个字节不动） ----------
+        # ---- ④ 清掉复制件里的 V 签（清的是复制件，源稿一个字节不动） ----------
         copy_text, cleared_lines = _strip_sign_lines(text)
         out["cleared"] = len(cleared_lines)
         out["cleared_lines"] = list(cleared_lines)
@@ -185,7 +185,7 @@ class _OpenPolishCopy:
 
         三种证据按强度排：
 
-        1. 调用方点名了 `source_manuscript` ⇒ 只认那一份，并且**它必须签过**
+        1. 调用方点名了 `source_manuscript` ⇒ 只认那一份，并且它必须签过
            （`vsigns.signed_manuscripts(artifact_path=…)`）；
         2. V 的颁发表里 `statement_id` 等于这条命题的签 ⇒ 它盖在哪份稿上就用哪份
            （`artifact_path` 那一格；2026-11-11 起 `issue` 会写它）；
@@ -213,7 +213,7 @@ class _OpenPolishCopy:
             if hit is None:
                 out.update(refused="source_not_signed", path=named,
                            why=(f"`{named}` 不在 V 的颁发表里 ⇒ 它不是一份签过的稿："
-                                "优化副本只能从**已拿签**的那一份复制（拿没签的稿来复制，"
+                                "优化副本只能从已拿签的那一份复制（拿没签的稿来复制，"
                                 "等于把「优化」建在一份没验过的正文上）"))
                 return out
             return self._polish_source_of(root, hit, out)

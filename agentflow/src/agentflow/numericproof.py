@@ -1945,7 +1945,7 @@ def filing_problems(*, origin: Any, evidence_kind: Any, proof_text: Any,
     text = str(proof_text or "").strip()
     # ---- 程序路径现在住在 `experiments.code_path`（2026-11-08） --------------------
     #
-    # B 手上没有"那一条实验"时，从 E 的证明手稿**稿头**读实验号（`- 实验号：exp:<号>`；
+    # B 手上没有"那一条实验"时，从 E 的证明手稿稿头读实验号（`- 实验号：exp:<号>`；
     # 2026-11-11 起稿名里的数字是 E 自己的稿号，不再是实验号 —— 读名字会挑错那条实验）。
     # 读到了就顺那条实验行取 `code_path`；读不到（F 侧 / 旧数据）再退回证明栏里旧
     # `程序：` 那一段。

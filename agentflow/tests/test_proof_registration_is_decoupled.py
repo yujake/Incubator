@@ -392,7 +392,7 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
         assert landed.get("ok") is True, landed
         rel = str(landed.get("path") or "")
         # 2026-11-11（业主裁定 ①「B侧稿号和命题号耦合是错的」）：B 的稿号由 B 自己的
-        # 号段发 ⇒ 签的载体是**这一笔落成的那个路径**，不再写死 `b-proof-<命题号>`。
+        # 号段发 ⇒ 签的载体是这一笔落成的那个路径，不再写死 `b-proof-<命题号>`。
         # 断言强度不降：仍然量"一份稿 / 同一路径 / 正文是最后一版 / 版本记录"。
         from agentflow import manuscriptids as _MIDS
 

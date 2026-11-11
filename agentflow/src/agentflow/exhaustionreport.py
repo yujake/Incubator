@@ -451,7 +451,7 @@ def experiment_id_of(rel: Any) -> str:
 
 
 def proof_manuscript_relpath(experiment_id: Any) -> str:
-    """穷举那一档的**老盘**稿名（`reports/e-proof-<实验号>.md`）；实验号不合法 ⇒ 空串。
+    """穷举那一档的老盘稿名（`reports/e-proof-<实验号>.md`）；实验号不合法 ⇒ 空串。
 
     2026-11-11（业主裁定 ① 同一条口径推到 E）之后 E 的稿名不再由实验号拼 ——
     每一族有自己的号段（`manuscriptids.FAMILY_COUNTERS`）。本函数只为老盘上的
@@ -462,7 +462,7 @@ def proof_manuscript_relpath(experiment_id: Any) -> str:
 
 
 def numeric_manuscript_relpath(experiment_id: Any) -> str:
-    """普通数值那一档的**老盘**稿名（`reports/e-num-<实验号>.md`；2026-11-08 新族）。
+    """普通数值那一档的老盘稿名（`reports/e-num-<实验号>.md`；2026-11-08 新族）。
 
     与 :func:`proof_manuscript_relpath` 同一条说明：新写路径按 E 自己的稿号命名，
     本函数只为老盘的既存量保留。
@@ -500,7 +500,7 @@ def find_manuscript_relpath(root: str | Path | None, experiment_id: Any, *,
     000014 的稿同一个形态）。
 
     三态：`checked=False` ⇒ 这一趟没法查（没给根）；`found=False` ⇒ 查过了、没有；
-    `found=True` ⇒ `path` / `manuscript_id`。**"没查成"绝不折成"没有"**。
+    `found=True` ⇒ `path` / `manuscript_id`。"没查成"绝不折成"没有"。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "path": "",
                            "manuscript_id": "", "candidates": [], "why": ""}
@@ -700,11 +700,11 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
 
     ## 稿号（2026-11-11 业主裁定 ① 推到 E：「你也再盯一下E侧稿的形状」）
 
-    改前 E 的稿名由**实验号**拼（`reports/e-proof-<实验号>.md`）—— 与 B 侧
+    改前 E 的稿名由实验号拼（`reports/e-proof-<实验号>.md`）—— 与 B 侧
     `b-proof-<命题号>` 是同一种耦合。现在 E 的稿号由
     `manuscriptids.next_manuscript_id(root, family="e-proof")` 发（`counters.emanuscript`
-    一条独立号段），稿名只回答"这是第几份 E 证明稿"。**稿与实验的对应关系记在稿头
-    那一行 `- 实验号：exp:<号>`**：同一条实验重落时靠 :func:`find_manuscript_relpath`
+    一条独立号段），稿名只回答"这是第几份 E 证明稿"。稿与实验的对应关系记在稿头
+    那一行 `- 实验号：exp:<号>`：同一条实验重落时靠 :func:`find_manuscript_relpath`
     按那一行找回它自己那份稿（不新写第二份）。
 
     与 :func:`land_report` 同一条纪律：写不成就如实记进 `problems`（不抛异常 ——
@@ -965,7 +965,7 @@ def compose_numeric_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any
 def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     """把普通数值实验手稿写进 `reports/e-num-<E稿号>.md`，读回来记下事实。
 
-    `e-num` 是**第三族**、有自己的号段（`counters.enummanuscript`）——
+    `e-num` 是第三族、有自己的号段（`counters.enummanuscript`）——
     与 `e-proof` 不共用计数器（两族各自的号各自自增、互不干扰；
     业主 2026-11-11：「E 两族」）。稿与实验的对应关系同样记在稿头
     `- 实验号：exp:<号>` 那一行。

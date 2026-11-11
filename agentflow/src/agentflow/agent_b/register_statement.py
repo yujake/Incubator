@@ -3111,17 +3111,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                            signed=bool(_concept_ms.get("signed"))):
                 return _refuse(
                     "concept_takes_no_proof_manuscript",
-                    "概念行不收**未签的**证明稿：`proof_manuscript` 是“这份证明在稿上被 V "
+                    "概念行不收未签的证明稿：`proof_manuscript` 是“这份证明在稿上被 V "
                     "逐行读过”的载体（签盖在它的 `## 证明` 正文上），而概念不参与等级链"
                     "（`evidencebits.derive_grade` 对 `kind='concept'` 短路成"
                     " `not_applicable`）—— 递上来的稿还没有 V 的签，一个字都落不进台账。"
                     "改前这一笔会先落一行概念、再整笔回 "
                     "`ok=false / proof_without_v_sign`（半笔：调用方按“没写成”处理，"
-                    "盘上却多了一行）。改法两条（都不是把**未签的**稿塞进本动作）："
-                    "① 要登记的是**命题的证明** ⇒ 用 `kind=\"conjecture\"`（或 lemma / "
+                    "盘上却多了一行）。改法两条（都不是把未签的稿塞进本动作）："
+                    "① 要登记的是命题的证明 ⇒ 用 `kind=\"conjecture\"`（或 lemma / "
                     "theorem）＋ `proof_manuscript=<稿的工作区相对路径>`，那才是收稿的"
                     "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
-                    "② 要登记的是**概念的良定义证明**（业主 2026-10-09：“proof 里就证"
+                    "② 要登记的是概念的良定义证明（业主 2026-10-09：“proof 里就证"
                     "这个概念为什么是良定义的”）⇒ 先 `own.land_manuscript` 把它落成 "
                     "`reports/b-proof-<号>.md` → 派 V 三转签 → 签回来之后用 "
                     "`own.ingest_manuscript(apply, cells=[\"proof_text\"])` 按位置与格收录"
@@ -5562,17 +5562,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if carried:
                 return _refuse(
                     D_POINTER_ONLY_REFUSAL,
-                    ("D 交稿**只递指针**（业主 2026-11-08：D 对命题台账只有只读权限，"
+                    ("D 交稿只递指针（业主 2026-11-08：D 对命题台账只有只读权限，"
                      "向 B 提交的每一条都要有 E / F 的成果背书）：这一笔还带着 "
                      + "、".join(carried)
-                     + " —— 那些内容一律由 **B 从手稿里读**，D 不许另传（抄一遍就等于"
+                     + " —— 那些内容一律由 B 从手稿里读，D 不许另传（抄一遍就等于"
                      "给「登记的那一份」换了个来源）。改法：只给 `proof_manuscript=<手稿"
                      "工作区相对路径>`，再给命题号 / 实验号与出处（`exp:<号>`）；"
                      "命题正文、证明正文、kind、evidence_kind 与引文理由都由 B 从那份稿里读"))
             if not rel:
                 return _refuse(
                     D_POINTER_ONLY_REFUSAL,
-                    ("D 交稿**只递指针**：这一笔没有给手稿路径（`proof_manuscript` 读到 "
+                    ("D 交稿只递指针：这一笔没有给手稿路径（`proof_manuscript` 读到 "
                      f"{str(proof_manuscript or '')[:60]!r}）⇒ 整笔不写。改法：只递指针 —— "
                      "`proof_manuscript` 给那份稿的工作区相对路径"
                      "（`reports/e-proof-<实验号>.md` / `reports/e-num-<实验号>.md` / "
@@ -5657,7 +5657,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse(
                 "pointer_manuscript_missing_statement",
                 f"按手稿路径收录：`{rel}` 里没有 `## 命题` 那一节 ⇒ 不知道要给 B 登记哪一条"
-                "命题。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段"), "", ""
+                "命题。这一格由 B 从稿里读，不许调用方在参数里另贴一段"), "", ""
         #: 这份稿的 `## 证明` 三态（2026-11-09，D4）：`present` / `absent`。
         #: 普通数值档（`e-num-*`）本来就没有这一节，`proof_text` 按业主口径强制空；
         #: 其余族缺节 ⇒ 受控拒（下面那一支），不许退回让调用方贴正文，也不许拿
@@ -5675,7 +5675,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                  "全文顶替）" if _absent else
                  f"按手稿路径收录：`{rel}` 里 `{_DS.SECTION_PROOF}` 那一节是空的 ⇒ "
                  "没有可登记的证明正文")
-                + "。这一格**由 B 从稿里读**，不许调用方在参数里另贴一段",
+                + "。这一格由 B 从稿里读，不许调用方在参数里另贴一段",
                 proof_body_state=_proof_state), "", ""
         # 2026-11-09（T2 收编，设计 3.2 第 2 处）：族判定只读 `manuscriptfamily.classify_manuscript`。
         # `notes/` 的手稿形名字读成 legacy（不可签、不可收录）；`reports/b-proof-*`
@@ -6291,8 +6291,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         ## 稿号（2026-11-11 业主裁定 ①：B 稿号与命题号解耦）
 
-        落点由 **B 自己那条号段** 决定（`manuscriptids.next_manuscript_id(root,
-        family="b-proof")`），不再由命题号拼。同一命题的下一版要落回**它自己那份稿**：
+        落点由 B 自己那条号段 决定（`manuscriptids.next_manuscript_id(root,
+        family="b-proof")`），不再由命题号拼。同一命题的下一版要落回它自己那份稿：
         先按稿头 `- 命题号：stmt:<号>` 找回已有那份（`bmanuscript.manuscript_id_for_statement`），
         找不到才发新号。老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
         （不新写第二个名字）—— 那是只读兼容的既存量，改名会把它变成第二份稿。

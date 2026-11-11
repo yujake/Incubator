@@ -232,7 +232,7 @@ def test_c_old_disk_names_still_classify_and_recognize_signs(tmp_path) -> None:
 def _named_by_own_counter(rel: str, *, family: str, before: int) -> bool:
     """这个名字里的号是不是"发它之前那一族计数器指着的号"。
 
-    这是本文件 a / b 两条判据的共同谓词：**名字里的号必须来自该族的计数器**。
+    这是本文件 a / b 两条判据的共同谓词：名字里的号必须来自该族的计数器。
     换回"用命题号 / 实验号"时它必然为 False（那些号不随计数器走）。
     """
     mid = _mid_of(rel)

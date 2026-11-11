@@ -12,7 +12,7 @@
 
 | # | 判据 | 钉住的东西 |
 |---|---|---|
-| a | 正控：源已拿签 ⇒ 复制成功、B 稿号来自 B 的号段、复制件里**没有**签块、源稿一个字节没动 | `B.open_polish_copy` 四步走通 |
+| a | 正控：源已拿签 ⇒ 复制成功、B 稿号来自 B 的号段、复制件里没有签块、源稿一个字节没动 | `B.open_polish_copy` 四步走通 |
 | b | 反向：源没签 ⇒ 受控拒（`no_signed_manuscript`），不产生任何文件 | 「拿没签的稿来优化」在结构上不可能 |
 | c | 反向：B 稿号不乱用（来自 `counters.bmanuscript`，不是源稿号、不是命题号） | 号源唯一 |
 | d1 | 反真空：不清签 ⇒ a 红（复制件仍读成已签） | a 的绿来自清签那一步 |
@@ -20,8 +20,8 @@
 
 ## 一句话口径：正文 sha 为什么与源相同
 
-复制件是**逐字复制**（优化还没开始），所以 `## 证明` 那一节的 sha 与源相同 —— 这是
-对的，也是"签按正文 sha 认"的自然结果。清签改变的是**整份文件**：文件 sha 变了、
+复制件是逐字复制（优化还没开始），所以 `## 证明` 那一节的 sha 与源相同 —— 这是
+对的，也是"签按正文 sha 认"的自然结果。清签改变的是整份文件：文件 sha 变了、
 稿上不再有签块、稿号是新的。等 B 真改了正文，正文 sha 才跟着变（那时 V 的签盖的是
 新 sha）。本文件把两个 sha 都当读数钉住，不靠"改一个字节"凑出不等式。
 
@@ -143,7 +143,7 @@ def test_a_the_signed_manuscript_is_copied_under_a_new_b_number(tmp_path) -> Non
         copy_text.encode("utf-8")).hexdigest(), got
     # 稿头还写着这条命题（下一轮落稿靠它找回自己那份）
     assert f"- 命题号：stmt:{SID}" in copy_text, copy_text.split("\n")[:5]
-    # 乙的读口：这一份副本自己**没有签**（签在源稿上）
+    # 乙的读口：这一份副本自己没有签（签在源稿上）
     assert VS.signed_manuscripts(st.root, artifact_path=cp)["found"] is False
     assert VS.signed_manuscripts(st.root, artifact_path=src)["found"] is True
     # 盘上多出来的只有那一份副本

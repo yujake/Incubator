@@ -18,13 +18,13 @@
 
 ## 四条纪律（与 F 那一套逐条相同，判据 `tests/test_manuscript_ids_are_per_family.py`）
 
-1. **每族一条计数器**（`:data:`FAMILY_COUNTERS`）：`f-proof` → `manuscript`（F 既有的
+1. 每族一条计数器（`:data:`FAMILY_COUNTERS`）：`f-proof` → `manuscript`（F 既有的
    那个键，不改名）、`b-proof` → `bmanuscript`、`e-proof` → `emanuscript`、
    `e-num` → `enummanuscript`；
-2. **占用检查**：`reports/<前缀><号>.md` 已存在 ⇒ 号继续往前推，绝不覆盖别人的稿；
-3. **并发安全**：同一进程内串行（模块级 `RLock`）；跨进程并发不在本号源的承诺里
+2. 占用检查：`reports/<前缀><号>.md` 已存在 ⇒ 号继续往前推，绝不覆盖别人的稿；
+3. 并发安全：同一进程内串行（模块级 `RLock`）；跨进程并发不在本号源的承诺里
    （`store` 的写者锁管不到 `reports/`）；
-4. **越界保护**：六位用尽（`999999` 之后）⇒ 受控抛 :class:`ManuscriptIdError`，
+4. 越界保护：六位用尽（`999999` 之后）⇒ 受控抛 :class:`ManuscriptIdError`，
    不静默升位宽（与 `store.alloc_id` 的 `IdExhausted` 同一条口径）。
 
 ## 为什么另起一个号源、不走 `store.alloc_id`
@@ -37,10 +37,10 @@
 
 ## 老盘（只读兼容）
 
-`b-proof-<命题号>` / `e-proof-<实验号>` / `e-num-<实验号>` 这些名字的**形状**与新名字
+`b-proof-<命题号>` / `e-proof-<实验号>` / `e-num-<实验号>` 这些名字的形状与新名字
 逐字相同（都是 `reports/<前缀><六位号>.md`），所以读侧（`manuscriptfamily` 的五档、
 `vsigns` 的签载体与签块、`depsection` 的族判定）一个字都不用改：它们只认形状，不认
-"这个数字是谁发的"。新号源只是**不再把命题号 / 实验号写进稿名**。
+"这个数字是谁发的"。新号源只是不再把命题号 / 实验号写进稿名。
 
 名字相同不等于身份相同：新稿的号来自本模块的计数器，稿与命题 / 实验的对应关系记在
 稿头 `- 命题号：stmt:<号>` / `- 实验号：exp:<号>` 那几行里（读侧按那几行找，不按名字
@@ -58,7 +58,7 @@ from typing import Any
 from . import manuscriptfamily as _MFAM
 from . import schema as _S
 
-#: 族 ⇒ `data/counters.json` 里这一族的键（**每族一条**；F 那一格沿用既有的
+#: 族 ⇒ `data/counters.json` 里这一族的键（每族一条；F 那一格沿用既有的
 #: `manuscript`，改名会让老盘上的计数器失去意义）。
 #:
 #: 为什么键名长这样：`manuscript` 是 F 已经发出去的那一条（2026-11-10 上线，老工作区里
@@ -237,7 +237,7 @@ def next_manuscript_id(root: Any, *, family: Any = FAMILY_F) -> str:
     """发一个这一族自己的手稿号：`counters.<族键>` + 1，占用就继续往前推。
 
     返回六位号（如 `000003`）；发完把这一族的计数器推到 `号 + 1`。号段用尽 ⇒
-    :class:`ManuscriptIdError`（受控，不静默升位宽）。**各族互不干扰**：B 发号只读
+    :class:`ManuscriptIdError`（受控，不静默升位宽）。各族互不干扰：B 发号只读
     / 写 `bmanuscript` 那一格，与 F 的 `manuscript`、E 的两条各管各的。
     """
     key = counter_key(family)

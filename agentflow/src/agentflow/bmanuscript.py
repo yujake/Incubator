@@ -24,8 +24,8 @@ B 改写在册证明时，正文与在册那一版不同 ⇒ 旧签读成 stale�
 改前 B 的稿名是 `reports/b-proof-<命题号>.md`（`relpath(statement_id)` 拼出来的）——
 与 F 在 2026-11-10 之前那套"稿名带命题号/计划号"是同一个毛病。现在 B 的稿号由
 `manuscriptids.next_manuscript_id(root, family="b-proof")` 发（`counters.bmanuscript`
-一条独立号段），稿名只回答"这是第几份 B 稿"。**稿与命题的对应关系记在稿头那一行
-`- 命题号：stmt:<号>`**：重新落同一命题的下一版时，靠
+一条独立号段），稿名只回答"这是第几份 B 稿"。稿与命题的对应关系记在稿头那一行
+`- 命题号：stmt:<号>`：重新落同一命题的下一版时，靠
 :func:`manuscript_id_for_statement` 按那一行找回它自己那份稿（而不是按名字里的数字猜）。
 
 老盘上的 `reports/b-proof-<命题号>.md` 只读兼容：名字形状与新名字逐字相同
@@ -84,7 +84,7 @@ STATEMENT_PREFIX = "stmt:"
 def relpath(statement_id: Any, proof_no: Any = 1) -> str:
     """这一条命题的 B 改写手稿落点（工作区相对）；号不合法 ⇒ 空串（不猜位置）。
 
-    **老盘的只读口径**（2026-11-11 起新写路径不再用它）：改前 B 的稿名就是
+    老盘的只读口径（2026-11-11 起新写路径不再用它）：改前 B 的稿名就是
     `reports/b-proof-<命题号>.md`，老盘上那些稿仍是这个形状，读侧要能拼回它们。
     新写路径的落点由 `manuscriptids.canonical_rel(稿号, family="b-proof")` 决定
     —— 号来自 B 自己的计数器，不是命题号。
@@ -119,7 +119,7 @@ def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
     `- 命题号：stmt:<号>`）。本函数扫 `reports/b-proof-*.md`、读那一行。
 
     三态：`checked=False` ⇒ 这一趟没法查（没给根）；`found=False` ⇒ 查过了、没有；
-    `found=True` ⇒ 找到了（`manuscript_id` / `path`）。**"没查成"绝不折成"没有"**。
+    `found=True` ⇒ 找到了（`manuscript_id` / `path`）。"没查成"绝不折成"没有"。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "manuscript_id": "",
                            "path": "", "candidates": [], "why": ""}
@@ -156,7 +156,7 @@ def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
                         f"stmt:{sid} ⇒ 这一条命题还没有 B 稿")
         return out
     # 多条同命题（2026-11-11：优化副本会让同一命题短暂有两份 B 稿 —— 已签的源稿与
-    # 未签的优化副本）：**未签的那一份优先**。B 正在改的就是它；已签的那一份按冻结
+    # 未签的优化副本）：未签的那一份优先。B 正在改的就是它；已签的那一份按冻结
     # 纪律只读（丁），不该被下一笔落稿挑中。同档再按名字序，读数里给全部候选。
     hits.sort(key=lambda item: (item[0], item[1]))
     signed_any, rel, mid = hits[0]

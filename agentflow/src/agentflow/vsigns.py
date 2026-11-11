@@ -532,13 +532,13 @@ def archive(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
 # 「维护拿签稿的稿号表可以和V自动维护的颁发出V签的表进行复用」
 # ```
 #
-# 所以这一节**不新建第二份账**：它只把 `out/vsigns/<正文sha>.json`（证据，逐份）与
+# 所以这一节不新建第二份账：它只把 `out/vsigns/<正文sha>.json`（证据，逐份）与
 # `out/vsigns/issued.json`（派生归档）读成一张"拿签稿"的清单。三件事因此结构上成立：
 #
 # - 「持续追加」= 颁发表本来就在追加（每发一签就多一份 `/sha.json`，归档跟着重建）；
 # - 「交稿时一并递交 D」= `signed_table(root)` 一次读出整张表（含原文 sha 与时刻），
 #   D 不需要另问一遍"哪几份稿签过"；
-# - 「老的也不被抹」= 同一份稿改版后再签会得到**另一个正文 sha** ⇒ 是另一行，
+# - 「老的也不被抹」= 同一份稿改版后再签会得到另一个正文 sha ⇒ 是另一行，
 #   旧行仍在（`test_the_signed_table_reuses_the_v_issued_table` 的 c 格钉这一条）。
 #
 # 这一节只有读口：写的唯一入口仍是 :func:`issue` / :func:`archive`。
@@ -550,7 +550,7 @@ SIGNED_TABLE_SCHEMA = "vsigns-signed-table/1"
 def _signed_entry_of(sign: Mapping[str, Any], *, listed: bool = False) -> dict[str, Any]:
     """一份签 ⇒ 拿签稿表里的一行（纯派生；只读签文件本身，不吃外部状态）。
 
-    `manuscript_id` 从 `artifact_path` 的**名字**读（`reports/<族>-<号>.md` 的号）——
+    `manuscript_id` 从 `artifact_path` 的名字读（`reports/<族>-<号>.md` 的号）——
     它回答"哪一份稿"，`artifact_sha` 回答"哪一版正文"。两格都不是"第几版证明"：
     业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」。
     """
@@ -571,10 +571,10 @@ def _signed_entry_of(sign: Mapping[str, Any], *, listed: bool = False) -> dict[s
 
 
 def signed_table(root: Any) -> dict[str, Any]:
-    """整张「拿签稿」表（**复用** V 的颁发表，不新建账）：本工作区里签过的每一份稿。
+    """整张「拿签稿」表（复用 V 的颁发表，不新建账）：本工作区里签过的每一份稿。
 
     数据只从两处读：`out/vsigns/<正文sha>.json`（逐份签，证据）与
-    `out/vsigns/issued.json`（派生归档）。**权威是逐份签文件**；归档只用来对账
+    `out/vsigns/issued.json`（派生归档）。权威是逐份签文件；归档只用来对账
     （`index.listed` / `index.missing_from_index` / `index.orphan_in_index`），
     对不上就如实报在读数里，不许拿归档当结论。
 
@@ -651,10 +651,10 @@ def signed_manuscripts(root: Any, *, statement_id: Any = "", manuscript_id: Any 
 
     返回 `{checked, found, count, signed, entries, latest, why, matched_by}`：
 
-    - `checked=False` ⇒ 这一格没查成（表列不出来），**不许读成"没有"**；
-    - `found=False` + `checked=True` ⇒ 查过了、这一条/这份稿**没有签**
+    - `checked=False` ⇒ 这一格没查成（表列不出来），不许读成"没有"；
+    - `found=False` + `checked=True` ⇒ 查过了、这一条/这份稿没有签
       （`why` 逐字说"没有"）；
-    - `found=True` ⇒ `entries` 是它拿到过的每一份签（同一份稿改版后再签会是**两行**，
+    - `found=True` ⇒ `entries` 是它拿到过的每一份签（同一份稿改版后再签会是两行，
       因为正文 sha 变了 —— 旧那行不会被抹），`latest` 是 `at` 最新的那一行。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "count": 0,
