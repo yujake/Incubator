@@ -2567,6 +2567,48 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "统一返回形状）/ _signed_version_reading（目标名上签住的是不是别的"
                           "正文 —— \"没查成\"不折成\"没签\"）—— 只被 `commit_manuscript` 调用；"
                           "拆出只为把 `manuscriptform` 拉回 800 行内",
+    # 2026-11-11（业主裁定 ①②③，`manuscript*` 这一批的共同落点）：手稿的「谁是产出方 /
+    # 提交了没有 / 收录写哪一枚记号」在一份稿上被 F、E、B 三方分别问到，而三方分属三个
+    # 角色包 ⇒ 判据必须落在一个中立的顶层模块，否则任一方挂进角色包都会让另外两方反向
+    # 依赖一个角色（并长出第二份「什么算已提交」）。它纯读 + 一次显式写口（B 收录的
+    # `mss:` 记号），不碰模型、不注册工具，测试也能直接 import。
+    "manuscriptsubmission.py": "手稿产出方 / 已提交 / 收录记号的统一读口（2026-11-11 裁定 ①②③）："
+                               "producer_of（只认路径族，不认调用方自报）/ submission_reading"
+                               "（路径族 × V 颁发表 × `tasks.artifacts` 三处 join）/ mark_ingested"
+                               "（B 收录写 `mss:` 记号）/ verification_producer_reading（老行读 "
+                               "unknown，不按族硬填）—— F、E、B 三方与判据共用这一份",
+    # 为什么必须是顶层模块：它写的是 E 自己那一行 `tasks.artifacts`，而触发点是收工门
+    # （工具层 / CLI 的 `closing`），不是 E 的某个动作文件 —— 挂在 `agent_e/` 会让工具层
+    # 反向 import 角色包；`mss:` 记号的拼装 / 解析与 `manuscriptsubmission` 逐字同一批函数。
+    "manuscriptclosing.py": "E 的收工自动提交（2026-11-11 裁定 ②）：auto_submit_for 选 E 名下"
+                            "（`e-proof` / `e-num`）已签未提交的稿，把 `mss:` 记号写进 E 那一行 "
+                            "`tasks.artifacts`（同一把事务锁内去重）—— 记号函数与 "
+                            "`manuscriptsubmission` 共用，不新造字符串；触发点在收工门而不在角色包",
+    # 为什么必须是顶层模块：判据被三处写口共用 —— `tools/fs_tools.py`（工具层）、
+    # `agent_f/core.py`（角色动作）与 `manuscriptform.promote_formal`（F/B 共用的转正）——
+    # 挂进任一侧都会让另外两侧反向依赖；而数据只来自 `vsigns` 的颁发表，本模块不新增账。
+    "manuscriptfreeze.py": "拿签后冻结的唯一判据（2026-11-11 裁定 ②）：freeze_reading 四态"
+                           "（signed / edited_after_sign / unsigned / unchecked，签块自述不算数，"
+                           "只信 V 颁发表）—— `fs.write` / `fs.edit` / `fs.delete` / `fs.move`、"
+                           "`agent_f/core._hand_proof` 与 `manuscriptform.promote_formal` 三处写口"
+                           "共用这一份；`unchecked` 不折成「没签」",
+    # 为什么必须是顶层模块：多证明的路径号由 B 收录时分配，但写依赖行（`depsection`）、
+    # 落 `verifications` 行（V）与收工读数三处都要读同一个号；挂在 B 或 V 任一侧都会让
+    # 另一侧反向依赖一个角色，并长出第二份「这是第几条路径」的口径。
+    "manuscriptpaths.py": "多证明的路径号（2026-11-11 裁定：由 B 收录时分配）：path_reading"
+                          "（一条命题几条路径 × 各是哪份稿）/ assign_path_group（新正文排 N+1，"
+                          "同 sha 沿用原号）/ stamp_verification_path_group（把号补到 V 的老行上，"
+                          "老行没有就只按 sha 读、不硬填）—— 依赖行与 verifications 行共用这一份",
+    # 为什么必须是顶层模块：2026-11-11 从 `manuscriptsubmission.py` 拆出（>800 软基线，
+    # 不抬只拆）。产出方那张表与「V 的父名单」的现算不属于任何角色包 —— `manuscriptpaths`
+    # 要拿 `_manuscript_id_of`，`manuscriptsubmission` 要拿 `producer_of` / `parents_of`，
+    # 测试要能在不建 store 的情况下单独核这张表；拆开后不另建第二份映射。
+    "manuscriptproducers.py": "手稿族的产出方读数（2026-11-11 从 `manuscriptsubmission.py` 拆出）："
+                              "PRODUCER_OF_FAMILY（族 ⇒ 角色唯一一张表）/ producer_of（只认路径"
+                              "族）/ parents_of（从 `capabilities.ALLOWED_EDGES` 现算 V 的父名单，"
+                              "不写死字面量）/ _manuscript_id_of —— 与 `manuscriptpaths` / "
+                              "`manuscriptsubmission` 共用，拆出只为把 `manuscriptsubmission` "
+                              "拉回 800 行内",
     # 2026-10-19（前缀稳定性机制）：把"系统提示每步重渲染"拆成"静态段逐字节稳定 + 动态段走 user"，
     # 并汇总上游 prompt 缓存读数。它不属于任何角色，属"循环面/质量面"的支撑模块。
     # 2026-11-09（D10 B1，另一条 lane 提交的纯模块；本批只补登记，不改它的实现）：
