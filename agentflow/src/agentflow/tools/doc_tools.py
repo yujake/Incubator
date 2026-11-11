@@ -1491,14 +1491,14 @@ ARTIFACT_EVENT = "documents.markdown_sha256"
 #: 「这一行的正文以哪份文件为准」的唯一口径（甲，2026-11-11）。
 #:
 #: 业主口径（`draft` 与本批施工单）：H 审的是论文正文 `out/paper/main.tex`，
-#: `documents` 只是它的登记行。所以 kind="paper" 的行，**正文 = `out/paper/main.tex`**；
+#: `documents` 只是它的登记行。所以 kind="paper" 的行，正文 = `out/paper/main.tex`；
 #: 其它 kind（note / survey / reproduction_report）没有 tex，正文就是它自己的
 #: `markdown_path` 那份渲染产物。
 #:
-#: 为什么记的是"文件字节的 sha"而不是 `content_sha256`：后者是这一版**内容**的规范
+#: 为什么记的是"文件字节的 sha"而不是 `content_sha256`：后者是这一版「内容」的规范
 #: 哈希（`signatures.content_sha256_of`，签名台账与 `doc:@hash` 都钉它），
 #: 把文件 sha 塞进去会让 `verify.content_hash_mismatch` 与整条签名链同时失效
-#: （D-44 的现场，见上一节）。文件 sha 继续走**同一条** `ARTIFACT_EVENT` 读数，
+#: （D-44 的现场，见上一节）。文件 sha 继续走「同一条」 `ARTIFACT_EVENT` 读数，
 #: 不新造第二份账。
 BODY_TEX_REL = "out/paper/main.tex"
 
@@ -1553,7 +1553,7 @@ def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any,
     （:func:`body_artifact_of`）。paper 行的正文是 `out/paper/main.tex`，
     不是这份 `render_markdown` 产物；两份的 sha 各占一格，互不冒充。
     文件还没落盘时 `body_sha256` 留空 + `body_problem` 说清 ——
-    "正文还不在盘上"是一条**读数**，不许退回 markdown 冒充它。
+    "正文还不在盘上"是一条「读数」，不许退回 markdown 冒充它。
 
     返回的读数与事件里的字段逐字相同，方便调用方把它带进自己的返回值。
     """
@@ -1583,7 +1583,7 @@ def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any,
         "body_problem": body_problem,
     }
     tx.info(ARTIFACT_EVENT, **reading, note=(
-        "中间产物（documents 行指向的 markdown）与**正文**（paper 行 = "
+        "中间产物（documents 行指向的 markdown）与「正文」（paper 行 = "
         "`out/paper/main.tex`；其它 kind = markdown 自己）写盘那一刻的字节 sha256；"
         "只作人工追溯，不作任何收工门判据"
     ))

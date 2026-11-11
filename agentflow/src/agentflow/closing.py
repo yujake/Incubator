@@ -1710,7 +1710,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                  if SIG.signed_revision(d, recs) is None and _records_of(str(d.get("doc_id") or ""))]
         never = [d for d in claimed
                  if not _records_of(str(d.get("doc_id") or ""))]
-        # 有 open findings、而现行版**没有**任何审校记录钉住 ⇒ 这一版没人复审过。
+        # 有 open findings、而现行版「没有」任何审校记录钉住 ⇒ 这一版没人复审过。
         open_unreviewed = [
             {"doc_id": did, "status": str(next(
                 (d.get("status") for d in docs if str(d.get("doc_id") or "") == did), "")),

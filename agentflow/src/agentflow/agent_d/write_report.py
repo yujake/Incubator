@@ -470,8 +470,8 @@ class _WriteReport:
         delivery = self._deliver_carried_to_b(carried_rows)
         # ---- 子→父的完成汇报（业主 2026-11-11：D 不能指向 G，G 是父） ----------
         #
-        # 时序：**B 收录之后**才汇报（这一行在 `_deliver_carried_to_b` 之后）。
-        # 内容：只带指针（命题号 / 稿号 / 台账落点 / 判定），**不带正文**。
+        # 时序：「B 收录之后」才汇报（这一行在 `_deliver_carried_to_b` 之后）。
+        # 内容：只带指针（命题号 / 稿号 / 台账落点 / 判定），「不带正文」。
         # 机制：`send_message` + 收件箱（`inbox_digest` / `mark_delivered`）——
         # 这是既有的"子任务收尾汇报"通道，不是 summon 一条新边；`D 的出边` 不加 G。
         delivery["parent_report"] = self._report_delivery_to_parent(delivery)
@@ -979,7 +979,7 @@ class _WriteReport:
 
         ## 为什么汇报必须发生在这一笔之后（业主 2026-11-11）
         「D 干完 ⇒ 向上汇报」—— 而 D 的活是"补材料 + 交台账"，所以"成没成"只有
-        `_deliver_carried_to_b` 的返回值知道。汇报写在它之后，且**失败也汇报**
+        `_deliver_carried_to_b` 的返回值知道。汇报写在它之后，且「失败也汇报」
         （B 受控拒时写"没进台账、原因是…"），绝不把拒收说成办成了。
 
         ## 为什么走收件箱而不是 summon

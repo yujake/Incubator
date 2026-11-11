@@ -1124,15 +1124,15 @@ def _dedup_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
 #
 # 现场（`projects/dct-min4-20261111`）：7 条 `record_finding` 落的手工判词全 `open`，
 # 而 `verify_fixes` 的 resolved 判据是「上一轮的 key 不在本轮 scan 结果里」——
-# 手工判词的 key 是散文，**永远不会**出现在 scan 结果里 ⇒ 只要 H 跑一次
+# 手工判词的 key 是散文，「永远不会」出现在 scan 结果里 ⇒ 只要 H 跑一次
 # `verify_fixes`，这 7 条会被全部判成 `fixed`（"重跑对应检查不再复现"），
 # 而一条检查都没重跑。那是把「没查」写成「修好了」，与 `R-04-b` 同一族。
 #
-# 本节的判据：**手工判词不许被自动复跑判掉**。
+# 本节的判据：「手工判词不许被自动复跑判掉」。
 #   * 来源标记：`record_finding` 落库时把 `MANUAL_FINDING_NOTE_PREFIX` 写进
 #     `resolution_note` 的开头（`resolution_note` 是既有自由文本字段，不进去重键、
-#     不是审校内容；`schema.ReviewFinding` 在 FC-27 禁改区，本批**不加列**）；
-#   * 离场只有一条路：H 自己显式复核 —— `record_finding` 以**同一个去重键**再登记
+#     不是审校内容；`schema.ReviewFinding` 在 FC-27 禁改区，本批「不加列」）；
+#   * 离场只有一条路：H 自己显式复核 —— `record_finding` 以「同一个去重键」再登记
 #     一次，`evidence` 以 `RECHECK_FIXED_PREFIX` / `RECHECK_WONTFIX_PREFIX` 开头，
 #     把结论（fixed / wontfix + 理由）写进同一个 finding_id 的 `resolution_note`。
 #     为什么走 `evidence` 而不加参数：工具声明面被两份冻结快照钉住（`tests/golden/

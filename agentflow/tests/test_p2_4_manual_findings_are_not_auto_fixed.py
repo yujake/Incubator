@@ -3,29 +3,29 @@
 
 ## 现场（`projects/dct-min4-20261111` 真机读数）
 
-H 的 7 条发现全部是 `review.record_finding` 落的**手工判词**（散文 key：
+H 的 7 条发现全部是 `review.record_finding` 落的手工判词（散文 key：
 `(kind, target, message)`），而 `verify_fixes` 的 resolved 判据是
 「上一轮的 key 不在本轮 `scan_document` 结果里」——
 
     散文 key 永远不在 scan 结果里 ⇒ 只要 H 跑一次 `verify_fixes`，
     那 7 条会被全部标成 `fixed`（"重跑对应检查不再复现"），而一条检查都没重跑。
 
-这正是 `R-04-b`（"没查 ≠ 修好"）在**手工判词**这一支上的同形缺口：改前它只保护了
+这正是 `R-04-b`（"没查 ≠ 修好"）在手工判词这一支上的同形缺口：改前它只保护了
 语义判据产的那一支（`_is_semantic_finding`），手工判词没有任何标记，结构上分不开。
 
 ## 本文件的判据
 
 - j 正控：7 条手工 findings（G 已用 `revise` 把它们标成 fixed）+ 跑一次
-  `verify_fixes` ⇒ **仍是 open**，绝不变成 fixed；读数逐条说清
+  `verify_fixes` ⇒ 仍是 open，绝不变成 fixed；读数逐条说清
   「手工判词不能被自动复跑判掉」。
-- k 反向：H **显式复核**过的手工判词（同一个去重键、`evidence` 以
+- k 反向：H 显式复核过的手工判词（同一个去重键、`evidence` 以
   `复核 fixed：` / `复核 wontfix：` 开头）能离场，且 `resolution_note` 指到
   复核那一次（`[H 复核] [round N]`）；之后的 `verify_fixes` 不许把它改回去。
 - l 反真空：把这道判据摘掉（`_is_manual_finding` 恒 False）⇒ j 立刻红（7 条全 fixed）。
 
 ## 为什么来源标记写在 `resolution_note`、复核走 `evidence`
 
-`schema.ReviewFinding` 在 FC-27 禁改区（本批**不许加列**）；工具声明面被两份冻结
+`schema.ReviewFinding` 在 FC-27 禁改区（本批不许加列）；工具声明面被两份冻结
 快照钉住（加参数要重冻 golden，本批未获授权）。所以：
 
 - 来源标记 = 既有自由文本 `resolution_note` 的受控前缀 `[manual] `；
@@ -181,7 +181,7 @@ def test_k_an_explicit_h_recheck_lets_a_manual_finding_leave(store: Store):
 
 
 def test_k2_an_explicit_recheck_cannot_be_used_as_a_stamp(store: Store):
-    """负控：复核前缀只能用在**已登记的手工判词**上（不许当盖章工具）。"""
+    """负控：复核前缀只能用在已登记的手工判词上（不许当盖章工具）。"""
     _workspace(store)
     agent = AgentH(store, config={"max_review_rounds": 3})
     missing = agent.writers.call(

@@ -4336,8 +4336,8 @@ _BODY_CROSS_REFS: dict[tuple[str, str, str], str] = {
     # "指到别人"，不登记就会被 `_body_action_problems` 第 3 件事当场报出来。
     ("C", "矛盾-三态并指到那一对", "D.adjudicate"):
         "「C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）」—— 指到别人",
-    ("G", "成稿-正文自己写", "H.review"):
-        "「稿件级审校由 **H** 做（`H.review`）」—— 指到别人",
+    # 2026-11-11（业主裁定「G 的出边集为 C,D,H」）：G 现在够得到 H.review ⇒ 这一条豁免
+    # 不再成立，按 `_body_action_problems` 第 3 件事的纪律删掉（留着会让豁免表腐烂）。
     # 2026-10-22 第四批：这句里的动作从 `E.check_formal` 改成 `L.check_formal`
     # （形式化那一岗从 E 划到 L），登记跟着换键 —— 换键之后它仍然"够不到"（V 没有到 L 的边），
     # 所以它仍然是"指到别人"那一档，不是该删的腐烂条目。

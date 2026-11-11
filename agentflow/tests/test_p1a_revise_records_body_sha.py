@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""甲（2026-11-11）：G 的「改」必须记进台账 —— 轮次 + **正文 sha**（a / b / c）。
+"""甲（2026-11-11）：G 的「改」必须记进台账 —— 轮次 + 正文 sha（a / b / c）。
 
 ## 现场
 
@@ -9,9 +9,9 @@
 
 ## 落点（为什么不是 documents 加一列）
 
-`schema.Document` 在 FC-27 禁改区（本批**不许加列**）；`content_sha256` 被签名链与
+`schema.Document` 在 FC-27 禁改区（本批不许加列）；`content_sha256` 被签名链与
 `doc:@hash` 内部引用钉着（D-44 的现场），把文件 sha 塞进那一格会让
-`verify.content_hash_mismatch` 与整条签名链同时失效。所以正文 sha 记在**同一条**
+`verify.content_hash_mismatch` 与整条签名链同时失效。所以正文 sha 记在同一条
 既有读数上：`documents` 行写盘时 `doc_tools.ARTIFACT_EVENT` 那条 info 事件
 （D-44 引入的"中间产物自己的 sha"），由 `doc_tools.body_artifact_of` 定"以哪份文件为准"：
 

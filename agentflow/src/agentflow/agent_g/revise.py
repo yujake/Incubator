@@ -174,7 +174,7 @@ class _Revise:
                 rendered = str(target)
                 # `D-44`：重画之后，中间产物自己的 sha 也跟着换一版 —— 记在同一笔事务里。
                 # 不记的话，读侧会把每一次正常改稿都报成"内容已变"（噪音会把真信号淹掉）。
-                # 甲（2026-11-11）：同一条事件里记**正文**那一份的 sha（paper =
+                # 甲（2026-11-11）：同一条事件里记「正文」那一份的 sha（paper =
                 # `out/paper/main.tex`，其它 kind = markdown 自己）。这是"改稿"这件事
                 # 在 `documents` 登记行上的唯一读数 —— 不新造第二份账。
                 artifact = DT.record_markdown_artifact(
@@ -217,7 +217,7 @@ class _Revise:
             "fixed_findings": fixed_ids,
             "markdown_path": rel,
             "rendered_path": rendered,
-            # ---- 甲（2026-11-11）：这一版**正文**的读数（哪份文件为准见
+            # ---- 甲（2026-11-11）：这一版「正文」的读数（哪份文件为准见
             # `DT.body_artifact_of`：paper ⇒ out/paper/main.tex；其它 kind ⇒ markdown）。
             # `content_sha256` 仍是"这一版内容"的规范哈希，两者不互相冒充。
             "body_path": artifact.get("body_path") or "",

@@ -10,7 +10,7 @@
 
 ## 修法
 
-`claimed` 多认一档：**该稿件有 `status=open` 的 findings**。于是这一档的分母 ≥ 1，
+`claimed` 多认一档：该稿件有 `status=open` 的 findings。于是这一档的分母 ≥ 1，
 而 `pinned=0` ⇒ 收工门红；读数里逐条列「哪几条 open、谁该处理」
 （手工判词只有 H 能复核掉；机械发现由 G 改稿后 H 重跑）。验收表没写这一档时，
 门也替它说话（自动分支与 `stale_signoffs` 同形）。

@@ -13,14 +13,14 @@
 
 - `specs/g.py` 的 `edges`：`('C','D','H')`（去掉 A/E/F）；
 - `specs/h.py` 的 `edges`：`('A','E')`（去掉 G）；
-- `specs/d.py` **不动**（D 的出边保持 `{A,B,C,E,F}`；D 是子，汇报是"向上"，不是召唤）；
-- 补内容的链：G 派 D → D 调 A/E/F 补 → D 交台账、B 收录 → **D 向上汇报只带指针**
+- `specs/d.py` 不动（D 的出边保持 `{A,B,C,E,F}`；D 是子，汇报是"向上"，不是召唤）；
+- 补内容的链：G 派 D → D 调 A/E/F 补 → D 交台账、B 收录 → D 向上汇报只带指针
   （`send_message` + 收件箱，不是 summon 一条新边）→ G 去台账读。
 
 ## 判据
 
 - a/d 边集：`ALLOWED_EDGES['G'] == {'C','D','H'}`、`'G' not in ALLOWED_EDGES['H']`、
-  `ALLOWED_EDGES['D']` 仍含 `{'A','E','F'}` 且**不含 G**；
+  `ALLOWED_EDGES['D']` 仍含 `{'A','E','F'}` 且不含 G；
 - b/f 端到端：G 派 H ⇒ 通；H 派 G ⇒ 受控拒；反真空：把边改回 A/D/E/F（并给 H 加回 G）⇒ 两条都放行；
 - e 题面：G 的 policy 有「补内容走 D」、没有旧说法「你能召唤的只有 A / D / E / F」；
   H 的 policy 没有「请 G 修订」；
@@ -116,6 +116,16 @@ def test_e_g_policy_routes_content_through_d_and_h_never_summons_g() -> None:
     # H 侧：不许暗示"可以找 G"
     assert "请 G 修订" not in h_text, "H 的题面还在暗示它可以找 G"
     assert "不许召唤 G" in h_text, "H 的题面没写「不许召唤 G」"
+    # m/n/o 的题面（2026-11-11：给号最好，没号按内容找根；歧义必须报）
+    assert "优先把命题号给 C" in g_text and "内容原样" in g_text, g_text
+    assert "匹配到哪个号" in g_text, g_text
+    from agentflow.specs.c import SPEC as C_SPEC
+
+    c_text = "\n".join(C_SPEC.brief.policy)
+    assert "先按内容去台账找根" in c_text, c_text
+    assert "table.search" in c_text and "ledger.resolve" in c_text, c_text
+    assert "没找到唯一的根" in c_text and "候选" in c_text, c_text
+    assert "不许挑一个凑数" in c_text, c_text
 
 
 # ============================================================ 丙 g/i：revise 的 next_step
@@ -360,3 +370,95 @@ def test_l_removing_the_c_paragraph_makes_j_red() -> None:
     assert len(kept) == len(G_SPEC.brief.policy) - 1, "夹具前提：那一段真的在 policy 里"
     text = "\n".join(kept)
     assert "proof_chain" not in text or "先根后叶" not in text, "摘掉之后仍像 j 一样通过"
+
+
+# ============================================================ m/n/o：C 没号也能按内容找根
+
+
+def _c_ledger(store: Store):
+    """C 的工具栏（含 `table.search` / `ledger.resolve` / `ledger.expand`）。"""
+    from agentflow.tools import build_registry as build_tools
+
+    return build_tools(store=store, workspace_root=store.root).registry
+
+
+def _pick_root(reading: dict) -> dict:
+    """按题面的口径选根：恰好一条候选才算根；0 条 / 多条都报「没找到唯一的根」。
+
+    这是判据要钉的那条规则的可机器读形式（C 的题面逐字写了同一句）。
+    """
+    cands = list(reading.get("candidates") or [])
+    ids = [str(c.get("stmt_id") or "") for c in cands]
+    if reading.get("found") and len(ids) == 1:
+        return {"matched": ids[0], "ambiguous": [], "reason": ""}
+    return {
+        "matched": "",
+        "ambiguous": ids,
+        "reason": ("没有命中任何命题" if not ids
+                   else f"命中 {len(ids)} 条，不是唯一的根"),
+    }
+
+
+def test_m_a_statement_id_goes_straight_to_ledger_resolve(tmp_path: pathlib.Path):
+    """m 正控（有号）：给 `stmt:<号>` ⇒ C 直接按号选根，读数里有那个号。"""
+    store = _mk_store(tmp_path)
+    _stmt(store, "000001")
+    reg = _c_ledger(store)
+    res = reg.call("ledger.resolve", role="C", query="stmt:000001")
+    assert res.ok, res.error
+    assert res.data["found"] is True and res.data["mode"] == "id", res.data
+    assert [c["stmt_id"] for c in res.data["candidates"]] == ["000001"], res.data
+    tree = reg.call("ledger.expand", role="C", node="stmt:000001", depth=1)
+    assert tree.ok, tree.error
+    assert tree.data["node"] == "000001", tree.data
+    assert [n["stmt_id"] for n in tree.data["nodes"]][:1] == ["000001"], tree.data
+
+
+def test_n_without_an_id_can_search_the_ledger_by_content(tmp_path: pathlib.Path):
+    """n 正控（无号）：只给内容 ⇒ C 用 `table.search` 找到台账那条，以它为根出链。"""
+    store = _mk_store(tmp_path)
+    _stmt(store, "000001")
+    with store.tx("statements", actor="test") as tx:
+        row = dict(tx.find("statements", stmt_id="000001"))
+        row["label"] = "Fatou 引理"
+        row["statement_full"] = "Fatou 引理 + 控制收敛定理给出的极限交换。"
+        tx.upsert("statements", row)
+    reg = _c_ledger(store)
+
+    found = reg.call("table.search", role="C", table="statements", query="Fatou 引理")
+    assert found.ok, found.error
+    ids = [str(r.get("stmt_id") or "") for r in (found.data.get("rows") or [])]
+    assert "000001" in ids, found.data
+
+    got = reg.call("ledger.resolve", role="C", query="Fatou 引理")
+    assert got.ok, got.error
+    cand = got.data["candidates"][0]
+    assert cand["stmt_id"] == "000001" and "Fatou" in cand["label"], got.data
+    choice = _pick_root(got.data)
+    assert choice == {"matched": "000001", "ambiguous": [], "reason": ""}, choice
+    tree = reg.call("ledger.expand", role="C", node=f"stmt:{choice['matched']}", depth=1)
+    assert tree.ok and tree.data["node"] == "000001", tree.data
+
+
+def test_o_ambiguous_content_must_not_pick_one_root(tmp_path: pathlib.Path):
+    """o 反向：命中两条以上 ⇒ 报「没找到唯一的根」+ 候选清单，不许硬选。"""
+    store = _mk_store(tmp_path)
+    _stmt(store, "000001")
+    _stmt(store, "000002")
+    with store.tx("statements", actor="test") as tx:
+        for sid, label in (("000001", "Fatou 引理（极限交换）"),
+                           ("000002", "Fatou 控制收敛（另一条）")):
+            row = dict(tx.find("statements", stmt_id=sid))
+            row["label"] = label
+            row["statement_full"] = f"{label} 的正文。"
+            tx.upsert("statements", row)
+    reg = _c_ledger(store)
+    got = reg.call("ledger.resolve", role="C", query="Fatou")
+    assert got.ok, got.error
+    assert got.data["hits_total"] == 2, got.data
+    choice = _pick_root(got.data)
+    assert choice["matched"] == "", choice
+    assert set(choice["ambiguous"]) == {"000001", "000002"}, choice
+    assert "不是唯一的根" in choice["reason"], choice
+    naive = {"matched": str(got.data["candidates"][0]["stmt_id"])}
+    assert naive["matched"] and naive != choice
