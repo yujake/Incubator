@@ -22,6 +22,17 @@
 非空、`ended_at=None`（逐字对齐 `schema.Task.validate` 的 `schema.py:2131-2139`），等待窗同步点等 `readings`
 非空而非 `sleep`（日志层另有 `_log`）。
 
+## 夹具路径（2026-11-11 业主改边集之后）
+
+业主把 `ALLOWED_EDGES['G']` 改成 `{C,D,H}`、`ALLOWED_EDGES['H']` 改成 `{A,E}` ⇒
+`H → G` 现在是 `forbidden_edge`。这一族判据守的是"扇出上限/等待/腾位"，与具体角色无关：
+上限只按**发起方**那一档取（`direct_children_limit_for(policy, by)`：M ⇒ 100、非 M ⇒
+`policy.max_direct_children`），在飞数只数父任务这一行的子行。所以把夹具路径从
+`H → G.revise` 换成 `H → A.run_once`（合法边；A 是 H 的下级，worker 档仍取 5/3/1 那几个数）：
+`_dispatch` 走 `by="H"`、主控档走 `by="M"`（M→A 同样合法）。`A.run_once` 没有参数
+（`additionalProperties: false`）⇒ `_bad_dispatch` 多传一个未声明参数，仍然精确落到
+闸门拒绝 `invalid_params`（不是 `forbidden_edge`）。
+
 逐条断言：`test_..._returns_in_time` / `..._times_out` / `test_await_fanout_slot_...` / `test_conductor_tier...`
 / `test_conductor_tier_is_exactly_twenty` / `test_gate_refusal_does_not_consume_a_fanout_slot` /
 `test_refused_attempts_at_the_cap_never_deepen_the_poison` / `test_a_failed_child_frees_the_slot_on_return`
@@ -41,7 +52,7 @@ import pytest
 from agentflow import conductor as CO
 from agentflow import policy as P
 from agentflow import schema as S
-from agentflow.agent_e import AgentE
+from agentflow.agent_a import AgentA
 from agentflow.agent_h import AgentH
 from agentflow.store import Store
 
@@ -52,54 +63,60 @@ from agentflow.store import Store
 # 只覆写要用的那一个方法（真类的方法签名由 Python 自己核）。
 
 
-class _GStub(AgentE):
-    """G 替身的共同基类：不建工具面（真类构造要 store/tools）。"""
+class _AStub(AgentA):
+    """A 替身的共同基类：不建工具面（真类构造要 store/tools）。"""
 
     def __init__(self) -> None:  # noqa: D107
         pass
 
 
-class FakeG(_GStub):
-    """G 的替身：`revise` 永远受理成功（父任务 = 谁召唤它）。"""
+class FakeA(_AStub):
+    """A 的替身：`run_once` 永远受理成功（父任务 = 谁召唤它）。"""
 
-    def revise(self, doc_id, **kw):  # noqa: D102
-        return {"outcome": "ok", "detail": f"revised {doc_id}"}
-
-
-class BoomG(_GStub):
-    """G 的替身：`bad_doc_id` 那一次跑了、炸了（`outcome=failed`），其余照常。"""
-
-    def __init__(self, bad_doc_id: str = "k0") -> None:  # noqa: D107
-        self.bad = bad_doc_id
-
-    def revise(self, doc_id, **kw):  # noqa: D102
-        if doc_id == self.bad:
-            raise RuntimeError("替身故意炸")
-        return {"outcome": "ok", "detail": f"revised {doc_id}"}
+    def run_once(self):  # noqa: D102
+        return {"outcome": "ok", "detail": "ran once"}
 
 
-class RefusingG(_GStub):
-    """G 的替身：`bad_doc_id` 那一次跑了、角色自己拒了（领域错误 ⇒ `refused/invalid_params`）。
+class BoomA(_AStub):
+    """A 的替身：**第一次**跑了、炸了（`outcome=failed`），其余照常。
 
-    这不是闸门拒绝：`_business_refusal_code` 按类名认领域错误（`agent_g` 的
-    `DocumentError`），与"闸门拒掉、根本没跑"是两件事（真机 `t-0006` 就是这一档）。
+    `A.run_once` 没有参数（`additionalProperties: false`）⇒ 替身拿不到"这一次的 key"，
+    改用调用序号认那一次；这一族每条用例要的都只是"第一件炸、下一件照常"。
     """
 
-    def __init__(self, bad_doc_id: str = "k0") -> None:  # noqa: D107
-        self.bad = bad_doc_id
+    def __init__(self) -> None:  # noqa: D107
+        self.calls = 0
 
-    def revise(self, doc_id, **kw):  # noqa: D102
-        if doc_id == self.bad:
+    def run_once(self):  # noqa: D102
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("替身故意炸")
+        return {"outcome": "ok", "detail": "ran once"}
+
+
+class RefusingA(_AStub):
+    """A 的替身：**第一次**跑了、角色自己拒了（领域错误 ⇒ `refused/invalid_params`）。
+
+    这不是闸门拒绝：`_business_refusal_code` 按类名认领域错误（`DocumentError` 在
+    `_BUSINESS_ERROR_NAMES` 里），与"闸门拒掉、根本没跑"是两件事（真机 `t-0006` 就是这一档）。
+    """
+
+    def __init__(self) -> None:  # noqa: D107
+        self.calls = 0
+
+    def run_once(self):  # noqa: D102
+        self.calls += 1
+        if self.calls == 1:
             raise DocumentError("替身按领域规则拒绝")
-        return {"outcome": "ok", "detail": f"revised {doc_id}"}
+        return {"outcome": "ok", "detail": "ran once"}
 
 
 class DocumentError(ValueError):
-    """与 `agent_g._support.DocumentError` 同名：判据按类名认它。"""
+    """业务错误类名（`_BUSINESS_ERROR_NAMES` 里那一档）：判据按类名认它。"""
 
 
-class ProbeG(_GStub):
-    """G 的替身：在跑的当口回头读自己那一行（受理标记在不在盘上）。
+class ProbeA(_AStub):
+    """A 的替身：在跑的当口回头读自己那一行（受理标记在不在盘上）。
 
     为什么必须"在跑的当口"读：只断言收尾之后行上有标记，区分不了"受理时写的"
     与"收尾时补的"—— 而上一轮的最小修法恰恰是后者（收尾一炸标记就没了）。
@@ -111,14 +128,14 @@ class ProbeG(_GStub):
         self.refuse = refuse
         self.seen_inputs: list[str] | None = None
 
-    def revise(self, doc_id, **kw):  # noqa: D102
+    def run_once(self):  # noqa: D102
         running = [r for r in self.store.rows("tasks")
-                   if r.get("role") == "G" and r.get("status") == "running"]
+                   if r.get("role") == "A" and r.get("status") == "running"]
         assert running, "跑到这里时自己的 running 行必须已经在盘上"
         self.seen_inputs = [str(x) for x in (running[-1].get("inputs") or [])]
         if self.refuse:
             raise DocumentError("替身按领域规则拒绝")
-        return {"outcome": "ok", "detail": f"revised {doc_id}"}
+        return {"outcome": "ok", "detail": "ran once"}
 
 
 class FakeH(AgentH):
@@ -140,7 +157,7 @@ def _mk_store(tmp_path) -> Store:
     return st
 
 
-def _mk_conductor(store, *, max_direct_children: int, g=None, fanout_wait_sec: float = 0.0,
+def _mk_conductor(store, *, max_direct_children: int, worker=None, fanout_wait_sec: float = 0.0,
                   log=None) -> CO.Conductor:
     """夹具一律传 `fanout_wait_sec=0`（= 不等，立即拒）。
 
@@ -153,7 +170,7 @@ def _mk_conductor(store, *, max_direct_children: int, g=None, fanout_wait_sec: f
         store,
         policy=P.Policy(max_concurrency=8, max_direct_children=max_direct_children,
                         max_tasks_per_run=500, wall_clock_sec=600),
-        registry={"H": ("object", FakeH()), "G": ("object", g or FakeG())},
+        registry={"H": ("object", FakeH()), "A": ("object", worker or FakeA())},
         fanout_wait_sec=fanout_wait_sec,
         log=log,
     )
@@ -166,14 +183,19 @@ def _parent(c: CO.Conductor, doc_id: str = "0001") -> str:
     return str(res.task_id)
 
 
-def _revise(c: CO.Conductor, parent: str, key: str, *, by: str = "H", doc_id: str | None = None):
-    return c.summon("G", "revise", {"doc_id": doc_id or key}, by=by,
+def _dispatch(c: CO.Conductor, parent: str, key: str, *, by: str = "H"):
+    """合法 worker 边 `H → A`（2026-11-11 之前这里是 `H → G.revise`）。
+
+    `input_key` 仍按 `key` 落（去重键是 `(role, action, input_key)`）；`A.run_once`
+    没有参数，所以 `params={}` —— 参数门那一格由 `_bad_dispatch` 单独咬。
+    """
+    return c.summon("A", "run_once", {}, by=by,
                     parent_task_id=parent, input_key=key)
 
 
-def _bad_revise(c: CO.Conductor, parent: str, key: str, *, by: str = "H"):
+def _bad_dispatch(c: CO.Conductor, parent: str, key: str, *, by: str = "H"):
     """一次必然被闸门拒掉、根本没跑的召唤（多传一个未声明的参数）。"""
-    return c.summon("G", "revise", {"doc_id": key, "no_such_param": 1}, by=by,
+    return c.summon("A", "run_once", {"no_such_param": 1}, by=by,
                     parent_task_id=parent, input_key=key)
 
 
@@ -189,7 +211,7 @@ def _bad_revise(c: CO.Conductor, parent: str, key: str, *, by: str = "H"):
 
 
 def _seed_in_flight(store: Store, parent: str, n: int, *, base: int = 0,
-                    role: str = "G", action: str = "revise", called_by: str = "H") -> list[str]:
+                    role: str = "A", action: str = "run_once", called_by: str = "H") -> list[str]:
     """往台账写 n 行"此刻在飞"的子行（父 = `parent`），返回它们的 `task_id`。
 
     口径 = `Conductor._in_flight_children_of` 认的那一档，逐字对齐 `schema.Task.validate`
@@ -250,14 +272,14 @@ def test_gate_refusal_does_not_consume_a_fanout_slot(tmp_path):
 
     _seed_in_flight(store, parent, 2)          # 此刻在飞 2（cap=3，还剩 1 格）
 
-    seed = _bad_revise(c, parent, "seed")
+    seed = _bad_dispatch(c, parent, "seed")
     assert seed.refusal_reason == "invalid_params", (
         f"这一条要的是闸门拒绝（根本没跑），拿到 {seed.outcome}/{seed.refusal_reason}")
     assert seed.task_id, "被拒的召唤必须落行（谁试过什么不许丢）"
 
     # 合法派活：改前这里被 fanout_exceeded 拒掉（那一行占了名额），改后必须受理。
     assert len(c._in_flight_children_of(parent)) == 2, "被拒的那一行不许进在飞分子"
-    ok = _revise(c, parent, "k5")
+    ok = _dispatch(c, parent, "k5")
     assert ok.outcome == "ok", (
         "在飞口径下这一件本该受理（在飞 2 < 上限 3）"
         f"（{ok.outcome}/{ok.refusal_reason}：{ok.detail}）")
@@ -274,7 +296,7 @@ def test_refused_attempts_at_the_cap_never_deepen_the_poison(tmp_path):
     parent = _parent(c)
     _seed_in_flight(store, parent, 3)
 
-    refused = [_revise(c, parent, f"over{i}") for i in range(3)]
+    refused = [_dispatch(c, parent, f"over{i}") for i in range(3)]
     assert [r.refusal_reason for r in refused] == ["fanout_exceeded"] * 3
     for r in refused:
         assert "在飞 3" in r.detail and "上限 3" in r.detail, (
@@ -291,8 +313,8 @@ def test_display_face_still_lists_attempts(tmp_path):
     """展示面没被改坏：`_children_of` 仍然列出全部尝试（含被拒的）。"""
     c = _mk_conductor(_mk_store(tmp_path), max_direct_children=3)
     parent = _parent(c)
-    assert _revise(c, parent, "k0").outcome == "ok"
-    assert _bad_revise(c, parent, "seed").refusal_reason == "invalid_params"
+    assert _dispatch(c, parent, "k0").outcome == "ok"
+    assert _bad_dispatch(c, parent, "seed").refusal_reason == "invalid_params"
 
     all_kids = c._children_of(parent)
     admitted = c._admitted_children_of(parent)
@@ -317,16 +339,16 @@ def test_a_failed_child_frees_the_slot_on_return(tmp_path):
     两件事：①返回后 `_in_flight_children_of(parent) == []`；②下一件立刻受理。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_direct_children=1, g=BoomG())
+    c = _mk_conductor(store, max_direct_children=1, worker=BoomA())
     parent = _parent(c)
 
-    boom = _revise(c, parent, "k0")
+    boom = _dispatch(c, parent, "k0")
     assert boom.outcome == "failed" and boom.error
 
     assert c._in_flight_children_of(parent) == [], (
         "跑完（失败也算返回）就该腾出名额；拿到 "
         f"{c._in_flight_children_of(parent)}")
-    nxt = _revise(c, parent, "k1")
+    nxt = _dispatch(c, parent, "k1")
     assert nxt.outcome == "ok", (
         "前一格已被腾出 ⇒ 这一件必须受理"
         f"（{nxt.outcome}/{nxt.refusal_reason}：{nxt.detail}）")
@@ -341,13 +363,13 @@ def test_a_role_refused_child_frees_the_slot_on_return(tmp_path):
     在"腾不腾位"上没有差别 —— 两者都已经是终态行。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_direct_children=1, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=1, worker=RefusingA())
     parent = _parent(c)
 
-    role_refusal = _revise(c, parent, "k0")
+    role_refusal = _dispatch(c, parent, "k0")
     assert role_refusal.outcome == "refused" and role_refusal.refusal_reason == "invalid_params"
     assert c._in_flight_children_of(parent) == [], "角色拒绝也是返回 ⇒ 也要腾位"
-    nxt = _revise(c, parent, "k1")
+    nxt = _dispatch(c, parent, "k1")
     assert nxt.outcome == "ok", (
         f"腾位之后这一件必须受理（{nxt.outcome}/{nxt.refusal_reason}：{nxt.detail}）")
     assert len(c._admitted_children_of(parent)) == 2, "累计读数仍然分得开这一档"
@@ -363,11 +385,11 @@ def test_a_role_refused_child_frees_the_slot_on_return(tmp_path):
 def test_the_admission_mark_is_on_disk_while_the_handler_runs(tmp_path):
     """受理标记与 `running` 行同一笔事务：跑到一半看盘，它已经在（结算标记还不在）。"""
     store = _mk_store(tmp_path)
-    probe = ProbeG(store)
-    c = _mk_conductor(store, max_direct_children=2, g=probe)
+    probe = ProbeA(store)
+    c = _mk_conductor(store, max_direct_children=2, worker=probe)
     parent = _parent(c)
 
-    r = _revise(c, parent, "k0")
+    r = _dispatch(c, parent, "k0")
     assert r.outcome == "refused" and r.refusal_reason == "invalid_params", r
     assert probe.seen_inputs is not None, "替身没被跑到 ⇒ 这条判据在这一形态上没有牙"
     assert CO._ADMITTED_MARK in probe.seen_inputs, (
@@ -388,7 +410,7 @@ def test_the_gate_refusal_row_carries_no_admission_mark(tmp_path):
     store = _mk_store(tmp_path)
     c = _mk_conductor(store, max_direct_children=3)
     parent = _parent(c)
-    seed = _bad_revise(c, parent, "seed")
+    seed = _bad_dispatch(c, parent, "seed")
     assert seed.refusal_reason == "invalid_params"
     row = next(x for x in c.store.rows("tasks") if x["task_id"] == seed.task_id)
     marks = [str(x) for x in row["inputs"]]
@@ -408,7 +430,7 @@ def test_a_legacy_refused_row_keeps_the_old_verdict(tmp_path):
     会被重新读成"没跑"—— 历史读数当场分家，而且分家方向是累计值被少算。这一版没有动
     `schema.Task`，所以老行连字段都不用补。
     """
-    base = {"role": "G", "action": "revise", "called_by": "H", "status": "done",
+    base = {"role": "A", "action": "run_once", "called_by": "H", "status": "done",
             "outcome": "refused", "refusal_reason": "invalid_params"}
     assert CO._occupies_fanout_slot({**base, "inputs": [CO._SETTLED_MARK]}) is True, \
         "老行（跑过又拒、只有结算标记）应当仍然算进累计读数"
@@ -431,14 +453,14 @@ def test_a_contained_charge_failure_still_occupies_the_slot(tmp_path, monkeypatc
     （同步派活返回后那一行已经不在飞），它证明不了累计占位。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_direct_children=2, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=2, worker=RefusingA())
 
     def boom(*_a, **_kw):
         raise RuntimeError("替身：记账炸了")
     monkeypatch.setattr(c.meter, "charge_once", boom)
 
     parent = _parent(c)
-    r = _revise(c, parent, "k0")
+    r = _dispatch(c, parent, "k0")
     assert r.outcome == "refused" and r.refusal_reason == "invalid_params", (
         f"这一条要的是「跑了、角色自己拒」，拿到 {r.outcome}/{r.refusal_reason}")
     row = next(x for x in store.rows("tasks") if x["task_id"] == r.task_id)
@@ -447,7 +469,7 @@ def test_a_contained_charge_failure_still_occupies_the_slot(tmp_path, monkeypatc
     assert CO._ADMITTED_MARK in marks, f"受理标记不在盘上：{marks}"
     assert len(c._admitted_children_of(parent)) == 1, (
         "记账失败让这条「跑了又拒」的行从累计读数里消失了（少算 1）")
-    assert _revise(c, parent, "k1").outcome == "ok"      # 下一件照常派得出去
+    assert _dispatch(c, parent, "k1").outcome == "ok"      # 下一件照常派得出去
     assert len(c._admitted_children_of(parent)) == 2
 
 
@@ -462,7 +484,7 @@ def test_a_failed_charge_writeback_still_occupies_the_slot(tmp_path, monkeypatch
     这里删掉了旧的"闸门仍按那一行占住的格子拒第 3 件"那段：上限看的是在飞数。
     """
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_direct_children=2, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=2, worker=RefusingA())
     # 父任务要在注入之前造好：`_set_usage` 是每一次召唤收尾都走的，
     # 注入之后再造父任务会让它自己也炸（那是另一个形态，不是这一条要判的）。
     parent = _parent(c)
@@ -472,7 +494,7 @@ def test_a_failed_charge_writeback_still_occupies_the_slot(tmp_path, monkeypatch
     monkeypatch.setattr(c, "_set_usage", boom)
 
     with pytest.raises(RuntimeError, match="记账写回炸了"):
-        _revise(c, parent, "k0")
+        _dispatch(c, parent, "k0")
     assert c._set_usage is boom, "注入没生效"
 
     kids = [x for x in store.rows("tasks") if x.get("parent_task_id") == parent]
@@ -503,14 +525,14 @@ def test_the_previous_minimal_fix_would_miss_this_row(tmp_path, monkeypatch):
         return any(str(x) == CO._SETTLED_MARK for x in (row.get("inputs") or []))
 
     store = _mk_store(tmp_path)
-    c = _mk_conductor(store, max_direct_children=2, g=RefusingG())
+    c = _mk_conductor(store, max_direct_children=2, worker=RefusingA())
 
     def boom(*_a, **_kw):
         raise RuntimeError("替身：记账炸了")
     monkeypatch.setattr(c.meter, "charge_once", boom)
 
     parent = _parent(c)
-    _revise(c, parent, "k0")
+    _dispatch(c, parent, "k0")
     row = next(x for x in store.rows("tasks")
                if x.get("parent_task_id") == parent and x.get("outcome") == "refused")
     assert _settled_only(row) is False, (
@@ -535,26 +557,26 @@ def test_conductor_tier_dispatches_more_than_five_while_worker_refuses_at_five(t
 
     m_parent = _parent(c)
     _seed_in_flight(store, m_parent, 99, called_by="M")
-    last = _revise(c, m_parent, "m99", by="M")
+    last = _dispatch(c, m_parent, "m99", by="M")
     assert last.outcome == "ok", (
         "主控那一档的同时在飞上限是 100，在飞 99 时这件必须派得进去；"
         f"拿到 {last.outcome}/{last.refusal_reason}")
     # `m99` 是同步返回的 ⇒ 它不留在在飞里；补一行 seed 把主控档填到恰好 100。
     _seed_in_flight(store, m_parent, 1, base=99, called_by="M")
     assert len(c._in_flight_children_of(m_parent)) == 100, "此刻在飞恰好 100"
-    over = _revise(c, m_parent, "m100", by="M")
+    over = _dispatch(c, m_parent, "m100", by="M")
     assert over.refusal_reason == "fanout_exceeded", "工人档之外也要有反真空（主控也会触顶）"
     assert "在飞 100" in over.detail and "上限 100" in over.detail, over.detail
 
     worker_parent = _parent(c, doc_id="0002")
     _seed_in_flight(store, worker_parent, 5, called_by="H")
-    refused = _revise(c, worker_parent, "w5", by="H")
+    refused = _dispatch(c, worker_parent, "w5", by="H")
     assert refused.refusal_reason == "fanout_exceeded", "工人档仍然在 5 处被拒（反真空）"
     assert "在飞 5" in refused.detail and "上限 5" in refused.detail, refused.detail
 
     # ---- 返回即腾位（所有者 2026-10-08 那句话的机器化）
     _mark_returned(store, c._in_flight_children_of(worker_parent)[0])
-    freed = _revise(c, worker_parent, "w6", by="H")
+    freed = _dispatch(c, worker_parent, "w6", by="H")
     assert freed.outcome == "ok", (
         "有一行返回了 ⇒ 名额必须立刻还回来；"
         f"拿到 {freed.outcome}/{freed.refusal_reason}：{freed.detail}")
@@ -567,20 +589,20 @@ def test_conductor_tier_is_exactly_one_hundred(tmp_path):
 
     full = _parent(c)
     _seed_in_flight(store, full, 100, called_by="M")
-    over = _revise(c, full, "m100", by="M")
+    over = _dispatch(c, full, "m100", by="M")
     assert over.refusal_reason == "fanout_exceeded"
     assert "在飞 100" in over.detail and "上限 100" in over.detail, over.detail
 
     _mark_returned(store, c._in_flight_children_of(full)[0])
     assert len(c._in_flight_children_of(full)) == 100 - 1
-    freed = _revise(c, full, "m100b", by="M")
+    freed = _dispatch(c, full, "m100b", by="M")
     assert freed.outcome == "ok", (
         f"返回一行就该腾出一格（{freed.outcome}/{freed.refusal_reason}：{freed.detail}）")
 
     # 另一棵树：在飞 99 时第 100 件受理（边界另一侧）
     edge = _parent(c, doc_id="0002")
     _seed_in_flight(store, edge, 99, called_by="M")
-    hundredth = _revise(c, edge, "e99", by="M")
+    hundredth = _dispatch(c, edge, "e99", by="M")
     assert hundredth.outcome == "ok", (
         f"第 100 件必须受理，拿到 {hundredth.outcome}/{hundredth.refusal_reason}")
 
@@ -638,7 +660,7 @@ def test_a_capped_summon_waits_and_dispatches_when_a_slot_frees_in_time(tmp_path
     t = threading.Thread(target=_return_one, daemon=True)
     t.start()
     try:
-        ok = _revise(c, parent, "w3")
+        ok = _dispatch(c, parent, "w3")
     finally:
         t.join(timeout=5.0)
 
@@ -666,7 +688,7 @@ def test_a_capped_summon_times_out_and_refuses_with_the_wait_reading(tmp_path):
     _seed_in_flight(store, parent, 3)
 
     readings = _capture_await(c)
-    refused = _revise(c, parent, "over")
+    refused = _dispatch(c, parent, "over")
     assert readings and readings[-1]["reason"] == "wait_timeout", readings
     assert readings[-1]["waited"] is True and readings[-1]["in_flight_after"] == 3, readings[-1]
 
@@ -769,8 +791,8 @@ def test_unknown_initiator_falls_back_to_policy_default():
     """不在覆盖表里的发起方一律退回 `Policy.max_direct_children`（保守方向，不fail-open）。"""
     p = P.Policy(max_direct_children=4)
     assert P.direct_children_limit_for(p, "Z") == 4
-    # 闸门那一层的负控用真角色（H→G 是允许的边）：在飞 4 处仍拒，报文带在飞几与上限。
-    r = P.check(p, P.Decision(frm="H", to="G", action="revise", direct_children=4))
+    # 闸门那一层的负控用真角色（H→A 是允许的边）：在飞 4 处仍拒，报文带在飞几与上限。
+    r = P.check(p, P.Decision(frm="H", to="A", action="run_once", direct_children=4))
     assert r is not None and r.reason == "fanout_exceeded"
     assert "在飞 4" in r.detail and "上限 4" in r.detail, r.detail
 
@@ -795,16 +817,16 @@ def test_a_saturated_instance_does_not_block_another_parents_dispatch(tmp_path):
     p2 = _parent(c, doc_id="0002")
     assert p1 != p2
 
-    _seed_in_flight(store, p1, 5, role="G", called_by="H")
+    _seed_in_flight(store, p1, 5, role="A", called_by="H")
     assert len(c._in_flight_children_of(p1)) == 5
     assert len(c._in_flight_children_of(p2)) == 0
 
     # ① 饱和的那个实例自己再派 ⇒ 拒（它的 5 个位满了）
-    blocked = _revise(c, p1, "k-blocked", by="H")
+    blocked = _dispatch(c, p1, "k-blocked", by="H")
     assert blocked.outcome == "refused" and blocked.refusal_reason == "fanout_exceeded", blocked
 
     # ② 另一个实例（P2）派同一角色的活 ⇒ 立刻受理（名额是逐实例的，不是逐角色的）
-    other = _revise(c, p2, "k-other", by="H")
+    other = _dispatch(c, p2, "k-other", by="H")
     assert other.outcome == "ok", (
         "名额被挂到角色上了：另一个父任务派同一角色也被拒 —— "
         f"拿到 {other.outcome}/{other.refusal_reason}：{other.detail}")
