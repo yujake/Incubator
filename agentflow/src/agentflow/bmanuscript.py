@@ -134,7 +134,7 @@ def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
     if not base.is_dir():
         out.update(checked=True, why=f"`{MANUSCRIPT_DIR}/` 不存在 ⇒ 还没有任何 B 稿")
         return out
-    hits: list[tuple[str, str]] = []
+    hits: list[tuple[bool, str, str]] = []
     for path in sorted(base.glob(f"{PREFIX}*.md")):
         rel = f"{MANUSCRIPT_DIR}/{path.name}"
         parsed = _VS.parse_manuscript_name(rel)
@@ -144,20 +144,26 @@ def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        if _head_statement_id(text) == sid:
-            hits.append((rel, str(parsed.get("manuscript_id") or "")))
-    out["candidates"] = [rel for rel, _mid in hits]
+        if _head_statement_id(text) != sid:
+            continue
+        block = _VS.manuscript_sign_reading(text, manuscript_path=rel)
+        hits.append((bool(block.get("found")), rel,
+                     str(parsed.get("manuscript_id") or "")))
+    out["candidates"] = [rel for _signed, rel, _mid in hits]
     if not hits:
         out.update(checked=True,
                    why=f"`{MANUSCRIPT_DIR}/{PREFIX}*.md` 里没有一份稿头写着 "
                         f"stmt:{sid} ⇒ 这一条命题还没有 B 稿")
         return out
-    # 多份同命题（老盘上可能有 `-p2`）：取名字序第一份，并把候选全部报出来 ——
-    # 静默挑一份会让"到底动了哪一份"变成读不出来的一格。
-    rel, mid = hits[0]
+    # 多条同命题（2026-11-11：优化副本会让同一命题短暂有两份 B 稿 —— 已签的源稿与
+    # 未签的优化副本）：**未签的那一份优先**。B 正在改的就是它；已签的那一份按冻结
+    # 纪律只读（丁），不该被下一笔落稿挑中。同档再按名字序，读数里给全部候选。
+    hits.sort(key=lambda item: (item[0], item[1]))
+    signed_any, rel, mid = hits[0]
     out.update(checked=True, found=True, manuscript_id=mid, path=rel,
+               signed=signed_any,
                why=(f"稿头 `- 命题号：stmt:{sid}` 指向 `{rel}`（候选 "
-                    f"{len(hits)} 份）"))
+                    f"{len(hits)} 份；这一份{'已' if signed_any else '未'}签）"))
     return out
 
 
