@@ -141,7 +141,7 @@ TS = "2026-01-01T00:00:00+00:00"
 #: 与 `ledger.expand`（`depth` 必填的局部树）两件只读工具。它们的探针真跑到了
 #: `ok=True` 那一支（前置在 `_PREREQS` 里铺一条命题 9001 与两条依赖边 ⇒ 树里有
 #: 节点 / 边 / frontier 三样），所以键名读自实跑观测。
-TOOL_COUNT = 126
+TOOL_COUNT = 127
 
 #: 本轮允许被跳过的工具数上限（依据见 `test_..._subset_...` 的 docstring）。
 MAX_SKIPPED = 0
@@ -704,6 +704,9 @@ def tool_params() -> dict[str, dict]:
         # `draft/37` §134：交接手稿的读面。编号 `0000` 由 `_seed` 真写一份手稿
         # （编号由脚本从 0000 起分配 —— 夹具不自己编文件名，走的是同一条实现）。
         "manuscripts.list": {},
+        # 2026-11-11（P1-7 暴露面）：统一读口。探针不给稿号/路径 ⇒ 走到
+        # 「没查成」那一支（`checked=False`），键名归 `CODE_ONLY_KEY_SOURCE`。
+        "manuscripts.submission_reading": {},
         # 2026-10-17（方案 1）：这三件原先只在 H 的落库代理里，现在它对 H 可见。
         # 夹具没有 `documents` 行 ⇒ 探针跑不成 ok 分支 ⇒ 键名读自 `_WRITE_TOOL_FUNCTIONS` 的实现。
         "review.review_document": {"doc_id": "0000"},
@@ -997,6 +1000,13 @@ CODE_ONLY_KEY_SOURCE: dict[str, str] = {
     # 键名读自 `conductor_ack` 里那个所有分支共用的 `data` 字面量。
     "conductor.ack": "成功支要求『那几条板项的收件人就是调用者』（探针的编号不存在）⇒ "
     "探针落在 `state=refused` 那一支；键名读自 `conductor_ack` 里那个共用的 `data` 字面量。",
+    # 2026-11-11（P1-7 暴露面）：`submission_reading` 的探针夹具里没有一份证明稿
+    # （也没有 `mss:` 记号）⇒ 只能走到「没有手稿路径 / 稿号 ⇒ 这一格没查成」那一支。
+    # 键名逐字读自 `manuscriptsubmission.submission_reading` 末尾那个 `out` 字典 ——
+    # 它是全分支共用的（`checked` 只在最后翻），所以三条支的键集合逐字相同。
+    "manuscripts.submission_reading": "探针夹具里没有证明稿 / `mss:` 记号 ⇒ 走"
+    "「没有手稿路径 / 稿号」那一支；键名读自 `manuscriptsubmission.submission_reading` "
+    "末尾那个全分支共用的 `out` 字典。",
 }
 
 #: `EXECUTED` 里带保留的那一条：真跑过，但那一次用的是桩 provider。

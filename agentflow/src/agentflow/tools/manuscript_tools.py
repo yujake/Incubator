@@ -10,6 +10,7 @@
 | 工具 | 谁用 | 作用 ||---|---|---|| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 
 `id` —— 它不是工具：走循环形状 `handoff` || `manuscripts.read` | 全部可召唤角色 | 按编号读全文（留言里传的就是这个编号） ||
 `manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
+`manuscripts.submission_reading` | 全部可召唤角色 | 读一份**证明稿**的提交状态（E/F 收工自动提交、B 收录即提交）：产出方 / 已签 / 已提交 / 时刻 / `via`（2026-11-11 补：`manuscriptsubmission.submission_reading` 此前 src 里零调用点，E 读不到自己的提交状态） |
 ## 为什么主控 M 不在这张工具面上（口径，别改回去）
 M 的工具面是"编排面 + 文件面白名单"（`draft/37` §38/§57，判据
 `tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），而 
@@ -88,6 +89,38 @@ def manuscripts_list(store, to: str = "", sender: str = "", limit: int = 50) -> 
     return ok({"count": len(rows), "items": rows}, count=len(rows), items=rows)
 
 
+@tool(
+    "manuscripts.submission_reading",
+    "读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交"
+    "（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。"
+    "「未提交」与「没查成」分开报（`checked=false` 是后者）。",
+    {"type": "object",
+     "properties": {
+         "manuscript": {"type": "string",
+                        "description": "证明稿的工作区相对路径（`reports/f-proof-*.md` / `e-proof-*` / `e-num-*` / `b-proof-*`）"},
+         "manuscript_id": {"type": "string",
+                           "description": "六位稿号；与路径二选一（给了路径就以路径为准）"},
+     },
+     "required": [], "additionalProperties": False},
+    side_effect="read",
+    roles=_READ_ROLES,
+    returns="{'checked','manuscript','manuscript_id','producer_role','producer_code',"
+            "'state','submitted_at','via','signed','signed_sha','sign_sha','sign_at',"
+            "'token','task_id','task_role','problems','why'}",
+)
+def manuscripts_submission_reading(store, manuscript: str = "",
+                                    manuscript_id: str = "") -> ToolResult:
+    """工具体：统一读口 `manuscriptsubmission.submission_reading`（E / F / B 读自己那份稿）。"""
+    root = getattr(store, "root", None)
+    if root is None:
+        raise ToolError("manuscripts.submission_reading 需要一个带 root 的 store")
+    from .. import manuscriptsubmission as _MSUB
+
+    got = _MSUB.submission_reading(store, root, manuscript=manuscript,
+                                   manuscript_id=manuscript_id)
+    return ok(got, **got)
+
+
 #: 装配清单（与 `attack_tools` 同一形态）：`(工具体函数, 需要从装配期注入的名字)`。
 #:
 #: 「只有读/列两件」：写手稿走循环形状 `handoff`（它知道"我是谁"，文件名要用它），
@@ -96,6 +129,7 @@ def manuscripts_list(store, to: str = "", sender: str = "", limit: int = 50) -> 
 _TOOL_FUNCTIONS: tuple[tuple[Any, tuple[str, ...]], ...] = (
     (manuscripts_read, ("store",)),
     (manuscripts_list, ("store",)),
+    (manuscripts_submission_reading, ("store",)),
 )
 
 # ---- 板的两件（`manuscripts.items` / `manuscripts.ack`）暂不注册（2026-10-08 晚，S1b）
