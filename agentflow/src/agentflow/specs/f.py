@@ -57,12 +57,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # （`agent_f/delivery.py::delivery_summary`）与收工那几格（`agent_f/step.py`
         # 的 `_CLOSE_KEYS`）。键清单逐字取自实跑观测，不是猜的。
         "dict（本轮做了什么 / 新状态；证明那一支另有 v_sign / delivery_state / delivery_label；"
+        "**收工那一趟另有收工自动提交读数**：auto_submit（候选级全文：checked / why / 逐份候选）/ "
+        "auto_submitted（这一趟真写进 tasks.artifacts 的拿签稿，逐份带稿号 / 正文 sha / 签 sha / "
+        "时刻）/ auto_submitted_count / still_unsubmitted（没提交的逐条带 state / why；推进轮次这三格"
+        "为空 = 这一趟没读，不是「没有可提交的」）；"
         "逐条交差读数：delivery / delivered / total / signed_count / pending_count / "
         "unsigned_count / proof_count / proof_statements / draft_count / abandoned_count / "
         "abandoned_statements / unfinished / unfinished_count / trail / trail_required / "
         "legal_exits / exits_note / legal_stop / is_failure / close_problems / coverage / "
         "coverage_reading / coverage_ratio / coverage_why / delivery_state_plan / "
-        "delivery_label_plan / self_assessment）", side_effect="write_local", handler_name="step",
+        "delivery_label_plan / self_assessment；**product 那一支被受控拒 manuscript_frozen 时**，"
+        "refusal.next_step 说清下一步：这一份已经拿签、只读 —— 别就地改它；要写第二份证明就另开"
+        "一份稿（新稿号），要润色已签正文则走 B 的 open_polish_copy（复制成 B 号稿））",
+        side_effect="write_local", handler_name="step",
     ),
 
     ActionSpec(
