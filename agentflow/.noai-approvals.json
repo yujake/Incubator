@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T13:22:36+08:00",
+  "generated_at": "2026-11-11T13:53:21+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -478,10 +478,10 @@
       "path": "src/agentflow/tools/fs_tools.py",
       "glob": "src/agentflow/tools/fs_tools.py",
       "category": "auth-audit",
-      "sha256": "a89452b90a4271addfb59dfef687858570f796f2a5951bdbed90ea150ec35a54",
+      "sha256": "446527febeb5df92352dd25009184fce037c9314a8f413d16381f183ecaf1d02",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-11 丁：拿签后冻结 —— fs.write/fs.edit/fs.delete/fs.move 四个写口共用 _reserved_refusal，新增 manuscriptfreeze 判据（只读 V 的颁发表）",
+      "change_note": "2026-11-11 甲：B 的唯一一格窄豁免 —— 只对角色 B / reports/b-proof-<六位号>.md / fs.edit / 未签（manuscriptfreeze.freeze_reading 的 unsigned）/ B 自己号段已发号；fs.write/delete/move 与别的角色、f-proof、-pN 仍拒。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这条权限面变更仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

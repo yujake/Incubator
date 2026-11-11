@@ -397,6 +397,10 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # `notes/f-proof-x.md` 是 bad_name、普通笔记是 unrecognized ⇒ 仍放行
     # （2026-11-07 那次收窄的负控不许被这一档误伤）。
     ("A", f"{MANUSCRIPT_RULE_KIND}:*"),
+    # 2026-11-11（甲）：B 这五行照旧拒 `fs.write` / `fs.delete` / `fs.move`，但 `fs.edit`
+    # 对自己号段、未签的 `reports/b-proof-<六位号>.md` 有一格窄豁免
+    # （`_b_polish_edit_allowed`；业主 ④ 的后半句「之后 B 在那份 B 稿上改正文」）。
+    # 豁免不写进表里，理由见那一节注释；这里一个字都没改。
     ("B", f"prefix:{_RESERVED_DIR}/f-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/b-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-proof-"),
@@ -803,8 +807,84 @@ def _manuscript_frozen(rel: str, role: str,
                 sign_sha=str(got.get("sign_sha") or ""))
 
 
+# ---- 2026-11-11（甲）：B 的唯一一格窄豁免 ------------------------------------
+#
+# 业主裁定 ④ 的后半句（逐字：「之后 B 在那份 B 稿上改正文」）：`B.open_polish_copy`
+# 已经把副本开出来了（`reports/b-proof-<B 稿号>.md`），但 B 改不动它 ——
+# `RESERVED_ARTIFACT_TABLE` 里 B 那两行（`prefix:reports/b-proof-` 与 `manuscript:*`）
+# 把"手稿形名字"一律拒写。要开的口子窄到不能再窄：
+#
+#   · 只对角色 **B**（A / F / D / M 一个都不开）；
+#   · 只对 `reports/b-proof-<六位号>.md` 这一种路径形（`_B_POLISH_RE` 是整条相对路径的
+#     锚定匹配：`f-proof-` / `e-proof-` / `e-num-` / `-pN` / 别的目录都不在内）；
+#   · 只对 **`fs.edit`**（`fs.write` / `fs.delete` / `fs.move` 仍由保留表拒 ——
+#     「改这一份」不等于「换一份」/「删一份」）；
+#   · 该稿必须**未签**：判据只走 `manuscriptfreeze.freeze_reading`（`state=unsigned`
+#     ⇒ 放行；`signed` / `edited_after_sign` / `unchecked` 三档照冻结那一套拒，
+#     `kind` 也照冻结那一个 `manuscript_frozen`，这里不新造码）；
+#   · 号必须是 **B 自己号段已发出的**（`manuscriptids.FAMILY_COUNTERS["b-proof"]`；
+#     计数器记的是「下一个要发的号」⇒ 已发号 = 计数器 - 1，读不出来就不放行）。
+#
+# 为什么豁免不写成 `RESERVED_ARTIFACT_TABLE` 的一行：那张表的语义是"命中了哪条**拒写**
+# 规则"（四个写口共用一处结论），把它塞成一行会让 `_reserved_artifact_rule` 的返回值
+# 分叉，而且四个写口会一起被放开 —— 要的只是一个口子上的一条放行线。所以结构是：
+# 冻结闸之后、保留表之前，一次只对 `edit=True` 生效的短路（见 `_reserved_refusal`）。
+_B_POLISH_FAMILY = "b-proof"
+
+#: B 的窄豁免认的路径形（整条工作区相对路径；大小写不敏感与保留表同一口径 ——
+#: Windows 上大小写不同的两个写法是同一份文件）。**不含** `-pN`：一份号一份文件。
+_B_POLISH_RE = re.compile(r"^reports/b-proof-(?P<mid>\d{6})\.md$", re.IGNORECASE)
+
+
+def _b_proof_id_is_issued(root: Path | None, manuscript_id: str) -> bool:
+    """这个号是不是 B 自己号段已经发出去的（`FAMILY_COUNTERS["b-proof"]` 那一条）。
+
+    三态纪律：号源读不出来 ⇒ 判不出"这是 B 发的号" ⇒ **不放行**（不是"没发过也算"）。
+    """
+    from .. import manuscriptids as _MID  # 延迟 import：本模块被 tools 包在导入期拉起
+
+    if not _MID.FAMILY_COUNTERS.get(_B_POLISH_FAMILY):
+        return False
+    try:
+        # `peek_manuscript_counter` 就是 `FAMILY_COUNTERS` 那一条的读口（`counter_key`），
+        # 不另读 `data/counters.json` —— 号源只有一处。
+        issued = _MID.peek_manuscript_counter(root, family=_B_POLISH_FAMILY) - 1
+    except Exception:  # noqa: BLE001 —— 读不出号源 = 判不出 ⇒ 按"不是 B 发的号"处理
+        return False
+    try:
+        return 0 <= int(manuscript_id) <= issued
+    except (TypeError, ValueError):  # pragma: no cover - 正则已限定六位数字
+        return False
+
+
+def _b_polish_edit_allowed(rel: str, role: str, root: Path | None) -> bool:
+    """B 的 `fs.edit` 是不是落在那一格窄豁免上（五道闸逐条见上面那段注释）。
+
+    只做"放不放行"的判定，不产生拒信：命中的拒信仍由冻结闸 / 保留表按既有档给出
+    （`signed` ⇒ `manuscript_frozen`；其余形状 ⇒ `reserved_framework_artifact`）。
+    """
+    if str(role or "") != "B" or root is None:
+        return False
+    raw = str(rel or "").strip().replace("\\", "/")
+    while raw.startswith("./"):
+        raw = raw[2:]
+    matched = _B_POLISH_RE.match(raw)
+    if matched is None:
+        return False
+    from .. import manuscriptfreeze as _FZ  # 与 `_manuscript_frozen` 同一处读口
+
+    got = _FZ.freeze_reading(root, raw)
+    if not got.get("is_manuscript"):
+        return False
+    # `frozen` 与 `state` 同时判：只认 `unsigned` 这一档。已签/签后改过/没查成都不放行
+    # （那三档在 `_reserved_refusal` 里已经被冻结闸拒过；这里再判一次是防豁免绕过它）。
+    if got.get("frozen") or str(got.get("state") or "") != "unsigned":
+        return False
+    return _b_proof_id_is_issued(root, matched.group("mid"))
+
+
 def _reserved_refusal(rel: str, role: str, content: Any = None,
-                      root: Path | None = None) -> ToolResult | None:
+                      root: Path | None = None, *, edit: bool = False) -> ToolResult | None:
     """保留路径的统一拒绝（不在保留表里 ⇒ None，调用方照旧往下走）。
 
     这一处是"保留"的唯一结论：四个写口（`fs.write` / `fs.edit` / `fs.delete` /
@@ -815,6 +895,9 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
     `content` / `root`（2026-11-04）：D 的证明稿那一档要按内容判（`## 证明` 节）与
     按盘上 F 的稿判"是不是引用"。写口在拿到"将要写进去的那一段"之后传进来；`fs.delete` /
     `fs.move` 不传（它们不产生新正文，路径形状那一半照样生效）。
+
+    `edit`（2026-11-11，甲）：只有 `fs.edit` 传 `True` —— B 的唯一一格窄豁免
+    （`_b_polish_edit_allowed`）只在这一格生效；其余三个写口保持默认 `False`。
     """
     if _reserved_artifact_path(rel):
         # 路径级的框架渲染产物（论文对应表三份）：全角色生效，拒信指向唯一写口。
@@ -831,6 +914,13 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
     frozen = _manuscript_frozen(rel, role, root)
     if frozen is not None:
         return frozen
+    # ---- 2026-11-11（甲）：B 的唯一一格窄豁免 ------------------------------------
+    #
+    # 位置是刻意的：在冻结闸之后（已签的稿先被冻结那一套拒，`kind=manuscript_frozen`），
+    # 在保留表之前（B 自己那两行仍管 `fs.write` / `fs.delete` / `fs.move` 与所有别的形状）。
+    # `edit=False`（其余三个写口）⇒ 这一分支整条不生效。
+    if edit and _b_polish_edit_allowed(rel, role, root):
+        return None
     if _reserved_ledger(rel):
         return fail(
             RESERVED_LEDGER_MESSAGE.format(path=rel),
@@ -1373,7 +1463,8 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。",
+    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`；"
+    "B 仅对自己未签的 `reports/b-proof-<六位号>.md` 有一格（write/delete/move 仍拒）。",
     _obj(
         {
             "path": {"type": "string", "description": "相对工作区根的路径"},
@@ -1415,8 +1506,10 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     target = _resolve(ctx, path)
     # 保留路径闸同样在最前面（`fs.edit` 能改正文，等于绕过同一条保留表）：
     # 与 `fs.write` 共用 `_reserved_refusal` 这一个入口（账本区 + 手稿两半都在里面），
-    # 不是两份表、也不是每个口各判一遍。`root` 供"研究手稿里那一节是不是引用 F"的判据用。
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
+    # 不是两份表、也不是每个口各判一遍。`root` 供"研究手稿里那一节是不是引用 F"的判据用；
+    # `edit=True` 是 2026-11-11（甲）那格窄豁免的唯一开关（只对 B / 自己号段 / 未签 /
+    # `reports/b-proof-<六位号>.md`）。
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root, edit=True)
     if denied is not None:
         return denied
     # 读后写那一闸在最前面（policy 层先于 provider 层，逐字照 DSH `POL:64-70` → `FSL:840`）：
