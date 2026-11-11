@@ -174,8 +174,10 @@ def test_a_one_registration_and_three_rewrites(tmp_path):
     body_now = VS.manuscript_proof_body(text_now).strip("\n")
     assert versions[0]["sha256"] == R.proof_sha(body_now), versions
     assert versions[0]["sha256"] == str(rounds[-1]["proof_sha256"]), versions
-    # 反面：把 `- 证明号：` 加回渲染 ⇒ `test_a2_*` 那一条红；把 bump 加回来 ⇒
-    # `test_a_negative_control_restoring_the_bump_makes_the_history_red` 红。
+    # 反面：把 `- 证明号：` 加回渲染 ⇒
+    # `test_one_manuscript_id_is_one_file.py::test_c_restoring_the_proof_no_line_turns_a_red`
+    # 红；把 bump 加回来 ⇒ `test_a_negative_control_restoring_the_bump_makes_the_history_red`
+    # 红。
 
 
 def test_a_negative_control_restoring_the_bump_makes_the_history_red(
