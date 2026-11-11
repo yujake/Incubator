@@ -1674,6 +1674,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #    `documents` 复制过来的，`doc-signatures/` 没跟过来），`verify_all` 的
         #    `accepted_without_signature` 管那半边。这一档只在 ② 上放自动判据。
         from . import signatures as SIG
+        from .tools import review_tools as _RV   # 惰性：避免 `tools` ↔ `closing` 的 import 期耦合
 
         docs = [dict(r) for r in store.rows("documents")]
         recs, bad_lines = SIG.read_ledger(SIG.ledger_path(project_root))
@@ -1686,14 +1687,59 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         def _records_of(doc_id: str) -> list[Mapping[str, Any]]:
             return [r for r in recs if str(r.get("doc_id") or "") == doc_id]
 
+        # ---- 乙（2026-11-11）：`claimed` 还要认「有 open findings 的稿件」。
+        #
+        # 现场（`projects/dct-min4-20261111`）：`documents/000000` 是
+        # `status=draft`、`review_rounds=0`，而 H 的 7 条 findings 全是 `open`。
+        # 旧判据的两条（status ∈ {accepted,revised} 或 review_rounds >= 1）都不满足
+        # ⇒ 这一档 0/0 空转，7 条 open 没人管也照样收工。
+        # 有 open findings 就说明「H 审过、且缺陷还在」—— 它必须进这一档的分母。
+        findings = [dict(r) for r in store.rows("review_findings")]
+        open_by_doc: dict[str, list[dict]] = {}
+        for f in findings:
+            if str(f.get("status") or "") != "open":
+                continue
+            open_by_doc.setdefault(str(f.get("doc_id") or ""), []).append(f)
+
         claimed = [d for d in docs
                    if str(d.get("status") or "") in claimed_statuses
-                   or int(d.get("review_rounds") or 0) >= 1]
+                   or int(d.get("review_rounds") or 0) >= 1
+                   or str(d.get("doc_id") or "") in open_by_doc]
         pinned = [d for d in claimed if SIG.signed_revision(d, recs) is not None]
         stale = [d for d in claimed
                  if SIG.signed_revision(d, recs) is None and _records_of(str(d.get("doc_id") or ""))]
         never = [d for d in claimed
                  if not _records_of(str(d.get("doc_id") or ""))]
+        # 有 open findings、而现行版**没有**任何审校记录钉住 ⇒ 这一版没人复审过。
+        open_unreviewed = [
+            {"doc_id": did, "status": str(next(
+                (d.get("status") for d in docs if str(d.get("doc_id") or "") == did), "")),
+             "review_rounds": int(next(
+                 (d.get("review_rounds") or 0 for d in docs
+                  if str(d.get("doc_id") or "") == did), 0)),
+             "findings": [
+                 {
+                     "finding_id": str(f.get("finding_id") or ""),
+                     "kind": str(f.get("kind") or ""),
+                     "level": str(f.get("level") or ""),
+                     "target": str(f.get("target") or ""),
+                     "message": str(f.get("message") or "")[:160],
+                     # 谁该处理：手工判词只有 H 自己能复核掉；机械发现由 G 改稿后
+                     # H 重跑对应检查。两种处置不许混成一句。
+                     "owner": (
+                         "H（`review.record_finding` 的显式复核通道：evidence 以 "
+                         f"`{_RV.RECHECK_FIXED_PREFIX}` / `{_RV.RECHECK_WONTFIX_PREFIX}` 开头）"
+                         if _RV._is_manual_finding(f) else
+                         "G 改稿 → H.verify_fixes 复核这一版"
+                     ),
+                     "source": "manual" if _RV._is_manual_finding(f) else "scan",
+                 }
+                 for f in open_by_doc.get(did, [])
+             ]}
+            for did in sorted(open_by_doc)
+            if SIG.signed_revision(
+                next((d for d in docs if str(d.get("doc_id") or "") == did), {}), recs) is None
+        ]
         detail: dict[str, Any] = {
             "documents": len(docs), "claimed_reviewed": len(claimed),
             "claimed_ids": [str(d.get("doc_id") or "") for d in claimed[:8]],
@@ -1707,6 +1753,15 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                  "review_rounds": d.get("review_rounds")}
                 for d in stale[:8]],
             "no_signature_record": [str(d.get("doc_id") or "") for d in never[:8]],
+            # 乙的读数：哪几条 open、谁该处理（逐条，不隐藏）。
+            "open_findings_total": sum(len(v) for v in open_by_doc.values()),
+            "open_findings_unreviewed": open_unreviewed,
+            "open_findings_unreviewed_docs": [d["doc_id"] for d in open_unreviewed],
+            # 丙的收工读数：改完稿之后下一步（与 `G.revise` 返回的 `next_step` 同一句）。
+            "next_step": (
+                "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）"
+                "或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。"
+            ),
             "signature_ledger": str(SIG.ledger_path(project_root)),
             # D5「两处都改」：这一档与 `signatures.SIGNABLE_STATUSES` 必须认同一组状态。
             # `statuses_aligned` 是当场的读数（不等就说明两处口径分叉了）。
@@ -1719,9 +1774,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "ledger_module": "signatures",
             "implicit_min": len(claimed),
             "note": ("这一档数的是「现行版本被审校记录钉住的稿件份数」，缺省阈值 = 自称被审过的稿件"
-                     "份数。差的那几份就是「改完之后没再复核」—— 派 `H.verify_fixes` / `H.review` "
+                     "份数（**含「有 open findings」的稿件** —— 有缺陷没处置也算被审过）。"
+                     "差的那几份就是「改完之后没再复核」—— 派 `H.verify_fixes` / `H.review` "
                      "复核现行版，或者如实标 `na` + 理由（`stale_signoffs` 与 "
-                     "`no_signature_record` 分开报：前者是「改过了没复核」，后者是「没有签名链」）"),
+                     "`no_signature_record` 分开报：前者是「改过了没复核」，后者是「没有签名链」）；"
+                     "`open_findings_unreviewed` 逐条列出 open findings 与谁该处理"),
         }
         if bad_lines:
             detail["ledger_bad_lines"] = bad_lines[:3]
@@ -3318,6 +3375,27 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                   "那一版）⇒ 交付里会带着没审过的断言。派 `H.verify_fixes` / `H.review` 复核"
                   "现行版。注意：写一行 `na` 关不掉这一条（它读的是签名链与现行版哈希，"
                   "与验收表怎么写无关）")
+        # ---- 乙（2026-11-11）：有 open findings 而这一版没有复审记录 ⇒ 必须点名。
+        #
+        # 这一支与上面那一支（`stale_signoffs`）分开：上面问的是「签名钉没钉在这一版上」，
+        # 这一支问的是「H 的缺陷处置完了没有」。真机现场两者都不满足，而旧门只在
+        # `stale` 上说话 ⇒ 没有签名链的 workspace 里，7 条 open findings 整趟静默。
+        open_rows = list((cur_detail or {}).get("open_findings_unreviewed") or [])
+        if open_rows:
+            unmet.append(
+                "有 open findings 而这一版**没有复审记录**（缺陷还没处置完）："
+                + "；".join(
+                    f"{o.get('doc_id')}（status={o.get('status')}，"
+                    f"review_rounds={o.get('review_rounds')}）"
+                    + "，open "
+                    + "、".join(
+                        f"{f.get('finding_id')}[{f.get('level')}]@{f.get('target')}"
+                        f"（处理人：{f.get('owner')}）"
+                        for f in (o.get("findings") or []))
+                    for o in open_rows)
+                + " —— 手工判词只有 H 能显式复核掉（`review.record_finding` 的复核通道）；"
+                  "机械发现由 G 改稿后派 `H.verify_fixes` 复核这一版。"
+                  "注意：写一行 `na` 关不掉这一条（它从 `review_findings` 与签名链现算）")
     # ---- 稿件是骨架还是手稿（`draft/39` §6.48 的 D63）：有 sections 却每节都空的行，
     # 验收表里没写这一档时由门报出来（真机读数 T5 第 7 趟 `p8g`：三节 body 全是空串）。
     if "document_body_rows" not in computed_kinds:
