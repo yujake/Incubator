@@ -21,6 +21,7 @@ import pathlib
 
 from conftest import TS, sync_counters
 from agentflow import closing as CL
+from agentflow import exhaustionreport as ER
 from agentflow import schema as S
 from agentflow.agent_loop import LlmBackend, run_role
 from agentflow.conductor import Conductor, LocalBackend
@@ -89,6 +90,42 @@ def _gate(st: Store) -> str:
     return CL.check_closing(st, checks=("load_bearing",)).status["load_bearing"]
 
 
+#: 这一条实验的号（`_T3_ROW` 落库后拿到的那个；`sync_counters` 从 0 起算）。
+T3_EXPERIMENT_ID = S.format_id(0)
+
+
+def _write_e_num_report(st: Store, *, experiment_id: str | None = None) -> str:
+    """给这一条实验补一份 `e-num` 稿（族 `e-num`，无签，正常）。
+
+    ## 为什么夹具必须补稿（改前缺的就是它）
+
+    2026-11-11 业主裁定「按签拦收工」之后，E 的收工门有两条判据
+    （`agent_loop._sign_gate_e`）：① `e-proof` 稿要有现行的 V 签；② 每一条没被撤销的
+    实验都要有一份 E 稿（缺稿时门逐字写「这一条实验没有落任何 E 稿（`e-num` /
+    `e-proof`）⇒ 普通数值实验也必须有稿」）。这一条用例原先只 `table.create` 了一条
+    实验行、一份稿都没落 ⇒ 门按第 ② 条拒得对（`stop_reason="final_refused"`）。
+
+    族为什么是 `e-num` 而不是 `e-proof`：`e-proof` 要 V 签（`manuscriptfamily.needs_sign`
+    为真），而 `e-num` 这一族本来就不需要签（`needs_sign("e-num") == False`，业主
+    2026-11-08）。补稿解决的是「有没有稿」，不是「签没签」—— 后者一个字没动。
+
+    稿由框架自己的渲染口 `compose_numeric_manuscript` 拼（不手写正文），稿头
+    `- 实验号：exp:000000` 正是 `find_manuscript_relpath(family="e-num")` 把稿钉回
+    这条实验的唯一依据；所以"这份稿对得上那条 T3 实验"也是一条可核的读数。
+    """
+    eid = str(experiment_id or T3_EXPERIMENT_ID)
+    rel = f"{ER.MANUSCRIPT_DIR}/e-num-{eid}.md"
+    text = ER.compose_numeric_manuscript(
+        experiment_id=eid, claim=_T3_ROW["claim"], claim_key=_T3_ROW["claim_key"],
+        method=_T3_ROW["method"], params={}, observations={},
+        result=_T3_ROW["result"], exit_code=_T3_ROW["exit_code"],
+        evidence_kind=_T3_ROW["evidence_kind"])
+    target = pathlib.Path(st.root) / rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(text, encoding="utf-8", newline="")
+    return rel
+
+
 def test_the_gate_blocks_before_e_endorses(tmp_path):
     """起手：正文里那条 proof 级断言没有 T3 背书 ⇒ 门拦。"""
     st, _cond, _reg, _gw = _world(tmp_path, [json.dumps({"final": "noop"})])
@@ -105,11 +142,17 @@ def test_e_endorsement_turns_the_gate_green(tmp_path):
     ]
     st, cond, reg, gw = _world(tmp_path, replies)
     assert _gate(st) == "fail"
+    # 这一条实验还欠一份 E 稿（2026-11-11 的按签收工门）；补上它才是"正常的一趟"
+    report = _write_e_num_report(st)
+    assert report == "reports/e-num-000000.md", report
+    found = ER.find_manuscript_relpath(st.root, T3_EXPERIMENT_ID, family="e-num")
+    assert found.get("found") is True and found.get("path") == report, found
     run = run_role("E", "给定理 1.5 的形式化做背书", store=st, registry=reg, conductor=cond,
                    seam=LlmSeam(role="E", session_root=st.root, gateway=gw, price=(0.0, 0.0),
                                 sid="t"),
                    workspace_root=str(st.root), sid="t", from_env=False, max_steps=4)
     assert run.stop_reason == "final", run.to_dict()
+    assert run.final_refused_beats == 0, "有稿 ⇒ 收工门那一格一次都不该拒"
     rows = st.rows("experiments")
     assert len(rows) == 1, rows
     got = rows[0]
@@ -117,6 +160,39 @@ def test_e_endorsement_turns_the_gate_green(tmp_path):
     assert got["verifier_output"].strip(), got
     assert str(got["experiment_id"]) == S.format_id(0), got
     # 门真的被这一跳关上了（断言的是同一个工作区、同一个判据）
+    assert _gate(st) == "pass", CL.check_closing(st, checks=("load_bearing",)).to_dict()
+
+
+def test_finishing_without_an_e_report_is_refused(tmp_path):
+    """反真空：同一条背书，没有 E 稿时收工被拒（普通数值实验也要有稿）。
+
+    这条与上面那条正控只差一个 `reports/e-num-000000.md`，于是"门是不是真的在看稿"
+    不再靠自觉：摘掉稿子，门必须当场红。它钉的是新收工门（2026-11-11 业主裁定
+    「按签拦收工」）对 E 的第二条判据 —— 每一条没被撤销的实验都要有一份 E 稿
+    （`e-num` / `e-proof`），普通数值实验也不能空着收工。
+    """
+    replies = [
+        json.dumps({"tool": "table.create",
+                    "args": {"table": "experiments", "row": dict(_T3_ROW)},
+                    "why": "检查器原话在这里，作为 proof 级背书"}, ensure_ascii=False),
+        json.dumps({"final": "已给出 T3 背书", "evidence": ["exp:0000"], "notify": {"to": "M", "summary": "收工：见 final", "body": "## 结论\n见 final。\n## 依据\n（见这一趟的步骤）\n"}}, ensure_ascii=False),
+    ]
+    st, cond, reg, gw = _world(tmp_path, replies)
+    assert _gate(st) == "fail"
+    assert not list((pathlib.Path(st.root) / "reports").glob("e-*.md")), \
+        "夹具前提：这一趟一份 E 稿都没有"
+    run = run_role("E", "给定理 1.5 的形式化做背书", store=st, registry=reg, conductor=cond,
+                   seam=LlmSeam(role="E", session_root=st.root, gateway=gw, price=(0.0, 0.0),
+                                sid="t"),
+                   workspace_root=str(st.root), sid="t", from_env=False, max_steps=4)
+    assert run.stop_reason == "final_refused", run.to_dict()
+    assert run.final == "", "被拒的收工不记 final"
+    assert run.final_refused_beats >= 1, run.final_refused_beats
+    assert any("没有落任何 E 稿" in n for n in run.notes), run.notes
+    assert any(f"reports/e-num-{T3_EXPERIMENT_ID}.md" in n for n in run.notes), run.notes
+    rows = st.rows("experiments")
+    assert len(rows) == 1 and str(rows[0]["experiment_id"]) == T3_EXPERIMENT_ID, rows
+    # 背书本身是成立的（`load_bearing` 已绿）—— 拦它的是"没有稿"，不是"没背书"
     assert _gate(st) == "pass", CL.check_closing(st, checks=("load_bearing",)).to_dict()
 
 
