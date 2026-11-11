@@ -3910,7 +3910,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p275）+ `_VOLATILE_FACT_SETS` 末尾追加一格
 #: （facts 键集仍 15 格、count / keys_sha256 与 p274 同值）；
 #: `attack.step` 的参数面变了 ⇒ 两份 golden（tool_surface_snapshot / 声明基线）按现值重冻。
-PROMPT_VERSION = "p275"
+#: p275 → p276（2026-11-11，业主裁定：一个稿号 = 一份文件 = 一份证明）：
+#: 业主逐字「一个稿号就相当于是该稿的文件名」「同稿号多个版本是错误的」「拿 V 签冻结后
+#: 交哪份是明确的」⇒ F 的题面里「同一份稿的第 N 个证明（-pN）」这一整套教法退役，
+#: 改成「要写第二份证明就另开一份稿（新稿号）」；`proof_no` 在 F 的送审参数表里不再传
+#: （老盘 -pN 只读兼容那一句保留）。落点：
+#:   ① `specs/f.py` 的多证明政策整条重写（台账侧 1..N 口径仍归 B/D，F 只产出稿）；
+#:   ② `agent_skills.py` 的 F / M / B / V 手册按同一口径改（手册只落盘、不进十一格）；
+#:   ③ `tools/verify_tools.py` 的 `verify_proof` returns 去掉 `proof_no`（V 签侧已退役，
+#:      顶层读数那格不再承诺）；`agent_v/core.py` 的顶层读数同步不再产出它。
+#: 十一格只换 F（含版本页脚）：`temp/_p276_recompute.py` 导入判据自己的 `_surface_digest`
+#: 现算（先钉 `AGENTFLOW_LEAN_ENABLED=1`），其余十格与 p275 逐字同值。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p276）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p275 同值）；
+#: `attack.step` / `verify_proof` 的 returns 变了 ⇒ 两份 golden（tool_surface_snapshot /
+#: 声明基线）按现值重冻；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
+PROMPT_VERSION = "p276"
 
 
 

@@ -2466,9 +2466,10 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 其余十格逐字未动（只差版本行）。
 # 逐格旧值 → 新值：
 #   F a62be58c… → 27d85b473d4560894e8a2c2a0a6444c3f3f21ed732da46a3588391b4d6a20f47。
-# 十一格不是手抄：`temp/_p275_recompute.py`（导入本文件的 `_surface_digest`，先钉
-# `AGENTFLOW_LEAN_ENABLED=1`）现算。
-_FROZEN_PROMPT_VERSION = "p275"
+# 十一格不是手抄：`temp/_p276_recompute.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`）现算。p276（2026-11-11，一个稿号 = 一份文件 = 一份证明）：
+# 只换 F 一格 27d85b47… → 4306d8ed…；其余十格与 p275 逐字同值（版本行已归一）。
+_FROZEN_PROMPT_VERSION = "p276"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2723,7 +2724,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "C": "de99ae26130ec76a7ada77f230a6e7e7e1f0687b2822e5427191f261ebe7a560",
     "D": "a45d95a863ed2cf586c7dc813590137bba02fddf0b460e826851ec3a8b3ec272",
     "E": "fae84d0458380c66df2fdd921106088f6563d1756cb5b36ee2f16bdeecab9e1b",
-    "F": "27d85b473d4560894e8a2c2a0a6444c3f3f21ed732da46a3588391b4d6a20f47",
+    "F": "4306d8edee143ca0c93cbcef9006c23825b6ef28a8578a77e8f97abaab3b36ab",
     "G": "6730aa37658b17eda6ec431eba07b1abf384233b6cb92f05e9793b13b427bd97",
     "H": "4e36b38d75464a30120bcaa5b929d686de2c974e23a4a0446f47d831d36c5dfa",
     "L": "781c3b6031a62d6da794c207b0248d63bf8a4b46f205266d8b6daeccaafc5e03",

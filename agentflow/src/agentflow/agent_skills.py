@@ -782,7 +782,8 @@ V 真的审了框架手稿，而 B 一次都没跑 —— 派活被 `deadline_ex
 ### ① 三个号各管一件事
 
 - **稿号**：F 自己发（`manuscriptids.next_manuscript_id`，六位，`data/counters.json` 的
-  `manuscript` 号段）。它是**签的单位**：同一份稿改稿仍是同一个稿号，另一份证明用 `-p2`。
+  `manuscript` 号段）。它是**签的单位**：同一份稿改稿仍是同一个稿号；同一命题要写
+  **第二份证明就另开一份稿（新稿号）** —— 一个稿号 = 一份文件 = 一份证明。
 - **计划号**：**继续 / 放弃 / 更改**的单位（立项拿的那个号）。F 在计划下做；
   **计划不拥有稿** —— 一个计划期间可以产出若干份稿，它们各自独立编号，与计划号无关。
 - **命题号**：**B 收录时现取**（V 判成立之后），只落在 `statements` 那一行上。
@@ -798,7 +799,8 @@ F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_
 ### ③ 送审：不传 `statement_id`
 
 这一轮手上还没有命题号，所以 `statement_id` 不传（它的缺省本来就是空串）；要说清的是
-`proof_manuscript`（就是那份 `f-proof-<稿号>.md`）与 `proof_no`（审第几份）。判词有落点：
+`proof_manuscript`（就是那份 `f-proof-<稿号>.md`；**一个稿号一份文件一份证明，不传
+`proof_no`**）。判词有落点：
 
 - 判「有毛病」⇒ 判词落 `verifications/pending/<正文 sha>.jsonl` 一行（`defect_step` 有值）；
 - 判「成立」⇒ **签落在稿上**：pending 三行 + `out/vsigns/<正文 sha>.json` 一份 + 稿上的签块。
@@ -1038,7 +1040,7 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 `statement_full` 可以不给 —— 命题取台账那一行），
 盖在旧正文上的那一签就不再算数（读侧现算 `proof_standing=stale`），
 你必须派 V 审这一份稿（`V.verify_proof`：`statement_id` 给号、`proof_manuscript` 给这份稿的路径
-—— **在册也给稿**；要审第几条证明就带 `proof_no`）；工具结果里带 `proof_standing` 与
+—— **在册也给稿**；一个稿号一份文件一份证明，**不传 `proof_no`**）；工具结果里带 `proof_standing` 与
 `resign_required`，它点名「派 V 重新签」时照做。
 
 ## 收录：位置与格由你指定，工具按块回填
@@ -1048,7 +1050,7 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
 
 | 动作 | 干什么 | 关键读数 |
 |---|---|---|
-| `own.land_manuscript` | 把一条**已登记**命题的这一版证明落成/就地重写成 `reports/b-proof-<号>[-p<N>].md`（只写文件、不写台账） | `written` / `preserved`（同一份正文重放 ⇒ true，一个字节不动）/ `sha256`（签尺） |
+| `own.land_manuscript` | 把一条**已登记**命题的这一版证明落成/就地重写成 `reports/b-proof-<号>.md`（只写文件、不写台账；一个稿号一份文件，新写不带 `-pN`，老盘 `-pN` 只读兼容） | `written` / `preserved`（同一份正文重放 ⇒ true，一个字节不动）/ `sha256`（签尺） |
 | `own.ingest_manuscript` | 按你给的**位置 + 格**从稿里提取并回填 | `cells`（逐格 outcome + 来源行号 + sha）/ `diff`（请求格 vs 实填格）/ `write`（写了哪几张表） |
 
 `own.ingest_manuscript` 的四个坐标：
@@ -1057,7 +1059,7 @@ D 的研究手稿里「## 携带的证明手稿」四列表带过来的那一份
   `e-num-*`；`notes/` 与 `-v2` 是 legacy —— 可 preview、不可收录）；
 - `target_stmt_id`：**位置**（录到哪一条命题）。它是权威：稿头 `- 命题号：` 与它不一致
   ⇒ 受控拒 `manuscript_points_elsewhere`，**工具不会替你换一行**；
-- `proof_no`：这一行的**第几份证明**；与稿名 `-p<N>` 不一致 ⇒ `proof_no_mismatch`；
+- `proof_no`：老盘按 `-p<N>` 分份时的那一格（新写一个稿号一份文件，不传）；与稿名 `-p<N>` 不一致 ⇒ `proof_no_mismatch`；
 - `cells`：**格**，闭集 `statement_full` / `proof_text` / `dependencies` / `kind` /
   `numeric_evidence`。`label` / `evidence_kind` / `origin` / `line_range` / `bits` /
   `proof_no` / `proof_sha256` / `proof_authors` / `stmt_id` 是**派生列**，不许指定。
@@ -1687,7 +1689,8 @@ def _v_skills() -> tuple[Skill, ...]:
 
 ## 结论是 `verify.verify_proof` 的**产出**，不是你的入参（2026-10-28 真机踩过）
 
-这件工具收 `statement_id` / `proof_manuscript`（**在册也给稿**）/ `proof_no` / `readonly_facts`；
+这件工具收 `statement_id` / `proof_manuscript`（**在册也给稿**）/ `readonly_facts`；
+**`proof_no` 只为老盘读兼容而留着**（一个稿号 = 一份文件 = 一份证明，新写不传）；
 **结论由它自己判**，返回里就有 `verdict` / `defect_step` / `findings` / `unresolved_errors`。
 把 `verdict` / `findings` / `defect_step` 当参数传进去 ⇒ 参数门拒成 `param_invalid`。
 要补一句**你自己的**看法：走 `message`（给派活的人）—— 塞进工具参数等于让被审的一方自己报结论。
@@ -2138,7 +2141,8 @@ def _f_skills() -> tuple[Skill, ...]:
 ## 谁签那个字
 
 - **证明手稿由框架写，不是你手写的文件**（`reports/f-proof-<你的稿号>.md` —— 稿号是你自己的，
-  与命题号、计划号无关；同一份稿改稿仍是同一个稿号，另一份证明用 `-p2`）：`F.step` 的返回里给
+  与命题号、计划号无关；同一份稿改稿仍是同一个稿号；**同一命题要第二份证明就另开一份稿（新号）**）：
+  `F.step` 的返回里给
   `manuscript_path` 与 `deps_preview`（全文**不进返回值** —— 它在盘上那一份里）；
   **登记 `statements` 那一行的是 B**（它读这份手稿，把命题与证明全文收进 `proof_text`、
   把 `## 依赖` 落成依赖边）—— 你不写 `statements`、也不填 `bits`；
@@ -2233,7 +2237,7 @@ def _f_skills() -> tuple[Skill, ...]:
 - 判不过（或那一问**没判成** —— 没有模型 / 超时 / 判词读不出来）⇒ 这一轮**受控拒**
   （`proposition_form_refused`，逐条列出缺什么），那一笔**不会**落成手稿登记条目。
   这时候改的是你写的那段命题描述：补前提、把结论写成断言，再交一次；
-- 已有命题的**证明重写**只动同一份手稿的 `## 证明` 那一节（`proof_no` 递增、正文 sha
+- 已有命题的**证明重写**只动同一份手稿的 `## 证明` 那一节（不换名、不涨 `proof_no`、正文 sha
   重算），**不过这道闸、也不重新登记** —— 命题正文一个字都不改。
 
 ## 还有没签的：点名、留痕，不替你决定
@@ -2299,11 +2303,11 @@ def _f_skills() -> tuple[Skill, ...]:
 | 键 | 必填 | 意思 |
 |---|---|---|
 | `proof_manuscript` | **是** | 这一份证明的手稿路径（`reports/f-proof-<稿号>.md`）；**在册也给** —— 不给它，签没有落点，B 从稿上读不到那一签 |
-| `proof_no` | 否（缺省 1） | 第几条证明（一份稿多份证明时逐份签） |
 | `readonly_facts` | 否 | 你附的只读读数（命题现状 / 台账条数） |
 
+**`proof_no` 不再传**：一个稿号 = 一份文件 = 一份证明（老盘 `-pN` 只读兼容，新写不产生）。
 **这一张表里没有 `statement_id`**（2026-11-10 业主裁定：「撤去所有有关对某个给定命题号
-进行攻坚或写证明的逻辑」）：F 交出去的只有**稿路径 ＋ 第几条证明 ＋ 只读读数**，正文 sha
+进行攻坚或写证明的逻辑」）：F 交出去的只有**稿路径 ＋ 只读读数**，正文 sha
 由签那一侧现算。**没号也能签**（V 不假定有号）：还没在册时那一签按**正文 sha** 落
 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按同一个 sha 认领；
 `verification_id` / `at` / `proof_sha256` 三票必须齐。判据：
