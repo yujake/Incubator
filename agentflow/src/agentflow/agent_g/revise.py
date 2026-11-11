@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from ._support import Any, DT, DocumentError, Mapping, S, SIG, Sequence
+from .revise_gates import checked_claims
 
 #: `revise` 回来时必须点名的下一步（丙，2026-11-11）。措辞照 `specs/m.py` 那句
 #: 「改完之后要再复核（D57）」—— 同一个意思只有一份说法，不自造新词。
@@ -71,59 +72,14 @@ class _Revise:
                     merged.append(c)
                     appended.append(cid or f"（自动编号，第 {len(merged)} 条）")
 
-            # 合规闸门：修订后的整份稿子要重过一遍机械检查。
-            # 只查"新加的那几条"是不够的 —— 替换语义下，旧的错话可能被换掉，
-            # 也可能被换坏，只有全量重查才说得清现在的稿子是否合规。
-            try:
-                normalized = DT.normalize_claims(merged)
-            except ValueError as exc:
-                # 2026-10-17（子代理 agents #11）：`normalize_claims` 是「纯函数校验」，抛裸
-                # `ValueError` ⇒ 绕过工具层的包装穿出动作，被记成 `failed/执行中异常`，
-                # 模型拿不到"哪一条断言、缺什么字段"。翻成 `DocumentError`（在
-                # `_BUSINESS_ERROR_NAMES` 里）⇒ 落 `refused/invalid_params`，可自救。
-                raise DocumentError(f"修订未通过机械检查：{exc}") from exc
-
-            # 第二道闸：引用存在性。与 `doc.build_document` 复用同一个判据，
-            # 理由见本方法 docstring —— 少了它，"修订"就是绕过引用检查的后门。
-            # `citing_kind` 必须传（业主义 2026-10-09 的两阶段口径）：正式论文
-            # （`kind="paper"`）里不许直接引我方手稿，手稿内容要在正文里重建。
-            cites = DT.check_citations(tx.rows, normalized,
-                                       citing_kind=str(doc.get("kind") or ""))
-            if not cites["checked"]:
-                # 理论上不可达（这里必然有 tx）。留着是为了让"没法查"这条状态
-                # 有出口，而不是在某次重构里悄悄退化成"当作查过了"。
-                raise DocumentError(
-                    f"修订 doc:{doc_id} 时无法核对引用是否存在：{cites['reason']} ⇒ 整笔不写库"
-                )
-            if cites["missing"]:
-                bad = "；".join(
-                    f"[{m['claim_id']}] {m['citation']!r}：{m['why']}" for m in cites["missing"]
-                )
-                raise DocumentError(
-                    f"修订 doc:{doc_id} 被拒：{len(cites['missing'])} 条引用指向**不存在**的对象，"
-                    f"整笔不写库（documents/review_findings 都不动）：{bad}。"
-                    "引用一个不存在的代号，等于把外部结论当成自己的结论（FC-02）——"
-                    "`normalize_claims` 只看 citations 非空，查不出这一点"
-                )
-
-            # 第三道闸：proof 级断言的证据锚（`D-1`）。与 `doc.build_document`
-            # 复用同一个 `DT.check_proofs`，理由与上面那条逐字相同 ——
-            # 少一道，"修订"就是绕过它的后门。这条不是推演：实测把 `revise` 的
-            # 新断言换成一条只引 `lit:`、没有 `proof_location` 的 proof 断言，
-            # 它能成功写库（`temp/r2-revise-bypass.txt`，本文件修之前跑出来的）。
-            proofs = DT.check_proofs(tx.rows, normalized, workspace_root=self.workspace_root)
-            if not proofs["checked"]:
-                raise DocumentError(
-                    f"修订 doc:{doc_id} 时无法核对 proof 级断言的证据：{proofs['reason']} ⇒ 整笔不写库"
-                )
-            if proofs["problems"]:
-                bad = "；".join(f"[{p['claim_id']}] {p['detail']}" for p in proofs["problems"])
-                raise DocumentError(
-                    f"修订 doc:{doc_id} 被拒：{len(proofs['problems'])} 条 proof 级断言的证据"
-                    f"不成立，整笔不写库（documents/review_findings 都不动）：{bad}。"
-                    "`evidence_kind='proof'` 享受最高一档的证据待遇，所以改写这条路"
-                    "也必须指向一条真的跑过检查器的实验行、并给出盘上真的存在的落点"
-                )
+            # 三道闸（机械检查 / 引用存在性 / proof 级证据锚）搬进了
+            # `agent_g/revise_gates.py`：判断、顺序、异常与消息逐字不变，只是为了让
+            # 这个动作留在 200 行线内（2026-11-11 体量拆分）。
+            normalized = checked_claims(
+                tx.rows, merged, doc_id=doc_id,
+                kind=str(doc.get("kind") or ""),
+                workspace_root=self.workspace_root,
+            )
 
             doc["claims"] = normalized
             doc["review_rounds"] = int(doc.get("review_rounds") or 0) + 1

@@ -84,6 +84,7 @@ from ._support import S
 from ._support import _is_manuscript_rel, _norm_manuscript_rel
 from .ingest_manuscript import _IngestManuscript
 from .land_manuscript import _LandManuscript
+from .proof_receipt import write_proof_receipt
 from .. import conceptrows as _CR   # 概念 origin 口径的唯一判据（自产声明 / 自相矛盾）
 from .. import depsection as _DS
 from .. import evidencebits as _EB
@@ -2202,31 +2203,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     out["proof_collected"] = True
             # ---- 收录回执（2026-11-08 缺陷 ③）：与"第 2 位这次翻没翻"解耦 -----------
             #
-            # 改前回执写在第 2 位翻真那一支里 ⇒ 一条新建的"命题 + 证明"
-            # （`bits.proof` 一开始就为真、`_needs_proof` 为假）永远拿不到回执：
-            # 返回值说第 1 份，而 `statements` 顶层的 `proof_no` / `proof_sha256`
-            # 一个字节都没写（盘上读 null）。现在只要这一行真有一份正文，就把它的号
-            # 与现算的 sha 写到顶层；号只从这一笔的落点 `proof_no` 读，不猜。
-            # e-num 那一档 `_body_present` 为假 ⇒ 顶层不写 —— 没有证明就不许读出
-            # "第 1 份证明"。
+            # 这一段搬进了 `agent_b/proof_receipt.py`：判断、写入顺序与回执形状逐字
+            # 不变，只为让这个闭包留在 200 行线内（2026-11-11 体量拆分）。搬出的
+            # 理由串（为什么回执必须与翻位解耦、为什么号只从落点读）跟着那一段走。
             if _body_present:
-                _want_sha = _PR.proof_sha(_body_now)
-                _mid = str(manuscript_id or row.get("manuscript_id") or "")
-                if (str(row.get("proof_sha256") or "") != _want_sha
-                        or int(row.get("proof_no") or 0) != int(_no_receipt)
-                        or (bool(_mid) and str(row.get("manuscript_id") or "") != _mid)):
-                    row["proof_no"] = int(_no_receipt)
-                    row["proof_sha256"] = _want_sha
-                    out["proof_receipt"] = {"proof_no": int(_no_receipt),
-                                            "proof_sha256": _want_sha}
-                    # ---- 2026-11-10：行上记 `manuscript_id`（F 自己的稿号）--------
-                    #
-                    # 稿名与命题号不再绑定 ⇒ "这一行是哪一份稿"只能由这一格回答。
-                    # F 的稿号与命题号不同形（前者是 F 自己发的六位号），D 的携带单、
-                    # F 的交差读数、B 的签块闸都按它回找那份稿。
-                    if _mid:
-                        row["manuscript_id"] = _mid
-                        out["proof_receipt"]["manuscript_id"] = _mid
+                write_proof_receipt(
+                    row, out, body_now=_body_now, proof_no=_no_receipt,
+                    manuscript_id=manuscript_id)
             # ---- 2026-11-05（业主）：签成之后就升档，不再等第二条命令 --------------
             #
             # 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §二.3 / A-1）：
