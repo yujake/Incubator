@@ -1189,6 +1189,10 @@ def _supersede_prior_open(
         （真机上同一处常被写成不同措辞，那是"同一处的两条"还是"两处"由人裁；
         本实现刻意只认逐字相同，粒度问题写在交付报告里）；
       * 只在更晚的轮次（`round < new_round`）覆盖 —— 同一轮里记的两条是并存的判词；
+        （实现上写的是 `旧 round != 本轮 round`：真机老行的 round 是旧的 max+1 口径
+        `max+1` 摊出来的 1..12，可能比新的 `review_rounds` 还大 —— 例如拷贝上
+        `review_rounds=3` 而老判词 round=12。老行不可能是"将来某一轮"记的，所以
+        "round 不同"就等价于"它是更早一次写入"；"round 相同"才是同一轮并存。）
       * `fixed` / `wontfix` / `disputed`（以及已是 `superseded` 的）不被覆盖：
         已了结的不动（g）；这里只动 `status == "open"` 的；
       * 不是删除：原文、轮次、证据、resolution_note 一个字不改，只加状态与指针；
@@ -1208,7 +1212,10 @@ def _supersede_prior_open(
         rid = str(row.get("finding_id") or "")
         if not rid or rid == str(new_id):
             continue
-        if int(row.get("round") or 1) >= int(new_round):
+        if int(row.get("round") or 1) == int(new_round):
+            # 同一轮记的两条是并存的判词（都不覆盖对方）；不同轮 = 更早一次写入。
+            # 为什么不写 `>=`：真机老行的 round 是旧的 max+1 口径（1..12），会比新的
+            # `documents.review_rounds` 还大 —— 那些行仍然比"这一次写入"更早。
             continue
         live = tx.find("review_findings", finding_id=rid)
         if live is None:

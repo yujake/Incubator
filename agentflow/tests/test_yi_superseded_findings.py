@@ -200,6 +200,25 @@ def test_the_scan_path_supersedes_too(store: Store, monkeypatch) -> None:
         second["superseded"])
 
 
+# ============================================================ 老行的"递增轮次"
+
+def test_a_legacy_inflated_round_is_still_superseded(store: Store) -> None:
+    """真机拷贝上的形态：老判词 round 是旧 `max+1` 口径（1..12），比新的复审轮次还大。
+
+    老行不可能是"将来某一轮"记的 ⇒ 它仍然比"这一次写入"更早。所以判据写成
+    "round 不同 = 更早一次写入；round 相同 = 同一轮并存"，而不是数值 `>=`。
+    （`temp/_min6_repro.py` 在 `projects/dct-min6-20261111` 的只读拷贝上量到：
+    新复审轮次 3、老判词 round=12，旧条仍被覆盖。）
+    """
+    _seed(store)
+    old = _record(store, target="claim-1", message="旧口径下第 12 轮的那条", round_no=12)
+    new = _record(store, target="claim-1", message="统一口径后的复审轮次那一条", round_no=3)
+    rows = _rows(store)
+    assert rows[old["finding_id"]]["status"] == "superseded"
+    assert rows[old["finding_id"]]["superseded_by"] == new["finding_id"]
+    assert rows[new["finding_id"]]["status"] == "open"
+
+
 # ============================================================ schema 三态 + verify 不再报红
 
 def test_old_rows_without_the_new_field_read_as_not_superseded() -> None:
