@@ -4,9 +4,15 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **294 个 `.py`、279,785 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,206 行**；§3 那张表里最大的一行是 `agent_loop.py`，14,189 行 —— 批 R40 把它补进了那张表，secretary.py 不在表里）。
+> **298 个 `.py`、281,183 行**，**76 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,238 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-11 手稿产出侧 / 呈递侧退役 `proof_no`（本批记账）**：本批只改既有文件的字节
+> （F 的稿头不再写 `- 证明号：`、登记条目不再写 `proof_no` / 版本段不再写 `p<N>@`、D 的
+> 携带行与 `mss:` 记号不再带这一格；读侧对老盘两种格式照旧），没有新模块。三格按现盘
+> 重算 279,785 → **281,183**：文件数 294 → 298（+4 个新模块）、`>800 行` 的 75 → 76
+> （新增的 `manuscriptsubmission.py` 越过 800）—— 这两格增量来自并行 lane 的新模块，
+> 本笔只认领三格读数、不认领它们的字节。
 > **2026-11-11 甲/乙 两笔并入后按现盘重算（本批记账）**：279,436 → **279,531**（净 +95：
 > 甲 `tools/fs_tools.py` +93 —— B 的窄豁免与那段理由注释；乙 `agent_f/delivery.py` +2 ——
 > 未签稿扫描的前缀改从 `manuscriptfamily` 派生）。文件数 291、`>800 行` 的 77、
