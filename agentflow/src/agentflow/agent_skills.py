@@ -3731,7 +3731,8 @@ def _g_skills() -> tuple[Skill, ...]:
 - **不改** ⇒ 必须写理由（"评审这条是错的"要用证据顶回去，不是沉默）；
 - **两条发现互相冲突** ⇒ 指出来，别自己挑一条当没看见另一条。
 
-`revise` 会把 `review_rounds` +1、`status` 置 `revised` —— 轮次是**读数**，不是战绩。
+`revise` 会把 `status` 置 `revised`；`documents.review_rounds` **由 H 的复审推进**
+（改稿本身不再加轮次）—— 轮次是**读数**，不是战绩。
 
 ## 别把两件工具用混
 

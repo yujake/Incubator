@@ -4385,7 +4385,7 @@
       "type": "string"
      },
      "round_no": {
-      "description": "审校轮次（不给时按该稿件已有发现的最大轮次 +1）",
+      "description": "审校轮次（不给时 = `documents.review_rounds` 的当前值；正常不需要给）",
       "minimum": 1,
       "type": "integer"
      },

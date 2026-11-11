@@ -529,8 +529,11 @@ def test_review_does_not_touch_knowledge_tables_and_only_changes_status(h: Agent
     # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：审校现在同一次事务里
     # 多写审核轴三字段（`review_verdict`/`reviewed_at`/`reviewed_by`）——
     # 这仍然是"只改这一行、不碰知识表、不碰 claims"，只是多记了"谁在什么时候判了什么"。
+    # 2026-11-11（甲）：一次复审同时推进 `review_rounds`（轮次账跟着复审走）——
+    # 变化点因此多这一格；knowledge 表逐字节未动这条判据一个字没放宽。
     _AXIS = ["review_verdict", "reviewed_at", "reviewed_by"]
-    assert changed == [("0000", sorted(_AXIS + ["status"]))], f"变化点不止 status＋审核轴：{changed}"
+    assert changed == [("0000", sorted(_AXIS + ["status", "review_rounds"]))], (
+        f"变化点不止 status＋审核轴＋轮次：{changed}")
     assert docs_after["rows"][0]["claims"] == docs_before["rows"][0]["claims"], "H 不许改 claims"
 
 

@@ -7024,6 +7024,22 @@
           }
         }
       ]
+    },
+    {
+      "tools": [
+        "review.record_finding"
+      ],
+      "key": "params",
+      "reason": "2026-11-11 甲（业主裁定「轮次账跟着复审走」）：`round_no` 的说明从『不给时按已有发现的最大轮次 +1』改成『不给时 = documents.review_rounds 的当前值；正常不需要给』—— 旧的 max+1 是第二套轮次（真机上 24 条判词摊出 12 个轮次，而 documents.review_rounds 恒 2）。只改这一格的 description，参数名/类型/minimum/必填面与其余三个参数一个字未动；工具说明（summary）与压缩比例也不动。",
+      "date": "2026-11-11",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "params/properties/round_no/description",
+          "from": "审校轮次（不给时按该稿件已有发现的最大轮次 +1）",
+          "to": "审校轮次（不给时 = `documents.review_rounds` 的当前值；正常不需要给）"
+        }
+      ]
     }
   ],
   "summary_lens_before": {

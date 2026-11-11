@@ -1013,6 +1013,59 @@ def _resolve_deps(store: Any, doc_id: str, dependencies: Any) -> tuple[Any, bool
     return [dict(d) for d in dependencies], True
 
 
+def _advance_review_round(
+    store: Any, doc_id: str, *, explicit: int | None = None, actor: str = "agent-H",
+) -> tuple[int, str | None]:
+    """H 做了一次复审 ⇒ `documents.review_rounds` +1（轮次账的唯一来源）。
+
+    ## 为什么轮次必须跟着「复审」走（甲，2026-11-11 业主裁定）
+
+    真机读数（`projects/dct-min6-20261111`）：`documents.review_rounds` 恒 2，而 H
+    事实上复审过很多趟 —— 因为此前只有 `G.revise` 会 +1，而真机上 G 常常用
+    `fs.edit` 改稿（不经过 `revise`）。于是"复审收过几次"这个读数与事实脱钩。
+
+    现在的口径（全仓一份）：
+      * `documents.review_rounds` = 第几轮复审。**只有 H 的复审入口推进它**
+        （`review_document` / `verify_fixes`）；
+      * `findings.round` = 这条判词是第几轮记的。同一轮取证时它必须等于当时的
+        `documents.review_rounds`；
+      * `record_finding` 不再自己 `max(round)+1` 造轮次（那就成了第二套轮次）。
+        它盖的是**当前** `review_rounds`（见 `record_finding` 里那段注释）。
+
+    ## `explicit` 是什么（为什么不是第二个轮次来源）
+
+    `review_document.round_no` 是可选的、`verify_fixes.round_no` 是必填的 —— 保留它们
+    是为了断点续跑与旧调用的形状。这里把它当**下限**：正常流程（H 不传 / 传的正是
+    下一轮）下 `new = cur + 1`；若调用方声明了一个更靠后的轮次（中断后接着跑），
+    以它为准并让盘上的账对齐到它 —— 于是**落盘之后** `documents.review_rounds`
+    与这一轮判词的 `round` 永远相等。
+
+    返回 `(这一轮的轮次, 写库失败原因或 None)`。`documents` 行不存在时（论文是真身、
+    台账行缺失那一路）返回算出来的轮次且不写库 —— 那一缺由调用方在 reason 里如实报。
+    """
+    row = next(
+        (r for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)), None)
+    current = int(dict(row).get("review_rounds") or 0) if row is not None else 0
+    new_round = current + 1
+    if explicit is not None:
+        new_round = max(new_round, int(explicit))
+    if new_round < 1:
+        new_round = 1
+    if row is None:
+        return new_round, f"documents 里没有稿件 {doc_id} ⇒ 轮次账没写回（只带读数）"
+    try:
+        with store.tx("documents", actor=actor,
+                      note=f"review round {current}->{new_round}") as tx:
+            live = tx.find("documents", doc_id=str(doc_id))
+            if live is None:
+                return new_round, f"稿件 {doc_id} 在事务内不存在 ⇒ 轮次账没写回"
+            live["review_rounds"] = new_round
+            tx.upsert("documents", live)
+    except Exception as exc:  # noqa: BLE001 - 轮次账坏掉要如实报，不许静默
+        return new_round, f"{type(exc).__name__}: {exc}"
+    return new_round, None
+
+
 def _set_doc_status(
     store: Any,
     doc_id: str,
@@ -1209,9 +1262,15 @@ def record_finding(
     `review_document` 的裁决路径 ——一审一判，不许用"补一条发现"顺手把状态挪一格。 2. 去重键仍是 `(kind, target, message)`（`_dedup_key`，
     全仓唯一一份）：同一条发现重复登记返回既有 `finding_id`（`created=False`），不制造重复行。 3. `evidence` 必填且非空：审校者的判断
     也要有依据（`schema.ReviewFinding` 的设计核心）。空 evidence 由 `validate()` 拒，这里不写第二份判据。
+    ## 轮次：只读 `documents.review_rounds`，不再自己 `max(round)+1`（甲，2026-11-11）
+    `findings.round` 是"第几轮记的判词"，而"第几轮"只由 H 的复审入口推进
+    （`_advance_review_round`）。本工具不写 `documents`（写集只有 `review_findings`），
+    所以它既**不推进**轮次、也**不发明**轮次：不给 `round_no` 时盖当前复审轮次
+    （0 = 还没复审过的新稿 ⇒ 至少记 1，那条判词属于即将进行的第 1 轮）。旧调用显式
+    给的 `round_no` 仍被尊重（断点续跑 / 旧夹具的形状），但正常 H 流程不传它。
     """
     doc_id = str(doc_id or "")
-    _doc_of(store, doc_id)  # 稿件不存在 ⇒  ValueError（不能给不存在的稿件落发现）
+    doc_row = _doc_of(store, doc_id)  # 稿件不存在 ⇒  ValueError（不能给不存在的稿件落发现）
     kind_s, target_s = str(kind or ""), str(target or "")
     message_s, evidence_s = str(message or ""), str(evidence or "")
     level_s = str(level or "warning")
@@ -1229,6 +1288,19 @@ def record_finding(
 
     existing = [dict(r) for r in store.rows("review_findings")
                 if str(r.get("doc_id")) == doc_id]
+    # ---- 甲（2026-11-11 业主裁定）：轮次只从 `documents.review_rounds` 来 -------------
+    #
+    # 这里原来是 `max(该稿已有发现的 round) + 1` —— 那是**第二套轮次**：真机
+    # `projects/dct-min6-20261111` 上每落一条手工判词就把它推一格（12 条判词 ⇒
+    # round 1..12），而 `documents.review_rounds` 恒 2，两套账互不相认。
+    # 现在：不给 `round_no` ⇒ 记在**当前复审轮次**（0 只出现在"还没复审过"的新稿上，
+    # 那一条属于即将进行的第 1 轮 ⇒ 至少 1）；给了 `round_no` ⇒ 以它为准（旧调用与
+    # 断点续跑的形状；正常 H 流程不传）。**不写 documents**（本工具写集只有
+    # `review_findings`），所以此处不推进轮次账。
+    round_val = (int(round_no) if round_no is not None
+                 else max(1, int(doc_row.get("review_rounds") or 0)))
+    if round_val < 1:
+        raise ValueError("round_no 从 1 开始")
     key = (kind_s, target_s, message_s)
     dup = next((r for r in existing if _dedup_key(r) == key), None)
     recheck_verdict, recheck_reason = _recheck_verdict_of(evidence_s)
@@ -1249,10 +1321,6 @@ def record_finding(
                 f"`{RECHECK_WONTFIX_PREFIX}` 必须带理由（显式放弃 = 说清为什么可以不改，"
                 "与 `wontfix` 的 schema 硬要求同一条纪律）"
             )
-        round_val = int(round_no) if round_no is not None else max(
-            (int(r.get("round") or 1) for r in existing), default=0) + 1
-        if round_val < 1:
-            raise ValueError("round_no 从 1 开始")
         status_new = "fixed" if recheck_verdict == "fixed" else "wontfix"
         with store.tx("review_findings", actor=actor,
                       note=f"recheck doc:{doc_id} {dup['finding_id']} -> {status_new}") as tx:
@@ -1277,10 +1345,6 @@ def record_finding(
                 "finding_id": str(dup.get("finding_id") or ""), "doc_id": doc_id,
                 "kind": kind_s, "level": str(dup.get("level") or level_s),
                 "round": int(dup.get("round") or 1), "status": str(dup.get("status") or "")}
-    round_val = int(round_no) if round_no is not None else max(
-        (int(r.get("round") or 1) for r in existing), default=0) + 1
-    if round_val < 1:
-        raise ValueError("round_no 从 1 开始")
     with store.tx("review_findings", actor=actor,
                   note=f"record_finding doc:{doc_id} round {round_val}") as tx:
         row = S.ReviewFinding(
@@ -1364,9 +1428,10 @@ def _unreviewable_review(
     "声明 ⊆ 实现"：两条返回路径少一个键都会当场变红）。
     """
     existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == str(doc_id)]
-    if round_no is None:
-        round_no = max((int(r.get("round") or 1) for r in existing), default=0) + 1
-    round_no = int(round_no)
+    # 没审成不是一次复审：这一趟**不推进**轮次账（`_advance_review_round` 只在真读到
+    # 正文之后才调用）。这里带的 `round` 是"当前第几轮"的读数，不是本次写下的。
+    round_no = int(round_no) if round_no is not None else max(
+        int(dict(doc).get("review_rounds") or 0), 1)
     status_now = str(doc.get("status") or "")
     zero_coverage = {
         "claims_total": 0,
@@ -1420,7 +1485,10 @@ def _unreviewable_review(
                            and str(r.get("level") or "") == "warning"),
             "finding_ids": [str(r.get("finding_id") or "") for r in existing
                             if str(r.get("status") or "") == "open"],
-            "review_round": round_no, "review_rounds": 0,
+            "review_round": round_no,
+            # 甲：这一格是盘上**现有**的轮次账读数（不是 0 —— 那会把"复审过 N 轮"
+            # 读成"没复审过"）；这一趟没审，所以它没有推进。
+            "review_rounds": int(dict(doc).get("review_rounds") or 0),
             "blocks_accept": False,
             "why": "这一趟没有可审的正文 ⇒ 状态一个字都没动（不是「没有 open findings」）",
         },
@@ -1499,14 +1567,19 @@ def review_document(
     # 而 H 的报告里那一格会一直写着 0 —— "没接线"与"查过没问题"必须分得开。
     scan = scan_document(submitted, dependencies=deps, semantic_judge=semantic_judge)
 
-    existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
-    if round_no is None:
-        # 轮次从"该稿件已有发现的最大轮次"往后走 —— 用库里的既有事实推，
-        # 而不是用一个内存计数器：审校必须能被中断后接着跑。
-        round_no = max((int(r.get("round") or 1) for r in existing), default=0) + 1
-    round_no = int(round_no)
+    # ---- 甲（2026-11-11 业主裁定）：H 做了一次复审 ⇒ 轮次账 +1（唯一来源）。
+    #
+    # 这一笔在"确认真有正文可审"之后才落：没审成不是一次复审（上面已经早退）。
+    # 轮次不再从"已有发现的最大 round +1"推 —— 那是第二套轮次（真机上
+    # `record_finding` 每落一条就把它推一格，于是 24 条发现摊出 12 个"轮次"，
+    # 而 `documents.review_rounds` 恒 2）。见 `_advance_review_round` 的口径。
+    round_no, round_error = _advance_review_round(
+        store, doc_id, explicit=round_no, actor=actor)
+    doc = {**doc, "review_rounds": round_no}
     if round_no < 1:
         raise ValueError("round_no 从 1 开始")
+
+    existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
 
     seen = {_dedup_key(r) for r in existing}
     pending: list[dict] = []
@@ -1725,6 +1798,11 @@ def review_document(
             f"⚠️ 文档状态**未能更新**（{status_error}）—— 这通常因为盘上这份稿件本身不合 schema，"
             "或 `documents` 里根本没有这一行（论文照审，状态这一笔如实报失败）"
         )
+    if round_error:
+        reason_bits.append(
+            f"⚠️ 轮次账**未能写回** `documents.review_rounds`（{round_error}）—— "
+            f"这一轮的判词仍按 round={round_no} 记，但盘上的轮次可能与它对不上"
+        )
 
     return {
         "doc_id": doc_id,
@@ -1859,14 +1937,20 @@ def verify_fixes(
     或这一轮答不上来 / 判据报错（`claims_unknown` / `checker_errors`）⇒ 留在 `open` 并标`source="not_rechecked"`（返回值取值，不落表）。
     """
     doc_id = str(doc_id)
-    round_no = int(round_no)
+    # ---- 甲（2026-11-11 业主裁定）：复审裁决这条路每做一次也推进一格轮次。
+    #
+    # 与 `review_document` 共用 `_advance_review_round`（轮次账只有一份实现）；
+    # 显式 `round_no` 只作下限 —— 断点续跑时调用方可能报一个更靠后的轮次，
+    # 正常流程下这里是 `cur + 1`。`doc` 跟着换成写回之后的读数。
+    round_no, round_error = _advance_review_round(
+        store, doc_id, explicit=round_no, actor=actor)
     if round_no < 1:
         raise ValueError("round_no 从 1 开始")
     max_review_rounds = int(max_review_rounds)
     if max_review_rounds < 1:
         raise ValueError("max_review_rounds 至少为 1")
 
-    doc = _doc_of(store, doc_id)
+    doc = {**_doc_of(store, doc_id), "review_rounds": round_no}
     deps, dep_checked = _resolve_deps(store, doc_id, dependencies)
     # 复审复扫与 `review_document` 用同一个被审对象（业主 2026-10-24：H 审论文）：
     # 有正文就把正文当输入（行号/引文都指着它），没有正文就照旧只读台账行 ——
@@ -1890,7 +1974,12 @@ def verify_fixes(
         and not int(semantic_check.get("checker_errors") or 0)
     )
     findings = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
-    prev = [r for r in findings if int(r.get("round") or 1) < round_no]
+    # 乙（2026-11-11）：`superseded` 是"被更晚的同处判词取代"的终态 —— 它不是待判的
+    # 旧账：再拿它去判 fixed / 仍 open 等于把已经翻篇的那一页又翻回来。所以复审的
+    # "上一轮旧账"里排除它（`open` 的判定仍是 `status == "open"`，一个字没动）。
+    prev = [r for r in findings
+            if int(r.get("round") or 1) < round_no
+            and str(r.get("status") or "") != "superseded"]
     #: 手工判词（P2-4）：它们的去重键永远不在 `current` 里，所以「本轮没复现」
     #: 对它们不是一个可用的判据。清单在循环外一次算清（不改 `_dedup_key`）。
     manual_ids = {str(r.get("finding_id")) for r in prev if _is_manual_finding(r)}
@@ -2157,6 +2246,11 @@ def verify_fixes(
         )
     if not status_updated:
         reason_bits.append(f"⚠️ 文档状态**未能更新**（{status_error}）")
+    if round_error:
+        reason_bits.append(
+            f"⚠️ 轮次账**未能写回** `documents.review_rounds`（{round_error}）—— "
+            f"这一轮仍按 round={round_no} 判，但盘上的轮次可能与它对不上"
+        )
 
     return {
         "doc_id": doc_id,
@@ -2846,7 +2940,7 @@ def _review_report_tool(_not_wired, store, actor, semantic_judge, **kw):
                      "description": "轴（数学 / 体例 / 工程 / 证据）"},
             "suggestion": {"type": "string", "description": "最小修法"},
             "round_no": {"type": "integer", "minimum": 1,
-                         "description": "审校轮次（不给时按该稿件已有发现的最大轮次 +1）"},
+                         "description": "审校轮次（不给时 = `documents.review_rounds` 的当前值；正常不需要给）"},
             "verbatim_quote": {"type": "string",
                                "description": "≤20 词的逐字引文（G10 那一格）"},
             "line": {"type": "integer", "minimum": 1,
