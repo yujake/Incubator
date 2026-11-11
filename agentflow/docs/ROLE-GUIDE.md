@@ -101,7 +101,7 @@
 | `lit.stage_withdraw` | 撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，报告上同一篇会同时出现在已入库与未入库两块。 | `write_local` | `slot`、`reason_code` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `search.dedup_check` | **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『会不会被判成已有的某篇』，并给出会命中的键。 | `read` | `title` |
@@ -250,7 +250,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `ocr.backends` | **真实探测** OCR 后端（easyocr / pytesseract / none）是否可用，逐条给理由与修复建议；不下载 easyocr 模型。 | `write_local` | （无） |
 | `ocr.detect_text_layer` | 判断 PDF 有没有**文本层**（复用 extract_text，pages==[] 即无）；无文本层是「**无法校验**」不是「**校验失败**」。 | `read` | （无） |
 | `ocr.run` | 对指定页（缺省全部页）做 OCR；auto 按 easyocr→pytesseract 选第一个可用者，都不可用时 fail 并给安装建议（不返回空文本）。可给已登记文献编号。 | `write_local` | （无） |
@@ -359,7 +359,7 @@
 | `ledger.resolve` | 按号 / 按标签关键字查命题台账，返回候选节点（命题号 / 类别 / 状态 / 等级 / 标签），不是树。找不到时明确说『没有这个号 / 没有命中』。选根之后再用 ledger.expand 展开。 | `read` | `query` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `search.local` | **不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
 | `search.shelf` | **不联网**：列出**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
@@ -508,7 +508,7 @@
 | `graph.stats` | 返回图统计摘要与热度前列（不重建索引；未建图时按需构建一次）。 | `read` | （无） |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `research.list_gaps` | 列出研究问题台账（D 的工作台），按 priority(high>medium>low)、question_id 稳定排序。 | `read` | （无） |
@@ -628,7 +628,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
@@ -768,7 +768,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
@@ -907,7 +907,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
@@ -1022,7 +1022,7 @@
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `review.list_findings` | 只读列举审校发现（可按稿件/状态/级别过滤），含 evidence。 | `read` | （无） |
 | `review.record_finding` | 把**你自己读出来的**一条发现落成 `review_findings` 行（只读角色的产出通道）。机械扫描（`review_document`）覆盖不到的用它；`evidence` 必填。 | `write_local` | `doc_id`、`kind`、`target`、`message`、`evidence` |
@@ -1137,7 +1137,7 @@
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
 | `table.get` | 按主键取一行；不存在时 ok=True、data=None（meta.found=False）。`statements` 行另带 route / proof_routes（算不出来会说明）。 | `read` | `table`、`id` |
@@ -1241,7 +1241,7 @@
 | `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
-| `manuscripts.submission_reading` | 读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。「未提交」与「没查成」分开报（`checked=false` 是后者）。 | `read` | （无） |
+| `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |
