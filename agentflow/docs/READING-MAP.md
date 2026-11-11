@@ -4,9 +4,17 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **304 个 `.py`、283,277 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,566 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **304 个 `.py`、283,482 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,566 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-11 甲/乙（轮次账跟着复审 / 同处旧判被覆盖，本批记账）**：304 个 `.py` 不变
+> （没有新模块），总行数 283,277 → **283,482**（净 +205，全在既有文件里：
+> `tools/review_tools.py` 甲+乙的轮次推进与覆盖规则、读数与注释；`schema.py` 的
+> `superseded` 状态值与 `superseded_by` 指针（ReviewFinding，FC-27 已按业主放行登记）；
+> `agent_g/revise.py` 的"改稿不再推进轮次"；`verify.py` 的 `accepted_with_open_error`
+> 认 `superseded` 为已处置；`agent_skills.py` 的 G 手册那半句；`agent_h/core.py`
+> 自检的变化点清单多 `review_rounds` 一格）；`>800 行` 的 **75** 与全仓最大
+> `agent_loop.py` 14,566 都不变。三格读数见上；本笔只认领这三格，不认领并行 lane 的字节。
 > **2026-11-11 乙（按签拦收工，本批记账）**：304 个 `.py` 不变（没有新模块），
 > 总行数 283,051 → **283,277**（+226，全在 `agent_loop.py`：收工门从「送审后必须起
 > `wait_for=V` 的计时器」改成业主追裁的「计划号/稿没有现行的 V 签、也没有被明确放弃

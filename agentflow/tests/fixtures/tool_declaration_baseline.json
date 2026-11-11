@@ -7040,6 +7040,21 @@
           "to": "审校轮次（不给时 = `documents.review_rounds` 的当前值；正常不需要给）"
         }
       ]
+    },
+    {
+      "tools": [
+        "review.list_findings"
+      ],
+      "key": "params",
+      "reason": "2026-11-11 乙（业主裁定「同一处的旧判词要被新判覆盖」）：FINDING_STATUSES 增加 `superseded`，而 review.list_findings 的 status 过滤枚举从受控词表现算 ⇒ 声明面跟着多这一档（否则『被覆盖的那几条』在只读列举里筛不出来）。这是词表的合法演进：其余枚举（level 三档）与 doc_id 一格未动，返回键集合也未动。",
+      "date": "2026-11-11",
+      "edits": [
+        {
+          "op": "append_item",
+          "path": "params/properties/status/enum",
+          "item": "superseded"
+        }
+      ]
     }
   ],
   "summary_lens_before": {

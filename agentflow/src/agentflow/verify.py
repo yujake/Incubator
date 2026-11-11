@@ -1239,7 +1239,10 @@ def _check_8(rep, doc_by_id, findings, questions, rejected_by_id, store):
                                     "审校发现没有 evidence —— 审校者的判断也需要证据"))
         if doc_row is not None and str(doc_row.get("status") or "") == "accepted" \
                 and str(f.get("level")) == "error" \
-                and str(f.get("status")) not in ("fixed", "wontfix", "disputed"):
+                and str(f.get("status")) not in ("fixed", "wontfix", "disputed", "superseded"):
+            # 乙（2026-11-11）：`superseded` 也是"已处置"的一档 —— 它被更晚的同处判词
+            # 覆盖了，原文与轮次都还在；把它读成"仍未关闭"会让覆盖之后 open 数降下来
+            # 而这条审计继续报红（那正是本题要修的反面）。
             rep.issues.append(Issue("error", "review_findings", fid, "accepted_with_open_error",
                                     "稿件已被 accepted，但它还有未处置的 error 级发现"))
 

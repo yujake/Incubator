@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""甲（2026-11-11 业主裁定）：轮次账要跟着**复审**走。
+"""甲（2026-11-11 业主裁定）：轮次账要跟着「复审」走。
 
-真机读数（`projects/dct-min6-20261111`，只读）：`documents.review_rounds` **恒 2**，
+真机读数（`projects/dct-min6-20261111`，只读）：`documents.review_rounds` 恒 2，
 而 H 事实上复审过很多趟、findings 摊出 12 个"轮次"。根因是两套轮次互不相认：
 
 * 只有 `G.revise` 会 +1，而真机上 G 常用 `fs.edit` 改稿（不经过 `revise`）；
@@ -14,7 +14,7 @@
 |---|---|---|
 | a | G 改一次 + H 复审一次 | `review_rounds == 2`，这一轮的 finding `round == 2` |
 | b | H 复审两次（G 各改一次） | `review_rounds == 3`，这一轮记的 finding `round == 3` |
-| c | 只复审不改稿（有 open findings） | 每复审一次仍 +1；**不许**因此把 status 写成 accepted |
+| c | 只复审不改稿（有 open findings） | 每复审一次仍 +1；不许因此把 status 写成 accepted |
 | d | 反真空：把 "+1" 摘掉 | a 必须变回"改前的读数"（1） |
 
 "轮次只从 `documents.review_rounds` 来"这件事在 b 里同时钉 findings 那一侧：
@@ -106,7 +106,7 @@ def test_a_one_revision_then_one_review_makes_two_rounds(store: Store) -> None:
 # ============================================================ b：H 复审两次（G 各改一次）⇒ 3
 
 def test_b_two_reviews_with_a_revision_each_make_three_rounds(store: Store) -> None:
-    """第二次改稿**不再**推进轮次；第二次复审把它推到 3，且这一轮的判词 round=3。"""
+    """第二次改稿不再推进轮次；第二次复审把它推到 3，且这一轮的判词 round=3。"""
     _seed(store)
     g = AgentG(store, config={"docs_subdir": "documents"})
     g.revise(DOC, note="第 1 次改")
@@ -159,7 +159,7 @@ def test_c_review_without_revision_still_advances_but_never_accepts(store: Store
 def test_d_removing_the_plus_one_turns_a_red(store: Store, monkeypatch) -> None:
     """反真空：把轮次推进摘掉 ⇒ a 的读数退回"改前"（1）。
 
-    这条不是在测一个理想行为，而是在测 **a 的那条断言真的靠这段实现活着**：
+    这条不是在测一个理想行为，而是在测 a 的那条断言真的靠这段实现活着：
     若将来有人把 `_advance_review_round` 改成"什么都不做"，这里会看到 1 而不是 2。
     """
     _seed(store)

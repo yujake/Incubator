@@ -4301,7 +4301,8 @@
        "open",
        "fixed",
        "wontfix",
-       "disputed"
+       "disputed",
+       "superseded"
       ],
       "type": "string"
      }

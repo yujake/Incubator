@@ -1025,19 +1025,19 @@ def _advance_review_round(
     `fs.edit` 改稿（不经过 `revise`）。于是"复审收过几次"这个读数与事实脱钩。
 
     现在的口径（全仓一份）：
-      * `documents.review_rounds` = 第几轮复审。**只有 H 的复审入口推进它**
+      * `documents.review_rounds` = 第几轮复审。只有 H 的复审入口推进它
         （`review_document` / `verify_fixes`）；
       * `findings.round` = 这条判词是第几轮记的。同一轮取证时它必须等于当时的
         `documents.review_rounds`；
       * `record_finding` 不再自己 `max(round)+1` 造轮次（那就成了第二套轮次）。
-        它盖的是**当前** `review_rounds`（见 `record_finding` 里那段注释）。
+        它盖的是当前 `review_rounds`（见 `record_finding` 里那段注释）。
 
     ## `explicit` 是什么（为什么不是第二个轮次来源）
 
     `review_document.round_no` 是可选的、`verify_fixes.round_no` 是必填的 —— 保留它们
-    是为了断点续跑与旧调用的形状。这里把它当**下限**：正常流程（H 不传 / 传的正是
+    是为了断点续跑与旧调用的形状。这里把它当下限：正常流程（H 不传 / 传的正是
     下一轮）下 `new = cur + 1`；若调用方声明了一个更靠后的轮次（中断后接着跑），
-    以它为准并让盘上的账对齐到它 —— 于是**落盘之后** `documents.review_rounds`
+    以它为准并让盘上的账对齐到它 —— 于是落盘之后 `documents.review_rounds`
     与这一轮判词的 `round` 永远相等。
 
     返回 `(这一轮的轮次, 写库失败原因或 None)`。`documents` 行不存在时（论文是真身、
@@ -1173,6 +1173,54 @@ def _dedup_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     return (str(row.get("kind")), str(row.get("target")), str(row.get("message")))
 
 
+def _supersede_prior_open(
+    tx: Any,
+    existing: Sequence[Mapping[str, Any]],
+    *,
+    kind: str,
+    target: str,
+    new_round: int,
+    new_id: str,
+) -> list[dict]:
+    """乙（2026-11-11 业主裁定）：同一处的旧判词被更晚的新判覆盖（`superseded`）。
+
+    语义边界（施工单逐条）：
+      * 只在 `kind` 与 `target` 逐字完全相同时覆盖 —— target 差一个字都不算同一处
+        （真机上同一处常被写成不同措辞，那是"同一处的两条"还是"两处"由人裁；
+        本实现刻意只认逐字相同，粒度问题写在交付报告里）；
+      * 只在更晚的轮次（`round < new_round`）覆盖 —— 同一轮里记的两条是并存的判词；
+      * `fixed` / `wontfix` / `disputed`（以及已是 `superseded` 的）不被覆盖：
+        已了结的不动（g）；这里只动 `status == "open"` 的；
+      * 不是删除：原文、轮次、证据、resolution_note 一个字不改，只加状态与指针；
+      * `open` 的判定仍只看 `status == "open"` ⇒ 覆盖之后 open 数下降（e）。
+
+    在调用方的事务里执行（与"写新判词"同一笔，避免出现"新的落了、旧的还 open"的中间态）。
+    返回被覆盖的读数 `[{finding_id, round, superseded_by}]`（与 finding 的落库值同源）。
+    """
+    changed: list[dict] = []
+    for row in existing:
+        if str(row.get("kind") or "") != str(kind):
+            continue
+        if str(row.get("target") or "") != str(target):
+            continue
+        if str(row.get("status") or "") != "open":
+            continue
+        rid = str(row.get("finding_id") or "")
+        if not rid or rid == str(new_id):
+            continue
+        if int(row.get("round") or 1) >= int(new_round):
+            continue
+        live = tx.find("review_findings", finding_id=rid)
+        if live is None:
+            continue
+        live["status"] = "superseded"
+        live["superseded_by"] = str(new_id)
+        tx.upsert("review_findings", live)
+        changed.append({"finding_id": rid, "round": int(live.get("round") or 1),
+                        "superseded_by": str(new_id)})
+    return changed
+
+
 # ---------------------------------------------------------------- 手工判词（P2-4）
 #
 # 现场（`projects/dct-min4-20261111`）：7 条 `record_finding` 落的手工判词全 `open`，
@@ -1265,7 +1313,7 @@ def record_finding(
     ## 轮次：只读 `documents.review_rounds`，不再自己 `max(round)+1`（甲，2026-11-11）
     `findings.round` 是"第几轮记的判词"，而"第几轮"只由 H 的复审入口推进
     （`_advance_review_round`）。本工具不写 `documents`（写集只有 `review_findings`），
-    所以它既**不推进**轮次、也**不发明**轮次：不给 `round_no` 时盖当前复审轮次
+    所以它既不推进轮次、也不发明轮次：不给 `round_no` 时盖当前复审轮次
     （0 = 还没复审过的新稿 ⇒ 至少记 1，那条判词属于即将进行的第 1 轮）。旧调用显式
     给的 `round_no` 仍被尊重（断点续跑 / 旧夹具的形状），但正常 H 流程不传它。
     """
@@ -1290,12 +1338,12 @@ def record_finding(
                 if str(r.get("doc_id")) == doc_id]
     # ---- 甲（2026-11-11 业主裁定）：轮次只从 `documents.review_rounds` 来 -------------
     #
-    # 这里原来是 `max(该稿已有发现的 round) + 1` —— 那是**第二套轮次**：真机
+    # 这里原来是 `max(该稿已有发现的 round) + 1` —— 那是第二套轮次：真机
     # `projects/dct-min6-20261111` 上每落一条手工判词就把它推一格（12 条判词 ⇒
     # round 1..12），而 `documents.review_rounds` 恒 2，两套账互不相认。
-    # 现在：不给 `round_no` ⇒ 记在**当前复审轮次**（0 只出现在"还没复审过"的新稿上，
+    # 现在：不给 `round_no` ⇒ 记在当前复审轮次（0 只出现在"还没复审过"的新稿上，
     # 那一条属于即将进行的第 1 轮 ⇒ 至少 1）；给了 `round_no` ⇒ 以它为准（旧调用与
-    # 断点续跑的形状；正常 H 流程不传）。**不写 documents**（本工具写集只有
+    # 断点续跑的形状；正常 H 流程不传）。不写 documents（本工具写集只有
     # `review_findings`），所以此处不推进轮次账。
     round_val = (int(round_no) if round_no is not None
                  else max(1, int(doc_row.get("review_rounds") or 0)))
@@ -1339,12 +1387,15 @@ def record_finding(
         return {"checked": True, "created": False, "duplicate_skipped": 1,
                 "finding_id": str(row["finding_id"]), "doc_id": doc_id,
                 "kind": kind_s, "level": str(row.get("level") or level_s),
-                "round": round_val, "status": status_new}
+                "round": round_val, "status": status_new,
+                # 显式复核只处置这一条，不产生"同处的新判词" ⇒ 不覆盖任何东西。
+                "superseded": []}
     if dup is not None:
         return {"checked": True, "created": False, "duplicate_skipped": 1,
                 "finding_id": str(dup.get("finding_id") or ""), "doc_id": doc_id,
                 "kind": kind_s, "level": str(dup.get("level") or level_s),
-                "round": int(dup.get("round") or 1), "status": str(dup.get("status") or "")}
+                "round": int(dup.get("round") or 1), "status": str(dup.get("status") or ""),
+                "superseded": []}
     with store.tx("review_findings", actor=actor,
                   note=f"record_finding doc:{doc_id} round {round_val}") as tx:
         row = S.ReviewFinding(
@@ -1364,9 +1415,17 @@ def record_finding(
         row.validate()
         payload = row.to_dict()
         tx.upsert("review_findings", payload)
+        # 乙（2026-11-11）：同一 (kind,target) 的更早 open 判词被这一条覆盖 ——
+        # 与"写新判词"同一笔事务（见 `_supersede_prior_open` 的语义边界）。
+        superseded = _supersede_prior_open(
+            tx, existing, kind=kind_s, target=target_s,
+            new_round=round_val, new_id=str(payload["finding_id"]))
     return {"checked": True, "created": True, "duplicate_skipped": 0,
             "finding_id": payload["finding_id"], "doc_id": doc_id, "kind": kind_s,
-            "level": level_s, "round": round_val, "status": "open"}
+            "level": level_s, "round": round_val, "status": "open",
+            # 读数（不在 `@tool` 的 returns 声明里 —— 声明的键集合一个字未动）：
+            # 这一条覆盖掉了哪几条旧判词（每条带 finding_id / round / superseded_by）。
+            "superseded": superseded}
 
 
 def _open_findings_gate(*, existing: Sequence[Mapping[str, Any]],
@@ -1428,7 +1487,7 @@ def _unreviewable_review(
     "声明 ⊆ 实现"：两条返回路径少一个键都会当场变红）。
     """
     existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == str(doc_id)]
-    # 没审成不是一次复审：这一趟**不推进**轮次账（`_advance_review_round` 只在真读到
+    # 没审成不是一次复审：这一趟不推进轮次账（`_advance_review_round` 只在真读到
     # 正文之后才调用）。这里带的 `round` 是"当前第几轮"的读数，不是本次写下的。
     round_no = int(round_no) if round_no is not None else max(
         int(dict(doc).get("review_rounds") or 0), 1)
@@ -1448,6 +1507,8 @@ def _unreviewable_review(
         "checked": False,
         "round": round_no,
         "new_findings": [],
+        # 乙：这一趟没审 ⇒ 一条旧判词也没被覆盖（键与正常路径逐字相同）。
+        "superseded": [],
         "duplicate_skipped": 0,
         "reopened": [],
         "error_count": 0,
@@ -1486,7 +1547,7 @@ def _unreviewable_review(
             "finding_ids": [str(r.get("finding_id") or "") for r in existing
                             if str(r.get("status") or "") == "open"],
             "review_round": round_no,
-            # 甲：这一格是盘上**现有**的轮次账读数（不是 0 —— 那会把"复审过 N 轮"
+            # 甲：这一格是盘上现有的轮次账读数（不是 0 —— 那会把"复审过 N 轮"
             # 读成"没复审过"）；这一趟没审，所以它没有推进。
             "review_rounds": int(dict(doc).get("review_rounds") or 0),
             "blocks_accept": False,
@@ -1593,6 +1654,8 @@ def review_document(
         pending.append(f)
 
     new_findings: list[dict] = []
+    #: 乙：这一轮被新判词覆盖掉的旧 open 判词（读数；每条带 superseded_by）。
+    superseded: list[dict] = []
     if pending:
         with store.tx(
             "review_findings", actor=actor, note=f"review_document doc:{doc_id} round {round_no}"
@@ -1630,6 +1693,11 @@ def review_document(
                 row.validate()
                 payload = row.to_dict()
                 tx.upsert("review_findings", payload)
+                # 乙（2026-11-11）：机械扫描产出的这一条同样是"这一轮的新判词" ——
+                # 同一 (kind,target) 的更早 open 判词被它覆盖（更晚轮次才覆盖）。
+                superseded.extend(_supersede_prior_open(
+                    tx, existing, kind=str(f["kind"]), target=str(f["target"]),
+                    new_round=round_no, new_id=str(payload["finding_id"])))
                 new_findings.append(payload)
 
     # ---- 重开"标了 fixed 但其实还在"的发现（防止 G 用点状态的方式修好问题）
@@ -1809,6 +1877,10 @@ def review_document(
         "checked": True,
         "round": round_no,
         "new_findings": new_findings,
+        # 乙（2026-11-11）：这一轮被新判词覆盖掉的旧 open 判词（读数；每条带
+        # `finding_id` / `round` / `superseded_by`）。它不在 `returns=` 声明里 ——
+        # 声明的键集合一个字未动（该判据是"声明 ⊆ 实现"，加读数不破它）。
+        "superseded": superseded,
         "duplicate_skipped": duplicate_skipped,
         "reopened": reopened,
         "error_count": scan["error_count"],
@@ -2312,6 +2384,10 @@ def list_findings(
                 "status": r.get("status"),
                 "round": r.get("round"),
                 "resolution_note": r.get("resolution_note"),
+                # 乙（2026-11-11）：被哪一条更晚的同处判词覆盖（空串 = 未覆盖）。
+                # 这是"覆盖"这件事在读数面上的唯一落点 —— 老行读成 ""（三态：
+                # 未覆盖 / 被某条覆盖 / 这一格不存在的老行同样是未覆盖）。
+                "superseded_by": r.get("superseded_by") or "",
             }
         )
     return {"count": len(out), "findings": out}

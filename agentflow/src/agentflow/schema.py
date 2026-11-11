@@ -1570,7 +1570,13 @@ FINDING_KINDS = (
 FINDING_LEVELS = ("error", "warning", "info")
 
 #: 审校发现的状态。`wontfix` / `disputed` 必须写理由（同 `dropped` 必须写 notes）。
-FINDING_STATUSES = ("open", "fixed", "wontfix", "disputed")
+#:
+#: `superseded`（乙，2026-11-11 业主裁定）：同一 `(kind, target)` 在**更晚的轮次**又记了
+#: 一条判词 ⇒ 更早那条被新判覆盖。它不是删除：原文、轮次、证据都留着，只把状态推成
+#: `superseded` 并用 `superseded_by` 指到新那条。`open` 的判定仍只看 `status == "open"`
+#: ⇒ 覆盖之后 open 数应当下降。`fixed` / `wontfix`（以及 `disputed`）是已了结的判词，
+#: **不被覆盖** —— 已了结的不动。
+FINDING_STATUSES = ("open", "fixed", "wontfix", "disputed", "superseded")
 
 #: `maths` 的取值域（`P-9` 候选 A，2026-09-27 所有者裁定；落点见 `docs/PROPOSALS.md`）。
 #:
@@ -2593,6 +2599,12 @@ class ReviewFinding:
     suggestion: str = ""
     status: str = "open"
     resolution_note: str = ""
+    #: 乙（2026-11-11 业主裁定）：被哪一条更晚的判词覆盖（`superseded_by` = 新 finding 的
+    #: `finding_id`）。三态口径：**空串 = 没有被覆盖**（所有老行、以及今天绝大多数行都是
+    #: 这一档），非空串 = 本行 status 已推成 `superseded` 且覆盖它的是那一条。
+    #: 它只在 `status == "superseded"` 时才有意义；`validate()` 对"说了被覆盖却不给指针"
+    #: 当场拒（指针是这条状态唯一的可追溯落点），其余情形一个字都不判。
+    superseded_by: str = ""
     created_at: str = ""
     created_by: str = "agent-H"
     #: 轴。取值域 = `gates.AXES`（数学 / 体例 / 工程 / 证据）。
@@ -2641,6 +2653,14 @@ class ReviewFinding:
             raise ValueError(
                 f"status={self.status!r} 时必须写 resolution_note"
                 "（不接受修但不说明为什么，与 'dropped 必须写 notes' 同一条纪律）"
+            )
+        # 乙：被覆盖的那一条必须指得到"被谁覆盖" —— 指针是 `superseded` 这个状态唯一
+        # 的可追溯落点（原文与轮次都留着，删掉的是"它还算数"这件事，不是这一行）。
+        # 反方向不判：`superseded_by` 非空而状态不是 superseded 的情形不存在于写入面，
+        # 但老行里多这一格不该被 `store.rebuild()` 静默丢掉（见类 docstring 第 1 条）。
+        if self.status == "superseded" and not self.superseded_by.strip():
+            raise ValueError(
+                "status='superseded' 时必须给 superseded_by（被哪一条更晚的判词覆盖）"
             )
         # ---- `P-9` 候选 A 的取值判据（2026-09-27 所有者裁定）----
         #

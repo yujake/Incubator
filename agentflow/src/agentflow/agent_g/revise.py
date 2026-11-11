@@ -25,7 +25,7 @@ class _Revise:
         note: str = "",
     ) -> dict:
         """按 H 的发现修订稿件。
-        - `status = "revised"`、并重渲染 markdown；轮次账**不再由改稿推进**（甲，
+        - `status = "revised"`、并重渲染 markdown；轮次账不再由改稿推进（甲，
           2026-11-11）：`documents.review_rounds` 只跟着 H 的复审走，本动作只在
           "还没进过任何一轮"时把它托到第 1 轮。`new_claims` 里代号已存在的断言会替换原
         断言（修订），新代号则追加。没有这条替换语义，G 就只能"再加一句新话"，永远改不掉那句错话 —— 那 `revise` 就修不好任何一条审校发现；- 
@@ -84,13 +84,13 @@ class _Revise:
             )
 
             doc["claims"] = normalized
-            # ---- 甲（2026-11-11 业主裁定）：轮次账跟着**复审**走，不跟着改稿走。
+            # ---- 甲（2026-11-11 业主裁定）：轮次账跟着复审走，不跟着改稿走。
             #
             # 此前这里是 `review_rounds += 1`。真机上 G 常走 `fs.edit` 改稿（不经过本函数），
             # 而 H 复审 N 次都不涨 ⇒ `review_rounds` 恒 2，"复审收过几次"不可信。
             # 现在唯一的推进者是 H 的复审入口（`review_tools._advance_review_round`）；
             # 本函数只在"这份稿还没进过任何一轮"时把它托到第 1 轮 —— 改稿开启的是
-            # **下一轮要复审的那一版**，而不是又记一次"复审"。
+            # 下一轮要复审的那一版，而不是又记一次"复审"。
             doc["review_rounds"] = max(int(doc.get("review_rounds") or 0), 1)
             doc["status"] = "revised"
             doc["updated_at"] = S.now_iso()
