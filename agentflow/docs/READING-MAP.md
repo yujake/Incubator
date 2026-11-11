@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-11，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **303 个 `.py`、282,310 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,238 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **303 个 `.py`、282,534 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，14,238 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-11 B 收录的第二条入口也分配路径号（本批记账）**：文件数 303 不变（没有新
+> 模块），总行数 282,310 → **282,534**（+224，全在本批改的两个既有文件里：
+> `agent_b/register_statement.py` +213、`secretary.py` +11 —— ② 逐份 inline 登记也调
+> `manuscriptpaths.assign_path_group`、三条读数同号、单段扫描认这个号）。`>800 行` 的
+> **75** 不变（两个文件本来就过线）、全仓最大仍是 `agent_loop.py` 14,238。
 > **2026-11-11 P1 七件一致化 + G/H 边集（本批记账）**：301 个 `.py` 不变（没有新模块），
 > 总行数 281,304 → **282,221**（+917：B 的 `open_polish_copy` 动作声明与 `-pN` 退役、
 > D→B 指针支的路径号、`manuscripts.submission_reading` 工具、F/V/D 题面那条禁令、

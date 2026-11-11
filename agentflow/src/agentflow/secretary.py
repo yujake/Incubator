@@ -9173,12 +9173,21 @@ class Secretary:
         #: 而 `proof_paths` 是"某一份证明里有几条可选路径"的声明面 —— 两者都给时，
         #: 一份证明一组比"整份证明被切成几段"更不容易把依赖挂错证明号。
         proof_plan = self._proof_dep_plan(body)
+        #: 单段扫描的路径号（2026-11-11 收尾批）：B 逐份 inline 登记时把分配出来的
+        #: 路径号放在 `body["path_group"]` 里（② 那一支也调 `assign_path_group`），
+        #: 这一档没有 `proofs` / `proof_paths` 可分组 ⇒ 段落下标恒为 1，只能用这个号。
+        #: 没有这一格 ⇒ 0（老路逐字不变：按段落下标，第 1 组 = 1）。
+        _single_group = 0
         if proof_plan:
             paths = [text for _no, text in proof_plan]
         elif isinstance(raw_paths, (list, tuple)) and raw_paths:
             proof_plan = [(0, str(p or "")) for p in raw_paths]
             paths = [text for _no, text in proof_plan]
         else:
+            try:
+                _single_group = int(body.get("path_group") or 0)
+            except (TypeError, ValueError):
+                _single_group = 0
             proof_plan = [(0, str(body.get("statement_full") or "") + "\n"
                            + str(body.get("proof_text") or ""))]
             paths = [text for _no, text in proof_plan]
@@ -9205,7 +9214,9 @@ class Secretary:
                 #: 路径组：多证明清单那一档里"一份证明 = 一条可选路径"，于是组号就是
                 #: 证明号（第 2 份证明的依赖落在 `path_group=2`）；老写法（没有 `proofs`）
                 #: 仍按段落下标，`proof_paths` 的第 N 段就是第 N 组 —— 老读数逐字不变。
-                group_no = int(plan_no) if plan_no >= 1 else gi
+                #: 单段而 B 分配了路径号（`body["path_group"]`）⇒ 用那个号（② 的那一支）。
+                group_no = int(plan_no) if plan_no >= 1 else (
+                    int(_single_group) if int(_single_group) >= 1 else gi)
                 step = {"kind": dep_kind, "label": ref["raw"], "code": ref["code"],
                         "table": ref["table"], field: ref["code"], "path_group": group_no,
                         "_from": "proof_scan"}
