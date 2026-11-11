@@ -523,6 +523,183 @@ def archive(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+# ---------------------------------------------------------------- 拿签稿表（复用颁发表，不新建账）
+#
+# 业主 2026-11-11 裁定 ②③（逐字）：
+# ```text
+# 「稿通过后相当于这个命题证完了，后续只对稿允许有只读权，但由于尚未入台账暂无引用权，
+#   需要维护拿签稿的稿号表（在一次攻坚中应该是持续追加，后续交稿时一并递交给D）」
+# 「维护拿签稿的稿号表可以和V自动维护的颁发出V签的表进行复用」
+# ```
+#
+# 所以这一节**不新建第二份账**：它只把 `out/vsigns/<正文sha>.json`（证据，逐份）与
+# `out/vsigns/issued.json`（派生归档）读成一张"拿签稿"的清单。三件事因此结构上成立：
+#
+# - 「持续追加」= 颁发表本来就在追加（每发一签就多一份 `/sha.json`，归档跟着重建）；
+# - 「交稿时一并递交 D」= `signed_table(root)` 一次读出整张表（含原文 sha 与时刻），
+#   D 不需要另问一遍"哪几份稿签过"；
+# - 「老的也不被抹」= 同一份稿改版后再签会得到**另一个正文 sha** ⇒ 是另一行，
+#   旧行仍在（`test_the_signed_table_reuses_the_v_issued_table` 的 c 格钉这一条）。
+#
+# 这一节只有读口：写的唯一入口仍是 :func:`issue` / :func:`archive`。
+
+#: 拿签稿表的读数 schema（读数用，不落盘 —— 落盘会变成"第二份账"）。
+SIGNED_TABLE_SCHEMA = "vsigns-signed-table/1"
+
+
+def _signed_entry_of(sign: Mapping[str, Any], *, listed: bool = False) -> dict[str, Any]:
+    """一份签 ⇒ 拿签稿表里的一行（纯派生；只读签文件本身，不吃外部状态）。
+
+    `manuscript_id` 从 `artifact_path` 的**名字**读（`reports/<族>-<号>.md` 的号）——
+    它回答"哪一份稿"，`artifact_sha` 回答"哪一版正文"。两格都不是"第几版证明"：
+    业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」。
+    """
+    path = str(sign.get("artifact_path") or "")
+    return {
+        "artifact_sha": str(sign.get("artifact_sha") or "").strip().lower(),
+        "artifact_path": path,
+        "manuscript_id": manuscript_id_of(path),
+        "statement_id": str(sign.get("statement_id") or ""),
+        "at": str(sign.get("at") or ""),
+        "verdict": str(sign.get("verdict") or ""),
+        "streak": int(sign.get("streak") or 0),
+        "need": int(sign.get("need") or 0),
+        "ledger": str(sign.get("ledger") or ""),
+        "written_by": str(sign.get("written_by") or ""),
+        "index_listed": bool(listed),
+    }
+
+
+def signed_table(root: Any) -> dict[str, Any]:
+    """整张「拿签稿」表（**复用** V 的颁发表，不新建账）：本工作区里签过的每一份稿。
+
+    数据只从两处读：`out/vsigns/<正文sha>.json`（逐份签，证据）与
+    `out/vsigns/issued.json`（派生归档）。**权威是逐份签文件**；归档只用来对账
+    （`index.listed` / `index.missing_from_index` / `index.orphan_in_index`），
+    对不上就如实报在读数里，不许拿归档当结论。
+
+    返回 `{checked, schema, path, count, entries, index, problems, why}`：
+    - `checked=False` ⇒ 目录列不出来（"没查成"，不是"没有签"）；
+    - `count=0` + `checked=True` ⇒ 查过了、一份签都还没有；
+    - `entries` 按 `(at, artifact_sha)` 升序（与归档同一条顺序规则）。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "schema": SIGNED_TABLE_SCHEMA, "path": rel(signs_dir(root), root),
+        "count": 0, "entries": [], "problems": [], "why": "",
+        "index": {"checked": False, "found": False, "count": 0,
+                  "missing_from_index": [], "orphan_in_index": []},
+    }
+    d = signs_dir(root)
+    if not d.exists():
+        out.update(checked=True,
+                   why=(f"`{SIGNS_DIR}/` 还没有出现 ⇒ 本工作区一次签都没发过"
+                        "（不是「没查成」，也不是「签了但表坏了」）"))
+        return out
+    try:
+        files = sorted(p for p in d.glob("*.json") if p.name != INDEX_NAME)
+    except OSError as exc:  # noqa: BLE001 —— 列不出来 = 没查成
+        out["why"] = f"`{SIGNS_DIR}/` 列不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        return out
+    index_doc, index_problem = load_index(root)
+    listed: set[str] = set()
+    if index_doc is not None:
+        listed = {str(e.get("artifact_sha") or "").strip().lower()
+                  for e in (index_doc.get("signs") or []) if isinstance(e, Mapping)}
+    entries: list[dict[str, Any]] = []
+    for path in files:
+        doc, problem = _read_json(path)
+        if doc is None:
+            out["problems"].append(f"{path.name}：{problem}")
+            continue
+        got = str(doc.get("artifact_sha") or "").strip().lower()
+        if not got or f"{got}.json" != path.name:
+            out["problems"].append(
+                f"{path.name}：里面的 artifact_sha 对不上文件名（"
+                f"{str(doc.get('artifact_sha') or '（空）')[:12]}…）⇒ 这一份不进表")
+            continue
+        entries.append(_signed_entry_of(doc, listed=got in listed))
+    out["entries"] = _sorted_entries(entries) if entries else []
+    out["count"] = len(out["entries"])
+    out["checked"] = True
+    in_index = [str(e.get("artifact_sha") or "") for e in out["entries"]]
+    out["index"] = {
+        "checked": index_doc is not None,
+        "found": index_path(root).is_file(),
+        "count": len(listed),
+        "missing_from_index": sorted(set(in_index) - listed),
+        "orphan_in_index": sorted(listed - set(in_index)),
+        "why": (f"归档读不出来（{index_problem}）⇒ 只按逐份签文件读" if index_doc is None
+                else ("" if not index_problem else index_problem)),
+    }
+    if out["index"]["missing_from_index"]:
+        out["problems"].append(
+            f"{len(out['index']['missing_from_index'])} 份签不在派生归档里"
+            "（归档落后，可 `rebuild_index` 重建 —— 不影响本表的结论）")
+    out["why"] = ("" if not out["problems"] else "；".join(out["problems"]))
+    return out
+
+
+def signed_manuscripts(root: Any, *, statement_id: Any = "", manuscript_id: Any = "",
+                       artifact_path: Any = "") -> dict[str, Any]:
+    """这一条命题 / 这一份稿「拿过签没有」—— 乙的读口（业主 2026-11-11 裁定 ②）。
+
+    三个键给一个就够（给多个则任一命中即算），按 `vsigns.signed_table` 那张表过滤：
+
+    - `statement_id`：签文件里记的命题号（未在册的签是空串）；
+    - `manuscript_id`：稿号（从 `artifact_path` 的名字读）；
+    - `artifact_path`：稿路径（逐字比较）。
+
+    返回 `{checked, found, count, signed, entries, latest, why, matched_by}`：
+
+    - `checked=False` ⇒ 这一格没查成（表列不出来），**不许读成"没有"**；
+    - `found=False` + `checked=True` ⇒ 查过了、这一条/这份稿**没有签**
+      （`why` 逐字说"没有"）；
+    - `found=True` ⇒ `entries` 是它拿到过的每一份签（同一份稿改版后再签会是**两行**，
+      因为正文 sha 变了 —— 旧那行不会被抹），`latest` 是 `at` 最新的那一行。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "count": 0,
+                           "signed": False, "entries": [], "latest": {},
+                           "why": "", "matched_by": ""}
+    table = signed_table(root)
+    out["checked"] = bool(table.get("checked"))
+    if not out["checked"]:
+        out["why"] = f"拿签稿表没查成：{table.get('why') or '（没有理由）'}"
+        return out
+    sid = str(statement_id or "").strip()
+    mid = str(manuscript_id or "").strip()
+    path = str(artifact_path or "").strip().replace("\\", "/")
+    if not (sid or mid or path):
+        out["why"] = ("没有给命题号 / 稿号 / 稿路径 ⇒ 不知道问的是哪一份"
+                      "（不是「没有签」）")
+        return out
+    hits: list[dict[str, Any]] = []
+    matched: set[str] = set()
+    for entry in table.get("entries") or []:
+        keep = False
+        if sid and str(entry.get("statement_id") or "") == sid:
+            keep = True
+            matched.add("statement_id")
+        if mid and str(entry.get("manuscript_id") or "") == mid:
+            keep = True
+            matched.add("manuscript_id")
+        if path and str(entry.get("artifact_path") or "") == path:
+            keep = True
+            matched.add("artifact_path")
+        if keep:
+            hits.append(dict(entry))
+    out["count"] = len(hits)
+    out["matched_by"] = ",".join(sorted(matched))
+    if not hits:
+        out.update(why=(f"查过了：{SIGNS_DIR}/ 里没有一份签指到 "
+                        f"{sid or mid or path} ⇒ 这一条还没有签"))
+        return out
+    out.update(found=True, signed=True, entries=hits,
+               latest=dict(hits[-1]),
+               why=(f"{len(hits)} 份签指到 {sid or mid or path}"
+                    f"（最新签于 {str(hits[-1].get('at') or '（没有 at）')}）"))
+    return out
+
+
 def manuscript_proof_body(text: str) -> str:
     """手稿里「被签的那一段正文」（`## 证明` 那一节，去掉小节自带的首尾空行）。
 

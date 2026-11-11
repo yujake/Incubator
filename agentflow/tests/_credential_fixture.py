@@ -19,8 +19,14 @@ AT = "2026-11-02T10:00:00+08:00"
 
 def issue_credential(root: Any, *, proof_text: str, statement_id: str = "",
                      manuscript: str = "", call: str = "call-1",
-                     at: str = AT, proof_no: int = 1) -> dict[str, Any]:
-    """写三行台账并颁发一份签；返回 `vsigns.issue` 的读数。"""
+                     at: str = AT, proof_no: int = 1,
+                     artifact_path: str = "") -> dict[str, Any]:
+    """写三行台账并颁发一份签；返回 `vsigns.issue` 的读数。
+
+    `artifact_path`（2026-11-11）：签文件里"这份签盖在哪一份稿上"那一格。
+    改前夹具不传它（签文件里那一格是空串），于是拿签稿表读不出"哪一份稿"——
+    `tests/test_the_signed_table_reuses_the_v_issued_table.py` 要的就是那一格。
+    """
     sid = str(statement_id or "").strip()
     ledger_sid = sid or "000000"
     rows = []
@@ -41,6 +47,6 @@ def issue_credential(root: Any, *, proof_text: str, statement_id: str = "",
         str(root), artifact_sha=sha, streak=3, need=3,
         ledger=f"verifications/{ledger_sid}.jsonl#{rows[-1]['verification_id']}",
         statement_id=sid, proof_no=int(proof_no), passes=passes, at=at,
-        by="secretary:B")
+        artifact_path=str(artifact_path or ""), by="secretary:B")
     assert got.get("written") is True or got.get("idempotent") is True, got
     return got
