@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-12T02:07:01+08:00",
+  "generated_at": "2026-11-12T02:17:26+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -300,6 +300,19 @@
       "authored": "ai-agent",
       "authored_basis": "attested",
       "change_note": "2026-11-11 P1 七件一致化（业主放行禁改区）：B 的 open_polish_copy 入表 / B·D·F·V 题面按新口径改写 / D→B 指针支分配 path_group / submission_reading 暴露成工具；另两份 golden 按现值重冻。reviewers=0（登记≠批准）",
+      "changed_this_session": null,
+      "reviewers": [],
+      "audits": [],
+      "also_hits": []
+    },
+    {
+      "path": "src/agentflow/specs/b_sign_policy.py",
+      "glob": "src/agentflow/specs/b_sign_policy.py",
+      "category": "auth-audit",
+      "sha256": "c8c7c22c5fa48b8c8a1f1e316d349d4d73e5f166b20ef4209c155d8bb129f593",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "（未提供变更说明）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
