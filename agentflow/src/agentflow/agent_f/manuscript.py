@@ -606,7 +606,7 @@ class _Manuscript:
         仍在盘上，按原后缀找得到它）；F 的新写路径不传它、也不产生 `-pN`（业主
         2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」）。
         """
-        return _MID.canonical_rel(manuscript_id, proof_no)
+        return _MID.canonical_rel(manuscript_id, proof_no, legacy=True)
 
 
 

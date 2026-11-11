@@ -292,8 +292,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
     # 两件效果轴都是 `write_local`（land 只写盘上那份稿；ingest 只写既有三个写口），外部轴 none。
     ActionSpec(
         "B", "land_manuscript",
-        "把一条**已登记**命题的某一版证明落成 / 就地重写成 `reports/b-proof-<命题号>[-p<N>].md`"
-        "（只写文件，不写台账；同一份正文重放 ⇒ `preserved=true`、一个字节不动）。这是「先拿签」"
+        "把一条**已登记**命题的某一版证明落成 `reports/b-proof-<B稿号>.md`（只写文件，不写台账；"
+        "同一份正文重放 ⇒ `preserved=true`、一个字节不动）。**稿号是 B 自己的号段**（六位号，"
+        "与命题号 / 计划号都无关）：新写路径**不产生 `-p<N>`** —— 同一命题的第二份证明是"
+        "**另一份稿**（另一个 B 稿号），不是同一份稿的第 N 个版本。这是「先拿签」"
         "那条正路的第一步：落稿 → 派 V 审这一份稿（`V.verify_proof` 带 `proof_manuscript`）→ 再用 "
         "`own.ingest_manuscript` 按位置收录。**命题拿已经登记的**（`statement_full` 可以不给，"
         "框架从台账那一行取）；稿名由号拼出，不接受调用方给路径。",
@@ -302,11 +304,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
             "proof_text": {**_S, "description": "这一版证明正文（逐字）。作者交内容、框架渲染落稿；与在册那一版不同时旧正文进 `proof_history`、旧签按 sha 现算成 stale"},
             "statement_full": {**_S, "description": "可以不传：不传就取在册那一行的命题正文（业主 2026-11-07：「命题拿已经登记的待优化的」）"},
             "label": {**_S, "description": "可选：只在台账那一行没有 label 时用；传了也不洗名（洗名仍归登记那一笔）"},
-            "proof_no": {**_I, "minimum": 1, "description": "想落成第几份证明；缺省 1（与既有 `-p<N>` 同名口径）"},
             "source_manuscript": {**_S, "description": "可选：来源稿路径（页头元信息从它读；没有就按台账与入参渲染）"},
             "if_match_sha256": {**_S, "description": "可选（并发纪律）：我以为目标稿现在的正文 sha 是它；不符 ⇒ 受控拒 `stale_target`、一个字节都不写"},
         }, ("statement_id", "proof_text")),
-        "dict（ok / path / written / preserved / signed / sha256 / sha / proof_no / why）",
+        "dict（ok / path / written / preserved / signed / sha256 / sha / why）",
         side_effect="write_local", handler_name="land_manuscript", external="none",
     ),
 
@@ -318,8 +319,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "**位置与格由你指定，工具按块回填**：给 `manuscript`（稿）、`target_stmt_id`（录到哪一条命题）"
         "与 `cells`（要填哪几格：statement_full / proof_text / dependencies / kind / numeric_evidence），"
         "框架从稿里按块提取、只回填你点名的格。`target_stmt_id` 是权威：稿头 `- 命题号：` 与它不一致 ⇒ "
-        "受控拒 `manuscript_points_elsewhere`（**不重定向**）；`proof_no` 与稿名 `-p<N>` 不一致 ⇒ "
-        "`proof_no_mismatch`。要先用 `mode=preview` 看「会写哪几格 / 有没有冲突」，再 `mode=apply` 真正"
+        "受控拒 `manuscript_points_elsewhere`（**不重定向**）。要先用 `mode=preview` 看「会写哪几格 / 有没有冲突」，再 `mode=apply` 真正"
         "回填；`mode=register` 登记新命题（继承「按手稿路径收录」那条路，`target_stmt_id` 必须空）。"
         "**派生列永远不许指定**（label / evidence_kind / origin / line_range / bits / proof_no / "
         "proof_sha256 / proof_authors / stmt_id）：它们由框架洗、由签现算、或是写口回执。`mode=apply` "
@@ -330,15 +330,33 @@ ACTIONS: tuple[ActionSpec, ...] = (
             "cells": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": list(_MI.INGEST_CELLS)},
                       "description": "录入格（闭集）。`mode=register` 缺省按族给全（f/e-proof: statement_full+proof_text+dependencies；e-num: statement_full+numeric_evidence）；每族只收它允许的格（e-num 不收 proof_text）"},
             "conflict": {"type": "string", "enum": list(_MI.CONFLICTS),
-                         "description": "目标格已有不同值时怎么办：`refuse`（默认，fail-closed）/ `overwrite`（只对 proof_text 有意义，且**仍要过签闸**）/ `append`（-pN 追加到证明清单）/ `keep`（跳过这一格，其余照做）"},
+                         "description": "目标格已有不同值时怎么办：`refuse`（默认，fail-closed）/ `overwrite`（只对 proof_text 有意义，且**仍要过签闸**）/ `append`（追加到证明清单）/ `keep`（跳过这一格，其余照做）"},
             "mode": {"type": "string", "enum": list(_MI.INGEST_MODES),
                      "description": "`preview`=只提取+预检、零写入；`apply`=按格回填在册行；`register`=登记新命题（继承按手稿路径收录那条路）"},
-            "proof_no": {**_I, "minimum": 1, "description": "这一行的第几份证明；缺省从稿名 `-p<N>` 读、再缺省 1。与稿名不一致 ⇒ 受控拒 `proof_no_mismatch`（不重定向）"},
             "if_match_proof_sha256": {**_S, "description": "可选（并发纪律）：我以为这一行现在的正文 sha；不符 ⇒ 受控拒 `stale_target`"},
             "reason": {**_S, "description": "可选：一句话说明这一笔为什么录（只进读数与台账 note，不参与判据）"},
         }, ("manuscript",)),
         "dict（ok / mode / manuscript / target / requested_cells / cells / diff / derived_write / write / refused / reason）—— `diff` 逐格拉平「请求格 vs 实填格」；`mode=register` 另带 `register` 与 `pointer` 读数",
         side_effect="write_local", handler_name="ingest_manuscript", external="none",
+    ),
+
+    # ---- 2026-11-11（业主裁定 ④）：已拿签的稿只读，优化必须先开副本 ------------------
+    # 原话：「B侧进入证明优化阶段时，选中一个待优化的命题后系统自动帮其拿到稿件并复制一份
+    # 注册成B号并清除复制版本内的V签」。改前这条唯一正路不在动作表里 ⇒
+    # `find_action("B","open_polish_copy")` 返回 None、`conductor` 对未声明动作直接
+    # `NotWiredError`，而冻结拒信 / `manuscript_frozen` 的 next_step 都指着它 ⇒ 补救路径不可达。
+    ActionSpec(
+        "B", "open_polish_copy",
+        "把这一条命题**已拿签的那份稿**复制成一份 B 号优化副本：源稿只读、一个字节不动，"
+        "副本按 B 自己的稿号落 `reports/b-proof-<B稿号>.md` 并清掉副本里的 `- V 签：` 行。"
+        "**已拿签的稿不许就地改** —— 改正文之前先拿这份副本，改完再重新派 V 签。",
+        _obj({
+            "statement_id": {**_S, "description": "待优化的那条命题号（必填：找「哪一份稿」的唯一入口）"},
+            "source_manuscript": {**_S, "description": "可选：点名那份已签的源稿；不给 ⇒ 从 V 的颁发表里找"},
+        }, ("statement_id",)),
+        "dict（ok / checked / refused / why / source_path / path / manuscript_id / cleared / "
+        "signed_before / signed_after / matched_by …）",
+        side_effect="write_local", handler_name="open_polish_copy", external="none",
     ),
 )
 
@@ -373,7 +391,7 @@ PROOF_CHANNEL = (
     "② 许可之后 M 会把这件要求交给你。"
     "③ 你的动作是逐条派 L（`B → L` 是唯一的入边，一条才做一条），派它时给三样："
     "命题目录里那一行（`stmt_id`，它自带 `statement_full` 与 `proof_text`）、要验的证明链"
-    "（`proof_text` 逐字；同一条有好几份证明时给 `proof_no`）、以及库里那条已被核过的依赖"
+    "（`proof_text` 逐字；同一条有好几份证明时点名那一份稿的路径）、以及库里那条已被核过的依赖"
     "（`statements` 里同一声明名的那几行）。"
     "④ 要回三样：检查器原话（`verifier_output`）、真实退出码（`exit_code`）、三态结论"
     "（`verified` / `failed` / `unknown`）—— 只写「通过」而没这三样的不算数。"
@@ -508,7 +526,8 @@ SPEC = AgentSpec(
             "`own.ingest_manuscript` 的两个坐标都由你给 —— `target_stmt_id` 是**位置**"
             "（录到哪一条命题；稿头 `- 命题号：` 与它不一致 ⇒ 受控拒 "
             "`manuscript_points_elsewhere`，**工具不会把这一笔挪到别的行**），"
-            "`proof_no` 是这一行的**第几份证明**（与稿名 `-p<N>` 不一致 ⇒ `proof_no_mismatch`）；"
+            "`manuscript` 是**那一份稿**（路径号由收录时按已有路径数分配，同 sha 沿用；"
+            "新写不产生 `-p<N>`）；"
             "`cells` 是**格**（闭集：`statement_full` / `proof_text` / `dependencies` / "
             "`kind` / `numeric_evidence`。`label` / `evidence_kind` / `origin` / `line_range` / "
             "`bits` / `proof_no` / `proof_sha256` / `proof_authors` / `stmt_id` 是派生列，"
@@ -622,19 +641,20 @@ SPEC = AgentSpec(
             # 对应表的 `proof_no`），缺的是"用户要几种证明时该落成什么形状"的口径，
             # 所以这一条是正向政策：写清形状，也写一句反向判据（别拆成几条命题）。
             "**同一条定理的多种证明只占一条 stmt，不占多条命题**：用户要「几种证明语言 / 几条独立"
-            "路径」时，目标是同一条命题的 `proof_no` 1..N，不是 N 条独立命题。登记时**逐份交稿**："
-            "每份证明各自有一份手稿（稿头的 `- 证明号：<N>` 说它属于第几条），你按稿登记成 "
-            "`#p1` / `#p2`…（`#p1` 落行上的 `proof_text`，`#p2` 起落同一行的 `proofs` 清单）；"
-            "**不要用内联的 `proofs=[{proof_no: 1..N, text: …}]` 交正文**（那条路没有稿、依赖面恒 0、"
-            "签也没有落点）。**每条证明各自要 V 的签**："
-            "`bits.evidence.reviewed_by_proof` 按 `proof_no` 逐份记（`{\"1\": true, \"2\": false}`），"
+            "路径」时，目标是同一条命题的**多条证明路径**（`path_group` 1..N），不是 N 条独立命题。"
+            "登记时**逐份交稿**：**B 的稿号是自己的号段**（`reports/b-proof-<B稿号>.md`）——"
+            "**同一命题的第二份证明是另一份稿**（另一个 B 稿号），不是同一份稿的第 N 个版本，"
+            "新写也不产生 `-p<N>` 名字；路径号由你收录时分配（同一命题已有 N 条 ⇒ N+1，"
+            "同一份正文 sha 重复收录 ⇒ 沿用原号）。**不要用内联的 `proofs=[…]` 交正文**"
+            "（那条路没有稿、依赖面恒 0、签也没有落点）。**每条证明各自要 V 的签**："
+            "`bits.evidence.reviewed_by_proof` 按路径逐份记（`{\"1\": true, \"2\": false}`），"
             "一份签了不代表另一份签了，也不许拿一份的签替另一份背书。每条证明用到的依赖按 "
-            "`used_by=\"stmt:<命题号>#pN\"` ＋ `path_group` 标明它属于第几条证明（`deps` 两维："
+            "`used_by=\"stmt:<命题号>#pN\"` ＋ `path_group` 标明它属于哪条路径（`deps` 两维："
             "外层 = 可选路径、内层 = 一条路径上的步骤），C 才能按不同的依赖面追出不同的证明路径。"
-            "论文对应表里同一条命题占多行、每行各带 `proof_no`。"
+            "论文对应表里同一条命题按证明路径占多行。"
             "**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / |G|=p^a·m 版 / "
-            "归纳版）不等于不同命题；拆开之后 `proof_no` 恒为 1、`path_group` 只剩一组，"
-            "多证明机制一次都不会被触发。判重先问「这是不是同一条」，再问「这是它的第几份证明」。",
+            "归纳版）不等于不同命题；拆开之后路径只剩一组，多证明机制一次都不会被触发。"
+            "判重先问「这是不是同一条」，再问「这是它的另一份证明吗」。",
             # 收录与识稿那九条（E 两族 / 收录先查 / 只递指针 / `## 证明` 三态 / 手稿名五档 /
             # 签的两格读数 / 签块第 9 格 / 两根轴判不了 / 短证明）整段搬到
             # `specs/b_ingest_policy.py`（逐字不动，`*INGEST_POLICY` 原样摊回）——

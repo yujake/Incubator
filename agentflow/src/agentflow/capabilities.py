@@ -3244,6 +3244,12 @@ _KNOWN_UNMATCHED_ACTIONS: frozenset[str] = frozenset({
     # `ingest` 写台账，都是"B 自己的动作"；塞进 `table.*` / `fs.*` 会把
     # "位置与格由 B 指定"这条口径重新交回通用写工具（正是 T1 要堵的路）。
     "B.land_manuscript", "B.ingest_manuscript",
+    # 2026-11-11（业主裁定 ④）：`open_polish_copy` 是 B 的角色级动作（复制一份已拿签的稿
+    # 成 B 号副本、清副本里的签），工具层没有同名工具；与上面三条同族 —— 只由
+    # `agent_loop._registry_with_own_action` 包成 `own.open_polish_copy`。不凑同名工具：
+    # 它不是通用写口，"复制哪一份、清哪一行"由这一格只读 + 受控拒绝判，塞进 `fs.*` 等于
+    # 把「拿签稿只读」这条边界重新交回通用文件工具。
+    "B.open_polish_copy",
     # 2026-10-13：`G.paper_package` 已从这里拿掉（业主裁定「paper_package 里那些东西都是
     # 古早废案了，我们要智能体写文章」）—— 动作本身、它的三个工具与渲染锚那一格一起退场，
     # 所以"这一格没比对上"的登记也不再需要它。退场面与理由见 `draft/117`。

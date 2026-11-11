@@ -291,8 +291,11 @@ def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any,
     """
     sid_text = str(statement_id or "").strip()
     mid = str(manuscript_id or "").strip()
+    # 2026-11-11（业主裁定：一个稿号 = 一份文件 = 一份证明）：新写路径不再按
+    # `proof_no` 拼 `-p<N>` —— 名字只由稿号（或老盘回退的命题号）决定。`proof_no`
+    # 形参保留只为旧调用点不必改签名；它不参与命名（也不参与渲染：稿头那一行已退役）。
     name = _MF.name_reading(_MF.FAMILY_B, statement_id=sid_text,
-                            manuscript_id=mid, proof_no=proof_no or 1)
+                            manuscript_id=mid, proof_no=1)
     out: dict[str, Any] = {"ok": False, "path": str(name.get("path") or ""),
                            "manuscript_id": mid, "written": False, "preserved": False,
                            "signed": False, "text": "", "why": "", "problem": {},
@@ -326,7 +329,7 @@ def land_rewrite(root: Any, *, statement_id: Any, statement_full: Any,
                   wash_actor=wash_actor, wash_filled=wash_filled, title=title)
     got = _MF.commit_manuscript(
         root, family=_MF.FAMILY_B, text=text, statement_id=sid_text,
-        manuscript_id=mid, proof_no=proof_no or 1, old_rel="", retitle="none",
+        manuscript_id=mid, proof_no=1, old_rel="", retitle="none",
         dependency_rows=rows, write_dependencies=write_dependencies)
     out["text"] = str(got.get("text") or text)
     out["path"] = str(got.get("path") or out["path"])

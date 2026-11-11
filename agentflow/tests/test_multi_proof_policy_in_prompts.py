@@ -57,25 +57,32 @@ from agentflow.tools import build_registry
 #: 每个角色那条政策必须聚齐的硬东西。
 #:
 #: 2026-11-10（p272/p274/p275 的稿号口径）之后三个角色不再共用同一句话：
-#: - B / D 那条政策说的是台账里的形状：一条 stmt 装 1..N 份证明（`proof_no` 1..N）；
+#: - B 那条政策说的是台账里的形状：一条 stmt 装 N 条证明路径（`path_group` 1..N），
+#:   而**稿**那边一个稿号一份文件 —— 第二份证明是另一份稿（另一个 B 稿号），不写 `-pN`；
+#: - D 那条政策说的是台账里的形状：一条 stmt 装 1..N 份证明（`proof_no` 1..N）；
 #: - F 那条政策说的是稿上的形状：一个稿号 = 一份文件 = 一份证明，同一命题要第二份
 #:   证明就另开一份稿（新稿号）；命题号由 B 收录时现取 —— F 既不立命题、也不写号。
 #: 改前这里是一份全局元组：F 也必须含「一条 stmt / 1..N」⇒ 它钉的其实是 B/D 的话，
 #: 会把 F 按新口径写对的政策判成红。改后逐角色钉各自的形状：B/D 一条不少，F 的检查项
 #: 从 0（它本来就不该有那两条）变成 9 条（稿口径的每一样都在）。
 REQUIRED: dict[str, tuple[str, ...]] = {
+    # 2026-11-11 第二刀（业主：「B 的稿号是自己的号段」）：B 侧不再教 `proof_no` /
+    # `-pN` —— 同一命题的第二份证明是**另一份稿**（另一个 B 稿号），路径号由 B 收录时
+    # 按已有路径数分配（`path_group`）。台账口径（一条 stmt 装多条路径）不变。
     "B": (
         "一条 stmt",
-        "proof_no",
-        "1..N",
         "path_group",
         "reviewed_by_proof",
         "不要把同一条定理拆成多条命题",
+        "B 的稿号是自己的号段",
+        "另一份稿",
     ),
     "D": (
+        # 2026-11-11 第二刀：D 只递稿路径（`proof_manuscript`），路径号由 B 收录时分配；
+        # 不再教「内联 `proofs` + `proof_no` 1..N」。
         "一条 stmt",
-        "proof_no",
-        "1..N",
+        "proof_manuscript",
+        "路径号由 B 收录时分配",
         "path_group",
         "reviewed_by_proof",
         "不要把同一条定理拆成多条命题",
@@ -183,10 +190,13 @@ def test_the_old_ledger_shape_does_not_come_back_into_f() -> None:
         f"F 的多证明政策里又出现了旧口径的句子 {stale} —— F 不立命题、不写命题号，"
         "一个稿号 = 一份文件 = 一份证明；同一命题要第二份证明就另开一份稿（新稿号）")
     # 正控：B / D 仍是台账口径 —— 这条反向断言不是把三个角色一起放宽成"谁都不用写"。
+    # 2026-11-11 第二刀：D 也不再写 `proof_no` 1..N（它只递稿路径），所以两端钉的是
+    # 「一条 stmt + path_group」这一对；B 那一条另由 `test_b_no_longer_teaches_the_pn_shape`
+    # 钉住「第二份证明是另一份稿」。
     for role in ("B", "D"):
         other = _policy_item(role)
         assert other is not None, f"{role} 的多证明政策应当恰好一条"
-        for token in ("一条 stmt", "1..N"):
+        for token in ("一条 stmt", "path_group"):
             assert token in other, (
                 f"{role} 的台账口径里不再有 {token!r} ⇒ 旧形状被一起删掉了（反向断言的两端都要在）")
 
@@ -211,3 +221,28 @@ def test_deleting_one_roles_policy_makes_that_role_red(
     for role in _ROLES:
         assert not _missing(role, prompts[role]), (
             f"{role} 的基线提示词本来就缺词：{_missing(role, prompts[role])}")
+
+
+#: B 那条政策里不许再出现的旧教法（2026-11-11 第二刀）。
+#:
+#: 业主：「B 的稿号是自己的号段」＋「一个稿号 = 一份文件 = 一份证明」⇒ B 不再按
+#: `-pN` / `proof_no` 教"同一份稿的第 N 份证明"；第二份证明是**另一份稿**。
+B_OLD: tuple[str, ...] = (
+    "`proof_no` 1..N",
+    "第几份证明",
+    "`#p1`",
+)
+
+
+def test_b_no_longer_teaches_the_pn_shape(prompts: dict[str, str]) -> None:
+    """② 反向：B 的多证明政策与题面里不再教 `-pN` / `proof_no` 选第几份证明。"""
+    item = _policy_item("B")
+    assert item is not None, "B 的多证明政策应当恰好一条（先看上面那条判据）"
+    stale = [token for token in B_OLD if token in item]
+    assert not stale, (
+        f"B 的多证明政策里又出现了 `-pN` / `proof_no` 教法 {stale} —— "
+        "B 的稿号是自己的号段，同一命题的第二份证明是另一份稿（另一个 B 稿号）")
+    # 反真空：整份渲染里那两个词也不再被当成"选题号的开关"。
+    text = prompts["B"]
+    assert "`proof_no` 1..N" not in text, "B 的渲染里仍是 `proof_no` 1..N 的旧教法"
+    assert "`b-proof-<命题号>[-p<N>]" not in text, "B 的渲染里仍是 `-p<N>` 旧落点名"
