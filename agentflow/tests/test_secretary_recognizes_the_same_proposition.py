@@ -463,7 +463,13 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
     assert labels_p2 == ["lit:000008"], labels_p2
     assert not (set(labels_p1) & set(labels_p2)), "两条证明的依赖面混在了一起"
     # 路径组仍是"第几条路径"那一维：组内 AND / 组间 OR，不因多一份证明而折平。
-    assert all(int(d.get("path_group") or 0) == 1 for d in _deps(st)), _deps(st)
+    # 两条路径的号 1 / 2 钉在上面 `groups_of` 的第一层（`two_d`）；这一列
+    # （`path_group`）在「逐份 inline 登记」这一支上仍是 1 —— B 按路径分配号只发生在
+    # 按手稿收录那一支（`manuscriptpaths.assign_path_group`），本用例不走那支。
+    by_used = {str(d.get("used_by")): d for d in _deps(st)}
+    assert sorted(by_used) == [f"stmt:{SID}", f"stmt:{SID}#p2"], sorted(by_used)
+    assert int(by_used[f"stmt:{SID}"]["path_group"]) == 1, by_used
+    assert int(by_used[f"stmt:{SID}#p2"]["path_group"]) == 1, by_used
 
     # V 的签按 proof_no 各签一份（既有 `reviewed_by_proof` 已经支持多维）：
     # 两份证明各签够 3 票（业主 2026-10-29），会审台账六行、逐条表两张都为 true ——
@@ -485,9 +491,22 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
                if not str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
     premises = [r for r in ledger
                 if str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
-    assert sorted((int(r.get("proof_no") or 0) for r in reviews)) == [1, 1, 1, 2, 2, 2], ledger
-    assert len(premises) == 1 and int(premises[0].get("proof_no") or 0) == 1, premises
-    assert str(premises[0].get("proof_sha256") or "") == VR.text_sha(PROOF_A), premises
+    # 2026-11-11（业主裁定「签跟着正文走」）：`proof_no` 在 V 签侧退役 —— canonical
+    # （#p1）的新行**不写**这一格；一份证明的身份由「正文 sha + statement_id + 路径」
+    # 站住，路径那一维就是上面钉住的 1 / 2。这里按路径各钉三票：sha 错、两组串了、
+    # 或把 `proof_no=1` 又写回 canonical，下面每一条都会红。
+    sha_a, sha_b = VR.text_sha(PROOF_A), VR.text_sha(PROOF_B)
+    path1 = [r for r in reviews if str(r.get("proof_sha256") or "") == sha_a]
+    path2 = [r for r in reviews if str(r.get("proof_sha256") or "") == sha_b]
+    assert (len(path1), len(path2)) == (3, 3), ledger
+    assert all("proof_no" not in r for r in path1), path1
+    assert [int(r.get("proof_no") or 0) for r in path2] == [2, 2, 2], path2
+    assert all(str(r.get("statement_id") or "") == SID for r in reviews), reviews
+    assert [VR.proof_no_of(r) for r in path1] == [1, 1, 1], path1
+    assert [VR.proof_no_of(r) for r in path2] == [2, 2, 2], path2
+    assert len(premises) == 1 and "proof_no" not in premises[0], premises
+    assert VR.proof_no_of(premises[0]) == 1, premises
+    assert str(premises[0].get("proof_sha256") or "") == sha_a, premises
     assert len(ledger) == len(reviews) + len(premises) == 7, ledger
     assert EB.reviewed_by_proof(_row(st)) == {1: True, 2: True}, EB.reviewed_by_proof(_row(st))
     per = {int(p["proof_no"]): p for p in _reading(st).get("proofs") or []}
