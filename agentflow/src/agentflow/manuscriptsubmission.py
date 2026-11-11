@@ -10,8 +10,8 @@
 2. 这份稿提交了没有、怎么提交的（乙 / 丙 / 统一读口）：
    :func:`submission_reading` 把三处 join 起来 —— 路径族、V 的颁发表
    （`out/vsigns/<正文 sha>.json`）、`tasks.artifacts` 里的 `mss:` 记号。
-3. 收工（E）与收录（B）各写哪一枚记号：:func:`auto_submit_for` 与
-   :func:`mark_ingested`。两个都复用 `agent_f/submission.py` 的那一套
+3. 收录（B）写哪一枚记号：:func:`mark_ingested`。收工（E）那一半在
+   `manuscriptclosing.auto_submit_for`。两个都复用 `agent_f/submission.py` 的那一套
    `mss:` 记号拼装 / 解析（本模块不新造字符串格式）。
 
 ## 三态纪律
