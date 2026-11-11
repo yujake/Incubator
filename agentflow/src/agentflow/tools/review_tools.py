@@ -1120,6 +1120,65 @@ def _dedup_key(row: Mapping[str, Any]) -> tuple[str, str, str]:
     return (str(row.get("kind")), str(row.get("target")), str(row.get("message")))
 
 
+# ---------------------------------------------------------------- 手工判词（P2-4）
+#
+# 现场（`projects/dct-min4-20261111`）：7 条 `record_finding` 落的手工判词全 `open`，
+# 而 `verify_fixes` 的 resolved 判据是「上一轮的 key 不在本轮 scan 结果里」——
+# 手工判词的 key 是散文，**永远不会**出现在 scan 结果里 ⇒ 只要 H 跑一次
+# `verify_fixes`，这 7 条会被全部判成 `fixed`（"重跑对应检查不再复现"），
+# 而一条检查都没重跑。那是把「没查」写成「修好了」，与 `R-04-b` 同一族。
+#
+# 本节的判据：**手工判词不许被自动复跑判掉**。
+#   * 来源标记：`record_finding` 落库时把 `MANUAL_FINDING_NOTE_PREFIX` 写进
+#     `resolution_note` 的开头（`resolution_note` 是既有自由文本字段，不进去重键、
+#     不是审校内容；`schema.ReviewFinding` 在 FC-27 禁改区，本批**不加列**）；
+#   * 离场只有一条路：H 自己显式复核 —— `record_finding` 以**同一个去重键**再登记
+#     一次，`evidence` 以 `RECHECK_FIXED_PREFIX` / `RECHECK_WONTFIX_PREFIX` 开头，
+#     把结论（fixed / wontfix + 理由）写进同一个 finding_id 的 `resolution_note`。
+#     为什么走 `evidence` 而不加参数：工具声明面被两份冻结快照钉住（`tests/golden/
+#     tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json`），
+#     加参数就必须重冻 golden（FC-27，本批未获授权）。这条代价写在交付报告里。
+#   * `verify_fixes` 读这两个标记：未显式复核的手工判词留在 `open`（读数进
+#     `not_rechecked`，`source="manual_not_rechecked"`），已显式复核的不再被改写
+#     （`source="manual_rechecked"`）。
+#: `record_finding` 落手工判词时写进 `resolution_note` 开头的来源标记。
+MANUAL_FINDING_NOTE_PREFIX = "[manual] "
+#: `resolution_note` 里"H 显式复核过这一条"的标记（由 `record_finding` 的复核通道写）。
+MANUAL_RECHECK_MARK = "[H 复核] "
+#: 显式复核的两个受控前缀（H 写在 `record_finding.evidence` 的开头）：
+#: `复核 fixed：<理由>`（H 重新判过、这一条不再成立）/
+#: `复核 wontfix：<理由>`（H 显式放弃，理由必填）。
+RECHECK_FIXED_PREFIX = "复核 fixed："
+RECHECK_WONTFIX_PREFIX = "复核 wontfix："
+#: 未显式复核时 `verify_fixes` 写回 `open` 的理由（逐字可查）。
+MANUAL_NOT_RECHECKED_NOTE = (
+    "手工判词（`review.record_finding` 落的散文发现）**不能被自动复跑判掉**："
+    "它的去重键不在机械 scan 的可产出集合里，「本轮没复现」不等于「H 复核过」。"
+    "离场只有一条路：H 用 `review.record_finding` 以同一去重键再登记一次，"
+    f"`evidence` 以 `{RECHECK_FIXED_PREFIX}` 或 `{RECHECK_WONTFIX_PREFIX}` 开头"
+)
+
+
+def _is_manual_finding(row: Mapping[str, Any]) -> bool:
+    """这条发现是不是 `record_finding` 落的手工判词（来源标记在 `resolution_note` 开头）。"""
+    return str(row.get("resolution_note") or "").startswith(MANUAL_FINDING_NOTE_PREFIX)
+
+
+def _manual_rechecked(row: Mapping[str, Any]) -> bool:
+    """这条手工判词是否已被 H 显式复核过（fixed / wontfix 都算离场）。"""
+    return _is_manual_finding(row) and MANUAL_RECHECK_MARK in str(row.get("resolution_note") or "")
+
+
+def _recheck_verdict_of(evidence: str) -> tuple[str, str]:
+    """`evidence` 的复核前缀 ⇒ `(verdict, reason)`；不是复核就是 `("", "")`。"""
+    text = str(evidence or "")
+    for verdict, prefix in (("fixed", RECHECK_FIXED_PREFIX),
+                            ("wontfix", RECHECK_WONTFIX_PREFIX)):
+        if text.startswith(prefix):
+            return verdict, text[len(prefix):].strip()
+    return "", ""
+
+
 # ---------------------------------------------------------------- 审校（写发现）
 
 
@@ -1172,6 +1231,47 @@ def record_finding(
                 if str(r.get("doc_id")) == doc_id]
     key = (kind_s, target_s, message_s)
     dup = next((r for r in existing if _dedup_key(r) == key), None)
+    recheck_verdict, recheck_reason = _recheck_verdict_of(evidence_s)
+    if recheck_verdict:
+        # ---- H 的显式复核（P2-4 的唯一离场通道；见本节顶部那段注释）。
+        if dup is None:
+            raise ValueError(
+                f"复核的对象不存在：稿件 {doc_id} 上没有去重键为 {key!r} 的发现 ⇒ "
+                "显式复核只能针对**已经登记过**的发现（它是回执，不是新发现）"
+            )
+        if not _is_manual_finding(dup):
+            raise ValueError(
+                "显式复核只对**手工判词**（`record_finding` 落的发现）开放："
+                "机械扫描产的发现由 `verify_fixes` 重跑对应检查判定，不许用这句话替它盖章"
+            )
+        if recheck_verdict == "wontfix" and not recheck_reason:
+            raise ValueError(
+                f"`{RECHECK_WONTFIX_PREFIX}` 必须带理由（显式放弃 = 说清为什么可以不改，"
+                "与 `wontfix` 的 schema 硬要求同一条纪律）"
+            )
+        round_val = int(round_no) if round_no is not None else max(
+            (int(r.get("round") or 1) for r in existing), default=0) + 1
+        if round_val < 1:
+            raise ValueError("round_no 从 1 开始")
+        status_new = "fixed" if recheck_verdict == "fixed" else "wontfix"
+        with store.tx("review_findings", actor=actor,
+                      note=f"recheck doc:{doc_id} {dup['finding_id']} -> {status_new}") as tx:
+            row = tx.find("review_findings", finding_id=str(dup["finding_id"]))
+            if row is None:
+                raise ValueError(f"发现 {dup['finding_id']} 在事务里读不到 ⇒ 复核不写库")
+            row["status"] = status_new
+            note_new = (
+                f"{MANUAL_RECHECK_MARK}[round {round_val}] H 显式复核 ⇒ {status_new}"
+                + (f"：{recheck_reason}" if recheck_reason else "")
+            )
+            row["resolution_note"] = (
+                str(row.get("resolution_note") or "").strip() + " " + note_new
+            ).strip()
+            tx.upsert("review_findings", row)
+        return {"checked": True, "created": False, "duplicate_skipped": 1,
+                "finding_id": str(row["finding_id"]), "doc_id": doc_id,
+                "kind": kind_s, "level": str(row.get("level") or level_s),
+                "round": round_val, "status": status_new}
     if dup is not None:
         return {"checked": True, "created": False, "duplicate_skipped": 1,
                 "finding_id": str(dup.get("finding_id") or ""), "doc_id": doc_id,
@@ -1189,7 +1289,12 @@ def record_finding(
             suggestion=str(suggestion or ""), axis=axis_s, line=line,
             line_unavailable_reason=str(line_unavailable_reason or ""),
             verbatim_quote=str(verbatim_quote or ""),
-            status="open", resolution_note="", created_at=S.now_iso(), created_by=actor,
+            status="open",
+            # P2-4：来源标记 —— 这条是 H 自己读出来的（不是机械 scan 的产物），
+            # `verify_fixes` 因此不许拿「本轮 scan 里没有它」当「修好了」。
+            resolution_note=(MANUAL_FINDING_NOTE_PREFIX
+                             + "手工判词：H 自己读出来的发现（record_finding 落库）"),
+            created_at=S.now_iso(), created_by=actor,
         )
         row.finding_id = tx.alloc_id("finding")
         row.validate()
@@ -1693,6 +1798,10 @@ def verify_fixes(
     )
     findings = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
     prev = [r for r in findings if int(r.get("round") or 1) < round_no]
+    #: 手工判词（P2-4）：它们的去重键永远不在 `current` 里，所以「本轮没复现」
+    #: 对它们不是一个可用的判据。清单在循环外一次算清（不改 `_dedup_key`）。
+    manual_ids = {str(r.get("finding_id")) for r in prev if _is_manual_finding(r)}
+    manual_done_ids = {str(r.get("finding_id")) for r in prev if _manual_rechecked(r)}
 
     resolved: list[dict] = []
     still_open: list[dict] = []
@@ -1744,7 +1853,38 @@ def verify_fixes(
     # 于是"没查"被读成"修好了"，那正是最贵的那条方向（`R-04` 的原文）。
     changes: list[dict] = []
     not_rechecked: list[dict] = []
+    semantic_not: list[dict] = []
+    manual_not: list[dict] = []
+    manual_done: list[dict] = []
     for item in list(resolved):
+        fid = str(item.get("finding_id") or "")
+        # ---- P2-4：手工判词不参与"本轮 scan 没复现 ⇒ fixed"这条判据。
+        if fid in manual_done_ids:
+            # H 已经显式复核过（fixed / wontfix，带理由）：`verify_fixes` 一个字都不改，
+            # 也不许把它重新算成 open（那会把 H 的判词又盖掉）。它仍算 resolved
+            # （读数里看得到 `source="manual_rechecked"`），但不进 `changes`。
+            item["source"] = "manual_rechecked"
+            item["status"] = "fixed" if str(item.get("status")) == "fixed" else "wontfix"
+            manual_done.append(item)
+            continue
+        if fid in manual_ids:
+            resolved.remove(item)
+            item["source"] = "manual_not_rechecked"
+            item["status"] = "open"
+            item["note"] = f"[round {round_no}] {MANUAL_NOT_RECHECKED_NOTE}"
+            # 盘上也要留在 `open`：G 在 `revise` 里把它标成 fixed 也不作数
+            # （那只改状态、不改正文；是否真修好只有 H 复核说得清）。
+            changes.append(
+                {
+                    "finding_id": fid,
+                    "status": "open",
+                    "resolution_note": f"[round {round_no}] {MANUAL_NOT_RECHECKED_NOTE}",
+                }
+            )
+            still_open.append(item)
+            manual_not.append(item)
+            not_rechecked.append(item)
+            continue
         if _is_semantic_finding(item) and not semantic_recheck_ok:
             resolved.remove(item)
             item["source"] = "not_rechecked"
@@ -1756,6 +1896,7 @@ def verify_fixes(
             )
             still_open.append(item)
             not_rechecked.append(item)
+            semantic_not.append(item)
             # 更要紧的是盘上也要留在 open：只改返回值而库里仍是 `fixed`，
             # 下一轮/下一个人读到的还是"修好了"（那正是这条要堵的方向）。
             changes.append(
@@ -1858,7 +1999,16 @@ def verify_fixes(
         _axis_reason = "没查成：依赖闭合没查 ⇒ 不写裁决（台账不留行）"
     else:
         _axis_verdict, _axis_checked = "", False
-        _axis_reason = "没查成：本轮没有重跑语义判据 ⇒ 不写裁决（台账不留行）"
+        # P2-4：这一档现在有两个来源（语义判据没重跑 / 手工判词没有 H 的显式复核），
+        # 理由必须逐条说出来，不能只留"没重跑语义判据"那一句。
+        _not_checked_bits: list[str] = []
+        if semantic_not:
+            _not_checked_bits.append("本轮没有重跑语义判据")
+        if manual_not:
+            _not_checked_bits.append(
+                f"{len(manual_not)} 条手工判词还没有 H 的显式复核（自动复跑判不掉它们）")
+        _axis_reason = ("没查成：" + "；".join(_not_checked_bits)
+                        + " ⇒ 不写裁决（台账不留行）")
     status_updated, status_error, status_now = _set_doc_status(
         store, doc_id, target_status, actor=actor,
         review_verdict=_axis_verdict, review_checked=_axis_checked,
@@ -1873,9 +2023,24 @@ def verify_fixes(
         # `R-04-b`：没重跑语义判据时，上一轮那几条语义发现留在 open
         # （读数必须逐条说出来，否则"resolved 变多了"看起来像"修好了"）。
         (
-            f"其中 {len(not_rechecked)} 条是**语义判据产的发现**、本轮未重跑判据 ⇒ 留在 open、"
+            f"其中 {len(semantic_not)} 条是**语义判据产的发现**、本轮未重跑判据 ⇒ 留在 open、"
             f"不许判 fixed（没查 ≠ 修好）"
-            if not_rechecked
+            if semantic_not
+            else ""
+        ),
+        # P2-4：手工判词的读数（与语义那一支同形，但判据不同：它根本不在 scan 的
+        # 可产出集合里，所以"没复现"永远不成立）。
+        (
+            f"其中 {len(manual_not)} 条是**手工判词**（`record_finding` 落的散文发现）、"
+            f"本轮**没有 H 的显式复核** ⇒ 留在 open，不许判 fixed"
+            f"（手工判词不能被自动复跑判掉；逐条见 `not_rechecked`）"
+            if manual_not
+            else ""
+        ),
+        (
+            f"{len(manual_done)} 条手工判词已由 H 显式复核过（fixed / wontfix 带理由）"
+            f"⇒ 本轮不改写它们"
+            if manual_done
             else ""
         ),
     ]
