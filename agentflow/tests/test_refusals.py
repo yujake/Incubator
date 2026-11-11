@@ -51,6 +51,11 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "`land_manuscript` 的返回骨架 `out` 初值（`ok=False`，受控码写在 `refused` 那一格）："
         "与 `register_statement.py` 里那几个同形骨架是同一件事 —— 不是手写的终态拒绝，"
         "由动作层按 `refused` 落终态（T1/D1 收口后一动作一文件拆出来的新模块）",
+    # 2026-11-11（B 的优化副本）：同一族的第三处返回骨架。
+    ("agent_b/open_polish_copy.py", ""):
+        "`open_polish_copy` 的返回骨架 `out` 初值（`ok=False`，受控码写在 `refused` 那一格，"
+        "由 `_polish_refusal` 统一写）：与 `land_manuscript` / `register_statement.py` 里"
+        "那几个同形骨架是同一件事 —— 不是手写的终态拒绝，由动作层按 `refused` 落终态",
     ("agent_d/poll.py", ""):
         "工具 `research.poll_waiting` 自己失败了（不是参数不对、也不是前置条件不满足）"
         "⇒ 这是「执行了、没成功」，该落 `failed`，不该冒充 `refused`",
@@ -142,7 +147,10 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "「手稿号不是六位号 ⇒ 这一份稿不落盘」与「手稿号拼不出规范路径 ⇒ 这一份稿不落盘」。"
         "号由框架的号源（`manuscriptids.next_manuscript_id`）发，坏号是内部数据不一致"
         "（执行了、没成功），不是调用方的参数错 ⇒ 它们仍是子结果，由 `_wash_manuscript` / "
-        "detail 折进返回值，不走 `refusals.refuse`（走它会给内部读数错贴 `invalid_params`）。",
+        "detail 折进返回值，不走 `refusals.refuse`（走它会给内部读数错贴 `invalid_params`）。"
+        "2026-11-11（拿签冻结，业主裁定 ②）：`proof_manuscript()` 的第三处骨架是"
+        "`_frozen.frozen` 那一支（`refused=kind=manuscript_frozen`）—— 它同样是子结果"
+        "（由 `_hand_proof` 折成动作层的受控拒），不是手写的终态 payload；处数 3 → 4。",
     ("agent_f/core.py", ""):
         "子结果（两处）：① 手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给"
         "调用方看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 "
@@ -187,8 +195,10 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     ("agent_l/formalize.py", ""): 12,
     # 2026-11-10（稿号口径）：`proof_manuscript()` 多出两处同形的返回骨架
     # （手稿号不是六位号 / 拼不出规范路径，各一处），加上 `preview_dependencies()` 的
-    # 读数一条 ⇒ 1 → 3。三处都是子结果，理由见 `_FAILURES_NOT_REFUSALS` 里那一格。
-    ("agent_f/manuscript.py", ""): 3,
+    # 读数一条 ⇒ 1 → 3。2026-11-11（拿签冻结）：`manuscript_frozen` 那一支的返回骨架
+    # 也是同形读数（`ok=False` + `refused/kind`），3 → 4。四处都是子结果，理由见
+    # `_FAILURES_NOT_REFUSALS` 里那一格。
+    ("agent_f/manuscript.py", ""): 4,
     # 2026-11-11（p286）：`agent_f/core.py` 的空 kind 处数 1 → 2。新增的那一处是
     # `parse_handed_product()` 的返回骨架 `out` 初值（三态解析器的"还没核完"，不是终态
     # 拒绝；真正的受控拒由 `_handed_product_round` 的 `refusal` 那一支产出）。
