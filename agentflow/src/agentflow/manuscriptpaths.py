@@ -213,7 +213,7 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
                 bad = True
                 continue
             row["path_group"] = group
-            lines[i] = json.dumps(row, ensure_ascii=False) + (
+            lines[i] = json.dumps(row, ensure_ascii=False, default=str) + (
                 "\n" if line.endswith("\n") else "")
             changed += 1
         if changed and not bad:
