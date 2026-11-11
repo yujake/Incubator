@@ -793,10 +793,10 @@ def submission_candidates(root: Any) -> dict[str, Any]:
 
     ## 事实来源（业主 2026-11-11 裁定 ②：复用 V 的颁发表）
 
-    - 签：`out/vsigns/<正文sha>.json`（逐份）—— 用 `vsigns.credential_reading` 读并
-      复算（文件在不算签：复算不过就不是签）；`issued.json` 只是派生归档，不拿它下结论；
-    - 稿：签文件自己写下的 `artifact_path` + `reports/f-proof-*.md`（还没签的稿也要
-      能读成「未签 ⇒ 不入提交单」）。
+    - 签：`out/vsigns/<正文sha>.json`（逐份）—— 用 `vsigns.credential_reading`
+      读并复算（文件在不算签：复算不过就不是签）；`issued.json` 只是派生归档，不拿它下结论；
+    - 稿：签文件自己写下的 `artifact_path` + `reports/` 下 F 族前缀的 `*.md`（前缀从
+      `manuscriptfamily` 派生，不在这里再写一份；还没签的稿也要能读成「未签 ⇒ 不入提交单」）。
 
     ## 判据（业主 2026-11-11 追加裁定：一个稿号 = 一份文件）
 
@@ -813,6 +813,7 @@ def submission_candidates(root: Any) -> dict[str, Any]:
     import hashlib
     from pathlib import Path
 
+    from .. import manuscriptfamily as _MFAM
     from .. import proofregistry as _PR
     from .. import vsigns as _VS
 
@@ -888,9 +889,10 @@ def submission_candidates(root: Any) -> dict[str, Any]:
         if str(doc.get("at") or "") > str(one["at"] or ""):
             one["at"] = str(doc.get("at") or "")
     # ---- 还没签的稿也要点名（判据 c：「未签 ⇒ 不入提交单」必须读得到）----
+    # 前缀从 `manuscriptfamily` 派生（唯一真身）：本文件不再写 `f-proof-` 这个字面量。
     reports = root_p / _VS.SIGN_CARRIER_DIR
     try:
-        report_paths = (sorted(reports.glob("f-proof-*.md"))
+        report_paths = (sorted(reports.glob(f"{_MFAM.prefix_of(FAMILY_F)}*.md"))
                         if reports.is_dir() else [])
     except OSError as exc:  # noqa: BLE001 —— 列不出来 = 这一半没查成
         report_paths = []
