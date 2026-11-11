@@ -2469,7 +2469,12 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 十一格不是手抄：`temp/_p276_recompute.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`）现算。p276（2026-11-11，一个稿号 = 一份文件 = 一份证明）：
 # 只换 F 一格 27d85b47… → 4306d8ed…；其余十格与 p275 逐字同值（版本行已归一）。
-_FROZEN_PROMPT_VERSION = "p277"
+# p277 → p278（2026-11-11，业主真机三裁定 · 甲 + 丙）：三格换值 —— B / E / F
+# （送审之后必须挂计时器等 V 的反馈；签成立即提交；B 另有交稿义务）。
+# 其余八格逐字未动（版本行已归一）。逐格旧值 → 新值：
+#   B b68b60f8… → 5ea2affa… / E bb895e8d… → 0dc0d45d… / F ee6e60db… → 163dde59…。
+# 十一格不是手抄：`temp/_p278_recompute.py` 的现算值（口径同上一支）。
+_FROZEN_PROMPT_VERSION = "p278"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2720,11 +2725,11 @@ _FROZEN_PROMPT_VERSION = "p277"
 #:   那一道"F 的稿叫什么"的字面，B 的收录面一个字没改）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "32b293f6106065c6bf8f07e4e33f22400aa3f9e7cfe87565462b828a7bf26706",
-    "B": "b68b60f87666eef86645023ce98456df422552199e93b745df21f847a2615cb3",
+    "B": "5ea2affad0bd4007d27cf5e996876d0cdd7cf26ed90522b376d96b9da930c8d0",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "bc209de75aed2228473898357eb384f2406b2d885086e3e259e57acbbcc7c2f6",
-    "E": "bb895e8da7703ab215dc02905da7c83a29294e393f47e9a016beecbfa4979f27",
-    "F": "ee6e60db2ca429da1bbf4c99d1138387a117a6b91cdd2a4298ca1690e7475748",
+    "E": "0dc0d45df4ff2f034034f7f3a07e5d5363d9ddea08d640e3d134e00ed03896fc",
+    "F": "163dde5989e099b9653b4aec3a7df90a4bd1f9d8a0c4dc91b19c19a9512ebc82",
     "G": "e6bcda81cdd3de68130542d917e769fb5388018cfb2c6a57ce05894d3f9ab100",
     "H": "6dda638560012a8d2842bddb413295b74d7e8e2ec4660e4335bee90fb1b9123a",
     "L": "cc1068bca4175f983fa323e9c853e70833e3eb2f1badfef247d54a420513770a",

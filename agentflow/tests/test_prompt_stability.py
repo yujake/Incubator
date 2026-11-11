@@ -1195,6 +1195,20 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "`tools_lines`。另同批 G/H 的边集按业主裁定改（G 出边 C/D/H、H 去掉 G）。"
              "十一格全换：工具清单多一行（十一格都换）+ B/D/F/V 四格的段文本换值。"
              "facts 键集仍 15 格、落点没动。"},
+    # p277 → p278（2026-11-11，业主真机三裁定 · 甲 + 丙）：facts 键集一格没动
+    # （还是 15 格）—— 本批只改三份题面的 policy 正文（F/E/B 的「送审之后必须挂计时器
+    # 等 V 的反馈；签成立即提交；B 另有交稿义务」）与 `review.review_document` 的
+    # returns（`open_findings` 一格；returns 不进 `tools_lines`）。没有哪一格事实换过
+    # 落点（system ↔ user），所以 count / keys_sha256 与 p277 同值。
+    {"version": "p278", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p278（2026-11-11，真机三裁定 · 甲 + 丙）：上游 —— ① 甲：F / E / B "
+             "三份题面各补一段「送审之后必须挂计时器等 V 的反馈，不许送完就收工」；"
+             "签「成立」那一刻由框架写 `mss:` 记号（`via=sign_issued`），收工再扫一次、"
+             "幂等；B 另写「交稿也是你的义务」。② 丙：`review_document` 的 target_status "
+             "加闸（有 open findings 不许 accepted），returns 补 `open_findings` 读数"
+             "（不进 tools_lines）。变化格 = B / E / F 三格，其余八格逐字未动。"
+             "facts 键集仍 15 格、落点没动。"},
 
 )
 

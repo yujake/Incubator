@@ -4516,7 +4516,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body'}",
+   "returns": "{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body','open_findings'}",
    "roles": [
     "H"
    ],

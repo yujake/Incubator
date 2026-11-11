@@ -3949,7 +3949,30 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （facts 键集仍 15 格、count / keys_sha256 与 p276 同值）；两份 golden 按现值重冻
 #: （agent 面 11 格 prompt 与 B 的动作表 / edges；tool 面多一件工具）；两文档重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
-PROMPT_VERSION = "p277"
+#: p277 → p278（2026-11-11，业主对真机读数的三条裁定 · 甲 + 丙）：本批只改两份题面与
+#: 一处工具面读数 ——
+#:   ① 甲「产出方送审后必须挂计时器等 V 的反馈；签成就提交（F / E / B 同理；B 另有
+#:      交稿义务）」：F / E / B 三份 specs 的 policy 各补一段（送审之后立刻
+#:      `clock.timer_start(wait_for=V, reason=…)`；签「成立」那一刻由框架写 `mss:` 记号
+#:      `via=sign_issued`，收工再扫一次、幂等；B 那一段另写「交稿也是你的义务」）。
+#:      机制那一半在 `vsigns.issue` 成功之后调 `manuscriptsubmission.mark_sign_submitted`
+#:      （复用 `agent_f/submission.py` 的记号，不新造格式）；收工门
+#:      `agent_loop._v_wait_gate_reading` 挡「送审后没起 wait_for=V 的计时器就收工」。
+#:   ② 丙「有 open findings 就不许 accepted」：`review_document` 的 `target_status`
+#:      加闸（`_open_findings_gate`），并给 `review.review_document` 的 returns 补一格
+#:      `open_findings`（读数；returns 不进 tools_lines ⇒ 提示词只差版本行）。
+#: 变化格 = B / E / F 三格（其余八格逐字未动）；十一格由判据自己的 `_surface_digest`
+#: 现算（`temp/_p278_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。逐格旧值 → 新值：
+#:   B 5ea2affa… → 5ea2affad0bd4007d27cf5e996876d0cdd7cf26ed90522b376d96b9da930c8d0
+#:   （B 那一格：签成立 = 已签，提交走收录 `via=ingested_to_ledger`，交稿是 B 的义务）
+#:   E bb895e8d… → 0dc0d45df4ff2f034034f7f3a07e5d5363d9ddea08d640e3d134e00ed03896fc
+#:   F ee6e60db… → 163dde5989e099b9653b4aec3a7df90a4bd1f9d8a0c4dc91b19c19a9512ebc82
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p278）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p277 同值）；两份 golden 按现值重冻
+#: （agent 面的 prompt 原文带版本行 ⇒ 十一格那一行都换；段摘要只有 B/E/F 三格换值。
+#: tool 面 `review.review_document` 的 returns 多一格 `open_findings`，summary 面未动）；
+#: 两文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
+PROMPT_VERSION = "p278"
 
 
 
