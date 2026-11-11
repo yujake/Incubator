@@ -561,7 +561,7 @@ See the repository root for license information.
 这一节是**机器会核对的读数**——每个数字都有判据盯着，改它必须同时改判据认的那个来源。
 
 ```
-agentflow/.noai-paths            禁改区清单（**48** 条 glob / **45** 条唯一路径，**7** 个分组）
+agentflow/.noai-paths            禁改区清单（**49** 条 glob / **46** 条唯一路径，**7** 个分组）
 agentflow/src/agentflow/tools/   **20** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
 ```
 

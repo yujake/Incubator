@@ -84,8 +84,8 @@ lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档�
 lint_rules_info         = 49   # 同一档的 info 栏
 lint_rules_strict_warning = 87 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
-noai_paths_glob         = 48   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
-noai_paths_unique       = 45   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
+noai_paths_glob         = 49   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
+noai_paths_unique       = 46   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数
 tools_star_tools_py     = 20   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
@@ -514,8 +514,8 @@ python -m agentflow.cli tools --json          # 同一份装配的机器可读�
 
 | 数 | 量的是什么 | 当次值 |
 |---|---|---:|
-| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **48** |
-| **唯一路径数** | 上述 glob 去重后的路径数 | **45** |
+| **清单 glob 数** | `.noai-paths` 的**条目行**数（**同一个文件可以登记两次**） | **49** |
+| **唯一路径数** | 上述 glob 去重后的路径数 | **46** |
 | **台账条目数** | `.noai-approvals.json` 里**有 hash 记录的路径**数 = **需要签字的行数** | **不写定值**（每签一个字就变） |
 | **禁改区类别数** | `.noai-paths` 的 `[category: …]` 分组数 | **7** |
 | **欠签** | 台账条目 × 2 名 reviewer（`REQUIRED_APPROVALS_ON_HIT = 2`） | **不写定值**（每签一个字就变） |
@@ -1243,7 +1243,7 @@ required_approvals: 2（尚未取得）
 
 | 事项 | 去向 |
 |---|---|
-| 哪些路径是禁 AI 区（当次 **48** 条条目 / **45** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
+| 哪些路径是禁 AI 区（当次 **49** 条条目 / **46** 条唯一路径 / 7 个分组；口径与复跑命令见 §3.5） | **`.noai-paths`** |
 | 命中之后要做什么（停 / 人编写或人逐行走查 / 2 名 reviewer / 机器执行） | **`AGENTS.md`** 的"命中之后要做什么" |
 | 退出码语义（`0=clean` / `1=requires_human` / `2=unknown`，**`unknown ≠ clean`**） | **`AGENTS.md`** 的"退出码"节 + `scripts/noai_gate.py` |
 | 实际判定 | `python scripts/noai_gate.py --paths <改动的文件…>`（或 `--git`、`--stdin`、`--json`、`-q`） |
@@ -1372,7 +1372,7 @@ python tools\verify_role_specs.py            # 退出码 0=完整 / 1=有缺失 
 
 | FC | 约束（简写） | 落地位置 | 可判定判据 | 状态 |
 |---|---|---|---|---|
-| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **48** 条条目 / **45** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
+| **FC-27** | 禁 AI 区必须显式列出 + 独立准入门槛 | **`.noai-paths`**（当次 **49** 条条目 / **46** 条唯一路径 / 7 个分组，见 §3.5）+ **`AGENTS.md`** 的 `NOAI-MANIFEST` 区块 + **`scripts/noai_gate.py`**（`REQUIRED_APPROVALS_ON_HIT = 2`，退出码 0/1/2）；`tests/test_noai_gate.py` 当次 124 passed（复跑 `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider`，键 `noai_gate_pytest_collected`）；`release_check.py` 第 6 项 | ① 两处**逐条一致**（实测退出码 0）；② 命中要求 2 批准（实测 `--paths src/agentflow/schema.py` → 退出码 1 + `required_approvals=2`）；③ 负控用例**在** `tests/test_noai_gate.py` 里（该文件当次 **0 skipped** ⇒ 负控真的在跑） | **已落地**。⚠️ 发布门上它**仍报红**，红的原因是"**禁改区命中待 2 名 reviewer 签字**"（制度要求；台账当次的 `reviewers` 元素总数**不写定值**，每签一个字就变），不是代码坏 |
 
 ---
 
