@@ -519,13 +519,20 @@ def test_criterion_4_bit4_is_per_path_and_the_quote_reading_has_no_evidence(
     # reviewed 按证明逐条：这一行带着它签的是第几条证明。
     assert [int(v["proof_no"]) for v in ev["verifications"]] == [1], ev["verifications"]
 
-    # 渲染面：路径记号、五档词、证明号那一格。
+    # 渲染面：路径记号、五档词、证明级那一栏的逐条证明号。
     src = _strip_js_comments(_page_text("Evidence"))
     assert "形式化：" in src and "路径${p.proof_no}" in src, (
         "Evidence 页没有按路径印第 4 位（`形式化：路径1 …`）")
     for word in ("逐字通过", "语义通过", "no_evidence", "没有可复核的区间"):
         assert word in src, f"Evidence 页的引文读数里没有「{word}」这一档"
-    assert 'key: "proof_no"' in src, "证明级那一栏没有逐条印证明号"
+    # 2026-11-11：`VerificationRow.proof_no` 退役（b3ec250f）⇒ 验证台账那一栏不再有
+    # 「证明号」列（那格读的是已退役字段）；逐份证明的号改由命题台账的
+    # `reviewed_paths` 承担 —— 一份证明一格，逐条印出它自己的号与签没签
+    # （`#p1 已签 ｜ #p2 未签`，见 Evidence.tsx 的 reviewedCell）。这一条钉的意图不变：
+    # 读者要能从页面逐条读出「这一份证明是第几号」，不是一句折平的汇总。
+    assert 'key: "reviewed_paths"' in src, "证明级那一栏（reviewed_paths）没有逐条印证明号"
+    assert "#p${p.proof_no}" in src, (
+        "reviewed 那一栏没有逐条印证明号（应渲染出 `#p1 已签 ｜ #p2 未签`）")
 
 
 def test_criterion_4_negative_control_folding_the_paths_into_one_state_is_reported(
