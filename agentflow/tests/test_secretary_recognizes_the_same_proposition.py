@@ -492,7 +492,7 @@ def test_two_different_proofs_are_recorded_side_by_side_with_separate_dependenci
     premises = [r for r in ledger
                 if str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
     # 2026-11-11（业主裁定「签跟着正文走」）：`proof_no` 在 V 签侧退役 —— canonical
-    # （#p1）的新行**不写**这一格；一份证明的身份由「正文 sha + statement_id + 路径」
+    # （#p1）的新行不写这一格；一份证明的身份由「正文 sha + statement_id + 路径」
     # 站住，路径那一维就是上面钉住的 1 / 2。这里按路径各钉三票：sha 错、两组串了、
     # 或把 `proof_no=1` 又写回 canonical，下面每一条都会红。
     sha_a, sha_b = VR.text_sha(PROOF_A), VR.text_sha(PROOF_B)

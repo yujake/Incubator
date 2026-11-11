@@ -556,7 +556,7 @@ def test_c_one_proposition_three_proofs_lands_three_dependency_surfaces(tmp_path
 
     # 三份各签：第 3 位逐条证明分开，任一份成立不借光给别的。
     # 2026-11-11（业主裁定「签跟着正文走」）：`proof_no` 在 V 签侧退役 —— canonical
-    # （#p1）的新行**不写**这一格；一份证明的身份由「正文 sha + statement_id + 路径」
+    # （#p1）的新行不写这一格；一份证明的身份由「正文 sha + statement_id + 路径」
     # 站住（路径那一维是上面已经钉住的 `path_group` 1 / 2 / 3）。显式 `proof_no>1`
     # 是旧多证明写口的兼容（读侧按号分组），所以 #p2 / #p3 照写。下面按号各钉一次：
     # sha 错、命题串了、或把 `proof_no=1` 又写回 canonical，每一条都会红。
