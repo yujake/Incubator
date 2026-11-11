@@ -2388,6 +2388,26 @@ class _Core:
                 # 分开"发了号"与"号没发出来"）。
                 mid_source = "allocated" if mid else ""
 
+        # ---- 2026-11-11（业主裁定 ②）：已拿签的那一份只读 -------------------------
+        #
+        # 这一格就是"`attack.step(product=…)` 重交同一稿号"那条写口：①②③ 里第 ② 档
+        # （subgoal）会沿用子目标已有的稿号，于是这一笔是在就地重写那份稿。若那份
+        # 稿已经拿签（V 的颁发表里有它），这一笔就是"改一份只读的稿"⇒ 受控拒，
+        # 拒信与 `fs.write` / `fs.edit` 那一侧同源（`manuscriptfreeze`，逐字同一句）。
+        if mid:
+            from .. import manuscriptfreeze as _FZ
+
+            _frozen_rel = _MID_HAND.canonical_rel(mid)
+            _frozen = _FZ.freeze_reading(root, _frozen_rel)
+            if _frozen.get("frozen"):
+                return _R.refuse(
+                    _FZ.MANUSCRIPT_FROZEN, str(_frozen.get("message") or ""),
+                    refused_kind=_FZ.MANUSCRIPT_FROZEN,
+                    manuscript_id=mid, manuscript_path=_frozen_rel,
+                    manuscript_received=manuscript_received,
+                    proof_text=body, proof_attached=False,
+                    freeze=dict(_frozen))
+
         def _gate(**_kw: Any) -> Mapping[str, Any]:
             # 闸的判据只有一处（`Secretary.judge_proposition_form`）：这里只把这一条
             # 命题的描述、种类与证明正文递过去；判不过 / 没判成都在它里面折成受控读数
@@ -2841,6 +2861,89 @@ class _Core:
                               "preview": {}, "named_by": "manuscript",
                               "manuscript_id": manuscript_id,
                               "why": f"手稿没写成（{type(exc).__name__}: {exc}）"}
+            # ---- 2026-11-11（业主裁定 ②）：已拿签的那一份只读 ⇒ 这一轮受控拒 --------
+            #
+            # `proof_manuscript` 是写口，它在稿已经拿签时一字节不写（`refused`）；
+            # 这里把那一格变成这一轮的受控拒（而不是"写没成、但这一轮算推进"）——
+            # 否则 `attack.step(product=…)` 重交同一稿号会在台账上记成 `progress`，
+            # 而盘上一个字都没变（"做了什么"与"什么都没做"同形）。
+            #
+            # 受控拒，但"交差读数照给"（与秘书打回那一支同一个做法）：这一轮没有新
+            # 成果，之前已经交出去的成果仍要逐条读 —— 于是"这一轮那一份有签"与
+            # "整个任务 1/3"两件事在同一份读数里分得开（判据
+            # `test_f_delivery_is_per_output.py::test_e_*`）。
+            if str(manuscript.get("refused") or "") == "manuscript_frozen":
+                from . import vsign as _VS_FROZEN
+
+                _frozen_msg = str(manuscript.get("why") or "")
+                # 这一份稿是谁的稿：`statements` 那一行上记的 `manuscript_id`（B 收录时写的
+                # 那一格）。读不到就留空串 —— 不拿"命题号 == 稿号"去猜。
+                _mid_now = str(manuscript.get("manuscript_id") or "")
+                _rel_now = str(manuscript.get("path") or "")
+                _text_now = str(manuscript.get("text") or "")
+                if not _text_now and _rel_now:
+                    # 冻结那一支不带正文（一个字节都没写）⇒ 签这一格读盘上那一份
+                    # （它才是"这一轮那一份"的真实状态；不拿空串读成"没签"）。
+                    try:
+                        from pathlib import Path as _Path
+
+                        _text_now = (_Path(str(self.store.root)) / _rel_now).read_text(
+                            encoding="utf-8")
+                    except (OSError, UnicodeDecodeError):
+                        _text_now = ""
+                _owner_stmt = ""
+                if _mid_now:
+                    _rows_sl, _p_sl, _e_sl = SL.rows_of(self.store)
+                    _owner_stmt = next(
+                        (str(r.get("stmt_id") or "") for r in _rows_sl
+                         if str(r.get("manuscript_id") or "") == _mid_now), "")
+                _refused_sign = _VS_FROZEN.delivery_reading(
+                    self.store.root, statement_id="", proof_text=_text_now)
+                _delivery_frozen = self._delivery_reading(
+                    plan, assessment=(product.get("self_assessment")
+                                      if isinstance(product, Mapping) else None))
+                _frozen_detail = (
+                    f"{_frozen_msg}；这一轮没有落稿、没有登记、没有送审"
+                    f"；V 签：{_refused_sign.get('label')}"
+                    f"（{_refused_sign.get('why')}）"
+                    f"；交差（逐条）：已签 "
+                    f"{_delivery_frozen.get('coverage_reading') or '0/0'}"
+                    f"（待签 {_delivery_frozen.get('pending_count')} 条、未签 "
+                    f"{_delivery_frozen.get('unsigned_count')} 条）")
+                return {
+                    "action": "no_change",
+                    "outcome": "no_change",
+                    "detail": _frozen_detail,
+                    "evidence": [],
+                    "status": "blocked",
+                    "blocked_reason": _frozen_msg,
+                    # 不是"这一轮之后没新事情可做"：开一份优化副本就能接着改。
+                    "in_flight": False,
+                    "count_attempt": False,
+                    "statement_id": _owner_stmt,
+                    "manuscript_id": _mid_now,
+                    "v_sign": {"reading": _refused_sign,
+                               "hint": ("这一份已拿签、只读；要改先 `B.open_polish_copy("
+                                        "statement_id=…)` 复制成新的 B 号稿")},
+                    "delivered": bool(_delivery_frozen.get("delivered")),
+                    "delivery": _delivery_frozen,
+                    "signed_count": _delivery_frozen.get("signed_count"),
+                    "pending_count": _delivery_frozen.get("pending_count"),
+                    "unsigned_count": _delivery_frozen.get("unsigned_count"),
+                    "coverage": _delivery_frozen.get("coverage"),
+                    "proof_count": _delivery_frozen.get("proof_count"),
+                    "draft_count": _delivery_frozen.get("draft_count"),
+                    "manuscript_path": _rel_now,
+                    "manuscript_washed": False,
+                    "refusal": {
+                        "kind": "manuscript_frozen",
+                        "problems": [_frozen_msg],
+                        "next_step": ("这一份已经拿签 ⇒ 先 `B.open_polish_copy("
+                                      "statement_id=…)` 复制成新的 B 号稿，在副本上改"),
+                        "manuscript_id": _mid_now,
+                        "manuscript_path": _rel_now,
+                    },
+                }
             # ---- F 的秘书在"提交给 V 之前"洗一遍依赖面（业主 2026-10-26 晚） -----------
             #
             # 业主原话：「F的秘书工作的时候是F写好了，提交证明给V前」「秘书若核出问题，

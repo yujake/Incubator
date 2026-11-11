@@ -314,10 +314,16 @@ def test_e_the_step_cell_is_the_plan_level_reading_not_this_rounds(tmp_path):
     这一轮那一份有签，但整个任务只有 1/3 —— 读数不许读成交差完成。
 
     改前红：`_apply_round` 的 `delivered` 只看这一轮的 `v_sign` ⇒ 这里会读成 True。
+
+    2026-11-11（业主裁定 ②，本条的第二个判据）：那一轮重交的是已拿签的那一份 ⇒
+    它现在受控拒（`manuscript_frozen`，改法指向 `B.open_polish_copy`），盘上那一份
+    一个字节都不动；但交差读数照给 —— 所以下面那几格 plan 级读数一个字都不用改。
     """
     st = _ws(tmp_path)
     f, plan, sids = _three_outputs(st, tmp_path)
     _sign(st, sids[2])
+    frozen_rel = _manuscript_rel(st, sids[2])
+    frozen_before = (pathlib.Path(st.root) / frozen_rel).read_text(encoding="utf-8")
     deploy = _proof_round(f, plan, sid="s3", text="引理 C")
 
     assert deploy.get("delivered") is False, deploy
@@ -332,6 +338,18 @@ def test_e_the_step_cell_is_the_plan_level_reading_not_this_rounds(tmp_path):
     # 交差说明里逐条点名了「1/3」与未签的条数
     detail = str(deploy.get("detail") or "")
     assert "1/3" in detail and "待签 2" in detail, detail
+    # ---- 2026-11-11（业主裁定 ②）：重交同一份「已拿签」的稿现在受控拒 ------------
+    #
+    # 业主逐字：「稿通过后相当于这个命题证完了，后续只对稿允许有只读权」；改法只有一条
+    # ——「要改就开 B 的优化副本」。所以这一轮不再是"又一次落稿"，而是一次受控拒。
+    assert deploy.get("action") == "no_change", deploy
+    refusal = dict(deploy.get("refusal") or {})
+    assert refusal.get("kind") == "manuscript_frozen", deploy
+    assert "open_polish_copy" in str(refusal.get("next_step") or ""), refusal
+    assert "拿签" in detail, detail
+    # 盘上那一份一个字节都没动（冻结是"只读"，不是"改一半"）
+    assert (pathlib.Path(st.root) / frozen_rel).read_text(
+        encoding="utf-8") == frozen_before
 
 
 class _FakeLLM:
