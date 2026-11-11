@@ -628,12 +628,16 @@ def test_d_the_whole_chain_reads_five_ways(tmp_path: pathlib.Path) -> None:
     root = pathlib.Path(st.root)
 
     # ---- ① F 自己的稿号（不借命题号、不借计划号）
-    # 新工作区里两个号段都从 0 起 ⇒ 先烧掉一个稿号，让"稿号 ≠ 命题号"这条读数
-    # 不靠夹具巧合对上（同 `temp/_f_chain_rehearsal.py` 的 000001 / 000000）。
-    assert MIN_WIDTH.match(MI.next_manuscript_id(root))
+    #
+    # 这里不断言「稿号 ≠ 命题号」：那是两套独立编号，数值重合不代表任何东西
+    # （2026-11-11 业主裁定：「这是两套编号，数值重合不能代表什么」）。
+    # 语义上的分离靠这三格：稿号由 `manuscriptids` 的计数器发、行上另记 `manuscript_id`、
+    # 签块第 9 格按稿名现算 —— 下面逐格断，不靠两个数字长得不一样。
+    before_manuscript = MI.peek_manuscript_counter(root)
     mid = MI.next_manuscript_id(root)
     assert MIN_WIDTH.match(mid), mid
-    assert mid != SID, mid
+    assert MI.peek_manuscript_counter(root) == before_manuscript + 1, (
+        "稿号不是由 F 自己的计数器发的", before_manuscript, MI.peek_manuscript_counter(root))
 
     # ---- ② F 产稿：稿名只由稿号决定，稿头如实写「还没落号」
     made = _round(st, mid)
@@ -663,7 +667,8 @@ def test_d_the_whole_chain_reads_five_ways(tmp_path: pathlib.Path) -> None:
     assert out.get("ok") is True, out
     stmt_id = str(out.get("stmt_id") or "")
     assert MIN_WIDTH.match(stmt_id), out
-    assert stmt_id != mid, ("收录用了稿号当命题号 ⇒ 两个号又被绑死了", stmt_id, mid)
+    # 收录时不拿「两号数值不等」当证据（它们允许重合，2026-11-11 业主裁定）。
+    # 语义分离由下面三格断：行上记的是稿号、稿名没变、签仍按稿号认。
     row = next(dict(r) for r in st.rows("statements")
                if str(r.get("stmt_id")) == stmt_id)
     assert str(row.get("manuscript_id") or "") == mid, row
@@ -671,8 +676,62 @@ def test_d_the_whole_chain_reads_five_ways(tmp_path: pathlib.Path) -> None:
 
     # ---- ⑤ 稿名不变 + V 台账读得出来
     assert (root / rel).is_file(), rel
-    assert not (root / "reports" / f"f-proof-{stmt_id}.md").exists(), (
-        "收录按命题号改了稿名 ⇒ 停用的旧口径回来了")
+    # 两号允许数值重合 ⇒ 不能拿"f-proof-<命题号>.md 不存在"当证据
+    # （重合时它正是那一份合法的稿）。要断的是「没有另存一份按命题号命名的副本」：
+    # 那个路径要么不存在，要么就与稿号那一份是同一个文件（== 两号重合）。
+    renamed = root / "reports" / f"f-proof-{stmt_id}.md"
+    assert (not renamed.exists()) or mid == stmt_id, (
+        "收录按命题号另存了一份稿 ⇒ 停用的转名口径回来了", renamed, mid, stmt_id)
+    assert (root / rel).is_file(), rel
     texts, problems = VR.list_verifications(st.root, statement_id=stmt_id, limit=None)
     assert not problems, problems
     assert len(texts or []) >= 1, ("V 的台账一条都没读到", texts, problems)
+
+
+# --------------------------------------------------------------- e 两号数值重合
+def test_e_the_two_number_spaces_are_allowed_to_coincide(tmp_path: pathlib.Path) -> None:
+    """e：稿号与命题号数值重合是合法的，整条链照样成立。
+
+    业主 2026-11-11 逐字：「稿号与命题号都从 000000 起没有问题，这是两套编号，
+    数值重合不能代表什么。」⇒ 判据不许再拿"两个数字长得不一样"当分离的证据。
+
+    这一条刻意让两边都取到同一个字面：新工作区里 `manuscriptids` 与 `statements`
+    两个号段都从 0 起，所以第一次产稿 + 第一次收录，两号天然都是 000000。
+    仍旧成立的那三件：行上记 `manuscript_id`、稿名不变、签按稿号认。
+    """
+    from conftest import sign_before_registration
+
+    st = _ws(tmp_path)
+    root = pathlib.Path(st.root)
+    mid = MI.next_manuscript_id(root)          # 第一次取号 ⇒ 000000
+    made = _round(st, mid)
+    rel = str(made["path"])
+    assert rel == f"reports/f-proof-{mid}.md", made
+    assert SID not in rel, rel
+
+    body = _body(st, rel)
+    sha = _PR.proof_sha(body)
+    _stamp(st, rel, sha)
+    pend = sign_before_registration(st.root, proof_text=body)
+    assert pend.get("proof_sha256") == sha or pend.get("sha") == sha, pend
+    out = AgentB(st, extractor=None, extract_text=None).register_statement(
+        statement_full=PROPOSITION, origin="own_result", kind="conjecture",
+        proof_manuscript=rel, label="DCT", line_range={"start": "1", "label": rel},
+        quote_reason="判据：两号数值重合也允许")
+    assert out.get("ok") is True, out
+    stmt_id = str(out.get("stmt_id") or "")
+
+    # 这一条测的正是「重合」这一形态本身：不重合就说明夹具没造出这个现场。
+    assert stmt_id == mid, ("这一条要的现场是两号数值重合（都从 000000 起）",
+                            stmt_id, mid)
+
+    row = next(dict(r) for r in st.rows("statements") if str(r.get("stmt_id")) == stmt_id)
+    assert str(row.get("manuscript_id") or "") == mid, row
+    assert (root / rel).is_file(), rel
+    block = VS.manuscript_sign_reading(
+        (root / rel).read_text(encoding="utf-8"), manuscript_path=rel)
+    assert block.get("signed") is True, block
+    assert block.get("manuscript_id") == mid, block
+    texts, problems = VR.list_verifications(st.root, statement_id=stmt_id, limit=None)
+    assert not problems, problems
+    assert len(texts or []) >= 1, ("重合形态下 V 台账读不出来", texts, problems)
