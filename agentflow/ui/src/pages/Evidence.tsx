@@ -24,7 +24,9 @@
  *   （比的是 V 签的那一份 vs 命题现在这一份，见那一栏的副标题）；
  * - 命题多两格：非平凡度（`T0`–`T4` 或"未判"）与形式化第 4 位的逐路径读数
  *   （`{证明号: 状态}` 是二维的，折成一条汇总就等于让 `#p2` 借 `#p1` 的光）；
- * - reviewed 按证明逐条显示：验证行的第一格就是证明号（`proof_no`）。
+ * - reviewed 按证明逐条显示：逐份证明的号与"签没签"在命题台账那一栏
+ *   （`reviewed_paths`；2026-11-11 起 `VerificationRow.proof_no` 已退役，
+ *   验证台账那一栏改按验证号 / 命题号读，页面与 `VerificationRow` 现值对齐）。
  *
  * ## 2026-10-23 第二批（业主：五元位只展开了第 4 位 / 实验表没挂报告）
  *
@@ -602,8 +604,9 @@ export function Evidence() {
         <div class="readings">
           这一栏是 V 的签名行：<span class="mono">verdict</span> 只有「成立」显绿，其余档显黄
           （不假装通过）；<span class="mono">unresolved_errors</span> 与「证明一致」那一格要一起读，
-          才知道这一行可不可回验。第一格是证明号（<span class="mono">proof_no</span>）——
-          一个定理有多条证明路径时，reviewed 是逐条签的。sha 原文不上屏：那一格只说
+          才知道这一行可不可回验。逐份证明的号与"签没签"在命题台账那一栏
+          （<span class="mono">reviewed_paths</span>）；验证台账行按验证号 / 命题号读。
+          sha 原文不上屏：那一格只说
           「一致 / 不一致 / unknown（没得比）」，比的是 V 签的那一份与命题现在这一份。
         </div>
         {isUnreadable(ev.verifications_tri) ? (
@@ -615,12 +618,6 @@ export function Evidence() {
             columns={[
               { key: "verification_id", title: "验证号" },
               { key: "statement_id", title: "命题号" },
-              {
-                // reviewed 按证明逐条：证明号是这一格的主键（`#p1` 是 canonical 那一份）。
-                key: "proof_no",
-                title: "证明号",
-                render: (r) => <span class="mono">#{r.proof_no}</span>,
-              },
               { key: "verifier", title: "签名者" },
               {
                 key: "verdict",
