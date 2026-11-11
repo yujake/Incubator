@@ -531,7 +531,8 @@ def test_one_failure_does_not_stop_others(tmp_path):
 def test_fanout_limit_refuses_extra_children(tmp_path):
     """扇出上限：一个任务同时在飞的子代理超过 `max_direct_children` ⇒ 拒（`fanout_exceeded`）。
 
-    链用 `H → G`（`ALLOWED_EDGES["H"] == {"G"}`）—— 为什么不用 `C → H`：
+    链用 `G → H`（`ALLOWED_EDGES["G"]` 含 `H`；2026-11-11 边集收缩之后 H 不再有 G，
+    所以方向反过来）—— 为什么不用 `C → H`：
     C 的边是空的，从 C 派任何子任务都会先被判 `forbidden_edge`，
     于是这条测试就测不到扇出了。
 
@@ -546,22 +547,22 @@ def test_fanout_limit_refuses_extra_children(tmp_path):
     c = _conductor(store, policy=pol, registry={
         "H": ("object", FakeH(rec)), "G": ("object", FakeG(rec)),
     })
-    parent = c.summon("H", "review", {"doc_id": "0001"})
+    parent = c.summon("G", "revise", {"doc_id": "0001"})
     assert parent.outcome == "ok"
 
     def _seed_in_flight(n: int) -> None:
         with store.tx("tasks", actor="test") as tx:
             for i in range(n):
                 tx.upsert("tasks", {
-                    "task_id": f"t-8{i:03d}", "role": "G", "action": "revise",
-                    "called_by": "H", "status": "running", "parent_task_id": parent.task_id,
+                    "task_id": f"t-8{i:03d}", "role": "H", "action": "review",
+                    "called_by": "G", "status": "running", "parent_task_id": parent.task_id,
                     "input_key": f"s{i}", "started_at": "2026-01-01T00:00:00+00:00",
                     "ended_at": None, "outcome": None, "tokens": 0, "usd": 0.0,
                     "artifacts": [], "inputs": [],
                 })
 
     _seed_in_flight(2)
-    over = c.summon("G", "revise", {"doc_id": "0009"}, by="H",
+    over = c.summon("H", "review", {"doc_id": "0009"}, by="G",
                     parent_task_id=parent.task_id, input_key="k-over")
     assert over.outcome == "refused" and over.refusal_reason == "fanout_exceeded", over
     assert "在飞 2" in over.detail and "上限 2" in over.detail, over.detail
@@ -574,7 +575,7 @@ def test_fanout_limit_refuses_extra_children(tmp_path):
         row.update({"status": "done", "ended_at": "2026-01-01T00:01:00+00:00",
                     "outcome": "ok", "detail": "替身：这一件跑完了"})
         tx.upsert("tasks", row)
-    ok = c.summon("G", "revise", {"doc_id": "0009"}, by="H",
+    ok = c.summon("H", "review", {"doc_id": "0009"}, by="G",
                   parent_task_id=parent.task_id, input_key="k-over")
     assert ok.outcome == "ok", f"返回之后名额该腾出来，拿到 {ok.outcome}/{ok.refusal_reason}"
 
@@ -590,9 +591,9 @@ def test_fanout_negative_control_under_limit(tmp_path):
     c = _conductor(store, policy=pol, registry={
         "H": ("object", FakeH(rec)), "G": ("object", FakeG(rec)),
     })
-    parent = c.summon("H", "review", {"doc_id": "0001"})
+    parent = c.summon("G", "revise", {"doc_id": "0001"})
     kids = [
-        c.summon("G", "revise", {"doc_id": f"000{i}"}, by="H",
+        c.summon("H", "review", {"doc_id": f"000{i}"}, by="G",
                  parent_task_id=parent.task_id, input_key=f"k{i}")
         for i in range(3)
     ]

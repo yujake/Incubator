@@ -182,17 +182,20 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `A` | `B` |
 | `B` | `C D H L V`（`H` 是 2026-10-14 加的：语义档的引文回验由 H 判；`L` 与 `D` 是 2026-10-22 同日加的：`B→L` 是 L 的唯一入口，`B→D` 是"形式化暴露的缺陷严重时 B 通知 D 开展研究"那条路） |
 | `C` | **（无出边）** —— 2026-10-19 曾按「C 要能把"候选的更短路径"交给 D」加过一条 `C→D`，**2026-10-20 业主裁定撤回**（逐字：「把协作改成『D 唤起 C、C 向 D 汇报』，并保留 C 无出边的原始设定」）⇒ 今天 `ALLOWED_EDGES["C"] == frozenset()`；C 的"汇报"就是它的返回值。`read_only` / `write_set` 一个字没动 |
-| `D` | `A B C E F` |
+| `D` | `A B C E F` —— **不含 G**（2026-11-11 业主：「D 不能指向 G，G 是 D 的父，是向上汇报完成任务」） |
 | `E` | `B D V` |
 | `F` | `A B C E V`（2026-11-05 业主裁定「让 F 作为 D 的严格下级，取消出边 F→D」⇒ 没有 `D`；`D→F` 与回执/通信不受影响） |
-| `G` | `A D E F` |
-| `H` | `A E G` |
+| `G` | `C D H`（2026-11-11 业主裁定逐字：「更改 G 的出边集为 C,D,H，H 为 G 的下级不召唤 G」＋「G 想补内容都走 D」⇒ 去掉 `A`/`E`/`F`，补内容一律经 D） |
+| `H` | `A E`（2026-11-11 去掉 `G`：H 是 G 的下级，不许召唤 G） |
 | `V` | **（无出边）** —— 2026-11-05 业主裁定「V 不应该有出边」；入边 `F` / `E` / `B` 一条未动，退回是回执里的步号 |
 | `L`（Lean 形式化者，**只在 Lean 开关打开时存在**） | **`C`**（唯一出边，用途只有一件：梳理证明链）。L 的唯一入边是 `B→L`；`M` 的出边里没有它 |
 
-**边总数 = 34**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；下面是每一次加减
+**边总数 = 32**（`sum(len(v) for v in capabilities.ALLOWED_EDGES.values())`；下面是每一次加减
 的读数，最后一条就是今天的数。V 落地前是 29 —— 新增的三条是 `M→V`、`F→V`、`V→F`。
 观测 2026-10-06（角色 V 落地）。
+**2026-11-11 从 34 降到 32**：业主裁定「更改 G 的出边集为 C,D,H，H 为 G 的下级不召唤 G」
+⇒ G 从 `A D E F` 改成 `C D H`（净 −1）、H 从 `A E G` 改成 `A E`（−1）；
+D 的出边一个字没动（D 的汇报是"向上"，不是召唤 G）。
 **2026-10-10 减回 29**：业主第 146 轮第 4 条裁定去掉 `M→B` / `M→F` / `M→V` 三条直接边
 （B / F / V 改由父代理转达；见 §M.4.1 上面那段）。
 **2026-10-13 再加一条 `M→B` 到 31**（业主裁定逐字「补 M 到 B」：B 是采信链第一环，无 Lean 的 T1 实测 M 够不着 B/V ⇒ `verifications` 目录压根没被创建）。
@@ -213,7 +216,7 @@ B 拿 H 的判定回填 `quote_verified` + `quote_mode="semantic"` —— H 仍�
 （C 没有出边、也不许给它加一条把话送回去的通道）。复跑 ⇒ `33`。
 判据：`tests/test_d_summons_c_and_c_reports_back.py`（正控：D 派 C、报告随返回值交回且
 D 的下一步读得到它；反真空：`ALLOWED_EDGES["C"] == frozenset()`、边总数（**那一条判据里
-写的是当次读数 32** —— 今天全表的读数是 34，见本节最后一条；判据里那个字面量要跟着改，
+写的是当次读数 32** —— 今天全表的读数是 32，见本节最后一条；判据里那个字面量要跟着改，
 否则它会红）；两条负控：
 把 `ALLOWED_EDGES["C"]` 塞成 `{"D"}` ⇒ 反真空红；把 D 的 `_do_summon` 改成"不读返回值
 直接 final" ⇒ 正控红）。
@@ -254,7 +257,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
   F 的向上汇报走 `conductor.escalate`（收件人 = 召唤者 D），要人干活仍可派 A / B / C / E / V。
 - `V→F`：V 不再能唤起任何人（`ALLOWED_EDGES["V"] == frozenset()`）；入边 `F` / `E` / `B`
   一条没少 —— 退回是在回执里点名第几步，由发件人自己按那一条改。
-复跑：同一命令 ⇒ `34`。判据：`tests/test_agent_spec_reconciliation.py`
+复跑：同一命令 ⇒ `32`（2026-11-11 的边集收缩之后）。判据：`tests/test_agent_spec_reconciliation.py`
 （`test_f_does_not_summon_d_and_v_summons_nobody`：声明层与派生层都读、V 的入边正控、
 把 `D` / `F` 加回能力面 ⇒ 红）。
 **Lean 关着时这条协作面整条看不见**：L 不在角色表里、`formal.*` 不装配、`B→L` 与 `L→C`
@@ -309,7 +312,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
-> 十一行加起来是 **66**（6+9+10+15+4+4+7+5+3+3+0），与标题那个 66 同源：标题读的是
+> 十一行加起来是 **67**（6+10+10+15+4+4+7+5+3+3+0），与标题那个 67 同源：标题读的是
 > `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
 > 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `66`。
 > **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；

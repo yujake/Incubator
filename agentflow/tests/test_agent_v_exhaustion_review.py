@@ -341,16 +341,17 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
     # 2026-11-07（业主最终裁定）：裁去 `F→B`（交稿不许向下派 B）、加回 `F→D`（向上交给
     # 父代理 D）—— 一减一加，边总数仍是 34。
     assert sorted(C.ALLOWED_EDGES["F"]) == ["A", "C", "D", "E", "V"]
-    assert sorted(C.ALLOWED_EDGES["G"]) == ["A", "D", "E", "F"]
-    assert sorted(C.ALLOWED_EDGES["H"]) == ["A", "E", "G"]
+    # 2026-11-11 业主裁定：「G 的出边集为 C,D,H」「H 为 G 的下级不召唤 G」。
+    assert sorted(C.ALLOWED_EDGES["G"]) == ["C", "D", "H"]
+    assert sorted(C.ALLOWED_EDGES["H"]) == ["A", "E"]
     # 2026-11-05（业主裁定「V 不应该有出边」）：V 不再能唤起任何人（入边见下一行）。
     assert sorted(C.ALLOWED_EDGES["V"]) == []
     assert sorted(C.ALLOWED_EDGES["L"]) == ["C"]
     assert sorted(C.ALLOWED_EDGES["M"]) == ["A", "B", "C", "D", "E", "G", "H"]
     inbound_v = sorted(role for role, tos in C.ALLOWED_EDGES.items() if "V" in tos)
     assert inbound_v == ["B", "E", "F"], inbound_v
-    # 边总数：36 → 34（恰好 −F→D、−V→F 两条；2026-11-07 的 −F→B、+F→D 一减一加，仍是 34）。
-    assert sum(len(tos) for tos in C.ALLOWED_EDGES.values()) == 34
+    # 边总数：2026-11-11 的边集收缩（G: 4→3、H: 3→2）之后是 32。
+    assert sum(len(tos) for tos in C.ALLOWED_EDGES.values()) == 32
 
     # ---- 动态那一半：真起一个主控，E 派 V 会审穷举证据，并且拿得到判决
     from agentflow.host import wired_conductor

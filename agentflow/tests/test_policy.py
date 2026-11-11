@@ -143,8 +143,9 @@ def test_allowed_edges_match_design_table():
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这两条断言按原句恢复
     # （2026-10-19 那一版曾为 C→D 改成 `frozenset({"D"})`）。
     assert C.ALLOWED_EDGES["C"] == frozenset(), "C 一旦能发起动作就成了绕过 B 引文回验的写入路径"
-    assert C.ALLOWED_EDGES["H"] == frozenset({"A", "E", "G"}), \
-        "审校者可以向 A/E 要证据、请 G 修订，但**不许自己改数据**（它的只读面在 tools 层）"
+    # 2026-11-11 业主裁定（逐字）：「H 为 G 的下级不召唤 G」 ⇒ H 的出边去掉 G（只剩 A/E）。
+    assert C.ALLOWED_EDGES["H"] == frozenset({"A", "E"}), \
+        "审校者可以向 A/E 要证据，但**不许召唤 G（G 是父）**、也不许自己改数据（只读面在 tools 层）"
     assert C.ALLOWED_EDGES["A"] == frozenset({"B"})
     # 2026-10-13（业主裁定逐字：「允许 B 唤起 V。理由是 B 需要初步检验收录的证明」）：
     # B 是审校链（B / H / V）的第一环 —— 它把外部文献里的证明收录进 `statements`
@@ -175,7 +176,9 @@ def test_allowed_edges_match_design_table():
     # 交稿」＋「向上的意思是F向父代理D交稿」）：F 的出边少 `B`、多 `D`（一减一加）。
     # 交稿链路 = F 落手稿 → 派 D 携带 → D 派 B 收录（V 签之后按 sha 认领）。
     assert C.ALLOWED_EDGES["F"] == frozenset({"A", "C", "D", "E", "V"})
-    assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"})
+    # 2026-11-11 业主裁定（逐字）：「更改 G 的出边集为 C,D,H」＋「G 想补内容都走 D」
+    # ⇒ G 不再直接调 A/E/F；补内容一律派 D（D 子任务，干完向上汇报，不新增 D→G 边）。
+    assert C.ALLOWED_EDGES["G"] == frozenset({"C", "D", "H"})
     # `V`（验证者）没有出边（2026-11-05 业主裁定「V 不应该有出边」）：它不再能
     # 唤起任何人，但入边 F / E / B 一条未动（退回是回执里的步号，不是一次唤起）。
     assert C.ALLOWED_EDGES["V"] == frozenset()
@@ -562,10 +565,10 @@ def test_the_refusal_names_who_can_relay() -> None:
     from agentflow import capabilities as C
 
     names = m_to_f.split("改派 ", 1)[1].split(" ——", 1)[0].split("、")
-    # 2026-10-18 之后 `V` 也在 M 的出边里 ⇒ 那三个名字里含 V；2026-10-20 业主裁定
-    # 撤掉 `M→V` 之后它回到两个（提示是现算的，所以它准确地少点了 V 一个）——
-    # 这是边表改动的读数，不是放宽：两个名字逐个核过"它的出边里真的有 F"。
-    assert names == ["D", "G"], m_to_f
+    # 2026-11-11 边集收缩（G 不再有 F 的出边）之后，能替 M 派 F 的中转只剩 D 一个。
+    # 提示是现算的，所以它准确地少点了 G —— 这是边表改动的读数，不是放宽：
+    # 每个名字逐个核过"它的出边里真的有 F"。
+    assert names == ["D"], m_to_f
     for via in names:
         assert "F" in C.edges_for(via, registry=reg), via
     # ---- 2026-10-20 业主裁定「派 V 只有 F 与 B 两个入口；M 不再直连 V」之后：
@@ -887,5 +890,6 @@ def test_iter_edges_is_flat_and_complete():
     # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这一条按原句恢复
     # （2026-10-19 那一版曾为 C→D 改成"C 的出边只有 D"）。
     edges = set(P.iter_edges())
-    assert ("M", "A") in edges and ("H", "G") in edges
+    # 2026-11-11：G 的出边 = C/D/H（H 是 G 的下级，方向是 G→H；H 不再有 G）。
+    assert ("M", "A") in edges and ("G", "H") in edges and ("G", "D") in edges
     assert not any(a == "C" for a, _ in edges), "C 不发起任何召唤（§3.1：C 的边刻意是空的）"

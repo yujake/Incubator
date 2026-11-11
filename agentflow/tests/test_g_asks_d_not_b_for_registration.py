@@ -66,7 +66,7 @@ _NEEDLES: tuple[tuple[str, str], ...] = (
     ("D 出研究手稿", "D 侧出研究手稿并登记"),
     ("B 是从 D 侧的研究手稿收录入库的", "B 的入库口在 D 侧的研究手稿"),
     ("G→B 这条边不存在", "G 到 B 没有这条边，这件事写明"),
-    ("你能召唤的只有 A / D / E / F", "可召唤面逐个点名"),
+    ("你只能召唤 C / D / H", "可召唤面逐个点名（C 做关系推断、D 补材料、H 判稿）"),
     ("forbidden_edge", "撞上去的受控理由码"),
     ("白丢一步", "代价：这一步白丢"),
     ("不能直接召唤 B", "那句直说（判据 ② 的豁免锚点）"),
@@ -180,19 +180,21 @@ def test_3_deleting_the_sentence_turns_criterion_one_red(
 
 
 # ============================================================ ④ 结构：面没被加宽
-def test_4_the_summonable_face_of_g_is_still_a_d_e_f() -> None:
-    """④ 补文案不许顺手加边：G 的可召唤面仍是 A/D/E/F，提示词里的伙伴条目也是那四个。"""
-    assert tuple(builtin_specs()["G"].edges) == ("A", "D", "E", "F"), (
+def test_4_the_summonable_face_of_g_is_c_d_h() -> None:
+    """④ 面是 2026-11-11 业主裁定的 `C/D/H`（不再直接调 A/E/F；补内容走 D）。"""
+    assert tuple(builtin_specs()["G"].edges) == ("C", "D", "H"), (
         f"G 的声明边被改了：{builtin_specs()['G'].edges}")
-    assert C.ALLOWED_EDGES["G"] == frozenset({"A", "D", "E", "F"}), (
+    assert C.ALLOWED_EDGES["G"] == frozenset({"C", "D", "H"}), (
         f"权限面的 G 出边被改了：{sorted(C.ALLOWED_EDGES['G'])}")
     assert "B" not in C.ALLOWED_EDGES["G"], (
-        "G → B 被加进了边表 —— 这一批只许改文案，那条边不在裁定的射程里")
+        "G → B 被加进了边表 —— B 的入口在 D 的手稿那一侧，G 不许直接召唤 B")
+    assert not ({"A", "E", "F"} & C.ALLOWED_EDGES["G"]), (
+        "G 还直接连着 A/E/F —— 「G 想补内容都走 D」要求这三条不在 G 的出边里")
 
     text = _render_g()
     bullets = {m.group(1) for m in (_PARTNER_BULLET.match(line) for line in text.splitlines())
                if m}
-    assert bullets == {"A", "D", "E", "F"}, f"提示词里的伙伴条目变了：{sorted(bullets)}"
+    assert bullets == {"C", "D", "H"}, f"提示词里的伙伴条目变了：{sorted(bullets)}"
 
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用

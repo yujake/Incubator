@@ -468,8 +468,16 @@ class _WriteReport:
         # `TypeError` —— 那是判据坏了，不是实现坏了）。
         self.last_carried_missing = dict(carried_missing)
         delivery = self._deliver_carried_to_b(carried_rows)
+        # ---- 子→父的完成汇报（业主 2026-11-11：D 不能指向 G，G 是父） ----------
+        #
+        # 时序：**B 收录之后**才汇报（这一行在 `_deliver_carried_to_b` 之后）。
+        # 内容：只带指针（命题号 / 稿号 / 台账落点 / 判定），**不带正文**。
+        # 机制：`send_message` + 收件箱（`inbox_digest` / `mark_delivered`）——
+        # 这是既有的"子任务收尾汇报"通道，不是 summon 一条新边；`D 的出边` 不加 G。
+        delivery["parent_report"] = self._report_delivery_to_parent(delivery)
         self.last_delivery = delivery
         lines.extend(self._delivery_section(delivery))
+        lines.extend(self._parent_report_section(delivery["parent_report"]))
         lines.append("")
 
         text = "\n".join(lines) + "\n"
@@ -940,6 +948,157 @@ class _WriteReport:
         if not rows:
             out["why"] = "携带单是空的（盘上没有任何一条按命号命名的 F 证明手稿）"
         return out
+
+    # ---------------------------------------------------------------- 子→父的完成汇报
+
+    #: 向上汇报的标题前缀（机器可识别；测试与审计按它捞，不另造第二套）。
+    PARENT_REPORT_SUBJECT = "D 交付汇报"
+
+    def _parent_of_this_summon(self) -> tuple[str, str]:
+        """这一趟的父 `(角色, 依据)`；`("", 依据)` = 判不出父是谁（不猜）。"""
+        tid = ""
+        try:
+            from ..conductor import current_task_id as _ctid
+
+            tid = str(_ctid() or "")
+        except Exception:  # noqa: BLE001 —— 挂点坏了就按"没有号"读，不编一个父
+            tid = ""
+        if not tid:
+            return "", "这一趟没有召唤号（直调 `AgentD` / 不在 summon 上下文里）"
+        row = next((dict(r) for r in self.store.rows("tasks")
+                    if str(r.get("task_id")) == tid), None)
+        if row is None:
+            return "", f"召唤号 {tid} 在 tasks 台账里读不到 ⇒ 判不出父是谁"
+        called_by = str(row.get("called_by") or "")
+        if called_by and called_by not in ("M", "user"):
+            return called_by, f"tasks[{tid}].called_by={called_by}"
+        return "", f"tasks[{tid}].called_by={called_by!r}（不是角色父）"
+
+    def _report_delivery_to_parent(self, delivery: Mapping[str, Any]) -> dict[str, Any]:
+        """把"B 收录成没成"如实汇报给父（只带指针，不带正文）。
+
+        ## 为什么汇报必须发生在这一笔之后（业主 2026-11-11）
+        「D 干完 ⇒ 向上汇报」—— 而 D 的活是"补材料 + 交台账"，所以"成没成"只有
+        `_deliver_carried_to_b` 的返回值知道。汇报写在它之后，且**失败也汇报**
+        （B 受控拒时写"没进台账、原因是…"），绝不把拒收说成办成了。
+
+        ## 为什么走收件箱而不是 summon
+        `D 的出边` 不含 `G`（业主：「D 不能指向 G，G 是 D 的父，是向上汇报完成任务」）。
+        向上汇报的现成机制是子任务收尾的那条私聊：`send_message` 落一条
+        `agent_message`，父下一趟进循环时由 `inbox_digest` 读进开场提示词。
+        于是这里只写一条留言，不碰边表、不新增工具。
+
+        ## 内容只有指针
+        `stmt_id` / `manuscript_id` / `deps_written` / 拒信原文（截断）；命题正文与
+        证明正文一律不写（G 拿东西一律去台账读，见 `specs/g.py` 的转交规则）。
+        """
+        results = [dict(r) for r in (delivery.get("results") or []) if isinstance(r, Mapping)]
+        ok_rows = [r for r in results if r.get("ok")]
+        bad_rows = [r for r in results if not r.get("ok")]
+        if not results:
+            return {"checked": False, "sent": False, "to": "", "msg_id": "",
+                    "success": [], "failed": [],
+                    "why": ("携带单是空的 ⇒ 这一趟没有向 B 递任何东西，也没有可汇报的收录结果"
+                            "（不拿一条空汇报冒充「已完成」）")}
+        to_role, basis = self._parent_of_this_summon()
+        if not to_role:
+            return {"checked": False, "sent": False, "to": "", "msg_id": "",
+                    "success": [self._delivery_pointer(r) for r in ok_rows],
+                    "failed": [self._delivery_pointer(r) for r in bad_rows],
+                    "why": f"判不出父是谁：{basis} ⇒ 这条汇报没发（不猜收件人）"}
+        lines = [f"父：{to_role}（依据 {basis}）。这是 D 交付这一笔的完成汇报（只带指针，正文在台账）。"]
+        if ok_rows:
+            lines.append(f"- B **收录成功** {len(ok_rows)} 条：")
+            lines.extend(f"  - {self._pointer_text(r)}" for r in ok_rows)
+            lines.append("  - 命题正文 / 证明正文请去台账读（`statements` 行 / `ledger.resolve`），"
+                         "本条不含正文。")
+        if bad_rows:
+            lines.append(f"- B **受控拒 / 没进台账** {len(bad_rows)} 条（不是办成了）：")
+            lines.extend(f"  - {self._pointer_text(r)}；拒信：{str(r.get('error') or '')[:240]}"
+                         for r in bad_rows)
+        if not bad_rows:
+            lines.append("- 没有受控拒的条目。")
+        body = "\n".join(lines)
+        from .. import sessions as SS
+
+        try:
+            from ..conductor import current_session as _cs
+
+            sroot, sid = _cs()
+        except Exception:  # noqa: BLE001 —— 读不到会话身份就退回工作区根 + 当天会话
+            sroot, sid = "", ""
+        session_root = Path(sroot) if str(sroot or "") else Path(str(self.store.root))
+        try:
+            from ..agent_loop import send_message
+        except Exception as exc:  # noqa: BLE001 —— 发不出去要如实记，不许静默
+            return {"checked": True, "sent": False, "to": to_role, "msg_id": "",
+                    "success": [self._delivery_pointer(r) for r in ok_rows],
+                    "failed": [self._delivery_pointer(r) for r in bad_rows],
+                    "why": f"消息通道不可用（{type(exc).__name__}: {exc}）⇒ 汇报没发出"}
+        msg_id, problem = send_message(
+            session_root, sender="D", to=to_role,
+            subject=(f"{self.PARENT_REPORT_SUBJECT}：收录 {len(ok_rows)} 条"
+                     + (f" / 拒 {len(bad_rows)} 条" if bad_rows else "")),
+            body=body, sid=str(sid or "") or None, by_framework=True,
+        )
+        return {"checked": True, "sent": bool(msg_id) and not problem, "to": to_role,
+                "msg_id": str(msg_id or ""), "session_root": str(session_root),
+                "sid": str(sid or ""),
+                "success": [self._delivery_pointer(r) for r in ok_rows],
+                "failed": [self._delivery_pointer(r) for r in bad_rows],
+                "why": str(problem or "")}
+
+    @staticmethod
+    def _delivery_pointer(row: Mapping[str, Any]) -> dict[str, Any]:
+        """一条交付结果的指针（不含正文）。"""
+        return {
+            "stmt_id": str(row.get("stmt_id") or ""),
+            "statement_id": str(row.get("statement_id") or ""),
+            "manuscript_id": str(row.get("manuscript_id") or ""),
+            "deps_written": int(row.get("deps_written") or 0),
+            "ok": bool(row.get("ok")),
+            "error": str(row.get("error") or "")[:240],
+        }
+
+    def _pointer_text(self, row: Mapping[str, Any]) -> str:
+        p = self._delivery_pointer(row)
+        bits = []
+        if p["stmt_id"]:
+            bits.append(f"stmt:{p['stmt_id']}")
+        if p["statement_id"]:
+            bits.append(f"在册行 stmt:{p['statement_id']}")
+        if p["manuscript_id"]:
+            bits.append(f"稿 {p['manuscript_id']}")
+        bits.append(f"deps_written={p['deps_written']}")
+        bits.append("台账落点 statements 行（读它拿正文）")
+        return "；".join(bits)
+
+    def _parent_report_section(self, report: Mapping[str, Any]) -> list[str]:
+        """把"向上汇报"的读数画进报告（成没成、发给谁、消息号、逐条指针）。"""
+        lines = ["## 8. 向上汇报（子→父；只带指针，不带正文）", ""]
+        if not report:
+            return lines + ["（这一版没有这一节）", ""]
+        if not report.get("checked"):
+            lines.append(f"- **没查成 / 没发**：{report.get('why') or ''}")
+            return lines + [""]
+        if not report.get("sent"):
+            lines.append(f"- **没发出**（收件人 {report.get('to') or '?'}）："
+                         f"{report.get('why') or ''}")
+        else:
+            lines.append(f"- 已发：`{report.get('msg_id')}` → {report.get('to')}"
+                         f"（会话 `{report.get('sid') or '当天'}`）")
+        for tag, key in (("收录成功", "success"), ("受控拒 / 没进台账", "failed")):
+            rows = list(report.get(key) or [])
+            lines.append(f"- {tag}：{len(rows)} 条")
+            for r in rows:
+                bits = [f"stmt:{r['stmt_id']}" if r.get("stmt_id") else "（未发号）",
+                        f"稿 {r['manuscript_id']}" if r.get("manuscript_id") else "",
+                        f"deps_written={r.get('deps_written')}",
+                        ("正文在 statements 行，本条不含正文" if r.get("ok")
+                         else f"拒信：{r.get('error') or ''}")]
+                lines.append("  - " + "；".join(b for b in bits if b))
+        return lines + [""]
+
 
     def _deliver_f_manuscript_row(self, row: Mapping[str, Any]) -> dict[str, Any] | None:
         """把携带单上一条"F 的登记条目（命题号还没发）"递给 B（2026-11-07 解耦）。
