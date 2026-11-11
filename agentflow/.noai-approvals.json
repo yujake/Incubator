@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T19:32:06+08:00",
+  "generated_at": "2026-11-11T19:49:43+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -129,10 +129,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "ee9c211a25e759d9dc011e653ae29208bd231ddf9de81105903da4fc78df1377",
+      "sha256": "8ee9f310de73c2c2cba135f916758747e71f651236d78f92dc659d9645770952",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-11 P1 七件一致化（业主放行禁改区）：B 的 open_polish_copy 入表 / B·D·F·V 题面按新口径改写 / D→B 指针支分配 path_group / submission_reading 暴露成工具；另两份 golden 按现值重冻。reviewers=0（登记≠批准）",
+      "change_note": "2026-11-11 丙组 R4：capabilities.two_layer_reconciliation 的 docstring 现读沿革 66=25+41 → 67=25+42（B 的 open_polish_copy 进 unmatched）；只改注释，声明面（ALLOWED_EDGES/CAPABILITIES 等）一字未动。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 仍需 2 名 reviewer 逐行走查。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
