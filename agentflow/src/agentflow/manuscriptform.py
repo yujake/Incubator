@@ -63,12 +63,12 @@ FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 #: 本模块的角色名 ⇒ 表里的族名（命名与解析都只走表；这里只做一层翻译）。
 _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 
-#: 「一个稿号一份稿」：这几族的新写路径**不带 `-pN` 后缀**（业主 2026-11-11 裁定）。
+#: 「一个稿号一份稿」：这几族的新写路径不带 `-pN` 后缀（业主 2026-11-11 裁定）。
 #:
 #:     「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
 #       应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
 #:
-#: 落在结构上：B 的落点永远 `reports/b-proof-<B稿号>.md`；同一命题的下一版**就地改**
+#: 落在结构上：B 的落点永远 `reports/b-proof-<B稿号>.md`；同一命题的下一版就地改
 #: 那一份（`proofregistry` 的 `mode=rewritten` 只动头部元信息与 `## 证明`，不新名）。
 #: 稿头的 `- 证明号：N` 仍可以递增（那是台账读数，不是文件名的一部分）。
 #:
@@ -751,6 +751,22 @@ def promote_formal(root: Any, *, family: Any = FAMILY_F, statement_id: Any = "",
             why = (f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ 没有可转正的稿")
             out.update(problem={"kind": "source_missing", "stage": "read",
                                 "why": why}, refused="source_missing", why=why)
+            return out
+    # ---- 2026-11-11（业主裁定 ②）：拿签之后冻结 —— 老盘搬家也不许动已签的稿 -----
+    #
+    # 转正（`promote`）会改名 / 搬走源稿：那是"改一份稿"的另一种形态，已拿签的
+    # 那一份只读。判据与三处写口同源（`manuscriptfreeze`，数据只来自 V 的颁发表），
+    # 拒信逐字同一句 —— 不在这里另写一套说法。
+    if rel:
+        from . import manuscriptfreeze as _FZ
+
+        _frozen = _FZ.freeze_reading(root, rel)
+        if _frozen.get("frozen"):
+            out.update(path=str(out.get("path") or ""),
+                       problem={"kind": _FZ.MANUSCRIPT_FROZEN, "stage": "read",
+                                "why": str(_frozen.get("message") or "")},
+                       refused=_FZ.MANUSCRIPT_FROZEN,
+                       why=str(_frozen.get("message") or ""))
             return out
     got = commit_manuscript(
         root, family=family, text=body, statement_id=statement_id,

@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T08:01:25+08:00",
+  "generated_at": "2026-11-11T13:22:36+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -478,10 +478,10 @@
       "path": "src/agentflow/tools/fs_tools.py",
       "glob": "src/agentflow/tools/fs_tools.py",
       "category": "auth-audit",
-      "sha256": "128d1b913359f37eddbd9502660b4ea728aa23be837e72ef0765c2cb31ef792d",
+      "sha256": "a89452b90a4271addfb59dfef687858570f796f2a5951bdbed90ea150ec35a54",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-10 D5（手稿形名字保留档）：RESERVED_ARTIFACT_TABLE 新增规则档 manuscript:*，A/B 各一行；匹配走 manuscriptfamily.classify_name（tier in {family,legacy}），notes/ 下手稿形名字与 -v2 历史名对 A/B 的 fs.write / fs.edit 受控拒，notes/f-proof-x.md（bad_name）与普通笔记仍放行；F/D/M 与既有 prefix:reports/... 四族行逐字未动。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 这条仍需 2 名 reviewer 逐行走查。",
+      "change_note": "2026-11-11 丁：拿签后冻结 —— fs.write/fs.edit/fs.delete/fs.move 四个写口共用 _reserved_refusal，新增 manuscriptfreeze 判据（只读 V 的颁发表）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

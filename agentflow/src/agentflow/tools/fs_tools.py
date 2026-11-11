@@ -774,6 +774,35 @@ def _d_proof_body_refusal(rel: str, role: str, content: Any,
                 kind=RESERVED_ARTIFACT_KIND, role="D")
 
 
+def _manuscript_frozen(rel: str, role: str,
+                       root: Path | None) -> ToolResult | None:
+    """拿签之后冻结（业主 2026-11-11 裁定 ②）：这一份稿只读 ⇒ 受控拒。
+
+    判据本体在 :func:`agentflow.manuscriptfreeze.freeze_reading`（数据只来自 V 的
+    颁发表）；这里只把它的那句话原样变成一次 `fail`。三档分开：
+
+    - `state=signed` ⇒ 「已经拿签（签 sha=…），只读；要改就开 B 的优化副本」；
+    - `state=edited_after_sign` ⇒ 同一句 + 「签后改过正文（违规态）」；
+    - `state=unchecked` ⇒ 「判不了这一份签过没有，按只读处理」（没查成 ≠ 没签）。
+
+    不带 `root`（`fs.delete` / `fs.move` 的旧调用点）时**不拦**：那一档连"签过没有"
+    都读不到，硬拦会把所有删除/改名一起拒掉。四个写口现在都传 `root`。
+    """
+    if root is None:
+        return None
+    from .. import manuscriptfreeze as _FZ
+
+    got = _FZ.freeze_reading(root, rel)
+    if not got.get("frozen"):
+        return None
+    message = str(got.get("message") or "").strip()
+    if not message:
+        message = _FZ.FREEZE_MESSAGE.format(sha=str(got.get("sign_sha") or ""))
+    return fail(message, path=rel, kind=_FZ.MANUSCRIPT_FROZEN,
+                role=str(role or ""), state=str(got.get("state") or ""),
+                sign_sha=str(got.get("sign_sha") or ""))
+
+
 def _reserved_refusal(rel: str, role: str, content: Any = None,
                       root: Path | None = None) -> ToolResult | None:
     """保留路径的统一拒绝（不在保留表里 ⇒ None，调用方照旧往下走）。
@@ -793,6 +822,15 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
             RESERVED_MAPPING_MESSAGE.format(path=rel),
             path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
         )
+    # ---- 2026-11-11（业主裁定 ②）：拿签之后冻结 —— 这一份稿只读 -----------------
+    #
+    # 位置在"保留表"之前：已拿签的稿对**每一个角色**都只读（保留表只管 A/B/F/M/D
+    # 那几族"谁都不许手写"），而冻结管的是"它已经签住了，谁都别再改"。判据只有一处
+    # （`manuscriptfreeze.freeze_reading`，数据来自 V 的颁发表）—— 这里只把拒信原样
+    # 交出去，不自己判"签没签"。
+    frozen = _manuscript_frozen(rel, role, root)
+    if frozen is not None:
+        return frozen
     if _reserved_ledger(rel):
         return fail(
             RESERVED_LEDGER_MESSAGE.format(path=rel),
@@ -1514,7 +1552,7 @@ def fs_delete(ctx: FsContext, *, path: str, recursive: bool = False) -> ToolResu
             kind="refuse_root",
             deleted=False,
         )
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
     if denied is not None:
         return denied
     if not target.exists() and not target.is_symlink():
@@ -1569,7 +1607,7 @@ def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
     if s == ctx.root or d == ctx.root:
         return fail("拒绝移动工作区根", src=_rel(ctx, s), dst=_rel(ctx, d), kind="refuse_root")
     for target in (s, d):
-        denied = _reserved_refusal(_rel(ctx, target), _caller_role())
+        denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
         if denied is not None:
             return denied
     if not s.exists() and not s.is_symlink():

@@ -252,7 +252,7 @@ class _Manuscript:
         if shown_concepts:
             # 先说清这一批是什么：混在可引命题里而不加这句，模型会照着引（而那是注定
             # 被拒的）。"可引门只放命题"是原因，"可以读"是它能做的事。
-            lines.append("以下概念已签（`reviewed=true`），**可读但不可引**：可引门只放"
+            lines.append("以下概念已签（`reviewed=true`），可读但不可引：可引门只放"
                          "命题（概念没有等级轴，不在可引池里）—— 读得到，但写进 `cites` "
                          "会被拒。")
             for row in shown_concepts:
@@ -381,6 +381,21 @@ class _Manuscript:
             return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
                     "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
                     "why": f"手稿号 {mid!r} 拼不出规范路径 ⇒ 这一份稿不落盘"}
+        # ---- 2026-11-11（业主裁定 ②）：已拿签的那一份只读 -------------------------
+        #
+        # 这是 F 的手稿写口：`attack.step(product=…)` 与 `proof_manuscript` 直调都
+        # 走这里。同一子目标会沿用同一个稿号（`_resolve_manuscript_id`）⇒ 那一份稿已经
+        # 拿签时，这一笔就是"改一份只读的稿"：一个字节都不写，受控拒（拒信与 `fs.*`
+        # 那一侧同源：`manuscriptfreeze` 一处判据）。
+        from .. import manuscriptfreeze as _FZ
+
+        _frozen = _FZ.freeze_reading(root, rel)
+        if _frozen.get("frozen"):
+            return {"ok": False, "path": rel, "text": "", "rows": [], "preview": {},
+                    "named_by": "manuscript", "preserved": False,
+                    "manuscript_id": mid, "refused": _FZ.MANUSCRIPT_FROZEN,
+                    "kind": _FZ.MANUSCRIPT_FROZEN, "freeze": dict(_frozen),
+                    "why": str(_frozen.get("message") or "")}
         preview = self.preview_dependencies(text)
         # ---- A1：这一份"预写"不许擦掉已经登记的那一条 ------------------------------
         #
