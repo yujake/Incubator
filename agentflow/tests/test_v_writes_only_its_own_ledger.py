@@ -97,8 +97,11 @@ V_UNIVERSAL_WRITE_TOOLS: frozenset[str] = frozenset({
     "conductor.post_task",
 })
 
-#: V 的完整工具面（2026-11-05 实测）。为什么钉死：`for_role("V")` 少一件/多一件如果是
+#: V 的完整工具面（2026-11-11 实测）。为什么钉死：`for_role("V")` 少一件/多一件如果是
 #: 静默发生的，下面"声明 == 行为"就可能在缩小的面上成立（真空通过）。
+#: 2026-11-11：多一件 `manuscripts.submission_reading`（`4f875733` 把此前零调用点的
+#: `manuscriptsubmission.submission_reading` 暴露成工具，roles=全部可召唤角色、只读）——
+#: 这是读数变了（工具面 +1），不是 V 的写面变了：它是 `side_effect="read"`。
 V_FACE: frozenset[str] = frozenset({
     "table.list", "table.get", "table.count", "table.schema", "table.search",
     "clock.now", "clock.timer_start", "clock.alarm_start", "clock.periodic_start",
@@ -109,7 +112,7 @@ V_FACE: frozenset[str] = frozenset({
     "trace.children",
     "verify.verify_proof", "verify.list_verifications", "verify.read_proof",
     "conductor.escalate", "conductor.ack", "conductor.post_task",
-    "manuscripts.read", "manuscripts.list",
+    "manuscripts.read", "manuscripts.list", "manuscripts.submission_reading",
 }) | V_UNIVERSAL_WRITE_TOOLS
 
 #: 例外表里每条登记"它写的是自己的什么"的「逐条关键词」（d 的判据输入）。

@@ -39,8 +39,9 @@ from agentflow.verifications import (
 #: （"派 V 只有 F 与 B 两个入口"）⇒ 32；2026-10-22 晚「L 的协作面」（+B→L、+B→D、+L→C）
 #: ⇒ 35；2026-10-23 晚「加 E 派 V 的边」（业主逐字：「E 写的报告要能落下来，且 V 也要会审
 #: 这种东西，加 E 派 V 的边」）⇒ 36；2026-11-05 业主裁定「取消出边 F→D」＋「V 不应该有
-#: 出边」⇒ 36 → 34，恰好 −F→D、−V→F 两条（V 的入口 F / B / E 一条没少）。
-EXPECTED_EDGE_TOTAL = 34
+#: 出边」⇒ 36 → 34，恰好 −F→D、−V→F 两条（V 的入口 F / B / E 一条没少）；2026-11-11
+#: 业主改 G/H 的出边集（`G`: {A,D,E,F} → {C,D,H} 净 −1；`H`: {A,E,G} → {A,E} −1）⇒ 34 → 32。
+EXPECTED_EDGE_TOTAL = 32
 
 #: V 的入口（2026-10-20 业主裁定逐字：「派 V 只有 F（自产证明）与 B（文献侧内容）
 #: 两个入口；M 不再直连 V」；2026-10-23 晚再加 E —— E 跑出穷举证据之后要能直接派 V 会审）。
@@ -76,7 +77,8 @@ def _edge_problems(d_edges, table, m_edges=None) -> list[str]:
     if total != EXPECTED_EDGE_TOTAL:
         out.append(f"边总数是 {total}，不是 {EXPECTED_EDGE_TOTAL} —— "
                    "2026-10-20 的裁定：D→V 没有加，`M→V` 撤掉一条（33 → 32）；"
-                   "2026-10-22/23 追加 L 与 E 之后才是今天的数（见 EXPECTED_EDGE_TOTAL 的沿革）")
+                   "2026-10-22/23 追加 L 与 E、2026-11-05 撤 F→D 与 V→F、"
+                   "2026-11-11 改 G/H 出边集之后才是今天的数（见 EXPECTED_EDGE_TOTAL 的沿革）")
     lost = sorted(D_EDGES - derived)
     if lost:
         out.append(f"D 少了这些边 {lost} —— 反真空：其余五条（A/B/C/E/F）一条都不许少")
@@ -94,7 +96,7 @@ def _edge_problems(d_edges, table, m_edges=None) -> list[str]:
 
 
 def test_d_has_no_edge_to_v_and_the_total_is_unchanged() -> None:
-    """① 正控：D 的出边里没有 `V`、M 的出边里也没有 `V`，边总数 36，两边的其余边一条没少。"""
+    """① 正控：D 的出边里没有 `V`、M 的出边里也没有 `V`，边总数 32，两边的其余边一条没少。"""
     specs = builtin_specs()
     problems = _edge_problems(specs["D"].edges, C.ALLOWED_EDGES, specs["M"].edges)
     assert problems == [], ("D/M 的出边与 2026-10-20 的裁定不一致：\n  - "

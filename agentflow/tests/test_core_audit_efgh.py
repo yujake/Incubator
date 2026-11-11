@@ -495,14 +495,29 @@ def test_agent_g_writes_documents_only_through_normalize_claims():
     而不是靠读代码记得。
     """
     calls = _role_calls_by_function("agent_g.py")
+    #: 2026-11-11 体量拆分：`_Revise.revise` 的三道闸搬进了
+    #: `agent_g/revise_gates.py::checked_claims`（判断、顺序、异常类型与消息逐字未改）。
+    #: 机械判据看不见跨函数的那一层 ⇒ 这里把"委派"也纳入，但**要求被委派的函数自己
+    #: 两条都跑**。强度不变：每个写 `documents` 的事务要么体内直接跑两道闸，要么只经
+    #: 这一个已验证的闸门函数 —— "少一道"两种形态都会红。
+    gate = "checked_claims"
     checked = 0
     for fname, names in calls.items():
         if "tx" not in names or fname == "_selftest":  # 自检的夹具播种，不是写稿路径
             continue
         checked += 1
+        if gate in names:
+            delegated = calls.get(gate, set())
+            assert {"normalize_claims", "check_citations"} <= delegated, (
+                f"{fname} 把闸门委派给 {gate}，但 {gate} 自己没跑全两道闸："
+                f"{sorted(delegated)}")
+            continue
         assert "normalize_claims" in names, f"{fname} 写 documents 却没跑 normalize_claims"
         assert "check_citations" in names, f"{fname} 写 documents 却没核引用是否存在"
     assert checked >= 1, "扫描没找到任何写库事务 —— 断言本身失效了"
+    assert {"normalize_claims", "check_citations"} <= calls.get(gate, set()), (
+        f"闸门函数 {gate} 自己没跑全两道闸（上面的委派分支不能替它担保）："
+        f"{sorted(calls.get(gate, set()))}")
 
 
 def test_agent_g_source_never_builds_a_claim_literal_without_citations():

@@ -9,7 +9,7 @@
 这一组守四件事：
 1. 四档齐全（`in_self` / `via_edges` / `unreachable` / `unknown`），且 `unknown` 不许折成"做得到"；
 2. 真表上的读数（含本轮新加的 `B → H`：`B` 自己没有语义回验，但一跳够得到 `H`）；
-3. 闭包是真的按出边走（`A → B → H → G` 三跳那条就是"只看被派人自己"会漏掉的形态）；
+3. 闭包是真的按出边走（`A → B → D → E` 三跳那条就是"只看被派人自己"会漏掉的形态）；
 4. 判不了时说得出为什么（角色/动作名认不出各有一条理由）。
 """
 from __future__ import annotations
@@ -38,13 +38,17 @@ def test_an_action_reachable_through_one_edge_is_via_edges() -> None:
 
 
 def test_the_closure_really_walks_more_than_one_hop() -> None:
-    """闭包按出边一层层走：`A` 自己不会写稿，但 `A → B → H → G` 够得到 `build_document`。
+    """闭包按出边一层层走：`A` 自己不会跑实验，但 `A → B → D → E` 够得到 `run_experiment`。
 
     "只看被派人自己的动作表"会把这一件读成"面内做不成"，而它其实三跳就够得到。
+
+    2026-11-11 业主改边集：`H` 的出边去掉 `G`、`G` 的入边只剩 `M` ⇒ 原来那条
+    `A → B → H → G`（`build_document`）从 `A` 这一支已经不可达；换一条同形态的
+    多跳路（仍是三跳、仍不是"被派人自己有"）：`A → B → D → E` 拿 `run_experiment`。
     """
-    got = S.reach_fit("A", "build_document")
+    got = S.reach_fit("A", "run_experiment")
     assert got["verdict"] == "via_edges", got
-    assert got["hops"][0] == "A" and got["hops"][-1] == "G", got
+    assert got["hops"][0] == "A" and got["hops"][-1] == "E", got
     assert len(got["hops"]) - 1 >= 2, got
 
 
