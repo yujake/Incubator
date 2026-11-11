@@ -196,8 +196,8 @@ def test_the_scan_path_supersedes_too(store: Store, monkeypatch) -> None:
     rows = _rows(store)
     assert rows[old[0]["finding_id"]]["status"] == "superseded"
     assert rows[old[0]["finding_id"]]["superseded_by"] == new[0]["finding_id"]
-    assert second["superseded"] and second["superseded"][0]["finding_id"] == old[0]["finding_id"], (
-        second["superseded"])
+    listed = {f["finding_id"]: f for f in RV.list_findings(store, doc_id=DOC)["findings"]}
+    assert listed[old[0]["finding_id"]]["superseded_by"] == new[0]["finding_id"]
 
 
 # ============================================================ 老行的"递增轮次"

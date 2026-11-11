@@ -1394,15 +1394,12 @@ def record_finding(
         return {"checked": True, "created": False, "duplicate_skipped": 1,
                 "finding_id": str(row["finding_id"]), "doc_id": doc_id,
                 "kind": kind_s, "level": str(row.get("level") or level_s),
-                "round": round_val, "status": status_new,
-                # 显式复核只处置这一条，不产生"同处的新判词" ⇒ 不覆盖任何东西。
-                "superseded": []}
+                "round": round_val, "status": status_new}
     if dup is not None:
         return {"checked": True, "created": False, "duplicate_skipped": 1,
                 "finding_id": str(dup.get("finding_id") or ""), "doc_id": doc_id,
                 "kind": kind_s, "level": str(dup.get("level") or level_s),
-                "round": int(dup.get("round") or 1), "status": str(dup.get("status") or ""),
-                "superseded": []}
+                "round": int(dup.get("round") or 1), "status": str(dup.get("status") or "")}
     with store.tx("review_findings", actor=actor,
                   note=f"record_finding doc:{doc_id} round {round_val}") as tx:
         row = S.ReviewFinding(
@@ -1424,15 +1421,12 @@ def record_finding(
         tx.upsert("review_findings", payload)
         # 乙（2026-11-11）：同一 (kind,target) 的更早 open 判词被这一条覆盖 ——
         # 与"写新判词"同一笔事务（见 `_supersede_prior_open` 的语义边界）。
-        superseded = _supersede_prior_open(
+        _supersede_prior_open(
             tx, existing, kind=kind_s, target=target_s,
             new_round=round_val, new_id=str(payload["finding_id"]))
     return {"checked": True, "created": True, "duplicate_skipped": 0,
             "finding_id": payload["finding_id"], "doc_id": doc_id, "kind": kind_s,
-            "level": level_s, "round": round_val, "status": "open",
-            # 读数（不在 `@tool` 的 returns 声明里 —— 声明的键集合一个字未动）：
-            # 这一条覆盖掉了哪几条旧判词（每条带 finding_id / round / superseded_by）。
-            "superseded": superseded}
+            "level": level_s, "round": round_val, "status": "open"}
 
 
 def _open_findings_gate(*, existing: Sequence[Mapping[str, Any]],
@@ -1515,7 +1509,6 @@ def _unreviewable_review(
         "round": round_no,
         "new_findings": [],
         # 乙：这一趟没审 ⇒ 一条旧判词也没被覆盖（键与正常路径逐字相同）。
-        "superseded": [],
         "duplicate_skipped": 0,
         "reopened": [],
         "error_count": 0,
@@ -1661,8 +1654,6 @@ def review_document(
         pending.append(f)
 
     new_findings: list[dict] = []
-    #: 乙：这一轮被新判词覆盖掉的旧 open 判词（读数；每条带 superseded_by）。
-    superseded: list[dict] = []
     if pending:
         with store.tx(
             "review_findings", actor=actor, note=f"review_document doc:{doc_id} round {round_no}"
@@ -1702,9 +1693,9 @@ def review_document(
                 tx.upsert("review_findings", payload)
                 # 乙（2026-11-11）：机械扫描产出的这一条同样是"这一轮的新判词" ——
                 # 同一 (kind,target) 的更早 open 判词被它覆盖（更晚轮次才覆盖）。
-                superseded.extend(_supersede_prior_open(
+                _supersede_prior_open(
                     tx, existing, kind=str(f["kind"]), target=str(f["target"]),
-                    new_round=round_no, new_id=str(payload["finding_id"])))
+                    new_round=round_no, new_id=str(payload["finding_id"]))
                 new_findings.append(payload)
 
     # ---- 重开"标了 fixed 但其实还在"的发现（防止 G 用点状态的方式修好问题）
@@ -1884,10 +1875,6 @@ def review_document(
         "checked": True,
         "round": round_no,
         "new_findings": new_findings,
-        # 乙（2026-11-11）：这一轮被新判词覆盖掉的旧 open 判词（读数；每条带
-        # `finding_id` / `round` / `superseded_by`）。它不在 `returns=` 声明里 ——
-        # 声明的键集合一个字未动（该判据是"声明 ⊆ 实现"，加读数不破它）。
-        "superseded": superseded,
         "duplicate_skipped": duplicate_skipped,
         "reopened": reopened,
         "error_count": scan["error_count"],
