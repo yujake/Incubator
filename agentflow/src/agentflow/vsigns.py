@@ -4118,7 +4118,9 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
        `artifact_sha` 同一把尺：`ARTIFACT_SHA_RULE`）。
     2. 凭据 `out/vsigns/<sha>.json`（`sign_of`）。
     3. 文件在不算签：`_recomputable` 复算不过 ⇒ `unbacked`（带理由码）；复算通过
-       但 `statement_id` / `proof_no` 对不上 ⇒ `borrowed`；都对得上 ⇒ `signed`。
+       但归属对不上 ⇒ `borrowed`；对得上 ⇒ `signed`。归属不按号比：新签文件
+       不写 `proof_no`（2026-11-11 业主裁定，见 `_sign_is_for_this_path`），身份是
+       正文 sha + `statement_id` + 稿路径；老签里带 `proof_no` 的仍按老口径比号。
     4. 没有凭据 ⇒ 数票：该 sha 上最近一趟 `review_call` 内、从 pass 1 起连续
        `verifications.is_a_vote` 的轮数（遇到第一个非票就停；后面的 fault 不抹掉
        已经数到的票）。停因按 D3 的 `fault_kind` 分：
@@ -4296,6 +4298,45 @@ def _filed_reading(*, store: Any, statement_id: str, sha: str,
     return filed, abandoned, (f"{sid}#p{match_no} 在册；第 3 位={filed}（{abandoned_why}）")
 
 
+def _sign_is_for_this_path(sign: Mapping[str, Any], *, sid: str,
+                           no: int) -> tuple[bool, str]:
+    """这份签是不是「`stmt:<sid>` 的第 `no` 号证明」的签（`borrowed` 的唯一判据）。
+
+    ## 2026-11-11（业主裁定：`proof_no` 在签侧退役）⇒ 新签不按号比
+
+    新签文件的身份只有三样：正文 sha（`artifact_sha`，进到这一格之前已经复算过）、
+    `statement_id`、稿路径（`artifact_path`）。`proof_no` 那一格不写 —— 于是把
+    "签里的号 == 问的号"当判据，会把同一份证明的第 2 条路径读成 `borrowed`
+    （"借光不算签"），而它没有借谁的：路径号是 B 收录时才分配的，签在分配之前
+    就已经盖在那份正文上了。读侧的三态是"这一份正文有没有签"，不是"号对不对得上"。
+
+    ## 老签照旧按号比
+
+    签文件里有 `proof_no`（2026-11-11 之前发的）⇒ 仍走老口径：号对不上就是
+    借光。那是那些文件唯一可用的归属凭据；不能因为新口径就把已有的那一格读成
+    "没这一格 ⇒ 放行"（老盘兼容是读得出来，不是把门放宽）。
+
+    ## 三态
+
+    `statement_id` 两边都有才比：未在册那一档签的 `statement_id` 是空串（合法），
+    不能因此判成借光；号认不出（`"abc"`）⇒ 判不了归属，按借光处理（不是放行）。
+    """
+    cred_sid = str(sign.get("statement_id") or "").strip()
+    if sid and cred_sid and cred_sid != sid:
+        return False, f"它是 stmt:{cred_sid} 的签，不是 stmt:{sid} 的"
+    raw_no = sign.get("proof_no")
+    if raw_no in (None, ""):
+        return True, ""
+    try:
+        cred_no = int(raw_no)
+    except (TypeError, ValueError):
+        return False, f"签文件里的 proof_no={raw_no!r} 认不出（判不了归属）"
+    if cred_no != int(no):
+        return False, (f"它是 stmt:{cred_sid or '（空）'}#p{cred_no} 的签，"
+                       f"不是 stmt:{sid}#p{no} 的")
+    return True, ""
+
+
 def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
                              sid: str, no: int) -> dict[str, Any]:
     """有签文件这一支的结论（`signed` / `borrowed` / `unbacked`；本模块不写盘）。"""
@@ -4317,17 +4358,11 @@ def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
                    why=f"这一份签没查成：{cred.get('why') or ''}")
         return out
     if cred.get("recomputable"):
-        cred_sid = str(sign.get("statement_id") or "").strip()
-        try:
-            cred_no = int(sign.get("proof_no") or 1)
-        except (TypeError, ValueError):
-            cred_no = 0
-        if (sid and cred_sid and cred_sid != sid) or cred_no != no:
+        same_path, why_not = _sign_is_for_this_path(sign, sid=sid, no=no)
+        if not same_path:
             out.update(state="borrowed", votes=0,
                        votes_source=(cred["tier"] or "none"),
-                       why=(f"`{cred['path']}` 复算通过，但它是 stmt:"
-                            f"{cred_sid or '（空）'}#p{cred_no} 的签，不是 stmt:"
-                            f"{sid}#p{no} 的 ⇒ 借光不算签"))
+                       why=(f"`{cred['path']}` 复算通过，但{why_not} ⇒ 借光不算签"))
             out["need"] = int(cred["need"] or out["need"])
             return out
         need = int(cred["need"] or out["need"])
