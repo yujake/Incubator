@@ -10,7 +10,7 @@
 | 工具 | 谁用 | 作用 ||---|---|---|| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 
 `id` —— 它不是工具：走循环形状 `handoff` || `manuscripts.read` | 全部可召唤角色 | 按编号读全文（留言里传的就是这个编号） ||
 `manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
-`manuscripts.submission_reading` | 全部可召唤角色 | 读一份**证明稿**的提交状态（E/F 收工自动提交、B 收录即提交）：产出方 / 已签 / 已提交 / 时刻 / `via`（2026-11-11 补：`manuscriptsubmission.submission_reading` 此前 src 里零调用点，E 读不到自己的提交状态） |
+`manuscripts.submission_reading` | 全部可召唤角色 | 读一份证明稿的提交状态（E/F 收工自动提交、B 收录即提交）：产出方 / 已签 / 已提交 / 时刻 / `via`（2026-11-11 补：`manuscriptsubmission.submission_reading` 此前 src 里零调用点，E 读不到自己的提交状态） |
 ## 为什么主控 M 不在这张工具面上（口径，别改回去）
 M 的工具面是"编排面 + 文件面白名单"（`draft/37` §38/§57，判据
 `tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），而 
@@ -91,9 +91,8 @@ def manuscripts_list(store, to: str = "", sender: str = "", limit: int = 50) -> 
 
 @tool(
     "manuscripts.submission_reading",
-    "读一份**证明稿**的提交状态（产出方 + 已签 + 已提交 + 时刻 + via）：E/F 的稿走收工自动提交"
-    "（`closing_auto_submit`），B 的稿走收录（`ingested_to_ledger`）；给稿路径或六位稿号之一。"
-    "「未提交」与「没查成」分开报（`checked=false` 是后者）。",
+    "读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、"
+    "B 走收录）；「未提交」与「没查成」分开报。",
     {"type": "object",
      "properties": {
          "manuscript": {"type": "string",

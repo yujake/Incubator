@@ -1178,6 +1178,23 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "证明就另开一份稿（新稿号）」；`proof_no` 在 F 的送审参数表里不再传（老盘 -pN"
              "只读兼容那句保留）。台账侧（B/D）的 1..N 口径不变：1..N 现在是 N 份稿各一条"
              "路径。十一格里只有 F 换值（4306d8ed…）。facts 键集仍 15 格、落点没动。"},
+    # p276 → p277（2026-11-11，P1 七件一致化 + G/H 边集）：facts 键集一格没动
+    # （还是 15 格）—— 本批只改题面正文（B/D/F/V 四格的 policy / 动作摘要）与工具面
+    # （`manuscripts.submission_reading` 多一件、进 `tools_lines` ⇒ 十一格的工具清单各多
+    # 一行），外加两份 golden 的重冻；没有哪一格事实换过落点（system ↔ user），所以
+    # count / keys_sha256 与 p276 同值。
+    {"version": "p277", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p277（2026-11-11，P1 七件一致化）：上游 —— ① B 的 ACTIONS 补 "
+             "`open_polish_copy`（冻结后的补救路径从结构上不可达变成可达），`own.*` 不进 "
+             "`tools_lines`；② B 的题面退役 -pN / proof_no 教法（B 的稿号是自己的号段，"
+             "第二份证明是另一份稿）；③ D 只递稿路径、路径号由 B 收录时分配；④ V 的签"
+             "身份改成正文 sha + 稿路径；⑤ F 题面/手册补「已拿签的稿不许就地改」；"
+             "⑥ D→B 生产路（register_statement 指针支）也分配路径号；⑦ "
+             "`manuscripts.submission_reading` 暴露成工具（全部角色、只读）、进 "
+             "`tools_lines`。另同批 G/H 的边集按业主裁定改（G 出边 C/D/H、H 去掉 G）。"
+             "十一格全换：工具清单多一行（十一格都换）+ B/D/F/V 四格的段文本换值。"
+             "facts 键集仍 15 格、落点没动。"},
 
 )
 

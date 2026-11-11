@@ -3925,7 +3925,31 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （facts 键集仍 15 格、count / keys_sha256 与 p275 同值）；
 #: `attack.step` / `verify_proof` 的 returns 变了 ⇒ 两份 golden（tool_surface_snapshot /
 #: 声明基线）按现值重冻；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
-PROMPT_VERSION = "p276"
+#: p276 → p277（2026-11-11，P1 七件一致化 + G/H 边集）：本批把六件题面与一处工具面
+#: 收成同一个口径 ——
+#:   ① B 的 ACTIONS 补 `open_polish_copy`（`reports/b-proof-<B稿号>.md`，清副本里的
+#:      V 签；冻结后的补救路径从"结构上不可达"变成可达）；`own.open_polish_copy` 随之
+#:      进 B 那一趟的循环工具面（不入基座 `tools_lines`，故只换 B 的段）；
+#:   ② B 的题面退役 `-pN` / `proof_no` 教法（「B 的稿号是自己的号段；同一命题的第二份
+#:      证明是另一份稿」），`bmanuscript` / `canonical_rel` 的新写路径不再产 `-pN`；
+#:   ③ D 的题面改成递稿路径（`proof_manuscript`），路径号由 B 收录时分配；
+#:   ④ V 的题面改成「签的身份是正文 sha + 稿路径」（冷启动题面同口径；`proof_no` 在
+#:      动作参数表里降级为历史坐标）；⑤ F 的题面与手册补「已拿签的稿不许就地改」
+#:      （`manuscript_frozen`；要改走 `B.open_polish_copy`），就地重写限定成未签时；
+#:   ⑥ D→B 的生产路（`register_statement` 指针支）也调用
+#:      `manuscriptsubmission.assign_path_group`（同一函数）：同一命题已有 N 条 ⇒ N+1、
+#:      同 sha 沿用，号写进依赖行 / `used_by` 的 `#pN` / verifications 行；
+#:   ⑦ `manuscriptsubmission.submission_reading` 此前 src 零调用点 ⇒ 暴露成工具
+#:      `manuscripts.submission_reading`（全部可召唤角色、只读；进 `tools_lines` ⇒ 十一格
+#:      全换）；另同批 G/H 的边集按业主裁定改（G 出边 C/D/H、H 去掉 G）。
+#: 十一格全换（工具面多一件 `manuscripts.submission_reading` ⇒ 每个角色的工具清单都多一行；
+#: 另有 B / D / F / V 四格的段文本按上面 ②–⑤ 改写）。逐格由判据自己的 `_surface_digest`
+#: 现算（`temp/_recompute_digests.py --write`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p277）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p276 同值）；两份 golden 按现值重冻
+#: （agent 面 11 格 prompt 与 B 的动作表 / edges；tool 面多一件工具）；两文档重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
+PROMPT_VERSION = "p277"
 
 
 
