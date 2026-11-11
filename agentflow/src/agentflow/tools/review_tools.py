@@ -1305,6 +1305,42 @@ def record_finding(
             "level": level_s, "round": round_val, "status": "open"}
 
 
+def _open_findings_gate(*, existing: Sequence[Mapping[str, Any]],
+                        reopened: Sequence[Mapping[str, Any]], round_no: int,
+                        doc: Mapping[str, Any]) -> tuple[list[dict], dict[str, Any]]:
+    """丙（2026-11-11）：「这一版还有没有 open findings」的判据 + 读数。
+
+    返回 `(挡不挡, 读数)`：`挡不挡` 是这一版（盘上全部 finding 里）状态仍为
+    `open` 的那些，含本轮刚重开的那几条；`读数` 的形状见下面 `reading`。
+
+    为什么单独一格：收口侧（`review_document` 的 `target_status`）与判据侧
+    （反真空把那一条摘掉 ⇒ 真机复现必须红）要用同一份判据；写在函数体里就打不了桩。
+    它只读：不改 finding 的状态 —— 「要修的是产生矛盾的那一侧，不是把 findings 的
+    状态改掉」（业主 2026-11-11）。
+    """
+    prior_open = [dict(r) for r in existing
+                  if str(r.get("status") or "") == "open"]
+    for rid in {str(r.get("finding_id") or "") for r in reopened}:
+        row = next((dict(r) for r in existing
+                    if str(r.get("finding_id") or "") == rid), None)
+        if row is not None and row not in prior_open:
+            prior_open.append(row)
+    reading = {
+        "checked": True,
+        "total": len(prior_open),
+        "error": sum(1 for r in prior_open if str(r.get("level") or "") == "error"),
+        "warning": sum(1 for r in prior_open if str(r.get("level") or "") == "warning"),
+        "finding_ids": [str(r.get("finding_id") or "") for r in prior_open],
+        "review_round": int(round_no),
+        "review_rounds": int(dict(doc).get("review_rounds") or 0),
+        "blocks_accept": bool(prior_open),
+        "why": ("这一版没有 open findings" if not prior_open else
+                f"还有 {len(prior_open)} 条 open findings 没被本轮复审收口"
+                f"（{'、'.join(str(r.get('finding_id') or '?') for r in prior_open[:8])}）"),
+    }
+    return prior_open, reading
+
+
 def _unreviewable_review(
     store: Any,
     doc_id: str,
@@ -1373,6 +1409,21 @@ def _unreviewable_review(
         "signature": None,
         "signature_error": None,
         "verdict": "unreviewable",
+        # 丙（2026-11-11）：没有可审的正文 ⇒ 这一格同样要把"还有没有 open findings"
+        # 带出来（键集合与正常路径逐字相同；这一趟没审，所以 `blocks_accept=False`）。
+        "open_findings": {
+            "checked": True,
+            "total": sum(1 for r in existing if str(r.get("status") or "") == "open"),
+            "error": sum(1 for r in existing if str(r.get("status") or "") == "open"
+                         and str(r.get("level") or "") == "error"),
+            "warning": sum(1 for r in existing if str(r.get("status") or "") == "open"
+                           and str(r.get("level") or "") == "warning"),
+            "finding_ids": [str(r.get("finding_id") or "") for r in existing
+                            if str(r.get("status") or "") == "open"],
+            "review_round": round_no, "review_rounds": 0,
+            "blocks_accept": False,
+            "why": "这一趟没有可审的正文 ⇒ 状态一个字都没动（不是「没有 open findings」）",
+        },
         "reason": (
             f"{paper_view.get('reason') or '没有可审的论文'}。"
             "⇒ 本次**没有判 pass**：一条发现都没落、`documents` 的状态一个字都没动"
@@ -1555,6 +1606,29 @@ def review_document(
     target_status = (
         "accepted" if (scan["error_count"] == 0 and dep_checked and claims_total) else "in_review"
     )
+    # ---- 丙（2026-11-11，业主裁定「丙修」）：有 open findings 就不许 accepted ----------
+    #
+    # 真机现场（`projects/dct-min5r-20261111`）：H 21:42:12 先用 `review.record_finding`
+    # 落了 3 条 open findings（2 error + 1 warning），21:42:19 再调本函数（`round_no=4`）。
+    # 它只按新扫的 `error_count=0` 就把 `documents.status` 写成 accepted、`review_verdict`
+    # 写成「成立」—— 台账自相矛盾（`verify_all` 的 `accepted_with_open_error` 那一条
+    # 也是这么被抓到的）。矛盾的产生侧就是这里，所以闸加在这里，不加在事后纠正那边。
+    #
+    # 判据两条（缺一不许 accepted）：
+    #   ① 这一版没有 open findings —— 本函数不收口上一轮/手工判词的 open 项（它只重跑
+    #      机械判据，看不到手工判词、也不改 finding 状态），所以只要盘上还有 open 的就
+    #      不许它把稿判成"通过"；
+    #   ② 本轮复审收过 —— 本轮 `round_no` 只收它自己扫出来的那一批；旧轮次的 open 项
+    #      还挂着时，"本轮"并没有收过那一版的全部发现（`review_rounds` 与 `round_no`
+    #      一起进读数，供人判是"还没复审"还是"复审了但没收口"）。
+    #
+    # 处置方向是去走 `review.verify_fixes`（逐条判 fixed / 仍 open，H 的手工判词有显式
+    # 复核通道），不是在这里把 findings 的状态改掉。
+    prior_open, open_findings_reading = _open_findings_gate(
+        existing=existing, reopened=reopened, round_no=round_no, doc=doc)
+    blocked_by_open_findings = bool(target_status == "accepted" and prior_open)
+    if blocked_by_open_findings:
+        target_status = "in_review"
     # ---- 审核轴：只有真判出了结论才写裁决（业主 2026-10-30，2026-11-04 施工单）
     #
     # 两态裁决只覆盖"查过之后"的两种结局：
@@ -1574,6 +1648,16 @@ def review_document(
             _missing.append("依赖闭合没查")
         _axis_verdict, _axis_checked = "", False
         _axis_reason = "没查成：" + "；".join(_missing) + " ⇒ 不写裁决（台账不留行）"
+    if blocked_by_open_findings:
+        # 有 open findings ⇒ 本轮不写「成立」：机械判据这一趟没找到缺陷，但它不覆盖
+        # 上一轮/手工判词留下的 open 项 —— 在这个前提下写「成立」就是真机那个矛盾。
+        _axis_verdict, _axis_checked = "", False
+        _axis_reason = (
+            "没查成：这一版还有 open findings 没被本轮复审收口（"
+            + "、".join(str(x) for x in open_findings_reading["finding_ids"][:8])
+            + f" 等 {len(open_findings_reading['finding_ids'])} 条；本轮 round={round_no}，"
+            f"documents.review_rounds={open_findings_reading['review_rounds']}）"
+            " ⇒ 不写裁决、不许 accepted；先去 `review.verify_fixes` 逐条判 fixed / 仍 open")
     status_updated, status_error, status_now = _set_doc_status(
         store, doc_id, target_status, actor=actor,
         review_verdict=_axis_verdict, review_checked=_axis_checked,
@@ -1629,6 +1713,13 @@ def review_document(
     ]
     if reopened:
         reason_bits.append(f"重开 {len(reopened)} 条「标了 fixed 但重跑仍复现」的发现")
+    if blocked_by_open_findings:
+        reason_bits.append(
+            "⛔ 有 open findings ⇒ **不判 accepted**（status=in_review）："
+            f"{open_findings_reading['why']}；本轮 round={round_no}、"
+            f"documents.review_rounds={open_findings_reading['review_rounds']} —— "
+            "先去 `review.verify_fixes` 逐条判 fixed / 仍 open（手工判词只有 H 的显式"
+            "复核通道能判掉），收口之后再复审")
     if not status_updated:
         reason_bits.append(
             f"⚠️ 文档状态**未能更新**（{status_error}）—— 这通常因为盘上这份稿件本身不合 schema，"
@@ -1657,6 +1748,8 @@ def review_document(
         "signature": signature,
         "signature_error": signature_error,
         "verdict": verdict,
+        # 丙（2026-11-11）：这一版还有没有 open findings、拦没拦 accepted 的读数。
+        "open_findings": open_findings_reading,
         # 本次审的论文正文是哪一份（可追溯）：`path` / `source` / `sha256` / `bytes` /
         # `lines` / `chars` 与"台账行在不在"。它是读数，不是判据 —— 判据是 verdict。
         "paper_body": dict(paper_view),
@@ -2617,7 +2710,7 @@ def _review_list_findings_tool(_not_wired, store, doc_id=None, status=None, leve
            },
     side_effect="write_local",
     roles=_WRITER_ROLES,
-    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body'}",
+    returns="{'doc_id','new_findings','duplicate_skipped','error_count','warning_count','verdict','status','signature','signature_error','coverage','checked','dep_check','info_count','reason','reopened','round','semantic_check','status_error','status_updated','paper_body','open_findings'}",
     tags=("review", "write"),
 )
 def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw):
