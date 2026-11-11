@@ -5854,60 +5854,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             f"手稿收录（D 只递指针）：普通数值手稿 `{rel}` —— 命题逐字取自 `## 命题`，"
             "证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 "
             "`code_path`，引文面不适用")
-        # ---- 2026-11-11（业主追加裁定 ⑥）：这一份排第几条路径 ------------------
-        #
-        # 业主：「多证明路径是 B 秘书需要关注的。如果对它判断同一的命题提交了多份
-        # 证明，则排进不同路径。」分配只有一处实现（`assign_path_group` →
-        # `manuscriptpaths`）：这条命题已有 N 条 ⇒ N+1；同一份正文 sha / 同一路径
-        # 重复收录 ⇒ 沿用原号。没在册（新命题）⇒ 不分配，落盘就是第 1 条。
-        from .. import manuscriptsubmission as _MSUB
-
-        _path_group: dict = {}
-        _path_no = 0
-        # ---- 已经在这一条命题上的正文 ⇒ 沿用它的路径号（幂等） ------------------
-        #
-        # 这一条补的是"同一份稿第二次携带"：`assign_path_group` 认的是 deps / 
-        # verifications 里的 sha，而路径还可能只记在台账行上（canonical 正文 / `proofs`
-        # 清单），那一格没有 path_group 可比 ⇒ 不先看行就会把同一份正文当成新路径
-        # （第二遍携带又落一遍依赖边）。所以先按行认"这一份是第几条"，认不到才分配。
-        _existing_path_no = 0
-        if row_now is not None and str(proof_text or "").strip():
-            if _same_manuscript_text(str(row_now.get("proof_text") or ""), proof_text):
-                _existing_path_no = 1
-            else:
-                for _entry in (row_now.get("proofs") or []):
-                    _one = dict(_entry or {})
-                    try:
-                        _pno = int(_one.get("proof_no") or 0)
-                    except (TypeError, ValueError):
-                        _pno = 0
-                    if (_pno >= 1 and _same_manuscript_text(
-                            str(_one.get("text") or _one.get("proof_text") or ""),
-                            proof_text)):
-                        _existing_path_no = _pno
-                        break
-        if row_now is not None and str(proof_text or "").strip():
-            if _existing_path_no >= 1:
-                _path_no = _existing_path_no
-                _path_group = {"checked": True, "path_group": _path_no,
-                               "existing": True, "count": 0,
-                               "statement_id": head_sid, "manuscript": rel,
-                               "body_sha": _PR.proof_sha(proof_text),
-                               "paths": [], "problems": [],
-                               "why": (f"这一份正文已经在这条命题的第 {_path_no} 条路径上"
-                                       " ⇒ 沿用原号，不新增路径")}
-            else:
-                _path_group = dict(_MSUB.assign_path_group(
-                    store=self.store, root=getattr(self.store, "root", ""),
-                    statement_id=head_sid, manuscript=rel,
-                    body_sha=_PR.proof_sha(proof_text)))
-                if not _path_group.get("checked"):
-                    return _refuse(
-                        "path_group_unreadable",
-                        "收录这一份手稿时路径数没读成："
-                        + str(_path_group.get("why") or "未知原因")
-                        + " ⇒ 整笔不写（不猜它是第几条路径）"), "", ""
-                _path_no = int(_path_group.get("path_group") or 1)
+        # ⑥（2026-11-11）：这一份排第几条路径 —— 分配只有 `assign_path_group` 一处实现，
+        # 分配与回执抽成两个方法（这个函数要守在 200 行那条软基线内）。
+        _path_no, _path_group, _path_refused = self._pointer_path_reading(
+            row_now=row_now, proof_text=proof_text, head_sid=head_sid, rel=rel)
+        if _path_refused:
+            return _path_refused, "", ""
         got = self._register_statement_impl(
             statement_full=proposition, statement_text=statement_text,
             proof_text=proof_text, proofs=None, proof_manuscript=rel,
@@ -5917,27 +5869,91 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or ())],
             doc_id=doc_id, line_range=line_range, path_group=_path_no)
         if isinstance(got, dict):
-            if _path_group:
-                got["path_group"] = dict(_path_group)
-            # 收录成功之后把同一个号回写到覆盖这份正文的 `verifications` 行
-            # （与 `ingest_manuscript` 的 `_mark_ingested` 同一个函数、同一档口径）。
-            if _path_no >= 1 and bool(got.get("ok")):
-                got["path_group_stamp"] = _MSUB.stamp_verification_path_group(
-                    root=getattr(self.store, "root", ""),
-                    statement_id=head_sid,
-                    body_sha=_PR.proof_sha(proof_text), manuscript=rel,
-                    path_group=_path_no)
-            got["pointer"] = {
-                "path": rel,
-                "statement_id": head_sid,
-                "proposition_source": ("ledger" if row_now is not None else "manuscript"),
-                "proposition_matches_manuscript": bool(
-                    not row_now
-                    or _same_manuscript_text(
-                        str(row_now.get("statement_full") or ""), statement)),
-                "d_gave_only_pointers": True,
-            }
+            got = self._pointer_receipt(
+                got, path_no=_path_no, path_group=_path_group, head_sid=head_sid,
+                rel=rel, proof_text=proof_text, row_now=row_now,
+                statement=statement)
         return got, origin_now, kind
+
+    def _pointer_path_reading(self, *, row_now: Mapping | None, proof_text: str,
+                              head_sid: str, rel: str
+                              ) -> tuple[int, dict, dict]:
+        """⑥：这一份手稿该排第几条路径 —— 指针支的唯一分配点。
+
+        「已在这一条命题上的正文」先按台账行认（canonical 正文 / `proofs` 清单）：
+        那一格没有 `path_group` 可比，不先看行就会把同一份正文当成新路径（第二遍
+        携带又落一遍依赖边）。认不到才交给唯一的分配函数 `assign_path_group`。
+
+        返回 `(path_no, reading, refusal)`：`refusal` 非空 ⇒ 调用方整笔不写。
+        """
+        from .. import manuscriptsubmission as _MSUB
+
+        path_group: dict = {}
+        path_no = 0
+        if row_now is None or not str(proof_text or "").strip():
+            return path_no, path_group, {}
+        existing = 0
+        if _same_manuscript_text(str(row_now.get("proof_text") or ""), proof_text):
+            existing = 1
+        else:
+            for entry in (row_now.get("proofs") or []):
+                one = dict(entry or {})
+                try:
+                    pno = int(one.get("proof_no") or 0)
+                except (TypeError, ValueError):
+                    pno = 0
+                if (pno >= 1 and _same_manuscript_text(
+                        str(one.get("text") or one.get("proof_text") or ""),
+                        proof_text)):
+                    existing = pno
+                    break
+        if existing >= 1:
+            return existing, {"checked": True, "path_group": existing,
+                              "existing": True, "count": 0,
+                              "statement_id": head_sid, "manuscript": rel,
+                              "body_sha": _PR.proof_sha(proof_text),
+                              "paths": [], "problems": [],
+                              "why": (f"这一份正文已经在这条命题的第 {existing} 条路径上"
+                                      " ⇒ 沿用原号，不新增路径")}, {}
+        path_group = dict(_MSUB.assign_path_group(
+            store=self.store, root=getattr(self.store, "root", ""),
+            statement_id=head_sid, manuscript=rel,
+            body_sha=_PR.proof_sha(proof_text)))
+        if not path_group.get("checked"):
+            return 0, path_group, _refuse(
+                "path_group_unreadable",
+                "收录这一份手稿时路径数没读成："
+                + str(path_group.get("why") or "未知原因")
+                + " ⇒ 整笔不写（不猜它是第几条路径）")
+        return int(path_group.get("path_group") or 1), path_group, {}
+
+    def _pointer_receipt(self, got: dict, *, path_no: int, path_group: dict,
+                         head_sid: str, rel: str, proof_text: str,
+                         row_now: Mapping | None, statement: str) -> dict:
+        """⑥ 的回执：路径号读数 + `verifications` 行回写 + `pointer` 三格。
+
+        `stamp_verification_path_group` 与 `ingest_manuscript` 的 `_mark_ingested`
+        是同一个函数、同一档口径（只回写覆盖这份正文的行；已有别的号 ⇒ 不覆盖）。
+        """
+        from .. import manuscriptsubmission as _MSUB
+
+        if path_group:
+            got["path_group"] = dict(path_group)
+        if path_no >= 1 and bool(got.get("ok")):
+            got["path_group_stamp"] = _MSUB.stamp_verification_path_group(
+                root=getattr(self.store, "root", ""), statement_id=head_sid,
+                body_sha=_PR.proof_sha(proof_text), manuscript=rel,
+                path_group=path_no)
+        got["pointer"] = {
+            "path": rel,
+            "statement_id": head_sid,
+            "proposition_source": ("ledger" if row_now is not None else "manuscript"),
+            "proposition_matches_manuscript": bool(
+                not row_now or _same_manuscript_text(
+                    str(row_now.get("statement_full") or ""), statement)),
+            "d_gave_only_pointers": True,
+        }
+        return got
 
     def _apply_declared_manuscript_kind(self, got: dict, *, statement_full: str,
                                         origin: str, kind: str,
