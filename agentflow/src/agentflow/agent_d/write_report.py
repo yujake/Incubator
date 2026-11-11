@@ -609,6 +609,24 @@ class _WriteReport:
             if no >= 1:
                 row["proof_no"] = int(no)
             rows.append(row)
+        # ---- 2026-11-11（业主裁定 ①③）：F 收工自动提交的拿签稿 -------------------
+        #
+        # 上面两圈都从「台账行 / 手稿登记条目」找稿；而 F 收工时由框架写下的提交记号
+        # （`tasks.artifacts` 的 `mss:<稿号>`）是第三条、也是唯一一条「F 说它交了」的
+        # 机械记录 —— 一份拿签稿在被 B 收录之前，只有这条记号能把它带到 D。
+        # 「已收录」的那一份由上面两圈按台账行走（同一个文件只上一行由 `seen_paths` 守）。
+        auto_rows, auto_note = self._auto_submitted_carried(
+            statements, _known_stmt_ids)
+        for one in auto_rows:
+            msid = str(one.get("manuscript_id") or "")
+            key = _carried_key("mss", msid)
+            path = str(one.get("path") or "")
+            if not msid or key in seen or (path and path in seen_paths):
+                continue
+            seen.add(key)
+            if path:
+                seen_paths.add(path)
+            rows.append(one)
         # ---- E 的穷举证明手稿（2026-11-04：同一张单，键是 exp:<实验号>） -------------
         #
         # 判据全在盘上：台账里有一行 `evidence_kind="proof"` 的实验、它落了
@@ -648,12 +666,121 @@ class _WriteReport:
                 one["proof_no"] = int(no)
             rows.append(one)
             seen_paths.add(str(one.get("path") or ""))
-        note = ""
+        note = auto_note
         if len(rows) > _DS.CARRIED_LIMIT:
-            note = (f"另有 {len(rows) - _DS.CARRIED_LIMIT} 条没列出来（这张单只列前 "
-                    f"{_DS.CARRIED_LIMIT} 条）—— 它们仍在盘上，B 可以按约定路径读"
-                    "（`depsection.read_manuscript`）。")
+            limit_note = (f"另有 {len(rows) - _DS.CARRIED_LIMIT} 条没列出来"
+                          f"（这张单只列前 {_DS.CARRIED_LIMIT} 条）—— 它们仍在盘上，"
+                          "B 可以按约定路径读（`depsection.read_manuscript`）。")
+            note = (note + " " + limit_note).strip()
             rows = rows[:_DS.CARRIED_LIMIT]
+        return rows, note
+
+    def _auto_submitted_carried(self, statements, known_stmt_ids) -> tuple[list[dict], str]:
+        """F 收工自动提交、而还没被收录的拿签稿 ⇒ `(携带行, 附注)`。
+
+        ## 为什么新增这一源（业主 2026-11-11 裁定 ①）
+
+        `_carried_manuscripts` 上面两圈都从「台账行 / 手稿登记条目」找稿：一份稿在
+        被 B 收录之前，台账里没有它的行，登记条目也不一定在盘上 ⇒ 未收录的拿签稿
+        到不了 D。F 收工时由框架写进 `tasks.artifacts` 的那条提交记号（`mss:<稿号>`）
+        正是"F 说它交了"的机械记录，这一源就按它收。
+
+        ## 判据（三件都要在盘上成立才带）
+
+        1. 记号里的 `file_sha` / `body_sha` 与盘上现行文件一致（提交之后又改过 ⇒ 不带，
+           那不是「已提交的那一版」）；
+        2. 签复算通过（`vsigns.credential_reading`）—— 没签 / 签不住的稿不是入库的证明；
+        3. 尚未收录：`statements` 里没有 `manuscript_id` 是这个稿号的行，
+           记号里的 `statement_id` 也不在册 —— 已收录的由上面两圈按台账行走。
+
+        返回的行与 F 那条完全同形：`{statement_id:"", manuscript_id, path, sha256}`，
+        `sha256` 是盘上那份文件的字节 sha256（D→B 的地址判据）。
+        """
+        import hashlib
+
+        from .. import depsection as _DS
+        from .. import proofregistry as _PR
+        from .. import vsigns as _VS
+        #: 记号格式的唯一实现住在 F 的交付读数里（与 F 写 artifacts 那一侧同一份）。
+        from ..agent_f import delivery as _FD
+
+        rows: list[dict] = []
+        skipped: list[str] = []
+        registered = {str(one.get("manuscript_id") or "").strip()
+                      for one in (statements or ())
+                      if str(one.get("manuscript_id") or "").strip()}
+        #: 台账里已经有一份同正文的证明 ⇒ 这一份「已收录」（不靠行上有没有记稿号）。
+        registered_bodies: set[str] = set()
+        for one in statements or ():
+            pt = str(one.get("proof_text") or "")
+            if pt.strip():
+                registered_bodies.add(_PR.proof_sha(pt))
+        latest: dict[str, dict] = {}
+        for task in self.store.rows("tasks") or ():
+            if str(task.get("role") or "") != "F":
+                continue
+            got, problems = _FD.submissions_of(task.get("artifacts") or ())
+            for why in problems:
+                skipped.append(f"{task.get('task_id')}: {why}")
+            for mid, rec in got.items():
+                cur = latest.get(mid)
+                if (cur is None
+                        or str(rec.get("submitted_at") or "")
+                        >= str(cur.get("submitted_at") or "")):
+                    latest[mid] = dict(rec)
+        for mid in sorted(latest):
+            rec = latest[mid]
+            rel = str(rec.get("path") or "").strip().replace("\\", "/")
+            if not rel:
+                skipped.append(f"mss:{mid}：提交记号里没有地址 ⇒ 带不了")
+                continue
+            sid = str(rec.get("statement_id") or "")
+            if mid in registered or (sid and sid in known_stmt_ids):
+                # 已收录：那一份由上面两圈按台账行走，不因新增来源重复。
+                continue
+            try:
+                blob = (Path(self.store.root) / rel).read_bytes()
+                text = blob.decode("utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                skipped.append(
+                    f"mss:{mid}：`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ 不带")
+                continue
+            file_sha = hashlib.sha256(blob).hexdigest()
+            body_sha = _PR.proof_sha(text)
+            want_file = str(rec.get("file_sha") or "")
+            if want_file and file_sha != want_file:
+                skipped.append(
+                    f"mss:{mid}：`{rel}` 在提交之后字节变了（提交时 {want_file[:12]}…"
+                    f" / 现在 {file_sha[:12]}…）⇒ 不按「已提交的那一版」带")
+                continue
+            want_body = str(rec.get("body_sha") or "")
+            if want_body and body_sha != want_body:
+                skipped.append(
+                    f"mss:{mid}：`{rel}` 的正文 sha 与提交记号不符（记号 "
+                    f"{want_body[:12]}… / 现在 {body_sha[:12]}…）⇒ 不带")
+                continue
+            if body_sha in registered_bodies:
+                # 台账里已经有一份同正文的证明：已收录，由上面两圈按台账行走。
+                continue
+            cred = _VS.credential_reading(self.store.root, body_sha)
+            if not cred.get("recomputable"):
+                skipped.append(
+                    f"mss:{mid}：`{rel}` 这一份签复算不上"
+                    f"（{cred.get('problem') or '?'}）⇒ 不带"
+                    "（没签的稿不是入库的证明）")
+                continue
+            one = {"statement_id": "", "manuscript_id": mid, "path": rel,
+                   "sha256": file_sha}
+            no = _DS.manuscript_proof_no(text) or int(rec.get("proof_no") or 1)
+            if int(no) >= 1:
+                one["proof_no"] = int(no)
+            rows.append(one)
+        note = ""
+        if skipped:
+            note = ("（F 已提交但这一趟没带上，逐条："
+                    + "；".join(skipped[:8])
+                    + (f"；另有 {len(skipped) - 8} 条" if len(skipped) > 8 else "")
+                    + "）")
         return rows, note
 
     def _carried_missing_reading(self, carried_rows: list[dict]) -> dict:
