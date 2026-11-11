@@ -13,6 +13,7 @@ from .evidence_for import _EvidenceFor
 from .list_experiments import _ListExperiments
 from .run_script_experiment import _RunScriptExperiment
 from .proposition_form import _NumericProofFormGate
+from .close import _CloseReading
 
 
 def _note_process_wait(elapsed_sec: float, site: str) -> None:
@@ -295,7 +296,7 @@ class _Core:
                 "program_timer": prog.reading(),
             }
 
-class AgentE(_RunExperiment, _AuthorScript, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _NumericProofFormGate, _Core):
+class AgentE(_RunExperiment, _AuthorScript, _EvidenceFor, _ListExperiments, _RunScriptExperiment, _NumericProofFormGate, _CloseReading, _Core):
     """数值实验与反例智能体。
 
     每个方法都可以被独立调用与单测：

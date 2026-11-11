@@ -1524,6 +1524,12 @@ class LoopRun:
     #: 父行那一句"我退出时掐断了 N 个还在跑的子：…"与判据 (b) 读的都是这一格，
     #: 于是"打标记那一步被打桩掉"时，子行没有标记、父行也不会点名（反真空那条同时红）。
     cut_off_children: list[str] = field(default_factory=list)
+    #: 收工自动提交（业主 2026-11-11 裁定 ②）：E 这一趟退场时框架写进
+    #: `tasks.artifacts` 的那几份拿签稿；`auto_submitted_count=None` = 这一格没读
+    #: （不是「0 份」）。F 的同名读数在它自己的 `step` 返回值里，不走这三格。
+    auto_submitted: list[dict[str, Any]] = field(default_factory=list)
+    auto_submitted_count: int | None = None
+    still_unsubmitted: list[dict[str, Any]] = field(default_factory=list)
     #: 这一趟每次派活产生了哪些子产出（`_call_productions` 的条目，按发生顺序）：
     #: `{kind, counted, task_id, role, step, status, outcome, handoff_id, outputs,
     #:   disposition, evidence?, recon_only?, waiver?}`。
@@ -1694,7 +1700,8 @@ class LoopRun:
         `counters_reset_at` / `compactions` / `mailbox_items` / `mailbox_msgs` /
         `mailbox_delivered` / `monitor_turns` / `wakes` / `wake_ids` / `wake_events` /
         `clock_pumps` / `clock_fired` / `park` / `handed_off` / `silent_children` /
-        `silent_children_asked` / `cut_off_children` / `waiting_for` / `resumed_from` /
+        `silent_children_asked` / `cut_off_children` / `auto_submitted` /
+        `auto_submitted_count` / `still_unsubmitted` / `waiting_for` / `resumed_from` /
         `notify_rejections` / `final_refused_beats` / `handoffs` / `summons` / `summons_refused` /
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
@@ -1764,6 +1771,10 @@ class LoopRun:
             "silent_children": list(self.silent_children),
             "silent_children_asked": list(self.silent_children_asked),
             "cut_off_children": list(self.cut_off_children),
+            # 收工自动提交（E）：与 `agent_run_end` 的三格同源；`None` = 这一格没读。
+            "auto_submitted": [dict(x) for x in self.auto_submitted],
+            "auto_submitted_count": self.auto_submitted_count,
+            "still_unsubmitted": [dict(x) for x in self.still_unsubmitted],
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections,
             # D-68 收工门的补救拍数（Q12，2026-10-26）：与 `notify_rejections` 并列 ——
@@ -9527,6 +9538,40 @@ class AgentLoop:
         # 收口时刻（`runs/*.json` 的 `end_ts`）：与 `elapsed_sec` 同一刻算，两个读数同源 ——
         # 分两处取时间会让"跑了 12.3 秒"与 `end_ts - start_ts` 差出一截，而没人能说清差在哪。
         run.ended_at = S.now_iso()
+        # ---- 收工自动提交（业主 2026-11-11 裁定 ②）：E 这一趟退场时扫一遍它名下的
+        # 拿签稿，把「已签、尚未提交」的写进 E 自己那一行 `tasks.artifacts`。
+        #
+        # 位置在 `agent_run_end` 之前：三格要跟着收工那一行一起落盘。F 走它自己的
+        # `step._close_reading`（同一套 `mss:` 记号），本格只服务 E，不重复 F 的。
+        if self.role == "E" and self.store is not None:
+            try:
+                from .agent_e import autosubmit as _EAS
+
+                auto = _EAS.auto_submit_at_close(
+                    store=self.store,
+                    root=(self.workspace_root or getattr(self.store, "root", "") or "."),
+                    task_id=str(self.my_task_id or ""),
+                    stamp=run.ended_at)
+            except Exception as exc:  # noqa: BLE001 —— 收工读数坏了不能把「停」带走
+                auto = {"checked": False, "auto_submitted": [],
+                        "auto_submitted_count": None, "still_unsubmitted": [],
+                        "why": (f"收工自动提交没跑成（{type(exc).__name__}: {exc}）"
+                                " ⇒ 这一趟没有提交（不是「没有要提交的」）")}
+            run.auto_submitted = [dict(x) for x in (auto.get("auto_submitted") or [])]
+            count = auto.get("auto_submitted_count")
+            run.auto_submitted_count = (int(count) if count is not None else None)
+            run.still_unsubmitted = [dict(x) for x in (auto.get("still_unsubmitted") or [])]
+            run.notes.append(str(auto.get("why") or "收工自动提交：没有读数"))
+            blocked = [x for x in run.still_unsubmitted
+                       if str(x.get("state") or "") in
+                       ("body_changed_after_sign", "ambiguous_path", "write_failed",
+                        "sign_unbacked", "no_task_row")]
+            if blocked:
+                run.notes.append(
+                    "有拿签稿没提交（逐条）："
+                    + "；".join(str(x.get("why") or x.get("state") or "")
+                               for x in blocked[:5])
+                    + (f" 等 {len(blocked)} 条" if len(blocked) > 5 else ""))
         run.messages = list(messages)
         run.transcript = render_messages(messages)
         # 委托做完 ⇒ 进度计数清零（裁定 12-F 逐字："每做完一个委托清一次"）。
@@ -9592,6 +9637,10 @@ class AgentLoop:
             "stop_reason": run.stop_reason, "steps": len(run.steps), "summons": run.summons,
             "messages": run.messages_sent,
             "blocked_remaining": dict(run.blocked_remaining),
+            # 收工自动提交（E，业主 2026-11-11 裁定 ②）：与 `LoopRun.to_dict()` 同源。
+            "auto_submitted": [dict(x) for x in run.auto_submitted],
+            "auto_submitted_count": run.auto_submitted_count,
+            "still_unsubmitted": [dict(x) for x in run.still_unsubmitted],
             # 停在等谁（空 = 不是那一档）：界面与 `inbox` 要的就地读数，
             # 不必去解析 `final` 那句话里的 qid。
             "waiting_for": run.waiting_for,
