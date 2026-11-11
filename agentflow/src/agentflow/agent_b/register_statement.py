@@ -2310,6 +2310,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "listed": listed,
                 }
             listed.append({"proof_no": no, "text": text,
+                           # 幂等的判据：`manuscriptintake._plan_proof` 按
+                           # `proofs[]` 条目上的 `proof_sha256` 判"同一份正文"。
+                           # 不写这一格 ⇒ 同一份稿重复收录会被读成 #pN 被占用。
+                           "proof_sha256": _VR.text_sha(text),
                            "created_at": str(entry.get("created_at") or S.now_iso())})
             out["attached"].append(no)
             #: 新挂上来的一份证明 = 刚交来的机械录入那一版 ⇒ 优化态显式 `false`
@@ -5596,9 +5600,26 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
             doc_id=doc_id, line_range=line_range)
-        return self._apply_declared_manuscript_kind(
-            got, statement_full=statement_full, origin=str(origin or "external_lit"),
-            kind=str(kind or "theorem"), proof_manuscript=proof_manuscript)
+        return self._mark_b_register(
+            self._apply_declared_manuscript_kind(
+                got, statement_full=statement_full,
+                origin=str(origin or "external_lit"),
+                kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
+            proof_manuscript)
+
+    def _mark_b_register(self, got: dict, proof_manuscript: Any) -> dict:
+        """正文登记那条路的「收录即提交」尾巴（裁决 ③）：只对 B 自己的 `b-proof-*`。
+
+        与 `ingest_manuscript` 同一枚记号、同一个实现（`agent_b/autosubmit.py`）；
+        受控拒 / 别的族 ⇒ 原样返回。
+        """
+        rel = str(proof_manuscript or "").strip().replace("\\", "/")
+        if not rel:
+            return got
+        from . import autosubmit as _BAS
+
+        return _BAS.mark_b_ingested(
+            self.store, getattr(self.store, "root", ""), manuscript=rel, out=got)
 
     def _register_pointer_manuscript(self, rel: str, *, provenance: Any = None,
                                      reading: Mapping | None = None
@@ -6824,8 +6845,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return result
 
     def _ingest_apply_proof(self, cells: dict, row: Mapping, want_no: int,
-                            target: str, manuscript_id: str = "") -> dict:
-        """写 `proof_text` 那一格（签闸 → `_attach_proofs`），就地把回执写回 `cells`。"""
+                            target: str, manuscript_id: str = "",
+                            write_no: int = 0) -> dict:
+        """写 `proof_text` 那一格（签闸 → `_attach_proofs`），就地把回执写回 `cells`。
+
+        `want_no` 是签闸读的证明号（稿名 / 参数给的，通常是 1）；`write_no` 是
+        B 收录时分配的路径号（业主 2026-11-11 追加裁定）—— 第二份证明落成 `#p2`
+        时，签仍按 canonical（#p1）的同一份正文认，依赖面与 verification 行才用路径号。
+        """
         text = str((cells.get("proof_text") or {}).get("value") or "")
         gate = self._unsigned_proof_gate(
             origin=str(row.get("origin") or ""),
@@ -6837,11 +6864,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if gate.get("refused"):
             return {"written": False, "code": str(gate["refused"]),
                     "why": str(gate.get("reason") or "")}
+        no = max(int(write_no or 0), int(want_no or 1))
         attach = self._attach_proofs(
             target,
-            entries=([{"proof_no": want_no, "text": text}]
-                     if want_no >= 2 else []),
-            canonical=(text if want_no == 1 else ""), proof_no=want_no,
+            entries=([{"proof_no": no, "text": text}] if no >= 2 else []),
+            canonical=(text if no == 1 else ""), proof_no=no,
             manuscript_id=str(manuscript_id or ""))
         if attach.get("refused"):
             return {"written": False, "code": str(attach["refused"]),
@@ -7179,7 +7206,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
-                      want_no: int, target: str, path: str) -> dict:
+                      want_no: int, target: str, path: str,
+                      path_group: int = 0) -> dict:
         """`mode=apply`：逐格回填（先 statements，再 dependencies；部分写如实回执）。
 
         ## 为什么刻意不跑同一性判定（业主 2026-11-09 的形态）
@@ -7219,13 +7247,18 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                             "written": bool(statements_written or deps_written),
                                             "sink": "apply：按格回填（部分写如实回执）"})
 
+        # ---- 路径号（业主 2026-11-11 追加裁定）：由 `ingest_manuscript` 在 plan 之前
+        # 分配好（那一层才看得到"这条命题已有几条路径"），这里只接住它。
+        _path_no = int(path_group or 0) or int(want_no or 1)
+
         # ---- 1) proof_text（签闸不松；#pN 逐份认签，不许借 #p1 的光）
         if str((cells.get("proof_text") or {}).get("outcome") or "") == "filled":
             from .. import vsigns as _VS_MID2
 
             got = self._ingest_apply_proof(
                 cells, row, want_no, target,
-                manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")))
+                manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")),
+                write_no=_path_no)
             if got["code"]:
                 return _cell_refused("proof_text", got["code"], got["why"])
             if got["written"]:
@@ -7264,7 +7297,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ---- 4) dependencies（集合语义：追加 + 去重；永不删）
         if str((cells.get("dependencies") or {}).get("outcome") or "") == "filled":
             got = self._ingest_apply_dependencies(cells, sec, target=target,
-                                                  want_no=want_no)
+                                                  want_no=want_no,
+                                                  path_group=_path_no)
             if got["code"]:
                 return _cell_refused("dependencies", got["code"], got["why"])
             if got["written"]:
@@ -7407,19 +7441,26 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return {"written": wrote, "code": "", "why": ""}
 
     def _ingest_apply_dependencies(self, cells: dict, sec: Any, *,
-                                   target: str, want_no: int) -> dict:
+                                   target: str, want_no: int,
+                                   path_group: int = 0) -> dict:
         """`mode=apply` 的 dependencies 那一格：集合语义（追加 + 去重；永不删）。
 
         先把稿里的依赖表过 `depsection` 的闸（等级够不够、能不能引、表与正文是否
         说同一件事），再交给秘书的 `record_manuscript_dependency_face` 落表。
         回填写读进 `cells["dependencies"]`；返回 `{"written": bool, "code": 码,
         "why": 话}`（`code` 非空 ⇒ 调用方按 `_cell_refused` 整笔不写，理由原样）。
+
+        `path_group` 是 B 收录时分配的路径号（业主 2026-11-11 追加裁定）：稿里那一列
+        是产出方写的，不是权威；这一份证明的所有依赖行都排进同一个号。
         """
         from .. import depsection as _DS
 
         one = dict(cells["dependencies"])
         rows = [dict(x) for x in (one.get("value") or [])]
         refs = [str(x) for x in (one.get("refs") or [])]
+        group = int(path_group or 0)
+        if group >= 1:
+            rows = [dict(r, path_group=group) for r in rows]
         stmt_rows, problem, error = SL.rows_of(self.store)
         if problem:
             return {"written": False, "code": "ledger_unreadable",

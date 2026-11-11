@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from ._support import _norm_manuscript_rel
 from .. import manuscriptfamily as _MFAM
@@ -182,15 +182,20 @@ class _IngestManuscript:
 
         # ---- mode=register：登记新命题（继承"按手稿路径收录"那条路）
         if str(mode) == "register":
-            return self._ingest_register(
+            got = self._ingest_register(
                 reading=reading, requested=requested, out=out, family=family,
                 path=rel, provenance=provenance)
-
-        # ---- plan + 逐格回执（preview 与 apply 共用同一份计划）
+            return self._mark_ingested(got, rel=rel, family=family)
+        path_no, _code, _why = self._ingest_path_group(
+            out, mode=str(mode), target=target, rel=rel, reading=reading,
+            want_no=want_no)
+        if _code:
+            return self._ingest_fail(out, _code, _why)
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
+        plan_no = max(path_no or 1, int(want_no or 1))
         plan = _MI.plan_cells(row, got_cells, str(conflict), family=family,
-                              proof_no=want_no)
+                              proof_no=plan_no)
         cells_out = self._ingest_plan_cells(plan, requested)
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),
@@ -208,6 +213,64 @@ class _IngestManuscript:
                             "written": False,
                             "sink": "preview：只提取、一个字节都不写"}
             return out
-        return self._ingest_apply(
-            reading=reading, row=row, plan=plan, out=out, requested=requested,
-            family=family, want_no=want_no, target=target, path=rel)
+        return self._mark_ingested(
+            self._ingest_apply(
+                reading=reading, row=row, plan=plan, out=out, requested=requested,
+                family=family, want_no=want_no, target=target, path=rel,
+                path_group=path_no),
+            rel=rel, family=family, path_group=path_no)
+
+    def _ingest_path_group(self, out: dict, *, mode: str, target: str, rel: str,
+                           reading: Mapping, want_no: int) -> tuple[int, str, str]:
+        """给这一笔收录分配「第几条路径」（只 apply 分配；register 是新命题第 1 条）。
+
+        这条命题已有 N 条路径 ⇒ 这一份排第 N+1；同一份稿（同正文 sha / 同路径）重复
+        收录 ⇒ 沿用原号。调用方显式点名 #pN（旧多证明写口）⇒ 路径号不得低于 N。
+        """
+        if str(mode) != "apply":
+            return 0, "", ""
+        from .. import manuscriptsubmission as _MSUB
+
+        assigned = _MSUB.assign_path_group(
+            store=self.store, root=getattr(self.store, "root", ""),
+            statement_id=target, manuscript=rel,
+            body_sha=str(reading.get("proof_sha256") or ""))
+        out["path_group"] = dict(assigned)
+        if not assigned.get("checked"):
+            return 0, "path_group_unreadable", str(
+                assigned.get("why") or "路径数读不出来 ⇒ 这一笔不写（不猜第几条）")
+        path_no = int(assigned.get("path_group") or 1)
+        if int(want_no or 1) > path_no:
+            path_no = int(want_no)
+            out["path_group"] = dict(assigned, path_group=path_no,
+                                     why=f"调用方点名 #p{want_no} ⇒ 路径号取 {path_no}")
+        return path_no, "", ""
+
+    def _mark_ingested(self, out: dict, *, rel: str, family: str,
+                       path_group: int = 0) -> dict:
+        """收录成功之后：B 自己的 `b-proof` 稿在 B 那一行 task 上置「已提交」。
+
+        业主 2026-11-11 裁定 ③：「如果产出方是 B，则该在它将稿存进台账时更新状态为
+        已提交」。只加一枚 `mss:` 记号（格式复用 F 那一套），台账业务字段一个不动；
+        受控拒 / 别的族 / 没有 task 行 ⇒ 原样返回并把理由写进 `b_submission`。
+
+        同一笔里把 B 分配的路径号回写到覆盖这份正文的 `verifications` 行（追加裁定）：
+        两件事都在"收录成功"这一刻发生，不另查一遍台账。
+        """
+        from . import autosubmit as _BAS
+
+        if bool(out.get("ok")) and int(path_group or 0) >= 1:
+            from .. import manuscriptsubmission as _MSUB
+            from .. import proofregistry as _PR
+
+            body_sha = str((out.get("manuscript") or {}).get("proof_sha256") or "")
+            if not body_sha:
+                body_sha = _PR.proof_sha(str(
+                    (out.get("cells", {}).get("proof_text") or {}).get("value") or ""))
+            out["path_group_stamp"] = _MSUB.stamp_verification_path_group(
+                root=getattr(self.store, "root", ""),
+                statement_id=str((out.get("target") or {}).get("stmt_id") or ""),
+                body_sha=body_sha, manuscript=rel, path_group=int(path_group))
+        return _BAS.mark_b_ingested(
+            self.store, getattr(self.store, "root", ""), manuscript=rel,
+            family=family, out=out)
