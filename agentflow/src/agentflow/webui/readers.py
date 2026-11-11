@@ -5553,10 +5553,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("VerificationRow",
      "verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）",
      (("verification_id", "string"), ("statement_id", "string"),
-      # 2026-10-22（多证明模型）：签名行多了两格 —— `stmt_id`（被审的那条命题，
-      # 与 `statement_id` 同值）与 `proof_no`（第几条证明）。读侧真的读得到它们
-      # （C 条拿夹具那一行逐键比），所以这里必须声明，否则类型面读不出证明号。
-      ("stmt_id", "string"), ("proof_no", "number"),
+      # 2026-10-22（多证明模型）：签名行多了 `stmt_id`（被审的那条命题，与
+      # `statement_id` 同值）。2026-11-11（业主裁定「签跟着正文走」）：`proof_no`
+      # 在 V 签侧退役 —— canonical（#p1）新行不再写这一格，一份证明的身份由
+      # 正文 sha + `statement_id` + 路径回答 ⇒ 类型面也不再声明它（页面若还印
+      # "第几份"就会印 `undefined`）。
+      ("stmt_id", "string"),
       ("verifier", "string"),
       ("verdict", "string"), ("defect_step", "string"), ("quote", "string"),
       ("why", "string"), ("findings", "Record<string, unknown>[]"),
@@ -5575,6 +5577,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # "V 签的那一份 vs 命题现在这一份（按 `proof_no` 逐条比）"的三档读数。
       # `proof_sha256` 留在数据里（凭据要能复核），只是页面不再印它。
       ("proof_sha_consistency", "string"),
+      # 2026-11-11（业主裁定 ①「甲」）：台账行无条件写产出方格 ——
+      # `producer_role` 由路径族现判（不采信调用方自报），`producer_code` 是产出方
+      # 的代码/稿号；`producer_problem` 只在"路径族与名册的父角色不一致 / 路径读不出
+      # 产出方"时写（条件写入 ⇒ 可选）。三格都真的读得出来（C 条逐键比）。
+      ("producer_role", "string"), ("producer_code", "string"),
+      ("producer_problem?", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       # 2026-10-27（引用核实那一批落地后的补登记）：台账那一行多了 `citation_checks`

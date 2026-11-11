@@ -685,7 +685,6 @@ export interface VerificationRow {
   verification_id: string;
   statement_id: string;
   stmt_id: string;
-  proof_no: number;
   verifier: string;
   verdict: string;
   defect_step: string;
@@ -702,6 +701,9 @@ export interface VerificationRow {
   submission_id: string;
   at: string;
   proof_sha_consistency: string;
+  producer_role: string;
+  producer_code: string;
+  producer_problem?: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
