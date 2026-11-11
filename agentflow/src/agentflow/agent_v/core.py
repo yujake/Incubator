@@ -854,7 +854,7 @@ def _unregistered_writeback(block_write: Mapping[str, Any], *,
     return out
 
 
-def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
+def fail_closed_sign_issuance(*, statement_id: str = "",
                               reason: str = "") -> dict[str, Any]:
     """`verify_proof` 初值里 `sign_issuance` 那一格的 fail-closed 形状（键无条件存在）。
 
@@ -871,6 +871,8 @@ def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
     值全是"没走到签发"：`checked=False` / `issue=False` / `issued=False`，`reason`
     说清这是早退，不是"不签发"那一档。
 
+    2026-11-11：`proof_no` 在 V 签侧退役 ⇒ 这一格的键集也不再带它（顶层读数同样不产出）。
+
     三态纪律：`checked=False` 不是"可以签"，也不是"判过、不签发" —— 它是"这一趟
     没走到签发那一步"。任何一条真路径仍会整格覆盖它（`out["sign_issuance"] = ...`），
     所以这里只影响早退。
@@ -885,7 +887,7 @@ def fail_closed_sign_issuance(*, statement_id: str = "", proof_no: int = 0,
                       "不是「可以签」，也不是「不签发」这一档"),
         "within_call": None, "review_call": "", "ledger_streak": 0,
         "basis": [], "reading": {}, "cost": {}, "material": {},
-        "statement_id": str(statement_id or ""), "proof_no": int(proof_no or 0),
+        "statement_id": str(statement_id or ""),
     }
 
 
@@ -1271,7 +1273,6 @@ class AgentV:
             "findings": [],
             "unresolved_errors": 0,
             "proof_sha256": "",
-            "proof_no": None,
             "proof_chars": 0,
             "signed_bit3": False,
             "reviewed_by": {},
@@ -1344,11 +1345,10 @@ class AgentV:
             out["detail"] = f"{exc}；这一格没查成，台账里不留行"
             self._emit(f"verify_proof({sid})：{exc} —— 没查，不落台账行")
             return out
-        out["proof_no"] = no
-        # `sign_issuance` 的初值在号判完之后补上这两格：早退路径（手稿闸 / 未在册那几条）
-        # 交回的 fail-closed 读数也要带对号与命题号，而不是空/0。
+        # `sign_issuance` 的初值在号判完之后补上命题号：早退路径（手稿闸 / 未在册那几条）
+        # 交回的 fail-closed 读数也要带对命题号，而不是空串。
+        # （2026-11-11：`proof_no` 在 V 签侧退役 —— 顶层与 sign_issuance 都不再写它。）
         out["sign_issuance"]["statement_id"] = sid
-        out["sign_issuance"]["proof_no"] = int(no)
         text = str(proof_text or "")
         #: 这一趟签的载体（工作区相对路径；空串 = 没有手稿）。在册那一支由参数给、
         #: 随台账行交给 `sign_statement`（签块落回同一份稿）；未在册那两支各自处理。
@@ -1777,7 +1777,6 @@ class AgentV:
                 "signed_bit3": False,
                 "verdict": str(standing.get("verdict") or ""),
                 "proof_sha256": str(standing.get("sha") or _PR.proof_sha(text)),
-                "proof_no": no,
                 "proof_chars": len(text),
                 # 这一趟零转：一条模型调用都没花、一行台账都没落。
                 "review_passes": [],
@@ -2128,7 +2127,6 @@ class AgentV:
             "findings": row["findings"],
             "unresolved_errors": row["unresolved_errors"],
             "proof_sha256": row["proof_sha256"],
-            "proof_no": row.get("proof_no"),
             "proof_chars": row["proof_chars"],
             # 命题位没有翻（V 不写 statements）；"签在稿上"由 `review_write` 两格说。
             "signed_bit3": False,
@@ -3582,7 +3580,6 @@ class AgentV:
                 "kind": "proof_unregistered_signed",
                 "verdict": str(block.get("verdict") or got.get("verdict") or ""),
                 "proof_sha256": str(block.get("proof_sha256") or got.get("sha") or ""),
-                "proof_no": no,
                 "signed_bit3": False,
                 "review_passes": [],
                 "secretary_judge": _unregistered_secretary_judge(got),
@@ -3666,7 +3663,6 @@ class AgentV:
             "findings": list(got.get("findings") or []),
             "unresolved_errors": int(got.get("unresolved_errors") or 0),
             "proof_sha256": str(got.get("sha") or ""),
-            "proof_no": no,
             "proof_chars": 0,
             "signed_bit3": False,
             "review_passes": list(got.get("passes") or []),
@@ -3777,7 +3773,6 @@ class AgentV:
             "findings": list(verdict.get("findings") or []),
             "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
             "proof_sha256": str(got.get("sha") or ""),
-            "proof_no": no,
             "proof_chars": int(got.get("proof_chars") or 0),
             "signed_bit3": False,
             "exhaustion_review": reviewed,
@@ -3853,7 +3848,6 @@ class AgentV:
             "findings": row["findings"],
             "unresolved_errors": row["unresolved_errors"],
             "proof_sha256": row["proof_sha256"],
-            "proof_no": row.get("proof_no"),
             "proof_chars": row["proof_chars"],
             "signed_bit3": False,
             "reviewed_by": {},

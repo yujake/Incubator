@@ -398,7 +398,9 @@ def test_e3_judging_cannot_is_not_a_verdict_and_the_legacy_axis_is_no_longer_a_c
                                    secretary_judge={"checked": True, "axis": "clean",
                                                     "decision": SEC.V_REPLY_CLEAN})
     VR._append_verification(VR.verification_ledger_path(st2.root, SID), {
-        **{k: first[k] for k in ("statement_id", "stmt_id", "proof_no", "verifier", "verdict",
+        # 2026-11-11：canonical 新行不再写 `proof_no`（V 签侧退役）⇒ 拷字段时不含它；
+        # 这条老行要验的是"轴名 unsure 不再是词表一格"，与证明号无关。
+        **{k: first[k] for k in ("statement_id", "stmt_id", "verifier", "verdict",
                                  "defect_step", "quote", "why", "findings",
                                  "unresolved_errors", "citation_checks", "proof_sha256",
                                  "proof_chars", "submission_id", "at")},

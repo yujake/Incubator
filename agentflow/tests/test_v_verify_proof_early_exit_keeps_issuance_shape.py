@@ -35,11 +35,13 @@ from agentflow import agent_v as AVPKG  # noqa: F401  —— 确保包已导入
 from agentflow.agent_v import core as AV
 
 #: 完整的 fail-closed 键集合（与 `fail_closed_sign_issuance` 逐字一致；改它要一起改）。
+#: 2026-11-11：`proof_no` 在 V 签侧退役 —— 这一格从集合里删掉（顶层读数与
+#: `Secretary.decide_sign_issuance` 同口径不再写它）。
 EXPECTED_KEYS = {
     "checked", "issue", "issued", "landed", "decision", "writeback", "streak",
     "need", "streak_ok", "projected", "same_sha", "state", "reason",
     "within_call", "review_call", "ledger_streak", "basis", "reading", "cost",
-    "material", "statement_id", "proof_no",
+    "material", "statement_id",
 }
 
 
@@ -89,7 +91,7 @@ def test_c_missing_manuscript_still_has_the_full_issuance_shape(
     assert got.get("reason") == "proof_text_needs_a_manuscript", got
     iss = _assert_fail_closed(got)
     assert iss["statement_id"] == "000007", iss
-    assert int(iss["proof_no"]) == 1, iss   # 缺省 = canonical
+    # 2026-11-11：`proof_no` 已从这一格退役 ⇒ 它不在键集里（上面的 == 断言钉着）。
 
 
 # ============================================================ d：反真空

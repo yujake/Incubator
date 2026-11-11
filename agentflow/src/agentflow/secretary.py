@@ -4257,6 +4257,12 @@ class Secretary:
             v = {"verdict": row.get("verdict"),
                  "unresolved_errors": row.get("unresolved_errors"),
                  "defect_step": row.get("defect_step")}
+        # 2026-11-11：`proof_no` 在 V 签侧退役 —— 返回值不再写这一格，但它仍是
+        # 「这一趟审的是哪一份」的材料标签（递给模型的那一小段仍要说清）。
+        try:
+            proof_number = int(_VR.as_proof_no(proof_no) or 0)
+        except (TypeError, ValueError):
+            proof_number = 0
         out: dict[str, Any] = {
             "checked": False, "issue": False, "issued": False,
             "decision": JUDGE_UNCHECKED, "landed": False, "writeback": {},
@@ -4267,12 +4273,9 @@ class Secretary:
             "within_call": None, "review_call": str(review_call or ""),
             "ledger_streak": 0,
             "basis": [], "reading": {}, "cost": {}, "material": {},
-            "statement_id": str(statement_id or ""), "proof_no": 0,
+            "statement_id": str(statement_id or ""),
+            # 2026-11-11：`proof_no` 在 V 签侧退役 —— 这一格不再写（顶层读数同口径）。
         }
-        try:
-            out["proof_no"] = int(_VR.as_proof_no(proof_no) or 0)
-        except (TypeError, ValueError):
-            out["proof_no"] = 0
         #: `within_call` 归一：负数按 0 收（"这一趟一轮都没判"不是"次数够了"）。
         within: int | None = None
         if within_call is not None:
@@ -4369,7 +4372,7 @@ class Secretary:
         # 所以这里给 `same_sha=True` 是"这一趟的事实"，不是台账读数。
         if within is not None:
             material = {
-                "statement_id": str(statement_id or ""), "proof_no": out["proof_no"],
+                "statement_id": str(statement_id or ""), "proof_no": proof_number,
                 "within_call": within,
                 "streak": out["projected"], "need": out["need"],
                 "projected": out["projected"], "streak_ok": out["streak_ok"],
@@ -4382,7 +4385,7 @@ class Secretary:
             }
         else:
             material = {
-                "statement_id": str(statement_id or ""), "proof_no": out["proof_no"],
+                "statement_id": str(statement_id or ""), "proof_no": proof_number,
                 "state": out["state"],
                 "streak": out["streak"],
                 "need": out["need"],

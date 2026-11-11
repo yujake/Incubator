@@ -356,7 +356,8 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
     for prompt in seam.prompts:
         assert P2_MARK in prompt, "提示词里没有 #p2 的正文（给了别的证明的正文）"
         assert P1_MARK not in prompt, "提示词里混进了 #p1 的正文（号与正文解耦）"
-    assert out["proof_no"] == 2, out
+    # 2026-11-11：`proof_no` 从 V 的顶层读数退役 ⇒ 号仍从台账那一行读（同一份事实）。
+    assert int(_ledger_rows(st)[0]["proof_no"]) == 2, _ledger_rows(st)[0]
     assert out["proof_sha256"] == VR.text_sha(P2), (
         f"sha 不是 #p2 那一份的（{out['proof_sha256'][:12]}… vs {VR.text_sha(P2)[:12]}…）")
     assert _ledger_rows(st)[0]["proof_sha256"] == VR.text_sha(P2), _ledger_rows(st)[0]
@@ -422,7 +423,8 @@ def test_text_without_proof_no_never_mismatches_the_recorded_number(
 
     if out["checked"]:
         # 记到 #p1 那一支：sha 必须是 #p1 的，否则就是错配。
-        assert out["proof_no"] == 1, out
+        # 2026-11-11：`proof_no` 从 V 的顶层读数退役 ⇒ 号仍从台账那一行读。
+        assert int(_ledger_rows(st)[-1]["proof_no"]) == 1, _ledger_rows(st)[-1]
         assert out["proof_sha256"] == VR.text_sha(P1), (
             f"记到 #p1 上，sha 却是别的证明的（{out['proof_sha256'][:12]}…）")
     else:

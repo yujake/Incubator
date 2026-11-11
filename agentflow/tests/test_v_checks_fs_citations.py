@@ -672,7 +672,9 @@ def test_dependencies_of_another_proof_do_not_enter_this_proofs_material(
     agent2, seam2 = _v(store, _reply(checks=[_check(lemma, "consistent", note="用法一致")]))
     out2 = _three(agent2, main, proof_text=MAIN_PROOF_2, proof_no=2)
     assert [c["stmt_id"] for c in out2["citations"]] == [lemma], out2["citations"]
-    assert out2["proof_no"] == 2 and out2["signed_bit3"] is False, out2
+    # 2026-11-11：`proof_no` 从 V 的顶层读数退役 ⇒ "审的是哪一份"仍从台账那一行读。
+    assert int(_ledger_row(store, main)["proof_no"]) == 2, _ledger_row(store, main)
+    assert out2["signed_bit3"] is False, out2
     assert out2["review_write"].get("manuscript_signed") is True, out2["review_write"]
     assert LEMMA_FULL in seam2.prompts[0]
 

@@ -344,7 +344,9 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
     body_now = DS.proof_body(text_now).strip("\n")
     assert body_now == PROOF_V2, body_now
     assert second.get("sha256") == PR.proof_sha(PROOF_V2), second
-    assert [int(v.get("proof_no") or 0) for v in entry_now["versions"]] == [1], (
+    # 2026-11-11：登记条目/版本段不再写 `proof_no`（`parse_entry` 缺省读成 0，
+    # canonical 的 1 不再是盘上的事实）；"只剩当前那一版"由条数与 sha 钉住。
+    assert [int(v.get("proof_no") or 0) for v in entry_now["versions"]] == [0], (
         entry_now["versions"])
     assert [str(v.get("sha256") or "") for v in entry_now["versions"]] \
         == [PR.proof_sha(PROOF_V2)], entry_now["versions"]

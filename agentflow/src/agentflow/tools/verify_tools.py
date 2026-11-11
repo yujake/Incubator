@@ -1132,8 +1132,10 @@ _ROLES_V = ("V",)
     # 三条返回路径的键集合完全相同（与 verify.evidence_for 同一纪律）：
     # `checked=False` 是"没查成"（没接线 / 结论不合法）而「不是」工具失败 ——
     # 与 verify.check_formal 的 no_backend 同一档。少给键会让下游把"没有读数"读成"是零"。
+    # 2026-11-11：`proof_no` 从声明里退役（V 签侧已退役它：一个稿号 = 一份文件 = 一份
+    # 证明；顶层读数不再产出这一格）。参数面仍收它只为老盘读兼容，不再承诺成返回键。
     returns=(
-            "{'checked','kind','statement_id','proof_no','verification_id','verdict','defect_step','findings',"
+            "{'checked','kind','statement_id','verification_id','verdict','defect_step','findings',"
             "'unresolved_errors','proof_sha256','proof_chars','signed_bit3','reviewed_by','bits',"
             # 2026-10-23：穷举型证据会审那一档的三格读数 + 签名主体（V）/ 作者（E）
             "'exhaustion_review','checks','missing','signer','proof_authors','report_path',"
