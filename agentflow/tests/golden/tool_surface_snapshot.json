@@ -2874,7 +2874,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`。",
+   "summary": "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`；B 仅对自己未签的 `reports/b-proof-<六位号>.md` 有一格（write/delete/move 仍拒）。",
    "tags": [
     "fs",
     "write",

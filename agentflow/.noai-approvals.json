@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-11T13:53:21+08:00",
+  "generated_at": "2026-11-11T14:00:33+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -556,10 +556,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "bc71126734b8ed5cec5976b6bc8a520faa29140ff48a113215144ffaca42402d",
+      "sha256": "c6811a9796a4a8abc5ee148ab23872f9b4770b639ec87ee0b373c5a1a76f0a80",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p275（2026-11-11）：attack.step 增加可选 product（证明/归约可直接交进来，框架照既有产物校验并落稿）；specs/f.py 的动作表同步那一格 + policy 一条教法；工具面 golden 按现值重冻（declaration/signature 只动 attack.step）。登记 ≠ 批准：仍需 2 名 reviewer。",
+      "change_note": "2026-11-11 记账：fs.edit 的 summary 随甲的窄豁免补了一句（B 仅对自己未签的 reports/b-proof-<六位号>.md 有一格；write/delete/move 仍拒），tool_surface_snapshot.json 按现值重冻。diff 只有 declarations.fs.edit.summary 一格；按 FC-27 口径『重冻必须由人逐格看过』—— reviewers 仍为空（登记≠批准）。",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
