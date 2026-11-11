@@ -729,7 +729,9 @@ def _register_body(*, label: str, detail: Mapping[str, Any], manuscript: str,
     from .agent_loop import BOARD_DETAIL_CHARS
 
     sid = str(detail.get("statement_id") or label.split("#", 1)[0])
-    no = int(detail.get("proof_no") or 1)
+    # `proof_no` 在 V 签侧退役：这一段只用 `label` 里老行可能带的 `#pN` 做措辞兼容
+    # （新行没有这一格 ⇒ `_label_parts` 按 canonical 1），明细字典里不再单独带一格。
+    _, no = _label_parts(label)
     sha = str(detail.get("proof_sha256") or "")
     path = str(manuscript or detail.get("manuscript") or "")
     summary = f"待收录：{sid}#p{no}（稿上已有成立的 V 签，`statements` 里还没入库）"
@@ -801,7 +803,7 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
                            "owner": str(owner or ""), "owner_known": False,
                            "owner_why": "", "reason": "", "problems": []}
-    sid, no = _label_parts(label)
+    sid = _label_parts(label)[0]
     sha = str(proof_sha or "").strip()
     if not sid or not sha:
         out.update(state="skipped",
@@ -873,7 +875,7 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
         item_depth = 1
     summary, body = _register_body(
         label=label,
-        detail={"statement_id": sid, "proof_no": no, "proof_sha256": sha,
+        detail={"statement_id": sid, "proof_sha256": sha,
                 "manuscript": str(manuscript or ""),
                 "reviewed_why": str(gap.get("reviewed_why") or "")},
         manuscript=manuscript, at=at)
@@ -1200,7 +1202,10 @@ def _detail_of_row(row: Mapping[str, Any],
         no = int(row.get("proof_no") or 1)
     except (TypeError, ValueError):
         no = 1
-    entry = {"label": label, "proof_no": no, "verification_id": vid,
+    # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— 回执明细也不再带这一格。
+    # 身份由 `label`（老行才带 `#pN` 尾巴）/ `verification_id` / `proof_sha256` 回答；
+    # `no` 仍用于老行上的报告面查询（`report_fix_list`），只是不再写进明细。
+    entry = {"label": label, "verification_id": vid,
              # `in_sync` 只影响板上的措辞（"这一签盖的就是现在这一份"），
              # 读不到就按 False 写 —— 那是最保守的那一句，不是一句假话。
              "unresolved_errors": int(row.get("unresolved_errors") or 0),
@@ -1217,6 +1222,9 @@ def _detail_of_row(row: Mapping[str, Any],
     via = ("report" if kind in ("procedural", "style")
            else (VSP.verdict_axis(row) or "verdict"))
     detail = AL._v_rejection_detail(sid, entry, row, via)
+    # `_v_rejection_detail` 为历史板项形状保留 `proof_no`；V 签侧退役之后这一格
+    # 不再随回执写出去（老行/老板项读侧照旧，`label` 仍带着老行的 `#pN`）。
+    detail.pop("proof_no", None)
     detail["fault_kind"] = kind
     detail["requires_rewrite"] = via != "report"
     if via == "report" and str(root or ""):

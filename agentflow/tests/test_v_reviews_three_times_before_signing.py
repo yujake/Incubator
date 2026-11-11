@@ -711,10 +711,12 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
     # （2026-11-02 业主：「这一档连历史兼容读也不留」）：读出来是空轴，连续计数里
     # 没有一条分支认它（不计入、也不清零 —— 与"问过、没判成"同一条通用纪律）。
     VR._append_verification(VR.verification_ledger_path(st.root, SID), {
-        **{k: first[k] for k in ("statement_id", "stmt_id", "proof_no", "verifier", "verdict",
+        **{k: first[k] for k in ("statement_id", "stmt_id", "verifier", "verdict",
                                  "defect_step", "quote", "why", "findings",
                                  "unresolved_errors", "citation_checks", "proof_sha256",
                                  "proof_chars", "submission_id", "at")},
+        # 手写的是 2026-10-30 之前那一版老行：老文件仍可带 `proof_no`（读侧兼容）。
+        "proof_no": 1,
         "verification_id": "v-legacy-0001",
         "round": 2,
         "secretary_judge": {"axis": LEGACY_AXIS, "checked": True, "decision": "判不了"},

@@ -2157,6 +2157,14 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     "写签"的唯一入口，若它只看调用方说的 `written=True`，那 `sign_statement` 那一侧的
     连续闸一旦泄漏，盘上就会出现"一次成立也有一份签"——而那正是这一笔要堵的形态。
 
+    ## `proof_no` 在写侧退役（业主 2026-11-11）
+
+    `proof_no` 参数保留只为旧调用点不必改签名：canonical（缺省 1）不再写进签文件
+    —— 一稿一份之后它不携带任何身份（`artifact_sha` / `artifact_path` / `statement_id`
+    才是身份）。显式 `proof_no>1` 是旧多证明写口，为旧读侧按号分组保留（不是新口径）。
+    读侧（`sign_of` / `sign_reading` / `signed_table` / 冻结）对老签文件里已有的
+    `proof_no` 仍按缺省 1 兼容。
+
     ## 一稿一签（已存在就不许覆盖）
     同一份正文只该有一个签。已存在且逐字相同 ⇒ `idempotent`（不重写，但仍补一次归档：
     上一次归档失败的话，这一次顺手修好）；已存在而内容不同 ⇒ `conflict`，「不写、不覆盖」，
@@ -2221,7 +2229,11 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         "artifact_sha_rule": ARTIFACT_SHA_RULE,
         "ledger": str(ledger or ""),
         "statement_id": str(statement_id or ""),
-        "proof_no": int(proof_no or 1),
+        # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical 新签不写它
+        # （旧多证明写口 `proof_no>1` 的兼容写在下面，见 `doc["proof_no"]` 那一支）。
+        # 身份靠三样：正文 sha（`artifact_sha`）/ 手稿路径（`artifact_path`，稿号现读）/
+        # `statement_id`。老签文件里已有的 `proof_no` 读侧照旧读（`sign_of` /
+        # `credential_reading` / `_any_credential` 都按缺省 1 兼容）。
         "verdict": "成立",
         "streak": int(streak), "need": int(need),
         # 逐转读数（「不是全文」：全文在台账，见 source_note）。
@@ -2234,6 +2246,10 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         "written_by": who or WRITTEN_BY_DIRECT,
         "envelope": envelope,
     }
+    # 旧多证明写口（显式 `proof_no>1`）的兼容：旧读侧按号分组（`_recomputable` 的
+    # legacy 支 / `_any_credential`），这一支照写那一格；canonical（缺省 1）不写。
+    if int(proof_no or 1) != 1:
+        doc["proof_no"] = int(proof_no)
     out["envelope"] = envelope
     path = sign_path(root, key)
     out["path"] = rel(path, root)

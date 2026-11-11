@@ -355,14 +355,19 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
 
     # ------------------------------------------------------------ L2 签名
     signed1 = _sign(st, text=P1, proof_no=1)
-    assert signed1.get("proof_no") == 1, _broken("L2", "签 #p1 的签名行没记证明号", signed1)
+    # 2026-11-11（V 签侧退役）：canonical 新行不再写 `proof_no`；身份改由
+    # `stmt_id` + `proof_sha256` 回答。显式 #p2 的旧多证明写口仍照写（见下面 L2）。
+    assert "proof_no" not in signed1, _broken(
+        "L2", "canonical 签名行仍然写了已退役的 proof_no", signed1)
     assert signed1.get("stmt_id") == SID and signed1.get("statement_id") == SID, _broken(
         "L2", "签名行上的 `stmt_id` 不是被审的那条命题", signed1)
     assert signed1.get("proof_sha256") == VR.text_sha(P1), _broken(
         "L2", "签名行上的 sha 不是 #p1 那一份的", signed1.get("proof_sha256"))
     disk = _ledger(st)[-1]
-    assert (disk.get("stmt_id"), disk.get("proof_no")) == (SID, 1), _broken(
-        "L2", "盘上那一行不是 (命题, #p1)", disk)
+    assert disk.get("stmt_id") == SID, _broken(
+        "L2", "盘上那一行不是这一条命题", disk)
+    assert "proof_no" not in disk, _broken(
+        "L2", "盘上 canonical 行仍然写了已退役的 proof_no", disk)
     assert disk.get("proof_sha256") == VR.text_sha(P1), _broken(
         "L2", "盘上那一行的 sha 与签名时那一份不符", disk.get("proof_sha256"))
 
@@ -405,8 +410,12 @@ def test_the_multi_proof_line_is_connected_end_to_end(tmp_path: pathlib.Path) ->
         "L2", "签 #p2 之后第 3 位没有写回（或写回失败）", wb)
     assert wb.get("proof_no") == 2, _broken("L2", "写回的不是 #p2 那一格", wb)
     ledger_pairs = [(r.get("stmt_id"), r.get("proof_no")) for r in _ledger(st)]
-    assert (SID, 1) in ledger_pairs and (SID, 2) in ledger_pairs, _broken(
-        "L2", "台账里不是两条证明各一行", ledger_pairs)
+    # 2026-11-11（V 签侧退役）：canonical（#p1）新行不再写 `proof_no`（None = 没写），
+    # 显式 #p2 的旧多证明写口照写。两条证明仍各三行。
+    assert len([p for p in ledger_pairs if p == (SID, None)]) == int(VR.SIGN_STREAK_NEED), _broken(
+        "L2", "canonical 的三行没有落成「不写 proof_no」", ledger_pairs)
+    assert len([p for p in ledger_pairs if p == (SID, 2)]) == int(VR.SIGN_STREAK_NEED), _broken(
+        "L2", "台账里 #p2 不是三行", ledger_pairs)
 
     row = _row(st)
     bits = row["bits"]

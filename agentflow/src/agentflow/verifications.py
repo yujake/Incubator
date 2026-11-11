@@ -575,7 +575,8 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         # 没有命题号是这一档的定义（命题还没在册）：两个键都留空串而不是缺键 ——
         # 读的人要能分辨"这一行不属于任何命题"与"这一行是旧格式、没有这个键"。
         "statement_id": "", "stmt_id": "",
-        "proof_no": int(DEFAULT_PROOF_NO),
+        # 2026-11-11 业主裁定：新行不再写 `proof_no`（V 签侧退役；老行读侧照旧）。
+        # 这一行是哪一份正文：`proof_sha256`；哪一份载体：`object_sha256` / `object_path`。
         "verifier": str(verifier or "V"), "verdict": checked["verdict"],
         "defect_step": checked["defect_step"], "quote": checked["quote"],
         "why": checked["why"], "findings": checked["findings"],
@@ -1495,8 +1496,10 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         # 那一个名字（业主 2026-10-22 点名要它）。只写一个会让按另一个键读的人读到 None，
         # 而"读到 None"与"这一签不属于任何命题"在读数上长得一样。
         "statement_id": str(statement_id), "stmt_id": str(statement_id),
-        #: 被审的是哪一份证明（1 = canonical，#p1）。老行没有这一格 ⇒ 读侧按 1 算。
-        "proof_no": no,
+        # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical 新行不写这一格
+        # （一稿一份之后身份由 `proof_sha256` + `stmt_id` 回答）。老行里已有的
+        # `proof_no` 读侧照旧（`proof_no_of` 缺省按 1，`PROOF_NO_KEYS` 兼容 `rev` / `no`）；
+        # 显式 `proof_no>1`（旧多证明调用点）的兼容写在行构造之后（见下面那一支）。
         "verifier": str(verifier or "V"), "verdict": checked["verdict"],
         "defect_step": checked["defect_step"], "quote": checked["quote"],
         "why": checked["why"], "findings": checked["findings"],
@@ -1517,6 +1520,12 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         "submission_id": str(submission_id or ""),
         "at": _now_iso(),
     }
+    if no != DEFAULT_PROOF_NO:
+        # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical（#p1）新行不再写。
+        # 显式 `proof_no>1` 是旧多证明写口（一稿一份之后生产路径不再产生它）：旧读侧
+        # （`consecutive_holds(proof_no=N)` / `_rows_of_proof`）按号分组，必须还能把这
+        # 一行认成第 N 份，所以这一支照写；它不是新口径，是旧文件的写侧兼容。
+        row["proof_no"] = int(no)
     if str(checked.get("verdict_raw") or "").strip():
         #: 折档那一行留住的模型原话（"它其实没判、只是没找到缺陷"这件事的唯一读数）。
         #: 只在真折过时写 ⇒ "模型自己就答了两态"的行与历史行逐字节不变。

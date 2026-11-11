@@ -174,9 +174,10 @@ def test_signing_the_current_proof_reaches_the_statement_row(tmp_path: pathlib.P
     assert _row(st)["bits"]["reviewed"] is False, "夹具前提：还没签"
 
     signed = _sign(st)
-    # 签名行必须带 (stmt_id, proof_no, proof_sha256) —— 三者合起来回答"复核过的是哪一份"。
+    # 签名行必须带 (stmt_id, proof_sha256) —— 两者合起来回答"复核过的是哪一份"。
+    # 2026-11-11（V 签侧退役）：canonical 新行不再写 `proof_no`；老行里已有的读侧照旧。
     assert signed["stmt_id"] == SID and signed["statement_id"] == SID, signed
-    assert signed["proof_no"] == 1, signed
+    assert "proof_no" not in signed, signed
     assert signed["proof_sha256"] == VR.text_sha(PROOF1), signed
     # 同一次写把第 3 位翻上去（写回读数也要看得见）
     wb = signed["statement_writeback"]

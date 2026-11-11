@@ -2396,7 +2396,9 @@ class AgentV:
                       f"row={row.get('verification_id') or '（没有编号）'}"],
             "reading": dict(standing), "cost": {}, "material": {},
             "writeback": {}, "statement_id": str(statement_id),
-            "proof_no": int(proof_no),
+            # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— 这一格的读数不再带它。
+            # 参数仍收（`review_standing` 要按老行自己的号读，老盘兼容），只是不再
+            # 往上层读数里写一格。
         }
 
     def _terminal_reason(self, *, kind: str, judgment: Mapping[str, Any],
@@ -3033,7 +3035,7 @@ class AgentV:
             pending = pending_rows[-1] if pending_rows else {}
             passes = _passes_with_tickets(passes, pending_rows)
             block_write, issued, landed = self._issue_and_land_unregistered(
-                rel=rel, sha=sha, streak=streak, need=need, no=no,
+                rel=rel, sha=sha, streak=streak, need=need,
                 passes=passes, at=at, block_write=block_write,
                 ledger=_pending_ledger_ref(pending))
         elif stopped == "reviewed_unsigned":
@@ -3310,7 +3312,7 @@ class AgentV:
                                         if judged else {})}
         if stopped == "signed":
             block_write, issued, landed = self._issue_and_land_unregistered(
-                rel=rel, sha=sha, streak=streak, need=need, no=no,
+                rel=rel, sha=sha, streak=streak, need=need,
                 passes=passes, at=at, block_write=block_write,
                 ledger=_pending_ledger_ref(pending))
         reading = dict(block_write.get("reading") or {})
@@ -3403,7 +3405,7 @@ class AgentV:
         return None, judged, passes, stopped, reviewed
 
     def _issue_and_land_unregistered(self, *, rel: str, sha: str, streak: int,
-                                     need: int, no: int,
+                                     need: int,
                                      passes: list[dict[str, Any]], at: str,
                                      block_write: dict[str, Any],
                                      ledger: str = ""
@@ -3447,7 +3449,8 @@ class AgentV:
             issued = _VS.issue(
                 self.workspace_root, artifact_sha=sha, streak=streak, need=need,
                 artifact_path=rel, ledger=ledger, statement_id="",
-                proof_no=no, passes=passes, at=at, by=who)
+                # `proof_no` 在写侧退役（业主 2026-11-11）：不再往签文件里传这一格。
+                passes=passes, at=at, by=who)
         except Exception as exc:  # noqa: BLE001 —— 颁发抛了也要如实报
             issued = {"written": False, "reason": (
                 f"颁发那一笔抛了（{type(exc).__name__}: {exc}）"), "path": ""}
