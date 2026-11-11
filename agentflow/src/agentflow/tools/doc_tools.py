@@ -1488,6 +1488,35 @@ def render_markdown(
 #: 事件流里记"这条中间产物的 sha"的 message（读侧按它反查）。
 ARTIFACT_EVENT = "documents.markdown_sha256"
 
+#: 「这一行的正文以哪份文件为准」的唯一口径（甲，2026-11-11）。
+#:
+#: 业主口径（`draft` 与本批施工单）：H 审的是论文正文 `out/paper/main.tex`，
+#: `documents` 只是它的登记行。所以 kind="paper" 的行，**正文 = `out/paper/main.tex`**；
+#: 其它 kind（note / survey / reproduction_report）没有 tex，正文就是它自己的
+#: `markdown_path` 那份渲染产物。
+#:
+#: 为什么记的是"文件字节的 sha"而不是 `content_sha256`：后者是这一版**内容**的规范
+#: 哈希（`signatures.content_sha256_of`，签名台账与 `doc:@hash` 都钉它），
+#: 把文件 sha 塞进去会让 `verify.content_hash_mismatch` 与整条签名链同时失效
+#: （D-44 的现场，见上一节）。文件 sha 继续走**同一条** `ARTIFACT_EVENT` 读数，
+#: 不新造第二份账。
+BODY_TEX_REL = "out/paper/main.tex"
+
+
+def body_artifact_of(root: Any, doc: Mapping[str, Any]) -> tuple[str, Path | None]:
+    """这一行的「正文」是哪个文件 ⇒ `(工作区相对路径, 绝对路径或 None)`。
+
+    口径见 :data:`BODY_TEX_REL`：paper ⇒ `out/paper/main.tex`（即使它还没落盘，
+    也返回这个落点 —— "正文还不在盘上"本身必须是一条可读的读数，不能退回
+    markdown 冒充正文）；其它 kind ⇒ 自己的 `markdown_path`。
+    """
+    kind = str(doc.get("kind") or "")
+    rel = BODY_TEX_REL if kind == "paper" else str(doc.get("markdown_path") or "")
+    rel = rel.replace("\\", "/")
+    if not rel:
+        return "", None
+    return rel, Path(str(root)) / rel
+
 
 def note_markdown_artifact(store: Any, doc_id: Any, rel: Any, absolute: Any, *,
                            actor: str = "agent-G") -> dict:
@@ -1498,38 +1527,64 @@ def note_markdown_artifact(store: Any, doc_id: Any, rel: Any, absolute: Any, *,
     只重画文件、不改任何数据行，而"写 documents 行的事务必须跑 normalize_claims"
     这条机械判据（`tests/test_core_audit_efgh.py`）会把它读成一次写稿 —— 在这里开事务
     就把两件事分清了：这里只追加一条 info 事件，一个字段都不写。
+
+    `body` 由调用方按 :func:`body_artifact_of` 算好传进来（甲）：正文那一份可能是
+    `out/paper/main.tex`（paper），也可能就是 rel 自己（其它 kind）。
     """
+    doc = next((dict(r) for r in store.rows("documents")
+                if str(r.get("doc_id")) == str(doc_id)), None)
+    body_rel, body_abs = body_artifact_of(getattr(store, "root", ""), doc or {})
     with store.tx("documents", actor=actor, note=f"{ARTIFACT_EVENT} doc:{doc_id}") as tx:
-        return record_markdown_artifact(tx, doc_id, rel, absolute)
+        return record_markdown_artifact(tx, doc_id, rel, absolute,
+                                        body_rel=body_rel, body_absolute=body_abs)
 
 
-def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any) -> dict:
+def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any,
+                             *, body_rel: Any = None,
+                             body_absolute: Any = None) -> dict:
     """在那笔写 `documents` 行的事务里，记下盘上那份 markdown 的字节 sha256。
 
     必须在文件写完之后调（`D-44` 的现场就是"记的 sha 与盘上那份对不上"）。
     读不到文件时不编一个哈希：`sha256` 留空 + `problem` 写清原因 ——
     "我没读到"与"我读到了、就这么长"必须分得开（三态纪律）。
 
+    ## 甲（2026-11-11）：正文那一份的 sha 同一条事件里记
+    `body_rel` / `body_absolute` 是"这一行的正文以哪份文件为准"的落点
+    （:func:`body_artifact_of`）。paper 行的正文是 `out/paper/main.tex`，
+    不是这份 `render_markdown` 产物；两份的 sha 各占一格，互不冒充。
+    文件还没落盘时 `body_sha256` 留空 + `body_problem` 说清 ——
+    "正文还不在盘上"是一条**读数**，不许退回 markdown 冒充它。
+
     返回的读数与事件里的字段逐字相同，方便调用方把它带进自己的返回值。
     """
     from .. import artifacts as A
 
-    path = Path(str(absolute))
-    sha256, size, problem = "", 0, ""
-    try:
-        sha256 = A.sha256_of(path)
-        size = int(path.stat().st_size)
-    except OSError as e:  # noqa: BLE001 —— 读不到是读数，不是异常上抛
-        problem = f"{type(e).__name__}: {e}"
+    def _probe(p: Any) -> tuple[str, int, str]:
+        if p is None:
+            return "", 0, "没有正文落点"
+        path = Path(str(p))
+        try:
+            return A.sha256_of(path), int(path.stat().st_size), ""
+        except OSError as e:  # noqa: BLE001 —— 读不到是读数，不是异常上抛
+            return "", 0, f"{type(e).__name__}: {e}"
+
+    sha256, size, problem = _probe(absolute)
+    body_path = str(body_rel or "").replace("\\", "/")
+    body_sha256, body_bytes, body_problem = _probe(body_absolute)
     reading = {
         "doc_id": str(doc_id),
         "path": str(rel or "").replace("\\", "/"),
         "sha256": sha256,
         "bytes": size,
         "problem": problem,
+        "body_path": body_path,
+        "body_sha256": body_sha256,
+        "body_bytes": body_bytes,
+        "body_problem": body_problem,
     }
     tx.info(ARTIFACT_EVENT, **reading, note=(
-        "中间产物（documents 行指向的 markdown）写盘那一刻的字节 sha256；"
+        "中间产物（documents 行指向的 markdown）与**正文**（paper 行 = "
+        "`out/paper/main.tex`；其它 kind = markdown 自己）写盘那一刻的字节 sha256；"
         "只作人工追溯，不作任何收工门判据"
     ))
     return reading
@@ -1569,6 +1624,33 @@ def document_artifact_readings(store: Any, doc_ids: Sequence[str] | None = None)
         # 最后一次写入为准：同一份稿件可以改很多次（revise / refresh_markdown）
         recorded[did] = dict(e)
     root = Path(str(getattr(store, "root", "") or "."))
+
+    def _state(target_rel: str, recorded_sha: str) -> tuple[str, str, int, str]:
+        """`(status, sha_now, bytes_now, reason)` —— 与 markdown 那一份同一套四态。"""
+        if not target_rel:
+            return "missing", "", 0, "这一行没有落点可核对"
+        target = root / target_rel
+        if not target.is_file():
+            return "missing", "", 0, f"{target_rel} 不在盘上了"
+        try:
+            sha_now = A.sha256_of(target)
+            size_now = int(target.stat().st_size)
+        except OSError as e:  # noqa: BLE001 —— 读不出来是第三态，不是"没变"
+            return "unreadable", "", 0, f"{target_rel} 读不出来（{type(e).__name__}: {e}）"
+        if not recorded_sha:
+            # 写那一行时这份文件还没落盘（甲：正文可能晚于 documents 行才写）——
+            # 现在盘上有了 ⇒ "变了"是唯一诚实的读数，不许写 ok。
+            return "changed", sha_now, size_now, (
+                f"写这一行时 {target_rel} 还不在盘上（记录的 sha 为空），"
+                f"它现在有了（{sha_now[:16]}…）⇒ 正文在这一行之后被写过"
+            )
+        if sha_now == recorded_sha:
+            return "ok", sha_now, size_now, ""
+        return "changed", sha_now, size_now, (
+            f"中间产物内容已变：{target_rel} 写这一行时是 {recorded_sha[:16]}…，"
+            f"盘上现在是 {sha_now[:16]}…（只作读数，不进任何门）"
+        )
+
     rows: list[dict] = []
     for doc in store.rows("documents"):
         did = str(doc.get("doc_id") or "")
@@ -1576,43 +1658,33 @@ def document_artifact_readings(store: Any, doc_ids: Sequence[str] | None = None)
             continue
         rel = str(doc.get("markdown_path") or "")
         got = recorded.get(did)
+        body_rel, _body_abs = body_artifact_of(root, doc)
+        body_recorded = str((got or {}).get("body_sha256") or "")
+        body_status, body_now, body_bytes, body_reason = _state(body_rel, body_recorded)
+        markdown_status, sha_now, bytes_now, reason = _state(
+            rel, str((got or {}).get("sha256") or ""))
         row = {
             "doc_id": did,
             "markdown_path": rel,
             "sha256_recorded": str((got or {}).get("sha256") or ""),
-            "sha256_now": "",
-            "bytes_now": 0,
-            "status": "unrecorded",
-            "reason": "",
-        }
-        if got is None:
-            row["reason"] = (
+            "sha256_now": sha_now,
+            "bytes_now": bytes_now,
+            "status": markdown_status if got is not None else "unrecorded",
+            "reason": (
                 "这一行没有被记过中间产物的 sha（改动之前写的行）⇒ 判不了它有没有变过"
-            )
-        elif not rel:
-            row["status"] = "missing"
-            row["reason"] = "这一行没有 markdown_path ⇒ 没有中间产物可核对"
-        else:
-            target = root / rel
-            if not target.is_file():
-                row["status"] = "missing"
-                row["reason"] = f"{rel} 不在盘上了"
-            else:
-                try:
-                    row["sha256_now"] = A.sha256_of(target)
-                    row["bytes_now"] = int(target.stat().st_size)
-                    row["status"] = (
-                        "ok" if row["sha256_now"] == row["sha256_recorded"] else "changed"
-                    )
-                    if row["status"] == "changed":
-                        row["reason"] = (
-                            "中间产物内容已变：写这一行时是 "
-                            f"{row['sha256_recorded'][:16]}…，盘上现在是 "
-                            f"{row['sha256_now'][:16]}…（只作读数，不进任何门）"
-                        )
-                except OSError as e:  # noqa: BLE001 —— 读不出来是第三态，不是"没变"
-                    row["status"] = "unreadable"
-                    row["reason"] = f"{rel} 读不出来（{type(e).__name__}: {e}）"
+                if got is None else reason
+            ),
+            # ---- 甲：正文那一份（paper = `out/paper/main.tex`，其它 kind = markdown）
+            "body_path": body_rel,
+            "body_sha256_recorded": body_recorded,
+            "body_sha256_now": body_now,
+            "body_bytes_now": body_bytes,
+            "body_status": body_status if got is not None else "unrecorded",
+            "body_reason": (
+                "这一行没有被记过正文的 sha（改动之前写的行）⇒ 判不了它有没有变过"
+                if got is None else body_reason
+            ),
+        }
         rows.append(row)
     # 出口自检：状态词表只有一个声明面（ARTIFACT_STATUSES），实现不许漏出一个新词。
     unknown_status = sorted({str(r["status"]) for r in rows} - set(ARTIFACT_STATUSES))
@@ -1871,7 +1943,10 @@ def build_document(
         # （唯一口径 `artifacts.sha256_of`，不接收任何传进来的值）。
         # 必须写在文件落盘之后：改前的现场就是"记的 sha 与盘上那份对不上"。
         # 它是人工追溯用的读数，不作任何收工门判据（见 `record_markdown_artifact`）。
-        record_markdown_artifact(tx, doc_id, rel, absolute)
+        # 甲（2026-11-11）：同一条事件里再记"正文"那一份（paper = out/paper/main.tex）。
+        _body_rel, _body_abs = body_artifact_of(root, payload)
+        record_markdown_artifact(tx, doc_id, rel, absolute,
+                                 body_rel=_body_rel, body_absolute=_body_abs)
     return payload
 
 

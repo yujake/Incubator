@@ -6,6 +6,14 @@ from __future__ import annotations
 
 from ._support import Any, DT, DocumentError, Mapping, S, SIG, Sequence
 
+#: `revise` 回来时必须点名的下一步（丙，2026-11-11）。措辞照 `specs/m.py` 那句
+#: 「改完之后要再复核（D57）」—— 同一个意思只有一份说法，不自造新词。
+#: 2026-11-11 业主裁定之后 `G → H` 是真边（`G` 的出边 = `C/D/H`），所以 G 自己就能派。
+REVISE_NEXT_STEP = (
+    "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）"
+    "或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。"
+)
+
 class _Revise:
     def revise(
         self,
@@ -151,6 +159,7 @@ class _Revise:
 
             rendered: str | None = None
             rel = payload.get("markdown_path")
+            body_rel, body_abs = DT.body_artifact_of(self.workspace_root, payload)
             if rel:
                 target = self._resolve_inside(str(rel))
                 deps = DT.dependencies_for_doc(tx.rows("dependencies"), doc_id)
@@ -165,7 +174,21 @@ class _Revise:
                 rendered = str(target)
                 # `D-44`：重画之后，中间产物自己的 sha 也跟着换一版 —— 记在同一笔事务里。
                 # 不记的话，读侧会把每一次正常改稿都报成"内容已变"（噪音会把真信号淹掉）。
-                DT.record_markdown_artifact(tx, doc_id, rel, target)
+                # 甲（2026-11-11）：同一条事件里记**正文**那一份的 sha（paper =
+                # `out/paper/main.tex`，其它 kind = markdown 自己）。这是"改稿"这件事
+                # 在 `documents` 登记行上的唯一读数 —— 不新造第二份账。
+                artifact = DT.record_markdown_artifact(
+                    tx, doc_id, rel, target,
+                    body_rel=body_rel, body_absolute=body_abs,
+                )
+            else:
+                # 没有 markdown_path 的行（历史行）仍然要给正文读数：正文就是
+                # `out/paper/main.tex`（paper）或空（其它 kind）。这里只记读数、
+                # 不改任何数据行（与 `note_markdown_artifact` 同一条纪律）。
+                artifact = {
+                    "body_path": str(body_rel or ""), "body_sha256": "",
+                    "body_problem": "这一行没有 markdown_path", "sha256": "",
+                }
             # 「这份稿子引了几条台账凭据 / 库里还有多少可引的」（`doc.build_document` 的
             # `meta.citation_coverage` 同一条读数，走同一份实现）：修订这条路也要给，
             # 否则"改写"成了绕开那条读数的后门 —— 与 `check_citations` / `check_proofs`
@@ -180,7 +203,9 @@ class _Revise:
 
         self._emit(
             f"修订 doc:{doc_id} → review_rounds={payload['review_rounds']}，"
-            f"替换 {len(replaced)} 条、新增 {len(appended)} 条断言，标记 {len(fixed_ids)} 条发现为 fixed"
+            f"替换 {len(replaced)} 条、新增 {len(appended)} 条断言，标记 {len(fixed_ids)} 条发现为 fixed；"
+            f"正文 {artifact.get('body_path') or '（无）'} sha={(artifact.get('body_sha256') or '')[:16]}…"
+            f"；下一步：{REVISE_NEXT_STEP}"
         )
         return {
             "doc_id": doc_id,
@@ -192,6 +217,17 @@ class _Revise:
             "fixed_findings": fixed_ids,
             "markdown_path": rel,
             "rendered_path": rendered,
+            # ---- 甲（2026-11-11）：这一版**正文**的读数（哪份文件为准见
+            # `DT.body_artifact_of`：paper ⇒ out/paper/main.tex；其它 kind ⇒ markdown）。
+            # `content_sha256` 仍是"这一版内容"的规范哈希，两者不互相冒充。
+            "body_path": artifact.get("body_path") or "",
+            "body_sha256": artifact.get("body_sha256") or "",
+            "body_bytes": int(artifact.get("body_bytes") or 0),
+            "body_problem": artifact.get("body_problem") or "",
+            "content_sha256": payload["content_sha256"],
+            # ---- 丙（2026-11-11）：改完必须送回 H 复审（G→H 是真边，见 capabilities）。
+            # 措辞照 `specs/m.py` 那句，不自造新词。
+            "next_step": REVISE_NEXT_STEP,
             # 与 `doc.build_document` 的 `meta.citation_coverage` 是同一份实现的同一份读数
             # （那边走工具结果的 meta，这边是角色方法的返回值）。
             "citation_coverage": coverage,
