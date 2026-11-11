@@ -508,7 +508,9 @@ class _Step:
         #
         # "登记一次、证明改 N 次"这件事必须在计划台账上读得出来（`proof_revisions`
         # 读数与下一轮提示词的 history 摘要都读它），否则只能靠数盘上有几份稿。
-        for _key in ("proof_mode", "proof_registered", "proof_rewritten", "proof_no",
+        # 2026-11-11 业主裁定：`proof_no` 在手稿产出侧退役 ⇒ 这里不再抄这一格
+        # （一稿一份，身份是稿号 + `proof_sha256`）。
+        for _key in ("proof_mode", "proof_registered", "proof_rewritten",
                      "proof_sha256", "proof_label", "proof_section_hashes",
                      "manuscript_migrated", "manuscript_path", "manuscript_id",
                      "manuscript_id_source"):
@@ -575,7 +577,8 @@ class _Step:
         if deploy.get("manuscript_id_source"):
             out["manuscript_id_source"] = str(deploy["manuscript_id_source"])
         # ---- 2026-11-07（业主裁定）：手稿登记条目的身份也进返回值 ----------
-        for _key in ("proof_mode", "proof_registered", "proof_rewritten", "proof_no",
+        # 2026-11-11：`proof_no` 在手稿产出侧退役 ⇒ 这两处清单里都不再有它。
+        for _key in ("proof_mode", "proof_registered", "proof_rewritten",
                      "proof_sha256", "proof_label", "proof_section_hashes",
                      "manuscript_migrated"):
             if deploy.get(_key) not in (None, "", {}, []):

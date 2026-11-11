@@ -337,12 +337,19 @@ class _Manuscript:
 
         ## 命名（2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」）
 
-        稿名只由手稿号决定：`reports/f-proof-<稿号>.md`；同一份稿的第 N 份证明沿用
-        老后缀 `-p<N>`（`reports/f-proof-<稿号>-p2.md`）。命题号是 B 收录时现取的，
+        稿名只由手稿号决定：`reports/f-proof-<稿号>.md`。命题号是 B 收录时现取的，
         计划号只管继续/放弃/更改 —— 两者都不进稿名。
         `manuscript_id` 由调用方给（同一份稿改稿给同一个号）；不给 ⇒ 向
         :func:`manuscriptids.next_manuscript_id` 要一个新号（绝不覆盖盘上已有的稿）。
         `named_by` 恒为 `"manuscript"`，读的人不必猜。
+
+        ## `-pN` 与 `- 证明号：` 在写侧退役（业主 2026-11-11）
+
+        「一个稿号就相当于是该稿的文件名，不再细分 version 几」⇒ 新写的稿不带 `-pN`
+        后缀、稿头也没有 `- 证明号：` 那一行。`proof_no` 形参保留只为旧调用点不必改
+        签名，它不参与命名、不参与渲染、也不进返回值。老盘 `reports/f-proof-<号>-p2.md`
+        仍能分类 / 读 / 认签，重写它时 `proofregistry._legacy_proof_no_of` 沿用文件名
+        里的 N（不改老稿的身份）。
 
         ## 2026-11-04（业主裁定）：渲染与落盘只剩一份实现
         页头与三节的拼法在 `manuscriptform.render_proof_manuscript`（与 B 的改写稿同
@@ -375,8 +382,9 @@ class _Manuscript:
             proposition=proposition,
             proof_text="\n".join(proof_lines or ["（这一轮没有交出论证正文）"]),
             dependency_rows=rows, plan_id=plan_id, sid=sid,
-            label=label, proof_no=proof_no)
-        rel = self.manuscript_path(mid, proof_no=proof_no)
+            label=label)
+        # 一个稿号 = 一份文件：落点只按稿号拼（`proof_no` 不再进名字，业主 2026-11-11）。
+        rel = self.manuscript_path(mid)
         if not rel:
             return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
                     "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
@@ -591,9 +599,12 @@ class _Manuscript:
                         proof_no: int = 1) -> str:
         """这一份手稿的落点（工作区相对）—— 与 `proof_manuscript` 写的是同一处。
 
-        只按 F 自己的稿号命名：`reports/f-proof-<稿号>.md`；同一份稿的第 N 份证明是
-        `-p<N>`。命题号与计划号都不参与命名（业主 2026-11-10 裁定）；号形不对 ⇒
-        空串（受控，不拼一个看起来像号的路径）。
+        只按 F 自己的稿号命名：`reports/f-proof-<稿号>.md`。命题号与计划号都不参与
+        命名（业主 2026-11-10 裁定）；号形不对 ⇒ 空串（受控，不拼一个看起来像号的路径）。
+
+        `proof_no>=2` 只保留给老盘读/重写兼容（`reports/f-proof-<号>-p2.md` 那一族
+        仍在盘上，按原后缀找得到它）；F 的新写路径不传它、也不产生 `-pN`（业主
+        2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」）。
         """
         return _MID.canonical_rel(manuscript_id, proof_no)
 

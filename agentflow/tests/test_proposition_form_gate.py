@@ -214,7 +214,9 @@ def test_b_a_well_formed_proposition_is_registered_as_a_manuscript(tmp_path):
     got = _hand(agent, WELL_FORMED)
     assert got["ok"] is True, got
     assert got["proof_mode"] == "registered", got
-    assert got["proof_no"] == 1, got
+    # 2026-11-11 业主裁定：`proof_no` 在手稿产出侧退役 ⇒ 读数里不再有这一格。
+    assert "proof_no" not in got, got
+    assert got.get("proof_sha256"), got
     assert len(stub.calls) == 1, stub.calls
     form = dict(got.get("proposition_form") or {})
     assert form.get("submittable") is True, form

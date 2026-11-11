@@ -70,7 +70,7 @@ _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 #:
 #: 落在结构上：落点永远 `reports/<族>-proof-<稿号>.md`；改正文就地改那一份
 #: （`proofregistry` 的 `mode=rewritten` 只动 `## 证明` 与头部的元信息，不换名、
-#: 不涨 `proof_no`：一个稿号一份稿 ⇒ 稿头那一行也恒为 1）。
+#: 不涨 `proof_no`；2026-11-11 业主裁定后半：稿头也不再有 `- 证明号：` 那一行）。
 #:
 #: 2026-11-11 晚（业主同一条裁定的后半）：这条对 F 与 B 都成立 ——
 #: 先前这里只写了 B，并注明"F 的 `-pN` 属于一条命题多份证明，另一批裁定"；
@@ -289,9 +289,17 @@ def render_proof_manuscript(
 ) -> str:
     """渲染一份证明手稿（纯函数，逐字节可复现；两族只差前缀与角色名）。
 
-    页头顺序固定：标题 → `- 命题号：` → `- 计划：` → 洗稿行 → `- 证明号：` →
-    `- 标签：`。三节顺序固定：`## 命题` / `## 证明` / `## 依赖`。
-    `- 计划：`、`- 证明号：`、`- 标签：`、洗稿行都是"给了才写"，但位置不随族变。
+    页头顺序固定：标题 → `- 命题号：` → `- 计划：` → 洗稿行 → `- 标签：`。
+    三节顺序固定：`## 命题` / `## 证明` / `## 依赖`。
+    `- 计划：`、`- 标签：`、洗稿行都是"给了才写"，但位置不随族变。
+
+    ## `- 证明号：` 在写侧退役（业主 2026-11-11）
+
+    「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可退役，台账不能退役」
+    ⇒ 新渲染的稿不再有这一行（一个稿号 = 一份文件 = 一份证明，身份由稿号 +
+    正文 sha 回答）。`proof_no` 形参保留只为旧调用点不必改签名，它不参与渲染。
+    老盘稿头里已有的 `- 证明号：N` 仍可读（`depsection.manuscript_proof_no`），
+    改旧稿时那一段也原样留着 —— 读能力不删，只是新写的稿不再产生它。
     """
     fam = str(family or "")
     role = fam if fam in FAMILIES else FAMILY_F
@@ -300,10 +308,6 @@ def render_proof_manuscript(
     sgid = str(sid or "").strip()
     label_text = " ".join(str(label or "").split())
     heading = _short(title or proposition or label_text or "（这一条没有写命题）")
-    try:
-        no = int(proof_no or 0)
-    except (TypeError, ValueError):
-        no = 0
     head: list[str] = [
         f"# {role} 的证明手稿：{heading}",
         "",
@@ -318,8 +322,6 @@ def render_proof_manuscript(
         if str(wash_filled or "").strip():
             parts.append(f"{_DS.WASH_MARK_FILLED}={str(wash_filled).strip()}")
         head.append(_DS.WASH_MARK + "；".join(parts))
-    if no >= 1:
-        head.append(f"{PROOF_NO_MARK}{no}")
     if label_text:
         head.append(f"{LABEL_MARK}{label_text}")
     head.extend([

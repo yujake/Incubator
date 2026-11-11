@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 
 import pytest
 from conftest import seed_statement_row
@@ -149,9 +150,13 @@ def test_a_one_registration_and_three_rewrites(tmp_path):
     assert [r["proof_mode"] for r in rounds] == [
         "registered", "rewritten", "rewritten", "rewritten"], rounds
     # 业主 2026-11-11：「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，
-    # 不再细分 version 几，应该在改正文时 edit 它」⇒ `proof_no` 恒 1（重写不涨号）。
-    # 反面：谁把 bump 加回来，这一条立刻红。
-    assert [r["proof_no"] for r in rounds] == [1, 1, 1, 1], rounds
+    # 不再细分 version 几，应该在改正文时 edit 它」＋「proof_no 确实该退役……
+    # 手稿产出侧和 V 签侧甚至呈递侧可退役」⇒ 读数里不再有这一格，盘上的稿头也没有
+    # `- 证明号：` 那一行。反面：谁把它加回来（读数或渲染），这两条立刻红。
+    assert all("proof_no" not in r for r in rounds), rounds
+    text_now = _manuscript_text(st)
+    assert "- 证明号：" not in text_now, text_now[:600]
+    assert re.search(r"(?m)^- 版本：p\d+@", text_now) is None, text_now[:600]
     shas = [str(r["proof_sha256"]) for r in rounds]
     assert len(set(shas)) == 4 and all(len(s) == 64 for s in shas), shas
     # 形态闸只在"登记新命题"那一次跑
@@ -164,12 +169,13 @@ def test_a_one_registration_and_three_rewrites(tmp_path):
     assert len(entries) == 1, entries
     versions = entries[0]["versions"]
     assert len(versions) == 1, versions
-    assert versions[0]["proof_no"] == 1, versions
-    body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
+    # 新写的版本段没有 `pN@` ⇒ 读回来的号是"没写"（0），不是恒真的 1。
+    assert versions[0]["proof_no"] == 0, versions
+    body_now = VS.manuscript_proof_body(text_now).strip("\n")
     assert versions[0]["sha256"] == R.proof_sha(body_now), versions
     assert versions[0]["sha256"] == str(rounds[-1]["proof_sha256"]), versions
-    # 反面：把 `proof_no` 的 bump 加回去 ⇒ 上面"恰好 1 条"必红。
-    # 反真空在 `test_a_negative_control_restoring_the_bump_makes_the_history_red`。
+    # 反面：把 `- 证明号：` 加回渲染 ⇒ `test_a2_*` 那一条红；把 bump 加回来 ⇒
+    # `test_a_negative_control_restoring_the_bump_makes_the_history_red` 红。
 
 
 def test_a_negative_control_restoring_the_bump_makes_the_history_red(
@@ -184,8 +190,11 @@ def test_a_negative_control_restoring_the_bump_makes_the_history_red(
     row = _seeded(st)
     f = _f(st)
 
-    def _bump(_rel, entry):   # 旧口径：重写就 +1（业主 2026-11-11 已作废）
-        return int(entry.get("proof_no") or 0) + 1
+    state = {"n": 1}
+
+    def _bump(_rel, _entry):   # 旧口径：重写就 +1（业主 2026-11-11 已作废）
+        state["n"] += 1
+        return int(state["n"])
 
     monkeypatch.setattr(R, "_legacy_proof_no_of", _bump)
     for body in PROOFS:
@@ -193,8 +202,9 @@ def test_a_negative_control_restoring_the_bump_makes_the_history_red(
 
     versions = R.entries_on_disk(st.root)[0]["versions"]
     body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
-    # 先量"模拟真的生效"：旧口径下号回到 1→4（否则下面那个 False 是假的）。
-    assert [v["proof_no"] for v in versions] == [1, 2, 3, 4], versions
+    # 先量"模拟真的生效"：旧口径下重写各记一个新号 2/3/4（第一版 canonical 不写号，
+    # 读回来是 0）。否则下面那个 False 是假的。
+    assert [v["proof_no"] for v in versions] == [0, 2, 3, 4], versions
     held = (len(versions) == 1
             and str(versions[0].get("sha256") or "") == R.proof_sha(body_now))
     assert held is False, (
@@ -272,7 +282,7 @@ def test_d_removing_the_rewrite_branch_makes_a_red(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- i：只动 `## 证明` 那一块
 
 def test_i_rewrite_touches_only_the_proof_section(tmp_path):
-    """i：同一命题重写 3 次 ⇒ 盘上 1 份稿、分节哈希只变 `## 证明`、`proof_no` 恒 1。"""
+    """i：同一命题重写 3 次 ⇒ 盘上 1 份稿、分节哈希只变 `## 证明`、不再写 `proof_no`。"""
     st = _ws(tmp_path)
     row = _seeded(st)
     f = _f(st)
@@ -280,13 +290,13 @@ def test_i_rewrite_touches_only_the_proof_section(tmp_path):
     base = dict(first["section_hashes"])
     assert set(base) == {"## 命题", "## 证明", "## 依赖"}, base
     seen = [dict(first["section_hashes"])]
-    nos = [first["proof_no"]]
+    readers = [first]
     for body in PROOFS[1:]:
         got = _hand(f, body, stable_row=row)
         seen.append(dict(got["section_hashes"]))
-        nos.append(got["proof_no"])
-    # 同上：一个稿号一份稿 ⇒ 号不随重写增长（旧口径的 [1,2,3,4] 已作废）
-    assert nos == [1, 1, 1, 1], nos
+        readers.append(got)
+    # 业主 2026-11-11：`proof_no` 在手稿产出侧退役 ⇒ 四笔读数里都没有这一格。
+    assert all("proof_no" not in r for r in readers), readers
     # 盘上始终只有 1 份该命题的手稿（不许出现 -v2 / -p2 这一族新名），
     # 而且它按 F 自己的稿号命名、不按命题号（2026-11-10 口径）。
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("*.md"))
@@ -298,12 +308,13 @@ def test_i_rewrite_touches_only_the_proof_section(tmp_path):
         assert hashes["## 依赖"] == base["## 依赖"], "依赖那一节没有新引用 ⇒ 逐字节相同"
         assert hashes["## 证明"] != base["## 证明"], "证明那一节必须变"
     assert len({h["## 证明"] for h in seen}) == 4, seen
-    # 头部：一个稿号一份文件一份证明 ⇒ 证明号恒 1、版本历史恰好 1 条（当前那一版），
-    # 且这一条的 sha 就是盘上 `## 证明` 的 sha。
+    # 头部：一个稿号一份文件一份证明 ⇒ 稿头没有 `- 证明号：`、版本历史恰好 1 条
+    # （当前那一版），且这一条的 sha 就是盘上 `## 证明` 的 sha。
     entry = R.parse_entry(_manuscript_text(st))
-    assert entry["proof_no"] == 1, entry
+    assert "- 证明号：" not in _manuscript_text(st), _manuscript_text(st)[:600]
+    assert entry["proof_no"] == 0, entry
     assert len(entry["versions"]) == 1, entry["versions"]
-    assert entry["versions"][0]["proof_no"] == 1, entry["versions"]
+    assert entry["versions"][0]["proof_no"] == 0, entry["versions"]
     body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
     assert entry["versions"][0]["sha256"] == R.proof_sha(body_now), entry["versions"]
     assert entry["sha256"] == R.proof_sha(body_now), entry
@@ -495,11 +506,12 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
     assert DS.SECTION_HEADING in text, text
     assert VS.manuscript_proof_body(text).strip("\n") == bodies[-1], text
     # 第二版开始走的是 `proofregistry`：头部有版本记录 —— 一个稿号一份证明 ⇒
-    # 恰好 1 条（当前那一版），号恒 1，sha 就是盘上 `## 证明` 的 sha。
+    # 恰好 1 条（当前那一版），不再写 `proof_no`，sha 就是盘上 `## 证明` 的 sha。
     entry = R.parse_entry(text)
-    assert entry["proof_no"] == 1, entry
+    assert "- 证明号：" not in text, text[:600]
+    assert entry["proof_no"] == 0, entry
     assert len(entry["versions"]) == 1, entry["versions"]
-    assert entry["versions"][0]["proof_no"] == 1, entry["versions"]
+    assert entry["versions"][0]["proof_no"] == 0, entry["versions"]
     assert entry["versions"][0]["sha256"] == R.proof_sha(
         VS.manuscript_proof_body(text).strip("\n")), entry["versions"]
 
@@ -523,7 +535,7 @@ def test_the_closing_reading_shows_registration_once_and_n_versions(tmp_path):
     assert read["proof_versions"] == 1, read
     one = read["propositions"][0]
     assert one["registrations"] == 1 and one["proof_count"] == 1, one
-    assert [v["proof_no"] for v in one["versions"]] == [1], one
+    assert [v["proof_no"] for v in one["versions"]] == [0], one
     body_now = VS.manuscript_proof_body(_manuscript_text(st)).strip("\n")
     assert one["versions"][0]["sha256"] == R.proof_sha(body_now), one
     assert "登记 1 次" in read["reason"] and "1 版" in read["reason"], read["reason"]
@@ -585,15 +597,15 @@ def test_a1_the_production_path_registers_once_and_rewrites_after(tmp_path):
 
     assert [r.get("proof_mode") for r in rounds] == [
         "registered", "rewritten", "rewritten"], rounds
-    # 一个稿号一份文件一份证明（业主 2026-11-11）⇒ 三笔都是 #p1（重写不涨号）。
-    assert [r.get("proof_no") for r in rounds] == [1, 1, 1], rounds
+    # 一个稿号一份文件一份证明（业主 2026-11-11）⇒ 读数里不再有 `proof_no`。
+    assert all("proof_no" not in r for r in rounds), rounds
     # 形态闸只在"登记新命题"那一次跑（改前是 3 次）
     assert len(stub.calls) == 1, stub.calls
     entries = R.entries_on_disk(st.root)
     assert len(entries) == 1, entries
     versions = entries[0]["versions"]
     assert len(versions) == 1, versions
-    assert versions[0]["proof_no"] == 1, versions
+    assert versions[0]["proof_no"] == 0, versions
     # 一份命题只住一份稿（F 自己的稿号那一份；还没有命题号）
     files = sorted(p.name for p in (pathlib.Path(st.root) / "reports").glob("f-proof*.md"))
     mids = {str(r.get("manuscript_id") or "") for r in rounds}
@@ -690,5 +702,5 @@ def test_a3_a_handwritten_labelled_head_is_not_a_registration_entry(tmp_path):
     assert len(gates) == 1, "手写稿被当成登记条目 ⇒ 形态闸一次都没跑"
     entry = R.parse_entry(path.read_text(encoding="utf-8"))
     assert entry["checked"] is True, entry
-    assert [v["proof_no"] for v in entry["versions"]] == [1], entry
+    assert [v["proof_no"] for v in entry["versions"]] == [0], entry
 

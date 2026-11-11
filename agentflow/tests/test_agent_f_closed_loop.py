@@ -272,7 +272,10 @@ def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
     assert "plan" not in rel, out
     manuscript = (Path(store.root) / rel).read_text(encoding="utf-8")
     assert "这是第一步" in manuscript
-    assert "- 证明号：1" in manuscript and "- 正文sha：" in manuscript, manuscript[:600]
+    # 2026-11-11 业主裁定：`- 证明号：` 在手稿产出侧退役 ⇒ 新稿头没有这一行；
+    # 登记元信息（正文 sha）照旧。
+    assert "- 证明号：" not in manuscript, manuscript[:600]
+    assert "- 正文sha：" in manuscript, manuscript[:600]
 
     # ② V 在命题还没在册时先签（pending 台账），B 按正文 sha 认领 → statements 一行
     body = DS.proof_body(manuscript).strip("\n")
@@ -358,10 +361,12 @@ def test_the_same_proof_twice_does_not_grow_the_manuscript_or_the_rows(store: St
     second = f.step(pid)
     assert [first.get("proof_mode"), second.get("proof_mode")] == [
         "registered", "rewritten"], (first, second)
-    assert [first.get("proof_no"), second.get("proof_no")] == [1, 1], (first, second)
+    # 2026-11-11 业主裁定：`proof_no` 在手稿产出侧退役 ⇒ F 这一层的读数里没有它；
+    # 一份稿的版本历史仍恰好 1 条（且那一条不写 `pN@`）。
+    assert "proof_no" not in first and "proof_no" not in second, (first, second)
     entries = R.entries_on_disk(store.root)
     assert len(entries) == 1, entries
-    assert [v["proof_no"] for v in entries[0]["versions"]] == [1], entries[0]["versions"]
+    assert [v["proof_no"] for v in entries[0]["versions"]] == [0], entries[0]["versions"]
     # 同一份正文认领两次 ⇒ statements 仍然只有一行
     rel = str(second.get("manuscript_path") or "")
     manuscript = (Path(store.root) / rel).read_text(encoding="utf-8")

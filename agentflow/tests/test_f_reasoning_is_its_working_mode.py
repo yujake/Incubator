@@ -311,10 +311,12 @@ def test_a_stub_seam_really_receives_one_call(tmp_path: pathlib.Path, store: Sto
     assert rec.get("product") == "proof", rec
     # 2026-11-07（业主裁定：登记与写证明解耦）：F 这一轮落的是手稿登记条目，
     # 不是 statements 行（那一行由 B 在 V 签之后收录）。所以判据读手稿那一格：
-    # 登记发生了一次、落点在盘上、证明号从 1 起。
+    # 登记发生了一次、落点在盘上；2026-11-11 起 `proof_no` 在手稿产出侧退役
+    # ⇒ history 里不再有这一格（一稿一份，身份是稿号 + `proof_sha256`）。
     assert rec.get("proof_mode") == "registered", rec
     assert str(rec.get("manuscript_path") or ""), rec
-    assert int(rec.get("proof_no") or 0) == 1, rec
+    assert "proof_no" not in rec, rec
+    assert str(rec.get("proof_sha256") or ""), rec
     assert (pathlib.Path(store.root) / str(rec["manuscript_path"])).is_file(), rec
     assert str(rec.get("statement_id") or "") == "", (
         "F 不写 statements：新命题在 V 签之前不该出现命题号")

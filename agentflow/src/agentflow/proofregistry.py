@@ -24,14 +24,18 @@
    元信息（都只在给了值时才写，旧稿逐字节不变）：
 
    ```
-   - 证明号：<N>            （既有那一行，`manuscriptform.PROOF_NO_MARK`）
    - 正文sha：<sha256>      （`## 证明` 那一节的 sha256 —— 与 V 签盖的是同一把尺）
    - 命题指纹：<sha256>     （`## 命题` 那一节规范化后的 sha256，判"还是不是同一条命题"）
    - 证据种类：<kind>       （`lemma` / `theorem` / `conjecture` …，B 收录时按它落 kind）
    - 登记时间：<ISO8601>    （这一条第一次落成手稿的时刻；重写不改它）
-   - 版本：p<N>@<ISO8601>@<sha256>   （同一个证明号只有一格：改正文就替换它，不涨版本；
-     老盘 `-pN` 的不同号各留一格，2026-11-11 业主裁定「一个稿号一份文件一份证明」）
+   - 版本：<ISO8601>@<sha256>   （同一个证明号只有一格：改正文就替换它，不涨版本；
+     老盘 `-pN` 的不同号各留一格，读侧写成 `p<N>@<ISO8601>@<sha256>`）
    ```
+
+   2026-11-11 业主裁定：「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可退役，
+   台账不能退役」⇒ 新写的稿头不再有 `- 证明号：<N>` 那一行（一个稿号 = 一份文件 =
+   一份证明，身份是稿号 + 正文 sha）。老盘稿头里已有的那一行、以及 `- 版本：` 里
+   `p<N>@` 的老格式，读侧照旧认（`parse_entry` 两种格式都读）—— 读能力不删。
 
 2. `attack_plans.history` 的既有格（F 侧）：每轮那一行照旧落 `manuscript_path` /
    `manuscript_proof_no` / `manuscript_sha256` / `manuscript_registered` / `manuscript_label`
@@ -282,6 +286,9 @@ def parse_entry(text: Any) -> dict[str, Any]:
                     continue
                 parts = item.split("@", 2)
                 got = {"raw": item, "proof_no": 0, "at": "", "sha256": ""}
+                # 两种格式（读侧都认；写侧 2026-11-11 起只写后一种）：
+                #   · 老盘 `p<N>@<时刻>@<sha>`（`proof_no` 在第 0 段）
+                #   · 新写 `<时刻>@<sha>`（canonical 不写 `p1` —— 一稿一份之后它不携带身份）
                 if len(parts) == 3:
                     try:
                         got["proof_no"] = int(parts[0].lstrip("pP") or 0)
@@ -289,20 +296,41 @@ def parse_entry(text: Any) -> dict[str, Any]:
                         got["proof_no"] = 0
                     got["at"] = parts[1].strip()
                     got["sha256"] = parts[2].strip().lower()
+                elif len(parts) == 2:
+                    got["at"] = parts[0].strip()
+                    got["sha256"] = parts[1].strip().lower()
                 out["versions"].append(got)
     out["checked"] = bool(out["versions"] or out["sha256"] or out["fingerprint"])
     return out
 
 
 def render_version(proof_no: Any, at: Any, sha: Any) -> str:
-    return f"p{int(proof_no or 0)}@{str(at or '')}@{str(sha or '')}"
+    """一版 ⇒ `- 版本：` 那一行里的一段（canonical 不写 `pN`）。
+
+    业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」⇒ 新写
+    canonical（`N=1`）渲染成 `<时刻>@<sha>`，`proof_no` 不在写侧产生。显式 `N>=2`
+    是老盘 `-pN` 的写侧兼容（旧读侧按号分组），照旧写 `p<N>@…` —— 新写路径不再
+    产生这个 N，但盘上已有的那几份不能被一次重写改了身份。读侧两种格式都认
+    （`parse_entry` 的 `- 版本：` 那一支）。
+    """
+    try:
+        no = int(proof_no or 0)
+    except (TypeError, ValueError):
+        no = 0
+    if no >= 2:
+        return f"p{no}@{str(at or '')}@{str(sha or '')}"
+    return f"{str(at or '')}@{str(sha or '')}"
 
 
 def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
-    """就地改写头部的那几行（缺的按固定次序插在 `- 证明号：` 之后）。
+    """就地改写头部的那几行（缺的插在头部最后一行之前）。
 
     `- 版本：` 与其他标记同样替换：`values[VERSION_MARK]` 已经是这一笔之后的完整清单
     （同一个证明号只留一格，见 `_versions_block`）。
+
+    2026-11-11（业主裁定）：`- 证明号：` 从 `values` 里拿掉了 —— 新写的稿不再有这一行。
+    老盘稿头若已经有它，本函数走"没命中 values ⇒ 原样保留"那条路：不改、不删，
+    读侧（`parse_entry` / `depsection.manuscript_proof_no`）照旧读得出那个号。
     """
     lines = head.split("\n")
     order = [SHA_MARK, FINGERPRINT_MARK, KIND_MARK, REGISTERED_AT_MARK, _MF.LABEL_MARK]
@@ -310,24 +338,20 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     out: list[str] = []
     for line in lines:
         raw = line.strip()
-        hit = next((mark for mark in [_MF.PROOF_NO_MARK, *order, VERSION_MARK]
+        hit = next((mark for mark in [*order, VERSION_MARK]
                     if raw.startswith(mark)), "")
         if hit and hit in values and str(values[hit]) != "":
             if hit in touched:   # 同一格出现第二次（手写稿／旧格式）⇒ 只留一份
                 continue
             touched.add(hit)
             out.append(f"{hit}{values[hit]}")
-            if hit == _MF.PROOF_NO_MARK:
-                for mark in order:
-                    if mark in values and str(values[mark]) != "" and mark not in touched:
-                        out.append(f"{mark}{values[mark]}")
-                        touched.add(mark)
             continue
         out.append(line)
     missing = [mark for mark in [*order, VERSION_MARK]
                if mark in values and str(values[mark]) != "" and mark not in touched]
     if missing:
-        # `- 证明号：` 那一行都没有的旧稿：插在头部最后一行之前（贴近稿头，不污染分节）。
+        # 头部最后一行之前（贴近稿头，不污染分节）。新稿已经没有 `- 证明号：` 那一行
+        # 可以当锚点，所以与"老稿本来就没有证明号"那一档走同一条插入规则。
         at = len(out)
         while at > 0 and not out[at - 1].strip():
             at -= 1
@@ -355,11 +379,20 @@ def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
                          "at": str(entry.get("registered_at") or ""),
                          "sha256": str(entry.get("sha256") or "")})
     want = int(proof_no)
-    if versions and int(versions[-1].get("proof_no") or 0) == want \
+
+    def _vno(one: Mapping[str, Any]) -> int:
+        """这一版是哪一号；新版 `- 版本：<时刻>@<sha>` 没有号段 ⇒ canonical（1）。
+
+        2026-11-11：canonical 的版本段不再写 `p1@`，所以"缺省"必须读成 1 而不是 0
+        —— 否则一次重写会把同一版当成"新的一版"再追加一格（版本历史重又涨起来）。
+        """
+        return int(one.get("proof_no") or 0) or 1
+
+    if versions and _vno(versions[-1]) == want \
             and str(versions[-1].get("sha256") or "") == str(sha):
         return "", versions
     current = {"proof_no": want, "at": str(at), "sha256": str(sha)}
-    if versions and int(versions[-1].get("proof_no") or 0) == want:
+    if versions and _vno(versions[-1]) == want:
         versions[-1] = current           # 同一个证明号 ⇒ 就地改这一版，不涨"版本"
     else:
         versions.append(current)
@@ -541,7 +574,6 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
     """
     head_now = split_sections(text)[0]
     head_new = _rewrite_head(head_now, {
-        _MF.PROOF_NO_MARK: str(proof_no),
         SHA_MARK: new_sha, FINGERPRINT_MARK: new_fp,
         _MF.LABEL_MARK: str(label or ""),
         KIND_MARK: (str(kind or "") if mode == MODE_REGISTERED
@@ -746,11 +778,12 @@ def register_or_rewrite(
             out["relocated_kept"] = relocated_from
     out.update(ok=True, checked=True, mode=mode, proof_no=proof_no, sha256=new_sha,
                deps_rows=rows, written=True, migrated=migrated,
-               entry={**entry, "label": str(label or ""), "statement_id": str(statement_id or ""),
-                      "proof_no": proof_no, "sha256": new_sha, "fingerprint": new_fp,
-                      "kind": str(kind or entry.get("kind") or ""),
-                      "registered_at": str(entry.get("registered_at") or at_text),
-                      "versions": versions},
+               #: 这一笔之后的登记条目（按盘上那一份读回来）：新写的稿没有
+               #: `- 证明号：` 那一行，所以这里的 `proof_no` 读成 0；老盘重写时若稿头
+               #: 本来就有那一行，照旧读出它的 N（读能力不删）。`versions` 同理 ——
+               #: canonical 新写的版本段是 `<时刻>@<sha>`，读回来的 `proof_no` 是 0；
+               #: 老盘 `-pN` 重写那一档仍是 `p<N>@…`。
+               entry=parse_entry(text),
                section_hashes=section_hashes(text), why="")
     return out
 

@@ -36,9 +36,11 @@ def test_a_f_registers_an_example_and_its_grade_is_by_the_textual_proof(tmp_path
     st = ws(tmp_path)
     env = run_f_example(st)
     entry = PR.parse_entry(env["signed_text"])
-    # 落稿：手稿条目就是登记条目，kind 是 example（不是 conjecture / lemma）
+    # 落稿：手稿条目就是登记条目，kind 是 example（不是 conjecture / lemma）；
+    # 2026-11-11 业主裁定：`- 证明号：` 在手稿产出侧退役 ⇒ 新稿头没有这一行。
     assert entry["kind"] == "example", entry
-    assert entry["proof_no"] == 1, entry
+    assert "- 证明号：" not in env["signed_text"], env["signed_text"][:600]
+    assert entry["proof_no"] == 0, entry
     # 形态闸：真的只跑了一次，且它看到的 kind 是 example
     calls = list(env["seam"].prompts)
     assert len(calls) == 1, calls

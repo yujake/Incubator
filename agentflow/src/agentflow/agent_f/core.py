@@ -2319,7 +2319,7 @@ class _Core:
         - 手稿登记里没有这个稿号的条目 ⇒ 登记：过 F 秘书的形态闸一次（只在这里），
           落 `reports/f-proof-<稿号>.md`（稿号由 `manuscriptids` 发，与命题号/计划号无关）；
         - 已有同 label 的条目 ⇒ 重写：只换 `## 证明` 那一节（顺手按 cites 重渲
-          `## 依赖`），`proof_no` 递增、正文 sha256 重算；不过闸、不登记、不新增
+          `## 依赖`），不涨 `proof_no`、正文 sha256 重算；不过闸、不登记、不新增
           statements 行（`## 命题` 那一节逐字节不动）；
         - 命题正文与登记条目不一致 ⇒ 受控拒 `proposition_text_changed`：这是新命题，
           或走「放弃 + 换号」—— 不许用挂证明改命题正文。
@@ -2443,8 +2443,7 @@ class _Core:
                 manuscript_received=manuscript_received, proof_text=body,
                 proof_attached=False, proposition_form=dict(got.get("gate") or {}),
                 proof_manuscript_gate=dict(got.get("gate") or {}), why=why, cites=cites,
-                manuscript_path=str(got.get("manuscript_path") or ""),
-                proof_no=int(got.get("proof_no") or 0))
+                manuscript_path=str(got.get("manuscript_path") or ""))
 
         reused = bool(row_now)
         mode = str(got.get("mode") or "")
@@ -2491,7 +2490,8 @@ class _Core:
                     "调用方给的" if mid_source == "given"
                     else "沿用子目标的" if mid_source == "subgoal"
                     else "这次新取的" if mid_source == "allocated" else ""),
-                "proof_no": int(got.get("proof_no") or 0),
+                # 2026-11-11 业主裁定：`proof_no` 在手稿产出侧退役 —— 这一笔的读数不再带
+                # 它（一个稿号一份文件，身份是稿号 + `proof_sha256`）。
                 "proof_sha256": str(got.get("sha256") or ""),
                 "manuscript_path": str(got.get("manuscript_path") or ""),
                 "manuscript_migrated": bool(got.get("migrated")),
@@ -3034,11 +3034,10 @@ class _Core:
                 # 现在登记与写证明解耦：登记只有新命题那一次，之后每一轮只换手稿的
                 # `## 证明`。所以读数必须能分开这两档（`proof_registered` / `proof_rewritten`），
                 # 否则"又登记了一次"与"只改了证明"在台账上长得一样。
-                _no = int(outlet.get("proof_no") or 0)
                 _sha = str(outlet.get("proof_sha256") or "")
                 outlet_note = (
                     ("手稿登记" if outlet.get("proof_registered") else "证明重写")
-                    + f"：`{outlet.get('manuscript_path')}`（第 {_no} 个证明版本，正文 sha "
+                    + f"：`{outlet.get('manuscript_path')}`（一稿一份，正文 sha "
                     + f"{_sha[:12]}…）"
                     + (f"；在册 `stmt:{statement_id}`（档位 `{outlet.get('evidence_kind')}`）"
                        if statement_id else
@@ -3046,7 +3045,7 @@ class _Core:
                 if outlet.get("proof_rewritten"):
                     outlet_note += "；只换了 `## 证明` 那一节（命题正文逐字节未动、没再登记）"
                 if outlet.get("manuscript_migrated"):
-                    outlet_note += "；旧稿这一次补上了登记元信息（指纹 / 证明号 / 版本）"
+                    outlet_note += "；旧稿这一次补上了登记元信息（指纹 / 版本）"
                 evidence = [f"stmt:{statement_id}"] if statement_id else []
             elif outlet.get("ok"):
                 outlet_note = "手稿既没登记也没重写（也没有受控拒）—— 那是没做成，不是做过了"
@@ -3305,7 +3304,6 @@ class _Core:
             "proof_mode": str(outlet.get("proof_mode") or ""),
             "proof_registered": bool(outlet.get("proof_registered")),
             "proof_rewritten": bool(outlet.get("proof_rewritten")),
-            "proof_no": int(outlet.get("proof_no") or 0),
             "proof_sha256": str(outlet.get("proof_sha256") or ""),
             "proof_label": str(outlet.get("proof_label") or ""),
             "proof_section_hashes": dict(outlet.get("section_hashes") or {}),

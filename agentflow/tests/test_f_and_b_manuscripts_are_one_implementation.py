@@ -690,9 +690,12 @@ def test_a2_the_real_entries_land_the_same_manuscript(tmp_path: pathlib.Path) ->
     assert _number_normalized(f_unsigned) == _number_normalized(b_text), (
         "两族经真实入口落下来的稿不是同一个骨架：\n--- F ---\n"
         f"{f_unsigned}\n--- B ---\n{b_text}")
-    # 三行页头与三节都在（改前 B 缺 `- 计划：` / 洗稿行、多 `- 标签：`）
-    for mark in ("- 命题号：stmt:", "- 计划：", "- 依赖面洗稿：", "- 证明号："):
+    # 三行页头与三节都在（改前 B 缺 `- 计划：` / 洗稿行、多 `- 标签：`）。
+    # 2026-11-11 业主裁定：`- 证明号：` 在手稿产出侧退役 ⇒ 两族新写的稿都没有这一行。
+    for mark in ("- 命题号：stmt:", "- 计划：", "- 依赖面洗稿："):
         assert mark in b_text, (mark, b_text.split("\n")[:8])
+    assert "- 证明号：" not in b_text, b_text.split("\n")[:8]
+    assert "- 证明号：" not in f_unsigned, f_unsigned.split("\n")[:8]
     assert "- 标签：" not in b_text, b_text.split("\n")[:8]
 
 

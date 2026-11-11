@@ -5,10 +5,11 @@
 >   应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
 
 这一份钉三件事：
-  a 连交三次（改正文） ⇒ 同一路径、盘上只有一份文件、`proof_no` 恒 1、稿头「证明号：1」
+  a 连交三次（改正文） ⇒ 同一路径、盘上只有一份文件、读数里不再有 `proof_no`、
+    稿头也没有 `- 证明号：` 那一行（2026-11-11 业主裁定：这一格在手稿产出侧退役）
   b 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）只读兼容：
     能分类、能读，重写它时沿用文件名里的 N（不把老稿的身份改掉）
-  c 反真空：把「重写不涨号」改回 `+1` 时 a 那条断言要能拦下来
+  c 反真空：把 `- 证明号：` 加回渲染 ⇒ a 那条断言要能拦下来
 """
 
 from __future__ import annotations
@@ -104,7 +105,7 @@ def _header(text: str) -> dict:
 
 # ---------------------------------------------------------------- a 一稿一份
 def test_a_three_submissions_stay_in_one_file(tmp_path: pathlib.Path) -> None:
-    """a：改正文三次 ⇒ 同一路径、盘上一份、`proof_no` 恒 1、稿头「证明号：1」。"""
+    """a：改正文三次 ⇒ 同一路径、盘上一份、不再产生 `proof_no` / `- 证明号：`。"""
     st = _ws(tmp_path)
     root = pathlib.Path(st.root)
     f = _agent(st)
@@ -112,7 +113,6 @@ def test_a_three_submissions_stay_in_one_file(tmp_path: pathlib.Path) -> None:
 
     rounds = [_submit(f, pid, tag) for tag in ("v1", "v2", "v3")]
     paths = [str(r.get("manuscript_path") or "") for r in rounds]
-    nos = [r.get("proof_no") for r in rounds]
     ids = [str(r.get("manuscript_id") or "") for r in rounds]
 
     assert all(p for p in paths), rounds
@@ -120,19 +120,21 @@ def test_a_three_submissions_stay_in_one_file(tmp_path: pathlib.Path) -> None:
     assert paths[0] == f"reports/f-proof-{ids[0]}.md", (paths[0], ids[0])
     assert "-p" not in pathlib.PurePosixPath(paths[0]).stem.partition("f-proof-")[2], (
         "新写路径不该带 `-pN`", paths[0])
-    assert nos == [1, 1, 1], ("一个稿号一份稿 ⇒ proof_no 恒 1", nos)
+    # 2026-11-11 业主裁定：「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可
+    # 退役」⇒ F 的读数里没有这一格（不是"恒 1"）。
+    assert all("proof_no" not in r for r in rounds), rounds
     assert ids == [ids[0]] * 3, ("改正文不许换稿号", ids)
 
     files = sorted(p.name for p in (root / "reports").glob("f-proof-*.md"))
     assert files == [f"f-proof-{ids[0]}.md"], ("盘上必须恰好一份", files)
 
-    head = _header((root / paths[0]).read_text(encoding="utf-8"))
-    assert head.get("- 证明号：") == "1", ("稿头的证明号也不涨", head)
+    text = (root / paths[0]).read_text(encoding="utf-8")
+    head = _header(text)
+    assert "- 证明号：" not in text, ("新写的稿不该再有这一行", head)
     assert head.get("- 命题号：") == "stmt:（还没落号）", head
 
     # 正文确实换了（三次不同），但仍是同一份文件
-    bodies = [str((root / paths[0]).read_text(encoding="utf-8")) for _ in range(1)]
-    assert "v3" in bodies[0], "最后一次改正文的标记应当在这份文件里"
+    assert "v3" in text, "最后一次改正文的标记应当在这份文件里"
 
 
 # ---------------------------------------------------------------- b 老盘 -pN 兼容
@@ -159,19 +161,33 @@ def test_b_legacy_pN_names_stay_readable_and_keep_their_number(tmp_path: pathlib
 
 
 # ---------------------------------------------------------------- c 反真空
-def test_c_restoring_the_bump_turns_a_red(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """c：把"重写不涨号"改回 `entry.proof_no + 1` ⇒ a 的同一现场必须红。"""
-    import agentflow.proofregistry as _PR
+def test_c_restoring_the_proof_no_line_turns_a_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """c 反真空：把 `- 证明号：` 加回渲染 ⇒ a 的「新稿没有这一行」当场红。
 
-    def _bump(rel, entry):  # noqa: ANN001, ANN202 - 打桩
-        return int((entry or {}).get("proof_no") or 0) + 1
+    这正是退役的那一行：改前 `render_proof_manuscript` 会在页头写它。把那一行塞回去
+    之后，同一份 a 的现场必须能拦下来 —— 否则"没有这一行"只是恒真的空话。
+    """
+    from agentflow import manuscriptform as _MF
 
-    monkeypatch.setattr(_PR, "_legacy_proof_no_of", _bump)
+    real = _MF.render_proof_manuscript
+
+    def _with_the_retired_line(*args, **kw):  # noqa: ANN002, ANN003 - 打桩
+        text = real(*args, **kw)
+        lines = text.split("\n")
+        at = next(i for i, line in enumerate(lines) if line.startswith("- 命题号："))
+        lines.insert(at + 1, "- 证明号：1")   # 改前的渲染（业主 2026-11-11 已作废）
+        return "\n".join(lines)
+
+    monkeypatch.setattr(_MF, "render_proof_manuscript", _with_the_retired_line)
     st = _ws(tmp_path)
     f = _agent(st)
     pid = _plan(f)
     rounds = [_submit(f, pid, tag) for tag in ("v1", "v2")]
-    nos = [r.get("proof_no") for r in rounds]
-    # 打桩之后读数就是 [1, 2] —— 这正是 a 那条断言要拦的形态
-    # （a 要求 `[1,1,1]`；这里出现 2 就说明"重写涨号"回来了）。
-    assert nos == [1, 2], ("打桩没生效 ⇒ 反真空不成立", nos)
+    rel = str(rounds[-1].get("manuscript_path") or "")
+    text = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
+    # 先量"打桩真的生效"（否则下面那个 False 是空的）。
+    assert "- 证明号：" in text, ("打桩没生效 ⇒ 反真空不成立", text[:600])
+    # a 的那条断言原样跑一遍：它必须在这里为 False。
+    assert ("- 证明号：" not in text) is False, (
+        "把退役的那一行加回渲染之后 a 仍然绿 ⇒ 「新稿没有这一行」是恒真的")
