@@ -23,7 +23,7 @@
 | b 缺缝要明说 | 把缝打桩成 None（只允许出现在负控里）⇒ 明确报"缺缝"，不是静默 `no_change` | 改前那一支说的是"未接线"且带一个不存在的开关 |
 | c 反真空 | 打桩一个假缝 ⇒ 真机路径真发一次调用（打桩计数） | 改前缝根本到不了 F 手上 |
 | 守卫 1 | `UNWIRED_OWNERS` 里没有 F（连"F 可能未接线"这条路都不存在） | 改前是 `("C", "D", "F")` |
-| 守卫 2 | 全仓字面量清零：那个开关的标识符与 flag 只允许出现在带裁定日期的文档串里；再给一条负控（注入一行 ⇒ 守卫必红） | 改前 `if attack_reasoning:` 就是那道闸 |
+| 守卫 2 | 全仓字面量清零：那个开关的标识符与 flag 只允许出现在说明了它已退役的文档串里（不认日期）；负控三档（注入一行 / 提了却没说退役 / 带日期但没说退役 ⇒ 都必红） | 改前 `if attack_reasoning:` 就是那道闸 |
 
 零模型钱：全部用假缝 / 真缝但不配 key（真缝不配 key 时 `ask_json` 自己报"没接线"，
 不发网络请求）。
@@ -71,8 +71,10 @@ def _proposition_form_answers_ok(monkeypatch):
 #: —— 源码里出现一次就红，而判据本体不能给自己开后门）。
 _NAME = "attack" + "_reasoning"
 _OLD_FLAG = "--" + _NAME.replace("_", "-")
-#: 裁定日期。守卫只允许"带这个日期的文档串"提到那个开关（解释它为什么被删）。
-_RULING_DATE = "2026-10-26"
+#: 提到旧开关的文档串必须说明它已经退役 —— 判据守的是"读的人知道它不再存在"，
+#: 不是一个格式条件。2026-11-12 起不再要求裁定日期：日期会让"补一个日期"成为免死牌，
+#: 而"说了退役"才是这条豁免的实质（业主定：过时的形式要求可以动掉，判据改守意图）。
+_RETIRED_MARKERS = ("已删", "已退役", "不再使用", "停用")
 
 
 class CountingSeam:
@@ -160,9 +162,11 @@ def test_the_old_flag_is_gone_and_f_gets_its_seam_without_it(tmp_path: pathlib.P
 def _literal_hits(root: pathlib.Path) -> list[tuple[str, int, str]]:
     """扫一遍 `root` 下的 `.py`：那个开关的字面量出现在哪里。
 
-    允许出现的唯一形态：带裁定日期的文档串（模块 / 类 / 函数的第一条语句）——
-    它解释"曾经有过这个开关、为什么删掉"。注释、普通字符串、标识符、argparse
-    参数一律算命中（返回 `(文件, 行号, 原文)`）。
+    允许出现的唯一形态：说明了它已退役的文档串（模块 / 类 / 函数的第一条语句）——
+    它解释"曾经有过这个开关、为什么删掉"。`_RETIRED_MARKERS` 在同一个文档串里
+    出现即可（不要求与字面量同行：说明往往在下一句）。日期不是豁免条件：带日期
+    但没说退役的文档串照样算命中。注释、普通字符串、标识符、argparse 参数一律算
+    命中（返回 `(文件, 行号, 原文)`）。
     """
     hits: list[tuple[str, int, str]] = []
     for path in sorted(pathlib.Path(root).rglob("*.py")):
@@ -182,7 +186,8 @@ def _literal_hits(root: pathlib.Path) -> list[tuple[str, int, str]]:
             if not (isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant)
                     and isinstance(first.value.value, str)):
                 continue
-            if _RULING_DATE in str(first.value.value):
+            doc = str(first.value.value)
+            if any(marker in doc for marker in _RETIRED_MARKERS):
                 for line_no in range(first.lineno, (first.end_lineno or first.lineno) + 1):
                     allowed.add(line_no)
         for line_no, line in enumerate(text.splitlines(), 1):
@@ -197,12 +202,14 @@ def test_the_old_switch_literal_is_gone_from_source_and_tests() -> None:
 
     为什么连标识符一起扫：只删命令行 flag 时，配置项 / 参数表 / 分支还留着同一个名字
     —— 那件事没有任何读数会报，而它正是"开关又以另一个名字回来了"的入口。
-    唯一豁免是带裁定日期的文档串（它就是本文件的说明与历史记录）。
+    唯一豁免是说明了它已退役的文档串（＝解释"曾经有过、为什么删掉"的说明；
+    日期不是豁免条件，见 `_RETIRED_MARKERS`）。
     """
     root = pathlib.Path(__file__).resolve().parents[1]
     hits = _literal_hits(root / "src") + _literal_hits(root / "tests")
     assert not hits, (
-        f"那个开关的字面量还在 {len(hits)} 处（只允许出现在带 {_RULING_DATE} 的文档串里）："
+        "那个开关的字面量还在 "
+        f"{len(hits)} 处（只允许出现在说明了它已退役的文档串里）："
         + "；".join(f"{p}:{ln} {text[:60]}" for p, ln, text in hits[:8]))
 
 
@@ -217,6 +224,29 @@ def test_the_scanner_really_scans(tmp_path: pathlib.Path) -> None:
     hits = _literal_hits(tmp_path)
     assert hits, "扫描器没抓到注入的那一行 ⇒ 守卫是空的"
     assert hits[0][0].endswith("probe.py") and hits[0][1] == 1, hits
+
+
+def test_a_docstring_must_say_the_switch_is_retired_not_just_date_it(
+        tmp_path: pathlib.Path) -> None:
+    """守卫 2 的豁免反真空（2026-11-12）：豁免来自"说了退役"，不来自日期或沉默。
+
+    三档都必须走同一条扫描器（否则"豁免改成守意图"可能悄悄变成"什么都能过"）：
+    ① 提了旧开关、没说退役 ⇒ 红；
+    ② 提了旧开关、带裁定日期、仍没说退役 ⇒ 红（日期不是免死牌）；
+    ③ 说了退役（`_RETIRED_MARKERS` 任一词）⇒ 绿（证明豁免通道是活的，不是空表）。
+    """
+    def _probe(dirname: str, doc: str) -> list[tuple[str, int, str]]:
+        d = tmp_path / dirname
+        d.mkdir()
+        (d / "probe.py").write_text(f'"""{doc}"""\nX = 1\n', encoding="utf-8")
+        return _literal_hits(d)
+
+    silent = _probe("silent", f"运行 F 时传 {_OLD_FLAG} 即可。")
+    assert silent, "提了旧开关却没说退役，扫描却绿了 ⇒ 豁免退化成'只要不说退役就行'"
+    dated = _probe("dated", f"2026-10-26 起改用 {_OLD_FLAG}。")
+    assert dated, "带一个日期就放行了 ⇒ 日期成了免死牌，判据守的不是'说了退役'"
+    retired = _probe("retired", f"{_OLD_FLAG} 已删除，F 现在无条件得到缝。")
+    assert not retired, "说了退役反而还红 ⇒ 豁免通道是死的（判据会误伤正当说明）"
 
 
 def test_unwired_owners_does_not_contain_f() -> None:
