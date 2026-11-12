@@ -244,11 +244,14 @@ class _IngestManuscript:
                      requested: Sequence[str], out: dict, named_path: int,
                      want_no: int, mode: str) -> dict:
         """计划 + 逐格回执 + I1/I2 不变量（返回 `{"plan": …}` 或 `{"fail": 受控拒}`）。"""
+        #: 优化线：计划按"覆盖这一格"走（它不分配号、也不比对号）；号由秘书核、
+        #: 能不能换由写口按新正文的 V 签判。登记线的冲突矩阵逐字不变。
+        plan_conflict = "overwrite" if named_path else str(conflict)
         plan = _MI.plan_cells(
-            row, got_cells, str(conflict), family=family,
-            proof_no=int(named_path or want_no or 1),
-            append_new_path=self._ingest_new_proof_path(
-                mode=mode, row=row, target=target, rel=rel, got_cells=got_cells))
+            row, got_cells, plan_conflict, family=family,
+            proof_no=(1 if named_path else int(want_no or 1)),
+            append_new_path=(False if named_path else self._ingest_new_proof_path(
+                mode=mode, row=row, target=target, rel=rel, got_cells=got_cells)))
         cells_out = self._ingest_plan_cells(plan, requested)
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),

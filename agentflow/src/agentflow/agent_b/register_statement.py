@@ -1920,7 +1920,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
                        canonical: str = "", bits: Mapping | None = None,
-                       proof_no: Any = 1, manuscript_id: str = "") -> dict:
+                       proof_no: Any = 1, manuscript_id: str = "",
+                       replace_existing: bool = False) -> dict:
         """把证明清单与 canonical 正文写回既有那一行（同一把 `statements` 锁）。
 
         为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
@@ -1938,9 +1939,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         "replaced_by": 新正文字节 sha256}`。读的人因此能回答"这一版之前是哪一版、被哪一版
         换掉的"，而不需要去别处找归档。
 
-        ## 清单仍不覆盖
+        ## 清单仍不覆盖（默认）
         #p2 及以后是追加式的：同号不同正文仍整笔不写（`proof_no_taken`）。那是"一份已经
         存在的证明被换掉"，与 canonical 这一格（同一份证明的改稿）不是同一件事。
+        2026-11-12 业主裁定：换第 N 份正文只允许优化线打开（`replace_existing=True`，
+        见 `_ingest_apply_proof`），且条件与 canonical 同构（新正文有 V 签 + 旧正文进
+        `proof_history` + `optimized_by_proof[n]=true`）；登记线不传它，口径不变。
 
         ## 三态与返回值
         `written=True` 表示这一笔真的落盘了（挂了新证明，或覆盖了 canonical）；
@@ -1973,6 +1977,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      "refused": "", "reason": "", "canonical_differs": False,
                      "canonical_written": False, "canonical_pending": False,
                      "canonical_history": [],
+                     #: 优化线换掉的 #pN（默认空：登记线不换已有证明）。
+                     "replaced": [],
                      #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。没换正文时是
                      #: 空列表 / 空串 —— 老返回形状因此逐字不变。
                      "optimized": [], "optimized_blocked": "",
@@ -2110,11 +2116,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if canonical_changed:
                 _abort = self._apply_canonical_proof(
                     row=row, out=out, raw_want=raw_want, stmt_id=stmt_id,
-                    have_raw=have_raw, have_canon=have_canon, bits=bits, store=store)
+                    have_raw=have_raw, have_canon=have_canon, bits=bits, store=store,
+                    history_proof_no=(int(proof_no or 0) if replace_existing else 0))
                 if _abort is not None:
                     return _abort
             have = {no: text for no, text in _VR.proof_list(row)}
-            _entries_read = self._append_proof_entries(row, out, entries, have)
+            _entries_read = self._append_proof_entries(
+                row, out, entries, have, bits=bits, replace_existing=replace_existing)
             if _entries_read["refused"]:
                 out["refused"] = str(_entries_read["refused"])
                 out["reason"] = str(_entries_read["reason"])
@@ -2266,12 +2274,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     out["kind_upgraded"] = dict(kind_upgrade)
             #: 三个"这一笔写什么"的来源全空 ⇒ 一个字都不写（`nothing_to_attach` 那一笔
             #: 也走这条判据：第 4 位同步出变化时 `formal_synced` 为真，于是它照样落盘）。
-            if (not out["attached"] and not canonical_changed and not out["formal_synced"]
+            if (not out["attached"] and not out["replaced"] and not canonical_changed
+                    and not out["formal_synced"]
                     and not out["grade_recomputed"] and not out["proof_collected"]
                     and not out["kind_upgraded"] and not out["kind_trace_refreshed"]
                     and not out["bits_synced"] and not out["proof_receipt"]):
                 return {"write": False, "result": out}
-            if out["attached"]:
+            if out["attached"] or out["replaced"]:
                 row[_VR.PROOFS_KEY] = listed
             out["canonical_written"] = bool(canonical_changed)
             return {"write": True, "row": row, "result": out}
@@ -2289,7 +2298,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return out
 
     def _append_proof_entries(self, row: dict, out: dict, entries: list[dict],
-                             have: Mapping) -> dict:
+                              have: Mapping, *, bits: Mapping | None = None,
+                              replace_existing: bool = False) -> dict:
         """把这一笔新交来的 #pN 挂进 `proofs` 清单（同号不同正文 ⇒ 整笔不写）。
 
         从 `_attach_proofs._transition` 里抽出来的那一段：清单从行上读一份新的，
@@ -2298,9 +2308,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         `attached` / `optimized`（新挂上来的一份是机械录入那一版 ⇒ 优化态显式
         `false`，翻真只发生在它被换正文那一笔）。
 
+        `replace_existing`（2026-11-12 业主裁定：换正文只允许优化这条线去换）：
+        只由优化线（`ingest_manuscript(path_group=n)`）打开。打开时"同号不同正文"
+        走与 canonical 完全同构的替换：先按 `_optimized_gate` 核这一份新正文的签
+        （没过 ⇒ `proof_without_v_sign` / `proof_sha_mismatch`，一个字节不写），
+        旧正文按号进 `proof_history`，再换清单那一份并打 `optimized_by_proof[n]`。
+        默认 `False` ⇒ 登记线维持 `proof_no_taken`（不放宽）。
+
         返回 `{"refused": 码, "reason": 话, "listed": 新清单}`：`refused` 非空时
         调用方原样写回 `out` 并整笔返回；挂上去的 `row["bits"]` 与
-        `out["attached"]` / `out["optimized"]` 就地写（与拆前同序，块内逐字相同）。
+        `out["attached"]` / `out["replaced"]` / `out["optimized"]` 就地写。
         """
         listed = [dict(p) if isinstance(p, Mapping) else p
                   for p in (row.get(_VR.PROOFS_KEY) or [])]
@@ -2311,15 +2328,23 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 if str(have[no]).strip() == text.strip():
                     out["already"].append(no)
                     continue
-                return {
-                    "refused": "proof_no_taken",
-                    "reason": (
-                        f"#{no} 已经在这条命题的证明清单里，而这一笔交来的正文与它不同 ⇒ "
-                        "整笔不写（覆盖既有的一条证明等于把它换掉，而签名可能还挂在它上面）。"
-                        "确实要换这一份：另起一个证明号，或者先由人把旧的那一条与它的签名"
-                        "一并处置"),
-                    "listed": listed,
-                }
+                if not replace_existing:
+                    return {
+                        "refused": "proof_no_taken",
+                        "reason": (
+                            f"#{no} 已经在这条命题的证明清单里，而这一笔交来的正文与它不同 ⇒ "
+                            "整笔不写（覆盖既有的一条证明等于把它换掉，而签名可能还挂在它上面）。"
+                            "确实要换这一份：另起一个证明号，或者先由人把旧的那一条与它的签名"
+                            "一并处置"),
+                        "listed": listed,
+                    }
+                replaced = self._replace_proof_entry(
+                    row, out, listed=listed, no=no, old=str(have[no]), text=text,
+                    bits=bits)
+                if replaced.get("refused"):
+                    return {"refused": replaced["refused"],
+                            "reason": replaced["reason"], "listed": listed}
+                continue
             listed.append({"proof_no": no, "text": text,
                            # 幂等的判据：`manuscriptintake._plan_proof` 按
                            # `proofs[]` 条目上的 `proof_sha256` 判"同一份正文"。
@@ -2335,6 +2360,60 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 {"proof_no": int(no), "optimized": False, "state": "fresh",
                  "why": "这一份刚挂上来（机械录入那一版），还没洗过"})
         return {"refused": "", "reason": "", "listed": listed}
+
+    def _replace_proof_entry(self, row: dict, out: dict, *, listed: list,
+                             no: int, old: str, text: str,
+                             bits: Mapping | None) -> dict:
+        """优化线换第 #N 份正文（签闸 + 旧正文留痕 + 优化态）。
+
+        与 canonical 那一支同构（`_apply_canonical_proof`）：先核这一份新正文的签
+        （`_optimized_gate`，判据只一处），过了才换；旧正文按号进 `proof_history`。
+        返回 `{"refused", "reason"}`（空 = 换成了）。
+        """
+        gate_bits = bits if bits is not None else (row.get("bits") or {})
+        gate = _optimized_gate(gate_bits, proof_no=no, proof_text=text)
+        out["optimized"] = [{
+            "proof_no": int(no),
+            "optimized": bool(gate.get("optimized")),
+            "state": ("true" if gate.get("optimized") else "false"),
+            "blocked": str(gate.get("optimized_blocked") or ""),
+            "why": str(gate.get("why") or ""),
+        }]
+        out["optimized_blocked"] = str(gate.get("optimized_blocked") or "")
+        if not gate.get("optimized"):
+            blocked = (out["optimized_blocked"]
+                       or _EB.OPTIMIZED_BLOCKED_NO_SIGN)
+            out["optimized"][0]["blocked"] = blocked
+            return {
+                "refused": ("proof_without_v_sign"
+                            if blocked == _EB.OPTIMIZED_BLOCKED_NO_SIGN
+                            else "proof_sha_mismatch"),
+                "reason": ("这一笔要换掉已存在的 #" + str(no) + " 正文，而它没有资格被记成"
+                           "「已优化」：" + str(gate.get("why") or "")
+                           + "。优化线换正文的前提是「优化后拿 V 签」—— 没有签的正文"
+                           "不许盖掉在册那一份。盘上一个字节都没动。"),
+            }
+        # 旧正文按号留痕（canonical 那一支不带号的历史形状不变）。
+        raw_history = row.get("proof_history")
+        history = ([dict(h) if isinstance(h, Mapping) else h for h in raw_history]
+                   if isinstance(raw_history, (list, tuple)) else [])
+        entry = _canonical_history_entry(old, text)
+        entry["proof_no"] = int(no)
+        history.append(entry)
+        row["proof_history"] = history
+        out["canonical_history"].append(dict(entry))
+        out.setdefault("replaced", []).append(int(no))
+        for i, one in enumerate(listed):
+            if isinstance(one, Mapping) and int(one.get("proof_no") or 0) == int(no):
+                listed[i] = {**dict(one), "text": text,
+                             "proof_sha256": _VR.text_sha(text)}
+                break
+        row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, no, True)
+        out["optimized_blocked"] = ""
+        out["optimized"] = [{"proof_no": int(no), "optimized": True,
+                             "state": "true", "blocked": "",
+                             "why": "优化线：新正文有 V 签，旧正文已进 proof_history"}]
+        return {"refused": "", "reason": ""}
 
     def _refresh_kind_trace_from_sign(self, row: dict, out: dict, *,
                                       store: Any) -> None:
@@ -2418,7 +2497,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _apply_canonical_proof(self, *, row: dict[str, Any], out: dict[str, Any],
                                raw_want: str, stmt_id: str, have_raw: str,
                                have_canon: str, bits: Mapping | None,
-                               store: Any) -> dict | None:
+                               store: Any, history_proof_no: int = 0) -> dict | None:
         """「换正文」那一段（`_transition` 的内层，只搬移）。
 
         2026-11-08 从 `_transition` 拆出：换正文之前先核签、换、认优化标记、判旧签不再
@@ -2535,6 +2614,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                         for h in raw_history]
                        if isinstance(raw_history, (list, tuple)) else [])
             entry = _canonical_history_entry(have_raw, raw_want)
+            if int(history_proof_no or 0) >= 1:
+                #: 优化线点名的第 n 条路径（n=1 就是 canonical 那一份）：读的人要能
+                #: 按号把这一条历史对回路径。登记线的 canonical 条目仍不带号（旧形状）。
+                entry["proof_no"] = int(history_proof_no)
             history.append(entry)
             out["canonical_history"].append(dict(entry))
             out["canonical_differs"] = True
@@ -7083,7 +7166,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_apply_proof(self, cells: dict, row: Mapping, want_no: int,
                             target: str, manuscript_id: str = "",
-                            write_no: int = 0) -> dict:
+                            write_no: int = 0,
+                            replace_existing: bool = False) -> dict:
         """写 `proof_text` 那一格（签闸 → `_attach_proofs`），就地把回执写回 `cells`。
 
         `want_no` 是签闸读的证明号（稿名 / 参数给的，通常是 1）；`write_no` 是
@@ -7132,7 +7216,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             target,
             entries=([{"proof_no": no, "text": text}] if no >= 2 else []),
             canonical=(text if no == 1 else ""), bits=attach_bits, proof_no=no,
-            manuscript_id=str(manuscript_id or ""))
+            manuscript_id=str(manuscript_id or ""),
+            replace_existing=bool(replace_existing))
         if attach.get("refused"):
             return {"written": False, "code": str(attach["refused"]),
                     "why": str(attach.get("reason") or "")}
@@ -7727,6 +7812,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "path_group": int(got.get("path_group") or 0),
                 "written": bool(got.get("written"))}
 
+    @staticmethod
+    def _optimization_replace_enabled() -> bool:
+        """换第 N 份正文这扇门开不开（C6 反真空的打桩点；默认开）。
+
+        业主 2026-11-12：「换正文只允许优化这条线去换」。这一格只回答"门开不开"，
+        不回答"哪条线" —— 线由 `ingest_manuscript(path_group>=1)` 认。反真空把它
+        打成 False ⇒ 回填第 2 条必须撞 `proof_no_taken`（证明"能换"是新加的、不是
+        恒真）；登记线根本不经过这一格。
+        """
+        return True
+
     def _ingest_proof_cell(self, cells: dict, row: Mapping, sec: Any, *,
                            plan: Mapping, reading: Mapping, want_no: int,
                            target: str, path: str, path_no: int,
@@ -7751,7 +7847,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         got = self._ingest_apply_proof(
             cells, row, want_no, target,
             manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")),
-            write_no=out_no)
+            write_no=out_no,
+            replace_existing=(bool(named_no) and self._optimization_replace_enabled()))
         if got["code"]:
             return {"code": got["code"], "why": got["why"]}
         return {"code": "", "why": "", "path_group": out_no, "receipt": receipt,
