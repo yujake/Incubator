@@ -1,22 +1,7 @@
-"""智能体 C：关系分析（程序做分析，LLM 只做排序与措辞）。
-定位（DESIGN-TOOLS.md §3.1）
-- 计数、索引、图搜索、路径枚举、去重、评分、溯源，全部是确定性代码（图与索引在 `tools/graph_tools.py`，代号溯源在 `tools/trace_tools.py`）；
-- 只有两处留 LLM 钩子，且默认关闭（构造时 `llm=None` 即可）：① 路径"最合理关系链"的排序；
-1. `hottest`：热度是 occurrences（概念在 `concept_ids` 里出现的次数），不是关系条数 —— 一条涉及 3 个概念的关系对其中每个概念都算 1 次出
-现。排序必须稳定（同分按 `concept_id` 升序），否则同分概念的相对顺序会随字典插入顺序漂移，报告每次都不一样。 2. `paths`：见下方"三条不让步的规则"。 3. 
-`cold`："没人研究"（degree 小）与"没人连接"（degree=0 的完全孤立）是两件事，必须分开归类； 4. `gaps`：需求说"若确实有，则报告"。
-所以按节点集合的 Jaccard 相似度贪心筛：新路径与任何已选路径的重合度`> max_overlap`（默认 0.5）就丢弃。
-取候选后按 §3.3(4) 的确定性序重选。
- 报告要给 D 的不只是"high"这个标签，而是"为什么判成 high"：`score_breakdown` 里逐项列出每个信号的输入值与贡献值。
-报告形态：登记表 + 文件双份（§2.2）`AnalysisReport.payload` 是 D 溯源用的机器可读部分（代号链、评分明细），
-`AnalysisReport.markdown` 是人读的部分。`persist()` 把两者分别落到`reports/<report_id>-<kind>.md` 与 
-`analysis_reports` 表。
-服务面（DESIGN-INTERACTIONS.md §1 I1 / I3 / I5）四类分析器是批处理：跑一次、产一份报告、进 `analysis_reports` 表。所以本模块另
-外提供服务方法（`neighbors` /`relations_between` / `contradictions` / `structural_duplicates`）：
-- 每个结果都带 `checked` 三态位（`False` = 没查，`True` + `empty=True` = 查了没有）；- 触及预算一定给 `truncated=True`
-并说明原因 —— 静默截断会被下游读成"就这些"，而它是一条口吻确定的错误结论；- 判据一律委托给冻结契约 `interactions`（矛盾、结构重复、冲突检查），绝不在这里写第二份。
-唯一的写入路径是 `gaps(submit_requests=True)`（I3：把"应该有边却缺失"的候选直接变成 A 的检索请求），默认关闭，且由 `gaps()` 的确定性代码路
-径完成 —— 它不经过 C 的工具与推理，写的也不是知识。工具面（`register_tools`）因此可以保持全量只读。
+"""C 包内部件共用的小工具（口径与包入口同一份）。
+
+定位、各分析器口径、报告形态与服务面见 `agent_c/__init__.py` 的模块 docstring —— 这里
+不复制一份会漂的副本。本文件只放图/路径工具、报告类型与受控小工具。
 """
 from __future__ import annotations
 import json
