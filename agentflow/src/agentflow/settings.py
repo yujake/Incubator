@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """机器级设置文件：这台机器上工具链在哪、用哪个模型 —— 「一处定义」。
 
-## 为什么要有它（2026-10-07 所有者指示）
+## 为什么要有它（所有者指示）
 
-改前的事实：这台机器上 Lean/Mathlib 装在哪，是「写死在代码与文档里的字符串」
-（`toolchain.py` 的模块 docstring 里逐字写着一台机器的绝对路径，
+这台机器上 Lean/Mathlib 装在哪，曾经是「写死在代码与文档里的字符串」
+（`toolchain.py` 的模块 docstring 里写着一台机器的绝对路径，
 `formalgw.py` 的注释里写着仓库临时区里的那个 Mathlib 目录名），而模型 API key
 只能从环境变量读（`modelgw.spec_from_env`）。两件事于是各有一个"机器相关的事实"
 落在两个地方，且其中一件（路径）是硬编码的。
@@ -34,7 +34,7 @@
 | `toolchain` | `lean_enabled` | 布尔：这台机器/这一趟要不要走 Lean 形式化这条路（缺省 `false`：无严苛要求时不烧形式化那笔钱；写 `true` 才按老套路走形式化） |
 | `model` | `api_key` | 模型 API key（落盘这件事的代价与安全阀见下面「安全阀」一节） |
 | `model` | `base_url` | OpenAI 兼容端点（缺省 `https://api.deepseek.com/v1`） |
-| `model` | `name` | 模型名（缺省 `deepseek-flash`；2026-10-10 裁定 19乙 从 `deepseek-chat` 换过来） |
+| `model` | `name` | 模型名（缺省 `deepseek-flash`） |
 | `workspace` | `projects_dir` | `projects/` 的落点（`agentflow project` 与 M 的 `conductor.ensure_project` 的缺省落点） |
 
 （`workspace` 这一段是同一个指示的第二半：那条写死的 `D:\Incubator\projects`
@@ -51,7 +51,7 @@
 （形状错，抛 `ValueError` 并说清收到的是什么），与语法错分得开。
 刻意不认 YAML：为一个设置文件引一门"缩进即语义"的方言不值得 ——
 `json` 是标准库，且它的错误信息带行列号（上面那条教训要的正是这个）。
-（注：`pyyaml` 从 2026-10-11 起是运行期依赖，但它是为预设层引入的
+（注：`pyyaml` 是运行期依赖，但它是为预设层引入的
 ——业主裁定"就用 dsh 的格式"，见 `presets.py`。设置文件这一档刻意不跟着变：
 同一个包对"哪一层用哪种方言"要有明确的边界，而不是"能解析就顺手解析"。）
 
@@ -145,7 +145,7 @@ ENV_SETTINGS = "AGENTFLOW_SETTINGS"
 #: `toolchain` 段认识的键（顺序即文档顺序）。
 TOOLCHAIN_KEYS: tuple[str, ...] = ("lean_bin", "mathlib_root", "coq_bin", "isabelle_bin",
                                    "lean_enabled")
-#: `toolchain` 段里那个布尔开关的键名（业主 2026-10-12 口径：机器上有没有 Lean
+#: `toolchain` 段里那个布尔开关的键名（业主口径：机器上有没有 Lean
 #: 环境由用户设一个 bool，全流程涉及 Lean 的都要跟着它的状态走）。
 #:
 #: ## 为什么它不走 `_section` 那条"非字符串 ⇒ 空串"的路
@@ -157,15 +157,15 @@ TOOLCHAIN_KEYS: tuple[str, ...] = ("lean_bin", "mathlib_root", "coq_bin", "isabe
 LEAN_ENABLED_KEY = "lean_enabled"
 #: 环境变量档（优先级最高的一档，与其余键同一条梯子）。
 ENV_LEAN_ENABLED = "AGENTFLOW_LEAN_ENABLED"
-#: 缺省：`True` —— 不设它时行为与 2026-10-12 之前逐字相同。
+#: 缺省：`False`（见下面那条业主口径）。
 #:
 #: 为什么缺省是"开"而不是"按探测自动决定"：这一格的语义是许可，不是读数。
 #: 本机的探测读数（`toolchain.probe_checkers` / `formalgw.detect_backend`）本来就如实
 #: 报"没装 Lean"，那条路不需要开关；它要回答的是「这一趟值不值得为形式化花钱」：
-#: 形式化的每一次尝试都要真起 Lean 子进程（`import Mathlib` 一次 ~25–30 秒），而多数趟次
-#: 拿不到 proof 行 —— 真机读数里 T1 三趟的 $6.1553 有一大半花在这条线上。
+#: 形式化的每一次尝试都要真起 Lean 子进程（`import Mathlib` 一次数十秒），而多数趟次
+#: 拿不到 proof 行 —— 那笔钱花在这条线上。
 #:
-#: 缺省是关（业主 2026-10-12 的口径逐字：「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）：
+#: 缺省是关（业主的口径逐字：「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）：
 #: 要形式化就显式写 `true`（或 `AGENTFLOW_LEAN_ENABLED=1`），那时全流程回到老套路、
 #: 一个字都不变（`tests/test_lean_switch.py` 的负控逐条钉这一点）。
 #: 把"探测不到"折进这一格仍然不允许 —— 那会让"我关了它"与"机器上没装"在读数上长得一样。
@@ -177,19 +177,19 @@ _FALSE_WORDS: tuple[str, ...] = ("0", "false", "no", "off", "n", "f")
 BOOL_KEYS: tuple[str, ...] = (LEAN_ENABLED_KEY,)
 #: `model` 段认识的键（顺序即文档顺序）。
 #:
-#: `reasoning_effort` 是 2026-10-10 加的（所有者裁定逐字：「所有智能体都要能 thinking，
+#: `reasoning_effort` 的取值（所有者裁定逐字：「所有智能体都要能 thinking，
 #: 且开默认到 High」）。它的取值词表不在这里：唯一来源是
 #: `modelgw.REASONING_EFFORTS` —— 本模块按设计不认识业务词表（它只管"取到一个字符串"），
 #: 在这里再写一份就是同一个词表的第二个定义点。词表外的取值由
 #: `modelgw.ModelSpec` 构造时当场拒绝（拼错一个字母会报错，不会静默按缺省跑）。
 #:
-#: `temperature` 是 2026-10-29 加的（业主口径：「temperature = 1.0（正常对话的数值）」，
+#: `temperature` 的取值（业主口径：「temperature = 1.0（正常对话的数值）」，
 #: 只给 V 的审阅调用）。它的合法区间与缺省同样不在这里：唯一来源是
 #: `modelgw.DEFAULT_TEMPERATURE` / `modelgw.TEMPERATURE_RANGE`，读入校验在
 #: `modelgw.normalize_temperature`（空串 = 未设置 = 缺省 0.2，别的角色一个字节不动）。
 MODEL_KEYS: tuple[str, ...] = ("vendor", "api_key", "base_url", "name",
                                "reasoning_effort", "temperature")
-#: `models` 段（按角色覆盖，业主 2026-10-14：「允许不同角色智能体用不同模型厂商的
+#: `models` 段（按角色覆盖，业主：「允许不同角色智能体用不同模型厂商的
 #: 不同 api key」）：键是角色名（`A`–`H` / `V` / `M`）或 `default`，值是那一段
 #: `MODEL_KEYS` 的子集。取缝时的梯子是：`models.<角色>` → `models.default` → `model`
 #: → 环境变量 → 缺省（唯一实现 `modelgw.spec_for`）。
@@ -331,11 +331,10 @@ def lean_enabled(path: str | Path | None = None, *,
     取值梯子（唯一口径，见模块 docstring）：环境变量 `AGENTFLOW_LEAN_ENABLED`
     > 设置文件 `toolchain` 段的 `lean_enabled` > :data:`DEFAULT_LEAN_ENABLED`（`False`）。
 
-    （2026-10-22 更正：这一行原写"缺省 `True`" —— 那是 2026-10-12 之前的缺省值。业主
-    当天的口径是"默认设置中 Lean 关闭帮用户在无严苛要求时省钱"，真身
-    `DEFAULT_LEAN_ENABLED = False`，而判据
+    缺省是 `False`（业主口径：「默认设置中 Lean 关闭帮用户在无严苛要求时省钱」）：
+    真身 `DEFAULT_LEAN_ENABLED = False`，而判据
     `tests/test_lean_switch.py::test_the_product_default_is_lean_off` 钉的正是它。
-    docstring 与真身不一致时，读文档的人会以为"没设就是开"，而实际每一趟都关着。）
+    docstring 与真身不一致时，读文档的人会以为"没设就是开"，而实际每一趟都关着。
 
     ## 读不懂的值必须当场报错（fail-closed）
 
@@ -447,7 +446,7 @@ def model_settings_for(role: str, path: str | Path | None = None, *,
 
 def secretary_settings(path: str | Path | None = None, *,
                        env: Mapping[str, str] | None = None) -> tuple[dict[str, str], str]:
-    """所有角色的秘书共用的那一档模型（业主 2026-10-14 的后半句）。
+    """所有角色的秘书共用的那一档模型（业主的后半句）。
 
     梯子与 :func:`model_settings_for` 同形，只是第一格换成 `secretary` 段：
     `secretary` → `models.default` → `model` → 空串。
@@ -478,7 +477,7 @@ def workspace_settings(path: str | Path | None = None, *,
     """`workspace` 段：`projects_dir`（缺的补空串）。
 
     为什么"数据面落点"也算设置：它与工具链地址同族 —— 都是"这台机器上东西放哪"。
-    改前 `projects.DEFAULT_PROJECTS_DIR` 里逐字写着一台机器的绝对路径，
+    `projects.DEFAULT_PROJECTS_DIR` 曾经逐字写着一台机器的绝对路径，
     换一台机器就是一句假话（症状是"项目建到了别处"，而不是一句报错）。
     取值顺序由调用方拼（`projects.projects_dir`）：显式参数 > `AGENTFLOW_PROJECTS_DIR`
     > 本段 > 由本包位置推出的工作区根下的 `projects/`。
@@ -547,7 +546,7 @@ def resolve_setting_path(raw: str | Path) -> Path:
 #    逐字节不变（判据 `test_webui_settings_write.py` 有一条负控钉它）。
 # 3. 权限尽力收紧：POSIX 上 `chmod 0600` 并回读校验；Windows 上 POSIX 模式位
 #    管不到 ACL（回读会如实报告 `mode_enforced=False`）—— 返回值里给的是实测读数，
-#    不是"应该是什么"。理由与 `draft/76` 题 E 的代价栏同一条。
+#    不是"应该是什么"。
 # 4. 没配/没装/读不出来 ⇒ 返回 `tri="unknown"` 而不是抛异常：写设置这件事不许把
 #    "没查成"折叠成"改成功了"，也不许让一个坏掉的文件把调用方炸掉。
 
@@ -784,12 +783,12 @@ def write_settings(values: Mapping[str, Any], path: str | Path | None = None, *,
     `env[AGENTFLOW_SETTINGS]` → 默认落点。`AGENTFLOW_SETTINGS` 指到别处时就写别处，
     所以判据可以在一份临时文件上跑，不碰本机的真设置。
 
-    返回形状（`draft/73` §2.6：与 `load_settings` 同族，但 key 只写不读）：
+    返回形状（与 `load_settings` 同族，但 key 只写不读）：
 
         {"ok": bool, "tri": "written" | "refused" | "unknown", "reason": str,
          "path": str, "values": {段: {键: 值}}, "permissions": {...}}
 
-    `tri` 是"写设置"这件事的词表（`draft/73` §2.5 给 `/api/settings` 定的那一套），
+    `tri` 是"写设置"这件事的词表（给 `/api/settings` 定的那一套），
     不是 `Tri`（`computed/unreadable/not_applicable`）—— 两套字符串不许互相顶替
     （裁定 N1）。HTTP 那一层做映射：`written→computed` · `refused→not_applicable` ·
     `unknown→unreadable`，并把本词原样带进回执的 `extra`。
