@@ -2,7 +2,7 @@
 
 ## [为什么] 为什么要有这一层
 
-本轮之前，`run_topic` 把模型答复直接当成结论落进 `claims.json` 与报告：
+没有这一层时，模型答复会被直接当成结论落进 `claims.json` 与报告：
 模型说"某定理在 1930 年被证明"，产物里就写着这句话，没有任何外部依据。
 "看起来有据"与"真有据"是两件事，而它们之间的缺口恰恰不在任何一段代码里 ——
 所以缺口不会报错，只会让报告变得不可复核。
@@ -41,19 +41,18 @@
 
 ### 逐源的判决面：三档分列 + 逐条 `filter_note`（产物面接线）
 
-`sources_detail[*]` 不只记"查到几条"，还把 provider 侧算过、改前算完即丢的
-相关性判决折进来（数据源是 `providers.TopicalityReport`）：
+`sources_detail[*]` 不只记"查到几条"，还把 provider 侧算过的相关性判决折进来
+（数据源是 `providers.TopicalityReport`）：
 
 - `topicality_buckets`：`judged_relevant` / `rejected` / `unjudged_no_ascii_keywords`
   三档分列 + `total` + `complete`，形状与 `TopicalityReport.counts()` 逐字一致；
 - `topicality_notes`：逐条 `filter_note`（`{filter_note: 条数}`），
-  `judged_relevant` 也一并收 —— 改前 `last_filter_notes` 里只有内部记号与计数，
-  逐条那句话在精筛之后就被丢掉了；
+  `judged_relevant` 也一并收 —— 只留内部记号与计数，逐条那句话在精筛之后就会丢；
 - `topicality_state`：这一跑的整体落法（`judged` / `not_precise` / 第三态名）。
 
 为什么必须是列表而不是一个 `rejected` 总数：`rejected=0` 有两种互不相同的
 来源（"精筛跑过了、一条都不该剔"与"精筛 100% 弃权"），下游照报告面取数时
-把两者读成同一件事，`draft/28` §100.3 记的正是这个形态。
+把两者读成同一件事。
 
 三档之和恒等于该源的候选总数（`topicality_buckets.total`，也就是台账
 `detail` 的长度），`complete` 就是这条断言 —— 它允许大于 `count`（返回值里
@@ -67,7 +66,7 @@
 
 跨源同一篇文献按 DOI 归一化去重（调用禁改区 `dedup.normalize_doi`，不另写第二份规则），
 合并后的条目写明它来自哪些源（`providers`）。为什么必须写下来：一条来源被两个库
-同时证实时，它与"只有一个库说过"在可信度上不是一回事，而两者在旧结构里长得一样。
+同时证实时，它与"只有一个库说过"在可信度上不是一回事，而一个来源字段分不开两者。
 
 ## [契约] 逐字回验的四种判决（第二条纪律）
 
@@ -148,7 +147,7 @@ RETRIEVAL_STATUSES: tuple[str, ...] = (
 #: 逐源状态：某个库这一次到底查成什么样。
 #:
 #: 第三态（`query_not_applicable_cjk` / `query_empty`）与 `providers` 侧的
-#: 名字逐字相同，不另立一套：改前状态名只出现在 `reason` 的自由文本里，
+#: 名字逐字相同，不另立一套：状态名若只出现在 `reason` 的自由文本里，
 #: 于是"这一问没发出去"必须靠读字符串才知道 —— 而字符串是给人读的，机器判不了。
 #:
 #: 为什么加值而不是另开一个字段：`sources_status` / `sources_detail[*].status`
@@ -445,12 +444,11 @@ def _default_search(topic: str, *, limit: int, timeout_sec: float) -> Sequence[A
             f"检索客户端造不出来（{type(exc).__name__}: {exc}）⇒ 本次没有发起检索"
         ) from exc
 
-    # [踩过] 用 `precise` 而不是 `topical`：实测（2026-09，本机联网）`topical` 的两路查询
-    # 按被引/年份排序，主题 "abelian group" 的前几条是石墨烯、希格斯玻色子、
-    # 椭圆曲线密码 —— 材料一旦跑偏，"只能用给定材料作答"就变成了
-    # "只能引用不相干的材料"。`precise` 走短语检索 + 标题关键词过滤，
-    # 同一主题返回的是 Infinite Abelian groups / Abelian groups 这类真对得上的条目；
-    # 中文主题（"阿贝尔群"）也返回了标题里带"阿贝尔群"的文献。
+    # [踩过] 用 `precise` 而不是 `topical`：`topical` 的两路查询按被引/年份排序，
+    # 主题 "abelian group" 会混进石墨烯、希格斯玻色子这类条目 —— 材料一旦跑偏，
+    # "只能用给定材料作答"就变成了"只能引用不相干的材料"。
+    # `precise` 走短语检索 + 标题关键词过滤，返回的是标题真对得上的条目
+    # （`Infinite Abelian groups` / `Abelian groups` 一类）。
     # description 传空：本层的输入只有一个 topic，没有第二段描述可用。
     return client.search(topic, "precise", "", int(limit))
 
@@ -591,7 +589,7 @@ def _attr_or_none(obj: Any, name: str) -> Any:
     为什么两种形态都要收：台账在产物里是 dict（`to_dict()` / JSON 回读），
     在内存里是 `TopicalityReport` 这样的冻结 dataclass —— 两条路径读同一批
     读数，只认一种形态会让另一种静默变成"没有这条读数"
-    （实测踩过：只写 `getattr` ⇒ dict 形态恒返回 `None`）。
+    （只写 `getattr` 时，dict 形态会恒返回 `None`）。
 
     为什么把异常也吃掉：`getattr` 在自造属性的测试替身上可能抛异常，
     而一次"读台账失败"绝不该让整次检索从"没查成"变成一次崩溃
@@ -637,7 +635,7 @@ def _normalize_buckets(report: Any) -> dict | None:
 def _notes_of(report: Any) -> dict[str, int]:
     """逐条 `filter_note` 的分列（`{filter_note: 条数}`，含被剔除的那些条）。
 
-    读数来自台账 `detail`：每一条候选都带一句改前会被丢掉的话。
+    读数来自台账 `detail`：每一条候选都带一句精筛时写下的理由。
     `filter_note` 为空的条目归到 `"no_filter_note"` —— 这条记号本身是信息
     （"这一条没有理由"），不许让它与"理由恰好是空串"两件事长得一样。
     """
@@ -778,7 +776,7 @@ def _retrieve_one(name: str, fn: SearchFn, *, row_name: str = "", query: str, li
         detail = _source_detail(row_name, status="failed", count=0, rejected=0, reason=failure)
         return name, [], [], failure, detail, "failed"
 
-    # 2026-10-17（IO #6）：注入的 `search_fn` 可能返回非可迭代值（int/None）——
+    # 注入的 `search_fn` 可能返回非可迭代值（int/None）——
     # `list(5)` 会抛 TypeError，而 `retrieve` 的 docstring 明写"本函数从不抛异常"。
     if not isinstance(items, (list, tuple)):
         items = []
@@ -906,7 +904,7 @@ def _retrieve_many(fns: Mapping[str, SearchFn], *, query: str, limit: int,
         reason = f"咨询了 {len(fns)} 个源，全部没有可用条目（含被拒收的）"
     else:
         # 全失败那一支逐条列出"为什么没查成"，并带上逐源状态名：第三态的那些源
-        # 与"上游坏了"在这一句里从此读得出来（改前只有源名与自由文本，
+        # 与"上游坏了"在这一句里读得出来（只列源名与自由文本时，
         # `query_not_applicable_cjk` 只是文本里的一串字）。
         why = "；".join(f"{d['source']}={d['status']}: {d['reason']}" for d in detail
                         if d["status"] == "failed" or d["status"] in SOURCE_STATUSES[3:])
@@ -956,7 +954,7 @@ def _default_sources(*, timeout_sec: float, limit: int) -> dict[str, SearchFn]:
 
         def _search(topic: str, *, limit: int, timeout_sec: float,
                     _p=provider) -> Sequence[Any]:
-            # 与单源路径同一套模式选择：见 `_default_search` 里对 `precise` 的实测说明。
+            # 与单源路径同一套模式选择：见 `_default_search` 里对 `precise` 的说明。
             return _p.search(topic, "precise", "", int(limit))
 
         # 把 provider 实例挂在这个检索函数上：`_retrieve_one` 因此能读到它
@@ -1117,12 +1115,12 @@ def _acquire_one(source: dict, fetch_fn: Callable[..., Any], extract_fn: Callabl
     # 抽取出来的逐页文本就是证据本体（回验要拿它逐字比对），但它有两种存法：
     #
     # - 给了 `text_store_dir`：按内容寻址存进项目的 `.fulltext/`，产物里只留 `text_ref`
-    #   （同一本书的同一份正文只存一份；依据 `draft/30` §T0-2 与 `draft/29` §7.4）。
-    # - 没给：逐页文本内联在产物里（形态与改前一致）。这里不再写 `text` ——
-    #   它是 `"\n".join(pages)` 的重复，全仓实测没有任何读者（`draft/29` §1 的读数）。
+    #   （同一本书的同一份正文只存一份）。
+    # - 没给：逐页文本内联在产物里。这里不再写 `text` ——
+    #   它是 `"\n".join(pages)` 的重复，全仓没有读者。
     #
     # 注意：写侧与读侧是同一条链 —— 只写 `text_ref` 而不让读侧认它，会让"全文级回验"
-    # 静默降级。所以本处改动必须与 `_fulltext_pages`（§T0-3）同批落地。
+    # 静默降级。所以本处改动必须与 `_fulltext_pages` 一起落地。
     if text_store_dir is None:
         base["text_pages"] = pages
         base["text_store"] = "inline"
@@ -1179,10 +1177,9 @@ def acquire_fulltext(sources: Sequence[Any], *, fetch_fn: Callable[..., Any] | N
     `fetch_fn` / `extract_fn` 是唯一的生产接线点，两者都为 `None` 时走禁改区里的
     `fetch.default_downloader` 与 `extract.extract_text`；测试注入假函数。
 
-    `text_store_dir` 决定"逐页正文存哪"（`draft/30` §T0-2）：给了它就按内容寻址存进
-    该目录（产物里只留 `text_ref`，同一本书的同一份正文只存一份）；不给就内联在产物里
-    （形态与改前一致，只是不再写那个没人读的 `text` 字段）。两种形态由 `text_store`
-    键自报，读者不必猜。
+    `text_store_dir` 决定"逐页正文存哪"：给了它就按内容寻址存进该目录
+    （产物里只留 `text_ref`，同一本书的同一份正文只存一份）；不给就内联在产物里
+    （只是不再写那个没人读的 `text` 字段）。两种形态由 `text_store` 键自报，读者不必猜。
 
     本函数不抛异常（构造下载器失败除外，那归 `not_configured`）：一条来源的
     下载/抽取失败只影响它自己。返回
@@ -1366,16 +1363,12 @@ def _check_one(doc: _PagesDoc, quote: str, fn: QuoteFn, *, window_kind: str) -> 
 def _read_verdict(result: Any) -> tuple[bool | None, str]:
     """从回验结果里读出三态与原因（同时接受 `QuoteCheck` 与同形 dict）。
 
-    ## `verified is None`（回验器拒绝判定）的第二项在这里就近补默认值
-
-    此前它默认成 `"unknown"`，于是调用方那句
-    `verdict_reason or "verifier_refused_to_judge"` 永远走不到 ——
-    一个更具体的字面量成了死词汇（`R2-AN-6`：`draft/28` §40.5）。
-    默认值搬到这里之后，"拒绝判定"写下的理由就是那个更具体的字面量，
-    调用方不再需要（也不许再）加一层同义兜底：同一个事实只许有一个定义。
+    `verified is None`（回验器拒绝判定）的第二项在这里就近补默认值：
+    理由写下 `"verifier_refused_to_judge"`，调用方不再需要（也不许再）加一层
+    同义兜底 —— 同一个事实只许有一个定义。
 
     为什么 `verified=False` 时不在这一层补默认值：那种情况下回验器没给理由
-    是可达的（`{"verified": False, "reason": ""}`，探针 `D2`），
+    是可达的（`{"verified": False, "reason": ""}`），
     而"没命中"的兜底（`not_found`）属于调用方的语境（它知道候选来源有几个）。
     两档的理由不是同一件事，在这里合并会把"回验器拒绝判定"与
     "回验器说没命中、但没给理由"折叠成一个词。
@@ -1396,12 +1389,12 @@ def _fulltext_pages(source: Mapping[str, Any],
                     ) -> tuple[list[str], str]:
     """这条来源的逐页正文从哪来：返回 `(逐页文本, 问题)`，问题为空串才算读成。
 
-    两种存法都必须能读（`draft/30` §T0-3）：产物里带 `text_ref` 时按引用去 store 读，
-    否则读内联的 `text_pages`。为什么要有这一层：此前 `text_pages` 在两处被直接读
-    （`_pages_of` 与 `_check_quote_levels`），两处直读就是两份口径。
+    两种存法都必须能读：产物里带 `text_ref` 时按引用去 store 读，
+    否则读内联的 `text_pages`。为什么要有这一层：让所有读者共用一种读法，
+    避免两处直读变成两份口径。
 
     `cache` 的作用域是一次 `verify_claims` 调用内的局部字典（键 = `text_ref.path`）：
-    同一份 4.6 MB 的 store 文件不该在一次回验里被解析七遍。刻意不做模块级缓存 ——
+    同一份大文件不该在一次回验里被反复解析。刻意不做模块级缓存 ——
     那会跨调用掩盖"文件被改"，而这一层的全部价值就在于当场发现文件被改。
 
     坏引用绝不许折成"这篇没有全文"：调用方拿到非空的问题串时，必须把它写进理由
@@ -1433,7 +1426,7 @@ def _pages_of(source: Mapping[str, Any],
     报告里的 `fulltext` 级永远为空，读者据此以为全文没有一句话对得上。
 
     降级到摘要时，理由必须说清是哪一种降级：引用坏了（`text_ref` 取不到）与
-    "这篇没有全文"是两句话 —— 把前者写成后者就是不实陈述（`draft/30` §T0-3）。
+    "这篇没有全文"是两句话 —— 把前者写成后者就是不实陈述。
     """
     pages, problem = _fulltext_pages(source, cache)
     if pages:
@@ -1504,24 +1497,17 @@ def _check_quote_levels(source: Mapping[str, Any], quote: str,
     `abstract`。「只存在于摘要、正文里没有的引文必须落到 `abstract`」 ——
     把它标成 `fulltext` 就是让读者以为正文里有这句话，而正文我们其实查过、没有。
 
-    ## 第五个返回值为什么必须存在（`E-12`）
-
-    此前"这条来源根本没有可比文本"与"回验器拒绝判定"都折成 `(None, "", {}, level)` 同一个形态，
-    于是 `verify_claims` 在"声明的来源没有文本"时直接落 `unknown` 并 `break` ——
-    其余"有文本"的来源根本没被查过。方向是 fail-closed（不会假通过），
-    但"能查成的"被写成"没查成"，台账还退化成字面量 `reason='unknown'`。
+    第五个返回值"有可比文本吗"是刻意的：若把"这条来源根本没有可比文本"与
+    "回验器拒绝判定"折成 `(None, "", {}, level)` 同一个形态，调用方会在
+    "声明的来源没有文本"时直接落 `unknown` 并停下，其余有文本的来源根本
+    没被查过 —— 方向虽是 fail-closed（不会假通过），但"能查成的"被写成
+    "没查成"，判决与理由都不实。
     所以这里显式区分：`False` = 这条来源没有可比文本（调用方应继续查别的来源），
     `True` = 真的比对过（结果可能是 verified / not_found / 拒绝判定）。
 
-    ## `False` 只剩一条路（`R2-AN-5`）
-
-    上面那个区分曾经漏了一半："有全文、没摘要、全文比过了但没命中"
-    这一形态（`:1155` 那一支）也被返回成 `False`，于是调用方写下
-    "一条来源都没比对过 / `no_comparable_text_in_any_source`" ——
-    判决与理由都是不实陈述（全文真的比过，结论是"没找到"，
-    方向虽然保守，但硬事实被丢掉了，一个假理由进了真库）。
-    现在那一支返回那次全文比对的结果（`comparable=True`、级别 `fulltext`），
-    `False` 因此恢复本条 docstring 的语义：它是 `:1139` 那条真"没有可比文本"。
+    `False` 因此只有一条路：真"没有可比文本"。"有全文、没摘要、全文比过了
+    但没命中"必须返回那次全文比对的结果（`comparable=True`、级别 `fulltext`），
+    否则调用方会写下"一条来源都没比对过 / `no_comparable_text_in_any_source`"。
     """
     text_pages, level, _why = _pages_of(source, cache)
     if not text_pages:
@@ -1545,7 +1531,7 @@ def _check_quote_levels(source: Mapping[str, Any], quote: str,
         if verified is None:
             return outcome, "", {}, "fulltext", True
         # 只剩 `verified is False` 一种出路：全文比过了、逐字没找到。
-        # 留一份读数，供下面"没有摘要"那一支如实返回（`R2-AN-5`）。
+        # 留一份读数，供下面"没有摘要"那一支如实返回。
         full_outcome = outcome
 
     abstract = _text_of(source.get("abstract"))
@@ -1557,12 +1543,12 @@ def _check_quote_levels(source: Mapping[str, Any], quote: str,
             # 留着这一支是为了"以后改了 `_pages_of`"时不会静默地把一次真比对
             # 说成"没有可比文本"：它退回 fail-closed 的 `unknown`。
             return None, "", {}, level, False
-        # `R2-AN-5`：全文比过了、逐字没找到、而这条来源没有摘要。
+        # 全文比过了、逐字没找到、而这条来源没有摘要。
         # 判决与理由必须是那次比对的读数（`not_found` + 回验器给的真理由），
         # 不许折成 `comparable=False` —— 调用方会把它读成"这条来源没有可比文本"，
         # 于是台账写下"一条来源都没比对过 / 没查成"，而事实是比过了、没找到。
         # 这样 `comparable=False` 也恢复它 docstring 里的语义：只有上面
-        # `:1139`（以及这个不可达分支）那条真"没有可比文本"的路。
+        # （以及这个不可达分支）那条真"没有可比文本"的路。
         return full_outcome, "", {}, "fulltext", True
     outcome, failure = _check_quote_against([abstract], quote, fn, window_kind="abstract")
     if failure:
@@ -1607,12 +1593,12 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
     把它标成全文级，就是让读者以为正文里有这句话。
     """
     ordered = [_normalize_claim(c) for c in claims]
-    # 2026-10-17（IO #7）：`evidence.json` 可能被写坏（`sources: [null, {...}]`）——
-    # 原来假定每条都是 Mapping，一条 null 就让整次回验抛 AttributeError。
+    # `evidence.json` 可能被写坏（`sources: [null, {...}]`）——
+    # 若假定每条都是 Mapping，一条 null 就让整次回验抛 AttributeError。
     sources = [s for s in sources if isinstance(s, Mapping)]
     index = {_text_of(s.get("source_id")): s for s in sources if _text_of(s.get("source_id"))}
-    # 一次回验内的局部缓存（键 = `text_ref.path`）：同一份 store 文件不该被解析七遍。
-    # 刻意不做模块级缓存 —— 那会跨调用掩盖"文件被改"（`draft/30` §T0-3）。
+    # 一次回验内的局部缓存（键 = `text_ref.path`）：同一份 store 文件不该被反复解析。
+    # 刻意不做模块级缓存 —— 那会跨调用掩盖"文件被改"。
     cache: dict[str, tuple[list[str], str]] = {}
     # "有可比文本"包含两种：摘要，或已获取到的全文。只数摘要会让"有全文的来源"
     # 被误判成没有可比原文，把一次明明能查的回验报成 unknown。
@@ -1662,7 +1648,7 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
                            checked=False)
                 break
             if not comparable:
-                # 这条来源没有任何可比的文本 ⇒ 继续查其余来源（`E-12`）。
+                # 这条来源没有任何可比的文本 ⇒ 继续查其余来源。
                 # 不 break 的理由：docstring 承诺"没命中时继续查其余来源"，
                 # 而"这条来源没文本"正是"没命中"的一种；break 会把明明能查成的
                 # 引文写成"没查成"，并把真原因丢掉。
@@ -1677,7 +1663,7 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
                 break
             if verified is None:
                 # 第二项在这里一定非空：`_read_verdict` 对 `verified is None`
-                # 已经补了 `"verifier_refused_to_judge"`（`R2-AN-6`）。
+                # 已经补了 `"verifier_refused_to_judge"`。
                 # 这里不再写 `or "verifier_refused_to_judge"` —— 那会是第二份
                 # 同义定义，而且永远走不到（判据见 `_read_verdict` 的 docstring）。
                 row.update(verdict="unknown", reason=verdict_reason,
@@ -1691,13 +1677,13 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
                 row.update(verdict="not_found", reason=not_found_reason or "not_found",
                            evidence_source=declared, checked=True)
             else:
-                # 防御性收口（`R2-AN-5` 之后这里不可达）：`candidates` 全部取自
+                # 防御性收口（这里不可达）：`candidates` 全部取自
                 # `with_text`（`_pages_of` 拿得到文本的来源），而 `_check_quote_levels`
-                # 现在只在真"没有可比文本"时返回 `comparable=False` ⇒ 走到这里时
+                # 只在真"没有可比文本"时返回 `comparable=False` ⇒ 走到这里时
                 # `any_comparable` 必为真。留着它不是为了守某个已知形态，
                 # 而是因为"没查成"绝不能落 `not_found`：万一将来判据漂了，
                 # 也必须 fail-closed 地记成 `unknown`，而不是把基础设施故障
-                # 读成学术不端（`E-12`）。
+                # 读成学术不端。
                 row.update(verdict="unknown", reason="no_comparable_text_in_any_source",
                            evidence_source=declared, checked=False)
         ledger.append(row)
