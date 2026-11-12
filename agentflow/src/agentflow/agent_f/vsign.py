@@ -1,36 +1,19 @@
 # -*- coding: utf-8 -*-
-"""F 侧的「V 签」读数：交差要拿签（业主 2026-11-02 裁定）。
+"""F 侧的「V 签」读数：交差要拿 V 签，拿到签 F 才能交差。
 
-口径逐字（这一笔的唯一目标）：
+这一格只做一件事：读签（不送审、不代派）。`F -> V` 那条边一直在
+（`capabilities.ALLOWED_EDGES["F"]` 含 `"V"`，声明真身是 `specs/f.py::SPEC.edges`），
+`agent_skills` 也一直教 F「你产出的证明由你派 V 签」；派 V 是 F 自己的动作
+（`framework_summon` 形状），所以这一层不调 `AgentV`、也不替 F 派活：它只回答「这一份
+证明现在有没有 V 签」。F 在写证明的那一趟里派 V，之后读到的就是这里给的读数。
 
-    重点是要F侧拿V签，拿到V签F才能交差
-
-## 改前的缺口
-
-`F -> V` 那条边一直在（`capabilities.ALLOWED_EDGES["F"]` 含 `"V"`，
-声明真身是 `specs/f.py::SPEC.edges`），`agent_skills` 也一直教 F「你产出的证明由你派
-V 签」；而 `agent_f` 的实现交完 B 的登记就结束了 —— 没有任何一处回读签，
-`F.step` 的返回值里也就没有一格说「这一份证明签了没有」。83 的定格读数就是现场：
-F 写的五份证明一份都没签（`out/vsigns/` 只有 000005 一份），而每一趟都照样回
-`outcome=progress`。
-
-## 这一格只做一件事：读签（不送审、不代派）
-
-业主 2026-11-02 的第二句把送审的路定死了：「F 不是直接能派 V 吗」——
-派 V 是 F 自己的动作（`framework_summon` 形状，边在，83 真机派过 17 次），
-所以这一层不调 `AgentV`、也不替 F 派活：它只回答「这一份证明现在有没有 V 签」。
-F 在写证明的那一趟里派 V，之后读到的就是这里给的读数。
-
-## 四档（与 `verifications.REVIEW_STATES` 同一把尺，不另立口径）
-
-- `signed` 已签：有一份签盖住现行正文 —— 手稿里的签块（业主指定的落点，
-  `vsigns.manuscript_sign_standing`）、`out/vsigns/<正文 sha>.json`、或
-  `verifications/pending/<正文 sha>.jsonl` 里那一签，三处任一成立即可；
-- `rejected` 未通过：V 判过这一份、结论不是「成立」（含"判词写成立、秘书读出缺陷"）；
-- `waiting` 待签：没有签、也没有打回（含「还没送审」与「审过、连续次数没到」）；
-- `unknown` 没查成：台账 / 签块 / pending 读不出来（不许折成「待签」）。
-
-`delivered` 只在 `signed` 时为真 —— 拿不到 V 签，这一趟就读成「没交差」。
+四档（与 `verifications.REVIEW_STATES` 同一把尺，不另立口径）：`signed` 已签 —— 有一份
+签盖住现行正文（手稿里的签块、`out/vsigns/<正文 sha>.json`、或
+`verifications/pending/<正文 sha>.jsonl` 里那一签，三处任一成立即可）；`rejected` 未
+通过 —— V 判过这一份、结论不是「成立」（含"判词写成立、秘书读出缺陷"）；`waiting` 待签
+—— 没有签、也没有打回（含「还没送审」与「审过、连续次数没到」）；`unknown` 没查成 ——
+台账 / 签块 / pending 读不出来（不许折成「待签」）。`delivered` 只在 `signed` 时为真 ——
+拿不到 V 签，这一趟就读成「没交差」。
 """
 from __future__ import annotations
 
