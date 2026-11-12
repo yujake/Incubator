@@ -88,7 +88,7 @@ QUEUE_LIMIT = 256
 HANDLERS: dict[str, Any] = {"handle_stream": None}   # 真身在文件末登记（函数要先存在）
 
 #: 契约判据 D 的例外面：声明了、但后端还没落地的端点（`{端点: 理由}`）。
-#: `/api/stream` 在 W2（本批）落地了 ⇒ 这一张表必须是空的；判据有一条反向断言
+#: `/api/stream` 已经落地 ⇒ 这一张表必须是空的；判据有一条反向断言
 #: 专门抓"永不生效的豁免"（登记了却已经在总表里 ⇒ 红）。
 PENDING_ENDPOINTS: dict[str, str] = {}
 
@@ -370,9 +370,9 @@ def subscribe() -> Subscription:
 #    回调表里永远只有一份；`attach()` 把"被自己顶掉的外来钩子"报出来；
 # 3. 可撤：`detach()` 只撤自己装的那几个槽（`_ATTACHED`），被顶掉的外来钩子
 #    还原回去 —— 判据用它保证一条用例装的钩子不会污染下一条，而 clock 的
-#    事件旁路也不会被第二次 `detach()` 当成自己的再摘一遍（2026-11-03 的真因）。
+#    事件旁路也不会被第二次 `detach()` 当成自己的再摘一遍。
 #
-# `checkpoint` 这个 kind（检查点文件被改写 ⇒ 发事件）本批刻意不做：那需要一个
+# `checkpoint` 这个 kind（检查点文件被改写 ⇒ 发事件）刻意不做：那需要一个
 # 轮询/watch 点，而"状态一律从盘上派生、不做后台轮询线程"是本服务的既有纪律
 # （`webui/__init__.py` 的纪律 1）。真要做，正确的位置是"写检查点的那一处"
 # （`agent_loop.save_run_checkpoint`）加一个与这里同形的钩子 —— 那属于驱动线的
@@ -381,7 +381,7 @@ def subscribe() -> Subscription:
 #: `attach()` 装上的四个闭包（`detach()` 与"幂等替换"的识别靠它）。
 _ATTACHED: dict[str, Any] = {}
 #: 被 `attach()` 顶掉的外来钩子（`detach()` 要还原它们，不是设 None）。
-#: 2026-10-29 真因：`clock` 的事件旁路也挂在 `sessions.append` 这一槽上，
+#: 真因：`clock` 的事件旁路也挂在 `sessions.append` 这一槽上，
 #: 一律设 None 会把它永久抹掉 ⇒ 之后所有派活/发消息都不再唤醒挂机的父。
 _PREV: dict[str, Any] = {}
 
@@ -395,10 +395,10 @@ def _snapshot_payload(root: Any) -> dict[str, Any]:
 
     已知代价（写在这里，不藏）：`append` 是热路径（一步一条事件），而这里每次都现算
     一份全量快照（读遍会话文件 + 台账）。于是"开着网页端跑一趟"会比不打开时多花
-    O(趟内事件数 x 会话数) 次读盘。本批接受它，两条理由：`attach()` 只在网页端起服务
+    O(趟内事件数 x 会话数) 次读盘。这里接受它，两条理由：`attach()` 只在网页端起服务
     时被调用（没人看着就不付这份代价），且快照的语义必须与 `/api/state` 逐字同源。
     要摊平它得引入节流/合并 —— 那是一个独立的选择（它会把"盘上新增 ⇒ 流里出现"
-    从"立刻"变成"最多晚 N 毫秒"），不在本批。
+    从"立刻"变成"最多晚 N 毫秒"），不在这一版。
     """
     from .readers import state_face  # noqa: PLC0415 - 见上面那句
 
@@ -494,7 +494,7 @@ def detach() -> dict[str, Any]:
     """只撤 `attach()` 自己装的那几个钩子；返回撤掉了哪几个槽。
 
     判据是 `_ATTACHED`（"我装的那一个"），不是"槽里现在是谁"。
-    为什么必须这样（2026-11-03 的真因）：`clock` 的事件旁路也挂在
+    为什么必须这样：`clock` 的事件旁路也挂在
     `sessions.append` 这一槽上。旧实现第二次 `detach()` 时 `_PREV` 已经清空，
     于是把第一次还原回来的 clock 观测器当成自己的又摘一遍 ⇒ 之后
     `observe_work` / `observe_message` 不再跑，`parked_steps` / `delivery` 恒 0；
@@ -544,7 +544,7 @@ def handle_stream(handler: Any, params: Mapping[str, str],
 
     心跳周期取默认广播器上那个可注入的值。
 
-    这个端点只有 `?since=` 一格（2026-10-27 起）：此前还有一格 `?sid=`，说"只订
+    这个端点只有 `?since=` 一格：`?sid=` 那一格曾说"只订
     这一段会话的事件"，而广播器从来没读过它 —— 那是假承诺，已删。分片要做的话，
     先按模块 docstring 末尾那条口径定义"哪些 kind 是会话级"。
     """
@@ -602,7 +602,7 @@ def handle_stream(handler: Any, params: Mapping[str, str],
         bc.unsubscribe(sub)
 
 
-# 2026-10-27 删掉了这里的 `handlers()` 与 `bind_handlers(cls)` 一对：docstring 自己写着
+# 这里不再有 `handlers()` 与 `bind_handlers(cls)` 那一对：docstring 自己写着
 # "这条不是接缝的正路……生产路径不依赖它"，而删之前的 grep 读数是没有一行代码调用它
 # （唯一提到它的是 `tests/test_webui_sse.py` 开头那段历史说明，已成过去时）。
 # 端点 -> 处理器的唯一查找路径是 `routes.handler_for`（子表模块的 `HANDLERS`），
