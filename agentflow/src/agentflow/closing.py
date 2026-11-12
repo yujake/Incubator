@@ -6189,6 +6189,19 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
         if st in ("disputed", "refuted"):
             disputed_source.append(f"依赖 {row.get('dep_id')} status={st}"
                                    f"（{str(row.get('label') or '')[:40]}）")
+    # 承重倒排（一次）：active 且现算等级是 theorem 的命题，按 derived_from 的父命题归拢。
+    # 原先每个 refuted / disputed 行都要扫全表、并对每一行现算一次 _statement_grade
+    # （300 条命题 / 30 条 refuted 的夹具上 = 9000 次位运算）；倒排之后每条命题的等级
+    # 只算一次，own_hole 的追加次序仍是 stmt_rows 的次序。
+    theorem_parents: dict[str, list[str]] = {}
+    for other in stmt_rows:
+        if str(other.get("status") or "") != "active":
+            continue
+        if _statement_grade(other) != "theorem":
+            continue
+        other_id = str(other.get("stmt_id"))
+        for parent in {str(x) for x in (other.get("derived_from") or [])}:
+            theorem_parents.setdefault(parent, []).append(other_id)
     for row in stmt_rows:
         st = str(row.get("status") or "")
         if st == "disputed":
@@ -6200,14 +6213,9 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             # 2026-11-05：这里改读等级（`theorem`），不再读 `statements.evidence_kind`
             # 那一列历史。改前判的是"自报档位 == proof"；一句自报就能让一条
             # 没有机器可核凭据的命题进 `own_hole`，或者反过来把真定理漏掉。
-            for other in stmt_rows:
-                if str(other.get("status") or "") != "active":
-                    continue
-                if _statement_grade(other) != "theorem":
-                    continue
-                if str(row.get("stmt_id")) in {str(x) for x in (other.get("derived_from") or [])}:
-                    own_hole.append(f"命题 {other.get('stmt_id')} 的证明压在 {row.get('stmt_id')}"
-                                    f"（status={st}）上")
+            for other_id in theorem_parents.get(str(row.get("stmt_id")), ()):
+                own_hole.append(f"命题 {other_id} 的证明压在 {row.get('stmt_id')}"
+                                f"（status={st}）上")
             if st == "refuted":
                 sid = str(row.get("stmt_id"))
                 reading = pollution_reading(store, sid)
