@@ -1655,7 +1655,7 @@ export interface SourceWindow {
   truncated: boolean;
 }
 
-/** 出处：写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
+/** 出处：写面端点的统一回执（判据 C 不覆盖它；`id`/`extra` 只是「有就带上」的两栏，所以写成可选）。 */
 export interface WriteResult {
   ok: boolean;
   tri: Tri;
