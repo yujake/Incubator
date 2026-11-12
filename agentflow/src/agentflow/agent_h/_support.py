@@ -1,22 +1,7 @@
-"""智能体 H：审校（只读）。
-## 为什么 H 必须是只读的
-若审校者能直接改稿，它就同时是"发现者"与"修正者"，于是"发现问题"与"掩盖问题"在结构上无法区分 —— 这不是分工洁癖，而是"审校记录能不能被信任"的前提。把这条做成结
-构约束（而不是写在提示词里），是它唯一可靠的落地方式。
-## "H 只读"在这里由三件事共同保证（缺一条就只剩口号）
-1. 工具面只读：`install_h_tools()` 只把 `side_effect in ("none","read")` 的工具、以及
-`tools.UNIVERSAL_TOOLS` 里登记过的通用能力放进 H 的自由工具箱（判据本体是
-`h_free_toolbox_accepts`），并在构造时断言这一点（拿到不合规的注册表就 fail-closed 拒绝启动）。
-为什么通用能力也在里面：业主 2026-10-24 裁定「通用能力根本不该出现谁能用这个说法」——
-`clock.timer_start` 据实是 `write_local`，而它必须对包括 H 在内的所有角色可用。
-硬约束没变：通用能力的登记写集只许落在通信/簿记类表上，碰知识表的一律不收。
-被拒的写工具会记进 `registry.refused_write_tools`，不静默丢弃。 2. 落库
-代理被钉死：H 唯一会写盘的动作（写 `review_findings`、改 `documents.status`）走的是显式的"代理注册表"（`self.writers`，
-`include_writers=True`），而这两个工具的落点固定：不碰 `claims`，不碰任何知识表。 3. 可核对的运行期断言：审校前后 
-`concepts/relations/literature` 逐字节不变；`documents.json` 的唯一变化点是 `status`（连 `updated_at`
-都不碰）。
-## H 的三态纪律
-`dependencies` 没查（显式 `None`）与"查了、依赖都闭合"是两件事：前者必须报 `dep_check.checked is False` 且不许判 
-`accepted`。 AgentD 的 `_UNSPECIFIED` 哨兵在这里沿用同一种语义。
+"""H 包内部件共用的小工具（口径与包入口同一份）。
+
+"H 只读"由哪三件事保证、三态纪律是什么，见 `agent_h/__init__.py` 的模块 docstring
+—— 这里不复制一份会漂的副本。本文件只放工具栏装配、只读判据与自检夹具。
 """
 from __future__ import annotations
 from pathlib import Path
