@@ -132,7 +132,7 @@ class Skill:
 
 
 def _m_skills() -> tuple[Skill, ...]:
-    """M（军师）那一族 —— 业主点名「特别要给 M 多找素材（毕竟它是军师）」。
+    """M（军师）那一族。
 
     来源（38 个 builtin 里挑出来综合的，逐条写在 §SURVEY）：`math-research-loop` /
     `propose-subgoal-decomposition` / `propose-research-plan-*` / `identify-key-failures` /
@@ -177,12 +177,11 @@ def _m_skills() -> tuple[Skill, ...]:
 """,
         ),
         Skill(
-            # 2026-10-24 业主裁定（逐字：「我认为现在M侧提示词并不能使M成为一个好的planner」）：
-            # 四步口径由业主当场给出（了解全貌 → 定方向、分别派遣 → 定期看产出、调整计划 →
-            # 全部落定才成文），第三步的射程随后由业主扩大成「监控全树各智能体行为 + 给出指导
-            # 沿树指到链尾（内容只有链尾看得到）+ 配合补派其它智能体」。这一条与 `specs/m.py` 的政策同口径，
-            # 写一般化的规划习惯（"怎么规划"），不写某一次任务规划成什么样 —— 业主当场拦下过
-            # 照抄样例；第一步也不写成"必须先派某个角色"（那是手段，不是政策）。
+            # 规划口径（四步：了解全貌 → 定方向、分别派遣 → 定期看产出、调整计划 →
+            # 全部落定才成文）；第三步的射程是「监控全树各智能体行为 + 给出指导
+            # 沿树指到链尾（内容只有链尾看得到）+ 配合补派其它智能体」。这一条与 `specs/m.py`
+            # 的政策同口径：写一般化的规划习惯（"怎么规划"），不写某一次任务规划成什么样；
+            # 第一步也不写成"必须先派某个角色"（那是手段，不是政策）。
             slug="规划-先了解全貌再定方向",
             title="规划：摸全貌 → 定方向、分别派人 → 盯全树、给指导、按需补派 → 落定才成文",
             summary="先摸清领域的全貌；方向多于一个就各派一个下属；盯全树给指导按需补派；落定才成文",
@@ -486,7 +485,7 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
 """,
         ),
         Skill(
-            # 2026-10-29 第二段：`Conductor.wake_blocked` 进 M 的工具面之后，模型那一侧
+            # `Conductor.wake_blocked` 进 M 的工具面之后，模型那一侧
             # 读得到的是这一份手册（工具描述只给一句话口径，手册给步骤与反面形态）。
             # 这一条刻意只写"怎么用 + 三条硬事实"，不写实现 —— 实现的三档、直写那几格、
             # 只经 `wake_on_lifeline` 叫醒那一条都在能力的 docstring 里（判据在
@@ -568,12 +567,9 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
             when="拿到一件活、要决定「这该派给谁」的时候（尤其是想派 F 或 V 的时候）",
             actions=("A.search_literature", "B.run_once", "C.neighbors", "D.propose_question",
                      "E.run_experiment", "G.build_document", "H.review",
-                     # 2026-10-20 业主裁定：撤掉 `M→V`。派 V 的入口按
-                     # `capabilities.ALLOWED_EDGES` 是三个：B（入库文献侧内容时请 V 签）、
-                     # F（交出证明时一并办）、E（2026-10-23 加的，穷举证据要 V 会审）。
-                     # 这里原来写"只有 F 与 B 两个入口"—— E→V 那条边加上之后它就过期了，
-                     # 而这句话讲的是权限面，过期版本会让人按旧矩阵办事。
-                     # ⇒ V 仍然不在 M 的出边里 ⇒ V 的动作不许出现在这一条的可派清单里
+                     # 派 V 的入口按 `capabilities.ALLOWED_EDGES` 是三个：B（入库文献侧内容时请 V 签）、
+                     # F（交出证明时一并办）、E（穷举证据要 V 会审）。
+                     # V 不在 M 的出边里 ⇒ V 的动作不许出现在这一条的可派清单里
                      # （写进去就是一句做不到的指令，`validate()` 会照判——见本文件 `validate()`）。
                      ),
             tools=("conductor.role_spec", "conductor.summon_many"),
@@ -701,7 +697,7 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
                   "以及一条链走到一半、要判断下一跳派不派得出去的时候"),
             actions=("A.search_literature", "B.run_once", "B.register_statement",
                      "C.handle", "D.propose_question", "E.run_experiment",
-                     # 2026-10-20 业主裁定：V 不在 M 的出边里 ⇒ V 那一跳由 F 办（`F→V`），
+                     # V 不在 M 的出边里 ⇒ V 那一跳由 F 办（`F→V`），
                      # M 只经 D 派这一腿；V 的动作写进这条清单就是一句做不到的指令。
                      ),
             tools=("conductor.summon", "conductor.ledger", "fs.read"),
