@@ -4569,20 +4569,20 @@ class Conductor:
             "seen_by": "", "seen_step": None, "keep_alive": bool(keep_alive),
         }
 
-    #: 改板项状态的两个有权限档（`_item_authority` 的读数，业主 2026-11-06 裁定 ①）。
+    #: 改板项状态的两个有权限档（`_item_authority` 的读数）。
     #:
-    #: 为什么只有两档：裁定原文只有两句话 ——「父代理可以更改子代理板项状态」与
+    #: 为什么只有两档：权限面只有两句话 ——「父代理可以更改子代理板项状态」与
     #: 「M 可通过审计工具更改任意代理的板项状态」。除此之外「没有人」有权改别人的板项
     #: （收件人自己走 `ack_items`，那条路一个字都没放宽）。
     ITEM_AUTHORITY_PARENT = "parent"
     ITEM_AUTHORITY_CONDUCTOR = "conductor"
 
-    #: 撤销时要不要另落一条通知行（改前行为；2026-11-09 D13 起关掉）。
+    #: 撤销时要不要另落一条通知行（缺省关掉）。
     #:
-    #: 真机病灶（`projects/**` 11:09:10 那一笔）：M 花 1 步撤 12 条，撤销动作自身又落
-    #: 12 条新 `notice` 行（t-000095..t-000106）⇒ 清理动作让 `tasks` 行数变多，而板项行
-    #: 的 `status` 恒为 `pending`（`_item_row` 写死）⇒ 那 12 行在状态报告/网页上又变成
-    #: "12 条待办"（叠上 D12 的观感就是"越清越多"）。
+    #: 为什么关：撤销动作自身若再落 N 条新 `notice` 行（`kind="notice"`、done/expired），
+    #: 清理动作就让 `tasks` 行数变多，而板项行的 `status` 恒为 `pending`（`_item_row`
+    #: 写死）⇒ 那 N 行在状态报告/网页上又变成"N 条待办"（叠上信息型板项"渲染即收口"
+    #: 的观感就是"越清越多"）。
     #:
     #: 关掉之后提醒并没有消失：被撤那一行自己的 `inputs` 落了六格留痕
     #: （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`，append-only），
@@ -4590,25 +4590,25 @@ class Conductor:
     #: 每一拍把最近 N 条渲染成【最近被撤销的项】。于是「谁撤的 / 为什么 / 你不需要再处理它」
     #: 一个字都没少，而新增 notice 行 = 0。
     #:
-    #: 为什么留这一格而不是把旧分支删干净：反真空判据要能整格打开它
+    #: 为什么留这一格而不是把另一条分支删干净：反真空判据要能整格打开它
     #: （`tests/test_revocation_posts_no_new_notice_rows.py` 的 ③），证明"新增行数 = 0"
-    #: 这条判据真的在数行、不是在读一个恒空的表。默认 `False`（改后的口径）。
+    #: 这条判据真的在数行、不是在读一个恒空的表。默认 `False`。
     REVOKE_POSTS_NOTICE_ROW: bool = False
 
     def _item_authority(self, rows: Mapping[str, Mapping[str, Any]], *,
                         by_task_id: str, row: Mapping[str, Any]) -> dict[str, Any]:
-        """谁有权改「这一条板项」的状态（业主 2026-11-06 裁定 ① 的唯一判据）。
+        """谁有权改「这一条板项」的状态（唯一判据）。
 
         判据只有两句话，落在这一处、不再在工具层抄第二份：
 
         1. 父：`row["parent_task_id"]`（收件人）那一行的 `parent_task_id` 是
            `by_task_id` ⇒ 改的人是收件人的「直接父代理」，可以改它名下的板项。
-           只认直接父：祖父 / 兄弟 / 更远的层都不行（裁定写的是「子代理板项」，
+           只认直接父：祖父 / 兄弟 / 更远的层都不行（权限面是「子代理的板项」，
            不是「子树里任何一项」）—— 越权一档由 `not_authorized` 逐条拒。
         2. M（主控）：`by_task_id` 那一行的 `role == "M"` ⇒ 可改「任意代理」的板项，
-           不限直接子（这就是「特别地」那半句）。一格刻意的收窄：如果那条项归属的
-           收件人自己也是 `role=M` 的顶趟行，M 也不改它 —— 裁定说的是「任意代理」，
-           顶趟与顶趟之间不是父子/代理关系；那两条 M 行谁也不知道"别人"是谁
+           不限直接子。一格刻意的收窄：如果那条项归属的收件人自己也是 `role=M` 的
+           顶趟行，M 也不改它 —— 口径是「任意代理」，而顶趟与顶趟之间不是父子/代理
+           关系；那两条 M 行谁也不知道"别人"是谁
            （`test_an_item_that_belongs_to_someone_else_is_refused` 正是这一档）。
 
         三态：`checked=False` 是"判不了"（没有台账号 / 台账里没有这一行 / 那一行
@@ -4673,14 +4673,14 @@ class Conductor:
 
     def revocation_cell(self, row: Mapping[str, Any], *, by_task_id: str = "",
                         rows: Mapping[str, Mapping[str, Any]] | None = None) -> dict[str, Any]:
-        """「这一条能不能被你撤、撤它该用哪个动作」—— 甲件（业主 2026-11-06）。
+        """「这一条能不能被你撤、撤它该用哪个动作」—— 甲件。
 
-        为什么要有这一格：改前 `conductor.board` / `conductor.patrol` 只给 `items[].id`，
-        "这一条能不能撤"要靠模型自己把 id 搬到 `conductor.void_items` 再被拒一次才知道
+        为什么要有这一格：`conductor.board` / `conductor.patrol` 的每一项都要直接回答
+        "这一条能不能撤"，否则模型得把 id 搬到 `conductor.void_items` 再被拒一次才知道
         —— 试错是两步，而第一步（搬 id）没有任何读数。现在每一步都直接带出可否与动作。
 
-        判据就是 :meth:`_item_authority`（业主裁定 ① 的唯一判据，三态见那里）：不可撤
-        的每一档都折算成 `revocable=False`，`code` / `why` 原样带出、分得开。
+        判据就是 :meth:`_item_authority`（唯一判据，三态见那里）：不可撤的每一档都折算成
+        `revocable=False`，`code` / `why` 原样带出、分得开。
 
         返回的键集固定（`revoke` 这一格在 board / patrol 的每一项上都长这样）：
         `{"revocable","action","call","mode","code","why"}`。
@@ -4734,25 +4734,23 @@ class Conductor:
                                depth: int) -> dict | None:
         """撤销通知那一条行的形状（乙件；唯一一处，判据可整格替换它做反真空）。
 
-        ## 2026-11-09（D13）起它只在 `REVOKE_POSTS_NOTICE_ROW=True` 时才被调用
+        ## 它只在 `REVOKE_POSTS_NOTICE_ROW=True` 时才被调用
 
-        本函数默认是死代码（业主 2026-11-09 裁定 ②：暂留，不删）。三句话写死它的身份：
+        缺省这一档是死代码（暂留，不删）。三句话写死它的身份：
 
         1. 生产路径永不许调它 —— `void_items(revoke=True)` 的默认分支在
            `REVOKE_POSTS_NOTICE_ROW=False` 时根本走不到这里；
         2. 它留着的唯一用途是反真空：判据把那个开关整格打开，证明"新增行数 = 0"这条
            结论真的在数行、不是在一张恒空的表上读出来的；
-        3. 彻底删它排在 T3（`tasks` 拆表 / `row_kind` 列）那一批：届时反真空换成
-          直接数「被撤行的 `inputs` 里有没有那条 `revoke:expired:` 留痕」，
-           不再需要一条"旧行为"当对照。
+        3. 彻底删它要等 `tasks` 拆表 / 加 `row_kind` 列那一批：届时反真空换成直接数
+           「被撤行的 `inputs` 里有没有那条 `revoke:expired:` 留痕」，不再需要一条
+           "旧行为"当对照。
 
-        业主 2026-11-09 的口径是「撤销动作不再自己生成待 ack 通知」，判据是
-        撤销 N 条之后新增 notice 行 = 0。所以默认路径不经这里：提醒改由被撤行
-        自己的 `revoke:expired:…` 留痕承担（`revoked_recent_of` 读它）。
+        口径是「撤销动作不再自己生成待 ack 通知」，判据是撤销 N 条之后新增 notice 行 = 0。
+        所以默认路径不经这里：提醒由被撤行自己的 `revoke:expired:…` 留痕承担
+        （`revoked_recent_of` 读它）。
 
-        ## 下面这段是改前（业主 2026-11-06 乙件）的原始口径，逐字保留
-
-        业主逐字（2026-11-06）：
+        ## 正文
 
             撤销时自动投一条通知给收件人（系统发出、不要 ack）：
             「你名下 t-xxxxx（<summary>）已被 <by> 撤销（理由：…），你不需要再处理它」
