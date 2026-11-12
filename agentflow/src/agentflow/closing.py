@@ -7196,29 +7196,29 @@ def roster_registration_reading(session_root: Any, *, sid: str | None = None,
                                 store: Any = None) -> dict[str, Any]:
     """收工门的「名册写没写」格：这一段会话里 `roster_problem` 非空的次数。
 
-名册是"代理之间的通信必须经名册"那条纪律的地址面（父 + 直接子 + 绝对编号），但"这一趟派活有没有把子
-代理写进名册"在收工读数里「一格都没有」：`summon_consumption` 只问"子产出处理了没有"，八格问的都是交
-付面 —— 名册 0 行（改前批量派活那条路一次登记都没有）与名册都写上了，两种日子长得一样。这一格只回答一个数：
-`with_problem` = `roster_problem`（单个 summon）与 `roster_problems`（批量逐项问题）非空的「条数」；`registered` 是成功登记的名字条数（与 `with_problem` 对照）。
+    名册是"代理之间的通信必须经名册"那条纪律的地址面（父 + 直接子 + 绝对编号），而"这一趟派活
+    有没有把子代理写进名册"在收工读数里「一格都没有」：`summon_consumption` 只问"子产出处理了
+    没有"，八格问的都是交付面 —— 名册 0 行与名册都写上了，两种日子长得一样。这一格只回答一个
+    数：`with_problem` = `roster_problem`（单个 summon）与 `roster_problems`（批量逐项问题）非空
+    的「条数」；`registered` 是成功登记的名字条数（与 `with_problem` 对照）。
 
-## 为什么还要 `unnamed`（`draft/160` 三-3 的丙案）
+    ## 为什么还要 `unnamed`
 
-`with_problem` 数的是会话里交回来的 `roster_problem`，而可抢占派活在句柄没落定时
-提前返回（`agent_loop._do_summon`），名册读数那一行在它后面 ⇒ 81 趟 2419 个
-`agent_step` 只有 9 个带任何 `roster_*` 键，`t-000106`（真跑、`done/ok`、有产物、
-名册里一行没有）那一步一个都没有。所以这一格单列一份从盘上算的读数：
-`unnamed = {checked, count, scanned, rows, bad, owners, reason}`，逐条点名
-「真跑过、名册上没有」的子代理，并给出它当初点的那个名字现在挂在谁身上
-（81 的 `E2` 就落在 `held_by = {task_id: t-000030, retired: True, task_outcome: refused}`）。
+    `with_problem` 数的是会话里交回来的 `roster_problem`，而可抢占派活在句柄没落定时提前返回
+    （`agent_loop._do_summon`），名册读数那一行在它后面 ⇒ 多数 `agent_step` 一个 `roster_*` 键都
+    没有。所以这一格另给一份从盘上算的读数 `unnamed = {checked, count, scanned, rows, bad,
+    owners, reason}`：逐条点名「真跑过、名册上没有」的子代理，并给出它当初点的那个名字现在挂在
+    谁身上（`held_by`）。
 
-它与 `with_problem` 回答的是两件事，谁也不代替谁：前者是"这一次会话有没有报过没登记"，
-后者是"盘上现在有多少个跑过却没名字的号"。两个都只落 `readings`、都在 `summary()`
-里各半句、都不进 `status` / 不产生 `Finding` ⇒ 门的强度一格没改。
+    它与 `with_problem` 回答的是两件事，谁也不代替谁：前者是"这一次会话有没有报过没登记"，后者是
+    "盘上现在有多少个跑过却没名字的号"。两个都只落 `readings`、都在 `summary()` 里各半句、都不进
+    `status` / 不产生 `Finding` ⇒ 门的强度一格没改。
 
-三态（`checked=False` 绝不是"都写上了"）：没有会话根 / 读不成 / 有坏行 ⇒ `checked=False` + 理由；读得成但
-一步都没有（`agent_step` 0 条）⇒ 同样 `checked=False`（"没有对象"与"查过了是 0"必须分开）。不许 fail（业
-主口径：只可见）：它是 `readings` 里的一格，不进 `status` / `machine_pass`、不产生 `Finding` —— 名册某一条
-没写上是"这一格没成事"，与"门该不该拦"是两件事。收工时只在 :meth:`ClosingReport.summary` 里加半句话，加不加都不改 `m_says_done`。
+    三态（`checked=False` 绝不是"都写上了"）：没有会话根 / 读不成 / 有坏行 ⇒ `checked=False` + 理由；
+    读得成但一步都没有（`agent_step` 0 条）⇒ 同样 `checked=False`（"没有对象"与"查过了是 0"必须
+    分开）。不许 fail（只可见）：它是 `readings` 里的一格，不进 `status` / `machine_pass`、不产生
+    `Finding` —— 名册某一条没写上是"这一格没成事"，与"门该不该拦"是两件事。收工时只在
+    :meth:`ClosingReport.summary` 里加半句话，加不加都不改 `m_says_done`。
     """
     # `unnamed` 与 `with_problem` 的口径互相独立：它读盘、不读会话，所以即使会话那
     # 一半读不成（下面几条早返），它也照旧给得出（`session_root` 为空时它自己报三态）。
@@ -7308,15 +7308,14 @@ def child_counts_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
 
 
 def unnamed_children_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
-    """「真跑但无名」那一格（`draft/160` 三-3 的丙案）：读数，不拦门。
+    """「真跑但无名」那一格：读数，不拦门。
 
     ## 它为什么存在
 
-    81 趟的 `t-000106` 真跑完（`done/ok`、有产物）、名册三份里一行都没有，而收工门
-    只报「1 处没登记」—— 那 1 处是另一个缺陷（`t-000007` 三份没写全，`draft/160`
-    二-2），跟它毫无关系。它连那 1 都不进，因为可抢占派活在句柄没落定时提前返回
-    （`agent_loop._do_summon`），把 `roster_problem` 丢了。所以这一格不读会话，读
-    盘上的事实：台账（谁真跑过）join 名册历史（谁有名字）join 拒绝流水（它点的名字
+    一个子代理真跑完（`done/ok`、有产物）、名册三份里一行都没有，而收工门只报「1 处没登记」
+    —— 那 1 处是另一个缺陷（三份没写全），跟它毫无关系。它连那 1 都不进，因为可抢占派活在
+    句柄没落定时提前返回（`agent_loop._do_summon`），把 `roster_problem` 丢了。所以这一格不读
+    会话，读盘上的事实：台账（谁真跑过）join 名册历史（谁有名字）join 拒绝流水（它点的名字
     现在在谁手里）。
 
     ## 口径只有一处
