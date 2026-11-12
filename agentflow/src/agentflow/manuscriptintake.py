@@ -241,8 +241,7 @@ def _parse_dependency_table(body: Sequence[tuple[int, str]]) -> tuple[list[dict[
     problems: list[dict[str, Any]] = []
     if not table:
         problems.append({"line": int(body[0][0]) if body else 0,
-                         "why": ("这一节下面没有表格：要给一张三列的表"
-                                 "（引用 / 命题号 / 用在哪一步；路径号不进稿）")})
+                         "why": "这一节下面没有表格：要给一张三列的表（引用 / 命题号 / 用在哪一步；路径号不进稿）"})
         return [], problems
     header_line, header_raw = table[0]
     header_cells = _cells_of(header_raw)
@@ -346,8 +345,7 @@ def _extract_proof(text: str) -> dict[str, Any]:
 
 
 def _extract_dependencies(text: str) -> dict[str, Any]:
-    """`## 依赖` ⇒ 三列表的行（老盘带路径号那一列的四列表仍读得回）；缺节时把证明正文里的
-    `stmt:` 引用一并带出（判缺节要不要拒）。"""
+    """`## 依赖` ⇒ 三列表的行（老盘带路径号那一列的四列表仍读得回）；缺节时把正文的 `stmt:` 引用带出（判缺节要不要拒）。"""
     body, heading = _section(text, SECTION_BY_CELL["dependencies"])
     proof = _extract_proof(text)
     refs = _stmt_refs(proof["value"]) if proof["outcome"] == EXTRACT_PRESENT else []
