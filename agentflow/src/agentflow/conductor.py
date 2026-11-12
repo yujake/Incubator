@@ -43,7 +43,7 @@ from .canonical import json_default
 from .policy import Decision
 from .scheduler import MemoryBudgetTracker, TaskCall
 from .store import StoreError
-#: 不在这里另定义 `ParamError`（曾经有过一份，被 linter 规则 R003 抓到）。
+#: 不在这里另定义 `ParamError`。
 #:
 #: 判据是"同一判据两处实现"：调用方按 `except ParamError` 捕获"参数不合法"时，
 #: 若两处各有一个同名类，漏掉一半没有任何报错。`tools.base.ParamError`
@@ -53,10 +53,10 @@ from .modelcost import settle_key
 from .tokenmeter import Charge, TokenMeter
 from .tools.base import ParamError
 from .agentspec import AgentBrief, AgentSpec
-# 顶层 import（2026-10-27，业主批准）：本文件要从秘书那一侧转发两个常量
+# 顶层 import：本文件要从秘书那一侧转发两个常量
 # （活档状态表、收工那句话的点名上限），转发比分头写一个字面量安全。
 # 方向只能是这样：`secretary` 顶层不 import `conductor`（秘书那一侧是懒 import），
-# 所以本行无环 —— 两种导入顺序都实测过（`temp/r_be2_cycle_test.py`）。
+# 所以本行无环。
 from . import secretary as SEC
 
 #: 一次召唤的终局状态（`status`），与 `schema.TASK_STATUSES` 一致。
@@ -67,28 +67,25 @@ TERMINAL_STATUSES: tuple[str, ...] = ("done", "cancelled", "failed")
 #: `block` 刻意不在里面：它是"停了、但这件活没做完"（`schema.TASK_STATUSES` 那一行的注释逐字）。
 #: 停了就不是"还在做"，而「活跃」问的是"还在做 / 在等"，不是"欠着多少活"—— 后者由
 #: `open_items_of` 与 `retire_ready` 的 `items_open` 各自回答，两轴不许折成一格。
-#: 真身在 `secretary.LIVE_TASK_STATUSES`（2026-10-27 从两份字面量收成一处转发）：
-#: 同一个"还没终态"的判据此前在 conductor 与 secretary 各写一份 `("pending", "running")`，
-#: 两处相等纯属巧合、没有任何判据钉住。转发之后"改一处忘另一处"在结构上不可能，
-#: 而判据 `tests/test_live_statuses_single_source.py` 钉住"两处名字取到的必须是同一个元组"
-#: 与"这两个文件里不再有第二处字面量"。
+#: 真身在 `secretary.LIVE_TASK_STATUSES`：判据就这一份，转发到这里之后"改一处忘另一处"
+#: 在结构上不可能；判据 `tests/test_live_statuses_single_source.py` 钉住"两处名字取到的
+#: 必须是同一个元组"与"这两个文件里不再有第二处字面量"。
 UNFINISHED_STATUSES: tuple[str, ...] = tuple(SEC.LIVE_TASK_STATUSES)
 
-#: 两个读数各自的机器键（业主 2026-10-26 裁定：两个数分开命名，不许混成一个数）。
+#: 两个读数各自的机器键：两个数分开命名，不许混成一个数。
 #:
-#: 业主逐字：「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫活跃子代理数」。
+#: 口径：「未销号的子代理数叫子代理数，工作未做完还在做的子代理数叫活跃子代理数」。
 #: 键给机器，中文名给人，两者同源（`CHILD_COUNT_LABELS`）—— 名册面、收工读数与 CLI
 #: 读数都从这里取措辞，不许各写一份（同一读数三处措辞迟早会漂成三个意思）。
 #:
-#: 2026-11-03（153-U-13 的另一半，业主裁决 4）：这一格从 `child_count` 改名
-#: `children_unretired` —— 这个名字量的是「名册里还没销号的子」，不是「台账里挂了几个子」；
-#: 后者是网页名册面那一格，已经叫 `children_in_ledger`（`webui.readers.roster_face`）。
+#: `children_unretired` 量的是「名册里还没销号的子」，不是「台账里挂了几个子」；后者是
+#: 网页名册面那一格，叫 `children_in_ledger`（`webui.readers.roster_face`）。
 #: 两个量两个名，说明各写在自己的那一处：这里 → 名册 / 未销号；那边 → 台账 / 含未落名册。
 CHILD_COUNT_KEY = "children_unretired"
 ACTIVE_CHILD_COUNT_KEY = "active_child_count"
 CHILD_COUNT_LABELS: dict[str, str] = {CHILD_COUNT_KEY: "子代理数",
                                       ACTIVE_CHILD_COUNT_KEY: "活跃子代理数"}
-#: 每个名字量的是什么的一句说明（业主 2026-11-03 裁决 4 的"两处都加一句说明"）：
+#: 每个名字量的是什么的一句说明：
 #: 中文名给人看（上面那张表，保持短），口径读这里。两个量各一句，谁也不许含糊：
 #: - `children_unretired`：名册里还没销号的名册项数（不是台账里的子数 ——
 #:   台账那一格是网页名册面的 `children_in_ledger`，含没落名册的子）；
@@ -99,7 +96,7 @@ CHILD_COUNT_CALIBERS: dict[str, str] = {
     ACTIVE_CHILD_COUNT_KEY: "上述名册项里非静默的数量（在飞 + 待机；unknown 既不算活跃也不算静默）",
 }
 
-#: 信息型板项的 `kind`：读进提示词那一拍就消费完 ⇒ "seen 即 ack"（D12；判据与理由在
+#: 信息型板项的 `kind`：读进提示词那一拍就消费完 ⇒ "seen 即 ack"（判据与理由在
 #: `Conductor` 的"工作项板"那一节，落点是 `Conductor.mark_item_seen`）。
 INFORMATIONAL_ITEM_KINDS: tuple[str, ...] = ("notice", "message")
 
@@ -115,14 +112,14 @@ INFORMATIONAL_ITEM_KINDS: tuple[str, ...] = ("notice", "message")
 #:   指导有时就是要办的事，所以今天不动它的旧行为（仍要 ack）。裁定之后只改这一格。
 ACK_REQUIRED_ITEM_PREFIXES: tuple[str, ...] = ("v-verdict@", "stop-notice@", "relay@")
 
-#: 撤销通知行的 `input_key` 前缀（业主 2026-11-06 裁定 ① 的乙件）。
+#: 撤销通知行的 `input_key` 前缀。
 #:
-#: 2026-11-09（D13）起默认不再落这一种行（`REVOKE_POSTS_NOTICE_ROW=False`），这个前缀
+#: 缺省不再落这一种行（`REVOKE_POSTS_NOTICE_ROW=False`），这个前缀
 #: 只剩两个用途：① 旧工作区里那些历史 `revoke-notice@…` 行仍然认得出（它们是
 #: `expects=""` 的已收口行，`_void_item_gate` 的 `no_obligation` 那一档会拒撤它们）；
-#: ② 反真空判据把旧行为整格打开时，防环那一句仍然读它。
+#: ② 反真空判据把另一档整格打开时，防环那一句仍然读它。
 #:
-#: 改前的两个理由（逐字保留）：
+#: 为什么需要它：
 #: 1. 幂等 —— 同一条项只该有一份撤销通知（撤销本身也只能落一次）；
 #: 2. 防环 —— 通知自己也是一条 `tasks` 行；没有这个前缀，撤一条通知会再生成一条
 #:    通知，撤通知的通知又会生成一条……`.void_items` 用它认出"这一条是通知，不再
@@ -131,16 +128,16 @@ REVOKE_NOTICE_PREFIX: str = "revoke-notice@"
 
 #: 撤销留痕在那一行 `inputs` 里的机器前缀（与 :meth:`Conductor.void_items` 写的那一条同源）。
 #:
-#: 为什么读侧也要一个前缀：撤销与旧口径的"作废"（`void:expired:…`）都收口成
-#: `done` + `expired`，光看状态分不开"这条是被撤了"与"这条是被作废了"。业主
-#: 2026-11-06 那一笔裁定的正文只认 `revoke`，所以「最近被撤销」这一格只认这一条前缀。
+#: 为什么读侧也要一个前缀：撤销与"作废"（`void:expired:…`）都收口成
+#: `done` + `expired`，光看状态分不开"这条是被撤了"与"这条是被作废了"。撤销的正文
+#: 只认 `revoke`，所以「最近被撤销」这一格只认这一条前缀。
 REVOKE_MARK_PREFIX: str = "revoke:expired:"
 
 #: 「最近被撤销」这一格一次回几条（收件人那一侧的读数与提示词共用这一个数）。
 #:
 #: 为什么有上界：撤销是流水，无限回会把提示词的一格撑成整本台账；N 之内足够回答
 #: 「我名下最近哪几条被撤了」，更早的去台账里看（每一行 `inputs` 都留着六格）。
-#: 业主的原话是「自动提醒，且要真能提醒到」——「最近 N 条」是提醒，不是全量同步。
+#: 口径是「自动提醒，且要真能提醒到」——「最近 N 条」是提醒，不是全量同步。
 REVOKED_RECENT_LIMIT: int = 5
 
 def _revoke_mark_of(row: Mapping[str, Any]) -> str:
@@ -180,12 +177,8 @@ def _board_item_summary(row: Mapping[str, Any], *, cap: int = 200) -> str:
 
 # ---------------------------------------------------------------- 三态（在飞 / 待机 / 静默）
 #
-# 业主逐字（2026-10-26 同一批裁定的第二句，`tests/test_three_states_flying_standby_silent.py`
-# 的模块头逐字抄着它）：
-#
-#   「关于『在飞』的读数要随着时钟式待机进行适配，分三种：1.在工作叫『在飞』，
-#    2.在等待（计时器）为『待机』，3.已收工，无任务，无计时器，叫『静默』。
-#    更新『活跃子代理』的定义为非静默子代理。」
+# 三种读数：1. 在工作叫「在飞」，2. 在等待（计时器）为「待机」，3. 已收工、无任务、
+# 无计时器叫「静默」；「活跃子代理」= 非静默子代理。
 #
 # 加上第四档 `unknown`（读不到台账 / 名册 / 时钟 ⇒ 判不了，不许折成静默）：
 # "没查成"与"查过了、它是静默的"是本项目最贵的一类折叠 —— 折成静默会让一个还挂在
@@ -202,16 +195,16 @@ AGENT_STATE_UNKNOWN = "unknown"
 
 #: 销号拒信的机器码：目标不是静默（在飞 / 待机 / 未读到）。
 #:
-#: 业主 2026-10-26 同一批裁定逐字：「销号可以也只可针对静默子代理」。这一条闸的
+#: 口径：「销号可以也只可针对静默子代理」。这一条闸的
 #: 拒绝不是"工具坏了"也不是"它不在你名下"，而是"它现在不能销"——父下一步该做的是
 #: 让它收工 / 等那些计时器 / 显式让它停，所以拒信必须带这个码，让调用方按码分流。
 RETIRE_REFUSAL_TARGET_NOT_SILENT = "target_not_silent"
 
-#: 三态词表。顺序就是业主那句"前面的优先"：在飞 → 待机 → 静默；`unknown` 是三态之外的一档。
+#: 三态词表。顺序就是"前面的优先"：在飞 → 待机 → 静默；`unknown` 是三态之外的一档。
 AGENT_STATES: tuple[str, ...] = (AGENT_STATE_FLYING, AGENT_STATE_STANDBY,
                                  AGENT_STATE_SILENT, AGENT_STATE_UNKNOWN)
 
-#: 「活跃」= 非静默 = 在飞 + 待机（业主同一句：「更新『活跃子代理』的定义为非静默子代理」）。
+#: 「活跃」= 非静默 = 在飞 + 待机。
 #:
 #: `unknown` 刻意不在这里：判不了不等于活跃，也不等于静默 —— 它自己的计数格单独给
 #: （`unknown` 那一格非 0 时，`complete` 一律是 False，读数里逐条点名）。
@@ -225,15 +218,13 @@ AGENT_STATE_LABELS: dict[str, str] = {AGENT_STATE_FLYING: "在飞",
 
 #: 一个 `status=running` 的任务多久没有新 step 就算"疑似停滞"（秒）。
 #:
-#: 取值理由（N = 10 分钟 = 600 秒，业主建议的就是这个数，理由要能被读数反驳）：
+#: 取值理由（N = 10 分钟 = 600 秒，理由要能被读数反驳）：
 #:
-#: 1. 真机读数（`projects/mp3-r3` 的 B1 / t-000006，2026-10-26）：21:12:46 起、
-#:    22:34:02 才 done，81 分钟里只有 4 个 step（首 21:15:46、末 22:32:49）⇒
-#:    步间隔约 25 分钟。它不是"跑得慢"，它是"没在跑"。
-#: 2. 而正常一步（一次模型调用 + 一次工具执行）在本仓是秒级到 1 分钟的量级：同一份
-#:    会话里相邻两条 `llm_call` 常见 3-7 秒（21:12:49 / 21:12:56 / 21:12:59）⇒
+#: 1. 停转的一趟会以远大于 N 的间隔翻 step（分钟级到十几分钟才一步），它不是"跑得慢"，
+#:    它是"没在跑"。
+#: 2. 而正常一步（一次模型调用 + 一次工具执行）在本仓是秒级到 1 分钟的量级 ⇒
 #:    10 分钟比"正常一步"高一个数量级，正常步进不会被读成停滞。
-#: 3. 它又比 B1 那 81 分钟低一个数量级 ⇒ 那一段里稳定读得出停滞，而不是"永远差一点"。
+#: 3. 它又比那些停转的间隔低一个数量级 ⇒ 那一段里稳定读得出停滞，而不是"永远差一点"。
 #: 4. 600 秒与时钟那条计时器的缺省时长同一个量级 ⇒ "停转了 11 分钟"与"等一条 11 分钟
 #:    的钟"用的是同一把尺，读的人不必在两套时间尺度之间换算。
 #:
@@ -291,10 +282,10 @@ def handoff_index(workspace: str | Path) -> dict[str, Any]:
     """交差账的索引（`{代理编号: 那一行}`）：全仓唯一读口，只读。
 
     ## 为什么它属于"三态"这一族
-    业主 2026-10-27 逐字：「如果已无事可做且无计时器，这意味着它交差了，需要向父代理
-    报告，父代理把它记为静默子代理」。所以"交差"是静默的一条盘上证据（不是旁证），而它今天
-    只有两处读法（`Conductor.handoffs_reading` 的 `silent` 那一格与 `agent_state`
-    的三态），两处口径分家 —— 后果具体：一份"父已经记为静默"的子代理，在销号门上
+    口径：「如果已无事可做且无计时器，这意味着它交差了，需要向父代理报告，父代理把它
+    记为静默子代理」。所以"交差"是静默的一条盘上证据（不是旁证），而它只有两处读法
+    （`Conductor.handoffs_reading` 的 `silent` 那一格与 `agent_state` 的三态）。
+    两处口径必须同源 —— 后果具体：一份"父已经记为静默"的子代理，在销号门上
     仍是"在飞"（`status=running`），于是父明明被告诉"静默子可销"，去销又吃到
     `target_not_silent`；而它占着的那个扇出名额谁也腾不出来。
 
