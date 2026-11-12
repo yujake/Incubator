@@ -313,16 +313,16 @@ def by_keywords(source: Any = None, *,
         sid = str(row.get("stmt_id") or "")
         if not sid:
             continue
-        hit_words = T.matched_keywords(
-            [str(row.get("label") or ""), str(row.get("statement_full") or "")], wanted)
+        label = str(row.get("label") or "")
+        full = str(row.get("statement_full") or "")
+        hit_words = T.matched_keywords([label, full], wanted)
         if not hit_words:
             continue
-        full = str(row.get("statement_full") or "")
-        hits.append({"stmt_id": sid, "label": str(row.get("label") or ""),
+        hits.append({"stmt_id": sid, "label": label,
                      "kind": str(row.get("kind") or ""),
                      "statement_full": full if limit is None else full[:limit],
                      "hit_words": hit_words,
-                     "proof_nos": [int(no) for no, _t in VR.proof_list(dict(row))],
+                     "proof_nos": [int(no) for no, _t in VR.proof_list(row)],
                      "row": dict(row)})
     hits.sort(key=lambda item: (-len(item["hit_words"]), item["stmt_id"]))
     out["hits"] = hits
