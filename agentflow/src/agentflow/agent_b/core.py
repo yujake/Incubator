@@ -965,16 +965,21 @@ class _Core:
         merged_id = str(decision["merged_id"])
         rel_rows = tx.rows("relations")
 
-        def contains_merged(r: Mapping[str, Any]) -> bool:
-            return merged_id in {str(x) for x in (r.get("concept_ids") or [])}
-
         rewritten: list[str] = []
         rejected: list[str] = []
         skipped: list[str] = []
         # 未被改写的行随时可作判重的对照集（按 relation_id 升序改写，保证结论稳定）
-        untouched = [dict(r) for r in rel_rows if not contains_merged(r)]
+        # 一趟分完两堆：`contains_merged` 原先在"对照集"与"待改写"两次扫描里各算一遍
+        # `concept_ids` 的集合，这里每行只算一次；两堆的次序都还是 `rel_rows` 原序。
+        untouched: list[dict] = []
+        to_rewrite: list[Mapping[str, Any]] = []
+        for r in rel_rows:
+            if merged_id in {str(x) for x in (r.get("concept_ids") or [])}:
+                to_rewrite.append(r)
+            else:
+                untouched.append(dict(r))
         accepted: list[dict] = []
-        for r in sorted((r for r in rel_rows if contains_merged(r)), key=lambda r: str(r.get("relation_id"))):
+        for r in sorted(to_rewrite, key=lambda r: str(r.get("relation_id"))):
             rid = str(r.get("relation_id"))
             new_cids = S.sorted_unique(
                 [survivor_id if str(c) == merged_id else str(c) for c in (r.get("concept_ids") or [])]
