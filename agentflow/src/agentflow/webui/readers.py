@@ -151,21 +151,21 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/evidence", "handle_evidence"),
     ("GET", "/api/artifacts", "handle_artifacts"),
     ("GET", "/api/acceptance", "handle_acceptance"),
-    # 2026-11-01（块 3）：论文包三块一次读 + 原文窗口。两条都只读：
+    # 论文包三块一次读 + 原文窗口。两条都只读：
     # `/api/package` 是 A/B/C 三块（三块总是一起看，一次请求才有同一份快照）；
     # `/api/source` 是每格 `source` 的落地（路径闸在 `source_window` 里，四条判据）。
     ("GET", "/api/package", "handle_package"),
     ("GET", "/api/source", "handle_source"),
     ("GET", "/api/machine", "handle_machine"),
-    # 业主 2026-10-12 的两条：预算窗口（②）与多智能体监控（①）。
-    # 它们与六个面同族（读盘现算、三态、不缓存），所以落在同一张子表里。
+    # 预算窗口（②）与多智能体监控（①）两条：与六个面同族（读盘现算、三态、
+    # 不缓存），所以落在同一张子表里。
     ("GET", "/api/budget", "handle_budget_view"),
     ("GET", "/api/live", "handle_live"),
     ("GET", "/api/usage", "handle_usage"),
     ("GET", "/api/status-reports", "handle_status_reports"),
-    # 业主 2026-10-13 的对话框：一段会话里"用户 ↔ 主控"的来回（对话页那一面）。
+    # 对话框（对话页那一面）：一段会话里"用户 ↔ 主控"的来回。
     ("GET", "/api/chat", "handle_chat"),
-    # 2026-10-21（业主的「名册监视」）：当前工作区的整棵名册树 —— 父是谁、子有哪些、
+    # 名册监视：当前工作区的整棵名册树 —— 父是谁、子有哪些、
     # 每个成员的绝对编号／名册名／角色／深度，外加收件箱那三格（未读 / 已读未 ack /
     # 未消总数，见 `_roster_inbox`）。
     # 只读一条：这个端点的消费者是只读面板，写面为零（表里没有与它配对的 POST，
@@ -173,7 +173,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("GET", "/api/roster", "handle_roster"),
     # 真身在 `webui/sse.py`（`GET /api/stream` 的推送流）。
     ("GET", "/api/stream", "handle_stream"),
-    # 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）：文献库那一面。
+    # 文献库那一面（业主报过「ui侧文献库无法读出，请确认」）。
     # 只收「正式入库」的那一档，每条带「被哪些命题／哪一份证明用过」。只读一条：
     # 这一条端点没有任何写面（表里没有配对的 POST，也不需要 --allow-writes）。
     ("GET", "/api/literature", "handle_library"),
@@ -201,28 +201,28 @@ CHECKED_TYPES: tuple[str, ...] = (
     "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
-    # 2026-10-12（业主的预算窗口与监控）：这四面的顶层键在任何工作区上都在
-    # （寄存器缺席、账本为空、没有进程都只是三态里的另一档，不是"读不出键"），
-    # 所以它们进受核对名单；行一级的类型见 `UNCHECKED_TYPES` 的理由。
+    # 这四面的顶层键在任何工作区上都在（寄存器缺席、账本为空、没有进程都只是
+    # 三态里的另一档，不是"读不出键"），所以它们进受核对名单；行一级的类型见
+    # `UNCHECKED_TYPES` 的理由。
     "BudgetView", "LiveView", "UsageView", "StatusReportsView",
-    # 2026-10-13（业主的对话框）：`ChatView` 的键在任何工作区上都在（"还没有会话"
+    # `ChatView` 的键在任何工作区上都在（"还没有会话"
     # 与"没查成"都只是三态里的另一档）；夹具那一段会话里有主控的 run_start 与一条
     # 提问，所以行一级的 `ChatLine` / `ChatSession` 也读得出键。
     "ChatView", "ChatLine", "ChatSession", "ChatOption",
-    # 2026-10-21（业主的「名册监视」）：`RosterView` 的顶层键在每一档上都在
+    # `RosterView` 的顶层键在每一档上都在
     # （名册目录不在 ⇒ `answer=unknown` 也是同一批键，见 `roster_face` 里那张表），
     # 所以它进受核对名单；行一级的五个类型见 `UNCHECKED_TYPES` 的理由。
     "RosterView",
-    # 2026-10-24（D-57 的文献库那一面）：五键外壳在每一档上都是同一批键
+    # 文献库那一面的五键外壳在每一档上都是同一批键
     # （表不在盘上 / 坏 JSON / 空表都只是 `state` 的另一档，不是"读不出键"），
     # 所以它进受核对名单；`data` 与三条行一级的类型见 `UNCHECKED_TYPES` 的理由。
     "LibraryView",
-    # 2026-10-27（业主裁定 ⑥-5 / W4）：错误动作那一面的两面顶层键在任何工作区上都在
+    # 错误动作那一面的两面顶层键在任何工作区上都在
     # （`state="unknown"` 也是同一批键：`checked` / `state` / `reason` / `data` /
     # `problems`），所以它们进受核对名单 —— 这是搬进生成物之后真正想要的收益：
     # C 条从现在起核对那批键名。缓存那一族留在 `UNCHECKED_TYPES`（理由见那一处）。
     "RoleErrorsView", "ErrorStatsData",
-    # 2026-11-01（块 2）：`/api/package` 的三块 + 外壳。顶层键在任何工作区上都在
+    # `/api/package` 的三块 + 外壳。顶层键在任何工作区上都在
     # （没有正文 ⇒ `structure.tri=not_applicable`；门读不成 ⇒ `closing.tri=unreadable`，
     # 键集合同一批），所以它们进受核对名单；行一级/子块类型见 `UNCHECKED_TYPES`。
     "PackageView", "ProofView", "StructureView", "ClosingView", "SourceWindow",
@@ -240,8 +240,9 @@ UNCHECKED_TYPES: dict[str, str] = {
     "UsageRow": "夹具没有造 usage_ledger 行（真机 p9b/data/usage_ledger.json 有 37 行，"
                 "但那是运行数据面、不入库）",
     "SearchRequestRow": "夹具没有造 search_requests 行（同上）",
-    # 2026-10-12 三条：它们的行是运行期数据，夹具上恒为空数组。
-    # 三态纪律在这里的落点与 `UsageRow` 同一条：没有读数就登记"为什么没有"，
+    # `BudgetEntry` / `UsageBucket` / `StatusReportRow` 三条：它们的行是运行期数据，
+    # 夹具上恒为空数组。三态纪律在这里的落点与 `UsageRow` 同一条：没有读数就
+    # 登记"为什么没有"，
     # 不是把接口从 types.ts 里删掉假装不存在。
     "BudgetEntry": "夹具没有预算寄存器（`budget.json` 由用户设过一次才有）"
                    "⇒ `added[]` 是空数组，行形状以 `budget._write` 为准",
@@ -249,12 +250,12 @@ UNCHECKED_TYPES: dict[str, str] = {
                    "⇒ 两个归口的格子读不出来，形状以 `tokenmeter.by_role/by_scope` 为准",
     "StatusReportRow": "夹具没有 `out/review/STATUS-*`（那是跑过一趟之后才写的）"
                        "⇒ `reports[]` 是空数组，形状以 `statusreport.status_report_paths` 为准",
-    # 2026-10-21（名册那一棵树）：夹具工作区里没有 `out/roster/`（名册只在有人被派活
+    # 名册那一棵树：夹具工作区里没有 `out/roster/`（名册只在有人被派活
     # 时才落盘）⇒ `nodes[]` 恒为空数组。行一级的五个形状以 `roster_face` 的真读数为准，
     # 而"为什么这里没有读数"就写在上面这一句里（三态纪律：不是把接口删掉假装不存在）。
     "RosterNode": "夹具没有 `out/roster/<父编号>.jsonl`（名册只在派人时落）"
                   "⇒ `nodes[]` 是空数组，形状以 `roster_face` 在真工作区上的读数为准",
-    # 2026-11-01（扩面：错误动作那一页加了三组读数）：下面四个是 `ErrorStatsData` 的
+    # 错误动作那一页的三组读数：下面四个是 `ErrorStatsData` 的
     # 子形状，夹具（`artifacts_ws`）没有 `verifications/` / `out/roster/refusals/` /
     # `out/secretary/` 的拒信与判词，也没有收工门的 blocker ⇒ 样本 / blocker 数组是空的。
     # 三态纪律在这里的落点与 `RosterNode` 同一条：登记"为什么没有读数"，不把接口删掉。
