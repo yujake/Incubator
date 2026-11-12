@@ -1,17 +1,27 @@
 """智能体 C：关系分析（程序做分析，LLM 只做排序与措辞）。
-定位（DESIGN-TOOLS.md §3.1）- 计数、索引、图搜索、路径枚举、去重、评分、溯源，全部是确定性代码（图与索引在 `tools/graph_tools.py`，代号溯源在 `tools/trace_tools.py`）；- 只有
-两处留 LLM 钩子，且默认关闭（构造时`llm=None` 即可）：① 路径"最合理关系链"的排序； 1. `hottest`：热度是 occurrences（概念在 `concept_ids` 里出现的次数），不是关系条数 —— 一条涉及
-3 个概念的关系对其中每个概念都算 1 次出现。排序必须稳定（同分按 `concept_id` 升序），否则同分概念的相对顺序会随字典插入顺序漂移，报告每次都不一样。 2. `paths`：见下方"三条不让步的规则"。 3. `cold`："没
-人研究"（degree 小）与"没人连接"（degree=0 的完全孤立）是两件事，必须分开归类； 4. `gaps`：需求说"若确实有，则报告"。所以按节点集合的 Jaccard 相似度贪心筛：新路径与任何已选路径的重合度
-`> max_overlap`（默认 0.5）就丢弃。取候选后按 §3.3(4) 的确定性序重选。报告要给 D 的不只是"high"这个标签，而是"为什么判成 high"：`score_breakdown` 里逐项列出每个信号的输入值与贡献值。
-报告形态：登记表 + 文件双份（§2.2）`AnalysisReport.payload` 是 D 溯源用的机器可读部分（代号链、评分明细），`AnalysisReport.markdown` 是人读的部分。`persist()` 把两者分别落
-到`reports/<report_id>-<kind>.md` 与 `analysis_reports` 表。服务面（DESIGN-INTERACTIONS.md §1 I1 / I3 / I5）四类分析器是批处理：跑一次、产一份报告、进 
-`analysis_reports` 表。所以本模块另外提供服务方法（`neighbors` /`relations_between` / `contradictions` / `structural_duplicates`）：- 每个结果都带
-`checked` 三态位（`False` = 没查，`True` + `empty=True` = 查了没有）；- 触及预算一定给 `truncated=True` 并说明原因 —— 静默截断会被下游读成"就这些"，而它是一条口吻确定的错误结
-论；- 判据一律委托给冻结契约 `interactions`（矛盾、结构重复、冲突检查），绝不在这里写第二份。唯一的写入路径是 `gaps(submit_requests=True)`（I3：把"应该有边却缺失"的候选直接变成 A 的检索请求），
-默认关闭，且由 `gaps()` 的确定性代码路径完成 —— 它不经过 C 的工具与推理，写的也不是知识。工具面（`register_tools`）因此可以保持全量只读。`goal-7f5116c1` M6/M7 把本模块拆成包：这里只做入口与
-命名空间的保持 ——拆包不许改变 import 面，所以原来能在 `agentflow.agent_c` 下 import 到的名字（含私有名，也包括住在`core.py` 的`_selftest` / `selftest`）都逐个再导出；动作
-各自在 `agent_c/<动作>.py`，`python -m agentflow.agent_c` 的自检入口在同目录 `__main__.py`。
+
+定位：计数、索引、图搜索、路径枚举、去重、评分、溯源全部是确定性代码（图与索引在
+`tools/graph_tools.py`，代号溯源在 `tools/trace_tools.py`）；只有两处留 LLM 钩子且默认
+关闭（构造时 `llm=None`）：路径"最合理关系链"的排序，以及分析器要措辞时的缝。
+
+分析器口径：`hottest` 的热度是 occurrences（概念在 `concept_ids` 里出现的次数），不是
+关系条数；排序必须稳定（同分按 `concept_id` 升序），否则相对顺序会随字典插入顺序漂移。
+`paths` 见"三条不让步的规则"。`cold` 把"没人研究"（degree 小）与"没人连接"（degree=0）
+分开归类。`gaps` 按节点集合的 Jaccard 相似度贪心筛（重合度 `> max_overlap` 默认 0.5
+就丢弃），取候选后按确定性序重选。报告要给 D 的不只是"high"这个标签，而是"为什么判成
+high"：`score_breakdown` 逐项列出每个信号的输入值与贡献值。
+
+报告形态：登记表 + 文件双份（§2.2）。`AnalysisReport.payload` 是机器可读部分（代号链、
+评分明细），`markdown` 是人读的部分；`persist()` 把两者分别落到
+`reports/<report_id>-<kind>.md` 与 `analysis_reports` 表。
+
+服务面（I1 / I3 / I5）四类分析器是批处理。`neighbors` / `relations_between` /
+`contradictions` / `structural_duplicates` 每个结果都带 `checked` 三态位（`False` = 没查，
+`True` + `empty=True` = 查了没有）；触及预算一定给 `truncated=True` 并说明原因。判据一律
+委托给冻结契约 `interactions`。唯一的写入路径是 `gaps(submit_requests=True)`（I3），
+默认关闭，由确定性代码路径完成 —— 工具面因此保持全量只读。
+
+拆包只做入口与命名空间保持：import 面不许变，动作各自在 `agent_c/<动作>.py`。
 """
 from __future__ import annotations
 
