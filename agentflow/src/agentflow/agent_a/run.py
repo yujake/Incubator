@@ -1,6 +1,6 @@
-"""角色 A 的动作 `run`（`goal-7f5116c1` M6：从 `agent_a.py` 拆出来，逐字未改）。
+"""角色 A 的动作 `run`：把 `run_once` 循环到"没有待办"或到达上限。
 
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
+拆出来的判据：这个方法的源码非空行与拆分前逐字相同（拆分只动 import 面）。
 """
 from __future__ import annotations
 
