@@ -6978,9 +6978,9 @@ class Conductor:
     def retire_integrity(self, root_task_id: str) -> dict[str, Any]:
         """`root_task_id` 名下整棵树是不是已经全部销号（M 收工前的结构完整性闸）。
 
-        业主 D-68 逐字：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」。
-        改前这条读数不存在：M 名下有几十个还在册的代理，与它收工那件事毫无关系
-        （真机 `projects/sylow3`：50 个实例行、48 条板项，一条销号落痕都没有）。
+        口径：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」。
+        没有这条读数时，M 名下有几十个还在册的代理，与它收工那件事毫无关系 ——
+        整棵树没销号而 final 照记。
 
         返回 `{"checked","complete","root","nodes","dirty","count","total",
         "root_open_items","states","stalled","stalled_count","clock","programs","reason"}`：
@@ -6989,15 +6989,15 @@ class Conductor:
         - `complete`：这一支是否全部销号（`nodes` 与 `dirty` 都空才算）；
         - `nodes`：还在册的节点，逐条给 `task_id` / `role` / `status` / `retired` /
           `open_items` / `open_item_ids`（前 8 条）/ `state` / `state_label` /
-          `blocking`（后三格是本批新增的读数，见下）/ `stalled` / `stalled_sec` ——
+          `blocking` / `stalled` / `stalled_sec` ——
           这就是拒信里那份清单；
         - `dirty`：已经销号、可名下还有未消项的节点（结构矛盾那一档，同样算不干净）；
         - `count` / `total`：还在册几个 / 这一支一共有几个节点（不含根自己）；
         - `root_open_items`：根自己名下的未消项条数（读数，不参与判定 —— 根没有父，
-          销号对它没有对象，而业主那句判据说的是"它下面那棵树"）；
+          销号对它没有对象，而那句判据说的是"它下面那棵树"）；
         - `states`：这一支每个非根节点的三态合计（`state_counts`：四档 + `active` +
           `total`），`clock`：这一次读时钟簿记的三态。两者都是读数，不参与判定 ——
-          `complete` 的定义一个字没动（业主那句"整棵树都已销号"就是它）；
+          `complete` 的定义一个字没动（「整棵树都已销号」就是它）；
         - `stalled` / `stalled_count`：疑似停滞的那些编号 / 几个。它是读数（父代理结项
           被拦时，拒信要点名"名下有 N 个在飞子，其中 M 个已停滞超过 N 分钟"），
           同样不参与 `complete` 的判定 —— 停滞不等于静默（见 `agent_state`）；
@@ -7006,11 +7006,11 @@ class Conductor:
           同样不参与 `complete` 的判定 —— 程序不是名册项，"整棵树都已销号"数的是名册。
           那一条"程序还在跑就不许收工"由 `_final_gate_reading` 说（两轴分开、各说各的那一句）。
 
-        ## 销号为什么更难的今天，final 的门没有变
-        本批（业主 2026-10-26：「销号可以也只可针对静默子代理」）让销号变难了：一个
-        挂着计时器的子代理不再能被销掉。所以这一份读数现在的用途多了一层 —— 谁在
-        等、等的是哪一条钟，`nodes[].state` / `nodes[].blocking` 逐条给出来。但
-        "整棵树已销号"这个判据仍然只是"还在册的都是 0"，不因为读数变多而变宽或变窄。
+        ## 销号变难之后，final 的门没有变
+        销号只可针对静默子代理之后，一个挂着计时器的子代理不再能被销掉。所以这一份
+        读数多了一层用途 —— 谁在等、等的是哪一条钟，`nodes[].state` /
+        `nodes[].blocking` 逐条给出来。但"整棵树已销号"这个判据仍然只是"还在册的都是
+        0"，不因为读数变多而变宽或变窄。
 
         ## 销号的判据取哪一处
         取父行 `inputs` 里的 `edge-released:` 落痕（`Secretary.retire` 每次销号都会先写它，
@@ -7019,7 +7019,7 @@ class Conductor:
 
         ## 三态与代价
         台账读不成、根那一行不存在 ⇒ `checked=False`。把这两种折成"干净"的代价是
-        整棵树没销号而 final 照记（业主那句话正好要挡住这一档）。
+        整棵树没销号而 final 照记（那句话正好要挡住这一档）。
         """
         out: dict[str, Any] = {
             "checked": True, "complete": False, "root": str(root_task_id or ""),
@@ -7027,10 +7027,9 @@ class Conductor:
             "root_open_items": 0, "states": None,
             "stalled": [], "stalled_count": 0,
             "clock": {"checked": False, "count": 0, "reason": ""}, "reason": "",
-            # 程序读数（业主 2026-10-26 G2 第 ② 条）：这一支名下（含根那一行）还有
-            # 几个程序在跑。它是本方法的读数格子，不参与 `complete` 的判定 ——
-            # "整棵树都已销号"这个判据一个字没动，程序那一半由 `_final_gate_reading`
-            # 与收工门自己说（那里才是"不许静默"的落点）。
+            # 程序读数：这一支名下（含根那一行）还有几个程序在跑。它是本方法的读数
+            # 格子，不参与 `complete` 的判定 ——"整棵树都已销号"这个判据一个字没动，
+            # 程序那一半由 `_final_gate_reading` 与收工门自己说（那里才是"不许静默"的落点）。
             "programs": {"checked": False, "running": [], "running_count": 0,
                          "unowned": [], "unowned_count": 0,
                          "orphans": {"no_timer": [], "finished_but_alive": []},
@@ -7124,7 +7123,7 @@ class Conductor:
         out["clock"] = {"checked": bool(clock.get("checked")),
                         "count": int(clock.get("count") or 0),
                         "reason": str(clock.get("reason") or "")}
-        # 程序读数（G2 第 ② 条）：收工门要的是"这一支还有没有进程在跑"，而那件事
+        # 程序读数：收工门要的是"这一支还有没有进程在跑"，而那件事
         # 三态（无工作 / 无计时器 / 无活跃子）读不出来 —— 一台程序可以在一个
         # 被读成"静默"的节点名下继续跑（计时器根本没登记到它名下时就是这样）。
         # 这一格读的那一份与销号门是同一份（`programs_in_subtree`），不另判一遍。
