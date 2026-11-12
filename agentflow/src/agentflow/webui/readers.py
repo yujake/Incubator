@@ -275,24 +275,24 @@ UNCHECKED_TYPES: dict[str, str] = {
                        "⇒ 形状以 `_roster_inbox` 的 `items` 为准",
     "RosterCoverage": "同 `RosterNode`：夹具上没有名册文件，`coverage` 三个计数都是 null"
                       "⇒ 形状以 `roster_face` 的 `coverage` 为准",
-    # 2026-10-24（D-66：一个子代理可以接好几件活）：节点下面那一串活与"拼不上的那些
-    # 代理行"都是行一级的形状，夹具工作区里没有名册 ⇒ 两者恒为空数组。
+    # 一个子代理可以接好几件活：节点下面那一串活与"拼不上的那些代理行"都是
+    # 行一级的形状，夹具工作区里没有名册 ⇒ 两者恒为空数组。
     "RosterTask": "同 `RosterNode`：夹具上没有名册节点，`nodes[].tasks[]` 是空数组"
                   "⇒ 形状以 `roster_face` 的 `tasks` 为准",
     "RosterUnplaced": "同 `RosterNode`：夹具上没有名册文件，`unplaced[]` 是空数组"
                       "⇒ 形状以 `roster_face` 的 `unplaced` 为准",
-    # 2026-10-25（「子 N」按台账数、未落名册的子挂在父节点下）：同一档 —— 夹具上
-    # 没有名册节点，这一格自然也是空数组，形状以 `roster_face` 的真读数为准。
+    # 「子 N」按台账数、未落名册的子挂在父节点下：同一档 —— 夹具上没有名册节点，
+    # 这一格自然也是空数组，形状以 `roster_face` 的真读数为准。
     "RosterUnrostered": "同 `RosterNode`：`nodes[].unrostered_children[]` 在夹具上是空数组"
                         "⇒ 形状以 `roster_face` 的 `unrostered_children` 为准",
-    # 2026-10-21（台账行带"角色 + 绝对编号"）：验收面的 `rows[]` 在任何工作区上都有
+    # 台账行带"角色 + 绝对编号"：验收面的 `rows[]` 在任何工作区上都有
     # 五行（判据是现算的、不依赖盘上数据），但它没有进契约判据 C 的读数清单
     # （`tests/test_webui_contracts.py::_backend_keys` 只取验收面的顶层键）⇒ 判据 C
     # 没有对账面。行形状由 `tests/test_ledger_faces_carry_role_and_id.py` 逐键钉着。
     "AcceptanceRow": "契约判据 C 的 `_backend_keys` 只读验收面的顶层键、没读 `rows[]`"
                      "⇒ 形状以 `_acceptance_rows` 与 `AcceptanceRow` 的声明为准"
                      "（逐键判据在 tests/test_ledger_faces_carry_role_and_id.py）",
-    # 2026-10-23（业主：命题标注非平凡度 / 第 4 位按路径 / sha 只报一致）：这三行的
+    # 命题标注非平凡度 / 第 4 位按路径 / sha 只报一致：这三行的
     # 行一级类型在夹具上读不出键 —— 夹具的 statements 是 0 行，也没有 out/experiments/
     # 与 code/exp/。形状以各自那一个读数函数为准，逐键判据在
     # `tests/test_webui_readings_format.py`（它自造工作区，把这三种形态都造出来）。
@@ -311,7 +311,7 @@ UNCHECKED_TYPES: dict[str, str] = {
                       " 的读数为准（同上那份判据文件）",
     "CodeExpFile": "同 `ExperimentSpot`：夹具没有 `code/exp/` ⇒ `code_exp[]` 恒为空数组；"
                    "形状以 `experiment_spots()` 的 `code_exp` 为准（同上）",
-    # 2026-10-24（D-57 的文献库那一面）：`artifacts_ws` 夹具里 `literature` 是 0 行
+    # 文献库那一面：`artifacts_ws` 夹具里 `literature` 是 0 行
     # ⇒ `data.works[]` / `data.problems[]` 恒为空数组，三个行一级的形状以本模块
     # 的读数为准（判据 `tests/test_library_face_only_counts_admitted_works.py`
     # 自己造工作区，把 5 条入库文献与两种被引形态都造出来）。
@@ -323,11 +323,11 @@ UNCHECKED_TYPES: dict[str, str] = {
                   "形状以 `_library_uses` 的读数为准（同上）",
     "LibraryProblem": "干净的工作区上 `problems[]` 是空数组（没有可留痕的问题）"
                       "⇒ 形状以 `library_face` 里那几处 `add_problem(` 的读数为准（同上）",
-    # 2026-10-27（业主裁定 ⑥-5 / W4）：两档提示词缓存那一族搬进生成物之后仍留在
-    # 本名单里 —— 不是因为它读不出来，而是因为 C 条的读盘步骤够不到它：
-    # `cachectl.status()` 要现渲染两档提示词（切 `AGENTFLOW_LEAN_ENABLED`、
-    # 重置工具链读数、跑一遍 `render_prompts`），那是一条有副作用的慢路径（本机
-    # 实测首次约 1.1 秒），把判据的读盘步骤变成"顺手改了进程的环境变量"不值得。
+    # 两档提示词缓存那一族搬进生成物之后仍留在本名单里 —— 不是因为它读不出来，
+    # 而是因为 C 条的读盘步骤够不到它：`cachectl.status()` 要现渲染两档提示词
+    # （切 `AGENTFLOW_LEAN_ENABLED`、重置工具链读数、跑一遍 `render_prompts`），
+    # 那是一条有副作用的慢路径（本机实测首次约 1.1 秒），把判据的读盘步骤变成
+    # "顺手改了进程的环境变量"不值得。
     # 顶层那两面（`RoleErrorsView` / `ErrorStatsData`）没有这个问题，已进受核对名单。
     # 这一族的形状仍只有一个来源（`types.ts` 的生成物），只是核对深度浅一档。
     "CacheView": "C 条的读盘步骤不跑 `cachectl.status()`（它要现渲染两档提示词）"
@@ -346,7 +346,7 @@ UNCHECKED_TYPES: dict[str, str] = {
     "ErrorCategoryGlossary": "真身是一张常量表（`errorstats.ERROR_CATEGORIES`），"
                              "不在盘上、也不经读模型 ⇒ C 条的读盘步骤取不到它",
     "ErrorCategoryMeaning": "同 `ErrorCategoryGlossary`：一行两格（`name` + `meaning`）",
-    # 2026-10-27（业主裁定 W5）：在飞面那两格有了具名行类型，但 C 条核不了它们 ——
+    # 在飞面那两格有了具名行类型，但 C 条核不了它们 ——
     # 夹具工作区里没有在跑的循环、也没有登记过的活进程 ⇒ 两格恒为空数组，
     # 对着空数组核等于没核。登记在这里，"造一套 live 夹具"是另一件事（见报告）。
     "LiveLoopRow": "夹具工作区里没有在跑的循环（`running[]` 是空数组）"
@@ -355,11 +355,11 @@ UNCHECKED_TYPES: dict[str, str] = {
     "LivePidRow": "夹具工作区里没有进程登记（`live[]` 是空数组）"
                   "⇒ 形状以 `stopctl.live_pids()` 的 `pid/role/sid/started_at/path` 为准；"
                   "同上，要核对它得先造 live 夹具",
-    # 2026-11-01（块 2）：`/api/package` 的行一级/子块类型。夹具造不出这些行
-    # （没有 statements-with-proofs、没有 `out/vsigns/`、没有 `out/roster/`、
-    # 也没有一份带 findings 的正文），所以 C 条只能核三块顶层键；行形状以
-    # `package_face` 的返回与 `_TS_TYPES` 的声明为准。真机 81 副本上逐格核过
-    # （2026-11-01，A 52 行 / B 5 条 findings / C 8 格）。
+    # `/api/package` 的行一级/子块类型。夹具造不出这些行（没有
+    # statements-with-proofs、没有 `out/vsigns/`、没有 `out/roster/`、也没有一份
+    # 带 findings 的正文），所以 C 条只能核三块顶层键；行形状以 `package_face` 的
+    # 返回与 `_TS_TYPES` 的声明为准。真机 81 副本上逐格核过（A 52 行 /
+    # B 5 条 findings / C 8 格）。
     "ProofRow": "夹具没有带 `proof_text` 的命题行（`make_artifacts_sample` 不造 statements）"
                 "⇒ `proofs.rows[]` 是空数组；形状以 `package_face` 的返回为准",
     "ProofItem": "同 `ProofRow`：没有命题行就没有逐条证明；形状同上",
