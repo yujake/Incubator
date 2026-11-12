@@ -1104,6 +1104,8 @@ def gate_g5(ctx: GateContext) -> GateResult:
     criterion_revision = GATE_CRITERIA_REVISION[gate_id]
     if ctx.doc is None:
         return _no_doc(gate_id, axis, criterion)
+    # `claims()` 会把每条断言归一一次；这扇门只用同一份视图（counts / 自证 / 循环）。
+    claims = ctx.claims()
     words = [str(w) for w in (ctx.banned_words or []) if str(w).strip()]
     if not words:
         return GateResult(
@@ -1115,11 +1117,11 @@ def gate_g5(ctx: GateContext) -> GateResult:
                 "参考体例的词表来自 `STYLE/RUBRIC.md:50-53`，属于**人的文风决定**，"
                 "应当由配置注入而不是由 AI 固化。门保留、如实报『没有对象』，而不是删门"
             ),
-            counts={"提供的禁词数": 0, "扫描的断言数": len(ctx.claims())},
+            counts={"提供的禁词数": 0, "扫描的断言数": len(claims)},
             self_attestation=_attest_text(
                 attest(
-                    f"检查 ctx.banned_words 是否为空（{len(ctx.claims())} 条断言在场）",
-                    {"提供的禁词数": 0, "扫描的断言数": len(ctx.claims())},
+                    f"检查 ctx.banned_words 是否为空（{len(claims)} 条断言在场）",
+                    {"提供的禁词数": 0, "扫描的断言数": len(claims)},
                     evidence_used=("ctx.banned_words",),
                 )
             ),
@@ -1128,7 +1130,7 @@ def gate_g5(ctx: GateContext) -> GateResult:
         )
     findings: list[dict] = []
     scanned = 0
-    for c in ctx.claims():
+    for c in claims:
         scanned += 1
         cid = str(c.get("claim_id") or "?")
         text = CA.claim_statement(c)
@@ -1194,7 +1196,9 @@ def gate_g6(ctx: GateContext) -> GateResult:
     findings: list[dict] = []
     named = 0
     found = 0
-    for c in ctx.claims():
+    # 归一后的断言表只取一次（循环与 not_applicable 那一句的条数共用）。
+    claims = ctx.claims()
+    for c in claims:
         cid = str(c.get("claim_id") or "?")
         ne = c.get("numeric_evidence")
         if not isinstance(ne, Mapping):
@@ -1236,7 +1240,7 @@ def gate_g6(ctx: GateContext) -> GateResult:
             gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
             verdict="not_applicable",
             reason=(
-                f"本稿 {len(ctx.claims())} 条断言**没有任何一条点名数值脚本**"
+                f"本稿 {len(claims)} 条断言**没有任何一条点名数值脚本**"
                 "（`numeric_evidence.script` 全空）⇒ 虚证门本轮没有可判定的对象。"
                 "注意这与『脚本都存在』是两件事 —— 所以判 not_applicable 而不是 pass"
             ),
@@ -2173,7 +2177,9 @@ def gate_g12(ctx: GateContext) -> GateResult:
     findings: list[dict] = []
     proved = 0
     with_counter_search = 0
-    for c in ctx.claims():
+    # 同一份断言视图：循环与下面那句"在 N 条断言里筛出"共用一次归一。
+    claims = ctx.claims()
+    for c in claims:
         cid = str(c.get("claim_id") or "?")
         if c.get("status") != "证":
             continue
@@ -2208,7 +2214,7 @@ def gate_g12(ctx: GateContext) -> GateResult:
                 }
             )
     counts = {"标『证』的断言数": proved, "有反例搜索痕迹": with_counter_search, "问题数": len(findings)}
-    proc = f"在 {len(ctx.claims())} 条断言里筛出 {proved} 条 status=='证'，逐条核对 counterexamples / numeric_evidence.n_counterexamples 是否存在"
+    proc = f"在 {len(claims)} 条断言里筛出 {proved} 条 status=='证'，逐条核对 counterexamples / numeric_evidence.n_counterexamples 是否存在"
     if not proved:
         return GateResult(
             gate_id=gate_id, name=GATES[gate_id]["name"], axis=axis, criterion=criterion,
@@ -2782,6 +2788,8 @@ def gate_report(
         )
     results = run_all_gates(ctx)
     agg = gate_verdict(results)
+    # 报告头的两格自证数字共用同一份断言视图（`claims()` 每次都会重新归一）。
+    claims = ctx.claims()
     return {
         "ok": agg["verdict"] == "accepted" and not agg["failed_gates"] and not agg["unknown_gates"],
         "reviewer": reviewer,
@@ -2796,8 +2804,8 @@ def gate_report(
         "own_errors": list(own_errors),
         # 自证数字：报告也要能回答"我扫了多少、数出了什么"（G13 的精神）
         "counts": {
-            "断言数": len(ctx.claims()),
-            "引用数": sum(len(c.get("citations") or []) for c in ctx.claims()),
+            "断言数": len(claims),
+            "引用数": sum(len(c.get("citations") or []) for c in claims),
             "依赖数": ("未提供（没查）" if ctx.dependencies is None else len(list(ctx.dependencies))),
             "发现数": ("未提供（没查）" if ctx.findings is None else len(list(ctx.findings))),
             "pass 门数": agg["pass"],
