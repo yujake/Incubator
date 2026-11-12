@@ -61,7 +61,8 @@ _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 #:
 #: 落在结构上：落点永远 `reports/<族>-proof-<稿号>.md`；改正文就地改那一份
 #: （`proofregistry` 的 `mode=rewritten` 只动 `## 证明` 与头部的元信息，不换名、
-#: 不涨 `proof_no`；稿头也不再有 `- 证明号：` 那一行）。F 与 B 都成立。
+#: 不涨 `proof_no`；稿头也不再有 `- 证明号：` 那一行）。这一条只对 F 与 B 成立 ——
+#: E 的稿头仍写 `- 证明号：<N>`（`exhaustionreport` 那一支），所以读侧仍要认那一行。
 #: 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）是历史，只读兼容：
 #: `proofregistry._legacy_proof_no_of` 命中它们时沿用文件名里的 N，不改身份。
 NO_VERSION_SUFFIX_FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
