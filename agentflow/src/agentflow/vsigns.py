@@ -788,11 +788,10 @@ MANUSCRIPT_NAME_BAD = "bad_manuscript_name"
 MANUSCRIPT_NAME_PLAN = "plan_is_not_a_sign_carrier"
 
 #: 证明手稿名的显式规则：
-#: `<prefix>-proof-<号>[-p<N>].md` ⇒ `(裸稿号, proof_no=N)`。
+#: `<prefix>-proof-<号>.md` ⇒ `(裸稿号, proof_no=1)`。
 #: - 号：4–6 位十进制（在册命题）或 `plan-<数字>`（F 立项那一轮，落稿名合法）；
-#: - `-p<N>`：老盘上的版本尾巴，只用于读旧稿（N 是 ≥1 的十进制，缺省 1）；
-#:   新稿不写它 —— 一个稿号 = 一份文件 = 一份证明。`-p0` / `-pabc` / 号里带别的
-#:   后缀一律不认（认不出就受控拒绝，不猜）。
+#: - 名字里没有 `-p<N>` 后缀：一个稿号 = 一份文件 = 一份证明。旧盘上的 `…-pN.md`
+#:   不再被认成手稿（对齐之后只有一种形式）。
 #:
 #: 解析与签载体都只读 `manuscriptfamily` 那一张表 ——
 #: 本模块不再保有自己的正则（设计 3.2 第 3/4 处）。`_MANUSCRIPT_NAME_RE` /
@@ -857,7 +856,7 @@ def parse_manuscript_name(path: Any) -> dict[str, Any]:
 
     | 名字 | 读数 |
     |---|---|
-    | `reports/f-proof-000000-p2.md` | `family="f-proof", id=000000, proof_no=2` |
+    | `reports/f-proof-000000.md` | `family="f-proof", id=000000, proof_no=1` |
     | `notes/b-proof-000003-v2.md` | `tier=legacy, family="legacy", proof_no=0` |
     | `reports/e-num-000012.md` | `family="e-num"`（进族） |
     | `notes/b-proof-000003.md` | `tier=legacy`（目录不对） |
@@ -872,10 +871,8 @@ def parse_manuscript_name(path: Any) -> dict[str, Any]:
 def manuscript_id_of(path: Any) -> str:
     """手稿路径 ⇒ 裸稿号（`reports/f-proof-000000.md` ⇒ `000000`；`...-plan-0001.md` ⇒ `plan-0001`）。
 
-    2026-11-04（业主裁定，多证明命名）：`f-proof-000000-p2.md` 的裸稿号是 `000000`
-    （`-p2` 是旧盘上的证明号尾巴，不是稿号的一部分）—— 否则 B 的签块闸会拿 `000000-p2` 去
-    `statements` 里找，永远对不上。解析本体在 :func:`parse_manuscript_name`；
-    认不出就回空串（不猜一个号），第 9 格宁可落 `unmatched`。
+    解析本体在 :func:`parse_manuscript_name`；认不出就回空串（不猜一个号），
+    第 9 格宁可落 `unmatched`。
     """
     return str(parse_manuscript_name(path).get("manuscript_id") or "")
 

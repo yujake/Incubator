@@ -13,7 +13,7 @@
 
 ## 口径（逐条对应判据）
 
-- 命名：`<prefix>-proof-<号>[-p<N>].md`，解析只走
+- 命名：`<prefix>-proof-<号>.md`，解析只走
   :func:`vsigns.parse_manuscript_name`；认不出 ⇒ 受控拒绝 `bad_manuscript_name`。
 - 渲染：三节（`## 命题` / `## 证明` / `## 依赖`）+ 洗稿元信息行 +
   `- 命题号：stmt:<号>` 那一行，两族由 :func:`render_proof_manuscript` 同一段代码产出，
@@ -110,8 +110,8 @@ DETAILS: dict[str, str] = {
         "这一份稿没有 `- 依赖面洗稿：` 那一行（或 `已洗` 不是 true）⇒ 它不是秘书洗过的"
         "那一版，落稿会绕过 B 的洗稿闸；先洗一遍再落稿",
     BAD_MANUSCRIPT_NAME:
-        "手稿名 {name!r} 认不出号：要 `<prefix>-proof-<号>[-p<证明号>].md`（号是 4–6 位"
-        "十进制，或 `plan-<数字>`；`-p<N>` 的 N 是 ≥1 的十进制）",
+        "手稿名 {name!r} 认不出号：要 `<prefix>-proof-<号>.md`（号是 4–6 位"
+        "十进制，或 `plan-<数字>`）",
     DEPENDENCY_SECTION_MISSING:
         "手稿里没有 `## 依赖` 这一节：依赖面不会按格式登记（证明正文里现在有 {refs} 条"
         " `stmt:` 引用）⇒ B 会整笔拒收 `dependency_section_missing`",

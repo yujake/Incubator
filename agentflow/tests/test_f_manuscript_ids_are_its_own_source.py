@@ -143,7 +143,8 @@ def test_b_the_manuscript_path_is_only_the_f_manuscript_number(tmp_path) -> None
     st = _ws(tmp_path)
     f = _f(st)
     assert f.manuscript_path("000007") == "reports/f-proof-000007.md"
-    assert f.manuscript_path("000007", proof_no=2) == "reports/f-proof-000007-p2.md"
+    # 一个稿号 = 一份文件 = 一份证明：`proof_no` 不进名字（对齐之后没有 `-pN`）。
+    assert f.manuscript_path("000007", proof_no=2) == "reports/f-proof-000007.md"
     assert f.manuscript_path("abc") == ""
     # 改前那三条回退（命题号 / 计划号 / 子目标号）必须已经删掉：给了就 TypeError
     for bad in ({"statement_id": SID}, {"plan_id": "000000"}, {"sid": "s1"}):

@@ -256,13 +256,14 @@ def test_a2_putting_b_render_back_makes_a_red(
 # ------------------------------------------------------------------ b 同一份命名
 def test_b_naming_and_parsing_are_one_function(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """b：两族的 `<prefix>-proof-<号>[-p<N>].md` 走同一个解析器；乱名两族都拒。"""
+    """b：两族的 `<prefix>-proof-<号>.md` 走同一个解析器；乱名两族都拒。"""
     for fam in (MF.FAMILY_F, MF.FAMILY_B):
         got = MF.name_reading(fam, statement_id="000000", proof_no=2)
         assert got.get("ok") is True, got
-        assert got["path"] == f"reports/{fam.lower()}-proof-000000-p2.md", got
+        # 产出侧只有一种名字：`proof_no` 不进名字（对齐之后没有 `-pN`）。
+        assert got["path"] == f"reports/{fam.lower()}-proof-000000.md", got
         parsed = VS.parse_manuscript_name(got["path"])
-        assert (parsed["manuscript_id"], parsed["proof_no"]) == ("000000", 2), parsed
+        assert (parsed["manuscript_id"], parsed["proof_no"]) == ("000000", 1), parsed
         bad = MF.name_reading(fam, statement_id="abc")
         assert bad.get("ok") is False, bad
         assert bad.get("code") == MF.BAD_MANUSCRIPT_NAME, bad

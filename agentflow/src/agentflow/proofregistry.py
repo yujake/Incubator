@@ -513,31 +513,12 @@ def read_entry(root: Any, *, family: Any, statement_id: Any = "",
 # ---------------------------------------------------------------- 登记 / 重写（唯一写入口）
 
 def _legacy_proof_no_of(rel: Any, entry: Mapping[str, Any]) -> int:
-    """这一份稿的「证明号」（一个稿号一份稿 ⇒ 新写恒 1；只有老盘的 `-pN` 才保留 N）。
+    """这一份稿的证明号：恒 1（一个稿号 = 一份文件 = 一份证明）。
 
-    「不再细分 version 几」⇒ 重写不涨号。
-    但老盘上按 `-pN` 命名的稿（`reports/f-proof-000012-p2.md` 那一族）已经在盘上了，
-    重写它时如果把号压回 1，等于把那份老稿的身份改了（文件名与稿头会打架）。
-    所以：名字里带 `-pN`（N≥2）⇒ 沿用 N；其余一律 1。
-
-    判据：`tests/test_one_manuscript_id_is_one_file.py`（新写路径恒 1）与
-          同文件里那条"老盘 `-pN` 仍按 N 读"的兼容断言。
+    名字里不再有 `-pN`（解析侧也不认它），重写也不涨号；于是这一格只剩一个取值。
+    函数名保留只为调用点不必改（它此前是"老盘 `-pN` 沿用 N"那一支的落点）。
     """
-    raw = str(rel or "").strip().replace("\\", "/")
-    tail = raw.rsplit("/", 1)[-1]
-    stem = tail[:-3] if tail.lower().endswith(".md") else tail
-    hit = re.search(r"-p(\d+)$", stem)
-    if hit:
-        try:
-            no = int(hit.group(1))
-        except (TypeError, ValueError):
-            no = 0
-        if no >= 2:
-            return no
-    try:
-        return int(entry.get("proof_no") or 0) if str(entry.get("manuscript_path") or "") == raw and hit else 1
-    except (TypeError, ValueError):
-        return 1
+    return 1
 
 
 def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str,
