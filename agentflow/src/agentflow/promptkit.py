@@ -299,37 +299,38 @@ def _interpolate(text: str, variables: Mapping[str, str], *, owner: str) -> str:
     逐字理由（DSH）：一份坏提示词比一次响亮的失败更糟。
     """
     out: list[str] = []
-    i = 0
-    while i < len(text):
-        if text.startswith("{{", i):
-            m = GROUP.match(text[i:])
-            if m is None:
-                raise PromptError(
-                    f"{owner}：第 {i} 个字符处有一个没有闭合的 {{{{ —— "
-                    "模板组必须是完整的 {{name}}（DSH 同样没有转义语法，这里也一样）"
-                )
-            name = m.group(1)
-            if not VARIABLE_NAME.match(name):
-                raise PromptError(
-                    f"{owner}：变量名 {name!r} 非法（要求 {VARIABLE_NAME.pattern}）"
-                )
-            if name not in variables:
-                known = "、".join(sorted(variables)) or "（一个都没有）"
-                raise PromptError(
-                    f"{owner}：引用了没有注册的变量 {{{{{name}}}}}；已注册的有：{known}"
-                )
-            value = variables[name]
-            if value is None or value == "":
-                raise PromptError(
-                    f"{owner}：变量 {{{{{name}}}}} 这次没有值（注册了但没提供）—— "
-                    "空值与缺失是两件事，这里都算失败：静默留空会让提示词少一段而没人知道"
-                )
-            out.append(value)
-            i += m.end()
-            continue
-        out.append(text[i])
-        i += 1
-    return "".join(out)
+    pos = 0
+    while True:
+        start = text.find("{{", pos)
+        if start < 0:
+            out.append(text[pos:])          # 剩下的全是字面量
+            return "".join(out)
+        m = GROUP.match(text[start:])
+        if m is None:
+            raise PromptError(
+                f"{owner}：第 {start} 个字符处有一个没有闭合的 {{{{ —— "
+                "模板组必须是完整的 {{name}}（DSH 同样没有转义语法，这里也一样）"
+            )
+        name = m.group(1)
+        if not VARIABLE_NAME.match(name):
+            raise PromptError(
+                f"{owner}：变量名 {name!r} 非法（要求 {VARIABLE_NAME.pattern}）"
+            )
+        if name not in variables:
+            known = "、".join(sorted(variables)) or "（一个都没有）"
+            raise PromptError(
+                f"{owner}：引用了没有注册的变量 {{{{{name}}}}}；已注册的有：{known}"
+            )
+        value = variables[name]
+        if value is None or value == "":
+            raise PromptError(
+                f"{owner}：变量 {{{{{name}}}}} 这次没有值（注册了但没提供）—— "
+                "空值与缺失是两件事，这里都算失败：静默留空会让提示词少一段而没人知道"
+            )
+        out.append(text[pos:start])
+        out.append(value)
+        pos = start + m.end()
+
 
 
 def _name_key(section: Section) -> tuple[int, str]:
