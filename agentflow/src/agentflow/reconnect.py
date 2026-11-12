@@ -195,26 +195,31 @@ class BackoffGate:
             timer.start()
         return wait
 
+    def _take(self) -> float | None:
+        """清掉待触发的那一次并把它计入 `waited_total`（同步与定时器两条路共用）。
+
+        同步与定时器两条路共用这一份"结清一次"的实现：取 pending、置 None、累计
+        三步的顺序与 DSH 定时器回调一致；两条路因此不会在读数上分叉。
+        """
+        wait = self.pending
+        self.pending = None
+        if wait is not None:
+            self.waited_total += wait
+        return wait
+
     def settle(self) -> float:
         """同步用法：sleep 结束之后登记这一次等待，返回登记了的秒数。
 
         对应 DSH 定时器回调里那一步（清 `reconnectTimer`）；累计口径是
         `waited_total`，总等待上限判的就是它。
         """
-        wait = self.pending
-        self.pending = None
-        if wait is None:
-            return 0.0
-        self.waited_total += wait
-        return wait
+        wait = self._take()
+        return 0.0 if wait is None else wait
 
     def _fire(self, fn: Callable[[], Any]) -> None:
         """定时器到点：先清 pending、累计 waited_total，再调 `fn`（顺序与 DSH 一致）。"""
-        wait = self.pending
-        self.pending = None
+        self._take()
         self._timer = None
-        if wait is not None:
-            self.waited_total += wait
         fn()
 
     def close(self) -> None:
