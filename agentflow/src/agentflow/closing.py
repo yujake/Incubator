@@ -4519,7 +4519,7 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
 
 
 def acceptance_absent_kind_state() -> str:
-    """老工作区的验收表里根本没有某一档时，那一行读成什么状态（D-38 第二步的唯一出口）。
+    """老工作区的验收表里根本没有某一档时，那一行读成什么状态（唯一出口）。
 
     写死 `unknown`：缺这一行既不是 fail（它没有被判过），也不是 pass（它没有被算过）
     —— 三态纪律里这正是「没查成」。单独成函数是为了反真空用例只打这一处桩：
@@ -4529,12 +4529,12 @@ def acceptance_absent_kind_state() -> str:
 
 
 def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
-    """论文对应表那一格（业主 2026-10-22）：三态齐全，且不是第八格之外的第九格。
+    """论文对应表那一格：三态齐全，落在 `readings` 而不是 `DEFAULT_CHECKS` 里。
 
-    业主原话：「G 产出论文时需附上对应表，说明每条定理、引理、命题、例子、实验对应
-    产出物的真实文件和序号是什么，H 依据此核查，G 也依据此写作」。
+    对应表要说清每条定理、引理、命题、例子、实验对应产出物的真实文件与序号 ——
+    H 依据它核查，G 依据它写作。
 
-    为什么它是一格读数而不是 `DEFAULT_CHECKS` 的第九格：既有的八格各有各的语义
+    为什么不把它加成 `DEFAULT_CHECKS` 的第九格：既有的八格各有各的语义
     （`status` 里每一格都参与 `machine_pass` 与退出码），加一格就会改变"收工门几格"
     这个读数与 `tri_state_exit_code` 的分布。这一格照着 `roster_registration` /
     `nontriviality` 的形状落 `readings`，并且仍然给 `Finding`（表在而对不上时拦门）：
@@ -4547,16 +4547,16 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
       `agentflow.agent_h.mapping_judge`）；
     - 表在且干净 ⇒ `pass`。
 
-    `warnings` 那一档（今天只有 `lean_on_but_no_artifact`：Lean 开关开着而盘上一个
+    `warnings` 那一档（只有 `lean_on_but_no_artifact`：Lean 开关开着而盘上一个
     Lean 产物都没有）只进读数、不动门：它说的不是"表与正文对不上"，把每一份不使用
     形式化的论文都堵在这一格上是不对的 —— 但"两格无从填起"必须看得见，
     所以 `warning_findings` 与 `warnings` 都在读数里（"看见了、这一档不拦"）。
 
-    另一档（D-38，2026-10-24）：有命题、已成稿，而论文包里从来没有 `MAPPING.json`
+    另一档：有命题、已成稿，而论文包里从来没有 `MAPPING.json`
     ⇒ `readings['mapping']['mapping_written']['missing']` 为真，并补一条 blocker
     （理由码 `mapping_not_written`）。它补的是上面三态的共同盲区：三态以"有没有正文"
     为轴，而"正文也没写、稿件却已成稿"那一形态落在 `unknown`（不适用）上 ——
-    两趟真机的对应表就是这样静默缺席的。
+    「论文欠一张对应表」就这样静默缺席。
 
     判据只有一处实现（`agentflow.papermapping.mapping_reading`），分档只有一处
     （`agentflow.agent_h.mapping_judge.level_of`）—— 这里只做接线与折成 `Finding`。
@@ -4602,10 +4602,10 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
             level if level in ("blocker", "warning") else "warning",
             str(item.get("message") or "")))
 
-    # ---- D-38（2026-10-24）：有命题、已成稿，而论文包里从来没有对应表。
+    # ---- 有命题、已成稿，而论文包里从来没有对应表。
     #
     # 为什么补在 `mapping_reading` 之后、而不是并进它的三态：那三态以"有没有正文"为轴，
-    # 而 D-38 的现场是"正文也没写、表也没写，稿件却已经成稿" —— 那边判 unknown（不适用），
+    # 而这里的现场是"正文也没写、表也没写，稿件却已经成稿" —— 那边判 unknown（不适用），
     # 于是"论文欠一张对应表"在收工门上完全没有读数。这一档只在那边没有报
     # `mapping_package_missing` 时补位，同一个"表不在盘上"不重复报两条。
     written = mapping_absence_reading(store, root)
