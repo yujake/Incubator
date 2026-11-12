@@ -1312,18 +1312,16 @@ def resolve_recipient(store: Any, at: str) -> dict[str, Any]:
     except ValueError:
         out["reason"] = f"`at` 不是 ISO 时间：{at!r}"
         return out
-    rows: list[dict[str, Any]] = []
+    alive: list[dict[str, Any]] = []
     try:
-        for row in store.rows("tasks"):
-            one = dict(row)
-            if str(one.get("role") or "") != "V" or str(one.get("kind") or ""):
-                continue
-            rows.append(one)
+        raw_rows = list(store.rows("tasks"))
     except Exception as exc:  # noqa: BLE001
         out["reason"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）⇒ 收件人没解析"
         return out
-    alive: list[dict[str, Any]] = []
-    for row in rows:
+    # 一趟同时做"只留 V 台账号"与"时间窗覆盖 at"（原先先把 V 行抄一份、再扫一遍）。
+    for row in raw_rows:
+        if str(row.get("role") or "") != "V" or str(row.get("kind") or ""):
+            continue
         try:
             started = datetime.fromisoformat(str(row.get("started_at") or ""))
         except ValueError:
@@ -1334,7 +1332,7 @@ def resolve_recipient(store: Any, at: str) -> dict[str, Any]:
         except ValueError:
             ended = None
         if started <= t and (ended is None or t <= ended):
-            alive.append(row)
+            alive.append(dict(row))
     out["candidates"] = [str(r.get("task_id") or "") for r in alive]
     if len(alive) != 1:
         out["reason"] = (f"那一拍有 {len(alive)} 趟 V 在跑（{out['candidates']}）⇒ "
@@ -1495,6 +1493,8 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
     who = dict(author or {})
     author_role = str(who.get("author") or "")
     author_known = bool(who.get("checked"))
+    # 这一格在两处出口（返回值与 outbox 行）各写一次，取一次就够。
+    author_source = str(who.get("source") or "")
     # 替人送审：送审者（收件人）与登记作者不是同一个角色 ⇒ 缺陷，
     # 但不许因此改投给作者（那是把定义读成路由）；只把它记下来、让它可见。
     violation = bool(author_known and author_role and role
@@ -1508,7 +1508,7 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
                            "resubmit": {},
                            "submitter": recipient, "submitter_role": role,
                            "author": author_role,
-                           "author_source": str(who.get("source") or ""),
+                           "author_source": author_source,
                            "submitter_is_not_author": (violation if author_known else None),
                            "author_not_recorded": (not author_known)}
     if not recipient:
@@ -1534,7 +1534,7 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
     out["key"] = key
     # outbox 的每一行都带这四格：替人送审/作者未记录必须在账上可查，不只在返回值里。
     extra = {"submitter": recipient, "submitter_role": role, "author": author_role,
-             "author_source": str(who.get("source") or ""),
+             "author_source": author_source,
              "submitter_is_not_author": (violation if author_known else None),
              "author_not_recorded": (not author_known),
              "severity": ("error" if violation else "")}
@@ -1644,11 +1644,13 @@ def publish_row(store: Any, row: Mapping[str, Any], *, at: str = "",
                            "reason": f"重送项收口没跑成（{type(exc).__name__}: {exc}）"}
             out["resubmit"] = settled
             out["problems"].extend(str(x) for x in (settled.get("problems") or []))
+            # 这一格两个分支都要用（closed 与非 closed 只差 state/reason）。
+            settled_checked = bool(settled.get("checked"))
             if settled.get("closed"):
-                out.update(checked=bool(settled.get("checked")), state="settled",
+                out.update(checked=settled_checked, state="settled",
                            reason=str(settled.get("reason") or "义务已清"))
             else:
-                out.update(checked=bool(settled.get("checked")), state="skipped",
+                out.update(checked=settled_checked, state="skipped",
                            reason="这一签不是「有毛病」那一档 ⇒ 不投回执"
                                   "（回执只给要改的人）；也没有要收口的重送项")
             return out
@@ -1847,41 +1849,50 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
         if not label or not vid:
             out["problems"].append("有一行没有 label / 编号 ⇒ 补投跳过（不猜）")
             continue
+        at = str(row.get("at") or "")
         item = _board_item(conductor, label, vid)
         author = _author_of(store, label)
         if item:
-            out["adopted"].append(str(item.get("task_id") or ""))
-            if author.get("checked") and author.get("author") != _role_of(item.get("role")):
+            # 这一行的四格在下面多处复用（返回值、outbox 行、重送义务的收件人）。
+            item_id = str(item.get("task_id") or "")
+            holder = str(item.get("parent_task_id") or "")
+            item_role_raw = item.get("role")
+            item_role = str(item_role_raw or "")
+            role_norm = _role_of(item_role_raw)
+            author_checked = bool(author.get("checked"))
+            author_name = author.get("author")
+            out["adopted"].append(item_id)
+            if author_checked and author_name != role_norm:
                 out["submitter_is_not_author"].append(
-                    f"{label}@{vid}：送审者 {item.get('role')}，作者 {author.get('author')}")
-            elif not author.get("checked"):
+                    f"{label}@{vid}：送审者 {item_role_raw}，作者 {author_name}")
+            elif not author_checked:
                 out["author_not_recorded"].append(f"{label}@{vid}")
             # 板上已有：把 outbox 补成 dispatched（幂等；已记过则不写第二行）。
-            key = key_of(label, vid, str(item.get("parent_task_id") or ""))
+            key = key_of(label, vid, holder)
             try:
                 with _lock(root):
                     latest = _latest(_read(root)[0])
                     if key not in latest:
                         _append(root, {"key": key, "label": label,
                                        "verification_id": vid,
-                                       "recipient": str(item.get("parent_task_id") or ""),
-                                       "role": str(item.get("role") or ""),
-                                       "at": str(row.get("at") or ""), "by_task": "",
+                                       "recipient": holder,
+                                       "role": item_role,
+                                       "at": at, "by_task": "",
                                        "state": DISPATCHED,
-                                       "item_id": str(item.get("task_id") or ""),
+                                       "item_id": item_id,
                                        "reason": "板上已有（补投时认领，不重开）",
                                        "source": caller,
-                                       "submitter": str(item.get("parent_task_id") or ""),
-                                       "submitter_role": str(item.get("role") or ""),
-                                       "author": str(author.get("author") or ""),
+                                       "submitter": holder,
+                                       "submitter_role": item_role,
+                                       "author": str(author_name or ""),
                                        "author_source": str(author.get("source") or ""),
                                        "submitter_is_not_author": (
-                                           (author.get("author") != _role_of(item.get("role")))
-                                           if author.get("checked") else None),
-                                       "author_not_recorded": (not author.get("checked")),
+                                           (author_name != role_norm)
+                                           if author_checked else None),
+                                       "author_not_recorded": (not author_checked),
                                        "severity": ("error" if (
-                                           author.get("checked")
-                                           and author.get("author") != _role_of(item.get("role")))
+                                           author_checked
+                                           and author_name != role_norm)
                                            else "")})
             except Exception as exc:  # noqa: BLE001
                 out["problems"].append(f"{label}@{vid}：outbox 认领没写成"
@@ -1893,13 +1904,12 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
             # 补投只补回执，不把"报告措辞"补成一条"改稿"命令。
             _detail = _detail_from_ledger(store, root, label, vid)
             if _detail is not None and _detail.get("requires_rewrite") is not False:
-                _holder = str(item.get("parent_task_id") or "")
                 _rs = ensure_resubmit(
                     store=store, root=root, label=label, verification_id=vid,
-                    detail=_detail, recipient=_holder,
-                    role=str(item.get("role") or ""),
-                    depth=max(1, int(_task_row(store, _holder).get("depth") or 1)),
-                    at=str(row.get("at") or ""))
+                    detail=_detail, recipient=holder,
+                    role=item_role,
+                    depth=max(1, int(_task_row(store, holder).get("depth") or 1)),
+                    at=at)
                 out.setdefault("resubmit", []).append(
                     {"label": label, "verification_id": vid, **_rs})
                 out["problems"].extend(str(x) for x in (_rs.get("problems") or []))
@@ -1924,7 +1934,7 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
                 depth = max(1, int(holder.get("depth") or 1))
             why = "outbox 里已有这一条意图（收件人就是它）"
         else:
-            got_who = resolve_recipient(store, str(row.get("at") or ""))
+            got_who = resolve_recipient(store, at)
             if got_who.get("checked"):
                 recipient = str(got_who["recipient"])
                 role = str(got_who["role"])
@@ -1938,7 +1948,7 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
             continue
         res = _publish(store=store, root=root, label=label, verification_id=vid,
                        recipient=recipient, role=role, depth=depth, detail=detail,
-                       at=str(row.get("at") or ""), by_task="", called_by="V",
+                       at=at, by_task="", called_by="V",
                        source=caller, unknown_reason=why, author=author)
         if res.get("submitter_is_not_author"):
             out["submitter_is_not_author"].append(
