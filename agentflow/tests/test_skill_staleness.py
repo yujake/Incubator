@@ -36,7 +36,7 @@
 | 三态：在飞 / 待机 / 静默（活跃 = 非静默） | `active-is-non-silent` |
 | 销号只可针对静默子代理 | `retire-only-silent` |
 | 消息走绝对编号链逐级转发，正文只到链尾 | `message-chain` |
-| 依赖面由 F 写进手稿 `## 依赖` 四列表，B 读稿登记；引用要 proof_review 级及以上 | `dependency-section` |
+| 依赖面由 F 写进手稿 `## 依赖` 三列表，B 读稿登记；引用要 proof_review 级及以上 | `dependency-section` |
 | 命题同一性由秘书按条件与结论判，路线进证明层不进定理名 | `proposition-identity` |
 | 非平凡度按证明花的力气判 | `nontrivial-by-effort` |
 | 引用核实是六档，不要求逐字 | `citation-six-verdicts` |
@@ -67,10 +67,11 @@ STALE_SKILLS: dict[str, tuple[str, ...]] = {
     # `manuscript_path`、不转章节稿）给 D 新加的那一段带来的字面命中 —— 正文未改。
     #   · 命中的那一句（`agent_skills.py` 的 D 手册，逐字）：
     #     「它不是框架渲染的手稿、没有 `## 命题` / `## 证明` / `## 依赖` 这三节，B 读不出也登不了记。」
-    #   · 为什么算命中：`dependency-section` 的口径是「正文出现 `## 依赖` 就必须给出四列表」；
-    #     这一句是拿 `## 依赖` 当「章节稿缺的那三节」的例子，没有四列、也没有 `proof_review` 档位。
+    #   · 为什么算命中：`dependency-section` 的口径是「正文出现 `## 依赖` 就必须给出三列表」；
+    #     这一句是拿 `## 依赖` 当「章节稿缺的那三节」的例子，没有三列、也没有 `proof_review` 档位。
     #   · 现在该怎么说（口径真身在 `agent_skills.py` 的 F 手册，照它写）：
-    #     「依赖面写进手稿 `## 依赖` 四列表（引用 / 命题号 / 用在哪一步 / 路径号）；
+    #     「依赖面写进手稿 `## 依赖` 三列表（引用 / 命题号 / 用在哪一步）；
+    #      路径号是第四列、由 B 收录时分配、不进稿；
     #      引用档位下限 proof_review（不够格被引 ⇒ `inadmissible`）。」
     #   · 为什么改完它可以删：按上一条改过之后 `dependency-section` 不再命中 ⇒ 本行必须删掉
     #     （否则本判据会以「台账写了、实测已经干净」红）。
@@ -203,8 +204,8 @@ def _rule_dependency_section(role: str, sk: AS.Skill) -> str | None:
         return (f"旧分工「{m.group(0)}」：F 写证明手稿、B 读稿登记（F 不写 statements、不填 bits）")
     if "`## 依赖`" not in sk.body and not _DEP_SECTION.search(sk.body):
         return None
-    if "四列" not in sk.body:
-        return "讲了 `## 依赖` 却没给四列表（引用 / 命题号 / 用在哪一步 / 路径号）"
+    if "三列" not in sk.body:
+        return "讲了 `## 依赖` 却没给三列表（引用 / 命题号 / 用在哪一步；路径号不进稿）"
     if role in ("F", "B") and "proof_review" not in sk.body:
         return "讲了 `## 依赖` 却没写引用档位下限 proof_review（不够格被引 ⇒ inadmissible）"
     return None
@@ -253,7 +254,7 @@ RULES: tuple[tuple[str, str, object], ...] = (
     ("active-is-non-silent", "三态：在飞 / 待机 / 静默（活跃 = 非静默）", _rule_active_is_non_silent),
     ("retire-only-silent", "销号只可针对静默子代理", _rule_retire_only_silent),
     ("message-chain", "消息逐级转发，正文只到链尾", _rule_message_chain),
-    ("dependency-section", "依赖面写在手稿 `## 依赖` 四列表，引用要 proof_review 级", _rule_dependency_section),
+    ("dependency-section", "依赖面写在手稿 `## 依赖` 三列表（路径号不进稿），引用要 proof_review 级", _rule_dependency_section),
     ("proposition-identity", "秘书按条件与结论判同一，路线不进定理名", _rule_proposition_identity),
     ("nontrivial-by-effort", "非平凡度按证明花的力气判", _rule_nontrivial_by_effort),
     ("citation-six-verdicts", "引用核实六档，不要求逐字", _rule_citation_six_verdicts),
@@ -394,3 +395,26 @@ def test_negative_control_a_cleared_ledger_entry_also_turns_red(monkeypatch) -> 
     measured = stale_report()
     assert measured != STALE_SKILLS
     assert clean.slug not in measured
+
+
+def test_negative_control_the_old_four_column_wording_turns_the_criterion_red(
+        monkeypatch) -> None:
+    """反真空（2026-11-13 三列口径）：把真手册里的「三列」改回旧词「四列」⇒ 判据必须红。
+
+    为什么必须打这一枪：`_rule_dependency_section` 的守卫从「正文要有四列」改成「正文要有
+    三列」——改完之后"四列"这个旧词在守卫里不再出现，于是"守卫接上了没有"只能靠这个反向桩
+    来证明：把那句教法换回旧词，它必须咬到。选 F 的「交付-证明要能被别人复核」：那一句正是
+    这一格的标准教法（三列表 + 路径号是第四列、不进稿）。
+    """
+    target = next(sk for _role, sk in _rows() if sk.slug == "交付-证明要能被别人复核")
+    assert "三列" in target.body, "打桩前提：那份手册本来写着「三列」"
+    poisoned = dataclasses.replace(target, body=target.body.replace("三列", "四列"))
+    assert "三列" not in poisoned.body, "打桩没生效"
+    monkeypatch.setitem(
+        AS.CATALOG, "F",
+        tuple(poisoned if sk is target else sk for sk in AS.CATALOG["F"]))
+
+    measured = stale_report()
+    assert "dependency-section" in measured.get(poisoned.slug, ()), (
+        "把「三列」改回旧词「四列」之后判据还是绿的 —— 这一条是空转的")
+

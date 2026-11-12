@@ -11,7 +11,8 @@
 一条链，而不是一个写入口：
 
 - F 那一侧：`F.step` 的 `proof` 档要落一份手稿（`reports/f-proof-<命题号>.md`），
-  里面有那一节固定格式的 `## 依赖`（四列表），并且 `deps_preview` 能只读地算出
+  里面有那一节固定格式的 `## 依赖`（三列表；路径号不进稿，老盘带那一列的仍读得回），
+  并且 `deps_preview` 能只读地算出
   "这份手稿交给 B 会落成什么/为什么落不成"；
 - B 那一侧：`B.register_statement(proof_manuscript=...)` 读那一节，按表落
   `dependencies`（`used_by="stmt:<命题号>#pN"` ＋ `path_group` ＋ `source_stmt_id`），
@@ -99,12 +100,12 @@ WEAK = S.format_id(3)
 CONJECTURE = S.format_id(4)
 
 _PROOF_TEXT = "命题 {sid} 的证明正文（判据夹具）。"
-#: 依赖段的正例（政策里写死的那张表，逐列固定）。
+#: 依赖段的正例（政策里写死的那张表，逐列固定；产出侧三列，路径号不进稿）。
 EXAMPLE_TABLE = (
     "## 依赖\n\n"
-    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-    "|---|---|---|---|\n"
-    "| 由定理甲，G 有 p 阶元 | stmt:000000 | 第 1 步 | 1 |\n"
+    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+    "|---|---|---|\n"
+    "| 由定理甲，G 有 p 阶元 | stmt:000000 | 第 1 步 |\n"
 )
 
 
@@ -332,7 +333,7 @@ def test_f_manuscript_section_is_read_by_b_and_lands_a_dependency(store: Store) 
 
 
 def test_the_policy_example_is_the_format_the_parser_accepts() -> None:
-    """政策里那个正例与解析器同形（格式漂了，这一条会红）—— 它钉的是"表头四列逐字"。"""
+    """政策里那个正例与解析器同形（格式漂了，这一条会红）—— 它钉的是"表头三列逐字"。"""
     from agentflow import depsection as DS
 
     section = DS.parse_dependency_section(EXAMPLE_TABLE)
