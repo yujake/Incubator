@@ -44,6 +44,8 @@ __all__ = [
 CONJECTURE_PREFIX_RE = re.compile(r"conj\s*[:：]\s*(\d{6})", re.IGNORECASE)
 #: 裸 6 位号（前后不能再是数字 —— 长串里的 6 位不算一个号）。
 BARE_ID_RE = re.compile(r"(?<![\d])(\d{6})(?![\d])")
+#: 台账里的号就长得这样（`conjecture_ids_of` 用；与上面两条同一种号形）。
+_SIX_DIGIT_RE = re.compile(r"\d{6}")
 
 #: 判据射程：D 的研究侧直属只有 E / F（C 是结构读数面，不在这一条上）。
 _RESEARCH_TARGETS: tuple[str, ...] = ("E", "F")
@@ -56,7 +58,7 @@ def conjecture_ids_of(rows: Iterable[Mapping[str, Any]]) -> set[str]:
         if not isinstance(row, Mapping):
             continue
         cid = str(row.get("conjecture_id") or "").strip()
-        if re.fullmatch(r"\d{6}", cid):
+        if _SIX_DIGIT_RE.fullmatch(cid):
             out.add(cid)
     return out
 
@@ -73,6 +75,37 @@ def _strings_of(value: Any) -> list[str]:
         for item in value:
             out.extend(_strings_of(item))
     return out
+
+
+def _dispatch_rows(events: Iterable[Any]) -> list[dict[str, Any]]:
+    """会话事件里 D 的派活事件 ⇒ 读数行（唯一一份形状）。
+
+    `d_dispatch_records` 与 `dispatch_text_problems(events=…)` 两支读的是同一批事件、
+    同一组过滤条件 ⇒ 行怎么长只能有一处说；各写一遍就是"同一件事两个实现"。
+    """
+    rows: list[dict[str, Any]] = []
+    for event in events or ():
+        if not isinstance(event, Mapping):
+            continue
+        if str(event.get("kind") or "") != "agent_step":
+            continue
+        if str(event.get("role") or "") != "D":
+            continue
+        payload = event.get("payload") if isinstance(event.get("payload"), Mapping) else {}
+        if str(event.get("shape") or "") != "summon" and not (
+                isinstance(payload, Mapping) and "role" in payload and "task" in payload):
+            continue
+        rows.append({
+            "sid": str(event.get("sid") or ""),
+            "index": int(event.get("index") or 0),
+            "role": str(payload.get("role") or ""),
+            "action": str(payload.get("action") or ""),
+            "task": str(payload.get("task") or ""),
+            "why": str(payload.get("why") or ""),
+            "text": "\n".join(_strings_of(payload)),
+            "payload": dict(payload),
+        })
+    return rows
 
 
 def d_dispatch_records(root: Any) -> dict:
@@ -97,31 +130,7 @@ def d_dispatch_records(root: Any) -> dict:
                          "⇒ 这一格没查成")
         return out
     out["checked"] = True
-    rows: list[dict[str, Any]] = []
-    for event in events or ():
-        if not isinstance(event, Mapping):
-            continue
-        if str(event.get("kind") or "") != "agent_step":
-            continue
-        if str(event.get("role") or "") != "D":
-            continue
-        shape = str(event.get("shape") or "")
-        payload = event.get("payload") if isinstance(event.get("payload"), Mapping) else {}
-        if shape != "summon" and not (
-                isinstance(payload, Mapping) and "role" in payload and "task" in payload):
-            continue
-        target = str(payload.get("role") or "")
-        texts = _strings_of(payload)
-        rows.append({
-            "sid": str(event.get("sid") or ""),
-            "index": int(event.get("index") or 0),
-            "role": target,
-            "action": str(payload.get("action") or ""),
-            "task": str(payload.get("task") or ""),
-            "why": str(payload.get("why") or ""),
-            "text": "\n".join(texts),
-            "payload": dict(payload),
-        })
+    rows = _dispatch_rows(events or ())
     out["dispatches"] = rows
     if not rows:
         out["reason"] = ("会话记录里没有 D 的 `summon` 事件 ⇒ 这一趟没有可判的派活文本"
@@ -138,11 +147,12 @@ def _id_hits(text: str, ids: set[str]) -> list[dict[str, str]]:
     hits: dict[str, str] = {}
     if not ids:
         return []
-    for match in CONJECTURE_PREFIX_RE.finditer(str(text or "")):
+    text = str(text or "")
+    for match in CONJECTURE_PREFIX_RE.finditer(text):
         cid = match.group(1)
         if cid in ids:
             hits.setdefault(cid, match.group(0))
-    for match in BARE_ID_RE.finditer(str(text or "")):
+    for match in BARE_ID_RE.finditer(text):
         cid = match.group(1)
         if cid in ids:
             hits.setdefault(cid, cid)
@@ -182,30 +192,7 @@ def dispatch_text_problems(root: Any, *, conjectures: Sequence[Mapping[str, Any]
     out["conjectures"] = sorted(ids)
     if events is not None:
         try:
-            from . import sessions as _SS
-
-            reading = {"checked": True, "dispatches": []}
-            for event in events:
-                if not isinstance(event, Mapping):
-                    continue
-                if str(event.get("kind") or "") != "agent_step":
-                    continue
-                if str(event.get("role") or "") != "D":
-                    continue
-                payload = event.get("payload") if isinstance(event.get("payload"), Mapping) else {}
-                if str(event.get("shape") or "") != "summon" and not (
-                        "role" in payload and "task" in payload):
-                    continue
-                reading["dispatches"].append({
-                    "sid": str(event.get("sid") or ""),
-                    "index": int(event.get("index") or 0),
-                    "role": str(payload.get("role") or ""),
-                    "action": str(payload.get("action") or ""),
-                    "task": str(payload.get("task") or ""),
-                    "why": str(payload.get("why") or ""),
-                    "text": "\n".join(_strings_of(payload)),
-                    "payload": dict(payload),
-                })
+            reading = {"checked": True, "dispatches": _dispatch_rows(events)}
         except Exception as exc:  # noqa: BLE001
             out["reason"] = f"会话事件读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
             return out
@@ -217,10 +204,13 @@ def dispatch_text_problems(root: Any, *, conjectures: Sequence[Mapping[str, Any]
     out["checked"] = True
     dispatches = [dict(x) for x in (reading.get("dispatches") or [])]
     out["dispatches"] = len(dispatches)
+    # 判据只射向 E / F：先筛一次、文本先归一一次 —— 下面两段都要按同一顺序看同一批行，
+    # 每段各筛一遍、每计划每行各 `_normalize` 一遍只是白算（首次命中相同）。
+    research = [one for one in dispatches
+                if str(one.get("role") or "") in _RESEARCH_TARGETS]
+    dispatch_texts = [(one, _normalize(one.get("text"))) for one in research]
     # ---- ① D 的派活文本本身点名了猜想号 ----------------------------------------
-    for one in dispatches:
-        if str(one.get("role") or "") not in _RESEARCH_TARGETS:
-            continue
+    for one in research:
         for hit in match(str(one.get("text") or ""), ids):
             out["violations"].append({
                 "kind": "dispatch",
@@ -245,17 +235,12 @@ def dispatch_text_problems(root: Any, *, conjectures: Sequence[Mapping[str, Any]
         key = _normalize(plan.get("problem_key"))
         attributed = None
         if problem:
-            for one in dispatches:
-                if str(one.get("role") or "") not in _RESEARCH_TARGETS:
-                    continue
-                text = _normalize(one.get("text"))
-                if problem and problem in text:
+            for one, text in dispatch_texts:
+                if problem in text:
                     attributed = one
                     break
         if attributed is None and key:
-            for one in dispatches:
-                if str(one.get("role") or "") not in _RESEARCH_TARGETS:
-                    continue
+            for one in research:
                 if key in {_normalize(v) for v in _strings_of(one.get("payload"))}:
                     attributed = one
                     break
