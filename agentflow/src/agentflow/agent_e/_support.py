@@ -24,17 +24,25 @@
 
 形式化路径不在本模块：`AgentE.run_experiment(method="formal")` 由动作面第一句以理由码
 `formal_not_in_e` 拒绝，`AgentE` 上没有 `check_formal`；实现体（`_CheckFormal`，见本包
-`check_formal.py`）留着给 L 的 `_CheckFormalL` 继承，那份实现的检查器三态口径（verified
-⇒ `proof`/`supports`；查了没通过 ⇒ `inconclusive`/`heuristic`；没查成 ⇒ 同上并在 notes
-写明哪一种）只服务 L。E 自己的受控"没查成"理由只有一处定义：本模块的
+`check_formal.py`）留着给 L 的 `_CheckFormalL` 继承。那份实现的检查器三态口径只服务 L：
+1. 检查器返回 `verified` ⇒ `evidence_kind="proof"`、`result="supports"`、
+`verifier_output` 是检查器自己的话、`verifier_subject_key` 等于本行的 `claim_key`；
+2. 查了但没通过（`compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch`）⇒
+`inconclusive` + `heuristic`（它给不出正面证据，不许落 `cross_check`）；
+3. 没查成（`timeout` / `import_unavailable` / `no_backend` / `tool_crashed` /
+`source_unreadable` / `lean_disabled` / `param_error` / `formal_moved_to_l`）⇒ 同上，
+且 `notes` 里写明是哪一种。E 自己的受控"没查成"理由只有一处定义：本模块的
 `_NOT_CHECKED_REASONS`（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
-`lean_disabled` / `param_error` / `formal_moved_to_l`）。`formal_moved_to_l` 是历史理由码：
-E 不再产出它，但它留在词表里 —— 历史台账行、`closing` 的读数与既有判据都还带着这个
-字符串，删掉会让旧行读不出意思。`lean_disabled` 是"用户把开关关掉了"（可行动：去设置里
-打开），`no_backend` 是"机器上没有" —— 两者混起来会让人去查环境。`method="formal"` 而
-产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）；`name` / `imports` 只对形式化路径
-有意义，E 收到它们时以 `formal_not_in_e` 拒绝而不是静默忽略 —— 静默忽略会让调用方以为
-自己指定了检查条件。
+`lean_disabled` / `param_error` / `formal_moved_to_l`）—— 上面这一行必须覆盖它，导入期
+断言与 `tests/test_agent_e.py` 各守一遍。`formal_moved_to_l` 是历史理由码：E 不再产出它，
+但它留在词表里 —— 历史台账行、`closing` 的读数与既有判据都还带着这个字符串，删掉会让旧
+行读不出意思。`lean_disabled` 是"用户把开关关掉了"（可行动：去设置里打开），`no_backend`
+是"机器上没有" —— 两者混起来会让人去查环境。
+4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
+形式化路径的输入是一份检查器能读的形式化源码（这条判据随实现体一起保留给 L）。
+`name` / `imports` 只对形式化路径有意义：E 收到它们时以受控理由码 `formal_not_in_e` 拒绝，
+而不是静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，实际用的
+是默认 Mathlib"这种假话没有任何地方会报出来）。
 
 其余两条读数：`evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`
 （没查）；给了参数但库里没有 ⇒ `checked=True, experiments=[], proved=False`（查了、没有）。
