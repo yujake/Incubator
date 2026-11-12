@@ -2423,8 +2423,7 @@ def _revoked_recent_line(entry: Mapping[str, Any]) -> str:
     """一条「最近被撤销」在提示词里的那一行（收件人读得懂的句子，不是台账原文）。
 
     念全四格：被撤的编号 / 谁撤的 / 理由 / 何时；`summary` 是那一行原来的摘要
-    （D13，2026-11-09 起撤销不落新行：提醒的载体是 `revoked_recent@<收件人>`
-    这一格；摘要与 `conductor._board_item_summary` 同一个读口，不从通知行来）。
+    （摘要与 `conductor._board_item_summary` 同一个读口，不从通知行来）。
     """
     at = str(entry.get("at") or "")
     when = f"，{at}" if at else ""
@@ -2441,9 +2440,9 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
     """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
     backlog, reason, items, revoked_recent, revoked_ids}`。
 
-    ## 「最近被撤销的项」为什么在这里（业主 2026-11-06 的第二笔；2026-11-09 D13 收口）
+    ## 「最近被撤销的项」为什么在这里
 
-    撤销不落新行（D13）：留痕写在被撤那一行自己的 `inputs` 里
+    撤销不落新行：留痕写在被撤那一行自己的 `inputs` 里
     （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`），
     `void_items` 返回的 `notified` 只带 `carrier="revoked_recent@<收件人>"`
     （`notice_id` 那一格已摘掉）。`open_items_of` 按定义看不见已撤项 ⇒
@@ -2463,7 +2462,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
     同一条通报每一步都重投一遍（模型会以为它又来了）；把 `claimed` 折进来会让
     一个已经有人在处理的项被念两次。
 
-    两层去重，各管一件事（判据第 2 条把这条写死：一开始只有状态机那一层，
+    两层去重，各管一件事（判据第 2 条把这条写死：只靠状态机那一层，
     超上限时队头被下一步重投、队尾永远轮不到）：
 
     - `rendered`：这一趟已经渲染进过提示词的 id（`AgentLoop._mailbox_rendered`），
@@ -2489,7 +2488,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
     already = {str(x) for x in (rendered or ())}
     blocks: list[str] = []
 
-    # ---- ① 板项（D-52 的那一半：收件人 = 我，状态 = queued）
+    # ---- ① 板项（收件人 = 我，状态 = queued）
     if conductor is None:
         got["checked"] = False
         got["reason"] = "这一趟没有 conductor 句柄 ⇒ 读不到板项"
@@ -2527,7 +2526,7 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                                   + "\n".join(_board_item_line(r) for r in pick))
                 if got["backlog"]:
                     blocks.append(f"- （还有 {got['backlog']} 项没渲染 —— 下一次投递继续）")
-        # ---- ①b 「最近被撤销的项」（业主 2026-11-06 的第二笔）----
+        # ---- ①b 「最近被撤销的项」----
         # 为什么落在这一层、为什么不进 open 计数，见本函数 docstring 同名那一节；
         # 这里只有一件事：读口是 `revoked_recent_of`，渲染键是 `REVOKED_RECENT_KEY_PREFIX`。
         look_revoked = getattr(conductor, "revoked_recent_of", None)
@@ -5921,7 +5920,7 @@ class AgentLoop:
 
     def _deliver_mailbox(self, *, step: int, messages: list[dict[str, Any]],
                          run: "AgentLoop.LoopRun") -> dict[str, Any]:
-        """信箱投递点：每一次 `ask_step` 之前投一次增量（D-52 的唯一投递点）。
+        """信箱投递点：每一次 `ask_step` 之前投一次增量（本模块唯一的投递点）。
 
         三件事按顺序，缺一件都不算投递成功：
 
@@ -5932,25 +5931,17 @@ class AgentLoop:
            追加成一条 user 消息（不是重渲染开卷），并落一条 `agent_mailbox` 事件。
 
         投递的承认（板项 `→ seen`、留言 `→ 已投递`）不在这里：它推迟到"模型真的
-        被问过一次"之后（`run()` 里 `call.ok` 那一支，与改前的 `pending_delivery` 同一条
-        纪律）。为什么：这一步的提示词还没发出去，此刻承认送达就是把"没发出去"记成
-        "读过了"。
+        被问过一次"之后（`run()` 里 `call.ok` 那一支）。为什么：这一步的提示词还没
+        发出去，此刻承认送达就是把"没发出去"记成"读过了"。
 
         返回 `{text, item_ids, msg_ids, wake_ids, monitor, checked, children,
         problems}`：`run()` 把 id 并进待标记的那两个队列，并在成功调用
-        之后落定。其中一格是 Q33 加的读数：`children["wait"]` 说这一拍实际等没等
+        之后落定。其中一格是返场读数：`children["wait"]` 说这一拍实际等没等
         ——`wait.reason == "return"` 就是"这一拍为了返场没等"。
-
-        2026-10-26（F1a 第 ② 条，判据是"写了没人读"）：改前这里还多一格
-        `return_beat`（返场判据这一拍给没给），投递读数与 `agent_children` 事件里各
-        一份，全仓 0 个生产读者 —— 它说的那件事由 `wait.reason` 逐字说清（`return`
-        那一档就是"欠返场所以没等"）。两处副本一起删掉；"判据说欠、但这一拍还是等了"
-        那一态由反真空判据（`tests/test_the_return_beat_does_not_wait_for_children.py`
-        的 e 条）直接读 `_return_reading` 的 `owed` 来构造，不再靠这个副本。
         """
         self._pump_clock(step=step, when="turn", run=run)
         wakes = self._take_wakes(step=step, run=run)
-        # ---- 轮查那一拍不是监控回合（业主 2026-10-27 傍晚）：它的正文是 SOP，而 SOP 的
+        # ---- 轮查那一拍不是监控回合：它的正文是 SOP，而 SOP 的
         # 第 ③ 步是"结完这一轮才允许做别的（自由行动）"—— 监控回合的出口限定
         # （`MONITOR_TURN_TOOLS` 只放 watch / guide / 补派 / 收口）会把第 ① 步
         # `conductor.patrol` 与第 ② 步 `conductor.patrol_verdict` 一起拒掉，于是
@@ -5964,16 +5955,15 @@ class AgentLoop:
             wakes={"consumed": [e for e in (wakes.get("consumed") or ())
                                 if isinstance(e, Mapping) and not CLK.is_patrol_timer(e)]},
             step=step)
-        # ---- 子代理返场（D-64）：与 D-52 同一条投递点
+        # ---- 子代理返场：与板项 / 留言同一条投递点
         #
         # 位置在这一处的理由：唤醒已经消费完（有唤醒就是监控回合，不再等孩子，
         # 否则"被叫醒看全树"会先被一个 5 分钟的等待拖住），而信箱还没读
         # （孩子回来的结果与板项、留言拼成同一条增量，才有同一个去重面）。
         #
-        # 等不等子不在这里判（Q33，2026-10-26）：`wait` 由 `_should_wait_for_children`
+        # 等不等子不在这里判：`wait` 由 `_should_wait_for_children`
         # 给，而那一位只读返场判据（`_return_reading`）的结论 —— 这一拍欠模型一个
-        # 回合就不等，直接问（改前是"没消费到唤醒就等满 300 秒"，于是派完到第一个
-        # 模型回合之间最多隔 5 分钟）。判据给过之后照旧等，见那一处的 docstring。
+        # 回合就不等，直接问。判据给过之后照旧等，见那一处的 docstring。
         wakes_reading = self._wake_readings(
             [str(e.get("wake_id") or "") for e in (wakes.get("consumed") or ())])
         back = self._return_reading(parked=self._park_reading(),
