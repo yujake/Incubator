@@ -36,11 +36,17 @@ class _Cold:
                 error="关系表为空：还没有关系数据，无法给出结论",
             )
 
-        isolated = sorted(cid for cid, v in counts.items() if v["relation_count"] == 0)
-        candidates = sorted(
-            ((cid, v) for cid, v in counts.items() if v["relation_count"] > 0),
-            key=lambda kv: (kv[1]["relation_count"], kv[0]),
-        )
+        # 孤立与候选同一趟分开（改前对 counts 扫了两遍），再各自排序 ——
+        # 排序键与原推导式逐字相同，两个列表的成员/次序因此不变。
+        isolated: list[str] = []
+        candidates: list[tuple[str, dict]] = []
+        for cid, v in counts.items():
+            if v["relation_count"] == 0:
+                isolated.append(cid)
+            else:
+                candidates.append((cid, v))
+        isolated.sort()
+        candidates.sort(key=lambda kv: (kv[1]["relation_count"], kv[0]))
         coldest = candidates[:top_n]
         cold_ids = {cid for cid, _ in coldest}
         hot_ids = set(self._hot_ids(max(top_n, _cfg_int(self.cfg, "hot_top_n", 5))))
