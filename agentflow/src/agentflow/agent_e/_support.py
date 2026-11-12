@@ -1,51 +1,48 @@
 """智能体 E：数值实验与反例。
-设计基线：``test/test1/DESIGN-ROLES.md`` §2.1 与 `schema.Experiment` 的硬约束。
-一个"能跑实验"的智能体最自然也最危险的越界，就是把"我算了几千个点都对"写成"已证明" ——数学里数值实验不构成证明（FC-22）。
-- `Experiment.evidence_kind` 是结构化字段，不是注释里的告诫；- 计算类方法（numeric / symbolic / exhaustive_search）在 schema 层就拿不到
-`evidence_kind="proof"`，写入的那一刻就炸；- 脚本自己声称 `proof` 会被降到 cross_check 并把这件事记进 `notes`（见 :meth:`AgentE.run_experiment` 的推导规则第
-4 条）。
-`script_path` 指向的脚本是被检验的对象（它算出了结论）。如果它同时能决定"这个结论算不算证明"，那么整条证据链的强度就由最不可信的一环决定 ——而这一环恰恰是最容易"顺手写一句 
-`{"evidence_kind": "proof"}`"的地方。
-推导规则（唯一权威表述，实现见 `_derive`）
-1. `exit_code != 0`（崩溃 / 超时 / 启动失败）⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
-`evidence_kind="heuristic"`。绝不允许把崩溃写成支持（FC-21/F C-25）。 2. 脚本在 stdout 打印了一行 `REPRO_RESULT: {json}`（约定格式见:data:
-`REPRO_RESULT_PREFIX`）：- `result` 必须 ∈ `EXPERIMENT_RESULTS`，否则整条结论视为格式非法，按第 3 条处理（宁可不认，也不要猜）；- `result="refutes"` ⇒ 
-`negation_kind="disproved"` 且必须有 `counterexample`。缺反例时 `Experiment.validate()` 会抛 —— 让它抛：那说明脚本在声称一个它没给出依据的证否，这正是最该炸的地方；- 
-`result="supports"` ⇒ `negation_kind="not_proved"`（数值支持只能是"未证明"，不是"已证明"）；- `result="inconclusive"` ⇒ 
-`negation_kind="no_local_evidence"`；- `evidence_kind` 由 method 推导，脚本自报值只作为"它想声称什么"被记录：计算类方法一律 `cross_check`（自报 proof ⇒ 降级
-+ 记 notes）。 3. 脚本没有打印那行（或格式非法）⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,`evidence_kind="heuristic"`，
-`notes` 写明"脚本未给出结构化结论"。
-形式化路径不在本模块了（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）
-`AgentE.run_experiment(method="formal")` 由动作面第一句以理由码 `formal_not_in_e` 拒绝，
-`AgentE` 上没有 `check_formal`；形式化那一岗的实现体（`_CheckFormal`，见本包的
-`check_formal.py`）仍然留着，L 的 `_CheckFormalL` 继承它。下面这一段是那份实现的历史口径
-（它今天只服务 L），E 这一层不再走：
-1. 检查器返回 `verified` ⇒ `evidence_kind="proof"`、`result="supports"`、
-`verifier_output` 是检查器自己的话、`verifier_subject_key` 等于本行的 `claim_key`； 2. 查了但没通过
-（`compile_error` / `uses_sorry` / `extra_axioms` / `decl_mismatch`）⇒ `inconclusive` + `heuristic`
-（它给不出正面证据，不许落 `cross_check`）； 3. 没查成（`timeout` / `import_unavailable` / `no_backend` /
-`tool_crashed` / `source_unreadable` / `lean_disabled` / `param_error` / `formal_moved_to_l`）⇒ 同上，
-且 `notes` 里写明是哪一种。其中"E 自己的受控'没查成'理由"只有一处定义：本模块的 `_NOT_CHECKED_REASONS`
-（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` / `lean_disabled` / `param_error` /
-`formal_moved_to_l`）—— 上面这一行必须覆盖它，导入期断言与 `tests/test_agent_e.py` 各守一遍。
-`formal_moved_to_l` 是历史理由码：E 不再产出它（那一支动作已经摘掉），但它留在词表里 ——
-历史台账行、`closing` 的那条读数与既有判据都还带着这个字符串，删掉会让旧行读不出意思。
-`lean_disabled` 仍是"用户把开关关掉了"（可行动：去设置里打开），`no_backend` 是"机器上没有" ——
-两者混起来会让人去查环境。
-4. `method="formal"` 而产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）：
-形式化路径的输入是一份检查器能读的形式化源码（这条判据随实现体一起保留给 L）。
-`name` / `imports` 只对形式化路径有意义：E 收到它们时以受控理由码 `formal_not_in_e` 拒绝，
-而不是静默忽略 —— 静默忽略会让调用方以为自己指定了检查条件（"说明了 imports，实际用的是默认 Mathlib"
-这种假话没有任何地方会报出来）。
-- `evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`（没查）；给了参数但库里没有 ⇒
-`checked=True, experiments=[], proved=False`（查了、没有）。
-- `check_formal` 的受控理由词表（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
-`lean_disabled` / `no_script` / `formal_moved_to_l`）随实现体一起服务 L：把"没查成"的判据写成
-`checked is False` 会把这几档全部折叠成第一档。检查器原样报的那个状态另走 `verifier_status`
-（收口与透传必须同时在，否则收口就是删信息）。
-- `proved` 只有在存在 proof 级实验时才为 True（FC-22）。
-- `params` / `artifact_paths` 是信息性字段：本模块不会把它们变成命令行参数，也不会去读那些产物文件。- 判读不走 LLM（`llm` 只用于 `author_script` 写脚本，S-10(a)）：数值实验的判读
-必须是确定性的（FC-16）—— `run_experiment` / `_derive` / `_parse_conclusion` 一条缝调用都没有，判据见 
+
+设计基线：`test/test1/DESIGN-ROLES.md` §2.1 与 `schema.Experiment` 的硬约束。一个"能跑
+实验"的智能体最自然也最危险的越界，就是把"我算了几千个点都对"写成"已证明"—— 数学里
+数值实验不构成证明（FC-22）。所以 `evidence_kind` 是结构化字段而不是注释里的告诫：
+计算类方法（numeric / symbolic / exhaustive_search）在 schema 层就拿不到
+`evidence_kind="proof"`；脚本自己声称 `proof` 会被降到 cross_check 并记进 `notes`
+（推导规则见 `_derive`）。`script_path` 指向的脚本是被检验的对象（它算出了结论）；如果
+它同时能决定"这个结论算不算证明"，整条证据链的强度就由最不可信的一环决定 —— 而这一环
+恰恰是最容易"顺手写一句 `{"evidence_kind": "proof"}`"的地方。
+
+推导规则（唯一权威表述，实现见 `_derive`）：① `exit_code != 0`（崩溃 / 超时 / 启动失败）
+⇒ `result="inconclusive"`、`negation_kind="no_local_evidence"`、`evidence_kind=
+"heuristic"`（绝不允许把崩溃写成支持，FC-21/FC-25）。② 脚本在 stdout 打出
+`REPRO_RESULT: {json}`（格式见 :data:`REPRO_RESULT_PREFIX`）：`result` 必须 ∈
+`EXPERIMENT_RESULTS`，否则按第 ③ 条处理（宁可不认，也不要猜）；`result="refutes"` ⇒
+`negation_kind="disproved"` 且必须有 `counterexample`（缺反例让 `Experiment.validate()`
+抛 —— 那说明脚本在声称一个它没给出依据的证否，这正是最该炸的地方）；`result="supports"`
+⇒ `negation_kind="not_proved"`（数值支持只能是"未证明"）；`result="inconclusive"` ⇒
+`negation_kind="no_local_evidence"`；`evidence_kind` 由 method 推导，脚本自报值只作为
+"它想声称什么"被记录（计算类一律 `cross_check`，自报 proof ⇒ 降级 + notes）。③ 脚本没
+打印那行（或格式非法）⇒ `inconclusive` + `no_local_evidence` + `heuristic`，`notes` 写明
+"脚本未给出结构化结论"。
+
+形式化路径不在本模块：`AgentE.run_experiment(method="formal")` 由动作面第一句以理由码
+`formal_not_in_e` 拒绝，`AgentE` 上没有 `check_formal`；实现体（`_CheckFormal`，见本包
+`check_formal.py`）留着给 L 的 `_CheckFormalL` 继承，那份实现的检查器三态口径（verified
+⇒ `proof`/`supports`；查了没通过 ⇒ `inconclusive`/`heuristic`；没查成 ⇒ 同上并在 notes
+写明哪一种）只服务 L。E 自己的受控"没查成"理由只有一处定义：本模块的
+`_NOT_CHECKED_REASONS`（`no_backend` / `timeout` / `tool_crashed` / `source_unreadable` /
+`lean_disabled` / `param_error` / `formal_moved_to_l`）。`formal_moved_to_l` 是历史理由码：
+E 不再产出它，但它留在词表里 —— 历史台账行、`closing` 的读数与既有判据都还带着这个
+字符串，删掉会让旧行读不出意思。`lean_disabled` 是"用户把开关关掉了"（可行动：去设置里
+打开），`no_backend` 是"机器上没有" —— 两者混起来会让人去查环境。`method="formal"` 而
+产物不是 `.lean` 文件 ⇒ 当场拒绝（`ExperimentError`）；`name` / `imports` 只对形式化路径
+有意义，E 收到它们时以 `formal_not_in_e` 拒绝而不是静默忽略 —— 静默忽略会让调用方以为
+自己指定了检查条件。
+
+其余两条读数：`evidence_for(claim_key=None, for_question_id=None)` ⇒ `checked=False`
+（没查）；给了参数但库里没有 ⇒ `checked=True, experiments=[], proved=False`（查了、没有）。
+"没查成"的判据写成 `checked is False` 会把几档全部折叠成第一档，所以检查器原样报的那个
+状态另走 `verifier_status`（收口与透传必须同时在，否则收口就是删信息）。`proved` 只有在
+存在 proof 级实验时才为 True（FC-22）。`params` / `artifact_paths` 是信息性字段：本模块
+不会把它们变成命令行参数，也不会去读那些产物文件。判读不走 LLM（`llm` 只用于
+`author_script` 写脚本，S-10(a)）：数值实验的判读必须是确定性的（FC-16），判据见
 `tests/test_agent_e_author_script.py::test_the_reading_path_never_calls_the_seam`。
 """
 from __future__ import annotations
