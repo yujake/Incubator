@@ -385,14 +385,18 @@ def first_difference(prev: str, cur: str, *, context: int = 80) -> dict[str, Any
     两边各带"从 index-context 到 index+context"的原文 —— 报"第 35035 个字符起不同"
     而不给那一段原文的话，读的人还得自己去拉两份 54KB 的提示词重放一遍。
     """
-    n = min(len(prev), len(cur))
-    index = n
-    for i in range(n):
-        if prev[i] != cur[i]:
-            index = i
-            break
-    if index == n and len(prev) == len(cur):
+    if prev == cur:
         return None
+    n = min(len(prev), len(cur))
+    # 二分找公共前缀长度：每步一次 C 层切片比较，避免在几十 KB 的前缀上逐字符跑 Python 循环。
+    lo, hi = 0, n
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if prev[:mid] == cur[:mid]:
+            lo = mid
+        else:
+            hi = mid - 1
+    index = lo
     lo = max(0, index - context)
     return {
         "index": index,
