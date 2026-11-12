@@ -17,7 +17,6 @@ class _Hottest:
         g = self._g()
         top_n = max(0, int(top_n))
         counts = g.counts()
-        counts_all = dict(counts)
         warnings: list[str] = []
         if not g.relations:
             # 这两种"空"必须分清：没有关系表数据 ≠ 没有热门概念。
