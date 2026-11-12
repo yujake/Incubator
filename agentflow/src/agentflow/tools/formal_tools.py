@@ -5,16 +5,16 @@
 
 `run-agent L` 这一条路是"模型 -> 循环 -> `ToolRegistry.call`"，而 L 的三个动作
 （`formalize` / `check_formal` / `record`）住在 Python 方法上，不经工具面就到不了模型手里。
-照 E 的成例（`verify_tools` 的 handler 惰性构造一个 `AgentE`），这里也惰性构造一个
-`AgentL`：于是"工具入口"与"AgentL 方法"共用同一份实现，不会写出字段口径不同的记录。
+照 E 的成例（`verify_tools` 的 handler 惰性构造 `AgentE`），这里也惰性构造 `AgentL`：
+"工具入口"与 "AgentL 方法" 共用同一份实现，不会写出字段口径不同的记录。
 
 ## 为什么不改 `verify_tools` 的 roles
 
 把 `L` 加进 `verify_tools._ROLES` 只需要一个字符，但那是 FC-27 的 prover-bridge 禁改区，
-而且会让 L 的口径与 E 的 `verify.check_formal` 在工具面上重合 —— L 走的是
-"自检闸 + E 的实现（函数级复用）"这条路，两条入口的差别（自检、三态形状）
-必须看得见。所以 L 的工具挂在自己的组 `formal.*` 下，桥接层仍然只有一份
-（`agent_l._CheckFormalL` 继承 E 的实现，最终调到 `verify.check_formal` 那个函数）。
+而且会让 L 的口径与 E 的 `verify.check_formal` 在工具面上重合 —— L 走的是"自检闸 + E 的
+实现（函数级复用）"这条路，两条入口的差别（自检、三态形状）必须看得见。所以 L 的工具
+挂在自己的组 `formal.*` 下，桥接层仍然只有一份（`agent_l._CheckFormalL` 继承 E 的实现，
+最终调到 `verify.check_formal` 那个函数）。
 
 ## 三态纪律在这里的落点
 
@@ -211,12 +211,10 @@ def _formal_formalize(_store, _root, **kw: Any) -> Any:  # pragma: no cover - �
     },
     side_effect="read",
     roles=_ROLES_L,
-    # `draft/146` D29/D30（2026-10-23）：受控拒绝那一支在九格 + L 那四格之外还多给
-    # refused / refusal_reason 两格（`status` 本来就在声明里）—— 它们是派发层
-    # （`conductor._end_from_payload`）判"这次是受控拒绝"的口子。声明说的是常规返回的
-    # 形状，所以这两格不列进键集合，写在下面"受控拒绝那一支"那句里：只在某一条分支上
-    # 出现的键，写进那条分支的说明（`agent_l/core.py::_formal_refusal` 只在那条分支上加
-    # 它们；本文件这一句如实标注，免得模型把常规返回读成也带这两格）。
+    # `draft/146` D29/D30：受控拒绝那一支比常规返回多 `refused` / `refusal_reason` 两格
+    # （`conductor._end_from_payload` 靠它们判"这次是受控拒绝"）。只出现在某条分支上的键
+    # 不列进键集合、写进那条分支的说明（`agent_l/core.py::_formal_refusal` 只在那里加），
+    # 免得模型把常规返回读成也带这两格。
     returns=(
         "{'checked','verified','claim','reason','detail','verifier_output','missing_imports',"
         "'verifier_status','exit_code','status','problems','lean','lean_path'}；"
@@ -291,13 +289,11 @@ def _formal_check_formal(_store, _root, **kw: Any) -> Any:  # pragma: no cover -
     },
     side_effect="write_local",
     roles=_ROLES_L,
-    # D17（2026-11-05）：`RECORD_REASONS`（`agent_l/_support.py`）的八个拒信码是
-    # `reason` 的取值，不是 `returns` 里的新键；受控拒绝那一支仍只报
-    # `refused` / `refusal_reason` 两格（`refusal_reason` 恒为 `invalid_params`，
-    # 细一档留在 `reason` 里）。`returns` 只列键集合的契约，不手抄取值表 ——
-    # 取值表的真身只在 `RECORD_REASONS` 一处。而且 `returns` 不进模型面
-    # （`tools/base.py:674-679` 逐字写着 ToolFace 的 description 不带 returns），
-    # 枚举它不会让模型多知道一个字，却会动冻结快照，所以保持现状。
+    # D17（2026-11-05）：`RECORD_REASONS` 的八个拒信码是 `reason` 的取值，不是
+    # `returns` 里的新键；受控拒绝那一支仍只报 `refused` / `refusal_reason`
+    # （`refusal_reason` 恒为 `invalid_params`，细一档在 `reason` 里）。取值表真身只在
+    # `RECORD_REASONS` 一处；`returns` 不进模型面（`tools/base.py:674-679`），枚举它只会
+    # 动冻结快照，所以保持现状。
     returns=(
         "{'recorded','experiment_id','statement_id','method','claim','claim_key','status',"
         "'verified','checker','output_sha256','code_hash','path','evidence_kind','result',"
