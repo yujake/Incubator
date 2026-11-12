@@ -1,26 +1,23 @@
-"""组装文件的解析与接线：组装行 `name` → 注册函数（`draft/103` §4.1/§4.1b）。
+"""组装文件的解析与接线：组装行 `name` → 注册函数。
 
 ## 为什么要这一层
 
-DSH 的组装行名字解析成 Cordis 插件；我们没有插件系统。按业主 2026-10-11 的口径
-（逐字）「如果 dsh 的架构无法容纳系统设计，请直接改造从 dsh 那儿搬来的架构」，
-这里就是那处改造：一张显式的解析表，每个名字对应一个注册函数
-`(reg, role, config, base) -> Iterable[str]`，`base` 是组装文件所在目录
-（`file:` 相对它解析）。
+DSH 的组装行名字解析成 Cordis 插件；我们没有插件系统。按业主口径「如果 dsh 的架构
+无法容纳系统设计，请直接改造从 dsh 那儿搬来的架构」，这里就是那处改造：一张显式的
+解析表，每个名字对应一个注册函数 `(reg, role, config, base) -> Iterable[str]`，
+`base` 是组装文件所在目录（`file:` 相对它解析）。
 
-## 本轮只落两行（其余按需加，不留死表）
+## 只落有用户的那两行（其余按需加，不留死表）
 
-`draft/103` §4.1 列了 12 行。先落地的只有有用户的那两行：
-
-| 行名 | 干什么 | 谁在用（今天） |
+| 行名 | 干什么 | 谁在用 |
 |---|---|---|
 | `agentflow.text_blocks` | 把 `file:` / `text:` 给的正文注册成具名段 | A 的预设：新增块 `A_SEARCH_STYLE` |
 | `agentflow.brief_blocks` | 把六格身份文本（真身 = `specs/<role>.py`）注册成段 | 预留：给"想显式列出这六格、但不抄第二份"的预设用 |
 
-其余 10 行（现算块：官能/工具/动作/伙伴/任务框/循环协议/事实/上下文…）现在没有用户 ——
-写出来就是死表（本仓对死表的纪律：不留；`CONTEXT_ORDERS` 与 `RESERVED_VALUES` 那两课）。
-它们按需加，而"名字不认识"这件事已经有一条判据兜着：`presets._read_rows` 的 `resolve`
-抛 ⇒ 那一行坏、带行号与名字，整个预设不可挂。
+其余现算块（官能/工具/动作/伙伴/任务框/循环协议/事实/上下文…）现在没有用户 ——
+写出来就是死表（本仓对死表的纪律：不留；`CONTEXT_ORDERS` 与 `RESERVED_VALUES`
+是前车之鉴）。它们按需加，而"名字不认识"这件事已经有一条判据兜着：`presets._read_rows`
+的 `resolve` 抛 ⇒ 那一行坏、带行号与名字，整个预设不可挂。
 
 ## 与 `presets.py` 的分工
 
@@ -44,7 +41,7 @@ from .promptkit import PromptRegistry, Section, SECTION_ORDERS
 #: 解析函数的形状：注册若干段，返回它接管的段名（调用方据此跳过自己的同名注册）。
 Resolver = Callable[[PromptRegistry, str, Mapping[str, Any], pathlib.Path], Iterable[str]]
 
-#: 行名：`file:` / `text:` 给的正文 → 具名段（`draft/103` §4.1 的第一行）。
+#: 行名：`file:` / `text:` 给的正文 → 具名段。
 TEXT_BLOCKS = "agentflow.text_blocks"
 #: 行名：五格身份文本 → 段。真身是 `specs/<role>.py`（业主裁定 I-1），这里不抄第二份。
 #: 为什么是五格不是六格：第六格 `AGENT_IDENTITY` 是模板（插值 `{{task_id}}` 这些当次事实），
@@ -54,7 +51,6 @@ BRIEF_BLOCKS = "agentflow.brief_blocks"
 #: `composition.py` 在 `<repo>/agentflow/src/agentflow/` ⇒ 上溯三级就是 `<repo>/agentflow`。
 def shipped_root() -> pathlib.Path:
     """随包预设根 = `agentflow/presets/roles/`（仓库层，不进 wheel ⇒ 不动 `pyproject.toml`）。
-    理由见 `draft/106` §2 的裁定 E 与 `draft/103` §3.2 的目录树。
 
     为什么根是 `roles/` 而不是 `presets/`：`presets.discover()` 把根的每一个直接子目录
     当成一个预设。根若给 `presets/`，那 `roles/` 本身会被读成一个坏预设行（它没有组装文件），
@@ -136,8 +132,7 @@ def _as_block_text(text: str) -> str:
 
     为什么必须做：文件末尾那个换行是编辑器给的，不是内容的一部分。留着它，
     `"\n\n".join(...)` 会在这一段与下一段之间拼出两个空行 —— 文件块与
-    内联的 `text:` 块于是对同样的内容渲染出不同的东西（实测：`search_style.md`
-    末尾带换行 ⇒ A 的提示词里那一段后面多一个空行，字符数 17394 而不是 17393）。
+    内联的 `text:` 块于是对同样的内容渲染出不同的东西。
     只去首尾空行，正文内部一个字符都不动。
     """
     return text.strip("\n")
@@ -147,8 +142,8 @@ def _register_brief_blocks(reg: PromptRegistry, role: str, config: Mapping[str, 
                            base: pathlib.Path) -> tuple[str, ...]:
     """`agentflow.brief_blocks`：把五格身份文本注册成段 —— 内容仍从真身读，不抄第二份。
 
-    业主裁定（`draft/107` §5-I-1）逐字：「`specs/<role>.py::SPEC.brief` 是唯一真身；
-    `agent_prompts.ROLE_BRIEFS` 改成它的视图」。所以这一行的存在意义只有一个：
+    业主裁定：`specs/<role>.py::SPEC.brief` 是唯一真身；
+    `agent_prompts.ROLE_BRIEFS` 改成它的视图。所以这一行的存在意义只有一个：
     让预设可以显式声明"这五格由我列出"（于是顺序/取舍写在组装文件里），
     而正文一个字都不许在预设里重写 —— 那是第二份副本，唯一性裁定不允许。
 
@@ -175,7 +170,7 @@ def _register_brief_blocks(reg: PromptRegistry, role: str, config: Mapping[str, 
     return tuple(provided)
 
 
-#: 解析表（今天两行；`draft/103` §4.1 的其余 10 行按需加）。
+#: 解析表（只放有用户的行；其余解析器按需加）。
 RESOLVERS: dict[str, Resolver] = {
     TEXT_BLOCKS: _register_text_blocks,
     BRIEF_BLOCKS: _register_brief_blocks,
@@ -215,7 +210,7 @@ def role_preset(role: str, *, root: pathlib.Path | None = None) -> PR.Preset | N
     """找某个角色的预设；没有 ⇒ None（调用方回落内置注册）。
 
     只管随包根（`include_user=False`）：用户自写的预设要生效得先有一条裁定
-    （"用户能改提示词"这件事本身是部署面决策，`draft/103` §4.5 的不做清单里）。
+    （"用户能改提示词"这件事本身是部署面决策，列在不做清单里）。
     """
     base = pathlib.Path(root) if root is not None else shipped_root()
     want = preset_id_of(role)
@@ -253,7 +248,7 @@ def apply_preset(reg: PromptRegistry, preset: PR.Preset, *, role: str) -> set[st
     """按组装文件的顺序注册它声明的段，返回接管的段名集合。
 
     坏行（解析函数抛）⇒ 异常往上走：调用方必须丢掉这个注册表重新开始
-    （半组装的提示词比没有提示词坏得多 —— `draft/101` §6.1 的 P16 形态）。
+    （半组装的提示词比没有提示词坏得多）。
     `disabled` 那一档：`presets.PresetRow.state` 明确 `enabled` 才挂；
     `conditional`（`!!js` 这种求值不了的门）不挂，因为"没求值"不许读成"生效"。
     """
