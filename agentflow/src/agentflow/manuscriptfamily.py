@@ -5,8 +5,8 @@
 
 族判定原来散落在各模块（前缀表、名字解析、候选名拼接、路径拼法…），它们"恰好一致"
 只是因为字符串没被人改过。本模块把那一列事实收成一张表：族 → 前缀 → 允许目录 →
-号形 → 证明号后缀 → 签要不要 → 允许格 / 派生列 / `evidence_kind` / `kind` 缺省 /
-出处。其余模块只做派生（re-export），不再各写字面量。
+号形 → 老盘 `-pN` 后缀 → 签要不要 → 允许格 / 派生列 / `evidence_kind` / `kind` 缺省 / 出处。
+其余模块只做派生（re-export），不再各写字面量。
 
 ## 边界
 
@@ -17,8 +17,8 @@
 
 `tier` 是权威的读法：`family`（规范名）/ `legacy`（历史名，可列出、可 preview、
 不可签、不可收录）/ `bad_name`（像手稿但号解析不出）/ `unrecognized`（不是手稿）。
-`-v2` 一类历史后缀只读成 `legacy`，`proof_no` 恒为 0：把它读成 `-p2` 等于把一份
-未审、且已知有缺陷的稿变成正式证明。
+`-v2` 一类历史后缀只读成 `legacy`，`proof_no` 恒为 0：它不是 `-p2`，把它读成规范档
+等于把一份未审、且已知有缺陷的稿当成正式稿（一个稿号 = 一份文件 = 一份证明）。
 """
 from __future__ import annotations
 
@@ -157,7 +157,8 @@ _ID_RE: Mapping[str, re.Pattern[str]] = MappingProxyType({
     "e-num": re.compile(r"^\d{4,6}$"),
 })
 
-#: 证明号后缀（`-p<N>`，N 是 >=1 的十进制；`-p0` / `-pabc` 不认）。`e-num` 不设。
+#: 老盘的 `-p<N>` 后缀（只读兼容：一个稿号 = 一份文件 = 一份证明；N 是 >=1 的
+#: 十进制，`-p0` / `-pabc` 不认）。`e-num` 不设。
 _PROOF_REST_RE = re.compile(r"^(?P<id>\d{4,6}|plan-\d+)(?:-p(?P<no>[1-9]\d*))?$")
 _PROOF_REST_NUM_RE = re.compile(r"^(?P<id>\d{4,6})(?:-p(?P<no>[1-9]\d*))?$")
 _NUM_REST_RE = re.compile(r"^(?P<id>\d{4,6})$")
@@ -458,8 +459,9 @@ def is_sign_carrier(rel: Any) -> bool:
 
 def relpath(family: Any, id: str = "", proof_no: int = 1, *,
             strict: bool = True) -> str:
-    """族 + 号 + 证明号 ⇒ 唯一拼名（`reports/<前缀><号>[-p<N>].md`）。
+    """族 + 号 + 证明号 ⇒ 拼名（`reports/<前缀><号>[-p<N>].md`）。
 
+    一个稿号 = 一份文件 = 一份证明：新写路径只拼 `reports/<前缀><号>.md`，`-p<N>` 只服务老盘只读兼容（老调用方给 `proof_no>=2` 时仍拼得出来）。
     为什么要集中拼名：手写拼法散在各处，拼错时的症状是"文件不在盘上"，而每一处都会以
     "查不到"的形式静默通过。这里对号形与证明号做同一套校验，拼出来的名字一定能被
     `parse` 读回原值（往返判据 `tests/test_manuscript_family_is_one_table.py`）。
