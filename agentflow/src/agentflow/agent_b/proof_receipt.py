@@ -28,12 +28,14 @@ def write_proof_receipt(
     """
     want_sha = _PR.proof_sha(body_now)
     mid = str(manuscript_id or row.get("manuscript_id") or "")
+    # 这一格要写四处（比较一次、写 row 两格、写回执一格）：转换只做一次。
+    no = int(proof_no)
     if (str(row.get("proof_sha256") or "") != want_sha
-            or int(row.get("proof_no") or 0) != int(proof_no)
+            or int(row.get("proof_no") or 0) != no
             or (bool(mid) and str(row.get("manuscript_id") or "") != mid)):
-        row["proof_no"] = int(proof_no)
+        row["proof_no"] = no
         row["proof_sha256"] = want_sha
-        out["proof_receipt"] = {"proof_no": int(proof_no),
+        out["proof_receipt"] = {"proof_no": no,
                                 "proof_sha256": want_sha}
         # ---- 行上记 `manuscript_id`（F 自己的稿号）
         #
