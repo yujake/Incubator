@@ -33,14 +33,15 @@ def _still(cand: Mapping[str, Any], state: str, why: str) -> dict[str, Any]:
 
     2026-11-11 业主裁定：`proof_no` 在手稿产出侧 / 呈递侧退役 ⇒ 这一格不带它。
     """
+    signed_sha = cand.get("signed_sha")
+    current_sha = cand.get("current_sha")
     return {
         "manuscript_id": str(cand.get("manuscript_id") or ""),
         "manuscript": str(cand.get("manuscript") or ""),
         "signed": bool(cand.get("signed")),
-        "signed_sha": str(cand.get("signed_sha") or ""),
-        "current_sha": str(cand.get("current_sha") or ""),
-        "sha_matches": bool(cand.get("signed_sha")
-                            and cand.get("signed_sha") == cand.get("current_sha")),
+        "signed_sha": str(signed_sha or ""),
+        "current_sha": str(current_sha or ""),
+        "sha_matches": bool(signed_sha and signed_sha == current_sha),
         "state": str(state or ""), "why": str(why or ""),
     }
 
@@ -221,11 +222,13 @@ def auto_submit_signed(*, store: Any, root: Any, plan_id: str, stamp: str) -> di
     fresh_set = set(fresh)
     for token in fresh:
         rec = dict(_DL.parse_submission(token) or {})
+        # 记号里 body_sha 与 signed_sha 是同一格（签绑的是正文），只取一次。
+        body_sha = str(rec.get("body_sha") or "")
         out["auto_submitted"].append({
             "manuscript_id": str(rec.get("manuscript_id") or ""),
             "manuscript": str(rec.get("path") or ""),
-            "body_sha": str(rec.get("body_sha") or ""),
-            "signed_sha": str(rec.get("body_sha") or ""),
+            "body_sha": body_sha,
+            "signed_sha": body_sha,
             "sign_sha": str(rec.get("sign_sha") or ""),
             "file_sha": str(rec.get("file_sha") or ""),
             "at": str(rec.get("at") or ""),
