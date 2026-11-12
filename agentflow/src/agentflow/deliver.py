@@ -124,7 +124,6 @@ def read_work_items(session_root: Path | str) -> list[dict[str, Any]]:
     if not path.is_file():
         return []
     latest: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -138,11 +137,10 @@ def read_work_items(session_root: Path | str) -> list[dict[str, Any]]:
             continue
         if not isinstance(obj, dict) or not obj.get("id"):
             continue
-        wid = str(obj["id"])
-        if wid not in latest:
-            order.append(wid)
-        latest[wid] = obj
-    return [latest[w] for w in order]
+        # 同一个 id 取最后一条的值；dict 的插入序就是它第一次出现的次序
+        # （重复赋值不换位置），所以返回值直接取 values()。
+        latest[str(obj["id"])] = obj
+    return list(latest.values())
 
 
 def append_work_item(session_root: Path | str, item: WorkItem) -> str:
