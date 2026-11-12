@@ -206,13 +206,19 @@ def test_r3_an_unsigned_statement_still_reviews_three_times(tmp_path):
 # ============================================================ r4：另一份证明不许借光
 
 def _put_two_proofs(st):
-    """一条命题两份证明：`#p1` 是行上的 `proof_text`，`#p2` 在 `proofs` 清单里。"""
+    """一条命题两份证明：`#p1` 是行上的 `proof_text`，`#p2` 在 `proofs` 清单里。
+
+    两份证明 = 两份稿、两个稿号（2026-11-11 业主：`-pN` 在产出侧退役）。稿头只写
+    命题号；"这是第几条路径"由 B 的秘书在收录时分配，不进稿名、也不进稿头。
+    """
     proof_2 = T3.PROOF + "\n3. 补上第三步。"
     row = {
         "stmt_id": T3.SID, "origin": "own_result", "kind": "theorem",
         "label": "弦长函数非常值", "statement_full": T3.FULL,
         "statement_text": "弦长函数不是常值", "proof_text": T3.PROOF,
         "evidence_kind": "heuristic", "status": "active",
+        # 行上记的稿号 = 这一份稿（`proof_receipt` 收口写的就是这一格）。
+        "manuscript_id": T3.SID,
         "quote_verified": None, "quote_reason": "自产命题，没有外部引文要比对",
         "created_at": T3.TS, "created_by": "test",
         "bits": EB.bits_of(proof=True, proof_process=T3.PROOF, kind="theorem"),
@@ -221,8 +227,22 @@ def _put_two_proofs(st):
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
     write_proof_manuscript(st.root, T3.SID, T3.PROOF, statement_full=T3.FULL)
-    write_proof_manuscript(st.root, T3.SID, proof_2, statement_full=T3.FULL, proof_no=2)
-    return proof_2
+    rel2 = write_proof_manuscript(
+        st.root, T3.SID, proof_2, statement_full=T3.FULL,
+        manuscript_id="000008")
+    return proof_2, rel2
+
+
+def _point_row_at_manuscript(st, manuscript_id: str) -> None:
+    """把行上的 `manuscript_id` 指到某一份稿（B 收录那一笔写的就是这一格）。
+
+    V 认「这一份稿是不是这条命题的稿」只读这一格；两条路径各一份稿时，被审的是哪
+    一份就由它说。改这一格不是放宽身份闸：它模拟的是 B 收录第二份稿时的落盘。
+    """
+    row = dict(T3._stmt_row(st))
+    row["manuscript_id"] = str(manuscript_id)
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", row)
 
 
 def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
@@ -232,9 +252,14 @@ def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
     会替 `#p2` 借 `#p1` 的光 —— 一份一次都没审过的证明被读成"已经签过"。
     2026-11-08 之后判据是这一份手稿上的签块盖住这一份正文：`#p2` 的稿上没有块 ⇒
     照常审；两份都签上之后才短接。
+
+    2026-11-11 之后 `#p2` 是**另一份稿、另一个稿号**（`000008`）；它被秘书分到第 2 条
+    路径这件事读台账，不靠 `-p2` 后缀或稿头那一行。B 收录第二份稿时把行上的
+    `manuscript_id` 指到它，V 据此认「这是这条命题的稿」。
     """
     st = T3._ws(tmp_path)
-    proof_2 = _put_two_proofs(st)
+    proof_2, rel2 = _put_two_proofs(st)
+    assert rel2 != T3.REL, (rel2, T3.REL)
     agent, review, sec_seam = _signed_agent(st)
 
     with T3._as_submitter():
@@ -244,7 +269,8 @@ def test_r4_another_proof_of_the_same_statement_is_still_reviewed(tmp_path):
     review.prompts.clear()
     sec_seam.seen.clear()
 
-    rel2 = f"reports/f-proof-{T3.SID}-p2.md"
+    # B 收录第二份稿 ⇒ 行上的稿号指向第二份（`proof_receipt` 那一格）。
+    _point_row_at_manuscript(st, "000008")
     with T3._as_submitter():
         second = agent.verify_proof(T3.SID, proof_no=2, proof_manuscript=rel2)
 
