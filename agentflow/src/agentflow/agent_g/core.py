@@ -1,7 +1,7 @@
-"""角色 G 的实现核心（`goal-7f5116c1` M6）：其余成员 + 把动作 mixin 装起来。
+"""角色 G 的实现核心：其余成员 + 把动作 mixin 装起来。
 
-动作方法一个都没留在这里 —— 它们各自在 `agent_g/<动作>.py`。
-这一层与各动作文件共用 `_support.py`（模块级 helper 与常量）。
+动作方法一个都没留在这里 —— 它们各自在 `agent_g/<动作>.py`。这一层与各动作文件
+共用 `_support.py`（模块级 helper 与常量）。
 """
 from __future__ import annotations
 
@@ -98,15 +98,15 @@ class _Core:
         return target
     def selftest(self) -> int:
         """就地冒烟自检：只做"构造断言 + 内存渲染"两步，不碰 store。
-        真正被调用的只有这两处（与实现逐条对应）： 1. `self.compose_claim(...)` 造一条断言 —— 覆盖断言构造那一道闸（它直接转发工具层的纯函数，不走
-        `self._call`、不碰注册表）； 2. `self.render({...}, dependencies=None)` 把它渲染成 markdown—— 
-        `dependencies=None` 是有意的"没查"：连依赖表都不读，于是这次自检对 store 连一次读都没有，更不会写；最后核对渲染结果里出现"自检断言"与
-        "lit:0000"。
-        它刻意不做的事（读的人不要以为已被覆盖）：- 不调 `build_document`：稿件落盘与随之而来的 schema 校验没有任何就地检查，那一路的回归只能靠测试与模块
-        级 `_selftest()`；- 不写 store：不落 `documents`，也不 `register_dependency`。自检不该改用户的库 —— 
-        `Store` 是用户的数据，一次冒烟检查没有资格往里写（顺带它也才能在只读工作区里被调用）。
-        返回 0（成功）/ 1（失败）。它与模块级 `_selftest()` 的分工：后者建临时工作区跑一遍完整流程（含 build_document 与落盘）并打印，前者是"就
-        地可调用"的冒烟检查。
+
+        `compose_claim(...)` 覆盖断言构造那一道闸（直接转发工具层的纯函数，不走
+        `_call`、不碰注册表）；`render({...}, dependencies=None)` 渲染 markdown ——
+        `dependencies=None` 是有意的"没查"：连依赖表都不读，于是这次自检对 store 连一次
+        读都没有，更不会写；最后核对渲染结果里出现"自检断言"与 "lit:0000"。
+
+        刻意不做：不调 `build_document`（落盘与 schema 校验没有就地检查，只能靠测试与
+        模块级 `_selftest()`）；不写 store（`Store` 是用户的数据，一次冒烟检查没有资格
+        往里写，顺带它也才能在只读工作区里被调用）。返回 0（成功）/ 1（失败）。
         """
         try:
             claim = self.compose_claim(
