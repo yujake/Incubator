@@ -507,10 +507,12 @@ def proof_column_script(text: Any) -> str:
     parsed = parse_proof_column(text)
     if parsed["script"] and is_script_path(parsed["script"]):
         return str(parsed["script"]).strip().replace("\\", "/")
-    raw = str(text or "").strip().replace("\\", "/")
+    # 两份写法都要用同一串原始正文（下面取行句与按行找程序路径各用一次）。
+    raw_text = str(text or "")
+    raw = raw_text.strip().replace("\\", "/")
     if is_script_path(raw):
         return raw
-    for line in str(text or "").splitlines():
+    for line in raw_text.splitlines():
         stripped = line.strip()
         for label, _name in MISPLACED_PROOF_PARTS:
             if stripped.startswith(f"{label}：") or stripped.startswith(f"{label}:"):
@@ -1306,14 +1308,16 @@ def find_index_entry(rows: Sequence[Mapping[str, Any]], *, program: Any = "",
         if relaxed != text:
             wants.add(hashlib.sha256(relaxed.encode("utf-8")).hexdigest())
     items = [dict(r) for r in (rows or ()) if isinstance(r, Mapping)]
+    # `index_entry_of` 每行只取一次：先认内容 sha、再认程序路径，两趟看的是同一份
+    # 归一结果（原先每趟各重算一遍）。
+    parsed_rows = ([(row, index_entry_of(row)) for row in items]
+                   if (wants or want_prog) else [])
     if wants:
-        for row in items:
-            got = index_entry_of(row)
+        for row, got in parsed_rows:
             if got["sha256"] and got["sha256"] in wants:
                 return row
     if want_prog:
-        for row in items:
-            got = index_entry_of(row)
+        for row, got in parsed_rows:
             if got["kind"] in (INDEX_KIND_REPORT, "") \
                     and norm_rel(row.get("file")) == want_prog:
                 return row
@@ -1542,7 +1546,9 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
         # 三条里任一条成立都不算。改前这里只看 `verdict` 那个词，于是同一行内容
         # 放进 `verifications/<号>.jsonl` 会被拒、放进 pending 就被当成签过。
         pending_row = dict(pending.get("row") or {})
-        pending_row.setdefault("verdict", str(pending.get("verdict") or ""))
+        # 这一格在下面三处出口都写（行上默认值 / 两处 reason），取一次就够。
+        pending_verdict = str(pending.get("verdict") or "")
+        pending_row.setdefault("verdict", pending_verdict)
         # 业主 2026-10-29 给 `signs_bit3` 加了「连续 N 次」那一闸；pending 这一签按
         # 对象 sha 认领，审的时候命题还没登记 ⇒ 没有命题台账可数连续次数，那条闸
         # 在这一档不适用。所以这里判的是行局部那一半（`row_signable`）——
@@ -1551,7 +1557,7 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
         if not _VR.row_signable(pending_row):
             out["found"] = False
             out["row"] = pending_row          # 认到了，但签不住 —— 行要交出去（defect_step 在行上）
-            out["verdict"] = str(pending.get("verdict") or "")
+            out["verdict"] = pending_verdict
             out["ledger"] = str(pending.get("ledger") or "")
             out["why"] = (f"{out['ledger']} 是 pending 那一路的最近一签，"
                           f"verdict={out['verdict']!r}，但它签不住："
@@ -1560,7 +1566,7 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                           + _VR._bit3_blockers(pending_row))
             return out
         out.update(found=True, row=pending_row, signable=True,
-                   verdict=str(pending.get("verdict") or ""),
+                   verdict=pending_verdict,
                    proof_sha256=str(pending.get("proof_sha256") or ""),
                    ledger=str(pending.get("ledger") or ""), route="pending")
         out["why"] = (f"{out['ledger']} 是 pending 那一路的最近一签，"
