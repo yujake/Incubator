@@ -5930,6 +5930,10 @@ class AgentLoop:
         """
         self._pump_clock(step=step, when="turn", run=run)
         wakes = self._take_wakes(step=step, run=run)
+        # 这一拍消费到的唤醒只读一次：`wake_ids` 两处产出同源（空投递那一支与最终返回），
+        # 监控回合那一格也从同一份上滤。`_take_wakes` 的 `consumed` 逐条都是 Mapping。
+        consumed = wakes.get("consumed") or ()
+        wake_ids = [str(e.get("wake_id") or "") for e in consumed]
         # ---- 轮查那一拍不是监控回合：它的正文是 SOP，而 SOP 的
         # 第 ③ 步是"结完这一轮才允许做别的（自由行动）"—— 监控回合的出口限定
         # （`MONITOR_TURN_TOOLS` 只放 watch / guide / 补派 / 收口）会把第 ① 步
@@ -5941,7 +5945,7 @@ class AgentLoop:
         # "被叫醒只看全树"），轮查的正文照旧在增量里，SOP 从下一拍起可执行。
         patrol_block = self._patrol_wake_block(wakes)
         monitor = self._monitor_block(
-            wakes={"consumed": [e for e in (wakes.get("consumed") or ())
+            wakes={"consumed": [e for e in consumed
                                 if isinstance(e, Mapping) and not CLK.is_patrol_timer(e)]},
             step=step)
         # ---- 子代理返场：与板项 / 留言同一条投递点
@@ -5953,8 +5957,7 @@ class AgentLoop:
         # 等不等子不在这里判：`wait` 由 `_should_wait_for_children`
         # 给，而那一位只读返场判据（`_return_reading`）的结论 —— 这一拍欠模型一个
         # 回合就不等，直接问。判据给过之后照旧等，见那一处的 docstring。
-        wakes_reading = self._wake_readings(
-            [str(e.get("wake_id") or "") for e in (wakes.get("consumed") or ())])
+        wakes_reading = self._wake_readings(wake_ids)
         back = self._return_reading(parked=self._park_reading(),
                                     wakes=wakes_reading, run=run)
         # 这一格只喂下面 `skip_reason` 那一支（不进任何读数：见本函数 docstring 末段）。
@@ -5964,33 +5967,37 @@ class AgentLoop:
         children = self._children_round_trip(
             step=step, run=run, wait=wait,
             skip_reason="" if wait else ("return" if return_beat else "wake"))
-        if children.get("settled") or children.get("running"):
+        # 返场那一格的三份读数（回来的 / 还在跑的 / 等没等）各取一次：SS 事件、
+        # run.notes 与返回值三处读的是同一份，别让它们各 `.get` 一遍。
+        settled = children.get("settled") or ()
+        running = children.get("running") or ()
+        wait_reading = children.get("wait") or {}
+        if settled or running:
             SS.append(self.session_root, {
                 "kind": "agent_children", "role": self.role,
                 "task_id": str(self.my_task_id or ""), "step": int(step),
-                "settled": [str(getattr(r, "task_id", "") or "")
-                            for r in (children.get("settled") or ())],
-                "settled_outcomes": [str(getattr(r, "outcome", None) or "")
-                                     for r in (children.get("settled") or ())],
-                "running": [str(x) for x in (children.get("running") or ())],
-                "waited_sec": round(float(
-                    (children.get("wait") or {}).get("waited_sec") or 0.0), 3),
-                "wait_reason": str((children.get("wait") or {}).get("reason") or ""),
+                "settled": [str(getattr(r, "task_id", "") or "") for r in settled],
+                "settled_outcomes": [str(getattr(r, "outcome", None) or "") for r in settled],
+                "running": [str(x) for x in running],
+                "waited_sec": round(float(wait_reading.get("waited_sec") or 0.0), 3),
+                "wait_reason": str(wait_reading.get("reason") or ""),
                 "checked": True,
             }, sid=self.sid)
             run.notes.append(
-                f"第 {step} 步返场：子代理回来 {len(children.get('settled') or ())} 条，"
-                f"还在跑 {len(children.get('running') or ())} 条"
+                f"第 {step} 步返场：子代理回来 {len(settled)} 条，"
+                f"还在跑 {len(running)} 条"
                 + ("（这一拍为了返场没等子：返场判据给过之后才等）"
-                   if str((children.get("wait") or {}).get("reason") or "") == "return" else
-                   f"（等待 {float((children.get('wait') or {}).get('waited_sec') or 0):.1f}s，"
-                   f"原因 {(children.get('wait') or {}).get('reason') or 'none'}）"))
+                   if str(wait_reading.get("reason") or "") == "return" else
+                   f"（等待 {float(wait_reading.get('waited_sec') or 0):.1f}s，"
+                   f"原因 {wait_reading.get('reason') or 'none'}）"))
         got = mailbox_digest(
             self.conductor, self.session_root, self.role,
             my_task_id=str(self.my_task_id or ""), sid=self.sid,
             parent_task_id=self.parent_task_id, parent_role=self.parent_role,
             rendered=sorted(self._mailbox_rendered))
-        for p in got.get("problems") or ():
+        # 问题清单与 checked 一并取一次：这两格在「空投递那一支」与「最终返回」都读。
+        problems = list(got.get("problems") or ())
+        for p in problems:
             run.notes.append(str(p))
         item_ids = [x for x in got.get("item_ids") or () if x]
         msg_ids = [x for x in got.get("msg_ids") or () if x]
@@ -5998,15 +6005,15 @@ class AgentLoop:
         revoked_ids = [x for x in got.get("revoked_ids") or () if x]
         parts = [x for x in (monitor, patrol_block, str(children.get("text") or ""),
                              str(got.get("text") or "")) if x]
+        checked = bool(got.get("checked"))
         if not parts:
             return {"text": "", "item_ids": [], "msg_ids": [], "revoked_ids": [],
-                    "wake_ids": [str(e.get("wake_id") or "") for e in wakes.get("consumed") or ()],
-                    "monitor": bool(monitor), "checked": bool(got.get("checked")),
+                    "wake_ids": wake_ids,
+                    "monitor": bool(monitor), "checked": checked,
                     "children": children,
-                    "problems": list(got.get("problems") or ())}
+                    "problems": problems}
         text = "\n\n".join(parts)
         messages.append(user_message(text))
-        wake_ids = [str(e.get("wake_id") or "") for e in (wakes.get("consumed") or ())]
         problem = record_mailbox_delivery(
             self.session_root, self.role, step=step, shape="turn", text=text,
             item_ids=item_ids, msg_ids=msg_ids, wake_ids=wake_ids,
@@ -6023,8 +6030,8 @@ class AgentLoop:
             run.monitor_turns += 1
         return {"text": text, "item_ids": item_ids, "msg_ids": msg_ids,
                 "revoked_ids": revoked_ids, "wake_ids": wake_ids, "monitor": bool(monitor),
-                "checked": bool(got.get("checked")), "children": children,
-                "problems": list(got.get("problems") or ())}
+                "checked": checked, "children": children,
+                "problems": problems}
 
     # ---------------------------------------------------------- 挂机（回合调度的那一支）
 
