@@ -13831,52 +13831,25 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
                        meter: Any = None) -> tuple[Any, str]:
     """秘书判断面那一条缝：`(缝 或 None, 读数)` —— 拿不到时读数就说清为什么。
 
-    ## 为什么需要这一处（真机 sylow5 的读数，2026-10-26）
+    ## 为什么需要这一处
 
-    命题同一性判定这一整条链在真机上是死的：`record_statement` 会调
-    :meth:`Secretary.adjudicate_proposition`，后者调 :meth:`Secretary.judge`，
-    而 `judge` 的第二道闸是 `if self.seam is None: return checked=False`。
-    全仓的 `Secretary(...)` 构造点当时一个都没传 `seam=`（`tools/table_tools.py`、
-    `conductor.py`、`closing.py`、`tools/conductor_tools.py`、
-    `agent_b/core.py` 的 `_statement_secretary`），于是每一次判词都走"没缝"那一支、
-    静默退回机械判据（相似度 0.15–0.33 ⇒ 判 different ⇒ 同一条定理被登记 2–3 次），
-    而 `out/secretary/proposition_verdicts.jsonl` 一次都没被建出来。
+    不传 `seam=` 的 `Secretary(...)` 会让整条命题同一性判定变成死路：
+    `record_statement` 调 :meth:`adjudicate_proposition`，后者调 :meth:`judge`，
+    而 `judge` 的第二道闸是"没有缝 ⇒ `checked=False`"。全仓的构造点分散在
+    `tools/table_tools.py` / `conductor.py` / `closing.py` / `tools/conductor_tools.py`
+    等处，逐个记得传缝不现实 ⇒ 收在 `LlmSeam.for_secretary` 一处现造，
+    并把"造没造出来"如实写进读数（没 key / 开关关着 / 装配器不给 ⇒ 各自的 reason）。
 
-    单测一直是绿的，因为每一处判据都自己塞了一条 `_FakeSeam` —— 那正是本仓说的
-    "实现了但没接线"的形态：实现与判据都在，只有装配处漏了一根线。
+    ## 账本：有账本就必须接上
 
-    ## 三档读数（进 `Secretary.model_source`，也进判定返回值的 `seam_source`）
+    `meter` 显式给了就用；没给而有 `store` ⇒ 现造 `TokenMeter(store)`；两样都没有
+    （单测里的裸缝、没有工作区可落账）⇒ `meter=None`，那一档的 `no_meter` 是
+    "没有账本可写"，不是漏接线 —— 漏接线的形态是"有工作区却没记账"，
+    那会让一笔真实花销既不在已归口、也不在 `unattributed`，是没有下落。
 
-    - `body（调用方给的缝）`：调用方手上已经有缝（例如 `agent_loop.run_role`
-      派生出来的那一条），原样用；
-    - `secretary（LlmSeam.for_secretary）`：现造一条秘书档的缝
-      （业主 2026-10-14：「所有智能体的秘书另外共用一个 api key」）；
-    - `none（…）`：造出来的缝 `wired=False`（设置里 `secretary` 那一档没有 key）。
-      这一档返回 `None` 而不是那条空缝：装一条空缝上去会让判定变成
-      "试过了、没成（`judge_not_wired`）"，而事实是"这一名秘书根本没有判断面" ——
-      而 `attempted` 那一格（:meth:`adjudicate_proposition`）会把前者写成
-      `attempted=True`，于是"从来没判过"在盘上长成了"判过没成"。
-
-    为什么不用 `LlmSeam.for_role`：秘书的判断是"判断类"调用，共用一把 key 才能
-    单独限额、单独看账（`by_role="secretary:<本体角色>"`），见
-    :meth:`LlmSeam.for_secretary` 的 docstring。
-
-    ## 账（2026-11-05，缺陷 3：这条缝没接电表）
-
-    改前这一处造缝只传了 `owner_role/session_root/sid`，没传 `meter=` —— 而
-    `LlmSeam.for_secretary` 的 `kw` 本来就支持它。后果是每条秘书判定都在
-    `llmseam._charge_ledger` 的第一道闸上落 `{"charged": False, "reason": "no_meter"}`：
-    现场 `temp/_five_verify_20261105/ws02/sessions/20261105.jsonl` 里 3 条 `llm_call`、
-    `$0.002101`，而 `usage_ledger` 是 0 行 —— 这笔钱在 `reconcile_usage` 里既不是
-    已归口、也不是 `unattributed`，是没有下落。
-
-    所以这里按"有账本就必须接上"取值：`meter` 显式给了就用；没给而有 `store` ⇒
-    现造 `TokenMeter(store)`；两样都没有（单测里的裸缝 / 没有工作区可落账）⇒
-    `meter=None` 且读数照旧 —— 那一档的 `no_meter` 是"没有账本可写"，不是漏接线。
-    接上之后每一笔都进账：在召唤上下文里 ⇒ 记到那次召唤的 `task_id` 上（并由
-    `TokenMeter._sync_task_usage` 回写 `tasks.usd`）；不在任何召唤里 ⇒ `task_id=None`
-    且 `note` 写明 `unattributed`，由 `reconcile_usage` 单列一栏点名 ——
-    三态纪律：发了请求的钱只有"已归口"与"点名说清为什么归不了"两种，没有第三种。
+    接上之后每笔都进账：在召唤上下文里 ⇒ 记到那次召唤的 `task_id`（并回写 `tasks.usd`）；
+    不在任何召唤里 ⇒ `task_id=None` + `note` 写明 `unattributed`，由 `reconcile_usage`
+    单列一栏点名。三态纪律：发了请求的钱只有"已归口"与"点名说清为什么归不了"两种。
     """
     if seam is not None:
         return seam, "body（调用方给的缝）"
