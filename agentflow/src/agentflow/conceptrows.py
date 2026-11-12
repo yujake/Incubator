@@ -718,10 +718,16 @@ def view_tx(tx: Any, *, shape: str = "statement") -> dict[str, Any]:
 
 def _merge_rows(out: dict[str, Any], *, stmt_rows: list[dict[str, Any]],
                 legacy_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    """合成的唯一实现（`view` 与 `view_tx` 都走这里：两边口径分家会造两种真相）。"""
+    """合成的唯一实现（`view` 与 `view_tx` 都走这里：两边口径分家会造两种真相）。
+
+    前置条件：`stmt_rows` 是调用方已经拷好的新 dict（`view` / `view_tx` 都在
+    `store.rows(...)` 之后逐行 `dict(r)` 过 —— 那一份拷贝同时是"别动 store 的行"
+    这道保护）。所以这里不再逐行拷第二次：改前每一行概念命题被拷两遍
+    （`view` 一遍、这里再一遍），而 `row["via"] = "statements"` 只改本函数自己的
+    那份。`out["rows"]` 里放的仍是调用方那批副本，返回行与 store 行之间没有别名。
+    """
     by_id: dict[str, dict[str, Any]] = {}
     for row in stmt_rows:
-        row = dict(row)
         row["via"] = "statements"
         by_id[str(row.get("stmt_id") or "")] = row
     out["counts"]["statements"] = len(by_id)
