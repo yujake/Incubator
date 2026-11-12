@@ -120,7 +120,8 @@ class _LandManuscript:
 
             _by_path = _BM_PATH.manuscript_id_for_path(
                 self.store.root, sid, path_no, store=self.store)
-            _path_basis = str(_by_path.get("basis") or "")
+            _path_basis = str(_by_path.get("basis") or (
+                "new_carrier" if _by_path.get("path_exists") else ""))
             out["path_basis"] = _path_basis
             if not _by_path.get("checked"):
                 out.update(kind="path_unreadable",
