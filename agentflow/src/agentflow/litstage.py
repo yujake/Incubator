@@ -1,4 +1,4 @@
-"""「待新增文献列表」的实现核心（业主 2026-10-20 口径）：按委托暂存 → 审 → 一键迁移 → 报告。
+"""「待新增文献列表」的实现核心：按委托暂存 → 审 → 一键迁移 → 报告。
 
 这一层与 `tools/search_tools.py` 的分工，照本仓的老规矩（`dedup.py` / `secretary.py`
 都是这个形状）：
@@ -10,7 +10,7 @@
 - 工具层是模型的手：把本模块的结论翻成 `ToolResult`（`fail(kind=...)` 给模型看），
   不重新判一遍。两份判据必然漂，而漂的形态是"工具说拒了、实现却写进去了"。
 
-## 列表的生命周期 = 一次查询委托（业主 2026-10-20 补充的第 1 条）
+## 列表的生命周期 = 一次查询委托
 
 待新增列表不是全局常驻的：一行候选属于某一次委托（`request_id`，形如 `r-000001`，
 就是 `search_requests` 里那一行）。于是：
@@ -22,7 +22,7 @@
 
 ## 为什么"入库"不在本模块里写 literature 行
 
-业主口径逐字：「入库走现有的 literature 登记路径（别绕开它）」。
+入库走现有的 literature 登记路径（别绕开它）。
 现有路径有两条，而且它们本来就不同：
 
 - 工具面：`tools/search_tools._h_register`（`search.register` 的 handler，走
@@ -85,23 +85,23 @@ __all__ = [
     "report_violations",
 ]
 
-#: 一次 `lit.admit` 调用最多入库几篇（业主口径 ①）。
+#: 一次 `lit.admit` 调用最多入库几篇（单次调用上限）。
 #:
 #: 为什么是"每次调用"而不是"每次检索"：A 可以分批入库（先入 6 篇、再入 4 篇），
 #: 而"一次检索至多 10 篇"那一条由 `MAX_ADMIT_PER_DELEGATION` 守 —— 两个上限管两件
 #: 不同的事，合成一个会让"分两批把 20 篇都塞进去"变成合法。
 MAX_ADMIT_PER_CALL: int = 10
 
-#: 同一个委托（`request_id` = 一次检索委托）累计入库上限（业主口径 ①）。
+#: 同一个委托（`request_id` = 一次检索委托）累计入库上限。
 #:
 #: 它与 `MAX_ADMIT_PER_CALL` 都必需：只有每次调用的上限 ⇒ 分几批就能突破；
 #: 只有委托上限 ⇒ 一次调用 100 篇也照样过。两条一起才等于"一次文献检索至多入库 10 篇"。
 MAX_ADMIT_PER_DELEGATION: int = 10
 
-#: 标题词集 Jaccard 的"重叠度高"阈值（业主口径 ④，自定但必须写在这里）。
+#: 标题词集 Jaccard 的"重叠度高"阈值（自定但必须写在这里）。
 #:
 #: 0.60 的依据（不是拍脑袋）：同一篇文献的两种写法（预印本 vs 正式版、带/不带副标题）
-#: 实测 Jaccard 落在 0.7–0.95；而同一领域的不同论文（共享 "abelian group" 这类
+#: 同一篇论文的标题变体 Jaccard 通常很高；而同一领域的不同论文（共享 "abelian group" 这类
 #: 高频词组）通常落在 0.1–0.35。0.60 落在两簇中间，且宁可误报——误报的代价只是
 #: "多要一句 `new_content`"（人写一句话即可），漏报的代价是"同一篇进库两次"
 #: （两条 lit_id、两套引文，下游无法合并）。
@@ -116,13 +116,13 @@ OVERLAP_KINDS: tuple[str, ...] = ("doi_exact", "title_jaccard")
 
 #: 委托报告的落点（相对工作区根）：`reports/lit-<request_id>.md`。
 #:
-#: 为什么是文件而不是只放在工具返回值里（业主 2026-10-20 第 3 条：这是交付物）：
+#: 为什么是文件而不是只放在工具返回值里（这是交付物）：
 #: 下一次委托的 D/H 要用它 —— 而"D/H 读一个工具调用的返回值"这件事在结构上做不到
 #: （它们是另外的角色、另外的循环）。写在 `reports/` 下之后，任何带 `fs.read` 的角色
 #: 都读得到，它也就成了台账之外唯一一份"这次检索进了哪几篇、挡了哪几篇与为什么"的证据。
 REPORT_DIR: str = "reports"
 
-#: 「待新增文献列表」现行的决策词表：三态（业主 2026-10-26 Q16 口径：
+#: 「待新增文献列表」现行的决策词表：三态（
 #: 「待裁 / 入库 / 拒收」，注册即待裁）。
 #:
 #: 与 `schema.CANDIDATE_STATUSES`（五个值）的关系必须说清，否则这里就是第二份唯一真源：
@@ -137,7 +137,7 @@ CANDIDATE_DECISIONS: tuple[str, ...] = ("pending", "admitted", "rejected")
 
 #: 历史档 ⇒ `(折成哪一态, 默认理由码, 事实在哪个字段里)`：读侧折算的唯一实现。
 #:
-#: `over_cap` 这一条是业主 Q16 第 ① 条点名的：「`cleared`（配额满）必须折进
+#: `over_cap` 这一条点名的：「`cleared`（配额满）必须折进
 #: rejected + reason_code=over_cap，不留第四态」。`withdrawn` 走同一台机器：
 #: 「撤掉」与「拒收」的差别从此落在受控理由码上（`withdrawn_by_reviewer`），
 #: 不再多占一个状态格 —— 状态格只有一个轴：这一条判过没有。
@@ -146,7 +146,7 @@ _LEGACY_CANDIDATE: dict[str, tuple[str, str, str]] = {
     "withdrawn": ("rejected", "withdrawn_by_reviewer", "withdrawn_reason"),
 }
 
-#: 提交闸拒信里题名截前多少字（业主 Q16 第 ③ 条：`<slot + 标题前 40 字>`）。
+#: 提交闸拒信里题名截前多少字（`<slot + 标题前 40 字>`）。
 UNDECIDED_TITLE_CHARS: int = 40
 
 
@@ -176,14 +176,14 @@ def fold_legacy(row: Mapping[str, Any]) -> dict:
 def judged_state(row: Mapping[str, Any]) -> str:
     """这一条判过没有：`pending` / `admitted` / `rejected`（先折算历史档）。
 
-    判据（业主 Q16 原话「A 确实读过、逐篇决定过」）落在三档上：
+    判据（「A 确实读过、逐篇决定过」）落在三档上：
 
     - `rejected` ⇒ 判过。拒收本身就是决定，不论是人判的（`rejected_off_topic` …）
       还是确定性判据判的（`over_cap` / `not_screened`）—— 后两者由机器做，A 不需要读；
     - `admitted` 且 `relevance` 非空 ⇒ 判过。那一句「为什么与本次检索相关」就是
       "我读过这一篇"的证据（`schema.LitCandidate.relevance` 的口径原本就是它）；
     - `admitted` 但 `relevance` 空 ⇒ 没判过。这是本判据最要紧的一格：入库了却
-      写不出为什么相关的行，没有任何"读过"的证据 —— 真机 `projects/mp3-r3` 的 33 条
+      写不出为什么相关的行，没有任何"读过"的证据 —— 现场那 33 条
       正是这个形状（同一秒整批入库、`relevance` 48/48 全空）。它不改入库判据
       （`webui/readers._library_admission` 照旧只读 `status == "admitted"`）：
       文献库面问「这一篇在不在库里」，提交闸问「A 判过没有」，两个问题。
@@ -224,7 +224,7 @@ def undecided(rows: Sequence[Mapping[str, Any]]) -> list[dict]:
 def _decision_counts(rows: Sequence[Mapping[str, Any]]) -> dict:
     """按三态数一遍（`{"pending": n, "admitted": n, "rejected": n}`，键恒在这三个）。
 
-    它是拒信与报告里"数没全更新为入库和拒收"那句话的读数来源：业主 Q16 的判据
+    它是拒信与报告里"数没全更新为入库和拒收"那句话的读数来源：提交闸的判据
     问的就是这个数（`pending` 必须是 0）。
     """
     counts = {s: 0 for s in CANDIDATE_DECISIONS}
@@ -235,7 +235,7 @@ def _decision_counts(rows: Sequence[Mapping[str, Any]]) -> dict:
 
 def undecided_reason(waiting: Sequence[Mapping[str, Any]],
                      request_id: str = "") -> str:
-    """提交闸的拒信原文：逐条点名 + 做法（业主 Q16 第 ③ 条）。
+    """提交闸的拒信原文：逐条点名 + 做法。
 
     为什么拒信要逐条点名而不是报一个数：「还有 14 条没判」这句谁都对得上，
     而 A 手上要做的是"去判哪一条"。所以每条给 `槽位 + 题名前 40 字`，
@@ -317,7 +317,7 @@ def literature_index(store: Store) -> list[dict]:
 
     为什么要有这一格：`overlap_check` 原来是"一条候选读一遍全表 + 逐行重算词集"，
     而 `admission_plan` 是逐槽调它的 ⇒ 10 个槽 × 300 行文献 = 表读 10 次、
-    `title_terms` 调 6000 次（实测 `temp/rbe3_measure.py`，2026-10-27）。
+    `title_terms` 调 6000 次。
     表读一次、词集算一次之后，同一次判断的读数一模一样（它只读、不动任何行）。
 
     `checked` 的语义不变：表读不出来时 `store.rows` 照旧抛 `StoreError`，
@@ -514,7 +514,7 @@ def candidate_identity(title: Any, doi: Any) -> str:
     """一条候选在一次委托内的身份：规范化 DOI 优先，DOI 空才退回规范化标题。
 
     为什么 DOI 优先，而不是"标题与 DOI 一起比"：同一篇在两次检索里交回的题名
-    可能差一个连字符或副标题位置（真机 `mp3-r4` 的 000001 与 000004 就是
+    可能差一个连字符或副标题位置（存量行里就有
     `Cartan‐type` 与 `Cartan-type`），而 DOI 是同一串 —— 身份若把标题也算进去，
     这种"同一篇"就会漏配，于是又长出一个槽位。DOI 空时才退回标题（与
     `dedup.literature_keys` 的次序一致：DOI → 标题+年 → 仅标题，这里只用"能拿到的那一级"）。
@@ -571,14 +571,14 @@ def stage_entries(
 ) -> dict:
     """把候选追加进本次委托的待新增列表（一次可追加任意条，超过 10 条也允许）。
 
-    为什么暂存不设上限：上限管的是入库（业主口径 ①），不是"广搜能拿回多少"。
+    为什么暂存不设上限：上限管的是入库，不是"广搜能拿回多少"。
     把上限提前到暂存这一档，会让"广搜 30 条、精选 8 条入库"这条正路直接走不通 ——
-    而业主明确要求"广搜可以超过 10 篇，但正式入库最多 10"。
+    而口径明确要求"广搜可以超过 10 篇，但正式入库最多 10"。
 
     槽位号由 `store.alloc_id("candidate")` 发：只增不复用（撤掉的号不会被再发一次），
     所以第 2 批的序号接着第 1 批往下排（12 条 + 3 条 = 1..15，撤掉的 3、7 空着）。
 
-    `request_id` 必须给（业主 2026-10-20 第 1 条：列表按委托重置）——
+    `request_id` 必须给（列表按委托重置）——
     新委托换一个 `request_id` 就是"从空列表开始"，不需要（也不许）清空旧行。
     """
     if store is None:
@@ -652,7 +652,7 @@ def stage_entries(
                 type_code=str(raw.get("type_code") or raw.get("type") or "J"),
                 summary=T.clip(str(raw.get("summary") or ""), 1200),
                 url=str(raw.get("url") or raw.get("pdf_url") or ""),
-                # 业主 2026-10-20 第 3 条：报告里每篇已入库的都要一句"为什么与本次检索相关"。
+                # 报告里每篇已入库的都要一句"为什么与本次检索相关"。
                 # 它在这里就能给（审的时候顺手写），不必等到迁移那一刻。
                 relevance=T.clip(str(raw.get("relevance") or ""), 400),
                 added_at=S.now_iso(),
@@ -679,7 +679,7 @@ def _scoped_rows(rows: Sequence[Mapping[str, Any]], rid: str) -> list[dict]:
     - `rid == "*"` ⇒ 不过滤（审计用：查全部委托）；
     - `rid` 非空 ⇒ 只留这一次委托的行；
     - `rid` 为空 ⇒ 一行都不给（不是"全表"）。"说不清这是哪一次委托"与"所有委托"
-      是两件事，后者会把旧委托的行混进本次筛选 —— 而那正是业主第 1 条要挡的。
+      是两件事，后者会把旧委托的行混进本次筛选 —— 而那正是委托边界要挡的。
 
     单独成函数是为了让"按委托重置"这条判据有一个可被负控替代的落点
     （`tests/test_search_tools_stage_admit.py` 把它换成恒等函数 ⇒ 判据必须变红）。
@@ -703,17 +703,17 @@ def list_candidates(
     返回的每一行都是三态折算后的（`litstage.fold_legacy`）：盘上的 `cleared`
     读成 `rejected` + `reason_code=over_cap`，`withdrawn` 读成 `rejected` +
     `withdrawn_by_reviewer`，理由搬进 `reject_reason`。所以列表视图里永远只有
-    `pending` / `admitted` / `rejected` 三档（业主 2026-10-26 Q16）。
+    `pending` / `admitted` / `rejected` 三档。
 
     空槽位（原来叫 `withdrawn`、现在折成 `rejected` + `withdrawn_by_reviewer`）
     并没有被物理删除（序号不复用），所以题名、理由、`added_at` 全都还在 —— 于是
-    "第 3 号被撤了哪一篇、为什么"是查得出来的。这正是业主口径 ③ 的落点：撤掉 ≠ 删掉。
+    "第 3 号被撤了哪一篇、为什么"是查得出来的。这正是"撤掉 ≠ 删掉"的落点：撤掉 ≠ 删掉。
 
     `status` 过滤同时认两种形态：折算后的三态（`pending`/`admitted`/`rejected`）
     与盘上的历史档名（`cleared` / `withdrawn`，照原样查得到那几条）—— 后者是为了
     "查历史"这条路不因为折算而断（老工作区里按 `cleared` 查仍然查得出那 14 条）。
 
-    默认视图只按当前委托过滤（业主 2026-10-20 第 1 条）；要看旧委托请显式给
+    默认视图只按当前委托过滤；要看旧委托请显式给
     `request_id`（`request_id="*"` 表示全查，用于审计"历史有没有残留"）。
     """
     if store is None:
@@ -801,7 +801,7 @@ def _terminal(store: Store, slot: str, *, code: str, note: str,
               slot_field: str, actor: str, tx_note: str) -> dict:
     """把某一槽写成判过的那一档：`status="rejected"` + 受控理由码 + 一行散文。
 
-    为什么不再有"写成 withdrawn"这条分支（2026-10-26 Q16）：状态只有三态
+    为什么不再有"写成 withdrawn"这条分支：状态只有三态
     （待裁 / 入库 / 拒收），"撤掉"与"拒收"的差别现在落在受控理由码上
     （`withdrawn_by_reviewer` 还是 `rejected_low_quality`），不再多占一个状态格。
     `slot_field` 保留原样：`lit.stage_withdraw` 仍然把那一句同时写进
@@ -809,7 +809,7 @@ def _terminal(store: Store, slot: str, *, code: str, note: str,
     `reject_reason` 两边都写满 —— 折完之后行仍然说得出理由。
 
     可改的条件是 `judged_state(row) == "pending"`，不是"status 字面是 pending"：
-    历史链路整批入库、`relevance` 空着的那几条（真机 33 条就是这个形状）也算
+    历史链路整批入库、`relevance` 空着的那几条（存量行就是这个形状）也算
     "没判过"，于是它们还能被逐条判拒 —— 否则那种行会永远卡在"写不进 relevance、
     又不许判拒"里，提交闸对它所在的那次委托就成了永久关闭。
     """
@@ -847,7 +847,7 @@ def withdraw(store: Store | None, slot: str, reason_code: str, note: str = "",
     "撤了什么"的那一列，后者是三态里"拒收的理由"那一列。
 
     `reason_code` 必须是 `schema.CANDIDATE_REASON_CODES` 里的受控取值
-    （业主 2026-10-20 第 3 条：报告里的理由只认受控取值，不许自由发挥）。
+    （报告里的理由只认受控取值，不许自由发挥）。
     """
     if store is None:
         raise LitStageError("未配置 store：撤不掉（不是「已经撤过了」）", kind="no_store")
@@ -910,7 +910,7 @@ def admission_plan(
     三条路都从这里过，谁也不许在调用点上各判一次（判据两份必然漂，而漂的形态是
     "工具说拒了、实现却写进去了"）。
 
-    ## 提交闸（业主 2026-10-26 Q16 第 ③ 条）
+    ## 提交闸
 
     `require_judged=True` 的那两条路（`lit.admit_all` 与 A 的自动链路）是"整批提交"：
     本委托只要还有一条没判，整批一条都不许入库，拒信逐条点名（`undecided_reason`）。
@@ -927,16 +927,16 @@ def admission_plan(
     - `"truncate"`（`lit.admit_all` / A 的自动链路用）：按槽位号顺序把前 N 条
       通过检查的收进来，其余落 `rejected` + `reason_code="over_cap"` ——
       一键迁移的语义是"把通过的都迁走"，不是"有一条超限就全不动"。
-      落盘处不再是第四态 `cleared`（业主 Q16 第 ① 条：配额满必须折进
+      落盘处不再是第四态 `cleared`（配额满必须折进
       rejected + over_cap），但 `plan["cleared"]` 这个键名沿用下来：
       它是"没进去的那几条"这一个读数格，不是状态名（`lit.admit` 的 `returns=`
       已经把它钉在冻结声明里，改名要人重冻快照）。
 
-    ## 逐条拒收（业主口径 ②④）
+    ## 逐条拒收
 
     - 这一条已经判过（`judged_state != "pending"`）⇒ 拒（`already_terminal`）；
     - 这一条没有 relevance（行上没有、调用级也没给）⇒ 拒（`missing_relevance`），
-      行保持原样：没写"为什么与本次检索相关"就等于没读过它（Q16 第 ② 条）。
+      行保持原样：没写"为什么与本次检索相关"就等于没读过它。
       "入库了但 relevance 空"的历史行也走这一格 —— 它先要补上那一句才谈得上入库；
       补不上就判拒（`lit.stage_reject`），别把它折成"入库了"。
     - DOI 与本地库某一行完全相同 ⇒ 视为重复，拒（`duplicate_doi`）。
@@ -1096,7 +1096,7 @@ def admission_plan(
 
 #: 结算核对的读数（进程内账，与 `clock.waits()` 同形：一条一条攒，判据自己 reset）。
 #:
-#: ## 为什么要有这一格（2026-10-27，R-BE3 的 ①-3）
+#: ## 为什么要有这一格
 #:
 #: `apply_settlement` 里有两个 `continue`：决定指向的槽位在表里读不到、或状态码不在三态里，
 #: 那一笔决定就被"静默丢掉" —— 写侧什么都不说。而调用方的 `admitted[]` 取自登记路径回来的
@@ -1107,7 +1107,7 @@ def admission_plan(
 #: - 结算之后由 :func:`settlement_mismatch` 回读一次候选行 ⇒ "报的说入库了、行上不是"记
 #:   `kind="status_not_written" / "lit_id_not_written" / "missing_row"`。
 #:
-#: 修不修行为要等这条读数先跑出一批真机数据（业主口径：先要读数）。
+#: 修不修行为要等这条读数先跑出一批现场数据（口径：先要读数）。
 _SETTLEMENT_READINGS: list[dict] = []
 #: 读数最多留几条（进程内账，无上限就是无界增长）。
 _SETTLEMENT_READINGS_MAX: int = 64
@@ -1349,7 +1349,7 @@ def admit(
     逐条被挡的槽位不在这里终态（保持 `pending`，理由在 `refused[]` 里）：
     `lit.admit` 是"补一句 `new_content` 再试"的入口；终态留给 `admit_all` 的结算
     或调用方的 `lit.stage_reject`。登记失败同样保持 `pending`（它还可以重试）。
-    本函数不清空列表，但它会刷新委托报告 —— 业主第 3 条把报告说成交付物：
+    本函数不清空列表，但它会刷新委托报告 —— 报告是交付物：
     只要这个委托动过库，报告就得在盘上。
     """
     plan = admission_plan(store, request_id=request_id, slots=slots, batch=batch,
@@ -1416,7 +1416,7 @@ def admit_all(
     actor: str = "agent-A",
     write_report_file: bool = True,
 ) -> dict:
-    """一键迁移 / 提交整批（业主 2026-10-20 第 2 条 + 2026-10-26 Q16 第 ③ 条的提交闸）。
+    """一键迁移 / 提交整批（含提交闸）。
 
     ## 提交闸先跑（Q16）：本委托还有一条没判 ⇒ 整批一条都不许入库
 
@@ -1447,7 +1447,7 @@ def admit_all(
                      if judged_state(r) == "pending"]
     # 提交闸跑在这两处之前：即使一条 pending 都没有也要跑 —— 否则"已经判完"
     # 与"还没判完但一行 pending 都不剩（入库了却没有 relevance）"在盘上同形，
-    # 而后者正是真机那 33 条的形状。
+    # 而后者正是存量那 33 条的形状。
     plan = admission_plan(store, request_id=rid, slots=pending_slots, new_content=new_content,
                           cap=cap, on_over_cap="truncate", require_judged=True)
     if not plan.get("ok"):
@@ -1533,14 +1533,14 @@ def report_path(store: Store, request_id: str) -> Path:
 
 def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
                     *, generated_at: str = "") -> str:
-    """委托报告正文：三块都必须有（业主 2026-10-26 Q16 加第三块「待裁」）。
+    """委托报告正文：三块都必须有。
 
     - `## 已入库`：每篇的 `lit_id` / 标题 / 年份 / DOI（或 provider）+ 一句"为什么与本次
       检索相关"（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）；
     - `## 未入库`：每篇的槽位 / 标题 / 受控理由码（`schema.CANDIDATE_REASON_CODES`）
       + 一行散文（拒收 / 重叠度高无新内容 / 超配额 …）。历史档（`cleared` /
       `withdrawn`）在这里按折算后的 `rejected` 出现；
-    - `## 待裁`：还没判的每一条（`undecided`）—— 这一块是 Q16 的要害：没有它，
+    - `## 待裁`：还没判的每一条（`undecided`）—— 这一块是要害：没有它，
       "A 还没读的那几条"在报告上与"根本没检索到"同形，而它们下一步的动作完全不同。
 
     三块即使没有行也各留一行 `（无）`：否则"这一块是空的"与"这一块被忘了写"在
@@ -1587,7 +1587,7 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         if why:
             lines.append(f"  相关性：{why}")
         else:
-            # 兜底不许是一句"谁都对得上"的话（改前是「A 未写相关性说明」）：
+            # 兜底不许是一句"谁都对得上"的话：
             # 那样读者看不出缺的是哪几条，也没法回头去要那一句。
             lines.append(f"  相关性：未写（缺的是 `lit:{lit_id}` 这一条的 "
                          "relevance / new_content）")
@@ -1663,7 +1663,7 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
 def report_violations(text: str) -> list[str]:
     """委托报告的判据：三块都在、都非空、未入库的理由都是受控取值。
 
-    第三块（`## 待裁`）是 2026-10-26 Q16 加的：没有它，"A 还没判的那几条"
+    第三块（`## 待裁`）：没有它，"A 还没判的那几条"
     在报告上只剩"未入库 0 篇"这一句 —— 而那与"这一批什么都没检索到"同形。
 
     返回违规描述列表（空 = 通过）。由 `tests/test_search_tools_stage_admit.py` 的正控
@@ -1720,7 +1720,7 @@ _REPORT_ADMITTED_ROW = re.compile(r"^-\s*`lit:([^`]+)`\s*《")
 def _relevance_violations(admitted_text: str) -> list[str]:
     """已入库的条目 relevance 全空 ⇒ 一条违规读数（只记读数，不拦门）。
 
-    为什么要这一档：`relevance` 是业主 2026-10-20 口径里"它为什么与本次检索
+    为什么要这一档：`relevance` 是"它为什么与本次检索
     相关"的那一句，报告「已入库」一块要用它；而 A 的自动链路暂存候选时一次
     都没带过 relevance，于是这一格永远空着 —— 报告照常写出，没有任何一处会
     因此变红，那一句就永远缺着。
