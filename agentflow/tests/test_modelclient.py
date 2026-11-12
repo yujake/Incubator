@@ -113,7 +113,7 @@ def test_client_from_env_reads_the_documented_env_names() -> None:
 def test_the_default_task_id_is_not_turned_into_the_string_none(tmp_path) -> None:
     """缺省 `task_id=None` 同样不许被 `str()` 变成字面量 `"None"`。
 
-    上面那一条覆盖的是调用点把 `task_id` 置成 `""`；而 `ModelClient` 的**缺省值**是 `None`，
+    上面那一条覆盖的是调用点把 `task_id` 置成 `""`；而 `ModelClient` 的缺省值是 `None`，
     `str(None).strip()` 得到的是 `"None"` —— 一个看起来像台账号、却不在 `tasks` 表里的字符串。
     后果与上面同族：每一笔未接线的花销都会落成 `dangling_usage_task`，而"未接线"这个
     合法状态被伪造成"接到了一个不存在的号"。
