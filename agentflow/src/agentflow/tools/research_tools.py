@@ -200,11 +200,9 @@ def research_list_gaps(store: Any, status: str | None = None, limit: int = 50) -
     },
     side_effect="write_local",
     roles=("D",),
-    # 键名从一个真实调用读出（`research_submit_gap`）。duplicated 两支返回同一套
-    # 8 个键（`G-23`）：判重支没有被提交的请求，故 `topic`/`mode` 如实给 `None`；
-    # 新建支没有"为什么跳过"这件事、也没有拦下它的未完成请求，故
-    # `reason` 给 `None`、`open_requests` 给空列表 —— 调用方不必先判
-    # `duplicated` 才能安全读键。
+    # 键名从一个真实调用读出（`research_submit_gap`）。duplicated 两支返回同一套 8 个键
+    # （`G-23`）：判重支没有被提交的请求 ⇒ `topic` / `mode` 如实给 `None`；新建支没有
+    # "为什么跳过"、也没有拦下它的未完成请求 ⇒ `reason` 给 `None`、`open_requests` 给空列表。
     returns=(
         "{'request_id','question_id','duplicated','topic','mode','waiting_request_ids',"
         "'reason','open_requests'}"
@@ -270,16 +268,12 @@ def research_submit_gap(
 
             # ---- I7 在途配额闸门（CS-1：这条路径此前是唯一不过闸门的角色面）
             #
-            # 同族的另外四条（`agent_a/core.py:72`、`agent_c/core.py:663`、
-            # `agent_f/core.py:914`、`agent_d/adjudicate.py:311`）都在建行之前问过
-            # `admit_search_request`，只有这一条没问 ⇒ 全局在途上限（缺省 20）
-            # 可以被这条路刷爆。现场读数（`draft/41-D` §3.4 的只读探针）：先塞 25 条在途
-            # 再调本工具 ⇒ 闸门说 `admitted=False`（25/20），而本工具照样把在途推成 26。
-            #
-            # 为什么闸门加在工具层而不是 agent 层（`agent_d/submit_gaps.py`）：
-            # agent 层只挡得住 D 自己；工具层是"任何调用方走这条路"的咽喉，而别的
-            # 调用方确实存在（`demo.py`、`agent_c/__main__.py` 的转交路径、手敲的工具调用）。
-            # 两处都加就是两份判据 —— 本仓最忌。
+            # 同族的另外四条都在建行之前问过 `admit_search_request`，只有这一条没问 ⇒
+            # 全局在途上限（缺省 20）可以被这条路刷爆（现场读数：先塞 25 条在途再调本工具，
+            # 闸门说 `admitted=False`，而本工具照样把在途推成 26）。闸门加在工具层而不是
+            # agent 层（`agent_d/submit_gaps.py`）：agent 层只挡得住 D 自己，工具层是"任何
+            # 调用方走这条路"的咽喉（`demo.py`、`agent_c/__main__.py` 的转交路径、手敲的
+            # 工具调用都存在）；两处都加就是两份判据。
             gate = admit_search_request(req_rows, submitted_by="agent-D", for_question_id=question_id)
             if not gate.get("admitted"):
                 # 拒绝时一行都不写（闸门自己不落盘，这里也当场返回）。
@@ -317,11 +311,9 @@ def research_submit_gap(
                 # dataclass 的默认值碰巧等于它）：闸门算出来的口径与写进行里的那个值
                 # 必须是同一个，否则"谁排前面"会有两个答案。
                 priority=str(gate.get("priority") or "medium"),
-                # `for_question_id` 是这一行的结构化归属（`schema.py:226-228` 逐字：
-                # "该请求是为哪个研究问题服务的"）—— 从前这里不写它，于是消费方
-                # （I2 闭环 / 证据就绪判据 / D 自己的每问题预算）只能拿
-                # `content_description` 里的 `[q:NNNN]` 做正则（CS-2/CS-3）。
-                # `question_id` 在这个作用域里是现成的参数，填它零成本。
+                # `for_question_id` 是这一行的结构化归属（`schema.py:226-228`："该请求
+                # 是为哪个研究问题服务的"）。从前不写它，消费方只能拿 `content_description`
+                # 里的 `[q:NNNN]` 做正则（CS-2/CS-3）；这里 `question_id` 现成，填它零成本。
                 for_question_id=str(question_id),
             )
             row.validate()  # 先校验：绝不把非法行落到盘上
@@ -591,11 +583,9 @@ def research_set_status(store: Any, question_id: str, status: str, notes: str | 
 
 
 #: 本模块对外暴露的全部工具函数（顺序即注册顺序）。
-#:
-#: 这里的元素是被 ``@tool`` 标记的普通函数，不是 ``ToolSpec``：它们的
-#: handler 不能带 store（见 :func:`install` 的说明），因此不能直接当
-#: ``tools/__init__.py`` 里"第三种约定"（模块级 ``ALL_TOOLS: list[ToolSpec]``）用。
-#: 装配请走 :func:`register` / :func:`install`。
+#: 元素是被 ``@tool`` 标记的普通函数，不是 ``ToolSpec``：它们的 handler 不能带 store
+#: （见 :func:`install` 的说明），因此不能当 ``tools/__init__.py`` 里"模块级
+#: ``ALL_TOOLS: list[ToolSpec]``"那一种约定用。装配请走 :func:`register` / :func:`install`。
 ALL_TOOLS = (
     research_list_gaps,
     research_submit_gap,
