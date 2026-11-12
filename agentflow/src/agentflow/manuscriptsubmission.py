@@ -38,13 +38,8 @@ from typing import Any, Mapping, Sequence
 from . import manuscriptfamily as _MFAM
 from . import schema as S
 
-#: 稿族 ⇒ 产出方角色（唯一一张映射表；事实来源仍是路径族，不是调用方自报）。
-PRODUCER_OF_FAMILY: dict[str, str] = {
-    "f-proof": "F",
-    "b-proof": "B",
-    "e-proof": "E",
-    "e-num": "E",
-}
+#: 稿族 ⇒ 产出方角色的唯一一张映射表在 `manuscriptproducers`（本模块只回引，
+#: 不再抄第二份 —— 抄出来的那张表在 import 之后永远不生效，读者却会以为改它有用）。
 
 #: 「已提交」记号的前缀与字段 —— 真身在 `agent_f/submission.py`，这里只做懒引用。
 SUBMISSION_PREFIX = "mss:"
@@ -61,8 +56,6 @@ TERMINAL_TASK_STATUSES: tuple[str, ...] = tuple(
 VIA_CLOSING = "closing_auto_submit"
 VIA_INGEST = "ingested_to_ledger"
 VIA_SIGN = "sign_issued"
-
-UNKNOWN = "unknown"
 
 
 # --------------------------------------------------------------------- 记号（复用 F 那一套）
@@ -153,10 +146,6 @@ def _task_tokens(tasks: Sequence[Mapping[str, Any]]) -> tuple[dict[str, dict[str
     return tokens, owners, problems
 
 
-def _manuscript_id_of(rel: str) -> str:
-    return str(_MFAM.classify_manuscript(rel).get("manuscript_id") or "")
-
-
 def _find_rel_for_mid(root: Any, mid: str) -> str:
     """按稿号在 `reports/` 下找那份稿（一个稿号 = 一份文件；多份 ⇒ 空串，不挑一份）。"""
     if not mid:
@@ -179,11 +168,8 @@ def _find_rel_for_mid(root: Any, mid: str) -> str:
 
 
 # --------------------------------------------------------------------- B：收录即提交
-def _task_row_for(store: Any, *, role: str, task_id: str) -> tuple[dict[str, Any] | None,
-                                                                  str]:
-    tasks, why = _read_tasks(store)
-    if why:
-        return None, why
+def _task_row_for(tasks: Sequence[Mapping[str, Any]], *, role: str,
+                  task_id: str) -> tuple[dict[str, Any] | None, str]:
     tid = str(task_id or "")
     if not tid:
         return None, "这一趟没有召唤号 ⇒ 没有可写的 task 行"
@@ -245,11 +231,13 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
     stmt_id = str((out.get("target") or {}).get("stmt_id")
                   or (out.get("register") or {}).get("stmt_id")
                   or out.get("stmt_id") or "")
-    row, row_why = _task_row_for(store, role="B", task_id=task_id)
+    # `tasks` 只读一次：原先 `_task_row_for` 与下面那次 `_read_tasks` 各读一遍整表。
+    tasks, tasks_why = _read_tasks(store)
+    row, row_why = ((None, tasks_why) if tasks_why
+                    else _task_row_for(tasks, role="B", task_id=task_id))
     if row is None:
         result.update(checked=True, why=f"没有 task 行可写：{row_why}")
         return out
-    tasks, _why = _read_tasks(store)
     submitted, _owners, _bad = _task_tokens(
         [r for r in tasks if str(r.get("role") or "") == "B"])
     if mid in submitted:
