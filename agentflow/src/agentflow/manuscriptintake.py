@@ -1,38 +1,35 @@
 # -*- coding: utf-8 -*-
-"""手稿的逐格提取（T1 的「提取」侧，设计 `_design_T123.md` 第 2 节）。
+"""手稿的逐格提取（「提取」侧）。
 
 ## 这一层做什么、不做什么
 
 输入是（稿正文文本 + 族 + 要填的格），输出是每一格的提取读数：
 `{格: {outcome, source: {section, lines, sha}, value, why}}`。它只做纯函数切节与
-解析：不读写盘、不读 store、不读台账、不 import 任何既有模块（只 import 标准库）。
-「把取到的那几格写进哪一行」不在这里 —— 那是接线后的 `Secretary.extract_manuscript`
-与 `own.ingest_manuscript`，本批只落这个纯函数层。
+解析：不读写盘、不读 store、不读台账；切节复用 `depsection`，不另写一份。
+「把取到的那几格写进哪一行」不在这里 —— 那是接线后的写口。
 
 ## 三态（与 D4 同一口径，不许折平）
 
 - `present`：稿里有这一节。`value` 是那一节的正文或解析结果；空节也算 present
   （空表 / 空正文是事实，不是"没有这一节"）。
 - `absent`：稿里没有这一节。`value=None`、`source.sha=""`、`source.lines=[]`；
-  调用方必须自己判，不许拿别的节或整份全文顶替（真机 `e-num-*` 没有 `## 证明`）。
+  调用方必须自己判，不许拿别的节或整份全文顶替（`e-num-*` 本来就没有 `## 证明`）。
 - `unreadable`：传进来的根本不是文本（`None` / bytes / 别的类型）。这一态不是
   `absent`：没读到与"稿里没有这一节"是两件事。
 
-## 与既有实现的关系
+## 切节的唯一实现
 
-设计 0.3 的硬约束 1 要求接线时复用 `depsection` 的切节语义，不再自己写。2026-11-10
-（真机 DCT 彩排的空证明缺陷）把这件事收口：`_section` 只是
-`depsection.section_lines` 的转发，判据（`## 证明` 到下一个同级或更高级的标题为止，
-`### ` 及更深的小标题算节内）只有 `depsection.heading_level` / `section_lines` 一处。
-改前这里抄了一份"任何 `#` 都截断"的镜像 ⇒ 同一份稿在 V 稿闸里读得到正文、在逐格提取
+`_section` 只是 `depsection.section_lines` 的转发：判据（`## 证明` 到下一个同级或
+更高级的标题为止，`### ` 及更深的小标题算节内）只有 `depsection.heading_level` /
+`section_lines` 一处。抄一份镜像的代价是同一份稿在 V 稿闸里读得到正文、在逐格提取
 里被截成空串，两处读数对不上。
 
 ## 冲突矩阵
 
-`plan_cells(row, got, conflict)` 是设计 2.6 的纯函数实现：逐格给出
-`filled / unchanged / kept / refused / not_applicable`，并返回 `diff`
-（`requested_not_filled` / `filled_not_requested`）与 `derived_write`。它不读写盘、
-不认签：`proof_without_v_sign` 那条闸要读 `verifications` / `vsigns`，属于接线那一步。
+`plan_cells(row, got, conflict)` 逐格给出 `filled / unchanged / kept / refused /
+not_applicable`，并返回 `diff`（`requested_not_filled` / `filled_not_requested`）与
+`derived_write`。它不读写盘、不认签：`proof_without_v_sign` 那条闸要读
+`verifications` / `vsigns`，属于接线那一步。
 """
 from __future__ import annotations
 
@@ -58,18 +55,18 @@ EXTRACT_UNREADABLE = "unreadable"
 #: 冲突策略（默认 fail-closed：`refuse`）。
 CONFLICTS: tuple[str, ...] = ("refuse", "overwrite", "append", "keep")
 
-#: 收录的三种模式（设计 §2.3.1）：预览 / 按格回填 / 登记新命题。
-#: 与 `own.ingest_manuscript` 的 `mode` 枚举同一份口径（判据钉住两处相等）。
+#: 收录的三种模式：预览 / 按格回填 / 登记新命题。
+#: 与 `agent_b.ingest_manuscript` 的 `mode` 枚举同一份口径（判据钉住两处相等）。
 INGEST_MODES: tuple[str, ...] = ("apply", "preview", "register")
 
-#: 计划结果的五种 outcome（设计 2.4 / 2.6）。
+#: 计划结果的五种 outcome。
 PLAN_FILLED = "filled"
 PLAN_UNCHANGED = "unchanged"
 PLAN_KEPT = "kept"
 PLAN_REFUSED = "refused"
 PLAN_NOT_APPLICABLE = "not_applicable"
 
-#: 每一格从稿的哪儿取（设计 2.5）。`kind` 取稿头的元信息行，不是一个小节。
+#: 每一格从稿的哪儿取。`kind` 取稿头的元信息行，不是一个小节。
 SECTION_BY_CELL: Mapping[str, str] = {
     "statement_full": "## 命题",
     "proof_text": "## 证明",
@@ -86,14 +83,14 @@ DEPENDENCY_COLUMNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("path_group", ("路径",), "路径号（第几条证明）"),
 )
 
-#: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像；接线时改成从它派生）。
-#: 顺序按档位从弱到强：`kind` 只升不降，升要签（设计 2.6）。
+#: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像）。
+#: 顺序按档位从弱到强：`kind` 只升不降，升要签。
 KIND_RANK: Mapping[str, int] = {
     "conjecture": 0, "example": 1, "proposition": 2,
     "lemma": 3, "corollary": 4, "theorem": 5,
 }
 
-#: 与族表对齐的两张镜像（接线时改用 `manuscriptfamily.allowed_cells` / `derived_cells`）。
+#: 与族表对齐的两张镜像（真身是 `manuscriptfamily` 的那张表）。
 _ALLOWED_BY_FAMILY: Mapping[str, tuple[str, ...]] = {
     "f-proof": ("statement_full", "proof_text", "dependencies", "kind"),
     "b-proof": ("proof_text", "dependencies", "kind"),
@@ -109,7 +106,7 @@ _DERIVED_BY_FAMILY: Mapping[str, tuple[str, ...]] = {
     "legacy": (),
 }
 
-#: 受控码（设计 2.10；新增的几条只在提取/计划这一层用，不进工具面）。
+#: 受控码（只在这一层用，不进工具面）。
 CODE_LEGACY = "legacy_manuscript_name"
 CODE_UNREADABLE = "manuscript_unreadable"
 CODE_STATEMENT_ABSENT = "manuscript_statement_absent"
@@ -158,7 +155,7 @@ def _normalise(text: Any) -> tuple[str | None, str]:
 def _section(text: str, heading: str) -> tuple[list[tuple[int, str]], int]:
     """取某一节的正文行 ⇒ `([(行号, 原文)], 标题所在行号)`；没有这一节 ⇒ `([], 0)`。
 
-    唯一实现是 :func:`depsection.section_lines`（2026-11-10：本模块不再自己切节）。
+    唯一实现是 :func:`depsection.section_lines`。
     标题行必须逐字以 `heading` 开头（后面可以跟括号说明或空白）；节从标题下一行开始、
     到下一个同级或更高级的标题或文末为止，`### ` 及更深的小标题算节内内容。
     入参已由 :func:`_normalise` 规范过换行，所以这里直接交给它。
@@ -435,7 +432,7 @@ def _normalise_cells(cells: Iterable[str]) -> tuple[str, ...]:
 
 
 def extract_cells(text: Any, family: str, cells: Iterable[str]) -> dict[str, dict[str, Any]]:
-    """从稿正文里逐格提取 ⇒ `{格: {outcome, source, value, why}}`（设计 2.4）。
+    """从稿正文里逐格提取 ⇒ `{格: {outcome, source, value, why}}`。
 
     参数：稿正文文本、族名（校验闭集；提取本身对族一视同仁 —— 族的合法性由
     `manuscriptfamily.allowed_cells` 判，不在这里判）、要填的格。
@@ -446,7 +443,7 @@ def extract_cells(text: Any, family: str, cells: Iterable[str]) -> dict[str, dic
     `cell_not_applicable_for_family`）。
 
     三态：`present` / `absent` / `unreadable`；`absent` 的 `value` 是 `None`、`source`
-    没有行号与 sha —— 不许把别的节或整份全文填进来顶替（设计 1.2 / D4 同一口径）。
+    没有行号与 sha —— 不许把别的节或整份全文填进来顶替（与 D4 同一口径）。
     """
     family_name = str(family or "").strip()
     if family_name not in FAMILY_NAMES:
@@ -555,7 +552,7 @@ def _plan_statement(reading: Mapping[str, Any], row: Mapping[str, Any],
 
 def _plan_proof(reading: Mapping[str, Any], row: Mapping[str, Any],
                 conflict: str, proof_no: int) -> dict[str, Any]:
-    """`proof_text`：空 ⇒ 填；同 sha ⇒ unchanged；不同 ⇒ 逐档按冲突矩阵（设计 2.6）。"""
+    """`proof_text`：空 ⇒ 填；同 sha ⇒ unchanged；不同 ⇒ 逐档按冲突矩阵。"""
     if reading.get("outcome") != EXTRACT_PRESENT:
         return _refused(reading, True, CODE_PROOF_ABSENT,
                         "稿里没有 `## 证明` ⇒ 没有要写的证明正文（缺节不等于空证明）")
@@ -710,21 +707,21 @@ def _derived(family: str, got: Mapping[str, Any]) -> list[str]:
 def plan_cells(row: Mapping[str, Any] | None, got: Mapping[str, Mapping[str, Any]],
                conflict: str = "refuse", *, family: str = "",
                proof_no: int = 1) -> dict[str, Any]:
-    """把提取读数对到既有行上 ⇒ 逐格计划（设计 2.4 / 2.6 的纯函数实现）。
+    """把提取读数对到既有行上 ⇒ 逐格计划。
 
     `row` 是既有台账行（`None` / 空字典 = `mode=register` 的新行），`got` 是
     `extract_cells` 的返回，`conflict` 是逐格策略。`family` 与 `proof_no` 是接线时由
     工具层从稿名读出的坐标（本函数不读稿名）。
 
     返回键：`ok` / `cells` / `diff` / `derived_write` / `refused` / `reason` / `written`。
-    两条硬不变量（设计 2.4）：
+    两条硬不变量：
 
     - I1：`diff.filled_not_requested == []` —— 实际改动只可能落在请求格与派生列里；
     - I2：`diff.requested_not_filled` 的每一条都带 `outcome ∈ {refused, kept,
       not_applicable}` 与非空的 `reason`。
 
     这一层不认签：`proof_without_v_sign` 要读 `verifications` / `vsigns`，属于接线后
-    的写口（TODO 设计 2.11 f）；也不写盘（`mode=preview` 与 `apply` 共用这一份计划）。
+    的写口；也不写盘（`mode=preview` 与 `apply` 共用这一份计划）。
     """
     policy = str(conflict or "refuse").strip()
     if policy not in CONFLICTS:
