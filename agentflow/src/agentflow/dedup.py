@@ -5,23 +5,16 @@
 - 文献：可以而且应该激进判重（同一篇论文从三个 provider 命中是常态），
   用两级硬键（DOI → 标题[+年]），命中即复用；此外还有一档带年份容差的
   仅标题兜底（:func:`find_existing_literature` 的第 3 轮，`year_tolerance=2`，
-  规则与理由见它的 docstring）。这一档是旧版声明漏掉的那一半：旧版只写了
-  "两级硬键、命中即复用"，读的人会以为硬键之外没有别的匹配档，`R6-AN-3`
-  按实现把它补上。
+  规则与理由见它的 docstring）。
   文件级去重（同一份字节）不在这里：它由 ``literature.download.sha256``
   承担 —— 那条路径要等下载之后才有哈希，而本模块的三轮匹配都在下载之前。
-  （改前这里写的是"三级硬键（DOI → 标题+年 → 文件哈希）"：文件哈希那一级
-  在 `literature_keys` / `find_existing_literature` 里不存在，全仓也没有任何
-  判重路径读 `literature.download.sha256`。`F-9` 登记了这处"声明与实现不符"。
-  本节按实现改成两级，不是因为文件级判重不该有，而是因为声明必须能被对账：
-  写成三级而只有两级，读的人会以为重复文件已经被挡住。）
 - 概念：只按规范化名字精确合并，不做相似度自动归并。
   理由：把"群"和"环"合并的代价远大于漏合并，且错误归并会污染所有下游关系。
   相似但不相同 → 交给复核，不自动合。
-  已经被 I5 合并掉的节点（`merged_into` 非空）不参与匹配 —— 见
+  已经被合并掉的节点（`merged_into` 非空）不参与匹配 —— 见
   :func:`find_concept`：让墓碑参与匹配会让新知识挂到一个永远不再被读到的节点上。
 - 关系：分三档（精确 / 强相似 / 待复核），且必须同概念组才比较。
-  理由见 DESIGN.md §3.3：不同概念组的文本相似是不同知识点。
+  理由：不同概念组的文本相似是不同知识点。
 """
 
 from __future__ import annotations
@@ -43,20 +36,16 @@ from . import textutil as T
 #: ``doi.org`` 会被当成前缀整体删掉，把 ``doi.org`` 这种（畸形但真实的）输入
 #: 变成空串。
 _DOI_URL_PREFIX_RE = re.compile(r"^(?:https?://)?(?:(?:dx|www)\.)?doi\.org/")
-# 2026-10-22（业主批「禁改区允许谨慎地动」）：原正则只吃 `dx.`，与上面那段注释
-# "带不带 `dx.` / 带不带 `www.` 的组合"不符 ⇒ `https://www.doi.org/10.1000/x` 与
-# `10.1000/x` 拿到两个主键（同一篇文献两行）。补一个 `www` 分支即可，其余不动。
+# `www` 分支是判据的一半：漏了它，`https://www.doi.org/10.1000/x` 与
+# `10.1000/x` 会拿到两个主键（同一篇文献两行）。
 _DOI_SCHEME_PREFIX_RE = re.compile(r"^doi:\s*")
 _FULLWIDTH_RE = re.compile(r"[\uff01-\uff5e]")
 
-#: 判重时从 DOI 尾部剥掉的句末标点（`F-9`）。
+#: 判重时从 DOI 尾部剥掉的句末标点。
 #:
-#: 为什么需要它：:func:`normalize_doi` 的 docstring 早就声明了"去掉尾随标点
-#: （句末标点被一起复制进 DOI 是常见脏数据）"，但改前的实现只 `rstrip(".")`，
-#: 而 `_to_halfwidth` 只覆盖 U+FF01–FF5E、NFKC 不折 U+3002（`。`）——
-#: 于是实测 `normalize_doi('10.1000/ABC。') == '10.1000/abc。'`，
-#: 中文句末标点留在键里：同一篇文献"一个带、一个不带"就生成两个 DOI 键
-#: （`temp/auditF-probe4.txt`）。
+#: 为什么需要它：句末标点被一起复制进 DOI 是常见脏数据。只 `rstrip(".")` 不够：
+#: `_to_halfwidth` 只覆盖 U+FF01–FF5E、NFKC 不折 U+3002（`。`），中文句末标点
+#: 会留在键里 —— 同一篇文献"一个带、一个不带"就生成两个 DOI 键。
 #:
 #: ## 为什么是这张显式表，而不是"所有 Unicode 标点"
 #:
@@ -65,7 +54,7 @@ _FULLWIDTH_RE = re.compile(r"[\uff01-\uff5e]")
 #: 所以这里逐字列出"作为句末标点出现"的字符：
 #:
 #: - 半角 `.,;:` —— 尾随的逗号/分号/冒号在引文里几乎只可能是标点；
-#:   它们是 `.` 的同类，而"只认 ASCII 句点"是改前那句声明与实现的分歧本身；
+#:   它们是 `.` 的同类：句末标点不止 ASCII 句点一种；
 #: - `。、，．；：！？` —— 中文/全角的句末标点。注意其中 `，．；：！？` 是
 #:   U+FF01–FF5E，NFKC 之后已经变成半角，落在上面那一组里；这里仍列出全角形态，
 #:   是为了不依赖"NFKC 恰好折了它"这个偶然事实（顺序改了也不出错）；
@@ -87,12 +76,11 @@ def _to_halfwidth(text: str) -> str:
 def normalize_doi(doi: str | None) -> str | None:
     """归一化 DOI —— 全项目唯一的一份 DOI 判据。
 
-    ``providers.normalize_doi`` 原先是第二份实现（``INVENTORY.md`` §4.7③ 实测
-    4 组输入里 3 组结果不同），现已改为转发到本函数。
+    ``providers.normalize_doi`` 转发到本函数 —— 全项目只有这一份实现。
 
     ## 为什么必须只能有一份（合并的理由，也是本函数的契约）
 
-    DOI 是判重键的第一级（§3.5）：
+    DOI 是判重键的第一级：
 
     - :func:`literature_keys` 用 ``f"doi:{normalize_doi(doi)}"`` 造键，
       而 ``literature_keys`` 是 :func:`find_existing_literature` 判"这篇是不是
@@ -105,7 +93,7 @@ def normalize_doi(doi: str | None) -> str | None:
     于是同一篇论文被判成两篇 —— 重复登记、重复下载、重复研究，而且
     没有任何报错（两边各自都自洽）。这就是"判重键必须单一来源"的理由。
 
-    ## 唯一的规则（吸收了原 ``providers`` 那份更严的处理）
+    ## 唯一的规则（采用 ``providers`` 那份更严的处理）
 
     1. 先去 NFKC：DOI 从网页/PDF 里复制出来常带全角数字与全角斜杠
        （``１０.１０００／ｘ``），不折平就会与半角形态分叉；
@@ -117,18 +105,16 @@ def normalize_doi(doi: str | None) -> str | None:
        （`。10.1000/abc` 与 `10.1000/abc` 是两个不同的串，多删一个字符
        就是"两个不同的 DOI 被合并"这种不可逆的错误）。
        剥哪些标点、为什么不含右括号，见 :data:`_DOI_TRAILING_PUNCT` 的说明。
-       顺序是"先去空白、再剥标点、再去空白"：改前是
-       `_to_halfwidth(text).strip().rstrip(".")`，于是 `'10.1000/abc.  '`
-       里的 `.` 不在末尾、剥不掉（`F-9` 的另一半）。
+       顺序是"先剥标点、再 NFKC"：尾随空白要先去掉，否则 `.` 不在末尾、剥不掉。
 
     入参不是 ``str`` 时按"没有 DOI"处理（返回 ``None``），绝不抛 ——
     判重路径宁可退到下一级键，也不该因为一个畸形字段把整批文献的处理打断。
     """
     if not doi or not isinstance(doi, str):
         return None
-    # 顺序是刻意的（`F-9`）：先去尾随标点，再做 NFKC。
+    # 顺序是刻意的：先去尾随标点，再做 NFKC。
     #
-    # 反过来（改前 + 只剥 ASCII）会漏掉一批：`！` / `？` / `，` / `；` / `：` 是
+    # 反过来（只剥 ASCII）会漏掉一批：`！` / `？` / `，` / `；` / `：` 是
     # U+FF01–FF5E，NFKC 会把它们折成半角 `!? ,;:`，于是"剥全角标点"这一步在
     # NFKC 之后就再也看不见原来的形态了。先剥再折，两份写法都能收进同一张表。
     text = doi.strip().rstrip(_DOI_TRAILING_PUNCT).strip()
@@ -148,7 +134,7 @@ def literature_keys(title: str, year: int | None, doi: str | None) -> list[str]:
     只按 `标题+年` 匹配会把同一篇工作登记两次。它在
     :func:`find_existing_literature` 的第 3 轮里被真正使用（并带年份容差保护）。
 
-    ## 这一族是唯一的键来源（`F-8`）
+    ## 这一族是唯一的键来源
 
     年份缺失时给 `|*`，不给 `|na`：`na` 是一个正常值形态，
     它会让"无年份的那个源"与"有年份的那个源"算出两个不同的键，
@@ -174,7 +160,7 @@ def title_key(title: str) -> str:
     它不是键 —— `literature_keys` 从不产出这个形态，`_row_keys` 也因此永远
     匹配不到它。唯一的用处是给 :func:`find_existing_literature` 第 3 轮拼出
     ``f"{title_key(title)}|*"``（那条路径要回答"命中的是哪个键"）。
-    这一点显式写下来，是因为 `F-8` 实测登记过三种标题键形态在飞
+    这一点显式写下来，是因为标题键曾经有三种形态在飞
     （`title:<norm>` / `title:<norm>|na` / `title:{title.lower()}`），
     它们互相不是成员关系；现在只剩 `literature_keys` 那一族。
     """
@@ -279,7 +265,7 @@ def find_existing_literature(
 def find_concept(rows: list[dict], name: str, aliases: list[str] | None = None) -> dict | None:
     """按规范化名字（含别名）精确匹配。不做相似度。
 
-    已被合并的节点（`merged_into` 非空）不参与匹配（I5）：
+    已被合并的节点（`merged_into` 非空）不参与匹配：
 
     合并后那个节点只是审计用的墓碑 —— 它的边已经被改写到 survivor 上。
     若还让它参与匹配，新来的同名概念会命中这个幽灵节点：survivor 永远接不到
@@ -334,7 +320,7 @@ def decide_relation(
     dup_strong: float = 0.92,
     dup_review: float = 0.72,
 ) -> DedupDecision:
-    """关系的三档判重（DESIGN.md §3.3）。
+    """关系的三档判重。
 
     比较用的是 `quote_normalized`（逐字引文）而不是 `description`：
     引文是客观的、可校验的；而 description 是转写，措辞自由度大，
@@ -400,7 +386,7 @@ def relation_dedup_key(concept_group_key: str, quote: str) -> str:
 
 
 def derive_related_concepts(concept_id: str, relations: list[dict], include_suspect: bool = True) -> list[str]:
-    """由关系表派生某概念的"相关概念"（DESIGN.md §6.2）。
+    """由关系表派生某概念的"相关概念"。
 
     刻意从关系派生而不是增量 append：这样漏更新会在下一次重算时自愈，
     且 `verify` 可以用同一个函数独立复算来交叉检查。
