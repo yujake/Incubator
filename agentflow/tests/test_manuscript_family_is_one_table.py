@@ -20,17 +20,14 @@ import pytest
 
 from agentflow import manuscriptfamily as MF
 
-#: 四族的名字用例：`(族, 号, 证明号)`。`e-num` 不设 `-pN`，所以只有 1。
+#: 四族写路径的名字用例：`(族, 号, 证明号)`。写侧只有一种形式 ——
+#: 一个稿号 = 一份文件 = 一份证明，证明号不进名字，所以这里只有 1。
+#: 盘上老名字 `…-p<N>.md` 的读数由 `test_manuscript_name_carries_proof_no.py` 钉。
 NAME_CASES: tuple[tuple[str, str, int], ...] = (
     ("f-proof", "000000", 1),
-    ("f-proof", "000000", 2),
-    ("f-proof", "123456", 3),
     ("f-proof", "plan-0001", 1),
     ("b-proof", "000000", 1),
-    ("b-proof", "000041", 2),
-    ("b-proof", "999999", 3),
     ("e-proof", "000012", 1),
-    ("e-proof", "000012", 2),
     ("e-num", "000012", 1),
 )
 
@@ -368,6 +365,25 @@ def test_relpath_and_accessors_fail_closed(call) -> None:
     """未知族 / 号形不对 / 证明号不合法 ⇒ `ValueError`（不猜一个名字出来）。"""
     with pytest.raises(ValueError):
         call()
+
+
+def test_relpath_refuses_a_proof_no_suffix() -> None:
+    """写路径给 `proof_no >= 2` ⇒ 受控拒绝（产出侧不拼 `-pN`）。
+
+    为什么是拒绝而不是静默压成 1：压成 1 会让"以为在写第 2 份"的调用方覆盖第 1 份
+    的稿，而那在盘上表现为"第 1 份变了、第 2 份不存在"，没有任何地方会报。
+    `legacy_read=True` 只给读侧算盘上旧文件名用，它仍拼得出旧名。
+    """
+    for family, manuscript_id in (("f-proof", "000000"), ("b-proof", "000041"),
+                                  ("e-proof", "000012")):
+        with pytest.raises(ValueError):
+            MF.relpath(family, manuscript_id, 2)
+        # 读侧那一条口仍拼得出盘上旧名（只服务已存在的旧文件）。
+        assert MF.relpath(family, manuscript_id, 2,
+                          legacy_read=True).endswith("-p2.md")
+    # e-num 从不设后缀：legacy_read 也不给它拼。
+    with pytest.raises(ValueError):
+        MF.relpath("e-num", "000012", 2, legacy_read=True)
 
 
 def test_parse_keeps_the_legacy_compatibility_readings() -> None:

@@ -61,11 +61,10 @@ _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 #:
 #: 落在结构上：落点永远 `reports/<族>-proof-<稿号>.md`；改正文就地改那一份
 #: （`proofregistry` 的 `mode=rewritten` 只动 `## 证明` 与头部的元信息，不换名、
-#: 不涨 `proof_no`；稿头也不再有 `- 证明号：` 那一行）。这一条只对 F 与 B 成立 ——
-#: E 的稿头仍写 `- 证明号：<N>`（`exhaustionreport` 那一支），所以读侧仍要认那一行。
-#: 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）是历史，只读兼容：
-#: `proofregistry._legacy_proof_no_of` 命中它们时沿用文件名里的 N，不改身份。
-NO_VERSION_SUFFIX_FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
+#: 不涨 `proof_no`；稿头也没有 `- 证明号：` 那一行）。产出侧三族都按这一条，
+#: `-pN` 与稿头那一行只留在读侧（盘上已存在的旧文件）。
+#: 产出侧只有一种名字：一个稿号 = 一份文件 = 一份证明（`proof_no` 不进名字）。
+
 
 #: 族 ⇒ 文件名前缀（命名的唯一来源；别处不许再写一遍字面量）。
 #: 从 `manuscriptfamily` 派生。
@@ -169,7 +168,7 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     """这一族、这个号 ⇒ 约定路径（工作区相对）；认不出就受控拒绝。
 
     `manuscript_id` 是这一族自己的手稿号：给了它，这一族的稿只按
-    `reports/<前缀><稿号>[-p<N>].md` 命名，命题号 / 计划号都不参与。
+    `reports/<前缀><稿号>.md` 命名（产出侧不拼证明号后缀），命题号 / 计划号都不参与。
     F 与 B 两族都走这一格（「B侧稿和F侧稿的维护方法一致」）。`statement_id` 与
     `plan_id` 仍保留给老盘上的只读兼容（`b-proof-<命题号>` / `f-proof-plan-*`）。
 
@@ -182,16 +181,9 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     sid = str(statement_id or "").strip()
     pid = str(plan_id or "").strip()
     mid = str(manuscript_id or "").strip()
-    try:
-        no = int(proof_no or 1)
-    except (TypeError, ValueError):
-        no = 0
-    # 一个稿号一份稿：这一族按稿号命名时不写 `-pN` 后缀（一个稿号 = 一份文件 =
-    # 一份证明）。
-    if mid and fam in NO_VERSION_SUFFIX_FAMILIES:
-        name_no = 1
-    else:
-        name_no = no if no >= 1 else 1
+    # 产出侧只有一种名字：一个稿号 = 一份文件 = 一份证明 ⇒ 拼名不带 `-p<N>` 后缀。
+    # `proof_no` 形参保留只为旧调用点不必改签名；它不参与拼名。
+    name_no = 1
     out: dict[str, Any] = {
         "checked": True, "ok": False, "family": fam, "path": "", "name": "",
         "manuscript_id": "", "proof_no": 0, "code": "", "why": "",
@@ -208,17 +200,16 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         if mid and fam in _FAMILY_OF:
             rel = _MID.canonical_rel(mid, name_no, family=_FAMILY_OF[fam])
         elif sid and fam in _FAMILY_OF:
-            rel = _MFAM.relpath(_FAMILY_OF[fam], sid,
-                                no if no >= 1 else 1)
+            rel = _MFAM.relpath(_FAMILY_OF[fam], sid, name_no)
         elif pid and fam == FAMILY_F:
             rel = _MFAM.relpath("f-proof", f"plan-{pid}", 1)
     except ValueError:
         rel = ""
     if not rel:
         if mid:
-            name = f"{prefix}{mid}" + (f"-p{no}" if no >= 2 and name_no != 1 else "")
+            name = f"{prefix}{mid}"
         elif sid:
-            name = f"{prefix}{sid}" + (f"-p{no}" if no >= 2 else "")
+            name = f"{prefix}{sid}"
         elif pid:
             name = f"{PLAN_PREFIX.get(fam) or (prefix + 'plan-')}{pid}"
         else:
@@ -240,10 +231,6 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
     if pid and not sid and not mid and fam != FAMILY_F:
         out.update(code=BAD_MANUSCRIPT_NAME,
                    why=f"{fam} 这一族没有 `plan-` 名（计划名只属于 F 的老盘只读兼容）")
-        return out
-    if out["proof_no"] != name_no:
-        out.update(code=BAD_MANUSCRIPT_NAME,
-                   why=(f"证明号 {no!r} 拼不出可解析的名字（`-p<N>` 的 N 是 ≥1 的整数）"))
         return out
     if mid:
         want_id = mid

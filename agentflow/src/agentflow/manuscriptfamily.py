@@ -69,7 +69,6 @@ class FamilySpec:
     prefix: str
     directories: tuple[str, ...]
     id_pattern: str
-    proof_suffix: bool
     needs_sign: bool
     tier: str
     allowed: tuple[str, ...]
@@ -85,8 +84,9 @@ class FamilySpec:
 #: 唯一判定表：四族 + `legacy` 读档。
 #:
 #: 各列的含义：
-#: - `prefix` / `directories` / `id_pattern` / `proof_suffix`：身份（`reports/` 是唯一
-#:   允许目录；`f-proof` 的号可以是 `plan-<数字>`；`e-num` 不设 `-pN`）；
+#: - `prefix` / `directories` / `id_pattern`：身份（`reports/` 是唯一允许目录；
+#:   `f-proof` 的号可以是 `plan-<数字>`）。证明号不是身份列：产出侧一个稿号 =
+#:   一份文件 = 一份证明，写路径不拼 `-pN`；
 #: - `needs_sign`：要不要 V 的签（`e-num` 走绿色通道）；
 #: - `allowed` / `default`：可请求格与缺省格（`statement_full` 只在 register 可写）；
 #: - `derived`：写口顺带写的列（五元位 / 证明号 / 正文 sha / 签后升档的 kind / proofs）；
@@ -97,7 +97,7 @@ class FamilySpec:
 FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
     "f-proof": FamilySpec(
         family="f-proof", prefix="f-proof-", directories=(MANUSCRIPT_DIR,),
-        id_pattern=r"\d{4,6}|plan-\d+", proof_suffix=True, needs_sign=True,
+        id_pattern=r"\d{4,6}|plan-\d+", needs_sign=True,
         tier=TIER_FAMILY,
         allowed=("statement_full", "proof_text", "dependencies", "kind"),
         default=("statement_full", "proof_text", "dependencies"),
@@ -108,7 +108,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
     ),
     "b-proof": FamilySpec(
         family="b-proof", prefix="b-proof-", directories=(MANUSCRIPT_DIR,),
-        id_pattern=r"\d{4,6}", proof_suffix=True, needs_sign=True,
+        id_pattern=r"\d{4,6}", needs_sign=True,
         tier=TIER_FAMILY,
         allowed=("proof_text", "dependencies", "kind"),
         default=("proof_text", "dependencies"),
@@ -119,7 +119,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
     ),
     "e-proof": FamilySpec(
         family="e-proof", prefix="e-proof-", directories=(MANUSCRIPT_DIR,),
-        id_pattern=r"\d{4,6}", proof_suffix=True, needs_sign=True,
+        id_pattern=r"\d{4,6}", needs_sign=True,
         tier=TIER_FAMILY,
         allowed=("statement_full", "proof_text", "dependencies", "kind"),
         default=("statement_full", "proof_text", "dependencies"),
@@ -130,7 +130,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
     ),
     "e-num": FamilySpec(
         family="e-num", prefix="e-num-", directories=(MANUSCRIPT_DIR,),
-        id_pattern=r"\d{4,6}", proof_suffix=False, needs_sign=False,
+        id_pattern=r"\d{4,6}", needs_sign=False,
         tier=TIER_FAMILY,
         allowed=("statement_full", "numeric_evidence"),
         default=("statement_full", "numeric_evidence"),
@@ -141,7 +141,7 @@ FAMILIES: Mapping[str, FamilySpec] = MappingProxyType({
     ),
     LEGACY_FAMILY: FamilySpec(
         family=LEGACY_FAMILY, prefix="", directories=(), id_pattern="",
-        proof_suffix=False, needs_sign=False, tier=TIER_LEGACY,
+        needs_sign=False, tier=TIER_LEGACY,
         allowed=(), default=(), derived=(),
         evidence_kind="", evidence_kind_from_sign=False,
         kind_default="", kind_default_from_ledger=False,
@@ -267,11 +267,15 @@ def _shape_of_name(name: str) -> dict[str, Any]:
 
 
 def _canonical_of(name_family: str, manuscript_id: str, proof_no: int) -> str:
-    """历史名 ⇒ 规范名（`reports/<族>-<号>[-pN].md`）；拼不出 ⇒ 空串。"""
+    """历史名 ⇒ 它对应的规范名（读侧建议，不是写路径）；拼不出 ⇒ 空串。
+
+    `legacy_read=True` 是这里唯一的用途：盘上那份旧稿叫 `…-p<N>.md` 时，建议名仍按
+    旧名拼回去（只读），新写路径不会产生这种名字。
+    """
     if not name_family or not manuscript_id:
         return ""
     try:
-        return relpath(name_family, manuscript_id, proof_no)
+        return relpath(name_family, manuscript_id, proof_no, legacy_read=True)
     except ValueError:
         return ""
 
@@ -458,15 +462,24 @@ def is_sign_carrier(rel: Any) -> bool:
 
 
 def relpath(family: Any, id: str = "", proof_no: int = 1, *,
-            strict: bool = True) -> str:
-    """族 + 号 + 证明号 ⇒ 拼名（`reports/<前缀><号>[-p<N>].md`）。
+            strict: bool = True, legacy_read: bool = False) -> str:
+    """族 + 号 ⇒ 拼名（`reports/<前缀><号>.md`）。
 
-    一个稿号 = 一份文件 = 一份证明：新写路径只拼 `reports/<前缀><号>.md`，`-p<N>` 只服务老盘只读兼容（老调用方给 `proof_no>=2` 时仍拼得出来）。
+    产出侧只有一种形式：一个稿号 = 一份文件 = 一份证明，名字里不带证明号后缀。
+    写路径给 `proof_no >= 2` ⇒ **受控拒绝**（`strict=True` 时 `ValueError`）。
+    为什么拒绝而不是静默压成 1：压成 1 会让"以为在写第 2 份"的调用方覆盖第 1 份的稿，
+    而那个错误在盘上表现为"第 1 份变了、第 2 份不存在"，没有任何地方会报 —— 正是本模块
+    要防的那类静默形态（见下段"为什么要集中拼名"）。
+
+    `legacy_read=True` 只服务**盘上已存在的旧文件**（`reports/<前缀><号>-p<N>.md` 那一族）：
+    给旧稿算"它对应的规范名"时把旧的 N 拼回去。它不是新写路径的一种形式，新写路径
+    不传它；解析侧认 `-pN` 也只服务那些旧文件（见 `_PROOF_REST_RE`）。
+
     为什么要集中拼名：手写拼法散在各处，拼错时的症状是"文件不在盘上"，而每一处都会以
     "查不到"的形式静默通过。这里对号形与证明号做同一套校验，拼出来的名字一定能被
     `parse` 读回原值（往返判据 `tests/test_manuscript_family_is_one_table.py`）。
 
-    `f-proof` 的号可以是 `plan-<数字>`；`e-num` 不设 `-pN`（proof_no 只能是 1）。
+    `f-proof` 的号可以是 `plan-<数字>`；`e-num` 从不设 `-pN`（`legacy_read` 也不给它拼）。
     未知族 / 号形不对 / proof_no 不是 >=1 的整数 ⇒ `ValueError`（不猜）。
 
     `strict=False` 是给"旧调用方本来就把非法输入读成空串"的那一处（`bmanuscript.relpath`
@@ -494,10 +507,11 @@ def relpath(family: Any, id: str = "", proof_no: int = 1, *,
         return _fail(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
     if no < 1:
         return _fail(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
-    suffix = f"-p{no}" if spec.proof_suffix and no >= 2 else ""
-    if not spec.proof_suffix and no != 1:
-        return _fail(f"{spec.family} 不设证明号后缀（一份数值手稿只对应一次实验），"
-                     f"收到 proof_no={no}")
+    if no != 1 and (spec.family == "e-num" or not legacy_read):
+        return _fail(
+            f"一个稿号 = 一份文件 = 一份证明：新写路径不设证明号后缀，"
+            f"收到 proof_no={proof_no!r}（族 {spec.family}）")
+    suffix = f"-p{no}" if legacy_read and no >= 2 else ""
     return f"{MANUSCRIPT_DIR}/{spec.prefix}{got_id}{suffix}.md"
 
 
