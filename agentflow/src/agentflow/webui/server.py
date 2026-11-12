@@ -862,8 +862,9 @@ class WebHandler(BaseHTTPRequestHandler):
         rel = str(params.get("file", ""))
         root = Path(self.static_root)
         try:
+            resolved = root.resolve()   # 一次解析，下面两处判据用同一份
             target = (root / rel).resolve()
-            inside = target == root.resolve() or root.resolve() in target.parents
+            inside = target == resolved or resolved in target.parents
         except (OSError, RuntimeError):
             inside, target = False, root
         if not inside or not target.is_file():
@@ -913,10 +914,12 @@ class WebHandler(BaseHTTPRequestHandler):
             self._json(404, {"ok": False, "tri": "not_applicable",
                              "reason": f"没有这个端点：{path}", "path": path})
             return
-        index = Path(self.static_root) / "index.html"
-        if self._wants_html() and index.is_file():
-            self._serve_spa_shell()
-            return
+        if self._wants_html():
+            # 外壳在不在由 `_serve_spa_shell` 自己判（那一次 `is_file` 就是这句话的
+            # 唯一判据）：吐出去了就到此为止，吐不出去才落到下面那张诚实的 404 —— 与
+            # 原来"先 is_file、再交给同一个函数再 is_file 一次"逐条同结局。
+            if self._serve_spa_shell():
+                return
         self._html(404, _error_page(404, "没有这个页面", f"没有路由：{path}"))
 
     # ------------------------------------------------------------ CSRF 占位符
