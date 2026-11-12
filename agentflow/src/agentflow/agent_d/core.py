@@ -360,7 +360,7 @@ class _Core:
                 chain = "->".join(rpath) if rpath else "-"
                 # 概念名优先用 C 已经翻译好的（口径以 C 为准），缺失再本地查
                 cnames = [str(x) for x in (p.get("concept_names") or [])]
-                names = cnames if len(cnames) == len(cpath) else [self._concept_name(c) for c in cpath]
+                names = cnames if len(cnames) == len(cpath) else self._concept_names(cpath)
                 out.append(
                     {
                         "kind": "paths",
@@ -425,7 +425,7 @@ class _Core:
                     continue
                 rids = [str(x) for x in (g.get("related_relation_ids") or g.get("relation_ids") or [])]
                 cnames = [str(x) for x in (g.get("concept_names") or [])]
-                names = cnames if len(cnames) == len(cids) else [self._concept_name(c) for c in cids]
+                names = cnames if len(cnames) == len(cids) else self._concept_names(cids)
                 out.append(
                     {
                         "kind": "gaps",
@@ -446,7 +446,7 @@ class _Core:
             cids = self._collect_ids(payload, ("concept_id", "concept_ids"))
             rids = self._collect_ids(payload, ("relation_id", "relation_ids"))
             if cids or rids:
-                names = [self._concept_name(c) for c in cids[:3]]
+                names = self._concept_names(cids[:3])
                 out.append(
                     {
                         "kind": kind or "unknown",
@@ -465,29 +465,54 @@ class _Core:
                 )
         return out
     def _collect_ids(self, node: Any, keys: Sequence[str], *, depth: int = 0) -> list[str]:
-        """递归收集 payload 里形如代号的值（容错用，深度受限防环）。"""
-        found: list[str] = []
+        """递归收集 payload 里形如代号的值（容错用，深度受限防环）。
+
+        去重与排序只在最外层做一次：改前每一层递归都 `sorted(set(found))` 一遍、
+        父层再把子层的已排序列表 `extend` 进来（同一批子树被反复集合化 + 排序，
+        深度 5 层就是 5 次）。`_collect_ids_into` 只往一个集合里放，判据
+        （`k in keys` / `S.is_valid_id` / `depth > 4` 截断）逐字未动。
+        """
+        found: set[str] = set()
+        self._collect_ids_into(node, keys, found, depth=depth)
+        return sorted(found)
+
+    def _collect_ids_into(self, node: Any, keys: Sequence[str], found: set[str], *,
+                          depth: int = 0) -> None:
+        """`_collect_ids` 的唯一递归体：把代号放进 `found`（不排序、不去重拷贝）。"""
         if depth > 4:
-            return found
+            return
         if isinstance(node, Mapping):
             for k, v in node.items():
                 if k in keys:
                     if isinstance(v, str) and S.is_valid_id(v):
-                        found.append(v)
+                        found.add(v)
                     elif isinstance(v, list):
-                        found.extend(str(x) for x in v if S.is_valid_id(x))
+                        found.update(str(x) for x in v if S.is_valid_id(x))
                 else:
-                    found.extend(self._collect_ids(v, keys, depth=depth + 1))
+                    self._collect_ids_into(v, keys, found, depth=depth + 1)
         elif isinstance(node, (list, tuple)):
             for item in node:
-                found.extend(self._collect_ids(item, keys, depth=depth + 1))
-        return sorted(set(found))
-    def _concept_name(self, cid: str) -> str:
-        # 合成视图（并表过渡期）：名字这一格两边都要看得到，否则报告里会出现"概念0007"
-        for row in _CR.view(self.store, shape="legacy")["rows"]:
+                self._collect_ids_into(item, keys, found, depth=depth + 1)
+    def _concept_name(self, cid: str, rows: Sequence[Mapping[str, Any]] | None = None) -> str:
+        """概念号 → 名字（合成视图，并表过渡期：两边都要看得到，否则报告里会出现"概念0007"）。
+
+        `rows=` 是调用方手上已有的一份 `_CR.view(store, shape="legacy")["rows"]` 快照：
+        `view()` 每次都要整读 `statements`（只取 `kind == "concept"` 的行）+ 老表 + 一趟
+        合并，而这一格改前是"每问一个名字就读一整份视图"。给快照就只读一次；
+        判据仍是逐行 `row.get("concept_id") == cid`、命中取 `str(name or cid)`、
+        不命中 `概念{cid}` —— 与不给快照时逐字同一份比较。
+        """
+        for row in (_CR.view(self.store, shape="legacy")["rows"] if rows is None else rows):
             if row.get("concept_id") == cid:
                 return str(row.get("name") or cid)
         return f"概念{cid}"
+
+    def _concept_names(self, cids: Sequence[str]) -> list[str]:
+        """一批概念号 → 名字，按入参顺序（视图只读一次；逐号判据仍只有 `_concept_name` 那一份）。"""
+        if not cids:
+            return []
+        rows = _CR.view(self.store, shape="legacy")["rows"]
+        return [self._concept_name(c, rows) for c in cids]
     def _relation_ids_touching(self, concept_ids: Sequence[str]) -> list[str]:
         want = set(concept_ids)
         return sorted(
@@ -686,7 +711,7 @@ class _Core:
                     f"弱线索（{'、'.join(rids)}，strength={strength or '未知'}）：只记录，不建问题/不追问"
                 )
                 continue
-            names = [self._concept_name(c) for c in cids] or [f"关系{rids[0]}", f"关系{rids[1]}"]
+            names = self._concept_names(cids) or [f"关系{rids[0]}", f"关系{rids[1]}"]
             out.append(
                 {
                     "kind": "contradiction",  # 内容键用的"来源类型"
@@ -1089,7 +1114,7 @@ class _Core:
         让 A/人看得出"这次追问是为了判定哪两条表述"。
         """
         rids = [str(x) for x in (qrow.get("contradiction_relation_ids") or [])]
-        names = [self._concept_name(str(c)) for c in (qrow.get("related_concept_ids") or [])][:4]
+        names = self._concept_names([str(c) for c in (qrow.get("related_concept_ids") or [])])[:4]
         topic = " ".join(n for n in names if n) or f"关系 {rids[0] if rids else '?'} 矛盾"
         quotes = "；".join(
             f"{o.get('relation_id')}：{_digest(o.get('statement') or o.get('description'), 100)}"
@@ -1407,7 +1432,7 @@ class _Core:
             pr_label = pr.get("label") or (f"pp.{pr.get('start')}-{pr.get('end')}" if pr.get("start") else "页码未知")
             names = [str(n) for n in (c.get("concept_names") or []) if n]
             if not names:
-                names = [self._concept_name(str(x)) for x in (c.get("concept_ids") or [])]
+                names = self._concept_names([str(x) for x in (c.get("concept_ids") or [])])
             # 链条自身的步子优先用 C 给的方向（见 AgentD._chain_concept_path）：
             # 一条关系的 concept_ids 是升序的，"素理想 → 环同态"会把方向写反。
             if numbered and c.get("hop_from") and c.get("hop_to"):
