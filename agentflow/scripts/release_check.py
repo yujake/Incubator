@@ -28,9 +28,8 @@
 "pytest 因为收集错误没跑起来"既不是"测试通过"，也不是"测试失败"，
 把它算成任何一档都会掩盖真相。
 
-`--skip` 关掉的项也记 `unknown`（`I-3`），不是"不参与判定"。
-理由：`--skip` 是调试开关，而"调试时跳过七项"与"八项都通过"在旧输出里长得一模一样
-（旧版逐字打印 `发布检查总判定：PASS    pass=1 fail=0 unknown=0` 且全文不出现"跳过"）。
+`--skip` 关掉的项也记 `unknown`，不是"不参与判定"。
+理由：`--skip` 是调试开关，而"调试时跳过七项"与"八项都通过"在输出上必须长得不一样。
 被跳过的项以名字进 `skipped` 列表与 `--json-out` 产出的报告，总判定按 `unknown` 记 ⇒ 退出码 2。
 这与编排层 `tools/release_all.py` 的口径逐字一致（那条有测试钉死）。
 
@@ -49,8 +48,7 @@
 
 ## 为什么"测试全绿"进不了这一项
 
-第 1 项全绿不能推出可以发布，理由是本项目自己的一手教训：
-9 条已交付缺陷里 0 条能被 happy-path 抓到（`10-…md` §10.10 结论①）。
+第 1 项全绿不能推出可以发布：本项目的已交付缺陷里，没有一条能被 happy-path 抓到。
 所以发布门不只看"测试过没过"，还看门本身有没有被校准过（第 3/4/5/6 项）
 与契约版本有没有对齐（第 7 项）。
 """
@@ -72,13 +70,11 @@ from typing import Sequence
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SRC = REPO_ROOT / "src"
 
-#: 门的产物落点（`X-1`）：`REPO_ROOT.parent / "temp"`。
+#: 门的产物落点：`REPO_ROOT.parent / "temp"`。
 #:
-#: 为什么不是仓库根：第 5 项（linter）会把 linter 的结果写成 JSON。此前它写的是
-#: `<repo>/.release-lint.json` —— 那是被 git 跟踪的文件，于是"跑一次发布门"
-#: 这件只读的事会把工作区改脏，而脏工作区又会反过来污染别的门的判据
-#: （例如"本次改动的文件集"）。实测：`python scripts/release_check.py --skip ...`
-#: 跑完 `.release-lint.json` 的 sha256 从 `B625A5B9…` 变成 `E25FCCA4…`。
+#: 为什么不是仓库根：第 5 项（linter）会把 linter 的结果写成 JSON。若写进被 git 跟踪的
+#: `<repo>/.release-lint.json`，则"跑一次发布门"这件只读的事会把工作区改脏，而脏工作区
+#: 又会反过来污染别的门的判据（例如"本次改动的文件集"）。
 #:
 #: 口径（不是"不产生产物"—— 产物本身是证据）：产物搬到被 `.gitignore`
 #: 排除的 `temp/` 里。`.gitignore` 的 `/temp/` 前导斜杠锚定在上一级
@@ -104,14 +100,13 @@ ROLE_TOOL_FLOOR: dict[str, int] = {"A": 18, "B": 16, "C": 15, "D": 30, "E": 18, 
 
 READ_ONLY_ROLES = ("C", "H")
 
-#: `item_selftests` 的四条判据（`D9`）。这是那一项判据的唯一出处：
+#: `item_selftests` 的四条判据。这是那一项判据的唯一出处：
 #: 模块 docstring 的八项表第 2 行必须与它逐条对应，`tests/test_release_check_items.py`
 #: 把两处铆在一起（改写判据而不同步这两处 ⇒ 测试必红）。
 #:
-#: 为什么要写成数据而不是只写在 docstring 里（`D9` 的实测）：表格第 2 行原写
-#: "8 个 agent + pipeline 自检全部退出码 0"，而 `item_selftests` 实际多一道
-#: `has_selftest` 门（没有 `__main__` 块 ⇒ `unknown`）。按 docstring 读会以为
-#: 没有自检块的那两个模块"应该 pass 或 fail"。实现更严且更符合三态纪律，
+#: 为什么要写成数据而不是只写在 docstring 里：表格第 2 行若只写"自检全部退出码 0"，
+#: 读的人会以为没有自检块的那两个模块"应该 pass 或 fail"，而 `item_selftests` 多一道
+#: `has_selftest` 门（没有 `__main__` 块 ⇒ `unknown`）。那个实现更严且更符合三态纪律，
 #: 是文档该改 —— 但只把文档改对，下一次漂移没人看得见，所以这里留一份可断言的原文。
 SELFTEST_CRITERIA: tuple[tuple[str, str], ...] = (
     ("no_selftest_block",
@@ -124,7 +119,7 @@ SELFTEST_CRITERIA: tuple[tuple[str, str], ...] = (
 
 
 def _selftest_verdict(has_selftest: bool, started: bool, timed_out: bool, exit_code: int | None) -> str:
-    """单个模块自检的三态判定（`D9`：把"没有自检块"这一支变成可单测的函数）。
+    """单个模块自检的三态判定（把"没有自检块"这一支变成可单测的函数）。
 
     分支顺序就是判据本身，与 `SELFTEST_CRITERIA` 逐条对应 ——
     `tests/test_release_check_items.py` 对四条分支各给一个输入，
@@ -138,7 +133,7 @@ def _selftest_verdict(has_selftest: bool, started: bool, timed_out: bool, exit_c
         return "fail"
     return "pass"
 
-#: `noai_gate.evaluate_approval` 的理由码 → 一句人话（`P-3`：写清缺的是哪一条）。
+#: `noai_gate.evaluate_approval` 的理由码 → 一句人话（写清缺的是哪一条）。
 #: 键取自 `noai_gate` 的 `REASON_*` 常量（那份判据只有一处实现，这里只做翻译，
 #: 不复制判据）；键缺失时按原样打印理由码，宁可露出一个陌生的码也不编一句解释。
 _APPROVAL_REASON_TEXT: dict[str, str] = {
@@ -148,7 +143,7 @@ _APPROVAL_REASON_TEXT: dict[str, str] = {
     "ledger_self_approval": "台账不能批准自己（本文件就是台账本体）",
     "hash_unavailable": "拿不到盘上内容的 `sha256` ⇒ 这一条**没查成**",
     #: `approved` 在 `exit_code == 0` 那一支被显式读走（`by_human` / `by_audit`）。
-    #: 它出现在这张表里的理由：`REAUDIT2-R1-2` 指出这张表少了它 ——
+    #: 它出现在这张表里的理由：这张表曾经少了它 ——
     #: 一旦有别的读法（例如把 approvals 全量打印出来）碰到这个码，
     #: 缺键就会把 `approved` 原样打成裸码，读的人分不清"没批准"与"批准了"。
     "approved": "已获批准（**通路按 `distinct_reviewers` 分流**：≥2 名不同 reviewer = 人审；"
@@ -166,7 +161,7 @@ _APPROVAL_REASON_TEXT: dict[str, str] = {
         "⇒ 这一条**没查成**：先确认证据还在不在，别把它读成『审计没过』"
     ),
     #: 以下两条是门口新加的两道机审判据（另一个批次落在 `scripts/noai_gate.py` 的
-    #: `REASON_*` 里）。翻译必须跟上：`REAUDIT2-R1-2` 之后有一条交叉断言
+    #: `REASON_*` 里）。翻译必须跟上：有一条交叉断言
     #: （`tests/test_release_check_noai.py::test_every_reason_code_the_gate_can_return_has_a_translation`）
     #: 要求"门能发出的每一个码都在这里有解释"——缺键会把裸码打给读报告的人。
     "insufficient_independent_dimensions": (
@@ -178,20 +173,16 @@ _APPROVAL_REASON_TEXT: dict[str, str] = {
         "机审记录里的「时间戳核对不上」（缺失 / 不可解析 / 与证据锚上的时间不一致）"
         "⇒ 这一条没查成：先弄清时间对不上的原因，别把它读成『审计没过』"
     ),
-    #: `F1-FOUND-1`（第 6 轮 F1 批实测补上的一处）：F1 为 `R6-R1d-3` 在
-    #: `scripts/noai_gate.py` 新加了 `REASON_AUDIT_TIMESTAMPS_ORDER`，但没同步这张表
-    #: ——`tests/test_release_check_noai.py::test_every_reason_code_the_gate_can_return_has_a_translation`
-    #: 当场报了 `missing == ['audit_timestamps_not_monotonic']`。交叉断言就是在等这一处，
-    #: 所以补的是翻译，不是判据。
+    #: 门给 `scripts/noai_gate.py` 新加了 `REASON_AUDIT_TIMESTAMPS_ORDER`，当时没同步这
+    #: 张表 —— `tests/test_release_check_noai.py` 那条交叉断言当场报了
+    #: `missing == ['audit_timestamps_not_monotonic']`。补的是翻译，不是判据。
     "audit_timestamps_not_monotonic": (
         "机审记录里的「审计时间戳次序倒挂」（后写的那一条不早于先写的）"
         "⇒ 这一条未批准：那串时间是审计者自报的，门只判『可解析、不在未来、按台账次序"
         "非递减』，不判内容真伪 —— 倒挂说明它不能当作『各自独立发生在本轮窗口内』的次序证据"
     ),
-    #: `FINAL-R1d-04` 那一批（2026-09-28 修复窗口）给 `scripts/noai_gate.py` 新加了
-    #: `REASON_REVIEW_ANCHOR`，但没同步这张表 ⇒ 与本文件上面 `F1-FOUND-1` 同族的缺口，
-    #: 同一条交叉断言（`tests/test_release_check_noai.py`，全量里绿、单独跑不过）
-    #: 当场报 `missing == ['reviewer_evidence_anchor_unverifiable']`。
+    #: 门给 `scripts/noai_gate.py` 新加了 `REASON_REVIEW_ANCHOR`，当时也没同步这张表 ⇒
+    #: 同上一条交叉断言当场报 `missing == ['reviewer_evidence_anchor_unverifiable']`。
     #: 所以补的是翻译，不是判据。
     "reviewer_evidence_anchor_unverifiable": (
         "人审记录**带了**证据锚，但锚核对不上（指向的文件不在盘上 / 内容与登记的 `sha256` "
@@ -218,7 +209,7 @@ class Item:
 @dataclass
 class Report:
     items: list[Item] = field(default_factory=list)
-    #: 被 `--skip` 关掉的项（`I-3`）。必须单独记，理由见 `counts()` / `overall()`。
+    #: 被 `--skip` 关掉的项。必须单独记，理由见 `counts()` / `overall()`。
     skipped: list[str] = field(default_factory=list)
 
     def add(self, item: Item) -> Item:
@@ -239,29 +230,20 @@ class Report:
     def overall(self) -> str:
         """总判定。
 
-         `I-3`（复现过）：旧实现只在这三项上算 —— `fail` ⇒ fail、`unknown` ⇒ unknown、
-        其余 ⇒ `pass`。而被 `--skip` 关掉的项根本不进 `items`，于是
-        `--skip tests selftests tools verify lint contract imports`（八项关掉七项）
-        得到 `pass=1 fail=0 unknown=0` ⇒ `overall="pass"`、退出码 0，
-        而且报告里「跳过」两个字都不出现。
+         被 `--skip` 关掉的项不进 `items`：只算三项的话，
+        八项关掉七项也会得到 `pass=1 fail=0 unknown=0` ⇒ `overall="pass"`、退出码 0。
+        这正是本项目最忌的形态：把"没查"折叠进"通过"。
 
-        实测（改前）逐字：`发布检查总判定：PASS    pass=1 fail=0 unknown=0`，
-        紧接着那句「 overall=pass 只说明这八项都通过了」在本次运行里是假的
-        —— 七项没跑。这正是本项目最忌的形态：把"没查"折叠进"通过"。
-
-        现在的口径：有任何一项被跳过 ⇒ 总判定是 `unknown`（退出码 2），
-        与编排层 `tools/release_all.py` 把"跳过的步骤记 unknown"逐字一致
-        （那条口径有测试钉死：`tests/test_release_all.py` 里 `by_key["per-file"] == "unknown"`）。
+        口径：有任何一项被跳过 ⇒ 总判定是 `unknown`（退出码 2），与编排层
+        `tools/release_all.py` 把"跳过的步骤记 unknown"逐字一致
+        （`tests/test_release_all.py` 里 `by_key["per-file"] == "unknown"`）。
         这与"跳过的项记成 pass"的差别就是"发布门能不能被 `--skip` 绕过"。
 
-         `H-5` / `H-2`（本轮修）：空 `items` 也给 `unknown`，不再给 `pass`。
-        旧实现在空表上走"三项都是 0 ⇒ 其余 ⇒ pass"，于是 `Report().overall()` 返回
-        `"pass"`，而姊妹实现 `tools/release_all.py::verdict_from_subitems([])` 返回 `None`
-        （那句 docstring 逐字写着"空列表 ⇒ `None`，调用方应退回用退出码判定，
-        而不是凭空得出 `pass`"）。两份实现只在非空时相同 ⇒ "编排层独立重算一遍"
-        这条防线在空集这一档整个失效。空集的含义是这一份报告没有可判的项
-        （`main()` 只有八个 runner 全被跳过时才会走到这里，而那时 `skipped` 非空、
-        本来就是 `unknown`）—— "没有可判的项"绝不是"全过"。
+        空 `items` 也给 `unknown`，不给 `pass`：空表上"三项都是 0 ⇒ 其余 ⇒ pass"会让
+        `Report().overall()` 返回 `"pass"`，而姊妹实现
+        `tools/release_all.py::verdict_from_subitems([])` 返回 `None`（"空列表 ⇒ `None`，
+        调用方应退回用退出码判定，而不是凭空得出 `pass`"）。两份实现只在非空时相同 ⇒
+        "编排层独立重算一遍"这条防线在空集这一档整个失效。"没有可判的项"绝不是"全过"。
         """
         c = self.counts()
         if c["fail"]:
@@ -269,7 +251,7 @@ class Report:
         if c["unknown"] or c["skipped"]:
             return "unknown"
         if not self.items:
-            # 没有可判的项 ⇒ 没查成（不是 pass）。理由见上面 `H-5` 那一段。
+            # 没有可判的项 ⇒ 没查成（不是 pass）。理由见 `overall()` 的 docstring。
             return "unknown"
         return "pass"
 
@@ -280,17 +262,15 @@ class Report:
             "items": [i.to_dict() for i in self.items],
             "authored_by": "AI agent（尚未经人逐行走查；本文件在禁 AI 区内）",
         }
-        # 被跳过的项要以名字进报告：只报一个计数，读的人不知道少的是哪一项
-        # （`I-3` 的另一半：`--json-out` 产物里此前连跳过这件事都没有）。
+        # 被跳过的项要以名字进报告：只报一个计数，读的人不知道少的是哪一项。
         if self.skipped:
             d["skipped"] = list(self.skipped)
         d["note"] = self._note()
         return d
 
     def _note(self) -> str:
-        #  `REAUDIT2-R1-3`：这句话必须随本次运行的事实变。
-        # 旧版只按 `skipped` 分流，于是"没有跳过但有一项 fail"时，
-        # 报告与 JSON 仍然逐字写着"overall=pass 只表示这八项检查都通过了" ——
+        # 这句话必须随本次运行的事实变：只按 `skipped` 分流的话，"没有跳过但有一项
+        # fail"时报告与 JSON 仍会写着"overall=pass 只表示这八项检查都通过了" ——
         # 本次运行里 overall 根本不是 pass，那句话是假的。
         c = self.counts()
         tail = (
@@ -317,7 +297,7 @@ class Report:
                 "没查成绝不是通过。" + tail
             )
         if not self.items:
-            # `H-5`：空表不是 pass。这一支必须与 `overall()` 的空表分支同口径，
+            # 空表不是 pass。这一支必须与 `overall()` 的空表分支同口径，
             # 否则报告正文会比总判定更乐观（那种不一致本身就是缺陷）。
             return (
                 "overall=unknown：本次**一项都没有判到**（items 为空、也没有 skipped 记录）"
@@ -336,7 +316,7 @@ def _ensure_utf8_console() -> None:
     cp936(GBK) 控制台下 Python 的默认编码会让 `print` 直接抛 `UnicodeEncodeError`
     —— 那不是"发现了问题"的退出码 1，而是发布门自己没跑成，而"没跑成"
     与"通过"在调用方眼里极易混淆（三态纪律）。口径与编排层 `tools/release_all.py`
-    上一轮采用的写法相同：`reconfigure(encoding="utf-8", errors="replace")`。
+    相同：`reconfigure(encoding="utf-8", errors="replace")`。
     """
     for _stream in (sys.stdout, sys.stderr):
         try:
@@ -423,8 +403,8 @@ def item_test_suite(rep: Report) -> Item:
         return it
     if r["exit_code"] != 0 or it.detail["failed"] or it.detail["errors"]:
         it.verdict = "fail"
-        # `REAUDIT2-R1-4`：这一句旧版是无条件的"这一项全绿不构成发布许可"，
-        # 于是 fail 档也在说"全绿" —— 与本文件自己的三态纪律相矛盾。
+        # 这一句不能无条件写"这一项全绿"：fail 档也在说"全绿"，
+        # 与本文件自己的三态纪律相矛盾。
         it.notes.append(
             f"本次**不是**全绿：passed={it.detail['passed']} failed={it.detail['failed']} "
             f"errors={it.detail['errors']} exit={r['exit_code']} ⇒ 这一项 fail，"
@@ -444,10 +424,10 @@ def item_selftests(rep: Report) -> Item:
     - `non_zero_exit`：有自检块而退出码非 0 ⇒ `fail`；
     - `all_ok`：有自检块且退出码 0 ⇒ `pass`。
 
-    `D9` 的实测：模块 docstring 的八项表第 2 行原写"8 个 agent + pipeline 自检全部
-    退出码 0"，漏了 `no_selftest_block` 那一支，而实现多这道门（更严、更符合
-    三态纪律）。表格那一行现在与上面四条逐条对应，`tests/test_release_check_items.py`
-    把两处铆在一起（改判据而不同步文档 ⇒ 测试必红）。
+    模块 docstring 的八项表第 2 行必须与上面四条逐条对应：那一行曾只写"自检全部
+    退出码 0"，漏了 `no_selftest_block` 那一支，而实现多这道门（更严、更符合三态
+    纪律）。`tests/test_release_check_items.py` 把两处铆在一起（改判据而不同步
+    文档 ⇒ 测试必红）。
     """
     it = rep.add(Item("selftests", "模块自检（8 个 agent + pipeline）"))
     results: dict[str, dict] = {}
@@ -455,27 +435,22 @@ def item_selftests(rep: Report) -> Item:
         src = SRC / "agentflow" / f"{mod}.py"
         text = src.read_text(encoding="utf-8") if src.exists() else ""
         if not src.exists():
-            # `goal-7f5116c1` M6/M7：八个角色模块改成了包，`__main__` 自检块搬到
-            # `<角色>/__main__.py`（`python -m agentflow.<角色>` 在包形态下执行的正是它）。
+            # 八个角色模块是包，`__main__` 自检块在 `<角色>/__main__.py`（`python -m
+            # agentflow.<角色>` 在包形态下执行的正是它）。
             # 不认这个落点的话，"有自检块"会被读成"没有" ⇒ 判据从 pass 掉成 unknown。
             pkg_main = SRC / "agentflow" / mod / "__main__.py"
             text = pkg_main.read_text(encoding="utf-8") if pkg_main.exists() else ""
-        #  "没有自检块"不是"自检通过"（三态纪律）。
-        # 这条判据写下来的当时（`D5`）：`agent_a` / `agent_b` 没有 `__main__` 块，
-        # 于是 `python -m agentflow.agent_a` 退出码 0 且输出 0 行 —— 旧判据会把它记成 PASS，
-        # 而它其实什么都没检查。这正是本项目最忌讳的"把没做读成通过"。
-        # 现在：没有自检块 ⇒ `unknown`，并把这件事报出来（它是待补的缺口，不是通过）。
-        #
-        # `REAUDIT2-R1-6`（第二轮复审实测）：上面那句曾经是现在时，而
-        # `DEVELOPMENT.md:1237` 已把 D5 记为"已关闭（S2）"，实测两个模块现在都有真守卫
-        # （`agent_a` L830 / `agent_b` L1721）。注释引用一个已经关闭的历史状态、却用现在时写，
-        # 会让后来的人以为缺口还在。所以这里改成过去时并点名"已关闭"。
+        #  "没有自检块"不是"自检通过"（三态纪律）：`agent_a` / `agent_b` 曾没有
+        # `__main__` 块，于是 `python -m agentflow.agent_a` 退出码 0 且输出 0 行 ——
+        # 只看退出码会把它记成 PASS，而它其实什么都没检查。两个模块后来都补了真守卫
+        # （那条缺口已关闭），但判据不变：没有自检块 ⇒ `unknown` 并报出来
+        # （它是待补的缺口，不是通过）。
         has_selftest = "__main__" in text
         r = _run([sys.executable, "-m", f"agentflow.{mod}"], cwd=SRC, timeout=900.0)
         entry = {"started": r["started"], "timed_out": r["timed_out"],
                  "exit_code": r["exit_code"], "has_selftest": has_selftest,
                  "tail": _tail(r["stdout"] + r["stderr"], 3)}
-        # 判据只此一处：`_selftest_verdict`（`D9`）。四条分支与 `SELFTEST_CRITERIA`
+        # 判据只此一处：`_selftest_verdict`。四条分支与 `SELFTEST_CRITERIA`
         # 逐条对应，模块 docstring 的八项表第 2 行照抄那一条 —— 三处一起漂不了。
         entry["verdict"] = _selftest_verdict(has_selftest, r["started"], r["timed_out"],
                                              r["exit_code"])
@@ -522,10 +497,9 @@ def item_tool_census(rep: Report) -> Item:
         it.notes.append("普查脚本没跑成")
         return it
     if r["exit_code"] != 0:
-        # `REAUDIT2-R1-5`：普查脚本自己崩了 ⇒ 这一次普查没查成，不是"查了有问题"。
-        # 旧版判 fail 且 `notes` 空（只把 stderr 塞进 detail），于是报告上出现
-        # 一条没有理由的 fail；同一文件里 `item_linter` 对同类形态判的是 unknown
-        # （"脚本没跑成 ⇒ 没查成"）。两处口径必须一致。
+        # 普查脚本自己崩了 ⇒ 这一次普查没查成，不是"查了有问题"。
+        # 判 fail 且 `notes` 空会让报告上出现一条没有理由的 fail；同一文件里
+        # `item_linter` 对同类形态判的是 unknown（"脚本没跑成 ⇒ 没查成"），两处口径必须一致。
         it.verdict = "unknown"
         it.detail = {"exit_code": r["exit_code"], "stderr": _tail(r["stderr"], 6)}
         it.notes.append(
@@ -607,10 +581,10 @@ def _parse_skip_values(raw: Sequence[str] | None, _depth: int = 0) -> set[str]:
 
     注意那两行合在一起的结果是嵌套列表：`--skip a b` 给的是
     `[["a", "b"]]`、`--skip a --skip b` 给的是 `[["a"], ["b"]]`。
-    所以这里必须递归摊平 —— 第一版对每个 chunk 直接 `str(...)`，
-    于是 `--skip a b` 被读成 `{"['a'", "'b']"}` 这种谁也不认识的 key，
-    结果是"没有任何一项被跳过"（一次静默的空跳，比旧缺陷更坏）。
-    这条路径由 `tests/test_release_check_items.py` 的三写法等价用例钉住。
+    所以这里必须递归摊平 —— 对每个 chunk 直接 `str(...)` 会把 `--skip a b` 读成
+    `{"['a'", "'b']"}` 这种谁也不认识的 key，结果是"没有任何一项被跳过"（一次静默的
+    空跳，比旧缺陷更坏）。这条路径由 `tests/test_release_check_items.py` 的三写法等价
+    用例钉住。
     """
     out: set[str] = set()
     for chunk in raw or []:
@@ -627,48 +601,33 @@ def _parse_skip_values(raw: Sequence[str] | None, _depth: int = 0) -> set[str]:
 
 
 def item_linter(rep: Report) -> Item:
-    """第 5 项：linter，严格档 + 三态映射（`H-6`）+ 产物落临时目录（`c-11`）。
+    """第 5 项：linter，严格档 + 三态映射 + 产物落临时目录。
 
-    ## 为什么必须带 `--strict`（`H-6`）
+    为什么必须带 `--strict`：不带时 `warning` 全被丢掉，而文档（`DEVELOPMENT.md` §2.4 / §8.4）
+    声称发布级用严格档 —— R007 那类"成文规则配不上一条门"的缺口在发布链上永远不可见。
 
-    旧命令是 `[lint_rules.py, --json-out, <artifact>]`，没有 `--strict` ——
-    于是 `warning` 全被丢掉，而文档（`DEVELOPMENT.md` §2.4 / §8.4）声称发布级用严格档。
-    实测：日常 `error 0 / warning 0 / info 21` 退出码 0；`--strict`
-    `error 0 / warning 39 / info 20` 退出码 1。也就是说 R007 那类"成文规则配不上一条门"
-    的缺口在发布链上永远不可见。
+    严格档之后，这一项的判据是「逐项读 error 与 warning」，不是「退出码 == 0」：
+    只加 `--strict`、判据仍写 `exit_code == 0`，会让这一项立刻变成 `fail`（warning 非空时
+    `--strict` 退 1），而 `error` 明明是 0 —— 那是"把 warning 读成了 fail"，读的人分不清
+    "有一处确定违规"与"有一堆待补的 docstring"。所以：
 
-    ## 严格档之后，这一项的判据是「逐项读 error 与 warning」，不是「退出码 == 0」
-
-    这是关键的一半：只把 `--strict` 加上、判据仍写 `exit_code == 0`，会让这一项
-    立刻变成 `fail`（因为 `lint_rules.py --strict` 在 warning 非空时退 1），
-    而 `error` 明明是 0 —— 那是"把 warning 读成了 fail"，判别力反而下降
-    （读的人分不清"有一处确定违规"与"有一堆待补的 docstring"）。
-    所以判据改成三态映射，且先把 error 与 warning 分开读：
-
-    | linter 的实测 | 这一项 |
+    | linter 的读数 | 这一项 |
     |---|---|
     | `error_count > 0` | `fail`（确定违规） |
     | `error_count == 0`、`warning_count > 0` | `pass`，但 `detail.errors_zero_warnings_present = True`，并在 `notes` 里把"严格档下仍有 N 条 warning"逐字报出来 |
     | 退出码 2（读不到源码树 / linter 自己炸） | `unknown`（这是检查器的问题，不是被检对象的） |
     | 拿不到 JSON 或读不出计数 | `unknown`（没查成，不许按退出码猜） |
 
-     这一档是加严：`warning` 从此在发布报告里有了名字与计数（此前一个字都不出现）。
-    它没有把"warning 非空"升成门失败，理由见 `H-6` 的裁决：门失败的含义是
-    "有确定违规"，而把 39 条待补 docstring 说成"发布门失败"会让这一项长期变红并被忽略
-    （本文件 R009 对禁改区用的是同一条理由）。要让 warning 参与阻断，改的是
-    `error_count > 0` 那一行 —— 那是一次口径变更，需要人裁。
+    这一档是加严：`warning` 从此在发布报告里有了名字与计数。它没有把"warning 非空"升成
+    门失败：门失败的含义是"有确定违规"，而把一堆待补 docstring 说成"发布门失败"会让这一项
+    长期变红并被忽略（本文件 R009 对禁改区用的是同一条理由）。要让 warning 参与阻断，改的
+    是 `error_count > 0` 那一行 —— 那是一次口径变更，需要人裁。
 
-    ## 产物路径（`c-11`）
-
-    正常落点 `GATE_ARTIFACT_DIR`（被 `.gitignore` 排除的 `temp/`，`X-1`）；
-    连它都建不出来时回退到系统临时目录，绝不回退到仓库根 ——
-    仓库根的 `.release-lint.json` 是禁改区门的输入面（`F8` 之后它已从版控删除，
-    但只要有人在仓库根写下这个名字，它就会作为新增文件进入"本次改动集"——
-    被跟踪与被新建在这一点上后果相同），回退写它等于
-    "跑一次门就改一次改动集"，而"本次改动集"正是禁改区门的输入（自我污染）。
-    `c-11` 的机器判据：`tests/test_release_check_noai.py` 里那条"回退产物不在仓库里、
-    且跑完 `git status` 不多出被跟踪文件的改动"。
-    """
+    产物路径：正常落点 `GATE_ARTIFACT_DIR`（被 `.gitignore` 排除的 `temp/`）；连它都建不
+    出来时回退到系统临时目录，绝不回退到仓库根 —— 仓库根若出现 `.release-lint.json` 这个
+    名字，它会作为新增文件进入"本次改动集"，而"本次改动集"正是禁改区门的输入（自我污染）。
+    机器判据：`tests/test_release_check_noai.py` 里那条"回退产物不在仓库里、且跑完
+    `git status` 不多出被跟踪文件的改动"。"""
     it = rep.add(Item("lint", "linter（严格档：error = 0；warning 逐条报数）"))
     artifact, why = _artifact_path()
     if why:
@@ -702,11 +661,10 @@ def item_linter(rep: Report) -> Item:
     errors = int(counts.get("error_count") or 0)
     warnings = int(counts.get("warning_count") or 0)
     it.detail["errors_zero_warnings_present"] = bool(errors == 0 and warnings)
-    # `FINAL-R7-11`：R011 有两条"没查成"退路（读不到 `tools/vocab_census.py`、
-    # 或普查 `checked=False`），它们按设计报 warning —— 而本项的判据是
-    # `error_count > 0`，于是"R011 一次都没判"与"判过、干净"在发布报告里同形。
-    # 这里把那个仪器状态单独提出来做成一个可见的位（不改判据强度：
-    # 仍是 pass，但报告里多一行明确的"没查成"，而不是让它淹在 warning 计数里）。
+    # R011 有两条"没查成"退路（读不到 `tools/vocab_census.py`、或普查 `checked=False`），
+    # 它们按设计报 warning —— 而本项的判据是 `error_count > 0`，于是"R011 一次都没判"
+    # 与"判过、干净"在发布报告里同形。这里把那个仪器状态单独提出来做成一个可见的位
+    # （不改判据强度：仍是 pass，但报告里多一行明确的"没查成"，而不是让它淹在 warning 计数里）。
     it.detail["r011_checked"] = _r011_was_checked(artifact)
     if it.detail["r011_checked"] is False:
         it.notes.append(
@@ -736,18 +694,16 @@ def item_linter(rep: Report) -> Item:
 
 
 def _artifact_path() -> tuple[Path, str]:
-    """选一个不落在仓库里的产物路径（`c-11` 的根除口径）。
+    """选一个不落在仓库里的产物路径。
 
     两条路都是临时目录：
-    1. 首选 `GATE_ARTIFACT_DIR`（`REPO_ROOT.parent / "temp"`，被 `.gitignore` 排除，
-       与 `X-1` / `D-2.3` 同一条口径）；
+    1. 首选 `GATE_ARTIFACT_DIR`（`REPO_ROOT.parent / "temp"`，被 `.gitignore` 排除）；
     2. 它建不出来（权限 / 磁盘 / 只读文件系统）⇒ 回退到 `tempfile.mkdtemp()`。
 
-    绝不回退到 `REPO_ROOT/.release-lint.json`：那个文件被 git 跟踪
-    （`git ls-files --error-unmatch .release-lint.json` 在改前是成功的），
-    回退写它等于"跑一次门就改一次仓库状态"，而"本次改动集"正是禁改区门的输入。
-    产物位置不固定不是问题：它写进 `Item.detail["artifact"]` 与 `notes` 里，
-    读报告的人照样找得到（"产物在哪"与"仓库有没有被改"相比，后者是不可逆的）。
+    绝不回退到 `REPO_ROOT/.release-lint.json`：回退写它等于"跑一次门就改一次仓库状态"，
+    而"本次改动集"正是禁改区门的输入。产物位置不固定不是问题：它写进
+    `Item.detail["artifact"]` 与 `notes` 里，读报告的人照样找得到（"产物在哪"与
+    "仓库有没有被改"相比，后者是不可逆的）。
     """
     try:
         GATE_ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -780,7 +736,7 @@ def _read_lint_counts(artifact: Path) -> dict | None:
 
 
 def _r011_was_checked(artifact: Path) -> bool | None:
-    """R011 这一轮到底判没判（`FINAL-R7-11`）：`True`/`False`/`None`（读不出来）。
+    """R011 这一轮到底判没判：`True`/`False`/`None`（读不出来）。
 
     判据：在 linter 的 JSON 里找 `rule == "R011"` 且 `level == "warning"` 的条目，
     它们的文案是那两条"没查成"退路（读不到普查工具 / `checked=False`）。
@@ -810,17 +766,17 @@ def _r011_was_checked(artifact: Path) -> bool | None:
 def item_noai(rep: Report, changed: Sequence[str] | None, *, ledger: str | None = None) -> Item:
     """禁 AI 区门。`changed is None`（没给）与 `changed == []`（给了且为空）不是同一件事。
 
-    前者是"没查成"（unknown），后者是"查过了、相对基线没有改动"（pass）。第一版用
-    `default=[]` 把两者折叠成一个 `if not changed`，于是编排层不传 `--changed` 时这一项
-    永远是 unknown（实测 `UNKNOWN pass=7 fail=0 unknown=1`）—— 也就是说这道门在发布链上
-    从来没有真的生效过。空集与缺输入必须分开。
+    前者是"没查成"（unknown），后者是"查过了、相对基线没有改动"（pass）。若用
+    `default=[]` 把两者折叠成一个 `if not changed`，编排层不传 `--changed` 时这一项
+    永远是 unknown（"UNKNOWN pass=7 fail=0 unknown=1"）—— 这道门在发布链上就从来没有
+    真的生效过。空集与缺输入必须分开。
 
-    ## 命中之后按台账判定，而不是"命中即 fail"（`P-3`）
+    ## 命中之后按台账判定，而不是"命中即 fail"
 
-    上一版是"命中禁改区 ⇒ fail，永远无法转绿"：登记过的改动（`--baseline` 写了 sha256）
-    与人走查过的改动（`--approve` 写了 reviewers）在它眼里与"从来没人看过"一样
-    —— 于是这道门给不出真实状态（它只会说"这里有人动过"，不会说"动过的那一版
-    有没有被批准"）。现在它调的是门自己的 `--check-approvals`：
+    "命中禁改区 ⇒ fail，永远无法转绿"给不出真实状态：登记过的改动（`--baseline` 写了
+    sha256）与人走查过的改动（`--approve` 写了 reviewers）在它眼里与"从来没人看过"
+    一样 —— 它只会说"这里有人动过"，不会说"动过的那一版有没有被批准"。现在它调的是
+    门自己的 `--check-approvals`：
 
     | 判据（`noai_gate.evaluate_approval`，唯一实现） | 这一项的结论 |
     |---|---|
@@ -829,14 +785,14 @@ def item_noai(rep: Report, changed: Sequence[str] | None, *, ledger: str | None 
     | 台账里没有条目 / `sha256` 漂了 / 两条通路都不够 | `fail`（并写清缺的是哪一条） |
     | 台账读不到或解析不了 / 拿不到盘上内容的 sha256 / 证据锚或回执链核对不上 | `unknown`（没查成） |
 
-     本表第一版漏了机审那一行（`R1-1`）：于是 `pass` 说明无条件写"各有 ≥2 名不同
-    reviewer 完成逐行走查"，而机审放行走廊里 `reviewers` 是空的 —— 发布报告在
-    替一个没有人签过字的通路宣称"人走过查了"。这正是 FC-27 最忌讳的形态（`noai_gate`
-    自己在 clean 抬头里已经按通路分流，发布门这一侧当时没跟上）。
+    这张表最初漏了机审那一行：于是 `pass` 说明无条件写"各有 ≥2 名不同 reviewer 完成
+    逐行走查"，而机审放行走廊里 `reviewers` 是空的 —— 发布报告在替一个没有人签过字的
+    通路宣称"人走过查了"。这正是 FC-27 最忌讳的形态（`noai_gate` 自己在 clean 抬头里
+    已经按通路分流，发布门这一侧当时没跟上）。
 
     这一项永远不写 `reviewers`：批准是人的动作。这一项只读台账、只报状态。
 
-    ## 清单一致性那一半（`--check-consistency`）也是三态（`Y-3`）
+    ## 清单一致性那一半（`--check-consistency`）也是三态
 
     这一项先跑门的一致性检查，再跑改动集判定。一致性检查自己有三个退出码，
     而它们是三个不同的事实（码表由门定义，负控见
@@ -848,9 +804,9 @@ def item_noai(rep: Report, changed: Sequence[str] | None, *, ledger: str | None 
     | `1` | 查过了：两处清单不一致 | `fail`（两处会按不同清单行事） |
     | `2` | 没查成：清单读不到 / 不在 git 仓库 / 解析失败 | `unknown`，不许写成"不一致" |
 
-    旧版用一句 `if exit_code != 0 ⇒ fail` 把后两档折成一个结论：一次根本没做成的比对
-    会被报告成"两处清单不一致"这个具体断言。那是"把 `unknown` 当 `pass`"的镜像，
-    同属三态纪律（`Y-3`）。
+    若用一句 `if exit_code != 0 ⇒ fail` 把后两档折成一个结论，一次根本没做成的比对
+    会被报告成"两处清单不一致"这个具体断言 —— 那是"把 `unknown` 当 `fail`"的镜像，
+    与本项目反复踩的"把没检查读成检查过了没问题"是同一条三态纪律的两面。
 
     ## `ledger` 参数（默认 None ⇒ 生产路径恒用仓库默认台账）
 
@@ -872,9 +828,9 @@ def item_noai(rep: Report, changed: Sequence[str] | None, *, ledger: str | None 
     it.detail["consistency_exit"] = r1["exit_code"]
     it.notes.extend(_tail(r1["stdout"] + r1["stderr"], 4))
     if r1["exit_code"] == 2:
-        # `Y-3`：`--check-consistency` 的 `2` 是没查成（清单读不到 / 不在 git 仓库…），
-        # 不是"两处清单不一致"（那是 `1`）。旧版用 `if exit_code != 0 ⇒ fail` 把两个码
-        # 折成一个结论，于是报告替一次根本没做成的比对写下"两处会按不同清单行事"
+        # `--check-consistency` 的 `2` 是没查成（清单读不到 / 不在 git 仓库…），
+        # 不是"两处清单不一致"（那是 `1`）。用 `if exit_code != 0 ⇒ fail` 把两个码
+        # 折成一个结论，报告就会替一次根本没做成的比对写下"两处会按不同清单行事"
         # 这个具体断言 —— 那是"把 unknown 当 fail"的镜像，与本项目反复踩的
         # "把没检查读成检查过了没问题"是同一条三态纪律的两面。
         it.verdict = "unknown"
@@ -929,14 +885,13 @@ def item_noai(rep: Report, changed: Sequence[str] | None, *, ledger: str | None 
     it.notes.extend(_tail(r2["stdout"] + r2["stderr"], 4))
     if r2["exit_code"] == 0:
         it.verdict = "pass"
-        # 通路分流（`R1-1`）：`noai_gate` 的 `approved` 有两条通路，这里必须照实说清是哪一条。
-        # 旧版无条件写"各 ≥2 名不同 reviewer 完成逐行走查" —— 机审通行走廊里 `reviewers`
-        # 是空的，那句话就是假的（同族缺陷在 `noai_gate` 的 clean 抬头里已经修过，
+        # 通路分流：`noai_gate` 的 `approved` 有两条通路，这里必须照实说清是哪一条。
+        # 无条件写"各 ≥2 名不同 reviewer 完成逐行走查"是假的 —— 机审通行走廊里
+        # `reviewers` 是空的（同族缺陷在 `noai_gate` 的 clean 抬头里已经修过，
         # 见 noai_gate.py 里 by_human/by_audit 那一段）。
         #
-        #  `REAUDIT2-R1-1`（第二轮复审实测）：只有 when_clean 且 `approvals` 非空
-        # 才配说"命中路径全部已获批准"。无命中时门返回 `clean` + `approvals == []` +
-        # `ledger == ""`，旧版（本轮第一版）会落到 `else` 那一支，宣称
+        #  只有 when_clean 且 `approvals` 非空才配说"命中路径全部已获批准"。无命中时
+        # 门返回 `clean` + `approvals == []` + `ledger == ""`，落到 `else` 分支就会宣称
         # "通路=多维独立审计……没有任何人类 reviewer 签过字" —— 那是替不存在的台账判定
         # 与不存在的审计流程作证。所以现在分三支，并且"无命中"那一支不许提批准。
         approvals = gate_result.get("approvals")
@@ -1007,7 +962,7 @@ def item_noai(rep: Report, changed: Sequence[str] | None, *, ledger: str | None 
                 f"{a.get('path')}：{_APPROVAL_REASON_TEXT.get(code, code)}"
                 f"（台账判定 `{a.get('approval_status')}`/`{code}`）"
             )
-        # `FINAL-R7-03`：`ledger_self_approval` 这一档的处置指示必须做得到 ——
+        # `ledger_self_approval` 这一档的处置指示必须做得到 ——
         # 台账本体按设计永远不可批准（门对 `.noai-approvals.json` 恒判 unapproved），
         # 所以对那一档说"去凑 2 名 reviewer"是一句做不到的话，会让人白跑。
         has_ledger_self = any(
@@ -1068,14 +1023,14 @@ def item_contract(rep: Report) -> Item:
 
 
 def item_imports(rep: Report) -> Item:
-    """源码树可导入 + 能力表自检被显式触发（`P-2`，2026-10-27 改成显式）。
+    """源码树可导入 + 能力表自检被显式触发。
 
     ## 为什么"导入普查"之外还要单独跑一次能力表审计
 
-    2026-10-27 之前 `capabilities.assert_capabilities()` 挂在导入期（"不可能忘记跑"是
-    当时的理由）。代价是两条实测：① 它给**每一次** CLI 启动加 1.2 秒；② 任何一格的
-    登记过期都会让所有命令 exit 1（当天真实发生过：一条并行 lane 收尾没做完就让
-    `agentflow --help` 也炸）。业主当批把它摘出导入期。
+    `capabilities.assert_capabilities()` 曾经挂在导入期（"不可能忘记跑"是当时的理由）。
+    代价是两条实测：① 它给每一次 CLI 启动加 1.2 秒；② 任何一格的登记过期都会让所有
+    命令 exit 1（一条并行 lane 收尾没做完就让 `agentflow --help` 也炸）。于是它被
+    摘出导入期。
 
     摘出来之后，"不可能忘记跑"这句话就落在**本项**与
     `tests/test_capabilities_audit_is_explicit.py` 上 —— 所以这里的调用是硬的：
@@ -1106,7 +1061,7 @@ def item_imports(rep: Report) -> Item:
         return it
     d = json.loads(r["stdout"].strip().splitlines()[-1])
     it.detail = d
-    # ---- 子检查①：能力表自检（`P-2`）—— 显式调用，不依赖"导入期"或"普查碰巧走到它"
+    # ---- 子检查①：能力表自检 —— 显式调用，不依赖"导入期"或"普查碰巧走到它"
     r2 = _run([sys.executable, "-c",
                "import agentflow.capabilities as C; C.run_capability_audit()"],
               cwd=SRC, timeout=300.0)
@@ -1149,9 +1104,9 @@ def item_imports(rep: Report) -> Item:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    # 注意（`I-3` / 三态纪律）：没跑完不许给 0。
+    # 注意（三态纪律）：没跑完不许给 0。
     # Ctrl-C（`KeyboardInterrupt` 是 `BaseException`，八个 runner 的
-    # `except Exception` 兜不住它）此前会让本脚本带 traceback 结束，退出码由
+    # `except Exception` 兜不住它）会让本脚本带 traceback 结束，退出码由
     # Python 决定（130/1），既不是 0/1/2 中的任何一档 —— 调用方（编排层 / CI）
     # 只能靠猜。这里显式记 `unknown`（2）并打印已经判到的那几项：
     # "没查完"与"查过没问题"必须分得开，而中断恰恰是最容易把两者混起来的一刻。
@@ -1236,7 +1191,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
     )
     for key, fn in runners:
         if key in skip_keys:
-            # `I-3`：跳过的项必须留痕（进 `rep.skipped`），否则"没跑"在报告里
+            # 跳过的项必须留痕（进 `rep.skipped`），否则"没跑"在报告里
             # 与"跑了没问题"长得一模一样。这里同时打一行，让 stdout 上也看得见。
             rep.skipped.append(key)
             print(f"\n===== [{key}] =====", flush=True)
@@ -1255,9 +1210,9 @@ def _main(argv: Sequence[str] | None = None) -> int:
 
     d = rep.to_dict()
     if args.json_out:
-        # `c-12`（`G-42` 的换行纪律）：产物必须是纯 LF。`Path.write_text` 在 Windows 上
+        # 换行纪律：产物必须是纯 LF。`Path.write_text` 在 Windows 上
         # 会把每个 `\n` 刷成 `\r\n` ⇒ 产物的 `sha256` 与"盘上那一版"对不上，
-        # 而禁改区批准台账钉住的正是 `sha256`（`draft/22` §12.15.2 记过那次事故）。
+        # 而禁改区批准台账钉住的正是 `sha256`。
         # 这条纪律本身有机器判据：`scripts/lint_rules.py::rule_R012_write_text_newline`。
         Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
         with open(args.json_out, "w", encoding="utf-8", newline="") as fh:
@@ -1269,12 +1224,12 @@ def _main(argv: Sequence[str] | None = None) -> int:
     print(f"发布检查总判定：{overall.upper()}    pass={c['pass']} fail={c['fail']} "
           f"unknown={c['unknown']} skip={c['skipped']}")
     if c["skipped"]:
-        # 这句话必须随本次运行的事实变：旧版无论跳过几项都逐字打印"这八项都通过了"，
-        # 于是"七项没跑"的运行也挂着那句假话（`I-3` 复现记录见 `Report.overall`）。
+        # 这句话必须随本次运行的事实变：无论跳过几项都逐字打印"这八项都通过了"，
+        # 会让"七项没跑"的运行也挂着那句假话（见 `Report.overall`）。
         print(f"⚠️ 本次有 {c['skipped']} 项被 `--skip` 关掉（{', '.join(rep.skipped)}）⇒")
         print("   总判定记 unknown（退出码 2）。「没让某几项跑」不等于「某几项都通过」。")
     elif c["fail"]:
-        # `REAUDIT2-R1-3`：fail 档也不许说"八项都通过了"。
+        # fail 档也不许说"八项都通过了"。
         print(f"⚠️ 本次有 {c['fail']} 项**没通过** ⇒ 不构成发布许可：")
     elif c["unknown"]:
         print(f"⚠️ 本次有 {c['unknown']} 项**没查成**（unknown ≠ 通过）⇒ 不构成发布许可：")
