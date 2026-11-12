@@ -1,10 +1,10 @@
-"""角色 C 的声明（`goal-7f5116c1` M3）：动作表 + 边 + 写集 + 职责与门面。
+"""角色 C 的声明：动作表 + 边 + 写集 + 职责与门面。
 
 这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
-`WRITE_SETS`，`agent_c.py` 只是把它再导出一次。
+`WRITE_SETS`，`agent_c` 包只是把它再导出一次。
 所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
-动作表的每一行都从 `capabilities.py` 逐字搬来（含注释），判据见
-`tests/test_agent_spec_reconciliation.py` 与 `tests/test_capabilities_two_layer.py`。
+与派生表逐格一致的判据见 `tests/test_agent_spec_reconciliation.py` 与
+`tests/test_capabilities_two_layer.py`。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from ..agentspec import (
     _obj,
 )
 
-#: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
+#: 本角色的动作表。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "C", "hottest",
@@ -97,9 +97,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         side_effect="read", handler_name="handle",
     ),
 
-    # 2026-10-09（业主：「想想C怎么找最短依赖链？总归得在记录定理和证明时同样把依赖写清，
-    # 直到找到最根上的依赖（某文献或某无前提依赖的自证定理）为止」/「B走乙。由于B这边出了
-    # 多依赖写法，C的分析需要做适配」）：只读、零模型调用 ——
+    # 只读、零模型调用 ——
     # 读 `statements` + `dependencies`，按 `path_group` 分组（组内 AND / 组间 OR），
     # 每组走到根（`lit:` / 无前提自证定理 / 原始概念），挑最短那组；`target` 允许给别名。
     ActionSpec(
@@ -124,10 +122,9 @@ SPEC = AgentSpec(
     brief=    AgentBrief(
         duty="关系分析：用确定性代码算图与计数，只在排序与措辞这两件事上动用模型",
         boundary=(
-            # 2026-11-01（业主口径 + 审计 174 §1.6）：改前写「工具面全量只读（拿不到任何写工具）」，
-            # 而 C 面有 10 件 write_local（7 件 clock.* + conductor.ack/post_task +
-            # analysis.register_report）—— 那句话按字面是假的，而且与工具说明自相矛盾。
-            # 业主逐字：「只读的意思是对其它智能体的产出只读」。
+            # 只读的意思是「对其它智能体的产出只读」，不是「拿不到任何写工具」：
+            # C 面有 write_local（`clock.*` / `conductor.ack` / `conductor.post_task` /
+            # `analysis.register_report`），它们写的是 C 自己的产出与簿记。
             "你是只读角色 —— **对其它智能体的产出只读**：不许改别人的稿、台账、报告，也不许直接向别人发请求"
             "（你的可召唤边是空的）。**你可写的是你自己侧的产物**：`analysis.register_report`（你算出来的分析"
             "登记成 `analysis_reports` 一行 —— 那是你的产出）、`conductor.ack` / `conductor.post_task`"
@@ -147,8 +144,7 @@ SPEC = AgentSpec(
             "读数要能改变判断：报一个数（度数 / 结构洞 / 绕行）时，在 `analysis.register_report` 的 `summary` 里"
             "写清它让哪个缺口成立或不成立；只列数字不指结论的不算产出。"
             "分析出「可能的更短证明路径」就照这条交出去：`analysis.register_report` 登记一条，写清**关键那一步**是什么、为什么因此更短。",
-            # 2026-11-11（业主逐字）：「给号是最好的，即使不给，C 也要能主动看内容搜索台账
-            # 匹配的命题作为根」。选根依据只能是台账里已有的内容；歧义必须报、不许硬选。
+            # 选根依据只能是台账里已有的内容；歧义必须报、不许硬选。
             "父交给你一段内容而没有号时：**先按内容去台账找根** —— 用 `table.search` / `table.list` "
             "的内容检索，把候选读回来比对（同一性/同证法那套判定与 B 的同一性口径一致），选一个根跑 "
             "`ledger.resolve` + `ledger.expand`；**匹配不到或有歧义时如实说「没找到唯一的根」并给候选"
@@ -171,26 +167,24 @@ SPEC = AgentSpec(
             "k 由你定；不够再对 frontier 里的节点逐个拼接。"
             "**空面也要如实报**：台账里没有依赖边 / 没有引用者时，工具会明说那是「查过、没有」"
             "（不是「没查成」），那也不等于这份证明没有问题。",
-            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
-            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
-            # 2026-11-04（审 F 区）：那一格 2026-11-03 起叫 `subtask_refusals`
-            # （`agenttrace.node_facts`，与 action_/final_/registration_refusals 三义分开）
-            # —— 提示词照旧叫 `refusals`，模型会去 `trace.children` 的返回里找一个不存在的键。
+            # 那一格叫 `subtask_refusals`（`agenttrace.node_facts`，与 action_ / final_ /
+            # registration_refusals 三义分开）—— 提示词里必须写这个名字；写成 `refusals`
+            # 模型会去 `trace.children` 的返回里找一个不存在的键。
             # 判据：tests/test_a_and_c_name_the_subtask_refusal_cell.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
             "逐个给子任务的状态、被拒次数与类目（`subtask_refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # p204（2026-10-27）：业主 2026-10-25 的三句裁定要做进**每个角色**的政策（不只是 M）：
-            # 「规范所有计时类任务申请的形式为：等待时间（或等待谁）+目的（必填）」；
-            # 「让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的」；
-            # 「计时到点后向智能体发送信息『目的+等待时间+时间到』」。
-            # 工具面的真身是 `tools/clock_tools.py` 那九件（`UNIVERSAL_TOOLS`：对十一个角色都发），
-            # 这一段只写"怎么用它"，不抄工具签名（签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（第 17 条逐个角色数过九件）。
+            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
+            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
+            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
+            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
+            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
+            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
             "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
             "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
             "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
@@ -235,10 +229,10 @@ SPEC = AgentSpec(
         '能思辨': '两条链矛盾时追共同上游：矛盾常常来自同一个定义被两种口径使用。',
         # 判据：policy 第一条（`'缺口不许只写在报告里'`）里同一条义务仍逐字在（本处是重复，不是唯一出处）。
         '敢创新': '你可以提候选缺口（那是猜想）；要不要把它变成检索请求由调用方决定。',
-        # 2026-10-21 减负：这一条「想删但没删」 —— 它已经被
-        # `tests/test_agent_prompts.py::test_read_only_roles_do_not_advertise_hands_on_the_data_plane`
-        # 守着，但那条判据守的是「这句话本身」（官能行里必须出现「结构禁止」），不是行为；
-        # 行为那一侧另有 `test_real_registry_gives_no_write_tool_to_read_only_roles`。
+        # 这一条不能删：`tests/test_agent_prompts.py::
+        # test_read_only_roles_do_not_advertise_hands_on_the_data_plane` 守着官能行里必须
+        # 出现「结构禁止」，行为那一侧另有
+        # `test_real_registry_gives_no_write_tool_to_read_only_roles`。
         # 删这句 = 改判据 ⇒ 按纪律留下。
         '手': '数据面写是结构禁止的（只读角色）；草稿本 note 照写。',
         '眼睛': '读的是关系图与计数：形状、度数、重复、绕行，不是文献本身。',
@@ -249,7 +243,7 @@ SPEC = AgentSpec(
     },
     read_only=True,
     summonable=True,
-    # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C（C 的"汇报"就是它的返回值）。
+    # C 无出边，由 D 唤起 C（C 的"汇报"就是它的返回值）。
     # 链条是 D → C 单向：D 用 `conductor.summon` 派 C，C 把报告随返回值交回；
     # 不给 C 加任何出行通道（它没有出边，也不许给它加）。
     edges=(),
