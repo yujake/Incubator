@@ -322,16 +322,15 @@ class _Formalize:
         # 位置与上面那道闸一样，在所有写操作之前：多路径未给号时盘上不许出现新文件。
         chosen = _path_choice(picked, proof_no=proof_no)
         if not chosen.get("ok"):
+            lost_lib = _library_reading(stmt_id=stmt_id, row=picked, proof_text="")
             return self._with_report(
                 self._formal_attach(
                     self._refusal(claim, str(chosen["reason"]), str(chosen["detail"])),
                     name=stem, written=False,
                     extra={"statement_id": stmt_id, "statement_source": stmt_source,
                            "refused": True, "path_source": wanted_source,
-                           "b_library": _library_reading(stmt_id=stmt_id, row=picked,
-                                                         proof_text="")}),
-                coverage={}, b_library=_library_reading(stmt_id=stmt_id, row=picked,
-                                                        proof_text=""))
+                           "b_library": lost_lib}),
+                coverage={}, b_library=lost_lib)
         path_no = int(chosen["proof_no"])
         proof_text = str(chosen.get("proof_text") or "")
         #: 这一份正文的指纹：`record` 把它写进 `experiments.observations.proof_sha256`，
@@ -563,7 +562,7 @@ class _Formalize:
             "written": bool(payload) if written is None else bool(written),
         })
         if extra:
-            out.update({k: v for k, v in dict(extra).items() if k in FAITHFULNESS_KEYS})
+            out.update({k: v for k, v in extra.items() if k in FAITHFULNESS_KEYS})
         return out
 
 
@@ -694,12 +693,13 @@ def _library_reading(*, stmt_id: Any, row: Mapping[str, Any],
     "我要的是哪一条"（见 `formalize` 被拒时的那一支）。
     """
     proof = str(proof_text or "")
+    stripped = proof.strip()
     return {
         "stmt_id": str(stmt_id or ""),
         "label": str((row or {}).get("label") or ""),
         "proof_chars": len(proof),
-        "dependency_steps": len(split_proof_steps(proof)) if proof.strip() else 0,
-        "found": bool(proof.strip()),
+        "dependency_steps": len(split_proof_steps(proof)) if stripped else 0,
+        "found": bool(stripped),
     }
 
 
@@ -735,7 +735,8 @@ def _split_by_numbering(text: str) -> list[str]:
             steps.append([line.strip()])
         elif steps:
             steps[-1].append(line.strip())
-    return ["\n".join(part).strip() for part in steps if "\n".join(part).strip()]
+    joined = ("\n".join(part).strip() for part in steps)
+    return [part for part in joined if part]
 
 
 def step_quote(step_text: Any) -> str:
@@ -899,9 +900,10 @@ def faithfulness_reading(*, proof_text: Any, source: Any) -> dict[str, Any]:
             "how": how,
         })
     assumptions: list[dict[str, Any]] = []
+    spans_in_step_order = sorted(spans.items())
     for item in facts["assume_markers"]:
         line = int(item["lean_line"])
-        owner = next((step for step, (start, end) in sorted(spans.items())
+        owner = next((step for step, (start, end) in spans_in_step_order
                       if start <= line <= end), 0)
         assumptions.append({"proof_step": owner, "lean_line": line, "text": item["text"]})
     extra = sorted(step for step in markers if step < 1 or step > len(steps))
