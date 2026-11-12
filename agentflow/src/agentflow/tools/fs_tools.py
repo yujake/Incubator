@@ -228,7 +228,7 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 # `fs.move`）都只经 `_reserved_refusal` 这一处取结论，不在各自的函数体里各写一遍。
 #
 # 为什么手稿是"框架渲染的产物"：2026-10-26 真机（sylow 那趟），F 用 `fs.write` 直写
-# `reports/f-proof-sylow1.md`（没有四列依赖表、没有洗稿元信息）、D 手写
+# `reports/f-proof-sylow1.md`（没有三列依赖表、没有洗稿元信息）、D 手写
 # `reports/RESEARCH.md`（没有携带单）⇒「F 的 proof 动作渲染 `## 依赖` / 秘书洗稿 / D 的
 # 携带单」整条链没有入口：B 只登记了 1 条 conjecture，`dependencies` 0 行。所以写它必须
 # 走 F 的 `proof` 动作（渲染 `## 依赖` 节 + 秘书盖洗稿元信息）或 D 的交付动作（渲染携带单）。
@@ -1195,23 +1195,27 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         # 并在读数里「说清"你要的是 PDF、我改读的是同名稿"」（不许静默替换来源）。
         sibling = target.with_suffix(".txt")
         if target.suffix.casefold() == ".pdf" and sibling.is_file():
+            # 这几个读数在下面几支里各被读两次（相对路径 / 字节数），各算一次。
+            sibling_rel = _rel(ctx, sibling)
+            target_rel = _rel(ctx, target)
             try:
                 routed_text = sibling.read_text(encoding="utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 return fail(
-                    f"同名纯文字稿读不出来（{type(exc).__name__}）：{_rel(ctx, sibling)} ⇒ "
+                    f"同名纯文字稿读不出来（{type(exc).__name__}）：{sibling_rel} ⇒ "
                     "这一格没读成，不是「没有纯文字稿」；可让 **A** 重跑 `text.extract`。",
-                    path=_rel(ctx, sibling), kind="route_unreadable", size=size,
+                    path=sibling_rel, kind="route_unreadable", size=size,
                 )
             # 形状与正常读取「逐字同形」：`data` 是标量文本，其余进 `meta`
             # （`fs.read` 在声明判据里是"data 无键集合"的豁免成员 —— 自造 data 键会破那条豁免）。
             routed_lines = routed_text.splitlines(keepends=True)
+            routed_bytes = len(routed_text.encode("utf-8"))
             return ok(
                 routed_text,
-                path=_rel(ctx, sibling),
+                path=sibling_rel,
                 encoding="utf-8",
-                bytes_read=len(routed_text.encode("utf-8")),
-                total_bytes=len(routed_text.encode("utf-8")),
+                bytes_read=routed_bytes,
+                total_bytes=routed_bytes,
                 truncated=False,
                 start_line=1,
                 lines_read=len(routed_lines),
@@ -1220,9 +1224,9 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
                 windowed=False,
                 had_errors=False,
                 sha256=None,
-                routed_from=_rel(ctx, target),
+                routed_from=target_rel,
                 note=("你要读的是二进制 PDF；按业主口径**自动路由到同名纯文字稿**"
-                      f"（`routed_from={_rel(ctx, target)}` 是你原本要读的那一份）"
+                      f"（`routed_from={target_rel}` 是你原本要读的那一份）"
                       "—— 其它角色不必自己做 OCR/抽取。"),
             )
         return fail(
@@ -1259,6 +1263,9 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         picked = lines[begin:end]
         shown = "".join(picked)
         next_line = end + 1 if end < total_lines else None
+        # `"".join(picked)` 再 `splitlines(keepends=True)` 得到的就是 `picked` 本身
+        # （每一段都以行边界结尾，除最后一段；重切不会多出/少掉一行）⇒ 直接用长度。
+        lines_read = len(picked)
         # 空窗口（start_line 超过行数）要如实说，且不能说成"文件是空的"。
         seg = (f"第 {begin + 1}–{end} 行" if picked else f"第 {begin + 1} 行起是空的")
         note = (note + "；" if note else "") + f"本次给{seg}（共 {total_lines} 行）"
@@ -1267,6 +1274,9 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
     else:
         shown = text
         next_line = None
+        # 不按行截时 `shown` 就是整份 `text`，它的行数已经算过（`total_lines`），
+        # 不再把整份正文重切一遍给 `splitlines`。
+        lines_read = total_lines
         if total_lines > 1:
             scope = "已读窗口内" if truncated else "共"
             note = (note + "；" if note else "") + f"{scope} {total_lines} 行"
@@ -1283,7 +1293,7 @@ def fs_read(ctx: FsContext, *, path: str, max_bytes: int = READ_DEFAULT_BYTES,
         total_bytes=size,
         truncated=truncated,
         start_line=begin + 1,
-        lines_read=len(shown.splitlines(keepends=True)),
+        lines_read=lines_read,
         total_lines=total_lines,
         next_line=next_line,
         windowed=windowed,
