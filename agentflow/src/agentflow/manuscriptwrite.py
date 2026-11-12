@@ -35,9 +35,11 @@ def _atomic_write(path: Path, text: str) -> None:
 
 def _refusal(out: dict[str, Any], code: str, why: str, *, stage: str,
              **extra: Any) -> dict[str, Any]:
+    # 这一句同时进 `why` 与 `problem.why`：规范化一次。
+    reason = str(why or "")
     out.update(ok=False, checked=bool(out.get("checked", True)), refused=code,
-               why=str(why or ""),
-               problem={"kind": code, "stage": stage, "why": str(why or "")})
+               why=reason,
+               problem={"kind": code, "stage": stage, "why": reason})
     out.update(extra)
     return out
 
