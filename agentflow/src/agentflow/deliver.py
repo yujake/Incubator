@@ -2,10 +2,8 @@
 
 ## 这一层填的是哪个洞
 
-`draft/28` §184.1 第 2 条：`judges.judge(` 在产品代码里零调用点 ——
-判据存在、真机验过，但没有任何交付流程会去问它们。于是"这次交付达不达标"仍然靠人读。
-
-这一层把三件事接起来（都不新增表：`draft/29` §3.2 的"候选落点先落文件"）：
+`judges.judge(` 的判据存在、真机验过，但如果没有任何交付流程会去问它们，"这次交付
+达不达标"仍然靠人读。这一层把三件事接起来（都不新增表：候选落点先落文件）：
 
 1. 闸门：给定一个交付物，跑一组判据（语义半）+ 机械半，得到一个三态结论：
    `pass` / `needs_work` / `unknown`。其中 `unknown` 专指"没判成"（没接线、坏 JSON）——
@@ -85,7 +83,7 @@ class WorkItem:
 class DeliveryGate:
     """一次交付闸门的结论。
 
-    为什么不复用 gates.GateResult（R003 抓到过这次重名）：那一个是通用的
+    为什么不复用 gates.GateResult：那一个是通用的
     「一道门的结构化结论」（gate_id / axis / criterion / verdict / reason /
     findings / 自证），而这里要带两样它没有的东西 —— 「工作项」（谁该改什么）
     与「没判成的判据清单」（三态里的 unknown 必须能被读出来）。合并两者是一次
@@ -172,7 +170,7 @@ def _mechanical_checks(store: Any, artifact: str, *, claimed_pairs: Sequence[Seq
             out.append({"kind": "unsupported_pair",
                         "detail": f"{pair['pair']} 在图里没有边也没有路径"})
     if store is not None:
-        # 断言强度（`draft/28` §189，第 7 步）：把稿件的每一条断言与它挂的证据档位
+        # 断言强度：把稿件的每一条断言与它挂的证据档位
         # 逐条比一遍。判不了"这句话证明了没有"（那是语义半），但"证据档位是 cross_check
         # 却写着『证明』"这种形态不需要模型就能判。
         claims: list[dict[str, Any]] = []
