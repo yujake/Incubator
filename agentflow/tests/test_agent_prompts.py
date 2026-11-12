@@ -2494,6 +2494,11 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     另一个稿号 —— 一个稿号 = 一份文件 = 一份证明」。
 # A / C / D / G / H / L / V 七格与 p279 逐字同值（这几句只落在 B/E/F/M 各自的 policy 上；
 # `agent_skills` 的手册正文与 `specs/l.py` 的注释不进提示词）。
+# p280 第二批（同源教法补齐，版本仍 p280）：只有 F 一格再换一次 —— `specs/f.py` 的依赖段
+# 教法从「四列表 / 示例画 `| 1 |`」改成「三列表（引用 / 命题号 / 用在哪一步）；路径号是
+# 第四列，由 B 收录时分配、不进稿」，示例表按三列画；`dependency_section_missing` 那句
+# 不再逐字引「（四列表，列固定）」。其余十格与第一批同值（`agent_skills` 的手册正文与
+# `specs/b.py` 的参数说明不进提示词）。逐格：F b9b8482b… → 8fce808f…
 _FROZEN_PROMPT_VERSION = "p280"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
@@ -2749,7 +2754,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "bc209de75aed2228473898357eb384f2406b2d885086e3e259e57acbbcc7c2f6",
     "E": "063d2d72dc8a9a9ced099f15f4d2f81a86a86055ce8fcb638d00f3fbf07c7e6b",
-    "F": "b9b8482b42e048ef408c63f6a0deb558e80ed81618170069282a4fd8543e409a",
+    "F": "8fce808f541b17527a45fdf138336a00b8bb4be9a94a200c465056f743edd8a5",
     "G": "4f8dc27ea967fb0a5c917c6c65249227b2d27c30b390b1f95e0894c3e7a11790",
     "H": "6dda638560012a8d2842bddb413295b74d7e8e2ec4660e4335bee90fb1b9123a",
     "L": "cc1068bca4175f983fa323e9c853e70833e3eb2f1badfef247d54a420513770a",
