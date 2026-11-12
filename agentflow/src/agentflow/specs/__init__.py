@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""把九个角色的声明收成表（`goal-7f5116c1` M3）。
+"""把角色词表里每个角色的声明收成表。
 
 `capabilities.py` 从这里的 `action_table()` / `edges()` / `write_sets()` 派生自己的三张表，
 `agentspec.builtin_registry()` 从 `builtin_specs()` 取注册表 —— 于是"角色动作表"的真身
 只有一份（`specs/<角色>.py`），而不是"声明一处、派生一处、再手抄一处"。
 
-这一包在 `.noai-paths` 里受保护：它现在就是权限面的落点。
+这一包在 `.noai-paths` 里受保护：它就是权限面的落点。
 """
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ if TYPE_CHECKING:  # pragma: no cover - 只为类型
 
 #: 收表的顺序 = 角色词表（`schema.ROLES`）后面接主控。
 #: 刻意不写死那串字母：lint `R005` 认的就是"角色名单只能有一个来源"，
-#: 而 `schema.ROLES` 是那个来源（第一版写死时它当场报了一条 warning，实测）。
+#: 而 `schema.ROLES` 是那个来源。
 _ORDER: tuple[str, ...] = (*S.ROLES, S.CONDUCTOR_ROLE)
 
 
 def builtin_specs() -> dict[str, "AgentSpec"]:
-    """九个角色的声明（按 `_ORDER`；每个角色的模块是叶子，只依赖 `..agentspec`）。"""
+    """每个角色的声明（按 `_ORDER`；每个角色的模块是叶子，只依赖 `..agentspec`）。"""
     out: dict[str, "AgentSpec"] = {}
     for role in _ORDER:
         mod = importlib.import_module(f".{role.lower()}", __package__)
