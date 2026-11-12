@@ -77,7 +77,7 @@ def _proof_kind_default(monkeypatch):
 
     2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
     fail-closed 拒收（`proof_kind_unjudged`），会把这一份要造的"错并 / 正常合并"
-    全部拒在合并之前 —— 而这一份量的是合并之后的**后验**判据（错并要红、正常合并
+    全部拒在合并之前 —— 而这一份量的是合并之后的后验判据（错并要红、正常合并
     要绿），不是两次的证法是不是同一套；这里的 PROOF_1/2/3 本来就是三条不同证法。
     真正的剧本桩（same / different / 没判成）在
     `tests/test_rehearsal_two_f_independent_proofs.py` 与
