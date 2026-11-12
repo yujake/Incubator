@@ -325,16 +325,20 @@ def check(doc: Path, *, roles: tuple[str, ...] | None = None,
     # 可以同时成立，而门是唯一一个每次都会跑的东西（测试会被挑着跑）。
     # 用集合比而不是顺序比：顺序问题由上面那条 `got_roles != list(letters)` 负责，
     # 这里问的是"门的角色表与现场是不是同一批角色"。
-    if live_role_list is not None and set(EXPECTED_ROLES) != set(live_role_list):
-        problems.append(
-            "`EXPECTED_ROLES` 与现场角色集合不一致：门里写的是 "
-            f"{list(EXPECTED_ROLES)}，现场（`tools.ROLES` + `schema.CONDUCTOR_ROLE`）是 "
-            f"{list(live_role_list)}。差集：门里多 "
-            f"{sorted(set(EXPECTED_ROLES) - set(live_role_list))}、门里少 "
-            f"{sorted(set(live_role_list) - set(EXPECTED_ROLES))}。"
-            "现场加了角色而这张表没跟上时，这道门会继续拿一个已经不存在的角色集合"
-            "判『结构完整』（`R6-6`）—— 请同时更新 `EXPECTED_ROLES` 与文档的角色节。"
-        )
+    if live_role_list is not None:
+        # 两个集合原先在条件里各建一次、在文案里又各建两次（同一对常量/入参，纯集合运算）；
+        # 现在建一次，条件与差集文案读同一对。
+        door_roles, live_roles_now = set(EXPECTED_ROLES), set(live_role_list)
+        if door_roles != live_roles_now:
+            problems.append(
+                "`EXPECTED_ROLES` 与现场角色集合不一致：门里写的是 "
+                f"{list(EXPECTED_ROLES)}，现场（`tools.ROLES` + `schema.CONDUCTOR_ROLE`）是 "
+                f"{list(live_role_list)}。差集：门里多 "
+                f"{sorted(door_roles - live_roles_now)}、门里少 "
+                f"{sorted(live_roles_now - door_roles)}。"
+                "现场加了角色而这张表没跟上时，这道门会继续拿一个已经不存在的角色集合"
+                "判『结构完整』（`R6-6`）—— 请同时更新 `EXPECTED_ROLES` 与文档的角色节。"
+            )
     if got_roles != list(letters):
         problems.append(
             f"角色节顺序/集合与期望不符：期望 {list(letters)}，实际 {got_roles}"
