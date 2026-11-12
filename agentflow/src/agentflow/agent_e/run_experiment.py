@@ -701,11 +701,17 @@ class _RunExperiment:
         """
         # 按 `claim_key` 找历史（「不限同一个脚本」）：换脚本往往正是"换枚举策略"的形态，
         # 只在同脚本内比较会把最有价值的那次推进藏起来（实测：换成 b.py 之后比较不出来）。
-        rows = [dict(r) for r in self.store.rows("experiments")
-                if str(r.get("claim_key")) == str(claim_key)]
-        if not rows:
+        #
+        # 只留最后一条与条数：`store.rows` 交出来的每一行已经是新 dict（`Store.read`
+        # 逐行 `dict(r)`，见那里的 docstring），这里只读不写 ⇒ 不必再整表拷一遍。
+        prev: Mapping[str, Any] | None = None
+        count = 0
+        for row in self.store.rows("experiments"):
+            if str(row.get("claim_key")) == str(claim_key):
+                count += 1
+                prev = row
+        if prev is None:
             return ""
-        prev = rows[-1]
         prev_code = str(prev.get("code_path") or "")
         prev_obs = _as_obs_dict(prev.get("observations"))
         now_obs = dict(derived.get("observations") or {})
@@ -714,7 +720,7 @@ class _RunExperiment:
         prev_rt = _as_float(prev.get("runtime_sec"))
         prev_strategy = str(prev_obs.get("strategy") or "")
         now_strategy = str(now_obs.get("strategy") or "")
-        bits = [f"同 claim 历史 {len(rows)} 条（最近一条 {prev.get('experiment_id')}："
+        bits = [f"同 claim 历史 {count} 条（最近一条 {prev.get('experiment_id')}："
                 f"{'超时' if prev.get('exit_code') is None else 'exit=' + str(prev.get('exit_code'))}"
                 f"，{prev_rt:.1f}s，result={prev.get('result')}）"]
         if prev_bound or now_bound:
