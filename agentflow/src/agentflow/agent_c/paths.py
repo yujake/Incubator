@@ -84,9 +84,10 @@ class _Paths:
                 )
                 continue
             kept.append(p)
-        selected = kept[: max(0, int(max_paths))]
+        limit = max(0, int(max_paths))
+        selected = kept[:limit]
         dropped_by_limit = [
-            {"path": list(p), "reason": f"超过 max_paths={max_paths}，仅在统计中计数"} for p in kept[max(0, int(max_paths)) :]
+            {"path": list(p), "reason": f"超过 max_paths={max_paths}，仅在统计中计数"} for p in kept[limit:]
         ]
         if dropped_by_limit:
             warnings.append(f"另有 {len(dropped_by_limit)} 条低重合度路径因 max_paths={max_paths} 未展开（仅在统计里计数）。")
