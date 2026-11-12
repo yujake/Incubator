@@ -230,8 +230,10 @@ class _Core:
         提前终结。
         """
         states = self._not_sent_states()
-        not_sent = [e for e in errors if any(s in e for s in states)]
-        sent_but_failed = [e for e in errors if e not in not_sent]
+        not_sent: list[str] = []
+        sent_but_failed: list[str] = []
+        for e in errors:
+            (not_sent if any(s in e for s in states) else sent_but_failed).append(e)
         return not_sent, sent_but_failed
     def _wired_provider_names(self) -> list[str]:
         """角色级接线上有哪些源名（按接线次序，同名只算一次）。
@@ -307,6 +309,9 @@ class _Core:
         # 请求行上的 `content_description` 一字不动 —— 那是审计留痕，不是查询串。
         query_desc = self._query_description(req.get("topic") or "", req.get("content_description") or "")
         named = [str(x) for x in (req.get("providers") or [])]
+        # 角色级接线名只点一次：点名分支里"可用名单"与返回值里的 role_providers
+        # 读的是同一份名单（改前按 missing 条数各算一遍）。
+        role_names = self._wired_provider_names()
         t0 = time.monotonic()
         if not named:
             out, errors, stats = self._search_along_wiring(
@@ -315,7 +320,7 @@ class _Core:
                 # 第一态：`providers_requested=None` 才是"没点名"的读数。
                 # 写成空数组会与"点名了、但一个都没接上"同形。
                 "providers_requested": None,
-                "role_providers": self._wired_provider_names(),
+                "role_providers": role_names,
                 # 第一态也逐源报状态：不报的话，"两个源被限流"与"接线上的源全都
                 # 0 命中"在读数上完全同形（都只剩 `outcome=no_results`）。逐源读数由
                 # `_search_along_wiring` 产生，形状与点名那一态、与工具面
@@ -328,13 +333,13 @@ class _Core:
         picked, missing = self._pick_named_providers(named)
         errors = [
             f"{name}: unknown_provider: 这一行点名的源不在当前接线上"
-            f"（可用：{self._wired_provider_names()}）"
+            f"（可用：{role_names}）"
             for name in missing
         ]
         if not picked:
             return [], errors, {
                 "providers_requested": list(named),
-                "role_providers": self._wired_provider_names(),
+                "role_providers": role_names,
                 "sources": [],
                 "cost": {"provider_calls": 0, "elapsed_s": round(time.monotonic() - t0, 3)},
             }
@@ -359,7 +364,7 @@ class _Core:
                 errors.append(f"{row['name']}: {row['error']}")
         return out, errors, {
             "providers_requested": list(named),
-            "role_providers": self._wired_provider_names(),
+            "role_providers": role_names,
             "sources": sources,
             "cost": {"provider_calls": len(picked),
                      "elapsed_s": round(time.monotonic() - t0, 3)},
