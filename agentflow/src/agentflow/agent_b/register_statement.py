@@ -1,33 +1,32 @@
-"""角色 B 的动作 `register_statement`（`draft/37` §46）：把一条命题登记进命题台账。
-§44.4 的真机读数把"审阅并 polish 一篇外部论文"这条链的堵点定在动作表上：主控只能 `conductor.summon` 动作，而"把论文里的定理登记成 `statements` 行"原先只有工具（`table.create`，
-A–D 都能调）—— `agent_b/` 里 `statements` 一个字都没有，所以即使 A 把文集登记好了（§46 的另一个动作），命题台账仍然建不起来， G 就没有可引的 `lit:`/命题依据，H 也没有可审的对象。
+"""角色 B 的动作 `register_statement`：把一条命题登记进命题台账。
+动作表上的堵点：主控只能 `conductor.summon` 动作，而"把论文里的定理登记成 `statements` 行"原先只有工具（`table.create`，
+A–D 都能调）—— `agent_b/` 里 `statements` 一个字都没有，所以即使 A 把文集登记好了，命题台账仍然建不起来， G 就没有可引的 `lit:`/命题依据，H 也没有可审的对象。
 1. `statement_full`（含完整假设的命题正文）：省掉假设的命题会被下游当成无条件成立—— 那是 FC-23 在命题级的同一种病； 2. `proof_text`（逐字摘录）：`quote_verified` 的比对对象就是它，没
 有它"引文回验"无从做起； 3. `source_lit_id`（`origin="external_lit"` 时）：出处必须真的存在 —— 本动作在写库前核一次 `literature` 表，引用一个不存在的 `lit_id` 直接拒（`kind="unknown_lit_id"`），
 与 `doc.build_document` 的 `check_citations` 同一条纪律：坏引用不许进库。
-第四个必填：出处（按来源分档，`draft/37` §68）`external_lit` 的命题要给非空的 `page_range`（`start` 或 `label` 至少一个）；`own_result` 的命题要给 `doc_id` 或非空
-的 `line_range`（`start` / `label`）。为什么不是"有这一栏就行"：第十三趟主控传的是 `{"start": null, "end": null}` ——形状在场、内容是空的 —— 六条命题因此都落成了"看着有出处、
-其实没有"的行，而审稿判据当场判它们缺页码，整条验收不及格。为什么按来源分档（人裁的甲档）：从文献里摘的命题才有"第几页"这件事，自有结果的出处是 `doc_id`/`line_range` —— 对后者要页码等于让它编一个数字。写入口与 
+第四个必填：出处（按来源分档）`external_lit` 的命题要给非空的 `page_range`（`start` 或 `label` 至少一个）；`own_result` 的命题要给 `doc_id` 或非空
+的 `line_range`（`start` / `label`）。为什么不是"有这一栏就行"：`{"start": null, "end": null}` 形状在场、内容是空的 —— 那样落成的行"看着有出处、
+其实没有"，而审稿判据当场判它缺页码。为什么按来源分档：从文献里摘的命题才有"第几页"这件事，自有结果的出处是 `doc_id`/`line_range` —— 对后者要页码等于让它编一个数字。写入口与 
 `reviewaccept._c_statements` 逐条对齐。
 `quote_verified` 是三态：`True` 逐字通过 / `False` 比对不一致 / `None` 还没查。只要不是 `True` 就必须给 `quote_reason`（包括"还没查"），这条由 
 `Statement.validate()`与这里的预检双保险 —— 预检存在的理由是把 `kind` 说清楚（调用方要能分辨"参数不对"与"还没查"）。
-第五、第六个必填：逐字证明与 ID 形态（`draft/37` §87）上面那句"双保险"原先只保了一半：`origin="own_result"` 缺 `proof_text`、以及`doc_id`/`source_lit_id` 形态不对（写
-成 `"doc:0000"`），都只由 `Statement.validate()`抛 `ValueError` —— 而它抛在事务里，调用方拿到的是一个异常，不是一条带 `kind` 的拒绝。T1 第 2 趟真机读数：这一动作被召唤 14 次，
-6 次落"执行中异常"（就是这一路），另外 8 次返回了 `ok=False` 却被台账记成 `outcome=ok` —— 两种形态都不像"拒绝"。
+第五、第六个必填：逐字证明与 ID 形态。上面那句"双保险"只保了一半：`origin="own_result"` 缺 `proof_text`、以及`doc_id`/`source_lit_id` 形态不对（写
+成 `"doc:0000"`），都只由 `Statement.validate()` 抛 `ValueError` —— 而它抛在事务里，调用方拿到的是一个异常，不是一条带 `kind` 的拒绝。
 于是这里补齐两级预检：`missing_proof_text` 与 `bad_id`。纪律与其余几级相同：要求写进模型看得见的形状（`specs/b.py`），也在写入口拦下并命名。`Statement.validate()` 仍然是第二道保险
 （它保的是"绕开本动作的写库路径"）。
-第七件：拒绝要自报"这是一次拒绝"（`draft/37` §88 的根因）返回 `ok=False` 还不够。主控的终态映射原先只看"handler 有没有返回 dict"，于是这一动作的 10 种拒绝全被记成 `outcome=ok`
-—— T1 第 2 趟真机：8 次拒绝在台账上长得像 8 次成功，而 `statements` 是 0 行，整条链在这里静默停住。
+第七件：拒绝要自报"这是一次拒绝"。返回 `ok=False` 还不够：主控的终态映射只看"handler 有没有返回 dict"，于是这一动作的每一种拒绝都会被记成 `outcome=ok`
+—— 拒绝在台账上长得像成功，而 `statements` 是 0 行，整条链在这里静默停住。
 所以下面每条拒绝都走 :func:`agentflow.refusals.refuse`：它带上受控的 `refusal_reason`（`invalid_params` —— 词表的定义正是"参数/前置条件不满足：这次调用本身不成立"）。不这
 么写的话，终态只能落 `failed`（"执行了、没成功"），那会把"我参数给错了"与"代码崩了"重新混成一件事。
-第八件：五元证据位随这一行一起落（`R3` 组 9 / EE-07）`draft/39` §3.14 起"这条命题算不算定理"由五位读数派生（`evidencebits.derive_grade`），而 `statements.bits` 这一
-栏此前从来没有过产出方：真机读数 138 行命题、带 bits 0 行。于是所有消费方（收工门、状态报告、`closing` 的收工读数）读到的永远是"五位全空 ⇒ 猜想"，而盘上那 138 行到底是"确实只是猜想"还是"没人算过"，从数据面分
+第八件：五元证据位随这一行一起落。"这条命题算不算定理"由五位读数派生（`evidencebits.derive_grade`），而 `statements.bits` 这一
+栏若没有产出方，所有消费方（收工门、状态报告、`closing` 的收工读数）读到的永远是"五位全空 ⇒ 猜想"，而盘上那些行到底是"确实只是猜想"还是"没人算过"，从数据面分
 不出来。
 现在在这一动作里把位算好、与命题那一行同一次事务写进去（`bits_of` 是纯函数，形状判据只用 `evidencebits`，不抄第二份口径）。
 等级由 `derive_grade` 现算（盘上那一份只是缓存，判据不读它）；- 算不出（`bits_of` 自己抛了）⇒ 拒绝并如实记 `kind="bits_compute_failed"` ——不许写一个空 `bits`：空 `bits`
 读出来是"五位全空"，与"我们没算"长得一模一样；- 形状不合规 ⇒ 拒绝并如实记 `kind="bad_bits"` + 逐条 `problems`，整笔不写。
 `numeric`/`formal`（E）、`reviewed`（V）、`audited`（H）都不是 B 的读数，一律按"还没做"留空 —— 替别人签正是这套位要堵的洞（`evidencebits.BIT_OWNERS` 是那五位的
 owner 表）。
-第九件：一条定理可以有好几份证明（业主 2026-10-22 的多证明模型，S2 的写侧）
+第九件：一条定理可以有好几份证明（多证明模型的写侧）
 可选参数 `proofs`（JSON 数组，元素 `{proof_no, text}`）把"这条定理的证明有几份"一次交清：
 `#p1` 落进既有的 `proof_text`（老字段、老写法逐字不变），`#p2` 及以上落进同一行的证明清单
 （键就是 `verifications.PROOFS_KEY`，元素 `{proof_no, text, created_at}`）。不给 `proofs`
@@ -37,7 +36,7 @@ owner 表）。
 证明号与清单形状的读写口径只此一处来源 `verifications`（`PROOFS_KEY` / `proof_list` /
 `as_proof_no`）—— 自己再拆一份，就会造出"盘上是第 2 条、读出来是第 1 条"这种没有任何东西
 会报的错。
-第十件：外部证明的上下文定理必须"重锚 或 显式声明"（业主 2026-10-22：「转写是提示词侧
+第十件：外部证明的上下文定理必须"重锚 或 显式声明"（「转写是提示词侧
 点一下就行……其它要严格」）`origin="external_lit"` 的命题在 `derived_from` 里点名的每一
 条上下文定理，写库前都要在依赖图上找到下面两件里的一件：一条重锚边（kind=theorem 或相应
 kind、status=closed、带 source_lit_id 或 source_stmt_id、page_range 非空、quote 逐字
@@ -46,7 +45,7 @@ kind、status=closed、带 source_lit_id 或 source_stmt_id、page_range 非空�
 逐条点出缺的是哪一件。三态：依赖图读不到 ⇒ 同样拒绝并说明"没查成"，绝不当成通过。
 不新增状态词、不新增字段（`schema.py` 在禁改区）—— 这一档用的正是 `Dependency` 类
 docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
-第十一件：B-2 与 B-3 两条拒收码的分工（业主 2026-10-22 两个裁定，同一批落地）
+第十一件：B-2 与 B-3 两条拒收码的分工
 两条都管"自产的东西能不能一进门就叫定理"，但它们问的不是同一个问题，所以码是两条：
 
 - `must_start_as_conjecture`（B-2）：「没有引文 / 自己编的命题必须从『猜想』注册」。
@@ -58,19 +57,19 @@ docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
   命题，在 V 的台账里必须有一份盖住这一份正文的「成立」签。它管的是升级：
   这一笔已经交了证明，而"这份证明有人看过"是它与"瞎编"之间唯一的分界。
 
-两条同时成立时优先报 `must_start_as_conjecture`：裁定 B-2 的入口判据比 B-3 的升级
+两条同时成立时优先报 `must_start_as_conjecture`：B-2 的入口判据比 B-3 的升级
 判据更靠前（还没立成猜想的东西，谈不上升级）。V 已经签住的那一笔给 B-2 让路 ——
 那一签本身就是"它先立过猜想、走过复核"的证据（`_self_authored_gate` 的 `signed`）。
-第十二件：穷举证明的签字是 V 的、②③ 是 E 写的，B 不许自签（业主 2026-10-23 裁定与晚间的更正）
-裁定逐字要点：「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，
-签名是对应的程序脚本……这些有关数值实验的都由 E 来签。若要入定理证明库，证明栏写
-程序地址（相对于仓库）。」落点是两道闸，判据本体都在 `numericproof`：
+第十二件：穷举证明的签字是 V 的、②③ 是 E 写的，B 不许自签。要点：「如果纯数值实验直接把
+整个命题证掉了，那也能拿 proof 标识，理由是穷举，签名是对应的程序脚本……这些有关数值实验
+的都由 E 来签。若要入定理证明库，证明栏写程序地址（相对于仓库）。」落点是两道闸，判据本体
+都在 `numericproof`：
 
 - 入参闸（`proof_needs_third_party_signature`）：`origin="own_result"` +
   `evidence_kind="proof"` ⇒ 证明栏要么是程序脚本的相对路径、且台账里有一条 E 按穷举
   签下的 proof（`observations.e_signature` 里 `signed_by="E"` +
   `proof_reason="exhaustion"`），要么有一条 `method="formal"` 的 proof 实验。两样都没有
-  ⇒ 整笔不写。改前 B 可以直接把自己的结果标成 proof，而没有任何一格会问"谁签的"。
+  ⇒ 整笔不写。B 不能直接把自己的结果标成 proof —— 必须有一格问"谁签的"。
 - 上面那两道 V 闸的例外：证明栏是程序、且 E 已按穷举签过 ⇒ 这一条不需要 V 的签
   （V 对数值证据直接拒签）。不改这一处的后果是一条真的穷举证明永远进不了定理证明库：
   它既过不了 B-3，也拿不到 V 那一签。
@@ -488,7 +487,7 @@ def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = 
                     why: str = "") -> str:
     """`self_authored_needs_v` 那一句：事实 + `建议：` + 一条真的走得通的路（唯一落点）。
 
-    ## 为什么按状态分四句（2026-11-02，业主裁定「一句原因 + 一句建议」）
+    ## 为什么按状态分四句（「一句原因 + 一句建议」）
 
     `_v_signature_for` 的 `state` 回答的正是"这一版正文现在欠什么"，而四种欠账的
     下一步不是同一件事，写成一句通用文案会把处置说错：
@@ -922,7 +921,7 @@ def _optimized_reading(attach: Mapping) -> dict:
 
 def _sign_filing_reading(store: Any, *, manuscript_path: Any,
                          manuscript_text: Any = "", statement_id: Any = "") -> dict:
-    """收录回执的两格读数（2026-11-08）：稿上已签 / 已入台账。
+    """收录回执的两格读数：稿上已签 / 已入台账。
 
     判据本体只有 `vsigns.sign_filing_reading` 一处；这一层只负责"回执不许因为读数
     失败而丢掉"（异常折成 `checked=False`，不带走这一笔登记）。
@@ -951,21 +950,21 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     - 按证明正文认出来的（`matched_by == proof_body`）⇒ 是：那一份的 `## 证明`
       与这一笔交的正文逐行相同，不存在"借别人的正文"；
     - 本行还没在册（没有号）⇒ 不是：没有"本行"可比对，就不许拿任何号去猜
-      （被引命题的号不是"本行"的）—— 改前 `stmt:000001` 就是这样把
-      `stmt:000000` 的稿连正文带签一起读走的；
+      （被引命题的号不是"本行"的）—— 拿被引命题的号去读，会把别人的那一行
+      连正文带签一起读走；
     - 本行在册 ⇒ 稿自己的号（稿头 `- 命题号：stmt:<号>`，没有再按号的文件名）
       必须等于本行号。稿头声明了别人号、或文件名是别人号，都不是自己的稿；
-    - 2026-11-10（业主裁定：稿号与命题号是两个号段）：本行在册、且行上记着
+    - 稿号与命题号是两个号段：本行在册、且行上记着
       `manuscript_id` ⇒ 稿自己的号等于「行上那个稿号」也算自己的稿。F 的稿按 F 自己
       的稿号命名，命题号是 B 收录时现取的 ⇒ 拿命题号去比稿名，会让"这一条自己的稿"
       在收录之后永远读成"别人的稿"。行上没有 `manuscript_id`（老盘）⇒ 仍按上一条
       的命题号口径判（退回，不是放宽）。
 
-    ## 2026-11-05 业主裁定：D1 取严格版
+    ## D1 取严格版
 
     依赖面也是"这一份证明"的事实：被引命题稿里那张 `## 依赖` 表写的是它引了谁；
     把它按到新命题头上，台账里就会出现一条"我引了 X"而作者从未这么写的边。
-    所以借正文、借签、借依赖面都不行；旧口径"历史形态的稿按既有语义放行"作废。
+    所以借正文、借签、借依赖面都不行。
 
     这一格就是 D1 反真空的打桩点：把它打成恒真 ⇒ `stmt:000001` 又会把
     `stmt:000000` 的稿读成自己的（判据 a 立刻红）。
@@ -1182,9 +1181,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 problems=problems)
         return bits, None
 
-    # ---- 普通数值手稿的绿色通道（2026-11-08 业主三条裁定） ------------------------
+    # ---- 普通数值手稿的绿色通道 ------------------------
     #
-    # 业主逐字：「D侧普通数值实验也需写报告……D侧呈递时一样引用E侧手稿提交强猜想
+    # 「D侧普通数值实验也需写报告……D侧呈递时一样引用E侧手稿提交强猜想
     # （即有数值实验支持的猜想），B侧做好适配（应该在手稿里找命题和数值实验程序，
     # 不录入其它内容）」＋「专门给普通数值实验开绿色通道就行」＋「乙」（② 程序设计
     # 挪进 experiments.observations["design"]，证明栏只剩 ③）。
@@ -1213,7 +1212,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "checked": False, "ok": False, "path": "", "experiment_id": "",
             "code_path": "", "method": "", "statement": "", "result_text": "",
             "manuscript": {}, "problems": [],
-            # 数值证据四元组的机器侧原料（2026-11-08：一个命题可以有多份实验）：
+            # 数值证据四元组的机器侧原料（一个命题可以有多份实验）：
             # 只从实验行原样取，不在这里判它们够不够（那是 `bit_problems` 的事）。
             "observations": {}, "params": {}, "result": "", "counterexample": None,
             "experiment_row": {},
@@ -1961,11 +1960,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         `_bits_after_canonical_write` 把这一笔按现行正文认到的签（`fresh` 里那几格）
         带过来，没认到的保留旧的（读侧按 sha 判 stale）—— 两边都不是"清空即通过"。
 
-        ## 收录那一笔：第 2 位跟着正文一起翻（2026-11-06，真机 R-mk-infinite-92）
+        ## 收录那一笔：第 2 位跟着正文一起翻
         板上 `b-register@<号>@<被签正文 sha>` 收口走的是秘书的"并进在册命题"支
         （`Secretary._merge_into_proposition`）：它只写 `proof_text`（canonical 从空
-        补上 / 第 N 份证明进清单），不写 `bits`。改前这一格只在 `canonical_changed`
-        时才合并位 ⇒ 收录完那一行是 `proof=false`，而 V 那一签只翻第 3 位 ⇒
+        补上 / 第 N 份证明进清单），不写 `bits`。只在 `canonical_changed` 时合并位，
+        收录完那一行就是 `proof=false`，而 V 那一签只翻第 3 位 ⇒
         `reviewed=true ∧ proof=false ∧ grade=conjecture` 的自相矛盾（等级永远到不了
         `pre_theorem`）。现在那一支也调本函数（`register_statement` 的 `merged` 支），
         本格在"行上已有正文而第 2 位还没翻"时用
@@ -1986,7 +1985,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      #: "写了什么"分开报，因为"没验过"与"验过没变化"都是 `False`，
                      #: 而两者该给调用方的话不同（前者不用再登记一次）。
                      "formal_synced": False, "formal_paths": {},
-                     #: 2026-11-05（业主）：签成之后在同一笔里按现行签把 `evidence_kind`
+                     #: 签成之后在同一笔里按现行签把 `evidence_kind`
                      #: 重算上去的读数（键存在 = 这一笔真升了；`{}` = 没动）。
                      #: 判据只有一处（`verifications._grade_recomputed_from_signature`，
                      #: 与签发那一笔共用），这一格只负责把它接在"正文落进那一行之后"。
@@ -2000,7 +1999,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      "kind_upgraded": {},
                      #: 已有 kind 升档留痕被这一笔按“同一句凭据 + 现算等级”刷新过没有。
                      #: 两条路（秘书先写 / B 后写）的 `_kind_upgrade.basis` 必须是同一句
-                     #: （业主 2026-11-10 裁量 ②）；刷新本身也是一次落盘。
+                     #: （两条路必须同一句）；刷新本身也是一次落盘。
                      "kind_trace_refreshed": False,
                      #: 这一笔把第 2 位补翻时合并出来的那整份位落盘了没有（第 3 位那几张
                      #: 表也跟着来）；"翻了"与"合并了"分开报：反真空把翻位那一步摘掉时，
@@ -2013,17 +2012,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         want = str(canonical or "").strip()
         #: 这一笔交来的东西（证明清单 `entries` / canonical 正文 `want`）两样都没有。
         #:
-        #: ## 两样都没有不等于"没有活要干"（D-2）
+        #: ## 两样都没有不等于"没有活要干"
         #: 第 4 位（形式化）不是从这一笔的入参算出来的，是从 L 的 `experiments` 台账同步
         #: 进盘上那一行的 `proof_text` / `proofs` 的。于是一条 `proof_text` 空、证明
         #: 只挂在 `proofs` 列表里的命题，L 验过之后再登记一次（什么都不带）正是它进第 4 位
-        #: 的那一笔；改前这里直接 `return out`，那一笔在到达 `_bits_with_formal` 之前就结束
+        #: 的那一笔；直接 `return out` 会让那一笔在到达 `_bits_with_formal` 之前就结束
         #: 了 ⇒ 验过的形式化永远进不了第 4 位，而且不报错（"没验过"与"验过了但没同步"在
         #: 读数上同形）。所以这里只记一个标记、不早退：后面照常走一次 `_bits_with_formal`，
         #: 有变化就写回（`formal_synced=True`），没变化则一个字都不写 —— "不写新行、不动
         #: canonical"这两条保持不变。
         nothing_to_attach = not entries and not want
-        # ---- 0 字证明：受控拒绝（业主 2026-10-24 裁定 B2 的第 1 条）
+        # ---- 0 字证明：受控拒绝
         #
         # 这一格是"声明了第 N 份证明、而它的正文是空的"。`_normalize_proofs` 已经在
         # 入口拦过一遍，但这一格是第二道写入口（多证明的追加、合并稿的顺位接续都经过
@@ -2188,9 +2187,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             _needs_proof = not bool(dict(row.get("bits") or {}).get("proof"))
             _needs_review = (bool(dict(bits or {}).get("reviewed"))
                              and not bool(dict(row.get("bits") or {}).get("reviewed")))
-            #: 2026-11-11（缺陷 ①）：第三种形态 —— 这一笔交来的签是这一号的，
+            #: 第三种形态 —— 这一笔交来的签是这一号的，
             #: 而行上的逐条表还没有这一号（第 2 位早就是真的：多证明 / 多路径的
-            #: 第 2 份证明）。改前只认 ① / ②，这一形态整笔不合并逐条表 ⇒
+            #: 第 2 份证明）。只认 ① / ② 会让这一形态整笔不合并逐条表 ⇒
             #: `reviewed_by_proof` 永远只有 `{1: True}`。判据只看"这一号在不在表里"，
             #: 不重判签（签是调用方按 `sign_reading.state == "signed"` 认过才交进来的）。
             _per_now = _EB.reviewed_by_proof(dict(row.get("bits") or {}))
@@ -2209,21 +2208,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     #: 的读数）：多路径 #p2 那一笔第 2 位早就是真的 ⇒ 逐条表补上了，
                     #: 但"翻位"这件事没发生，回执不许说发生了。
                     out["proof_collected"] = True
-            # ---- 收录回执（2026-11-08 缺陷 ③）：与"第 2 位这次翻没翻"解耦 -----------
+            # ---- 收录回执：与"第 2 位这次翻没翻"解耦 -----------
             #
-            # 这一段搬进了 `agent_b/proof_receipt.py`：判断、写入顺序与回执形状逐字
-            # 不变，只为让这个闭包留在 200 行线内（2026-11-11 体量拆分）。搬出的
+            # 这一段住在 `agent_b/proof_receipt.py`：判断、写入顺序与回执形状逐字
+            # 不变，拆出去只为让这个闭包留在 200 行线内。搬出的
             # 理由串（为什么回执必须与翻位解耦、为什么号只从落点读）跟着那一段走。
             if _body_present:
                 write_proof_receipt(
                     row, out, body_now=_body_now, proof_no=_no_receipt,
                     manuscript_id=manuscript_id)
-            # ---- 2026-11-05（业主）：签成之后就升档，不再等第二条命令 --------------
+            # ---- 签成之后就升档，不再等第二条命令 --------------
             #
-            # 现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §二.3 / A-1）：
-            # 000014 / 000016 的 `register_statement:proofs` 把正文与 bits 写进来了，而
-            # `evidence_kind` 停在 `heuristic` —— 升档要靠秘书 `record_statement:upgrade`
-            # 再跑一次，而那一条没人跑（000015 / 000018 / 000019 连正文都没回填）。
+            # 正文与 bits 已经写进来了，而 `evidence_kind` 若停在 `heuristic`，升档还要
+            # 靠秘书 `record_statement:upgrade` 再跑一次 —— 而那条命令不一定有人跑。
             #
             # 位置：正文（canonical 覆盖 / 新挂的 #pN）已经写进 `row`、bits 也已经认过签
             # 之后，`tx.upsert` 之前。判据只有一处：`verifications.proof_review_gap`
@@ -2242,19 +2239,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 row = dict(_recomputed.get("row") or row)
                 # 读数必须落盘，不只是"算过"：这一格与 `sign_statement` 那一笔
                 # （`verifications.py` 的 `new[GRADE_RECOMPUTED_KEY] = reading`）
-                # 是同一件事的两个落点。改前这里只把 row 拷回来、丢掉了 reading 本身，
-                # 于是"B 登记期按签重算等级"在返回值里说得清、在盘上查不到 ——
+                # 是同一件事的两个落点。只把 row 拷回来、丢掉 reading 本身，
+                # 会让"B 登记期按签重算等级"在返回值里说得清、在盘上查不到 ——
                 # 而这条回执正是"这一档凭什么"的唯一可读凭据。
                 row[_VR.GRADE_RECOMPUTED_KEY] = dict(_recomputed["reading"])
                 out["grade_recomputed"] = dict(_recomputed.get("reading") or {})
-            # ---- 已有 kind 留痕 ⇒ 用这一笔的凭据 + 现算等级刷新（裁量 ②） -----------
+            # ---- 已有 kind 留痕 ⇒ 用这一笔的凭据 + 现算等级刷新 -----------
             self._refresh_kind_trace_from_sign(row, out, store=store)
             # ---- D-37：证据齐了就升 `kind`（判据只有一处，落点也收到这一处） ----------
             #
             # 位置：正文已落 `row`、第 2 / 3 位已按这一笔认到的签同步、等级已按现行签
             # 重算之后，`tx.upsert` 之前。
             #
-            # 改前这一格只挂在"第 4 位（形式化）同步出变化"那一支下面。于是 T1 的
+            # 这一格若只挂在"第 4 位（形式化）同步出变化"那一支下面，
             # `own.ingest_manuscript(mode="apply")` 把一份已签的正文收录进来时，
             # 第 2 位与等级都追上了，而 `kind` 仍写着 `conjecture` —— 工具回执说"收录
             # 成功"，台账里的证据状态却没变（读的人在盘上读不到"这是定理"）。
@@ -2263,7 +2260,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 写完正文之后按证据追上。判据只有一处（`evidencebits.kind_following_grade`，
             # 秘书那一支 / V 落签那一支 / 读侧共用同一个）；本格只负责"改了哪两格"。
             #
-            # `allow_pending=False`（2026-11-10 业主裁量）：这一支写的是这一条命题，
+            # `allow_pending=False`：这一支写的是这一条命题，
             # 升档依据必须是它自己的台账那一签或第 4 位 verified。"命题还没在册时审的
             # 那一签"只够过准入闸 —— 拿它升档，新建的 conjecture 行会在同一笔里变成
             # theorem，而这一行连自己的台账行都还没有，留痕也指不出"这条命题的哪一签"。
@@ -2627,15 +2624,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 纯函数，不读 proof_text），不再算第二遍。
         if candidate:
             row["bits"] = candidate
-        # ---- 换正文 ⇒ 这一份的优化态（业主 2026-11-02 的两阶段录入） ----
+        # ---- 换正文 ⇒ 这一份的优化态（两阶段录入） ----
         #
-        # 口径（`draft/179` 二之一）：「洗过的肯定能保证V签。所以二阶段只用看是否
-        # 优化过」。上面那道核已经判过"这一份有签、签的就是它" ⇒ 这里落 `true`；
+        # 口径：「洗过的肯定能保证V签。所以二阶段只用看是否优化过」。上面那道核已经
+        # 判过"这一份有签、签的就是它" ⇒ 这里落 `true`；
         # 落盘的 true 与 `reviewed_by_proof` / `reviewed_sha_by_proof` 是同一笔
         # 事务写下去的（第 ② 处：那两张表不许被换正文这一笔清掉）。
         row["bits"] = _EB.with_optimized_flag(row.get("bits") or {}, 1, True)
         out["optimized_blocked"] = ""
-        # ---- 改写过 ⇒ 旧签不算数（业主 2026-10-26 Q14 的唯一硬机制）。
+        # ---- 改写过 ⇒ 旧签不算数（唯一硬机制）。
         #
         # 判据不在这里：`verifications.review_standing` 是唯一判定口（它拿
         # 现行正文的 sha 与台账覆盖集比）。这一格只做两件写之外的事 —— 把结论
@@ -2654,14 +2651,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                              proofs_listed: Any, row: Mapping | None,
                              v_sign: Mapping, store: Any,
                              proof_no: Any = 1) -> dict:
-        """这一笔要写进台账的证明正文，每一份都得有一份覆盖它的签（业主 2026-11-02）。
+        """这一笔要写进台账的证明正文，每一份都得有一份覆盖它的签。
 
         ## 为什么闸设在这里、且不看 kind / 不看来源
 
-        85 暴露的那条绕行不是"某一种来源漏了"，而是「闸的判据选错了轴」：
+        绕行的根源不是"某一种来源漏了"，而是「闸的判据选错了轴」：
         `_self_authored_gate` 判的是 `kind`（猜想放行），F 那次闸判的是手稿来源
         （carried_by_D / disk），于是"进程内直交 + 声称是猜想 + 无签"这一组合整条穿过。
-        业主的裁决是「机械录入那一版也必须有签（F 的签 或 文献编号）」——判据的真身是
+        裁决是「机械录入那一版也必须有签（F 的签 或 文献编号）」——判据的真身是
         "「要写进去的那份正文有没有签」"，与它叫什么 kind、从哪条路来都无关。
 
         ## 判据（三档，不折平）
@@ -2670,15 +2667,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
           不是"查过了、有签"，而是"这一笔没有内容要写"。D 的每一次交付都是这一档 ——
           它交的是在册那一行的正文，干的是读稿登记依赖面（那条路不能因此被堵死）。
         - 文献侧（`origin="external_lit"` 且有 `source_lit_id`）⇒ 免签：占位签就是
-          文献编号（`draft/179` 二之二「假V签，但要允许进台账」）。
+          文献编号（「假V签，但要允许进台账」）。
         - 其余 ⇒ 每一份要写的正文都要有覆盖它的签：唯一判据是
-          `vsigns.sign_reading.state == "signed"`（`_signature_covers`）。D268 批 2
-          起手稿块不再是旁路：块只是渲染视图，认签必须有可复算的凭据。缺一份就整笔拒。
+          `vsigns.sign_reading.state == "signed"`（`_signature_covers`）。手稿块不是
+          旁路：块只是渲染视图，认签必须有可复算的凭据。缺一份就整笔拒。
 
         ## 为什么拒而不是"降档收下"
 
-        业主原话：「不许再出现 proofs=0 绕行」。降档收下就是那条绕行换了个名字
-        ——85 的 13 条正是"heuristic 收下、再进论文"来的。
+        「不许再出现 proofs=0 绕行」。降档收下就是那条绕行换了个名字
+        —— "heuristic 收下、再进论文"正是它。
         """
         out: dict = {"applicable": False, "refused": "", "reason": "", "reading": {}}
         now = dict(row or {})
@@ -2983,18 +2980,18 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         statement_full: str,
         source_lit_id: str = "",
         proof_text: str = "",
-        #: 多证明（业主 2026-10-22）：`[{proof_no, text}, ...]`。#p1 落 `proof_text`，
+        #: 多证明：`[{proof_no, text}, ...]`。#p1 落 `proof_text`，
         #: #p2 及以后落同一行的 `proofs` 清单；不给就与今天逐字一致（等价 #p1）。
         proofs: list | None = None,
-        #: F 的证明手稿正文（业主 2026-10-24 最终形态：「作者写内容、收方读稿登记」）。
+        #: F 的证明手稿正文（「作者写内容、收方读稿登记」）。
         #: 手稿里那一节 `## 依赖` 的四列表由 B 读出来落 `dependencies` —— F 自己不写台账。
-        #: 不给 ⇒ 与改前逐字一致（依赖面仍由秘书的正文扫描那条老路决定）。
+        #: 不给 ⇒ 依赖面仍由秘书的正文扫描那条老路决定。
         proof_manuscript: str = "",
         kind: str = "theorem",
         label: str = "",
         statement_text: str = "",
         origin: str = "external_lit",
-        #: 「这是我们自己定义的新概念」（2026-11-10）：只在 `kind="concept"` +
+        #: 「这是我们自己定义的新概念」：只在 `kind="concept"` +
         #: `origin="own_result"` 时有意义。默认 `False` = 不声明（照旧受控拒）；
         #: 显式 `True` 才把这条自产概念放进台账（秘书那一层落 `self_authored`）。
         #: 与 `source_lit_id` 同时给 ⇒ 自相矛盾，受控拒（判据在 `conceptrows`）。
@@ -3004,15 +3001,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         quote_verified: bool | None = None,
         quote_reason: str = "",
         #: 这条引文是「怎么」回验通过的（`schema.QUOTE_MODES`：`verbatim` 逐字命中 /
-        #: `semantic` 语义相同 —— 业主 2026-10-14：「回验……保持语义相同即可」）。
+        #: `semantic` 语义相同 —— 回验保持语义相同即可）。
         #: 不给就按历史行读（`True` ⇒ 逐字那一档），但「新写方应当说清方式」。
         quote_mode: str = "",
-        #: 语义那一档的「证据」（业主 2026-10-14：「语义那一档必须留证据」）：
+        #: 语义那一档的「证据」（语义那一档必须留证据）：
         #: `quote_span` 是来源里那一段逐字正文，`quote_call_sha256` 是那次语义判定的
         #: 调用记录（H 的 `judge_quote_semantics` 回执里 `call.prompt_sha256`）。
         #: 标了 `quote_mode="semantic"` 而缺这两样 ⇒ `Statement.validate()` 当场拒。
         #:
-        #: D1（2026-10-22）起这两栏还有第二层用法：逐字档把 `quote_span` 写成定位
+        #: 这两栏还有第二层用法：逐字档把 `quote_span` 写成定位
         #: （`p{页}:norm[起:止]`，见 `quoteevidence.SPAN_SCHEME`），写侧会拿它指向的
         #: 片段（或 `proof_text`）去这一篇的全文里真比对，落盘的区间是重算出来的那个
         #: （自报的区间只是线索）。核不出区间 ⇒ 这一笔降成 unknown，理由说清为什么要补。
@@ -3021,14 +3018,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         derived_from: list | None = None,
         doc_id: str = "",
         line_range: dict | None = None,
-        #: 2026-11-11（业主追加裁定 ⑥）：走「按手稿路径收录」那条指针支时，由
+        #: 走「按手稿路径收录」那条指针支时，由
         #: `manuscriptsubmission.assign_path_group`（实现 `manuscriptpaths`）先分配好的
         #: 「第几条路径」。`0` = 调用方没走指针支（老口径逐字不变）。
         path_group: int = 0,
     ) -> dict:
         """登记一条命题，返回 `{"ok": True, "stmt_id": ..., "row": {...}}`；不合规就零写入。"""
         full = str(statement_full or "").strip()
-        # ---- 2026-11-08（业主三条裁定）：普通数值手稿的绿色通道 ----------------
+        # ---- 普通数值手稿的绿色通道 ----------------
         #
         # 只认 E 的 `reports/e-num-<实验号>.md`（其余路径 / 正文一律走原路）。认出来了：
         # 命题取手稿 `## 命题`（覆盖调用方传的 statement_full —— 业主：「在手稿里找命题」），
@@ -3050,7 +3047,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 full = _green_statement
         #: 这一笔的 `kind` 只在这里派生一次（B-2 的判据与落库用的必须是同一个值）。
         #:
-        #: 为什么强调"只一处"：改前这个缺省值在动作里出现过两遍 —— 概念行那一支写
+        #: 为什么强调"只一处"：这个缺省值若在动作里出现两遍 —— 概念行那一支写
         #: `str(kind or "").strip() == "concept"`，载荷那一格写 `str(kind or "theorem")`。
         #: 两处各算一次，谁加一个 `.strip()` 或改一次缺省值，"判据读的那个 kind"与
         #: "落库的那个 kind"就会分家 —— 而它们分家的形态是静默的：判据放过的行，
@@ -3058,13 +3055,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         kind_now = str(kind or "theorem").strip()
         if not full and kind_now != "concept":
             # 命题没有"内容待补"这一档：省掉假设的命题会被下游当成无条件成立。
-            # 概念有（业主 `draft/97` §14.13 逐字：「抽不到定义的概念就让A去网上搜，
-            # 写入时定义内容留空，等A返回后写入」）⇒ 空定义的概念要落行并带待补标记，
+            # 概念有（「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入」）
+            # ⇒ 空定义的概念要落行并带待补标记，
             # 而不是在这里被拒。这一档此前也拒，于是"定义还没抽到"这件事在 B 的动作里
-            # 根本走不通（只有直接调秘书那条路能落）—— 而 §15.4 最常见的场景
+            # 根本走不通（只有直接调秘书那条路能落）—— 而最常见的场景
             # （B 消化 A 查回来的论文时撞到生僻定义）走的正是这个动作。
             #
-            # 2026-10-24（业主裁定 B2 的第 1 条）：受控码改成 `empty_statement_text`。
+            # 受控码是 `empty_statement_text`。
             # 为什么不继续用 `bad_statement`：那一句拒信把"只有短版"与"0 字"混在一档里，
             # 而"0 字"是另一件事 —— 它连可判的对象都没有（判档位那一趟也会拒它，
             # 见 `secretary.judge_statement` 的同一条受控码），所以两者的读数要分得开。
@@ -3084,7 +3081,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "那一份是 E 自己跑出来的实验结果，不是文献里摘的 —— 按 external_lit 登记"
                 "会把逐字引文那几道闸（page_range / quote_verified）套到一份数值读数上",
                 numeric_channel={"path": _green.get("path") or ""})
-        # ---- 2026-11-07（业主裁定 ②：lemma 那条死锁）：F 的手稿登记按内容落了
+        # ---- lemma 那条死锁：F 的手稿登记按内容落了
         # `- 证据种类：lemma` ⇒ B 收录已登记的同一条命题时照它落 kind。
         #
         # 为什么只在"已在册"那一档生效：首次登记受 B-2 管（自产、无出处、无签 ⇒
@@ -3099,18 +3096,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if declared:
                 kind_now = declared
         if _green.get("ok"):
-            # 2026-11-08（业主改口径）：「普通数值实验不写 kind，一律写 conjecture」。
+            # 「普通数值实验不写 kind，一律写 conjecture」。
             # 所以这一档不看调用方声明了什么、也不拒收它：kind 直接落 conjecture。
             # 不留「你原来声明的是 theorem」这类读数 —— 那种读数会让声明继续在盘外
             # 活着，而台账上那一行永远只有 conjecture。等级由五元位现算
             # （numeric=verified ⇒ strong_conjecture）。
             kind_now = "conjecture"
-        # ---- 概念行的两处口径（2026-10-21，本批缺陷一的写入侧） --------------------
+        # ---- 概念行的两处口径（写入侧） --------------------
         #
-        # 真机读数（`projects/mp3/data/statements.json`）：1143 条概念行、「1142 条带
-        # `source_lit_id`」（术语确实出自文献），而 `origin` 一律 `own_result` ——
-        # 文献里来的术语被记成了"我们自己的结果"；同时每一条都带着
-        # `proof_text="concept:primitive"`，把"有没有证明"的读数全顶高。
+        # 概念行的 `origin` 若一律写 `own_result`，文献里来的术语就被记成了"我们自己的
+        # 结果"；而 `proof_text` 若带着 `concept:primitive`，会把"有没有证明"的读数全顶高。
         #
         # 两件事各有一个出口，都不许静默：
         # ② `origin`：概念行走「受控集合」，`own_result` 在这条动作上直接拒 ——
@@ -3124,9 +3119,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         _concept_ms: dict[str, Any] = {}
         if kind_now == "concept":
             if origin == "own_result":
-                # ---- 2026-11-10（自产概念在动作面没有入口）：`self_authored` ----------
+                # ---- 自产概念在动作面没有入口：`self_authored` ----------
                 #
-                # 真洞（业主亲跑概念彩排撞到）：`kind="concept"` + `origin="own_result"`
+                # 洞：`kind="concept"` + `origin="own_result"`
                 # 在这一格被硬拒，而本动作的参数面没有 `self_authored` 可传 ——
                 # 底层能力一直在（`Secretary.write_concept_row(…, origin="own_result",
                 # self_authored=True)` 与 `conceptrows.concept_origin_problem` 都支持），
@@ -3208,7 +3203,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 proofs_dropped = [dict(p) if isinstance(p, Mapping) else p
                                   for p in (proofs or [])]
                 proofs = None
-        # 普通数值通道：`proof_text` 空着（业主明令），别的正文一律不录。
+        # 普通数值通道：`proof_text` 空着，别的正文一律不录。
         # 调用方若还塞了 `proof_text` / `proofs`，丢掉但留痕（`dropped_content`）——
         # 静默丢掉会让"他以为交了什么"与"台账里有什么"分家。
         if _green.get("ok"):
@@ -3231,15 +3226,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 位置在这里：证明清单刚归一完，`proof_text` 已经是最终那一份（#p1 已接进来）。
         trunc_reading = _text_truncation_reading(statement_full=full, proof_text=proof_text,
                                                  proofs=proofs_listed)
-        # ---- 手稿的依赖段（业主 2026-10-24 最终形态） ---------------------------------
+        # ---- 手稿的依赖段 ---------------------------------
         #
-        # 业主原话（逐字）：「依赖面登记是否是F在其手稿中写好，D的研究手稿引用F的证明手稿给B
+        # 「依赖面登记是否是F在其手稿中写好，D的研究手稿引用F的证明手稿给B
         # 入库时，B侧读到F手稿处的依赖面，按此入库的？（即和V签一个逻辑）」「改」。
         # ⇒ 作者（F）只在手稿里写内容，登记由收方（B）读稿产生；F 不写 `dependencies`。
         #
         # 三条判据与处置（实现全在 `agentflow.depsection`，这里只做"读到就核、核不住就整笔拒"）：
         #   ① 手稿里没有 `## 依赖` 这一节、而证明正文（`## 证明` 那一节）里点了 `stmt:` 引用 ⇒
-        #      整笔受控拒绝 `dependency_section_missing`（业主 2026-10-24 的裁定：依赖面就在
+        #      整笔受控拒绝 `dependency_section_missing`（依赖面就在
         #      手稿里、B 按它入库；正文引了却交不出那一节 = 这份手稿不合格，补上再来）。
         #      只报一句 `deps_missing` 就照常入库，等于给"不写依赖段"留一条最省事的路；
         #   ② 有段而某行读不懂（缺列 / 列数不对 / 命题号形状不对 / 路径号不是正整数）⇒
@@ -3248,21 +3243,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #      （档位判据从等级序现算，见 `depsection.citation_levels`）。
         # 一条 `stmt:` 引用都没有（自足的证明）⇒ 不拒、也不记 missing：读数是 `not_applicable`。
         #
-        # ---- 兜底读盘（2026-10-26，死结 2 的修法） ---------------------------------
+        # ---- 兜底读盘 ---------------------------------
         #
-        # 真机读数（sylow5/sylow6）：`proof_manuscript` 这一格从来没有人传过值 —— 它是可选
-        # 参数，而 B 的提示词只印必填参数（实测这一格在 B 的段里出现 0 次）⇒ 就算 F 写了
-        # 手稿，也没有任何代码把它读出来递进这一笔登记，`dependencies` 于是恒 0 行。
+        # `proof_manuscript` 是可选参数，而 B 的提示词只印必填参数 ⇒ 就算 F 写了手稿，
+        # 也可能没有任何代码把它读出来递进这一笔登记，`dependencies` 于是恒 0 行。
         #
-        # 业主 2026-10-26 把传递路径定成三段（原话「是通过D传吗」）：
+        # 传递路径定成三段（「是通过D传吗」）：
         #   ① `param`：调用方（D 派 B 那一笔的 args / 直调）把正文递进来了，最优先；
         #   ② `carried_by_D`：D 交研究手稿给 B 入库时把它一并带上（D 的报告里有
         #      「携带的证明手稿」那一节，`depsection.read_carried_manuscript` 读它）——
         #      这是主路：携带者 D、收方 B；
         #   ③ `disk`：前两处都没有（历史调用 / 直调），按约定路径去盘上找 F 的稿
         #      （两种名都认：`reports/f-proof-<命题号>.md` 与 `reports/f-proof-plan-<plan>.md`）。
-        #      （2026-11-10 后：稿按稿号命名 —— F 的新稿叫 `f-proof-<稿号>.md`，这两种旧名
-        #      只读兼容；这一段的按命题号改名是那一代的读数。）
+        #      （稿按稿号命名 —— F 的新稿叫 `f-proof-<稿号>.md`，这两种旧名只读兼容。）
         # 三处都没有时按下面那一条（有引用就整笔拒收）处置。
         # 读数写清稿是从哪来的（`manuscript_source=param|carried_by_D|disk|none`）。
         manuscript_source = _DS.SOURCE_NONE
@@ -3270,13 +3263,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         manuscript_carried: dict = {}
         manuscript_path = ""
         manuscript_text = str(proof_manuscript or "")
-        # ---- `proof_manuscript` 也收「工作区相对路径」（2026-11-04，转正那一笔）----------
+        # ---- `proof_manuscript` 也收「工作区相对路径」----------
         #
         # 这一格在 V 的召唤参数里是路径（`verify_proof(proof_manuscript="notes/…")`），
-        # 在这里历史上只当正文。同一格两个意思是真机形态分叉的根源：F 把
-        # `notes/F-conj000000-proof.md` 交给 V（路径），B 这一侧没有人接得住它 ——
-        # 于是"登记成功即改名"那条路一次都没走到（真机 `projects/paper-rewrite-big`：
-        # F 的稿在 notes/、`reports/f-proof-*.md` 0 份）。
+        # 在这里若只当正文，形态就会分叉：F 把 `notes/F-conj000000-proof.md` 交给 V（路径），
+        # B 这一侧没有人接得住它 —— "登记成功即改名"那条路一次都走不到。
         #
         # 判据只看形状：单行、带 `/`、以 `.md` 结尾、落在 `notes/` 或 `reports/` 下。
         # 是路径就按盘上那一份读（读了之后 `manuscript_source` 仍是 `param` —— 这一笔的
@@ -3419,12 +3410,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # `read_manuscript` 会按 `## 证明` 逐行归一后的内容认 `f-proof-plan-*.md`
                 # （87 的六份稿全叫计划名、按号命名的 0 份；详见 depsection 那一节）。
                 #
-                # ---- 2026-11-10（业主裁定：稿号与命题号是两个号段）------------------
+                # ---- 稿号与命题号是两个号段 ------------------
                 #
-                # 改前这里只给 `statement_ids` ⇒ `read_manuscript` 按命题号拼名
-                # （`reports/f-proof-<命题号>.md`）。那在稿号口径下找不到 F 的稿：稿名用
-                # 的是 F 自己的稿号。现在先读这一行上记的 `manuscript_id`，把它当点名的
-                # 候选路径排在最前；行上没有（老盘）⇒ 仍按命题号那几条旧名找（退回）。
+                # 只给 `statement_ids` 会让 `read_manuscript` 按命题号拼名
+                # （`reports/f-proof-<命题号>.md`），而稿名用的是 F 自己的稿号 ⇒ 找不到
+                # F 的稿。所以先读这一行上记的 `manuscript_id`，把它当点名的候选路径排在
+                # 最前；行上没有（老盘）⇒ 仍按命题号那几条旧名找（退回）。
                 _row_mid_rel = ""
                 _row_mid_now = str((redelivery or {}).get("manuscript_id") or "").strip()
                 if _row_mid_now:
@@ -3436,20 +3427,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 manuscript_probe = _DS.read_manuscript(
                     getattr(self.store, "root", ""), statement_ids=probe_ids,
                     proof_text=proof_text, **_named_kw)
-                # ---- D1（2026-11-05）：命中之后还要问"这是不是这一条的稿" --------
+                # ---- 命中之后还要问"这是不是这一条的稿" --------
                 #
                 # 候选表里有 `derived_from` / 正文引用（那是"试哪些名字"，读数要能说清），
                 # 但用哪一份是另一道判据：号必须是本行的，或者它是按证明正文认出来的
                 # （内容逐行相同 ⇒ 正文本来就是这一笔交的那一份，不存在"借别人的正文"）。
-                # 改前缺这一道：`stmt:000001` 按 `derived_from=["000000"]` 读到了
-                # `reports/f-proof-000000.md`（号不是本行），把 P0 的正文与签当成了自己的。
+                # 缺这一道时：`stmt:000001` 按 `derived_from=["000000"]` 会读到
+                # `reports/f-proof-000000.md`（号不是本行），把别人的正文与签当成自己的。
                 #
-                # 2026-11-05 业主裁定（D1 严格版）：依赖面也是"这一份证明"的事实 ——
+                # D1 严格版：依赖面也是"这一份证明"的事实 ——
                 # 被引命题稿里那张 `## 依赖` 表写的是它引了谁，按到新命题头上就是一条
                 # 作者从未写过的边。所以"这一笔自己带了正文"也不再放行读别人的依赖面：
                 # 号不是本行的稿，一律不读（正文 / 签 / 依赖面三样都不借）。
                 #
-                # 2026-11-10：`row_manuscript_id` 是本行记的稿号 —— 稿名里的号等于它
+                # `row_manuscript_id` 是本行记的稿号 —— 稿名里的号等于它
                 # 也算本行的稿（不然"这条自己的稿"在收录之后永远读成别人的）。
                 _hit_ok = _manuscript_usable(manuscript_probe,
                                              stmt_id_now=stmt_id_now,
@@ -3465,7 +3456,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     manuscript_text = str(manuscript_probe.get("text") or "")
                     manuscript_source = _DS.SOURCE_DISK
                     manuscript_path = str(manuscript_probe.get("path") or "")
-        #: 2026-11-02：二次寻址的读数（业主：「二次寻址做成自动工具，不要消耗 LLM 的 token」）。
+        #: 二次寻址的读数（「二次寻址做成自动工具，不要消耗 LLM 的 token」）。
         #: `mode` 三态 `auto` / `model` / `unknown`；本仓这条链上全程是纯函数 ⇒ `auto`，
         #: 没寻址（参数直递 / 三处都没有）⇒ 仍记 `auto` 且 `hit` 说清命中没有（"没查成"
         #: 只留给函数抛异常那一档，见下面的异常边缘）。`model` 这一档刻意留着：它一旦出现，
@@ -3481,11 +3472,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "list_sha256": str(manuscript_carried.get("list_sha256") or ""),
             "refusal": "", "reason": "", "suggestion": "",
         }
-        # ---- 证明号：产出侧不写、B 也不算（业主口径：路径号归秘书） ----------------
+        # ---- 证明号：产出侧不写、B 也不算（路径号归秘书） ----------------
         #
-        # 改前这里读两处"这是第几份证明"：手稿稿头那一行 `- 证明号：N` 与 D 的携带单
-        # 第四列。产出侧不写那个号之后，这两个来源都没有对象了 —— 这一格退役为
-        # "这一笔没有指定号"。真正的号由秘书在收录事务里分配（`Secretary.record_statement` /
+        # 这里不读"这是第几份证明"（手稿稿头那一行 `- 证明号：N` 与 D 的携带单第四列
+        # 都不再是来源）—— 产出侧不写那个号之后，这一格是"这一笔没有指定号"。
+        # 真正的号由秘书在收录事务里分配（`Secretary.record_statement` /
         # `record_manuscript_dependency_face` 的锁里），回执的 `path_group` 是它。
         proof_no_placement = 1
         #: 号是哪来的：产出侧不再写号 ⇒ 只有秘书分配这一档（`path_group`）。
@@ -3496,14 +3487,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
-        # ---- 这份稿是这条命题的稿吗（D7 的另一半，业主 2026-10-27） -----------------
+        # ---- 这份稿是这条命题的稿吗 -----------------
         #
-        # 真机读数（`projects/mp3-r2`，B 那一趟）：B 交的是 stmt:000008 的完整证明，而
-        # 兜底读盘 / D 的携带单按证明正文里的 `stmt:` 引用找到的是别条命题的稿
-        # （`reports/f-proof-000000.md`，头一行写着 `- 命题号：stmt:000000`）。改前那一支
-        # 只管"同一条 statement_full 已在册"，不管"这份稿是谁的" ⇒ 它拿 000000 的稿给
-        # 000008 做读稿登记，还把那份稿的依赖面记到 000008 头上（源与收方错配，而读数上
-        # 一切正常：`manuscript_source` 只说是 carried_by_D / disk）。
+        # 兜底读盘 / D 的携带单若按证明正文里的 `stmt:` 引用找到别条命题的稿
+        # （`reports/f-proof-000000.md`，头一行写着 `- 命题号：stmt:000000`），只判
+        # "同一条 statement_full 已在册"、不判"这份稿是谁的"，就会拿它的稿给本行做
+        # 读稿登记，还把那份稿的依赖面记到本行头上（源与收方错配，而读数上一切正常：
+        # `manuscript_source` 只说是 carried_by_D / disk）。
         #
         # 判据用稿自己声明的那一行（`depsection.manuscript_statement_id`），不靠猜：
         #  - 声明了号、而号不是这一条 ⇒ 这份稿是别人的；
@@ -3513,13 +3503,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                           if manuscript_text.strip() else "")
         manuscript_foreign = bool(declared_owner and stmt_id_now
                                   and declared_owner != stmt_id_now)
-        # ---- 寻址来的稿正文落成 `proof_text`（2026-11-02，业主：「F侧实际上是D侧，
+        # ---- 寻址来的稿正文落成 `proof_text`（「F侧实际上是D侧，
         #      F的东西都在D的手稿上记了一笔」） ------------------------------------
         #
         # 主路是 D 的携带单：B 按清单寻址（号 → 路径 → 文件 sha256）取到那份稿的正文。
-        # 改前那份正文只进依赖面（`_receive_carried_manuscript` 写 `dependencies`，
-        # 命题行一个字不动），于是"按稿收录"在盘上等于"读稿落依赖" —— 正文还得模型
-        # 手工粘进 `proof_text`（真机 85 的 `000000`/`000007` 就是这样被改写的）。
+        # 那份正文若只进依赖面（`_receive_carried_manuscript` 写 `dependencies`，
+        # 命题行一个字不动），"按稿收录"在盘上就等于"读稿落依赖" —— 正文还得模型
+        # 手工粘进 `proof_text`。
         #
         # 这里只做一件事：调用方没给 `proof_text`、而寻址到了一个属于这一条的稿，
         # 就把稿里 `## 证明` 那一节当正文（`proof_text_source=manuscript`）。
@@ -3527,7 +3517,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ② 稿是别人的（`manuscript_foreign`）⇒ 不取（那一档下面另有拒信）；
         # ③ 与在册那一行的正文相同 ⇒ 也算取过了（读数照给，写入由 `carries_write` 决定）。
         #
-        # 2026-11-05（走查 D1）：还要问"这份稿是不是本行的"。调用方点名递上来的
+        # 还要问"这份稿是不是本行的"。调用方点名递上来的
         # （`param`）不算——那是"本笔给的 proof_manuscript"，允许；
         # 兜底读盘 / D 的携带单找来的，号必须是本行、或它是按证明正文认出来的。
         # 改前缺这一道：按 `derived_from` 读到的被引命题的稿被当成了这一条的稿，
@@ -3539,13 +3529,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                               manuscript_path=manuscript_path,
                               stmt_id_now=stmt_id_now,
                               matched_by=manuscript_probe.get("matched_by"),
-                              # 2026-11-10：本行记的稿号也是"本行"的判据之一
+                              # 本行记的稿号也是"本行"的判据之一
                               # （稿号与命题号是两个号段）。
                               row_manuscript_id=str(
                                   (redelivery or {}).get("manuscript_id") or "")))
-        #: 这份稿的 `## 证明` 三态读数（2026-11-09，D4）。
+        #: 这份稿的 `## 证明` 三态读数。
         #:
-        #: 为什么单独立这一格：`proof_body` 改前缺节会退到 `## 依赖` 节、再退到整份
+        #: 为什么单独立这一格：`proof_body` 缺节会退到 `## 依赖` 节、再退到整份
         #: 全文 ⇒ "没这一块"被读成"拿了别的块"。现在缺节 ⇒ `state=absent`、`body=""`：
         #: 这一笔的 `proof_text` 保持空（不拿依赖段 / 全文顶替），而"这份稿没有证明"
         #: 这件事进 `_deps_reading().manuscript_proof` 与顶层读数，调用方看得见。
@@ -3558,8 +3548,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 普通数值手稿没有 `## 证明` 那一节（`proof_body_reading` 会给 absent）——
                 # 这一档的正文按业主口径空着，不许把「数值结果」当证明正文收进来。
                 and not _green.get("ok")
-                # 概念行不收未签的证明稿（2026-11-10，审计 §6-① / 业主裁定 甲）：这一支
-                # 改前不看 kind，于是稿里的 `## 证明` 会被取成概念行的正文 ⇒ 概念行先落盘、
+                # 概念行不收未签的证明稿：这一支不看 kind 时，稿里的 `## 证明` 会被取成
+                # 概念行的正文 ⇒ 概念行先落盘、
                 # 随后撞"无签不许换 canonical 正文"整笔拒（半笔）。判据与上面"写盘前拒"
                 # 同一个（`_concept_refuses_manuscript`：已签的稿放行，签好的那一份由
                 # `own.ingest_manuscript` 按位置与格收录），覆盖稿从 D 携带单 / 兜底读盘
@@ -3579,25 +3569,24 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #: 形态就是真机那次"四个入口都不收"。
         carries_write = self._carries_canonical_write(
             proof_text=proof_text, proofs_listed=proofs_listed, row=redelivery)
-        # ---- 路径号不在这里分配（业主口径：归秘书） -------------------------------
+        # ---- 路径号不在这里分配（归秘书） -------------------------------
         #
-        # 改前这里有两个分配点（① 指针支 `_pointer_path_reading`、② 逐份 inline
+        # 这里不设分配点（① 指针支 `_pointer_path_reading`、② 逐份 inline
         # `_inline_path_reading`）。号下沉到秘书那一笔事务里：登记新命题 / 并进在册
         # 命题走 `record_statement`（"另一条证明路径"那一支也在锁里分号并写进回执），
         # 依赖面走 `record_manuscript_dependency_face`。这一侧只读回执里的 `path_group`。
-        # ---- 2026-11-04（业主裁定 A 甲）：B 的改写要有可签的载体 --------------------
+        # ---- B 的改写要有可签的载体 --------------------
         #
-        # 业主逐字：「A 甲 —— B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
+        # 「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
         # B 改写在册正文时，正文与在册那一版不同 ⇒ 旧签 stale、台账也盖不住新正文；
         # 它需要一份自己的手稿（`reports/b-proof-<命题号>.md`，三节与 F/E 同形），
         # 由 B 派 V 审、收方秘书（`secretary:B`）落签块，B 再带这份稿入库。
         #
-        # ---- D1（2026-11-10）：落稿不能在闸前 -------------------------------------
+        # ---- 落稿不能在闸前 -------------------------------------
         #
-        # 改前这里先调 `_land_b_manuscript` 把稿写下来，再往下过依赖面 / 自产签 /
-        # 无签三道闸。后果是真机 98b 10:46:46 那笔：稿在（`reports/b-proof-000000.md`）、
-        # 台账 `proof_text` 仍是空、`statements` 五行全 `conjecture` —— 被拒的登记在
-        # 盘上留下了一份"看似正式的稿"。
+        # 先调 `_land_b_manuscript` 把稿写下来、再往下过依赖面 / 自产签 / 无签三道闸，
+        # 会让被拒的登记在盘上留下一份"看似正式的稿"（稿在 `reports/b-proof-000000.md`、
+        # 台账 `proof_text` 仍是空）。
         #
         # 为什么不能"拒了再删"：这条链在落稿点之前有二十来处受控拒绝（依赖段、档位、
         # 出处、自产签、无签……），每一处都要记得删；删除本身也会失败（占用 / 只读 /
@@ -3649,24 +3638,24 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 manuscript_path=foreign_path,
                 manuscript_owner=declared_owner,
                 stmt_id=stmt_id_now)
-        #: 这一份稿是不是 F 的秘书洗过的那一版（业主 2026-10-26 晚：B 读到的必须是
+        #: 这一份稿是不是 F 的秘书洗过的那一版（B 读到的必须是
         #: "秘书洗过"的版本，读数带 `manuscript_washed=true`）。那一行元信息由
         #: `agent_f` 在洗完之后盖进正文（`depsection.mark_washed`），跟着文件走 ——
         #: 于是"这份稿洗没洗过"在收方这里读得到，不靠调用方自述。
         manuscript_wash: dict = _DS.manuscript_wash_reading(manuscript_text) if (
             manuscript_text.strip()) else {"washed": False, "actor": "", "filled": "", "mark": ""}
         manuscript_washed = bool(manuscript_wash.get("washed"))
-        #: 与来源是否逐字一致（信息格，不是门；业主 2026-10-26 Q14 的第 3 条）。
+        #: 与来源是否逐字一致（信息格，不是门）。
         #: 这一格只回答"改没改" —— 处置在签那一侧：改写过 ⇒ 旧签不算数 ⇒ 派 V 重新签
         #: （`_attach_proofs` 里那一段 `review_standing` / `resign_required`）。
         proof_vs_source = verbatim_vs_source(proof_text=proof_text,
                                              source_text=manuscript_text,
                                              source=manuscript_source)
-        # ---- 兜底审计（2026-10-27）：盘上那份稿不是框架渲染的 ---------------------
+        # ---- 兜底审计：盘上那份稿不是框架渲染的 ---------------------
         #
         # 为什么这一条必须存在：上面那一整条链（F 的 proof 动作渲染 `## 依赖` → 秘书洗稿
         # 并盖元信息 → D 携带 → B 读稿）的有效性，全部压在"这份稿是框架写出来的"上。
-        # 而改前的真机形态是模型直接 `fs.write` 写一份自由格式的 `reports/f-proof-*.md`
+        # 而模型可以直接 `fs.write` 写一份自由格式的 `reports/f-proof-*.md`
         # —— 它有文件名、有正文，于是下游每一处都"读到了"，只是没有四列依赖表、
         # 也没有洗稿元信息：`dependencies` 于是 0 行，而读数上一切正常。
         # `fs.write`/`fs.edit` 那一侧已经受控拒绝（`reserved_framework_artifact`），
@@ -3920,7 +3909,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         def _deps_receipt(out_row: dict) -> dict:
             """把回执里那一行「依赖边 N 条（其中命题→命题 M 条）」补进 `out["note"]`。
 
-            2026-11-05（缺陷 1c）：`_deps_reading` 已经把那一句放在 `deps_missing`
+            `_deps_reading` 已经把那一句放在 `deps_missing`
             的 `deps_receipt` 里；这一步只把它复述到人读的那一行 `note` 上（同一句，
             不另写一份口径）。取不到就一个字都不加 —— 不编一句"依赖边 0 条"给那些
             根本没有依赖面的出口（概念行 / 受控拒绝）。
@@ -3933,7 +3922,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     (out_row.get("deps_missing") or {}).get("deps_stmt_edges") or 0)
             return out_row
 
-        # ---- 收方读稿登记（业主 2026-10-26 晚：「D 到 B 没有路吗？加」） --------------
+        # ---- 收方读稿登记（「D 到 B 没有路吗？加」） --------------
         #
         # 这一笔可能是"同一条命题再交一次"：F 已经把它落成 `statements` 一行，而这一趟
         # D 把 F 的证明手稿一并递过来了。收方要做的是读稿落依赖面，不是再新建一行、
@@ -3945,12 +3934,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # "把核过的段落成边"。没有这一支时，同一条命题的第二次递交走 `duplicate` 早退
         # ⇒ `dependencies` 一行都不落，而这正是"F 写了稿、D 带了稿、依赖面还是 0 行"的成因。
         #
-        # ---- 为什么它不能接"改在册正文"这一笔（D7，业主 2026-10-27） ----------------
+        # ---- 为什么它不能接"改在册正文"这一笔 ----------------
         #
-        # 真机读数（`projects/mp3-r2`，13:17）：B 拿到 stmt:000008 的完整证明，要把截断的
-        # 登记换掉。四个入口全部撞在这条支路上 —— 它返回 `ok:true / new_row:false /
-        # note:「命题行不动」`，交来的 `proof_text` 与 `proofs` 一个字都没写，返回值里
-        # 也没有任何一格说"正文没写"。于是 `proof_no` 恒 0、`proofs` 恒空。
+        # 要把截断的登记换掉时，四个入口全部撞在这条支路上 —— 它返回 `ok:true /
+        # new_row:false / note:「命题行不动」`，交来的 `proof_text` 与 `proofs` 一个字
+        # 都没写，返回值里也没有任何一格说"正文没写"。于是 `proof_no` 恒 0、`proofs` 恒空。
         #
         # 所以这条支路只在"这一笔没有正文/清单要写"时接管（`carries_write`）：它本来就是
         # "D 递稿、B 读稿登记依赖面"的通道，不是"改正文"的通道。带了正文的那一笔交给下面的
@@ -3985,9 +3973,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     received = {**received, "promoted_manuscript": promotion}
                 return received
 
-        # 第九级（`draft/83` §7 的 D71）：出处页码/行号的类型在写库前归一。
-        # 真机读数（T1 第 18 趟）：`{"start": "343", "end": "414"}` 一路走到
-        # `PageRange.__post_init__` 的比大小，`TypeError` 从动作里抛出去。
+        # 第九级：出处页码/行号的类型在写库前归一。
+        # `{"start": "343", "end": "414"}` 若一路走到 `PageRange.__post_init__`
+        # 的比大小，`TypeError` 会从动作里抛出去。
         page_norm, page_bad = _normalize_range(page_range, what="page_range")
         if page_bad:
             return _refuse("bad_page_range", page_bad)
@@ -4000,13 +3988,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            f"evidence_kind 必须是 {S.EVIDENCE_KINDS} 之一，收到 {evidence_kind!r}"
                            "（它是证据强度，不是来源；来源走 source_lit_id）")
         if _green.get("ok"):
-            # 2026-11-08（业主：「专门给普通数值实验开绿色通道」）：这一档的档位由手稿族
+            # 这一档的档位由手稿族
             # 决定，不由调用方声明 —— 普通数值实验 = "有数值实验支持，不构成证明"。
             # 受控词表里本来就有这一档（`cross_check` 的定义逐字是这句），不新造值。
             evidence_kind = _NP.SUPPORTED_ONLY_KIND
-        # ---- 2026-10-23（业主裁定「都由 E 来签」→ 晚间更正「签字仍然由 V 签」）：B 不许自签 proof
+        # ---- B 不许自签 proof
         #
-        # `proof` 这一档从这一天起有两个入口：形式化（检查器/L 那一支）与穷举
+        # `proof` 这一档有两个入口：形式化（检查器/L 那一支）与穷举
         # （E 按 `numericproof` 的穷尽证据签、证明栏写程序脚本）。两样都不是 B 能给的，
         # 所以本动作在写入前核一次台账：我方结果（`origin="own_result"`）要 proof，
         # 就必须指得到一条真的第三方签名。判据只有一处（`numericproof.filing_problems`），
@@ -4035,13 +4023,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                              # 读不到 ⇒ 空清单 ⇒ 索引那一路取不到对象，
                                              # 闸按"目录里没有这一条"拒（不是放行）。
                                              index_rows=self._report_index_rows(),
-                                             # 2026-11-08：程序路径不住证明栏了，闸要按
+                                             # 程序路径不住证明栏了，闸要按
                                              # `reports/e-proof-<号>.md` 那个名字钉到实验行
                                              # 才能读到 `code_path`。
                                              manuscript=manuscript_path)
-        # ---- 2026-11-04（业主裁定 ⑥-1-b）：要写正文/依赖面的这一笔必须带稿 ----------
+        # ---- 要写正文/依赖面的这一笔必须带稿 ----------
         #
-        # 裁定：「闸要求本笔必须带 `proof_manuscript`，不靠台账签行反查」。
+        # 「闸要求本笔必须带 `proof_manuscript`，不靠台账签行反查」。
         # 反查会造出第二载体（同一份稿经两个入口进同一行依赖面），而"这一笔带没带稿"
         # 是调用方当场能验证的事实。位置在第三方签字闸之前：不带稿这一档连"要 proof
         # 的那份材料"都不完整，先说这一句；带了稿、只是没有第三方签 ⇒ 下一闸照旧咬住。
@@ -4061,7 +4049,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                  "这一笔带了哪份稿，必须是本笔当场说得出的。"))
         if _sign_problems:
             return _refuse("proof_needs_third_party_signature", "；".join(_sign_problems))
-        # ---- 2026-10-16（亲测 B 时加的）：「把缺的出处字段一次说齐」 --------------
+        # ---- 「把缺的出处字段一次说齐」 --------------
         # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
         # missing_page_range 「三轮」才凑齐）。业主口径："真实智能体也会在这里困惑并
         # 浪费 token" ⇒ 保留每条的 kind 与原文案不动，只在拒信里补一行「整份清单」。
@@ -4095,15 +4083,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse("missing_quote_reason",
                            "quote_verified 不是 True 时必须给 quote_reason —— "
                            "三态纪律：没通过要说为什么没通过，还没查也要说出来（不许留白）" + _all_missing)
-        # 出处：「填了形状不算填了内容」（`draft/37` §68 的第十二/十三趟真机读数），
-        # 而"出处是哪一栏"按来源分档（§68 人裁的甲档，与审稿判据逐条对齐）。
+        # 出处：「填了形状不算填了内容」，而"出处是哪一栏"按来源分档（与审稿判据逐条对齐）。
         #
-        # 实测（第十三趟）：主控给六条 `external_lit` 命题传了
-        # `page_range={"start": null, "end": null}` —— 字段在场、内容是空的 ——
+        # 只传 `page_range={"start": null, "end": null}` —— 字段在场、内容是空的 ——
         # 于是这一行在台账上"有出处"，而审稿判据（`reviewaccept._c_statements`）
-        # 当场报"缺 page_range（页码）"，整条验收因此不及格。
-        # 写入口与判据必须说同一件事：判据要求的东西，写入口在「进库之前」就要拦
-        # （否则台账里会长期躺着一批"看着有、其实没有"的行，只有走完整审稿流程的人才会发现）。
+        # 当场报"缺 page_range（页码）"。写入口与判据必须说同一件事：判据要求的东西，
+        # 写入口在「进库之前」就要拦（否则台账里会长期躺着一批"看着有、其实没有"的行）。
         if origin == "external_lit":
             page = dict(page_norm)
             if not (page.get("start") or str(page.get("label") or "").strip()):
@@ -4113,13 +4098,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "（例如「全文未分页」「附录 A」）—— 只传 "
                                "`{\"start\": null, \"end\": null}` 等于没给，"
                                "审稿判据会判这一行缺出处页码" + _all_missing)
-        #: 这一笔是不是"自产命题但证明还没做完"（F-05 的待办那一档）。
+        #: 这一笔是不是"自产命题但证明还没做完"（待办那一档）。
         #: 必须在两个分支之外先给默认值：它下面要在返回值里用到，而
-        #: `external_lit` 那一支不会走到 `own_result` 那一支里 —— 第一版把赋值写在
-        #: 分支里，于是所有 `external_lit` 登记都在返回值那一行 `NameError`
-        #: （`tasks` 落 `failed`）。判据：`tests/test_intake_actions.py` 的四跳链。
+        #: `external_lit` 那一支不会走到 `own_result` 那一支里 —— 赋值写进分支里，
+        #: 所有 `external_lit` 登记都会在返回值那一行 `NameError`。
+        #: 判据：`tests/test_intake_actions.py` 的四跳链。
         needs_proof = (str(origin) == "own_result" and not str(proof_text or "").strip()
-                       # 普通数值通道有 E 的实验行撑着：它不欠一份证明正文（业主 2026-11-08）。
+                       # 普通数值通道有 E 的实验行撑着：它不欠一份证明正文。
                        and not _green.get("ok"))
         if str(origin) == "external_lit":
             page = dict(page_norm)
@@ -4134,7 +4119,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             line = dict(line_norm)
             if _green.get("ok"):
                 # 普通数值通道的出处是那条实验行（`exp:<号>`），不是 doc_id / line_range：
-                # 业主的模型里 D 交的是"E 的实验成果"，没有我方稿件可指 —— 这一格按
+                # D 交的是"E 的实验成果"，没有我方稿件可指 —— 这一格按
                 # `origin_basis` 记成实验行，不拿一条编出来的页码顶替。
                 pass
             elif not (str(doc_id or "").strip()
@@ -4144,18 +4129,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "`doc_id`（我方稿件那一行的 id）或 `line_range`"
                                "（start / label 至少一个）—— 自有结果的出处不是"
                                "「文献第几页」，那一栏要它等于让它编一个数字" + _all_missing)
-            # 第五级（§87）：自产命题的证明。
+            # 第五级：自产命题的证明。
             #
-            # F-05（主控裁定，2026-10-06）改的这一格：以前这里 `_refuse`，于是
-            # "证明还没做完"这一档永远进不了库，也就永远没有一条待办能被
-            # 秘书消费（`draft/53:181` 的消费端要的是"摆出来"，不是"拦住"）。
+            # 这一格不再 `_refuse`：`_refuse` 会让"证明还没做完"这一档永远进不了库，
+            # 也就永远没有一条待办能被秘书消费（消费端要的是"摆出来"，不是"拦住"）。
             # 现在不拦：落库 + 按既有字段如实标记 ——
             #   `proof_text` 留空（它确实没有）、`quote_verified=None` +
             #   `quote_reason` 写明"证明还没做完"，等级由 `evidencebits.derive_grade`
             #   现算（缺 proof 位 ⇒ "猜想"，不是证明级）。
             #
-            # 硬顺序（主控点名）：本改动必须排在 B 删掉 `schema.Statement.validate`
-            # 里那条 `own_result` raise 之后 —— 否则这一笔会在事务里抛
+            # 硬顺序：这一档必须排在 `schema.Statement.validate` 里那条 `own_result`
+            # raise 之后 —— 否则这一笔会在事务里抛
             # `ValueError`，比"写库前预检拒绝"更坏（拒绝是受控的，抛异常不是）。
             if needs_proof and not str(quote_reason or "").strip():
             # 三态那一栏必须自己说清"为什么还没有"：只留一个空字段等于把
@@ -4163,7 +4147,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 差别只在"这里不再拒收，而是替它把理由写实"）。
                 quote_reason = "证明还没做完 / 未核到 ⇒ 这一行按待办挂着（等级现算是『猜想』）"
 
-        # ---- 业主 2026-10-22 的 B-3（后半）：自产的定理级命题要先过 V。
+        # ---- B-3（后半）：自产的定理级命题要先过 V。
         #
         # 位置为什么在这里：来源 / 正文 / 证明清单 / 三态都定稿了（上面那几级会把
         # `needs_proof` 的 `quote_reason` 写实），而任何写入都还没发生 —— 闸要么
@@ -4175,7 +4159,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 落下去的却是另一个 kind"这件事在读数上完全看不见。
             origin=str(origin), kind=kind_now, lit_id=lit_id,
             statement_full=full, proof_text=str(proof_text or ""),
-            # 2026-11-02：手稿签块也在这道闸的可见面上（业主：B 收录时从稿上读到签）。
+            # 手稿签块也在这道闸的可见面上（B 收录时从稿上读到签）。
             manuscript_text=str(manuscript_text or ""),
             manuscript_path=str(manuscript_path or ""))
         if self_authored.get("refused"):
@@ -4190,9 +4174,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                         and quote_verified is not True
                         and kind_now not in CONJECTURE_START_KINDS)
             if _b2_hits and not bool((self_authored.get("reading") or {}).get("in_ledger")):
-                # ---- 2026-11-02（业主的责任路由）----
+                # ---- 责任路由 ----
                 #
-                # 原话：「如果F侧产出证明而没有V签，这是F侧工作异常，B不该处理（润色）无签
+                # 「如果F侧产出证明而没有V签，这是F侧工作异常，B不该处理（润色）无签
                 # 证明」「命题在册且缺失V签，这是B侧问题，M应让B处理」。
                 # 两条分开落：
                 #   · 册上还没有这一条、而这一笔是 F 的手稿（`manuscript_source` 不是 none）
@@ -4482,9 +4466,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 manuscript_wash = _DS.manuscript_wash_reading(manuscript_text)
                 # 转正搬的是同一份正文 ⇒ 重新读一次三态，让读数说的是"这一份稿"。
                 manuscript_proof = _DS.proof_body_reading(manuscript_text)
-        # ---- 业主 2026-11-01：B 收录时"认签"（第 3 位的第四源） -------------------
+        # ---- B 收录时"认签"（第 3 位的第四源） -------------------
         #
-        # 原话：「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入。」
+        # 「B 侧自己写的证明想要 V 签时一样是拿到 V 签，B 再录入。」
         # 于是 `out/vsigns/<artifact_sha>.json` 是 B 这一侧认得的那一份签：正文的 sha 对得上、
         # 连续次数够、而且这一份签属于「这一条命题」（同一段正文被别的命题复用不算签过），
         # 才把第 3 位写成已签。三态都在 `v_sign` 里（`checked` / `found` / `applied` / `why`），
@@ -4496,10 +4480,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 bits, root=getattr(self.store, "root", ""),
                 proof_text=str(proof_text or ""), statement_id=stmt_id_now,
                 proof_no=proof_no_placement, kind=str(kind_now or ""),
-                # 2026-11-02（业主：「V 签先放在 F 的手稿里，让 B 录入」）：
+                # 「V 签先放在 F 的手稿里，让 B 录入」：
                 # 收录时先读手稿里那一行签块（`vsigns.manuscript_sign_standing`）。
                 manuscript_text=str(manuscript_text or ""),
-                # 2026-11-02（业主：「B侧需寻址获得F侧证明及V签」）：签块的第 9 格
+                # 「B侧需寻址获得F侧证明及V签」：签块的第 9 格
                 # 手稿号要与它所处那份稿对得上；在册命题的集合从 store 现读（只读判据）。
                 manuscript_path=str(manuscript_path or ""),
                 store=self.store)
@@ -4508,10 +4492,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                       "artifact_sha": "",
                       "why": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
                               "⇒ 不是「没有签」")}
-        # ---- 没有签的证明不许进台账（业主 2026-11-02；覆盖所有来源） ------------------
+        # ---- 没有签的证明不许进台账（覆盖所有来源） ------------------
         #
-        # 业主四条要求的第 5 条：「机械录入那一版也必须有签（F 的签 或 文献编号），
-        # 不许再出现 proofs=0 绕行」。而今天的口子不止一条：
+        # 「机械录入那一版也必须有签（F 的签 或 文献编号），不许再出现 proofs=0 绕行」。
+        # 而口子不止一条：
         #   · kind="conjecture" 让 _self_authored_gate 短路 ⇒ 无签照收（85 的 14/16 条）；
         #   · 闸只认 carried_by_D / disk 两种手稿来源，F 的进程内直交（param）不触发；
         #   · F 侧把 evidence_kind 现算成 heuristic 照交 ⇒ 无签进台账。
@@ -4520,7 +4504,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ① 文献侧的占位签：origin="external_lit" + source_lit_id（V 签位填文献编号）；
         # ② 已有一份真签覆盖这一份正文（在册台账，或手稿签块，sha 相符）。
         #
-        # 判据本体在 `proofintake_unsigned_gate`（2026-11-02）。它默认是「闸」，
+        # 判据本体在 `proofintake_unsigned_gate`。它默认是「闸」，
         # 由 `AGENTFLOW_UNSIGNED_PROOF_INTAKE` 三态控制（默认 strict = 拒），
         # 让"把闸摘掉 ⇒ 判据必须红"的反真空能被机器跑出来 —— 见那个函数的 docstring。
         if unsigned_proof_intake_is_strict():
@@ -4529,7 +4513,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 proofs_listed=proofs_listed, row=redelivery, v_sign=v_sign,
                 proof_no=proof_no_placement, store=self.store)
             if _pg.get("refused"):
-                # ---- 2026-11-05（D3）：拒信要带"认签那一格"的读数 ------------------
+                # ---- 拒信要带"认签那一格"的读数 ------------------
                 #
                 # 第二笔同正文 sha 的登记被 `already_claimed` 挡住时，拒码是
                 # `proof_without_v_sign`；"为什么认不到签"（这一签已认给谁）原本只在
@@ -4735,10 +4719,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `manuscript_owner_mismatch` 拒；收工扫盘按稿名开 `b-register@000001@…` 的义务
         # 永远关不上（`reconcile_registrations` left=1，而 `verify_all` 0 error —— 真空的绿）。
         #
-        # 口径①（业主 2026-11-05 选定）：稿名优先（扫盘按稿名算号，读侧必须与它同键），
-        # 稿名认不出再退到稿头那一行；只在这一笔「确实要新建」时当候选（在册那一档的号
-        # 由在册行给，候选号不许改变它）。候选号被占 ⇒ 秘书受控拒绝 `stmt_id_taken`，
-        # 不另发号（发号那一步在 `Secretary.record_statement` / `_record_statement_tx`）。
+        # 口径：候选号只从稿头那一行 `- 命题号：stmt:<id>` 取（稿名是 F 自己的稿号，
+        # 与命题号是两个号段，不能当命题候选）；只在这一笔「确实要新建」时当候选
+        # （在册那一档的号由在册行给，候选号不许改变它）。候选号被占 ⇒ 秘书受控拒绝
+        # `stmt_id_taken`，不另发号（发号那一步在 `Secretary.record_statement` /
+        # `_record_statement_tx`）。
         candidate_stmt_id = ""
         candidate_source = ""
         #: 候选号只从"明确递进来的稿"取：`param`（调用方点名给 `proof_manuscript`）与
@@ -4751,15 +4736,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             _DS.SOURCE_PARAM, _DS.SOURCE_CARRIED)
         if (not stmt_id_now and not manuscript_foreign and _explicit_manuscript
                 and str(manuscript_text or "").strip()):
-            # ---- 2026-11-10：候选号只从稿头那一行取，不再从稿名取 --------------
+            # ---- 候选号只从稿头那一行取 --------------
             #
-            # 旧口径（口径①「稿名优先」）成立的前提是"稿名就是命题号"。2026-11-10
-            # 业主裁定之后稿名是 F 自己的稿号（`f-proof-<稿号>.md`），与命题号
-            # 是两个号段 —— 再把稿名当命题候选，遇到"稿号恰好等于某条在册命题号"
-            # 就会把别人的号借来用（`stmt_id_taken` 整笔拒，主链断掉）。
+            # 稿名是 F 自己的稿号（`f-proof-<稿号>.md`），与命题号是两个号段 ——
+            # 把稿名当命题候选，遇到"稿号恰好等于某条在册命题号"就会把别人的号
+            # 借来用（`stmt_id_taken` 整笔拒，主链断掉）。
             # 稿头那一行 `- 命题号：stmt:<id>` 才是"这份稿说自己是哪一条命题"。
             _from_head = _DS.manuscript_statement_id(str(manuscript_text or ""))
-            # 被引命题的稿不是本笔的稿（2026-11-06）：`derived_from` / 正文的
+            # 被引命题的稿不是本笔的稿：`derived_from` / 正文的
             # `stmt:` 引用把它们的号带进来是正常的；拿那个号当候选号会撞在被引
             # 命题自己头上（`stmt_id_taken`），主链整笔拒（D 携带 F 稿 → B 登记）。
             _cited_manuscript = _manuscript_belongs_to_a_cited_statement(
@@ -4847,8 +4831,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 不回读数：`proof_text=P1` 与 `proofs=[{1, P1}]` 的返回键集合保持逐字相同。
                 _path_receipt = {}
         if written.get("merged") and not written.get("created"):
-            # 2026-10-24（业主：表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为
-            # 同种证明，可选各取所长混合成一份、重拿 V 签）：秘书把这一笔判成了"已有命题"。
+            # 表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为同种证明，
+            # 可选各取所长混合成一份、重拿 V 签：秘书把这一笔判成了"已有命题"。
             # 两种去向，都由秘书落盘（证明清单 / 依赖 / 合并稿的覆盖都在那一笔事务里）：
             #   - 第 N 份证明（`proof_no` >= 1、`merged_same_kind` 为假）⇒ 这里不再
             #     调 `_attach_proofs`：秘书已经把它写进 `proofs`（或 canonical 那一格），
@@ -4861,10 +4845,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             proof_no = int(written.get("proof_no") or 0)
             out = {"ok": True, "stmt_id": stmt_now, "new_row": False, "merged": True,
                    "merged_into": str(written.get("merged_into") or stmt_now),
-                   #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
+                   #: 这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
                 **({"promoted_manuscript": dict(pre_gate_promotion)}
                    if pre_gate_promotion else {}),
-                   #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                   #: B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 "self_authored_review": self._self_authored_reading(self_authored),
                    "source_lit_id": lit_id or None,
@@ -4889,8 +4873,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                    #: "读了"与"猜的"在读数上必须分得开（缺口 ①）。
                    "proof_no_source": str(proof_no_source),
                    "duplicate_reading": bool(written.get("duplicate")),
-                   # ---- 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，
-                   # 让秘书判」）。四样都要透出来，否则调用方看不见"这一条被并进去了"
+                   # ---- 命题同一性那一趟判定的读数（「让秘书洗定理名，让秘书判」）。
+                   # 四样都要透出来，否则调用方看不见"这一条被并进去了"
                    # 与"凭什么并的"：`adjudication`（三态 + 判词 + 是否沿用缓存）、
                    # `canonical_name`（洗过的定理名）、`label_washed`（原标签 → 定理名）、
                    # `proof_route`（标签里被洗掉的那条路线 —— 它落在第 N 份证明上，没有丢）。
@@ -4901,9 +4885,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                    "row": dict(written.get("row") or {}),
                    #: 秘书那一笔把依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": _deps_reading(written),
-                   #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
+                   #: 稿是从参数来的、从盘上读的、还是没有。
                    "manuscript_source": manuscript_source,
-                   #: 这一笔的正文是从哪来的（2026-11-02）：`param`（调用方直递）/
+                   #: 这一笔的正文是从哪来的：`param`（调用方直递）/
                    #: `manuscript`（按 D 的携带单寻址到的那份稿的 `## 证明`）/ 空串（这一笔
                    #: 没有正文要写）。与 `manuscript_source` 分开读：那一格说稿从哪来，
                    #: 这一格说落进 `proof_text` 的是不是那份稿。
@@ -4918,7 +4902,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             #: `_text_truncation_reading`）：三条"没有新建行"的出口都要带上它 ——
             #: 这一笔交上来的正文超了上限这件事，与"有没有新建行"无关。
             out.update(trunc_reading)
-            # ---- 收录签的那条路也走"写全"的那一支（真机 R-mk-infinite-92 的 000000）--
+            # ---- 收录签的那条路也走"写全"的那一支 --
             #
             # 这一支（`written["merged"]`）是"命题先在册、正文后到"的收录路：板上
             # `b-register@<号>@<被签正文 sha>` 收口就走它。秘书那一笔只把正文写进在册行
@@ -4989,7 +4973,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if proofs_dropped:
                 out["proofs_dropped"] = proofs_dropped
             out["v_sign"] = dict(v_sign)
-            #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
+            #: 二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
             out["addressing"] = dict(addressing)
             if _path_receipt:
                 out.update(_path_receipt)
@@ -5045,10 +5029,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 _landed_row = dict(written.get("row") or {})
             _landed_has_proof = _row_has_proof(_landed_row)
             out = {"ok": True, "stmt_id": stmt_now,
-                   #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
+                   #: 这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
                 **({"promoted_manuscript": dict(pre_gate_promotion)}
                    if pre_gate_promotion else {}),
-                   #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                   #: B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 "self_authored_review": self._self_authored_reading(self_authored),
                    "source_lit_id": lit_id or None,
@@ -5074,7 +5058,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                    "row": dict(written.get("row") or {}),
                    #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                    "deps_missing": _deps_reading(written),
-                   #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
+                   #: 稿是从参数来的、从盘上读的、还是没有。
                    "manuscript_source": manuscript_source,
                    #: 正文的来源（`param` / `manuscript` / 空串），口径见新建那一支。
                    "proof_text_source": proof_text_source,
@@ -5137,19 +5121,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 out["deps_missing"] = _deps_reading(
                     written, extra_deps=int(md.get("deps_written") or 0))
             out["v_sign"] = dict(v_sign)
-            #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
+            #: 二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
             out["addressing"] = dict(addressing)
             if _path_receipt:
                 out.update(_path_receipt)
             return out
         if written.get("duplicate") and not written.get("created"):
-            # 秘书查重的读数（业主 2026-10-09：「秘书实际操作增、改、查工具」）：
+            # 秘书查重的读数：
             # 同一条 `statement_full`（按 `textutil.normalize` 比）已在册 ⇒ 不新建行。
             #
             # 多证明模型下这条分支多了一个合法用途：这条定理已经在册，而这一笔带来的是
             # 它的一条新证明（#p2 及以后）⇒ 行不新建，证明挂到既有那一行上。
             #
-            # 2026-10-22 审计后这条分支还要接住第三种合法用途：这一笔带来的是 canonical
+            # 这条分支还要接住第三种合法用途：这一笔带来的是 canonical
             # 正文（`proof_text`），既可能是"登记时还没有证明、现在补上了"，也可能是
             # 改稿。两者都要真写进去；后者还负责把旧正文留进 `proof_history`。
             stmt_dup = str(written.get("stmt_id") or "")
@@ -5188,9 +5172,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                        #: 2026-11-04：这一笔把攻坚稿转成正式稿了吗（有才带这一格）。
                     **({"promoted_manuscript": dict(pre_gate_promotion)}
                        if pre_gate_promotion else {}),
-                    #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
+                    #: B 的改写手稿读数（有就带上）。
                     **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
-                    #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
                 "self_authored_review": self._self_authored_reading(self_authored),
                        "source_lit_id": lit_id or None,
@@ -5210,7 +5193,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                        "proof_no_source": str(proof_no_source),
                        #: 依赖面建起来没有（三态；见 `_deps_missing_reading`）。
                        "deps_missing": _deps_reading(written),
-                       #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）。
+                       #: 稿是从参数来的、从盘上读的、还是没有。
                        "manuscript_source": manuscript_source,
                        #: 正文的来源（`param` / `manuscript` / 空串），口径见新建那一支。
                        "proof_text_source": proof_text_source,
@@ -5243,8 +5226,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                     f"`{_VR.PROOFS_KEY}` 里。")
                 if attach.get("formal_synced"):
                     # 第 4 位（二维）这一笔真的变了：说清它现在是哪几条路径、各是什么。
-                    # 这是 D28 的可见面 —— 改前这一位没有任何写者，L 验过之后再登记
-                    # 一次也不会让它变。
+                    # 这是第 4 位的可见面 —— 没有写者时，L 验过之后再登记一次
+                    # 也不会让它变。
                     out["formal_paths"] = dict(attach.get("formal_paths") or {})
                     out["note"] += (
                         "第 4 位（形式化通过）按 L 的 `experiments` 台账同步了："
@@ -5276,7 +5259,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     out["deps_missing"] = _deps_reading(
                         written, extra_deps=int(md.get("deps_written") or 0))
                 out["v_sign"] = dict(v_sign)
-                #: 2026-11-02：二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
+                #: 二次寻址的读数（清单来源 / 地址 / 命中 / 模式 auto|model|unknown）。
                 out["addressing"] = dict(addressing)
                 if upgrade_skipped:
                     # D2：升档没有请求（闸不会认这一份的签）⇒ 这一格单独说清楚。
@@ -5429,7 +5412,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         written_grade = str(bits.get("grade") or "")
         if attach.get("formal_synced"):
             written_grade = str(_EB.bits_from_row(data).get("grade") or written_grade)
-        # 定义待补那一档要看得见（`draft/97` §15.4 的补法优先级）：
+        # 定义待补那一档要看得见（补法优先级）：
         # 抽不到定义 ⇒ ①先问直接父（它手里有原文，就地能给）→ ②A 上网搜 → ③B 自撰。
         # 这里只把"要给谁"写进读数（载体那一步在循环那一层：它才知道自己的父是谁）。
         pending_defs = ([{"kind": "pending_definition", "table": "statements", "id": stmt_id,
@@ -5447,11 +5430,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #: 换正文那一笔的优化态读数（逐份 + 被拦下的原因）。没有换正文时是空字典 ——
         #: 老写法的返回值逐字不变。
         optimized_reading = _optimized_reading(attach)
-        #: 2026-11-05（缺陷 1c）：依赖面读数（三态）只算一次，回执那一行也从它取 ——
+        #: 依赖面读数（三态）只算一次，回执那一行也从它取 ——
         #: 同一件事不许在 `deps_missing` 与 `note` 里各算一遍（两个口径迟早分家）。
         deps_reading_now = _deps_reading(written)
         deps_line = str(deps_reading_now.get("deps_receipt") or "")
-        #: 2026-11-08（V 只对手稿负责）：收录回执带两格读数 —— 稿上已签 / 已入台账。
+        #: 收录回执带两格读数 —— 稿上已签 / 已入台账。
         sign_filing = _sign_filing_reading(
             self.store, manuscript_path=manuscript_path,
             manuscript_text=manuscript_text, statement_id=stmt_id)
@@ -5461,12 +5444,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `_attach_proofs` 的收录回执写进 statements 顶层。
         _row_proof_now = _row_has_proof(data)
         return {"ok": True, "stmt_id": stmt_id, "source_lit_id": lit_id or None,
-                #: D2：这一笔的号是从稿名 / 稿头当候选来的（有才带这一格；见下候选号那一段）。
+                #: 这一笔的号是从稿头当候选来的（有才带这一格；见下候选号那一段）。
                 **({"stmt_id_candidate": candidate_stmt_id,
                     "stmt_id_candidate_source": candidate_source}
                    if candidate_stmt_id else {}),
                 **optimized_reading,
-                #: 2026-11-04：这一笔有没有把稿转成按号命名的正式稿（有才带这一格）。
+                #: 这一笔有没有把稿转成按号命名的正式稿（有才带这一格）。
                 **({"promoted_manuscript": dict(promotion)} if promotion else {}),
                 #: B-3 的写侧读数：这一笔要不要 V 的签、有没有拿到（见 `_self_authored_gate`）。
                 #: 2026-11-04（业主裁定 A 甲）：B 的改写手稿读数（有就带上）。
@@ -5509,7 +5492,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "why": str(_same_search.get("why") or ""),
                     "same_statement": _same_search_reading(_same_search)}
                    if _same_search else {}),
-                #: 命题同一性那一趟判定的读数（业主 2026-10-24：「让秘书洗定理名，让秘书
+                #: 命题同一性那一趟判定的读数（「让秘书洗定理名，让秘书
                 #: 判」）：三态 + 判词 + 洗过的定理名 + "原标签 → 定理名" + 标签里被洗掉的
                 #: 那条路线（它落在第 1 份证明上，没有丢）。判 different / unknown 时
                 #: `adjudication.verdict` 就是那个结论，`basis` 是"凭什么是它"。
@@ -5524,22 +5507,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "deps_dangling": list(written.get("deps_dangling") or []),
                 "deps_unmappable": list(written.get("deps_unmappable") or []),
                 #: 依赖面建起来没有（三态）：带证明正文而一条依赖都没落 ⇒ `state=missing`
-                #: （改前这件事只活在 `deps_written=0` 里，没有任何一格会因此变红 ——
-                #: 真机 sylow3 七条命题、依赖全表 0 行，就是静默过去的）。
+                #: （只活在 `deps_written=0` 里时，没有任何一格会因此变红）。
                 "deps_missing": deps_reading_now,
                 #: 认签读数（只在真认到一签时出现：新建那一档的老返回形状逐字不变）：
                 #: 键与另外三条"没有新建行"的出口同名（`v_sign`），三态都在读数里。
                 **({"v_sign": dict(v_sign)} if v_sign.get("found") else {}),
-                #: 稿是从参数来的、从盘上读的、还是没有（2026-10-26 的兜底读盘）：
+                #: 稿是从参数来的、从盘上读的、还是没有：
                 #: 这一格让"没人传参"与"B 按约定路径读到了"在读数上分得开。
                 "manuscript_source": manuscript_source,
-                #: 2026-11-04（业主裁定 A 甲）：这一笔有没有（以及怎么）落 B 的改写手稿。
+                #: 这一笔有没有（以及怎么）落 B 的改写手稿。
                 #: 只在真落了/真检查过时出现 —— 老返回形状逐字不变。
                 **({"b_manuscript": dict(b_manuscript)} if b_manuscript else {}),
-                #: 这一笔的正文是从哪来的（2026-11-02，D 侧是主路）：`param`（调用方直递）/
+                #: 这一笔的正文是从哪来的（D 侧是主路）：`param`（调用方直递）/
                 #: `manuscript`（按 D 的携带单寻址到的那份稿的 `## 证明` 那一节）/ 空串。
                 #: 与 `manuscript_source` 分开：那一格说稿从哪来，这一格说落进 `proof_text`
-                #: 的是不是那份稿 —— 两者都缺时，正文只能靠调用方手工粘（真机 85 就是这样）。
+                #: 的是不是那份稿 —— 两者都缺时，正文只能靠调用方手工粘。
                 "proof_text_source": proof_text_source,
                 "addressing": dict(addressing),
                 "manuscript_washed": manuscript_washed,
@@ -5557,7 +5539,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                  if _row_proof_now else ""),
                 "proof_no_source": str(proof_no_source),
                 "pending_definitions": pending_defs,
-                #: 概念行带进来的 `proof_text` 被丢掉了（本批缺陷一的写入侧）：
+                #: 概念行带进来的 `proof_text` 被丢掉了：
                 #: 空串 = 没丢过。「留痕」是必须的 —— 静默丢会让调用方以为
                 #: "概念也能带证明"，下一次还这么交。
                 "proof_text_dropped": proof_text_dropped,
@@ -6003,7 +5985,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         升成 lemma 是签之后的那一步；没有签就改 kind 等于自报（那正是 B-2 堵的）。
         这里只在 `derive_grade(bits)` 已经到 `pre_theorem` / `theorem` 时才落。
 
-        `example`（业主 2026-11-07，protocol 第六节）走的是同一条升档路：它是
+        `example`（玩具例子）走的是同一条升档路：它是
         给人看的标签，落稿 / 收 V 签 / 按五元位算等级与 lemma 一字不差；差别只在
         G 收进正文时用 `Example` 环境（`papermapping.ENV_TITLES`）。B 这一侧不另开分支。
         """
@@ -6013,7 +5995,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if str(origin or "") != "own_result" or str(kind or "").strip() not in (
                 "", "theorem", "conjecture"):
             return out
-        # 2026-11-10（T1）：调用方（`own.ingest_manuscript`）已经把稿头那一格从
+        # 调用方（`own.ingest_manuscript`）已经把稿头那一格从
         # `Secretary.extract_manuscript` 的读数里拿到了 ⇒ 不再为同一格读一次盘。
         declared = str(declared_kind or "").strip() or _declared_manuscript_kind(
             text=str(proof_manuscript or ""), root=str(self.store.root))
@@ -6546,11 +6528,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             missing.append({"ref": key, "in_ledger": key in known})
         return missing, ""
 
-    # ---------------------------------------------------------------- 业主 B-3（2026-10-22）
+    # ---------------------------------------------------------------- B-3
     #
-    # 裁定逐字：「B 侧自己杜撰定理与证明时，也必须给 V 看才能落库，否则按瞎编处理。」
+    # 「B 侧自己杜撰定理与证明时，也必须给 V 看才能落库，否则按瞎编处理。」
     #
-    # 为什么落在写入口而不是收工门：收工门 R10 是事后读数（它只把结论记成 rejected），
+    # 为什么落在写入口而不是收工门：收工门是事后读数（它只把结论记成 rejected），
     # 运行期零后果 —— 一条自己编的「定理」在盘上照样 status=active、grade=conjecture，
     # 而下游（G 的正文、H 的审稿、D 的手稿）读的是那一行。闸必须在「进库之前」。
     #
@@ -6566,14 +6548,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     #: 这条闸的受控拒绝码（调用方据它分辨「参数不对」与「还欠 V 一签」）。
     SELF_AUTHORED_NEEDS_V = "self_authored_needs_v"
-    #: 2026-11-02（业主：「F 侧产出证明而没有 V 签，这是 F 侧工作异常，B 不该处理（润色）无签证明」）：
+    #: 「F 侧产出证明而没有 V 签，这是 F 侧工作异常，B 不该处理（润色）无签证明」：
     #: 收到的是 F 的手稿、而它没有 V 签 ⇒ 退回、不润色，要求 F 先拿 V 签（谁产出谁送审）。
     F_PROOF_UNSIGNED = "f_proof_needs_v_sign_first"
 
     def _report_index_rows(self) -> list[dict]:
         """D 报告的目录行（论文对应表那几行；读不到 ⇒ 空清单，不猜）。
 
-        ## 为什么要读它（业主 2026-10-23 夜的模型，D-34）
+        ## 为什么要读它
 
         「D 侧报告的多半是新成果，B 基本都是从 D 的报告看到定理（命题），经索引看 F 侧证明
         或 E 侧报告，并核实 V 签，然后 B 拿着这些注册定理（命题）入库」——
@@ -6608,8 +6590,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         ## 为什么在 B 的动作里落盘（而不是让 B 自己写文件）
 
-        B 的工具面没有文件写口（只有 `table.*` / `manuscripts.read|list` 这类）。而业主
-        2026-11-04 的裁定 A 甲要的是「B 的改写要有可签的载体」⇒ 作者（B）交内容、
+        B 的工具面没有文件写口（只有 `table.*` / `manuscripts.read|list` 这类）。而口径
+        要的是「B 的改写要有可签的载体」⇒ 作者（B）交内容、
         框架落盘、V 审、收方秘书落签。渲染与三态判据全在 `agentflow.bmanuscript`：
         这里只把读数原样带回（`written` / `preserved` / `signed` / `problem`），
         并把"稿在哪"给调用方（拒信里要点名，B 下一次要按那个路径送审）。
@@ -6617,7 +6599,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         一个字节都不写的那几档（目标已签且是另一份正文 / 目标读不出来）不许折成
         "写成了"：签另算不是毁签。
 
-        ## 稿号（2026-11-11 业主裁定 ①：B 稿号与命题号解耦）
+        ## 稿号（B 稿号与命题号解耦）
 
         落点由 B 自己那条号段 决定（`manuscriptids.next_manuscript_id(root,
         family="b-proof")`），不再由命题号拼。同一命题的下一版要落回它自己那份稿：
@@ -6625,7 +6607,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         找不到才发新号。老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
         （不新写第二个名字）—— 那是只读兼容的既存量，改名会把它变成第二份稿。
 
-        `path_group >= 1`（2026-11-12 业主裁定：两条路径各一份 B 改写稿）时，载体按
+        `path_group >= 1`（两条路径各一份 B 改写稿）时，载体按
         「路径」认：调用方（`land_manuscript`）已经用 `manuscript_id_for_path` 认过，
         命中就重写那一份、没命中就新开一份 —— 这里不再回退到"按命题找"，那会把两条
         路径合成同一份稿。`0` = 老调用面，逐字不变。
