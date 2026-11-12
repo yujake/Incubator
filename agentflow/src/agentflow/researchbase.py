@@ -93,10 +93,23 @@ def research_base(store: Any) -> dict[str, Any]:
             "reason": f"{problem} ⇒ 成文门**没查成**（不是「研究成果够用」）",
         }
 
-    with_proof = [r for r in rows if str(r.get("proof_text") or "").strip()]
-    verified = [r for r in rows if r.get("quote_verified") is True]
-    cited_lit = sorted({str(r.get("source_lit_id")) for r in rows if str(r.get("source_lit_id") or "").strip()})
-    cited_doc = sorted({str(r.get("doc_id")) for r in rows if str(r.get("doc_id") or "").strip()})
+    with_proof = 0
+    verified = 0
+    cited_lit: set[str] = set()
+    cited_doc: set[str] = set()
+    for row in rows:
+        if str(row.get("proof_text") or "").strip():
+            with_proof += 1
+        if row.get("quote_verified") is True:
+            verified += 1
+        lit = row.get("source_lit_id")
+        if str(lit or "").strip():
+            cited_lit.add(str(lit))
+        doc = row.get("doc_id")
+        if str(doc or "").strip():
+            cited_doc.add(str(doc))
+    cited_lit_sorted = sorted(cited_lit)
+    cited_doc_sorted = sorted(cited_doc)
 
     missing: list[str] = []
     if not rows:
@@ -112,17 +125,18 @@ def research_base(store: Any) -> dict[str, Any]:
         "checked": True,
         "state": state,
         "statements": len(rows),
-        "with_proof": len(with_proof),
-        "verified_quotes": len(verified),
-        "cited_literature": cited_lit,
-        "cited_documents": cited_doc,
+        "with_proof": with_proof,
+        "verified_quotes": verified,
+        "cited_literature": cited_lit_sorted,
+        "cited_documents": cited_doc_sorted,
         "missing": missing,
         "next_steps": list(_INSUFFICIENT_NEXT_STEPS) if missing else [],
         "reason": (
             (missing[0] + " ⇒ 按业主 2026-10-28 的口径：**不许成文**，"
              "要上报父代理要求扩大研究面") if missing else
-            f"研究成果池可用：{len(rows)} 条命题（带证明 {len(with_proof)} / 可核引文 "
-            f"{len(verified)}）；B 引到的文献 {len(cited_lit)} 篇、手稿 {len(cited_doc)} 份"
+            f"研究成果池可用：{len(rows)} 条命题（带证明 {with_proof} / 可核引文 "
+            f"{verified}）；B 引到的文献 {len(cited_lit_sorted)} 篇、"
+            f"手稿 {len(cited_doc_sorted)} 份"
         ),
     }
     return base
