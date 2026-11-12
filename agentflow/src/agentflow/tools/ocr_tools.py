@@ -683,9 +683,12 @@ def _select_backend(ctx: _Ctx, requested: str) -> tuple[Any, str]:
     if name not in valid:
         raise OcrError(f"backend 必须是 {list(valid)} 之一，收到 {requested!r}")
 
-    rows = _probe_rows(ctx)
-
     def describe() -> str:
+        # 探测只在这一句真被用到时才做：改前它无条件跑在函数最上面（`_probe_rows`
+        # 逐个探全部后端 —— easyocr 那一条要 import torch，实测 3~5 秒），而它的
+        # 产物只有这里读得到 ⇒ 选中后端的成功路径白付一遍全量探测。探测值本身
+        # 不变：`available()` 带缓存，先探后探拿到的是同一份结论。
+        rows = _probe_rows(ctx)
         lines = []
         for r in rows:
             if not r["produces_text"]:
