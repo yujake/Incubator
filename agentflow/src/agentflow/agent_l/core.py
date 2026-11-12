@@ -1,52 +1,33 @@
 # -*- coding: utf-8 -*-
 """智能体 L（Lean 形式化者）：公共骨架（构造期 / 路径守卫 / 自检闸 / 结论形状）。
 
-## L 是谁（业主 2026-10-22 的施工单）
-
-照 E 的 Lean 面复制出来的一个可运行角色：E 里与 Lean 开关 / 形式化有关的实现
+L 是照 E 的 Lean 面复制出来的一个可运行角色：E 里与 Lean 开关 / 形式化有关的实现
 搬过来，E 一行不删、行为不改。
 
-协作面（业主 2026-10-22 晚的最终裁定，逐字）：只有 B 可以派 L，L 允许派 C 来梳理
-证明链，消费 B 的定理证明库，可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新
-得到 V 签，若缺陷严重，B 应通知 D 开展研究处理证明难点。三个读数都由声明派生
-（`specs/l.py` + `specs/b.py` → `capabilities`）：入边恰好 `B → L`、出边恰好
+协作面：只有 B 可以派 L，L 允许派 C 梳理证明链，消费 B 的定理证明库，可向 B 汇报
+困难、要求 B 完善证明并重新拿 V 签，缺陷严重时 B 通知 D 开研究。三个读数都由声明
+派生（`specs/l.py` + `specs/b.py` → `capabilities`）：入边恰好 `B → L`、出边恰好
 `L → C`、可召唤。越权一律 `forbidden_edge`；Lean 关着时 L 连角色都不存在
 （`leanscope`），那一条边也看不见。
 
-## 与 E 的关系：抄的是"面"，不是"桥"
+与 E 的关系：抄的是"面"，不是"桥"。`verify.check_formal`（桥接层，FC-27 禁改区）
+是唯一实现，L 直接调它 ⇒ "E 会怎么读检查器"与"L 会怎么读检查器"结构化地不可能
+分家；L 抄的是 E 在 Agent 这一层的收口逻辑（路径守卫、理由折叠、三态形状）。
+`_CheckFormal` 同样复用：L 的 `_CheckFormalL` 继承 E 那个混入，只在前面加一道自检
+闸（`leantoolchain`），"E 的行为改不改"不靠人记得 —— 它压根没有第二份。
 
-`verify.check_formal`（桥接层，FC-27 禁改区）是唯一实现，L 直接调它。
-所以"E 会怎么读检查器"与"L 会怎么读检查器"结构化地不可能分家 —— L 抄的是
-E 在 Agent 这一层的收口逻辑（路径守卫、理由折叠、三态形状），桥接只有一份。
+自检闸（"别一堆报错，很久没测了"）：任何 Lean 调用之前先过
+`leantoolchain.lean_selfcheck_reading()`。它不是 `usable` 时，L 的一切形式化结论
+记 `unknown`，原因压成一行：不起检查器、不抛栈（返回形状固定的 dict，与受控拒绝
+同形）、不连撞同一条错误（同一实例只取一次自检读数）。`usable` 时 L 必须真的把
+`.lean` 写到盘上并真的调用检查器；三态由检查器的原话与真实退出码推出，不由模型的
+自我陈述推出。
 
-`_CheckFormal` 也是这样复用的：L 的 `_CheckFormalL` 继承 E 的那个混入，
-只在前面加一道自检闸（`leantoolchain`），其它逐字走 E 的实现。这样
-"E 的行为改不改"这件事不需要靠人记得 —— 它压根没有第二份。
-
-## 自检闸（业主第二句话："别一堆报错，很久没测了"）
-
-任何 Lean 调用之前先过 `leantoolchain.lean_selfcheck_reading()`。它不是 `usable`
-时，L 的一切形式化结论记 `unknown`，并把原因压成一行：
-
-- 不起检查器（不 spawn `lean`、不写临时文件）；
-- 不抛栈：返回的还是一个形状固定的 dict（与受控拒绝同形）；
-- 不连撞同一条错误：同一份自检读数在一个 AgentL 实例里只取一次，
-  失败说明也只报一行（`one_line`）。
-
-`usable` 时：L 必须真的把 `.lean` 写到盘上（`formalize`），并且真的调用检查器；
-结论三态由检查器的原话与真实退出码推出，不由模型的自我陈述推出。
-
-## 三处刻意的取舍
-
-- `_resolve` 从 E 的实现逐字搬来（`agent_e/core.py`），不抽公共函数：抽出去就得改
-  E 的 import，而"不许改 E 的行为"这条纪律最便宜的守法就是"E 的文件一个字节都不动"。
-  `_formal_refusal` 是同名的转发口，不是第二份实现（E 的 `check_formal` 调的就是
-  这个名字；漏了它，一次受控拒绝会在工具面上变成 `kind="unexpected"`，
-  见 :meth:`_Core._formal_refusal` 的 docstring 与被接住的 `draft/146` D29）。
-- `install_l_tools` 只装 L 自己的 `formal.*`：L 不经过 `verify.*` 的工具面，
-  它是直接调桥接层函数的（与 `AgentE.check_formal` 同一条路）。
-- `llm` 参数只保留在签名里（与 E 一致）：形式化这一路一次模型调用都没有，
-  判读必须由检查器决定（FC-16）。
+三处刻意的取舍：`_resolve` 从 E 逐字搬来（`agent_e/core.py`）不抽公共函数 —— 抽出
+去就得改 E 的 import，而"不许改 E 的行为"最便宜的守法就是"E 的文件一个字节都不动"；
+`_formal_refusal` 是同名的转发口，不是第二份实现；`install_l_tools` 只装 L 自己的
+`formal.*`，L 不经过 `verify.*` 的工具面；`llm` 参数只留在签名里（与 E 一致），
+形式化这一路一次模型调用都没有，判读必须由检查器决定（FC-16）。
 """
 from __future__ import annotations
 
@@ -229,25 +210,24 @@ class _Core:
                         refusal_reason: str = _REFUSAL_REASON_FOR_FORMAL) -> dict[str, Any]:
         """受控拒绝口（E 的 `check_formal` 调的就是这个名字，见 `_CheckFormalL`）。
 
-        为什么必须有这个名字（`draft/146` D29）：`_CheckFormalL` 继承 E 的
-        `check_formal`，而 E 那两条拒绝分支（路径越界 / 桥接层 `not res.ok`）调的是
-        `self._formal_refusal(...)`。L 原来只定义了 `_refusal`，于是 `formal.check_formal`
-        走到那条分支时抛 `AttributeError`，被 `ToolRegistry.call` 兜成
-        `kind="unexpected"`：调用方指了一个越界路径、或同时给了两份具名声明，
-        在下游读起来与"L 内部有 bug"一模一样 —— 而前者本该是一句读得懂的话。
+        为什么必须有这个名字：`_CheckFormalL` 继承 E 的 `check_formal`，而 E 那两条
+        拒绝分支（路径越界 / 桥接层 `not res.ok`）调的是 `self._formal_refusal(...)`。
+        少了它，`formal.check_formal` 走到那条分支时抛 `AttributeError`，被
+        `ToolRegistry.call` 兜成 `kind="unexpected"`：调用方指了一个越界路径、或同时
+        给了两份具名声明，在下游读起来与"L 内部有 bug"一模一样 —— 而前者本该是一句
+        读得懂的话。
 
-        为什么是转发而不是复制一份体：拒绝体只有一处（:meth:`_refusal`），
-        键集合随分支变，判据就会在缺的那条分支上失效。这里只补三格，使形状与
-        `draft/146` D25 的第三档一致：`refused=True` 是第三态位，
-        `refusal_reason` 是派发层认的那一格受控理由码，`status="unknown"` 说的是
-        "这一趟没有结论"。L 自己的理由码仍留在 `reason` 与 `detail` 里（它不在
-        `REFUSAL_REASONS` 里），行上的受控理由与角色的原话因此各占一格
-        （见 `conductor._end_from_payload` 的 D25 ③）。
+        为什么是转发而不是复制一份体：拒绝体只有一处（:meth:`_refusal`），键集合随
+        分支变，判据就会在缺的那条分支上失效。这里只补三格，使形状与受控拒绝的第三
+        档一致：`refused=True` 是第三态位，`refusal_reason` 是派发层认的那一格受控
+        理由码，`status="unknown"` 说的是"这一趟没有结论"。L 自己的理由码仍留在
+        `reason` 与 `detail` 里（它不在 `REFUSAL_REASONS` 里），行上的受控理由与角色
+        的原话因此各占一格（见 `conductor._end_from_payload`）。
 
-        与自检闸那一支的分工：闸门拦下来的是"没查成"（:meth:`_refusal`，
-        它不带 `refused` 那一格 ⇒ 派发层读成"没声明拒绝"，落 `no_result`），
-        这里拒绝的是"这次调用本身不成立"（路径越界 / 桥接层受控失败），
-        两者不是同一件事 —— 把前者也标成拒绝，"Lean 没装好"就会被记成"框架说了不"。
+        与自检闸那一支的分工：闸门拦下来的是"没查成"（:meth:`_refusal`，它不带
+        `refused` 那一格 ⇒ 派发层读成"没声明拒绝"，落 `no_result`），这里拒绝的是
+        "这次调用本身不成立"（路径越界 / 桥接层受控失败），两者不是同一件事 ——
+        把前者也标成拒绝，"Lean 没装好"就会被记成"框架说了不"。
         """
         out = self._refusal(claim, reason, detail)
         out.update({
@@ -328,6 +308,6 @@ class AgentL(_Record, _Formalize, _CheckFormalL, _Report, _Core):
       （业主 2026-10-22 晚裁定："可向 B 汇报形式化过程中遇到的困难"）。
 
     与 E 的分工：E 做实验与形式化两件事，L 只做形式化这一件；两侧共用同一个桥接层。
-    协作面（2026-10-22 晚的最终裁定）：唯一入口是 B（`B → L`），L 只派 C
-    （`L → C`，梳理证明链）；两个读数都由 `capabilities` 从声明派生。
+    协作面：唯一入口是 B（`B → L`），L 只派 C（`L → C`，梳理证明链）；两个读数都
+    由 `capabilities` 从声明派生。
     """
