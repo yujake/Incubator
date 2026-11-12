@@ -122,15 +122,19 @@ def unknown_ids(store: Any, text: str) -> dict[str, list[str]]:
 
     bad: dict[str, list[str]] = {}
     cache: dict[str, set[str]] = {}
+    recorded: dict[str, set[str]] = {}
     for token, table, _form in ids_in(text):
         if table not in cache:
             rows, home = _home_rows(store, table)
             field = S.TABLES[home]["id_field"] if home in S.TABLES else ""
             cache[table] = ({str(r.get(field)) for r in rows} if field else set())
-        if token not in cache[table]:
-            bad.setdefault(table, [])
-            if token not in bad[table]:
-                bad[table].append(token)
+        if token in cache[table]:
+            continue
+        # 同一张表里重复的不存在的号只点名一次（集合判重；`bad` 仍是首次出现序）。
+        known = recorded.setdefault(table, set())
+        if token not in known:
+            known.add(token)
+            bad.setdefault(table, []).append(token)
     return bad
 
 
@@ -148,9 +152,9 @@ def relation_index(store: Any) -> tuple[dict[frozenset[str], str], dict[str, set
     return pairs, adj
 
 
-def link_status(store: Any, a: str, b: str) -> tuple[str, str]:
-    """两个概念之间是 `direct` / `path` / `none`，以及证据说明。"""
-    pairs, adj = relation_index(store)
+def _link_status(pairs: Mapping[frozenset[str], str], adj: Mapping[str, set[str]],
+                 a: str, b: str) -> tuple[str, str]:
+    """`link_status` 的判定本体：索引由调用方给（同一批概念对只建一次索引）。"""
     if frozenset({a, b}) in pairs:
         return "direct", pairs[frozenset({a, b})]
     seen, queue = {a}, [a]
@@ -165,6 +169,12 @@ def link_status(store: Any, a: str, b: str) -> tuple[str, str]:
     return "none", ""
 
 
+def link_status(store: Any, a: str, b: str) -> tuple[str, str]:
+    """两个概念之间是 `direct` / `path` / `none`，以及证据说明。"""
+    pairs, adj = relation_index(store)
+    return _link_status(pairs, adj, a, b)
+
+
 def overview_findings(store: Any, text: str, *, claimed_pairs: Sequence[Sequence[str]] = (),
                       ) -> dict[str, Any]:
     """高观点的机械半：引用落地 + 声称的概念对有没有图上的支撑。
@@ -174,11 +184,15 @@ def overview_findings(store: Any, text: str, *, claimed_pairs: Sequence[Sequence
     """
     unknown = unknown_ids(store, text)
     unsupported: list[dict[str, str]] = []
+    # 关系表只读一次：同一批概念对共用一张索引（原先每条 `link_status` 都重扫一遍关系表）。
+    index: tuple[dict[frozenset[str], str], dict[str, set[str]]] | None = None
     for pair in claimed_pairs:
         if len(pair) < 2:
             unsupported.append({"pair": "、".join(map(str, pair)), "status": "malformed"})
             continue
-        status, why = link_status(store, str(pair[0]), str(pair[1]))
+        if index is None:
+            index = relation_index(store)
+        status, _why = _link_status(index[0], index[1], str(pair[0]), str(pair[1]))
         if status == "none":
             unsupported.append({"pair": f"{pair[0]}↔{pair[1]}", "status": "none"})
     problems: list[str] = []
@@ -203,6 +217,8 @@ def conjecture_hygiene(store: Any) -> dict[str, Any]:
     """
     rows = _rows(store, "conjectures")
     exp_ids = {str(r.get("experiment_id")) for r in _rows(store, "experiments")}
+    # 被指向的目标集合只随 `rows` 变一次（原先每遇到一个 `promoted_to` 就重扫一遍全表）。
+    conjecture_ids = {str(r.get("conjecture_id")) for r in rows}
     findings: list[dict[str, str]] = []
     for row in rows:
         cid = str(row.get("conjecture_id") or "?")
@@ -217,8 +233,7 @@ def conjecture_hygiene(store: Any) -> dict[str, Any]:
         if not (row.get("experiment_ids") or row.get("notes")):
             findings.append({"conjecture_id": cid, "kind": "zombie",
                              "detail": "没有实验也没有笔记：提了就不管"})
-        if row.get("promoted_to") and str(row.get("promoted_to")) not in {
-                str(r.get("conjecture_id")) for r in rows}:
+        if row.get("promoted_to") and str(row.get("promoted_to")) not in conjecture_ids:
             findings.append({"conjecture_id": cid, "kind": "bad_promotion",
                              "detail": f"promoted_to={row.get('promoted_to')} 指向不存在的猜想"})
     by_kind: dict[str, int] = {}
@@ -382,17 +397,24 @@ def trace_findings(store: Any, pairs: Sequence[Sequence[str]], *, text: str = ""
     from . import schema as S
 
     dangling: list[str] = []
+    # 一张表的 id 集合只建一次（同一批矛盾里常有多对引同一张表）。
+    table_ids: dict[str, set[str] | None] = {}
     for pair in pairs:
         if len(pair) < 2:
             dangling.append("（形态不合法：" + "、".join(map(str, pair)) + "）")
             continue
         table, ident = str(pair[0]), str(pair[1])
-        rows, home = _home_rows(store, table)
-        if home not in S.TABLES:
+        if table not in table_ids:
+            rows, home = _home_rows(store, table)
+            if home not in S.TABLES:
+                table_ids[table] = None
+            else:
+                field = S.TABLES[home]["id_field"]
+                table_ids[table] = {str(r.get(field)) for r in rows}
+        ids = table_ids[table]
+        if ids is None:
             dangling.append(f"{table}/{ident}（没有这张表）")
-            continue
-        field = S.TABLES[home]["id_field"]
-        if ident not in {str(r.get(field)) for r in rows}:
+        elif ident not in ids:
             dangling.append(f"{table}/{ident}")
     named = [f"{t_}/{i}" for t_, i in ((str(p[0]), str(p[1])) for p in pairs if len(p) >= 2)
              if str(i) in (text or "")]
