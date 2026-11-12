@@ -1,8 +1,8 @@
-"""稿件内容的规范哈希（依据 `draft/30` §T4-A；`draft/29` §8.5 第 2 条）。
+"""稿件内容的规范哈希。
 
 ## 为什么需要它
 
-"审批通过"必须是对某一个版本的审批。今天 `Document` 没有内容哈希 ⇒
+"审批通过"必须是对某一个版本的审批。`Document` 没有内容哈希 ⇒
 "审批过的版本"与"被引用的版本"可以静默变成两版（本仓最忌的静默失效形态）。
 这一层提供那个唯一的哈希算法，供两侧共用：
 
@@ -12,7 +12,7 @@
 
 两份实现必然漂移 —— 所以算法只在这里定义一次。
 `doc:` 内部引用的三段判据同理：它的唯一实现是本文件的 `doc_ref_verdict`
-（写入期 `doc_tools` 与审计期 `verify` 都调它，题 5/5a 把原先那两份合成了一份）。
+（写入期 `doc_tools` 与审计期 `verify` 都调它）。
 
 ## 口径（逐字，改它等于改"什么算同一版"）
 
@@ -40,10 +40,9 @@ CANONICAL_FIELDS: tuple[str, ...] = ("kind", "title", "sections", "claims", "ope
 
 #: 三个列表字段：缺字段与空列表必须算同一版。
 #:
-#: 实测踩到的坑（`T4-A` 第一批）：夹具/调用方给的字典常常没有 `sections` 键，
+#: 实测踩到的坑：夹具/调用方给的字典常常没有 `sections` 键，
 #: 而落库后的行是 `[]` —— 若把"缺键"读成 `None`，同一份内容就有两种哈希，
-#: `content_hash_mismatch` 会在完全干净的库上开火
-#: （实测：`test_fully_clean_workspace_has_no_errors` 就是这样红的）。
+#: `content_hash_mismatch` 会在完全干净的库上开火。
 LIST_FIELDS: tuple[str, ...] = ("sections", "claims", "open_problems")
 
 #: 引用里钉的哈希长度（`doc:<doc>#<claim>@<前 16 位>`）。
@@ -56,7 +55,7 @@ def _canonical_bytes(row: Mapping[str, Any]) -> bytes:
     列表字段用 `row.get(k) or []` 归一：缺键、`None`、空列表三者在内容上
     是同一件事（"这篇稿子没有那一节"），不许因为写法不同而算出两个哈希。
 
-    "规范字节串"的口径只有一处实现（`agentflow.canonical`，`R-33`）：
+    "规范字节串"的口径只有一处实现（`agentflow.canonical`）：
     本函数只负责"哪些字段进哈希 + 列表字段怎么归一"，
     序列化参数由那边定死（门 `scripts/noai_gate.py` 用的是同一份实现，
     它按文件路径加载，不 import 本包）。
@@ -73,7 +72,7 @@ def content_sha256_of(row: Mapping[str, Any]) -> str:
 
 
 def claims_hash_of(row: Mapping[str, Any]) -> str:
-    """只覆盖 `claims` 的哈希（单条断言级签名用；`draft/29` §8.8.2 的 `claims_hash`）。"""
+    """只覆盖 `claims` 的哈希（单条断言级签名用）。"""
     return CANONICAL.canonical_sha256(row.get("claims") or [])
 
 
@@ -90,7 +89,7 @@ def doc_ref(doc_id: str, claim_id: str, row: Mapping[str, Any]) -> str:
 def parse_doc_ref(ref: str) -> tuple[str, str, str] | None:
     """拆内部引用；不是 `doc:` 形状时返回 `None`（不抛 —— 调用方要能把它当"另一档"）。
 
-    两种形状（业主 2026-10-09 的裁定把它分成两档，见 `doc_ref_verdict` 的 docstring）：
+    两种形状（业主的裁定把它分成两档，见 `doc_ref_verdict` 的 docstring）：
 
     - `doc:<doc_id>#<claim_id>@<hash>` —— 引某条断言（三段式；`@hash` 可省 ⇒
       没钉版本，见下）；
@@ -111,13 +110,12 @@ def parse_doc_ref(ref: str) -> tuple[str, str, str] | None:
     return doc_id, claim_id, rev
 
 
-# --------------------------------------------------- `doc:` 内部引用的三段判据（题 5/5a）
+# --------------------------------------------------- `doc:` 内部引用的三段判据
 #
-# 三段（稿件在 / 那条断言在 / 钉的哈希就是当前这一版）此前有两份实现：
+# 三段（稿件在 / 那条断言在 / 钉的哈希就是当前这一版）曾有两份实现：
 # 写入期 `tools/doc_tools.py` 的 `_doc_citation_problem` 与审计期 `verify.py` 里
 # `elif kind == "doc":` 那一支。两份对同一个字符串各判一次，漂了没有任何地方会报
-# —— 写入期那份自己的注释写着"与 `verify.py:923-961` 同口径"，
-# 而"口径靠注释对齐"就等于没有门（行号本身还会漂）。
+# —— "口径靠注释对齐"就等于没有门（行号本身还会漂）。
 #
 # 唯一实现落在本模块，理由三条：
 # 1. 这一段用到的三件原语都已经在这里（`parse_doc_ref` 解析、`content_sha256_of`
@@ -129,7 +127,7 @@ def parse_doc_ref(ref: str) -> tuple[str, str, str] | None:
 #    与本模块"算法与词表只有一个落点"的性格一致。
 #
 # 合成的只是判定，不是渲染：两侧各自保留自己的文案，审计期还多一条自己的档
-# （目标稿件必须 `accepted`）—— 那一条不在三段里，本次一字未动。
+# （目标稿件必须 `accepted`）—— 那一条不在三段里。
 
 #: 三段判据的判定码（空串 = 三段全过）。
 DOC_REF_OK = ""
@@ -143,7 +141,7 @@ class DocRefVerdict(NamedTuple):
     """三段判据的判定，外加渲染文案要用的三段原值。
 
     为什么把 `doc` 与 `current_hash` 一起带回来，而不是让调用方自己再解析一次、
-    再算一次哈希：那样等于在每个调用点上又长出一份三段逻辑，而那正是本次要消掉的
+    再算一次哈希：那样等于在每个调用点上又长出一份三段逻辑，而那正是要消掉的
     东西。调用方只翻译判定码，不重做判定。
 
     `code` 是上表里那五个值之一；`pinned_hash` 是引用里钉的那一段（可为空串 =
@@ -166,7 +164,7 @@ class DocRefVerdict(NamedTuple):
     def whole(self) -> bool:
         """这一条引的是整份手稿（两段式）还是某条断言（三段式）。
 
-        业主 2026-10-09：「智能体产生的手稿确实不是正常引文……错误的是所有智能体
+        业主：「智能体产生的手稿确实不是正常引文……错误的是所有智能体
         产生的手稿里的成果若要使用则必须在论文正文里从零搭建，使内容自包含，
         不以引文格式落实」⇒ 两段式是合法的一档（引我方那份手稿的整体成果），
         这一格让"引整份手稿"与"引某条断言"在读数上分得开。
@@ -196,9 +194,9 @@ def doc_ref_reading(raw: str) -> dict[str, bool]:
 
 def doc_ref_verdict(raw: str,
                     doc_of: Callable[[str], Mapping[str, Any] | None]) -> DocRefVerdict:
-    """`doc:` 内部引用的判定（依据 `draft/30` §T4-A，含 2026-10-09 的两档裁定）。
+    """`doc:` 内部引用的判定。
 
-    ## 两档（业主 2026-10-09 的裁定）
+    ## 两档（业主的裁定）
 
     逐字：「关于"写论文时无法写入引用智能体产生的手稿的研究成果"，这个现象是半对半错。
     对的在于智能体产生的手稿确实不是正常引文，错误的是所有智能体产生的手稿里的成果
@@ -209,8 +207,7 @@ def doc_ref_verdict(raw: str,
     - 保留：手稿不是文献（它不在 `literature` 里，`lit:` 引不到它）—— 这一档不动；
     - 改：`doc:<稿件>`（两段式）是合法的一档：引我方那份手稿里的成果，
       不必在正文里从零重搭一遍。此前它被 `parse_doc_ref` 判成"形状不对"
-      （唯一写法的三段式要求 `#断言@哈希`），于是"用手稿里的成果"只剩"重搭"一条路
-      —— 真机现场与三条读数见 `tests/test_a_document_may_cite_our_own_statement.py`。
+      （唯一写法的三段式要求 `#断言@哈希`），于是"用手稿里的成果"只剩"重搭"一条路。
     - 三段式（`doc:<稿件>#<断言>@<哈希>`）照旧：它比两段式更精确（钉到某条断言、
       钉到那一版）。钉了哈希就要对上（`DOC_REF_STALE` 一字未松）；
       两段式没钉版本这一档要看得见（`pinned=False`），不许与"钉过了"混作一谈。
@@ -245,9 +242,9 @@ def doc_ref_verdict(raw: str,
     return DocRefVerdict(DOC_REF_OK, tdoc_id, tclaim_id, thash, doc, cur)
 
 
-# ---------------------------------------------------------------- 签名台账（T4-B）
+# ---------------------------------------------------------------- 签名台账
 #
-# `draft/29` §8.8：签名对象是"某一个修订版"（`doc_id + content_sha256`），
+# 签名对象是"某一个修订版"（`doc_id + content_sha256`），
 # 记录落成文件台账（append-only JSONL），不进 `schema.TABLES`。
 # 这一节只做"记录的写法与读法"；谁有资格签、签得上算不上，由下面几组判据回答。
 
@@ -255,28 +252,27 @@ def doc_ref_verdict(raw: str,
 LEDGER_NAME = "DOC-SIGNATURES.jsonl"
 #: 证据快照目录（工作区根下）。一条签名一份，文件名钉住内容哈希。
 EVIDENCE_DIR = "doc-signatures"
-#: 只有审核角色有资格签（`draft/29` §8.8.2：角色名说明"谁有资格"，
+#: 只有审核角色有资格签（角色名说明"谁有资格"，
 #: `instance_id` 说明"是哪一次审"）。
 SIGNER_NAME = "agent-H"
 #: "接受档"判定。设计的字面是 `verdict == "accepted"`，而本仓 `review` 的判定词表实测是
-#: `rejected / unverified / accepted_with_warnings / accepted`，且 §8.8.3 明说
-#: "含 `external_unavailable` 依赖 ⇒ H 给 warning（已知边界）"也要签一条。
+#: `rejected / unverified / accepted_with_warnings / accepted`，且"含 `external_unavailable`
+#: 依赖 ⇒ H 给 warning（已知边界）"也要签一条。
 #: 所以接受档是这两个 —— 不把 warning 当拒绝（那会把"已知边界"变成"不许发布"）。
 ACCEPTING_VERDICTS: tuple[str, ...] = ("accepted", "accepted_with_warnings")
 
-#: 「该被签」的稿件状态（E-07 / `draft/52` D5：`accepted` 且 `revised`）。
+#: 「该被签」的稿件状态（`accepted` 或 `revised`）。
 #:
-#: 为什么把 `revised` 也算进来（`draft/44` E-07 "签名覆盖 `revised`"）：
-#: `G.revise` 把稿子推成 `revised` 的那一刻，签名还钉着改之前那一版 ——
-#: 只按 `accepted` 判的话，一份"改完之后没再复核"的稿子在这条判据面前
-#: 一份都不查（真机根 A 实测 10 份非 `accepted` 的稿子被静默跳过，
-#: 其中 2 份的签名哈希与现行版不符：`p6d/0015`、`p8e/0000`）。
+#: 为什么把 `revised` 也算进来：`G.revise` 把稿子推成 `revised` 的那一刻，
+#: 签名还钉着改之前那一版 —— 只按 `accepted` 判的话，一份"改完之后没再复核"
+#: 的稿子在这条判据面前一份都不查（真机上会有一批非 `accepted` 的稿子被静默跳过，
+#: 其中有的签名哈希与现行版不符）。
 #:
 #: 三处必须同源（分叉的症状是"读数说查了 N 行而判据一行没查"）：
 #: 本常量、`verify.py` 的覆盖读数与交叉断言、`closing.REVIEWED_DOC_STATUSES`
 #: （`reviewed_current_rows` 那一档的 `claimed` 集合）。
 #: `scripts/lint_rules` 的 R002 与 `verify_all` 都直接读它，`append_signature`
-#: 的写侧闸门一个字不改（E-07 只改读侧）。
+#: 的写侧闸门一个字不改（只改读侧）。
 SIGNABLE_STATUSES: tuple[str, ...] = ("accepted", "revised")
 #: 旧名（标量）保留作别名转发：`verify.py` 与若干读数键仍在用它。
 SIGNABLE_STATUS = SIGNABLE_STATUSES[0]
@@ -314,13 +310,10 @@ def evidence_dir(root: str | Path) -> Path:
 def line_hash(record: Mapping[str, Any]) -> str:
     """一行的规范哈希（不含 `prev_hash` 自己）—— 链式台账的链节。
 
-    序列化走 `canonical.canonical_sha256`（唯一实现）：`R-BE4`（2026-10-27，业主批准）
-    之前这里内联了一份 `json.dumps(..., separators=(",", ":"), default=str)`，于是
+    序列化走 `canonical.canonical_sha256`（唯一实现）：同一口径只许一处 ——
+    这里内联一份 `json.dumps(..., separators=(",", ":"), default=str)` 会让
     `canonical.py` 的 docstring（"包里这一份是唯一的实现，`signatures` 用它"）与事实
-    不符。两份的字节今天逐字相同（`canonical_json_text` 的 `default` 也是 `str`），
-    读数见 `temp/rbe4_canonical_equivalence.py`：6 条纯 JSON 夹具 + 4 条非原生值夹具
-    （Path / datetime / set / dataclass）全部同字节同 sha256 ⇒ 链上哈希一个都没变。
-    收敛的理由是"同一口径只许一处"（R-33），不是"现在两份算得不一样"。
+    不符，两份的字节也可能悄悄漂。
     """
     payload = {k: v for k, v in record.items() if k != "prev_hash"}
     return CANONICAL.canonical_sha256(payload)
@@ -332,9 +325,8 @@ def read_ledger(path: str | Path) -> tuple[list[dict], list[str]]:
     坏行逐条报出来（带行号），不静默跳过 —— "读不出来"与"没有这一行"
     是两件事（三态纪律）。文件不存在 ⇒ 空台账、零问题（那是合法初态）。
 
-    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`（`draft/36` T-6 合并）。
-    此前这里是第二份完整实现，唯一的差别是那句措辞写"不是 JSON 对象"；
-    合并后统一成"不是对象"（与 `artifacts` / `sessions` 一致，两处对一处）。
+    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`。坏行的措辞与
+    `artifacts` / `sessions` 同源（"不是对象"），不在这里另写一句。
     """
     return read_jsonl(path)
 
@@ -369,7 +361,7 @@ def verify_signature(root: str | Path, record: Mapping[str, Any],
                      doc_row: Mapping[str, Any]) -> str:
     """逐条判一条签名；返回判据码，全部通过则返回 `"valid"`。
 
-    判的顺序与 `draft/29` §8.8.4 的五条逐字对应：谁签的 → 判定档 → 签的是这一版 →
+    判的顺序与签名的五条逐字对应：谁签的 → 判定档 → 签的是这一版 →
     它读到的输入是这一版 → 证据锚可复核。
     """
     name = str(record.get("name") or "")
@@ -400,18 +392,14 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
     """这份稿件在"签名"这件事上的问题（空 = 签过且有效）。
 
     `status ∈ SIGNABLE_STATUSES`（`accepted` / `revised`）的稿件才谈"该被签"——
-    草稿没有签名不是缺陷。`revised` 也算进来是 E-07：改稿之后签名钉的是旧版，
-    而那正是最该被看见的一件事（只按 `accepted` 判 ⇒ 10 份真机稿件被静默跳过）。
+    草稿没有签名不是缺陷。`revised` 也算进来：改稿之后签名钉的是旧版，
+    而那正是最该被看见的一件事（只按 `accepted` 判会让一批真机稿件被静默跳过）。
 
     ## 判据是"至少一条签名完全成立"，不是"第一条签名成立"
 
     同一版内容被签多次是正常状态（H 重审一轮就再签一条；改稿后旧签名作废、
     新签名钉新版）。所以判据必须是"存在一条有效的"，而不是"台账里第一条有效" ——
-    后者会让一条历史记录的失效把整份稿件判成"没签"。实测（2026-09-29）：
-    同一版内容签了两条，其中一条的证据快照被后一条覆盖（当时快照路径只含内容哈希），
-    于是 `formal(doc)` 变假，而它自己这条函数的 docstring 与 `signed()` 写的是
-    "至少一条签名完全成立"。快照路径的重名问题已在 `append_signature` 里修掉，
-    这里修的是判据本身的语义。
+    后者会让一条历史记录的失效把整份稿件判成"没签"。
 
     一条都不成立时，返回第一条的具体判据码与证据（人要知道是哪种失效）。
     """
@@ -443,7 +431,7 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
 
 def signed(doc_row: Mapping[str, Any], records: Sequence[Mapping[str, Any]],
            *, root: str | Path) -> bool:
-    """`draft/29` §8.8.4 的 `signed(doc)`：至少一条签名完全成立。"""
+    """`signed(doc)`：至少一条签名完全成立。"""
     return not signature_problems(root, doc_row, records)
 
 
@@ -464,8 +452,8 @@ def signed_revision(doc_row: Mapping[str, Any],
  非 `accepted` 状态的稿件一律返回真（草稿本来就不该被签 ⇒ 没有问题是正常的）。
     所以它回答不了另一个问题："现在盘上这一版内容，有没有一条签名针对它"。
 
-    那个问题在 `R-59`（`draft/28` §161.4）里是决定性的：`verify_fixes` 复审通过时想把
-    状态置回 `accepted`，而"改过稿之后旧审批不许沿用"（`draft/29` §8.8.4）要求
+    那个问题在 `verify_fixes` 复审那一处是决定性的：复审通过时想把
+    状态置回 `accepted`，而"改过稿之后旧审批不许沿用"要求
     `accepted` 必须由针对这一版的审+签背书。用 `signed()` 去判会得到"真"
     （因为状态那一刻还是 `revised`）⇒ 于是置了 `accepted`、签名却还钉着旧版本 ⇒
     `stale_signature`。本函数的判据是逐字的：台账里存在一条 `content_sha256`
@@ -484,7 +472,7 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
                      findings: Sequence[Mapping[str, Any]] = ()) -> dict:
     """写一条签名：先落证据快照，再追加台账一行（带 `prev_hash`）。
 
-    写侧闸门（`draft/29` §8.8.7 的"禁自批"）：签名者必须是 `agent-H`、
+    写侧闸门（"禁自批"）：签名者必须是 `agent-H`、
     判定必须是接受档、必填字段必须齐 —— 否则 `ValueError`，不写半个文件。
     """
     missing = [k for k in REQUIRED_SIGNATURE_FIELDS
@@ -506,8 +494,7 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
     records, _problems = read_ledger(ledger_path(base))
     # 快照文件名必须逐条唯一：同一版内容被签多次是正常状态（H 重审一轮就再签一条），
     # 若文件名只含内容哈希，后一条会把前一条的快照覆盖掉 ⇒ 前一条的 `evidence_sha256`
-    # 从此对不上 ⇒ 那条签名永久失效。实测（2026-09-29，P7 重签台账）：正是这样把
-    # `formal(doc)` 变成假的，而错在"快照被覆盖"这件与内容无关的事上。
+    # 从此对不上 ⇒ 那条签名永久失效。错在"快照被覆盖"这件与内容无关的事上。
     # 序号取"台账里已有多少条"，确定性、可读、且与新记录一一对应。
     ordinal = len(records) + 1
     name = f"{doc_id}-{content[:REF_HASH_LEN]}-{ordinal:03d}.json"
@@ -516,8 +503,8 @@ def append_signature(root: str | Path, record: Mapping[str, Any], *,
                 "at": str(record.get("at") or ""), "verdict": str(record.get("verdict") or ""),
                 "findings": [dict(f) for f in findings]}
     snap_path = snap_dir / name
-    # 规范字节串只有一处实现（`canonical`）：`R-BE4` 之前这里与下面那一行各内联了一份，
-    # 与 `canonical.py` docstring 的"唯一实现"那句不符（理由与读数见 `line_hash`）。
+    # 规范字节串只有一处实现（`canonical`）：这里内联一份会让「唯一实现」那句
+    # 与事实不符（理由与读数见 `line_hash`）。
     snap_path.write_text(CANONICAL.canonical_json_text(snapshot) + "\n", encoding="utf-8")
 
     row = dict(record)
