@@ -14,8 +14,9 @@
  * 3. `lean_ready` / `can_do_formal` 与 `provers.checked` 一样是**三态**：
  *    `null` 渲染成 `unknown`，不许折成 `false`。
  *
- * 一处**已经接上的缺口**：`draft/74 §3.5` 第 6 行要的"活着的 loop / 进程"由
- * `GET /api/live`（在飞面）提供，卡片指路「在飞」页 ——
+ * 一处**已经接上的缺口**：`draft/74 §3.5` 第 6 行要的"活着的 loop / 进程"过去那一栏
+ * 渲染成 `not_applicable` 并写明。
+ * 现在 `GET /api/live`（在飞面）给了它，卡片改成指路「在飞」页 ——
  * 说明文与读数说同一件事，别留一句"没有端点"的旧话在页面上。
  */
 import { useState } from "preact/hooks";
