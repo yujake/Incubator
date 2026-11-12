@@ -18,10 +18,30 @@ from .. import manuscriptintake as _MI
 INGEST_MODES: tuple[str, ...] = _MI.INGEST_MODES
 
 
+def _path_group_parameter(value: Any, mode: str) -> tuple[int, str, str]:
+    """`path_group` 参数面 ⇒ `(路径号, 受控码, 人话)`（码空 = 过关）。
+
+    只在 `mode=apply` 的优化线上收：它点名的是一条已存在的路径，回填才用得上；
+    预览 / 登记没有「换第 N 份」这件事。`0` = 老调用面（不提路径）。
+    """
+    try:
+        named = int(value or 0)
+    except (TypeError, ValueError):
+        return 0, "bad_path_group", f"`path_group` 必须是整数（收到 {value!r}）"
+    if named < 0:
+        return 0, "bad_path_group", f"`path_group` 必须 >= 0（收到 {named}）"
+    if named >= 1 and mode != "apply":
+        return named, "path_group_not_allowed_for_mode", (
+            "`path_group` 只在 `mode=apply` 的优化线上收：它点名的是一条已存在的"
+            "路径，回填才用得上；预览 / 登记没有「换第 N 份」这件事")
+    return named, "", ""
+
+
 class _IngestManuscript:
     def ingest_manuscript(self, *, manuscript: str, target_stmt_id: str = "",
                           cells: Sequence[str] = (), conflict: str = "refuse",
                           mode: str = "apply", proof_no: Any = None,
+                          path_group: int = 0,
                           if_match_proof_sha256: str = "", reason: str = "",
                           provenance: Any = None) -> dict:
         """按「位置 + 格」从手稿里提取并回填（T1 的唯一入口）。
@@ -34,6 +54,10 @@ class _IngestManuscript:
         `cells` 是格（闭集），派生列请求 ⇒ 受控拒 `derived_cell_not_requestable`；
         `conflict` 是 `refuse`（默认）/ `overwrite` / `append` / `keep`；`mode` 是
         `preview`（只提取、零写）/ `apply`（按格回填）/ `register`（登记新命题）；
+        `path_group`（2026-11-12 业主裁定「换正文只允许优化这条线去换」）：优化线
+        显式点名的已存在路径号（`>=1`）。它不分配号 —— 秘书在事务里核"第 n 条
+        路径在册、且这一份稿对得上它"，核不过 ⇒ 受控拒 `path_not_found` /
+        `path_mismatch`。普通登记一律不传（`0`）；带它才是"换第 N 份正文"那条线。
         `if_match_proof_sha256` 是调用方"我以为这一行现在的正文 sha 是它"，不符 ⇒
         `stale_target`（写入方带 sha，不符受控拒、不静默覆盖）。
 
@@ -60,6 +84,10 @@ class _IngestManuscript:
             return self._ingest_fail(
                 out, "bad_conflict_policy",
                 f"`conflict` 只有 {_MI.CONFLICTS}（收到 {conflict!r}）")
+        named_path, _path_code, _path_why = _path_group_parameter(
+            path_group, str(mode or ""))
+        if _path_code:
+            return self._ingest_fail(out, _path_code, _path_why)
         requested, _code, _why = self._ingest_requested_cells(cells, str(mode))
         if _code:
             return self._ingest_fail(out, _code, _why)
@@ -191,19 +219,36 @@ class _IngestManuscript:
         path_no, _code, _why = 0, "", ""
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
-        #: 这一份稿是哪条路径的（C2：逐路径记录优先，退 canonical 时读数里写明）。
-        #: 提取在锁外、判定在锁外；这里只读，不写一个字节。register 没有目标行 ⇒ 空。
-        path_reading: dict = {}
-        if row is not None:
-            path_reading = self._proof_path_reading(
-                stmt_id=target, row=row, manuscript_path=rel,
-                proof_text=str((got_cells.get("proof_text") or {}).get("value") or ""))
-            out["path_group_reading"] = dict(path_reading)
+        _plan = self._ingest_plan(
+            row, got_cells, conflict=str(conflict), family=family, target=target,
+            rel=rel, requested=requested, out=out, named_path=named_path,
+            want_no=want_no, mode=str(mode))
+        if _plan.get("fail"):
+            return _plan["fail"]
+        plan = dict(_plan["plan"])
+        if str(mode) == "preview":
+            out["write"] = {"statements": False, "dependencies": False,
+                            "written": False,
+                            "sink": "preview：只提取、一个字节都不写"}
+            return out
+        got = self._ingest_apply(
+            reading=reading, row=row, plan=plan, out=out, requested=requested,
+            family=family, want_no=want_no, target=target, path=rel,
+            path_group=named_path)
+        _pg = got.get("path_group")
+        _pg_no = int((_pg or {}).get("path_group") or 0) if isinstance(_pg, Mapping) else int(_pg or 0)
+        return self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no)
+
+    def _ingest_plan(self, row: Mapping | None, got_cells: Mapping, *,
+                     conflict: str, family: str, target: str, rel: str,
+                     requested: Sequence[str], out: dict, named_path: int,
+                     want_no: int, mode: str) -> dict:
+        """计划 + 逐格回执 + I1/I2 不变量（返回 `{"plan": …}` 或 `{"fail": 受控拒}`）。"""
         plan = _MI.plan_cells(
-            row, got_cells, str(conflict), family=family, proof_no=int(want_no or 1),
+            row, got_cells, str(conflict), family=family,
+            proof_no=int(named_path or want_no or 1),
             append_new_path=self._ingest_new_proof_path(
-                mode=str(mode), row=row, target=target, rel=rel, got_cells=got_cells,
-                path_reading=path_reading))
+                mode=mode, row=row, target=target, rel=rel, got_cells=got_cells))
         cells_out = self._ingest_plan_cells(plan, requested)
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),
@@ -213,20 +258,10 @@ class _IngestManuscript:
         out["diff"] = self._ingest_diff(out, requested)
         problem = self._ingest_invariant_problem(out)
         if problem:
-            return self._ingest_fail(out, "ingest_invariant_violated", problem)
+            return {"fail": self._ingest_fail(out, "ingest_invariant_violated", problem)}
         if not out["ok"]:
-            return out
-        if str(mode) == "preview":
-            out["write"] = {"statements": False, "dependencies": False,
-                            "written": False,
-                            "sink": "preview：只提取、一个字节都不写"}
-            return out
-        got = self._ingest_apply(
-            reading=reading, row=row, plan=plan, out=out, requested=requested,
-            family=family, want_no=want_no, target=target, path=rel)
-        _pg = got.get("path_group")
-        _pg_no = int((_pg or {}).get("path_group") or 0) if isinstance(_pg, Mapping) else int(_pg or 0)
-        return self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no)
+            return {"fail": out}
+        return {"plan": plan}
 
     def _ingest_new_proof_path(self, *, mode: str, row: Mapping, target: str,
                                rel: str, got_cells: Mapping,

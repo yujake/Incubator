@@ -2453,6 +2453,107 @@ def _assign_path_group_in_tx(tx: Any, *, root: Any, statement_id: str,
     return got
 
 
+def _existing_path_group_in_tx(tx: Any, *, root: Any, statement_id: str,
+                               path_group: int, manuscript: str = "",
+                               body_sha: str = "") -> dict:
+    """核对「调用方点名的第 n 条路径」是不是已存在、且对得上这一份稿。
+
+    优化线（业主 2026-11-12：「换正文只允许优化这条线去换。优化线需指明命题号和
+    路径。」）显式带 `(命题号, 路径号)`；这一格不分配号，只在事务里核对：
+    第 n 条路径不在册 ⇒ `path_not_found`；这一份稿已经绑在别的路径上 ⇒
+    `path_mismatch`；对得上才把号回给调用方。号仍归秘书（这里没有分配动作）。
+
+    三态：`checked=False` ⇒ 路径记录读不出来（不是「没有这条路径」）；`refused`
+    非空 ⇒ 受控拒、一个字节都不写；`basis` 说明这一份稿是靠什么对上的
+    （`path_manuscript` / `path_body_sha` / `signed_carrier`）。
+    """
+    from . import manuscriptpaths as _MP
+    from . import verifications as _VR
+
+    n = int(path_group or 0)
+    sid = str(statement_id or "").strip()
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    sha = str(body_sha or "").strip().lower()
+    out: dict[str, Any] = {"checked": False, "path_group": n, "existing": False,
+                           "basis": "", "paths": [], "refused": "", "reason": "",
+                           "why": ""}
+    if n < 1:
+        out.update(refused="bad_path_group",
+                   reason=f"路径号必须是正整数（收到 {path_group!r}）")
+        return out
+    if not sid:
+        out.update(refused="bad_statement_id", reason="没有命题号 ⇒ 路径核对不了")
+        return out
+    reading = _MP.path_reading(tx, root, statement_id=sid)
+    out["paths"] = [dict(one) for one in (reading.get("paths") or ())]
+    if not reading.get("checked"):
+        out.update(refused="path_group_unreadable",
+                   reason=("路径记录读不出来 ⇒ 核不了第几条（不猜）："
+                           + str(reading.get("why") or "未知原因")))
+        return out
+    hit = next((one for one in out["paths"]
+                if int((one or {}).get("path_group") or 0) == n), None)
+    if hit is None:
+        out.update(checked=True,
+                   refused="path_not_found",
+                   reason=(f"第 {n} 条路径还没在册（路径号只能指已存在的路径；"
+                           "新路径由秘书在收录事务里分配）"))
+        return out
+    out.update(checked=True, existing=True)
+    hit_rel = str(hit.get("manuscript") or "").strip().replace("\\", "/")
+    hit_sha = str(hit.get("body_sha") or "").strip().lower()
+    if rel and hit_rel and hit_rel == rel:
+        out.update(basis="path_manuscript",
+                   why=f"第 {n} 条路径的稿记录点名 `{rel}`")
+        return out
+    if sha and hit_sha and hit_sha == sha:
+        out.update(basis="path_body_sha",
+                   why=f"第 {n} 条路径的正文 sha 就是这一份")
+        return out
+    # ---- 第一轮优化：路径记录还指着 F/E 的源稿；这一份是新落的 B 改写稿 --------
+    #
+    # 路径身份不写稿头（业主：「路径在产出侧也不标注」），逐路径记录要等收录成功才
+    # 绑上新稿。所以第一轮只能核对两件事：这一份稿的签行已经在（优化线要求先拿签）、
+    # 且它没有被绑到别的路径上。第二轮起 `path_manuscript` 那一档会命中。
+    try:
+        rows, _bad = _VR.list_verifications(root, statement_id=sid, limit=None)
+    except Exception:  # noqa: BLE001 —— 读不到签行就按"对不上"受控拒（不猜）
+        rows = []
+    bound_elsewhere = 0
+    signed_here = False
+    for one in rows or ():
+        doc = dict(one or {})
+        rec = str(doc.get("manuscript") or doc.get("object_path") or "").strip().replace("\\", "/")
+        row_sha = str(doc.get("proof_sha256") or "").strip().lower()
+        try:
+            row_group = int(doc.get("path_group") or 0)
+        except (TypeError, ValueError):
+            row_group = 0
+        if rel and rec == rel:
+            if row_group >= 1 and row_group != n:
+                bound_elsewhere = row_group
+            if sha and row_sha == sha:
+                signed_here = True
+        elif sha and row_sha == sha and row_group >= 1 and row_group != n:
+            bound_elsewhere = row_group
+    if bound_elsewhere:
+        out.update(refused="path_mismatch",
+                   reason=(f"这一份稿已经绑在第 {bound_elsewhere} 条路径上，"
+                           f"不是第 {n} 条 ⇒ 不改写"))
+        return out
+    if signed_here:
+        out.update(basis="signed_carrier",
+                   why=(f"第 {n} 条路径在册；这一份稿是它有签的改写载体"
+                        "（逐路径记录要等这一笔收录成功后才绑上新稿）"))
+        return out
+    out.update(refused="path_mismatch",
+               reason=(f"第 {n} 条路径的稿记录是 `{hit_rel or '（没有稿）'}`"
+                       f"（正文 sha {hit_sha[:12] or '无'}…），而这一份是 "
+                       f"`{rel or '（没有稿）'}`（{sha[:12] or '无'}…）⇒ 对不上。"
+                       "这一份稿要先拿 V 签，再按它自己那条路径回填"))
+    return out
+
+
 def _path_material_numbers(groups: Any) -> list[int]:
     """依赖组里"材料说这是第几条路径"的那几个号（手稿依赖表第 4 列 / 显式给的组号）。
 
@@ -7839,6 +7940,7 @@ class Secretary:
 
     def record_manuscript_dependency_face(self, stmt_id: str, groups: Any, *,
                                           proof_no: int = 1,
+                                          path_group: int = 0,
                                           note: str = "",
                                           manuscript: str = "",
                                           body_sha: str = "",
@@ -7885,35 +7987,15 @@ class Secretary:
             out.update(checked=True, reason="这一份手稿的依赖段是空的（自足证明合法，不写边）")
             return out
         if not groups and reserve:
-            # 只分号、不写边：收录那一笔请求了正文、没请求依赖格（自足证明 / 只补正文），
-            # 但"这一份是第几条路径"仍要由秘书在锁里给（B 不算）。一个字节的依赖行都不写；
-            # 号只进回执，后面的正文写口用它 —— 那条路自己会拒"号已被另一份正文占"。
-            try:
-                with self.store.tx("statements", "dependencies",
-                                   actor=f"secretary-{self.role}",
-                                   note=note or "record_manuscript_dependency_face:reserve") as tx:
-                    if not SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["found"]:
-                        out.update(refused="statement_missing",
-                                   reason=(f"台账里没有 stmt:{sid} ⇒ 路径号分不了"))
-                        return out
-                    _alloc = _assign_path_group_in_tx(
-                        tx, root=self.root, statement_id=sid,
-                        manuscript=manuscript, body_sha=body_sha)
-                    if not _alloc.get("checked"):
-                        out.update(refused="path_group_unreadable",
-                                   reason=("路径数读不出来 ⇒ 这一笔不写（不猜第几条）："
-                                           + str(_alloc.get("why") or "未知原因")))
-                        return out
-                    out.update(checked=True, deps_written=0, path_groups=0,
-                               path_group=int(_alloc.get("path_group") or 1),
-                               path_group_reading=dict(_alloc),
-                               reason=("这一笔没有请求依赖格 ⇒ 只分配路径号（不写边）"))
-            except Exception as exc:  # noqa: BLE001 —— 分号失败必须回三态，不许半笔
-                out.update(checked=False, refused="write_failed",
-                           reason=(f"路径号没分成（{type(exc).__name__}: {exc}）"
-                                   " ⇒ 这一笔按'没写成'读"))
-            return out
-        _gate = self._manuscript_dependency_refusal(sid=sid, proof_text=proof_text)
+            # 只分号 / 只核对号、不写边（实现在 `_reserve_path_only`）。
+            return self._reserve_path_only(
+                sid=sid, note=note, manuscript=manuscript,
+                body_sha=body_sha, path_group=path_group)
+        _named_group = int(path_group or 0)
+        # 优化线是"换已存在那条路径的正文"，不是新路径 ⇒ 不问同种证明那一问
+        # （那一问决定的是"要不要新开一条路径"；拿它拦改写会把优化线堵死）。
+        _gate = ({} if _named_group >= 1
+                 else self._manuscript_dependency_refusal(sid=sid, proof_text=proof_text))
         if _gate:
             out.update(_gate)
             return out
@@ -7944,7 +8026,33 @@ class Secretary:
                         body_sha = _VR_canon.text_sha(_canon_text)
                 _has_identity = bool(str(body_sha or "").strip()
                                      or str(manuscript or "").strip())
-                if _has_identity:
+                if _named_group >= 1:
+                    # 优化线：号不分配，只核对"第 n 条路径确实存在且对得上这一份稿"。
+                    if not _has_identity:
+                        out.update(refused="bad_path_identity",
+                                   reason=("优化线要给已存在的路径号，也要给这一份稿的身份"
+                                           "（`manuscript` / `body_sha`）：没有身份就核不了"
+                                           "它是不是那条路径的稿"))
+                        return out
+                    _alloc = _existing_path_group_in_tx(
+                        tx, root=self.root, statement_id=sid,
+                        path_group=_named_group, manuscript=manuscript,
+                        body_sha=body_sha)
+                    if _alloc.get("refused"):
+                        out.update(refused=str(_alloc.get("refused") or "path_group_refused"),
+                                   reason=str(_alloc.get("reason") or ""))
+                        return out
+                    if not _alloc.get("checked"):
+                        out.update(refused="path_group_unreadable",
+                                   reason=("路径数读不出来 ⇒ 这一份的依赖面不落（不猜第几条）："
+                                           + str(_alloc.get("why") or "未知原因")))
+                        return out
+                    group_no = int(_alloc.get("path_group") or _named_group)
+                    _note_path_material(out, _path_material_numbers(groups),
+                                        decided=group_no)
+                    out["path_group"] = group_no
+                    out["path_group_reading"] = dict(_alloc)
+                elif _has_identity:
                     _alloc = _assign_path_group_in_tx(
                         tx, root=self.root, statement_id=sid,
                         manuscript=manuscript, body_sha=body_sha)
@@ -8017,6 +8125,56 @@ class Secretary:
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             out.update(checked=False, refused="write_failed",
                        reason=f"依赖面落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
+        return out
+
+    def _reserve_path_only(self, *, sid: str, note: str, manuscript: str,
+                           body_sha: str, path_group: int) -> dict[str, Any]:
+        """`record_manuscript_dependency_face` 的"只分号 / 只核对号"那一支（不写边）。
+
+        `path_group=0` ⇒ 由秘书在锁里分配"第几条"（另一条路径 / canonical）；
+        `path_group>=1` ⇒ 优化线：只核对这个号已存在且对得上这一份稿（不分配）。
+        一个字节的依赖行都不写；号只进回执，后面的正文写口用它。
+        """
+        out: dict[str, Any] = {"checked": False, "stmt_id": sid, "deps_written": 0,
+                               "path_groups": 0, "duplicates": [], "refused": "",
+                               "reason": "", "tables": [], "deps_dangling": [],
+                               "deps_unmappable": []}
+        try:
+            with self.store.tx("statements", "dependencies",
+                               actor=f"secretary-{self.role}",
+                               note=note or "record_manuscript_dependency_face:reserve") as tx:
+                if not SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["found"]:
+                    out.update(refused="statement_missing",
+                               reason=(f"台账里没有 stmt:{sid} ⇒ 路径号分不了"))
+                    return out
+                _named = int(path_group or 0)
+                if _named >= 1:
+                    _alloc = _existing_path_group_in_tx(
+                        tx, root=self.root, statement_id=sid, path_group=_named,
+                        manuscript=manuscript, body_sha=body_sha)
+                else:
+                    _alloc = _assign_path_group_in_tx(
+                        tx, root=self.root, statement_id=sid,
+                        manuscript=manuscript, body_sha=body_sha)
+                if _alloc.get("refused"):
+                    out.update(refused=str(_alloc.get("refused") or "path_group_refused"),
+                               reason=str(_alloc.get("reason") or ""))
+                    return out
+                if not _alloc.get("checked"):
+                    out.update(refused="path_group_unreadable",
+                               reason=("路径数读不出来 ⇒ 这一笔不写（不猜第几条）："
+                                       + str(_alloc.get("why") or "未知原因")))
+                    return out
+                out.update(checked=True, deps_written=0, path_groups=0,
+                           path_group=int(_alloc.get("path_group") or _named or 1),
+                           path_group_reading=dict(_alloc),
+                           reason=(("这一笔没有请求依赖格 ⇒ 只核对已存在的路径号（不写边）"
+                                    if _named else
+                                    "这一笔没有请求依赖格 ⇒ 只分配路径号（不写边）")))
+        except Exception as exc:  # noqa: BLE001 —— 分号失败必须回三态，不许半笔
+            out.update(checked=False, refused="write_failed",
+                       reason=(f"路径号没分成（{type(exc).__name__}: {exc}）"
+                               " ⇒ 这一笔按'没写成'读"))
         return out
 
     def _manuscript_dependency_refusal(self, *, sid: str, proof_text: str) -> dict[str, Any]:

@@ -7093,10 +7093,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         上的，签文件里没有号（见 `vsigns._sign_is_for_this_path`）。
         """
         text = str((cells.get("proof_text") or {}).get("value") or "")
-        #: 落点号 = 秘书分到的路径号（`write_no`，没有就用 canonical）。签闸按这个号
-        #: 认签：V 的签可以带号，号是路径号（改前用调用方的 `want_no` ⇒ 第二条路径的
-        #: 签被当成"没签 #p1"，整笔拒）。
-        no = max(int(write_no or 0), int(want_no or 1))
+        #: 落点号 = 优化线显式点名的路径号 / 秘书分到的路径号（`write_no`），没有就用
+        #: canonical。签闸按这个号认签：V 的签可以带号，号是路径号（改前用调用方的
+        #: `want_no` ⇒ 第二条路径的签被当成"没签 #p1"，整笔拒）。不许用 max()：
+        #: 优化线回填第 2 条时 `want_no` 仍是 1，max 会把第 2 条压回第 1 条。
+        no = int(write_no or 0) or int(want_no or 0) or 1
         gate = self._unsigned_proof_gate(
             origin=str(row.get("origin") or ""),
             lit_id=str(row.get("source_lit_id") or ""),
@@ -7499,7 +7500,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
-                      want_no: int, target: str, path: str) -> dict:
+                      want_no: int, target: str, path: str,
+                      path_group: int = 0) -> dict:
         """`mode=apply`：逐格回填（先 dependencies，再 statements；部分写如实回执）。
 
         ## 路径号（业主口径：归秘书）
@@ -7513,6 +7515,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         另一条证明路径"而没请求依赖格（`append_new_path`）⇒ 同一处秘书事务只分号、
         不写边（`reserve=True`）。其余没请求依赖格的情形没有"第几条"可问，正文照
         既有口径落 `want_no`（canonical）。
+
+        ## 优化线（`path_group >= 1`，2026-11-12 业主裁定）
+
+        调用方显式点名一条已存在的路径 ⇒ 正文落到那一条（不是 canonical）。
+        `reserve` 那一笔只核对号、不分配；核不过 ⇒ `path_not_found` / `path_mismatch`。
 
         ## 为什么刻意不跑同一性判定（业主 2026-11-09 的形态）
 
@@ -7551,60 +7558,54 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                             "written": bool(statements_written or deps_written),
                                             "sink": "apply：按格回填（部分写如实回执）"})
 
-        #: 这一份证明的路径号：默认 canonical（没请求依赖格时没有别的来源）；
-        #: 依赖格那一笔会把秘书在锁里分到的号带回来，后面的正文 / 证据用它。
-        _path_no = int(want_no or 1)
+        #: 这一份稿是哪条路径的（C2：逐路径记录优先，退 canonical 时读数里写明）。
+        #: 提取 / 判定都在锁外；这里只读，不写一个字节。
+        _path_read = self._proof_path_reading(
+            stmt_id=target, row=row, manuscript_path=path,
+            proof_text=str((cells.get("proof_text") or {}).get("value") or ""))
+        out["path_group_reading"] = dict(_path_read)
+        #: 这一份证明的路径号：优化线显式点名的那条已存在路径；没有就按 canonical
+        #: （其余情形由依赖格 / reserve 那一笔把秘书在锁里定下的号带回来）。
+        _named_no = int(path_group or 0)
+        _path_no = _named_no or int(want_no or 1)
 
         # ---- 1) dependencies（集合语义：追加 + 去重；永不删） --------------------
         #
         # 秘书那一笔回执里的 `path_group` 就是这一笔的路径号（产出侧不写、B 不算）。
         if str((cells.get("dependencies") or {}).get("outcome") or "") == "filled":
-            got = self._ingest_apply_dependencies(
+            _deps = self._ingest_dependencies_cell(
                 cells, sec, target=target, want_no=want_no, path=path,
                 body_sha=str(reading.get("proof_sha256") or ""),
+                path_group=_named_no,
                 proof_text=str(((reading.get("cells") or {}).get("proof_text")
                                 or {}).get("value") or ""))
-            if got["code"]:
-                return _cell_refused("dependencies", got["code"], got["why"])
-            if got.get("path_group"):
-                _path_no = int(got["path_group"])
+            if _deps["code"]:
+                return _cell_refused("dependencies", _deps["code"], _deps["why"])
+            if _deps.get("path_group"):
+                _path_no = int(_deps["path_group"])
                 #: 回执读数（与改前 `assign_path_group` 的返回同形，测试与模型都读它）。
                 out["path_group"] = {"checked": True, "path_group": _path_no,
                                      "existing": False, "statement_id": target,
                                      "manuscript": _norm_manuscript_rel(path)}
-            if got["written"]:
+            if _deps["written"]:
                 deps_written = True
                 written_cells.append("dependencies")
 
         # ---- 2) proof_text（签闸不松；#pN 逐份认签，不许借 #p1 的光）
         if str((cells.get("proof_text") or {}).get("outcome") or "") == "filled":
-            # 这一笔是"同一命题的另一条证明路径"、而没请求依赖格 ⇒ 号仍要由秘书分
-            # （只分号、不写边：`reserve=True`）。号在秘书那一笔事务里定下来，正文写口
-            # 用它；两条路的冲突由写口的 `proof_no_taken` 兜住（不会静默覆盖）。
-            if bool(plan.get("append_new_path")) and not deps_written:
-                reserved = dict(sec.record_manuscript_dependency_face(
-                    target, [], note=f"own.ingest_manuscript:reserve:{target}",
-                    manuscript=_norm_manuscript_rel(path),
-                    body_sha=str(reading.get("proof_sha256") or ""),
-                    reserve=True) or {})
-                if not reserved.get("checked"):
-                    return _cell_refused(
-                        "proof_text",
-                        str(reserved.get("refused") or "path_group_unreadable"),
-                        str(reserved.get("reason") or ""))
-                _path_no = int(reserved.get("path_group") or _path_no)
-                out["path_group"] = {"checked": True, "path_group": _path_no,
-                                     "existing": False, "statement_id": target,
-                                     "manuscript": _norm_manuscript_rel(path)}
-            from .. import vsigns as _VS_MID2
-
-            got = self._ingest_apply_proof(
-                cells, row, want_no, target,
-                manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")),
-                write_no=_path_no)
-            if got["code"]:
-                return _cell_refused("proof_text", got["code"], got["why"])
-            if got["written"]:
+            # 这一笔是"同一命题的另一条证明路径"、而没请求依赖格 ⇒ 号仍要由秘书分；
+            # 优化线（`path_group>=1`）同一条事务只核对已存在的号（不分配）。
+            _proof = self._ingest_proof_cell(
+                cells, row, sec, plan=plan, reading=reading, want_no=want_no,
+                target=target, path=path, path_no=_path_no, named_no=_named_no,
+                reserve=((bool(plan.get("append_new_path")) or _named_no >= 1)
+                         and not deps_written))
+            if _proof["code"]:
+                return _cell_refused("proof_text", _proof["code"], _proof["why"])
+            _path_no = int(_proof.get("path_group") or _path_no)
+            if _proof.get("receipt"):
+                out["path_group"] = dict(_proof["receipt"])
+            if _proof["written"]:
                 statements_written = True
                 written_cells.append("proof_text")
 
@@ -7698,6 +7699,64 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         out["reason"] = str(out.get("reason") or "逐格回填完成")
         return out
 
+    def _ingest_reserve_path(self, *, sec: Any, target: str, path: str,
+                             body_sha: str, path_group: int = 0) -> dict:
+        """只分号 / 只核对号的秘书事务（不写依赖边）。
+
+        `path_group=0` ⇒ 让秘书在事务里分配"第几条"（另一条路径 / canonical）；
+        `path_group>=1` ⇒ 优化线：只核对这个号已存在且对得上这一份稿，不分配。
+        返回 `{code, why, path_group, reading}`（`code` 非空 ⇒ 调用方整笔不写）。
+        """
+        named = int(path_group or 0)
+        reserved = dict(sec.record_manuscript_dependency_face(
+            target, [], note=f"own.ingest_manuscript:reserve:{target}",
+            manuscript=_norm_manuscript_rel(path), body_sha=str(body_sha or ""),
+            reserve=True, path_group=named) or {})
+        if not reserved.get("checked"):
+            return {"code": str(reserved.get("refused") or "path_group_unreadable"),
+                    "why": str(reserved.get("reason") or ""), "path_group": 0,
+                    "reading": dict(reserved.get("path_group_reading") or {})}
+        return {"code": "", "why": "",
+                "path_group": int(reserved.get("path_group") or named or 0),
+                "reading": dict(reserved.get("path_group_reading") or {})}
+
+    def _ingest_dependencies_cell(self, cells: dict, sec: Any, **kw: Any) -> dict:
+        """依赖格的回执收成四格（`_ingest_apply` 只按 `code` 判整笔写不写）。"""
+        got = self._ingest_apply_dependencies(cells, sec, **kw)
+        return {"code": str(got.get("code") or ""), "why": str(got.get("why") or ""),
+                "path_group": int(got.get("path_group") or 0),
+                "written": bool(got.get("written"))}
+
+    def _ingest_proof_cell(self, cells: dict, row: Mapping, sec: Any, *,
+                           plan: Mapping, reading: Mapping, want_no: int,
+                           target: str, path: str, path_no: int,
+                           named_no: int, reserve: bool) -> dict:
+        """`proof_text` 那一格：先定号（分配 / 核对已存在），再调正文写口。"""
+        out_no = int(path_no or 0)
+        receipt: dict = {}
+        if reserve:
+            reserved = self._ingest_reserve_path(
+                sec=sec, target=target, path=path,
+                body_sha=str(reading.get("proof_sha256") or ""),
+                path_group=int(named_no or 0))
+            if reserved["code"]:
+                return {"code": reserved["code"], "why": reserved["why"]}
+            out_no = int(reserved["path_group"] or out_no)
+            receipt = {"checked": True, "path_group": out_no,
+                       "existing": bool(named_no), "statement_id": target,
+                       "manuscript": _norm_manuscript_rel(path),
+                       "reading": dict(reserved.get("reading") or {})}
+        from .. import vsigns as _VS_MID2
+
+        got = self._ingest_apply_proof(
+            cells, row, want_no, target,
+            manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")),
+            write_no=out_no)
+        if got["code"]:
+            return {"code": got["code"], "why": got["why"]}
+        return {"code": "", "why": "", "path_group": out_no, "receipt": receipt,
+                "written": bool(got.get("written"))}
+
     @staticmethod
     def _ingest_apply_kind_receipt(cells: dict, evidence: Mapping) -> None:
         """`kind` 格的 receipt 反映派生升档（`outcome=kept` + `kind_upgraded`）。
@@ -7784,6 +7843,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_apply_dependencies(self, cells: dict, sec: Any, *,
                                    target: str, want_no: int,
                                    path: str = "", body_sha: str = "",
+                                   path_group: int = 0,
                                    proof_text: str = "") -> dict:
         """`mode=apply` 的 dependencies 那一格：集合语义（追加 + 去重；永不删）。
 
@@ -7833,7 +7893,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                  for x in stmt_rows}
         groups = _DS.deps_groups(rows, kinds)
         written = dict(sec.record_manuscript_dependency_face(
-            target, groups, proof_no=want_no,
+            target, groups, proof_no=want_no, path_group=int(path_group or 0),
             note=f"own.ingest_manuscript:dependencies:{target}",
             manuscript=_norm_manuscript_rel(path), body_sha=str(body_sha or ""),
             proof_text=str(proof_text or "")) or {})
