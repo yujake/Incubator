@@ -236,9 +236,11 @@ def _selftest() -> int:
 
     g = AgentG(st, config={"docs_subdir": "documents"}, log=None)
     # `names()` 是注册面（含 G 调不到的写侧工具），`call_surface("G")` 才是可调用面。
-    line(f"[2] G 的可调用面（call_surface('G')）：{sorted(g.tools.call_surface('G'))}")
+    # 下一段打印两次读的是同一份可调用面（一次要列表、一次要长度）⇒ 只取一次。
+    surface = g.tools.call_surface("G")
+    line(f"[2] G 的可调用面（call_surface('G')）：{sorted(surface)}")
     line(f"    注册面（names()，含 G 调不到的工具）：{len(g.tools.names())} 个；"
-         f"可调用面 {len(g.tools.call_surface('G'))} 个")
+         f"可调用面 {len(surface)} 个")
 
     line("[3] compose_claim：三条正向 + 三条负控")
     # `D-1`：proof 级断言必须给出一个盘上真的存在的落点
