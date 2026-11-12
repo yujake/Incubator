@@ -1,6 +1,6 @@
 """文本抽取层：``extract_text(path) -> DocumentText``。
 
-设计基线：``test/test1/DESIGN.md`` §4.1（接口契约）与 §6.3（引文校验）。
+设计基线：接口契约（§4.1）与引文校验（§6.3）。
 
 本模块的唯一职责是把一个本地文件变成"逐页可定位的文本"，它不负责
 概念/关系抽取（那是 llm.py），也不负责引文校验（那是 agent_b + verify）。
@@ -82,14 +82,12 @@ _HTML_SUFFIXES: Final[frozenset[str]] = frozenset({".html", ".htm", ".xhtml"})
 
 #: 真正的 XML（不是 XHTML）也算"标记语言"，按扩展名显式走剥标签那一条路。
 #:
-#: 2026-10-15 加（真机读数驱动，业主授权动禁改区）：此前 `.xml` 落到最后的
-#: `UnsupportedFormat` —— 而 Europe PMC 唯一取得到全文的那条路
-#: （EBI 的 `/rest/{PMCID}/fullTextXML`，对真 OA 文章返 200）返回的正是 JATS XML。
-#: ⇒ 只修 provider 的端点、不修这里，等于把 `403` 换成另一种"读不到"
-#: （12 条里能救回来的 5 条会以"格式不认识"再失败一次）。
+#: 为什么必须加：`.xml` 若落到最后的 `UnsupportedFormat` —— 而 Europe PMC 唯一
+#: 取得到全文的那条路（EBI 的 `/rest/{PMCID}/fullTextXML`，对真 OA 文章返 200）
+#: 返回的正是 JATS XML ⇒ 只修 provider 的端点、不修这里，等于把 `403` 换成另一种
+#: "读不到"（能救回来的那些条目会以"格式不认识"再失败一次）。
 #:
-#: 实测（$0 探针，`PMC6502358`）：`.xml` ⇒ 今天抛 `UnsupportedFormat`；
-#: 同一份内容剥完标签是 218,954 字符干净正文（原始 XML 547,355 字符）。
+#: 一份 JATS 全文剥完标签是干净正文（原始 XML 要大一个量级）。
 #:
 #: 为什么只按扩展名认、不把 `<?xml` 加进 `_sniff`：嗅探那条路救的是
 #: "内容与文件名不符"（HTML 被存成 `.bin`）。而 `<?xml` 单独一个声明太弱 ——
@@ -111,7 +109,7 @@ class ExtractError(RuntimeError):
 
 
 class UnsupportedFormat(ExtractError):
-    """扩展名不在支持范围内（§4.1 承诺 pdf/txt/md/html，2026-10-15 起加 `.xml`）。"""
+    """扩展名不在支持范围内（承诺 pdf/txt/md/html，另加 `.xml`）。"""
 
 
 class ExtractTooLarge(ExtractError):
@@ -207,9 +205,8 @@ class DocumentText:
         引文校验用它来区分"这句话不在这页上"与"这页根本没抽出来"：
         后者必须走 `quote_verified=None`（没法判定），而不是 `False`（判成不存在）。
 
-        `R3-5`：这句话在 2026-09-26 之前是假的 —— 那时生产代码里没有调用点，
-        `quoteverify.check_quote` 自己用 `failed_pages()` + 区间过滤重写了同一判据。
-        现在 `check_quote` 真的调本方法（判据只有这一份实现），
+        `R3-5`：`quoteverify.check_quote` 曾经自己用 `failed_pages()` + 区间过滤
+        重写了同一判据；现在 `check_quote` 真的调本方法（判据只有这一份实现），
         所以"引文校验用它"是事实而不是愿望。
         传 `None` 表示"窗口未给" ⇒ 返回 `False`（判不了，而不是"全篇都要查"）。
         """
@@ -370,9 +367,9 @@ class _HTMLTextExtractor(HTMLParser):
         self._skip_stack: list[str] = []
         #: 非块级标签两侧插什么（缺省空串 = HTML 的老行为）。
         #:
-        #: 为什么 XML 需要它（2026-10-15，实测驱动）：JATS 的字段大多是行内元素
+        #: 为什么 XML 需要它（实测驱动）：JATS 的字段大多是行内元素
         #: （`journal-title` / `article-id` / `surname` …），而这里只对块级标签断开
-        #: ⇒ 相邻字段会被粘在一起。实测 `PMC6502358` 剥出来是
+        #: ⇒ 相邻字段会被粘在一起。剥出来会得到
         #: `'2753rsosRoyal Society Open ScienceR Soc Open SciThe Royal SocietyPMC6502358…'`
         #: —— `SocietyR` 这种粘连会污染引文回验（逐字子串匹配）与模型的阅读。
         #: 插一个空格（而不是全部换行）是刻意的：换行会把
@@ -527,7 +524,7 @@ def _sniff(raw: bytes) -> str:
       且同一次读取里出现 ``<html`` ⇒ HTML。`<?xml` 单独仍然不算：XHTML 是 HTML，
       而 `<?xml` 一个声明太弱（SVG / RSS / 配置文件都以它开头），误判会让下游拿到
       "剥完标签什么都没有"的空正文。
-      2026-10-15 补一句边界：真 XML（JATS 全文那一类）现在按扩展名 `.xml` 支持
+      边界：真 XML（JATS 全文那一类）按扩展名 `.xml` 支持
       （见 `_XML_SUFFIXES` 与分派里那一条），走的是扩展名那条路，不是嗅探这条。
       也就是说：`foo.xml` 会被剥标签读；而一个存成 `.bin` 的 JATS 文件仍会被拒
       —— 那一条是刻意的（"内容与文件名不符"只救 HTML 那一种形态，原因见上）。
@@ -641,8 +638,7 @@ def _page_status_of(pages: Sequence[str], status: Sequence[str] | None,
 
     `R3-8`：长度确实对不上时不许静默降级。旧版在这里无声地改按内容推，
     于是后端上报的 `failed` 凭空消失、回到"真引文被判成幻觉"的那条路径，
-    而没有任何信号（重审实测：`_finish_pdf(['第一页','','第三页'], 'PyPDF2', ['ok'])`
-    ⇒ `page_status=('ok','empty','ok')`、`failed_pages=()`）。
+    而没有任何信号。现在留一条 warning（带 backend 与两个长度）
     现在留一条 warning（带 backend 与两个长度）—— 按内容推仍然是结论
     （抛异常会让"后端少报一页状态"变成整篇抽取失败，代价更大），
     但它是"被记录过的降级"，可以被断言、也可以被人看见。
@@ -678,8 +674,8 @@ def _finish_pdf(pages: Sequence[str], backend: str,
         # 无文本层：pages=[] 是给 agent_b 的信号（§6.3），
         # source_kind 仍保持 "pdf"，好让报告能区分"扫描版 PDF"与"非 PDF"。
         #
-        # `R3-2`（重审实测的修法）：逐页状态必须带出去。
-        # 旧版在这里无条件写 `page_status=()`，于是"整篇每一页都抽取失败"这一档
+        # `R3-2`：逐页状态必须带出去。
+        # 若在这里无条件写 `page_status=()`，于是"整篇每一页都抽取失败"这一档
         # 在 `failed_pages()` 眼里是"没有失败的页" ⇒ `ocr_tools` 里专为
         # "抽取失败"写的那一支（`失败原因是抽取失败`）成了死代码，
         # 工具把"我们的后端在这份文件上全崩了"报成"疑似扫描件（本来就是空白页）"，
@@ -691,7 +687,7 @@ def _finish_pdf(pages: Sequence[str], backend: str,
         # `page_status` 记的是后端上报的真实页数，`pages` 是空元组），所以要读
         # 就用 `page_status` / `failed_pages()`，不要拿 `pages` 的长度去索引它
         # —— 空 `pages` 会让按它兜底的读者静默读空。两者分开正是 `F-4` 的用意。
-        # `R3B-2`（第二轮复审实测）：日志行必须和工具面一样分开这两件事。
+        # `R3B-2`：日志行必须和工具面一样分开这两件事。
         # 旧版无论哪一种都打同一句「PDF 无文本层（疑似扫描件）」——
         # 于是"我们的抽取链在这份文件上全崩了"与"它本来就是扫描件"
         # 在日志里长得一模一样（`ocr_tools` 那边已经分开，日志这边还没有）。
@@ -758,11 +754,11 @@ def extract_text(
     suffix = p.suffix.lower()
     _check_size(p, max_bytes)
 
-    # 显式 `.xml` 必须先于魔数嗅探（2026-10-15，实测驱动）：
+    # 显式 `.xml` 必须先于魔数嗅探：
     # JATS 全文常常以 ``<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96)…"`` 开头，
     # 而 `_sniff` 把 ``<!DOCTYPE`` 判成 HTML ⇒ 走到下面那一条 `HtmlNotSupported`
-    # ⇒ 一个我们明确按扩展名支持的文件被拒。实测那 5 条 OA 里就有 1 条
-    # （`PMC13322628`）是这个形态：修好端点、也认了 `.xml`，却仍读不到。
+    # ⇒ 一个我们明确按扩展名支持的文件被拒。有的 OA 条目就是这个形态
+    # （`PMC13322628`）：修好端点、也认了 `.xml`，却仍读不到。
     # 顺序在这里就是判据：扩展名是调用方明说的，嗅探是猜的 —— 明说优先。
     if suffix in _XML_SUFFIXES:
         # 真 XML（JATS 那一类）：与 HTML 走同一条"剥标签取正文"的路
@@ -770,7 +766,7 @@ def extract_text(
         # 读报告的人要能分清"这是从网页剥的"还是"从 XML 全文剥的"。
         text, _kind, encoding = _extract_plain_text(p, max_bytes=max_bytes)
         # `inline_sep=" "`：JATS 的字段多是行内元素，不插分隔符会被粘在一起
-        # （实测 `'…SocietyR Soc Open Sci…'`）—— 理由见 `_HTMLTextExtractor.__init__`。
+        # （`'…SocietyR Soc Open Sci…'`）—— 理由见 `_HTMLTextExtractor.__init__`。
         body = _strip_html(text, inline_sep=" ")
         if not body.strip():
             return DocumentText(text="", pages=[], source_kind="xml", encoding=encoding)
@@ -825,11 +821,10 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     except Exception:  # 有些 stdout 替身没有 reconfigure；切编码失败不该让自检本身挂掉
         pass
 
-    # 2026-10-26：自检的产物写进临时目录，不再写仓库里的 `demo/selftest/`。
-    # 为什么（实测读数）：那两份 PDF 是 fitz 每次落盘字节都不相同的生成物，跑一次
-    # `python -m agentflow.extract` 就让 `git status -- demo/selftest` 冒出两行 M
-    # （HEAD 那次提交 1ab029f 里正是这两份被顺手提交的）。按 HEAD 还原只是遮：
-    # 再跑一次又脏一次，而"自检不许改仓库"要的是根本不写进去。
+    # 自检的产物写进临时目录，不再写仓库里的 `demo/selftest/`。
+    # 为什么：那两份 PDF 是 fitz 每次落盘字节都不相同的生成物，跑一次
+    # `python -m agentflow.extract` 就让 `git status -- demo/selftest` 冒出两行 M。
+    # 按 HEAD 还原只是遮：再跑一次又脏一次，而"自检不许改仓库"要的是根本不写进去。
     DEMO = Path(tempfile.mkdtemp(prefix="agentflow_extract_selftest_"))
     pdf_path = DEMO / "sample.pdf"
     blank_path = DEMO / "blank.pdf"
