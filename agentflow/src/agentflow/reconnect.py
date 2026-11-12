@@ -4,30 +4,19 @@
 ## 为什么要有它（本仓的缺口）
 
 `agent_loop` 的 `no_reply` 那一支把失败分成三档：`judge_timeout` /
-`judge_output_limit` / `judge_no_reply:<kind>`（连接类）。连接类改前的处置是
-"记一笔、立刻进入下一轮"，于是网络没回来时同一句话会被连着再发两遍，中间没有
-任何等待。业主 88 那一趟的读数是 186 步、两次 `model_unreachable`、$0.16 ——
-那两段就是"看起来在重试，其实在空转"。
+`judge_output_limit` / `judge_no_reply:<kind>`（连接类）。连接类若只是"记一笔、
+立刻进入下一轮"，网络没回来时同一句话会被连着再发两遍，中间没有任何等待 ——
+那是"看起来在重试，其实在空转"。
 
 DSH 的浏览器桥用 `ClientBridgeLifecycle` 管这件事：单飞、指数退避、抖动、
 成功即重置。本模块把它逐条搬成 Python，语义一个字不加。
 
 ## 与 DSH 那段 JS 的逐条对应
 
-DSH 的 `ClientBridgeLifecycle`（`app.asar` 反查原文）：
-
-    var ClientBridgeLifecycle = class {
-      baseDelayMs; maxDelayMs; reconnectAttempt = 0; reconnectTimer; closed = false;
-      constructor(baseDelayMs, maxDelayMs) {...}
-      connected() { this.reconnectAttempt = 0; }
-      reconnect(connect) {
-        if (this.reconnectTimer !== void 0 || this.closed) return;
-        // cap = min(maxDelayMs, baseDelayMs 乘 2 的 reconnectAttempt 次幂)
-        this.reconnectAttempt++;
-        this.reconnectTimer = setTimeout(() => { this.reconnectTimer = void 0; connect(); },
-                                         cap / 2 + Math.random() * cap / 2);
-      }
-    }
+DSH 的 `ClientBridgeLifecycle`（`app.asar` 反查原文）只有三个动作：`connected()`
+把尝试数归零；`reconnect(connect)` 在"没有待触发的定时器且未关闭"时排一次
+`cap = min(maxDelayMs, baseDelayMs * 2 ** attempt)` 的等待（抖动取 `cap/2` 到
+`cap`）；定时器到点先清自身、再调 `connect`。
 
 逐条落点（左边是 JS，右边是本模块）：
 
