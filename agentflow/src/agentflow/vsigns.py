@@ -2953,19 +2953,11 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
         out["reason"] = "台账里没有「有毛病」那一档的签 ⇒ 一条打回都没有（查过了）"
         return out
     out["receipts"] = len(rows)
-    out["statements"] = len({str(r.get("stmt_id") or r.get("statement_id") or "")
-                             for r in rows})
-    steps: dict[str, int] = {}
-    for row in rows:
-        for step in defect_steps(row):
-            steps[str(step)] = steps.get(str(step), 0) + 1
-    out["steps"] = dict(sorted(steps.items(), key=lambda kv: int(kv[0])))
     mailbox = _mailbox_times(root) if times else {}
     items, item_problem = _board_items(store)
     out["delivery_checked"] = not item_problem
     if item_problem:
         out["problems"].append(item_problem + " ⇒ 送达那一半没查成")
-    detail: list[dict[str, Any]] = []
     # 167：作者 / 送审者这一格（业主 2026-11-01「谁写证明谁送审」）。
     # 用惰性 import：`vreceipts` 的读口又会调回本函数，模块级 import 会成环。
     try:
@@ -2975,8 +2967,17 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
     except Exception:  # noqa: BLE001 —— 读不成是"作者/送审者这一格没查成"
         _VRC, box = None, {}
         out["problems"].append("outbox 读不出来 ⇒ 作者/送审者这一格没查成")
+    # 一趟读完三样（缺陷步分布 / 涉及几条命题 / 逐条明细）：改前三样各扫一遍 `rows`，
+    # `defect_steps(row)` 也各算一次（它要过一遍 findings）。
+    steps: dict[str, int] = {}
+    stmt_ids: set[str] = set()
+    detail: list[dict[str, Any]] = []
     for row in rows:
         sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+        stmt_ids.add(sid)
+        row_steps = defect_steps(row)
+        for step in row_steps:
+            steps[str(step)] = steps.get(str(step), 0) + 1
         no = int(_VR.as_proof_no(row.get("proof_no")) or 1)
         label = f"{sid}#p{no}"
         vid = str(row.get("verification_id") or "")
@@ -2996,7 +2997,7 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
             "artifact_sha": str(row.get("proof_sha256") or ""),
             "label": label, "verification_id": vid,
             "axis": verdict_axis(row), "at": str(row.get("at") or ""),
-            "defect_steps": defect_steps(row), "state": one["state"],
+            "defect_steps": row_steps, "state": one["state"],
             "delivered_to": one["delivered_to"], "delivered_at": one["delivered_at"],
             "read_by": one["read_by"], "read_step": one["read_step"],
             # 送审者 / 作者 / 替人送审那一档（可见，不是路由：回执仍投送审者）
@@ -3007,6 +3008,8 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
             "submitter_is_not_author": not_author,
             "author_not_recorded": author_unknown,
         })
+    out["statements"] = len(stmt_ids)
+    out["steps"] = dict(sorted(steps.items(), key=lambda kv: int(kv[0])))
     out["delivered"] = sum(1 for d in detail if d["state"] == "delivered")
     out["dispatched"] = sum(1 for d in detail if d["state"] != "not_dispatched")
     out["not_dispatched"] = int(out["receipts"]) - int(out["dispatched"])
