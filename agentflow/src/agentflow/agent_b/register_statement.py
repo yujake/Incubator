@@ -7643,15 +7643,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                             "written": bool(statements_written or deps_written),
                                             "sink": "apply：按格回填（部分写如实回执）"})
 
-        #: 这一份稿是哪条路径的（C2：逐路径记录优先，退 canonical 时读数里写明）。
-        #: 提取 / 判定都在锁外；这里只读，不写一个字节。
+        #: 优化线显式点名的已存在路径号（0 = canonical / 由秘书分配）。
+        _named_no = int(path_group or 0)
+        #: C2 的逐路径解析（锁外只读）：退 canonical 时读数里写明理由。
         _path_read = self._proof_path_reading(
             stmt_id=target, row=row, manuscript_path=path,
             proof_text=str((cells.get("proof_text") or {}).get("value") or ""))
-        out["path_group_reading"] = dict(_path_read)
-        #: 这一份证明的路径号：优化线显式点名的那条已存在路径；没有就按 canonical
-        #: （其余情形由依赖格 / reserve 那一笔把秘书在锁里定下的号带回来）。
-        _named_no = int(path_group or 0)
+        out["path_group_reading"] = (
+            self._named_path_reading(_path_read, _named_no) if _named_no >= 1
+            else dict(_path_read))
         _path_no = _named_no or int(want_no or 1)
 
         # ---- 1) dependencies（集合语义：追加 + 去重；永不删） --------------------
@@ -7782,6 +7782,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                         "sink": "land_statement:attach_proofs / amend_statement_meta / "
                                 "record_manuscript_dependency_face"}
         out["reason"] = str(out.get("reason") or "逐格回填完成")
+        return out
+
+    @staticmethod
+    def _named_path_reading(reading: Mapping, named: int) -> dict:
+        """优化线的路径读数：显式路径号说了算（C2 的解析只作参考），两个数都写出来。"""
+        out = dict(reading or {})
+        out.update(
+            named_path_group=int(named),
+            resolved_path_group=int(out.get("path_group") or 0),
+            authoritative="优化线显式路径号（秘书在事务里核对；C2 读数只作参考）")
         return out
 
     def _ingest_reserve_path(self, *, sec: Any, target: str, path: str,
