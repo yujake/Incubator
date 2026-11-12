@@ -3669,7 +3669,7 @@ class Finding:
 class ClosingReport:
     """各条检查的读数。`status` 每条一个三态值；`findings` 是拦门的原因。
 
-    `m_verdict`（业主 2026-10-09 的裁定）：M 自己的判据 ——
+    `m_verdict`：M 自己的判据 ——
     `{"goal": "我这一趟的目标", "met": True/False, "basis": "依据哪几条读数", "at": …}`。
     `m_says_done` 由它决定；机器口径是 `can_close`（`bool | None`，`None` = 算不出来，不许读成通过），机器那八格（`status` / `machine_pass`）退成读数。
     """
@@ -3710,14 +3710,14 @@ class ClosingReport:
     def machine_pass(self) -> bool:
         """机器读数：八格每条都 `pass` 且没有 blocker（老口径的机械合取）。
 
-        业主 2026-10-09 的裁定之后它只是一个读数（收工不由它定）：
+        它只是一个读数（收工不由它定）：
         「是否收工不要用机械判据，由 M 制定的目标是否达成为准」。
         """
         return all(v == "pass" for v in self.status.values()) and not self.blockers
 
     @property
     def m_says_done(self) -> bool:
-        """M 判"我这一趟的目标达成了" —— 这是 M 的判断，不是机器口径（业主 2026-10-09）。
+        """M 判"我这一趟的目标达成了" —— 这是 M 的判断，不是机器口径。
 
         - M 提交了 `m_verdict.met=True` ⇒ `True`（哪怕机器某几格是 fail/unknown：
           那些格子照样进读数与 `overrode`，不是静默放行）；
@@ -3725,9 +3725,9 @@ class ClosingReport:
           它自己知道没做到"，也必须由它说了算）；
         - M 没提交 ⇒ `False` + `m_verdict=False` 那一档的读数（"没人判过" ≠ "判过能交"）。
 
-        2026-11-03 改名（153-U-01/U-02，业主裁决 ①=乙）：这个名字量的是"谁说的"，
-        不是"机器同不同意"；机器口径是 :attr:`can_close`。旧名字 `can_close` 在这个属性上
-        是三处说法之一（另两处：`VERDICT_NOTE` 与生成物），改名之后一处一个人。
+        这个名字量的是"谁说的"，
+        不是"机器同不同意"；机器口径是 :attr:`can_close`。一个名字只能落一处说法
+        （`VERDICT_NOTE` 与生成物说的是同一句）。
 
         旧的机械口径原样保留在 :attr:`machine_pass`，两者不一致时逐格记进 :attr:`overrode`。
         """
@@ -3735,20 +3735,20 @@ class ClosingReport:
 
     @property
     def can_close(self) -> bool | None:
-        """机器口径：这一趟能不能交。三态（2026-11-03，153-U-01/U-02 的裁决 ①=乙）。
+        """机器口径：这一趟能不能交。三态。
 
         - `True`：机器口径成立（`m_says_done` ∧ `retire_integrity.complete` ∧ `programs_ok`）；
         - `False`：机器口径不成立；
         - `None`：算不出来 —— 还没接线（`retire_integrity` / `programs` 的读数没喂进来），
           或喂进来的某一格自己没查成。
 
-        两句硬话（业主 2026-11-03）：
+        两句硬话：
         1. `m_says_done` 是 M 的判断，不是机器口径 —— 要问"谁说的"看那个名字；
         2. `can_close=None` 不许被读成通过：它既不是过也不是不过，是"这一格没查成"。
            拿它当布尔的人必须走 :attr:`closable`，或者显式判 `is True`。
 
-        为什么先给三态而不接线：接线（把 `retire_integrity` / `programs` 的读数喂进
-        `check_closing`）是另一笔（可单独回退）；这一笔只把名字与三态摆正。
+        为什么名字与三态先摆正、接线另算：接线（把 `retire_integrity` / `programs` 的读数
+        喂进 `check_closing`）是可单独回退的一笔。
         """
         return self._machine_caliber_value
 
@@ -3823,7 +3823,7 @@ class ClosingReport:
     def verdict_conflicts(self) -> list[dict[str, Any]]:
         """M 的自述与它自己的任务列表对不上的地方（空列表 = 自洽）。
 
-        业主 2026-10-09 的第二句：「所有智能体是否能停都是看自己被派的活有没有做完，
+        「所有智能体是否能停都是看自己被派的活有没有做完，
         M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」⇒ 停的判据是
         任务列表（M 自己列的），所以"说达成"与"列表里还有没做完的项"必须对得上；
         对不上时不阻断（判据归 M），但逐项点名，让人看得见它凭什么说停。
@@ -3845,7 +3845,7 @@ class ClosingReport:
 
     @property
     def escalation_gaps(self) -> list[dict[str, Any]]:
-        """任务列表里"干不了/还没做完"的项，有没有上报（业主 2026-10-09 第三句）。
+        """任务列表里"干不了/还没做完"的项，有没有上报。
 
         > 「如果某代理认为某件任务自己无法胜任且无法通过派子代理解决，则会将情况上报父智能体。
         > 特别地，M 向用户上报。」
@@ -3864,18 +3864,18 @@ class ClosingReport:
     def summon_consumption(self) -> dict[str, Any]:
         """收工门的「子产出处理」那一格（口径见 `summon_consumption_reading`）。
 
-        它不是八格之一，也没有 `status`：业主裁定这条规矩不 fail 收工，
+        它不是八格之一，也没有 `status`：这条规矩不 fail 收工，
         但它必须读得到。`checked=False` = "这一格没查成"（不是"处理了"）。
         """
         return dict(self.readings.get("summon_consumption") or {})
 
     @property
     def mapping_gaps(self) -> dict[str, Any]:
-        """论文对应表那两条落差读数（D-69 ②）：论文说定理 / 台账说猜想、论文排成定理 / V 没签。
+        """论文对应表那两条落差读数：论文说定理 / 台账说猜想、论文排成定理 / V 没签。
 
         读数只在这里转发，判据与文字都在 `papermapping.mapping_reading`（`kind_gap` /
         `theorem_unsigned` 两格）：那两格说的是"论文与台账现在的关系"，不是"表与正文对不对
-        得上" —— 所以它们不进 `problems`、不改 `status`，也不动 `m_says_done`。业主的边界是
+        得上" —— 所以它们不进 `problems`、不改 `status`，也不动 `m_says_done`。边界是
         "先让它看得见"：收工那一句话里点名，逐条 label → stmt 在 `readings['mapping']` 里。
 
         三态：这一格没有跑过（`readings['mapping']` 不存在 / 不是新形状）⇒ 两个空清单 +
@@ -3900,7 +3900,7 @@ class ClosingReport:
     def to_dict(self) -> dict[str, Any]:
         """整份读数的可读视图（CLI、工具与落档共用同一个形状）。"""
         return {
-            # 2026-11-03（153-U-01/U-02）：`m_says_done` 是 M 的判断；
+            # `m_says_done` 是 M 的判断；
             # `can_close` 是机器口径（`bool | None`，`None` = 没接线/算不出来，不许读成通过）。
             "m_says_done": self.m_says_done,
             "can_close": self.can_close,
@@ -3912,7 +3912,7 @@ class ClosingReport:
             "verdict_conflicts": self.verdict_conflicts,
             "escalation_gaps": self.escalation_gaps,
             "verdict_note": VERDICT_NOTE,
-            # 受控拒绝那一格（2026-11-03 第二笔）：None = 门跑了；非空 = 门根本没跑
+            # 受控拒绝那一格：None = 门跑了；非空 = 门根本没跑
             # （会话号不在盘上 / 不是一个号）。两个出口读同一个形状，句子与码同源。
             "refusal": self.refusal,
             "status": dict(self.status),
