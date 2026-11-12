@@ -3164,25 +3164,22 @@ def _waiting_notice(run, *, root: Path, sid: str | None) -> str:
 def _task_text_of(args) -> int | None:
     """`run-agent` 的 `--task` / `--task-file` 二选一：`None` = 可以开跑，非 `None` = 退出码。
 
-    ## 为什么要有这一格（业主 2026-11-01）
+    ## 为什么要有这一格
 
     「开真机跑必须写一个临时启动器脚本，因为它要 --task 传一段多行提示词，而 --task
-    在 PowerShell 里传多行中文会碎 ⇒ 我每次都得现写一个 py 文件」。这一格把那份启动器
-    收进命令本身：`--task-file <path>` 逐字读文件，只去掉末尾一个换行，再原样交给
-    后面那条 `--task` 的路。
+    在 PowerShell 里传多行中文会碎」。这一格把那份启动器收进命令本身：`--task-file <path>`
+    逐字读文件，只去掉末尾一个换行，再原样交给后面那条 `--task` 的路。
 
-    ## 读法与启动器逐字同源（`temp/_launch_cold_v2*.py`）
+    ## 读法（与那份启动器逐字同源）
 
     ```python
     raw = TASK_FILE.read_text(encoding="utf-8")
     TASK = raw[:-1] if raw.endswith("\\n") else raw
-    print(f"[launch] task 字符数={len(TASK)} sha256={sha256(TASK)[:32]}")
     ```
 
     所以这里也是 `Path.read_text(encoding="utf-8")`（文本模式：CRLF 会归一成 `\\n`，
     与启动器读到的字符串是同一个），并且只切掉末尾那一个 `\\n` —— 不是 `rstrip`
-    （多去一个换行就换了任务指纹：真机那一份文件是 1220 字节、去掉一个换行后 1219 字，
-    `sha256` 前 32 位 `11c9964a…`）。
+    （多去一个换行就换了任务指纹：提示词是按 sha256 认的）。
 
     ## 三态
 
@@ -3241,7 +3238,7 @@ def _task_text_of(args) -> int | None:
 def cmd_run_agent(args) -> int:
     """真跑一次角色循环（顶层角色走它自己的循环；`--drive` 决定被召唤的子角色）。
 
-    退出码是「六档」，逐档由 :data:`EXIT_CODE_BY_STOP` 那张表定（`--help` 与 `_run_agent_exit_code` 的 docstring 与这里同口径；业主 2026-10-19 重排）：
+    退出码是「六档」，逐档由 :data:`EXIT_CODE_BY_STOP` 那张表定（`--help` 与 `_run_agent_exit_code` 的 docstring 与这里同口径）：
     - `0` 正常完成（`stop_reason="final"`，给了结论）；
     - `1` 行为异常（只留给"真出事"：没接线 / 模型没认 key / 没返回 / 连不上 / 输出吃光 / 坏 JSON
       超限 / 坏参数超限 / 没 notify，以及任何没登记的新 `stop_reason` —— 没登记一律归 1，安全侧）；
@@ -3253,17 +3250,15 @@ def cmd_run_agent(args) -> int:
     用完且最后那轮给了 final ⇒ 0、没给 final ⇒ 5；续跑发现这一程已跑完（`resumed_done`）⇒ 0。
     ## 花钱的判断类能力开关：`--semantic-review`（H 的语义判据）/ `--experiment-reasoning`
     （E 的写脚本推理，S-10(a) 的 `author_script`）。两条同一条纪律：环境里有 key 也不改变行为。
-    F 的攻坚推理不在这一列（2026-10-26 业主裁定：「没有默认开，这个就是F的工作方式，没有
-    开关的说法」）：`--attack-reasoning` 已删除，F 出场就有缝（`host.wired_llm_conductor`
-    无条件装配）。`--semantic-review` 不连带打开 E 的缝（两件事各自可解释：H 判"结论是否
+    F 的攻坚推理不在这一列：F 出场就有缝（`host.wired_llm_conductor` 无条件装配），
+    那是它的工作方式、没有开关可开（`--attack-reasoning` 已删除）。
+    `--semantic-review` 不连带打开 E 的缝（两件事各自可解释：H 判"结论是否
     强于引文"、E 把判据写成一份能跑的脚本）。代价必须知道：E 没缝时，F 需要脚本的那一轮
-    写不出来 ⇒ 落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）。改前它是静默的
-    `no_change`（真机 `projects/mp4` 计划 000003 的 r1/r2 逐字："子目标 sg1 有判据但没有
-    脚本，而 E 没能把它写出来（no_seam）⇒ 未推进"）——"有判据没脚本"与"跑了但没结果"
-    在读数上从此分得开。
+    写不出来 ⇒ 落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）——
+    "有判据没脚本"与"跑了但没结果"在读数上分得开。
 
-    这一层与 `run` / `project run` / `web` 一样只剩"翻成 `RunSpec` 再交给 `_run_spec`"
-    （`draft/145` §3.2 的别名形态）；真正的执行体是 :func:`_exec_role`。
+    这一层与 `run` / `project run` / `web` 一样只剩"翻成 `RunSpec` 再交给 `_run_spec`"；
+    真正的执行体是 :func:`_exec_role`。
 
     读写：读任务与检查点；写 `tasks` / `usage_ledger` / `sessions/<sid>.jsonl` 与 `runs/` 下的运行记录（每一笔花销都进台账）。
     实现方式一句话：`agent_loop.run_role`（多轮走 `autonomy`，退出码由 `_run_agent_exit_code` 翻）。
