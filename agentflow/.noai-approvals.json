@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-12T22:49:05+08:00",
+  "generated_at": "2026-11-13T00:12:18+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,10 +505,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "0ff94ff2c001ae65d8d3529fa5357f9afb1f3ee89e2c44adfe45502888dde6ce",
+      "sha256": "9b94a68f5389d796da067db8e8ab0c6fb6326cf1bb00edcdbd248d05250987e7",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p279：G 的 revise 动作说明按新轮次口径改（改稿开启/推进这一轮；复审收过几次看 review_rounds）；agent 面 golden 按现值重冻（G 的 prompt 与动作摘要 + 十一格版本行），tool 面一个字没动",
+      "change_note": "（未提供变更说明：内容 hash 从 0ff94ff2c001 变为 9b94a68f5389，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
