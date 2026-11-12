@@ -1508,7 +1508,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         st = store.rows("statements")
         rel = store.rows("relations")
         rows = list(st) + list(rel)
-        # 两档口径（2026-10-14 业主裁定：「回验……保持语义相同即可」）：`true` 那一栏
+        # 两档口径（「回验……保持语义相同即可」）：`true` 那一栏
         # 按 `evidencebits.quote_state` 算，于是"说了通过却说不清怎么通过的"
         # （`quote_mode` 空/认不出的词）不算 true，落回 `unchecked`。
         # 逐字与语义分开报：前者不花模型钱、后者是 H 判的，混成一个数就看不出钱花在哪。
@@ -1516,7 +1516,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         for r in rows:
             states[EB.quote_state(r)] = states.get(EB.quote_state(r), 0) + 1
         judged = states["verbatim"] + states["semantic"] + states["mismatch"]
-        # B-4（业主 2026-10-22）：四态另立一栏。
+        # 四态另立一栏。
         #
         # 为什么不能只留上面三态：「无来源可核」的行与概念行落在这两个数里会被读成
         # "假"（mismatch）或"未查"（unchecked）—— 前者说这一行查过、对不上，后者说
@@ -1541,22 +1541,22 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "unchecked": unchecked_plain,
             # 新增的两栏（方式）：`true` 那两个数各自是怎么来的
             "verbatim": states["verbatim"], "semantic": states["semantic"],
-            # D1（2026-10-22）：说通过而拿不出区间的行（`evidencebits.QUOTE_NO_EVIDENCE`）。
+            # 说通过而拿不出区间的行（`evidencebits.QUOTE_NO_EVIDENCE`）。
             # 单列一栏而不是折进 `unchecked`：那一档说的是"还没查"（欠一次回验），
             # 这一档说的是"它说通过了、却指不出核的是哪一段"（欠的是证据本身）——
             # 折在一起，读的人会去补一条不存在的工序。它不计入 `judged`：
             # 没有区间的"通过"没有可复核的读数，不该给这一档的分母加分。
             "no_evidence": int(states.get(EB.QUOTE_NO_EVIDENCE, 0)),
-            # 四态（B-4）：`no_source` 那一族三档 + 概念行的"不适用"。
+            # 四态：`no_source` 那一族三档 + 概念行的"不适用"。
             "no_source_backed": no_source[QE.NO_SOURCE_BACKED],
             "no_source_unbacked": no_source[QE.NO_SOURCE_UNBACKED],
             "no_source_absent": no_source[QE.NO_SOURCE_ABSENT],
             "not_applicable": no_source[QE.NOT_APPLICABLE],
         }
     if kind == "reviewed_then_digested_rows":
-        # 「审过之后有没有被逐条消化」（业主 2026-10-09；口径与判据见 `draft/97` §9.4）。
+        # 「审过之后有没有被逐条消化」。
         #
-        # 为什么要有这一档：T2 第 22 趟（`t2a`）现场是「① 手稿成稿 + ② H 过审」都有、
+        # 为什么要有这一档：现场会出现「① 手稿成稿 + ② H 过审」都有、
         # 而 `statements=0`（手稿里的成果一条都没变成台账行）—— 收工门只报得出
         # "报告缺附件那一件"，没有任何一格说得出来缺的是"消化"这一环；
         # 而 C 的最短依赖链（`C.proof_chain`）正是建在它上面：
@@ -1595,7 +1595,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         }
     if kind == "proof_experiment_rows":
         # 「形式化验过几条」那一档。键是 `(命题号, 证明号)`：第 4 位是二维的（每条证明
-        # 一格，业主 2026-10-22），所以同一份证明被登记了两次只算一条，而同一命题的
+        # 一格），所以同一份证明被登记了两次只算一条，而同一命题的
         # 两条证明各算一条 —— 折成"一行实验算一条"会让重跑把读数顶高，
         # 折成"一条命题算一条"会让 #p2 的那份验证消失。
         from . import verifications as _VR_PX
@@ -1623,13 +1623,12 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "同一份证明重复登记只算一条，同一命题的两条证明各算一条"),
         }
     if kind in ("reviewed_documents", "accepted_documents"):
-        # 2026-10-17（业主：「H 审过和通过是完全不同的状态」）：
+        # 审过和通过是完全不同的状态：
         # 审过读审核轴上的真裁决；通过才读 `成立`（与 V 的「成立」同形）。
-        # 不再用 `status ∈ accepted/revised` 冒充"审过" —— 那是把"通过"折成"审过"，
-        # 而 T5 第 9 趟正是靠这个折平才七格全绿。
+        # 用 `status ∈ accepted/revised` 冒充"审过"就是把"通过"折成"审过"。
         #
-        # 2026-10-30 业主裁定：「不应该有『看不出来』」—— 旧行里那四个字不是第三态。
-        # 它按「没查成」读（`checked=False`），于是既不算「审过」也不算「通过」；
+        # 「看不出来」不是第三态：旧行里那四个字按「没查成」读（`checked=False`），
+        # 于是既不算「审过」也不算「通过」；
         # 读点统一走 `schema.read_review_verdict`，这里只读它的两栏（verdict / checked）。
         readings = [(r, S.read_review_verdict(r)) for r in store.rows("documents")]
         if kind == "accepted_documents":
@@ -1656,14 +1655,14 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         }
         return len(rows), detail
     if kind == "reviewed_current_rows":
-        # 「改完之后有没有再复核」那一档（`draft/39` §6.46 的 D57）。
+        # 「改完之后有没有再复核」那一档。
         #
         # 三件事分开报，因为它们的原因不同：
         # ① pinned —— 现行版被某一条签名钉住（这一档要数的就是它）；
         # ② stale —— 自称审过、而且台账里有该稿件的签名，但没有一条钉在现行版上
         #    ⇒ 这是「改完之后没再复核」（G.revise 追加/替换断言后忘了找 H）；
         # ③ no_signature_record —— 自称审过却一条签名记录都没有。它与 ② 分开：
-        #    那可能是"这个工作区根本没有签名链"（真机：T3 的工作区是把上一趟的
+        #    那可能是"这个工作区根本没有签名链"（工作区可能是把上一趟的
         #    `documents` 复制过来的，`doc-signatures/` 没跟过来），`verify_all` 的
         #    `accepted_without_signature` 管那半边。这一档只在 ② 上放自动判据。
         from . import signatures as SIG
@@ -1671,21 +1670,20 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
 
         docs = [dict(r) for r in store.rows("documents")]
         recs, bad_lines = SIG.read_ledger(SIG.ledger_path(project_root))
-        #: 「该被签」的状态单一来源 = `signatures.SIGNABLE_STATUSES`（E-07 / `draft/52` D5：
-        #: `accepted` + `revised`）。这一档与 `signature_problems` 必须认同一组状态 ——
-        #: 分叉的症状是"签名的判据说这份稿子没问题"而"这一档说它没被钉住"（真机 `p8e`：
-        #: 两处相反）。`statuses_aligned` 把这件事变成当场的读数，而不是一句注释。
+        #: 「该被签」的状态单一来源 = `signatures.SIGNABLE_STATUSES`
+        #: （`accepted` + `revised`）。这一档与 `signature_problems` 必须认同一组状态 ——
+        #: 分叉的症状是"签名的判据说这份稿子没问题"而"这一档说它没被钉住"（两处相反）。
+        #: `statuses_aligned` 把这件事变成当场的读数，而不是一句注释。
         claimed_statuses = tuple(SIG.SIGNABLE_STATUSES)
 
         def _records_of(doc_id: str) -> list[Mapping[str, Any]]:
             return [r for r in recs if str(r.get("doc_id") or "") == doc_id]
 
-        # ---- 乙（2026-11-11）：`claimed` 还要认「有 open findings 的稿件」。
+        # ---- `claimed` 还要认「有 open findings 的稿件」。
         #
-        # 现场（`projects/dct-min4-20261111`）：`documents/000000` 是
-        # `status=draft`、`review_rounds=0`，而 H 的 7 条 findings 全是 `open`。
-        # 旧判据的两条（status ∈ {accepted,revised} 或 review_rounds >= 1）都不满足
-        # ⇒ 这一档 0/0 空转，7 条 open 没人管也照样收工。
+        # 一份稿件可能 `status=draft`、`review_rounds=0`，而 H 的 findings 全是 `open`。
+        # 只按 status ∈ {accepted,revised} 或 review_rounds >= 1 判 ⇒ 这一档 0/0 空转，
+        # open 的缺陷没人管也照样收工。
         # 有 open findings 就说明「H 审过、且缺陷还在」—— 它必须进这一档的分母。
         findings = [dict(r) for r in store.rows("review_findings")]
         open_by_doc: dict[str, list[dict]] = {}
@@ -1746,11 +1744,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                  "review_rounds": d.get("review_rounds")}
                 for d in stale[:8]],
             "no_signature_record": [str(d.get("doc_id") or "") for d in never[:8]],
-            # 乙的读数：哪几条 open、谁该处理（逐条，不隐藏）。
+            # 读数：哪几条 open、谁该处理（逐条，不隐藏）。
             "open_findings_total": sum(len(v) for v in open_by_doc.values()),
             "open_findings_unreviewed": open_unreviewed,
             "open_findings_unreviewed_docs": [d["doc_id"] for d in open_unreviewed],
-            # 丙的收工读数：改完稿之后下一步（与 `G.revise` 返回的 `next_step` 同一句）。
+            # 收工读数：改完稿之后下一步（与 `G.revise` 返回的 `next_step` 同一句）。
             "next_step": (
                 "改完之后要再复核：派 `H.verify_fixes`（它按 `round_no` 复核这一版）"
                 "或 `H.review`，让签名钉到现行版上；改完不复核的稿子不许当成交付。"
@@ -1760,8 +1758,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             # `statuses_aligned` 是当场的读数（不等就说明两处口径分叉了）。
             "signable_statuses": list(claimed_statuses),
             "statuses_aligned": tuple(claimed_statuses) == tuple(REVIEWED_DOC_STATUSES),
-            # EE-10（`draft/44` J-24）：两条台账（产物 / 签名）只合并读法 ——
-            # 读 JSONL 的那一层已经是唯一实现（`jsonlfile.read_jsonl`，`draft/36` T-6）。
+            # 两条台账（产物 / 签名）只合并读法 ——
+            # 读 JSONL 的那一层已经是唯一实现（`jsonlfile.read_jsonl`）。
             # 这里如实标出这一档读的是哪一条台账，好让"同一份产物被两个台账各钉一次"
             # 这件事看得见（两条台账钉的是不同哈希空间，不许合并本体）。
             "ledger_module": "signatures",
@@ -1778,12 +1776,12 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(pinned), detail
     if kind == "manuscript_edited":
         # 任务原文第一句（"改掉正文里的问题"）的机器可判形式：可改的主稿与只读基线不同。
-        # 为什么必须有一档盯它（`draft/37` §96 的真机读数）：第 9 趟三条腿的凭据全齐、
-        # 收工门七格全过，而主稿一个字节都没改 —— "引文核过、形式化验过"与
-        # "把正文里的问题改掉"是三件事，前两件有判据，第三件当时没有。
+        # 为什么必须有一档盯它：三条腿的凭据可以全齐、收工门七格全过，而主稿一个字节
+        # 都没改 —— "引文核过、形式化验过"与"把正文里的问题改掉"是三件事，
+        # 前两件有判据，第三件没有这一档就没有读数。
         draft = project_root / "out" / "paper" / "main.tex"
         base = project_root / "source" / "main.tex"
-        # 「实质改动」那一半（`draft/46-04` §2.2 ③）：比 sha 会把"只差空白"
+        # 「实质改动」那一半：比 sha 会把"只差空白"
         # 也算成改过（一个字节即算），而任务要的是"把正文里的问题改掉"。
         # 判据改成"去空白规范化之后仍有差异"，并把两个读数并列出来
         # （`raw_changed` 是旧口径的数，`substantive` 才是这一档的取值）。
@@ -1791,8 +1789,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             raise LegNotApplicable(kind, f"可改的主稿不在盘上：{draft}")
         if not base.is_file():
             # CC-05：缺只读基线 = 这一行不适用（`not_applicable`），
-            # 不是"整张表没查成"。真机 `p6i` 的 P1 就是这一支
-            # （`ValueError` ⇒ 整格 unknown ⇒ 后面 10 行连读数都没有）。
+            # 不是"整张表没查成" —— 抛 `ValueError` 那一支会把后面 10 行连读数都吞掉。
             raise LegNotApplicable(
                 kind, f"只读基线不在盘上：{base}（比不出「改没改」）—— "
                       f"这一档要的是「主稿相对基线的实质改动」，没有基线就没有分母")
@@ -1815,8 +1812,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "normalized_equal": not substantive,
         }
     if kind == "citation_records_vs_bibitems":
-        # 「逐条」的那一档（`draft/37` §103）：把"有没有做过比对"换成"每条 `\bibitem` 都有记录"。
-        # 为什么必须按条数比：§102 的第 12 趟只落了一条 `quote_verified=false` 就算满足了 ——
+        # 「逐条」的那一档：把"有没有做过比对"换成"每条 `\bibitem` 都有记录"。
+        # 为什么必须按条数比：只落一条 `quote_verified=false` 就算满足 ——
         # 那是"做一条就算"的口子，而任务原文要的是"逐条核验"。
         # 记录认两种：`quote_verified` 非 null（真/假两种比对结论），或 `quote_reason` 非空
         # （三态里的"未查 + 理由" —— 外部原文不在盘上时，这正是诚实的结论）。
@@ -1826,7 +1823,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #
         # 为什么：这一档问的是"每条引文有没有比对记录"，而"要几条"这个分母
         # 若由可改的那份稿子自己给，写表的人（或模型）就能通过删文献
-        # 把分母一起改小 —— 那是"自己给自己定阈值"（`draft/43-C` C-05/C-06）。
+        # 把分母一起改小 —— 那是"自己给自己定阈值"。
         # 只读基线是这一趟任务的输入，改不动 ⇒ 它才是分母的真源。
         # 基线不在盘上 ⇒ `LegNotApplicable`（第四态，CC-05）：
         # 那是"这一档在这个工作区用不上"，不是"整张表没查成"。
@@ -1860,7 +1857,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "false": sum(1 for r in verdict if EB.quote_state(r) == "mismatch"),
             "verbatim": sum(1 for r in rows if EB.quote_state(r) == "verbatim"),
             "semantic": sum(1 for r in rows if EB.quote_state(r) == "semantic"),
-            # D1（2026-10-22）：说通过而拿不出区间的行既不进"有结论"也不进"未查+理由"
+            # 说通过而拿不出区间的行既不进"有结论"也不进"未查+理由"
             # （它不是未查，也不是结论）—— 单独一栏，别让它们从读数里消失。
             "no_evidence": sum(1 for r in rows if EB.quote_state(r) == EB.QUOTE_NO_EVIDENCE),
             # 四态（B-4，与 `quote_verified_rows` 同一口径）：这一档的分母只数"有结论"
