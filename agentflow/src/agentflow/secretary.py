@@ -11459,37 +11459,33 @@ class Secretary:
         return out
 
     def unnamed_children(self, *, owner: str = "") -> dict[str, Any]:
-        """「真跑但无名」的逐条读数（`draft/160` 三-3 的丙案；只读，不修）。
+        """
+        「真跑但无名」的逐条读数（只读，不修）。
 
         ## 它回答的问题
 
         「这一支里，有没有真跑过、却在任何一个父的名册上都找不到名字的子代理？」
-        —— 81 趟的 `t-000106` 就是它：真跑、`done/ok`、有产物，而名册三份里一行都没有，
-        父永远叫不出它的名字（`retire(name=…)` 叫不到；只能用 `retire_child(task_id=…)`
-        走 unrostered 那一支认边收口，收完仍然没有名字）。
+        —— 真跑、`done/ok`、有产物，而名册三份里一行都没有：父永远叫不出它的名字
+        （`retire(name=…)` 叫不到，只能用 `retire_child(task_id=…)` 走 unrostered 那一支认边收口，
+        收完仍然没有名字）。
 
         ## 判据只有一处
 
-        「真跑过」的条件全在模块级 :func:`ran_but_unnamed` 里（四个条件连着三个已堵住
-        的洞），这里只负责取数、join、按父归组。网页那一格
-        （`webui.readers._roster_unrostered_children`）用同一个函数给每条打 `ran` 标记
-        —— 两个面说的是同一句话，不是各写一份。
+        「真跑过」的条件全在模块级 :func:`ran_but_unnamed` 里，这里只负责取数、join、按父归组。
+        网页那一格（`webui.readers._roster_unrostered_children`）用同一个函数给每条打 `ran` 标记 ——
+        两个面说的是同一句话，不是各写一份。
 
         ## 口径：台账 join 名册历史，不读会话
 
-        为什么不用会话里那条 `roster_problem`：可抢占派活在句柄没落定时提前返回
-        （`agent_loop._do_summon`），名册读数那一行在后面 —— 81 里 2419 个 `agent_step`
-        只有 9 个带任何 `roster_*` 键，`t-000106` 那一步一个都没有（`draft/160` 二-2）。
-        所以这一格读盘上的事实：`tasks`（谁真跑过）+ 名册三份（谁有名字）+ 拒绝流水
+        会话里那条 `roster_problem` 不可靠：可抢占派活在句柄没落定时提前返回，名册读数那一行在后面。
+        所以这一格只读盘上的事实：`tasks`（谁真跑过）+ 名册三份（谁有名字）+ 拒绝流水
         （它当初点的那个名字，现在在谁手里）。
 
         ## 三态（`checked` 绝不折成"没有"）
 
-        - 台账读不成 ⇒ `checked=False` + `reason`，`count=None`（不是 0：0 是"查过了，
-          一个都没有"这个很强的结论）；
+        - 台账读不成 ⇒ `checked=False` + `reason`，`count=None`（不是 0：0 是"查过了，一个都没有"）；
         - 某个父的名册 / 拒绝流水有坏行 ⇒ 同样 `checked=False` + `bad` 逐条点名 ——
-          "读不全"不许折成"这一支没有无名子代理"（fail-closed，与 `roster_repair`
-          同一条纪律）。
+          "读不全"不许折成"这一支没有无名子代理"（fail-closed，与 :meth:`roster_repair` 同一条纪律）。
 
         ## 返回
 
@@ -11497,14 +11493,9 @@ class Secretary:
 
         - `task_id` / `role` / `parent_task_id` / `status` / `outcome` / `started_at` / `ended_at`；
         - `artifacts`（台账里那一格原样）+ `artifacts_missing`（在盘上找不到的那几个）；
-        - `edge_released`：父有没有已经认掉这条边（81 的 `t-000106` 是 `True` —— 收口了
-          仍然没有名字，正是这一格要让人看见的那件事）；
-        - `requested_name` / `refusal_code`：它当初点名要的是什么、被哪一档拒绝（从
-          `refusals/<父>.jsonl` 来；没被拒过就是两个空串）；
-        - `held_by`：那个名字现在挂在谁身上（`null` = 没人用；否则 `{name, task_id,
-          retired, retired_task_id, task_status, task_outcome}`）—— 这一格回答"是哪个
-          号占掉了它的名字"，也就是 81 里 `E2 → t-000030（已销号、outcome=refused）`
-          那条链在收工读数上的落点。
+        - `edge_released`：父有没有已经认掉这条边（收口了仍然没有名字，正是这一格要让人看见的事）；
+        - `requested_name` / `refusal_code`：它当初点名要的是什么、被哪一档拒绝；
+        - `held_by`：那个名字现在挂在谁身上（`null` = 没人用）—— 这一格回答"是哪个号占掉了它的名字"。
         """
         out: dict[str, Any] = {"checked": False, "count": None, "scanned": 0,
                                "rows": [], "bad": [], "owners": [], "reason": ""}
