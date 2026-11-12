@@ -134,6 +134,15 @@ def project_root_of(start: pathlib.Path) -> pathlib.Path | None:
     return None
 
 
+def _candidate_names(candidates: Sequence[str]) -> list[str]:
+    """候选名 + 由它派生的叠加件名（`candidate_paths` 与 `discover_for_touch` 共用）。"""
+    names: list[str] = []
+    for base in candidates:
+        names.append(base)
+        names.append(pathlib.Path(base).with_suffix("").name + LOCAL_SUFFIX)
+    return names
+
+
 def candidate_paths(workspace_root: pathlib.Path, *, project_root: pathlib.Path | None,
                     candidates: Sequence[str] = DEFAULT_CANDIDATES,
                     home: pathlib.Path | None = None) -> tuple[pathlib.Path, ...]:
@@ -155,10 +164,7 @@ def candidate_paths(workspace_root: pathlib.Path, *, project_root: pathlib.Path 
     out: list[pathlib.Path] = []
     if home is not None:
         out.append(pathlib.Path(home) / USER_GLOBAL_NAME)
-    names: list[str] = []
-    for base in candidates:
-        names.append(base)
-        names.append(pathlib.Path(base).with_suffix("").name + LOCAL_SUFFIX)
+    names = _candidate_names(candidates)
     for directory in chain:
         for name in names:
             out.append(directory / name)
@@ -173,7 +179,7 @@ def discover_sources(paths: Iterable[pathlib.Path], *,
     内容相同也不合并（跨目录合并会让"这一条管到哪一层"失去边界）。
     """
     out: list[InstructionSource] = []
-    seen: dict[tuple[pathlib.Path, str], int] = {}
+    seen: set[tuple[pathlib.Path, str]] = set()
     for path in paths:
         try:
             if not path.is_file():
@@ -185,7 +191,7 @@ def discover_sources(paths: Iterable[pathlib.Path], *,
         key = (source.scope_dir, source.trimmed_sha1)
         if dedupe and key in seen:
             continue
-        seen[key] = len(out)
+        seen.add(key)
         out.append(source)
     return tuple(out)
 
@@ -203,16 +209,22 @@ def render_baseline(sources: Sequence[InstructionSource], *, max_bytes: int,
                         notice=f"{BUDGET_PREFIX}这个功能被关掉了（max_bytes={max_bytes}）")
 
     ordered = list(sources)
+    # 每个来源在成品里的那一段（框头之外）只拼一次：装得下装不下的判据只需比字节数。
+    # 非空列表的成品 = 框头 + 一段段 + 段间两个换行 ⇒ 每个来源贡献 `段字节 + 2`。
+    header_bytes = _bytes(header)
+    part_bytes = [_bytes(_part(source)) for source in ordered]
     included: list[InstructionSource] = []
     omitted: list[str] = []
+    width = 0
     # 从最具体的一份往回装（列表末尾是最具体的），装不下就把更宽的那一份整份丢掉。
     # 为什么不能顺着（由宽到窄）装：那样会出现"更宽的那一份恰好塞得下、于是把最具体的挤掉"
     # —— DSH 的口径是反的："it drops whole broader files before truncating the most-specific file"。
-    for source in reversed(ordered):
-        if _fits([source, *included], max_bytes, header):
-            included.insert(0, source)
+    for i in range(len(ordered) - 1, -1, -1):
+        if header_bytes + width + part_bytes[i] + 2 <= max_bytes:
+            included.insert(0, ordered[i])
+            width += part_bytes[i] + 2
         else:
-            omitted.append(str(source.path))
+            omitted.append(str(ordered[i].path))
     omitted.reverse()
     truncated = ""
     text = _compose(included, header)
@@ -305,30 +317,24 @@ class InstructionState:
         directory = pathlib.Path(touched)
         if directory.is_file() or directory.suffix:
             directory = directory.parent
-        names: list[str] = []
-        for base in candidates:
-            names.append(base)
-            names.append(pathlib.Path(base).with_suffix("").name + LOCAL_SUFFIX)
-        found = discover_sources(directory / name for name in names)
+        found = discover_sources(directory / name for name in _candidate_names(candidates))
         return tuple(s for s in found if s.path not in self._visible)
+
+
+def _part(source: InstructionSource) -> str:
+    """一个来源在成品里的那一段（来源行 + 转义后的正文）。"""
+    return f"{SOURCE_PREFIX}{source.path}\n{escape_closer(source.text.strip())}"
 
 
 def _compose(sources: Sequence[InstructionSource], header: str) -> str:
     """框 + 逐份（来源行 + 正文），正文一律转义框闭合标记。"""
     if not sources:
         return ""
-    parts = [header]
-    for source in sources:
-        parts.append(f"{SOURCE_PREFIX}{source.path}\n{escape_closer(source.text.strip())}")
-    return "\n\n".join(parts)
+    return "\n\n".join([header, *(_part(source) for source in sources)])
 
 
 def _bytes(text: str) -> int:
     return len(text.encode("utf-8"))
-
-
-def _fits(sources: Sequence[InstructionSource], max_bytes: int, header: str) -> bool:
-    return _bytes(_compose(sources, header)) <= max_bytes
 
 
 def _truncate_tail(source: InstructionSource, budget: int) -> str:
@@ -337,11 +343,14 @@ def _truncate_tail(source: InstructionSource, budget: int) -> str:
         return ""
     lines = source.text.splitlines()
     kept: list[str] = []
+    used = 0
     for line in lines:
-        trial = "\n".join([*kept, line])
-        if _bytes(trial) > budget:
+        one = _bytes(line)
+        add = one + (1 if kept else 0)      # 行间那个 `\n` 也是一个字节
+        if used + add > budget:
             break
         kept.append(line)
+        used += add
     return "\n".join(kept)
 
 
