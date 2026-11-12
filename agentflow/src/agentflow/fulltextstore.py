@@ -67,10 +67,15 @@ def store_dir_for(project_dir: str | Path) -> Path:
     return Path(project_dir) / STORE_DIR_NAME
 
 
+def _ref_name_with_hash(pdf_sha256: str, text_sha256: str) -> str:
+    """由两个已算好的哈希拼文件名（`ref_name` 与 `put` 共用同一份拼法）。"""
+    pdf = str(pdf_sha256 or "").strip().lower()[:HASH_PREFIX] or "0" * HASH_PREFIX
+    return f"{pdf}-{str(text_sha256 or '')[:HASH_PREFIX]}.json"
+
+
 def ref_name(pdf_sha256: str, pages: Sequence[str]) -> str:
     """算出一份正文在 store 里的文件名（`<pdf8…>-<text8…>.json`）。"""
-    pdf = str(pdf_sha256 or "").strip().lower()[:HASH_PREFIX] or "0" * HASH_PREFIX
-    return f"{pdf}-{pages_text_sha256(pages)[:HASH_PREFIX]}.json"
+    return _ref_name_with_hash(pdf_sha256, pages_text_sha256(pages))
 
 
 def put(pages: Sequence[str], *, store_dir: str | Path, pdf_sha256: str = "",
@@ -90,9 +95,10 @@ def put(pages: Sequence[str], *, store_dir: str | Path, pdf_sha256: str = "",
         raise ValueError("put() 收到空正文：没有内容的 store 文件不是证据，是噪声")
     directory = Path(store_dir)
     directory.mkdir(parents=True, exist_ok=True)
-    target = directory / ref_name(pdf_sha256, text)
-
+    # 正文哈希只算一次：文件名与 payload 的 `text_sha256` 用同一份（整本书的 join+sha 不便宜）。
     text_hash = pages_text_sha256(text)
+    target = directory / _ref_name_with_hash(pdf_sha256, text_hash)
+
     if target.is_file():
         existing, problem = _read_store_file(target)
         if not problem and existing.get("text_sha256") == text_hash:
