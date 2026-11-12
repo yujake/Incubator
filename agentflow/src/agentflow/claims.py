@@ -333,7 +333,7 @@ def _heuristic_claims(text: str) -> tuple[list[tuple[str, str, str]], list[str],
         mark = _LINE_MARK.match(raw)
         basis = "numbered" if mark and mark.group("mark")[0].isdigit() else (
             "bullet" if mark else "")
-        line = _LINE_MARK.sub("", raw, count=1)
+        line = _LINE_MARK.sub("", raw, count=1) if mark else raw
         if not line.strip():
             continue
         parts = _QUOTE_BREAK.split(line, maxsplit=1)
@@ -409,7 +409,8 @@ def refusal_reason(text: str) -> str:
     "模型觉得像拒绝"不能。
     """
     body = _norm_ws(text)
-    hits = [m for m in NO_CLAIM_MARKERS if m.lower() in body.lower()]
+    low = body.lower()
+    hits = [m for m in NO_CLAIM_MARKERS if m.lower() in low]
     if hits:
         return (f"答复里命中了拒绝措辞「{'、'.join(hits)}」 ⇒ 本次确实没有"
                 "可断言的结论（不是‘拆不出来’）")
@@ -634,7 +635,8 @@ def split_claims(text: Any, *, max_claims: int = DEFAULT_MAX_CLAIMS,
     # 会让空台账看起来像"有 1 条断言"，那是本模块最要防的读法。
     # 判据只在没有引文候选时生效：模型真的给了引文时，"有引文"比"命中拒绝措辞"
     # 强，不许因为一句客套话把真断言丢掉。
-    refusals = [m for m in NO_CLAIM_MARKERS if m.lower() in stripped.lower()]
+    low = stripped.lower()
+    refusals = [m for m in NO_CLAIM_MARKERS if m.lower() in low]
     if refusals and not from_fn and not any(q for _t, q, _b in heuristic):
         reason = _missing_reason(stripped, notes, fenced)
         return _assemble("no_claims", reason, raw=[], max_claims=limit,
@@ -721,14 +723,15 @@ def ledger_rows(split: SplitResult, verdicts: Sequence[Any] = ()) -> list[dict]:
     "回验器说它查不成"（`unknown`）不是一件事，不许混。
     """
     index, copies = _index_verdicts(verdicts)
+    # 兜底：一次建好 text → 第一条判决行的索引，别对每条断言都线性扫一遍 copies。
+    by_text: dict[str, dict] = {}
+    for leftover in copies:
+        by_text.setdefault(_norm_ws(leftover.get("text")), leftover)
     rows: list[dict] = []
     for claim in split.claims:
         matched = index.get((claim.text, claim.quote))
         if matched is None:
-            for leftover in copies:
-                if _norm_ws(leftover.get("text")) == claim.text:
-                    matched = leftover
-                    break
+            matched = by_text.get(claim.text)
         if matched is None:
             row = {
                 "text": claim.text, "quote": claim.quote, "verdict": "known_unverifiable",
