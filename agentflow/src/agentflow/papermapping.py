@@ -1919,7 +1919,7 @@ def _citation_problems(row: Row, package_root: Path,
             f"表里 label={row.label!r} 的 `citation_loc` 缺 `file`（包内那份文件的相对路径）",
             label=row.label, where=MAPPING_JSON_NAME))
         return problems
-    given = [(k, loc.get(k)) for k in RANGE_KEYS if loc.get(k) is not None]
+    given = [(k, v) for k in RANGE_KEYS if (v := loc.get(k)) is not None]
     if not given:
         problems.append(_problem(
             "mapping_citation_loc_missing",
@@ -2323,7 +2323,7 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 "mapping_unresolvable", f"第 {i} 行不是对象（收到 {type(item).__name__}）"))
             continue
         missing = [f for f in ROW_FIELDS
-                   if not str(item.get(f) if item.get(f) is not None else "").strip()]
+                   if not str(v if (v := item.get(f)) is not None else "").strip()]
         if missing:
             problems.append(_problem(
                 "mapping_unresolvable",
@@ -2361,7 +2361,7 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 label=label))
             continue
         bad_lean = [f for f in LEAN_ROW_FIELDS
-                    if item.get(f) is not None and not isinstance(item.get(f), str)]
+                    if (v := item.get(f)) is not None and not isinstance(v, str)]
         if bad_lean:
             problems.append(_problem(
                 "mapping_unresolvable",
@@ -2371,7 +2371,7 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 label=label))
             continue
         bad_numeric = [f for f in NUMERIC_ROW_FIELDS
-                       if item.get(f) is not None and not isinstance(item.get(f), str)]
+                       if (v := item.get(f)) is not None and not isinstance(v, str)]
         if bad_numeric:
             problems.append(_problem(
                 "mapping_unresolvable",
@@ -2380,7 +2380,7 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                 label=label))
             continue
         bad_index = [f for f in (NP.INDEX_KIND_FIELD, NP.INDEX_PATH_FIELD, NP.INDEX_SHA_FIELD)
-                     if item.get(f) is not None and not isinstance(item.get(f), str)]
+                     if (v := item.get(f)) is not None and not isinstance(v, str)]
         bad_sign = item.get(NP.INDEX_SIGN_FIELD)
         if bad_index or (bad_sign is not None and not isinstance(bad_sign, Mapping)):
             problems.append(_problem(
@@ -2406,9 +2406,8 @@ def parse_rows(payload: Any) -> tuple[list[Row], list[dict[str, Any]]]:
                         evidence_kind=str(item.get(NP.INDEX_KIND_FIELD) or "").strip(),
                         evidence_path=str(item.get(NP.INDEX_PATH_FIELD) or "").strip(),
                         evidence_sha256=str(item.get(NP.INDEX_SHA_FIELD) or "").strip(),
-                        v_signature=(dict(item.get(NP.INDEX_SIGN_FIELD))
-                                     if isinstance(item.get(NP.INDEX_SIGN_FIELD), Mapping)
-                                     else None),
+                        v_signature=(dict(bad_sign)
+                                     if isinstance(bad_sign, Mapping) else None),
                         # 台账那两格（D-69）：旧表没有这两键 ⇒ 读成空串 ⇒ 渲染印
                         # `未读到`（"这一格没填"不许印成空白，也不许折成「未通过」/「未审」）。
                         ledger_kind=str(item.get(LEDGER_KIND_FIELD) or "").strip(),
@@ -3359,11 +3358,12 @@ def _statement_surplus_problems(
     extra: list[tuple[BodyEnv, str]] = []
     for env in statement_envs:
         key = (str(env.kind), str(env.label))
-        take = next((sid for sid in by_key.get(key, ()) if sid not in used), "")
+        candidates = by_key.get(key, ())
+        take = next((sid for sid in candidates if sid not in used), "")
         if take:
             used[take] = env
             continue
-        taken = [sid for sid in by_key.get(key, ()) if sid in used]
+        taken = [sid for sid in candidates if sid in used]
         if not mapped.get(key):
             why = "（对应表里没有这一行）"
         elif taken:
