@@ -1,31 +1,19 @@
 # -*- coding: utf-8 -*-
-"""角色动作的「拒绝」只有一个形态（`draft/37` §88）。
+"""角色动作的「拒绝」只有一个形态。
 
-## 为什么需要这个模块
+各动作此前各写各的 `{"ok": False, "kind": ..., "error": ...}`：形状看着一致，但终态
+映射看不见它 —— `Conductor._end_from_payload` 只看"handler 有没有返回 dict"，于是
+`ok=False` 被记成 `outcome=ok`。"拒绝"与"崩溃"同形，"成功"与"什么都没写"也同形。
 
-角色动作拒绝一次调用时，此前各写各的：`{"ok": False, "kind": ..., "error": ...}`。
-形状看着一致，但终态映射看不见它 —— `Conductor._end_from_payload` 原先只看
-"handler 有没有返回 dict"，于是 `ok=False` 被记成 `outcome=ok`。
+修法：拒绝自报受控理由（`schema.REFUSAL_REASONS` 里的 `invalid_params` 一档，定义是
+"参数/前置条件不满足：这次调用本身不成立"）。`schema.Task.validate` 要求
+`outcome=refused` 必须带受控理由，所以理由不许由各动作自造 —— 有理由才能落
+`refused/invalid_params`，只有 `ok=False` 的只能落 `failed`（"执行了、没成功"）。
 
-T1 第 2 趟真机读数（2026-10-04）：`B.register_statement` 的 8 次拒绝在 `tasks` 台账里
-全是 `outcome=ok`（detail 还写着"按有产出处理"），而 `statements` 是 0 行 ——
-主控以为命题登记好了，于是不再改参数，整条链在这一步静默停住；同一趟里另外 6 次
-抛异常的调用反倒记成 `failed`。"拒绝"与"崩溃"同形，"成功"与"什么都没写"也同形。
-
-## 修法：拒绝要自报理由，理由取受控词表里的那一档
-
-`schema.REFUSAL_REASONS` 里 `invalid_params` 的定义就是这一档：
-"参数/前置条件不满足：这次调用本身不成立（不是『角色没这个本事』）"。
-`schema.Task.validate` 逐字要求 `outcome=refused` 必须带受控理由
-（"拒绝的理由必须是受控词表，不许自由文本"），所以理由不能由各动作自造。
-
-显式声明它之后，终态映射能落 `refused / invalid_params`；不声明的
-（只 `ok=False`）只能落 `failed` —— 那是"执行了、没成功"，与"这次调用本身不成立"
-是两件事，混在一起的代价就是这个模块存在的原因。
-
-`kind` 仍然逐字保留：它比 `invalid_params` 细一档（`missing_proof_text` /
-`bad_id` / `bad_mode`…），是调用方真正据以改参数的那一格。
+`kind` 逐字保留：它比 `invalid_params` 细一档（`missing_proof_text` / `bad_id` /
+`bad_mode`…），是调用方真正据以改参数的那一格。
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -35,37 +23,32 @@ from . import schema as S
 __all__ = ["PRECONDITION_REASON", "EMPTY_STATEMENT_TEXT", "EMPTY_PROOF_TEXT",
            "SAME_STATEMENT_UNJUDGED", "refuse"]
 
-#: 前置条件不满足时用的那一档受控理由。集中在这里，是为了让"动作拒绝"这件事
-#: 只有一个落点：散在各文件里的字面量一旦漂移，`Task.validate` 会在写库那一刻抛，
-#: 而那时"拒绝"已经变成"崩溃"了。
+#: 前置条件不满足时用的那一档受控理由。集中一处：散在各文件的字面量一旦漂移，
+#: `Task.validate` 会在写库那一刻抛 —— 那时"拒绝"已经变成"崩溃"了。
 PRECONDITION_REASON = "invalid_params"
 
-#: 模块导入期自检：这一档必须真的在受控词表里。不在 ⇒ 每次拒绝都会把
-#: `Task.validate` 撞红，而那时错误信息在别处（"outcome=refused 时必须给
-#: refusal_reason ∈ (...)"），排查方向会被引到词表上而不是这里。
+#: 导入期自检：这一档必须在受控词表里。不在 ⇒ 每次拒绝都撞红 `Task.validate`，
+#: 而错误信息在别处，排查方向会被引到词表上而不是这里。
 assert PRECONDITION_REASON in S.REFUSAL_REASONS, (
     f"{PRECONDITION_REASON!r} 不在 schema.REFUSAL_REASONS 里 ⇒ 所有动作拒绝都会"
     "在写台账时抛异常（拒绝被记成崩溃）"
 )
 
-#: 空正文的两个受控码（业主 2026-10-24 裁定 B2 的第 1 条：0 字命题 / 0 字证明要受控拒绝）。
+#: 空正文的两个受控码（0 字命题 / 0 字证明要受控拒绝）。
 #:
-#: 为什么这两个字面量住在这里而不是各自写一份：`register_statement`（写侧硬拦）与
-#: `secretary.judge_statement`（判档位那一侧）必须说同一个词 —— 否则同一个输入在两处
-#: 拿到两个 `kind`，调用方只能靠猜"这两个是不是同一件事"。
+#: 必须只有一份：`register_statement`（写侧硬拦）与 `secretary.judge_statement`
+#: （判档位那一侧）要说同一个词，否则同一输入在两处拿到两个 `kind`。
 #:
-#: 两者的分工：`empty_statement_text` 是"这一条命题没有正文"（没有可判的对象）；
-#: `empty_proof_text` 是"这一笔声明了第 N 份证明，而它的正文是空的"（声明了却没交）。
-#: 后者刻意不管"整笔一条证明都没交"那一档：自产命题的"证明还没做完"是合法登记态
-#: （F-05 的待办那一档），拦掉它等于把那条路堵死。
+#: 分工：`empty_statement_text` = 这一条命题没有正文（没有可判的对象）；
+#: `empty_proof_text` = 这一笔声明了某份证明而它的正文是空的（声明了却没交）。
+#: 后者刻意不管"整笔一条证明都没交"：自产命题的"证明还没做完"是合法登记态。
 EMPTY_STATEMENT_TEXT = "empty_statement_text"
 EMPTY_PROOF_TEXT = "empty_proof_text"
 
-#: 「这一条是不是在册的某一条命题」这一问没查成的受控码。
+#: 「这一条是不是在册的某一条命题」没查成的受控码。
 #:
-#: 三态纪律：台账里有候选、而关键词没提取成或判定没成（没缝 / 超时 / 坏 JSON）⇒
-#: 整笔不写。把"没查成"折成"查过了、不是同一条"会让同一条命题被登记成第二行，
-#: 而盘上不会有任何一格说那一笔其实没查过。
+#: 台账里有候选、而关键词没提取成或判定没成（没缝 / 超时 / 坏 JSON）⇒ 整笔不写。
+#: 把"没查成"折成"不是同一条"会让同一条命题被登记成第二行，且盘上无迹可查。
 SAME_STATEMENT_UNJUDGED = "same_statement_unjudged"
 
 
