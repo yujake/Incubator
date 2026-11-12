@@ -490,12 +490,13 @@ def _candidates_impl(
     见 `_TOOL_MODULE_EXTRAS` 的理由串）会被算成"对上了"，而它在工具面上根本不存在。
     """
     groups = _TOOL_GROUPS_BY_ROLE.get(spec.role, ())
-    return sorted(
-        n for n in tools
-        if n.split(".")[-1] == spec.handler_name
-        and n.split(".")[0] in groups
-        and n.split(".")[0] in _ASSEMBLED_GROUPS
-    )
+    hits: list[str] = []
+    for name in tools:
+        parts = name.split(".")
+        group = parts[0]
+        if parts[-1] == spec.handler_name and group in groups and group in _ASSEMBLED_GROUPS:
+            hits.append(name)
+    return sorted(hits)
 
 
 def _reconcile(
@@ -671,13 +672,10 @@ def _module_aliases(tree: ast.AST) -> dict[str, str]:
         if not isinstance(node, ast.ImportFrom) or not node.level:
             continue
         package = "agentflow" if node.level >= 2 else "agentflow.tools"
-        if node.module:
-            base = f"{package}.{node.module}"
-            for alias in node.names:
-                out[alias.asname or alias.name] = f"{base}.{alias.name}"
-        else:
-            for alias in node.names:
-                out[alias.asname or alias.name] = f"{package}.{alias.name}"
+        base = f"{package}.{node.module}" if node.module else package
+        for alias in node.names:
+            local = alias.asname or alias.name
+            out[local] = f"{base}.{alias.name}"
     return out
 
 
