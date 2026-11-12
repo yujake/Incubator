@@ -668,7 +668,9 @@ def _pending_ledgers(
 def pending_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
     """pending 台账的全部行（按落盘顺序；坏行照实报出，不静默跳过）。"""
     ledgers, problems = _pending_ledgers(root)
-    return [dict(row) for _file, rows in ledgers for row in rows], problems
+    #: `_pending_ledgers` 交出来的每一行已经是那一份文件的一份新拷贝（它与盘上/缓存
+    #: 都不共享），这里不再逐行 `dict(...)` 拷第二遍。
+    return [row for _file, rows in ledgers for row in rows], problems
 
 
 def pending_sign(root: str | Path, *, object_sha256: Any = "",
@@ -1809,7 +1811,8 @@ def _claimed_pending_rows(root: str | Path, *, statement_id: str = ""
             continue
         if want and sid != want:
             continue
-        out.append(dict(row))
+        #: `rows` 已经是 `pending_rows` 为这一趟新拷出来的一批行，这里不再拷第三遍。
+        out.append(row)
     return out, problems
 
 
