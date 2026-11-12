@@ -40,7 +40,7 @@ A 线自有：页面与静态（`/`、`/index.html`、`/run/{sid}`、`/static/{f
 from __future__ import annotations
 
 import re
-from typing import Sequence
+from typing import Any, Sequence
 
 from .readers import ROUTES as READER_ROUTES
 from .writes import ROUTES as WRITE_ROUTES
@@ -68,10 +68,8 @@ def compose(own: Sequence[tuple[str, str, str]],
 #: 签名 `(handler, params, query)`，`handler` 就是那个 `WebHandler` 实例。
 _SUBTABLE_MODULES = ("readers", "sse", "writes")
 
-#: `_SUBTABLE_MODULES` 解析出来的模块对象（首次查找时填一次）。
-#: 每个请求都会走 :func:`handler_for`，而这三个模块在进程里恒是同一批对象 ⇒
-#: 缓存的是"模块对象本身"，不是它们的 `HANDLERS`（那张表仍然每次现读，
-#: 于是运行期新增一条登记照样取得到）。
+#: 首次查找解析出来的三个子表模块对象。缓存的是模块本身，不是它们的 `HANDLERS`
+#: （那张表仍每次现读，于是运行期新增一条登记照样取得到）。
 _MODULES: tuple[Any, ...] | None = None
 
 

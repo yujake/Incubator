@@ -71,17 +71,11 @@ def _dict(obj: Any) -> dict[str, Any]:
 
 def _get(obj: Any, *names: str, default: Any = None) -> Any:
     """按候选名字依次取一个字段（dict 与对象两种形态都认）。"""
-    if isinstance(obj, Mapping):
-        # 读模型的每一行、每一格都要过这里，而 `_dict(obj)` 会先整份拷贝一份字典
-        # ⇒ 字典这一档直接按名字读（取值结果与经 `_dict` 之后再读逐格相同）。
-        for name in names:
-            if name in obj:
-                return obj[name]
-    else:
-        src = _dict(obj)
-        for name in names:
-            if name in src:
-                return src[name]
+    # 字典这一档直接按名字读：`_dict(obj)` 会先整份拷贝一份，而读模型的每一格都过这里。
+    src = obj if isinstance(obj, Mapping) else _dict(obj)
+    for name in names:
+        if name in src:
+            return src[name]
     for name in names:
         if hasattr(obj, name):
             return getattr(obj, name)
