@@ -899,12 +899,14 @@ def declaration_names(source: str) -> list[str]:
     "该交给检查器哪个名字"的唯一答案是 :func:`qualified_declaration_names`。
     """
     body = _strip_lean_noise(str(source or ""))
-    pat = re.compile(
-        r"(?m)^[ \t]*(?:@\[[^\]]*\][ \t]*)*"
-        r"(?:(?:" + "|".join(_MODIFIERS) + r")[ \t]+)*"
-        r"(?:" + "|".join(_NAMED_DECL_KEYWORDS) + r")[ \t]+([^\s:{(]+)"
-    )
-    return list(dict.fromkeys(m.group(1).strip() for m in pat.finditer(body)))
+    # 与 `qualified_declaration_names` 共用同一条声明行正则（`_DECL_LINE`，关键字表
+    # 同一份）；原先这里每次调用都现拼一次同样的模式再 `finditer`。
+    names: dict[str, None] = {}
+    for line in body.split("\n"):
+        match = _DECL_LINE.match(line)
+        if match:
+            names.setdefault(match.group(1).strip(), None)
+    return list(names)
 
 
 class DeclarationNameError(ValueError):
@@ -973,7 +975,8 @@ def sole_declaration_name(source: str) -> str:
     里是能用的，但 `#print axioms <短名>` 写在文件作用域里就指向另一条（不存在的）常量。
     """
     found = qualified_declaration_names(source)
-    if len(found) == 1:
+    count = len(found)
+    if count == 1:
         return found[0]
     if not found:
         raise DeclarationNameError(
@@ -983,7 +986,7 @@ def sole_declaration_name(source: str) -> str:
             "或把要核的命题写成具名声明（`theorem` / `lemma` / `def` …）。"
         )
     raise DeclarationNameError(
-        f"源码里有 {len(found)} 条具名声明：{found[:8]}{'…' if len(found) > 8 else ''} —— "
+        f"源码里有 {count} 条具名声明：{found[:8]}{'…' if count > 8 else ''} —— "
         "取不到「唯一那条」。请显式给出声明名（`name` / `checker_name`）："
         "替调用方挑一条会把「核的是哪个命题」变成一次猜测。"
     )
