@@ -148,7 +148,9 @@ class ModelClient:
                 role=self.role,
                 # 原样透传（`""` 也归一成 `None`）：`None` 是"未接线"的合法取值，
                 # 不是"缺一个字符串"。见 `task_id` 字段那段（`dangling_usage_task` 的判据）。
-                task_id=(str(self.task_id).strip() or None),
+                # 缺省 `None` 是"没有台账号可挂"，**不许**被 `str()` 变成字面量 "None" ——
+            # 那会把一笔花销挂到一个不存在的 task_id 上，而审计只会说"挂不上"。
+            task_id=(str(self.task_id).strip() if self.task_id is not None else "") or None,
                 scope=self.scope,
                 call_index=self.calls,
             )

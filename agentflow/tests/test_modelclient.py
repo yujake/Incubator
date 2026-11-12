@@ -110,6 +110,31 @@ def test_client_from_env_reads_the_documented_env_names() -> None:
     assert "api_key" not in json.dumps(c.to_dict()), "读数里不许出现 key"
 
 
+def test_the_default_task_id_is_not_turned_into_the_string_none(tmp_path) -> None:
+    """缺省 `task_id=None` 同样不许被 `str()` 变成字面量 `"None"`。
+
+    上面那一条覆盖的是调用点把 `task_id` 置成 `""`；而 `ModelClient` 的**缺省值**是 `None`，
+    `str(None).strip()` 得到的是 `"None"` —— 一个看起来像台账号、却不在 `tasks` 表里的字符串。
+    后果与上面同族：每一笔未接线的花销都会落成 `dangling_usage_task`，而"未接线"这个
+    合法状态被伪造成"接到了一个不存在的号"。
+    """
+    from agentflow import verify as V
+
+    store = Store(tmp_path / "ws")
+    store.init()
+    meter = TokenMeter(store)
+    c = _client(_transport(200, _body("甲")), meter=meter)
+    c.task_id = None          # 缺省（没接线），不是 ""
+    assert c.complete("你好") == "甲"
+    rows = store.rows("usage_ledger")
+    assert len(rows) == 1, rows
+    assert rows[0].get("task_id") is None, (
+        f"缺省 task_id 被折成了 {rows[0].get('task_id')!r} ⇒ 会落成 dangling_usage_task")
+    report = V.verify_all(store)
+    assert [i for i in report.issues if i.code == "dangling_usage_task"] == []
+    assert report.ok, [i.to_dict() for i in report.errors]
+
+
 def test_unwired_task_id_is_not_folded_into_a_fake_string(tmp_path) -> None:
     """判据（主控裁定 · B→A 需求单）：没接线的 `task_id` 原样透传 `None`，不折成字符串。
 
