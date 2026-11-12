@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
 """可追加的总预算：一个工作区一份、运行期可改、每次闸门现读。
 
-## 业主口径（2026-10-12，逐字）
+## 业主口径
 
-「我们不硬性限制运行步数，但限制预算。请做好预算设置和显示窗口，用户可追加预算，
-运行消耗的钱从总预算里实时扣除，扣完时自动发送优雅停止请求（这时预算可能会继续扣成
-负的一点点，但无大碍）。」
+不硬性限制运行步数，但限制预算；用户可追加，运行消耗的钱从总预算里实时扣除，扣完
+时自动发送优雅停止请求（这时预算可能继续扣成负的一点点，但无大碍）。
 
 ## 为什么是"盘上寄存器"而不是一个内存里的参数
 
-改前的事实（只读调查，2026-10-12）：`Policy` 是 `frozen=True` 的值对象、
-`TokenMeter(budget_usd=…)` 与 `LlmSeam(usd_budget=…)` 的上限只在构造期注入、
-`SeamSpend.usd` 只增 —— 于是"跑到一半追加预算"这件事在结构上没有入口，
-唯一的办法是重跑一次。而这个项目的运行是小时级、多智能体的：
-用户在网页上看见还剩 $0.3、想加 $2 让它跑完，是常态而不是例外。
+`Policy` 是 `frozen=True` 的值对象、`TokenMeter(budget_usd=…)` 与
+`LlmSeam(usd_budget=…)` 的上限只在构造期注入、`SeamSpend.usd` 只增 —— 于是"跑到
+一半追加预算"这件事在结构上没有入口，唯一的办法是重跑一次。而这个项目的运行是
+小时级、多智能体的：用户在网页上看见还剩 $0.3、想加 $2 让它跑完，是常态而不是例外。
 
 所以这一层做成盘上寄存器（`<工作区>/budget.json`），它只回答一个问题：
 「这一趟的总预算是多少」。三个刻意的地方：
@@ -86,7 +84,7 @@ def read_register(root: str | Path) -> dict[str, Any]:
 
     - 文件不在 ⇒ `exists=False`、`checked=True`、`problem=""`（"没设过预算"是正常形态）；
     - 文件在但读不懂（坏 JSON / 不是对象 / `total_usd` 非法）⇒ `problem` 非空、
-      `total_usd=None` —— 调用方必须看得见这一档（见模块 docstring 第 3 条）。
+      `total_usd=None` —— 调用方必须看得见这一档（见模块 docstring）。
     """
     path = register_path(root)
     out: dict[str, Any] = {"checked": True, "exists": False, "total_usd": None,
@@ -141,14 +139,13 @@ def write_initial(root: str | Path, total_usd: float, *, by: str = "user",
        换成一份读得懂的，代价是那份读不懂的原样没了；这件事必须留痕，
        于是它不是"静默覆盖"。
     """
-    # 2026-10-17（store #10）：`add_usd` 有类型闸、`write_initial` 没有。`_coerce_usd`
-    # 读不出时返回 `None` —— 直接用它会让"总额度"静默写成 null，所以这里明确拒绝。
+    # `add_usd` 有类型闸、`write_initial` 没有。`_coerce_usd` 读不出时返回 `None` ——
+    # 直接用它会让"总额度"静默写成 null，所以这里明确拒绝。
     _usd = _coerce_usd(total_usd)
     if _usd is None:
         raise ValueError(f"总额度必须是**非负数字**，收到 {total_usd!r}；拒写（不写 null）")
     reg = read_register(root)
     got = _write(root, total_usd=total_usd,
-                 # 2026-10-17（store #10）：`add_usd` 有类型闸、`write_initial` 没有 ⇒ 同一入口两种形态。
                  entry={"kind": "set", "usd": _usd, "by": str(by), "at": _now(),
                         "note": str(note or "")},
                  added_before=reg["added"])
