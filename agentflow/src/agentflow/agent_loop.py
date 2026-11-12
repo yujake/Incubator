@@ -7797,11 +7797,11 @@ class AgentLoop:
                 + ("（注：这个读数是重算过的 —— 读数期间台账又变了）" if got.get("retried") else ""))
 
     def _v_wait_gate_reading(self) -> dict[str, Any]:
-        """收工门（乙，2026-11-11 业主裁定）：按签拦收工，不按计时器拦。
+        """收工门：按签拦收工，不按计时器拦。
 
-        业主逐字：「拦收工前有计划号未产出 V 签稿且未放弃。如果一个计划号有 V 签稿，
-        则被定义为可 finish 的。对于 E 和 B 同样只拦无签收工，不强制落签就收工。
-        其中 E 侧对普通数值实验是拦无稿就收工，普通数值实验无签正常」。
+        口径：拦收工前有计划号未产出 V 签稿、且未放弃。如果一个计划号有 V 签稿，
+        则被定义为可 finish 的；对 E 和 B 同样只拦无签收工，不强制落签就收工。
+        其中 E 侧对普通数值实验是拦无稿就收工，普通数值实验无签正常。
 
         判据（三个角色各一条，读的都是台账上现成的痕迹，不新立字段）：
 
@@ -7815,7 +7815,7 @@ class AgentLoop:
           `agent_f.delivery.abandoned_of` 是唯一读口）⇒ 不算欠签。
         - E：`e-proof`（穷举证明档）没有现行的签 ⇒ 拒；`e-num`（普通数值实验）只拦
           无稿 —— 有稿无签是正常（`manuscriptfamily.needs_sign("e-num")` 是假，
-          `manuscriptfreeze` 也写「e-num 永远 state=unsigned」，业主 2026-11-08）。
+          `manuscriptfreeze` 也写「e-num 永远 state=unsigned」）。
           实验行被撤销（`schema.experiment_is_voided`）⇒ 不是欠稿。
 
         「签算不算签」只有一条口径：`manuscriptclosing.signed_candidates` 的
@@ -7918,11 +7918,10 @@ class AgentLoop:
 
     def _final_gate_reading(self, run: "AgentLoop.LoopRun | None" = None
                             ) -> dict[str, Any]:
-        """收工前的结构完整性闸：M 名下整棵树是不是已经全部销号（D-68，三态）。
+        """收工前的结构完整性闸：M 名下整棵树是不是已经全部销号（三态）。
 
-        业主 2026-10-26 逐字：「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」。
-        改前这一格不存在：M 名下有几十个还在册的代理，与它收工那件事毫无关系
-        （真机 `projects/sylow3`：50 个实例行、48 条板项、0 条销号落痕）。
+        「最终 final 时应该是 M 下整棵树都已销号，否则不记 final」：M 名下有还在册的
+        代理，与它收工那件事就有关系，没有例外的回合。
 
         返回 `{"checked","applicable","complete","root","nodes","dirty","count",
         "total","root_open_items","stalled","stalled_count","states","programs",
@@ -7932,7 +7931,7 @@ class AgentLoop:
           "整棵树"这回事），所以非 M 一律 `applicable=False, complete=True`（放行，且
           不落噪声）；"不是 M"是查过了的结论，不是"没查成"；
         - `checked`：台账读到没有。读不成 ⇒ `checked=False` 且这一趟也挡住
-          （业主 2026-11-03 的裁定 ③：fail-closed，与"A 的读不全 ⇒ 不叫醒"同一口径）：
+          （fail-closed，与"A 的读不全 ⇒ 不叫醒"同一口径）：
           "有没有树、清没清"这件事不知道的时候，不许把它读成"干净"；
         - `complete`：这一支全部销号了没有（`nodes` 与 `dirty` 都空），并且这一支名下
           没有还在跑的程序（`programs_ok`）。两条轴各自给读数，合起来才是"可以收工"；
@@ -7941,11 +7940,11 @@ class AgentLoop:
         - `stalled` / `stalled_count` / `states`：疑似停滞的那几个编号 / 几个，以及三态
           合计。它是读数（拒信要点名"名下有 N 个在飞子，其中 M 个已停滞超过 N 分钟"），
           不改 `complete`，也不许被读成"可以销"——见 `conductor.agent_state`；
-        - `programs` / `programs_ok`：这一支（含我自己那一行）还在跑的程序（G2 第 ② 条）。
+        - `programs` / `programs_ok`：这一支（含我自己那一行）还在跑的程序。
           `programs_ok=False` ⇒ `complete=False`（有主的程序还在跑就不记 final）；
           `programs.checked=False`（程序那一格没查成）不拦收工，但 `run.notes` 与这里都
           必须写"没查成"；无主程序与"账说收口了而进程还在"的那两类只点名、不拦
-          （业主第 ③ 条：无主进程读数是读数，不是门）；
+          （无主进程读数是读数，不是门）；
         - `why`：不干净时那一句人话（逐节点点名 + 未消项条数 + 还在跑的程序 + 处置路径）。
 
         为什么只有这一处：业主那句说的是"不记 final"，而 `final` 落盘的唯一入口是
@@ -7955,10 +7954,10 @@ class AgentLoop:
             "checked": True, "applicable": False, "complete": True,
             "root": str(self.my_task_id or ""), "nodes": [], "dirty": [],
             "count": 0, "total": 0, "root_open_items": 0, "why": "", "reason": "",
-            # 停滞读数（业主 2026-10-26 第二条）：`retire_integrity` 的同名格原样透传，
+            # 停滞读数：`retire_integrity` 的同名格原样透传，
             # 拒信里那一句"其中 M 个已停滞超过 N 分钟"就从这两格来。
             "stalled": [], "stalled_count": 0, "states": None,
-            # 程序读数（G2 第 ② 条，业主 2026-10-26：「注销前检测的能力」）：
+            # 程序读数（「注销前检测的能力」）：
             # 这一支名下（含我自己那一行）还有没有程序在跑。`retire_integrity` 的同名格
             # 原样透传（它读的是 `Conductor.programs_in_subtree`，与销号门同一份）。
             # 为什么另开两格而不是把它并进 `complete`：`complete` 数的是名册项
@@ -7970,7 +7969,7 @@ class AgentLoop:
                          "orphans": {}, "orphan_count": 0, "reason": ""},
             "programs_ok": True,
         }
-        # ---- 按签拦收工（乙，2026-11-11 业主裁定）：见 `_v_wait_gate_reading` ----
+        # ---- 按签拦收工：见 `_v_wait_gate_reading` ----
         #
         # 位置在"是不是主控"那一条之前：非 M 一律 `applicable=False` 返回，若把这道闸
         # 放在后面，它永远走不到（这正是它要补的那个空档）。判的是「计划号/稿有没有
@@ -7987,21 +7986,19 @@ class AgentLoop:
         if str(self.role) != S.CONDUCTOR_ROLE:
             reading["reason"] = "不是主控那一趟 ⇒ 名下没有整棵树可销（这道闸对它没有对象）"
             return reading
-        # ---- 任何 final 都要清仓，没有例外（业主 2026-10-26 追裁）
+        # ---- 任何 final 都要清仓，没有例外 ----
         #
-        # 这里曾经有一条"监控/被唤醒的回合不判"的例外（`monitor_of` 或 `run.wakes > 0`），
-        # 被业主追裁删掉：它是一个绕闸的口子 —— M 只要在一次被唤醒的回合里发 `final`，
-        # 就绕过了"整棵树都要销号"的要求。业主原话是「最终 final 时应该是 M 下整棵树
-        # 都已销号，否则不记 final」，没有给"哪种回合的 final"留口子。
-        # 于是判据只有一条：这一趟的 `final` 一律要过 `retire_integrity`；
-        # 树没清 ⇒ 不记 final（`stop_reason="final_refused"`），谁被唤醒、因为什么被唤醒都一样。
+        # "监控/被唤醒的回合不判"那条例外会是绕闸的口子 —— M 只要在一次被唤醒的回合里
+        # 发 `final`，就绕过了"整棵树都要销号"的要求。所以判据只有一条：这一趟的
+        # `final` 一律要过 `retire_integrity`；树没清 ⇒ 不记 final
+        # （`stop_reason="final_refused"`），谁被唤醒、因为什么被唤醒都一样。
         reading["applicable"] = True
         cond = self.conductor
         mine = str(self.my_task_id or "")
         if cond is None or not mine:
             reading["checked"] = False
             reading["complete"] = False
-            # 业主 2026-11-03 的裁定 ③：这一支改前是"照旧放行"，现在是挡（fail-closed）。
+            # 这一支是挡（fail-closed），不是"照旧放行"。
             # 为什么不让它放行：这一趟是主控（`role == M` ⇒ 这道闸有对象），却读不到
             # "名下那棵树"，于是"清没清"不知道 —— 不知道不许写成"干净"。
             missing = "conductor 没接上" if cond is None else "台账号是空的"
