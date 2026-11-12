@@ -1,13 +1,10 @@
-"""收工自动提交的读那一半（2026-11-11 从 `agent_f/delivery.py` 拆出）。
+"""收工自动提交的读那一半。
 
-为什么要拆：`delivery.py` 在「收工自动提交」那一批之后 660 → 987 行，越过 `>800` 的
-体量软基线；业主口径是基线不许抬，所以按「读 / 写」两条边界拆：
-
-- 本模块：读那一半 —— `mss:` 记号的拼与解（`submission_token` / `parse_submission` /
-  `submissions_of`）＋ 本工作区里 F 的稿 × V 的颁发表 ⇒ 每个稿号「该不该提交」的读数
-  （`submission_candidates`，纯读：不碰 store、不写盘）；
-- `agent_f/autosubmit.py`：写那一半 —— 收工那一趟选谁、事务里 append
-  `tasks.artifacts`（原 `agent_f/step.py::_Step._auto_submit_signed` 的方法体）。
+按「读 / 写」两条边界拆：本模块是读那一半 —— `mss:` 记号的拼与解（`submission_token` /
+`parse_submission` / `submissions_of`）＋ 本工作区里 F 的稿 × V 的颁发表 ⇒ 每个稿号
+「该不该提交」的读数（`submission_candidates`，纯读：不碰 store、不写盘）；
+`agent_f/autosubmit.py` 是写那一半 —— 收工那一趟选谁、事务里 append
+`tasks.artifacts`。
 
 公开面一个字没变：`delivery.py` 在顶层回引本模块的六个公开名，`step.py` 与
 `agent_d/write_report.py` 照旧按 `delivery.<name>` 取用（monkeypatch 面因此不变）。
@@ -18,22 +15,18 @@ from __future__ import annotations
 from typing import Any
 
 
-# ============================================================ 收工自动提交（业主 2026-11-11 裁定 ①）
+# ============================================================ 收工自动提交
 #
-# 业主逐字（这一节要落实的那一条）：
+# 三个前提，这一节按它排：
 #
-#     「F侧报告收工时自动提交其名下未提交的V签稿」
-#
-# 三个前提都写在裁定里，这一节按它排：
-#
-# 1. 事实来源是 V 的颁发表，不是新表（同日裁定 ②：「维护拿签稿的稿号表可以和
-#    V 自动维护的颁发出V签的表进行复用」）⇒ 本模块只读 `out/vsigns/<正文sha>.json`
-#    （逐份签 = 证据；`issued.json` 是派生归档，不拿它下结论），不落任何新账；
+# 1. 事实来源是 V 的颁发表，不是新表（「维护拿签稿的稿号表可以和 V 自动维护的颁发出
+#    V 签的表进行复用」）⇒ 本模块只读 `out/vsigns/<正文sha>.json`（逐份签 = 证据；
+#    `issued.json` 是派生归档，不拿它下结论），不落任何新账；
 # 2. 「已提交」的持久记号只有一处：F 自己的 `tasks.artifacts`（框架写、append-only）。
-#    判据是「里面有没有这个稿号」，与版本无关（同日追加裁定）；
-# 3. 一个稿号 = 一份文件（同日追加裁定：「一个稿号就相当于是该稿的文件名，
-#    不再细分 version 几」）⇒ 提交时看的就是该稿号当前那一份文件；签的 sha 与当前
-#    正文 sha 不一致 ⇒ 不提交、如实报，不替它挑「哪一版」。
+#    判据是「里面有没有这个稿号」，与版本无关；
+# 3. 一个稿号 = 一份文件（「一个稿号就相当于是该稿的文件名，不再细分 version 几」）⇒
+#    提交时看的就是该稿号当前那一份文件；签的 sha 与当前正文 sha 不一致 ⇒ 不提交、
+#    如实报，不替它挑「哪一版」。
 
 #: F 的稿族（`vsigns.parse_manuscript_name` 的 `family` 格；只认这一族）。
 FAMILY_F = "f-proof"
