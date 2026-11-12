@@ -113,7 +113,7 @@ from dataclasses import replace
 from datetime import datetime
 from functools import partial
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Sequence
 
 from .. import clock as C
 from .. import schema as S
@@ -267,6 +267,27 @@ def _find_task_row(store: Any, task_id: str) -> Mapping[str, Any] | None:
     return None
 
 
+def _roster_rows(root: Path, owner: str) -> Iterator[Mapping[str, Any]]:
+    """一位主人的名册行：对照表（`<父>-index.jsonl`）在前、名册本体在后，折叠后逐条吐。
+
+    两处读口（`:func:`_roster_task_id` / :func:`_roster_task_text`）改前各自抄了一遍
+    这段"两份盘上事实、读不成的那一份跳过、再折叠"的内层循环 —— 合并成这一处
+    （FC-03：同一件事一份实现）。逐条 `yield` 与原写法同序同内容：原写法也是
+    "读一份、折叠、逐条看"，命中就 `return`（第二份根本不会去读）—— 这里靠
+    生成器的惰性保持同一个副作用顺序，只是不必先读完再返回。
+    """
+    from .. import jsonlfile as JF
+    from .. import secretary as SEC
+
+    for path, fold in ((SEC.roster_index_path(root, owner), SEC._fold_index),
+                       (SEC.roster_path(root, owner), SEC._fold_roster)):
+        try:
+            rows, _bad = JF.read_jsonl(path)
+        except Exception:  # noqa: BLE001 - 一份读不成不该判成"没有这个名字"
+            continue
+        yield from fold(rows)
+
+
 def _roster_task_id(root: Path, name: str) -> tuple[str, str, str]:
     """名册名 -> 它当前那件活的台账号。返回 `(task_id, 名册主人, 理由)`。
 
@@ -275,26 +296,19 @@ def _roster_task_id(root: Path, name: str) -> tuple[str, str, str]:
     实现）。这里刻意不构造 `Secretary` 实例：探针在每次到点判定时都会跑，构造一个
     秘书会连带开日志/装配，代价与副作用都不该落在一次读数上。
     """
-    from .. import jsonlfile as JF
     from .. import secretary as SEC
 
     owners, why = SEC.roster_owners(root)
     if not owners:
         return "", "", why or "还没有人派过活（名册目录是空的）"
     for owner in owners:
-        for path, fold in ((SEC.roster_index_path(root, owner), SEC._fold_index),
-                           (SEC.roster_path(root, owner), SEC._fold_roster)):
-            try:
-                rows, _bad = JF.read_jsonl(path)
-            except Exception:  # noqa: BLE001 - 一份读不成不该判成"没有这个名字"
+        for item in _roster_rows(root, owner):
+            if str(item.get("name") or "") != str(name):
                 continue
-            for item in fold(rows):
-                if str(item.get("name") or "") != str(name):
-                    continue
-                task_id = str(item.get("task_id") or "")
-                if task_id:
-                    return task_id, str(owner), ""
-                return "", str(owner), f"名册里有 {name}，但它名下还没有活（task_id 为空）"
+            task_id = str(item.get("task_id") or "")
+            if task_id:
+                return task_id, str(owner), ""
+            return "", str(owner), f"名册里有 {name}，但它名下还没有活（task_id 为空）"
     return "", "", f"名册里没有 {name} 这个名字（找过 {len(owners)} 份名册）"
 
 
@@ -306,7 +320,6 @@ def _roster_task_text(root: Path, task_id: str) -> str:
     `task_text`（写侧在 `Secretary.roster_add` 里落的）。找不到就回空串 ——
     空串只表示"名册里没有这件活的原文"，不表示"它没有 task"。
     """
-    from .. import jsonlfile as JF
     from .. import secretary as SEC
 
     owners, _why = SEC.roster_owners(root)
@@ -314,18 +327,12 @@ def _roster_task_text(root: Path, task_id: str) -> str:
     if not want:
         return ""
     for owner in owners:
-        for path, fold in ((SEC.roster_index_path(root, owner), SEC._fold_index),
-                           (SEC.roster_path(root, owner), SEC._fold_roster)):
-            try:
-                rows, _bad = JF.read_jsonl(path)
-            except Exception:  # noqa: BLE001 - 一份读不成不该判成"没有原文"
+        for item in _roster_rows(root, owner):
+            if str(item.get("task_id") or "") != want:
                 continue
-            for item in fold(rows):
-                if str(item.get("task_id") or "") != want:
-                    continue
-                text = str(item.get("task_text") or "")
-                if text:
-                    return text
+            text = str(item.get("task_text") or "")
+            if text:
+                return text
     return ""
 
 
@@ -1367,6 +1374,13 @@ def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> Too
     reason = str(wakes.get("reason") or "")
     if problems:
         reason = "；".join(problems + ([reason] if reason else []))
+    # 三档状态计数走一趟：改前是三个 `sum(1 for t in all_timers if t.state == ...)`
+    # （同一张表扫三遍）。`t.state` 只读不改，三档的判据逐字相同，别的状态照样不计。
+    state_counts = {"pending": 0, "fired": 0, "cancelled": 0}
+    for t in all_timers:
+        state = t.state
+        if state in state_counts:
+            state_counts[state] += 1
     return ok({
         "checked": checked,
         "clock": "agentflow.clock",
@@ -1379,9 +1393,9 @@ def clock_timer_list(store: Any, root: Any, *, include_done: bool = True) -> Too
         "periodic_count": len(periodic_rows),
         "waiters": list(park.get("waiters") or []),
         "waiters_parked": park.get("parked"),
-        "pending_count": sum(1 for t in all_timers if t.state == "pending"),
-        "fired_count": sum(1 for t in all_timers if t.state == "fired"),
-        "cancelled_count": sum(1 for t in all_timers if t.state == "cancelled"),
+        "pending_count": state_counts["pending"],
+        "fired_count": state_counts["fired"],
+        "cancelled_count": state_counts["cancelled"],
         "pending_wakes": int(wakes.get("count") or 0) if wakes.get("checked") else 0,
         "wakes_checked": bool(wakes.get("checked")),
         "observed_events": observed["counts"],
@@ -1644,15 +1658,25 @@ def program_list(store: Any, root: Any, *, include_done: bool = False) -> ToolRe
 def _program_stop_payload(**kw: Any) -> dict[str, Any]:
     """把逐条读数与汇总装成同一份形状（每一档都给全键，缺的那档是 0 / 空表）。"""
     items = list(kw.get("items") or ())
-    counts = {code: sum(1 for r in items if str(r.get("result") or "") == code)
-              for code in C.PROGRAM_STOP_RESULTS}
-    killed = int(counts.get("killed") or 0)
+    # 改前是「每档一次整表扫」（`{code: sum(1 for r in items ...) for code in
+    # PROGRAM_STOP_RESULTS}`）+「再扫一趟收 still_alive」+「再扫一趟加 woken」——
+    # 同一张 items 扫了 3 + N 遍（N = 受控档位数）。这里一趟把三件事都收齐：
+    # counts 的键集合仍是 `PROGRAM_STOP_RESULTS` 全体（缺的档是 0，与改前同形）。
+    counts = {code: 0 for code in C.PROGRAM_STOP_RESULTS}
     still_alive: list[int] = []
+    seen_alive: set[int] = set()
+    woken = 0
     for row in items:
+        code = str(row.get("result") or "")
+        if code in counts:
+            counts[code] += 1
         for pid in (row.get("still_alive") or ()):
-            if int(pid) not in still_alive:
-                still_alive.append(int(pid))
-    woken = sum(int(r.get("woken") or 0) for r in items)
+            pid_num = int(pid)
+            if pid_num not in seen_alive:
+                seen_alive.add(pid_num)
+                still_alive.append(pid_num)
+        woken += int(row.get("woken") or 0)
+    killed = counts.get("killed") or 0
     bits = [f"我杀了 {killed} 个自己的程序"]
     if counts.get("already_exited"):
         bits.append(f"{counts['already_exited']} 个早就结束了（already_exited：查过了，不是第二次杀掉）")
