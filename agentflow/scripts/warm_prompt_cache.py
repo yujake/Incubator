@@ -1,23 +1,31 @@
-"""把十一个角色 + 秘书的提示词前缀写进上游缓存，并把当次读数落成可复核的 JSON。先说结论：本仓没有"写缓存"的开关：上游（DeepSeek）的前缀缓存是服务端自动的：请求体里没有 `cache_control`，
-也没有`AGENTFLOW_*_CACHE` 这类环境变量。全仓 grep `cache_control` 命中 0 处；`modelgw.py`的 `_payload`（`:739-764`）只拼 `model` / `messages` /
-`temperature` / `stream` /推理强度 / `tools`，一个缓存注解都没有。于是"写缓存"这件事的唯一开关是前缀逐字节相同：上游自己对没命中的那部分建索引，下一次同前缀的请求就命中。
-读数那一侧才有字段：`usage.prompt_cache_hit_tokens` /`prompt_cache_miss_tokens`（`modelgw.py:878-888` 读进来 → `llmseam.py:477-478`转成
-`SeamCall` 两格 → `promptstability.prompt_cache_record` 成形）。上游没有"写"这个计数。本脚本里的 `write` 是推导量：一次调用里被上游建索引的就是它报的 miss
-那部分（`write = prompt_cache_miss_tokens`），并在读数里标`write_source="derived:miss"`。上游没给这两格时三者都是 `None`（unknown，绝不折成 0）。
-这个脚本发的是什么请求（为什么它和生产对得上）：每个角色发的形状与 `agent_loop` 生产路径一致：tools = llmseam.build_tool_face(role, registry)     # 原生工具面（生产也发这个）system =
-agent_prompts.system_prompt(role, registry=..., split_facts(facts))user   = 一句话"只回 OK"                            # 生产的第 0 条 user
-是开场白，它在前缀之后 ⇒ 不影响命中：`facts` 用 `promptstability.split_facts` 过一遍 —— 与生产同一个函数，于是 system 里会变的事实全是静态指路语（`budget_left` / `notebook` /
-`task` / `task_id` / `depth` /`parent_task_id` / `summoned_by` / `children` / `board` / `inbox` /
-`user_replies` /`workspace_root`，见 `promptstability.STEP_VOLATILE_FACTS`）。秘书那一档（2026-10-21
-起与十个角色同形）：`Secretary.judge` 调`seam.ask_json(material, system=_judge_system(kind))` —— 稳定头进 system、材料留在 user。所以秘书那一行的预热对象是
-`_judge_system(kind)` 那一段，user 消息是空材料的形状（`材料：` + 一份 JSON）。改前它整条都在 user 位（`system=""`），实测连发两趟 `hit=0 / miss=175`。
-「谁进命中样本、谁被排除、为什么」：`--hit-sample` 点名的是"同一份前缀再发一次应当命中"的目标 —— 这是"缓存真的落地了"的实证（`write` 只是推导量：`write = miss`）。秘书被显式排除（见 `HIT_SAMPLE_EXCLUDED`）：它的 system 头只有 304 字（2026-11-01 真机读数），上游对这一段始终报 `hit=0`（连发两趟 `miss=176`）⇒ 把它放进样本就必然让整趟落成 `incomplete`，而同一趟里其余十一个目标的命中率是 99.3%–99.7%、每一行 `ok` 都是 true。于是"整趟没暖成"与"秘书这一格不计缓存命中"被折成了同一个词 —— 那个读数是假的。排除不是"不量"：秘书照常预热、照常有 `write>0` 的落地记录，只是不进"必须命中"的样本，并在读数里单列成 `hit_sample_excluded=[{target, why}]`（`--hit-sample` 里没有它时这一格是空表，不是一句话）。`verdict` 只由进样本的目标（`hit_sample_measured`）决定：`incomplete` 只在这些目标真有 miss 时出现；反真空是"让一个普通角色（例如 M）真 miss ⇒ 仍必须判 `incomplete`"（判据 `tests/test_prompt_cache_warm.py` 第 6 节）。
-内置花费上限：`LlmSeam(usd_budget=--cap-usd)`（默认 0.10 美元）是真闸：每发一次请求之前它自己比一次全局已花（`llmseam.ask` 的前两个分支），超了就返回 `judge_over_budget` 而不发请求。
-本脚本在它之外再预检一次（`spent >= cap` ⇒ 干净停下并说"剩下的没预热"），于是"超上限"不会被误读成"某一个角色预热失败"。幂等 / 可重复：同一 scenario 再跑一遍：同样的 prompt_sha256、同样的
-system/tools 摘要，第二趟的`hit` 会接近满、`write` 接近 0（这正是判据 ② 要的那一跳）。所以重复跑是安全的，而且它本身就是"缓存真的落了盘"的证明。退出码（三态，与 `noai_gate.py` /
-`release_check.py` 同一纪律）：```text 0 = warmed       查过了：点名的每个目标都有"写进去"的记录（write>0 或 hit>0）1 = incomplete   查过了：有目标**没有**那条记录（调用失败 / 预算中途停 / 上游不给读数）2 = unknown      **没查成**：没有模型 key、渲染不出来、写不出读数文件````unknown`
-绝不是 `warmed`。"没预热"与"预热了但上游没给读数"也是两件事：后者是本文件里 `known=false` 的那一档，它算 `incomplete`（那块缓存有没有落地不可判定）。
-"""
+"""把十一个角色 + 秘书的提示词前缀写进上游缓存，并把当次读数落成可复核的 JSON。本仓没有"写缓存"的开关：上游（DeepSeek）的前缀缓存是服务端自动的 —— 请求体里没有 `cache_control`，也没有 `AGENTFLOW_*_CACHE` 这类环境变量；`modelgw._payload` 只拼 `model` / `messages` / `temperature` / `stream` / 推理强度 / `tools`。
+于是"写缓存"的唯一开关是前缀逐字节相同：上游自己对没命中的那部分建索引，下一次同前缀的请求就命中。读数那一侧才有字段：`usage.prompt_cache_hit_tokens` / `prompt_cache_miss_tokens`（`modelgw` → `llmseam` 的 `SeamCall` → `promptstability.prompt_cache_record`）。
+上游没有"写"这个计数：本脚本里的 `write` 是推导量（`write = prompt_cache_miss_tokens`，读数里标 `write_source="derived:miss"`）；上游没给这两格时三者都是 `None`（unknown，绝不折成 0）。
+
+这个脚本发的是什么请求（为什么它和生产对得上）：每个角色发的形状与 `agent_loop` 生产路径一致：
+tools = `llmseam.build_tool_face(role, registry)`（原生工具面，生产也发这个）；system = `agent_prompts.system_prompt(role, registry=..., split_facts(facts))`；
+user = 一句话"只回 OK"（生产的第 0 条 user 是开场白，它在前缀之后 ⇒ 不影响命中）：`facts` 用 `promptstability.split_facts` 过一遍 —— 与生产同一个函数，
+于是 system 里会变的事实全是静态指路语（`budget_left` / `notebook` / `task` / `task_id` / `depth` / `parent_task_id` / `summoned_by` / `children` /
+`board` / `inbox` / `user_replies` / `workspace_root`，见 `promptstability.STEP_VOLATILE_FACTS`）。
+秘书那一档与十个角色同形：`Secretary.judge` 调 `seam.ask_json(material, system=_judge_system(kind))` —— 稳定头进 system、材料留在 user。
+所以秘书那一行的预热对象是 `_judge_system(kind)` 那一段，user 消息是空材料的形状（`材料：` + 一份 JSON）。
+
+「谁进命中样本、谁被排除、为什么」：`--hit-sample` 点名的是"同一份前缀再发一次应当命中"的目标 —— 这是"缓存真的落地了"的实证（`write` 只是推导量）。
+秘书被显式排除（见 `HIT_SAMPLE_EXCLUDED`）：它的 system 头只有三百来字，上游对这一段始终报 `hit=0` ⇒ 把它放进样本就必然让整趟落成 `incomplete`，
+而同一趟里其余十一个目标几乎全命中。于是"整趟没暖成"与"秘书这一格不计缓存命中"被折成了同一个词 —— 那个读数是假的。
+排除不是"不量"：秘书照常预热、照常有 `write>0` 的落地记录，只是不进"必须命中"的样本，并在读数里单列成 `hit_sample_excluded=[{target, why}]`。
+`verdict` 只由进样本的目标（`hit_sample_measured`）决定：`incomplete` 只在这些目标真有 miss 时出现；反真空是"让一个普通角色（例如 M）真 miss ⇒ 仍必须判
+`incomplete`"（判据 `tests/test_prompt_cache_warm.py` 第 6 节）。
+
+内置花费上限：`LlmSeam(usd_budget=--cap-usd)`（默认 0.10 美元）是真闸：每发一次请求之前它自己比一次全局已花（`llmseam.ask` 的前两个分支），超了就返回
+`judge_over_budget` 而不发请求。本脚本在它之外再预检一次（`spent >= cap` ⇒ 干净停下并说"剩下的没预热"），于是"超上限"不会被误读成"某一个角色预热失败"。
+
+幂等 / 可重复：同一 scenario 再跑一遍：同样的 prompt_sha256、同样的 system/tools 摘要，第二趟的 `hit` 会接近满、`write` 接近 0（这正是判据 ② 要的那一跳）。
+所以重复跑是安全的，而且它本身就是"缓存真的落了盘"的证明。
+
+退出码（三态，与 `noai_gate.py` / `release_check.py` 同一纪律）：`0` = warmed（点名的每个目标都有"写进去"的记录：write>0 或 hit>0）；
+`1` = incomplete（有目标没有那条记录：调用失败 / 预算中途停 / 上游不给读数）；`2` = unknown（没查成：没有模型 key、渲染不出来、写不出读数文件）。
+`unknown` 绝不是 `warmed`。"没预热"与"预热了但上游没给读数"也是两件事：后者是本文件里 `known=false` 的那一档，它算 `incomplete`（那块缓存有没有落地不可判定）。"""
 
 from __future__ import annotations
 
@@ -71,17 +79,17 @@ WARM_TARGETS: tuple[str, ...] = ROLES + (SECRETARY,)
 DEFAULT_CAP_USD = 0.10
 
 #: 做"第二次调用应该命中"那一跳的样本（省钱：只挑 2 个）。
-#: 挑规则：`M` 是最大的一份（历史真机读数就是它），`C` 是最小的一份（最便宜的对照）。
+#: 挑规则：`M` 是最大的一份，`C` 是最小的一份（最便宜的对照）。
 DEFAULT_HIT_SAMPLE: tuple[str, ...] = ("M", "C")
 
-#: 诊断档是 warm 的固定组成部分（2026-11-04 复发缺陷的修法 ①）。
+#: 诊断档是 warm 的固定组成部分。
 #:
 #: ## 缺陷
 #:
-#: 读数文件只留最近 `MAX_RUNS_KEPT` 趟，而"带 `--probe-no-tools` 的那一趟"曾经是
-#: 唯一一条诊断：p241 两趟预热把它挤出去 ⇒
-#: `test_the_two_diagnostic_readings_say_what_they_measured` 红；当时靠补跑两趟
-#: （$0.001223 + $0.002201）恢复 —— 那是花钱掩盖，不是修：下一次滚存照样复发。
+#: 读数文件只留最近 `MAX_RUNS_KEPT` 趟，而"带 `--probe-no-tools` 的那一趟"曾是
+#: 唯一一条诊断：两次预热就把它挤出窗口 ⇒
+#: `test_the_two_diagnostic_readings_say_what_they_measured` 红。补跑恢复是花钱
+#: 掩盖，不是修：下一次滚存照样复发。
 #:
 #: ## 修法（为什么不是把窗口调大）
 #:
@@ -94,9 +102,9 @@ DEFAULT_HIT_SAMPLE: tuple[str, ...] = ("M", "C")
 #: 为什么都要固定：`test_the_two_diagnostic_readings_say_what_they_measured`
 #: 读的是同一趟里的两条读数（`tools_in_prefix` 与 `cross_run_hit`）。只固定其中
 #: 一条，它就会在"最近一趟没有另一条"时红 —— 那不是修好了，只是换一条路复发。
-#: 跨 run 这一侧后来还证明了同一条：只固定 H 时，p241 滚存把 M 挤掉 ⇒
+#: 跨 run 这一侧是同一条：只固定 H 时，滚存把 M 挤掉 ⇒
 #: `test_cross_run_prefix_is_reused.py` 的 `test_two_partner_configs_...` 以
-#: `KeyError: 'M'` 红（2026-11-05）。两个伙伴必须每趟都量，不是"轮着量"。
+#: `KeyError: 'M'` 红。两个伙伴必须每趟都量，不是"轮着量"。
 #:
 #: 代价：每趟多 5 次调用（1 次去工具面 + 两个伙伴各 2 次）。它们都在同一份前缀上，
 #: 真机实测比主趟便宜一个量级（见读数里 `usd` 那一格）；换来的是诊断不再随滚存消失。
@@ -163,9 +171,8 @@ def _resolve_cross_run_probes(
       `--roles` 里就退到第一个不在名单里的非秘书目标（来源 `fallback`）。
     - 显式点名是追加，不是替换：显式 `--probe-cross-run V` 得到 H / M / V 三个
       伙伴，显式 `--probe-cross-run H` 不会把 M 删掉。为什么：滚存会把"唯一一条"
-      挤掉，而"只量一个伙伴"正是 2026-11-04（no-tools）与 2026-11-05（M）两次
-      红的同一个根。要让 M 不量，只能改这里的缺省表（那是一条判据要抓的改动），
-      不能靠一次命令行参数偷偷少量。
+      挤掉，而"只量一个伙伴"正是这条判据两次红的同一个根。要让 M 不量，只能改
+      这里的缺省表（那是一条判据要抓的改动），不能靠一次命令行参数偷偷少量。
     - 显式点名不在 `present` 里、或点了秘书：忽略（命令行侧会先拒绝；程序调用
       不与产品规则对着干 —— 秘书不是跨 run 目标）。
     """
@@ -195,11 +202,10 @@ def _resolve_cross_run_probes(
 #:
 #: ## 秘书为什么被排除（不是"跳过不量"）
 #:
-#: 它的 system 头只有 304 字（2026-11-01 真机读数：`--roles secretary` 那一趟的
-#: `system_chars=304`），而上游对这一段始终报 `hit=0`（连发两趟 `miss=176`）。
+#: 它的 system 头很短，上游对这一段始终报 `hit=0`（具体读数见这张表的值）。
 #: 于是"把秘书放进 `--hit-sample`"必然让整趟落成 `incomplete` —— 而同一趟里
-#: 其余十一个目标的命中率是 99.3%–99.7%、`rows[].ok` 全为 true。两件事被折成
-#: 同一个词，读数就在说谎：读者分不出"整趟没暖成"与"秘书这一格不计命中"。
+#: 其余十一个目标几乎全命中、`rows[].ok` 全为 true。两件事被折成同一个词，读数
+#: 就在说谎：读者分不出"整趟没暖成"与"秘书这一格不计命中"。
 #:
 #: 排除只作用于"必须命中"这个判据：秘书仍然在 `WARM_TARGETS` 里、仍然被预热、
 #: 仍然要有 `write>0` 的落地记录（`missing` 那一格照样会点名它）。它不进的是
@@ -249,7 +255,7 @@ USER_PROMPT = "这是前缀预热：不要做任何工作，不要调用工具�
 #: 它模拟的是"同一个角色被派去做另一件活"：任务文本、台账号、深度、收件箱、板上、
 #: 名册、用户答、工作区根全换，其余不变。
 #:
-#: 2026-10-21 之后这份事实改变不了 system 一个字节（上面那些格子全在
+#: 这份事实改变不了 system 一个字节（上面那些格子全在
 #: `promptstability.STEP_VOLATILE_FACTS` 里、全被换成静态指路语）⇒
 #: `cross_run_prefix_chars` 应当等于整条 system 的长度，而真机读数里"换一趟活"的
 #: 第一次调用就该命中（`cross_run_hit` 里该伙伴的两行）。这份事实因此变成了判据的探针：
@@ -265,13 +271,11 @@ OTHER_RUN_FACTS: Mapping[str, Any] = {
     "inbox": "- [m-0001] 一条留言",
     "user_replies": "- [q-0001] 问：… → 用户答（user）：…",
     "workspace_root": "/tmp/another-workspace",
-    # ---- 2026-10-21 第二批：另一份伙伴配置（不只是另一件活）。
+    # ---- 另一份伙伴配置（不只是另一件活）。
     #
     # `availability`（`host.wiring_status` 的读数）与 `parent_limits`（`Policy` 的数字）
-    # 此前住在 system 里（段序 4520 / 5210），于是"换一份伙伴配置"在这里会表现为
-    # 前缀从 63% / 88% 处断开 —— 跨 run 探针那一行（`pass=4`，第一次见这份 system）
-    # 的 `hit` 就是"换配置之后还剩多少前缀"的实测值。
-    # 改后它们只在开场那条 user 消息里（消息不是前缀）⇒ `pass=4` 也该≥90%。
+    # 只出现在开场那条 user 消息里（消息不是前缀）⇒ 换一份伙伴配置不该动前缀，
+    # 跨 run 探针那一行（第一次见这份 system）的 `hit` 因此也该 ≥90%。
     # 判据：`tests/test_cross_run_prefix_is_reused.py::test_two_partner_configs_hit_...`。
     "availability": {"A": "no_provider", "B": "wired", "C": "no_key", "D": "wired",
                      "E": "wired", "F": "wired", "G": "wired", "H": "wired", "V": "wired"},
@@ -286,12 +290,12 @@ def _sha(text: str) -> str:
 
 #: 预热读数里那一格 key 指纹 —— 直接取 `cachectl` 的实现（不是转发、更不是第二份）。
 #:
-#: 为什么不再内联一份（`R-BE4`，2026-10-27 业主批准）：这里原先写的是
-#: `hashlib.sha256(key.encode()).hexdigest()[:16]`，与 `cachectl.fingerprint` 只差
-#: 一个边界 —— 空 key。那份返回空串（"没有 key"），这份返回 `sha256("")[:16]`
-#: = `e3b0c44298fc1c14`，于是"没有 key 时落过读数"这一档会被 `cachectl._key_matches`
-#: 读成"换过 key 了"（`key.tri="stale"`），而事实是这一档根本没有 key。
-#: 判据 `tests/test_cache_key_fingerprint_is_one_implementation.py` 钉住"对象同一"
+#: 为什么直接取而不内联一份：`hashlib.sha256(key.encode()).hexdigest()[:16]` 与
+#: `cachectl.fingerprint` 只差一个边界 —— 空 key。那份返回空串（"没有 key"），
+#: 内联版返回 `sha256("")[:16]` = `e3b0c44298fc1c14`，于是"没有 key 时落过读数"
+#: 这一档会被 `cachectl._key_matches` 读成"换过 key 了"（`key.tri="stale"`），
+#: 而事实是这一档根本没有 key。判据
+#: `tests/test_cache_key_fingerprint_is_one_implementation.py` 钉住"对象同一"
 #: 与"每个 key 上结论逐字相同"。
 key_fingerprint = CACHECTL.fingerprint
 
@@ -333,16 +337,13 @@ def lean_mode() -> bool:
 #: （"命中"能证明"写过"以外的更多事，但"写过"这一格就没了）。所以两趟都留着。
 #: 键集仍然只有一个来源（本文件），`MAX_RUNS_KEPT` 防止它无限长。
 #:
-#: 2026-10-22 从 8 提到 16：8 只是"一档 + 一趟重落 + 一条诊断"刚好够用的窗口。现在要
-#: 同时留两档（Lean 关 / 开），而诊断读数（带 `tools_in_prefix` 的那一趟、跨 run 探针、
-#: 秘书的第二次调用）本来就是更早跑出来的 —— 两趟新预热就会把仅有的那条诊断读数挤出
-#: 窗口，届时 `test_cross_run_prefix_is_reused.py` 会以"没有探针 ⇒ 这次没量"变红。
-#: 加 8 格不是"多留点历史"，是为了让"两档 + 诊断"同时待在窗口里。
+#: 为什么是 16：要同时留两档（Lean 关 / 开），而诊断读数（带 `tools_in_prefix` 的那一趟、
+#: 跨 run 探针、秘书的第二次调用）本来就是更早跑出来的 —— 更小的窗口会让两趟新预热把
+#: 仅有的那条诊断读数挤出去，届时 `test_cross_run_prefix_is_reused.py` 会以"没有探针 ⇒
+#: 这次没量"变红。多留几格不是"多留点历史"，是为了让"两档 + 诊断"同时待在窗口里。
 #:
-#: 2026-11-04：16 这个数字不再承担"把诊断留在窗口里"的职责。那次复发证明它担不起：
-#: p241 两趟照样把唯一带 `--probe-no-tools` 的 p234 那趟挤了出去（见
-#: `DEFAULT_TOOLS_PROBE`）。现在诊断是每一趟的固定组成 ⇒ 这个窗口只回答"留几趟历史"，
-#: 不再回答"诊断还在不在"。所以这里不调大（调大只是把复发推迟）。
+#: 现在诊断是每一趟的固定组成 ⇒ 这个窗口只回答"留几趟历史"，不再回答"诊断还在不在"。
+#: 所以这里不调大（调大只是把复发推迟）。
 MAX_RUNS_KEPT = 16
 
 
@@ -493,14 +494,9 @@ def _render_system(role: str, registry: Any, facts: Mapping[str, Any]) -> str:
 def _secretary_head() -> tuple[str, int]:
     """秘书的稳定头（进 `system` 那一位的那一段）与它的长度。
 
-    2026-10-21 之前：`Secretary.judge`（`secretary.py:1325`）调的是
-    `seam.ask_json(prompt)` —— 不带 system，抬头 + 问题 + 材料全在一条 user 消息里，
-    而材料每问一次都变。真机读数（`2026-10-21`，本脚本 `--roles secretary
-    --hit-sample secretary`）：连发两趟都是 `hit=0 / miss=175`。
-
-    现在：`_judge_system(kind)` 走 `system=`，`_judge_material(context)` 留在 user。
-    于是可预热的那一段就是 system 本身（`prefix_chars = len(system)`），
-    而它与"这一趟问的是什么材料"无关 —— 换一份材料照样命中。
+    可预热的那一段是 `system` 本身（`prefix_chars = len(system)`）：
+    `_judge_system(kind)` 走 `system=`，`_judge_material(context)` 留在 user，
+    而材料每问一次都变 —— 于是它只影响 user，换一份材料照样命中。
     """
     from agentflow.secretary import _judge_system
 
@@ -648,7 +644,7 @@ def _record_of(target: str, item: Mapping[str, Any], call: Any, *, pass_no: int,
     """一次调用的读数行（含 `write` 的推导与三态）。
 
     `prompt_sha256` 在这一份读数里的口径：这一行被预热的那段提示词的 sha256 ——
-    2026-10-21 起十一个目标同形：都是真正发出去的那条 `system`（秘书也是）。
+    十一个目标同形：都是真正发出去的那条 `system`（秘书也是）。
     `system_sha256` / `user_sha256` 两格分别给出真正发出去的两条消息的摘要，
     于是"预热的是哪一段"不必靠字段名猜。
     """
@@ -849,13 +845,12 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
     为这个形态准备的）。设完 env 之后必须清 `agent_prompts` 的 `lru_cache`，
     否则渲染还读着上一档的开关。
 
-    `tools_probe` / `cross_run_probes` 是每一趟的固定组成部分（2026-11-04）：
+    `tools_probe` / `cross_run_probes` 是每一趟的固定组成部分：
     缺省（`None`）取 `DEFAULT_TOOLS_PROBE` / `DEFAULT_CROSS_RUN_PROBES`，显式点名则
     追加目标（不能减：见 `_resolve_cross_run_probes`）。为什么不再允许"不做诊断"、
     也不允许"只量一个伙伴"：读数文件只留 `MAX_RUNS_KEPT` 趟，而这些诊断曾经是
     历史里的"唯一一趟" —— 滚存会把它挤掉，判据随即变红（见 `DEFAULT_TOOLS_PROBE`
-    的说明；跨 run 的 M 就是这么在 2026-11-05 红的）。每一趟都带 ⇒ 窗口怎么滚，
-    最近一趟都有全部诊断。
+    的说明）。每一趟都带 ⇒ 窗口怎么滚，最近一趟都有全部诊断。
 
     `tools_probe` 回答：工具面在不在缓存前缀里？做法：拿一个已经带工具面预热过的
     目标，把同一个 system 在不带工具面的情况下再发一次。
@@ -1001,7 +996,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             tools_in_prefix = None if got is None else (int(got) == 0)
         cross_rows = [r for r in rows if int(r["pass"]) in (4, 5)]
         # 每个伙伴都量到两行才算"这一趟真的带了跨 run 诊断"（预算停在中途会是 false，
-        # 少一个伙伴也是 false —— 那正是 2026-11-05 M 被挤掉时要能看见的形态）。
+        # 少一个伙伴也是 false —— 那正是"伙伴被滚存挤掉"时要能看见的形态）。
         cross_complete = bool(cross_probes) and all(
             sum(1 for r in cross_rows if str(r["role"]) == partner) == 2
             for partner in cross_probes)
@@ -1021,7 +1016,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             # 与走 `cachectl.warm` 写的是同一份读数 —— 少这三格，那一路会落成
             # `key_fingerprint_missing`（"换没换过不可判定"），而两份读数看起来一样。
             # 指纹只许一处实现：`key_fingerprint()` 转发 `cachectl.fingerprint`
-            # （`R-BE4`：内联那份在空 key 上与它结论相反，见该函数的 docstring）。
+            # （内联那份在空 key 上与它结论相反，见该函数的 docstring）。
             "key_fingerprint": key_fingerprint(str(getattr(spec, "api_key", "") or "")),
             "key_model": str(getattr(spec, "model", "") or ""),
             "key_base_url": str(getattr(spec, "base_url", "") or ""),
@@ -1051,7 +1046,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             "tools_probe": probe,
             "cross_run_probes": list(cross_probes),
             # 这一趟带了哪些诊断、目标是哪来的（`explicit` / `default` / `fallback`）。
-            # 2026-11-04 起诊断是 warm 的固定组成部分：判据不必再从历史里捞"唯一那趟"，
+            # 诊断是 warm 的固定组成部分：判据不必再从历史里捞"唯一那趟"，
             # 滚存也就挤不掉它（`carried=True` 是正常趟的形态）。
             "diagnostics": {
                 "tools_probe": probe,
@@ -1066,7 +1061,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             # 每个伙伴两行：`pass=4` 是第一次见这份 system（应当 0 命中），
             # `pass=5` 是同一份再发一次（应当接近满命中）。两行一起才说明白
             # "命中条件是前缀逐字节相同"，而不是"缓存坏了 / 缓存很好"。
-            # 2026-11-05 起固定两个伙伴（H 与 M）⇒ 每趟 4 行；每行都带 `role`。
+            # 两个伙伴固定（H 与 M）⇒ 每趟 4 行；每行都带 `role`。
             # 为什么不是一个伙伴：`test_two_partner_configs_...` 要两者都命中 ——
             # "某一段只在另一个角色的模板里"只量一个角色看不见。
             "cross_run_hit": ([{"role": r["role"], "pass": int(r["pass"]),
@@ -1077,7 +1072,7 @@ def warm(targets: tuple[str, ...] = WARM_TARGETS, *, cap_usd: float = DEFAULT_CA
             "note": "",
         }
         # 先定结论、再落盘：读数文件里必须带着结论写下去。
-        # 反例（本脚本第一版就是这个形态）：先写文件后判结论 ⇒ 盘上 `verdict` 恒为空串，
+        # 反例：先写文件后判结论 ⇒ 盘上 `verdict` 恒为空串，
         # 而"没判过"与"判过了没问题"在读者眼里长得一模一样（三态纪律）。
         result["verdict"] = str(judgement["verdict"])
         result["note"] = str(judgement["note"])
