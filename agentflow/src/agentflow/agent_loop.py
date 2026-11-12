@@ -12877,6 +12877,9 @@ class AgentLoop:
         if self.secretary is None or shape not in SECRETARY_OUTBOUND_SHAPES:
             return {}
         out: dict[str, Any] = {}
+        # 本实例自己的根：`optimize_outbound` 与 `assess_delegation` 两处兜底都读它，
+        # 取一次（_attribute 是纯属性，读在 try 外不会把异常从 fail-open 里挤出去）。
+        base = str(self.workspace_root or "")
         try:
             # `admission` 是依赖注入：秘书要判 `message` 的协作边，判据本体在
             # 本模块（`message_admission`）—— 传进去而不是让 `secretary.py` 自己抄一份。
@@ -12887,7 +12890,7 @@ class AgentLoop:
             got = self.secretary.optimize_outbound(shape, dict(payload),
                                                    admission=message_admission,
                                                    face=face_note,
-                                                   base=str(self.workspace_root or ""))
+                                                   base=base)
             out["alarms"] = list(got.get("alarms") or [])
             out["fail_open"] = bool(got.get("fail_open"))
             if got.get("problem"):
@@ -12896,14 +12899,16 @@ class AgentLoop:
             # `_recipient_face` 是钩子与循环之间的承载键（与 `_washed_payload` 同族）：
             # 循环取完就 pop，按它决定这一步执不执行；角色读到的是循环按它摆出来的
             # `refused` / `error` 那两格。
-            if isinstance(got.get("face"), Mapping):
-                out["_recipient_face"] = dict(got["face"])
+            got_face = got.get("face")
+            if isinstance(got_face, Mapping):
+                out["_recipient_face"] = dict(got_face)
             # ---- S1g：洗格式的读数 + 真正要发出去的那一份。
             #
             # `_washed_payload` 用一个下划线打头的键承载（本模块内部用）：
             # 它不并进这一步的结果 —— 结果里只看 `wash`（三态 + 动了几格），
             # 全文在台账的 `before`/`after` 两格里（那份才是给人逐格看的）。
-            wash = got.get("wash") if isinstance(got.get("wash"), Mapping) else {}
+            got_wash = got.get("wash")
+            wash = got_wash if isinstance(got_wash, Mapping) else {}
             out["wash"] = {"checked": bool(wash.get("checked")),
                            "washed": bool(got.get("washed")),
                            "refused": str(wash.get("refused") or ""),
@@ -12914,23 +12919,26 @@ class AgentLoop:
             # 要么是一条请示（`outcome=wash_proposed` + `proposal_id` + diff），
             # 要么是一次确认/拒绝的结论（`accepted` 真/假），要么是"编号不成立"的受控拒绝。
             # 循环取完就 pop 掉，然后按它决定：执行 washed / 执行 original / 谁都不执行。
-            if isinstance(got.get("wash_proposal"), Mapping):
-                out["wash_proposal"] = dict(got["wash_proposal"])
+            got_proposal = got.get("wash_proposal")
+            if isinstance(got_proposal, Mapping):
+                out["wash_proposal"] = dict(got_proposal)
             # ---- S1g-2：面适配读数（业主 2026-10-09「"超越职责"的一个主要可能是
             # 无法在被分配的读写面内完成任务，这个秘书也要帮忙看」）。
             # `base` 传本实例自己的根：子代理那一趟它的根是它的面，父视角的基准
             # 必须跟着走（否则"父视角有、面内没有"这一档会算错）。
-            out["surface_fit"] = dict(got.get("surface") or {}) if isinstance(
-                got.get("surface"), Mapping) else {}
+            surface = got.get("surface")
+            surface_ok = isinstance(surface, Mapping)
+            out["surface_fit"] = dict(surface or {}) if surface_ok else {}
             # ---- 能力面那一维（业主 2026-10-14：「秘书侧……评估派发出的任务能否由
             # 子代理及子代理的出边共同完成」）。与 `surface_fit`（路径面）各判一维：
             # 这一条说"谁能做"（`in_self` / `via_edges` / `unreachable` / `unknown`），
             # 那条说"在哪做"。两条都是读数，都不替父改主意。
-            if isinstance(got.get("surface"), Mapping):
-                out["reach_fit"] = dict(got["surface"].get("reach") or {})
-                if got["surface"].get("reach_bad"):
-                    out["reach_bad_targets"] = list(got["surface"]["reach_bad"])
-                    out["reach_reason"] = str(got["surface"].get("reach_reason") or "")
+            if surface_ok:
+                out["reach_fit"] = dict(surface.get("reach") or {})
+                reach_bad = surface.get("reach_bad")
+                if reach_bad:
+                    out["reach_bad_targets"] = list(reach_bad)
+                    out["reach_reason"] = str(surface.get("reach_reason") or "")
             if wash.get("refused"):
                 # 硬拒：一次派活连"派给谁/做什么"都不全 ⇒ 不执行、不评估、不协商。
                 return out
@@ -12945,19 +12953,20 @@ class AgentLoop:
             try:
                 to = str(payload.get("role") or "")
                 action = str(payload.get("action") or "")
+                raw_params = payload.get("params")
                 key = str(payload.get("input_key") or "") or _summon_key(
-                    action, dict(payload.get("params") or {}))
+                    action, dict(raw_params or {}))
                 dups: list[dict[str, Any]] = []
                 if self.conductor is not None and hasattr(self.conductor, "duplicate_candidates"):
                     dups = self.conductor.duplicate_candidates(to, action, key)
                 out["assessment"] = self.secretary.assess_delegation(
-                    to=to, action=action, params=dict(payload.get("params") or {}),
+                    to=to, action=action, params=dict(raw_params or {}),
                     input_key=key, duplicates=dups,
                     # S1g-2：复用已有子代理时它的面是已知的（名册那一格）
                     # ⇒ 面适配那一维判得最准；新起一个时槽位还没分（判得了
                     # "越界"与"父视角有、面内没有"两档）。
                     reuse=str(payload.get("reuse") or payload.get("name") or ""),
-                    base=str(self.workspace_root or ""))
+                    base=base)
             except Exception as exc:  # noqa: BLE001 - 同上
                 out["assessment_fail_open"] = f"{type(exc).__name__}: {exc}"
             # `R2b-⑲`：协商（职责 2 的"给出重新安排建议并协商"）—— 评估摆了同 key 的既有
