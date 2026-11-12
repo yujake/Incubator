@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
-"""台账索引的"面"：依赖面 / 被引面 / 局部树展开（从 `ledgerindex.py` 拆出的那一半）。
+"""台账索引的"面"：依赖面 / 被引面 / 局部树展开（`ledgerindex.py` 的另一半）。
 
 ## 为什么拆开
 
-`ledgerindex.py` 在 2026-11-10 落成时是 912 行（越过 `>800` 的体量软基线）。它做的是
-两件不同的事：建索引（把两条表读成节点表 + 双向邻接，只读、一次）与按面读
-（依赖面 / 被引面 / `expand` 的局部树）。前者是数据的家，后者是"从索引里看出去"的
-几种读法 —— 拆成两个模块，各自只回答一件事；索引对象仍是 `ledgerindex.LedgerIndex`
-（本模块不定义第二个索引、也不建第二份邻接）。
+`ledgerindex.py` 做的是两件不同的事：建索引（把两条表读成节点表 + 双向邻接，只读、
+一次）与按面读（依赖面 / 被引面 / `expand` 的局部树）。前者是数据的家，后者是"从索引
+里看出去"的几种读法 —— 拆成两个模块，各自只回答一件事；索引对象仍是
+`ledgerindex.LedgerIndex`（本模块不定义第二个索引、也不建第二份邻接）。
 
 ## 口径不变
 
 所有函数都是 `index` 的第一人称读法：入参是一个已建好的 `LedgerIndex`，行为、返回
-形状、有界（深度 / 节点 / 字符）与增量账逐字保持原样 —— 这次只搬代码，不改判据。
+形状、有界（深度 / 节点 / 字符）与增量账逐字保持原样。
 `LedgerIndex.dependency_face` / `cited_face` / `expand` 仍存在，转发到本模块。
 """
 from __future__ import annotations
@@ -39,7 +38,7 @@ from .ledgerindex import (
 def dependency_face(index: Any, stmt_id: Any, *,
                     max_chains: int = MAX_FACE_CHAINS,
                     max_depth: int = MAX_FACE_DEPTH) -> dict[str, Any]:
-    """一条命题的依赖面：向上到根的全路径，按 `(证明号, path_group)` 分组。
+    """一条命题的依赖面：向上到根的全路径，按 `(path_no, path_group)` 分组。
 
     组内每条链回答三件事：路上经过哪几条命题（`chain`）、每一跳引在哪一步
     （`steps[i].used_at`）、终点是不是根（`root`）；走不到根 ⇒ `status="broken"`
@@ -230,7 +229,7 @@ def expand(index: Any, node: Any, depth: int, direction: str = "both", *,
            max_chars: int = MAX_CHARS) -> dict[str, Any]:
     """从 `node` 起按 `depth` 层上下展开 ⇒ 局部树（层数由调用方决定、必填）。
 
-    返回形状（业主 2026-11-10 的 4.2）：
+    返回形状：
 
         {nodes, edges, frontier, truncated, reasons, budget_used,
          added_nodes, already_known, ...}
@@ -410,7 +409,7 @@ def _via_text(previous: Mapping[str, Any], edge: Mapping[str, Any]) -> str:
 
 
 def _read_node(index: Any, sid: str, relation: Mapping[str, Any]) -> dict[str, Any]:
-    """一个节点的完整读数（七样，业主逐条点名）。"""
+    """一个节点的完整读数（七样）。"""
     node = index.nodes.get(sid) or {}
     return {
         "stmt_id": sid,
