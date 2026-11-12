@@ -7441,8 +7441,12 @@ class Conductor:
             plans = [dict(r) for r in self.store.rows("attack_plans")]
         except Exception:  # noqa: BLE001 —— 读不成时不编造待办（宁可少一条）
             return []
-        planned = {str(p.get("problem_key") or "") for p in plans} | \
-                  {str(p.get("conjecture_id") or "") for p in plans}
+        planned = set()
+        for p in plans:
+            # 两族键都当"已计划"（`problem_key` 与 `conjecture_id`）：一次遍历收完，
+            # 集合语义不变（原先两个集合推导再并起来，同一批 plans 走了两遍）。
+            planned.add(str(p.get("problem_key") or ""))
+            planned.add(str(p.get("conjecture_id") or ""))
         items: list[dict[str, Any]] = []
         for c in cons:
             cid = str(c.get("conjecture_id") or "")
@@ -7476,10 +7480,19 @@ class Conductor:
         except Exception as exc:  # noqa: BLE001 —— 读不成 ≠ 都没读
             return {"checked": False, "opened": len(want), "seen": 0, "acked": 0,
                     "reason": f"板读不成（{type(exc).__name__}: {exc}）⇒ seen/acked 判不了"}
-        return {"checked": True, "opened": len(rows),
-                "seen": sum(1 for r in rows
-                            if str(r.get("item_state") or "") in ("seen", "claimed", "done")),
-                "acked": sum(1 for r in rows if str(r.get("item_state") or "") == "done"),
+        # 两档计数一趟数完（原先这批行被走三遍：一遍取行、`seen` 一遍、`acked` 一遍），
+        # `item_state` 每行只取一次。判据未动：`seen` 认 seen/claimed/done，
+        # `acked` 只认 done（done 同时算进 seen —— 与两个 sum 各自的写法逐字等价）。
+        seen = 0
+        acked = 0
+        for r in rows:
+            state = str(r.get("item_state") or "")
+            if state == "done":
+                seen += 1
+                acked += 1
+            elif state in ("seen", "claimed"):
+                seen += 1
+        return {"checked": True, "opened": len(rows), "seen": seen, "acked": acked,
                 "note": ("opened = 开出来的板项数；seen/acked = 此刻真的到了那两档的条数"
                          "（展开了不等于读到了）")}
 
