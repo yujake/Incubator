@@ -68,11 +68,15 @@ def read_jsonl_state(path: str | Path) -> tuple[list[dict], list[str], str]:
         return [], [f"读不出来（{type(e).__name__}: {e}）"], "unreadable"
     records: list[dict] = []
     problems: list[str] = []
+    loads = json.loads
     for i, raw in enumerate(text.splitlines(), 1):
-        if not raw.strip():
+        # 空行判据与 `not raw.strip()` 等价（`str.strip()` 缺省剥的正是
+        # `str.isspace()` 为真的字符），但不为每一行造一份剥好的副本：
+        # 非法 JSON 行也要走到 `loads`，那儿本来就不怕首尾空白。
+        if not raw or raw.isspace():
             continue
         try:
-            obj: Any = json.loads(raw)
+            obj: Any = loads(raw)
         except ValueError as e:
             problems.append(f"第 {i} 行读不出来（{type(e).__name__}: {e}）")
             continue
