@@ -1,10 +1,10 @@
-"""角色 D 的声明（`goal-7f5116c1` M3）：动作表 + 边 + 写集 + 职责与门面。
+"""角色 D 的声明：动作表 + 边 + 写集 + 职责与门面。
 
 这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
-`WRITE_SETS`，`agent_d.py` 只是把它再导出一次。
+`WRITE_SETS`，`agent_d` 包只是把它再导出一次。
 所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
-动作表的每一行都从 `capabilities.py` 逐字搬来（含注释），判据见
-`tests/test_agent_spec_reconciliation.py` 与 `tests/test_capabilities_two_layer.py`。
+与派生表逐格一致的判据见 `tests/test_agent_spec_reconciliation.py` 与
+`tests/test_capabilities_two_layer.py`。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from ..agentspec import (
     _obj,
 )
 
-#: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
+#: 本角色的动作表。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "D", "probe_c",
@@ -107,9 +107,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "D", "run_round",
         "把 ingest ->…-> research 串成一轮（有界：limit）",
-        # 2026-10-16 补说明（第 10 趟 T5 实测：`report` 传字符串 ⇒ `invalid_params`）。
-        # 与下面 `propose_question` 那条注记「同一个坑」（`draft/37` §130 的真机读数：
-        # 「声明不写、handler 拒收 ⇒ 主控只能猜」）：`_OBJ` 只说"是个对象"，没说里面是什么。
+        # `_OBJ` 只说"是个对象"，没说里面是什么 —— 声明不写、handler 拒收 ⇒ 主控只能猜。
         # 这里要的是「一份 C 的分析报告」（`analysis_reports` 那行的形状 ——
         # `agent_d/propose_question.py` 里记的 `pipeline` C→D 路就是这么传的）。
         _obj({"report": {"type": "object",
@@ -120,20 +118,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "本轮汇总 dict", side_effect="write_local", handler_name="run_round",
     ),
 
-    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要缩短（226 -> 61 字）。删掉的
-    # 是「为什么单列」那一整段设计缘由与真机读数（T2 第 1 趟 R1 永远 0 行、run_round 要
-    # 一份 C 的分析报告、以及七个动作逐个点名）—— 那是这条动作为什么被加进来的历史，
-    # 不是调用方要拿去做判断的事实。留下的半句是调用方真正会用的那条硬事实：D 的其余
-    # 动作都要求 qid 已存在，所以从零起手只有这一步能立起第一行（派活的次序靠它决定）。
     ActionSpec(
         "D", "propose_question",
         "把一句话研究问题立成 research_questions 一行；D 的其余动作都要求 qid 已存在，"
         "所以从零起手先派它",
-        # `kind` / `priority` 的取值必须在声明里写出来（`draft/37` §130 的真机读数）：
-        # 此前这里是裸 `_S`（只表示"是个字符串"），而 handler 按受控词表拒收 ——
-        # 真机里主控连续 4 次传 `kind='existence'` / `'main'`，每次都落 `refused/bad_kind`，
-        # 而它在自己的提示词里看不到合法取值（同一个坑在 `F.create_plan` 的预算上出现过：
-        # 声明不写、handler 拒收 ⇒ 主控只能猜）。枚举值从 `schema` 那一份取，不另抄字面量。
+        # `kind` / `priority` 的取值必须在声明里写出来：裸 `_S` 只表示"是个字符串"，而
+        # handler 按受控词表拒收 ⇒ 主控只能猜（不看合法取值就会落 `refused/bad_kind`）。
+        # 枚举值从 `schema` 那一份取，不另抄字面量。
         _obj({"question": _S,
               "kind": {"type": "string", "enum": list(S.QUESTION_KINDS)},
               "priority": {"type": "string", "enum": list(S.PRIORITIES)},
@@ -143,10 +134,6 @@ ACTIONS: tuple[ActionSpec, ...] = (
         handler_name="propose_question",
     ),
 
-    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要缩短（180 -> 82 字）。删掉的
-    # 是 §118 那段真机事故（这一格曾按进程当前目录解析、把交付物写到工作区外还记成 ok）
-    # 与 `reports_subdir` 那半句配置细节 —— 前者是历史，后者的缺省值已经在落点里写实。
-    # 留下的是调用方必须知道的两条：默认落到哪儿、路径按工作区根解析（越界即拒）。
     ActionSpec(
         "D", "write_report",
         "把研究结果渲染成 markdown 报告；相对路径按工作区根解析，跳到工作区外一律拒，"
@@ -155,10 +142,6 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "写出文件的路径（绝对）", side_effect="write_local", handler_name="write_report",
     ),
 
-    # 2026-10-07（题 9/B，所有者授权、主控代改）：本条摘要缩短（61 -> 47 字）。删掉的是
-    # 「状态机由 schema 判」那半句 —— 它复述的是代码判据（转换合法性真身在
-    # `schema.Conjecture.validate` 与 `CONJECTURE_STATUSES`），调用方拿它做不了判断；
-    # 留下的「被引用的实验/文献必须在库里」才是关键约束（不满足会被当场拒收）。
     ActionSpec(
         "D", "register_conjecture",
         "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；被引用的实验/文献必须在库里",
@@ -180,9 +163,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
 def _build(d: BuilderDeps) -> Any:
     """构造 D（构造期拿到同一个 C 实例：`peers["C"]`，由接线层的单例保证）。
 
-    2026-10-26 晚（业主：「D 到 B 没有路吗？加」）：构造期同时拿到同一个 B 实例
-    （`peers["B"]`）—— D 的交付路径要在代码里把 F 的证明手稿递给 B
-    （`AgentB.register_statement`），而不是靠模型记得去派 B。那条边本来就在
+    构造期同时拿到同一个 B 实例（`peers["B"]`）—— D 的交付路径要在代码里把 F 的证明手稿
+    递给 B（`AgentB.register_statement`），而不是靠模型记得去派 B。那条边本来就在
     `edges` 里（D→B），这一格只是把"边"变成"手上的对象"。
     """
     from ..agent_d import AgentD
@@ -206,17 +188,15 @@ SPEC = AgentSpec(
             "猜想的九个状态各自必须带什么（schema 的硬条件，缺一样就当场拒收）：`proposed` 要给非空 `testable`（给不出一律落 `needs_evidence`）；`supported_not_proved` 要至少一条 `experiment_ids`；`refuted` 要 `counterexample_experiment_id`；`proved` 要 `proof_experiment_id`；`promoted` 要 `promoted_to`；`known_in_literature` 要 `known_lit_id`；`withdrawn` 要 `withdraw_reason`。",
         ),
         policy=(
-            # 2026-10-20 业主裁定（逐字：「「F 和 E 都是 D 的研究侧直属，M 的职责是统筹协调，
-            # D 是真正主导研究」……请「加强 D 侧研究的积极性，压低 M 自主操纵研究的积极性」」）
-            # ⇒ 头一条就是"你主导研究"：派 C/E/F、让 F 带 V 的签字，都由 D 自己决定。
+            # 头一条就是"你主导研究"：派 C/E/F、让 F 带 V 的签字，都由 D 自己决定。
             # 它「不新增任何边」（D 的出边仍是 A/B/C/E/F，`D→V` 那条已叫停）—— 只是把
             # 已有的授权写成"由你决定、不必等 M 批准"，否则 D 每走一步都要先问主控。
-            # 2026-11-06 p250b 把撤销那条插到了最前，顶掉了"第一条"这个位置 ⇒ 挪回第一条：
-            # 判据 `test_d_owns_the_research_side` 钉的就是"越靠后越会被读成补充说明"。
+            # 这一条必须排在第一条：判据 `test_d_owns_the_research_side` 钉的就是
+            # "越靠后越会被读成补充说明"。
             "**研究侧由你主导**：下一步做什么、派 C（要候选路径）、派 E（写脚本/玩具例子）、"
             "派 F（攻坚）、让 F 带 V 的签字，都由你决定，不必等 M 批准；M 只做统筹与搭桥。",
-            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
-            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
+            # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）
+            # ⇒ 这一句是他们唯一的说明书。
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
             "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
@@ -234,13 +214,13 @@ SPEC = AgentSpec(
             "然后写成 `conjectures` 的一行 —— `statement` 一句话说清，`testable` 给出**怎么判它有假**（参数、界、判据），"
             "`negation_statement` 写它的否定。**没有猜想就只有一堆读数**。猜想登记之后用实验去支持或反驳它（`experiment_ids` / "
             "`counterexample_experiment_id`），并如实推进状态（proposed → testing → supported_not_proved / refuted / proved）。"
-            # 2026-11-08（业主三条裁定）：D 对 statements 只读；提交强猜想时引用 E 的手稿。
+            # D 对 statements 只读；提交强猜想时引用 E 的手稿。
             "**提交强猜想时引用 E 的普通数值手稿**（业主 2026-11-08）：你对 `statements` 只有只读权限 —— "
             "要把一条「有数值实验支持的猜想」交给 B 登记时，交的是那条 E 的 `reports/e-num-<实验号>.md`"
             "（`proof_manuscript` 给这个路径）+ `kind=conjecture`；B 从那份稿的 `## 命题` 取命题、从实验行取程序，"
             "`proof_text` 空着、等级 `strong_conjecture`、不过 V。穷举证据仍走 `reports/e-proof-<实验号>.md`"
             "（它要 V 签，按原路走）；F 的文字证明走 F 的手稿。这样你的每一件提交物都有 E 或 F 侧的背书。"
-            # 2026-11-08（业主三条裁定之一）：D 交稿只递指针，正文由 B 从手稿里读。
+            # D 交稿只递指针，正文由 B 从手稿里读。
             "**向 B 登记只递指针**（业主 2026-11-08）：`B.register_statement` 那一笔你只给三样 —— "
             "手稿的工作区相对路径（`proof_manuscript`）、命题号 / 实验号、出处（`exp:<实验号>`）；"
             "命题正文、证明正文、kind、evidence_kind 一律由 B 从那份稿里读。**你不要把稿里的"
@@ -249,7 +229,7 @@ SPEC = AgentSpec(
             "给「登记的那一份」换了来源，而没有任何东西保证它与稿逐字相同。"
             "**这一轮逐条点名新增的东西**（有模型缝时 ≥3 条：新猜想、新问题或一步新归约、新读数，可组合；缝没接时如实报 "
             "`not_wired`，不硬凑三条）；只整理已有成果不算推进。",
-            # 2026-11-08（块丙）：台账归属与写集（业主裁定「D对命题台账只有只读权限」）。
+            # 台账归属与写集：命题台账由 B 写、D 只读。
             "**命题台账由 B 写、D 只读**（业主 2026-11-08 逐字：D 对命题台账只有只读权限；"
             "D 向 B 提交要登记的命题时都是有证明或数值实验的，即 E 和 F 的成果）：`statements` "
             "只能经 B 的收录口写（`B.register_statement`，你只递指针，见上一条）；你**自己的写集**"
@@ -258,12 +238,9 @@ SPEC = AgentSpec(
             "**报告落点是文件、不是表**：`reports/RESEARCH.md` 与 `reports/<qid>-research.md` —— "
             "`write_report` 只写文件、不落任何表（`WRITE_SETS['D']` 里没有 `analysis_reports` "
             "正是这个事实，读数是 `report_landing_reading`）。",
-            # 2026-10-21 减负：原来这是「两条」（"猜想写出来交给 F"＋"立了猜想必须派 F"），
-            # 前者的机制细节并进后者、重复的说理删掉；D→F 边通 / summon 形状两件事实保留。
-            # 2026-11-08（业主三条裁定之二，逐字）：「那条猜想只是参考意见，D不能直接把
-            # 自己的猜想登记到命题台账，也不能命令E或F必须把它做出来，这只是研究方向参考」
-            # ⇒ 这一段从「派 F 去证这条猜想」改成「把研究方向交给 F」：不给猜想号、不
-            # 命令它必须证；判据是机械的（`agentflow.dispatchpolicy.dispatch_text_problems`）。
+            # 立了猜想之后把研究方向交给 F：不给猜想号、不命令它必须证；判据是机械的
+            # （`agentflow.dispatchpolicy.dispatch_text_problems`）。`D→F` 边通 / summon
+            # 形状两件事实保留。
             "**立了猜想之后把研究方向交给 F**（`D→F` 的边是通的、用循环的 `summon` 形状唤起 `F.create_plan`）："
             "`register_conjecture` 成功之后的下一个方向就这样交出去，并至少推进一步 `F.step`（按别的名字派只会拿到 "
             "`unknown_action`）。**交出去的是研究方向，不是命令**（业主 2026-11-08）：`problem` / `subgoals` 写清"
@@ -272,8 +249,8 @@ SPEC = AgentSpec(
             "去攻更值得的一条。这一条是机器可核的：判据从**D 的派活记录**里取文本，文本里出现你自己登记的"
             "`conjecture_id` ⇒ 红并逐条点名（`agentflow.dispatchpolicy.dispatch_text_problems`；"
             "判据不判 F 自主写的计划）。**派了 F 就要在同一趟里读回它的结果**：推得动就让 F 继续"
-            # 2026-10-20 业主裁定（逐字："我们自己经 F 产出的证明天生带 V 签字"）：D 「不派 V」
-            # —— V 的签字由 F 在交出证明时一并办好（F 是唯一能派 V 的人），D 只核"带没带签"。
+            # D 「不派 V」 —— V 的签字由 F 在交出证明时一并办好（F 是唯一能派 V 的人），
+            # D 只核"带没带签"。
             "（F 交回的证明要带 V 的签字：没有就让 F 去补签 —— F 会派 V，你不要自己派 V；签不了就让 B 如实降档），"
             "要实验就派 E，推不动就上报召唤者。判定是可读的：这一趟收工时，**本趟交出去的那条方向**要在 "
             "`attack_plans` 里落成计划、且**至少有一轮真推进**（`outcome=progress`，且那一轮有 `cites` 或产出"
@@ -285,20 +262,17 @@ SPEC = AgentSpec(
             "候选更短路径由你自己向 C 要（用循环的 `summon` 形状派 C，C 的报告随返回值交回）；C 没有出边，也不该给它加。"
             "拿到那条候选就按它立一条可判猜想（`testable` 写清若成立省掉哪一步），再**把方向**交给 F，不要自己顺手写完；"
             "`problem_key` 由 F 按它落成的计划自己给（不要拿猜想号当命令）。",
-            # 2026-11-05（业主最终裁定：「入库完后向派它入库的代理汇报，派它入库的知道究竟是什么目的」；
-            # 业主 2026-11-04 放权动禁改区 · FC-27 · 类别 auth-audit）：F 可以**直接派 A / 直接派 B**
-            # （两条边都通，B 没有到 F 的边），所以这一条是降格句 —— 只在报到 D 这里、或 B 把入库结果
-            # 回给 D 时才由 D 落实；不写成「F 报给你、你再派 A」的唯一路径。
+            # F 可以**直接派 A / 直接派 B**（两条边都通，B 没有到 F 的边），所以这一条是
+            # 降格句 —— 只在报到 D 这里、或 B 把入库结果回给 D 时才由 D 落实；不写成
+            # 「F 报给你、你再派 A」的唯一路径。
             "**F 可能直接派 A（或直接派 B 入库）** —— `F → A` / `F → B` 都是直接边，不必先经过你；"
             "**若这件事报到你这里、或 B 把入库结果回给你，你要把它落实**：派 A 查文献（用循环的 `summon` 形状）⇒ "
             "让 B 入库（`summon` 派 B 的登记）⇒ **回告 F「库已更新」**，并把你新入库的号点名给它。"
             "**不要只说「我知道了」**，也不要把这件事又推回 M —— 研究侧的主导在你。"
             "若查不到、或入库后被判不够格（等级低于 `pre_theorem`），**查不到或不够格要如实回告**："
             "说清缺哪一格，不要让它等一个不会来的更新。",
-            # 2026-11-04 业主裁定（逐字）：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
-            # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
-            # 然后再提出新的想法」。与上一条「立了猜想必须派 F」同源：那一条说的是"别不派 F"，
-            # 这一条说的是"派 F 之后你给什么、不给什么"。落成三句可执行的话（①②③），
+            # 与上一条「立了猜想必须派 F」同源：那一条说的是"别不派 F"，这一条说的是
+            # "派 F 之后你给什么、不给什么"。落成三句可执行的话（①②③），
             # 判据：tests/test_d_does_not_land_the_proof.py（受控码 reserved_framework_artifact）。
             "**你可以给「证明思路」与「依赖面参考」，但证明的落稿与拿签不属于你**（业主 2026-11-04 逐字："
             "「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，最终的证明落稿拿签必须派给 F 完成，"
@@ -316,12 +290,13 @@ SPEC = AgentSpec(
             "+ 下一个想法 —— 即「读回 F 的结果 → 立新猜想 → 再派 F」这个循环；`out/proofs/` 是攻坚过程记录"
             "（可写 `## 思路` / `## 依赖面参考`，不能带 `## 证明` 节）。",
             "**登记猜想之前先判重**：不给 `conjecture_id` 时框架按规范化后的 `statement` 查重 —— 命中就**更新既有那一行**并回 "
-            # 2026-10-26（收口批）：这一句改前写着「要真的另起一条必须显式 force_new=true」，而
-            # `own.register_conjecture` 的参数表里没有它（那件工具的参数面就是 D 这条动作的声明，
-            # `additionalProperties: False`）⇒ 照这句写只会撞 `invalid_params`。改法是把差异写进
-            # 正文重新交（规范化后不同才会落新的一行）—— 与拒信（`agent_b.register_statement`
-            # 的 `duplicate_statement` 与 `secretary.record_statement` 那一条）说的同一件事，
-            # 口径逐字同源。判据：tests/test_duplicate_refusal_names_a_real_parameter.py。
+            # 这一句必须说清"怎么另起一条"：`own.register_conjecture` 的参数表里没有
+            # `force_new`（那件工具的参数面就是 D 这条动作的声明，
+            # `additionalProperties: False`）⇒ 照旧写法只会撞 `invalid_params`。改法是把
+            # 差异写进正文重新交（规范化后不同才会落新的一行）—— 与拒信
+            # （`agent_b.register_statement` 的 `duplicate_statement` 与
+            # `secretary.record_statement` 那一条）说的同一件事，口径逐字同源。
+            # 判据：tests/test_duplicate_refusal_names_a_real_parameter.py。
             "`duplicate=true`（不是新建）；要另起一条就把差异写进正文重新交（正文按规范化比不同才会落新的一行）。"
             "所以改写一条猜想之前先想清楚：这是「同一条改个"
             "说法」还是「另一条」—— 前者会更新原行（历史留在同一行上），后者才是新行。",
@@ -336,8 +311,8 @@ SPEC = AgentSpec(
             "`reserved_framework_artifact` 拒，改走 `write_report`）。**`reports/RESEARCH.md` 里不许出现"
             "你自己新写的 `## 证明` 节**：那一节只许是引用/转载 F 的稿（点名盘上的 `reports/f-proof-<号>.md` "
             "或带它的 sha256），否则 `fs.write` / `fs.edit` 受控拒绝（`reserved_framework_artifact`）。",
-            # 2026-11-01（业主裁定，审计 171 M-20 / 172 R86）：未签闭环在 D 这一侧的落点 ——
-            # D 是研究侧的主导，打回的证明由它派 F 重送、放弃也由它派 B 去办。
+            # 未签闭环在 D 这一侧的落点 —— D 是研究侧的主导，打回的证明由它派 F 重送、
+            # 放弃也由它派 B 去办。
             "**命题不能悬着：每条登记的命题最终要么有 V 签、要么被明确放弃**。收工门的读数 `statements_unsigned` 数的是"
             "「既没有 V 签、也没有被明确放弃」的非概念命题，它大于 0 就是 **blocker**（`machine_pass` 假、退出码 1，"
             "**不落在八格里任何一格上**）。所以看到被 V 打回的证明，两条路选一条：① 派 F 把那一条补齐之后**重新送 V 审**，"
@@ -373,8 +348,8 @@ SPEC = AgentSpec(
             "就是我们版的综述**，比一份综述稿好用得多。所以别派「写一篇综述」这种活，也别给 `documents` 另开一类。",
             "**命题研究起手先派 A 做一轮泛化搜索**：一次检索分三档交回 —— **推广**（哪些已入库结论是它的推广）/ **类比**（别的领域"
             "里的同构结构）/ **特例**（它退化成的已知结论）。只答「有没有人做过」是白跑一趟：这一档问的是**它在已知地图上的位置**。",
-            # 2026-10-23 夜（业主的三句话，D-34）：E 拿着有 V 签名的报告上报你，和 F 拿着 V 签名的证明上报你
-            # 是一个逻辑 —— 你的报告是目录，正文是 F 的证明或 E 的报告，V 的签是盖章，B 是读者。
+            # E 拿着有 V 签名的报告上报你，和 F 拿着 V 签名的证明上报你是一个逻辑 ——
+            # 你的报告是目录，正文是 F 的证明或 E 的报告，V 的签是盖章，B 是读者。
             # 这一条把"收到带 V 签的穷举报告"之后的四步写死在提示词里（代码侧的真身是
             # `numericproof.INDEX_*` 那四格与 `papermapping` 的对应表；B 的入库闸读的就是它们）。
             "**收到带 V 签的穷举报告（E 的 ②③ + 那份程序 + V 那一签）就等于收到一份正文，你必须把它写进你的报告目录里**："
@@ -392,11 +367,9 @@ SPEC = AgentSpec(
             "正文对不上，回来补那一格，不要换个说法再交一次。"
             "④ 这条链**不许跳过索引**：没有目录行的正文，B 取不到，它就只能落「有数值实验支持」——那不是 E 那份证据不行，"
             "是目录里没有 E 那本的条目。",
-            # 2026-10-24 业主裁定（D-54，逐字要点）：「中间路径会有很多，我们不关心。就是最后一步，
-            # 比如 Sylow 第一定理，会有几种证明语言，会有不同的依赖面，然后后续让 C 从不同的依赖面
-            # 起点追依赖链就能完整显示不同证明路径」。多证明机制早就在（`proofs` /
-            # `used_by="stmt:<号>#pN"` / `path_group` / `reviewed_by_proof` / 对应表的 `proof_no`），
-            # 缺的是"用户要几种证明时该落成什么形状"的口径 —— 这一条是 D 侧的正向政策。
+            # 多证明机制早就在（`proofs` / `used_by="stmt:<号>#pN"` / `path_group` /
+            # `reviewed_by_proof` / 对应表的 `proof_no`），缺的是"用户要几种证明时该落成
+            # 什么形状"的口径 —— 这一条是 D 侧的正向政策。
             "**用户要「一条定理的几种证明」时，落成一条命题的多条证明路径，不落成几条命题**："
             "派 F 时就把形状说清 —— 目标命题只登记**一条 stmt**；**每条证明各是一份稿**"
             "（`reports/f-proof-<F 稿号>.md`，一个稿号 = 一份文件 = 一份证明），你携带给 B 时"
@@ -409,8 +382,7 @@ SPEC = AgentSpec(
             "证明的正文。**反向判据：不要把同一条定理拆成多条命题** —— 表述不同（极大 p-子群版 / "
             "一般阶版 / 归纳版）不等于不同命题；拆成多条之后路径只剩一组，"
             "C 追不出「不同的证明路径」，收工读数也只会看到几条互不相干的命题。",
-            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
-            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
@@ -418,13 +390,12 @@ SPEC = AgentSpec(
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # p204（2026-10-27）：业主 2026-10-25 的三句裁定要做进**每个角色**的政策（不只是 M）：
-            # 「规范所有计时类任务申请的形式为：等待时间（或等待谁）+目的（必填）」；
-            # 「让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的」；
-            # 「计时到点后向智能体发送信息『目的+等待时间+时间到』」。
-            # 工具面的真身是 `tools/clock_tools.py` 那九件（`UNIVERSAL_TOOLS`：对十一个角色都发），
-            # 这一段只写"怎么用它"，不抄工具签名（签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（第 17 条逐个角色数过九件）。
+            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
+            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
+            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
+            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
+            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
+            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
             "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
             "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
             "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
@@ -451,8 +422,6 @@ SPEC = AgentSpec(
             "名册上：**留着不销会让名册越来越长，收工读数也会失真**（名册上「还有谁」与实际「还能派谁」分家）。"
             "**销号 ≠ 停止**：要它此刻停下来用叫停/停止，销号说的是「它交完了、名字不再复用」—— "
             "拿销号去停一个还在跑的，等于名字先没了、活还在跑。",
-            # 2026-10-24 业主口径（D-66：「已收口子代理可再接收活，但已销号不可用」
-            # 「如果一个子代理（例如G1）被销号，且有G2，再派G时追加写成G3（不可复用G1）」）：
             # 把「收口」与「销号」两个字分清，并说清再派一个同类子代理该走哪条路。
             # 判据：tests/test_roster_ownership_survives_the_reuse_path.py。
             "**收口 ≠ 销号，再派同类子代理要新建**：收口 = 这件活做完了，它还在册、可以再接活；"
@@ -464,17 +433,12 @@ SPEC = AgentSpec(
             "已销号的名字不可用。",
         ),
         signature_error="把没有证据写成没有争议。",
-        # `44 J-01` / `S-07` 的口径更正（2026-10-10，T4 第 6 趟 `t4f` 的真机读数）：
-        # 这一句原先写的是"analysis_reports 里的分析、结论、建议三层" —— 而
-        # `analysis_reports` 是 C 的报告通道（`schema.REPORT_KINDS` 只收
-        # `hottest/paths/cold/gaps` 四档），D 的写集里没有它，`write_report` 也只写
-        # `reports/<qid>-research.md` 那份 markdown（不写任何表）。
-        # M 因此在 `t4f` 里报了一条 `cannot`：「D 调用 write_report 6 次均返回 ok，
-        # 但台账里没有一张表收得下它（WRITE_SETS["D"] 无 analysis_reports）」——
-        # 它照着的正是这一句。`agent_d/_support.py` 的 `report_landing_reading`
-        # 早就把这件事做成读数（S-07），但声明这一层没跟上：
-        # 声明里点名的那张表，角色写不了 ⇒ 判据见
-        # `tests/test_the_brief_names_only_writable_tables.py`（那句话点的表必须在写集里）。
+        # 这一句点的表必须是 D 的写集里的表：`analysis_reports` 是 C 的报告通道
+        # （`schema.REPORT_KINDS` 只收 `hottest/paths/cold/gaps` 四档），D 的写集里没有它，
+        # `write_report` 也只写 `reports/<qid>-research.md` 那份 markdown（不写任何表）——
+        # 声明里点名一张角色写不了的表，模型照它去写就会白跑（`agent_d/_support.py` 的
+        # `report_landing_reading` 是这个事实的读数）。
+        # 判据见 `tests/test_the_brief_names_only_writable_tables.py`。
         deliverable=("研究报告文件（`write_report` 写出的 `reports/<qid>-research.md`）里的"
                      "分析、结论、建议三层，以及它登记进 `research_questions` 的问题与缺口清单、"
                      "提交给 A/E 的检索请求（`search_requests`）。报告只落成文件、不进任何报告表"
@@ -520,16 +484,13 @@ SPEC = AgentSpec(
     },
     read_only=False,
     summonable=True,
-    # 2026-10-20 业主裁定（逐字："F 产出的证明带 V 签字后不该反复要求签字，所以最早版本
-    # 只有 F 能派 V；B 负责定理及证明入库时可让 V 审核签字，这是对文献侧引入的内容需要看的"）：
-    # 「D 不派 V」 ⇒ 这一格刻意没有 `V`（边总数因此仍是 34，2026-11-05 实测）。D 的义务是「确认 F 交回的证明
+    # 「D 不派 V」 ⇒ 这一格刻意没有 `V`。D 的义务是「确认 F 交回的证明
     # 带 V 的签字，没有就让 F 去补签（F 会派 V）」，见 `brief.policy` 里「立了猜想就必须在
     # 同一趟里派 F」那一条。`specs/m.py` 里那两条"要有人走查"的文句同样转交到 D 名下
     # （D 再让 F 去办）—— 判据见 `tests/test_v_signing_belongs_to_b_e_f.py`。
     # 别在这里补 `'V'`：V 的签字有三个入口（F 产出时签、B 入库文献侧内容时签、
-    # E 跑出穷举证据时签）—— 第三个入口 E 是 2026-10-23 晚追加的（业主逐字：「E 写的
-    # 报告要能落下来，且 V 也要会审这种东西，加 E 派 V 的边」），边表里 `F` / `B` / `E`
-    # 各有一条到 `V` 的边（`ALLOWED_EDGES`，判据 `tests/test_v_signing_belongs_to_b_e_f.py`）。
+    # E 跑出穷举证据时签），边表里 `F` / `B` / `E` 各有一条到 `V` 的边
+    # （`ALLOWED_EDGES`，判据 `tests/test_v_signing_belongs_to_b_e_f.py`）。
     edges=(
         'A',
         'B',
@@ -538,8 +499,7 @@ SPEC = AgentSpec(
         'F',
     ),
     write_set=frozenset((
-                     # 2026-11-08（块丙，业主裁定「D对命题台账只有只读权限」）：写集按**实际
-                     # 写过的表**列全 —— D 的代码真的写这三张：
+                     # 写集按**实际写过的表**列全 —— D 的代码真的写这三张：
                      #   · `conjectures`：`conjecture.register_conjecture` 落猜想行
                      #     （`agent_d/register_conjecture.py` → `tools/conjecture_tools.py`）；
                      #   · `research_questions`：`ingest` / `propose_question` / `consider` /
