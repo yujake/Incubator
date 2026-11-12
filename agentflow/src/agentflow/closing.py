@@ -2984,9 +2984,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         kind = str(row.get("kind") or "")
         name = str(row.get("name") or "")
         note = str(row.get("note") or "")
-        # ---- 行级形状/字段类型（`draft/52` CC-02）：读不懂 ⇒ 这一行 `unreadable`。
-        # 为什么先判它：`min`/`max` 非整数此前会抛异常穿出 `check_closing`（门崩），
-        # `na` 非布尔此前被静默当普通行判（假绿）—— 两者都在这一处收口。
+        # ---- 行级形状/字段类型：读不懂 ⇒ 这一行 `unreadable`。
+        # 为什么先判它：`min`/`max` 非整数会抛异常穿出 `check_closing`（门崩），
+        # `na` 非布尔会被静默当普通行判（假绿）—— 两者都在这一处收口。
         problem = _acceptance_row_problem(cid, row, seen_ids)
         if problem:
             _mark_unreadable(idx, row, "acceptance_row_unreadable", problem)
@@ -2995,7 +2995,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             continue
         seen_ids.add(cid)
         want_min = int(row.get("min") or 0)     # 0 = 让这一档自己定阈值（见下面的 implicit_min）
-        #: 上限（`draft/39` §6.45 的 D56）：`max` 缺省取这一档自己给的 `implicit_max`。
+        #: 上限：`max` 缺省取这一档自己给的 `implicit_max`。
         #:
         #: 为什么需要"上限"这一根轴：多数档问的是「做得够不够」（`got >= min`），而
         #: `unfinished_request_rows` 问的是「剩下多少没做」—— 它的达标线是 0，
@@ -3006,17 +3006,16 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         want_max: int | None = None
         if row.get("max") is not None:
             want_max = int(row["max"])
-        # ---- `na` 行（`draft/39` §6.39 的 D49）：这一档对这个项目天然不适用。
+        # ---- `na` 行：这一档对这个项目天然不适用。
         #
         # 三态：`na` ≠ 通过 ≠ 失败（与五位证据模型的 `pending|na|failed|verified` 同一套口径）。
-        # 真机读数（T4 第 1 趟 `t4a`）：那是一趟调查任务（"交付一份清单"），它天然没有
-        # "算或造"这一环 —— M 按纪律如实写了 0（红得精确），可那份诚实没有出口：
-        # 政策里提过 `na` 这个词，实现里只认 `got >= min`。于是"这一档不适用"只能被读成
-        # "没做"。两条守卫：①`na` 必须写出理由（`note` 非空），否者等于没标注；
+        # 调查型任务（"交付一份清单"）天然没有"算或造"这一环 —— 按纪律如实写 0 是红得精确，
+        # 可那份诚实需要出口：只认 `got >= min` 时，"这一档不适用"只能被读成"没做"。
+        # 两条守卫：①`na` 必须写出理由（`note` 非空），否则等于没标注；
         # ②不许整张表都是 `na`（一张全 na 的验收表等于没有验收表）。
         if row.get("na") is True:
             if not note.strip():
-                # CC-02：只有这一行是坏的（缺理由）⇒ 记 `unreadable`，
+                # 只有这一行是坏的（缺理由）⇒ 记 `unreadable`，
                 # 不再把整张表折成"没查成"（好行的读数照留）。
                 _mark_unreadable(idx, row, "acceptance_na_without_reason",
                                  f"验收行 {cid} 标了 `na`，却没有写理由（`note` 为空）"
@@ -3029,7 +3028,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                         "got": None, "ok": True, "na": True, "state": "na", "note": note})
             continue
         if kind not in LEG_CHECK_KINDS:
-            # CC-02：词表外 `kind` 只废这一行；整格仍由下面的汇总落 `unknown`
+            # 词表外 `kind` 只废这一行；整格仍由下面的汇总落 `unknown`
             # （绝不 `pass`）—— 自造名字的威慑一点没减，只是不再连坐好行的读数。
             _mark_unreadable(idx, row, "acceptance_unknown_kind",
                              f"验收行 {cid} 的 kind={kind!r} 不在受控词表 "
@@ -3040,12 +3039,12 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         try:
             got, detail = _leg_reading(store, kind, Path(resolve_under_workspace(store, project_dir)))
         except LegNotApplicable as na_exc:
-            # ---- CC-05（`draft/44` J-21：与 E-05 同批）：缺基线 = 这一行不适用。
+            # ---- 缺基线 = 这一行不适用。
             #
-            # 与"读不到台账 = 没查成"分界（`draft/46-04` §2.8 ③ 逐字）：
+            # 与"读不到台账 = 没查成"分界：
             # 缺只读基线是"这一档在这个工作区用不上"（换一档写得出来的），
-            # 不是"整张表没查成" —— 后者会让后面每一行连读数都不肯留下（真机 `p6i`：
-            # `rows=0`、整格 `unknown`，而表里另外 10 行本来算得出）。
+            # 不是"整张表没查成" —— 后者会让后面每一行连读数都不肯留下
+            # （`rows=0`、整格 `unknown`，而表里另外 10 行本来算得出）。
             na_kind_rows.append(cid)
             out.append({"id": cid, "name": name, "kind": kind, "min": want_min, "max": None,
                         "got": None, "ok": None, "state": "not_applicable",
@@ -3107,11 +3106,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         row_out = {"id": cid, "name": name, "kind": kind, "min": want_min, "max": want_max,
                    "got": got, "ok": ok_row, "state": "computed", "detail": detail}
         out.append(row_out)
-        # ---- 第三条队列（业主 2026-10-18 裁定）：`literature.unprocessed > 0` ⇒ 不许 pass。
+        # ---- 第三条队列：`literature.unprocessed > 0` ⇒ 不许 pass。
         #
-        # 缺陷读数（本条的负控就是它）：`projects/mp2` R10 逐字写「`literature.unprocessed`=32
-        # 未清零」而结论是 pass；`projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12
-        # 记成立。三份验收表都如实写出了这个读数，却没有一行判它 —— 「写出来了」不等于
+        # 一份验收表可以如实写出这个读数却没有一行判它 —— 「写出来了」不等于
         # 「有人判了」。所以判据落在这里：这一行算出来的 `pass` 在 `unprocessed > 0` 时降成
         # `unknown`，并要求写清为什么可以带着它收工。
         #
@@ -3154,7 +3151,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                                          "reason": why, "unprocessed_reason": reason})
                     rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
                                                 "warning", f"验收行 {cid}：{why}"))
-        # ---- 接 V 的回路的收工侧（2026-10-19）：计划 `history` 里的 `statement_id`
+        # ---- 接 V 的回路的收工侧：计划 `history` 里的 `statement_id`
         # 必须在 `verifications` 里有一行，否则「攻」这一行记 `unknown`（不是 `pass`）。
         #
         # 为什么必须在这里说，而不是只靠 M 的提示词：`F.step` 把论证落成 `statements`
@@ -3206,33 +3203,26 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                        f"越多越不达标 —— 0 才是达标）")
             unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{why} —— 读数 {detail}"
                          + (f"；{note}" if note else "")
-                         # 同一环里现在就能达标的其它成员档（T4 第 6 趟 `t4f` 的真机读数）：
-                         # M 把"想"那一环声明成 `conjecture_rows`（0 条），而同一环的
-                         # `statement_rows` 有 448 条 —— 它选了唯一为 0 的那一档，而当时
-                         # 门只说了"这行没达标"，没说"同一环换个成员档就达标"。
+                         # 同一环里现在就能达标的其它成员档：
+                         # M 可以把"想"那一环声明成 `conjecture_rows`（0 条），而同一环的
+                         # `statement_rows` 有几百条 —— 它选了唯一为 0 的那一档，门就该
+                         # 说出"同一环换个成员档就达标"，而不是只说"这行没达标"。
                          + _alternatives_note(store, kind,
                                               Path(resolve_under_workspace(store, project_dir))))
 
-    # ---- 四条自动分支的守卫（E-04a）：只看「真算过的 kind」。
+    # ---- 四条自动分支的守卫：只看「真算过的 kind」。
     #
-    # 为什么（`draft/44` J-17 / `draft/46-04` §2.1）：这四条分支是门替没写进表里的档
-    # 说话的那四条（改完没复核 / 骨架稿 / 引文对不上 / 账本被模板灌满）。
-    # 旧守卫看的是"表里有没有这个 `kind`"—— 于是给这四档写一行 `na` 就能让分支整条闭嘴，
-    # 而 `na` 的本意只是"这一行对这个项目天然不适用"（D49），不是"门不许问这件事"。
-    # 现在守卫只看 `computed_kinds`（非 `na` 的行）：`na` 只豁免它自己那一行的阈值判定。
-    # 真机实现证据（内存复算）：`p7b` +6 行、`p5-review-t17`/`p8g` 各 +3 行 `na` ⇒ 旧门读成 `pass`。
-    # 对 33 份真表 0 处翻转：4 行合法 `na` 所在的四档
-    # （`numeric_experiment_rows`/`supported_claims`/`reviewed_proof_rows`/`proof_experiment_rows`）
-    # 一行都不在这四条分支认的四个档上（`46-04` §2.1 末段）。
-    # 现在守卫只看 `computed_kinds`（真算过的行）：`na`/`not_applicable`/`unreadable`
-    # 都不算 —— 它们都不是"这一档被算过"（`draft/52` CC-02 把这条定义收进
-    # `acceptance_row_state` 一处，行循环与这四条守卫共用）。
+    # 为什么：这四条分支是门替没写进表里的档说话的那四条（改完没复核 / 骨架稿 / 引文对不上 /
+    # 账本被模板灌满）。只按"表里有没有这个 `kind`"判的话，给这四档写一行 `na` 就能让分支
+    # 整条闭嘴，而 `na` 的本意只是"这一行对这个项目天然不适用"，不是"门不许问这件事"。
+    # 守卫只认 `computed_kinds`（真算过的行）：`na` / `not_applicable` / `unreadable` 都不算 ——
+    # 它们都不是"这一档被算过"。这条定义收在 `acceptance_row_state` 一处，行循环与这四条共用。
     computed_kinds = acceptance_kinds_with_state(out, "computed")
     na_kinds_in_table = acceptance_kinds_with_state(out, "na")
     _branch_kinds = ("reviewed_current_rows", "document_body_rows",
                      "claim_evidence_fit_rows", "manuscript_rows")
     # E-04b（机器报缺口）：这四档里"只被 `na` 行顶着"的那些 —— 如实报出来，
-    # "算不算覆盖"的判断归 M/秘书（`draft/52` 裁决 5），机器不判 fail/unknown。
+    # "算不算覆盖"的判断归 M/秘书，机器不判 fail/unknown。
     na_only_branch_kinds = sorted(k for k in _branch_kinds
                                   if k in na_kinds_in_table and k not in computed_kinds)
 
