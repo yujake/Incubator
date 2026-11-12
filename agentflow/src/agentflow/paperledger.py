@@ -1,15 +1,14 @@
 # -*- coding: utf-8 -*-
-"""S1q：正文重建 —— 定理库取原文逐字搬、序号重写、映射落 `dependencies`。
+"""正文重建 —— 定理库取原文逐字搬、序号重写、映射落 `dependencies`。
 
-业主 `draft/97` §9.5 与 §7 的表把这件事的判据列出来了，但口径没写全；
-`§16.1` 是施工前补写的定死版（四步 + 五条判据）。这里落的就是那四步：
+正文重建有四步（口径定死、可复算），这里落的就是那四步：
 
 | 步 | 做什么 | 为什么是这么定的 |
 |---|---|---|
 | ① 取原文逐字搬 | 被搬的 `statements.statement_full` 一字不改地进正文 | 逐字是回验的前提（`quoteverify` 的同一套纪律：改一个字就没法拿原文比） |
-| ② 序号重写 | 论文自己那一套号（`"1.5"`）由论文给；台账里的 `label` 不许被改写 | §9.5 的 `label` 行：论文号是"人话标签"，台账标签是另一件事 |
+| ② 序号重写 | 论文自己那一套号（`"1.5"`）由论文给；台账里的 `label` 不许被改写 | 论文号是"人话标签"，台账标签是另一件事 |
 | ③ 引用 `stmt:` | 正文那一处断言必须带 `stmt:<源号>` | `closing.PAPER_LEDGER_PREFIXES`（`stmt:`/`exp:`/`rel:`）是"论文承载本轮结果"那一位 |
-| ④ 映射落 `dependencies` | 一条映射一行，字段组合见 §9.5 | "从哪份手稿的哪条断言来"要可复算 |
+| ④ 映射落 `dependencies` | 一条映射一行 | "从哪份手稿的哪条断言来"要可复算 |
 
 ## 为什么是"检查器 + 写入器"而不是"一个生成正文的函数"
 
@@ -88,7 +87,7 @@ def dep_row_for_mapping(*, dep_id: str, statement_row: Mapping[str, Any],
                         paper_doc_id: str, claim_id: str, paper_number: str,
                         created_at: str, created_by: str = "agent-G",
                         found: bool = True) -> dict[str, Any]:
-    """④ 映射那一行的字段组合（`draft/97` §9.5 逐格定死）。
+    """④ 映射那一行的字段组合。
 
     `used_by = "doc:<论文号>#<claim_id>"`：论文也是 `documents` 行，而这一格回答的是
     "论文里哪一处断言压在这条定理上"。`source_doc_id` / `source_claim_id` 记
@@ -96,10 +95,9 @@ def dep_row_for_mapping(*, dep_id: str, statement_row: Mapping[str, Any],
     于是"搬进来的"与"原来的"两头都指得出来。
 
     【注意】 不许再给 `source_stmt_id`：`Dependency.validate` 的"四选一"是硬闸
-    （被依赖的那一端最多给一个），而 §9.5 定死的那一端是手稿（`doc`）。
-    这一点是实测撞出来的（第一版同时给了 `source_doc_id` 与 `source_stmt_id`，
-    当场以"给两个就说不清这条边到底依赖谁"被拒）—— 也就是说
-    "被搬的是哪一条 `statements` 行"由检查器那一侧的 `moved[]` 记着，
+    （被依赖的那一端最多给一个），而定死的那一端是手稿（`doc`）。同时给
+    `source_doc_id` 与 `source_stmt_id` 会当场以"给两个就说不清这条边到底依赖谁"
+    被拒 —— "被搬的是哪一条 `statements` 行"由检查器那一侧的 `moved[]` 记着，
     而不是靠这一行多挂一个来源端。`found=False` 时落 `dangling`（被搬那条找不到了），
     并写清为什么（`Dependency.validate` 要求非空理由）。
     """
@@ -195,9 +193,8 @@ def check_paper_ledger(paper: Mapping[str, Any], moved: Sequence[Mapping[str, An
                              "why": (f"正文里那一处断言没有 `stmt:{sid}` 引用 ⇒ "
                                      "'搬进去的东西从哪来'不可复算")})
         numbers.setdefault(num, sid)
-    # 3b 重号：两条映射行指向同一个论文号就是红（§9.5 的原话是"落两行指向同一个
-    # `label` ⇒ 红"）—— 判的是映射行，不是"正文里那两条各写了什么号"：
-    # 后者在同号时本来就看不出撞（两条各自的号字段都写着 `1.1`）。
+    # 3b 重号：两条映射行指向同一个论文号就是红 —— 判的是映射行，不是"正文里那两条
+    # 各写了什么号"：后者在同号时本来就看不出撞（两条各自的号字段都写着 `1.1`）。
     by_label: dict[str, set[str]] = {}
     for d in deps:
         if str(d.get("used_by") or "").startswith("doc:"):
