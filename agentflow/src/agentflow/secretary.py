@@ -2059,6 +2059,11 @@ STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
         "proof_no",             # 收录回执（这一行现在是第几份证明）
         "proof_sha256",         # 收录回执（这一份正文的指纹）
         "manuscript_id",        # 收录回执（这份稿的 F 稿号；稿名不再与命题号绑定）
+        # 逐路径的稿（2026-11-13，V1-A）：`{路径号: 稿路径}`。收录回执写 `manuscript_id`
+        # 时同一笔写这一格 —— 它是"这一条命题的每条路径各是哪份稿"的落点，`manuscript_id`
+        # 只有一格、会被第 2 条路径覆写。只由 `agent_b/proof_receipt.write_proof_receipt`
+        # 写，读口是 `manuscriptpaths.path_reading`。
+        "manuscripts",
         "_grade_recomputed",    # 按签重算等级的读数（`verifications.GRADE_RECOMPUTED_KEY`）
     ),
     "numeric_evidence": ("bits",),

@@ -14,16 +14,65 @@ from .manuscriptproducers import _manuscript_id_of
 
 
 # --------------------------------------------------------------------- 路径号（多证明）
+#: 逐路径那份稿记录在命题行上的键名：`{路径号: 工作区相对路径}`（2026-11-13，V1-A）。
+#:
+#: 为什么是"路径"而不是"稿号"：稿号是路径的纯函数（`manuscriptproducers._manuscript_id_of`
+#: 是全仓唯一那把尺），反过来不成立 —— 同一个六位号在 `f-proof` / `b-proof` 两个号段里
+#: 各有一份稿。所以这里存路径，稿号在读侧现算（`paths[].manuscript_id`），不存两份会分家的
+#: 事实。旧盘没有这一格 ⇒ 本格不贡献任何路径（退回 `manuscript_id` 那一个旧口径）。
+PER_PATH_KEY = "manuscripts"
+
+
+def _per_path_manuscripts(row: Any) -> tuple[dict[int, str], list[str]]:
+    """命题行上的逐路径稿记录 ⇒ `({路径号: 稿路径}, 读数问题)`。
+
+    三态（与 `path_reading` 同一套纪律）：
+    - 这一格不存在 ⇒ `({}, [])`：老盘，退回旧口径（不是"读不出来"）；
+    - 这一格存在而读得出 ⇒ 逐条给出路径号与稿路径；
+    - 这一格存在却读不成（不是映射 / 路径号不是正整数 / 稿是空的）⇒ 问题清单非空。
+      调用方把问题原样带进 `path_reading` 的 `problems`，V 那一侧据此 fail-closed
+      （"没读成"绝不折成"没有这一条路径"）。
+    """
+    raw = row.get(PER_PATH_KEY) if isinstance(row, Mapping) else None
+    if raw is None:
+        return {}, []
+    if not isinstance(raw, Mapping):
+        return {}, [f"`{PER_PATH_KEY}` 不是映射（{type(raw).__name__}）⇒ 逐路径稿记录读不出来"]
+    out: dict[int, str] = {}
+    problems: list[str] = []
+    for group_raw, rel_raw in raw.items():
+        try:
+            group = int(group_raw)
+        except (TypeError, ValueError):
+            problems.append(f"`{PER_PATH_KEY}` 里有一个读不出的路径号 {group_raw!r}")
+            continue
+        rel = str(rel_raw or "").strip().replace("\\", "/")
+        if group < 1 or not rel:
+            problems.append(f"`{PER_PATH_KEY}.{group_raw}` 不是一条有效记录"
+                            f"（路径号 {group!r}、稿 {rel_raw!r}）")
+            continue
+        out[group] = rel
+    return out, problems
+
+
 def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
     """一条命题现在有几条「证明路径」、每条是哪份稿（稿号 + 正文 sha）。
 
-    三条来源 join：
+    四条来源 join：
     - `dependencies` 行的 `path_group`（B 收录时写的那个号；老盘只有 1）；
     - `statements` 行的证明清单（每条路径的正文 sha）；
+    - `statements` 行的逐路径稿记录（`manuscripts`：路径号 ⇒ 稿路径，B 收录每一笔
+      写一格）。它是"这一条路径是哪份稿"的第一手记录：收录前落下的 pending 行在
+      认领之前不属于任何命题（`list_verifications` 读不到），签行那一面就只剩
+      正文 sha、没有稿号 —— 这一格正好补上那一段；
     - `verifications` 行的 `path_group`（V 落行时可能还没有，B 收录后由
       :func:`stamp_verification_path_group` 补齐）。没有这一格的签行按正文 sha
       认回已有那条路径、只补 `manuscript`，不新增路径；认不回来才留成 0 号
       （不计入 `paths`，不替它编组号）。
+
+    每条路径的 `manuscript` 按"签的载体优先、收录记录其次、被审对象兜底"取：
+    签行里的 `manuscript`（V 真的把签盖在那份稿上）最硬；逐路径稿记录次之；
+    `object_path`（被审的对象，同一份正文可以有多份副本）只在整条路径都没有稿时兜底。
     """
     sid = str(statement_id or "").strip()
     out: dict[str, Any] = {"checked": False, "statement_id": sid, "paths": [],
@@ -136,11 +185,33 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
                                           "sources": []})
         if not one["body_sha"]:
             one["body_sha"] = sha
-        if not one["manuscript"] and rel:
-            one["manuscript"] = rel
-            one["manuscript_id"] = _manuscript_id_of(rel)
-        if not one["manuscript_id"] and rel:
-            one["manuscript_id"] = _manuscript_id_of(rel)
+        #: "这一条路径的稿"只认 `manuscript` 那一格（V 真的把签盖在那份稿上）。
+        #: `object_path` 是"被审的对象"—— 同一份正文可以有多份副本（夹具 / 转抄 /
+        #: 优化副本），拿它当路径的稿会把路径指到副本上。2026-11-13 起 B 收录时
+        #: 连 pending 行也盖路径号（`stamp_verification_path_group`）⇒ 这些行会走到
+        #: 这一支，所以这里不能再无条件吃 `rel`：`object_path` 降为兜底
+        #: （`objects_only`，整条路径都找不到稿时才用）。
+        man = str(doc.get("manuscript") or "").strip()
+        if man and not one["manuscript"]:
+            one["manuscript"] = man
+            one["manuscript_id"] = _manuscript_id_of(man)
+        if rel and not one["manuscript"]:
+            objects_only.setdefault(int(group), rel)
+    # ---- 命题行上的逐路径稿记录（`manuscripts`）：每条路径各那一份 ---------------
+    #
+    # 放在签行之后、`object_path` 兜底之前：签的载体最硬（V 真的盖了），收录时
+    # 记下的那一份次之，被审对象（可能是副本）最后。这一格补的正是签行给不出的
+    # 那一段：收录前落下的 pending 行在认领之前读不进 `list_verifications`，于是
+    # 那条路径只剩正文 sha、没有稿号 —— 靠这一格才认得出它是第几条路径的稿。
+    _per_path, _per_bad = _per_path_manuscripts(row_self)
+    problems.extend(_per_bad)
+    for group, path_rel in _per_path.items():
+        one = by_group.setdefault(group, {"path_group": group, "manuscript_id": "",
+                                          "body_sha": "", "manuscript": "",
+                                          "sources": []})
+        if not one["manuscript"]:
+            one["manuscript"] = path_rel
+            one["manuscript_id"] = _manuscript_id_of(path_rel)
     for group, rel in objects_only.items():
         one = by_group.get(int(group))
         if one is not None and not one["manuscript"]:
@@ -200,14 +271,24 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
 
     为什么必须回写：V 落行时 B 还没收录（路径号还没分配），而同一份证明的依赖行与
     verification 行必须用同一个号。写法是"只读-判-重写"：已有同一个号 ⇒ 一个字节不动；
-    已有别的号 ⇒ 不覆盖、如实报（`bound_elsewhere`）；其余行逐字节原样。
+    已有别的号 ⇒ 不覆盖、如实报；其余行逐字节原样。
+
+    ## pending 行也盖（2026-11-13，V1-B）
+
+    改前这一格跳过未认领的 pending 行（判据是"文件名不等于 `<命题号>.jsonl`"）。
+    而 pending 台账的文件名是正文 sha（`verifications.pending_ledger_path`），
+    永远不等于 `<命题号>.jsonl` ⇒ 收录前落下的那一签永远拿不到路径号，只剩"哪份正文"
+    而没有"第几条路径"。于是"一条路径若从未在册重签、只剩 pending 行"这一档里，
+    路径号只能靠 B 收录这一笔来补 —— 现在补，且不看认领状态（盖号不是认领：
+    `statement_id` 那一格仍然只有 `vsigns.bind_pending_claim` 能写）。
+    已有别的号 ⇒ 照旧不覆盖（并发 / 同一份正文被两条命题收录时如实报出来）。
     """
     sid = str(statement_id or "").strip()
     sha = str(body_sha or "").strip().lower()
     rel = str(manuscript or "").strip().replace("\\", "/")
     group = int(path_group or 0)
-    out: dict[str, Any] = {"checked": False, "stamped": 0, "files": [],
-                           "problems": [], "why": ""}
+    out: dict[str, Any] = {"checked": False, "stamped": 0, "pending_stamped": 0,
+                           "files": [], "problems": [], "why": ""}
     if not sid:
         out["why"] = "没有命题号 ⇒ 路径号回写不了（不是「已经写过」）"
         return out
@@ -224,10 +305,13 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
     except Exception as exc:  # noqa: BLE001
         out["why"] = f"verifications 目录读不出来（{type(exc).__name__}: {exc}）"
         return out
+    pending_dir_path = pending
     bad_any = False
     for path in files:
         if not path.is_file():
             continue
+        #: 这一份文件是不是 pending 那一条叠（只用来分开报读数，不改写法）。
+        is_pending = path.parent == pending_dir_path
         try:
             raw = path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -236,6 +320,7 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
 
         lines = raw.splitlines(keepends=True)
         changed = 0
+        pending_changed = 0
         bad = False
         for i, line in enumerate(lines):
             if not line.strip():
@@ -256,9 +341,6 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
                     f"{path.name} 有一行属于 stmt:{row_sid}（不是 stmt:{sid}）⇒ 不回写")
                 bad = True
                 continue
-            if not row_sid and path.name != f"{sid}.jsonl":
-                # 未认领的 pending 行不替它绑号（认领是 `vsigns.claim_pending` 的事）。
-                continue
             current = row.get("path_group")
             try:
                 current_no = int(current) if current not in (None, "") else 0
@@ -276,6 +358,8 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
             lines[i] = json.dumps(row, ensure_ascii=False, default=str) + (
                 "\n" if line.endswith("\n") else "")
             changed += 1
+            if is_pending:
+                pending_changed += 1
         if changed and not bad:
             tmp = path.with_suffix(path.suffix + ".tmp")
             try:
@@ -289,11 +373,15 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
                     pass
                 continue
             out["stamped"] += changed
+            out["pending_stamped"] += pending_changed
             out["files"].append(str(path))
         bad_any = bad_any or bad
     out["checked"] = not bad_any
-    out["why"] = (f"回写了 {out['stamped']} 条 verification 行（路径号 {group}）"
-                  if not bad_any else "有行已有别的路径号 / 属于别的命题 ⇒ 没有覆盖")
+    out["why"] = (
+        f"回写了 {out['stamped']} 条 verification 行（路径号 {group}"
+        + (f"，其中 pending 行 {out['pending_stamped']} 条" if out["pending_stamped"] else "")
+        + "）"
+        if not bad_any else "有行已有别的路径号 / 属于别的命题 ⇒ 没有覆盖")
     return out
 
 

@@ -1920,6 +1920,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _attach_proofs(self, stmt_id: str, entries: list[dict],
                        canonical: str = "", bits: Mapping | None = None,
                        proof_no: Any = 1, manuscript_id: str = "",
+                       manuscript: str = "",
                        replace_existing: bool = False) -> dict:
         """把证明清单与 canonical 正文写回既有那一行（同一把 `statements` 锁）。
 
@@ -2216,7 +2217,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if _body_present:
                 write_proof_receipt(
                     row, out, body_now=_body_now, proof_no=_no_receipt,
-                    manuscript_id=manuscript_id)
+                    manuscript_id=manuscript_id, manuscript=manuscript)
             # ---- 签成之后就升档，不再等第二条命令 --------------
             #
             # 正文与 bits 已经写进来了，而 `evidence_kind` 若停在 `heuristic`，升档还要
@@ -2984,7 +2985,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #: #p2 及以后落同一行的 `proofs` 清单；不给就与今天逐字一致（等价 #p1）。
         proofs: list | None = None,
         #: F 的证明手稿正文（「作者写内容、收方读稿登记」）。
-        #: 手稿里那一节 `## 依赖` 的四列表由 B 读出来落 `dependencies` —— F 自己不写台账。
+        #: 手稿里那一节 `## 依赖` 的三列表由 B 读出来落 `dependencies` —— F 自己不写台账。
         #: 不给 ⇒ 依赖面仍由秘书的正文扫描那条老路决定。
         proof_manuscript: str = "",
         kind: str = "theorem",
@@ -3656,7 +3657,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 为什么这一条必须存在：上面那一整条链（F 的 proof 动作渲染 `## 依赖` → 秘书洗稿
         # 并盖元信息 → D 携带 → B 读稿）的有效性，全部压在"这份稿是框架写出来的"上。
         # 而模型可以直接 `fs.write` 写一份自由格式的 `reports/f-proof-*.md`
-        # —— 它有文件名、有正文，于是下游每一处都"读到了"，只是没有四列依赖表、
+        # —— 它有文件名、有正文，于是下游每一处都"读到了"，只是没有三列依赖表、
         # 也没有洗稿元信息：`dependencies` 于是 0 行，而读数上一切正常。
         # `fs.write`/`fs.edit` 那一侧已经受控拒绝（`reserved_framework_artifact`），
         # 但"换个名字绕过"永远有路（手写、别的工具、人放一份到盘上）⇒ 收方这里再挡一次。
@@ -3821,7 +3822,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                or "（D 的报告里没有那一节）") + "）；"
                          "③ 按约定路径去盘上找也没有（"
                          + str(manuscript_probe.get("why") or "（没有可定位的命题号）")
-                         + "）—— 依赖面必须写进 F 的证明手稿（四列表，列固定），B 读稿登记；"
+                         + "）—— 依赖面必须写进 F 的证明手稿（三列必填；路径号不进稿），B 读稿登记；"
                          "让 D 把 F 那份稿一并带过来（或把正文传进 `proof_manuscript`）再交"),
                         refs_in_proof=list(on_ledger),
                         findings=findings,
@@ -4702,7 +4703,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             pre_write = self._attach_proofs(stmt_id_now, attach_entries,
                                             canonical=attach_canonical,
                                             bits=bits,
-                                            proof_no=int(proof_no_placement))
+                                            proof_no=int(proof_no_placement),
+                                            manuscript=manuscript_path)
             # 正文写不进去 ⇒ 升档这一笔也不用问了（闸只会拒）：照实回这一笔的拒码。
             if pre_write.get("refused"):
                 return _refuse(str(pre_write.get("refused") or "proof_text_not_written"),
@@ -4916,7 +4918,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 不在此列：那一笔要 V 重签，位不许替它说"签过"。
             if proof_no >= 1 and not written.get("merged_same_kind"):
                 collect = self._attach_proofs(
-                    stmt_now, [], canonical="", bits=bits, proof_no=int(proof_no))
+                    stmt_now, [], canonical="", bits=bits, proof_no=int(proof_no),
+                    manuscript=manuscript_path)
                 if collect.get("refused"):
                     out["bits_not_written"] = {
                         "refused": str(collect.get("refused") or ""),
@@ -4996,7 +4999,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             attach = pre_write or self._attach_proofs(stmt_now, attach_entries,
                                                       canonical=attach_canonical,
                                                       bits=bits,
-                                                      proof_no=int(proof_no_placement))
+                                                      proof_no=int(proof_no_placement),
+                                                      manuscript=manuscript_path)
             # ---- 2026-11-08：已在终态档也要把"这一笔认到的签"落到行上 ----------
             #
             # V 只对手稿负责之后，签不再由 V 写 statements；B 的 at_tier 出口（同一条
@@ -5014,7 +5018,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     and not _already):
                 _collected = self._attach_proofs(
                     stmt_now, [], canonical="", bits=bits,
-                    proof_no=int(proof_no_placement))
+                    proof_no=int(proof_no_placement), manuscript=manuscript_path)
                 if _collected.get("row"):
                     written = {**dict(written), "row": dict(_collected.get("row") or {})}
             if attach.get("written"):
@@ -5326,7 +5330,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                      canonical=attach_canonical,
                                      bits=bits,
                                      proof_no=int(proof_no_placement),
-                                     manuscript_id=_manuscript_id_now)
+                                     manuscript_id=_manuscript_id_now,
+                                     manuscript=manuscript_path)
         if attach.get("refused"):
             # 换正文那一笔被拒（`optimized_blocked`：没有签 / 签的不是这一份）⇒ 不许当
             # 成功返回：盘上那一份 `proof_text` 一个字都没动，读数在 `_optimized_reading`。
@@ -5393,7 +5398,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 and str(data.get("kind") or "") == "conjecture"):
             _claimed = self._attach_proofs(
                 stmt_id, [], canonical="", proof_no=int(proof_no_placement),
-                manuscript_id=_manuscript_id_now)
+                manuscript_id=_manuscript_id_now, manuscript=manuscript_path)
             if _claimed.get("kind_upgraded"):
                 _claim_kind = dict(_claimed.get("kind_upgraded") or {})
             if _claimed.get("written") or _claim_kind:
@@ -7105,7 +7110,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 outcome = ("filled" if dep.get("outcome") == _MI.EXTRACT_PRESENT
                            and (dep.get("rows") or [])
                            else "not_applicable")
-                note = ("依赖段四列照写" if outcome == "filled"
+                note = ("依赖段三列照写" if outcome == "filled"
                         else "稿里没有依赖行（自足证明合法）")
             else:
                 outcome = "filled"
@@ -7148,6 +7153,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_apply_proof(self, cells: dict, row: Mapping, want_no: int,
                             target: str, manuscript_id: str = "",
                             write_no: int = 0,
+                            manuscript: str = "",
                             replace_existing: bool = False) -> dict:
         """写 `proof_text` 那一格（签闸 → `_attach_proofs`），就地把回执写回 `cells`。
 
@@ -7198,6 +7204,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             entries=([{"proof_no": no, "text": text}] if no >= 2 else []),
             canonical=(text if no == 1 else ""), bits=attach_bits, proof_no=no,
             manuscript_id=str(manuscript_id or ""),
+            manuscript=manuscript,
             replace_existing=bool(replace_existing))
         if attach.get("refused"):
             return {"written": False, "code": str(attach["refused"]),
@@ -7839,6 +7846,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             cells, row, want_no, target,
             manuscript_id=_VS_MID2.manuscript_id_of(str(path or "")),
             write_no=out_no,
+            manuscript=path,
             replace_existing=(bool(named_no) and self._optimization_replace_enabled()))
         if got["code"]:
             return {"code": got["code"], "why": got["why"]}
