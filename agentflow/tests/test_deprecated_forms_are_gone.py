@@ -157,7 +157,6 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
     },
     "F5_two_nontrivial_questions": {
         "src/agentflow/agent_loop.py": "该删，已转持有方（热文件，本轮只读）",
-        "src/agentflow/specs/b.py": "该删，已转持有方（FC-27 禁改区）",
         "tests/test_filing_tier_carries_the_proof.py":
             "判据读它：断言 note 里不再出现旧那两问（负控）",
     },
@@ -493,9 +492,9 @@ def test_the_commented_code_scanner_ignores_prose(tmp_path: pathlib.Path) -> Non
 
 #: 文件 -> 为什么那句话里的旧名字还留着。
 DANGLING_ALLOWED: dict[str, str] = {
-    "src/agentflow/specs/b.py":
-        "该删，已转持有方（FC-27 禁改区）：那一句写「判据本体在 `secretary.proof_effort_readings` 与 `secretary.EFFORT_TIER_BANDS`」，而 EFFORT_TIER_BANDS 已按业主 2026-10-29 的裁定删除；这一行等人工改"
-,
+    # 2026-11-12：`src/agentflow/specs/b.py` 那一行从台账删除（等额纪律的"台账过期"
+    # 一档）—— E4 清扫把点名 `secretary.EFFORT_TIER_BANDS` 的那句整句删掉了，盘上
+    # 一处命中都没有；留着它反而会掩盖"这一句已经不在"这个事实。
     "src/agentflow/autonomy.py":
         "活陷阱：`STOP_TOKEN` 撤掉之后，任何还引用它的代码会立刻 NameError —— "
         "这一句是「旁路没了、别再把它加回来」的唯一说明，删掉下一个人会重新加一个字面匹配",
