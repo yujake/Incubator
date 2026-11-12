@@ -8387,101 +8387,25 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
 def _numbered_sections(prefix: str, lines: Sequence[str], base_order: int) -> list[Section]:
-
-
-
     """把一组行拆成多段（每行一段），顺序 = base_order + 序号 * 10。"""
-
-
-
     return [
-
-
-
         Section(f"{prefix}_{i:02d}", base_order + i * 10, text=line)
-
-
-
         for i, line in enumerate(lines)
-
-
-
     ]
-
-
-
-
-
-
-
-
-
-
-
 #: 循环协议（`loop_protocol_for()` 的返回值）按空行切出的 15 块的名字。
-
-
-
 #:
-
-
-
 #: 顺序与正文一一对应：前言 / 形状表头 / 11 个形状（`02B` 就是正文的 `2b)`）/ 规则表头 / 16 条规则。
-
-
-
 #: 十个角色的块数都是 15（实测：出边为空的 C / V 用两行残桩替掉 2) 与 2b) 两块，块数不变；
-
-
-
 #: M 多出来的两段专段嵌在 `2)` 与 `7)` 块内部）⇒ 名字表可以写死，
-
-
-
 #: 但仍然断言块数相等（见 `_block_sections`）：块数一变就当场抛，不静默少切半块。
-
-
-
 _LOOP_BLOCK_NAMES: tuple[str, ...] = (
-
-
-
     "AGENT_TOOLS_SDK", "LOOP_SHAPES_HEAD",
-
-
-
     "LOOP_SHAPE_01", "LOOP_SHAPE_02", "LOOP_SHAPE_02B", "LOOP_SHAPE_03", "LOOP_SHAPE_04",
-
-
-
     "LOOP_SHAPE_05", "LOOP_SHAPE_06", "LOOP_SHAPE_07", "LOOP_SHAPE_08", "LOOP_SHAPE_09",
-
-
-
     "LOOP_SHAPE_10",
-
-
-
     "LOOP_RULES_HEAD", "LOOP_RULES",
-
-
-
 )
-
-
-
-
-
-
-
-
-
-
-
 def _block_sections(text: str, names: Sequence[str]) -> list[Section]:
-
-
-
     """把一段文本按空行切成多段，段名与 order 都取自 `names` / `SECTION_ORDERS`。
 
 
@@ -8571,113 +8495,30 @@ def _block_sections(text: str, names: Sequence[str]) -> list[Section]:
 
 
     """
-
-
-
     blocks = text.split("\n\n")
-
-
-
     if blocks and blocks[-1] == "":                 # 尾空块 ⇒ 分隔符并进前一块（见 docstring）
-
-
-
         blocks = blocks[:-1]
-
-
-
         if blocks:
-
-
-
             blocks[-1] = blocks[-1] + "\n\n"
-
-
-
     if len(blocks) != len(names):
-
-
-
         raise PromptError(
-
-
-
             f"块数与名字数不等：{len(blocks)} 块 vs {len(names)} 个名字 —— "
-
-
-
             "这段文本被改过（增删了空行或整块），先按新的块数更新对应的名字表，"
-
-
-
             "不要让它静默地按名字截断"
-
-
-
         )
-
-
-
     if "\n\n".join(blocks) != text:
-
-
-
         raise PromptError("按空行切块之后拼不回原文 —— 段结构会与文本漂开，必须当场停下来查")
-
-
-
     return [Section(name, SECTION_ORDERS[name], block)
-
-
-
             for name, block in zip(names, blocks, strict=True)]
-
-
-
-
-
-
-
-
-
-
-
 #: 其余五坨的块名表（A 轴批 2；块数与名字数都由 `_block_sections` 当场对账）。
-
-
-
 #:
-
-
-
 #: 逐条实测（`draft/103` §2.1 / §2.2）：`PAPER_PACK` 10 块（只有 M/G/H 注册）、
-
-
-
 #: `TASK_FRAME` 恒 4 块、`EVIDENCE_CONTRACT` 2 块、`HANDOFF` 2 块（末尾那个空块是
-
-
-
 #: `HANDOFF_PROTOCOL` 的收尾换行，按 `_block_sections` 的口径并进了第 2 块）。
-
-
-
 _PAPER_BLOCK_NAMES: tuple[str, ...] = (
-
-
-
     "PAPER_PACK", "PAPER_01", "PAPER_02", "PAPER_03", "PAPER_04",
-
-
-
     "PAPER_05", "PAPER_06", "PAPER_07", "PAPER_07_BODY", "PAPER_08",
-
-
-
 )
-
-
-
 #: 任务框的正文（四块，块名见下面的表）。2026-10-25（S1）：此前它含「你收到的留言」
 #: 与「挂在你名下的工作项」两格 —— D-52 把这两格改成每一步的增量（`agent_loop._deliver_mailbox`），
 #: 而 system 段还在印它们、缺省句恒为「没收到留言 / 板上没事」⇒ 模型开场读「空」、下一步又收到增量。
@@ -8688,43 +8529,13 @@ _TASK_FRAME_TEXT: str = (
     "你的草稿本（最近几条，是你自己以前写的）：\n{{notebook}}\n\n"
     "剩余预算：{{budget_left}}"
 )
-
 _TASK_FRAME_BLOCK_NAMES: tuple[str, ...] = (
-
-
-
     "TASK_FRAME", "TASK_USER_REPLIES", "TASK_NOTEBOOK",
-
-
-
     "TASK_BUDGET",
-
-
-
 )
-
-
-
 _EVIDENCE_BLOCK_NAMES: tuple[str, ...] = ("EVIDENCE_CONTRACT", "EVIDENCE_RULES")
-
-
-
 _HANDOFF_BLOCK_NAMES: tuple[str, ...] = ("HANDOFF", "HANDOFF_RULES")
-
-
-
-
-
-
-
-
-
-
-
 def _faculty_block_names(count: int) -> tuple[str, ...]:
-
-
-
     """`FACULTIES` 的块名：第一块沿用旧名，其余按位置编号。
 
 
@@ -8762,29 +8573,8 @@ def _faculty_block_names(count: int) -> tuple[str, ...]:
 
 
     """
-
-
-
     return ("FACULTIES",) + tuple(f"FACULTIES_{i:02d}" for i in range(2, count + 1))
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #: 没有读到工具链读数时那一段的正文。写在这里是为了让"没读到"也是一句诚实的话：#: 空字符串会让模型以为这一栏本来就没有，而"我不知道"与"没有"是两件事。
-
-
-
 def _no_toolchain_text() -> str:
     """没有读到工具链读数时那一段（只报事实与怎么取读数，不点名任何角色）。
 
@@ -8797,25 +8587,8 @@ def _no_toolchain_text() -> str:
     return ("这台机器上的证明工具链：（这一次没有读到读数 —— 探测没做，"
             "不是「这台机器上跑不了」。要判断能不能跑形式化核验，"
             "先让框架跑一次 `agentflow doctor`）")
-
-
-
-
-
-
-
-
-
-
-
 @lru_cache(maxsize=1)
-
-
-
 def _toolchain_readings() -> tuple[Mapping[str, Any], Mapping[str, Any]] | None:
-
-
-
     """这台机器的工具链读数（探测一次，两段文案共用）；`None` = 探测本身崩了。
 
 
@@ -8862,49 +8635,13 @@ def _toolchain_readings() -> tuple[Mapping[str, Any], Mapping[str, Any]] | None:
 
 
     """
-
-
-
     from . import toolchain as TC
-
-
-
-
-
-
-
     try:
-
-
-
         return TC.probe_checkers(), TC.mathlib_state()
-
-
-
     except Exception:  # noqa: BLE001 —— 读不到就如实说读不到，不编一个「没有」
-
-
-
         return None
-
-
-
-
-
-
-
-
-
-
-
 @lru_cache(maxsize=1)
-
-
-
 def _lean_switch() -> tuple[bool, str]:
-
-
-
     """用户设的那个开关（`toolchain` 段的 `lean_enabled`）：`(能不能走形式化, 来源)`。
 
 
@@ -8946,35 +8683,13 @@ def _lean_switch() -> tuple[bool, str]:
 
 
     """
-
-
-
     # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：判定真身只有一处 ——
-
     # `leanscope.lean_reading()`（它读 `settings.lean_enabled` 那条梯子，并在读不懂时
-
     # 按"关"折）。这里不再自己判一遍，只把它折成既有那两个返回值：`enabled` 与
-
     # 来源（`"env"` / `"settings"` / `""` / `"unreadable"`，与改前的取值逐字相同）。
-
     _reading = _LEANSCOPE.lean_reading()
-
     return _reading.enabled, str(_reading.source or "")
-
-
-
-
-
-
-
-
-
-
-
 def reset_toolchain_readings() -> None:
-
-
-
     """把这一轴的缓存一起清掉（读数 + 开关 + 两段文案）。
 
 
@@ -9000,41 +8715,12 @@ def reset_toolchain_readings() -> None:
 
 
     """
-
-
-
     _toolchain_readings.cache_clear()
-
-
-
     _lean_switch.cache_clear()
-
-
-
     toolchain_facts_text.cache_clear()
-
-
-
     toolchain_formal_text.cache_clear()
-
-
-
-
-
-
-
-
-
-
-
 @lru_cache(maxsize=1)
-
-
-
 def toolchain_facts_text() -> str:
-
-
-
     """这台机器上的证明工具链读数（现算一次，之后按进程记忆）。
 
 
@@ -9124,297 +8810,73 @@ def toolchain_facts_text() -> str:
 
 
     """
-
-
-
     got = _toolchain_readings()
-
-
-
     enabled, switch_src = _lean_switch()
-
-
-
     if not enabled:
-
-
-
         # 业主 2026-10-12 的开关（`lean_enabled=false`（`toolchain` 段））：这一段必须
-
-
-
         # 先说他关掉了这条路，再报机器事实。顺序是刻意的 ——
-
-
-
         # 机器事实（"有 Lean 吗、Mathlib 能不能 import"）在这一档里不再是
-
-
-
         # 行动依据：用户已经说了这一趟不走形式化。把机器事实摆在前面，
-
-
-
         # 模型会照着它去派 `check_formal`（真实机读数：T1 前几趟就是这么烧掉的）。
-
-
-
         from . import settings as SET
-
-
-
-
-
-
-
         where = {"env": f"环境变量 {SET.ENV_LEAN_ENABLED}",
-
-
-
                  "settings": f"设置文件 toolchain 段的 {SET.LEAN_ENABLED_KEY}",
-
-
-
                  "unreadable": (f"设置文件 toolchain 段的 {SET.LEAN_ENABLED_KEY}"
-
-
-
                                 "（值读不懂 ⇒ 按关处理（fail-closed））"),
-
-
-
                  }.get(switch_src, "内置缺省")
-
-
-
         lines = [
-
-
-
             f"- Lean 形式化：**已关闭**（{where} = false）⇒ 本会话不做形式化验证（系统做不了）",
-
-
-
             "这台机器上的证明工具链（现算读数，不是记忆）：",
-
-
-
             "- 这一趟走替代路线（这条路上唯一的「审过」凭据）：证明正文先落成一份手稿（F 的 "
-
-
-
             "`reports/f-proof-<稿号>.md` / E 的 `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`），再请 V 用 `verify.verify_proof` 带 **`proof_manuscript`**（在册也给）逐行走查 —— 签块落回那一份稿，结论进 "
-
-
-
             "`verifications/<命题号>.jsonl`（文件账本，不是表；还没号时先落 `verifications/pending/<正文 sha>.jsonl`，B 登记拿到号后按正文 sha 认领）；文字证明这一路本会话最高到等级 `pre_theorem`（`evidence_kind=\"proof_review\"` 是它的历史列名），"
-
-
-
             "所以任何断言都写成「逐行审阅」，不写「已证明」",
-
-
-
         ]
-
-
-
         if got is not None:
-
-
-
             probe, mathlib = got
-
-
-
             # 机器事实降级成"背景读数"：它不再决定做什么，但读的人有权知道。
-
-
-
             lines.append(
-
-
-
                 "- 背景读数（下面这些**不改变上面的处置**）：检查器 "
-
-
-
                 + ("有" if probe.get("available") else "没有（或没查成）")
-
-
-
                 + "；Mathlib " + str(mathlib.get("import_mathlib_measured")
-
-
-
                                      or mathlib.get("import_mathlib") or "没读到"))
-
-
-
         return "\n".join(lines)
-
-
-
-
-
-
-
     if got is None:
-
-
-
         return ("这台机器上的证明工具链：没查成 —— 探测本身失败了"
-
-
-
                 " ⇒ 不知道环境里有没有检查器（先让框架跑一次 `agentflow doctor`）")
-
-
-
     probe, mathlib = got
-
-
-
-
-
-
-
     if probe.get("available"):
-
-
-
         found = "；".join(f"{r['name']} {r.get('version') or '（版本读不出）'}"
-
-
-
                           for r in probe["available"])
-
-
-
     elif not probe.get("checked"):
-
-
-
         found = f"探测没做成（{probe.get('reason')}）⇒ 不知道环境里有没有检查器"
-
-
-
     else:
-
-
-
         found = "没有任何受支持的检查器 —— 本环境无法产出 proof 级证据"
-
-
-
-
-
-
-
     # 2026-10-17（Lean 审计 S1）：第一行必须是开关状态 —— 六处提示词都写"看第一行"，
     # 而原来第一行是标题、状态在第二行；开分支还全篇没有"已开启"三个字。
     lines = ["- 形式化开关（`lean_enabled = true`）：**已开启** ⇒ 本会话可以走形式化这条路；"
              "这条路要不要走由**用户指定**，指定之后一条一条经 **B** 的通道安排",
              "这台机器上的证明工具链（现算读数，不是记忆）：", f"- 检查器：{found}"]
-
-
-
     if not mathlib.get("root"):
-
-
-
         lines.append(f"- Mathlib：没找到工程根（{mathlib.get('reason')}）"
-
-
-
                      "⇒ `import Mathlib` 会落「没查成」（`import_unavailable`），"
-
-
-
                      "那不是「证明不成立」")
-
-
-
     else:
-
-
-
         lines.append(f"- Mathlib：工程根 {mathlib['root']}；`import Mathlib` "
-
-
-
                      f"{mathlib.get('import_mathlib')}")
-
-
-
         # D70（`draft/83` §7）：文件面读数不算数 —— 真编译过一次才算。
-
-
-
         # 真机读数（2026-10-08，T1 第 18 趟）：`_env/` 那份 Mathlib 的依赖包 junction
-
-
-
         # 在环境搬迁后悬空 ⇒ umbrella 在、`import Mathlib` 报 `unknown package 'Std'`，
-
-
-
         # 而上一行照样写"可用"，模型照着它试了 4 次形式化（全部没查成）。
-
-
-
         lines.append(f"- Mathlib 实测（第 ⑤ 步真编译一次图论那条 import）："
-
-
-
                      f"{mathlib.get('import_mathlib_measured')}")
-
-
-
     return "\n".join(lines)
-
-
-
-
-
-
-
-
-
-
-
 #: `TOOLCHAIN_FORMAL` 在没拿到读数时的诚实说法（与 `_NO_TOOLCHAIN` 同一形态：
-
-
-
 #: 「这一次没有读到读数」不是「这台机器做不到」）。
-
-
-
 _NO_TOOLCHAIN_FORMAL = ("这一次没有读到工具链读数 ⇒ 按**最保守**那一条写：写不 import "
-
-
-
                         "任何库的自足文件（只用 Lean 核心语法与核心策略），"
-
-
-
                         "并把「本机能不能用 Mathlib 没读到」写进 `notes` 交给人 —— "
-
-
-
                         "别猜，也别在源码里 import Mathlib（猜错就是一次「没查成」）")
-
-
-
-
-
-
-
-
-
-
-
 @lru_cache(maxsize=1)
 def toolchain_formal_text() -> str:
     """L 这一岗怎么写形式化（现算一次，之后按进程记忆）。
@@ -9467,7 +8929,6 @@ def toolchain_formal_text() -> str:
                 "「`pre_theorem`」（穷举证书仍到 `theorem`，与 Lean 同级），正文里不许出现「已形式化验证」这类词；\n"
                 "  4. 检查器状态那一栏会如实报 `lean_disabled`（不是 `no_backend`："
                 "前者是用户关掉了这条路，后者是机器上没装）—— 见到它别再重试，改走上面三步")
-
     head = ("你这一岗怎么写形式化（由上面那份读数现算；读数是这一刻的，变了它跟着变）：\n"
             "- 形式化这一岗只有你（L）：`formal.formalize`（写盘 + 检查 + 三态一次成型）与 "
             "`formal.check_formal`（只给裁决、不落库）是你手上那两件；别的角色不写 Lean 源码，"
@@ -9479,83 +8940,41 @@ def toolchain_formal_text() -> str:
             "（对不上的那一步如实记成缺口，别用 sorry 堵住）；\n"
             "- 落点固定 `code/formal/<声明名>.lean`：源码落盘、算 sha256、把同一个文件交给检查器真跑；"
             "结论只有**三态**（`verified` / `failed` / `unknown`），凭据是检查器原话与真实退出码")
-
     if got is None:
         return head + "\n" + _NO_TOOLCHAIN_FORMAL
-
     probe, mathlib = got
     if not probe.get("checked"):
         return (head + "\n- 工具链探测**没做成** ⇒ 别猜：先按自足文件写（那是今天一定"
                 "可达的一条路），把「本机有没有检查器没读到」写进 `notes` 交给人")
-
     if not probe.get("available"):
         return (head + "\n- 没有可用的检查器 ⇒ **本环境产不出 proof 级证据**：如实把"
                 "「本环境没有后端」写进 `notes`，不要用 `sorry`/占位、也不要把数值实验"
                 "当成 proof（五元位的第 2 位只能由真检查器签）")
-
     probe_state = mathlib.get("import_mathlib_probe") or {}
-
     if not mathlib.get("root"):
         return (head + "\n- 找不到 Mathlib 工程根 ⇒ 写不 import 任何库的**自足文件**"
                 "（只用核心语法与核心策略）；`import Mathlib` 会落 `import_unavailable`，"
                 "那是「没查成」不是「命题不成立」")
-
     if probe_state.get("verified"):
         return (head + "\n- Mathlib **可用**（实测真编译过一次）⇒ 需要库里的引理或实例就"
                 "直接用：这次检查显式传 `imports: ['Mathlib']`，或把 `import Mathlib` "
                 "写进源码（两条都行）。本机装好了却绕开它、硬编核心层的替代证明，"
                 "正是 §101 之前那 11 趟的老路（真机：8 次 formal 全 `compile_error`、"
                 "一条 proof 都没落成）")
-
     if probe_state.get("checked"):
         missing = probe_state.get("missing_imports") or []
         return (head + "\n- Mathlib **不可用**（实测编译失败"
                 + (f"，缺的包：{'、'.join(str(m) for m in missing)}" if missing else "")
                 + "）⇒ 写自足文件。这是**环境问题**，不是命题问题；把这一句写进 "
                   "`notes`，别据它改结论")
-
     return (head + "\n- Mathlib 那一轴**没查成**（探针没做成："
             + str(probe_state.get("reason") or probe_state.get("status") or "没给理由")
             + "）⇒ 按自足文件写（今天一定可达），并把「没查成」写进 `notes`")
-
-
-
-
-
-
-
-
-
-
-
 #: `PARENT_LIMITS` 在没拿到策略读数时的诚实说法（与 `_NO_TOOLCHAIN` 同一条纪律：
-
-
-
 #: 「这一次没有读到」不是「没有上限」）。
-
-
-
 _NO_PARENT_LIMITS = ("这一次没有读到策略读数 ⇒ 派活按最保守那一档做：一次只派一件、"
-
-
-
                      "等它返回再派下一件；被拒时把「被策略挡下」如实写进汇报"
-
-
-
                      "（别写成「我不会做」）。上限的数字要问框架要，不要自己猜一个。")
-
-
-
-
-
-
-
-
-
-
-
 #: 开场那条 user 消息里「现在的接线态」那一栏的唯一渲染口（2026-10-21 从 system 挪出来）。
 #:
 #: 为什么挪：`host.wiring_status` 的读数随伙伴配置变（谁配了 provider / key），而它此前
@@ -9577,8 +8996,6 @@ def wiring_text(availability: Mapping[str, str] | None) -> str:
     return (lines or "（没有读数）") + (
         "\n派活前先看这一栏：没接线的伙伴派了也会被拒（refused/not_wired），"
         "不如改派能做的，或如实说明缺什么。" if unusable else "")
-
-
 #: `PARTNER_AVAILABILITY` 在 system 里剩下的那一句指路语（逐字节静态）。
 #:
 #: 两条纪律与 `promptstability.SYSTEM_PLACEHOLDERS` 同源：①不写状态（写进去就等于把这一段
@@ -9590,7 +9007,6 @@ PARTNER_WIRING_POINTER = (
     "（这一格刻意不写在这里：换一次伙伴配置它就变，而 system 是每一趟的前缀 —— "
     "写进段里，换个配置之后这一处往后的前缀就一个 token 都复用不了。）"
 )
-
 #: `PARENT_LIMITS` 在 system 里剩下的那一半：口径与处置（没有一个数字）。
 #:
 #: 另一半（四类上限的具体数字 + 墙钟 + 你现在在深度几）按同一口径挪进了开场那条 user
@@ -9611,12 +9027,7 @@ PARENT_LIMITS_RULES = (
     "（数字刻意不写在这里：四类上限与墙钟都是这一次 run 的配置，换一趟就可能换数字 "
     "⇒ 写进 system 就是「换个 run 就换一段前缀」。）"
 )
-
-
 def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> str:
-
-
-
     """这一次 run 的派活上限（数字全部现算：来自 `policy.Policy` 与 `fanout_limit_for`）。
 
 
@@ -9726,42 +9137,18 @@ def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> s
 
 
     """
-
-
-
     #: 深度那一句里的"你现在在深度 X"：system 那一侧走 `{{depth}}` 变量插值，
     #: 而这一段现在念在开场 user 消息里（不经过 `promptkit`），所以由调用方把
     #: 现成的数字递进来；不递（审计/判据直呼）就原样留 `{{depth}}` —— 两种读法各答
     #: 各的问题，谁也不冒充谁。
     depth_text = "{{depth}}" if depth is None else str(int(depth))
     wall = policy.wall_clock_sec
-
-
-
     wall_line = (
-
-
-
         f"- 墙钟：{int(float(wall))} 秒（从 run 开始算）。到点之后新召唤一律被拒"
-
-
-
         f"（`deadline_exceeded`），已在跑的走**协作式取消** —— 不是强杀"
-
-
-
         if wall is not None else
-
-
-
         "- 墙钟：这一次**不限**（`wall_clock_sec=None`）—— 但「不限」是这一次的策略，"
-
-
-
         "不是「永远可以慢慢来」")
-
-
-
     if not C.ALLOWED_EDGES.get(str(role), ()):
         # 出边为空（今天 C / V）：四类派活上限对它都不存在 —— 只留墙钟。
         # 不念"同时在飞的子代理最多 N 个"：它一个伙伴都唤不动。
@@ -9769,270 +9156,68 @@ def parent_limits_text(policy: Any, role: str, *, depth: int | None = None) -> s
                 "全局并发 / 召唤总数四类上限对你都不适用（不是「上限为 0」，是这条路不存在）。\n"
                 f"{wall_line}\n"
                 "- 你仍然会收到消息、也要把结论落盘；要别人办的事写进交回派你那一方的结论里。")
-
-
-
     fanout = int(POL.fanout_limit_for(policy, role))
-
-
-
     other = ("" if fanout == policy.max_fanout
-
-
-
              else f"（工人档是 {int(policy.max_fanout)} 个；你这一档是单独定的）")
-
-
-
     return (
-
-
-
         # 2026-10-21：标题那一行搬去了 `_opening_transcript` 的栏名（它现在是开场那条
         # user 消息里的一栏，不是 system 里的一段）—— 两处各印一遍标题会让同一句话读两次。
-
-
-
         f"- 你**同时**在飞的子代理最多 {fanout} 个{other}。口径是「同时在飞」："
-
-
-
         "子行 `status` 还在 `pending`/`running` 的那些；子代理一返回就腾出名额，"
-
-
-
         "与它返回得好不好无关。名额是**逐实例**的 —— 别人再向同一个角色派活会新建一个"
-
-
-
         "实例（D#2），不是让忙着的那个接手。\n"
-
-
-
         f"- 召唤链深度上限 {int(policy.max_depth)} 跳（台账口径：主控的直接子 = 1；"
-
-
-
         f"**链上代理数 = 跳数 + 1** ⇒ 最多 {int(policy.max_depth) + 1} 个代理）。你现在在深度 {depth_text}"
-
-
-
         f"（台账跳数；链上第几个 = 这个数 + 1）⇒ 到 {int(policy.max_depth)} 跳就到底，再往下派会落 "
-
-
-
         f"`depth_exceeded`；**目标是 V 时这条不拦** —— V 是审稿人，不占链（`reviewer_roles`）。\n"
-
-
-
         f"- 全局同时运行 {POL.concurrency_reading(policy)}；"
-
-
-
         f"一次 run 的召唤总数 {int(policy.max_tasks_per_run)} 个。\n"
-
-
-
         f"{wall_line}\n"
-
-
-
         "- **触顶的处置是「先等」，不是「这条路不通」**：达到派活上限时框架会让你等到"
-
-
-
         "一个子代理返回再照常派（`fanout_wait_sec`）；等到超时或墙钟到点才算真的被拒。\n"
-
-
-
         "- 被拒不是「你不会做」：读 `refusal_reason` 的原话（`fanout_exceeded` / "
-
-
-
         "`depth_exceeded` / `concurrency_exceeded` / `deadline_exceeded` / `budget_exceeded` / "
-
-
-
         "`forbidden_edge`）写进汇报 —— 「被策略挡下」与「我不会做」是两件事。"
-
-
-
     )
-
-
-
-
-
-
-
-
-
-
-
 #: 三种指称的总判据（`draft/104` §4.4）。静态文本：它讲的是"怎么指称"，没有任何数字，
-
-
-
 #: 所以不进"现算"那一族（那一族的口径是"凡提示词须与代码一致 ⇒ 从代码现算"）。
-
-
-
 #:
-
-
-
 #: 为什么需要这一块：今天两处各说一半 —— `AGENT_IDENTITY` 渲染台账号并说"编号用来对账与回报"，
-
-
-
 #: 而 `retire` / `interrupt` 只认名册名，那条纪律只写在受控拒绝的文案里
-
-
-
 #: （`agent_loop.py` 逐字：「绝对编码不是父子之间的指称」）⇒ 模型要犯一次错才读得到它。
-
-
-
 #: 真机代价：拿台账号去 `retire` 白费一步；或者反过来，对账时用名册名（名册名会被复用面回收，
-
-
-
 #: 对账对不上）。受众与 `PARENT_LIMITS` 同一条判据（能派活才有"我名下的子代理"）——
-
-
-
 #: C 的出边是 0、一辈子没有子代理，名册名对它没有意义（`draft/104` §5.1 原写"全部"，
-
-
-
 #: 这一处按"从代码现算"收窄，理由记在 `draft/103` §4.1b-8）。
-
-
-
 _COLLAB_NAMES_TEXT = (
-
-
-
     "三种指称，别混（协作里最容易错的一件事）：\n"
-
-
-
     "- **台账号**（`t-NNNNNN`）：框架分配的，一生不变 —— 它用来**对账与回报**"
-
-
-
     "（谁派了谁、谁交的差），不是用来指称某个子代理。\n"
-
-
-
     "- **名册名**（`D1` / `A2`）：你名下子代理的名字 —— **父可以自己提名**，也可以只给角色"
-
-
-
     "**由秘书分配**；**名字一经分配**不再改，"
-
-
-
     "销号之后**永久不再复用**。**要指称某个子代理就用它**："
-
-
-
     "`{\"interrupt\": {\"name\": \"D1\"}}` / `{\"retire\": {\"name\": \"D1\"}}` / "
-
-
-
     "`{\"roster\": {\"of\": \"D1\"}}` / `conductor.retire_child(child_name=\"D1\")` 都只认名册名"
     "（销号两个入口落到同一处：能调工具的父走 `retire_child`，只读那一档只有 `retire` 形）；"
     "**这四个入口**写台账号会被受控拒绝"
-
-
-
     "（框架的原话：「绝对编码不是父子之间的指称」）—— 但这条只管这四个入口："
     "`message` 与 `handoff` 的 `to` **两种写法都收**（名册名，或绝对编号如 `t-NNNNNN`："
     "框架把它翻成收件人，原写法留在 `roster_addressing` 里供对账），所以发消息不必先查名册。\n"
-
-
-
     "- **实例标签**（`A#2`）：同一个角色要多开几个实例时用来区分「这一个 A」；"
-
-
-
     "一趟里只有一个实例时它是空串（不写就是它）。\n"
-
-
-
     "- 引用**产出**用台账引用（`stmt:` / `exp:` / `lit:` / `rel:` / `eval:` / 手稿编号），"
-
-
-
     "别拿台账号代替 —— 台账号指的是一次运行，不是一份证据。"
-
-
-
 )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 #: 画像文件的名字（工作区根相对路径）。`draft/37` §109（用户口径：
-
-
-
 #: "M 要看到所有人的简介，其它智能体只要看到可协作的同伴的简介，这些应该落成
-
-
-
 #: 智能体可查阅的描述文件 —— 怕只是开头注入提示词它们后面忘了"）。
-
-
-
 #:
-
-
-
 #: 为什么必须落盘：提示词只在开头注入一次，跑到第 40 步时它已经在上下文里被挤到很远；
-
-
-
 #: 而一份随时能 `fs.read` 的文件把"谁能干什么、不许干什么"变成可回查的事实。
-
-
-
 PROFILES_FILE = "AGENT-PROFILES.md"
-
-
-
-
-
-
-
-
-
-
-
 def profiles_markdown(*, registry: Any = None,
-
-
-
                       availability: Mapping[str, str] | None = None,
-
-
-
                       roles: Sequence[str] | None = None) -> str:
-
-
-
     """全体角色的画像（Markdown）：职责 / 交付物 / 边界（逐条）/ 签名错误 / 立场 / 接线态。
 
 
@@ -10062,174 +9247,49 @@ def profiles_markdown(*, registry: Any = None,
 
 
     """
-
-
-
     order = [str(x) for x in (roles if roles is not None else tuple(ROLE_BRIEFS))]
-
-
-
     # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：画像文件是给所有角色 fs.read 的
-
     # 用户面，所以"开关关着时不存在的角色"不许在这里留一节 —— 那是"它存在但没用到"
-
     # 的噪音（也正是业主点名要去掉的那一类读数）。可见性由 `leanscope` 判，这一行只读。
-
     order = list(_LEANSCOPE.visible_roles(order))
-
-
-
     out: list[str] = ["# 智能体画像（框架现算，随时可查）", "",
-
-
-
                       "这份文件由框架在**每次运行开始时**重新生成：职责、交付物、边界、"
-
-
-
                       "立场与现在的接线态都来自声明层，不是记忆。你要派活或接受派活时，"
-
-
-
                       "**按这里的描述选人**（谁适合干什么）——**动作是各人自己的事**，"
-
-
-
                       "不在这份文件里。", "",
-
-
-
                       "做不了就上报：任何角色，一件事你自己做不到、你能协作的同伴也做不到 ⇒ "
-
-
-
                       "报告主控 M（`message` 的 `to` 写 \"M\"），写清缺什么、试过什么；"
-
-
-
                       "不许静默放弃，也不许把没做成的写成做成了。", ""]
-
-
-
     for role in order:
-
-
-
         brief = ROLE_BRIEFS.get(role)
-
-
-
         if brief is None:
-
-
-
             continue
-
-
-
         state = ""
-
-
-
         if availability is not None:
-
-
-
             state = f"（现在的接线态：{availability.get(role, 'unknown')}）"
-
-
-
         out += [f"## {role}：{brief.duty}{state}", "",
-
-
-
                 f"- **交付物**：{brief.deliverable}", "- **边界（不许做什么）**："]
-
-
-
         out += [f"  {i}. {x}" for i, x in enumerate(brief.boundary, 1)]
-
-
-
         if brief.signature_error:
-
-
-
             out.append(f"- **它最容易犯的错**：{brief.signature_error}")
-
-
-
         # 立场那几句也是"描述"（`AgentBrief` 六格之一），留着 —— 它回答"它看重什么"。
-
-
-
         if brief.stance:
-
-
-
             out.append("- **它的立场**：" + "；".join(str(x) for x in brief.stance))
-
-
-
         # 2026-10-16（业主口径 S1/S2）：这里删掉了两段，它们都会把
-
-
-
         # 别人的动作泄给任何读这份文件的人（而这份文件在工作区根，谁都能 `fs.read`）：
-
-
-
         #   ① "对外可被调用的动作" + `_params_hint(a)` —— 逐条印动作名与必填参数；
-
-
-
         #   ② "政策" —— policy 原文里点着动作名（例如 D 那条写着 `F.create_plan`）。
-
-
-
         # 原话逐字：「M 只是个派活的……不指定能力。M 能看到的只是各角色描述，
-
-
-
         # 看不到具体的工具箱与动作」；2026-10-16 追加：「对于其它智能体派子智能体，
-
-
-
         # 能看到的应该是一样的（就是描述）」⇒ 描述面（职责/交付物/边界/立场/最容易犯的错）
-
-
-
         # 留在文件里，动作与政策只在角色自己的提示词里（那才是它自己要看的那一份）。
-
-
-
         out.append("")
-
-
-
     # 2026-10-17（Lean 审计 S6）：本函数原来完全不看开关 —— 真机 `projects/t2r/AGENT-PROFILES.md:56`
     # 在关掉 Lean 的机器上仍印着「E：数值实验与形式化验证…」。同一套"无 Lean"改写在这里套一次，
     # 于是角色画像与角色提示词不会再自相矛盾（改写是幂等的：开着时逐字返回原文）。
     return _apply_no_lean_variant("\n".join(out).rstrip() + "\n")
-
-
-
-
-
-
-
-
-
-
-
 def write_profiles(root: str | Path, *, registry: Any = None,
-
-
-
                    availability: Mapping[str, str] | None = None) -> str:
-
-
-
     """把画像文件写进工作区根，返回路径（写失败返回空串，由调用方记 note）。
 
 
@@ -10247,45 +9307,13 @@ def write_profiles(root: str | Path, *, registry: Any = None,
 
 
     """
-
-
-
     try:
-
-
-
         path = Path(root) / PROFILES_FILE
-
-
-
         path.write_text(profiles_markdown(registry=registry, availability=availability),
-
-
-
                         encoding="utf-8", newline="\n")
-
-
-
         return str(path)
-
-
-
     except OSError:
-
-
-
         return ""
-
-
-
-
-
-
-
-
-
-
-
 #: 「这一次运行的事实」那十四格的值与缺省句（唯一来源）。
 #:
 #: 为什么抽成函数（2026-10-21）：这些事实从 system 挪进了 user 消息，于是它们的值有
