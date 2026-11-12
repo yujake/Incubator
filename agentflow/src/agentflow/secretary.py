@@ -8272,55 +8272,54 @@ class Secretary:
                          ) -> dict[str, Any]:
         """B 交内容 ⇒ 秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一次做完）。
 
-        业主逐字见 :meth:`wash_statement`。B 自己一次写工具都不调：这里是一笔事务（`statements` +
-        `dependencies`），B 那一侧只交内容。## 返回（读的人要能分辨"没写"的四种原因）：
+        这是一笔事务（`statements` + `dependencies`），B 那一侧只交内容、不调工具。
+
+        ## 返回（要能分辨"没写"的几种原因）
+
         | 结局 | 返回 |
         |---|---|
         | 写成了 | `{"checked": True, "created": True, "stmt_id": …, "deps_written": n, "path_groups": k}` |
         | 同内容已有一条 | `{"checked": True, "created": False, "duplicate": True, "stmt_id": <既有>}` |
-        | 同内容 + 更强的证据档（有凭据） | `{"checked": True, "created": False, "upgraded": True, "stmt_id": <既有>, "changes": [...]}` |
+        | 同内容 + 更强证据档（有凭据） | `{"checked": True, "created": False, "upgraded": True, "stmt_id": <既有>, "changes": [...]}` |
         | 受控拒绝（一行都不落） | `{"checked": False, "refused": "<理由码>", "reason": …}` |
-        理由码：`secretary_unavailable`（没装 store）、`not_statement_writer`（不是 B 的活）、`wash_failed`（格式
-        洗不动）、`unresolved_dependency`（依赖指着一个不在册的 id）、`unknown_lit_id`（出处不在册）、
-        `empty_statement`（命题缺 `statement_full` —— 只有短版不算数）。概念的定义空着不是拒绝：它落成
-        `pending_definition` + 待补标记（`D12` 甲）。
-        ## 同一命题 / 同种证明（业主 2026-10-24；2026-11-04 改口径）
-        登记时先按 `statement_full` 的规范化值查重（老口径，逐字不变）；老口径没命中时再判
-        「是不是同一条命题」：秘书判得成（`adjudicate_proposition`）⇒ 它说了算；没查成 ⇒
-        fail-closed，只认「确定性键相同」这一档等价改写（词面相似度那一档只给候选表排序，
-        不决定并 —— 业主 2026-11-04：「词面相似度只许用于候选表排序，不许决定并」）。
-        命中 ⇒ 不新建命题行，而是那条命题的第 N 份证明：证明
-        落 `proofs` 清单（canonical 空时落 `proof_text`）、依赖落 `used_by="stmt:#pN"`。
-        没有证明正文的重复登记也判归属（2026-11-04）：判得成同一条 ⇒ 不新建第二行，
-        回 `duplicate=True` + `no_proof=True`（重复读数，不是第 N 份证明）；判不成 ⇒ 照常新建。
-        同一命题下新交来的证明与在册某一份同种（`proof_same_kind`，相似度 ≥
-        `proof_same_jaccard`）⇒ 不新增证明号，受控拒绝并点名第几份；调用方给 `merge=True`
-        并交合并稿时，合并稿成为那一份证明的新版本、旧正文进 `proof_history`，且要求 V 重签
-        （`resign_required=True`，未重签前读侧现算为未成立）。
-        ## 概念行那一档（D2）：同一个概念不许落成第二行
-        `kind="concept"` 的行没有"条件 ⇒ 结论"，上面那一套判据在它上面等于失效（两条把
-        同一个术语定义了两遍的行会被判成"不同"）。所以概念行另有一条确定性判据：定义项
-        相同（标签规范化后相同，或正文里「概念（X）」/「定义（X）」抽出的术语相同）⇒
-        不新建行、返回既有 `stmt_id`（`duplicate=True` + `matched_by`）。这一档不发模型
-        调用 —— 判词表里没有概念那一格，而确定性判得出的不交给模型。
-        ## 定理名里的内部工作名（D1）
-        `F 攻坚 000000 子目标 S2` 这类派活台账里的工作名不许当定理名（真机 mp3-r2 的
-        `000000` / `000001` 逐字都是它）：命中 `LABEL_WORKING_NAME_RULES` 就洗掉，洗成
-        什么由 `wash_working_name` 的三级兜底决定（剩下一截 / 正文里的第一句 / 待命名），
-        读数在 `label_washed` 里逐条给「原标签 → 洗过的名字 + 触发了哪一类」。
-        ## `candidate_id`：把稿名 / 稿头的号当候选号（D2 口径①，2026-11-05）
-        B 在"新建"这一档把稿名 / 稿头算出来的号当候选交进来：可用就用它发号
-        （并 `raise_counter_to` 把计数器抬到它之后，下一笔不会又撞）；已被占 ⇒ 受控
-        拒绝 `stmt_id_taken`，不另发一个号（改前是静默另发 ⇒ 稿 000001、命题 000000，
-        第 5 步 `manuscript_owner_mismatch`、扫盘 `b-register@000001@…` 的义务永远关不上）。
-        不给 ⇒ 与改前逐字一致（按计数器发）。
-        ## 为什么"洗不动"在这里是硬拒（而在派活那条路上不是）：派活洗不动可以原样发出去，让下游闸门去拒
-        （`refused` 行本身就是证据）；写入这条路上没有下游闸门：`Statement.validate` 只查形状，而"键名是别名"这种错会让内容静默落成空字段。
-        写是不可逆的，所以这里选"不写"（与 `draft/90` §1.2 对"硬拒"的取舍同一条理由：拒绝是受控的，静默写坏不是）。
-        ## 依赖的二维列表（业主指定形状）：`deps` 外层 = 可选路径、内层 = 一条路径上的步骤 ⇒ 外层下标（从 1 起）
-        写进 `Dependency.path_group`（组内 AND / 组间 OR，见 `draft/97` §12.1）。每一步的 `kind` 决定它落哪一格
-        来源（`source_stmt_id` / `source_experiment_id` / `source_lit_id` / `source_doc_id`）；指向的 id 必须在册，
-        否则整笔不写（不许留一条挂空号的依赖 —— 那正是"依赖图静默少一环"的成因）。
+
+        理由码：`secretary_unavailable` / `not_statement_writer` / `wash_failed` /
+        `unresolved_dependency`（依赖指着一个不在册的 id）/ `unknown_lit_id` /
+        `empty_statement`（缺 `statement_full` —— 只有短版不算数）。
+        概念的定义空着不是拒绝：它落成 `pending_definition` + 待补标记。
+
+        ## 同一命题 / 同种证明
+
+        先按 `statement_full` 的规范化值查重（老口径）；没命中时再判"是不是同一条命题"：
+        秘书判得成（`adjudicate_proposition`）⇒ 它说了算；没查成 ⇒ fail-closed，
+        只认「确定性键相同」这一档等价改写（词面相似度只给候选表排序、不决定并）。
+        命中 ⇒ 不新建命题行，而是那条命题的第 N 份证明：证明落 `proofs` 清单
+        （canonical 空时落 `proof_text`）、依赖落 `used_by="stmt:#pN"`。
+        没有证明正文的重复登记也判归属：判得成同一条 ⇒ 回 `duplicate=True` + `no_proof=True`
+        （重复读数，不是第 N 份证明）；判不成 ⇒ 照常新建。
+        同一命题下的新证明与在册某一份同种（`proof_same_kind` 阈值）⇒ 不新增证明号、
+        受控拒绝并点名第几份；调用方给 `merge=True` 并交合并稿时，合并稿成为那一份的
+        新版本、旧正文进 `proof_history`，且要求 V 重签（`resign_required=True`）。
+
+        ## 概念行：同一个概念不许落成第二行
+
+        `kind="concept"` 没有"条件 ⇒ 结论"，上面的判据在它上面等于失效（两条把同一个术语
+        定义了两遍会被判成"不同"）。所以概念行另有一条确定性判据：定义项相同
+        （标签规范化后相同，或正文里「概念（X）」/「定义（X）」抽出的术语相同）⇒
+        不新建、返回既有 `stmt_id`（`duplicate=True` + `matched_by`）。这一档不发模型调用。
+
+        ## 定理名里的内部工作名不许当定理名
+
+        `F 攻坚 000000 子目标 S2` 这类派活台账里的工作名命中
+        `LABEL_WORKING_NAME_RULES` 就洗掉，洗成什么由 `wash_working_name` 的三级兜底决定
+        （剩下一截 / 正文第一句 / 待命名），读数在 `label_washed` 里逐条给
+        「原标签 → 洗过的名字 + 触发了哪一类」。
+
+        ## `candidate_id`：把稿名/稿头的号当候选号
+
+        B 在"新建"这一档把稿名/稿头算出来的号当候选交进来：可用就用它发号
+        （并 `raise_counter_to` 把计数器抬到它之后）；已被占 ⇒ 受控拒绝 `stmt_id_taken`，
+        不另发一个号 —— 静默另发会让稿与命题的号错开。
         """
         out: dict[str, Any] = {"checked": False, "created": False, "duplicate": False,
                                "upgraded": False, "merged": False, "merged_into": "",
@@ -8962,59 +8961,44 @@ class Secretary:
                           out: dict[str, Any] | None = None,
                           transition_sync: bool = False,
                           d12_pending: bool = False) -> dict[str, Any]:
-        """在已开的事务里写一条概念行：洗名 + 五元位 + 概念同一性都由这一处做（2026-10-26，D14）。
+        """在已开的事务里写一条概念行：洗名 + 五元位 + 概念同一性都在这一处做。
 
-        ## 为什么是"秘书的一个专用方法"，而不是调 `record_statement`
-        `record_statement` 自己开事务（`store.tx`），而概念行的写侧全都在一笔已经打开的
-        事务里（`_record_pending_concept`、`conceptrows.write_concept`、
-        `conceptrows.sync_from_legacy`）—— 事务不能嵌套（文件锁不可重入）。而且
-        `record_statement` 会先跑一次命题同一性判定（可能发一次模型调用），而
-        "锁里不许有网络等待"是本仓的硬规矩；概念这一档本来也一次调用都不发。
-        所以这里是"同一个写入方、同一套判据、不开新事务"的那一格：
-        `record_statement` 与 `conceptrows` 的过渡写口都调它，读侧与写侧的判据因此只有一份。
+        ## 为什么不是调 `record_statement`
 
-        ## 三件事在这里做（真机 mp3-r3 那 30 条概念行缺的正是这三件）
-        1. 五元位：`_concept_bits` 现算（概念行算出来的等级是 `not_applicable`）。
-           改前 `conceptrows` 直写，`bits` 是 `{}` —— 于是"五位一位都没做"这条读数
-           对 30 行全部成立，而它们其实是同一个缺省值；
-        2. 洗名：`wash_working_name`（D1 的唯一实现，零模型调用）。洗过就把 `from`/`to`/`why`
-           放进 `out["label_washed"]`（静默改名是不许的）；
-        3. 概念同一性：`_same_concept_candidate`（`propositionkey.same_concept` 的唯一调用点）。
+        `record_statement` 自己开事务，而概念行的写侧全都在一笔已经打开的事务里
+        （`_record_pending_concept` / `conceptrows.write_concept` / `sync_from_legacy`）——
+        事务不能嵌套（文件锁不可重入）。而且 `record_statement` 会先跑一次命题同一性判定
+        （可能发模型调用），而"锁里不许有网络等待"是本仓的硬规矩；概念这一档也不发调用。
+        所以这里是"同一个写入方、同一套判据、不开新事务"的那一格：两个过渡写口都调它，
+        读侧与写侧的判据因此只有一份。
+
+        ## 三件事在这里做
+
+        1. 五元位：`_concept_bits` 现算（概念行算出来的等级是 `not_applicable`）；
+           概念行不直写 `bits`，否则"五位一位都没做"的读数会对整批旧行全部成立；
+        2. 洗名：`wash_working_name`（零模型调用）；洗过就把 `from`/`to`/`why` 放进
+           `out["label_washed"]` —— 静默改名是不许的；
+        3. 概念同一性：`_same_concept_candidate`（`propositionkey.same_concept` 的唯一调用点），
            判词进 `out["concept_identity"]`。
 
-        ## 判到"同一个概念"时的处置（2026-11-08，D2 的四个入口统一）
-        `concept_identity_action(identity)` 是唯一的折算点，这一层按它的 `concept_action` 走：
+        ## 判到"同一个概念"时按 `concept_identity_action` 折算
 
-        - `merged`（新建 + same + 有候选）⇒ 不写这一行，返回并入读数（`stmt_id` 就是并入
-          对象）。调用方的号必须是在过闸之前没发过的（四个发号入口都先过闸）—— 否则
-          会留 `id_gap`，所以这一档在这里是最后一道网，不是发号点；
+        - `merged`（新建 + same + 有候选）⇒ 不写这一行，返回并入读数（`stmt_id` 即并入对象）。
+          调用方给的号必须是在过闸之前没发过的 —— 这一档是最后一道网，不是发号点；
         - `refused`（判不了）⇒ 新建那一支不写、返回受控拒，拒信给改法（把定义项写出来）。
-          唯一例外是 `D12` 甲：`_record_pending_concept`（定义还没抽到的概念行的唯一入口）
-          传 `d12_pending=True` 时照落成 `pending_definition`，读数里 `d12_pending=True`
-          写明这个前提。这一档按调用方身份分，不按文本（"没定义"）：否则
-          "同义概念都不写定义项"就能绕过受控拒、落成两行。判得 `same` 时两种来路都并入。
+          例外：`d12_pending=True`（定义还没抽到的概念行的唯一入口）照落成
+          `pending_definition`，读数里写明这个前提；
         - `created`（different / 候选 0 条）⇒ 照常写。
 
         改一条既有行（`existing` 给了）不新建也不并入：它本身就是那一行，读数只报
-        `checked` / `state` / `same_as` / `reason`（这一档的 `concept_action` 不写 ——
-        没有"新行"可谈）。
+        `checked` / `state` / `same_as` / `reason`。
 
-        `transition_sync=True` 只给 `conceptrows.sync_from_legacy`（= `upsert_legacy_shaped`
-        的过渡同步路）：过渡同步的契约是一号一行（老表那一行按原号镜像到新标准），
-        合并不在这一层做 —— 老表的合并由 `merged_into` 那一格管。`d12_pending=True` 只给
-        `_record_pending_concept`（`D12` 甲 的唯一入口）。别的调用点传这两个中的任何一个 ⇒
-        `tests/test_concept_identity_gate_is_acted_on.py` 的机械判据当场红。
+        `transition_sync=True` 只给 `conceptrows.sync_from_legacy`（一号一行的过渡同步，
+        合并不在这一层做）；`d12_pending=True` 只给 `_record_pending_concept`。
+        别的调用点传这两个中的任何一个 ⇒ 机械判据当场红。
 
-        ## 既有行为一个字不动
-        升档（定义到了 ⇒ `pending_definition` 回 `active`）与合并（老表的墓碑
-        `merged_into` ⇒ `superseded` + 理由）都由调用方算好 `status` / `quote_reason`
-        传进来（`conceptrows` 那一层的过渡语义）；这一格只负责把它们写进同一行 ——
-        `existing` 给了就是改那一行（新标准独有的 `proof_text` / `doc_id` / 已算出的
-        `bits` / `created_at` 一格不覆盖）。
-
-        `proof_text` 只是因为"概念行不许带证明文本"那句拒绝必须留在唯一一处
-        （`concept_statement`）才出现在签名里：这一层不判它，新建那一支原样转发下去，
-        由构造口当场 `ValueError`（改一条既有行时它不参与 —— 那种行本来就没有这一格）。
+        升档（`pending_definition` 回 `active`）与合并（老表墓碑 ⇒ `superseded` + 理由）
+        都由调用方算好 `status` / `quote_reason` 再进来。
         """
         from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
         from . import textutil as T       # 惰性：查重键的唯一实现
