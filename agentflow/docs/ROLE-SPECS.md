@@ -1151,7 +1151,7 @@ C 的产出有两类，状态语义完全不同。
 | F-4 | **C/D/F 的推理未接线时如实记 `no_change`，绝不假装做了** | `attack.step` 的 `summary` 逐字 |
 | F-5 | 到终止条件时交 `best_partial`：**不是失败，也不是成功** | `status="stalled"` |
 | F-6 | 数值实验**不许关闭子目标**（FC-22） | 自检实测："数值实验**不许**关闭子目标（FC-22）" |
-| F-7 | **写证明手稿**（`reports/f-proof-<命题号>.md`），末尾带 `## 依赖` 四列表（引文 / 命题号 / 第几步 / 路径组）；手稿要过秘书洗稿才算可交（缺那一节就补空的、有引用的核号、洗不干净打回）（2026-10-27 口径） | `agent_f.manuscript.proof_manuscript` / `depsection.render_dependency_section`；`tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py` |
+| F-7 | **写证明手稿**（`reports/f-proof-<命题号>.md`），末尾带 `## 依赖` 三列表（引文 / 命题号 / 第几步；路径号不进稿、由 B 收录时分配）；手稿要过秘书洗稿才算可交（缺那一节就补空的、有引用的核号、洗不干净打回）（2026-10-27 口径） | `agent_f.manuscript.proof_manuscript` / `depsection.render_dependency_section`；`tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py` |
 
 ### F.3 明确不负责
 
@@ -1260,7 +1260,7 @@ C 的产出有两类，状态语义完全不同。
   `path_group` **恒为 `1`** —— 这不是算错，是口径缺口：F 的产物 schema
   （`attackround.PRODUCT_SPECS["proof"]`）只有 `steps[{text, cites, assumption}]`，没有
   「第几条证明」这一维，`agent_f` 里也 0 处 `proof_no` ⇒ 这个数在 F 这一侧**没有来源**；
-  要修得给产物与提示词加一维（改结构），不是改一行。手写的四列表那一侧是好的：B 读
+  要修得给产物与提示词加一维（改结构），不是改一行。手写的三列表那一侧是好的：B 读
   `depsection.parse_dependency_section` 时按路径号 1..N 落 `used_by="stmt:<号>#pN"`，
   多证明机制在 B / C 那一侧照常成立。
 
