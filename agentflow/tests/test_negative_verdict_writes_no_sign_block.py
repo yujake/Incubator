@@ -72,7 +72,7 @@ REJECT_REPLY = json.dumps({"verdict": "有毛病", "defect_step": 2,
                           ensure_ascii=False)
 
 #: 与 `agent_f/manuscript.py::proof_manuscript` 同一个形状（V 只读 `## 证明` 那一节）。
-#: `## 依赖` 必须是可解析的四列空表（表头在、0 行）—— 只有一句"空表就是声明"的散文
+#: `## 依赖` 必须是可解析的三列空表（表头在、0 行）—— 只有一句"空表就是声明"的散文
 #: 会被 `_registered_manuscript_body` 读成 `dependency_section_unreadable`（空表也是声明，
 #: 但声明要写成表）。渲染走唯一实现，夹具不手抄表头。
 MANUSCRIPT = ("# F 的证明手稿：弦长函数\n\n"

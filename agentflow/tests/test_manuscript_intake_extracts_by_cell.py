@@ -8,7 +8,8 @@
    真机 `reports/e-num-*` 没有 `## 证明` 就是这么被读错的）；
 2. `source` 是来源读数：节名 + 行号区间 + 那一格内容的 sha（`proof_text` 的 sha
    与签的 `proof_sha` 同一把尺：对正文文本、不 strip、不加换行）；
-3. 依赖表的四列解析与 `kind` 稿头声明；空节是 `present`（空表 / 空正文是事实）；
+3. 依赖表的三列必填解析（老盘带路径号那一列的四列仍读得回）与 `kind` 稿头声明；
+   空节是 `present`（空表 / 空正文是事实）；
 4. 冲突矩阵（设计 2.6）与两条对拍不变量 I1 / I2（设计 2.4）；
 5. 反真空：把 `absent` 判成 `present`（拿依赖段顶替证明段）必须让同一条判据红。
 
@@ -243,7 +244,8 @@ def test_level_two_subheads_do_not_truncate_the_proof_cell() -> None:
 
 
 def test_dependencies_parse_four_columns_and_report_problems() -> None:
-    """依赖表：四列按表头取、顺序不限；坏表进 problems（不静默读成空表）。"""
+    """依赖表：四列（老盘形态，解析侧仍收路径号那一列）按表头取、顺序不限；
+    坏表进 problems（不静默读成空表）。"""
     good = MI.extract_cells(FULL_TEXT, "f-proof", ["dependencies"])["dependencies"]
     assert good["outcome"] == MI.EXTRACT_PRESENT
     assert good["rows"] == 1 and good["problems"] == []

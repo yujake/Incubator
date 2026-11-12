@@ -74,7 +74,7 @@ def _write_manuscript(tmp: Path, sid: str, body: str,
                       statement_full: str = "若 G 是有限群，则 |G| 有限。") -> str:
     """给在册命题落一份带空依赖表的手稿（2026-11-04 甲：在册送审必须带稿）。
 
-    `## 依赖` 的四列表头不能省：V 读稿时缺这一节是受控拒绝
+    `## 依赖` 的三列表头不能省：V 读稿时缺这一节是受控拒绝
     （`dependency_section_missing`），空表（表头在、0 行）才是合法形态。
     """
     rel = f"reports/f-proof-{sid}.md"
@@ -150,7 +150,7 @@ def test_e_policy_quotes_budget_unreadable_note_verbatim(prompts) -> None:
 
 
 def test_f_dependency_table_example_parses_with_the_real_parser(prompts) -> None:
-    """F 提示词里那张四列表的例子，喂给真解析器必须一把过（列名 / 顺序 / 形状）。"""
+    """F 提示词里那张三列表的例子，喂给真解析器必须一把过（列名 / 顺序 / 形状）。"""
     text = prompts["F"]
     start = text.find(DS.SECTION_HEADING)
     assert start >= 0, "F 的提示词里没有 `## 依赖` 那一段"

@@ -4,7 +4,7 @@
 ## 改前是什么形态（真机读数，业主已看过）
 
 ```text
-F 用 fs.write 直接写了 reports/f-proof-sylow1.md（自由格式、无四列依赖表、无洗稿元信息）
+F 用 fs.write 直接写了 reports/f-proof-sylow1.md（自由格式、无三列依赖表、无洗稿元信息）
 D 手写 reports/RESEARCH.md（没有携带单）
 ⇒ 框架的「渲染手稿 / 秘书洗稿 / D 携带」整条链没有入口
 ⇒ B 只登记 1 条 conjecture、dependencies 0 行

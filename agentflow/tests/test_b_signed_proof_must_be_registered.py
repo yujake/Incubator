@@ -116,7 +116,7 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 
 def _manuscript(st: Store, sid: str) -> str:
-    """写一份按号的证明稿（四列 `## 依赖` 表头不能省，空表就是声明）。"""
+    """写一份按号的证明稿（三列 `## 依赖` 表头不能省，空表就是声明）。"""
     rel = f"reports/f-proof-{sid}.md"
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)

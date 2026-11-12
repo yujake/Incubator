@@ -95,7 +95,7 @@ def _manuscript(sid: str, proof: str) -> str:
              "path_group": 1}]
     head = "# F 的证明手稿\n\n"
     head += f"- 命题号：stmt:{sid}\n"
-    # 三列（引用 / 命题号 / 步）：手写一张新形式表，不借 renderer 的四列。
+    # 三列（引用 / 命题号 / 步）：手写一张新形式表，不借 renderer 的那三列。
     deps = ("| 引用 | 命题号 | 步 |\n|---|---|---|\n"
             f"| 引理：p 阶元 | stmt:{DEP_SID} | 1 |\n")
     return (head + "\n## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + proof
