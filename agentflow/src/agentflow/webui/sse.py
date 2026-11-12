@@ -581,16 +581,20 @@ def handle_stream(handler: Any, params: Mapping[str, str],
         handler.wfile.flush()
         # ② 循环：事件 / 心跳 / 收尾
         mine = _generation()
+        beat = bc.heartbeat_sec
+        # 每次迭代都要用到的两格：心跳周期在构造期定死（`Broadcaster.__init__` 之后再无人写它），
+        # 所以"等多久取一次"与"多久发一次"在进循环之前算一次就够。
+        drain_timeout = min(0.2, max(0.01, beat))
         last_beat = time.monotonic()
         while serving() and _generation() == mine:
-            got = sub.drain(timeout=min(0.2, max(0.01, bc.heartbeat_sec)))
+            got = sub.drain(timeout=drain_timeout)
             for _event_id, frame in got:
                 handler.wfile.write(frame)
             if got:
                 handler.wfile.flush()
             if sub.closed:
                 break
-            if time.monotonic() - last_beat >= bc.heartbeat_sec:
+            if time.monotonic() - last_beat >= beat:
                 handler.wfile.write(format_event(kind="heartbeat",
                                                  data=heartbeat_event()))
                 handler.wfile.flush()
