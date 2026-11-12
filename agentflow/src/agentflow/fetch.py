@@ -516,7 +516,7 @@ def _normalize_mirrors(raw: Any) -> list[dict[str, Any]]:
         if not isinstance(item, Mapping):
             logger.warning("忽略非法镜像规则：%r", item)
             continue
-        rule = {k: v for k, v in item.items()}
+        rule = dict(item)
         if not rule.get("prefix") and not rule.get("prepend") and not rule.get("template"):
             # 例如 {"hosts": "...", "name": "gh-proxy"} 这种只带名字的规则，按预设展开。
             if rule.get("name") == "gh-proxy":
@@ -858,13 +858,13 @@ class HttpDownloader:
         `read_failed` 只可能来自读；外层 `except OSError` 只可能是落盘失败。
         """
         headers = getattr(response, "headers", None)
-        content_type = ""
-        if headers is not None and headers.get("Content-Type"):
-            content_type = str(headers.get("Content-Type"))
+        raw_ctype = headers.get("Content-Type") if headers is not None else None
+        content_type = str(raw_ctype) if raw_ctype else ""
+        raw_length = headers.get("Content-Length") if headers is not None else None
         declared = None
-        if headers is not None and headers.get("Content-Length"):
+        if raw_length:
             try:
-                declared = int(str(headers.get("Content-Length")).strip())
+                declared = int(str(raw_length).strip())
             except ValueError:
                 declared = None
         if declared is not None and declared > self.max_bytes:
