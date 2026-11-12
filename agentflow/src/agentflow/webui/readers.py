@@ -2805,7 +2805,7 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
              "closable": bool(getattr(rep, "closable", False)),
              "verdict_at": str(verdict.get("at") or ""),
              "verdict_met": (bool(verdict.get("met")) if verdict else None),
-             # 两条来源分开点名（2026-11-02，84 ④）：一个空 `blockers` 不等于"门没拦住"，
+             # 两条来源分开点名：一个空 `blockers` 不等于"门没拦住"，
              # 也不等于"格失败"—— 读的人必须能看出是哪一半把 machine_pass 打假的。
              "blockers": blockers,
              "blocking_cells": blocking_cells,
@@ -3152,7 +3152,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
     tool = {k: str(v) for k, v in toolchain_settings().items()}
     model = {k: str(v) for k, v in model_settings().items()}
     work = {k: str(v) for k, v in workspace_settings().items()}
-    # 按角色 / 秘书那两档（业主 2026-10-14）：只给掩码后的形态 + "配没配"
+    # 按角色 / 秘书那两档：只给掩码后的形态 + "配没配"
     # （真 key 一个字都不进读数，与 `model.api_key` 同一条纪律）。
     slots: dict[str, Any] = {}
     for slot in sorted((raw.get(MODELS_SECTION) or {}) if isinstance(raw, dict) else {}):
@@ -3166,14 +3166,14 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
                             "name": red_slot["model"],
                             "vendor": red_slot["vendor"],
                             "reasoning_effort": red_slot["reasoning_effort"],
-                            # 采样温度（2026-10-29）：按角色那一档也要报，
+                            # 采样温度：按角色那一档也要报，
                             # 否则"能给 V 配 1.0"这件事在机器面上看不见。
                             "temperature": str(red_slot["temperature"]),
                             # 这一格必须取这一档自己的 `key_source`（`spec_for` 已经
-                            # 按这一档算过 env/settings）。此前这里调的是全局 `key_source()` ——
-                            # 它读的是 `model` 段 ⇒ 每一档都报同一个来源：`models.A` 的 key
-                            # 明明是从这一档取的，读数却说"看的是 model 段"。
-                            # 缺陷形态与"读数说谎"同族：数字自洽、没有任何地方会报错。
+                            # 按这一档算过 env/settings）。用全局 `key_source()` 会读
+                            # `model` 段 ⇒ 每一档报同一个来源：`models.A` 的 key 明明
+                            # 是从这一档取的，读数却说"看的是 model 段" —— 缺陷形态与
+                            # "读数说谎"同族：数字自洽、没有任何地方会报错。
                             "key_source": spec_slot.key_source, "configured": spec_slot.configured,
                             "source": where}
     sec_cell: dict[str, Any] = {}
@@ -3183,7 +3183,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         sec_cell = {"api_key": red_sec["api_key"], "base_url": red_sec["base_url"],
                     "name": red_sec["model"], "vendor": red_sec["vendor"],
                     "reasoning_effort": red_sec["reasoning_effort"],
-                    # 采样温度（2026-10-29）：秘书那一档的形状与上面两处逐字相同。
+                    # 采样温度：秘书那一档的形状与上面两处逐字相同。
                     "temperature": str(red_sec["temperature"]),
                     "key_source": sec_spec.key_source,
                     "configured": sec_spec.configured, "source": sec_where,
@@ -3196,11 +3196,11 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
 
         sec_cell["own_slot"] = {k: (_MASK if k == "api_key" and v else v)
                                 for k, v in sec_cell["own_slot"].items()}
-    # 推理强度（2026-10-10 所有者裁定「所有智能体都要能 thinking，默认 High」）：
+    # 推理强度（所有者裁定「所有智能体都要能 thinking，默认 High」）：
     # 它同属"这台机器上的模型配置"，所以机器面必须报它 —— 否则台面上默认写着
     # 一切正常，而 `settings.json` 里那个值可能是 `off`。
     effort_raw = model.get("reasoning_effort", "") or ""
-    # 采样温度（2026-10-29）：与强度同一条纪律 —— 盘上写了什么，机器面就报什么；
+    # 采样温度：与强度同一条纪律 —— 盘上写了什么，机器面就报什么；
     # 区间外的值判成 unreadable 并把原值原样回显（回显成缺省会让人以为配置生效了）。
     temperature_raw = model.get("temperature", "") or ""
     effort_problem = ""
@@ -3208,7 +3208,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         spec = ModelSpec(base_url=model.get("base_url", "") or "",
                          model=model.get("name", "") or "",
                          api_key=model.get("api_key", "") or "",
-                         # `vendor` 必须一起传（2026-10-14）：这一格的读数取自
+                         # `vendor` 必须一起传：这一格的读数取自
                          # `spec.redacted()`，不传就等于"盘上写了厂商、机器面说没有"
                          # —— 而面板上那一格的初值正是从这份读数取的。
                          vendor=model.get("vendor", "") or "",
@@ -3234,25 +3234,25 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
         "toolchain": {k: tool.get(k, "") for k in TOOLCHAIN_KEYS},
         "model": {"api_key": red["api_key"], "base_url": red["base_url"],
                   "name": red["model"],
-                  # 厂商（2026-10-14）：`type_decls()` 里一直声明着这一格，而这里没给 ——
-                  # 于是 `types.ts` 的 `SettingsReading.model.vendor` 名存实亡，
-                  # 面板上那一格的初值永远取不到（盘上写了也不显示）。
+                  # 厂商：`type_decls()` 里声明着这一格，读数不给就等于
+                  # `types.ts` 的 `SettingsReading.model.vendor` 名存实亡 ——
+                  # 面板上那一格的初值取不到（盘上写了也不显示）。
                   # 这是"声明与读数差一格"，两个方向都该由判据管住（见
                   # `tests/test_role_models.py` 的读数那三条）。
                   "vendor": red["vendor"],
                   "reasoning_effort": effort_shown,
-                  # 采样温度（2026-10-29）：这一格与 `spec.temperature` 同源 ——
+                  # 采样温度：这一格与 `spec.temperature` 同源 ——
                   # 盘上没写就是缺省（0.2），写了就是那个数；区间外由上面那一支
                   # 判成 unreadable 并回显原值。
                   "temperature": temperature_shown,
                   # key 是从哪一档取到的（`"env"` / `"settings"` / 空串）。
-                  # 所有者 2026-10-10 的裁定是"key 从 config 里面接"——
+                  # 所有者裁定"key 从 config 里面接"——
                   # 这一格就是那句话在机器面上的读数：`settings` 才算成立，
                   # `env` 说明有一个环境变量盖住了配置文件（写错了也不会有人发现）。
                   "key_source": key_source(),
                   "configured": spec.configured},
         "workspace": {k: work.get(k, "") for k in WORKSPACE_KEYS},
-        # 按角色那一档与秘书那一档（业主 2026-10-14）：`key_source` 报的是
+        # 按角色那一档与秘书那一档：`key_source` 报的是
         # 那份设置文件里 key 的来源，`configured` 是"这一档到底有没有 key"。
         MODELS_SECTION: slots,
         SECRETARY_SECTION: sec_cell,
