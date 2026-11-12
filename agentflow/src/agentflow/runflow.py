@@ -243,7 +243,7 @@ def _exit_code_for(reason: str, *, successes: int) -> int:
     """把"为什么停下"映射成退出码（管线域的唯一映射点）。
 
     域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["pipeline"]`，全仓统一的三条
-    口径见 `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）。这一域没有
+    口径见 `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6）。这一域没有
     `3/4/5`：`agentflow run` 一次跑完就结束，没有"等用户 / 加钱续跑"那一说。
 
     - `budget_exhausted` ⇒ 1（钱是硬约束，停在这里必须能从退出码看见，
@@ -335,7 +335,7 @@ def _new_task_row(*, task_id: str, topic: str, status: str, outcome: str | None,
         status=status,
         outcome=outcome,
         detail=detail,
-        # `FINAL-R5-01`（最后一次集中审查抓到的）：这一行改前从不设 `error`，
+        # `FINAL-R5-01`：这一行若从不设 `error`，
         # 而 `schema.Task.validate` 要求 `status="failed"` 必须带非空 `error`
         # 且 `outcome="failed"`。于是 `_settle_run_task` 里那次 validate 抛异常、
         # `written=False`，占位行永远停在 `running` —— 受害面正是
@@ -348,9 +348,9 @@ def _new_task_row(*, task_id: str, topic: str, status: str, outcome: str | None,
         ended_at=ended_at,
         tokens=int(tokens),
         usd=round(float(usd), 6),
-        # `R5-F3`（第一次重审实测的修法）：`tasks.artifacts` 的契约是
+        # `R5-F3`：`tasks.artifacts` 的契约是
         # `verify.py` 里那一条 —— 每一项形如 `"<表名>:<行 id>"`，指向
-        # 库里真的存在的一行。旧版把六个文件名塞进这个字段，
+        # 库里真的存在的一行。若把六个文件名塞进这个字段，
         # 于是每跑一次 `agentflow run` 都新增 6 条
         # `unknown_artifact_kind` warning（测试只断言 `errors`，所以完全不可见）。
         # 一次 `run` 产出的六件东西是磁盘文件，不是表里的行 ——
@@ -358,7 +358,7 @@ def _new_task_row(*, task_id: str, topic: str, status: str, outcome: str | None,
         # （人读的说明），并把"留空"这件事写清楚，免得读的人以为是漏了。
         artifacts=[],
         # `inputs` 与 `artifacts` 是同一条纪律：声明为集合的字段必须升序去重
-        # （`Task.validate` 实测会拒"未升序"）。所以这里也过 `sorted_unique`。
+        # （`Task.validate` 会拒"未升序"）。所以这里也过 `sorted_unique`。
         inputs=S.sorted_unique([
             f"topic={topic}",
             "budget_usd=<见 cost.json>",
@@ -384,9 +384,9 @@ def _settle_run_task(store: Any, *, task_id: str, topic: str, reason: str, exit_
     `artifacts` 留空（那六件产物是磁盘文件，契约是 `"<表名>:<行 id>"`，六个名字进 `detail`；`R5-AN-5`：写成
     "这一趟承诺的那六件产物"会与 `artifacts=[]` 矛盾并新增 6 条 `unknown_artifact_kind` warning，那是 `R5-F3`
     改掉的旧形态）；`inputs` 只写形状；`detail` 写清谁写的、为什么；`error` 只在 `status="failed"` 时非空
-    （`schema.Task.validate` 硬要求，`FINAL-R5-01`：改前不给 `error`，那三个码的行写不进去、占位行停在
+    （`schema.Task.validate` 硬要求：不给 `error` 时那三个码的行写不进去、占位行停在
     `running`）。三态纪律：写失败不吞（`written=False` 与 `error` 落 `run-manifest.json` 的 `task_row` 段并往
-    `unknowns` 加一行；`R5-F6`：此前说"在返回值里可见"而那个返回值从未被读过）；退出码不改。`R5-AN-5` 另一半：
+    `unknowns` 加一行）；退出码不改。`R5-AN-5` 另一半：
     `out` / `ledger` 两个形参函数体里从没用过（`temp/reaudit6-R5-p4.txt`），已删 —— 形参也是接口面。
     """
     tokens = int(meter.tokens_for(task_id))
@@ -394,7 +394,7 @@ def _settle_run_task(store: Any, *, task_id: str, topic: str, reason: str, exit_
     ok_calls = sum(1 for r in records if r.reply.ok)
     status, outcome = _run_task_verdict(reason=reason, exit_code=exit_code)
     # `FINAL-R5-01`：`schema.Task.validate` 对 `status="failed"` 有两条硬要求 ——
-    # `error` 非空、`outcome == "failed"`。改前这一行只给 status/outcome，
+    # `error` 非空、`outcome == "failed"`。若这一行只给 status/outcome，
     # 于是"模型侧确实失败了"这三个码在台账上永远停在 `running`（占位行）。
     # 理由串逐字就是这一跑的 `reason`，加上退出码，便于人顺着追。
     task_error = (f"模型侧结局 {reason!r}（exit_code={exit_code}）"
@@ -467,7 +467,7 @@ def _run_task_verdict(*, reason: str, exit_code: int) -> tuple[str, str]:
     """`(tasks.status, tasks.outcome)`（`G-3`）。
     为什么不按 `exit_code` 映射：退出码是三态（0/1/2），而 `tasks.status` 说的是"这次召唤的终态"。一次
     `no_key` 的运行退出码 2（没查成），它在台账里的终态却是 `done`（这一行确实跑完了、结论是"没有 key 所以没调模型"）；写成 `failed` 会让"环境缺 key"看起来像"这次召唤崩了"。
-    可达性（`R5-F4`：这里原先有三处与事实不符）：① `cancelled` 在 `run_topic` 这条通路上到不了（它没有取消
+    可达性（这里有三处必须与事实相符）：① `cancelled` 在 `run_topic` 这条通路上到不了（它没有取消
     入口：不收 CancelToken，`cli.py` 里也没有 signal / KeyboardInterrupt 处理），留着是因为本函数是纯映射、
     将来接进取消面的调用方要用它，但"`agentflow run` 会产出 status=cancelled"是假的；② `failed` 曾经也不
     可达（旧实现只认字面量 `"error"`，而 `run_topic` 赋给 `reason` 的是 `reply.error_kind`，于是"模型调用确实失败了"被静默记成 `done` / `no_result`），现在按 `modelgw` 的两张词表分档；③ 旧实现里有一段
@@ -708,7 +708,7 @@ def _report_md(*, topic: str, reason: str, exit_code: int, price: tuple[float, f
     `evidence` / `verification` 缺省为 `None`：证据段始终出现（哪怕只写"本次运行没有检索记录"），段落存在
     与否是判据，不能靠"某次运行刚好没有"；`lean` 缺省 `None`：形式化验证小节只在真的开了这一层时出现（关着
     的时候写一整段"没用 Lean"会把证据段变成公告栏）。`run_spent_usd` 是"这一次运行"花掉的钱（`G-4`），
-    缺省 `None` 表示调用方没给（退回账本累计值，与改前行为逐字相同）；预算那一行必须同时印两个数 —— 只印
+    缺省 `None` 表示调用方没给（退回账本累计值，与既有行为逐字相同）；预算那一行必须同时印两个数 —— 只印
     累计值时"这次运行花了多少"与"这个工作区一共花了多少"是同一个数字，而预算判的只是前者。
     """
     spent_for_budget = (round(float(ledger["usd"]), 6) if run_spent_usd is None
