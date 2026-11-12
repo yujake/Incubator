@@ -2,7 +2,7 @@
 
 ## 这一层填的是哪个洞
 
-`judge.judge_json` 在 `draft/28` §178 里被记成"有定义、零调用点"：
+`judge.judge_json` 被记成过"有定义、零调用点"：
 框架里有一处"唯一的 LLM 缝"，但没有任何判据真的走它。
 而"高观点 / 敢创新 / 有品味"这三项官能如果只写在提示词里，
 就等于把质量交给运气 —— 没有人能回答"这次的产出到底达没达到标准"。
@@ -15,7 +15,7 @@
 2. 引用落地：模型给的每条 finding 必须带一句 `quote`，而那句话必须逐字出现在被审的产出里；
    引不到就丢掉并计数（`dropped`）。一条"凭印象"的评审意见在记录里是可见的缺陷，不是结论。
 3. 负控是准入条件：每条判据都必须带至少一条"这一段必须被判不通过"的样本
-   （`NEGATIVE_CONTROLS`），没有负控的判据不许进表 —— 这是 `draft/28` §180 里
+   （`NEGATIVE_CONTROLS`），没有负控的判据不许进表 —— 这是
    "判据必须有注入负控"那条纪律在语义判据上的落点。
 
 ## 与 `review_tools` 的关系
@@ -299,7 +299,7 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
 
     prompt = criterion.prompt(artifact, context)
     data, problem, call = J.seam_json(seam, prompt, point=f"judge:{criterion.id}")
-    # 一次重试（2026-10-14 真机实测逼出来的）：这一档用的是会思考的模型，
+    # 一次重试：这一档用的是会思考的模型，
     # 思维链把输出预算吃光（`judge_output_limit`）或把 JSON 说成散文（`judge_bad_json`）
     # 都会让判据落到"没查成"—— 而那两档都不是"判过了没问题"，也不该白扔一次判定。
     # 重试只加一句"先给 JSON"，只重试一次；仍然不行就如实回那一档（三态纪律）。
@@ -317,9 +317,9 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
     base.prompt_version = str(getattr(call, "prompt_version", "") or "")
     base.prompt_sha256 = str(getattr(call, "prompt_sha256", "") or "")
     if data is None:
-        # `L-05b-2/4`（`draft/52` D3）：异常→码的映射只有一处（`judge._problem_of`），
-        # 本入口不再自己 try/except（旧实现让 `BudgetExhausted` / `JudgeRefused` /
-        # `TimeoutError` 落成 `judge_failed:<类名>`，与 `judge_json` 给的码不一致）。
+        # 异常→码的映射只有一处（`judge._problem_of`）：本入口不再自己 try/except
+        # —— 否则 `BudgetExhausted` / `JudgeRefused` / `TimeoutError` 会落成
+        # `judge_failed:<类名>`，与 `judge_json` 给的码不一致。
         base.problem = problem or "judge_failed"
         base.detail = str(getattr(call, "detail", "") or "") or base.problem
         return base
@@ -347,7 +347,7 @@ def judge(criterion_id: str, artifact: str, *, seam: LlmSeam | None,
 
 def semantic_judge_for(seam: Any, *, criterion_id: str = "claims.conclusion_strength",
                        doc_context: str = "") -> Any:
-    """把一条模型缝接成 `review_tools` 认的 `semantic_judge(claim, doc)`（`draft/28` §196）。
+    """把一条模型缝接成 `review_tools` 认的 `semantic_judge(claim, doc)`。
 
     ## 为什么需要这个适配器（两套词表，一个方向）
 
@@ -393,7 +393,7 @@ def semantic_judge_for(seam: Any, *, criterion_id: str = "claims.conclusion_stre
     return _judge
 
 
-# ============================================================ 引文回验的语义档（2026-10-14）
+# ============================================================ 引文回验的语义档
 # 业主：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」，落点是 B 唤起 H。
 # 逐字那一档仍归 `quoteverify.check_quote`（不花模型钱，先走它）；逐字不中才轮到这一档。
 # 不许把模型调用塞进 `check_quote`：那是禁改区里的逐字判据，混进模型会让
@@ -526,9 +526,8 @@ def covered_faculties() -> tuple[str, ...]:
 def json_rules_problems() -> list[str]:
     """每条判据的模板都得把 `_JSON_RULES` 带上（否则模型不知道该回 JSON）。
 
-    为什么单列一条（2026-10-14 真机实测的教训）：新加的 `quote.same_meaning`
-    第一版模板忘了接 `_JSON_RULES` —— 夹具（假缝回 JSON）全绿，真机上 5 条引文
-    全部 `judge_bad_json`（模型回的是散文），于是那一档在真机上恒"没查成"。
+    为什么单列一条：新加的判据模板忘了接 `_JSON_RULES` 时，夹具（假缝回 JSON）全绿，
+    而真机上模型回的是散文、那一档恒"没查成"。
     这不是"模型不行"，是判据自己没把形状说给模型听。凡新增判据，这一条都会先红。
     """
     missing = [cid for cid, c in CRITERIA.items() if _JSON_RULES not in c.template]
