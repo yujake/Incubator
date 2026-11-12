@@ -12,7 +12,7 @@
 `known_unverifiable` 落台账（丢弃会让"没验这一条"看起来像"不存在"）；`claims_ledger` 摘牌只看"这次真拆过
 （`split_claims` 给了 `parsed`）"。退出三态同 `lint_rules` / `noai_gate`：0 成功（走到 `max_calls` 为止）、
 1 查过了确实失败（预算耗尽一律 1，跑飞被熔断必须能从退出码看见）、2 没查成；回验未通过不改退出码。熔断 fail-closed（先查钱再花钱），口径是"这一次运行"的 `budget_usd`（`G-4`，达则落 `budget_exhausted`），
-不是 `usage_ledger` 累计（改前用后者 ⇒ 同工作区第二次运行被第一次的花销熔断：`calls=0` 而 `spent_usd` 报上次的钱）；两个数都在产物里（`cost.json` 的 `spent_usd_this_run` 与 `usage_ledger.usd`）。
+不是 `usage_ledger` 累计（用后者的话，同工作区第二次运行会被第一次的花销熔断：`calls=0` 而 `spent_usd` 报上次的钱）；两个数都在产物里（`cost.json` 的 `spent_usd_this_run` 与 `usage_ledger.usd`）。
 测试接缝七个：`transport` / `search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` / `lean_run_fn` /
 `claims_parse_fn`（生产 `None`，走 `urllib` / 禁改区的 `providers` 与 `quoteverify` / `fetch` / `extract` /
 `formalgw.check_lean` / 纯启发式；注入与否记进 `claims_ledger.parse_fn_used`）—— 刻意不加
@@ -209,14 +209,12 @@ def _budget_left(budget_usd: float, spent_usd: float) -> float:
 def _spent_this_run(meter: TokenMeter, task_id: str) -> float:
     """本次运行已经花掉多少（`G-4` / `F5-FOUND-1`）。
     口径：按 `task_id` 过滤账本，不是工作区增量 —— 账本每行都带 `task_id`，所以这个问题有精确解
-    （`TokenMeter.usd_for`）。改前是"开跑取一次 `TokenMeter.spent()` 当基线、之后判 `spent() - baseline`"，
-    那个近似只在"同一工作区两次运行不可能重叠"时成立，而 `R5-AN-1` 把并发修通后它就不成立了：另一个进程
-    在我取基线之后入账，它的钱落进我的差额（实测两真进程：A 的 `spent_usd_this_run=6e-06` 对，B 的
-    `spent_usd_this_run=1.2e-05` = 自己 6e-06 + A 的 6e-06，而 B 自己的 `calls_usd` 是 6e-06 ⇒ 被判"账本
-    对不上"）；同一个位还喂预算熔断（可能提前熔断）。这是"照 intended semantics 修"而不是改口径：基线的
-    存在本身就说明意图是"本次运行的花销"，工作区增量只是它在不可重叠前提下的一种实现（`G-4` 的 docstring
-    即 `run_topic` 已按新口径逐字改写）。做成函数而不是在循环里内联：口径必须一处，且负控要能"改回工作区
-    增量"看到读数变坏（负控变体 `V8-found1-workspace-delta`）。
+    （`TokenMeter.usd_for`）。"开跑取一次 `TokenMeter.spent()` 当基线、之后判差额"只在
+    "同一工作区两次运行不可能重叠"时成立；并发修通后另一个进程在我取基线之后入账，
+    它的钱就落进我的差额，同一个位还喂预算熔断（可能提前熔断）。这是"照 intended semantics
+    修"而不是改口径：基线的存在本身就说明意图是"本次运行的花销"，工作区增量只是它在
+    不可重叠前提下的一种实现。做成函数而不是在循环里内联：口径必须一处，且负控要能
+    "改回工作区增量"看到读数变坏。
     """
     return round(float(meter.usd_for(task_id)), 6)
 
@@ -273,8 +271,8 @@ def _complete_or_not_checked(gw: ModelGateway, prompt: str, *, scope: str,
                              model: str = "") -> ModelReply:
     """调一次模型，并把"网关自己抛出来了"折回三态里的"没查成"（`G-7`）。
     `ModelGateway.complete` 承诺"返回三态结局，从不抛异常"，而 `modelgw._once` 只捕 `TimeoutError` /
-    `ConnectionError`（2026-09-26 全面体检）；`urllib_transport` 把 `urllib.request.Request(...)` 建在 `try` 之外，于是
-    `AGENTFLOW_MODEL_BASE_URL` 写错就抛 `ValueError: unknown url type`（实测 `temp/auditG-probe1.txt` P6 段）。
+    `ConnectionError`；`urllib_transport` 把 `urllib.request.Request(...)` 建在 `try` 之外，于是
+    `AGENTFLOW_MODEL_BASE_URL` 写错就抛 `ValueError: unknown url type`。
     调用点没有 `try` ⇒ 一个配置错误让整条 run 崩在这次调用上：六件产物一件不写、账本一行没有、熔断不生效，
     而"没查成"与"代码崩了"在下游无法区分。这里堵的是调用点（`G-7` 口径二）：折成的结局是
     `error_kind="unknown"`，它在 `modelgw.NOT_CHECKED` 里 ⇒ 按"没查成"记（退出码 2），不是"查了、结论是失败"。
@@ -892,33 +890,31 @@ def _phase_1(max_calls, now, out_dir, spec, store, topic):
     # 看不出来（数字自洽）。`price_of` 会按 cfg 上的厂商/模型去价目表取；
     # 认不出厂商就回落成环境变量/缺省价（口径见 `modelcost.price_of`）。
     price = price_of(cfg, at=stamp)
-    # `G-2`：幂等键必须按这一次运行命名，不能只按主题（2026-09-26 改）：旧版 `"run-" + topic[:110]` ⇒ 同一主题跑
-    # 第二遍时 `charge_reply` 走 duplicate 快速通道，`per_call` 全是 `{charged: false, reason: 'duplicate'}` 却仍带
-    # 第一遍那行的 usd/tokens ⇒ `spent_usd`、`cost.json`、`run-manifest.json` 都报第一遍的钱（读数
-    # `temp/auditG-probe4.txt` A 段）。两个口径各管一件事（裁定见 `draft/28` §24）：① `task_id` 走契约 ——
-    # `schema.Task.validate` 要求 `t-NNNN`（`PROCESS_ID_PREFIXES["task"] = "t"`，`P-17`），否则 `require_process_id`
-    # 拒写、`tasks` 恒 0 行（`_settle_run_task` 把写失败收进 detail 不抛 ⇒ 静默失败）；取号与建行同
-    # `conductor._write_new_row`，`R5-AN-1` 起连临界区也是同一个 `store.tx`。
-    # ② 幂等键 = `(运行标识, call_index)` 的摘要，运行标识取主题整串 sha256 + `now` + 生产形态随机后缀 ⇒ `FC-19`
-    # 不受影响、各拿自己的 `t-NNNN` 行、`usage_ledger.task_id → tasks` 不悬空；显式同一 `now` 判 duplicate
-    # （`test_cli_run.py` 的 `test_rerunning_the_same_topic_does_not_double_charge` 要的正是它）。
-    # `R5-F5`：`topic[:100]` 不许截断；`now is None` 时不许只用 `S.now_iso()` 的秒粒度（同秒两跑撞键，后一次的
-    # 花费在账上不存在；读数：两次运行共 0.099s，`usage_ledger` 只有 1 行、`per_call` 全 duplicate）。
+    # `G-2`：幂等键必须按这一次运行命名，不能只按主题：否则同一主题跑第二遍时
+    # `charge_reply` 走 duplicate 快速通道，`per_call` 全是 duplicate 却仍带第一遍那行的
+    # usd/tokens ⇒ `spent_usd`、`cost.json`、`run-manifest.json` 都报第一遍的钱。
+    # 两个口径各管一件事：① `task_id` 走契约 —— `schema.Task.validate` 要求 `t-NNNN`
+    # （`PROCESS_ID_PREFIXES["task"] = "t"`），否则 `require_process_id` 拒写、`tasks` 恒 0 行
+    # （`_settle_run_task` 把写失败收进 detail 不抛 ⇒ 静默失败）；取号与建行同在
+    # 一个 `store.tx`。
+    # ② 幂等键 = `(运行标识, call_index)` 的摘要，运行标识取主题整串 sha256 + `now` +
+    # 生产形态随机后缀 ⇒ 各拿自己的 `t-NNNN` 行、`usage_ledger.task_id → tasks` 不悬空；
+    # 显式同一 `now` 判 duplicate。
+    # `R5-F5`：`topic[:100]` 不许截断；`now is None` 时不许只用 `S.now_iso()` 的秒粒度
+    # （同秒两跑撞键，后一次的花费在账上不存在）。
     _run_stamp = (stamp or "").replace(":", "").replace("+", "").replace("-", "")[:15]
     _topic_digest = hashlib.sha256(topic.encode("utf-8")).hexdigest()[:16]
     _run_nonce = "" if now is not None else "-" + uuid.uuid4().hex[:8]
     _idem_scope = "run-" + _topic_digest + "-" + (_run_stamp or "nostamp") + _run_nonce
     from .interactions import next_prefixed_id
-    # `R5-AN-1`（第 6 轮重审实测的修法）：取号必须与建行在同一个临界区里（读数 `temp/reaudit6-R5-p6.txt`）。
-    # 缺陷形态（两个真进程并发 `agentflow run`）：旧版在 `store.tx` 之外读无锁快照取号、行却等到整条 run 结束时的
-    # 另一个 tx 才写 ⇒ 两个进程都拿到 `t-0001`；`tasks` 只剩 1 行而 `tokens` 是两跑之和，两条 `usage_ledger` 都挂
-    # `t-0001`，`verify_all` 的 code 集合是 [] —— 静默丢行。为什么"只把取号搬进 tx"不够：`next_prefixed_id` 是纯
-    # 函数（读现有行取 max+1）、没有计数器，第二个进程在第一个写行之前进 tx 读到的还是同一份快照 ⇒ 照样撞号
-    # （最小修法实测 `temp/fix6_f5-minimal.txt`：E1/E2/E3/E5 四条判据仍全为 False）⇒ 取号必须同时落一行才算占住号
-    # （唯一性只在"读与写同一临界区"内成立，同 `conductor._write_new_row` 与 `store.insert_unique` 的纪律）。
-    # 占位行 `status` 只能是 `running`：`schema.Task.validate` 要求终态带 `ended_at` 而结局还不知道；`tokens`/`usd`
-    # 是 0、`outcome=None`，收工时由 `_settle_run_task` 整行改写；崩在收工前留下的那一行 `running` 由 `verify_all`
-    # 的 `task_still_running` 报成 warning（僵尸行是事实，不是噪音）。
+    # `R5-AN-1`：取号必须与建行在同一个临界区里。只把取号搬进 tx 不够：
+    # `next_prefixed_id` 是纯函数（读现有行取 max+1）、没有计数器，第二个进程在第一个
+    # 写行之前进 tx 读到的还是同一份快照 ⇒ 照样撞号 ⇒ 取号必须同时落一行才算占住号
+    # （唯一性只在"读与写同一临界区"内成立，同 `conductor._write_new_row` 与
+    # `store.insert_unique` 的纪律）。占位行 `status` 只能是 `running`：
+    # `schema.Task.validate` 要求终态带 `ended_at` 而结局还不知道；`tokens`/`usd`
+    # 是 0、`outcome=None`，收工时由 `_settle_run_task` 整行改写；崩在收工前留下的
+    # `running` 行由 `verify_all` 的 `task_still_running` 报成 warning（僵尸行是事实，不是噪音）。
     with store.tx("tasks", actor="agent-M", note="runflow allocate") as tx:
         task_id = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
         reserved = _new_task_row(
@@ -1033,8 +1029,8 @@ def _phase_3(_idem_scope, acquisition, base_prompt, budget_usd, cfg, claims_max,
             gw = ModelGateway(cfg, transport=transport)
             for i in range(int(max_calls)):
                 # `G-4` / `F5-FOUND-1`：只算本次运行（同一个 `task_id`）已经花了多少。
-                # 改前这里减的是"开跑时的账本基线"（工作区增量）：那样同一个工作区里
-                # 并发的另一次运行在基线之后入的账会被算进我的额度，可能让我提前熔断。
+                # 若减"开跑时的账本基线"（工作区增量）：同一个工作区里并发的另一次运行
+                # 在基线之后入的账会被算进我的额度，可能让我提前熔断。
                 spent_before = _spent_this_run(meter, task_id)
                 # 熔断在调用之前：达线就停，一次都不多花。
                 if _is_exhausted(budget_usd, spent_before):
@@ -1088,13 +1084,13 @@ def _phase_3(_idem_scope, acquisition, base_prompt, budget_usd, cfg, claims_max,
                     "⇒ 本次的逐字回验最多只能到达摘要级"
                 )
 
-    # 全文获取段的按次改写（`X-NEW-2` / `T15-RECON-1`，`draft/28` §98.4）：
+    # 全文获取段的按次改写：
     # 与上面 `lean` 那一段同形 —— 常量里那句写的是"开放全文获取（fetch/extract）
     # 没有接进本流程"，那是关于流程的断言；而真相是"接了（`cli.py`
     # 有 `--fulltext` 开关、`run_topic` 在 `fulltext=True` 时真的调
     # `acquire_fulltext`，见上面 `if fulltext:` 那一段）、本次没要"。
-    # 后果是可验证的：读者把"存在但未启用"读成"不存在" —— §98.4 记的那次，
-    # 受害的正是本轮 goal 文本（它据此把"接 fulltext"排成了一件工程活）。
+    # 后果是可验证的：读者把"存在但未启用"读成"不存在"（受害的是 goal 文本 ——
+    # 它据此把"接 fulltext"排成了一件工程活）。
     #
     # 判据是"这一次有没有发起"（`fulltext` 这个形参本身），不是"这一层在不在"：
     #   * `fulltext=True` ⇒ 这一项已在 `if fulltext:` 那一段被摘牌；检索没查成时
@@ -1191,28 +1187,28 @@ def _phase_4(meter, reason, records, stamp, started_at, store, successes, task_i
     # 产物之间必须自洽：本次实际花掉的（逐次相加）与账本汇总不等，
     # 就说明有一条调用没进账 —— 那正是这一层要抓的形态，不许静默写两份数字。
     #
-    # `R5-AN-3`（第 6 轮重审实测的修法）：只累加真的入账的那些调用。
+    # `R5-AN-3`：只累加真的入账的那些调用。
     # 只写 `sum(r.usd for r in records)` 会把重放路径上继承来的 usd 也算进来：
     # `charge_reply` 判 duplicate 时返回的是上一次那一行的 usd（那样调用方还能
-    # 读出"这笔账本来是多少"），而本次的真实增量是 0 ⇒ 一次完全正常、被刻意
-    # 支持的重放被这个自检位判成"账本对不上"（实测
-    # `spent_usd_this_run=0.0 calls_usd=6e-06 reconciled=False`）。
-    # 自检位在正常操作上翻红就等于它失去区分力（本项目自己的纪律：
-    # "error 永远红就等于 error 没有区分力"）。
+    # 读出"这笔账本来是多少"），而本次的真实增量是 0 ⇒ 一次正常、被刻意
+    # 支持的重放会被这个自检位判成"账本对不上"。
+    # 自检位在正常操作上翻红就等于它失去区分力（"error 永远红就等于 error 没有区分力"）。
     # 过滤之后"重放 ⇒ 0 == 0"成立，而"有一次 charged=True 的调用却没进账"
-    # 这条判据对真漏账的分辨力一点没少（那种调用仍然被算进来）。
+    # 这条判据对真漏账的分辨力一点没少。
     calls_usd = round(sum(r.usd for r in records if r.charge.get("charged")), 6)
     # 判据用增量：`records` 只含本次的调用，与整本台账比会永远不等（工作区里有历史）。
     reconciled = abs(calls_usd - run_spent_usd) < 1e-9
 
-    # ---- `G-3`：给这次运行补一行 `tasks`，否则账本上的钱挂不到任何一次召唤上（2026-09-26 全面体检，读数
-    # `temp/auditG-probe2.txt` S1 段）。缺陷：`run_topic` 写 `usage_ledger` 行时给了 `task_id='run-<主题>'`，而
-    # 全文件没有任何 `store.tx("tasks")` / `Task(...)` 写入 ⇒ `tasks` 表 0 行 ⇒ `verify_all` 每跑一次 `agentflow run` 就报 2 条
-    # error 级 `dangling_usage_task` + 1 条 warning `usage_task_total_mismatch`，error 信号因此失去区分力。
-    # 口径选"补一行 tasks"而不是把 usage 行的 task_id 置 None：前者信息多（能看出这一次运行花了多少、跑到哪一步），
-    # 后者只是把那条账从审计面摘出去。`R5-F6`：`_settle_run_task` 的返回值此前赋值给 `task_row` 后从未被读过
-    # （写失败时恰恰没有那一行 tasks，`detail` 也不存在）—— 现两个出口都接上：`manifest["task_row"]` 把 written /
-    # error 落进产物，没写成时往 `unknowns` 加一行；退出码不改（结论与六件产物已落盘，账本挂点缺失是审计面的事）。
+    # ---- `G-3`：给这次运行补一行 `tasks`，否则账本上的钱挂不到任何一次召唤上。
+    # 缺陷：`run_topic` 写 `usage_ledger` 行时给了 `task_id='run-<主题>'`，而全文件没有
+    # 任何 `store.tx("tasks")` / `Task(...)` 写入 ⇒ `tasks` 表 0 行 ⇒ `verify_all` 每跑一次
+    # `agentflow run` 就报 2 条 error 级 `dangling_usage_task` + 1 条 warning
+    # `usage_task_total_mismatch`，error 信号因此失去区分力。
+    # 口径选"补一行 tasks"而不是把 usage 行的 task_id 置 None：前者信息多（能看出这一次
+    # 运行花了多少、跑到哪一步），后者只是把那条账从审计面摘出去。`R5-F6`：
+    # `_settle_run_task` 的返回值现两个出口都接上：`manifest["task_row"]` 把 written /
+    # error 落进产物，没写成时往 `unknowns` 加一行；退出码不改（结论与六件产物已落盘，
+    # 账本挂点缺失是审计面的事）。
     task_row = _settle_run_task(store, task_id=task_id, topic=topic, reason=reason,
                                 exit_code=exit_code,
                                 records=records, meter=meter,
@@ -1490,13 +1486,12 @@ def run_topic(store: Any, *, topic: str, budget_usd: float, out_dir: str | Path,
     `KeyboardInterrupt` 是 `BaseException`、会穿出 `except Exception` 兜底，留下的"部分产物"三者不同形但都
     不可消费，所以 `cli.main` 把它折成退出码 2 并打印显式说明；真正的修法（走完六件产物 + `status=cancelled`）
     要接进取消面。本函数（`run_topic`）的 `store` 是工作区（`usage_ledger` 的落点）、`out_dir` 是产物落点，两者刻意分开：账本属于
-    工作区（跨运行累计），产物属于这一次运行。`budget_usd` 是这一次运行的额度（`G-4`）；本次花销按 `task_id` 过滤 `usage_ledger`（`F5-FOUND-1` 之后），所以并发另一次运行与历史花销都不会算进我的额度（改前是
-    "`spent` 取一次 `baseline` 再相减"的工作区增量，`R5-AN-1` 把并发修通后就不再成立，逐字读数见 `_spent_this_run`）。两个口径都在产物里：
+    工作区（跨运行累计），产物属于这一次运行。`budget_usd` 是这一次运行的额度（`G-4`）；本次花销按 `task_id` 过滤 `usage_ledger`（`F5-FOUND-1`），所以并发另一次运行与历史花销都不会算进我的额度。两个口径都在产物里：
     `spent_usd_this_run` 是本次运行，`cost.json` 的 `usage_ledger.usd` 与返回值 `spent_usd` 是工作区累计。
     `now` 只为测试注入固定时间戳；`search_fn` / `quote_fn` / `fetch_fn` / `extract_fn` 是四个动作的测试接缝
     （生产为 `None`，分别走禁改区里的 `providers` / `quoteverify` / `fetch` / `extract`）；`retrieval_limit` 与
     `retrieval_timeout_sec` 只影响检索本身。`fulltext` 缺省关闭（全文获取是逐条网络下载，打开后逐条六态：`no_pdf` / `download_failed` …）：关闭时它如实写进
-    未接线清单，理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，与 `lean` 那条同形；常量里"没有接进本流程"是关于流程的断言，真相是"接了、本次没要"，见 `X-NEW-2` / `draft/28` §98.4）。
+    未接线清单，理由串按"这一次"改写（"本次没有发起全文获取（`--fulltext` 默认关）"，与 `lean` 那条同形；常量里"没有接进本流程"是关于流程的断言，真相是"接了、本次没要"）。
     `lean` 缺省关闭；打开后每个 `` ```lean `` 代码块都交给 `formalgw.check_lean` 真跑一次，结论与到达的证据
     档位写进 `claims.json` 的 `lean` 段与报告的形式化验证小节 —— 它是 `evidence_kind="proof"` 的唯一来源，
     所以默认关、且真跑过之前不许把 lean 从"未接线"清单摘掉（`lean_run_fn` 是它唯一的测试接缝）。`claims_parse_fn` 缺省 `None`（纯启发式，同一答复必得同一结论）；注入它只提供候选，编号、去重、截断与
