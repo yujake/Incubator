@@ -68,16 +68,28 @@ def compose(own: Sequence[tuple[str, str, str]],
 #: 签名 `(handler, params, query)`，`handler` 就是那个 `WebHandler` 实例。
 _SUBTABLE_MODULES = ("readers", "sse", "writes")
 
+#: `_SUBTABLE_MODULES` 解析出来的模块对象（首次查找时填一次）。
+#: 每个请求都会走 :func:`handler_for`，而这三个模块在进程里恒是同一批对象 ⇒
+#: 缓存的是"模块对象本身"，不是它们的 `HANDLERS`（那张表仍然每次现读，
+#: 于是运行期新增一条登记照样取得到）。
+_MODULES: tuple[Any, ...] | None = None
+
 
 def handler_for(name: str):
     """按名字找子表模块里的 handler（A 线自己的方法由 `server.py` 先用 `getattr` 找）。
 
     刻意在这里才 import 那三个模块：它们导入期就要 `from .routes import ...`，
-    模块级互相导入会成环；调用期导入既安全又便宜（模块已缓存）。
+    模块级互相导入会成环；调用期导入既安全又便宜（模块已缓存）—— 所以首次查找之后
+    就把这三个模块对象留在 :data:`_MODULES` 里，省掉每个请求都重走一遍导入机制。
     """
-    from . import readers, sse, writes  # noqa: PLC0415 - 见上：避免导入期成环
+    global _MODULES
+    mods = _MODULES
+    if mods is None:
+        from . import readers, sse, writes  # noqa: PLC0415 - 见上：避免导入期成环
 
-    for mod in (readers, sse, writes):
+        mods = _MODULES = (readers, sse, writes)
+
+    for mod in mods:
         table = getattr(mod, "HANDLERS", None) or {}
         fn = table.get(name)
         if fn is not None:
