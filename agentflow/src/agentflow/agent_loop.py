@@ -3342,6 +3342,25 @@ def _decode_roster_outcome(written: str, roster: Any
                   "addressed_by": str(addr.get("addressed_by") or "")}, ""
 
 
+def _present_fields(raw: Mapping[str, Any], keys: Sequence[str]) -> dict[str, str]:
+    """`keys` 里"给了非空值"的那几格：`{键: str(值)}`，每个键只取一次。
+
+    为什么单独一格：`_decode_shape` 的 `summon` / `summon_many` 两支原先用
+    `{k: str(raw.get(k)) for k in keys if str(raw.get(k) or "").strip()}` ——
+    同一个键在一句里被 `.get` 两次（判空一次、取值再一次）。这里一趟取值、拿同一份
+    判空，键序仍是 `keys` 的顺序（解码出的载荷键序因此逐字不变）。
+
+    "非空"的判据逐字照旧：`raw.get(k) or ""` 后 `.strip()` 为真才算给了
+    （None / 空串 / 全空白 / `0` / `False` 一律不算 —— 与原表达式同为假值）。
+    """
+    out: dict[str, str] = {}
+    for k in keys:
+        got = raw.get(k)
+        if str(got or "").strip():
+            out[k] = str(got)
+    return out
+
+
 def _decode_shape(data: Mapping[str, Any], *,
                   roster: Any = None) -> tuple[str, Mapping[str, Any], str]:
     """规范形态的解码：一次只说一件事，取的那个键必须是 `SHAPES` 里的一种。
@@ -3395,16 +3414,14 @@ def _decode_shape(data: Mapping[str, Any], *,
         # 它是"不点动作时必填的那件活"，解码器丢它 ⇒ 模型写了活、框架说"你没写活"。
         # 判据 `tests/test_native_tool_calls.py::test_every_advertised_key_survives_the_decoder`
         # 当场抓出这一条（它就是为这种"广告一份、解码另一份"设的）。
-        extra: dict[str, Any] = {k: str(value.get(k)) for k in ("brief", "name", "reuse", "task")
-                                 if str(value.get(k) or "").strip()}
+        extra = _present_fields(value, ("brief", "name", "reuse", "task"))
         # 两段式（业主 2026-10-21）：确认/拒绝那两个受控字段要带过去 ——
         # 这一步的解码是白名单，不带就等于"父说了接受、框架没听见"，
         # 而那在读数上与"父还没表态"长得一样（同一族缺陷见上面 `brief`/`task` 那两段）。
         # 只在给了的时候带：老载荷的键集因此一个字节不变。
         # 字段名不在这里另写一份：真身在 `secretary`（延迟导入 —— 那个模块在装秘书那一侧
         # 才需要，本模块在解码这一步只需要两个字符串）。
-        extra.update({k: str(value.get(k)) for k in (accept_field, reject_field)
-                      if str(value.get(k) or "").strip()})
+        extra.update(_present_fields(value, (accept_field, reject_field)))
         # S1g：动作声明里的参数被摆在了顶层（不在 `params` 里）时，别再静默丢掉它们
         # —— 今天这条路把它们丢在校验之前，于是模型看到的是「缺必填参数」，而那个值
         # 明明就在它写的那一句话里。带两类：① 声明过的键；② 名字写错、但按唯一候选
@@ -3433,11 +3450,9 @@ def _decode_shape(data: Mapping[str, Any], *,
             params = item.get("params") or {}
             if not isinstance(params, Mapping):
                 return "", {}, f"summon_many.targets[{i}].params 必须是一个对象"
-            item_extra: dict[str, Any] = {
-                # S1k-4：一批派活的目标也各带自己的名册三格（只在给了的时候带，
-                # 老载荷的键集因此不变）—— 与 `summon` 那一支同一口径。
-                k: str(item.get(k)) for k in ("brief", "name", "reuse", "task")
-                if str(item.get(k) or "").strip()}
+            # S1k-4：一批派活的目标也各带自己的名册三格（只在给了的时候带，
+            # 老载荷的键集因此不变）—— 与 `summon` 那一支同一口径。
+            item_extra = _present_fields(item, ("brief", "name", "reuse", "task"))
             # S1g：与 `summon` 那一支同一口径（声明里的参数被摆在目标顶层 ⇒ 别静默丢）。
             item_extra.update(_carried_top_level_params(role, action, item, params))
             clean.append({"role": role, "action": action, "params": dict(params),
@@ -3446,8 +3461,7 @@ def _decode_shape(data: Mapping[str, Any], *,
                           **item_extra})
         out: dict[str, Any] = {"targets": clean, "why": str(value.get("why") or "")}
         # 两段式：一批也能整批请示/确认（与 `summon` 同一口径，只在给了的时候带）。
-        out.update({k: str(value.get(k)) for k in (accept_field, reject_field)
-                    if str(value.get(k) or "").strip()})
+        out.update(_present_fields(value, (accept_field, reject_field)))
         return key, _with_notify(out, value), ""
     if key == "ask_user":
         if not isinstance(value, Mapping):
