@@ -606,7 +606,6 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         读数进 `notes`，放行判据照旧按"读到的条数"走（读不成 ⇒ 0 条 ⇒ 不开轮）。
         """
         nonlocal clock_pump_note
-        from . import agent_loop as AL
 
         try:
             from . import clock as CLK
@@ -652,8 +651,6 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
         # S-G（裁定 15）：唤醒判据现读一次收件箱（"还没投递过的留言"）。
         # 读不成 ⇒ 0（不放行）：`pending_wake` 的 `checked=False` 走的是"没有可唤醒的"，
         # 而"没读成"这件事会由那一轮的收工读数再报一次（不许在这里悄悄多烧一轮钱）。
-        from . import agent_loop as AL
-
         wake = AL.pending_wake(root, role, sid=sid)
         wake_pending = int(wake.get("count") or 0) if wake.get("checked") else 0
         # ---- D-53（业主 2026-10-24）：时钟唤醒也折进同一个 `wake_pending`。
