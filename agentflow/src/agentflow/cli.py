@@ -9,11 +9,10 @@
     python -m agentflow doctor --selfcheck                          # 包内源码自检（不花钱）
 """
 
-# 2026-10-22（`draft/145-CLI升级方案.md`，业主「到时候我们会花一整段时间慢慢看的，
-# 务必该怎么改就怎么改」）：这一批只动 CLI 的形状 —— 一个入口（`start`）讲清
+# CLI 的形状：一个入口（`start`）讲清
 # "干什么 / 在哪干 / 花多少钱 / 开不开 Lean"，四条老命令（`run` / `run-agent` /
 # `project run` / `web`）保留为别名并共用同一个执行体 `_run_spec`。
-# 角色行为、工具层、读数口径都不在这一次的范围里。
+# 角色行为、工具层、读数口径都不属于这一层。
 
 from __future__ import annotations
 
@@ -40,17 +39,15 @@ from .console import pin_utf8
 from .store import Store, StoreError
 from .verify import verify_all
 
-#: 不给 `--root` 时的工作区根：`src/agentflow/cli.py` 的 `parents[2]` = 仓库里的 `agentflow/`。
-#: （2026-09-30 更正：这一行原写 `# test/test1/` —— 那是 cli.py 还住在原型
-#: `test/test1/src/agentflow/` 时的解析结果，搬到正式版之后注释没跟着改。）
+#: 不给 `--root` 时这个常量指向的仓库根：`src/agentflow/cli.py` 的 `parents[2]` = 仓库里的 `agentflow/`。
 DEFAULT_ROOT = Path(__file__).resolve().parents[2]
 
-#: 工作区缺省 = 当前目录（2026-10-27 修）。
+#: 工作区缺省 = 当前目录。
 #:
-#: 改前的缺省是 `DEFAULT_ROOT`（= 代码检出目录 `agentflow/`），而 `DEFAULT_ROOT` 是从
+#: 为什么不用 `DEFAULT_ROOT`（= 代码检出目录 `agentflow/`）：它是从
 #: `__file__` 算出来的 —— 于是"我在某个工作区里启动"这件事在结构上做不到：
 #: `cd projects/xxx` 之后 `run-agent M ...` 仍然把仓库根当成工作区，
-#: 实测两次把受版本控制的 `data/tasks.json` / `data/events.jsonl` / `data/counters.json` /
+#: 会把受版本控制的 `data/tasks.json` / `data/events.jsonl` / `data/counters.json` /
 #: `data/usage_ledger.json` 写脏，还落下 `runs/` `sessions/` `skills/` `.agentflow-workspace`。
 #: CLI 的常理是"不给 --root 就用当前目录"；`--root` 仍可显式覆盖。
 def _root_of(args) -> Path:
@@ -158,7 +155,7 @@ def make_store(root: Path | None = None) -> Store:
 
 # ---------------------------------------------------------------- Lean 工具链开机自检
 #
-# 业主 2026-10-22 的原话：「开机自检可以做，防止用户提供虚构的lean环境」。
+# 开机自检可以防止用户提供一个虚构的 lean 环境。
 # 自检本体在 `leantoolchain`（纯函数自检 + 一份四档读数）；这一节只做两件事：
 # 把它打到第一屏，并把"自检不是 usable"变成摘要里那一格 unknown。
 #
@@ -181,7 +178,7 @@ def _lean_mathlib_text(sc: Mapping) -> str:
 
     为什么这一格必须打到台面上：用户看到的"Lean 能用"与"形式化能用"是两件事 ——
     盘上那份 Mathlib 编译好了而裸 `lean.exe` 报 `unknown package 'Mathlib'` 的形态
-    等于"装了没用"（2026-10-25 的现场）。这一格就是那件事的读数。
+    等于"装了没用"。这一格就是那件事的读数。
     `sc` 里没有 `mathlib` 那一格时（老读数、或调用方注入了自检替身）如实写"没读到"，
     不补一个"可用"。
     """
@@ -226,10 +223,10 @@ def _lean_first_screen(root: Path, *, stream=None) -> dict:
     （`settings.lean_enabled` 与 `toolchain.resolve_checker`，后者明写着"不跑版本命令"），
     所以整段不 spawn、不写临时文件。
 
-    ## 为什么首屏不再跑自检（2026-10-25）
+    ## 为什么首屏不跑自检
 
     自检的第 ⑤ 步（Mathlib 图论）要真编译一次 `import Mathlib.Combinatorics.SimpleGraph.Basic`
-    加 `#check SimpleGraph`：本机实测 11.3 秒（整次自检 13.3 秒），而首屏的用途只是
+    加 `#check SimpleGraph`：十几秒（整次自检也是十几秒），而首屏的用途只是
     "开跑之前让人看一眼开关与解释器"。把十几秒压在开工前那一下，读数是"这工具启动很慢"，
     而它想回答的那个问题（这台机器的图论库可用吗）是 `agentflow doctor` 与收工门的活 ——
     那两处照旧跑完整自检，一个格子都不少。
@@ -301,7 +298,7 @@ def _lean_first_screen(root: Path, *, stream=None) -> dict:
                         + tty.paint("`agentflow doctor`", "bold")))
     for problem in sc["problems"]:
         emit(tty.bullet(tty.paint(f"没通过：{problem}", "yellow")))
-    # 第 ⑤ 步那一格（业主 2026-10-25：盘上有 Mathlib 而裸 lean 不知道它在哪 ⇒
+    # 第 ⑤ 步那一格（盘上有 Mathlib 而裸 lean 不知道它在哪 ⇒
     # 装了等于没装）。首屏这一格只写"未查"，不补一个"可用"。
     emit(tty.bullet(f"Mathlib（第 ⑤ 步，图论）：{_lean_mathlib_text(sc)}"))
     emit(tty.bullet("形式化证据：这一趟首屏不判定（自检未查）—— 收工门会跑一次并把结论写下来"))
@@ -313,7 +310,7 @@ def _lean_evidence_text(lean: Mapping, reading: Mapping) -> str:
 
     「记成 verified」这件事的前提是"我们有一个会拒绝假命题的检查器"。
     自检没给出 `usable` 的时候，这一趟声称的 proof 级证据不记成 verified ——
-    它记 `unknown`，并把原因点名在这同一格里（业主口径：不许把没跑自检写成 usable）。
+    它记 `unknown`，并把原因点名在这同一格里（不许把没跑自检写成 usable）。
     """
     from . import leantoolchain as LT
 
@@ -322,7 +319,7 @@ def _lean_evidence_text(lean: Mapping, reading: Mapping) -> str:
     if not lean.get("enabled"):
         return head + f"；proof 级证据 {lean.get('proved', 0)} 条 —— {lean.get('reason')}"
     if (reading or {}).get("first_screen"):
-        # 首屏不跑自检（第 ⑤ 步那一次 Mathlib 编译实测 11.3 秒）⇒ 这一格不判定。
+        # 首屏不跑自检（第 ⑤ 步那一次 Mathlib 编译要十几秒）⇒ 这一格不判定。
         # 与"查过了、不可用"必须分开写：那会让人去修一个没坏的东西。
         return (head + f"；proof 级证据 {lean.get('proved', 0)} 条 —— 形式化证据这一格"
                 "这一趟未查（首屏不跑自检：要读数请跑 `agentflow doctor`；"
@@ -423,8 +420,8 @@ def init_workspace(st: Store, root: Path, *, allow_foreign_entries: bool,
                    cmd: str, force: bool = False) -> int:
     """`Store.init()` 的 CLI 外壳：把 `R-32` 那一档的拒绝翻成「照着改」的话。
 
-    为什么要有这一层（业主原文：「里面有 2 个不属于我们的条目」）：`R-32` 的判据本身
-    是对的（它挡的是"在别人的目录里凭空建库"，`draft/28` §136.3 事故 B），缺的是一条
+    为什么要有这一层：`R-32` 的判据本身
+    是对的（它挡的是"在别人的目录里凭空建库"），缺的是一条
     「我认这个目录，里面那些文件是我自己投的料」的出口。`--force` 不是那条出口：
     它是"清空重建"。所以这里补第四条路 —— 带 `allow_foreign_entries` 时先落
     `.agentflow-workspace`（`store.init` 自己明写的白名单出口），再照常 init；
@@ -484,9 +481,9 @@ def cmd_init(args) -> int:
 
 
 def cmd_interject(args: argparse.Namespace) -> int:
-    """给主控 M 插一句话（2026-10-27 新增：这条通道此前只有 Python API）。
+    """给主控 M 插一句话（这条通道此前只有 Python API）。
 
-    业主口径：插话只有用户能发、只有 M 会收到（2026-10-08 裁定）。交付方式不变：
+    插话只有用户能发、只有 M 会收到。交付方式不变：
     M 在下一步开头看到一段【插话】，不打断当前步。编号由框架按会话内顺序发（`i-0001`…）。
 
     读写：只写 `<工作区>/sessions/<sid>.jsonl` 一条 `agent_interjection` 事件（追加，不改已有行）；
@@ -676,9 +673,8 @@ def cmd_run_b(args) -> int:
     st = make_store(root)
     st.init()
     cfg = load_config(root, args.config)
-    # 抽取器只有一处装配（`host.b_extractor`）：
-    # 此前这里写死 `RuleExtractor()` ⇒ `B.run_once` 永远拒抽（`R-56`），
-    # 于是"跑一轮 B"这条命令结构上不可能真的抽取出东西（2026-10-03，`draft/37` §83）。
+    # 抽取器只有一处装配（`host.b_extractor`）：写死 `RuleExtractor()` 的话
+    # `B.run_once` 会永远拒抽（`R-56`），"跑一轮 B"这条命令结构上不可能真的抽取出东西。
     _notes: list[str] = []
     agent = AgentB(
         st,
@@ -715,12 +711,9 @@ def cmd_status(args) -> int:
     print(tty.paint(f"工作区 {s['root']}", "bold"))
     print("")
     # 表名清单必须来自 `S.TABLES`，不许在这里写死。
-    # 这里原先写死 `("search_requests", "literature", "concepts", "relations")`，
-    # 而 `Store.stats()` 明明返回全部表（当时 15 张，加 `conjectures` 后为 16）——
-    # 于是"库长什么样"的第一入口静默地不显示另外 11 张（analysis_reports / experiments /
-    # documents / tasks …）。
-    # 写死的第二份名单还会在表被改名/删除时以 `KeyError` 崩掉（`s[t]`），
-    # 而不是如实报告。与 `cmd_tools` 里那句"角色清单必须来自 ROLES"同一个道理。
+    # 写死一份子集会静默地不显示其余的表（analysis_reports / experiments / documents /
+    # tasks …），并在表被改名/删除时以 `KeyError` 崩掉（`s[t]`）而不是如实报告。
+    # 与 `cmd_tools` 里那句"角色清单必须来自 ROLES"同一个道理。
     rows = []
     for t in S.TABLES:
         info = s[t]
