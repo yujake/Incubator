@@ -407,7 +407,10 @@ def _units(text: str, *, bigrams: bool) -> set[str]:
     中文不分词：不引入分词器（版本会让键漂移），用二元组是中文相似度的标准做法。
     """
     got: set[str] = set()
-    for chunk in _atoms(text):
+    # 记号只切一趟：`bigrams=True` 原先在算完中文之后又对同一段文本调一次 `_atoms`，
+    # 只为了取拉丁词元的相邻对（同一个正则、同一份输入、同一个纯函数）。
+    atoms = _atoms(text)
+    for chunk in atoms:
         if _CJK_RUN.fullmatch(chunk):
             if len(chunk) == 1:
                 got.add(chunk)
@@ -418,7 +421,7 @@ def _units(text: str, *, bigrams: bool) -> set[str]:
         else:
             got.add(chunk)
     if bigrams:
-        latin = [c for c in _atoms(text) if not _CJK_RUN.fullmatch(c)]
+        latin = [c for c in atoms if not _CJK_RUN.fullmatch(c)]
         for left, right in zip(latin, latin[1:]):
             got.add(left + " " + right)
     return got
@@ -437,19 +440,22 @@ def judgeable(text: str, *, minimum: int = MIN_CONTENT_UNITS) -> dict[str, Any]:
     （`≤ ≥ ≡` 这种纯符号）。两档的 `reason` 不同 —— "太短"可以补上下文，
     "纯符号"要补文字，处置不同。
     """
-    units = _content_unit_count(text)
+    # 空文本那一档在规范化之前就给答案（原来的顺序也是先算 units 再丢掉、返回 0）：
+    # 规范形态只算一次 —— 原先 `_content_unit_count` 算一遍、下面判"有没有文字"再算一遍。
     if not str(text or "").strip():
         return {"ok": False, "units": 0, "minimum": int(minimum),
                 "reason": "文本是空的（没有可比的内容）"}
     canonical = _canonical(text, strip_glue=False)
+    units = len(_units(canonical, bigrams=False))
+    minimum = int(minimum)
     if not re.search(r"[a-z\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", canonical):
-        return {"ok": False, "units": units, "minimum": int(minimum),
+        return {"ok": False, "units": units, "minimum": minimum,
                 "reason": "全是符号与数字（没有一个可比的文字）"}
-    if units < int(minimum):
-        return {"ok": False, "units": units, "minimum": int(minimum),
-                "reason": (f"文本太短（内容单元 {units} < {int(minimum)}）⇒ "
+    if units < minimum:
+        return {"ok": False, "units": units, "minimum": minimum,
+                "reason": (f"文本太短（内容单元 {units} < {minimum}）⇒ "
                            "判不了，不许折成不同")}
-    return {"ok": True, "units": units, "minimum": int(minimum), "reason": ""}
+    return {"ok": True, "units": units, "minimum": minimum, "reason": ""}
 
 
 # ------------------------------------------------------------------ 命题键
