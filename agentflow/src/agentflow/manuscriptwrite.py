@@ -1,19 +1,12 @@
 # -*- coding: utf-8 -*-
-"""手稿落盘的三个零件：原子写 / 受控拒绝的返回形状 / "目标名上签住的是不是别的正文"。
+"""手稿落盘的三个零件：原子写 / 受控拒绝的返回形状 / 「目标名上签住的是不是别的正文」。
 
-## 为什么拆出来
-
-`manuscriptform.py` 在 2026-11-10 的 p274 / p275 两批之后到 810 行（越过 `>800` 的
-体量软基线）。它的主职责是"命名 / 渲染 / 搬签 / 落盘事务"；这里搬出来的是落盘事务的
-三件零件（它们都只被 `commit_manuscript` 调用），于是 `manuscriptform` 仍只回答
-"一份手稿怎么命名、怎么渲染、怎么搬签、怎么落盘"。
-
-## 口径不变
-
-三个函数逐字搬移（含 docstring），`commit_manuscript` 的调用点一个字没改；
-`manuscriptform` 回引它们，所以 `manuscriptform._atomic_write` 这个既有名字
-（`proofregistry` 也在用）照旧可读。
+三个函数都只被 `manuscriptform.commit_manuscript` 调用。拆到本模块是为了让
+`manuscriptform` 只回答"一份手稿怎么命名、怎么渲染、怎么搬签、怎么落盘"，
+不再顺带增长体量。`manuscriptform` 按名字回引它们，所以
+`manuscriptform._atomic_write` 这个既有名字（`proofregistry` 也在用）照旧可读。
 """
+
 from __future__ import annotations
 
 import os
