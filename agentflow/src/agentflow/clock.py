@@ -3736,7 +3736,10 @@ def programs_owned(workspace: str | Path, *, task_id: str = "",
     unowned: list[Timer] = []
     others = 0
     others_running = 0
+    running = 0
     for timer in rows:
+        if timer.state == "pending":
+            running += 1
         if not str(timer.task_id or ""):
             unowned.append(timer)
         elif is_my_program(timer, task_id=task_id, role=role):
@@ -3748,7 +3751,7 @@ def programs_owned(workspace: str | Path, *, task_id: str = "",
     out.update({"checked": True, "mine": mine, "unowned": unowned,
                 "others": others, "others_running": others_running,
                 "count": len(rows),
-                "running": sum(1 for t in rows if t.state == "pending"),
+                "running": running,
                 "reason": ""})
     return out
 
@@ -4448,10 +4451,10 @@ def read_handoffs(workspace: str | Path, *, parent_task_id: str = "") -> dict[st
     if error:
         return {"checked": False, "rows": [], "count": 0, "reason": error,
                 "parent_task_id": str(parent_task_id or "")}
-    rows = [dict(r) for r in doc.get("rows") or () if isinstance(r, Mapping)]
-    if parent_task_id:
-        want = str(parent_task_id)
-        rows = [r for r in rows if str(r.get("parent_task_id") or "") == want]
+    rows = [dict(r) for r in doc.get("rows") or ()
+            if isinstance(r, Mapping)
+            and (not parent_task_id
+                 or str(r.get("parent_task_id") or "") == str(parent_task_id))]
     return {"checked": True, "rows": rows, "count": len(rows), "reason": "",
             "parent_task_id": str(parent_task_id or "")}
 
