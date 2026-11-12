@@ -6,15 +6,15 @@
 它是定义还是定理、它当前处于什么生命周期、它的证明在哪里、
 它背后有没有数值证据、有没有被作废、允许被用在哪一层。
 
-本项目此前把这件事散在两处：
-`schema.Document.validate()`（写入期硬拦）与 `tools/doc_tools.scan_claim`（构造期检查），
-而 H 侧又另抄了一份（`tools/review_tools.scan_document`）—— 三处判据必然漂移，
-漂移的形态是"G 认为合规、H 认为通过"，没有任何报错。
+同一件事散在多处时判据必然漂移：
+`schema.Document.validate()`（写入期硬拦）与 `tools/doc_tools.scan_claim`（构造期检查）
+各有一套，H 侧再抄一份（`tools/review_tools.scan_document`）—— 漂移的形态是
+"G 认为合规、H 认为通过"，没有任何报错。
 
 本模块把这张"字段 → 规格"的表做成一份声明表（:data:`CLAIM_FIELDS`），
 G 与 H 都调它。新增第二个实现 = 违反 FC-03。
 
-规格出处：`draft/17-正式文稿体例（参考投影度量论）.md` §8.3（第 1021–1052 行）
+规格出处：`draft/17-正式文稿体例（参考投影度量论）.md` §8.3
 给出"一条断言应有的 12 个字段"。本模块逐条落地它，并保留我们已有的
 `citations` / `evidence_kind` / `is_negative` / `negation_kind` / `disclaimer`
 （参考体例里没有这五个，但它们是我们三条 FC 的落地形态，不许为了对齐那张表而删）。
@@ -49,7 +49,7 @@ status        ∈ {证, 验, 待精化, 作废}             它当前处于什�
 ```
 
 `作废`（retracted）不是一种证据：它是"一条曾经存在的断言被撤销了"。
-本框架此前表达不了这件事（`schema.py` 里 0 处 `retracted`），
+默认模型若没有这一格，就表达不了这件事 ——
 这正是参考体例里 `❌作废` 是常规状态、而我们的模型缺的那一格。
 
 因此本模块显式允许两者自由组合（13 种组合都能写），只把已知的不一致组合
@@ -73,10 +73,9 @@ status        ∈ {证, 验, 待精化, 作废}             它当前处于什�
 必须一致，`tests/test_claimanatomy.py` 有一组双向对照用例钉住这一点。
 
 `status` / `kind` / `allowed_use` 这些受控词表的真身按 `DEVELOPMENT.md` §2.3
-已经是 `schema.py`（唯一来源）：2026-10-07 所有者裁定 `draft/68` 题 2 选 B，
-本次改动由所有者授权、主控代改，六张词表（`CLAIM_KINDS` / `CLAIM_STATUSES` /
+已经是 `schema.py`（唯一来源）：六张词表（`CLAIM_KINDS` / `CLAIM_STATUSES` /
 `ALLOWED_USE_KINDS` / `NUMERIC_EVIDENCE_KEYS` / `CLAIM_SOURCE_KINDS` /
-`CLAIM_CHECK_KINDS`）从本模块搬进 `schema.py`，本模块只 import。
+`CLAIM_CHECK_KINDS`）住在这里，本模块只 import。
 留在本模块的是它们的使用方式（`CLAIM_FIELDS` 与派生的别名/家族表）与判据本身 ——
 搬的是真身词表，不是判据表。两侧是同一个对象（`is`），不是两份同值拷贝。
 """
@@ -126,14 +125,13 @@ __all__ = [
 # ---------------------------------------------------------------- 受控词表（真身在 schema）
 #
 # 六张角色语义词表的真身现在在 `schema.py`（`DEVELOPMENT.md` §2.3 要的落点）。
-# 2026-10-07 所有者裁定 `draft/68` 题 2 选 B，本次改动由所有者授权、主控代改。
 # 这里只 import，不再留第二份字面量 —— 于是下面这些名字与本模块的
 # `CLAIM_FIELDS[*].domain` 指向的是同一个对象（`is`，不是相等）。
 #
 # 为什么可以是模块级 import 而不是 `_evidence_kinds()` 那种惰性转发：
 # `import agentflow.claimanatomy` 一定会先执行包 `__init__`，而它 import 了
 # `interactions`（`CONTRACT_VERSION`），后者又 import `schema` 与 `store` ——
-# 实测 `import agentflow.claimanatomy` 之后 `agentflow.schema` 与
+# `import agentflow.claimanatomy` 之后 `agentflow.schema` 与
 # `agentflow.store` 都已在 `sys.modules` 里。所以"惰性"在这一层省不下任何东西，
 # 反而需要一份同值兜底（那就是第二份字面量）。`schema` 不 import 本模块，无环。
 from .schema import (  # noqa: E402 - 见上：位置放在词表这一节，不搬到文件顶部
@@ -483,11 +481,11 @@ CLAIM_FIELDS: dict[str, FieldSpec] = {
     ),
     # ---------------- 断言台账的四列 + 两列出处（`draft/31` P3 / `draft/30` §T3-P3）
     #
-    # 这六列此前是"断言里多出来的键"：`undeclared_field` 把它们逐条报成 warning，
+    # 这六列若留在"断言里多出来的键"里：`undeclared_field` 把它们逐条报成 warning，
     # 而那条 warning 的原文恰恰是「未声明的字段无法被门读到」——
     # 也就是说台账里的「来源 / 我方核到什么程度 / 能否证伪」落了库、却没有任何判据。
-    # [踩过] 实测 2026-09-29（P3 首次派 H 审台账）：24 行台账被审出 240 条
-    # `undeclared_field`（10 个自有键 × 24 条），error=0 而 warning 全是这一件事。
+    # [踩过] 实测 2026-09-29（P3 首次派 H 审台账）：台账里的自有键被逐条报成
+    # `undeclared_field`，error=0 而 warning 全是这一件事。
     # 处置是把它们变成声明的字段：取值域受控、类型受判，G 与 H 读的是同一份判据；
     # 而"这份台账的列"从此也进了 `known_field_names()`，"多出来的键"重新变成异常信号。
     "source_kind": FieldSpec(
@@ -615,7 +613,7 @@ def optional_field_names() -> tuple[str, ...]:
 
 
 def new_field_names() -> tuple[str, ...]:
-    """由 `draft/17` §8.3 新增、而本框架此前没有的字段名。"""
+    """由 `draft/17` §8.3 新增、而本框架原先没有的字段名。"""
     return tuple(sorted(n for n, s in CLAIM_FIELDS.items() if s.from_reference and not s.required))
 
 
@@ -636,7 +634,7 @@ class ClaimIssue:
     会让审校变成另一种幻觉的来源）。
 
     `code` 受控（`DEVELOPMENT.md` §6 的禁止形态之一是"隐含的判据无法被审阅"）；
-    每条 code 还归入 `draft/39` §3.8 的 8 族之一（`CLAIM_FAMILY_BY_CODE`），
+    每条 code 还归入 8 族之一（`CLAIM_FAMILY_BY_CODE`），
     拒信按族号报错（见 `family_note`）：
 
     ================================  =======  ==========================================
@@ -652,7 +650,7 @@ class ClaimIssue:
     `lifecycle_incomplete`              4       `frozen`/`is_negative`/`作废` 的生命周期不闭合
     `missing_disclaimer`                5       `cross_check` 缺那句"不构成证明"声明
     `uncontrolled_disclaimer`           5       声明写了，但不是这一档的受控那一句
-                                                 （2026-10-13 加：自造近义声明此前一路过关）
+                                                 （自造近义声明会一路过关）
     `overclaim`                         6       证据档位 < proof 却用了"证明/定理/必然"这类词
     `incomplete_numeric_evidence`       7       `numeric_evidence` 四元组缺键
     `duplicate_claim_id`                8       同一稿件里代号重复
@@ -1081,8 +1079,8 @@ def _proof_review_disclaimer() -> str:
 def _wording_ceiling() -> tuple[str, ...]:
     """哪些证据档位允许用「定理 / 证明 / 必然」这类措辞（唯一实现在 `doc_tools`）。
 
-    业主 2026-10-12：「写论文那一档原先卡每个定理都要到 proof 水平，但没 Lean 显然做不到，
-    但也要能写」—— 关掉 Lean 时上限换成 `proof_review`（逐行审阅过的证明），
+    写论文那一档若卡每个定理都要到 proof 水平，没有 Lean 就做不到；关掉 Lean 时
+    上限换成 `proof_review`（逐行审阅过的证明），
     开着时仍然只有 `proof`。这里只做转发，不在判据层再写一份口径（FC-03）。
     """
     try:
@@ -1317,9 +1315,9 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
 
     # ---- 2b. 证据档位的两条硬约束（FC-22，本框架既有，参考体例里没有）
     #
-    # 它们与 `schema.Document.validate` 的两条逐字对应（`:1091-1095` 与
+    # 它们与 `schema.Document.validate` 的两条逐字对应（与
     # `scan_claim` 原有的过度声称检查）。放在这一处而不是各写一遍：
-    # 这两条正是 INVENTORY 4.5#10 记录的"G/H 两份判据漂移"的重灾区。
+    # 这两条正是"G/H 两份判据漂移"的重灾区。
     ek_norm = _value_of(norm, "evidence_kind")
     statement_text = claim_statement(norm)
     if ek_norm in _evidence_kinds():
@@ -1349,12 +1347,10 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                 )
             )
         elif ek_norm in ("cross_check", "proof_review"):
-            # 2026-10-13（无 Lean T2 的真机）：写了的声明也必须是受控那一句。
+            # 写了的声明也必须是受控那一句。
             #
-            # 现场：`projects/p6t2-research-20261012b` 的 doc 0002 claim-1 挂着
-            # 『文献交叉比对，不构成证明』—— 这句在全仓代码里不存在（受控的只有
-            # 「数值交叉验证，不构成证明」与「逐行审阅过的证明，未经机器检查」）。
-            # 此前这条判据只查"非空"，于是自造声明一路写库；而声明的用途正是"让读者
+            # 受控的只有「数值交叉验证，不构成证明」与「逐行审阅过的证明，未经机器检查」；
+            # 若判据只查"非空"，自造声明就会一路写库；而声明的用途正是"让读者
             # 一眼看出这一档凭什么"——换一句近义的话，等于把那句受控承诺换成了作者
             # 自己愿意承担的话（FC-03：同一个受控字符串不许各自手打）。
             got_text = str(_value_of(norm, "disclaimer") or "").strip()
@@ -1377,7 +1373,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                         claim_id=cid,
                     )
                 )
-        # 用词上限（业主 2026-10-12）：关掉 Lean 时 `proof_review` 也算到了顶
+        # 用词上限：关掉 Lean 时 `proof_review` 也算到了顶
         # —— 那时"正文里写定理"这件事必须有路可走，否则没有 Lean 的用户连论文都写不了。
         if ek_norm not in _wording_ceiling():
             hit = [m for m in _overclaim_markers() if m in statement_text]
@@ -1425,7 +1421,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
             )
         )
     if not is_neg and nk_norm is not None:
-        # 等级是 error 而不是 warning：`schema.Document.validate:1102-1106`
+        # 等级是 error 而不是 warning：`schema.Document.validate`
         # 对同一条硬拦（"会让'否定'的计数虚高"）。写入期拦、审校期只警告，
         # 就是两处判据两个结论 —— 那正是 FC-03 的形态。
         issues.append(
@@ -1446,7 +1442,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
     # ---- 2d. `citations` 的结构（FC-02，本框架既有）
     #
     # `citations` 在声明表里只写了"list[str]（非空）"，但它的两条真实约束
-    # 是"非空"与"不含空元素"，而且 `schema.py:1078-1086` 也这样硬拦。
+    # 是"非空"与"不含空元素"，而且 `schema.py` 也这样硬拦。
     # 判据必须逐字对上：写入期与审校期对同一个字符串给出不同结论，
     # 就是 FC-03 说的那种"没有任何报错的分裂"。
     cites_norm = _value_of(norm, "citations")
@@ -1480,8 +1476,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
                 )
             # ---- 2d-2 每条引用的形态：前缀必须是认得的真前缀、代号非空
             #
-            # 为什么这一条现在才有（2026-10-07 所有者裁定 `draft/68` 题 1 选 A，
-            # 本次改动由所有者授权、主控代改）：`stmt:<命题号>` 加进词表之后，
+            # 为什么这一条现在才有：`stmt:<命题号>` 加进词表之后，
             # 前缀这一格才有"真前缀 / 不是真前缀"的可判定口径 —— 否则
             # `zzz:0004` 这类谁也核不了的写法在这里一路放行，直到写入期
             # `doc_tools.check_citations` 才被拒（那时判据层的结论与写入期相反）。
