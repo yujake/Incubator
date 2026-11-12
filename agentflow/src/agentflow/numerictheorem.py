@@ -254,10 +254,8 @@ def citation_present(segment: Any, *, program: Any, evidence_id: Any) -> bool:
     if not text:
         return False
     want = NP.norm_rel(program)
-    if want:
-        variants = {want, want.replace("_", "\\_"), want.replace("_", r"\_")}
-        if any(v and v in text for v in variants):
-            return True
+    if want and (want in text or want.replace("_", "\\_") in text):
+        return True
     eid = str(evidence_id or "").strip()
     return bool(eid) and eid in text
 
