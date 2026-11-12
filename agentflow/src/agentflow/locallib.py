@@ -180,9 +180,9 @@ def ingest_directory(
 
     `dry_run=True` 时只算 hash 与清单，不写文件、不进事务。
 
-    ## 为什么 provenance 要三个参数（`draft/28` §191）
+    ## 为什么 provenance 要三个参数
 
-    原先这里把请求行写死成 `submitted_by="human"` + 正文里那句"人直接提供的一本本地藏书"。
+    这里曾把请求行写死成 `submitted_by="human"` + 正文里那句"人直接提供的一本本地藏书"。
     人调用它时那是事实；A 调用它时那就是假 provenance —— 而"这篇文献从哪来"
     正是这条链存在的理由。于是三个参数分开：
 
@@ -316,9 +316,8 @@ def ingest_directory(
 
 #: 检索用的停用词。必须滤掉：`the` / `and` 这类词每一页都有，把它们算进
 #: "命中多少主题词"等于给所有页加同一个常数，而目录页恰恰靠这种噪声词多命中一个
-#: 而胜出（实测 2026-09-28：题目 `the argument principle and the residue theorem`
-#: 下，`complex.pdf` 的目录页命中 6 个词、真正的正文页命中 5 个 ⇒ 目录页得分最高，
-#: 于是交给模型的材料是"Chapter 1. Basic calculus…"，模型只能如实回答"材料中没有"）。
+#: 而胜出（于是交给模型的材料可能是"Chapter 1. Basic calculus…"，模型只能如实回答
+#: "材料中没有"）。
 _STOPWORDS = frozenset({
     "the", "and", "for", "with", "from", "that", "this", "these", "those", "are", "was",
     "were", "into", "over", "under", "between", "about", "which", "where", "when", "then",
@@ -351,18 +350,15 @@ def _tokens(query: str) -> list[str]:
 
 
 #: 导航页（目录 / 索引 / 参考文献）的判据阈值：非空行里以数字结尾的比例。
-#: 目录与索引的行末多半是页码，散文页几乎没有这种行。实测（complex.pdf 第 2 页目录）
-#: 该比例远高于正文页；用 0.35 当阈值留了余量，并把"命中 Contents/Index"也算进去。
+#: 目录与索引的行末多半是页码，散文页几乎没有这种行。目录页该比例远高于正文页；
+#: 用 0.35 当阈值留了余量，并把"命中 Contents/Index"也算进去。
 _NAV_PENALTY = 0.15
 
 #: 页级打分的主键单位：命中多少个不同主题词，权重远大于稀有度之和。
-#: 为什么必须这样（实测，2026-09-28）：原来只用 `Σ 1/df(t)`，于是
+#: 为什么必须这样：原来只用 `Σ 1/df(t)`，于是
 #:   命中一个稀有词（df=4 ⇒ 0.25）的页，压过命中三个常见词（0.043+0.011+…）的页。
 #: 代价：题目 `cosets and quotient groups` 下选中的页只命中 `cosets` 一个词，
-#: 而书里明明有同时讲 quotient 与 groups 的页。
-#: 离线原型（`temp/_score_prototype.py`，8 题乘以 7 本书）：
-#:   现状 ⇒ 8 题里 1 题"最强来源命中不到 2 个主题词"；覆盖率优先 ⇒ 0 题；
-#:   另一条折中（Σweight 乘以 (1+命中数)）仍是 1 题（没用，故不采用）。
+#: 而书里明明有同时讲 quotient 与 groups 的页。覆盖率优先把"命中几个不同词"放成主键。
 #: 取值 1000 只是"远大于任何可能的 Σweight"（Σweight 不超过词数），读作主键。
 _COVERAGE_FIRST = 1000.0
 
@@ -386,7 +382,7 @@ def _window_on_tokens(page: str, toks: list[str], weight: dict[str, float],
                       max_chars: int) -> str:
     """在页内挑一个长度 <= `max_chars` 的窗口：让窗内的不同主题词尽量多、且尽量稀有。
 
-    为什么不是"从页首截 max_chars 个字符"（第一版就是这么写的，实测踩了）：
+    为什么不是"从页首截 max_chars 个字符"（从页首硬截会踩的坑）：
     主题词常常出现在页的中后段，从页首截会把命中句整段切掉 —— 于是交给模型的
     材料里根本没有答案，模型只能如实回答"材料中没有"，而这一跑看上去"跑通了"。
     本函数反过来：先定位命中点，再围着它取窗口，最后吸附到句子边界。
@@ -451,12 +447,12 @@ def _window_on_tokens(page: str, toks: list[str], weight: dict[str, float],
 def page_scores(pages: list[str], query: str) -> list[float]:
     """每一页与 `query` 的相关度（主键=命中多少个不同主题词，次键=稀有度加权和）。
 
-    ## 为什么把它单独抽出来（`draft/28` §187 真机读数逼出来的）
+    ## 为什么把它单独抽出来
 
     原先这套打分只活在 `excerpt_for` 内部，于是任何"要按相关度给「书」排序"的调用方
     都拿不到分数 —— 我第一版 `search.local` 就因此拿"摘录长度"当排序键，而
     长度在窗口取满时恒等于 `max_chars`：排序退化成按 `lit_id` 字母序，
-    真机读数里"martingale central limit theorem"的第三名是一篇讲
+    曾经"martingale central limit theorem"的第三名是一篇讲
     「伊朗城市」的论文（它命中的是 `central`）。判据只有一份实现才不会这样脱节。
 
     导航页（目录/索引）按住 `_NAV_PENALTY` 压分，理由见 `_looks_like_navigation`。
@@ -478,7 +474,7 @@ def page_scores(pages: list[str], query: str) -> list[float]:
         present = {t for t in weight if t in low}
         # 主键是覆盖率（这一页到底谈了几个主题词），稀有度只当次键。
         # 只用 `Σ 1/df(t)` 会让"命中一个稀有词"的页压过"命中三个常见词"的页 ——
-        # 实测代价见 `_COVERAGE_FIRST` 的说明（cosets 那道题就是这么选错的）。
+        # 代价见 `_COVERAGE_FIRST` 的说明（cosets 那道题就是这么选错的）。
         score = len(present) * _COVERAGE_FIRST + sum(weight[t] for t in present)
         if score > 0 and _looks_like_navigation(page):
             score *= _NAV_PENALTY
@@ -497,9 +493,9 @@ def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple
     把不连续的高分句子拼起来会让"逐字复制"变成"逐字拼接"—— 而框架的回验
     只认前者，结果是每一条都落 `not_found`，看上去像模型在编，其实是材料被拼过。
 
-    ## 排序口径（2026-09-28 真跑后改的；打分本体已抽到 `page_scores`）
+    ## 排序口径（打分本体已抽到 `page_scores`）
 
-    第一版按"整页里主题词的原始出现次数"排序，真跑实测：主题
+    原来按"整页里主题词的原始出现次数"排序，真跑时发现：主题
     `convex optimization duality and Lagrange multipliers` 选中的那一页讲的是
     "凸集的定义"（`convex` 满页都是），而 `duality` / `Lagrange` 一次都没进窗口 ——
     模型于是如实回答"材料中没有对偶的内容"。改成按不同主题词的稀有度加权和
@@ -774,7 +770,7 @@ def selftest() -> int:
             problems.append("来源请求不是一条 human 提交的记录（本地文件不许伪装成检索结果）")
 
         # 检索接缝：摘录必须是原文的连续子串（模型才能逐字抄），页码必须在范围内；
-        # 且稀有词要能推动选页与选窗口 —— 这一条是 2026-09-28 真跑踩出来的：
+        # 且稀有词要能推动选页与选窗口 —— 这一条是真跑踩出来的：
         # 只按出现次数排序时，满篇都是的 common 词把只在第 3 页出现的 rare 词压住了。
         pages = ["A group is a set with an operation.\nSecond line.", "Another page about rings."]
         page, exc = excerpt_for(pages, "group operation")
