@@ -120,13 +120,18 @@ def test_the_approval_claim_in_the_docstring_matches_the_declaration() -> None:
     判据形状（第一版写错过）：`assert 旧句子 not in text` 会红，因为改后的
     docstring 引用了那句错话来解释改了什么。所以要区分"作为结论出现"
     与"作为被引用的错话出现" —— 前者是裸行，后者前面有引号或"旧版"字样。
+
+    2026-11-12（E7 清扫之后）：那句口径说明被改写成"所以它需要审批，
+    `detect_verifier` 不需要"（旧写法 `但"都不需要审批"只对 … 成立` 已不在）。
+    判据的落点跟着换到达句话上，守的事一个字没变 —— 仍然是"check_formal 需要
+    审批、detect_verifier 不需要，这句区别必须在 docstring 里看得见"。
     """
     text = VERIFY_TOOLS_PY.read_text(encoding="utf-8")
     bad = [ln.strip() for ln in text.splitlines()
            if "两者都不需要审批" in ln and "旧版" not in ln and '"' not in ln]
     assert bad == [], f"这句错话仍作为结论出现：{bad}"
     plain = _undecorated(text)
-    assert '但"都不需要审批"只对 `detect_verifier` 成立' in plain, \
+    assert "`NEEDS_APPROVAL` 的判据，所以它需要审批，`detect_verifier` 不需要" in plain, \
         "改后的口径说明不见了（判据的落点变了，请更新本用例）"
     # 反向守卫：不许有人"为了这句话成真"去把 exec 的声明抹掉
     assert '"exec"' in text, "check_formal 的第二根轴声明不见了 —— 那是把两根轴压回一档"
