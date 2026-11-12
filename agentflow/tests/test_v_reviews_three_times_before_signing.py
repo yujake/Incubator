@@ -680,7 +680,11 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
             window = lines[max(0, i - 6): i + 7]
             if not any(note in w for note in LEGACY_RETIRED_NOTES for w in window):
                 unannotated.append(f"{rel}:{i + 1}:{line.strip()[:80]}")
-    assert seen >= 4, f"全 src/ 只扫到 {seen} 处 `{LEGACY_AXIS}` ⇒ 扫错了对象（假绿）"
+    # 下限跟着盘上的真实处数走（现在 3 处：verifications 两处 + 4786 那一处）。
+    # 这一格是**反真空**（扫错对象会假绿），不是"必须至少有几处"的规格；
+    # 因此只在"扫到的比盘上少"时才该红 —— 若将来又退役一处，把这里同步降下来，
+    # 不要为了让数字对上而往源码里塞这个已退役的词。
+    assert seen >= 3, f"全 src/ 只扫到 {seen} 处 `{LEGACY_AXIS}` ⇒ 扫错了对象（假绿）"
     assert unannotated == [], (
         f"`{LEGACY_AXIS}` 只许出现在「这一档已经取消」的语境里（业主 2026-11-02："
         "连历史兼容读也不留）；这几处没写明：\n" + "\n".join(unannotated))
