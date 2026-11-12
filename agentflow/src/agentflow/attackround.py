@@ -530,11 +530,11 @@ def _read_step_role(n: int, text: str, is_assumption: bool) -> tuple[str, str]:
     """
     if not is_assumption:
         return "推导步", ""
-    hit = [m for m in DERIVATION_MARKERS if m in text]
+    hit = next((m for m in DERIVATION_MARKERS if m in text), "")
     if not hit:
         return "前提步", ""
     return "推导步（被声明成前提）", (
-        f"第 {n} 步：这一步被声明成前提，但它是推导步（正文带「{hit[0]}」这类推导接词）"
+        f"第 {n} 步：这一步被声明成前提，但它是推导步（正文带「{hit}」这类推导接词）"
         "—— 把要推的一步声明成前提，等于这一步没做；要么把它写出来（给出推导或 `cites`），"
         "要么它本来就只是前提。"
     )
@@ -653,12 +653,12 @@ def pre_spend_gate(*, goal: str, testable: str = "", deps_refuted: Sequence[str]
     checks["deps_refuted"] = refuted
     if refuted:
         reasons.append(f"引到的命题里有已被作废/反驳的：{refuted} ⇒ 先把依赖换掉再花这一轮的钱")
-    tried = [str(x) for x in tried_strategies]
-    remaining = [s for s in STRATEGIES if s not in set(tried)]
+    tried = {str(x) for x in tried_strategies}
+    remaining = [s for s in STRATEGIES if s not in tried]
     checks["strategies_tried"] = {
-        "tried": sorted(set(tried)), "remaining": remaining, "exhausted": not remaining,
+        "tried": sorted(tried), "remaining": remaining, "exhausted": not remaining,
         # 代价读数：这句话是读数，不是否决 —— 见下面那段边界说明。
-        "note": (f"{len(STRATEGIES)} 招里试过 {len(set(tried))} 招、还剩 {len(remaining)} 招"
+        "note": (f"{len(STRATEGIES)} 招里试过 {len(tried)} 招、还剩 {len(remaining)} 招"
                  + ("（已穷尽：再试只能是同一批招）" if not remaining else "")),
     }
     # ---- 计数不否决花钱。
