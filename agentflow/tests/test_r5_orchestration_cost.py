@@ -1184,7 +1184,14 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_merge_note",                # I5 合并改写留痕的字符串键（`agent_b/core.py` 用 `row["_merge_note"]` 写；符号面 0 次）。引用处是 `tests/test_agent_b_gates.py` 的 docstring（并表那一笔把"改写清单"的读物从老表改成 `relations` 表时写的）
     "_washed_payload",            # S1g：`_outbound_hook` 返回里承载"洗过的那一份"的字符串键（不是符号；循环取完就 pop 掉，不并进结果）
     "_lease_expired",             # 行内键（`interactions.py` 用 r.get("_lease_expired") 读）
-    "_conflict_check",            # "没检查"相关字段名（同族叙述）
+    # —— 2026-11-12：_conflict_check 从本表退出（同一条等额纪律，登记过期）——
+    # （这里刻意不加反引号：本判据把反引号里的标识符当成一条引用。）
+    # 它原登记为「"没检查"相关字段名（同族叙述）」。本轮读数：唯一那条注释引用已经
+    # 写成 `_conflict_check.checked=False`（反引号里带 `.` 与 `=`），而本判据的
+    # `_TICKED_PRIVATE` 只认「反引号里恰好是一个标识符」⇒ 它不再是被 tick 的引用
+    # （仍按需出现在 `run_once.py` 与 `tests/test_agent_b_gates.py` 的代码里，不在
+    # 本表的登记面上）。这不是放宽判据：口径仍是"只有文本提及的 token 要逐条登记"，
+    # 变的是这个 token 不再有被 tick 的提及；留着它反而会被反向等额判成登记过期。
     "_tables_written_by_action",  # 已删函数的残骸讨论（`capabilities.py` 的记录）
     "_mark_dirty",                # 已删 helper 的残骸讨论（`draft/28` §176 删除；`table_tools.py` 的注释在解释它为什么没了）
     "_target_text",               # 负控叙述里被删掉的字段名
@@ -1315,6 +1322,14 @@ _REF_KNOWN_MENTION_TOKENS = (
     # 的指针；符号面今天都是 0 次，按本表纪律登记，不改引用处文本（改了就丢掉"改前叫什么"）。
     "_SIGN_CARRIER_RE",            # 已删的正则（改名前的签载体判定）：`vsigns.py` 原处的删除留痕在讲"那两个名字已删除、旧调用方读 `parse_manuscript_name` / …"，留痕按纪律必须点名被删的东西
     "_STATES",                     # 命名约定片段（不是标识符）：`vsigns.py` 的注释在说"受控词表普查按 `_STATES` 后缀扫，所以这里刻意不写这个后缀"——它是后缀举例，全仓没有叫 `_STATES` 的符号
+    # —— 2026-11-12（本轮清扫与优化之后的对齐）：四条新登记，逐条写在下面 ——
+    # 三条是「已退役的名字」、一条是「存活但真符号只数到定义那一次」。引用处都是
+    # 负控或「改前是什么形态」的史实叙述，不是"照着找能得到东西"的指针；按本表纪律
+    # 登记，不改引用处文本（改了就丢掉"改前叫什么"）。
+    "_pointer_path_reading",       # 已退役的路径读数（稿号化之后不再从交付里的号定落点）：`register_statement.py` 的注释在讲"这里不设分配点，① 指针支、② 逐份 inline"那条改前的路；`tests/test_b_ingests_a_new_form_manuscript.py` 的负控断言它不存在
+    "_inline_path_reading",        # 同一条注释里成对出现的另一支（逐份 inline 的旧读数）；同上，负控断言它不存在
+    "_proof_no_from_delivery",     # 已退役：交付里读落点号那条路（3f53557f 起 proof_no 在产出侧退役）：`tests/test_proof_no_comes_from_the_delivery.py` 与 `tests/test_b_ingests_a_new_form_manuscript.py` 的负控/史实都点名它
+    "_rewrite_is_the_same_proof",  # 存活方法（`register_statement.py` 的 def 一处；两处注释在讲"同一份稿改正文 ⇒ 改稿"，真符号只数到定义那一次）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
@@ -1346,8 +1361,10 @@ _REF_KNOWN_MISSING_TEST_FILES: tuple[tuple[str, str], ...] = (
      "历史真值：那一行逐字写着它已不存在（讲那份清单原来对这类引用完全没牙）"),
     ("tests/test_does_not_exist_zzz.py",
      "负控夹具里那个「点名的文件不存在」的假名字（判据要求它被报出来）"),
-    ("tests/sub/test_x.py",
-     "形态示例：`tools/run_each_test_file.py` 在讲「子目录形态会被逐文件门判绿」"),
+    # 2026-11-12：tests/sub/test_x.py 那一行从本表删除（等额纪律的"登记过期"一档）——
+    # `tools/run_each_test_file.py` 现在举的例子是 `tests/sub/` 这个目录（不再点名任何
+    # 具体测试文件），盘上一处 ticked 引用都没有了；留着它反而会被反向等额判成过期。
+
     # —— 2026-10-26（清悬空引用那一单）：四份已删判据的名字，引用都是"出处/实例"，不是笔误 ——
     ("tests/test_agent_e_formal_path.py",
      "已删的 E 正式化路径判据：`tools/run_each_test_file.py` 把它当「14 passed / 1 skipped」的真实实例"

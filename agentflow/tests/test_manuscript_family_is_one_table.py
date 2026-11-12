@@ -24,7 +24,9 @@ from agentflow import manuscriptfamily as MF
 
 #: 四族写路径的名字用例：`(族, 号, 证明号)`。写侧只有一种形式 ——
 #: 一个稿号 = 一份文件 = 一份证明，证明号不进名字，所以这里只有 1。
-#: 盘上老名字 `…-p<N>.md` 的读数由 `test_manuscript_name_carries_proof_no.py` 钉。
+#: 盘上老名字 `…-p<N>.md` 已不再被认成手稿（`-pN` 退出解析侧）：本文件下面
+#: `reports/f-proof-000000-p2.md` 那一格是 False 正控，B 拒写老名形态的读数见
+#: `test_b_may_edit_its_own_unsigned_proof.py` 的 h 行。
 NAME_CASES: tuple[tuple[str, str, int], ...] = (
     ("f-proof", "000000", 1),
     ("f-proof", "plan-0001", 1),
