@@ -141,7 +141,7 @@ def _usd(value: Any, default: str = "unknown") -> str:
 def _now_iso() -> str:
     """当前本地时间（ISO，秒）。渲染在页脚「最后更新」那一行 —— 它是投影的一部分，
     所以 `tests/test_webui.py::test_rendering_is_a_projection_not_a_cache` 会把这只钟
-    钉成常量再比字节：否则两次请求跨一秒就会红（2026-10-03 的全量里真红过一次）。"""
+    钉成常量再比字节：否则两次请求跨一秒就会红（全量里真红过一次）。"""
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
 
@@ -309,7 +309,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
     # ---- 每一趟 = 一条 `agent_run_start` 到它自己那条 `agent_run_end`（或文件尾）。
     #
     # 配对键是 `task_id`，不是"当前那趟"（`draft/158` §三）：会话文件是一个工作区一天
-    # 一份、所有子代理共写，改前每一条 start 覆盖 `cur`、每一条 end 关掉"当前那趟"，
+    # 一份、所有子代理共写；若每一条 start 覆盖 `cur`、每一条 end 关掉"当前那趟"，
     # 两端都不看任务号 ⇒ 81 那趟 63/71 行的终态为空或挂的是别人的 end。这一份与
     # `sessions.runs_in_session` 是两处同形实现（只改一处等于再造一次"两个读口各说一套"），
     # 所以三档归属与"收工行自报步数"必须逐句同形。
@@ -349,15 +349,15 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
             start_tid = _text(e.get("task_id"))
             cur = {
                 "sid": sid, "role": _text(e.get("role")), "task": _text(e.get("task")),
-                # 162 ④：绝对编号只从这一趟自己的开场事件来（读不到 ⇒ ""，不造假编号）。
+                # 绝对编号只从这一趟自己的开场事件来（读不到 ⇒ ""，不造假编号）。
                 # `runs_in_session` 里同一句。
                 "task_id": start_tid,
                 "task_id_source": "event" if start_tid else "missing",
                 "start_index": i, "start_ts": _text(e.get("ts")),
                 "steps": 0, "llm_calls": 0, "usd": None, "unknown_usd": 0,
-                # 162 ②：收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
+                # 收工那一刻才有的两格（没有收工行 ⇒ 保持 None，不是 0）
                 "spend_usd": None, "spend_unknown_usd_calls": None,
-                # 162 ③：归属计数从它自己的开始那一行起算（`events_span` 也把它算进跨度）
+                # 归属计数从它自己的开始那一行起算（`events_span` 也把它算进跨度）
                 "events_owned": 1,
                 "stop_reason": "", "final_chars": None, "summons": None,
                 "messages": None, "elapsed_sec": None, "last_shape": "",
@@ -373,7 +373,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                             "ts": _text(e.get("ts")), "role": _text(e.get("role"))})
             continue
         cur = hit[1]
-        # 162 ③：这条事件归到这一趟了 ⇒ 归属计数 +1（与 `events_span` 是两个问题：
+        # 这条事件归到这一趟了 ⇒ 归属计数 +1（与 `events_span` 是两个问题：
         # 一个是"谁写的"，一个是"占了几行下标"）。`runs_in_session` 里同一句。
         cur["events_owned"] += 1
         if kind == "agent_step":
@@ -407,7 +407,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                 calls = spend.get("calls")
                 if isinstance(calls, int) and not isinstance(calls, bool) and calls >= 0:
                     cur["llm_calls"] = calls
-                # 162 ②：收工行自报的花销 —— 单独成格，「不顶替」 `usd`（事件求和）。
+                # 收工行自报的花销 —— 单独成格，「不顶替」 `usd`（事件求和）。
                 # 逐格回退（`runs_in_session` 里那一段逐句同形）：缺哪一格就那一格留 None。
                 reported_usd = spend.get("usd")
                 if (isinstance(reported_usd, (int, float))
@@ -418,7 +418,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
                         and not isinstance(unknown_reported, bool) and unknown_reported >= 0):
                     cur["spend_unknown_usd_calls"] = unknown_reported
             open_runs.remove(hit)
-    # ---- 未收尾的循环（2026-11-01，82 的定格数据）：给每一趟补 `stale_loop`。
+    # ---- 未收尾的循环（82 的定格数据）：给每一趟补 `stale_loop`。
     # 判据与逐格读数见 :func:`mark_stale_loops`：有 start 没 end、且顶趟已收尾 ⇒ True。
     mark_stale_loops(runs)
     # ---- 把待答问题挂到「正在等它」的那一趟上
@@ -457,7 +457,7 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
         "orphan_to": ordered[-1]["ts"] if ordered else "",
         "last_kind": last_kind,
         "last_seq": last_seq,
-        # 162 ②：这一段会话里「事件流有、而没有任何一趟的自报账认得」的钱。
+        # 这一段会话里「事件流有、而没有任何一趟的自报账认得」的钱。
         # 算在 `sessions.unattributed_usd_of` 一处（两处各写一遍就是同一个数两份实现）。
         "unattributed_usd": SS.unattributed_usd_of(events, runs),
     }
@@ -485,15 +485,15 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     pending: list[dict[str, Any]] = []
     runs: list[dict[str, Any]] = []
     orphans: list[dict[str, Any]] = []
-    # ---- 会话文件只读一遍（2026-11-01，161 ②）。
+    # ---- 会话文件只读一遍。
     #
-    # 改前这一份快照把同一批会话文件读了 4 遍：`list_sessions` 一遍、待答那一路
+    # 这一份快照若把同一批会话文件读 4 遍（`list_sessions` 一遍、待答那一路
     # （`session_ids_with_questions` → `list_sessions` 一遍 + 自己 `read_session` 一遍，
-    # 有未答问题时 `pending_view` 再一遍）、下面主循环再一遍。真机 81 单个会话文件
-    # 26 MB / 约 436 ms ⇒ 一次 `/api/state` 光"读会话"就 1.6–2.0 s。
+    # 有未答问题时 `pending_view` 再一遍）、下面主循环再一遍），真机 81 单个会话文件
+    # 26 MB / 约 436 ms ⇒ 一次 `/api/state` 光"读会话"就要 1.6–2.0 s。
     # 现在 `list_sessions(read_cache=…)` 把那一遍读出来的 `{sid: (事件, 坏行)}` 交出来，
     # 待答与主循环都用它。这是"同一份盘上事实只解析一遍"，不是缓存：
-    # 每个请求仍然现读现算，读到的东西与改前逐字节相同。
+    # 每个请求仍然现读现算，读到的东西与单读几遍逐字节相同。
     read_cache: dict[str, tuple[list[dict], list[str]]] = {}
     cache_ok = True
     sessions_problem = ""
@@ -522,7 +522,7 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
         pending_all = []
         problems.append(f"待答清单没查成：{type(exc).__name__}: {exc}")
-    # `problems` 的次序是读数的一部分：改前"待答"那条在前、会话目录那条在后，
+    # `problems` 的次序是读数的一部分："待答"那条在前、会话目录那条在后，
     # 这里照旧（两处同时失败时正文才不会换序），所以上面那一条先记、这里再补。
     if sessions_problem:
         problems.append(sessions_problem)
@@ -546,11 +546,11 @@ def snapshot(root: str | Path) -> dict[str, Any]:
             "last_ts": _text(item.get("last_ts")),
             "last_kind": got["last_kind"] or "unknown",
             "last_seq": got["last_seq"],
-            # 先占位：这一格在下面从全局那份待答清单里数出来（`D20`，见循环之后那段）。
+            # 先占位：这一格在下面从全局那份待答清单里数出来（见循环之后那段）。
             "pending": 0,
             "runs": len(got["runs"]),
             "orphans": len(got["orphans"]),
-            # 162 ②：没人认领的那笔钱（见 `_scan` 返回处那一格）
+            # 没人认领的那笔钱（见 `_scan` 返回处那一格）
             "unattributed_usd": got["unattributed_usd"],
         })
         pending.extend(got["pending"])
@@ -559,7 +559,7 @@ def snapshot(root: str | Path) -> dict[str, Any]:
         problems.extend(f"{sid}: {p}" for p in bad)
     # ---- 会话概览那一格的「待答」：与面板那份清单（`pending_questions`）数同一份列表。
     #
-    # `D20`（2026-10-22）：这两处在改前是"各算一遍"—— 每一段会话把自己那一片的
+    # 这两处若"各算一遍"—— 每一段会话把自己那一片的
     # `len()` 写进 `SessionRow.pending`，全局清单再把各片拼起来。两处恰好相等，
     # 所以没有任何判据会红；而"概览说 3 条、面板列出 2 条"这种漂移一旦出现，
     # 它也只会在用户眼里出现，不在测试里出现。现在只有一个来源：
@@ -620,7 +620,7 @@ def _orphan_summary(orphans: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
     """读台账（`Store`）做第二个独立读数：读不到就报「没查成」，不折成 0。
 
-    ## `D21`（2026-10-22）：这里曾经把 `events.jsonl` 的总行数叫作「台账事件 N 条」
+    ## 这一格不再把 `events.jsonl` 的总行数叫作「台账事件 N 条」
 
     `Store._append_events` 每提交一次事务写 `rows + 1` 行：N 行事件，末尾再补一行
     `op="commit"` 的提交标记（重放靠它分批，见那边的 docstring）。所以"文件行数"
@@ -632,7 +632,7 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
 
     - `upserts`：写入笔数（= 非 commit 标记的行数）；
     - `commit_markers`：提交标记的行数；
-    - `events`：保留这个名字（`types.ts` 与既有读者都认它），口径从 D21 起
+    - `events`：保留这个名字（`types.ts` 与既有读者都认它），口径
       与 `upserts` 逐字相同 —— 它不再等于文件总行数。
 
     守恒：`upserts + commit_markers == events.jsonl 的总行数`（一行都不丢，也不重复
@@ -714,7 +714,7 @@ _TS_ALIASES: tuple[tuple[str, str, str], ...] = (
      "交付说明那一格专用的三态（`webui/state.py` 的 `_read_report`）"),
 )
 
-#: 本模块声明、但本批没有真读数可对账的接口（`{接口名: 理由}`）。
+#: 本模块声明、但没有真读数可对账的接口（`{接口名: 理由}`）。
 #: 判据 C 的两份名单都从模块自己的属性上读（`tests/test_webui_contracts.py`），
 #: 所以"这个接口为什么还没被核对"只写在这里一处。
 UNCHECKED_TYPES: dict[str, str] = {
@@ -757,7 +757,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("first_ts", "string"), ("last_ts", "string"), ("last_kind", "string"),
       ("last_seq", "number"), ("pending", "number"), ("runs", "number"),
       ("orphans", "number"),
-      # 162 ②：这一段会话里「事件流有、而没有任何一趟的自报账认得」的钱
+      # 这一段会话里「事件流有、而没有任何一趟的自报账认得」的钱
       # （= `llm_call.usd` 合计 − 各趟 `spend_usd` 合计）。会话文件读不出来时是 `null`。
       ("unattributed_usd", "number | null"))),
     ("PendingQuestion",
@@ -768,13 +768,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("RunRow",
      "snapshot() 的 `runs[]` —— 一趟运行（一条 agent_run_start 到它之后的 agent_run_end）",
      (("sid", "string"), ("role", "string"), ("task", "string"),
-      # 162 ④：这一趟的「绝对编号」（`agent_run_start.task_id`）。读不到写 `""`，
+      # 这一趟的「绝对编号」（`agent_run_start.task_id`）。读不到写 `""`，
       # 不造一个假编号；`task_id_source` 说这个编号从哪来（`event` / `missing`）。
       # 这一面刻意只有两个取值：编号只能来自它自己的开场事件，不从相邻事件借。
       ("task_id", "string"), ("task_id_source", "string"),
       ("start_index", "number"), ("start_ts", "string"), ("steps", "number"),
       ("llm_calls", "number"), ("usd", "number | null"), ("unknown_usd", "number"),
-      # 162 ②：收工那一行自己报的账（`agent_run_end.spend`）。「不顶替 `usd`」 ——
+      # 收工那一行自己报的账（`agent_run_end.spend`）。「不顶替 `usd`」 ——
       # `usd` 是事件求和，是同一趟的另一个来源（`readers.run_view` 的并排卡靠它）。
       # 没有收工行 ⇒ 两格都是 `null`（不是 0）。
       ("spend_usd", "number | null"), ("spend_unknown_usd_calls", "number | null"),
@@ -783,10 +783,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("elapsed_sec", "number | null"), ("last_shape", "string"),
       ("end_index", "number | null"), ("end_ts", "string"),
       ("waiting_on", "string[]"), ("waiting", "boolean"),
-      # 162 ③：`events_span` 是下标跨度（原 `events_in_run` 改名，数一个字节没动）；
+      # `events_span` 是下标跨度（原 `events_in_run` 改名，数一个字节没动）；
       # `events_owned` 是按三档归属「只数归到这一趟」的（含没有 `task_id` 的 `agent_step`）。
       ("events_span", "number"), ("events_owned", "number"),
-      # 2026-11-01（82 的定格数据）：「有 start 没 end」不等于「还在跑」。这一格只说
+      # 「有 start 没 end」不等于「还在跑」（82 的定格数据）。这一格只说
       # "这一段记录没收到 end、而这一场会话的顶趟已经收尾" ⇒ 它是被打断后剩下的循环
       # 记录，不是活着的循环。顶趟还在跑时它恒为 false（那时它真的还在飞）。
       ("stale_loop", "boolean"))),
@@ -833,7 +833,7 @@ def type_decls(
 
     形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
     各自的 `type_decls()` 拼成 `ui/src/types.ts`。于是加接口这件事永远发生在
-    自己那一行里 —— 本批之后生成器不必再被碰。
+    自己那一行里 —— 生成器不必再被碰。
 
     为什么它在这里、且带两个入参：渲染只有这一份，`readers.py` / `writes.py` 里的
     同名函数是薄转发（`state.type_decls(<自己的表>, ())`）—— 改排版一处三处一起变，
