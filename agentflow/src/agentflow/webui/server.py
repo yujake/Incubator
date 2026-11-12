@@ -195,7 +195,7 @@ _HASHED = re.compile(r"\.[A-Za-z0-9_-]{8,}\.")
 #: 停止理由 → 徽标词汇：三态加一档「停在等待用户」。
 #:
 #: 表体不在这里写：它与 `cli.EXIT_CODE_BY_STOP` 同源于
-#: :data:`agentflow.stop_reasons.STOP_REASONS`（Q23，2026-10-26）。改前这里手写一份，
+#: :data:`agentflow.stop_reasons.STOP_REASONS`。手写一份时，
 #: `final_refused` 只进了退出码表（5），界面于是显示一个空徽标；反过来这里多一格
 #: `max_steps`（旧读数）。现在这里投影全部条目，退出码表只投影 `live=True` 的那些，
 #: 两表多出来的那一格必须是 `live=False`，判据双向钉住。
@@ -480,7 +480,7 @@ class WebHandler(BaseHTTPRequestHandler):
     def _drain_unread_body(self) -> None:
         """把"这一支不打算读"的请求正文读掉，「再」回话（不读 ⇒ 客户端可能读到 RST）。
 
-        ## 为什么必须读（2026-11-10，WinError 10053 实测）
+        ## 为什么必须读（WinError 10053 实测）
 
         `do_POST` 在"路由没命中"那一支直接回 404，从不碰正文；而 `http.client`
         发请求时分两次 `send()` —— 先发头块、再发正文（`http/client.py::_send_output`
@@ -505,7 +505,7 @@ class WebHandler(BaseHTTPRequestHandler):
         - `_form()` 已经读过（或本函数补读过）⇒ `_form_read` 为真，直接返回 ——
           重复补读会去等一段已经不存在的正文，把回话拖到时限。
 
-        ## 已知限制（2026-11-10 业主裁定：登记，不补）
+        ## 已知限制（业主裁定：登记，不补）
 
         GET 带正文这一格不补读：HTTP 语义里 GET 正文没有定义，补它会把"未读正文"的
         责任从客户端搬到服务端，而现无客户端这么发。若将来有，按 chunked 那一套补。
@@ -569,7 +569,7 @@ class WebHandler(BaseHTTPRequestHandler):
     def _unauthorized(self) -> None:
         """口令不对/没给：`/api/*` 回 JSON，页面与静态资源回 HTML（E9）。
 
-        为什么按路径分（2026-11-03 修 E9）：`/api/*` 的其余错误早就一律 JSON
+        为什么按路径分：`/api/*` 的其余错误一律 JSON
         （Q1：未知端点 404 JSON），只有 401 这一格不分路径、一律吐 HTML ——
         前端 `api.ts` 的 `readJSON` 只能把一整段 `<!DOCTYPE html>…` 当理由塞进
         `ApiError.reason` 上屏。两档的形状：`/api/*` → `{"ok": false, "tri":
@@ -633,7 +633,7 @@ class WebHandler(BaseHTTPRequestHandler):
           第一个参数就是这个句柄）—— 于是那两条线加端点只改自己的模块，不必碰本文件。
         两边都没有 ⇒ 那是路由表与实现的漂移，回 500 并把名字说清（表驱动不该静默 404）。
 
-        ## 处理器抛了也必须有回话（2026-10-28 真机）
+        ## 处理器抛了也必须有回话（真机）
 
         真机：`serve web` 在 8788 上把 URL 打了出来，而 `/api/state` 的请求被直接关掉
         （客户端看到 `RemoteDisconnected: Remote end closed connection without response`，
@@ -644,7 +644,7 @@ class WebHandler(BaseHTTPRequestHandler):
         所以这里兜住：回 500 JSON（`{"ok": false, "kind": "handler_crashed", ...}`），
         并把 traceback 逐行写进 stderr（人能从日志里读到是哪一行）。
 
-        ## 例外：客户端先走了（E3，2026-11-03）
+        ## 例外：客户端先走了
 
         三种"对端没了"（:data:`PEER_GONE`）原样上抛，不记 500、不打 traceback：
         那不是处理器崩了，是浏览器导航时把连接掐掉了。这里原先自己列了一份两种的
@@ -770,7 +770,7 @@ class WebHandler(BaseHTTPRequestHandler):
 
     def handle_run_digest(self, params: Mapping[str, str],
                           query: Mapping[str, Sequence[str]]) -> None:
-        """`GET /api/run-digest`：从事件流现算的趟次档案（业主 2026-11-02 裁定「甲」）。
+        """`GET /api/run-digest`：从事件流现算的趟次档案（业主裁定「甲」）。
 
         与 `/api/run-index` 是两条独立的读数，各自读自己的来源：
 
@@ -890,8 +890,8 @@ class WebHandler(BaseHTTPRequestHandler):
         非 303 的正文由 `writes.answer()` 给（它自己转义过里面的用户文本），
         这里只把它嵌进错误页 —— 不重新渲染、也不二次转义。
 
-        `audit_enabled` 取 :func:`agentflow.webui.writes.writes_allowed` 这同一个事实
-        （E7，2026-11-03）：只读档不落 `web-actions.jsonl`（那是工作区根上的一个文件）。
+        `audit_enabled` 取 :func:`agentflow.webui.writes.writes_allowed` 这同一个事实：
+        只读档不落 `web-actions.jsonl`（那是工作区根上的一个文件）。
         `/answer` 本身不在这道闸门后面（它的闸门是 `userio.answer_question`），
         所以这里传的是"本服务开没开写面"，不是"这条端点准不准写"。
         """
@@ -931,7 +931,7 @@ class WebHandler(BaseHTTPRequestHandler):
 
 
 # ====================================================================== 服务
-#: 起服务那一层的受控拒绝（2026-10-28）：端口已被占、或绑完自证不通过。
+#: 起服务那一层的受控拒绝：端口已被占、或绑完自证不通过。
 #: 它继承 `RuntimeError` 而不是 `SystemExit`：`serve()` 是库函数，调用方（CLI / 判据）
 #: 各自决定怎么收场；`run()` 把它翻成非零退出并打一行人话。
 class WebStartupError(RuntimeError):
@@ -946,9 +946,9 @@ def port_owner(host: str, port: int, *, timeout: float = 2.0,
                token: str = "") -> dict:
     """这个端口上有没有"正在服务的东西"（三态：`free` / `busy` / `unknown`）。
 
-    ## 判据是"连得上"，不是"bind 得上"（2026-10-28 修）
+    ## 判据是"连得上"，不是"bind 得上"
 
-    改前只用裸 `bind` 探：Windows 上对一个还挂在 TIME_WAIT 的端口 bind 同样报
+    只用裸 `bind` 探会错：Windows 上对一个还挂在 TIME_WAIT 的端口 bind 同样报
     `WSAEADDRINUSE`，而那个端口上根本没有 listener —— 于是刚被杀掉的网页服务会让下一次
     "开网页"空等四分钟才报错（真机：`/api/state` 明确"积极拒绝"，而这里说"已经被占用"）。
     `SO_REUSEADDR` 不能用来区分这两件事：它连"另一个进程正在听"也一起放行（双绑静默成功）。
@@ -1025,7 +1025,7 @@ def verify_serving(url: str, *, root: str | Path, timeout: float = 5.0,
                    token: str = "") -> dict:
     """绑完自证：这一趟的端口真是自己在服务吗（三态，`ok` 才放行）。
 
-    `mismatch` = 200 但 root 不是这一趟 ⇒ 端口上答话的是别人（改前那种"绑上了却空转、
+    `mismatch` = 200 但 root 不是这一趟 ⇒ 端口上答话的是别人（"绑上了却空转、
     真正答话的是旧服务"的形态）；`unknown` = 连不上/不通 ⇒ 没查成，不许折成 ok。
 
     `token` 是这一趟的口令（缺省空 = 不要求口令，与"服务没开口令"同一档）。
@@ -1076,9 +1076,8 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     测试用 `port=0` 起随机端口：返回后读 `srv.server_address[1]` 拿真实端口，
     在 `finally` 里 `srv.shutdown()` + `srv.server_close()`。
 
-    `allow_writes` / `settings_write` 是本批新增的两个开关（裁定 C2 / E1）：
-    今天只解析并透传（挂到句柄上、可在 `handler.allow_writes` 读到），
-    写面要等 W3、设置写面要等 W4 —— 这一点在 `--help` 与模块 docstring 里都写明了。
+    `allow_writes` / `settings_write` 是两个真的改变行为的开关（裁定 C2 / E1）：
+    挂到句柄上（`handler.allow_writes`），由 `writes.authorize()` 当第 3 / 第 4 层判。
     `static_root` / `csrf_token` 也是可注入的：判据要在临时目录里造一份前端外壳，
     并按需钉住令牌（缺省 = 每进程一个随机值）。
 
@@ -1104,7 +1103,7 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     （`tests/test_webui_sse.py` 的 `_bound_server` 就是这么做的）。
     """
     # 这一代是不是本函数开的：开了才由它接钩子，也才由它在 `server_close()` 时撤掉。
-    # 2026-10-29：撤钩子这件事原先只有 `run()` 里做，于是直接调 `serve()` 的判据
+    # 撤钩子若只在 `run()` 里做，直接调 `serve()` 的判据
     # 会把 `sse.attach()` 装的四个钩子留在这个进程里 ⇒ 后面任何用例的
     # `sessions.append` 都走"发 SSE 事件"那条路，`observed_events()` 的计数不再增长，
     # `test_clock_governs_all_timed_work` 的 test_h / test_h3 / test_j 于是"单跑绿、
@@ -1122,7 +1121,7 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
         "allow_writes": bool(allow_writes), "settings_write": bool(settings_write),
         "routes_table": tuple(routes_table) if routes_table is not None else (),
     })
-    # ---- 起之前先问一句"这个端口上是不是已经有东西在听"（2026-10-28）。
+    # ---- 起之前先问一句"这个端口上是不是已经有东西在听"。
     # 为什么这一问不能省：Windows 的 SO_REUSEADDR 让第二个 bind 静默成功，于是下面那句
     # `ThreadingHTTPServer(...)` 不报错、URL 照打、请求却永远进不来。`port=0` 不探
     # （那是"让系统挑"，不构成撞车）。
@@ -1169,9 +1168,9 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
 
 #: 端口登记文件名（放在工作区根下，跟 `budget.json` 一类同层）。
 #:
-#: 为什么要有它：改前每次起服务都让系统挑一个随机端口（`--port 0`），于是"开网页"这件事
+#: 为什么要有它：每次起服务都让系统挑一个随机端口（`--port 0`）时，"开网页"这件事
 #: 每次都是四步 —— 挑端口、起进程、从输出里抓 URL、把 URL 抄给人；重启一次 URL 就变，
-#: 上一份链接立刻失效。业主 2026-10-28 原话是"为什么开网页还是那么累？优化"。
+#: 上一份链接立刻失效。业主说的是"为什么开网页还是那么累？优化"。
 #: 记下端口只是第一步，真正省事的是 `ensure_serving` 的复用：同一个工作区第二次起服务时
 #: 直接回"已经在服务它，地址就是这个"，不再起第二个进程。
 PORT_FILE_NAME = "webui.json"
@@ -1280,8 +1279,8 @@ def run(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--root", default="", help="工作区根（不给就用 DEFAULT_ROOT）")
     ap.add_argument("--host", default=DEFAULT_HOST, help=f"监听地址（默认 {DEFAULT_HOST}）")
     # 缺省 None = "调用方没给"（不是"给了 DEFAULT_PORT"）：`ensure_serving` 要靠这个
-    # 区分"按登记端口复用/新起"与"你指名要这个端口"。改前缺省写成 DEFAULT_PORT，
-    # 于是"没给"永远被读成"给了 8788" ⇒ 复用那一路永远走不到（2026-10-28 实测）。
+    # 区分"按登记端口复用/新起"与"你指名要这个端口"。缺省若写成 DEFAULT_PORT，
+    # "没给"就会被读成"给了 8788" ⇒ 复用那一路永远走不到（实测）。
     ap.add_argument("--port", type=int, default=None,
                     help=f"监听端口（缺省：用 webui.json 记下的那个，没有就用 "
                          f"{DEFAULT_PORT}；给 0 让系统挑，且不登记）")
@@ -1291,8 +1290,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                     help="只打印一行 URL 的 JSON（便于起后台任务后拿到确切 URL）")
     # 裁定 T1 的两个开关。它们真的改变行为（`writes.authorize()` 的第 3 / 第 4 层）：
     # 不给 `--allow-writes` ⇒ 写面只读，`/api/*` 的写端点一律 403，而且这一档
-    # 一个字节都不往工作区写（连审计台账也不写）。2026-11-03 修 E8：改前这两句写的是
-    # "本批还没有接线：现在给不给都一样"，与实现相反。
+    # 一个字节都不往工作区写（连审计台账也不写）。这两句曾写成"开关还没接线、
+    # 给不给都一样"，与实现相反 —— 那是被修掉的旧文案。
     ap.add_argument("--allow-writes", action="store_true",
                     help="允许写面（缺省只读：不给 ⇒ /api/ 下七条写端点 403，"
                          "且只读档不往工作区写任何文件）")
@@ -1301,7 +1300,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     args = ap.parse_args(list(argv) if argv is not None else None)
     root = Path(args.root).resolve() if args.root else Path(DEFAULT_ROOT).resolve()
     token = args.token or os.environ.get("AGENTFLOW_WEB_TOKEN", "")
-    # ---- 先算"复用还是新起"（2026-10-28，业主：为什么开网页还是那么累）。
+    # ---- 先算"复用还是新起"（业主：为什么开网页还是那么累）。
     # `--port 0` 是显式的"让系统挑"，不复用也不登记；其余情况交给
     # `ensure_serving` 一处判（三条判据写在它的 docstring 里）。
     explicit_port = args.port is not None
@@ -1330,7 +1329,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                     token=token, allow_writes=args.allow_writes,
                     settings_write=not args.no_settings_write)
     except WebStartupError as exc:
-        # 起不来就说出来（非零退出 + 一行人话）。改前这一支会把"绑上、打印 URL、空转"
+        # 起不来就说出来（非零退出 + 一行人话）。否则这一支会把"绑上、打印 URL、空转"
         # 当成成功：真机一次是端口上挂着两小时前的尸体，一次是 Windows 的双绑静默成功。
         sys.stderr.write(f"[webui] 起不来：{exc}\n")
         sys.stderr.flush()
@@ -1338,9 +1337,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     host, port = srv.server_address[0], srv.server_address[1]
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
-    # 端口只在自证通过之后才记下来（2026-10-28）：改前是在打印 URL 之前记的，于是
-    # 一次失败的启动（自证没过、退出 1）也会把那个端口写进 `webui.json`，下一次"开网页"
-    # 就照着一个死地址去绑。记录跟着"真的在服务"走。
+    # 端口只在自证通过之后才记下来：若在打印 URL 之前记，一次失败的启动（自证没过、
+    # 退出 1）也会把那个端口写进 `webui.json`，下一次"开网页"就照着一个死地址去绑。
+    # 记录跟着"真的在服务"走。
     def _remember_port() -> None:
         if explicit_port or not int(port):
             return
@@ -1359,8 +1358,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"工作区根：{root}", flush=True)
         print("Ctrl-C 停止。", flush=True)
         if args.allow_writes or args.no_settings_write:
-            # 2026-11-03（E8）：改前这句说"只做到解析与透传，现在不改变任何行为"——
-            # 与 `writes.authorize()` 的实现相反。现在照实说这一趟的写面是哪一档。
+            # 这句曾说"只做到解析与透传，现在不改变任何行为"—— 与
+            # `writes.authorize()` 的实现相反。现在照实说这一趟的写面是哪一档。
             print("（写面：" + ("已开 --allow-writes" if args.allow_writes
                               else "只读（没开 --allow-writes）：/api/ 的写端点一律 403，"
                                    "只读档不往工作区写任何文件")
@@ -1371,7 +1370,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             webbrowser.open(url)
         except Exception as exc:  # noqa: BLE001 - 打不开浏览器不该拖垮服务
             sys.stderr.write(f"[webui] 打不开浏览器：{type(exc).__name__}: {exc}\n")
-    # ---- 绑完自证（2026-10-28）：在服务的必须是"这一趟"，不是端口上原来那个。
+    # ---- 绑完自证：在服务的必须是"这一趟"，不是端口上原来那个。
     # 为什么不能省：Windows 的 SO_REUSEADDR 让第二个 bind 静默成功（这次的现场），于是
     # "URL 打出来了"与"请求真的进这个进程"是两件事。打法：起服务之后从这个进程往自己
     # 端口打一次 `/api/state`，`root` 对不上就不再假装在服务（`verify_serving` 三态）。
