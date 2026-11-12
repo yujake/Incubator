@@ -11,19 +11,18 @@
  *   此刻的编号）与 `data/tasks.json`（状态与板项）。只读：这个端点在路由表里只有
  *   一条 GET，面板上也就没有写操作。
  *
- * ## 为什么是树而不是"按层平铺"（业主 2026-10-24 的原话）
- * 「名册按树展开，不只是简单按层展开。」改前页面拿 `nodes` 的顺序 + `depth` 缩进
- * 直接平铺，画出来是 d1 / d2 d2 d2 / d3 ... / d4 ...：同一个名册名（F1 / B1 / V1）
- * 在两层各出现一次，而它们分属不同的父 —— 读的人看不出"谁是谁的子"。现在一条分支
+ * ## 为什么是树而不是"按层平铺"
+ * 按 `depth` 平铺画出来是 d1 / d2 d2 d2 / d3 ... / d4 ...：同一个名册名（F1 / B1 / V1）
+ * 在两层各出现一次，而它们分属不同的父 —— 读的人看不出"谁是谁的子"。所以一条分支
  * 从父开始，子缩进在父下面并用连接线连起来；同一父的多个子按落盘行序排（不是按
  * 名册名重排）。
  *
- * ## 一个节点是一个子代理，它下面挂"管过的任务号"（业主 2026-10-24）
- * 「一个子代理可接收多个任务」「一个子代理后面可展开它管的任务号」。所以树里两层：
+ * ## 一个节点是一个子代理，它下面挂"管过的任务号"
+ * 一个子代理可接收多个任务，所以树里两层：
  * 1. 代理这一层（父子关系，`children_of`）—— 一个节点是一个常驻子代理（G1 / D1 / F1…）；
  * 2. 任务这一层（`nodes[].tasks[]`）—— 点开节点行尾那个「活 N」才列，一行一件活
  *    （编号 + 起止时间 + 状态 + 一句话）。任务号不是树的节点：把它们摆进树里会造出
- *    d1 上多出来的根，那正是 D-66 那个故障的形态（`t-000039` / `t-000068` 被抬到 d1）。
+ *    d1 上多出来的根（`t-000039` / `t-000068` 曾被抬到 d1）。
  *
  * ## 折叠（默认展开到第 2 层）
  * 树大起来一次铺开会把页面淹掉。所以默认只展开到第 2 层：第 1、2 层的节点展开，
@@ -38,10 +37,9 @@
  * （`draft/75 §1.4`），而"监控面"本来就在「在飞」页。所以它落在这里，与那一页的
  * 「在飞」「停机」「用量」几张卡片并排 —— 同一份读数，一处实现。
  *
- * ## 已销号（退役）的节点怎么画（D-59，业主 2026-10-26 的两句口径）
- * 「对已销号的，名册 ui 显示默认折叠，只有用户再点击展开再显示」「已销号子代理为画删除线的
- * 格式并不再显示收件箱情况」。所以销号节点：
- *   - **仍然在树上、仍然有自己的那一行**（不能消失：消失就看不出"曾经有过、后来销了"）；
+ * ## 已销号（退役）的节点怎么画
+ * 销号节点：
+ *   - **仍然在树上、仍然有自己的那一行**（消失就看不出"曾经有过、后来销了"）；
  *   - 名字画删除线（`.roster-retired`，token 走 `app.css`，不写字面色值）；
  *   - 行尾挂一个「已销号」标识，并把 `retired_branch`（退役时读到的那一支）写进明细；
  *   - **不显示收件箱那三格**（未读 / 已读未 ack / 未消）：销号即退场，收件箱读数对它没有
@@ -75,13 +73,11 @@
  * 「在飞 N 个」，也不能并进「活跃（非静默）」。页面把它逐字写成「未收口的活 N 件」，
  * 与三态徽标分开摆。
  *
- * ## 取数不许挨着渲染（2026-10-24 真机故障之后的划线）
- * 改前父子关系与"缺号怎么办"都长在这个组件里：`data.roots.map(renderBranch)`，而
- * `renderBranch` 第一句就是 `ctx.childrenOf[tid] ?? []`。真机上跑着的是旧后端
- * （进程起在 D-51 落盘之前），那一份读数里没有 `children_of` ⇒ `undefined[tid]`
- * 当场抛 TypeError，正文那一段永远到不了 DOM，于是"抬头在、树一行都没有"。
- * 现在这些判断全在 `../rosterTree`（纯函数、全函数、可被判据直接跑），这一层只
- * 负责把算好的行摆成 DOM：它不再直取任何一格可能不存在的读数。
+ * ## 取数不许挨着渲染
+ * 父子关系与"缺号怎么办"这些判断全在 `../rosterTree`（纯函数、全函数、可被判据直接
+ * 跑）；这一层只把算好的行摆成 DOM，不直取任何一格可能不存在的读数。教训是真机上
+ * 跑着旧后端（读数里没有 `children_of`）时，`undefined[tid]` 当场抛 TypeError，
+ * 正文那一段永远到不了 DOM，于是"抬头在、树一行都没有"。
  */
 import type { ComponentChildren } from "preact";
 import { useState } from "preact/hooks";
@@ -108,8 +104,7 @@ const DEFAULT_OPEN_DEPTH = 2;
  */
 const openOverride: Map<string, boolean> = new Map();
 
-/** "这个子代理管过哪些活"那一栏的开合态（业主 2026-10-24：「一个子代理后面可展开它管
- * 的任务号」）。
+/** "这个子代理管过哪些活"那一栏的开合态（子代理后面可展开它管的任务号）。
  *
  * 与 `openOverride` 分开存：子树的展开（父子关系）与任务清单的展开是两件事，
  * 一个默认按层数算、一个默认折上；混在一个键里会让点开任务清单顺手把子树也翻了。
@@ -128,7 +123,7 @@ function isTasksOpen(node: RosterNode): boolean {
  * 层号读不出来（缺那一格）按第 1 层算：折叠守的是"别把页面淹掉"，它不该反过来
  * 把一整支藏起来 —— 看不见的节点等于没画。
  *
- * ## 已销号的节点一律先折上（D-59 业主口径：「已销号的，名册 ui 显示默认折叠」）
+ * ## 已销号的节点一律先折上
  * 这一条**覆盖**层数规则：销号节点的子树代表"它退场之前那一支"，不是"现在还在跑的东西"，
  * 默认铺开只会把当班的那几行挤下去。判定次序是刻意的：**先看用户点过的**
  * （`openOverride`），再看是不是已销号，最后才是层数 —— 反过来写会让"默认折叠"
@@ -150,8 +145,8 @@ function isOpen(node: RosterNode): boolean {
  *
  * 兜底只在旧后端 / 缺那一格时走到 —— 正常路径不该走到这里：根节点的 `name` 与 `role`
  * 由读侧补成主控（`readers.roster_face` 的 `_roster_root_identity`），所以根那一行
- * 在页面上就叫 `M`。兜底写 `M（顶层）`，不写"这一格读坏了"那种措辞
- * （业主 2026-10-26：「顶层能不能标 M 啊，unknown 很怪」）。
+ * 在页面上就叫 `M`。兜底写 `M（顶层）`：那里写 `unknown` 只会让读的人去查一个
+ * 并不存在的读数问题。
  */
 function nameText(node: RosterNode): string {
   return node.name === "" ? "M（顶层）" : node.name;
@@ -164,7 +159,7 @@ function nameText(node: RosterNode): string {
  * `kind` 里带 `roster-state-` 前缀，于是 `Badge` 的 class 是 `badge roster-state-flying`。
  *
  * `unknown` 那一档刻意也画出来（不是不画）：不画会让"没读到"与"静默"在页面上
- * 长得一模一样 —— 而这一批要修的正是这个折叠。
+ * 长得一模一样。
  *
  * 悬停给 `state_reason`（后端那句"为什么判成这一格"）：三档文字只说得清"是哪一档"，
  * 说不清"凭什么" —— 而待机与静默的差别恰恰在理由里（挂着哪一条计时器 / 在等哪个子）。
@@ -180,7 +175,7 @@ function stateBadge(node: RosterNode) {
   return <Badge kind={`roster-state-${state}`} text={STATE_TEXT[state]} title={stateTitle(node)} />;
 }
 
-/** 疑似停滞那一枚小标记（业主 2026-10-26 第二条裁定）：画在三态徽标旁边。
+/** 疑似停滞那一枚小标记：画在三态徽标旁边。
  *
  * 为什么是"旁边一枚"而不是改那一枚：三态那一格回答"它现在属于哪一档"，而停滞回答
  * "它最近一步是什么时候"——两个问题，两枚标记。把停滞折进三态（例如判成静默）会让
@@ -209,8 +204,8 @@ function childText(children: RosterChild[]): string {
 
 /** 未落名册的子（台账里有父、名册正文与对照表里都没有任何名册项接过的那几行）。
  *
- * 旧后端（进程起在这次改动之前）给的读数里没有这一格 ⇒ 按空数组处理：那时页面
- * 与改前逐字一样，不是"没有未落名册的子"这个结论。
+ * 后端读不到这一格时按空数组处理：那是"这一格不在读数里"，不是"没有未落名册的子"
+ * 这个结论。
  */
 function unrosteredOf(node: RosterNode): RosterUnrostered[] {
   return Array.isArray(node.unrostered_children) ? node.unrostered_children : [];
@@ -218,8 +213,8 @@ function unrosteredOf(node: RosterNode): RosterUnrostered[] {
 
 /** 「子 N」那一格：N = 台账里这个父的子数（不是名册项数）。
  *
- * 为什么改口径（2026-10-25 业主截图）：名册项只数"落了名册"的那些，名册漏写一个，
- * 父的子树读数就比台账低一个（sylow4：M 名下有 6 个，页面显示「子 4」）。所以：
+ * 为什么不数名册项：名册项只数"落了名册"的那些，名册漏写一个，父的子树读数就比台账
+ * 低一个（曾出现 M 名下有 6 个、页面显示「子 4」）。所以：
  * - N 取 `child_count`（台账数）；台账读不到（null）⇒ 退回名册项数并注明"台账未读到"；
  * - 名册项数比台账少时，同一格后面显式写「其中 M 个未落名册」——不许悄悄少算。
  */
@@ -231,7 +226,7 @@ function childCountText(node: RosterNode): string {
   return `子 ${total}${unknown}${tail}`;
 }
 
-/** 未落名册的子那一行：编号 + 角色 + 状态（业主：不许只躺在页面底部的 unplaced 里）。 */
+/** 未落名册的子那一行：编号 + 角色 + 状态（不许只躺在页面底部的 unplaced 里）。 */
 function UnrosteredLine(props: { children: RosterUnrostered[] }) {
   const rows = props.children;
   if (rows.length === 0) {
@@ -254,7 +249,7 @@ function UnrosteredLine(props: { children: RosterUnrostered[] }) {
 /** 收件箱那一格：读不到就是"未读到"（不是 0 条）。
  *
  * 三格分开（D13）：`unread` = 还没被读进任何一步（queued/claimed）；
- * `seen_not_acked` = 读了、还缺 ack。改前只有一个数，而它把 `seen` 也算成"积压"——
+ * `seen_not_acked` = 读了、还缺 ack。合成一个数会把 `seen` 也算成"积压"——
  * 那个数因此在正常流程下只涨不落（`close_item` 全仓只有一个调用者）。
  */
 function inboxBadge(inbox: RosterInbox) {
@@ -392,7 +387,7 @@ function NodeDetail(props: { node: RosterNode }) {
 
 /** 递归画树要用的那几样东西（一路传下去，免得每次取数都重算一遍）。 */
 interface TreeCtx {
-  /** 点开的那个节点的明细（一次只开一个，与改前一致）。 */
+  /** 点开的那个节点的明细（一次只开一个）。 */
   picked: string;
   onToggle: (node: RosterNode) => void;
   onToggleTasks: (node: RosterNode) => void;
@@ -402,12 +397,12 @@ interface TreeCtx {
 /** 一条分支：这个节点一行 + （展开了才画）它自己的子树。
  *
  * 缩进与连接线由嵌套的 `.roster-kids` 给（`border-left` 就是那条竖线），所以这里
- * 不再按 `depth` 现算左缩进 —— 那正是改前"按层平铺"的形态。层号仍然印在行首
+ * 不再按 `depth` 现算左缩进 —— 那写成"按层平铺"就看不出父子。层号仍然印在行首
  * （`dN` 是读数，不是缩进的来源）。
  *
  * 父子关系、"这一支缺号"这些判断全在 `rosterTree.buildRosterTree` 里做完了：
- * 这里只负责把一行树摆成 DOM。改前这里自己读 `children_of` 与 `nodes`，后端少给
- * 一格就整片不画 —— 那一次故障的教训是"取数不许挨着渲染"。
+ * 这里只负责把一行树摆成 DOM，不自己读 `children_of` 与 `nodes` —— 后端少给一格
+ * 就整片不画的教训，就是"取数不许挨着渲染"。
  */
 function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
   const node = row.node;
@@ -454,7 +449,7 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             </span>
             <Badge kind="badge-unknown" text={node.role === "" ? "unknown" : node.role} />
             <span class="mono">{node.task_id === "" ? "unknown" : node.task_id}</span>
-            {/* 2026-11-03（E10）：`registered === false` = 这棵树来自台账兜底档
+            {/* `registered === false` = 这棵树来自台账兜底档
                 （`out/roster/` 没读到、`data/tasks.json` 里有带父的代理行），
                 它不在任何名册项上。名册档的节点「不带」这一格（= 它在名册上），
                 所以判据写成 `=== false` 而不是 `!node.registered` —— 后者会把
@@ -469,7 +464,6 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             ) : null}
             <span class="readings">{childCountText(node)}</span>
             {/* 「▸ 活 N（飞 a · 待 b）」：N = 非静默（在飞 + 待机），不是 children.length
-                （业主 2026-10-26：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」）。
                 这一格数的是本节点的直接子；`unknown` 单独列，不混进活跃。
                 悬停把口径钉在字面上：静默的子不在 N 里，而未读到的子另列一格 ——
                 "名下 5 个、其中 4 个昨天就收工了"与"5 个都在干活"从此长得不一样。 */}
@@ -484,7 +478,7 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
             )}
             {/* 三态徽标：在飞 / 待机 / 静默 / 未读到（文案与颜色都跟着这一档走，悬停给原因）。 */}
             {stateBadge(node)}
-            {/* 疑似停滞（业主 2026-10-26 第二条）：紧挨着三态徽标的小标记 ——
+            {/* 疑似停滞：紧挨着三态徽标的小标记 ——
                 三态说"它属于哪一档"，这一枚说"它最近一步离现在多久"。只加不改：
                 三态那枚不动，所以"它仍然在跑"与"它已经很久没动静"同时看得见。 */}
             {stalledBadge(node)}
@@ -528,12 +522,11 @@ function renderBranch(row: TreeRow, ctx: TreeCtx): ComponentChildren {
   );
 }
 
-/** 一个子代理管过的那些活（业主 2026-10-24：「一个子代理后面可展开它管的任务号」）。
+/** 一个子代理管过的那些活。
  *
  * 一行一件活：编号 + 起止时间 + 状态 + 一句话（`taskLine` 在 `../rosterTree` 里，
  * 纯函数、可被判据直接跑）。这一栏与父子那一层是两个层次：先画代理树，再在每个
- * 代理下面挂它管过的任务号 —— 不把任务当节点摆进树里（那会造出 d1 上多出来的根，
- * 正是 D-66 那个故障的形态）。
+ * 代理下面挂它管过的任务号 —— 不把任务当节点摆进树里（那会造出 d1 上多出来的根）。
  */
 function TaskList(props: { tasks: RosterTask[] }) {
   return (
@@ -596,8 +589,8 @@ export function RosterPanel() {
  * 管取数与三态——把"画树"这一段单独摆开，读的人一眼看得出哪几行是树、哪几行是壳。
  *
  * 父子关系、"缺号"、"走不到"这些判断都不在这里：它们在 `rosterTree.buildRosterTree`
- * 里（纯函数、全函数）。改前这一段自己读 `data.roots` / `data.children_of`，后端
- * 少给一格就整片不画 —— 取数不许挨着渲染，这就是那一次故障的教训。
+ * 里（纯函数、全函数）。这一层不自己读 `data.roots` / `data.children_of` —— 后端
+ * 少给一格就整片不画的教训，就是"取数不许挨着渲染"。
  */
 function RosterBody(props: {
   data: RosterView;
