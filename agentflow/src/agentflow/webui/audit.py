@@ -118,16 +118,11 @@ def summarize(params: Mapping[str, Any] | None) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for raw_key, raw_value in (params or {}).items():
         key = str(raw_key)
-        low = key.lower()
-        if any(hint in low for hint in _SECRET_HINTS):
+        if any(hint in key.lower() for hint in _SECRET_HINTS):
             out[key] = REDACTED
             continue
-        if isinstance(raw_value, Mapping):
-            out[key] = summarize(raw_value)
-            continue
-        if isinstance(raw_value, (list, tuple)):
-            out[key] = [_one_of(v) for v in raw_value]
-            continue
+        # 形状归一只有一处：字典（递归回来）、列表、标量三种都在 `_one_of` 里，
+        # 这里不再各写一遍（两份递归在嵌套字典上是两次维护）。
         out[key] = _one_of(raw_value)
     return out
 
@@ -207,8 +202,9 @@ def read_actions_state(root: str | Path) -> dict[str, Any]:
     """
     path = actions_path(root)
     rows, problems, state = read_jsonl_state(path)
+    joined = "；".join(problems)
     if state == "unreadable":
         return {"tri": "unreadable", "rows": [], "problems": problems,
-                "reason": "；".join(problems) or "台账读不出来", "path": str(path)}
+                "reason": joined or "台账读不出来", "path": str(path)}
     return {"tri": "computed", "rows": rows, "problems": problems,
-            "reason": "" if not problems else "；".join(problems), "path": str(path)}
+            "reason": joined, "path": str(path)}
