@@ -1,28 +1,24 @@
 # -*- coding: utf-8 -*-
-"""手稿的族 / 号 / 后缀的唯一判定表（T2，设计 `_design_T123.md` 第 3 节）。
+"""手稿的族 / 号 / 后缀的唯一判定表。
 
 ## 为什么必须是一个新模块
 
-现状的族判定散落 11 处（`vsigns` 的名字解析与签载体两把尺、`depsection` 的前缀表、
-`manuscriptform` 的 `PREFIX`/`PLAN_PREFIX`、`exhaustionreport` 的两个前缀常量、
-`vreceipts.REGISTRATION_CARRIERS`、`closing` 的候选名、`agent_v/core` 的三处路径拼接 …），
-它们今天"恰好一致"只是因为字符串没被人改过。本模块把那一列事实收成一张表：
-族 → 前缀 → 允许目录 → 号形 → 证明号后缀 → 签要不要 → 允许格 / 派生列 /
-`evidence_kind` / `kind` 缺省 / 出处。其余模块将来只做派生（re-export），不再各写字面量。
+族判定原来散落在各模块（前缀表、名字解析、候选名拼接、路径拼法…），它们"恰好一致"
+只是因为字符串没被人改过。本模块把那一列事实收成一张表：族 → 前缀 → 允许目录 →
+号形 → 证明号后缀 → 签要不要 → 允许格 / 派生列 / `evidence_kind` / `kind` 缺省 /
+出处。其余模块只做派生（re-export），不再各写字面量。
 
-## 本批的边界
+## 边界
 
-纯函数、零 I/O、零既有模块依赖（只 import `re` / `dataclasses` / `types`）——
-它现在不被任何既有模块 import，也不 import 任何既有模块。判据在
-`tests/test_manuscript_family_is_one_table.py`；接线（11 处收编、两个新工具）不在本批，
-逐条 TODO 见该批报告与设计第 3.2 节。
+纯函数、零 I/O、零内部依赖（只 import 标准库）。判据在
+`tests/test_manuscript_family_is_one_table.py`。
 
 ## 五档读数
 
 `tier` 是权威的读法：`family`（规范名）/ `legacy`（历史名，可列出、可 preview、
 不可签、不可收录）/ `bad_name`（像手稿但号解析不出）/ `unrecognized`（不是手稿）。
 `-v2` 一类历史后缀只读成 `legacy`，`proof_no` 恒为 0：把它读成 `-p2` 等于把一份
-未审、且已知有缺陷的稿变成正式证明（设计 1.2 第 3 条）。
+未审、且已知有缺陷的稿变成正式证明。
 """
 from __future__ import annotations
 
@@ -48,7 +44,7 @@ TIER_BAD = "bad_name"
 TIER_UNRECOGNIZED = "unrecognized"
 TIERS: tuple[str, ...] = (TIER_FAMILY, TIER_LEGACY, TIER_BAD, TIER_UNRECOGNIZED)
 
-#: 收录格的闭集（设计 2.7.2）。族的 `allowed` 只能是它的子集。
+#: 收录格的闭集。族的 `allowed` 只能是它的子集。
 INGEST_CELLS: tuple[str, ...] = (
     "statement_full", "proof_text", "dependencies", "kind", "numeric_evidence")
 
@@ -86,12 +82,12 @@ class FamilySpec:
     line_range_origin: str
 
 
-#: 唯一判定表：四族 + `legacy` 读档（设计 3.1.1 / 3.1.2 两列合并成一处）。
+#: 唯一判定表：四族 + `legacy` 读档。
 #:
 #: 各列的含义：
 #: - `prefix` / `directories` / `id_pattern` / `proof_suffix`：身份（`reports/` 是唯一
 #:   允许目录；`f-proof` 的号可以是 `plan-<数字>`；`e-num` 不设 `-pN`）；
-#: - `needs_sign`：要不要 V 的签（`e-num` 走绿色通道，业主 2026-11-08）；
+#: - `needs_sign`：要不要 V 的签（`e-num` 走绿色通道）；
 #: - `allowed` / `default`：可请求格与缺省格（`statement_full` 只在 register 可写）；
 #: - `derived`：写口顺带写的列（五元位 / 证明号 / 正文 sha / 签后升档的 kind / proofs）；
 #: - `evidence_kind`：`b-proof` 为空串是有意的 —— 它按签现算，不是表里一个定值；
@@ -201,11 +197,10 @@ def _split_rel(rel: Any) -> tuple[str, str]:
 def _is_file_name(rel: Any) -> bool:
     """这个名字是不是「一份真文件的名字」：末段以 `.md` 结尾（大小写不敏感）。
 
-    只读字符串、不 stat 盘：盘上有没有这一份不是名字的问题。2026-11-10 起这一格是
-    「签的载体」判定的一部分（:func:`sign_carrier`）—— 载体是真文件的名字，
-    `reports/f-proof-000000`（缺扩展名）不是。此前这一格长在 `vsigns` 里，
-    `vsigns.sign_carrier_reading` 与 `_pending_carrier_path` 两条口都各自读它一次；
-    搬到这里之后两条口只读表这一处（判据不再有第二份 `.md` 判定）。
+    只读字符串、不 stat 盘：盘上有没有这一份不是名字的问题。这一格是「签的载体」
+    判定的一部分（:func:`sign_carrier`）—— 载体是真文件的名字，
+    `reports/f-proof-000000`（缺扩展名）不是。`vsigns` 的两条口（签载体 / pending
+    载体）都只读这里，判据没有第二份 `.md` 判定。
     """
     raw = str(rel or "").strip().replace("\\", "/")
     tail = raw.rsplit("/", 1)[-1] if raw else ""
@@ -281,12 +276,11 @@ def _canonical_of(name_family: str, manuscript_id: str, proof_no: int) -> str:
 
 
 def classify_manuscript(rel: Any) -> dict[str, Any]:
-    """工作区相对路径 ⇒ 五档读数（目录参与身份判定，设计 3.1.1 第 1 条）。
+    """工作区相对路径 ⇒ 五档读数（目录参与身份判定）。
 
-    为什么名字里带 `_manuscript` 而不叫 `classify`：`projects.classify` 先存在，判的是
-    项目目录状态（workspace / archive …），与"这份稿属于哪一族"是两个语义；两个模块各有一个
-    短名 `classify` 会让 R003（公开名在多模块里有独立实现）报两条告警，而它们本来就不该合并。
-    带后缀之后短名不再撞车，读者也不会把"项目目录状态"与"手稿族"读成同一件事。
+    为什么不叫 `classify`：`projects.classify` 先存在，判的是项目目录状态
+    （workspace / archive …），与"这份稿属于哪一族"是两个语义；短名撞车还会让 R003
+    （公开名在多模块里有独立实现）报两条告警，而它们本来就不该合并。
 
     返回键：`tier` / `family` / `name_family` / `id` / `proof_no` / `code` / `why` /
     `checked` / `name` / `directory` / `canonical`。
@@ -299,7 +293,7 @@ def classify_manuscript(rel: Any) -> dict[str, Any]:
 
     为什么 `legacy` 的 `proof_no` 恒为 0：所有"按号认签 / 按号寻址"的读侧遇到 0 都会
     自然拒（`as_proof_no` 那一族的既有口径），不需要每一处再加分支；而且 `-v2` 与 `-p2`
-    本来就不是同一个东西（设计 1.2 第 3 条）。
+    本来就不是同一个东西。
 
     `family` 在 `legacy` 档返回 `legacy`（不是族，是读档）；名字本来属于哪一族放在
     `name_family` 里 —— 拼规范名、看"它本来是 b-稿"时读后者。
@@ -380,15 +374,13 @@ def classify_name(name: Any) -> dict[str, Any]:
 def parse(rel: Any) -> dict[str, Any]:
     """兼容 `vsigns.parse_manuscript_name` 的返回，外加 `tier` / `canonical`。
 
-    与旧读法的差异（设计 3.2 第 4 处，结论会翻）：
-    - `-v2`：旧 `checked=False, code=bad_manuscript_name`；新 `checked=True,
-      tier=legacy, proof_no=0, code=legacy_manuscript_name`；
-    - `e-num`：旧 `family=False`；新 `family="e-num"`（进族）；
-    - `notes/b-proof-*`：旧按名字认成正式族；新 `tier=legacy`（目录不对）。
+    与旧读法不同的三处：
+    - `-v2` ⇒ `checked=True, tier=legacy, proof_no=0`；
+    - `e-num` ⇒ 进族（`family="e-num"`）；
+    - `notes/b-proof-*` ⇒ `tier=legacy`（目录不对）。
 
-    `family` 这一格给的是族名（`e-num` 时逐字等于 `"e-num"`，设计 3.6 d 的读数）；
-    旧调用方要的布尔读法在 `is_family` 里（有名字形状即为真，含 `bad_name` —— 与旧
-    `parse_manuscript_name` 对 `f-proof-abc` 的 `family=True, checked=False` 一致）。
+    `family` 这一格给的是族名（`e-num` 时逐字等于 `"e-num"`）；"名字有族形"这个
+    布尔读法在 `is_family` 里（含 `bad_name`）。
     """
     reading = classify_manuscript(rel)
     tier = str(reading["tier"])
@@ -407,22 +399,16 @@ def parse(rel: Any) -> dict[str, Any]:
 
 
 def sign_carrier(rel: Any) -> dict[str, Any]:
-    """这一份稿是不是「签的载体」（设计 3.2 第 3 处；替换 vsigns 的两条正则）。
+    """这一份稿是不是「签的载体」。
 
-    判据只有一条：`tier=family` 且族要签（`f-proof` / `b-proof` / `e-proof`）且
-    目录是 `reports/`。于是三处旧读法的结论会翻：
+    判据：`tier=family`、族要签（`f-proof` / `b-proof` / `e-proof`）、目录是
+    `reports/`，且它是一份真文件的名字（末段 `.md`，见 :func:`_is_file_name`）——
+    `reports/f-proof-000000`（缺扩展名）不是载体。三类读法因此与旧的两条正则不同：
 
-    - `-v2` / `notes/b-proof-*`：旧 `ok=True`（只调 `sign_carrier_reading` 的读侧会
-      把历史档当合法载体）；新 `ok=False`、码 `legacy_manuscript_name`；
-    - `e-num`：旧 `ok=True`（回落到"不是计划稿就能签"）；新 `ok=False`
-      （绿色通道不签，业主 2026-11-08）；
+    - `-v2` / `notes/b-proof-*` ⇒ `ok=False`、码 `legacy_manuscript_name`；
+    - `e-num` ⇒ `ok=False`（绿色通道不签）；
     - `f-proof-plan-*`：老盘上的只读兼容名，与数字名同等（`ok=True`，可签）——
-      2026-11-10 业主裁定之后不再新写这种名字；`CODE_PLAN_NOT_SIGN` 只留给老读数解释。
-
-    外加一格（2026-11-10 晚）：`ok=True` 还要求它是一份真文件的名字（末段 `.md`，
-    见 :func:`_is_file_name`）—— `reports/f-proof-000000`（缺扩展名）不是载体。
-    这一格原先在 `vsigns.sign_carrier_reading` 里，搬进来之后 `vsigns` 的两条口
-    （签载体 / pending 载体）都只读这里，不再各写一份 `.md` 判定。
+      不再新写这种名字，`CODE_PLAN_NOT_SIGN` 只留给老读数解释。
 
     返回 `{ok, code, why, name, family, tier}`；`ok=False` 不许折成"可以签"。
     """
@@ -463,9 +449,8 @@ def is_sign_carrier(rel: Any) -> bool:
     """`sign_carrier(rel)["ok"]` 的布尔读法（判据只走那一个函数）。
 
     这是载体判定（族 + 目录 + 真文件名），不是「名字属于签的族」这种形状判定：
-    `reports/f-proof-000000`（缺 `.md`）在 :func:`classify_manuscript` 里是 `tier=family`，
-    但它不是载体 —— 2026-11-10 晚之前这个布尔只读名字表，于是它在这里是 True、而
-    `vsigns.is_sign_carrier` 是 False；现在两条口同源到 :func:`sign_carrier`，缺 `.md`
+    `reports/f-proof-000000`（缺 `.md`）在 :func:`classify_manuscript` 里是
+    `tier=family`，但它不是载体 —— `vsigns.is_sign_carrier` 与这里同源，缺 `.md`
     在两边都是 False。
     """
     return bool(sign_carrier(rel).get("ok"))
@@ -475,10 +460,9 @@ def relpath(family: Any, id: str = "", proof_no: int = 1, *,
             strict: bool = True) -> str:
     """族 + 号 + 证明号 ⇒ 唯一拼名（`reports/<前缀><号>[-p<N>].md`）。
 
-    为什么要集中拼名：手写拼法散在 `closing` / `agent_v/core` / `manuscriptform` 三处，
-    拼错时的症状是"文件不在盘上"，而每一处都会以"查不到"的形式静默通过。这里对
-    号形与证明号做同一套校验，拼出来的名字一定能被 `parse` 读回原值（往返判据
-    `tests/test_manuscript_family_is_one_table.py`）。
+    为什么要集中拼名：手写拼法散在各处，拼错时的症状是"文件不在盘上"，而每一处都会以
+    "查不到"的形式静默通过。这里对号形与证明号做同一套校验，拼出来的名字一定能被
+    `parse` 读回原值（往返判据 `tests/test_manuscript_family_is_one_table.py`）。
 
     `f-proof` 的号可以是 `plan-<数字>`；`e-num` 不设 `-pN`（proof_no 只能是 1）。
     未知族 / 号形不对 / proof_no 不是 >=1 的整数 ⇒ `ValueError`（不猜）。
