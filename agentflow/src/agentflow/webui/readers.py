@@ -3857,7 +3857,7 @@ CHAT_INHERIT_KINDS = ("agent_run_end", "agent_message", "user_question")
 def _single_run_start_ids(events: Sequence[Mapping[str, Any]]) -> dict[str, str]:
     """每一岗在这次会话里"唯一那一趟"的绝对编号；拿不准的岗不进结果。
 
-    业主 2026-10-21（"全面接入"第二步的兼容半）：老事件（写侧补 `task_id` 之前落盘的
+    老事件（写侧补 `task_id` 之前落盘的
     `agent_run_end`）盘上没有编号，于是"某某交付"那条线只能一直标 `missing`。这一条
     函数算的是"能回填到什么程度"：
 
@@ -3924,14 +3924,13 @@ def _chat_role(event: Mapping[str, Any]) -> tuple[str, str]:
 def _chat_message_who(event: Mapping[str, Any], conductor: str) -> tuple[str, str]:
     """一条 `agent_message` 该进哪一档，以及它那一行的标题。返回 `(who, 标题)`。
 
-    判据是收信人，不是发信人（D-62，业主 2026-10-24：「看M对话public形式为什么也会直接
+    判据是收信人，不是发信人（业主：「看M对话public形式为什么也会直接
     让用户可见」）：
 
     - `to == ALL`（或 `channel == "public"`）⇒ `team`：公共频道的语义是"发给树上的人"
       （`agent_loop.public_visibility` 逐条写了可见面：框架通报全树可见，代理自己发的只对
-      直接父/直接子可见），它不是"对用户说的话"。发信人是主控也一样 —— 改前那一版只按
-      "发信人是不是 M"分档，于是主控的派活通告被印成主控对用户的回答，`channel` 只被拼进
-      标题当装饰；
+      直接父/直接子可见），它不是"对用户说的话"。发信人是主控也一样 —— 只按"发信人是
+      不是 M"分档，主控的派活通告就会被印成主控对用户的回答，`channel` 只被拼进标题当装饰；
     - 主控发给用户的私聊（`to` 是 `userio.USER` 或另一个写法 `user`）⇒ `conductor`：
       这才是"用户 ↔ 主控"那一档；
     - 其余（别的角色发给主控的私聊、主控发给下级的私聊、别的角色之间的私聊）⇒ `team`：
@@ -3959,7 +3958,7 @@ def _chat_message_who(event: Mapping[str, Any], conductor: str) -> tuple[str, st
 def _chat_delivery_who(role: str, conductor: str) -> tuple[str, str]:
     """一条 `agent_run_end` 的收工交付该进哪一档，以及标题。
 
-    主控这一趟的 `final` 就是"主控交给用户的那段话"（业主 2026-10-13 的对话框要的正是
+    主控这一趟的 `final` 就是"主控交给用户的那段话"（业主的对话框要的正是
     它），所以它留在 `conductor`；别的角色的交付进 `team`。这一档按 `role` 取，不看有没有
     `to` / `channel`：收工事件本来就没有收件人那一栏。
     """
@@ -3985,9 +3984,9 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     | `agent_run_end`（role=M，有 final） | `conductor` | 主控这一趟的交付 |
     | `agent_run_end`（别的角色，有 final） | `team` | 那个角色的交付 |
 
-    分档判据是"这句话说给谁听"，不是"发信人是不是主控"（D-62）：公共频道的广播
-    （`to=ALL`）发给的是树上的人，它不进 `conductor` 那一档 —— 改前那一版只按发信人
-    分档，把主控的派活通告印成了"主控对你说的话"。逐档判据见 :func:`_chat_message_who`
+    分档判据是"这句话说给谁听"，不是"发信人是不是主控"：公共频道的广播
+    （`to=ALL`）发给的是树上的人，它不进 `conductor` 那一档 —— 只按发信人分档会把
+    主控的派活通告印成"主控对你说的话"。逐档判据见 :func:`_chat_message_who`
     与 :func:`_chat_delivery_who`。
 
     刻意不进对话的两类：`agent_note`（协议层的步级留痕，如"system 重发：第 1 步"）与
@@ -4040,7 +4039,7 @@ def _chat_line(index: int, event: Mapping[str, Any]) -> dict[str, Any] | None:
     else:
         return None
     body, clipped = _chat_clip(text)
-    # 业主 2026-10-21（"全面接入"）：每一条对话线都要能回答"是哪个绝对编号的哪个角色在说话"。
+    # 每一条对话线都要能回答"是哪个绝对编号的哪个角色在说话"。
     # 绝对编号从事件里取（`task_id`；`agent_message` 那一路写的是 `from_task_id`），
     # 两个都没有就留空串 —— 空串在页面上显示成"（未记录编号）"，比编一个假编号好。
     #
@@ -4074,7 +4073,7 @@ def chat_face(root: str | Path, sid: str = "", *,
               lines_max: int = CHAT_LINES_MAX) -> dict[str, Any]:
     """`GET /api/chat` 的读模型：一段会话里的"用户 ↔ 主控"对话（逐条、有界）。
 
-    业主 2026-10-13：「用户和主控的对话不应该只做成只能一句话启动任务，应该是能对话的」。
+    业主：「用户和主控的对话不应该只做成只能一句话启动任务，应该是能对话的」。
     这一面就是那句话的读侧 —— 把一段会话里属于对话的事件投影成逐条线，
     与「一趟详情」的逐条事件分开：后者是"盘上发生了什么"（含工具与模型调用），
     这一面是"谁对谁说了什么"。
@@ -4088,7 +4087,7 @@ def chat_face(root: str | Path, sid: str = "", *,
     - 有坏行 ⇒ `unreadable` + 坏行数，读得出来的那些线照常给（与 `run_events` 同一条）；
     - 线是有界的：只给最近 `lines_max` 条，`total`/`shown` 照实报，截断逐条标明。
 
-    编号那一格（业主 2026-10-21「全面接入」第二步的兼容半）：每条线都有 `task_id` 与
+    编号那一格（兼容老事件的那一半）：每条线都有 `task_id` 与
     `task_id_source`，来源分三档 —— `event`（事件里真有）、`inherited`（老事件没记，但
     同一岗在这段会话里唯一那一趟的 `agent_run_start` 有编号 ⇒ 用它，判据在
     :func:`_single_run_start_ids`）、`missing`（拿不准或确实没记）。回填只在唯一时发生：
@@ -4101,7 +4100,7 @@ def chat_face(root: str | Path, sid: str = "", *,
     发信人的角色。为什么不交给前端去解析标题里的 `E → D` —— 标题是给人看的一句话，
     不是数据（改一次文案就会把它悄悄拆掉，而没有任何判据会红）。
 
-    分档那一格（D-62，业主 2026-10-24）：`who` 判的是"这句话说给谁听"，不是"发信人是
+    分档那一格：`who` 判的是"这句话说给谁听"，不是"发信人是
     谁"。`conductor` 只收说给用户听的那几条（主控私聊回答 / `ask` 反问 / 收工交付）；
     主控的公共频道广播（`to=ALL`）归 `team` —— 它发给的是树上的人，把它摆在
     "主控对你说的话"那一档等于对读者撒谎。`team` 那一档页面默认折叠。
