@@ -253,7 +253,7 @@ class GateContext:
     ==========================  ==============================================
     `doc`                        门判 `unknown`（没有可审的对象）
     `dependencies=None`          不判"依赖闭不闭合"；它只作 `_iter_doc_files` 的路径来源
-                                 （2026-10-27 更正：改前这张表写着"依赖相关门判 unknown"，
+                                 （这张表若写着"依赖相关门判 unknown"，
                                  而 15 道门里没有任何一道读它判闭合 —— 那句承诺是空话。
                                  依赖闭合的判据不在本模块，见 `schema.Dependency` 与 `verify`）
     `files`                      自含性/虚证/可复跑门判 `unknown`
@@ -453,12 +453,12 @@ def _looks_like_path(text: str) -> bool:
 
     ## `D-7` 第 (1) 步：先切尾部 `:行号`，再判形态
 
-    本函数此前直接拿原串判形态，于是框架自己规定的证明位置形态恰好
+    若直接拿原串判形态，框架自己规定的证明位置形态会恰好
     落在候选之外：`claimanatomy.py` 把 `proof_location` 的形态定成
     "`file:line` 或 `claim_id`"，而 `"PROOF-DOES-NOT-EXIST.lean:1"` 的尾部是
     `:1` 而不是 `.lean` ⇒ 形态正则（要求 `.ext` 结尾）不命中，串上也没有
     `[/\\]` ⇒ 这个候选被静默丢掉。后果是 G1 数出"检查的路径数 = 0"、
-    报 `pass` —— 一道"一条都没看见"的门用零发现伪装成通过（`D-7` 的实测）。
+    报 `pass` —— 一道"一条都没看见"的门用零发现伪装成通过。
 
     切法复用 :func:`_strip_line_suffix`（同一处切法；本仓库已经有过
     "两处 `file:line` 切法不一致"的教训，不许再出现第三套）。
@@ -570,16 +570,14 @@ def gate_g1(ctx: GateContext) -> GateResult:
     与 `dependencies[*]` 的自由文本标签。我们没有"包"这个概念，
     这里把"包内"读成"工作区内"。
 
-    ## `D-7`：criterion 的第二句以前没有实现
+    ## criterion 的第二句必须有实现
 
     这道门的 `criterion` 逐字是两句："正文不得引用工作区外的路径；
-    每个被引材料必须在工作区内存在"。第二句在 2026-09-27 之前的实现里
-    一个字都没有（AST 实测：`gate_g1` 的函数体里没有任何一处
-    对解析出来的目标调用 `Path.exists` —— 旧实现只做了一次 `relative_to`
-    判内外），于是"指向一个盘上不存在的材料"与"指向一个真实文件"
-    在 `counts` / `verdict` 上完全同形。
+    每个被引材料必须在工作区内存在"。若只做一次 `relative_to`
+    判内外、不对解析出来的目标调用 `Path.exists`，则"指向一个盘上不存在的材料"
+    与"指向一个真实文件"在 `counts` / `verdict` 上完全同形。
 
-    这三步（`D-7` 的修法）是配套的，缺一步这条门就还是空的：
+    这三步是配套的，缺一步这条门就还是空的：
 
     1. 候选筛选先切尾部 `:行号` 再判形态（见 :func:`_looks_like_path`）
        —— 不切的话 `PROOF-….lean:1` 这种框架自己规定的形态根本进不了候选；
@@ -590,7 +588,7 @@ def gate_g1(ctx: GateContext) -> GateResult:
        "改掉文本"，因为参考体例（`selfcontain_check.py`）的判据本来就是两句，
        删掉第二句等于把这道门的范围改窄（那是口径变更，不是修缺陷）。
 
-    ## 自述读数纪律（`R2b-gates-1`）
+    ## 自述读数纪律
 
     这道门的 `counts` 与 `reason` 是它自己的读数，两者必须逐档对齐：`reason`
     只在某一档计数非零时提它，并且带上那个数。反过来的两个坑各登记一条：
@@ -603,7 +601,7 @@ def gate_g1(ctx: GateContext) -> GateResult:
       （更严的那一档优先），但 `reason` 必须显式写出这一档的条数 ——
       否则这条旁路会被发现分支永久吃掉；
     - 这一条是三支共同的：任一档非零就必须在 `reason` 里出现并带自己的数，
-      包括 `unknown` 支里的 `globbed`（`R2b7-gates-1`：那里原来只报
+      包括 `unknown` 支里的 `globbed`（那里若只报
       "存在性没查成"一档，而 `counts` 里通配符那档是非零的）。
       `globbed == 0` 时那半句不出现，所以它是"非零才出现"，不是恒加一句。
 
@@ -668,7 +666,7 @@ def gate_g1(ctx: GateContext) -> GateResult:
                 }
             )
             continue
-        # ---- `D-7` 第 (2) 步：criterion 的第二句此前在实现里不存在。
+        # ---- `D-7` 第 (2) 步：criterion 的第二句在实现里必须有落点。
         #
         # 旧实现只判"在不在工作区内"（一次 `relative_to`），于是
         # "指向一个盘上不存在的材料"与"指向一个真实文件"在 `counts` 与 `verdict`
@@ -747,7 +745,7 @@ def gate_g1(ctx: GateContext) -> GateResult:
         # 背景提名（`X-91.5-5 ②`）：上面每一句都是"有问题的那几档"，
         # 于是 fail 支的读者看不到"其实还有若干条在工作区内"这个上下文 ——
         # 一条 `工作区内不存在` 的发现会被读成"整篇都在引用区外材料"。
-        # `FINAL-R5-04`：这一句改前用的是 `inside`，而 `missing ⊆ inside`
+        # `FINAL-R5-04`：这一句若用 `inside`，而 `missing ⊆ inside`
         # （"不存在"的路径当然也算在工作区内）⇒ 唯一一条候选就是缺材料时，
         # 这一句会说"有 1 条在区内"，把同一批材料数了两遍。现在只数
         # 判过存在性且真的在盘上的那些（= `inside - missing`，通配符另计）。
@@ -872,8 +870,7 @@ def gate_g2(ctx: GateContext) -> GateResult:
     "裸文件名"这一档在本项目不存在（写裸文件名进 citations 是写入期就拒的），
     所以这里只报 warning 并逐条留痕（§8.4 的"假阳性须逐条留痕"）。
 
-    可解析前缀的唯一声明面是 `schema.CITATION_PREFIXES`（2026-10-07 所有者裁定
-    `draft/68` 题 1 选 A，本次改动由所有者授权、主控代改）。改前本门内联了四个前缀
+    可解析前缀的唯一声明面是 `schema.CITATION_PREFIXES`。若本门内联四个前缀，
     `("lit","rel","exp","eval")`，于是它与写入期（`doc_tools._CITATION_TABLES`）
     对同一个字符串给出两个结论：`stmt:0004` 在写入期是合法引用、在本门是
     "不在可解析的种类里"。现在两边都从声明面派生 ⇒ 不可能再分家。
@@ -921,7 +918,7 @@ def gate_g3(ctx: GateContext) -> GateResult:
 
     注意：分类只有一份实现（`R2R2-R1`）：形态判定调
     `tools.doc_tools.classify_proof_location`，与写入期的 `check_proofs` 同一个函数。
-    经实测，两处曾经各写一套正则，同一份数据 18 档里有 9 档给出不同分类
+    经核查，两处各写一套正则时，同一份数据 18 档里有 9 档给出不同分类
     （最难看的一档：断言自己没有 `claim_id` 时 `claim-1:3` 被本门当成 `file:line` 而 pass）。
     现在：
     - `self_ref` ⇒ pass（自指）；
@@ -1326,12 +1323,12 @@ def gate_g7(ctx: GateContext) -> GateResult:
 # ---- G8 可复跑门 ----------------------------------------------------------
 
 
-#: G8 回执（`run_evidence.commands[*]`）的必备键（业主 2026-10-18 裁定：
-#: G8 改由 M 代跑、把回执交给 H 核，H 只判「回执是否合格」）。
+#: G8 回执（`run_evidence.commands[*]`）的必备键（G8 改由 M 代跑、把回执交给 H 核，
+#: H 只判「回执是否合格」）。
 #:
 #: 为什么是这四个：`claim_id` 让回执与断面对上；`command` 是"精确命令"；
 #: `exit_code` 是"跑过没有 + 绿还是红"的唯一机器读数（少了它，红与绿分不开 ——
-#: 旧实现根本不读退出码，所以「跑过而且红了」与「跑过而且绿了」在门上同形）；
+#: 不读退出码时「跑过而且红了」与「跑过而且绿了」在门上同形）；
 #: `output_tail` 是"留了输出"（§8.4 那半句"并留输出"）。
 G8_RECEIPT_KEYS: tuple[str, ...] = ("claim_id", "command", "exit_code", "output_tail")
 
@@ -1341,7 +1338,7 @@ def g8_receipt_problems(commands: Sequence[Mapping[str, Any]]) -> list[str]:
 
     为什么把"合格"做成判据而不是信任调用方：G8 的输入是调用方给的，
     而"调用方给了一份读不懂的回执"在旧实现里有两条静默路径 ——
-      - `commands` 不是数组时（真机：`{"checked": true, "commands": "     "}`），
+      - `commands` 不是数组时（例如 `{"checked": true, "commands": "     "}`），
         旧代码 `[dict(x) for x in "     " if isinstance(x, Mapping)]` 得到 `[]`；
       - 逐条缺键时，那些键的缺失没有任何读数。
     两条路径都会让门在"什么都没有"的输入上继续往下判，而 §8.4 要的恰恰是
@@ -1405,11 +1402,10 @@ def gate_g8(ctx: GateContext) -> GateResult:
             criterion_revision=criterion_revision,
         )
     if ev.get("checked") is not True:
-        # ---- 第三态（业主 2026-10-18：「没跑 ⇒ unknown 并写明为什么没跑，不许静默」）。
+        # ---- 第三态（「没跑 ⇒ unknown 并写明为什么没跑，不许静默」）。
         #
-        # 缺陷读数（本条的第一条负控）：`projects/mp3` 末节第 4 条与 `projects/t3d` 三·4
-        # 都逐字写着「H 只读、拿不到执行工具 ⇒ G8 只能记 unknown」—— 那一档从"读数"退化成
-        # "权限的必然结果"，谁都不会再问"这一轮到底跑了没有"。
+        # 若把"H 只读、拿不到执行工具 ⇒ G8 只能记 unknown"当成权限的必然结果，
+        # 那一档就从"读数"退化，谁都不会再问"这一轮到底跑了没有"。
         # 现在 unknown 也有义务：必须带一行原因，否则连"为什么没跑"都留不下来。
         why = str(ev.get("reason") or "").strip()
         if not why:
@@ -1452,7 +1448,7 @@ def gate_g8(ctx: GateContext) -> GateResult:
         )
     # ---- 回执的形状：先要求"读得懂"，再判"覆盖了没有"。
     #
-    # 真机读数（`projects/mp3` round 2，H 传给 `review.report` 的 run_evidence）：
+    # 真机读数（H 传给 `review.report` 的 run_evidence）：
     #   {"checked": true, "commands": "     "}
     # 旧实现把那个空白字符串当可迭代对象遍历了一遍（每个字符都不是 Mapping），
     # 得到 `commands = []`；而那一轮 `numeric = 0` ⇒ 差集为空 ⇒ G8 = pass，
@@ -1489,7 +1485,7 @@ def gate_g8(ctx: GateContext) -> GateResult:
                     ),
                 }
             )
-    # ---- 回执的资格（业主 2026-10-18）：H 只判"回执合不合格"，而这条判据必须在门上。
+    # ---- 回执的资格：H 只判"回执合不合格"，而这条判据必须在门上。
     #
     # 三态口径（与 G8 的其余部分一致）：
     #   * 没有实跑记录（`checked=true` 却一条都没有）⇒ `unknown`（不是 vacuous pass）；
@@ -1694,12 +1690,12 @@ def _quote_word_count(text: str) -> int:
     return cjk + latin
 
 
-#: G10 六格里"最小修法"那一格的键名（`P-9` 候选 A 的对齐动作，2026-09-27 所有者裁定）。
+#: G10 六格里"最小修法"那一格的键名（`P-9` 候选 A 的对齐动作）。
 #:
 #: `schema.ReviewFinding` 里这一格叫 `suggestion`，而 `P-9` 正文与旧夹具写的是
 #: `minimal_fix`。它们是同一个格子的两个键名，判据只有这一处实现（FC-03）：
 #: 取值时正名优先、历史键名兜底；两个名字都不写才算缺这一格。
-#: 只在一边改名的后果是实测过的：G10 会因为读不到键而把每一条发现都打成"不合格式"。
+#: 只在一边改名的后果是：G10 会因为读不到键而把每一条发现都打成"不合格式"。
 _MINIMAL_FIX_KEYS = ("suggestion", "minimal_fix")
 
 
@@ -1729,7 +1725,7 @@ def _finding_format_in_scope(f: Mapping[str, Any]) -> bool:
     （三态纪律：未知不是通过）。判据是"日期形态命中后取前 10 个字符比较"，
     而不是纯字典序比较 —— 常量的真前缀（`'2026-09-2'` / `'2026-09-'` /
     `'2026-0'` / `'2'` 这四个截断串）字典序比常量小，纯比较会把它们读成
-    "契约生效前的历史行"而豁免掉，比空串还宽松（第 10 轮独立重审 `R2b-AN-2` 实测）。
+    "契约生效前的历史行"而豁免掉，比空串还宽松。
     """
     created = str(f.get("created_at") or "").strip()
     if not _CREATED_AT_DATE_PREFIX_RE.match(created):
@@ -1797,7 +1793,7 @@ def gate_g10(ctx: GateContext) -> GateResult:
     `criterion_revision` 的唯一来源是 `GATE_CRITERIA_REVISION[gate_id]`（声明表），
     每条路径打的是同一句话。
 
-    ---- `P-9` 候选 A 落地之后的形态（2026-09-27 所有者裁定）----
+    ---- `P-9` 候选 A 落地之后的形态 ----
 
     `schema.ReviewFinding` 现在带 `axis` / `line` / `verbatim_quote` / `maths`
     四个字段（"最小修法"那一格与 `suggestion` 对齐），所以"本项目结构性不可判"
@@ -1966,7 +1962,7 @@ def gate_g10(ctx: GateContext) -> GateResult:
     structural_gap = len(in_scope) - len([f for f in in_scope if _has_the_four_gate_keys(f)])
     # ---- `findings` 与 `observed_hash` 的耦合（`X-96.3-2`）----
     #
-    # 接线前的实测形态（`draft/28` §96.3 第 2 条逐字）：`GateContext` 里这两个输入
+    # 接线前的形态：`GateContext` 里这两个输入
     # 互不相干，于是"一条带行号的发现"可以在一份没钉版本 hash 的报告里通过 G10
     # —— 而 `line` 的判据是"G11 通过后必填"：它的全部意义恰恰是"版本冻住之后，
     # 行号才有意义"。不接线时的后果不是假通过那么远，而是这条判据的结论没有依据：
@@ -2250,7 +2246,7 @@ def gate_g13(ctx: GateContext, results: Mapping[str, GateResult] | None = None) 
     """G13 空结论自证门（照搬 `STYLE/RUBRIC.md:105-107`）。
 
     判据（§8.4）："某个轴『零发现』时必须报告『用了什么过程、数出了什么数字』。"
-    失败处置：阻断（实测范例：`p6_..._REFEREE.md:48-56`）。
+    失败处置：阻断（范例：`p6_..._REFEREE.md:48-56`）。
 
     这道门是对报告本身的检查：它遍历其余各门，凡是报"零发现"的，
     必须有自证块。缺一个就是 H 自己的格式违规 ——
@@ -2674,9 +2670,9 @@ def gate_verdict(results: Mapping[str, "GateResult"]) -> dict:
     为什么 `unknown` 单占一档：把它并进 `accepted` 会让"我们从未检查"伪装成
     "检查通过"；并进 `rejected` 又会把"没做"说成"做失败了"（FC-01）。
 
-    为什么"门不齐"也单占一档（2026-10-27，`docs/PROPOSALS.md` G-5 的收口）：
+    为什么"门不齐"也单占一档（`docs/PROPOSALS.md` 的 G-5 收口）：
     本函数只数交进来的那几个 `GateResult`，于是"空集合"与"只跑了一门"在记账上
-    与"15 门全绿"逐字相同 —— 实测改前 `gate_verdict({})` 给 `verdict="accepted"`、
+    与"15 门全绿"逐字相同 —— 若 `gate_verdict({})` 给 `verdict="accepted"`、
     `reason="…15 道门全部通过"`（零门在场地宣称全绿）。现在"齐全"是一等条件：
     `GATE_IDS` 里有、这次没交进来的门逐条列进 `missing_gates`，结论落
     `unverified`（没查成），不是 `accepted`。`run_all_gates` 恒给 15 门，所以这一档
