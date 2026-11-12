@@ -4760,13 +4760,16 @@ class Secretary:
         """
         from . import verifications as _VR
 
+        # 这一格是"在原句上追加一句"：原先五条支各读一次 `out.get("reason")`，
+        # 而它在本方法里直到写回之前没有任何一处改过 ⇒ 读一次就够。
+        prior = str(out.get("reason") or "")
         if self.store is None:
-            out["reason"] = (f"{out.get('reason') or ''}；但这一名秘书没有 store "
+            out["reason"] = (f"{prior}；但这一名秘书没有 store "
                              "⇒ 决定是「签发」，而落签那一步落不了（换装配："
                              "`for_role_wired(..., store=<本工作区的 store>)`）")
             return
         if not isinstance(row, Mapping) or not str(row.get("verification_id") or ""):
-            out["reason"] = (f"{out.get('reason') or ''}；但没有可落的那一行"
+            out["reason"] = (f"{prior}；但没有可落的那一行"
                              "（`record_verification` 的返回行没递进来）⇒ 只落了决定")
             return
         try:
@@ -4777,22 +4780,23 @@ class Secretary:
                 by=self.sign_recipient(),
                 manuscript=str(row.get("manuscript") or ""))
         except Exception as exc:  # noqa: BLE001 —— 落签失败要如实报（台账那一行已在盘上）
+            name = type(exc).__name__
             out["writeback"] = {"written": False, "sign_issued": False,
-                                "reason": f"落签没成（{type(exc).__name__}: {exc}）"}
-            out["reason"] = (f"{out.get('reason') or ''}；落签没成"
-                             f"（{type(exc).__name__}: {exc}）⇒ 签没落，台账那一行留着")
+                                "reason": f"落签没成（{name}: {exc}）"}
+            out["reason"] = (f"{prior}；落签没成"
+                             f"（{name}: {exc}）⇒ 签没落，台账那一行留着")
             return
         out["writeback"] = dict(writeback)
         out["manuscript_write"] = dict(writeback.get("manuscript_write") or {})
         out["issued"] = bool(writeback.get("sign_issued"))
         if not out["issued"]:
-            out["reason"] = (f"{out.get('reason') or ''}；但落签没落成："
+            out["reason"] = (f"{prior}；但落签没落成："
                              f"{str(writeback.get('reason') or '没有理由')}")
         elif not out["manuscript_write"].get("written"):
-            out["reason"] = (f"{out.get('reason') or ''}；签已颁发，但手稿块没落"
+            out["reason"] = (f"{prior}；签已颁发，但手稿块没落"
                              f"（{str(writeback.get('reason') or '没有理由')}）")
         else:
-            out["reason"] = (f"{out.get('reason') or ''}；签已颁发并由收方秘书落回手稿"
+            out["reason"] = (f"{prior}；签已颁发并由收方秘书落回手稿"
                              "（命题行由 B 收录时按正文 sha 认领）")
 
     def _note_sign_issuance(self, out: Mapping[str, Any], *, task_id: str = "") -> None:
