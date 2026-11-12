@@ -1,5 +1,5 @@
 /*
- * 论文包三块（2026-11-01，块 4）：A 证明完整吗 / B 结构合规吗 / C 能不能收工。
+ * 论文包三块：A 证明完整吗 / B 结构合规吗 / C 能不能收工。
  *
  * 一次 `GET /api/package` 拿三块：三块总是一起看，一次请求才有同一份快照。
  * 每一格都带 `source`（path / line / match），由 `SourceLink` 走 `/api/source`
@@ -436,7 +436,7 @@ export function Acceptance() {
               </tbody>
             </table>
 
-            {/* 2026-11-02（84 ④）：machine_pass=false 有两条来源 —— 格失败与 blocker。
+            {/* machine_pass=false 有两条来源 —— 格失败与 blocker。
                 空 blockers 不等于"门没拦住"，只看 counts 又会漏掉不进八格的 blocker。 */}
             {gates.machine_pass_cause === "pass" ? (
               <div class="readings">机器口径成立：八格全 pass 且没有 blocker。</div>
