@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""四个只读读数（`draft/145` 之后这一层的形状，业主 2026-10-24 裁定的 B/F 两格）。
+"""四个只读读数（这一层的形状，业主裁定的 B/F 两格）。
 
 ## 这一层为什么存在
 
 "这个数是多少"在这套框架里出现过两种坏形态：
 
 1. 同一个数在两个地方各算一遍（CLI 一份、网页一份）⇒ 两处读数分家，而没有任何一条判据
-   会因此变红。真机教训：`status-report` 与网页的"在飞任务"曾经差一档。
+   会因此变红。教训：`status-report` 与网页的"在飞任务"曾经差一档。
 2. "没读到"被折成 0 ⇒ 用户读到"这一趟 0 次错误"，而实际上是工作区根本不存在
    （三态纪律的反面，见 `AGENTS.md` 与 `noai_gate` 的退出码表）。
 
@@ -60,7 +60,7 @@ READOUT_KEYS: tuple[str, ...] = ("checked", "state", "reason", "data", "problems
 
 #: `errors_readout` 的 `data` 键集（写进判据，多一个少一个都算口径漂了）。
 #:
-#: 2026-11-01 扩面：前五个键是改前就有的（`total` 仍是角色侧总数，语义一个字没改）；
+#: 扩面：前五个键是原有的（`total` 仍是角色侧总数，语义一个字没改）；
 #: 后面几组是新的三类读数 + 逐类三态 + 每条 source 的样本。三组数刻意不相加：
 #: `total`（谁做错了）/ `system_total`（系统哪里坏了）/ `state_readings_total`
 #: （现在积着什么）是三种单位（`errorstats` 模块 docstring 第二节）。
@@ -78,7 +78,7 @@ COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 
 #: `gates_readout` 的 `data` 键集。
 #:
-#: `refusal`（2026-11-03 第二笔）：`None` = 门真的跑了；非空 = 受控拒绝（会话号不在
+#: `refusal`：`None` = 门真的跑了；非空 = 受控拒绝（会话号不在
 #: 盘上 / 不是一个号），那一份 data 里的 `cells` 是空的而不是八格 `unknown` ——
 #: "门根本没跑"与"跑了、八格都没查成"必须长得不一样。
 GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "m_says_done",
@@ -97,13 +97,12 @@ ALL_DATA_KEYS: tuple[str, ...] = ("errors", "flow", "cost", "gates")
 
 #: 门那一格的四态取值（与 `closing.ClosingReport.status` 同一套词）。
 #:
-#: 为什么有四档（2026-11-01 补 `na`）：改前这里只有 `pass` / `fail` / `unknown`，
+#: 为什么有四档（补 `na`）：这里曾经只有 `pass` / `fail` / `unknown`，
 #: 而 `closing` 早就会写第四档 `na`（`load_bearing` 在「形式化已关闭」的项目上
 #: 记 `na`，closing.py 的 `rep.status["load_bearing"] = "na"`）。于是 `gates_readout`
-#: 在 :531 把它折成 `unknown` —— 同一现场两个读口给出两种 counts：
-#: `closing` 侧 pass5/fail1/unknown1/na1，读数层 pass5/fail1/unknown2。
-#: 扫全库 158 个工作区，`load_bearing` 那一格 158/158 都是 `na` ⇒ 不是某个
-#: 工作区的怪数据，是这个词表少了一档（每一份收工门读数都被折了同一格）。
+#: 在 :531 把它折成 `unknown` —— 同一现场两个读口给出两种 counts。
+#: 旧工作区里 `load_bearing` 那一格大量是 `na` ⇒ 不是某个工作区的怪数据，
+#: 是这个词表少了一档（每一份收工门读数都被折了同一格）。
 #:
 #: 四档各自的语义（`unknown` 与 `na` 是两件不同的事，不许互相折）：
 #:
@@ -115,8 +114,8 @@ ALL_DATA_KEYS: tuple[str, ...] = ("errors", "flow", "cost", "gates")
 #:   没有承重结论要 T3 背书）。它是读数，不是"没查成"：把 `na` 读成 `unknown`
 #:   等于把「这一档不存在」说成「我们没查」。
 #:
-#: 折平哪一种都有代价：`na → unknown` 让"不适用"混进"没查成"（改前就是这个形态，
-#: 格子的原话写着"不适用"，状态栏却写 unknown）；`na → pass` 更糟（把"不用查"
+#: 折平哪一种都有代价：`na → unknown` 让"不适用"混进"没查成"（格子的原话写着
+#: "不适用"，状态栏却写 unknown）；`na → pass` 更糟（把"不用查"
 #: 说成"查过了没问题"）。词表是这一层唯一的口径主人，所以补在词表上、而不是在
 #: `gates_readout` 里给某一格特判。
 CELL_STATES: tuple[str, ...] = ("pass", "fail", "unknown", "na")
@@ -173,10 +172,10 @@ def scan(target: Any, *, tables: Iterable[str] = ()) -> dict[str, Any]:
     `target` 既可以是工作区根路径，也可以是 `Store`（口径与 `errorstats` 一致：
     有 `read_events` 与 `root` 的对象就当 `Store` 用）。
 
-    读盘的实现不在这里，而真身按来源分两处（2026-10-27，R-BE1 的 ②-1 更正）：
+    读盘的实现不在这里，而真身按来源分两处：
     事件流是 `errorstats._read_events`，会话记录是 `sessions.read_all_sessions`
-    （`errorstats._read_sessions` 已改成对它的转发）。改前这句把两者都写成
-    `errorstats` 的"唯一真身"，而 `sessions.read_session` 才是按 sid 的那条主线 ——
+    （`errorstats._read_sessions` 已改成对它的转发）。把两者都写成
+    `errorstats` 的"唯一真身"会漏掉 `sessions.read_session` 那条按 sid 的主线 ——
     两套实现对"读不明白"各有一套判定，同一份坏目录会给出两个数。
     本函数只把两处读数拼起来，不复制读取逻辑（复制出来的第二份迟早会与第一份对三态
     的判断不一样，而那正是这个模块存在的理由：口径只能有一个主人）。
@@ -269,7 +268,7 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
     误读是"0 次错误"，而排查那件事第一步就是看"到底读了几条事件、几行读不明白"——
     它必须和计数在同一个对象里，才不会有人另算一份。
 
-    2026-11-01 扩面（业主「覆盖面有些小了」）加的三组，刻意不相加：
+    扩面（业主「覆盖面有些小了」）加的三组，刻意不相加：
 
     - `system` / `system_total`：系统侧（hook 没判成 / 外部面掉了 / 收工门拦下）；
     - `state_readings` / `state_readings_total`：状态读数（板项没被 ack，快照会回落）；
@@ -277,7 +276,7 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
       与每一类前 N 条的 `{source, ref, ts, detail}` —— 页面"按类"与"展开到每条的 source"
       两段吃这一份，网页不另算一份口径。
 
-    `scanned`（2026-10-27，R-BE1 的 ⑥-5）：调用方已经读过一份扫描（`scan()`）时传进来，
+    `scanned`：调用方已经读过一份扫描（`scan()`）时传进来，
     于是这一条不再自己读一遍盘。扩面新读的四个目录不进 `scan()`（只有这条读数要用），
     在这里单列读一次 —— 整条读数仍然只读一遍盘。
     """
@@ -386,7 +385,7 @@ def flow_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
     `data.totals` 是四个数的全角色合计。为什么不做"成功率"这类派生比率：口径一改就会
     悄悄改掉历史可比性（`EVAL_REQUIRED_FIELDS` 那一族的教训），比率留给读的人自己算。
 
-    `scanned`：与 `errors_readout` 同一格（`stats all` 共读一份扫描，2026-10-27 ⑥-5）。
+    `scanned`：与 `errors_readout` 同一格（`stats all` 共读一份扫描）。
     """
     scanned = scan(target) if scanned is None else scanned
     why = _scan_problem(scanned, need=("events", "sessions"))
@@ -455,7 +454,7 @@ def cost_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
     experiment / search / extract / review / reason）回答"花在哪件事上"。只给一个切面时，
     另一件事就得有人另算一份——而那正是本模块要收掉的形态。
 
-    `scanned`：`stats all` 共读一份扫描（2026-10-27 ⑥-5）。那份扫描没带
+    `scanned`：`stats all` 共读一份扫描（那份扫描没带
     `usage_ledger` 时这里自己读这一张表（单跑 `stats cost` 走的就是这条路）。
     """
     scanned = scan(target, tables=("usage_ledger",)) if scanned is None else scanned
@@ -534,15 +533,15 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
 
     `project_dir` / `report_path` 不给 ⇒ 依赖它们的那几格如实记 `unknown`（不是 pass）。
 
-    `sid` 给了一个盘上不存在的号 ⇒ 受控拒绝（2026-11-03 第二笔）：`checked=False`、
+    `sid` 给了一个盘上不存在的号 ⇒ 受控拒绝：`checked=False`、
     `reason` 就是 CLI 那一句原话、`data.refusal` 带 `{"code","sid","detail","exit_code": 2}`，
     `data.cells` 为空（门根本没跑，不是"八格全是 unknown"的空读数）。这一档与
     `agentflow closing` 共用 `closing.closing_session_identity`，所以两个出口同文同码。
-    机器口径的两个喂参也在这里现算（`closing.machine_feeders`）—— API 出口此前不喂 ⇒
+    机器口径的两个喂参也在这里现算（`closing.machine_feeders`）—— API 出口不喂 ⇒
     同一份工作区在 API 算出 `can_close=None`、在 CLI 算出 True/False（"一个说不知道、
     一个说可以交"）。
 
-    `scanned`：`stats all` 共读一份扫描（2026-10-27，R-BE1 的 ⑥-5）。门的"现算"不受影响 ——
+    `scanned`：`stats all` 共读一份扫描。门的"现算"不受影响 ——
     八格仍然在这次调用里现跑，这里复用的只是事件流/会话记录那份扫描（门本身不读它们，
     只用它的 `store`）。
     """
@@ -564,8 +563,8 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                              reason=f"打开工作区失败（{type(e).__name__}: {e}）", data=empty)
     from . import closing as CL
 
-    # 机器口径的两个喂参（2026-11-03 第二笔）：CLI 与工具体都喂这一份；这一条读数
-    # 此前不喂 ⇒ 同一份工作区在 API 出口算出 `can_close=None`、在 CLI 出口算出
+    # 机器口径的两个喂参：CLI 与工具体都喂这一份；这一条读数
+    # 不喂 ⇒ 同一份工作区在 API 出口算出 `can_close=None`、在 CLI 出口算出
     # True/False（"一个说不知道、一个说可以交"）。现在三个出口走同一个
     # `closing.machine_feeders`（口径只有一处）。
     feed = CL.machine_feeders(store)
@@ -576,7 +575,7 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     except Exception as e:  # noqa: BLE001 门自己抛了 ⇒ 这一趟"没查成"，不是"没问题"
         return _envelope(checked=False,
                          reason=f"收工门没跑成（{type(e).__name__}: {e}）", data=empty)
-    # ---- 受控拒绝（2026-11-03 第二笔）：号不在盘上 ⇒ 门根本没跑。
+    # ---- 受控拒绝：号不在盘上 ⇒ 门根本没跑。
     #
     # 这一档不许折成"八格全是 unknown 的一张表"（那是空读数）：`checked=False` +
     # 原话进 `reason`，`data.refusal` 带 code/sid/exit_code —— CLI 那边是同一句话、
@@ -609,7 +608,7 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     data: dict[str, Any] = {
         "cells": cells, "counts": counts,
         "machine_pass": bool(report.machine_pass),
-        # 2026-11-03（153-U-01/U-02）：`m_says_done` 是 M 的判断；`can_close` 是机器口径
+        # `m_says_done` 是 M 的判断；`can_close` 是机器口径
         # （`bool | None`，`None` = 没接线 —— 不许折成 False，那会被读成"机器说不通过"）。
         "m_says_done": bool(report.m_says_done),
         "can_close": report.can_close,
@@ -745,7 +744,7 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
             lines += ["", "收工门八格：没有读数" if readout.get("checked") else "收工门八格：没查成"]
         else:
             # 列名逐字是「四态」：这一格的值域就是 `CELL_STATES` 的四档。写成「三态」
-            # 会让读的人以为 `na` 是别的什么东西（改前它正是被折进 `unknown` 的那一档）。
+            # 会让读的人以为 `na` 是别的什么东西（它曾被折进 `unknown`）。
             head = ["格", "四态", "原话（缩 46 字，全文见 --json）"]
             rows = [[c.get("name", ""), c.get("status", ""), _clip(str(c.get("detail") or ""))]
                     for c in cells]
