@@ -196,12 +196,13 @@ def task_outcome(res: "BRunResult") -> tuple[str, str]:
     一篇都没真消化 ⇒ `failed`。`no_result` 是「有效结论」（"跑完了，确实没有产出"），
     不是错误 —— 它存在的意义正是让主控「看得见」"这一趟白跑了"，从而不再原样重派。
     """
-    worked = res.digested > 0
+    digested = res.digested  # 这一格是计算属性（processed − unreadable）：下面两处读的是同一个值
+    worked = digested > 0
     produced = bool(res.concepts_created or res.concepts_reused or res.relations_added
                     or res.relations_duplicate or res.quotes_verified
                     or res.quotes_failed or res.quotes_unknown)
     stuck = bool(res.failed) and not worked and not produced
-    detail = (f"真消化 {res.digested} 篇（新建概念 {res.concepts_created} / 复用 "
+    detail = (f"真消化 {digested} 篇（新建概念 {res.concepts_created} / 复用 "
               f"{res.concepts_reused} / 新增关系 {res.relations_added} / 引文判定 "
               f"{res.quotes_verified + res.quotes_failed + res.quotes_unknown}）；"
               f"没有本地全文 {res.unreadable} 篇、缺抽取器 {res.skipped_no_extractor} 篇、"
