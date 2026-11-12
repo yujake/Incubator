@@ -1603,7 +1603,7 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
         # :func:`_statement_tier_reading`）。`label` 仍只装档位名 —— 让 `不适用`
         # 借那一格会抹掉"这一行有没有档位"这个判据。
         got["nontriviality_word"] = tier["word"]
-        # 这一档是按号命中的、还是读旧行时按 sha 回退的（2026-10-26，D16）：
+        # 这一档是按号命中的、还是读旧行时按 sha 回退的：
         # 读的人要能分辨"正文改了档位还在"与"按文本碰巧对上"，两件事不许折平。
         got["nontriviality_matched_by"] = tier["matched_by"]
         got.update(_bit_readings(row))
@@ -1695,7 +1695,7 @@ def _experiment_code_consistency(root: Path, rows: list[dict]) -> list[dict[str,
     超过 `_CODE_HASH_MAX_BYTES` 的脚本不读（有界：一个实验的脚本不该有几十兆，
     而一次请求把整盘大文件哈希一遍会把这一面拖成秒级）。
 
-    报告那两格（业主 2026-10-23：证据链的实验表没挂穷举论证报告）：
+    报告那两格（业主：证据链的实验表没挂穷举论证报告）：
     `out/experiments/<号>/exhaustion.md` 是 ②③ 的唯一落点
     （`exhaustionreport.report_relpath` —— 落点的口径只有那一处，这里只转发）。
     - 盘上有 ⇒ `exhaustion_path` 是仓库相对的落点、`exhaustion_tri="computed"`；
@@ -1765,7 +1765,7 @@ _EXPERIMENT_SPOT_FILES: tuple[tuple[str, str], ...] = (
 def experiment_spots(root: str | Path) -> dict[str, Any]:
     """实验产物的落点读数：`code/exp/` 与 `out/experiments/<号>/{design,exhaustion}.md`。
 
-    这一面是"产物页要补的那两处落点"（2026-10-23 业主：产物那一栏略有过时）。
+    这一面是"产物页要补的那两处落点"（业主：产物那一栏略有过时）。
     它只报盘上真有什么，不编"应该有但还没写"的行：
 
     - `rows[]`：一个落点一行 —— `{kind, path, exists, bytes, tri}`；
@@ -1867,21 +1867,21 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     里面是 0 行 —— 这与"没读到"是两件事，前者不报 `unreadable`）。
     每一栏另有一个 `<栏>_tri`，于是"哪一栏没读成"不会被整面的一个词吞掉。
 
-    ## 2026-10-23（业主的三条显示口径）多加的那几格
+    ## 业主的三条显示口径多加的那几格
 
     行形状变了，判定一个字没改（这一层仍然只是搬运）：
 
     - 命题行：`quote_state`（引文五档，含 `no_evidence`）、`nontriviality` /
       `nontriviality_label` / `nontriviality_meaning` / `nontriviality_tri` /
       `nontriviality_word`（非平凡度：判不了是 `None` + 空 label，页面写"未判"，
-      不是 T0；概念 / 定义行是 `tri="not_applicable"`，页面写"不适用" —— 2026-10-26）、
+      不是 T0；概念 / 定义行是 `tri="not_applicable"`，页面写"不适用"）、
       `formal_paths`（第 4 位逐路径：`[{proof_no, state}]`）、
       `grade` / `grade_label`（五元位派生的等级）；
     - 关系行：`quote_state`（同一个读口，引文那一卡按五档计数）；
     - 实验行：`code_sha_consistency`（台账钉的代码 sha vs 盘上现在这一份脚本；
       四档 `match` / `revoked` / `mismatch` / `unknown`）＋ 撤销那一档的
-      `code_sha_from` / `code_sha_to` / `void_reason`（业主 2026-10-24：
-      改脚本要重新登记并撤销老登记 —— 「已撤销」不是红，要能说出从哪一份换到哪一份）；
+      `code_sha_from` / `code_sha_to` / `void_reason`（业主：改脚本要重新登记并
+      撤销老登记 —— 「已撤销」不是红，要能说出从哪一份换到哪一份）；
     - 验证行：`proof_sha_consistency`（V 签的那一份 vs 命题现在那一份，
       按 `proof_no` 逐条比）。
     """
@@ -1924,7 +1924,7 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     # ---- 逐行补"是谁、在哪一趟写的"（读模型的 join；磁盘格式一个字节都不变）
     out.update(_annotate_ledger_rows(root_p, {
         key: out.get(key) or [] for key in _LEDGER_EVIDENCE_COLUMNS}))
-    # ---- 2026-10-23（业主的三条显示口径）：引文五档 / 非平凡度 / 第 4 位逐路径。
+    # ---- 业主的三条显示口径：引文五档 / 非平凡度 / 第 4 位逐路径。
     # 顺序有讲究：命题行先补，验证行才能拿它比"V 签的那一份 vs 现在这一份"。
     out["statements"] = _statement_readings(root_p, out.get("statements") or [])
     out["relations"] = _quote_state_rows(out.get("relations") or [])
