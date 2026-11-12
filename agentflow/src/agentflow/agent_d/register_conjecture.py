@@ -1,7 +1,4 @@
-"""角色 D 的动作 `register_conjecture`（`goal-7f5116c1` M6：从 `agent_d.py` 拆出来，逐字未改）。
-
-拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。R1-A1 起本动作接了模型精修（产出只进读数，登记语义不变）⇒ 它不再逐字；同族其余动作仍逐字。
-"""
+"""角色 D 的动作 `register_conjecture`（一动作一文件；判据 `tests/test_agent_split_is_one_action_one_file.py`）。"""
 from __future__ import annotations
 
 from ._support import (Any, EvidenceError, KIND_CLIENT, STATE_FAILED, STATE_USED, json,
