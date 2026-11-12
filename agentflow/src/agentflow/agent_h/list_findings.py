@@ -1,11 +1,10 @@
-"""角色 H 的动作 `list_findings`（`goal-7f5116c1` M6：从 `agent_h.py` 拆出来，逐字未改）。
+"""角色 H 的动作 `list_findings`：只读列举审校发现（`kind` 由本层现筛）。
 
 `kind` 这一格归本文件筛：动作面（`specs/h.py` 的 `H.list_findings.params`）承诺了
 `doc_id` / `level` / `status` / `kind` 四格，而底下的工具 `review.list_findings`
-只收前三格（`additionalProperties=False`）。照动作面派活带 `kind` 时，
-工具层会拒成 `invalid_params` —— 动作面承诺的那一格，工具面做不到。
-所以这一层把 `kind` 接下来、在返回的清单上现筛（工具面一个字都不动：
-它仍然是"一次纯列举"，没有"没查成"这一档）。
+只收前三格（`additionalProperties=False`）。照动作面派活带 `kind` 时，工具层会拒成
+`invalid_params` —— 动作面承诺的那一格，工具面做不到。所以这一层把 `kind` 接下来、
+在返回的清单上现筛（工具面一个字都不动：它仍然是"一次纯列举"，没有"没查成"这一档）。
 """
 from __future__ import annotations
 
