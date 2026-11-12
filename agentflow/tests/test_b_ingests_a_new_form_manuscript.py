@@ -26,6 +26,8 @@ from __future__ import annotations
 import inspect
 import pathlib
 
+import pytest
+
 import conftest
 from agentflow import evidencebits as EB
 from agentflow import manuscriptsubmission as MS
@@ -51,6 +53,30 @@ def _ws(tmp_path: pathlib.Path) -> tuple[Store, AgentB]:
     st = Store(tmp_path / "ws")
     st.init()
     return st, AgentB(st, extractor=None, extract_text=None, config={})
+
+
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：`different`（另一条路径）。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
+    fail-closed 拒收（`proof_kind_unjudged`），会把 b/c 这里的第二份证明拒掉 ——
+    而这一份量的是"新形式稿能不能落成第 2 条路径"，不是语义判别。真正的剧本桩
+    （same / different / 没判成）在
+    `tests/test_rehearsal_two_f_independent_proofs.py` 与
+    `tests/test_unjudged_axes_are_fail_closed.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
 
 
 def _citable(st: Store) -> None:
