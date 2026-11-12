@@ -503,9 +503,8 @@ def archive(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
     fresh = _entry_of(sign)
     entries = [e for e in entries
                if str(e.get("artifact_sha") or "") != fresh["artifact_sha"]] + [fresh]
-    # `_sorted_entries` 自己会把每一项复制成新 dict，所以这里不再逐项 `dict(e)`；
-    # 排序也只做一次 —— `updated_at` 与 `signs` 从同一份排好的清单取（改前那两格
-    # 各调一次 `_sorted_entries`：两次全量复制、两次排序）。
+    # `_sorted_entries` 自己会复制每一项，所以不再逐项 `dict(e)`；排序也只做一次 ——
+    # `updated_at` 与 `signs` 从同一份排好的清单取。
     ordered = _sorted_entries(entries)
     body = {"schema": INDEX_SCHEMA,
             "updated_at": str(ordered[-1].get("at") or "") if ordered else "",
@@ -1342,8 +1341,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     for no, one in proofs:
         one_sha = _sign_sha(one)
         if one_sha == signed_now:
-            # 这一行的 sha 就是命中条件用的那一个（`proof_list` 的正文一律是 `str`），
-            # 下面那一格不再把同一段正文哈希第二遍。
+            # 命中条件用的就是这个 sha（`proof_list` 的正文一律是 `str`）⇒ 不再重算一遍。
             matched_no, matched_text, matched_sha = int(no), str(one), one_sha
             break
     # 册里现行那一版（最新一份带正文的证明行）：stale 档必须把它点名 ——
@@ -1729,9 +1727,7 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
 
     picked: Mapping[str, Any] | None = None
     for row in rows:
-        # 不再逐行 `dict(row)`：下面那几格（`read_verdict` / `ledger_axis` /
-        # `defect_steps` / `_anchor_of`）都只读不写，而一趟台账常是几十行、命中的
-        # 只有一行 —— 不为被跳过的那几十行各复制一份。
+        # 不逐行 `dict(row)`：下面几格都只读不写，而一趟台账常是几十行、命中的只有一行。
         if int(_VR.as_proof_no(row.get("proof_no")) or 1) != no:
             continue
         if str(row.get("proof_sha256") or "").strip().lower() != sha:
@@ -2665,8 +2661,8 @@ def index_drift(root: Any) -> dict[str, Any]:
                            "这一格「没查成」（不是「归档一致」）"))
         return out
     out.update(checked=True, tri="computed", index=doc)
-    # 两边的归档项都只拿来判等与读格（`got != exp` / `got.get(...)`），没有一处写回去
-    # ⇒ 不再逐项 `dict(e)` 复制（`_sorted_entries` 现算那一侧本来就是新 dict）。
+    # 两边都只拿来判等与读格（`got != exp` / `got.get(...)`）⇒ 不再逐项 `dict(e)`：
+    # 现算那一侧本来就是新 dict。
     stored = {str(e.get("artifact_sha") or ""): e
               for e in (doc.get("signs") or []) if isinstance(e, Mapping)}
     want = {str(e.get("artifact_sha") or ""): e for e in (computed.get("signs") or [])}
@@ -2971,8 +2967,7 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
     except Exception:  # noqa: BLE001 —— 读不成是"作者/送审者这一格没查成"
         _VRC, box = None, {}
         out["problems"].append("outbox 读不出来 ⇒ 作者/送审者这一格没查成")
-    # 一趟读完三样（缺陷步分布 / 涉及几条命题 / 逐条明细）：改前三样各扫一遍 `rows`，
-    # `defect_steps(row)` 也各算一次（它要过一遍 findings）。
+    # 一趟读完三样（缺陷步分布 / 几条命题 / 逐条明细）：改前三样各扫一遍，`defect_steps` 各算一次。
     steps: dict[str, int] = {}
     stmt_ids: set[str] = set()
     detail: list[dict[str, Any]] = []

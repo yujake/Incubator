@@ -241,11 +241,10 @@ def _replace_section(text: str, name: str, body: str) -> tuple[str, bool]:
 # ---------------------------------------------------------------- 头部元信息（解析 / 改写）
 
 def _head_of(text: Any) -> str:
-    """手稿头部（第一个框架节之前那些行；没有节 ⇒ 整份）。
+    """手稿头部（与 :func:`split_sections` 同一份切节口径，但不构造各节正文）。
 
-    与 :func:`split_sections` 同一份切节口径，只是不构造各节正文：只要头部的两处
-    （:func:`parse_entry` / :func:`_head_for_new_version`）不必为一小段头部把整份稿
-    切成一节一节、再把每一节 join 回来。
+    只要头部的两处（:func:`parse_entry` / :func:`_head_for_new_version`）不必为一段头部
+    把整份稿切成一节一节、再把每一节 join 回来。
     """
     lines = str(text or "").replace("\r\n", "\n").split("\n")
     starts = _section_start_indices(lines)
@@ -697,8 +696,7 @@ def register_or_rewrite(
             # F 的稿当底稿时就是这样，正文必须换成 B 交来的那一份）。
             # `proof_body` 缺节 ⇒ 空串（不回退到依赖段 / 全文）⇒ 与参数正文的 sha 不同
             # ⇒ 走 `_replace_section`；基稿若没有那一节，下面会受控拒 / 整份重渲染
-            # （`_replace_section` 的 `ok` 说了算）。左边那把尺就是上面算好的 `new_sha`
-            # —— 同一个函数、同一处归一，再算一遍不会得到第二个值。
+            # （`_replace_section` 的 `ok` 说了算）。左边那把尺 = 上面算好的 `new_sha`。
             if str(proof_text or "").strip() and new_sha != proof_sha(_DS.proof_body(text)):
                 text, _ok_proof = _replace_section(text, "证明", str(proof_text))
                 if not _ok_proof:
