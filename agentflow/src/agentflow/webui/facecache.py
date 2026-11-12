@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""两个重读面的按盘失效缓存（`/api/package` 与 `/api/artifacts`；业主 2026-11-02）。
+"""两个重读面的按盘失效缓存（`/api/package` 与 `/api/artifacts`）。
 
 ## 为什么要有这一层
 
@@ -8,29 +8,15 @@
 （七类扫描 + 台账 join + `closing.check_closing` 的八格门），而页面每翻一次就要等一次。
 这两个面又恰好是只读的：同一份盘、同一批参数，算出来的就是同一份读数。
 
-## 84 那次 2.36 s 的读数（2026-11-02，`projects/paper-rewrite-84` 定格数据）
+## 冷调用那几秒花在哪
 
-先给结论：那是未命中（冷调用），不是键太细、也不是被挤出 8 档。实测拆分
-（同一次进程内，`package_face` 的墙钟）：
-
-```text
-package_face 总计   2,387 ms
-  closing.check_closing  1,693 ms   ← 71%
-  structure               429 ms   ← 18%
-  acceptance              379 ms   ← 16%
-  closing_block           245 ms
-  machine_feeders          38 ms
-  proofs                   25 ms
-  disk_key                 31 ms   ← 键只占 1.3%（410 个文件 + 事件序号）
-```
-
-同一份静止的盘，第 2/3 次调用 37–46 ms、`cache.hit=true`；`_MAX_ENTRIES=8`
-而真正会进缓存的只有 `package` / `artifacts` / `run-digest` 三面（`/api/evidence`
-与 `/api/errors` 不走这一层），远没到淘汰线。业主 2026-11-02 的判据是
-"同一份 84 定格数据连调 3 次 ⇒ 第 2/3 次 ≤ 200 ms 且 hit=true" —— 改前就已成立，
-本次没有再改缓存代码；把读数写在这里，免得下一个人再把"冷启动 2.4 s"当成
-缓存失效的缺陷重查一遍。若要缩短冷调用，下一刀在 `check_closing`（它一次调用里
-把 11 MB 的会话读了 9 遍，约占 71%），那是另一笔改动。
+冷调用 2.4 s 不是键太细、也不是被挤出 8 档：键只占 1.3%（410 个文件 + 事件序号），
+大头在 `closing.check_closing`（一次调用把 11 MB 的会话读 9 遍，约占 71%），其余是
+structure 与 acceptance。同一份静止的盘，第 2/3 次调用 37–46 ms、`cache.hit=true`；
+`_MAX_ENTRIES=8` 而真正会进缓存的只有 `package` / `artifacts` / `run-digest` 三面
+（`/api/evidence` 与 `/api/errors` 不走这一层），远没到淘汰线。要缩短冷调用，下一刀
+在 `check_closing`；把读数写在这里，免得下一个人再把"冷启动 2.4 s"当成缓存失效的缺陷
+重查一遍。
 
 ## 失效键：盘状态，不是时间
 
@@ -48,7 +34,7 @@ key_sha = sha256(  schema ‖ face ‖ 归一化后的参数 ‖ 工作区路径
    `can_close`）不许跨过一次事件序号 —— 事件一追加，键立刻变，下一次必然现算。
    它和 `mtime`/大小是两条独立的证据：事件流被追加、后又被截断成同样大小这种事
    在 `mtime` 上看不出来，序号上看得出来。
-3. 没有 TTL。这一条是有意的，也是这一轮反复在治的那类缺陷的反面：
+3. 没有 TTL。这一条是有意的，也是本项目反复在治的那类缺陷的反面：
 
    - TTL 会把"刚刚变过"的那一份盘读成旧值（`hit=true` 但读数是旧的）—— 那是假绿；
    - TTL 也会把"十分钟没变"的那一份盘重新现算一遍 —— 那是白等。
