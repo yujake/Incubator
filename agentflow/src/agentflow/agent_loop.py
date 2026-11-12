@@ -12437,15 +12437,15 @@ class AgentLoop:
         return self._message_by_channel(payload, to, reply_to)
 
     def _do_message(self, payload: Mapping[str, Any]) -> dict[str, Any]:
-        """`message` 形状的寻址与投递（业主 2026-10-19：「只有名册上的编号能通话」）。
+        """`message` 形状的寻址与投递（「只有名册上的编号能通话」）。
 
-        2026-10-22（业主「按编号沟通」）：`to` 由解码层按名册名 / 绝对编号解析过时
-        （payload 带 `roster_addressing`，见 `_decode_shape` 的 `message` 那一支），
-        `to` 已经是那个成员的角色、原写法留在 `roster_addressing["written"]` 里。
-        这一档「按原写法再问一次名册」（同一份判据、同一份上下文 ⇒ 读数就是那条地址的
-        读数），然后投角色收件箱：收件箱是按角色收的，把 `B1` 原样当 `to` 写进去
-        会得到一条没有任何进程读得到的留言。读数仍然带 `how=parent/child`
-        （名册判据通过），所以"按名册名发的角色留言"在盘上看得出来是哪一种落点。
+        解码层按名册名 / 绝对编号解析过 `to` 时（payload 带 `roster_addressing`，见
+        `_decode_shape` 的 `message` 那一支），`to` 已经是那个成员的角色、原写法留在
+        `roster_addressing["written"]` 里。这一档「按原写法再问一次名册」（同一份判据、
+        同一份上下文 ⇒ 读数就是那条地址的读数），然后投角色收件箱：收件箱是按角色收的，
+        把 `B1` 原样当 `to` 写进去会得到一条没有任何进程读得到的留言。读数仍然带
+        `how=parent/child`（名册判据通过），所以"按名册名发的角色留言"在盘上看得出来
+        是哪一种落点。
 
         这一档的判据链与"按角色名发"逐字相同（先协作边、再回执）：`to` 已经是收件箱
         认得的角色，闸门就是那道闸。名册只回答"这个写法是哪个角色"，不另开一条投递
@@ -12454,7 +12454,6 @@ class AgentLoop:
         是角色通道。`via_roster` 只认那一次现读的名册：payload 里的 `written` 只是
         "原写法"的指针，它自称的东西不算数。
 
-        D-63（2026-10-24 业主：「现在怎么还有to谁的写法？已经是名册机制了！」）：
         收件人的三种写法各有各的处置，判据仍然只有 `roster_addresses` 那一处，
         这一层只读它的结论：
 
@@ -12471,11 +12470,10 @@ class AgentLoop:
         written = str(marker.get("written") or "") if isinstance(marker, Mapping) else ""
         # ---- 寻址：先问名册
         #
-        # 改前这里是"`to` 像不像角色名"的字符串启发式：不在 `S.ROLES` 里就当名册名。
-        # 那个启发式把名册「绕开」了 —— 角色名那一条路从不问名册，于是
-        # ①名册名在发消息这条路上用不上、②同名多实例时行为未定义（谁都能读到）、
-        # ③退役的名字仍可被寻址。现在判据只有一处（`roster_addresses`），
-        # 而"发给谁"的结论进读数 `addressing`（三态：读成了 / 不在名册 / 读不成）。
+        # 判据只有一处（`roster_addresses`），"发给谁"的结论进读数 `addressing`
+        # （三态：读成了 / 不在名册 / 读不成）。不用"`to` 像不像角色名"的字符串启发式：
+        # 那会把名册「绕开」—— 角色名那一条路从不问名册，于是名册名在发消息这条路上
+        # 用不上、同名多实例时行为未定义（谁都能读到）、退役的名字仍可被寻址。
         addr = self._address_of(written or to)
         how = str(addr.get("how") or "")
         via_roster = (bool(written) and how in ("parent", "child")
@@ -12485,7 +12483,7 @@ class AgentLoop:
             # 按 `to` 重新问一次名册：不拿一个对不上的地址去投递。
             addr = self._address_of(to)
             how = str(addr.get("how") or "")
-        # 权限先于路由（业主 2026-10-19 之后仍然如此）：`to` 写成「角色名」时，
+        # 权限先于路由：`to` 写成「角色名」时，
         # 那句拒信必须先说"没有协作边"，而不是"你要发给谁" —— 否则同一个越权会被
         # 读成一次寻址问题，而准入判据的唯一实现仍只有 `message_admission` 那一份。
         # 名册名 / 绝对编号不被解码层翻成角色之前不吃这一条（`_message_to_member`
@@ -12503,16 +12501,16 @@ class AgentLoop:
                     "addressing": addr, "error": str(addr.get("error") or ""),
                     "note": (f"{addr.get('error')}（这一条没有落盘：`send_message` 没调、"
                              "板项没开 —— 受控拒绝不是「稍后再试」）")}
-        # 名册不可用那一档不再有回退（2026-10-22 按业主口径从 fail-open 改成 fail-closed）：
+        # 名册不可用那一档没有回退（fail-closed）：
         # 它由上面那条 `refused` 拦下（`roster_addresses` / `_address_of` 给的是
-        # `refused="roster_unavailable"`）。改前这里有一支 `_message_legacy` 的回退 ——
+        # `refused="roster_unavailable"`）。不用 `_message_legacy` 的回退：
         # 那句"说话不该被一次读失败挡住"在私聊上恰好是"不校验名册"，而名册规则的方向是收紧：
         # 已经有双边通话（父/子）、上行与手稿角色级通道，私聊没有非开不可的场合。
         if how in ("parent", "child") and via_roster:
             # 名册名 / 绝对编号已翻成角色 ⇒ 落角色收件箱（见本方法 docstring）。
             out = self._message_by_channel(payload, to, reply_to)
         elif how in ("parent", "child"):
-            # 名册成员 ⇒ 落成"挂在收件人名下的板项"（只有它自己读得到，父不代读 T20）
+            # 名册成员 ⇒ 落成"挂在收件人名下的板项"（只有它自己读得到，父不代读）
             out = self._message_to_member(payload, addr)
         else:
             # `ALL`（公共频道）/ 用户：原来的通道逐字不动
