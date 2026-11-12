@@ -9099,17 +9099,16 @@ class Conductor:
         折叠成同一个值"—— 本项目在引文校验、OCR、D 溯源、C 预算截断四处
         踩过它，每一次的后果都是下游把"我们没查"读成了"查了没有"。
 
-        ## D25（`draft/146` D25）：角色返回的 `status` 不是任务终态
+        ## 角色返回的 `status` 不是任务终态
 
         检查器那一族动作（E / L 的 `check_formal` / `formalize` / `record`）把 `status`
         写成三态词（`verified` / `failed` / `unknown`）—— 那是"检查器说了什么"，不是
-        "这次召唤跑成了什么"。原来把 `raw["status"]` 直接当终态，落出两个真机缺陷：
+        "这次召唤跑成了什么"。把 `raw["status"]` 直接当终态会落出两个缺陷：
 
         - `status="failed"` ⇒ 任务 failed，而 `schema.Task.validate` 要求 failed 必须写
           `error`；角色把检查器原话写在 `detail` 里（L 的键就叫 `detail`）⇒ 写台账那一刻
-          抛 `ValueError` ⇒ 整步落 `failed / 执行中异常` 且 payload 丢失（真机原文：
-          `L.formalize 执行中异常（ValueError: status=failed 时必须写 error…）`，
-          `payload=None`）。一次有证据的"命题没核过"被记成"框架崩了"，证据全丢；
+          抛 `ValueError` ⇒ 整步落 `failed / 执行中异常` 且 payload 丢失。一次有证据的
+          "命题没核过"被记成"框架崩了"，证据全丢；
         - `status="unknown"`（受控拒绝 / 漏步 / 自检不过）一律折成 `done/ok` ⇒ 动作日志
           （`out/tasks/<id>.json`）上"拒绝 / 没查成 / 成功"三者同形。
 
@@ -9118,7 +9117,7 @@ class Conductor:
         | 角色返回 | 任务终态 | 为什么 |
         |---|---|---|
         | `refused=True` / `status="refused"` / 受控 `refusal_reason` | done/`refused` | 角色自报"这次调用不成立"：拒绝是策略的决定 |
-        | `ok is False`（`draft/37` §88） | `refused` 或 `failed` | 见下面那一段 |
+        | `ok is False` | `refused` 或 `failed` | 见下面那一段 |
         | `failed`（`status` 或 `tri_state`） | failed/`failed` | 检查器说不行 ⇒ 这一趟没干成；`error` 从 `detail` 兜底 |
         | `unknown` | done/`no_result` + `[handler_not_checked …]` | 没查成：跑完了，但没给出结论 |
         | `verified` / 其它 | done/`ok` | 跑完了且给出了结论 |
@@ -9159,10 +9158,10 @@ class Conductor:
             declared_refusal = (raw.get("refused") is True or declared_status == "refused"
                                 or refusal is not None)
             if status == "done" and raw.get("ok") is False:
-                # ---- §88：handler 自己说了"这次没做成"，就不许记成 ok。
-                # T1 第 2 趟真机的根因：`B.register_statement` 有 8 次返回 `{"ok": False, "kind":
-                # "missing_quote_reason"…}`，而台账把它们全记成 `outcome=ok`（detail 还写着"按有产出处理"）⇒ 主控
-                # 以为命题登记好了，而 `statements` 是 0 行，那条链就在这一步静默停住。
+                # ---- handler 自己说了"这次没做成"，就不许记成 ok。
+                # 不接住的后果：台账把它们全记成 `outcome=ok`（detail 还写着"按有产出
+                # 处理"）⇒ 主控以为活干完了，而下游那一张表是 0 行，那条链就在这一步
+                # 静默停住。
                 # 分档：handler 声明了受控的 `refusal_reason` ⇒ `refused`（词表定义就是"这次调用本身不成立"）；只说
                 # `ok=False` 而没分类 ⇒ `failed`（"执行了、没成功"，理由合成在 error 上）。声明的 `outcome` 无论
                 # 是不是任务级词表，都不许把 `ok=False` 洗成 ok —— 那正是下面那条"外来判定折叠成 ok"会做的事，
@@ -9182,7 +9181,7 @@ class Conductor:
                     outcome = "failed"
                     error = error or f"{stamp} handler 返回 ok=False，未声明受控的 refusal_reason"
             elif status == "done" and declared_refusal:
-                # ---- D25 ③：角色声明了"拒绝"⇒ 必须落 `refused`，且行上的理由在受控词表里。
+                # ---- 角色声明了"拒绝"⇒ 必须落 `refused`，且行上的理由在受控词表里。
                 # L 的 `formalize` / `record` 拒绝时给的是 `refused=True` + 它自己的理由码
                 # （`statement_not_found` / `reading_mismatch` …），那些不在 `REFUSAL_REASONS`
                 # 里：框架不替它再造一套词表 —— 行上落 `invalid_params`（词表定义正是
@@ -9192,11 +9191,11 @@ class Conductor:
                 status, outcome = "done", "refused"
                 refusal = refusal or "invalid_params"
             elif status == "done" and tri == "failed":
-                # ---- D25 ①：三态说"检查器说不行"⇒ 这一趟没干成。结论与把 `status`
-                # 直接当终态的那一版相同，区别只在 `error` 有来源、payload 不丢。
+                # ---- 三态说"检查器说不行"⇒ 这一趟没干成；`error` 从 `detail` 兜底，
+                # payload 不丢。
                 status = "failed"
             elif status == "done" and tri == "unknown":
-                # ---- D25 ②：`unknown` 是"没查成"，不是 ok（受控拒绝走上面那一支）。
+                # ---- `unknown` 是"没查成"，不是 ok（受控拒绝走上面那一支）。
                 # 落 `done/no_result` 而不是新造一个 `tasks.outcome` 取值：`TASK_OUTCOMES`
                 # 是被 `cycles.outcome` / `audits.outcome` 复用的受控词表（`schema.py`
                 # 还是禁改区），为一次映射把它改宽是把整张词表改宽。`no_result` 说的是
@@ -9213,30 +9212,28 @@ class Conductor:
             if outcome is not None and (
                     str(outcome) not in S.TASK_OUTCOMES
                     or str(outcome) in S.FRAMEWORK_ONLY_OUTCOMES):
-                # ---- 两套词表不许折叠（实测缺陷，2026-09-29 验收 P1）
+                # ---- 两套词表不许折叠
                 #
                 # 角色有自己的判定词表（F 的子目标判定是 `progress` / `no_change` /
                 # `blocked` …），而这里要的是任务级结果词表
                 # （`TASK_OUTCOMES = ok/no_result/not_applicable/refused/failed/cancelled`）。
-                # 以前这里把角色的判定原样透传 ⇒ `Task.validate` 抛 `ValueError`
-                # ⇒ 整步落 failed，而活其实已经干完了（事务已提交）。
-                # 实测：20/20 条 `F.step` 台账是 `failed`，而 14 条检索请求已经提交、
-                # 11 条以 ok 收尾 —— 台账说"失败"，实际成功。这直接毁掉 P10 的
-                # "台账能重建 M 的决策序列"。
+                # 把角色的判定原样透传 ⇒ `Task.validate` 抛 `ValueError` ⇒ 整步落
+                # failed，而活其实已经干完了（事务已提交）—— 台账说"失败"、实际成功，
+                # 那直接毁掉"台账能重建 M 的决策序列"。
                 #
                 # 处置：任务级结果按"执行完成"记 `ok`，角色的判定原样留在 detail 里
                 # （可见，不是静默丢弃 —— 静默丢弃是本项目最忌的形态）。
-                # D22 补的那一半：`FRAMEWORK_ONLY_OUTCOMES`（`cut_off_by_parent`）虽然
-                # 在词表里，却只有父代理的退场结算能写 —— handler 声明它不算数
+                # 另一半：`FRAMEWORK_ONLY_OUTCOMES`（`cut_off_by_parent`）虽然在词表里，
+                # 却只有父代理的退场结算能写 —— handler 声明它不算数
                 # （否则一行会凭空变成"被掐断"，而读侧会把它的产出当作"未并入"丢掉）。
                 detail = f"[handler_outcome={outcome}] {detail}".strip()
                 outcome = "ok"
             if status == "failed":
                 outcome = "failed"
-                # ---- D25 第一面：`status=failed` 必须写 `error`（`Task.validate` 逐字
-                # 要求"失败的原因不能是空白"），而角色把检查器的原话写在 `detail` 里
-                # （L/E 的键名就叫 `detail`）⇒ 从这里兜底。原来只认 `raw["error"]`，
-                # 于是 L 的每一次真失败都在写台账那一刻抛 ValueError，payload 一起丢。
+                # ---- `status=failed` 必须写 `error`（`Task.validate` 逐字要求"失败的原因
+                # 不能是空白"），而角色把检查器的原话写在 `detail` 里（L/E 的键名就叫
+                # `detail`）⇒ 从这里兜底。只认 `raw["error"]` 的话，L 的每一次真失败都在
+                # 写台账那一刻抛 ValueError，payload 一起丢。
                 error = error or detail or (
                     "handler 声明 status=failed 但没写原因（框架按无理由失败记录）")
                 detail = detail or error
@@ -9248,9 +9245,9 @@ class Conductor:
                 detail=detail or "执行完成",
                 error=error,
                 # 角色拒绝时它的理由必须能传到行上：`Task.validate` 逐字要求
-                # `outcome=refused` 带受控的 `refusal_reason`，而这里此前没透传它
+                # `outcome=refused` 带受控的 `refusal_reason`，而不透传它
                 # ⇒ 角色一拒绝就落 `failed`（"策略说不"被记成"代码崩了"）。
-                # 实测（2026-09-29）：这正是 `test_refused_outcome_is_not_rewritten` 咬出来的。
+                # 判据：`test_refused_outcome_is_not_rewritten` 咬的就是这一条。
                 refusal_reason=refusal,
                 payload=raw.get("payload", raw.get("data", raw)),
                 artifacts=list(raw.get("artifacts") or []),
@@ -9258,12 +9255,12 @@ class Conductor:
                 tokens=int(raw.get("tokens") or 0),
                 usd=float(raw.get("usd") or 0.0),
             )
-        # 返回值不是 Mapping 时，也认它自己声明的 `outcome` / `detail`
-        # （2026-10-15 加，T5 第 8 趟的真机读数）：`BRunResult` 这一类结果对象本来就带着
-        # `outcome` / `detail` 两个属性，而这一支此前一律记 `ok` —— 于是"这一趟什么都没
-        # 产出"与"干得漂亮"在台账上同形。只认受控词表里的取值（角色自己的判定词表，
-        # 例如 F 的 `no_change`，不在 `TASK_OUTCOMES` 里 ⇒ 不采信，仍记 `ok` 并把话留在
-        # `payload` 里），这样这条口子不会把两套词表折叠起来。
+        # 返回值不是 Mapping 时，也认它自己声明的 `outcome` / `detail`：`BRunResult`
+        # 这一类结果对象本来就带着 `outcome` / `detail` 两个属性，而这一支若一律记
+        # `ok`，"这一趟什么都没产出"与"干得漂亮"在台账上就同形了。只认受控词表里的
+        # 取值（角色自己的判定词表，例如 F 的 `no_change`，不在 `TASK_OUTCOMES` 里 ⇒
+        # 不采信，仍记 `ok` 并把话留在 `payload` 里），这样这条口子不会把两套词表折叠
+        # 起来。
         declared = getattr(raw, "outcome", None)
         if (isinstance(declared, str) and declared in S.TASK_OUTCOMES
                 and declared not in S.FRAMEWORK_ONLY_OUTCOMES):
