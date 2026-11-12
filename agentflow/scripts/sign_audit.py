@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""`agentflow sign-audit`：D268 批 1 的只读读数口（零模型、零写盘）。
+"""`agentflow sign-audit`：只读的签回验读数口（零模型、零写盘）。
 
-它回答一个问题：按"必须可复算"的新口径，每个工区里的签到底有几份是真的。
+它回答一个问题：按"必须可复算"的口径，每个工区里的签到底有几份是真的。
 
-七张表（对应设计 §5.3 的五张表 + 本批要求的 `borrowed` 与"不可复算签文件"清单）：
+七张表：
 
 1. `signed`：凭据在、且复算通过（签文件里的 `passes` 能在台账上逐条点出 `need` 行）。
 2. `unissued`：够票（`votes >= need`）却没有签文件 —— 事故档，今天是按 `signed` 读的。
@@ -13,21 +13,18 @@
 6. `legacy_clean_only`：有 clean 行（1..need-1 票）、没有凭据 —— 严格化后从"当签读"
    翻成"欠签"的那批。
 7. `unverifiable_sign_files`：不可复算的签文件逐条（工区 / 文件 sha / 理由码 /
-   那格台账）—— 只列，不写盘、不补签、不标记（业主 2026-11-09 裁定 ⑦）。
+   那格台账）—— 只列，不写盘、不补签、不标记。
 
-读什么：`<root>/data/statements.json`、`verifications/**/*.jsonl`、`out/vsigns/*.json`、
-`reports|notes|out` 下的 `*proof*.md`。写什么：一个字节都不写（不建目录、不加锁、
-不写报告、不碰台账、不碰签文件）。
-
-退出码：`0` 查过了（含"0 签"）/ `2` 没查成（根不在盘上 / 一条台账都读不出来）。
-`2` 不是"没有问题"：它是"这一格没查成"，与 `0` 必须分开（三态纪律）。
+读 `<root>/data/statements.json`、`verifications/**/*.jsonl`、`out/vsigns/*.json`、
+`reports|notes|out` 下的 `*proof*.md`；一个字节都不写（不建目录、不加锁、不写报告、
+不碰台账、不碰签文件）。退出码：`0` 查过了（含"0 签"）/ `2` 没查成（根不在盘上 /
+一条台账都读不出来）。`2` 不是"没有问题"：它是"这一格没查成"，与 `0` 必须分开。
 
 跑法：
 
     python scripts/sign_audit.py --root projects/paper-rewrite-98b
     python scripts/sign_audit.py --root .                 # 扫 <root>/projects/* 或 <root>/agentflow/projects/*
-    python scripts/sign_audit.py --root projects/paper-rewrite-84 --json
-"""
+    python scripts/sign_audit.py --root projects/paper-rewrite-84 --json"""
 from __future__ import annotations
 
 import argparse
@@ -53,7 +50,7 @@ def _workspaces(root: Path) -> list[Path]:
     `agentflow/` 自己就有一套空表。所以：
     ① 根自己就是一个有命题的工区 ⇒ 只看它；
     ② 否则先看 `agentflow/projects/`、再看 `projects/`（本仓的数据面在
-       `agentflow/projects/`；`D:\Incubator\projects\` 是另一套历史目录）；
+       `agentflow/projects/`）；
     ③ 都没有时才把根下「有命题」的子目录当工区（空表子目录不算 ——
        否则 `--root .` 会把 `agentflow/` 那套空表当成一个工区）。
     """
@@ -113,7 +110,7 @@ def _manuscript_for(ws: Path, sid: str, no: int,
                     rows: Sequence[Mapping[str, Any]]) -> str:
     """这一份证明的正文载体（只读；次序：台账点名的稿 > 内容 sha 对得上的稿 > 同名稿）。
 
-    98b 的 000000 是 `reports/b-proof-000000.md`（不是 `f-proof-*`）⇒ 只按
+    有的工区正文落在 `reports/b-proof-000000.md`（不是 `f-proof-*`）⇒ 只按
     `depsection.manuscript_relpaths` 那一条扫不到，必须先用台账行的 `manuscript`。
     """
     mine = [r for r in rows if int(r.get("proof_no") or 1) == int(no)]
@@ -275,9 +272,9 @@ def _audit_workspace(ws: Path) -> dict[str, Any]:
         if key in seen:
             continue
         seen.add(key)
-        # 块自称 3/3 的那一版有没有一份复算通过的凭据？
+        # 块自称 n/n 的那一版有没有一份复算通过的凭据？
         # 注意：不能拿"现行正文"的 `sign_reading` 判 —— 块盖的是旧版、而旧版真签过时，
-        # 按现行正文读会把它误报成冲突（84 的 f-proof-000000 就是这一档）。
+        # 按现行正文读会把它误报成冲突。
         cred = VS.credential_reading(ws, block_sha) if block_sha else {
             "found": False, "recomputable": False, "problem": "no_block_sha",
             "path": "", "why": "签块没写正文sha"}
