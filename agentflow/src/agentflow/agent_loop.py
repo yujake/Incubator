@@ -1102,17 +1102,15 @@ def _dump_invalid_reply(root: str, sid: str | None, step: int, text: str,
 #:
 #: 2026-10-21 第二批（`availability` / `parent_limits`）：这两格不是"这一趟活的事实"，
 #: 而是"这一次 run 的配置"—— 前者随伙伴配置变（谁配了 provider / key），后者随
-#: `Policy` 变（`cli.py` 每趟用 `wall_clock_sec` / `usd_budget` 现造）。它们此前住在
-#: system 的 `PARTNER_AVAILABILITY`（段序 4520）/ `PARENT_LIMITS`（段序 5210）里，
-#: 于是换一次配置 ⇒ M 的 system 从 63% / 88% 处断开（本机实测）。落点与那十格同一个：
-#: 开场这一条消息（消息不是前缀）。
+#: `Policy` 变（`cli.py` 每趟用 `wall_clock_sec` / `usd_budget` 现造）。放进 system 会让
+#: 换一次配置就断开前缀缓存；落点与那十格同一个：开场这一条消息（消息不是前缀）。
 OPENING_FACT_KEYS: tuple[str, ...] = (
     "task", "inbox", "board", "children", "user_replies",
     "summoned_by", "task_id", "depth", "parent_task_id", "workspace_root",
     "availability", "parent_limits",
-    # 2026-10-22（业主 B-3）：我名下被 V 判「有毛病」的证明明细。它与上面十二格同一个
-    # 落点（开场那条 user 消息），因为它是"这一趟要补哪几条"的活账 —— 换一趟活/V 多签
-    # 一签，它就不同；放进 system 会让前缀在每一签之后作废。
+    # 我名下被 V 判「有毛病」的证明明细。它与上面十二格同一个落点（开场那条 user
+    # 消息），因为它是"这一趟要补哪几条"的活账 —— 换一趟活/V 多签一签，它就不同；
+    # 放进 system 会让前缀在每一签之后作废。
     "v_rejections",
 )
 
@@ -1140,22 +1138,18 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
                         parent_limits: str = "", v_rejections: str = "") -> str:
     """一趟循环开头的简报（任务 / 父与子 / 用户回答 / 处境 / 派活上限）。
 
-    ## 为什么这里没有「收件箱」与「板」两格（D-52，业主 2026-10-24 的口径）
+    ## 为什么这里没有「收件箱」与「板」两格
 
     开场这一条消息是快照：谁派的、深度、台账号、名册、工作区 —— 一趟定一次，
     续跑要能逐字重建它（`tests/test_user_channel_stop_and_resume.py` 的
     `rebuilt == run.messages` 就是这条判据）。
 
     而留言与板项是流水：跑到一半子代理交差、父代理回复、V 的判决、计时器到点，
-    每一步都可能新增。它们此前也被塞在快照里（开卷九格里的 `inbox` / `board`），
-    于是"这一趟开头听到了什么"被冻在第一条消息里。开卷之后唯一还会送东西的是
-    "一步执行完之后听一次"那条耳朵（`AgentLoop._hear`），而它对这些步都不发生：
-    `invalid` / 没拿到回复 / 正在阻塞等子 / 收工那一步。真机现场（`projects/sylow3`，
-    只读读数）：t-000031 / t-000038 在 17:44:42 / 17:45:45 落成 `item_state=queued`，
-    收件人 t-000003 直到 18:05:06 那次阻塞式派活返回、步 8 执行完才被那条耳朵送到
-    （19 分钟；它在这 19 分钟里一步都没有），而"送过没有"在盘上一条记录都没有
-    （`seen_step=8` 查不到对应的投递事件）。所以缺的不是"再调一次渲染"，是
-    "把流水的投递口从'上一步的耳朵'改成'每一次 ask_step 之前的一次读数'"。
+    每一步都可能新增。把流水塞进快照，就再也送不到收件人手里 —— 开卷之后唯一还会
+    送东西的是"一步执行完之后听一次"那条耳朵（`AgentLoop._hear`），而它对
+    `invalid` / 没拿到回复 / 正在阻塞等子 / 收工那几步都不发生；"送过没有"在盘上
+    也可以一条记录都没有。缺的不是"再调一次渲染"，是"把流水的投递口从'上一步的耳朵'
+    改成'每一次 ask_step 之前的一次读数'"。
 
     所以两格搬去了 :func:`mailbox_digest` / `AgentLoop._deliver_mailbox`：每一次
     `ask_step` 之前现算一次"发给我、还没读过的"那批，作为一条独立的增量消息投进去
@@ -1169,15 +1163,11 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
     3. 流水只有一条通道、一个状态机（板项 `queued → seen`，留言 `agent_inbox` 投递登记），
        "投过没有"因此可复算（append-only 的 `agent_mailbox` 事件）。
 
-    2026-10-21 起其余各格从 system 搬来（跨 run 也命中缓存）：`AGENT_IDENTITY`（段序 0）
-    的 `task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`、
-    `TASK_FRAME`（4200）的 `task` / `user_replies`、`WORKSPACE_FACTS`（10000）的
-    `workspace_root` 都是"这一趟的事实"（实测两份不同的活从第 95 个字符起就不同 ⇒
-    换一趟活第一次调用 `hit=0`）；现在只在这条消息里念一遍（缺省句唯一来源仍是
-    `agent_prompts.prompt_facts`），system（前缀）逐字节不变。第二批 `availability`
-    / `parent_limits` 同搬（属"这一次 run 的配置"，原住 `PARTNER_AVAILABILITY` 4520 /
-    `PARENT_LIMITS` 5210，换配置在 63% / 88% 处断开），system 只剩静态指路语
-    （`PARTNER_WIRING_POINTER` / `PARENT_LIMITS_RULES`）。
+    其余各格（`task` / `task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`
+    / `user_replies` / `workspace_root` / `availability` / `parent_limits`）都是"这一趟的
+    事实"或"这一次 run 的配置"：放进 system 会让前缀在换一趟活 / 换一次配置时作废，
+    所以只在这条消息里念一遍（缺省句唯一来源仍是 `agent_prompts.prompt_facts`），
+    system（前缀）逐字节不变。
     """
     defaulted = AP.prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id,
                                depth=depth, parent_task_id=parent_task_id,
@@ -1189,7 +1179,7 @@ def _opening_transcript(task: str, *, inbox: str, summoned_by: str, task_id: str
     # 但这里刻意不把 `defaulted['inbox']` / `defaulted['board']` 念出来：它们是流水，
     # 归属 `_deliver_mailbox`（见 docstring 的第一节）。
     return (f"你的任务：{defaulted['task']}\n\n"
-            # 业主 2026-10-22 的 B-3：「V 的判决必须递到 F（让 F 去修）」。这一栏是
+            # V 的判决必须递到 F（让 F 去修）：这一栏是
             # "V 已经判过、判的是有毛病"的逐条读数（数据源只有 V 的台账）。
             f"我名下被 V 判「有毛病」的证明（逐条读 V 的台账）："
             f"{defaulted['v_rejections']}\n\n"
@@ -1220,12 +1210,11 @@ def _is_role_name(value: str) -> bool:
 def _message_landed(result: Mapping[str, Any]) -> bool:
     """这一步的留言真的落成了没有（`LoopRun.messages_sent` / `messages_refused` 的唯一判据）。
 
-    为什么不能只看 `shape == "message"`（2026-10-22 查实的那条缺陷）：受控拒绝
+    为什么不能只看 `shape == "message"`：受控拒绝
     （`not_in_roster` / `not_an_edge` / `member_retired` / `public_is_not_a_conversation`
     / `no_task_id`）同样产出一行 `shape == "message"` 的步，而它
-    一条都没落盘。旧实现按形状数，于是 D 发给 E 的那一条被 `not_in_roster` 拒掉时，
-    回执照报 `messages_sent == ["E"]`，而 E 的收件箱是空的 —— 回执把"尝试过"读成了
-    "发成了"（`tests/test_a_message_receipt_never_lies.py` 守这一条）。
+    一条都没落盘。按形状数就会把受控拒绝读成"发成了"，回执凭空说收件人收到了一条
+    根本不在它收件箱里的信（`tests/test_a_message_receipt_never_lies.py` 守这一条）。
 
     判据两条，缺一不可：
     1. 没有受控拒绝理由码（`refused` 为空）：被拒的那一步没有落点；
@@ -1265,15 +1254,14 @@ SUMMON_NOT_DISPATCHED: tuple[str, ...] = ("refused", "cancelled", "wash_proposed
 def _summon_landed(result: Mapping[str, Any]) -> bool:
     """这一步的召唤真的派出去了没有（`LoopRun.summons` / `summons_refused` 的唯一判据）。
 
-    为什么不能只看 `shape == "summon"`（2026-10-22 查实的那条缺陷）：两种"形状对、
+    为什么不能只看 `shape == "summon"`：两种"形状对、
     什么也没派出去"的步同样产出一行 `shape == "summon"`：
 
     1. 受控拒绝（`forbidden_edge` / `depth_exceeded` / `invalid_params` / `no_owner` …）
        —— `Conductor._refuse` 会为被拒的那一次写一行 `outcome="refused"` 的台账行，
-       于是 `task_id` 非空、看起来像"有落点"，但一个子代理都没有被唤起
-       （现场：C 想唤 A，被 `forbidden_edge` 拒，而回执照报 `summons == ["A"]`）；
+       于是 `task_id` 非空、看起来像"有落点"，但一个子代理都没有被唤起；
     2. 两段式洗格式请示（`outcome="wash_proposed"`、`executed=False`）—— 结果自己
-       写着"这一趟没有派活（0 行新任务、0 次子任务调用）"（现场：D 的回执照报 `["D"]`）。
+       写着"这一趟没有派活"。
 
     判据三条，缺一不可：
 
