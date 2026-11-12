@@ -357,10 +357,10 @@ class LlmSeam:
     def spent_usd(self) -> tuple[float, str]:
         """全局已花多少钱，以及这个数是从哪儿读来的（`(usd, source)`）。
 
-        ## 为什么必须是全局口径（2026-10-15 业主裁定 B2）
+        ## 为什么必须是全局口径
 
         `budget_limit()` 给的是这一趟的总预算（盘上寄存器 / `--budget-usd`），
-        而这里此前比的是 `self.spend.usd` —— 这一条缝自己的累计。
+        而这里若比的是 `self.spend.usd` —— 这一条缝自己的累计。
         一个角色一条缝（`for_role`），于是每个角色都以为"我最多能花整笔"：
         十个角色就能把总预算花成十倍，而每一处闸门看起来都在"正常工作"。
         业主那句「只卡总花销的钱」说的正是这个数，不是某条缝的数。
@@ -554,7 +554,7 @@ class LlmSeam:
             reasoning=str(getattr(reply, "reasoning", "") or ""),
             # "没查成"与"它回了看不懂的东西"在这一格必须分得开：网关从不抛异常，
             # 超时/网络/认证都折成 `ok=False` + `error_kind`（映射只有 `judge.problem_of_reply`
-            # 一处）。2026-10-12 T2 真机读数：三次超时全落成 `judge_failed:ModelReplyNotOk`，
+            # 一处）。真机读数：三次超时全落成 `judge_failed:ModelReplyNotOk`，
             # 循环据此把它算成"坏 JSON"并写成"连续 3 次没有给出可解析的 JSON"。
             problem=J.problem_of_reply(reply),
             detail=str(getattr(reply, "error_detail", "") or ""),
@@ -598,7 +598,7 @@ class LlmSeam:
         各有自己的价，而不是一个数打天下。
 
         "从配置里读出厂商与模型"这一步（含"没配 vendor 就按端点认一家"）
-        不在本函数里，在 `modelgw.vendor_model_of`：它此前是抄了两份的
+        不在本函数里，在 `modelgw.vendor_model_of`：它若分两处就是抄两份
         （这一处一份，`modelcost.price_of` 那一处干脆没有）⇒ 两条路的计价口径
         不一致而两边都自洽。口径只许有一处。
         """
@@ -669,7 +669,7 @@ class LlmSeam:
         1. 调用方显式给的 `task_id`（循环那一路会给）；
         2. 没给 ⇒ `ambient_task_id()`（`conductor.current_task_id()`：召唤上下文里
            挂着"这一趟是谁"）。V 的审阅工具、抽取那一路、秘书的判断都走这一档 ——
-           改前它们一律传空串，于是那些账落在 `task_id=None` 上（真机 18 笔、$0.0322），
+           不传它们就是空串，那些账落在 `task_id=None` 上，
            既不属于任何一行 `tasks`、也点不出名；
         3. 两处都没有（不在任何一次召唤里）⇒ 如实 `task_id=None`，并在 `note` 里
            写 `unattributed` 与原因。这一档是「说得出为什么」的空，不是"忘了填"：
@@ -782,7 +782,7 @@ class LlmSeam:
         try:
             data = parse_llm_json(call.text)
         except Exception as exc:
-            # 把解析报错原文 + 一句话诊断留下来（2026-09-30）：以前这里只写
+            # 把解析报错原文 + 一句话诊断留下来：只写
             # "不是 JSON 对象"，于是"它到底哪里写坏了"在台账上不可回答。
             # 真机实测：模型（M 与 G 的循环都）连着三次多写一个右花括号
             # （`…"why": "…"}}`）—— 现在这句话会进"纠正消息"，模型下一次就能改对。
@@ -817,7 +817,7 @@ class LlmSeam:
             # 随 `call` 回去，循环那侧据 `call.tool_call_list[1:]` 在 step 结果里
             # 写一条 `warn`（点名被丢的那几条的 action 名）。
             #
-            # 为什么不再把整步判成 `judge_bad_json`（改前那一版就是那样）：r34b 真机
+            # 为什么不再把整步判成 `judge_bad_json`：r34b 真机
             # 147 步里有 10 步因为"给了 2 条工具调用"整步作废，而 token 早就计费了
             # （有的步 `tokens_out` 到 6000），产出全丢。"多条"不是坏数据，是模型
             # 多给了一条 —— 它不是"没按协议说话"，所以不该走坏 JSON 那一档。
@@ -825,7 +825,7 @@ class LlmSeam:
             if data is None:
                 # ---- 坏参数要留原文
                 #
-                # 改前这里原样构造 `SeamCall(**{**call.__dict__, ...})`，`text` 仍是
+                # 若原样构造 `SeamCall(**{**call.__dict__, ...})`，`text` 仍是
                 # 回复正文（原生调用时为空）⇒ 循环的 `_dump_invalid_reply` 写出
                 # 0 字节文件，而报错里的 char 6691 谁也复核不了。
                 # `judge_bad_args` 缺的那段证据就是 arguments 本身，所以这一类把
@@ -836,7 +836,7 @@ class LlmSeam:
                                   "detail": detail, **extra})
                 return None, bad
             return data, call
-        # 回落：上游没给结构化调用（或不支持 tools）⇒ 走原来的文本 JSON 那条路。
+        # 回落：上游没给结构化调用（或不支持 tools）⇒ 走文本 JSON 那条路。
         from .llm import parse_llm_json
 
         err = ""
@@ -893,7 +893,7 @@ NOTIFY_JSON_SCHEMA: dict[str, Any] = {
 #: 是 `summary` / `body`，不是 `["to", "summary", "body"]`。
 #:
 #: 为什么必须广告（`draft/108` CS-18）：`_decode_shape` 的 `summon` / `summon_many`
-#: 两支都调 `_with_notify` 把这一栏带进 payload，而原生面此前没有它 ⇒ 原生那条路上
+#: 两支都调 `_with_notify` 把这一栏带进 payload，而原生面没有它 ⇒ 原生那条路上
 #: 主控结构上给不出留痕，只能退回"框架据派活派生"的那一行 —— 而那一行按本仓口径
 #: 只是日志、不算交接。与 `NOTIFY_JSON_SCHEMA` / `blocked` 是同一族（批 R47 修的是
 #: 形状名与 `final.blocked`，本批修的是键一级的这两格）。
@@ -1017,7 +1017,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         },
         "required": ["to", "body"],
     }),
-    # `framework_handoff` 与 `framework_interrupt` 此前不在（这张表里没有它们），而
+    # `framework_handoff` 与 `framework_interrupt` 不在（这张表里没有它们），而
     # `agent_loop.SHAPES` 里两个都在、提示词也按形状名教模型写它们（手稿是"交接落行"的
     # 唯一入口）。于是"`SHAPES` 减去 `tool` 全都广告成函数"这条纪律有一条裂缝：
     # 原生路上写 `framework_handoff` 只会拿到"模型调用了一个没广告过的函数"。
@@ -1051,7 +1051,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "properties": {
             "of": {"type": "string",
                    "description": "缺省 = 自己的名册；也可写我名下某个子代理的名册名"},
-            # S-H（裁定 14）的"全树"那一档：原生工具面此前没有这一格，
+            # S-H（裁定 14）的"全树"那一档：原生工具面没有这一格，
             # 于是模型在原生调用那条路上结构上给不出它（提示词里却写着）——
             # 与解码器那一侧的漏字段是同一件事的两半，两处一起补（`draft/105` A9）。
             # 不写 `enum`：取值合法性由读侧当面拒绝（与文本那条路同一套口径），
@@ -1084,13 +1084,13 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "properties": {
             "final": {"type": "string"},
             "evidence": {"type": "array", "items": {"type": "string"}},
-            # `notify` 是"收工手稿"那一栏（`agent_prompts` §7）：它此前只活在提示词里，
+            # `notify` 是"收工手稿"那一栏（`agent_prompts` §7）：它只活在提示词里，
             # 不在广告面上 ⇒ 原生工具面下模型结构上给不出这一栏。见
             # `NOTIFY_JSON_SCHEMA` 上面那段（含"为什么 required 里没有它"）。
             "notify": NOTIFY_JSON_SCHEMA,
             # `blocked`（"我在等上级指导"的收工声明）与 `notify` 是同一条纪律的两半：
             # 文本那条路由 `_decode_shape` 带过 `{"final": …, "blocked": {…}}`，
-            # 而原生面此前既没广告它、`to_shape` 又把它静默丢掉 ⇒ 模型以为声明了、
+            # 而原生面既没广告它、`to_shape` 又把它静默丢掉 ⇒ 模型以为声明了、
             # 父那边 `subtree_blocked` 读出来仍是没有（`draft/108` CS-17）。
             # 这里只做广告 + 透传，不在传输层判必填：`why` / `needs` 齐不齐由
             # `AgentLoop._note_blocked_declaration` 判并给读数 —— 把它列进 `required`
@@ -1144,7 +1144,7 @@ class ToolFace:
         广告出去的是归一化名：`names` 的键只有下划线写法（`fs_read` 这样的函数名
         才符合 OpenAI 兼容接口的字符集），而提示词、拒信、文档、工具面里用的都是
         带点的真名（`fs.read` / `table.get`）。模型两种名字都见过，于是它写点号名
-        是必然会发生的事 —— 改前这里只按原样查 `names`，点号名一律查不到，
+        是必然会发生的事 —— 只按原样查 `names`，点号名一律查不到，
         落成"模型调用了一个没广告过的函数"，再被计进 `judge_bad_json`。真机三趟
         16 条 `judge_bad_json` 里 8 条就是这个形态（`table.get`、`review.record_finding`
         …），而它们没有一条是坏 JSON。
@@ -1191,7 +1191,7 @@ class ToolFace:
     def raw_args_text(call: Mapping[str, Any]) -> str:
         """一条原生调用的 `arguments` 原文（不是回复正文）。
 
-        为什么需要它（真机 82，2026-11-01 · B-1/B-2/B-3）：`judge_bad_args` 坏的是
+        为什么需要它：`judge_bad_args` 坏的是
         `arguments` 那段字符串，而 `SeamCall.text` 装的是"回复正文"——原生调用时它是
         空的。循环把 `call.text` 交给 `_dump_invalid_reply`，于是 `out/invalid/*.txt`
         全是 0 字节：报错给了列号（例如 char 6691），证据却被丢掉了。
@@ -1258,7 +1258,7 @@ class ToolFace:
             if "notify" in args:
                 out["notify"] = args["notify"]
             # `blocked` 同一条纪律（`draft/108` CS-17）：给了就原样带过，没给就不造空 dict ——
-            # 此前这一格被静默丢掉，于是"模型声明卡住了"与"没人声明"在盘上长得一样。
+            # 这一格若被静默丢掉，于是"模型声明卡住了"与"没人声明"在盘上长得一样。
             # 校验与落痕仍归 `AgentLoop._note_blocked_declaration`（含它那两句读数）。
             if "blocked" in args:
                 out["blocked"] = args["blocked"]
@@ -1340,7 +1340,7 @@ def _json_shape_hint(text: str) -> str:
     注意它只用于诊断：修补后的结果不会被当成模型的原意使用
     （那会让"多一个括号"这种错被静默接受）。
 
-    2026-10-28 追加一档：内联 XML 形态的工具调用（DeepSeek 的 `｜｜DSML｜｜` 标记）。
+    追加一档：内联 XML 形态的工具调用（DeepSeek 的 `｜｜DSML｜｜` 标记）。
     真机 `projects/paper-rewrite-78c` 的 `B#7`：回复尾部逐字是
     `</｜｜DSML｜｜ parameter> … </｜｜DSML｜｜ calls>` —— 它根本不是 JSON，修补救不回来，
     但对模型说清"你写成了 XML，只接受一行 JSON"能让下一回合改对（泛泛的"不是 JSON"
