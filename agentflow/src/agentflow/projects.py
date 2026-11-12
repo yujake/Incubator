@@ -69,12 +69,10 @@ __all__ = [
 #: 项目里的数据是会变的运行产物，而 `agentflow/` 是四道门逐字节快照的受审树 ——
 #: 把运行数据写进受审树，等于每跑一次就让它"漂"一次。
 #:
-#: 2026-10-07 改：这里此前逐字写着一台机器的绝对路径（`D:\Incubator\projects`），
-#: 换一台机器就是一句假话，而症状是"项目建到了别处"而不是一句报错。现在它由
-#: 由本包位置推出的工作区根算出来（`settings.WORKSPACE_ROOT`，即 `src/` 的上两级），
+#: 默认落点由本包位置推出的工作区根算出来（`settings.WORKSPACE_ROOT`，即 `src/` 的上两级），
 #: 并且允许用设置文件的 `workspace.projects_dir` 覆盖（见 `projects_dir`）。
-#: 本机读数：改前改后逐字相同（都是 `D:\Incubator\projects`）—— 判据在
-#: `tests/test_settings.py::test_the_projects_dir_default_is_derived_not_written`。
+#: 不写死绝对路径：换一台机器就是一句假话，而症状是"项目建到了别处"而不是一句报错。
+#: 判据在 `tests/test_settings.py::test_the_projects_dir_default_is_derived_not_written`。
 DEFAULT_PROJECTS_DIR = SET.WORKSPACE_ROOT / "projects"
 
 #: 环境变量兜底（给不想每次敲 `--projects-dir` 的用法）。
@@ -83,7 +81,7 @@ ENV_PROJECTS_DIR = "AGENTFLOW_PROJECTS_DIR"
 _NAME_RE = re.compile(r"^project(\d+)$")
 
 #: 已发出去的编号水位（单调递增）。为什么需要它：只看现有目录的话，
-#: 删掉 `project2`（当时最大的那个）之后下一个名字又是 `project2` ——
+#: 删掉 `project2`（最大的那个）之后下一个名字又是 `project2` ——
 #: 于是两次不同的运行共用一个路径，而"这个项目的历史"从此说不清。
 #: 水位文件是唯一一处"记着曾经发到几号"的地方，`create_project` 负责推进它。
 SEQUENCE_FILE = ".sequence"
@@ -98,7 +96,7 @@ def projects_dir(explicit: str | Path | None = None) -> Path:
     四档的取舍与工具链那一轴同一条口径（见 `agentflow.settings` 的模块 docstring）：
     环境变量压在最上面是为了 CI 与既有脚本不被设置文件静默改掉；
     设置文件是本机的正常落点；最后一档是"由本包位置推出来的工作区根下的
-    `projects/`"（改前那一档是一个写死的绝对路径）。
+    `projects/`"（不是写死的绝对路径）。
     """
     if explicit:
         return Path(explicit)
@@ -240,7 +238,7 @@ class BudgetNotLandable(RuntimeError):
     """显式给的额度写不进 `budget.json` ⇒ 这一次不跑。
 
     为什么不"拿旧额度接着跑"：`budget.limit_usd()` 的取值口径是"寄存器优先"，
-    于是旧寄存器会静默压过用户刚给的数（实测形态：`budget.json` 里是 0.5，用户给
+    于是旧寄存器会静默压过用户刚给的数（`budget.json` 里是 0.5、用户给
     `--budget-usd 10`，闸门照旧按 0.5 停，而输出里一个字都不提）。那一格是
     "用户以为给了 10"与"闸门按 0.5 停"同时成立的形态，必须在开跑之前停下来。
     """
@@ -294,7 +292,7 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
     """按 `ref` 建/初始化工作区，并写一张项目卡。冷启动/收编才调用它。
 
     `force_nonempty=True` 只由 `adopt_project` 在"用户自己往文件夹里丢过东西"
-    那一档传进来（业主 2026-10-13 的口径）；它只是对 `Store.init` 那道
+    那一档传进来（口径）；它只是对 `Store.init` 那道
     "外来目录"守卫开一次口子，不改变本函数对文件的任何行为。
     """
     from . import schema as S
@@ -325,7 +323,7 @@ def create_project(ref: ProjectRef, *, now: str | None = None,
 
 def adopt_project(root: str | Path, *, name: str | None = None, now: str | None = None,
                   allow_nonempty: bool = True) -> dict[str, Any]:
-    """把一个用户自己建的、里面已经有东西的文件夹收编成项目（业主 2026-10-13）。
+    """把一个用户自己建的、里面已经有东西的文件夹收编成项目。
 
     业主的原话：「要知道有时候用户会自己在 projects 里建文件夹，然后把几个文件丢进去，
     就用系统开始工作的。也就是项目中除了系统成体系的产出，其他内容不会是结构化的」。
@@ -401,7 +399,7 @@ def seed_source_paper(project: str | Path, *, paper: str | Path,
                       force: bool = False) -> dict[str, Any]:
     """把一篇外部论文铺进项目：`source/` = 只读基线，`out/paper/main.tex` = 可改副本。
 
-    为什么要有这一条（业主 2026-10-13：「打通正常的创建项目逻辑」）：`create_project` 只铺
+    为什么要有这一条（「打通正常的创建项目逻辑」）：`create_project` 只铺
     工作区骨架，没有任何受支持的路径把"那篇论文"放进项目 —— 于是 T1 的夹具是手搓的，
     而绕过守卫手抄（`init --force`）会留下一个没有项目卡、产物归属也接不上的文件夹。
 
@@ -459,7 +457,7 @@ def create_review_project(root: str | Path, *, paper: str | Path,
     于是 `classify` / 产物归属 / `project list` 都认得它。
     """
     # 用户自己建的目录（里面已经有东西）也走这条路：`adopt_project` 收编它、
-    # 把原有条目记进项目卡，再铺论文（业主 2026-10-13 的口径）。
+    # 把原有条目记进项目卡，再铺论文（口径）。
     got = adopt_project(root, name=name, now=now)
     proj = Path(got["project"]["path"])
     seeded = seed_source_paper(proj, paper=paper, force=force)
@@ -544,7 +542,7 @@ def _open_extract_task(store: Store, project_name: str, input_key: str = "") -> 
 
     `input_key` 也要给：它是循环检测的键（同一条 `(role, action, input_key)` 出现在
     祖先链上才算循环），留空会被 `verify_tasks` 报 `task_without_input_key`（warning）
-    —— 实测漏第一次就撞到。取"这一跑读的是哪一架子书"（书架路径）比取项目名更贴近
+    —— 漏第一次就会撞到。取"这一跑读的是哪一架子书"（书架路径）比取项目名更贴近
     输入本身；没给书架就退回项目名。
 
     这里刻意不截断（与 `runflow._new_task_row` 把主题截到 120 字不同）：那条截断的
@@ -559,7 +557,7 @@ def _open_extract_task(store: Store, project_name: str, input_key: str = "") -> 
     with store.tx("tasks", actor="cli") as tx:
         # 台账号的取法与 `Conductor._write_new_row` 同一套口径：`next_prefixed_id`
         # 取 max+1（它不是 `store.alloc_id` 的类别 —— `ID_COUNTERS` 里没有 `task`，
-        # 实测踩过：写成 `tx.alloc_id("task")` 会得到"未知 ID 类别"，退出码 2）。
+        # 踩过：写成 `tx.alloc_id("task")` 会得到"未知 ID 类别"，退出码 2）。
         tid = next_prefixed_id(tx.rows("tasks"), "task_id", "t")
         row = S.Task(task_id=tid, role="B", action="extract", called_by="M",
                      status="running", input_key=key,
@@ -629,20 +627,16 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
     if extractor is None:
         # `meter` 必须给：不给的话这一次抽取的花销一笔都进不了 `usage_ledger`，
         # 而 CLI 上会打出 0.0 USD —— 那正是"自报比事实好看"的形态。
-        # 实测（2026-09-28）：第一次真跑打出的就是 `0.0 USD / 3 次调用`，
-        # 钱花了、账上没有。归口用 `extract`（`schema.USAGE_SCOPES` 里的一档）。
+        # 归口用 `extract`（`schema.USAGE_SCOPES` 里的一档）。
         # `task_id=task_id or None`：给不出来就如实说"这一笔不挂在任何一次召唤上"。
-        # 此前这里与 `host.b_extractor` 是同一类病：把 `None` 折成字符串 `"(未接线)"`。
-        # 那个字符串不是 `t-NNNN` 契约里的号 ⇒ `verify.verify_all` 把它报成
+        # 若把它折成字符串 `"(未接线)"`：那个字符串不是 `t-NNNN` 契约里的号 ⇒
         # `dangling_usage_task`(error)，而账本看起来"有个具体的任务号"（假读数比没读数更难发现）。
         # 透传 `None` 的语义与 `charged=False` 完全无关：前者是"这笔花销挂不上召唤"，
         # 后者是"这笔没有真的入账"（`uncharged()` 数的是后者）—— 两件事不许合并成一个标签。
         client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
                                 task_id=task_id or None, role="B")
-        # 输出额度不再由我们设（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
-        # 这里曾写 `max_tokens=8192`，理由是"缺省 4096 会把长输出截在半句上"。
-        # 真调用对照（2026-10-15）：请求体里不带 `max_tokens` 时上游回
-        # `finish_reason=stop`、`tokens_out=14,015`（带上 32,768 反而只有 12,987）。
+        # 输出额度不设（「我们不卡 token，只卡总花销的钱」）：
+        # 请求体里不带 `max_tokens` 时上游照样回 `finish_reason=stop`、长输出写得下。
         extractor = LLMExtractor(client)
     else:
         client = None
@@ -673,15 +667,14 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         # 停止条件是"这一轮什么都没试"，不是"没处理成功"：
         # 抽取失败（`failed=1`、`processed=0`）本来就不置 `processed`（留给租约到期重试），
         # 把那种轮当成"队列空了"会让一次失败的抽取静默结束整轮循环 ——
-        # 实测：7 本书只读了 2 本，而 CLI 上看起来"跑完了"。
+        # 7 本书可能只读了 2 本，而 CLI 上看起来"跑完了"。
         if processed == 0 and failed == 0:
             break
 
     # 抽取阶段就被剔除的关系（`LLMExtractor._ground_relations`：模型的 `quote` 在原文里
-    # 逐字找不到 ⇒ 当场丢掉）。必须单独汇总出来：它此前只写进抽取器的 `last_report`，
+    # 逐字找不到 ⇒ 当场丢掉）。必须单独汇总出来：它若只写进抽取器的 `last_report`，
     # 于是真跑时会出现"日志里有 7 行『剔除引文无法回验的关系』，而汇总框里
     # 『引文未过（已剔除）』读 0" —— 同一份输出里两个数互相矛盾，用户没法判断该信哪个。
-    # 实测（2026-09-30，2 本书 87 页）：新增关系 13 / 抽取阶段剔除 7 ⇒ 模型一共提了 20 条。
     # 两档是两个阶段，不是同一件事的两种说法：这里是"引文在原文里根本找不到"，
     # 下面的 `quotes_failed` 是"活到落库那一步、但带页码窗口的回验没过"。
     dropped = 0
@@ -742,7 +735,7 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     这一趟会把它落进 `<项目根>/budget.json`（C4，见 :func:`_land_budget_register`）。
     为什么落盘点在这里而不是调用方：冷启动的工作区是在本函数里 `create_project` 出来的，
     在那之前往那个文件夹里写 `budget.json` 会让 `Store.init()` 的外来条目守卫判它不干净
-    （实测：新目录上先写寄存器，`run --budget-usd` 直接以 store 错误退出）；而写晚了，
+    （新目录上先写寄存器，`run --budget-usd` 会直接以 store 错误退出）；而写晚了，
     这一趟就已经花过钱了。所以"工作区已存在、还没花钱"那个时刻只在这个函数里。
 
     `run_topic_fn` 是给测试用的接缝（不传就用真的 `runflow.run_topic`）。
@@ -780,7 +773,7 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
         ingest = rep.to_dict()
 
     # 运行号与产物目录只在真的要跑模型时才分配（`R-25`）。
-    # 改前：不给 `--topic` 的那次调用也会占一个号、建出一个空的 `out/run-N/`，
+    # 不给 `--topic` 的那次调用若也占一个号、建出一个空的 `out/run-N/`，
     # 而它没有六件产物 —— 读到那个目录的人会问"它的产物呢"。
     # 数据本身没错（卡里 topic 空、result 空），但那是个可被误读的形态。
     topic_text = topic.strip()
@@ -794,13 +787,13 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     # 主题那一跑的材料才不只是"一页摘录"，而是有图可查的知识面。
     extraction: dict[str, Any] = {}
     if extract:
-        # 抽取这一步也要有一条自己的 `tasks` 行（2026-09-30 修）。
+        # 抽取这一步也要有一条自己的 `tasks` 行。
         #
-        # 为什么：`modelclient` 按 `task_id` 把花销记进 `usage_ledger`，而原来的
+        # 为什么：`modelclient` 按 `task_id` 把花销记进 `usage_ledger`，而
         # `task_id=f"{ref.name}-extract"`（例如 `first-extract`）既不是合法台账号
         # （`t-NNNN`），台账里也没有对应的行 ⇒ 用户跑完 `project run --extract` 再跑
         # `verify`，会看到两条 `dangling_usage_task`（error）加一条
-        # `usage_task_total_mismatch`（warning）。实测就是这么撞到的：
+        # `usage_task_total_mismatch`（warning）。那一撞的形态：
         # 「刚跑成功的那一跑，自查说数据不一致」—— 那会直接毁掉用户对读数的信任。
         extract_task = _open_extract_task(store, ref.name,
                                           input_key=str(books_dir) if books_dir else "")
@@ -847,14 +840,14 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
             search_fn={"localpdf": search_fn} if search_fn else None,
             fetch_fn=fetch_fn, extract_fn=extractor, fulltext=bool(fulltext),
             retrieval_limit=int(retrieval_limit),
-            # `lean` 必须透传：它是"proof 级证据"那一档的唯一开关。此前 `project` 这个
-            # 动词没有这个开关，于是本地书架这条主路径上永远拿不到 proof 级证据，
-            # 每次运行的 `not_wired` 里都挂着 lean（实测 2026-09-28：`--lean` 直接报
+            # `lean` 必须透传：它是"proof 级证据"那一档的唯一开关。`project` 这个
+            # 动词若没有这个开关，本地书架这条主路径上永远拿不到 proof 级证据，
+            # 每次运行的 `not_wired` 里都挂着 lean（`--lean` 会直接报
             # `unrecognized arguments`）。口径与 `run` 那个动词一致：默认关，关着就如实
             # 把"没有任何形式化验证证据"写进未接线清单。
             lean=bool(lean),
             # 项目路径默认把逐页正文存进项目根的 `.fulltext/`（内容寻址、同一本书
-            # 只存一份；依据 `draft/30` §T0-6 与 `draft/29` §10.6）。裸 `run` 那个动词
+            # 只存一份）。裸 `run` 那个动词
             # 没有项目根，所以它不默认开 —— 要开就显式 `--text-store-dir`。
             # 调用方给了 `text_store_dir` 就按它走（覆盖默认，供 CLI 与测试用）。
             text_store_dir=str(text_store_dir) if text_store_dir
