@@ -5997,6 +5997,8 @@ def one_evidence_used_twice(documents: Iterable[Mapping[str, Any]],
     空列表 = 不报（正常形态）。
     """
     exp_by_id: dict[str, Mapping[str, Any]] = {}
+    #: 同一行实验被几条断言各引一次时，`_freeze(observations.data)` 只算一次（第一次被引时缓存）。
+    ident: dict[str, tuple[Any, ...]] = {}
     for row in experiments:
         if not isinstance(row, Mapping):
             continue
@@ -6022,7 +6024,10 @@ def one_evidence_used_twice(documents: Iterable[Mapping[str, Any]],
                 row = exp_by_id.get(ref)
                 if row is None:
                     continue          # 悬空引用由 `dangling_citation` 报，不在这里重复
-                group = groups.setdefault(evidence_identity(row),
+                key = ident.get(ref)
+                if key is None:
+                    key = ident[ref] = evidence_identity(row)
+                group = groups.setdefault(key,
                                           {"claim_ids": [], "experiment_ids": []})
                 if cid not in group["claim_ids"]:
                     group["claim_ids"].append(cid)
