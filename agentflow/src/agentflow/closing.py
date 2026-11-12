@@ -5164,7 +5164,7 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
             ledger_rows, ledger_problems = [], [f"台账读不成（{type(exc).__name__}: {exc}）"]
         for one in ledger_problems:
             out["problems"].append(f"{sid}：{one}")
-        by_vid = {str(r.get("verification_id") or ""): dict(r) for r in ledger_rows}
+        by_vid = {str(r.get("verification_id") or ""): r for r in ledger_rows}
         proofs: list[dict[str, Any]] = []
         for no, text in _VR.proof_list(row):
             label = _VR.proof_label(sid, no)
@@ -5178,7 +5178,7 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                                "why": f"签的读数没读成（{type(exc).__name__}: {exc}）"})
                 continue
             state = str(st.get("state") or "unsigned")
-            ev = dict(st.get("evidence") or {})
+            ev = st.get("evidence") or {}
             verdict = str(ev.get("verdict") or "")
             vid = str((st.get("credential") or {}).get("verification_id")
                       or (ev.get("last_row") or {}).get("verification_id") or "")
@@ -5214,7 +5214,7 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                     cls = "never_submitted"
             else:
                 cls = "never_submitted"
-            rec = dict(by_vid.get(vid) or {})
+            rec = by_vid.get(vid) or {}
             owner = str(rec.get("submitter") or rec.get("recipient") or "")
             row_manuscript = str((ev.get("last_row") or {}).get("manuscript") or "")
             proofs.append({
@@ -5302,7 +5302,7 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
         if (str(row.get("status") or "") == "abandoned"
                 and _SA.parse_abandon(row.get("quote_reason")).get("checked")):
             continue
-        ev = dict((row.get("bits") or {}).get("evidence") or {})
+        ev = (row.get("bits") or {}).get("evidence") or {}
         source = str(ev.get("proof_source") or "")
         if source == "citation":
             cls = "unoptimized_from_lit"
