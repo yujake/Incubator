@@ -220,9 +220,10 @@ class _ProofChain:
         # 二维展开：每个 `(证明号, 组号)` 是一条候选路径。证明号那一维是"第几条证明"，
         # 组号那一维是"第几条路径"（语义未改：组内 AND / 组间 OR）。
         by_proof = graph.groups_of(node["stmt_id"])
-        proof_nos = sorted(by_proof)
+        ordered_proofs = sorted(by_proof.items())
+        proof_nos = [proof_no for proof_no, _by_group in ordered_proofs]
         groups_out: list[dict[str, Any]] = []
-        for proof_no, by_group in sorted(by_proof.items()):
+        for proof_no, by_group in ordered_proofs:
             for group, edges in sorted(by_group.items()):
                 got = graph.walk(node["stmt_id"], group=group, proof_no=proof_no,
                                  edges=edges, max_depth=max_depth)
@@ -233,13 +234,21 @@ class _ProofChain:
                         key=lambda g: (g["length"] if g["reached"] else 10 ** 6,
                                        g.get("proof_no") or 1, g["group"]))
         best = ranked[0] if ranked and ranked[0]["reached"] else None
-        if any(g.get("cycle") for g in groups_out):
-            warnings.append("有 " + str(sum(1 for g in groups_out if g.get("cycle")))
+        cycle_count = unreached_count = 0
+        truncated = False
+        for g in groups_out:
+            if g.get("cycle"):
+                cycle_count += 1
+            if not g["reached"]:
+                unreached_count += 1
+            if g.get("truncated"):
+                truncated = True
+        if cycle_count:
+            warnings.append("有 " + str(cycle_count)
                             + " 组依赖里出现环 ⇒ 那一组跳过（不牵连别的组）")
-        if any(not g["reached"] for g in groups_out):
-            warnings.append("有 " + str(sum(1 for g in groups_out if not g["reached"]))
+        if unreached_count:
+            warnings.append("有 " + str(unreached_count)
                             + " 组没走到根（悬空边 / 超深度 / 依赖没写，逐组见 payload）")
-        truncated = any(g.get("truncated") for g in groups_out)
         # 「2026-10-17」：「无依赖的 target 自己也要判一次根」 ——
         # 原实现只 walk 依赖组 ⇒ 一条"无前提自证定理/原始概念"被读成
         # "0 组可选路径，没有一组走到根"，而按本仓口径它「本来就是根」（链闭合）。
@@ -652,14 +661,18 @@ class _DepGraph:
 
         viable, length, _detail = _along(start_node, 0, [start_node], sub_group=group,
                                          edges=list(edges), via_proof=proof_no)
+        truncated = cycle = False
         for item in failures:
             item["blocking"] = not viable
+            if item["blocking"]:
+                if item["status"] == "depth":
+                    truncated = True
+                elif item["status"] == "cycle":
+                    cycle = True
         return {"group": group, "proof_no": proof_no, "hops": hops,
                 "length": int(length), "reached": bool(viable),
-                "truncated": any(item["status"] == "depth" and item["blocking"]
-                                 for item in failures),
-                "cycle": any(item["status"] == "cycle" and item["blocking"]
-                             for item in failures),
+                "truncated": truncated,
+                "cycle": cycle,
                 "unwritten": unwritten,
                 "failures": failures,
                 "why": "" if viable else self._why_not_viable(failures),
