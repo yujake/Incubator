@@ -497,6 +497,16 @@ def _body_text_of(paper: Mapping[str, Any]) -> str:
     return str(paper.get("text") or "") if paper.get("checked") else ""
 
 
+def _blank(text: str) -> bool:
+    """正文"没有可审的字"的判据（`not text.strip()` 的等价形式）。
+
+    等价性：对 `str` 而言 `.strip()` 得空串 ⇔ 要么本来就是空串、要么每个字符都是空白
+    （`str.isspace()` 的定义就是"非空且全为空白"）。正文可能有几十万字符，
+    `.strip()` 会为问这一句整份拷一份字符串；`isspace()` 只扫一遍、不分配。
+    """
+    return not text or text.isspace()
+
+
 # ---------------------------------------------------------------- 纯函数判据
 
 
@@ -537,6 +547,17 @@ def scan_document(
     reviewed = 0
     decided = 0
     seen_ids: dict[str, str] = {}
+    # 用词上限（`doc_tools.wording_ceiling`：`proof` 永远到顶，Lean 开关关掉时
+    # `proof_review` 也到顶 —— 业主 2026-10-12：「没 Lean 也要能写论文」）。
+    # 它只读 `settings.lean_enabled()`（纯读，本函数体内不写任何全局态），
+    # 同一个 `scan_document` 调用里每次读到的都是同一个元组 ⇒ 提到循环外算一次。
+    # 读不到（工具层不可导入 / 设置文件写坏）时按最保守（只有 proof），与改前逐字相同。
+    try:
+        from .doc_tools import wording_ceiling
+
+        _ceiling = tuple(wording_ceiling())
+    except Exception:  # noqa: BLE001 —— 工具层读不到就按最保守（只有 proof）
+        _ceiling = ("proof",)
     for i, c in enumerate(claims):
         if not isinstance(c, Mapping):
             findings.append(
@@ -616,12 +637,6 @@ def scan_document(
                     quote=text or cid,
                 )
             )
-        try:
-            from .doc_tools import wording_ceiling
-
-            _ceiling = tuple(wording_ceiling())
-        except Exception:  # noqa: BLE001 —— 工具层读不到就按最保守（只有 proof）
-            _ceiling = ("proof",)
         if ek in S.EVIDENCE_KINDS and ek not in _ceiling:
             hit = [m for m in OVERCLAIM_MARKERS if m in text]
             if hit:
@@ -889,7 +904,9 @@ def scan_document(
                     quote=d["label"] or d["dep_id"] or "(空：既无 label 也无 dep_id)",
                 )
             )
-        dep_check = {"checked": True, "reason": f"检查了 {len(list(dependencies))} 条依赖", "open": open_deps}
+        # `dependencies` 的声明类型就是 `Sequence`（见签名）⇒ 直接取长度，
+        # 不再为问一句"几条"把整份清单拷成一个 list（拷贝只服务这一句 str 插值）。
+        dep_check = {"checked": True, "reason": f"检查了 {len(dependencies)} 条依赖", "open": open_deps}
 
     errors = [f for f in findings if f["level"] == "error"]
     warnings = [f for f in findings if f["level"] == "warning"]
@@ -1206,17 +1223,22 @@ def _supersede_prior_open(
     返回被覆盖的读数 `[{finding_id, round, superseded_by}]`（与 finding 的落库值同源）。
     """
     changed: list[dict] = []
+    # 四个取值都只依赖入参（循环里没有任何东西改写它们）⇒ 循环外算一次。
+    # 改前每一行都重算一遍 `str(kind)` / `str(target)` / `str(new_id)` / `int(new_round)`，
+    # 而 `review_document` 是"每条新发现调一次本函数" ⇒ 同一批 `existing` 被扫 N 趟。
+    kind_s, target_s = str(kind), str(target)
+    new_id_s, new_round_i = str(new_id), int(new_round)
     for row in existing:
-        if str(row.get("kind") or "") != str(kind):
+        if str(row.get("kind") or "") != kind_s:
             continue
-        if str(row.get("target") or "") != str(target):
+        if str(row.get("target") or "") != target_s:
             continue
         if str(row.get("status") or "") != "open":
             continue
         rid = str(row.get("finding_id") or "")
-        if not rid or rid == str(new_id):
+        if not rid or rid == new_id_s:
             continue
-        if int(row.get("round") or 1) == int(new_round):
+        if int(row.get("round") or 1) == new_round_i:
             # 同一轮记的两条是并存的判词（都不覆盖对方）；不同轮 = 更早一次写入。
             # 为什么不写 `>=`：真机老行的 round 是旧的 max+1 口径（1..12），会比新的
             # `documents.review_rounds` 还大 —— 那些行仍然比"这一次写入"更早。
@@ -1225,10 +1247,10 @@ def _supersede_prior_open(
         if live is None:
             continue
         live["status"] = "superseded"
-        live["superseded_by"] = str(new_id)
+        live["superseded_by"] = new_id_s
         tx.upsert("review_findings", live)
         changed.append({"finding_id": rid, "round": int(live.get("round") or 1),
-                        "superseded_by": str(new_id)})
+                        "superseded_by": new_id_s})
     return changed
 
 
@@ -1444,11 +1466,18 @@ def _open_findings_gate(*, existing: Sequence[Mapping[str, Any]],
     """
     prior_open = [dict(r) for r in existing
                   if str(r.get("status") or "") == "open"]
+    # 改前那一支写的是 `next((dict(r) for r in existing if ...), None)`：生成器会把
+    # 命中之前扫过的每一行都先拷成 dict 再丢掉 —— 每个 rid 一份 O(N) 的拷贝。这里先
+    # 只挑出那一行（不拷），命中之后才拷一次；`dict(row) not in prior_open` 与改前的
+    # `row not in prior_open` 是同一次按内容比较（`row` 改前也只是那一行的副本）。
     for rid in {str(r.get("finding_id") or "") for r in reopened}:
-        row = next((dict(r) for r in existing
+        row = next((r for r in existing
                     if str(r.get("finding_id") or "") == rid), None)
-        if row is not None and row not in prior_open:
-            prior_open.append(row)
+        if row is None:
+            continue
+        copied = dict(row)
+        if copied not in prior_open:
+            prior_open.append(copied)
     reading = {
         "checked": True,
         "total": len(prior_open),
@@ -1605,7 +1634,7 @@ def review_document(
     try:
         doc = _doc_of(store, doc_id)
     except ValueError:
-        if not body.strip():
+        if _blank(body):
             raise
         row_missing = True
         # 台账行缺了：按"这一行还没登记过"的形状起一份最小输入（claims 为空 ⇒
@@ -1614,7 +1643,7 @@ def review_document(
                "sections": [], "open_problems": [], "markdown_path": None}
     paper_view = paper_reading(paper)
     paper_view["documents_row"] = "missing" if row_missing else "present"
-    if not body.strip():
+    if _blank(body):
         return _unreviewable_review(
             store, doc_id, round_no=round_no, paper_view=paper_view, doc=doc,
             actor=actor,
@@ -1642,11 +1671,20 @@ def review_document(
 
     existing = [dict(r) for r in store.rows("review_findings") if str(r.get("doc_id")) == doc_id]
 
-    seen = {_dedup_key(r) for r in existing}
+    # 一趟分完三件事：已有发现的去重键（`existing_keys`）、本轮扫描产出的全部去重键
+    # （`current_keys`）、以及待落库的新发现。改前这三样要扫三趟 —— `existing` 两趟
+    # （`seen` 一次、"标了 fixed 仍复现"的候选再一次）、`scan["findings"]` 两趟
+    # （落库候选一次、`current_keys` 再一次），每一趟都为每行现算一次 `_dedup_key`
+    # 的三段 `str()`。`_dedup_key` 只读行的 `kind/target/message` 三格，本段循环里
+    # 没有任何东西改写这些行 ⇒ 同一行在任何一趟算出的键逐字相同。
+    existing_keys = [_dedup_key(r) for r in existing]
+    seen = set(existing_keys)
+    current_keys: set[tuple[str, str, str]] = set()
     pending: list[dict] = []
     duplicate_skipped = 0
     for f in scan["findings"]:
         key = _dedup_key(f)
+        current_keys.add(key)
         if key in seen:
             duplicate_skipped += 1
             continue
@@ -1699,12 +1737,13 @@ def review_document(
                 new_findings.append(payload)
 
     # ---- 重开"标了 fixed 但其实还在"的发现（防止 G 用点状态的方式修好问题）
-    current_keys = {_dedup_key(f) for f in scan["findings"]}
+    # `current_keys` 与 `existing_keys` 都在上面那趟扫里算好了（同一行同一键）；
+    # 这里按 `existing` 的原序配回每一行，判据表达式逐字未变。
     reopened: list[dict] = []
     to_reopen = [
         r
-        for r in existing
-        if str(r.get("status")) == "fixed" and _dedup_key(r) in current_keys
+        for r, r_key in zip(existing, existing_keys)
+        if str(r.get("status")) == "fixed" and r_key in current_keys
     ]
     if to_reopen:
         _apply_finding_status(
@@ -2018,7 +2057,7 @@ def verify_fixes(
     _paper = read_paper_body(Path(getattr(store, "root", None) or "."))
     _body = _body_text_of(_paper)
     _submitted: dict = dict(doc)
-    if _body.strip():
+    if not _blank(_body):
         _submitted["text"] = _body
     # R-04-a：复扫与 `review_document` 共用同一个语义判据（`semantic_judge=None`
     # 时 `semantic_check["checked"] is False` —— 那是"没查"，不是"没问题"）。
@@ -2046,6 +2085,7 @@ def verify_fixes(
 
     resolved: list[dict] = []
     still_open: list[dict] = []
+    prev_keys: set[tuple[str, str, str]] = set()
     for r in prev:
         base = {
             "finding_id": r.get("finding_id"),
@@ -2060,13 +2100,15 @@ def verify_fixes(
             "status": r.get("status"),
         }
         key = _dedup_key(r)
+        prev_keys.add(key)
         if key in current:
             base["evidence"] = current[key].get("evidence")
             base["source"] = "prev_round"
             still_open.append(base)
         else:
             resolved.append(base)
-    prev_keys = {_dedup_key(r) for r in prev}
+    # `prev_keys` 就是这趟里每一行的键（改前是又扫一趟 `prev` 重算一遍 `_dedup_key`，
+    # 那一趟读的三格与这趟逐字相同、本段循环不写 `prev` 的任何行）。
     for key, f in current.items():
         if key in prev_keys:
             continue
@@ -2097,7 +2139,13 @@ def verify_fixes(
     semantic_not: list[dict] = []
     manual_not: list[dict] = []
     manual_done: list[dict] = []
-    for item in list(resolved):
+    # 改前是 `for item in list(resolved)` + 两条 `resolved.remove(item)`：先拷一份
+    # O(N) 的快照，再为每条被摘掉的行做一次 O(N) 的按值删除（O(N²)，且 `remove`
+    # 按内容相等找第一行）。改后一趟分拣：留下的按原序进 `kept_resolved`，
+    # 摘掉的直接不进 —— 循环结束后 `resolved` 与改前逐项同序（`resolved` 在
+    # 循环里没有被别处读过）。
+    kept_resolved: list[dict] = []
+    for item in resolved:
         fid = str(item.get("finding_id") or "")
         # ---- P2-4：手工判词不参与"本轮 scan 没复现 ⇒ fixed"这条判据。
         if fid in manual_done_ids:
@@ -2107,9 +2155,9 @@ def verify_fixes(
             item["source"] = "manual_rechecked"
             item["status"] = "fixed" if str(item.get("status")) == "fixed" else "wontfix"
             manual_done.append(item)
+            kept_resolved.append(item)
             continue
         if fid in manual_ids:
-            resolved.remove(item)
             item["source"] = "manual_not_rechecked"
             item["status"] = "open"
             item["note"] = f"[round {round_no}] {MANUAL_NOT_RECHECKED_NOTE}"
@@ -2127,7 +2175,6 @@ def verify_fixes(
             not_rechecked.append(item)
             continue
         if _is_semantic_finding(item) and not semantic_recheck_ok:
-            resolved.remove(item)
             item["source"] = "not_rechecked"
             item["status"] = "open"
             item["note"] = (
@@ -2157,6 +2204,8 @@ def verify_fixes(
                 "resolution_note": f"[round {round_no}] 重跑对应检查不再复现 ⇒ fixed",
             }
         )
+        kept_resolved.append(item)
+    resolved = kept_resolved
     for item in still_open:
         if item.get("source") != "prev_round":
             continue
@@ -2259,7 +2308,7 @@ def verify_fixes(
     unresolved = [f for f in blocking]
     reason_bits = [
         f"第 {round_no} 轮复审（上限 max_review_rounds={max_review_rounds}）："
-        f"上一轮 {len(prev)} 条发现里 resolved={len(resolved)}、仍复现={len(still_open) - len([f for f in still_open if f.get('source') == 'new_issue'])}",
+        f"上一轮 {len(prev)} 条发现里 resolved={len(resolved)}、仍复现={len(still_open) - sum(1 for f in still_open if f.get('source') == 'new_issue')}",
         f"error 级未解决 {len(unresolved)} 条",
         # `R-04-b`：没重跑语义判据时，上一轮那几条语义发现留在 open
         # （读数必须逐条说出来，否则"resolved 变多了"看起来像"修好了"）。
@@ -2481,7 +2530,9 @@ def review_report(
         "not_applicable_count": report["verdict"]["not_applicable"],
         "failed_gates": list(report["verdict"]["failed_gates"]),
         "unknown_gates": list(report["verdict"]["unknown_gates"]),
-        "own_error_count": len(list(own_errors)),
+        # `own_errors` 的声明类型是 `Sequence[str]`（见签名），且上面两处
+        # `list(own_errors)` 已经各自取过一份 ⇒ 数个数直接 `len`，不再为它拷第三份。
+        "own_error_count": len(own_errors),
         "coverage": coverage,
         "markdown": markdown,
     }
