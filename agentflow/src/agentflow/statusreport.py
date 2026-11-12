@@ -47,6 +47,9 @@ REPORT_TABLES: tuple[str, ...] = (
 #: 每张表在报告里最多列几条"最近的行"。
 RECENT_LIMIT = 8
 
+#: 整表行要留一份、供后面几段复用的表（见 `collect` 里的 `full_rows`）。
+_FULL_ROW_TABLES: tuple[str, ...] = ("tasks", "documents", "attack_plans", "statements")
+
 
 def _now() -> _dt.datetime:
     return _dt.datetime.now().astimezone()
@@ -94,8 +97,15 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
 
     root = Path(root)
     tables: dict[str, Any] = {}
+    # 这四张表的整表行后面还要各读一次（`statements` 数五元位、`tasks` 数在飞/顶趟、
+    # `attack_plans` 数产物、`documents` 给官能两项）：第一次读进来时留一份，
+    # 省掉后面四次 `_rows(store, ...)`（每次都重解析 JSON 并逐行复制）。
+    # 留的是未按 `since` 过滤的那一份 —— 后面那几处读的就是全量口径。
+    full_rows: dict[str, tuple[list[dict[str, Any]], str]] = {}
     for table in REPORT_TABLES:
         rows, why = _rows_or_why(store, table)
+        if table in _FULL_ROW_TABLES:
+            full_rows[table] = (rows, why)
         if since:
             rows = [r for r in rows if _row_time(r) >= str(since)]
         recent = [{"id": _id_of(table, r), "at": _row_time(r),
@@ -128,7 +138,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
 
     grades: dict[str, int] = {}
     problems = 0
-    statement_rows, statement_why = _rows_or_why(store, "statements")
+    statement_rows, statement_why = full_rows["statements"]
     for r in statement_rows:
         bits = EB.bits_from_row(r)
         grades[str(bits.get("grade"))] = grades.get(str(bits.get("grade")), 0) + 1
@@ -142,7 +152,7 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
     # ---- 在飞与卡点
     live = SC.live_pids(root)
     loops = SC.running_loops(root)
-    tasks = _rows(store, "tasks")
+    tasks = full_rows["tasks"][0]
     # 这一行是什么（哪根轴）、它活不活，只有秘书一处判（`secretary.row_axis` /
     # `secretary.is_live_agent`，2026-10-26 Q27）—— 这里不再自己看 `kind`，只说
     # "哪几根轴算在飞"：
@@ -301,9 +311,9 @@ def collect(store: Any, root: str | Path, *, since: str = "") -> dict[str, Any]:
         # 为什么把它们放进状态报告：真机卡点②③ 要读的正是这两样（"V 有没有被 F 用起来"
         # 与"attack_plans.history 的产物四种有没有齐备"），而 M/用户想知道"现在什么情况"时
         # 应当直接看到它们，而不是再去翻会话。
-        "attack_rounds": _attack_rounds(_rows(store, "attack_plans")),
+        "attack_rounds": _attack_rounds(full_rows["attack_plans"][0]),
         "interjections": _interjections(root),
-        "faculty": _faculty_mechanics(store, _rows(store, "documents")),
+        "faculty": _faculty_mechanics(store, full_rows["documents"][0]),
         # ---- S-07（`44 J-01` 的裁定：只读数、不进闸门）：D 的 `write_report`
         # "有调用、但台账里没有落点"。不进 `closing` 的闸门是这个读数的用途决定的
         # （诊断，不是判交付过不过；加进闸门会改变验收读数的翻转面）。
