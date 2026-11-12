@@ -1,4 +1,4 @@
-"""编排：把 A→B→C→D 串成一条可中断、可续跑、可审计的流水线（DESIGN-TOOLS.md §5）。
+"""编排：把 A→B→C→D 串成一条可中断、可续跑、可审计的流水线。
 
 ## 这一层为什么不是"一个脚本"
 
@@ -8,9 +8,9 @@ D 的循环本来就可以手工跑：调一次 C、调一次 D、跑一遍 A、
 - 每一轮的中间产物都落盘（C 报告文件 + 登记行、``research_questions`` 台账、
   D 的报告），因此"这一轮到底发生了什么"能在事后逐条重放；
 - 每一轮的摘要作为返回值回去（供 CLI 打印），不混进报告正文 ——
-  给机器看的和给人看的必须分开（与 §2.2 的"登记表 + 文件双份"同一条理由）；
+  给机器看的和给人看的必须分开（与"登记表 + 文件双份"同一条理由）；
 - 等待集（``waiting_request_ids``）落在盘上，所以即使进程被杀掉，
-  下一次运行 ``poll`` 依然能判断"我上次在等哪些请求"（§4.2）。
+  下一次运行 ``poll`` 依然能判断"我上次在等哪些请求"。
 
 ## 三种运行模式（同一段代码，靠参数区分）
 
@@ -88,7 +88,7 @@ def _reports_dir(store: Store) -> Path:
 def _conductor_for_c(store: Store, agent_c: Any) -> Any:
     """把调用方给的那个 `AgentC` 实例接到主控的召唤面上（L-03）。
 
-    为什么必须经 `conductor.summon`（`draft/44` 的 L-03）：`pipeline` 以前直呼
+    为什么必须经 `conductor.summon`：`pipeline` 以前直呼
     `agent_c.handle(...)` 再自己把报告写进 `analysis_reports` —— 那条路
     ① 不写 `role=C` 的 `tasks` 行（于是 `c_analysis_runs` 读 0），
     ② 绕过策略/预算/台账三道闸门。现在报告只由 C 的动作（`handle`，它的写集里
@@ -228,7 +228,7 @@ def run_pipeline(
     ----
     store       : 共享存储。
     request     : 需求原文（同时是 C 的分析需求与"这一轮在干什么"的审计记录）。
-    gap_rounds  : 补证据的轮数（默认 2，见 §8 待决问题 3 的"每问题最多 2 轮"）。
+    gap_rounds  : 补证据的轮数（默认 2：每问题最多 2 轮）。
                   从第 2 轮起不再重复做 C 的分析（报告已在盘上），
                   这样"再来一轮"的语义是"给已经提出的问题补证据"，而不是"重新分析一遍"。
     agent_c     : C 智能体。为 None 时只用 ``analysis_reports`` 里已登记的报告（replay 模式）。
@@ -273,7 +273,7 @@ def run_pipeline(
     if agent_d is None:
         # 必须把 C 实例显式交给 D。
         #
-        # I1（DESIGN-INTERACTIONS.md §1）要求 D 能"按需向 C 点菜"：在追问某个问题时
+        # I1 要求 D 能"按需向 C 点菜"：在追问某个问题时
         # 现场查 neighbors / relations_between / contradictions，而不是只消费上一次
         # 跑出来的报告。D 侧有一个惰性兜底（不传 c 时自己装配一个 AgentC），
         # 但那会让"谁负责装配 C"这件事隐式化 —— 一旦兜底行为变化，I1 会静默退化
@@ -308,8 +308,8 @@ def run_pipeline(
         # ---- L-03：经 `conductor.summon`（报告只由 C 的动作产出）
         #
         # 旧形态是 `_make_request_fn(agent_c)(request)` + `_persist_report(...)`：
-        # 那次分析没有 `role=C` 的 `tasks` 行、也没过策略/预算闸门 ——
-        # 真机后果就是 `c_analysis_runs` 读 0（台账上像"C 一次都没跑过"）。
+        # 那样分析没有 `role=C` 的 `tasks` 行、也没过策略/预算闸门 ——
+        # `c_analysis_runs` 会读 0（台账上像"C 一次都没跑过"）。
         # 现在走 `summon("C", "handle", {"request_text": request})`：C 的 `handle`
         # 自己 `persist()`（它的写集里本来就有 `analysis_reports`），
         # pipeline 只读回 `report_id` —— 于是"谁产出了报告"与"谁派了这活"都在台账上。
@@ -418,7 +418,7 @@ def run_pipeline(
         rsum["d"] = d_rounds
         rsum["submitted"] = sorted({rid for d in d_rounds for rid in d.get("submitted", [])})
 
-        # ---- 4.2 D 复查（§4.1 的 [6]→[3] 回路）：对尚未下结论的问题重新评估。
+        # ---- 4.2 D 复查（[6]→[3] 回路）：对尚未下结论的问题重新评估。
         # 这一步让"新到的文献"真正进入 D 的判断，而不是只躺在关系表里。
         # 不足的在这里再次提问（工具层的查重会挡住"已有未完成请求"的重复提交）；
         # 就绪的会在第 4.5 步被 poll 拉回 researching。
@@ -433,7 +433,7 @@ def run_pipeline(
             v = agent_d.assess(qid)
             considered.add(qid)
             # 即使 agent_a=None 也要提问（缺陷修复，见文件顶部"缺陷 3 的结论"）：
-            # assess 是纯确定性判断（§4.4 的三条判据），它不依赖 A 是否接线；
+            # assess 是纯确定性判断（三条判据），它不依赖 A 是否接线；
             # 提交请求也只是往 `search_requests` 写一行，同样不需要 A 在线。
             # 早先这里在 agent_a=None 时跳过提问，结果是"证据不足"这件事在台账里
             # 完全看不见（问题停在 open），用户会以为 D 没工作。
@@ -731,7 +731,7 @@ class _FakeB:
     """自检用的假 B：把未消化文献置 processed，并为第一条补一条通过校验的新关系。
 
     补关系是刻意的：D 的 poll 只有在"等待的请求结束 且 结果文献已被 B 消化"
-    之后才会把问题拉回 researching（§4.2）。只置 processed 而不改关系表，
+    之后才会把问题拉回 researching。只置 processed 而不改关系表，
     就测不到"新证据并入证据包"这条路径。
     """
 
