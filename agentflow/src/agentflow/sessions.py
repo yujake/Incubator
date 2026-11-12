@@ -259,7 +259,7 @@ def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
     reading: dict[str, Any] = {"checked": False, "files": 0, "records": 0,
                                "bad_lines": 0, "unreadable_files": [], "reason": ""}
     root_path = pathlib.Path(str(root))
-    if not root_path.exists() or not root_path.is_dir():
+    if not root_path.is_dir():
         reading["reason"] = f"工作区不存在：{root}"
         return ([], reading)
     folder = sessions_dir(root_path)
@@ -674,15 +674,16 @@ def reconcile_run_index(root: Any) -> dict:
         return {"tri": "unreadable", "drift": [], "sessions": sorted(live),
                 "reason": why}
     stored = index.get("sessions") or {}
+    stored_ids, live_ids = set(stored), set(live)
     drift: list[str] = []
-    for sid in sorted(set(stored) - set(live)):
+    for sid in sorted(stored_ids - live_ids):
         _rec = stored.get(sid)
         _rec = _rec if isinstance(_rec, dict) else {}
         drift.append(f"会话 {sid}：索引里有它（{len(_rec.get('runs') or [])} 趟），"
                      "而盘上已经没有这场会话了")
-    for sid in sorted(set(live) - set(stored)):
+    for sid in sorted(live_ids - stored_ids):
         drift.append(f"会话 {sid}：盘上有它，索引里没有（索引落后或没建全）")
-    for sid in sorted(set(live) & set(stored)):
+    for sid in sorted(live_ids & stored_ids):
         want = live[sid]
         got = stored.get(sid) or {}
         # ① 索引自己就是不守恒的（表里的 `runs` 复算摘要 ≠ 表里存着的 `digest`）
