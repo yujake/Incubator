@@ -136,9 +136,16 @@ def audit(root: str | Path) -> dict[str, Any]:
     out["checked"] = not problems
 
     groups: "OrderedDict[tuple[str, int], list[Mapping[str, Any]]]" = OrderedDict()
+    by_sha_call: "OrderedDict[tuple[str, int, str, str], list[Mapping[str, Any]]]" = (
+        OrderedDict())
     for row in rows:
-        key = (_statement_of(row), VR.proof_no_of(row))
-        groups.setdefault(key, []).append(row)
+        sid_now, no_now = _statement_of(row), VR.proof_no_of(row)
+        groups.setdefault((sid_now, no_now), []).append(row)
+        call_now = str(row.get("review_call") or "").strip()
+        if call_now:
+            by_sha_call.setdefault(
+                (sid_now, no_now, str(row.get("proof_sha256") or ""), call_now),
+                []).append(row)
 
     for (sid, proof_no), group in groups.items():
         latest, call = _latest_call_rows(group)
@@ -188,15 +195,6 @@ def audit(root: str | Path) -> dict[str, Any]:
         if VR.is_a_vote(row):
             out["summary"]["vote_rows"] += 1
 
-    by_sha_call: "OrderedDict[tuple[str, int, str, str], list[Mapping[str, Any]]]" = (
-        OrderedDict())
-    for row in rows:
-        call = str(row.get("review_call") or "").strip()
-        if not call:
-            continue
-        key = (_statement_of(row), VR.proof_no_of(row),
-               str(row.get("proof_sha256") or ""), call)
-        by_sha_call.setdefault(key, []).append(row)
     for (sid, proof_no, sha, call), group in by_sha_call.items():
         ordered = sorted(group, key=_pass_no)
         for index, earlier in enumerate(ordered):
