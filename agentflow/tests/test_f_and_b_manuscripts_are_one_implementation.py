@@ -66,6 +66,28 @@ EMPTY_DEP_TABLE = (
 
 # ------------------------------------------------------------------ 夹具
 
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """这一份量的是「两条入口落同一份稿 / 同一套渲染」，不是同种证明的语义判别。
+
+    2026-11-12 起「同种证明」改由秘书的语义判定给（`Secretary._manuscript_dependency_refusal`
+    没判成 ⇒ fail-closed `proof_kind_unjudged`）。这里默认回 `different`：第二份证明
+    是另一条路径，正是本文件 a2 要落的第 2 条路径。语义判别本身的判据在
+    `tests/test_rehearsal_two_f_independent_proofs.py`（那里三对问答都钉住）。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
+
+
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
@@ -660,6 +682,16 @@ def _real_entries_run(st: Store) -> tuple[str, str, str]:
     assert str(published.get("path") or "") == rel_f, published
     f_unsigned = (pathlib.Path(st.root) / rel_f).read_text(encoding="utf-8")
     body = DS.proof_body(f_unsigned).strip("\n")
+    # 这一份 F 稿就是这条命题自己那一份稿（2026-11-12：`_rewrite_is_the_same_proof`
+    # 按"稿身份"判改稿 / 新路径；行上记的稿号等于这份稿的稿号才是"改这一份的正文"）。
+    # 不写这一格，B 会把"同一命题 + 一份还没认领的 F 稿"读成第 2 条路径，于是不落
+    # B 的改写载体 —— 本文件量的正是"两族经真实入口落下来的稿同一个骨架"，前提是
+    # 这一笔确实是改写这条命题那一份稿。断言一个字都没改。
+    _row_now = next(dict(r) for r in st.rows("statements")
+                    if str(r.get("stmt_id")) == SID)
+    _row_now["manuscript_id"] = VS.manuscript_id_of(rel_f)
+    with st.tx("statements", actor="test", note="fixture:d4-own-manuscript") as tx:
+        tx.upsert("statements", _row_now)
     # B 的入库闸要一份盖住正文的签（签块在稿上；签另算）。
     _stamp(st, rel_f, sid=SID, body=body)
 
