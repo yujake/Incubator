@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
-"""D10 的受控引用词表（B1：纯模块，零 `agentflow` 依赖）。
+"""受控引用词表（纯模块，零 `agentflow` 依赖）。
 
 ## 这个模块解决什么
 
-`refs`（交接手稿 / 收工 notify 里的"这一行的依据"）今天有四套写法、两张表：
+`refs`（交接手稿 / 收工 notify 里的"这一行的依据"）有四套写法、两张表：
 
 - `manuscripts.OBJECT_REFS` 认 `stmt/exp/lit/rel/q/c`；
 - `schema.CITATION_PREFIXES` 认 `rel/lit/exp/eval/doc/stmt`；
 - 携带单另有一套 `stmt/exp/mss`（`depsection.CARRIED_KEYS`）；
-- 提示词教 `stmt:/exp:/lit:/rel:/q:/c:`（2026-11-09 起，`refs` 这一侧）与 `eval:`（`citations` 那一侧）。
+- 提示词教 `stmt:/exp:/lit:/rel:/q:/c:`（`refs` 这一侧）与 `eval:`（`citations` 那一侧）。
 
 同一个字符串在两张表里结论相反（`doc:` 在 citations 合法、在 refs 非法；`q:`/`c:` 反过来），
-而真机已经付过一次代价：收工 `notify.refs` 写 `verifications/000001.jsonl#v-000003`，
-被判"前序手稿不在盘上" ⇒ 整份交接没写成。
+而真机已经付过一次代价：一条 `verifications/...` 形式的 ref 被判"前序手稿不在盘上"
+⇒ 整份交接没写成。
 
 本模块把"能引什么、每种怎么寻址、怎么核它真的存在"收成一张表，并给两个入口：
 
@@ -31,10 +31,10 @@
 | `bad` | False | None | 形状就不成立（前缀不认识 / 号形不对） |
 | `ambiguous` | True | None | 查过了，但一个裸稿号命中多个族（不猜） |
 
-"表文件不在"算 `unchecked` 而不是 `missing`：读不到 ≠ 没有。这是 `manuscripts.ref_problem`
-当前把"读不出表"说成"引用悬空"的反面。
+"表文件不在"算 `unchecked` 而不是 `missing`：读不到 ≠ 没有。不能把"读不出表"
+说成"引用悬空"。
 
-## 两个文件、一张表（2026-11-09 拆开）
+## 两个文件、一张表
 
 本模块是「解析 + 存在性」那一半：:func:`parse_ref` 判形状（含 legacy 映射），
 :func:`ref_reading` 在工作区根下判存在性。词表本身（前缀 → 目标 / 寻址形 / 号形）
@@ -42,8 +42,7 @@
 `refvocab.parse_ref` / `refvocab.REF_SPECS` 等公开名照旧可用，调用点一个都不用改。
 
 为什么拆：`tools/repo_survey.py` 的软判据（`tests/test_repo_survey_does_not_get_worse.py`）
-量「>800 行的 src 文件数」，本模块 839 行越线；处置是拆模块而不是抬基线。搬的是整段
-（缩进与注释逐字不动），行为由 `temp/_probe_refvocab.py` 的改前/改后读数对拍。
+量「>800 行的 src 文件数」，本模块越线；处置是拆模块而不是抬基线。
 
 ## 解析与存在性为什么留在同一个文件里
 
@@ -57,11 +56,6 @@
 两个文件都不 import 任何 `agentflow` 模块（尤其不 import `agent_*`），也不改既有文件。
 `:func:`parse_ref` 的命名空间表是字面量；一致性由测试钉（`tests/test_ref_vocabulary_is_one_table.py`
 逐条对 `schema.CITATION_PREFIXES` 与 `manuscripts.OBJECT_REFS` 比对），模块本身不制造导入边。
-
-## 与设计文档的关系
-
-口径见 `agentflow/temp/_design_D9_D10.md` §3（词表、legacy 映射、三态、写错时的形态）。
-本模块是那份设计的 B1，不含写口接线（B2/B3 才改既有文件）。
 """
 from __future__ import annotations
 
@@ -113,7 +107,7 @@ def _legacy_canonical(raw: str) -> tuple[str, str]:
     ## 为什么 legacy 读成旧形而不拒
 
     `refs` 是 append-only 账本的证据：作者当时写了什么，要能复核。真机已经付过
-    "整份拒"的代价（t-000032 的交接没写成）；把历史写法判成非法，等于让旧证据
+    "整份拒"的代价（一份交接没写成）；把历史写法判成非法，等于让旧证据
     永久背锅。所以：读得出来就映射成规范形，并在读数里标 `legacy`；
     读不出来才进 `bad`。
 
@@ -282,7 +276,8 @@ def parse_ref(text: Any) -> dict[str, Any]:
             if match is None:
                 return _bad(out, CODE_BAD_ADDRESS,
                             f"族 {family} 的号形不对：{ident!r}")
-            # `-pN` 是证明号，不是稿号：`mss:` 的地址只到 `<family>-<id>`。
+            # `-pN` 是老盘只读后缀，不是稿号的一部分：`mss:` 的地址只到
+            # `<family>-<id>`（一个稿号 = 一份文件 = 一份证明）。
             target = f"{family}-{match.group('id')}"
         else:
             target = ident
@@ -639,7 +634,7 @@ def ref_reading(text: Any, *, root: Any = "", cache: dict[Any, Any] | None = Non
 
 #: 兼容名：与 :func:`ref_reading` 是同一个函数（赋值别名，不是第二份实现）。
 #:
-#: 为什么保留这个名字：既有调用方与设计文档都用 `ref_problem`（"这条引用有什么问题"）；
+#: 为什么保留这个名字：既有调用方都用 `ref_problem`（"这条引用有什么问题"）；
 #: 但"有问题"不该遮住"没查成"这一档，所以真正的读数入口叫 `ref_reading`，这里只做别名。
 ref_problem = ref_reading
 
