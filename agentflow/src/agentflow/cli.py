@@ -1751,10 +1751,10 @@ def _print_plan(spec: RunSpec, args) -> int:
         project["run_index"] = plan["run_index"]
         project_note = str(plan.get("note") or "")
         workspace = Path(plan["project"]["path"])
-    _has_rows, ledger_why = _has_ledger(workspace)
     if project:
         note = project_note
     else:
+        _has_rows, ledger_why = _has_ledger(workspace)
         note = (f"这一趟的落点还没有台账（{ledger_why}）" if not _has_rows
                 else f"这一趟的落点已有台账（{ledger_why}）")
     try:
@@ -3460,7 +3460,7 @@ def _exec_role(spec: RunSpec, args) -> int:
         print(tty.paint(
             "[run-agent] 注意：A 没有接任何检索后端 ⇒ 唤起 A 会如实落 refused/not_wired"
             "（想离线验证就用 --provider fixture）", "yellow"))
-    if args.rounds and args.rounds > 1:
+    if multi_round:
         auto = AU.run_autonomous(args.role, args.task, store=st, registry=wiring["registry"],
                                  conductor=wiring["conductor"], session_root=root,
                                  seam=seam, rounds=args.rounds, report_every=args.report_every,
