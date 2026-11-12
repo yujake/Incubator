@@ -205,6 +205,11 @@ export function Machine() {
   const mathlib = m.mathlib;
   // 开关的读数（三态）：`null` = 这一格没读成，不许折成"关"。
   const leanOn: boolean | null = typeof m.lean_enabled === "boolean" ? m.lean_enabled : null;
+  // 「填了几格」这一格要问三处：impact 那一句、按钮的 `disabled`、note 那一句。
+  // 改前每处各 `Object.values(...)` 一遍（连临时数组一起新建三遍）；这里算一次、三处共用。
+  // `every((v) => v === "")` 与「填了值的格数为 0」是同一件事，所以按钮点不动的时机不变。
+  const filledCount = Object.values(values).filter((one) => one !== "").length;
+  const nothingFilled = filledCount === 0;
 
   /** 翻这个开关：写 `toolchain.lean_enabled` 那一格（`postSettings` 自带 `confirm=1`）。 */
   const flipLean = (want: boolean): void => {
@@ -459,31 +464,37 @@ export function Machine() {
                 kind={configured ? "badge-pass" : "badge-na"}
                 text={configured ? `配了（${src === "" ? "来源没读到" : src}）` : "沿用下一档"}
               />
-              {ROLE_FIELDS.map((rf) => (
-                <label class="opt" key={rf.key}>
-                  <span class="mono">{rf.key}</span>
-                  <input
-                    type={rf.key === "api_key" ? "password" : "text"}
-                    placeholder={
-                      roleValue(settings, role, rf.key) === ""
-                        ? `${rf.hint}（盘上没设过）`
-                        : rf.hint
-                    }
-                    value={values[`models.${role}.${rf.key}`] ?? roleValue(settings, role, rf.key)}
-                    onInput={(ev) => {
-                      const v = ev.currentTarget.value;
-                      setValues((old) => ({ ...old, [`models.${role}.${rf.key}`]: v }));
-                    }}
-                  />
-                </label>
-              ))}
+              {ROLE_FIELDS.map((rf) => {
+                // 这一格盘上的现值要问两处（placeholder 里那句"盘上没设过"、输入框的初值）。
+                // 改前每处各 roleValue 一次（每次都要 roleCell 一遍），这里算一次、两处共用 ——
+                // 两处的判据都是"现值是不是空串"，所以渲染结果不变。
+                const preset = roleValue(settings, role, rf.key);
+                return (
+                  <label class="opt" key={rf.key}>
+                    <span class="mono">{rf.key}</span>
+                    <input
+                      type={rf.key === "api_key" ? "password" : "text"}
+                      placeholder={
+                        preset === ""
+                          ? `${rf.hint}（盘上没设过）`
+                          : rf.hint
+                      }
+                      value={values[`models.${role}.${rf.key}`] ?? preset}
+                      onInput={(ev) => {
+                        const v = ev.currentTarget.value;
+                        setValues((old) => ({ ...old, [`models.${role}.${rf.key}`]: v }));
+                      }}
+                    />
+                  </label>
+                );
+              })}
             </div>
           );
         })}
         <ConfirmButton
           action="写这些设置"
           impact={`会改盘上那份设置文件（${settings.path === "" ? "落点没读到" : settings.path}）：
-            只写填了值的 ${Object.values(values).filter((v) => v !== "").length} 格`}
+            只写填了值的 ${filledCount} 格`}
           onConfirm={() => {
             postSettings(values)
               .then((got) => {
@@ -494,9 +505,9 @@ export function Machine() {
                 setWriteResult(`写请求失败：${whyOf(exc)}`);
               });
           }}
-          disabled={Object.values(values).every((v) => v === "")}
+          disabled={nothingFilled}
           note={
-            Object.values(values).every((v) => v === "")
+            nothingFilled
               ? "一格都没填 —— 按钮点不动（不假装成功）"
  : "写面没开（agentflow web --allow-writes）时后端会回 403，回执如实显示"
           }
