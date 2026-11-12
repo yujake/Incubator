@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""手稿的「产出方」与「已提交」读数（2026-11-11 业主裁定 ①②③ 的共同落点）。
+"""手稿的「产出方」与「已提交」读数。
 
 ## 这一层回答三个问题（三块共用，别各写一份）
 
-1. 这份稿的产出方是谁（甲）：事实来源只有手稿路径的族前缀
+1. 这份稿的产出方是谁：事实来源只有手稿路径的族前缀
    （`reports/f-proof-*` ⇒ F；`reports/e-proof-*` / `e-num-*` ⇒ E；
    `reports/b-proof-*` ⇒ B）—— :func:`producer_of`。它再拿
    `capabilities.ALLOWED_EDGES` 现算「V 的父名单」做校验（不写死一张字面量表）。
-2. 这份稿提交了没有、怎么提交的（乙 / 丙 / 统一读口）：
+2. 这份稿提交了没有、怎么提交的：
    :func:`submission_reading` 把三处 join 起来 —— 路径族、V 的颁发表
    （`out/vsigns/<正文 sha>.json`）、`tasks.artifacts` 里的 `mss:` 记号。
 3. 收录（B）写哪一枚记号：:func:`mark_ingested`。收工（E）那一半在
@@ -55,7 +55,7 @@ TERMINAL_TASK_STATUSES: tuple[str, ...] = tuple(
 
 #: `via` 的三档（统一读口的三条读数之一）：F/E 收工、B 收录、V 签发那一刻。
 #:
-#: 2026-11-11（甲）：签是事件、收工是轮询 —— 轮询会漏掉「签晚于收工」那一次，
+#: 签是事件、收工是轮询 —— 轮询会漏掉「签晚于收工」那一次，
 #: 所以签成功那一刻框架也走 `mss:` 这条路把稿置为已提交（:func:`mark_sign_submitted`）。
 #: 两条路写同一个记号格式，只差 `via=` 这一格，读的人分得清是谁置的。
 VIA_CLOSING = "closing_auto_submit"
@@ -158,7 +158,7 @@ def _manuscript_id_of(rel: str) -> str:
 
 
 def _find_rel_for_mid(root: Any, mid: str) -> str:
-    """按稿号在 `reports/` 下找那份稿（一稿号一文件；多份 ⇒ 空串，不挑一版）。"""
+    """按稿号在 `reports/` 下找那份稿（一个稿号 = 一份文件；多份 ⇒ 空串，不挑一份）。"""
     if not mid:
         return ""
     hits: list[str] = []
@@ -300,11 +300,10 @@ def _producer_row(*, store: Any, role: str, task_id: str = "") -> tuple[dict[str
     与 :func:`_task_row_for` 的两点不同（都是这一条路必须的）：
 
     1. 沿 `parent_task_id` 往上找：签那一刻的召唤是 V，而稿是它的父（F/E/B）产的；
-       收方秘书那条链让 V 的 parent 就是送审的产出方（真机：`t-000017` 的 parent 是
-       `t-000003`/F）；
-    2. 允许写到终态行：签可能晚于收工（真机就是 21:21 收工、21:37 才签）——
-       这一条路存在的理由就是补上那个次序，所以终态不是拒绝理由。`tasks.artifacts`
-       是 append-only，晚到的提交记号不改变那一行已有的任何一格。
+       收方秘书那条链让 V 的 parent 就是送审的产出方；
+    2. 允许写到终态行：签可能晚于收工 —— 这一条路存在的理由就是补上那个次序，所以
+       终态不是拒绝理由。`tasks.artifacts` 是 append-only，晚到的提交记号不改变那一行
+       已有的任何一格。
     """
     tasks, why = _read_tasks(store)
     if why:
@@ -333,13 +332,12 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
                         stamp: str = "") -> dict[str, Any]:
     """V 签发成功那一刻：把这一份稿在产出方那一行置为已提交（`via=sign_issued`）。
 
-    为什么要这一条（2026-11-11 甲，业主逐字）：「签是事件，收工是轮询；轮询会漏掉
-    "签晚于收工"这种病态」。真机 `dct-min5r` 的次序就是 F 21:21 收工、V 21:37 才签
-    ⇒ 收工那一趟扫盘时还没签（`auto_submitted=[]`、`auto_submitted_count=null`），
-    稿从此停在「已签、未提交」。这条路把「签发成功」本身当成提交事件。
+    为什么要这一条：「签是事件，收工是轮询；轮询会漏掉「签晚于收工」这种病态」——
+    收工那一趟扫盘时还没签，稿会停在「已签、未提交」。这条路把「签发成功」本身当成
+    提交事件。
 
     复用：记号格式与解析全部来自 `agent_f/submission.py`（本模块只转发），
-    不新造第二套字符串；幂等键与收工那一条相同（稿号，与版本无关）。
+    不新造第二套字符串；幂等键与收工那一条相同（都是稿号）。
 
     三态：`checked=False` = 这一格没查成（签读不出 / 台账读不出），不是「没签」；
     `written=False, already=True` = 之前已经有一条记号（签触发 + 收工各一次只剩一条）；
@@ -489,7 +487,7 @@ def submission_reading(store: Any, root: Any, *, manuscript: Any = "",
         "sign_sha": "", "at": "", "why": "没有正文 sha ⇒ 签查不了"}
     role = str(prod.get("producer_role") or UNKNOWN)
     if rec:
-        # 记号自己带着 `via`（2026-11-11 起三条路各写各的）；老记号没有这一格 ⇒
+        # 记号自己带着 `via`（三条路各写各的）；老记号没有这一格 ⇒
         # 按产出方族回落（B ⇒ 收录，其余 ⇒ 收工扫到的），不把它读成「没提交」。
         via = str(rec.get("via") or (VIA_INGEST if role == "B" else VIA_CLOSING))
         state = "submitted"
