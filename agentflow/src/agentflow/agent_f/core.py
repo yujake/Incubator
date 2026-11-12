@@ -1013,9 +1013,9 @@ class _Core:
         """
         index: dict[str, dict[str, dict[str, Any]]] = {}
         unreadable: list[str] = []
-        tables = {t for _, t, _, _ in self._EVIDENCE_SOURCES} | set(self._EVIDENCE_BARE_ORDER)
-        for table in sorted(tables):
-            column = next((c for _, t, c, _ in self._EVIDENCE_SOURCES if t == table), "")
+        columns = {t: c for _, t, c, _ in self._EVIDENCE_SOURCES}
+        for table in sorted(columns.keys() | set(self._EVIDENCE_BARE_ORDER)):
+            column = columns.get(table, "")
             if not column:
                 continue
             try:
@@ -1073,8 +1073,10 @@ class _Core:
         for key in ("evidence_ids", "experiment_ids", "proof_experiment_ids"):
             raw_ids += [str(x) for x in (sg.get(key) or [])]
         ids = [x for x in dict.fromkeys(x for x in raw_ids if x.strip())]
-        subgoals = {str(s.get("sid") or ""): dict(s) for s in (plan.get("subgoals") or [])}
+        subgoals = {str(s.get("sid") or ""): s for s in (plan.get("subgoals") or [])}
         index, unreadable = self._evidence_rows()
+        #: 前缀 ⇒ 那一条来源声明：逐 id 现扫 `_EVIDENCE_SOURCES` 与现建前缀集合都可以省掉。
+        sources = {s[0]: s for s in self._EVIDENCE_SOURCES}
         out: list[str] = []
         citable: list[str] = []
         left = _EVIDENCE_BLOCK_CHARS
@@ -1084,7 +1086,7 @@ class _Core:
             prefix, key = (head.strip(), tail.strip()) if tail else ("", raw.strip())
             body = ""
             label = ""
-            source = next((s for s in self._EVIDENCE_SOURCES if s[0] == prefix), None)
+            source = sources.get(prefix)
             if prefix and source is not None:
                 _, table, _column, fields = source
                 row = (index.get(table) or {}).get(key.split("#", 1)[0].strip())
@@ -1094,7 +1096,7 @@ class _Core:
                     citable.append(raw)
                 else:
                     body = self._NOT_ON_LEDGER_NOTE
-            elif prefix and prefix not in {s[0] for s in self._EVIDENCE_SOURCES}:
+            elif prefix and prefix not in sources:
                 label = f"{prefix}:（这一类不落表）"
                 body = "（这一类证据不在 `store` 的表里，只有 id —— 它算可引，本层判不了它）"
                 # `_foreign_cites` 明确跳过这一类（`_CITE_PREFIXES_NOT_VERIFIABLE`）⇒ 可引。
