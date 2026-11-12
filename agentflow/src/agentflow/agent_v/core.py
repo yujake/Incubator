@@ -1,92 +1,69 @@
 # -*- coding: utf-8 -*-
-"""智能体 V：证明级验证（只读；`draft/39` §3.21 一/五/六 的用户定案）。
-## 它是谁
-H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（五元位第 3 位）。 V 做三件事（用户点名的 I12/I10/I17），三条都在这里落地：
-1. I12 冷启动：每次审校只把"对象（证明全文）+ 只读读数"拼进提示词 ——拼提示词的函数（`verifications.cold_start_prompt`）只收字
-符串，没有任何 store / conductor / registry 句柄参数，"独立性"因此是结构性质； 2. I10 硬禁令 + 同段依据：逐条查无条件前提 / 无
-依据的步骤 / "易证、显然"这类缝 /引用到不干净的命题，每条问题指到那一步（落进 findings 的 `step` 字段）； 3. I17 整篇重读：证明是整体一次交
-给它的输入，不是逐单元切开的碎片。
-## 它只写一个文件，不写任何表
-`read_only=True`、`write_set=frozenset()`（`specs/v.py`）。它唯一的产物是
-`verifications/<命题号>.jsonl`（追加式，`verifications.record_verification` 发号）。所以它拿不到任何写工具
-—— 这不是"约定只读"，是 `tools.base._role_surface`的结构性剥离（`tools.READ_ONLY_ROLES` 含 `"V"`）。
-## 2026-10-22 补：签字要能到命题那一行上（2026-10-29 起由秘书落地）
-`verify_proof` 调 `verifications.record_verification(..., store=self.store, flip=False)`：
-它只把台账那一行落盘。把被签的那一份证明（`proof_no`）的 `reviewed` 翻上去是
-`verifications.sign_statement` 的事，而它的唯一调用者是 V 的秘书
-（`Secretary.decide_sign_issuance` 的落地那一步）。为什么必须由签名这条路径自己写：
-此前第 3 位的唯一写者是 B 的 `register_statement`，而它按
-`evidencebits.BIT_OWNERS` 不替 V 签字 ⇒ "V 签了、台账上写着成立"与"命题那一行的 reviewed 位"
-之间没有连接，收工门 R10 恒 0。写回的结果在返回值 `review_write` 里（写没写成、为什么、
-回滚了没有），失败不静默吞掉。
-业主 2026-10-29 的口径：V 只产审稿意见；在册档发不发签由 V 的秘书决定（连续 3 次 clean
-才发）。未在册档是明文例外（业主 2026-11-04 乙-5）：不经秘书判，三转 clean 即由 V 颁发
-签信封（`vsigns.issue`），手稿签块仍由收方秘书落。所以 `verify_proof` 的返回值里
-`signed_bit3` 在在册档读的是"秘书真的把位翻上去了没有"（不是"台账里的票数够不够"）；
-在未在册档它恒为 False —— 那一档没有命题行可翻，签落在 `out/vsigns/` 与 pending 台账上。
-## 2026-10-30 补：「连续 3 次」是谁在数（这一条改了调用形态）
-业主口径逐字：「V 所谓连续 3 次『没问题』，是 V 判没问题后连续再判，不是 F 提交 3 次
-V 过 3 次。毕竟没问题的判决没必要给 F。有毛病的要给 F 知道叫它改正。这块 V 秘书要做好」。
-于是 `verify_proof` 一次调用会自己问模型（同一份正文、同一个 `proof_no`）：每一问都落一行
-台账、都问一次秘书发不发；clean 那一档一个字都不发给 F。
+"""智能体 V：证明级验证（只读）。
 
-## 2026-10-30 再补：连判只有两种终局（业主第二次裁定仍有效）
-业主口径逐字：「连判里面如果判出一回秘书语义分析认为是『有毛病』的，
-则直接打回了，连判终止」。于是这一趟的终局只有两种，上界动态等于门槛
-（:func:`review_pass_bound`，`VR.SIGN_STREAK_NEED` 现读）：
+H 是稿件级正式审查（五元位第 5 位）；V 是证明级验证（第 3 位）—— 两个粒度、两套凭据、
+两个台账。V 做三件事，三条都在这里落地：I12 冷启动（每次审校只把"证明全文 + 只读读数"
+拼进提示词；`verifications.cold_start_prompt` 只收字符串，没有任何 store / conductor /
+registry 句柄参数，"独立性"因此是结构性质）；I10 硬禁令 + 同段依据（逐条查无条件前提 /
+无依据的步骤 / "易证、显然"这类缝 / 引用到不干净的命题，每条问题指到那一步，落进
+findings 的 `step`）；I17 整篇重读（证明是整体一次交给它的输入，不是逐单元切开的碎片）。
 
-1. 连续 `VR.SIGN_STREAK_NEED` 转 clean ⇒ 秘书发签；
-2. 任一转判出 `fault`（有毛病）⇒ 立刻终止，这一转就是终局：台账那一行经秘书洗稿后由
-   `agent_loop.v_rejections_digest` 与 `deliver_v_verdicts` 打回给 F；V 自己的结论不是
-   「成立」那一档也立刻停（它本身就是打回）。
+它只写一个文件，不写任何表：`read_only=True`、`write_set=frozenset()`（`specs/v.py`）。
+唯一产物是 `verifications/<命题号>.jsonl`（追加式，`verifications.record_verification`
+发号）。所以它拿不到任何写工具 —— 这不是"约定只读"，是 `tools.base._role_surface` 的
+结构性剥离（`tools.READ_ONLY_ROLES` 含 `"V"`）。
 
-## 2026-11-02 定稿：跨两次送审绝不累计（业主追加口径，本模块的计数边界）
+签字要能到命题那一行上（由秘书落地）：`verify_proof` 调
+`verifications.record_verification(..., store=self.store, flip=False)`，只把台账那一行
+落盘；把被签的那一份证明的 `reviewed` 翻上去是 `verifications.sign_statement` 的事，
+唯一调用者是 V 的秘书（`Secretary.decide_sign_issuance` 的落地那一步）。为什么必须由
+签名这条路径自己写：否则"V 签了、台账上写着成立"与"命题那一行的 reviewed 位"之间没有
+连接，收工门 R10 恒 0。写回结果在返回值 `review_write` 里（写没写成、为什么、回滚了
+没有），失败不静默吞掉。
 
-业主逐字：「不允许跨两次送审累计成功数」。于是：
+V 只产审稿意见：在册档发不发签由 V 的秘书决定（连续 3 次 clean 才发）。未在册档是明文
+例外：不经秘书判，三转 clean 即由 V 颁发签信封（`vsigns.issue`），手稿签块仍由收方
+秘书落。所以 `verify_proof` 返回值里的 `signed_bit3` 在在册档读的是"秘书真的把位翻上去
+了没有"（不是"台账里的票数够不够"）；在未在册档恒为 False —— 那一档没有命题行可翻，
+签落在 `out/vsigns/` 与 pending 台账上。
 
-- 一次 `verify_proof` = 同一次调用内连判 `SIGN_STREAK_NEED` 轮，每一趟从第 1 轮重数；
-- 台账每一行带 `review_pass`（这一趟的第几轮）与 `review_call`（这一趟的调用 id）；
-- 秘书的发签地板（`sign_issuance.within_call`）只看这一趟的轮数；台账尾部的历史连续数
-  （`consecutive_holds` / `legacy_rows`）只作历史读数，不参与新签判断；
-- 旧台账没有 `review_call` / `review_pass` 的行 = 历史形态，读得出、但不按新规则重算成签。
+「连续 3 次」是 V 在数，不是 F 提交 3 次：`verify_proof` 一次调用自己问模型（同一份
+正文、同一个 `proof_no`），每一问都落一行台账、都问一次秘书发不发；clean 那一档一个
+字都不发给 F。连判只有两种终局（上界动态等于门槛，:func:`review_pass_bound` 现读
+`VR.SIGN_STREAK_NEED`）：① 连续 `VR.SIGN_STREAK_NEED` 转 clean ⇒ 秘书发签；② 任一转判
+出 `fault` ⇒ 立刻终止，这一转就是终局，台账那一行经秘书洗稿后由
+`agent_loop.v_rejections_digest` 与 `deliver_v_verdicts` 打回给 F；V 自己的结论不是
+「成立」那一档也立刻停（它本身就是打回）。
 
-## 2026-10-30 三次补：秘书的语义判定只有两档（第三次裁定，本次唯一口径）
-业主口径逐字：「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」。
-所以秘书的判定轴只有 `clean` / `fault`：拿不准、只挑出一处小记号问题、只说"我没逐行验证"
-——统统算 `fault`。词表里也只有两格（`secretary.V_REPLY_VERDICTS`）：模型若仍答历史
-那一格（"判不了"）或任何词表外的写法 ⇒ `judge()` 判"不采信" ⇒ `checked=False`（没查成），
-不会被折成第三种结论。2026-11-02（业主追加裁定：「这一档连历史兼容读也不留」）：老台账行
-上那个轴名也不再有兼容读 —— `verifications` 删了
-`SECRETARY_JUDGE_HISTORICAL_AXES` 与 `secretary_axis` 的兼容支，老行上那个值读出来是
-空轴（这一行没有轴），连续计数里没有一条分支认它。
+跨两次送审绝不累计：一次 `verify_proof` = 同一次调用内连判 `SIGN_STREAK_NEED` 轮，每一
+趟从第 1 轮重数；台账每一行带 `review_pass`（这一趟的第几轮）与 `review_call`（这一趟
+的调用 id）；秘书的发签地板（`sign_issuance.within_call`）只看这一趟的轮数，台账尾部的
+历史连续数（`consecutive_holds` / `legacy_rows`）只作历史读数；旧台账没有
+`review_call` / `review_pass` 的行 = 历史形态，读得出、但不按新规则重算成签。
 
-"没查成"不是判定（第 3 条）：秘书问不出来 / 模型输出不合法 / 台账写不进去 ⇒ 那是框架
-失败：终止、`checked=False` + 明确 reason，不许当成 fault 打回、也不许说"次数没到"。
-没有判断面（装配缺口）与"问过、没答上来"分开读：后者是框架失败（`reason` 以
-`secretary_unjudged` 开头），前者是"这一趟没人能发这一签"（V 的审阅照算、台账照落）。
+秘书的语义判定只有两档：拿不准、只挑出一处小记号问题、只说"我没逐行验证"——统统算
+`fault`。词表里也只有两格（`secretary.V_REPLY_VERDICTS`）：模型若答词表外的写法（包括
+历史那一格"判不了"）⇒ `judge()` 判"不采信" ⇒ `checked=False`（没查成），不会被折成
+第三种结论。老台账行上那个轴名也没有兼容读 —— 读出来是空轴（这一行没有轴），连续计数
+里没有一条分支认它。"没查成"不是判定：秘书问不出来 / 模型输出不合法 / 台账写不进去
+⇒ 框架失败：终止、`checked=False` + 明确 reason，不许当成 fault 打回、也不许说"次数没
+到"。没有判断面（装配缺口）与"问过、没答上来"分开读：后者 `reason` 以
+`secretary_unjudged` 开头，前者是"这一趟没人能发这一签"（V 的审阅照算、台账照落）。
+"循环跑完而既没签也没打回"不是一条终局：它只可能来自病态配置（门槛 ≤0）或秘书在次数够
+的那一转既不签也不判出问题 ⇒ 返回值报内部不一致（`checked=False` + 明确 `reason`），
+绝不写成"次数没到"。逐次读数在返回值的 `review_passes` 里（每项带 `terminal`）。
 
-"循环跑完而既没签也没打回"不是一条终局：它只可能来自病态配置（门槛被改成 0 / 负数）
-或秘书在次数够的那一转既不签也不判出问题 ⇒ 返回值报内部不一致（`checked=False` + 明确
-`reason`），绝不写成"次数没到"。逐次读数在返回值的 `review_passes` 里（每项带
-`terminal`：这一转是不是终局、是哪一种终局）。
-## V 的判词只是陈述；轴只有两态（散文支由秘书给，穷举支由机械会审给）（2026-11-06 p247 · p248 补穷举支）
-业主 2026-11-01 逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
-2026-11-06 第三次收紧又逐字定死：「V 的判词只是陈述」「不做折档」「不许按词面把判不了 /
-看不出来 / 拿不准 / 我无法判断折成任何一态」；「每一转的轴（clean / fault）一律由 V 秘书
-做语义分析后给出」；「判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。
-穷举支是这条例外里唯一不经秘书的：那一支没有 V 的散文回复，轴由机械会审自己的两态读数给
-（`exhaustionreport.review`，台账行的 `source=exhaustion_report`），不经秘书；在册档与未在册
-散文支仍由秘书给轴（`source=secretary:v_reply_defect`）。
-于是：`verdict` / `findings` / `defect_step` 只由 `parse_verdict` 做结构解析；
-`成立` / `有毛病` 是轴的名字（`secretary_judge.axis`），连续次数与签发只看那个轴。
-"检查器自己没跑成"（没接线 / 输出不是合法 JSON / 缺 `verdict` 字段）不是轴 —— 那种情况下
-`checked=False` 且台账里不留行（绝不写一行"没查成"来冒充"审过了"）。
-`verify_proof` 因此有两种失败形态，各自的读数分开：
-- `checked=False, reason="judge_not_wired"`：没有模型缝，这次根本没看；
-- `checked=False, reason="unparsable"`：看了、但拿回来的东西不是合法结论 ⇒ 不落台账行。
-穷举型证据缺材料同理：`checked=False, reason="missing_material"`（缺哪一块进 `detail`），
-台账里也不留行。秘书这一问没查成是另一档：台账照落（`secretary_judge.checked=False`），
-只是那一转不算 clean、也不按 V 的判词补判。
+V 的判词只是陈述；轴只有两态：`verdict` / `findings` / `defect_step` 只由
+`parse_verdict` 做结构解析；`成立` / `有毛病` 是轴的名字（`secretary_judge.axis`），
+连续次数与签发只看那个轴。判 `fault` 而 V 没给 `defect_step` ⇒ 秘书定出那一步。散文支
+的轴一律由 V 秘书做语义分析后给出（`source=secretary:v_reply_defect`）；穷举支是唯一
+例外：那一支没有 V 的散文回复，轴由机械会审自己的两态读数给（`exhaustionreport.review`，
+台账行 `source=exhaustion_report`），不经秘书。"检查器自己没跑成"（没接线 / 输出不是
+合法 JSON / 缺 `verdict` 字段）不是轴：那种情况 `checked=False` 且台账里不留行（绝不写
+一行"没查成"来冒充"审过了"）。两种失败形态的读数分开：`reason="judge_not_wired"`（没有
+模型缝，这次根本没看）与 `reason="unparsable"`（看了、但拿回来的不是合法结论）；穷举型
+证据缺材料是 `missing_material`（缺哪一块进 `detail`）。秘书这一问没查成是另一档：台账
+照落（`secretary_judge.checked=False`），只是那一转不算 clean、也不按 V 的判词补判。
 """
 
 from __future__ import annotations
