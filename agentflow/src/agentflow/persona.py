@@ -40,7 +40,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .promptkit import PromptError, PromptRegistry, Section
+from .promptkit import SECTION_ORDERS, PromptError, PromptRegistry, Section
 
 #: 身份前缀槽位的段名（DSH 同名）。
 #:
@@ -91,10 +91,8 @@ def apply_persona(reg: PromptRegistry, persona: Persona, *, scope: str) -> None:
             "就是错的：身份是 per-agent 的东西。DSH 逐字：mounted globally it collides "
             "with the registry's own registration and fails loud."
         )
-    reg.section(Section(PERSONA_PREFIX_SECTION, _order("DEPLOYMENT_PERSONA_PREFIX"),
-                        persona.prefix, complete=persona.complete), scope=scope)
-    reg.section(Section(PERSONA_SUFFIX_SECTION, _order("DEPLOYMENT_PERSONA_SUFFIX"),
-                        persona.suffix), scope=scope)
+    _register_slots(reg, prefix=persona.prefix, suffix=persona.suffix, scope=scope,
+                    complete=persona.complete)
     if not persona.include_runtime_context:
         reg.suppress_runtime_context(scope=scope)
 
@@ -112,10 +110,7 @@ def register_deployment_persona(reg: PromptRegistry, *,
 
     `harness_identity` 给非空文本时才注册框架自述那一段（默认不注册，见模块 docstring）。
     """
-    reg.section(Section(PERSONA_PREFIX_SECTION, _order("DEPLOYMENT_PERSONA_PREFIX"),
-                        prefix))
-    reg.section(Section(PERSONA_SUFFIX_SECTION, _order("DEPLOYMENT_PERSONA_SUFFIX"),
-                        suffix))
+    _register_slots(reg, prefix=prefix, suffix=suffix)
     if not include_runtime_context:
         reg.suppress_runtime_context()
     if harness_identity:
@@ -123,10 +118,21 @@ def register_deployment_persona(reg: PromptRegistry, *,
                             harness_identity))
 
 
+def _register_slots(reg: PromptRegistry, *, prefix: str, suffix: str,
+                    scope: str | None = None, complete: bool = False) -> None:
+    """把两个身份槽位注册到同一层（部署那一份与角色那一份共用这一份实现）。
+
+    `scope=None` 是全局层（部署那一份），给角色名就是那个角色的作用域（遮蔽）；
+    注册先后固定为前缀再后缀，`complete` 只落在前缀槽位。
+    """
+    reg.section(Section(PERSONA_PREFIX_SECTION, _order("DEPLOYMENT_PERSONA_PREFIX"),
+                        prefix, complete=complete), scope=scope)
+    reg.section(Section(PERSONA_SUFFIX_SECTION, _order("DEPLOYMENT_PERSONA_SUFFIX"),
+                        suffix), scope=scope)
+
+
 def _order(name: str) -> int:
     """从 `promptkit.SECTION_ORDERS` 取号（集中分配，贡献者不自己拍数字）。"""
-    from .promptkit import SECTION_ORDERS
-
     return SECTION_ORDERS[name]
 
 
