@@ -1768,8 +1768,9 @@ class OpenAlexProvider:
         pdf_url, pdf_source = _openalex_pdf_url(work)
         authors = _openalex_authors(work)
         venue = _openalex_venue(work)
+        abstract_index = work.get("abstract_inverted_index")
         summary = reconstruct_abstract(
-            work.get("abstract_inverted_index") if isinstance(work.get("abstract_inverted_index"), dict) else None
+            abstract_index if isinstance(abstract_index, dict) else None
         )
         language = _stringify(work.get("language")) or None
 
@@ -1784,7 +1785,8 @@ class OpenAlexProvider:
             verdict = keyword_hit(topic, title)
             keep, filter_note = _precise_keep(topic, title, description)
 
-        oa = work.get("open_access") if isinstance(work.get("open_access"), Mapping) else {}
+        open_access = work.get("open_access")
+        oa = open_access if isinstance(open_access, Mapping) else {}
         raw: dict[str, Any] = {
             "filter_note": filter_note,
             # 逐条判决在这里就落进 `raw`：改前它算完即丢，于是"精筛弃权"
@@ -1939,22 +1941,24 @@ def _plan_mode(mode: str, topic: str, description: str, limit: int) -> list[_Que
         # - topic 走短语检索（短检索词，加引号才收得紧）。
         # 两者之间用 OR：否则"描述里的词 + topic 短语"必须同时出现在同一篇里，
         # 实测会把召回压到 0；topic 约束改由标题关键词过滤承担（见 _precise_keep）。
-        parts = [p for p in (_term_query(description), _phrase_query(topic) or topic) if p]
+        term_description = _term_query(description)
+        term_topic = _term_query(topic) or topic
+        parts = [p for p in (term_description, _phrase_query(topic) or topic) if p]
         search = " OR ".join(parts)
         # 降级串（`C-4a`）：同一批检索词的全词项形态。短语那一段是字面匹配，
         # 长题面上它单独命中 0 条是常态（实测见 `_fetch_with_fallback`），
         # 主查询空手而归时用它再抓一次。
-        fallback_parts = [p for p in (_term_query(description), _term_query(topic) or topic) if p]
-        last_resort = _term_query(topic) or topic
+        fallback = " OR ".join(p for p in (term_description, term_topic) if p)
+        last_resort = term_topic
         return [
             _QueryPlan(
                 channel="precise",
                 template={"search": search},
                 limit=precise_limit,
                 sort=None,
-                fallback=" OR ".join(fallback_parts),
+                fallback=fallback,
                 # 第三档：前两串都零召回时只用 topic（脱开 description，见 `last_resort`）。
-                last_resort=last_resort if last_resort not in (" OR ".join(fallback_parts), search)
+                last_resort=last_resort if last_resort not in (fallback, search)
                 else "",
             )
         ]
