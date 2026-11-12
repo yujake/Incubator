@@ -16,7 +16,8 @@
 （`active.source`）：这个工作区正在跑（或最近一趟）的运行记录（`run`）> 本进程开关
 （`process`）> 读不出来（`unknown`）。工作区不从这里传：`cachectl` 自己从进程命令行
 的 `--root`（起本服务的那个旗标）取 —— 于是网页进程读得到"正在跑的那一趟"的开关，
-而不是它自己的。这一格此前在多进程下说反的那次误读，修的就是这一层。
+而不是它自己的。这一格在多进程下不许说反：工作区只能从服务进程的命令行取，
+不能从页面请求里传。
 
 ## 写权限读数与试算放行（D-60 ① ②）
 
@@ -168,8 +169,8 @@ def _warm_argv(root: Path, lean: str) -> list[str]:
 def _spawn_warm(root: Path, lean: str) -> tuple[int, str]:
     """detached 起一趟预热，stdout/stderr 追加进 `runs/web-cache-warm-*.log`。
 
-    起进程那五件事住在 `writes._spawn_detached` 里（2026-10-27 业主裁定 W3：
-    "起一趟"与"起一趟预热"此前各写了一遍同一套），这里只保留这一面自己的两格：
+    起进程那五件事住在 `writes._spawn_detached` 里（"起一趟"与"起一趟预热"共用同一
+    套），这里只保留这一面自己的两格：
     日志前缀 `web-cache-warm`（预热记录的 `log` 与读侧都按它认）与要跑的那条命令。
     """
     from . import writes as WR
