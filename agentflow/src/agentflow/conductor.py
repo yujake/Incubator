@@ -6069,16 +6069,16 @@ class Conductor:
         role_of: dict[str, str] = {}
         status_of: dict[str, str] = {}
         kids: dict[str, list[str]] = {}
+        # 身份三格（角色 / 状态）与父子边在同一趟里建：两条判据都只看这一行自己，
+        # 而 `kids[父]` 的追加次序仍按 `rows` 的原序（逐个子代理的"等谁"读的就是它）。
         for r in rows:
             tid = str(r.get("task_id") or "")
             if not tid:
                 continue
             role_of[tid] = str(r.get("role") or "")
             status_of[tid] = str(r.get("status") or "")
-        for r in rows:
-            tid = str(r.get("task_id") or "")
             pid = str(r.get("parent_task_id") or "")
-            if tid and pid:
+            if pid:
                 kids.setdefault(pid, []).append(tid)
         self_busy = {tid: (status_of[tid] in UNFINISHED_STATUSES
                            and not bool((three.get(tid) or {}).get("handed_off")))
