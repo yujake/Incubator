@@ -1,12 +1,12 @@
-"""跨智能体交互的冻结契约（DESIGN-INTERACTIONS.md §1 I1–I7）。
+"""跨智能体交互的冻结契约（I1–I7）。
 
 为什么要有这个模块，而不是把逻辑分别写进 A/B/C/D
 -------------------------------------------------
 
-上一版最贵的教训有两个，都指向同一个解法：
+最贵的教训有两个，都指向同一个解法：
 
 1. 同一判据写在两处 ⇒ 必然漂移。 `RuleExtractor` 的 docstring 早就警告过
-   "两个模块各持一套判据"。"矛盾"这个判据此前只活在 `agent_d` 里；I6 要求
+   "两个模块各持一套判据"。"矛盾"这个判据只活在 `agent_d` 里；I6 要求
    B 在写入期也问同一个问题。若 B 自己再写一份 `_negated`，那么"写入期认为不矛盾、
    事后 C 认为矛盾"会变成一个没有报错的静默分裂。
 2. 共享存储 + 多智能体下，最容易死锁的地方是"在事务里调用别人"。
@@ -32,15 +32,14 @@ B            ``check_conflict``（I6 写入期闸门，纯函数）
 C            ``check_conflict`` / ``detect_contradictions``（对外再导出同一份实现）
              ``structural_duplicate_pairs``（I5 候选）
 D            ``detect_contradictions`` / ``adjudicate_contradiction``（I2 闭环）
-             ``evidence_relevance``（§3.2 证据就绪判据）
-             ``find_equivalent_question``（§3.1 等价类）
+             ``evidence_relevance``（证据就绪判据）
+             ``find_equivalent_question``（等价类）
 ===========  ==========================================================
 
 "三态纪律"在本模块的落地
 -------------------------
 
-跨智能体返回的每个"空"都必须是三态，见 `DESIGN-INTERACTIONS.md` §3.4。
-具体做法：凡"没查"的情况下返回 `None` 的开关，都不给默认值，
+跨智能体返回的每个"空"都必须是三态。具体做法：凡"没查"的情况下返回 `None` 的开关，都不给默认值，
 并且每个结果字典都带一个显式的 ``checked`` 布尔位：
 
 - ``{"checked": False, "conflict": None}`` —— 没检查（例如调用方没把已有关系传进来）
@@ -150,14 +149,13 @@ __all__ = [
 #: 若裁决可以是"仍未解决"，那它天然是一个不会自己停的循环。
 #: 没有上限的自治循环不是"更自主"，而是"会烧完预算且不给结论"。
 #:
-#: 2026-10-15 业主裁定 C9 把这些数字整体抬高。裁定标准逐字是
-#: 「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），删或把
+#: 口径「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），删或把
 #: 触发水平抬高到几乎不可能触发的程度（即使触发也是提醒而非强杀）」。
 #: 抬高的方向与依据：
 #:
-#: - 这些数字是 2026-09 的离线单机读数下定的（那时候一次检索几毫秒），
+#: - 这些数字是离线单机时代定下的（那时候一次检索几毫秒），
 #:   而现在一次上游检索是秒级、一次抽取是分钟级 —— 同样的"20 个在途"含义完全不同；
-#: - 它们此前会在正常研究里真的触发（T5 第 8 趟的 `D` 只问了 2 个问题就撞上
+#: - 它们会在正常研究里真的触发（`D` 只问了 2 个问题就撞上
 #:   `max_rounds_per_contradiction`），而撞上之后没有任何读数说"这是配额挡的"；
 #: - 真正该管住"烧钱不给结论"的是钱（`usd_budget` + 总账），不是配额。
 #:   配额剩下的职责是"防一次编程错误把请求数炸成 O(n²)"，那是 100 与 10 都能胜任的事。
@@ -167,7 +165,7 @@ DEFAULTS: dict[str, int] = {
     "max_contradiction_requests": 100,  # I2 全局矛盾检索请求上限（10 → 100，裁定 C9）
     "max_gap_requests_per_run": 30,  # I3 单次 gaps 最多直连多少条检索请求（3 → 30，裁定 C9）
     "max_reprocess_per_relation": 8,  # I4 同一关系最多被重抽取几次（2 → 8，裁定 C9）
-    "question_jaccard_threshold": 0.6,  # §3.1 问题等价类的概念集 Jaccard 阈值
+    "question_jaccard_threshold": 0.6,  # 问题等价类的概念集 Jaccard 阈值
     "structural_duplicate_max_pairs": 1_000,  # I5 结构重复枚举上限（防 O(n^2) 爆炸；200 → 1000）
 }
 
@@ -278,7 +276,7 @@ def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
     | ``strong`` | 一句明确断言肯定是 ``(肯定式)``，另一句明确断言了对应的 ``(否定式)``（如 "A 是 B" vs "A 不是 B"） | 高 —— 这是货真价实的对立 |
     | ``weak``   | 一句出现否定标记（"不"/"not "…），另一句没出现 | 低 —— 大量假阳性 |
 
-    这个区分来自一次实测：把 25 条真实论文关系（中文表述）过一遍本函数，
+    把 25 条真实论文关系（中文表述）过一遍本函数，
     ``weak`` 信号报了 6 条（24%），而它们没有一条是矛盾。根因有两个：
 
     - ``("是","不是")`` 这一对立词组里，"是"在中文里无处不在
@@ -697,7 +695,7 @@ def check_conflict(
     # `conflict=True` 只由 strong 信号驱动。
     #
     # 为什么：I6 的后果是 `status="suspect"`。若让 weak 信号（"否定词出现与否不一致"）
-    # 也能置这个状态，实测会有 ~24% 的关系被打上 suspect —— 那时这个标记
+    # 也能置这个状态，约四分之一的关系会被打上 suspect —— 那时这个标记
     # 就不再指示任何东西，而"假报警比不校验更糟，因为它会训练人忽略告警"。
     # weak 信号并不丢弃：它们进 `weak_signals`，供 C/D 当作线索继续查。
     if hits:
@@ -804,7 +802,7 @@ def structural_duplicate_pairs(
                 continue  # 孤立概念不参与（见 docstring）
             # "两者已有直接关系"必须在邻域比较之前判。
             #
-            # 这一行原先写在 `na != nb` 之后，于是它永远不执行：
+            # 这一行若写在 `na != nb` 之后，它永远不执行：
             # 无向图的邻接表由"每条关系的概念两两展开"建立、不含自环，
             # 所以 `na == nb ∧ b ∈ na` ⇒ `b ∈ nb` ⇒ b 有自环，矛盾。
             # 也就是说"有直接关系"这个情形已经被 `na != nb` 排除了，
@@ -894,7 +892,7 @@ def _name_evidence(a: Mapping[str, Any], b: Mapping[str, Any]) -> str:
     return "none"
 
 
-# ---------------------------------------------------------------- §3.1 问题等价类
+# ---------------------------------------------------------------- 问题等价类
 
 def find_equivalent_question(
     existing_questions: Sequence[Mapping[str, Any]],
@@ -903,7 +901,7 @@ def find_equivalent_question(
     relation_ids: Sequence[str],
     jaccard_threshold: float | None = None,
 ) -> dict | None:
-    """在已有问题里找一个与候选问题等价的，避免同一件事被研究两次（§3.1）。
+    """在已有问题里找一个与候选问题等价的，避免同一件事被研究两次。
 
     等价判据（满足其一即可）：
 
@@ -917,7 +915,7 @@ def find_equivalent_question(
 
     为什么需要它：上一版 D 的 `ingest` 只按 `(kind, 排序后的 rel_ids)` 去重，
     于是同一份报告里两条不同链条支持同一个研究点时会生成两个问题。
-    （实测 4 条问题里只有 2 条是不同的。）去重键太窄，等价类才够。
+    （4 条问题里可能只有 2 条是不同的。）去重键太窄，等价类才够。
     """
     thr = DEFAULTS["question_jaccard_threshold"] if jaccard_threshold is None else float(jaccard_threshold)
     want_rels = {str(x) for x in relation_ids if x}
@@ -969,14 +967,14 @@ def find_equivalent_question(
     }
 
 
-# ---------------------------------------------------------------- §3.2 证据就绪判据
+# ---------------------------------------------------------------- 证据就绪判据
 
 def evidence_relevance(
     question: Mapping[str, Any],
     *,
     new_relations: Sequence[Mapping[str, Any]] | None,
 ) -> dict:
-    """新到的证据是否真的回答了那个问题（§3.2）。
+    """新到的证据是否真的回答了那个问题。
 
     上一版 `poll` 的判据是"请求 done 且其文献都 processed"。那只说明
     "消化完了"，不说明"这些新证据真的回答了那个问题"。后果是：一个查不到
@@ -1057,10 +1055,10 @@ def priority_rank(priority: Any) -> int:
 def role_key_of_submitter(submitted_by: str) -> str:
     """把提交方折到"角色那一层"（`agent-A-egr` → `agent-A`）；折不动就原样返回。
 
-    业主 2026-10-12 裁定 CS-15 ②：实例后缀不改变档位。真机读数（77 个工作区）：
-    `search_requests` 280 行里约 270 行的 `submitted_by` 是 `agent-A-A1` / `agent-A-egr` /
-    `agent-A-topical` 这类实例写法，而 `SUBMITTER_DEFAULT_PRIORITY` 里的键是角色级的
-    ⇒ 改前逐行落到兜底 low，理由串还写着"陌生来源"（对框架自己的角色是一句错话）。
+    口径 CS-15 ②：实例后缀不改变档位。`search_requests` 的 `submitted_by` 常见
+    `agent-A-A1` / `agent-A-egr` / `agent-A-topical` 这类实例写法，而
+    `SUBMITTER_DEFAULT_PRIORITY` 里的键是角色级的 ⇒ 不折就逐行落到兜底 low，
+    理由串还写着"陌生来源"（对框架自己的角色是一句错话）。
 
     两条刻意的界：
     - 冒号后缀不折：`agent-D:contradiction` 靠精确匹配与 `agent-D` 分成两个键
@@ -1136,7 +1134,7 @@ def order_pending_requests(
     失败重试时 A 只留一个未来的 `lease_until`、把 `claimed_by` 置空，
     那时的行在语义上就是"可以再取"，把它排到全新任务后面会让退避机制
     以另一种方式复活。当前实现保证的是"死掉的租约不会被饿死"，
-    这是设计真正担心的事；"过期优先于全新"则不是（详见 A 子任务的实测报告）。
+    这是设计真正担心的事；"过期优先于全新"则不是。
 
     - 优先级次序优先 —— 这是 I7 的全部意义。
     - 其次是"可立刻取走"先于"有人正持有有效租约"。
@@ -1283,25 +1281,24 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
 
     取 ``max+1`` 并跳过已占用的号 —— 不记录计数器，因此删除中间行不会导致撞号。
 
-    ## `prefix` 不带连接号（文档与实现曾经不一致）
+    ## `prefix` 不带连接号
 
-    曾经的 docstring 写"生成 ``<prefix>-NNNN``"，读起来像是要把连接号一起传。
+    docstring 若写"生成 ``<prefix>-NNNN``"，读起来像是要把连接号一起传。
     按那个读法传 ``prefix="r-"`` 会得到 ``"r--0001"`` —— 而它能通过
     `SearchRequest.validate`（那里只查非空），于是静默落库；
     更糟的是下一轮 `startswith("r-")`/数字解析匹配不上，取号永远从 1 重来，
-    直到与已有行撞号。这是一次真实的"文档与实现对不上"（与 `Tx.mark_dirty`
-    曾经那次同族）。
+    直到与已有行撞号（与 `Tx.mark_dirty` 同族）。
 
-    现在：docstring 说清 `prefix="r"`，并且在这里 fail-closed 拒绝含分隔符的前缀 ——
+    docstring 说清 `prefix="r"`，并且在这里 fail-closed 拒绝含分隔符的前缀 ——
     与其让一个写错的参数静默产生坏 ID，不如当场炸。
 
-    ## 编号上限在这里（`P-4`：上限下沉，判据只有一份）
+    ## 编号上限在这里（上限下沉，判据只有一份）
 
     `r-NNNNNN` 是编号宽度契约，不是风格偏好：`store.MAX_ID` 是它唯一的常量来源
     （本函数直接 import 它，不另写一个上限数字），而 `store.alloc_id` 用满即
-    `IdExhausted`。宽度本身来自 `schema.ID_DIGITS`（2026-10-14 业主裁定：四位改六位，
-    防溢出），本函数只调 `schema.format_id()` —— 形态一处定义，发号点一处不漏。
-    本函数此前没有任何上限：表里已用到上限时它会给出超长号，而
+    `IdExhausted`。宽度本身来自 `schema.ID_DIGITS`（四位改六位，防溢出），
+    本函数只调 `schema.format_id()` —— 形态一处定义，发号点一处不漏。
+    本函数若没有上限：表里已用到上限时它会给出超长号，而
     `SearchRequest.validate` 只查"非空"，所以它会静默落库，
     一直到某个下游按固定宽度解析时才暴露。
 
