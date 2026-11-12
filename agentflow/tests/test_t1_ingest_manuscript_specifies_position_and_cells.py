@@ -343,9 +343,9 @@ def test_b1_position_is_authoritative_and_not_redirected(
     assert _row(st, "000009").get("proof_text") == "", "录到了调用方没点名的行"
 
 
-def test_b2_proof_no_must_agree_with_the_manuscript_name(
+def test_b2_an_old_pn_name_is_no_longer_a_manuscript(
         tmp_path: pathlib.Path) -> None:
-    """稿名 `-p2` 而参数说 #p1 ⇒ 受控拒 `proof_no_mismatch`（不就近取一个）。"""
+    """`…-p2.md` 不再是手稿名（对齐之后只有一种名字）⇒ 收录受控拒。"""
     st, b = _ws(tmp_path)
     _signed_row(st)
     _write(st, "reports/f-proof-000001-p2.md", _manuscript(sid="000001"))
@@ -353,7 +353,7 @@ def test_b2_proof_no_must_agree_with_the_manuscript_name(
         manuscript="reports/f-proof-000001-p2.md", target_stmt_id="000001",
         cells=["proof_text"], mode="preview", proof_no=1)
     assert got["ok"] is False
-    assert got["refused"] == "proof_no_mismatch", got
+    assert got["refused"] == "bad_manuscript_name", got
     assert _row(st).get("proof_text") == ""
 
 

@@ -4,11 +4,9 @@
 > 「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
 >   应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
 
-这一份钉三件事：
+这一份钉两件事：
   a 连交三次（改正文） ⇒ 同一路径、盘上只有一份文件、读数里不再有 `proof_no`、
     稿头也没有 `- 证明号：` 那一行（2026-11-11 业主裁定：这一格在手稿产出侧退役）
-  b 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）只读兼容：
-    能分类、能读，重写它时沿用文件名里的 N（不把老稿的身份改掉）
   c 反真空：把 `- 证明号：` 加回渲染 ⇒ a 那条断言要能拦下来
 """
 
@@ -24,8 +22,6 @@ if str(ROOT_SRC) not in sys.path:
     sys.path.insert(0, str(ROOT_SRC))
 
 from agentflow import conductor as CND  # noqa: E402
-from agentflow import manuscriptfamily as MFAM  # noqa: E402
-from agentflow import proofregistry as PR  # noqa: E402
 from agentflow.agent_f import AgentF  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
@@ -135,29 +131,6 @@ def test_a_three_submissions_stay_in_one_file(tmp_path: pathlib.Path) -> None:
 
     # 正文确实换了（三次不同），但仍是同一份文件
     assert "v3" in text, "最后一次改正文的标记应当在这份文件里"
-
-
-# ---------------------------------------------------------------- b 老盘 -pN 兼容
-def test_b_legacy_pN_names_stay_readable_and_keep_their_number(tmp_path: pathlib.Path) -> None:
-    """b：老盘 `-pN` 只读兼容 —— 能分类、能读；重写它时沿用文件名里的 N。"""
-    st = _ws(tmp_path)
-    root = pathlib.Path(st.root)
-    legacy_rel = "reports/f-proof-000012-p2.md"
-    (root / "reports").mkdir(parents=True, exist_ok=True)
-    (root / legacy_rel).write_text(
-        "# F 的证明手稿：老盘的第二份证明\n\n"
-        "- 命题号：stmt:（还没落号）\n- 计划：000004 · 子目标：S1\n"
-        "- 证明号：2\n\n## 命题\n\n老盘那一份的命题。\n\n"
-        "## 证明\n\n旧正文。\n\n## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n",
-        encoding="utf-8")
-
-    reading = MFAM.classify_manuscript(legacy_rel)
-    assert reading.get("tier") == "family", reading
-    assert reading.get("manuscript_id") == "000012", reading
-    assert int(reading.get("proof_no") or 0) == 2, reading
-
-    assert PR._legacy_proof_no_of(legacy_rel, {}) == 2, "老盘 -p2 必须沿用 2（不改身份）"
-    assert PR._legacy_proof_no_of("reports/f-proof-000012.md", {}) == 1, "没有 -pN 的名字一律 1"
 
 
 # ---------------------------------------------------------------- c 反真空

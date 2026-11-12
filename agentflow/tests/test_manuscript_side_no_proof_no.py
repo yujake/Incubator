@@ -14,7 +14,7 @@ V 签侧已由 `9484753f` 退役；这一份钉手稿产出侧（F）与呈递�
 |---|---|---|
 | 稿头 | `- 证明号：N`（`manuscriptform.render_proof_manuscript`） | `depsection.manuscript_proof_no` 照旧 |
 | 登记条目 | `proof_no` / `versions[].proof_no`（`proofregistry`） | 老 `- 证明号：` / `p<N>@…` 两种格式都读 |
-| 稿名 | `-pN` 后缀（新写只按稿号） | `-p2` 仍能分类 / 读 / 认签 |
+| 稿名 | `-pN` 后缀（新写只按稿号） | 不再认 `…-pN.md`（对齐之后只有一种名字） |
 | F 读数 | `_hand_proof` / `step` / `history` 里的 `proof_no` | 老计划台账里的那一格不删 |
 | 呈递侧 | 携带行里的 `proof_no`、`mss:` 记号里的 `#proof_no=` | 老记号 / 老携带行照读 |
 
@@ -25,7 +25,7 @@ V 签侧已由 `9484753f` 退役；这一份钉手稿产出侧（F）与呈递�
 | a | 同一份稿连交两次（改正文） | 稿头没有 `- 证明号：`、登记条目没有 `proof_no`、版本段没有 `pN@`；两次同一路径、盘上一份 | 写侧回潮（谁再写一格 / 谁把 `-pN` 加回）⇒ 红 |
 | b | 一份已登记的 F 稿走 D 的携带单；一份 `mss:` 记号 | 携带行没有 `proof_no` 键；记号里没有 `#proof_no=`（老记号照读） | 呈递侧回潮 ⇒ 红 |
 | c | F 交卷 → V 未在册签 → B 收录（彩排） | B 认签 `applied=True`；行上 `manuscript_id` / `reviewed` / `grade=pre_theorem` 都对 | B 依赖 `proof_no` 才接得住 ⇒ 红 |
-| d | 老稿：`reports/f-proof-000012-p2.md` + 稿头 `- 证明号：2` | 仍能分类（`proof_no=2`）、读正文、认签（按 sha） | 读侧把老格删掉 / 把 `-p2` 读成坏名 ⇒ 红 |
+| d | 老稿：`reports/f-proof-000012.md` + 稿头 `- 证明号：2` | 仍能分类、读正文；稿头那一行仍读得出 | 读侧把 `- 证明号：` 删掉 ⇒ 红 |
 | e | 反真空：把 `- 证明号：` 加回渲染 / 把 `proof_no` 加回携带行 | a 的读数、b 的读数当场红 | 那两条"没有这一格"只是恒真 ⇒ 红 |
 
 零模型调用（F 的形态闸、V 的审阅、B 的秘书都用预置回复 / 替身）；不读写 `projects/`。
@@ -38,7 +38,6 @@ import re
 
 import pytest
 
-from _credential_fixture import issue_credential
 from agentflow import conductor as CND
 from agentflow import depsection as _DS
 from agentflow import manuscriptform as MF
@@ -229,11 +228,11 @@ def test_c_b_catches_the_new_manuscript_without_any_proof_no(tmp_path: pathlib.P
     assert int(VR.proof_no_of(row) or 0) in (0, 1), row.get("proof_no")
 
 
-# ============================================================ d 老盘兼容
-def test_d_an_old_p2_manuscript_still_reads_and_signs(tmp_path: pathlib.Path) -> None:
-    """d：老稿（`-p2` + 稿头 `- 证明号：2`）仍能分类、读正文、认签。"""
+# ============================================================ d 稿头老行仍读
+def test_d_an_old_manuscript_header_line_still_reads(tmp_path: pathlib.Path) -> None:
+    """d：稿头老行 `- 证明号：2` 仍读得出（只停写、不停读）；名字只有一种形式。"""
     st = _ws(tmp_path)
-    rel = "reports/f-proof-000012-p2.md"
+    rel = "reports/f-proof-000012.md"
     text = ("# F 的证明手稿：老盘的第二份证明\n\n"
             "- 命题号：stmt:（还没落号）\n- 计划：000004 · 子目标：S1\n"
             "- 证明号：2\n\n## 命题\n\n老盘那一份的命题。\n\n"
@@ -247,7 +246,8 @@ def test_d_an_old_p2_manuscript_still_reads_and_signs(tmp_path: pathlib.Path) ->
     reading = MFAM.classify_manuscript(rel)
     assert reading["tier"] == MFAM.TIER_FAMILY, reading
     assert reading["manuscript_id"] == "000012", reading
-    assert int(reading["proof_no"] or 0) == 2, reading
+    # 名字里没有 `-pN` ⇒ 证明号那一格在"名字"这一侧恒 1；老稿头那一行是另一处读数。
+    assert int(reading["proof_no"] or 0) == 1, reading
     assert MFAM.sign_carrier(rel)["ok"] is True, MFAM.sign_carrier(rel)
 
     # 读正文：`## 证明` 那一节照旧（与 V 签同一把尺）。
@@ -255,13 +255,6 @@ def test_d_an_old_p2_manuscript_still_reads_and_signs(tmp_path: pathlib.Path) ->
     body = str(proof.get("body") or "").strip("\n")
     assert proof.get("state") == _DS.PROOF_PRESENT and body == PROOF, proof
 
-    # 认签：老签按 `#p2` 认领（签文件里那一格还在，读侧照旧）。
-    issue_credential(st.root, proof_text=body, manuscript=rel,
-                     proof_no=2, artifact_path=rel)
-    signed = VS.sign_reading(st.root, statement_id="", proof_text=body,
-                             proof_no=2, manuscript_path=rel)
-    assert signed["state"] == "signed", signed
-    assert int(signed.get("proof_no") or 0) == 2, signed
     # 稿头那一行读得出（读能力不删）。
     assert int(R.parse_entry(text)["proof_no"]) == 2
     assert int(_DS.manuscript_proof_no(text)) == 2

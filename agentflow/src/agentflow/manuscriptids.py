@@ -119,24 +119,14 @@ def canonical_rel(manuscript_id: Any, proof_no: Any = 1, *,
     """手稿号 ⇒ 规范手稿路径：`reports/<前缀><号>.md`（产出侧不产生 `-p<N>`）。
 
     `family` 缺省是 F（`f-proof-`）—— 老调用方的位置参数与返回值逐字不变。
-    一个稿号 = 一份文件 = 一份证明：写路径不再按 `proof_no` 拼后缀。`proof_no`
-    只在 `legacy=True` 时参与命名，而那是**给盘上已存在的旧稿算它的旧名**（只读；
-    `reports/f-proof-<号>-p2.md` 那一族），不是新写路径的一种形式。
+    一个稿号 = 一份文件 = 一份证明：名字只由稿号决定。`proof_no` / `legacy` 两个形参
+    保留只为旧调用点不必改签名，它们不参与命名（对齐之后没有第二种名字）。
     号形不对 / 未知族 ⇒ 空串（不猜、不拼一个看起来像号的路径）。
     """
     mid = str(manuscript_id or "").strip()
     if not is_manuscript_id(mid):
         return ""
-    no = 1
-    if legacy:
-        try:
-            no = int(proof_no or 1)
-        except (TypeError, ValueError):
-            no = 0
-        if no < 1:
-            no = 1
-    return _MFAM.relpath(str(family or FAMILY_F), mid, no, strict=False,
-                         legacy_read=bool(legacy))
+    return _MFAM.relpath(str(family or FAMILY_F), mid, strict=False)
 
 
 def manuscript_path(root: Any, manuscript_id: Any, proof_no: Any = 1, *,

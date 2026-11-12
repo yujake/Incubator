@@ -16,6 +16,8 @@
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from agentflow import manuscriptfamily as MF
@@ -202,9 +204,8 @@ def test_legacy_versions_are_a_read_not_a_family(rel: str, version: int) -> None
     carrier = MF.sign_carrier(rel)
     problems = legacy_violations(reading, carrier, MF.allowed_cells("legacy"))
     assert problems == [], problems
-    expected_suffix = f"-p{version}.md" if version >= 2 else ".md"
     expected_canonical = (f"reports/{reading['name_family']}-"
-                          f"{reading['id']}{expected_suffix}")
+                          f"{reading['id']}.md")
     assert reading["canonical"] == expected_canonical, reading
     # 三处读口各自独立地拒它（单改正则不够：vsigns 内部曾有两把尺打架）。
     assert MF.parse(rel)["proof_no"] == 0
@@ -281,7 +282,7 @@ def test_sign_carrier_is_exactly_three_families_in_reports() -> None:
     """
     table = {
         "reports/f-proof-000000.md": True,
-        "reports/f-proof-000000-p2.md": True,
+        "reports/f-proof-000000-p2.md": False,
         "reports/b-proof-000000.md": True,
         "reports/e-proof-000012.md": True,
         "reports/f-proof-plan-0001.md": True,
@@ -372,18 +373,12 @@ def test_relpath_refuses_a_proof_no_suffix() -> None:
 
     为什么是拒绝而不是静默压成 1：压成 1 会让"以为在写第 2 份"的调用方覆盖第 1 份
     的稿，而那在盘上表现为"第 1 份变了、第 2 份不存在"，没有任何地方会报。
-    `legacy_read=True` 只给读侧算盘上旧文件名用，它仍拼得出旧名。
     """
     for family, manuscript_id in (("f-proof", "000000"), ("b-proof", "000041"),
-                                  ("e-proof", "000012")):
+                                  ("e-proof", "000012"), ("e-num", "000012")):
         with pytest.raises(ValueError):
             MF.relpath(family, manuscript_id, 2)
-        # 读侧那一条口仍拼得出盘上旧名（只服务已存在的旧文件）。
-        assert MF.relpath(family, manuscript_id, 2,
-                          legacy_read=True).endswith("-p2.md")
-    # e-num 从不设后缀：legacy_read 也不给它拼。
-    with pytest.raises(ValueError):
-        MF.relpath("e-num", "000012", 2, legacy_read=True)
+        assert re.search(r"-p\d+\.md$", MF.relpath(family, manuscript_id)) is None
 
 
 def test_parse_keeps_the_legacy_compatibility_readings() -> None:

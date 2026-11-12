@@ -5,7 +5,7 @@
 
 族判定原来散落在各模块（前缀表、名字解析、候选名拼接、路径拼法…），它们"恰好一致"
 只是因为字符串没被人改过。本模块把那一列事实收成一张表：族 → 前缀 → 允许目录 →
-号形 → 老盘 `-pN` 后缀 → 签要不要 → 允许格 / 派生列 / `evidence_kind` / `kind` 缺省 / 出处。
+号形 → 签要不要 → 允许格 / 派生列 / `evidence_kind` / `kind` 缺省 / 出处。
 其余模块只做派生（re-export），不再各写字面量。
 
 ## 边界
@@ -17,8 +17,9 @@
 
 `tier` 是权威的读法：`family`（规范名）/ `legacy`（历史名，可列出、可 preview、
 不可签、不可收录）/ `bad_name`（像手稿但号解析不出）/ `unrecognized`（不是手稿）。
-`-v2` 一类历史后缀只读成 `legacy`，`proof_no` 恒为 0：它不是 `-p2`，把它读成规范档
-等于把一份未审、且已知有缺陷的稿当成正式稿（一个稿号 = 一份文件 = 一份证明）。
+`-v2` 一类历史后缀只读成 `legacy`，`proof_no` 恒为 0：它不是 `-p2`（对齐之后
+`-pN` 也不再是手稿名的一部分），把它读成规范档等于把一份未审、且已知有缺陷的稿当成
+正式稿（一个稿号 = 一份文件 = 一份证明）。
 """
 from __future__ import annotations
 
@@ -157,10 +158,10 @@ _ID_RE: Mapping[str, re.Pattern[str]] = MappingProxyType({
     "e-num": re.compile(r"^\d{4,6}$"),
 })
 
-#: 老盘的 `-p<N>` 后缀（只读兼容：一个稿号 = 一份文件 = 一份证明；N 是 >=1 的
-#: 十进制，`-p0` / `-pabc` 不认）。`e-num` 不设。
-_PROOF_REST_RE = re.compile(r"^(?P<id>\d{4,6}|plan-\d+)(?:-p(?P<no>[1-9]\d*))?$")
-_PROOF_REST_NUM_RE = re.compile(r"^(?P<id>\d{4,6})(?:-p(?P<no>[1-9]\d*))?$")
+#: 规范名的号形（读与写共用）。产出侧一个稿号 = 一份文件 = 一份证明：名字里没有
+#: `-p<N>` 后缀；旧盘上的 `…-pN.md` 不再被认成手稿（对齐之后只有一种形式）。
+_PROOF_REST_RE = re.compile(r"^(?P<id>\d{4,6}|plan-\d+)$")
+_PROOF_REST_NUM_RE = re.compile(r"^(?P<id>\d{4,6})$")
 _NUM_REST_RE = re.compile(r"^(?P<id>\d{4,6})$")
 #: 历史后缀（`-v<N>`，N 含 0）：只读成历史档，不当 `-pN`。
 _LEGACY_REST_RE = re.compile(r"^(?P<id>\d{4,6})-v(?P<v>\d+)$")
@@ -229,7 +230,7 @@ def _shape_of_name(name: str) -> dict[str, Any]:
             continue
         rest = name[len(spec.prefix):]
         out["name_family"] = family
-        # 1) 规范名：号 + 可选的 -pN（e-num 不设后缀）。
+        # 1) 规范名：号（对齐之后没有 `-pN` 后缀）。
         matched = None
         if family == "e-num":
             matched = _NUM_REST_RE.match(rest)
@@ -238,11 +239,9 @@ def _shape_of_name(name: str) -> dict[str, Any]:
         else:
             matched = _PROOF_REST_NUM_RE.match(rest)
         if matched is not None:
-            no = int(matched.groupdict().get("no") or 1)
             out.update(tier=TIER_FAMILY, manuscript_id=str(matched.group("id")),
-                       proof_no=no, suggested_no=no, code="",
-                       why=(f"`{name}` ⇒ 族 {family}、稿号 {matched.group('id')}、"
-                            f"证明号 {no}"))
+                       proof_no=1, suggested_no=1, code="",
+                       why=f"`{name}` ⇒ 族 {family}、稿号 {matched.group('id')}")
             return out
         # 2) 历史名：规范的号 + 非规范后缀 -vN（只读档）。
         legacy = _LEGACY_REST_RE.match(rest)
@@ -257,9 +256,9 @@ def _shape_of_name(name: str) -> dict[str, Any]:
         # 3) 像手稿、号却解析不出（受控拒那一档）。
         out.update(tier=TIER_BAD, proof_no=0, code=CODE_BAD, checked=False,
                    why=(f"手稿名 {name!r} 认不出号：要 "
-                        f"{spec.prefix}<号>[-p<N>].md（号是 4-6 位十进制"
+                        f"{spec.prefix}<号>.md（号是 4-6 位十进制"
                         + ("，或 plan-<数字>" if family == "f-proof" else "")
-                        + "；-p<N> 的 N 是 >=1 的十进制）"))
+                        + "）"))
         return out
     out["why"] = (f"不是手稿族的名字（没有 {', '.join(s.prefix for s in FAMILIES.values() if s.prefix)}"
                   " 前缀）")
@@ -267,15 +266,14 @@ def _shape_of_name(name: str) -> dict[str, Any]:
 
 
 def _canonical_of(name_family: str, manuscript_id: str, proof_no: int) -> str:
-    """历史名 ⇒ 它对应的规范名（读侧建议，不是写路径）；拼不出 ⇒ 空串。
+    """历史名 ⇒ 它对应的规范名（`reports/<族>-<号>.md`）；拼不出 ⇒ 空串。
 
-    `legacy_read=True` 是这里唯一的用途：盘上那份旧稿叫 `…-p<N>.md` 时，建议名仍按
-    旧名拼回去（只读），新写路径不会产生这种名字。
+    对齐之后规范名只有一种：不带 `-pN`（`proof_no` 这一格留作签名，不参与拼名）。
     """
     if not name_family or not manuscript_id:
         return ""
     try:
-        return relpath(name_family, manuscript_id, proof_no, legacy_read=True)
+        return relpath(name_family, manuscript_id)
     except ValueError:
         return ""
 
@@ -462,25 +460,21 @@ def is_sign_carrier(rel: Any) -> bool:
 
 
 def relpath(family: Any, id: str = "", proof_no: int = 1, *,
-            strict: bool = True, legacy_read: bool = False) -> str:
+            strict: bool = True) -> str:
     """族 + 号 ⇒ 拼名（`reports/<前缀><号>.md`）。
 
-    产出侧只有一种形式：一个稿号 = 一份文件 = 一份证明，名字里不带证明号后缀。
-    写路径给 `proof_no >= 2` ⇒ **受控拒绝**（`strict=True` 时 `ValueError`）。
+    产出侧只有一种形式：一个稿号 = 一份文件 = 一份证明，名字里没有证明号后缀。
+    给 `proof_no >= 2` ⇒ 受控拒绝（`strict=True` 时 `ValueError`）。
     为什么拒绝而不是静默压成 1：压成 1 会让"以为在写第 2 份"的调用方覆盖第 1 份的稿，
     而那个错误在盘上表现为"第 1 份变了、第 2 份不存在"，没有任何地方会报 —— 正是本模块
     要防的那类静默形态（见下段"为什么要集中拼名"）。
-
-    `legacy_read=True` 只服务**盘上已存在的旧文件**（`reports/<前缀><号>-p<N>.md` 那一族）：
-    给旧稿算"它对应的规范名"时把旧的 N 拼回去。它不是新写路径的一种形式，新写路径
-    不传它；解析侧认 `-pN` 也只服务那些旧文件（见 `_PROOF_REST_RE`）。
 
     为什么要集中拼名：手写拼法散在各处，拼错时的症状是"文件不在盘上"，而每一处都会以
     "查不到"的形式静默通过。这里对号形与证明号做同一套校验，拼出来的名字一定能被
     `parse` 读回原值（往返判据 `tests/test_manuscript_family_is_one_table.py`）。
 
-    `f-proof` 的号可以是 `plan-<数字>`；`e-num` 从不设 `-pN`（`legacy_read` 也不给它拼）。
-    未知族 / 号形不对 / proof_no 不是 >=1 的整数 ⇒ `ValueError`（不猜）。
+    `f-proof` 的号可以是 `plan-<数字>`；`e-num` 同样只有一种名字。
+    未知族 / 号形不对 / proof_no 不是 1 ⇒ `ValueError`（不猜）。
 
     `strict=False` 是给"旧调用方本来就把非法输入读成空串"的那一处（`bmanuscript.relpath`
     的返回值契约）：同一套校验，失败时回空串而不是抛。默认永远是 fail-closed。
@@ -507,12 +501,11 @@ def relpath(family: Any, id: str = "", proof_no: int = 1, *,
         return _fail(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
     if no < 1:
         return _fail(f"证明号要是 >=1 的整数，收到 {proof_no!r}")
-    if no != 1 and (spec.family == "e-num" or not legacy_read):
+    if no != 1:
         return _fail(
             f"一个稿号 = 一份文件 = 一份证明：新写路径不设证明号后缀，"
             f"收到 proof_no={proof_no!r}（族 {spec.family}）")
-    suffix = f"-p{no}" if legacy_read and no >= 2 else ""
-    return f"{MANUSCRIPT_DIR}/{spec.prefix}{got_id}{suffix}.md"
+    return f"{MANUSCRIPT_DIR}/{spec.prefix}{got_id}.md"
 
 
 def allowed_cells(family: Any) -> tuple[str, ...]:
