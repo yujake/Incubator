@@ -273,7 +273,9 @@ def _log_tail(root: Path, log: str) -> tuple[list[str] | None, str]:
 
 def _is_failure_line(line: str) -> bool:
     """这一行是"没成"的收尾标记吗（含 Traceback 那一行）。"""
-    return any(line.startswith(mark) or mark in line for mark in _WARM_FAIL_MARKS)
+    # 标记都出现在日志行的任意位置（句首那一档也含在内），所以一个 `in` 就够：
+    # 原先的 `startswith(mark) or mark in line` 里前一半恒被后一半包含。
+    return any(mark in line for mark in _WARM_FAIL_MARKS)
 
 
 def _decide_warm_state(record: Mapping[str, Any],
@@ -292,20 +294,21 @@ def _decide_warm_state(record: Mapping[str, Any],
     # 更不许取 `tail[-1]`（空表上取下标会抛 IndexError，被 warm_job 接住后
     # 这一格会从"跑中"变成"不知道"，与实际状态正好相反）。
     last_line = tail[-1] if tail else ""
+    recent = tail[-3:]
     for line in reversed(tail):
         if _is_failure_line(line):
             return {"state": "failed", "reason": f"这一趟没成：{line}",
-                    "last_line": last_line, "tail": tail[-3:]}
+                    "last_line": last_line, "tail": recent}
         if any(line.startswith(mark) for mark in _WARM_DONE_MARKS):
             return {"state": "done", "reason": f"这一趟跑完了：{line}",
-                    "last_line": last_line, "tail": tail[-3:]}
+                    "last_line": last_line, "tail": recent}
     if _pid_alive(pid):
         return {"state": "running", "reason": f"子进程还在跑（pid={pid}）；日志 {record.get('log')}",
-                "last_line": last_line, "tail": tail[-3:]}
+                "last_line": last_line, "tail": recent}
     return {"state": "unknown",
             "reason": (f"子进程（pid={pid}）已经结束，但日志里没有收尾标记"
                        f"（最后一行：{last_line}）"),
-            "last_line": last_line, "tail": tail[-3:]}
+            "last_line": last_line, "tail": recent}
 
 
 def warm_job(root: Path | str) -> dict[str, Any]:
@@ -396,47 +399,44 @@ def handle_cache_warm(handler: Any, params: Mapping[str, str],
     lean = (WR._one(form, "lean").strip().lower() or "off")  # noqa: SLF001
     dry = WR._flag(form, "dry_run")  # noqa: SLF001
     seen = {"lean": lean, "dry_run": dry, "confirm": WR._flag(form, "confirm")}  # noqa: SLF001
+
+    def _done(code: int, result: str, ok: bool, **kw: Any) -> dict[str, Any]:
+        """这一面的统一回执（五个出口的 `endpoint` / `source` / `params` 三格相同）。"""
+        return WR._finish(handler, endpoint="/api/cache/warm", source=source,  # noqa: SLF001
+                          params=seen, code=code, result=result, ok=ok, **kw)
+
     # D-60 ②：试算走只读放行（只保留回环来源那一道）；真跑仍然四层全要。
     allowed, code, why = WR.authorize(handler, endpoint="POST /api/cache/warm",
                                       read_only=dry)
     if not allowed:
-        return WR._finish(handler, endpoint="/api/cache/warm", source=source, params=seen,  # noqa: SLF001
-                          code=code, result=f"拒绝：{why}", ok=False)
+        return _done(code, f"拒绝：{why}", False)
     if lean not in WARM_LEANS:
-        return WR._finish(handler, endpoint="/api/cache/warm", source=source, params=seen,  # noqa: SLF001
-                          code=400, result=(f"拒绝：lean 只认 {list(WARM_LEANS)}（收到 {lean!r}）"
-                                            "—— 能预热的目标恒等于 WARM_TARGETS，请求方点不了别的"),
-                          ok=False)
+        return _done(400, (f"拒绝：lean 只认 {list(WARM_LEANS)}（收到 {lean!r}）"
+                           "—— 能预热的目标恒等于 WARM_TARGETS，请求方点不了别的"), False)
     if not WR._flag(form, "confirm"):  # noqa: SLF001
-        return WR._finish(handler, endpoint="/api/cache/warm", source=source, params=seen,  # noqa: SLF001
-                          code=400,
-                          result=("拒绝：真预热会真的花钱，必须带 confirm=1 一次显式确认"
-                                  "（按钮上的二次确认就是它）"), ok=False)
+        return _done(400, ("拒绝：真预热会真的花钱，必须带 confirm=1 一次显式确认"
+                           "（按钮上的二次确认就是它）"), False)
     argv = _warm_argv(root, lean)
     if dry:
         try:
             got = _plan(tiers=(lean,))
         except Exception as exc:  # noqa: BLE001 - 计划算不出来属于"没查成"
-            return WR._finish(handler, endpoint="/api/cache/warm", source=source,  # noqa: SLF001
-                              params=seen, code=500,
-                              result=f"试算失败：{type(exc).__name__}: {exc}", ok=False,
-                              extra={"argv": argv})
+            return _done(500, f"试算失败：{type(exc).__name__}: {exc}", False,
+                         extra={"argv": argv})
         doc = got.get("doc") or {}
         tier = doc.get("tiers", {}).get(lean) if isinstance(doc.get("tiers"), dict) else None
         tier = tier or {}
-        return WR._finish(handler, endpoint="/api/cache/warm", source=source, params=seen,  # noqa: SLF001
-                          code=200,
-                          result=(f"试算（没有发请求、花费 0 美元）：要预热 "
-                                  f"{len(tier.get('to_warm') or [])} 个目标，预计 "
-                                  f"{float(tier.get('usd_est') or 0.0):.6f} 美元"),
-                          ok=True, state=WARM_STATE_PLAN,
-                          extra={"dry_run": True, "plan": doc, "argv": argv})
+        return _done(200,
+                     (f"试算（没有发请求、花费 0 美元）：要预热 "
+                      f"{len(tier.get('to_warm') or [])} 个目标，预计 "
+                      f"{float(tier.get('usd_est') or 0.0):.6f} 美元"),
+                     True, state=WARM_STATE_PLAN,
+                     extra={"dry_run": True, "plan": doc, "argv": argv})
     try:
         pid, log = _spawn_warm(root, lean)
     except Exception as exc:  # noqa: BLE001 - 起不来要如实报，不许静默
-        return WR._finish(handler, endpoint="/api/cache/warm", source=source, params=seen,  # noqa: SLF001
-                          code=500, result=f"起不来：{type(exc).__name__}: {exc}", ok=False,
-                          extra={"argv": argv})
+        return _done(500, f"起不来：{type(exc).__name__}: {exc}", False,
+                     extra={"argv": argv})
     extra: dict[str, Any] = {"pid": pid, "log": log, "argv": argv, "tier": lean}
     written, problem = _write_record(root, {"schema": 1, "kind": "cache_warm",
                                             "at": _now_iso(), "pid": pid, "log": log,
@@ -445,11 +445,10 @@ def handle_cache_warm(handler: Any, params: Mapping[str, str],
         # 记录写不成不冒充失败（子进程真的起来了），但必须说出口：没有这份记录，
         # 页面那一格三态就只能说"不知道"。
         extra["record_problem"] = problem
-    return WR._finish(handler, endpoint="/api/cache/warm", source=source, params=seen,  # noqa: SLF001
-                      code=200,
-                      result=(f"已起一趟预热（{lean} 档，pid={pid}）—— 页面会跟到跑完，"
-                              f"跑完自动重取读数；日志 {log}"),
-                      ok=True, ident=log, state=WARM_STATE_RUNNING, extra=extra)
+    return _done(200,
+                 (f"已起一趟预热（{lean} 档，pid={pid}）—— 页面会跟到跑完，"
+                  f"跑完自动重取读数；日志 {log}"),
+                 True, ident=log, state=WARM_STATE_RUNNING, extra=extra)
 
 
 HANDLERS.update({
