@@ -251,14 +251,14 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
                     note = f"{type(exc).__name__}: {exc}"
                     prog.finish(outcome="failed", note=note)
                     break
-        if not note and codes and codes[-1] != 0:
-            note = (f"引擎退出码 {codes[-1]} —— "
-                    + ("PDF 仍然写出来了（本机 MiKTeX 收尾失败的已知形态），"
-                       "产物与退出码两栏都如实记" if _fresh(pdf, before_pdf) else "没有编出 PDF"))
 
     # "这一趟编出来没有"与"盘上有没有 PDF"是两件事：上一次编的 PDF 会一直躺在那里
     # （引擎什么都没产而那份旧 PDF 还在时，把它当成本次读数就等于说"编成功了"）。
     fresh = _fresh(pdf, before_pdf)
+    if not note and codes and codes[-1] != 0:
+        note = (f"引擎退出码 {codes[-1]} —— "
+                + ("PDF 仍然写出来了（本机 MiKTeX 收尾失败的已知形态），"
+                   "产物与退出码两栏都如实记" if fresh else "没有编出 PDF"))
     pages = _page_count(pdf) if fresh else None
     size = pdf.stat().st_size if fresh else None
     if not fresh and pdf.is_file() and not note:
