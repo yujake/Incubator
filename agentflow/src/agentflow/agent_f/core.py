@@ -2128,60 +2128,62 @@ class _Core:
         same_proposition: dict[str, Any] = {}
         plan_id = str(plan.get("plan_id") or "")
         label_for_sid = f"F 攻坚 {plan_id} 子目标 {sid}"
+        #: 三条认法原先各扫一遍 statements，这里一趟分完（优先级与改前同序：逐字相同 >
+        #: 同一命题不同正文 > 同一子目标的弱认法 > 槽冲突）。
+        # 弱一档的认法：同一个子目标交出来的命题（`statement_text` + 派活标签）。
+        # 为什么需要它：`full` 里带着"可检验形式"与"显式前提"两段，而这两段会随
+        # 这一轮的产物变（同一子目标第二轮多写了一句前提，`full` 就不同了）。
+        # 没有这一档，重跑一轮就会多一条命题 —— 号在变，稿的名字也跟着变。
+        weak_row: dict[str, Any] = {}
+        slot_conflict: dict[str, Any] = {}
+        full_stripped = full.strip()
+        body_stripped = body.strip()
         for row in existing:
-            if str(row.get("statement_full") or "").strip() != full.strip():
-                continue
-            if str(row.get("proof_text") or "").strip() == body.strip():
-                existing_row = dict(row)
-                exact_match = True
-                break
-            if not same_proposition:
-                same_proposition = dict(row)
-        if not existing_row:
-            existing_row = same_proposition
-        weak_match = bool(existing_row) and not exact_match
-        if not existing_row:
-            # 弱一档的认法：同一个子目标交出来的命题（`statement_text` + 派活标签）。
-            # 为什么需要它：`full` 里带着"可检验形式"与"显式前提"两段，而这两段会随
-            # 这一轮的产物变（同一子目标第二轮多写了一句前提，`full` 就不同了）。
-            # 没有这一档，重跑一轮就会多一条命题 —— 号在变，稿的名字也跟着变。
-            for row in existing:
-                if (str(row.get("statement_text") or "").strip() == text
-                        and str(row.get("label") or "").strip() == label_for_sid):
+            if str(row.get("statement_full") or "").strip() == full_stripped:
+                if str(row.get("proof_text") or "").strip() == body_stripped:
                     existing_row = dict(row)
-                    weak_match = True
+                    exact_match = True
                     break
+                if not same_proposition:
+                    same_proposition = dict(row)
+                continue
+            if str(row.get("label") or "").strip() != label_for_sid:
+                continue
+            if str(row.get("statement_text") or "").strip() == text:
+                if not weak_row:
+                    weak_row = dict(row)
+            elif not slot_conflict:
+                slot_conflict = dict(row)
         if not existing_row:
+            existing_row = same_proposition or weak_row
+        weak_match = bool(existing_row) and not exact_match
+        if not existing_row and slot_conflict:
             # ---- 2026-11-07（业主裁定）：同一个登记槽里换了命题 ⇒ 受控拒 --------------
             #
             # 判据是"同 label 的一条在册命题，而命题正文不同"。它不再是"重跑漂移"，
             # 而是另一条命题占了同一个槽：静默换掉命题正文正是这次要消灭的形态
             # （改证明不能顺手改命题）。处置方向是把新命题登记一条新的（换号），
             # 或者明确放弃旧的（`abandon_kind`）—— 两条都不在这条路上。
-            for row in existing:
-                if str(row.get("label") or "").strip() != label_for_sid:
-                    continue
-                if str(row.get("statement_text") or "").strip() == text:
-                    continue
-                from .. import refusals as _R_SLOT
+            row = slot_conflict
+            from .. import refusals as _R_SLOT
 
-                return _R_SLOT.refuse(
-                    "proposition_text_changed",
-                    ("同一 label（" + label_for_sid + "）下已经登记的是另一条命题（"
-                     f"stmt:{row.get('stmt_id')}），而这一轮的命题正文不同 ⇒ 受控拒。"
-                     "这是**新命题**（把它登记成新的一条），或者走「放弃 + 换号」；"
-                     "**不要用挂证明改命题正文** —— 改证明只动 `## 证明` 那一节"),
-                    refused_kind="proposition_text_changed",
-                    statement_id=str(row.get("stmt_id") or ""), reused=True,
-                    promoted=False, manuscript_received=manuscript_received,
-                    proof_text=body, proof_attached=False,
-                    proposition_form={"checked": False, "well_formed": False,
-                                      "submittable": False,
-                                      "refused": "proposition_text_changed",
-                                      "reason": "命题正文与在册那一条不一致"},
-                    why="命题正文与在册那一条不一致", cites=cites,
-                    manuscript_path=str(self.manuscript_path(manuscript_id)),
-                    proof_no=0)
+            return _R_SLOT.refuse(
+                "proposition_text_changed",
+                ("同一 label（" + label_for_sid + "）下已经登记的是另一条命题（"
+                 f"stmt:{row.get('stmt_id')}），而这一轮的命题正文不同 ⇒ 受控拒。"
+                 "这是**新命题**（把它登记成新的一条），或者走「放弃 + 换号」；"
+                 "**不要用挂证明改命题正文** —— 改证明只动 `## 证明` 那一节"),
+                refused_kind="proposition_text_changed",
+                statement_id=str(row.get("stmt_id") or ""), reused=True,
+                promoted=False, manuscript_received=manuscript_received,
+                proof_text=body, proof_attached=False,
+                proposition_form={"checked": False, "well_formed": False,
+                                  "submittable": False,
+                                  "refused": "proposition_text_changed",
+                                  "reason": "命题正文与在册那一条不一致"},
+                why="命题正文与在册那一条不一致", cites=cites,
+                manuscript_path=str(self.manuscript_path(manuscript_id)),
+                proof_no=0)
         if weak_match and existing_row:
             # 同一条命题的重跑：交给登记条目的命题正文必须是盘上那一行（canonical），
             # 这一轮漂移过的 `full` / `text` 只用于渲染稿，不用来造新号。
