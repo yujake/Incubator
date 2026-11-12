@@ -140,6 +140,10 @@ export function Acceptance() {
   const closing = pkg.closing;
   const gates = closing.gates;
   const content = closing.content;
+  // machine_pass 的两句判词各问一件事（哪些格失败 / 哪些格没全 pass）。改前每句都
+  // 各扫两遍（some 判有没有 + filter 取清单），这里分两组各扫一遍，两句各取一组。
+  const failedCells = gates.blocking_cells.filter((one) => one.status === "fail");
+  const notPassCells = gates.blocking_cells.filter((one) => one.status !== "fail");
 
   return (
     <>
@@ -266,28 +270,29 @@ export function Acceptance() {
                   </tr>
                 </thead>
                 <tbody>
-                  {proofs.rows.map((row) => (
-                    <tr key={row.stmt_id}>
-                      <td class="mono">{row.stmt_id} {row.label}</td>
-                      <td>{stateBadge(row.state)}</td>
-                      <td class="mono">
-                        {row.proofs.length === 0 ? "—" : row.proofs.map((p) => (
-                          <span key={p.proof_no}>
-                            #{p.proof_no} {p.streak}/{p.need}
-                            {p.streak_ok ? "（够了）" : ""}
-                            {" "}
-                            <SourceLink source={p.source} label="签行" />
-                          </span>
-                        ))}
-                      </td>
-                      <td class="mono">
-                        {row.proofs.flatMap((p) => p.defect_steps).length === 0
-                          ? "—"
-                          : row.proofs.flatMap((p) => p.defect_steps).join("、")}
-                      </td>
-                      <td><SourceLink source={row.source} label="台账行" /></td>
-                    </tr>
-                  ))}
+                  {proofs.rows.map((row) => {
+                    // 「缺陷步」这一格要两件事：有没有、有哪些。改前每行 flatMap 两次
+                    // （先判 length、再 join），这里一次算好 —— 那一格的值一个都不变。
+                    const defectSteps = row.proofs.flatMap((p) => p.defect_steps);
+                    return (
+                      <tr key={row.stmt_id}>
+                        <td class="mono">{row.stmt_id} {row.label}</td>
+                        <td>{stateBadge(row.state)}</td>
+                        <td class="mono">
+                          {row.proofs.length === 0 ? "—" : row.proofs.map((p) => (
+                            <span key={p.proof_no}>
+                              #{p.proof_no} {p.streak}/{p.need}
+                              {p.streak_ok ? "（够了）" : ""}
+                              {" "}
+                              <SourceLink source={p.source} label="签行" />
+                            </span>
+                          ))}
+                        </td>
+                        <td class="mono">{defectSteps.length === 0 ? "—" : defectSteps.join("、")}</td>
+                        <td><SourceLink source={row.source} label="台账行" /></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
@@ -443,11 +448,11 @@ export function Acceptance() {
             ) : (
               <div class="readings">
                 machine_pass=false 的原因：
-                {gates.blocking_cells.some((cell) => cell.status === "fail")
-                  ? `因格失败：${gates.blocking_cells.filter((cell) => cell.status === "fail").map((cell) => `${cell.name}=${cell.status}`).join("、")}；`
+                {failedCells.length > 0
+                  ? `因格失败：${failedCells.map((one) => `${one.name}=${one.status}`).join("、")}；`
                   : ""}
-                {gates.blocking_cells.some((cell) => cell.status !== "fail")
-                  ? `格没全 pass：${gates.blocking_cells.filter((cell) => cell.status !== "fail").map((cell) => `${cell.name}=${cell.status}`).join("、")}；`
+                {notPassCells.length > 0
+                  ? `格没全 pass：${notPassCells.map((one) => `${one.name}=${one.status}`).join("、")}；`
                   : ""}
                 {gates.blockers.length > 0
                   ? `blocker ${gates.blockers.length} 条（清单在下面）；`
