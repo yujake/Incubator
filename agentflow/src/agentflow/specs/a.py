@@ -1,10 +1,10 @@
-"""角色 A 的声明（`goal-7f5116c1` M3）：动作表 + 边 + 写集 + 职责与门面。
+"""角色 A 的声明：动作表 + 边 + 写集 + 职责与门面。
 
 这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
-`WRITE_SETS`，`agent_a.py` 只是把它再导出一次。
+`WRITE_SETS`，`agent_a` 包只是把它再导出一次。
 所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
-动作表的每一行都从 `capabilities.py` 逐字搬来（含注释），判据见
-`tests/test_agent_spec_reconciliation.py` 与 `tests/test_capabilities_two_layer.py`。
+与派生表逐格一致的判据见 `tests/test_agent_spec_reconciliation.py` 与
+`tests/test_capabilities_two_layer.py`。
 """
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `search_literature`（2026-09-30 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
+    # ---- `search_literature`
     # 为什么必须有它：上面两个动作的参数里没有主题（只认队列里已有什么），召唤方没办法告诉 A 要查什么。
     # 名字不叫 `search`：两层对账按"工具名最后一段 == handler_name"配对，`fs.search` / `table.search`
     # 会让它落进 `ambiguous`，而导入期第 [7b] 条要求 `ambiguous` 为空。
@@ -62,13 +62,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
             {
                 "topic": {**_S, "minLength": 1, "maxLength": 400},
                 # 缺省 `precise`（实现在 `AgentA.search_literature`）：这一个动作
-                # 服务的是"给我这条命题的来源"，而真机实测 `topical` 的词袋查询
-                # 在这个语义下 15 条里只有 1 条对题、`precise` 是 8 条里 7 条对题。
-                # 要领域全景就显式传 `broad` / `topical`。
+                # 服务的是"给我这条命题的来源"，词袋式的 `topical` 在这个语义下
+                # 对题率很低。要领域全景就显式传 `broad` / `topical`。
                 "mode": {"type": "string", "enum": list(S.SEARCH_MODES)},
                 "description": _S,
-                # 题 3（2026-10-07 所有者授权补 `providers`）：工具面 `search.literature` 早有
-                # `providers`（一次问多源），动作面没有 ⇒ 编排层看不见这个入口。只搬形状、不搬名单：
+                # 工具面 `search.literature` 早有 `providers`（一次问多源），动作面没有 ⇒
+                # 编排层看不见这个入口。只搬形状、不搬名单：
                 # 工具面那格还带 `enum` / `minItems` / `maxItems`，这里一格都不抄（可用源的真身是
                 # `providers.build_providers` 的名单 + 调用方注入的实例，抄一份就是第二个要同步的地方），
                 # 所以只声明 array<string>。这一对的形状一致没有导入期判据看着（两层类型对账落进
@@ -79,14 +78,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
             },
             required=("topic",),
         ),
-        # 【FC-27 禁改区 · 本次改动所有者授权、主控代改】本文件登记在 `.noai-paths`
-        # 的 `[category: auth-audit]` 里。题 20 选 A（2026-10-07 所有者裁定）：
-        # 这一格此前只写"含 request_id / outcome / result_lit_ids / literature"，
-        # 而实现（`agent_a/search_literature.py`）在题 11 补完"完整透传"之后已经
-        # 返回 26 个键 —— 声明面漏掉的正是 `sources` / `cost` 这一类跨源读数，
-        # 而主控派活读的就是这一格（`capabilities.CAPABILITIES` 由本文件派生）。
-        # 本次只把键名逐字抄齐（名字与次序都取自实现末尾那个 return 字典），
-        # 不改实现、不改别处、不改任何判据。
+        # 键名逐字抄自实现（`agent_a/search_literature.py`）末尾那个 return 字典：
+        # 声明面漏掉的正是 `sources` / `cost` 这一类跨源读数，而主控派活读的就是这一格
+        # （`capabilities.CAPABILITIES` 由本文件派生）。
         (
             "ASearchResult dict（逐键：ok / admitted / request_id / topic / mode / done / "
             "outcome / claimed_request_ids / claimed_own / result_lit_ids / literature / "
@@ -100,12 +94,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `walk_citations`（2026-10-15 加；本文件是 FC-27 禁改区 [auth-audit]，业主裁定逐字
-    #      「引文图是用新动作的方式落」，按「有道理就允许改、事后签字」登记，待 2 名人审）
-    # 为什么必须有它（`draft/124` §10.6）：这一轮之前只取 `cited_by_count` / `referenced_works_count`
-    # （排序用），没取 `referenced_works` 与 `cited_by_api_url` ⇒ "顺着引文走"结构上做不了，而业主点名的
-    # "更短证明路径"正是引文图上的问题（更短的路线通常在奠基论文的参考文献里或后续引用里）。实测
-    # （`temp/_probe_citation_walk.py`，$0）：源论文 `10.1098/rsos.181055` 引了 123 篇、前推 29 条。
+    # ---- `walk_citations`
+    # 为什么必须有它：只取 `cited_by_count` / `referenced_works_count`（排序用）而不取
+    # `referenced_works` 与 `cited_by_api_url` ⇒ "顺着引文走"结构上做不了，而"更短证明路径"
+    # 正是引文图上的问题（更短的路线通常在奠基论文的参考文献里或后续引用里）。
     # 两根轴：效果轴 `read`（只读、一行都不落；登记走既有 `search.dedup_check` / `search.register`，
     # 判重只有一处实现）；外部轴 `egress`（两个方向各发一次 OpenAlex 请求）。
     ActionSpec(
@@ -124,9 +116,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
             required=("lit_id",),
         ),
         (
-            # 2026-11-04（审 F 区）：键表逐个抄 `agent_a/walk_citations.py` 末尾那个 return 字典
-            # （改前漏了 ok / kind / truncated_to_tool_max —— 判三态与判截断要用的正是这三格）；
-            # 失败档也改成描述动作自己（工具那句 error 拼进 note，动作返回里没有 error 键）。
+            # 键表逐个抄 `agent_a/walk_citations.py` 末尾那个 return 字典：`ok` / `kind` /
+            # `truncated_to_tool_max` 这三格是判三态与判截断要用的。失败档描述动作自己
+            # （工具那句 error 拼进 note，动作返回里没有 error 键）。
             # 判据：tests/test_a_action_declarations_match_their_return_keys.py。
             "dict（逐键：ok / kind / lit_id / doi / openalex_id / direction / count / "
             "candidates / truncated_to_tool_max / note；"
@@ -141,10 +133,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="egress",
     ),
 
-    # ---- `ingest_local`（2026-10-02 加；本文件是 FC-27 禁改区，本次改动已登记基线待 2 名人审）
-    # 为什么必须有它（`draft/37` §44.4 的真机读数）：主控只能 `conductor.summon` 「动作」，而登记盘上
-    # 已有文件原先只有工具（`search.ingest_local`）⇒ 盘上有论文、台账里没有它，后面每一跳（B 登记
-    # 命题 → G 建我方稿件 → H 审）都因为没有 `lit_id` 而落空。
+    # ---- `ingest_local`
+    # 为什么必须有它：主控只能 `conductor.summon` 「动作」，而登记盘上已有的文件原先只有工具
+    # （`search.ingest_local`）⇒ 盘上有论文、台账里没有它，后面每一跳（B 登记命题 →
+    # G 建我方稿件 → H 审）都因为没有 `lit_id` 而落空。
     # 两根轴：效果轴 `write_local`（走 `locallib.ingest_directory`，一个事务写 `literature`，需要时写
     # `search_requests` 的登记行）；外部轴 `none`（不联网 —— 刻意与那两个 `egress` 动作分开：算成"要
     # 出网"会让只读/离线场景把它整条划掉，而它恰恰是离线场景最需要的那一件）。
@@ -161,9 +153,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
             },
             required=("books_dir",),
         ),
-        # 2026-11-04（审 F 区）：键表逐个抄 `agent_a/ingest_local.py` 末尾那个 return 字典。
-        # 改前写「含 counts / …」，而实现返回的是 17 个平铺的键（没有 counts 这一格）——
-        # 照 counts 去读的人会读到 None，再把「没读到」当「没入库」。
+        # 键表逐个抄 `agent_a/ingest_local.py` 末尾那个 return 字典：实现返回 17 个平铺的键
+        # （没有 counts 这一格）—— 照 counts 去读会读到 None，再把「没读到」当「没入库」。
         # 判据：tests/test_a_action_declarations_match_their_return_keys.py。
         "IngestReport dict（逐键：ok / kind / resolved / root / dry_run / limit / books[] / "
         "count / ingested / already_present / skipped / unreadable / text_layer_ok / "
@@ -172,8 +163,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         external="none",
     ),
 
-    # ---- `shelf_search`（2026-10-06 加，J-53 / 裁决 2 族 1；本文件是 FC-27 禁改区，本次改动已登记
-    #      基线待 2 名人审）
+    # ---- `shelf_search`
     # 为什么必须有它：`search.shelf` 与 `search.local` 在 A/C/H 的工具面上，动作面里一个都没有 ⇒ 主控
     # 派不出"在本地书架上找一找"（与 `ingest_local` 同一格病：工具层通、编排层不通）。它服务的是
     # 「不联网也能推进」那条路（`#1` 那一类"无意义/重复的外出"的正解之一）。
@@ -203,7 +193,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
 def _build(d: BuilderDeps) -> Any:
     """构造 A（逐字搬自 `host._Builder.agent_a`：下载器由 `agent_a` 配置段的 `download` 决定）。
 
-    为什么 `providers` 与 `downloader` 必须一起给（2026-09-29 验收 P1 实测的缺口）：
+    为什么 `providers` 与 `downloader` 必须一起给：
     只给 providers 时 A 能检索、却一条全文都下不下来，台账里逐条写 `error="no_downloader"`
     —— 而 `no_pdf_url` 是另一回事（那篇本来就没有开放获取 PDF）。两种"没下来"必须分得开。
     """
@@ -224,19 +214,17 @@ SPEC = AgentSpec(
             "下载失败不许当成功，也不许静默重试到超预算。",
             "命中校验（§2 R1b）：登记一行文献之前先核题名/年份/DOI —— 与派活时点名的那一篇对不上就把该行的 matched 写成 mismatch 并说清差在哪，不许静默登记成找到。",
             "定位与确认（§2 R14）：把一条命题交给下游之前，必须先在抽出来的正文里定位它 —— 回报定位结论（matched ∈ exact / partial / none）+ 页码 + 片段；partial / none 要把最接近的三段一并列出来（让人能复核）。none 不许交给 B：没定位到就不算找到。注意这里有两个 matched：文献行的那个问「是不是这一篇」（第三态叫 mismatch），这个问「这条定理在不在这篇里」（第三态叫 none），别串。",
-            # 【FC-27 禁改区 · 2026-10-20 业主口径，待 2 名人审】待新增文献列表：
-            # 一次检索至多入库 10 篇 / 每委托从空开始 / 可撤可补可追加 / 重叠高无新内容拒收 /
-            # 只拿到 3 篇也逐篇审 / 一键迁移后清空 / 报告两块都要写。
+            # 待新增文献列表的口径：一次检索至多入库 10 篇 / 每委托从空开始 / 可撤可补可追加 /
+            # 重叠高无新内容拒收 / 只拿到 3 篇也逐篇审 / 一键迁移后清空 / 报告两块都要写。
             # 刻意写进「既有条目」（boundary）而不是新开一节：它与上面几条是同一种东西
             # （A 在登记文献这件事上不许做的事），分散到别处会让"登记"的口径裂成两处。
-            # 长度 97 字（业主口径 ≤100 字）；"不写步骤与命令"同样按口径办。
             "一次检索至多入库10篇，要精选：候选先进待新增列表（每委托从空开始），"
             "可撤可补、可再找一批；重叠高又无新内容就拒收；只拿到3篇也逐篇审。"
             "筛完一键迁移并清空列表；报告写清已入库与未入库（含理由）。",
         ),
         policy=(
-            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
-            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
+            # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）
+            # ⇒ 这一句是他们唯一的说明书。
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
             "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
@@ -245,18 +233,16 @@ SPEC = AgentSpec(
             "（`stmt:` / `rel:` 号，写进结论与 `note`）；只登记元数据不说影响的，不算有价值。"
             "取回的这批如果**要被引用成断言**（报告里「这条结论凭什么」要追到出处），**派 B 整理**：概念行与关系行"
             "（`relations` 的 `kind`/`quote`）；你自己不建概念网，也别把一批文献直接扔给下一环。",
-            # 2026-10-21 复核：判不了（缺「文内定位结论」字段），故保留。
-            #   这一句说的是 R14 的「定位轴」（matched ∈ exact / partial / none ＋ 页码 ＋ 片段 ＋
-            #   「最接近的三段」），而台账里「没有这一格」：`schema.py:200` 逐字写它「由 A 在回报里
-            #   给出…「不落本栏」」。`literature.matched` 是「另一根轴」（身份：exact/partial/mismatch），
-            #   往它写 `none` 会被 `Literature.validate()` 拒（实测 ValueError）。
-            #   ⇒ 没有任何写入期闸能拿「报了 none」去比「写了候选」（实测：`outcome="no_results"`
-            #   而 `result_lit_ids` 非空的 `search_requests` 行照样通过校验）。
-            #   缺的字段：`search_requests` / `lit_candidates` 上没有 `located` / `closest_snippets` 这类落点。
+            # 这一句说的是 R14 的「定位轴」（matched ∈ exact / partial / none ＋ 页码 ＋ 片段 ＋
+            # 「最接近的三段」），而台账里「没有这一格」：`schema.py:200` 逐字写它「由 A 在回报里
+            # 给出…「不落本栏」」。`literature.matched` 是「另一根轴」（身份：exact/partial/mismatch），
+            # 往它写 `none` 会被 `Literature.validate()` 拒。
+            # ⇒ 没有任何写入期闸能拿「报了 none」去比「写了候选」（`outcome="no_results"` 而
+            # `result_lit_ids` 非空的 `search_requests` 行照样通过校验）。
+            # 缺的字段：`search_requests` / `lit_candidates` 上没有 `located` / `closest_snippets` 这类落点。
             "确认优先于登记 —— 见上面 boundary 那条（none 列最接近的三段、不交 B）。",
-            # 2026-10-21 复核：判不了（缺 `negative_search` / `counter_verdict` 字段），故保留。
-            #   `search_requests` 的 17 个字段里没有任何「反证检索」维度，`SEARCH_OUTCOMES` 里也没有
-            #   `unresolved`（实测写入 `outcome="unresolved"` 被 `SearchRequest.validate()` 拒）。
+            # `search_requests` 的 17 个字段里没有任何「反证检索」维度，`SEARCH_OUTCOMES` 里也没有
+            # `unresolved`（写入 `outcome="unresolved"` 会被 `SearchRequest.validate()` 拒）。
             #   这个词只存在于 `CONTRADICTION_VERDICTS`（contradictions 表，写手是
             #   `interactions.adjudicate_contradiction`）与 `DOC_STATUSES.unresolved_review`
             #   （documents 表，F/H 的产出）—— 两者都不是 A 的产出。
@@ -266,34 +252,29 @@ SPEC = AgentSpec(
             "（别的领域里的同构结构）/ **特例**（它退化成的已知结论），每档都要给到能查的那一行（`lit:` / `stmt:` / `rel:`）与逐字依据。"
             "只答「有没有人做过」是白跑一趟：这一档问的是**它在已知地图上的位置**；类比要写清「迁移的是什么、不迁移的是什么」"
             "（**类比是证据生成器，不是证明**）。",
-            # 2026-10-22 业主裁定 B-1（逐字：「若出现被指认无可信度的文献，或待审核的文献，
-            # 则不可当引文入库，只可当研究参考」）：只在提示词里提醒。
-            # 不做 stage 强制、不做出处闸、不改 schema —— 这一格是提示词，不是判据；
-            # 落库路径（lit_candidates / literature）一个字都没动。
+            # 只在提示词里提醒：不做 stage 强制、不做出处闸、不改 schema —— 这一格是提示词，
+            # 不是判据；落库路径（lit_candidates / literature）一个字都没动。
             "被指认无可信度、或还在待审核的文献：不可当引文入库，只可当研究参考 —— 它的原话不进 `quote`，"
             "也不拿它当「这条结论凭什么」的凭据；结论里要用到它，先换一篇可核的来源，"
             "或者把它按「研究参考 / 待核」如实标出来。",
-            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
-            # 子代理的能力」）＋「到时候改M提示词那路要在监控接线后按具体实现明确」：
             # 只写这一实现里真有的两件 —— `trace.children` 与 `conductor.escalate` 都在本角色的
             # 工具面上（`trace.children` 的 `roles` 是全部可召唤角色，escalate 是全部角色）。
             # 判据：tests/test_every_role_knows_it_can_watch_its_children.py。
-            # 2026-11-04（审 F 区）：那一格 2026-11-03 起叫 `subtask_refusals`
-            # （`agenttrace.node_facts`，与 action_/final_/registration_refusals 三义分开）
-            # —— 提示词照旧叫 `refusals`，模型会去 `trace.children` 的返回里找一个不存在的键。
+            # 那一格叫 `subtask_refusals`（`agenttrace.node_facts`，与 action_ / final_ /
+            # registration_refusals 三义分开）—— 提示词里必须写这个名字；写成 `refusals`
+            # 模型会去 `trace.children` 的返回里找一个不存在的键。
             # 判据：tests/test_a_and_c_name_the_subtask_refusal_cell.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
             "逐个给子任务的状态、被拒次数与类目（`subtask_refusals`）、最近几步（`recent_steps`）、产出是否真落盘"
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # p204（2026-10-27）：业主 2026-10-25 的三句裁定要做进**每个角色**的政策（不只是 M）：
-            # 「规范所有计时类任务申请的形式为：等待时间（或等待谁）+目的（必填）」；
-            # 「让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的」；
-            # 「计时到点后向智能体发送信息『目的+等待时间+时间到』」。
-            # 工具面的真身是 `tools/clock_tools.py` 那九件（`UNIVERSAL_TOOLS`：对十一个角色都发），
-            # 这一段只写"怎么用它"，不抄工具签名（签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（第 17 条逐个角色数过九件）。
+            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
+            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
+            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
+            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
+            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
+            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
             "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
             "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
             "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
@@ -311,12 +292,9 @@ SPEC = AgentSpec(
             "而手上没有可等的东西」，不是「没在等」；这一档既无计时而手头也没活，就按交差处理"
             "（框架向父代理报告），别空转着等。"
             "**计时只有时钟这一处**：旧的计时工具已经退役，别去找别的等待 / 定时入口。",
-            # 2026-10-28（阶段 ③ 2C，业主要的三件事之一）：主动性口径。
-            # 真机依据（draft/172 §4 第 4 轮 O-04 / §8 第 3 轮）：search.download 10 次
-            # 成功 4 次，失败 6 次是 404 / 429 / 400 各两次 —— 每一类的正确处置不同，
-            # 而 A 当时把「没下来」归到「这篇找不到」，于是 27 篇只有元数据的文献被当成
-            # 「本来就没有」。这一句是提示词口径，不是判据；工具面的落点是
-            # `search.download` 的 `fetch_kind` 与 `search.retry_pending` 的四结局。
+            # 主动性口径：每一类下载失败的正确处置不同，把它们都归到「这篇找不到」会让
+            # 只有元数据的文献被当成「本来就没有」。这一句是提示词口径，不是判据；
+            # 工具面的落点是 `search.download` 的 `fetch_kind` 与 `search.retry_pending` 的四结局。
             # 判据：tests/test_a_selfchecks_topic_and_hears_the_fetch_kind.py。
             "**取不到全文不等于这篇不存在**：下载失败先读 `fetch_kind` / `kind` 再决定下一步 —— "
             "`http_429` 等这个源的冷却过去（**同一个源在冷却时后面的行会自动跳过**，别换着地址瞎试）；"
@@ -326,7 +304,7 @@ SPEC = AgentSpec(
             "不许写成「没有这篇」—— 我们没有拿到，与它不存在是两件事。"
             "批量再取走 `search.retry_pending`：每行一次、四结局 got / failed / no_location / "
             "cooled_down（`cooled_down` 是跳过、不是失败；`no_location` 是「行上没地址」，也不是「不存在」）。",
-            # 同上（2C 的第二半）：宽检索抓回来的噪声不该各花一次判官调用。
+            # 宽检索抓回来的噪声不该各花一次判官调用。
             # 机器侧落点：`providers.mark_topic_selfcheck` 把 broad 的候选逐条标成
             # related / off_topic / unknown（只标不删），经 `search.literature` 的
             # `candidates[].topic_selfcheck` 交到你手上。
@@ -359,11 +337,11 @@ SPEC = AgentSpec(
         '眼睛': '读的来源包括元数据与落地页：同一篇文献在不同库里不一致时，先记差异再决定采信谁。',
         '手': '登记文献行、把下载落在本地、把失败写进请求行的错误字段；不抽概念（那是 B）。',
         '脑子': "把'我要找的是哪一类东西'想清楚，再决定查什么、怎么判相关、什么时候收手。",
-        # 2026-10-21：原来那句是「劝告」（「你是把外部材料搬进来的人，不是替它们下定义的人」），
-        # 现改成「陈述结构」：这条义务有结构性闸（A 的动作面没有 register_statement/register_conjecture、
-        # 写面只有 literature/search_requests ⇒ 想造概念会得到 unknown_action）。
-        # 这一行本身删不掉：判据 test_core_faculties_..._denied_ones_are_written_as_forbidden 要求
-        # 「denied 的官能必须写明理由，并落在『结构上不许』那一列」。
+        # 写成「陈述结构」：这条义务有结构性闸（A 的动作面没有 register_statement /
+        # register_conjecture、写面只有 literature/search_requests ⇒ 想造概念会得到
+        # unknown_action）。这一行本身删不掉：判据
+        # test_core_faculties_..._denied_ones_are_written_as_forbidden 要求「denied 的官能
+        # 必须写明理由，并落在『结构上不许』那一列」。
         # 结构性判据：tests/test_a_cannot_invent_concepts.py。
         '敢创新': '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想由 D 立案、D 才写 `conjectures`。',
     },
