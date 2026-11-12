@@ -631,13 +631,13 @@ def _dead_loop_line(*, streak: int, same_reading: int, limit: int, what: str) ->
             f"不会再给就换做法，或者把「卡在哪」写进 final 收工。")
 
 
-#: 拒因的"谁在拒"那一格（Q17）：受控拒因码 → 判停用的稳定键。
+#: 拒因的"谁在拒"那一格：受控拒因码 → 判停用的稳定键。
 def _refusal_key(result: Any) -> str:
     """这一步"被什么拒了"的稳定键（空串 = 这一步没被拒）。
 
     ## 键只装"谁在拒"，绝不装读数
 
-    这是 Q17 的读数纪律：同一道闸在不同拍里给出的键必须逐字相同，否则
+    这是读数纪律：同一道闸在不同拍里给出的键必须逐字相同，否则
     "同一拒因连续 N 次"永远累计不起来（判停就成了摆设）。所以键里只有受控拒因码
     （`refused` / `refusal_reason`）与工具层的结构化档（`meta.kind`）——
     "拒的时候局面是什么样"（子数、在册数、候选项）留在 `refusal_reading` 那一格，
@@ -654,8 +654,8 @@ def _refusal_key(result: Any) -> str:
        `{tool, ok, data, error, meta}`，细一档的原因只剩 `meta.kind` 这一处可读；
     4. 都没有 ⇒ 空串（这不是拒因：坏 JSON / 没回复 / 超时各走自己那一档）。
 
-    `final_refused`（D-68 收工门）刻意键成空串：Q12 已经给它自己的上限
-    （`max_final_refused`），两套账同时记同一件事，读数就说不清是哪一套停的。
+    `final_refused`（收工门）刻意键成空串：它有自己的上限（`max_final_refused`），
+    两套账同时记同一件事，读数就说不清是哪一套停的。
 
     边界：逐项被拒的批量（`summon_many` 的 `results[].refusal_reason`）不算"这一步被拒"
     —— 那一步本身派出了活，被拒的是其中几项，它们有自己的读数（`summons_refused`）。
@@ -676,7 +676,7 @@ def _refusal_key(result: Any) -> str:
 
 
 def _refusal_nudge_line(*, streak: int, limit: int, key: str, what: str) -> str:
-    """「同一个拒因」连着第 N 次的那一句提醒（Q17；与 `_dead_loop_line` 同族）。
+    """「同一个拒因」连着第 N 次的那一句提醒（与 `_dead_loop_line` 同族）。
 
     为什么这一档必须存在：拒信只说"这一次为什么被拒"，它说不了"你已经撞了三下同一道闸"。
     模型读到的是同一条处置路径 —— 没有这一句，它只会在同一处再撞两下，然后被框架
@@ -7146,8 +7146,8 @@ class AgentLoop:
             # 兜底表在这里挂（而不是起跑处）：它只在"这一趟要静默了"的这一刻存在。
             # 起跑处挂会让活跃期间的每次投递都被它命中 —— 那正是前三次挂死的原因。
             #
-            # 「研究未尽」先挡：研究没做完时，"无事可做 ⇒ 交差"会把整盘活静默地放掉
-            # （真机 R-mk-infinite-93 的同族形态）。这一档只把交差换成"排动作"，
+            # 「研究未尽」先挡：研究没做完时，"无事可做 ⇒ 交差"会把整盘活静默地放掉。
+            # 这一档只把交差换成"排动作"，
             # 不新造任何终止态。
             guard = self._research_guard(step=step, run=run, reading=research,
                                          tree=tree)
@@ -7171,10 +7171,10 @@ class AgentLoop:
             run.park["skip_calls"] = int(run.park.get("skip_calls") or 0) + 1
             run.park["woke_reasons"] = list(run.park.get("woke_reasons") or []) + [reason]
         elif back.get("owed") and not work.get("busy"):
-            # ③b 返场（Q22）：第 ③ 支与第 ④ 支的结论都从这一处判据取（`_return_reading`）。
+            # ③b 返场：第 ③ 支与第 ④ 支的结论都从这一处判据取（`_return_reading`）。
             # 这一拍之所以"不是无事可做"只有两种来路：这一批是我这一趟刚派出去、此刻还在
             # 跑的子（派活之后还没给过模型回合），或者上一拍是"等谁"的唤醒、那条唤醒点名的
-            # 正是我派的子（第 ③ 支按 p206 跳过了那一拍，产出就悬在上下文里）。
+            # 正是我派的子（第 ③ 支跳过了那一拍，产出就悬在上下文里）。
             # 两种都给且只给一拍：给了之后 `run.park["return_given"]` 点名这一批，判据就
             # 不再成立，下一拍起照旧按第 ④ 支挂机（"无事可做 ⇒ 挂机"一个字没丢）。
             reason = str(back.get("why") or "")
@@ -7182,7 +7182,7 @@ class AgentLoop:
             run.notes.append(f"返场（Q22）：{reason}")
         elif parked["count"] and not work.get("busy"):
             # ④ 有计时器在等 + 本趟确实无事可做 ⇒ 挂机
-            # ---- 但"无事可做"还要过「研究未尽」这一关（真机 R-mk-infinite-93）：
+            # ---- 但"无事可做"还要过「研究未尽」这一关：
             # 板上未结项 0 ≠ 研究做完了；`researchpending.pending_reading` 非空 ⇒ 这一拍
             # 不许 park，必须把 next_action 排给模型（提示词那一段由 `_research_block` 拼）。
             guard = self._research_guard(step=step, run=run, reading=research,
