@@ -627,11 +627,17 @@ def citation_coverage(
     # 早已认它，指向 `eval_results` 表）⇒ 读数必须数它，否则一条合法的 `eval:` 引用在
     # `meta.citation_coverage` 里是隐形的（审计 L2-2 的取证）。
     own: dict[str, list[str]] = {k: [] for k in ("lit", "rel", "exp", "stmt", "doc", "eval")}
-    for i, c in enumerate(claims, 1):
+    # 去重与追加共用同一个集合：原先 `str(raw) not in own[kind]` 是对已收列表的线性查找，
+    # 引用多时退化成 O(n²)；顺序仍是首次出现的顺序（`own[kind]` 与 `seen_own[kind]` 同步）。
+    seen_own: dict[str, set[str]] = {k: set() for k in own}
+    for c in claims:
         for raw in (c or {}).get("citations") or []:
             kind, _ref = citation_ref_parts(raw)
-            if kind in own and str(raw) not in own[kind]:
-                own[kind].append(str(raw))
+            if kind in own:
+                raw_s = str(raw)
+                if raw_s not in seen_own[kind]:
+                    seen_own[kind].add(raw_s)
+                    own[kind].append(raw_s)
     counts = {k: len(v) for k, v in own.items()}
 
     def _count(table: str, key: str = "") -> int:
