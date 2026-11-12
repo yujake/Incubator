@@ -225,6 +225,9 @@ class _Corpus:
         self.main: Path | None = None
         self.package: Path | None = None
         self.main_text = ""
+        #: 两条派生读数各只算一次（proofs 与 ledger_match 共用同一份正文）。
+        self._statement_names: tuple[str, ...] | None = None
+        self._events: list[dict] | None = None
 
     def pkg_prefix(self) -> str:
         """论文包相对工作区根的前缀（`out/paper/`）—— 读数里的 `file` 要带它。
@@ -276,17 +279,22 @@ class _Corpus:
     @property
     def statement_names(self) -> tuple[str, ...]:
         """定理类环境名（含印成 Theorem/Lemma/… 的自定义宏）。"""
-        text = self.main_text or "\n".join(seg for _r, seg, _o in self.segments)
-        return PM.statement_env_names(text)
+        if self._statement_names is None:
+            text = self.main_text or "\n".join(seg for _r, seg, _o in self.segments)
+            self._statement_names = PM.statement_env_names(text)
+        return self._statement_names
 
     def hits(self, pattern: re.Pattern[str]) -> list[tuple[str, int, str, str]]:
         """逐片段跑一条正则：`(文件, 行号, 命中原文, 最后一组)`。"""
         out: list[tuple[str, int, str, str]] = []
         last = pattern.groups
         for rel, seg, offset in self.segments:
+            line = offset + 1
+            cursor = 0
             for m in pattern.finditer(seg):
-                out.append((rel, offset + seg.count("\n", 0, m.start()) + 1,
-                            m.group(0).strip(), m.group(last) if last else ""))
+                line += seg.count("\n", cursor, m.start())
+                cursor = m.start()
+                out.append((rel, line, m.group(0).strip(), m.group(last) if last else ""))
         return out
 
 
@@ -385,21 +393,26 @@ def _scan_duplicates(corpus: _Corpus, cap: int) -> tuple[list[dict], dict, str, 
 
 def _env_events(corpus: _Corpus) -> list[dict]:
     """正文里的 begin/end 事件（定理类环境 + `proof`），按文档顺序。"""
+    if corpus._events is not None:
+        return corpus._events
     names = tuple(dict.fromkeys(tuple(corpus.statement_names) + ("proof",)))
-    if not names:
-        return []
     pattern = re.compile(
         r"\\(?P<which>begin|end)\s*\{(?P<name>" + "|".join(re.escape(n) for n in names)
         + r")\}")
     events: list[dict] = []
     for rel, seg, offset in corpus.segments:
+        line = offset + 1
+        cursor = 0
         for m in pattern.finditer(seg):
+            line += seg.count("\n", cursor, m.start())
+            cursor = m.start()
             events.append({
                 "which": m.group("which"),
                 "name": m.group("name"),
                 "file": rel,
-                "line": offset + seg.count("\n", 0, m.start()) + 1,
+                "line": line,
             })
+    corpus._events = events
     return events
 
 
@@ -728,7 +741,8 @@ def scan_tex(
         bad.append({"kind": "corpus",
                     "reason": f"{item.get('file')}: {item.get('why')}"})
 
-    findings.sort(key=lambda f: (SCAN_KINDS.index(f["kind"]) if f["kind"] in SCAN_KINDS else 99,
+    rank = {kind: i for i, kind in enumerate(SCAN_KINDS)}
+    findings.sort(key=lambda f: (rank.get(f["kind"], 99),
                                  f["file"], f["line"], f["column"]))
     total = len(findings)
     kept = findings[:cap]
