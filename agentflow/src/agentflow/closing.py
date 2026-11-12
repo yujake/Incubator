@@ -2083,11 +2083,9 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "带着它们收工不是不许，但必须写清为什么（`unprocessed_reason`）"),
         }
     if kind == "retrieval_attempts":
-        # 「盘外引文先检索」那一档（`draft/37` §105）：用户一句话点破了我的口径 ——
-        # "盘上没有就 false？A 不会去查吗"。实测：`A.search_literature("An overview of
-        # periodic elliptic operators")` 一次就登记了 9 行文献、含 Kuchment 那篇（带 DOI），
-        # 而 A 的工具面里还有 `search.download`。所以"原文不在工作区"不是结论，
-        # 它只是"还没去取" —— 这一档就是要求"真的查过"。
+        # 「盘外引文先检索」那一档：一句话点破了旧口径 ——"盘上没有就 false？
+        # A 不会去查吗"。A 的工具面里有 `search.literature` / `search.download`，
+        # 所以"原文不在工作区"不是结论，它只是"还没去取" —— 这一档就是要求"真的查过"。
         reqs = store.rows("search_requests")
         done = [r for r in reqs if r.get("done") is True]
         lit = store.rows("literature")
@@ -2110,12 +2108,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             {"id": str(r.get("report_id") or r.get("id") or ""),
              "status": str(r.get("status") or "")} for r in rows[:8]]}
     if kind == "c_analysis_runs":
-        # C 的关系分析跑过几次（`draft/39` §6.41 的 D52）。
+        # C 的关系分析跑过几次。
         #
-        # 为什么必须单列这一档：C 的八个动作产物就是返回值本身、不落台账
-        # （`draft/39` 记过这件事）—— 于是"这一趟到底用没用 C"在收工门上无处可读。
-        # 真机读数（T5 第 1 趟 `p8-fermat-shorter-proof`）：用户点名"重点考察 C"，
-        # 而 `tasks` 表里 role=C 的行是 0，七格全绿、无人察觉。
+        # 为什么必须单列这一档：C 的八个动作产物就是返回值本身、不落台账 ——
+        # 于是"这一趟到底用没用 C"在收工门上无处可读。用户点名"重点考察 C"也可以
+        # 而 `tasks` 表里 role=C 的行是 0、七格全绿、无人察觉。
         # 这一档数的是任务行（`tasks` 里 role=C 且跑过的），不是 C 的产物 ——
         # 因为 C 的产物本来就不落盘；"它被用过没有"只有任务行能回答。
         rows = [dict(r) for r in store.rows("tasks")
@@ -2153,11 +2150,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
     if kind == "report_files":
         # D 的 `write_report` 只写文件（返回路径），不落 `analysis_reports` —— 这一档就数文件。
         #
-        # 落位取并集（`draft/37` §118）：写者的缺省落位是 `<工作区>/<reports_subdir>`
+        # 落位取并集：写者的缺省落位是 `<工作区>/<reports_subdir>`
         # （`AgentD.__init__` 从 `agent_d.reports_subdir` 取，缺省 `reports`），
         # 而主控显式传 `out_path` 时常见的落点是 `out/reports`。写者读配置，读数就得
-        # 读同一份配置 —— 只看一个写死的目录会出现「报告写出来了、读数说 0 条」
-        # （T2 第 1 趟实际就是这么读错的，而那一趟报告确实写了 8 次）。
+        # 读同一份配置 —— 只看一个写死的目录会出现「报告写出来了、读数说 0 条」。
         subs = ["out/reports"]
         cfg_sub = _reports_subdir_of(project_root)
         subs.append(cfg_sub or "reports")
@@ -2185,17 +2181,16 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                               "reports 数；若写者用的是别的子目录，这一档的读数会偏低")
         return len(files), detail
     if kind == "reviewed_proof_rows":
-        # 「造判决性证据」那一档（`draft/39` §3.17 A5 + §3.14 五元位）：我方命题里五元位派生出「预备定理级」
+        # 「造判决性证据」那一档：我方命题里五元位派生出「预备定理级」
         # （有证明过程 + 审过）或「正式定理」（有证明过程 + 形式化通过）的行数。等级一律现算
         # （`evidencebits.bits_from_row` ⇒ `derive_grade`），不读盘上存的等级 —— 自报的等级不算数。引用命题
         # （`origin=external_lit`）不算：它的第 2 位凭据是文献代号，混进来就等于"引一篇别人的定理"满足了"我们
-        # 自己造了判决性证据"。三态（`draft/57` 组 9 的 R3 读侧；主控 2026-10-07 派单）：① 这条命题根本没有位记录
+        # 自己造了判决性证据"。三态（R3 读侧）：① 这条命题根本没有位记录
         # （产出方没走过 / 老数据）· ② 有记录、但等级只到 `conjecture` · ③ 有记录、且到 `pre_theorem`/`theorem`
-        # （这一档要数的）—— ①与②在旧读数里同形，而"没算过"与"算了、不够档"是两件事。局部导入已删
-        # （2026-10-14）：`_leg_reading` 是跨上千行的大 if 链，函数里任何一处 `import EB` 都会让整个函数里的 `EB`变成局部名 ⇒ 上面 `quote_verified_rows` 那一档用模块级导入时报 `UnboundLocalError`（那一格 pass 变 unknown）。
+        # （这一档要数的）—— ①与②在旧读数里同形，而"没算过"与"算了、不够档"是两件事。
         # 局部导入要用一个只在本分支出现的名字：`_leg_reading` 是一条跨上千行的大
         # if 链，任何一处把模块级名字导成局部名都会让别的分支 `UnboundLocalError`
-        # （这一格 2026-10-14 踩过，见上面 `quote_verified_rows` 的注释）。
+        # （见上面 `quote_verified_rows` 的注释）。
         from . import verifications as _VR_R10
         rows = list(store.rows("statements"))
         counted: list[dict[str, Any]] = []
@@ -2208,7 +2203,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         cited_skipped = 0
         cited_skipped_rows: list[dict[str, str]] = []
         without_bits_ids: list[str] = []
-        # ---- 第 3 位相对「每份证明现在那一份正文」的读数（2026-10-22，业主口径）
+        # ---- 第 3 位相对「每份证明现在那一份正文」的读数
         #
         # 多证明模型：每条证明各自有 reviewed，`#p1` 签过不等于 `#p2` 签过。`bits.reviewed`
         # 是写口翻的汇总位，而"签的是不是现在这一份"只有 `verifications` 台账能回答：
