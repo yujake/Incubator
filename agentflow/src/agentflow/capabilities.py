@@ -10,11 +10,11 @@
 - 动作来自真实代码：`ActionSpec.handler_name` 必须是 `agent_x.py` 里真的存在的公开方法 ——
   不是注释约定，而是 :func:`assert_capabilities` 在导入期用 `importlib` 取类、逐个
   `callable(getattr(cls, name))` 核过的；编造一个不存在的动作名会让模块根本 import 不进来。
-- 写集来自 `store.tx(...)` / `alloc_id(...)`：每一行都带符号名证据（`R4-6`：行号易失）。它是
+- 写集来自 `store.tx(...)` / `alloc_id(...)`：每一行都带符号名证据（行号易失）。它是
   并发安全判据（两张写集相交 ⇒ 串行），写错一个表名不是报错而是两个任务真的同时改同一批行
   ⇒ 静默的数据损坏。已知的一处间接写（`F → A` 的写入发生在 A 自己的 `tx(...)` 里，
-  `AgentF._deploy_a` / `AgentF.step` 只提交请求行；`F → D` 那条边已于 2026-11-05 由业主
-  撤掉，不再是一例）本轮刻意不并入 F 的写集，理由见 `WRITE_SETS["F"]` 的注释 ——
+  `AgentF._deploy_a` / `AgentF.step` 只提交请求行；`F → D` 那条边已经撤掉，
+  不再是一例）本轮刻意不并入 F 的写集，理由见 `WRITE_SETS["F"]` 的注释 ——
   有意的取舍，不是遗漏。
 - 只读角色的写集必须为空（或只有它自己的产出表）：见 `READ_ONLY_WRITE_EXCEPTIONS`，与
   `tools.READ_ONLY_ROLES` 交叉断言 —— 工具面没有写工具而能力表有写集 ⇒ 当场炸。
@@ -117,12 +117,12 @@ def unmapped_actions() -> list[tuple[str, str]]:
     对不上的动作就必须如实报出来，而不是当成"一致"（那是 P16 的
     "判据真空通过"：空集永远是子集）。
 
-    ## "对上了"的判据是装配面，不是声明面（2026-10-26，第 ④ 条根因）
+    ## "对上了"的判据是装配面，不是声明面（第 ④ 条根因）
 
     `_tool_side_effects()` 读的是**声明**：`tools._MODULES` 加上
     `_TOOL_MODULE_EXTRAS` 里逐条登记的那几件 —— 而后者登记的理由是
     "两层参数对账要看得见这条工具"（见那张表的理由串），不是"它是工具面上的一件"。
-    于是 `D.register_conjecture` 曾经被算成"已对上"：名字对上了
+    于是 `D.register_conjecture` 若被算成"已对上"：名字对上了
     `conjecture.register_conjecture` 的声明，而 `build_registry` 根本装配不到那个模块
     ⇒ 工具面上没有它 ⇒ `agent_loop._own_actions_to_expose` 也不注入 `own.register_conjecture`
     ⇒ 模型按手册喊短名 `register_conjecture`，只拿到"并列候选 0 个"。
@@ -150,16 +150,11 @@ def unmapped_actions() -> list[tuple[str, str]]:
 #: `G`/`H` = `doc`/`review` · 通用组（`fs`/`table`/`graph`/`trace`）任何角色都可能用到、只在唯一命中
 #: 时才算对上。表里没有的角色组合 ⇒ 报"两层声明没有比对"（info，三态里的 unknown），不猜映射。
 _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
-    # 2026-11-04（A 区声明面收口）：这一行原来挂六组
-    # `("search","table","fs","research","trace","graph")`，而 A 的 54 件工具里
-    # 一件 `research.*` / 一件 `graph.*` 都没有 —— `research` 是 D 的缺口工作台
-    # （`research_tools`），`graph` 是概念关系图（`graph_tools`，C/D/B 的落点）。
-    # 多写的两组的危害不是报错，而是把"这条动作可能落到 D 的检索台上"写进权限面：
-    # 这一行是 `_candidates_impl` 的名字消歧依据，组写宽了，同名的另一组工具就会
-    # 充当候选（`ambiguous` 长大 ⇒ `assert_capabilities` 第 [7b] 条才报，而在那之前
-    # 它只是"看起来能对上"）。收成 A 真有的四组：`search`（找文献）+
-    # 通用三组 `table`/`fs`/`trace`（任何角色都可能用到、只在唯一命中时才算对上）。
-    # 判据：`temp/n6_p5_A_groups.py`（A 的组表 == 它实际工具前缀集合，现读注册表）。
+    # A 只挂它真有的四组：`search`（找文献）+ 通用三组 `table`/`fs`/`trace`。
+    # `research` 是 D 的缺口工作台（`research_tools`），`graph` 是概念关系图
+    # （`graph_tools`，C/D/B 的落点）—— 组写宽了，同名的另一组工具就会充当候选
+    # （`ambiguous` 长大 ⇒ `assert_capabilities` 第 [7b] 条才报，而在那之前它只是
+    # "看起来能对上"）。判据：A 的组表 == 它实际工具前缀集合（现读注册表）。
     "A": ("search", "table", "fs", "trace"),
     "B": ("ocr", "table", "fs", "trace", "graph"),
     "C": ("graph", "table", "fs", "trace"),
@@ -177,7 +172,7 @@ _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     # 主控拿的是编排面工具（派活 / 台账 / 停止 / 状态 / 角色规格）：它不产出领域对象，
     # 所以这里只有 conductor 一组，且 CAPABILITIES["M"] 一个字都没变。
     "M": ("conductor",),
-    # L（Lean 形式化者，2026-10-22 新设）：它自己的两件工具在 `formal` 组
+    # L（Lean 形式化者）：它自己的两件工具在 `formal` 组
     # （`tools/formal_tools.py`），加上任何角色都可能用到的 `fs`（读写 .lean）。
     # 刻意不写 "verify"：L 不到 `verify.*` 的工具面上去 —— 它由 Agent 层直接调
     # `verify.check_formal` 那个函数（与 `AgentE.check_formal` 同一条路），
@@ -210,7 +205,7 @@ def _matching_tool_name(spec: ActionSpec, tools: Mapping[str, Any]) -> str | Non
     return hits[0] if len(hits) == 1 else None
 
 
-#: `_tool_side_effects()` 的进程内缓存（2026-10-27）。
+#: `_tool_side_effects()` 的进程内缓存。
 #:
 #: 为什么要有它：`assert_capabilities()` 一趟要问它 32 次（实测
 #: `temp/r_be2_cap_profile.py`），而它每次都把 `tools/` 下那 24 个模块重新 `ast.parse`
@@ -251,7 +246,7 @@ def _tool_side_effects() -> dict[str, tuple[str, str, bool]]:
     return dict(_TOOL_SIDE_EFFECTS_CACHE)
 
 
-#: 工具模块的 AST 进程内缓存（2026-10-27）。
+#: 工具模块的 AST 进程内缓存。
 #:
 #: 本模块有三处读工具源码的读者（`_read_tool_side_effects` / `_tool_declared_names` /
 #: `_tool_param_faces`），每处都自己 `ast.parse` 一遍 24 个模块；导入期一趟下来
@@ -353,16 +348,15 @@ def _declared_side_effects(tree: ast.AST) -> list[tuple[str, str, str, bool]]:
 
 #: 读声明时要多读的模块（`tools._MODULES` 之外的那一个，逐条写理由）。
 #:
-#: ## 为什么这张表必须存在（审计 D-6 的治本）
-#: 本文件原来手抄了一份 14 项模块名单，并写着「与 `tools._MODULES` 同源」—— 那是一句假话：
-#: 实测差三个模块（少 `text_tools` / `manuscript_tools`、多 `conjecture_tools`），于是
-#: `param_type_coverage()['tools_read']` 只肯说「读到 77 个工具的 schema」，而工具层有 95 件，
-#: 读数说不出这 18 件的差从哪来。同一件事（工具模块有哪些）只允许有一个真身：
+#: ## 为什么这张表必须存在 —— 工具模块名单的真身是 `tools._MODULES`
+#: 本文件若手抄一份模块名单并写着「与 `tools._MODULES` 同源」，那句就是假话：
+#: 少列/多列都会让 `param_type_coverage()['tools_read']` 的读数与工具层的件数对不上，
+#: 读数说不出差从哪来。同一件事（工具模块有哪些）只允许有一个真身：
 #: `tools._MODULES`（装配期真正注册工具的那张表）。这里只登记「为什么还要多读一个模块」。
 #:
-#: 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：`conjecture_tools` 从这张表里退场 ——
-#: 它已经进了 `tools._MODULES`（真身），再登记一次就是重复项，而上面那条 assert 当场会红
-#: （实测：`('...conjecture_tools', 'conjecture_tools')`）。于是这张表今天是空的，
+#: `conjecture_tools` 从这张表里退场 ——
+#: 它已经进了 `tools._MODULES`（真身），再登记一次就是重复项，而上面那条 assert 当场会红。
+#: 于是这张表今天是空的，
 #: 而空表是有内容的读数：'没有任何模块需要多读' —— 不是'这条机制还没接上'。
 _TOOL_MODULE_EXTRAS: dict[str, str] = {}
 
@@ -445,22 +439,12 @@ def two_layer_reconciliation() -> dict:
     ## 为什么这个函数必须存在（它补的是一条真的缝）：`declaration_divergences` 答"两层在哪里不一致"，
     而"对账面有没有真的在做"有三个不同答案，必须分开数：`compared`（动作与工具唯一对上了）、
     `unmatched`（`handler_name` 在角色工具组里对应 0 个 ⇒ 没比成，unknown）、`ambiguous`（对应 ≥2 个 ⇒ 按唯一性约定拒绝猜，unknown）。
-    实测（2026-11-11 现算）：67 个动作 = 25 compared + 42 unmatched + 0 ambiguous
-    （2026-11-09 T1 收口：B 新增 `land_manuscript` / `ingest_manuscript` 两个动作 ——
-    它们对应的 `own.*` 工具只在被派那一趟现装、不进基座注册表（见 `specs/b.py` 与
-    `agent_b/_support.py` 的说明）⇒ `_TOOL_GROUPS_BY_ROLE["B"]` 里没有唯一对应的工具，
-    两条都进 `unmatched`，`compared` 与 `ambiguous` 不变；2026-11-11 业主裁定 B 补
-    `open_polish_copy`（冻结后的补救入口）⇒ 66 → 67，它同样没有基座里唯一对应的工具
-    ⇒ `unmatched` 41 → 42，`compared` / `ambiguous` 不变）。
-    此前（2026-10-27 是 64 = 25 + 39 + 0；2026-10-26 是 64 = 24 + 40 + 0；当晚把 `conjecture_tools` 接进 `tools._MODULES` 之后，
-    `D.register_conjecture` 又有了唯一对应的工具 ⇒ 从 unmatched 走回 compared，两边各 ±1）。
-    （2026-10-15 是 62 个动作 = 23 compared + 39 unmatched + 0 ambiguous；`compared` 从 21 涨到 22 是加了 `A.walk_citations` —— 工具名最后一段正是 `walk_citations`，与 `handler_name` 逐字相同；对照 `search_literature` 落不进（工具名最后一段是 `literature`）⇒ 进 `unmatched`，所以"两层形状一致"对那一对没有判据看着，见 `specs/a.py` 里那段注释）。
-    2026-10-26：`D.register_conjecture` 从 compared 挪进 unmatched —— 它对应的
+    三类之和必须等于动作总数；读数按当前声明表现算，不写死数字。
+    `D.register_conjecture` 落在 `unmatched`：它对应的
     `conjecture.register_conjecture` 只被"读到"、没有被 `build_registry` 装配（见 `_ASSEMBLED_GROUPS`），
-    所以"两层有一个唯一对应的工具"这句话对它不成立（+1 unmatched、−1 compared、动作总数不变）。
-    此前各次（数字逐次可复算，每次只增不改）：（2026-10-14）60 = 21 + 39 + 0（退场前：`paper_package` 那一条本来也进 `unmatched`）；（2026-10-06）59 = 21 + 38 + 0（加角色 V 的三条动作 `verify.verify_proof` / `verify.list_verifications` / `verify.read_proof` 全部对上，`_TOOL_GROUPS_BY_ROLE["V"]` 只登记 `verify` 一组）；（2026-10-03）55 = 18 + 37 + 0（加 `G.paper_package`，2026-10-13 退场）；（2026-10-02）53 = 18 + 35 + 0（加 `A.ingest_local` 与 `B.register_statement`）；（2026-09-30）51 = 17 + 34 + 0（加 `A.search_literature`）。
+    所以"两层有一个唯一对应的工具"这句话对它不成立。
     `C.proof_chain` 与 C 的其余八条同族：`handler_name` 在 `_TOOL_GROUPS_BY_ROLE["C"]` 里对不上工具组 ⇒ 进 `unmatched`，并逐条登记在 `_KNOWN_UNMATCHED_ACTIONS`。
-    `assert_capabilities()` 第 [7] 条原来只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）—— 于是 `ambiguous` 那一格可以静默长大：它今天恰好是 0，所以那条缝从没被看见。本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。
+    `assert_capabilities()` 第 [7] 条只钉 `unmatched`（`_KNOWN_UNMATCHED_ACTIONS`）—— 于是 `ambiguous` 那一格可以静默长大。本函数就是给分区断言用的输入，它自己不做判断（判断在第 [7] 条）。
     注意：刻意不把"一致"塞进 `declaration_divergences()`：那个函数的名字就是"分歧"，往里塞一致项会造出"名字与语义不符"的新缺陷（而它正是本仓库最忌讳的那类：判据看起来还在工作，读的人已经理解错了）。
     """
     return _reconcile(CAPABILITIES, _tool_side_effects())
@@ -2116,17 +2100,17 @@ TOOL_WRITE_SETS: dict[str, frozenset[str]] = {
 
 # ---------------------------------------------------------------- 允许的召唤边
 
-#: 谁能召唤谁（DESIGN-CONDUCTOR.md §3.1，逐字实现）。
+#: 谁能召唤谁（DESIGN-CONDUCTOR.md §3.1）。
 #:
 #: 两条刻意设计的边：
 #: - `C` 的边是空的：C 一旦能发起动作，它就成了"绕过 B 引文回验"的写入路径。
 #:   C 的 `candidate_gaps` / `structural_duplicates` 是产出，由 D 或编排层
 #:   决定要不要变成请求。
-#: - `H` 能召唤 `A` / `E` / `G`（不是只有 `G`）：`H → A` 与 `H → E` 两条边
-#:   2026-09-30 由人批准加入（`draft/28` §199），用途是"引文对不上就找 A 核实原文、
-#:   断言能不能形式化就找 E"。审校者依然不能改数据，但那条约束的真身是
+#: - `H` 的出边只有 `A` / `E`（不指向 `G`）：引文对不上就找 A 核实原文、
+#:   断言能不能形式化就找 E。审校者依然不能改数据，但那条约束的真身是
 #:   "H 的工具面 0 个写工具"（schema.H 的装配期断言），不是"H 没有向外的边"——
-#:   把这两件事混成一句会让人以为 `H → A`/`H → E` 不存在（本行 2026-10-06 更正）。
+#:   把这两件事混成一句会让人以为 `H → A` / `H → E` 不存在。
+#: - `G` 的出边是 `C` / `D` / `H`：改完稿由 G 自己送回 H，H 不反过来召唤 G。
 #: 真身是 `src/agentflow/specs/<角色>.py`（M3 起）。这一行只做派生 —— 
 #: 也就是说改权限面要改 `specs/`，而 `specs/` 在 `.noai-paths` 里受保护。
 ALLOWED_EDGES: dict[str, frozenset[str]] = _specs.edges()
