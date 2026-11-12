@@ -10,17 +10,15 @@
 - 号形：手稿族名与文件名正则、legacy 路径尾巴正则，以及"一个号有几种写法"
   （`_id_forms` / `_anchor_forms` / `_manuscript_from_name`）那一族 helper。
 
-## 为什么与解析分开（2026-11-09）
+## 为什么与解析分开
 
-`tools/repo_survey.py` 的软判据量「>800 行的 src 文件数」，`refvocab.py` 839 行越线 ⇒
-处置是拆模块、不抬基线（业主口径）。切法是"数据 vs 读它"：本文件只有表与号形，
-不解析引用、不读盘、不 import 任何 `agentflow` 模块；解析与存在性留在
-:mod:`agentflow.refvocab`（它按名字回引这里的表与 helper，`refvocab.parse_ref` 等
-公开名照旧可用）。
+`tools/repo_survey.py` 的软判据量「>800 行的 src 文件数」 ⇒ 处置是拆模块、不抬基线
+（业主口径）。切法是"数据 vs 读它"：本文件只有表与号形，不解析引用、不读盘、不
+import 任何 `agentflow` 模块；解析与存在性留在 :mod:`agentflow.refvocab`（它按名字
+回引这里的表与 helper，`refvocab.parse_ref` 等公开名照旧可用）。
 
-搬过来的是整段（注释逐字不动），所以这份规格仍然是"一张表"的唯一落点 ——
-一致性由 `tests/test_ref_vocabulary_is_one_table.py` 逐条对 `schema.CITATION_PREFIXES`
-与 `manuscripts.OBJECT_REFS` 钉住。
+这份规格仍然是"一张表"的唯一落点 —— 一致性由 `tests/test_ref_vocabulary_is_one_table.py`
+逐条对 `schema.CITATION_PREFIXES` 与 `manuscripts.OBJECT_REFS` 钉住。
 """
 from __future__ import annotations
 
@@ -122,7 +120,8 @@ REF_SPECS: Mapping[str, RefSpec] = MappingProxyType(
 #: 四族手稿（与 `manuscriptfamily.FAMILY_ORDER` 同序；这里不 import 那个模块）。
 _MANUSCRIPT_FAMILIES: tuple[str, ...] = ("f-proof", "b-proof", "e-proof", "e-num")
 
-#: 手稿文件名：`<family>-<id>[-p<N>].md`；`f-proof` 的 id 可以是 `plan-<数字>`。
+#: 手稿文件名：`<family>-<id>.md`（读侧兼容旧盘上的 `-pN` 尾巴）；`f-proof` 的 id
+#: 可以是 `plan-<数字>`。
 _MANUSCRIPT_NAME_RE: MappingProxyType = MappingProxyType({
     family: re.compile(
         (r"^(?P<id>\d{4,6}|plan-\d+)(?:-p[1-9]\d*)?$" if family == "f-proof"
@@ -155,8 +154,7 @@ def _id_forms(value: Any) -> set[str]:
     """一个编号的等价写法（`0001` / `000001` / `1` 都认）。
 
     为什么不是单一写法：盘上同时存在 4 位旧号与 6 位新号（`schema.is_valid_id`
-    两种都收），而历史 refs 里两种写法都有；只做字面比较会把宽度差判成"目标不存在"
-    （真机历史里 3 条 `stmt:0000` 就是这么被误判的）。
+    两种都收），而历史 refs 里两种写法都有；只做字面比较会把宽度差判成"目标不存在"。
     """
     raw = _text(value)
     out = {raw}
@@ -195,9 +193,9 @@ def _looks_like_family(name: str) -> bool:
 def _manuscript_from_name(name: str) -> tuple[str, str]:
     """文件名 ⇒ `(family, id)`；认不出返回 `("", "")`（不猜）。
 
-    只认规范名（`<family>-<号>[-pN].md`，`f-proof` 另有 `plan-<数字>`）。
-    `-v2` 一类历史后缀刻意不认：它不能当第 N 份证明，也不能被当成一份规范稿的别名
-    （否则 `b-proof-000003-v2.md` 会冒充 `b-proof-000003.md`）。
+    只认规范名（`<family>-<号>.md`，`f-proof` 另有 `plan-<数字>`）。
+    `-v2` 一类历史后缀刻意不认：一个稿号 = 一份文件 = 一份证明，别名会让
+    `b-proof-000003-v2.md` 冒充 `b-proof-000003.md`。
     """
     stem = _text(name)
     if not stem.endswith(".md"):
