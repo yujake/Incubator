@@ -10,7 +10,7 @@
 ## 为什么用标准库而不是 httpx / openai SDK
 
 `pyproject.toml` 的运行期依赖刻意保持极小（今天只有 `filelock` 与预设层用的 `pyyaml`；
-后者是业主 2026-10-11「就用 dsh 的格式」的裁定带来的，见 `presets.py`）：
+后者来自「就用 dsh 的格式」的口径，见 `presets.py`）：
 核心能在任何环境被复核。网关是最该保持这个性质的地方 —— 它必须能在客户的离线或
 受限网络里跑。于是 HTTP 用 `urllib.request`，JSON 用标准库，超时与重试自己实现。
 （这一层自己一个第三方库都不 import：`filelock` 与 `pyyaml` 都不在这条路径上。）
@@ -165,7 +165,7 @@ DEFAULT_MODEL = "deepseek-flash"
 #: 它的 README 把 `reasoningEffort` 的取值面写成 `off | low | high | max`，
 #: 于是这里不许自创第二套拼写。
 #:
-#: 为什么照抄它的词表而不是自己定一套（2026-10-10 读 `dsh-llm-deepseek/README.zh.md`）：
+#: 为什么照抄它的词表而不是自己定一套（读 `dsh-llm-deepseek/README.zh.md`）：
 #: 那一份已经被真机跑过，且它写明了两条协议细节 —— `low`/`high`/`max` 以
 #: `reasoning_effort` 序列化，`off` 则发 `thinking: {type: disabled}` 并省略
 #: `reasoning_effort`（"对拒绝未知强度取值的网关保持协议拼写有效"）。
@@ -309,7 +309,7 @@ class ModelSpec:
     #: （「花销计算标准与供应商定价吻合」）。空串 = 没配
     #: （计价那一侧会按端点猜一次，猜不到就如实回落并在读数里标出来）。
     vendor: str = ""
-    #: 单次请求的墙钟上限（秒）。2026-10-12 从 60 抬到 300 —— 真机读数逼出来的：
+    #: 单次请求的墙钟上限（秒）：300。为什么不是一个更小的数：
     #:
     #: - 探针（`temp/_probe_chain.py`）：开了 thinking 的一道难题，`max_tokens=32768`
     #:   那一次真的跑了 181 秒才回（32,768 token 全是思维链）；
@@ -324,36 +324,36 @@ class ModelSpec:
     #: 真正的熔断另有其人（预算闸门 / 墙钟 / 步循环），所以放大它不会让失控的运行跑更久。
     #: 要按机器改就设 `AGENTFLOW_MODEL_TIMEOUT_SEC`（或设置文件里那一档，见 `spec_from_env`）。
     #:
-    #: 2026-10-15 业主裁定「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），
+    #: 口径「凡是可能阻止智能体完成大项目的（限制输入、思考、产出、步数等），
     #: 删或将触发水平抬高到几乎不可能触发的程度」⇒ 从 300 抬到 1800 秒：
     #: 实测最坏的一次单请求是 260 秒（T2 步 0），1800 是它的七倍 ——
     #: 正常调用几乎不可能碰到；它留着只为挡住"永远不回来的请求"（那条会挂死整趟）。
     timeout_sec: float = 1800.0
     max_retries: int = 2
     temperature: float = 0.2
-    #: 这一格已删（2026-10-15 业主裁定：「我们不卡 token，只卡总花销的钱」）。
+    #: 这一格不设（「我们不卡 token，只卡总花销的钱」）。
     #:
     #: `ModelSpec.max_tokens` 与 `agent_loop.max_output_tokens`、抽取那条路的
     #: `client_from_env(max_tokens=8192)`、`LlmSeam.ask(max_tokens=…)` 四处一起删掉，
     #: 请求体里不再出现 `max_tokens` —— 额度交回上游（它们的缺省比我们给的更宽）。
     #:
-    #: 为什么这是对的（AI 代理 2026-10-15 的两发真调用对照，合计 ≈ $0.017）：
+    #: 为什么这是对的（两发真调用对照，合计 ≈ $0.017）：
     #: 同一段 prompt，不带 `max_tokens` 时上游回 `finish_reason=stop`、
     #: `tokens_out=14,015`；带 `max_tokens=32768` 时 `tokens_out=12,987` ——
     #: 缺省不是 4096，我们原本那一栏反而是在压低它的额度。
-    #: 而此前那些"产出丢了"的真机读数（`output_exhausted`：推理把输出预算吃光、正文 0 字）
+    #: 而"产出丢了"的那些真机读数（`output_exhausted`：推理把输出预算吃光、正文 0 字）
     #: 正是被这一栏咬的：推理与本应写正文的额度共用同一份上限。
     #:
     #: 推理强度（词表 `REASONING_EFFORTS`，缺省 `DEFAULT_REASONING_EFFORT`）。
     #:
-    #: 它取代改前那种"请求体里根本没有这一栏"的形态：真机读数（2026-10-10）
+    #: 它取代"请求体里根本没有这一栏"的形态：真机读数
     #: `deepseek-chat`（历史读数）裸调与带 `reasoning_effort=high` 的对照 —— 前者
     #: `reasoning_chars=absent`、`tokens_in=13`，后者 `reasoning_chars=76`、
     #: `tokens_in=39`。这两行就是"模型有没有过脑子"在网线上的唯一区别。
     reasoning_effort: str = DEFAULT_REASONING_EFFORT
     #: key 是从哪一档取到的：`"env"` / `"settings"` / `""`（都没取到）。
     #:
-    #: ## 为什么这是一个必须存在的读数（2026-10-10 所有者裁定「key 从 config 里面接」）
+    #: ## 为什么这是一个必须存在的读数（口径「key 从 config 里面接」）
     #:
     #: 取值梯子是 `环境变量 > settings.json > 内置默认`，于是"我以为它在 config 里"
     #: 与"它其实来自一个残留的环境变量"在其余所有读数上完全一样：
@@ -438,7 +438,7 @@ def spec_for(role: str = "", *, secretary: bool = False,
     `来源` 是 `settings.model_settings_for` / `secretary_settings` 给的那一格
     （`models.A` / `models.default` / `model` / `secretary` / 空串）；
     它进 `ModelSpec.key_source` 的位置旁边 —— "这把 key 是从哪一格来的"
-    是排障时第一个要回答的问题，而它此前只能靠人翻文件。
+    是排障时第一个要回答的问题，而它不记就只能靠人翻文件。
 
     `vendor` 今天只做一件事：`base_url` 没给时按它选一个内置端点
     （见 :data:`VENDOR_BASE_URLS`）。多厂商的价目表在 `modelcost` 那一侧，
@@ -489,11 +489,11 @@ def vendor_model_of(spec: Any = None) -> tuple[str, str]:
 
     ## 为什么要有这一个函数（而不是各调用点自己 getattr）
 
-    它此前是抄了两份的：`llmseam._price_now` 里一份（`vendor` 没配就按端点猜一家），
+    它若分两处就是抄两份：`llmseam._price_now` 里一份（`vendor` 没配就按端点猜一家），
     而 `modelcost.price_of` 那一支干脆不猜（于是 `runflow` 那条路上价目表形同虚设）。
     结果是同一次运行里两条路的计价口径不一致：多智能体那条按厂商表算，
     `agentflow run` 那条按缺省价算 —— 而两个数字都自洽，没有任何地方会报错。
-    业主 2026-10-14「花销计算标准调整到与模型供应商定价吻合」要的正是把这一格收成一处。
+    「花销计算标准调整到与模型供应商定价吻合」要的正是把这一格收成一处。
 
     ## 口径（三态，不猜成"没有厂商"）
 
@@ -657,7 +657,7 @@ class ModelReply:
         return {
             "ok": self.ok,
             "text_len": len(self.text),
-            # "它想了吗"：0 与"这一栏不存在"必须分得开 —— 改前是后者，
+            # "它想了吗"：0 与"这一栏不存在"必须分得开 —— 没有这一格就是后者，
             # 于是"没配 thinking"与"配了但它没想"在读数上长得一样。
             "reasoning_chars": len(self.reasoning),
             "error_kind": self.error_kind,
@@ -708,7 +708,7 @@ def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
     非 2xx 也读回响应体（上游的报错正文里才有真正的原因，
     直接抛异常会把原因丢掉，只剩一个状态码）。
 
-    `Request(...)` 的构造放在 `try` 里面（`G-7` 口径一）：此前它建在
+    `Request(...)` 的构造放在 `try` 里面（`G-7` 口径一）：若它建在
     `try` 之外，于是 `AGENTFLOW_MODEL_BASE_URL` 写成 `not-a-url` 时
     `urllib.request.Request` 抛的 `ValueError` 绕过本函数全部的错误翻译，
     直接冒到调用方 —— 用它的人拿到的是一条崩溃，而不是一条"没查成"。
@@ -735,7 +735,7 @@ def urllib_get(url: str, headers: Mapping[str, str],
     """生产传输层里的 GET（只给 `/models` 那一类"读清单"用）。
 
     为什么不能拿 `urllib_transport` 凑合：它固定 `method="POST"`（chat-completions 只有
-    POST）。真机实测（2026-10-11）：用 POST 去问 `/v1/models` 得到 HTTP 405，
+    POST）。真机：用 POST 去问 `/v1/models` 得到 HTTP 405，
     而那条读数会被读成"端点不认这个模型名/这个路径"—— 一个假的结论。
     换成 GET 之后同一个端点的清单里真的有 `deepseek-flash`
     （`['deepseek-flash', 'deepseek-v4-pro']`）。
@@ -785,7 +785,7 @@ class ModelGateway:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
         # 请求体里没有 `max_tokens`（「我们不卡 token，只卡总花销的钱」）：
-        # 额度交回上游 —— 真调用对照过，上游缺省比我们原先给的那一栏更宽
+        # 额度交回上游 —— 真调用对照过，上游缺省比我们给的那一栏更宽
         # （见 `ModelSpec` 那一格上面的读数）。我们这一侧只留"钱"和"墙钟"两道闸。
         body: dict[str, Any] = {
             "model": self.spec.model,
@@ -793,7 +793,7 @@ class ModelGateway:
             "temperature": self.spec.temperature if temperature is None else temperature,
             "stream": False,
             # 推理强度：唯一实现在 `reasoning_body_fields`（`off` 发 thinking.type=disabled，
-            # 其余三档发 reasoning_effort）。改前这里没有这一栏 ——
+            # 其余三档发 reasoning_effort）。没有这一栏时 ——
             # 那正是"模型不过脑子"在网线上的成因。
             **reasoning_body_fields(self.spec.reasoning_effort),
         }
@@ -852,7 +852,7 @@ class ModelGateway:
         reasoning = ""
         #: 上游为什么停（`stop` / `length` / …）；缺这一格时是空串。
         #:
-        #: 为什么必须读它（2026-10-12 真机读数）：`length` + 空正文 = 输出额度被吃满
+        #: 为什么必须读它：`length` + 空正文 = 输出额度被吃满
         #: （严格口径 T1 的 `ModelReplyNotOk` 就是这一种：思维链 26215 字、正文 0 字），
         #: 而 `stop` + 空正文 = 模型真的什么都没说。两种病的处方完全不同
         #: （前者抬额度 / 降强度，后者查提示词），折成同一句话就是让人查错方向
@@ -866,7 +866,7 @@ class ModelGateway:
             message = first.get("message") if isinstance(first.get("message"), dict) else {}
             content = message.get("content") if isinstance(message.get("content"), str) else ""
             # 思维链：上游在开了 thinking 的调用里给 `reasoning_content`
-            # （真机读数 2026-10-10：`reasoning_effort=high` ⇒ 76 字，裸调 ⇒ 这一栏不在）。
+            # （`reasoning_effort=high` 才有这一栏，裸调 ⇒ 这一栏不在）。
             # 它不是答案，所以只在这里分开收着，绝不并进 `content`。
             reasoning = (message.get("reasoning_content")
                          if isinstance(message.get("reasoning_content"), str) else "")
@@ -890,11 +890,11 @@ class ModelGateway:
             # 但有原生工具调用时 content 本来就可以是空的（DSH 那条路上就是这样），
             # 所以这一条判据从"content 非空"改成"content 或 tool_calls 至少有一个"。
             #
-            # 这一条还必须报出"它到底想没想"（2026-10-10）：想了 500 字却一个字没答，
+            # 这一条还必须报出"它到底想没想"：想了 500 字却一个字没答，
             # 与什么都没想，是两种不同的病因（前者是输出被截断/协议漂移，后者是没开 thinking）
             # —— 折成同一句话会让排障的人去查错方向。
             #
-            # 想了很多却一个字没答，再分一档（2026-10-12 T2 真机）：`finish_reason=length`
+            # 想了很多却一个字没答，再分一档：`finish_reason=length`
             # 且思维链非空 ⇒ 完成预算被思考吃光了（推理 token 与正文共用 `max_tokens`）。
             # 这一档的处置与"协议漂移"完全不同：前者要它把这一步拆小、把思考压短，
             # 后者要它重念一遍输出协议。实测那两条：思维链 109,397 / 96,969 字，
