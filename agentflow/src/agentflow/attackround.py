@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""F 的"一轮真推理"形态（`draft/39` §3.16 + §3.19 已批准项）—— 纯判定层。
+"""F 的"一轮真推理"形态 —— 纯判定层。
 
-## 这一层解决什么（D15 的根）
+## 这一层解决什么
 
-真机读数（p6e/p6f）：`attack.step` 第 1 轮逐字返回 `no_change`（"本框架尚未接线自动推理"），
+`attack.step` 第 1 轮曾逐字返回 `no_change`（"本框架尚未接线自动推理"），
 于是 `attack_plans.history` 有行、计划永远推不动。修法是给一轮定死形态：
 
 - 一轮 = 一次全新的 LLM 会话（种子只给：子目标 + history + `best_partial` + 证据包 +
@@ -15,7 +15,7 @@
 - 确实什么都做不了时，也必须落成 `dead_end` 或"缺什么"——那就是三态（`null` + 理由），
   不是 `no_change`。
 
-已批准的加强项（§3.19）在这一层的落点：
+加强项在这一层的落点：
 
 | 条 | 落法 |
 |---|---|
@@ -29,7 +29,7 @@
 ## 为什么它是一层纯函数
 
 "一轮该收什么、什么时候才允许花钱、哪一步继承了缺陷"这三件事都不需要模型：
-它们是形态与判据。把它们做成纯函数，才能离线、确定性地判（E11/E12/E13 就是这么跑的），
+它们是形态与判据。把它们做成纯函数，才能离线、确定性地判，
 而模型只负责往里填内容。
 """
 from __future__ import annotations
@@ -40,23 +40,23 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from . import schema as _S
 
-#: 一轮的四种产物（`draft/39` §3.16）：没有 `no_change` 这一档，它是被修掉的那个形态。
+#: 一轮的四种产物：没有 `no_change` 这一档，它是被修掉的那个形态。
 PRODUCTS: tuple[str, ...] = ("reduction", "proof", "counterexample_request", "dead_end")
 #: 通用数学工具箱（方法名，不含任何本题的构造或结论）：每轮必填一个。
 STRATEGIES: tuple[str, ...] = (
     "归约", "反证", "极值与双重计数", "对称性与去同构", "构造参数族",
     "局部—整体", "编码为 SAT/ILP", "套用已知定理", "小情形搜索找模式",
 )
-#: F 不许写的"缝"（用户 2026-10-05 口径：F 禁止写"易证/显然/trivial/clearly/it is easy to see"）。
+#: F 不许写的"缝"（用户口径：F 禁止写"易证/显然/trivial/clearly/it is easy to see"）。
 F_BANNED_MARKERS: tuple[str, ...] = (
     "易证", "显然", "trivial", "clearly", "it is easy to see", "无须证明", "显然成立",
 )
 
 #: 一步正文里的"推导接词"—— 只用于读数（不是判据：不会因此拒收任何一轮）。
 #:
-#: 为什么需要这一格（`temp/dep_probe/REPORT-dependency-surface.md` 的结论）：可引池为空时，
-#: `assumption: true` 是唯一合法出口，于是 83/84/85/87 的 262 个编号步骤里 244 个标成
-#: 「（前提）」—— 而它们逐字都是「由 H 的分段定义得到…」「因此…」「故…」。这里把一句话
+#: 为什么需要这一格：可引池为空时，
+#: `assumption: true` 是唯一合法出口，于是大量步骤被标成「（前提）」
+#: —— 而它们逐字都是「由 H 的分段定义得到…」「因此…」「故…」。这里把一句话
 #: 读成两类：前提步（真的先接受一个条件）与推导步被声明成前提（把要推的一步
 #: 声明成前提）。后者只落一条 `problem` 读数，判据强度一个字不动。
 #:
@@ -78,7 +78,7 @@ SUBGOAL_FIELDS: tuple[str, ...] = ("goal", "testable")
 
 #: 四种产物各自"必填字段"的那一句（提示词直接印它；判据那边 `parse_round` 与它是同一份口径）。
 #:
-#: 为什么把这几句搬到这里（2026-10-19，mp4-6 的真机读数）：提示词里那四段从前是
+#: 为什么把这几句搬到这里：提示词里那四段从前是
 #: `agent_f/core.py` 手写的一段字面量，而受控值本身在 `attackround` —— 两处漂了之后
 #: 的形态是"模型按提示词写、判据按常量拒"（本模块原来就在注释里写着这条风险）。
 #: 现在四档的名字与必填字段都只在这里定义，提示词与重问、拒收消息全部引用它。
@@ -272,20 +272,19 @@ def clean_new_subgoals(goals: Any) -> tuple[list[dict[str, str]], list[str]]:
 
 #: 提示词里的引用纪律（提示词与拒收消息共用这一处口径）。
 #:
-#: 真机读数（`projects/mp4` 的 `mp4-6` 那趟，计划 `000001` 第 1 轮）：
-#: 模型给 `proof` 的一步写了 `cites=["reports/attack-000000.md §A5"]` —— 台账里没有这条
-#: （`reports/…md` 是 F 自己写的产物文件，不是台账 id），判据当场拒收（R-03）。
+#: 模型可能给 `proof` 的一步写 `cites=["reports/attack-000000.md §A5"]` —— 台账里没有这条
+#: （`reports/…md` 是 F 自己写的产物文件，不是台账 id），判据当场拒收。
 #: 拒收拦得住，但它为什么编没治：`_evidence_digest` 里那句"不在册"只是一条旁注，
 #: 而提示词从没把"能引的 id 就这些"摆到它眼前。所以纪律写在这里、id 列表紧挨着它。
 #:
-#: 前缀清单从 `schema.CITATION_PREFIXES` 现算（2026-10-25）：手抄的那一份里有
-#: `conj:` / `plan:` / `req:` 三个假前缀 —— 模型照着写会被写入期拒（`bad_citation_prefix`），
-#: 而"提示词教一个判据不认的前缀"不会有任何读数报出来。
+#: 前缀清单从 `schema.CITATION_PREFIXES` 现算：手抄的清单会有假前缀 ——
+#: 模型照着写会被写入期拒（`bad_citation_prefix`），而"提示词教一个判据不认的前缀"
+#: 不会有任何读数报出来。
 _CITATION_PREFIX_LINE: str = " / ".join(f"`{prefix}:`" for prefix in _S.CITATION_PREFIXES)
 CITE_DISCIPLINE = (
     "只许引用下面列出的 id（它们现算自台账）—— **没有可引的就不要引**；"
     "要声明前提，就把这一步写成 `assumption: true`。"
-    # 2026-10-25（审计 G/H/V/L 其余条）：前缀清单此前手抄了一份
+    # 前缀清单曾经手抄了一份
     # （`conj:` / `plan:` / `req:` 三个都不在 `schema.CITATION_PREFIXES` 里）——
     # 现在按真身现算，写死的那一份不再存在。
     "带前缀的写法：" + _CITATION_PREFIX_LINE + "。"
@@ -298,14 +297,14 @@ RETRY_QUOTE_CHARS = 400
 
 #: 什么时候该交 `proof`（而不是又交一次 `reduction`）—— 提示词里那一节的唯一正文。
 #:
-#: ## 为什么需要这一节（真机 sylow3–sylow6 的读数，2026-10-26）
+#: ## 为什么需要这一节
 #:
-#: 四趟真机里 `attack.step` 的 `action` 一次都不是 `proof`：10 个计划各 1 轮、每轮都是
-#: `dead_end`，而 `reports/f-proof-*.md` 0 份、会话里 `## 依赖` 0 次。追下去是两层：
+#: `attack.step` 的 `action` 可能一次都不是 `proof`：计划每轮都是 `dead_end`，
+#: 而 `reports/f-proof-*.md` 一份都没有、会话里 `## 依赖` 也没出现过。追下去是两层：
 #:
-#: ① 工具路径上 F 的推理缝是 `None`（那 10 条 `dead_end` 的 detail 逐字就是
+#: ① 工具路径上 F 的推理缝是 `None`（`dead_end` 的 detail 逐字就是
 #:    `core.py` 里"本框架尚未接线自动推理"那一支的文案），模型根本没被问过 ——
-#:    这一层是装配（F 现在无条件有缝；当年的那个开关已于 2026-10-26 删除），不是判据；
+#:    这一层是装配（F 现在无条件有缝），不是判据；
 #: ② 即使缝接上了，提示词里也只有"四种产物之一"的清单，没有一条话说清
 #:    "论证到什么程度就该交 `proof`"。而第 2 段（每轮至少 3 条新事实）在措辞上只
 #:    点名了 reduction 那一类动作，`proof` 又不关闭子目标（FC-22）—— 模型读到的是
@@ -356,9 +355,9 @@ class RoundError(ValueError):
 def _product_error(shown: str) -> RoundError:
     """`product` 不在四档里 ⇒ 一条可动作的错误：四个合法值 + "你给的是 X" + 唯一出口。
 
-    改前这一处只说 `product 必须是 (...) 之一，收到 'x'`（`no_change` 另有一支只说
+    这一处曾经只说 `product 必须是 (...) 之一，收到 'x'`（`no_change` 另有一支只说
     "它正是 D15 要根除的形态"）—— 于是模型知道"错了"、不知道该写什么，重问三次仍然
-    交 `{"outcome": "no_change"}`（真机 mp4-6 计划 000002 第 1 轮）。现在四档逐字列出、
+    交 `{"outcome": "no_change"}`。现在四档逐字列出、
     点名它给的是哪个值、并给出唯一出口（`dead_end`）。
     """
     got = str(shown or "").strip()
@@ -377,7 +376,7 @@ _PRODUCT_ALIAS_KEYS: tuple[str, ...] = ("outcome", "action", "result", "status")
 
 
 def _alias_of(got: Mapping[str, Any]) -> str:
-    """`product` 缺失时，模型把它写在哪个键上了（`{"outcome": "no_change"}` 就是真机那一份）。"""
+    """`product` 缺失时，模型把它写在哪个键上了。"""
     for key in _PRODUCT_ALIAS_KEYS:
         value = str(got.get(key) or "").strip()
         if value:
@@ -387,14 +386,12 @@ def _alias_of(got: Mapping[str, Any]) -> str:
 
 def retry_note(previous: str, error: str, *, illegal: str = "",
                limit: int = RETRY_QUOTE_CHARS) -> str:
-    """不成形之后重问时带给模型的那一段（P3-5 的加强版；真机 mp4-6 的读数）。
+    """不成形之后重问时带给模型的那一段。
 
     ## 为什么要三件事一起给（缺一件都还是"重问三次仍交 `no_change`"）
 
-    真机读数（`projects/mp4` 的 `mp4-6` 那趟，F 的推理缝当时是开着的）：
-    `attack_plans` 计划 `000002` 第 1 轮重问了 3 次，模型每次都交
-    `{"outcome": "no_change"}`。这不是"它没读到那句话"—— 判据原话确实在重问提示词里
-    （`retry_note = str(exc)`）。缺的是三件别的事：
+    重问 3 次、模型每次都交 `{"outcome": "no_change"}` 的情形里，判据原话确实在重问
+    提示词里（`retry_note = str(exc)`）。缺的是三件别的事：
 
     1. 受控四档在提示词末尾（先上下文、后词表），重问那一段也不复述它们；
     2. 它看不见自己写了什么（"你上一次不成形"没有指代对象，模型无从对照）；
@@ -412,8 +409,8 @@ def retry_note(previous: str, error: str, *, illegal: str = "",
     return "\n".join([
         f"复述受控词表：这一轮**只能**输出四种产物之一 —— {PRODUCT_MENU}"
         "（`no_change` 不是产物、`ok` / `success` / `done` 也不是）。",
-        # 业主 2026-10-19：这一句与主提示词第 2 段同一口径，但同样只是嘱托（不是门）。
-        # 为什么要在这里再说一遍：真机上重问 3 次仍交旧形态 —— 只改主提示词那一处，
+        # 业主：这一句与主提示词第 2 段同一口径，但同样只是嘱托（不是门）。
+        # 为什么要在这里再说一遍：重问 3 次仍交旧形态 —— 只改主提示词那一处，
         # 重问时模型拿到的仍是"换个措辞"的许可。
         "复述推进口径：这一轮**必须产出一批新事实（至少 3 条）**（新的引理/命题、"
         "新的反例族、新的数值界、或一步新的归约）；**只整理不算推进**"
@@ -435,7 +432,7 @@ def parse_round(text: str) -> dict[str, Any]:
     非法 `product` 的那一档给的是可动作的纠正指引（四个合法值 + "你给的是 X" +
     "把 X 换成上述四个之一"），并把那个值挂在 `RoundError.illegal` 上 ——
     重问那一层要拿它拼"把 `<X>` 换成上述四个之一"（`retry_note`），
-    而"再解析一遍错误消息猜它是哪个值"只能是猜（真机 mp4-6：模型把 `no_change`
+    而"再解析一遍错误消息猜它是哪个值"只能是猜（模型会把 `no_change`
     填在 `outcome` 里，`product` 整个缺失）。
     """
     raw = str(text or "").strip()
@@ -454,7 +451,7 @@ def parse_round(text: str) -> dict[str, Any]:
         raise _product_error("no_change")
     if product not in PRODUCTS:
         # `product` 缺失/写错时，模型常把它填在 `outcome` / `action` 上（`{"outcome": "no_change"}`
-        # 就是真机那一份）；两种写法都归到同一档，并把"你给的是哪个值"念出来。
+        # 就是那一份）；两种写法都归到同一档，并把"你给的是哪个值"念出来。
         # 注意：只有在 `product` 本身不合法时才用 `"no_change" in raw` 这条兜底 ——
         # 一份成形的产物里出现这个词（例如 evidence 里引述本提示词）不该被误杀。
         if "no_change" in raw:
@@ -592,7 +589,7 @@ def inherit_defects(round_row: Mapping[str, Any], *, clean_ids: Iterable[str]) -
     return out
 
 
-#: 预算读数读不到时要说的话（P-09 的代码那一半，`draft/44:60`）。
+#: 预算读数读不到时要说的话。
 #:
 #: 它是"一处口径"而不是"两处措辞"：代码侧（F 写进 `why_strategy` 与返回值的
 #: `budget_reading.why`）与提示词侧（`agent_prompts.ROLE_BRIEFS["E"].policy`）
@@ -600,7 +597,7 @@ def inherit_defects(round_row: Mapping[str, Any], *, clean_ids: Iterable[str]) -
 #: `tests/test_agent_f_inference.py::test_p09_the_framework_written_why_strategy_carries_the_same_sentence`
 #: 就会红。
 #:
-#: 为什么不能写成"那时按最保守的做法办"（本仓库此前在提示词里就是那个方向）：
+#: 为什么不能写成"那时按最保守的做法办"（提示词里曾经就是那个方向）：
 #: 读不到不等于不许花。把"读数缺失"折成"全局停摆"是相反的方向，
 #: 而且那正是本项目最贵的缺陷形态（把 null 与 0 折成同一个值）。
 BUDGET_UNREADABLE_NOTE = (
@@ -610,9 +607,7 @@ BUDGET_UNREADABLE_NOTE = (
 
 #: 读数读不到时，钱由谁管（写成常量，好让"证据"本身可被引用与断言）。
 #:
-#: 只点符号名、不点行号：这张注记原先写着 `conductor.py:1063-1077` 与
-#: `policy.py:338-343`，而 2026-10-27 实测那两处已经是 `store: Any = None` 与
-#: `Refusal.__post_init__` —— 行号在这棵树里几十分钟就漂，且没有任何判据在读它们
+#: 只点符号名、不点行号：行号在这棵树里几十分钟就漂，且没有任何判据在读它们
 #: （唯一的读者是 `why` 字符串里那几条文件名断言，行号漂了它照样绿）。
 #: 现在由 `tests/test_agent_f_inference.py::test_p09_the_guard_note_names_live_symbols`
 #: 逐符号证明：`Conductor._meter_guard` 与 `policy.check` 都还在，且行号不许回来。
@@ -662,13 +657,13 @@ def pre_spend_gate(*, goal: str, testable: str = "", deps_refuted: Sequence[str]
     remaining = [s for s in STRATEGIES if s not in set(tried)]
     checks["strategies_tried"] = {
         "tried": sorted(set(tried)), "remaining": remaining, "exhausted": not remaining,
-        # 代价读数（P-09）：这句话是读数，不是否决 —— 见下面那段边界说明。
+        # 代价读数：这句话是读数，不是否决 —— 见下面那段边界说明。
         "note": (f"{len(STRATEGIES)} 招里试过 {len(set(tried))} 招、还剩 {len(remaining)} 招"
                  + ("（已穷尽：再试只能是同一批招）" if not remaining else "")),
     }
-    # ---- P-09（`draft/44:60`）：计数不否决花钱。
+    # ---- 计数不否决花钱。
     #
-    # 此前这里是 `checks["all_strategies_tried"] = len(set(tried)) >= len(STRATEGIES)`
+    # 这里曾经写 `checks["all_strategies_tried"] = len(set(tried)) >= len(STRATEGIES)`
     # 并把它写进 `reasons` ⇒ `spend=False`。那是"该模型抉择的事被写死成一个死旋钮"：
     # 九招试完该不该再花一轮（换子目标 vs 再试同一批招）是代价判断，不是事实。
     # 现在它只是一条读数（`strategies_tried`：试过哪几招 / 还剩哪几招 / 是否穷尽、
@@ -715,9 +710,9 @@ def dead_end_row(*, strategy: str, reason: str, evidence: str,
                  why_strategy: str = "") -> dict[str, Any]:
     """造一条成形的 `dead_end` 产物（走同一套判据 —— 一处校验，不手搓 dict）。
 
-    为什么要有这个构造器（`draft/39` §6.14 的接线）：F 的 `step` 里有几条收尾路径
+    为什么要有这个构造器：F 的 `step` 里有几条收尾路径
     （没有 owner 侧的推理入口、没有可推进的子目标、预算用尽）本来就是"这一轮没有新事实"，
-    而它们此前只写一个 `outcome="no_change"` —— 没有产物。按 §3.16，那种情形必须落成
+    而它们曾经只写一个 `outcome="no_change"` —— 没有产物。那种情形必须落成
     `dead_end`（受控理由 + 证据 + `best_partial`），于是"这一轮到底交了什么"可查。
     """
     payload = {"product": "dead_end", "strategy": strategy,
