@@ -222,7 +222,7 @@ def settings_path(path: str | Path | None = None, *,
     """
     if path is not None:
         return Path(path)
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     raw = str(src.get(ENV_SETTINGS) or "").strip()
     if raw:
         return Path(raw)
@@ -345,7 +345,7 @@ def lean_enabled(path: str | Path | None = None, *,
     用户以为形式化开着、实际全趟都没跑。
     错误信息里回显收到的原文（它不是密钥，可以回显）。
     """
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     raw = str(src.get(ENV_LEAN_ENABLED) or "").strip()
     if raw:
         return _parse_switch(raw, where=f"环境变量 {ENV_LEAN_ENABLED}"), "env"
@@ -409,6 +409,16 @@ def _models_section(path: str | Path | None = None, *,
     return out
 
 
+def _overlay_slot(merged: dict[str, str], body: Mapping[str, str]) -> bool:
+    """把一档槽里非空的键逐键叠到 `merged`；返回这一档有没有给出任何非空值。"""
+    touched = False
+    for k, v in body.items():
+        if str(v or "").strip():
+            merged[k] = v
+            touched = True
+    return touched
+
+
 def model_settings_for(role: str, path: str | Path | None = None, *,
                        env: Mapping[str, str] | None = None) -> tuple[dict[str, str], str]:
     """某个角色该用哪一档模型：返回 `(值, 来源)`。
@@ -429,17 +439,11 @@ def model_settings_for(role: str, path: str | Path | None = None, *,
     slots = _models_section(path, env=env)
     merged = dict(base)
     source = "model" if any(str(v or "").strip() for v in base.values()) else ""
-    if DEFAULT_MODEL_SLOT in slots:
-        for k, v in slots[DEFAULT_MODEL_SLOT].items():
-            if str(v or "").strip():
-                merged[k] = v
-        if any(str(v or "").strip() for v in slots[DEFAULT_MODEL_SLOT].values()):
-            source = f"{MODELS_SECTION}.{DEFAULT_MODEL_SLOT}"
+    if DEFAULT_MODEL_SLOT in slots and _overlay_slot(
+            merged, slots[DEFAULT_MODEL_SLOT]):
+        source = f"{MODELS_SECTION}.{DEFAULT_MODEL_SLOT}"
     mine = slots.get(str(role)) or {}
-    for k, v in mine.items():
-        if str(v or "").strip():
-            merged[k] = v
-    if any(str(v or "").strip() for v in mine.values()):
+    if _overlay_slot(merged, mine):
         source = f"{MODELS_SECTION}.{role}"
     return merged, source
 
@@ -460,14 +464,9 @@ def secretary_settings(path: str | Path | None = None, *,
     merged = dict(base)
     source = "model" if any(str(v or "").strip() for v in base.values()) else ""
     if DEFAULT_MODEL_SLOT in slots:
-        for k, v in slots[DEFAULT_MODEL_SLOT].items():
-            if str(v or "").strip():
-                merged[k] = v
+        _overlay_slot(merged, slots[DEFAULT_MODEL_SLOT])
     own = _section(SECRETARY_SECTION, MODEL_KEYS, path, env)
-    for k, v in own.items():
-        if str(v or "").strip():
-            merged[k] = v
-    if any(str(v or "").strip() for v in own.values()):
+    if _overlay_slot(merged, own):
         source = SECRETARY_SECTION
     return merged, source
 
@@ -509,7 +508,7 @@ def env_or_setting(env_name: str, setting_value: Any, *,
     `(src.get(var) or "").strip()` 同一条口径）：否则一个空的环境变量会
     静默遮住设置文件，而"设了个空值"与"没设"在用户眼里是同一件事。
     """
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     raw = str(src.get(env_name) or "").strip()
     if raw:
         return raw, "env"
@@ -590,8 +589,9 @@ def _clean_write_values(values: Mapping[str, Any]) -> tuple[dict[str, dict[str, 
     空串是合法的值：它是「清掉这一格」的写法（读侧把空串当未设置）。
     """
     known = dict(_write_sections())
-    nested = {name: keys for name, keys, _slots in _nested_write_sections()}
-    slots_of = {name: slots for name, _keys, slots in _nested_write_sections()}
+    nested_rows = _nested_write_sections()
+    nested = {name: keys for name, keys, _slots in nested_rows}
+    slots_of = {name: slots for name, _keys, slots in nested_rows}
     out: dict[str, Any] = {}
     for raw_section, raw_seg in (values or {}).items():
         section = str(raw_section)
@@ -834,12 +834,12 @@ def write_settings(values: Mapping[str, Any], path: str | Path | None = None, *,
         base = dict(base) if isinstance(base, Mapping) else {}
         base.update(seg)
         merged[section] = base
-    problem = _atomic_write_json(Path(target), merged)
+    problem = _atomic_write_json(target, merged)
     if problem:
         return {"ok": False, "tri": "unknown", "path": str(target), "values": {},
                 "permissions": {},
                 "reason": f"写设置文件失败（盘上那份没被动过）：{problem}"}
-    perms = _tighten(Path(target))
+    perms = _tighten(target)
     # 回显按盘上合并后的那一份算（而不是按调用方给的那一份）：这样"写进去的"
     # 与"回报的"是同一件事，漏掉一个键会当场看出来。
     masked = _masked_all(merged)
