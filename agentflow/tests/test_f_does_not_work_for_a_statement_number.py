@@ -489,10 +489,11 @@ _REPO_LITERAL_WHITELIST: dict[str, tuple[int, str, str]] = {
         "冻结工具面：这一格是 verify.verify_proof 的参数说明，改它要重冻 "
         "tests/golden/tool_surface_snapshot.json 与 tests/fixtures/tool_declaration_baseline.json"
         "（FC-27 eval-criteria）⇒ 本批停手"),
-    "agentflow/src/agentflow/proofregistry.py": (
-        1, "待裁",
-        "另一条 lane 收口了 legacy 读兼容标注（9ecce80c）但没动模块 docstring 这一处旧名；"
-        "本 lane 没碰这个文件，留待那条 lane 或业主一并按稿号改"),
+    # 2026-11-12：`agentflow/src/agentflow/proofregistry.py` 那一行（1 条、待裁）从
+    # 白名单删除 —— 稿号口径那一笔（f032093b）已把模块 docstring 的
+    # `reports/f-proof-<命题号>.md` 改成 `reports/f-proof-<稿号>.md`，盘上一处旧字面
+    # 都没有了（等额纪律的「登记过期」一档）。断言未动：仍是"白名单之外一处不许有、
+    # 白名单之内条数必须相等"。
 }
 
 #: 扫描面要排除的目录：`agentflow/tests/` 是判据本体与负控夹具的家 —— e / e2 就在那里
