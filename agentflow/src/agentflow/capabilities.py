@@ -2978,11 +2978,9 @@ def assert_capabilities(
 
     # ---- [7b] 对账面必须是一个分区（D-3）
     #
-    # 上面那条只钉 `unmatched`。实测（2026-11-12 现算）：
-    # 67 个动作 = 25 compared + 42 unmatched + 0 ambiguous
-    # （这三个数不手抄口径：`tests/test_r4_roles_surface.py` 的
-    # `test_the_reconciliation_numbers_in_the_source_match_the_live_reading`
-    # 每次把实跑读数拼成这句话再来源码里找；动作表一变、这里没跟就红。）
+    # 上面那条只钉 `unmatched`。对账读数不在这里手抄：口径写在
+    # `two_layer_reconciliation` 的 docstring 里（三类之和 = 动作总数；读数按当前
+    # 声明表现算，不写死数字），手抄数字会随动作表漂移。
     # 于是 `ambiguous` 那一格今天恰好是 0，
     # 而没有任何判据看着它 —— 若将来一个动作的 handler_name 在角色工具组里
     # 撞上两个工具，`declaration_divergences()` 只会多一条 info，导入照样成功，

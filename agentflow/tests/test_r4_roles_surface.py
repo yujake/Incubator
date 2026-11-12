@@ -13,13 +13,14 @@
 | `R4-AN-4`（medium = `N-5`） | 写等级登记表 × 第一根轴词表没有导入期交叉断言 | `test_the_write_level_register_is_cross_checked_at_import` |
 | `R4-AN-5`（low） | "负控 2" 两重空转（monkeypatch 打错命名空间 + 真表 H 面没有 exec 工具） | `test_for_role_notes_follow_the_current_state` |
 | `R4-AN-1`（low） | 理由串两句与事实相反（说已被对上、援引已撤回的 [7c]） | `test_the_review_report_reason_matches_todays_facts` |
-| `R4-AN-2`（low） | 对账面数字手抄过期（48/16/32 实测 49/16/33） | `test_the_reconciliation_numbers_in_the_source_match_the_live_reading` |
+| `R4-AN-2`（low；2026-11-12 口径更新） | 对账面数字手抄会过期（曾 48/16/32、后 67/25/42）；现行设计是"读数现算、不写死数字" | `test_the_reconciliation_surface_is_live_and_not_hand_copied` |
 | `R4-AN-3`（low） | `if STRICT_DECLARATIONS: pass` 是空转开关 | `test_strict_declarations_switch_is_not_a_no_op` |
 """
 from __future__ import annotations
 
 import ast
 import pathlib
+import re
 
 import pytest
 
@@ -447,24 +448,30 @@ def test_the_review_report_reason_matches_todays_facts() -> None:
     assert "真正的反方向判据" not in block, "[7c] 已撤回，理由串不许再把它当判据"
 
 
-def test_the_reconciliation_numbers_in_the_source_match_the_live_reading() -> None:
-    """`R4-AN-2`：源码注释里的对账数字必须等于实跑读数（手抄的数字会过期）。
+def test_the_reconciliation_surface_is_live_and_not_hand_copied() -> None:
+    """`R4-AN-2`（2026-11-12 口径更新）：对账数字不再写进源码，源码只写口径。
 
-    改前写的是"48 个动作 = 16 compared + 32 unmatched + 0 ambiguous"，
-    实测（含 `D-5` 落地的 `H.review_report`）是 49 / 16 / 33 / 0。
-    本用例不手抄 49：它把实跑读数拼成那句话再去源码里找 —— 数字漂了任一处都红。
+    为什么动这条判据：它的旧形态要求"源码注释里必须有实跑读数那一句话"。D5 清扫
+    按现行设计删掉了 `two_layer_reconciliation` 里那串逐次动作计数史（"67 = 25 +
+    42 + 0"那一族）—— 手抄数字本来就随动作表漂移，维护它的唯一办法是每加一个动作
+    就回头改注释，那正是"为守判据保留过时东西"。现在源码只写口径（"三类之和 =
+    动作总数；读数按当前声明表现算，不写死数字"）。
+    被守的那件事没有失去落点：
+    ① 实跑读数：三格之和 = 动作总数（本用例现算，[7b] 的导入期断言也核同一件事）；
+    ② 源码口径句在场；
+    ③ 手抄形态（`N 个动作 = N compared`）不许回到源码里 —— 它一回来就会再漂。
     """
     from agentflow import capabilities as C
 
     recon = C.two_layer_reconciliation()
-    expected = (
-        f"{recon['total']} 个动作 = {len(recon['compared'])} compared + "
-        f"{len(recon['unmatched'])} unmatched + {len(recon['ambiguous'])} ambiguous"
-    )
+    assert (len(recon["compared"]) + len(recon["unmatched"])
+            + len(recon["ambiguous"])) == recon["total"], recon
     text = CAPABILITIES.read_text(encoding="utf-8")
-    assert expected in text, f"源码注释与实跑读数不符：找不到 {expected!r}"
+    assert "三类之和必须等于动作总数" in text, "口径句不见了（判据的落点变了）"
+    assert "不写死数字" in text, "口径句不见了（判据的落点变了）"
+    assert not re.search(r"\d+ 个动作 = \d+ compared", text), (
+        "源码里又出现了手抄的对账数字 —— 它会随动作表漂移；口径是现算，别写死")
     assert "48 个动作" not in text, "旧数字 48 还在（它是手抄漂移的样本）"
-    assert ": 32}" not in text, "旧数字 32 还在（Counter 那一段）"
 
 
 def test_strict_declarations_switch_is_not_a_no_op(monkeypatch) -> None:
