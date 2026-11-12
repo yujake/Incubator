@@ -160,6 +160,16 @@ def subtree_rows(
         # 台账里没有这个号 ⇒ 这棵树本来就不存在（不是"台账读不出来"，那一档在别处报）。
         # 空列表是准数，不是把"没查成"折叠成"没有结果"。
         return []
+    # 子行索引只建一趟：原先每走一个节点就调一次 `children_of(everything, …)`，
+    # 那是对整张表重扫一遍再复制再排序（全树 O(n²)，`tasks` 上千行时 `watch` 就慢在这里）。
+    # 这里按 `children_of` 同一个谓词（parent 相同、kind 为空）分桶，桶内仍按 task_id
+    # 升序 —— 逐节点取到的行与次序和逐次调 `children_of` 逐行相同（同一个 `everything`）。
+    kids: dict[str, list[dict[str, Any]]] = {}
+    for r in everything:
+        if not str(r.get("kind") or ""):
+            kids.setdefault(str(r.get("parent_task_id") or ""), []).append(r)
+    for bucket in kids.values():
+        bucket.sort(key=lambda r: str(r.get("task_id") or ""))
     limit = None if depth is None else max(1, int(depth))
     out: list[dict[str, Any]] = []
 
@@ -167,7 +177,7 @@ def subtree_rows(
         if limit is not None and level >= limit:
             return
         out.append({**row, "level": level})
-        for kid in children_of(everything, _task_id_of(row)):
+        for kid in kids.get(_task_id_of(row), ()):
             walk(kid, level + 1)
 
     walk(root, 0)
