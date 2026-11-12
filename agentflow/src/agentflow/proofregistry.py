@@ -683,11 +683,11 @@ def register_or_rewrite(
             text = str(template).replace("\r\n", "\n")
             # `## 证明` 的内容以参数为准：template 也可能是一份"骨架"（B 的改写拿
             # F 的稿当底稿时就是这样，正文必须换成 B 交来的那一份）。
-            # `proof_body` 缺节 ⇒ 空串（不回退到依赖段 / 全文）⇒
-            # 与参数正文的 sha 不同 ⇒ 走 `_replace_section`；基稿若没有那一节，
-            # 下面会受控拒 / 整份重渲染（`_replace_section` 的 `ok` 说了算）。
-            if str(proof_text or "").strip() and not proof_sha(proof_text) == proof_sha(
-                    _DS.proof_body(text)):
+            # `proof_body` 缺节 ⇒ 空串（不回退到依赖段 / 全文）⇒ 与参数正文的 sha 不同
+            # ⇒ 走 `_replace_section`；基稿若没有那一节，下面会受控拒 / 整份重渲染
+            # （`_replace_section` 的 `ok` 说了算）。左边那把尺就是上面算好的 `new_sha`
+            # —— 同一个函数、同一处归一，再算一遍不会得到第二个值。
+            if str(proof_text or "").strip() and new_sha != proof_sha(_DS.proof_body(text)):
                 text, _ok_proof = _replace_section(text, "证明", str(proof_text))
                 if not _ok_proof:
                     text = _MF.render_proof_manuscript(
