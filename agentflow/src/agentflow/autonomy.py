@@ -844,13 +844,16 @@ def run_autonomous(role: str, task: str, *, store: Any, registry: Any,
                 notes.append(line)
         closing = (index >= total_rounds) or run.stop_reason == "not_wired" or bool(next_reason)
         on_beat = index % every == 0
-        if on_beat and not closing and min_usd > 0.0 and (_spent_usd() - last_report_usd) < min_usd:
+        # 这一轮收工前的花销只现读一次：下面三支读的是同一次读数（这一小段里没有
+        # 任何会推进用量的调用 —— `_publish_report` 只发消息、落事件，不调模型）。
+        spent_now = _spent_usd()
+        if on_beat and not closing and min_usd > 0.0 and (spent_now - last_report_usd) < min_usd:
             report.report_sent = (f"距上次汇报的花销还没到 {min_usd:.6f} 美元"
-                                  f"（本轮后累计 {_spent_usd():.6f}）")
+                                  f"（本轮后累计 {spent_now:.6f}）")
         elif on_beat or closing:
             notes.extend(_publish_report(root, role=role, report=report, rounds=total_rounds,
-                                         usd_budget=usd_budget, spent_usd=_spent_usd(), sid=sid))
-            last_report_usd = _spent_usd()
+                                         usd_budget=usd_budget, spent_usd=spent_now, sid=sid))
+            last_report_usd = spent_now
         else:
             report.report_sent = f"本轮不在汇报节拍上（每 {every} 轮一次）"
 
