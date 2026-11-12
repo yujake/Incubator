@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
-"""停止理由的单一真身：退出码、界面徽标、是否进退出码表（Q23，2026-10-26）。
+"""停止理由的单一真身：退出码、界面徽标、是否进退出码表。
 
 ## 为什么要有这一处
 
 `stop_reason` 有两个读者：命令行的退出码（`cli.EXIT_CODE_BY_STOP`）与界面的
-徽标（`webui.server._STOP_BADGES`）。改前两张表各写一份，新增一档只改了一边：
-`final_refused` 进了退出码表（5）却没进徽标表，界面于是显示一个空徽标。
-反方向也有一格：`max_steps` 留在徽标表里，退出码表没有它 —— 两表都 22 格，
-旧判据的长度比较 `len(徽标) >= len(退出码)` 因此把两处错误抵消成绿。
+徽标（`webui.server._STOP_BADGES`）。两张表各写一份时，新增一档只改一边就会
+漂移（一边留下空徽标，另一边多出一格），而按长度比较的旧判据还能把两处错误
+抵消成绿。
 
 现在一件事只在同一行里说：`reason -> (退出码, 徽标 class, 徽标文案, live)`。
 `cli` 只投影 `live=True` 的那些（进退出码表的档必须有码），`webui` 投影全部
@@ -21,10 +20,10 @@
 （`tests/test_run_agent_exit_code_table.py` 的 `_TABLE_ONLY_TODAY` 写着理由），
 本单不动它，免得把"表可以比代码宽一点"那条既有契约一起改掉。
 
-`live=False`：只有徽标、没有退出码。`max_steps` 是这一档：裁定 12-K 之后
-循环不再产生它（步数只上报、不收工），但旧会话记录里真有。不给它借一个现成的
-码，因为那会把"旧读数"和某种运行期收场混成同一个退出码。运行期真读到未登记的
-档时，`cli.EXIT_CODE_WHEN_UNKNOWN` 仍然是 1（未登记），这条既有语义没有变。
+`live=False`：只有徽标、没有退出码。`max_steps` 是这一档：步数只上报、不收工
+之后循环不再产生它，但旧会话记录里真有。不给它借一个现成的码，因为那会把
+"旧读数"和某种运行期收场混成同一个退出码。运行期真读到未登记的档时，
+`cli.EXIT_CODE_WHEN_UNKNOWN` 仍然是 1（未登记），这条既有语义没有变。
 
 ## 为什么放在这里，而不是 cli.py 或 schema.py
 
@@ -35,7 +34,7 @@
 
 from __future__ import annotations
 
-#: 全仓统一的三条口径（`R-BE1` 的 ③-6，2026-10-27 业主批准）。每个域都遵守；
+#: 全仓统一的三条口径（业主批准）。每个域都遵守；
 #: 各域多出来的码（`3`/`4`/`5`）只是把这三条之外的"下一步谁动"说细，不许改变这三条。
 EXIT_CODE_UNIFIED: dict[int, str] = {
     0: "查过、结论是好（做完了 / 达标 / clean）",
@@ -43,10 +42,10 @@ EXIT_CODE_UNIFIED: dict[int, str] = {
     2: "没查成（三态里的 unknown：不是好，也不是坏）",
 }
 
-#: 域 × 码 → 一句话含义（`R-BE1` 的 ③-6，2026-10-27 业主批准）。
+#: 域 × 码 → 一句话含义（与 :data:`EXIT_CODE_UNIFIED` 同一批口径）。
 #:
 #: 为什么要这张表：同一个 `1` 在四条命令里含义不同（loop 是"行为异常"、pipeline 是
-#: "预算熔断"、gate 是"被 M 拦住"、门禁是"requires_human"），而此前这件事只散在四处
+#: "预算熔断"、gate 是"被 M 拦住"、门禁是"requires_human"），而这件事只散在四处
 #: docstring 的散文里 —— 没有一处能对拍，于是"同码不同义"既看不出来也测不出来。
 #:
 #: 两条纪律：
@@ -101,12 +100,12 @@ EXIT_CODE_DOMAINS: dict[str, dict[int, str]] = {
 
 #: reason -> (退出码, 徽标 class, 徽标文案, live)。
 #:
-#: 退出码的六档口径（业主 2026-10-19）：0 正常完成 · 1 行为异常 · 2 研究启动失败 ·
+#: 退出码的六档口径（业主裁定）：0 正常完成 · 1 行为异常 · 2 研究启动失败 ·
 #: 3 等待用户 · 4 正常且中途停止（用户 / 父 / 钱叫停） · 5 正常且自行停止但没有 final。
 #: 全仓的上位口径与"同码不同义"的登记见 :data:`EXIT_CODE_UNIFIED` / :data:`EXIT_CODE_DOMAINS`。
 #: `live=False` 的条目退出码写 `None`：它们只有徽标，不该进退出码表。
 #:
-#: 徽标 class 只用改前表里那四种（`badge-pass` / `badge-unknown` / `badge-pending` /
+#: 徽标 class 只用那四种（`badge-pass` / `badge-unknown` / `badge-pending` /
 #: `badge-fail`），页面的 CSS 里都有定义。
 STOP_REASONS: dict[str, tuple[int | None, str, str, bool]] = {
     # ---- 0 正常完成（给了 final）
