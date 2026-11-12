@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""E 的 ②③ 落盘：程序设计思路与穷举论证要落成盘上一份可核的读数（业主 2026-10-23 晚）。
+"""E 的 ②③ 落盘：程序设计思路与穷举论证要落成盘上一份可核的读数。
 
-业主原话（逐字）：「E 写的报告要能落下来，且 V 也要会审这种东西，加 E 派 V 的边」。
+E 写的报告要能落下来，且 V 也要会审这种东西。
 
 ## 这一格解决什么
 
-改前 ②③ 只活在 `experiments.observations` 的自由格里（脚本自报，E 原样收下）：
+若 ②③ 只活在 `experiments.observations` 的自由格里（脚本自报，E 原样收下）：
 读的人能看见那两段字，但它们不是一个"可引用的落点"—— B 登记时只能把文本贴进
 `statements.proof_text`，G 在正文里也没法指向一份文件，V 更没有材料可核。
 于是出现"写了但没落地"：台账上有字、盘上没有东西。
@@ -22,13 +22,13 @@ B 登记时指它、G 在正文里引它、V 审它，四处说的是同一份�
 
 - E 写侧：报告没落成 / 三块不齐 ⇒ 那条证据降档（`numericproof.sign_experiment` 的
   档位由 `exhaustion_problems` 单点决定 ⇒ 落成 cross_check，不是 proof）；
-- B 的入库闸：证明栏（2026-11-08 起只有 ③）齐、落盘核查不过 ⇒ 受控拒绝（`numericproof.filing_problems`）；
+- B 的入库闸：证明栏（只有 ③）齐、落盘核查不过 ⇒ 受控拒绝（`numericproof.filing_problems`）；
 - V 的会审：缺材料 ⇒ `看不出来` 并点名缺哪一块，不许判 `成立`。
 
-## "要不要"与"齐不齐"是两件事（D-43，业主 2026-10-24）
+## "要不要"与"齐不齐"是两件事
 
-业主原话：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，对一般数值实验
-不做要求」。所以本模块只回答"齐不齐"，不回答"要不要"：后者是
+「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，对一般数值实验
+不做要求。所以本模块只回答"齐不齐"，不回答"要不要"：后者是
 `numericproof.wants_numeric_proof` 那一份判据（`method="exhaustive_search"` / 布尔 true 的
 `exhaustive` / 调用方声称 `proof`，三者任一）。落盘那一步的调用方（E 的 `run_experiment`）
 先问那一句，只有"想升格"的那一条才写报告；一般数值实验不写、不记、也不因缺块扣分。
@@ -623,22 +623,22 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
         |---|---|---|---|
         （这一份证明没有引用任何在册命题 —— 空表就是声明。）
 
-    ## 2026-11-08：`## 证明` 只剩 ③（业主：「穷举式的 proof_test 应该是填穷举论证，
-    实验栏填相对路径」+「乙」）
+    ## `## 证明` 只剩 ③
 
-    改前那一节是三段（程序 / 程序设计 / 穷举论证）。现在：① 程序路径住
+    穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径。所以：① 程序路径住
     `experiments.code_path`（稿头那一行 `- 程序：…（sha256 …）` 是元信息，不参与
     被签的正文）、② 程序设计住 `experiments.observations["design"]`、被签的那一节
     只有 ③ 穷举论证。于是「稿上被签的那一份」与「`statements.proof_text` 登记的那一份」
     仍然逐字相同（`numericproof.compose_proof_column` 单段），而两段各自有唯一居所。
 
-    ## `proof_no`（2026-11-04，缺口 ①）
-    这一份是这条命题的第几份证明。给了就写一行 `- 证明号：<N>`；不给就省略 ——
-    "不知道"等于第 1 份（读侧按 `#p1` 处理），不许猜成别的号。
+    ## `proof_no`（稿号）
+    这一份是这条命题的哪个稿号（一个稿号 = 一份文件 = 一份证明）。给了就写一行
+    `- 证明号：<N>`；不给就省略 ——
+    "不知道"等于稿号 1（读侧按 `#p1` 处理），不许猜成别的号。
     为什么不给个默认 1 写死：写死会让"E 知道这是第 3 份"与"E 不知道"在稿上一个样，
     而前者正是 B 收录时要用的那一格（`depsection.manuscript_proof_no` 读它）。
 
-    ## `kind`（2026-11-07，玩具例子）
+    ## `kind`（玩具例子）
     这一条命题的种类标签（`theorem` / `lemma` / `proposition` / `corollary` /
     `conjecture` / `example`）。给了就写一行 `- 证据种类：<kind>` —— 与 F 的手稿
     同一个头标记（`proofregistry.KIND_MARK`），B 收录时按它落 `statements.kind`
@@ -698,10 +698,10 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
 def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     """把 E 的证明手稿写进 `reports/e-proof-<E稿号>.md`，读回来记下事实。
 
-    ## 稿号（2026-11-11 业主裁定 ① 推到 E：「你也再盯一下E侧稿的形状」）
+    ## 稿号
 
-    改前 E 的稿名由实验号拼（`reports/e-proof-<实验号>.md`）—— 与 B 侧
-    `b-proof-<命题号>` 是同一种耦合。现在 E 的稿号由
+    E 的稿名不再由实验号拼（`reports/e-proof-<实验号>.md` 与 B 侧
+    `b-proof-<命题号>` 是同一种耦合）。现在 E 的稿号由
     `manuscriptids.next_manuscript_id(root, family="e-proof")` 发（`counters.emanuscript`
     一条独立号段），稿名只回答"这是第几份 E 证明稿"。稿与实验的对应关系记在稿头
     那一行 `- 实验号：exp:<号>`：同一条实验重落时靠 :func:`find_manuscript_relpath`
