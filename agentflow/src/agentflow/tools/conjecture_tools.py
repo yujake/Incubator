@@ -1,19 +1,18 @@
 """猜想台账的产出面（依据 `draft/29` §7.4/§7.5 的状态机、`draft/30` §T1 的数据面）。
+
 ## 为什么需要这个模块（T1 留下的那一格）
-`conjectures` 表、`CONJECTURE_STATUSES` 词表、以及"跨对象不变量"（`verify.verify_all`的 
-`dangling_experiment` / `refuted_without_counterexample` / 
-`proved_without_formal_proof` …）在 T1 就落了地，而没有任何角色代码写得出这一行 —— T1 的条目逐字写着"提出 / 检验 / 否证
-/ 升格这些语义动作在 T3 接线"。于是验收 P7 的第 4 张表（猜想表：提出→检验→支持/否证/升格）没有任何数据可渲染。
-本模块把那半件事接上：一个动作，两个语义（新建 / 更新）。
+`conjectures` 表、`CONJECTURE_STATUSES` 词表与"跨对象不变量"（`verify.verify_all` 的
+`dangling_experiment` / `refuted_without_counterexample` / `proved_without_formal_proof`）
+在 T1 就落了地，却没有任何角色代码写得出这一行 —— 语义动作（提出 / 检验 / 否证 / 升格）
+被留给了后面某一批接线，于是验收 P7 的第 4 张表没有任何数据可渲染。本模块把那半件事
+接上：一个动作，两个语义（新建 / 更新）。
+
 ## 为什么只有一个动作而不是"propose + assess"两个
-两个动作会让"第一次写"和"以后改"走两条代码路径，而这两条路径要维护同一组单行内判据（`schema.Conjecture.validate` 的九条）。合成一个"登记/
-更新"动作之后：
-- 判据只有一份：无论新建还是更新，最后都过 `S.Conjecture(...).validate()`；- 状态机的"从哪到哪"不需要在这一层再写一遍 —— 
-`validate()` 已经把"每条状态必须带什么"写死了（`refuted` 必须有反例实验、`proved` 必须有形式化证明…），跨对象那一半在 
-`verify.verify_all`。
-## 三态
-`conjecture_id` 省略 ⇒ 新建（编号由 `store.alloc_id("conjecture")` 分配）；给了它而库里没有这一行 ⇒ 抛（不许把"更新一
-条不存在的猜想"静默变成新建 ——那会让一次笔误产生一条重复的猜想，而两条都看起来正常）。
+两个动作会让"第一次写"和"以后改"走两条代码路径，而两条路径要维护同一组单行内判据
+（`schema.Conjecture.validate` 的九条）。合成一个"登记/更新"动作后判据只有一份，状态机
+的"从哪到哪"也不必在这一层再写一遍（`validate()` 已写死"每条状态必须带什么"），跨对象
+那一半在 `verify.verify_all`。三态（`None` = 没提这件事）见
+`register_conjecture` 的 docstring。
 """
 
 from __future__ import annotations
@@ -180,9 +179,8 @@ def register_conjecture(
                 kind="dangling_lit", conjecture_id=cid, lit_id=row_obj.known_lit_id,
             )
         data = row_obj.to_dict()
-        # D13 的读数：这一次是"命中既有行"还是"真的新建"，以及命中的是哪一条。
-        # 为什么不只写进 detail 那句话：调用方（D/M）要能机械地看到
-        # "我这次的登记没有产生新行"，那才是"重复登记"这个病被治好的证据。
+        # D13 的读数：这一次是"命中既有行"还是"真的新建"，命中的是哪一条。调用方（D/M）
+        # 要能机械地看到"我这次的登记没有产生新行"，那才是"重复登记"这个病被治好的证据。
         data["duplicate"] = bool(dup_of)
         if dup_of:
             data["duplicate_of"] = dup_of
@@ -218,13 +216,12 @@ def _guard_result(fn: Any) -> Any:
 
 
 #: 本模块的工具函数：声明随函数走（`@tool` 把 `ToolSpec` 挂在 `fn.__tool_spec__` 上），
-#: `register` 只做装配（`draft/36` 的 `T-8`）。与 `fs_tools` / `table_tools` 同一条路子。
+#: `register` 只做装配（`draft/36` 的 `T-8`）。
 #:
-#: 为什么声明不放进"名字 ⇒ 字段"的 dict 表：lint `R010` 是按 `@tool(...)` 装饰器
-#: 或 `ToolSpec(name=<字面量>, …)` 读声明的（`scripts/lint_rules.py::_r010_specs`），
-#: 表格化成 `ToolSpec(name=变量, …)` 会让它"看不到这条工具"——而它守的正是
-#: "声明的 `external` 与 handler 链里实际的出网/起进程是否相符"。所以声明留在
-#: 能静态读到的位置，抽出去的是装配这一步。
+#: 声明不放进"名字 ⇒ 字段"的 dict 表：lint `R010` 按 `@tool(...)` 装饰器或
+#: `ToolSpec(name=<字面量>, …)` 读声明，表格化成变量名会让它"看不到这条工具"—— 而它守的
+#: 正是"声明的 `external` 与 handler 链里实际的出网/起进程是否相符"。声明留在能静态读到
+#: 的位置，抽出去的是装配这一步。
 @tool(
     "conjecture.register_conjecture",
     "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。"
