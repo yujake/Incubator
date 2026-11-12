@@ -494,9 +494,12 @@ def check_citations(
     unpinned_docs: list[str] = []
     resolved = 0
     for i, c in enumerate(claims, 1):
-        cid = str((c or {}).get("claim_id") or f"claim-{i}")
-        for raw in (c or {}).get("citations") or []:
-            kind, ref = citation_ref_parts(raw)
+        c = c or {}
+        cid = str(c.get("claim_id") or f"claim-{i}")
+        for raw in c.get("citations") or []:
+            # 一条引用的字符串形态与（前缀, 代号）只算一次：下面每一支都要用它们。
+            raw_s = str(raw)
+            kind, ref = citation_ref_parts(raw_s)
             table = _CITATION_TABLES.get(kind)
             if table is None:
                 # 未知前缀：`verify` 对历史数据记 warning，但新写的稿件没有
@@ -508,19 +511,19 @@ def check_citations(
                 # `stmt:0004` 就立刻合法（表由前缀定，不由顺序试）。
                 # 两种情形在读数上必须分得开，否则调用方会去改一个没错的前缀词表。
                 why = (
-                    (f"{str(raw)!r} 是裸号、没有 kind ⇒ 无法定表（`citations` 是混合列表，"
-                     f"元素自己不说属于哪张表）⇒ 写成带前缀的形态，例如 `stmt:{str(raw)}`"
-                     f"（引我们自己的命题）或 `lit:{str(raw)}`（引一篇文献）；"
+                    (f"{raw_s!r} 是裸号、没有 kind ⇒ 无法定表（`citations` 是混合列表，"
+                     f"元素自己不说属于哪张表）⇒ 写成带前缀的形态，例如 `stmt:{raw_s}`"
+                     f"（引我们自己的命题）或 `lit:{raw_s}`（引一篇文献）；"
                      f"可选前缀：{sorted(_CITATION_TABLES)}"
                      f"（注意 `doc:` 是三段式：`doc:<稿件>#<断言>@<内容哈希前 16 位>`）")
-                    if _CITATION_BARE_NUMBER.match(str(raw).strip())
+                    if _CITATION_BARE_NUMBER.match(raw_s.strip())
                     else (f"前缀 {kind!r} 无法识别（应为 {sorted(_CITATION_TABLES)}）"
                           "⇒ 无法核对存在性")
                 )
                 missing.append(
                     {
                         "claim_id": cid,
-                        "citation": str(raw),
+                        "citation": raw_s,
                         "kind": kind,
                         "ref": ref,
                         "why": why,
@@ -533,7 +536,7 @@ def check_citations(
                     missing.append(
                         {
                             "claim_id": cid,
-                            "citation": str(raw),
+                            "citation": raw_s,
                             "kind": kind,
                             "ref": ref,
                             "why": (
@@ -551,12 +554,12 @@ def check_citations(
                     continue
                 # 内部引用分两档：三段式引某条断言、两段式引我方那份手稿的整体成果。
                 # 通用检查只看得到第一段 ⇒ 单独一支（`_doc_citation_problem`）。
-                problem = _doc_citation_problem(str(raw), rows_of)
+                problem = _doc_citation_problem(raw_s, rows_of)
                 if problem:
                     missing.append(
                         {
                             "claim_id": cid,
-                            "citation": str(raw),
+                            "citation": raw_s,
                             "kind": kind,
                             "ref": ref,
                             "why": problem,
@@ -566,11 +569,11 @@ def check_citations(
                     resolved += 1
                     from .. import signatures as SIG
 
-                    reading = SIG.doc_ref_reading(str(raw))
+                    reading = SIG.doc_ref_reading(raw_s)
                     if reading.get("whole"):
-                        whole_docs.append(str(raw))
+                        whole_docs.append(raw_s)
                         if not reading.get("pinned"):
-                            unpinned_docs.append(str(raw))
+                            unpinned_docs.append(raw_s)
                 continue
             if table not in id_sets:
                 field = str(S.TABLES[table]["id_field"])
@@ -581,7 +584,7 @@ def check_citations(
                 missing.append(
                     {
                         "claim_id": cid,
-                        "citation": str(raw),
+                        "citation": raw_s,
                         "kind": kind,
                         "ref": ref,
                         "why": f"{table} 表里没有 {S.TABLES[table]['id_field']}={ref!r}",
