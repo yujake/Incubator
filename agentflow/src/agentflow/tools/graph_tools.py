@@ -1,22 +1,28 @@
 """图索引与查询：把"关系表"变成一张可反复查询的概念图（纯读）。
-既然分析主体是程序，那第一件要做对的事就是把遍历集中到一处：如果每条查询各自去扫一遍 `relations`，那么
-因此 `RelationGraph` 采用 一次构建、多次查询：构造时把`concept_relations` / `adjacency` / `group_counts` 全部建好，之后所有查询都是字典查找 + 小列表排序，恒定且确定。
-图模型（严格照 DESIGN-TOOLS.md §3.2）- 节点 = 概念（`concept_id`）；实现上按两两展开：`concept_ids=[A,B,C]` 的关系会产生 3 条两两边（A-B、A-C、B-C），三条边共享同一个
-relation_id。
-为什么 `paths` 必须有界（这不是"优化"，是正确性问题）
-- `max_len`：最多几跳；- `max_paths`：最多收集几条；- `node_budget`：最多展开多少个节点（搜索预算）。
-触及任何一道闸都要如实回报 `truncated=True` 并说明原因。所以 `paths()` 返回的是 `PathSearchResult` —— 它是 `list`的子类（因此仍然是 `list[list[str]]`，签名不变），额外
-带 `truncated` /`reasons` / `budget_used`。
-所有列表返回前都排序：邻居按 `concept_id` 升序、关系按`relation_sort_key`（§3.3(4) 的确定性序）。同分一律以 `relation_id` 兜底，保证同输入同输出 —— 否则同一份数据每次跑出来的报告都不一
-样，D 无法引用。
-1. 四个 handler 的 `StoreError` 会逃出工具层`graph.build` / `graph.stats` / `graph.neighbors` / `graph.relations_between`此前只有"成功"一条
-路：`store.rows` 的 `StoreError`（表不是合法 JSON / 锁超时 /编号用尽）直接逃出，被 `tools/base.py` 兜成 `kind="unexpected"`。那是环境故障，不是"未预期的异常" —— 调用
-方看到 `unexpected` 就无法区分"重试可能成功"与"表坏了，重试一百次也一样"。现在四个 handler 都过 `attack_tools._guard`（守卫只有一份实现，本模块 import 它，不另写）。
-2. `graph.neighbors` 的返回曾经不可截断上下文预算的剪枝只按字符长度剪字符串，对"很多个短 dict"完全无效（实测 3000 个邻居剪枝后一条都没少），而它又不像 `paths()` / `neighborhood()` 
-那样带 `truncated`。现在它有 `max_neighbors`（默认 :data:`MAX_NEIGHBORS_DEFAULT`）并在截断时返回 `truncated=True` + `reasons`。判据只有一份（:func:
-`bounded_neighbors`）。
-`RelationGraph.neighbors()`（裸 list）刻意不改：`agent_c.gaps` 的`set(g.neighbors(...)) & ...` 与 `trace_tools` 都按 `list` 用它，改返回类型会静
-默破坏那些调用点。有界那一层加在 `neighbors_bounded()` 与工具层上（见两处 docstring）。
+
+遍历集中在 `RelationGraph`：一次构建、多次查询 —— 构造时把 `concept_relations` /
+`adjacency` / `group_counts` 建好，之后所有查询都是字典查找 + 小列表排序，恒定且确定。
+若每条查询各自扫一遍 `relations`，同一份图会被反复算。
+
+图模型（严格照 DESIGN-TOOLS.md §3.2）：节点 = 概念（`concept_id`）；实现上按两两展开：
+`concept_ids=[A,B,C]` 的关系产生 3 条两两边（A-B、A-C、B-C），三条边共享同一个
+`relation_id`。
+
+## 为什么 `paths` 必须有界（这不是"优化"，是正确性问题）
+`max_len`（最多几跳）/ `max_paths`（最多收集几条）/ `node_budget`（最多展开多少个节点）
+是三道闸，触及任何一道都要如实回报 `truncated=True` 并说明原因。所以 `paths()` 返回
+`PathSearchResult` —— `list` 的子类（仍是 `list[list[str]]`，签名不变），额外带
+`truncated` / `reasons` / `budget_used`。
+
+所有列表返回前都排序：邻居按 `concept_id` 升序、关系按 `relation_sort_key`（§3.3(4)
+的确定性序），同分以 `relation_id` 兜底 —— 同输入同输出，否则报告每次都不一样，D 无法
+引用。
+
+两条防线各自的"为什么"写在落点上：handler 的 `StoreError` 由 `attack_tools._guard`
+统一兜（唯一实现，本模块 import 它，不另写）；`graph.neighbors` 的条数上限见
+:data:`MAX_NEIGHBORS_DEFAULT`。`RelationGraph.neighbors()`（裸 list）刻意不改：
+`agent_c.gaps` 的 `set(g.neighbors(...)) & ...` 与 `trace_tools` 都按 `list` 用它，
+改返回类型会静默破坏那些调用点；有界那一层加在 `neighbors_bounded()` 与工具层上。
 """
 
 from __future__ import annotations
@@ -44,14 +50,11 @@ __all__ = [
 
 
 #: `graph.neighbors` 返回的邻居条数上限（结果封装/剪枝的那道闸）。
-#: 为什么必须有一个数（FC-17 的上下文预算在这个工具上曾经完全失效）：
-#: `contextbudget.prune_tool_result` 只按字符长度剪 `data` 里的字符串，而 `graph.neighbors` 的返回是
-#: "很多个很短的 dict" —— 实测 3000 个邻居 = 265960 字符的 JSON，剪枝后 `pruned=False`、条数一条都没少。
-#: 于是"结果太大"这条防线在它上面不生效，而它又不像 `paths()` / `neighborhood()` 那样带 `truncated`
-#: ⇒ 调用方会把"我只拿到前 N 个"读成"它就只有这些邻居"。
-#: 200 的来由：正常概念图里一个概念的邻居数是几个到几十个（概念是"概念组"，不是词项），200 已覆盖远超
-#: 常规的稠密情形、同时把最坏返回量钉在数十 KB 量级。要更多邻居的调用方应当用 `graph.svc_neighbors`
-#: （`AgentC.neighbors`，带 `depth`/`max_nodes` 与三态）按需展开，而不是让一次低层查询把整张邻接表拖出来。
+#: 为什么必须有一个数：`contextbudget.prune_tool_result` 只按字符长度剪字符串，而这里
+#: 的返回是"很多个很短的 dict"（实测 3000 个邻居 = 265960 字符，剪枝后一条都没少）——
+#: 于是"结果太大"这条防线在它上面失效。200 覆盖远超常规的稠密情形（概念是"概念组"，
+#: 邻居通常几个到几十个），又把最坏返回量钉在数十 KB；要更多邻居请用
+#: `graph.svc_neighbors`（带 `depth` / `max_nodes` 与三态）按需展开。
 MAX_NEIGHBORS_DEFAULT = 200
 
 
@@ -236,11 +239,10 @@ class RelationGraph:
         #: concept_group_key -> 出现次数（有多少条关系用了这个概念组）
         self.group_counts: dict[str, int] = {}
 
-        # 为什么 concept_relations 要把 rejected 也算进来：
-        # "度数/连接数"描述的是关系表里实际存在多少条记录，不是"多少条可信记录"。
-        # 可信度由 status / quote_verified 另行表达（cold 的弱连接判据就要用它们）。
-        # 如果这里悄悄过滤掉 rejected，那么"某概念的全部关系都被判重拒绝"这一
-        # 重要事实会表现为"该概念没有关系"，恰恰是最该被看见的情况被藏起来。
+        # 为什么把 rejected 也算进来："度数/连接数"描述关系表里实际存在多少条记录，
+        # 不是"多少条可信记录"（可信度由 status / quote_verified 另行表达）。过滤掉
+        # rejected 会让"某概念的全部关系都被判重拒绝"表现为"该概念没有关系" —— 最该
+        # 被看见的情况反而被藏起来。
         for r in self.relations:
             rid = str(r.get("relation_id") or "")
             cids = [str(c) for c in (r.get("concept_ids") or []) if c]
@@ -737,10 +739,9 @@ def _coerce_holder(graph: Any, store: Any) -> _GraphHolder:
     },
     side_effect="read",
     roles=("C", "D"),
-    # `returns=` 必须逐个列全，不许写 `...`：`tests` 逐字解析这个字符串
-    # 去和实际返回的键集合比对（`test_graph_returns_declaration_matches_
-    # implementation`）。写 `...` 就等于把"还有什么"交给读的人猜，
-    # 而"声明与实现一致"这条判据必须机械可判（4.3#9：返回结构要有契约测试）。
+    # `returns=` 必须逐个列全，不许写 `...`：`tests` 逐字解析这个字符串与实际键集比对
+    # （`test_graph_returns_declaration_matches_implementation`）。写"还有什么"交给读的
+    # 人猜，"声明与实现一致"就不再机械可判（4.3#9：返回结构要有契约测试）。
     returns=(
         "{'built_from','concept_count','relation_count','literature_count','pair_count',"
         "'group_count','isolated_concepts','isolated_count','degree_top','status_counts',"
@@ -809,11 +810,9 @@ def graph_stats(holder, top_n: int = 10) -> ToolResult:
     },
     side_effect="read",
     roles=("C", "D"),
-    # 这里刻意没有 `checked`：低层 `graph.neighbors` 与
-    # `graph.svc_neighbors`（`AgentC.neighbors` 的三态服务版）是两种契约，
-    # 由 `tests/test_core_audit_abc_cli.py::test_service_tool_names_resolve_the_
-    # documented_collision` 钉住。有界/截断是三态之外的另一件事：
-    # 它说的是"这一份结果完整不完整"，不是"这次到底查没查"。
+    # 这里刻意没有 `checked`：低层 `graph.neighbors` 与 `graph.svc_neighbors` 是两种
+    # 契约（`tests/test_core_audit_abc_cli.py` 钉住）。有界/截断说的是"这份结果完整不
+    # 完整"，不是"这次到底查没查" —— 后者是三态的事。
     returns=(
         "{'concept_id','name','degree','total_neighbors','returned_neighbors',"
         "'truncated','reasons','neighbors':[{'concept_id','name','relation_count','relation_ids'}]}"
@@ -823,11 +822,9 @@ def graph_neighbors(holder, concept_id: str, max_neighbors: int | None = None) -
     def _neighbors() -> dict:
         g = holder.get()
         if concept_id not in g.adjacency:
-            # "这个概念不存在"是业务上的失败，不是异常 —— 它必须保持原来的
-            # 形态：`ok=False` + `known_concepts`（可操作提示，调用方据此改参数），
-            # 而不是被包成某个 `kind`（改动前实测：meta 里没有 kind）。
-            # 所以用哨兵异常把它送出 `_guard`，出来之后再翻回那个形状 ——
-            # `_guard` 会把任何返回值包成 `ok(...)`，"提前返回失败"只能经异常。
+            # "这个概念不存在"是业务失败，不是异常：必须保持 `ok=False` +
+            # `known_concepts`（可操作提示）的形状，不包成某个 `kind`。`_guard` 会把返回
+            # 值包成 `ok(...)`，所以"提前返回失败"只能经哨兵异常送出、出来再翻回这个形状。
             raise _UnknownConceptError(concept_id, sorted(g.adjacency)[:50]) from None
         # 有界 + 截断留痕的判据只有一份：`RelationGraph.neighbors_bounded`
         # → `bounded_neighbors`。这里不自己切片（那会是第二份实现）。
