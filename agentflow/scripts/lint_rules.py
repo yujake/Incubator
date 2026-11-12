@@ -1,19 +1,27 @@
 """`agentflow` 的机械可查规则（linter）。
+
 ## 为什么要有它
-`DEVELOPMENT.md` 里的规范分两类：能被机器判定的与只能靠人判的。只有前者值得写成规则；把后者也塞进来，结果是一堆"看起来在检查、实际靠人读"的条目，而它们会训练人忽略输出（这正是本项目反复吃过的亏：
-假报警比不校验更糟）。
-所以本文件的每一条规则都满足三个条件：
+
+`DEVELOPMENT.md` 里的规范分两类：能被机器判定的与只能靠人判的。只有前者值得写成规则；把后者
+也塞进来，结果是一堆"看起来在检查、实际靠人读"的条目，而它们会训练人忽略输出（假报警比不校验
+更糟）。所以本文件的每一条规则都满足三个条件：
+
 1. 可判定 —— 输入是源码文本，输出是"命中/未命中"，不需要理解语义；
 2. 给出行号与上下文 —— 命中不等于缺陷，交付的是线索；
 3. 分级 —— `error`（确定是违规）/ `warning`（很可能是）/ `info`（只是数字）。
+
 ## 与 `tests/` 的分工
-linter 管全仓库的形态（"有没有第二份名单"、"有没有静默失败"），测试管行为。两者不重叠：linter 不做断言，测试不做全仓扫描。所以 linter 的命中不阻塞测试，它只在
-`scripts/release_check.py` 里参与判定。
+
+linter 管全仓库的形态（"有没有第二份名单"、"有没有静默失败"），测试管行为。两者不重叠：linter
+不做断言，测试不做全仓扫描。所以 linter 的命中不阻塞测试，它只在 `scripts/release_check.py`
+里参与判定。
+
 ## 退出码
-`0` = 无 error（且非严格档）；`1` = 有 error，或 `--strict` 档下仍有 warning；`2` = linter 自己没跑成（读不到源码树）。`warning` 只在
-`--strict` 档升级成失败 ——把"很可能是违规"与"确定违规"分开，是为了不让日常档的退出码失去信息量。
-退出码是刻意的。参考体例（`draft/17-…md` §6）记录了一套成熟项目的教训："多数脚本不设退出码，于是『未报错』被误读为『无问题』"。
-"""
+
+`0` = 无 error（且非严格档）；`1` = 有 error，或 `--strict` 档下仍有 warning；`2` = linter
+自己没跑成（读不到源码树）。`warning` 只在 `--strict` 档升级成失败 —— 把"很可能是违规"与
+"确定违规"分开，是为了不让日常档的退出码失去信息量。退出码是刻意的：多数脚本不设退出码，于是
+『未报错』被误读为『无问题』。"""
 
 from __future__ import annotations
 
@@ -138,15 +146,12 @@ def _explained(lines: Sequence[str], i: int, j: int) -> str:
 def rule_R001_bare_except_pass(root: Path) -> list[Finding]:
     """没有解释的 `except ...: pass` —— 静默吞掉异常。
 
-    判定：`except` 行之后紧接着只有 `pass`（允许中间有空行与注释），
-    且从 `except` 到 `pass` 之间没有任何解释性注释。
+    判定：`except` 行之后紧接着只有 `pass`（允许中间有空行与注释），且从 `except` 到 `pass` 之间
+    没有任何解释性注释。
 
-    这条规则本身经历过一次校准：第一版把所有 `except: pass` 都报成 error，
-    在真实代码上产生 29 个 error，其中 22 个是故意且带注释的设计决定
-    （"日志钩子坏了不该打断实验/攻坚/写稿/审校"）。那会让这条门在第一次运行时就
-    失去可信度。现在只有没解释的才算违规 —— 这与本项目的通用纪律一致：
-    闸门必须在真实样本上量过假阳性率才能上。
-    """
+    为什么不是"所有 `except: pass` 都报 error"：那样在真实代码上产生 29 个 error，其中 22 个是
+    故意且带注释的设计决定（"日志钩子坏了不该打断实验/攻坚/写稿/审校"），会让这条门在第一次运行时
+    就失去可信度。现在只有没解释的才算违规 —— 闸门必须在真实样本上量过假阳性率才能上。"""
     out: list[Finding] = []
     pat = re.compile(r"^\s*except\b")
     for p in _iter_py(root, SRC_REL):
@@ -171,15 +176,21 @@ def rule_R001_bare_except_pass(root: Path) -> list[Finding]:
 def rule_R002_none_folds_to_empty(root: Path) -> list[Finding]:
     """`if <x> is None:` 之后两行内 `return []` / `return {}` —— 把"没做"折叠成"没有"。
 
-    这是本项目最贵的那个缺陷形态（`DESIGN-INTERACTIONS.md` §3.4）。允许例外：分支里同时出现 `checked`/`reason`/`raise` 的（说明它显式表达了"没做"）。一次校准：
-    带伴生原因的返回不算折叠：真实假阳性：`tools/search_tools._literature_rows` 写
-    成```python if ctx.store is None: return [], "未配置 store（不是表坏了）"try: return ctx.store.rows("literature"), None except Exception as exc: return [], f"读 literature 表失败：{type(exc).__name__}: {exc}"```这不是折叠 —— 它恰恰是三态纪律的正确形态：空容器 + 一个受控的 reason，"读到了 / 读了但表坏了 / 根本没配 store"三者分得开（该函数的 docstring 逐字解释了这件事）。旧的例外判据靠关键词（`r
-    eason`/`checked`）匹配，这个函数用的是中文理由字符串，于是被判为违规。校准后判据加上结构一条：`return
-    []`/`{}` 后面跟着逗号（即返回的是一个 ≥2 元组）⇒ 它在带回一个伴生值 ⇒ 不算折叠。为什么结构判据比关键词更可靠：关键词列表永远列不全（中文/英文/别的字段名），而"有没有带回第二个东西"是写法本身，与命名无关。注释出口（`L
-    INT-02` / `draft/52` F9：与 R001 对齐）：本规则的消息此前让用户"如果不是（例如'空输入理应得空输出'），请在紧邻的注释里写明理由"——而判据里没有注释豁免分支，那句话是一个代码里不存在的出口（`d
-    raft/43-D` §1.4④）。现在补上 `_explained` 出口（与 R001 同一套门槛：≥4 个非空白字符），让消息兑现；同时消息里点名"本规则判的是形态，注释出口只对'确实不是折叠'那一类生效"。⇒ 这不是放宽判据：没有解释的折叠照旧报 warning；有解释的那些，与 R001 走同一个 `_
-    explained` 判据（一处实现，两处引用）。
-    """
+    这是本项目最贵的那个缺陷形态。允许例外：分支里同时出现 `checked` / `reason` / `raise` 的
+    （说明它显式表达了"没做"）。
+
+    带伴生原因的返回不算折叠：例如 `if ctx.store is None: return [], "未配置 store"` 不是折叠 ——
+    它恰恰是三态纪律的正确形态：空容器 + 一个受控的 reason，"读到了 / 读了但表坏了 / 根本没配
+    store"三者分得开。旧例外判据靠关键词（`reason` / `checked`）匹配，而中文理由字符串会被判违规。
+    所以判据加上结构一条：`return []` / `{}` 后面跟着逗号（即返回的是一个 ≥2 元组）⇒ 它在带回一个
+    伴生值 ⇒ 不算折叠。为什么结构判据比关键词更可靠：关键词列表永远列不全（中文/英文/别的字段名），
+    而"有没有带回第二个东西"是写法本身，与命名无关。
+
+    注释出口（与 R001 对齐）：消息让用户「如果不是（例如'空输入理应得空输出'），请在紧邻的注释里
+    写明理由」—— 判据里必须有对应的注释豁免分支，否则那句话是一个代码里不存在的出口。这里补上
+    `_explained` 出口（与 R001 同一套门槛：≥4 个非空白字符），让消息兑现。这不是放宽判据：没有
+    解释的折叠照旧报 warning；有解释的那些，与 R001 走同一个 `_explained` 判据（一处实现，两处
+    引用）。"""
     out: list[Finding] = []
     pat = re.compile(r"^\s*if\s+.*\bis\s+None\s*:")
     for p in _iter_py(root, SRC_REL):
@@ -201,7 +212,7 @@ def rule_R002_none_folds_to_empty(root: Path) -> list[Finding]:
             m = re.search(r"return\s+(?:\[\]|\{\})\s*,\s*([^\n,]*)", window)
             if m and m.group(1).strip() and m.group(1).strip() != "None":
                 continue
-            # 注释出口（`LINT-02`）：与 R001 共用 `_explained`（≥4 个非空白字符）。
+            # 注释出口：与 R001 共用 `_explained`（≥4 个非空白字符）。
             if _explained(lines, i, i + 3):
                 continue
             out.append(Finding(
@@ -331,32 +342,30 @@ def rule_R003_duplicate_public_defs(root: Path) -> list[Finding]:
 
 
 def rule_R004_registry_outside_tools(root: Path) -> list[Finding]:
-    """在工具层之外直接构造 `ToolRegistry` —— 绕过装配期的角色校验。已退休（`P-1`，本函数不再产生 findings）：
-    这条规则的存在理由只有一条：`build_registry` 之外构造的注册表没有核过`roles ⊆ schema.ROLES`（`agent_d.install_d_tools` 因此静默少过 3
-    个工具，`agent_e` / `agent_f` 的装配路径也一直带着这个缺口）。`P-1` 把判据下沉到`ToolRegistry.register*` 之后，"构造一张没核过角色的注册表"在结构上不可能
-    ——判据跑在注册那一刻，覆盖所有入口。于是这条规则的判据面变成真空：它还能报的每一处都已经是合规代码。与其让它继续以 warning 的形式报"已知的、
-    被接受的缺口"（`agent_e.py` /`agent_f.py` 那两条），不如按 `R006` 的既有形态退休、不删号：编号保留（删号会让历史报告里的 "R004" 变成悬空引用），
-    退休记录见`RETIRED_RULES`，`DEVELOPMENT.md` §6 的规则表同步。为什么"返回空列表"而不是删掉函数：见 `R006` 的同一条理由 ——删函数会连带改 `RULES` 的编号。
-    历史判据（保留在下面这段描述里，供读旧报告的人对照）：命中判据曾经是：某个非脚手架函数的函数体里出现了 `ToolRegistry(...)` 调用，且同一函数体里既没有调
-    `REGISTRY_BUILDERS`（`build_registry`/`build_for_role`）也没有调 `ROLE_VALIDATOR_CALLS` 里登记的校验器，也不在
-    `R004_ALLOWED_SITES`的逐点例外里。四次校准（豁免脚手架 / 改 AST 匹配 / 豁免整条函数链 /豁免正规装配入口）的过程留在 git 历史里；
-    四次校准的共同教训正是"这类规则只能在判据没有更好的落点时存在"—— 而 `P-1` 给了它一个更好的落点。
-    """
-    # 不产生 findings 是刻意的：判据面已由注册期校验承担（`P-1`，见 docstring）。
+    """在工具层之外直接构造 `ToolRegistry` —— 绕过装配期的角色校验。已退休（本函数不再产生 findings）。
+
+    这条规则的存在理由只有一条：`build_registry` 之外构造的注册表没有核过 `roles ⊆ schema.ROLES`
+    （`agent_d.install_d_tools` 因此静默少过 3 个工具，`agent_e` / `agent_f` 的装配路径也一直带
+    着这个缺口）。判据下沉到 `ToolRegistry.register*` 之后，"构造一张没核过角色的注册表"在结构上
+    不可能 —— 判据跑在注册那一刻，覆盖所有入口。于是这条规则的判据面变成真空：它还能报的每一处
+    都已经是合规代码。与其让它继续以 warning 的形式报"已知的、被接受的缺口"，不如退休、不删号：
+    编号保留（删号会让历史报告里的 "R004" 变成悬空引用），退休记录见 `RETIRED_RULES`，
+    `DEVELOPMENT.md` §6 的规则表同步。为什么"返回空列表"而不是删掉函数：见 `R006` 的同一条理由
+    —— 删函数会连带改 `RULES` 的编号。"""
+    # 不产生 findings 是刻意的：判据面已由注册期校验承担（见 docstring）。
     return []
 
 
 def rule_R005_hardcoded_role_list(root: Path) -> list[Finding]:
     """写死完整角色名单的第二份副本（FC-03）。
 
-    ## 判据的校准（这条规则被改过一次）
+    判据：字面量里出现 ≥6 个不同角色字母（即它是在试图枚举"全部角色"）。子集声明（≤4）不报。
 
-    第一版的判据是"一行里出现 ≥4 个角色字母的字面量"，在真实代码上命中`cli.py`、`attack_tools.py`、`doc_tools.py` 等 6 处 —— 而它们全都是合法的：工具模块各自声明
-    `_ROLES = ("E","F","G")` 是刻意的（"哪几个角色该拿到本模块的工具"是模块级知识，不该集中到 schema）。把它们报成"第二份名单"是假报警。真正的缺陷形态是
-    `cli.cmd_tools` 里那种枚举全部角色的写法：`roles=("A","B","C","D")` —— 它看起来在"列出所有角色"，而实际上漏掉了 E–H，于是命令一边说"工具总数 55"、一边只列 4 个角色。
-
-    所以判据收紧为：字面量里出现 ≥6 个不同角色字母（即它是在试图枚举"全部角色"）。子集声明（≤4）不报。
-    """
+    为什么不是"一行里出现 ≥4 个角色字母"：那样会命中 `cli.py`、`attack_tools.py`、
+    `doc_tools.py` 等 6 处，而它们全都是合法的 —— 工具模块各自声明 `_ROLES = ("E","F","G")`
+    是刻意的（"哪几个角色该拿到本模块的工具"是模块级知识，不该集中到 schema）。真正的缺陷形态是
+    `cli.cmd_tools` 里那种枚举全部角色的写法：`roles=("A","B","C","D")` —— 它看起来在"列出所有
+    角色"，而实际上漏掉了 E–H，于是命令一边说"工具总数 55"、一边只列 4 个角色。"""
     out: list[Finding] = []
     pat = re.compile(r"""['"]([A-H])['"](\s*,\s*['"]([A-H])['"]){5,}""")
     for p in _iter_py(root, SRC_REL):
@@ -376,17 +385,18 @@ def rule_R005_hardcoded_role_list(root: Path) -> list[Finding]:
 
 
 def rule_R006_read_tool_touches_network(root: Path) -> list[Finding]:
-    """`side_effect="read"` 的文件里出现网络/子进程/模型下载调用。这条规则的校准（被改过一次）：第一版是逐行报 warning，在真实代码上产生 19 条 warning，散落在`search_tools` /
-    `ocr_tools` / `verify_tools` / `table_tools` / `agent_c` 里。问题在于判据是文件级共现：一个文件里只要既有 `side_effect="read"` 又有`subprocess`（哪怕那个
-    `read` 工具跟网络毫无关系），就会命中。19 条 warning 里绝大多数是这种无关共现 —— 而噪音会让整条规则被忽略。所以改成每个文件一条、级别 `info`：它交付的是"去这个文件里核一下具体那个工具"这个指针，而不是一个缺陷判定。
-    真正的缺陷判定由人看过之后写进`DEVELOPMENT.md` 的清单，或者由工具层自己的测试断言（`test_tools_search_ocr.py`里对 `search.providers` 的 `side_effect` 断言就是那种形态）。
-    为什么还留着它：INVENTORY 里 `search.providers`（声明 read 却发 HTTP）与`ocr.run`（声明 read 却下 100MB 模型）正是这样被发现的 —— 一个指向"值得看一眼的地方"的指针有真实价值，
-    只要它不冒充缺陷。已退休（`G-14`，本函数不再产生 findings）：它交付的是"去这个文件里核一下具体那个工具"这个指针，而 R010 已经把同一件事逐工具做了（沿 handler 链做 AST 解析，点名到工具）。同一件事留两份的结果是：
-    文件级那份在最该抓的文件上给不出是哪一个工具（一个文件里 55 个工具），而它的 info 行还会与 R010 的结论混在一起。所以 R006 停报，编号保留（删号会让历史报告里的 "R006" 变成悬空引用），退休记录见
-    `RETIRED_RULES`。退休时的口径缺口（`R7-R6-1`，已补）：退休声明写的是"判据移入 R010"，但 R010 此前只有两条子规则："非 exec 而起子进程"（R010-a）与"声明 egress 而看不到网络"（R010-b）。
-    于是 R006 问的那个方向 —— `side_effect="read"` / `external="none"` 的工具实际联网 —— 在门里没有任何判据看得见（实测：人造树上改前的 R006 报 1 条、而 R010 报 0 条）。
-    那正是"门被悄悄改松"的形态：退休声明说判据还在，其实少了半边。现在由 R010-c 接住（同一个函数、同一张 `_R010_NETWORK_MARKERS`、逐工具点名）。
-    """
+    """`side_effect="read"` 的文件里出现网络/子进程/模型下载调用。已退休（本函数不再产生 findings）。
+
+    这条规则交付的是"去这个文件里核一下具体那个工具"这个指针，而 R010 已经把同一件事逐工具做了
+    （沿 handler 链做 AST 解析，点名到工具）。同一件事留两份的结果是：文件级那份在最该抓的文件上
+    给不出是哪一个工具（一个文件里 55 个工具），而它的 info 行还会与 R010 的结论混在一起。所以
+    R006 停报，编号保留（删号会让历史报告里的 "R006" 变成悬空引用），退休记录见 `RETIRED_RULES`。
+
+    退休时的口径缺口（已补）：退休声明写的是"判据移入 R010"，但 R010 当时只有"非 exec 而起子
+    进程"（R010-a）与"声明 egress 而看不到网络"（R010-b）。于是 R006 问的那个方向 ——
+    `side_effect="read"` / `external="none"` 的工具实际联网 —— 在门里没有任何判据看得见。那正是
+    "门被悄悄改松"的形态：退休声明说判据还在，其实少了半边。现在由 R010-c 接住（同一个函数、
+    同一张 `_R010_NETWORK_MARKERS`、逐工具点名）。"""
     # 不产生 findings 是刻意的：判据面已由 R010 逐工具承担（见 docstring 末节）。
     # 留这个函数体而不是删函数，是为了让 `RULES` 的编号与文档表不用改 —— 改编号
     # 会让历史报告与 DEVELOPMENT.md §6 的规则表对不上。
@@ -399,7 +409,7 @@ def rule_R006_read_tool_touches_network(root: Path) -> list[Finding]:
 #: 而"10 条里有一条不干活"如果不写出来，就会变成看起来没变、其实少了一条判据面——
 #: 那正是本项目最忌讳的静默失效形态。`run_all` 的摘要行会把这张表一并打印。
 #:
-#: `R004` 进这张表的理由（`P-1`，与 `R006` 同族）：判据有了更好的落点
+#: `R004` 进这张表的理由（与 `R006` 同族）：判据有了更好的落点
 #: （注册期校验），于是这条替身规则只会报出合规代码。退休 ≠ 判据消失 ——
 #: 判据现在跑在 `ToolRegistry.register` 里，覆盖全部入口。
 RETIRED_RULES: dict[str, str] = {
@@ -430,25 +440,40 @@ def _load_vocab_census():
 
 
 def rule_R011_dead_vocab(root: Path) -> list[Finding]:
-    """受控词表里的死取值：登记了、而 `src/` 里找不到产出点（`G-26` 第二步）。
-    ## 两栏分开、级别不同（`P-22` / `P-23` 的裁定）
+    """受控词表里的死取值：登记了、而 `src/` 里找不到产出点。
+
+    ## 两栏分开、级别不同
+
     登记表只有一处（`tools/vocab_census.py` 的 `RESERVED_VALUES`），而普查把它读成两栏：
+
     | 栏 | 含义 | 级别 | 为什么这个级别 |
     |---|---|---|---|
-    | 栏一 `reserved` | 无产出、但已登记为预留（每条都写了理由与将来谁接线） | info | 这是人的口径裁定，不是缺陷：用红灯逼一个"未经裁决的改法"是本项目明确否掉的形态 |
+    | 栏一 `reserved` | 无产出、但已登记为预留（每条都写了理由与将来谁接线） | info | 这是人的口径决定，不是缺陷：用红灯逼一个"未经裁决的改法"是本项目明确否掉的形态 |
     | 栏二 `unclaimed` | 无产出、且无人认领 | error | 它没有任何理由留在词表里：要么补产出、要么登记为预留、要么删值 —— 三选一之前它就是一条静默的谎（审计看到"有这个取值"而代码永远给不出） |
-    两栏永不合并：`reserved` 不是"通过"，它必须照样打印出来（含理由）——静默豁免是本项目最忌的形态。`reserved + unclaimed == dead` 这条恒等式在这里机械核对：它不成立说明普查那一侧漏了值，那时报 error 而不是"看起来干净"。
+
+    两栏永不合并：`reserved` 不是"通过"，它必须照样打印出来（含理由）—— 静默豁免是本项目最忌的
+    形态。`reserved + unclaimed == dead` 这条恒等式在这里机械核对：它不成立说明普查那一侧漏了值，
+    那时报 error 而不是"看起来干净"。
+
     ## 另外两种必须出现在输出里的东西
-    - 栏一附（`registered_not_dead`）：登记为预留、而机械普查今天看不见它是死取值的那些（同形不同义，或登记已过期）。它们必须打印 —— 否则那几条登记在输出里查无此条，等于登记表自己骗自己；- 已知缺口：反向（漏词表：代码产出了不在词表里的字面量）
-    本版未实现。把"没查"与"查过没问题"折叠成同一个沉默，正是本项目最忌讳的形态。
-    ## 扫描器自己失效时也必须说话，而且不许与"查过了、干净"同形（`H-7`）
-    普查工具的反真空下限（词表数 / 产出点数）不满足时 `checked=False`。这一档与"读不到普查工具"一起构成两条"没查成"退路：它们报 `warning`，不报 `info`。理由是三态纪律在本仓库里的统一口径 —— `unknown`（没查成）绝不等于
-    `clean`（查过了、没问题），而 `info` 在发布门上恰好是"看不见"的那一档（`item_linter` 只看 `error`），于是"探测器坏了"与"词表很干净"会印成同一个样子。
-    为什么不是 `error`（登记册里 `H-7` 的另一种口径）：这两条是常驻的仪器状态，不是任何一次改动造成的缺口；把它们升成 `error` 会让发布门在任何一次`vocab_census` 读不到时立刻红，而那时该做的是修仪器（或如实在报告里声明缺了这一项），
-    不是让一条永远红的灯常驻。`warning` 让它在 `--strict`档与 `item_linter` 的严格档里都可见，又不会把"没查成"说成"被检对象有缺陷"。
-    第三条"没查成"是反向的已知缺口（漏词表：代码产出了不在词表里的字面量）—— 它是本版明确未实现的能力，与上面两条仪器状态不同：它今天结构上不可能变绿，钉成 `warning` 就是造一条永远红的灯。所以它保持 `info`，
-    但必须逐字打印（静默豁免才是本仓库最忌的形态）。
-    """
+
+    - 栏一附（`registered_not_dead`）：登记为预留、而机械普查今天看不见它是死取值的那些（同形不同
+      义，或登记已过期）。它们必须打印 —— 否则那几条登记在输出里查无此条，等于登记表自己骗自己；
+    - 已知缺口：反向（漏词表：代码产出了不在词表里的字面量）未实现。把"没查"与"查过没问题"折叠
+      成同一个沉默，正是本项目最忌讳的形态。
+
+    ## 扫描器自己失效时也必须说话
+
+    普查工具的反真空下限（词表数 / 产出点数）不满足时 `checked=False`。这一档与"读不到普查工具"
+    一起构成两条"没查成"退路：它们报 `warning`，不报 `info`。理由是三态纪律：`unknown` 绝不等于
+    `clean`，而 `info` 在发布门上恰好是"看不见"的那一档（`item_linter` 只看 `error`），于是"探测器
+    坏了"与"词表很干净"会印成同一个样子。为什么不是 `error`：这两条是常驻的仪器状态，不是任何一次
+    改动造成的缺口；把它们升成 `error` 会让发布门在任何一次 `vocab_census` 读不到时立刻红，而那时
+    该做的是修仪器（或如实在报告里声明缺了这一项）。`warning` 让它在 `--strict` 档与 `item_linter`
+    的严格档里都可见，又不会把"没查成"说成"被检对象有缺陷"。
+
+    第三条"没查成"是反向的已知缺口（漏词表）—— 它今天结构上不可能变绿，钉成 `warning` 就是造一
+    条永远红的灯。所以它保持 `info`，但必须逐字打印（静默豁免才是本仓库最忌的形态）。"""
     mod = _load_vocab_census()
     if mod is None:
         return [Finding(
@@ -520,16 +545,24 @@ def rule_R011_dead_vocab(root: Path) -> list[Finding]:
 
 def rule_R007_missing_docstring(root: Path, *, strict: bool = False) -> list[Finding]:
     """公开函数/方法缺 docstring。
-    ## 这个"数"为什么不能是一个全局数字（校准）
-    第一版只打印 `公开函数 497 个，其中 188 个没有 docstring` —— 一个不可行动的数字：它既没说是哪些文件，也没说"新写的函数该不该补"。而 `DEVELOPMENT.md` §2.4是一条成文的规则（"每个公开函数必须有
-    docstring 且含'为什么'段落"）。一条成文的规则配一个不可行动的数字，等于这条规则没有门。
-    ## 校准后的形态：按模块给数字 + `--strict` 时升级为 warning
-    - 默认（日常 `python scripts/lint_rules.py`）：一条 `info`，消息里带
-    按缺失数排序的前 5 个模块（让人一眼看到该从哪下手）+ 全量数字。为什么不逐条报 `warning`：188 条会把整份报告淹掉，而噪音会让整条规则被忽略（R001/R006 都栽在这上面）。
-    - `--strict`（发布级）：逐模块一条 `warning`。这样"发布"与"日常"
-    对同一条规则的强度不同，而这个差别是显式写下来的，不是靠人记得。
-    为什么不直接把日常级别升成 warning：那会让 188 条警告常驻输出，而 `release_check.py` 的第 5 项只看 `error` —— 于是"升级"实际上什么也没挡住，只制造了噪音。"更严"必须体现在判据上，不是体现在级别上。
-    """
+
+    ## 这个"数"为什么不能是一个全局数字
+
+    只打印一个总数是"不可行动的数字"：它既没说是哪些文件，也没说"新写的函数该不该补"。而
+    `DEVELOPMENT.md` §2.4 是一条成文的规则（"每个公开函数必须有 docstring 且含'为什么'段落"）。
+    一条成文的规则配一个不可行动的数字，等于这条规则没有门。
+
+    ## 形态：按模块给数字 + `--strict` 时升级为 warning
+
+    - 默认（日常）：一条 `info`，消息里带按缺失数排序的前 5 个模块（让人一眼看到该从哪下手）+
+      全量数字。为什么不逐条报 `warning`：几百条会把整份报告淹掉，而噪音会让整条规则被忽略
+      （R001/R006 都栽在这上面）。
+    - `--strict`（发布级）：逐模块一条 `warning`。这样"发布"与"日常"对同一条规则的强度不同，而
+      这个差别是显式写下来的，不是靠人记得。
+
+    为什么不直接把日常级别升成 warning：那会让几百条警告常驻输出，而 `release_check.py` 的第 5
+    项只看 `error` —— 于是"升级"实际上什么也没挡住，只制造了噪音。"更严"必须体现在判据上，不是
+    体现在级别上。"""
     per_file: dict[str, tuple[int, int]] = {}
     for p in _iter_py(root, SRC_REL):
         try:
@@ -627,7 +660,7 @@ _R010_PROCESS_MARKERS: tuple[tuple[str, str], ...] = (
 )
 
 #: 网络调用的标记。与 R006 的标记各有各的一份是刻意的：
-#: R006 的级别与命中集合在 B2 里不许变（改宽它就是制造噪音，见 P15），
+#: R006 的级别与命中集合不许变（改宽它就是制造噪音），
 #: 所以新增的标记只加在这一份里，R006 一个字符都不动。
 #:
 #: 判据是"点号路径以标记为尾，或标记是不带点的单段且与路径的首段相等"。
@@ -665,18 +698,17 @@ _R010_NETWORK_MARKERS: tuple[tuple[str, str], ...] = (
 #: 每一条都必须写理由，且理由要回答同一个问题：它起进程这件事，
 #: 满不满足轴的定义 —— "在宿主上执行一个由调用方决定内容的程序"。
 #: 不满足 ⇒ 它按定义不是 `exec`，而 lint 的字面判据（"出现起子进程的调用"）
-#: 仍然会命中它。把两者一起读才是 P-13 §10 第 1 条要的人裁。
+#: 仍然会命中它。把两者一起读才是这里要的人裁。
 #:
 #: `tests/test_lint_rules.py::test_r010_allowed_sites_still_exist` 会断言
 #: 每个键都真的指向一个"确实起进程、且确实没声明 exec"的工具 ——
 #: 否则例外清单会静默腐烂成一张"永不生效的豁免"。
 _R010_ALLOWED_SITES: dict[str, str] = {}
-#: 2026-10-03（`draft/37` §82）删掉了这里唯一的一条：`verify.detect_verifier`。
-#: 它此前"按定义不是 exec、却仍被 `subprocess` 标记命中"，所以登记为例外；
-#: 探测现在只是转发 `agentflow.toolchain.probe_checkers`（查找口径与三态都搬到那一处定义），
-#: 本工具不再自己起子进程 ⇒ 例外不再命中，而本文件末尾的判据
-#: （`tests/test_lint_rules.py::test_r010_allowed_sites_still_exist`）要求
-#: 例外清单里的每一条都必须在真实树上命中 —— 所以是删掉它，而不是留着一条永不生效的豁免。
+#: 这里曾登记过一条 `verify.detect_verifier`：它"按定义不是 exec、却仍被 `subprocess`
+#: 标记命中"。探测现在只是转发 `agentflow.toolchain.probe_checkers`（查找口径与三态都
+#: 搬到那一处定义），本工具不再自己起子进程 ⇒ 例外不再命中，而本文件末尾的判据
+#: （`tests/test_lint_rules.py::test_r010_allowed_sites_still_exist`）要求例外清单里的
+#: 每一条都必须在真实树上命中 —— 所以是删掉它，而不是留着一条永不生效的豁免。
 
 #: R010-a 的已知漏检（这条规则看不见、但按定义/按事实确实会起进程的工具）。
 #: 为什么要把漏检写下来：三态纪律要求"没查成"与"查过了没问题"分开。这三个工具没有被 R010-a 命中，原因是
@@ -702,9 +734,8 @@ _R010_KNOWN_GAPS: dict[str, str] = {
 #: "声明是对的、瞎的是检测器" —— 出网发生在第三方库内部，工具层源码里没有
 #: 任何网络字面量，所以 R010-b 的字面判据结构上看不见它。三种处置里：
 #:
-#: - 改声明（把 `ocr.run` 降成 `none`）：那是制造假话，直接违反 `P-13` 里
-#:   "声明必须正确"这一条；
-#: - `noqa` 静默：本项目的成文教训是"静默豁免是最难查的形态"（`P15` 同族）；
+#: - 改声明（把 `ocr.run` 降成 `none`）：那是制造假话，直接违反"声明必须正确"这条纪律；
+#: - `noqa` 静默：本项目的成文教训是"静默豁免是最难查的形态"；
 #: - 登记 + 照旧打印 info（本表）：warning 归零，而"这一段我核不了"仍然可见。
 #:
 #: 每一条都必须写清"哪一段核不了"。`test_r010_egress_blind_spots_still_exist`
@@ -920,19 +951,31 @@ def _r010_markers_reachable(
 
 def rule_R010_external_axis_mismatch(root: Path) -> list[Finding]:
     """声明与代码在 `external` 这根轴上不符（R006 的对偶）。
-    R006 问的是"声明 `read`、实际联网/起进程"，但判据是文件级共现、还要求同文件里有 `side_effect="read"` 的声明 ⇒ `src/agentflow/tools/search_tools.py` 里三个真发
-    HTTP 的 `network` 工具一次都不出现（`P-13` §10 第 5 条）。R010 改按工具判：读出每个 `ToolSpec` / `@tool` 的声明，从 handler 按名字解析转发（深度上限 4）。
-    三条子规则各问一个方向：R010-a 声明 `external != "exec"` 而链里起子进程 ⇒ error（"声明与代码不符"的确定形态，决定审批与沙箱是否生效）；R010-b 声明 `egress` 而链里看不到网络 ⇒
-    warning（可能只是保守标注；假报警会训练人忽略告警：P15）；R010-c 声明 `none` 而链里出现网络标记 ⇒ warning（R006 原本问的那个方向，`R7-R6-1` 说"移入 R010"却一直没人接）。
-    R010-c 只判 `none`：声明 `exec` 的姿态是如实的，且 `subprocess` 同时在标记表里 ⇒ 会重复报两次；标记表按末段相等匹配 `search` / `download` ⇒ 会命中
-    `re.search` / `rx.search`，这类逐条登记在 `_R010_NETWORK_FALSE_POSITIVES` 以 info 继续可见，报告里有"核对了 N 条、其中 M 条登记为假阳性"的反真空读数。
-    `_R010_EGRESS_BLIND_SPOTS` 是"检测器看不见"的登记（出网确实发生、而源码结构上没有网络字面量，例如 `ocr.run` 首次构造 `easyocr` Reader 时由第三方库下模型），与 R010-a
-    侧的已知漏检 `_R010_KNOWN_GAPS` 分开：两张表管两根轴、两个失败方向。
-    `external` 取 `declared_external=` 或 `@tool(external=...)`，都没写就是 `none`（同 `ToolSpec.declared_external` 的默认值）⇒
-    `subprocess` 在链里却没人声明的工具被 R010-a 命中，正是 `P-13` §10 第 1 条那处歧义，由 `_R010_ALLOWED_SITES` 逐条登记理由；例外只把 error 降成
-    info，`test_r010_allowed_sites_still_exist` 断言它真的指着"起进程、没声明 exec"的工具。
-    声明必须由人写：`P-13` §9① 已否决 AST 推断（22/55 取不到 handler 源码、9 个转发型是假阳性），AST 只核对声明与代码是否一致，深度上限 4，取不到名字的那条由"扫到了几条工具"的 info 报出。
-    """
+
+    R006 问的是"声明 `read`、实际联网/起进程"，但判据是文件级共现、还要求同文件里有
+    `side_effect="read"` 的声明 ⇒ `src/agentflow/tools/search_tools.py` 里三个真发 HTTP 的
+    `network` 工具一次都不出现。R010 改按工具判：读出每个 `ToolSpec` / `@tool` 的声明，从 handler
+    按名字解析转发（深度上限 4）。
+
+    三条子规则各问一个方向：R010-a 声明 `external != "exec"` 而链里起子进程 ⇒ error（"声明与代码
+    不符"的确定形态，决定审批与沙箱是否生效）；R010-b 声明 `egress` 而链里看不到网络 ⇒ warning
+    （可能只是保守标注；假报警会训练人忽略告警）；R010-c 声明 `none` 而链里出现网络标记 ⇒ warning
+    （R006 原本问的那个方向）。
+
+    R010-c 只判 `none`：声明 `exec` 的姿态是如实的，且 `subprocess` 同时在标记表里 ⇒ 会重复报两次；
+    标记表按末段相等匹配 `search` / `download` ⇒ 会命中 `re.search` / `rx.search`，这类逐条登记在
+    `_R010_NETWORK_FALSE_POSITIVES` 以 info 继续可见，报告里有"核对了 N 条、其中 M 条登记为假阳性"
+    的反真空读数。`_R010_EGRESS_BLIND_SPOTS` 是"检测器看不见"的登记（出网确实发生、而源码结构上
+    没有网络字面量，例如 `ocr.run` 首次构造 `easyocr` Reader 时由第三方库下模型），与 R010-a 侧的
+    已知漏检 `_R010_KNOWN_GAPS` 分开：两张表管两根轴、两个失败方向。
+
+    `external` 取 `declared_external=` 或 `@tool(external=...)`，都没写就是 `none`（同
+    `ToolSpec.declared_external` 的默认值）⇒ `subprocess` 在链里却没人声明的工具被 R010-a 命中，
+    由 `_R010_ALLOWED_SITES` 逐条登记理由；例外只把 error 降成 info，
+    `test_r010_allowed_sites_still_exist` 断言它真的指着"起进程、没声明 exec"的工具。
+
+    声明必须由人写：AST 推断已被否决（很多 handler 的源码取不到、转发型是假阳性），AST 只核对声明
+    与代码是否一致，深度上限 4，取不到名字的那条由"扫到了几条工具"的 info 报出。"""
     base = root / _R010_TOOLS_REL
     if not base.exists():
         # 合成小树（测试夹具）与"还没落地工具层的树"都会走到这里。
@@ -1000,12 +1043,11 @@ def rule_R010_external_axis_mismatch(root: Path) -> list[Finding]:
             # ---- R010-c：声明 `none`（两根轴上的"我什么都不对外做"）而链里真的联网
             #
             # 这是 R006 原来问的那个方向（"声明 read、实际联网"）在逐工具口径下的落地。
-            # 为什么它是补回来的一条而不是新判据：R006 退休时 `RETIRED_RULES` 写的是
-            # "判据移入 R010（逐工具 AST）"，但 R010 此前只有"非 exec 而起子进程"与
-            # "声明 egress 而看不到网络"两条 —— 于是 `side_effect="read"` / `external="none"`
-            # 的工具真的联网这件事在今天的门里没有任何一条判据看得见（`lint_rules.py`
-            # 的 R009 那条 info 也自认"静默豁免是本项目最忌的形态"）。
-            # 级别是 warning 而不是 error，理由与 R006 当年一致、并写进 DEVELOPMENT.md：
+            # R006 退休时 `RETIRED_RULES` 写的是"判据移入 R010（逐工具 AST）"，但 R010
+            # 当时只有"非 exec 而起子进程"与"声明 egress 而看不到网络"两条 —— 于是
+            # `side_effect="read"` / `external="none"` 的工具真的联网这件事没有任何一条
+            # 判据看得见（R009 那条 info 也自认"静默豁免是本项目最忌的形态"）。
+            # 级别是 warning 而不是 error：
             # 判据是"字面标记可达"，`_R010_NETWORK_MARKERS` 里 `search` / `download`
             # 这两条是按末段相等匹配的 ⇒ 真实树上 `re.search` / `rx.search` 这类
             # 正则方法会被算成"网络入口"（实测 4 个候选里 2 个是这种假阳性）。
@@ -1059,9 +1101,9 @@ def rule_R010_external_axis_mismatch(root: Path) -> list[Finding]:
                         "它是**已知盲区登记**，不是给规则开后门（登记后会以 info 继续出现）",
                     ))
 
-    # ---- 遗留取值 `network` 的计数与翻译表核对：B3 收官后整段删掉
+    # ---- 遗留取值 `network` 的计数与翻译表核对已整段删掉
     #
-    # 它曾经在这里报告"全仓还有 N 处 `side_effect=\"network\"`"，并逐条核对
+    # 它曾在这里报告"全仓还有 N 处 `side_effect=\"network\"`"，并逐条核对
     # `base.LEGACY_EFFECTS_BY_TOOL` 与那些声明是否一一对应（两个方向都报）。
     # 那个取值已从 `SIDE_EFFECTS` 里删掉 ⇒ 任何声明它的 `ToolSpec` 在构造期
     # 就以 `ValueError` 被拒，于是"还剩几处遗留"这个数字恒定是 0、
@@ -1154,7 +1196,7 @@ _R009_CODE_SPAN = re.compile(r"``.+?``|`[^`\n]+`", re.S)
 #:
 #: 范围刻意不含 `U+2190–U+21FF`（箭头 ← → ⇒）与 `U+2300–U+25FF`（技术符号、
 #: 制表符 ─ │）：本仓库的注释大量使用 `A → B` 表示流程、用 `⇒` 表示推论，
-#: 它们是正常标点而不是装饰。第一版把箭头也算了进去，在真实树上得到 915 处
+#: 它们是正常标点而不是装饰。曾把箭头也算进去（真实树上 915 处
 #: 命中 —— 其中绝大多数是 `→`，这类假阳性会让整条规则被忽略（校准纪律）。
 _R009_EMOJI_CLS = (
     "\U0001F000-\U0001FAFF"
@@ -1208,7 +1250,7 @@ def _r009_scan(text: str) -> tuple[list[tuple[int, str]], int]:
 
     ## 列号为什么有两种算法
 
-    `tokenize` 给的列号是字符下标，而 `ast` 的 `col_offset` 是 UTF-8 字节偏移。源码里四处是中文，两者的差值就是中文的字节数 —— 混用会让区间滑进代码里（清洗脚本第一版就是这样去改动
+    `tokenize` 给的列号是字符下标，而 `ast` 的 `col_offset` 是 UTF-8 字节偏移。源码里四处是中文，两者的差值就是中文的字节数 —— 混用会让区间滑进代码里（清洗脚本曾这样去改动
     `min(2.0**attempt, 30.0)` 的）。
     """
     text = text.replace("\r\n", "\n")
@@ -1263,17 +1305,30 @@ def _r009_scan(text: str) -> tuple[list[tuple[int, str]], int]:
 
 
 def rule_R009_decoration_in_comments(root: Path) -> list[Finding]:
-    """注释与 docstring 里出现 Markdown 强调标记或 emoji。源码注释不会经过渲染器。写在里面的成对星号与 emoji，到了读者眼里就是一堆符号 —— 它表达的不是强调，而是"这段文字是被生成出来的"。这类标记一旦出现就会扩散：下一段注释照抄上一段的写法，
-    几十个文件之后就成了默认风格。所以它值得一条机器可查的规则，而不是依赖每次 code review 都有人提。禁改区（FC-27）之外的文件，AI 可以改，这条规则必须挡住回归，所以是 `error`。禁改区之内的文件（`dedup.py` / `store.py` /
-    `release_check.py` 等）按 FC-27 只能由人编写或人逐行走查 —— 对它们报 `error` 会造出一条永远红的灯：它只能靠人去改那些人专属文件才能变绿，而每个文件的改动各需要 2 名 reviewer。
-    一条永远红的门与一条永远绿的门一样没有信息量（本项目 R001/R006 都栽在噪音上），所以区内只报一条汇总 `info`：能看见、不阻塞，并列出要清哪几个文件。在真实树上试过四类候选，命中量与误报如下（131 个 `.py`，8167 个注释/文档串）：成对星号强调：
-    禁改区外 12 处 —— 采用；- 未配对的残留星号：禁改区外 12 处 —— 采用（它是"清了一半"的形态）；- emoji：禁改区外 1 处 —— 采用；- 单个星号强调：区外 7 处，其中 6 处是假阳性 ——放弃。它们分别是
-    `# -*- coding: utf-8 -*-`（文件编码声明）与`search.*`（glob 写法）。真命中里混着同形态的 glob 写法，单靠字符没法区分；假阳性会让这条规则被忽略。- Markdown 链接 `[文字](url)` 与删除线：全仓 0 处 ——
-    不立项。一条没有真实正样本的规则无法校准，它只是"看起来更严"。emoji 的字符范围也要贴着这个仓库：第一版把箭头 `→` `⇒` 也算成 emoji，于是在真实树上得到 915 处命中，绝大多数是流程写法 `A → B`。范围因此收窄成"emoji 平面 + 杂项符号
-    + 变体选择符"。三态纪律：判据失败要报出来，不能折叠成"通过"。本规则有三处可能查不了 ——禁改区清单读不到（那就无法区分区内区外，⇒ error）、文件读不出/解析不了（⇒ 汇总 warning）、判据自检不过或一个源文件都没扫到（⇒ error）。最后一条是本项目
-    P16"判据真空通过"的通用形态：判据解析出空集时无条件通过。本规则的自检形态是"先在人造样本上证明扫描器接上了" ——不这样做就得靠"整棵树有没有解析出注释"来判断，而一棵真的没有注释的树与一个坏掉的扫描器在输出上完全一样（第一版就是这么写的，
-    被`test_linter_runs_all_rules_and_reports_counts` 的合成树当场抓住：那棵树里的文件确实没有注释，于是被判成"扫描器坏了"）。
-    """
+    """注释与 docstring 里出现 Markdown 强调标记或 emoji。
+
+    源码注释不会经过渲染器：写在里面的成对星号与 emoji，到了读者眼里就是一堆符号 —— 它表达的不是
+    强调，而是"这段文字是被生成出来的"。这类标记一旦出现就会扩散：下一段注释照抄上一段的写法，
+    几十个文件之后就成了默认风格。所以它值得一条机器可查的规则，而不是依赖每次 code review 都有
+    人提。
+
+    禁改区（FC-27）之外的文件，AI 可以改，这条规则必须挡住回归，所以是 `error`。禁改区之内的文件
+    （`dedup.py` / `store.py` / `release_check.py` 等）按 FC-27 只能由人编写或人逐行走查 —— 对它们
+    报 `error` 会造出一条永远红的灯：它只能靠人去改那些人专属文件才能变绿，而每个文件的改动各需要
+    2 名 reviewer。一条永远红的门与一条永远绿的门一样没有信息量（R001/R006 都栽在噪音上），所以区
+    内只报一条汇总 `info`：能看见、不阻塞，并列出要清哪几个文件。
+
+    判据范围：成对星号强调、未配对的残留星号、emoji 三类。单个星号强调放弃 —— 真命中里混着
+    `# -*- coding: utf-8 -*-` 与 `search.*` 这类 glob 写法，单靠字符没法区分，而假阳性会让规则被
+    忽略。Markdown 链接与删除线不立项（全仓无真实正样本，一条没有正样本的规则无法校准）。emoji 的
+    字符范围贴着本仓收窄成"emoji 平面 + 杂项符号 + 变体选择符"，刻意不含箭头（`→` / `⇒`，它们是
+    流程写法）。
+
+    三态纪律：判据失败要报出来，不能折叠成"通过"。本规则有三处可能查不了 —— 禁改区清单读不到
+    （⇒ error）、文件读不出/解析不了（⇒ 汇总 warning）、判据自检不过或一个源文件都没扫到
+    （⇒ error）。最后一条是"判据真空通过"的通用形态：判据解析出空集时无条件通过。本规则的自检形
+    态是"先在人造样本上证明扫描器接上了" —— 否则一棵真的没有注释的树与一个坏掉的扫描器在输出上
+    完全一样。"""
     out: list[Finding] = []
 
     gate = None
@@ -1383,7 +1438,7 @@ def rule_R009_decoration_in_comments(root: Path) -> list[Finding]:
 
 #: 编排层（`scripts/` 与 `tools/`）—— R012 的扫描范围。
 #:
-#: 为什么口径落在这里而不是全仓：`G-42` 说的是产物（发布门上落下的证据文件），
+#: 为什么口径落在这里而不是全仓：这条纪律说的是产物（发布门上落下的证据文件），
 #: 而产物只有编排层会写。`src/` 里的 `write_text` 写的是工作区内的载荷，
 #: `tests/` 里的写的是 `tmp_path`（怎么换行都不影响任何门）。
 ORCHESTRATOR_FILES_REL = (SCRIPTS_REL, Path("tools"))
@@ -1430,17 +1485,22 @@ def _r012_violations(tree: ast.Module) -> list[ast.Call]:
 
 
 def rule_R012_write_text_newline(root: Path) -> list[Finding]:
-    """编排层里"不做行尾控制就写文本"的调用点（`G-42` 的机器判据，`c-12`）。
+    """编排层里"不做行尾控制就写文本"的调用点。
 
-    这条规则为什么存在（而不是一条注释）：`tools/release_all.py` 的注释引用了一条禁令 —— `G-42：禁止 Path.write_text()` ——而全仓 grep 显示 `RULES` 里当时只有
-    R001–R011，没有任何一条叫 G-42。也就是说：那条"被引用的禁令"在门里查不到，读者以为有机器防线，实际只有一段散文。散文不是判据 —— 它随文件一起漂，而漂的方向永远是"没人再记得它"。
-    真正的事故形态（`draft/22` §12.15.2 记过）：`Path.write_text()` 在 Windows 上把每个 `\\n` 刷成 `\\r\\n`，于是"跑一次门"就把被 git 跟踪的产物改脏
-    ——改行尾会改 `sha256`，而禁改区批准台账钉住的对象正是 `sha256`。判据：对 `scripts/` 与 `tools/` 下的每个 `.py`：AST 里出现`X.write_text(...)` 而没有
-    `newline=` ⇒ `warning`。两种写法算合规：显式传 `newline=`，或改用 `write_bytes`（自己给字节）。为什么是 `warning` 而不是 `error`：放
-    `error` 会让发布门在任何一次漏改时立刻红 —— 与本文件 R009 对禁改区的处置同一条理由："CI 里一条永远红的灯会被忽略"。`warning` 在
-    `--strict` 档可见（`scripts/release_check.py::item_linter` 现在走严格档），且会被逐条打印出来。豁免不是"静默"：逐条登记的豁免见
-    `R012_NEWLINE_EXEMPTIONS`；登记一旦指向不存在的文件或该文件不再出现 `write_text`，本规则报一条 `info` 提醒把它删掉 ——登记过期与漏登记同样危险。
-    """
+    这条规则为什么存在（而不是一条注释）：`tools/release_all.py` 的注释引用了一条禁令 ——
+    `禁止 Path.write_text()` —— 而 `RULES` 里当时没有任何一条叫它。也就是说：那条"被引用
+    的禁令"在门里查不到，读者以为有机器防线，实际只有一段散文。散文不是判据 —— 它随文件一起漂，
+    而漂的方向永远是"没人再记得它"。
+
+    真正的事故形态：`Path.write_text()` 在 Windows 上把每个 `\\n` 刷成 `\\r\\n`，于是"跑一次门"就把
+    被 git 跟踪的产物改脏 —— 改行尾会改 `sha256`，而禁改区批准台账钉住的对象正是 `sha256`。判据：
+    对 `scripts/` 与 `tools/` 下的每个 `.py`：AST 里出现 `X.write_text(...)` 而没有 `newline=` ⇒
+    `warning`。两种写法算合规：显式传 `newline=`，或改用 `write_bytes`（自己给字节）。为什么是
+    `warning` 而不是 `error`：放 `error` 会让发布门在任何一次漏改时立刻红 —— 与本文件 R009 对禁改
+    区的处置同一条理由："CI 里一条永远红的灯会被忽略"。`warning` 在 `--strict` 档可见
+    （`scripts/release_check.py::item_linter` 走严格档），且会被逐条打印出来。豁免不是"静默"：逐条
+    登记的豁免见 `R012_NEWLINE_EXEMPTIONS`；登记一旦指向不存在的文件或该文件不再出现
+    `write_text`，本规则报一条 `info` 提醒把它删掉 —— 登记过期与漏登记同样危险。"""
     out: list[Finding] = []
     for rel_dir in ORCHESTRATOR_FILES_REL:
         if not (root / rel_dir).exists():
@@ -1557,7 +1617,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _pin_utf8()
     # `allow_abbrev=False`：`--json` 是 `--json-out` 的**前缀**，argparse 默认会把
     # 前者当后者的缩写接住 —— 于是"旧名已经删掉"这句话是假的，`--json <path>` 照样能跑
-    # （2026-10-27 实测）。关掉缩写才是真的一个字面量一个名字：旧写法现在以
+    # 关掉缩写才是真的一个字面量一个名字：旧写法现在以
     # "unrecognized arguments: --json" + 退出码 2 失败，而不是继续按"要一个路径"生效。
     ap = argparse.ArgumentParser(description="agentflow 机械可查规则（linter）",
                                  allow_abbrev=False)
@@ -1575,9 +1635,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     rep = run_all(root, strict=args.strict)
     d = rep.to_dict()
     if args.json_out:
-        # `G-42`（`c-12`）的落地形态：产物必须是纯 LF，与平台无关。
+        # 行尾纪律的落地形态：产物必须是纯 LF，与平台无关。
         # `Path.write_text` 在 Windows 上会把每个 `\n` 刷成 `\r\n` ⇒ 产物的 `sha256`
-        # 与"盘上那一版"对不上（`draft/22` §12.15.2 记过那次事故），
+        # 与"盘上那一版"对不上，
         # 而禁改区批准台账钉住的正是 `sha256`。`newline=""` 关掉平台的换行转换。
         # 这条纪律本身也有机器判据：本文件的 `rule_R012_write_text_newline`。
         Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
@@ -1587,7 +1647,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     mode = "严格（发布级）" if args.strict else "日常"
     print(f"[linter] 扫描 {d['scanned']}；规则 {len(d['rules_run'])} 条；模式 {mode}")
     # 退休的规则必须显式打印：否则"10 条里有一条不干活"会变成
-    # "看起来规则数没变、其实少了一条判据面"（G-14 的 retire 形态）。
+    # "看起来规则数没变、其实少了一条判据面"。
     for rid, why in sorted(RETIRED_RULES.items()):
         print(f"[linter] 已退休 {rid}：{why}")
     print(f"[linter] error {d['error_count']} / warning {d['warning_count']} / info {d['info_count']}")
