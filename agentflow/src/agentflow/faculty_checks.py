@@ -2,7 +2,7 @@
 
 ## 为什么每一项官能都要有"机械的那一半"
 
-`draft/28` §180 把官能分成"代码保证 / 你自己把握"。高观点、敢创新、有品味今天偏后者，
+官能分成"代码保证 / 你自己把握"。高观点、敢创新、有品味多半偏后者，
 但它们各自有一半是不需要模型就能判的，而这一半恰恰是最容易出错、也最贵的那一半：
 
 - 高观点的机械半：引用落地。稿子说"概念 A 与 B 之间有关系"，那 A、B 必须真的在概念表里，
@@ -57,7 +57,7 @@ def _rows(store: Any, table: str) -> list[dict]:
 def _table_names() -> set[str]:
     """可归属的表名（现取，不另写名单）：`schema.TABLES` + 已并走的老表名。
 
-    S1r 并表之后 `concepts` 不再是 `TABLES` 里的一张表，但文本里的
+    并表之后 `concepts` 不再是 `TABLES` 里的一张表，但文本里的
     `concepts/0001` 这种引用仍然在（稿件、报告、旧日志里到处是）⇒
     它必须被认出来并落到新家（`store._MOVED_TABLES` 是"并走"这件事的唯一
     定义点，名单不在这里抄第二份）。不认识它等于让这条引用从"引用落地"
@@ -259,13 +259,13 @@ def style_findings(text: str, *, require_disclaimer: bool = False,
 #: 卡点词表：结论里出现这些词，才算"说了卡在哪"。
 #:
 #: 刻意不收"没有""不足""问题"这类词：它们恰恰出现在这一格要拦的话术里 ——
-#: 实测（2026-09-29）：`"已全部核对完成，没有发现问题"` 里含"没有"，
+#: 例如「已全部核对完成，没有发现问题」里含「没有」，
 #: 于是"只核对了"被读成"点名了卡点"，判据直接失效。词表只留指向具体缺失的词。
 BLOCKER_WORDS: tuple[str, ...] = ("缺", "未接线", "没接线", "预算", "无法", "卡在",
                                   "卡点", "需要补", "待补", "尚无", "尚未")
 
 #: 数据面表（判定"库变了没有"时只看这些；台账与用量账不算产出）。
-#: S1r 并表之后 `concepts` 那一格换成 `statements`（概念行住它里面）：
+#: 并表之后 `concepts` 那一格换成 `statements`（概念行住它里面）：
 #: 老名字留在名单里会让 `snapshot_counts` 把"并走"读成"这张表没有产出"，
 #: 而 `statements` 不进名单则"写了命题/概念"这件事在推进判据里看不见。
 DATA_TABLES: tuple[str, ...] = (
@@ -309,15 +309,14 @@ def progress_findings(before: Mapping[str, int], after: Mapping[str, int], *,
 #: 判据"结论有没有强于它挂的证据"的机械半只有一份实现：`claimanatomy.validate_claim`
 #: 的 `overclaim`（`evidence_kind != proof` 而正文出现 `OVERCLAIM_MARKERS`）。
 #:
-#: 这一层不再另立词表 —— 第一版我写了 `STRENGTH_WORDS = ("证明","定理",…)`，
-#: 测试当场抓到两个误报（`服从中心极限定理` 是定理的名字、`不构成证明` 是明说不是证明），
-#: 而更要紧的是：`claimanatomy` 早就有这条判据（且它的词表由
-#: `doc_tools.OVERCLAIM_MARKERS` 唯一提供，还有测试钉住两边是同一个对象）。
-#: 于是这里的职责改成"把那份判据的结论翻译成 faculty 视图"，而不是再判一次。
+#: 这一层不再另立词表 —— 自己写一张 `STRENGTH_WORDS` 会误报（`服从中心极限定理`
+#: 是定理的名字、`不构成证明` 是明说不是证明），而且 `claimanatomy` 早就有这条判据
+#: （词表由 `doc_tools.OVERCLAIM_MARKERS` 唯一提供，还有测试钉住两边是同一个对象）。
+#: 于是这里的职责是"把那份判据的结论翻译成 faculty 视图"，而不是再判一次。
 #:
-#: `draft/39` §3.8（2026-10-05）之后这条判据有了自己的 code（`overclaim` = 第 6 族）：
-#: 族号要能直接印在拒信里，而它此前与"status × evidence_kind 交叉"共用
-#: `inconsistent_status` ⇒ 两族在拒信里长得一样。旧 code 仍留在表里（旧行/旧调用点）。
+#: `overclaim` 现在有自己的 code：族号要能直接印在拒信里，而它此前与
+#: "status × evidence_kind 交叉"共用 `inconsistent_status` ⇒ 两族在拒信里长得一样。
+#: 旧 code 仍留在表里（旧行/旧调用点）。
 CLAIM_STRENGTH_CODES: tuple[str, ...] = ("overclaim", "inconsistent_status")
 
 
@@ -365,9 +364,8 @@ def claim_strength_findings(claims: Sequence[Mapping[str, Any]], *,
     return {"checked": True, "verdict": verdict, "total": total, "overclaimed": over,
             "missing_evidence": missing, "findings": findings,
             "problem_count": len(findings),
-            # 判据出处：`draft/39` §3.8 之后这条是第 6 族（`overclaim`）。
-            # 旧名（`inconsistent_status`）仍被 `CLAIM_STRENGTH_CODES` 认，
-            # 但"出处"这一栏只写现在这一个 —— 两族共用一个名字正是这次要修的东西。
+            # 判据出处：`claimanatomy.overclaim`（旧名 `inconsistent_status` 仍被认，
+            # 但「出处」这一栏只写现在这一个）。
             "criterion_source": f"claimanatomy.{CLAIM_STRENGTH_CODES[0]}"}
 
 
