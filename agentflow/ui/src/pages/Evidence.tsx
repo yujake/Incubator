@@ -256,20 +256,32 @@ function formalCell(r: StatementRow) {
   );
 }
 
-/** 引文回验的五档计数（读不到的那一档一律算"未查"）。 */
-function quoteTally(rows: RelationRow[]): Record<string, number> {
-  const out: Record<string, number> = {
+/** 引文回验的五档计数（读不到的那一档一律算"未查"）＋ 不是「逐字 / 语义」通过的那些行。
+ *
+ * 两件事本来各扫一遍（`quoteTally` 一趟 + `filter` 一趟，每行各算一次
+ * `quoteStateOf`）。合到一趟里：`quoteStateOf` 每行只算一次，`notClean` 的
+ * 行序仍是 `relations` 的行序，五个计数仍是那五档各自的条数 —— 读数一个都不变。
+ */
+function quoteScan(rows: RelationRow[]): {
+  tally: Record<string, number>;
+  notClean: RelationRow[];
+} {
+  const tally: Record<string, number> = {
     verbatim: 0,
     semantic: 0,
     mismatch: 0,
     unchecked: 0,
     no_evidence: 0,
   };
+  const notClean: RelationRow[] = [];
   for (const r of rows) {
-    const key = quoteStateOf(r);
-    out[key] = (out[key] ?? 0) + 1;
+    const state = quoteStateOf(r);
+    tally[state] = (tally[state] ?? 0) + 1;
+    if (state !== "verbatim" && state !== "semantic") {
+      notClean.push(r);
+    }
   }
-  return out;
+  return { tally, notClean };
 }
 
 export function Evidence() {
@@ -288,11 +300,8 @@ export function Evidence() {
   }
 
   const ev = face.data;
-  const tally = quoteTally(ev.relations);
-  const notClean = ev.relations.filter((r) => {
-    const state = quoteStateOf(r);
-    return state !== "verbatim" && state !== "semantic";
-  });
+  // 五档计数与「不是逐字 / 语义通过」的那批行由同一趟扫出来（每行只算一次引文状态）。
+  const { tally, notClean } = quoteScan(ev.relations);
 
   return (
     <>
