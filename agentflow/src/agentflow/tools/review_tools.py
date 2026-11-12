@@ -1,30 +1,34 @@
 """H 的工具：审校。
+
 ## 审校对象是论文，不是台账行（业主 2026-10-24 裁定）
 「只对论文负责是正确的，documents 等都是中间产物」＋「H 审论文（`out/paper/main.tex` /
 pdf），documents 只是它的登记行」。所以 `review.review_document` 的输入正文来自
-`read_paper_body`：`<项目根>/out/paper/main.tex` 优先，退到 `main.pdf` 的文本层；
-两者的正文都带行号（`_line_of` 因此能定位），本次审的那一份正文的 sha256 记进读数。
-两者都没有 ⇒ `checked=False` + `verdict="unreviewable"`，不落发现、不动状态：
-没审到不是"审过、没问题"。`documents` 那一行仍然只是中间产物 —— 审完只改它的
-`status`，台账行缺失时论文照审（缺的只是登记行）。
+`read_paper_body`：`<项目根>/out/paper/main.tex` 优先，退到 `main.pdf` 的文本层；正文带
+行号（`_line_of` 因此能定位），本次审的那一份正文的 sha256 记进读数。两者都没有 ⇒
+`checked=False` + `verdict="unreviewable"`，不落发现、不动状态：没审到不是"审过、没问题"。
+`documents` 那一行仍只是中间产物 —— 审完只改它的 `status`，台账行缺失时论文照审。
+
 ## 这个模块存在的最重要理由
-审校者的判断也需要证据。
-1. `schema.ReviewFinding.evidence` 必填非空（写入时硬约束）； 2. 本模块的每个检查都给出 `evidence` 字段，内容是触发该发现的实际值（例
-如 `citations=[]`、`evidence_kind='cross_check' 且 disclaimer 为空`），而不是一句「看起来不对」；
+审校者的判断也需要证据：① `schema.ReviewFinding.evidence` 必填非空（写入时硬约束）；
+② 每个检查都给出 `evidence`，内容是触发该发现的实际值（如 `citations=[]`、
+`evidence_kind='cross_check' 且 disclaimer 为空`），而不是一句「看起来不对」。
+
 ## 「H 只读」在本模块里的落地形态（两条，缺一不可）
-- 默认注册面只读：`register()` 只注册 `review.scan_document`（`none`）与 `review.list_findings`（`read`）。会写
-盘的两个入口（`review.review_document` / `review.verify_fixes`，均为 `write_local`）必须显式 
-`include_writers=True` 才会被装配 —— 于是「H 的工具面」（默认装配结果）在结构上不含任何写工具。- 它们是 H 的代理步骤，不是 H 的刀：这两个写工具的落
-点被钉死在`review_findings`（新增/改状态）与 `documents.status` 上，一个字都不改 `claims` / `knowledge tables`。
-## 判据只有一份（已修，历史见下）
-`scan_document` 与 G 侧的 `doc_tools.scan_claim` 同词表（`schema.FINDING_KINDS`），逐条检查项必须一致：引用是否为空、
-`evidence_kind` 是否合法、`cross_check` 是否缺 disclaimer、正文是否过度声称、否定型断言的 `negation_kind`是否合法/是否该有。
-这里曾经是假的：本模块 docstring 声称"不另写一套检查"，而`scan_document` 把 `scan_claim` 的检查复制了一份且已经漂移 ——H 侧当时不检查非法
-`evidence_kind`、不检查 `negation_kind` 是否在受控词表里、也不检查"非否定断言却带了 negation_kind"。现在这三条已在 
-`scan_document` 里补齐（与 `scan_claim` 同等级、同判据）。
-本轮把根因也去掉了：字段级判据现在归 `claimanatomy`（`CLAIM_FIELDS` 是唯一声明表），`doc_tools.scan_claim` 只是它的适配层。
-`scan_document` 仍保留自己的循环，但它必须产出同一批 finding kind（`schema.FINDING_KINDS`），且不许比 G 侧轻 —— 这一约束由 
-`tests/test_tools_audit_fixes.py` 的双向对照用例钉住，由 `tests/test_gates.py` 的 G10/G14 用例补充。
+- 默认注册面只读：`register()` 只注册 `review.scan_document`（`none`）与
+  `review.list_findings`（`read`）；会写盘的两个入口必须显式 `include_writers=True` 才会
+  被装配 ⇒ 「H 的工具面」在结构上不含任何写工具。
+- 它们是 H 的代理步骤，不是 H 的刀：落点钉死在 `review_findings`（新增/改状态）与
+  `documents.status` 上，一个字都不改 `claims` / 知识表。
+
+## 判据只有一份
+`scan_document` 与 G 侧 `doc_tools.scan_claim` 同词表（`schema.FINDING_KINDS`），逐条检查
+项必须一致：引用是否为空、`evidence_kind` 是否合法、`cross_check` 是否缺 disclaimer、正文
+是否过度声称、否定型断言的 `negation_kind` 是否合法/是否该有。这里曾经是假的：docstring
+声称"不另写一套检查"，而 `scan_document` 复制了一份且漂移（不查非法 `evidence_kind`、不查
+`negation_kind` 词表、不查"非否定断言却带了 negation_kind"）。现在三条已补齐，字段级判据
+归 `claimanatomy`（`CLAIM_FIELDS` 是唯一声明表），`doc_tools.scan_claim` 只是适配层。
+`scan_document` 保留自己的循环，但必须产出同一批 finding kind 且不许比 G 侧轻 —— 由
+`tests/test_tools_audit_fixes.py` 的双向对照与 `tests/test_gates.py` 的 G10/G14 钉住。
 """
 
 from __future__ import annotations
@@ -1230,25 +1234,21 @@ def _supersede_prior_open(
 
 # ---------------------------------------------------------------- 手工判词（P2-4）
 #
-# 现场（`projects/dct-min4-20261111`）：7 条 `record_finding` 落的手工判词全 `open`，
-# 而 `verify_fixes` 的 resolved 判据是「上一轮的 key 不在本轮 scan 结果里」——
-# 手工判词的 key 是散文，「永远不会」出现在 scan 结果里 ⇒ 只要 H 跑一次
-# `verify_fixes`，这 7 条会被全部判成 `fixed`（"重跑对应检查不再复现"），
-# 而一条检查都没重跑。那是把「没查」写成「修好了」，与 `R-04-b` 同一族。
+# 现场（`projects/dct-min4-20261111`）：7 条 `record_finding` 落的手工判词全 `open`，而
+# `verify_fixes` 的 resolved 判据是「上一轮的 key 不在本轮 scan 结果里」—— 手工判词的 key
+# 是散文，永远不会出现在 scan 结果里 ⇒ 只要 H 跑一次 `verify_fixes`，这 7 条会被全部判成
+# `fixed`，而一条检查都没重跑。那是把「没查」写成「修好了」，与 `R-04-b` 同一族。
 #
 # 本节的判据：「手工判词不许被自动复跑判掉」。
 #   * 来源标记：`record_finding` 落库时把 `MANUAL_FINDING_NOTE_PREFIX` 写进
-#     `resolution_note` 的开头（`resolution_note` 是既有自由文本字段，不进去重键、
-#     不是审校内容；`schema.ReviewFinding` 在 FC-27 禁改区，本批「不加列」）；
-#   * 离场只有一条路：H 自己显式复核 —— `record_finding` 以「同一个去重键」再登记
-#     一次，`evidence` 以 `RECHECK_FIXED_PREFIX` / `RECHECK_WONTFIX_PREFIX` 开头，
-#     把结论（fixed / wontfix + 理由）写进同一个 finding_id 的 `resolution_note`。
-#     为什么走 `evidence` 而不加参数：工具声明面被两份冻结快照钉住（`tests/golden/
-#     tool_surface_snapshot.json` 与 `tests/fixtures/tool_declaration_baseline.json`），
-#     加参数就必须重冻 golden（FC-27，本批未获授权）。这条代价写在交付报告里。
+#     `resolution_note` 的开头（既有自由文本字段，不进去重键、不是审校内容；`schema` 在
+#     FC-27 禁改区，本批「不加列」）；
+#   * 离场只有一条路：H 自己显式复核 —— 以同一个去重键再登记一次，`evidence` 以
+#     `RECHECK_FIXED_PREFIX` / `RECHECK_WONTFIX_PREFIX` 开头，把结论（fixed / wontfix +
+#     理由）写进同一个 finding_id 的 `resolution_note`。为什么走 `evidence` 而不加参数：
+#     工具声明面被两份冻结快照钉住，加参数就必须重冻 golden（FC-27，本批未获授权）；
 #   * `verify_fixes` 读这两个标记：未显式复核的手工判词留在 `open`（读数进
-#     `not_rechecked`，`source="manual_not_rechecked"`），已显式复核的不再被改写
-#     （`source="manual_rechecked"`）。
+#     `not_rechecked`，`source="manual_not_rechecked"`），已显式复核的不再被改写。
 #: `record_finding` 落手工判词时写进 `resolution_note` 开头的来源标记。
 MANUAL_FINDING_NOTE_PREFIX = "[manual] "
 #: `resolution_note` 里"H 显式复核过这一条"的标记（由 `record_finding` 的复核通道写）。
@@ -1747,22 +1747,15 @@ def review_document(
     )
     # ---- 丙（2026-11-11，业主裁定「丙修」）：有 open findings 就不许 accepted ----------
     #
-    # 真机现场（`projects/dct-min5r-20261111`）：H 21:42:12 先用 `review.record_finding`
-    # 落了 3 条 open findings（2 error + 1 warning），21:42:19 再调本函数（`round_no=4`）。
-    # 它只按新扫的 `error_count=0` 就把 `documents.status` 写成 accepted、`review_verdict`
-    # 写成「成立」—— 台账自相矛盾（`verify_all` 的 `accepted_with_open_error` 那一条
-    # 也是这么被抓到的）。矛盾的产生侧就是这里，所以闸加在这里，不加在事后纠正那边。
-    #
-    # 判据两条（缺一不许 accepted）：
-    #   ① 这一版没有 open findings —— 本函数不收口上一轮/手工判词的 open 项（它只重跑
-    #      机械判据，看不到手工判词、也不改 finding 状态），所以只要盘上还有 open 的就
-    #      不许它把稿判成"通过"；
-    #   ② 本轮复审收过 —— 本轮 `round_no` 只收它自己扫出来的那一批；旧轮次的 open 项
-    #      还挂着时，"本轮"并没有收过那一版的全部发现（`review_rounds` 与 `round_no`
-    #      一起进读数，供人判是"还没复审"还是"复审了但没收口"）。
-    #
-    # 处置方向是去走 `review.verify_fixes`（逐条判 fixed / 仍 open，H 的手工判词有显式
-    # 复核通道），不是在这里把 findings 的状态改掉。
+    # 真机现场（`projects/dct-min5r-20261111`）：H 21:42 落了 3 条 open findings，7 秒后调
+    # 本函数（`round_no=4`），只按新扫的 `error_count=0` 就把 `documents.status` 写成
+    # accepted、`review_verdict` 写成「成立」—— 台账自相矛盾（`verify_all` 的
+    # `accepted_with_open_error` 就是这么抓到的）。矛盾的产生侧是这里，闸就加在这里。
+    # 判据两条（缺一不许 accepted）：① 这一版没有 open findings —— 本函数不收口上一轮 /
+    # 手工判词的 open 项（它只重跑机械判据、看不到手工判词），只要盘上还有 open 的就不许
+    # 判成"通过"；② 本轮复审收过 —— 旧轮次的 open 项还挂着时，"本轮"并没有收过那一版的
+    # 全部发现（`review_rounds` 与 `round_no` 一起进读数，供人判是哪一种）。
+    # 处置方向是走 `review.verify_fixes`（逐条判 fixed / 仍 open），不是在这里改 findings。
     prior_open, open_findings_reading = _open_findings_gate(
         existing=existing, reopened=reopened, round_no=round_no, doc=doc)
     blocked_by_open_findings = bool(target_status == "accepted" and prior_open)
