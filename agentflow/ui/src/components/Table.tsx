@@ -59,8 +59,7 @@ export function plain(value: unknown): string {
  *
  * 为什么不能借 `unknown`：`cell()` 的 `unknown` 专指"这一格没读到"（三态里那一档）。
  * 而"这一格没有正文可给"（例如内容级判据过了、没有要说的细节）**不是**没读到 ——
- * 把它印成 `unknown` 会让同一行自相矛盾（结论：过了 / 读数：unknown）；
- * 那正是 `pages/Acceptance.tsx` 的「读数」列改前那一版的形态。
+ * 把它印成 `unknown` 会让同一行自相矛盾（结论：过了 / 读数：unknown）。
  *
  * 与 `cell()` 的分工：
  * - `cell()` 管"读不到" ⇒ `unknown`（三态那一档，读的人知道该去查为什么没读到）；
@@ -117,10 +116,9 @@ export interface BucketRow {
 /**
  * 把 `{名字: {tokens, usd, entries, attempts}}` 摊成表格行。
  *
- * 为什么抽到这里（2026-10-27 业主裁定 W6）：`pages/Live.tsx` 与 `pages/Budget.tsx`
- * 此前各写了一份 `buckets()`，而 Live 那份少了 `attempts` 一格 —— 同一件事两份实现，
- * 漂了没有任何地方会报错（两页各印一张看起来都正常的表）。四格都从 `cell()` 走，
- * 于是"读不到"仍是 `unknown`，不会被折成 0。
+ * 为什么抽到这里：`pages/Live.tsx` 与 `pages/Budget.tsx` 都要这张表，各写一份就会
+ * 漂 —— 漂了没有任何地方会报错（两页各印一张看起来都正常的表）。四格都从 `cell()`
+ * 走，于是"读不到"仍是 `unknown`，不会被折成 0。
  */
 export function buckets(rec: Record<string, unknown>): BucketRow[] {
   return Object.keys(rec)
