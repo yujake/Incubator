@@ -534,6 +534,10 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
         sid = str(row.get("stmt_id") or "").strip()
         if sid and sid not in wanted:
             wanted.append(sid)
+    #: 整趟只读一次 `statements`（`by_id` 的 `rows=` 口子就是为这种快照开的）；读不成 ⇒
+    #: `None`，下面逐条退回原读法（那一档的 `checked=False` 读数不变）。
+    statement_rows: list[dict] | None = (
+        _SL.rows_of(store)[0] if store is not None else None)
     out: dict[str, dict[str, Any]] = {}
     for sid in wanted:
         tried: list[str] = []
@@ -542,7 +546,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
         row_mid = ""
         if store is not None:
             try:
-                got = _SL.by_id(store, stmt_id=sid)
+                got = _SL.by_id(store, stmt_id=sid, rows=statement_rows)
             except Exception:  # noqa: BLE001 —— 读不成按"没有这一格"退回（下面读数照给）
                 got = {"checked": False}
             if got.get("checked") and got.get("found"):
@@ -623,9 +627,16 @@ def _citation_material(*, rel: str, deps: Mapping[str, Any],
         info = dict(cited.get(sid) or {})
         item = grouped.setdefault(sid, {
             "stmt_id": sid, "paths": [], "path_groups": [],
-            "dep_ids": [], "statement_full": "", "statement_digest": "",
-            "statement_missing": False, "statement_label": "", "evidence_kind": "",
-            "admissible": False, "grade": "",
+            "dep_ids": [],
+            "statement_full": str(info.get("statement_full") or ""),
+            # 读不到稿时给一句实话：不许让提示词把它读成"被引命题的正文是空的"。
+            "statement_digest": (
+                "（V 只读手稿：盘上找不到这一条命题的手稿，读不到它的正文与签）"
+                if not bool(info.get("found")) else str(info.get("statement_digest") or "")),
+            "statement_missing": False, "statement_label": "",
+            "evidence_kind": str(info.get("evidence_kind") or ""),
+            "admissible": bool(info.get("signed")),
+            "grade": str(info.get("grade") or ""),
             #: 被引命题的手稿（V 读到的正文 / 签都在这一份上）；空串 = 盘上没有。
             "manuscript": str(info.get("manuscript") or ""),
             "manuscript_missing": not bool(info.get("found")),
@@ -647,16 +658,6 @@ def _citation_material(*, rel: str, deps: Mapping[str, Any],
         item["dep_ids"].append(locator)
     out = list(grouped.values())
     for item in out:
-        info = dict(cited.get(str(item["stmt_id"])) or {})
-        item["statement_full"] = str(info.get("statement_full") or "")
-        item["statement_digest"] = str(info.get("statement_digest") or "")
-        item["admissible"] = bool(info.get("signed"))
-        item["grade"] = str(info.get("grade") or "")
-        item["evidence_kind"] = str(info.get("evidence_kind") or "")
-        if item["manuscript_missing"]:
-            # 读不到稿时给一句实话：不许让提示词把它读成"被引命题的正文是空的"。
-            item["statement_digest"] = (
-                "（V 只读手稿：盘上找不到这一条命题的手稿，读不到它的正文与签）")
         item["path_groups"] = sorted(item["path_groups"])
     out.sort(key=lambda it: (it["stmt_id"], it["path_groups"]))
     return out, ""
