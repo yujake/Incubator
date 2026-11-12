@@ -57,9 +57,8 @@ def normalize(text: str | None) -> str:
 def normalize_for_quote(text: str | None) -> str:
     """引文校验专用的保守规范化。
 
-    与 `normalize` 的区别（DESIGN.md §6.3）：只允许空白折叠、大小写、连字符与
-    引号归一化、全半角转换；不删标点（因为删标点会让 "no, X" 与 "no X" 等价，
-    从而放过错误的引文）。
+    与 `normalize` 的区别：只允许空白折叠、大小写、连字符与引号归一化、全半角转换；
+    不删标点（因为删标点会让 "no, X" 与 "no X" 等价，从而放过错误的引文）。
     """
     if not text:
         return ""
@@ -83,11 +82,10 @@ def is_cjk(text: str) -> bool:
 # 这一段是"怎么算包含"的唯一实现：命题台账查口（`statementledger.by_keywords`）与
 # 通用表工具（`tools/table_tools.table_search` 在 `statements` 表上）都调它。
 #
-# 为什么必须只有一处（2026-11-09「两把尺」）：两处各写一份时，同一个查询会给出两个结论
+# 为什么必须只有一处：两处各写一份时，同一个查询会给出两个结论
 # —— 工具层用 `casefold` 裸子串，查口用 `normalize`（全半角 / 大小写 / 标点 / 空白都折叠）。
-# 实测：`noether，环` 在查口命中 `Noether 环`、在工具层 0 命中；全角 `Ｐ 阶元` 同样分家。
+# 例如 `noether，环` 在查口命中 `Noether 环`、在工具层 0 命中；全角 `Ｐ 阶元` 同样分家。
 # 两边各自都自洽 ⇒ 没有任何判据会报错，只有人对着读数才看得出来。
-# 设计取舍（差异清单、为什么不去改 `by_keywords` 的字段面）见 `temp/_design_two_rulers.md`。
 
 
 def normalized_keywords(keywords: str | Iterable[Any]) -> list[tuple[str, str]]:
@@ -206,10 +204,9 @@ _SLUG_STRIP = re.compile(r"[^a-z0-9\u4e00-\u9fff]+")
 def slugify(text: str, limit: int = 60, fallback: str = "untitled") -> str:
     """把任意文本变成安全的文件名片段 —— 全项目唯一的一份 slug 规则。
 
-    合并前后的两套契约（见 ``INVENTORY.md`` §4.7②）：
-    ``fetch.slugify`` 原先把 CJK 一并当分隔符剥掉、空结果回退 ``"download"``；
-    本函数保留 CJK、空结果回退 ``"untitled"``。``fetch.slugify`` 现已改为
-    转发到本函数（唯一判据），参数名与默认值由调用点显式表达。
+    ``fetch.slugify`` 转发到本函数（唯一判据），参数名与默认值由调用点显式表达。
+    这份契约与 ``fetch`` 原先那份的差别只在两处：本函数保留 CJK（那份把 CJK 一并
+    当分隔符剥掉），空结果回退 ``"untitled"``（那份回退 ``"download"``）。
 
     ## 规则与理由
 
@@ -293,27 +290,27 @@ def parse_page_range(text: str | None) -> PageRange:
 def concept_group_key(concept_ids: Iterable[str]) -> str:
     """概念组的稳定键：升序去重后用 `|` 连接。
 
-    关系判重的前置条件（DESIGN.md §3.3）：不同概念组之间文本再像也是不同知识点。
+    关系判重的前置条件：不同概念组之间文本再像也是不同知识点。
     """
     return "|".join(sorted(set(concept_ids)))
 
 
-# ---------------------------------------------------------------- 引用解析（P-5 的唯一实现）
+# ---------------------------------------------------------------- 引用解析（唯一实现）
 
 
 def citation_ref_parts(citation: Any) -> tuple[str, str]:
     """把一条 citation 拆成 `(前缀, 代号)`：按第一个 `:` 切、再去掉 `#` 之后的部分。
 
-    ## 为什么它是唯一实现、以及为什么放在 `textutil`（`P-5`）
+    ## 为什么它是唯一实现、以及为什么放在 `textutil`
 
-    这条口径此前有两份实现：`verify.py` 的 `dangling_citation` 检查里内联着
-    一份，工具层 `doc_tools.citation_ref_parts()` 又抄了一份。两份必须逐字一致 ——
-    否则"G 认为合法的引用"与"verify 认为悬空的引用"会给出不同答案，而
-    两边各自都自洽（FC-03 禁止的形态）。
+    这条口径只许有一份：`verify.py` 的 `dangling_citation` 检查与工具层
+    `doc_tools.citation_ref_parts()` 如果各写一份，两份必须逐字一致 —— 否则"G 认为
+    合法的引用"与"verify 认为悬空的引用"会给出不同答案，而两边各自都自洽
+    （FC-03 禁止的形态）。
 
-    落点选 `textutil` 而不是 `verify.py`，理由是依赖图（改前实测）：
+    落点选 `textutil` 而不是 `verify.py`，理由是依赖图：
 
-    - `tools/table_tools.py:1135` 有 `from ..verify import verify_all`
+    - `tools/table_tools.py` 有 `from ..verify import verify_all`
       ⇒ 工具层依赖 `verify`。所以"`verify` 去 import 工具层"是把依赖方向
       反过来引一条新边，会把工具包的装配（`tools/__init__`）拉进审计模块的
       import 图里；`verify` 与 `tools/doc_tools` 之间没有任何现有边。
@@ -344,10 +341,9 @@ _TEXT_CITATION = re.compile(r"(?<![\w:/])([A-Za-z][A-Za-z0-9_]*):([A-Za-z0-9][A-
 def find_citations(text: Any, *, prefixes: Iterable[str] | None = None) -> list[dict[str, str]]:
     """从自由文本里扫出引用记号，按出现次序返回（同一个记号只出现一次）。
 
-    业主 2026-10-09（`draft/97` §14.11）：「B 只交定理内容 + 证明过程」，
-    而「依赖 = 证明过程里引用到的那些号」⇒ 秘书要从证明文本里逐条扫出引用。
-    这一格就是那件事的唯一实现（此前仓库里只有"解析一条已经切好的 citation"
-    的 `citation_ref_parts`，没有"从一段话里找出来"的那一半）。
+    业主口径：「B 只交定理内容 + 证明过程」，而「依赖 = 证明过程里引用到的那些号」
+    ⇒ 秘书要从证明文本里逐条扫出引用。这一格就是那件事的唯一实现（`citation_ref_parts`
+    只解析一条已经切好的 citation，没有"从一段话里找出来"的那一半）。
 
     返回 `[{"raw", "prefix", "code", "table"}]`：
 
