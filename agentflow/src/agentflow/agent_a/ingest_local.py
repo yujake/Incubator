@@ -2,19 +2,21 @@
 
 为什么需要（`draft/37` §44 那趟真机读数逼出来的，不是设计洁癖）：A 的动作表里没有
 `search.register` / `search.ingest_local`，而 B 的动作表只有"处理已存在的 literature 行" ——
-工具层通（`search.ingest_local` 是 A 的工具）、编排层不通，于是盘上有论文、台账里没有它，
-后面每一跳（B 登记命题 → G 建我方稿件 → H 审）全部因为没有 `lit_id` 而落空。
+工具层通、编排层不通，于是盘上有论文、台账里没有它，后面每一跳（B 登记命题 → G 建我方
+稿件 → H 审）全部因为没有 `lit_id` 而落空。
 
-一份口径，不是两份：与工具同调 `locallib.ingest_directory` —— 判重键（内容 sha256）、provenance
-三件事（`actor="agent-A"` / `submitted_by="unknown"` / `origin_note="由 agent-A 从一个本地目录登记"`）
-与幂等语义全部来自那一份实现；判据 `tests/test_intake_actions.py::`
-`test_the_action_and_the_tool_agree_on_provenance_and_idempotence` 钉住"两者对同一个目录给出同一份读数"。
+一份口径，不是两份：与工具同调 `locallib.ingest_directory` —— 判重键（内容 sha256）、
+provenance 三件事（`actor="agent-A"` / `submitted_by="unknown"` /
+`origin_note="由 agent-A 从一个本地目录登记"`）与幂等语义全部来自那一份实现；判据
+`tests/test_intake_actions.py::test_the_action_and_the_tool_agree_on_provenance_and_idempotence`
+钉住"两者对同一个目录给出同一份读数"。
 
-它不假装能做的事：不支持的扩展名不会被硬塞进来（`.tex` 今天在 `extract` 的支持面之外：`main.tex`
-落 `UnsupportedFormat`、`counts.unreadable=1`、零写入）——`unreadable` 非零是"这份没登记成"，
-而 `ingested=0` 且 `unreadable=0` 是"这个 pattern 一个文件都没匹配上"，两件事必须分得开；
-一篇论文的可读载体通常是 PDF（有文本层时 `has_text_layer=true`、`pages` 照实数记）。
-不联网：这个动作的外部轴是 `none`（与 `run_once` / `search_literature` 的 `egress` 不同）。
+它不假装能做的事：不支持的扩展名不会被硬塞进来（`.tex` 在 `extract` 的支持面之外：
+`main.tex` 落 `UnsupportedFormat`、`counts.unreadable=1`、零写入）—— `unreadable` 非零
+是"这份没登记成"，而 `ingested=0` 且 `unreadable=0` 是"这个 pattern 一个文件都没匹配
+上"，两件事必须分得开；一篇论文的可读载体通常是 PDF（有文本层时 `has_text_layer=true`、
+`pages` 照实数记）。不联网：这个动作的外部轴是 `none`（与 `run_once` /
+`search_literature` 的 `egress` 不同）。
 """
 from __future__ import annotations
 
