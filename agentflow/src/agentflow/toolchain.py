@@ -92,9 +92,12 @@ SETTING_KEYS: Mapping[str, str] = {
 }
 
 
-def _env(env: Mapping[str, str] | None) -> dict[str, str]:
-    """读环境变量（给了 `env` 就用它，否则读 `os.environ`）—— 便于判据注入。"""
-    return dict(os.environ if env is None else env)
+def _env(env: Mapping[str, str] | None) -> Mapping[str, str]:
+    """读环境变量（给了 `env` 就用它，否则用 `os.environ`）—— 便于判据注入。
+
+    只读调用方（`.get`），所以不复制整份环境：`probe_checkers` 每个检查器都会问一次。
+    """
+    return os.environ if env is None else env
 
 
 def _probe_one_path(name: str, raw: str) -> tuple[str, str, str]:
@@ -243,6 +246,13 @@ def probe_checkers(env: Mapping[str, str] | None = None) -> dict[str, Any]:
             "looked_in": looked_in, "sources": {r["name"]: r["source"] for r in out}}
 
 
+#: Mathlib 一侧两种布局（Lean 4.7 / 4.9+）：`lean_path_for` 对工程根与每个依赖包各取一遍。
+_LEAN_LIB_SUBDIRS: tuple[Path, ...] = (
+    Path(".lake") / "build" / "lib",
+    Path(".lake") / "build" / "lib" / "lean",
+)
+
+
 def lean_path_for(root: str | Path) -> str:
     """Mathlib 工程根 → 编译 `import Mathlib` 需要的 `LEAN_PATH`。
 
@@ -261,12 +271,12 @@ def lean_path_for(root: str | Path) -> str:
     """
     base = Path(str(root))
     parts: list[Path] = []
-    for sub in (Path(".lake") / "build" / "lib", Path(".lake") / "build" / "lib" / "lean"):
+    for sub in _LEAN_LIB_SUBDIRS:
         parts.append(base / sub)
     pkgs = base / ".lake" / "packages"
     if pkgs.is_dir():
         for pkg in sorted(pkgs.iterdir()):
-            for sub in (Path(".lake") / "build" / "lib", Path(".lake") / "build" / "lib" / "lean"):
+            for sub in _LEAN_LIB_SUBDIRS:
                 parts.append(pkg / sub)
     return os.pathsep.join(str(p) for p in parts if p.is_dir())
 
@@ -423,12 +433,33 @@ def mathlib_state(env: Mapping[str, str] | None = None, *,
       实测读数。三格同源 —— 本机只跑第 ⑤ 步那一次编译，所以"umbrella 实测"与
       "图论实测"是同一份读数（拆成两次编译就是两处口径的毛病）。
     """
-    from . import formalgw as FG
+    row, problems = _reading_and_problems(env, reading)
+    enabled = bool(lean_enabled(env)[0])
+    return _mathlib_state_of(row, problems, enabled)
+
+
+def _reading_and_problems(env: Mapping[str, str] | None,
+                          reading: Mapping[str, Any] | None,
+                          ) -> tuple[dict[str, Any], list[str]]:
+    """第 ⑤ 步读数（给了就用那一份）+ 它的自洽问题（`mathlib_state` 一族共用）。"""
     from . import leantoolchain as LT
 
     row = dict(reading) if reading is not None else LT.mathlib_reading(env=env)
-    problems = _reading_problems(row)
-    enabled = bool(lean_enabled(env)[0])
+    return row, _reading_problems(row)
+
+
+def _mathlib_state(env: Mapping[str, str] | None, reading: Mapping[str, Any] | None,
+                   enabled: bool) -> dict[str, Any]:
+    """`mathlib_state` 的私有入口：开关已经由调用方算好（`toolchain_report` 不重复读设置）。"""
+    row, problems = _reading_and_problems(env, reading)
+    return _mathlib_state_of(row, problems, enabled)
+
+
+def _mathlib_state_of(row: Mapping[str, Any], problems: Sequence[str],
+                      enabled: bool) -> dict[str, Any]:
+    """读数 + 自洽问题 + 开关 ⇒ `mathlib_state` 的返回形状（同一份投影，两处调用）。"""
+    from . import formalgw as FG
+
     root = str(row.get("root") or "")
     umbrella = str(row.get("umbrella_olean") or "")
     rev: dict[str, Any] = FG.mathlib_revision(Path(root)) if root else {}
@@ -486,10 +517,14 @@ def lean_enabled(env: Mapping[str, str] | None = None) -> tuple[bool, str]:
     return SET.lean_enabled(env=env)
 
 
+def _formal_mode_of(enabled: bool) -> str:
+    """开关 → 证明路线（`formal_mode` 与 `toolchain_report` 共用这一条映射）。"""
+    return "formal" if enabled else "prose_review"
+
+
 def formal_mode(env: Mapping[str, str] | None = None) -> str:
     """这一趟的证明路线：`"formal"`（默认）或 `"prose_review"`（开关关掉时）。"""
-    enabled, _ = lean_enabled(env)
-    return "formal" if enabled else "prose_review"
+    return _formal_mode_of(lean_enabled(env)[0])
 
 
 def _model_spec(env: Mapping[str, str] | None = None) -> Any:
@@ -536,12 +571,12 @@ def toolchain_report(env: Mapping[str, str] | None = None, *,
         #: 于是他会去查环境，而真正该看的是设置文件。
         "lean_enabled": enabled,
         "lean_enabled_source": enabled_src,
-        "formal_mode": formal_mode(env),
+        "formal_mode": _formal_mode_of(enabled),
         "lean_ready": bool(lean),
         "can_do_formal": bool(lean) and enabled,
         "lean_path": (lean or {}).get("path", ""),
         "lean_version": (lean or {}).get("version", ""),
-        "mathlib": mathlib_state(env, reading=mathlib_reading),
+        "mathlib": _mathlib_state(env, mathlib_reading, enabled),
         # 能不能做 = 装了 且 开关开着（上面那一条是唯一口径）。
         # 这里不能另写一行 `can_do_formal`：重复键会覆盖上面那行，
         # 于是关掉 Lean 的机器上 `doctor` 仍说"能做形式化核验"。
