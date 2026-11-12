@@ -1,20 +1,17 @@
-"""角色 H 的动作 `judge_quote_semantics`（业主 2026-10-14：「回验不应该是十分呆板的
-逐字验证，而是保持语义相同即可」，落点是 「B 唤起 H」）。
+"""角色 H 的动作 `judge_quote_semantics`：引文回验的语义那一档（不逐字、只判是不是同义）。
 
-## 这一件只判、不写
+这一件只判、不写：H 是只读角色，落库代理被钉死在 `review_findings` / `documents.status`
+上（不碰任何知识表，见 `agent_h/__init__.py`）。所以它不写 `relations` / `statements`，
+而是把判定与证据交回唤起它的那一方（B），由 B 用自己的写面回填 `quote_verified` /
+`quote_mode` / `quote_reason`。"判"与"落"分居两处，正是这条链能被信任的前提（与
+"发现者不许同时是修正者"同一条纪律）。
 
-H 是只读角色，而它的落库代理被钉死在 `review_findings` / `documents.status` 上（「不碰任何知识表」，见 
-`agent_h/__init__.py` 的"为什么 H 必须是只读的"）。所以这一件「不写」 `relations` / `statements`：它把判定与证据交回「唤
-起它的那一方」（B），由 B 用它自己的写面回填 `quote_verified` / `quote_mode` / `quote_reason`。"判"与"落"分居两处，
-正是这条链能被信任的前提（与"发现者不许同时是修正者"同一条纪律）。
-
-## 两档与三态
-
-- 逐字那一档「不在这里」：它归 `quoteverify.check_quote`（禁改区里那份不花钱的实现），由 B 先走；这一件只处理"逐字不中、但语义相同"那一档。
-- 语义判定要模型缝（`self.llm`）：「没有缝（没有 key）⇒ 如实回"没查"」，既不是通过也不是不通过（`judge_not_wired`）。缝只在
-`run-agent --semantic-review` 时才接到 H 手上（默认确定性）——所以默认路径下这一件回的是"没查成"，而那句话本身就是如实读数。- 判定词表
-与"判定 ⇒ 三栏"的映射都只有一处：`judges.quote_semantics_judge_for` /
-`judges.quote_fields_from_verdict`（本文件不抄第二份口径）。
+逐字那一档不在这里：它归 `quoteverify.check_quote`（禁改区里那份不花钱的实现），由 B
+先走；这一件只处理"逐字不中、但语义相同"那一档。语义判定要模型缝（`self.llm`）：
+没有缝（没有 key）⇒ 如实回"没查"，既不是通过也不是不通过（`judge_not_wired`）。缝只在
+`run-agent --semantic-review` 时才接到 H 手上（默认确定性），所以默认路径下这一件回的
+是"没查成"，而那句话本身就是如实读数。判定词表与"判定 ⇒ 三栏"的映射都只有一处
+（`judges.quote_semantics_judge_for` / `judges.quote_fields_from_verdict`）。
 """
 from __future__ import annotations
 
@@ -58,7 +55,7 @@ class _JudgeQuoteSemantics:
             "same_meaning": verified,
             "quote_mode": mode,
             "quote_reason": reason,
-            # 证据两栏（业主：「语义那一档必须留证据」）—— B 拿它们直接回填行上的
+            # 证据两栏（语义那一档必须留证据）—— B 拿它们直接回填行上的
             # `quote_span` / `quote_call_sha256`；缺了这两样，`quote_mode="semantic"`
             # 在 `schema` 那一层会被当场拒（说不出对着哪一段、哪一次判的就不算通过）。
             "quote_span": str(span),
