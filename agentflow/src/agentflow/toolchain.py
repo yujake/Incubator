@@ -1,17 +1,15 @@
 # -*- coding: utf-8 -*-
 """这台机器上的证明工具链：在哪、哪一版、能不能用 —— 「一处定义」。
 
-## 为什么要有这一层（2026-10-03 的现场）
+## 为什么要有这一层
 
-`tools/verify_tools.py`（探测）与 `formalgw.py`（调用）此前「各自」 `shutil.which("lean")`
-—— 两处独立地"看 PATH"。这带来两个后果，那天都实测到了：
+`tools/verify_tools.py`（探测）与 `formalgw.py`（调用）曾经各自 `shutil.which("lean")`
+—— 两处独立地"看 PATH"。这带来两个后果：
 
 1. 「同一台机器上"探测说没有、调用却真能跑"是可能的」（两处的口径各写一份，本可以漂）。
-   实测：Lean 4.7.0 就装在这台机器的一个目录里（不在 PATH 上），
-   而 `detect_verifier()` 报 `available=[]`。
+   例如 Lean 装在 PATH 之外时，`detect_verifier()` 会报 `available=[]`。
 2. 「能力静默降级」：探测说"没有检查器" ⇒ 形式化那一条腿改成 `cross_check`，
    报告里只剩一句"没核到"，而「没有任何地方会说"这台机器其实能做"」。
-   用户的原话是"这是坏的" —— 坏的正是这种"看不出来"。
 
 所以本层的职责只有一件事：把「这台机器能做形式化核验吗」变成一个「可读、可判据、三态」的读数，
 并让「探测与调用共用同一个答案」（谁都不许再自己 `which` 一次）。
@@ -21,8 +19,7 @@
 这台机器的 Lean / Coq / Isabelle 装在哪，写在 `settings.json` 的
 `toolchain.lean_bin` / `toolchain.coq_bin` / `toolchain.isabelle_bin`，
 Mathlib 工程根写在 `toolchain.mathlib_root`（见 `agentflow/settings.example.json`
-与 :mod:`agentflow.settings`；2026-10-07 起）。改前这里是逐字写着一台机器的
-绝对路径的 —— 那是"机器相关的事实落在代码里"，换一台机器就变成一句假话。
+与 :mod:`agentflow.settings`）。把一台机器的绝对路径写进代码，换一台机器就变成一句假话。
 
 ## 查找顺序（每一档都留下"是从哪找到的"）
 
@@ -188,7 +185,7 @@ def resolve_checker(name: str, env: Mapping[str, str] | None = None) -> dict[str
 def _version_of(exe: str, name: str) -> tuple[str, str]:
     """跑那个检查器的报版本命令。返回 `(版本行, 问题)` —— 起不来就算问题（三态里的没查成）。
 
-    业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，程序结束它返回。
+    起程序就登记一条程序计时器，程序结束它返回。
     """
     cmd = VERSION_COMMANDS.get(name, f"{name} --version").split()
     argv = [exe, *cmd[1:]]
@@ -249,14 +246,12 @@ def probe_checkers(env: Mapping[str, str] | None = None) -> dict[str, Any]:
 def lean_path_for(root: str | Path) -> str:
     """Mathlib 工程根 → 编译 `import Mathlib` 需要的 `LEAN_PATH`。
 
-    ## 为什么要由框架来拼（`draft/37` §101 的真机读数）
+    ## 为什么要由框架来拼
 
     `formalgw.check_lean` 起检查器的命令是裸的 `[lean, <file>]` —— 它靠进程环境里的
     `LEAN_PATH` 找包。于是"Mathlib 装好了"与"`import Mathlib` 能不能编过"是两件事：
-    2026-10-04 实测，盘上有一份编译完整的 Mathlib（工程根由设置文件或
-    `AGENTFLOW_MATHLIB_ROOT` 给出来，umbrella `Mathlib.olean` 在、4095 个 olean 在），
-    而 E 的每一次形式化尝试都报 `unknown package 'Mathlib'` —— 差的就是这一串
-    `LEAN_PATH`。
+    工程根有了、umbrella 的 `.olean` 也在，而 E 的形式化尝试仍可能报
+    `unknown package 'Mathlib'` —— 差的就是这一串 `LEAN_PATH`。
 
     ## 布局只认两处（4.7.0 与 4.9+ 各一种）
 
@@ -283,7 +278,7 @@ _MISSING_PACKAGE = re.compile(r"unknown package '([^']+)'")
 def _missing_imports_of(*texts: Any) -> list[str]:
     """从检查器原文里抠出"缺的包"（只认原文里真的出现过的那几个名字）。
 
-    为什么从这里读、不另问一次：改前这条信息来自那次 umbrella 探针自己的返回值。
+    为什么从这里读、不另问一次：这条信息只活在 umbrella 探针自己的返回值里。
     现在只有第 ⑤ 步那一次编译（`leantoolchain.mathlib_reading` 的 `evidence`），
     所以"缺哪个包"也只能从那条原文里读 —— 两处各读一份，就又是两个答案。
     """
@@ -403,18 +398,16 @@ def mathlib_state(env: Mapping[str, str] | None = None, *,
                   reading: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Mathlib 那一轴的状态：第 ⑤ 步那条读数的一处投影。
 
-    ## 为什么改前是两处探测，现在是这一处（2026-10-25 合并）
+    ## 为什么是一条投影而不是第二次探测
 
-    改前这一格自己有一套探测：`formalgw.find_mathlib_root` 找工程根、自己认两种
-    umbrella 布局、再真编译一次 `import Mathlib` + `norm_num`（`_import_mathlib_probe`，
-    超时 180 秒）。而自检的第 ⑤ 步另有一套：`leantoolchain.mathlib_reading` 读盘面
-    加一次 `import Mathlib.Combinatorics.SimpleGraph.Basic` + `#check SimpleGraph` 的真编译。
-    两套探的是同一件事，却可以给出两个答案 —— 2026-10-08 的现场就是文件面说可用、
-    真编译报 `unknown package 'Std'`；两处读数分家时，读的人分不清该信哪一个，
-    而 `agentflow doctor` 为此要编译两次（本机实测：umbrella 那一次 18.9 秒、
-    第 ⑤ 步那一次 12.4 秒）。
+    这一格自己探过：`formalgw.find_mathlib_root` 找工程根、自己认两种 umbrella 布局、
+    再真编译一次 `import Mathlib` + `norm_num`；而自检的第 ⑤ 步另有一套
+    （`leantoolchain.mathlib_reading` 读盘面加一次 `import Mathlib.Combinatorics.SimpleGraph.Basic`
+    + `#check SimpleGraph` 的真编译）。两套探的是同一件事，却可以给出两个答案 ——
+    文件面说可用、真编译报 `unknown package 'Std'`；两处读数分家时，读的人分不清该信
+    哪一个，而 `agentflow doctor` 为此要编译两次。
 
-    所以本函数现在只做一件事：把第 ⑤ 步那条读数（`leantoolchain.mathlib_reading`，
+    所以本函数只做一件事：把第 ⑤ 步那条读数（`leantoolchain.mathlib_reading`，
     结论由 `leantoolchain._mathlib_control` 那一次真编译给出）投影成既有那几个键，
     一格都不自己量。`reading=` 让调用方把已经跑过的那一份传进来 —— doctor 把自检读数里
     的 `mathlib` 那一格直接给它，于是整趟只编译一次；不给就现读盘面（纯读，不起进程）。
@@ -428,7 +421,7 @@ def mathlib_state(env: Mapping[str, str] | None = None, *,
       既有判据与文档都读它，但它不单独代表"可用"；
     - `import_mathlib_probe` / `import_mathlib_measured` / `graph_import_measured`：
       实测读数。三格同源 —— 本机只跑第 ⑤ 步那一次编译，所以"umbrella 实测"与
-      "图论实测"是同一份读数（拆成两次编译就是改前那个毛病）。
+      "图论实测"是同一份读数（拆成两次编译就是两处口径的毛病）。
     """
     from . import formalgw as FG
     from . import leantoolchain as LT
@@ -482,7 +475,7 @@ def mathlib_state(env: Mapping[str, str] | None = None, *,
 
 
 def lean_enabled(env: Mapping[str, str] | None = None) -> tuple[bool, str]:
-    """这一趟要不要走 Lean 形式化（业主 2026-10-12 的开关）。返回 `(值, 来源)`。
+    """这一趟要不要走 Lean 形式化（业主的开关）。返回 `(值, 来源)`。
 
     实现在 `settings.lean_enabled`（取值梯子只有一处：环境变量
     `AGENTFLOW_LEAN_ENABLED` > 设置文件 `toolchain.lean_enabled` > 缺省 `True`）。
@@ -521,7 +514,7 @@ def toolchain_report(env: Mapping[str, str] | None = None, *,
 
     只回答"这台机器能做什么"，「不发起任何模型调用」（它不花钱）。
     `model_key` 那一格只看「有没有配」，绝不打印值 —— 而且"配没配"要看
-    环境变量与设置文件两档（2026-10-07 起 key 也可以落在 `settings.json` 里，
+    环境变量与设置文件两档（key 也可以落在 `settings.json` 里，
     那么这一格只读 key 的环境变量就会报"没配"，与真实情况相反）。
 
     `mathlib_reading` 是"已经跑过的那一份第 ⑤ 步读数"（doctor 把自检读数里的
@@ -536,7 +529,7 @@ def toolchain_report(env: Mapping[str, str] | None = None, *,
                   "base_url": spec.base_url,
                   "model": spec.model},
         "provers": probe,
-        #: 用户设的那个开关（业主 2026-10-12）：`False` ⇒ 全流程不做 Lean 形式化。
+        #: 用户设的那个开关：`False` ⇒ 全流程不做 Lean 形式化。
         #: 它与下面 `lean_ready`（探测读数）是两条独立的事实：
         #: "机器上装了 Lean"不等于"这一趟允许用它"，反过来"关掉了"也不等于"没装"。
         #: 折叠这两件事的症状是：关掉开关的用户被报成"环境里没有检查器"，
@@ -549,7 +542,7 @@ def toolchain_report(env: Mapping[str, str] | None = None, *,
         "lean_path": (lean or {}).get("path", ""),
         "lean_version": (lean or {}).get("version", ""),
         "mathlib": mathlib_state(env, reading=mathlib_reading),
-        # 2026-10-17（Lean 审计 #1）：原来这里还有一行 `"can_do_formal": bool(lean)`
-        # 重复键覆盖了上面那行 —— 于是关掉 Lean 的机器上 `doctor` 仍说"能做形式化核验"。
-        # 已删：能不能做 = 装了 且 开关开着（上面 456 行那一条是唯一口径）。
+        # 能不能做 = 装了 且 开关开着（上面那一条是唯一口径）。
+        # 这里不能另写一行 `can_do_formal`：重复键会覆盖上面那行，
+        # 于是关掉 Lean 的机器上 `doctor` 仍说"能做形式化核验"。
     }
