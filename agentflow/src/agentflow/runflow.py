@@ -829,19 +829,34 @@ def _verification_from_ledger(rows: Sequence[Mapping[str, Any]], split: Any,
     verdicts = claims_mod.VERDICTS
     counts: dict[str, int] = {"total": len(rows)}
     for name in verdicts:
-        counts[name] = sum(1 for r in rows if str(r.get("verdict")) == name)
+        counts[name] = 0
+    # 一趟把五件事收齐：各档判决计数、两级 verified 计数、verified 到达的级别集合、
+    # 「有没有一条通过」。改前是「每档一次整表扫」（len(VERDICTS) 遍）+ 两级各一遍 +
+    # `levels_reached` 一遍 + `any(...)` 一遍 ≈ 8 遍，每遍都为每行现取一次
+    # `str(r.get("verdict"))`（有时还有 `str(r.get("level"))`）。判据表达式逐字未变：
+    # verdict / level 的取值、`levels_reached` 的"level 为真才收"、以及 unknown 的算法
+    # （台账行里出现词表外的判决 ⇒ 记进 `unknown`）都照旧。
+    verdict_set = frozenset(str(v) for v in verdicts)
+    per_level: dict[str, int] = {}
+    any_verified = False
+    for r in rows:
+        verdict = str(r.get("verdict"))
+        if verdict in verdict_set:
+            counts[verdict] += 1
+        if verdict == "verified":
+            any_verified = True
+            raw_level = r.get("level")
+            if raw_level:
+                level_text = str(raw_level)
+                per_level[level_text] = per_level.get(level_text, 0) + 1
     unknown_like = len(rows) - sum(counts[n] for n in verdicts)
     counts["unknown"] = counts["unknown"] + unknown_like
     counts["unverified"] = counts["total"] - counts["verified"]
     for level in ("abstract", "fulltext"):
-        counts[f"verified_{level}"] = sum(
-            1 for r in rows if str(r.get("verdict")) == "verified"
-            and str(r.get("level")) == level
-        )
-    levels_reached = sorted({str(r.get("level")) for r in rows
-                             if str(r.get("verdict")) == "verified" and r.get("level")})
+        counts[f"verified_{level}"] = per_level.get(level, 0)
+    levels_reached = sorted(per_level)
     checked = bool(evidence.get("checked"))
-    if not any(r.get("verdict") == "verified" for r in rows):
+    if not any_verified:
         reason = (f"对 {len(rows)} 条原子断言做了逐字比对，本次没有一条通过"
                   "（未通过的判决见 counts 的 not_found / known_unverifiable / unknown）")
     else:
