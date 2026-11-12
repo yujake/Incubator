@@ -232,7 +232,8 @@ def research_submit_gap(
         return fail(f"question_id 必须是 {S.ID_DIGITS} 位十进制字符串（旧数据里的 4 位号仍可读），收到 {question_id!r}", kind="bad_id")
     if mode not in S.SEARCH_MODES:
         return fail(f"mode 必须是 {S.SEARCH_MODES} 之一，收到 {mode!r}", kind="bad_mode")
-    if not str(topic).strip():
+    topic_text = str(topic).strip()
+    if not topic_text:
         return fail("topic 不能为空（空 topic 会让 A 的查询无从构造）", kind="bad_topic")
 
     try:
@@ -302,7 +303,7 @@ def research_submit_gap(
             row = S.SearchRequest(
                 request_id=req_id,
                 timestamp=S.now_iso(),
-                topic=str(topic).strip(),
+                topic=topic_text,
                 mode=mode,
                 content_description=str(description or ""),
                 done=False,
@@ -335,7 +336,7 @@ def research_submit_gap(
             # ---- 台账：记录"这个问题问过哪条请求、问的什么"
             ledger = _read_ledger(store)
             lrow = _ledger_row(ledger, question_id)
-            entry = {"request_id": req_id, "topic": str(topic).strip(), "mode": mode, "at": S.now_iso()}
+            entry = {"request_id": req_id, "topic": topic_text, "mode": mode, "at": S.now_iso()}
             if lrow is None:
                 ledger["rows"].append(
                     {"question_id": question_id, "origin": qrow.get("origin", ""), "requests": [entry]}
@@ -349,7 +350,7 @@ def research_submit_gap(
                 "request_id": req_id,
                 "question_id": question_id,
                 "duplicated": False,
-                "topic": str(topic).strip(),
+                "topic": topic_text,
                 "mode": mode,
                 "waiting_request_ids": waiting,
                 # 判重支才有的两个键，这里如实给"没有"（`G-23`：两条分支同一套 8 键）。
