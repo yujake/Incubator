@@ -832,7 +832,9 @@ def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str,
     known = {str(x) for x in known_ids}
     #: 形态 `名字:数字`（或 `名字:数字-数字`）—— 本文档内交叉引用的写法。
     is_xref_form = re.match(r"^[^:\\/]+:\d+(-\d+)?$", rel) is not None
-    head = rel.rsplit(":", 1)[0] if re.match(r"^.+:\d+(-\d+)?$", rel) else rel
+    #: 整串是否以 `:<数字>` 收尾（切尾巴那一步与最后的 `file` 分支共用同一次判定）。
+    has_tail = re.match(r"^.+:\d+(-\d+)?$", rel) is not None
+    head = rel.rsplit(":", 1)[0] if has_tail else rel
     if rel in known:
         return "self_ref", rel
     if head in known:
@@ -848,7 +850,7 @@ def classify_proof_location(loc: object, known_ids: Iterable[Any]) -> tuple[str,
     # `test_gate_g3_rejects_a_proof_location_that_is_neither_id_nor_path` 变红）。
     if not looks_like_file and not re.search(r"[/\\]", rel):
         return "cross_ref", head
-    return "file", (rel.rsplit(":", 1)[0] if re.match(r"^.+:\d+(-\d+)?$", rel) else rel)
+    return "file", head
 
 
 def check_proofs(
@@ -908,11 +910,13 @@ def check_proofs(
     for i, c in enumerate(claims, 1):
         c = c or {}
         cid = str(c.get("claim_id") or f"claim-{i}")
-        exp_refs = [
-            citation_ref_parts(x)[1]
-            for x in (c.get("citations") or [])
-            if citation_ref_parts(x)[0] == "exp"
-        ]
+        exp_refs: list[str] = []
+        # 一条 citation 只解析一次：原先列表推导在 `if` 与取值里各调一次
+        # `citation_ref_parts`，同一个字符串被切两遍。
+        for x in (c.get("citations") or []):
+            ckind, cref = citation_ref_parts(x)
+            if ckind == "exp":
+                exp_refs.append(cref)
         # ---- 第五道（2026-10-13，无 Lean T2 的真机）：引一条否证的实验当支撑。
         # 现场：`projects/p6t2-research-20261012b` 的 exp:0002 自己的结论是 `result="refutes"`
         # （`counterexample: criterion mismatch …, mismatches: 108`），而论文的 claim-2 把它列进 `citations`
