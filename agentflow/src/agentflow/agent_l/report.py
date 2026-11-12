@@ -1,11 +1,8 @@
 # -*- coding: utf-8 -*-
-"""L 的「向 B 汇报形式化困难」这一格（业主 2026-10-22 晚裁定的第三句）。
+"""L 的「向 B 汇报形式化困难」这一格。
 
-## 裁定原文（逐字）
-
-> 「可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新得到 V 签」
-
-它有三条落点，缺一条这一句就只是口号：
+"可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新得到 V 签"有三条落点，
+缺一条这一句就只是口号：
 
 1. 谁听：只有 B（`specs/b.py` 的 `edges` 里有 `L`，`specs/l.py` 的 `summonable=True`
    —— 那一侧是"B 可以派 L"，这一侧是"L 可以跟 B 说话"）。递送走既有的 `message`
@@ -16,13 +13,9 @@
 3. 什么时候说：`formalize` 判"形式化失败或对不上"时自己说（`_maybe_report_failure`），
    不靠模型记得去发一条消息 —— "会记得"不是判据，`formalize` 的结论才是。
 
-## 三类不汇报的失败（刻意）
-
-- 检查器说 `compile_error` / `extra_axioms` / `decl_mismatch`：那是 L 自己写的源码
-  有毛病（`agent_l/formalize.py` 的失败分类），B 改不动它；
-- 自检不是 `usable`（`lean_selfcheck_*`）：环境问题，与 B 的证明无关；
-- 台账里一行命题都没有（`no_ledger`）：没有对象可汇报。
-
+三类不汇报的失败（刻意）：检查器说 `compile_error` / `extra_axioms` /
+`decl_mismatch`（L 自己写的源码有毛病，B 改不动）；自检不是 `usable`
+（`lean_selfcheck_*`，环境问题）；台账里一行命题都没有（`no_ledger`，没有对象可汇报）。
 这三类都留在返回值里（`reason` / `coverage`），也留在 `report.state="skipped"` 的
 理由里 —— "没汇报"与"汇报了"分得开，且"为什么不汇报"有读数。
 """
