@@ -2005,15 +2005,6 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                 f"这一笔改的是 {table!r}，那几格没有落点。整笔不写。",
                 table=table, id=id, kind="param_error")
         payload.update(extra_abandon)
-    try:
-        idf = _spec_of(table)["id_field"]
-    except ToolError as e:
-        return fail(str(e), table=table, kind="unknown_table")
-    # ---- 直写兜底：同 `table.create`（见 `_direct_write_disposal`）。
-    # 这一格也是"V 签完之后把档位写强"那条路被接管的地方：同一份内容再交一次，
-    # 秘书会按 `verifications` 里那一签决定升不升档（升档就地改那一行、不新建）。
-    if not patch:
-        return fail("patch 不能为空（空 patch 只会更新 updated_at，通常是调用方写错了）", table=table, id=id, kind="param_error")
     # ---- `tasks` 台账的写侧判据（D12）：与 `table.create` 同一处判据、同一组理由码。
     # 这一格堵的是同一形状的第二个口子：update 可以把一行直接改成 `item_state="done"`，
     # 而那条路的语义是"绕过状态机伪造收口"，与 create 写的 done 是同一件事。
