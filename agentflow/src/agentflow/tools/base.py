@@ -285,14 +285,15 @@ def stale_tool_param_seams(
     out: list[str] = []
     for tool in sorted(table):
         spec = specs.get(tool)
+        props = {} if spec is None else ((spec.params or {}).get("properties") or {})
+        violations: list[str] | None = None
         for prop in sorted(table[tool] or {}):
-            if spec is None:
+            if spec is None or prop not in props:
                 out.append(f"{tool}.{prop}")
                 continue
-            if prop not in ((spec.params or {}).get("properties") or {}):
-                out.append(f"{tool}.{prop}")
-                continue
-            if prop not in tool_param_seam_violations(spec, seams):
+            if violations is None:
+                violations = tool_param_seam_violations(spec, seams)
+            if prop not in violations:
                 # 已经不需要接缝了（handler 现在收得下它）
                 out.append(f"{tool}.{prop}")
     return out
@@ -750,9 +751,10 @@ def candidate_tool_names(name: str, names: Iterable[str], *, limit: int = 3) -> 
     out: list[str] = []
     tail = want.split(".")[-1]
     if tail:
-        out += [n for n in pool if n.split(".")[-1] == tail]
-        tails = sorted({n.split(".")[-1] for n in pool})
-        out += [n for n in pool if n.split(".")[-1] in difflib.get_close_matches(
+        pairs = [(n, n.split(".")[-1]) for n in pool]
+        out += [n for n, t in pairs if t == tail]
+        tails = sorted({t for _n, t in pairs})
+        out += [n for n, t in pairs if t in difflib.get_close_matches(
             tail, tails, n=limit, cutoff=0.6)]
     out += list(difflib.get_close_matches(want, pool, n=limit, cutoff=0.6))
     seen: set[str] = set()
@@ -1073,10 +1075,13 @@ class ToolRegistry:
         allowed_by_sandbox: list[str] = []
         allowed_by_exception: list[str] = []
         allowed_by_universal: list[str] = []
+        readonly = filter_readonly and role in READ_ONLY_ROLES
+        bookkeeping = set(BOOKKEEPING_TABLES) if readonly else set()
+        exempt = {name for name, _why in READONLY_CALL_EXCEPTIONS.get(role, ())} if readonly else set()
         for s in self._specs.values():
             if role not in s.roles:
                 continue
-            if filter_readonly and role in READ_ONLY_ROLES:
+            if readonly:
                 # 可达性轴与副作用轴分开。登记在 `UNIVERSAL_TOOLS` 的工具对只读角色
                 # 照样发 —— 判据不是它的副作用等级，而是它写不写知识表。
                 # 硬约束在这里（不是只在测试里）：登记的写集越出通信/簿记类表
@@ -1084,16 +1089,15 @@ class ToolRegistry:
                 # 就成了"只读角色能改知识表"的后门。
                 _universal = UNIVERSAL_TOOLS.get(s.name)
                 if _universal is not None:
-                    _outside = sorted(set(_universal.tables) - set(BOOKKEEPING_TABLES))
+                    _outside = sorted(set(_universal.tables) - bookkeeping)
                     if _outside:
                         refused_universal.append(s.name)
                         continue
                 # 「该角色自己的落库代理放行」：写面钉死在
                 # `READONLY_CALL_EXCEPTIONS[role]` 那张逐条登记的表里
                 # —— 它不是"放宽只读"，而是"只读角色的写只允许这几个落点"。
-                _exempt = {_n for _n, _w in READONLY_CALL_EXCEPTIONS.get(role, ())}
                 if s.side_effect in SIDE_EFFECTS_WRITE:
-                    if s.name in _exempt:
+                    if s.name in exempt:
                         allowed_by_exception.append(s.name)
                     elif _universal is not None:
                         allowed_by_universal.append(s.name)
@@ -1263,6 +1267,7 @@ class ToolRegistry:
             return fail(str(e), tool=name, kind="unknown_tool")
 
         props = spec.params.get("properties") or {}
+        has_budget = "budget" in props
         # ---- 同名参数的消歧（规则与 `budget` 同族：schema 说了算）
         # 优先级：「显式关键字 > 位置映射 > bound_role」。位置映射里的 `role` 必须与关键字
         # 形态走同一套判据：否则 `call(name, {"role": "H"})` 会跳过身份判据、工具真的收到
@@ -1283,7 +1288,7 @@ class ToolRegistry:
             # 身份声明回退到 bound_role（没有被显式声明过）。
             role = None
         # 3) 工具自己声明了 `budget` ⇒ 调用方按关键字传的映射属于工具（FC-17 的既有规则）。
-        budget_as_tool_param = isinstance(budget, Mapping) and "budget" in props
+        budget_as_tool_param = isinstance(budget, Mapping) and has_budget
 
         # ---- 调用期角色判据（唯一判据在 `_callable_for`）
         #
@@ -1320,11 +1325,11 @@ class ToolRegistry:
             merged["role"] = role_as_param
 
         # ---- FC-17：budget 消歧（见 docstring 的规则）
-        if budget_as_tool_param and "budget" in props and "budget" not in merged:
+        if budget_as_tool_param and "budget" not in merged:
             merged["budget"] = budget
             budget = None
             spill_root = None
-        if budget is not None and "budget" in props:
+        if budget is not None and has_budget:
             merged["budget"] = budget
             budget = None
             spill_root = None
@@ -1334,7 +1339,7 @@ class ToolRegistry:
             # 参数集是封闭的 ⇒ 整份调用被拒，一次真实的写入/检索就白费了。它「不是」工具参数，
             # 但它是审计线索 —— 从参数面剥掉、记进留痕（下面 `entry` 里），不当参数也不丢。
             _why = None
-            _props = (spec.params or {}).get("properties") or {}
+            _props = props
             if "why" in merged and "why" not in _props:
                 _why = merged.pop("why")
             validate_params(spec.params, merged)
@@ -1390,7 +1395,7 @@ class ToolRegistry:
         # 什么都没传的情况下，被塞进一个它根本不认识的 `ContextBudget` 对象。
         # 这条与上面消歧规则是同一句话的两半。
         eff_budget = budget if budget is not None else self.default_budget
-        if eff_budget is not None and "budget" in props:
+        if eff_budget is not None and has_budget:
             eff_budget = None
         if eff_budget is not None:
             eff_spill = spill_root if spill_root is not None else self.default_spill_root
