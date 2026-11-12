@@ -1596,9 +1596,8 @@ class LoopRun:
 
         判据是 :func:`_summon_landed`（看那一步的结果有没有真的开出一行子任务），
         不是 `shape == "summon"`。受控拒绝（`forbidden_edge` 之类）与两段式请示
-        （`wash_proposed`）也是 `shape == "summon"` 的步，把它们数进来就是回执说谎
-        （2026-10-22 查实：C 想唤 A 被 `forbidden_edge` 拒掉、D 的两段式请示 0 行新任务，
-        旧实现仍分别报 `["A"]` / `["D"]`）。没派出去的那些逐条进 :attr:`summons_refused`。
+        （`wash_proposed`）也是 `shape == "summon"` 的步，把它们数进来就是回执说谎。
+        没派出去的那些逐条进 :attr:`summons_refused`。
         """
         return [str(s.payload.get("role") or "") for s in self.steps
                 if s.shape == "summon" and _summon_landed(s.result)]
@@ -1638,9 +1637,8 @@ class LoopRun:
         """这次运行真的发出去的留言（按发生顺序，可重复）。
 
         判据是 :func:`_message_landed`（看那一步的结果有没有落点），不是 `shape == "message"`。
-        被受控拒掉的那一步也是 `shape == "message"`，把它数进来就是回执说谎（2026-10-22
-        查实：D 发给 E 的那一条被 `not_in_roster` 拒掉，旧实现仍报 `["E"]`，而 E 的收件箱
-        是空的）。没落成的那些逐条进 :attr:`messages_refused`。
+        被受控拒掉的那一步也是 `shape == "message"`，把它数进来就是回执说谎。
+        没落成的那些逐条进 :attr:`messages_refused`。
         """
         return [str(s.payload.get("to") or "") for s in self.steps
                 if s.shape == "message" and _message_landed(s.result)]
@@ -1696,25 +1694,17 @@ class LoopRun:
         `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
         `prompt_cache` / `elapsed_sec` / `end_ts` / `notes` / `final_payload`。
 
-        （D-52/D-53 那九格此前漏在这份清单外：`mailbox_*` / `monitor_turns` /
-        `wake*` / `clock_*` —— 判据 `tests/test_summons_and_numbered_addressing.py::test_to_dict_documents_every_key_it_returns`
-        要求两个方向都相等，所以"加了键没补文档"会当场红。这里补齐的是文档，不是行为。
-        2026-10-27：`handed_off` / `silent_children` 两格（p209 的"交差"那一批加进
-        `to_dict` 时漏了这一行文档）同样按这条判据补上。
-        2026-10-26（F1a 第 ② 条）：同一条判据的反方向也走了一次 —— `refusal_max` /
-        `refusal_stopped` 两格从 `to_dict()` 里去掉（全仓 0 个非测试读者，能由
-        `refusal_key` + `refusal_streak` + `dead_loop_max` 复算），于是这份清单也短两格。）
+        （判据 `tests/test_summons_and_numbered_addressing.py::test_to_dict_documents_every_key_it_returns`
+        要求两个方向都相等，所以"加了键没补文档"会当场红。这份清单只记文档，不是行为。）
 
         `summons` 与 `summons_refused` 是同一件事的两半，判据都在
         :func:`_summon_landed`：前者只记真的开出了子任务的召唤，后者逐条点名"尝试过但
         没派出去"的那几条（`to` / 理由码 / 结局）。只报前者会让"被拒 / 在请示"在回执上
-        消失 —— 那正是 2026-10-22 查实的那条缺陷（C 唤 A 被 `forbidden_edge` 拒掉仍报
-        `["A"]`；D 的两段式请示 0 行新任务仍报 `["D"]`）。
+        消失。
 
         `messages_sent` 与 `messages_refused` 是同一件事的两半，判据都在
         :func:`_message_landed`：前者只记真的落成的收件人，后者逐条点名"尝试过但没落成"
-        的那几条（`to` / 理由码 / 回执态）。只报前者会让"被拒"在回执上消失 —— 那正是
-        2026-10-22 查实的那条缺陷（D 发给 E 被 `not_in_roster` 拒掉，回执照报 `["E"]`）。
+        的那几条（`to` / 理由码 / 回执态）。只报前者会让"被拒"在回执上消失。
         """
         return {
             "role": self.role, "task": self.task,
@@ -1728,20 +1718,20 @@ class LoopRun:
             "no_reply_streak": self.no_reply_streak,
             "dead_loop_max": self.dead_loop_max, "same_call_max": self.same_call_max,
             "stalled_max": self.stalled_max,
-            # 两档分开报（裁定 10丙）：提醒了几次 / 有没有因此判停 / 账从第几步算起。
+            # 两档分开报：提醒了几次 / 有没有因此判停 / 账从第几步算起。
             "dead_loop_nudges": self.dead_loop_nudges, "stalled_nudges": self.stalled_nudges,
             "dead_loop_stopped": self.dead_loop_stopped,
-            # 同一拒因那一档（Q17）：拒因键 / 那一步的读数 / 当前连击。三格与
+            # 同一拒因那一档：拒因键 / 那一步的读数 / 当前连击。三格与
             # `dead_loop_*` 分开报 —— 两档都写 `no_progress_limit` 收工，只有这几个数
             # 分得清是哪一档停的（谁也没冒充谁）。最长连击与"是不是因它停的"两格
-            # 不进这里：它们没有读者，能复算（见字段说明，2026-10-26 F1a 第 ② 条）。
+            # 不进这里：它们没有读者，能复算。
             "refusal_key": self.refusal_key,
             "refusal_reading": self.refusal_reading,
             "refusal_streak": self.refusal_streak,
             "counters_reset_at": self.counters_reset_at,
-            # S-B：这一趟压了几次（0 = 一次都没压；与"没启用"那一档合起来读）。
+            # 这一趟压了几次（0 = 一次都没压；与"没启用"那一档合起来读）。
             "compactions": self.compactions,
-            # D-52 / D-53 的两个收口读数：投了几条（板项 / 留言分别列 id）、
+            # 两个收口读数：投了几条（板项 / 留言分别列 id）、
             # 唤醒了几次（编号逐条点名）、监控回合数、推时钟的次数与推响的条数。
             "mailbox_items": list(self.mailbox_items),
             "mailbox_msgs": list(self.mailbox_msgs),
@@ -1765,16 +1755,16 @@ class LoopRun:
             "still_unsubmitted": [dict(x) for x in self.still_unsubmitted],
             "waiting_for": self.waiting_for, "resumed_from": self.resumed_from,
             "notify_rejections": self.notify_rejections,
-            # D-68 收工门的补救拍数（Q12，2026-10-26）：与 `notify_rejections` 并列 ——
+            # 收工门的补救拍数：与 `notify_rejections` 并列 ——
             # 两格都是"收工被打回了几次"，一格管留痕表，一格管整棵树销号。
             "final_refused_beats": self.final_refused_beats,
             "handoffs": list(self.handoffs),
             "summons": self.summons,
-            # 召回收执的另一半（2026-10-22）：尝试过但没派出去的那几条逐条点名，
+            # 召回收执的另一半：尝试过但没派出去的那几条逐条点名，
             # 与 `summons` 同一份判据（`_summon_landed`）。
             "summons_refused": self.summons_refused,
             "messages_sent": self.messages_sent,
-            # 回执的另一半（2026-10-22）：尝试过但没落成的那几条逐条点名，
+            # 回执的另一半：尝试过但没落成的那几条逐条点名，
             # 与 `messages_sent` 同一份判据（`_message_landed`）。
             "messages_refused": self.messages_refused,
             # 子产出处理读数（业主裁定：父必须处理子产出）：四个数 + 那份明细。
