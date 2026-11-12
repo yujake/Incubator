@@ -725,8 +725,11 @@ def _result_reason(row: S.Experiment) -> str:
         # 这一句要说出是哪一个 —— 两档的凭据形态不同，读的人据此去查不同的地方。
         from .. import numericproof as _NP
 
-        if _NP.is_signed_exhaustion(row.to_dict()):
-            sig = _NP.signature_of(row.to_dict())
+        # 这一行的扁平视图只造一次：`is_signed_exhaustion` 与 `signature_of`
+        # 读的是同一份（`row.to_dict()` 是纯转换，中间没有对 row 的写）。
+        as_dict = row.to_dict()
+        if _NP.is_signed_exhaustion(as_dict):
+            sig = _NP.signature_of(as_dict)
             return (
                 f"{row.method} 实验穷尽了整个论域 ⇒ 等级 `theorem`"
                 f"（历史列 evidence_kind={row.evidence_kind}；签名者 E，理由 {sig.get('proof_reason')}，"
