@@ -376,7 +376,10 @@ class WaveHandle:
 
     def settled(self) -> list[Any]:
         """已经落定的结果（按输入顺序，只含落定的那些）。"""
-        return [self.settled_by_index()[i] for i in sorted(self.settled_by_index())]
+        # 落定表原先建两遍（一遍取键排序、一遍按下标取值），每一遍都会对句柄各
+        # poll() 一次；同一份只建一次 —— `poll()` 是只读读数，两次之间没有写。
+        got = self.settled_by_index()
+        return [got[i] for i in sorted(got)]
 
     def settled_by_index(self) -> dict[int, Any]:
         """已经落定的那些，按输入下标给（`_do_summon_many` 要按输入顺序拼 results）。"""
