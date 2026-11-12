@@ -1,15 +1,14 @@
-"""主控接线：把 A–H 接到 `LocalBackend`（依据 `draft/30` §T3-H）。
+"""主控接线：把 A–H 接到 `LocalBackend`。
 
 `conductor.summon` 把活交给"后端"，而进程内的 `LocalBackend` 明确拒绝自动创建角色实例
 （构造依赖靠猜就等于静默少做事）⇒ 调用方必须给一张登记表；没人给就每次召唤都如实落
-`refused/not_wired`（这是设计，不是缺陷）。本模块是那张登记表的唯一装配点：按各角色实测的
-构造签名造工厂。实测（2026-09-29，`temp/_probe_agent_construction.py`）：八个角色只给
-`store` 就能自组装工具面（D 9 / E 6 / F 6 / G 63 / H 22 件，A/B/C 为 `None`），所以这里不重复
-装配工具，只补两类真实依赖：`A` 需要 `providers`（没给就不进登记表，不编造 provider 列表）；
+`refused/not_wired`（这是设计，不是缺陷）。本模块是那张登记表的唯一装配点：按各角色声明的
+构造工厂造实例。八个角色只给 `store` 就能自组装工具面，所以这里不重复装配工具，只补两类
+真实依赖：`A` 需要 `providers`（没给就不进登记表，不编造 provider 列表）；
 `B` 需要 `extractor` + `extract_text`，且它的签名里没有 `llm` —— B 的 LLM 走 extractor 协议
 （`LLMExtractor`），没有时用 `RuleExtractor`。
 
-## 它不是计划器（`draft/31` P10 的形式约束）
+## 它不是计划器
 
 本模块不含计划 JSON schema、prompt 模板库、plan 解析器、重计划状态机，也不决定"该派谁"；它
 只回答一件事：每个角色的实例怎么造出来。"派谁、派什么"是 M 的工具调用序列。
@@ -26,7 +25,7 @@ from typing import Any, Callable, Mapping
 
 from . import schema as S
 
-#: 角色可见性的唯一判定入口（业主 2026-10-22：「在Lean开关没开时隔绝L」）。
+#: 角色可见性的唯一判定入口（业主：「在 Lean 开关没开时隔绝 L」）。
 #: 本文件读它两处：接线态读数（`status`）与按声明取角色（`_build` 的 `get` 会拒绝）。
 from . import leanscope as _LEANSCOPE
 
@@ -47,15 +46,15 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
                 notes: list[str] | None = None) -> Any:
     """B 的抽取器 —— 「唯一装配点」（`run-agent` / `run-b` / `pipeline` 三条路共用）。
 
-    ## 为什么它必须存在（2026-10-03 的根因，见 `draft/37` §83）：`LLMExtractor` 要一个
-    `complete(prompt) -> str` 的 client，而模型缝不是它（`LlmSeam` 只有 `ask`）。三条路
-    各写各的：`run-agent` 从不给 B client ⇒ 退 `RuleExtractor` ⇒ `B.run_once` 当场拒抽
-    （`R-56`）⇒ `relations` 0 行、`literature.processed=False`（实测 `p5-run15`）；
-    `run-b` / `pipeline` 写死 `RuleExtractor()` ⇒ 同样拒抽。配方只在 `projects.py` 里对：
-    `client_from_env(scope="extract", meter=TokenMeter(store), role="B")`。那一版曾写
-    `max_tokens=8192`（缺省 4096 会截半句），2026-10-15 起整条删掉：业主裁定「不卡 token，
-    只卡总花销的钱」，对照证明不带它反而更宽。收成一处：「有 key ⇒ 计量过的模型 client；
-    没有 key ⇒ 规则档」，后者让 `run_once` 如实报 `no_llm_extractor`；两种情况都写 `notes`。
+    ## 为什么它必须存在
+
+    `LLMExtractor` 要一个 `complete(prompt) -> str` 的 client，而模型缝不是它（`LlmSeam` 只有
+    `ask`）。三条路各写各的：`run-agent` 从不给 B client ⇒ 退 `RuleExtractor` ⇒ `B.run_once`
+    当场拒抽 ⇒ `relations` 0 行、`literature.processed=False`；`run-b` / `pipeline` 写死
+    `RuleExtractor()` ⇒ 同样拒抽。配方只在 `projects.py` 里对：
+    `client_from_env(scope="extract", meter=TokenMeter(store), role="B")`。
+    收成一处：「有 key ⇒ 计量过的模型 client；没有 key ⇒ 规则档」，后者让 `run_once` 如实报
+    `no_llm_extractor`；两种情况都写 `notes`。
     """
     from .extract import extract_text  # noqa: F401  （保留语义：调用方仍需自查）
     from .llm import LLMExtractor, RuleExtractor
@@ -68,17 +67,13 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
     from .modelclient import SCOPE_EXTRACT, client_from_env
     from .tokenmeter import TokenMeter
 
-    # `task_id=None` 是如实说"这一笔不挂在任何一次召唤上"（F3 / C 线需求单 R-2）。
-    # 此前写的是 `task_id="host-wiring"` —— 一个编造的任务号：它不在 `tasks` 表里，
-    # 于是 `verify.verify_all` 把它报成 `dangling_usage_task`（error）。
-    # 编造一个看起来像任务号的字符串，比留空更坏：审计读到的是一个具体的号，
-    # 而那个号从来不存在（`draft/44` 的 R-06 同族：假读数比没读数更难发现）。
+    # `task_id=None` 是如实说"这一笔不挂在任何一次召唤上"：编造一个看起来像任务号的
+    # 字符串，比留空更坏 —— 审计读到的是一个具体的号，而那个号从来不存在
+    # （假读数比没读数更难发现）。
     #
-    # 跨线依赖（已写进需求单，不在这里顺手改 A 线的文件）：`modelclient.ModelClient`
-    # 把它折成字符串 `self.task_id or "(未接线)"` 再写进账本，所以光改这一行还不够 ——
-    # 要让 `dangling_usage_task` 真的归零，`modelclient` 那一侧必须让 `None` 原样透传
-    # （`task_id=self.task_id or None`）。另：盘上已经写下的行不会被代码改写
-    # （`store.rebuild` 重放的是同一批事件），所以历史工作区的计数不会因为改这一行而归零。
+    # 跨线依赖：`modelclient.ModelClient` 会把它折成字符串再写进账本，所以光改这一行
+    # 还不够；要让 `dangling_usage_task` 真的归零，`modelclient` 那一侧必须让 `None`
+    # 原样透传。盘上已经写下的行不会被代码改写（`store.rebuild` 重放的是同一批事件）。
     client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store),
                              task_id=None, role="B")
     if notes is not None:
@@ -111,11 +106,11 @@ class _Builder:
                  workspace_root: str | Path | None = None,
                  llm_by_role: Mapping[str, Any] | None = None) -> None:
         self.llm = llm
-        #: 逐角色的模型缝（2026-09-30）：`llm=` 是"所有角色共用这一个"，
+        #: 逐角色的模型缝：`llm=` 是"所有角色共用这一个"，
         #: 而 H 的语义判据要的是只给 H 一个缝 —— 把它塞进 `llm=` 会让
         #: `agent_b` 拿它去造 `LLMExtractor`，而缝不是抽取器 client
-        #: （实测：`TypeError: client 必须提供 complete(prompt: str) -> str 方法`，
-        #: 且当时被 `resolve` 的 `except TypeError` 兜成了一句误导性的"需要一个 store"）。
+        #: （会抛 `TypeError`，且容易被 `resolve` 的 `except TypeError` 兜成一句
+        #: 误导性的"需要一个 store"）。
         self.llms: dict[str, Any] = dict(llm_by_role or {})
         self.providers = list(providers or [])
         self.extractor = extractor
@@ -124,7 +119,7 @@ class _Builder:
         self._made: dict[tuple[str, str], Any] = {}
         #: "为什么 B 在用规则抽取器"这类装配读数（`b_extractor` 往里写，`wired_llm_conductor` 转出来）
         self.extractor_notes: list[str] = []
-        #: 角色声明的注册表（懒取一次；`goal-7f5116c1` M4）
+        #: 角色声明的注册表（懒取一次）
         self._specs: Any = None
 
     # ------------------------------------------------------------ 逐个角色
@@ -138,7 +133,7 @@ class _Builder:
         seg = self.cfg.get(f"agent_{role.lower()}") or {}
         return dict(seg) if isinstance(seg, Mapping) else {}
 
-    #: 角色 → 它的构造签名收不收 `actor=`（2026-09-30 为实例轴查的实测结论）。
+    #: 角色 → 它的构造签名收不收 `actor=`。
     #: A/D/E/F 有显式 `actor=` 形参；G/H 从 config 的 `actor` 键取；
     #: B/C 没有 actor 概念（B 的写入走 `claimed_by` 领取，C 只读）。
     _ACTOR_KWARG: frozenset[str] = frozenset({"A", "D", "E", "F"})
@@ -191,10 +186,9 @@ class _Builder:
     def agent_v(self, store: Any, instance: str = "") -> Any:
         """V（构造在 `specs/v.py::build`：要工作区根；模型缝由 `agent_v` 按角色取）。
 
-        为什么 V 也要走这条通用装配（而不是自己 new 一个）：`capabilities` 第 [1]
-        条要求主控的出边恰好等于 `schema.ROLES`，而 `capabilities` 第 [2] 条要求
-        `AgentV` 上真有那三个 handler —— 两处一致才叫"接线完成"。
-        这里只多一个薄壳：真正的构造在声明里（与 A–H 同形）。
+        为什么 V 也要走这条通用装配（而不是自己 new 一个）：`capabilities` 要求主控的
+        出边恰好等于 `schema.ROLES`，且 `AgentV` 上真有那三个 handler —— 两处一致才叫
+        "接线完成"。这里只多一个薄壳：真正的构造在声明里（与 A–H 同形）。
         """
         return self._build("V", store, instance)
 
@@ -202,10 +196,9 @@ class _Builder:
     def agent_l(self, store: Any, instance: str = "") -> Any:
         """L（Lean 形式化者；构造在 `specs/l.py::build`：要工作区根）。
 
-        2026-10-22 新设。这里的薄壳不是重复：`_Builder.get` 按 `agent_<角色小写>`
-        取构造器，而 `build_role_registry` 的工厂又调它 —— 少这一行时
-        `AgentRegistry` 里看得到 L、`host` 却造不出来（判据
-        `tests/test_agent_spec_reconciliation.py::test_the_class_path_is_what_host_actually_builds`
+        这里的薄壳不是重复：`_Builder.get` 按 `agent_<角色小写>` 取构造器，而
+        `build_role_registry` 的工厂又调它 —— 少这一行时 `AgentRegistry` 里看得到 L、
+        `host` 却造不出来（判据 `test_the_class_path_is_what_host_actually_builds`
         当场报 `'_Builder' object has no attribute 'agent_l'`）。
         协作面仍然不搭：L 不可召唤、也没有出边，本方法只让"用户直接起 L"这条路通。
         """
@@ -220,7 +213,7 @@ class _Builder:
 
     # ------------------------------------------------------------ 依赖怎么造
     #
-    # `goal-7f5116c1` M4：角色的构造搬进了它自己的声明（`specs/<角色>.py::build`），
+    # 角色的构造搬进了它自己的声明（`specs/<角色>.py::build`），
     # 这里只剩"装配知识"——两个角色专属的默认值，它们不是声明，放这儿才对：
     # 一个是"没给抽取器时按有没有模型缝选哪一种"，一个是"A 的下载器由配置开关决定"。
 
@@ -275,7 +268,7 @@ class _Builder:
         return self._specs
 
     def _build(self, role: str, store: Any, instance: str = "") -> Any:
-        """按声明构造一个角色实例（`goal-7f5116c1` M4）。
+        """按声明构造一个角色实例。
 
         这里只做三件通用的事：① 算该角色的 llm / config / actor（G/H 的 config 带 actor）；
         ② 按声明里的 `needs` / `peers` 备齐依赖；③ 把 `BuildDeps` 交给 `spec.build`。
@@ -310,7 +303,7 @@ class _Builder:
     def get(self, role: str, store: Any, instance: str = "") -> Any:
         """取（或建）该角色的实例；键含 store 根 ⇒ 换库必换实例。
 
-        `instance` 是 2026-09-30 加的实例轴：空串 = 那个单例（默认行为逐字不变）；
+        `instance` 是实例轴：空串 = 那个单例（默认行为逐字不变）；
         显式标签 ⇒ 键里多一维，于是"N 个 B 一起干活"拿到的是 N 个对象。
         为什么单例路径必须留着：`D` 与 `F` 在构造期就绑定了邻居（`c=` / `e=`），
         每召唤一次新建一个 C，就会让 `D.c is C` 这条结构不变式断掉
@@ -325,7 +318,7 @@ class _Builder:
     def status(self) -> dict[str, str]:
         """逐角色的接线态（`WIRING_STATES` 之一）。
 
-        业主 2026-10-22（「在Lean开关没开时隔绝L」）：由 Lean 开关决定存在性的角色在
+        业主（「在 Lean 开关没开时隔绝 L」）：由 Lean 开关决定存在性的角色在
         开关关着时不出现在这份读数里 —— 否则它会被读成"这个角色接了线、只是没用到"，
         而业主点名要去掉的正是那一类噪音。判定由 `leanscope.is_hidden` 做，这一行只读。
         """
@@ -401,7 +394,7 @@ def wired_conductor(store: Any, *, policy: Any = None, llm: Any = None,
     reg = build_role_registry(store, llm=llm, providers=providers, extractor=extractor,
                               config=config, workspace_root=workspace_root)
     cond = conductor_for(store, policy=policy, role_registry=reg, backend=backend)
-    # 「静默的唤醒就是接到消息」（业主 2026-10-29）：真实跑的那一趟在这里把执行侧接上——
+    # 「静默的唤醒就是接到消息」（业主）：真实跑的那一趟在这里把执行侧接上——
     # 收件人已完成且未销号时，一条 message / notice 落盘就会把它按同一个号继续跑起来。
     # 替身构造的 conductor 默认不接（`_ensure_consumer` 会明说"执行侧未接线"），
     # 于是"要不要叫醒"的判定与"真的跑起来"在读数上分得开。
@@ -410,7 +403,7 @@ def wired_conductor(store: Any, *, policy: Any = None, llm: Any = None,
             cond.resume_runner = cond.resume_dispatched
         except Exception:  # noqa: BLE001 —— 接线失败不许带走装配
             pass
-    # 兜底计时器被打掉 ⇒ 把那个代理叫起来（业主 2026-10-29：它"接住所有的事件"）。
+    # 兜底计时器被打掉 ⇒ 把那个代理叫起来（业主：它"接住所有的事件"）。
     # 时钟侧只留钩子（它不 import 编排层），钩子的实现就是上面那条执行侧；
     # 已销号由 `wake_on_lifeline` 挡掉（"彻底没有了，叫不醒"）。
     if cond is not None and hasattr(cond, "wake_on_lifeline"):
@@ -432,7 +425,7 @@ def wired_tool_registry(store: Any, *, policy: Any = None, llm: Any = None,
 
     返回 `tools.build_registry` 的原返回值（`RegistryBuild`，含 `.registry`）。
 
-    `session_root` / `sid` 显式往后传（`draft/37` §63）：会话身份是装配期输入，
+    `session_root` / `sid` 显式往后传：会话身份是装配期输入，
     不给 ⇒ `conductor.closing` 的 `user_pending` 记 `unknown`（不是 pass）。
     这里显式列出而不是靠 `build_kw` 顺手带过去：靠 `build_kw` 时，
     一个拼错的键会被静默吞进 `deps` 之外、工具照旧按缺省会话读 —— 那正是假绿的形态。
@@ -474,19 +467,18 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     | （无） | F（`attack.step` 真推一轮） | 不适用：F 的推理不是开关，见下 |
 
     三条同一条纪律：环境里有 key 也不改变行为（`DEFAULT_LLM_LOOPS` 的注释逐字写着）。
-    ## F 没有开关（业主 2026-10-26 晚的裁定，原话）
-    「没有默认开，这个就是F的工作方式，没有开关的说法」。改前 `--attack-reasoning`
-    是 F 有没有推理的那道闸：默认关 ⇒ `agent_f.default_llm()` 返回 None ⇒ 真机 10 个
+    ## F 没有开关（业主原话）
+    「没有默认开，这个就是F的工作方式，没有开关的说法」。`--attack-reasoning`
+    曾经是 F 有没有推理的那道闸：默认关 ⇒ `agent_f.default_llm()` 返回 None ⇒
     计划全是 `rounds=1`、`dead_end(缺工具)`、detail 逐字"本框架尚未接线自动推理"，
     F 一次推理都没做过、一份 proof 都没交过。现在那个开关已退役（形参保留只为兼容
     仍在传它的调用方，例如 `cli.py`），F 的缝在这里无条件装配。
     ## 为什么 F 的缝不连带打开 `experiment_reasoning`
     两件事各自可解释：F 是"想这一步怎么打"（它的工作方式），E 是"把判据写成一份能跑的
-    脚本"（另一笔钱、另一个开关）。代价（`projects/mp4` 真机，`attack_plans.json` 计划
-    000003 的 r1/r2）：只开 F 的缝、E 没缝 ⇒ F 需要脚本时写不出来，那一轮落
-    `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）—— 改前它是静默的
-    `no_change`，看上去像"跑了但没结果"。整条链要通，还需要 `experiment_reasoning`
-    （E 写脚本、跑玩具例子）。
+    脚本"（另一笔钱、另一个开关）。代价（只开 F 的缝、E 没缝）：F 需要脚本时
+    写不出来，那一轮落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）——
+    以前它是静默的 `no_change`，看上去像"跑了但没结果"。整条链要通，还需要
+    `experiment_reasoning`（E 写脚本、跑玩具例子）。
     ## 语义（与 `LlmBackend` 的 docstring 逐字一致）：登记在 `loops` 里的 `(角色, 动作)` 由 LLM
     循环执行，其余动作仍走 Python 实现；默认 `loops` 为空 ⇒ 与 `wired_conductor` 完全一致。
     `conductor_for` 这条缓存：`tools.conductor_tools.conductor_for` 按 `store.root` 缓存而忽略后传的 `backend`：先建确定性主控、再要模型主控会
@@ -502,11 +494,11 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
 
     root = Path(session_root or getattr(store, "root", ".")).resolve()
     ws = str(workspace_root or getattr(store, "root", "") or "")
-    # ---- 会话身份在装配期定下（`draft/37` §63，修法 B）
+    # ---- 会话身份在装配期定下
     #
     # `sid=None` 的缺省值是"写入那一刻"的 `sessions.session_id()`（当天日期）。
     # 运行内 `conductor.closing` 拿到的必须是「这一趟」的会话号，而不是"今天那段" ——
-    # 实测第 11 趟运行内报 `can_close: true`、外部带 sid 报 `failed: ['user_pending']`。
+    # 否则同一份交付在运行内与外部带 sid 读会给出两个结论。
     # 所以这里解析一次，把它同时交给：模型缝（写 `llm_call` 事件）、
     # `LlmBackend`（写 `agent_*` 事件）、以及工具层（读会话文件）——
     # 三处读写的必须是同一个文件。
@@ -515,7 +507,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     def _seam(role: str) -> Any:
         """按角色造一个模型缝（唯一一处构造）。
 
-        为什么收成一处（`R1-B-x` 裁定 3）：改前 H 与 F 各内联了一份
+        为什么收成一处：H 与 F 曾各内联了一份
         `LlmSeam.for_role(...)` 的 lambda，两份逐字相同 —— 那是"同一件事两份实现"，
         加第三个角色（D）时必然再抄第三份，而三者只要有一处参数不同
         （`session_root` / `usd_budget` / `meter`）就会静默分家。
@@ -527,26 +519,21 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
             meter=TokenMeter(store, budget_usd=usd_budget)))
         return factory(role)
 
-    # H 的语义判据（`draft/28` §196）：默认 False —— 环境里有 key 也不改变确定性行为
+    # H 的语义判据：默认 False —— 环境里有 key 也不改变确定性行为
     # （与 `DEFAULT_LLM_LOOPS` 同一条纪律）。打开时 H 拿一个按角色造的模型缝，
     # `claims_semantically_judged` 才会从 0 变成真读数。
     h_llm = None
     if semantic_review:
         h_llm = _seam("H")
-    # F 的攻坚推理（`draft/39` §6.32 的 D42b）：业主 2026-10-26 晚的裁定 ——
-    # 「没有默认开，这个就是F的工作方式，没有开关的说法」。
+    # F 的攻坚推理：无条件装配 —— `_seam("F")` 拿到的对象就是 F 的推理面
+    # （没有配 key 时缝自己会如实落 `not_wired` —— 那是"钱没花成"，不是"没接线"）。
+    # 它曾经是一道装配开关（默认关 ⇒ `f_llm is None`）⇒ `attack_plans.history`
+    # 那一条逐字写着"本框架尚未接线自动推理"，F 从来没被问过一次。那道开关
+    # （形参与命令行 flag）已删除。
     #
-    # 所以这里无条件装配：`_seam("F")` 拿到的对象就是 F 的推理面（没有配 key 时缝自己
-    # 会如实落 `not_wired` —— 那是"钱没花成"，不是"没接线"）。
-    # 2026-10-26 之前这里是一道装配开关（默认关 ⇒ `f_llm is None`）
-    # ⇒ 真机读数（T2 第 12 趟 `p6n`）里 `attack_plans.history` 那一条逐字写着
-    # "本框架尚未接线自动推理"，F 从来没被问过一次。那道开关（形参与
-    # 命令行 flag）已在本批删除。
-    #
-    # 工具层那条路也要拿到它（`draft/39` §6.33 的 D42c）：真机里 M 派 `F.step` 走的是
-    # `attack.step` 那条工具路径（`attack_tools._agent_for` → `AgentF(store)`），
-    # 那条路径拿不到 host 的装配上下文 —— 只接角色工厂，`F.step` 仍然 `no_change`
-    # （T2 第 14 趟 `p6p` 实测）。两条路共用同一个缝对象。
+    # 工具层那条路也要拿到它：M 派 `F.step` 走的是 `attack.step` 那条工具路径
+    # （`attack_tools._agent_for` → `AgentF(store)`），那条路径拿不到 host 的装配
+    # 上下文 —— 只接角色工厂，`F.step` 仍然 `no_change`。两条路共用同一个缝对象。
     f_llm = _seam("F")
     from . import agent_f as _AF
 
@@ -554,13 +541,12 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     notes_attack = ("F 的攻坚推理：接线（这是 F 的工作方式，不是可选项 —— 业主 2026-10-26 裁定）"
                     "；角色工厂与工具层两条路共用同一个缝")
     # ---- E 的写脚本推理（`--experiment-reasoning`，业主裁定：「把 F 与 E 的接缝做好」）
-    # 缝在哪被 gate（这一处就是根因，2026-10 的真机读数）：E 的缝一直只有"插座"没有"线" ——
-    # `agent_e/author_script.py` 在 `self.llm is None` 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个
-    # 入口：① `specs/e.py::_build` 的 `llm=d.llm`（`_Builder._llm_for("E")`，而 `role_llm` 里从没登记过 `"E"`）；
-    # ② `agent_f/core.py` 的 `e` 属性里的 `llm=role_seam("E")`（`llmseam` 的按角色表）。开关就是
-    # `role_llm["E"]` 与 `set_role_seam("E", …)` ⇒ F 每轮都撞同一句"子目标有判据但没有脚本（no_seam）"。
-    # 两条路都要接：真机里 M 派 `F.step` 走工具层（`attack_tools._agent_for` → `AgentF(store)`），那条路拿
-    # 不到这里的装配上下文 ⇒ 只登记 `role_llm["E"]` 时工具路径上 E 仍是 `llm=None`，所以角色工厂与`llmseam` 按角色表两处都写（同一份缝对象）。
+    # E 的缝一直只有"插座"没有"线"：`agent_e/author_script.py` 在 `self.llm is None`
+    # 时受控拒绝 `no_seam`，而 `self.llm` 的来源只有两个入口：
+    # ① `specs/e.py::build` 的 `llm=d.llm`（`_Builder._llm_for("E")`，而 `role_llm`
+    # 里没登记过 `"E"`）；② `agent_f/core.py` 的 `e` 属性里的 `llm=role_seam("E")`
+    # （`llmseam` 的按角色表）。所以角色工厂与 `llmseam` 按角色表两处都写
+    # （同一份缝对象）—— 只接一处时工具路径上 E 仍是 `llm=None`。
     e_llm = None
     from .llmseam import set_role_seam as _set_role_seam
 
@@ -577,14 +563,15 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
             "E 的写脚本推理：未接线（默认确定性）⇒ 有判据的子目标会落 `no_seam`，"
             "F 那一轮如实落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是缝）；"
             "要真写脚本就加 `--experiment-reasoning`（F 那一侧没有开关：它出场就有缝）")
-    # ---- D 的模型精修（`R1-B-x` 裁定 3）：缝不由角色开关决定，由"这次运行有没有模型"决定。
-    # 裁决 6 的口径是"接全部在用动作"，不是"可选接" ⇒ D 不该像 F 当年那样等一个开关。
-    # 三条硬要求（裁定 3 逐字）：① 有模型就接上（`_model_key_present()`：环境里配了 key）；② 三态读数：
+    # ---- D 的模型精修：缝不由角色开关决定，由"这次运行有没有模型"决定 ——
+    # "接全部在用动作"，不是"可选接" ⇒ D 不该像 F 当年那样等一个开关。
+    # 三条硬要求：① 有模型就接上（`_model_key_present()`：环境里配了 key）；② 三态读数：
     # 接上之后 `_llm_refine` 的 `reading.state` 会落 `used`/`failed`/`not_wired`/`unknown_object`
     # （`agent_d/_support.model_json_call`），于是"这次到底问没问模型、问成没问成"是读得出来的；
     # ③ fail-open：这一层拿不到模型就退回确定性分析（`_llm_refine` 本来就返回 `(None, reading)`），
     # 绝不因为模型不可用而中断研究。成本靠读数看见：缝自己带 `TokenMeter`（与 H/F 同一个 `usd_budget`）。
-    # 为什么不是无条件建缝：没有 key 时建出来的缝每次调用只落 `not_wired` —— 那不是"接上了"，而把"没接线"写成"接上了但没答"正是本项目反复防的那种假话；所以没有模型 ⇒ 不建缝，并把这件事写进 notes。
+    # 为什么不是无条件建缝：没有 key 时建出来的缝每次调用只落 `not_wired` —— 那不是"接上了"，
+    # 而把"没接线"写成"接上了但没答"正是本项目反复防的那种假话。
     d_llm = None
     if _model_key_present():
         d_llm = _seam("D")
@@ -608,7 +595,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
                                    llm_by_role=(role_llm or None))
     table = dict(loops or {})
     conductor = conductor_for(store, policy=policy, role_registry=role_reg, backend="local")
-    # 画像文件（`draft/37` §109，用户口径）：M 要看到所有人的简介，其它角色看可协作的
+    # 画像文件（用户口径）：M 要看到所有人的简介，其它角色看可协作的
     # 同伴 —— 而"只在开头注入提示词"会被跑到后面忘掉，所以每次运行落一份可查的文件
     # 到工作区根（不进 `out/`：那里是论文包的地盘，锚在看着它）。
     try:
@@ -622,22 +609,19 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     except Exception as exc:  # noqa: BLE001 —— 写不成不影响这次运行，但必须留痕
         notes.append(f"画像文件没写成：{type(exc).__name__}: {exc}")
 
-    # ---- 各角色的 skills 落到工作区（业主 2026-10-14：「现做现读」）
+    # ---- 各角色的 skills 落到工作区（业主：「现做现读」）
     _materialize_skills(store, notes)
 
     # 内层 backend 必须带着 store：`LocalBackend.store` 由 `Conductor` 注入，
     # 而 `factory(role, store=None)` 会被角色工厂当场拒（"需要一个 store"）——
-    # 实测 2026-09-29：`run-agent M` 派 H 做 review，两次都以
-    # `TypeError: factory(H) 需要一个 store（backend 的契约是 fn(*, store=...)）` 失败，
-    # 而 §185 那批测试没看见它：那个用例把子角色也登记进 `loops`（走 LLM 循环），
-    # `LocalBackend` 那条路一次都没走。
+    # 这条路走不到时 `summon` 会以 `TypeError` 失败，而只测 LLM 循环的用例看不见它。
     inner = getattr(conductor, "backend", None)
     if not isinstance(inner, LocalBackend):
         inner = LocalBackend(role_reg)
         inner.store = store
 
     def _default_seam(role: str) -> LlmSeam:
-        # `meter=` 见 `draft/37` §64：缝是模型调用的唯一入口，记账挂在它身上 ——
+        # `meter=`：缝是模型调用的唯一入口，记账挂在它身上 ——
         # 不挂的话，`run-agent` 这条路一次调用都不会进 `usage_ledger`。
         return LlmSeam.for_role(role, session_root=root, sid=eff_sid, usd_budget=usd_budget,
                                 meter=TokenMeter(store, budget_usd=usd_budget))
@@ -645,7 +629,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     backend = LlmBackend(inner=inner, loops=table, session_root=root,
                          seam_factory=seam_factory or _default_seam, store=store,
                          max_steps=max_steps, workspace_root=ws, sid=eff_sid,
-                         # `draft/37` §125：单趟 `run-agent` 的停机点只有一个
+                         # 单趟 `run-agent` 的停机点只有一个：步循环顶上看这个开关文件。
                          # —— 步循环顶上看这个开关文件。多轮的自主跑不接它
                          # （那一档的停机点在每轮之间，见 `autonomy._stop_before_round`）。
                          stop_file=str(stop_file or ""))
@@ -659,9 +643,9 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     backend.registry = built.registry
     backend.conductor = conductor
     backend.store = store
-    # ---- D8 / E23（业主 2026-10-09 裁"修"）：把"每实例一个注册表"的装配点接上。
+    # ---- 把"每实例一个注册表"的装配点接上。
     #
-    # 不接会让权限面自相矛盾（现场依据 `draft/90` §2 的 E23）：`_surface_refusal` 的基准是
+    # 不接会让权限面自相矛盾：`_surface_refusal` 的基准是
     # 这一趟的 `workspace_root`（它跟着面走），而 `fs.*` 真正落盘的根是共用注册表的根
     # （= 父的工作区）⇒ 一条相对路径的检查结论是"在面内"，真写下去却落在面外，
     # 而测试全绿 —— 正是本仓最忌的"测试全绿、上线即越权"。
@@ -676,23 +660,23 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     backend.registry_factory = _registry_for_face
     return {"conductor": conductor, "backend": backend, "registry": built.registry,
             "loops": table, "session_root": root,
-            # 这一趟定下的会话号（§63）：调用方与运维据此核对"工具面读的是哪一段"。
+            # 这一趟定下的会话号：调用方与运维据此核对"工具面读的是哪一段"。
             "sid": eff_sid,
-            # 装配读数（B 的抽取器是什么、为什么；2026-10-03 §83 的根因修复）：
+            # 装配读数（B 的抽取器是什么、为什么）：
             # 空 = 一切按预期；非空 = 有人该看一眼（例如没 key ⇒ B 会拒抽）。
             "notes": notes}
 
 
 def _materialize_skills(store: Any, notes: list[str]) -> list[str]:
-    """把各角色的 skills 落到工作区（业主 2026-10-14：「现做现读」）。
+    """把各角色的 skills 落到工作区（业主：「现做现读」）。
 
     前置提示词里只给索引（`agent_prompts` 的 `SKILLS_INDEX` 段），正文落在
     `<工作区>/skills/<角色>/<slug>.md`，角色用自己的 `fs.read` 现读。
-    ## 为什么抽成函数（2026-10-14，R116）：它此前是 `run()` 里的一段内联 `try/except`，
-    一条判据都碰不到它（与本文件第 594 行那段注释记的是同一类缺陷：§185 那批测试没看见它）。"现做现读"的落点
-    就是这一段：它不跑，提示词里的索引就指向 33 个不存在的文件，而每一处各自自洽 ——
+    ## 为什么抽成函数：它此前是 `run()` 里的一段内联 `try/except`，
+    一条判据都碰不到它（与本文件里那段"测试没看见它"的注释是同一类缺陷）。"现做现读"的落点
+    就是这一段：它不跑，提示词里的索引就指向一堆不存在的文件，而每一处各自自洽 ——
     没有任何地方会报错。
-    ## 没有工作区时不写：`store is None` 时旧写法是 `materialize(".")`，会把 33 个 `.md` 写进
+    ## 没有工作区时不写：`store is None` 时旧写法是 `materialize(".")`，会把几十个 `.md` 写进
     进程当前目录。改成：没有工作区 ⇒ 这一格没做，并留一条明说的 note（三态：没做 ≠ 做好了）。
     返回写出去的路径；一条不成也不打断这一趟（索引仍然有效），但必须留痕。
     """
