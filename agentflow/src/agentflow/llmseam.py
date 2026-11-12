@@ -1,8 +1,8 @@
 """统一的模型缝：一次模型调用 = 一条可审计的记录。
 
-## 为什么要有这一层（`draft/34` §7 的第 4 步）
+## 为什么要有这一层
 
-在它之前，"接模型"这件事在仓里有两种纪律：`runflow` 那条流程把 `prompt_version`
+"接模型"这件事在仓里有两种纪律：`runflow` 那条流程把 `prompt_version`
 落进 run-manifest（可复现），而 C/D 的钩子直接 `self.llm.complete(prompt)`
 （没有版本、没有模型名、没有落库的调用记录）。于是同一个问题在两处有两个答案：
 "这次结论是哪个版本的提示词、哪个模型、哪一次调用产生的？"
@@ -18,7 +18,7 @@
 
 ## 落档落在哪
 
-落在项目会话记录里（`sessions.append`）—— 不新增表。理由与 `draft/29` §3.2 一致：
+落在项目会话记录里（`sessions.append`）—— 不新增表。理由是：
 候选落点先落文件；表结构一改就是 schema 迁移（禁改区）。
 落档失败不吞：调用结果里带 `recorded` 字段写明失败原因，调用方据此决定要不要继续。
 """
@@ -66,7 +66,7 @@ class SeamCall:
     #: 输入里命中缓存的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
     #: `None` = 上游没回这一格（"没查成"），`0` = 明说零命中 —— 三态，不许折平。
     #: 它与 `usd` 成对：供应商按"命中/未命中/输出"三档计价，而这一格是那三档里
-    #: 唯一被我们此前丢掉的一档（业主 2026-10-14：「花销标准与供应商定价吻合」）。
+    #: 唯一被我们丢掉的一档（「花销标准与供应商定价吻合」）。
     cache_hit_tokens: int | None = None
     #: 输入里未命中缓存的那一部分（上游 `usage.prompt_cache_miss_tokens`）。三态同上。
     cache_miss_tokens: int | None = None
@@ -77,7 +77,7 @@ class SeamCall:
     elapsed_sec: float = 0.0
     recorded: str = ""      # 空串 = 审计记录已落档；否则是没落成的原因
     #: 这一趟走的是哪条协议：`"tool_calls"`（原生工具调用）/ `"text"`（文本 JSON 回落）。
-    #: 它是审计读数，不是装饰：`draft/37` §48 那趟真机死在"模型把 `tool` 写成 `name`"，
+    #: 它是审计读数，不是装饰：那趟真机死在"模型把 `tool` 写成 `name`"，
     #: 而那条路上"名字由谁给"正是这个字段回答的问题。
     protocol: str = "text"
     #: 这一趟广告了几件函数（工具 + 循环形状），以及那份工具面的摘要。
@@ -90,14 +90,14 @@ class SeamCall:
     #: 两个读数回答两个不同的问题，折成一个就答不了任何一个：
     #: `reasoning_effort` 是"我们要求它想多深"（配置面），
     #: `reasoning_chars` 是"它实际想了多少字"（结果面）。
-    #: 真机形态有四种，各自指向不同的修法：
+    #: 形态有四种，各自指向不同的修法：
     #:
     #:   effort=high + chars>0    正常；
     #:   effort=off  + chars=0    这一档本来就不想（是配置，不是缺陷）；
     #:   effort=high + chars=0    请求发了但它没想 ⇒ 查模型/端点，别查提示词；
     #:   effort=off  + chars>0    配置说关而它照想 ⇒ 查 `off` 那条序列化。
     #:
-    #: 所有者 2026-10-10 的原话是"感觉像不怎么过脑子"—— 那一句在改前无法验证：
+    #: "感觉像不怎么过脑子"那一句若没有这两个读数就无法验证：
     #: 请求体里没有这一栏，回复里的 `reasoning_content` 也从没被读过。
     reasoning_effort: str = ""
     #: 这一趟按哪个采样温度问的（`modelgw.TEMPERATURE_RANGE` 里的一个数）。
@@ -105,13 +105,13 @@ class SeamCall:
     #: 三态：`None` = 这一趟没有发请求（没接线 / 预算已尽）—— "没查过"不是"0"；
     #: 具体数值 = 真的进了请求体 `temperature` 那一格的那个数（显式给的那个，
     #: 或这一档配置 `ModelSpec.temperature` 的那个）。
-    #: 为什么它是一个字段：温度是"这一次判定可不可复现"的一半读数，而改前它只活在
-    #: `modelclient` 的 `to_dict()` 里、从没进过网线（`draft/125` §四 的假绿）。
+    #: 为什么它是一个字段：温度是"这一次判定可不可复现"的一半读数；没有它，
+    #: 温度只活在 `modelclient` 的 `to_dict()` 里、从没进过网线。
     temperature: float | None = None
     #: 这一趟回复里的思维链字数（上游 `message.reasoning_content`）。
     #: 只记字数不记原文：与 `tool_call_list` 不进 `to_dict()` 同一条纪律（会随每次调用膨胀）。
     reasoning_chars: int = 0
-    #: 思维链的原文（S-C / 12-A=乙 之后才带上；空串 = 上游没给）。
+    #: 思维链的原文（空串 = 上游没给）。
     #:
     #: 为什么不进 `to_dict()`：它逐字可能上千字，每条 `llm_call` 事件都抄一份会把
     #: 会话记录撑大（与 `tool_call_list` 同一条纪律）。它的归属地是消息序列里
@@ -125,7 +125,7 @@ class SeamCall:
     tool_call_list: tuple[dict[str, Any], ...] = ()
     #: 这一次到底发没发请求（`False` 只有两条早退路：没接线 / 预算已尽）。
     #:
-    #: 为什么它必须与 `ok=False` 分开（2026-10-19）：缓存读数的三态之外还有"第零态"——
+    #: 为什么它必须与 `ok=False` 分开：缓存读数的三态之外还有"第零态"——
     #: 根本没发请求的调用不可能有 `prompt_cache_*`，把它算进 `unknown_calls` 会让
     #: "上游不报这一格"与"这一趟一个请求都没发"在 run 记录里长得一样。
     #: 账本那边同一件事记的是 `ledger.reason == "no_request"`，两处口径一致。
@@ -191,7 +191,7 @@ class SeamSpend:
 
 #: 逐角色登记的"默认模型缝"（装配期写入；工具层那条路从这里取）。
 #:
-#: ## 为什么需要它（两处真机断点，同一根因）
+#: ## 为什么需要它（两处断点，同一根因）
 #:
 #: `attack_tools._agent_for`（`F.step` 的工具路径）与 `verify_tools._agent_v`
 #: （V 的三件工具）都拿不到 host 的装配上下文 —— 它们只从 `register(...)`
@@ -331,7 +331,7 @@ class LlmSeam:
     #: 见 `ask` 的前两个分支），复用会让两次早退撞同一个幂等键，
     #: 而后到的那一笔被静默判成 `duplicate` —— 一笔真实记录凭空消失。
     ledger_calls: int = 0
-    #: 现读上限的口子（业主 2026-10-12 的预算轴）：给一个无参可调用，
+    #: 现读上限的口子（预算轴）：给一个无参可调用，
     #: 每次花钱之前问一次"现在的总预算是多少"。`None` = 不看寄存器（用 `usd_budget`）。
     #:
     #: 为什么是回调而不是一个数：追加预算是运行期发生的（网页上点一下），
@@ -394,7 +394,7 @@ class LlmSeam:
         """按角色造一个缝。`from_env=True` 时读配置（没 key 就是没接线）。
 
         配置的梯子是 `modelgw.spec_for(role, ...)`：`models.<角色>` → `models.default`
-        → `model` 段 → 环境变量 → 内置缺省（业主 2026-10-14：允许按角色用不同厂商的
+        → `model` 段 → 环境变量 → 内置缺省（允许按角色用不同厂商的
         不同 key）。`gateway` 显式给的时候按老口径用给的那个（判据与替身模型都走这条）。
         """
         if gateway is None and from_env:
@@ -406,7 +406,7 @@ class LlmSeam:
     def for_secretary(cls, *, owner_role: str = "", session_root: Path | str,
                       gateway: Any | None = None, from_env: bool = True,
                       settings_path: str | Path | None = None, **kw: Any) -> "LlmSeam":
-        """所有角色的秘书共用的那一把 key（业主 2026-10-14 的后半句）。
+        """所有角色的秘书共用的那一把 key。
 
         它与 :meth:`for_role` 的差别只有一处：配置的第一格是 `secretary` 段
         （`modelgw.spec_for(secretary=True)`），而不是那个角色自己的那一档。
@@ -468,12 +468,12 @@ class LlmSeam:
             temperature: float | None = None) -> SeamCall:
         """发一次调用，落一条审计记录，返回结局（不抛业务异常）。
 
-        `max_tokens` 这一栏已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
-        它此前由循环步（`agent_loop`）传 32,768；删掉之后请求体里不再有这一栏，
+        `max_tokens` 这一栏不设（「我们不卡 token，只卡总花销的钱」）。
+        它若设了，会由循环步（`agent_loop`）传 32,768；不设则请求体里没有这一栏，
         额度交回上游（真调用对照：不带比带 32768 还宽）。
 
-        `temperature`（2026-10-29）：不给就用这一档配置的温度（`ModelSpec.temperature`，
-        缺省 0.2）—— 与改前逐字相同。给了就透传进请求体并记进 `SeamCall.temperature`。
+        `temperature`：不给就用这一档配置的温度（`ModelSpec.temperature`，
+        缺省 0.2）—— 与不给时逐字相同。给了就透传进请求体并记进 `SeamCall.temperature`。
         为什么要显式这一格：业主把 V 的审阅调用定在 1.0（正常对话的数值），
         而"这一次按几度问的"必须能在审计记录里读回来（读数与请求体同源）。
         """
@@ -516,7 +516,7 @@ class LlmSeam:
             return self._land(call, prompt=prompt, system=system, task_id=task_id, note=note,
                               charged=False)
 
-        # 温度这一格只在调用方显式给了时才传下去（2026-10-29 第 16 轮）：
+        # 温度这一格只在调用方显式给了时才传下去：
         # 它是给 V 的审阅调用加的那一格；无条件传会让所有"按脚本回文本"的替身网关
         # （它们没有这个形参）在调用期抛 TypeError，而那个 TypeError 会被上层折成
         # `judge_failed:TypeError` ⇒ 一条本该绿的判据红在"替身签名"上，不是行为上。
@@ -620,7 +620,7 @@ class LlmSeam:
     def _billing_of(self, reply: Any) -> dict[str, Any]:
         """这一笔的计价读数（三档价 + 命中数 + 用了峰/谷哪一档 + "我们不知道"的那几格）。
 
-        为什么留它（业主 2026-10-14「花销标准与供应商定价吻合」）：`usd` 是一个数，
+        为什么留它（「花销标准与供应商定价吻合」）：`usd` 是一个数，
         而"这个数按哪几档价、按峰还是按谷算出来的"必须能复核。三种会让它偏高的情形 ——
         命中价未登记、上游没报命中数、没登记的组合回落到了缺省价 —— 各有一条痕迹，
         读账的人因此不会把"我们算贵了"读成"供应商算错了"。
@@ -699,7 +699,7 @@ class LlmSeam:
             note += ("；unattributed：这一次调用没有台账号可挂"
                      "（调用方没给 task_id，且不在任何一次召唤的上下文里）"
                      "⇒ 这一行的 task_id 为空，它进不了任何一行 tasks.usd")
-        # 花销口径的留痕（业主 2026-10-14：「花销计算标准与供应商定价吻合」）：
+        # 花销口径的留痕（「花销计算标准与供应商定价吻合」）：
         # 账本那一行自己要说得清这笔钱按哪一档价算的 —— 否则"和供应商账单对不上"
         # 只能靠翻会话事件才查得出来。四格都从 `SeamCall.billing` 现抄（不另算一份）。
         billing = dict(getattr(call, "billing", None) or {})
@@ -823,7 +823,7 @@ class LlmSeam:
             # 多给了一条 —— 它不是"没按协议说话"，所以不该走坏 JSON 那一档。
             data, problem, detail = face.to_shape(call.tool_call_list[0])
             if data is None:
-                # ---- 坏参数要留原文（真机 82，2026-11-01 · B-1/B-2/B-3）
+                # ---- 坏参数要留原文
                 #
                 # 改前这里原样构造 `SeamCall(**{**call.__dict__, ...})`，`text` 仍是
                 # 回复正文（原生调用时为空）⇒ 循环的 `_dump_invalid_reply` 写出
@@ -857,11 +857,11 @@ class LlmSeam:
 #: `framework_final` 的 `notify` 那一栏的 schema（`agent_prompts` §7 与
 #: `agent_loop.NOTIFY_FIELDS` 逐字同一份字段表）。
 #:
-#: 为什么必须写进广告面（2026-10-08 的三处缺口之一）：提示词要求
+#: 为什么必须写进广告面：提示词要求
 #: 非主控角色收工时填这一栏，而原生工具面这一趟根本没有这一格；就算模型硬塞，
 #: `ToolFace.to_shape` 也只会重建 `final`+`evidence` ⇒ 「收工手稿」的输入在结构上到不了
 #: 秘书。广告面与接受面必须是同一份（`META_FUNCTIONS` 上面那条纪律）—— 这一格就是那
-#: 条纪律此前漏掉的地方：`agent_loop._decode_shape` 收 `notify`，而广告面没有它。
+#: 条纪律漏掉的地方：`agent_loop._decode_shape` 收 `notify`，而广告面没有它。
 #:
 #: `required` 刻意留空：`notify` 在 `_decode_shape` 那侧是可选键（L-05e 之后
 #: "没填/填错都不打回，只落 `notify_problem` 读数"），而主控 M 免填。把它列成
@@ -928,7 +928,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         "type": "object",
         "properties": {
             "role": {"type": "string", "enum": list("ABCDEFGHV")},
-            # 2026-10-16（业主口径 S2 最终形态）：`action` 整个摘掉 ——
+            # 口径 S2 最终形态：`action` 整个摘掉 ——
             # 原话逐字：「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
             # ⇒ 派活只有一种形状：`role` + `task`。点哪个动作是被派者自己的事
             # （它那一趟跑自己的循环、从自己的工具面与手册里选）。
@@ -947,7 +947,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
             # 主控派活时的留痕（CS-18）：与 `_dispatch_notify` 同源，`to` 可省略。
             "notify": DISPATCH_NOTIFY_JSON_SCHEMA,
         },
-        # 2026-10-16（业主口径 S2）：`task` 进必填，`action` 保持可选。
+        # 口径 S2：`task` 进必填，`action` 保持可选。
         # 口径是"派活" —— 那件活是必说的；点不点动作由派活方决定（点了就是老行为）。
         "required": ["role", "task"],
     }),
@@ -958,7 +958,7 @@ META_FUNCTIONS: tuple[tuple[str, str, dict[str, Any]], ...] = (
                 "type": "object",
                 "properties": {
                     "role": {"type": "string", "enum": list("ABCDEFGHV")},
-                    # 2026-10-16（口径 S2 最终形态）：`action` 同样摘掉 —— 派活只有
+                    # 口径 S2 最终形态：`action` 同样摘掉 —— 派活只有
                     # `role` + `task` 两格（与 `summon` 一致）。
                     "task": {"type": "string", "description":
                              "**必填**：这件活是什么（写清做什么；可带起手建议，怎么做由它定）"},
@@ -1213,7 +1213,7 @@ class ToolFace:
         target = self._resolve(raw_name)
         if target is None:
             cands = self.candidates(raw_name)
-            # 2026-10-26：这一档的码从 `judge_bad_json` 改成 `judge_unknown_tool`。
+            # 这一档的码从 `judge_bad_json` 改成 `judge_unknown_tool`。
             # 它从来不是坏 JSON（模型给的结构完全合法，只是名字不在这份广告面上），
             # 而 `judge_bad_json` 那一档的纠正话术是"只回一行 JSON" —— 对着这条错说那句话
             # 等于把模型领向更错的方向（真机三趟 16 条 `judge_bad_json` 里 8 条是这个形态）。
