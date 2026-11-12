@@ -2032,7 +2032,7 @@ def _spec_of_start(args) -> tuple[RunSpec | None, str]:
                           project_start=mode, task=task), ""
     if mode == "project":
         return _spec_from(args, mode=MODE_PROJECT, origin="start", task=task), ""
-    # ---- auto：按目录状态推断（`draft/145` §3.1）
+    # ---- auto：按目录状态推断
     from . import projects as P
 
     base = P.projects_dir(getattr(args, "projects_dir", None))
@@ -2057,7 +2057,7 @@ def _spec_of_start(args) -> tuple[RunSpec | None, str]:
 
 
 def cmd_start(args) -> int:
-    """统一入口（`draft/145` §3.1）：一个入口讲清"干什么 / 在哪干 / 花多少钱 / 开不开 Lean"。
+    """统一入口：一个入口讲清"干什么 / 在哪干 / 花多少钱 / 开不开 Lean"。
 
     ## `--mode` 怎么推断（不写就是 auto）
 
@@ -2071,8 +2071,8 @@ def cmd_start(args) -> int:
 
     - 缺 `--task` 且没 `--watch`：说清"要么给任务、要么只开网页"；
     - `--mode role` 少 `--role`：点名 `--role` 与可选值；
-    - `--mode research` 不用给角色：角色缺省 M（`draft/145` 的 F2 正是位置参数缺失时
-      argparse 那句原文 —— 用户从"缺什么"里读不出"该给哪个旗标"）。
+    - `--mode research` 不用给角色：角色缺省 M（位置参数缺失时 argparse 那句原文说不出
+      "该给哪个旗标"）。
 
     退出码：0 做成了 / 1 查过了、有问题 / 2 没查成（用法错或前提不满足）。
 
@@ -2098,8 +2098,8 @@ def cmd_run(args) -> int:
     `--model` 只覆盖模型名：key / base_url / 超时 / 重试一律来自环境变量
     （`spec_from_env`），命令行不许传 key —— argv 会进 shell 历史与进程列表。
 
-    这一层只剩"翻成 `RunSpec` 再交给 `_run_spec`"（`draft/145` §3.2 的别名形态：
-    解析层不动、执行层收口）；真正的执行体是 :func:`_exec_topic`。
+    这一层只剩"翻成 `RunSpec` 再交给 `_run_spec`"（解析层不动、执行层收口）；
+    真正的执行体是 :func:`_exec_topic`。
 
     读写：写那一趟临时工作区的各表、`usage_ledger`（真花钱的账）与六件产物目录。
     实现方式一句话：`runflow.run_topic`（本层只把旗标翻成 `RunSpec`）。
@@ -2128,7 +2128,7 @@ def _exec_topic(spec: RunSpec, args) -> int:
     code = _land_budget(spec, root)
     if code:
         return code
-    # ---- 第一屏：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
+    # ---- 第一屏：Lean 工具链开机自检（防止用户提供一个虚构的 lean 环境）。
     # 它回答的是"这一趟能不能信形式化证据"，所以必须在跑之前就露出来，
     # 而不是等报告里出现一条 proof 行之后才去怀疑环境。
     lean_reading = _lean_first_screen(root)
@@ -2146,11 +2146,11 @@ def _exec_topic(spec: RunSpec, args) -> int:
         # 而不是让读者以为"取了、但没有开放全文"。
         fulltext=bool(args.fulltext),
         # `--lean` 三档（`on` / `off` / `auto`）已经在 `_run_spec` 里归一成
-        # `lean_enabled` 这一格：改前这里写的是 `bool(args.lean)`，而 `--lean off`
+        # `lean_enabled` 这一格：直接读 `bool(args.lean)` 的话，`--lean off`
         # 会让 `bool("off")` 为真 —— 关不掉的开关比没有开关更坏。
         lean=bool(getattr(args, "lean_enabled", False)),
         # 裸 `run` 没有项目根，所以逐页正文默认内联；要"同一本书只存一份"
-        # 就显式给一个落点（依据 `draft/30` §T0-7）。
+        # 就显式给一个落点。
         text_store_dir=getattr(args, "text_store_dir", None),
     )
     # 两个数字、两种口径，必须分开印（`G-4`）：
@@ -3328,7 +3328,7 @@ def _exec_role(spec: RunSpec, args) -> int:
                                 stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
     if _budget_code:
         return _budget_code
-    # ---- 第一屏：Lean 工具链开机自检（业主 2026-10-22「防止用户提供虚构的lean环境」）。
+    # ---- 第一屏：Lean 工具链开机自检（防止用户提供一个虚构的 lean 环境）。
     # `--json` 那一档把它打到 stderr：机器读的 stdout 必须保持可解析
     # （一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
     _lean_first_screen(root, stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
