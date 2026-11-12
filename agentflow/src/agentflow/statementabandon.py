@@ -1,9 +1,7 @@
 # -*- coding: utf-8 -*-
 """「放弃原命题」的标记与写入口：`abandoned@<ISO8601>@<理由>`。
 
-业主 2026-11-01 逐字裁定：
-
-> 「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」
+口径：每个命题和证明的产出最终必须以 V 签收尾，拿不到 V 签就得一直改，或者放弃原命题。
 
 于是"已登记的命题"只许落在两处：有 V 签，或明确放弃（带理由与时间）。
 "明确"这个词在盘上要有载体，否则 `status="abandoned"` 只是换了一个字面量：
@@ -16,7 +14,7 @@
 
 ## 为什么标记住在 `quote_reason`，而不是新加两列
 
-同一张表的 `pending_definition`（`draft/93·续` D12 甲）已经用同一套手法把
+同一张表的 `pending_definition` 已经用同一套手法把
 "为什么空着、谁来补"写进 `quote_reason` 的受控标记（`concept:pending_search` /
 `concept:self_authored`，唯一出处是 `migrate_concepts`），由 `schema.Statement.validate`
 逐条核。这里照抄那一条纪律：不新增列（新增列就是改磁盘契约，属 FC-27 的
@@ -53,19 +51,15 @@ ABANDON_MARKER = "abandoned@"
 #: 字段分隔符：`<前缀><ISO8601><分隔符><理由>`。
 ABANDON_SEP = "@"
 
-# ---------------------------------------------------------------- 换号理由（业主 2026-11-07 裁定）
+# ---------------------------------------------------------------- 换号理由（裁定）
 #
-# 业主逐字（这是本节的验收标准）：
+# 口径：换号需给清理由 —— ① 命题有实质数学错误；② 证明过程中遇到难以逾越的困难。
+# 对于 ①，需在换号理由中指出错误；对于 ②，需指出困难，并将原先证明中可取之处
+# 拆出落成引理。
 #
-# > 「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
-# >   对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
-#
-# 改前 `quote_reason` 里那段理由是自由文本：写一句"无干净依据"就能过
-# （98 的真机读数：000040–000048 九条同一秒批量放弃，理由逐字都是同一句
-# "verifications/ 下不存在 0000NN.jsonl"），而"同一 label 再登记一条"这件事
-# 在盘上没有任何结构化读数（000049 → 000050：label 同为 `lem:cancel`、
-# `line_range` 同为那份稿、"区别只是一处措辞"）。所以这一节把"理由"从一段散文
-# 变成两档受控形状：每一档都要求指出业主原话里点名的那样东西。
+# `quote_reason` 里那段理由若只是自由文本：写一句"无干净依据"就能过，而"同一 label
+# 再登记一条"这件事在盘上没有任何结构化读数。所以这一节把"理由"从一段散文变成两档
+# 受控形状：每一档都要求指出上面点名的那样东西。
 #
 # ## 为什么形状住在 `quote_reason` 里（与上面那段同一个理由）
 #
@@ -76,12 +70,9 @@ ABANDON_SEP = "@"
 # `parse_abandon_reason()["structured"]` 为假 —— 于是"这一行的换号理由齐不齐"
 # 在盘上是一个可读的读数，而不是靠人去猜那段散文是什么意思。
 
-#: 换号理由的四档。前两档是业主 2026-11-07 原话里的 1 与 2（F 侧注册/放弃闸的
-#: `math_error` / `difficulty`）；后两档是同一句裁定同步到 E 侧数值证明路线
-#: 时业主点名的两个理由（2026-11-07 第二刀，逐字）：
-#:
-#: > 「F侧的注册+放弃闸需同步到E侧的数值证明路线，只不过E侧放弃的理由为：
-#: >   1.发现反例；2.枚举空间过于宏大以致难以在合理成本内实现。」
+#: 换号理由的四档。前两档是 F 侧注册/放弃闸的 1 与 2（`math_error` / `difficulty`）；
+#: 后两档是同步到 E 侧数值证明路线的两个理由：发现反例、枚举空间过于宏大以致难以
+#: 在合理成本内实现。
 #:
 #: 多一个"其它"就等于给自由文本留了后门（"作业规格不是命题"那一类暂无这一档，
 #: 见 `docs/ROLE-GUIDE.md` 同批报告里的待裁项）。
@@ -112,8 +103,8 @@ ABANDON_PARAM_KEYS: tuple[str, ...] = ("abandon_kind", "abandon_basis", "defect_
 #: `salvaged` 里每一条引理的 `kind` 取值 —— 业主原话是"拆出落成引理"。
 #:
 #: `schema` 里没有 statements.kind 的词表（`schema.Statement.kind: str = "theorem"`，
-#: 见 `schema.py:2363` —— 它是个自由字符串，schema 不校验取值）；可判真假的断言类
-#: 那几档的真身在 `secretary.PROPOSITION_KINDS`（`secretary.py:1367`：
+#: 它是个自由字符串，schema 不校验取值）；可判真假的断言类
+#: 那几档的真身在 `secretary.PROPOSITION_KINDS`：
 #: theorem / lemma / proposition / corollary / conjecture）。其中 `lemma` 就是
 #: 业主说的"引理"，所以这里直接用它、不需要退到"最接近的一档"。
 SALVAGED_KINDS: tuple[str, ...] = ("lemma",)
@@ -122,7 +113,7 @@ SALVAGED_KINDS: tuple[str, ...] = ("lemma",)
 #: `verifications/<号>.jsonl#v-00000N`）。号必须是 6 位（本仓的 id 宽度）。
 DEFECT_REF_RE = re.compile(r"^verifications/(\d{6})\.jsonl#(v-\d{6})$")
 
-#: 语义判定那一问的受控码（`abandon_difficulty_not_genuine` 是业主 2026-11-07 点名的）。
+#: 语义判定那一问的受控码（`abandon_difficulty_not_genuine` 是裁定点名的）。
 ABANDON_DIFFICULTY_NOT_JUDGED = "abandon_difficulty_not_judged"
 ABANDON_DIFFICULTY_NOT_GENUINE = "abandon_difficulty_not_genuine"
 ABANDON_SALVAGED_NOT_FROM_PROOF = "abandon_salvaged_not_from_proof"
@@ -131,11 +122,11 @@ ABANDON_SALVAGED_NOT_FROM_PROOF = "abandon_salvaged_not_from_proof"
 def abandon_exempt_kinds() -> tuple[str, ...]:
     """哪些 `kind` 明确不是命题、不归放弃闸管（真身 `secretary.NOT_APPLICABLE_KINDS`）。
 
-    ## 为什么闸要改成 fail-closed（2026-11-07 审计 A3）
-    改前判据是"`kind in PROPOSITION_KINDS` 才拦"：于是登记口收下的 `example` /
-    `remark` / 空 kind（`record_statement` 对 kind 不设词表）一路放行 —— 只要把
-    kind 写成一个词表外的值，自由文本放弃就绕过了整道闸。现在只放行明确非命题
-    的那两档（`concept` / `definition`，业主 2026-11-07 的边界），其余一律当命题处理。
+    ## 为什么闸是 fail-closed
+    判据若是"`kind in PROPOSITION_KINDS` 才拦"：登记口收下的 `example` /
+    `remark` / 空 kind（`record_statement` 对 kind 不设词表）就一路放行 —— 只要把
+    kind 写成一个词表外的值，自由文本放弃就绕过了整道闸。所以只放行明确非命题
+    的那两档（`concept` / `definition`），其余一律当命题处理。
 
     独立成一个函数（而不是在各处写 `not in`）：放行面是一份可以单独打桩的判据，
     反真空用例要能把它改宽再看见负控变绿。
@@ -158,9 +149,9 @@ def abandon_proposition_kinds() -> tuple[str, ...]:
     （`Statement.kind` 是自由字符串，见 `schema.py:2363` 一带），"可判真假的断言类"
     只在这一处被定义过。
 
-    ## 它与放行面的关系（2026-11-07 改）
-    改前放弃闸用的是"`kind in abandon_proposition_kinds()` 才拦"，于是词表外的
-    kind（`example` / `remark` / 空串）直接不拦。现在放行面才是判据：
+    ## 它与放行面的关系
+    放弃闸若用"`kind in abandon_proposition_kinds()` 才拦"，词表外的
+    kind（`example` / `remark` / 空串）就直接不拦。放行面才是判据：
     :func:`is_abandon_exempt` 只认 `concept` / `definition` 两档，其余（含认不出的）
     全按命题处理。这个函数因此只用于读数与措辞，不再被当作"要不要拦"的分界线。
     """
@@ -233,10 +224,10 @@ def _defect_refusal(store: Any, root: str, ref: str, basis: str, *,
 
     返回 `(detail, refused_code, why)`：成功时 `refused_code` 是空串。
 
-    ## 2026-11-07 审计 C1 之后补的两条（业主「需在换号理由中指出错误」）
-    改前只核「那一行存在并且判有毛病」：放弃 000001 时可以引用 000002 的判词
+    ## 补的两条（「需在换号理由中指出错误」）
+    只核「那一行存在并且判有毛病」时：放弃 000001 可以引用 000002 的判词
     （跨命题），也可以引用一条对旧正文的判词（改稿后它已经 stale）。两条都不是
-    「指出这条命题的错误」。现在：
+    「指出这条命题的错误」。除此之外：
     - ref 里的命题号必须等于 `statement_id`（`abandon_defect_ref_other_statement`）；
     - 那一行的 `proof_sha256` 必须与现行证明正文（按那一行的 `proof_no` 取）
       的 sha 相同（`abandon_defect_ref_stale`）。没有 sha 的行同样按 stale 拒 ——
@@ -267,7 +258,7 @@ def _defect_refusal(store: Any, root: str, ref: str, basis: str, *,
         return {}, "abandon_defect_ref_not_fault", (
             f"{ref} 这一行的判词是 {verdict!r}、轴是 {axis!r} —— 它**不是**「有毛病」"
             "⇒ 不能拿它当「命题有实质数学错误」的依据")
-    # ---- 陈旧判词（审计 C1）：审的是旧正文 ⇒ 不能拿来放弃现正文
+    # ---- 陈旧判词：审的是旧正文 ⇒ 不能拿来放弃现正文
     no = _VR.proof_no_of(row)
     current_text = _VR.proof_text_of(statement or {}, no)
     current_sha = _PR.proof_sha(current_text)
@@ -351,7 +342,7 @@ def _experiment_claims(row: Mapping[str, Any], target: Mapping[str, Any]) -> boo
 def _counterexample_refusal(store: Any, eid: str,
                             target: Mapping[str, Any],
                             ) -> tuple[dict[str, Any], str, str]:
-    """核一条 counterexample 档的证据（业主 2026-11-07：E 侧放弃理由 1「发现反例」）。
+    """核一条 counterexample 档的证据（E 侧放弃理由 1「发现反例」）。
 
     三条同时成立才算"可核的反例"（缺一条都拒，且逐条说清缺哪一条）：
 
@@ -427,7 +418,7 @@ def _has_enumeration_scale(mapping: Mapping[str, Any]) -> bool:
 def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
     """把放弃理由里的 `space` 读成一份可核读数（E 侧放弃理由 2「枚举空间过于宏大」）。
 
-    业主 2026-11-07（逐字）：「枚举空间过于宏大以致难以在合理成本内实现」。
+    口径：「枚举空间过于宏大以致难以在合理成本内实现」。
     "宏大"必须是一个读数，不是一句形容词 —— 所以这一格只认结构化的空间数据，
     读口走 `numericproof._space_reading` 的既有字段（`search_bound` / `SPACE_KEYS`），
     这里不新造字段名、不另写一份读法。
@@ -436,7 +427,7 @@ def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
     - 直接给搜索空间对象（区间 `[lo, hi]` / `n_cases` 一类计数 / `SPACE_KEYS` 里的键）；
     - 给实验行那三格 `{"observations": …, "certificate": …, "search_bound": …}`。
 
-    三态（业主：读数读不到 ⇒ 受控拒，fail-closed）：
+    三态（读数读不到 ⇒ 受控拒，fail-closed）：
     - `abandon_space_required`：这一格是空的；
     - `abandon_space_unreadable`：给的不是对象 / 对象里读不出任何空间读数；
     - `abandon_space_not_a_reading`：读出来的是一段文字（或没有任何规模数字）——
@@ -527,12 +518,12 @@ def _difficulty_refusal(out: dict[str, Any], *,
                         difficulty: Any, salvaged: Any, at: Any,
                         difficulty_judge: Any, judgment_required: bool,
                         ) -> dict[str, Any]:
-    """difficulty 档的判据（2026-11-07 从 :func:`check_abandon_reason` 原样搬出）。
+    """difficulty 档的判据（从 :func:`check_abandon_reason` 原样搬出）。
 
     搬出来只为让主函数回到 200 行以内（`tests/test_repo_survey_does_not_get_worse.py`
-    的 `src_functions_gt200_lines` 那一格）：判定逻辑、拒绝码、判定顺序、字段名一个字
-    都没改 —— 逐行搬移，`out` 是主函数传进来的同一个 dict，`detail` / `problems`
-    也是同一个引用，所以返回值与搬之前逐字节相同。
+    的 `src_functions_gt200_lines` 那一格）：判定逻辑、拒绝码、判定顺序、字段名逐字
+    对应 `check_abandon_reason`；`out` 是主函数传进来的同一个 dict，`detail` / `problems`
+    也是同一个引用，所以返回值与不拆分时逐字节相同。
 
     `(out_patch, done)` 的等价形状在这里是"就地改传进来的 `out` 并返回它"：这一档的
     每条路径都收场（原实现里每条路径也都是 `return out`），所以不需要再往主函数回。
@@ -641,11 +632,11 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
                          judgment_required: bool = False) -> dict[str, Any]:
     """换号理由的唯一判据（四档）：返回 `{checked, refused, why, problems, …}`。
 
-    这是业主 2026-11-07 那句裁定的机器落点。两个写口（`apply_abandonment` 与
+    这是换号理由裁定的机器落点。两个写口（`apply_abandonment` 与
     `Secretary.amend_statement_meta`）都只调它，不各写一份校验 —— 两处各写一份，
     "什么算给清了理由"就会在两个出口长出两种答案。
 
-    ## 四档各自要求什么（2026-11-07 审计之后 + E 侧同步的完整版）
+    ## 四档各自要求什么
     | `abandon_kind` | 必须给 | 判据 |
     |---|---|---|
     | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 里的命题号必须等于 `statement_id`；那一行必须真的存在、「有毛病」或轴为 `fault`；`proof_sha256` 必须与现行正文一致（陈旧 ⇒ 拒）；`abandon_basis` 必须点名 `defect_step` |
@@ -653,17 +644,17 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     | `counterexample` | `experiment_id` + `abandon_basis` | `experiment_id` 在 `experiments` 里真有一行；那一行 `result="refutes"` 或带非空 `counterexample` 读数；且它检验的是这一条命题（`claim_key` / `claim` 认，见 :func:`_experiment_claims`）。「发现反例」的证据是那一次实验，不是一句"我找到了反例" |
     | `space_too_large` | `space` + `abandon_basis` | `space` 必须是结构化读数（走 `numericproof._space_reading` 的既有字段），且读得出规模（`[lo, hi]` 区间或枚举例数）；读不到 / 只有文字 ⇒ 受控拒（fail-closed） |
 
-    后两档是 E 侧数值证明路线的两条放弃理由（业主 2026-11-07 第二刀），判定口与
+    后两档是 E 侧数值证明路线的两条放弃理由，判定口与
     前两档是同一个函数：这里不写第二份"像不像反例 / 空间大不大"的判据。
 
     ## `statement_id` / `at` 为什么是必填的
-    审计 C1：改前的 `defect_ref` 没有 target，可以引用另一条命题的「有毛病」行，
+    `defect_ref` 若没有 target，可以引用另一条命题的「有毛病」行，
     也可以引用一条对旧正文的判词。两件事都要"被放弃的那一条"才判得了，所以
     target 与放弃时刻都进判据。`statement` 给了就直接用它（写口手里有盘上那一行），
     不给就按 `statement_id` 从 `statements` 读。
 
-    ## 语义判定（2026-11-07 审计 B1）
-    `difficulty="做不动了"` 能过，是因为改前只查非空。现在 `difficulty_judge` 是一次
+    ## 语义判定
+    只查非空时，`difficulty="做不动了"` 也能过。`difficulty_judge` 是一次
     秘书语义判定（`Secretary.judge_abandon_difficulty`，两态 fail-closed，不用字数/
     关键词阈值）；它同时判「那几条 salvaged 是不是从这条命题的旧证明里拆出来的」。
     - `judgment_required=True` 而没给判定面 ⇒ `abandon_difficulty_not_judged`（fail-closed）；
@@ -708,7 +699,7 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
         return out
     out.update(abandon_kind=got_kind, abandon_basis=got_basis)
     root_now = str(root or getattr(store, "root", "") or "")
-    # ---- 目标命题（2026-11-07 审计 C1 / C10：判据要有"被放弃的那一条"）
+    # ---- 目标命题（判据要有"被放弃的那一条"）
     target_id = str(statement_id or "").strip()
     rows, read_why = _statement_rows(store)
     if rows is None:
@@ -1061,29 +1052,29 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
                       difficulty_judge: Any = None) -> dict[str, Any]:
     """把一条已登记命题标成 `abandoned`（写侧唯一实现：理由与时间一起落盘）。
 
-    这是业主 2026-11-01 那句「拿不到V签就得一直改，或者放弃原命题」里
+    这是「拿不到 V 签就得一直改，或者放弃原命题」里
     "放弃"那一条的落地：它把命题从"还欠一个签"的集合里挪走，同时也把名下开着的
     重送义务作废（`vreceipts.close_resubmits_for`，`close="expired"`）—— 不一起办，
     "放弃"会被"名下还有未消的板项"反锁死（`retire_integrity`）。
 
-    ## 2026-11-07（业主裁定）：放弃"可判真假的断言类"命题时必须给结构化理由
-    业主逐字：「换号需给清理由：1.命题有实质数学错误；2.证明过程中遇到难以逾越的困难。
-    对于1，需在换号理由中指出错误；对于2，需指出困难，并将原先证明中可取之处拆出落成引理。」
-    同日第二刀（E 侧数值证明路线）：「只不过E侧放弃的理由为：1.发现反例；
-    2.枚举空间过于宏大以致难以在合理成本内实现」⇒ 同一道闸多两档（`counterexample` /
-    `space_too_large`，判据仍是 :func:`check_abandon_reason` 一处）。
+    ## 放弃"可判真假的断言类"命题时必须给结构化理由
+    换号需给清理由：① 命题有实质数学错误；② 证明过程中遇到难以逾越的困难。
+    对于 ①，需在换号理由中指出错误；对于 ②，需指出困难，并将原先证明中可取之处
+    拆出落成引理。E 侧数值证明路线另有两条：① 发现反例；② 枚举空间过于宏大以致
+    难以在合理成本内实现 ⇒ 同一道闸多两档（`counterexample` / `space_too_large`，
+    判据仍是 :func:`check_abandon_reason` 一处）。
 
     - 明确非命题的两档（`concept` / `definition`，真身
       `secretary.NOT_APPLICABLE_KINDS`）⇒ 不受这道闸管（概念没有"条件 ⇒ 结论"，
       谈不上"命题有数学错误"或"证明遇到困难"）：理由仍必须是可解析的放弃标记
       （`schema.Statement.validate` 那条老闸照旧）。
     - 其余一切 kind（含词表外的 `example` / `remark` / 空串）一律按命题处理
-      （2026-11-07 审计 A3：改前"认不出的 kind 不拦"就是一条一行 patch 的绕行）。
+      （"认不出的 kind 不拦"就是一条一行 patch 的绕行）。
 
     ## 已经把这一条标成 `abandoned` 的行：幂等重放放行，理由变了必须过闸
-    历史行（98 里那批只有自由文本的行）必须还能被幂等重放（同一个标记原样重交 ⇒
+    历史行（只有自由文本的那批）必须还能被幂等重放（同一个标记原样重交 ⇒
     `already=True`，不写任何格），否则"先补理由、再关板项"这条路会被闸反锁死。
-    但"已 abandoned"不是一张跳过判据的通行证（2026-11-07 审计 A4）：这一笔要把
+    但"已 abandoned"不是一张跳过判据的通行证：这一笔要把
     `quote_reason` 改成另一段文字 ⇒ 走与第一次放弃同一道闸；自由文本改写照旧
     `abandon_reason_missing`。要补理由，给全那五格（或一份完整的结构化标记）。
 
@@ -1145,7 +1136,7 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
             out["resubmits"] = close_resubmits(store, statement_id=sid,
                                                why="命题被明确放弃（幂等重放）")
             return out
-    # ---- 新的一次放弃 / 改写理由：命题类必须过结构化理由那一关（业主 2026-11-07）----
+    # ---- 新的一次放弃 / 改写理由：命题类必须过结构化理由那一关 ----
     kind_now = str(current.get("kind") or "").strip().lower()
     if not is_abandon_exempt(kind_now):
         form = check_abandon_reason(store, kind=abandon_kind, basis=abandon_basis,
