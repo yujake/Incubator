@@ -334,16 +334,11 @@ def _key_matches(recorded: Mapping[str, Any], current: Mapping[str, Any]) -> boo
     三个格子都不同名同义地比：`fingerprint`（key 本身）、`model`、`base_url`。
     `base_url` 只有两边都非空时才比 —— 旧读数可能没记它，拿空串当"不同"会把所有
     老读数都判成"换了厂商"（而那是另一件事）。
+
+    比较逻辑只在 :func:`_changed_labels` 一处：两处各写一遍的话，"哪几格变了"与
+    "算不算同一片"会在某次改动后各说一套，而两句话都自洽。
     """
-    if str(recorded.get("fingerprint") or "") != str(current.get("fingerprint") or ""):
-        return False
-    if str(recorded.get("model") or "") != str(current.get("model") or ""):
-        return False
-    rec_base = str(recorded.get("base_url") or "")
-    cur_base = str(current.get("base_url") or "")
-    if rec_base and cur_base and rec_base != cur_base:
-        return False
-    return True
+    return not _changed_labels(recorded, current)
 
 
 def _changed_labels(recorded: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
@@ -418,7 +413,7 @@ def _per_target(readings: Mapping[str, Any], renders: Mapping[str, Mapping[str, 
     `fresh` 只在 `measured` 上才有意义：其余两档是 `None`（不是 False —— "没量"
     与"量了但变了"是两件事）。
     """
-    got: dict[str, Any] = dict(readings.get("targets") or {})
+    got: Mapping[str, Any] = readings.get("targets") or {}
     out: dict[str, dict[str, Any]] = {}
     for target in targets:
         row = dict(got.get(target) or {})
@@ -453,7 +448,7 @@ def tier_reading(tier: str, *, path: Path | None = None,
     out_path = Path(path) if path is not None else default_readings_path()
     current_key = dict(key) if key is not None else key_reading()
     readings = warm.cache_readings(lean=(tier == "on"), path=out_path)
-    rendered = dict(renders) if renders is not None else render_tier(tier)
+    rendered = renders if renders is not None else render_tier(tier)
 
     doc: dict[str, Any] = {
         "tier": tier,
@@ -1139,24 +1134,22 @@ def status(*, path: Path | None = None,
         for target in per_tier[tier]["key"]["affected"]:
             if target not in affected:
                 affected.append(target)
+    dismiss_key = f"{current_key.get('fingerprint') or 'none'}|{current_key.get('model') or ''}"
     if stale_tiers:
         first = per_tier[stale_tiers[0]]["key"]
         reminder = {"active": True, "tri": "stale", "tiers": stale_tiers,
                     "text": str(first["text"]), "affected": affected,
-                    "dismiss_key": (f"{current_key.get('fingerprint') or 'none'}|"
-                                    f"{current_key.get('model') or ''}")}
+                    "dismiss_key": dismiss_key}
     elif key_unknown:
         reminder = {"active": True, "tri": "unknown", "tiers": key_unknown,
                     "text": (f"{'、'.join(TIER_LABEL[t] for t in key_unknown)} 的旧读数没有 "
                              "key 指纹 ⇒ 换没换过 key 不可判定；重落一次就会记上"),
                     "affected": [],
-                    "dismiss_key": (f"{current_key.get('fingerprint') or 'none'}|"
-                                    f"{current_key.get('model') or ''}")}
+                    "dismiss_key": dismiss_key}
     else:
         reminder = {"active": False, "tri": "same", "tiers": [], "text": "",
                     "affected": [],
-                    "dismiss_key": (f"{current_key.get('fingerprint') or 'none'}|"
-                                    f"{current_key.get('model') or ''}")}
+                    "dismiss_key": dismiss_key}
 
     return {
         "schema": 1,
@@ -1493,7 +1486,6 @@ def cmd_warm(args: Any) -> int:
     读写：读模板并写缓存落盘（`--dry-run` 只算不写、一次模型都不调；真预热会花钱）。
     实现方式一句话：`cachectl.warm`（两档 lean 各自一份缓存）。
     """
-    """`agentflow cache warm --lean on|off|both [--dry-run]`：真预热或只给计划。"""
     raw = str(getattr(args, "lean", "") or "")
     wanted = tuple(TIERS) if raw == "both" else ((raw,) if raw in TIERS else ())
     if not wanted:
@@ -1579,7 +1571,6 @@ def cmd_cache(args: Any) -> int:
     读写：读提示词模板与两档缓存目录；`warm` 会真发模型调用（花钱），`status` 只读。
     实现方式一句话：`cachectl`（命令行与网页按钮读同一份实现）。
     """
-    """`cache` 这一组的总入口（分给两个子命令；认不出就报用法，退出码 2）。"""
     which = str(getattr(args, "cache_cmd", "") or "")
     if which == "status":
         return cmd_status(args)
