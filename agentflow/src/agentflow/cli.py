@@ -3290,22 +3290,21 @@ def _exec_role(spec: RunSpec, args) -> int:
             file=sys.stderr)
         return 2
     if bool(getattr(args, "subagents", False)) or spec.research:
-        # `--subagents`（2026-09-30）：把所有已声明的角色动作都交给模型驱动 ——
+        # `--subagents`：把所有已声明的角色动作都交给模型驱动 ——
         # "各角色像主控的 subagent"这句话的部署开关。
         #
         # 为什么是一个显式开关而不是默认值：默认驱动一切会把"确定性代码"的活
         # （A 的检索编排、B 的按行整理、D 的图计算…）也换成模型调用，
         # 而 `host.DEFAULT_LLM_LOOPS` 的注释写着装配期纪律："不许因为环境里有 key
         # 就改变行为"。所以默认仍是"只跑确定性动作"，要 subagent 语义就明说。
-        # 真机实测（`temp/live-collab-fanout-20260930-145743.txt`）：把确定性动作
-        # `B.run_once` 交给 LLM 循环会替换掉那份确定性整理 —— 3 个 B 实例各烧
-        # 7–8 步、以 bad_json_limit 收场、概念与关系一条没涨。批量消化这类活应当
-        # 让角色跑确定性动作（并发由实例轴给），只把"判断类"动作交给模型。
+        # 代价：把确定性动作 `B.run_once` 交给 LLM 循环会替换掉那份确定性整理 ——
+        # 几个 B 实例各烧七八步、以 bad_json_limit 收场、概念与关系一条没涨。批量消化这类活
+        # 应当让角色跑确定性动作（并发由实例轴给），只把"判断类"动作交给模型。
         from . import capabilities as _C
         from . import leanscope as _LEANSCOPE
         from . import schema as _S
 
-        # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这一串会变成"交给模型驱动"的
+        # （「在 Lean 开关没开时隔绝 L」）：这一串会变成"交给模型驱动"的
         # (角色, 动作) 清单 ⇒ 开关关着时不存在的角色不进这张表（否则模型会去派一个
         # 没有工具面、也没有提示词的角色）。
         for _role in _LEANSCOPE.visible_roles(_S.ROLES):
@@ -3332,7 +3331,7 @@ def _exec_role(spec: RunSpec, args) -> int:
     # （一条人话混进 JSON 流里，下游拿到的是解析错误而不是结论）。
     _lean_first_screen(root, stream=(sys.stderr if bool(getattr(args, "json", False)) else None))
 
-    # ---- 停机开关的闩式快照（D19，业主 2026-10-22「用户摁停后仍开下一轮」）
+    # ---- 停机开关的闩式快照（「用户摁停后仍开下一轮」）
     #
     # 为什么要在开跑之前读一次、而不是等轮间那一段自己读：开关是一次性信号 ——
     # 读到它的那一趟在收尾时把它撤走（`agent_loop._consume_stop_at_teardown`），
@@ -3362,13 +3361,13 @@ def _exec_role(spec: RunSpec, args) -> int:
             f"by={stop_latch.get('by')}、force={stop_latch.get('force')}、"
             f"at={stop_latch.get('at')} ⇒ 这一趟按『按用户要求停』办", "yellow"))
 
-    # ---- 会话身份在这一刻定下，之后整趟不再漂移（`draft/37` §63，修法 B）
+    # ---- 会话身份在这一刻定下，之后整趟不再漂移
     #
     # 为什么要在装配之前解析出来：`sessions.append(..., sid=None)` 的缺省值是
-    # 「写入那一刻」的 `session_id()`（环境变量优先，否则当天日期）。此前 `run-agent`
-    # 把 `sid=None` 一路传下去，于是"这一趟是哪一段会话"谁都没说清 ——
+    # 「写入那一刻」的 `session_id()`（环境变量优先，否则当天日期）。把 `sid=None`
+    # 一路传下去的话，"这一趟是哪一段会话"谁都没说清 ——
     # 运行内 `conductor.closing` 按缺省读，读到的可能不是这一趟写的那一段：
-    # 实测第 11 趟（`--sid real11`）运行内报 `can_close: true`，而外部带 sid 的
+    # 运行内可以报 `can_close: true`，而外部带 sid 的
     # 读数报 `failed: ['user_pending']` —— 假绿，且只在运行内出现。
     # 解析一次、之后原样带下去，工具面与写入面读的就是同一个文件；
     # 顺带把"跨零点的一趟会被劈成两个会话文件"这件事也去掉了
@@ -3390,7 +3389,7 @@ def _exec_role(spec: RunSpec, args) -> int:
 
     seam = seam_for(args.role)
     if not seam.wired:
-        # 2026-10-19 口径：2 = 研究启动失败（连跑都没开始）。这句里刻意不再出现"没查成"
+        # 口径：2 = 研究启动失败（连跑都没开始）。这句里刻意不再出现"没查成"
         # —— 同一句话里两种标签并存时，读的人会拿旧的那一种去解释 2。
         print("[run-agent] 研究启动失败：没有接模型（环境变量 AGENTFLOW_MODEL_API_KEY 与 "
               "agentflow/settings.json 的 model.api_key 都没有值）—— "
@@ -3398,13 +3397,13 @@ def _exec_role(spec: RunSpec, args) -> int:
         return 2
 
     loops = {key: {"max_steps": args.max_steps} for key in table}
-    # ---- A 的检索后端（2026-09-30 修）
+    # ---- A 的检索后端
     #
     # 为什么必须在这里建：`wired_llm_conductor` 一直收 `providers=`，但从来没有人传 ⇒
     # `_Builder.status()` 把 A 判成 `no_provider`、A 不进登记表 ⇒ 任何角色唤起 A 都落
-    # `refused/not_wired`。真机实测（`draft/28` §201）：G 明明按协议唤起了 A，
+    # `refused/not_wired`。有角色按协议唤起了 A，
     # 拿回来的却是"A 没有接线（registry 里没有它）"—— 文献检索这条最重要的协同边
-    # 在协同运行里从来就没接上过。用户口径："A 的文献检索必须要通关。"
+    # 在协同运行里从来就没接上过。A 的文献检索必须要通关。
     #
     # 口径与 `run-a` 逐字一致（`cmd_run_a` 那三行）：先看 `--provider`，再看配置里的
     # `agent_a.providers`，都没有才用 openalex。不一致的默认值本身就是"凌乱"的一种，
@@ -3415,13 +3414,13 @@ def _exec_role(spec: RunSpec, args) -> int:
     prov_names = (str(args.provider).split(",") if getattr(args, "provider", None)
                   else (cfg.get("agent_a") or {}).get("providers", ["openalex"]))
     providers = _build_providers(cfg, list(prov_names), root)
-    # 墙钟可配（`draft/37` §16 P0）：不给 `--wall-clock-sec` 时用 `Policy` 的缺省值，
+    # 墙钟可配：不给 `--wall-clock-sec` 时用 `Policy` 的缺省值，
     # 于是"这次运行能给多久"从写死的 900 秒变成一个显式参数。
     from .policy import Policy
 
     wall = getattr(args, "wall_clock_sec", None)
-    # 2026-10-18（缺陷 ⑳，业主口径「墙钟可以干脆不设」）：`--wall-clock-sec 0` ⇒ 不设上限。
-    # 真机证据（`projects/t2y`，T2）：我没有传这个参数，于是用了 `default=3600.0`，
+    # `--wall-clock-sec 0` ⇒ 不设上限。
+    # 代价是实打实的：不传这个参数时用 `default=3600.0`，
     # 1 小时整被切断 —— 而切断的那一刻 M 正要派 B 去登记命题：
     #   t-000009 E ← refused「墙钟截止已过（wall_clock_sec=3600.0）」
     #   t-000010 B ← refused 同上
@@ -3429,17 +3428,17 @@ def _exec_role(spec: RunSpec, args) -> int:
     # 0（或负数）显式表示"不设上限"，与"我没传"区分开（后者仍走缺省 3600）。
     if wall is not None and float(wall) <= 0:
         wall = None
-    # `Policy.usd_budget` 必须拿到同一个数（业主 2026-10-12 的预算轴；只读调查发现
-    # 这一格此前从来没被灌过 —— 改前 `Policy(wall_clock_sec=wall)`，
-    # 于是 `conductor` 那个全局 meter 的 `budget_usd=None`、
-    # 「编排层的全局 USD 守卫实际不受 --budget-usd 约束」）。
+    # `Policy.usd_budget` 必须拿到同一个数（预算轴）：只读调查发现
+    # 这一格此前从来没被灌过 —— `Policy(wall_clock_sec=wall)` 的写法
+    # 让 `conductor` 那个全局 meter 的 `budget_usd=None`、
+    # 也就是「编排层的全局 USD 守卫实际不受 --budget-usd 约束」。
     # 与别处同一条取值口径：命令行给的数 > 无（不限）—— 寄存器那一档由
     # `budget.limit_usd` 在每一次闸门上现读，不在这里预先合并。
     usd_cap = getattr(args, "budget_usd", None)
     pol = Policy(wall_clock_sec=wall, usd_budget=usd_cap) if wall is not None \
         else Policy(usd_budget=usd_cap)
-    # `--stop-file` 接给谁（`draft/37` §125）：「单趟」那一档接进步循环（它此前根本
-    # 没有停机点 —— 真机实测：用户叫停后继续跑完 60 多个任务、烧掉 $0.98，最后被强杀，
+    # `--stop-file` 接给谁：「单趟」那一档接进步循环（它不能没有停机点 ——
+    # 用户叫停后继续跑完几十个任务、烧掉预算，最后被强杀，
     # 台账里没有 `agent_run_end`、盘上没有步检查点）；多轮自主跑那一档照旧由
     # `autonomy._stop_before_round` 在「每轮之间」查，两处不叠加（避免"一轮跑到一半
     # 停下"把那一轮的汇报与检查点弄成半截）。
@@ -3479,14 +3478,14 @@ def _exec_role(spec: RunSpec, args) -> int:
         print(f"  停止原因：{auto.stop_reason}；用量：{auto.spend}")
         for note in auto.notes:
             print(f"  注：{note}")
-        # 退出码：同一张表（业主 2026-10-19 裁定；改前这一层自成一条 if 链，
-        # 于是 `budget` 单趟 4 / 多轮 1、`stop_file` 单趟 4 / 多轮 0 —— 两套口径都会漂）。
+        # 退出码：同一张表（这一层若自成一条 if 链，
+        # `budget` 就会单趟 4 / 多轮 1、`stop_file` 单趟 4 / 多轮 0 —— 两套口径都会漂）。
         # 只有"轮数用完"（`rounds`）要看最后那一轮有没有 final，见 `_autonomy_exit_code`。
         # `checkpoint_mismatch`（拿 A 的进度续 B）同样查表 ⇒ 2 研究启动失败，
         # 不是"跑过了有问题" —— 它不再需要一条自己的分支。
         code = _autonomy_exit_code(auto)
-        # ---- 按用户要求停（D19）：这一档在改前根本走不到 —— 多轮那一层从「读盘」到
-        # 「上一轮的理由码」三层都断了，于是用户摁停之后第 2 轮照开。现在它停在这里，
+        # ---- 按用户要求停：这一档在多轮那一层很容易走不到 —— 从「读盘」到
+        # 「上一轮的理由码」任何一层断了，用户摁停之后第 2 轮照开。现在它停在这里，
         # 并且这一行的三个读数就是那条判据的可见面：停在第几轮、开关上写着谁按的、
         # `runs/stop-history.jsonl` 记了没有。
         if auto.stop_reason in _STOPCTL.USER_STOP_REASONS:
@@ -3506,7 +3505,7 @@ def _exec_role(spec: RunSpec, args) -> int:
                 "要继续做就 `--resume` 接着跑（那一停是上面那一趟的，不会带到下一趟）；"
                 "要撤掉盘上可能残留的那把开关用 `agentflow stop --clear`。", "bold"))
             return code
-        # 停在等用户（`draft/37` §72）：自主多轮那一层的停止判据现在有这一档了 ——
+        # 停在等用户：自主多轮那一层的停止判据有这一档 ——
         # 上一轮停在等用户、而那个问题「还挂着」时，它不会开下一轮（`autonomy.py`
         # 的 `_stop_before_round`，判据在 `tests/test_resume_after_answer.py`）。
         # 退出码与单趟同档：3 = 停在等待用户（既不是完成也不是失败）。
@@ -3518,7 +3517,7 @@ def _exec_role(spec: RunSpec, args) -> int:
                 f"用 `agentflow --root {root} inbox{_sid_suffix(args.sid)}` 看，"
                 f"答完再用 `--resume` 接着跑。", "bold"))
             return code
-        # 已上报召唤者（`conductor.escalate`，业主 2026-10-19「父子天然双向」）：
+        # 已上报召唤者（`conductor.escalate`，父子天然双向）：
         # 多轮驱动这一层的停止理由是从最后一轮抄上来的（`autonomy._stop_before_round`），
         # 所以它也会是 `escalated`。退出码从同一张表取（`EXIT_CODE_BY_STOP`），
         # 不在这里另写一个 5 —— 两处各写一个数字正是本文件已经治过的那种漂移。
