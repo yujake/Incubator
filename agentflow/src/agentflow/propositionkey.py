@@ -427,11 +427,6 @@ def _units(text: str, *, bigrams: bool) -> set[str]:
     return got
 
 
-def _content_unit_count(text: str) -> int:
-    """内容单元数（拉丁词元 + 中文字）：判"太短"的那个读数。"""
-    return len(_units(_canonical(text, strip_glue=False), bigrams=False))
-
-
 def judgeable(text: str, *, minimum: int = MIN_CONTENT_UNITS) -> dict[str, Any]:
     """这段文本够不够格让判据给结论（三态里的"判不了"那一档的判据本体）。
 
@@ -441,7 +436,7 @@ def judgeable(text: str, *, minimum: int = MIN_CONTENT_UNITS) -> dict[str, Any]:
     "纯符号"要补文字，处置不同。
     """
     # 空文本那一档在规范化之前就给答案（原来的顺序也是先算 units 再丢掉、返回 0）：
-    # 规范形态只算一次 —— 原先 `_content_unit_count` 算一遍、下面判"有没有文字"再算一遍。
+    # 规范形态只算一次：单元数（判"太短"）与"有没有文字"两档读的是同一份规范形态。
     if not str(text or "").strip():
         return {"ok": False, "units": 0, "minimum": int(minimum),
                 "reason": "文本是空的（没有可比的内容）"}
