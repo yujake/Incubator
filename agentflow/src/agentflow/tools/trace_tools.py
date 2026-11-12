@@ -418,9 +418,12 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
             }
         )
 
-    want = sorted({int(p) for p in (pages or []) if int(p) >= 1}) or list(
-        range(1, len(all_pages) + 1)
-    )
+    # `pages` 里每个号只转一次整型（原先集合推导的过滤条件与取值各 `int(p)` 一遍）；
+    # `max_chars` 同样只转一次 —— 它在 base 与截断循环里要读三次，转换是纯函数、值不变。
+    want: list[int] = sorted({p for p in (int(x) for x in (pages or [])) if p >= 1})
+    if not want:
+        want = list(range(1, len(all_pages) + 1))
+    limit = int(max_chars)
     picked: list[int] = []
     chunks: list[str] = []
     total = 0
@@ -429,8 +432,8 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
         if p > len(all_pages):
             continue
         chunk = all_pages[p - 1]
-        if total + len(chunk) > int(max_chars):
-            room = int(max_chars) - total
+        if total + len(chunk) > limit:
+            room = limit - total
             if room > 0:
                 chunks.append(chunk[:room])
                 picked.append(p)
