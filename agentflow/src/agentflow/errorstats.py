@@ -995,23 +995,16 @@ class ErrorStats:
         for bucket, cats in (("error", ERROR_CATEGORIES), ("system", SYSTEM_CATEGORIES),
                              ("state", STATE_CATEGORIES), ("process", PROCESS_CATEGORIES)):
             for cat, _why in cats:
-                if bucket == "error":
-                    n = self.category_total(cat)
-                    per_role = {r: int(c.get(cat, 0)) for r, c in sorted(self.by_role.items())
-                                if int(c.get(cat, 0))}
-                elif bucket == "system":
+                if bucket == "system":
                     n = int(self.system.get(cat, 0))
                     per_role = {SYSTEM_ACTOR: n} if n else {}
-                elif bucket == "state":
-                    n = self.state_category_total(cat)
-                    per_role = {r: int(c.get(cat, 0))
-                                for r, c in sorted(self.state_readings.items())
-                                if int(c.get(cat, 0))}
                 else:
-                    n = self.process_category_total(cat)
-                    per_role = {r: int(c.get(cat, 0))
-                                for r, c in sorted(self.process.items())
+                    cells = (self.by_role if bucket == "error"
+                             else self.state_readings if bucket == "state"
+                             else self.process)
+                    per_role = {r: int(c.get(cat, 0)) for r, c in sorted(cells.items())
                                 if int(c.get(cat, 0))}
+                    n = sum(per_role.values())
                 tri = dict(self.class_state.get(cat) or {})
                 span = dict(self.spans.get(cat) or {})
                 rows.append({"category": cat, "bucket": bucket, "count": int(n),
@@ -1412,8 +1405,11 @@ def _read_aux(root: Path) -> dict[str, Any]:
     # 只折 `-index.jsonl`：主册（`<owner>.jsonl`）与索引记的是同一批名字（`add` 与 `bind`
     # 一一对应），两份一起折会让每个名字都变成"同名多开"的假数。
     live: dict[str, dict[str, list[str]]] = {}
+    repaired: list[dict[str, Any]] = []
     for row in roster_rows:
         if not str(row.get("_file") or "").endswith("-index.jsonl"):
+            if row.get("repaired"):
+                repaired.append(row)
             continue
         name = str(row.get("name") or "")
         owner = str(row.get("owner") or "")
@@ -1426,8 +1422,6 @@ def _read_aux(root: Path) -> dict[str, Any]:
             slot.setdefault(name, []).append(str(row.get("task_id") or ""))
     collisions = {f"{owner}:{name}": len(ids)
                   for owner, names in live.items() for name, ids in names.items() if len(ids) > 1}
-    repaired = [row for row in roster_rows
-                if row.get("repaired") and not str(row.get("_file") or "").endswith("-index.jsonl")]
     # 会话文件名（只 glob 名字，不读内容）：样本的 `source` 要指到具体哪个文件，
     # 而 `sessions.read_all_sessions` 刻意不回文件名（它是"记录"不是"文件"）。
     sess_folder = root / "sessions"
@@ -1735,6 +1729,9 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
         return role
 
     session_names = list(_aux_reading("session_files").get("names") or ())
+    roster_reading = _aux_reading("roster")
+    statements_reading = _aux_reading("statements")
+    stop_reading = _aux_reading("stop_history")
 
     def _where(record: Mapping[str, Any]) -> tuple[str, str, str]:
         """一条会话记录的 `(source, ref, ts)`：页面展开时"去哪看这一条"。
@@ -1756,6 +1753,8 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
 
     # ---- 事件流：tasks 行的被拒 / 没做成 / 板项 / 被叫停
     if ev_reading.get("checked"):
+        board_items = 0
+        board_open = 0
         for row in task_rows:
             ctx.update(source="data/events.jsonl", ref=str(row.get("task_id") or ""),
                        ts=str(row.get("_ts") or ""),
@@ -1771,21 +1770,19 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                     if outcome == _REFUSAL_OUTCOME:
                         ev_reading["unclassified"] = int(
                             ev_reading.get("unclassified") or 0) + 1
-                    continue
-                code, cat = found
-                if code in CALLER_ATTRIBUTED_CODES and _known_role(row.get("called_by")):
-                    role = _role_name(row.get("called_by"))
                 else:
-                    role = _role_name(row.get("role"))
-                _bump(role, code, cat)
-                continue
-            if outcome == _CUT_OFF_OUTCOME:
+                    code, cat = found
+                    if code in CALLER_ATTRIBUTED_CODES and _known_role(row.get("called_by")):
+                        role = _role_name(row.get("called_by"))
+                    else:
+                        role = _role_name(row.get("role"))
+                    _bump(role, code, cat)
+            elif outcome == _CUT_OFF_OUTCOME:
                 # 父退场切割：孩子还在跑、父先退了 ⇒ 这一行由父的退场结算写成终态。
                 # 记发起方（`called_by`）：活是它派出去的，它先走了。
                 _bump(_caller_or_actor(row, _role_name(row.get("role"))),
                       "cut_off_by_parent", "child_cut_off")
-                continue
-            if outcome == _CANCELLED_OUTCOME:
+            elif outcome == _CANCELLED_OUTCOME:
                 # 叫停算不算错，先看停机流水（模块 docstring 第五节那条最容易改坏的格子）。
                 if stopped_by_user:
                     _bump(_role_name(row.get("role")), "cancelled", "task_stopped")
@@ -1794,28 +1791,22 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                     # 但要看得见：记进 `sources.events.cancelled_unexplained`。
                     ev_reading["cancelled_unexplained"] = int(
                         ev_reading.get("cancelled_unexplained") or 0) + 1
-                continue
-        # ---- 板项（状态读数）：`item_state != done` 且不是停机通知
-        for row in task_rows:
+            # ---- 板项（状态读数）：`item_state != done` 且不是停机通知
             if str(row.get("kind") or "") not in _BOARD_KINDS:
                 continue
-            ctx.update(source="data/events.jsonl", ref=str(row.get("task_id") or ""),
-                       ts=str(row.get("_ts") or ""),
-                       detail=str(row.get("detail") or ""))
+            board_items += 1
             if str(row.get("item_state") or "") == "done":
                 continue
+            board_open += 1
             detail = str(row.get("detail") or "").lstrip()
             if detail.startswith(_STOP_ITEM_PREFIXES):
                 # 停机相关的那 4 条：它们是叫停的下游形态，不是"通知发了没人收口"。
                 ev_reading["stop_items_open"] = int(ev_reading.get("stop_items_open") or 0) + 1
                 continue
             _bump(_role_name(row.get("role")), "item_state", "item_not_acked")
-    # 板项是快照：`tasks` 读不到时那个 0 也得说成"没查成"，所以单独一格的读数
-    board_lines = [r for r in task_rows if str(r.get("kind") or "") in _BOARD_KINDS]
-    if ev_reading.get("checked"):
-        ev_reading["board_items"] = len(board_lines)
-        ev_reading["board_open"] = sum(1 for r in board_lines
-                                       if str(r.get("item_state") or "") != "done")
+        # 板项是快照：`tasks` 读不到时那个 0 也得说成"没查成"，所以单独一格的读数
+        ev_reading["board_items"] = board_items
+        ev_reading["board_open"] = board_open
 
     # ---- 会话记录：判据层的 problem、工具层的拒信、代唤请示
     if ss_reading.get("checked"):
@@ -2042,8 +2033,8 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
     _apply({"roster_write_refused"}, ref_reading)
     _apply({"verdict_understated", "hook_undecided"}, sec_reading)
     _apply({"closing_blocker"}, cls_reading)
-    _apply({"task_stopped"}, _aux_reading("stop_history"))
-    _apply({"roster_repaired"}, _aux_reading("roster"))
+    _apply({"task_stopped"}, stop_reading)
+    _apply({"roster_repaired"}, roster_reading)
     # `statements` 读不出来只影响归属（退回 `（未记作者）`），不影响计数 —— 所以
     # `proof_defect_found` 的三态仍由 `verifications` 决定，这一格在 `sources.statements` 里
     # 单独看得见（不把"作者没记"折成"这一类没查成"）。
@@ -2052,11 +2043,11 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
         "events": ev_reading,
         "sessions": ss_reading,
         "verifications": ver_reading,
-        "roster": _aux_reading("roster"),
+        "roster": roster_reading,
         "roster_refusals": ref_reading,
         "secretary": sec_reading,
-        "statements": _aux_reading("statements"),
-        "stop_history": _aux_reading("stop_history"),
+        "statements": statements_reading,
+        "stop_history": stop_reading,
         "closing": cls_reading,
         "unclassified": unclassified,
         "hits": {"checked": checked,
