@@ -12505,28 +12505,35 @@ class Secretary:
             branch_by_parent[parent_id] = found
             branch_checked_by_parent[parent_id] = bool(got.get("checked"))
             return found
+        root_id = str(owner or "")
         if scope != "descendants":
-            top = branches_of(str(owner or ""))
-            top_checked = bool(branch_checked_by_parent.get(str(owner or ""), False))
-            return [{"row": r, "parent": "", "parent_tid": "", "depth": 1,
-                     "branch": top.get(str(r.get("task_id") or ""), ""),
-                     "branch_checked": top_checked,
-                     "facts": dict(root_by.get(str(r.get("task_id") or "")) or {})}
-                    for r in rows]
+            top = branches_of(root_id)
+            top_checked = bool(branch_checked_by_parent.get(root_id, False))
+            for r in rows:
+                tid = str(r.get("task_id") or "")
+                out.append({"row": r, "parent": "", "parent_tid": "", "depth": 1,
+                            "branch": top.get(tid, ""),
+                            "branch_checked": top_checked,
+                            "facts": dict(root_by.get(tid) or {})})
+            return out
         # 全树：逐层往下，每一层的 facts 从它的父那一格里取。
         # 这一格最容易写错（第一版就是）：`children_facts(X)` 给的是"X 名下"的读数，
         # 而某一行要的是"它父名下的它自己"那一格 —— 拿 X 去查 X 只会得到空表，
         # 于是全树的每一行都会读成 `ready`（一个安静的错误：没有任何地方会报错）。
-        top_branches = branches_of(str(owner or ""))
-        top_checked = bool(branch_checked_by_parent.get(str(owner or ""), False))
-        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any], str, bool]] = [
-            (r, "", str(owner or ""), 1,
-             dict(root_by.get(str(r.get("task_id") or "")) or {}),
-             top_branches.get(str(r.get("task_id") or ""), ""), top_checked)
-            for r in rows]
+        top_branches = branches_of(root_id)
+        top_checked = bool(branch_checked_by_parent.get(root_id, False))
+        queue: list[tuple[dict[str, Any], str, str, int, dict[str, Any], str, bool]] = []
+        for r in rows:
+            tid = str(r.get("task_id") or "")
+            queue.append((r, "", root_id, 1, dict(root_by.get(tid) or {}),
+                          top_branches.get(tid, ""), top_checked))
+        # 队列用游标取头（原先 `pop(0)` 每次把整个列表前移一格）：先来先处理
+        # 的顺序一个字没变，只是取头从 O(队列长) 变成 O(1)。
+        head = 0
         seen = 0
-        while queue and seen < 512:
-            r, parent_name, parent_tid, depth, facts, branch, checked = queue.pop(0)
+        while head < len(queue) and seen < 512:
+            r, parent_name, parent_tid, depth, facts, branch, checked = queue[head]
+            head += 1
             seen += 1
             out.append({"row": r, "parent": parent_name, "parent_tid": parent_tid,
                         "depth": depth, "branch": branch, "branch_checked": checked,
