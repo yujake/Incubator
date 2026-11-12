@@ -24,7 +24,7 @@
 | e | A（别的角色）对 b 稿调 `fs.edit` | 仍拒 | 只对角色 B |
 | f | 把豁免摘掉（打桩 `_b_polish_edit_allowed` ⇒ False） | a 变红 | a 的绿来自那格豁免本身 |
 | g | B 对「没发过号」的 `reports/b-proof-000009.md` 调 `fs.edit` | 仍拒 | 号必须来自 B 自己的号段 |
-| h | B 对 `reports/b-proof-000000-p2.md` 调 `fs.edit` | 仍拒 | 一份号一份文件（`-pN` 不在豁免里） |
+| h | B 对 `reports/b-proof-000000-p2.md` 调 `fs.edit` | 仍拒 | 一份号一份文件（`-pN` 老名在产出侧已退役，不在豁免里） |
 
 全部 tmp 工作区，不读写 `projects/`（真机工作区只读），不跑全量。
 """
@@ -60,7 +60,6 @@ TEXT = """# B 的证明手稿：夹具命题
 
 - 命题号：stmt:000001
 - 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无
-- 证明号：1
 
 ## 命题
 
@@ -72,8 +71,8 @@ TEXT = """# B 的证明手稿：夹具命题
 
 ## 依赖
 
-| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |
-|---|---|---|---|
+| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |
+|---|---|---|
 （这一份证明没有引用任何在册命题 —— 空表就是声明。）
 """
 
@@ -257,7 +256,7 @@ def test_g_a_number_b_never_issued_is_still_refused(tmp_path: pathlib.Path) -> N
 
 
 def test_h_the_proof_no_suffix_is_not_exempted(tmp_path: pathlib.Path) -> None:
-    """h：`-pN` 后缀不在豁免里（一份号一份文件）。"""
+    """h：`-pN` 老名不在豁免里（一份号一份文件；2026-11-11 起它已不是稿名）。"""
     st = _ws(tmp_path)
     assert _alloc_b(st) == "000000"
     rel = _write(st, "reports/b-proof-000000-p2.md")
