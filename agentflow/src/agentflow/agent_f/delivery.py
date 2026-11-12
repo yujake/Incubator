@@ -1,75 +1,50 @@
 # -*- coding: utf-8 -*-
-"""F 的交差读数：按条读，不是「一条签到手就交差」（业主 2026-11-02 原话）。
+"""F 的交差读数：按条读，不是「一条签到手就交差」。
 
-口径唯一来源：`draft/179-证明优化两阶段录入口径（2026-11-02）.md` §二之三（逐字）：
+口径：一个 F 可以产出多条成果，不许暗示它一拿到一条定理的证明就交差。F 是否收工靠它
+自己评判：是否全面研究了 D 交给它的攻坚任务、是否尽力做出了足够多的成果（也可以是没
+成果）、即使没完成原定任务是否产出了一些小的阶段性成果。
 
-    一个F可以产出多条成果，不要暗示它一拿到一条定理的证明就交差。
-    F具体是否收工靠它自己评判：是否全面研究了D交给它的攻坚任务、是否尽力做出了
-    足够多的成果（也可以是没成果）、即使没完成原定任务，是否产出了一些小的阶段性成果。
-
-## 改前（这一格要修掉的读数）
-
-`F.step` 的交差读数只有两格：`delivered: bool` + `delivery_state`（四档），
-而它们读的是「这一轮那一份」证明的签（`agent_f/vsign.py`）。于是：
-
-- 一个任务产出 3 条成果、只有最后那一条拿到签 ⇒ `delivered=True`
-  —— 「有一个签」被读成了「交差完成」；
-- 一个任务「研究了、尽力了、0 条成果」⇒ 没有能读的成果，交差读数无从说起；
-  「什么都没交」与「还没开始」在读数上长得一样。
-
-## 改后（逐条 + 自评）
-
-读数以「成果」为单位。一条成果 = 一个在册命题号（`stmt:<号>`）：同一号被重交
-（改稿再交）仍是同一份成果，不是多条 —— 84/85 的现场就有这种重交
-（`projects/paper-rewrite-84` 计划 `000000` 的第 1–4 轮都是 `stmt:000001`）。
-
-每一条成果各自读一次签（`agent_f/vsign.delivery_reading` 的四档），再汇总：
+读数以「成果」为单位。一条成果 = 一个在册命题号（`stmt:<号>`）：同一号被重交（改稿再交）
+仍是同一份成果，不是多条。每一条成果各自读一次签（`agent_f/vsign.delivery_reading` 的
+四档），再汇总：
 
 | 格 | 意思 |
 |---|---|
 | `signed_count` | 「已签」的条数 |
 | `pending_count` | 「待签」的条数（还没送审，或审过、连续次数没到 —— 都不是「没过」） |
 | `unsigned_count` | 「未签」的条数（V 判过、结论不是能签的那一档；或这一份根本没查成） |
-| `coverage` | 已签 ÷ 总数，化成「最简分数」（3/3 读作 `1/1`、1/3 读作 `1/3`；0 条已签照实写 `0/N`） |
-| `coverage_reading` | 未约分的「已签/总数」（`3/3`）—— 要原始条数看这一格 |
+| `coverage` | 已签 ÷ 总数，化成最简分数（0 条已签照实写 `0/N`） |
+| `coverage_reading` | 未约分的「已签/总数」—— 要原始条数看这一格 |
 | `coverage_ratio` | 0..1 的数；0 条成果时是 `None`（不是 0 —— 没有分母） |
 | `state` | `signed_all` / `outputs_settled` / `outputs_unsigned` / `researched_no_output` / `not_started` |
 | `delivered` | 「有成果、且每一条成果都已签」（不是「有一条签了」；0 条不算交差完成） |
 | `proof_count` | 能叫「证明」的条数（`claim=proof`，只有已签的算） |
 | `unfinished` | 还没签、也没被明确放弃的成果（逐条：命题号 + 手稿 + 签的档位） |
-| `legal_stop` | 现在收工「合不合业主口径」（未签成果没处置 ⇒ 假；「研究过、没成果」⇒ 真） |
+| `legal_stop` | 现在收工合不合口径（未签成果没处置 ⇒ 假；「研究过、没成果」⇒ 真） |
 | `self_assessment` | 三条自评判据各一档（见下），外加 F 自己写的 `next_move` / `why` 留痕 |
 
-## 交差不许静默（业主 2026-11-02 追加口径）
+交差不许静默：收工的判据要拦着说"你还有哪些命题未签（也可以选择放弃那些命题），没签的
+要继续完善直到拿到 V 签"。所以 `unfinished` 逐条点名（命题号 + 手稿路径 + 签的档位），
+不只是一个数；它不替 F 决定下一步 —— `LEGAL_EXITS` 只是举例（换证明路线 / 拆成更弱的
+引理 / 补缺工具 / 减弱断言 / 明确放弃 / 判断是误判再送一次），不是枚举、不是系统动作。
+但 F 必须留痕：`self_assessment.next_move` 写选了什么、`why` 写理由；没留痕 ⇒
+`trail.checked=False`、`close_problems` 点名「它申请收工却没说自己怎么办」。「明确放弃」
+是合法出路，落法是台账那一行 `status=abandoned` +
+`quote_reason=abandoned@<ISO8601>@<理由>`（三样缺一不可）；放弃之后的成果按 `abandoned`
+读（不再算「未签」，也不计入「产出的证明数」）。
 
-「应该是收工的判据拦着说你还有哪些命题未签（也可以选择放弃那些命题），没签的要继续完善
-直到拿到V签」。所以交差读数里：
+三条自评判据（`SELF_CRITERIA`）：`comprehensive`（是否全面研究了任务：`comprehensive` /
+`partial` / `not_comprehensive`）、`enough_output`（是否尽力做出了足够多的成果：
+`enough_output` / `some_output` / `no_output`）、`partial_output`（即使没完成原定任务，
+是否产出了小的阶段性成果：`partial_output` / `none`）。自评由 F 自己在那一轮 JSON 的
+`self_assessment` 格写（见 `agent_f.core._attack_prompt` 第 7 段）；F 没写或写得不成形时
+这一格不冒充自评：`source="derived"` + `checked=False`，三档按盘上证据推（见
+:func:`derived_self_assessment`），`why` 明说「这不是 F 的自评」。
 
-- `unfinished` 「逐条点名」还没签的成果（命题号 + 手稿路径 + 签的档位），不只是一个数；
-- 它「不替 F 决定」下一步：`LEGAL_EXITS` 只是「举例」（换证明路线 / 拆成更弱的引理 /
-  补缺工具 / 减弱断言 / 明确放弃 / 判断是误判再送一次），不是枚举、不是系统动作；
-- 但 F 「必须留痕」：`self_assessment.next_move` 写它选了什么、`why` 写理由；
-  没留痕 ⇒ `trail.checked=False`、`close_problems` 点名「它申请收工却没说自己怎么办」；
-- 「明确放弃」是合法出路，落法是台账那一行 `status=abandoned` +
-  `quote_reason=abandoned@<ISO8601>@<理由>`（三样缺一不可）。放弃之后的成果
-  按 `abandoned` 读：「不再算「未签」」（但那一条也不计入「产出的证明数」）。
-
-## 三条自评判据（`SELF_CRITERIA`）
-
-| 键 | 问的原话 | 档 |
-|---|---|---|
-| `comprehensive` | 是否全面研究了 D 交给它的攻坚任务 | `comprehensive` / `partial` / `not_comprehensive` |
-| `enough_output` | 是否尽力做出了足够多的成果（也可以是没成果） | `enough_output` / `some_output` / `no_output` |
-| `partial_output` | 即使没完成原定任务，是否产出了一些小的阶段性成果 | `partial_output` / `none` |
-
-自评由 「F 自己」写（一轮的 JSON 里 `self_assessment` 那一格，见
-`agent_f.core._attack_prompt` 第 7 段）。F 没写（或写得不成形）时这一格
-「不冒充自评」：`source="derived"` + `checked=False`，三档按盘上证据推
-（怎么推写在 :func:`derived_self_assessment` 里），`why` 明说「这不是 F 的自评」。
-
-「没成果」是「合法的收工理由」（业主原话「也可以是没成果」）：`enough_output=no_output`
-＋ 研究过（`researched=True`）⇒ `state=researched_no_output`、`is_failure=False`、
-`legal_stop=True`。它不是失败，也不是「交差完成」—— 是第三种结局。
+「没成果」是合法的收工理由：`enough_output=no_output` ＋ 研究过（`researched=True`）⇒
+`state=researched_no_output`、`is_failure=False`、`legal_stop=True`。它不是失败，也不是
+「交差完成」—— 是第三种结局。
 """
 from __future__ import annotations
 
