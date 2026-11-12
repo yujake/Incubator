@@ -1,11 +1,9 @@
 # -*- coding: utf-8 -*-
 """Lean 工具链的"开机自检"：这台机器上的那个 lean 到底是不是一个真检查器。
 
-## 为什么要有它（业主 2026-10-22 的原话）
+## 为什么要有它
 
-「开机自检可以做，防止用户提供虚构的lean环境」。
-
-这句话指的不是"lean 没装"，而是另一种更贵的形态：「环境看起来装好了，但它不说话」。
+它防的不是"lean 没装"，而是另一种更贵的形态：「环境看起来装好了，但它不说话」。
 `toolchain.probe_checkers` 能回答"盘上有没有一个叫 lean 的可执行文件、它报什么版本"，
 而这两件事都可以被一个只有五行代码的回显器满足（打印一行 `Lean (version 4.7.0, ...)`，
 任何输入都以 0 退出）。于是一整套 `evidence_kind="proof"` 的证据链就建立在
@@ -24,7 +22,7 @@
    `theorem dsh_selfcheck_bad : 1 = 2 := rfl`，它「必须非 0 退出」。
    若它也"通过"，说明那个 lean 是个回显器而不是检查器 —— 这正是"虚构环境"的
    唯一机械判据，也是本模块存在的全部理由。
-5. 图论可用（第 ⑤ 步，2026-10-25 接入）：先按 :func:`mathlib_reading` 找那份
+5. 图论可用（第 ⑤ 步）：先按 :func:`mathlib_reading` 找那份
    Mathlib 工程（`lakefile.lean` + `lean-toolchain` + `.lake/build/lib[/lean]/Mathlib.olean`），
    找到了就用它编译一次 `import Mathlib.Combinatorics.SimpleGraph.Basic` 加
    `#check SimpleGraph`：退出码 0「且」输出里真的出现 `SimpleGraph` 才算 `usable`。
@@ -32,12 +30,11 @@
    这一档不许把整次自检判成 `unusable`：缺库是"这一项不可用"，不是"检查器坏了"。
    反过来，检测到工程根而这一次编译没过，是 `unusable`，整次自检跟着不许是 `usable`。
 
-## 第 ⑤ 步为什么要有一条自己的"怎么调用"（2026-10-25 的现场）
+## 第 ⑤ 步为什么要有一条自己的"怎么调用"
 
-盘上那份 Mathlib 编译好了（`mathlib-pinned` 那份 `SimpleGraph` 的 38 个模块全有
-`.olean`），而裸的 `lean.exe <file>` 不知道它在哪：实测原文是
-`error: unknown package 'Mathlib'` 加 `unknown identifier 'SimpleGraph'`，退出码 1
-（见 `tests/test_lean_mathlib_wiring.py` 里逐字引的那一段）。也就是说"装了等于没装"。
+盘上那份 Mathlib 编译好了，而裸的 `lean.exe <file>` 不知道它在哪：检查器报
+`error: unknown package 'Mathlib'` 加 `unknown identifier 'SimpleGraph'`，退出码 1。
+也就是说"装了等于没装"。
 所以第 ⑤ 步不再用裸命令，而是 :func:`mathlib_command` 给出的那一条：
 
 1. `lake env lean <file>`（cwd = Mathlib 工程根）—— 首选。`lake env` 是工程自己声明的
@@ -59,7 +56,7 @@
 
 第 ⑤ 步的结论另有一格 `mathlib`（`state` 取值见 :data:`MATHLIB_STATES`），它「不」并进
 上面这张表的措辞里：`mathlib.state == "unusable"` 会让整次自检不是 `usable`
-（业主口径：那一项不可用时不许把整次自检判成 usable），而 `absent`（这台机器没有
+（那一项不可用时不许把整次自检判成 usable），而 `absent`（这台机器没有
 Mathlib）只是"退回裸 lean"，整次自检照旧可以由前四步给出 `usable`。
 
 两条硬纪律，代码里各有一处落点：
@@ -72,7 +69,7 @@ Mathlib）只是"退回裸 lean"，整次自检照旧可以由前四步给出 `u
 
 ## 为什么"关着时一次都不许碰 lean"
 
-业主 2026-10-12 的开关口径：`lean_enabled=false` 时全流程涉及 Lean 的都跟着关，
+开关口径：`lean_enabled=false` 时全流程涉及 Lean 的都跟着关，
 连探测都不做（`formalgw.check_lean` 已经有一处
 同形的落点）。自检更贵（三步子进程），所以关着时它在「解析之前」就返回：
 不 spawn、不建临时目录、不算哈希。判据 `test_the_switch_off_means_off_and_no_process_is_started`
@@ -153,7 +150,7 @@ SOURCES: tuple[str, ...] = ("flag", "env", "settings", "config", "default")
 #: 前者是"这台机器没有 Mathlib"（退回裸 lean，不是缺陷），后者是"检测没跑成"。
 MATHLIB_STATES: tuple[str, ...] = ("usable", "unusable", "absent", "unknown")
 
-#: 第 ⑤ 步用的那条 import：业主点名的那一个模块（图论入口）。
+#: 第 ⑤ 步用的那条 import：点名的那个模块（图论入口）。
 MATHLIB_GRAPH_MODULE = "Mathlib.Combinatorics.SimpleGraph.Basic"
 #: 第 ⑤ 步的源码：一行 import 加一句 `#check`。`#check` 的输出是"这个检查器真的把
 #: 这个名字当成了一个东西"的证据，而不只是"它没报错"（回显器给不出这一行）。
@@ -167,8 +164,8 @@ GRAPH_MARKER = "SimpleGraph"
 
 #: Mathlib 缺省候选目录名（在 `<工作区根>/_env/` 下面找；顺序即优先级）。
 #:
-#: 为什么有这一档：2026-10-25 的现场是"Mathlib 编译好了（`SimpleGraph` 的 38 个模块
-#: 全有 `.olean`），而设置文件没写 `toolchain.mathlib_root`" —— 于是裸 lean 永远报
+#: 为什么有这一档：现场是"Mathlib 编译好了（`SimpleGraph` 的模块全有 `.olean`），
+#: 而设置文件没写 `toolchain.mathlib_root`" —— 于是裸 lean 永远报
 #: `unknown package 'Mathlib'`，盘上那份库等于没装。候选只探 `_env/` 这一层（外加每格
 #: 的一层子目录，Mathlib 的发行目录形如 `mathlib4-<tag>`），不递归搜整盘：
 #: "自动在别处找到了一个 Mathlib"比"没找到"更难排查。
@@ -184,7 +181,7 @@ _MATHLIB_LIB_SUBS: tuple[Path, ...] = (Path(".lake") / "build" / "lib",
 EXPECTED_LEAN_MAJOR = 4
 
 #: 单步超时（秒）。三步子进程共用这一档：正样例与反控都在一个只有一行 `theorem`
-#: 的文件上跑，本机实测 0.4–0.9 秒（2026-10-22，Lean 4.7.0）；给 60 秒是留给
+#: 的文件上跑，一般远快于 1 秒；给 60 秒是留给
 #: 冷启动、杀毒扫描与慢盘的余量，而不是留给"它慢慢想"。
 DEFAULT_TIMEOUT_SEC = 60.0
 #: `--version` 单独一档（它比编译一个文件便宜得多，卡住就说明这个 exe 有问题）。
@@ -196,7 +193,7 @@ POSITIVE_NAME = "dsh_selfcheck"
 #: 反控的声明名（与被检的那条真命题同一个文件族，只是命题是假的）。
 NEGATIVE_NAME = "dsh_selfcheck_bad"
 #: 正样例源码（「必须」是一个真命题：`1 = 1` 在 Lean 4 里 `rfl` 就能证）。
-# 反控的命题每趟随机（业主 2026-10-22 口径：防虚构 lean 环境）：常量化的 `1 = 2` 会被
+# 反控的命题每趟随机（口径：防虚构 lean 环境）：常量化的 `1 = 2` 会被
 # 一个"源码里含 1=2 就 exit 1"的假 lean 认出来。这里随机两个不同的自然数 n != m，
 # 正样例用 n = n，反控用 n = m ⇒ 假 lean 没法靠字面量或文件名蒙混。
 _N = random.randint(2, 9999)
@@ -402,12 +399,12 @@ def _resolve(src: Mapping[str, str], *, root: str | Path | None,
     就会静默盖掉这台机器上正确的落点。`--lean` 与 env 仍然压在所有文件档之上
     （CI 与既有脚本靠它们，见 `settings` 模块的优先级那一段）。
 
-    `src` 与 `env` 是两个不同的东西（2026-10-25 修）：`src` 是"当成环境变量表用的
+    `src` 与 `env` 是两个不同的东西：`src` 是"当成环境变量表用的
     那一份"（`selfcheck(env=None)` 时它就是 `os.environ` 的拷贝），而 `env` 是调用方
     「注入了没有」这件事本身。`settings.toolchain_settings` 判的是后者：`env is None`
-    才落磁盘读 `settings.json`。此前这里把 `src` 传给了它，于是"注入了一份等于
-    os.environ 的映射"被读成"调用方注入了环境"⇒ 设置文件那一档再也读不到 ——
-    本机实测形态：`settings.json` 里明明写着 `toolchain.lean_bin`，自检却报
+    才落磁盘读 `settings.json`。若把 `src` 传给它，"注入了一份等于
+    os.environ 的映射"会被读成"调用方注入了环境"⇒ 设置文件那一档再也读不到 ——
+    形态：`settings.json` 里明明写着 `toolchain.lean_bin`，自检却报
     "五档都找过、都没找到 lean"。口径与 `toolchain.resolve_checker` 逐字一致
     （它传的就是原始 `env`）。
     """
@@ -480,7 +477,7 @@ def _run(cmd: Sequence[str], *, cwd: str, timeout_sec: float,
     if env_overlay:
         child_env = dict(os.environ)
         child_env.update({str(k): str(v) for k, v in env_overlay.items() if str(k)})
-    # 业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，程序结束它返回
+    # 起程序就登记一条程序计时器，程序结束它返回
     # 并带上结局。这里是本模块唯一的 spawn 点，所以记账也只在这一处。
     from . import clock as _CLK
 
@@ -784,7 +781,7 @@ def mathlib_reading(*, root: str | Path | None = None, env: Mapping[str, str] | 
     这一格「不」下"可用"的结论：`state` 只可能是 `absent` / `unknown`（未检出 / 没查成）。
     `usable` 与 `unusable` 只能由真编译给出，见 :func:`_mathlib_control` ——
     盘面上 `Mathlib.olean` 在、而 `import Mathlib` 报 `unknown package 'Std'` 的那一次
-    真机事故就是这么来的。
+    事故就是这么来的。
     """
     out = _empty_mathlib()
     src = dict(os.environ if env is None else env)
@@ -918,7 +915,7 @@ def _mathlib_control(out: dict[str, Any], exe: str, workdir: Path, *,
     四档的落点：
 
     - 没有 Mathlib（`detected=False`）⇒ `absent`：这一次不给结论，也不把它说成
-      "检查器不可用"（业主口径：缺库是这一项不可用，不是检查器坏了）；
+      "检查器不可用"（缺库是这一项不可用，不是检查器坏了）；
     - 退出码 0 且输出里有 `SimpleGraph` ⇒ `usable`；
     - 退出码非 0 ⇒ `unusable`，理由里带上检查器的原文（例如 `unknown package 'Mathlib'`
       与 `unknown identifier 'SimpleGraph'` —— 那正是"裸 lean 不知道 Mathlib 在哪"的原文）；
@@ -1146,8 +1143,8 @@ def _four_steps(out: dict[str, Any], exe: str, workdir: Path, *,
     分成一个函数是为了让 `selfcheck` 的 `try/finally`（临时目录）与"自检自己崩了"
     那一档读起来是两条线：编排（解析/清理/结论）与判据（几步本身）各自只有一处。
 
-    第 ⑤ 步排在最后、且只在前四步已经判成 `usable` 时才跑：一次 Mathlib 编译在本机
-    实测约 7–11 秒（裸 lean 加 `LEAN_PATH` 约 7 秒、`lake env lean` 约 11 秒），
+    第 ⑤ 步排在最后、且只在前四步已经判成 `usable` 时才跑：一次 Mathlib 编译
+    比裸 lean 慢得多（多了 lake 的环境解析），
     而"这个解释器是不是检查器"这件事前四步已经答完了 —— 一个连反控都过不了的东西，
     再花十秒问它图论库通不通没有意义（它通不通都构不成证据）。
     """
@@ -1205,7 +1202,7 @@ def _four_steps(out: dict[str, Any], exe: str, workdir: Path, *,
     # 它有三档要分开落：
     #   absent   ⇒ 退回裸 lean 本来的结论（这一趟没有库这一项，不是缺陷）；
     #   unusable ⇒ 整次自检不许是 usable，并追加一条 `[Mathlib]` 开头的 problem
-    #              （业主口径：那一项不可用时不许把整次自检判成 usable）；
+    #              （那一项不可用时不许把整次自检判成 usable）；
     #   unknown  ⇒ 这一步没查成 ⇒ 整次自检是"没查成"（与前四步超时同一档；
     #              这一步的结论没拿到，就不许把整次报成"查过了没问题"）。
     mstate, mwhy = _mathlib_control(out, exe, workdir, timeout_sec=timeout_sec)
@@ -1235,7 +1232,7 @@ def _four_steps(out: dict[str, Any], exe: str, workdir: Path, *,
 
 #: 读数缓存：`(root, lean, 四档环境变量, mathlib_root)` → 上一份读数。
 #:
-#: 为什么必须缓存：一次自检要起三到四个子进程（本机真机实测 1.3 秒；接上 Mathlib 之后
+#: 为什么必须缓存：一次自检要起三到四个子进程（接上 Mathlib 之后
 #: 多一次约 7–11 秒的真编译），而"第一屏摘要"与"收工门那一格"问的是同一个问题、
 #: 在同一趟里问两遍。缓存的是「读数」而不是"结论"：键里带着解析相关的四档环境变量，
 #: 换一档就问一次，不会把上一次的答案张冠李戴。要强制重查用 `refresh=True`。
