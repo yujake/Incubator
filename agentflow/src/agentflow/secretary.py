@@ -12035,7 +12035,10 @@ class Secretary:
             return out
         by_task = dict(snap.get("by_task") or {})
         per_owner: dict[str, dict[str, int]] = {}
-        state_of: dict[str, str] = {}
+        # 全量的三态读数在下面那一趟里顺手攒下来：原先建一张 `tid -> state` 的表，
+        # 再拿 items 逐条查表扫第二遍（同一批项走两趟）。逐项 append 与逐项查表同值，
+        # 同号多项时也是逐项各记一次（与原来的生成器一致）。
+        states_seen: list[str] = []
         waiting: list[dict[str, Any]] = []
         unjudged: list[dict[str, Any]] = []
         for it in items:
@@ -12049,14 +12052,14 @@ class Secretary:
             if cell is None:
                 # 台账里没有它那一行 ⇒ 三态判不了（`unknown`），而 `unknown` 不是静默：
                 # 把它折成静默会让"判不了"与"它就是收工了"长得一模一样。
-                state_of[tid] = AGENT_STATE_UNKNOWN
+                states_seen.append(AGENT_STATE_UNKNOWN)
                 slot["unknown"] = int(slot["unknown"]) + 1
                 unjudged.append({"owner": it["owner"], "name": it["name"],
                                  "task_id": tid, "state": AGENT_STATE_UNKNOWN,
                                  "why": "台账里没有它那一行 ⇒ 它有没有未收口的活判不了"})
                 continue
             state = str(cell.get("state") or AGENT_STATE_UNKNOWN)
-            state_of[tid] = state
+            states_seen.append(state)
             # 词表外的取值记进 `unknown`（`conductor.state_counts` 的同一条口径）：
             # 先算出要落的键再累加 —— 直接 `slot[key] = int(slot.get(state)) + 1`
             # 会读到"另一格"的旧值，于是 `unknown` 每遇到一个词表外取值就被
@@ -12083,8 +12086,7 @@ class Secretary:
                             "waiting_for": kids, "for_names": wait_names,
                             "note": ("它自己不忙，是在等 " + "、".join(wait_names)
                                      + "（active）")})
-        counts = state_counts(state_of.get(it["task_id"], AGENT_STATE_UNKNOWN)
-                              for it in items)
+        counts = state_counts(states_seen)
         active_count = counts["active"]
         note = (f"{labels[CHILD_COUNT_KEY]}={len(items)}，"
                 f"{labels[ACTIVE_CHILD_COUNT_KEY]}={active_count}"
