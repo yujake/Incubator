@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""多证明的路径号（业主 2026-11-11 追加裁定：由 B 收录时分配）。
+"""多证明的路径号（B 收录时分配）。
 
 一条命题已有 N 条路径 ⇒ 新正文排第 N+1；同一份稿（同正文 sha / 同路径）重复
 收录 ⇒ 沿用原号。依赖行与 `verifications` 行都用这个号。
@@ -96,7 +96,7 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
 
 def assign_path_group(*, store: Any, root: Any, statement_id: str,
                       manuscript: str, body_sha: str = "") -> dict[str, Any]:
-    """B 收录时给这一份证明分配「第几条路径」（业主 2026-11-11 追加裁定）。
+    """B 收录时给这一份证明分配「第几条路径」。
 
     规则：这条命题已经有 N 条路径 ⇒ 新正文排第 N+1 条；同一份稿（同正文 sha / 同
     路径）重复收录 ⇒ 沿用原来的号，不新增路径。老盘没有 `path_group` 的行不猜号
