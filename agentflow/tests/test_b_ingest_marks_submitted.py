@@ -232,14 +232,14 @@ def test_e_two_different_proofs_get_two_paths(tmp_path):
     reading = MS.path_reading(st, st.root, statement_id=SID)
     assert reading["checked"] is True and reading["count"] == 2, reading
     assert {p["manuscript_id"] for p in reading["paths"]} == {"000001", "000002"}, reading
-    # c：渲染出来的依赖表两行在「路径号」列可区分
+    # c：产出侧渲染的依赖表不再写「路径号」列（路径号由 B 的秘书分配，不进稿）
     render_rows = [{"stmt_id": str(r.get("source_stmt_id") or ""),
                     "quote": str(r.get("label") or ""), "step": 1,
                     "path_group": int(r.get("path_group") or 1)} for r in deps]
     section = DS.render_dependency_section(render_rows)
     lines = [ln for ln in section.splitlines() if f"stmt:{DEP_SID}" in ln]
     assert len(lines) == 2, section
-    assert "| 1 |" in lines[0] and "| 2 |" in lines[1], lines
+    assert "路径号" not in section, section
 
 
 def test_f_re_ingesting_the_same_proof_does_not_add_a_third_path(tmp_path):

@@ -833,9 +833,15 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
     if not table:
         out["problems"].append({
             "line": heading_line,
-            "why": (f"`{SECTION_HEADING}` 下面没有表格：要给一张四列的表"
-                    f"（{' / '.join(name for _f, _k, name in COLUMN_KEYS)}）")})
+            "why": (f"`{SECTION_HEADING}` 下面没有表格：要给一张表"
+                    f"（{' / '.join(name for _f, _k, name in COLUMN_KEYS)}；"
+                    "最后一列 `路径号` 可省 —— 路径号由收录时的秘书分配，产出侧不写）")})
     header_cells: list[str] = []
+    #: 本表实际有哪几列（字段名，按 `COLUMN_KEYS` 的顺序）。产出侧不写路径号 ⇒
+    #: `path_group` 是唯一可省的一列，其余三列（引用 / 命题号 / 步）缺一不可。
+    #: 省了它 ⇒ `deps_groups` 里那一格按 `assign_path_group` 的默认（第 1 条）落，
+    #: 由秘书在收录事务里覆盖成它分配的号。
+    present_fields: list[str] = [field for field, _k, _n in COLUMN_KEYS]
     #: 逐行解析用的列序。表头认得全就照表头取列（上面 `COLUMN_KEYS` 说的
     #: 「顺序不限」只有在这里真的按表头解析时才是事实；此前 `found` 只进了
     #: 出参 `column_index`，正文一律按位置读 —— 表头换个顺序，`step` 与
@@ -854,35 +860,40 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
                 if any(key.lower() in low for key in keys):
                     found[field] = idx
                     break
-        missing = [name for field, _keys, name in COLUMN_KEYS if field not in found]
+        required = [f for f, _k, _n in COLUMN_KEYS if f != "path_group"]
+        missing = [name for field, _keys, name in COLUMN_KEYS
+                   if field in required and field not in found]
+        present_fields = [f for f, _k, _n in COLUMN_KEYS if f in found]
         if missing:
             out["problems"].append({
                 "line": header_line,
-                "why": (f"表头缺列：{missing}（这一节要四列，逐列固定："
-                        f"{' / '.join(name for _f, _k, name in COLUMN_KEYS)}）")})
-        elif len(header_cells) != len(COLUMN_KEYS):
+                "why": (f"表头缺列：{missing}（这一节要 {len(required)} 列，逐列固定："
+                        f"{' / '.join(name for _f, _k, name in COLUMN_KEYS if _f in required)}）")})
+        elif len(header_cells) != len(found):
+            # 表头里有一列认不出来（多出来的那一列）：列数要恰好等于认出的字段数。
             out["problems"].append({
                 "line": header_line,
-                "why": (f"表头有 {len(header_cells)} 列，这一节要恰好 {len(COLUMN_KEYS)} 列"
-                        f"（{' / '.join(name for _f, _k, name in COLUMN_KEYS)}）")})
-        out["columns"] = [field for field, _k, _n in COLUMN_KEYS if field in found]
+                "why": (f"表头有 {len(header_cells)} 列，只有 {len(found)} 列认得出："
+                        f"{' / '.join(name for _f, _k, name in COLUMN_KEYS)}")})
+        out["columns"] = present_fields
         out["column_index"] = dict(found)
-        if len(found) == len(COLUMN_KEYS):
-            parse_order = [found[field] for field, _k, _n in COLUMN_KEYS]
+        if not missing and len(header_cells) == len(found):
+            parse_order = [found[f] for f in present_fields]
     # ---- 逐行读表格（表头之后：分隔行跳过，其余每一行都要是完整的一条）
     for line_no, raw in table[1:]:
         cells = _cells(raw)
         if _is_separator(cells):
             continue
-        if len(cells) != len(COLUMN_KEYS):
+        if len(cells) != len(present_fields):
             out["problems"].append({
                 "line": line_no,
-                "why": (f"这一行读出来 {len(cells)} 列，应有 {len(COLUMN_KEYS)} 列："
+                "why": (f"这一行读出来 {len(cells)} 列，应有 {len(present_fields)} 列："
                         f"{cells!r}（{SECTION_HEADING} 那张表一行一条依赖）")})
             continue
         row: dict[str, Any] = {"line": line_no}
         bad: list[str] = []
-        for idx, (field, _keys, name) in enumerate(COLUMN_KEYS):
+        for idx, field in enumerate(present_fields):
+            _keys, name = next((k, n) for f, k, n in COLUMN_KEYS if f == field)
             src = parse_order[idx]
             value = (cells[src] if src < len(cells) else "").strip().strip("`").strip()
             if not value:
@@ -913,6 +924,10 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
         if bad:
             out["problems"].append({"line": line_no, "why": "；".join(bad)})
             continue
+        if "path_group" not in row:
+            # 产出侧不写路径号 ⇒ 这一格不是"缺列"，是"还没分配"：收录时由秘书在
+            # 事务里给出（这一列的默认值只是让读取方拿到一个整数，不是权威）。
+            row["path_group"] = 1
         out["rows"].append(row)
     if out["problems"]:
         out["refused"] = REFUSED_SECTION
@@ -2199,23 +2214,25 @@ def dependency_review(text: str,
 # ------------------------------------------------------------------ 渲染（唯一实现）
 
 def render_dependency_section(rows: Iterable[Mapping[str, Any]]) -> str:
-    """把依赖行渲染成那一节固定格式的表格（表头四列，逐字与解析器对齐）。
+    """把依赖行渲染成那一节固定格式的表格（表头三列，逐字与解析器对齐）。
 
     唯一实现放在这里（解析与渲染必须同一个人写，否则"渲染出来的格式解析器读不懂"
     这种形态没有任何地方会报）：F 的手稿渲染与秘书洗稿后的重渲染都读它。
+    产出侧只写必填列：路径号（第几条证明）由 B 的秘书在收录时分配，不进稿
+    （对齐之后产出侧不标注它）。老盘上带那一列的四列表仍读得回（解析侧可选列）。
     一条引用都没有时也把表头留着，并写一行"空表就是声明" —— 于是"这份证明是自足的"
     与"作者忘写了这一节"在收方那侧读得不一样（三态不是靠猜的）。
     """
-    head = "| " + " | ".join(name for _f, _k, name in COLUMN_KEYS) + " |"
-    rule = "|" + "|".join("---" for _ in COLUMN_KEYS) + "|"
+    shown = [one for one in COLUMN_KEYS if one[0] != "path_group"]
+    head = "| " + " | ".join(name for _f, _k, name in shown) + " |"
+    rule = "|" + "|".join("---" for _ in shown) + "|"
     lines = [SECTION_HEADING, "", head, rule]
     count = 0
     for row in rows:
-        lines.append("| {quote} | stmt:{sid} | {step} | {group} |".format(
+        lines.append("| {quote} | stmt:{sid} | {step} |".format(
             quote=str(row.get("quote") or "").replace("|", "／"),
             sid=str(row.get("stmt_id") or ""),
-            step=str(row.get("step") or ""),
-            group=int(row.get("path_group") or 1)))
+            step=str(row.get("step") or "")))
         count += 1
     if not count:
         lines.append("")
