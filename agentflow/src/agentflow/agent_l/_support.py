@@ -3,8 +3,8 @@
 
 ## 这里的东西从哪来
 
-业主 2026-10-22 的施工单：照 E 的 Lean 面复制出 L，E 的代码一行不删、行为不改。
-所以受控词表不复制，而是从 E 的实现包里 import 过来（`agent_e._support`）：
+L 照 E 的 Lean 面复制而来，E 的代码一行不删、行为不改。所以受控词表不复制，而是
+从 E 的实现包里 import 过来（`agent_e._support`）：
 
 - `FORMAL_REASONS` 与 `_FORMAL_REASON_BY_TOOL_REASON`（桥接层理由的收口表）是
   E 那一侧的唯一落点。抄一份到这里就等于埋下"两份词表各自漂移、而没有任何地方报"
@@ -66,16 +66,11 @@ SELFCHECK_REASONS: dict[str, str] = {
 
 #: `record`（把一次形式化检查登记成一行 `experiments`）自己的受控拒绝理由。
 #:
-#: 为什么要单独一组：`record` 的四条拒绝都不是"检查器说了什么"，而是"这次登记
+#: 为什么要单独一组：`record` 的这几条拒绝都不是"检查器说了什么"，而是"这次登记
 #: 不成立" —— 命题不在台账里、命题没有正文、产物不是工作区里的 `.lean`、
-#: 调用方口述的读数与刚才现跑出来的那一份对不上。把它们折进 `unknown` 会让
+#: 调用方口述的读数与刚才现跑出来的那一份对不上、要证明的那条路径不在册 / 没给 /
+#: 产物名与号对不上 / `path_source` 不在受控三值里。把它们折进 `unknown` 会让
 #: "登记被拒"与"没查成"变成同一句话（三态纪律在这里的落点：拒绝是第三态位）。
-#:
-#: 2026-10-22 晚追加三条（业主裁定「要指明对哪个路径做了形式化验证」）：
-#: `proof_path_not_found`（号不在册）/ `proof_path_unspecified`（多路径未给号）/
-#: `proof_path_artifact_mismatch`（产物文件名与号对不上：`#p2` 的产物必须是
-#: `..._p2.lean`，否则登记进去的就是另一条路径的源码）/ `bad_path_source`
-#: （`path_source` 不在受控三值里）。
 RECORD_REASONS: tuple[str, ...] = (
     "statement_not_found",
     "statement_body_empty",
@@ -109,11 +104,9 @@ DECLARATION_NAME_RX = re.compile(r"^[A-Za-z_][A-Za-z0-9_']{0,63}$")
 #: 理由是"谁的产物在哪儿"要一眼看得出来，而两个角色写同一个目录会让
 #: "这个 .lean 是谁写的"只能靠猜）。
 #:
-#: 2026-10-25（审计 G/H/V/L 第 4 条）：这一格是 `lean_file` 那一格三个落点里
-#: 「源码真实在哪」的唯一真身 —— `papermapping.LEAN_ARTIFACT_DIRS` 把 `code/formal`
-#: 加进扫描面，而 `lean_file` 收的就是这个前缀的项目根相对路径
-#: （`code/formal/<声明名>.lean`）。此前 G 的提示词说"论文包内相对路径"、扫描面只有
-#: 包内 + `out/formal`、而全仓没有一步把这里拷进包 ⇒ 这一份源码填不进对应表。
+#: 这一格是 `lean_file` 那一格三个落点里「源码真实在哪」的唯一真身 ——
+#: `papermapping.LEAN_ARTIFACT_DIRS` 把 `code/formal` 加进扫描面，而 `lean_file`
+#: 收的就是这个前缀的项目根相对路径（`code/formal/<声明名>.lean`）。
 FORMAL_DIR = "code/formal"
 
 #: 一条 formal（Lean 核验）行的机器可读键：`experiments.claim_key` 取这个形态。
@@ -130,9 +123,7 @@ def one_line(text: Any, limit: int = 400) -> str:
     """把一个可能多行的说明压成一行（"同一条失败只报一行"的落点）。
 
     为什么必须压：自检的 `problems` 是一个列表，原样塞进结论就会让一次失败在
-    下游展开成十几行 —— 而模型的处置动作由第一行决定，后面的行只是噪音
-    （真机读数：8 次 `check_formal` 全撞在同一件事上，因为理由那一段太长，
-    模型每次都只读到开头）。
+    下游展开成十几行 —— 而模型的处置动作由第一行决定，后面的行只是噪音。
     """
     flat = " ".join(str(text or "").split())
     return flat[:limit]
