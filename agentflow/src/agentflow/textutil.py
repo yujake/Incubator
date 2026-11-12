@@ -22,20 +22,25 @@ _PUNCT_RE = re.compile(
 )
 _WS_RE = re.compile(r"\s+")
 _CJK_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+#: 引文规范化要统一的三类字符（编译一次；见 :func:`normalize_for_quote`）。
+_QUOTE_HYPHEN_RE = re.compile(r"[\u2010-\u2015\u2212]")
+_QUOTE_APOSTROPHE_RE = re.compile(r"[\u2018\u2019\u201b]")
+_QUOTE_DQUOTE_RE = re.compile(r"[\u201c\u201d\u201f]")
+#: 分词用的字符段（CJK 连续段 与 拉丁/数字段），见 :func:`tokens`。
+_TOKEN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+|[a-z0-9]+")
+#: slug 折叠用的连续连字符，见 :func:`slugify`。
+_DASH_RUN_RE = re.compile(r"-{2,}")
+
+#: 全角 → 半角的逐码点映射（`str.translate` 用的就是这张表，见 :func:`to_halfwidth`）。
+_HALFWIDTH_TABLE: dict[int, int | str] = {
+    0x3000: " ",
+    **{code: code - 0xFEE0 for code in range(0xFF01, 0xFF5F)},
+}
 
 
 def to_halfwidth(text: str) -> str:
     """全角转半角（含全角空格）。"""
-    out = []
-    for ch in text:
-        code = ord(ch)
-        if code == 0x3000:
-            out.append(" ")
-        elif 0xFF01 <= code <= 0xFF5E:
-            out.append(chr(code - 0xFEE0))
-        else:
-            out.append(ch)
-    return "".join(out)
+    return text.translate(_HALFWIDTH_TABLE)
 
 
 def normalize(text: str | None) -> str:
@@ -66,9 +71,9 @@ def normalize_for_quote(text: str | None) -> str:
     t = to_halfwidth(t)
     t = t.lower()
     # 统一各种连字符与引号
-    t = re.sub(r"[\u2010-\u2015\u2212]", "-", t)
-    t = re.sub(r"[\u2018\u2019\u201b]", "'", t)
-    t = re.sub(r"[\u201c\u201d\u201f]", '"', t)
+    t = _QUOTE_HYPHEN_RE.sub("-", t)
+    t = _QUOTE_APOSTROPHE_RE.sub("'", t)
+    t = _QUOTE_DQUOTE_RE.sub('"', t)
     t = _WS_RE.sub(" ", t)
     return t.strip()
 
@@ -133,7 +138,7 @@ def tokens(text: str) -> set[str]:
         return set()
     out: set[str] = set()
     # 先把 CJK 连续段与拉丁段分开
-    for m in re.finditer(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]+|[a-z0-9]+", norm):
+    for m in _TOKEN_RE.finditer(norm):
         chunk = m.group(0)
         if is_cjk(chunk):
             if len(chunk) == 1:
@@ -164,7 +169,9 @@ def similarity_detail(a: str, b: str) -> dict:
     ta, tb = tokens(a), tokens(b)
     inter, union = ta & tb, ta | tb
     return {
-        "score": round(similarity(a, b), 4),
+        # 与 `similarity(a, b)` 同一个商：这里两组 token 已经在手上，
+        # 再调一次会把两边各重新切一遍（首次命中相同，只是白算）。
+        "score": round(len(inter) / len(union), 4) if union else 0.0,
         "shared": sorted(inter)[:40],
         "only_a": sorted(ta - tb)[:20],
         "only_b": sorted(tb - ta)[:20],
@@ -238,13 +245,13 @@ def slugify(text: str, limit: int = 60, fallback: str = "untitled") -> str:
     """
     t = to_halfwidth(unicodedata.normalize("NFKC", text or "")).lower()
     t = _SLUG_STRIP.sub("-", t).strip("-")
-    t = re.sub(r"-{2,}", "-", t)
+    t = _DASH_RUN_RE.sub("-", t)
     slug = t[:limit].strip("-")
     if slug:
         return slug
     # 回退值本身也过同一套规则：调用点若传了 `"a/b"` 这类东西，也不会漏出去。
     safe = _SLUG_STRIP.sub("-", to_halfwidth(unicodedata.normalize("NFKC", fallback or ""))).strip("-")
-    return re.sub(r"-{2,}", "-", safe) or "untitled"
+    return _DASH_RUN_RE.sub("-", safe) or "untitled"
 
 
 # ---------------------------------------------------------------- 页码解析
