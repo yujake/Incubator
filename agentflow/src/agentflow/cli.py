@@ -768,15 +768,14 @@ def cmd_verify(args) -> int:
     #   0 = 通过（无错误，且 --strict 下也无警告）
     #   1 = 查过了、发现问题（error 一律失败；--strict 时 warning 也算失败）
     #   2 = 没查成（StoreError，由 `main` 统一处理）
-    # 原先只有 `--strict` 才返回非零 ⇒ `agentflow verify` 在库确实有 error 时
-    # 退出码仍是 0。"未报错"被读成"无问题"，正是 `draft/17` §6.3 记的那条教训，
-    # 也是本项目把 linter/门禁的退出码做成三档的理由。校验器的默认行为必须能当门用。
+    # 只在 `--strict` 下返回非零的话，`agentflow verify` 在库确实有 error 时
+    # 退出码仍是 0 —— "未报错"被读成"无问题"。校验器的默认行为必须能当门用。
     if rep.errors:
         return 1
     return 1 if (args.strict and rep.warnings) else 0
 
 
-#: 移植期工具的落点（业主 2026-10-24 批的 CLI 更新方案 C）。
+#: 移植期工具的落点。
 #:
 #: 四条命令（`repair` / `rebuild` / `demo` / `evidence migrate`）的实现搬到了
 #: `tools/legacy_cli/<名字>.py`，CLI 里只留同名命令做一行转发。目的：让"下一版删掉
@@ -895,7 +894,7 @@ def _backfill_state_text(entry: Mapping[str, Any]) -> str:
     """把"凭据不够"那一栏的 `state` 原值打出来；空串时说清是哪一种空。
 
     `proof_review_gap` 在"台账文件不在盘上 / 空文件 / 没有证明正文"这几支提前 return，
-    `state` 原值就是空串。这里不补枚举（业主 2026-11-04：打印原值），而是把 gap 自己
+    `state` 原值就是空串。这里不补枚举（打印原值：口径与写口一致），而是把 gap 自己
     交回来的 `ledger` / `ledger_present` / `rows` 原样打出来，让读的人分得清
     "从来没送过审"（ledger_missing）与"台账在、但没签"（ledger_present、rows）。
     """
@@ -931,7 +930,7 @@ def _print_grade_backfill(out: Mapping[str, Any]) -> None:
     will = list(cols.get("will_upgrade") or [])
     print(f"会动 {len(will)}：")
     for entry in will:
-        # `from`/`to` 是等级；档位两列并列给出（2026-11-05：判定面读等级）。
+        # `from`/`to` 是等级；档位两列并列给出（判定面读的是等级）。
         print(f"  - {entry.get('statement_id')}  等级 {entry.get('from')} → {entry.get('to')}"
               f"  （档位 {entry.get('from_kind') or '（空）'} → "
               f"{entry.get('to_kind') or '（空）'}；{entry.get('direction') or '?'}；"
@@ -951,7 +950,7 @@ def _print_grade_backfill(out: Mapping[str, Any]) -> None:
     summary = " / ".join(f"{k} {v}" for k, v in states.items()) or "（无）"
     print(f"凭据不够 {len(short)}：{summary}")
     for entry in short:
-        # `state` 原值（`proof_review_gap().state`），不是本命令自造的枚举 —— 业主 2026-11-04。
+        # `state` 原值（`proof_review_gap().state`），不是本命令自造的枚举。
         print(f"  - {entry.get('statement_id')}  evidence_kind={entry.get('evidence_kind')}"
               f"  {_backfill_state_text(entry)}")
 
@@ -979,7 +978,7 @@ def cmd_repair_backfill_grades(args) -> int:
     """按现行 V 签重算 `statements.evidence_kind`：缺省 dry-run，`--apply` 才写。
 
     判据只有一处：每一行都调 `verifications._grade_recomputed_from_signature`
-    （签落位那一刻用的是同一个函数）。四栏（业主 2026-11-04 定稿）：
+    （签落位那一刻用的是同一个函数）。四栏：
     会升 / 已是最高 / 凭据不够（`state` 打印 `proof_review_gap()` 的原值）/
     没查成（`checked=False` + 原因）。
 
@@ -1028,18 +1027,16 @@ def cmd_tools(args) -> int:
 
     root = _root_of(args)
     st = make_store(root)
-    # 只读普查不建工作区（2026-10-27 修）：改前这一行是无条件的 `st.init()`，于是
+    # 只读普查不建工作区：无条件 `st.init()` 的话，
     # `cd src && python -m agentflow.cli tools` 会去 `src/` 里建 data/ 并被"外来条目"拒掉
-    # （实测：`test_role_specs_complete` 那条对账当场红）。工具面是声明，不需要磁盘。
+    # （`test_role_specs_complete` 那条对账会当场红）。工具面是声明，不需要磁盘。
     # 目录已经是工作区时才 init（那一步是幂等的），否则裸注册表照常能列出全部工具。
     if (root / "data").is_dir():
         st.init()
     # 角色清单必须来自 `TOOL_ROLES`（= 可被召唤的 A–H + 主控 M），不许在这里写死。
-    # 这里原先写死 `("A","B","C","D")`，于是 E/F/G/H 落地之后，本命令会
-    # 一边报告"工具总数 55"，一边只列 4 个角色的工具数 —— 而"角色即权限面"
-    # 恰恰是靠这条命令变成可打印的事实的。写死名单让那句"评审时可核对"落空。
-    # 现在补的是同族缺口：用 `ROLES` 会让主控的 8 件编排面工具在普查里完全不出现
-    # （实测 2026-09-28：总数 63，而各角色表里没有 M）—— 那正是"主控有没有手"
+    # 写死一个子集的话，本命令会一边报告"工具总数"、一边只列几个角色的工具数 ——
+    # 而"角色即权限面"恰恰是靠这条命令变成可打印的事实的。
+    # 用 `ROLES` 还会让主控的编排面工具在普查里完全不出现 —— 那正是"主控有没有手"
     # 这个问题的答案，不能被漏掉。
     build = build_registry(store=st, workspace_root=root, roles=tuple(ROLES))
     if args.json:
@@ -1047,7 +1044,7 @@ def cmd_tools(args) -> int:
         return 0
     print(f"工具总数：{len(build.registry)}（已装模块 {len(build.loaded)}：{', '.join(build.loaded) or '无'}）")
     if build.lean_off:
-        # 业主 2026-10-22：按开关不装的模块要能看见（不然读者会去查"为什么少了两个工具"）。
+        # 按开关不装的模块要能看见（不然读者会去查"为什么少了两个工具"）。
         print(f"按 Lean 开关不装的模块（不是缺陷）：{', '.join(build.lean_off)}")
     if build.skipped:
         print("未装上的模块（并行开发中属正常）：")
