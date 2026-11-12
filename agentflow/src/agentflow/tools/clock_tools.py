@@ -2,7 +2,6 @@
 """时钟原生工具：`clock.*` 九件，所有角色都能用，到点同时落 mailbox 项与唤醒标记。
 
 ## 为什么时钟必须是系统原生工具（D-53 的业主口径）
-
 业主原话（唯一权威）：
 
     「对于D53，把时钟做成系统原生工具，让M在派活完后启动计时器（计时器依托时钟实现），
@@ -10,21 +9,15 @@
       （看时钟读数）或计时、定闹钟什么的也可以用。总之这是个通用工具。
       时钟只有一个，依附于其上的计时进程可以很多。」
 
-改前的形态：M 派完活之后没有任何"过一会儿回来看看"的动作可用，只能靠外部
-按时间叫醒它；而"按时间"这件事在工具面上不可见。本模块把时钟、计时器、闹钟、
-周期性巡查做成工具，挂在 `clock.` 这一个组下。
+本模块把时钟、计时器、闹钟、周期性巡查做成工具挂在本组下，工具面第一次有了"过一会儿
+回来看看"这个动作（此前只能靠外部按时间叫醒，而"按时间"在工具面上不可见）。
 
-## 业主 2026-10-25 的裁定（计时类任务的申请形状）
-
-    「主时钟是否控制了所有计时类工作？如果不是，请规范所有计时类任务申请的形式为：
-      等待时间（或等待谁）+目的（必填），例如M的巡视叫等待20分钟+周期性巡查。」
-
-    「注意：让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的。
-      计时到点后向智能体发送信息"目的+等待时间+时间到"」
-
-于是工具面只认两半：`after_sec`（或闹钟的 `at`）与 `wait_for` 二选一，外加一句目的。
-两个都不给、或两个都给 => 受控拒绝并说清只能选一个。目的缺了不再打回重来：照常
-受理、读数带 `purpose_missing=true`、其后的读数与到点消息里追问一句，补一句目的走
+## 计时类任务的申请形状（业主 2026-10-25 裁定）
+业主要求所有计时类任务的申请都写成「等待时间（或等待谁）+ 目的（必填）」；忘填目的不报错、
+只追加目的，到点消息要带「目的+等待时间+时间到」，让老的未依赖时钟的计时工具退场。
+工具面据此只认两半：`after_sec`（或闹钟的 `at`）与 `wait_for` 二选一，外加一句目的。
+两个都不给、或两个都给 => 受控拒绝并说清只能选一个。目的缺了不再打回重来：照常受理、
+读数带 `purpose_missing=true`、其后的读数与到点消息里追问一句，补一句目的走
 `clock.timer_purpose`（同一个编号，不是新建一条）。
 
 "计时只有主时钟这一处"：代理可见的工具面里不存在第二个计时入口（判据
@@ -45,10 +38,9 @@
 | `clock.timer_cancel` | 取消一条还没到点的计时器（给 `pd-` 号则停周期性巡查） |
 | `clock.wait_any` | 手上没事了：记一条「等待任意计时器返回」的意图，谁先回来都行 |
 
-`clock.wait_any` 是 2026-10-27 第二批加进来的第九件 (业主第三条裁定的后半个动作：「直到它
-认为无事可做时，可启动计时器"等待任意计时器返回"」)。改前这个动作只有框架内部入口
-`clock.request_wait_any`，模型面上没有这一格；工具只写意图与交回读数，挂机与否的判定仍在
-`agent_loop._park_gate` 一处 (工具不做控制流)。
+`clock.wait_any` 是第九件（2026-10-27 业主第三条裁定的后半个动作：「直到它认为无事可做
+时，可启动计时器"等待任意计时器返回"」）。它只写意图与交回读数，挂机与否的判定仍在
+`agent_loop._park_gate` 一处（工具不做控制流）。
 
 ## 程序两件（G1，业主 2026-10-26）
 
@@ -57,15 +49,11 @@
 | `program.list` | 我这一趟起的程序还在跑的有哪几个（pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的） |
 | `program.stop` | 停掉我名下的一个（或全部）：先宽限、再真杀，然后按 `outcome="killed"` 收口并唤醒等它的人 |
 
-为什么不叫 `clock.program_list` / `clock.program_stop`（业主原话是"名称你来定"）：
-`clock.*` 恰好九件是一条被钉住的判据（`tests/test_clock_governs_all_timed_work.py`
-的 `CLOCK_NINE`，写死只读角色 C/H/V 面上也是九件）。程序这两件的轴不是"计时"而是
-"我起的进程"：`program.stop` 是 `write_local`，只读角色按副作用就该拿不到它
-（`tools/__init__.py` 的 `UNIVERSAL_TOOLS` 不在本批可改范围），挂进 `clock.` 会让那条
-"恰好九件"的判据只剩改宽这一条路。分一个组，那条判据原样成立。
-
-业主原话（唯一权威）：`「重点完善子代理杀自己发出去的程序进程的工具（由于计时器监控着那些
-程序，我想实现起来不会太难），以及注销前检测的能力」`。两件的分工就是这句话的两半：
+为什么不叫 `clock.program_list` / `clock.program_stop`：`clock.*` 恰好九件是一条被钉住的
+判据（`tests/test_clock_governs_all_timed_work.py` 的 `CLOCK_NINE`，写死只读角色 C/H/V
+面上也是九件）。程序这两件的轴不是"计时"而是"我起的进程"：`program.stop` 是
+`write_local`，只读角色按副作用就该拿不到它，挂进 `clock.` 会让那条"恰好九件"的判据只剩
+改宽这一条路。分一个组，那条判据原样成立。两件的分工就是业主那一句的两半：
 `program.list` 是"注销前检测"（交差/销号之前先看自己还有没有程序在跑），
 `program.stop` 是"杀自己发出去的那个进程"（计时器那条账一并收口，等它的人被叫醒）。
 
@@ -80,27 +68,22 @@
 
 ## 到点动作必须是两件一起
 
-D-53 的核心修复是"到点后时钟自动给 M 发消息"。今天 D-52 的 mailbox 投递还没修，
-所以到点动作由 `_deliver_due` 一次做两件：
+D-53 的核心修复是"到点后时钟自动给 M 发消息"，所以到点动作由 `_deliver_due` 一次做两件：
 
 1. 落一条 mailbox 项：`tasks` 表一行 `kind="notice"`、`parent_task_id` 是收件人
    的台账号、`detail` 就是上面那句到点消息。这一件可审计；
 2. 置一条唤醒标记：`<工作区>/out/clock/wake.json` 里一条事件，带 `task_id` /
    `timer_id` / `mailbox_item_id` / `message`。这一件让"正在等子的父"能立刻拿到
-   一个回合，不依赖还没修的 mailbox 投递。
+   一个回合。
 
 两件都做、任缺一件都不算投递成功（判据 `tests/test_clock_is_a_native_tool.py`
-的第 6 条用打桩分别证明两件都是承重的）。
-
-## 消费端还差哪一步（本模块不改 `agent_loop.py`）
-
-消费端（D-52/D-53 统一接的那一处）需要：在等子代理的等待点上读
-`clock.pending_wakes(root, my_task_id)` 或调 `clock.consume_wakes(root, my_task_id)`，
-并把"有唤醒"折进它本来就有的唤醒判据。本模块只把落点做好、读口交出去。
+的第 6 条用打桩分别证明两件都是承重的）。消费端读 `clock.pending_wakes(root, my_task_id)`
+或调 `clock.consume_wakes(root, my_task_id)`，把"有唤醒"折进它本来就有的唤醒判据；
+本模块只把落点做好、读口交出去（不改 `agent_loop.py`）。
 
 ## 两根轴为什么这样声明（2026-10-24 按业主裁定改为据实）
 
-业主新裁定（逐字，唯一权威）：「通用能力根本不该出现谁能用这个说法」。
+业主裁定（逐字，唯一权威）：「通用能力根本不该出现谁能用这个说法」。
 这条裁定把两根轴分开了：副作用轴说"它改不改我们拥有的东西"，可达性轴说
 "它是不是通用能力"。此前把两根轴压在一起，代价是这三件写表的工具被声明成
 `side_effect="read"` —— 只为让 `for_role` 不把只读角色剥掉。那是谎报：
@@ -117,13 +100,6 @@ D-53 的核心修复是"到点后时钟自动给 M 发消息"。今天 D-52 的 
 可达性不再靠声明绕过去：它们登记在 `tools.UNIVERSAL_TOOLS`（通用能力的受控集合），
 `ToolRegistry.for_role` 对通用工具不按副作用等级剥离。它们也不进
 `READONLY_CALL_EXCEPTIONS` —— 通用能力不是"例外"。
-
-缺口（曾经据实登记，2026-10-25 晚已补上）：`clock.periodic_start` / `clock.periodic_stop` /
-`clock.timer_purpose` 三件一度没登记进 `tools.UNIVERSAL_TOOLS`，于是只读角色 C/H/V 的
-工具面上只有五件（"声明了通用、平台按副作用剥掉"的可见缺口）。业主放行后已在
-`tools/__init__.py` 的 `UNIVERSAL_TOOLS` 里补了三条登记，现在九件对全部十一个角色都发；
-判据是 `tests/test_clock_governs_all_timed_work.py` 的第 17 条（含"写集不越出
-`BOOKKEEPING_TABLES`"那一条硬约束）。
 
 硬约束（不许通用集合变成后门）：`UNIVERSAL_TOOLS` 里每件工具登记的写集只许落在
 通信/簿记类表上（今天只有 `tasks`；事件流与 `out/clock` 是文件，不在表里）。
@@ -160,11 +136,10 @@ _ROLES_WRITE: tuple[str, ...] = tuple(r for r in S.ROLES if r not in READ_ONLY_R
 #: 判据按它认出"这是一条到点项"；两个字面量都在 `clock.due_message` 里，这里只是
 #: 给读的人与判据一个稳定的常量（不许在别处再拼一份前缀）。
 #:
-#: 2026-10-27（L2）：轮查计时器那一档还有第三个抬头 `clock.PATROL_DUE_HEAD`
-#: （逐字「轮查到点：」）。它刻意不进这张元组，理由与它为什么换抬头是同一条 ——
-#: 业主要那一档"不是一句提醒，而是一套动作"，于是它的正文根本不以"到点"二字开头；
-#: 把它并进来会让"按前缀认到点项"这条读法把一段 SOP 当成一条通知。
-#: 认轮查那一档的判据只有一处：`clock.is_patrol_timer`（读 `reason` 那一格）。
+#: 轮查那档另有抬头 `clock.PATROL_DUE_HEAD`（「轮查到点：」），刻意不进这张元组：
+#: 业主那一档要的是"一套动作"而不是一句提醒，它的正文根本不以"到点"二字开头 ——
+#: 并进来会让"按前缀认到点项"这条读法把一段 SOP 当成一条通知。认轮查那一档只读
+#: `clock.is_patrol_timer` 的 `reason`。
 DUE_PREFIX: str = "时间到："
 PATROL_PREFIX: str = "巡查时间到："
 DUE_PREFIXES: tuple[str, ...] = (DUE_PREFIX, PATROL_PREFIX)
@@ -1024,10 +999,9 @@ def clock_now(store: Any, root: Any, *, include_wakes: bool = True,
         "programs_outside_clock": cov.get("programs_outside_clock"),
         "programs_outside_where": list(cov.get("programs_outside_where") or []),
         "programs_files_scanned": cov.get("programs_files_scanned"),
-        # 程序计时器的现读（业主 2026-10-27 第一条：「运行一个程序时会自动启动一个
-        # 计时器，程序运行完成时计时器会返回」）。这一格是"有程序在跑要看得见"的那个
-        # 可见面：`running` > 0 时 rows 里每一条带 program / pid / elapsed_sec / state。
-        # 三态：读不成 ⇒ `checked=false`（不是"没有程序在跑"）。
+        # 程序计时器的现读：`running` > 0 时 rows 里每条带 program / pid / elapsed_sec /
+        # state（"有程序在跑要看得见"的可见面）。三态：读不成 ⇒ `checked=false`，不是
+        # "没有程序在跑"。
         "programs": {
             "checked": bool(programs.get("checked")),
             "count": int(programs.get("count") or 0),
@@ -1206,10 +1180,8 @@ def clock_periodic_start(store: Any, root: Any, conductor: Any, *, every_sec: fl
     带哪四类异常、各自几条，以及一段"样例报醒文本"（`wake_sample`）。起表那一刻就让 M
     看见"到点它会收到什么"，否则这条巡查值不值得一直跳就只能靠猜。
 
-    `patrol_checklist` 这一格进 `returns=` 声明（2026-10-26 的 p210 重冻一并补上）：那一份声明
-    此前被 `tests/golden/tool_surface_snapshot.json` 逐字钉住（FC-27 禁改区，重冻要两名
-    reviewer），所以它一直是"给了但没声明"的那一档；重冻之后声明与实现同形，
-    `tests/test_tools_returns_declaration.py` 两向都验。
+    `patrol_checklist` 这一格在 `returns=` 声明里，声明与实现同形（`tests/test_tools_returns_declaration.py`
+    两向都验）。
     """
     workspace = _resolve_root(root, store)
     _bind(workspace, store, conductor)
@@ -1493,8 +1465,8 @@ def clock_wait_any(store: Any, root: Any, *, purpose: str = "") -> ToolResult:
     """记一条「等待任意计时器返回」的意图，并把这一格的读数交回去。
 
     业主 2026-10-27 第三条裁定的后半个动作（逐字）：「直到它认为无事可做时，可启动
-    计时器"等待任意计时器返回"」。改前这个动作只有框架内部入口（`clock.request_wait_any`），
-    模型面上没有这一格 ⇒ 模型没法表达这个意图。
+    计时器"等待任意计时器返回"」。此前这个动作只有框架内部入口
+    （`clock.request_wait_any`），模型面上没有这一格 ⇒ 模型没法表达这个意图。
 
     三件一起做，缺一件这个动作就成了"起一条不存在的表"：
 
