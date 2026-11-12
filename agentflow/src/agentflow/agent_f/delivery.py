@@ -516,6 +516,8 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
     for one in outputs or ():
         got = dict(one or {})
         state = str(got.get("state") or "")
+        # 这一项的命题号只取一次：下面"叫不叫证明"那一格与"放弃/未签"那一支读的是同一个。
+        sid = str(got.get("statement_id") or "")
         if state == "signed" or got.get("signed") is True:
             kind, signed = "signed", signed + 1
         elif state == "waiting":
@@ -528,10 +530,9 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
         got["claim"] = claim
         got["claim_label"] = CLAIM_LABELS.get(claim, "")
         if claim == CLAIM_PROOF:
-            proof_statements.append(str(got.get("statement_id") or ""))
+            proof_statements.append(sid)
         # ---- 明确放弃的成果：不再算「未签」（也不再计入证明数）。
         aband = dict(got.get("abandoned") or {}) if isinstance(got.get("abandoned"), Mapping) else {}
-        sid = str(got.get("statement_id") or "")
         if bool(aband.get("abandoned")):
             abandoned_count += 1
             abandoned_statements.append(sid)
