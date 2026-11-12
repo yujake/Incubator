@@ -2919,19 +2919,28 @@ def _v_delivery_lines(root: str | Path, details: Sequence[Mapping[str, Any]],
     from . import vsigns as _VSP   # 惰性：与 `v_rejections_digest` 同一处依赖
 
     mailbox = _VSP._mailbox_times(root)
-    rows: list[dict[str, Any]] = []
+    # 三档按 `state` 一趟分桶（原先先建一份 `rows`、再逐档各扫一遍）；`total` 就是
+    # 原来 `len(rows)` 的那个分母 —— 三档之外的 `state` 照旧进分母、不落任何一桶。
+    delivered: list[dict[str, Any]] = []
+    dispatched: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    total = 0
     for d in details:
         label = str(d.get("label") or "")
         one = _VSP.delivery_of(root, store, label=label,
                                verification_id=str(d.get("verification_id") or ""),
                                mailbox=mailbox)
-        rows.append({"label": label, **one})
-    delivered = [r for r in rows if r["state"] == "delivered"]
-    dispatched = [r for r in rows if r["state"] == "dispatched_only"]
-    missing = [r for r in rows if r["state"] == "not_dispatched"]
+        row = {"label": label, **one}
+        total += 1
+        if row["state"] == "delivered":
+            delivered.append(row)
+        elif row["state"] == "dispatched_only":
+            dispatched.append(row)
+        elif row["state"] == "not_dispatched":
+            missing.append(row)
     if not store:
         return ["- 送达：这一趟没有 store ⇒ 送达那一半没查成（不是「没送达」）"]
-    line = (f"- 送达：已送达 {len(delivered)}/{len(rows)} 条")
+    line = (f"- 送达：已送达 {len(delivered)}/{total} 条")
     if dispatched:
         line += f"；开了板项但还没读 {len(dispatched)} 条（{', '.join(r['label'] for r in dispatched[:4])}）"
     if missing:
@@ -2969,10 +2978,13 @@ def global_v_rejections_text(root: str | Path, store: Any = None, *,
                 " ⇒ 不是「没有打回」）"), problems
     if not int(got.get("receipts") or 0):
         return "（全局：台账里没有「有毛病」那一档的签 ⇒ 一条打回都没有，查过了）", problems
+    # 窗口只切一次：正文那一段与「还有几条没渲染」读的是同一个切片（原先各算一遍
+    # `(got.get("rows") or [])[:max(1, int(limit))]`，`int(limit)` 也跟着算两遍）。
+    shown = (got.get("rows") or [])[:max(1, int(limit))]
     lines = [f"全局（不限于我名下）：被 V 判「有毛病」的证明共 {got['receipts']} 条"
              f"（{got['statements']} 条命题；数据源 `verifications/*.jsonl` 逐条读；"
              f"断在哪一步见每条）"]
-    for d in (got.get("rows") or [])[:max(1, int(limit))]:
+    for d in shown:
         steps = "、".join(f"第 {s} 步" for s in (d.get("defect_steps") or [])) or "步号没读到"
         where = {"delivered": f"已送达 {d.get('delivered_to') or '（收件角色没读到）'}"
                              f"（{d.get('delivered_at') or '时刻没读到'}）",
@@ -2981,7 +2993,7 @@ def global_v_rejections_text(root: str | Path, store: Any = None, *,
                      str(d.get("state") or ""), str(d.get("state") or ""))
         lines.append(f"- {d.get('label')}（{d.get('axis') or 'verdict'}，"
                      f"{d.get('verification_id') or '（没有编号）'}）：{steps}；{where}")
-    backlog = int(got["receipts"]) - len((got.get("rows") or [])[:max(1, int(limit))])
+    backlog = int(got["receipts"]) - len(shown)
     if backlog > 0:
         lines.append(f"- （还有 {backlog} 条没渲染）")
     lines.append(f"- 送达：已送达 {got.get('delivered')} 条、未送达 "
