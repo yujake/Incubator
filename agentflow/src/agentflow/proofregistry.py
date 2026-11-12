@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""手稿登记（把「登记命题」与「写/改证明」解耦；业主 2026-11-07 裁定）。
+"""手稿登记（把「登记命题」与「写/改证明」解耦）。
 
 ## 业主要的两件事（逐字）
 
@@ -9,19 +9,19 @@
 
 ⇒ 一次登记（过 F 秘书的形态闸）之后，反复改证明不再登记：只改同一份手稿的
 `## 证明` 那一节（顺手按 cites 重渲 `## 依赖`），把 `正文 sha256` 重算。`proof_no` 不涨
-（业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」）。
+（「一个稿号就相当于是该稿的文件名，不再细分 version 几」）。
 不新落第二个文件（不出现 `f-proof-000041-v2.md` 这类名字），也不新落 statements 行。
 
 ## 登记条目住在哪（没有新表、没有新列）
 
-业主 2026-11-07（逐字）：「手稿文件本身（规范路径 + 文件头元信息：命题文本 / 证明号 /
+业主（逐字）：「手稿文件本身（规范路径 + 文件头元信息：命题文本 / 证明号 /
 正文 sha256 / cites）」「`attack_plans.history` 的既有格（`manuscript_path` 等）里带上
 这份稿的身份」「不要开新表」。所以：
 
 1. 手稿文件就是登记条目（唯一落点，`manuscriptform.name_reading` 定的规范路径）：
-   `reports/f-proof-<命题号>.md`（B 侧 `reports/b-proof-<命题号>.md`；还没有命题号时
-   按计划名 `reports/f-proof-plan-<计划号>.md`，与既有两段命名一致）。文件头多了四行
-   元信息（都只在给了值时才写，旧稿逐字节不变）：
+   `reports/f-proof-<稿号>.md`（B 侧 `reports/b-proof-<稿号>.md`；老盘上的
+   `<命题号>` / 计划名只读兼容）。文件头多了四行元信息（都只在给了值时才写，旧稿
+   逐字节不变）：
 
    ```
    - 正文sha：<sha256>      （`## 证明` 那一节的 sha256 —— 与 V 签盖的是同一把尺）
@@ -32,7 +32,7 @@
      老盘 `-pN` 的不同号各留一格，读侧写成 `p<N>@<ISO8601>@<sha256>`）
    ```
 
-   2026-11-11 业主裁定：「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可退役，
+   「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可退役，
    台账不能退役」⇒ 新写的稿头不再有 `- 证明号：<N>` 那一行（一个稿号 = 一份文件 =
    一份证明，身份是稿号 + 正文 sha）。老盘稿头里已有的那一行、以及 `- 版本：` 里
    `p<N>@` 的老格式，读侧照旧认（`parse_entry` 两种格式都读）—— 读能力不删。
@@ -78,11 +78,11 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from . import depsection as _DS
 from . import manuscriptform as _MF
 from . import verifications as _VR
-from .proofoutcomes import (  # 登记这一步的两段结局读数（2026-11-11 从本模块拆出）
+from .proofoutcomes import (  # 登记这一步的两段结局读数
     REFUSED_GATE, REFUSED_PATH, REFUSED_READ, REFUSED_SHAPE, REFUSED_TEXT_CHANGED,
     REFUSED_WRITE, form_gate_reading, preserved_reading,
 )
-from .proofrevisions import (  # 收工读数那一半（2026-11-10 拆出）
+from .proofrevisions import (  # 收工读数那一半
     entries_on_disk, proof_revisions, registration_note,
 )
 
@@ -93,7 +93,7 @@ KIND_MARK = "- 证据种类："
 REGISTERED_AT_MARK = "- 登记时间："
 VERSION_MARK = "- 版本："
 
-#: 受控码（写读两侧共用，不另起第二套词）：定义点 2026-11-11 搬到 `proofoutcomes.py`
+#: 受控码（写读两侧共用，不另起第二套词）：定义点在 `proofoutcomes.py`
 #: （与「跑闸 / 解释拒收」和「幂等保留」两段读数同一处）。这里从它回引同样的名字，
 #: 所以 `proofregistry.REFUSED_*` 这个公开面一个字没变。
 
@@ -126,24 +126,23 @@ def proposition_fingerprint(proposition: Any) -> str:
 
 def proof_sha(proof_text: Any) -> str:
     """`## 证明` 那一节的 sha256（与 V 签盖的是同一把尺；全仓库唯一实现）。
-
-    2026-11-09（D4）：入参有两种形态 —— 一份手稿（有 `## 证明` 那一节）或
+    入参有两种形态 —— 一份手稿（有 `## 证明` 那一节）或
     一段证明正文（登记/重写那一笔直接把正文交进来，没有小节标题）。后者按
     `depsection.proof_body_or_whole` 的显式回退取整份正文（`fell_back=True`
     在那一格内部）。
 
-    ## 两种形态各按什么字节算（2026-11-09 T2 收口，这是"一把尺"的定义）
+    ## 两种形态各按什么字节算（"一把尺"的定义）
 
     - 一份手稿：取 `## 证明` 那一节的正文，去掉小节自带的首尾空行后算 sha。
       这与 V 签盖的是同一段字节（`vsigns.manuscript_proof_body` 同一处归一）。
     - 一段正文（`fell_back=True`）：逐字节就是它，不再做首尾空行归一。
       为什么不能顺手 `.strip("\\n")`：这一段正文在 V 那一侧是按原字节算的；
       多剥一个换行就等于给"同一段正文"造出第二个 sha，跨入口对拍时会变成
-      "签不上"或"签错了也能过"（这正是 T2 收口要消灭的两把尺）。
+      "签不上"或"签错了也能过"。
      由此一条可查的后果：带首尾换行的一段正文，其 sha 与 strip 之后的值不同；
       盘上已有的历史行按它落盘时的原样对拍，本函数不会替它重新归一。
 
-    ## 为什么这里允许"退而取全文"（这一句是给后人的）
+    ## 为什么这里允许"退而取全文"
     `proof_sha` 的入参在登记/重写路径上就是一段没有 markdown 标题的证明正文
     （`register_or_rewrite` 的 `proof_text`），把它当手稿切小节只会得到空串；
     而 sha 一旦变成空串的 sha，版本记录与 V 签的对拍会同时静默失真。
@@ -170,10 +169,10 @@ def proof_sha(proof_text: Any) -> str:
 def _section_start_indices(lines: Sequence[str]) -> list[int]:
     """`## ` 标题里"是手稿一节"的那些行下标（同级自由小标题不算新的一节）。
 
-    与 `depsection.section_lines` 同一份口径（2026-11-10，真机 DCT 彩排的空证明）：
+    与 `depsection.section_lines` 同一份口径：
     证明正文里 `## 记号与约定` / `## 第一步` 这类同级小标题是节内内容，只有
-    `## 依赖` 一类已知节名才开启下一节。改前这里按"任何 `## `"切，`## 证明` 那一节
-    会被切成空的，分节哈希里出现 `## 记号` 这种并不存在的"节"。
+    `## 依赖` 一类已知节名才开启下一节。按"任何 `## `"切会把 `## 证明` 那一节
+    切成空的，分节哈希里于是出现 `## 记号` 这种并不存在的"节"。
     """
     return [i for i, line in enumerate(lines)
             if _SECTION_RE.match(line) and _DS.is_section_heading(line)]
@@ -286,7 +285,7 @@ def parse_entry(text: Any) -> dict[str, Any]:
                     continue
                 parts = item.split("@", 2)
                 got = {"raw": item, "proof_no": 0, "at": "", "sha256": ""}
-                # 两种格式（读侧都认；写侧 2026-11-11 起只写后一种）：
+                # 两种格式（读侧都认；写侧只写后一种）：
                 #   · 老盘 `p<N>@<时刻>@<sha>`（`proof_no` 在第 0 段）
                 #   · 新写 `<时刻>@<sha>`（canonical 不写 `p1` —— 一稿一份之后它不携带身份）
                 if len(parts) == 3:
@@ -307,7 +306,7 @@ def parse_entry(text: Any) -> dict[str, Any]:
 def render_version(proof_no: Any, at: Any, sha: Any) -> str:
     """一版 ⇒ `- 版本：` 那一行里的一段（canonical 不写 `pN`）。
 
-    业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」⇒ 新写
+    「一个稿号就相当于是该稿的文件名，不再细分 version 几」⇒ 新写
     canonical（`N=1`）渲染成 `<时刻>@<sha>`，`proof_no` 不在写侧产生。显式 `N>=2`
     是老盘 `-pN` 的写侧兼容（旧读侧按号分组），照旧写 `p<N>@…` —— 新写路径不再
     产生这个 N，但盘上已有的那几份不能被一次重写改了身份。读侧两种格式都认
@@ -328,7 +327,7 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     `- 版本：` 与其他标记同样替换：`values[VERSION_MARK]` 已经是这一笔之后的完整清单
     （同一个证明号只留一格，见 `_versions_block`）。
 
-    2026-11-11（业主裁定）：`- 证明号：` 从 `values` 里拿掉了 —— 新写的稿不再有这一行。
+    `- 证明号：` 不在 `values` 里 —— 新写的稿不再有这一行。
     老盘稿头若已经有它，本函数走"没命中 values ⇒ 原样保留"那条路：不改、不删，
     读侧（`parse_entry` / `depsection.manuscript_proof_no`）照旧读得出那个号。
     """
@@ -364,12 +363,12 @@ def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
                     sha: str) -> tuple[str, list[dict[str, Any]]]:
     """把这一版记进 `- 版本：` 那一行（同一个证明号就是同一份稿 ⇒ 就地替换那一格，不追加）。
 
-    业主 2026-11-11（逐字）：「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，
+    「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，
     不再细分 version 几，应该在改正文时 edit 它」⇒ 新写路径的稿号只有一个证明号，
     重写就是就地改这一版：版本行只留当前那一格（恰好 1 条），不涨"版本"。
 
-    老盘 `-pN`（N≥2）那几份各有自己的号：不同号仍各留一格（它们是"这一条命题的第 N 份
-    证明"，不是同一份的第 N 版）；同号重写只替换同号那一格，号与文件名一起保持身份。
+    老盘 `-pN`（N≥2）那几份各有自己的号：不同号仍各留一格（它们是各自独立的老文件，
+    不是同一份的第 N 版）；同号重写只替换同号那一格，号与文件名一起保持身份。
 
     同一版重复写（号与 sha 都相同）⇒ 返回空串，调用方据此不动那一行（幂等）。
     """
@@ -383,7 +382,7 @@ def _versions_block(entry: Mapping[str, Any], *, proof_no: int, at: str,
     def _vno(one: Mapping[str, Any]) -> int:
         """这一版是哪一号；新版 `- 版本：<时刻>@<sha>` 没有号段 ⇒ canonical（1）。
 
-        2026-11-11：canonical 的版本段不再写 `p1@`，所以"缺省"必须读成 1 而不是 0
+        canonical 的版本段不写 `p1@`，所以"缺省"必须读成 1 而不是 0
         —— 否则一次重写会把同一版当成"新的一版"再追加一格（版本历史重又涨起来）。
         """
         return int(one.get("proof_no") or 0) or 1
@@ -409,28 +408,20 @@ def same_slot_reading(entry: Mapping[str, Any], *, statement_id: Any = "", plan_
     三种身份键，按优先级取第一个两边都有的：
 
     1. 命题号（`- 命题号：stmt:<号>`）：拿到号之后，号就是身份；
-    2. `（计划号，子目标）`（`- 计划：<plan> · 子目标：<sid>`）：legacy 读兼容
-       —— p272（2026-11-10 业主裁定）之后 F 不再新写计划名（`manuscriptids` 只发
-       六位稿号），这一支只为读老盘上 `f-proof-plan-*` 与带 `- 计划：` 头的登记条目。
-       老盘上 F 还没有号时，这是唯一稳定的槽位键 —— 计划稿的路径里没有子目标，
-       光看路径会把同一计划下的不同子目标读成同一槽；
+    2. `（计划号，子目标）`（`- 计划：<plan> · 子目标：<sid>`）：只读兼容老盘的
+       `f-proof-plan-*` 登记条目。老盘上 F 还没有号时这是唯一稳定的槽位键 —— 计划稿
+       的路径里没有子目标，光看路径会把同一计划下的不同子目标读成同一槽；F 不再新写
+       计划名（只发六位稿号），新写路径不会走到这一支；
     3. `- 标签：`：只有前两样都缺时才用（旧稿 / 手写稿的兜底）。
 
     调用方必须先确认 `entry["checked"]`（有正文 sha / 命题指纹 / 版本记录）：
     手写稿可以给自己写一行 `- 标签：`，但它没有登记元信息，不是登记条目
     （A3 的判据 `test_a_handwritten_labelled_head_is_not_an_entry`）。
 
-    为什么要有这一格：改前 `register_or_rewrite` 只比 label，而当时的生产路径
-    （`agent_f/core.py::_apply_round` → `proof_manuscript` 先写一份计划稿）那一份
-    稿头没有 `- 标签：`（渲染时 `label=""`）⇒ 每一轮都读成"新命题" ⇒ 每轮重新登记
-    （实测 3 轮 `modes=[registered×3]`、闸 3 次、`proof_no=[1,1,1]`）。
-    槽位从稿头元信息取，于是"传不传 `manuscript_text`"不再决定解耦成不成立。
-
-    legacy 读兼容（2026-11-10 业主要求如实标注）：上面那段"生产路径先写计划稿"
-    是改前 / 老盘的现场。p272 之后 F 不再新写计划名 —— `agent_f/manuscript.py::
-    proof_manuscript` 只按 `manuscript_id` 命名（`manuscriptids.canonical_rel` ⇒
-    `reports/f-proof-<六位稿号>.md`）。所以「计划号 + 子目标」这一支只为读老盘上的
-    登记条目；新写路径不会走到它。不改行为，只把"计划稿 = 证明底稿"标成历史读法。
+    为什么要有这一格：只看 label 时，生产路径先写的那份计划稿稿头没有 `- 标签：`
+    （渲染时 `label=""`）⇒ 每一轮都读成"新命题" ⇒ 每轮重新登记（重复跑形态闸、
+    证明号也不推进）。槽位从稿头元信息取，于是"传不传 `manuscript_text`"不再决定
+    解耦成不成立。
     """
     want_sid = str(statement_id or "").strip()
     have_sid = str(entry.get("statement_id") or "").strip()
@@ -487,7 +478,7 @@ def entry_relpath(*, family: Any, statement_id: Any = "", plan_id: Any = "",
                   manuscript_id: Any = "") -> str:
     """这一份手稿的落点（`manuscriptform.name_reading`；认不出 ⇒ 空串，不猜）。
 
-    `manuscript_id` 是 F 自己的稿号（2026-11-10）：给了它，F 的稿只按
+    `manuscript_id` 是 F 自己的稿号：给了它，F 的稿只按
     `reports/f-proof-<稿号>.md` 命名；命题号 / 计划号不参与。`statement_id` / `plan_id`
     保留给 b-proof / e-proof 与老盘只读兼容。
     """
@@ -524,7 +515,7 @@ def read_entry(root: Any, *, family: Any, statement_id: Any = "",
 def _legacy_proof_no_of(rel: Any, entry: Mapping[str, Any]) -> int:
     """这一份稿的「证明号」（一个稿号一份稿 ⇒ 新写恒 1；只有老盘的 `-pN` 才保留 N）。
 
-    业主 2026-11-11：「不再细分 version 几」⇒ 重写不涨号。
+    「不再细分 version 几」⇒ 重写不涨号。
     但老盘上按 `-pN` 命名的稿（`reports/f-proof-000012-p2.md` 那一族）已经在盘上了，
     重写它时如果把号压回 1，等于把那份老稿的身份改了（文件名与稿头会打架）。
     所以：名字里带 `-pN`（N≥2）⇒ 沿用 N；其余一律 1。
@@ -555,22 +546,12 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
                           statement_id: Any) -> str:
     """把稿头元信息改成本笔这一版（`## 证明` 之后一个字节不动），并补上命题号那一行。
 
-    稿头那一行必须写上这一笔的命题号（2026-11-07：解耦之后的漏格）。解耦之后登记条的
-    底稿常常是 `proof_manuscript` 先写的那份计划稿，而它渲染时还没有命题号
-    （`manuscriptform.render_proof_manuscript` 写的是 `- 命题号：stmt:（还没落号）`）。
-    `_rewrite_head` 只管元信息那几行、不碰这一行，于是登记落在
-    `reports/f-proof-<号>.md` 上而稿头仍说"还没落号"—— 双读数。后果是可直接读到的：
-    `entries_on_disk` 把这一条读成"未落号的登记条目"，D 的携带单于是把同一份稿再列一遍
-    （`mss:<号>` 与 `stmt:<号>` 两行、路径与 sha 相同），而按号核对携带单的那一侧找不到
-    它。号已经拿到 ⇒ 这一行必须写它。
-
-    legacy 读兼容（2026-11-10 业主裁定）：上面"底稿是先写的计划稿"是改前 / 老盘的现场；
-    p272 之后 F 不再新写计划名（`manuscriptids` 只发六位稿号），登记条的底稿是按稿号
-    命名的那一份；这一支只为读老盘上按计划名落的登记条目 —— 行为一个字没改，只是把
-    "计划稿 = 证明底稿"标注成历史读法。
-
-    这一段是纯搬移：`register_or_rewrite` 原来内联在这里的几行原样搬进来，
-    入参与返回值都是原来的那几格（拆分只为了把 210 行压回 200 行以内）。
+    稿头那一行必须写上这一笔的命题号：`_rewrite_head` 只管元信息那几行、不碰这一行，
+    而登记条目常常是从一份"还没落号"的底稿起家的（渲染时写的是
+    `- 命题号：stmt:（还没落号）`）。不补就会出现双读数 —— 登记落在
+    `reports/f-proof-<号>.md` 上而稿头仍说"还没落号"，`entries_on_disk` 会把它读成
+    "未落号的登记条目"，D 的携带单于是把同一份稿再列一遍（`mss:<号>` 与 `stmt:<号>`
+    两行、路径与 sha 相同），按号核对的那一侧找不到它。号已经拿到 ⇒ 这一行必须写它。
     """
     head_now = split_sections(text)[0]
     head_new = _rewrite_head(head_now, {
@@ -607,7 +588,7 @@ def register_or_rewrite(
       problems, refused, why, entry, section_hashes, gate, written, migrated}`。
 
     - `mode="registered"`：这一条第一次落成手稿（过闸；`gate` 读数的原文在 `gate`）；
-    - `mode="rewritten"`：同一条命题的下一版证明（`## 证明` 就地换；`proof_no` 恒 1，
+    - `mode="rewritten"`：同一条命题的重写（`## 证明` 就地换；`proof_no` 恒 1，
       老盘 `-pN` 沿用 N —— 一个稿号一份文件一份证明）；
     - `ok=False` 时 `refused` 是受控码，盘上一个字节都不动（`written=False`）。
     """
@@ -680,7 +661,7 @@ def register_or_rewrite(
     mode = MODE_REWRITTEN if same_slot else MODE_REGISTERED
     # ---- 幂等：同一份正文再挂一次 ⇒ 一个字节都不动（版本号也不涨） ------------------
     #
-    # 真机上 D 的交付动作每写一份报告都会把同一批稿再递一遍（`write_report` 每次都跑），
+    # D 的交付动作每写一份报告都会把同一批稿再递一遍（`write_report` 每次都跑），
     # 而"同一份正文"不该被记成第 N+1 版 —— 否则 `proof_no` 会被无意义的重复递交顶高，
     # V 台账也会被同一 sha 灌满。
     preserved = preserved_reading(
@@ -701,7 +682,7 @@ def register_or_rewrite(
     rows = [dict(r) for r in (dependency_rows or [])]
     deps_section = _DS.render_dependency_section(rows)
     new_sha = proof_sha(proof_text)
-    # ---- 一个稿号 = 一份文件 = 一份证明（业主 2026-11-11，逐字） ----------------------
+    # ---- 一个稿号 = 一份文件 = 一份证明（逐字） ------------------------------------
     #
     #   「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
     #     应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
@@ -721,7 +702,7 @@ def register_or_rewrite(
             text = str(template).replace("\r\n", "\n")
             # `## 证明` 的内容以参数为准：template 也可能是一份"骨架"（B 的改写拿
             # F 的稿当底稿时就是这样，正文必须换成 B 交来的那一份）。
-            # 2026-11-09（D4）：`proof_body` 缺节 ⇒ 空串（不回退到依赖段 / 全文）⇒
+            # `proof_body` 缺节 ⇒ 空串（不回退到依赖段 / 全文）⇒
             # 与参数正文的 sha 不同 ⇒ 走 `_replace_section`；基稿若没有那一节，
             # 下面会受控拒 / 整份重渲染（`_replace_section` 的 `ok` 说了算）。
             if str(proof_text or "").strip() and not proof_sha(proof_text) == proof_sha(
@@ -756,7 +737,6 @@ def register_or_rewrite(
                      if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
         text, _ok_deps = _replace_section(text, "依赖", deps_body)
     # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"），并补上命题号那一行。
-    # 那一段（含"为什么必须写命题号"的现场）搬进 `_head_for_new_version`：纯搬移。
     text = _head_for_new_version(
         text, proof_no=proof_no, new_sha=new_sha, new_fp=new_fp, label=label,
         kind=kind, mode=mode, entry=entry, at_text=at_text,
