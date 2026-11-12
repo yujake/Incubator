@@ -4,11 +4,10 @@
 ## 这一层是什么
 
 `snapshot()` 与它的内部件（`_scan` / `_orphan_summary` / `_read_ledger` /
-`_read_report` / 取值帮手）从 `webui.py` 原样搬到这里，
-语义一字不改（`draft/73` §1.2 的 R1 拆包）。它与渲染、与 HTTP 都无关：
-给它一个工作区根，它给你一个纯数据快照。
+`_read_report` / 取值帮手）只做一件事：给它一个工作区根，它给你一个纯数据快照。
+它与渲染、与 HTTP 都无关。
 
-## 三条纪律（与拆包前逐条相同）
+## 三条纪律
 
 1. 「状态一律从盘上派生」：每次调用都重新读会话文件、台账、报告，不缓存、
    不做后台轮询线程。同一份盘上数据读两次得到逐字节相同的快照骨架
@@ -19,13 +18,11 @@
    `"、".join(selected)`，否则退回旧的 `answer` 字段。读 `userio` 的返回一律用
    `getattr(obj, "x", None)` / `dict.get`，不假设新字段一定存在。
 
-## 裁定 L1 之后的一处结构变化（本文件里唯一一处口径收敛）
+## 待答问题与选项的读法只有一处实现
 
-待答问题与选项的读法只有一处实现，在 `userio`：本模块的
-`answer_text_of` / `option_view` 变成一层转发，`_scan` 不再自己扫
+在 `userio`：本模块的 `answer_text_of` / `option_view` 只是转发，`_scan` 不再自己扫
 `user_question` / `user_answer`（那一栏由 `snapshot()` 从
-`userio.workspace_pending_view` 取一次、按会话号切给它）。公开名与签名一个字
-没动 —— `webui.__all__` 那八个名字与 `temp/_verify_w0.py` 对账的口径都还在。
+`userio.workspace_pending_view` 取一次、按会话号切给它）。公开名与签名未动。
 """
 
 from __future__ import annotations
