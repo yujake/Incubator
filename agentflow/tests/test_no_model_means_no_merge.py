@@ -25,6 +25,9 @@ from __future__ import annotations
 
 import pathlib
 import sys
+
+import pytest
+
 from typing import Any, Mapping
 
 # 与 `tests/conftest.py` 同一个注入方式（这一份也要能在一棵临时源码树上单独跑）。
@@ -77,6 +80,31 @@ def _rows(st: Store) -> list[dict]:
 def _record(sec: Secretary, st: Store, payload: Mapping[str, Any]) -> dict:
     """秘书直收的一笔：先给正文补手稿载体（稿 + 手稿签 + 五元位），再登记。"""
     return sec.record_statement(carry_proof_manuscript(st.root, payload), role="B")
+
+
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：`different`（另一条路径）。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
+    fail-closed 拒收（`proof_kind_unjudged`），而这一份量的是"命题同一性判成 same
+    之后能不能并起来"（b 的正控），不是证法是不是同一套 —— 两条证明本来就是
+    不同的证法（见文件里的 PROOF_1 / PROOF_2），判 different 才是这个夹具的意思。
+    真正的剧本桩（same / different / 没判成）在
+    `tests/test_rehearsal_two_f_independent_proofs.py` 与
+    `tests/test_unjudged_axes_are_fail_closed.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
 
 
 def _proof_nos(row: dict) -> list[int]:

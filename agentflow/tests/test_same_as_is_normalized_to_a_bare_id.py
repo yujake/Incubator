@@ -26,6 +26,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
@@ -44,6 +46,31 @@ PROOF_A = ("证明：把弦长函数记为 f，设 G 是 3-正则群。由定义
 #: 第二次交来的另一条证法（与 PROOF_A 不像，免得先撞"同种证明"那道拒绝）。
 PROOF_B = ("证明：对顶点数作强归纳。取一条最长路径，用 3-正则性把端点邻域配对，"
            "再以诱导子图归结到更小的图，最终得到弦长随基图变化的递推，导出非常值。")
+
+
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：`different`（另一条路径）。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
+    fail-closed 拒收（`proof_kind_unjudged`）。这一份量的是 `same_as` 归一化之后
+    命题同一性判成 same 时并得起来（b），用的又是另一条证法（PROOF_B）—— 所以
+    "不同种"才是这个夹具的意思。若不打桩，`_Seam` 的那一份答复会被这一问吃掉。
+    真正的剧本桩（same / different / 没判成）在
+    `tests/test_rehearsal_two_f_independent_proofs.py` 与
+    `tests/test_unjudged_axes_are_fail_closed.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
 
 
 class _Seam:
