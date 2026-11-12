@@ -261,11 +261,11 @@ class _RunOnce:
             def _merge_aliases(existing: dict, name: str,
                                aliases: Iterable[str] | None) -> None:
                 # 合并别名（需求未要求，但别名不合并会导致后续同义名重复建概念）
-                merged = S.sorted_unique(list(existing.get("aliases") or [])
-                                          + [name] + list(aliases or []))
-                merged = [a for a in merged
-                          if T.normalize(a) != (existing.get("normalized_name") or "")]
-                if merged == (existing.get("aliases") or []):
+                current = existing.get("aliases") or []
+                normalized_name = existing.get("normalized_name") or ""
+                merged = S.sorted_unique(list(current) + [name] + list(aliases or []))
+                merged = [a for a in merged if T.normalize(a) != normalized_name]
+                if merged == current:
                     return
                 existing["aliases"] = merged
                 existing["updated_at"] = S.now_iso()
@@ -337,13 +337,16 @@ class _RunOnce:
                 # 概念号与命题号是同一个号空间（业主 D2「同表同分配器不可能撞号」）
                 # ⇒ 这里从 `stmt` 发号；落刀之后 `concept` 这一档连计数器都没有了。
                 cid = tx.alloc_id("stmt")
+                # 归一化名这一格下面要用两次（行上的 `normalized_name` 与别名过滤），
+                # `T.normalize` 对同一个名字是纯函数 ⇒ 算一次。
+                norm_name = T.normalize(name)
                 row = S.Concept(
                     concept_id=cid,
                     name=name,
                     definition=definition,
                     related_concepts=[],
-                    normalized_name=T.normalize(name),
-                    aliases=[a for a in S.sorted_unique(list(aliases or [])) if T.normalize(a) != T.normalize(name)],
+                    normalized_name=norm_name,
+                    aliases=[a for a in S.sorted_unique(list(aliases or [])) if T.normalize(a) != norm_name],
                     # 这一格记的是"这个术语是从哪一篇抽出来的"（概念行的出处），
                     # 不是"定义逐字抄自那里"。所以「一律」给这一篇：即使定义还没抽到，
                     # 术语的来路也是清楚的 —— 而 `origin` 的正确口径就靠它
