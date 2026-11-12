@@ -365,10 +365,20 @@ class _Core:
         return None
     def _concepts_relations(self, g: RelationGraph, cids: Sequence[str]) -> list[dict]:
         out: list[dict] = []
+        # 去重从"按整行 dict 的值比较"改成"按 relation_id"：改前每条候选关系都要
+        # `rel not in out`（逐条整 dict 比较，O(候选数²)，一行有十几个字段），
+        # 而同一条关系只可能经"不同概念"重复出现（每个概念的 `concept_relations`
+        # 构造时已 `sorted(set(...))` 去重过）。`relation_by_id` 的键就是那一行的
+        # `relation_id`，且行里必带该字段 ⇒ 两行 dict 相等 ⇔ 它们是同一个 id。
+        # 取值次序（首个出现的顺序）与返回的 dict 对象（图里那一份，不拷贝）都未变。
+        seen: set[str] = set()
         for cid in cids:
             for rid in g.concept_relations.get(cid, []):
+                if rid in seen:
+                    continue
                 rel = g.relation_by_id.get(rid)
-                if rel is not None and rel not in out:
+                if rel is not None:
+                    seen.add(rid)
                     out.append(rel)
         return out
     def _evaluate_gap(
