@@ -9,13 +9,13 @@
 
 多表事务按固定顺序加锁（见 `LOCK_ORDER`），这是避免死锁的标准做法。
 
-## "看着对、其实不成立"的地方（`F-1` / `F-3` / `G-12` / `R6-AN-1`，已修）
+## "看着对、其实不成立"的地方
 
-上面三句话曾经各自有反例，修法与代价逐条写在对应函数的 docstring 里：`_atomic_write`（固定
-临时名 `<file>.tmp` ⇒ Windows 上并发写者互抢，`F-3`）· `init` / `rebuild`（不加锁 ⇒ 读到
-"清空到一半"的中间态，`G-12`）· `tx` 的提交块（先快照后事件 ⇒ 崩一次就留下"快照有、事件无"
-的行并被重建静默丢掉，`F-1`）· `_merge_counters_for_commit`（用事务缓存整份覆盖
-`counters.json` ⇒ 窗口内的 `set_counters` 被静默吞掉，`R6-AN-1`）。
+上面三句话各有反例，修法与代价逐条写在对应函数的 docstring 里：`_atomic_write`（固定
+临时名 `<file>.tmp` ⇒ Windows 上并发写者互抢）· `init` / `rebuild`（不加锁 ⇒ 读到
+"清空到一半"的中间态）· `tx` 的提交块（先快照后事件 ⇒ 崩一次就留下"快照有、事件无"
+的行并被重建静默丢掉）· `_merge_counters_for_commit`（用事务缓存整份覆盖
+`counters.json` ⇒ 窗口内的 `set_counters` 被静默吞掉）。
 """
 
 from __future__ import annotations
@@ -36,15 +36,13 @@ from filelock import FileLock, Timeout
 from . import migrate_concepts as MC
 from . import schema as S
 
-#: `_atomic_write` 的 `os.replace` 重试次数与退避基数（`F-3`）。
+#: `_atomic_write` 的 `os.replace` 重试次数与退避基数。
 #: 总等待 = 0.02 + 0.04 + 0.08 + 0.16 + 0.32 = 0.62 秒 —— 足够跨过"另一个进程正
 #: 持有目标文件"的瞬间，而短到不会让一次真实的权限错误变成一次长挂起。
 #:
-#: `R3-10`（重审实测）：这句注释此前漏掉了"第 6 次失败之后还 sleep 了 0.64s"
-#: 那一笔，于是注释说 0.62s、实测是 1.27s（`os.replace` 恒定失败时）。而这段代码
-#: 正处在写者锁内：多出来的那 0.64 秒会原样叠加到持锁时长上。
-#: 修法选的是"让代码与注释一致"而不是"改数字"：最后一次尝试失败之后不再 sleep
-#: （反正下一句就是抛 `StoreError`，那一觉是纯等待），总等待于是真的 ≈0.62 秒。
+#: 这段代码正处在写者锁内：多出来的 sleep 会原样叠加到持锁时长上。
+#: 最后一次尝试失败之后不再 sleep（反正下一句就是抛 `StoreError`，那一觉是纯等待），
+#: 总等待于是真的 ≈0.62 秒。
 _REPLACE_ATTEMPTS = 6
 _REPLACE_BACKOFF_S = 0.02
 
@@ -53,7 +51,7 @@ _REPLACE_BACKOFF_S = 0.02
 LOCK_ORDER: tuple[str, ...] = (
     "search_requests",
     "literature",
-    # 待新增文献列表（业主 2026-10-20 口径）：紧跟在 `literature` 之后 ——
+    # 待新增文献列表：紧跟在 `literature` 之后 ——
     # 一次检索的候选先落这里、筛完才写 `literature`，两把锁在同一条链路上相邻，
     # "先锁候选、再锁文献"与 ingest 的顺序一致（反过来会在两笔并行 ingest 里互相等待）。
     "lit_candidates",
@@ -87,7 +85,7 @@ LOCK_ORDER: tuple[str, ...] = (
 #:
 #: 宽度不在这里写死：`schema.ID_DIGITS` 是唯一定义处，导入期
 #: `schema.assert_id_space_contract()` 会把这两处对账（改一边必红）。
-#: 2026-10-14 业主裁定「所有四位编号改成六位，防溢出」⇒ 上限由 9999 抬到 999999。
+#: 四位编号改成六位（防溢出）⇒ 上限是 999999。
 MAX_ID = 10 ** S.ID_DIGITS - 1
 
 #: 已经并走的表：名字 -> (新家, 怎么读它)。S1r 并表那一笔（`SCHEMA_VERSION=2`）
@@ -151,8 +149,8 @@ def _parse_iso(ts: str | None) -> datetime | None:
     try:
         dt = datetime.fromisoformat(ts)
     except (ValueError, TypeError):
-        # 2026-10-17（store #12）：`lease_until` 是自由列（`Literature.validate` 不校验它），
-        # 真机里可能是 int ⇒ `fromisoformat` 抛 TypeError，原来只接 ValueError。
+        # `lease_until` 是自由列（`Literature.validate` 不校验它），
+        # 可能是 int ⇒ `fromisoformat` 抛 TypeError，所以还要接 TypeError。
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
@@ -187,14 +185,14 @@ _KNOWN_NON_REPLAY_OPS: frozenset[str] = frozenset({"commit", "info", "corrupt"})
 #: `.agentflow-workspace` 是 `projects.classify` 认的工作区标记，与"有 `data/`"同义。
 #:
 #: 这张表刻意只列本框架自己会在根上放的东西：多列一项 = 少拦一种外来目录，
-#: 少列一项 = 多拦一种正常布局。两种代价都实测过一次，所以它是逐条登记的。
+#: 少列一项 = 多拦一种正常布局。两种代价都出现过，所以它是逐条登记的。
 #:
 #: 为什么 `runs/` 也必须在这里：它同样是框架自己在根上建的目录 —— cache 的档位记录
 #: （`cachectl.record_active_run`）、stopctl 的 pid / 中断信号 / 停历史、`agent_loop`
 #: 的长产出与 `autonomy` 的 checkpoint 都住在里面。
 #:
-#: 2026-11-10：`start` 在 `init()` 之前就写了 `runs/cache-active-*.json`，于是守卫把自己的文件
-#: 当外来条目，全新空目录永远 init 不了（真机实测两次 exit 1）。`runs/` 因此必须进白名单。
+#: `start` 若在 `init()` 之前就写了 `runs/cache-active-*.json`，守卫会把自己的文件
+#: 当外来条目，全新空目录永远 init 不了。`runs/` 因此必须进白名单。
 _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
     {"data", "library", "projects", ".agentflow-workspace", "runs"}
 )
@@ -202,15 +200,15 @@ _WORKSPACE_ROOT_ENTRIES: frozenset[str] = frozenset(
 
 def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
                               before_rows: Iterable[Mapping[str, Any]] = ()) -> None:
-    """写入期闸（2026-10-19）：`evidence_kind="proof_review"` 的命题必须有 V 那一签。
+    """写入期闸：`evidence_kind="proof_review"` 的命题必须有 V 那一签。
     活证据（`projects/mp1` 现算）：10 条 `proof_review` 的 `verification_id` / `reviewed_by` 全是
     `null`、`bits` 是 `{}`，其中 3 条（`000031`/`000032`/`000036`）最近一签是「有毛病」—— 自称
-    "证明经逐行审阅"却没有任何「成立」那一签，而 2026-10-19 之前没有任何代码强制它。
+    "证明经逐行审阅"却没有任何「成立」那一签，而没有任何代码强制它时，这条硬约束只靠自觉。
     为什么是拒收而不是"降档 + 待办"：`own_result` 缺 `proof_text` 那一档的缺省读数是"猜想级"，
     数据没说谎；而 `proof_review` 是一句话（"V 审过了"），真假只有 `verifications` 能回答 ⇒ 放行
     会让猜想级命题以"审阅过的证明"出现在交付面上（"测试全绿、上线即越权"的形态）。
     判据本体在 `verifications.proof_review_gap`（一处口径：写入期、审计期、收工门都读它）。
-    作用域（2026-10-19 晚，`projects/mp2` 带出的一处过宽）：只核这一笔事务改到的行（`changed`），
+    作用域（一处过宽）：只核这一笔事务改到的行（`changed`），
     存量缺陷由审计期 `verify._check_13` 的 `proof_review_without_verification` 点名 ⇒ 改 A 行不再
     顺带核 B 行；新写/改写的行仍要过三条判据（`proof_text` / 最近一签「成立」/ `sha256` 相符）。
     """
@@ -232,7 +230,7 @@ def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
     if not gaps:
         return
     first = gaps[0]
-    # 拒收消息要能让写的人当场知道怎么改（业主 2026-10-19：「拒收消息要能让人看懂」）：
+    # 拒收消息要能让写的人当场知道怎么改：
     # `first["why"]` 里已经逐字写着"最近一签是 `v-…`：verdict=…、unresolved_errors=…"、
     # 或"`verifications/<号>.jsonl` 不在盘上"；`checklist` 再给三条逐项的过关读数
     # （缺哪一项一眼可见），最后补两条出口（重派 V 再签 / 如实降档）。
@@ -257,7 +255,7 @@ def _refuse_fake_proof_review(root: Path, table: str, doc: Mapping[str, Any], *,
     )
 
 
-#: 命题台账那两张表的写入口（2026-10-19 晚，`projects/mp2` 的 `stmt:000003` 带出来的）。
+#: 命题台账那两张表的写入口。
 #:
 #: 与 `secretary.STATEMENT_WRITE_TABLES` 同内容但不同用途：那边是"秘书的写集声明"，
 #: 这里是"通用写入通道的禁区"。刻意不 import `secretary`（`store` 在依赖图最底层，
@@ -288,7 +286,7 @@ def direct_write_refusal(table: str) -> str:
     `conceptrows.write_concept`（B 的抽取产出）、`doc_tools.register_dependency`（G 登记依赖）、`paperledger`（论文
     台账映射）、`migrate_concepts`（迁移）—— 它们各有自己的判据（B 的登记那一笔 / `Dependency.validate`），
     且都不叫 `tool:*`；把闸口开在"所有写者"上等于让这些路径 fail-closed，那是权限面的改动，不是本条能决定的。
-    2026-10-26（D8）：命题行只经 B 的 `register_statement` 登记，F 的证明出口不再直写这张表；
+    命题行只经 B 的 `register_statement` 登记，F 的证明出口不再直写这张表；
     `tools/table_tools.py` 的 `statements_are_registered_by_b` 守这一条。
     ## 第二个用户：`lit_candidates`（业主 2026-10-20 的待新增文献列表）拒的是同一件事 —— 模型的通用写口直接改
     一张"每一格都带语义"的表；合法写者也全是人写过的代码路径（`agent_a/run_once` 的自动入库、`tools/search_tools.py`
@@ -298,7 +296,7 @@ def direct_write_refusal(table: str) -> str:
     """
     name = str(table or "")
     if name == "lit_candidates":
-        # 待新增文献列表（业主 2026-10-20 口径）同样不许由通用写口直写。
+        # 待新增文献列表同样不许由通用写口直写。
         #
         # 为什么它与 `statements` 那一族同形：这张表上的每一条改动都带语义
         # （槽位只增不复用 / 撤掉要留理由 / 入库要回填 lit_id / 条数上限 10）。
@@ -339,11 +337,11 @@ def direct_write_refusal(table: str) -> str:
     )
 
 
-#: 一次直写请求的兜底路由（业主 2026-10-24 裁定，逐字）：
+#: 一次直写请求的兜底路由：
 #:
-#: 「关于直写statements的问题，不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管」
-#: 「还有哪些动作是被"需要经秘书"拦截的？都走自动路由。甚至包装得足够好后可以让智能体
-#:   对秘书的存在无感，只是知道某些动作会有人帮他兜底。」
+#: 关于直写 statements 的问题，不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管；
+#: 其它被"需要经秘书"拦截的动作也走自动路由 —— 包装得足够好后可以让智能体对秘书的存在无感，
+#: 只是知道某些动作会有人帮他兜底。
 #:
 #: 这张表是"哪张表 → 由谁兜底 → 什么意图 → 走哪条正路的哪个入口"的唯一落点。
 #: 它只写名字与出处，不写实现：`store` 在依赖图最底层（`secretary` / `litstage` /
@@ -375,8 +373,8 @@ def direct_write_refusal(table: str) -> str:
 #:   `usage_ledger`、`eval_results` —— 它们的写者是框架自己的收口路径，所以这里不给它们
 #:   兜底方（"路由"只对"有正路可走"的写有意义）。
 #:   注意这一句不是"通用写口会被拒"：`direct_write_refusal` 只拒 `lit_candidates` 与
-#:   `statements`，这几张表在通用写口上本来没有拒信。2026-10-27 实测（D12）：
-#:   `table.create(table="tasks")` 直接放行并落行，且能写 `item_state="done"` 伪造收口、
+#:   `statements`，这几张表在通用写口上本来没有拒信。`table.create(table="tasks")`
+#:   直接放行并落行，且能写 `item_state="done"` 伪造收口、
 #:   能把板项种到别人名下 —— 那是一条权限面缺口，不是"有拒信只是没路由"。
 #:   `tasks` 那一侧的判据今天在工具层：`tools/table_tools.py::_tasks_write_refusal`
 #:   （只许给自己落项、不许伪造收口 / 已读）。`counters` / `usage_ledger` / `eval_results`
@@ -486,9 +484,9 @@ class Tx:
         key = row.get(id_field)
         if key is None:
             raise StoreError(f"{table} 的行缺少主键 {id_field}")
-        # 2026-10-18（业主：「完美跑通 T1」/ 缺陷 ⑩）：`created_by` 缺省时用本次写入的 actor
+        # `created_by` 缺省时用本次写入的 actor
         # 填，而不是让 `schema` 的 per-table 默认值（`agent-F` 等）冒充作者。
-        # 真机 T5：`conjectures.created_by` 全是 `agent-F`，而它其实是 D 写的。
+        # 否则 `conjectures.created_by` 会全是 `agent-F`，而它其实是 D 写的。
         # 显式给了 `created_by` 就保留（不覆盖调用方的声明）。
         _row_cls = (S.TABLES.get(table) or {}).get("row")
         if _row_cls is not None and "created_by" in getattr(_row_cls, "__dataclass_fields__", {}):
@@ -610,7 +608,7 @@ class Tx:
             c = self._store._load_for_write("counters")
             self._store._dirty_counters = c
         counters = c.setdefault("counters", {})
-        # 2026-10-17（store #4）：counters 是可被手改的 JSON；`"lit": "abc"` 会让裸
+        # counters 是可被手改的 JSON；`"lit": "abc"` 会让裸
         # `int()` 抛 ValueError，把一次取号变成 traceback。坏值当 0（并在下面照常报冲突）。
         _raw_next = counters.get(kind, 0)
         try:
@@ -752,7 +750,7 @@ class Store:
         self._seq = 0
         #: 读路径的进程内缓存：表名 -> (路径, `st_mtime_ns`, `st_size`, 解析好的 doc)。
         #:
-        #: 为什么需要它（`R-BE4`，2026-10-27 业主批准）：`_load` 原来是"每次调用都
+        #: 为什么需要它：`_load` 原来是"每次调用都
         #: 读盘 + `json.loads` 整份表"，而 `rows()` / `read()` / `tx.rows()` /
         #: 提交块的 `before_rows` 全部走它。实测（`temp/rbe4_rows_cost.py`）：
         #: 1.0MB / 1000 行 8.2ms、3.2MB / 3000 行 31.9ms、6.3MB / 6000 行 68.3ms；
@@ -1360,11 +1358,11 @@ class Store:
         """
         self.events_path.parent.mkdir(parents=True, exist_ok=True)
         batch = f"{_now()}-{os.getpid()}-{next(self._batch_seq)}"
-        # `R-BE4`（2026-10-27，业主批准）：批内只读一次日志尾巴。
+        # 批内只读一次日志尾巴。
         #
-        # 改前每条事件各调一次 `_next_seq()`，而它每次都 `_seq_high_water()` →
+        # 每条事件若各调一次 `_next_seq()`，而它每次都 `_seq_high_water()` →
         # `read_events()` ⇒ 整份 events.jsonl 重解析一遍：一笔 N 条事件的提交把
-        # 整份日志解析 N+1 遍，而且全在写者锁内。实测（6.9MB / 20001 行）：
+        # 整份日志解析 N+1 遍，而且全在写者锁内。代价（6.9MB / 20001 行）：
         # 提交 1 条 = 2 遍 / 311ms，提交 5 条 = 6 遍 / 845ms；改后各 1 遍 / 155ms、160ms。
         # 为什么"取一次然后本地 +1"在语义上等价：本方法的调用点约束（见 docstring 的
         # `c-6` 那一段）要求整段在写者锁内 ⇒ 批内没有第二个写者能推进 seq，唯一会
@@ -1637,7 +1635,7 @@ class Store:
         return out
 
     def _rebuild_locked(self, *, backup: bool = True) -> dict:
-        # `R3-3`（重审实测）：快照必须与日志比对，不能只看 `op=commit` 标记。
+        # 快照必须与日志比对，不能只看 `op=commit` 标记。
         #
         # 缺陷形态：正常提交之后手工往 `<表>.json` 多塞一行（日志无痕）⇒ 旧版
         # `rebuild` 返回 `{'applied': 1, 'batches_applied': 1, 'batches_incomplete': 0, …}`，
