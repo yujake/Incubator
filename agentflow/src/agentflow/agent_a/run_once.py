@@ -72,12 +72,16 @@ def _source_failure_reading(errors: Sequence[str], sources: Sequence[dict]) -> s
     与"三个源都正常、其中两个 0 命中"在盘上同形，而前者意味着这篇文献的证据面
     可能少了一半来源。
     """
-    failed = [str(s.get("name") or "") for s in sources
-              if str(s.get("status") or "") == "failed"]
-    refused = [str(s.get("name") or "") for s in sources
-               if bool(s.get("refused"))]
-    failed = [name for name in failed if name]
-    refused = [name for name in refused if name]
+    failed: list[str] = []
+    refused: list[str] = []
+    for s in sources:
+        name = str(s.get("name") or "")
+        if not name:
+            continue
+        if str(s.get("status") or "") == "failed":
+            failed.append(name)
+        if bool(s.get("refused")):
+            refused.append(name)
     parts: list[str] = []
     if failed:
         parts.append(f"{len(failed)} 个源失败：{'、'.join(failed)}")
@@ -430,7 +434,7 @@ class _RunOnce:
                     fresh["outcome"] = "no_results"
                     fresh["lease_until"] = None
                     cand_rows = [
-                        dict(row) for row in tx.rows("lit_candidates")
+                        row for row in tx.rows("lit_candidates")
                         if str(row.get("request_id")) == req["request_id"]
                     ]
                     fresh["last_error"] = (
