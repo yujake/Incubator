@@ -3313,12 +3313,6 @@ class AgentV:
         body = str(text or "")
         rel = str(manuscript or "").strip().replace("\\", "/")
         explicit = bool(rel)
-        exp_rows: list = []
-        try:
-            if self.store is not None:
-                exp_rows = list(self.store.rows("experiments"))
-        except (StoreError, AttributeError, TypeError):
-            exp_rows = []
         # ---- 只认参数给的那份手稿（与 F 那一支同一条入口守卫） -------------------
         #
         # 为什么不按证明栏自己去实验台账里反查一份稿：F 的落块那一路也只认
@@ -3332,8 +3326,6 @@ class AgentV:
         # 这份稿属于哪条实验：稿名里那个实验号是唯一不会歧义的键（两条实验共用
         # 同一份程序时，按 `code_path` 反查会挑到第一条 —— 那样签核的是别人那份报告）。
         eid = _ER.experiment_id_of_manuscript(self.workspace_root, rel)
-        row = next((dict(r) for r in exp_rows
-                    if str(r.get("experiment_id") or "") == eid), None)
         read = _ER.read_proof_manuscript(self.workspace_root, rel)
         if not read.get("ok"):
             if not explicit:
@@ -3369,6 +3361,16 @@ class AgentV:
                                      f"（参数 sha {VR.text_sha(body)[:12]}…，盘上 "
                                      f"{VR.text_sha(on_disk)[:12]}…）⇒ 拒绝：签会盖错一份正文"),
                           "passes": [], "manuscript": rel}
+        # 实验表只在"这份稿确实要审"之后才读（上面几支早退的路根本不看它，读整表是白读）；
+        # 这一行（稿属于哪条实验）与 `is_exhaustion_column` 都只用这一次读的结果。
+        exp_rows: list = []
+        try:
+            if self.store is not None:
+                exp_rows = list(self.store.rows("experiments"))
+        except (StoreError, AttributeError, TypeError):
+            exp_rows = []
+        row = next((dict(r) for r in exp_rows
+                    if str(r.get("experiment_id") or "") == eid), None)
         if not _ER.is_exhaustion_column({"proof_text": body}, exp_rows):
             return None, None
         # 2026-11-04（审计缺陷 ③）：缺 `## 依赖` 段不许签（空表合法）。
@@ -3672,10 +3674,11 @@ class AgentV:
                        review_passes=list(got.get("passes") or []),
                        secretary_judge=_unregistered_secretary_judge(got))
             #: 会审的七项读数照带（缺材料那一档也一样：读数是正本，不因没查成而丢）。
-            if got.get("exhaustion_review"):
-                out["exhaustion_review"] = dict(got["exhaustion_review"])
-                out["checks"] = list(dict(got["exhaustion_review"]).get("checks") or [])
-                out["missing"] = list(dict(got["exhaustion_review"]).get("missing") or [])
+            review = dict(got.get("exhaustion_review") or {})
+            if review:
+                out["exhaustion_review"] = review
+                out["checks"] = list(review.get("checks") or [])
+                out["missing"] = list(review.get("missing") or [])
             self._emit(f"verify_proof(未在册)：没查成（{got.get('reason')}）")
             return out
         stopped = str(got.get("stopped") or "")
