@@ -365,7 +365,8 @@ def check_formal(
             # 与 R009 对注释/docstring 的判据无关，保持原样。
             note="未验证：环境无证明检查器。**这不等于验证失败**",
         )
-    if not (source and source.strip()) and not script_path:
+    has_source = bool(source and source.strip())
+    if not has_source and not script_path:
         return ok(
             {
                 "checked": False,
@@ -390,7 +391,7 @@ def check_formal(
     from ..formalgw import STATUSES, check_lean
 
     nm = str(checker_name or "")
-    if source and source.strip():
+    if has_source:
         src = str(source)
         path_arg: str | None = None
     else:
@@ -463,6 +464,7 @@ def check_formal(
     # `evidence_of` 是"这次到了什么等级"的唯一定义处（`_conclude` 每次都算好），
     # 因此 `checked` 从它读，而不是在这里再列一遍"哪些状态算查了"。
     ev = raw.get("evidence") or {}
+    backend = raw.get("backend")
     status = str(raw.get("status") or "")
     checked = bool(ev.get("checked"))
     # `E-14`：`proved` 与 `checked` 同源 —— 都读 `formalgw.evidence_of` 的结论，
@@ -512,7 +514,7 @@ def check_formal(
         source_sha256=raw.get("source_sha256"),
         source_path=raw.get("source_path"),
         ran=raw.get("ran"),
-        backend_status=((raw.get("backend") or {}).get("status") if isinstance(raw.get("backend"), Mapping) else None),
+        backend_status=(backend.get("status") if isinstance(backend, Mapping) else None),
         evidence_kind=ev.get("evidence_kind"),
     )
 
