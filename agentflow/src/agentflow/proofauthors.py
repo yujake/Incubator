@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
-"""谁写的这份证明：B 登记的那一刻把它记到 statements 行上（业主 2026-11-01 裁定）。
+"""谁写的这份证明：B 登记的那一刻把它记到 statements 行上。
 
 ## 为什么需要它
 
 V 回执的收件人 = 送审者（召唤 V 的那个 task）。"送审者该不该是这个人"只能拿
-"作者是谁"来判：业主的口径是「F 写的证明，F 送审，F 拿到 V 签，B 侧收录」「不
-存在 F 写证明 B 送审」。而在这一笔之前，statements 行上没有作者 —— 81 的 8 条
-回执因此只能记 `author_not_recorded`（见 `vreceipts._author_of`），运行期永远
-判不出"替人送审"。
+"作者是谁"来判（业主口径：「F 写的证明，F 送审，F 拿到 V 签，B 侧收录」；不
+存在 F 写证明 B 送审）。statements 行上没有作者，这类回执就只能记
+`author_not_recorded`（见 `vreceipts._author_of`），运行期永远判不出"替人送审"。
 
 ## 只认两种来源（读不出来就记"作者未记录"，不猜）
 
 1. 调用方显式交 `proof_authors`（B 自己写的那一份走这条：`["B"]`）；
-2. 从登记时读到的来源路径推：`reports/` ⇒ F（F 的研究稿），`out/paper/` ⇒ G
-   （G 的论文正文），`documents/` ⇒ B（B 的登记稿）。
+2. 从登记时读到的来源路径推：`reports/` ⇒ F，`out/paper/` ⇒ G，`documents/` ⇒ B。
 
-`origin="own_result"` 不是作者证据：F 与 B 都会交自产命题。`created_by` 也不是
-（它是登记口，恒为 `secretary-<角色>`）。
+`origin="own_result"` 与 `created_by` 都不是作者证据：前者 F 与 B 都会交，
+后者是登记口（恒为 `secretary-<角色>`）。
 
 ## 三态
 
