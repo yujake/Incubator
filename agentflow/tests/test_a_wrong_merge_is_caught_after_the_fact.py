@@ -41,6 +41,8 @@ import pathlib
 import re
 import sys
 
+import pytest
+
 # 与 `tests/conftest.py` 同一个注入方式（这一份也要能在一棵临时源码树上单独跑）。
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
@@ -67,6 +69,31 @@ PROOF_3 = "证明：把弦长函数记为 f，由邻域结构直接算出（路�
 
 #: 结论标记：必须落在分句边界上（`3-正则群` 里的那个"则"不是结论标记）。
 _SPLIT = re.compile(r"[；;。，,\n]\s*(?:则|那么|于是|故|因此|从而|推出)|⇒|->|=>")
+
+
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：`different`（另一条路径）。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
+    fail-closed 拒收（`proof_kind_unjudged`），会把这一份要造的"错并 / 正常合并"
+    全部拒在合并之前 —— 而这一份量的是合并之后的**后验**判据（错并要红、正常合并
+    要绿），不是两次的证法是不是同一套；这里的 PROOF_1/2/3 本来就是三条不同证法。
+    真正的剧本桩（same / different / 没判成）在
+    `tests/test_rehearsal_two_f_independent_proofs.py` 与
+    `tests/test_unjudged_axes_are_fail_closed.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
 
 
 def _own(full: str, *, label: str = "") -> dict:
