@@ -5758,20 +5758,25 @@ def _apply_no_lean_variant(text: str) -> str:
     if _lean_switch()[0]:
         return text
     for _name, blocks, drop, replacements in _no_lean_tables():
-        for start, keep in blocks:
-            kept: list[str] = []
-            skipping = False
-            for line in text.split("\n"):
-                if not skipping and start in line:
-                    skipping = True
-                if skipping and keep and keep in line:
-                    skipping = False
-                if not skipping:
-                    kept.append(line)
-            text = "\n".join(kept)
-        if drop:
-            text = "\n".join(line for line in text.split("\n")
-                             if not any(mark in line for mark in drop))
+        # 顺序一字未变：先整块删、再整行删、最后逐条替换（三张表各自独立）。
+        # 整块删与整行删共用一次 split / 一次 join（改前每删一块都整文 split 一遍、
+        # join 一遍；M 岗的正文 73 KB，而三张表里有两张根本没有块也没有行标记）。
+        if blocks or drop:
+            lines = text.split("\n")
+            for start, keep in blocks:
+                kept: list[str] = []
+                skipping = False
+                for line in lines:
+                    if not skipping and start in line:
+                        skipping = True
+                    if skipping and keep and keep in line:
+                        skipping = False
+                    if not skipping:
+                        kept.append(line)
+                lines = kept
+            if drop:
+                lines = [line for line in lines if not any(mark in line for mark in drop)]
+            text = "\n".join(lines)
         for old, new in replacements:
             text = text.replace(old, new)
     return text
