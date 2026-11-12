@@ -469,7 +469,7 @@ def _sources_from_items(raw_items: Sequence[Any], *, source_name: str, query: st
     out: list[dict] = []
     rejected: list[dict] = []
     index: dict[str, int] = {}
-    for raw in list(raw_items):
+    for raw in raw_items:
         source, why = _source_from_item(
             raw, index=start_index + len(out) - 1, provider=source_name,
             query=query, retrieved_at=retrieved_at,
@@ -505,6 +505,9 @@ def _merge_across_sources(groups: Sequence[tuple[str, Sequence[dict]]],
     merged: list[dict] = []
     index: dict[str, int] = {}
     conflicts: list[dict] = []
+    # 逐槽的冲突表：`duplicate_of` 按 position-1 取自己那一槽（原先每条来源
+    # 都把整张 `conflicts` 扫一遍，是 O(来源数 × 冲突数)）。同槽内的先后不变。
+    by_slot: dict[int, list[dict]] = {}
     for name, items in groups:
         for source in items:
             keys = _merge_keys(source)
@@ -518,9 +521,11 @@ def _merge_across_sources(groups: Sequence[tuple[str, Sequence[dict]]],
             for field in ("title", "year"):
                 kept, dropped = current.get(field), source.get(field)
                 if kept and dropped and kept != dropped:
-                    conflicts.append({"slot": pos, "field": field, "kept": kept,
-                                      "dropped": dropped, "from": name,
-                                      "reason": "跨源同一篇文献的该字段不一致，保留先到的那一份"})
+                    conflict = {"slot": pos, "field": field, "kept": kept,
+                                "dropped": dropped, "from": name,
+                                "reason": "跨源同一篇文献的该字段不一致，保留先到的那一份"}
+                    conflicts.append(conflict)
+                    by_slot.setdefault(pos, []).append(conflict)
             _merge_into(current, source)
 
     for position, source in enumerate(merged, start=1):
@@ -533,7 +538,7 @@ def _merge_across_sources(groups: Sequence[tuple[str, Sequence[dict]]],
         source["provenance"] = prov
         source["duplicate_of"] = [
             {k: v for k, v in c.items() if k != "slot"}
-            for c in conflicts if c["slot"] == position - 1
+            for c in by_slot.get(position - 1, ())
         ]
     return merged, conflicts
 
@@ -781,7 +786,7 @@ def _retrieve_one(name: str, fn: SearchFn, *, row_name: str = "", query: str, li
     if not isinstance(items, (list, tuple)):
         items = []
     sources, rejected = _sources_from_items(
-        list(items)[: max(1, int(limit))], source_name=name,
+        items[: max(1, int(limit))], source_name=name,
         query=query, retrieved_at=retrieved_at,
     )
     report = _topicality_of(fn)
@@ -1226,16 +1231,22 @@ def acquire_fulltext(sources: Sequence[Any], *, fetch_fn: Callable[..., Any] | N
         })
 
     statuses = [r["status"] for r in results]
-    counts = {name: statuses.count(name) for name in ACQUIRE_STATUSES}
-    ok_sources = [s for s in selected
-                  if (_text_of((s.get("fulltext") or {}).get("status")) == "ok")]
+    # 逐条数一遍（原先每档 `statuses.count(name)` 各扫一趟）；键与次序仍是
+    # `ACQUIRE_STATUSES`，不认识的取值照旧不入表。
+    counts = dict.fromkeys(ACQUIRE_STATUSES, 0)
+    for status in statuses:
+        if status in counts:
+            counts[status] += 1
+    # 与上面 `results` 同一批读数：`r["status"]` 就是 `fulltext.status`（缺格记
+    # `not_configured`），所以"拿到全文"的条数不必再扫一遍 `selected`。
+    ok_count = sum(1 for r in results if r["status"] == "ok")
     checked = bool(selected) and not setup_error
     if setup_error:
         reason = f"没有可用的下载/抽取实现 ⇒ 本次没有做全文获取（{setup_error}）"
     elif not selected:
         reason = "本次没有可获取全文的来源（检索没查成或来源为空）⇒ 没有发起任何下载"
     else:
-        reason = (f"{len(ok_sources)}/{len(selected)} 条来源拿到了可逐字回验的全文；"
+        reason = (f"{ok_count}/{len(selected)} 条来源拿到了可逐字回验的全文；"
                   f"其余各态见 counts（每一种都带理由）")
     return {
         "configured": not setup_error,
@@ -1244,7 +1255,7 @@ def acquire_fulltext(sources: Sequence[Any], *, fetch_fn: Callable[..., Any] | N
         "statuses": statuses,
         "counts": counts,
         "results": results,
-        "ok_sources": len(ok_sources),
+        "ok_sources": ok_count,
         "reason": reason,
     }
 
@@ -1516,10 +1527,10 @@ def _check_quote_levels(source: Mapping[str, Any], quote: str,
     # 全文那次比对的结果（没跑过全文就是 `None`）。下面"这条来源没有摘要"
     # 那一支要如实返回这一次的读数，而不是把它折成"没有可比文本"。
     full_outcome: Any = None
-    # 全文文本只从这一处取：内联的 `text_pages` 与引用式的 `text_ref` 都由
-    # `_fulltext_pages` 解析（引用坏了就返回空 + 问题串，于是这里自然跳过全文那次比对，
-    # 落到摘要级，并把问题串留给 `verify_claims` 去计数与写理由）。
-    full_pages, _ft_problem = _fulltext_pages(source, cache)
+    # `_pages_of` 的级别就是"文本从哪来"的读数：它给 `fulltext` 当且仅当
+    # `_fulltext_pages` 拿到了逐页正文 ⇒ 这里直接复用上面那一份，不再取一次
+    # （原先内联全文会被第二次 `[str(p) ...]` 重建一遍）。
+    full_pages = text_pages if level == "fulltext" else []
     if full_pages:
         outcome, failure = _check_quote_against(full_pages, quote, fn, window_kind="fulltext")
         if failure:
@@ -1602,8 +1613,15 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
     cache: dict[str, tuple[list[str], str]] = {}
     # "有可比文本"包含两种：摘要，或已获取到的全文。只数摘要会让"有全文的来源"
     # 被误判成没有可比原文，把一次明明能查的回验报成 unknown。
-    with_text = [s for s in sources if _pages_of(s, cache)[0]]
-    with_fulltext = [s for s in sources if _pages_of(s, cache)[1] == "fulltext"]
+    # 一次读逐页正文就同时给出两张表（原先每张表各扫一遍 `sources`）。
+    with_text: list[Mapping[str, Any]] = []
+    with_fulltext: list[Mapping[str, Any]] = []
+    for source in sources:
+        pages, level, _why = _pages_of(source, cache)
+        if pages:
+            with_text.append(source)
+            if level == "fulltext":
+                with_fulltext.append(source)
 
     fn = quote_fn if quote_fn is not None else _default_quote_fn()
     ledger: list[dict] = []
@@ -1689,15 +1707,21 @@ def verify_claims(claims: Sequence[Any], sources: Sequence[Mapping[str, Any]], *
         ledger.append(row)
 
     counts = {"total": len(ledger)}
+    verdict_tally = {v: 0 for v in VERDICTS}
+    level_tally = {level: 0 for level in EVIDENCE_LEVELS}
+    for r in ledger:
+        verdict = r["verdict"]
+        if verdict in verdict_tally:
+            verdict_tally[verdict] += 1
+        if verdict == "verified" and r["level"] in level_tally:
+            level_tally[r["level"]] += 1
     for v in VERDICTS:
-        counts[v] = sum(1 for r in ledger if r["verdict"] == v)
+        counts[v] = verdict_tally[v]
     counts["unverified"] = counts["total"] - counts["verified"]
     # 两级的通过条数分开数：合成一个"通过"数字正是本层最要防的那种读法 ——
     # 读者会把它当成"全文都对得上"，而其中可能有几条只对上了摘要。
     for level in EVIDENCE_LEVELS:
-        counts[f"verified_{level}"] = sum(
-            1 for r in ledger if r["verdict"] == "verified" and r["level"] == level
-        )
+        counts[f"verified_{level}"] = level_tally[level]
 
     levels_reached = sorted({r["level"] for r in ledger if r["verdict"] == "verified"})
 
