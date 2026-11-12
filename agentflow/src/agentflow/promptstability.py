@@ -1,25 +1,19 @@
 """system 提示词的前缀稳定性：静态/动态分离、逐字节判据、缓存读数汇总。
 
-## 这一层为什么存在（根因，逐个给代码位置）
+## 这一层为什么存在（根因）
 
-上游的前缀缓存（DeepSeek 的 `prompt_cache_hit_tokens`）命中条件是前缀逐字节相同。
+上游的前缀缓存命中条件是前缀逐字节相同。
 框架里 system 提示词是每一段对话的前缀，而它每一步都重算：
 
-- `agent_loop.py:2940` 开局渲染一次（`AP.system_prompt(self.role, registry=..., **facts)`）；
-- `agent_loop.py:3152` 每个步边界再过一次 `_system_at_step`（`:2808` 同一个渲染函数）。
+- `agent_loop.py` 开局渲染一次（`AP.system_prompt(self.role, registry=..., **facts)`）；
+- 每个步边界再过一次 `_system_at_step`（同一个渲染函数）。
 
-（行号是 2026-10-19 的读数，会漂；名字不会。）
-
-`_system_at_step` 的前身（改前那个每步重算 system 的实现）动机是对的（2026-10-15 的裁定 J=乙）：
+`_system_at_step` 的前身（每步重算 system 的实现）动机是对的（裁定 J=乙）：
 `budget_left` 与 `notebook` 是模型据以决策的两个数，开局那一版是旧的。但它选的落点是
 system，代价是「只要花销变了（几乎每一步都变），`TASK_BUDGET` 这一段的字节就变了
-⇒ 整条前缀作废」。实测（`2026-10-19` 本机，非零价、M 岗）：
-
-    第 0 步 system 54,902 字 / 第 1 步 system 54,902 字，identical=False
-    从第 35,035 个字符起不同：`剩余预算：5.000000 美元（…已用 0.000000…）`
-                          vs   `剩余预算：4.998800 美元（…已用 0.001200…）`
-
-于是「命中缓存」这件事在结构上不可能发生 —— 不是概率低，是永不。
+⇒ 整条前缀作废」。实测：第 0 步与第 1 步的 system 字数相同、`identical=False`，
+从「剩余预算：…」那一句起不同。于是「命中缓存」这件事在结构上不可能发生 ——
+不是概率低，是永不。
 
 ## 改法：静态/动态分离（本模块只给机制与判据，不做渲染缓存）
 
@@ -28,16 +22,14 @@ system，代价是「只要花销变了（几乎每一步都变），`TASK_BUDGE
   （:data:`SYSTEM_PLACEHOLDERS`），并交给调用方塞进 user 消息
   （`agent_loop._prompt` 的尾部已经有「剩余花销预算」，本次补上「草稿本」）。
 
-  ## 2026-10-21：登记的判据从「每步会变」扩成「跨 run 会变」
+  ## 登记的判据从「每步会变」扩成「跨 run 会变」
 
   前缀缓存命中的是"同一份前缀的第二次"。原来的登记表只收"每步会变"的两格
   （`budget_left` / `notebook`），于是同一趟的第 2..N 步能命中；而"另一趟活"
   的第一步永远命中不了 —— 因为 `AGENT_IDENTITY`（段序 0，整条提示词的最前面）
   逐字写着 `task_id` / `depth` / `children` / `parent_task_id` / `summoned_by`，
   而 `TASK_FRAME`（段序 4200）写着 `task` 正文 / `inbox` / `board` / `user_replies`。
-  实测（`2026-10-21`，本机，M 岗）：两份"不同的活"的 system 从第 95 个字符起
-  就不同（改前读数，见 `tests/fixtures/prompt_cache_warm.json` 的
-  `cross_run_prefix_chars`）⇒ 换一趟活的第一次调用 `hit=0`。
+  实测：两份"不同的活"的 system 从很靠前的位置就不同 ⇒ 换一趟活的第一次调用 `hit=0`。
 
   所以登记表收的是所有跨 run 会变的事实：它们在 user 消息里现读（开场那一条
   `agent_loop._opening_transcript` 逐格写着原值），system 里只留一段静态指路语。
@@ -46,7 +38,7 @@ system，代价是「只要花销变了（几乎每一步都变），`TASK_BUDGE
 - system 里允许每步变化的段必须有登记（:data:`DYNAMIC_SECTION_WHITELIST`，初始为空）：
   :func:`unregistered_dynamic_sections` 扫"两份装配里变了的段名"，与登记表对比。
   没有登记却变了 ⇒ 判据红。这条守的是"以后有人往 system 里再塞一个每步会变的东西"
-  —— 那正是今天这个 bug 的形态，而它不会自己报错。
+  —— 那正是这个 bug 的形态，而它不会自己报错。
 - 逐字节判据在 :func:`step_stability`：同一角色、同一 task、同一 registry 下，
   连续两步的 system 必须逐字节相同；不同则报出"从第几个字符起不同 + 前后各 80 字"
   （:func:`first_difference`）。负控：往 system 里塞一个时间戳/步号 ⇒ 必红。
@@ -91,7 +83,7 @@ __all__ = [
 #:
 #: 为什么把键集也当判据：写这一格的落点有两个（`agent_run_end` 与
 #: `agent_loop.save_run_checkpoint`），它们的形状都来自 :func:`summarize_prompt_cache`。
-#: 有人另拼一份 dict 时（2026-10-19 的 `runs/agent-*.json` 就是那种形态：只有 `spend`），
+#: 有人另拼一份 dict 时（`runs/agent-*.json` 曾经就是那种形态：只有 `spend`），
 #: 少的不止是 `hit`/`miss` —— 是整格。键集判据让"少一格"当场可见。
 CACHE_SUMMARY_KEYS: tuple[str, ...] = (
     "calls", "no_request_calls", "hit", "miss", "unknown_calls", "tokens_in",
@@ -108,7 +100,7 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 
 #: 会变、因而不许进 system 的事实键（登记表：键 → 根因所在处）。
 #:
-#: 「会变」这一句话有两根轴，两轴都收（2026-10-21 起，判据见模块开头那一段）：
+#: 「会变」这一句话有两根轴，两轴都收（判据见模块开头那一段）：
 #:
 #: | 轴 | 判据 | 收进来的键 |
 #: |---|---|---|
@@ -116,17 +108,17 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 #: | 跨 run 会变 | 谁在 `run()` 开头被重新算一次 | task 正文 / `task_id` / `depth` / `parent_task_id` / `summoned_by` / `children` / `board` / `inbox` / `user_replies` / `workspace_root` |
 #: | 跨 run 会变（配置轴） | 谁随这一趟的配置变 | `availability`（伙伴配置）/ `parent_limits`（`Policy`：墙钟 / 预算 / 四类上限） |
 #:
-#: 为什么第三轴也收（2026-10-21 第二批）：前两轴收的是"换一趟活"，这一轴收的是
+#: 为什么第三轴也收（第二批）：前两轴收的是"换一趟活"，这一轴收的是
 #: "换一份配置"。而"配置"与"活"在上游缓存眼里没有区别 —— 都是另一份前缀。
-#: 实测（本机，M 岗）：`availability` 两份不同的读数让 system 从第 32,568 / 51,935
-#: 字符（62.7%）处断开，`parent_limits` 让它从第 ~88% 处再断一次 ⇒ 换一次伙伴配置
-#: 就砍掉 37% 的前缀。它们现在的落点与前十格同一个（开场那条 user 消息）。
+#: 实测：`availability` 两份不同的读数让 system 从不同的位置起就分家。
+#: 两份不同的接线态会让 system 从很靠前的位置就断开，`parent_limits` 让它再断一次
+#: ⇒ 换一次伙伴配置就砍掉一大截前缀。它们现在的落点与前十格同一个（开场那条 user 消息）。
 #:
 #: 为什么第二轴也收：一趟之内逐字不变的东西，换一趟就换一份，而上游前缀缓存要的
 #: 是"另一趟也能用同一段前缀"。只挪第一轴，换一趟活的第一次调用永远 `hit=0`
-#: （改前实测：两份不同的活的 system 从第 95 个字符起不同）。
+#: （两份不同的活的 system 从很靠前的位置起就不同）。
 #:
-#: 落点逐条（行号是 2026-10-21 的读数，会漂；名字不会）：
+#: 落点逐条（只点名字、不点行号：行号会漂）：
 #:
 #: - 模板那一侧全部在 `agent_prompts.role_prompt_registry` 里：`AGENT_IDENTITY`
 #:   （段序 0）:`agent_prompts.py:8666`（`{{summoned_by}}` / `{{task_id}}`）、
@@ -148,7 +140,7 @@ DYNAMIC_SECTION_WHITELIST: frozenset[str] = frozenset()
 #: 它们若哪天变成"每趟都不一样"，判据（两条渲染逐字节比对 + 段白名单）会先红 ——
 #: 那时再决定挪不挪。
 #:
-#: 2026-10-21 第二批把 `availability` / `parent_limits` 加进了这张表（它们此前在
+#: 第二批把 `availability` / `parent_limits` 加进了这张表（它们原先在
 #: 上面那句"刻意没有登记"里）：判据从"同一台机器/同一份配置"改成了"换一份配置"，
 #: 因为业主的口径是"换一次伙伴配置不该砍掉 37% 的前缀"。这两格的真值同样念在开场那条
 #: user 消息里（`agent_loop._opening_transcript` 的「现在的接线态」/「派活上限」两栏）。
@@ -215,7 +207,7 @@ STEP_VOLATILE_FACTS: Mapping[str, str] = {
         "墙钟 / 预算 / 四类上限换一次 run 就可能换一份数字，而这一段在 M 的 system 里"
         "位于第 ~88% 处（第二个断点）。"
     ),
-    # 2026-10-22（业主 B-3：「V 的判决必须递到 F」）：这一格的读数来自
+    # （业主：「V 的判决必须递到 F」）：这一格的读数来自
     # `verifications/<命题号>.jsonl`（V 的台账）+ `statements` 的现行正文 ⇒ 换一趟活、
     # V 多签一签、F 改一次证明，它都会变。它是"这一趟要补哪几条"的事实，
     # 不是静态指路语 —— 所以登记在这里，真值念在开场那条 user 消息里
@@ -337,13 +329,13 @@ def volatile_facts_digest(mapping: Mapping[str, str] | None = None) -> tuple[int
 
     `tests/test_agent_prompts.py` 的 `_FROZEN_PROMPT_DIGESTS` 按缺省事实渲染模板
     ⇒ 它钉的是"段文本"，钉不住"哪几格事实被挪出了 system"。上一批把登记表从 2 格扩到
-    12 格（`2026-10-21`）时，十格摘要一个都没变 ⇒ 那条判据没红、也没抬版本，而
+    12 格时，十格摘要一个都没变 ⇒ 那条判据没红、也没抬版本，而
     提示词里模型看到的落点整个换了一遍（从 system 挪进 user 消息）。
     审计射程到此为止 —— 这条函数就是补上的那一格读数。
 
     ## 为什么是"键集"而不是"值"
 
-    值那部分（每一格为什么收进来）是会持续改写的散文（长注释、行号、真机读数）；
+    值那部分（每一格为什么收进来）是会持续改写的散文（长注释、行号、机器读数）；
     键集才是模型实际读到的结构：少一格 = 那一格的事实被挪回了 system 或整段被删。
     于是指纹只对键集算，散文随便改都不会让判据红。
 
@@ -677,7 +669,7 @@ def missing_prompt_cache_steps(events: Sequence[Mapping[str, Any]]) -> list[int]
     （`hit` / `miss` 都是 `None`），与"这个键根本没有"是两件事 —— 后者是写入被删掉
     （本函数的猎物），前者是上游没给读数（合法的第三态）。
 
-    ## 判据收在"两个上游字段名在不在"上，而不是"整个 dict 非空"（2026-10-19）
+    ## 判据收在"两个上游字段名在不在"上，而不是"整个 dict 非空"
 
     为什么：`"prompt_cache": {}` 是"看起来写了、其实一格没落"的形态 —— 它在会话
     记录里有一个键，`event.get("prompt_cache") is not None` 也过得去，而
@@ -696,7 +688,7 @@ def missing_prompt_cache_steps(events: Sequence[Mapping[str, Any]]) -> list[int]
         if ok:
             continue
         # `index` 用 `is None` 判而不是 `or`：第 0 步的索引是 `0`，
-        # 而 `0 or -1` 会把它写成 -1（真机里第 0 步恰恰最常见）。
+        # 而 `0 or -1` 会把它写成 -1（第 0 步恰恰最常见）。
         raw = event.get("index")
         missing.append(int(raw) if raw is not None else -1)
     return missing
@@ -774,7 +766,7 @@ def checkpoint_prompt_cache_problem(checkpoint: Any) -> str:
     """检查点（`runs/agent-<角色>-<sid>.json`）里的缓存读数合格吗？返回问题串（空 = 合格）。
 
     三态在这一层的落点：
-    - 键不在 ⇒ 写入被删掉（2026-10-19 之前的形态：这份文件只有 `spend`）；
+    - 键不在 ⇒ 写入被删掉（旧形态：这份文件只有 `spend`）；
     - 键在、值 `{}` ⇒ 写的时候没有汇总可写（"没算过"，不是"零命中"）；
     - 键在、值是汇总 ⇒ 交给 :func:`cache_summary_problem` 逐条核对自洽。
 
