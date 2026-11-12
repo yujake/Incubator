@@ -10225,54 +10225,31 @@ class Secretary:
                                 force_new: bool, out: dict[str, Any],
                                 adjudication: Mapping[str, Any] | None = None
                                 ) -> dict[str, Any] | None:
-        """同一命题 / 同种证明两道判断的落点（业主 2026-10-24）。
+        """
+        同一命题 / 同种证明两道判断的落点。
 
-        这不是"新建一条命题"那一支：命中之后这一笔的去向只有三种，每一种都如实写进
-        `out`（三态，读的人要能分辨"并了 / 拒了 / 没命中照常新建"）：
+        命中之后这一笔的去向只有这几种，每一种都如实写进 `out`：
 
         | 结局 | 返回里的读数 |
         |---|---|
         | 并成第 N 份证明 | `merged=True` + `merged_into` + `proof_no=N` + `matched_by` |
-        | 同一条命题、但这一笔没有证明正文 | `checked=True` + `created=False` + `duplicate=True` + `no_proof=True` + `stmt_id=<既有>` |
-        | 同种证明、且没给 merge | `checked=False` + `refused="proof_same_kind"` + 点名第几份 |
+        | 同一条命题、但这一笔没有证明正文 | `duplicate=True` + `no_proof=True` + `stmt_id=<既有>` |
+        | 同种证明、且没给 merge | `refused="proof_same_kind"` + 点名第几份 |
         | merge=True 且命中同种 | `merged=True` + `merged_same_kind=True` + `resign_required=True` |
-        | 同一个概念（概念行） | `checked=True` + `created=False` + `duplicate=True` + `stmt_id=<既有>` + `matched_by="concept_label"` 或 `"concept_defined_term"` |
-        | 判不了（试过而没判成） | `checked=False` + `refused="same_statement_unjudged"` + `adjudication.fail_closed` + 一句原因（不新建、不合并） |
-        | 同种证明这一问没判成 | `checked=False` + `refused="proof_kind_unjudged"` + 点名哪几份判不了（不新增证明号） |
-        | 概念同一性没判成 | `checked=False` + `refused="concept_identity_unjudged"` + 一句原因（不新建第二行） |
+        | 同一个概念（概念行） | `duplicate=True` + `matched_by="concept_label"` 或 `"concept_defined_term"` |
+        | 判不了（试过而没判成） | `refused="same_statement_unjudged"` + `adjudication.fail_closed` + 原因 |
+        | 同种证明这一问没判成 | `refused="proof_kind_unjudged"` + 点名哪几份判不了 |
+        | 概念同一性没判成 | `refused="concept_identity_unjudged"` + 原因 |
         | 没命中 | `None`（调用方照常新建；这一支一个字节都不写） |
 
-        概念行那一档（D2）走 :meth:`_merge_into_concept`：它没有"条件 ⇒ 结论"，判据是
-        "定义项相同"（`propositionkey.same_concept`，确定性、零模型调用）。
+        概念行走 :meth:`_merge_into_concept`：它没有"条件 ⇒ 结论"，判据是"定义项相同"
+        （`propositionkey.same_concept`，确定性、零模型调用）。
 
-        ## 为什么"并进一条命题"要落在秘书这一层
-        业主 2026-10-09 的裁定是"B 交内容、秘书实际操作增改查"。判"这两条是不是同一条
-        定理"正是"查重"那一件活，而查重的读数（依据是键还是相似度、读数多少）必须与
-        落盘在同一笔事务里 —— 分两处就会出现"读的时候判了同一条、写的时候建了新行"。
+        ## 为什么落在秘书这一层
 
-        ## 证明号从哪来
-        第 N 份：`verifications.proof_list(row)` 的最大证明号 + 1（读口径只有那一处）。
-        canonical 还是空的时候（先登记命题、后补证明），这一份就是 #p1，写 `proof_text`
-        那一格而不是清单 —— 同一格不许有两个权威。
-
-        ## 依赖落在哪一维
-        这一笔的依赖全部落在 `used_by="stmt:<号>#pN"`（第 N 条证明）上，`path_group`
-        照旧是"第几条路径"。两条证明的依赖面因此分开，`_DepGraph.groups_of` 读出来
-        是 `{1: {…}, 2: {…}}` 两维（既有机制，不在这里重写）。
-
-        ## 谁说了算（2026-10-24 晚，业主改口径；2026-11-08 收成两档）
-        业主逐字：「不用机械判据，让秘书洗定理名，让秘书判」，准绳是「定理描述一致
-        （什么条件推出什么结论），就是一个定理」；2026-11-08 又逐字：「没有判不了」。所以：
-
-        - `adjudication.checked`（秘书判成了）⇒ 它说了算：`same` ⇒ 并进它点名的
-          `same_as` 那一条（那一条读不到/不可并 ⇒ 受控拒，不新建）；`different` ⇒ 不并，
-          照常新建（这是"查过了、确实不是"）；
-        - 试过而没判成（`attempted=True` + `checked=False`：超时 / 坏 JSON / 词表外结论 /
-          same 点不出号 / 检索面没建成）⇒ 受控拒（`same_statement_unjudged`）：不新建、
-          不合并。"没判成不等于不是同一条"—— 拿它当 different 去新建，就是重复行的来源；
-        - 没有判断面（没缝 / 开关关着）⇒ 2026-11-04 的确定性兜底：只认"确定性键相同"
-          这一档等价改写，词面相似度一个字节都不决定并；没并的那一档留
-          `adjudication.fail_closed` + `why_not_merged` 两个读数。
+        "B 交内容、秘书实际操作增改查"：判"这两条是不是同一条定理"正是查重那一件活，
+        而查重的读数必须与落盘在同一笔事务里 —— 分两处就会出现"读的时候判了同一条、
+        写的时候建了新行"。
         """
         from . import verifications as VR   # 惰性：证明清单 / 签名状态的唯一读口径
 
