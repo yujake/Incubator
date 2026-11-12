@@ -205,8 +205,8 @@ def slugify(text: str, limit: int = 60, fallback: str = "untitled") -> str:
     """把任意文本变成安全的文件名片段 —— 全项目唯一的一份 slug 规则。
 
     ``fetch.slugify`` 转发到本函数（唯一判据），参数名与默认值由调用点显式表达。
-    这份契约与 ``fetch`` 原先那份的差别只在两处：本函数保留 CJK（那份把 CJK 一并
-    当分隔符剥掉），空结果回退 ``"untitled"``（那份回退 ``"download"``）。
+    与 ``fetch`` 那份的差别只在两处：本函数保留 CJK（那一份把 CJK 一并当分隔符剥掉），
+    空结果回退 ``"untitled"``（那一份回退 ``"download"``）。
 
     ## 规则与理由
 
@@ -341,7 +341,7 @@ _TEXT_CITATION = re.compile(r"(?<![\w:/])([A-Za-z][A-Za-z0-9_]*):([A-Za-z0-9][A-
 def find_citations(text: Any, *, prefixes: Iterable[str] | None = None) -> list[dict[str, str]]:
     """从自由文本里扫出引用记号，按出现次序返回（同一个记号只出现一次）。
 
-    业主口径：「B 只交定理内容 + 证明过程」，而「依赖 = 证明过程里引用到的那些号」
+    口径：「B 只交定理内容 + 证明过程」，而「依赖 = 证明过程里引用到的那些号」
     ⇒ 秘书要从证明文本里逐条扫出引用。这一格就是那件事的唯一实现（`citation_ref_parts`
     只解析一条已经切好的 citation，没有"从一段话里找出来"的那一半）。
 
