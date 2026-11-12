@@ -5398,13 +5398,12 @@ def _manuscripts_by_statement(root: Path) -> dict[str, list[dict[str, Any]]]:
     except OSError:
         return out
     for path in paths:
-        # 目录是身份的一部分（设计 3.1.1 第 1 条）：把 `reports/` 带上再判。
+        # 目录是身份的一部分：把 `reports/` 带上再判。
         got = parse_manuscript_name(f"{_MFAM.MANUSCRIPT_DIR}/{path.name}")
         if not (got.get("checked") and got.get("family")):
             continue
-        # 2026-11-09（T2）：`-v2` 历史档现在读成 `checked=True/tier=legacy`
-        # （旧读法是 `checked=False`）；它仍然不进这一格。`e-num` 进族后也不进
-        # （这一格问的是"证明手稿"，普通数值稿没有 `## 依赖`）。
+        # `-v2` 历史档读成 `checked=True/tier=legacy`；它不进这一格。`e-num` 进族后
+        # 也不进（这一格问的是"证明手稿"，普通数值稿没有 `## 依赖`）。
         if (got.get("tier") != _MFAM.TIER_FAMILY
                 or got.get("family") not in ("f-proof", "b-proof", "e-proof")):
             continue
@@ -5423,13 +5422,10 @@ def _manuscripts_by_statement(root: Path) -> dict[str, list[dict[str, Any]]]:
 def dependency_face_reading(store: Any, project_root: Any = None) -> dict[str, Any]:
     """收工门的依赖面那一格：`present N / 自足 M / 缺节 K / 未读 U`（只报不拦）。
 
-    ## 为什么需要这一格（`temp/dep_probe/REPORT-dependency-surface.md` 第 2 条 / 第 5 条）
+    ## 为什么需要这一格
 
-    改前收工门不数 `dependencies`（`secretary.py` 那一段的源码自证逐字：「收工门不数
-    `dependencies`、读侧也没有一格问过这件事 ⇒ 依赖面 0 行是静默的」）。后果是
-    「写 0 条与写 5 条在收工读数上同价」：`verify` 对 0 行不产生一条 issue，收工门
-    也没有一格点名，盘上 35 份空表的手稿就这么一路静默过去。
-
+    收工门与读侧都不数 `dependencies`，于是「写 0 条与写 5 条在收工读数上同价」：
+    `verify` 对 0 行不产生一条 issue、收工门也没有一格点名 —— 依赖面 0 行是静默的。
     这一格只做"让 0 被看见"这件事：它是一格读数（`readings`），不进 `status`、
     不产生 blocker、不动退出码 —— 自足的证明仍然是合法形态，必须放行。
 
