@@ -337,6 +337,17 @@ def _question_of(event: Mapping[str, Any]) -> Question:
                                       or event.get("multiSelect")))
 
 
+def _pending_from_events(events: Sequence[Mapping[str, Any]]) -> list[Question]:
+    """已读好的事件 ⇒ 还没被回答的问题（`pending_questions` 与 `pending_view` 共用）。
+
+    共用这一处是为了让"问了还没答"只有一份判据，同时让 `pending_view` 不必
+    为了拿待答清单再把同一段会话读一遍。
+    """
+    answered = {str(e.get("qid")) for e in events if e.get("kind") == ANSWER_KIND}
+    return [_question_of(e) for e in events
+            if e.get("kind") == ASK_KIND and str(e.get("qid")) not in answered]
+
+
 def pending_questions(session_root: Path | str, *, sid: str | None = None,
                       cache: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
                       ) -> list[Question]:
@@ -347,17 +358,7 @@ def pending_questions(session_root: Path | str, *, sid: str | None = None,
     `cache` 是 `{sid: 事件}`（见 :func:`_events`），给了且命中就不再读盘。
     """
     root = Path(session_root)
-    events = _events(root, sid, cache=cache)
-    answered = {str(e.get("qid")) for e in events if e.get("kind") == ANSWER_KIND}
-    out: list[Question] = []
-    for e in events:
-        if e.get("kind") != ASK_KIND:
-            continue
-        qid = str(e.get("qid"))
-        if qid in answered:
-            continue
-        out.append(_question_of(e))
-    return out
+    return _pending_from_events(_events(root, sid, cache=cache))
 
 
 def list_questions(session_root: Path | str, *, sid: str | None = None) -> list[Question]:
@@ -417,8 +418,14 @@ def read_replies(session_root: Path | str, *, role: str | None = None,
     """
     root = Path(session_root)
     events = _events(root, sid)
-    asked = {str(e.get("qid")): str(e.get("role") or "") for e in events if e.get("kind") == ASK_KIND}
-    text_of = {str(e.get("qid")): str(e.get("text") or "") for e in events if e.get("kind") == ASK_KIND}
+    asked: dict[str, str] = {}
+    text_of: dict[str, str] = {}
+    for e in events:
+        if e.get("kind") != ASK_KIND:
+            continue
+        qid = str(e.get("qid"))
+        asked[qid] = str(e.get("role") or "")
+        text_of[qid] = str(e.get("text") or "")
     out: list[dict[str, Any]] = []
     for e in events:
         if e.get("kind") != ANSWER_KIND:
@@ -623,11 +630,8 @@ def pending_view(session_root: Path | str, *, sid: str | None = None,
         if e.get("kind") == ASK_KIND:
             qid = str(e.get("qid") or "")
             index_of.setdefault(qid, i)
-    out: list[dict[str, Any]] = []
-    for q in pending_questions(root, sid=sid, cache=cache):
-        out.append(question_view(q, sid=str(sid or ""),
-                                 index=index_of.get(q.qid)))
-    return out
+    return [question_view(q, sid=str(sid or ""), index=index_of.get(q.qid))
+            for q in _pending_from_events(events)]
 
 
 def workspace_pending_view(session_root: Path | str, *,
