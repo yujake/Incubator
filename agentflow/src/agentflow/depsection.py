@@ -880,6 +880,11 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
         if not missing and len(header_cells) == len(found):
             parse_order = [found[f] for f in present_fields]
     # ---- 逐行读表格（表头之后：分隔行跳过，其余每一行都要是完整的一条）
+    # 字段名 → (表头认列用的键, 人话列名)。改前这一格是逐行逐格现扫一遍
+    # `next((k, n) for f, k, n in COLUMN_KEYS if f == field)`（行数 × 列数 次
+    # 4 元素线性查找，每个格还要建一个生成器）；`COLUMN_KEYS` 是模块级常量、
+    # 循环里不动它 ⇒ 建一次映射，逐格 O(1) 取。取到的 `(keys, name)` 与改前逐字相同。
+    _column_of = {field: (keys, name) for field, keys, name in COLUMN_KEYS}
     for line_no, raw in table[1:]:
         cells = _cells(raw)
         if _is_separator(cells):
@@ -893,7 +898,7 @@ def parse_dependency_section(text: str) -> dict[str, Any]:
         row: dict[str, Any] = {"line": line_no}
         bad: list[str] = []
         for idx, field in enumerate(present_fields):
-            _keys, name = next((k, n) for f, k, n in COLUMN_KEYS if f == field)
+            _keys, name = _column_of[field]
             src = parse_order[idx]
             value = (cells[src] if src < len(cells) else "").strip().strip("`").strip()
             if not value:
@@ -1444,7 +1449,12 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
             continue
         raw_id, raw_path, raw_sha = (c.strip().strip("`").strip() for c in cells[:3])
         raw_no = cells[3].strip().strip("`").strip() if len(cells) > 3 else ""
-        if not any(raw_id.startswith(p) for p in CARRIED_KEYS):
+        #: 这一行的身份前缀（`stmt:` / `exp:` / `mss:`）。改前同一件事算两遍 ——
+        #: `any(raw_id.startswith(p) ...)` 判"是不是表头"、`next(...)` 再取前缀，
+        #: 两次扫的都是同一张三元组、同一个 `raw_id`。取一次，"有没有前缀"看它是否为空
+        #: （`CARRIED_KEYS` 里没有空串 ⇒ `next` 取到的非空串 ⇔ `any` 为真）。
+        key = next((p for p in CARRIED_KEYS if raw_id.startswith(p)), "")
+        if not key:
             # 表头那一行（"命题号（stmt:NNNNNN ...）"）不算坏行：它第一格不以上面的前缀开头
             if raw_id.startswith("命题号") or not raw_id:
                 continue
@@ -1465,7 +1475,6 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
                     "why": (f"证明号那一格要是 >= 1 的整数（可写 `2` / `#p2`；收到 "
                             f"{raw_no!r}）—— 留空才是 #p1")})
                 continue
-        key = next(p for p in CARRIED_KEYS if raw_id.startswith(p))
         sid = raw_id[len(key):].strip()
         if key == "mss:":
             # 稿号不是 `stmt:` 那种 6 位十进制：它是 `plan-<计划号>` 或 `<命题号>`
@@ -2111,11 +2120,13 @@ def dependency_review(text: str,
         _add(got)
 
     # ③ `## 依赖` 表里的号：同样要在册 ∧ 等级够（同一个判据，坐标换成行号 + 表里写的步号）。
-    table_ids: list[str] = []
+    # `table_set` 就是下面 ④ 要用的那张集合：改前先攒一个 `table_ids` 列表（每行一次
+    # `sid not in table_ids` 的线性查重 ⇒ O(行数²)）再 `set(table_ids)` 转一次，
+    # 而那个列表除了这一次转换没有任何读者。这里是同一趟里直接进集合。
+    table_set: set[str] = set()
     for row in rows:
         sid = str(row.get("stmt_id") or "")
-        if sid not in table_ids:
-            table_ids.append(sid)
+        table_set.add(sid)
         if sid in flagged:
             continue
         got = _admissible(
@@ -2133,7 +2144,6 @@ def dependency_review(text: str,
 
     # ④ 表与正文的引用集合必须一致：两边差集逐条点名（表多一行也是缺陷）。
     body_set = set(body_refs)
-    table_set = set(table_ids)
     for ref in body_refs:
         if ref in table_set:
             continue
