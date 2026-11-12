@@ -295,6 +295,8 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
     else:
         # 单跑这一条时照旧：`error_action_stats` 自己就会读那两处（不重复读盘）。
         stats = ES.error_action_stats(target)
+    # `by_class()` 每次现算全部类目 × 角色；这条读数要用它两处（classes / unknown）。
+    classes = stats.by_class()
     data: dict[str, Any] = {"by_role": {r: dict(c) for r, c in stats.by_role.items()},
                             "role_total": dict(stats.role_total),
                             "total": int(stats.total),
@@ -305,7 +307,7 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
                             "state_readings": {r: dict(c) for r, c
                                                in stats.state_readings.items()},
                             "state_readings_total": int(stats.state_readings_total),
-                            "classes": [dict(one) for one in stats.by_class()],
+                            "classes": [dict(one) for one in classes],
                             "class_state": {k: dict(v) for k, v in stats.class_state.items()},
                             "samples": {k: [dict(s) for s in v]
                                         for k, v in stats.samples.items()},
@@ -324,7 +326,7 @@ def errors_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
             "unclassified_signal",
             f"结构判据认不出族的那几条没有猜类目：{loose}（各自的那一类里没加数；"
             "要收进来就给 errorstats 的族表补一条原话）"))
-    unknown = [one["category"] for one in stats.by_class()
+    unknown = [one["category"] for one in classes
                if str(one.get("state") or "") == "unknown"]
     if unknown:
         # 三态纪律：没查到的那几类必须点名，否则页面上的 0 会被读成"这一类没事"。
