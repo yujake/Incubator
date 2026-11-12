@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-13，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **304 个 `.py`、277,168 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,839 行（`agent_loop.py`，14,569 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **304 个 `.py`、277,167 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,839 行（`agent_loop.py`，14,569 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-13 p280（提示词批路 · 设计对齐最后一项，本批记账）**：304 个 `.py` 不变；
