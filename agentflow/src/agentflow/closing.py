@@ -3247,7 +3247,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         "informational_rows": list(informational_rows),
         "literature_unprocessed": _unprocessed_cache,
         "duplicate_ids": list(duplicate_ids),
-        # E-04a/E-04b 的读数：哪几个"自动分支档"只被 `na` 行顶着
+        # 读数：哪几个"自动分支档"只被 `na` 行顶着
         # （`na` 不再能关掉分支；这里如实报出"表里只给了 na"这件事）。
         "na_only_branch_kinds": na_only_branch_kinds,
         "note": ("`reading_version` 变了 ⇒ 与历史读数**不可直接比**（口径变了）。"
@@ -3272,11 +3272,11 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             "`attack_plan_rows` 只报立项数、不判推进 —— 它一个读数撑不起一张验收表。"
             "至少要有几行是真的按台账现算的"))
         return
-    # ---- 覆盖面（`draft/37` §137）：研究型项目的验收表要覆盖研究链四个环节。
+    # ---- 覆盖面：研究型项目的验收表要覆盖研究链四个环节。
     # 「0 也是读数」：所以缺的是那一行，不是那个数（写 0 与删掉一行都会红，
     # 但前者留下读数、后者留下一个空环节 —— 两者分开报）。
     # 参与覆盖面的行 = 除 `unreadable`（连 `kind` 都不可信）与 `informational`
-    # （只报数、不判：2026-10-19，「攻」那一格只认 `plan_progress_rows`）以外的所有行。
+    # （只报数、不判：「攻」那一格只认 `plan_progress_rows`）以外的所有行。
     coverage_kinds = [str(r.get("kind") or "") for r in out
                       if acceptance_row_state(r) not in ("unreadable", "informational")]
     try:
@@ -3289,12 +3289,12 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             f"{exc} ⇒ 研究链覆盖面这一格没查成（不是「覆盖齐了」）"))
         return
     rep.readings["acceptance"]["research_chain"] = chain
-    # E-04b：整环只有 `na` 行的那些环 —— 如实报出来（读数），
-    # "这算不算覆盖"由 M/秘书判断（机器不判 fail/unknown，`draft/52` C1）。
+    # 整环只有 `na` 行的那些环 —— 如实报出来（读数），
+    # "这算不算覆盖"由 M/秘书判断（机器不判 fail/unknown）。
     rep.readings["acceptance"]["research_chain"]["na_only_groups"] = chain["na_only_groups"]
     if chain["missing"]:
         unmet.append("研究链覆盖面：验收表里一行都没有的环节 —— " + "；".join(chain["missing"]))
-    # ---- D-38 第二步（2026-10-24）：老工作区的验收表里根本没有「论文对应表」这一档。
+    # ---- 老工作区的验收表里根本没有「论文对应表」这一档。
     #
     # 兼容性口径写死在这里（`acceptance_absent_kind_state` 是唯一出口）：缺这一行
     # 读成 `unknown`（没查成），不判红 —— 不进 `unmet`、不往 `rows` 里塞一行假的读数
@@ -3316,9 +3316,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         rep.readings["acceptance"]["missing_kind_state"] = absent_state
         rep.readings["acceptance"]["problems"] = list(
             rep.readings["acceptance"].get("problems") or []) + [absent_reason]
-    # ---- 稿子改完之后有没有再复核（`draft/39` §6.46 的 D57）：验收表里没写这一档时，
+    # ---- 稿子改完之后有没有再复核：验收表里没写这一档时，
     # 门替它报出来 —— 否则「G.revise 追加的断言从未被审过」可以整趟静默留下
-    # （T5 第 5 趟：`review_findings` 0 条、七格全绿，而现行版 `68bfc4c7…` 没有任何签名）。
+    # （`review_findings` 0 条、七格全绿，而现行版没有任何签名）。
     # 这一档写进验收表时由它自己那一行判（含 `na` + 理由那条出口），门不重复说话。
     if "reviewed_current_rows" not in computed_kinds:
         try:
@@ -3339,11 +3339,11 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                   "那一版）⇒ 交付里会带着没审过的断言。派 `H.verify_fixes` / `H.review` 复核"
                   "现行版。注意：写一行 `na` 关不掉这一条（它读的是签名链与现行版哈希，"
                   "与验收表怎么写无关）")
-        # ---- 乙（2026-11-11）：有 open findings 而这一版没有复审记录 ⇒ 必须点名。
+        # ---- 有 open findings 而这一版没有复审记录 ⇒ 必须点名。
         #
         # 这一支与上面那一支（`stale_signoffs`）分开：上面问的是「签名钉没钉在这一版上」，
-        # 这一支问的是「H 的缺陷处置完了没有」。真机现场两者都不满足，而旧门只在
-        # `stale` 上说话 ⇒ 没有签名链的 workspace 里，7 条 open findings 整趟静默。
+        # 这一支问的是「H 的缺陷处置完了没有」。两者都不满足而只在 `stale` 上说话的话，
+        # 没有签名链的 workspace 里 open findings 会整趟静默。
         open_rows = list((cur_detail or {}).get("open_findings_unreviewed") or [])
         if open_rows:
             unmet.append(
@@ -3360,8 +3360,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 + " —— 手工判词只有 H 能显式复核掉（`review.record_finding` 的复核通道）；"
                   "机械发现由 G 改稿后派 `H.verify_fixes` 复核这一版。"
                   "注意：写一行 `na` 关不掉这一条（它从 `review_findings` 与签名链现算）")
-    # ---- 稿件是骨架还是手稿（`draft/39` §6.48 的 D63）：有 sections 却每节都空的行，
-    # 验收表里没写这一档时由门报出来（真机读数 T5 第 7 趟 `p8g`：三节 body 全是空串）。
+    # ---- 稿件是骨架还是手稿：有 sections 却每节都空的行，
+    # 验收表里没写这一档时由门报出来（三节 body 全是空串也算"有稿件"就是这个缺口）。
     if "document_body_rows" not in computed_kinds:
         try:
             _got, body_detail = _leg_reading(
@@ -3379,9 +3379,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                   "把每一节的正文写进去（`G.build_document` 的 `sections` 要带 `body`）。"
                   "注意：给这一档写一行 `na` 关不掉它 —— 这一条是从 `documents` 表**现算**的"
                   "（E-04a 的守卫只看真算过的行）；没有 sections 的清单型交付本来就不进这一档")
-    # ---- 断言与它引的证据对不对得上（`draft/39` §6.48 的 D61/D62）：验收表里没写这一档时，
-    # 门把「对不上」的那些断言逐条报出来（真机读数 T5 第 7 趟 `p8g`：两条 exp 引用互换、
-    # 一条 lit 引用跑题，而所有机械读数全绿）。
+    # ---- 断言与它引的证据对不对得上：验收表里没写这一档时，
+    # 门把「对不上」的那些断言逐条报出来（两条 exp 引用互换、一条 lit 引用跑题，
+    # 而所有机械读数全绿，就是这一档要抓的形态）。
     if "claim_evidence_fit_rows" not in computed_kinds:
         try:
             fit = citation_fit(store)
@@ -3397,8 +3397,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 + " —— 把引文改成真的支持这条断言的那一条（或改断言让它与证据相符）。"
                   "注意：写一行 `na` 关不掉它（这一条是从 `documents` 现算的）；"
                   "两侧都取不到可判特征的那一类记 `unjudged`，不会进这一条")
-    # ---- 交接账本是不是被模板灌满（`draft/39` §6.49 的 D64，用户 2026-10-06 裁）：
-    # 验收表里没写这一档时，门替它报出来 —— 五趟真机的账本里 100% 是框架派生的模板、
+    # ---- 交接账本是不是被模板灌满：
+    # 验收表里没写这一档时，门替它报出来 —— 账本可以 100% 是框架派生的模板、
     # `refs` 全空，而"手稿 N 行"这个读数一直在替噪声背书。
     if "manuscript_rows" not in computed_kinds:
         try:
@@ -3415,11 +3415,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 "（派活时带 `notify`，收工时的 `final.notify`）。"
                 "注意：写一行 `na` 关不掉它（这一条是从 `manuscripts/handoffs.jsonl` 现算的）；"
                 "动作驱动的一趟也能自撰交接 —— 用一次 `handoff` 把结论与编号写给下一位")
-    # ---- 五条「内容」判据（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）：
-    # D66（算要结论 / 造要我方派生命题）· D67（C 的产物要进交付）· T1 口径（一条都没核到
-    # 不算交付）· T3 口径（论文要承载本轮结果）。与上面四条同族：门替没写进表里的档说话，
-    # `na` 关不掉它们（E-04a 的守卫口径一致）；读不出来的当成「没查成」记读数，
-    # 绝不折成「通过」。
+    # ---- 五条「内容」判据：「算」要结论、「造」要我方派生命题、C 的产物要进交付、
+    # 一条引文都没核到不算交付、论文要承载本轮结果。与上面四条同族：门替没写进表里的档
+    # 说话，`na` 关不掉它们；读不出来的当成「没查成」记读数，绝不折成「通过」。
     try:
         content_unmet, content_readings = content_leg_unmet(
             store, Path(resolve_under_workspace(store, project_dir)),
@@ -3437,7 +3435,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             + "；".join(unmet)
             + "。台账是唯一能复算的地方 —— 把凭据落进台账（不是只写进报告）再收工"))
     elif unreadable_rows:
-        # CC-02（`draft/52` 裁定 (a)）：行级读不懂 ⇒ 整格 `unknown`（绝不 `pass`），
+        # 行级读不懂 ⇒ 整格 `unknown`（绝不 `pass`），
         # 而好行的读数已经在上面留下了。逐条理由已各自 push 成 warning。
         rep.status["acceptance"] = "unknown"
         rep.findings.append(Finding(
@@ -3448,7 +3446,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             "其余行的读数照常给出 —— 这与「结构级读不懂（顶层不是 JSON / 不是数组）」"
             "不同一档：那时没有任何行可读"))
     elif unknown_rows:
-        # 业主 2026-10-18：`literature.unprocessed > 0` 时那一行记 `unknown` ⇒ 整格
+        # `literature.unprocessed > 0` 时那一行记 `unknown` ⇒ 整格
         # 也必须跟着 `unknown`（否则「行记 unknown、格记 pass」＝这一条什么都没改）。
         rep.status["acceptance"] = "unknown"
         rep.findings.append(Finding(
@@ -3464,23 +3462,22 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 
 #: 「这次调用没有会话身份」——与 `sid=None`（= 读缺省会话）「刻意分开」的两个输入。
 #:
-#: 为什么必须分开（`draft/37` §63 的真机读数，修法 B）：运行内 `conductor.closing`
-#: 报 `user_pending: pass`，而同一次运行外部带 sid 的读数报 `fail` —— 假绿的病因
-#: 是工具体按 `sid=None` 走到了 `sessions/<今天>.jsonl`，而那一趟的提问落在
-#: `sessions/real11.jsonl` 里。"读缺省会话"是一个「具体且合法」的问题
-#: （运维会问："这个工作区今天那段会话在等什么？"），所以 `sid=None` 的语义不改；
-#: 缺的是第三个输入："调用方「没有」会话身份，这一格问不出来"。
+#: 为什么必须分开：运行内 `conductor.closing` 可以报 `user_pending: pass`，而同一次运行外部
+#: 带 sid 的读数报 `fail` —— 假绿的病因是工具体按 `sid=None` 走到了
+#: `sessions/<今天>.jsonl`，而那一趟的提问落在另一个会话文件里。"读缺省会话"是一个
+#: 「具体且合法」的问题（运维会问："这个工作区今天那段会话在等什么？"），所以
+#: `sid=None` 的语义不改；缺的是第三个输入："调用方「没有」会话身份，这一格问不出来"。
 #: 把它折进 `sid=None` 就会重演同一个假绿 —— 而这次连"读错了文件"都不会有人发现。
 NO_SESSION = ""
 
 #: `closing_session_identity` 的两个受控拒绝码（与 CLI 的退出码 2 同一档）。
 #:
-#: 为什么要有它们（2026-11-03 第二笔）：`agentflow closing` 在 e4e5efff 已经先定
-#: 会话身份、号不在盘上就受控拒绝（退出码 2，门不跑）；而 API 那几个出口
+#: 为什么要有它们：`agentflow closing` 先定会话身份、号不在盘上就受控拒绝
+#: （退出码 2，门不跑）；而 API 那几个出口
 #: （`readouts.gates_readout` / `conductor.closing` / 将来的网页端点）直接调
 #: `check_closing(sid=…)`，`sessions.read_session` 把"文件不存在"读成空会话 ⇒
 #: `user_pending` 拿到 `pass`。同一件事两个出口，一个拒绝一个放行。
-#: 现在把"读哪一场"抽成本模块唯一的一份实现（`closing_session_identity`）：
+#: 所以把"读哪一场"抽成本模块唯一的一份实现（`closing_session_identity`）：
 #: CLI 与 API 都先问它，拒绝时用的是同一句话、同一个码（2）。
 NO_SUCH_SESSION = "no_such_session"
 BAD_SESSION_ID = "invalid_session_id"
@@ -3504,18 +3501,18 @@ class SessionIdentity(NamedTuple):
 def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
     """`agentflow closing` / `check_closing` 的会话身份：`(sid, 读数里那一句, 拒绝理由, 码)`。
 
-    三态（`draft/37` §63 + 153-U-07 + 2026-11-03 第二笔）：
+    三态：
 
     - `given is None` ⇒ 读缺省会话（`sessions/<今天>.jsonl`，运维口径、合法）；
     - `given` 是空串（`NO_SESSION`）⇒ 没给号：点名"缺省会话"，`user_pending` 那一格
-      「没查成」—— 不许折进 `None` 的"读缺省会话"（§58/§63 的假绿）；
+      「没查成」—— 不许折进 `None` 的"读缺省会话"（假绿）；
     - 给了号、且那一段在盘上 ⇒ 读它，读数点名这个号；
     - 给了号、盘上没有（或它根本不是会话号）⇒ 受控拒绝（退出码 2，门不跑）。
 
     为什么"没给"落到 `NO_SESSION` 而不是 `None`：两个输入混用，缺省会话里没有提问
-    就会被读成"没问过"——§58/§63 的假绿。
+    就会被读成"没问过"。
 
-    为什么这一份实现住在 `closing.py`（2026-11-03 第二笔）：CLI 与 API 两个出口必须
+    为什么这一份实现住在 `closing.py`：CLI 与 API 两个出口必须
     拒绝同一件事、用同一句话、给同一个码；两处各写一份 = 下一次改文案只改一边，
     于是同一个号在一个出口是"拒绝"、在另一个出口是"空读数"。
     """
@@ -3559,8 +3556,8 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
         sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "", "")
 
 
-#: 收工判据的那一句话（业主 2026-10-09 逐字）——三处（`to_dict` / 工具 / CLI）共用一份措辞，
-#: 免得"谁判收工"这件事在不同出口里被说成三件不同的事。
+#: 收工判据的那一句话（三处（`to_dict` / 工具 / CLI）共用一份措辞，
+#: 免得"谁判收工"这件事在不同出口里被说成三件不同的事）。
 VERDICT_NOTE = (
     "收工与否由 M 判（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」"
     "＋「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令"
@@ -3571,23 +3568,22 @@ VERDICT_NOTE = (
     "『判过能交』）。"
 )
 
-#: 报告体例由 M 裁定（R9 / `draft/52` 裁决 1 = C''）—— 门不再自带任何节名清单。删掉九节（`REPORT_SECTIONS`）
-#: 与分栏标记（`SPLIT_MARKERS`）的理由：那两样出自 `draft/37` §14.4，是 review 线的交付规格，被塞进通用收工门的
-#: `report_shape` 档之后，每个研究型工作区都被按审稿报告的排版来判 —— 那是"只为某一条线建的标准"（用户
-#: 2026-10-06 口径：直接废除，不是降为读数）。真机读数也说明它判错了对象：46 份报告里 45 份"九节齐全"，而缺
-#: 附件三件套的有 9 份 —— 门在排版上一分不让，在"这条结论是不是我们自己做的、依据在哪、文件有没有被换过"上
+#: 报告体例由 M 裁定 —— 门不再自带任何节名清单。删掉九节（`REPORT_SECTIONS`）
+#: 与分栏标记（`SPLIT_MARKERS`）的理由：那两样是 review 线的交付规格，被塞进通用收工门的
+#: `report_shape` 档之后，每个研究型工作区都被按审稿报告的排版来判 —— 那是"只为某一条线建的标准"。
+#: 而门在排版上一分不让、在"这条结论是不是我们自己做的、依据在哪、文件有没有被换过"上
 #: 却一个字都没判。现在的口径：体例归 M，门只核两件事 ① 附件三件套（`ATTACHMENT_FIELDS`）—— 来源与完整性，
 #: 不是排版，保留判实；② M 声明的体例有没有兑现 —— M 若落下 `REPORT-STYLE.json`（`{"sections": [...]}`，见
 #: :data:`REPORT_STYLE_NAME`），门就逐节核它在不在报告里；没声明 ⇒ 不判体例（读数里如实写 `none`，不是"通过"）。
 REPORT_STYLE_NAME = "out/review/REPORT-STYLE.json"
 
-#: 附件三件套（§16 P3 报告行逐字要求）。
+#: 附件三件套（报告行逐字要求）。
 ATTACHMENT_FIELDS: tuple[str, ...] = ("origin=own_result", "依据", "sha")
 
-#: 验收读数的口径版本（`draft/46-04` §6.4 第 1 条：每改一次口径必须能说清"从哪一趟起口径变了"）。
-#: `readings["acceptance"]["reading_version"]` 直接读它。必须有：33 份历史表 / 204 行今天读出的 `got` 是旧口径下的
-#: 数，没有版本号就无从判断差异来自"研究对象变了"还是"门的口径变了"（口径锚点 `p8g`）。沿革（每档一句，判据
-#: 细节在各档自身的实现与 `draft/46-04`，这里不复述）：
+#: 验收读数的口径版本（每改一次口径必须能说清"从哪一趟起口径变了"）。
+#: `readings["acceptance"]["reading_version"]` 直接读它。必须有：历史表读出的 `got` 是旧口径下的
+#: 数，没有版本号就无从判断差异来自"研究对象变了"还是"门的口径变了"。沿革（每档一句，判据
+#: 细节在各档自身的实现里，这里不复述）：
 #: `"2026-10-06-C"`：E-05（`min` 与 `implicit_min` 取大 + 引文分母改用只读基线 `source/main.tex` +
 #: `manuscript_edited` 去空白后比）、CC-05（缺基线 ⇒ 该行 `not_applicable`）、E-04a（`na` 只豁免自己那行）、
 #: E-04b、R9（九节与分栏判据废除）。`"2026-10-06-C2"`（`draft/52` CC-02 裁定 (a)）：行级分界 —— 一行读不懂只废
@@ -3606,7 +3602,7 @@ ACCEPTANCE_READING_VERSION = "2026-10-19-C5"
 class LegNotApplicable(Exception):
     """这一档在这个工作区里算不出来，而原因是"它本来就该用别的档"。
 
-    与"读不到台账 ⇒ 没查成"必须分开（`draft/46-04` §2.8 ③ 逐字）：
+    与"读不到台账 ⇒ 没查成"必须分开：
 
     - 缺只读基线（`manuscript_edited` / `citation_records_vs_bibitems` 要
       `source/main.tex`）⇒ 这是这一行不适用（`not_applicable`），
