@@ -172,16 +172,17 @@ def assign(job: Job, pid: int) -> bool:
         raise JobObjectUnavailable(unavailable_reason())
     if job.closed:
         raise JobObjectUnavailable("作业已经关掉了（关掉之后 OS 已经收过树）")
+    pid_no = int(pid)
     k32 = _k32()
-    h = k32.OpenProcess(_PROCESS_SET_QUOTA | _PROCESS_TERMINATE, False, int(pid))
+    h = k32.OpenProcess(_PROCESS_SET_QUOTA | _PROCESS_TERMINATE, False, pid_no)
     if not h:
         return False
     try:
         ok = bool(k32.AssignProcessToJobObject(_w.HANDLE(job.handle), _w.HANDLE(h)))
     finally:
         k32.CloseHandle(_w.HANDLE(h))
-    if ok and int(pid) not in job.pids:
-        job.pids.append(int(pid))
+    if ok and pid_no not in job.pids:
+        job.pids.append(pid_no)
     return ok
 
 
@@ -242,12 +243,17 @@ def descendants_of(pid: int, *, max_depth: int = 8) -> list[int]:
     finally:
         k32.CloseHandle(_w.HANDLE(snapshot))
     out: list[int] = []
-    frontier = [int(pid)]
+    seen: set[int] = set()
+    root = int(pid)
+    frontier = [root]
     for _ in range(max(1, int(max_depth))):
         nxt: list[int] = []
         for p in frontier:
             for c in children.get(p, []):
-                if c not in out and c != int(pid):
+                # `seen` 与 `out` 同一批元素：用集合判"进来过没有"，
+                # 别每加一个后代就把已有的那份从头扫一遍。
+                if c != root and c not in seen:
+                    seen.add(c)
                     out.append(c)
                     nxt.append(c)
         if not nxt:
@@ -307,9 +313,10 @@ def grace_then_kill(job: Job, *, grace_sec: float = 5.0, poll_sec: float = 0.3,
 def reap(job: Job) -> dict[str, Any]:
     """收割残留：列出还挂在作业里的 pid（给"每轮 reap_job"用；不杀，只报）。"""
     got = assigned_pids(job)
-    return {"pids": got.get("pids") or [], "checked": bool(got.get("checked")),
+    pids = got.get("pids") or []
+    return {"pids": pids, "checked": bool(got.get("checked")),
             "reason": got.get("reason") or "",
-            "count": len(got.get("pids") or [])}
+            "count": len(pids)}
 
 
 def close(job: Job) -> None:
