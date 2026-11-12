@@ -1,22 +1,11 @@
 # -*- coding: utf-8 -*-
-"""一个 agent 的声明（`goal-7f5116c1` 的 M2）：它"是什么"，写在一个地方。
+"""一个 agent 的声明：它"是什么"，写在一个地方。
 
-今天"一个 agent 由什么定义"散在六处、且每一处都是手抄的：
-
-| 处 | 内容 |
-|---|---|
-| `schema.py::ROLES` | 角色词表（禁改区） |
-| `tools/__init__.py` | `ROLES` / `TOOL_ROLES` / `READ_ONLY_ROLES`（禁改区） |
-| `capabilities.py` | `CAPABILITIES` / `ALLOWED_EDGES` / `WRITE_SETS`（禁改区） |
-| `agent_prompts.py` | `ROLE_BRIEFS` / `FACULTY_EMPHASIS` / `FACULTY_LOCAL` |
-| `host.py` | 每个角色的构造器 `agent_x()` |
-| `docs/ROLE-SPECS.md` | 每角色一节 + 手抄的动作表 |
-
-`AgentSpec` 的落点：每个角色自己的模块里写一份 SPEC，装配面（M3/M4）从这里读；每一格都有
-对账判据（`tests/test_agent_spec_reconciliation.py`）。M2 接管 `brief` / `emphasis` +
-`local_notes` / `read_only` / `summonable` / `edges` / `write_set` / `class_path`。
-没接管（写清楚，免得被读成"已经做完了"）：动作表 `ActionSpec` 还在 `capabilities.py`、构造
-工厂还在 `host.py`（M3 / M4 搬）；在那之前本模块不复制那两份数据。
+声明类型（`AgentSpec` / `AgentBrief` / `ActionSpec`）与受控词表在本模块；每个角色
+自己的 SPEC 写在 `specs/<角色>.py`，装配面从这里读，而不是各自手抄。每一格都有
+对账判据（`tests/test_agent_spec_reconciliation.py`）。动作表与构造依赖工厂都由
+`AgentSpec` 拥有：前者从 `specs/<角色>.py` 的 `ACTIONS` 来，后者是 `build` / `needs` /
+`peers` —— 于是"新建一个 agent"只是给它加一份声明。
 """
 from __future__ import annotations
 
@@ -24,17 +13,17 @@ import importlib
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping
 
-#: 角色可见性的唯一判定入口（业主 2026-10-22：「在Lean开关没开时隔绝L」）。
+#: 角色可见性的唯一判定入口（Lean 开关关着时隔绝 L）。
 #:
 #: 为什么把"哪个角色由 Lean 开关决定存在性"放在 `leanscope` 而不是本文件：本文件是
-#: 声明类型与注册表的落点（禁改区），而"今天谁是 Lean 只角色"是随施工单变的读数；
+#: 声明类型与注册表的落点（禁改区），而"谁是 Lean 只角色"是随施工单变的读数；
 #: 两件事分开之后，本文件只留一行"读它"，判定本身只有一处。
 from . import leanscope
 
 
 @dataclass(frozen=True)
 class AgentBrief:
-    """一个角色的手写部分（与 `agent_prompts.RoleBrief` 逐字对应；M3 之后由本模块拥有）。"""
+    """一个角色的手写部分（与 `agent_prompts.RoleBrief` 逐字对应）。"""
 
     duty: str
     boundary: tuple[str, ...]
@@ -50,7 +39,7 @@ class BuilderDeps:
 
     工厂（`AgentSpec.build`）只吃这个对象，不碰 `_Builder`：这样"一个角色要什么依赖"
     写在它自己的声明里（`needs` / `peers`），而"这些依赖怎么造"留在接线层（`host`）——
-    两件事分开之后，"新建一个 agent"不需要在 `host` 里加分支（`goal-7f5116c1` M4）。
+    两件事分开之后，"新建一个 agent"不需要在 `host` 里加分支。
     """
 
     role: str
@@ -58,7 +47,7 @@ class BuilderDeps:
     instance: str = ""
     #: 该角色用的模型缝（`_llm_for(role)` 已算好）
     llm: Any = None
-    #: 该角色的配置段（G/H 的那一份已经带 `actor`，与今天逐字一致）
+    #: 该角色的配置段（G/H 的那一份已经带 `actor`）
     config: Mapping[str, Any] = field(default_factory=dict)
     #: 检索后端（声明里 `needs=("providers",)` 时才给）
     providers: tuple[Any, ...] = ()
@@ -86,18 +75,18 @@ class AgentSpec:
     summonable: bool = True
     edges: tuple[str, ...] = ()
     write_set: frozenset[str] = frozenset()
-    #: 本角色的动作表（M3 起由 `specs/<角色>.py` 拥有；`capabilities.CAPABILITIES`
+    #: 本角色的动作表（由 `specs/<角色>.py` 拥有；`capabilities.CAPABILITIES`
     #: 从它派生）。`M` 是空元组：主控的"动作"是 `summon()` 本身，不是 Agent 方法。
     actions: tuple[ActionSpec, ...] = ()
     class_path: str = ""
-    #: 构造期依赖工厂（M4）：`(BuilderDeps) -> 实例`。写在角色自己的声明里，
+    #: 构造期依赖工厂：`(BuilderDeps) -> 实例`。写在角色自己的声明里，
     #: 于是"新建一个 agent"不需要在 `host` 里加分支。
     build: Callable[[BuilderDeps], Any] | None = None
     #: 工厂需要哪些装配期资源（`providers` / `downloader` / `extractor` / `workspace_root`）。
     #: 空元组 = 只要 `store` / `config` / `llm` / `actor`。
     needs: tuple[str, ...] = ()
     #: 构造期要拿到的邻居实例（D 要 C、F 要 E）——"谁能叫谁"之外的另一件事：
-    #: 这是"谁在构造期就握着谁"，今天由 `host._Builder.get()` 的同单例保证。
+    #: 这是"谁在构造期就握着谁"，由 `host._Builder.get()` 的同单例保证。
     peers: tuple[str, ...] = ()
 
     @property
@@ -116,9 +105,9 @@ class AgentSpec:
 
 
 class AgentRegistry:
-    """角色 ⇒ 声明。装配面（M3/M4）从这里读，而不是各自手抄。
+    """角色 ⇒ 声明。装配面从这里读，而不是各自手抄。
 
-    刻意不用模块级单例：`goal-7f5116c1` 的判据之一是"在测试里造一个临时角色"——
+    刻意不用模块级单例：判据之一是"在测试里造一个临时角色"——
     那要求"多一个角色"是给某个注册表加一条，而不是去改一个全局常量
     （全局常量会被 import 序与缓存绑住，测试之间互相污染）。
     """
@@ -138,9 +127,8 @@ class AgentRegistry:
     def get(self, role: str) -> AgentSpec:
         """取某个角色的声明；没有就抛（不返回 None：那会把"没登记"与"登记成空"混起来）。
 
-        业主 2026-10-22（「在Lean开关没开时隔绝L」）：由开关决定存在性的角色
-        （`leanscope.LEAN_ONLY_ROLES`）在开关关着时按"不存在"处理，抛
-        `leanscope.RoleHidden`（带 `reason="lean_off"` 的受控值）而不是把它的
+        由开关决定存在性的角色（`leanscope.LEAN_ONLY_ROLES`）在开关关着时按"不存在"
+        处理，抛 `leanscope.RoleHidden`（带 `reason="lean_off"` 的受控值）而不是把它的
         声明交出去 —— 否则"按名取 L"这条路会绕过角色表的隔绝。
         """
         if leanscope.is_hidden(role):
@@ -153,10 +141,10 @@ class AgentRegistry:
     def roles(self) -> tuple[str, ...]:
         """已登记的角色（按登记顺序）。
 
-        业主 2026-10-22：由开关决定存在性的角色（`leanscope.LEAN_ONLY_ROLES`）
-        在开关关着时不出现在这份读数里 —— 它是"角色表读数"的唯一来源，
-        装配面、提示词、名册与判据都读它。判定本身不在这里：`leanscope.is_hidden`
-        是唯一入口，这一行只是它的读者（所以改开关立刻跟着变，没有缓存）。
+        由开关决定存在性的角色（`leanscope.LEAN_ONLY_ROLES`）在开关关着时不出现在
+        这份读数里 —— 它是"角色表读数"的唯一来源，装配面、提示词、名册与判据都读它。
+        判定本身不在这里：`leanscope.is_hidden` 是唯一入口，这一行只是它的读者
+        （所以改开关立刻跟着变，没有缓存）。
         """
         return leanscope.visible_roles(self._specs)
 
@@ -167,10 +155,10 @@ class AgentRegistry:
     def summonable_roles(self) -> tuple[str, ...]:
         """可被召唤的角色（主控 M 不在其中）。
 
-        2026-10-22 第三班：与 :meth:`roles` 读同一个可见性判据。改前的写法直接遍历
-        `self._specs`，于是开关关着时它照样返回 L —— 而那一档 L "不存在"（`roles()`
-        里没有它），两份读数就自相矛盾：判据读到的"可召唤名单里有 L"与"角色表里没有 L"
-        只能有一句是真的。判定仍不在本方法里（`leanscope.is_hidden` 是唯一入口）。
+        与 :meth:`roles` 读同一个可见性判据：直接遍历 `self._specs` 会让开关关着时
+        这里照样返回 L，而 `roles()` 里没有它 —— 两份读数就自相矛盾：判据读到的
+        "可召唤名单里有 L"与"角色表里没有 L"只能有一句是真的。判定仍不在本方法里
+        （`leanscope.is_hidden` 是唯一入口）。
         """
         return leanscope.visible_roles(
             r for r, s in self._specs.items() if s.summonable)
@@ -201,10 +189,9 @@ def builtin_registry() -> AgentRegistry:
 
     为什么读 `specs/` 而不是九个角色模块：角色模块是实现（`agent_d` 4000+ 行，
     连带 store / capabilities / …），而注册表是给装配面与判据用的薄层 ——
-    M2 时只能这么取，是因为声明写在角色模块里；M3 把声明搬进 `specs/<角色>.py`
-    （叶子）之后，取声明不再需要拉起任何实现。"这一层是叶子"因此从注释里的承诺
-    变成了结构事实（判据：`tests/test_new_agent_is_one_spec.py` 会断言
-    取注册表不会把实现模块拉进来）。
+    声明搬进 `specs/<角色>.py`（叶子）之后，取声明不再需要拉起任何实现。
+    "这一层是叶子"因此是结构事实（判据：`tests/test_new_agent_is_one_spec.py`
+    会断言取注册表不会把实现模块拉进来）。
     """
     from . import specs as _specs
 
@@ -215,43 +202,37 @@ def builtin_registry() -> AgentRegistry:
     return reg
 
 
-# ---------------------------------------------------------------- 从 capabilities.py 搬来的
+# ---------------------------------------------------------------- 声明类型与声明词表
 #
-# 下面这四块原本在 `capabilities.py`（禁改区）。M3 把"角色动作表"的真身搬进
-# `specs/<角色>.py` 之后，`capabilities` 变成从它派生 —— 于是"声明类型"与
-# "声明词表"必须待在更低的一层（叶子），否则 `specs` 反过来 import `capabilities` 会成环。
-#
-# 搬移方式：逐字（含注释），判据见 `tests/test_agent_spec_reconciliation.py` 与
-# `tests/test_capabilities_two_layer.py`；`capabilities` 侧改成 `from .agentspec import …`，
-# 公开名与取值一个都没变。
+# 这四块与 `capabilities.py` 的公开名、取值逐字一致；`capabilities` 侧从本模块
+# import。它们必须待在比 `specs` 更低的一层（叶子），否则 `specs` 反过来 import
+# `capabilities` 会成环。对账判据见 `tests/test_agent_spec_reconciliation.py` 与
+# `tests/test_capabilities_two_layer.py`。
 
 #: 动作的副作用等级。与 `tools/base.SIDE_EFFECTS` 逐字一致（FC-07：副作用是一等公民）。
 #: 为什么不从 `tools.base` import 过来：`capabilities` 是更底层的声明层，
 #: 它要能被 `verify`、能被 CLI 单独读，而不该拖上整个工具层。两处字面量由
 #: :func:`assert_capabilities` 交叉断言（`assert set(SIDE_EFFECTS) == set(TOOL_SIDE_EFFECTS)`），
 #: 于是"两套说法"不可能悄悄分叉。
-#:
-#: B3 收官时 `network` 从这里与 `tools/base.py` 一起删掉（同一个原子改动）。
 SIDE_EFFECTS: tuple[str, ...] = ("none", "read", "write_local")
 
 
 #: 第一根轴（改不改我们拥有的东西）的取值。与 `tools.base.EFFECT` 逐字一致，
-#: 同样由 :func:`assert_capabilities` 交叉断言 —— 形态照抄既有第 5 条，
-#: 不发明第二套机制（P-13 §3.4）。
+#: 同样由 :func:`assert_capabilities` 交叉断言 —— 不发明第二套机制。
 EFFECT: tuple[str, ...] = ("none", "read", "write_local")
 
 
 #: 第二根轴（能不能触到我们不拥有的东西）的取值。与 `tools.base.EXTERNAL` 逐字一致。
 #:
 #: 能力层逐动作声明 `external`（`ActionSpec.external`），取值就是这里的三个。
-#: 词表仍必须在本层有一份，因为两份字面量的比对（第 5 条的同族断言）是
+#: 词表仍必须在本层有一份，因为两份字面量的比对（同族断言）是
 #: "两套说法不可能悄悄分叉"的唯一机器判据。
 EXTERNAL: tuple[str, ...] = ("none", "egress", "exec")
 
 
 #: `side_effect="unknown"` 单独存在，且不在 `SIDE_EFFECTS` 里。
 #:
-#: 为什么需要它：本轮的能力表是从真实代码推导的，有几个方法我读不出它到底写不写
+#: 为什么需要它：能力表按真实代码推导，但总有方法读不出它到底写不写
 #: （例如 `AgentC.register_tools` 只改自己进程内的注册表，`AgentF.e` 只是惰性建 E）。
 #: 把它们硬填成 `"read"` 是编造；填 `"none"` 也一样。按三态纪律，这里必须有一个
 #: "我不知道"的值，并且它必须让并发判据保守（未知 ⇒ 当写者处理 ⇒ 串行）。
@@ -280,18 +261,13 @@ class ActionSpec:
     handler_name: str = ""
     #: 逐动作的 `external` 声明（`none` / `egress` / `exec`）；`None` = 还没迁移。
     #:
-    #: 为什么这个字段现在才出现（B3 第 0 步，只读勘察结论）：在此之前
-    #: `action_axes` 只能从 `side_effect` 派生 external（`network` 走遗留翻译表、
-    #: 其余一律 `"none"`）⇒ 能力层结构上表达不了 `external="exec"`。
-    #: 于是"只改工具层"必然是半迁移，而 `declaration_divergences()` 会判成
-    #: "能力层低估了风险轴"、`assert_capabilities()` 第 [7] 条在导入期就炸
-    #: （实测：`pytest tests/test_policy.py` 收集期 ERROR）。
+    #: 为什么这个字段存在：没有它，`action_axes` 只能从 `side_effect` 派生 external
+    #: （`network` 走遗留翻译表、其余一律 `"none"`）⇒ 能力层结构上表达不了
+    #: `external="exec"`，`declaration_divergences()` 会判成"能力层低估了风险轴"。
     #:
-    #: 注意：`None` 默认值在 B3 收官后仍然保留，它是"未迁移"的显式标记，
-    #: 而三态纪律要求"没声明"与"声明成 `none`"是两件事 ——
-    #: 本轮把剩下的动作全部迁移了，判据里也不再有遗留分支，
-    #: 但字段本身不删（删了它，"未迁移"这件事就无法被表达，
-    #: 于是 `action_axes` 会把"没声明"静默读成 `("none", …)`）。
+    #: `None` 默认值保留：它是"未迁移"的显式标记，而三态纪律要求"没声明"与
+    #: "声明成 `none`"是两件事。字段本身不删（删了它，`action_axes` 会把
+    #: "没声明"静默读成 `("none", …)`）。
     external: str | None = None
 
     def __post_init__(self) -> None:
@@ -340,12 +316,12 @@ _I = {"type": "integer"}
 _N = {"type": "number"}
 _B = {"type": "boolean"}
 _ARR_S = {"type": "array", "items": {"type": "string"}}
-#: `array<integer>`。R-36（`draft/28` §164）为 `G.register_dependency.page_range` 新增。
+#: `array<integer>`，用于 `G.register_dependency.page_range`。
 #:
-#: 为什么必须新列一个：这里原来写的是 `_ARR_S`，而工具层
-#: （`doc_tools` 的 `doc.register_dependency`）写的是
-#: `{"type": "array", "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}` ——
-#: 于是没有任何一种取值能同时过两道门（实测 2026-09-29）：
+#: 为什么必须单列一个：`_ARR_S` 与工具层（`doc_tools` 的
+#: `doc.register_dependency`）的
+#: `{"type": "array", "items": {"type": "integer"}, "minItems": 1, "maxItems": 2}`
+#: 对不上，于是没有任何一种取值能同时过两道门：
 #: `[45, 46]` 能力层拒（"必须是 string"）工具层放行；`["45", "46"]` 能力层放行
 #: 工具层拒（"必须是 integer"）。实现本体 `doc_tools._coerce_page_range` 两种都收，
 #: 但"两层各自判死一半"意味着这条链路上没有合法形状。
@@ -355,17 +331,15 @@ _ARR_I = {"type": "array", "items": {"type": "integer"}}
 _OBJ = {"type": "object"}
 #: 一行行记录的序列（依赖行、发现行…）。刻意与 `_OBJ` 分开。
 #:
-#: 为什么要单列一个常量：`H.review` / `G.render` 的 `dependencies` 先前都声明成
+#: 为什么要单列一个常量：`H.review` / `G.render` 的 `dependencies` 若声明成
 #: `_OBJ`，而实现侧（`AgentH.review` → `review.review_document`、
 #: `AgentG.render` → `doc_tools.render_markdown`）交下去的是序列 ——
 #: 于是任何一次"把依赖逐条交给审校/渲染"的派活，都在参数门被判
 #: `H.review 的参数不合法：dependencies. 必须是对象，收到 array`，
 #: 而理由码被记成 `unknown_action`（"这个角色没这个本事"），与真相不符。
-#: 实测 2026-09-29（P3 派 H 审台账）：`summon(role="H", action="review",
-#: params={"doc_id": "0000", "dependencies": [ …13 行 external_unavailable… ]})`
-#: 被参数门拒。导入期的交叉断言（`param_seam_violations`）只比 property 名
-#: 与实现签名，不比类型，所以它照旧全绿 —— 这条注释与
-#: `tests/test_capability_seams.py` 的正控一起，是这一格唯一的机器判据。
+#: 导入期的交叉断言（`param_seam_violations`）只比 property 名与实现签名，
+#: 不比类型，所以它照旧全绿 —— 这条注释与 `tests/test_capability_seams.py`
+#: 的正控一起，是这一格唯一的机器判据。
 _ARR_OBJ = {"type": "array", "items": {"type": "object"}}
 
 
@@ -373,7 +347,7 @@ _ARR_OBJ = {"type": "array", "items": {"type": "object"}}
 
 
 def audit_registry(registry: AgentRegistry) -> list[str]:
-    """一张注册表"够不够格被装配/召唤/审计"的判据（`goal-7f5116c1` M5）。
+    """一张注册表"够不够格被装配/召唤/审计"的判据。
 
     返回人话列表（空 = 通过）。它问的是声明自己的完整性，不是行为：一份 `AgentSpec` 先过这一关，才是"一个模块 + 一次登记"里那份 spec 要满足的契约。逐条：
     1. `role` 与注册键一致、`brief.duty` / `emphasis` / `local_notes` 非空（门面齐全）；
