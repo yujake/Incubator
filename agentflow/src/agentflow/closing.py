@@ -7359,11 +7359,10 @@ def unnamed_children_reading(root: Any, *, store: Any = None) -> dict[str, Any]:
 def _run_check(rep: ClosingReport, name: str, fn: Any, *args: Any, **kwargs: Any) -> None:
     """跑一格；格自己抛了 ⇒ 那一格 `unknown` + 逐字原因（整份门不许因此塌）。
 
-    三态纪律（2026-10-27，R-BE1 的 ⑥-1）：「门抛异常」与「门判不过」是两件事。
-    改前任何一格里的 `store.rows` 抛 StoreError（半截表 / 非 UTF-8 / schema 版本不符）
-    都会冒泡出 `check_closing`：`agentflow closing` 于是落到 CLI 的兜底
-    （`cli.py:5159` 打一行 `[store 错误] …` 并退 2），一格读数都没有；
-    `conductor.closing` 工具则直接拿到异常。而文档承诺的是"没查成落成 `unknown`"。
+    三态纪律：「门抛异常」与「门判不过」是两件事。任何一格里的 `store.rows` 抛
+    StoreError（半截表 / 非 UTF-8 / schema 版本不符）若冒泡出 `check_closing`，
+    `agentflow closing` 就会落到 CLI 的兜底（打一行 `[store 错误] …` 并退 2），一格读数
+    都没有；`conductor.closing` 工具则直接拿到异常。而文档承诺的是"没查成落成 `unknown`"。
 
     `except Exception` 而不是只捕 StoreError：这一层要挡的是"任何一格自己炸掉"，
     而 StoreError 只是今天最常见的那一种。记录里带类型名，读的人仍然能分辨。
@@ -7387,8 +7386,8 @@ def _run_reading(rep: ClosingReport, key: str, fn: Any, *args: Any, **kwargs: An
     """跑一格读数；读数自己抛了 ⇒ 返回 `{"checked": False, "reason": …}` 并留一条 warning。
 
     与 `_run_check` 的分工：读数不进 `status`、不产生 blocker，所以这里也不许往
-    `status` 里塞键（那会改 `machine_pass` 的形状）。改前 `nontriviality_reading`
-    在坏表上抛 AttributeError 会把整份门一起打掉（见 `_paper_statement_rows` 那条注释）。
+    `status` 里塞键（那会改 `machine_pass` 的形状）——`nontriviality_reading` 在坏表上
+    抛 AttributeError 就会把整份门一起打掉（见 `_paper_statement_rows` 那条注释）。
     """
     try:
         got = fn(*args, **kwargs)
@@ -7415,10 +7414,10 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
                   ) -> ClosingReport:
     """跑收工门，返回读数（不抛业务异常 —— 没查成落成 `unknown`）。
 
-「不抛」今天是结构性的，不是纪律（2026-10-27，R-BE1 的 ⑥-1）：每一格经 :func:`_run_check`、
-每一格读数经 :func:`_run_reading` 调，它们自己抛了就把异常收成"这一格 `unknown` + 逐字原因"。
-改前这句话是假的：`store.rows` 抛的 StoreError（半截表 / 非 UTF-8 / schema 版本不符）会从
-某一格里冒出来，`agentflow closing` 打一份 traceback，而不是给一个"没查成"。
+「不抛」是结构性的，不是纪律：每一格经 :func:`_run_check`、每一格读数经
+:func:`_run_reading` 调，它们自己抛了就把异常收成"这一格 `unknown` + 逐字原因"。
+否则 `store.rows` 抛的 StoreError（半截表 / 非 UTF-8 / schema 版本不符）会从某一格里
+冒出来，`agentflow closing` 打一份 traceback，而不是给一个"没查成"。
 
 `session_root` 不给时取 `store.root`（会话记录与工作区本来就是同一个根，两处分开写迟早出"审计记录落在别
 处"的静默错位）。`project_dir` / `report_path` 不给 ⇒ 对应的那一两格是 `unknown`（不是 `pass`）—— 门宁可
@@ -7429,11 +7428,11 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
 报告里 `readings["refusal"]` 非空（`{"code","sid","detail","exit_code": 2}`），`status` 为空。
 CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.closing`）问的是
 同一个 :func:`closing_session_identity` ⇒ 同一句话、同一个码；"门根本没跑"与"跑了、
-八格都没查成"因此长得不一样（2026-11-03 第二笔）。
+八格都没查成"因此长得不一样。
 
-收工由 M 判（业主 2026-10-09）：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
+收工由 M 判：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
 ⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是八格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
-  `retire` / `programs`（2026-11-03，153-U-01/U-02 第 2 笔）是机器口径的两个喂参：
+  `retire` / `programs` 是机器口径的两个喂参：
   `retire` 是 `Conductor.retire_integrity` 的读数（要 `checked` / `complete`），`programs` 是程序读数
   （要 `checked` / `running_count`）。两个都给了才可能算出 `can_close` 的真/假；没给 ⇒ `None`
   （`not_wired`，既不是过也不是不过）。见 :func:`machine_caliber`。
@@ -7443,11 +7442,11 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     rep = ClosingReport()
     tasks = [dict(t) for t in (task_list or ()) if isinstance(t, Mapping)]
     root = session_root if session_root is not None else getattr(store, "root", None)
-    # ---- 会话身份先过闸（2026-11-03 第二笔）：号不在盘上 ⇒ 门不跑、马上受控拒绝。
+    # ---- 会话身份先过闸：号不在盘上 ⇒ 门不跑、马上受控拒绝。
     #
     # 为什么必须在跑门之前：门自己会把每一格兜成 `unknown`，"号不在盘上"与"查过了、
-    # 八格都没查成"在出口上会长得一模一样（e4e5efff 在 CLI 侧已经这么判过，这一笔把
-    # 同一个判据搬到唯一入口上，于是 API 那几个出口也拿到同一个拒绝）。
+    # 八格都没查成"在出口上会长得一模一样；闸放在这个唯一入口上，API 那几个出口
+    # 于是也拿到同一个拒绝。
     identity = closing_session_identity(root, sid)
     if identity.problem:
         rep.readings["session"] = {"sid": identity.sid, "note": identity.note,
