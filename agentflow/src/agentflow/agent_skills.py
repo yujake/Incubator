@@ -3737,14 +3737,13 @@ def _g_skills() -> tuple[Skill, ...]:
 
 
 def _l_skills() -> tuple[Skill, ...]:
-    """L（Lean 形式化者，2026-10-22 新设）。
+    """L（Lean 形式化者）。
 
     只有一条：它这一岗的全部工作就是"忠实复述 + 交给检查器真跑 + 如实报三态"。
-    这一份是从 E 的 Lean 段改写过来的（2026-10-22 第四批之后 E 名下那条已撤：形式化只由
-    L 做，E 不再教怎么写 Lean），两处差别是业主施工单直接要求的：
+    与 E 那一侧的写法有两条差别：
 
     1. 落点 `code/formal/`："这个 .lean 是谁写的"要一眼看得出来；
-    2. 步骤从"自己去写、自己去跑"改成"先把 B 的证明链路逐步对上，再用
+    2. 步骤是"先把 B 的证明链路逐步对上，再用
        `L.formalize` 一次成型（写盘 + 检查 + 三态）" —— 因为 L 有那一格动作。
     """
     return (
@@ -3905,8 +3904,7 @@ def _shared_skills() -> tuple[Skill, ...]:
             # `when` 进提示词（`shared` 技能进每个角色的索引），所以这里不点名
             # 具体动作：点名会把"秘书职责"的名字泄漏给全部十个角色，而
             # `tests/test_secretary_prompt_alignment.py` 会按"登记该知道它的角色"
-            # 逐字核，多一个都要人来裁（实测：第一版在这里写了 assess / consider / …，
-            # 十格全中 ⇒ 那条判据当场红）。具体动作名写在正文里（正文不进提示词）。
+            # 逐字核，多一个都要人来裁。具体动作名写在正文里（正文不进提示词）。
             when=("准备调一个**需要编号**的动作，而手上那个编号不是刚从读数里拿到的时候"
                   "（哪些动作要编号、以及三个态怎么分，见正文）"),
             actions=("D.assess", "D.consider", "D.poll", "D.adjudicate", "D.propose_question",
@@ -3977,16 +3975,16 @@ def _shared_skills() -> tuple[Skill, ...]:
     )
 
 
-#: 一轮的调研记录（业主：「至少为每种智能体特地去找至少 5 个 skill 来综合考量」）。
+#: 一轮的调研记录（每个角色至少读 5 个 builtin skill 再综合考量）。
 #:
 #: 键是角色（含 `shared`），值是真的读过并用上了的那几条 builtin skill 名
 #: （目录名逐字，见 `temp/deepmath/moonshine/assets/skills/builtin`）。
 #: 判据 `tests/test_agent_skills.py` 断言两件事：每格 ≥5 且名字都在那张清单里；
-#: 以及并集覆盖全部 38 个来源（2026-10-15 R126 补的那一条 —— 此前只查了"每格 ≥5"，
-#: 于是有 3 个来源一次都没被任何一岗记下，而记录里写着"38 条已逐条读完"。
+#: 以及并集覆盖全部 38 个来源（只查"每格 ≥5"会漏掉从未被任何一岗记下的来源，
+#: 而记录里却可能写着"38 条已逐条读完"）。
 #: 三份 `-neural-network-functions` 变体读完之后各归其主：D 收 `problem-generator-…`
 #: （类比要做结构映射 + 换掉那个复杂度参数）、E 收 `construct-counterexamples-…`
-#: （已知的拿来改，破那条承重假设）、F 收 `direct-proving-…`（一条路不通先记下试过哪几条）。）
+#: （已知的拿来改，破那条承重假设）、F 收 `direct-proving-…`（一条路不通先记下试过哪几条）。
 SURVEY: dict[str, tuple[str, ...]] = {
     "shared": ("math-research-loop", "verify-overall", "pessimistic-verifier",
                "research-consolidation", "memory-hygiene", "conclusion-manage"),
@@ -4058,9 +4056,7 @@ CATALOG: dict[str, tuple[Skill, ...]] = {
     "G": _g_skills(),
     "H": _h_skills(),
     "V": _v_skills(),
-    # L（Lean 形式化者，2026-10-22 新设）：那一份手册从 E 的 Lean 段改写而来
-    # （2026-10-22 第四批之后形式化只由 L 做，E 名下那条已撤），
-    # 落点 `code/formal/`、入口是 L 自己的 `formalize`。
+    # L（Lean 形式化者）：落点 `code/formal/`、入口是 L 自己的 `formalize`。
     "L": _l_skills(),
 }
 
@@ -4087,8 +4083,7 @@ def index_block(role: str) -> str:
     lines = [
         "**你这一岗的 skills（现做现读）**：下面每一行是一份**盘上**的操作手册 ——",
         f"先看「什么时候读它」，对上了再用 `fs.read` 读 `{SKILLS_DIR}/<角色>/<名字>.md` 的全文。",
-        # 2026-10-14 真机读数（两次真跑 16 + 3 次模型调用）：索引在提示词里、
-        # 但一次正文都没被读过 —— 模型凭提示词里的规则就把活干完了。
+        # 索引在提示词里，但正文常常一次都没被读过 —— 模型凭提示词里的规则就把活干完了。
         # 加这一句不是"再叮嘱一遍"，而是把读它为什么划算说出来：
         # 提示词给的是口径（每一格都要成立），手册给的是这一档的具体步骤与反面形态。
         "**对上了就现在读**：手册里写着这一档的**具体步骤**与**反面形态**（提示词只给口径，"
@@ -4103,11 +4098,8 @@ def index_block(role: str) -> str:
         lines.append(f"| `{skill_path(owner, s.slug)}` | {s.summary} | {s.when} |")
     lines.append("")
     lines.append("读了之后按它做；做了什么要落台账（**没有台账的那一步等于没发生**）。")
-    # 2026-10-24（业主口径：形式化要不要做由用户指定，指定之后由 B 逐条安排）：
-    # 这一格此前是"形式化见 L：`formal.*` 只挂在 L 身上，别自己写 Lean 源码……它的入口
-    # 只有两条"—— 那是一句"去哪找谁"的指路 + 一句禁令，而协作面里除 B 以外没有谁与 L 有边。
-    # 现在按正向指引重写：只写"这件事的结论以什么为准、谁安排的、回执是什么形状"，
-    # 不写"别自己写"也不写"找 L"（禁令归判据：工具面没有 formal.*，越权一律 forbidden_edge）。
+    # 这一格只写"这件事的结论以什么为准、谁安排的、回执是什么形状"，不写"别自己写"
+    # 也不写"找 L"（禁令归判据：工具面没有 formal.*，越权一律 forbidden_edge）。
     # B 那一格不补这一句：它的收件通道写在 `specs/b.py` 的政策里（唯一该写全的地方）。
     from . import leanscope as _LEANSCOPE
 
@@ -4138,7 +4130,7 @@ def materialize(root: str | pathlib.Path) -> list[str]:
         for s in rows:
             path = base / SKILLS_DIR / owner / f"{s.slug}.md"
             text = _render(owner, s)
-            # 2026-10-24：手册正文也要过 Lean 关档改写 —— 它是模型会 fs.read 的东西。
+            # 手册正文也要过 Lean 关档改写 —— 它是模型会 fs.read 的东西。
             if not _LEANSCOPE.lean_on():
                 for _old, _new in NO_LEAN_SKILL_REPLACEMENTS:
                     text = text.replace(_old, _new)
