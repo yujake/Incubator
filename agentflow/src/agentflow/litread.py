@@ -3,20 +3,19 @@
 
 ## 为什么需要一个独立模块
 
-这两件事各有一份"读侧真相"，而它们此前都分处两端、还各自漂过：
+这两件事各有一份"读侧真相"，而它们此前分处两端、各自漂过：
 
 1. `literature.path` 有两个写入坐标系：`search_tools._adopt_file` 写着
    「相对路径优先按 `library/` 解释（表里存的就是这个坐标系），不存在再按 workspace
    解释」，而抽取入口 `agent_b.run_once` 只走 `store.library_path`（只认 `library/`）
-   ⇒ 一条按工作区相对写下的 `library/000001/…` 被解析成 `library/library/000001/…`，
-   真机 19 条 `no_fulltext` 里就有 1 条是这么来的。
+   ⇒ 一条按工作区相对写下的 `library/000001/…` 被解析成 `library/library/000001/…`。
    写入侧的归一化不在这里（`schema.literature_path_problem` 与 `table_tools` 的
-   归一化是 2026-11-05 的 M4，属 FC-27、人审）：本模块只负责让存量行读得回来 ——
-   历史行仍然带着那个前缀躺在盘上，读侧不认它就会把那篇文献判成 `file_missing`，
-   而"文件真的不在"与"在另一个基准下"在读数上同形。
-2. `download.fulltext` 的三个档只有写点、没有清除点：改前全仓只有
+   归一化属 FC-27、人审）：本模块只负责让存量行读得回来 —— 历史行仍然带着那个前缀
+   躺在盘上，读侧不认它就会把那篇文献判成 `file_missing`，而"文件真的不在"与
+   "在另一个基准下"在读数上同形。
+2. `download.fulltext` 的三个档只有写点、没有清除点：全仓只有
    `search_tools._mark_candidate_locator` 写过一个 `no_fulltext_this_time`，
-   而 `status=ok` 的行照样一直挂着它（19 条里 6 条自相矛盾）。
+   而 `status=ok` 的行照样一直挂着它。
 
 两边各写一份判据，迟早会出现第三种口径。所以这里只收两件事的实现：
 
@@ -56,10 +55,10 @@ FULLTEXT_TIERS: tuple[str, ...] = (
 BASE_LIBRARY = "library"
 BASE_WORKSPACE = "workspace"
 
-#: 只有以它开头的串才允许按 workspace 基准回退（见模块 docstring 第 1 条）。
+#: 只有以它开头的串才允许按 workspace 基准回退（见模块 docstring）。
 #: 取值不在这里另写一遍：`schema.LIT_PATH_PREFIX` 是"这一格不该带它"的唯一声明
-#: （2026-11-05 的 M4 写入闸拒的就是这个前缀）—— 读侧要认的正是同一串，
-#: 两处各写一个 `"library/"` 早晚会漂。
+#: （写入闸拒的就是这个前缀）—— 读侧要认的正是同一串，两处各写一个 `"library/"`
+#: 早晚会漂。
 WORKSPACE_PREFIX = LIT_PATH_PREFIX
 
 
@@ -205,9 +204,9 @@ def fulltext_tier(*, bytes_on_disk: int | None,
 def with_fulltext(download: dict | None, tier: str | None) -> dict:
     """把档位写进 `download` 栏；`tier is None` ⇒ 清掉旧的 `fulltext` 键。
 
-    为什么写入与清除必须是同一处：改前只有写点、没有清除点，于是"这一行后来
-    有字节了"之后旧标签还在（真机 6 条 `status=ok` 却写着没有全文）。这个函数是
-    "写/清成对"的唯一实现 —— 两个调用点都调它，谁都不许自己 `dl["fulltext"] = ...`。
+    为什么写入与清除必须是同一处：只有写点、没有清除点，"这一行后来有字节了"之后
+    旧标签还在。这个函数是"写/清成对"的唯一实现 —— 两个调用点都调它，谁都不许自己
+    `dl["fulltext"] = ...`。
     """
     out = dict(download or {})
     if tier is None:
