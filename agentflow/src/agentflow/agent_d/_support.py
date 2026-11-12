@@ -740,6 +740,10 @@ def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = ""
         reading["calls"] = 1
         text = str(getattr(call, "text", "") or "")
         problem = str(getattr(call, "problem", "") or "")
+        # `call.detail` 只取一次：下面两支都要读它（`judge_not_wired` 那支原先在一条
+        # f-string 里取了两次 —— 条件一次、拼进去一次，两次之间没有任何写）。
+        detail_raw = getattr(call, "detail", "")
+        detail = str(detail_raw or "")
         if data is not None:
             reading["state"] = STATE_USED
             return dict(data), text, reading
@@ -747,10 +751,9 @@ def model_json_call(llm: Any, prompt: str, *, task_id: str = "", note: str = ""
         # `judge_bad_json` / `judge_failed:*`）：三态读数按它的词表落，不自己再判一遍。
         if problem == "judge_not_wired":
             reading["state"] = STATE_NOT_WIRED
-            reading["reason"] = f"{problem}{('：' + str(getattr(call, 'detail', '') or '')) if getattr(call, 'detail', '') else ''}"
+            reading["reason"] = f"{problem}{('：' + detail) if detail_raw else ''}"
             return None, text, reading
         reading["state"] = STATE_FAILED
-        detail = str(getattr(call, "detail", "") or "")
         reading["reason"] = f"{problem or 'judge_failed'}{('：' + detail) if detail else ''}"
         return None, text, reading
     # `client`
