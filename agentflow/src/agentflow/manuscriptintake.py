@@ -75,13 +75,18 @@ SECTION_BY_CELL: Mapping[str, str] = {
     "numeric_evidence": "## 数值结果",
 }
 
-#: 依赖表的四列（与 `depsection.COLUMN_KEYS` 同一套关键词；顺序不限、缺一不可）。
+#: 依赖表的列（与 `depsection.COLUMN_KEYS` 同一套关键词；顺序不限）。
+#: 前三列缺一不可；最后一列 `path_group` 可省 —— 产出侧不写路径号，号由收录时的
+#: 秘书在事务里分配（省了它 ⇒ 这一格按默认第 1 条落，由秘书覆盖）。
 DEPENDENCY_COLUMNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("quote", ("引用",), "引用（F 的原话）"),
     ("stmt_id", ("命题号", "stmt"), "命题号（stmt:NNNNNN）"),
     ("step", ("步",), "用在哪一步"),
     ("path_group", ("路径",), "路径号（第几条证明）"),
 )
+
+#: `DEPENDENCY_COLUMNS` 里可以省掉的那一列（唯一一列）。
+DEPENDENCY_OPTIONAL_FIELDS: tuple[str, ...] = ("path_group",)
 
 #: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像）。
 #: 顺序按档位从弱到强：`kind` 只升不降，升要签。
@@ -254,29 +259,34 @@ def _parse_dependency_table(body: Sequence[tuple[int, str]]) -> tuple[list[dict[
             if any(key.lower() in low for key in keys):
                 found[field] = index
                 break
-    missing = [name for field, _keys, name in DEPENDENCY_COLUMNS if field not in found]
+    missing = [name for field, _keys, name in DEPENDENCY_COLUMNS
+               if field not in DEPENDENCY_OPTIONAL_FIELDS and field not in found]
+    present = [field for field, _k, _n in DEPENDENCY_COLUMNS if field in found]
     if missing:
         problems.append({"line": header_line,
-                         "why": f"表头缺列：{missing}（这一节要四列，逐列固定）"})
+                         "why": (f"表头缺列：{missing}（这一节要 "
+                                 f"{len(DEPENDENCY_COLUMNS) - len(DEPENDENCY_OPTIONAL_FIELDS)} 列，"
+                                 "逐列固定；路径号那一列可省）")})
         return [], problems
-    if len(header_cells) != len(DEPENDENCY_COLUMNS):
+    if len(header_cells) != len(present):
         problems.append({"line": header_line,
-                         "why": (f"表头有 {len(header_cells)} 列，这一节要恰好 "
-                                 f"{len(DEPENDENCY_COLUMNS)} 列")})
+                         "why": (f"表头有 {len(header_cells)} 列，只有 {len(present)} 列认得出"
+                                 f"（{' / '.join(n for _f, _k, n in DEPENDENCY_COLUMNS)}）")})
         return [], problems
     rows: list[dict[str, Any]] = []
     for line_no, raw in table[1:]:
         cells = _cells_of(raw)
         if _is_separator(cells):
             continue
-        if len(cells) != len(DEPENDENCY_COLUMNS):
+        if len(cells) != len(present):
             problems.append({"line": line_no,
                              "why": f"这一行读出来 {len(cells)} 列，应有 "
-                                    f"{len(DEPENDENCY_COLUMNS)} 列：{cells!r}"})
+                                    f"{len(present)} 列：{cells!r}"})
             continue
         row: dict[str, Any] = {"line": line_no}
         bad: list[str] = []
-        for field, _keys, name in DEPENDENCY_COLUMNS:
+        for field in present:
+            _keys, name = next((k, n) for f, k, n in DEPENDENCY_COLUMNS if f == field)
             value = cells[found[field]].strip().strip("`").strip()
             if not value:
                 bad.append(f"缺 {name}")
@@ -302,6 +312,9 @@ def _parse_dependency_table(body: Sequence[tuple[int, str]]) -> tuple[list[dict[
         if bad:
             problems.append({"line": line_no, "why": "；".join(bad)})
             continue
+        if "path_group" not in row:
+            # 产出侧不写路径号 ⇒ 这一列不是"缺"，是"还没分配"（收录时由秘书给）。
+            row["path_group"] = 1
         rows.append(row)
     return rows, problems
 
@@ -551,7 +564,8 @@ def _plan_statement(reading: Mapping[str, Any], row: Mapping[str, Any],
 
 
 def _plan_proof(reading: Mapping[str, Any], row: Mapping[str, Any],
-                conflict: str, proof_no: int) -> dict[str, Any]:
+                conflict: str, proof_no: int,
+                *, append_new_path: bool = False) -> dict[str, Any]:
     """`proof_text`：空 ⇒ 填；同 sha ⇒ unchanged；不同 ⇒ 逐档按冲突矩阵。"""
     if reading.get("outcome") != EXTRACT_PRESENT:
         return _refused(reading, True, CODE_PROOF_ABSENT,
@@ -588,6 +602,11 @@ def _plan_proof(reading: Mapping[str, Any], row: Mapping[str, Any],
                             f"稿是 #p{proof_no}，但这一行还没有 #p1 ⇒ 先录 #p1")
         return _planned(reading, PLAN_FILLED, writable=True,
                         reason=f"追加第 {proof_no} 份证明（append）")
+    if append_new_path and conflict == "refuse":
+        # 换了稿 / 换了正文 ⇒ 同一命题的另一条证明路径（不是覆盖在册那一份）。
+        # 号由收录时的秘书在事务里分配，这一层只判"可写"。
+        return _planned(reading, PLAN_FILLED, writable=True,
+                        reason=("追加一条新的证明路径（路径号由收录时的秘书分配）"))
     if conflict == "keep":
         return _planned(reading, PLAN_KEPT, writable=True,
                         reason="conflict=keep：保留台账现值，跳过这一格")
@@ -706,12 +725,16 @@ def _derived(family: str, got: Mapping[str, Any]) -> list[str]:
 
 def plan_cells(row: Mapping[str, Any] | None, got: Mapping[str, Mapping[str, Any]],
                conflict: str = "refuse", *, family: str = "",
-               proof_no: int = 1) -> dict[str, Any]:
+               proof_no: int = 1, append_new_path: bool = False) -> dict[str, Any]:
     """把提取读数对到既有行上 ⇒ 逐格计划。
 
     `row` 是既有台账行（`None` / 空字典 = `mode=register` 的新行），`got` 是
     `extract_cells` 的返回，`conflict` 是逐格策略。`family` 与 `proof_no` 是接线时由
     工具层从稿名读出的坐标（本函数不读稿名）。
+
+    `append_new_path`：这一份稿是同一命题的另一条证明路径（换了稿 / 换了正文）。
+    产出侧不再写 `-pN` 之后，"这是第几份"在计划这一步还不知道（号由收录时的秘书分）
+    ⇒ 这一格只说"追加"，不比对某个具体号；真正的号与写入由秘书那一笔事务判。
 
     返回键：`ok` / `cells` / `diff` / `derived_write` / `refused` / `reason` / `written`。
     两条硬不变量：
@@ -759,7 +782,8 @@ def plan_cells(row: Mapping[str, Any] | None, got: Mapping[str, Mapping[str, Any
         if cell == "statement_full":
             cells[cell] = _plan_statement(reading, row_now, policy)
         elif cell == "proof_text":
-            cells[cell] = _plan_proof(reading, row_now, policy, proof_no_now)
+            cells[cell] = _plan_proof(reading, row_now, policy, proof_no_now,
+                                      append_new_path=bool(append_new_path))
         elif cell == "dependencies":
             cells[cell] = _plan_dependencies(reading, row_now)
         elif cell == "kind":

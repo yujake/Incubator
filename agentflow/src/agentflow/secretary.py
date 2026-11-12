@@ -2412,6 +2412,63 @@ def _stmt_edge_count(steps: Any) -> int:
                and str(step.get("source_stmt_id") or "").strip())
 
 
+def _assign_path_group_in_tx(tx: Any, *, root: Any, statement_id: str,
+                             manuscript: str = "", body_sha: str = "") -> dict:
+    """在事务内分配「第几条证明路径」（业主口径：路径号归 B 的秘书）。
+
+    唯一实现是 :func:`manuscriptpaths.assign_path_group`（同一命题已有 N 条 ⇒ N+1；
+    同一份正文 sha / 同一份稿重复收录 ⇒ 沿用）。这里只做两件事：把它接到事务快照
+    上（`store=tx` ⇒ 读的是这一笔锁里的 `dependencies`，不是锁外的另一份快照），
+    并把读数原样回传。
+
+    为什么必须传 `tx` 而不是 `self.store`：分配与写盘要在同一把锁里。传 store 时
+    `path_reading` 读的是 `store.rows(...)`（锁外的缓存快照），两个并发收录会各自
+    看到"N 条" ⇒ 都开 N+1（开两个同号路径）。传 `tx` 时读的是本事务的快照，
+    且本事务已经持有 `statements` + `dependencies` 的锁。
+    """
+    from . import manuscriptsubmission as _MSUB
+
+    sid = str(statement_id or "").strip()
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    if not sid:
+        return {"checked": False, "path_group": 1, "existing": False, "count": 0,
+                "statement_id": "", "manuscript": rel, "body_sha": str(body_sha or ""),
+                "paths": [], "problems": [],
+                "why": "没有命题号 ⇒ 路径号分不了（新命题那一档由收录方给号后再分）"}
+    got = dict(_MSUB.assign_path_group(
+        store=tx, root=root, statement_id=sid, manuscript=rel,
+        body_sha=str(body_sha or "")) or {})
+    got.setdefault("statement_id", sid)
+    got.setdefault("manuscript", rel)
+    got.setdefault("body_sha", str(body_sha or ""))
+    return got
+
+
+def _stamp_path_number(steps: Any, *, path_group: int, proof_no: int,
+                       single_group: bool = True) -> list[dict]:
+    """把秘书分到的号盖到已解析的依赖步骤上（返回新列表，不改调用方那份载荷）。
+
+    两格各管一件事（`_write_dep_steps` 的同一口径）：
+    - `proof_no` ⇒ `used_by` 的 `#pN` 尾巴 = "这条依赖出自第几份证明正文"；
+    - `path_group` ⇒ 那一列 = "同一份证明里的第几条可选路径"。
+
+    什么时候盖 `path_group`：只有"这一份稿 = 这一条路径"（`single_group`）时才盖。
+    载荷显式交了二维 `deps`（外层 = 可选路径、内层 = 一步）时，那几个组号是调用方
+    对"一份证明里有几条可选路径"的声明，不是"第几份证明" —— 盖成分配号会把两条
+    可选路径并成一条（`test_b_hands_content_to_the_secretary` 钉住它）。同理，
+    证明正文里分段扫出来的那一路（`_from="proof_scan"`）保留段落下标（1/2…）。
+    """
+    out: list[dict] = []
+    for step in (steps or ()):
+        one = dict(step)
+        if single_group:
+            one["proof_no"] = int(proof_no)
+            if str(step.get("_from") or "") != "proof_scan":
+                one["path_group"] = int(path_group)
+        out.append(one)
+    return out
+
+
 def _deps_missing_reading(*, proof_text: Any, deps_written: int,
                           derived_from: Any = (), stmt_id: str = "",
                           proof_no: int = 0, scan: Mapping[str, Any] | None = None) -> dict:
@@ -2520,7 +2577,11 @@ def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
                                 "why": f"kind 必须是 {S.DEP_KINDS} 之一，收到 {kind!r}"})
                 continue
             step = {"path_group": group_no, "kind": kind, "label": str(st.get("label") or ""),
-                    "quote": str(st.get("quote") or "")}
+                    "quote": str(st.get("quote") or ""),
+                    #: 这一步从哪来：`proof_scan` = 证明正文里扫出来的（一份证明里的
+                    #: 第几条可选路径），其余 = 手稿依赖段 / 调用方显式给的（一份稿 =
+                    #: 一条路径）。收录时按这条痕迹决定"路径号盖哪一格"。
+                    "_from": str(st.get("_from") or "")}
             #: 这一步属于第几份证明（多证明清单那一档才会带）：不往这里搬的话，
             #: `_write_dep_steps` 只能按 `body["proof_no"]` 落 `used_by`，
             #: 于是 #p2 / #p3 的依赖会全被记到 #p1 名下（依赖面又混成一维）。
@@ -7733,7 +7794,10 @@ class Secretary:
 
     def record_manuscript_dependency_face(self, stmt_id: str, groups: Any, *,
                                           proof_no: int = 1,
-                                          note: str = "") -> dict[str, Any]:
+                                          note: str = "",
+                                          manuscript: str = "",
+                                          body_sha: str = "",
+                                          reserve: bool = False) -> dict[str, Any]:
         """收方读稿登记：把一份手稿的依赖段落成那条在册命题的 `dependencies` 行。
 
         ## 为什么需要这一格（业主 2026-10-26 晚：「D 到 B 没有路吗？加」）
@@ -7742,7 +7806,14 @@ class Secretary:
         从来没有第二个写者：D 只能派 B，不能把稿递给 B；B 那一笔登记也只会发生在
         "新建一条命题"的时候 —— 同一条命题再交一次就走 `duplicate` 早退，
         `dependencies` 一行都不落。这条通道补的正是那一格：命题行不动，只把
-        手稿里那一节 `## 依赖` 的四列表落成依赖边（B 是收方、秘书是写者）。
+        手稿里那一节 `## 依赖` 的表格落成依赖边（B 是收方、秘书是写者）。
+
+        ## 路径号（业主口径：归秘书，在这一笔事务里分配）
+        `groups` 里那几格路径号是产出侧 / 调用方给的，一律不采信：这一笔的号由
+        :func:`_assign_path_group_in_tx` 在同一把锁里分（同一命题已有 N 条 ⇒ N+1；
+        同一份正文 sha / 同一份稿重复携带 ⇒ 沿用原号）。回执的 `path_group` 是这一笔
+        用的号，`path_group_reading` 是分配函数的原样读数。`proof_no` 参数只为兼容
+        旧调用面保留，一个字节都不参与定号（给了就在 `path_group_ignored` 里点名）。
 
         ## 两件事一起保证
         - 幂等：同一 `used_by` + 路径组 + 来源已经有一条依赖 ⇒ 不重复落（D 每趟都
@@ -7764,8 +7835,37 @@ class Secretary:
             out.update(refused="bad_statement_id", reason="没有命题号 ⇒ 依赖面挂不到任何一行")
             return out
         groups = [list(g) for g in (groups or []) if isinstance(g, (list, tuple))]
-        if not groups:
+        if not groups and not reserve:
             out.update(checked=True, reason="这一份手稿的依赖段是空的（自足证明合法，不写边）")
+            return out
+        if not groups and reserve:
+            # 只分号、不写边：收录那一笔请求了正文、没请求依赖格（自足证明 / 只补正文），
+            # 但"这一份是第几条路径"仍要由秘书在锁里给（B 不算）。一个字节的依赖行都不写；
+            # 号只进回执，后面的正文写口用它 —— 那条路自己会拒"号已被另一份正文占"。
+            try:
+                with self.store.tx("statements", "dependencies",
+                                   actor=f"secretary-{self.role}",
+                                   note=note or "record_manuscript_dependency_face:reserve") as tx:
+                    if not SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["found"]:
+                        out.update(refused="statement_missing",
+                                   reason=(f"台账里没有 stmt:{sid} ⇒ 路径号分不了"))
+                        return out
+                    _alloc = _assign_path_group_in_tx(
+                        tx, root=self.root, statement_id=sid,
+                        manuscript=manuscript, body_sha=body_sha)
+                    if not _alloc.get("checked"):
+                        out.update(refused="path_group_unreadable",
+                                   reason=("路径数读不出来 ⇒ 这一笔不写（不猜第几条）："
+                                           + str(_alloc.get("why") or "未知原因")))
+                        return out
+                    out.update(checked=True, deps_written=0, path_groups=0,
+                               path_group=int(_alloc.get("path_group") or 1),
+                               path_group_reading=dict(_alloc),
+                               reason=("这一笔没有请求依赖格 ⇒ 只分配路径号（不写边）"))
+            except Exception as exc:  # noqa: BLE001 —— 分号失败必须回三态，不许半笔
+                out.update(checked=False, refused="write_failed",
+                           reason=(f"路径号没分成（{type(exc).__name__}: {exc}）"
+                                   " ⇒ 这一笔按'没写成'读"))
             return out
         try:
             with self.store.tx("statements", "dependencies",
@@ -7777,10 +7877,32 @@ class Secretary:
                                reason=(f"台账里没有 stmt:{sid} ⇒ 依赖面挂不到任何一行"
                                        "（收方读稿登记的是在册命题的依赖面）"))
                     return out
-                body = {"deps": groups, "proof_no": int(proof_no or 1)}
+                # ---- 路径号：这一笔的依赖面属于「第几条证明」，由秘书在锁里分 ----
+                _alloc = _assign_path_group_in_tx(
+                    tx, root=self.root, statement_id=sid,
+                    manuscript=manuscript, body_sha=body_sha)
+                if not _alloc.get("checked"):
+                    out.update(refused="path_group_unreadable",
+                               reason=("路径数读不出来 ⇒ 这一份的依赖面不落（不猜第几条）："
+                                       + str(_alloc.get("why") or "未知原因")))
+                    return out
+                group_no = int(_alloc.get("path_group") or 1)
+                out["path_group"] = group_no
+                out["path_group_reading"] = dict(_alloc)
+                if int(proof_no or 0) >= 1 and int(proof_no or 0) != group_no:
+                    out["path_group_ignored"] = {
+                        "given": int(proof_no), "by": "调用方",
+                        "why": ("证明号 / 路径号由秘书在收录事务里分配"
+                                "（`assign_path_group`）⇒ 调用方给的这个数不采信"),
+                    }
+                body = {"deps": groups, "proof_no": group_no}
                 steps = self._resolve_write_steps(tx, body, out, groups)
                 if steps is None:
                     return out
+                # 号盖在已解析的步骤上：手稿依赖段那一路 `used_by` 尾巴与
+                # `path_group` 同号（一份稿 = 一份证明 = 一条路径）。
+                steps = _stamp_path_number(steps, path_group=group_no,
+                                           proof_no=group_no)
                 existing = set()
                 for row in tx.rows("dependencies"):
                     existing.add(_dep_step_key(dict(row)))
@@ -7788,8 +7910,8 @@ class Secretary:
                 for step in steps:
                     key = _dep_step_key({
                         "used_by": _PL.used_by_of(
-                            f"stmt:{sid}", int(step.get("proof_no") or body.get("proof_no") or 1)),
-                        "path_group": int(step.get("path_group") or 1),
+                            f"stmt:{sid}", int(step.get("proof_no") or group_no)),
+                        "path_group": int(step.get("path_group") or group_no),
                         "kind": str(step.get("kind") or "theorem"),
                         "source_stmt_id": step.get("source_stmt_id"),
                         "source_lit_id": step.get("source_lit_id"),
@@ -7799,7 +7921,7 @@ class Secretary:
                     })
                     if key in existing:
                         out["duplicates"].append({
-                            "path_group": int(step.get("path_group") or 1),
+                            "path_group": int(step.get("path_group") or group_no),
                             "label": str(step.get("label") or ""),
                             "why": "这一条依赖已经在表里（同一路径组、同一来源）⇒ 不重复落"})
                         continue
@@ -9350,6 +9472,24 @@ class Secretary:
                      "proof_text": str(body.get("proof_text") or "")},
                     sign=_sign, store=self.store)
         legacy = CR.legacy_present(self.store)
+        # ---- 调用方给的路径号：忽略，但要让读的人看见「这个号不是它给的」 --------
+        #
+        # 业主口径：路径号归秘书（这一笔事务里分配）；产出侧不写 `-pN`、B 的动作也
+        # 不再自己算。B 若还塞了一个进来，这里不校验、也不采信 —— 校验一致只是
+        # 把两套算法并排留着（两份迟早会漂，而漂的那一天没有读数会响）；直接忽略
+        # 才不会出现「调用方说了算」的第二条口径。`path_group_ignored` 把收与弃都写下来。
+        _given_path_group = 0
+        try:
+            _given_path_group = int(body.get("path_group") or 0)
+        except (TypeError, ValueError):
+            _given_path_group = 0
+        if _given_path_group >= 1:
+            out["path_group_ignored"] = {
+                "given": _given_path_group,
+                "by": "调用方（B 的动作）",
+                "why": ("路径号由秘书在收录事务里分配（`assign_path_group`）⇒ 调用方给的"
+                        "这个数一个字节都不采信；回执里的 `path_group` 才是这一笔用的号"),
+            }
         with self.store.tx(*STATEMENT_WRITE_TABLES, "literature", "experiments",
                            "documents",
                            *([CR.LEGACY_TABLE] if legacy.get("present") else ()),
@@ -9360,6 +9500,49 @@ class Secretary:
             existing = (SL.duplicate_hits(tx.rows("statements"), text=full)["hits"]
                         or [None])[0]
             if existing is not None and not force_new:
+                # ---- 路径号：先算，升档那支与重复那支都要用它 ----------------------
+                #
+                # 同一命题已在册、而交上来的正文是它的一条新路径（或正本还空着
+                # 的"先立命题、后补证明"）⇒ 号在这里分配：B 随后用这个号把正文挂成
+                # 第 N 份证明（`_attach_proofs`），依赖面 / `verifications` 行也用它。
+                # 号必须在锁里分（锁外分，两个并发收录会同时看到 N ⇒ 都开 N+1）。
+                # 同一份正文再交一次 ⇒ 沿用原号（`_same_no`），不新增路径；改稿 /
+                # 纯重复读数那两档不分号。
+                _dup_proof = str(body.get("proof_text") or "")
+                _dup_alloc: dict = {}
+                _dup_first_fill = not str(existing.get("proof_text") or "").strip()
+                if ((_dup_first_fill
+                     or str(body.get("proof_path_kind") or "") == "new_path")
+                        and _dup_proof.strip()):
+                    _dup_sha = VR.text_sha(_dup_proof)
+                    _same_no = next(
+                        (int(no) for no, _t in VR.proof_list(dict(existing))
+                         if str(_t or "").strip() and VR.text_sha(str(_t)) == _dup_sha), 0)
+                    if _same_no >= 1:
+                        out["path_group"] = _same_no
+                        out["path_group_reading"] = {
+                            "checked": True, "path_group": _same_no, "existing": True,
+                            "statement_id": str(existing.get("stmt_id") or ""),
+                            "manuscript": str(body.get("manuscript_path") or ""),
+                            "body_sha": _dup_sha, "count": 0, "paths": [],
+                            "problems": [],
+                            "why": (f"这一份正文已经是第 {_same_no} 条路径 ⇒ 沿用原号，"
+                                    "不新增路径"),
+                        }
+                    else:
+                        _dup_alloc = _assign_path_group_in_tx(
+                            tx, root=self.root,
+                            statement_id=str(existing.get("stmt_id") or ""),
+                            manuscript=str(body.get("manuscript_path") or ""),
+                            body_sha=_dup_sha)
+                        if not _dup_alloc.get("checked"):
+                            out.update(checked=False, created=False, duplicate=False,
+                                       refused="path_group_unreadable",
+                                       reason=("路径数读不出来 ⇒ 这一笔不写（不猜第几条）："
+                                               + str(_dup_alloc.get("why") or "未知原因")))
+                            return out
+                        out["path_group"] = int(_dup_alloc.get("path_group") or 1)
+                        out["path_group_reading"] = dict(_dup_alloc)
                 upgraded = self._upgrade_evidence_kind(existing, body)
                 if upgraded.get("upgraded"):
                     # 同一份内容、这一回带来的证据档更强 ⇒ 改那一行（不新建）。
@@ -9459,6 +9642,24 @@ class Secretary:
                 out["stmt_id_candidate_source"] = "candidate"
             else:
                 stmt_id = tx.alloc_id(stmt_kind)
+            # ---- 路径号（业主口径）：这一笔是新建 ⇒ 由秘书在这一笔事务里分配 ------
+            #
+            # 号在这里分而不是在 B 那一侧：新建的命题还没有任何路径 ⇒ 这个号必然是
+            # 第 1 条；但它与"写依赖 / 写 `used_by` / 回执"必须是同一个数，且要在
+            # 同一把锁里定下来。`assign_path_group` 是唯一实现（同一份正文 sha /
+            # 同一份稿沿用原号 —— 对新建这一档是死路，对合并那一档才是活的）。
+            _new_alloc = _assign_path_group_in_tx(
+                tx, root=self.root, statement_id=stmt_id,
+                manuscript=str(body.get("manuscript_path") or ""),
+                body_sha=VR.text_sha(str(body.get("proof_text") or "")))
+            if not _new_alloc.get("checked"):
+                out.update(checked=False, created=False, refused="path_group_unreadable",
+                           reason=("路径数读不出来 ⇒ 这一笔不写（不猜第几条）："
+                                   + str(_new_alloc.get("why") or "未知原因")))
+                return out
+            _new_path_no = int(_new_alloc.get("path_group") or 1)
+            out["path_group"] = _new_path_no
+            out["path_group_reading"] = dict(_new_alloc)
             # ---- 内部工作名不许当定理名（D1；真机 mp3-r2 的 000000 / 000001）---------
             # 那两行的 label 逐字都是「F 攻坚 000000 子目标 S2」：派活台账里的工作名进了
             # 定理名，于是同一条定理的两份证明在台账上看起来是两条不同的定理。判据与词表
@@ -9633,6 +9834,11 @@ class Secretary:
             if identity_actions:
                 out["concepts_identity"] = identity_actions[:20]
             out["concept_quota"] = quota.reading()
+            # 这一笔的路径号是秘书刚分配的（见上）：依赖的 `used_by` 尾巴与
+            # `path_group` 都从它来 —— 产出侧不再写号，这一段是那个号唯一的落点。
+            steps = _stamp_path_number(steps, path_group=_new_path_no,
+                                       proof_no=_new_path_no,
+                                       single_group=len(groups) <= 1)
             dep_count = self._write_dep_steps(tx, steps, stmt_id=stmt_id, body=body)
             written.append("dependencies")
             #: 依赖面到底建起来没有：带证明正文而一条依赖都没落 ⇒ 这一格说 `missing`
@@ -10453,37 +10659,55 @@ class Secretary:
             return out
         # ---- 落成第 N 份证明（或 canonical 那一格还是空的时候的 #p1）
         #
-        # 2026-11-04（缺口 ①）：交付里可能写着"这是第几份证明"（`body["proof_no"]`，
-        # B 从手稿稿头 / D 的携带单读来）。交付说了号就用交付的号；没写才回退：
-        # canonical 空 ⇒ #p1，否则最大号 + 1。改前这里只有回退 —— 于是 E 说"这是第 2 份"
-        # 的稿会被静默记成 #p1（V 的签、依赖的 `used_by`、论文对应表的 proof_no 全错位）。
+        # 号由秘书在这一笔事务里分配（`assign_path_group`）：同一命题已有 N 条路径
+        # ⇒ 这一份排 N+1；同一份正文 sha 重复收录 ⇒ 沿用原号（上一格"逐字同一份"
+        # 已经处理了那条路，走到这里的一定是新的正文）。分配必须在锁里，理由见
+        # `_assign_path_group_in_tx`。
+        #
+        # 交付里写的号（`body["proof_no"]`，改前从稿头 `- 证明号：` / 携带单读来）
+        # 不再采信：产出侧不写那个号了，留着它当权威就是第二套口径。给了就只
+        # 记读数（`proof_no_ignored`），号仍由分配给出。
         canonical_was_empty = not VR.proof_text_of(row, 1).strip()
         try:
             requested_no = int(body.get("proof_no") or 0)
         except (TypeError, ValueError):
             requested_no = 0
-        if requested_no >= 1 and not canonical_was_empty:
-            have_now = {int(no): str(text or "") for no, text in existing}
-            if (requested_no in have_now
-                    and VR.text_sha(have_now[requested_no]) != VR.text_sha(proof)):
-                # 号已经被另一份正文占了：不许覆盖（那是"同一份证明两个正文"），
-                # 也不许静默换号（换号就是猜）—— 整笔受控拒绝，说清在册的是哪几号。
+        if requested_no >= 1:
+            out["proof_no_ignored"] = {
+                "given": requested_no,
+                "why": ("证明号由秘书按路径面分配（`assign_path_group`）⇒ 交付里写的"
+                        "这个数一个字节都不采信；回执里的 `proof_no` 才是这一份的号"),
+            }
+        if canonical_was_empty:
+            # 先登记命题、后补证明：这一份填 canonical 那一格（#p1），不新增路径。
+            _alloc = _assign_path_group_in_tx(
+                tx, root=self.root, statement_id=sid,
+                manuscript=str(body.get("manuscript_path") or ""),
+                body_sha=VR.text_sha(proof))
+            if not _alloc.get("checked"):
                 out.update(checked=False, created=False, duplicate=False, merged=False,
-                           refused="proof_no_taken", stmt_id=sid, merged_into=sid,
-                           matched_by=basis, similarity=similarity,
-                           reason=(f"交付说这一份是 #{requested_no}，而在册的 "
-                                   f"#{requested_no} 是另一份正文（sha 不同）⇒ 整笔不写。"
-                                   f"在册的证明号：{sorted(have_now)}。要么让交付写对号"
-                                   "（稿头 `- 证明号：N` 或携带单第四列），要么把这一份"
-                                   "作为新的一份（不给号 ⇒ 回退成最大号 + 1）"))
+                           refused="path_group_unreadable",
+                           reason=("路径数读不出来 ⇒ 这一份的正文不落（不猜第几条）："
+                                   + str(_alloc.get("why") or "未知原因")))
                 return out
-        if canonical_was_empty and requested_no in (0, 1):
-            # 先登记命题、后补证明：这一份就是 #p1，写 canonical 那一格（不进清单）。
-            row["proof_text"] = proof
             proof_no = 1
+            out["path_group"] = 1
+            out["path_group_reading"] = dict(_alloc, path_group=1)
+            row["proof_text"] = proof
         else:
-            proof_no = (requested_no if requested_no >= 1
-                        else max(int(no) for no, _ in existing) + 1)
+            _alloc = _assign_path_group_in_tx(
+                tx, root=self.root, statement_id=sid,
+                manuscript=str(body.get("manuscript_path") or ""),
+                body_sha=VR.text_sha(proof))
+            if not _alloc.get("checked"):
+                out.update(checked=False, created=False, duplicate=False, merged=False,
+                           refused="path_group_unreadable",
+                           reason=("路径数读不出来 ⇒ 这一份不并、不新增证明号（不猜第几条）："
+                                   + str(_alloc.get("why") or "未知原因")))
+                return out
+            proof_no = int(_alloc.get("path_group") or 1)
+            out["path_group"] = proof_no
+            out["path_group_reading"] = dict(_alloc)
             listed = [dict(p) if isinstance(p, Mapping) else p
                       for p in (row.get(VR.PROOFS_KEY) or [])]
             listed.append({"proof_no": proof_no, "text": proof,
@@ -10545,6 +10769,11 @@ class Secretary:
         steps = self._resolve_write_steps(tx, body_for_deps, out, groups)
         if steps is None:
             return out
+        # 这一份的路径号由秘书刚分配（见上）：手稿依赖段那一路的 `used_by` 尾巴与
+        # `path_group` 都从它来；证明正文里分段扫出来的那一路 `path_group` 保留段落
+        # 下标（一份证明里的几条可选路径，不是几份证明）。
+        steps = _stamp_path_number(steps, path_group=proof_no, proof_no=proof_no,
+                                   single_group=len(groups) <= 1)
         deps_written = self._write_dep_steps(tx, steps, stmt_id=sid, body=body_for_deps)
         if deps_written:
             written.append("dependencies")
@@ -10556,10 +10785,8 @@ class Secretary:
             scan={"refs": sum(len(g) for g in (groups or []))})
         out.update(checked=True, created=False, duplicate=False, merged=True,
                    merged_into=sid, stmt_id=sid, proof_no=proof_no,
-                   #: 这个号是哪来的：交付写的就是 `crafted` / `carried`；秘书按回退
-                   #: 算出来的就是 `fallback`（B 那一侧还会覆盖成它自己的读数）。
-                   proof_no_source=str(body.get("proof_no_source") or
-                                       ("fallback" if requested_no < 1 else "")),
+                   #: 这个号是秘书按路径面分配的（唯一来源 `assign_path_group`）。
+                   proof_no_source="path_group",
                    matched_by=basis, similarity=similarity, same_kind=[],
                    tables=written, row=row, deps_written=deps_written,
                    #: 其中"命题→命题"几条（2026-11-05 缺陷 1c：两个数分开读）。

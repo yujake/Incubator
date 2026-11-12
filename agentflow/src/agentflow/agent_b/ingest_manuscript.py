@@ -28,8 +28,9 @@ class _IngestManuscript:
 
         参数（设计 §2.3.1；工具面的 ActionSpec 是这一份的广告）：`manuscript` 是工作区
         相对路径、只收 `reports/` 下过族表的规范名；`target_stmt_id` 是位置（录到哪一条
-        命题，`mode!="register"` 时必填）；`proof_no` 是这一行的第几份证明，与稿名
-        `-p<N>` 不一致 ⇒ 受控拒 `proof_no_mismatch`（不重定向、不"就近取一个"）；
+        命题，`mode!="register"` 时必填）；`proof_no` 是旧调用面留下的那一格 —— 产出侧
+        不写「证明号」，路径号由秘书在收录事务里分配，所以这一格只校验形态（>=1 的整数），
+        不参与定号（稿名里的 `-p<N>` 也不再比对）；
         `cells` 是格（闭集），派生列请求 ⇒ 受控拒 `derived_cell_not_requestable`；
         `conflict` 是 `refuse`（默认）/ `overwrite` / `append` / `keep`；`mode` 是
         `preview`（只提取、零写）/ `apply`（按格回填）/ `register`（登记新命题）；
@@ -148,11 +149,18 @@ class _IngestManuscript:
         if head and str(mode) != "register":
             out["target"]["stmt_id"] = target
 
-        # ---- proof_no：稿名与参数不一致 ⇒ 受控拒（防"稿名说 #p1、参数说 #p2"）
+        # ---- proof_no：只校验形态；号由秘书分配（稿名里的 `-pN` 不再比对） --------
         want_no, _code, _why = self._ingest_proof_no(reading, proof_no)
         if _code:
             return self._ingest_fail(out, _code, _why)
         out["manuscript"]["proof_no"] = want_no
+        if proof_no not in (None, ""):
+            #: 调用方还塞了旧口径的号 ⇒ 忽略，但要让读的人看见"这个号不是它给的"。
+            out["proof_no_ignored"] = {
+                "given": str(proof_no), "by": "调用方",
+                "why": ("路径号 / 证明号由秘书在收录事务里分配（`assign_path_group`）"
+                        "⇒ 调用方给的这个数不采信；稿名里的 `-p<N>` 也不再是判据"),
+            }
 
         # ---- 目标行（apply / preview 必须已在册；register 没有目标行）
         row: dict | None = None
@@ -176,17 +184,27 @@ class _IngestManuscript:
             got = self._ingest_register(
                 reading=reading, requested=requested, out=out, family=family,
                 path=rel, provenance=provenance)
-            return self._mark_ingested(got, rel=rel, family=family)
-        path_no, _code, _why = self._ingest_path_group(
-            out, mode=str(mode), target=target, rel=rel, reading=reading,
-            want_no=want_no)
-        if _code:
-            return self._ingest_fail(out, _code, _why)
+            _pg_reg = got.get("path_group")
+            _pg_reg_no = (int((_pg_reg or {}).get("path_group") or 0)
+                          if isinstance(_pg_reg, Mapping) else int(_pg_reg or 0))
+            return self._mark_ingested(got, rel=rel, family=family,
+                                       path_group=_pg_reg_no)
+        path_no, _code, _why = 0, "", ""
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
-        plan_no = max(path_no or 1, int(want_no or 1))
+        #: 这一份是同一命题的另一条证明路径吗（换了稿 / 换了正文）？判据与登记
+        #: 那一支同一处（`_rewrite_is_the_same_proof`：同一份稿改正文 ⇒ 改稿；换稿
+        #: ⇒ 新路径）。只在这里决定"计划说追加还是冲突"，不决定路径号。
+        _proof_value = str((got_cells.get("proof_text") or {}).get("value") or "")
+        _append_new_path = bool(
+            str(mode) == "apply" and row is not None and _proof_value.strip()
+            and str(row.get("proof_text") or "").strip()
+            and not self._rewrite_is_the_same_proof(
+                stmt_id=target, row=row, manuscript_path=rel,
+                proof_text=_proof_value))
+        plan_no = int(want_no or 1)
         plan = _MI.plan_cells(row, got_cells, str(conflict), family=family,
-                              proof_no=plan_no)
+                              proof_no=plan_no, append_new_path=_append_new_path)
         cells_out = self._ingest_plan_cells(plan, requested)
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),
@@ -204,38 +222,13 @@ class _IngestManuscript:
                             "written": False,
                             "sink": "preview：只提取、一个字节都不写"}
             return out
-        return self._mark_ingested(
-            self._ingest_apply(
-                reading=reading, row=row, plan=plan, out=out, requested=requested,
-                family=family, want_no=want_no, target=target, path=rel,
-                path_group=path_no),
-            rel=rel, family=family, path_group=path_no)
-
-    def _ingest_path_group(self, out: dict, *, mode: str, target: str, rel: str,
-                           reading: Mapping, want_no: int) -> tuple[int, str, str]:
-        """给这一笔收录分配「第几条路径」（只 apply 分配；register 是新命题第 1 条）。
-
-        这条命题已有 N 条路径 ⇒ 这一份排第 N+1；同一份稿（同正文 sha / 同路径）重复
-        收录 ⇒ 沿用原号。调用方显式点名 #pN（旧多证明写口）⇒ 路径号不得低于 N。
-        """
-        if str(mode) != "apply":
-            return 0, "", ""
-        from .. import manuscriptsubmission as _MSUB
-
-        assigned = _MSUB.assign_path_group(
-            store=self.store, root=getattr(self.store, "root", ""),
-            statement_id=target, manuscript=rel,
-            body_sha=str(reading.get("proof_sha256") or ""))
-        out["path_group"] = dict(assigned)
-        if not assigned.get("checked"):
-            return 0, "path_group_unreadable", str(
-                assigned.get("why") or "路径数读不出来 ⇒ 这一笔不写（不猜第几条）")
-        path_no = int(assigned.get("path_group") or 1)
-        if int(want_no or 1) > path_no:
-            path_no = int(want_no)
-            out["path_group"] = dict(assigned, path_group=path_no,
-                                     why=f"调用方点名 #p{want_no} ⇒ 路径号取 {path_no}")
-        return path_no, "", ""
+        got = self._ingest_apply(
+            reading=reading, row=row, plan=plan, out=out, requested=requested,
+            family=family, want_no=want_no, target=target, path=rel,
+            append_new_path=_append_new_path)
+        _pg = got.get("path_group")
+        _pg_no = int((_pg or {}).get("path_group") or 0) if isinstance(_pg, Mapping) else int(_pg or 0)
+        return self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no)
 
     def _mark_ingested(self, out: dict, *, rel: str, family: str,
                        path_group: int = 0) -> dict:
@@ -245,8 +238,8 @@ class _IngestManuscript:
         已提交」。只加一枚 `mss:` 记号（格式复用 F 那一套），台账业务字段一个不动；
         受控拒 / 别的族 / 没有 task 行 ⇒ 原样返回并把理由写进 `b_submission`。
 
-        同一笔里把 B 分配的路径号回写到覆盖这份正文的 `verifications` 行（追加裁定）：
-        两件事都在"收录成功"这一刻发生，不另查一遍台账。
+        同一笔里把秘书分配的路径号回写到覆盖这份正文的 `verifications` 行：
+        两件事都在"收录成功"这一刻发生，不另查一遍台账（号从回执里来，不在这里算）。
         """
         from . import autosubmit as _BAS
 

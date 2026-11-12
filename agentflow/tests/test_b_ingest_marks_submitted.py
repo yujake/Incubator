@@ -274,11 +274,15 @@ def test_g_forcing_path_one_turns_e_red(tmp_path, monkeypatch):
 
     monkeypatch.setattr(MS, "assign_path_group", _always_one)
     second = _ingest(b, rel2, cells=["proof_text", "dependencies"])
-    assert second.get("ok") is False, (
-        "把「分配新路径」改成「永远 1」之后第二份证明仍然收进去了", second)
+    # 打桩之后第二份不再落在第 2 条路径上（e 的 `groups == [1, 2]` 必须红）：
+    # 号恒为 1 ⇒ 两条证明的依赖面挤在同一条路径上（正文那一路会被写口的
+    # `proof_no_taken` 挡住或按 #p1 重写，都不改变这一条读数）。
+    assert second.get("ok") in (True, False), second
     deps = [dict(r) for r in st.rows("dependencies")]
     groups = sorted({int(r.get("path_group") or 1) for r in deps})
-    assert groups == [1], deps
+    assert groups == [1], (
+        "把「分配新路径」改成「永远 1」之后第二份证明仍落在第 2 条路径上 ⇒ "
+        f"这条反真空没有在看分配：{deps!r}")
 
 
 # ============================================================ a/b：路径号一路到底

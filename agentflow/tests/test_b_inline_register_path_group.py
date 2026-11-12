@@ -5,14 +5,13 @@
 
 B 收录有两条入口：
 
-| # | 入口 | 改前 |
+| # | 入口 | 改后 |
 |---|---|---|
-| ① | 按手稿收录（`ingest_manuscript` / D→B 指针支） | 已跑 `manuscriptpaths.assign_path_group`，`path_group` 1/2 正确 |
-| ② | 逐份 inline 登记（`register_statement` 里那一支把 `proofs` 逐条挂上） | 只按交付里写的号落 `used_by`，`path_group` 仍停在 1 |
+| ① | 按手稿收录（`ingest_manuscript` / D→B 指针支） | 号由秘书在收录事务里分（`assign_path_group`），`path_group` 1/2 正确 |
+| ② | 逐份 inline 登记（`register_statement` 里那一支把 `proofs` 逐条挂上） | 同上：B 不再自己算，回执里的 `path_group` 一路用到底 |
 
-于是同一个「第几条证明」在两条入口上给了两个号：一条说 `stmt:<号>#p2`，另一条说第 1
-条路径。这一份钉的是 ② 也调同一个函数（不写第二套分配逻辑），并把那个号一路用到底：
-`dependencies.path_group` / `used_by` 的 `#pN` / `verifications.path_group` 三者同号。
+这一份钉的是"同一个「第几条证明」在两条入口上是同一个号"：`dependencies.path_group` /
+`used_by` 的 `#pN` / `verifications.path_group` 三者同号。
 
 ## 判据
 
@@ -22,7 +21,7 @@ B 收录有两条入口：
 | b | ② 登记第一份 | 依赖行 `used_by="stmt:<号>"`（无 `#p1`，沿既有口径）且 `path_group=1`；`verifications.path_group=1` |
 | c | 同 sha 重复逐份登记 | 仍 2 条路径、号不变（幂等）：证明号仍 `[1, 2]`、依赖组仍 `{1, 2}`，不说成第 3 条 |
 | d | 同一份证明分别走 ① 与 ② | 两条入口拿到的 `path_group` 相同（都 = 2） |
-| e | 反真空：把 ② 那一支的分配摘掉 | a 必须红 —— 第二份证明的依赖面回落成「`#p2` 的痕迹顶着第 1 条路径」/ 整条丢失，`verifications` 也没有号 |
+| e | 反真空：把唯一的分配实现打成"永远第 1 条" | a 必须红 —— 第二份证明的依赖面回落成「`#p2` 的痕迹顶着第 1 条路径」/ 整条丢失，`verifications` 也没有号 |
 
 全部 tmp 工作区、零模型调用（V 的签走 conftest 的真写口）。第一份证明也走 ②（`proofs=[{1,…}]`），
 于是两条入口的起点逐字相同 —— d 比的是"同一份证明、同一个盘面"，不是两个不同的盘面。
@@ -47,7 +46,6 @@ from agentflow import manuscriptsubmission as MS  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
-from agentflow.agent_b.register_statement import _RegisterStatement  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
 #: 被引的那条在册命题（要够可引档：`pre_theorem` 及以上）。
@@ -88,20 +86,20 @@ def _citable(st: Store) -> None:
         tx.upsert("statements", dict(row, bits=bits))
 
 
-def _manuscript(sid: str, proof: str, *, proof_no: int = 0) -> str:
-    """一份三节稿：`## 命题` / `## 证明` / `## 依赖`（依赖段一行指向 `DEP_SID`）。
+def _manuscript(sid: str, proof: str) -> str:
+    """一份三节稿：`## 命题` / `## 证明` / `## 依赖`（依赖段只写三列）。
 
-    `proof_no>=2` 时补老格式稿头 `- 证明号：N` —— 那是 2026-11-11 之前交付里写
-    「这是第几份证明」的地方（解析器照旧认它，见 `depsection.manuscript_proof_no`）。
+    产出侧不写「证明号」、也不写依赖表的「路径号」列 —— 路径号由秘书收录时分配。
     """
-    rows = [{"stmt_id": DEP_SID, "quote": "引理：p 阶元", "step": "1", "line": 1,
+    rows = [{"stmt_id": DEP_SID, "quote": "引理：p 阶元", "step": "1",
              "path_group": 1}]
     head = "# F 的证明手稿\n\n"
-    if proof_no >= 2:
-        head += f"- 证明号：{proof_no}\n"
     head += f"- 命题号：stmt:{sid}\n"
+    # 三列（引用 / 命题号 / 步）：手写一张新形式表，不借 renderer 的四列。
+    deps = ("| 引用 | 命题号 | 步 |\n|---|---|---|\n"
+            f"| 引理：p 阶元 | stmt:{DEP_SID} | 1 |\n")
     return (head + "\n## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + proof
-            + "\n\n" + DS.render_dependency_section(rows))
+            + "\n\n## 依赖\n\n" + deps)
 
 
 def _write(st: Store, rel: str, text: str) -> None:
@@ -122,18 +120,18 @@ def _first_proof(st: Store, b: AgentB) -> str:
     conftest.sign_for_the_gate(st.root, statement_id=sid, proof_text=P1, store=st,
                                manuscript=rel)
     first = b.register_statement(**OWN, proofs=[{"proof_no": 1, "text": P1}],
-                                 proof_manuscript=ms1)
+                                 proof_manuscript=rel)
     assert first.get("ok") is True, first
     return sid
 
 
 def _second_proof(st: Store, b: AgentB, sid: str) -> dict:
-    """逐份 inline 登记第二份证明（正文 + 手稿，稿头说第 2 份）。"""
-    ms2 = _manuscript(sid, P2, proof_no=2)
+    """逐份 inline 登记第二份证明（正文 + 手稿路径；稿头不写「证明号」）。"""
+    ms2 = _manuscript(sid, P2)
     _write(st, MS2_REL, ms2)
     conftest.sign_for_the_gate(st.root, statement_id=sid, proof_text=P2, store=st,
                                manuscript=MS2_REL)
-    return b.register_statement(**OWN, proof_text=P2, proof_manuscript=ms2)
+    return b.register_statement(**OWN, proof_text=P2, proof_manuscript=MS2_REL)
 
 
 # ------------------------------------------------------------------ 读数
@@ -310,32 +308,34 @@ def test_d_both_entrances_pick_the_same_path_number(tmp_path):
 
 
 # ============================================================ e：反真空
-def test_e_removing_the_inline_assignment_turns_a_red(tmp_path, monkeypatch):
-    """把 ② 那一支的分配摘掉 ⇒ a 必须红（回到"第 2 条顶着第 1 条路径"那一边）。
+def test_e_removing_the_allocation_turns_a_red(tmp_path, monkeypatch):
+    """把路径号分配摘掉（永远第 1 条）⇒ a 必须红（回到"第 2 条顶着第 1 条路径"那一边）。
 
-    打桩点取这条支唯一的分配合口（`_RegisterStatement._inline_path_reading`）：
-    它摘掉之后，第二份证明的依赖面要么整条不落（`#p2` 那一行读不到），要么回落成
-    `path_group=1`，而 `verifications` 那一份也没有号 —— 正控（不摘）是同一条判据全绿。
+    打桩点取分配的唯一实现（`manuscriptsubmission.assign_path_group`，实现
+    `manuscriptpaths`）：秘书那一笔事务里调的就是它。它一旦恒返回 1，第二份证明的
+    依赖面要么整条不落（`#p2` 那一行读不到），要么回落成 `path_group=1`，而
+    `verifications` 那一份也没有 2 —— 正控（不打桩）是同一条判据全绿。
     """
-    # 正控：不摘 ⇒ a 的判据全绿（否则这条反真空测的是桩本身）
+    # 正控：不打桩 ⇒ a 的判据全绿（否则这条反真空测的是桩本身）
     st_ok, b_ok = _ws(tmp_path, "control")
     sid_ok = _first_proof(st_ok, b_ok)
     assert _second_proof(st_ok, b_ok, sid_ok).get("ok") is True
     assert _path_problems(st_ok, sid_ok) == [], _path_problems(st_ok, sid_ok)
 
-    # 打桩：② 不再分配路径号
-    real = _RegisterStatement._inline_path_reading
+    # 打桩：唯一实现永远给第 1 条
+    real = MS.assign_path_group
 
-    def _no_assignment(self, **_kw):
-        return 0, {}, {}
+    def _always_one(**_kw):
+        return {"checked": True, "path_group": 1, "existing": False, "count": 1,
+                "paths": [], "why": "打桩：永远第 1 条"}
 
-    monkeypatch.setattr(_RegisterStatement, "_inline_path_reading", _no_assignment)
+    monkeypatch.setattr(MS, "assign_path_group", _always_one)
     st, b = _ws(tmp_path, "stubbed")
     sid = _first_proof(st, b)
     got = _second_proof(st, b, sid)
     assert got.get("ok") is True, got
     problems = _path_problems(st, sid)
-    assert problems, "摘掉 ② 的分配之后判据 a 仍然全绿 ⇒ 那不是这一笔写对的"
+    assert problems, "摘掉分配之后判据 a 仍然全绿 ⇒ 那不是这一笔写对的"
     deps = [(str(d.get("used_by")), int(d.get("path_group") or 0))
             for d in _deps(st, sid)]
     ver = [r.get("path_group") for r in _verifications(st, sid, P2)]
@@ -344,4 +344,4 @@ def test_e_removing_the_inline_assignment_turns_a_red(tmp_path, monkeypatch):
         f"分配被摘掉之后 `#p2` 仍落在第 2 条路径上（旧形状没有复现）：{deps!r}")
     assert (not ver) or any(int(g or 0) != 2 for g in ver), (
         f"分配被摘掉之后 verification 行仍带 2：{ver!r}")
-    monkeypatch.setattr(_RegisterStatement, "_inline_path_reading", real)
+    monkeypatch.setattr(MS, "assign_path_group", real)

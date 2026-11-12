@@ -451,16 +451,18 @@ def test_c1_conflict_matrix_empty_same_different_append(
     assert diff["refused"] == "proof_text_exists_different", diff
     assert _row(st)["proof_text"] == "另一份正文"
 
-    # append：-p2 且 #p1 已在
+    # append：另一份稿（另一个稿号、名字不带 -pN）、#p1 已在 ⇒ 同一命题的第 2 条路径
     st, b = _ws(tmp_path / "append")
     _signed_row(st, proof=PROOF, proof_no=1, row_proof=PROOF)
-    _issue_proof_sign(st, "000001", "第二份证明正文", 2,
-                      "reports/f-proof-000001-p2.md")
-    _write(st, "reports/f-proof-000001-p2.md",
+    # 签先于台账正文（设计 §4.2 O2 的前提）：新形式下签不绑号，只盖正文。
+    conftest.sign_for_the_gate(st.root, statement_id="000001",
+                               proof_text="第二份证明正文", store=st,
+                               manuscript="reports/f-proof-000777.md")
+    _write(st, "reports/f-proof-000777.md",
            _manuscript(proof="第二份证明正文"))
     appended = b.ingest_manuscript(
-        manuscript="reports/f-proof-000001-p2.md", target_stmt_id="000001",
-        cells=["proof_text"], mode="apply", proof_no=2)
+        manuscript="reports/f-proof-000777.md", target_stmt_id="000001",
+        cells=["proof_text"], mode="apply")
     assert appended["ok"] is True, appended
     assert appended["cells"]["proof_text"]["outcome"] == "filled", appended
     proofs = [dict(x) for x in (_row(st).get("proofs") or [])]

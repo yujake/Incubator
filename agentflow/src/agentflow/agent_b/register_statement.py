@@ -669,46 +669,6 @@ def _normalize_proofs(raw: object, *, proof_text: str) -> tuple[list[dict], str,
     return [e for e in entries if int(e["proof_no"]) > 1], str(canon or ""), None
 
 
-def _inline_proof_entry(*, proofs: object, proofs_listed: Sequence[Mapping],
-                        proof_text: str, proof_no_delivery: int) -> tuple[int, str]:
-    """② 逐份 inline 登记：这一笔要挂上去的那一份证明 ⇒ `(交付里说的号, 正文)`。
-
-    只认「逐份」形态，三档（其余一律 `(0, "")`，交给老路，一个字节都不改）：
-
-    - `proofs` 恰好一条（`[{proof_no, text}]`，一级清单）⇒ 那一条的号与正文；
-    - 交付里明说这是第 N>=2 份（老格式稿头 `- 证明号：N` / D 携带单第四列）⇒ 号取交付；
-    - 新命题第一次带 `proofs=[{1, …}]` ⇒ `(1, 正文)`：这一条命题还没有任何路径，
-      号就是 1（没有台账号可分配，但 `verifications` 行照同一个号回写）。
-
-    一批交多份 / 没带清单也没说号的普通正文登记都不在这一格：前者每份各有一号、
-    后者是 canonical 覆盖（老路逐字不变）。
-    """
-    raw = proofs if isinstance(proofs, (list, tuple)) else ()
-    listed = [dict(x) for x in (proofs_listed or ()) if isinstance(x, Mapping)]
-    if len(raw) == 1 and len(listed) == 1:
-        try:
-            no = int(listed[0].get("proof_no") or 0)
-        except (TypeError, ValueError):
-            return 0, ""
-        text = str(listed[0].get("text") or "")
-        return (no, text) if no >= 1 and text.strip() else (0, "")
-    if len(raw) == 1 and not listed:
-        one = raw[0] if isinstance(raw[0], Mapping) else {}
-        try:
-            no = int(one.get("proof_no", one.get("no")) or 0)
-        except (TypeError, ValueError):
-            return 0, ""
-        text = str(one.get("text") or proof_text or "")
-        return (1, text) if no == 1 and text.strip() else (0, "")
-    try:
-        delivered = int(proof_no_delivery or 0)
-    except (TypeError, ValueError):
-        delivered = 0
-    if delivered >= 2 and str(proof_text or "").strip():
-        return delivered, str(proof_text)
-    return 0, ""
-
-
 def _normalize_range(raw: object, *, what: str) -> tuple[dict, str]:
     """把 `page_range` / `line_range` 归一化，返回 `(归一后的字典, 拒绝理由)`。
     ## 为什么必须有这一级（`draft/83` §7 的 D71，T1 第 18 趟真机读数）
@@ -2729,37 +2689,6 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return out
 
     @staticmethod
-    def _proof_no_from_delivery(*, manuscript_text: str = "",
-                                manuscript_carried: Mapping | None = None
-                                ) -> tuple[int, str]:
-        """这一笔交付说的"第几份证明" ⇒ `(号, 来源)`；两处都没有 ⇒ `(0, "fallback")`。
-
-        ## 来源三档（写进读数，不许折平）
-        - `crafted`：手稿稿头那一行 `- 证明号：N`（`depsection.manuscript_proof_no`）。
-          作者自己写的号最权威 —— 它知道这一份是这条命题的第几条证明。
-        - `carried`：D 的携带单第四列（`read_carried_manuscript` 命中的那一行）。
-          D 转述作者写的号（或者按盘上事实填的号）。
-        - `fallback`：两处都没有。调用方据此走回退口径（canonical 空则 #p1 /
-          否则最大号 + 1），不在这里替它猜一个号。
-        0 是"交付里没有号"的哨兵（与 `verifications.as_proof_no` 的 0 同一个意思）：
-        读侧折成 1 会让"没写"与"写了第 1 份"分不开。
-        """
-        crafted = 0
-        try:
-            crafted = int(_DS.manuscript_proof_no(str(manuscript_text or "")) or 0)
-        except (TypeError, ValueError):
-            crafted = 0
-        if crafted >= 1:
-            return crafted, "crafted"
-        try:
-            carried = int((manuscript_carried or {}).get("proof_no") or 0)
-        except (TypeError, ValueError):
-            carried = 0
-        if carried >= 1:
-            return carried, "carried"
-        return 0, "fallback"
-
-    @staticmethod
     def _signature_covers(store: Any, *, stmt_id: str, proof_no: Any, text: str) -> dict:
         """这一份正文有没有一份覆盖它的 V 签（D268 批 2 起判据只有 `sign_reading`）。
 
@@ -3469,29 +3398,18 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "list_sha256": str(manuscript_carried.get("list_sha256") or ""),
             "refusal": "", "reason": "", "suggestion": "",
         }
-        # ---- 证明号从交付里读（2026-11-04，缺口 ①） ---------------------------------
+        # ---- 证明号：产出侧不写、B 也不算（业主口径：路径号归秘书） ----------------
         #
-        # 交付里有两处写"这是第几份证明"：手稿稿头那一行 `- 证明号：N`（作者自己写的，
-        # 最权威）与 D 的携带单第四列（转述）。两处都没有 ⇒ 回退（canonical 空则 #p1 /
-        # 否则最大号 + 1），并把"这一次用的是哪一来源"写进读数（`proof_no_source`）——
-        # 不写的话，"读了"与"猜的"在盘上同形，而猜错的表现是静默的 #pN 错位。
-        proof_no_delivery, proof_no_source = self._proof_no_from_delivery(
-            manuscript_text=manuscript_text, manuscript_carried=manuscript_carried)
-        #: 这一份正文该落在哪个证明号上（1 = canonical 那一格）。
-        proof_no_placement = int(proof_no_delivery) if proof_no_delivery >= 1 else 1
-        # ---- 2026-11-11（业主追加裁定 ⑥）：D→B 的指针支也要分配路径号 --------------
-        #
-        # 改前指针支（D 只递 `proof_manuscript` + `line_range`）一路落 `proof_no=1`
-        # ⇒ 同一命题的第二份证明被当成 `#p1` 就地改写（`_rewrite_body` 那一支），
-        # 第 2 条路径在主链上永远不存在。分配归 B 收录时做，且只有一处实现
-        # （`manuscriptsubmission.assign_path_group` → `manuscriptpaths`）：同一命题
-        # 已有 N 条 ⇒ N+1；同一份正文 sha ⇒ 沿用。调用方（指针支）把分配好的号传进来，
-        # 这里只把它当这一笔的落点号 —— 路径号 / `used_by` 的 `#pN` / verification 行
-        # 三处用同一个数。
-        if int(path_group or 0) >= 1:
-            proof_no_placement = int(path_group)
-            proof_no_delivery = int(path_group)
-            proof_no_source = "path_group"
+        # 改前这里读两处"这是第几份证明"：手稿稿头那一行 `- 证明号：N` 与 D 的携带单
+        # 第四列。产出侧不写那个号之后，这两个来源都没有对象了 —— 这一格退役为
+        # "这一笔没有指定号"。真正的号由秘书在收录事务里分配（`Secretary.record_statement` /
+        # `record_manuscript_dependency_face` 的锁里），回执的 `path_group` 是它。
+        proof_no_placement = 1
+        #: 号是哪来的：产出侧不再写号 ⇒ 只有秘书分配这一档（`path_group`）。
+        proof_no_source = ""
+        # 调用方若还从旧接口塞了 `path_group`：忽略（不校验一致 —— 校验只是把两套
+        # 算法并排留着）。读数落在返回值的 `path_group_ignored` 里。
+        _given_path_group = int(path_group or 0)
         manuscript: dict = {}
         deps_groups: list[list[dict]] = []
         manuscript_refs: list[str] = []
@@ -3578,46 +3496,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #: 形态就是真机那次"四个入口都不收"。
         carries_write = self._carries_canonical_write(
             proof_text=proof_text, proofs_listed=proofs_listed, row=redelivery)
-        # ---- 2026-11-11（收尾批）：② 逐份 inline 登记也分配路径号 -------------------
+        # ---- 路径号不在这里分配（业主口径：归秘书） -------------------------------
         #
-        # 业主 2026-11-11 追加裁定「多证明路径是 B 秘书需要关注的」在两条入口上都必须
-        # 成立：① 按手稿收录（`ingest_manuscript` / 指针支）已经跑
-        # `manuscriptpaths.assign_path_group`；② 逐份 inline 登记（这一支把 `proofs`
-        # 逐条挂上）此前只按交付里写的号落 `used_by`，`path_group` 仍停在 1 —— 同一份
-        # 证明在两条入口上拿到两个号（一条说 `#p2`、一条说第 1 条路径）。
-        #
-        # 处置：这一支也调同一个函数（不写第二套分配逻辑），拿到的号一路用到底：
-        # `dependencies.path_group` / `used_by` 的 `#pN` / `verifications.path_group`
-        # 是同一个数。指针支自己已经分配过（`path_group` 参数 >= 1）⇒ 这里让路。
-        _inline_no, _inline_text = _inline_proof_entry(
-            proofs=proofs, proofs_listed=proofs_listed, proof_text=proof_text,
-            proof_no_delivery=int(proof_no_delivery or 0))
-        #: 这一条在册命题的正本还空着（先落猜想行、后补证明那一档）⇒ 这一份就是第 1 条
-        #: 路径，没有"覆盖已有正文"的歧义，照常分配（号会是 1）。
-        _inline_first_fill = bool(
-            stmt_id_now and not str((redelivery or {}).get("proof_text") or "").strip())
-        _path_no, _path_group, _path_refused = 0, {}, {}
-        if _inline_no >= 1 and int(path_group or 0) < 1 and (
-                _inline_no >= 2 or not stmt_id_now or _inline_first_fill):
-            _path_no, _path_group, _path_refused = self._inline_path_reading(
-                row_now=redelivery, body=_inline_text, manuscript_path=manuscript_path)
-            if _path_refused:
-                return _path_refused
-            if _path_no >= 1:
-                # 落点号：同一份正文已在那条路径上 ⇒ 沿用原号（幂等，不新增路径）；
-                # 否则取「分配号」与「交付号」里较大的那个 —— 交付号是旧格式的兼容
-                # 读法，分配号才是权威（两者正常时相等）。
-                _placed = int(_path_no)
-                if not bool(_path_group.get("existing")):
-                    _placed = max(int(_inline_no or 0), int(_path_no))
-                _from = str(proof_no_source or "")
-                proof_no_placement = _placed
-                proof_no_delivery = _placed
-                # 号是哪来的：交付里写了号（`crafted` / `carried`）而分配也给出同一个
-                # 数 ⇒ 照旧报交付那一档（读数不许因为多跑了一次分配就改名）；交付没写
-                # 号（`fallback`）或分配把号改掉了 ⇒ 这一回是分配给的。
-                if _from not in ("crafted", "carried") or _placed != int(_inline_no or 0):
-                    proof_no_source = "path_group"
+        # 改前这里有两个分配点（① 指针支 `_pointer_path_reading`、② 逐份 inline
+        # `_inline_path_reading`）。号下沉到秘书那一笔事务里：登记新命题 / 并进在册
+        # 命题走 `record_statement`（"另一条证明路径"那一支也在锁里分号并写进回执），
+        # 依赖面走 `record_manuscript_dependency_face`。这一侧只读回执里的 `path_group`。
         # ---- 2026-11-04（业主裁定 A 甲）：B 的改写要有可签的载体 --------------------
         #
         # 业主逐字：「A 甲 —— B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
@@ -3645,9 +3529,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         b_manuscript: dict = {}
         _b_source_text = str(manuscript_text or "")
         _rewrite_body = bool(
-            stmt_id_now and proof_no_placement == 1
-            and str(proof_text or "").strip()
-            and str(proof_text) != str((redelivery or {}).get("proof_text") or ""))
+            stmt_id_now and str(proof_text or "").strip()
+            and str(proof_text) != str((redelivery or {}).get("proof_text") or "")
+            # 换了稿 ⇒ 同一命题的另一条证明路径，不是改在册那一份（见判据的 docstring）。
+            and self._rewrite_is_the_same_proof(
+                stmt_id=str(stmt_id_now), row=dict(redelivery or {}),
+                manuscript_path=manuscript_path, proof_text=str(proof_text or "")))
         if _rewrite_body:
             b_manuscript = self._preview_b_manuscript(
                 statement_id=stmt_id_now, statement_full=full,
@@ -3810,30 +3697,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 kinds = {str(r.get("stmt_id") or ""): _DS.dep_kind_of(str(r.get("kind") or ""))
                          for r in stmt_rows}
                 deps_groups = _DS.deps_groups(manuscript.get("rows") or (), kinds)
-        # 2026-11-11（⑥）：指针支分配的路径号要落进依赖行 —— 手稿 `## 依赖` 表里
-        # 那一列写的是作者自己那份稿里的号（一份稿 = 一份证明 ⇒ 通常是 1），而这一笔
-        # 收录的是该命题的第 N 条路径。`record_manuscript_dependency_face` 与
-        # `payload["deps"]` 都从 `proof_no` / `path_group` 取号，所以在这里统一改。
-        if int(path_group or 0) >= 1 and deps_groups:
-            deps_groups = [[dict(step, proof_no=int(path_group),
-                                 path_group=int(path_group)) for step in group]
-                           for group in deps_groups]
-        elif _path_no >= 1 and deps_groups:
-            # ② 逐份 inline 登记同一条口径（2026-11-11 收尾批）：稿里那一列是产出方
-            # 写的，不是权威 —— 这一份证明的全部依赖行都排进分配出来的那个号。
-            # 不这么改的话，第 2 份证明的依赖会顶着 `used_by="stmt:<号>"` /
-            # `path_group=1` 落进第 1 条路径（读数上就是"两条入口给了两个号"）。
-            # 两个名字各管一件事（2026-11-12 逐行读证，别再把它们并成一个数）：
-            #   · `proof_no` ⇒ `used_by` 的 `#pN` 尾巴 = "这条依赖出自第几份证明正文"
-            #     → 交付里声明的那个号（`proof_no_placement`，稿头优先）
-            #   · `path_group` ⇒ 那一列 = "这一份证明里的第几条可选路径"
-            #     → 收录分配的号（`_path_no`）
-            # 手稿依赖段那一路（`depsection.deps_groups`）恰好两值相同，但那是那一路的性质，
-            # 不是全局不变量：证明正文里分段扫出来的那一路就是 path_group 1/2、proof_no 1。
-            deps_groups = [[dict(step, proof_no=int(proof_no_placement),
-                                 path_group=int(_path_no)) for step in group]
-                           for group in deps_groups]
-        elif not manuscript_text.strip():
+        # ---- 路径号不在这里算、也不在这里盖 ----------------------------------------
+        #
+        # 改前这一段把 `path_group` / `proof_no` 盖到 `deps_groups` 上（指针支与逐份
+        # inline 两支各一份读法）。业主口径：路径号归 B 的秘书，分配与写盘在同一把锁里
+        # —— 秘书在 `_record_statement_tx` / `record_manuscript_dependency_face` 里用
+        # `assign_path_group` 分号并盖到依赖步骤上。稿里那一列（老形式才有）是产出方
+        # 写的，不是权威。
+        if not manuscript_text.strip():
             # ---- 参数空、盘上也没有稿：不许静默跳过（2026-10-26，业主的裁定） ------
             #
             # 正文引用了可引命题（在册 ∧ 等级 ≥ pre_theorem）⇒ 这份证明的依赖面必须
@@ -4671,46 +4542,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 不落盘（`_statement_from` 的白名单会忽略这两个键，它们不进 schema）。
         payload["manuscript_text"] = str(manuscript_text or "")
         payload["manuscript_path"] = str(manuscript_path or "")
-        # ---- 证明号（缺口 ①）：交付里给了号才透传 --------------------------------
+        # ---- 落点：这一笔是"新的一条证明路径"还是"改在册那一份的正文" ------------
         #
-        # 不给（`fallback`）时不传这一格：秘书那一支的 `_merge_target` 把
-        # `body["proof_no"]` 当"合并稿要覆盖哪一份"的显式号 —— 回退不是显式号，
-        # 传进去会让"回退"变成"指定覆盖 #p1"。回退口径由秘书自己算（canonical 空则
-        # #p1 / 否则最大号 + 1）。
-        if proof_no_delivery >= 1:
-            payload["proof_no"] = int(proof_no_delivery)
-            payload["proof_no_source"] = str(proof_no_source)
-        if _path_no >= 1:
-            # ② 的路径号也透传给秘书：单段正文的引用扫描（`_scan_proof_deps`）据此
-            # 把这一步的 `path_group` 落成同一个号；没有它，扫描只按段落下标 1 落。
-            payload["path_group"] = int(_path_no)
-        # ---- 落点：交付说这一份是 #pN（N>1）⇒ 它进 `proofs` 清单，不进 canonical ----
-        #
-        # canonical（`proof_text`）只放 #p1；把第 2 份写进那一格会让 `proof_list` 读出
-        # 两条 #p1（一条正文、一条空），而 `used_by` / 对应表 / V 的签全按号走。
-        # 只在"这一笔没有另交清单"时拆分：清单里的号是调用方显式给的，两套号不许叠。
+        # 号不在这里算（见上）：这一格只回答"要不要让秘书为这一笔分一个新号"。
+        # 判据是稿的身份（`_rewrite_is_the_same_proof`）：同一份稿改正文 ⇒ 改稿；
+        # 换了一份稿 ⇒ 新路径。秘书在重复那一支里看到这个标记才分配 N+1。
+        _proof_path_kind = (
+            "new_path"
+            if (stmt_id_now and not _rewrite_body and str(proof_text or "").strip()
+                and str(proof_text) != str((redelivery or {}).get("proof_text") or ""))
+            else "")
+        if _proof_path_kind:
+            payload["proof_path_kind"] = _proof_path_kind
         attach_canonical = str(proof_text or "")
         attach_entries = [dict(e) for e in proofs_listed]
-        if (proof_no_placement > 1 and attach_canonical.strip()
-                and not attach_entries):
-            attach_entries = [{"proof_no": int(proof_no_placement),
-                               "text": attach_canonical,
-                               "created_at": S.now_iso()}]
-            attach_canonical = ""
-        if (_path_no >= 2 and attach_canonical.strip() and attach_entries
-                and any(_same_manuscript_text(attach_canonical,
-                                              str(e.get("text") or ""))
-                        for e in attach_entries)):
-            # ② 的这一档：稿里 `## 证明` 被取成了 canonical 正文，而清单里已经声明
-            # 这一份是第 N>=2 条（同一份正文）⇒ 它不许再当 #p1 写一遍 —— 否则同一份
-            # 证明既是「行上的 canonical」又是「清单里的 #pN」，而签只认一个号。
-            attach_canonical = ""
-        if _path_no >= 1 and len(attach_entries) == 1:
-            # 逐份登记这一份的落点号由分配给出（交付号只在没有分配时才是权威）：
-            # 同一份正文重复登记（同 sha）时分配会沿用原号，这里就落回那一号，
-            # 于是不新增一条路径。
-            attach_entries = [dict(attach_entries[0],
-                                   proof_no=int(proof_no_placement))]
         # ---- D2①（2026-11-05 走查）：先把正文写进那一行，再请求升档 ----------------
         #
         # 路径：`secretary.py` 的升档那一支（`_record_statement_tx`，改前在
@@ -4840,6 +4685,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         written = sec.record_statement(payload, role="B",
                                        candidate_id=candidate_stmt_id,
                                        adjudication=_same_adjudication)
+        # ---- 这一笔的路径号：秘书分完才读得到（B 不再自己算） ----------------------
+        #
+        # 回执里的 `path_group` 是秘书那一笔事务里分配的号（新行 = 1；同一命题的
+        # 第 N 条路径 = N+1）。落点 / 依赖 / `verifications` 回写全用这个数 —— 它
+        # 是"这一份证明是第几条路径"的唯一权威。
+        _alloc_no = int(written.get("path_group") or 0)
+        if _alloc_no >= 1:
+            proof_no_placement = _alloc_no
+            proof_no_source = "path_group"
+            if (_alloc_no >= 2 and str(proof_text or "").strip()
+                    and not written.get("created") and not written.get("merged")):
+                # 第 2 条及以后：正文进 `proofs` 清单，不许再当 canonical (#p1) 写一遍
+                # （同一份证明既是行上的 canonical 又是清单里的 #pN，签只认一个号）。
+                attach_canonical = ""
+                attach_entries = [{"proof_no": _alloc_no, "text": str(proof_text),
+                                   "created_at": S.now_iso()}]
         # ---- D2②：拒绝要看，不许把它读成成功 ------------------------------------
         #
         # 改前 `if written.get("upgraded") and not written.get("created")` 不看
@@ -4868,26 +4729,31 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            **refused_extra,
                            **({"canonical_history": list(pre_write.get("canonical_history") or [])}
                               if pre_write.get("canonical_written") else {}))
-        # ---- 2026-11-11（收尾批）：verifications 行也落同一个路径号 -----------------
+        # ---- verifications 行也落同一个路径号 --------------------------------------
         #
-        # 三处同号的那第三处：V 落签时 B 还没分配路径号（那一格空着），这一笔分配完
-        # 之后按「覆盖这一份正文的行」回写 —— 与 ① 的 `_mark_ingested` / 指针支的
-        # `_pointer_receipt` 是同一个函数（`stamp_verification_path_group`）：已有同一
-        # 个号 ⇒ 一个字节不动；已有别的号 ⇒ 不覆盖、如实报。
+        # 三处同号的那第三处：V 落签时还没有路径号（那一格空着），这一笔由秘书分配完
+        # 之后按「覆盖这一份正文的行」回写（与 `_mark_ingested` 同一个函数
+        # `stamp_verification_path_group`）：已有同一个号 ⇒ 一个字节不动；已有别的号
+        # ⇒ 不覆盖、如实报。号从回执里来（`_alloc_no`），不在这一侧算。
         _path_receipt: dict = {}
         _sid_written = str(written.get("stmt_id") or "")
-        if _path_no >= 1 and _sid_written.strip():
+        #: 这一笔落盘的那一份正文（回写 verification 行按它的 sha 找）。
+        #: `proof_text` 空而清单里只有一份时用清单那一份（逐份 inline 那一支）。
+        _stamp_text = str(proof_text or "")
+        if not _stamp_text.strip() and len(proofs_listed) == 1:
+            _stamp_text = str(proofs_listed[0].get("text") or "")
+        if _alloc_no >= 1 and _sid_written.strip():
             from .. import manuscriptsubmission as _MSUB
 
             _path_receipt = {
-                "path_group": dict(_path_group),
+                "path_group": dict(written.get("path_group_reading") or {}),
                 "path_group_stamp": dict(_MSUB.stamp_verification_path_group(
                     root=getattr(self.store, "root", ""), statement_id=_sid_written,
-                    body_sha=_PR.proof_sha(_inline_text),
+                    body_sha=_PR.proof_sha(_stamp_text),
                     manuscript=_norm_manuscript_rel(manuscript_path),
-                    path_group=int(_path_no))),
+                    path_group=int(_alloc_no))),
             }
-            if _path_no < 2:
+            if _alloc_no < 2:
                 # 第 1 条路径是既有口径的默认值（老返回形状里没有这两格）⇒ 只做回写、
                 # 不回读数：`proof_text=P1` 与 `proofs=[{1, P1}]` 的返回键集合保持逐字相同。
                 _path_receipt = {}
@@ -5169,7 +5035,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                 + str(attach.get("reason") or "")
                                 + "（档位那一笔已经落盘，这一格不回滚）")
             # 这一笔带了这条命题自己的手稿 ⇒ 它的依赖面在正文写完之后补落（D7 的 A）。
-            md = self._manuscript_deps_after_write(sec, stmt_now, deps_groups)
+            md = self._manuscript_deps_after_write(
+                sec, stmt_now, deps_groups, manuscript=manuscript_path,
+                body_sha=_PR.proof_sha(_stamp_text))
             if md:
                 out["manuscript_deps"] = md
                 # ---- D6（2026-11-05 走查）：回执要读"写完之后"的依赖面 ----------
@@ -5310,7 +5178,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     if pd:
                         out["proof_deps"] = pd
                 # 这一笔带了这条命题自己的手稿 ⇒ 它的依赖面在正文写完之后补落（D7 的 A）。
-                md = self._manuscript_deps_after_write(sec, stmt_dup, deps_groups)
+                md = self._manuscript_deps_after_write(
+                    sec, stmt_dup, deps_groups, manuscript=manuscript_path,
+                    body_sha=_PR.proof_sha(_stamp_text))
                 if md:
                     out["manuscript_deps"] = md
                     # ---- D6（2026-11-05 走查）：同升档那一支，读"写完之后"的依赖面。
@@ -5979,12 +5849,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             f"手稿收录（D 只递指针）：普通数值手稿 `{rel}` —— 命题逐字取自 `## 命题`，"
             "证明栏空着（业主 2026-11-08：普通数值档不写证明正文），程序在实验行的 "
             "`code_path`，引文面不适用")
-        # ⑥（2026-11-11）：这一份排第几条路径 —— 分配只有 `assign_path_group` 一处实现，
-        # 分配与回执抽成两个方法（这个函数要守在 200 行那条软基线内）。
-        _path_no, _path_group, _path_refused = self._pointer_path_reading(
-            row_now=row_now, proof_text=proof_text, head_sid=head_sid, rel=rel)
-        if _path_refused:
-            return _path_refused, "", ""
+        # 路径号不在这里分配（业主口径：归秘书，在收录事务里分）。这一支只递内容；
+        # `_register_statement_impl` 用回执里的 `path_group` 做落点与回写。
         got = self._register_statement_impl(
             statement_full=proposition, statement_text=statement_text,
             proof_text=proof_text, proofs=None, proof_manuscript=rel,
@@ -5992,161 +5858,39 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             evidence_kind=evidence_kind, quote_verified=None,
             quote_reason=quote_reason,
             derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or ())],
-            doc_id=doc_id, line_range=line_range, path_group=_path_no)
+            doc_id=doc_id, line_range=line_range)
         if isinstance(got, dict):
             got = self._pointer_receipt(
-                got, path_no=_path_no, path_group=_path_group, head_sid=head_sid,
-                rel=rel, proof_text=proof_text, row_now=row_now,
-                statement=statement)
+                got, head_sid=head_sid, rel=rel, proof_text=proof_text,
+                row_now=row_now, statement=statement)
         return got, origin_now, kind
 
-    def _inline_path_reading(self, *, row_now: Mapping | None, body: str,
-                             manuscript_path: str = "") -> tuple[int, dict, dict]:
-        """② 逐份 inline 登记：这一份证明该排第几条路径 —— 这条支的唯一分配点。
-
-        与 :meth:`_pointer_path_reading` 同形、同一套口径，只差一档处理：这里没有
-        `head_sid`（命题号由 `row_now` 给；新命题还没号 ⇒ 这一份就是第 1 条路径，
-        不调分配函数）。
-
-        两半（顺序固定，缺一半就会把同一份正文记成两条路径）：
-        1. 「已在这一条命题上的正文」先按台账行认（canonical 正文 / `proofs` 清单）：
-           认到 ⇒ 沿用那个号，一个字节不新增（同 sha 重复登记幂等）；
-        2. 认不到才交给唯一的分配函数 `manuscriptpaths.assign_path_group`：这条命题
-           已有 N 条路径 ⇒ N+1（同一份正文 sha / 同一份稿 ⇒ 沿用原号）。
-
-        返回 `(path_no, reading, refusal)`：`refusal` 非空 ⇒ 调用方整笔不写。
-        """
-        from .. import manuscriptsubmission as _MSUB
-
-        text = str(body or "")
-        row = dict(row_now or {}) if isinstance(row_now, Mapping) else {}
-        sid = str(row.get("stmt_id") or "").strip()
-        rel = _norm_manuscript_rel(manuscript_path)
-        sha = _PR.proof_sha(text) if text.strip() else ""
-        if not text.strip():
-            return 0, {}, {}
-        if not sid:
-            # 新命题：这一条命题上还没有任何路径 ⇒ 第 1 条。分配函数要台账号，
-            # 这一档没有可读的路径面（不是"没查成"，是"还没得查"）。
-            return 1, {"checked": False, "path_group": 1, "existing": False,
-                       "count": 0, "statement_id": "", "manuscript": rel,
-                       "body_sha": sha, "paths": [], "problems": [],
-                       "why": "新命题还没有任何路径 ⇒ 这一份是第 1 条（分配函数要台账号）"}, {}
-        existing = 0
-        if _same_manuscript_text(str(row.get("proof_text") or ""), text):
-            existing = 1
-        else:
-            for entry in (row.get("proofs") or []):
-                one = dict(entry or {}) if isinstance(entry, Mapping) else {}
-                try:
-                    pno = int(one.get("proof_no") or 0)
-                except (TypeError, ValueError):
-                    pno = 0
-                if pno >= 1 and _same_manuscript_text(
-                        str(one.get("text") or one.get("proof_text") or ""), text):
-                    existing = pno
-                    break
-        if existing >= 1:
-            return existing, {"checked": True, "path_group": existing, "existing": True,
-                              "count": 0, "statement_id": sid, "manuscript": rel,
-                              "body_sha": sha, "paths": [], "problems": [],
-                              "why": (f"这一份正文已经在这条命题的第 {existing} 条路径上"
-                                      " ⇒ 沿用原号，不新增路径")}, {}
-        got = dict(_MSUB.assign_path_group(
-            store=self.store, root=getattr(self.store, "root", ""),
-            statement_id=sid, manuscript=rel, body_sha=sha))
-        if not got.get("checked"):
-            return 0, got, _refuse(
-                "path_group_unreadable",
-                "逐份登记这一份证明时路径数没读成："
-                + str(got.get("why") or "未知原因")
-                + " ⇒ 整笔不写（不猜它是第几条路径）")
-        #: 行上已经占掉的那些证明号（canonical 那一格 = #1）。分配函数的读数只来自
-        #: 依赖行 / verification 行，而老行 / 没走过 ① 的那一条 #p1 两处都可能没有号 ⇒
-        #: 不给下限就会把第 2 份证明也排成第 1 条（两个号指同一条路径）。这是"防重号"
-        #: 的下限，不是第二套分配规则：正常盘面上它恒 <= 分配号（1:1 时相等）。
-        occupied = 0
-        for no, body_text in _VR.proof_list(row):
-            if str(body_text or "").strip():
-                occupied = max(occupied, int(no or 0))
-        floor = occupied + 1 if occupied >= 1 else 1
-        path_no = max(int(got.get("path_group") or 1), floor)
-        if floor > int(got.get("path_group") or 1):
-            got = {**got, "path_group": path_no, "floor": floor,
-                   "why": (f"行上已有 {occupied} 份证明（读出来 {floor-1} 号被占），"
-                           f"而路径面只记到 {int(got.get('path_group') or 0)} 条 ⇒ "
-                           f"按行上已占的号取下限，这一份排第 {path_no} 条")}
-        return path_no, got, {}
-
-    def _pointer_path_reading(self, *, row_now: Mapping | None, proof_text: str,
-                              head_sid: str, rel: str
-                              ) -> tuple[int, dict, dict]:
-        """⑥：这一份手稿该排第几条路径 —— 指针支的唯一分配点。
-
-        「已在这一条命题上的正文」先按台账行认（canonical 正文 / `proofs` 清单）：
-        那一格没有 `path_group` 可比，不先看行就会把同一份正文当成新路径（第二遍
-        携带又落一遍依赖边）。认不到才交给唯一的分配函数 `assign_path_group`。
-
-        返回 `(path_no, reading, refusal)`：`refusal` 非空 ⇒ 调用方整笔不写。
-        """
-        from .. import manuscriptsubmission as _MSUB
-
-        path_group: dict = {}
-        path_no = 0
-        if row_now is None or not str(proof_text or "").strip():
-            return path_no, path_group, {}
-        existing = 0
-        if _same_manuscript_text(str(row_now.get("proof_text") or ""), proof_text):
-            existing = 1
-        else:
-            for entry in (row_now.get("proofs") or []):
-                one = dict(entry or {})
-                try:
-                    pno = int(one.get("proof_no") or 0)
-                except (TypeError, ValueError):
-                    pno = 0
-                if (pno >= 1 and _same_manuscript_text(
-                        str(one.get("text") or one.get("proof_text") or ""),
-                        proof_text)):
-                    existing = pno
-                    break
-        if existing >= 1:
-            return existing, {"checked": True, "path_group": existing,
-                              "existing": True, "count": 0,
-                              "statement_id": head_sid, "manuscript": rel,
-                              "body_sha": _PR.proof_sha(proof_text),
-                              "paths": [], "problems": [],
-                              "why": (f"这一份正文已经在这条命题的第 {existing} 条路径上"
-                                      " ⇒ 沿用原号，不新增路径")}, {}
-        path_group = dict(_MSUB.assign_path_group(
-            store=self.store, root=getattr(self.store, "root", ""),
-            statement_id=head_sid, manuscript=rel,
-            body_sha=_PR.proof_sha(proof_text)))
-        if not path_group.get("checked"):
-            return 0, path_group, _refuse(
-                "path_group_unreadable",
-                "收录这一份手稿时路径数没读成："
-                + str(path_group.get("why") or "未知原因")
-                + " ⇒ 整笔不写（不猜它是第几条路径）")
-        return int(path_group.get("path_group") or 1), path_group, {}
-
-    def _pointer_receipt(self, got: dict, *, path_no: int, path_group: dict,
+    def _pointer_receipt(self, got: dict, *,
                          head_sid: str, rel: str, proof_text: str,
                          row_now: Mapping | None, statement: str) -> dict:
-        """⑥ 的回执：路径号读数 + `verifications` 行回写 + `pointer` 三格。
+        """指针支的回执：路径号读数 + `verifications` 行回写 + `pointer` 三格。
 
-        `stamp_verification_path_group` 与 `ingest_manuscript` 的 `_mark_ingested`
-        是同一个函数、同一档口径（只回写覆盖这份正文的行；已有别的号 ⇒ 不覆盖）。
+        路径号从秘书回执里读（`got["path_group"]` / `got["path_group_reading"]`）：
+        这一侧不再分配，也不猜。`stamp_verification_path_group` 与
+        `ingest_manuscript` 的 `_mark_ingested` 是同一个函数、同一档口径（只回写
+        覆盖这份正文的行；已有别的号 ⇒ 不覆盖）。没有号（拒绝 / 概念行）⇒ 不回写。
         """
         from .. import manuscriptsubmission as _MSUB
 
-        if path_group:
-            got["path_group"] = dict(path_group)
+        _pg_got = got.get("path_group")
+        if isinstance(_pg_got, Mapping):
+            path_no = int(_pg_got.get("path_group") or 0)
+        else:
+            path_no = int(_pg_got or 0)
         if path_no >= 1 and bool(got.get("ok")):
             got["path_group_stamp"] = _MSUB.stamp_verification_path_group(
                 root=getattr(self.store, "root", ""), statement_id=head_sid,
                 body_sha=_PR.proof_sha(proof_text), manuscript=rel,
                 path_group=path_no)
+            if path_no < 2:
+                # 第 1 条路径是既有口径的默认值 ⇒ 老返回形状逐字不变。
+                got.pop("path_group", None)
+                got.pop("path_group_reading", None)
         got["pointer"] = {
             "path": rel,
             "statement_id": head_sid,
@@ -6267,7 +6011,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         return None
 
     def _manuscript_deps_after_write(self, sec: Any, stmt_id: str,
-                                     deps_groups: list[list[dict]]) -> dict:
+                                     deps_groups: list[list[dict]], *,
+                                     manuscript: str = "",
+                                     body_sha: str = "") -> dict:
         """正文写进在册那一行之后，把这份稿的依赖面也落下去（D7 的 A 那一半）。
 
         为什么需要它：上面那条"收方读稿登记"早退支路在"这一笔带了正文/清单"时让路
@@ -6277,11 +6023,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         只在"这一笔真的带了已核过的依赖组"时动手（`deps_groups` 空 ⇒ 返回空字典，
         调用方原样不动）。别条命题的稿在调用处就被挡掉了，这里不会再判一次所有权。
+
+        `manuscript` / `body_sha` 是这一份证明的身份：秘书用它们认"这一份正文
+        已经在那条路径上了吗"。不传 ⇒ 秘书分不到它、会再开一个新号（同一份证明
+        两条路径），所以两个调用点都传。
         """
         if not deps_groups:
             return {}
         written = dict(sec.record_manuscript_dependency_face(
-            stmt_id, deps_groups, note="b.register_statement:canonical") or {})
+            stmt_id, deps_groups, note="b.register_statement:canonical",
+            manuscript=manuscript, body_sha=body_sha) or {})
         return {"deps_written": int(written.get("deps_written") or 0),
                 "deps_duplicates": [dict(x) for x in (written.get("duplicates") or [])],
                 "checked": bool(written.get("checked")),
@@ -6335,6 +6086,48 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if known is None or str(known) != str(entry.get("text") or ""):
                 return True
         return False
+
+    def _rewrite_is_the_same_proof(self, *, stmt_id: str, row: Mapping,
+                                   manuscript_path: str, proof_text: str) -> bool:
+        """这一笔是"改在册同一份证明的正文"还是"同一命题的另一条证明路径"。
+
+        产出侧不再写 `- 证明号：N` 之后，"第几份"在交付里没有字面号可读了。判据改成
+        稿的身份：同一份稿改了正文 ⇒ 改稿（旧正文进 `proof_history`，那一份的签
+        转 stale，B 的改写载体 `reports/b-proof-<号>.md` 照旧）；换了一份稿 ⇒
+        同一命题的另一条证明路径（路径号由秘书分配，这条判据不决定号）。
+
+        这条判据只决定"要不要走 B 的改写载体"那一支，不决定路径号 —— 号仍由
+        秘书在 `record_statement` / `record_manuscript_dependency_face` 的锁里分。
+        读不到台账里那份正文的稿 ⇒ 走保守的那一档（只认 `reports/b-proof-*` 是
+        B 自己的改写载体，其余按新路径），不把一个新路径塞进改写支。
+        """
+        rel = _norm_manuscript_rel(manuscript_path)
+        canon = str(row.get("proof_text") or "")
+        if not rel or not canon.strip():
+            # 没有稿（内联正文）或 canonical 还空着 ⇒ 既有口径：按改 canonical 处理。
+            return True
+        # 这一条命题的"正本稿名"（一个稿号一份文件）：同名的正文变了 ⇒ 改稿。
+        # 换了一份稿（另一个稿号 / 另一族）⇒ 同一命题的另一条证明路径。
+        sid = str(stmt_id or "")
+        for family in ("f", "e", "b"):
+            if sid and rel == f"reports/{family}-proof-{sid}.md":
+                return True
+        canon_sha = _PR.proof_sha(canon)
+        try:
+            rows, _bad = _VR.list_verifications(
+                getattr(self.store, "root", ""), statement_id=str(stmt_id or ""),
+                limit=None)
+        except Exception:  # noqa: BLE001 —— 读不到就退回下面那一条（不猜成"新路径"）
+            rows = []
+        for one in rows or ():
+            doc = dict(one or {})
+            if str(doc.get("proof_sha256") or "") != canon_sha:
+                continue
+            rec = _norm_manuscript_rel(
+                str(doc.get("manuscript") or doc.get("object_path") or ""))
+            if rec:
+                return rec == rel
+        return rel.startswith("reports/b-proof-")
 
     def _existing_statement_for(self, full: str) -> dict | None:
         """按 `statement_full` 的规范化值找在册那一行（"是不是同一条"的唯一判据在
@@ -6406,7 +6199,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            "这一趟没有秘书 ⇒ 收下的稿写不进依赖面（不许退回'B 自己写'）："
                            + (f"{self.secretary_problem}" if self.secretary_problem else ""))
         written = dict(sec.record_manuscript_dependency_face(
-            stmt_id, deps_groups, note="b.receive_carried_manuscript") or {})
+            stmt_id, deps_groups, note="b.receive_carried_manuscript",
+            manuscript=str((manuscript or {}).get("path") or ""),
+            body_sha=_PR.proof_sha(proof_text)) or {})
         if not written.get("checked"):
             return _refuse(str(written.get("refused") or "dependency_face_not_written"),
                            str(written.get("reason") or ""))
@@ -6908,21 +6703,24 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     @staticmethod
     def _ingest_proof_no(reading: Mapping, proof_no: Any) -> tuple[int, str, str]:
-        """稿名与参数对证明号的读数 ⇒ `(第几份, 受控码, 人话)`。"""
-        name_no = int(reading.get("name_proof_no") or 0)
-        given_no: int | None = None
-        if proof_no not in (None, ""):
-            try:
-                given_no = int(proof_no)
-            except (TypeError, ValueError):
-                given_no = 0
-            if given_no < 1:
-                return 0, "bad_proof_no", f"`proof_no` 要是 >=1 的整数（收到 {proof_no!r}）"
-        if given_no is not None and name_no and given_no != name_no:
-            return 0, "proof_no_mismatch", (
-                f"稿名说这是 #p{name_no}，而 `proof_no` 参数说 #p{given_no} ⇒ 整笔不写"
-                "（以哪一个为准由调用方先说清；工具不会自己挑一个）")
-        return int(given_no or name_no or 1), "", ""
+        """`proof_no` 参数只校验形态，不定号（号由秘书在收录事务里分配）。
+
+        改前这一格是"稿名 `-p<N>` 与参数对拍、不一致 ⇒ 受控拒 `proof_no_mismatch`"。
+        产出侧不再写 `-pN` / 「证明号」之后，这条比对没有对象了：稿名里的号不再是
+        权威，参数里的号也不再是 —— 路径号只有一处来源（`assign_path_group`，在
+        `Secretary.record_statement` / `record_manuscript_dependency_face` 的锁里）。
+        所以这里只剩"形态不对就拒"（`bad_proof_no`），对得上的那一档一律返回 1
+        （调用方据此走的只是"这一笔没有指定号"的既有路径）。
+        """
+        if proof_no in (None, ""):
+            return 1, "", ""
+        try:
+            given_no = int(proof_no)
+        except (TypeError, ValueError):
+            given_no = 0
+        if given_no < 1:
+            return 0, "bad_proof_no", f"`proof_no` 要是 >=1 的整数（收到 {proof_no!r}）"
+        return 1, "", ""
 
     def _ingest_target_row(self, out: dict, target: str,
                            if_match: str) -> tuple[dict | None, str, str]:
@@ -7596,8 +7394,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
                       want_no: int, target: str, path: str,
-                      path_group: int = 0) -> dict:
-        """`mode=apply`：逐格回填（先 statements，再 dependencies；部分写如实回执）。
+                      append_new_path: bool = False) -> dict:
+        """`mode=apply`：逐格回填（先 dependencies，再 statements；部分写如实回执）。
+
+        ## 路径号（业主口径：归秘书）
+
+        这一格不再自己算「第几条路径」：号的分配下沉到秘书那一笔写事务里 —— 依赖面
+        那一路走 `record_manuscript_dependency_face`（它在锁里分号并把号回传），
+        登记新命题那一路走 `record_statement`（同一把锁、同一处实现）。
+
+        依赖格排在正文之前：它回执里的 `path_group` 是这一份证明的路径号，正文
+        （`_attach_proofs`）与 `verifications` 回写都用同一个数。这一笔是"同一命题的
+        另一条证明路径"而没请求依赖格（`append_new_path`）⇒ 同一处秘书事务只分号、
+        不写边（`reserve=True`）。其余没请求依赖格的情形没有"第几条"可问，正文照
+        既有口径落 `want_no`（canonical）。
 
         ## 为什么刻意不跑同一性判定（业主 2026-11-09 的形态）
 
@@ -7636,12 +7446,49 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                             "written": bool(statements_written or deps_written),
                                             "sink": "apply：按格回填（部分写如实回执）"})
 
-        # ---- 路径号（业主 2026-11-11 追加裁定）：由 `ingest_manuscript` 在 plan 之前
-        # 分配好（那一层才看得到"这条命题已有几条路径"），这里只接住它。
-        _path_no = int(path_group or 0) or int(want_no or 1)
+        #: 这一份证明的路径号：默认 canonical（没请求依赖格时没有别的来源）；
+        #: 依赖格那一笔会把秘书在锁里分到的号带回来，后面的正文 / 证据用它。
+        _path_no = int(want_no or 1)
 
-        # ---- 1) proof_text（签闸不松；#pN 逐份认签，不许借 #p1 的光）
+        # ---- 1) dependencies（集合语义：追加 + 去重；永不删） --------------------
+        #
+        # 秘书那一笔回执里的 `path_group` 就是这一笔的路径号（产出侧不写、B 不算）。
+        if str((cells.get("dependencies") or {}).get("outcome") or "") == "filled":
+            got = self._ingest_apply_dependencies(
+                cells, sec, target=target, want_no=want_no, path=path,
+                body_sha=str(reading.get("proof_sha256") or ""))
+            if got["code"]:
+                return _cell_refused("dependencies", got["code"], got["why"])
+            if got.get("path_group"):
+                _path_no = int(got["path_group"])
+                #: 回执读数（与改前 `assign_path_group` 的返回同形，测试与模型都读它）。
+                out["path_group"] = {"checked": True, "path_group": _path_no,
+                                     "existing": False, "statement_id": target,
+                                     "manuscript": _norm_manuscript_rel(path)}
+            if got["written"]:
+                deps_written = True
+                written_cells.append("dependencies")
+
+        # ---- 2) proof_text（签闸不松；#pN 逐份认签，不许借 #p1 的光）
         if str((cells.get("proof_text") or {}).get("outcome") or "") == "filled":
+            # 这一笔是"同一命题的另一条证明路径"、而没请求依赖格 ⇒ 号仍要由秘书分
+            # （只分号、不写边：`reserve=True`）。号在秘书那一笔事务里定下来，正文写口
+            # 用它；两条路的冲突由写口的 `proof_no_taken` 兜住（不会静默覆盖）。
+            if append_new_path and not deps_written:
+                reserved = dict(sec.record_manuscript_dependency_face(
+                    target, [], note=f"own.ingest_manuscript:reserve:{target}",
+                    manuscript=_norm_manuscript_rel(path),
+                    body_sha=str(reading.get("proof_sha256") or ""),
+                    reserve=True) or {})
+                if not reserved.get("checked"):
+                    return _cell_refused(
+                        "proof_text",
+                        str(reserved.get("refused") or "path_group_unreadable"),
+                        str(reserved.get("reason") or ""))
+                _path_no = int(reserved.get("path_group") or _path_no)
+                out["path_group"] = {"checked": True, "path_group": _path_no,
+                                     "existing": False, "statement_id": target,
+                                     "manuscript": _norm_manuscript_rel(path)}
             from .. import vsigns as _VS_MID2
 
             got = self._ingest_apply_proof(
@@ -7654,7 +7501,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 statements_written = True
                 written_cells.append("proof_text")
 
-        # ---- 2) numeric_evidence（只 e-num；凭据仍从 experiments 那一行读）
+        # ---- 3) numeric_evidence（只 e-num；凭据仍从 experiments 那一行读）
         if str((cells.get("numeric_evidence") or {}).get("outcome") or "") == "filled":
             got = self._ingest_apply_numeric_evidence(cells, row, path=path)
             if got["code"]:
@@ -7683,18 +7530,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                  "reason": ("台账那一档不满足升档条件（签未到位 / "
                                             "稿头没声明更强的档）⇒ 这一格不写")}
 
-        # ---- 4) dependencies（集合语义：追加 + 去重；永不删）
-        if str((cells.get("dependencies") or {}).get("outcome") or "") == "filled":
-            got = self._ingest_apply_dependencies(cells, sec, target=target,
-                                                  want_no=want_no,
-                                                  path_group=_path_no)
-            if got["code"]:
-                return _cell_refused("dependencies", got["code"], got["why"])
-            if got["written"]:
-                deps_written = True
-                written_cells.append("dependencies")
-
-        # ---- 5) statement_full：在册行只读（plan 不会给 filled；这里兜底并说清）
+        # ---- 4) statement_full：在册行只读（plan 不会给 filled；这里兜底并说清）
         if str((cells.get("statement_full") or {}).get("outcome") or "") == "filled":
             return _cell_refused(
                 "statement_full", "cell_not_writable_on_existing_row",
@@ -7834,25 +7670,25 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_apply_dependencies(self, cells: dict, sec: Any, *,
                                    target: str, want_no: int,
-                                   path_group: int = 0) -> dict:
+                                   path: str = "", body_sha: str = "") -> dict:
         """`mode=apply` 的 dependencies 那一格：集合语义（追加 + 去重；永不删）。
 
         先把稿里的依赖表过 `depsection` 的闸（等级够不够、能不能引、表与正文是否
         说同一件事），再交给秘书的 `record_manuscript_dependency_face` 落表。
         回填写读进 `cells["dependencies"]`；返回 `{"written": bool, "code": 码,
-        "why": 话}`（`code` 非空 ⇒ 调用方按 `_cell_refused` 整笔不写，理由原样）。
+        "why": 话, "path_group": N}`（`code` 非空 ⇒ 调用方按 `_cell_refused` 整笔
+        不写，理由原样）。
 
-        `path_group` 是 B 收录时分配的路径号（业主 2026-11-11 追加裁定）：稿里那一列
-        是产出方写的，不是权威；这一份证明的所有依赖行都排进同一个号。
+        ## 路径号（业主口径：归秘书）
+        `path_group` 不是 B 算的：稿里那一列是产出方写的（新形式干脆没有这一列），
+        不是权威。`record_manuscript_dependency_face` 在同一把锁里分配，并把号回传
+        给这里 —— 正文 / 证据 / `verifications` 回写都用回执里的那个号。
         """
         from .. import depsection as _DS
 
         one = dict(cells["dependencies"])
         rows = [dict(x) for x in (one.get("value") or [])]
         refs = [str(x) for x in (one.get("refs") or [])]
-        group = int(path_group or 0)
-        if group >= 1:
-            rows = [dict(r, path_group=group) for r in rows]
         stmt_rows, problem, error = SL.rows_of(self.store)
         if problem:
             return {"written": False, "code": "ledger_unreadable",
@@ -7884,7 +7720,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         groups = _DS.deps_groups(rows, kinds)
         written = dict(sec.record_manuscript_dependency_face(
             target, groups, proof_no=want_no,
-            note=f"own.ingest_manuscript:dependencies:{target}") or {})
+            note=f"own.ingest_manuscript:dependencies:{target}",
+            manuscript=_norm_manuscript_rel(path), body_sha=str(body_sha or "")) or {})
         if not written.get("checked"):
             return {"written": False,
                     "code": str(written.get("refused") or "dependency_face_not_written"),
@@ -7895,8 +7732,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "rows_written": int(written.get("deps_written") or 0),
             "duplicates": len(written.get("duplicates") or []),
             "path_groups": int(written.get("path_groups") or 0),
+            "path_group": int(written.get("path_group") or 0),
         }
-        return {"written": deps_written, "code": "", "why": ""}
+        return {"written": deps_written, "code": "", "why": "",
+                "path_group": int(written.get("path_group") or 0)}
 
     def _preview_b_manuscript(self, *, statement_id: str, statement_full: str,
                               proof_text: str, label: str = "",

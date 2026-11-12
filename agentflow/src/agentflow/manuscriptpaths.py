@@ -51,6 +51,38 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
                                   or row.get("source_lit_id")
                                   or row.get("source_experiment_id")
                                   or row.get("label") or ""))
+    # ---- 命题行自己的证明清单也是路径面（v3：不再只靠依赖行 / 签行） -------------
+    #
+    # 一条命题的 canonical 正文 + `proofs` 清单逐份就是它的路径。改前这里只读
+    # `dependencies` 与 `verifications`：一份"自足、没有依赖行、签还没落成行"的证明
+    # 在路径面上是 0 条 ⇒ 第二份收录会被分到第 1 条（同号）。补上这一面之后
+    # "已有几条路径"与"这一行上有几份证明"同源（`verifications.proof_list` 是唯一
+    # 读口，canonical 是 #p1）。
+    row_self = None
+    try:
+        rows_self = [dict(r) for r in store.rows("statements")] if store is not None else []
+    except Exception:  # noqa: BLE001 —— 读不到就不加这一面（"没查成"不冒充"没有"）
+        rows_self = []
+        problems.append("statements 读不出来 ⇒ 路径面只按依赖行 / 签行读")
+    for one_row in rows_self:
+        if str(one_row.get("stmt_id") or "") == sid:
+            row_self = one_row
+            break
+    if row_self is not None:
+        from . import verifications as _VRself
+
+        for proof_no, body in _VRself.proof_list(row_self):
+            try:
+                group = int(proof_no)
+            except (TypeError, ValueError):
+                continue
+            if group < 1 or not str(body or "").strip():
+                continue
+            one = by_group.setdefault(group, {"path_group": group, "manuscript_id": "",
+                                              "body_sha": "", "manuscript": "",
+                                              "sources": []})
+            if not one["body_sha"]:
+                one["body_sha"] = str(_VRself.text_sha(str(body)) or "")
     try:
         from . import verifications as _VR
 
