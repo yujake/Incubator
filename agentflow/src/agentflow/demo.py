@@ -182,7 +182,7 @@ class FixtureDownloader:
         if not url.startswith("abfixture:"):
             if self.fallback is not None:
                 return self.fallback.download(url, dest_dir, filename_hint)
-            # `kind` 是 `FetchResult` 的受控失败档（`F-6`）：契约要求"失败的下载
+            # `kind` 是 `FetchResult` 的受控失败档：契约要求"失败的下载
             # 必须答得出为什么"，所以这里不能再只给自由文本的 error。
             return FetchResult(ok=False, kind="non_fixture_url", path=None, http_status=None,
                                bytes=0, sha256=None,
@@ -215,12 +215,12 @@ class FixtureDownloader:
 
 def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
                               candidates: dict[str, Any] | None = None) -> dict:
-    """演示替身：替 A 把「待新增列表」里的每一条逐条判过（2026-10-26 Q16 之后入库的唯一定路）。
+    """演示替身：替 A 把「待新增列表」里的每一条逐条判过（入库的唯一定路）。
 
     为什么演示里必须有这一步：A 的自动链路只负责把检索到的候选暂存进列表（注册即待裁），
     入库必须先逐条判过 —— 判过的证据就是那一句 `relevance`（为什么与本次检索相关），
-    而没有逐条判完之前整批提交会被拒（`lit.admit_all` 的提交闸）。
-    真机 `projects/mp3-r3` 那次就是反例：33 条同一秒整批入库、`relevance` 一条都没写。
+    而没有逐条判完之前整批提交会被拒（`lit.admit_all` 的提交闸）；反例是整批在同一秒
+    入库、`relevance` 一条都没写。
 
     演示里没有模型，所以"读"这个动作由演示脚本替：先把这一条的 PDF 取下来（
     `AgentA._stage_download`，与产品里同一条下载路径），再代写那一句 relevance，
@@ -314,7 +314,7 @@ def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
                                 tx.upsert("literature", got_dup, note="demo.judge")
             # 判完之后收口（提交闸在这一步才放行；它同时写委托报告）。
             registry.call("lit.admit_all", request_id=rid)
-            # 这一问最终入库了哪几篇要写回请求行：Q16 之后入库不在 `run_once` 里发生，
+            # 这一问最终入库了哪几篇要写回请求行：入库不在 `run_once` 里发生，
             # 于是 `result_lit_ids` 也得在这里补上（否则请求行永远说"一篇都没找到"）。
             if admitted_ids:
                 with store.tx("search_requests", actor="demo", note="demo.judge") as tx:
@@ -342,7 +342,7 @@ def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
 
 def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     from .extract import extract_text
-    # `R-56`（`draft/28` §172）：演示点名要一个离线确定性抽取器，所以用
+    # 演示点名要一个离线确定性抽取器，所以用
     # `OfflineFixtureExtractor`（与 `RuleExtractor` 同实现、声明自己不是框架回退）。
     # 用 `RuleExtractor` 会被 `AgentB` 当成"框架在无 LLM 时偷偷回退"而拒抽 ——
     # 那条规矩是对的（它会往概念图里灌碎片），演示要的是"调用方明确选择"。
@@ -390,7 +390,7 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     # ---------------- 2. A 智能体：搜索 + 下载 + 登记 ----------------
     providers = [FixtureProvider(cpath)]
     # 演示里"读过"要拿得到字节：把这一轮 provider 交回的 Candidate 按题名留一份
-    # （`pdf_url` 只活在它上面；Q16 之后入库被推迟到逐条判决那一步）。
+    # （`pdf_url` 只活在它上面；入库被推迟到逐条判决那一步）。
     cand_by_title = {getattr(c, "title", ""): c
                      for c in providers[0].search("", "topical", "", 100)}
     agent_a = AgentA(
@@ -426,7 +426,7 @@ def run_demo(root: Path, *, reset: bool = True, verbose: bool = True) -> int:
     log("\n[5] 各表统计")
     stats = st.stats()
     # 表名从 `schema.TABLES` 取（`stats()` 的键就是它生成的）——
-    # 写死一张名单在这里正是"并表之后 `stats["concepts"]` 当场 KeyError"的成因。
+    # 写死一张名单会与它漂移，落成 `stats["concepts"]` 那样的 KeyError。
     for t in [*S.TABLES, "events"]:
         info = stats[t]
         extra = " ".join(f"{k}={v}" for k, v in info.items() if k != "count")
