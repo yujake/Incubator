@@ -3,13 +3,11 @@
 
 ## 这一格修的是什么
 
-真机 `projects/R-mk-infinite-93`（2026-11-06）：`tasks` 里 D 已经交了一份可用稿、
-`experiments` 有 10 行（其中 7 行 `result` 是 `supports` / `refutes`），而
-`statements` 与 `documents` 都是 0 行；`research_questions` 还有 1 条 `open`。
-板上"未结项"是 0 —— 于是 `agent_loop._pending_work` 的三条判据（新投递 /
-未消板项 / 待消费子产出）全不成立，M 每一拍都判"无事可做"并挂机：它每 20 分钟
-醒来只查子任务与信箱，再 park。"研究还没做完"在盘上有读数，但没有任何一处把
-它变成"不许挂机"的判据。
+真机事故：`tasks` 里 D 已经交了一份可用稿、`experiments` 有几行有结论，而 `statements`
+与 `documents` 都是 0 行；`research_questions` 还有一条 `open`。板上"未结项"是 0 ——
+于是 `agent_loop._pending_work` 的三条判据（新投递 / 未消板项 / 待消费子产出）全不
+成立，M 每一拍都判"无事可做"并挂机：它每 20 分钟醒来只查子任务与信箱，再 park。
+"研究还没做完"在盘上有读数，但没有任何一处把它变成"不许挂机"的判据。
 
 所以本模块只做一件事：把"研究未尽"从"感觉没活"换成台账上数得出来的判据，
 并给出一条确定的下一动作。它不调模型、不写任何东西，纯读。
@@ -26,17 +24,16 @@
 | `manuscript_missing` | 非概念 `statements` > 0 而 `documents` = 0（研究已落成命题，稿子还没有一行） | 派 G 成文（或派 D 先出手稿） |
 
 `concept_missing` 与 `candidate_unfiled` 是两条独立的分支，缺一不可：
-真机 R-mk-infinite-93 的三次轮查（04:57 / 05:22 / 05:49）每次都只排"再做一轮
-实验/穷举"，概念行一行都没长出来 —— 概念面空着，说明文献整理这一环（B 的交付面）
-还没做完，这就是"研究未尽"里最先可读的那一格。
+只排"再做一轮实验/穷举"而不看概念面时，概念行一行都不会长出来 —— 概念面空着，
+说明文献整理这一环（B 的交付面）还没做完，这就是"研究未尽"里最先可读的那一格。
 
-这一档的动作主语是 B 而不是 C（2026-11-06 业主裁定，甲）：概念行的唯一写侧在
+这一档的动作主语是 B 而不是 C：概念行的唯一写侧在
 B 那一侧（`conceptrows` → `Secretary.write_concept_row`，契约第 4 条逐字"写经秘书"：
 五元位 / 洗名 / 概念同一性同一份实现）；C 的动作面全是分析（`hottest` / `paths` /
 `cold` / `gaps` / `neighbors` / `relations_between` 产 `AnalysisReport`），一行概念
-都写不出来 ⇒ 派 C 是死路：派出去也长不出概念行，这条"未尽项"永远消不掉（真机 93
-就是这样空转的）。理由也不是"概念面是 F 的可引池"：可引池 = 在册 ∧ 等级 ≥
-`pre_theorem` 的命题（`depsection.citable_pool`），与 concept 行无关。
+都写不出来 ⇒ 派 C 是死路：派出去也长不出概念行，这条"未尽项"永远消不掉。理由也不是
+"概念面是 F 的可引池"：可引池 = 在册 ∧ 等级 ≥ `pre_theorem` 的命题
+（`depsection.citable_pool`），与 concept 行无关。
 
 概念面那一档排在命题面之前（上表就是这么排的），两条各自的判据都必须能单独触发
 （判据见 `tests/test_m_must_not_park_with_research_unfinished.py` 的 a1/a2 与 b1/b2）。
@@ -143,12 +140,12 @@ def _ids(rows: list[Mapping[str, Any]], field: str, limit: int = 12) -> list[str
 def _gap_concept_missing(counts: Mapping[str, Any]) -> dict[str, Any] | None:
     """分支甲：概念面是不是空的（研究型项目里 concept 行 = 0）。
 
-    为什么这一条排在"候选族"前面：真机 R-mk-infinite-93 的三次轮查每次都只排
-    "再做一轮实验/穷举"，概念行一行都没长出来 —— 概念面是这一档最先可读的缺口。
+    为什么这一条排在"候选族"前面：只排实验时概念行一行都没长出来 ——
+    概念面是这一档最先可读的缺口。
 
-    为什么动作对象是 B 而不是 C（业主 2026-11-06 裁定，甲）：概念行只由 B 经
+    为什么动作对象是 B 而不是 C：概念行只由 B 经
     `Secretary.write_concept_row` 写，C 的动作面全是分析（产 `AnalysisReport`）——
-    派 C 也长不出概念行，那条"未尽项"永远消不掉（真机 93 就是这样空转的）。
+    派 C 也长不出概念行，那条"未尽项"永远消不掉。
 
     作用域：只对"研究型项目"触发（`research_shaped=True`）。一个空工作区
     （没有实验 / 问题 / 文献 / 稿子）不产生这一条 —— 它是"没有研究对象"，
