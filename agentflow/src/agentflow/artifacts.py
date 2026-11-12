@@ -1,18 +1,13 @@
 # -*- coding: utf-8 -*-
-"""产物登记：谁在哪个路径产出了什么（依据 `draft/28` §153 的 A3/A4 与 R-52）。
+"""产物登记：谁在哪个路径产出了什么。
 
 ## 这一层补的是什么
 
 `tasks.artifacts` 记的是"这次召唤产出了哪些引用"（`table:id` 或 `file:<相对路径>`），
 `documents.markdown_path` 记的是"G 渲染的那一份稿件"。两者都只回答单个对象自己的
-产出面。没有任何地方回答那个在 §153 里连撞两次的问题：
-
-- A3（两份"断言台账"同义不同物）：`out/p2-claims-ledger.md` 与
-  `out/paper/CLAIMS-LEDGER.md` 并存，而"这个路径归谁"没有登记 —— 于是谁都无法在
-  事前判断"我要写的这个路径是不是另一个角色的产物"。
-- A4（六个产生验收读数的脚本不在可审计对象图里）：`code/*.py` 既非 `experiments`
-  行也非 `documents` 行 ⇒ 它们不在任何对象图里，产出的读数也就没有可核的来源。
-- R-52：没有"构建产物"这个对象类型 ⇒ 产出物无法进图；且产物路径没有归属登记。
+产出面。没有任何地方回答"这个路径归谁"：同一个路径可能是两个角色的产物，而
+"我要写的这个路径是不是另一个角色的产物"在事前无法判断；也没有"构建产物"这个
+对象类型，产出的读数没有可核的来源。
 
 本模块不去改 `schema.py`（那是 FC-27 禁改区，且"新表"要人裁），而是把这件事做成
 工作区级文件台账（与 `signatures` 的 `DOC-SIGNATURES.jsonl`、`sessions` 的
@@ -45,8 +40,7 @@ note       人读的补充（可空）
 ## 它不是判据的执行者
 
 本模块只登记与核对；"这个产物该不该存在""这份读数可不可信"由各自的判据回答。
-`unowned()` 是唯一的判断：给一组路径，答"哪些没有归属登记" —— A4 那六个
-脚本正是靠它才看得见。
+`unowned()` 是唯一的判断：给一组路径，答"哪些没有归属登记"。
 """
 
 from __future__ import annotations
@@ -114,21 +108,15 @@ def sha256_of(path: pathlib.Path) -> str:
     return digest.hexdigest()
 
 
-#: 逐条登记的已知外部生产者（EE-11 的写入期口径）。
+#: 逐条登记的已知外部生产者（写入期口径）。
 #:
-#: ## 它不是"允许名单"（这一条是主控裁定，2026-10-06）
+#: ## 它不是"允许名单"
 #:
-#: 未登记的名字照写台账 —— 外部脚本（真机 2985 行 `paper-generator`）的产出
-#: 不许因为"框架没登记这个名字"就消失：台账少一行 = 下游读不到那份产物，
-#: 那是不可逆的信息损失（比"多一根分面轴"贵得多）。
+#: 未登记的名字照写台账 —— 外部脚本的产出不许因为"框架没登记这个名字"就消失：
+#: 台账少一行 = 下游读不到那份产物，那是不可逆的信息损失（比"多一根分面轴"贵得多）。
 #: 这张表的作用是让常见的外部生产者有名字、有理由（人读得懂"这是谁"），
 #: 而"出现了一个没登记的生产者"这件事由 `summarize()["unregistered"]` 如实报出来。
 #: 一句话：写入期可见，不是写入期否决。
-#:
-#: 真机读数（`draft/43-E` 附）：Incubator 根的 `ARTIFACTS.jsonl` 有 2985 行
-#: `producer="paper-generator"`，而这个串在 `src/`、`tools/`、`AGENTS.md`、`draft/*.md`
-#: 里零命中 ⇒ 它是外部脚本写的，不是框架角色。登记它（而不是改历史行：`store.rebuild`
-#: 会重放同一批，而"历史行不许回填"是本仓的纪律）。
 REGISTERED_EXTERNAL_PRODUCERS: dict[str, str] = {
     "paper-generator": (
         "外部论文打包脚本（不是框架角色）：真机 Incubator 根 2985 行 `ARTIFACTS.jsonl` "
@@ -193,9 +181,9 @@ def record(
     先核文件再写台账：文件不存在 / 不是普通文件 ⇒ `ArtifactError`，一个字节都不写。
     （"先记账、后产出"的顺序会让台账成为一份愿望清单 —— 而它唯一的用途是核对。）
 
-    `producer` 走写入期口径 `producer_problem`（EE-11）：只拦畸形输入
-    （空 / 换行 / 超长）。未登记的合法名字照写台账 —— 外部生产者（真机 2985 行
-    `paper-generator`）的产出不许因为"框架没登记这个名字"就消失；它的可见性由
+    `producer` 走写入期口径 `producer_problem`：只拦畸形输入（空 / 换行 / 超长）。
+    未登记的合法名字照写台账 —— 外部生产者（如 `paper-generator`）的产出不许因为
+    "框架没登记这个名字"就消失；它的可见性由
     `producer_is_known()` / `summarize()["unregistered"]` 提供
     （"写入期可见，不是写入期否决"）。
     """
@@ -219,7 +207,8 @@ def record(
         "producer": str(producer),
         "kind": str(kind or "file"),
         "task_id": str(task_id or ""),
-        # 2026-10-17（store #16）：本模块其余坏输入走 `ArtifactError`，只有这一格是裸 int()。
+        # 本模块其余坏输入走 `ArtifactError`；这一格也只经 `_exit_code_of` 收成 int，
+        # 不静默吞坏值。
         "exit_code": exit_code if exit_code is None else _exit_code_of(exit_code),
         "note": str(note or ""),
     }
@@ -236,9 +225,8 @@ def record(
 def read_ledger(root: Any) -> tuple[list[dict], list[str]]:
     """读台账；返回 `(记录, 坏行说明)`。
 
-    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`（`draft/36` T-6 合并）。
-    此前这里、`signatures.read_ledger`、`sessions.read_session` 各写了一份同形的循环 ——
-    三份实现意味着"坏行的定义"有三个落点，改一处另两处不会跟着变。
+    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`。坏行的定义只能有一个
+    落点：各自写一份同形的循环，改一处另两处不会跟着变。
     """
     return read_jsonl(ledger_path(root))
 
@@ -277,8 +265,8 @@ def verify_entries(root: Any, records: Sequence[Mapping[str, Any]] | None = None
 def owners_of(root: Any, path: Any) -> list[dict]:
     """这个路径在台账里的全部归属记录（按时间序）。空列表 = 没有归属登记。
 
-    为什么返回全部而不是最后一条：同一个路径被两个生产者登记过（A3 那两份台账
-    就是这种形态）本身就是一条发现，只给最后一条会把它抹掉。
+    为什么返回全部而不是最后一条：同一个路径被两个生产者登记过（同义不同物的两份
+    台账）本身就是一条发现，只给最后一条会把它抹掉。
     """
     rel = rel_path(root, path)
     records, _bad = read_ledger(root)
@@ -288,9 +276,7 @@ def owners_of(root: Any, path: Any) -> list[dict]:
 def unowned(root: Any, paths: Iterable[Any]) -> list[str]:
     """给定的路径里，没有归属登记的（工作区相对路径，排序）。
 
-    这是本模块唯一的判断：A4 那六个脚本（`code/*.py`，既非 `experiments` 行
-    也非 `documents` 行）正是靠它才看得见 —— "不在可审计对象图里"这句话，
-    在没有这条判据之前只能靠人肉比对。
+    这是本模块唯一的判断：它把"不在可审计对象图里"从一句人肉比对变成可查的读数。
     """
     known = {str(r.get("path") or "") for r in read_ledger(root)[0]}
     out: set[str] = set()
@@ -320,10 +306,10 @@ def list_artifacts(root: Any, *, producer: str | None = None,
 def summarize(root: Any) -> dict:
     """台账汇总：条数 / 生产者计数 / 未登记的生产者 / 类别计数 / 坏行数 / 四态计数。
 
-    `unregistered` 是 EE-11 的读数（不是闸门）：台账里出现过、但既不是角色/主控、
+    `unregistered` 是读数（不是闸门）：台账里出现过、但既不是角色/主控、
     也不是 `tool:<名>`/`agentflow.<模块>`、也不在 `REGISTERED_EXTERNAL_PRODUCERS` 里的
-    生产者名 —— 各几条。它让"出现了一个没人登记的生产者"当场看得见
-    （改前：那种名字静默写进台账，`by_producer` 悄悄多一根分面轴，而那与"少登一行"同形）。
+    生产者名 —— 各几条。它让"出现了一个没人登记的生产者"当场看得见；否则那种名字
+    只会让 `by_producer` 悄悄多一根分面轴。
     """
     records, bad = read_ledger(root)
     by_producer: dict[str, int] = {}
@@ -341,7 +327,7 @@ def summarize(root: Any) -> dict:
 
 
 def render_markdown(root: Any, entries: Sequence[Mapping[str, Any]] | None = None) -> str:
-    """把台账渲染成一份可进包的表（A4 那六个脚本要的就是这一份）。
+    """把台账渲染成一份可进包的表。
 
     逐条给：路径 / 生产者 / 类别 / 召唤号 / 退出码 / 字节 / sha256（前 16 位）/
     现在的状态。状态列不许省：一份只列 sha256 的表会让读者以为"列出来就是对的"。
