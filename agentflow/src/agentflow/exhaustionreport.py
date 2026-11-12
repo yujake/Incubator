@@ -1168,12 +1168,18 @@ def blocks_of(text: Any) -> tuple[dict[str, int], list[str]]:
     missing: list[str] = []
     headings = ((BLOCK_DESIGN, DESIGN), (BLOCK_EXHAUSTION, ENUMERATION),
                 (BLOCK_ENVIRONMENT, ENVIRONMENT))
+    # 两个逐行/逐段的查表都由这三对定死（`headings` 是函数内常量）⇒ 各建一次：
+    # ・`heading_hits`：改前每读一行都要现拼 2×3 个 f-string（`f"## {label}"` /
+    #   `f"# {label}"`）再比 —— 同一批字符串在整份报告上被重复构造 行数×6 次；
+    # ・`label_of`：改前每缺一段就现建一个三键字典，只为取一个标签。
+    heading_hits = tuple((f"## {label}", f"# {label}", key) for label, key in headings)
+    label_of = {key: label for label, key in headings}
     current = ""
     for line in raw_lines:
         stripped = line.strip()
         hit = ""
-        for label, key in headings:
-            if stripped.startswith(f"## {label}") or stripped.startswith(f"# {label}"):
+        for at_h2, at_h1, key in heading_hits:
+            if stripped.startswith(at_h2) or stripped.startswith(at_h1):
                 hit = key
                 break
         if hit:
@@ -1184,8 +1190,7 @@ def blocks_of(text: Any) -> tuple[dict[str, int], list[str]]:
             blocks[current] = blocks.get(current, 0) + len(stripped)
     for _label, key in headings:
         if not blocks.get(key):
-            missing.append({"design": BLOCK_DESIGN, "enumeration": BLOCK_EXHAUSTION,
-                            "environment": BLOCK_ENVIRONMENT}[key])
+            missing.append(label_of[key])
     return blocks, missing
 
 
