@@ -6156,13 +6156,16 @@ class Conductor:
                 "reason": ""}
 
     def _handoffs_summary(self) -> dict[str, Any]:
-        """交差账的汇总（`activity_snapshot` 与父的读共用这一份）。"""
-        root = str(getattr(self.store, "root", "") or "")
-        got = CLK.read_handoffs(root)
-        rows = [dict(r) for r in (got.get("rows") or ())]
-        return {"checked": bool(got.get("checked")), "count": len(rows),
-                "silent": [str(r.get("task_id") or "") for r in rows],
-                "reason": str(got.get("reason") or "")}
+        """交差账的汇总（`activity_snapshot` 与父的读共用这一份）。
+
+        正文只有一处：`handoffs_reading` 是这份交差读数的唯一读口（'父侧那一格'与
+        '整支的汇总'读的是同一本账），这里只是从它的六格里摘出汇总要的四格 ——
+        `parent` / `rows` 不进汇总。改前这里自己又把 `CLK.read_handoffs` 读一遍、
+        把四个键各算一遍，那是同一判据的第二份实现（一处改了另一处不会报）。
+        """
+        got = self.handoffs_reading()
+        return {"checked": got["checked"], "count": got["count"],
+                "silent": got["silent"], "reason": got["reason"]}
 
     def active_reading(self, task_id: str, *, names: Mapping[str, str] | None = None,
                        snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
