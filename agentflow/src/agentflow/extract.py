@@ -122,7 +122,7 @@ class HtmlNotSupported(ExtractError):
     为什么它必须是一个独立类型，而不是让 :class:`UnsupportedFormat` 去承担：
     两者对调用方的含义完全不同。扩展名不支持说的是"这个后缀的格式我们不认识"，
     而这里的内容确实是 HTML（正文就在里面，剥标签就能拿到可回验文本）—— 只是
-    文件被存成了 `.bin` 这类名字（实测出现过：Crossref 链接落下来的响应是 HTML，
+    文件被存成了 `.bin` 这类名字（出现过：Crossref 链接落下来的响应是 HTML，
     却被存成 `.bin`）。旧行为会报成"不支持的扩展名"，把一次可处理的内容
     说成"格式不认识"，调用方据此只能放弃；现在的理由直接告诉他怎么处理。
     """
@@ -367,7 +367,7 @@ class _HTMLTextExtractor(HTMLParser):
         self._skip_stack: list[str] = []
         #: 非块级标签两侧插什么（缺省空串 = HTML 的老行为）。
         #:
-        #: 为什么 XML 需要它（实测驱动）：JATS 的字段大多是行内元素
+        #: 为什么 XML 需要它：JATS 的字段大多是行内元素
         #: （`journal-title` / `article-id` / `surname` …），而这里只对块级标签断开
         #: ⇒ 相邻字段会被粘在一起。剥出来会得到
         #: `'2753rsosRoyal Society Open ScienceR Soc Open SciThe Royal SocietyPMC6502358…'`
@@ -511,7 +511,7 @@ def _pdf_pages_pypdf2(path: Path, max_pages: int) -> tuple[list[str], list[str]]
 def _sniff(raw: bytes) -> str:
     """读文件头几十字节判它到底是什么 ⇒ ``"pdf" | "html" | ""``（空串 = 看不出来）。
 
-    为什么必须有它：调用方给的扩展名不是内容的证据。实测（真实数学文献的
+    为什么必须有它：调用方给的扩展名不是内容的证据。（真实数学文献的
     全文获取路径）两次 `extract_failed` 都是同一个形态：Crossref 链接返回的是
     HTML，落盘时被存成 `.bin`，而分派只看扩展名 ⇒ 直接判"格式不支持"。内容是
     完好的，失败的只是"我们按名字猜格式"这一步。
@@ -626,8 +626,8 @@ def _page_status_of(pages: Sequence[str], status: Sequence[str] | None,
                     backend: str = "?") -> tuple[str, ...]:
     """逐页三态。后端给了（且长度对得上）就用它的；否则按内容推。
 
-    抽出来是为了让 `_finish_pdf` 的两支共用同一条长度校验规则：旧版只在"有文本层"
-    那一支用它，无文本层那一支硬写空元组 —— 那正是 `R3-2`（整篇抽取失败被
+    抽出来是为了让 `_finish_pdf` 的两支共用同一条长度校验规则：只在"有文本层"
+    那一支用它、无文本层那一支硬写空元组时，就是 `R3-2`（整篇抽取失败被
     报成"疑似扫描件"）的成因。`R6-AN-5` 补一句：两支传的 `expected` 不同
     （无文本支要给，正常支不传，见下一段），相同的只是"长度校验"这一步，
     不是"两支走完全相同的路径"。
@@ -636,10 +636,9 @@ def _page_status_of(pages: Sequence[str], status: Sequence[str] | None,
     而后端给的 `status` 仍然与真实页数等长。此时不能因为"长度与 `pages` 不等"
     就把整份状态丢掉 —— 那正是被修掉的那个缺陷。给了 `expected` 就按它比长度。
 
-    `R3-8`：长度确实对不上时不许静默降级。旧版在这里无声地改按内容推，
+    `R3-8`：长度确实对不上时不许静默降级。在这里无声地改按内容推，
     于是后端上报的 `failed` 凭空消失、回到"真引文被判成幻觉"的那条路径，
-    而没有任何信号。现在留一条 warning（带 backend 与两个长度）
-    现在留一条 warning（带 backend 与两个长度）—— 按内容推仍然是结论
+    而没有任何信号。现在留一条 warning（带 backend 与两个长度）—— 按内容推仍然是结论
     （抛异常会让"后端少报一页状态"变成整篇抽取失败，代价更大），
     但它是"被记录过的降级"，可以被断言、也可以被人看见。
     """
@@ -688,7 +687,7 @@ def _finish_pdf(pages: Sequence[str], backend: str,
         # 就用 `page_status` / `failed_pages()`，不要拿 `pages` 的长度去索引它
         # —— 空 `pages` 会让按它兜底的读者静默读空。两者分开正是 `F-4` 的用意。
         # `R3B-2`：日志行必须和工具面一样分开这两件事。
-        # 旧版无论哪一种都打同一句「PDF 无文本层（疑似扫描件）」——
+        # 旧形态无论哪一种都打同一句「PDF 无文本层（疑似扫描件）」——
         # 于是"我们的抽取链在这份文件上全崩了"与"它本来就是扫描件"
         # 在日志里长得一模一样（`ocr_tools` 那边已经分开，日志这边还没有）。
         status_now = _page_status_of(pages, status, backend=backend,
