@@ -134,9 +134,10 @@ def manuscript_backing(text: Any) -> str:
         found = pattern.search(body)
         if found:
             return found.group(0)
-    if BACKING_PAPER.search(body) and _PAPER_LOCATOR.search(body):
-        locator = _PAPER_LOCATOR.search(body)
-        return f"out/paper/main.tex{locator.group(0) if locator else ''}"
+    if BACKING_PAPER.search(body):
+        locator = _PAPER_LOCATOR.search(body)     # 定位标记只搜一次（命中才拼进背书位置）
+        if locator:
+            return f"out/paper/main.tex{locator.group(0)}"
     return ""
 
 
@@ -630,9 +631,11 @@ def scan_quote_evidence(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     """
     dirty: list[dict[str, Any]] = []
     rows = list(rows or ())
+    verified = 0
     for row in rows:
         if row.get("quote_verified") is not True:
             continue
+        verified += 1
         span = span_of(row)
         mode = str(row.get("quote_mode") or "")
         reason = str(row.get("quote_reason") or "").strip()
@@ -663,6 +666,6 @@ def scan_quote_evidence(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     return {
         "checked": len(rows),
         "dirty": dirty,
-        "verified_rows": sum(1 for r in rows if r.get("quote_verified") is True),
+        "verified_rows": verified,
         "clean": not dirty,
     }
