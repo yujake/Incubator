@@ -431,10 +431,22 @@ def cache_readings(lean: bool | None = None, *,
                 "reason": CACHE_MISSING_FOR_LEAN_STATE, "at": "", "prompt_version": "",
                 "run": None, "targets": empty_targets}
 
+    # 按 target 分一次桶：改前每个 target 都要把 `chosen["rows"]` 整表扫一遍
+    # （T 个 target × N 行，且每行都现取一次 `str(r.get("role"))`），只为了挑出
+    # 属于它的那几行。这里扫一趟、按 role 分好，逐 target 直接用分到的那一段。
+    # 判据逐字未变：role 相等、`int(pass or 1) <= 2`（`and` 的短路次序也一样 ——
+    # `int()` 仍只在 role 命中 WARM_TARGETS 时才求值），每行仍拷一份 `dict(r)`，
+    # 桶内次序仍是文件序。
+    rows_by_target: dict[str, list[dict[str, Any]]] = {t: [] for t in WARM_TARGETS}
+    for raw in (chosen.get("rows") or []):
+        role_of = str(raw.get("role"))
+        bucket = rows_by_target.get(role_of)
+        if bucket is None or int(raw.get("pass") or 1) > 2:
+            continue
+        bucket.append(dict(raw))
     per_target: dict[str, dict[str, Any]] = {}
     for target in WARM_TARGETS:
-        rows = [dict(r) for r in (chosen.get("rows") or [])
-                if str(r.get("role")) == target and int(r.get("pass") or 1) <= 2]
+        rows = rows_by_target[target]
         measured = [r for r in rows if str(r.get("kind")) != "absent"]
         absent = [r for r in rows if str(r.get("kind")) == "absent"]
         state = "measured" if measured else ("absent" if absent else "missing")
