@@ -4,15 +4,11 @@
 
 ## 为什么需要它（而不是"照文档手敲六条命令"）
 
-用户对正式版的要求逐字是：
-
-> "建立一键发布检查（release check：全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter）"
-
+正式版点名的清单是：全量测试 + 全部自检 + 验收测试 + verify + 工具普查 + linter。
 `scripts/release_check.py` 覆盖了其中五项（全量测试 / 全部自检 / verify / 工具普查 / linter），
-但没有验收测试这一项。两份东西合起来才等于用户点名的清单，而"照文档手敲六条命令"
-是发布流程里最容易被跳过的一步 —— 手敲的清单没有退出码，于是"少跑了一条"与"跑了都过了"
-在任何自动化里长得一模一样（本项目 `draft/17` §6.3 的教训逐字：
-*"多数脚本不设退出码，于是『未报错』被误读为『无问题』"*）。
+但没有验收测试这一项。两份东西合起来才等于点名的清单，而"照文档手敲"是发布流程里
+最容易被跳过的一步 —— 手敲的清单没有退出码，于是"少跑了一条"与"跑了都过了"在任何
+自动化里长得一模一样。
 
 ## 三态汇总（`unknown` 绝不是 `pass`）
 
@@ -43,15 +39,12 @@
 
 注意 `--only` 认的是步骤 key（`release-check` / `acceptance` / `repro` /
 `role-specs` / `coverage` / `per-file`），不是发布门内部的子项名：
-`lint` 是 `release-check` 这一步里的第 5 项，不是一个步骤 key
-（`D3` 实测：旧版这里举的例子是 `--only lint,role-specs`，直接以退出码 2 失败，
-而那是本 docstring 里唯一的一个 `--only` 例子）。
+`lint` 是 `release-check` 这一步里的第 5 项，不是一个步骤 key。
 `tests/test_release_all.py` 会把本 docstring 里出现的每个 `--only` 示例真跑一遍，
 判据是那两句话：stderr 不许出现「未知的步骤 key」，且被点名的每个 key 不许记成
-`[unknown]`（不许拿退出码当判据：`--only` 是子集运行，未选中的步骤按 `H-5`
+`[unknown]`。不许拿退出码当判据：`--only` 是子集运行，未选中的步骤按 `H-5`
 记 `unknown`，而 `unknown` 就是退出码 2 —— 这一个数同时表示"用法错误"与"跑通了但有
-步骤未知"两种事实，拿它判其中一种是把两种含义折成一个读数。`D-13` 记录了那次踩坑：
-旧判据 `returncode != 2` 长期为真，只因为当时另一个门红着、整体退出码是 1）。
+步骤未知"两种事实，拿它判其中一种是把两种含义折成一个读数。
 """
 
 from __future__ import annotations
@@ -97,23 +90,20 @@ class Step:
     expect_seconds: int = 60
     #: 该步骤自己的退出码语义：退出码 → 三态结论。
     #:
-    #:  这是本编排层最容易写错的一处，而第一版就写错了：
-    #: 它当时把所有非零退出码一律判成 `fail`，于是 `scripts/release_check.py`
-    #: 返回 2（它自己的"没查成"档）时，编排层报的是 `fail` ——
-    #: 把"没查成"读成了"发现问题"，正好是本项目三态纪律要挡的那件事，
-    #: 而且发生在"用来挡住这类错误的那一层"里。
+    #: 这是本编排层最容易写错的一处：把所有非零退出码一律判成 `fail`，会把
+    #: `scripts/release_check.py` 返回 2（它自己的"没查成"档）读成 `fail` ——
+    #: 正好是本项目三态纪律要挡的那件事，而且发生在"用来挡住这类错误的那一层"里。
     #:
     #: 所以每一步都必须显式声明自己的码表。默认只认 `0 = pass`，
     #: 其余一律 `fail`（那是普通 pytest 风格脚本的语义）。
     exit_map: dict[int, str] = field(default_factory=lambda: {0: "pass"})
-    #: 该步骤若会把自己的逐项结构写成 JSON，这里给出那个路径（`D-2.3`）。
+    #: 该步骤若会把自己的逐项结构写成 JSON，这里给出那个路径。
     #:
-    #: 为什么编排层要读它：子进程（`scripts/release_check.py`）本来就把八项逐项
-    #: 结果算好了（`items[]` + `counts{}` + `overall`）。编排层此前只留最后 12 行
-    #: `tail`，把那份已经算好的结构丢掉了 —— 于是"8 项各自 pass 还是 unknown"
-    #: 在编排层的 JSON 里读不出来，只能靠翻文本。缺口在编排层，不在发布门。
+    #: 为什么编排层要读它：子进程本来就把八项逐项结果算好了（`items[]` + `counts{}` +
+    #: `overall`）；只留最后 12 行 `tail` 会把那份结构丢掉 —— 于是"8 项各自 pass 还是
+    #: unknown"在编排层的 JSON 里读不出来，只能靠翻文本。缺口在编排层，不在发布门。
     json_out: Path | None = None
-    #: 这一步已知的、会被绿的缺口（`FINAL-R7-05`）：在报告里逐条打出来。
+    #: 这一步已知的、会被绿的缺口：在报告里逐条打出来。
     #: 为什么要有这个字段而不是只写在标题里：标题会被 `[:56]` 截断（见汇总那一行），
     #: 而"这一步的绿不覆盖什么"恰恰是最容易被截掉的那半句。
     notes: tuple[str, ...] = ()
@@ -150,7 +140,7 @@ def _looks_like_a_crash(output: str) -> bool:
 
 
 def _read_step_json(path: Path | None) -> tuple[list[dict], dict, list[str]]:
-    """读一个步骤写下的子 JSON（`D-2.3`）。返回 `(items, counts, notes)`。
+    """读一个步骤写下的子 JSON。返回 `(items, counts, notes)`。
 
      三态纪律在这里同样适用：读不到与读到了但是空的不是一件事。
     读不到时返回空 `items` 并附一条 note（于是"这一项没有逐项结构"是可见的），
@@ -177,13 +167,13 @@ def _read_step_json(path: Path | None) -> tuple[list[dict], dict, list[str]]:
 
 
 def verdict_from_subitems(items: list[dict]) -> str | None:
-    """按子项汇总该步的结论（`D-2.3`）：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`。
+    """按子项汇总该步的结论：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`。
 
     这条口径与 `scripts/release_check.py::Report.overall` 「逐字相同」（刻意如此）：编排层要能「独立」从子项重算一遍，于是"子进程的总判定"与"逐项明细"之间一旦不一致就会被发现，
     而不是被信任。空列表 ⇒ `None`，且这个 `None` 的含义是"「没有可汇总的东西」"，调用方应退回用退出码判定，「而不是」凭空得出 `pass`。
 
-    `H-5` 之前的裂缝正是出在这一档：姊妹实现 `Report.overall()` 的空表分支返回`pass`（"三项计数都是 0 ⇒ 其余 ⇒ pass"），于是两处只在非空时相同
-    ——"独立重算一遍"这条防线在空集上整个失效，编排层看到 `subitems=[]` 时不会与发布门分家，两边都绿。现在 `Report.overall()` 的空表也返回 `unknown`（见
+    空表这一档最容易写错：姊妹实现 `Report.overall()` 的空表分支也必须是 `unknown`
+    （"三项计数都是 0 ⇒ 其余 ⇒ pass"那一版会让"独立重算一遍"在空集上整个失效 —— 编排层看到 `subitems=[]` 时两边都绿；见
     `tests/test_release_all.py` 的交叉断言：非空组合两处逐字一致，空表一律读成 `unknown`）。这里保留 `None` 而不是直接给 `"unknown"`：它的调用方（`run_step`）
     需要区分"没有逐项明细可汇总"（⇒ 没有别的证据，退回退出码）与"逐项明细说 unknown"，两者后续处理不同。
     """
@@ -204,7 +194,7 @@ class Result:
     exit_code: int | None
     seconds: float
     tail: list[str]
-    #: 该步骤自己的逐项结构（`D-2.3`）：原样嵌进来的子进程 JSON 的 `items[]`。
+    #: 该步骤自己的逐项结构：原样嵌进来的子进程 JSON 的 `items[]`。
     #: 刻意"原样嵌"而不是"改写成一个我们自己的结构"：同一件事两个落点必然漂移，
     #: 而这里要的恰恰是"发布门逐项到底怎么判的"这件事只由发布门说了算。
     subitems: list[dict] = field(default_factory=list)
@@ -300,22 +290,19 @@ def _resolve_changed(since: str | None, changed_file: str, root: Path) -> Path |
 
 def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file: Path | None = None,
                 sub_json_dir: Path | None = None) -> list[Step]:
-    """步骤表：2 个承接用户点名清单的步骤 + 1 个论文复现步骤 + 1 个前端步
-    + 3 个结构性门 = 7（`frontend` 是裁定 G2 之后加的那一步，排在 `per-file` 之后；
-    逐条理由见下）。
+    """步骤表：2 个承接点名清单的步骤 + 1 个论文复现步骤 + 1 个前端步
+    + 3 个结构性门 = 7（`frontend` 排在 `per-file` 之后；逐条理由见下）。
 
-    `D4` 的实测（改前）：这里原写"用户点名的六项 + 三个结构性门（角色规格、
-    coverage 分档、逐文件单跑）"，按它自己的分解 —— 六项落在 2 个步骤里
-    （`release-check` 覆盖 5 项 + `acceptance` 1 项），加 3 个结构性门 = 5，
-    而本函数实际返回 6。多出来的那个是 `repro`（论文独立复现），
-    清单完全没有它：按 docstring 数步骤会漏掉一个门。
-    `tests/test_release_all.py` 现在把这份清单与 `build_steps` 的实际条数铆在一起
+    清单与步骤不是一一对应：点名的六项落在 2 个步骤里（`release-check` 覆盖 5 项 +
+    `acceptance` 1 项），再加 `repro` 与 3 个结构性门。按"点名的六项"数步骤会漏掉
+    `repro`（论文独立复现）—— 清单里完全没有它。
+    `tests/test_release_all.py` 把这份清单与 `build_steps` 的实际条数铆在一起
     （往表里加一个步骤而不同步这段 ⇒ 测试必红）。
 
-    `scripts/release_check.py` 一次覆盖用户点名的前五项（全量测试 / 全部自检 /
+    `scripts/release_check.py` 一次覆盖点名的前五项（全量测试 / 全部自检 /
     verify / 工具普查 / linter，外加禁 AI 区门 / 契约版本 / 源码树可导入三项），
-    所以这里把它作为一个步骤；用户额外点名、而它没有的验收测试是第二个步骤
-    （`acceptance`）。论文独立复现是第三个：它不是用户在那一句里点名的项，
+    所以这里把它作为一个步骤；点名了、而它没有的验收测试是第二个步骤
+    （`acceptance`）。论文独立复现是第三个：它不是那一句里点名的项，
     但它守的是"论文里的实验能不能被独立重跑"，与本脚本存在的理由同源
     （"手敲的清单没有退出码"）。
     另外三个结构性门各自守一件"全量测试结构上守不住"的事：
@@ -325,16 +312,16 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
     - `per-file`：逐文件单跑 —— 全量绿会掩盖单文件红（顺序依赖/跨文件状态泄漏），
       这一步正是把"排序给的那部分绿灯"收回去。它很慢，但 `--skip` 会记成 `unknown`。
 
-    第七个步骤 `frontend`（裁定 G2）守的是"入库的前端产物与源码脱节"：
-    前端构建产物 `src/agentflow/web/static/` 是入库的（裁定 B1），于是"改了
+    第七个步骤 `frontend` 守的是"入库的前端产物与源码脱节"：
+    前端构建产物 `src/agentflow/web/static/` 是入库的，于是"改了
     `ui/src/` 忘了重建"在全量测试里没有任何判据看得见 —— 那正是这一步。
     它自带三态（`tools/frontend_gate.py`：`0=pass / 1=fail / 2=unknown`）：
     没装 node/pnpm、或构建环境起不来（例如本沙箱不允许 Node 用管道 stdio 起
     esbuild ⇒ `spawn EPERM`）⇒ 记 `unknown`，绝不是 `pass`。
     """
     acc = acceptance_root or (root.parent / "test" / "test2")
-    # `D-2.3`：让 release-check 把它的逐项结构写成 JSON，编排层再读回来嵌进自己的 JSON。
-    # 用临时目录而不是仓库里的固定路径：产物不该改仓库状态（与 `X-1` 同一条口径）。
+    # 让 release-check 把它的逐项结构写成 JSON，编排层再读回来嵌进自己的 JSON。
+    # 用临时目录而不是仓库里的固定路径：产物不该改仓库状态。
     if sub_json_dir is None:
         sub_json_dir = Path(tempfile.mkdtemp(prefix="release-all-sub-"))
     release_check_json = sub_json_dir / "release-check.json"
@@ -346,10 +333,9 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             + ["--json-out", str(release_check_json)],
             cwd=root, env=_env(), expect_seconds=300,
             #  `release_check.py` 自带三态：`0=pass / 1=fail / 2=unknown`。
-            # 第一版漏了这一行，于是它返回 2 时编排层报的是 `fail` ——
-            # "没查成"被读成"发现问题"。必须显式声明码表。
-            # 这里还曾把那一项 unknown 归因于"这不是 git 仓库"。真因是调用方不传改动集
-            # （P-25）；本仓现在就是 git 仓库，而那一项照样 unknown。改动集由
+            # 必须显式声明码表，否则它返回 2 时编排层报的是 `fail` ——
+            # "没查成"被读成"发现问题"。
+            # 那一项 unknown 的真因是调用方不传改动集：改动集由
             # `--since` / `--changed-file` 供上，取不到时仍如实报 unknown。
             exit_map=TRI_STATE_EXIT,
             json_out=release_check_json,
@@ -378,19 +364,16 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             "coverage", "零测试公开函数的风险分档清单（等级 1/2 应为 0；"
                         "注意：传递判据 `--propagate` 本步**不开**，见 `FINAL-R7-05`）",
             [sys.executable, str(root / "tools" / "coverage_zero_test.py")],
-            # `REL-01`（`draft/52` F11）：耗时声明必须与实测对得上。
-            # 旧值 60 而实测 928.6 s（`draft/43-D` §0.3：本机后台真跑完一次 `--json-out`），
-            # 差 15 倍 ⇒ 那是一句假声明（读发布报告的人会以为这一步几秒钟就能跑完）。
-            # 取 1000（保守取实测值的上界附近）：`--timeout` 默认 1800 仍留 1.8 倍余量，
-            # 所以不动 `--timeout`（调小会把"慢"变成"超时 ⇒ unknown"）。
+            # 耗时声明必须与实测对得上：一次 `--json-out` 实测约 928.6 s，这里取 1000
+            # （保守取上界附近）；`--timeout` 默认 1800 仍留 1.8 倍余量
+            # （调小会把"慢"变成"超时 ⇒ unknown"）。
             cwd=root, env=_env(), expect_seconds=1000,
             exit_map=TRI_STATE_EXIT,
             # `FINAL-R7-05`：`coverage_zero_test` 的传递判据（等级 1e/2c，"自身 AST 里
             # 没有写原语、只经由 callee 写盘"）默认关闭，而本步不传 `--propagate`
             # ⇒ 这类零测试编排函数落到等级 4，既不进 `gate`（阈值 2）也不进等级 1/2 清单。
-            # 实测（R7）：真实树副本开 `--propagate` 后 gate=22（9+13）—— 也就是说
-            # "开了就会红"。所以这里不改判据强度（那要先把那 22 个函数补上测试，
-            # 属于另一件事），但把这句缺口写进步骤标题与 notes：读发布报告的人
+            # 所以这里不改判据强度（那要先把那些函数补上测试，属于另一件事），
+            # 但把这句缺口写进步骤标题与 notes：读发布报告的人
             # 不会把这一步的绿读成"编排函数都被覆盖了"。
             notes=("传递判据（1e/2c）本次关闭 ⇒ 本步的『等级 1/2 = 0』不含"
                    "『只经由 callee 写盘』的编排函数（`FINAL-R7-05`）。"
@@ -401,12 +384,10 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
             "per-file", "逐文件单跑测试（把顺序依赖/跨文件状态泄漏变成可判定的门）",
             [sys.executable, str(root / "tools" / "run_each_test_file.py")],
             # 这一步很慢（每个 `tests/test_*.py` 各起一个 pytest 进程，量级与全量测试相同）。
-            # 文件数不写死（`G-32`）：当次由 `tools/run_each_test_file.py` 自己 rglob 出来
-            # （`--list` 可复算），这里不记任何文件数定值 —— 记一个数就会随 `tests/` 长大而过期
-            # （曾记过 `⇒ 118`，2026-10-06 按 PERF-02 的纪律删掉；下限判据见 `tests/test_release_all.py`）。
+            # 文件数不写死：当次由 `tools/run_each_test_file.py` 自己 rglob 出来
+            # （`--list` 可复算），这里不记任何文件数定值 —— 记一个数就会随 `tests/` 长大而过期。
             # `expect_seconds` 是声明/估算，权威读数是当次运行输出：
-            # 同门实测（2026-09-28、128 文件）＝ 1082.0s（默认）/ 1115.7s（Lean 在 PATH 上）
-            # ⇒ 这里取 1200（与实测同量级；原先的 420 比实测小 2.6 倍，会把"预计 ~420s"印成误导读数）。
+            # 取 1200（与实测同量级；取小会把"预计"印成误导读数）。
             # 慢的门会被跳过，所以这里的对策不是"不做"，而是 `--skip per-file`
             # 会被记成 `unknown`（不是 pass），跳过了就得逐条解释。
             cwd=root, env=_env(), expect_seconds=1200,
@@ -434,12 +415,12 @@ def build_steps(root: Path, acceptance_root: Path | None = None, *, changed_file
 
 
 class StepCancelled(BaseException):
-    """这一步被中断（`Ctrl-C`）——「带着三态结论一起抛出」（`D5`）。
+    """这一步被中断（`Ctrl-C`）——「带着三态结论一起抛出」。
 
     为什么是 `BaseException` 而不是 `Exception`：它表示的是一次中断，
     任何 `except Exception` 都不该把它吞掉（吞掉就等于"用户按了 Ctrl-C，
-    进程却继续把剩下的门跑完"）。为什么带一个 `result`：`D5` 的承诺是
-    "取消落进 `unknown` 这一档"，而"抛出去"只证明了停下来了、证明不了记成了哪一档。
+    进程却继续把剩下的门跑完"）。为什么带一个 `result`："取消落进 `unknown` 这一档"
+    是承诺，而"抛出去"只证明了停下来了、证明不了记成了哪一档。
     带上 `Result` 之后，调用方既能如实记账（`unknown`），又能让中断继续向上传播。
     """
 
@@ -472,11 +453,10 @@ def run_step(step: Step, timeout: float) -> Result:
         started = False
         out = f"{type(exc).__name__}: {exc}"
     except KeyboardInterrupt:
-        # `D5`：`KeyboardInterrupt` 是 BaseException，`except Exception` 兜不住它。
-        # 旧实现只捕 `TimeoutExpired` / `OSError` / `Exception`，于是用户 Ctrl-C 时
-        # 整段脚本带 traceback 结束 —— 拿到的是一个不属于三态的退出码，
-        # 而模块 docstring 逐字承诺 `unknown` 覆盖"取消"。承诺在这里落地：
-        # 这一步记 `unknown`（没跑成），并把中断继续抛给调用方。
+        # `KeyboardInterrupt` 是 BaseException，`except Exception` 兜不住它。
+        # 漏接的后果是用户 Ctrl-C 时整段脚本带 traceback 结束 —— 拿到的是一个
+        # 不属于三态的退出码，而模块 docstring 承诺 `unknown` 覆盖"取消"。
+        # 承诺在这里落地：这一步记 `unknown`（没跑成），并把中断继续抛给调用方。
         #
         # 为什么必须 `raise`（不能把它吞成"这一步 unknown，接着跑下一步"）：
         # 吞掉中断会让用户按了 Ctrl-C 之后进程还在后台把剩下的门跑完 ——
@@ -492,24 +472,23 @@ def run_step(step: Step, timeout: float) -> Result:
     secs = time.monotonic() - t0
     tail = [ln for ln in out.strip().splitlines() if ln.strip()][-12:]
     subitems, subcounts, notes = _read_step_json(step.json_out)
-    # `FINAL-R7-05`：步骤自己声明的"已知会被绿的缺口"要出现在 Result 的 notes 里
+    # 步骤自己声明的"已知会被绿的缺口"要出现在 Result 的 notes 里
     # （打印与 JSON 都走这一处），否则它只活在标题那 56 个字符里。
     notes = [*(getattr(step, "notes", ()) or ()), *notes]
     if cancelled:
-        # `D5`：先把这一步的结论算出来、再重新抛中断。
+        # 先把这一步的结论算出来、再重新抛中断。
         #
         # `run_step` 的契约是"给一个 Step，回一个 `Result`"，所以它必须「返回」
         # 那个 `unknown`（于是调用方哪怕在 `finally` 里也能读到"这一步没跑成"），
         # 然后把 `KeyboardInterrupt` 继续抛出去让进程真的停下来。
-        # 只 `raise` 不返回（第一版就是这样）会让"中断"这件事退化成一次普通异常
-        # —— 那与 `D5` 的承诺（`unknown` 覆盖"取消"）不符，也让单元测试只能
-        # 断言"抛了"，断言不了"记成了 unknown"。
+        # 只 `raise` 不返回会让"中断"这件事退化成一次普通异常 —— 那与"`unknown`
+        # 覆盖取消"的承诺不符，也让单元测试只能断言"抛了"，断言不了"记成了 unknown"。
         notes.append("这一步被中断（Ctrl-C）⇒ **没跑成**：不是 fail，更不是 pass")
         raise StepCancelled(Result(step, "unknown", code, secs, tail,
                                    subitems, subcounts, notes))
     verdict = classify(code, started, timed_out, step, out)
     if subitems:
-            # `D-2.3`：该步的结论按它自己的逐项明细汇总，而不是只信一个整数退出码。
+            # 该步的结论按它自己的逐项明细汇总，而不是只信一个整数退出码。
             derived = verdict_from_subitems(subitems)
             if derived is not None and derived != verdict:
                 notes.append(
@@ -523,8 +502,9 @@ def run_step(step: Step, timeout: float) -> Result:
 def overall(results: list[Result]) -> str:
     """总判定：任一 `fail` ⇒ `fail`；否则任一 `unknown` ⇒ `unknown`；空表 ⇒ `unknown`。
 
-    `H-5` / `T4` / `I-7`（本轮修）：空表不再返回 `pass`。旧口径是"三项计数都是 0 ⇒ 其余 ⇒ `pass`"，于是
-    `overall([]) == "pass"` ——一个"没有可判的项"的输入被读成"全过"，与姊妹函数`verdict_from_subitems([])`（返回 `None`，逐字写着"不许凭空得出 pass"）
+    空表不返回 `pass`：旧口径是"三项计数都是 0 ⇒ 其余 ⇒ `pass`"，于是
+    `overall([]) == "pass"` —— 一个"没有可判的项"的输入被读成"全过"，与姊妹函数
+    `verdict_from_subitems([])`（返回 `None`，逐字写着"不许凭空得出 pass"）
     在同一仓库里给了两种口径。空集的含义是没查成，不是通过。
 
     真实路径上 `main()` 走不到这里：它对 `build_steps(...)` 的每一条都`results.append(...)`（跳过记 `unknown`、跑了记结果），
@@ -580,10 +560,9 @@ def main(argv: list[str] | None = None) -> int:
     acc = Path(args.acceptance_root).resolve() if args.acceptance_root else None
     _own_changed_file = ""
     changed_file = _resolve_changed(args.since, args.changed_file, root)
-    # `FINAL-R7-09`：`_resolve_changed` 造的临时改动集文件只创建不删除 —— 跑一次门就在
-    # 系统临时目录里留一份（实测 `--since HEAD~1` 后 `agentflow-changed-*.txt` 由 0 → 1）。
-    # 记下"这一次自己造的那一份"，退出前删掉（用户显式给的 `--changed-file` 不在此列：
-    # 那是他的文件，不许替他删）。
+    # 改动集门这一步自己造的临时文件只创建不删除 —— 跑一次门就在
+    # 系统临时目录里留一份。记下"这一次自己造的那一份"，退出前删掉
+    # （用户显式给的 `--changed-file` 不在此列：那是他的文件，不许替他删）。
     if not args.changed_file and changed_file is not None and changed_file.is_file():
         _own_changed_file = str(changed_file)
     steps = build_steps(root, acc, changed_file=changed_file)
@@ -591,8 +570,8 @@ def main(argv: list[str] | None = None) -> int:
     skip = {k.strip() for k in args.skip.split(",") if k.strip()}
     only = {k.strip() for k in args.only.split(",") if k.strip()}
     #  两个集合都要校验，不能只校验"最终被跳过的那批"。
-    # 第一版写成 `bad = (skip | (keys - only)) - keys`，于是 `--only lin`（打错一个字母）
-    # 算出来的"跳过集"正好是整个 `keys`，`bad` 因此为空 ⇒ 静默地什么都没跑，然后退出码 2。
+    # 只校验派生的跳过集时，`--only lin`（打错一个字母）算出来的"跳过集"正好是整个
+    # `keys`，"未知 key"因此为空 ⇒ 静默地什么都没跑，然后退出码 2。
     # 退出码凑巧是对的，理由却是错的 —— 而如果将来有人把跳过记成 `pass`，
     # 这个拼写错误就会变成一次"全绿的空跑"。判据必须打在用户输入上，不是打在派生结果上。
     bad = (skip | only) - keys
@@ -604,11 +583,11 @@ def main(argv: list[str] | None = None) -> int:
     results: list[Result] = []
 
     def _one(s: Step, results_list: list[Result]) -> None:
-        """跑一步并记账（`D5`：Ctrl-C 不许让整段带 traceback 结束）。"""
+        """跑一步并记账（Ctrl-C 不许让整段带 traceback 结束）。"""
         try:
             r = run_step(s, args.timeout)
         except StepCancelled as exc:
-            # `D5`：这一步的结论是 `unknown`（`run_step` 已经算好并带出来了）。
+            # 这一步的结论是 `unknown`（`run_step` 已经算好并带出来了）。
             # 先如实记账，再把中断继续抛给外层 —— 于是"停下来"与"记成哪一档"
             # 这两件事都成立。吞掉它（不在外层接住）会让进程在用户按下 Ctrl-C
             # 之后继续在后台跑完剩下的门，那是"用沉默对抗操作者"。
@@ -639,7 +618,7 @@ def main(argv: list[str] | None = None) -> int:
         # 走到这里说明中断发生在还没轮到任何一步的那一刻（例如 `build_steps`
         # 还没返回、或正卡在打印上）。此时这一轮到此为止：把「没跑过的」步骤
         # 整批记 `unknown`，仍然把报告落盘并汇总 —— 绝不静默退出
-        # （那正是 `D5` 说的"不属于三态的退出码"）。
+        # （静默退出给的是一个不属于三态的退出码）。
         done = {r.step.key for r in results}
         remaining = [s for s in steps if s.key not in done]
         for s in remaining:
@@ -652,7 +631,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"[skip ] {s.key:14s} {s.title}")
 
     verdict = overall(results)
-    # `D-2.5`：三个计数只算一次，stdout 的总判定行与 JSON 顶层用的是同一个 dict。
+    # 三个计数只算一次，stdout 的总判定行与 JSON 顶层用的是同一个 dict。
     # 各算一遍就会漂移，而漂移的表现是"打印说 pass=5、JSON 里说 pass=4" ——
     # 两个都对不上，读者不知道该信哪个。
     counts = {v: sum(1 for r in results if r.verdict == v) for v in ("pass", "fail", "unknown")}
@@ -669,14 +648,12 @@ def main(argv: list[str] | None = None) -> int:
           "仍需人逐行走查 + 2 名 reviewer 批准 —— 它全绿**不构成发布许可**。")
 
     if args.json_out:
-        # 写文件用 `open(..., newline="")`：这是 G-42 的换行纪律（禁 `Path.write_text()`）在本文件里的落地形态 ——
-        # `write_text` 在 Windows 上会把 LF 刷成 CRLF，而产物的 sha256 与"盘上那一版"必须对得上
-        # （draft/22 §12.15.2 记过那次事故）。这条纪律不再只是一段散文（`c-12`）：它现在是
-        # `scripts/lint_rules.py` 的 `R012`（`rule_R012_write_text_newline`）—— 对 `scripts/` 与 `tools/` 下
+        # 写文件用 `open(..., newline="")`：`write_text` 在 Windows 上会把 LF 刷成 CRLF，
+        # 而产物的 sha256 与"盘上那一版"必须对得上。这条纪律是
+        # `scripts/lint_rules.py` 的 `R012`（`rule_R012_write_text_newline`）：对 `scripts/` 与 `tools/` 下
         # 每个 `.py`，AST 里出现 `X.write_text(...)` 而没有 `newline=` ⇒ 一条 `warning`，并在
         # `python scripts/lint_rules.py --strict` 的报告里逐条点名。引用这条纪律时请引 `R012`，不要引 `G-42`
-        # （`G-42` 只是 `docs/PROPOSALS.md` 里的一条教训，不是任何一条能跑的判据）。同族的另外两处本轮已按同一
-        # 口径改掉（`c-12`）：`scripts/release_check.py` 与 `scripts/lint_rules.py` 的 `--json-out` 出口。
+        # （`G-42` 只是 `docs/PROPOSALS.md` 里的一条教训，不是任何一条能跑的判据）。
         Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
         with open(args.json_out, "w", encoding="utf-8", newline="") as fh:
             fh.write(json.dumps(
@@ -690,7 +667,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cleanup_own_changed_file(path_text: str) -> bool:
-    """删掉"这一次自己造的"临时改动集文件（`FINAL-R7-09`）；返回是否删掉了。
+    """删掉"这一次自己造的"临时改动集文件；返回是否删掉了。
 
     为什么单独一个函数：`main` 有两条出口（未知 key 的提前返回、正常收尾），
     两处都要清 —— 写成两段内联代码早晚会漏掉一处。用户显式给的
