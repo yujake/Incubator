@@ -1229,23 +1229,24 @@ def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int
     字段（dict 参数、lambda），用 `list.index()` 去定位会得到错误的下标
     （重复元素全部指向第一个）。下标从一开始就是真的。
     """
-    waves: list[list[tuple[int, Any]]] = []
+    waves: list[list[tuple[int, Any, frozenset[str]]]] = []
     for i, call in enumerate(calls):
         ws = _write_set(_role_of(call))
         placed = False
         for wave in waves:
             if limit is not None and len(wave) >= limit:
                 continue
-            if any(_write_set(_role_of(other)) & ws
-                   and not _same_role_other_instance(call, other)
-                   for _, other in wave):
+            # 每个已入波成员的写集在入波时算好（它与调用参数无关），
+            # 否则每来一个调用就要把前面所有成员重算一遍。
+            if any(other_ws & ws and not _same_role_other_instance(call, other)
+                   for _, other, other_ws in wave):
                 continue
-            wave.append((i, call))
+            wave.append((i, call, ws))
             placed = True
             break
         if not placed:
-            waves.append([(i, call)])
-    return [[i for i, _ in wave] for wave in waves]
+            waves.append([(i, call, ws)])
+    return [[i for i, _call, _ws in wave] for wave in waves]
 
 
 def _role_of(call: Any) -> Any:
