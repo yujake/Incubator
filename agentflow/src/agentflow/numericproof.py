@@ -1,12 +1,9 @@
 # -*- coding: utf-8 -*-
 """E 签的数值证据：穷举证明（`proof_reason="exhaustion"`）与「有数值实验支持」的分界。
 
-业主 2026-10-23 的裁定（要点逐字）：
-
-> 「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，签名是对应的
-> 程序脚本。一般的理论命题只是拿不完全的数值实验探路的不能靠此拿 proof，只能说有数值
-> 实验支持。这些有关数值实验的都由 E 来签。若要入定理证明库，证明栏写程序地址
-> （相对于仓库）。」
+分界：如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，签名是对应
+的程序脚本；一般的理论命题只是拿不完全的数值实验探路的，不能靠此拿 proof，只能说有数值
+实验支持。若要入定理证明库，证明栏写程序地址（相对于仓库）。
 
 于是本模块是这几件事的唯一口径（判据、写侧、读侧都从这里取，不许各写一份）：
 
@@ -15,31 +12,30 @@
    这一档；缺任何一条 —— 包括「说不清」的那一档 —— 都只能落到
    :data:`SUPPORTED_ONLY_KIND`（即 `cross_check`，它的定义本来就写着
    "数值/穷举交叉验证，不构成证明"）。
-2. 签名主体（业主 2026-10-23 晚更正）：签字由 V，`signed_by` 只能是
+2. 签名主体：签字由 V，`signed_by` 只能是
    :data:`PROOF_SIGNER`（V），不许出现 `signed_by="E"`；E 是 :data:`NUMERIC_AUTHOR`，
    写进 `proof_authors`（②③ 的原作者）。V 的逐行走查仍不覆盖数值证据 ——
    "签字"与"逐行审阅"是两件事（见 :func:`verifier_covers` / :func:`verifier_problems`）。
    B 不许给自己产出的命题自签 proof。
-3. 证明栏（业主 2026-11-08 的口径；改前是"三段式"，见下）：只写 ③ 穷举论证 ——
+3. 证明栏（现行口径：只写 ③ 穷举论证；旧的"三段式"只用于读历史行）：只写 ③ 穷举论证 ——
    搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理。
    ① 程序相对地址住在 `experiments.code_path`（配 `code_hash`）、② 程序设计住在
    `experiments.observations["design"]`；两格都不许再抄进 `statements.proof_text`。
-   业主逐字：「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」＋「乙」（=
-   ② 程序设计挪进 `observations["design"]`，`proof_text` 只剩 ③）。
+   ② 程序设计挪进 `observations["design"]`，`proof_text` 只剩 ③。
    ③ 由 E 写，B 只负责原样登记（不许自己编、也不许把 E 的读数改写成自己的话）。
    落点是 `statements.proof_text` 一份文本、单段标签固定（:func:`compose_proof_column`）：
    这样 `schema.Statement` 不用加字段，而"B 改了一个字"可以由逐段比对抓出来。
    三档仍然分得开：穷举（命题 + 程序 + 穷举论证 + V 签 ⇒ `theorem`）· 普通数值
    （命题 + 数值结果 + 程序，无 V ⇒ `strong_conjecture`）· F 文字证明（+ V ⇒
    `pre_theorem`）。
-4. "形式化"那一格（业主 2026-10-23 晚）：数值实验定理填数值实验程序（相对仓库路径），
+4. "形式化"那一格：数值实验定理填数值实验程序（相对仓库路径），
    普通理论定理填 Lean 程序（`.lean` 路径）—— 两者同一格、填的东西不同，
    不许互相冒充。判据见 :func:`formal_slot`（判据 ⑧）。
 
-## ②③ 只对"想升格成数值证明"的那一条要求（D-43，业主 2026-10-24）
+## ②③ 只对"想升格成数值证明"的那一条要求
 
-业主原话：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，对一般数值实验
-不做要求」。于是"要不要三件套"绑在意图上，不绑在 `method` 上 —— 判据本体是
+「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，对一般数值实验
+不做要求。于是"要不要三件套"绑在意图上，不绑在 `method` 上 —— 判据本体是
 :func:`wants_numeric_proof`（`method="exhaustive_search"` / 布尔 true 的 `exhaustive` /
 调用方声称 `evidence_kind="proof"`，三者任一）。一般数值实验（`numeric` / `cross_check` /
 `heuristic`）⇒ 不要求报告、不报 `problems`、不落空文件；已经写了报告的不因缺块扣分。
@@ -47,7 +43,7 @@
 ## 为什么「穷尽证据」这几个键就够（而不是再要一份证书）
 
 `certificate` 说的是"在 B 内没有反例"的证书，`search_bound` 说的是那个 B —— 它们是
-穷举类方法在数据面上的既有载体（`schema.Experiment` 硬约束 2c）。而业主点名要的是
+穷举类方法在数据面上的既有载体（`schema.Experiment` 硬约束 2c）。而要的是
 更基本的几件：搜索空间是什么、是不是 exhaustive、以及 ②③ 那两段人话。前两件本来就在
 `search_bound` / 脚本自报的 `observations` 里，后两件只有写它们的人（E）说得清。
 所以判据读这几件，`certificate` 有则一并留下、没有也不强求（`method="exhaustive_search"`
@@ -77,7 +73,7 @@ CALCULATION_METHODS: tuple[str, ...] = ("numeric", "symbolic", "exhaustive_searc
 #: 形式化那一档的方法名（它的证据由检查器说，不由本模块签）。
 FORMAL_METHOD = "formal"
 
-#: "想升格成数值证明"的方法（业主 2026-10-24 的 D-43：「程序设计思路/穷举论证」只针对
+#: "想升格成数值证明"的方法（「程序设计思路/穷举论证」只针对
 #: 想升格成数值证明的数值实验，对一般数值实验不做要求）。
 #:
 #: 这一格不是"要不要三件套"的全部判据 —— 判据本体在 :func:`wants_numeric_proof`：
@@ -91,16 +87,13 @@ PROOF_INTENT_METHODS: tuple[str, ...] = ("exhaustive_search",)
 PROOF_REASON_EXHAUSTION = "exhaustion"
 PROOF_REASONS: tuple[str, ...] = (PROOF_REASON_EXHAUSTION,)
 
-#: 证明的签名主体（业主 2026-10-23 晚的更正：签字由 V，不是 E）。
+#: 证明的签名主体（签字由 V，不是 E）。
 #:
-#: 这一格经过一次改口径，两个版本都记在这里，免得后人以为哪个是笔误：
-#: 先前那版写「这些有关数值实验的都由 E 来签」⇒ `signed_by="E"`；业主随后更正为
-#: 「签字仍然由 V 签（不是 E）。E 是 ②③ 的原作者，但签名主体是 V」⇒ 现在
-#: `signed_by` 只能是 :data:`PROOF_SIGNER`（V），不许出现 `signed_by="E"`
+#: 口径：`signed_by` 只能是 :data:`PROOF_SIGNER`（V），不许出现 `signed_by="E"`
 #: （判据 ⑦ 与 `filing_problems` 都会拒）。E 的位置是 :data:`NUMERIC_AUTHOR`：
 #: ②③ 的作者，写进 `proof_authors`。
 PROOF_SIGNER = "V"
-#: ②③ 的作者（业主：「② 与 ③ 都由 E 写」）。
+#: ②③ 的作者（「② 与 ③ 都由 E 写」）。
 NUMERIC_AUTHOR = "E"
 #: 形式化那一档那条程序的作者（`.lean` 由 L 落库，`evidencebits.BIT_OWNERS["formal"]`）。
 FORMAL_AUTHOR = "L"
@@ -119,11 +112,11 @@ SUPPORTED_ONLY_LABEL = "有数值实验支持（cross_check，不构成证明）
 #: 穷尽证据的几格在盘上的键名（`observations` / `certificate.detail` / `search_bound`）。
 EXHAUSTIVE_KEY = "exhaustive"
 #: ③ 穷举论证的键名。`coverage` 是它的历史别名（同一件事的两种写法都认，
-#: 但新写的一律用 `enumeration`）：业主 2026-10-23 晚把这一格的含义说全了 ——
+#: 但新写的一律用 `enumeration`）：这一格的含义是
 #: 「搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理」。
 ENUMERATION_KEY = "enumeration"
 ENUMERATION_ALIASES: tuple[str, ...] = ("enumeration", "coverage")
-#: ② 程序设计的键名（业主：「思路：要解决什么、按什么结构搜、为什么覆盖全域」）。
+#: ② 程序设计的键名（「思路：要解决什么、按什么结构搜、为什么覆盖全域」）。
 DESIGN_KEY = "design"
 #: 搜索空间的候选键名（脚本自报时常见的那几种写法）。
 SPACE_KEYS: tuple[str, ...] = ("search_space", "space", "domain", "enumerated")
@@ -134,11 +127,11 @@ SPACE_KEYS: tuple[str, ...] = ("search_space", "space", "domain", "enumerated")
 #: 而 `observations` 本来就是"这一次到底算了什么"的机器可读格，签名是它的自然成员。
 SIGNATURE_KEY = "e_signature"
 
-#: 签名里"这两块是谁写的"那一格（业主 2026-10-23 晚：②③ 的作者必须是 E）。
+#: 签名里"这两块是谁写的"那一格（②③ 的作者必须是 E）。
 PROOF_AUTHORS_KEY = "proof_authors"
 
-#: 证明栏的那一段（业主 2026-11-08：「穷举式的 proof_test 应该是填穷举论证，
-#: 实验栏填相对路径」⇒ 证明栏只剩 ③）。
+#: 证明栏的那一段：穷举式的 proof_test 应该是填穷举论证，
+#: 实验栏填相对路径 ⇒ 证明栏只剩 ③。
 #:
 #: 写成 `标签：正文`（正文可以续行，解析时归到这一段）。
 PROOF_PARTS: tuple[tuple[str, str], ...] = (
@@ -147,7 +140,7 @@ PROOF_PARTS: tuple[tuple[str, str], ...] = (
 #: 段名 → 标签（同一份表派生，不写第二份）。
 PART_NAMES: dict[str, str] = {name: label for label, name in PROOF_PARTS}
 
-#: 改前那两段（2026-11-08 之前的三段式证明栏）。它们不再住证明栏：
+#: 旧三段式证明栏里的那两段。它们不再住证明栏：
 #: ① 程序 → `experiments.code_path`、② 程序设计 → `experiments.observations["design"]`。
 #: 解析器见到这两个标签就算一条 `problems`（"证明栏里还带着旧三段"），于是
 #: B 的入库闸不会再把一份旧形态的证明栏当合格的穷举证明 ——— 而不是静默地把它读成
@@ -296,14 +289,14 @@ def wants_numeric_proof(*, method: Any = "",
                         certificate: Mapping[str, Any] | None = None,
                         search_bound: Mapping[str, Any] | None = None,
                         evidence_kind: Any = "") -> bool:
-    """这一条实验是不是"想升格成数值证明" —— 要不要 ②③ 三件套的唯一判据（D-43）。
+    """这一条实验是不是"想升格成数值证明" —— 要不要 ②③ 三件套的唯一判据。
 
-    业主原话（2026-10-24，唯一权威）：「「程序设计思路/穷举论证」只针对想升格成数值证明的
-    数值实验，对一般数值实验不做要求」。
+    「程序设计思路/穷举论证」只针对想升格成数值证明的
+    数值实验，对一般数值实验不做要求。
 
-    改前这条要求绑在 `method` 上（凡是计算类都问三件套），真机 r34d `000004`-`000009` 与
-    cube2 `000001`/`000002` 于是每条都在喊「报告里缺 ['程序设计思路','穷举论证']」，
-    盘上还多出一份"两块正文各 0 字"的报告。现在按意图问，三条入口任一成立才算想升格：
+    这条要求不能绑在 `method` 上（凡是计算类都问三件套会让每条都在喊
+    「报告里缺 ['程序设计思路','穷举论证']」，盘上还多出一份"两块正文各 0 字"的报告）。
+    现在按意图问，三条入口任一成立才算想升格：
 
     1. `method="exhaustive_search"`：这一档本身就是奔着穷举证明去的；
     2. `exhaustive` 读到布尔 `true`：读口与优先级与 :func:`exhaustion_problems` 同一份
@@ -339,7 +332,7 @@ def exhaustion_problems(*, method: Any,
                         evidence_kind: Any = "") -> list[str]:
     """穷尽判定：空清单 = 整个论域被穷尽验证过（够 proof）；非空 = 缺什么，逐条写清。
 
-    要的东西就是业主 2026-10-23 晚点名的三块（2026-11-08 的居所：① 在
+    要的东西就是三块（① 在
     `experiments.code_path`、② 在 `observations["design"]`、③ 在证明栏）：
     ① 程序相对地址（`code_path`）、② 程序设计（`design`）、③ 穷举论证（`enumeration`），
     外加"可核"这件事本身：布尔 true 的 `exhaustive` 与一个说得出范围的搜索空间。
@@ -387,7 +380,7 @@ def exhaustion_problems(*, method: Any,
         problems.append(
             f"缺程序脚本的相对路径（code_path 读到 {code_path!r}）：穷举证明的签名就是那份程序，"
             "证明栏的第 ① 段要写它的相对路径（含后缀，不含盘符与 `..`）")
-    # ---- ②③ 的落盘核查（业主 2026-10-23 晚：「E 写的报告要能落下来」）
+    # ---- ②③ 的落盘核查（「E 写的报告要能落下来」）
     #
     # 判据本体只有一份：`exhaustionreport.landing_problems`（报告在不在、三块齐不齐、
     # 落点与实验号对不对得上、字节数与 sha256 记没记）。这里只把它的结论并进来 ——
@@ -396,10 +389,10 @@ def exhaustion_problems(*, method: Any,
     # （`exhaustion_verdict` 只看 `problems` 空不空），所以"报告没落成"与
     # "没有 exhaustive 标记"在下游是同一句话：这条证据不够 proof，逐条说明缺什么。
     #
-    # D-43（业主 2026-10-24）：「「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，
-    # 对一般数值实验不做要求」⇒ 这一步只对 `wants_numeric_proof` 为真的那一条问。
-    # 一般数值实验没有报告不是欠账 —— 改前它对每一条计算类实验都问，于是 numeric/cross_check
-    # 的行上也挂着"报告里缺 ②③"，那是把"升格材料"当成了"所有数值实验的入场券"。
+    # 「程序设计思路/穷举论证」只针对想升格成数值证明的数值实验，
+    # 对一般数值实验不做要求 ⇒ 这一步只对 `wants_numeric_proof` 为真的那一条问。
+    # 一般数值实验没有报告不是欠账 —— 若对每一条计算类实验都问，numeric/cross_check
+    # 的行上也会挂着"报告里缺 ②③"，那是把"升格材料"当成了"所有数值实验的入场券"。
     if wants_numeric_proof(method=method, observations=obs, certificate=cert,
                            search_bound=bound, evidence_kind=evidence_kind):
         problems.extend(report_problems({"method": str(method or ""),
@@ -417,9 +410,9 @@ def compose_proof_column(*, enumeration: Any) -> str:
 
         穷举论证：搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理
 
-    ## 为什么只剩一段（业主 2026-11-08，唯一权威）
+    ## 为什么只剩一段
 
-    「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」；② 程序设计按「乙」挪进
+    「穷举式的 proof_test 应该是填穷举论证，实验栏填相对路径」；② 程序设计挪进
     `experiments.observations["design"]`。所以：① 程序路径住 `experiments.code_path`、
     ② 程序设计住 `observations["design"]`，两者都不许再抄进证明栏 —— 证明栏只有 ③。
 
@@ -435,13 +428,13 @@ def compose_proof_column(*, enumeration: Any) -> str:
 def parse_proof_column(text: Any, *, code_path: Any = "") -> dict[str, Any]:
     """把证明栏拆开：`{"script","design","enumeration","problems","raw","numeric"}`。
 
-    ## 新口径（2026-11-08）：单段（穷举论证）+ 实验行的 `code_path` 非空
+    ## 现行口径：单段（穷举论证）+ 实验行的 `code_path` 非空
 
-    判据（业主那两句裁定）：
+    判据：
     - 证明栏里必须有 ③「穷举论证」那一段；
     - 程序路径不在证明栏里，在 `experiments.code_path` 那一格 —— 调用方把那一格的值
       当 `code_path` 传进来，本函数用 `is_script_path` 核它；
-    - 证明栏里若还带着旧两段（`程序：` / `程序设计：`）⇒ 记一条 `problems`：那是改前
+    - 证明栏里若还带着旧两段（`程序：` / `程序设计：`）⇒ 记一条 `problems`：那是旧
       形态，程序该在 `code_path`、设计该在 `observations["design"]`，不许拿它冒充新形态。
 
     `script` / `design` 两格仍返回，但只从参数 / 旧标签读：新文本下 `design` 恒为空，
@@ -1390,11 +1383,11 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
                             object_path: str = "") -> dict[str, Any]:
     """读 `verifications/<命题号>.jsonl`，取「盖住这一份证明栏的最近一签」。
 
-    为什么需要这一格（业主 2026-10-23 晚「签字仍然由 V 签」的落地）：改前 B 的入库闸读的是
-    `experiments.observations.e_signature.signed_by` —— 那是 E 自己在 `build_experiment` 里
-    盖的章。实测：真穷举实验跑完、`verifications/` 目录根本不存在，B 仍然登记成功，落成
-    `kind=theorem` / `evidence_kind=proof` / `bits.reviewed=False`。也就是说"谁签的"这一格
-    从头到尾只有一个人（E）说过话，而"第三方"这三个字没有任何东西核过。
+    为什么需要这一格：只读 `experiments.observations.e_signature.signed_by` 不够 —— 那是
+    E 自己在 `build_experiment` 里盖的章。穷举实验跑完、`verifications/` 目录根本不存在时，
+    B 仍可能登记成功，落成 `kind=theorem` / `evidence_kind=proof` / `bits.reviewed=False`。
+    也就是说"谁签的"这一格从头到尾只有一个人（E）说过话，而"第三方"这三个字没有任何
+    东西核过。
 
     读法与 `agent_c.proof_chain._verified_ok` 同一口径（那个函数是"V 的台账里有没有成立"
     的既有读法）：台账是 `<工作区>/verifications/<命题号>.jsonl`，一行一次审校、追加式，
@@ -1407,26 +1400,25 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
 
     按命题号读、不按"扫全目录找同文"读：`sha 相符` 只回答"这份稿被签过"，而命题这一行的
     第 3 位是按命题记的。扫全目录会让"签在 stmt:000000 上的那一签"给 stmt:000001
-    借光（业主 2026-10-23 晚的坑：`kind=theorem` / `evidence_kind=proof` /
-    `bits.reviewed=False` 正是"别人的签顶了这一行"的形态）。
+    借光。
 
     返回 `{"checked","found","verdict","proof_sha256","ledger","why","route"}`，
-    另有四格读数（2026-11-03，154 那一轮：收工门要按对象认签，也要分得清四结局）：
+    另有四格读数（收工门要按对象认签，也要分得清四结局）：
 
     - `checked=False` ⇒ 「没查成」（没给工作区根 / 台账读不出来），不是"没有签"；
     - `checked=True, found=False` ⇒ 查过了：台账不在盘上，或最近一签盖的不是这一份正文；
     - `checked=True, found=True` ⇒ `verdict` / `proof_sha256` / `ledger` 是那一签的读数。
     - `row` ⇒ 认到的那一整行（`found=True` 或"认到了但签不住"时非空）。为什么要交出去：
       「有毛病」的 `defect_step` / `findings` 只在行上，不交半行给调用方，读的人就只能知道
-      "有毛病"、不知道第几步（`draft/154` 要的正是"第 4 步剪枝没解释"这一句）。
+      "有毛病"、不知道第几步（要的正是"第 4 步剪枝没解释"这一句）。
     - `signable` ⇒ 那一行自己够不够格签（`verifications.row_signable`：成立、无未解决 error、
       引用核实不挡、没有"引用核实没查成"）。`found` 的语义没有因此改变（它仍然是
       "认到了那一签"）—— 但收工门要的是"签住了"，那一档由调用方按这一格判。
     - `stale` / `stale_row` ⇒ 查过了、没有盖住这一份的签，但台账里有一行盖的是
       同一份对象的旧版（`object_path` 相同、`object_sha256` 不同），或命题台账最近一签
-      盖的是别的正文。这两格把"从没审过"与"签的是旧版"分开 —— 改前两者都是 `found=False`。
+      盖的是别的正文。这两格把"从没审过"与"签的是旧版"分开 —— 否则两者都是 `found=False`。
 
-    ## 认签的键：有对象格的行按对象核，没有对象格的老行才按正文 sha 核（2026-11-03）
+    ## 认签的键：有对象格的行按对象核，没有对象格的老行才按正文 sha 核
 
     给了 `object_sha256`（收工门按 E 那份报告的字节 sha 认签）时：
 
@@ -1434,14 +1426,14 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
       不是这一份 ⇒ 不认）。不许退回按 `proof_sha256` 认：报告重跑一次（②③ 原文没变、
       程序/读数那几块变了）时正文 sha 与旧签一致而对象已经换了 —— 退回按正文认会把
       "签的是旧版报告"当成"签过"（那正是 `draft/154` 的第 ④ 种结局）。
-    - 那一行没有那一格（D-34 之前写的行 / 手写的行）⇒ 按 `proof_sha256` 认（存量兼容；
+    - 那一行没有那一格（没有对象格的老行）⇒ 按 `proof_sha256` 认（存量兼容；
       这条老口径一个字都没改）。
-    - 没给 `object_sha256`（B 的入库闸那一路按证明栏认签）⇒ 与改前逐字相同：按 `proof_sha256` 认。
+    - 没给 `object_sha256`（B 的入库闸那一路按证明栏认签）⇒ 沿用存量口径：按 `proof_sha256` 认。
 
-    ## D-34：找签改成"按对象内容 sha"（于是顺序不再重要）
+    ## 找签改成按对象内容 sha（于是顺序不再重要）
 
-    改前只按命题号读。可命题号是"登记之后"才有的：r34b 的真机现场是 `statements` 0 行，
-    V 审完只能报 `statement_missing`，那一签没有落点、结论丢了。现在多一路
+    改前只按命题号读。可命题号是"登记之后"才有的：V 审完可能只报 `statement_missing`，
+    那一签没有落点、结论丢了。现在多一路
     :data:`~verifications.PENDING_DIR_NAME`（`verifications/pending/<sha>.jsonl`）：
     命题还没在册时 V 的那一签落在那里，按对象内容的 sha 认领 —— 于是"先签后登记"
     与"先登记后签"是同一件事。
@@ -1454,7 +1446,7 @@ def latest_third_party_sign(root: Any, *, proof_text: Any = "",
     out: dict[str, Any] = {"checked": False, "found": False, "verdict": "",
                            "proof_sha256": "", "ledger": "", "why": "",
                            "route": "", "object_sha256": "", "object_path": "",
-                           # 四格读数（2026-11-03）：那一行本身 / 它够不够格签 / 有没有旧版的签。
+                           # 四格读数：那一行本身 / 它够不够格签 / 有没有旧版的签。
                            "row": {}, "signable": False,
                            "stale": False, "stale_row": {}, "stale_ledger": ""}
     if root is None or not str(root).strip():
