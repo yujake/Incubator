@@ -2500,6 +2500,25 @@ def _existing_path_group_in_tx(tx: Any, *, root: Any, statement_id: str,
                            "新路径由秘书在收录事务里分配）"))
         return out
     out.update(checked=True, existing=True)
+    # ---- 稿头那一行：这一份稿确实是这一条命题的稿（不是别条命题的） -------------
+    #
+    # 路径号不写稿头（业主：「路径在产出侧也不标注」），但 `- 命题号：stmt:<号>` 那一行
+    # 本来就在（B 的改写稿由框架渲染）。它不是路径号，只回答"这份稿属于谁"—— 拿它
+    # 挡住"把别条命题的稿回填到这一条路径上"。
+    if rel:
+        try:
+            _text = (Path(str(root)) / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            _text = ""
+        if _text:
+            from . import depsection as _DS
+
+            _head_sid = str(_DS.manuscript_statement_id(_text) or "").strip()
+            if _head_sid and _head_sid != sid:
+                out.update(refused="path_mismatch",
+                           reason=(f"`{rel}` 的稿头点的是 stmt:{_head_sid}，不是 "
+                                   f"stmt:{sid} ⇒ 不改写"))
+                return out
     hit_rel = str(hit.get("manuscript") or "").strip().replace("\\", "/")
     hit_sha = str(hit.get("body_sha") or "").strip().lower()
     if rel and hit_rel and hit_rel == rel:
