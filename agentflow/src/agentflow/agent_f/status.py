@@ -57,11 +57,14 @@ class _Status:
             if ended and len(ended) == len(ids):
                 s["blocked_stale"] = True
                 touch = last_touch.get(str(s.get("sid") or ""))
+                # 同两个值要进三处（子目标两格 + stale_blocked 一行）：各算一次。
+                touch_at = str((touch or {}).get("at") or "")
+                touch_round = (touch or {}).get("round")
                 # `R-61`：把"最后一次被触碰"也放进只读视图（不改盘上那一行）
-                s["last_touched_at"] = str((touch or {}).get("at") or "")
-                s["last_touched_round"] = (touch or {}).get("round")
+                s["last_touched_at"] = touch_at
+                s["last_touched_round"] = touch_round
                 hint = (
-                    f"；该子目标最后一次被触碰是第 {touch['round']} 轮（{touch['at']}）"
+                    f"；该子目标最后一次被触碰是第 {touch_round} 轮（{touch_at}）"
                     "⇒ 从那以后没有人再推进" if touch else
                     "；`history` 里查不到这个子目标的触碰记录 ⇒ **它从立项起就没动过**"
                 )
@@ -70,8 +73,8 @@ class _Status:
                     f"『没有人再推进一步』，不是『还在等』{hint}）"
                 )
                 stale_blocked.append({"sid": s.get("sid"), "requests": ended,
-                                      "last_touched_at": str((touch or {}).get("at") or ""),
-                                      "last_touched_round": (touch or {}).get("round")})
+                                      "last_touched_at": touch_at,
+                                      "last_touched_round": touch_round})
         return {
             "checked": True,
             "plan_id": row.get("plan_id"),
