@@ -1,35 +1,32 @@
 # -*- coding: utf-8 -*-
-"""FC-27 批量签字前端：reviewer 逐行走查完，一条命令给多个禁改区路径各追加一条 reviewer 记录。
+"""FC-27 批量签字前端：reviewer 逐行走查完，一条命令给多个禁改区路径各追加一条
+reviewer 记录。
 
-## 它是什么、不是什么
-
-是：选路（`--paths` / `--all`）、报读数（`--list`）、问一句（`--yes` / 交互确认）、
+它是什么：选路（`--paths` / `--all`）、报读数（`--list`）、问一句（`--yes` / 交互确认）、
 逐条调用 `scripts/noai_gate.py` 的 `--approve` 通路、每签一条立刻回读台账。
-
-不是：台账的第二个实现。三条判据写在代码里，不是写在注释里 ——
+它不是什么：台账的第二个实现 —— 三条判据写在代码里，不是写在注释里：
 
 1. 不自己写台账：每一条都走门的 `--approve`（本脚本只拼参数、读门给的退出码），
    台账的字段、校验、原子写、理由码都只有门那一处实现。签完的回读也用门的读函数
    `load_ledger`，不解析 JSON 字符串。
 2. 不代登记 hash：台账里没有这一条 / 登记的 hash 与盘上不一致 ⇒ 这一批一条都不签，
-   让人先跑 `--baseline`。门的判据是"登记 != 批准"，一个批量脚本没有资格把两步并成一步。
-3. 不给自己签字：目标是台账本身时，门自己会以 `ledger_self_approval` 拒；
-   本脚本的预演（不落盘的 `add_approval`）会把它提前到"一条都没写"之前。
+   让人先跑 `--baseline`。门的判据是"登记 != 批准"，批量脚本没有资格把两步并成一步。
+3. 不给自己签字：目标是台账本身时，门会以 `ledger_self_approval` 拒；本脚本的预演
+   （不落盘的 `add_approval`）把它提前到"一条都没写"之前。
 
-## 用法
+用法：
 
     python scripts/noai_batch_sign.py --list
-    python scripts/noai_batch_sign.py --all --reviewer 张三 \
-        --scope "逐行走查：权限面/桥接层/冻结读数" --verdict "逐行走查通过" \
-        --note "2026-10-23 第一批" --yes
+    python scripts/noai_batch_sign.py --all --reviewer 张三 \\
+        --scope "逐行走查：权限面/桥接层/冻结读数" --verdict "逐行走查通过" \\
+        --note "逐行走查第一批" --yes
     python scripts/noai_batch_sign.py --paths a.py b.py --reviewer 李四 --scope "..." [--dry-run]
 
-`--reviewer` 可以给多次（同一批里每个名字归一化之后必须互不相同）；
-不给 `--yes` 时先在终端里打印清单再要人逐字输入 yes，stdin 不是终端则直接拒绝。
+`--reviewer` 可以给多次（同一批里每个名字归一化之后必须互不相同）；不给 `--yes` 时
+先在终端里打印清单再要人逐字输入 yes，stdin 不是终端则直接拒绝。
 
 退出码：0 = 目标路径全部满足 2 名不同 reviewer；1 = 还有未满足的；
-2 = 没查成 / 没签成（参数错、台账读不到、前置条件不成立 —— 一律一个字节都不写）。
-"""
+2 = 没查成 / 没签成（参数错、台账读不到、前置条件不成立 —— 一律一个字节都不写）。"""
 
 from __future__ import annotations
 
@@ -304,10 +301,10 @@ def _needs_baseline(ledger: G.Ledger, keys: list[str], root: pathlib.Path) -> li
 def _scope_for(root: pathlib.Path, key: str, args: argparse.Namespace) -> str:
     """这一条该写什么 scope：有模板就按模板现算，否则用 --scope 原样。
 
-    为什么需要模板（2026-10-27 那一批 42 条受保护路径）：门的口径是"scope 必须具体到
-    符号或行区间"，而一条命令给 42 个不同文件写同一句话（"看过了"）恰好是它拒的那一档。
-    模板让每一行都带上自己的路径 / 行数 / sha256 前 12 位 —— 这是可核的最小具体：
-    读台账的人拿那 12 位去跟盘上比，就知道当时签的是哪一版。
+    为什么需要模板：门的口径是"scope 必须具体到符号或行区间"，而一条命令给几十个
+    不同文件写同一句话（"看过了"）恰好是它拒的那一档。模板让每一行都带上自己的
+    路径 / 行数 / sha256 前 12 位 —— 这是可核的最小具体：读台账的人拿那 12 位去跟
+    盘上比，就知道当时签的是哪一版。
     """
     template = str(getattr(args, "scope_template", "") or "")
     if not template:
