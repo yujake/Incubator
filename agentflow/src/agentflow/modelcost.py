@@ -143,7 +143,7 @@ _FALSE_WORDS: tuple[str, ...] = ("0", "false", "no", "off")
 
 def peak_override(env: Mapping[str, str] | None = None) -> bool | None:
     """`AGENTFLOW_MODEL_PEAK` 给的显式峰谷判定；没给/读不懂 ⇒ `None`（按钟现算）。"""
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     raw = str(src.get(ENV_PEAK) or "").strip().lower()
     if raw in _TRUE_WORDS:
         return True
@@ -217,17 +217,6 @@ class Price:
         return self.source_note or "default:deepseek-public-observed"
 
 
-def _float_env(env: Mapping[str, str], name: str, default: float) -> float:
-    """读一个浮点环境变量；读不出来就用默认值（不静默改成 0，那会变成免费）。"""
-    raw = str(env.get(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
-
-
 def _float_env_opt(env: Mapping[str, str], name: str) -> float | None:
     """读一个可缺的浮点环境变量：没给就是 `None`（"未登记"，不是 0）。"""
     raw = str(env.get(name) or "").strip()
@@ -239,9 +228,15 @@ def _float_env_opt(env: Mapping[str, str], name: str) -> float | None:
         return None
 
 
+def _float_env(env: Mapping[str, str], name: str, default: float) -> float:
+    """读一个浮点环境变量；读不出来就用默认值（不静默改成 0，那会变成免费）。"""
+    value = _float_env_opt(env, name)
+    return default if value is None else value
+
+
 def price_from_env(env: Mapping[str, str] | None = None) -> Price:
     """从环境变量读单价；三个变量都可单独缺省。"""
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     named = [k for k in (ENV_PRICE_IN, ENV_PRICE_OUT, ENV_PRICE_IN_HIT)
              if str(src.get(k) or "").strip()]
     return Price(
@@ -353,21 +348,23 @@ def price_for(vendor: str = "", model: str = "", *, at: Any = None,
 
     环境变量仍然压在最上面（`price_from_env`）：CI 与既有脚本不许被这次改动弄坏。
     """
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     overridden = any(str(src.get(k) or "").strip()
                      for k in (ENV_PRICE_IN, ENV_PRICE_OUT, ENV_PRICE_IN_HIT))
     pinned = peak_override(env)
     peak = is_peak(at) if pinned is None else pinned
-    table = VENDOR_PRICES.get(str(vendor or "").strip().lower(), {})
-    row = table.get(str(model or "").strip())
+    vendor_name = str(vendor or "")
+    model_name = str(model or "")
+    table = VENDOR_PRICES.get(vendor_name.strip().lower(), {})
+    row = table.get(model_name.strip())
     if overridden or row is None:
         p = price_from_env(env)
         return p, {
             "peak": peak,
             "peak_source": ("env" if pinned is not None else "clock"),
             "price_source": ("env" if overridden else "fallback"),
-            "vendor": str(vendor or ""),
-            "model": str(model or ""),
+            "vendor": vendor_name,
+            "model": model_name,
             "hit_price_known": p.hit_price_known,
             "holiday_table": False,
         }
@@ -379,11 +376,16 @@ def price_for(vendor: str = "", model: str = "", *, at: Any = None,
         "peak": peak,
         "peak_source": ("env" if pinned is not None else "clock"),
         "price_source": "table",
-        "vendor": str(vendor or ""),
-        "model": str(model or ""),
+        "vendor": vendor_name,
+        "model": model_name,
         "hit_price_known": True,
         "holiday_table": False,
     }
+
+
+def _as_price(price: tuple[float, float] | Price) -> Price:
+    """两格元组 / `Price` 都收成 `Price`（调用方两种写法都在用）。"""
+    return price if isinstance(price, Price) else Price(price[0], price[1])
 
 
 def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
@@ -412,11 +414,10 @@ def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
     上游没回这两格（`None`）⇒ 全部按未命中价算（保守），并在
     :func:`billing_reading` 里留一条读数，免得"我们不知道"被读成"没有这回事"。
     """
-    p = price if isinstance(price, Price) else Price(price[0], price[1])
+    p = _as_price(price)
     tokens_in = int(getattr(reply, "tokens_in", 0) or 0)
     tokens_out = int(getattr(reply, "tokens_out", 0) or 0)
     hit = getattr(reply, "cache_hit_tokens", None)
-    miss = getattr(reply, "cache_miss_tokens", None)
     if p.hit_price_known and hit is not None:
         hit_tokens = max(0, min(int(hit), tokens_in))
         miss_tokens = tokens_in - hit_tokens
@@ -439,7 +440,7 @@ def billing_reading(reply: Any, price: tuple[float, float] | Price) -> dict[str,
     尤其是"命中缓存的价没登记"与"上游没回命中数"这两种情形，它们都会让
     `usd` 偏高，而偏高如果不留痕，读账的人只会以为供应商算错了。
     """
-    p = price if isinstance(price, Price) else Price(price[0], price[1])
+    p = _as_price(price)
     tokens_in = int(getattr(reply, "tokens_in", 0) or 0)
     hit = getattr(reply, "cache_hit_tokens", None)
     miss = getattr(reply, "cache_miss_tokens", None)
@@ -569,8 +570,8 @@ def reconcile_usage(store: Any) -> dict:
     第三个允许出现的名字是 `dangling`：账本挂着一个 `tasks` 里不存在的号。那是
     写入侧的缺陷（`verify.dangling_usage_task` 会报 error），这里只如实点名。
     """
-    ledger = [dict(r) for r in store.rows("usage_ledger")]
-    tasks = [dict(r) for r in store.rows("tasks")]
+    ledger = store.rows("usage_ledger")
+    tasks = store.rows("tasks")
     task_rows = {str(r.get("task_id") or ""): r for r in tasks}
     per_task: dict[str, int] = {}
     unattributed_micro = 0
@@ -618,6 +619,24 @@ def reconcile_usage(store: Any) -> dict:
         "unattributed": unattributed,
         "named_residual": named,
         "dangling": dangling,
+    }
+
+
+def _duplicate_result(prior: Any, scope: str) -> dict:
+    """重放结局的那七个键（无锁快通道与锁内竞态两条路共用一份）。
+
+    这一支若没有 `scope`，重放路径上逐笔的归口是空串（`R5-AN-2`）。取 `prior` 行的值
+    （判重放的是账本，归口也以账本为准）；`prior` 行理论上可能没有这一列（手工写的行），
+    那时退回本次实参 —— 实参已经过 `USAGE_SCOPES` 校验，不会是空串。
+    """
+    return {
+        "charged": False,
+        "usage_id": str(prior.get("usage_id") or ""),
+        "tokens_in": int(prior.get("tokens_in") or 0),
+        "tokens_out": int(prior.get("tokens_out") or 0),
+        "usd": float(prior.get("usd") or 0.0),
+        "reason": "duplicate",
+        "scope": str(prior.get("scope") or scope),
     }
 
 
@@ -710,19 +729,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
     key = idempotency_key(idem_scope or task_id, call_index)
     prior = _find_by_marker(meter, key)
     if prior is not None:
-        return {
-            "charged": False,
-            "usage_id": str(prior.get("usage_id") or ""),
-            "tokens_in": int(prior.get("tokens_in") or 0),
-            "tokens_out": int(prior.get("tokens_out") or 0),
-            "usd": float(prior.get("usd") or 0.0),
-            "reason": "duplicate",
-            # 这一支若没有 `scope`，重放路径上逐笔的归口是空串。
-            # 取 `prior` 行的值（判重放的是账本，归口也以账本为准）；
-            # `prior` 行理论上可能没有这一列（手工写的行），那时退回本次实参
-            # —— 实参已经过 `USAGE_SCOPES` 校验，不会是空串。
-            "scope": str(prior.get("scope") or scope),
-        }
+        return _duplicate_result(prior, scope)
 
     ok = bool(getattr(reply, "ok", False))
     attempts = max(1, int(getattr(reply, "attempts", 1) or 1))
@@ -737,7 +744,6 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
     # 账面静默翻倍，同时 `tasks.tokens` 那类派生值也跟着虚高。所以这里显式除回去。
     usd_total = 0.0 if missing else usd_for(reply, price if price is not None else price_of())
     usd_per_attempt = round(usd_total / attempts, 9)
-    usd = usd_total
     note = _charge_note(reply, call_index=call_index, extra_note=extra_note)
 
     # 零值也要记：账上"没有这一行"与"这一行是零"是两件不同的事，
@@ -770,18 +776,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
     if not outcome["recorded"]:
         # 竞态的另一半：快速通道漏掉了（另一个进程是在本次无锁读之后才提交的），
         # 而锁内的权威判据抓到了它。这是正常结局，返回幂等结果而不是错误。
-        prior = outcome["row"]
-        return {
-            "charged": False,
-            "usage_id": str(prior.get("usage_id") or ""),
-            "tokens_in": int(prior.get("tokens_in") or 0),
-            "tokens_out": int(prior.get("tokens_out") or 0),
-            "usd": float(prior.get("usd") or 0.0),
-            "reason": "duplicate",
-            # 与上面那条无锁快速通道同一口径（`R5-AN-2`）：归口以账本那一行为准，
-            # 那一行缺列时才退回本次实参。
-            "scope": str(prior.get("scope") or scope),
-        }
+        return _duplicate_result(outcome["row"], scope)
     if not ok:
         reason = str(getattr(reply, "error_kind", "") or "unknown")
     elif missing:
@@ -794,7 +789,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
         "usage_id": outcome["usage_id"],
         "tokens_in": tokens_in,
         "tokens_out": tokens_out,
-        "usd": usd,
+        "usd": usd_total,
         "reason": reason,
         "scope": scope,
     }
