@@ -544,14 +544,15 @@ class LlmSeam:
 
         usd, usd_note = self._usd_of(reply)
         calls = tuple(getattr(reply, "tool_calls", ()) or ())
+        reasoning = str(getattr(reply, "reasoning", "") or "")
         call = SeamCall(
             ok=bool(getattr(reply, "ok", False)),
             text=str(getattr(reply, "text", "") or ""),
             # "它实际想了多少字"：结果面的读数。它与 `base` 里的 `reasoning_effort`
             # 成对，四种组合各自指向不同的修法（见 `SeamCall.reasoning_effort` 那段）。
-            reasoning_chars=len(str(getattr(reply, "reasoning", "") or "")),
+            reasoning_chars=len(reasoning),
             # 原文那一条（12-A=乙：下一轮原样带回去）—— 只有它能让"它记得自己想过什么"成立。
-            reasoning=str(getattr(reply, "reasoning", "") or ""),
+            reasoning=reasoning,
             # "没查成"与"它回了看不懂的东西"在这一格必须分得开：网关从不抛异常，
             # 超时/网络/认证都折成 `ok=False` + `error_kind`（映射只有 `judge.problem_of_reply`
             # 一处）。真机读数：三次超时全落成 `judge_failed:ModelReplyNotOk`，
@@ -770,12 +771,12 @@ class LlmSeam:
             return SeamCall(**{**call.__dict__, "recorded": problem})
         return call
 
-    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
-                 note: str = "") -> tuple[dict[str, Any] | None, SeamCall]:
-        """要一份 JSON：返回 `(判定, 结局)`。坏 JSON 归成 `judge_bad_json`，不静默当空。"""
-        call = self.ask(prompt, system=system, task_id=task_id, note=note)
-        if not call.ok:
-            return None, call
+    def _parse_text_json(self, call: SeamCall) -> tuple[dict[str, Any] | None, SeamCall | None]:
+        """把回复正文解析成对象；解析不出来 ⇒ `(None, 坏结局)`（`ask_json` / `ask_step` 共用）。
+
+        为什么两处共用一个：`judge_bad_json` 的码、detail 的措辞与"原文前 200 字"是
+        同一件事，两处各写一遍会漂；漂了之后"哪条路把坏 JSON 说成什么"就没人数得清。
+        """
         from .llm import parse_llm_json
 
         err = ""
@@ -790,11 +791,20 @@ class LlmSeam:
             err = f"{type(exc).__name__}: {exc}"
         if not isinstance(data, Mapping):
             hint = _json_shape_hint(call.text)
-            bad = SeamCall(**{**call.__dict__, "ok": False, "problem": "judge_bad_json",
-                              "detail": (f"模型返回的不是一个 JSON 对象（解析报错：{err or '不是对象'}）"
-                                         f"{hint}；原文前 200 字：{str(call.text)[:200]}")})
-            return None, bad
-        return dict(data), call
+            return None, SeamCall(
+                **{**call.__dict__, "ok": False, "problem": "judge_bad_json",
+                   "detail": (f"模型返回的不是一个 JSON 对象（解析报错：{err or '不是对象'}）"
+                              f"{hint}；原文前 200 字：{str(call.text)[:200]}")})
+        return dict(data), None
+
+    def ask_json(self, prompt: str, *, system: str = "", task_id: str = "",
+                 note: str = "") -> tuple[dict[str, Any] | None, SeamCall]:
+        """要一份 JSON：返回 `(判定, 结局)`。坏 JSON 归成 `judge_bad_json`，不静默当空。"""
+        call = self.ask(prompt, system=system, task_id=task_id, note=note)
+        if not call.ok:
+            return None, call
+        data, bad = self._parse_text_json(call)
+        return (None, bad) if bad is not None else (data, call)
 
     def ask_step(self, prompt: str, *, system: str = "", task_id: str = "",
                  note: str = "",
@@ -837,21 +847,10 @@ class LlmSeam:
                 return None, bad
             return data, call
         # 回落：上游没给结构化调用（或不支持 tools）⇒ 走文本 JSON 那条路。
-        from .llm import parse_llm_json
-
-        err = ""
-        try:
-            data = parse_llm_json(call.text)
-        except Exception as exc:  # noqa: BLE001 —— 与 `ask_json` 同一套处理
-            data = None
-            err = f"{type(exc).__name__}: {exc}"
-        if not isinstance(data, Mapping):
-            hint = _json_shape_hint(call.text)
-            bad = SeamCall(**{**call.__dict__, "ok": False, "problem": "judge_bad_json",
-                              "detail": (f"模型返回的不是一个 JSON 对象（解析报错：{err or '不是对象'}）"
-                                         f"{hint}；原文前 200 字：{str(call.text)[:200]}")})
+        data, bad = self._parse_text_json(call)
+        if bad is not None:
             return None, bad
-        return dict(data), SeamCall(**{**call.__dict__, "protocol": "text"})
+        return data, SeamCall(**{**call.__dict__, "protocol": "text"})
 
 
 #: `framework_final` 的 `notify` 那一栏的 schema（`agent_prompts` §7 与
