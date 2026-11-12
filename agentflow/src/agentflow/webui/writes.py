@@ -3,12 +3,10 @@
 
 ## 这一层是什么
 
-`answer(root, form)` —— 从 `webui.py` 的 `answer` 原样搬来、只改了个名字
-（`draft/73` §1.2 的 R1 拆包；改名是为了让"写面"这个名字在包里可见）。
-行为一字不改：落盘仍然只走 `userio.answer_question` 这一个写入口
-（事件形状由它定义，本模块不拼第二份），三态与状态码也照旧。
+`answer(root, form)` 是回答那一条写路径：落盘只走 `userio.answer_question` 这一个
+写入口（事件形状由它定义，本模块不拼第二份），三态与状态码也照旧。
 
-## 口径（与拆包前逐条相同）
+## 口径
 
 - qid 与 sid 必须按 `(sid, qid)` 这一对匹配：每段会话各自从 `q0001` 开始编号，
   只按 qid 索引会让"给一个已经答过的会话再提交"通过存在性检查，往那个会话里写下
@@ -19,18 +17,18 @@
 - 跳过（`skip=1`）⇒ 落一条空的 `selected` 与空的 `custom`。那是"答了，答案是空"，
   不是"没答"。
 
-## W3/W4 在这一层加了什么（裁定 C2 / D2 / E1 / I1）
+## 三件写端点与它们的闸门（裁定 C2 / D2 / E1 / I1）
 
-三件新的写端点，每一件都走既有的闸门、不另写一条写路径：
+三件都走既有的闸门、不另写一条写路径：
 
 | 端点 | 既有闸门（出处） |
 |---|---|
 | `POST /api/stop` | `stopctl.request_stop_detail`（`stopctl.py:65`）· 强制停再走 `stopctl.kill_registered`（`stopctl.py:392`） |
 | `POST /api/submit` | `interactions.next_prefixed_id`（`interactions.py:1233`）＋ `store.tx`（`store.py:890`）＋ `SearchRequest.validate`（`schema.py:243`） |
-| `POST /api/settings` | `settings.write_settings`（本批新增，见 `settings.py`）—— 它自己就是那条唯一写入口 |
+| `POST /api/settings` | `settings.write_settings`（见 `settings.py`）—— 它自己就是那条唯一写入口 |
 
-`/api/task` 不做（裁定 I1：`userio` 里没有"用户 → M 留言"这条通道，
-硬做等于在权限面之外开一条写路径）。
+`/api/task` 是"用户 → M 留言"那条通道（`handle_interject`），与上面三件走同一套
+闸门与审计；不给它另开一条写路径。
 
 `POST /answer` 的行为一个字不改（它由 A 线 `server.py` 的 `handle_answer` 调
 :func:`answer`）：它的闸门就是 `userio.answer_question`，`draft/73` §2.5 那一行
@@ -39,7 +37,7 @@
 
 新端点的授权矩阵（裁定 C2）按 `draft/74` §4 的口径三层，次序即下面的检查次序：
 回环来源 ⇒ CSRF（`X-CSRF-Token`，与 `index.html` 里注入的每进程令牌比对）⇒
-`allow_writes`（`agentflow web --allow-writes`，W0 已透传到句柄上）。
+`allow_writes`（`agentflow web --allow-writes`，已透传到句柄上）。
 `/api/settings` 另加一层 `settings_write`（`--no-settings-write` 关掉它）。
 
 三态与状态码（失败不许折成 200）：
@@ -54,7 +52,7 @@
 每一次到达本模块处理器的写尝试（含被拒的）都追加一行
 `<工作区>/web-actions.jsonl`（裁定 D2，实现见 :mod:`agentflow.webui.audit`）。
 
-一个必须写清楚的例外（E7，2026-11-03）：只读档（没开 `--allow-writes`）不写这一行。
+一个必须写清楚的例外（E7）：只读档（没开 `--allow-writes`）不写这一行。
 台账是工作区根上的一个文件，而缺省档在 `--help` 与模块 docstring 里叫"只读"——
 写它就是"只读服务不是只读"（实测：只发过 GET 与被拒 POST 的只读服务在
 `projects/chain-v1` 与 `projects/p6t2-research-20261012` 各建了一个
@@ -93,7 +91,7 @@ __all__ = ["HANDLERS", "MISSING_TYPES", "PENDING_ENDPOINTS", "ROUTES",
 
 #: 处理器的落点（与 `readers.py`/`sse.py` 同一条约定）：键 = `ROUTES` 第三元素，
 #: 值 = `(handler, params, query)` 签名的函数、`handler` 是 `WebHandler` 实例。
-#: `/answer` 由 `WebHandler` 自己的方法实现（W0 从单文件搬过来的那一支）；
+#: `/answer` 由 `WebHandler` 自己的方法实现；
 #: C 线新加的三条写端点把 handler 放这里 —— 于是不必去改 A 线的 `server.py`。
 HANDLERS: dict[str, Any] = {}
 
@@ -101,7 +99,7 @@ HANDLERS: dict[str, Any] = {}
 UNCHECKED_TYPES: dict[str, str] = {}
 
 #: 契约判据 D 的例外面（`{端点: 理由}`）：声明了但后端还没落地的写端点。落地后删掉。
-#: 本批三条写端点都已注册 ⇒ 这张表保持空（判据 D 的反向断言要求"落地即撤销"）。
+#: 三条写端点都已注册 ⇒ 这张表保持空（判据 D 的反向断言要求"落地即撤销"）。
 PENDING_ENDPOINTS: dict[str, str] = {}
 
 #: 本模块挂到总路由表上的写端点：`(method, path 模式, 处理器名字)`。
@@ -124,8 +122,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", "/api/task", "handle_interject"),
 )
 
-#: 本模块还欠的 TS 接口（`(名字, 为什么还没有)`）。写面的三态回执在 W3/W4 才有
-#: 生产者，所以本批不生成它的接口 —— 生成器把这一行写成 `types.ts` 里的 TODO。
+#: 本模块还欠的 TS 接口（`(名字, 为什么还没有)`）；写面接口已全部生成 ⇒ 空。
 MISSING_TYPES: tuple[tuple[str, str], ...] = ()
 
 #: 写面统一回执的字段表（`(TS 名字, 后端出处, ((字段, TS 类型), ...))`）。
@@ -134,7 +131,7 @@ MISSING_TYPES: tuple[tuple[str, str], ...] = ()
 #: 与 `tri` 分处两根轴 —— `tri` 说"这次请求成没成"，`state` 说"被起的那件事到哪一步了"。
 _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("WriteResult",
-     "写面端点的统一回执（W3/W4 才有生产者 ⇒ 判据 C 不覆盖它；`id`/`extra` 只是"
+     "写面端点的统一回执（判据 C 不覆盖它；`id`/`extra` 只是"
      "「有就带上」的两栏，所以写成可选）",
      (("ok", "boolean"), ("tri", "Tri"), ("reason", "string"),
       ("id?", "string"), ("state?", "string"), ("extra?", "Record<string, unknown>"))),
@@ -144,8 +141,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
 def type_decls() -> str:
     """本模块（写面）那一段 TS 声明文本。
 
-    渲染代码只有一份，在 `webui/state.type_decls`（2026-10-26 清洁去重：本文件里
-    原先是同一段排版代码的第二份抄写，现在只剩这一行转发）。
+    渲染代码只有一份，在 `webui/state.type_decls`（本文件只留这一行转发）。
 
     形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
     各自的 `type_decls()` 拼成 `ui/src/types.ts`。C 线加写端点时，回执接口加在
@@ -160,7 +156,7 @@ TRI_COMPUTED = "computed"
 TRI_NOT_APPLICABLE = "not_applicable"
 TRI_UNREADABLE = "unreadable"
 
-#: 真正算"本机"的主机名（来源校验用）。2026-10-27 起只留真回环：
+#: 真正算"本机"的主机名（来源校验用）。只留真回环：
 #: `0.0.0.0` / `::` 是绑定地址、不是来源地址，见 :data:`_BIND_HOSTS`。
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
 
@@ -168,8 +164,8 @@ _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
 #: 所以它只参与"要不要拒"这一档（在这一层不当外来证据），不参与"是不是本机"：
 #: 绑 0.0.0.0 的服务用 `http://0.0.0.0:8788` 打开时 `Host` 正是它，按外来地址
 #: 拒会把正当用法一起拒掉；而真正的外来连接由第三层（socket 对端地址）拦，
-#: 那一层看的是内核给的事实、不看头。此前这一格与回环混在同一张表里，
-#: 于是"Host 是回环"这句话在绑 0.0.0.0 时不再成立（D9）。
+#: 那一层看的是内核给的事实、不看头。把回环与绑定地址混在同一张表里，
+#: "Host 是回环"这句话在绑 0.0.0.0 时就不成立（D9）。
 _BIND_HOSTS = frozenset({"0.0.0.0", "::"})
 
 _TRI_FOR_CODE = {403: TRI_NOT_APPLICABLE, 400: TRI_NOT_APPLICABLE, 500: TRI_UNREADABLE}
