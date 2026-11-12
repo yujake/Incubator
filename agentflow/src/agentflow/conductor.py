@@ -8488,7 +8488,7 @@ class Conductor:
     ) -> SummonResult:
         """唯一的召唤入口 —— 阻塞式拼法（`summon_begin` 再 `summon_run`）。
 
-        D-64 起它只是两种拼法里的那一种：`summon_preemptible` 派完就给句柄，
+        它只是两种拼法里的那一种：`summon_preemptible` 派完就给句柄，
         这一种派完就等到孩子跑完。两者是同一段实现（前半在 `summon_begin`、
         后半在 `summon_run`），所以"可抢占版"与"阻塞版"不可能漂移 —— 判据
         `tests/test_summon_is_preemptible.py` 的 e 条（结果集/顺序/refusal 一致）
@@ -8516,7 +8516,7 @@ class Conductor:
         instance: str = "",
         roster: Mapping[str, Any] | None = None,
     ) -> "SummonHandle":
-        """派完就返回句柄（不等到孩子跑完）—— 这就是 D-64 的"可抢占"。
+        """派完就返回句柄（不等到孩子跑完）—— 这就是"可抢占"。
 
         与 `summon` 的差别只有一处：后半段（执行 handler、写终态、记账）跑在
         一个后台线程里，句柄立刻可读（`task_id` / `running` / `done`）。
@@ -8525,11 +8525,9 @@ class Conductor:
         派出去的编号在 `summon_preemptible` 返回那一刻就已经在台账上，
         而不是"过一会儿可能会出现"。
 
-        真机理由（2026-10-24 sylow3 只读读数）：M（t-000001）第 4 步 invalid
-        在 17:34:17，第 5 步的调用 17:34:25 起，而 `agent_step index=5` 落在
-        19:06:48 —— 一次阻塞式派活让父代理 92 分钟零回合；D1 的第 8 步同样
-        阻塞了 29 分钟。后果不是"慢"，是"下一次 ask_step 之前的任何投递都只能
-        在阻塞结束时才出手"（t-000031 的 notice 迟到 20m28s）。
+        为什么必须可抢占：阻塞式派活会让父代理在等待期间零回合，后果不是"慢"，
+        而是"下一次 ask_step 之前的任何投递都只能在阻塞结束时才出手" ——
+        等待越长，迟到的消息越多。
         """
         return self.start_summon(self.summon_begin(
             role, action, params, by=by, parent_task_id=parent_task_id,
@@ -8554,7 +8552,7 @@ class Conductor:
                      run: Any = None) -> "SummonHandle":
         """把 `summon_begin` 的产物挂到一个后台线程上，并立刻返回句柄。
 
-        两个可选钩子（缺省 = 老行为）：
+        两个可选钩子（缺省 = 常规行为）：
 
         - `run`：跑哪一段（缺省 `self.summon_run`）。调度器传一个把
           `Semaphore` 与 `ConcurrencyProbe` 包好的版本 —— 并发上限与探针
@@ -8639,16 +8637,16 @@ class Conductor:
         ----
         lineage : 祖先链（含父自身）。`scheduler` 会带过来；直接调用时可省略，此时从 `tasks` 表按 `parent_task_id`
             重建。两者必须一致：前者是纯调度（无 store）场景的表达，后者是正常运行时的权威来源。
-        instance : 实例标签（2026-09-30 加）。空串 = 这个角色只有那一个实例（与从前逐字同义）。显式给不同的标签 ⇒
+        instance : 实例标签。空串 = 这个角色只有那一个实例。显式给不同的标签 ⇒
             被 `LocalBackend` 解析成不同的对象，并允许同波并发（`policy.estimate_write_conflict`）。它只影响"哪个实例
             干活"，不进 `tasks` 行 —— `tasks` 的字段是 schema 契约（禁改区），实例身份落在数据行的 `actor` 上（由
             `host` 按实例造对象时写死），那才是可审计的那一份。
         roster : 名册登记要用的那几格（`brief` / `task` / `name` / `reuse`），缺省 `None` = 一个都没给。
             为什么走形参而不是从 `tasks` 行读：`schema.Task` 里没有 `brief` / `task` 两格（它是禁改区的
             schema 契约），而"父给的那句简介"只活在派活的那个载荷里（`agent_loop._do_summon` 的 `brief`、
-            `summon_many` 每个 target 的那一格）。2026-10-21 的在途实现正是从行里读这两格 ⇒ 恒为空 ⇒
-            `roster_add` 用"没给一句任务简介"拒收每一条（名册照样空，只是 problem 变多）。
-            没给 `brief` 是合法的：秘书从 `task` 代写一句并留痕（2026-10-20 业主裁定）。
+            `summon_many` 每个 target 的那一格）。从行里读这两格只会恒为空 ⇒ `roster_add` 用"没给一句任务
+            简介"拒收每一条（名册照样空，只是 problem 变多）。
+            没给 `brief` 是合法的：秘书从 `task` 代写一句并留痕。
         """
         params = dict(params or {})
         token = token or self.token
@@ -8688,11 +8686,10 @@ class Conductor:
 
         # ---- [1] 角色 / 动作存在性（不落台账的只有"取消"这一种，见上）
         #
-        # [1a] 不可召唤要先于动作表判（`draft/28` §154 的 R-44）。
-        # 以前 `summon(role="M")` 拿到的是 `unknown_action`（"这个角色没这个动作"），
-        # 而真相是"召唤主控这件事本身不允许"（`NON_SUMMONABLE`）。两者的处置相反：
-        # 前者让人去查名字，后者要求改设计。专用判据 `policy.check` 一直是对的
-        # （`G-11` 修的就是它的可达性），是这条入口把顺序放反了。
+        # [1a] 不可召唤要先于动作表判。`summon(role="M")` 若先撞上 `unknown_action`
+        # （"这个角色没这个动作"），真相是"召唤主控这件事本身不允许"（`NON_SUMMONABLE`）。
+        # 两者的处置相反：前者让人去查名字，后者要求改设计。专用判据 `policy.check`
+        # 一直是对的，是这条入口曾把顺序放反了。
         if str(role) == S.CONDUCTOR_ROLE:
             return self._refuse(
                 role, action, reason="forbidden_edge",
@@ -8701,13 +8698,11 @@ class Conductor:
                 by=by, parent_task_id=parent_task_id, input_key=input_key, params=params, depth=1,
                 instance=instance,
             )
-        # 2026-10-16（业主口径 S2「M 只派活」）：`action` 为空时跳过这一格 ——
+        # 口径「M 只派活」：`action` 为空时跳过这一格 ——
         # 「一致改成 task 必填，action 不填」「action 完全不用父代理填」⇒ 没有动作名可核。
-        # 这一处是那条链上最后一个漏网的闸门：`policy.check` 的第 [1] 步我早改了，
-        # 而这里直接调 `P.check_action` ⇒ 空动作被判 `unknown_action`
-        # （"{{role}} 没有动作 ''"），于是"派活"在落行之前就被拒。
-        # 真机/判据现场：批量派活两项的理由码正是 `unknown_action`（不是边的 `forbidden_edge`），
-        # 所以连"越权 ⇒ 代唤"那条路都走不到。角色存在性与边由下面的 `P.check` 照旧把关。
+        # 这里若直接调 `P.check_action`，空动作会被判 `unknown_action`
+        # （"{{role}} 没有动作 ''"），于是"派活"在落行之前就被拒，连"越权 ⇒ 代唤"
+        # 那条路都走不到。角色存在性与边由下面的 `P.check` 照旧把关。
         if str(action):
             edge = P.check_action(role, action, registry=self.specs)
             if edge is not None:
@@ -8720,14 +8715,14 @@ class Conductor:
         # ---- [2] 参数（结构问题在写 running 行之前判掉：跑一个注定炸的
         #          参数会让台账里多一条 failed，而它其实从来没被执行过）
         #
-        # 2026-10-16（S2「M 只派活」）：`action` 为空 = 派活而不点动作 ——
+        # 口径「M 只派活」：`action` 为空 = 派活而不点动作 ——
         # 没有动作的 schema 可核（`find_action("", …)` 当然是 None），所以这一格跳过；
         # 交给接活的那个角色自己的循环按它自己的工具面校验。
         spec = C.find_action(role, action, registry=self.specs) if str(action) else None
         if spec is not None:
             bad = self._check_params(spec, params)
             if bad is not None:
-                # 理由码是 `invalid_params` 而不是 `unknown_action`（R-46）：
+                # 理由码是 `invalid_params` 而不是 `unknown_action`：
                 # "参数不合法"与"角色没这个动作"是两件事，前者要改参数，后者要查能力表。
                 return self._refuse(
                     role, action, reason="invalid_params", detail=bad, by=by,
@@ -8756,14 +8751,13 @@ class Conductor:
 
         # ---- [4] 策略判定（边 / 深度 / 循环 / 扇出 / 并发 / 总量 / 预算 / 墙钟）
         chain = tuple(lineage) if lineage is not None else self._ancestry(parent_task_id)
-        # 扇出 = 此刻在飞的直接子数（所有者 2026-10-08 裁定：单时刻，不是累计；
-        # 直接子返回即腾出名额）—— 判据见 `_in_flight_children_of`。
-        # 只数直接子，不管隔着几层的子（业主 2026-10-24：「12是只管直接子，
-        # 不管隔着几层的子」）：孙辈挂在子自己名下，算子的格。
+        # 扇出 = 此刻在飞的直接子数（单时刻，不是累计；直接子返回即腾出名额）
+        # —— 判据见 `_in_flight_children_of`。
+        # 只数直接子，不管隔着几层的子：孙辈挂在子自己名下，算子的格。
         # 累计读数（`_admitted_children_of`）仍在台账/审计面，但不参与策略判定。
         # 上限那一档按发起方角色取（`by`），默认档与主控档都在 `policy` 里。
         direct_children = len(self._in_flight_children_of(parent_task_id)) if parent_task_id else 0
-        # ---- [4-pre] 触顶就等（所有者 2026-10-08：「只可等待子智能体返回结果」）
+        # ---- [4-pre] 触顶就等（只可等待子智能体返回结果）
         #
         # 等在这里、而不是等在第 [5] 步之后：占位令牌（`self._running`）此刻还没拿，
         # 等的时候不会把全局并发名额攥在手里（拿在手里会让别的线程也派不动）。
@@ -8777,9 +8771,9 @@ class Conductor:
                       f"（在飞 {fanout_wait.get('in_flight_before')} → "
                       f"{fanout_wait.get('in_flight_after')}，上限 {direct_children_limit}，"
                       f"{fanout_wait.get('reason')}）")
-        # ---- B9（`draft/41-A` 的 B9）：判据与占位必须在同一个临界区里
+        # ---- 判据与占位必须在同一个临界区里
         #
-        # 旧顺序是"锁内读 `running`/`total` → 锁外判 → 写完 running 行（一次 fsync
+        # 锁外判的写法是"锁内读 `running`/`total` → 锁外判 → 写完 running 行（一次 fsync
         # 事务）之后才 `_running.add`"。于是同一瞬间有 N 个线程都读到 `running=3` 时
         # 会全部放行，`max_concurrency` 被超过 (N-1)；`Semaphore` 只在单次
         # `run_waves` 内生效，跨 plan / 跨进程都不约束。
@@ -8793,7 +8787,7 @@ class Conductor:
             # 两个数都按旧语义取：`running` 是"已经接受、还没结束"的条数
             # （不含本次自己），`total` 是"已经发生过"的次数（不含本次）——
             # 这样 `policy.check` 的 `>=` 边界一个字节都不动（改了语义等于偷偷收紧上限）。
-            # 与旧实现的唯一差别是：别的线程的预留也在这个集合里了 ⇒ 那个窗口没了。
+            # 与锁外判的唯一差别是：别的线程的预留也在这个集合里了 ⇒ 那个窗口没了。
             running = len(self._running)
             total = self._started_total + self._cancelled_total
             self._started_total += 1                # 预留：与下面的令牌同进同出
@@ -8811,7 +8805,7 @@ class Conductor:
         want_usd = None
         if budget and budget.get("max_usd") is not None:
             want_usd = float(budget["max_usd"])
-        # ---- [4a] FC-19 预算守卫：在开工之前问一句"还允不允许"。
+        # ---- [4a] 预算守卫：在开工之前问一句"还允不允许"。
         #
         # 顺序是判据的一部分：`guard()` 必须在写 `running` 行之前跑。
         # "干完再拒"不是同一个功能 —— 它的后果是钱已经花掉了才说不该花，
@@ -8881,18 +8875,17 @@ class Conductor:
             "parent_task_id": parent_task_id, "depth": depth, "input_key": input_key,
             "status": "running", "outcome": None, "refusal_reason": None,
             # 与 `Task` 的字段顺序一致（`refusal_reason` 之后、`detail` 之前）——
-            # 顺序不一致会让 `tasks.json` 在 `rebuild()` 之后逐字节不同（I-9）。
+            # 顺序不一致会让 `tasks.json` 在 `rebuild()` 之后逐字节不同。
             "instance": instance,
             "detail": (spec.summary if spec is not None else _dispatch_only_detail(str(role or ""))),
             "error": None, "started_at": started, "ended_at": None,
             "tokens": 0, "usd": 0.0,
             "artifacts": [],
-            # `inputs` 的初值同时打上受理标记（题 21 选 B，2026-10-07 所有者裁定）：
-            # 它与 `status="running"` 这一行同一笔事务落盘，因此累计审计读数
-            # （`_occupies_fanout_slot` / `_admitted_children_of`）不再依赖后续任何一步
-            # （角色自己的拒绝、记账写回、甚至崩溃）是否成功。理由与负控见 `_ADMITTED_MARK`。
-            # 扇出上限本身（所有者 2026-10-08）只看 `status ∈ {pending,running}`，
-            # 与本标记无关。
+            # `inputs` 的初值同时打上受理标记：它与 `status="running"` 这一行同一笔事务
+            # 落盘，因此累计审计读数（`_occupies_fanout_slot` / `_admitted_children_of`）
+            # 不再依赖后续任何一步（角色自己的拒绝、记账写回、甚至崩溃）是否成功。
+            # 理由与负控见 `_ADMITTED_MARK`。扇出上限本身只看
+            # `status ∈ {pending,running}`，与本标记无关。
             "inputs": _admitted_inputs(params),
         }
         # 「在飞」标记的寿命就是 [5]→[5b] 这一段：登记已经发生（或已经带理由地
@@ -8917,21 +8910,21 @@ class Conductor:
 
             # ---- [5b] 名册登记：子行已经落盘、子代理还没跑。这是唯一的登记点。
             #
-            # 位置就是判据本身（三条，缺一条都会退回真机那个缺陷）：
+            # 位置就是判据本身（三条，缺一条都会重现"没跑完的都不在名册上"）：
             # ① 在 `_write_new_row` 之后 —— 只有真的建了子行才登记（被拒的召唤在
             #    `_refuse` 里另有一条路，它不经过这里 ⇒ 不会登记）；
-            # ② 在 `backend.call` 之前 —— 子代理可能跑很久、也可能被强停（`projects/p3-verify`
-            #    的 D 与它的 E 就是这样），等它返回再登记等于"没跑完的都不在名册上"；
+            # ② 在 `backend.call` 之前 —— 子代理可能跑很久、也可能被强停，等它返回再
+            #    登记等于"没跑完的都不在名册上"；
             # ③ 只在这里 —— 调用点（`_do_summon` / `_do_summon_many` / 队列认领 / 两个工具）
             #    一个都不许再自己调 `roster_add`，否则同一个子代理会有两条同名项。
             #
             # 失败姿态：`_register_roster` 从不抛（没秘书/秘书拒收/抛异常都变成一条 problem），
             # 所以登记不会带走这次派活；读数随 `SummonResult.roster_*` 交回调用方。
             #
-            # 2026-10-24（sylow4 真机）：这里多一条——写没写成要读盘（`roster_rec["state"]`），
-            # 并把"没写成"与"兜底换过"都打进日志。理由：可抢占派活的父代理那一步拿到的是
-            # "还在跑"，读不到名册那几格（`_do_summon` 在 handle 没落定时提前返回）⇒
-            # 若这里不记，一次整份漏写就只剩读侧的 `unplaced` 这一个事后读数。
+            # 这里还要读盘（`roster_rec["state"]`），并把"没写成"与"兜底换过"都打进
+            # 日志。理由：可抢占派活的父代理那一步拿到的是"还在跑"，读不到名册那几格
+            # （`_do_summon` 在 handle 没落定时提前返回）⇒ 若这里不记，一次整份漏写就
+            # 只剩读侧的 `unplaced` 这一个事后读数。
             roster_rec = self._register_roster(task_id=tid, role=role,
                                                owner=str(parent_task_id or ""), meta=roster)
             if roster_rec.get("problem"):
@@ -8941,10 +8934,8 @@ class Conductor:
         finally:
             SEC.forget_roster_pending(
                 self.store.root, str(parent_task_id or ""), tid)
-        # ---- [5c] 等这条子代理的计时器（业主 2026-10-27 第五条不变量）
-        #
-        # 「如果一个子代理还有活跃子代理，必存在一个等待该子代理的计时器，所以"静默"
-        # 定义良好」。位置是判据本身：
+        # ---- [5c] 等这条子代理的计时器（不变式：「一个子代理还有活跃子代理，必存在
+        # 一个等待该子代理的计时器」，所以"静默"定义良好）。位置是判据本身：
         # ① 在 `_write_new_row` 与 `_register_roster` 之后 —— 子行与名册行都已在盘上，
         #    "等谁"的读口（台账/名册）此刻读得到它，目的才填得出原文；
         # ② 在 `backend.call` 之前 —— 子代理可能跑很久，甚至一跑完就交差；起表晚一步
@@ -8986,16 +8977,16 @@ class Conductor:
 
         # ---- [6] 执行
         try:
-            # `task_id` 传下去（2026-09-30）：并发多实例时"按角色找那条 running 行"
+            # `task_id` 传下去：并发多实例时"按角色找那条 running 行"
             # 会同时找到 N 条 ⇒ 后端拿不到自己的台账号。台账号是这一次召唤刚写下的，
             # 这里就是它唯一的权威来源，直接给，别让后端去猜。
             raw = self.backend.call(role, action, params, token=token, instance=instance,
                                     task_id=tid)
             res = self._end_from_payload(tid, raw)
         except CancelRequested as e:
-            # ---- D22：被叫停是"一个子代理结局"的第二档，判定只在 `S.child_ending` 一处
-            # （字面量不许在这里另拼一份：改前这里写死 `cancelled`/`cancelled`，
-            # 与 `dispose` 那一处各写一份，于是"被停"这一档有两个定义）。
+            # ---- 被叫停是"一个子代理结局"的第二档，判定只在 `S.child_ending` 一处
+            # （字面量不许在这里另拼一份：这里若写死 `cancelled`/`cancelled`，与
+            # `dispose` 那一处各写一份，"被停"这一档就有两个定义）。
             _code = str(getattr(getattr(e, "reason", None), "code", "") or "cancelled")
             _stop = S.child_ending(stop_code=_code)
             res = self._end(tid, status=_stop["status"], outcome=_stop["outcome"],
@@ -9005,15 +8996,14 @@ class Conductor:
             res = self._end(tid, status="done", outcome="refused", refusal_reason="not_wired",
                             detail=str(e))
         except Exception as e:  # noqa: BLE001 —— 这里必须兜住一切，否则僵尸 running
-            # ---- R-46：业务拒绝 ≠ 崩溃（`draft/28` §154）
+            # ---- 业务拒绝 ≠ 崩溃
             #
             # 角色代码故意抛出的领域错误（`ExperimentError` / `DocumentError` /
             # `PlanError` / `ReviewError` / `EvidenceError` / `ToolError`）表示
             # "这次调用不成立" —— 与 `refused` 同族；而 `TypeError` / `KeyError` /
             # `AttributeError` / `OSError` 这些是代码或环境崩了，必须留 `failed`。
-            # 以前两者一律落 `failed / 执行中异常`：实测 4 条 `E.run_experiment`
-            # （我把 `name`/`imports` 与 `method="numeric"` 一起传）就这么被记成"崩了"，
-            # 而它其实是一次参数拒绝 —— 读台账的人会去查代码，而该改的是调用。
+            # 两者一律落 `failed / 执行中异常` 的话，一次参数拒绝会被记成"崩了" ——
+            # 读台账的人会去查代码，而该改的是调用。
             #
             # 刻意不把裸 `ValueError` 算进拒绝：它既可能是校验（业务），
             # 也可能是判据自身的 bug；宁可把它留在 `failed`（过度报失败比把 bug
@@ -9025,9 +9015,7 @@ class Conductor:
             else:
                 res = self._end(tid, status="failed", outcome="failed",
                                 error=f"{type(e).__name__}: {e}",
-                                # 详情里也要带原话（`draft/39` §6.29 的 D41）：真机读数
-                                # （T2 第 7 趟 `p6i` 与第 11 趟 `p6m`）里主控连着三次收到
-                                # "E.run_experiment 执行中异常"这一句，而它修不了脚本 ——
+                                # 详情里也要带原话：只写一句"执行中异常"，主控修不了脚本 ——
                                 # 不知道是导入失败、语法错、还是脚本自己抛的。
                                 # 三态纪律在这一层：失败要留下能据以改的原话。
                                 detail=f"{role}.{action} 执行中异常"
