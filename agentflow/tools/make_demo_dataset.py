@@ -30,6 +30,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from agentflow import conceptrows as CR  # noqa: E402
 from agentflow import dedup as D  # noqa: E402
 from agentflow import schema as S  # noqa: E402
+from agentflow import textutil as T  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
 DEFAULT_DEST = ROOT / "pipelinedemo"
@@ -147,12 +148,10 @@ def build(dest: Path) -> Path:
     st.init()
 
     lib = st.library
-    doc_text: dict[str, str] = {}
     for lid, title, ltype, fname, text in LITS:
         d = lib / lid
         d.mkdir(parents=True, exist_ok=True)
         (d / fname).write_text(text + "\n", encoding="utf-8")
-        doc_text[lid] = text
 
     # 声明哪几张表由并表过渡层决定（`concepts` 落刀之后不在 schema 里，
     # 声明它会以"未知表"当场失败）。写概念行走 `CR.upsert_legacy_shaped`：
@@ -168,7 +167,7 @@ def build(dest: Path) -> Path:
             crow.validate()
             CR.upsert_legacy_shaped(tx, crow.to_dict(), actor="dataset", note="concept_created")
 
-        for lid, title, ltype, fname, _ in LITS:
+        for lid, title, ltype, fname, text in LITS:
             # `dedup_key` 必须取自唯一的键族 `dedup.literature_keys`：
             # 手写 `f"title:{title.lower()}"` 是第三种标题键形态 —— 既不是
             # `literature_keys` 的产物（差一个 `|*` 后缀），也没走
@@ -181,20 +180,23 @@ def build(dest: Path) -> Path:
                 path=f"{lid}/{fname}", processed=True, source_request_ids=[],
                 dedup_key=demo_keys[0], doi=None, year=1900 + int(lid), authors=[],
                 venue="Demo", language="en", added_at=S.now_iso(),
-                download={"status": "ok", "http_status": 200, "bytes": len(doc_text[lid]),
+                download={"status": "ok", "http_status": 200, "bytes": len(text),
                           "sha256": "0" * 64, "error": None},
             ).to_dict())
 
         lid_to_rels: dict[str, list[str]] = {c[0]: [] for c in CONCEPTS}
         for rid, cids, desc, lit, quote, pages, status, verified in RELATIONS:
             pr = S.PageRange(pages[0], pages[1], f"pp. {pages[0]}-{pages[1]}")
+            # 三处都要同一份「按号排序的概念组」：只排一次，免得同一个排序跑三遍。
+            ordered = sorted(cids)
+            group_key = "|".join(ordered)
             row = S.Relation(
-                relation_id=rid, concept_ids=sorted(cids), description=desc, lit_id=lit,
+                relation_id=rid, concept_ids=ordered, description=desc, lit_id=lit,
                 page_range=pr, quote=quote,
-                quote_normalized=__import__("agentflow.textutil", fromlist=["x"]).normalize_for_quote(quote),
+                quote_normalized=T.normalize_for_quote(quote),
                 quote_verified=verified, statement=desc,
-                concept_group_key="|".join(sorted(cids)),
-                dedup_key=f"{'|'.join(sorted(cids))}::{rid}",
+                concept_group_key=group_key,
+                dedup_key=f"{group_key}::{rid}",
                 status=status, duplicate_of=None, created_at=S.now_iso(),
             )
             row.validate()
