@@ -557,9 +557,9 @@ def _checkpoint_spend(checkpoint: Any) -> dict[str, Any] | None:
     检查点里的 `spend` 可能是空对象（老检查点、或还没花过钱），那时"没有这一栏"
     与"这一栏是 0"必须分得开。
 
-    为什么判断权放在这里（2026-10-27 业主裁定 ⑥-4）：页面要比"同一趟"的两个数，
-    而"检查点有没有花销读数"这件事此前在 TS 里判一次、在 Python 里没人判 ——
-    两个数一个来自这里、一个来自 `runs[]`，谁都不许自己再猜一遍形状。
+    为什么判断权放在这里：页面要比"同一趟"的两个数，而"检查点有没有花销读数"
+    这件事此前在 TS 里判一次、在 Python 里没人判 —— 两个数一个来自这里、一个来自
+    `runs[]`，谁都不许自己再猜一遍形状。
     """
     if not isinstance(checkpoint, Mapping):
         return None
@@ -585,7 +585,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
       `ok`/`missing`/`unknown`（另一套词表，见裁定 N1）；
     - `checkpoint`：`runs/agent-<角色>-<sid>.json` 的内容（读不到就是 `None`）。
 
-    花销那四格（2026-10-27 业主裁定 ⑥-4）回答的是"同一趟花了两遍算的两处是不是同一个数"：
+    花销那几格回答的是"同一趟花了两遍算的两处是不是同一个数"：
 
     - `checkpoint_role`：被选中的那一份检查点属于哪个角色（`""` = 没有检查点）；
     - `checkpoint_spend_usd`：那一份检查点自己的累计（`spend.usd`，读不到 `null`）；
@@ -625,7 +625,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
                 "same_run_start_index": None, "unattributed_usd": None}
     events, bad = SS.read_session(root_p, sid=sid)
     runs = SS.runs_in_session(events, sid=sid)
-    # 未收尾的循环（2026-11-01，82 的定格数据）：`sessions.runs_in_session` 是纯会话
+    # 未收尾的循环（82 的定格数据）：`sessions.runs_in_session` 是纯会话
     # 读数（盘上格式不动），`stale_loop` 由 `webui.state` 现算 —— 与 `/api/state` 的
     # `runs[]` 同一个函数、同一套判据（顶趟已收尾 + 这一趟没收到 end）。
     _state.mark_stale_loops(runs)
@@ -783,7 +783,7 @@ def run_events(root: str | Path, sid: str, *, since_index: int = 0,
 
 
 # ====================================================================== 2c 趟次档案（裁定 甲）
-# 为什么要有这一面（业主 2026-11-02 的裁定「甲」，逐字）：
+# 为什么要有这一面（业主裁定「甲」，逐字）：
 #
 #   `index/run-index.json` 的口径一字不改 —— 只在"收工成功"时建；收工没做成 /
 #   被叫停 ⇒ 那一格如实 `unreadable`（没建就是没建，不许拿一份半截索引冒充"已对账"）。
@@ -859,12 +859,12 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       `total - unsigned` 合计（其中签住的证明位数），以及"收工行没带这一格"的趟数。
       这里不是"签了几个签文件"：`signed_proofs` 数的是收工读数里的已签证明位；
     - `sign_files`：签文件的个数（`out/vsigns/*.json`，含派生归档 `issued.json`）。
-      它确实是"文件个数"，保留原名一个批次；它与 `signed_proofs` 是两个数、两套口径
-      （84 的现场：前者 3、后者 31 —— 改前两件事共用 `signed` 一格，读的人会把 31 读成
+      它确实是"文件个数"，保留原名；它与 `signed_proofs` 是两个数、两套口径
+      （84 的现场：前者 3、后者 31 —— 两件事曾共用 `signed` 一格，读的人会把 31 读成
       "签了 31 份"）。目录不在 ⇒ 0；目录在而列不出来 ⇒ `None`（没查成，不是 0）；
-    - `recomputable_signs`：复算通过的凭据份数（D268 批 2 的"签数"唯一读数）。
+    - `recomputable_signs`：复算通过的凭据份数（"签数"的唯一读数）。
       与 `sign_files` 的区别：文件在但 `passes` 点不出 need 行（自指签 / 无轴 / 不齐）
-      不计入。目录不在 ⇒ 0；读不出来 ⇒ `None`。前端本批改读这一格；
+      不计入。目录不在 ⇒ 0；读不出来 ⇒ `None`。前端改读这一格；
     - `stop_reasons`：`{停止理由: 趟数}`（空字典 = 一趟都没有停止理由可数）。
 
     有坏行时 `tri=unreadable` 而读得出来的那些行照常算（少给数会让"这一趟 0 步"
