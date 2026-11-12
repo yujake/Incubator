@@ -68,8 +68,7 @@ from ..formalgw import STATUSES as _FORMALGW_STATUSES
 from ..formalgw import DeclarationNameError, sole_declaration_name
 from ..store import Store
 
-#: E 的三种计算法（`schema.EXPERIMENT_METHODS` 去掉 `formal`）。
-#:
+#: E 的三种计算法（`schema.EXPERIMENT_METHODS` 去掉 `formal`）。 :
 #: 常量本体在 `agentflow.experiment_methods`（中立模块）：`specs/e.py` 的动作面也要读它，
 #: 而 `specs/e.py` 从本模块 import 会成环 —— 本模块末尾反向 `from ..specs.e import SPEC`，
 #: 先导入 `specs.e` 时 `SPEC` 还没定义。这里只 re-export，既有 import 面不变
@@ -793,11 +792,9 @@ def install_e_tools(
     reg = registry if registry is not None else ToolRegistry(name="agent-E")
     root = Path(workspace_root) if workspace_root is not None else Path(store.root)
     VT.register(reg, store=store, root=root)
-    # ---- 绑定角色（`P-14`）：这张注册表代表 E，`AgentE._call` 的每次调用都会被
-    # 判一次"E 拿不拿得到这个工具"。不绑的话那些调用会全部以"调用方没有声明角色"失败。
-    # 它不改 `E` 的工具面（`for_role` 在这张注册表上没剥掉任何东西）。
+    # ---- 绑定角色（`P-14`）：不绑的话 `AgentE._call` 每次调用都以"没声明角色"失败；
+    # 它不改 `E` 的工具面（`for_role` 在这里没剥掉任何东西）。
     if reg.bound_role is None:
         reg.bound_role = "E"
     return reg
 from ..specs.e import SPEC  # noqa: E402,F401
-
