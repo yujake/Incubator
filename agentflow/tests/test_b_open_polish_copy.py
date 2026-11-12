@@ -69,7 +69,6 @@ MANUSCRIPT = f"""# F 的证明手稿：夹具命题
 - 命题号：stmt:{SID}
 {SIGN_LINE.format(sha="__SHA__")}
 - 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无
-- 证明号：1
 
 ## 命题
 
@@ -81,8 +80,8 @@ MANUSCRIPT = f"""# F 的证明手稿：夹具命题
 
 ## 依赖
 
-| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |
-|---|---|---|---|
+| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |
+|---|---|---|
 （这一份证明没有引用任何在册命题 —— 空表就是声明。）
 """
 
@@ -271,7 +270,6 @@ def _unregistered_manuscript(*, manuscript_id: str, signed: bool) -> str:
             f"命题号=stmt:；手稿号={manuscript_id}")
     lines += [
         "- 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无",
-        "- 证明号：1",
         "",
         "## 命题",
         "",
@@ -283,8 +281,8 @@ def _unregistered_manuscript(*, manuscript_id: str, signed: bool) -> str:
         "",
         "## 依赖",
         "",
-        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |",
-        "|---|---|---|---|",
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |",
+        "|---|---|---|",
         "（这一份证明没有引用任何在册命题 —— 空表就是声明。）",
         "",
     ]
