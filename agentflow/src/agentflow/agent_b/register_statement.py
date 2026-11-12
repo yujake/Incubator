@@ -6442,6 +6442,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _land_b_manuscript(self, *, statement_id: str, statement_full: str,
                            proof_text: str, label: str = "", proof_no: int = 1,
+                           path_group: int = 0,
                            source_manuscript: str = "",
                            manuscript_id: str = "") -> dict:
         """把 B 的改写正文落成 `reports/b-proof-<B稿号>.md`（可签的载体）。
@@ -6465,6 +6466,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         找不到才发新号。老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
         （不新写第二个名字）—— 那是只读兼容的既存量，改名会把它变成第二份稿。
 
+        `path_group >= 1`（2026-11-12 业主裁定：两条路径各一份 B 改写稿）时，载体按
+        「路径」认：调用方（`land_manuscript`）已经用 `manuscript_id_for_path` 认过，
+        命中就重写那一份、没命中就新开一份 —— 这里不再回退到"按命题找"，那会把两条
+        路径合成同一份稿。`0` = 老调用面，逐字不变。
+
         ## 页头三格从来源稿读出来传全（2026-11-05 走查 D4）
         改前这里只传 `label`，于是运行期落下来的 b-稿缺 `- 计划：`、缺洗稿行、还多
         一行 `- 标签：` —— 与 f-族不是同一个骨架。页头那几格只活在来源稿里，所以
@@ -6476,6 +6482,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         from .. import bmanuscript as _BM
 
         out: dict = {"ok": False, "checked": True, "path": "", "manuscript_id": "",
+                     "path_group": int(path_group or 0),
                      "written": False,
                      "preserved": False, "signed": False, "text": "",
                      "sha256": "", "proof_no": 0, "preview": False,
@@ -6491,16 +6498,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         # ---- 稿号：先找回「这一条命题自己那份 B 稿」，找不到才发新号 ---------------
         mid = str(manuscript_id or "").strip()
-        found = _BM.manuscript_id_for_statement(root, statement_id)
+        found: dict = {"checked": True, "found": False, "why": ""}
         legacy_rel = ""
-        if not mid and found.get("found"):
-            mid = str(found.get("manuscript_id") or "")
-        if not mid:
-            # 老盘上的名字（`reports/b-proof-<命题号>.md`）：就地重写，不新写第二个名字。
-            _legacy = f"reports/b-proof-{str(statement_id or '').strip()}.md"
-            if (Path(str(root)) / _legacy).is_file():
-                mid = str(statement_id or "").strip()
-                legacy_rel = _legacy
+        if int(path_group or 0) < 1:
+            found = _BM.manuscript_id_for_statement(root, statement_id)
+            if not mid and found.get("found"):
+                mid = str(found.get("manuscript_id") or "")
+            if not mid:
+                # 老盘上的名字（`reports/b-proof-<命题号>.md`）：就地重写，不新写第二个名字。
+                _legacy = f"reports/b-proof-{str(statement_id or '').strip()}.md"
+                if (Path(str(root)) / _legacy).is_file():
+                    mid = str(statement_id or "").strip()
+                    legacy_rel = _legacy
+        #: 优化线（`path_group >= 1`）：mid 已由调用方按路径认过；空 = 这一条路径还没有
+        #: B 改写稿 ⇒ 直接发新号。绝不回退到"按命题找"（那会把两条路径合成一份稿）。
         if not mid:
             from .. import manuscriptids as _MID_ALLOC
 

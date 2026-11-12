@@ -155,6 +155,114 @@ def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
     return out
 
 
+def manuscript_id_for_path(root: Any, statement_id: Any, path_group: Any,
+                          *, store: Any = None) -> dict[str, Any]:
+    """这一条路径的 B 改写稿是哪一份（逐路径记录的唯一读口）。
+
+    ## 为什么不能再用 `manuscript_id_for_statement`
+    那个函数回答的是"这一条命题自己那份 B 稿"（按稿头的 `- 命题号：` 找，未签优先）。
+    业主 2026-11-12 的裁定是「两条路径各一份 B 改写稿」：同一命题的路径 1 与路径 2
+    必须落在两个稿号上。按命题找只会挑中其中一份 ⇒ 第二条路径会覆盖第一条的载体。
+    路径身份不写稿头（业主：「路径在产出侧也不标注」），唯一的事实来源是
+    `manuscriptpaths` 的逐路径记录（`verifications[].path_group` + `manuscript`）。
+
+    ## 三态（不折平）
+    - `checked=False` ⇒ 这一趟读不到路径记录（没给根 / 台账读不出来）—— "没查成"；
+    - `checked=True, path_exists=False` ⇒ 查过了、第 n 条路径还没在册（不猜）；
+    - `checked=True, path_exists=True, found=False` ⇒ 路径在册、还没有 B 的改写稿
+      （调用方应为它新开一份，而不是回头按命题挑一份已有的）；
+    - `found=True` ⇒ 这一条路径的 B 改写稿就是 `manuscript_id` / `path`。
+
+    返回键：`checked / found / path_exists / path_group / manuscript_id / path /
+    candidates / basis / why`。`basis` 说明这一份是怎么认出来的（`path_manuscript` =
+    路径记录第一份稿就是它；`verification_manuscript` = 同号签行里那一份 B 稿）。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "found": False, "path_exists": False,
+        "path_group": int(path_group or 0), "manuscript_id": "", "path": "",
+        "candidates": [], "basis": "", "why": "",
+    }
+    try:
+        group = int(path_group or 0)
+    except (TypeError, ValueError):
+        group = 0
+    if group < 1:
+        out.update(checked=True, why=(
+            f"路径号必须是正整数（收到 {path_group!r}）⇒ 路径身份不成立，不按命题猜"))
+        return out
+    sid = str(statement_id or "").strip()
+    if not sid:
+        out.update(checked=True, why="没给命题号 ⇒ 没有路径可认（不是「没有这份稿」）")
+        return out
+    if root is None or str(root) == "":
+        out.update(why="这一趟没有工作区根 ⇒ 查不了（不是「没有这份稿」）")
+        return out
+    from . import manuscriptpaths as _MP
+
+    reading = _MP.path_reading(store, root, statement_id=sid)
+    if not reading.get("checked"):
+        out.update(why=("路径记录读不出来 ⇒ 不猜第几条："
+                        + str(reading.get("why") or "未知原因")))
+        return out
+    paths = [dict(one) for one in (reading.get("paths") or ())]
+    out["candidates"] = [str(one.get("manuscript") or "") for one in paths]
+    hit = next((one for one in paths if int(one.get("path_group") or 0) == group), None)
+    if hit is None:
+        out.update(checked=True, why=(f"第 {group} 条路径还没在册 ⇒ 不落稿"
+                                      "（不许落一份稿、回头再猜它是第几条）"))
+        return out
+    out["path_exists"] = True
+    # 1) 路径记录点名的那一份就是 B 的改写稿 ⇒ 就是它
+    rel = str(hit.get("manuscript") or "").strip()
+    if rel and is_relpath(rel):
+        out.update(checked=True, found=True, manuscript_id=_manuscript_id_for_rel(rel),
+                   path=rel, basis="path_manuscript",
+                   why=f"第 {group} 条路径的稿记录点名 `{rel}`")
+        return out
+    # 2) `path_reading` 每条路径只留第一份 manuscript（F 的源稿常排在前面）；
+    #    B 的改写稿与它同属一条路径，落在同号的 `verifications` 行里。
+    from . import verifications as _VR
+
+    try:
+        rows, _bad = _VR.list_verifications(root, statement_id=sid, limit=None)
+    except Exception:  # noqa: BLE001 —— 读不到签行不算"没有 B 稿"
+        out.update(checked=True, why=(
+            f"第 {group} 条路径在册，而签行读不出来 ⇒ 不猜它有没有 B 改写稿"))
+        return out
+    hits: list[str] = []
+    for one in rows or ():
+        doc = dict(one or {})
+        try:
+            row_group = int(doc.get("path_group") or 0)
+        except (TypeError, ValueError):
+            row_group = 0
+        if row_group != group:
+            continue
+        cand = str(doc.get("manuscript") or doc.get("object_path") or "").strip()
+        if cand and is_relpath(cand):
+            hits.append(cand)
+    if hits:
+        # 同一路径可能有多份 B 稿（改稿留痕 / 多轮优化）：取最后一条签行那一份
+        # （台账行序 = 时间序，最后那一份是这一条路径现在的载体）。
+        rel = hits[-1]
+        out.update(checked=True, found=True, manuscript_id=_manuscript_id_for_rel(rel),
+                   path=rel, basis="verification_manuscript",
+                   why=f"第 {group} 条路径的同号签行里有 B 稿 `{rel}`（{len(hits)} 份候选）")
+        return out
+    out.update(checked=True, why=(
+        f"第 {group} 条路径在册，但它的记录里还没有 B 的改写稿 ⇒ B 要为它新开一份"
+        "（不许回头按命题挑一份已有的：那会把两条路径合成一份）"))
+    return out
+
+
+def _manuscript_id_for_rel(rel: Any) -> str:
+    """`reports/b-proof-<号>.md` ⇒ 号（认不出 ⇒ 空串，不猜）。"""
+    parsed = _VS.parse_manuscript_name(str(rel or "").strip())
+    if not (parsed.get("checked") and parsed.get("family")):
+        return ""
+    return str(parsed.get("manuscript_id") or "")
+
+
 def is_relpath(value: Any) -> bool:
     """这一串字是不是「B 的改写手稿」那一形态（`reports/b-proof-<数字>.md`）。
 
