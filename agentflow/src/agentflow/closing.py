@@ -5281,11 +5281,10 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
             "proofs": proofs, "why": str(worst.get("why") or "")[:400]})
 
 def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
-    """第二阶段那一格读数：按 optimized 加来源分三档（业主 2026-11-02 两阶段录入）。
+    """第二阶段那一格读数：按 optimized 加来源分三档。
 
-    业主原话（`draft/179` 二之一）：「其实第二阶段逐个优化时只要读那栏记录是否优化的
-    新参数即可。若为否，要么是F刚产出的（此处机械录入就是指自动化工具），要么是文献
-    录入的……总之都要洗一遍。洗过的肯定能保证V签。所以二阶段只用看是否优化过」。
+    第二阶段的判据只有「这一份优化过没有」：没优化过的一律要洗一遍 —— F 刚产出的
+    机械录入与文献侧录入都在内；洗过的才谈得上 V 签。
 
     于是这一格回答的不是「签了没有」（那是 `statements_unsigned`），而是「哪些证明还没洗」。
 
@@ -5297,14 +5296,13 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     | `unoptimized_from_lit` | `bits.evidence.proof_source == "citation"`（文献侧录入：V 签位填的是文献编号） |
     | `unoptimized_source_not_recorded` | 来源读不出来（proof_source 空 / 没有 bits 的旧行），不许折成 from_f |
 
-    一条命题有多份证明时按份出读数：「签是逐条的」（`draft/179` 二之三），交差与洗都
-    按份算，不按命题算。
+    一条命题有多份证明时按份出读数：签是逐条的，交差与洗都按份算，不按命题算。
 
     ## 为什么 optimized 用三态（true / false / not_recorded）
 
-    存量行没有这一格（真机 3134 行 own_result）。缺格折成 false 会让整库一次全变
-    「等洗」；折成 true 更坏（等于自报洗过）。所以缺格记 `not_recorded`，它在上面三档里
-    与 false 同档（都是「要洗」），但读数里逐条说得清是哪一种。判据读的是
+    存量行没有这一格。缺格折成 false 会让整库一次全变「等洗」；折成 true 更坏
+    （等于自报洗过）。所以缺格记 `not_recorded`，它在上面三档里与 false 同档
+    （都是「要洗」），但读数里逐条说得清是哪一种。判据读的是
     `evidencebits.optimized_state`（唯一口径），不在这里再判一次。
 
     ## 三态（这一格本身）
@@ -5757,13 +5755,13 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
     return out
 
 
-#: 登记动作在会话步里的工具名（三种写法都认：B 的正名与两个历史别名）。
+#: 登记动作在会话步里的工具名（三种写法都认）。
 _REGISTER_ACTION_NAMES: tuple[str, ...] = (
     "own.register_statement", "B.register_statement", "register_statement")
 
 
 def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]:
-    """① 「这一趟里命题同一性判定到底发生过几次」（业主 2026-11-08，sylow5 的根因）。
+    """这一趟里命题同一性判定到底发生过几次。
 
     三个数一起读，缺一个就读不出"整条链是死的"：
 
@@ -5772,7 +5770,7 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
        注意这本账只记「判完并且要缓存」的那一趟：`use_cache=False` 的调用
        （候选逐页给，按正文 sha 缓存会把"这一页没查到"沿用到下一页）不写这本账，
        只写 `statement_same.jsonl`。只数这一本就会把"判过了一场"读成"一次都没判"
-       （2026-11-08 业主 sylow5 的误报：`verdict_rows=0` 而 seam 两条都说明判过）；
+       （`verdict_rows=0` 而两条缝都说明判过）；
     2. `statement_same_judged`：`out/secretary/statement_same.jsonl` 里 `stage="judge"`
        且 `checked=True` 的行数（第二本账；`statement_same_rows` 是该账全部行，
        含 `keywords` / `retrieval` 那些"还没判"的尝试 —— 混进来会把"没判成"数成"判过"）。
@@ -5789,7 +5787,7 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
     判定：`judged_zero = 有登记动作 ∧ 两本账合读的判定行 0`；`seam_none > 0` 也算命中。
     两者都由 `check_closing` 转成一条 warning（不是 blocker）：同类"接线 / 可见性"
     读数（`statements_unoptimized` / `suspected_splits` / `proposition_form`）都是
-    readings + warning；而且裸秘书工作区（既有的那批判据）不该因为"没缝"就收不了工 ——
+    readings + warning；而且裸秘书工作区不该因为"没缝"就收不了工 ——
     那是改门强度，不是加读数。三态：没有工作区根 / 台账读不出来 ⇒ `checked=False` +
     `reason`（没查成不是"0 次判定"）。
     """
