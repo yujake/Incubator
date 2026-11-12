@@ -53,13 +53,13 @@ STEP_TEXT = "由定理甲直接得到"
 PROOF_TEXT = f"1. {STEP_TEXT}（依据：stmt:{DEP}）"
 
 DEP_TABLE = (
-    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-    "|---|---|---|---|\n"
-    f"| 由定理甲 | stmt:{DEP} | 第 1 步 | 1 |\n"
+    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+    "|---|---|---|\n"
+    f"| 由定理甲 | stmt:{DEP} | 第 1 步 |\n"
 )
 EMPTY_DEP_TABLE = (
-    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-    "|---|---|---|---|\n"
+    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+    "|---|---|---|\n"
     "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n"
 )
 
@@ -364,7 +364,7 @@ def test_c_the_sign_block_moves_for_both_families(tmp_path: pathlib.Path) -> Non
     st3 = _ws(tmp_path / "B-retitle")
     target3 = f"reports/b-proof-{SID}.md"
     old_title = ("# B 的证明手稿：旧标题\n\n"
-                 f"- 命题号：stmt:{SID}\n- 证明号：1\n\n"
+                 f"- 命题号：stmt:{SID}\n\n"
                  "## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + PROOF_TEXT
                  # 2026-11-05：这里原来用空表，而 PROOF_TEXT 的正文点了 `stmt:{DEP}`
                  # —— 那正是缺陷甲的形态（正文引了、表里没写）。现在它会被
