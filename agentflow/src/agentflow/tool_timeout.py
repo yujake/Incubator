@@ -1,14 +1,14 @@
-"""逐工具超时：协作式截止 + 一张表（业主 2026-10-10 裁定 13甲 / 12-D / 12-E / 12-G）。
+"""逐工具超时：协作式截止 + 一张表（裁定 12-D / 12-E / 12-G）。
 
 ## 搬的是什么（DSH 的原文口径）
 
-- `dsh-timeout/lib/index.js:12-25` 的 `TimeoutReason`（能力自己的 code + 到点的那口钟）、
-  `:57-73` 的 `deadline()`、`:134-138` 的 `timeoutOf(x, code)` 作用域判据；
-- `dsh-tool-call-timeout-policy/lib/index.js:80` 的 `TOOL_TIMEOUT`（既作内部超时分类码、
-  又作结构化错误码）、`:93-109` 的替换结果（模型可见文本 `Error: tool call timed out after
-  <ms>ms`、`error.info.name = "ToolTimeoutError"`）、`:115-134` 的包装器（没声明就原样放行；
+- `dsh-timeout/lib/index.js` 的 `TimeoutReason`（能力自己的 code + 到点的那口钟）、
+  `deadline()`、`timeoutOf(x, code)` 作用域判据；
+- `dsh-tool-call-timeout-policy/lib/index.js` 的 `TOOL_TIMEOUT`（既作内部超时分类码、
+  又作结构化错误码）、替换结果（模型可见文本 `Error: tool call timed out after
+  <ms>ms`、`error.info.name = "ToolTimeoutError"`）、包装器（没声明就原样放行；
   只有我们自己的那口钟响过才替换结果）；
-- `:29`/`:44` 的注册期校验文案（`must be a positive finite number`）。
+- 注册期校验文案（`must be a positive finite number`）。
 
 ## 三处与 DSH 的差异（都是我方的形态，逐条写明理由）
 
@@ -46,11 +46,11 @@ import time
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-#: DSH 逐字搬来的码（`dsh-tool-call-timeout-policy/lib/index.js:80`）：它同时是内部超时
+#: DSH 逐字搬来的码（`dsh-tool-call-timeout-policy/lib/index.js`）：它同时是内部超时
 #: 分类码与结构化错误码 —— 两处同一个字符串，重试/沙箱/回放才能按它路由。
 TOOL_TIMEOUT = "TOOL_TIMEOUT"
 
-#: DSH 逐字搬来的上限（`dsh-timeout/lib/index.js:27`）：Node 不把它夹到 1 毫秒的最大延迟。
+#: DSH 逐字搬来的上限（`dsh-timeout/lib/index.js`）：Node 不把它夹到 1 毫秒的最大延迟。
 MAX_TIMER_DELAY_MS = 2147483647
 
 #: 结构化错误里那个名字（DSH 的 `error.info.name`）。
@@ -65,7 +65,7 @@ _MS_PER_SEC = 1000.0
 
 
 def assert_timer_delay(timeout_ms: float, name: str = "timeoutMs") -> None:
-    """DSH `dsh-timeout/lib/index.js:28-30` 逐字搬来的注册期/装表期校验。"""
+    """DSH 的 `dsh-timeout/lib/index.js` 逐字搬来的注册期/装表期校验。"""
     if not isinstance(timeout_ms, (int, float)) or timeout_ms != timeout_ms:
         raise ValueError(f"{name} must be a positive finite number no greater than "
                          f"{MAX_TIMER_DELAY_MS}")
@@ -76,7 +76,7 @@ def assert_timer_delay(timeout_ms: float, name: str = "timeoutMs") -> None:
 
 def clamp_timeout(requested: float | None, default: float, maximum: float,
                   name: str = "timeoutMs") -> float:
-    """DSH `:43-46` 逐字搬来：调用方给的那一份必须是正的有限数（0 不是"关掉超时"）。"""
+    """DSH 的 `clamp_timeout` 口径逐字搬来：调用方给的那一份必须是正的有限数（0 不是"关掉超时"）。"""
     if requested is not None:
         if not isinstance(requested, (int, float)) or requested != requested or requested <= 0:
             raise ValueError(f"{name} must be a positive finite number")
@@ -84,7 +84,7 @@ def clamp_timeout(requested: float | None, default: float, maximum: float,
 
 
 class TimeoutReason(Exception):
-    """DSH `:12-25` 的 `TimeoutReason`：能力自己的 code + 到点的那口钟（毫秒）。"""
+    """DSH 的 `TimeoutReason`：能力自己的 code + 到点的那口钟（毫秒）。"""
 
     def __init__(self, code: str, timeout_ms: float) -> None:
         super().__init__(f"{code} after {timeout_ms}ms")
@@ -102,9 +102,9 @@ class ToolTimedOut(Exception):
 
 
 def timeout_of(carrier: Any, code: str | None = None) -> TimeoutReason | None:
-    """DSH `:134-138` 的判据：只认自己那个 code 的 `TimeoutReason`。
+    """DSH 的 `timeoutOf` 判据：只认自己那个 code 的 `TimeoutReason`。
 
-    为什么这条判据必须搬（逐字理由见 `:73-80`）：嵌套时外层包装器的钟先响 ⇒ 内层要把它
+    为什么这条判据必须搬：嵌套时外层包装器的钟先响 ⇒ 内层要把它
     读成普通的上游取消并原样透传下游结果，而不是误报成"我超时了"。
     传 `code=None` 时才认任何 code（那是"有没有超时"的粗问，不是本包装器自己的问法）。
     """
@@ -131,13 +131,12 @@ class TimeoutDecl:
 
 
 #: 逐工具的限时表（真身）。覆盖面 = 工具面上全部 `external in ("egress", "exec")` 的那些件
-#: （现读，清单由 `tests/test_the_tool_timeouts_are_cooperative.py` 对齐；2026-10-26 实测十件）。
-#: 不是"挑几件挂上"：少登记一件，那一件就永远不会被限时，而没有任何东西会红 ——
-#: 这正是那三件 `formal.*` 此前挂在外面的形态。
+#: （清单由 `tests/test_the_tool_timeouts_are_cooperative.py` 对齐）。
+#: 不是"挑几件挂上"：少登记一件，那一件就永远不会被限时，而没有任何东西会红。
 #:
 #: 为什么只有这几件（DSH 同款口径）：`dsh-tool-web` 声明了 30s，而随附的
-#: `bash`/`read`/`write`/`edit` 有意不声明（`README.md:123`）⇒ "无统一默认"是本条裁定的
-#: 一部分，不是遗漏。本地读写是毫秒级的事，给它加钟只会让读数里多一格噪声。
+#: `bash`/`read`/`write`/`edit` 有意不声明 ⇒ "无统一默认"是本条裁定的一部分，
+#: 不是遗漏。本地读写是毫秒级的事，给它加钟只会让读数里多一格噪声。
 TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
     # ---- 检索（egress）：一次提问要打多个源，最坏是"每个源各自超时"的叠加。
     "search.literature": TimeoutDecl(
@@ -154,7 +153,7 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
     "search.download": TimeoutDecl(
         180.0, "DOWNLOAD_TIMEOUT", "pending",
         "下 PDF 是这一层最慢的一件（分钟级是常态，所以给三分钟而不是三十秒）"),
-    # 2026-10-28（阶段 ③ 2B）：批量重取 —— 一次调用最多碰 `limit` 行（缺省 10），
+    # 批量重取 —— 一次调用最多碰 `limit` 行（缺省 10），
     # 每行都是一次下载（`search.download` 那一档单次就给三分钟）⇒ 给十分钟。
     # 检查点接在每一行开始之前（`raise_if_timed_out()`）：到点就停在那里，
     # 已经落盘的那些行不受影响（它们各自的事务已提交），只是这一次的汇总会被
@@ -172,9 +171,8 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
         "框架内置的 LaTeX 编译（两遍 pdflatex）—— 长稿子分钟级起步，给它半小时；"
         "读者从 `draft/117` 起：旧路的 render/build/anchor 三条已退场"),
     # `verify.*` 两件在禁改区 `tools/verify_tools.py` 里 ⇒ 检查点只能由人加（如实标 pending）。
-    # 2026-10-23 晚：`verify.check_formal` 整条删除（E 不做形式化）⇒ 那一格从表里退场。
-    # 形式化那三件今天叫 `formal.formalize` / `formal.check_formal` / `formal.record`（L 的），
-    # 三件都 `external=exec`（各自会起一次 Lean 检查器）—— 2026-10-26 补进表，见下面那三行。
+    # 形式化那三件叫 `formal.formalize` / `formal.check_formal` / `formal.record`（L 的），
+    # 三件都 `external=exec`（各自会起一次 Lean 检查器）。
     #
     # 那三条为什么是 1200 秒（同档 exec 的读数：`verify.run_experiment` 600、`doc.paper_compile` 1800）：
     # 检查器自己那口钟缺省 600 秒（`agent_l/core.py` 的 `default_timeout`），而这三件的
@@ -200,7 +198,7 @@ TIMEOUT_TABLE: dict[str, TimeoutDecl] = {
 
 
 def lookup(name: str) -> TimeoutDecl | None:
-    """查一个工具的限时声明（`None` = 没有声明 ⇒ 原样放行，照 DSH 的 `:124`）。
+    """查一个工具的限时声明（`None` = 没有声明 ⇒ 原样放行，照 DSH 的 `return next()`）。
 
     三态：`None` 是"没有声明"这一档，它与"声明了 0 秒"是两件事 ——
     后者在装表期就会被 :func:`assert_timer_delay` 拒掉（0 不是"关掉超时"的公开哨兵）。
@@ -341,7 +339,7 @@ class _Deadline:
     def __enter__(self) -> "_Deadline":
         decl = lookup(self.name)
         if self.seconds is None:
-            # 没声明（或读不到）⇒ 不装钟，原样放行（DSH `:124` 的 `return next()`）。
+            # 没声明（或读不到）⇒ 不装钟，原样放行（DSH 的 `return next()`）。
             # 读不到的那一档在这里也不装：装一个猜出来的钟比不装更糟。
             self.run = DeadlineRun(self.name, False, "", "", 0.0, 0.0)
             return self
@@ -349,7 +347,7 @@ class _Deadline:
         assert_timer_delay(timeout_ms, f'tool "{self.name}" timeoutMs')
         outer = _CURRENT_SCOPE.get()
         # 照 `timeoutOf` 的作用域：外层钟已经响过 ⇒ 这一跳读作上游取消，
-        # 内层不许把自己的钟当成"我的超时"（DSH `:73-80` 的逐字理由）。
+        # 内层不许把自己的钟当成"我的超时"（DSH 的 `timeoutOf` 逐字理由）。
         self._outer_expired = bool(outer is not None and outer.expired)
         code = decl.code if decl is not None else TOOL_TIMEOUT
         self.scope = DeadlineScope(self.name, code, timeout_ms, time.monotonic())
@@ -360,7 +358,7 @@ class _Deadline:
         if self.scope is not None:
             _CURRENT_SCOPE.reset(self._token)
             state = ""
-            # 照 `timeoutOf` 的作用域（DSH `:73-80`）：只有"抛出来的那个 reason 的 code
+            # 照 `timeoutOf` 的作用域（DSH 同款）：只有"抛出来的那个 reason 的 code
             # 就是我这一层的 code"才算我超时了；别人那口钟抛上来的读作普通异常。
             if (exc is not None and isinstance(exc, ToolTimedOut)
                     and exc.reason.code == self.scope.code):
@@ -375,7 +373,7 @@ class _Deadline:
 
     @property
     def observed_timed_out(self) -> bool:
-        """我们自己的那口钟响了、而且工具真的停住了 ⇒ 才替换结果（DSH `:130`）。"""
+        """我们自己的那口钟响了、而且工具真的停住了 ⇒ 才替换结果（DSH 同一条）。"""
         if self.run is None or not self.run.declared:
             return False
         if self._outer_expired:
@@ -412,7 +410,7 @@ def timeout_result(name: str, code: str, timeout_ms: float, *,
                    outer_expired: bool = False) -> dict[str, Any]:
     """被替换掉的那个结果（逐字节相同：耗时只进侧信道 —— 裁定 12-E）。
 
-    形状照 DSH `:93-109`：模型可见的 `error` 文本逐字是
+    形状照 DSH：模型可见的 `error` 文本逐字是
     `Error: tool call timed out after <ms>ms`；结构化那一份带上同一个 `TOOL_TIMEOUT`
     与 `ToolTimeoutError`（重试/沙箱/回放按它路由）。
 
