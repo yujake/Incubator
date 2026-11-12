@@ -429,6 +429,10 @@ JUDGE_UNCHECKED = "没查成"
 #:
 #: 加一类判断时只加一行：`Secretary.JUDGE_KINDS` 与 `judge()` 的校验都从这张表派生，
 #: 于是"新类别悄悄用了别的轴的词"这件事在结构上就发生不了。
+#: 同种证明的判定词表（二态、语义；判不了走 `checked=False`，不设第三档）。
+#: 定义必须早于 `JUDGE_VERDICTS`（那张表在模块加载期就取它）。
+PROOF_KIND_VERDICTS: tuple[str, ...] = ("same", "different")
+
 JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "duplicate_retry": DECISIONS,
     "tool_name": DECISIONS,
@@ -440,6 +444,10 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "v_reply_defect": V_REPLY_VERDICTS,
     # 这一签发不发（业主 2026-10-29 的 A 段：发签决定权在 V 的秘书）。
     "sign_issuance": SIGN_ISSUANCE_VERDICTS,
+    # 这一份证明与在册各路径是不是同一套证法（二态、语义；业主 2026-11-12：
+    # 「对比证明方法…语义判别，千万别做任何机械闸，结论是二态的：一致/不同」）。
+    # 不加第三档：判不了走 `checked=False`（fail-closed，调用方不收录）。
+    "proof_kind": PROOF_KIND_VERDICTS,
 }
 
 #: 判断"没查成"时，台账那一行的 `decision` 该写什么（按类别）。
@@ -451,7 +459,7 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
 #: 若不补，B 的台账在没查成时写的就是派活轴的"建议重排"（全仓已实测 10 行这种错轴）。
 _JUDGE_UNDECIDED: dict[str, str] = {
     "v_reply_defect": JUDGE_UNCHECKED, "sign_issuance": JUDGE_UNCHECKED,
-    "statement_aesthetic": JUDGE_UNCHECKED,
+    "statement_aesthetic": JUDGE_UNCHECKED, "proof_kind": JUDGE_UNCHECKED,
 }
 
 
@@ -1424,8 +1432,10 @@ STATEMENT_KEY_ALIASES: dict[str, tuple[str, ...]] = {
 #: 而是那条命题的第 N 份证明。缺省阈值与唯一实现都在 `propositionkey`，
 #: 这里只是把它们摆到秘书这一层（可注入：构造参数 `same_proposition_jaccard`）。
 SAME_PROPOSITION_JACCARD = _PK.SAME_PROPOSITION_JACCARD
-#: 同种证明的判据（同一命题下的第 N 份证明）：命中 ⇒ 不新增证明号，受控拒绝
-#: `proof_same_kind`（或 `merge=True` 合成一份并重拿 V 签）。
+#: 同种证明的判据（同一命题下的第 N 份证明）：判成 `same` ⇒ 不新增证明号，受控拒绝
+#: `proof_same_kind`（或 `merge=True` 合成一份并重拿 V 签）。判据是秘书的语义二态
+#: （`Secretary.judge("proof_kind", …)`，业主 2026-11-12：「语义判别，千万别做任何
+#: 机械闸，结论是二态的：一致/不同」）；相似度只作材料读数，不参与收不收。
 PROOF_SAME_JACCARD = _PK.PROOF_SAME_JACCARD
 #: 同一命题命中的两条依据（进返回值与拒信：读的人要能分辨"凭什么并的"）。
 MERGED_BY_KEY = _PK.BASIS_KEY
@@ -1440,10 +1450,9 @@ PROOF_SAME_KIND = "proof_same_kind"
 #: 同种证明这一问"没判成"的受控码（2026-11-08，业主「没有判不了」）。
 #:
 #: 为什么必须与 `PROOF_SAME_KIND` 分开：那一档是现象结论（"判过了、同种"），这一档
-#: 没有结论（`same_kind_proof` 回 `checked=False`：今天只剩"没有可比的文本"，未来若
-#: 判定面换成模型，则超时 / 坏 JSON / 没给可用答案也落这一档）。折平会把"没判成"读成
-#: "判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）—— 前者是同一种证法
-#: 被并列记录，后者是一份真的另一种证法被拒，两种都错。
+#: 没有结论（判定面回 `checked=False`：超时 / 坏 JSON / 没给可用答案都落这一档）。
+#: 折平会把"没判成"读成"判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）
+#: —— 前者是同一种证法被并列记录，后者是一份真的另一种证法被拒，两种都错。
 PROOF_KIND_UNJUDGED = "proof_kind_unjudged"
 #: 概念同一性"没判成"的受控码（2026-11-08，同上）。
 #:
@@ -3510,6 +3519,13 @@ class Secretary:
             out["route"] = str(data.get("route") or "")[:500]
             out["condition"] = str(data.get("condition") or "")[:500]
             out["conclusion"] = str(data.get("conclusion") or "")[:500]
+        if kind == "proof_kind":
+            # 判 same 时模型要指到"哪一条在册路径"（拒信点名第 N 条）；坏值不采信，
+            # 由调用方退回"第一条在册路径"（仍然拒收，不猜一条不存在的号）。
+            try:
+                out["same_path"] = int(data.get("same_path") or 0)
+            except (TypeError, ValueError):
+                out["same_path"] = 0
         return self._record_judge(kind, context, out)
 
     def _record_judge(self, kind: str, context: Mapping[str, Any],
@@ -7826,7 +7842,8 @@ class Secretary:
                                           note: str = "",
                                           manuscript: str = "",
                                           body_sha: str = "",
-                                          reserve: bool = False) -> dict[str, Any]:
+                                          reserve: bool = False,
+                                          proof_text: str = "") -> dict[str, Any]:
         """收方读稿登记：把一份手稿的依赖段落成那条在册命题的 `dependencies` 行。
 
         ## 为什么需要这一格（业主 2026-10-26 晚：「D 到 B 没有路吗？加」）
@@ -7896,6 +7913,39 @@ class Secretary:
                            reason=(f"路径号没分成（{type(exc).__name__}: {exc}）"
                                    " ⇒ 这一笔按'没写成'读"))
             return out
+        # ---- 同种证明：事务外先问一次（锁内不许发模型），结论带进事务 ----------
+        #
+        # 只在"这一份正文是新的"时问：同一份正文（sha 已在册）是幂等重交，不是另一套
+        # 证法。判 same ⇒ 拒收并点名第 N 条路径；判不了 ⇒ fail-closed；different 才
+        # 往下分号。这是 apply 那条入口的分配点（仍是秘书的唯一实现）。
+        if str(proof_text or "").strip():
+            from . import verifications as _VRkind
+
+            got_row = SL.by_id(self.store, stmt_id=sid)
+            if got_row.get("checked") and got_row.get("found"):
+                row_now = dict(got_row.get("row") or {})
+                _known = {_VRkind.text_sha(str(t)) for _n, t in
+                          _VRkind.proof_list(row_now) if str(t or "").strip()}
+                if _VRkind.text_sha(str(proof_text)) not in _known:
+                    _kind = self._same_kind_hits(row_now, str(proof_text))
+                    _sim = float(_kind.get("similarity") or 0.0)
+                    if not _kind.get("checked"):
+                        out.update(checked=False, refused=PROOF_KIND_UNJUDGED,
+                                   reason=("这一份证明与在册各路径是不是同种没判成"
+                                           "（没判成 ≠ 不同）⇒ 不收录、不新增路径："
+                                           + str(_kind.get("reason")
+                                                 or "判定面没给可用结论")))
+                        return out
+                    if str(_kind.get("decision") or "") == "same":
+                        _n = int(_kind.get("same_path") or 1)
+                        out.update(checked=False, refused=PROOF_SAME_KIND,
+                                   same_kind_material={"similarity": _sim},
+                                   reason=(f"这一份证明与 stmt:{sid} 的第 {_n} 条路径同种"
+                                           "（秘书的语义判定：两套证法是同一路，不是两条"
+                                           "独立路径）⇒ 不收录、不新增路径。材料读数"
+                                           f"（只作参考）：相似度 {_sim:.4f}。处置：换一条"
+                                           "真正不同的证法再交，或本次不再提交"))
+                        return out
         try:
             with self.store.tx("statements", "dependencies",
                                actor=f"secretary-{self.role}",
@@ -8621,16 +8671,29 @@ class Secretary:
         out["proposition_adjudication"] = dict(
             adjudication.get("proposition_adjudication") or {})
         out["canonical_name"] = str(adjudication.get("canonical_name") or "")
+        # ---- 同种证明：在锁外先问一次（锁内不许发模型），结论带进事务 ----------
+        _proof_kind = self._proof_kind_for_existing(
+            full=full, body=body, adjudication=adjudication)
+        if _proof_kind:
+            out["proof_kind"] = {
+                "checked": bool(_proof_kind.get("checked")),
+                "decision": str(_proof_kind.get("decision") or ""),
+                "same_path": int(_proof_kind.get("same_path") or 0),
+                "material_similarity": float(_proof_kind.get("similarity") or 0.0),
+                "reason": str(_proof_kind.get("reason") or ""),
+            }
         return self._land_or_refuse(body, full=full, kind=kind,
                                     force_new=bool(force_new), out=out,
                                     adjudication=adjudication,
+                                    proof_kind=_proof_kind,
                                     candidate_id=str(candidate_id or ""))
 
 
     def _land_or_refuse(self, body: Mapping[str, Any], *, full: str, kind: str,
                         force_new: bool, out: dict[str, Any],
                         adjudication: Mapping[str, Any],
-                        candidate_id: str) -> dict[str, Any]:
+                        candidate_id: str,
+                        proof_kind: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """把这一笔交给事务写口；写不成按三态回一条读数（不抛、不半笔）。
 
         2026-11-08 从 `record_statement` 拆出（只搬移，块内逐字相同）：「交给事务写口」
@@ -8641,7 +8704,8 @@ class Secretary:
             landed = self._record_statement_tx(body, full=full, kind=kind,
                                                force_new=bool(force_new), out=out,
                                                adjudication=adjudication,
-                                               candidate_id=candidate_id)
+                                               candidate_id=candidate_id,
+                                               proof_kind=proof_kind)
             return self._with_relabel_reading(landed, kind=kind)
         except Exception as exc:  # noqa: BLE001 —— 落盘失败必须回三态，不许半笔
             # ---- 写入期闸的拒收要留住它自己的码（2026-11-05 走查 D2）------------
@@ -9435,13 +9499,15 @@ class Secretary:
     def _record_statement_tx(self, body: dict[str, Any], *, full: str, kind: str,
                              force_new: bool, out: dict[str, Any],
                              adjudication: Mapping[str, Any] | None = None,
-                             candidate_id: str = ""
+                             candidate_id: str = "",
+                             proof_kind: Mapping[str, Any] | None = None
                              ) -> dict[str, Any]:
         """一笔事务把命题（+ 概念行 + 依赖组）落盘（`record_statement` 的写那一半）。
 
         `adjudication` 是事务之外那一次模型判定（见 `adjudicate_proposition`）：
         它决定这一笔是"并进在册的那一条"还是"新建"，并把定理名洗成 `canonical_name`。
-        事务里不再发调用 —— 锁里不许有网络等待。
+        `proof_kind` 是事务之外那一次"同种证明"判定（`_proof_kind_for_existing`）：
+        事务里只读结论、只落盘 —— 锁里不许有网络等待、更不许发模型调用。
         """
         from . import conceptrows as CR   # 惰性：并表过渡层的唯一读写口
         from . import textutil as T       # 惰性：查重键的唯一实现
@@ -9569,6 +9635,41 @@ class Secretary:
                 _dup_proof = str(body.get("proof_text") or "")
                 _dup_alloc: dict = {}
                 _dup_first_fill = not str(existing.get("proof_text") or "").strip()
+                # ---- 同种证明（业主 2026-11-12）：结论来自事务外那一问，这里只落 -----
+                #
+                # 只在"这一笔是同一命题的另一条证明路径"（`proof_path_kind=="new_path"）
+                # 且正文确实是新的时候判：同一份正文重交是幂等（走 `_same_no`），改稿
+                # （B 的改写载体）不是新路径。判不了 ⇒ fail-closed（不收录），不许折成
+                # "不同"照旧开新路径。
+                _verdict = dict(proof_kind or {})
+                _dup_sha = VR.text_sha(_dup_proof) if _dup_proof.strip() else ""
+                _known_now = {VR.text_sha(str(t))
+                              for _n, t in VR.proof_list(dict(existing))
+                              if str(t or "").strip()}
+                if (str(body.get("proof_path_kind") or "") == "new_path"
+                        and _dup_sha and _dup_sha not in _known_now):
+                    _sid_now = str(existing.get("stmt_id") or "")
+                    if not _verdict.get("checked"):
+                        out.update(checked=False, created=False, duplicate=False,
+                                   refused=PROOF_KIND_UNJUDGED, stmt_id=_sid_now,
+                                   reason=("这一份证明与在册各路径是不是同种没判成"
+                                           "（没判成 ≠ 不同）⇒ 不收录、不新增路径："
+                                           + str(_verdict.get("reason")
+                                                 or "判定面没给可用结论")))
+                        return out
+                    if str(_verdict.get("decision") or "") == "same":
+                        _n = int(_verdict.get("same_path") or 1)
+                        out.update(checked=False, created=False, duplicate=False,
+                                   refused=PROOF_SAME_KIND, stmt_id=_sid_now,
+                                   same_kind_material={
+                                       "similarity": float(_verdict.get("similarity") or 0.0)},
+                                   reason=(f"这一份证明与 stmt:{_sid_now} 的第 {_n} 条路径同种"
+                                           "（秘书的语义判定：两套证法是同一路，不是两条"
+                                           "独立路径）⇒ 不收录、不新增路径。材料读数"
+                                           "（只作参考）：相似度 "
+                                           f"{float(_verdict.get('similarity') or 0.0):.4f}。"
+                                           "处置：换一条真正不同的证法再交，或本次不再提交"))
+                        return out
                 if ((_dup_first_fill
                      or str(body.get("proof_path_kind") or "") == "new_path")
                         and _dup_proof.strip()):
@@ -9644,7 +9745,8 @@ class Secretary:
             merged = self._merge_into_proposition(tx, body, full=full, kind=kind,
                                                   groups=groups,
                                                   force_new=bool(force_new), out=out,
-                                                  adjudication=adj)
+                                                  adjudication=adj,
+                                                  proof_kind=proof_kind)
             if merged is not None:
                 return merged
             steps = self._resolve_write_steps(tx, body, out, groups)
@@ -10331,42 +10433,127 @@ class Secretary:
                 f"{threshold:.2f}，但词面相似度不参与判定、不决定并"
                 "（词面重合不等于条件与结论一致）；确定性键不同 ⇒ 两条")
 
+    def _proof_kind_for_existing(self, *, full: str, body: Mapping[str, Any],
+                                 adjudication: Mapping[str, Any]) -> dict[str, Any]:
+        """在事务外先问一次"这一份证明与在册各路径同种吗"，把结论带进事务。
+
+        锁内不许发模型调用（硬规矩）：`record_statement` 这一笔在拿锁之前先读一次
+        台账、问一次 `judge("proof_kind", …)`，事务里只落结论。适用范围与"新路径"
+        同一档（`proof_path_kind="new_path"`，或同一性判定指到在册某一条）：
+        - 同一份正文（sha 已在册）⇒ 不问（那是幂等重交，走"逐字同一份"那一支）；
+        - 这一笔带来的是在册那一行自己的稿（同一份稿改正文）⇒ 不问（改稿不是新路径）；
+        - 没有证明正文 / 没有在册行 ⇒ 不问（新命题 / 首份，没有同种可言）。
+        返回 `_same_kind_hits` 的原样读数（空字典 = 这一档不问）。
+        """
+        from . import verifications as VR
+        from . import vsigns as _VS
+
+        proof = str(body.get("proof_text") or "")
+        if not proof.strip():
+            return {}
+        try:
+            rows = [dict(r) for r in self.store.rows("statements")]
+        except Exception:  # noqa: BLE001 —— 读不到台账 ⇒ 这一问没查成（fail-closed）
+            return {"checked": False, "decision": "", "same_path": 0, "hits": [],
+                    "unjudged": [], "similarity": 0.0, "paths": [],
+                    "reason": "statements 读不出来 ⇒ 同种证明这一问没查成"}
+        if adjudication.get("checked") and str(adjudication.get("same_as") or ""):
+            target = str(adjudication.get("same_as") or "")
+            row = next((r for r in rows if str(r.get("stmt_id") or "") == target), None)
+        else:
+            hits = SL.duplicate_hits(rows, text=full)["hits"]
+            row = dict(hits[0]) if hits else None
+        if row is None:
+            # 措辞不同的同一条命题：机械键相同的那一行也是"在册可比的那一条"
+            # （判定归秘书；这里只定"跟哪一行比"，与 `_proposition_owner` 同一口径）。
+            try:
+                key = _PK.proposition_key(full)
+                row = next((r for r in rows
+                            if _PK.proposition_key(str(r.get("statement_full") or ""))
+                            == key), None)
+            except Exception:  # noqa: BLE001 —— 抽不出键 ⇒ 没有可比行（不猜）
+                row = None
+        if row is None:
+            return {}
+        known = {VR.text_sha(str(t)) for _no, t in VR.proof_list(row)
+                 if str(t or "").strip()}
+        if VR.text_sha(proof) in known:
+            return {}
+        manuscript = str(body.get("manuscript_path") or "")
+        if manuscript:
+            try:
+                mid = _VS.manuscript_id_of(manuscript)
+            except Exception:  # noqa: BLE001 —— 认不出稿号就当"不是同一份稿"
+                mid = ""
+            if mid and str(row.get("manuscript_id") or "") == str(mid):
+                return {}
+        return self._same_kind_hits(row, proof)
+
     def _same_kind_hits(self, row: Mapping[str, Any], proof: str) -> dict[str, Any]:
-        """这条命题在册的证明里，与新交来的这一份同种的那些（相似度降序）。
+        """这一份新证明与在册各路径是不是同一套证法（秘书的二态语义判定）。
 
-        判据只有一处（`propositionkey.same_kind_proof`）。返回
-        `{"hits": [...], "unjudged": [{"proof_no", "reason"}]}`：
+        判据只有一处：`self.judge("proof_kind", …)` —— 业主 2026-11-12：「对比证明方法
+        后发现有很大差别（语义判别，千万别做任何机械闸，结论是二态的：一致/不同）」。
+        改前这里是 `propositionkey.same_kind_proof` 的 Jaccard 阈值判定线；现在它只剩
+        `similarity` 这一个材料读数（写进回执供人看），一个字节都不参与收不收。
 
-        - `hits`：判成了 `same` 的那些（`proof_no` / `similarity` / `detail` / `reason`）；
-        - `unjudged`：判定面没给出可用结论的那几份（`checked=False`）。它们不再
-          静默跳过：调用方据此 fail-closed（整笔受控拒、不新增证明号）。改前把它们
-          当成"不是同种"继续走 ⇒ "判不了当不同"，那正是同一种证法被并列记录的来路。
-          空槽不算"判不了"：`proof_list` 会把"canonical 那一格还没有正文"读成
-          一条空证明（`(1, "")`），那不是一份可比的证明，跳过它 —— 否则每一笔
-          "在册行还没有证明、这一笔来补第一份"都会被受控拒（真机 R-mk-infinite-92
-          的 5 条红就是它们）。
+        返回：
+        - `checked`：这一问判成了没有；`False` ⇒ 调用方 fail-closed（不收录）；
+        - `decision`：`same` / `different`（判成了才有）；
+        - `same_path`：判 same 时它对应哪一条在册路径的 `path_group`（坏值退回第一条）；
+        - `hits` / `unjudged`：与改前同形的两个列表（调用方只读这两个）；
+        - `similarity`：逐路径 `propositionkey.proof_similarity` 的最大值，只作材料。
         """
         from . import verifications as VR   # 惰性：证明清单的唯一读口径
 
-        hits: list[dict[str, Any]] = []
-        unjudged: list[dict[str, Any]] = []
-        if not str(proof or "").strip():
-            return {"hits": hits, "unjudged": unjudged}
-        for no, text in VR.proof_list(row):
-            if not str(text or "").strip():
-                continue      # 空槽不是一份证明，也不是"判不了"
-            got = _PK.same_kind_proof(proof, text, threshold=self.proof_same_jaccard)
-            if not got.get("checked"):
-                unjudged.append({"proof_no": int(no),
-                                 "reason": str(got.get("reason") or "")})
-                continue
-            if str(got.get("state") or "") != _PK.STATE_SAME:
-                continue
-            hits.append({"proof_no": int(no), "similarity": float(got.get("similarity") or 0.0),
-                         "detail": dict(got.get("detail") or {}),
-                         "reason": str(got.get("reason") or "")})
-        hits.sort(key=lambda h: (-h["similarity"], int(h["proof_no"])))
-        return {"hits": hits, "unjudged": unjudged}
+        out: dict[str, Any] = {"checked": False, "decision": "", "same_path": 0,
+                               "similarity": 0.0, "paths": [], "hits": [],
+                               "unjudged": [], "reason": ""}
+        text = str(proof or "")
+        if not text.strip():
+            out.update(checked=True, decision="different",
+                       reason="这一笔没有证明正文 ⇒ 没有同种可言")
+            return out
+        paths = [{"path_group": int(no), "text": str(t)}
+                 for no, t in VR.proof_list(row) if str(t or "").strip()]
+        out["paths"] = paths
+        for one in paths:
+            try:
+                sim = float(_PK.proof_similarity(text, one["text"]))
+            except Exception:  # noqa: BLE001 —— 相似度只是读数，算不出来不影响判定
+                sim = 0.0
+            out["similarity"] = max(out["similarity"], sim)
+        if not paths:
+            out.update(checked=True, decision="different",
+                       reason="在册没有可比的证明正文 ⇒ 这是第一条路径")
+            return out
+        got = dict(self.judge("proof_kind", {
+            "statement_full": str(row.get("statement_full") or ""),
+            "label": str(row.get("label") or ""),
+            "proof_text": text,
+            "proofs": paths,
+        }, note="secretary:proof_kind") or {})
+        out["reason"] = str(got.get("reason") or "")
+        if not got.get("checked"):
+            out["unjudged"] = [{"proof_no": p["path_group"],
+                                "path_group": p["path_group"],
+                                "reason": out["reason"] or "同种证明这一问没查成"}
+                               for p in paths]
+            return out
+        out["checked"] = True
+        out["decision"] = str(got.get("decision") or "")
+        known = [p["path_group"] for p in paths]
+        try:
+            same_path = int(got.get("same_path") or 0)
+        except (TypeError, ValueError):
+            same_path = 0
+        if out["decision"] == "same":
+            out["same_path"] = same_path if same_path in known else known[0]
+            out["hits"] = [{"proof_no": out["same_path"],
+                            "similarity": out["similarity"],
+                            "detail": {"material_similarity": out["similarity"]},
+                            "reason": out["reason"]}]
+        return out
 
     def _same_concept_candidate(self, tx: Any, *, label: str,
                                 full: str, exclude_id: str = "") -> dict[str, Any]:
@@ -10503,7 +10690,8 @@ class Secretary:
     def _merge_into_proposition(self, tx: Any, body: Mapping[str, Any], *, full: str,
                                 groups: list[list[dict[str, Any]]], kind: str = "",
                                 force_new: bool, out: dict[str, Any],
-                                adjudication: Mapping[str, Any] | None = None
+                                adjudication: Mapping[str, Any] | None = None,
+                                proof_kind: Mapping[str, Any] | None = None
                                 ) -> dict[str, Any] | None:
         """
         同一命题 / 同种证明两道判断的落点。
@@ -10615,8 +10803,11 @@ class Secretary:
         out["proposition_reason"] = str(verdict.get("reason") or "")
         basis = str(verdict.get("basis") or "")
         similarity = float(verdict.get("similarity") or 0.0)
-        kind_got = self._same_kind_hits(row, proof)
-        kind_hits, unjudged_proofs = kind_got["hits"], kind_got["unjudged"]
+        # 同种证明这一问在事务外已经问过（锁内不许发模型）：这里只读结论。
+        # `proof_kind` 为空 = 这一笔没有在册可比的证明（新命题 / 首份）⇒ 不是同种。
+        kind_got = dict(proof_kind or {})
+        kind_hits, unjudged_proofs = (list(kind_got.get("hits") or []),
+                                      list(kind_got.get("unjudged") or []))
         merge = body.get("merge") is True
         existing = VR.proof_list(row)
         # ---- 同一份正文再交一次：不新增证明号，也不算「同种证明」（2026-11-02） ------
@@ -10653,17 +10844,16 @@ class Secretary:
         # （合并要落到具体哪一份，判不了就不许猜）。判不了不等于不同 —— 折成不同就会
         # 新增证明号，同一种证法被并列记录，正是这一轴要防的形态。
         if unjudged_proofs:
-            names = "、".join(f"#{int(h['proof_no'])}" for h in unjudged_proofs)
+            names = "、".join(f"第 {int(h['proof_no'])} 条路径" for h in unjudged_proofs)
             out.update(checked=False, created=False, duplicate=False, merged=False,
                        refused=PROOF_KIND_UNJUDGED, stmt_id=sid, merged_into=sid,
                        matched_by=basis, similarity=similarity, same_kind=[],
                        unjudged_proofs=list(unjudged_proofs),
                        reason=(f"这一份证明与 stmt:{sid} 的 {names} 没判成是不是同种"
-                               "（没判成 ≠ 不同）⇒ 不新增证明号：折成不同，同一种证法会"
-                               "被并列记录。短证明不按字数预判死（会照常判）；这一档只在"
-                               "判定面没给出可用结论时出现（今天 = 没有可比的文本；判定面"
-                               "若换成模型，则是超时 / 坏 JSON / 没给可用答案）。"
-                               "改法：换一条真正不同的证法再交，或本次不再提交"))
+                               "（没判成 ≠ 不同）⇒ 不收录、不新增路径：折成不同，同一套"
+                               "证法会被并列记录。这一档只在判定面没给出可用结论时出现"
+                               "（超时 / 坏 JSON / 没给可用答案）。改法：重交这一份，"
+                               "或换一条真正不同的证法再交"))
             return out
         # ---- merge=True：合成一份，覆盖那一份证明的正文（要 V 重签）
         #
@@ -10701,21 +10891,22 @@ class Secretary:
         # ---- 同种证明：不新增证明号
         if kind_hits:
             top = kind_hits[0]
-            others = "、".join(f"#{int(h['proof_no'])}" for h in kind_hits)
+            path_no = int(top["proof_no"])
+            _sim = float(top.get("similarity") or 0.0)
             out.update(checked=False, created=False, duplicate=False, merged=False,
                        refused=PROOF_SAME_KIND, stmt_id=sid, merged_into=sid,
                        matched_by=basis, similarity=similarity, proof_no=0,
                        same_kind=kind_hits,
-                       reason=(f"这一笔要与 stmt:{sid} 的第 {others} 份证明同种（相似度 "
-                               f"{float(top['similarity']):.4f} >= 阈值 "
-                               f"{self.proof_same_jaccard:.2f}）⇒ 不新增证明号"
-                               "（证明方式几乎相同的视为同种证明，并列记录会让一条定理"
-                               "看起来有好几条独立证法）。`own.register_statement` 上能做到"
-                               "的两条处置：① 换一条真正不同的证法再交（键不同、相似度低于"
-                               "阈值即可）；② 这一份不另立证明号 —— 同一种证法在册已经有"
-                               "一份，本次不再提交。参数面没有「合并到第几份 / 改证明号」"
-                               "这一类键：往参数里加只会被参数门按未声明键受控拒；同种证法"
-                               "的正文修订由人看过稿之后处理"))
+                       #: 相似度只作材料读数（不参与收不收）：人看得见"机械读数长什么样"。
+                       same_kind_material={"similarity": _sim},
+                       reason=(f"这一份证明与 stmt:{sid} 的第 {path_no} 条路径同种"
+                               "（秘书的语义判定：两套证法是同一路，不是两条独立路径）"
+                               "⇒ 不收录、不新增路径（并列记录会让一条定理看起来有好几条"
+                               "独立证法）。材料读数（只作参考，不作判据）：相似度 "
+                               f"{_sim:.4f}。两条处置：① 换一条真正不同的证法再交；"
+                               "② 这一份不再提交 —— 同一套证法在册已经有一份。"
+                               "参数面没有「合并到第几条路径 / 改号」这一类键："
+                               "同种证法的正文修订由人看过稿之后处理"))
             return out
         # ---- 落成第 N 份证明（或 canonical 那一格还是空的时候的 #p1）
         #
@@ -13878,6 +14069,31 @@ def _judge_system(kind: str) -> str:
             "conclusion（一句话：这一条的结论是什么）。"
             "basis 里必须分别对条件与结论各给一句比对（例如『条件：都是有限群 + p 是素数，"
             "一致；结论：都是 Sylow p-子群存在，一致』）—— 不许只给一个总分。")
+    elif kind == "proof_kind":
+        # 业主 2026-11-12 的场景逐字：「两个 F 分别独立交了关于某个命题的证明……后录入的
+        # 稿子 B 秘书识别到是同一命题，在对比证明方法后发现几乎一致，于是不收录；另一种
+        # 情况：对比证明方法后发现有很大差别（语义判别，千万别做任何机械闸，结论是二态的：
+        # 一致/不同），于是注册了该命题号下的第 2 路径」。
+        #
+        # 这一问只回答"证法是不是同一套"，不回答"命题是不是同一条"（那是
+        # `proposition_identity`），也不回答"证明对不对"（那是 V 的轴）。题面刻意不提
+        # 字数 / 相似度 / 关键词：机械读数不是判据（材料里的 `material_similarity` 只是
+        # 给人看的参考，模型不许拿它当理由）。
+        ask = (
+            "问题：同一条命题下，新交来的这一份证明（材料里的 `proof_text`）与在册各条"
+            "证明路径（材料里的 `proofs`，每项有 `path_group` 与 `text`）是不是同一套证法？"
+            "只判『证明方法』这一件事：核心思路、承重步骤、用到的工具是否同一路；"
+            "换措辞、换记号、换变量名、把同一步展开或压缩，都仍是同一套证法。"
+            "结论只有两档：same（与某一条在册路径是同一套证法）/ different（是一套"
+            "不同的证法，可以并列为另一条路径）——没有第三档，也不许自己造一个词。"
+            "判 same 时必须在 `same_path` 里给出它对应的是哪一条在册路径的 `path_group`"
+            "（整数，必须是材料里出现过的号）；判 different 时 `same_path` 给 0。"
+            "读不清（正文缺关键步骤、被截断、只是重复了命题）时不要猜：把 decision 留成"
+            "空串，框架把它当「没判成」处理（fail-closed，不收录），那不是你的判词。"
+            "不参与判定的东西：定理叫什么名字、证明写得多长、用了哪些字词、文风、"
+            "材料里机器算出的相似度读数 —— 那些都不是『证明方法』本身。"
+            "reason 一句话；basis 写清你凭哪几步这么判（引证明里的步骤，不要引相似度数字）。"
+        )
     elif kind == "v_reply_defect":
         # 业主 2026-10-29（V 签门槛的 B 段）第一版是三档；2026-10-30 第三次裁定收成两档：
         # 「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」。
