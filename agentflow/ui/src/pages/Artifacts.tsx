@@ -14,16 +14,15 @@
  * 4. 报告体例 `style.sections`；
  * 5. 六件产物 `products`（裁定 J2：真机无样本 ⇒ 夹具造，页面标明"夹具样本"）；
  * 6. 任务产物 `tasks`（`out/tasks/t-*.json` 与 `tasks` 台账行对应）；
- * 7. 文献库 `library` —— 2026-10-24（D-57）起读 `GET /api/literature`
+ * 7. 文献库 `library` —— 读 `GET /api/literature`
  *    （`api.getLibrary()` → `LibraryView`）：只算「正式入库」的那一档，每条带
  *    题名 / 作者 / DOI 或去重键 / 命中校验 / 认领与挖掘尝试 / 下载落地（与盘上的
- *    文件核过：在 / 不在 / 读不到）/ 被哪条命题、第几份证明用过。三种空态分三档
- *    显示：这条端点读不到、台账里 0 条、台账读不到 —— 它们不许被画成同一个样子；
- * 8. 台账对账 `ledger_verify`（台账钉住的那一份 vs 盘上现在这一份；2026-10-23 前
- *    它只在台账那一卡里并排显示）；
- * 9. 实验产物的落点 `experiment_spots` 与 `code_exp` —— 第九张是它（2026-10-23 补：
+ *    文件核过：在 / 不在 / 读不到）/ 被哪条命题、哪一份证明（`#pN`）用过。三种空态
+ *    分三档显示：这条端点读不到、台账里 0 条、台账读不到 —— 它们不许被画成同一个样子；
+ * 8. 台账对账 `ledger_verify`（台账钉住的那一份 vs 盘上现在这一份）；
+ * 9. 实验产物的落点 `experiment_spots` 与 `code_exp` —— 第九张是它：
  *    `code/exp/` 下的脚本与 `out/experiments/<号>/{design,exhaustion}.md`；
- *    证据链那张实验表的「报告」列也链到这张卡）。
+ *    证据链那张实验表的「报告」列也链到这张卡。
  *
  * 另有一张「台账（第二个独立读数）」卡不在那张表里：它读的是共享快照
  * （`useLive().snapshot.ledger`，与首页 / 一趟详情的「台账」卡同一份），不是这一面的
@@ -33,15 +32,14 @@
  * ＋ 这一面的九栏 ＋ 一张台账镜子卡。源码里 `<Card` 出现十三处，是因为页头卡有一个
  * 「还没读到」的副本、「六件产物」按 `art.run_dir` 分两支（两支是同一栏）。
  *
- * ## 2026-10-23（业主：这一页的显示格式略有过时）
+ * ## 三条显示口径
  *
- * - sha 原文一律不上屏（「对于 sha 值用户并不关心，只用显示是否一致即可」）：
- *   台账那一格说"一致 / 不一致 / unknown（没得比）"，副标题写清比的是与哪一份；
- *   半截哈希那种写法（前 8 位）也不许出现 —— 它既不能核也不能读；
- * - 补 `code/exp/` 与 `out/experiments/<号>/{design,exhaustion}.md` 的落点那一栏
+ * - sha 原文一律不上屏：台账那一格说"一致 / 不一致 / unknown（没得比）"，副标题写清
+ *   比的是与哪一份；半截哈希（前 8 位）也不许出现 —— 它既不能核也不能读；
+ * - `code/exp/` 与 `out/experiments/<号>/{design,exhaustion}.md` 的落点单列一栏
  *   （实验代码与两份读得懂的说明落在哪，盘上现在有没有）；
- * - 台账改成 `upserts` / `commit_markers` 两格（与 `Home` / `Run` 同一句文案），
- *   不再有"事件 N 条"那种总行数口径。
+ * - 台账用 `upserts` / `commit_markers` 两格（与 `Home` / `Run` 同一句文案），
+ *   不报"事件 N 条"那种总行数。
  */
 import type { ComponentChildren } from "preact";
 
@@ -79,10 +77,9 @@ function bound(row: AcceptanceCheck, which: "min" | "max"): string {
 
 /** 这一面读数的九张卡：栏序 = `draft/74 §3.4` 那七栏 + 后来补的两栏，标题的唯一来源。
  *
- * 2026-10-23（业主：文件头写"七栏"而实际已是九张卡）：改前那个数字是手写的，
- * 加了卡它不会动 —— 于是文件头与屏幕各说各的。现在标题与数字都数这张表
- * （`CARD_COUNT`），加一张卡忘了登记、或文件头那个中文数字忘了改，
- * `tests/test_webui_readings_format.py` 的判据⑩ 会红。
+ * 标题与数字都数这张表（`CARD_COUNT`）：加一张卡忘了登记、或文件头那个中文数字忘了
+ * 改，`tests/test_webui_readings_format.py` 的判据⑩ 会红 —— 手写一个数字就会漂，
+ * 而文件头与屏幕各说各的没有任何地方会报错。
  *
  * 第九张是「实验产物的落点」；第八张是「台账对账」。
  */
@@ -163,7 +160,7 @@ function useText(work: LibraryWork, usesTri: string): string {
 }
 
 /**
- * 文献库那一格：三种空态必须分三档（业主 2026-10-24 的 D-57）。
+ * 文献库那一格：三种空态必须分三档。
  *
  * 1. `view === null` ⇒ 这条端点根本没读到（没有 `/api/literature`、或请求失败）；
  * 2. `state === "unknown"` ⇒ 端点在，但台账没读成（表不在盘上 / 坏 JSON）；
@@ -232,7 +229,7 @@ function libraryBody(view: LibraryView | null, problem: string): ComponentChildr
           {
             key: "mine_attempts",
             title: "挖掘尝试",
-            // 两处都走取值器（2026-11-01）：`String(w.mine_attempts)` 与模板里的
+            // 两处都走取值器：`String(w.mine_attempts)` 与模板里的
             // `${w.mine_attempts}` 都是同一件事 —— 这一格没有时印字面量 `undefined`。
             render: (w) =>
               w.last_mine_error === ""
@@ -272,7 +269,7 @@ function libraryBody(view: LibraryView | null, problem: string): ComponentChildr
 
 export function Artifacts() {
   const face = useFace(() => api.getArtifacts());
-  // 文献库是第二条端点（D-57）：它与产物面是两份盘上的事实，各有各的三态 ——
+  // 文献库是第二条端点：它与产物面是两份盘上的事实，各有各的三态 ——
   // 把它塞进 `ArtifactsView` 会让"产物面读不成"连带把文献库也画成没查成。
   const library = useFace(() => api.getLibrary());
   const live = useLive();
@@ -333,7 +330,7 @@ export function Artifacts() {
               { key: "producer", title: "谁产出的" },
               { key: "kind", title: "类别" },
               {
-                // 2026-10-23（业主：sha 原文不显示）：这一格取同一路径的核对行读数，
+                // 这一格取同一路径的核对行读数，
                 // 没有对应核对行 ⇒ unknown（没得比），不是"不一致"。
                 key: "sha_consistency",
                 title: "与盘上这一份",
@@ -353,11 +350,11 @@ export function Artifacts() {
               },
               { key: "task_id", title: "任务" },
               { key: "at", title: "登记时间", render: (r) => cell(r.at) },
-              // R93 体检：这里原来还有一列「退出码」。台账的格式里有 `exit_code`
+              // 这里不列「退出码」：台账的格式里有 `exit_code`
               // 这一栏（`artifacts.FIELDS`），但真机上登记的都是 `out/tasks/` 下那些
-              // "任务结果文件"——那种东西没有退出码，于是整列恒 `unknown`
+              // "任务结果文件"——那种东西没有退出码，整列恒 `unknown`
               // （本机实测：t1-review-2 的 6 行全是）。退出码真正的落点是「证据链 →
-              // 实验」那一张表（`experiments.exit_code`，那里是真读数），所以这一列撤掉。
+              // 实验」那一张表（`experiments.exit_code`，那里是真读数）。
             ]}
           />
         )}
@@ -377,7 +374,6 @@ export function Artifacts() {
             columns={[
               { key: "path", title: "路径" },
               {
-                // 2026-10-23：原来的两列（台账里的 sha / 盘上现在的 sha）合成一列。
                 // 这一格只印"一致 / 不一致 / unknown（没得比）"—— 两份都拿不到时是
                 // 没得比，不是"不一致"（那一档由下面 `status` 的五档自己说清）。
                 key: "sha_consistency",
@@ -401,8 +397,8 @@ export function Artifacts() {
           <TriState tri="unreadable" label="台账" reason="共享快照还没读到" />
         ) : (
           <>
-            {/* D21（与 Home 的「台账」卡、Run 的「台账」卡同一个口径）：`events` 不再是
-                events.jsonl 的总行数，它是写入笔数（`upserts`）；其中的 commit 标记行数
+            {/* D21（与 Home 的「台账」卡、Run 的「台账」卡同一个口径）：`events` 是
+                写入笔数（`upserts`），不是 events.jsonl 的总行数；其中的 commit 标记行数
                 单列。两次事务写两行 ⇒ 只报总行数会把"写了多少笔"翻倍地回答。 */}
             <div class="readings">
               台账写入{" "}
@@ -441,9 +437,9 @@ export function Artifacts() {
             empty="交接台账 0 条（读到了，里面是空的）。"
             columns={[
               { key: "id", title: "编号" },
-              // 2026-10-26（Q2）：这两列原来直接印 `sender` / `to`，于是页面上只有
-              // `M` / `ALL` / `A` 这种角色名。现在印读侧算好的 `sender_label` /
-              // `to_label`（`M（t-000001）` / `A（t-000002）`；旧行是 `（旧账无号）`）——
+              // 这两列印读侧算好的 `sender_label` / `to_label`
+              // （`M（t-000001）` / `A（t-000002）`；旧行是 `（旧账无号）`），
+              // 不直接印 `sender` / `to` 那种只有角色名的裸值 ——
               // 角色名与编号各占一格，页面只负责显示，不自己拼编号。
               { key: "sender", title: "发", render: (r) => plain(r.sender_label) },
               { key: "to", title: "收", render: (r) => plain(r.to_label) },
@@ -472,9 +468,9 @@ export function Artifacts() {
         }
         right={<TriState tri={art.checks_tri} label="checks" />}
       >
-        {/* R93 体检：这张卡原先在"没有这份文件"时照样铺满一张表（每格 `不适用`），
-            读者看到的是"一屏不适用"，而不是"这一趟没走到这一步"。现在按三态分档：
-            没这份表 ⇒ 一句话说清它是谁写的、什么时候会有；有才画表。 */}
+        {/* 这张卡按三态分档：
+            没这份表 ⇒ 一句话说清它是谁写的、什么时候会有；有才画表 ——
+            否则读者看到的是一屏"不适用"，而不是"这一趟没走到这一步"。 */}
         {isUnreadable(art.checks_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
         ) : art.checks.length === 0 ? (
@@ -534,11 +530,10 @@ export function Artifacts() {
         )}
       </Card>
 
-      {/* R93 体检：原来这里还有一张「六件产物」卡（`run-manifest.json` /
-          `model-transcript.jsonl` / `evidence.json` / `claims.json` / `cost.json` /
-          `report.md`）。那六件属于 **`agentflow project run` 那条流水线**
-          （`out/run-N/` 下的运行产物），审阅型项目里一张都不会有 ⇒ 整卡恒 `不适用`
-          （本机实测：t1-review-2 六件全是 not_applicable）。所以整卡改成一句导引；
+      {/* 「六件产物」属于 **`agentflow project run` 那条流水线**
+          （`run-manifest.json` / `model-transcript.jsonl` / `evidence.json` /
+          `claims.json` / `cost.json` / `report.md` 落在 `out/run-N/` 下），
+          审阅型项目里一张都不会有 ⇒ 没有那个目录时整卡只给一句导引；
           真有那个目录时（`project run` 跑过的项目）照旧画表。 */}
       {art.run_dir === "" ? (
         <Card title={ARTIFACT_CARDS.products} subtitle="属于另一条流水线">
@@ -588,9 +583,9 @@ export function Artifacts() {
                   render: (r) =>
                     r.lines === null ? "unknown（非 JSONL，按设计没有行数）" : String(r.lines),
                 },
-                // 2026-10-23（业主：sha 原文不显示）：这一列撤掉。六件产物只有盘上这
-                // 一份，没有第二份可比 —— 印一列"unknown（没得比）"不如在副标题里
-                // 说清这件事（下面那句就是它）。台账钉过的文件在上面两栏里有一致性读数。
+                // 这里不印 sha：六件产物只有盘上这一份，没有第二份可比 ——
+                // 一列"unknown（没得比）"不如在副标题里说清这件事。
+                // 台账钉过的文件在上面两栏里有一致性读数。
                 { key: "tri", title: "三态", render: (r) => <TriState tri={r.tri} /> },
               ]}
             />
@@ -604,7 +599,7 @@ export function Artifacts() {
         subtitle={`${art.experiment_spots.length} 个落点 · ${art.code_exp.length} 个实验脚本 · code/exp/ 与 out/experiments/<号>/`}
         right={<TriState tri={art.experiment_spots_tri} label="experiment_spots" />}
       >
-        {/* 2026-10-23（业主：产物页要补这两处落点）：数值实验的产出分三处 ——
+        {/* 数值实验的产出分三处 ——
             `code/exp/` 下的脚本、`out/experiments/<号>/design.md`（这一步打算怎么验）、
             `out/experiments/<号>/exhaustion.md`（程序 / 程序设计 / 穷举论证三块，V 会审它）。
             这一栏只报盘上真有什么；没有就直说"还没跑过实验"，不铺一屏"不在"。 */}
@@ -666,10 +661,10 @@ export function Artifacts() {
               { key: "role", title: "角色" },
               { key: "action", title: "动作" },
               { key: "called_by", title: "谁调的" },
-              // 状态列读后端现算的 `status_reading`（D12 ②，2026-11-09）：板项行
+              // 状态列读后端现算的 `status_reading`（D12 ②）：板项行
               // （`kind` 非空）的 `status` 在台账里恒为 `pending`（那是"这一行是板项"
-              // 的类型标记），真正的收口在 `item_state`/`item_close`。改前这里印的是
-              // `status`，于是 71 条 `item_state=done` 的 notice 全显示成 pending。
+              // 的类型标记），真正的收口在 `item_state`/`item_close`。直接印 `status`
+              // 会把 71 条 `item_state=done` 的 notice 全显示成 pending。
               // 投影与 `.md` 状态报告是同一个函数（`statusreport.tasks_row_reading`）。
               { key: "status", title: "状态", render: (r) => cell(r.status_reading) },
               { key: "outcome", title: "结局", render: (r) => cell(r.outcome) },
