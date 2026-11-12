@@ -1278,7 +1278,9 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
         # 不该因为"它同时还是空的 / 必填字段走了另一条分支"而被跳过。
         # 跳过的后果是：G 判 error、H 判 info，两边对同一份稿件给出相反结论。
         if spec.domain is not None and name in norm:
-            enum_val = _value_of(norm, name)
+            # `val` 就是 `_value_of(norm, name)`（上面刚取过，二者之间 norm 没被改），
+            # 不再取第二遍。
+            enum_val = val
             if name == "evidence_kind":
                 domain = _evidence_kinds()
             elif name == "negation_kind":
@@ -1319,8 +1321,11 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
     # `scan_claim` 原有的过度声称检查）。放在这一处而不是各写一遍：
     # 这两条正是"G/H 两份判据漂移"的重灾区。
     ek_norm = _value_of(norm, "evidence_kind")
+    # 受控词表在两处用（本段与第 4 段的 `ek_illegal`）；`_evidence_kinds()` 是
+    # 纯转发，取一次与取两次逐字同值。
+    kinds = _evidence_kinds()
     statement_text = claim_statement(norm)
-    if ek_norm in _evidence_kinds():
+    if ek_norm in kinds:
         # `cross_check` 与 `proof_review` 都要那句声明（各自的声明不同：一个是"数值交叉验证"，
         # 一个是"逐行审阅过的证明，未经机器检查"）—— 读者必须在正文旁边就读到"这一档凭什么"。
         if ek_norm in ("cross_check", "proof_review") \
@@ -1545,7 +1550,8 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
 
     # ---- 4. 交叉轴：status × evidence_kind（三态）
     status_val = _value_of(norm, "status")
-    ek_val = _value_of(norm, "evidence_kind")
+    # `ek_norm` 是本函数早先取过的同一格（中间没有写 norm），不再重取。
+    ek_val = ek_norm
     verdict, reason = status_evidence_consistency(status_val, ek_val)
     fields_used.append("status")
     fields_used.append("evidence_kind")
@@ -1568,7 +1574,7 @@ def validate_claim(claim: Mapping[str, Any], *, strict: bool = False) -> ClaimSp
         # error），就不再额外报"判不了" —— 那会把同一条缺陷说两遍，
         # 而且是以两种级别说两遍。三态纪律要的是"判不了有别于判错了"，
         # 不是"把判错了也说成判不了"。
-        ek_illegal = ek_val not in _evidence_kinds()
+        ek_illegal = ek_val not in kinds
         if not ek_illegal:
             issues.append(
                 ClaimIssue(
