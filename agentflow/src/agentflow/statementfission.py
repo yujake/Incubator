@@ -1,18 +1,15 @@
 # -*- coding: utf-8 -*-
-"""形态读数：同一趟里有没有把一条定理拆成多条独立命题（D-54，只报不拦）。
+"""形态读数：同一趟里有没有把一条定理拆成多条独立命题（只报不拦）。
 
 ## 这一份回答的问题
 
-业主 2026-10-24 在真机上看到的现象（`projects/sylow3`）：同一条 Sylow 定理被登记成三条
-独立命题（`000000` 正规化子路线 / `000003` Wielandt 路线 / `000006` S3 归纳路线），
-`bits.evidence.proofs` 全为空、`proof_no` 全为 None、`path_group` 只有一组。
-多证明机制（`proofs=[{proof_no, text}]`、`used_by="stmt:<号>#pN"`、二维 `path_group`、
-`reviewed_by_proof`、对应表带 `proof_no`）早就齐了，缺的是"该用它"的口径与一种形态读数。
+一条定理被拆成三条独立命题（各写一条不同的表述、各自登记一份证明）时，台账上看起来
+完全正常：三条表述不同、各有自己的证明与状态。只有把它们放在一起看，才看得出
+"这其实是同一条定理"。判重（`secretary` 的 `_same_proposition_candidate`）只看
+"同一次登记的正文是否相同"，看不见"三条不同的表述其实是同一条定理"。
 
-这一份补的就是那个读数：一条定理被拆成几条命题、而没有任何一条用上第 2 份证明，
-这种形态在台账上看起来完全正常（三条表述不同、各有自己的证明），只有把它们放在一起看
-才看得出来。判重（`secretary` 的 `_same_proposition_candidate`）只看"同一次登记的正文
-是否相同"，看不见"三条不同的表述其实是同一条定理"。
+按现口径一个稿号 = 一份文件 = 一份证明，所以 `proof_no > 1` 只会是旧盘读数 —— 这一档
+留着是为了让旧行的形态可见，不是"一份稿可以挂几份证明"。
 
 ## 判据的三段
 
@@ -23,8 +20,8 @@
    `propositionkey.SAME_PROPOSITION_JACCARD`（0.85）—— 与"这是不是同一条命题"那一轴
    同一个尺度，不另立一个数。
 3. 形态：命中的行按同一性做传递闭包成簇（A 与 B 判同、B 与 C 判同 ⇒ 三条一簇）。
-   簇内没有任何一条有 `proof_no > 1`（即所有行都只有 canonical 那一份证明）⇒ 报一条读数，
-   点名是哪几条。有一条用了第 2 份证明 ⇒ 这一簇归入 `multi`（多证明机制被用上了，不报）。
+   簇内没有任何一条带 `proof_no > 1`（旧盘上"同一命题挂过第二份证明"的痕迹）⇒ 报一条
+   读数，点名是哪几条。有一条带 `proof_no > 1` ⇒ 这一簇归入 `multi`（旧读数，不报）。
 
 ## 三态（这一份自己的纪律）
 
@@ -38,7 +35,7 @@
 ## 边界
 
 - 纯函数：不读盘、不读 store、不写文件、不调模型；入参是调用方已经读出来的行。
-- 不拦门：没有返回值能让任何门变红，它只产出读数（D-54 明确"先让它可见"）。
+- 不拦门：没有返回值能让任何门变红，它只产出读数（口径是"先让它可见"）。
 - 不猜趟：入参就是"这一趟"的那批行（调用方按趟取）；本函数不按 `created_at` 聚趟 ——
   按时间切片会造出"同一趟被切成两半"的假读数，而切法本身没有唯一答案。
 - 概念行、被否证行不参与：它们不是"这条定理的一条独立表述"。
@@ -54,7 +51,8 @@ from . import verifications as VR
 #: 读数种类码（进返回值，读的人据此分流；不是错误码，不改变任何门）。
 KIND_SUSPECTED_SPLIT = "suspected_split_proposition"
 
-#: 形状读数里"已用上多证明"的那一档（不报，但要留读数：它证明这一簇不是拆命题）。
+#: 形状读数里"已挂过第二份证明"的那一档（旧盘读数；不报，但要留读数：
+#: 它说明这一簇不是拆命题）。
 KIND_ALREADY_MULTI = "already_multi_proof"
 
 #: 同一性阈值（缺省 = 命题轴那一档，见 `propositionkey.SAME_PROPOSITION_JACCARD`）。
@@ -65,12 +63,12 @@ _DIGITS = 4
 
 
 def proof_numbers(row: Mapping[str, Any]) -> list[int]:
-    """这条命题在册的证明号（`#p1` 恒在；第 2 份起在 `proofs` 清单里）。"""
+    """这条命题在册的证明号（`#p1` 恒在；旧盘的 `proofs` 清单里可能还有别的号）。"""
     return [int(no) for no, _text in VR.proof_list(row)]
 
 
 def max_proof_no(row: Mapping[str, Any]) -> int:
-    """这条命题的最高证明号：1 = 只有 canonical 那一份（多证明机制没被用上）。"""
+    """这条命题的最高证明号：1 = 只有一份证明（现口径下的正常形态）。"""
     got = proof_numbers(row)
     return max(got) if got else 1
 
@@ -140,7 +138,7 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
     | `skipped` | 被跳过的行与理由（概念 / 弃用状态 / 空正文 / 没号），逐条点名 |
     | `same_pairs` / `different_pairs` / `unknown_pairs` | 两两判定的三档计数 |
     | `readings` | 命中的簇，每条 = `{kind, stmt_ids, pairs, max_proof_no, proof_nos, note}` |
-    | `multi` | 命中的簇里已经用上第 2 份证明的那些（不报，但留读数） |
+    | `multi` | 命中的簇里带 `proof_no > 1` 的那些（旧盘读数；不报，但留读数） |
     | `unknown` | 判不了的对（文本太短 / 纯符号），逐对给理由 |
     | `threshold` / `scope` | 这一次用的阈值与趟标签 |
     | `reason` | 空 = 查过了；非空 = 没查成（可用命题少于 2 条） |
