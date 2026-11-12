@@ -3920,9 +3920,8 @@ class _Core:
         if all(st == "closed" for st in statuses):
             return "resolved"
 
-        proof_ids = {str(x) for s in subgoals for x in (s.get("proof_experiment_ids") or [])}
         if all(st in ("closed", "supported_not_proved") for st in statuses):
-            if not proof_ids:
+            if not any(s.get("proof_experiment_ids") for s in subgoals):
                 # 关键一分：子目标都有数值支持，但一条 proof 级证据都没有。
                 # 这时若返回 resolved 就是把 cross_check 当成了证明（FC-22 要防的正是这件事）。
                 return "supported_not_proved"
