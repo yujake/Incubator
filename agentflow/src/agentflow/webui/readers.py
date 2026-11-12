@@ -5873,7 +5873,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "roster_face() 的 coverage —— 台账里的代理行与名册节点的对账（读不到就是 null）",
      (("tasks_agents", "number | null"), ("roster_nodes", "number | null"),
       ("unrostered", "number | null"))),
-    # 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）：文献库那一面。
+    # 文献库那一面（「ui侧文献库无法读出，请确认」是它的来由）。
     # 五键外壳里 `state` 只有两档（computed / unknown）：`unknown` 是"这一面没读成"
     # （表不在盘上 / 坏 JSON），而 `count` 那一格在那一档是 null —— 不是 0。
     ("LibraryView",
@@ -5918,10 +5918,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("code", "string"), ("detail", "string"))),
 
     # ---------------------------------------------------------------- 13 两档提示词缓存
-    # 2026-10-27（业主裁定 ⑥-5 / W4）：这一族此前手写在前端 `ui/src/api.ts` 里
-    # （真身是 `cachectl.status()` 与 `cacheface.warm_job()`）。手写的类型就是第二份
-    # 口径：后端加一格、`tsc` 只会觉得"少了一个可选字段"，一声不吭。搬进来之后
-    # `types.ts` 仍是唯一来源。
+    # 这一族的真身是 `cachectl.status()` 与 `cacheface.warm_job()`。类型不手写在
+    # `ui/src/api.ts`：手写的类型就是第二份口径 —— 后端加一格、`tsc` 只会觉得
+    # "少了一个可选字段"，一声不吭。生成之后 `types.ts` 仍是唯一来源。
     ("CacheTargetCell",
      "cachectl.tier_reading() 的 per_target[目标] —— 一个预热目标落地/新鲜的四格",
      (("state", "string"), ("fresh", "boolean | null"),
@@ -5958,7 +5957,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("covered_count", "number"), ("total", "number"), ("missing", "string[]"),
       ("absent", "string[]"), ("fresh", "boolean"), ("tri", "string"),
       ("why", "string"),
-      # 2026-11-03（E10）：这一格是"这一档的 key 换没换"（与
+      # 这一格是"这一档的 key 换没换"（与
       # `status()["tiers"][档]["key"]` 同一份读数，形状见 `CacheKeyCell`）。
       # 读不出来时 `_active_doc` 给的是 `{}`（`dict(reading.get("key") or {})`），
       # 所以它与 `CheckpointView.spend` / `prompt_cache` 同一条写法：
@@ -5989,8 +5988,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
        " key_unknown_tiers: string[] }"))),
 
     # ---------------------------------------------------------------- 14 错误动作计数
-    # 2026-10-27（同 W4）：这一族此前也手写在 `ui/src/api.ts` 里。真身是
-    # `readouts.errors_readout()`（口径在 `errorstats`）与 `errorstats.ERROR_CATEGORIES`。
+    # 这一族的真身是 `readouts.errors_readout()`（口径在 `errorstats`）与
+    # `errorstats.ERROR_CATEGORIES`，同样不从 `ui/src/api.ts` 手抄。
     ("ReadoutProblem",
      "errors_readout() 的 problems[] —— 一条「读到了、但人该看见」的异常"
      "（与 `LibraryProblem` 同形：两族各是各的读数，合并不省事）",
@@ -6056,7 +6055,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("categories", "ErrorCategoryMeaning[]"), ("source", "string"))),
 
     # ---------------------------------------------------------------- 15 论文包三块
-    # 2026-11-01（块 2）：`GET /api/package` 一次给三块（A 证明 / B 结构 / C 收工）。
+    # `GET /api/package` 一次给三块（A 证明 / B 结构 / C 收工）。
     # 三块顶层进 `CHECKED_TYPES`；行一级与子块类型登记在 `UNCHECKED_TYPES`（夹具
     # 不逐行造 B 的 findings / A 的 proofs），理由写在那一处。
     ("PackageView",
@@ -6147,7 +6146,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("can_close", "boolean | null"), ("can_close_reason", "string"),
       ("closable", "boolean"), ("verdict_at", "string"),
       ("verdict_met", "boolean | null"),
-      # 2026-11-02（84 ④）：`machine_pass=false` 的两条来源分开点名 —— 只看
+      # `machine_pass=false` 的两条来源分开点名 —— 只看
       # `blockers=[]` 会把"格失败"读成"门没拦住"，只看 counts 又会漏掉不进八格的
       # blocker。`machine_pass_cause` 是受控词：pass / cells / blockers / blockers+cells
       # / unknown（最后一档是"两条都空而 machine_pass 假"的缺陷读数）。
@@ -6227,9 +6226,9 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
 #: 所以这里的键名只能自己列一份 —— 判据 `test_the_run_row_keys_match_sessions`
 #: 会断言这一份与 `sessions.runs_in_session` 真给出的键集合相同（漂移当场红）。
 #:
-#: ## 162 ③：`events_in_run` 改名 `events_span`，另加 `events_owned`
+#: ## `events_in_run` 改名 `events_span`，另加 `events_owned`
 #:
-#: 改前那一格叫「趟内事件」，算的是 `end_index - start_index` —— 它是「下标跨度」，
+#: 那一格叫「趟内事件」时，算的是 `end_index - start_index` —— 它是「下标跨度」，
 #: 不是"这一趟发了几条事件"。多代理共写同一份会话文件时，整段跨度里「别人的」事件
 #: 全被算进来：81 上 71 趟的合计是 70055，而真实事件只有 6514（10.75 倍）；M 那行
 #: 6512 里最多只有 512 条可能是它自己的（359 条带自己的 `task_id` + 153 条空编号但
@@ -6243,9 +6242,9 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
 #: 比真值 512 还小。判据 `test_events_owned_counts_the_steps_that_carry_no_task_id`
 #: 就是钉这件事的反真空。
 #:
-#: ## 162 ②：`spend_usd` / `spend_unknown_usd_calls` 加进来，而 `usd` 不换
+#: ## `spend_usd` / `spend_unknown_usd_calls` 加进来，而 `usd` 不换
 #:
-#: 改前这一行只有一格钱（`usd` = 把「归到这一趟的」 `llm_call.usd` 加起来）。而收工那
+#: 只有一格钱（`usd` = 把「归到这一趟的」 `llm_call.usd` 加起来）时，收工那
 #: 一行自己带着这一趟的账（`agent_run_end.spend`，写侧是 `agent_loop.py` 的收工事件、
 #: 形状是 `llmseam.SeamSpend.to_dict()` 的 5 格）。两处数的不是同一件事：
 #:
@@ -6262,7 +6261,7 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
 #:
 #: 三态：`spend_usd` / `spend_unknown_usd_calls` 在没有收工行（`end_index is None`）
 #: 时是 「`None`，不是 `0`」 —— "这一趟没写收工行"与"这一趟花了 0 元"是两件事。
-#: ## 162 ④：`task_id` + `task_id_source` 进契约
+#: ## `task_id` + `task_id_source` 进契约
 #:
 #: 行里一直有 `task`（那一段任务文本），却没有「绝对编号」 —— 于是页面上"这一趟是谁的活"
 #: 答不出来，也没法拿去和名册 / 台账对。编号在写侧一直有：`agent_run_start` 与
@@ -6273,7 +6272,7 @@ def ts_fields() -> dict[str, tuple[str, ...]]:
 #: 为什么只有两个取值、没有 `ChatLine` 那种 `inherited`：这一面「没有继承路径」 ——
 #: 编号只能来自这一趟自己的开场事件，不从相邻事件借（借了就等于替它编一个号）。
 #:
-#: 实测（2026-11-01）：78–81 的 236 趟 「236/236」 都有非空唯一编号；但全仓 722 趟里
+#: 实测：78–81 的 236 趟 「236/236」 都有非空唯一编号；但全仓 722 趟里
 #: 27 趟没有（`p5-review-*` / `p6e` / `p6f` 等 10 月初的工作区）⇒ 必须留 `""` 这一档。
 RUN_ROW_KEYS: tuple[str, ...] = (
     "sid", "role", "task", "task_id", "task_id_source",
@@ -6282,7 +6281,7 @@ RUN_ROW_KEYS: tuple[str, ...] = (
     "stop_reason", "final_chars", "summons", "messages", "elapsed_sec",
     "last_shape", "end_index", "end_ts", "waiting_on", "waiting",
     "events_span", "events_owned",
-    # 2026-11-01（82 的定格数据）：「有 start 没 end」不是「还在跑」的判据。这一格由
+    # 「有 start 没 end」不是「还在跑」的判据（82 的定格数据）。这一格由
     # `webui.state.mark_stale_loops` 现算（与 `/api/state` 的 `runs[]` 同一处），
     # 所以它也是"两份读口逐字同形"里的那一格（判据见
     # `tests/test_the_run_row_has_two_readers_that_agree.py`）。
@@ -6293,8 +6292,8 @@ RUN_ROW_KEYS: tuple[str, ...] = (
 def type_decls() -> str:
     """本模块（六个只读面）那一段 TS 声明文本。
 
-    渲染不在本文件：唯一实现在 `webui/state.type_decls`（2026-10-26 清洁去重时，
-    本文件里那第二份抄写被删掉，只留这一行转发 —— 排版改一处，三面同时跟上）。
+    渲染不在本文件：唯一实现在 `webui/state.type_decls`（本文件只留这一行转发 ——
+    排版改一处，三面同时跟上）。
 
     形状是 `draft/78 §3` 的接缝之一：`agentflow/web/emit_types.py` 把三条零交线
     各自的 `type_decls()` 拼成 `ui/src/types.ts`。于是加接口这件事永远发生在
@@ -6327,7 +6326,7 @@ HANDLERS.update({
 def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
     """台账兜底：名册读不到时，从 `data/tasks.json` 建一棵树（标成 `unregistered`）。
 
-    业主 2026-10-21（"网页完整接入名册机制!!"）：名册是"父 + 子 + 绝对编号"的唯一真身，
+    业主（"网页完整接入名册机制!!"）：名册是"父 + 子 + 绝对编号"的唯一真身，
     但当登记没发生时，页面上不该是"什么都没有" —— 那会让读的人以为"这次没派活"。
     台账里明明有 A/E/D 这些带父的代理行，它们就是"存在、但不在名册上"的证据。
 
