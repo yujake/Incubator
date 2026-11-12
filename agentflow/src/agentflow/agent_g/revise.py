@@ -59,19 +59,27 @@ class _Revise:
             merged = [dict(c) for c in (doc.get("claims") or [])]
             replaced: list[str] = []
             appended: list[str] = []
+            # 断言代号 → 位置只建一次：改前每条 new_claim 都线性扫一遍 merged
+            # （同一份稿上改十条就是十趟）。位置在替换时不变；追加时补登记，
+            # 于是"同一批里给了两个同号的新断言"仍然后一个替换前一个。
+            pos_by_cid: dict[str, int] = {}
+            for i, e in enumerate(merged):
+                existing_cid = str(e.get("claim_id") or "")
+                if existing_cid and existing_cid not in pos_by_cid:
+                    pos_by_cid[existing_cid] = i
             for raw in new_claims or []:
                 if not isinstance(raw, Mapping):
                     raise DocumentError(f"new_claims 的元素必须是对象，收到 {type(raw).__name__}")
                 c = dict(raw)
                 cid = str(c.get("claim_id") or "").strip()
-                idx = next(
-                    (i for i, e in enumerate(merged) if cid and str(e.get("claim_id")) == cid), None
-                )
+                idx = pos_by_cid.get(cid) if cid else None
                 if idx is not None:
                     merged[idx] = c
                     replaced.append(cid)
                 else:
                     merged.append(c)
+                    if cid:
+                        pos_by_cid[cid] = len(merged) - 1
                     appended.append(cid or f"（自动编号，第 {len(merged)} 条）")
 
             # 三道闸（机械检查 / 引用存在性 / proof 级证据锚）搬进了
