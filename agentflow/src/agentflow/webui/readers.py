@@ -1,9 +1,10 @@
 # -- coding: utf-8 --
-"""只读面的读模型（`draft/73` §2.3 的本体；属于 B 线那一批）。
+"""只读面的读模型（`draft/73` §2.3 的本体）。
 
 ## 这一层是什么
 
-六个面的适配器，一个面一个函数：只读、三态、不吞异常。
+一个面一个适配器函数：只读、三态、不吞异常。下表是 C1 那几行；后来加的 package /
+roster / library / errors / cache / run-digest 几条同形（读既有实现，不另写一份）。
 
 | 面 | 函数 | 端点（`draft/75 §1.1` 的 C1 第 1–6 行） | 读什么（既有实现，不另写一份） |
 |---|---|---|---|
@@ -62,8 +63,8 @@
   `agentflow/web/emit_types.py` 拼进 `ui/src/types.ts`。
 - :data:`MISSING_TYPES` —— 本模块还欠的接口与理由。补完一个就删掉它那一行。
 
-处理器的落点（A 线已落地的那条接缝）：`routes.py` 的第三格是处理器名字，
-而 `WebHandler` 住在 A 线的 `webui/server.py` 里（B 线不许碰）。所以六个面的 HTTP
+处理器的落点：`routes.py` 的第三格是处理器名字，而 `WebHandler` 住在 A 线的
+`webui/server.py` 里（B 线不碰）。所以每个面的 HTTP
 外壳写成模块级函数（签名 `(handler, params, query)`，`handler` 是 `WebHandler` 实例），
 在文件末登记进 :data:`HANDLERS`（`{名字: 可调用对象}`）—— `routes.handler_for(name)`
 按名字来取，`server._invoke()` 先找 `WebHandler` 的方法、再找子表。
@@ -1271,19 +1272,18 @@ def _annotate_ledger_rows(root_p: Path,
             for column, rows in columns.items()}
 
 
-# ============================================================ 3.5 呈现读数（业主 2026-10-23）
+# ============================================================ 3.5 呈现读数
 #
 # 这一节只做一件事：把判据层已经有的读数换成"人要看的那一格"，不改任何判定语义。
-# 三条口径（业主原话：「对于 sha 值用户并不关心，只用显示是否一致即可」「对于命题的
-# 显示要标注非平凡度等级」「证据链第 4 位按路径显示」）：
+# 三条口径（「对于 sha 值用户并不关心，只用显示是否一致即可」「对于命题的显示要标注
+# 非平凡度等级」「证据链第 4 位按路径显示」）：
 #
 # 1. sha 一律不出原文，只出一致性读数：:data:`SHA_MATCH` / :data:`SHA_MISMATCH` /
 #    :data:`SHA_UNKNOWN`。三档里"没得比"必须与"不一致"分开 —— 折平就等于把
 #    "没有第二份可核"读成"两份不一样"，那是本项目的三态纪律最忌的一折；
 # 2. 非平凡度：档位与显示名一律调 `secretary.nontriviality_of` /
 #    `nontriviality_label`（本模块不另写一份读口），这里只补 hover 用的那句说明；
-#    判不了是 `None` + 空 label，页面显示"未判"，绝不折成 T0（2026-10-23 起 0 是
-#    一档真的档位）；
+#    判不了是 `None` + 空 label，页面显示"未判"，绝不折成 T0（T0 是一档真的档位）；
 # 3. 五元位第 4 位是二维的（`{证明号: 状态}`）：逐路径给出来（`formal_by_proof`），
 #    汇总留给等级派生 —— 折成一条汇总就等于让 `#p2` 借 `#p1` 的光。
 
@@ -1294,19 +1294,19 @@ SHA_UNKNOWN = "unknown"
 
 #: 实验的「代码一致」那一格多出的一档：这一行在台账上已经撤销（脚本改过）。
 #:
-#: 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
+#: 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
 #: 为什么它不能并进 `mismatch`：「不一致」说的是"这一行还挂着，但它钉的脚本已经不是
 #: 盘上那一份"——那是一处异常，要人去处理；「已撤销」说的是"这件事已经处置过：
 #: 老登记作废、新登记接上"。前者是红，后者不是红。折平之后，读者看见一片红，
 #: 分不清哪一条要动手、哪一条已经被撤过（现场：`projects/sylow3` 的 000000 与 000001）。
 CODE_CONSISTENCY_REVOKED = "revoked"
 
-#: 非平凡度"判不了"在页面上的写法（不是 T0 —— 2026-10-23 起 T0 是一档真的档位）。
+#: 非平凡度"判不了"在页面上的写法（不是 T0 —— T0 是一档真的档位）。
 NONTRIVIALITY_UNJUDGED_WORD = "未判"
 
 #: 非平凡度"不适用"在页面上的写法（概念 / 定义行没有证明正文，判档这一问对它不成立）。
 #:
-#: 2026-10-26（D15'）：这一格与 :data:`NONTRIVIALITY_UNJUDGED_WORD` 必须是两个词。
+#: 这一格与 :data:`NONTRIVIALITY_UNJUDGED_WORD` 必须是两个词。
 #: "判不了"说的是"该判而没判"（没缝 / 缺正文 / 正文被截断），处置是"再去判一次"；
 #: "不适用"说的是"这一问对它不成立"（`kind="concept"` / `"definition"` 没有证明正文），
 #: 再判一次也不会有别的结论。词只有一个来源：`nontriviality_of` 的 `tri` 三档 +
@@ -1479,7 +1479,7 @@ def _per_proof_numbers(row: Mapping[str, Any]) -> list[int]:
 
     为什么要并集、而不是只看 `optimized_by_proof`：那一格只回答"记过的那几份各是
     什么"，缺格的那一份根本不在表里 —— 只看它，"这一份还没记"就会从屏幕上
-    消失，而那正是三态里的 `not_recorded`（业主 2026-11-02：缺格不许折成 false）。
+    消失，而那正是三态里的 `not_recorded`（缺格不许折成 false）。
     所以逐份的编号取自三张同形表（`reviewed_by_proof` / `reviewed_sha_by_proof` /
     `optimized_by_proof`）：任一张认得这一份，这一份就在命题台账里占一行 —— 于是
     「优化」与签过 / 签的正文那两张表按 `proof_no` 并排，缺哪一格就写哪一档，
@@ -1512,9 +1512,9 @@ def _per_proof_numbers(row: Mapping[str, Any]) -> list[int]:
 
 
 def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
-    """命题行的五元位逐位读数（业主 2026-10-23：「每一位一格」）。
+    """命题行的五元位逐位读数。
 
-    页面此前只展开了第 4 位（按路径），第 1/2/3/5 位在屏幕上根本不存在 ——
+    页面若只展开第 4 位（按路径），第 1/2/3/5 位在屏幕上根本不存在 ——
     于是"这一条到没到定理"只能从派生的等级那一格去猜。这里把四位各自的读数
     摆出来，第 4 位仍然是 `formal_paths`（二维的，一位多行，见
     :func:`_statement_readings`），不在这里压成一句汇总。
@@ -1524,7 +1524,7 @@ def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
     现在这一份正文"由 `verifications` 的 `proof_sha_consistency` 回答 ——
     两件事各有各的落点，这一格不替另一件事说话。
 
-    2026-11-03（业主 goal ⑤：网页端「是否优化」）：再给一格 `optimized_paths`，
+    「是否优化」再给一格 `optimized_paths`，
     与 `reviewed_paths` 并排、同一条证明一行。三态由
     `evidencebits.optimized_state` 给（唯一读口，本处不另判一次）：
     `true` / `false` / `not_recorded`。缺格就是 `not_recorded`，不许折成
@@ -1655,8 +1655,9 @@ def _verification_consistency(rows: list[dict],
     `proofregistry.proof_sha(proof_text_of(命题行, 这个证明号))`。命题行不在读到的
     statements 里（被引用的外部命题 / 那一行还没落盘）⇒ `unknown`：没得比。
 
-    为什么按 `proof_no` 取而不是按"最新一份"：多证明模型下每一条路径各签各的，
-    拿错的路径去比会让另一条路径的改稿把这一条判成"不一致"。
+    为什么按这一行的 `proof_no` 取（那一行没记就按 canonical `#p1`）而不是按"最新一份"：
+    多证明模型下每一条路径各签各的，拿错的路径去比会让另一条路径的改稿把这一条判成
+    "不一致"。
     """
     from .. import verifications as VR
 
@@ -5483,24 +5484,24 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 不是显示词；页面不印它，但"按号命中"与"靠正文 sha 回退"必须分得开。
       ("nontriviality_matched_by", "string"),
       ("formal_paths", "FormalPath[]"),
-      # 2026-10-23 第二批（业主：五元位每一位一格）：前四格是第 1/2/3/5 位各自的
-      # 状态词（`evidencebits.BIT_STATES` 那四档），第 4 位不在这里 —— 它是二维的，
-      # 读法是 `formal_paths`（压成一句汇总正是改前那个错）。
+      # 五元位每一位一格：前四格是第 1/2/3/5 位各自的状态词
+      # （`evidencebits.BIT_STATES` 那四档），第 4 位不在这里 —— 它是二维的，
+      # 读法是 `formal_paths`（压成一句汇总就等于让 `#p2` 借 `#p1` 的光）。
       ("bit_numeric", "string"), ("bit_proof", "string"),
       ("bit_reviewed", "string"), ("bit_audited", "string"),
       ("reviewed_paths", "ReviewedPath[]"),
-      # 2026-11-03（业主 goal ⑤：网页端「是否优化」）：与 `reviewed_paths` 并排的
-      # 逐份那一格。三态 token 由 `evidencebits.optimized_state` 给（true / false /
-      # not_recorded）；缺格是 `not_recorded`，不是 `false`。页面那一列叫「优化」。
+      # 「是否优化」：与 `reviewed_paths` 并排的逐份那一格。三态 token 由
+      # `evidencebits.optimized_state` 给（true / false / not_recorded）；
+      # 缺格是 `not_recorded`，不是 `false`。页面那一列叫「优化」。
       ("optimized_paths", "OptimizedPath[]"),
       ("grade", "string"), ("grade_label", "string"),
-      # 2026-11-06（真机 R-mk-infinite-92）：收录回执两格 —— 这一行现在这一份证明是
-      # 哪一号、正文指纹是什么。它由"把正文补进在册那一行、补翻第 2 位"的那一笔
+      # 收录回执两格 —— 这一行现在这一份证明是哪一号、正文指纹是什么。
+      # 它由"把正文补进在册那一行、补翻第 2 位"的那一笔
       # （`agent_b.register_statement._attach_proofs` 的 `proof_collected`）按盘上的
       # 正文现算落盘；不是 `schema.Statement` 的字段，也没有每一行都会有的承诺
       # （老行 / 新建行都没有）⇒ 声明成可选（`?`）—— C 条"可选的没出现不算漂移"那一档。
       ("proof_no?", "number"), ("proof_sha256?", "string"),
-      # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：后三格是读模型的 join
+      # 后三格是读模型的 join
       # （`_annotate_ledger_row`），不是 `schema.Statement` 的字段。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"), ("by_task_id_tri", "string"))),
@@ -5544,7 +5545,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("concept_group_key", "string"), ("dedup_key", "string"), ("status", "string"),
       ("duplicate_of", "string"), ("created_at", "string"),
       ("supporting_lit_ids", "string[]"),
-      # 2026-10-23：引文五档（`_quote_state_rows`；含 `no_evidence` —— 说通过而拿不出
+      # 引文五档（`_quote_state_rows`；含 `no_evidence` —— 说通过而拿不出
       # 可复核区间的那一档，折进"未查"就把它欠的东西读错了）。
       ("quote_state", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
@@ -5554,17 +5555,16 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）",
      (("verification_id", "string"), ("statement_id", "string"),
       # 2026-10-22（多证明模型）：签名行多了 `stmt_id`（被审的那条命题，与
-      # `statement_id` 同值）。2026-11-11（业主裁定「签跟着正文走」）：`proof_no`
-      # 在 V 签侧退役 —— canonical（#p1）新行不再写这一格，一份证明的身份由
-      # 正文 sha + `statement_id` + 路径回答 ⇒ 类型面也不再声明它（页面若还印
-      # "第几份"就会印 `undefined`）。
+      # `statement_id` 同值）。`proof_no` 在 V 签侧退役：一份证明的身份由
+      # 正文 sha + `statement_id` + 路径回答 ⇒ 类型面不声明它（页面也不再印
+      # "第几份"）。
       ("stmt_id", "string"),
       ("verifier", "string"),
       ("verdict", "string"), ("defect_step", "string"), ("quote", "string"),
       ("why", "string"), ("findings", "Record<string, unknown>[]"),
       ("unresolved_errors", "number"), ("proof_sha256", "string"),
       ("proof_chars", "number"), ("round", "number"), ("used_faces", "string[]"),
-      # 2026-11-02（V 三轮送审的口径，业主逐字：「不允许跨两次送审累计成功数」）：
+      # 2026-11-02（V 三轮送审的口径，逐字：「不允许跨两次送审累计成功数」）：
       # 新写的台账行多两格 —— `review_call` 是同一趟 `verify_proof` 的调用 id
       # （同趟三行逐字相同），`review_pass` 是这趟里的第几轮（1..need）。
       # 类型取 `verifications.record_verification` 写行的真值：前者恒为 `str(...)`，
@@ -5573,11 +5573,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 与 `citation_checks` 那一批同一条口径：声明的是新行形状，不是老盘的样子。
       ("review_call", "string"), ("review_pass", "number | null"),
       ("submission_id", "string"), ("at", "string"),
-      # 2026-10-23（业主：sha 原文不显示）：`proof_sha_consistency` 是
-      # "V 签的那一份 vs 命题现在这一份（按 `proof_no` 逐条比）"的三档读数。
+      # `proof_sha_consistency` 是
+      # "V 签的那一份 vs 命题现在这一份（一份证明一行）"的三档读数。
       # `proof_sha256` 留在数据里（凭据要能复核），只是页面不再印它。
       ("proof_sha_consistency", "string"),
-      # 2026-11-11（业主裁定 ①「甲」）：台账行无条件写产出方格 ——
+      # 台账行无条件写产出方格 ——
       # `producer_role` 由路径族现判（不采信调用方自报），`producer_code` 是产出方
       # 的代码/稿号；`producer_problem` 只在"路径族与名册的父角色不一致 / 路径读不出
       # 产出方"时写（条件写入 ⇒ 可选）。三格都真的读得出来（C 条逐键比）。
@@ -5585,11 +5585,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("producer_problem?", "string"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
-      # 2026-10-27（引用核实那一批落地后的补登记）：台账那一行多了 `citation_checks`
+      # 引用核实那一批落地后的补登记：台账那一行多了 `citation_checks`
       # 五格（`verifications.CITATION_CHECK_KEYS`：stmt_id / verdict / quote_verbatim /
       # note / in_material）。后端真的读得出它（C 条拿夹具那一行逐键比）⇒ 这里必须声明，
       # 否则类型面读不出"这条证明里的引用被逐条核成了什么"。
-      # `in_material` 是 2026-10-27 补的第 5 格：材料之外的那条（V 多给的）不算挡签，
+      # `in_material` 是补的第 5 格：材料之外的那条（V 多给的）不算挡签，
       # 而这一格必须落盘 —— 否则落盘再读回来时两个判定口给出相反结论。
       ("citation_checks",
        "{ stmt_id: string; verdict: string; quote_verbatim: boolean; note: string; "
