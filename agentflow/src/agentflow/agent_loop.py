@@ -6486,10 +6486,9 @@ class AgentLoop:
     def _agents_working(by_task: Mapping[str, Any], *, me: str) -> list[str]:
         """「除我以外谁在飞」—— 这条判据的唯一实现（`_tree_busy_reading` 读它）。
 
-        业主 2026-11-06 逐字：「查在飞时肯定要除掉自己，不然就是看见自己在干活就
-        允许给自己挂机」。所以 `me` 那一行最先被摘掉：M 在读这一拍时自己的台账行
-        就是 `running`（`agent_state` 第 ⑥ 步在没有钟压着时正是把它读成"在飞"），
-        不摘它，`busy` 在这类拍上恒真、判据形同废纸。
+        为什么要除掉自己：不摘 `me` 那一行，就是"看见自己在干活就允许给自己挂机"。
+        M 在读这一拍时自己的台账行就是 `running`（`agent_state` 第 ⑥ 步在没有钟压着时
+        正是把它读成"在飞"），不摘它，`busy` 在这类拍上恒真、判据形同废纸。
 
         输入是 `Conductor.activity_snapshot()` 的 `by_task`（三态唯一实现的输出），
         这里只做"挑出 flying 且不是我"这一件事，不另判一遍三态。
@@ -6503,35 +6502,18 @@ class AgentLoop:
     def _item_owner_can_still_act(row: Mapping[str, Any]) -> bool:
         """这条未消板项的『收件人』还"在不在"—— 决定它算不算"有人在干活"。
 
-        ## 为什么要有这一针（真机 R-mk-infinite-94，2026-11-06 16:35 起每 7 分钟一 park）
+        ## 为什么要有这一针
 
-        那一趟的 `why_text` 逐字是：
-
-            「除 M 以外在飞：t-000142；除 M 以外还有 10 条未结项
-              （t-000002、t-000008、t-000012、t-000020、t-000058、t-000079）」
-
-        而台账里那 10 条全是 `kind=notice` / `expects=ack` 的板项（`item_state` 是
-        `queued` 或 `seen`），它们的收件人那一行『全部已收工』：
-
-            t-000002 role=A status=done outcome=ok        ended_at 14:18:12
-            t-000008 role=E status=done outcome=ok        ended_at 15:46:54
-            t-000012 role=D status=done outcome=ok        ended_at 16:26:03
-            t-000020 role=F status=done outcome=cancelled ended_at 16:25:41
-            t-000058 role=B status=done outcome=ok        ended_at 15:37:56
-            t-000079 role=G status=done outcome=ok        ended_at 15:35:16
-
-        它们读到过这些通知（`seen_by` 就是收件人自己、`seen_step` 是它当时的步号：49 / 30 /
-        33 / 81 / 18 / 30），但在收工之前没有 ack，而收工之后没有人会再替它们 ack
-        （父不许代 ack —— 业主 2026-10-08；`void_items` 也只许作废"叫不醒"的收件人的项）。
-        于是"10 条未结项"是『死的』：再挂八小时也还是 10 条，"树忙"因此虚高且恒真，
-        `_research_guard` 的第 ① 档永远优先 ⇒ 研究未尽那一档一次都没拦过
-        （open_questions ×3 一直没处理，$7.23 之后停摆）。
+        未消板项若挂在已收工的收件人名下，就再没有人会处理它：父不许代 ack，
+        `void_items` 也只许作废"叫不醒"的收件人的项。把这种死项算进"树忙"，
+        读数就虚高且恒真 ⇒ `_research_guard` 的第 ① 档永远优先，研究未尽那一档
+        一次都拦不下来。
 
         ## 判据只有一处
 
         委托 `secretary.is_live_agent`（"这一行还算不算在跑"的唯一判据：轴是 agent，即
         `kind` 为空、不是顶趟行、`status` 在活档 `LIVE_TASK_STATUSES`）。这里『不』自己
-        读 `kind` / `status` —— 那正是 Q18/Q27 收掉的第二份判据
+        读 `kind` / `status` —— 那会是第二份判据
         （判据：`tests/test_the_axis_is_asked_in_one_place.py` 与
         `tests/test_the_axis_and_liveness_are_asked_separately.py`）。
 
@@ -6552,12 +6534,10 @@ class AgentLoop:
     def _tree_busy_reading(self) -> dict[str, Any]:
         """整棵树「有没有（除我以外的）人在干活」的读数（`_research_guard` 的第二个输入）。
 
-        ## 为什么要有这一格（业主 2026-11-06 口径逐字）
+        ## 为什么要有这一格
 
-            「只要整个树有人干活，且 M 自己暂无可直接做完的板项，它就能挂机」
-
-        改前只有 M 自己名下的三条判据（新投递 / 未消项 / 刚落定的子），"别人正在跑"没进
-        读数 ⇒ 研究未尽时连 B 正在登记概念都照挡（业主不许可的过度催促）。
+        挂机的前提是"无事可做"，而"无事可做"只问"有没有人找我"，不问"别人是不是
+        正在跑" ⇒ 研究未尽时连别的角色正在登记概念也照挡，那是不许可的过度催促。
 
         ## 读数来源（只读既有读数，不新造状态）
 
@@ -6565,9 +6545,9 @@ class AgentLoop:
         （在飞 / 待机 / 静默 / 未读到）唯一实现的调用点，`conductor.patrol` 与
         `conductor.state` 读的也是同一份台账快照。`state == "flying"` 就是"它自己在跑"。
 
-        ## 除掉 M 自己（业主 2026-11-06）
+        ## 除掉 M 自己
 
-            「查在飞时肯定要除掉自己，不然就是看见自己在干活就允许给自己挂机」
+        查在飞时不能不除掉自己，否则"看见自己在干活"就成了一条挂机的理由。
 
         三样都不进这里，它们各有各的读者：
         - 自己那一行（`_agents_working` 的 `me` 那一刀）：M 此刻正在读这一拍，
@@ -6579,20 +6559,20 @@ class AgentLoop:
         ## 口径
 
         `busy = working or unfinished`：
-        - `working`：除 M 以外、三态为"在飞"的那些台账号（业主"任一子代理在飞"）；
-        - `unfinished`：除 M 以外、名下还有未消板项『且收件人还活着』的那些父号（业主
-          "有未结项"，与 `Conductor.open_items_by_parent` 同一份读数，收件人那一刀由
+        - `working`：除 M 以外、三态为"在飞"的那些台账号；
+        - `unfinished`：除 M 以外、名下还有未消板项『且收件人还活着』的那些父号（与
+          `Conductor.open_items_by_parent` 同一份读数，收件人那一刀由
           :meth:`_item_owner_can_still_act` 判）；
         - `stale_items`（『不』进 `busy`）：名下还有未消板项、但收件人已经收工的那些父号
-          —— 那些项永远不会再被处理（真机 R-mk-infinite-94 的 10 条 / 6 个号），
-          算进 `busy` 就是让这条判据恒真。它们不静默消失：照旧进读数与 `why_text`。
+          —— 那些项永远不会再被处理，算进 `busy` 就是让这条判据恒真。它们不静默消失：
+          照旧进读数与 `why_text`。
 
-        ## 为什么 `unfinished` 要问收件人还在不在（真机 R-mk-infinite-94）
+        ## 为什么 `unfinished` 要问收件人还在不在
 
-        改前 `unfinished` 不看收件人还在不在：R-mk-infinite-94 那一趟 6 个号的 10 条通知
-        全挂在已收工的收件人名下 ⇒ 读数每拍报"还有 10 条未结项" ⇒ `_research_guard` 第 ①
-        档恒真、研究不尽那一档一次都没落地。判据：`test_park_gate_whole_tree_busy.py`
-        的 a2 / b / d / e（这一刀不是"树忙恒 False"：`working` 一个字没动）。
+        不看收件人在不在，已收工收件人名下的通知就会每拍报成"还有未结项" ⇒
+        `_research_guard` 第 ① 档恒真、研究不尽那一档一次都落不了地。判据：
+        `test_park_gate_whole_tree_busy.py` 的 a2 / b / d / e（这一刀不是"树忙恒 False"：
+        `working` 一个字没动）。
 
         ## 三态
 
@@ -6637,7 +6617,7 @@ class AgentLoop:
         unfinished: list[str] = []
         unfinished_count = 0
         # 收件人已经收工的那些未消项（`{owner, role, status, count}`）：不算"有人干活"，
-        # 但也不许静默消失 —— 它们照旧进读数与 `why_text`（真机 R-mk-infinite-94）。
+        # 但也不许静默消失 —— 它们照旧进读数与 `why_text`。
         stale_owners: list[dict[str, Any]] = []
         stale_count = 0
         rows: list[dict[str, Any]] = []
