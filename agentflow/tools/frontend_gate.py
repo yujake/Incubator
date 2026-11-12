@@ -1,15 +1,20 @@
 # -*- coding: utf-8 -*-
-"""前端发布步：类型检查 + 构建 + 产物新鲜度（裁定 G2 / B1 的落点）。
+"""前端发布步：类型检查 + 构建 + 产物新鲜度。
 
 ## 三态（每条退出码都有出处，不是"非零就算红"）
 
-```text 0 = pass       三件事都查过了：typecheck 过、构建过、构建结果与入库的 dist 逐字节相同1 = fail       查过了，有问题：类型检查报错 / 构建报错 / 构建结果与入库产物不一致2 = unknown    没查成：本机没有 node/pnpm，或构建环境起不来（例如沙箱不允许 Node用管道 stdio 起 esbuild ⇒ `spawn EPERM`）```
+```text
+0 = pass       三件事都查过了：typecheck 过、构建过、构建结果与入库的 dist 逐字节相同
+1 = fail       查过了，有问题：类型检查报错 / 构建报错 / 构建结果与入库产物不一致
+2 = unknown    没查成：本机没有 node/pnpm，或构建环境起不来（例如沙箱不允许 Node
+               用管道 stdio 起 esbuild ⇒ `spawn EPERM`）
+```
 
 `unknown` 绝不是 `pass`：这是本项目反复踩的坑（`unknown` 被折成绿灯），所以"没装 node"这条路的退出码是 2，编排层（`tools/release_all.py`）会照实记 `unknown`。
 
 ## 为什么"新鲜度"要靠重新构建一次来判
 
-`agentflow/src/agentflow/web/static/` 是入库的构建产物（裁定 B1：产物必须能被全新 clone 直接读到）。既然入库，它就会与源码脱节 —— 改了 `ui/src/` 而忘了重建，
+`agentflow/src/agentflow/web/static/` 是入库的构建产物（必须能被全新 clone 直接读到）。既然入库，它就会与源码脱节 —— 改了 `ui/src/` 而忘了重建，
 判据必须能红。唯一可靠的判法就是"现在构建一次，与入库的那份比字节"：构建到临时目录（不改仓库状态），再与 `static/` 逐文件比（多一个/少一个/内容不同都算）；
 - 相同 ⇒ pass；不同 ⇒ fail 并打印差异清单（谁多了、谁少了、谁内容不同）。
 
@@ -34,7 +39,7 @@ from typing import Sequence
 #: 项目根（`tools/` 的上一级）。
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 UI = ROOT / "ui"
-#: 入库的产物落点（`ui/vite.config.ts` 的 `outDir`；裁定 B1）。
+#: 入库的产物落点（`ui/vite.config.ts` 的 `outDir`）。
 STATIC = ROOT / "src" / "agentflow" / "web" / "static"
 
 #: 构建环境起不来时输出里会出现这些字样 ⇒ 记 `unknown` 而不是 `fail`。
@@ -125,7 +130,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     tmp = pathlib.Path(tempfile.mkdtemp(prefix="frontend-gate-"))
     try:
-        # 构建到临时目录：不改仓库状态（与 `X-1` 同一条口径）。
+        # 构建到临时目录：不改仓库状态。
         code, out = _run([pnpm, "-C", str(UI), "exec", "vite", "build",
                           "--outDir", str(tmp), "--emptyOutDir"], ROOT, args.timeout)
         if code == -1 or (code != 0 and any(m in out for m in ENV_BROKEN_MARKERS)):
