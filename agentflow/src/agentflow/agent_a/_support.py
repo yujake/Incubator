@@ -69,16 +69,15 @@ class ARunResult:
     #: 角色级接线上有哪些源（第一态用它说明"这一次用的是哪些源"）。
     role_providers: list[str] = field(default_factory=list)
     #: 逐源读数（形态照工具面 `search.literature` 的 `sources[]`）。
-    #: 两态都有：点名了源的那一态来自 `MultiProvider` 的逐源统计，没点名的
-    #: 第一态来自 `_search_along_wiring` 的逐源读数 —— 第一态不报的话，
-    #: "某个源被限流"与"接线上的源全都 0 命中"在动作读数上同形（2026-10-20
-    #: 审计 A 的缺陷 6）。"这一次有没有点名源"仍由 `providers_requested` 回答
-    #: （`None` = 没点名），不许用 `sources` 是否为空去推断。
+    #: 两态都有：点名了源的那一态来自 `MultiProvider` 的逐源统计，没点名的第一态来自
+    #: `_search_along_wiring` 的逐源读数 —— 第一态不报的话，"某个源被限流"与"接线上的
+    #: 源全都 0 命中"在动作读数上同形。"这一次有没有点名源"仍由 `providers_requested`
+    #: 回答，不许用 `sources` 是否为空去推断。
     sources: list[dict] = field(default_factory=list)
     #: 成本读数（形态照工具面的 `cost`）：`provider_calls` 是这一轮向上游发了几次。
     cost: dict = field(default_factory=dict)
 
-    # ---- 委托报告（业主 2026-10-20 第 3 条：报告是交付物，不是可选）
+    # ---- 委托报告（报告是交付物，不是可选）
     #
     # 为什么这三格在 `ARunResult` 上而不是只写文件：调用方（主控 / D / H）读的是动作的
     # 返回，而不是去猜盘上有哪个文件。「报告在哪、里面两块各几条」必须随这次动作一起交回 ——
