@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """并表过渡期：概念行的唯一读写口（S1r 的"两处同号合并"那一层）。
 
-背景（`draft/97` §10.3 / §15.2）：`concepts` 要并进 `statements`（`kind="concept"`），
+背景：`concepts` 要并进 `statements`（`kind="concept"`），
 而这是一次动磁盘格式的迁移（`SCHEMA_VERSION 1→2`、`TABLES` 删表），属于
 `AGENTS.md` 里"错误不可逆"的那一类。所以中间必须有一层过渡，让读侧可以一个一个搬：
 
@@ -24,13 +24,12 @@
    "只有一边"。`counts` 里 `statements` / `legacy` / `merged` / `legacy_only` 四个数
    分开给 —— "两边都有"与"只有一边"是不同的读数（前者说明镜像在工作，
    后者说明还有老写侧没搬完）。
-4. 写经秘书（2026-10-26，D14）：这一层不再自己 `tx.upsert("statements", …)`，
+4. 写经秘书：这一层不自己 `tx.upsert("statements", …)`，
    而是调 `Secretary.write_concept_row`（见 :func:`_concept_secretary`）。
    五元位、洗名（`wash_working_name`）、概念同一性（`propositionkey.same_concept`）
    三件事因此与秘书那条路是同一份实现 —— 这一层里不许出现第二份。
-   为什么这条必须是契约而不是一句说明：真机 `projects/mp3-r3` 的 30 条概念行
-   正是"绕过了它"的形态（`created_by=agent-B`、`bits` 空、非平凡度无记录），
-   而盘上一切正常。
+   为什么这条必须是契约而不是一句说明：绕过它写进来的概念行会带
+   `created_by=agent-B`、`bits` 空、非平凡度无记录，而盘上一切正常。
 
 ## 为什么镜像不用自己发号（一个容易被忽略的细节）
 
@@ -55,20 +54,17 @@ LEGACY_TABLE = "concepts"
 
 #: 概念行允许的 `origin`（受控集合，唯一出处 = 这一处）。
 #:
-#: 口径逐字来自业主 2026-10-21（mp3 那批的验收词）：
+#: 口径：来自文献的 ⇒ `external_lit`；自己造的 ⇒ `own_result`；
+#: 概念行的 origin 不许是 `own_result`（除非它确实是自己定义的新概念）。
 #:
-#: > 来自文献的 ⇒ `external_lit`；自己造的 ⇒ `own_result`；
-#: > 概念行的 origin 不许是 `own_result`（除非它确实是自己定义的新概念）
-#:
-#: 真机读数（`projects/mp3/data/statements.json`，2026-10-21 现算）：1143 条概念行、
-#: 其中 1142 条带 `source_lit_id`（术语确实出自文献），而 `origin` 一律是
-#: `own_result` —— 于是"文献里来的术语"在报告里被读成"我们自己的结果"。
-#: 根因在 `concept_statement` 把 `origin="own_result"` 写死（本批缺陷一）。
+#: 为什么要有这一格：概念行常常带 `source_lit_id`（术语确实出自文献），而 `origin`
+#: 若被写死成 `own_result`，"文献里来的术语"在报告里就被读成"我们自己的结果"。
+#: 根因是 `concept_statement` 把 `origin="own_result"` 写死。
 CONCEPT_ORIGINS: tuple[str, ...] = ("external_lit", "own_result")
 
 #: 不算定义项的通用词（规范化之后逐字比）。
 #:
-#: 为什么要有这一格：概念行的标签在真机里有一大片只写着"概念"/"定义"（名字在正文里），
+#: 为什么要有这一格：概念行的标签常常只写着"概念"/"定义"（名字在正文里），
 #: 拿它当键会把所有这些没命名的行并成一条 —— 那是比"重复登记"更坏的一种错
 #: （一条真概念在台账上消失，而盘上看起来完全合法）。
 CONCEPT_GENERIC_TERMS: tuple[str, ...] = (
@@ -78,8 +74,8 @@ CONCEPT_GENERIC_TERMS: tuple[str, ...] = (
 
 #: 从 `statement_full` 里抽"被定义的那个术语"只认开头这两种显式形态。
 #:
-#: 为什么只认开头、只认这两种：`概念（X）` / `定义（X）` 是登记时写定义句的固定形态
-#: （真机 mp3-r2 的六条概念行逐条都是），而"正文里某个括号里的东西"不是一个可复算的
+#: 为什么只认开头、只认这两种：`概念（X）` / `定义（X）` 是登记时写定义句的固定形态，
+#: 而"正文里某个括号里的东西"不是一个可复算的
 #: 定义项 —— 猜它会把两条不相关的定义并成一条。
 _DEFINED_TERM_HEAD = re.compile(
     r"^[\s#>*_\-|]*"
@@ -106,15 +102,14 @@ def defined_term(statement_full: str) -> str:
             return str(found.group(1) or "").strip()
     return ""
 
-#: 一轮之内新建概念的上限（业主 2026-10-21：「概念应按轮限量，一轮几十条以内」）。
+#: 一轮之内新建概念的上限（口径：概念应按轮限量，一轮几十条以内）。
 #:
 #: 为什么是 30（可自证）：
 #:
-#: - 真机读数：mp3 的一轮消化灌进 1143 条概念（19 篇文献 × 每篇几十个关系名），
-#:   于是"每轮产出新事实"这条读数被一次水漫金山顶平 —— 一轮 1143 与一轮 3 条
-#:   在多轮趋势上长得一样；
-#: - 业主给的口径是"一轮几十条以内"：30 落在"几十"的下半区，既容得下一篇文献的
-#:   显式概念草稿（真机里通常 < 30），又让配额确实咬得住；
+#: - 一轮不限而灌进上千条概念，"每轮产出新事实"这条读数会被一次水漫金山顶平 ——
+#:   一轮 1143 与一轮 3 条在多轮趋势上长得一样；
+#: - 口径是"一轮几十条以内"：30 落在"几十"的下半区，既容得下一篇文献的
+#:   显式概念草稿（通常 < 30），又让配额确实咬得住；
 #: - 它是每轮（`B.run` 一次 / 一次 `run_once` / 秘书的一笔）的总量，不是"每篇"：
 #:   按篇限量挡不住"篇数多"那种水漫（19 篇 × 30 = 570 仍然过大）。
 CONCEPTS_PER_ROUND_MAX = 30
@@ -182,7 +177,7 @@ def resolve_concept_origin(*, origin: str = "", source_lit_id: str = "",
 
 @dataclass
 class ConceptQuota:
-    """一轮之内"新建概念"的配额（业主 2026-10-21：「每轮几十条以内」）。
+    """一轮之内"新建概念"的配额（口径：每轮几十条以内）。
 
     ## 为什么配额要是一个对象，而不是一个整数常量
 
@@ -243,7 +238,7 @@ class ConceptQuota:
 #: （`schema.is_valid_id` 为假 ⇒ 谁把它当号用都会当场看出不对，而不是去找一个不存在的概念）。
 SUPERSEDED_INTO = "superseded"
 
-#: `draft/97` §15.4 的①档标记：问直接父（最常见的场景里父就是 A —— 原文在它手里，
+#: ①档标记：问直接父（最常见的场景里父就是 A —— 原文在它手里，
 #: 就地就能给定义，不用惊动 M、也不用真的再上网搜）。
 #:
 #: 为什么它是一个行内标记而不是一列/一张表：它与 `pending_search` / `self_authored`
@@ -253,9 +248,9 @@ ASK_PARENT = "concept:ask_parent"
 
 
 def definition_supply(store: Any) -> dict[str, Any]:
-    """概念行的定义来源逐档计数（`draft/97` §14.13 / §15.4：三档不许折平）。
+    """概念行的定义来源逐档计数（三档不许折平）。
 
-    业主 2026-10-09 的两句口径合成这一格：
+    两句口径合成这一格：
 
     > 「抽不到定义的概念就让A去网上搜，写入时定义内容留空，等A返回后写入；如果概念很基础，
     >  是数学基本概念，允许B自己写定义（我们相信LLM的智力）」
@@ -361,7 +356,7 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
     # 墓碑（`merged_into`）必须带过来：它是"这一行不是活节点"的唯一机器可读标记，
     # 而读侧（`dedup.find_concept` / `decide_structural_duplicate`）判的正是这一格的真值性。
     # 丢弃它等于把墓碑重新变成活节点 —— 新知识会挂到幽灵节点上、survivor 永远接不到
-    # （实测抓到，见 `_to_legacy` 的 docstring 与 `draft/97` §13.2l）。
+    # （见 `_to_legacy` 的 docstring）。
     if str(row.get("merged_into") or ""):
         out["merged_into"] = str(row["merged_into"])
         out["status"] = "superseded"   # 与 `sync_from_legacy` 的墓碑映射同一档
@@ -370,7 +365,7 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
 
 #: 概念行「良定义证明」的三态（`well_definedness_reading` 的唯一词表）。
 #:
-#: 2026-11-10 业主裁定（甲）：概念的良定义证明与一般手稿走同一条链，差别只在
+#: 裁定 甲：概念的良定义证明与一般手稿走同一条链，差别只在
 #: "谁产出" —— 一般命题的稿由 F 产出，概念的良定义稿由 B 产出（`reports/b-proof-<号>.md`，
 #: 复用既有 b-proof 族），V 照常三转签，B 收录时把 `## 证明` 写进这一行的 `proof_text`。
 #: 所以这一格不是"概念有没有证明"（它没有等级轴、不参与可证链），而是"那一份良定义
@@ -386,8 +381,8 @@ def concept_bits(*, origin: str, source_lit_id: str = "", proof_text: str = "",
                  sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """概念行的五元位（唯一实现：`evidencebits.bits_of(..., kind="concept")`）。
 
-    为什么概念行也要算这一格（2026-10-26，真机 mp3-r3）：那 30 条概念行是直写进来的，
-    `bits` 全空 —— 而同一批里秘书落的那一条（000002 theorem）有 `bits`。空 `bits` 不是
+    为什么概念行也要算这一格：直写进来的概念行 `bits` 全空，而秘书落的那一条有
+    `bits`。空 `bits` 不是
     "这一行没有证据"，是"没有人替它算过"：读侧（`evidencebits.bits_from_row`、
     `clean_statement_ids`、页面那一格五元位）都拿它当"五位一件没做"读。
 
@@ -396,7 +391,7 @@ def concept_bits(*, origin: str, source_lit_id: str = "", proof_text: str = "",
     —— 不传 kind 算出来的 "conjecture" 会被校验端当场拒（口径与
     `agent_b.register_statement._statement_bits` 同一句）。
 
-    ## 良定义证明（2026-11-10 业主裁定 甲）
+    ## 良定义证明（裁定 甲）
 
     概念行的 `proof_text` 不再是恒空的一格：B 落 `reports/b-proof-<号>.md`、V 签回来
     （`vsigns.sign_reading.state == "signed"`）、B 收录之后，这一格装的就是"良定义证明"。
@@ -525,11 +520,11 @@ def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases
     + `quote_reason` 里的待补标记（`concept:pending_search`：等 A 检索回来，
     或基本概念由 B 自撰）。不许落成 `active` + 空定义，也不许干脆不落。
 
-    ## `proof_text` 是「良定义证明」这一格（2026-11-10 业主裁定 甲）
+    ## `proof_text` 是「良定义证明」这一格（裁定 甲）
 
-    旧口径（本批缺陷一）是"概念行永远写空、调用方传了就当场 `ValueError`"—— 理由
-    是历史 1143 条概念行都带哨兵 `concept:primitive`，把"有没有证明"的读数全顶高了。
-    业主 2026-11-10 的裁定把这一格重新定义成良定义证明的落点：B 落
+    这一格曾经"概念行永远写空、调用方传了就当场 `ValueError`"—— 理由是历史概念行
+    都带哨兵 `concept:primitive`，把"有没有证明"的读数全顶高了。
+    裁定把这一格重新定义成良定义证明的落点：B 落
     `reports/b-proof-<号>.md` → V 三转签（签在稿上）→ B 按位置与格收录 ⇒ 这一格装
     `## 证明` 那一节。所以判据不再是"空/非空"，而是有没有 V 的签：
 
@@ -608,8 +603,8 @@ def _to_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
 
     两条边界必须显式：
 
-    - `normalized_name` 现算（`textutil.normalize(label)`）——老表那一格实测
-      640/2233 条与现算不符（`pipeline.py` 当年把原始名字写了进去），投影里跟现算走，
+    - `normalized_name` 现算（`textutil.normalize(label)`）——老表那一格可能与现算不符
+      （`pipeline.py` 曾把原始名字写了进去），投影里跟现算走，
       与 `migrate_concepts` 的"读侧现算、丢弃那一格"同一口径；
     - `related_concepts` 给 `[]`（并表之后那件事由 `relations` 表管）；
     - `merged_into`：新标准里没有这一列，墓碑用 `status="superseded"` 表达 ⇒
@@ -620,9 +615,9 @@ def _to_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
       `dedup.find_concept` 是 `if row.get("merged_into"): continue`，
       `agent_b.decide_structural_duplicate` 是 `if a.get("merged_into") or b.get("merged_into")`。
       投影恒给 `None` 会把墓碑重新变成活节点：新来的同名概念命中幽灵节点、
-      survivor 永远接不到新知识，而盘上一切正常（实测抓到：让被合并方在
+      survivor 永远接不到新知识，而盘上一切正常（让被合并方在
       `statements.json` 里排在前面，`find_concept(view_rows, "abelian group")`
-      返回墓碑而不是 survivor）。
+      会返回墓碑而不是 survivor）。
     """
     out: dict[str, Any] = {}
     for legacy_name, new_name in LEGACY_VIEW_FIELDS.items():
@@ -651,7 +646,7 @@ def view(store: Any, *, shape: str = "statement") -> dict[str, Any]:
     最后那一个是"新标准那一行还空着定义、而老行有"的条数 —— 它不自动合并
     （新标准优先），但必须可见：那是"两边不同步"的读数，不是可以顺手抹平的差异。
 
-    `shape="legacy"`（2026-10-09 加）：把每一行反向投影回老字段名
+    `shape="legacy"`：把每一行反向投影回老字段名
     （`concept_id`/`name`/`definition`…，见 `LEGACY_VIEW_FIELDS`）。它的用途只有一个 ——
     让读侧一次只搬一件事：先换读口（`store.rows("concepts")` ⇒ `view(…)[ "rows"]`），
     再逐处把字段名改成新标准。两件事一起做的话，红的时候分不清是"读口换错了"
@@ -759,14 +754,13 @@ def _merge_rows(out: dict[str, Any], *, stmt_rows: list[dict[str, Any]],
 def push_counters(tx: Any, used_id: str) -> None:
     """把 `stmt` 与 `concept` 两个计数器都抬到 `used_id` 之后（只抬，不烧号）。
 
-    为什么必须有这一格（实测抓到的一条真缺陷）：过渡期是"同一个号写在两张表里"，
+    为什么必须有这一格（一条真缺陷）：过渡期是"同一个号写在两张表里"，
     而两张表各有自己的计数器。B 的 pipeline 从 `concept` 计数器发号 ⇒ 写入 `statements`
     的那些镜像行会让 `stmt` 计数器落在后面（`verify` 的 `counter_behind` 当场报
     "stmt 计数器为 0，但表里已用到 3；继续分配会撞号"）；反过来，秘书那条路从 `stmt`
     发号 ⇒ `concept` 计数器落在后面。两个方向都要补。
 
-    第一版是错的，记在这里（`test_demo_end_to_end` 的"零问题"判据当场抓出来）：
-    它用"多调一次 `alloc_id` 把计数器顶上去"来修 —— 那会烧掉一个没建行的号，
+    为什么不是"多调一次 `alloc_id` 把计数器顶上去"：那会烧掉一个没建行的号，
     同一张表于是出现 `id_gap`（"分配了 ID 但未建成行"）。正确形状是
     `Tx.raise_counter_to(kind, used_id)`：把计数器设到 `max(used)+1`，一个号都不烧。
     """
@@ -784,9 +778,8 @@ def tables_for_concept_write(*extra: str) -> tuple[str, ...]:
     """写一条概念要声明哪些表：`statements` + （老表还在时）`concepts` + 调用方给的。
 
     为什么要有这一格（它是"落刀不牵连夹具"的关键）：`Store.tx` 对未知表会拒，
-    所以凡是"声明了 `concepts`"的地方在落刀之后都会当场报错 —— 实测这样的地方有
-    29 处（`temp/_s1r_flip_inventory.py` 的 `tx_declare`：src 13 + tests 45 处里的
-    去重文件数）。让调用方改成 `store.tx(*CR.tables_for_concept_write("relations"), …)`
+    所以凡是"声明了 `concepts`"的地方在落刀之后都会当场报错。让调用方改成
+    `store.tx(*CR.tables_for_concept_write("relations"), …)`
     之后，老表在不在由这一处判断，夹具与测试在落刀前后都不用改一个字。
     """
     base = ["statements", *[str(x) for x in extra if str(x)]]
@@ -890,14 +883,12 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
     （文件锁不可重入）。所以把"写哪两张表、怎么写"收成这一格，
     `upsert`（单独写一条概念）与秘书那一笔都调它，口径只有一处。
 
-    2026-10-26（D14）：这一格不再自己 `tx.upsert("statements", …)`，而是调
-    `Secretary.write_concept_row`（见 :func:`_concept_secretary` 的 docstring：
-    真机 mp3-r3 的 30 条概念行 `bits` 空、`created_by=agent-B`，就是绕过了它）。
-    于是五元位、洗名、概念同一性三件事与秘书那条路是同一份实现，`conceptrows`
-    里一份判据都不留。
+    这一格不自己 `tx.upsert("statements", …)`，而是调
+    `Secretary.write_concept_row`。五元位、洗名、概念同一性三件事与秘书那条路是
+    同一份实现，`conceptrows` 里一份判据都不留。
 
     `origin` / `self_authored` 原样交给秘书那一层（口径在 :func:`concept_statement`，
-    这里不抄第二份）。`proof_text` 只在有 V 签时留（2026-11-10 业主裁定 甲）：判据与
+    这里不抄第二份）。`proof_text` 只在有 V 签时留（裁定 甲）：判据与
     "没签就清空并留读数"那一句都在 :func:`concept_statement` / 秘书那一笔，这里不另写。
 
     `mirror=True` 只在老表还在 schema 里时才有意义（落刀之后那张表不存在，
@@ -919,12 +910,12 @@ def write_concept(tx: Any, *, stmt_id: str, label: str, definition: str = "",
 def _concept_secretary(tx: Any) -> Any:
     """这一笔概念写要经的那名秘书（`Secretary.write_concept_row` 的唯一入口）。
 
-    ## 为什么这一层不再自己写 `statements`（2026-10-26，D14）
-    真机读数（`projects/mp3-r3`，36 行 statements）：30 条概念行全部
-    `created_by=agent-B`、`bits` 空、非平凡度一条记录都没有 —— 因为这一层的三处
-    `tx.upsert("statements", …)` 绕过了秘书那一笔。秘书那一笔要做的三件事
+    ## 为什么这一层不自己写 `statements`
+    这一层的三处 `tx.upsert("statements", …)` 若绕过秘书那一笔：概念行会
+    `created_by=agent-B`、`bits` 空、非平凡度一条记录都没有，而盘上看起来"行都在"。
+    秘书那一笔要做的三件事
     （五元位 / 洗名 `wash_working_name` / 概念同一性 `propositionkey.same_concept`）
-    于是全都没跑，而盘上看起来"行都在"（同一批里秘书落的那一条 theorem 有 `bits`，
+    于是全都没跑（同一批里秘书落的那一条 theorem 有 `bits`，
     正路是好的，坏的是这三个写口）。
 
     所以写这一格收回秘书：`conceptrows` 里不再有第二份同一性或洗名实现 ——
@@ -1002,7 +993,7 @@ def sync_from_legacy(tx: Any, legacy_row: Mapping[str, Any], *,
 
     返回写进新标准的那一行 dict（调用方可以拿去当读数）。
 
-    2026-10-26（D14）：这两支（新建 / 改既有）都不再自己 `tx.upsert("statements", …)`，
+    这两支（新建 / 改既有）都不自己 `tx.upsert("statements", …)`，
     而是调 `Secretary.write_concept_row` —— 五元位、洗名、概念同一性三件事因此与秘书
     那条路是同一份实现。这一层只保留"过渡语义"：同号（契约 1）、老表墓碑
     （`merged_into` ⇒ `superseded`）、以及定义到达/清空时那两格状态迁移
@@ -1073,9 +1064,9 @@ def upsert(store: Any, *, label: str, definition: str = "", stmt_id: str = "",
     "降级"，而是迁移之后的正态；但老文件还在盘上（`stale_file`）时必须在返回值里
     读得到（它装着没搬完的数据）。
 
-    ## 2026-11-08：先判同一性、再发号（D2 后门）
-    这一支以前是"先 `alloc_id` 再写"，于是概念同一性判不了时无路可退（拒了留
-    `id_gap`、放过就是后门）。现在 `secretary.concept_identity_gate(tx)` 在发号之前
+    ## 先判同一性、再发号（防 D2 后门）
+    这一支若"先 `alloc_id` 再写"，概念同一性判不了时就无路可退（拒了留
+    `id_gap`、放过就是后门）。所以 `secretary.concept_identity_gate(tx)` 在发号之前
     判，处置由 `secretary.concept_identity_action` 统一折算（唯一折算点）：
 
     - `refused`（判不了）⇒ `checked=False`、一个号都不发（counters 不动）；
