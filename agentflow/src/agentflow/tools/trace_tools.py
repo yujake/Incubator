@@ -1,22 +1,26 @@
 """代号溯源：把"代号"还原成"表述"，再按需还原成"文献正文"（纯读）。
+
 ## 为什么要分三级（DESIGN-TOOLS.md §4.3）
-D 拿到的是 C 报告里的代号（`relation_id` / `concept_id` / `lit_id`）。它必须先看到"这条关系到底说了什么"才能判断值不值得研究。
-而"看到什么"的成本差别极大：
-| 层级 | 从 | 到 | 成本 ||---|---|---|---|| L1 `trace.relation` | 关系代号 | 引文 / 描述 / 陈述 / 页码
-/ 校验状态 + 概念名 + 文献元数据 | 极低（读内存行） || L2 `trace.concept` | 概念代号 | 概念定义 + 它参与的全部关系的表述 | 低（读
-内存行） || L3 `trace.literature` | 文献代号 | 元数据 + 本地文件 + 正文片段（可能触发 PDF 抽取/OCR） | 贵 |
+D 拿到的是 C 报告里的代号（`relation_id` / `concept_id` / `lit_id`），必须先看到"这条关系
+到底说了什么"才能判断值不值得研究，而"看到什么"的成本差别极大：L1 `trace.relation`（关系
+→ 引文 / 描述 / 陈述 / 页码 / 校验状态 + 概念名 + 文献元数据）与 L2 `trace.concept`（概念
+→ 定义 + 它参与的全部关系的表述）都只读内存行；L3 `trace.literature`（文献 → 元数据 +
+本地文件 + 正文片段）才碰文件，可能触发 PDF 抽取/OCR。
+
 ## 为什么 L3 必须"按需"，绝不能默认调用
-L3 要真的去读文件：`extract.extract_text` 打开 PDF、逐页抽文本，几十页的文献就是几百毫秒到几秒，还可能要拉起 OCR（easyocr 首次使用
-要下载上百 MB 模型）。如果每溯源一条关系就顺手带上正文，那么 D 每轮分析几十条关系 = 几十次全文抽取，其中 90% 的结果根本不会被用到。更糟的是它会掩盖 L1 的
-信息：D 应该先读"这条关系说了什么"，不够用了才下钻 —— 直接喂正文会让它跳过判断这一步。
-所以：`L1`/`L2` 永不读文件；`L3` 只在 D 显式调用时才读，且如实报告读取结果（文件不存在 / 无文本层 / 抽取失败，三件事分得清清楚楚）。
+L3 要真的去读文件：`extract.extract_text` 打开 PDF、逐页抽文本，几十页的文献就是几百
+毫秒到几秒，还可能要拉起 OCR（easyocr 首次使用要下载上百 MB 模型）。每溯源一条关系就
+顺手带上正文 ⇒ D 每轮分析几十条关系 = 几十次全文抽取，其中 90% 根本用不到；更糟的是它
+会掩盖 L1 的信息（D 应先读"这条关系说了什么"，不够用了才下钻）。所以：L1/L2 永不读文件，
+L3 只在 D 显式调用时才读，且如实报告读取结果（文件不存在 / 无文本层 / 抽取失败，三件事分
+得清清楚楚）。
+
 ## "没做"和"做了但没结果"是两件事（与 quoteverify.py 同一精神）
-`quote_verified` 是三态：`True` 校验通过 / `False` 校验失败 / `None` 无法校验（例如扫描版无文本层）。本模块把这个三态原样透出并
-附上中文标签，绝不在展示层把它压成布尔 —— 那正是 `DESIGN.md` §6.3 反复强调要避免的。同理，L3 读不到正文时返回 
-`status="no_text_layer"` 而不是"空字符串"：后者会被下游读成"这篇文献没有内容"，前者才说明"需要 OCR"。
-## 确定性
-所有输出字段都来自表里的行与文件系统事实，没有一处猜测：`concept_names` 是查概念表得到的，`file_exists` 是 `Path.exists()` 得
-到的，`text` 是抽取器返回的。因此本模块可以被断言测试（见文件末尾自检）。
+`quote_verified` 是三态：`True` 校验通过 / `False` 校验失败 / `None` 无法校验（例如扫描版
+无文本层）。本模块把三态原样透出并附中文标签，绝不在展示层压成布尔（`DESIGN.md` §6.3）。
+同理，L3 读不到正文时返回 `status="no_text_layer"` 而不是"空字符串"：后者会被读成"这篇
+文献没有内容"，前者才说明"需要 OCR"。所有输出字段都来自表行与文件系统事实，没有一处
+猜测，因此本模块可以被断言测试（见文件末尾自检）。
 """
 
 from __future__ import annotations
@@ -49,12 +53,10 @@ L3_STATUSES = ("ok", "no_path", "file_missing", "not_a_file", "path_rejected", "
 def _status(value: str) -> str:
     """受控词表的执行点。
 
-    这是被审计点名的缺陷（`INVENTORY.md` §4.5 #9）：`L3_STATUSES` 曾经
-    全仓库只有定义行引用它，所有 `status` 都是散落各处的字面量 ——
-    也就是说"受控词表"只是一句注释。一个拼错的 `"file_mising"` 会照样返回，
-    调用方按 `== "file_missing"` 分支就会静默走错路。
-    现在每个 `status` 都必须过这里：不在词表里就当场炸（导入期/调用期 fail-closed），
-    而不是把一个编外的状态字符串交给下游。
+    审计点名的缺陷（`INVENTORY.md` §4.5 #9）：`L3_STATUSES` 曾经只有定义行引用它，所有
+    `status` 都是散落字面量 —— "受控词表"只是一句注释：拼错的 `"file_mising"` 照样返回，
+    按 `== "file_missing"` 分支的调用方静默走错路。现在每个 `status` 都必须过这里，不在
+    词表里就当场炸（fail-closed），不把编外的状态字符串交给下游。
     """
     if value not in L3_STATUSES:
         raise ToolError(f"L3 status={value!r} 不在受控词表 L3_STATUSES={L3_STATUSES} 里")
@@ -282,9 +284,9 @@ def trace_concept(_g, concept_id: str, with_relations: bool = True) -> ToolResul
 def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max_chars: int = 4000) -> ToolResult:
     g, err = _g("trace.literature")
     if err is not None:
-        # 顺序很关键：这里此前先查 `meta.get("in_table")`，于是"没有 store
-        # 也没有 graph"时会报"文献表里没有 X"（把"没查"说成"查了没有"），
-        # 而下面那句更诚实的"未提供 store，无法解析磁盘路径"永远打不出来。
+        # 顺序很关键：先查 `meta.get("in_table")` 会把"没有 store 也没有 graph"报成
+        # "文献表里没有 X"（把"没查"说成"查了没有"），而那句更诚实的"未提供 store，
+        # 无法解析磁盘路径"永远打不出来。
         return err
     assert g is not None
     meta = _literature_brief(g, lit_id)
@@ -301,8 +303,8 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
         "literature": meta,
         "requested_pages": list(pages) if pages else None,
         "max_chars": int(max_chars),
-        # 这两项在每一条分支上都必须存在：调用方拿不到它们时无法区分
-        # "没有正文可返回"与"工具忘了填"。放在 base 里 = 不可能漏。
+        # 这两项在每一条分支上都必须存在：否则调用方无法区分"没有正文可返回"
+        # 与"工具忘了填"。放在 base 里 = 不可能漏。
         "pages_returned": [],
         "truncated": False,
     }
@@ -480,10 +482,10 @@ def trace_literature(_g, store, lit_id: str, pages: list[int] | None = None, max
 def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
     g, err = _g("trace.chain")
     if err is not None:
-        # 三态纪律（本函数曾经的缺陷）：无 store 无 graph 时 `_g()` 返回过一张
-        # 空图，于是每个代号都落进 `missing`，函数仍然 `ok=True` +
-        # `step_count=0` —— 调用方读到的结论是"这些关系代号都不存在"，
-        # 而真相是"关系图从未构建"。现在：没图可查 ⇒ 明确失败 + checked=False。
+        # 三态纪律（本函数曾经的缺陷）：无 store 无 graph 时 `_g()` 曾返回一张空图，
+        # 于是每个代号都落进 `missing`，函数仍然 `ok=True` + `step_count=0` —— 调用方
+        # 读到"这些关系代号都不存在"，而真相是"关系图从未构建"。现在没图可查 ⇒ 明确
+        # 失败 + checked=False。
         return err
     assert g is not None
     steps: list[dict] = []
@@ -506,9 +508,8 @@ def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
             "step_count": len(steps),
             "chain_text": "\n".join(lines),
             "missing": missing,
-            # `checked=True` 与 `missing` 非空可以同时成立，而且必须能区分：
-            # 这里说的是"图查过了，这些代号确实不在里面"；
-            # 上面 `_g` 的 `kind="no_graph"` 说的是"根本没图可查"。
+            # `checked=True` 与 `missing` 非空可以同时成立：这里说的是"图查过了，
+            # 这些代号确实不在里面"；`_g` 的 `kind="no_graph"` 说的是"根本没图可查"。
             "checked": True,
             "contains_fulltext": False,
             "note": "这是关系链的'表述链'（L1）。要判断证据是否足够，再对关键步骤调 trace.literature（L3）。",
@@ -538,9 +539,9 @@ def trace_chain(_g, relation_ids: list[str]) -> ToolResult:
         "additionalProperties": False,
     },
     side_effect="read",
-    # 「普通代理能追一层」是业主原话里的前半句：这一件因此对所有可被召唤的角色开放
-    # （C/H/V 是只读角色，side_effect="read" 让结构性过滤不会剥掉它）。主控不在这
-    # 一份声明里：M 要看全树用 conductor.watch（业主原话的后半句）。
+    # 「普通代理能追一层」：这一件对所有可被召唤的角色开放（C/H/V 只读，
+    # side_effect="read" 让结构性过滤不会剥掉它）；主控不在这份声明里 ——
+    # M 要看全树用 conductor.watch。
     roles=tuple(S.ROLES),
     returns=("{'checked','me','depth_requested','depth_granted','one_layer_only',"
              "'children','count','deeper','session'}；每个子任务里有 "
@@ -552,11 +553,10 @@ def trace_children(store, root, *, task_id: str = "", depth: int = 1,
     """"我直接下级"的读数入口（判据在 `agenttrace.children_with_facts`）。
 
     身份从调用上下文读（`AgentLoop._do_tool` 用 `calling_as` 挂上），与
-    `conductor.broadcast` 同一处挂点：工具的形状里没有"我是谁"这一格。
-    非 M 角色只许看自己的下级 —— 传别人的台账号会被受控拒绝，否则"一层"这条
-    约束只要换一个 task_id 就绕过去了。能看几层的主体是调用方：`role` 来自
-    `COND.current_caller_role()`（与 `mine` 分开读），并原样交给
-    `children_with_facts` —— 脚本里就算传了 M 的 task_id，没有 M 的身份也只拿一层。
+    `conductor.broadcast` 同一处挂点：工具的形状里没有"我是谁"这一格。非 M 角色只许看
+    自己的下级 —— 传别人的台账号会被受控拒绝，否则"一层"这条约束只要换一个 task_id 就
+    绕过去了。能看几层由调用方身份决定（`role` 与 `mine` 分开读，原样交给
+    `children_with_facts`）：脚本里就算传了 M 的 task_id，没有 M 的身份也只拿一层。
     """
     from .. import agenttrace as AT
     from .. import conductor as COND
@@ -646,9 +646,9 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None,
         try:
             return RelationGraph.from_store(store), None
         except Exception as exc:  # noqa: BLE001
-            # StoreError（表损坏 / 锁超时）此前会逃出工具层，被 base.py:381-382
-            # 兜成没有类型信息的 kind="unexpected"；这里把它变成可读的失败，
-            # 并且明确 checked=False —— "读表失败"不是"图里没有"。
+            # StoreError（表损坏 / 锁超时）此前会逃出工具层、被 base.py:381-382 兜成
+            # 没有类型信息的 kind="unexpected"；这里变成可读的失败 + checked=False ——
+            # "读表失败"不是"图里没有"。
             return None, fail(
                 f"{tool}：从 store 建关系图失败（{type(exc).__name__}: {exc}）⇒ **没查成**"
                 "（不是「图里没有」）。请先修复/重建相关表。",
@@ -660,8 +660,8 @@ def register(registry: ToolRegistry, *, store: Any = None, graph: Any = None,
 
 
 
-    # \T-8\：声明与工具体都在模块级（\@tool\ 写进 \fn.__tool_spec__\），
-    # 这里只把装配期算出来的值按位置绑上去（\partial\）。
+    # T-8：声明与工具体都在模块级（`@tool` 写进 `fn.__tool_spec__`），
+    # 这里只把装配期算出来的值按位置绑上去（`partial`）。
     _bound: dict[str, Any] = {}
     _bound['_g'] = _g
     _bound['store'] = store
