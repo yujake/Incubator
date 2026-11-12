@@ -4048,15 +4048,16 @@ def program_census(*, source_root: str | Path | Iterable[str | Path] | None = No
             visitor.visit(tree)
             spanned = set(visitor.spans)
             for hit in visitor.hits:
-                row = {"path": rel, "line": hit["line"], "func": hit["func"],
-                       "call": hit["call"], "where": f"{rel}:{hit['line']}（{hit['func']}）"}
-                if hit["func"] in spanned:
+                func = hit["func"]
+                row = {"path": rel, "line": hit["line"], "func": func,
+                       "call": hit["call"], "where": f"{rel}:{hit['line']}（{func}）"}
+                if func in spanned:
                     governed.append(row)
                     continue
                 allowed = next((r for r in PROGRAM_ALLOWED_RAW
                                 if r["path"] == rel
-                                and (r["func"] == hit["func"]
-                                     or hit["func"].endswith("/" + r["func"]))), None)
+                                and (r["func"] == func
+                                     or func.endswith("/" + r["func"]))), None)
                 if allowed is not None:
                     governed.append({**row, "why": allowed.get("why", ""),
                                      "blocked_by": allowed.get("blocked_by", "")})
@@ -6141,16 +6142,17 @@ def raw_wait_census(*, source_root: str | Path | Iterable[str | Path] | None = N
             visitor = _WaitVisitor()
             visitor.visit(tree)
             for hit in visitor.findings():
-                row = {"path": rel, "line": hit["line"], "func": hit["func"],
-                       "form": hit["form"],
-                       "where": f"{rel}:{hit['line']}（{hit['func']}）"}
-                allowed = _exempt_for(rel, hit["func"], hit["form"])
+                func, form = hit["func"], hit["form"]
+                row = {"path": rel, "line": hit["line"], "func": func,
+                       "form": form,
+                       "where": f"{rel}:{hit['line']}（{func}）"}
+                allowed = _exempt_for(rel, func, form)
                 if allowed is not None:
                     exempt.append({**row, "why": allowed.get("why", ""),
                                    "blocked_by": allowed.get("blocked_by", "")})
-                elif hit["form"] == "sleep":
+                elif form == "sleep":
                     findings.append(row)
-                elif _primitive_governed(rel, hit["func"]):
+                elif _primitive_governed(rel, func):
                     findings.append({**row, "governed": True})
                 else:
                     findings.append(row)
