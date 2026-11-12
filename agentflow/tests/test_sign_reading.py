@@ -75,15 +75,18 @@ def _write_ws(root: pathlib.Path, sids: list[str]) -> None:
         json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _manuscript(root: pathlib.Path, sid: str, text: str = PROOF,
-                *, no: int = 1) -> tuple[str, str, str]:
-    """落一份 `reports/f-proof-<号>.md` ⇒ `(相对路径, 全文, 正文 sha)`。"""
-    rel = (f"reports/f-proof-{sid}.md" if no <= 1
-           else f"reports/f-proof-{sid}-p{no}.md")
+def _manuscript(root: pathlib.Path, sid: str, text: str = PROOF) -> tuple[str, str, str]:
+    """落一份 `reports/f-proof-<号>.md` ⇒ `(相对路径, 全文, 正文 sha)`。
+
+    稿名只有一种形式（没有 `-pN` 后缀）、稿头不写 `- 证明号：`：路径号由 B 的秘书
+    在收录时分配，不进稿（2026-11-11 业主口径）。
+    """
+    rel = f"reports/f-proof-{sid}.md"
     body = ("# 证明手稿（夹具）\n\n"
-            f"- 命题号：stmt:{sid}\n- 证明号：{no}\n\n"
+            f"- 命题号：stmt:{sid}\n\n"
             f"## 命题\n\n夹具命题。\n\n## 证明\n\n{text}\n\n"
-            "## 依赖\n\n| 依赖 | 类型 | 状态 | 说明 |\n|---|---|---|---|\n")
+            "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+            "|---|---|---|\n")
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(body, encoding="utf-8")
