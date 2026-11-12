@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""收工门（`draft/37` §16 P3）：把"能不能交"从一句判断变成八格各自能造红的读数。
+"""收工门：把"能不能交"从一句判断变成八格各自能造红的读数。
 
 判据：`DEFAULT_CHECKS` 八格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
 三态纪律：`pass` / `fail` / `unknown`，`unknown` 不是通过（"没查成"与"查过了没问题"必须分得开）；
@@ -9,19 +9,18 @@
 
 | 检查 | 判什么 |
 |---|---|
-| `paper` | 有论文正文（`out/paper/main.tex`）⇒ 必须由「本次」编译出 `main.pdf`（回执里的 `tex_sha256` == 盘上那一份）；没有正文 ⇒ 不适用。旧那一格是「渲染锚 consistent」，2026-10-13 随 `paper_package` 整条退场（`draft/117`） |
+| `paper` | 有论文正文（`out/paper/main.tex`）⇒ 必须由「本次」编译出 `main.pdf`（回执里的 `tex_sha256` == 盘上那一份）；没有正文 ⇒ 不适用 |
 | `contradictions` | 没有未裁决的矛盾：`dependencies.status ∈ {disputed, refuted}`、`statements.status = disputed`、稿件 `status = unresolved_review` |
 | `load_bearing` | 承重结论（正文里 `evidence_kind="proof"` 的断言）必须有 T3（形式化）或已降档 |
 | `report_shape` | 报告形状：附件三件套判实（来源 / 依据 / 版本 sha）+ M 声明的体例有没有兑现 |
 | `user_pending` | 没有还在等用户回答的问题（有 ⇒ 必须停在"等待用户"，不许续跑） |
 | `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
 | `acceptance` | 验收表的机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
-| `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`（真缺陷）；只有 `changed` ⇒ `pass` + 一条 warning（D9 收窄，业主 2026-10-09：按路径取最后一条登记之后又被改写是常态；把它读成没查成会让任何有派活的跑批都收不了工） |
+| `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`（真缺陷）；只有 `changed` ⇒ `pass` + 一条 warning（按路径取最后一条登记之后又被改写是常态；把它读成没查成会让任何有派活的跑批都收不了工） |
 
-维护规则（2026-10-27，R-BE1 的 ③-8）：上面这张表必须与 :data:`DEFAULT_CHECKS` 逐条对应
-（一格一行、顺序相同）。改前它少了一行（`acceptance`）而没有任何判据会红 —— 门的实现
-与门的说明书各说八格里的七格。判据 `tests/test_the_gate_table_lists_every_cell.py` 从本
-docstring 里现扫表行、与 `DEFAULT_CHECKS` 对拍：加/删一格而不改这张表，那条会红。
+维护规则：上面这张表必须与 :data:`DEFAULT_CHECKS` 逐条对应（一格一行、顺序相同）。
+判据 `tests/test_the_gate_table_lists_every_cell.py` 从本 docstring 里现扫表行、与
+`DEFAULT_CHECKS` 对拍：加/删一格而不改这张表，那条会红。
 """
 from __future__ import annotations
 
