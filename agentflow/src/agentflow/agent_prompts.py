@@ -11248,11 +11248,7 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 #: 外加用户随后的一句补充：「就传个编号感觉有点尬，可以再附一句简要描述」——
 
 
-
 #: 所以 `brief` 是这一形状的一部分，框架会把它拼进那条留言。
-
-
-
 HANDOFF_PROTOCOL = """\
 交接手稿（handoff；交接工作前的标准动作，也是"派活依据"与"溯源"落在盘上的那条通道）。
 
@@ -11274,17 +11270,6 @@ HANDOFF_PROTOCOL = """\
   **每一跳都能被第三方从盘上复核**（谁在什么时候把什么交给了谁、依据是哪几个编号）。
 
 """
-
-
-
-
-
-
-
-
-
-
-
 def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
     """关掉 Lean 时那三张改写表按模块收集（B 一份、E 一份、L 一份，外加 G 的论文体例一段；
     顺序即应用顺序）。
@@ -11318,7 +11303,6 @@ def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
     from .specs import b as _B_SPEC
     from .specs import e as _E_SPEC
     from .specs import g as _G_SPEC
-
     out: list[tuple[str, tuple, tuple, tuple]] = []
     for mod in (_B_SPEC, _E_SPEC, _G_SPEC):
         out.append((
@@ -11328,8 +11312,6 @@ def _no_lean_tables() -> list[tuple[str, tuple, tuple, tuple]]:
             tuple(getattr(mod, "NO_LEAN_REPLACEMENTS", ())),
         ))
     return out
-
-
 def _apply_no_lean_variant(text: str) -> str:
     """开关关掉时，按 `specs/<role>.py` 的那三张表改写渲染出来的提示词。
 
@@ -11371,33 +11353,10 @@ def _apply_no_lean_variant(text: str) -> str:
         for old, new in replacements:
             text = text.replace(old, new)
     return text
-
-
-
 def system_prompt(role: str, **kw: Any) -> str:
-
-
-
     """渲染某个角色这一次的 system prompt。"""
-
-
-
     return _apply_no_lean_variant(role_prompt_registry(role, **kw).render(Scope(role=role)))
-
-
-
-
-
-
-
-
-
-
-
 def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
-
-
-
     """这次提示词的审计读数：版本、哈希、长度、段名、变量名、预设。
 
 
@@ -11431,69 +11390,19 @@ def prompt_audit(role: str, **kw: Any) -> dict[str, Any]:
 
 
     """
-
-
-
     reg = role_prompt_registry(role, **kw)
-
-
-
     assembly = reg.assemble(Scope(role=role))
-
-
-
     text = _apply_no_lean_variant(assembly.render())
-
-
-
     return {
-
-
-
         "prompt_version": PROMPT_VERSION,
-
-
-
         "role": role,
-
-
-
         "prompt_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-
-
-
         "prompt_chars": len(text),
-
-
-
         "sections": list(assembly.names),
-
-
-
         "variables": sorted(assembly.variables),
-
-
-
         "preset": _composition.preset_reading(role, root=kw.get("preset_root")),
-
-
-
     }
-
-
-
-
-
-
-
-
-
-
-
 def user_replies_digest(replies: Sequence[Mapping[str, Any]], limit: int = 6) -> str:
-
-
-
     """把用户的回答渲染成提示词里的一段（含"这条是迟到的"标记）。
 
 
@@ -11511,361 +11420,78 @@ def user_replies_digest(replies: Sequence[Mapping[str, Any]], limit: int = 6) ->
 
 
     """
-
-
-
     if not replies:
-
-
-
         return ""
-
-
-
     lines: list[str] = []
-
-
-
     for r in replies[-limit:]:
-
-
-
         mark = "（迟到送达）" if r.get("late") else ""
-
-
-
         lines.append(f"- [{r.get('qid')}]{mark} 问：{_clip_text(r.get('question'), 120)} "
-
-
-
                      f"→ 用户答（{r.get('by')}）：{_clip_text(r.get('answer'), 300)}")
-
-
-
     return "\n".join(lines)
-
-
-
-
-
-
-
-
-
-
-
 def _clip_text(value: Any, limit: int) -> str:
-
-
-
     """截断一段文本（保留尾部省略号说明）。"""
-
-
-
     text = str(value or "")
-
-
-
     return text if len(text) <= limit else text[:limit] + "…"
-
-
-
-
-
-
-
-
-
-
-
 def roles_covered() -> tuple[str, ...]:
-
-
-
     """本模块已登记职责的角色（与 `schema.ROLES` + 主控对账用）。"""
-
-
-
     return tuple(sorted(ROLE_BRIEFS))
-
-
-
-
-
-
-
-
-
-
-
 def missing_roles() -> tuple[str, ...]:
-
-
-
     """`schema.ROLES`（含主控）里还没有手写职责的角色 —— 判据用，必须是空的。"""
-
-
-
     want = set(S.ROLES) | {S.CONDUCTOR_ROLE}
-
-
-
     return tuple(sorted(want - set(ROLE_BRIEFS)))
-
-
-
-
-
-
-
-
-
-
-
 def _selftest_registry() -> Any:
-
-
-
     """自检用的注册表（不带 workspace_root：于是没有 fs 工具，这是如实的工具面）。"""
-
-
-
     from .tools import build_registry
-
-
-
-
-
-
-
     return build_registry().registry
-
-
-
-
-
-
-
-
-
-
-
 def selftest() -> int:
-
-
-
     """自检：每个角色都有一份非空提示词，且里面真的有它的工具与伙伴。"""
-
-
-
     problems: list[str] = []
-
-
-
     registry = _selftest_registry()
-
-
-
     missing = missing_roles()
-
-
-
     if missing:
-
-
-
         problems.append(f"这些角色没有手写职责：{missing}")
-
-
-
-
-
-
-
     for role in roles_covered():
-
-
-
         text = system_prompt(role, registry=registry, task="自检任务", workspace_root="D:/x")
-
-
-
         if not text.strip():
-
-
-
             problems.append(f"{role} 的提示词是空的")
-
-
-
         if "{{" in text:
-
-
-
             # 只查左花括号：循环协议里的 JSON 例子天然会以 `}}` 收尾（嵌套对象），
-
-
-
             # 而"没被插值的模板组"一定表现为一个孤立的 `{{`。
-
-
-
             problems.append(f"{role} 的提示词里还有没被插值的模板组（出现了 {{{{）")
-
-
-
         for spec in _specs_for(role, registry):
-
-
-
             if spec.name not in text:
-
-
-
                 problems.append(f"{role} 的提示词里没有它的工具 {spec.name}")
-
-
-
         for other in partners_out(role):
-
-
-
             if f"- {other}：" not in text:
-
-
-
                 problems.append(f"{role} 的提示词里没有伙伴 {other}")
-
-
-
         if role in C.NON_SUMMONABLE and "不可以被任何人唤起" not in text:
-
-
-
             problems.append(f"{role} 是不可召唤的，但提示词没写")
-
-
-
-
-
-
-
     # 负控：一个没登记的角色必须当场拒绝（不许给一份通用提示词糊过去）
-
-
-
     try:
-
-
-
         system_prompt("Z", registry=registry)
-
-
-
         problems.append("未登记的角色没有抛")
-
-
-
     except ValueError:
-
-
-
         pass  # 负控期望它抛
-
-
-
     # 负控：没给注册表必须当场拒绝（不许悄悄用一个少了几件工具的注册表）
-
-
-
     try:
-
-
-
         system_prompt("A")
-
-
-
         problems.append("没给注册表却没有抛")
-
-
-
     except ValueError:
-
-
-
         pass  # 负控期望它抛
-
-
-
     # 负控：缺任务时不许留下空模板组（应替换成显式文案）
-
-
-
     if "{{task}}" in system_prompt("A", registry=registry):
-
-
-
         problems.append("缺任务时模板组没有被替换")
-
-
-
-
-
-
-
     problems.extend(prompt_text_problems())
     if problems:
-
-
-
         print("SELF-CHECK FAILED")
-
-
-
         for p in problems:
-
-
-
             print("  -", p)
-
-
-
         return 1
-
-
-
     print(f"SELF-CHECK DONE（{len(roles_covered())} 个角色各有非空提示词；工具与伙伴逐条在文内）")
-
-
-
     return 0
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
-
-
-
     import sys
-
-
-
-
-
-
-
     sys.exit(selftest())
-
-
 def _pending_local_materials(root: str) -> str:
     """工作区里"盘上有、但还没登记进 literature"的本地材料（一行；没有或读不到 ⇒ 空串）。
 
@@ -11887,7 +11513,6 @@ def _pending_local_materials(root: str) -> str:
     known: set[str] = set()
     try:
         import json as _json
-
         payload = _json.loads((base / "data" / "literature.json").read_text(encoding="utf-8"))
         rows = payload.get("rows") if isinstance(payload, dict) else payload
         for row in rows or []:
@@ -11909,8 +11534,6 @@ def _pending_local_materials(root: str) -> str:
     return (f"- **未收编的本地材料**：`source/` 下有 {len(pending)} 份还没进 `literature`"
             f"（{head}）—— 派 `A.ingest_local`（参数 `books_dir=\"source\"`）收编；"
             "它按内容 sha256 幂等，**重复收不会多出行**")
-
-
 #: 只读判据：提示词里那几句口径必须与代码里的常量 / 词表对得上（对不上就返回一句人话）。
 #:
 #: 为什么要有它：这一段族的缺陷形态是"提示词写了一个代码里不成立的机制"，而两边的
@@ -11930,7 +11553,6 @@ def prompt_text_problems() -> list[str]:
         from . import schema as _S
     except Exception as exc:  # noqa: BLE001 —— 没查成要说出来，不是通过
         return [f"只读判据没跑成（导不进被钉的模块：{type(exc).__name__}: {exc}）"]
-
     # 一、原地打转那两个阈值：散文里的数字必须等于 `AgentLoop` 那一格（改一处忘另一处是
     # 经典形态），而且"读数变不变都算"那句旧口径不许回来 —— 它把轮询说成了打转。
     text = PARENT_STOP_TEXT
@@ -11949,7 +11571,6 @@ def prompt_text_problems() -> list[str]:
     if "读数变不变都算" in text:
         problems.append("PARENT_STOP 又回到旧口径「读数变不变都算」：判停要求读数也不变，"
                         "而读数在变的重问只会点名【同一个调用】")
-
     # 二、销号那道闸是"静默"，不是"还在飞 / 未消板项"。
     loop = LOOP_PROTOCOL
     if "静默" not in loop:
@@ -11959,12 +11580,10 @@ def prompt_text_problems() -> list[str]:
     for stale in ("还在飞 / 名下还有未消的板项", "这一形是旧路"):
         if stale in loop:
             problems.append(f"LOOP_PROTOCOL 里还有销号旧口径：{stale}")
-
     # 三、公聊那条硬拒：公告栏里点名下指令会被拒，段里必须写出来。
     if "public_is_not_a_conversation" not in loop:
         problems.append("LOOP_PROTOCOL 的公共频道那一段没写公告栏拒信"
                         "（public_is_not_a_conversation）")
-
     # 四、受控词表：任务结果的六档必须逐档在段里出现（少一档模型就会把 cancelled 当重派）。
     #
     # D22 的例外（2026-10-26）：`FRAMEWORK_ONLY_OUTCOMES` 那一档（`cut_off_by_parent`）不进这一条
@@ -11978,7 +11597,6 @@ def prompt_text_problems() -> list[str]:
         if f"`{code}`" not in loop:
             problems.append(f"LOOP_PROTOCOL 的 outcome 那一段缺受控取值 {code}"
                             f"（schema.TASK_OUTCOMES）")
-
     # 五、形状条数：段里那句"十一种"必须等于 `agent_loop.SHAPES` 的条数。
     shown = str(len(_AL.SHAPES))
     if shown != "11":
@@ -11988,7 +11606,6 @@ def prompt_text_problems() -> list[str]:
     for key in _AL.SHAPES:
         if f"`{key}`" not in loop and f"\"{key}\"" not in loop and f"{key}" not in loop:
             problems.append(f"LOOP_PROTOCOL 里找不到形状 {key} 的写法")
-
     # 六、本地材料的真实读数：`.tex` 落的是 unreadable + UnsupportedFormat，并且那条
     # 动作的 `kind` 就叫 `unsupported_format`（`agent_a/ingest_local.py` 在 `counts.unreadable`
     # 非零时返回的就是它）。改前这一条写着"那个串在本仓从来没有产生过"并把出现当成错 ——
@@ -12001,6 +11618,4 @@ def prompt_text_problems() -> list[str]:
         problems.append("PAPER_PACK 没写那条动作的 kind（unsupported_format）—— 三样要写全")
     if "读到了正文" in PAPER_PACK and "不是" not in PAPER_PACK.split("读到了正文", 1)[0][-12:]:
         problems.append("PAPER_PACK 把 .tex 说成读到了正文 —— 那是 unreadable，不是抽到正文")
-
     return problems
-
