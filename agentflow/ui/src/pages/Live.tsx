@@ -7,17 +7,17 @@
  *   与进程面（登记着且真活着的 pid）是两条判据，缺一路都会漏；停机开关与近几条
  *   停机/中断历史一并给出（"我按过停没有、谁按的"只有盘上那份说得清）。
  * - `api.getStatusReports()` → `StatusReportsView`：`out/review/STATUS-*` 最近几份
- *   （`statusreport` 一直在写、此前盘上没有任何读者）。
+ *   （`statusreport` 一直在写，这一条是它的读者）。
  * - `api.getUsage()` → `UsageView`：用量台账的汇总（总计 + 按角色 + 按归口）。
  *
  * 三态纪律在这一页上的落点：`answer` 只有三档字面量（"有" / "没有" / "没查成"）——
  * 读不出来时**必须**显"没查成"，不许显"没有"（那会把"没查成"读成"没人跑"，
  * 而用户正要用这一格决定要不要叫停）。
  *
- * ## 2026-10-21（业主的「名册监视」）：这一页多了第四张卡 —— 名册树
- * 用户端此前没有任何地方看得到"谁是谁的子、每个子代理的绝对编号与名册名"：名册的
- * 真身（`out/roster/<父编号>.jsonl`）在盘上，而页面只有 `/api/live` 那一份"谁在跑"。
- * 现在这一页接上 `api.getRoster()`（`<RosterPanel />`，实现只有一处）：它既补上
+ * ## 第四张卡：名册树
+ * 「谁是谁的子、每个子代理的绝对编号与名册名」只有名册的真身
+ * （`out/roster/<父编号>.jsonl`）说得清，而 `/api/live` 只回答"谁在跑"。
+ * 所以这一页接上 `api.getRoster()`（`<RosterPanel />`，实现只有一处）：它既补上
  * 「在飞」那两张表里只有角色名、没有绝对编号的缺口，也把父→子那一层摆出来。
  * 为什么落在这里而不是新开一页：监控面的问题是"现在有谁在跑、谁是谁的子"，两件事
  * 在同一屏才读得通（另开一页=让人来回对号）。
@@ -39,9 +39,9 @@ export function Live() {
   const usage = useFace(() => api.getUsage());
 
   const l = liveFace.data;
-  // 三格的行类型来自生成物（2026-10-27 业主裁定 W5）：此前本文件自己声明了
-  // `LoopRow` / `PidRow` / `ReportRow` 三份同形接口，再用 `as unknown as` 把
-  // `Record<string, unknown>[]` 打穿 —— "生成物是唯一类型来源"这条纪律就被绕开了。
+  // 三格的行类型来自生成物：本文件不自己声明 `LoopRow` / `PidRow` / `ReportRow`
+  // 三份同形接口、也不拿 `as unknown as` 把 `Record<string, unknown>[]` 打穿 ——
+  // 那会绕开"生成物是唯一类型来源"这条纪律。
   const running: LiveLoopRow[] = l?.running ?? [];
   const pids: LivePidRow[] = l?.live ?? [];
   const history = l?.history ?? [];
