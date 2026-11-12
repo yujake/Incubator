@@ -230,61 +230,43 @@ def _resolve(ctx: FsContext, raw: Any) -> Path:
 # 手稿（文件名级、只看表上那三个角色）。四个写口（`fs.write` / `fs.edit` / `fs.delete` /
 # `fs.move`）都只经 `_reserved_refusal` 这一处取结论，不在各自的函数体里各写一遍。
 #
-# 真机读数（2026-10-26，sylow 那一趟）：F 用 `fs.write` 直接写了
-# `reports/f-proof-sylow1.md`（自由格式、没有四列依赖表、没有洗稿元信息），D 手写了
-# `reports/RESEARCH.md`（没有携带单）⇒ 「F 的 proof 动作渲染 `## 依赖` / 秘书洗稿 /
-# D 的携带单」整条链没有入口：B 只登记了 1 条 conjecture，`dependencies` 0 行。
+# 为什么手稿是"框架渲染的产物"：2026-10-26 真机（sylow 那趟），F 用 `fs.write` 直写
+# `reports/f-proof-sylow1.md`（没有四列依赖表、没有洗稿元信息）、D 手写
+# `reports/RESEARCH.md`（没有携带单）⇒「F 的 proof 动作渲染 `## 依赖` / 秘书洗稿 / D 的
+# 携带单」整条链没有入口：B 只登记了 1 条 conjecture，`dependencies` 0 行。所以写它必须
+# 走 F 的 `proof` 动作（渲染 `## 依赖` 节 + 秘书盖洗稿元信息）或 D 的交付动作（渲染携带单）。
 #
-# 所以这两类文件是「框架渲染的产物」，不是自由手稿：写它必须走 F 的 `proof` 动作
-# （渲染 `## 依赖` 节 + 秘书盖洗稿元信息）或 D 的交付动作（渲染携带单）。
+# 为什么保留表上是 F / D / M（业主 2026-10-27 裁定「把 M 也纳入」）：
+#   F —— 写内容的那个人：证明手稿由它的 `proof` 动作渲染，手写等于把这条链跳过；
+#   D —— 交研究稿的那个人：研究手稿由 `write_report` 渲染，手写等于"没有携带单"；
+#   M —— 主控：既不是作者也不是收方，更不该绕过框架。实测（2026-10-27 `start --mode
+#        research`）M→F 不是允许边，M 就用 `fs.write` 把 `reports/f-proof-cli.md` 写了
+#        进盘 —— 正是"换个角色绕过"的同一条路。裁定逐字：「把 M 也纳入保留表 …… 它是
+#        主控，更不该绕过框架」。
+# 三类之外一个字都不动：G/L 的排版产物、M 的其它产出（`reports/m-review.md` 这一类）都
+# 不在表上 —— 判据是"按角色分行的一张数据表"，不是"谁都不许写 reports/"。
 #
-# ---- 为什么保留表上是这三个角色（业主 2026-10-27 裁定「把 M 也纳入」）--------------
+# 目录不是判据（2026-10-27，D6）：F 曾把证明手稿写进 `notes/`（文件名没改、只换目录），
+# 改前那条闸（要求路径在 `reports/` 下）整条失效。所以判据里不再有"目录"这一层：同一个
+# 文件名在哪个目录下都是同一份框架产物。`reports/` 仍是最推荐的落点
+# （`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir` 缺省都是它），但不再是豁免条件。
 #
-#   F  —— 写内容的那个人：证明手稿（`reports/f-proof-*.md`）由它的 `proof` 动作渲染，
-#          `## 依赖` 四列表与洗稿元信息都是框架产物的一部分，手写就等于把这条链跳过；
-#   D  —— 交研究稿的那个人：研究手稿（`reports/RESEARCH.md` / `reports/<qid>-research.md`）
-#          由 `write_report` 渲染，携带单是它的一部分，手写就等于"没有携带单"；
-#   M  —— 主控：它既不是内容的作者也不是收方，更不该绕过框架。实测（2026-10-27
-#          `start --mode research` 那一趟）M→F 不是允许边，于是 M 自己用 `fs.write`
-#          把 `reports/f-proof-cli.md` 写进了盘 —— 那正是"换个角色绕过"的同一条路。
-#          裁定逐字：「把 M 也纳入保留表 …… 它是主控，更不该绕过框架」。
+# 框架账本区：文件口不许把表口架空（2026-10-26，P3）。真机实证（Q10 审计，零模型钱）：
+# `fs.write(path="data/usage_ledger.json", overwrite=True)` 把账本从 10.51 美元整份抹成
+# 0，`data/events.jsonl` 里该表的记录数 8 仍写 8、一个字节的痕迹都没留，随后 `verify`
+# 一声不响；`data/counters.json` 同样被整份覆盖。实质是：`fs.*` 直接落在文件系统上，而
+# 表口的三层（表属性枚举 / 直写弃置 / 事务里的工具身份闸）一层都不经过。所以"保留"从
+# 三个手稿文件名扩成路径级：
+#   - `data/` 整个目录（表快照、计数、事件日志、锁）；
+#   - `locks/`（锁目录换个位置仍然受管）；
+#   - `events.jsonl`（事件日志是重建的唯一输入，出现在任何目录下都是同一本账）。
+# 这三条对角色是 `*`：没有任何角色例外，也没有"没挂角色"这一档（脚本直调、模块自检同样
+# 拒 —— 框架自己的写入走 `Store`，不走 `fs.*`）。拒信只说不许、不说"该往哪写"：模型对
+# `data/` 没有一条合法正路，指一条空气路只会让它换着写法重试到 `no_progress_limit`。
 #
-# 三类之外一个字都不动：G/L 的排版产物、M 的其它产出（`reports/m-review.md` 这一类）
-# 都不在表上。判据的形状因此是"按角色分行的一张数据表"，不是"谁都不许写 reports/"。
-#
-# ---- 目录不是判据（2026-10-27，D6）-------------------------------------------------
-#
-# 真机读数（`projects/mp3-r2/notes/f-proof-S1-stmt000008.md`，7595 B / 54 行）：F 把证明
-# 手稿写进了 `notes/` —— 文件名一个字没改，只是换了个目录，于是改前那条闸（要求路径在
-# `reports/` 下）整条失效："框架渲染 → 秘书洗稿 → D 携带 → B 读稿登记"这一条链一次都
-# 没走过，而盘上那份文件看起来就是 F 的手稿。
-#
-# 所以判据里不再有"目录"这一层：同一个文件名在哪个目录下都是同一份框架产物。`reports/`
-# 仍然是最推荐的落点（`depsection.MANUSCRIPT_DIR`、D 的 `reports_subdir` 缺省都是它，
-# 兜底读盘也只按它找），但它已经不再是豁免条件 —— 换个目录不该换来一条绕过口。
-
-# ---- 框架账本区：文件口不许把表口架空（2026-10-26，P3）----------------------------
-#
-# 真机实证（Q10 审计，零模型钱）：`fs.write(path="data/usage_ledger.json", overwrite=True)`
-# 把账本从 10.51 美元整份抹成 0；`data/events.jsonl` 里该表的记录数 8 仍写 8 ——
-# 一个字节的痕迹都没留；随后 `verify` 一声不响。`data/counters.json` 同样被整份覆盖
-# （实测写进去的是 {"lit":0}）。改前这条路的实质是：`fs.*` 直接落在文件系统上，
-# 而表口的三层（表属性枚举 / 直写弃置 / 事务里的工具身份闸）一层都不经过 ——
-# 文件口把表口整个架空了，于是 Q10 另外两个方案（关表口）在结构上都是戏。
-#
-# 所以"保留"从三个手稿文件名扩成路径级：
-#   - `data/` 整个目录：表快照、计数、事件日志、锁（`Store.locks` 落在 `data/.locks`）；
-#   - `locks/`：锁目录换个位置仍然受管（同一本账换个目录不该换来一条绕过口）；
-#   - `events.jsonl`：事件日志是重建的唯一输入，出现在任何目录下都是同一本账。
-# 这三条对角色是 `*`：没有任何角色例外，也没有"没挂角色"这一档
-# （脚本直调、模块自检同样拒 —— 框架自己的写入走 `Store`，不走 `fs.*`）。
-#
-# 拒信只说不许、不说"该往哪写"：模型对 `data/` 没有一条合法正路（表口的写入由框架
-# 自己的落盘路径完成），指一条空气路只会让它换着写法重试到 `no_progress_limit`。
-#
-# 权限面变更的声明：本文件不在 `.noai-paths` 里（`scripts/noai_gate.py --paths` 判 clean），
-# 但这一段判的是"谁能写哪里" —— 按 FC-27 的口径它属于权限面变更：作者只做实现与判据，
-# 合入前需要人逐行走查一次这段判据与四个写口的接入位置。
+# 权限面变更的声明：本文件不在 `.noai-paths` 里（`noai_gate --paths` 判 clean），但这一段
+# 判的是"谁能写哪里"，按 FC-27 的口径属于权限面变更：合入前需要人逐行走查这段判据与四个
+# 写口的接入位置。
 
 #: 保留表里"路径级 + 产物档"的角色标记（`@` = 任何角色都不许手写）：
 #: 与 `*`（框架账本区，拒信不给去处）分开，这一档的拒信指向各自的渲染动作。
@@ -388,14 +370,12 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     # 同样是框架渲染的 —— 与 e-proof 一样，A / B 不许手写（否则"B 的绿色通道按族名认稿"
     # 这条判据会被一份手写稿喂假内容）。
     ("A", f"prefix:{_RESERVED_DIR}/e-num-"),
-    # 2026-11-10（D5）：同一个"手稿形名字"换个目录/换个历史后缀就能绕过上面那四行。
-    # 真机 98b：B 用 `fs.write` 直接写 `notes/b-proof-000003-v2.md` / `-000004-v2.md`
-    # ⇒ 绕过 `proofregistry.register_or_rewrite`（唯一写口），"同一命题只住一份稿"
-    # 失效，V 审的始终是 base 稿、v2 从未进台账。所以再加一档按名字判的规则：
-    # 名字过 `manuscriptfamily.classify_name` 且 tier ∈ {family, legacy} ⇒ 拒
-    # （`notes/b-proof-000001.md` 是 family、`-v2` 是 legacy，两条都拒）；号解析不出的
-    # `notes/f-proof-x.md` 是 bad_name、普通笔记是 unrecognized ⇒ 仍放行
-    # （2026-11-07 那次收窄的负控不许被这一档误伤）。
+    # 2026-11-10（D5）：同一个"手稿形名字"换个目录/换个历史后缀就能绕过上面那四行。真机
+    # 98b：B 用 `fs.write` 直写 `notes/b-proof-000003-v2.md` / `-000004-v2.md` ⇒ 绕过
+    # `proofregistry.register_or_rewrite`（唯一写口），"同一命题只住一份稿"失效、v2 从未
+    # 进台账。所以再加一档按名字判的规则：名字过 `manuscriptfamily.classify_name` 且
+    # tier ∈ {family, legacy} ⇒ 拒；号解析不出的 `notes/f-proof-x.md` 是 bad_name、普通
+    # 笔记是 unrecognized ⇒ 仍放行（2026-11-07 那次收窄的负控不许被这一档误伤）。
     ("A", f"{MANUSCRIPT_RULE_KIND}:*"),
     # 2026-11-11（甲）：B 这五行照旧拒 `fs.write` / `fs.delete` / `fs.move`，但 `fs.edit`
     # 对自己号段、未签的 `reports/b-proof-<六位号>.md` 有一格窄豁免
@@ -809,26 +789,20 @@ def _manuscript_frozen(rel: str, role: str,
 
 # ---- 2026-11-11（甲）：B 的唯一一格窄豁免 ------------------------------------
 #
-# 业主裁定 ④ 的后半句（逐字：「之后 B 在那份 B 稿上改正文」）：`B.open_polish_copy`
-# 已经把副本开出来了（`reports/b-proof-<B 稿号>.md`），但 B 改不动它 ——
+# 业主裁定 ④ 的后半句（逐字：「之后 B 在那份 B 稿上改正文」）：`B.open_polish_copy` 已经把
+# 副本开出来了（`reports/b-proof-<B 稿号>.md`），但 B 改不动它 ——
 # `RESERVED_ARTIFACT_TABLE` 里 B 那两行（`prefix:reports/b-proof-` 与 `manuscript:*`）
-# 把"手稿形名字"一律拒写。要开的口子窄到不能再窄：
+# 把"手稿形名字"一律拒写。口子窄到不能再窄：只对角色 B；只对
+# `reports/b-proof-<六位号>.md`（`_B_POLISH_RE` 锚定整条相对路径，`f-proof-` /
+# `e-proof-` / `e-num-` / `-pN` / 别的目录都不在内）；只对 `fs.edit`（write / delete /
+# move 仍由保留表拒）；该稿必须未签（只走 `manuscriptfreeze.freeze_reading`，`signed` /
+# `edited_after_sign` / `unchecked` 照拒、`kind` 照旧；`unchecked` 按只读处理）；
+# 号必须是 B 自己号段已发出的（`FAMILY_COUNTERS["b-proof"]`，读不出来就不放行）。
 #
-#   · 只对角色 **B**（A / F / D / M 一个都不开）；
-#   · 只对 `reports/b-proof-<六位号>.md` 这一种路径形（`_B_POLISH_RE` 是整条相对路径的
-#     锚定匹配：`f-proof-` / `e-proof-` / `e-num-` / `-pN` / 别的目录都不在内）；
-#   · 只对 **`fs.edit`**（`fs.write` / `fs.delete` / `fs.move` 仍由保留表拒 ——
-#     「改这一份」不等于「换一份」/「删一份」）；
-#   · 该稿必须**未签**：判据只走 `manuscriptfreeze.freeze_reading`（`state=unsigned`
-#     ⇒ 放行；`signed` / `edited_after_sign` / `unchecked` 三档照冻结那一套拒，
-#     `kind` 也照冻结那一个 `manuscript_frozen`，这里不新造码）；
-#   · 号必须是 **B 自己号段已发出的**（`manuscriptids.FAMILY_COUNTERS["b-proof"]`；
-#     计数器记的是「下一个要发的号」⇒ 已发号 = 计数器 - 1，读不出来就不放行）。
-#
-# 为什么豁免不写成 `RESERVED_ARTIFACT_TABLE` 的一行：那张表的语义是"命中了哪条**拒写**
-# 规则"（四个写口共用一处结论），把它塞成一行会让 `_reserved_artifact_rule` 的返回值
-# 分叉，而且四个写口会一起被放开 —— 要的只是一个口子上的一条放行线。所以结构是：
-# 冻结闸之后、保留表之前，一次只对 `edit=True` 生效的短路（见 `_reserved_refusal`）。
+# 为什么豁免不写成 `RESERVED_ARTIFACT_TABLE` 的一行：那张表的语义是"命中了哪条拒写
+# 规则"（四个写口共用一处结论），塞成一行会让 `_reserved_artifact_rule` 的返回值分叉、
+# 四个写口一起被放开 —— 要的只是一个口子上的一条放行线。所以结构是：冻结闸之后、保留表
+# 之前，一次只对 `edit=True` 生效的短路（见 `_reserved_refusal`）。
 _B_POLISH_FAMILY = "b-proof"
 
 #: B 的窄豁免认的路径形（整条工作区相对路径；大小写不敏感与保留表同一口径 ——
