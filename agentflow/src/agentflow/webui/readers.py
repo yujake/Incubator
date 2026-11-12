@@ -4910,7 +4910,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
     # 它下面挂着"这个子代理接过的那些活"（`tasks`，每件各带自己的时间与状态）。
     # 这一份不承担"谁是谁的子"（那一件由上面的 `children_of` 说）。
     #
-    # 2026-10-25（业主截图）：2026-10-24 起节点上的"子 N"只数名册项 —— 名册项少一个，
+    # 节点上的"子 N"只数名册项 —— 名册项少一个，
     # 父的子树读数就比台账低一个，而少的那一个既不在这棵树里、也不在任何一处说
     # "它是谁的儿子"。所以每个节点补三格：`children_in_ledger`（台账里的子数 ——
     # 这个名字量的是"这个节点在台账里挂了几个子"，含没落名册的；收工读数里那个
@@ -5083,7 +5083,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
             # 三态（`conductor.agent_state` 是唯一实现）+ 那一句"为什么是这一档"。
             "state": state,
             "state_reason": state_reason,
-            # 疑似停滞（业主 2026-10-26 第二条）：`state` 仍是 flying；这一格只是
+            # 疑似停滞（业主第二条）：`state` 仍是 flying；这一格只是
             # "它最近一步离现在多久"，页面上画在徽标旁边。`stalled_sec` 是 `number | null`
             # （null = 这一格没读到，不是 0）。
             "stalled": stalled,
@@ -5134,7 +5134,7 @@ def roster_face(root: str | Path, *, limit: int = ROSTER_NODES_MAX,
 
     # ---- 对账读数（名册覆盖到台账的哪一步）：三个数都是"读到了才是数字"
     #
-    # 平铺并点名（业主 2026-10-24「找不到名册项时才平铺并点名，不许抬成 d1 根」）：
+    # 平铺并点名（业主「找不到名册项时才平铺并点名，不许抬成 d1 根」）：
     # 台账里那些"有父、却不在任何名册项接过的活里"的代理行，摆进 `unplaced`（带
     # 自己的父、角色、状态与时间），并在诊断里逐个点名。它们不进 `nodes`、也不进
     # `roots` —— 把它们画成 d1 上的树根等于替盘上事实改口径（真机上那正是
@@ -5188,7 +5188,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("name", "string"), ("path", "string"), ("exists", "boolean"),
       ("bytes", "number | null"), ("lines", "number | null"), ("sha256", "string"),
       ("tri", "Tri"),
-      # 2026-10-21（业主「每一行都要带角色 + 绝对编号」）：六件产物是文件清单、不是某条
+      # 业主「每一行都要带角色 + 绝对编号」：六件产物是文件清单、不是某条
       # 写入 ⇒ 编号那一格恒为 `not_applicable`，但三格照样在每一行上（页面处置同一套）。
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"), ("by_task_id_tri", "string"))),
@@ -5203,13 +5203,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("fingerprint", "string"), ("step", "number"), ("stop_reason", "string"),
       ("waiting_for", "string"), ("spend", "CheckpointSpendView | Record<string, never>"),
       ("prompt_cache", "CheckpointCacheView | Record<string, never>"),
-      # 2026-11-02（83 的 113 分钟那一批）：`save_run_checkpoint` 补了收口三格。
+      # `save_run_checkpoint` 补了收口三格。
       # 类型照写侧的真值（三格都是 `str(...)`，见 `save_run_checkpoint` 的 payload）：
       # `started_at` 空串 = 这一趟没真的开跑（不编）；`end_ts` 崩溃那档按写入时刻补；
       # `step_source` 是 `run` / `crash` 两档，说清 `step` 是从哪来的。
       ("step_source", "string"), ("started_at", "string"), ("end_ts", "string"),
       ("at", "string"))),
-    # 2026-10-19：顶趟的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）。
+    # 顶趟的缓存汇总（`promptstability.summarize_prompt_cache` 的 11 格）。
     # 为什么它必须是声明出来的而不是 `Record<string, unknown>`：这一格是
     # "提示词改动到底省了多少"在盘上唯一的读数（顶趟不写产出文件），
     # 顶层键含糊了，前端就只能把它当黑盒渲染 —— 而 C 条判据会把它与夹具上
@@ -5228,7 +5228,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("tri", "Tri"), ("reason", "string"), ("sid", "string"), ("runs", "RunRow[]"),
       ("report", "ReportReadingView"), ("checkpoint", "CheckpointView | null"),
       ("checkpoint_reason", "string"), ("path", "string"),
-      # 2026-10-27（业主裁定 ⑥-4）：花销"两处一致"必须同范围比。下面四格给出
+      # 花销"两处一致"必须同范围比。下面四格给出
       # "同一趟"的两个数：检查点那一趟（同一 role）的累计，与这一段会话里
       # 同一 role 那一趟的事件求和。跨趟的合计另有其数（`runs`），不许拿来比。
       ("checkpoint_role", "string"),
@@ -5301,7 +5301,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("secretary", "SecretaryDecision[]"), ("secretary_tri", "Tri"),
       ("products", "RunProduct[]"), ("products_tri", "Tri"), ("run_dir", "string"),
       ("products_reason", "string"),
-      # 2026-10-23（产物页补的那两处落点）：`code/exp/` 与 `out/experiments/<号>/`。
+      # 产物页补的那两处落点：`code/exp/` 与 `out/experiments/<号>/`。
       ("experiment_spots", "ExperimentSpot[]"), ("experiment_spots_tri", "Tri"),
       ("experiment_spots_reason", "string"), ("code_exp", "CodeExpFile[]"),
       ("tasks", "TaskRow[]"), ("tasks_tri", "Tri"))),
@@ -5319,7 +5319,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "AUXILIARY_SIGNALS）",
      (("tri", "Tri"), ("reason", "string"),
       ("criteria", "Record<string, string>"), ("details", "Record<string, string>"),
-      # 2026-10-21：逐条行（与 `criteria` 同一批判据，只是形状是"一行一条"）。
+      # 逐条行（与 `criteria` 同一批判据，只是形状是"一行一条"）。
       # 加它的理由只有一条：业主那句"台账面每一行都带角色 + 绝对编号"里，收工门
       # 也得有"行"这个东西可挂那三格（`criteria` 是 Record，挂不上）。
       ("rows", "AcceptanceRow[]"),
@@ -5338,7 +5338,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("model", "{ vendor: string; api_key: string; base_url: string; name: string; "
                 "reasoning_effort: string; temperature: string; key_source: string; "
                 "configured: boolean }"),
-      # 按角色那一档（业主 2026-10-14）：槽 → 那一档的读数（key 一律掩码）。
+      # 按角色那一档：槽 → 那一档的读数（key 一律掩码）。
       ("models", "Record<string, { api_key: string; base_url: string; name: string; "
                  "vendor: string; reasoning_effort: string; temperature: string; "
                  "key_source: string; "
@@ -5353,7 +5353,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "machine_face() —— toolchain.toolchain_report() 的键 + 设置三段",
      (("tri", "Tri"), ("reason", "string"), ("model", "Record<string, unknown>"),
       ("provers", "Record<string, unknown>"),
-      # 业主 2026-10-12 的开关（`toolchain.lean_enabled`）：与 `lean_ready`（机器上有
+      # 开关（`toolchain.lean_enabled`）：与 `lean_ready`（机器上有
       # 没有装）是两条独立的事实 —— 台面必须两条都看得见，否则"关掉了"会被读成"没装"。
       ("lean_enabled", "boolean"), ("lean_enabled_source", "string"),
       ("formal_mode", "string"),
@@ -5384,7 +5384,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("LiveView",
      "live_face() —— 未收尾的循环 / 活进程 / 停机开关与历史（行逐字来自 stopctl）",
      (("tri", "Tri"), ("reason", "string"), ("root", "string"), ("answer", "string"),
-      # 2026-11-01（82 的定格数据）：两个并列的数 —— 「在飞」只数 tasks 里 running
+      # 两个并列的数 —— 「在飞」只数 tasks 里 running
       # （与名册三态同源），「未收尾的循环」数的是 `running[]`（有 start 没 end）。
       # 读不到 / 还没写过 ⇒ `null`（不是 0）。
       ("tasks_running", "number | null"), ("unclosed_loops", "number"),
@@ -5392,7 +5392,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("live", "LivePidRow[]"),
       ("unreadable_sessions", "string[]"),
       ("switch", "Record<string, unknown>"), ("switch_present", "boolean"),
-      # 这两格没有具名行类型（2026-10-27）：它们是 `stop-history.jsonl` /
+      # 这两格没有具名行类型：它们是 `stop-history.jsonl` /
       # `interrupts.jsonl` 里自由形状的 JSONL 行（`consume_stop` 的 payload
       # 与中断记录各写各的键），声明成具名接口就是替生产者编形状。
       ("history", "Array<Record<string, unknown>>"),
@@ -5401,7 +5401,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "stopctl.running_loops() 的 running[] —— 一条「未收尾的循环」（有 start 没 end；"
      "`stale_loop` 由 `webui.state.mark_stale_loops` 现算）",
      (("role", "string"), ("sid", "string"), ("since", "string"),
-      # 2026-11-01（82 的定格数据）：顶趟已收尾 ⇒ 这一行是"被打断后剩下的循环记录"，
+      # 顶趟已收尾 ⇒ 这一行是"被打断后剩下的循环记录"，
       # 不是活着的循环（页面据此写"宿主进程已退出/被叫停，不是活着"）。
       ("stale_loop", "boolean"))),
     ("LivePidRow",
@@ -5425,7 +5425,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "status_reports_face() —— 状态报告最近几份（`statusreport` 写了没人读的那个缺口）",
      (("tri", "Tri"), ("reason", "string"), ("dir", "string"),
       ("count", "number | null"), ("reports", "StatusReportRow[]"))),
-    # 2026-10-13（业主的对话框）：一段会话里"用户 ↔ 主控"的来回。
+    # 对话页那一面：一段会话里"用户 ↔ 主控"的来回。
     # `qid` / `options` 是"有就带上"的两栏（只有提问那一条线才有），所以写成可选。
     ("ChatOption",
      "chat_face() 的 options[] 一项（`userio.option_view` 渲染视图里的两栏）",
@@ -5466,10 +5466,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("bits", "Record<string, unknown>"),
       ("status", "string"), ("derived_from", "string"), ("doc_id", "string"),
       ("line_range", "string"), ("created_at", "string"), ("created_by", "string"),
-      # 2026-10-23（业主：命题要标注非平凡度、第 4 位按路径显示、引文读数分档）：
+      # 命题要标注非平凡度、第 4 位按路径显示、引文读数分档：
       # 这十一格都是读模型的现算读数（`_statement_readings`），不是 `schema.Statement`
       # 的字段。`nontriviality` 是 `number | null` —— `null` 是"未判"，不是 T0。
-      # 2026-10-26（D15'）多一格 `nontriviality_word`：页面直接印的那个词
+      # 多一格 `nontriviality_word`：页面直接印的那个词
       # （`T0`…`T4` / `不适用` / `未判`）。`nontriviality_tri` 多第三个取值
       # `not_applicable`（概念 / 定义行没有证明正文 ⇒ 判档这一问对它不成立）。
       # 词不借 `nontriviality_label` 那一格：`label` 只装档位名，否则"有没有档位"
@@ -5478,7 +5478,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("nontriviality", "number | null"), ("nontriviality_label", "string"),
       ("nontriviality_meaning", "string"), ("nontriviality_tri", "string"),
       ("nontriviality_word", "string"),
-      # 2026-10-26（D16）再一格 `nontriviality_matched_by`：档位是靠哪一格对上命题行的
+      # 再一格 `nontriviality_matched_by`：档位是靠哪一格对上命题行的
       # （`stmt_id` 按号 / `sha256` 旧行回退 / 空串 = 没判过）。它是台账的来历读数，
       # 不是显示词；页面不印它，但"按号命中"与"靠正文 sha 回退"必须分得开。
       ("nontriviality_matched_by", "string"),
