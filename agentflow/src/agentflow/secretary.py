@@ -1,25 +1,25 @@
 # -*- coding: utf-8 -*-
-"""「秘书」：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。
+"""「秘书」：每个智能体自带的随员。
 它不是一个同级角色：不占 `schema.ROLES`、不加注册工具、不改权限面声明、不改 `llmseam` 的
 enum、不重冻快照 ⇒ 一个计数都不变。同一个类，每角色一份配置（自己的定位 + 收发箱）。
-## 四条职责（用户 2026-10-06 逐字裁定，`draft/53` §2）
+## 四条职责
 | # | 职责 | 谁的秘书做 | 本模块的落点 |
 |---|---|---|---|
 | 1 | 格式与内容优化 | 发件方 | :meth:`Secretary.optimize_outbound`（对齐参数表/必填/工具真名；不替本体承诺） |
 | 2 | 委派评估 | 发件方 | :meth:`Secretary.assess_delegation`（收件方真做得到吗 + 该不该派） |
 | 4 | 委托加工 | 收件方 | :meth:`Secretary.rework_inbound`（按本角色定位改说法，不加码不减码） |
 | 3 | 闭环提醒 | 收件方 | :meth:`Secretary.remind_closure`（未接手 / 未反馈；经 M） |
-职责 1 另有一件同样是"看"的事（业主 2026-10-26 逐字：「秘书处理将发出的信息时，要看内容是否
+职责 1 另有一件同样是"看"的事（「秘书处理将发出的信息时，要看内容是否
 与接受面相符」）：:meth:`Secretary.judge_recipient_face` —— 公告栏里点名并下指令、或一份稿子里
 装了多件派活 ⇒ 这一条退回本体，一个字节都不写盘（判据机械可判、零模型调用）。
-两条实质性红线（`draft/53` §2）：格式补不全、或加工后发现实质缺陷 ⇒ 与对方协商、不静默修
+两条实质性红线：格式补不全、或加工后发现实质缺陷 ⇒ 与对方协商、不静默修
 （:meth:`Secretary.negotiate` ≤2 轮 + 台账留痕）—— 它从不替本体表态。手稿通道的增/改/查也在
-这里（`draft/55` §3）：`handoff_add` / `handoff_revise` / `handoff_query`，智能体侧只留"查"。
-## 权限与失败姿态（`draft/55` §4）
+这里：`handoff_add` / `handoff_revise` / `handoff_query`，智能体侧只留"查"。
+## 权限与失败姿态
 库表只读（写集 ∅）；文件两处写：手稿通道 + 自己的台账 `out/secretary/<role>.jsonl`；不使用注册
 工具；信息面 ≤ 本体，且 V 的秘书不读 F 的叙述（I12 的独立性不许被绕过）。fail-open：超时/出错
 ⇒ 原样放行 + 留痕，唯一例外是手稿执笔失败必须报错留痕。它是判断者不是仪表盘：不做任何统计
-（用户 2026-10-06：那套统计是坏设计），成本靠 :meth:`Secretary.should_engage` 的机器预筛控制
+（那套统计是坏设计），成本靠 :meth:`Secretary.should_engage` 的机器预筛控制
 （只在预筛报警 / 重复候选 / 闭环逾期 / 首次遇见该形态时才叫秘书；默认路径确定性）。
 """
 from __future__ import annotations
@@ -91,16 +91,14 @@ DECISION_PROPOSED = "洗出格式差异 ⇒ 请示"
 DECISION_ACCEPTED = "接受了秘书的格式洗"
 DECISION_REJECTED = "拒绝了秘书的格式洗"
 
-#: 非平凡性的五档（业主 2026-10-21 定 T1–T4；2026-10-23 补 T0）：它回答"多不平凡"。
-#: 2026-11-01 起它同时是判档那一问的词表（`STATEMENT_VERDICTS` 从它派生）—— 不再是两根轴。
+#: 非平凡性的五档（T0–T4）：它回答"多不平凡"，同时是判档那一问的词表
+#: （`STATEMENT_VERDICTS` 从它派生）—— 一根轴，不是两根。
 #:
-#: 2026-10-23 业主裁定的要点（逐字）：「只是加一个档位叫 T0（和 T1 到 T4 是一个性质），
-#: T0 叫基础定理或初步结论，T1 重新定位为有一定价值的非平凡结论，T2 到 T4 定位不变」。
-#: 所以 T0 不是"次品档"、不是"未评级"，它是同一根轴上的第一档：
+#: T0 不是"次品档"、不是"未评级"，它是同一根轴上的第一档：
 #: 平凡但真的那些（`a+b=b+a` 那一类，以及由数值实验直接穷举出来的基础事实）落在 T0，
-#: 而它们"能进表"这件事由 T0 这一档保证（改前是"平凡 ⇒ 当场拒收"）。
+#: 而它们"能进表"这件事由 T0 这一档保证。
 #:
-#: | 档 | 语义（业主原话） |
+#: | 档 | 语义 |
 #: |---|---|
 #: | 0 | 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些） |
 #: | 1 | 有一定价值的非平凡结论 |
@@ -113,8 +111,8 @@ NONTRIVIALITY_LEVELS: tuple[int, ...] = (0, 1, 2, 3, 4)
 
 #: "这一格没判成"的取值（三态里的第三态）。它不在 `NONTRIVIALITY_LEVELS` 里：
 #:
-#: 改前用 `0` 表示它，而 2026-10-23 起 `0` 是 T0（真的档位）—— 两个意思折进同一个值，
-#: 读的人会把"没人判过"读成"基础定理"。所以这一档挪到 `None`（JSON 里是 null）。
+#: `0` 是 T0（真的档位），不能再用它表示"没人判过"—— 两个意思折进同一个值，
+#: 读的人会把"没人判过"读成"基础定理"。所以这一档是 `None`（JSON 里是 null）。
 NONTRIVIALITY_UNJUDGED: None = None
 
 #: 档位台账的刻度的标记（写在每一行里）。
@@ -216,7 +214,7 @@ def nontriviality_label(level: Any) -> str:
 #: ## 旧行怎么读（只影响读旧台账；写侧与新行一个字都不产生这三个词）
 #: | 老 `decision` | 折算出的档位 | 判据 |
 #: |---|---|---|
-#: | `T0`…`T4` | 同名档位 | 2026-11-01 那一笔的兼容形状 |
+#: | `T0`…`T4` | 同名档位 | 老台账里的同名档位 |
 #: | `太平凡` | T0 | 这个结论只剩"力气小 ⇒ 落 T0"这一层意思 |
 #: | `合格` | 读 `judge.nontriviality`（或同号 `nontriviality.jsonl` 那一行）；都没有 ⇒ 未判 | 它当年只表示"收"，从不携带档位 |
 #: | `判不了` | 未判（`None`） | 它是"该判而没判"，不是一档 |
@@ -229,7 +227,7 @@ STATEMENT_VERDICTS: tuple[str, ...] = tuple(
 
 #: 没有"证明正文"这一档、因而不做力气判档的那几档 kind（"不适用"的适用范围，唯一一处）。
 #:
-#: 为什么它与 :data:`CONCEPT_IDENTITY_KINDS` 分开住（2026-10-26）：那一格管"同一性按定义项
+#: 为什么它与 :data:`CONCEPT_IDENTITY_KINDS` 分开住：那一格管"同一性按定义项
 #: 判"（只有 `concept` 一档 —— `definition` 行的标签常常是空的，拿它当键会把一堆不相关的
 #: 定义并到同一行），这一格管"有没有证明正文可判"（概念与定义都没有）。两件事折成一张表
 #: 会让"并错了"与"判错了"互相牵制，而它们的处置完全不同：前者是多一行还是少一行，
@@ -238,7 +236,7 @@ NOT_APPLICABLE_KINDS: tuple[str, ...] = ("concept", "definition")
 
 #: "不适用"那一格的理由（写进台账的 `basis`，也是页面上那句说明的出处，唯一一处）。
 #:
-#: 业主 2026-10-26 的口径：概念行的非平凡度不是"未判"，是"不适用（无证明）"。
+#: 概念行的非平凡度不是"未判"，是"不适用（无证明）"。
 #: 前者说的是"该判而没判"，后者说的是"这一问对它不成立"—— 两个词不许折平。
 NONTRIVIALITY_NOT_APPLICABLE_BASIS = "不适用：概念行没有证明正文，不做力气判档"
 
@@ -249,21 +247,21 @@ def _is_not_applicable_kind(kind: Any) -> bool:
 
 
 def _is_trivial_verdict(decision: Any) -> bool:
-    """这一次判断的档位是不是 T0（唯一口径；2026-11-01 起不再认旧词）。
+    """这一次判断的档位是不是 T0（唯一口径；不认旧词）。
 
-    为什么要单独一个函数：2026-10-23 之后"平凡"这个档位有两个后果（落 T0 + 不在入库口
-    拒收），两处必须问同一个问题。而这一条是"把'懂平凡'这一档打桩"的注射点 —— 判据要把
-    "恒判平凡"打进去看非平凡那一支会不会红，就得有一个名字。
+    为什么要单独一个函数：T0 这一档有两个后果（落 T0 + 不在入库口拒收），两处必须问
+    同一个问题。而这一条是"把'懂平凡'这一档打桩"的注射点 —— 判据要把"恒判平凡"
+    打进去看非平凡那一支会不会红，就得有一个名字。
 
-    2026-11-01：审美轴三格退场之后，"太平凡"不再是一个取值 ⇒ 这里只认档位（`"T0"` / `0`
-    / `"0"`）。旧词到档位的折算只在读旧行时做（:func:`_tier_from_legacy_decision`）。
+    只认档位（`"T0"` / `0` / `"0"`）。旧词到档位的折算只在读旧行时做
+    （:func:`_tier_from_legacy_decision`）。
     """
     return _nontriviality_level(decision) == 0
 
-#: 「这一条与在册的哪一条是同一条命题」的结论词表（业主 2026-10-24 的准绳；2026-11-08 收成两档）。
+#: 「这一条与在册的哪一条是同一条命题」的结论词表（两档）。
 #:
-#: 业主逐字：「定理描述一致（什么条件推出什么结论），就是一个定理」；2026-11-08 又裁定：
-#: 这一问不许有第三种结论 —— 读不清就是没判成，不是一种判词。
+#: 准绳：「定理描述一致（什么条件推出什么结论），就是一个定理」。这一问不许有第三种
+#: 结论 —— 读不清就是没判成，不是一种判词。
 #:
 #: 所以这一问只有两个结论：同一组条件推出同一组结论（same）/ 不是（different）。
 #: 「没有第三种结论词」：读不清（缺条件 / 结论写不清 / same 点不出候选号 / 词表外结论 /
@@ -275,16 +273,16 @@ PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different")
 #: 命题同一性判定的旁支台账（append-only）：一行一次判定，键是命题正文的 sha256。
 #:
 #: 为什么按正文 sha 缓存而不是按本次登记：同一段正文被交上来第二遍（改个标签、换个人重交、
-#: 重试）时，判定不会有别的结论 —— 而每一次都要真发一次模型调用。真机 sylow4 的形态正好是
-#: "同一条定理交了三遍"，没有这一层就是三笔钱买同一句话。
+#: 重试）时，判定不会有别的结论 —— 而每一次都要真发一次模型调用。没有这一层，
+#: "同一条定理交了三遍"就是三笔钱买同一句话。
 PROPOSITION_VERDICT_LEDGER = "proposition_verdicts.jsonl"
 
 #: 一次判定一页给几条候选（分页的页大小，不是截断）。
 #:
 #: 候选是秘书自己按关键词在台账里检索出来的命中项（查口的 `by_keywords`，
 #: 唯一实现在 `statementledger`）；
-#: 命中多于这个数时按页依次交给模型，问到命中或页尽为止（2026-11-08 缺陷 ②：
-#: 改前只把前 4 条交给模型，第 5–N 条永不入眼却被记成"这批都不是"）。
+#: 命中多于这个数时按页依次交给模型，问到命中或页尽为止（只把前 4 条交给模型会让
+#: 第 5–N 条永不入眼，却被记成"这批都不是"）。
 #: `pages_total` / `pages_judged` / `page_exhausted` / `candidates_total` 四个读数
 #: 把"看了几页 / 几个候选 / 是不是页尽"与判词一起摆出来。
 #: 为什么一页是 4：一次判定要在提示词里同时放下这一条的正文与每条候选的正文/定理名；
@@ -296,31 +294,27 @@ PROPOSITION_VERDICT_TEXT_CHARS = 1200
 
 #: 证明的"路子"说明住在哪：行 JSON 里一个 `{证明号: 一句话}` 的字典。
 #:
-#: 业主要求（2026-10-24）：「路线写在证明这一层」。它不能待在命题的 label 里 ——
+#: 路线写在证明这一层。它不能待在命题的 label 里 ——
 #: 那条 label 是定理名（`Sylow 三定理`），带"（路线一：…）"之后，同一条定理的三种证法
-#: 就成了三条不同的命题（真机 sylow4 的三行正是这么来的）。所以：
+#: 就成了三条不同的命题。所以：
 #: 定理名归 label，路子归证明号（这一格），依赖的路径分组归 `Dependency.path_group`。
 #: 键是证明号的字符串形式（JSON 的键只能是字符串），读侧一律走 :func:`proof_route_of`。
 PROOF_ROUTES_KEY = "_proof_routes"
 
-#: V 的回复有没有指出缺陷（业主 2026-10-29 的 B 段；2026-10-30 第三次裁定收成两档）。
+#: V 的回复有没有指出缺陷（两档）。
 #:
 #: 为什么另立一张表而不复用 `STATEMENT_VERDICTS`（`合格` / `太平凡` / `判不了`）：
 #: 那是 B 的审美轴（这条命题够不够格入库），这里是 V 的结论轴（这段审阅回复
 #: 到底有没有指出缺陷）。两根轴共用一张词表之后，"太平凡"会被当成一种"有缺陷"——
 #: 而它们在台账上是两件事（前者不改任何签，后者清零连续次数）。
 #:
-#: 2026-10-30（第三次裁定，逐字）：「不可能有判不了。你告诉我啥叫判不了？
-#: 只要不是完全没毛病都叫有毛病」。于是这一根轴的词表只有两格，历史上那一格
-#: （`判不了` / 轴名 `unsure`）从词表里删掉了：拿不准、只挑出一处小记号问题、说
-#: "我没逐行验证"——统统算「有缺陷要指出」。模型若仍答那一格，`judge()` 判它
-#: "不在词表里 ⇒ 不采信" ⇒ `checked=False`（"没查成"，见 :meth:`Secretary.judge_v_reply`），
-#: 不会被当成第三种结论，也不会在台账上留下一个 `判不了` 的判词。
-#: 2026-11-02（追加裁定：「这一档连历史兼容读也不留」）：老台账行上那个轴名也不再是
-#: 一格 —— `verifications.SECRETARY_JUDGE_HISTORICAL_AXES` 与 `secretary_axis` 的兼容支
-#: 一起删了，老行上那个值读出来是空轴（"这一行没有轴"）；`_hold_run_lengths` 里专门为它
-#: 写的那条分支也删了（那一支的结果与"轴读不出来"那条通用纪律逐字相同，删掉它等于删掉
-#: "承认那一档存在"的最后一处落点）。
+#: 这一根轴的词表只有两格：「不可能有判不了。只要不是完全没毛病都叫有毛病」。
+#: 拿不准、只挑出一处小记号问题、说"我没逐行验证"——统统算「有缺陷要指出」。
+#: 模型若答词表外的值，`judge()` 判它"不在词表里 ⇒ 不采信" ⇒ `checked=False`
+#: （"没查成"，见 :meth:`Secretary.judge_v_reply`），不会被当成第三种结论，也不会在
+#: 台账上留下一个 `判不了` 的判词。
+#: 老台账行上那个轴名也不再是一格：`verifications.SECRETARY_JUDGE_HISTORICAL_AXES` 与
+#: `secretary_axis` 的兼容支都没有了，老行上那个值读出来是空轴（"这一行没有轴"）。
 V_REPLY_CLEAN = "没问题"
 V_REPLY_FAULT = "有缺陷要指出"
 
@@ -334,15 +328,15 @@ V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT)
 #: "拿不准"落在 `V_REPLY_FAULT` 那一格（业主逐字：只要不是完全没毛病都叫有毛病）。
 V_REPLY_AXIS: dict[str, str] = {V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault"}
 
-#: `v_reply_defect` 的第三格：缺陷类别（D3，业主 2026-11-09 裁定 ② 的方案 A）。
+#: `v_reply_defect` 的第三格：缺陷类别。
 #:
 #: 轴仍然只有 `clean` / `fault` 两档（`V_REPLY_AXIS` 不动）；这一格回答"判 fault 时，
 #: fault 的内容是哪一类" —— 词表本体只有一处（`verifications.FAULT_KINDS`），这里不抄。
-#: 为什么由秘书这一问给、不给 V 加必填字段：裁定 ② 逐字「只走 A：秘书语义判
-#: `defect_kind` + 写侧护栏；不给 V 加必填字段（那是把句式要求换个地方钉）」。
+#: 为什么由秘书这一问给、不给 V 加必填字段：只走"秘书语义判 `defect_kind` ＋ 写侧护栏"
+#: 这一条路；给 V 加必填字段等于把句式要求换个地方钉。
 V_REPLY_DEFECT_KIND_FIELD = "defect_kind"
 
-#: 秘书这一问的"报告质量读数"那一格（D3，业主裁定 ①）：判「没问题」时可以顺带记一句
+#: 秘书这一问的"报告质量读数"那一格：判「没问题」时可以顺带记一句
 #: "这份报告缺了什么记录"（例：没写反例尝试的位置）。它不是判据、不进 fault 轴，
 #: 也不挡签；写侧把它原样落进 `secretary_judge.report_gap`，读侧只作质量读数。
 V_REPLY_REPORT_GAP_FIELD = "report_gap"
@@ -352,7 +346,7 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
                           report_gap: Any = "", reason: Any = "") -> dict[str, Any]:
     """把 `v_reply_defect` 那一问的答案读成 `(axis, fault_kind, fault_cause, report_gap)`。
 
-    这是 D3 批 2 的写侧分类第一半（纯函数，零 IO、不碰模型）：秘书那一问的
+    这是写侧分类的第一半（纯函数，零 IO、不碰模型）：秘书那一问的
     `decision` / `defect_kind` / `report_gap` 三格 + 它自己的 `reason`，在这里翻译成
     台账 `secretary_judge` 格里要落的那几个键。第二半（写行处的护栏与兜底）在
     `agent_v/core.py` 的 `_write_fault_cell`：那里才拿得到 findings / defect_step。
@@ -360,7 +354,7 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
     判据（与 D3 §3.1 / §5.3 逐条对得上）：
 
     1. `decision` 不在两档词表里（`判不了` / 空 / 别的写法）⇒ `axis=""`：那不是一种
-       结论（p247 / 业主 2026-10-30），四个类别格全部留空，由调用方按"没查成"处置。
+       结论（"没有判不了"这条纪律），四个类别格全部留空，由调用方按"没查成"处置。
     2. `decision=没问题` ⇒ `axis="clean"`、`kind=""`；`report_gap` 非空时
        `cause="report_gap"`（报告质量读数，不影响投票）。模型若同时给了 `defect_kind`
        ⇒ 不采信（clean 行带 kind 是自相矛盾行；`is_a_vote` 会 fail-closed 把它吞掉，
@@ -368,14 +362,14 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
     3. `decision=有缺陷要指出` ⇒ `axis="fault"`，`kind` 只认
        `verifications.FAULT_KINDS` 里的四类；不认识的写法一律留空（写行处按 `math`
        兜底 —— 缺 kind 的新行不许静默解锁，D3 §5.3）。
-    4. `defect_kind="report_gap"`（模型把"只缺反例尝试记录"写进这一格）⇒ 按业主裁定 ①
-       归到 `kind=""`、`cause="report_gap"`：它不是缺陷。`axis` 这里仍是 `fault`，
+    4. `defect_kind="report_gap"`（模型把"只缺反例尝试记录"写进这一格）⇒ 归到
+       `kind=""`、`cause="report_gap"`：它不是缺陷。`axis` 这里仍是 `fault`，
        由写行处（拿到 findings / defect_step 之后）决定要不要翻成 clean ——
        只有"没有数学证据"时才翻（护栏只许往更严的方向折）。
     5. `kind="procedural"` ⇒ `cause="self_declared"`（V 自己说没逐行验证）；
        其余类别 `cause=""`。
 
-    返回键固定四个，每一行都写（D3 批 2 的硬要求）：`fault_kind` 可以为空串、
+    返回键固定四个，每一行都写：`fault_kind` 可以为空串、
     `fault_cause` 可以为空串，但键必须在 —— 键在不在是"新行 / 老行"的唯一分界
     （`verifications.fault_kind_of` 读的就是它）。
     """
@@ -407,9 +401,9 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
     return out
 
 
-#: V 的秘书「发不发这一签」（业主 2026-10-29 的 A 段）。
+#: V 的秘书「发不发这一签」。
 #:
-#: 两档：`签发` / `不签发`。第三个词「判不了」在 2026-10-30 的第三次裁定之后不是一种
+#: 两档：`签发` / `不签发`。第三个词「判不了」不是一种
 #: 决定：读数不全 / 没答上来 ⇒ `checked=False` + 理由（"没查成"由那两格说，不由
 #: `decision` 冒充成第三档）。
 SIGN_ISSUE = "签发"
@@ -420,7 +414,7 @@ SIGN_ISSUANCE_VERDICTS: tuple[str, ...] = (SIGN_ISSUE, SIGN_WITHHOLD)
 
 #: 判定"没查成"时，台账那一行的 `decision` 该写什么。
 #:
-#: 业主 2026-10-30：「没查成」不是一种判定 ⇒ 台账上也不许写成一个结论词。这一格因此用
+#: 「没查成」不是一种判定 ⇒ 台账上也不许写成一个结论词。这一格因此用
 #: `没查成` 这个专用词：它不在任何一张 `JUDGE_VERDICTS` 里，读的人一眼看得出"这一趟没有
 #: 结论"，不会把它当成某一档（也不给"判不了"留位置）。
 JUDGE_UNCHECKED = "没查成"
@@ -438,14 +432,13 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "tool_name": DECISIONS,
     "rearrange": DECISIONS,
     "statement_aesthetic": STATEMENT_VERDICTS,
-    # 命题同一性（业主 2026-10-24：「让秘书洗定理名，让秘书判」）：结论词表就是三态。
+    # 命题同一性：结论词表就是二态。
     "proposition_identity": PROPOSITION_VERDICTS,
-    # V 的回复有没有指出缺陷（业主 2026-10-29 的 B 段）。独立一张表，不复用审美轴。
+    # V 的回复有没有指出缺陷。独立一张表，不复用审美轴。
     "v_reply_defect": V_REPLY_VERDICTS,
-    # 这一签发不发（业主 2026-10-29 的 A 段：发签决定权在 V 的秘书）。
+    # 这一签发不发（发签决定权在 V 的秘书）。
     "sign_issuance": SIGN_ISSUANCE_VERDICTS,
-    # 这一份证明与在册各路径是不是同一套证法（二态、语义；业主 2026-11-12：
-    # 「对比证明方法…语义判别，千万别做任何机械闸，结论是二态的：一致/不同」）。
+    # 这一份证明与在册各路径是不是同一套证法（二态、语义：对比证明方法，不做任何机械闸）。
     # 不加第三档：判不了走 `checked=False`（fail-closed，调用方不收录）。
     "proof_kind": PROOF_KIND_VERDICTS,
 }
@@ -455,8 +448,7 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
 #: 为什么需要这张小表：`_record_judge` 的缺省是 `"建议重排"`（派活那一轴的词）——
 #: 对这几种判断，`checked=False` 时写"建议重排"是一句假话。这里给它们一个专用词
 #: （`没查成`，不是任何一档结论），其余类别原样保留旧缺省：改它们的词会改历史读数。
-#: 2026-11-01 补上 `statement_aesthetic`：词表退场之后"判不了"不再是一个取值，这一行
-#: 若不补，B 的台账在没查成时写的就是派活轴的"建议重排"（全仓已实测 10 行这种错轴）。
+#: 每一类都得在表里：漏一类，它在没查成时写的就是派活轴的"建议重排"（错轴）。
 _JUDGE_UNDECIDED: dict[str, str] = {
     "v_reply_defect": JUDGE_UNCHECKED, "sign_issuance": JUDGE_UNCHECKED,
     "statement_aesthetic": JUDGE_UNCHECKED, "proof_kind": JUDGE_UNCHECKED,
@@ -466,10 +458,10 @@ _JUDGE_UNDECIDED: dict[str, str] = {
 def decisions_path(root: str | Path, role: str, task_id: str = "") -> Path:
     """这一名秘书的决定台账路径。
 
-    - `task_id` 空 ⇒ 老文件 `out/secretary/<role>.jsonl`（每角色一份，绝不混写 —— `draft/53` §5 的防错①）：
+    - `task_id` 空 ⇒ 老文件 `out/secretary/<role>.jsonl`（每角色一份，绝不混写）：
       历史行仍然在这里，读侧必须继续读得到；
-    - `task_id` 给了 ⇒ 分片 `out/secretary/<role>-<task_id>.jsonl`（S1m）：一实例一片、一个写者一片，于是
-      同角色的并发实例（`summon_many` 的多 `instance`）不再往同一个文件里挤（D106/D107 的修法）。
+    - `task_id` 给了 ⇒ 分片 `out/secretary/<role>-<task_id>.jsonl`：一实例一片、一个写者一片，于是
+      同角色的并发实例（`summon_many` 的多 `instance`）不再往同一个文件里挤。
     注意：名字刻意不叫 `ledger_path` —— 那个名字在 `artifacts.py`（产物归属台账）与 `signatures.py`（签名
     台账）里各有一份独立实现，而秘书的决定台账与它们不是同一件事 —— 合并它们会把三件不同的事折成一个
     （lint R003 的口径是"同一判据的两份实现必须合并"，这里恰恰不是同一判据，所以正确的做法是改名字而不是合并）。
@@ -730,7 +722,7 @@ def _pid_alive(pid: int) -> bool:
 #
 # 落点：`out/roster/<owner>.jsonl`（名册）、`<owner>-index.jsonl`（电话簿）、`<owner>-retired.jsonl`（销号名单）、`refusals/<owner>.jsonl`（拒绝流水，子目录）。四份都 append-only，读侧折叠。
 # 为什么不放 `out/secretary/`：`webui/readers.py` 是目录 glob（`*.jsonl`），
-# 同目录会把名册行混进"秘书决定台账"那一面（`draft/92` §2 的落点说明）。
+# 同目录会把名册行混进"秘书决定台账"那一面。
 
 ROSTER_DIR: tuple[str, ...] = ("out", "roster")
 
@@ -746,17 +738,16 @@ def roster_index_path(root: str | Path, owner: str) -> Path:
 
 
 def retired_path(root: str | Path, owner: str) -> Path:
-    """销号名单（业主 B1：名字一经退役永久不复用；后续版本的新功能读它）。"""
+    """销号名单（名字一经退役永久不复用；后续版本的新功能读它）。"""
     return Path(root).joinpath(*ROSTER_DIR, f"{owner}-retired.jsonl")
 
 
 def refusals_path(root: str | Path, owner: str) -> Path:
-    """派活登记被拒的流水（业主 2026-11-02：「被拒是一次有记录的决定」）。
+    """派活登记被拒的流水（被拒是一次有记录的决定）。
 
     为什么必须落一条盘上记录：拒绝当时名册三份一个字节都没写（`roster_add` 直接返回），
     跨进程唯一靠得住的证据就是这一刻落下的这条流水。收口兜底（`roster_repair`）读它，
-    于是"派活时被拒的号"不会在销号那一刻被补成新名字 —— 而那等于悄悄改写那次拒绝
-    （`draft/151` 三-6 的另一半；裁定见 `draft/151` §6.4）。
+    于是"派活时被拒的号"不会在销号那一刻被补成新名字 —— 而那等于悄悄改写那次拒绝。
 
     落点：`out/roster/refusals/<父>.jsonl`。放进子目录、而不是像 `-retired.jsonl` 那样
     同目录同后缀，是因为读侧按 `out/roster/*.jsonl` 的目录 glob 认"谁有一份名册"
@@ -767,11 +758,11 @@ def refusals_path(root: str | Path, owner: str) -> Path:
 
 
 def registration_refusals(root: str | Path, *, owner: str = "") -> dict[str, Any]:
-    """名册写口拒过的那些号 —— 只读读数（2026-11-03，153-U-09 的 registration 半）。
+    """名册写口拒过的那些号 —— 只读读数。
 
     为什么要一个读数面：这条流水（`refusals_path`）从 2026-11-02 起就在盘上，但唯一的读者
     是收口兜底 `Secretary.roster_repair` —— "这一号曾被拒过"在人的读数面上完全不可见。
-    业主 2026-11-03 的裁决 5 要的就是这一格。
+    "这一号曾被拒过"在人的读数面上必须可见。
 
     名字为什么叫 `registration_refusals`（而不是 `refusals`）：全仓 `refusals` 一词已有三义
     —— 动作被拒的行（`statusreport` 的 `refusal_reason`）、收工被拒的事件
@@ -1029,7 +1020,7 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
     `task_id` / `first_task_id` 是"调用流水读数"（这一项是为哪件活建的、最近一次
     是哪件活），不是身份，也不是归属键 —— 一个子代理可以接 N 件活，名册里仍是
-    一项（业主 2026-10-24：「一个子代理可接收多个任务」「不可按照任务号记录名册」）。
+    一项（一个子代理可以接多个任务；名册不按任务号记）。
     """
     items: dict[str, dict[str, Any]] = {}
     for raw in rows:
@@ -1045,9 +1036,9 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             item["role"] = str(r.get("role") or "")
         if kind == "add":
             item["brief"] = str(r.get("brief") or "")
-            # 简介是谁写的（业主 2026-10-20：「简介没写，秘书帮忙写」）：
+            # 简介是谁写的（简介没写时秘书帮忙写）：
             # `parent` = 父给的原话；`secretary` = 秘书从任务原文派生的一句；
-            # `""` = 这一格是改前落的行（那时还没有这一格，不许倒填成"父给的"）。
+            # `""` = 这一格缺失的行（不许倒填成"父给的"）。
             item["brief_source"] = str(r.get("brief_source") or "")
             item["task_id"] = str(r.get("task_id") or "")
             item["first_task_id"] = str(r.get("first_task_id") or r.get("task_id") or "")
@@ -1059,17 +1050,17 @@ def _fold_roster(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
             item["retired_branch"] = str(r.get("branch") or "")
         elif kind == "keep_alive":
             # 读侧先落地的那一格：今天没有任何生产者（全仓没有一处往名册写
-            # `kind="keep_alive"` 的行，`projects/ 下` 现存的 roster jsonl 里也是 0 行）。
+            # `kind="keep_alive"` 的行）。
             # 「做完还待命」这条事实的唯一来源是台账那一侧的派活项（
             # `conductor.keep_alive_of` 读 `kind="delegation"` 行的 `keep_alive`），
             # `_state_reading` 走的正是那一条路。
-            # 为什么留着而不是删（2026-10-27 裁定）：它是名册事件的合法一格，删掉之后
+            # 为什么留着而不是删：它是名册事件的合法一格，删掉之后
             # 将来真要写它的人会在别处再写一份 fold —— 而"同一份事件流的两种折法"正是
             # 本仓栽过的那一类。读数侧的代价为零（这一行永远不会命中）。
             # 反过来说：如果哪天有人开始写它，`keep_alive_of` 与这一格就是两份口径，
             # 那时必须合并成一处 —— 所以这一行在此点名，免得它继续静默。
             item["keep_alive"] = bool(r.get("value"))
-        # 任务原文（业主 2026-10-27：「自动以 task 填充目的」）：它是父派下来的那件事
+        # 任务原文（自动以 task 填充目的）：它是父派下来的那件事
         # 本身，`add` 与 `bind` 两行都可能带着它（复用支只写 bind）。改前落的行没有
         # 这一格 => 空格（不许拿 brief 冒充：brief 是 60 字摘要，不是原文）。
         text = str(r.get("task_text") or "")
@@ -1228,19 +1219,17 @@ def _status_enum(facts: Mapping[str, Any], *, retired: bool) -> str:
 
 # ---------------------------------------------------------------- 台账行分轴（Q18，2026-10-26）
 #
-# 业主 2026-10-26 的裁定：一条 `tasks` 行到底是"在跑的子代理"、"板项"还是"顶趟行"，
-# 这个判断只许有一处。改前它是三处各写一遍：conductor 的扇出轴（`_in_flight_children_of`）
-# 与未消项轴（`open_items_by_parent`）各一份，秘书的闭环轴写的是第三份 —— 而且没读 `kind`。
-# 代价是真机 `projects/mp3-r3`：30 条板项行（`status` 恒为 `pending`）被数成"running 5 条"
-# （`MAX_REMINDERS` 截断），而那一刻 18 条代理行全部 done、台账里一个在跑的子都没有。
+# 一条 `tasks` 行到底是"在跑的子代理"、"板项"还是"顶趟行"，这个判断只许有一处。
+# 散在多处时各写一遍（扇出轴 / 未消项轴 / 闭环轴），而闭环轴那一份没读 `kind`：
+# 30 条板项行（`status` 恒为 `pending`）会被数成"running 5 条"（`MAX_REMINDERS` 截断），
+# 而那一刻 18 条代理行全部 done、台账里一个在跑的子都没有。
 #
-# 落点为什么在秘书而不在 conductor：本轮只许改秘书的收件箱一族（加收工 detail 的组装处）。
-# conductor 那几处的内联判法留给下一批收（清单写进交付说明，不在这里顺手改）。
+# 落点为什么在秘书而不在 conductor：收件箱一族归秘书。
 #
-# Q27（2026-10-26 晚）：上面那一处判据同时回答了两个问题 —— "这一行是什么"（轴）与
+# 上面那一处判据同时回答了两个问题 —— "这一行是什么"（轴）与
 # "它还活不活"。要"所有代理行（含终态）"的读点拿不到它（终态代理行被折进 `other`），
 # 要"活着的代理"的读点又得自己再写一遍 `status ∈ {pending, running}`。所以拆成两件：
-# `row_axis(row)` 只回答轴（五档与 Q18 的 `task_row_axis` 逐字同形），
+# `row_axis(row)` 只回答轴（五档），
 # `is_live_agent(row)` 只回答"是不是一个活着的代理"（= 轴是 agent）。判据仍然只有这一处，
 # 读点调哪一个由它问的问题决定，不许再内联 `kind` / `status`。
 #: 代理行：`kind` 为空、不是顶趟行、`status` 还没终态。
@@ -1257,7 +1246,7 @@ ROW_AXIS_OTHER = "other"
 TOP_LEVEL_ACTION = "run"
 #: "还没终态"的两档（`schema.TASK_STATUSES` 里的活档；与 conductor 的扇出判据同一批）。
 #:
-#: 这一行是全仓唯一的真身（2026-10-27）：conductor 的 `UNFINISHED_STATUSES` 是它对
+#: 这一行是全仓唯一的真身：conductor 的 `UNFINISHED_STATUSES` 是它对
 #: 这一行的转发（`tuple(SEC.LIVE_TASK_STATUSES)`），不再是第二份字面量。方向是这样选的，
 #: 不是反过来：`conductor` 顶层 import `secretary`（那一行要读 `MAX_REMINDERS`），
 #: 而 `secretary` 顶层不 import `conductor` —— 这样两种导入顺序都无环。
@@ -1374,7 +1363,7 @@ def declarations_candidates(name: str, names: Iterable[str], *, limit: int = 3) 
     return candidate_tool_names(name, names, limit=limit)
 
 
-#: 秘书的写集（业主 2026-10-09：B 交内容、秘书落盘）。只有这两张表，
+#: 秘书的写集（B 交内容、秘书落盘）。只有这两张表，
 #: 且只经 `Secretary.record_statement` 一处 —— 声明与实现同一位。
 STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
 #: 谁可以交命题内容给这一条路径（写入侧是 B 的活，别的人交 ⇒ 受控拒绝）。
@@ -1390,22 +1379,22 @@ STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     "statement_full", "statement_text", "kind", "label", "proof_text", "origin",
     "source_lit_id", "doc_id", "page_range", "line_range", "evidence_kind",
     "quote_verified", "quote_reason", "derived_from", "aliases", "bits",
-    # 2026-10-14（业主：「回验……保持语义相同即可」+「语义那一档必须留证据」）：
-    # 方式与证据三栏必须能过秘书这一道 —— 否则 B 传给 `register_statement` 的
+    # 回验的方式与证据三栏必须能过秘书这一道（回验保持语义相同即可；语义那一档必须
+    # 留证据）—— 否则 B 传给 `register_statement` 的
     # `quote_mode` 会被这一层的白名单静默丢掉（那一栏就白填了）。
     "quote_mode", "quote_span", "quote_call_sha256",
     "deps", "concepts",
-    # 2026-10-21（本批缺陷一）：概念行"确实是我们自己定义的新概念"的显式声明。
+    # 概念行"确实是我们自己定义的新概念"的显式声明。
     # 它必须能过这一层的白名单 —— 否则调用方在概念条目里写的那一句
     # `self_authored=True` 会被静默丢掉，于是"声明了"与"没声明"落成同一件事，
     # 而 `origin="own_result"` 的受控判据（`conceptrows.concept_origin_problem`）
     # 就永远只能拒绝、无法放行。
     "self_authored",
     # 多段可选证明：B 自己分的段（每段一组 `path_group`）。不给就把
-    # "定理内容 + 证明过程"当一段 —— 秘书不按空行/字样猜 B 想分几段（`draft/97` §14.11）。
+    # "定理内容 + 证明过程"当一段 —— 秘书不按空行/字样猜 B 想分几段。
     "proof_paths",
-    # 2026-10-24（业主：表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为同种
-    # 证明，可选"各取所长混合成一份、重拿 V 签"）：`merge=True` 是那一档可选项的开关。
+    # 表述几乎相同的定理要认出是同一个；证明方式几乎相同的视为同种证明，
+    # 可选"各取所长混合成一份、重拿 V 签"：`merge=True` 是那一档可选项的开关。
     # 它必须能过这一层的白名单 —— 否则调用方交上来的合并稿会被静默当成"另一份新证明"。
     "merge",
 })
@@ -1428,33 +1417,33 @@ STATEMENT_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "proof_paths": ("proof_groups", "proof_segments"),
     "concepts": ("definitions",),
 }
-#: 同一命题的判据（业主 2026-10-24）：命中键或命中相似度 ⇒ 这一笔不是新命题，
+#: 同一命题的判据：命中键或命中相似度 ⇒ 这一笔不是新命题，
 #: 而是那条命题的第 N 份证明。缺省阈值与唯一实现都在 `propositionkey`，
 #: 这里只是把它们摆到秘书这一层（可注入：构造参数 `same_proposition_jaccard`）。
 SAME_PROPOSITION_JACCARD = _PK.SAME_PROPOSITION_JACCARD
 #: 同种证明的判据（同一命题下的第 N 份证明）：判成 `same` ⇒ 不新增证明号，受控拒绝
 #: `proof_same_kind`（或 `merge=True` 合成一份并重拿 V 签）。判据是秘书的语义二态
-#: （`Secretary.judge("proof_kind", …)`，业主 2026-11-12：「语义判别，千万别做任何
-#: 机械闸，结论是二态的：一致/不同」）；相似度只作材料读数，不参与收不收。
+#: （`Secretary.judge("proof_kind", …)`：语义判别，不做机械闸，结论只有一致/不同）；
+#: 相似度只作材料读数，不参与收不收。
 PROOF_SAME_JACCARD = _PK.PROOF_SAME_JACCARD
 #: 同一命题命中的两条依据（进返回值与拒信：读的人要能分辨"凭什么并的"）。
 MERGED_BY_KEY = _PK.BASIS_KEY
 MERGED_BY_SIMILARITY = _PK.BASIS_SIMILARITY
-#: 第三种依据（2026-10-24 晚）：秘书那一趟模型判定说"同一条"（`adjudicate_proposition`）。
+#: 第三种依据：秘书那一趟模型判定说"同一条"（`adjudicate_proposition`）。
 #:
 #: 它必须与上面两条分开命名：键相同 / 相似度兜底都是机械读数，而这一条是"读了条件与结论
 #: 之后判的" —— 三者的可信度、可复核方式、以及"凭什么并的"那句话都不一样。
 MERGED_BY_ADJUDICATION = "secretary_adjudication"
 #: 同种证明的拒收码（写侧与拒信共用这一个字面量）。
 PROOF_SAME_KIND = "proof_same_kind"
-#: 同种证明这一问"没判成"的受控码（2026-11-08，业主「没有判不了」）。
+#: 同种证明这一问"没判成"的受控码（「没有判不了」）。
 #:
 #: 为什么必须与 `PROOF_SAME_KIND` 分开：那一档是现象结论（"判过了、同种"），这一档
 #: 没有结论（判定面回 `checked=False`：超时 / 坏 JSON / 没给可用答案都落这一档）。
 #: 折平会把"没判成"读成"判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）
 #: —— 前者是同一种证法被并列记录，后者是一份真的另一种证法被拒，两种都错。
 PROOF_KIND_UNJUDGED = "proof_kind_unjudged"
-#: 概念同一性"没判成"的受控码（2026-11-08，同上）。
+#: 概念同一性"没判成"的受控码（同上）。
 #:
 #: 概念这一档是确定性判据（`same_concept`，零模型调用），但"两侧都抽不出定义项"仍是
 #: 判不了：折成 different 就会照旧新建第二行（同一个概念两行，正是这一档要治的形态），
@@ -1472,7 +1461,7 @@ CONCEPT_IDENTITY_UNJUDGED = "concept_identity_unjudged"
 #: 而那不是"两条命题"。
 #: 认不出的 kind 一律不并（保守：并错一条的代价比漏并大）。
 #:
-#: `example`（玩具例子，业主 2026-11-07，`_canon_F_manuscript_protocol.md` 第六节）也在这
+#: `example`（玩具例子）也在这
 #: 一张表里：它只是给人看的标签，处理与普通命题一致 —— 落稿 / 过形态闸 / 送 V /
 #: 按五元位算等级，一条都不特殊。它进来是为了让"命题性的那几档"与"正文里能收进
 #: `Example` 环境的那一档"是同一份名单：手稿头写 `- 证据种类：example`、B 收录时按它
@@ -2009,7 +1998,7 @@ def normalize_same_as(value: Any) -> tuple[str, int]:
 
 
 
-#: `table.update(table="statements")` 允许就地改的非正文三格（真机 82 · A-1…A-4）。
+#: `table.update(table="statements")` 允许就地改的非正文三格。
 #:
 #: 为什么只有这三格：B 这一趟想改的三件事就是它们；改正文有专门的登记路（重交一条
 #: 带新 `statement_full` / `proof_text` 的登记，旧正文进 `proof_history`）。
@@ -2017,7 +2006,7 @@ def normalize_same_as(value: Any) -> tuple[str, int]:
 #: 「谁能改 statements 的哪一格」是 FC-27 的权限面（`tools/table_tools.py` 也是禁改区）。
 STATEMENT_META_PATCH_KEYS: tuple[str, ...] = ("status", "kind", "quote_reason")
 
-#: 放弃/换号时随 `status="abandoned"` 一起交上来的那几格（业主 2026-11-07 裁定）。
+#: 放弃/换号时随 `status="abandoned"` 一起交上来的那几格。
 #:
 #: 它们不是就地改的字段（一个字节都不会落进 row 的顶层键）：它们是"理由"的
 #: 结构化形状，由 `statementabandon.check_abandon_reason` 判过之后拼进
@@ -2028,20 +2017,20 @@ STATEMENT_META_PATCH_KEYS: tuple[str, ...] = ("status", "kind", "quote_reason")
 #: 而"受控拒"要求一个字节都不写 ⇒ 校验必须赶在 `tx.upsert` 之前。
 STATEMENT_ABANDON_PATCH_KEYS: tuple[str, ...] = (
     "abandon_kind", "abandon_basis", "defect_ref", "difficulty", "salvaged",
-    # E 侧那两档的按档证据（业主 2026-11-07 第二刀：反例 / 枚举空间过于宏大）：
+    # E 侧那两档的按档证据（反例 / 枚举空间过于宏大）：
     # `experiment_id` 指一条真的证否实验；`space` 是一份结构化的枚举参数与规模读数。
     "experiment_id", "space")
 
 #: 就地改 `kind` 时认的英文词表（命题性的那几档 + 概念/定义两档）。
 #:
-#: 中文 kind（`定理` / `引理`）不在里面：真机 82 的 A-1 就是它进不了命题性词表、
+#: 中文 kind（`定理` / `引理`）不在里面：它进不了命题性词表、
 #: 也不在猜想白名单，而拒因说的是另一件事（去要 V 签）。这一格把"不是取值"说清。
 STATEMENT_META_KINDS: tuple[str, ...] = PROPOSITION_KINDS + NOT_APPLICABLE_KINDS
 
 #: 经 :meth:`Secretary.land_statement` 落盘的两类操作各自允许改哪几格（权限面，写死在这一层）。
 #:
-#: 为什么需要这一格（业主 2026-11-08，逐字：「我应该定过B实际只有台账的只读权限，B的任何
-#: 所谓写台账的路实际上都由B秘书洗过」）：B 的写侧还有两支自己开 `store.tx("statements")`
+#: 为什么需要这一格（B 实际只有台账的只读权限；B 的任何"写台账"的路实际都由 B 秘书洗过）：
+#: B 的写侧还有两支自己开 `store.tx("statements")`
 #: 落行（追加证明 / 更新数值证据位），秘书那一层一个字都没过目。收口之后 B 只交"这一笔要
 #: 改成什么"，开事务、读现行行、判"改了哪几格"、写盘四件事都在秘书这一层；这张表是第三件
 #: 的判据：
@@ -2971,63 +2960,58 @@ class Secretary:
         self.seam = seam
         self.log = log
         self.deadline_sec = float(deadline_sec)
-        #: 同一命题 / 同种证明的两个阈值（业主 2026-10-24）。可注入的理由：这两条判据的
-        #: 松紧是口径问题，不是实现问题 —— 不同工作区的表述习惯不同（sylow3 那种带
+        #: 同一命题 / 同种证明的两个阈值。可注入的理由：这两条判据的
+        #: 松紧是口径问题，不是实现问题 —— 不同工作区的表述习惯不同（带
         #: 长尾注的登记与短句式的登记），阈值该能被一次实验性调参改掉，而不必改代码。
         self.same_proposition_jaccard = float(same_proposition_jaccard)
         self.proof_same_jaccard = float(proof_same_jaccard)
         #: 会话号（花销归因要读 `llm_call` 事件；`None` = 缺省会话，与 `llmseam` 同一口径）。
         self.sid = sid
-        #: 判断类要不要真发一次模型调用（`draft/53` §12 / `draft/55` §5.2）。
+        #: 判断类要不要真发一次模型调用。
         #: 关着的时候 :meth:`judge` 仍然返回三态中的"没查成"（`checked=False` + 理由），
         #: 于是"判断没做"与"判断过了、可派"在台账上永远分得开。
         #:
-        #: 生产装配由 `agent_loop._secretary_for` 打开它（主控裁定 A5）。
-        #: 2026-10-14 起那一口还会按业主的裁定换一把 key：设置文件里配了
+        #: 生产装配由 `agent_loop._secretary_for` 打开它。
+        #: 那一口还会按配置换一把 key：设置文件里配了
         #: `secretary` 档 ⇒ 秘书走全角色共用的那一档模型
         #: （`llmseam.LlmSeam.for_secretary`）；没配 ⇒ 退回本体那一个缝。
         self.enable_model = bool(enable_model)
         #: 秘书这一趟的模型是从哪一档来的（读数：`secretary（…）` / `body（…）`）。
         #: 它回答"这次判断花的是共用那把 key，还是本体那把" —— 而这正是
-        #: 「所有智能体的秘书另外共用一个 api key」这条裁定生效与否的唯一机器读数。
+        #: 「所有智能体的秘书另外共用一个 api key」是否生效的唯一机器读数。
         self.model_source: str = ""
         #: 写集的声明式落点：它让"秘书有没有写集、写哪几张表"成为一个可读的事实，
         #: 而不是"读遍本文件找不到 store.tx 所以大概没有"。
-        #: 2026-10-09 起不是空集：B 的写入代理要落 `statements`（含概念行）与
-        #: `dependencies`（业主那两句裁定），只走 :meth:`record_statement` 一处。
+        #: 不是空集：B 的写入代理要落 `statements`（含概念行）与 `dependencies`，
+        #: 只走 :meth:`record_statement` 一处。
         self.writes: frozenset[str] = frozenset(STATEMENT_WRITE_TABLES)
         #: 最近一次销号名单读数（由 :meth:`retired_ledger` 写）。
         #:
         #: 为什么单列一格：`retired_names` 只回 `(行, 坏行)`、`_is_retired` 只回一个布尔，
         #: 于是"这一份读不全"（认不出来的行 / 整份读不出来 / 不可信的分片）在任何返回值上
-        #: 都无处可报，被读成"没销号"（`draft/145` §一 R8/R14/R19）。
+        #: 都无处可报，被读成"没销号"。
         #: 形状见 :meth:`retired_ledger` 的返回值；它是读数，不是判据。
         self.last_retired_ledger: dict[str, Any] = {}
         self._negotiations: list[dict[str, Any]] = []
-        #: 这个秘书服务的实例（台账号）。由 `bind_task` 在循环开跑时绑上（S1m）：
+        #: 这个秘书服务的实例（台账号）。由 `bind_task` 在循环开跑时绑上：
         #: 绑上之后台账分片到 `out/secretary/<role>-<task_id>.jsonl`，于是同角色的并发实例
         #: 各写各的片（今天只有角色维度 ⇒ 两个 D 实例会把记录写进同一个文件，读的人分不出是谁）。
         self.task_id: str = ""
         #: 最近一次判断的墙钟（秒）—— 读数，不是判据（fail-open 的代价要看得见，
         #: 但不许拿它去卡任何一条委托）。
         #:
-        #: 2026-10-27 删掉了另一个兄弟字段（存"闭环该不该介入"那一位的）：它写两次、
-        #: 全仓 0 个读者，而 `should_engage()` 是纯谓词、返回值本来就带走这一位。
-        #: 留着它只会让下一个人以为"有一个地方在读它"。
         self._last_judge_elapsed = 0.0
-        #: 入库审美的同题不重判表（2026-10-14 第五趟真机读数）。
+        #: 入库审美的同题不重判表。
         #:
-        #: 真机上同一份 `statement_full`（21 字）被提交了 6 次：每一次都真的发了一次
-        #: 模型调用、都得到同一个「太平凡」，而一次 run 因此烧掉 20/26 次调用与 $0.226，
-        #: 最后 `statements` 仍是 0 行。判断的对象只有那段文本（加一句自证不平凡的说明），
-        #: 所以同一份文本问第二遍不会有别的结论 —— 记下来，省掉那几次调用，也让"再交一遍"
-        #: 这件事在读数上立刻变便宜且答案不变（于是没有理由反复试）。
+        #: 判断的对象只有那段文本（加一句自证不平凡的说明），所以同一份文本问第二遍不会
+        #: 有别的结论 —— 记下来，省掉那几次模型调用，也让"再交一遍"这件事在读数上立刻
+        #: 变便宜且答案不变（于是没有理由反复试）。
         #:
         #: 键 = `(statement_full, why_this_is_not_trivial)` 的摘要；值 = 第一次的结论。
         #: 只记 `checked=True` 的结论：没查成（没缝 / 超时 / 坏 JSON）不许缓存 ——
         #: 那会把"这一次没查成"变成"以后都别查了"，而缝是可能好起来的。
         self._statement_verdicts: dict[str, dict[str, Any]] = {}
-        #: 命题同一性的同题不重判表（业主 2026-10-24：「让秘书洗定理名，让秘书判」）。
+        #: 命题同一性的同题不重判表。
         #:
         #: 键 = 命题正文的 sha256（见 `_proposition_verdict_key`）；值 = 第一次的判定。
         #: 这一层只是进程内的快表：盘上那份 append-only 台账
@@ -3035,9 +3019,9 @@ class Secretary:
         #: 跨进程/跨趟的缓存 —— 没有盘上那一份，"同一条正文第二次进来不再花钱"这句话只在
         #: 同一个秘书实例活着的时候成立。
         self._proposition_verdicts: dict[str, dict[str, Any]] = {}
-        #: 工具面真名表的缓存（2026-10-27）。`registry=None` 那一档的兜底是
-        #: `build_registry(store=...)` —— 装配一整套工具要 12 ms（实测
-        #: `temp/r_be2_static_cache.py`），而 `prescreen` 每次委派都问一遍。
+        #: 工具面真名表的缓存。`registry=None` 那一档的兜底是
+        #: `build_registry(store=...)` —— 装配一整套工具要十几毫秒，而 `prescreen`
+        #: 每次委派都问一遍。
         #: 工具面是静态的（`tools/_MODULES` 那张表在进程内不变），所以这份名单
         #: 只缓存"读成功了"的那一次；空表（读不成）不缓存 —— 那会把"这一次没读成"
         #: 变成"以后都没有真名"，而三态纪律不许这么折。
@@ -3046,11 +3030,11 @@ class Secretary:
     # ------------------------------------------------------------ 台账（E 类：记录）
 
     def bind_task(self, task_id: str) -> None:
-        """把这一名秘书绑到它服务的实例上（S1m）。绑上之后台账分片。
+        """把这一名秘书绑到它服务的实例上。绑上之后台账分片。
 
-        为什么必须有这一步：秘书的台账先前只有角色维度
-        （`out/secretary/<role>.jsonl`），而同角色的并发实例（`summon_many` 的多 `instance`）
-        会写进同一个文件 —— 读的人分不出哪一行是哪一个代理写的（`draft/91` §7 的 D106）。
+        为什么必须有这一步：秘书的台账若只有角色维度
+        （`out/secretary/<role>.jsonl`），同角色的并发实例（`summon_many` 的多 `instance`）
+        会写进同一个文件 —— 读的人分不出哪一行是哪一个代理写的。
         绑定之后每一实例一片（`<role>-<task_id>.jsonl`），一个写者一片。
         同时写一份存活标记（`secretary_alive` 读它）——"与它同生同死"的第一半。
         """
@@ -3601,17 +3585,16 @@ class Secretary:
             "basis": [str(x) for x in (data.get("basis") or [])][:5],
             "elapsed_sec": self._last_judge_elapsed, "cost": cost}
         if kind == "statement_aesthetic":
-            # 2026-11-01：档位就是 `decision` 本身（一根轴一个字段）。这里把它作为派生
-            # 读数带回（`judge_statement` 与旧替身都读这一格），不再单独向模型要第二个
-            # 字段 —— 两个字段就是"同一件事两个名字"，82 现场（模型把 T1 写进 reason）
-            # 正是这么来的。
+            # 档位就是 `decision` 本身（一根轴一个字段）。这里把它作为派生读数带回
+            # （`judge_statement` 与旧替身都读这一格），不再单独向模型要第二个字段 ——
+            # 两个字段就是"同一件事两个名字"。
             out["nontriviality"] = level
             out["nontriviality_basis"] = str(data.get("nontriviality_basis") or "")[:500]
         if kind == "v_reply_defect":
-            # ---- p247：判 fault 而 V 没给步号时，由秘书定出那一步 ----------------
+            # ---- 判 fault 而 V 没给步号时，由秘书定出那一步 ----------------
             #
-            # 业主 2026-11-06 第三次收紧：「判 fault 而 V 没给 defect_step ⇒ 秘书定出
-            # 那一步」。所以这一问要多要一格；取值只有两种：正整数（指到 V 回复里
+            # 判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步。所以这一问要多要一格；
+            # 取值只有两种：正整数（指到 V 回复里
             # 说的那一步）或 null（这一档不是按步号定位的）。坏值一律 null —— 不猜。
             raw_step = data.get("defect_step")
             step: int | None = None
@@ -3627,7 +3610,7 @@ class Secretary:
             out["defect_kind"] = str(data.get("defect_kind") or "").strip()[:40]
             out["report_gap"] = str(data.get("report_gap") or "").strip()[:500]
         if kind == "proposition_identity":
-            # ---- 2026-10-24：同一趟判断的第二组输出（业主：让秘书洗定理名，让秘书判）。
+            # ---- 同一趟判断的第二组输出。
             #
             # 这一类的判词不止一个词：还要把名字洗出来（canonical_name）、把标签里那条
             # 路线挪到证明那一层（route），并把"条件是什么 / 结论是什么"各自留一句比对
@@ -3834,9 +3817,10 @@ class Secretary:
         except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
             out["ledger_error"] = f"{type(exc).__name__}: {exc}"
 
-    # ------------------------------------------------ 同一命题检索（2026-11-08）
+    # ------------------------------------------------ 同一命题检索
     #
-    # 业主逐字：「B秘书要学会在命题台账里按关键词搜索」「语义判定……应该是主动查询」。
+    # 「B秘书要学会在命题台账里按关键词搜索」「语义判定……应该是主动查询」。
+    # 语义判定是主动查询，不是把全表交给模型。
     #
     # 两问，都在这一处收口：
     #   ① pick_statement_keywords：从待收命题里挑数学内容的关键词（检索的输入）；
@@ -3848,7 +3832,7 @@ class Secretary:
                                 kind: str = "", task_id: str = "") -> dict[str, Any]:
         """给一条待收命题挑检索关键词（一次模型调用；产物只有 keywords 与 why）。
 
-        业主 2026-11-08 逐字：「B秘书要学会在命题台账里按关键词搜索」。
+        「B秘书要学会在命题台账里按关键词搜索」。
         这一问只回答"拿哪几个词去台账里捞"，不回答"捞到的是不是同一条"（那是
         :meth:`adjudicate_proposition` 那一趟）。两问分开的理由：关键词是检索的输入，
         判同一是检索结果的处置；混成一问会让"检索没捞到"与"判定说不是"在读数上同形。
@@ -3957,11 +3941,11 @@ class Secretary:
     def judge_abandon_difficulty(self, *, statement: Mapping[str, Any],
                                  difficulty: Any, basis: Any, salvaged: Any = (),
                                  task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
-        """放弃闸的 difficulty 档：一次秘书语义判定（业主 2026-11-07 审计 B1/第 10 条）。
+        """放弃闸的 difficulty 档：一次秘书语义判定。
 
-        业主逐字：「对于2，需指出困难，并将原先证明中可取之处拆出落成引理」。
-        改前 `difficulty` 只要非空就过（"做不动了"也算指出困难），`salvaged` 只核
-        "在册 / active / kind=lemma"（可以是任意一条无关旧引理）。这一问同时判两件事，
+        「对于 2，需指出困难，并将原先证明中可取之处拆出落成引理」。
+        `difficulty` 只非空不算数（"做不动了"不是指出困难），`salvaged` 光"在册 /
+        active / kind=lemma"也不算（可以是任意一条无关旧引理）。这一问同时判两件事，
         一次调用：
 
         1. `difficulty` 是不是在说真实的数学困难、难在哪（卡在哪条引理 / 哪一步 /
@@ -3971,7 +3955,7 @@ class Secretary:
 
         ## 为什么是模型判定而不是字数/关键词阈值
         「真困难」与「从旧稿拆出」都是语义判断：任何字数下限都会被一段套话满足，
-        任何关键词表都会把"缺一条 K 的速降假设"判成没有关键词。业主明确不要机械判据。
+        任何关键词表都会把"缺一条 K 的速降假设"判成没有关键词。不要机械判据。
 
         ## 三态（本仓最贵的那条纪律）
         没缝 / 关着 / 超时 / 坏 JSON / 非布尔 / 说合格却读不出"难在哪" ⇒ `checked=False`
@@ -4134,9 +4118,7 @@ class Secretary:
                     "cost": {"ledger": "", "reason": "没发调用（不是 B 的秘书）"}}
         # ---- 0 字命题：不进判档流程（B2 的第 1 条，2026-10-24）
         #
-        # 真机读数（sylow4 的 `out/secretary/nontriviality.jsonl`）：11 行里有 1 行的
-        # `statement_chars` 是 0，档位 None、basis "无任何命题或证明内容，无法定档"。
-        # 那一行根本不该存在：空正文不是一个"判不了的对象"，它是"没有对象" ——
+        # 空正文那一行根本不该存在：空正文不是一个"判不了的对象"，它是"没有对象" ——
         # 判它一次要花一次模型调用，而结论只能是"没东西可判"。所以这一格在取材料之前
         # 就受控拒绝：不发调用、不落台账（判不了的读数也不留 —— 它会被读成"有人判过"）。
         body_full = str(statement_full or "")
@@ -4164,17 +4146,15 @@ class Secretary:
         proof_joined = "\n\n".join(x for x in proof_bodies if str(x).strip())
         readings = proof_effort_readings(statement_full=body_full, proof_text=proof_joined,
                                          basis_hint=basis_hint)
-        # 2026-10-15 业主裁定 D4：这几格此前是 `[:2000] / [:500] / [:300] / [:500]`
-        # —— 一条静默截断，而且截的恰好是判据的输入：秘书要判的是"这条命题
+        # 这几格都开到判据输入够用的上限，不做静默截断：秘书要判的是"这条命题
         # 平不平凡"，而命题的长尾（限定条件、量词顺序）正是决定平凡与否的部分。
         # 截到 2000 字符意味着它可能在对半条命题下结论，而那个结论会变成
         # "这条别收"（`agent_loop._statement_filing_refusal`）。
-        # 裁定标准：「限制输入…删或把触发水平抬高到几乎不可能触发」⇒ 抬 10 倍以上。
         # 注意 `statement_full` 同时是缓存键的输入（见下面的 sha256）：键必须
         # 跟着一起变 —— 它变了是好事，"同一命题问第二遍不重复花钱"仍然成立，
         # 而两条前 2000 字符相同、之后不同的命题不再被误认成同一条。
         #
-        # 2026-10-24：多一格 `effort`（力气读数）。它按 `sort_keys` 排在材料最前面 ——
+        # 多一格 `effort`（力气读数）。它按 `sort_keys` 排在材料最前面 ——
         # 万一材料真的被截断，模型至少已经看到读数本身，而不是只看到半句正文。
         context = {
             "effort": {k: readings.get(k) for k in
@@ -4312,7 +4292,7 @@ class Secretary:
                       statement_id: str = "", proof_no: Any = 1,
                       task_id: str = "", proof_text: str = "",
                       materials: Any = None) -> dict[str, Any]:
-        """V 这段审阅回复到底有没有指出缺陷（业主 2026-10-29 的 B 段；两档不许折平）。
+        """V 这段审阅回复到底有没有指出缺陷（两档不许折平）。
 
         ## 材料只给两样（这是本方法的判据，不是实现细节）
         V 的回复正文 + 该台账行的 `verdict` / `defect_step`。不给 F 的证明
@@ -4327,16 +4307,16 @@ class Secretary:
         判断面） / `reason` / `basis` / `material`（真递给模型的那一份，供判据逐字核） /
         `refused` / `cost` / `verdict`（台账那一行的结论原文）。
 
-        业主 2026-10-30 第三次裁定：「不可能有判不了…只要不是完全没毛病都叫有毛病」。
+        「不可能有判不了…只要不是完全没毛病都叫有毛病」。
         于是结论只有两格（`没问题` / `有缺陷要指出`）：拿不准、只挑出一处小记号问题、
         只说"我没逐行验证"——每一档在题面里都明文算「有缺陷要指出」。模型若仍答历史
         那一格（`判不了`）或任何词表外的写法 ⇒ `checked=False` + `axis=""`：
         那是"没查成"（框架失败），不是一种结论，更不是"没问题"（连续计数里既不算票、
         也不清零；上层见 `agent_v.core` 的 `secretary_unjudged` 那一支）。
 
-        ## p247：轴是唯一的判定来源；判 fault 时由本方法定出那一步
-        业主 2026-11-06 第三次收紧逐字：「V 的判词只是陈述」「每一转的轴（clean / fault）
-        一律由 V 秘书做语义分析后给出」「判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。
+        ## 轴是唯一的判定来源；判 fault 时由本方法定出那一步
+        「V 的判词只是陈述」「每一转的轴（clean / fault）一律由 V 秘书做语义分析后给出」
+        「判 fault 而 V 没给 defect_step ⇒ 秘书定出那一步」。
         所以：① `verdict` 只作为材料里的原话递给模型，本方法不按它的字面定轴；
         ② 模型判「有缺陷要指出」时还要给出 `defect_step`（题面要求），本方法把它带回去；
         ③ V 给了步号就以 V 的为准？不 —— 轴与步号都是秘书这一问的产物：V 的 `defect_step`
@@ -4349,9 +4329,8 @@ class Secretary:
             "unwired": bool(self.seam is None or not self.enable_model),
             "reason": "", "basis": [], "refused": "", "cost": {},
             "verdict": str(verdict or ""), "defect_step": defect_step,
-            #: D3 批 2：这四个键每一行都写（值可以为空串）。键在不在是"新行 / 老行"
-            #: 的唯一分界（`verifications.fault_kind_of` 读的就是它）；没判成时它们也
-            #: 在，值为空 —— "没有这一格"只属于这批改动之前写下的老行。
+            #: 这四个键每一行都写（值可以为空串）。键在不在是"新行 / 老行"的唯一分界
+            #: （`verifications.fault_kind_of` 读的就是它）；没判成时它们也在，值为空。
             "fault_kind": "", "fault_cause": "", "report_gap": "",
             "statement_id": str(statement_id or ""), "proof_no": 0,
             "material": {},
@@ -4394,19 +4373,19 @@ class Secretary:
         answer = str(got.get("decision") or "").strip()
         if answer not in V_REPLY_AXIS:
             # 词表外（`judge` 已经挡过一次，这里是第二道：本方法的取值只由 V_REPLY_AXIS 定）。
-            # 业主 2026-10-30：`判不了` 不是一种结论 ⇒ 它落到这里（"不采信"），不许
+            # `判不了` 不是一种结论 ⇒ 它落到这里（"不采信"），不许
             # 折成 fault 去凑一条判词，也不许折成 clean 放过去。
             out["answer"] = JUDGE_UNCHECKED
             out["axis"] = ""
             out["reason"] = f"结论 {answer!r} 不在 {list(V_REPLY_VERDICTS)} 里 ⇒ 不采信"
             return out
         out.update(checked=True, answer=answer, axis=V_REPLY_AXIS[answer])
-        # ---- D3 批 2：把这一问的答案读成四个类别格（写侧分类第一半） --------------
+        # ---- 把这一问的答案读成四个类别格（写侧分类第一半） --------------
         #
         # 轴仍由 `V_REPLY_AXIS` 定（两档不动）；这一支只多读两格 —— `defect_kind`
         # 与 `report_gap` —— 并把它们翻译成台账那一格里要落的
-        # `fault_kind` / `fault_cause` / `report_gap`。业主裁定 ① 的"只缺反例尝试
-        # 记录不算缺陷"在这里被编码成 `kind=""` + `cause="report_gap"`；要不要把它
+        # `fault_kind` / `fault_cause` / `report_gap`。"只缺反例尝试记录不算缺陷"
+        # 在这里被编码成 `kind=""` + `cause="report_gap"`；要不要把它
         # 翻成 clean 轴由写行处决定（那里才拿得到 findings / defect_step —— 护栏只许
         # 往更严的方向折，见 `agent_v/core.py` 的 `_write_fault_cell`）。
         _reading = v_reply_fault_reading(
@@ -4432,7 +4411,7 @@ class Secretary:
                              within_call: int | None = None,
                              review_call: str = ""
                              ) -> dict[str, Any]:
-        """这一签发不发（业主 2026-10-29 的 A 段：发签决定权在 V 的秘书）。
+        """这一签发不发（发签决定权在 V 的秘书）。
 
         ## 判据分两层，且只有一层能否决
         1. 台账那一层（机械、唯一真身）：`:func:`verifications.review_standing`` 现算的
@@ -4442,8 +4421,8 @@ class Secretary:
            它只能在这个前提下再否决，不能把"次数不够"判成"签发"。
         ⇒ 两层是"与"，不是"或"：门槛是地板，秘书的决定是天花板。
 
-        ## `within_call`：单次送审内部的轮数（2026-11-02 定稿，业主授权加这一格）
-        业主逐字：「不允许跨两次送审累计成功数」。`AgentV` 的连判循环每转都把
+        ## `within_call`：单次送审内部的轮数
+        「不允许跨两次送审累计成功数」。`AgentV` 的连判循环每转都把
         "这一趟的第几轮"作为 `within_call` 递进来；一旦给了它，第 1 层的地板就只看
         这个数，台账尾部历史连续数一个字节都不再参与"发不发签"的判断（连"缺口补齐"
         式的二次确认也不许：那正是后门从别处长回来的形态）。台账仍被读一次，但只作
@@ -4458,7 +4437,7 @@ class Secretary:
         | 判了 | `checked=True` + `issue`（真/假）+ `decision`（中文两档） |
         | 没缝 / 开关关着 / 超时 / 台账读不成 / 坏 JSON / 词表外 | `checked=False` + `issue=False` + 理由 |
 
-        `checked=False` ⇒ 不发签（`draft/125` §三：装配没接上时秘书判定必须报
+        `checked=False` ⇒ 不发签（装配没接上时秘书判定必须报
         `checked=False`，且不放签）。返回键：`checked` / `issue` / `decision` / `streak` /
         `need` / `streak_ok` / `projected` / `same_sha` / `state` / `reason` / `basis` /
         `reading` / `cost` / `material`。
@@ -4516,8 +4495,8 @@ class Secretary:
                                  "不放签（不是「可以签」）")
                 self._note_sign_issuance(out, task_id=task_id)
                 return out
-            # 2026-11-02：给了 `within_call` 时台账只是历史读数 —— 历史读不成
-            # 不许反过来否决这一趟（要求 ④：台账不以任何形式参与发不发签）。
+            # 给了 `within_call` 时台账只是历史读数 —— 历史读不成不许反过来否决这一趟
+            # （台账不以任何形式参与发不发签）。
             reading_problem = f"{type(exc).__name__}: {exc}"
             reading = {}
         out["reading"] = dict(reading)
@@ -4529,7 +4508,7 @@ class Secretary:
         out["same_sha"] = same_sha
         # 这一签落下去之后的连续次数：同一份正文 ⇒ 前一票 + 这一票；换了一份 ⇒ 从 1 起。
         #
-        # 两种调用顺序都要对（业主 2026-10-29 追加口径之后，生产走的是第二种）：
+        # 两种调用顺序都要对（生产走的是第二种）：
         # · 先问后做：台账里还没有这一签 ⇒ `streak + 1`（预测）；
         # · 先落台账后问（V 的秘书这一条路：`record_verification(flip=False)` 已经把行落了）
         #   ⇒ 这一签就是尾部那一签 ⇒ 连续次数就是 `streak`，不许再加一票。
@@ -4539,10 +4518,10 @@ class Secretary:
                   and str(row.get("verification_id") or "")
                   == str(reading.get("verification_id") or ""))
         out["landed"] = bool(landed)
-        # ---- p247：候选这一签的资格只看秘书给的轴，不看 V 的 verdict 字面 ----
+        # ---- 候选这一签的资格只看秘书给的轴，不看 V 的 verdict 字面 ----
         #
-        # 业主 2026-11-06 第三次收紧：「streak / 签发只看秘书给出的轴，不看 V 自己写的
-        # 那两个字」。所以这里读 `secretary_axis`（row 已经有这一格；直调路径可以从
+        # 「streak / 签发只看秘书给出的轴，不看 V 自己写的那两个字」。所以这里读
+        # `secretary_axis`（row 已经有这一格；直调路径可以从
         # `verdict` 的 `secretary_judge` / `axis` 带进来），不再用 `verdict == "成立"`。
         candidate_axis = ""
         if isinstance(row, Mapping):
@@ -4555,8 +4534,8 @@ class Secretary:
             candidate_axis = str(v.get("axis") or "")
         if not candidate_axis:
             #: 老调用点 / 直调夹具：只给了 `verdict`，没有秘书那一格 ⇒ 没有轴。
-            #: 2026-11-06 裁定 2 起 `historical_axis` 一律空轴（它从前按 `verdict` 字面
-            #: 给 clean/fault，那正是"绕过秘书登记成立"的后半截）。这一档因此是
+            #: `historical_axis` 一律空轴（按 `verdict` 字面给 clean/fault，那正是
+            #: "绕过秘书登记成立"的后半截）。这一档因此是
             #: "判不了"：`candidate_ok` 为假 ⇒ 不签发，不是"没问题"。
             candidate_axis = _VR.historical_axis(v)
         candidate_ok = (candidate_axis == "clean"
@@ -5245,13 +5224,13 @@ class Secretary:
         - 第二段是判断（只有 :meth:`should_engage` 说该介入时才走）：错名映到哪一个候选（:meth:`judge` 的
           `tool_name` 一类，一次模型调用 + 台账）。判断没查成 ⇒ 结论仍是预筛那一份，且台账里
           `judge.checked=False` 写明。
-        另加一件同样是判断的事（业主 2026-10-26）：内容与收件面相符吗 ——
+        另加一件同样是判断的事：内容与收件面相符吗 ——
         :meth:`judge_recipient_face`（`face=` 是它要的收件面读数，由调用方注入；判据本体不在这里）。
         判"不符"的那一档是受控拒绝：这一条一份稿子都不出去，拒信与结论一起进返回值与台账。
         fail-open：超时/自己出错 ⇒ 原样放行 + 台账留痕（`fail_open=True`）。
         """
         original = dict(payload)
-        # ---- 两段式（业主 2026-10-21 裁定）：确认/拒绝那两个字段是协议字段，
+        # ---- 两段式：确认/拒绝那两个字段是协议字段，
         # 不进洗格式的输入、也不进"原稿/洗后"这两份被并列记录的内容面载荷。
         # 分开取而不是洗完之后再删：`original` 与 `washed` 必须是同一件事的两份，
         # 否则"逐字段 diff"会把一个协议字段算成内容差异。
@@ -5262,7 +5241,7 @@ class Secretary:
         try:
             if time.monotonic() - t0 > self.deadline_sec:
                 raise TimeoutError("秘书超过单次调用上限")
-            # ---- S1g：洗格式（E5 的落地）。位置：判"该不该介入"之前 ——
+            # ---- 洗格式。位置：判"该不该介入"之前 ——
             # 预筛要核的是洗过之后那一份（否则"错名"永远是错的，洗了白洗）。
             # 内容面一个字不动（`wash_delegation` 的边界逐条写在它的 docstring 里）。
             wash = self.wash_delegation(shape, body)
@@ -5982,7 +5961,7 @@ class Secretary:
     def inbox_todos(self, *, limit: int = 20) -> dict[str, Any]:
         """F-05 的消费端：把"还没有处理 / 还没有反馈"的东西摆出来（只读，两栏）。
 
-        ## 两栏（业主 2026-10-26 Q18：不许混成一句）
+        ## 两栏（不许混成一句）
         | 栏 | 装什么 | 截断 |
         |---|---|---|
         | `running_agents` | 此刻真的在跑的子代理（数量 + 全部编号） | 永不截断 |
@@ -5990,13 +5969,11 @@ class Secretary:
 
         一行 `tasks` 落在哪一栏由两处判据决定，两处都在本模块：轴归 :func:`row_axis`
         （代理行 / 板项行 / 顶趟行 / 其它），"还算不算在跑"归 :func:`is_live_agent`
-        （2026-10-26 Q27 把这两问拆开；改前它们是同一个返回值）。改前这一段自己判，
-        而且只看 `status ∈ {pending, running}` 与 `action != "run"`
-        —— 板项行（`status` 恒为 `pending`）于是被写成 `state="running"`：真机
-        `projects/mp3-r3` 的 30 条板项被数成"running 5 条"（`MAX_REMINDERS` 截断），
-        而那一刻 18 条代理行全部 done、台账里一个在跑的子都没有。
+        （两问拆开，才分得清"这一行是什么"与"它还活不活"）。只按
+        `status ∈ {pending, running}` 与 `action != "run"` 判，板项行（`status` 恒为
+        `pending`）就会被写成 `state="running"` —— 板项与在跑的子代理在读数上同形。
 
-        `draft/53` §10 的口径不变：生产端是机器（`search_requests` / `reprocess_requests`
+        口径：生产端是机器（`search_requests` / `reprocess_requests`
         的 pending + 那些三态行），消费端是各角色自己的秘书 + M 的秘书（全局）；本方法
         只做"摆出来"这一半，判断归 :meth:`remind_closure`。
 
@@ -6505,7 +6482,7 @@ class Secretary:
         """名册的折叠后状态（`(项列表, 坏行)`）：一项 = 名字 / 角色 / 简介 / 状态。
 
         事件流折叠口径：`add` 建项；`bind` 只推当前调用；`retire` 标退役；
-        `keep_alive` 只改那一格读数。只追加、不物理删（`draft/92` I-8）。
+        `keep_alive` 只改那一格读数。只追加、不物理删。
         """
         from . import jsonlfile as JF
 
@@ -6520,17 +6497,17 @@ class Secretary:
         return _fold_index(rows), bad
 
     def retired_names(self, owner: str) -> tuple[list[dict[str, Any]], list[str]]:
-        """销号名单（业主 B1）：名字一经退役永久不复用。`(行列表, 坏行)`。
+        """销号名单：名字一经退役永久不复用。`(行列表, 坏行)`。
 
-        这是 :meth:`retired_ledger` 的薄包装：`bad` 的口径与改前逐字相同（"某行不是
-        合法 JSON / 不是对象"），所以既有读者不受影响。"这一份名单够不够回答否"那一格
+        这是 :meth:`retired_ledger` 的薄包装：`bad` 的口径是"某行不是
+        合法 JSON / 不是对象"，所以既有读者不受影响。"这一份名单够不够回答否"那一格
         不在这里 —— 它在 `retired_ledger` 的 `checked` / `unattributable` 上。
         """
         got = self.retired_ledger(owner, trusted_shard=True)
         return list(got.get("rows") or []), list(got.get("bad") or [])
 
     def retired_ledger(self, owner: str, *, trusted_shard: bool) -> dict[str, Any]:
-        """销号名单的四态读数 ＋ 逐行读数（`draft/145` §3.1）。
+        """销号名单的四态读数 ＋ 逐行读数。
 
         返回 `{"checked","state","rows","bad","unattributable","unattributable_rows",
         "reason"}`。`state` 是 `jsonlfile.READ_STATES` 之一（`absent` / `empty` / `ok` /
@@ -6540,19 +6517,19 @@ class Secretary:
         给调用方"按号 / 按名逐个排除：这一行可能是谁"用（判据在
         :func:`retired_row_gaps`）。
 
-        为什么要多出 `unattributable` 这一档（改前没有，于是下面这些全被读成"没销号"）：
+        为什么要多出 `unattributable` 这一档（没有它，下面这些全会被读成"没销号"）：
         一行是合法 JSON、也是对象，但认不出它是哪一号 / 哪一名 —— 少 `task_id`、
-        少 `name`、或两者类型不是非空字符串（`draft/145` R8 / R10 / R11）；
-        又或者那一行的 `owner` 与它所在的分片名字对不上（R19 的"张冠李戴"那一半）。
+        少 `name`、或两者类型不是非空字符串；
+        又或者那一行的 `owner` 与它所在的分片名字对不上（"张冠李戴"那一半）。
         这种行今天既不在 `bad` 里、也不命中任何键 ⇒ 闸门读成"这一份里没有它" ⇒
         已销号的号照样被叫醒。判据只认"非空字符串"两件事，刻意不校验格式
-        （格式校验会变成第二份发号口径 —— `draft/145` §3.1 注 2）。
+        （格式校验会变成第二份发号口径）。
 
         `trusted_shard`：这个分片名是怎么来的，必须由调用方显式说。
         - `True`：来自台账那一行自己的 `parent_task_id`（或写侧的"我就是这个父"）⇒
           文件不存在就是"还没人销过号"这条查过的事实（`absent` + `checked=True`）；
         - `False`：来自扫目录 / 调用方猜的 ⇒ 文件不存在证明不了任何事（`checked=False`）。
-        把这两档折在一起，就是 `draft/145` B1/B2 那条洞（"读不成"被写成"查过了、没有"）。
+        把这两档折在一起，就是那条洞（"读不成"被写成"查过了、没有"）。
         """
         from . import jsonlfile as JF
 
@@ -6802,7 +6779,7 @@ class Secretary:
                     reuse: str = "", surface: str = "", new: str = "") -> dict[str, Any]:
         """名册登记（增那一支）：`{"name","role","task_id","brief","brief_written","problem"}`。
 
-        ## 两个入口，语义不同（业主 2026-10-24）
+        ## 两个入口，语义不同
         名册项是"一个常驻子代理"的身份（名字 / 角色 / 简介 / 读写面），不是一件活。
         一个子代理可以接好几件活，所以写入侧只有两条路：
 
@@ -6817,7 +6794,7 @@ class Secretary:
         两个入口不许混着给（`reuse` 与 `new` / `want_name` 同时给 ⇒ 受控拒绝：那是
         两句互相矛盾的话，猜哪一句都会替调用方改主意）。
 
-        ## 受控拒绝带机器码（业主 2026-11-02）
+        ## 受控拒绝带机器码
         拒绝时回执多一格 `refusal_code`（成功回执逐键不变），取值只有这五个，一档一个语义：
         `name_taken`（这个名字用过：活跃 / 已收口 / 已销号）、`task_id_reused`（同一个号
         已经登记在别的名字名下）、`task_id_retired`（这个号销过号，不许再 add / bind）、
@@ -6834,7 +6811,7 @@ class Secretary:
           活落的"，不回答"这个名册项是谁" —— 名册项的身份是 `owner` + `name`
           （读侧按名字归组：一个节点 + N 件活，见 `webui.readers.roster_face`）。
 
-        ## 简介（业主 2026-10-20）
+        ## 简介
         `brief` 缺失（空 / 纯空白）而 `task` 非空 ⇒ 秘书代写：由 `brief_from_task` 从
         任务原文派生一句（确定性、不调模型、不花钱，≤60 字、单行），登记行里那一格记
         `brief_source="secretary"`、返回 `brief_written=True`；父给的那一句记
@@ -6929,9 +6906,8 @@ class Secretary:
                         "problem": problem, "refusal_code": "name_taken"}
         else:
             name = ""
-        # ⑥（业主 2026-11-02）：已销号的号不许再登记（名字那一侧早就封死，号那一侧
-        # 改前敞着 —— `draft/149` §1.4-④：换个新名字重新 add 成功，于是这个新名字
-        # 永远销不掉、成为永久孤儿，父也永远不许销号）。
+        # ⑥ 已销号的号不许再登记（名字那一侧封死，号那一侧若不封：换个新名字重新 add
+        # 成功，于是这个新名字永远销不掉、成为永久孤儿，父也永远不许销号）。
         retired_by = self._retired_name_of_task_id(owner, str(task_id))
         if retired_by:
             return {"name": name, "role": str(role), "task_id": str(task_id),
@@ -6939,7 +6915,7 @@ class Secretary:
                     "problem": (f"{task_id} 已经销号（{retired_by}）⇒ 受控拒绝"
                                 "（task_id_retired）：已销号的号不许再登记给任何名字"
                                 "（否则它会变成一个永远销不掉的孤儿项）")}
-        # ④（业主 2026-11-02）：同一个号不许出现在两条 `add` 行。判据读全历史
+        # ④ 同一个号不许出现在两条 `add` 行。判据读全历史
         # （全部 add ∪ 全部 bind），不读折叠视图 —— 后者会把复用过的旧号判成"没见过"。
         history, bad_hist = self._roster_history(owner)
         if bad_hist:
@@ -6998,13 +6974,12 @@ class Secretary:
     def open_solo_entry(self, *, task_id: str, task: str = "", brief: str = "") -> dict[str, Any]:
         """给"用户指定单条执行"开一条名册行与一个读写面槽位（`owner` = 它自己的任务号）。
 
-        ## 为什么需要这一格（业主 2026-10-22 的 B-5 裁定）
+        ## 为什么需要这一格
 
-        B-5：「L 的形式化验证成本极高 ⇒ 在全部研究和论文落定之后，用户指定有形式化验证
-        需求时，要一条才做一条」。B-5 之后业主 2026-10-22 晚的最终裁定又给了它一条入口
-        （「只有 B 可以派 L」），所以这一格今天不只在 `run-agent L` 上用到：被 B 派的那一趟
-        走父的秘书登记，而用户指定单条起的那一趟没有父，走本方法。而业主要求"单条执行时
-        同样有台账号、名册行、读写面" —— 那三样在"被父派活"那一档是由父的秘书在
+        形式化验证成本极高 ⇒ 在全部研究和论文落定之后，用户指定有形式化验证需求时，
+        要一条才做一条。而只有 B 可以派 L，所以这一格今天不只在 `run-agent L` 上用到：
+        被 B 派的那一趟走父的秘书登记，而用户指定单条起的那一趟没有父，走本方法。
+        "单条执行时同样有台账号、名册行、读写面"—— 那三样在"被父派活"那一档是由父的秘书在
         `Conductor._register_roster` 里落的，单条执行时没有父，于是没有任何人落它们。
 
         这里补的就是那一个缺失：把"这一趟"登记进它自己名下的名册（`owner` 与
@@ -7258,7 +7233,7 @@ class Secretary:
                            ) -> list[dict[str, Any]]:
         """一页命中候选 ⇒ 判定的上下文那一份（只留判定要看的格）。
 
-        2026-11-08（缺陷 ②）：这一格只是一页的成形器（页大小
+        这一格只是一页的成形器（页大小
         `PROPOSITION_VERDICT_CANDIDATES`）；分页在 `_identity_pages`，问到命中或页尽，
         不再把整批截到前 4 条。
         """
@@ -7276,9 +7251,9 @@ class Secretary:
                                task_id: str = "") -> dict[str, Any]:
         """这一条与在册的哪一条是同一个定理（秘书主动查询 + 一次模型判定，两档，按正文 sha256 缓存）。
 
-        业主 2026-10-24 的两句（唯一权威）：「不用机械判据，让秘书洗定理名，让秘书判」；
-        「定理描述一致（什么条件推出什么结论），就是一个定理」；2026-11-08 又裁定：
-        这一问不许有第三种结论 —— 读不清就是没判成，不是一种判词。
+        两句准绳：「不用机械判据，让秘书洗定理名，让秘书判」；
+        「定理描述一致（什么条件推出什么结论），就是一个定理」。这一问不许有第三种
+        结论 —— 读不清就是没判成，不是一种判词。
 
         所以这一格做三件事、两次模型调用（挑词 + 判定；判定那一趟同时洗名）：
         ⓪ 「秘书自己出查询」：`pick_statement_keywords` 挑数学关键词（一次调用），
@@ -7292,7 +7267,7 @@ class Secretary:
         ② 判是不是同一个命题：读条件与结论，只给 same / different，
            判 same 时点名并进哪一条（`same_as`）。
 
-        ## 检索读数（"它确实查过"必须看得见；2026-11-08）
+        ## 检索读数（"它确实查过"必须看得见）
         `keywords` / `hits_total`（命中几条）/ `hits_named`（这一趟交给模型看的全部候选，
         带每条命中的词）/ `judged`（判定那一趟发没发）/ `same_as` / `why`。
         分页读数（缺陷 ②）：`candidates_total`（候选总数）/ `pages_total`（要问几页）/
@@ -8234,7 +8209,7 @@ class Secretary:
 
     def _abandon_reason_gate(self, row: Mapping[str, Any], wanted: Mapping[str, Any],
                              given: Mapping[str, Any]) -> dict[str, Any]:
-        """放弃命题那一步的换号理由闸（业主 2026-11-07；判据本体在 `statementabandon`）。
+        """放弃命题那一步的换号理由闸（判据本体在 `statementabandon`）。
 
         返回 `{"refused","reason","form","quote_reason"}`：
         - 不归这道闸管（目标状态不是 abandoned / 明确非命题的 kind / 幂等重放且没交
@@ -8243,8 +8218,8 @@ class Secretary:
         - 过关 ⇒ `quote_reason` 是要落盘的那一条标记（`abandoned@<ISO>@<JSON>`），
           `form` 是判据的逐格读数。
 
-        ## 判档读的是盘上原 kind（2026-11-07 审计 A1/A2）
-        改前读的是 `wanted.get("kind", row.get("kind"))` —— 同一笔 patch 里把
+        ## 判档读的是盘上原 kind
+        读 `wanted.get("kind", row.get("kind"))` 会让同一笔 patch 里把
         `kind` 改成 `concept` 再写 `status=abandoned`，闸就按"想要的 kind"跳过。
         现在：
         1. 同一笔里改 `kind` + 把 `status` 改成 `abandoned` ⇒ 受控拒
@@ -8257,7 +8232,7 @@ class Secretary:
         1. 明确非命题的两档（`concept` / `definition`）⇒ 不受这道闸管（概念没有
            "条件 ⇒ 结论"，谈不上"命题本身有数学错误"或"证明遇到的困难"）；
            其余一切 kind（含词表外的 `example` / `remark` / 空串）一律按命题处理
-           （审计 A3：改前"认不出的 kind 不拦"就是一条一行 patch 的绕行）。
+           （"认不出的 kind 不拦"就是一条一行 patch 的绕行）。
         2. 命题 ⇒ 必须给 `abandon_kind` + `abandon_basis`，判据
            `statementabandon.check_abandon_reason`（math_error 要 `defect_ref`
            指向这一条且审的是现行正文、理由要点名 `defect_step`；difficulty 要
@@ -8265,9 +8240,9 @@ class Secretary:
            须在这笔放弃之前就在册，最后过 `judge_abandon_difficulty` 的语义判定）。
         3. 这一行早就是 `abandoned` 而这一次没交新理由、也没改 `quote_reason`
            ⇒ 幂等重放，不拦（历史行必须还能被重放）；理由要变 ⇒ 与第一次同一道闸
-           （审计 A4：已 abandoned 不是免检通行证）。
+           （已 abandoned 不是免检通行证）。
 
-        ## E 侧那两档（业主 2026-11-07 第二刀）
+        ## E 侧那两档
         `counterexample`（发现反例）/ `space_too_large`（枚举空间过于宏大）由同一道闸判：
         前者要 `experiment_id` 指一条真的证否实验、后者要一份结构化的 `space` 读数。
         这两格由调用方随 `status=abandoned` 一起交（走 `patch` 或完整的结构化
@@ -8781,7 +8756,7 @@ class Secretary:
         kind = str(body.get("kind") or "theorem")
         if not full.strip():
             if kind == "concept":
-                # D12 已裁（2026-10-09，业主选甲）：定义还没抽到的概念行照落 ——
+                # 定义还没抽到的概念行照落 ——
                 # 落成 `pending_definition`（不是依据）+ 待补标记（谁去补写在 reason 里）。
                 # 不许折成 `active` + 空定义（`Statement.validate` 当场拒），
                 # 也不许"干脆不落"（那样这个概念并表之后查不到）。
@@ -8790,10 +8765,9 @@ class Secretary:
                        reason=("statement_full 是空的 ⇒ 不写（只有短版不算数：省掉假设的"
                                "命题会被下游当成无条件成立）"))
             return out
-        # ---- D1（2026-10-22）：语义那一档的证据缺了就不写，并给具名理由。
+        # ---- 语义那一档的证据缺了就不写，并给具名理由。
         #
-        # 判据本体在 `_semantic_quote_evidence_refusal`（拆出来只为让本方法留在
-        # "一屏半"之内；2026-11-07 体量基线回到 95）。
+        # 判据本体在 `_semantic_quote_evidence_refusal`（拆出来只为让本方法留在"一屏半"之内）。
         _semantic_refusal = _semantic_quote_evidence_refusal(body)
         if _semantic_refusal:
             out.update(**_semantic_refusal)
@@ -8807,7 +8781,7 @@ class Secretary:
                        reason=(f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，"
                                f"收到 {_origin_now!r}"))
             return out
-        # ---- 2026-11-04（业主裁定：正文必须由手稿承载）：`proof_text` 的唯一收口闸 ----
+        # ---- 正文必须由手稿承载：`proof_text` 的唯一收口闸 ----
         #
         # 位置在"判同一性"之前：这一笔如果连正文都不该写，就不该先花一次模型调用去
         # 判它跟谁同一条；而且判词会诱导调用方以为"只差一个合并"。
@@ -8829,7 +8803,7 @@ class Secretary:
         # 它要落到哪一条在册行由同一性判定给出 ⇒ 这一闸必须在判定之后、拿到 `same_as`
         # 再判一次（`_merge_into_proposition` 里）。先在这里跳过，免得把一条合法的
         # 合并判成"没有在册行"。
-        # ---- 命题同一性：让秘书洗定理名、让秘书判（业主 2026-10-24）。
+        # ---- 命题同一性：让秘书洗定理名、让秘书判。
         #
         # 位置在"落盘之前、事务之外"：这一步会发一次模型调用（可以慢、可以超时），
         # 把它放进 `store.tx` 就是拿网络等待去占着写锁，而锁里不该有网络等待。
@@ -8840,14 +8814,14 @@ class Secretary:
                 {"statement_full": full, "label": str(body.get("label") or ""),
                  "kind": kind})
         else:
-            # 2026-11-08（业主）：调用方已经把"是不是在册的同一条"查过一圈
+            # 调用方已经把"是不是在册的同一条"查过一圈
             # （`register_statement._resolve_same_statement`：关键词检索 + 秘书认定）。
             # 这里沿用那一趟的结论，不再发第二次模型调用 —— 同一件事两个判据会给出
             # 两个答案，而"两处各判一次"正是这条链要收掉的形态。
             adjudication = dict(adjudication)
             out["adjudication_source"] = "register_statement:same_statement"
         out["adjudication"] = self._adjudication_reading(adjudication)
-        #: 没判成必须可见（2026-10-26）：`adjudication` 是那一趟的逐字读数，而这一格是
+        #: 没判成必须可见：`adjudication` 是那一趟的逐字读数，而这一格是
         #: "判了没有"的一句话（`checked` / `attempted` / `reason` / `seam_source`）。
         #: 为什么要两格：前者挨着 `verdict` / `basis` 那一组判词，读的人（模型只看工具
         #: 返回的那份 JSON）容易把它读成"判过了、结论是某一档"；这一格单独命名，于是
@@ -9527,9 +9501,8 @@ class Secretary:
             crow.validate()
             tx.upsert(CR.LEGACY_TABLE, crow.to_dict(), note="secretary:concept_mirror")
         CR.push_counters(tx, sid)   # 一个号空间、两个计数器（见 push_counters）
-        # 概念/定义行的档位读数：不适用（没有证明正文）。改前这一行不存在 ——
-        # 真机 mp3-r3 的 30 条概念行在 `out/secretary/nontriviality.jsonl` 里一条
-        # 记录都没有，而读侧把"没有记录"与"不需要记录"都印成同一个"未判"。
+        # 概念/定义行的档位读数：不适用（没有证明正文）。不落这一格时，读侧会把
+        # "没有记录"与"不需要记录"都印成同一个"未判"。
         # 两支都调（新建与同步）：那一格是幂等的（同一段正文只落一行），于是存量概念行
         # 会在它下一次经秘书那一笔时被补上，不需要一次全库迁移。
         self.judge_statement(statement_full=full, kind="concept", stmt_id=sid)
@@ -9550,11 +9523,11 @@ class Secretary:
     }
 
     def _scan_proof_deps(self, body: Mapping[str, Any]) -> dict[str, Any]:
-        """从"定理内容 + 证明过程"里扫出依赖（业主 `draft/97` §14.11 乙：B 只交这两样）。
+        """从"定理内容 + 证明过程"里扫出依赖（B 只交这两样）。
 
         ## 路径分组（`Dependency.path_group`）：载荷给了显式的 `proof_paths`（多段可选证明，B 自己分的段）⇒
-        每段一组，下标从 1 起（组内 AND / 组间 OR，见 `draft/97` §12.1）；载荷给了 `proofs`（多证明清单，
-        业主 2026-10-22）⇒ 一份证明一组，组下标就是它在清单里的位次，并且这一组的每一步都带上它的
+        每段一组，下标从 1 起（组内 AND / 组间 OR）；载荷给了 `proofs`（多证明清单）
+        ⇒ 一份证明一组，组下标就是它在清单里的位次，并且这一组的每一步都带上它的
         `proof_no`（于是 `used_by` 落成 `stmt:<号>#pN`，第 2 份及以后的依赖面不再与 #p1 混在一起）。
         两样都没给 ⇒ 把 `statement_full` + `proof_text` 当一段（全归第 1 组）—— 刻意"不猜"：
         不按空行、不按"证明一/证明二"这种字样去猜 B 想分几段。
@@ -9564,7 +9537,7 @@ class Secretary:
         | `from_proof` | 扫到了至少一条在册引用 | 这是"扫到了" |
         | `none_in_proof` | 证明过程给了（键在）、一条引用也没有 | 这是"扫了、确实是空的" |
         | `unknown` | 证明过程这一格根本没给、也没扫到引用 | 这是"没扫成" —— 与"空"折平就等于把"B 没交证明过程"读成"这条定理不依赖任何东西" |
-        扫的范围是定理内容 + 证明过程两张脸（业主的口径："证明过程/定理内容里出现的引用"），去重按 `(前缀, 代号)`
+        扫的范围是定理内容 + 证明过程两张脸（"证明过程/定理内容里出现的引用"），去重按 `(前缀, 代号)`
         （`lit:0003#p.4` 与 `lit:0003` 是同一条）。
         """
         from . import textutil as T   # 惰性：引用扫描的唯一实现
@@ -10221,16 +10194,16 @@ class Secretary:
                              ) -> list[dict[str, Any]] | None:
         """把依赖组解析成可落盘的步骤；判不了就返回 `None`（调用方据此整笔不写）。
 
-        从 :meth:`_record_statement_tx` 里拆出来是因为 2026-10-24 之后有两个调用点：
+        从 :meth:`_record_statement_tx` 里拆出来是因为有两个调用点：
         "新建一条命题"与"并进已有命题的第 N 份证明"。两处必须用同一套判据 ——
         各写一份的形态是"两条路径对同一条悬空依赖给出两种处置"，而那种漂移没有
         任何读数会响（与 `_resolve_dep_steps` 的注释同一条理由）。
 
-        ## 命题这一档：不可引 ⇒ 受控拒（2026-11-06 业主口径的纠正）
+        ## 命题这一档：不可引 ⇒ 受控拒
 
         正文里点一个不可引的号（不在册 / 等级 < `pre_theorem`）不是"待接的
-        悬空边"：业主逐字「F 应该无法读到尚未在册的命题」「F 只可引用准定理级及以上
-        的命题」⇒ F 读不到它，不可能在引用它，所以这种正文只可能是这一笔写错了。
+        悬空边"：「F 应该无法读到尚未在册的命题」「F 只可引用准定理级及以上的命题」
+        ⇒ F 读不到它，不可能在引用它，所以这种正文只可能是这一笔写错了。
         判据与 F 的可引池、B 的登记入口同源（`depsection.citable_pool` /
         `uncitable_statement_problem`）；拒信逐字点名那个号。
 
@@ -10240,7 +10213,7 @@ class Secretary:
         ## 仍然保留 dangling 的只有"非命题来源"这一档
 
         文献 / 实验 / 文档这三种来源的号不在册时，边照旧落 `dangling` 并点名：
-        它们不是"F 读不到的命题"，业主 2026-11-06 那条口径没有覆盖它们；把它们
+        它们不是"F 读不到的命题"，那条口径没有覆盖它们；把它们
         也改成整笔拒会顺手改掉 G 契约里那一档（`body["deps"]` 直给的那条路本来
         就更严：它整笔不写）。命题来源不走这条 —— 它在上面的 `blocked` 那一支就拒了。
         """
@@ -10559,16 +10532,16 @@ class Secretary:
                 out["adjudication"]["fail_closed"] = True
                 return None
             return hit
-        # ---- 没有判断面：确定性兜底（业主 2026-11-04 裁定）
+        # ---- 没有判断面：确定性兜底
         #
-        # 改前这一支退回 `_same_proposition_candidate` 的"键相同或词面相似度达阈值"两档，
-        # 于是「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」（键不同、
-        # 词面相似度 0.8889 ≥ 0.85）被并成一行。而"素数 / 奇素数"正是业主点名的
+        # 退回 `_same_proposition_candidate` 的"键相同或词面相似度达阈值"两档会把
+        # 「设 p 是素数；则 p 是奇数」与「设 p 是奇素数；则 p 是奇数」（键不同、
+        # 词面相似度 0.8889 ≥ 0.85）并成一行。而"素数 / 奇素数"正是
         # 「条件强弱关系」⇒ 语义不一致 ⇒ 不并。
         #
         # 现在的口径（两条，缺一条都不成立）：
         # - 确定性键相同 ⇒ 仍并：那是"条件与结论的等价改写 + 分句顺序 / 记号排版"
-        #   （业主的判准里「条件只是等价改写 ⇒ 一致」正好落这一档），零模型、可复算，
+        #   （「条件只是等价改写 ⇒ 一致」正好落这一档），零模型、可复算，
         #   不是阈值判据；
         # - 词面相似度一个字节都不决定并：它只在读数里报"离阈值有多远"
         #   （`_fail_closed_reason`）。
@@ -11154,12 +11127,12 @@ class Secretary:
         _note_path_material(out, _path_material_numbers(groups)
                             if len(groups) <= 1 else [], decided=proof_no)
         written = ["statements"]
-        # ---- 洗定理名 + 路线进证明层（业主 2026-10-24：「路线写在证明这一层」）。
+        # ---- 洗定理名 + 路线进证明层（「路线写在证明这一层」）。
         #
         # 这一笔的 label 已经被洗成 `canonical_name`（见 `_record_statement_tx`），但并进去之后
         # label 用的是那条在册行的。所以这里两件都要做：
-        # ① 在册那一条的名字如果与洗过的名字不同 ⇒ 顺手把它洗掉（真机 sylow4 的三行正是
-        #    这么来的：第一条带着"（路线一：…）"落了盘，后来的两份证明并进来时把它洗净）；
+        # ① 在册那一条的名字如果与洗过的名字不同 ⇒ 顺手把它洗掉（第一条带着
+        #    "（路线一：…）"落了盘，后来的两份证明并进来时把它洗净）；
         # ② 这一笔自己的路线说明落到"第 N 份证明"上（`PROOF_ROUTES_KEY`），不丢。
         route = str(adj.get("route") or "").strip() if adj.get("checked") else ""
         canonical = str(adj.get("canonical_name") or "").strip() if adj.get("checked") else ""
@@ -11167,7 +11140,7 @@ class Secretary:
             old_label = str(row.get("label") or "")
             # 只在"在册那个名字是本名加修饰"时洗（`Sylow 三定理（路线一：…）` ⇒ `Sylow 三定理`）。
             # 两个都干净、却不完全同名的（`Sylow 三定理` 与 `Sylow 定理`）不动它：名字不参与
-            # 同一性判定（业主：「不看名称」），先落盘的那个名字赢 —— 否则每并一份证明就改名
+            # 同一性判定（「不看名称」），先落盘的那个名字赢 —— 否则每并一份证明就改名
             # 一次，而"这一条现在叫什么"会跟着最后一次提交漂。
             if canonical in old_label:
                 out["label_washed"] = {"from": old_label, "to": canonical,
@@ -11176,9 +11149,9 @@ class Secretary:
                                                "那一类修饰被洗掉了；被洗掉的路线落进这一份"
                                                "证明的路线说明里，不丢")}
                 row["label"] = canonical
-        # ---- 在册那一行的名字如果是内部工作名，并这一笔时顺手洗掉（D1 的修名那一半）。
-        # 为什么修名放在这一支：真机 mp3-r2 的 000000 / 000001 已经带着工作名落了盘，
-        # 而它与"这一笔的 label"无关 —— 要修的正是在册那一行。判据与新建那一支同一处
+        # ---- 在册那一行的名字如果是内部工作名，并这一笔时顺手洗掉（修名那一半）。
+        # 为什么修名放在这一支：要修的正是在册那一行，而它与"这一笔的 label"无关。
+        # 判据与新建那一支同一处
         # （`wash_working_name`），所以两处不会给出两个洗法；这一支只动 label，不动内容。
         working = wash_working_name(row.get("label"), kind=str(row.get("kind") or ""),
                                     stmt_id=sid,
@@ -11414,21 +11387,19 @@ class Secretary:
         def _lines(key: str) -> Any:
             """`line_range` 的既有约定是归一化后的区间（`{"start":120,"end":148}`）。
 
-            本轮一度照 `Statement.line_range` 的注释（"如 120-148"）把它写成字符串，
-            结果被 `tests/test_intake_actions.py`（`own_row["line_range"]["start"] == 120`）
-            当场判红 —— 仓里早已定死这一格落的是归一化区间，而 `_normalize_range`
-            就是那个唯一实现。所以回到 `_rng`：判据比注释权威，而"注释与判据对不上"
-            这件事该单独记一笔，不该在这一笔里顺手改掉任何一边。
+            判据（`tests/test_intake_actions.py`）落的是归一化区间，而 `_normalize_range`
+            就是那个唯一实现 —— 所以走 `_rng`。判据比注释权威；"注释与判据对不上"
+            这件事该单独记一笔，不该顺手改掉任何一边。
             """
             return _rng(key)
 
         origin = _s("origin") or "external_lit"
         reason = _s("quote_reason")
         if not reason.strip() and body.get("quote_verified") is not True:
-            # 业主 `draft/97` §14.11：B 只交"定理内容 + 证明过程"，别的一概不要求它给。
+            # B 只交"定理内容 + 证明过程"，别的一概不要求它给。
             # 而 `Statement.validate` 的硬要求是"不是 True 就必须写 quote_reason" ——
             # 不给一个受控的默认值，那份两件式契约对自产命题（`own_result`）在结构上
-            # 就不成立（实测：整笔以 `quote_verified=None 时必须写 quote_reason` 被拒）。
+            # 就不成立（整笔会以 `quote_verified=None 时必须写 quote_reason` 被拒）。
             # 这里填的是为什么这一格是空的，不是编一个"已核对"的结论：
             # 回验要做的是拿另一份文本逐字比，而自产命题没有第二份文本可比。
             # 调用方给了就照用（不覆盖）。
@@ -11437,11 +11408,9 @@ class Secretary:
         return S.Statement(
             stmt_id=stmt_id, origin=origin, kind=kind,
             label=_s("label"),
-            # ---- D2（2026-10-22）：正文只有一个真身，短版是派生值。
+            # ---- 正文只有一个真身，短版是派生值。
             #
-            # 真机读数（`saxl-ws/data/statements.json`）：13 条命题的
-            # `statement_text` 长度全是 0，而 `statement_full` 有正文 —— 同一份正文
-            # 两个字段、一个空一个满，读侧读哪个都能给出另一种答案。真身定在
+            # 同一份正文两个字段、一个空一个满，读侧读哪个都能给出另一种答案。真身定在
             # `statement_full`（schema 对它才是硬要求、下游都靠它），短版在这里由它
             # 派生（逐字复制，不截断：截断出来的"短版"是另一条命题）。派生规则只有
             # 这一处实现（`statementbody.derive_text`），读侧的唯一入口是
@@ -11451,12 +11420,12 @@ class Secretary:
             proof_text=_s("proof_text"), source_lit_id=_s("source_lit_id") or None,
             page_range=_rng("page_range"), quote_verified=body.get("quote_verified"),
             quote_reason=reason,
-            # ---- D1（2026-10-22）：回验的三栏证据必须能过这一层。
+            # ---- 回验的三栏证据必须能过这一层。
             #
-            # 它们此前被 `STATEMENT_PARAM_KEYS` 收下、却没搬进 `Statement` ⇒ 静默丢掉。
-            # 后果是实测出来的：H 的语义判定明明给了 `quote_span` 与调用指纹，盘上
-            # 两栏全空，而 `schema._normalize_quote_mode` 把"只说了通过"的行记实成
-            # `verbatim` —— 于是"逐字回验通过"这句话在盘上没有任何读数（D1）。
+            # 只被 `STATEMENT_PARAM_KEYS` 收下、却没搬进 `Statement` 就会被静默丢掉：
+            # H 的语义判定给了 `quote_span` 与调用指纹而盘上两栏全空，
+            # `schema._normalize_quote_mode` 就会把"只说了通过"的行记实成 `verbatim`
+            # —— 于是"逐字回验通过"这句话在盘上没有任何读数。
             # 这里只搬，不判：缺证据那一档由 `quoteevidence.enforce_quote_evidence`
             # 在写库前处理（`register_statement` 的写侧断言），读侧判据是
             # `quoteevidence.scan_quote_evidence`。
@@ -11465,18 +11434,17 @@ class Secretary:
             evidence_kind=_s("evidence_kind") or "heuristic", status="active",
             derived_from=S.sorted_unique([str(x) for x in (body.get("derived_from") or [])]),
             aliases=[str(a) for a in (body.get("aliases") or []) if str(a).strip()],
-            # `line_range` 是字符串（"120-148"），不是 `PageRange` —— 这里原先走的是
-            # `_rng(...)`，于是落盘那一格是一个 `{start/end/label}` 的字典（`Statement`
-            # 的声明是 `str`）。判据抓不到它（`to_dict` 照抄、`verify` 不查那一格），
-            # 但下游按"行范围"读它的人会拿到一个字典。
+            # `line_range` 是字符串（"120-148"），不是 `PageRange` —— 走 `_rng(...)` 会让
+            # 落盘那一格是一个 `{start/end/label}` 的字典（`Statement` 的声明是 `str`）。
+            # 判据抓不到它（`to_dict` 照抄、`verify` 不查那一格），但下游按"行范围"
+            # 读它的人会拿到一个字典。
             doc_id=_s("doc_id") or None, line_range=_lines("line_range"),
-            # ---- 2026-11-05（缺陷乙）：`bits` 必须 10 键齐、没有 None -------------
+            # ---- `bits` 必须 10 键齐、没有 None -------------
             #
-            # 改前这一格是 `dict(body.get("bits") or {})`：调用方没交 `bits` 时落盘的
-            # 就是 `{}`，而 `bits_shape_problems({})` 返回 `[]`（空表被当成"没有形状
-            # 问题"）⇒ 一条整块没填 `bits` 的行照样过闸。现场就是 `000019`
-            # （`events.jsonl:3671`，20:54:32，B 走 `table.create` 被路由到正路）。
-            # 现在"缺就现算、算不齐就拒"，判据见 `_complete_statement_bits`。
+            # `dict(body.get("bits") or {})` 在调用方没交 `bits` 时落盘的就是 `{}`，而
+            # `bits_shape_problems({})` 返回 `[]`（空表被当成"没有形状问题"）⇒ 一条
+            # 整块没填 `bits` 的行照样过闸。现在"缺就现算、算不齐就拒"，
+            # 判据见 `_complete_statement_bits`。
             bits=_complete_statement_bits(body, kind=kind, origin=origin),
             created_at=S.now_iso(),
             created_by=f"secretary-{self.role}")
@@ -11486,8 +11454,8 @@ class Secretary:
                     face: str = "", base: str = "") -> dict[str, Any]:
         """这件活落在被派人的读写面里做不做得成（三态读数，只报不改）。
 
-        业主 2026-10-09 逐字：「"超越职责"的一个主要可能是无法在被分配的读写面内完成任务，这个秘书也要帮忙看，
-        不只是看任务是否符合角色设计」（`draft/90` §1.11；符号级规格见 `draft/92` §3.3 的 S1g-2 块）。
+        「"超越职责"的一个主要可能是无法在被分配的读写面内完成任务，这个秘书也要帮忙看，
+        不只是看任务是否符合角色设计」。
         ## 判什么：只判声明里给出的盘上路径（参数名由 :func:`surface_path_args` 一处给出，与执行期硬拦同一张表）。
         逐条给"这一句话在两边的所指是不是同一个文件"：
         | `verdict` | 判据 | 意思 |
@@ -11499,7 +11467,7 @@ class Secretary:
         ## 为什么 `not_in_face` 不需要知道槽位：新起一个子代理时槽位还没分（`surface_alloc` 与 `roster_add` 同一趟），
         所以"落点在这一族的面里的哪一格"判不了。但 `escapes` 与 `not_in_face` 两档的判据是"两份所指不是同一个
         文件"，与槽位无关 —— 它们正是"面内做不成"的主体，于是这条读数在派活那一刻就有用。
-        ## 为什么只报不改：路径值是内容面（`draft/90` §1.2 那条红线）：把它改写成另一条路径 = 替父决定"这件事
+        ## 为什么只报不改：路径值是内容面：把它改写成另一条路径 = 替父决定"这件事
         该在哪儿做"。秘书的活是把它变成看得见的事，处置权在父。参数：`face` 收件方这趟的面（`surface_of` 读得出）；
         `base` 本实例自己的根（父视角的基准）—— 不给 ⇒ 用 `self.root`（顶层那一趟两者相同；子代理那一趟它自己的
         根是它的面，调用方要传进来）。
@@ -11764,10 +11732,9 @@ class Secretary:
                     if r.get("parent_task_id") == owner and not str(r.get("kind") or "")]
         except Exception as exc:  # noqa: BLE001
             return 0, f"台账读不成（{type(exc).__name__}: {exc}）", []
-        # 已知集 = 全部 `add` 行 ∪ 全部 `bind` 行的 task_id 并集（业主 2026-11-02 的定稿口径）。
-        # 改前读 `roster_index` 的折叠视图 ⇒ 一个名字接过第二件活之后，第一件活从
-        # `known` 里消失 ⇒ 自愈把已经登记过的行再补一次（机制 B，零并发可复现；
-        # `draft/149` §4.5 的 I 组读数：`repair fixed=1`，多出 `D2/t-000002`）。
+        # 已知集 = 全部 `add` 行 ∪ 全部 `bind` 行的 task_id 并集。
+        # 读 `roster_index` 的折叠视图不行：一个名字接过第二件活之后，第一件活从
+        # `known` 里消失 ⇒ 自愈把已经登记过的行再补一次（零并发可复现）。
         known, bad = self._roster_history(owner)
         if bad:
             return 0, f"名册/对照表有 {len(bad)} 行读不出来 ⇒ 不补（免得重名）", []
@@ -11958,10 +11925,10 @@ class Secretary:
                      snapshot: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """两个读数：子代理数 / 活跃子代理数（本方法是它们唯一的实现）。
 
-        ## 两个数各自的定义（业主 2026-10-26 裁定，逐字见 `conductor` 那几个常量）
+        ## 两个数各自的定义（见 `conductor` 那几个常量）
         - 子代理数 = 名册里还没销号的名册项数（在册、未退役）；
-        - 活跃子代理数 = 其中非静默的数量（业主后一句：「更新『活跃子代理』的定义为
-          非静默子代理」）：非静默 = 在飞 + 待机，三态判定只有 `conductor.agent_state`
+        - 活跃子代理数 = 其中非静默的数量（「活跃子代理」的定义就是非静默子代理）：
+          非静默 = 在飞 + 待机，三态判定只有 `conductor.agent_state`
           一处；`unknown`（判不了）既不算活跃也不算静默，它进 `states["unknown"]`
           并让 `complete=False`。
 
@@ -12324,7 +12291,7 @@ class Secretary:
         """名册视图"没读成"的那一份读数（三态里的第三态，形状与真身那个分支逐键相同）。
 
         为什么单列一个方法而不是在 `roster_view` 里内联：那个 `checked=False` 的行有 11 个键
-        （含 S-H 补的两格），内联一份就多一处会漂的形状；这里与 `_roster_view_body` 里的
+        ，内联一份就多一处会漂的形状；这里与 `_roster_view_body` 里的
         同形返回逐键相同，靠 `test_roster_view_reports_and_never_writes` 与
         `test_roster_state_is_checkable` 一起钉住（它们会读 `checked` / `reason` 与每格的存在性）。
         """
@@ -12341,21 +12308,21 @@ class Secretary:
         """`roster_view` 的真身（口径与返回值见上一份 docstring）。：`{"checked","rows","more","reason","diagnostics"}`。
 
         每一行：`name` / `role` / `brief` / `brief_source`（`parent` 父给的原话 / `secretary` 秘书从任务原文代写 /
-        `""` 改前落的行）/ `state`（活跃 / 待命 / 已停 / 已退役 / 未登记）/ `retirable`（按 `conductor.retire_ready`
-        的三分支）/ `items_open`（只报不拦）/ `task_id`（当前调用），外加 S-H（裁定 14）补的三格：`status`（机器
+        `""` 缺这一格的行）/ `state`（活跃 / 待命 / 已停 / 已退役 / 未登记）/ `retirable`（按 `conductor.retire_ready`
+        的三分支）/ `items_open`（只报不拦）/ `task_id`（当前调用），外加三格：`status`（机器
         可判的那一格：`running` / `idle` / `ready` / `retired` —— 中文那五档是给人读的，而"父要不要现在动手"需要
         一格能直接判的）、`in_flight`（它名下此刻还在跑的任务数，`Conductor.children_facts` 现算）、`last_reading`
         （它最近一条工作报告的摘要，`latest_report_of` 的同一份数据，但一次读一份手稿再逐行取）。DSH 的
-        `list_agents` 没有这一格，我们的比它全 ⇒ 照裁定"净减一样别丢"留着。`scope="descendants"` 时给全树（每
+        `list_agents` 没有这一格，我们的比它全 ⇒ "净减一样别丢"。`scope="descendants"` 时给全树（每
         一行多 `parent` 与 `depth`）—— 改前只有下一层。规模：默认只回 20 项 + `more`（与 `inbox_digest` 同族口径）。
-        ## 父是谁（业主 2026-10-19：「名册 = 父 + 子 + 绝对编号」）：每一份视图都带一格 `parent`（见
+        ## 父是谁（「名册 = 父 + 子 + 绝对编号」）：每一份视图都带一格 `parent`（见
         :meth:`parent_of`：绝对编号 + 角色 + 名册名），`scope="descendants"` 的行另带 `parent_task_id` —— 改前
         那些行只有相对名 `parent`，而"相对名"没法拿去发消息（那正是这一轮要补的那一格）。于是"我能通话的是谁"
         这件事在同一份读数里自足了，寻址不必再另造一个视图。
         ## 逐行 diagnostic（不再一行坏就整份拒）：改前名册里有一行读不出来 ⇒ `{"checked": False, "rows": []}`
         （整体拒）。DSH 的 `list-agents.js:30-47` 是逐行报 `corrupt/unsupported/unavailable`。现在照它：好行照常
         渲染，坏行逐条落进 `diagnostics`（带行号与类别）。只有一种情形仍然整体拒：一条好行都没有而坏行有（三态纪律挡的正是"名册是空的"与"名册读不成"被折成同一句话）。
-        ## 两个读数各占一格（业主 2026-10-26）
+        ## 两个读数各占一格
         这一份视图顶上带 `children_unretired`（子代理数 = 名下未销号的名册项数）与
         `active_child_count`（活跃子代理数 = 其中非静默的数量 = 在飞 + 待机），
         另有一格 `counts`（`Secretary.child_counts` 的整份读数：`owner` / `states` /
@@ -12373,9 +12340,9 @@ class Secretary:
         cond = self._conductor()
         rows, bad = self.roster_rows(owner)
         diagnostics = [_diagnose_line(line) for line in bad]
-        # 「我自己的父是谁」那一格（业主 2026-10-19：名册 = 父 + 子 + 绝对编号）。
-        # 改前这一份视图只有"我名下的子代理"—— 父是谁只能从 `AgentLoop.parent_task_id`
-        # 那个内存字段读到，而名册自己（盘上那一份）答不上来。现在六条 return 都带上它。
+        # 「我自己的父是谁」那一格（名册 = 父 + 子 + 绝对编号）。
+        # 只有"我名下的子代理"时，父是谁只能从 `AgentLoop.parent_task_id` 那个内存字段
+        # 读到，而名册自己（盘上那一份）答不上来。现在六条 return 都带上它。
         parent = self.parent_of(owner=owner)
 
         def _fail(reason: str) -> dict[str, Any]:
@@ -12603,10 +12570,10 @@ class Secretary:
                            reason: str = "") -> dict[str, Any]:
         """销号落定台账那一行：还在飞的（`status ∈ {pending, running}`）⇒ 写终态 `cancelled`。
 
-        ## 为什么销号必须动台账（业主 2026-10-26：「确实保证这个机制跑得通」）
+        ## 为什么销号必须动台账
         扇出名额的分子是"父名下 `status ∈ {pending, running}` 的直接子"
-        （`Conductor._in_flight_children_of`，业主 2026-10-08 的单时刻口径）。销号改前只写
-        名册 / 对照表 / 销号名单三份 jsonl —— 台账那一行一个字节都不动，于是
+        （`Conductor._in_flight_children_of`，单时刻口径）。销号若只写名册 / 对照表 /
+        销号名单三份 jsonl —— 台账那一行一个字节都不动，于是
         「销号一个静默子代理腾出名额」这句话在盘上是空话：占位数不变，下一次 `summon`
         照旧 `fanout_exceeded`。这一笔就是那句承诺的落点：销号 = 让它从"占位"里退出。
 
@@ -12722,20 +12689,17 @@ class Secretary:
         if cond is None:
             return {"ok": False, "action": "refused", "report": {},
                     "why": ["没有 store ⇒ 读不到台账（没读成，不是'不在跑'）"]}
-        # ---- 收工兜底（2026-10-29）：销号之前先把"台账有、名册没有"的那几条补上。
+        # ---- 收工兜底：销号之前先把"台账有、名册没有"的那几条补上。
         #
-        # 分工（业主 2026-10-29 的链路，2026-11-02 按 `4e2963b4` 的口径更正）：治本在
-        # 登记侧 —— `Conductor._register_roster` 一件活登记一次；撞名字是 `name_taken`
-        # 受控拒绝、交父决定，框架不替它换名（改前这里把撞名说成"框架替你换一个号继续
-        # 登记"，那条路已经删了，`4e2963b4`）。兜底在这里 —— 收工/销号是"这一支要收口了"
-        # 还缺行，那些子代理连名字都没有，父根本无法按名册名去销它（79 那趟 11 个节点
-        # 卡住就是这个形态）。补一行只写名册与对照表，不动台账、不动进程。
+        # 分工：治本在登记侧 —— `Conductor._register_roster` 一件活登记一次；撞名字是
+        # `name_taken` 受控拒绝、交父决定，框架不替它换名。兜底在这里 —— 收工/销号是
+        # "这一支要收口了"还缺行，那些子代理连名字都没有，父根本无法按名册名去销它。
+        # 补一行只写名册与对照表，不动台账、不动进程。
         #
-        # 两件事不是同一件事（`draft/151` 三-6，2026-11-01 按业主裁定改口径）：
-        # 派活时不自作主张、收口时必须给得出名字。而"必须给得出"的对象是"真跑过"的号 ——
-        # 没跑过的号（被派活闸拒掉的）永远没有名字；写口拒过但真跑了的号，会在这里拿到
-        # 一个从未发过的新名字（`roster_repair` 补，add 行带 `named_after_run` /
-        # `requested_name` / `refusal_code` 三格留痕，被拒的那个名字不复用）。
+        # 两件事不是同一件事：派活时不自作主张、收口时必须给得出名字。而"必须给得出"
+        # 的对象是"真跑过"的号 —— 没跑过的号（被派活闸拒掉的）永远没有名字；写口拒过
+        # 但真跑了的号，会在这里拿到一个从未发过的新名字（`roster_repair` 补，add 行带
+        # `named_after_run` / `requested_name` / `refusal_code` 三格留痕，被拒的那个名字不复用）。
         # 下面把"谁补成了什么"原样写进回执 —— 否则读回执的人会以为名字丢了。
         repaired = 0
         try:
@@ -12884,12 +12848,12 @@ class Secretary:
             return {"ok": False, "action": "reported", "report": {"children": briefs},
                     "why": [f"{name} 名下还有活跃子代理 ⇒ 不退役（它还在干什么活见 report）"],
                     "reading": reading}
-        # ---- 孤儿闸（Q13，业主 2026-10-26：「最终 final 时应该是 M 下整棵树都已销号」）
+        # ---- 孤儿闸（「最终 final 时应该是 M 下整棵树都已销号」）
         #
         # 这一闸只挡一件事：先销父、把静默的子留到以后。它必须存在，因为那种销法
         # 会永久孤儿化——销号只发给"直接子代理"（`_do_retire` 与 `conductor.retire_child`
         # 都只认自己名册里的那一层），一支的子代理只有它这一个父能销；父一销号，名字
-        # 永久不复用（业主 B1）、不会再有下一轮，那些子代理就再也没有任何代理有权限销它们。
+        # 永久不复用、不会再有下一轮，那些子代理就再也没有任何代理有权限销它们。
         # 于是 `Conductor.retire_integrity` 永远不 complete、`final` 被结构完整性闸永久拒
         # —— 这就是"深树永远清不完"的真身。
         #
@@ -12932,7 +12896,7 @@ class Secretary:
                                           "why": "还在它名下的名册上、没销号（父一销号，"
                                                  "就再没有任何代理有权限销它）"}
                                          for r in rows_left]}}
-        # ---- 先撤兜底计时器（业主 2026-10-29 第 7 条：静默可销号，但销号必须把那条表
+        # ---- 先撤兜底计时器（静默可销号，但销号必须把那条表
         #      撤掉并落抑制标记，否则"号已销、计时器又长回来"是不可逆的鬼读数）。
         #
         # 为什么放在台账那一笔之前：两个方向都会留半笔，但只有一个是可重试的 ——
@@ -12946,7 +12910,7 @@ class Secretary:
                              f"（{killed.get('reason') or '没查成'}）⇒ 一个字节都没落盘，"
                              "重试即可（反方向会是『已销号却还会被叫醒』，不可逆）")],
                     "lifeline": killed}
-        # ---- 落定台账那一行（业主 2026-10-26：「确实保证这个机制跑得通」）
+        # ---- 落定台账那一行
         #
         # 顺序是判据本身：先落台账、再写名册。反过来先写名册时，台账那一笔要是炸了，
         # 盘上就是"名字已销、那一行还占着扇出名额"—— 重试会被"已经销号过"挡住，
@@ -13864,19 +13828,19 @@ def proposition_verdicts_path(root: str | Path) -> Path:
     return Path(root).joinpath(*SECRETARY_DIR, PROPOSITION_VERDICT_LEDGER)
 
 
-# ---------------------------------------------------------------- 命题形态判定台账（2026-11-07）
+# ---------------------------------------------------------------- 命题形态判定台账
 
 #: 命题形态判定（"这条描述有没有明确「从什么条件导出什么结论」"）的旁支台账。
 #:
-#: 为什么要有这一本账：这一问的结论必须能被收工读数数出来（业主 2026-11-07：
-#: 「命题登记时需过 F 秘书闸」+ 读数要显形"被拒的条数 + 逐条码"）。而它不落
+#: 为什么要有这一本账：这一问的结论必须能被收工读数数出来
+#: （「命题登记时需过 F 秘书闸」+ 读数要显形"被拒的条数 + 逐条码"）。而它不落
 #: `statements` 行 —— F 自己不写 `statements`（登记是 B 的活），所以判定结果落在
 #: 秘书自己的台账上，读侧一个口：:func:`proposition_form_of`。
 PROPOSITION_FORM_LEDGER = "proposition_form.jsonl"
 
 #: 同一命题检索的旁支台账（挑词 / 判定 / 检索各一行）。
 #:
-#: 为什么要有这一本账：业主 2026-11-08 的验收口径是"B 秘书查过一圈没有"必须可审计
+#: 为什么要有这一本账：验收口径是"B 秘书查过一圈没有"必须可审计
 #: （关键词、命中数、查到哪一条、为什么没查成）。这些读数不落 `statements` 行
 #: （那一行只记证据位），所以落在秘书自己的台账上，读侧一个口：
 #: :func:`statement_same_rows`。
@@ -14282,15 +14246,14 @@ def _judge_system(kind: str) -> str:
             "reason 一句话；basis 写清你凭哪几步这么判（引证明里的步骤，不要引相似度数字）。"
         )
     elif kind == "v_reply_defect":
-        # 业主 2026-10-29（V 签门槛的 B 段）第一版是三档；2026-10-30 第三次裁定收成两档：
-        # 「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」。
-        # 于是题面只给两档，并逐字写清"拿不准就按有缺陷处理"——没有中间档可退。
+        # 题面只给两档（「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」），
+        # 并逐字写清"拿不准就按有缺陷处理"——没有中间档可退。
         # why：`verifications.parse_verdict` 只能挡住结构不合格，它挡不住"整体很好，只是有
-        # 一个缺陷需要指出"——那种回复曾经在词表上被读成「成立」，而它明明指出了一个缺陷。
-        # p247（业主第三次收紧）：轴只由这一问给；V 的 verdict 只是陈述，不得按字面定轴；
+        # 一个缺陷需要指出"——那种回复按字面读成「成立」时，它明明指出了一个缺陷。
+        # 轴只由这一问给；V 的 verdict 只是陈述，不得按字面定轴；
         # 判 fault 还要给出 defect_step（V 没给时由这一问定出那一步）。
-        # 2026-11-09（D3 批 2，业主裁定 ①②）：把「程序性」与「数学缺陷」分开记 ——
-        # 判 fault 时还要给 defect_kind；「没记录反例尝试」不是判据（缺了写 report_gap）。
+        # 把「程序性」与「数学缺陷」分开记 —— 判 fault 时还要给 defect_kind；
+        # 「没记录反例尝试」不是判据（缺了写 report_gap）。
         ask = (
             "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底有没有指出缺陷？"
             "只有两档，没有中间档：\n"
