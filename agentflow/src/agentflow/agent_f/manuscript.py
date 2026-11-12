@@ -367,10 +367,14 @@ class _Manuscript:
             cites = [str(c) for c in (step.get("cites") or [])]
             suffix = f"（依据：{'、'.join(cites)}）" if cites else "（前提）"
             proof_lines.append(f"{i}. {str(step.get('text') or '').strip()}{suffix}")
-        proposition = str(sg.get("text") or "").strip() + (
-            f"；这一条的可检验形式：{sg.get('testable')}" if sg.get("testable") else "")
+        # 命题正文与可检验形式各只取一次：标题要的是未 strip 的原串、proposition 用 strip 版
+        # （两者都从同一个值派生，不改变各自拿到的东西）。
+        sg_text = str(sg.get("text") or "")
+        testable = sg.get("testable")
+        proposition = sg_text.strip() + (
+            f"；这一条的可检验形式：{testable}" if testable else "")
         text = _MF.render_proof_manuscript(
-            _MF.FAMILY_F, title=str(sg.get("text") or ""),
+            _MF.FAMILY_F, title=sg_text,
             proposition=proposition,
             proof_text="\n".join(proof_lines or ["（这一轮没有交出论证正文）"]),
             dependency_rows=rows, plan_id=plan_id, sid=sid,
@@ -511,12 +515,17 @@ class _Manuscript:
                               "levels": {}, "would_write": 0, "deps_missing": {},
                               "proof_body_state": str(proof_reading.get("state") or "")}
         refs = _DS.stmt_refs(body)
+        # 这一格在下面每一支里都要给，四个入参有四个是同一个（正文 / refs / 段）：
+        # 只把"写了多少行"留成参数，五处调用共用这一处拼法。
+        def _deps_missing(written: int) -> dict[str, Any]:
+            return _DS.deps_missing_reading(
+                proof_text=body, deps_written=written, derived_from=refs,
+                refs=len(refs), section=section)
+
         if section.get("refused"):
             out.update(refused=str(section.get("refused")),
                        reason=str(section.get("reason") or ""))
-            out["deps_missing"] = _DS.deps_missing_reading(
-                proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
-                section=section)
+            out["deps_missing"] = _deps_missing(0)
             return out
         if not section.get("present"):
             if refs:
@@ -526,9 +535,7 @@ class _Manuscript:
             else:
                 out["reason"] = (f"手稿里没有 `{_DS.SECTION_HEADING}` 这一节，正文也没有引用任何"
                                  "在册命题 ⇒ 依赖面这一格不适用（B 不会因此拒收：自足的证明合法）")
-            out["deps_missing"] = _DS.deps_missing_reading(
-                proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
-                section=section)
+            out["deps_missing"] = _deps_missing(0)
             return out
         rows = section.get("rows") or []
         # 2026-11-05（缺陷甲）：表在、但 0 行数据而正文点了在册号 ⇒ 预览就必须说"会退"。
@@ -550,23 +557,17 @@ class _Manuscript:
             text, known_ids=_DS.citable_pool(stmt_rows), statement_rows=stmt_rows)
         if _code:
             out.update(refused=str(_code), reason=str(_why))
-            out["deps_missing"] = _DS.deps_missing_reading(
-                proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
-                section=section)
+            out["deps_missing"] = _deps_missing(0)
             return out
         gate = _DS.gate_rows(rows, stmt_rows)
         out["levels"] = dict(gate.get("levels") or {})
         if not gate.get("ok"):
             out.update(refused=str(gate.get("refused") or ""),
                        reason=str(gate.get("reason") or ""))
-            out["deps_missing"] = _DS.deps_missing_reading(
-                proof_text=body, deps_written=0, derived_from=refs, refs=len(refs),
-                section=section)
+            out["deps_missing"] = _deps_missing(0)
             return out
         out.update(ok=True, would_write=len(rows))
-        out["deps_missing"] = _DS.deps_missing_reading(
-            proof_text=body, deps_written=len(rows), derived_from=refs,
-            refs=len(refs), section=section)
+        out["deps_missing"] = _deps_missing(len(rows))
         return out
 
     def promote_manuscript(self, source: str, *, manuscript_id: str = "",
