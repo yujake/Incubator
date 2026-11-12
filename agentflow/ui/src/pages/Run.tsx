@@ -301,8 +301,13 @@ export function Run(props: RunProps) {
       ? Math.abs(ckAmount - runAmount) < 1e-9
       : null;
   // 本段会话每一趟的合计：只作参考读数摆出来，不参与上面那个判据（跨趟不同范围）。
-  const sessionTotal = runs.reduce((acc, r) => acc + (r.usd ?? 0), 0);
-  const sessionUnknown = runs.reduce((acc, r) => acc + r.unknown_usd, 0);
+  // 两个数合成一趟遍历：改前各扫一遍 runs。逐趟相加的先后次序没变 ⇒ 浮点和逐位相同。
+  let sessionTotal = 0;
+  let sessionUnknown = 0;
+  for (const one of runs) {
+    sessionTotal += one.usd ?? 0;
+    sessionUnknown += one.unknown_usd;
+  }
   const ledger = live.snapshot === null ? null : live.snapshot.ledger;
   const orphans = live.snapshot === null ? null : live.snapshot.orphans;
   const orphanSummary = live.snapshot === null ? null : live.snapshot.orphan_summary;
