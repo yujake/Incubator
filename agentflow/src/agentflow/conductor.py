@@ -4319,7 +4319,9 @@ class Conductor:
         if asked:
             picked = [(tid, by_id.get(tid)) for tid in asked]
         else:
-            picked = sorted(((str(r.get("task_id") or ""), dict(r)) for r in rows
+            # `rows` 已经是本方法自己拷的一份（`dict(r) for r in self._tasks()`），
+            # 循环里一个字段都不写回 ⇒ 这里不再逐行复制第二遍。
+            picked = sorted(((str(r.get("task_id") or ""), r) for r in rows
                              if str(r.get("item_state") or "") == "block"),
                             key=lambda x: x[0])
         allowed = str(approve or "").strip().lower() == "yes"
@@ -4413,11 +4415,13 @@ class Conductor:
                 cell["why"] = (f"{owner} 这一支有没有在跑的程序读不成"
                                f"（{sub.get('reason') or '没查成'}）⇒ 交人看（不猜）")
                 continue
-            if int(sub.get("active_count") or 0) > 0:
+            # 这一支的活跃节点数：判据与拒信那一句读的是同一个数，转一次就够。
+            active_count = int(sub.get("active_count") or 0)
+            if active_count > 0:
                 busy = "、".join(str(r.get("task_id")) for r in (sub.get("rows") or ()))
                 cell["refusal_code"] = "subtree_active"
                 cell["why"] = (f"{owner} 这一支还有 "
-                               f"{int(sub.get('active_count') or 0)} 个节点在活跃（{busy}）"
+                               f"{active_count} 个节点在活跃（{busy}）"
                                "⇒ 它不是静默：叫起来会与它们抢同一份活")
                 continue
             gate = self.retire_state_of(owner)
