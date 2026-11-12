@@ -214,8 +214,11 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
     # `("todo","in_progress","supported_not_proved","closed","blocked","dropped")`）
     # 会掉进下面那条"没有可推进的子目标" ⇒ 把「输入写错了」读成「确实没有待办」，
     # 正是本仓最在意的"没查成写成查了没有"。先校验词表，如实说清是输入的问题。
-    unknown = sorted({str(s.get("status") or "") for s in subgoals
-                      if str(s.get("status") or "")} - set(SUBGOAL_STATUSES))
+    # 每个子目标的状态只取一次：下面三条判据（词表校验 / 可推进池 / 能干的那几条）
+    # 原先各对同一个字段做一次 `str(... or "")`；现在先配对成 (子目标, 状态)，共用同一批读数
+    # （次序仍是输入次序，`pool` 的过滤与先后不变）。
+    statuses = [(sg, str(sg.get("status") or "")) for sg in subgoals]
+    unknown = sorted({st for _, st in statuses if st} - set(SUBGOAL_STATUSES))
     if unknown:
         return {
             "picked": False,
@@ -225,7 +228,7 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
                        "这一条**没说成**『没有可推进的子目标』—— 把输入写错读成『确实没有待办』，"
                        "会让上层以为攻坚已经无事可做。"),
         }
-    pool = [s for s in subgoals if str(s.get("status") or "") in ("in_progress", "todo", "blocked")]
+    pool = [sg for sg, st in statuses if st in ("in_progress", "todo", "blocked")]
     if not pool:
         return {
             "picked": False,
@@ -233,8 +236,8 @@ def pick_next_subgoal(subgoals: Sequence[dict]) -> dict:
             "reason": "没有可推进的子目标（全部 closed/dropped/supported_not_proved 或列表为空）",
         }
     # 还在等的那几条里"能干的"（`todo`/`in_progress`）—— 等它们把活做完，父目标才回来。
-    workable = {str(s.get("sid") or "") for s in subgoals
-                if str(s.get("status") or "") in ("todo", "in_progress")}
+    workable = {str(sg.get("sid") or "") for sg, st in statuses
+                if st in ("todo", "in_progress")}
 
     def waiting(sg: dict) -> list[str]:
         return [str(x) for x in (sg.get("waiting_on") or []) if str(x) in workable]
