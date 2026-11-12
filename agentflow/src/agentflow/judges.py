@@ -494,6 +494,7 @@ def registry_problems() -> list[str]:
     """判据表自身的完整性（判据也要有判据）。返回问题清单，空 = 干净。"""
     problems: list[str] = []
     faculties = {f for f, _w, _b in AP.FACULTIES}
+    covered = {c.faculty for c in CRITERIA.values()}
     if len(CRITERIA) < 3:
         problems.append(f"判据表只有 {len(CRITERIA)} 条（少于三条：官能覆盖不够）")
     for cid, c in CRITERIA.items():
@@ -513,7 +514,7 @@ def registry_problems() -> list[str]:
         elif len(controls) < 2:
             problems.append(f"{cid} 只有 1 条负控：一条样本证明不了判别力")
     for want in ("高观点", "敢创新", "有品味", "脑子", "能思辨"):
-        if not any(c.faculty == want for c in CRITERIA.values()):
+        if want not in covered:
             problems.append(f"没有一条判据给『{want}』做背书")
     return problems
 
