@@ -359,6 +359,21 @@ def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, An
     return body
 
 
+def _replier(handler: Any, endpoint: str, source: str,
+             params: Mapping[str, Any]) -> Any:
+    """一支"这一面的回执"：`endpoint` / `source` / `params` 三格在每个出口都相同。
+
+    返回的函数前半截与 :func:`_finish` 的后半截同形（`code` / `result` / `ok` 三个位置
+    参数，其余照旧走关键字）。`_finish` 在调用那一刻按模块全局查找 —— 于是打桩它的
+    判据照样生效。六个写端点各自有 4–9 个出口，把这三格重复写 40 遍是本文件里最大
+    的一处重复（漏一格就是一条进错台账的行）。
+    """
+    def reply(code: int, result: str, ok: bool, **kw: Any) -> dict[str, Any]:
+        return _finish(handler, endpoint=endpoint, source=source, params=params,
+                       code=code, result=result, ok=ok, **kw)
+    return reply
+
+
 # ====================================================================== 三个新端点
 def handle_stop(handler: Any, params: Mapping[str, str],
                 query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
@@ -375,19 +390,17 @@ def handle_stop(handler: Any, params: Mapping[str, str],
     force = _flag(form, "force")
     seen = {"reason": reason, "force": force, "confirm": _flag(form, "confirm")}
     allowed, code, why = authorize(handler, endpoint="POST /api/stop")
+    done = _replier(handler, "/api/stop", source, seen)
     if not allowed:
-        return _finish(handler, endpoint="/api/stop", source=source, params=seen,
-                       code=code, result=f"拒绝：{why}", ok=False)
+        return done(code, f"拒绝：{why}", False)
     if not _flag(form, "confirm"):
-        return _finish(handler, endpoint="/api/stop", source=source, params=seen, code=400,
-                       result=("拒绝：叫停不可逆，必须带 confirm=1 一次显式确认"
-                               "（draft/75 §1.1 第 8 行）"), ok=False)
+        return done(400, ("拒绝：叫停不可逆，必须带 confirm=1 一次显式确认"
+                          "（draft/75 §1.1 第 8 行）"), False)
     try:
         payload, outcome = SC.request_stop_detail(root, reason=reason, by="web", force=force)
     except Exception as exc:  # noqa: BLE001 - 失败不许折成 200
-        return _finish(handler, endpoint="/api/stop", source=source, params=seen, code=500,
-                       result=(f"停机开关没写成：{type(exc).__name__}: {exc}"
-                               "（盘上那一份没被动过）"), ok=False)
+        return done(500, (f"停机开关没写成：{type(exc).__name__}: {exc}"
+                          "（盘上那一份没被动过）"), False)
     extra: dict[str, Any] = {"outcome": outcome, "stop": payload, "force": force}
     if outcome == "created":
         result = f"已叫停：写下停机开关（reason={reason}）"
@@ -405,8 +418,7 @@ def handle_stop(handler: Any, params: Mapping[str, str],
             killed = {"problem": f"{type(exc).__name__}: {exc}"}
         extra["killed"] = killed
         result += f"；强制停：杀 {killed.get('killed', 'unknown')} 个在册进程"
-    return _finish(handler, endpoint="/api/stop", source=source, params=seen, code=200,
-                   result=result, ok=True, ident=_text(payload.get("path")), extra=extra)
+    return done(200, result, True, ident=_text(payload.get("path")), extra=extra)
 
 
 def handle_submit(handler: Any, params: Mapping[str, str],
@@ -433,16 +445,14 @@ def handle_submit(handler: Any, params: Mapping[str, str],
     seen = {"topic": topic, "mode": mode, "content": content, "providers": providers,
             "confirm": _flag(form, "confirm")}
     allowed, code, why = authorize(handler, endpoint="POST /api/submit")
+    done = _replier(handler, "/api/submit", source, seen)
     if not allowed:
-        return _finish(handler, endpoint="/api/submit", source=source, params=seen,
-                       code=code, result=f"拒绝：{why}", ok=False)
+        return done(code, f"拒绝：{why}", False)
     if not _flag(form, "confirm"):
-        return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=400,
-                       result=("拒绝：入队一条检索请求要 confirm=1 一次显式确认"
-                               "（ConfirmButton 的落点）"), ok=False)
+        return done(400, ("拒绝：入队一条检索请求要 confirm=1 一次显式确认"
+                          "（ConfirmButton 的落点）"), False)
     if not topic:
-        return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=400,
-                       result="拒绝：topic 不能为空（整批未写入）", ok=False)
+        return done(400, "拒绝：topic 不能为空（整批未写入）", False)
     try:
         store = Store(root)
         store.init()
@@ -455,11 +465,10 @@ def handle_submit(handler: Any, params: Mapping[str, str],
         # 受控 400 + `tri=not_applicable` + 照常走 `_finish` 落审计。
         # 不接受"把 `web-actions.jsonl` 加进 store 的根白名单"那种修法：
         # 那会放宽 `store.py` 的"别在别人的目录里凭空建库"那道守卫。
-        return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=400,
-                       result=("拒绝：这个工作区没有 data/（没 `agentflow init` 过），"
-                               "不能入队 —— 先 `agentflow init`，或换一个已初始化的"
-                               f"工作区。{type(exc).__name__}: {exc}"),
-                       ok=False, tri=TRI_NOT_APPLICABLE)
+        return done(400, ("拒绝：这个工作区没有 data/（没 `agentflow init` 过），"
+                          "不能入队 —— 先 `agentflow init`，或换一个已初始化的"
+                          f"工作区。{type(exc).__name__}: {exc}"),
+                    False, tri=TRI_NOT_APPLICABLE)
     rid = ""
     try:
         with store.tx("search_requests", actor="web", note="web-submit") as tx:
@@ -471,16 +480,12 @@ def handle_submit(handler: Any, params: Mapping[str, str],
             row.validate()
             tx.upsert("search_requests", row.to_dict(), note="submitted")
     except (ValueError, TypeError, KeyError) as exc:
-        return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=400,
-                       result=(f"拒绝：请求不合法，整批未写入 —— "
-                               f"{type(exc).__name__}: {exc}"), ok=False)
+        return done(400, (f"拒绝：请求不合法，整批未写入 —— "
+                          f"{type(exc).__name__}: {exc}"), False)
     except Exception as exc:  # noqa: BLE001 - 结局说不清 ⇒ unreadable，不折成成功
-        return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=500,
-                       result=(f"入队没成：{type(exc).__name__}: {exc}"
-                               "（事务未提交，盘上那份没被动过）"), ok=False)
-    return _finish(handler, endpoint="/api/submit", source=source, params=seen, code=200,
-                   result=(f"已入队 {rid}（topic={topic} · mode={mode}）"),
-                   ok=True, ident=rid)
+        return done(500, (f"入队没成：{type(exc).__name__}: {exc}"
+                          "（事务未提交，盘上那份没被动过）"), False)
+    return done(200, f"已入队 {rid}（topic={topic} · mode={mode}）", True, ident=rid)
 
 
 def handle_settings(handler: Any, params: Mapping[str, str],
@@ -514,14 +519,12 @@ def handle_settings(handler: Any, params: Mapping[str, str],
             values.setdefault(section, {})[rest] = text
     allowed, code, why = authorize(handler, endpoint="POST /api/settings",
                                    need_settings=True)
+    done = _replier(handler, "/api/settings", source, values)
     if not allowed:
-        return _finish(handler, endpoint="/api/settings", source=source, params=values,
-                       code=code, result=f"拒绝：{why}", ok=False)
+        return done(code, f"拒绝：{why}", False)
     if not _flag(form, "confirm"):
-        return _finish(handler, endpoint="/api/settings", source=source, params=values,
-                       code=400,
-                       result=("拒绝：写设置要 confirm=1 一次显式确认"
-                               "（覆盖 key 是不可逆动作）"), ok=False)
+        return done(400, ("拒绝：写设置要 confirm=1 一次显式确认"
+                          "（覆盖 key 是不可逆动作）"), False)
     got = SET.write_settings(values)
     settings_tri = str(got.get("tri") or "unknown")
     mapped = {"written": TRI_COMPUTED, "refused": TRI_NOT_APPLICABLE,
@@ -533,10 +536,8 @@ def handle_settings(handler: Any, params: Mapping[str, str],
              "permissions": got.get("permissions") or {}}
     # 三态由 `write_settings` 的词表映射而来（不由状态码反推），所以显式传进去 ——
     # 发出去的正文与这里返回的字典必须是同一支。
-    return _finish(handler, endpoint="/api/settings", source=source, params=values,
-                   code=http, result=str(got.get("reason") or ""),
-                   ok=bool(got.get("ok")), ident=str(got.get("path") or ""),
-                   extra=extra, tri=mapped)
+    return done(http, str(got.get("reason") or ""), bool(got.get("ok")),
+                ident=str(got.get("path") or ""), extra=extra, tri=mapped)
 
 
 def handle_budget(handler: Any, params: Mapping[str, str],
@@ -568,37 +569,32 @@ def handle_budget(handler: Any, params: Mapping[str, str],
     seen = {"action": action, "usd": raw_usd, "note": note, "by": by,
             "confirm": _flag(form, "confirm")}
     allowed, code, why = authorize(handler, endpoint="POST /api/budget")
+    done = _replier(handler, "/api/budget", source, seen)
     if not allowed:
-        return _finish(handler, endpoint="/api/budget", source=source, params=seen,
-                       code=code, result=f"拒绝：{why}", ok=False)
+        return done(code, f"拒绝：{why}", False)
     if not _flag(form, "confirm"):
-        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
-                       result=("拒绝：改预算要 confirm=1 一次显式确认"
-                               "（它改的是这一趟还能不能继续花钱）"), ok=False)
+        return done(400, ("拒绝：改预算要 confirm=1 一次显式确认"
+                          "（它改的是这一趟还能不能继续花钱）"), False)
     if action not in ("add", "set"):
-        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
-                       result=f"拒绝：action 只认 add / set（收到 {action!r}）", ok=False)
+        return done(400, f"拒绝：action 只认 add / set（收到 {action!r}）", False)
     if raw_usd == "":
-        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
-                       result="拒绝：usd 不能为空", ok=False)
+        return done(400, "拒绝：usd 不能为空", False)
     try:
         amount = float(raw_usd)
     except (TypeError, ValueError):
-        return _finish(handler, endpoint="/api/budget", source=source, params=seen, code=400,
-                       result=f"拒绝：usd 读不成数字（收到 {raw_usd!r}）", ok=False)
+        return done(400, f"拒绝：usd 读不成数字（收到 {raw_usd!r}）", False)
     got = (B.add_usd(root, amount, by=by, note=note) if action == "add"
            else B.write_initial(root, amount, by=by, note=note))
     ok = bool(got.get("ok"))
-    return _finish(handler, endpoint="/api/budget", source=source, params=seen,
-                   code=200 if ok else 400,
-                   result=(f"已{'追加' if action == 'add' else '重设'}额度："
-                           f"总额现在是 ${float(got.get('total_usd') or 0.0):.6f}"
-                           if ok else f"没写成：{got.get('reason') or '（没给理由）'}"),
-                   ok=ok, ident=str(got.get("path") or ""),
-                   extra={"action": action, "total_usd": got.get("total_usd"),
-                          "entry": got.get("entry") or {},
-                          "added_count": got.get("added_count"),
-                          "history_lost": got.get("history_lost") or ""})
+    return done(200 if ok else 400,
+                (f"已{'追加' if action == 'add' else '重设'}额度："
+                 f"总额现在是 ${float(got.get('total_usd') or 0.0):.6f}"
+                 if ok else f"没写成：{got.get('reason') or '（没给理由）'}"),
+                ok, ident=str(got.get("path") or ""),
+                extra={"action": action, "total_usd": got.get("total_usd"),
+                       "entry": got.get("entry") or {},
+                       "added_count": got.get("added_count"),
+                       "history_lost": got.get("history_lost") or ""})
 
 
 HANDLERS.update({
@@ -702,35 +698,29 @@ def handle_start_run(handler: Any, params: Mapping[str, str],
     seen = {"task": task, "sid": sid, "resume": resume, "dry_run": dry,
             "confirm": _flag(form, "confirm")}
     allowed, code, why = authorize(handler, endpoint="POST /api/run")
+    done = _replier(handler, "/api/run", source, seen)
     if not allowed:
-        return _finish(handler, endpoint="/api/run", source=source, params=seen,
-                       code=code, result=f"拒绝：{why}", ok=False)
+        return done(code, f"拒绝：{why}", False)
     if not task:
-        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
-                       result="拒绝：任务不能为空 —— 它就是你要对系统说的那一句话", ok=False)
+        return done(400, "拒绝：任务不能为空 —— 它就是你要对系统说的那一句话", False)
     if resume and not sid:
-        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
-                       result=("拒绝：resume 要配 sid —— 它问的是"
-                               "「接着哪一段会话跑」，缺了无从选窗口"), ok=False)
+        return done(400, ("拒绝：resume 要配 sid —— 它问的是"
+                          "「接着哪一段会话跑」，缺了无从选窗口"), False)
     if not _flag(form, "confirm"):
-        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=400,
-                       result="拒绝：起一趟会真的花预算，必须带 confirm=1 一次显式确认", ok=False)
+        return done(400, "拒绝：起一趟会真的花预算，必须带 confirm=1 一次显式确认", False)
     argv = _run_argv(root, task, sid=sid, resume=resume)
     if dry:
-        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=200,
-                       result="试运行：没有起任何进程（argv 见 extra）", ok=True,
-                       extra={"argv": argv, "dry_run": True})
+        return done(200, "试运行：没有起任何进程（argv 见 extra）", True,
+                    extra={"argv": argv, "dry_run": True})
     try:
         pid, log = _spawn_run(root, task, sid=sid, resume=resume)
     except Exception as exc:  # noqa: BLE001 - 起不来要如实报，不许静默
-        return _finish(handler, endpoint="/api/run", source=source, params=seen, code=500,
-                       result=f"起不来：{type(exc).__name__}: {exc}", ok=False,
-                       extra={"argv": argv})
-    return _finish(handler, endpoint="/api/run", source=source, params=seen, code=200,
-                   result=(f"已{'续跑' if resume else '起'}一趟（pid={pid}）"
-                           f"—— 去「对话」或「在飞」页看它"),
-                   ok=True, ident=log,
-                   extra={"pid": pid, "log": log, "argv": argv})
+        return done(500, f"起不来：{type(exc).__name__}: {exc}", False,
+                    extra={"argv": argv})
+    return done(200,
+                (f"已{'续跑' if resume else '起'}一趟（pid={pid}）"
+                 f"—— 去「对话」或「在飞」页看它"),
+                True, ident=log, extra={"pid": pid, "log": log, "argv": argv})
 
 
 def handle_interject(handler: Any, params: Mapping[str, str],
@@ -755,31 +745,25 @@ def handle_interject(handler: Any, params: Mapping[str, str],
     seen = {"body": body, "subject": subject, "sid": sid, "dry_run": dry,
             "confirm": _flag(form, "confirm")}
     allowed, code, why = authorize(handler, endpoint="POST /api/task")
+    done = _replier(handler, "/api/task", source, seen)
     if not allowed:
-        return _finish(handler, endpoint="/api/task", source=source, params=seen,
-                       code=code, result=f"拒绝：{why}", ok=False)
+        return done(code, f"拒绝：{why}", False)
     if not body:
-        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=400,
-                       result="拒绝：插话内容不能为空", ok=False)
+        return done(400, "拒绝：插话内容不能为空", False)
     if not _flag(form, "confirm"):
-        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=400,
-                       result="拒绝：插话会改变正在跑的那一趟的做法，必须带 confirm=1", ok=False)
+        return done(400, "拒绝：插话会改变正在跑的那一趟的做法，必须带 confirm=1", False)
     if dry:
-        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=200,
-                       result="试运行：没有写任何一条插话", ok=True, extra={"dry_run": True})
+        return done(200, "试运行：没有写任何一条插话", True, extra={"dry_run": True})
     try:
         iid, problem = AL.send_interjection(root, sender=U.USER, subject=subject,
                                             body=body, sid=(sid or None))
     except Exception as exc:  # noqa: BLE001 - 写失败不许折成 200
-        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=500,
-                       result=f"没写成：{type(exc).__name__}: {exc}", ok=False)
+        return done(500, f"没写成：{type(exc).__name__}: {exc}", False)
     if problem:
-        return _finish(handler, endpoint="/api/task", source=source, params=seen, code=400,
-                       result=f"没写成：{problem}", ok=False)
-    return _finish(handler, endpoint="/api/task", source=source, params=seen, code=200,
-                   result=f"已投递（{iid}）：主控会在下一步开头读到，当前这一步不被打断",
-                   ok=True, ident=iid,
-                   extra={"interjection_id": iid, "sid": sid})
+        return done(400, f"没写成：{problem}", False)
+    return done(200,
+                f"已投递（{iid}）：主控会在下一步开头读到，当前这一步不被打断",
+                True, ident=iid, extra={"interjection_id": iid, "sid": sid})
 
 
 #: 两条"说话"的端点在下面才定义（它们的正文紧邻本段之上）⇒ 注册放在这里，
