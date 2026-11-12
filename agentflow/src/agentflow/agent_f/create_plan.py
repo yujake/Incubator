@@ -1,7 +1,4 @@
-"""角色 F 的动作 `create_plan`（`goal-7f5116c1` M6：从 `agent_f.py` 拆出来，逐字未改）。
-
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
-"""
+"""角色 F 的动作 `create_plan`。"""
 from __future__ import annotations
 
 from ._support import AT, Any, Mapping, PlanError, S, Sequence, TERMINAL_STATUSES
