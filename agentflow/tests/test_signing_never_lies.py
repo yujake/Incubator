@@ -49,6 +49,8 @@ from agentflow.store import Store
 
 TS = "2026-10-22T00:00:00+08:00"
 SID = S.format_id(0)
+#: 第 2 份证明那一份 F 稿的稿号（2026-11-12 起稿名不再带 `-pN`；一个稿号一份文件）。
+MID2 = "000901"
 #: 两份证明的正文（含各自独有的字样，好判"提示词里到底是哪一份"）。
 P1 = "1. 由定义直接得到。\n2. 由 1 与假设 n >= 3 得结论。"
 P2 = "另一条路线：\n1. 先证引理。\n2. 由引理得结论。"
@@ -84,7 +86,7 @@ def _ws(path: pathlib.Path) -> Store:
 
 
 def _row(*, proof_text: str = P1, proofs: list | None = None,
-         evidence_kind: str = "heuristic") -> dict:
+         evidence_kind: str = "heuristic", manuscript_id: str = "") -> dict:
     row = {
         "stmt_id": SID, "origin": "own_result", "kind": "theorem",
         "label": SHORT, "statement_full": FULL, "statement_text": SHORT,
@@ -96,6 +98,9 @@ def _row(*, proof_text: str = P1, proofs: list | None = None,
     }
     if proofs is not None:
         row[VR.PROOFS_KEY] = proofs
+    if manuscript_id:
+        #: 这一条命题现在那一份稿的稿号（新形式：稿号与命题号解耦；V 按这一格认稿）。
+        row["manuscript_id"] = str(manuscript_id)
     return row
 
 
@@ -144,6 +149,40 @@ def _r10(store: Store) -> tuple[int, dict]:
     return CL._leg_reading(store, "reviewed_proof_rows", store.root)
 
 
+def _new_form_manuscript(store: Store, rel: str, proof: str) -> str:
+    """按新形式写一份 F 稿：一个稿号一份文件，稿头没有「证明号」那一行。
+
+    2026-11-12（产出侧退役 `-pN`）：第 N 份证明不再是一份稿名里带 `-pN` 的文件，
+    而是它自己那份 F 稿（`reports/f-proof-<稿号>.md`）+ 行上 `manuscript_id` 同号。
+    """
+    from agentflow import depsection as _DS
+
+    path = pathlib.Path(store.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "# F 的证明手稿\n\n"
+        f"- 命题号：stmt:{SID}\n\n"
+        f"## 命题\n\n{FULL}\n\n"
+        f"## 证明\n\n{proof}\n\n"
+        + _DS.render_dependency_section([]),
+        encoding="utf-8")
+    return rel
+
+
+def _own_manuscript(store: Store, manuscript_id: str) -> None:
+    """把这一条命题行上的稿号记成这一份（V 按行上的 `manuscript_id` 认稿）。
+
+    走 `data/statements.json` 直写（与 `_make_stock_proof_review` 同一条"存量行"来路）：
+    这一族夹具会先造出写入期闸本来会拒的存量形态，再量读侧/签侧怎么读它 —— 走
+    `store.tx` 会把夹具前提挡在闸外。
+    """
+    path = store.data / "statements.json"
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    hit = next(r for r in doc["rows"] if str(r.get("stmt_id")) == SID)
+    hit["manuscript_id"] = str(manuscript_id)
+    path.write_bytes(json.dumps(doc, ensure_ascii=False).encode("utf-8"))
+
+
 def _v(store: Store, seam: _Seam) -> AgentV:
     return AgentV(store, workspace_root=store.root, llm=seam)
 
@@ -180,8 +219,11 @@ def _v_rounds(store: Store, *, proof_no: Any = 1, proof_text: str = "",
                    secretary=_v_secretary(store))
     no = int(proof_no or 1)
     body = proof_text or (P2 if no == 2 else P1)
-    # 2026-11-04（甲）：在册送审必须带按号手稿；p2 走 `f-proof-<号>-p2.md`。
-    rel = write_proof_manuscript(store.root, SID, body, statement_full=FULL, proof_no=no)
+    # 2026-11-12：第 N 份证明是它自己那份稿（稿号与命题号解耦）；行上记同一个稿号。
+    mid = MID2 if no != 1 else SID
+    if no != 1:
+        _own_manuscript(store, mid)
+    rel = _new_form_manuscript(store, f"reports/f-proof-{mid}.md", body)
     out: dict = {}
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
                         parent_role="F"):
@@ -340,12 +382,21 @@ def test_proof_no_binds_the_text_that_reaches_the_model(tmp_path: pathlib.Path) 
     改前（`p1.py`）：送进提示词的是 `#p1` 的正文（`hit["proof_text"]`），却把
     `#p2` 记在台账行上 —— 于是一条"审过了 #p2"的假证据，加上 `#p1` 被读成
     "签过一份它没被审的正文"。
+
+    2026-11-12（产出侧退役 `-pN`）：稿名不再写第几份 —— 第 2 份证明是它自己那份
+    F 稿（`reports/f-proof-<稿号>.md`，本段用稿号 MID2），行上记同一个稿号。所以
+    "号与正文绑定"现在由「这一份稿的正文就是 #p2」保证，而不是稿名里的 `-p2`。
     """
+    from agentflow import depsection as _DS
+
     st = _ws(tmp_path)
-    _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
+    _put(st, proofs=[{"proof_no": 2, "proof_text": P2}], manuscript_id=MID2)
     seam = _Seam()
     agent = AgentV(st, workspace_root=st.root, llm=seam, secretary=_v_secretary(st))
-    rel2 = write_proof_manuscript(st.root, SID, P2, statement_full=FULL, proof_no=2)
+    rel2 = _new_form_manuscript(st, f"reports/f-proof-{MID2}.md", P2)
+    _ms2 = pathlib.Path(st.root) / rel2
+    # 新形式的稿名与稿头：一个稿号一份文件，正文里没有「证明号」这一行。
+    assert "-p2" not in _ms2.name and "证明号" not in _ms2.read_text(encoding="utf-8")
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
                         parent_role="F"):
         for _i in range(VR.SIGN_STREAK_NEED):
@@ -385,14 +436,14 @@ def test_a_proof_number_alone_cannot_carry_a_sign(tmp_path: pathlib.Path) -> Non
       台账回执里的号只是送审方给的标签；分配归 B 收录（`_proof_no_from_delivery`）。
     """
     st = _ws(tmp_path)
-    _put(st, proofs=[{"proof_no": 2, "proof_text": P2}])
+    _put(st, proofs=[{"proof_no": 2, "proof_text": P2}], manuscript_id=MID2)
     seam = _Seam()
     out = _v(st, seam).verify_proof(SID, proof_no=3)
     assert out["checked"] is False and out["reason"] == "proof_text_needs_a_manuscript", out
     assert seam.prompts == [], "没有稿却问了模型（号不能顶替正文）"
     assert _ledger_bytes(st) == 0, "没审却落了台账行"
 
-    rel = write_proof_manuscript(st.root, SID, P2, statement_full=FULL, proof_no=2)
+    rel = _new_form_manuscript(st, f"reports/f-proof-{MID2}.md", P2)
     agent = AgentV(st, workspace_root=st.root, llm=seam,
                    secretary=_v_secretary(st))
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
