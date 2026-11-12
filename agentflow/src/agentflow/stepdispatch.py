@@ -263,23 +263,25 @@ class StepDispatch:
         """一句汇总（回给模型的那一份）：第 k 条 / 工具名 / 结果一句话 + 可执行建议。"""
         if not self.items:
             return "这一步一条调用都没接住（没有可执行的条目）。"
-        head = (f"这一步给了 {self.requested} 条调用，已按顺序逐条"
-                if all(not (self.outcomes.get(i.call_index) or {}).get("not_executed")
-                       for i in self.items)
-                else f"这一步给了 {self.requested} 条调用，已按顺序逐条处理（有未执行的条目）")
         parts: list[str] = []
+        done = 0
+        any_not_executed = False
+        cancelled = False
         for item in self.items:
             got = self.outcomes.get(int(item.call_index)) or {}
             line = str(got.get("line") or "（没有读数）")
             parts.append(f"第 {item.call_index + 1} 条 {action_of(item.shape, item.payload)} {line}")
-        done = sum(1 for i in self.items
-                   if not (self.outcomes.get(i.call_index) or {}).get("not_executed")
-                   and self.outcomes.get(i.call_index))
+            if got.get("not_executed"):
+                any_not_executed = True
+            elif got:
+                done += 1
+            if str(got.get("reason") or "") == NOT_EXECUTED_CANCELLED_BY_STOP:
+                cancelled = True
+        head = (f"这一步给了 {self.requested} 条调用，已按顺序逐条"
+                if not any_not_executed
+                else f"这一步给了 {self.requested} 条调用，已按顺序逐条处理（有未执行的条目）")
         # 停机那一档不拼"下一步请只发一条调用"：那一条建议的前提是"模型自己发多了"，
         # 而这里有未执行是因为外面按了停（多调用本身是能力）。
-        cancelled = any(
-            str((self.outcomes.get(i.call_index) or {}).get("reason") or "")
-            == NOT_EXECUTED_CANCELLED_BY_STOP for i in self.items)
         advice = STOP_ADVICE if cancelled else ADVICE
         return (f"{head}：{'；'.join(parts)}。"
                 f"（真的执行 {done} / {self.requested} 条）{advice}")
@@ -310,7 +312,8 @@ def catch_step_request(request: StepRequest,
     返回值三态见模块 docstring：一个条目都拆不出来时 `problem=CATCH_FAILED`，
     调用方必须把它当"整步 unknown"处理 —— 不许退化成"只跑第一条"。
     """
-    requested = max(len(request.raw_calls()), 1)
+    raw_calls = request.raw_calls()
+    requested = max(len(raw_calls), 1)
     items: list[StepItem] = []
     if not str(request.shape):
         # 第 1 条都没解码出来：整步接不住（不是"接住了 0 条"）。
@@ -324,7 +327,7 @@ def catch_step_request(request: StepRequest,
         call_index=0, calls=requested, shape=str(request.shape),
         payload=dict(request.payload or {}),
         action=str(request.action) or action_of(request.shape, request.payload)))
-    for index, raw in enumerate(request.raw_calls()[1:], start=1):
+    for index, raw in enumerate(raw_calls[1:], start=1):
         try:
             shape, payload, action, problem, detail = decode(raw)
         except Exception as exc:  # noqa: BLE001 —— 一条解不出来不许带走其余条目
