@@ -1233,12 +1233,12 @@ def cmd_pipeline(args) -> int:
 
 # ---------------------------------------------------------------- 统一执行体（RunSpec）
 #
-# 业主 2026-10-22 口径（`draft/145-CLI升级方案.md` §2）：一个入口讲清"干什么 / 在哪干 /
-# 花多少钱 / 开不开 Lean"，其余都是它的子模式；老命令全部保留为别名，不许破坏脚本。
+# 一个入口讲清"干什么 / 在哪干 / 花多少钱 / 开不开 Lean"，其余都是它的子模式；
+# 老命令全部保留为别名，不许破坏脚本。
 #
 # 这一节就是那句话的落点：五条入口（`start` 与四条老命令）各自只做一件事 —— 把自己
 # 那一套旗标翻成一个 `RunSpec`，然后交给同一个 `_run_spec`。旗标在那一层归一，于是
-# 「同一个概念三个旗标」（`draft/145` 的 F3）不会再变成三处各自解释一遍。
+# 「同一个概念三个旗标」不会再变成三处各自解释一遍。
 #
 # 为什么是"共用执行体"而不是把老命令改写成 argv 重排（把 `run --topic T` 改排成
 # `start --task T`）：argv 重排会把三条老命令的用法错、`--help` 与缺省值全部换一套，
@@ -1262,7 +1262,7 @@ MODE_DEFAULT_BUDGET: Mapping[str, float | None] = {
     MODE_WEB: None,
 }
 
-#: `--lean` 的三档（业主口径：auto 先跑自检，usable 才开）。
+#: `--lean` 的三档（auto 先跑自检，usable 才开）。
 LEAN_CHOICES: tuple[str, ...] = ("on", "off", "auto")
 
 #: `start --mode` 认得的值。`auto` 是"按目录状态推断"，其余是显式指定。
@@ -1279,8 +1279,7 @@ START_MODES: tuple[str, ...] = ("auto", "topic", "role", "research",
 START_PLAN_KEYS: tuple[str, ...] = ("mode", "task", "workspace", "project", "model",
                                     "budget", "lean", "summons", "writes", "spend")
 
-#: 新分层（F 的形状；业主 2026-10-24：「A 到 E 都是好的，且尽可能往 F 的想法上靠，
-#: 至少形状上一致」）：四个动词组，每组一句话说明它管什么。
+#: 新分层（四个动词组，每组一句话说明它管什么）。
 #:
 #: ## 为什么要这一层，又为什么旧名一个都不删
 #:
@@ -1460,8 +1459,8 @@ class _BudgetUsdAction(argparse.Action):
     """
 
     def __call__(self, parser, namespace, values, option_string=None) -> None:
-        # `0` = 不设上限（2026-10-27 修）。改前给 0 等于"上限 0"：真机第一拍就
-        # "预算已耗尽"停机、0 次模型调用（实测）。而同一批旗标里 `--wall-clock-sec 0`
+        # `0` = 不设上限。给 0 若读成"上限 0"，开跑第一拍就
+        # "预算已耗尽"停机、0 次模型调用。而同一批旗标里 `--wall-clock-sec 0`
         # 的 help 自己写着「<=0 视为不设上限」—— 两个 0 语义相反，是纯口径坑。
         # 记账层的 `0 = 预算为零`（`tokenmeter` 的三态判据）没动：那是内部语义，
         # 这里只把"命令行上的 0"读成"不限"。
@@ -1481,7 +1480,7 @@ def _spec_from(args, *, mode: str, origin: str, task: str | None = None,
     """把一条入口的旗标翻成 `RunSpec`；只给这条入口才知道的那几格传 `overrides`。
 
     所有取值都走 `getattr`：判据里有手搭 `Namespace` 的老调用方（`tests/test_agent_cli.py`
-    的 `_args`），缺一格就让整条 `run-agent` 崩在属性上，是这次升级不该付的代价。
+    的 `_args`），缺一格就让整条 `run-agent` 崩在属性上 —— 升级不该付这个代价。
     """
     budget = getattr(args, "budget_usd", None)
     if budget is None:
@@ -1593,7 +1592,7 @@ def _lean_scope(plan: _LeanPlan):
 def _budget_notice(before_usd, after_usd, path: str, *, stream=None) -> None:
     """预算那一行读数：把"原来多少 → 现在多少"点名出来（C4 的第二半）。
 
-    为什么非点名不可（改前的现场）：`budget.json` 里留着 0.5 时，
+    为什么非点名不可：`budget.json` 里留着 0.5 时，
     `limit_usd(fallback=10.0)` 返回 0.5 且一声不响 —— 于是"我给了 10"与"闸门按 0.5 停"
     同时成立，而输出里一个字都没提。
     """
@@ -1612,9 +1611,9 @@ def _budget_notice(before_usd, after_usd, path: str, *, stream=None) -> None:
 def _land_budget(spec: RunSpec, root: Path, *, stream=None) -> int:
     """显式给了 `--budget-usd` 就落盘（C4）。返回 0 = 没给或写成了，2 = 没查成。
 
-    改前的两处错（同一批查出来的）：
+    两处必须避开的坑：
 
-    1. 三条 run 命令一次都没调 `budget.write_initial` —— 传了不写，下次查看仍是旧值，
+    1. 三条 run 命令一次都不调 `budget.write_initial` 的话 —— 传了不写，下次查看仍是旧值，
        于是用户只能先 `budget --set 10` 绕过；
     2. 寄存器压过 flag —— `budget.json` 里留着 0.5 时，`limit_usd(fallback=10.0)`
        返回 0.5 且一声不响。
@@ -1625,7 +1624,7 @@ def _land_budget(spec: RunSpec, root: Path, *, stream=None) -> int:
 
     调用点必须在"工作区已经存在、还没花钱"这一刻：不是在这个函数里顺手 init，
     因为空目录里先落一个 `budget.json` 会让 `Store.init()` 的外来条目守卫判它不干净
-    （实测：新目录上 `run --budget-usd 0.5` 直接以 store 错误退出）。
+    （新目录上 `run --budget-usd 0.5` 会直接以 store 错误退出）。
     """
     if not spec.budget_usd_given or spec.budget_usd is None:
         return 0
@@ -1666,8 +1665,8 @@ def _target_workspace(spec: RunSpec, args) -> tuple[Path, dict | None]:
     """这一趟真正的落点：项目模式给项目文件夹，其余给工作区根。
 
     "在哪干"这一格只在这里答一次。`web` 那一档也走它，所以 `start --watch --project P`
-    开出来的网页读的正是 P 的盘 —— 而不是"用户以为的工作区"（F6 那条现场：
-    `web` 不含"当前项目"，监督一次还得自己拼 `--root projects/p3-verify2`）。
+    开出来的网页读的正是 P 的盘 —— 而不是"用户以为的工作区"（`web` 不含"当前项目"时，
+    监督一次还得自己拼 `--root projects/<名字>`）。
 
     这里一律按 `start="auto"` 解析：它回答的是"落点在哪"，不回答"要不要新建" ——
     后者归 `project_start`，而试运行那一档要的正是"别替我把新建这一步办了"。
@@ -1689,7 +1688,7 @@ def _target_workspace(spec: RunSpec, args) -> tuple[Path, dict | None]:
 def _summons_text(spec: RunSpec) -> str:
     """预检里的"会召唤谁"：这一趟会不会起角色、起哪些。
 
-    为什么这一格非有不可（`draft/145` 的 F1）：三个入口长得像、语义完全不同 ——
+    为什么这一格非有不可：三个入口长得像、语义完全不同 ——
     `run` 是单趟作答、不召唤任何角色，`run-agent` 才是真跑某个角色的循环。今天先跑了
     `run` 的人会以为"角色都起来了"，白花一次钱才发现什么角色都没起。
     """
@@ -1725,7 +1724,7 @@ def _print_plan(spec: RunSpec, args) -> int:
        而不是 `projects.run_project` 再 dry-run —— 后者第一件事就是 `create_project`。
     3. 缓存那一行照印（`_announce_cache_line(..., write_record=False)`）：读数可以读，
        但 `run_reading` 平时会顺手写 `runs/cache-active-*.json` —— 试运行不写它，
-       否则横幅那句"一个字节都不写"就是假的（2026-11-10 真机上那条 `runs/` 还让
+       否则横幅那句"一个字节都不写"就是假的（那条 `runs/` 还会让
        全新空目录的 `Store.init()` 死在"外来条目"守卫上）。
     """
     from . import projects as P
