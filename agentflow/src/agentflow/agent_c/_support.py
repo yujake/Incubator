@@ -55,12 +55,13 @@ def _cfg_get(cfg: Mapping[str, Any], key: str, default: Any = None, *, aliases: 
     为什么要支持嵌套：阈值天然属于"评分"这件事，写进 `score: {high: 3.0}` 更清楚；
     但扁平写法在测试里更省事。两种都认，免得同一份配置出现两套读法。
     """
-    for k in (key, *aliases):
+    keys = (key, *aliases)
+    for k in keys:
         if k in cfg:
             return cfg[k]
     sub = cfg.get("score")
     if isinstance(sub, Mapping):
-        for k in (key, *aliases):
+        for k in keys:
             if k in sub:
                 return sub[k]
     return default
