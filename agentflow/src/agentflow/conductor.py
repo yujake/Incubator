@@ -644,24 +644,36 @@ def waiters_of(clock: Mapping[str, Any], task_ids: Iterable[str]) -> dict[str, A
     want = [str(t or "") for t in task_ids]
     wait_any_checked = bool(clock.get("wait_any_checked", True))
     wait_any_reason = str(clock.get("wait_any_reason") or "")
-    by_any = dict(clock.get("wait_any_by_task") or {})
-    mine_any: dict[str, Any] = {}
-    for tid in want:
-        row = by_any.get(tid)
-        if row:
-            mine_any = dict(row)
-            mine_any["task_id"] = tid
-            break
-    # 交差账：只在这个编号确实在账上时给，读不成 ⇒ `None`（= 不知道，不许折成"交过差"）。
     hand_checked = bool(clock.get("handoff_checked", False))
+    stall_checked = bool(clock.get("stall_checked", False))
+    by_any = dict(clock.get("wait_any_by_task") or {})
     hand_by_task = dict(clock.get("handoff_by_task") or {})
+    stall_by_task = dict(clock.get("stall_by_task") or {})
+    mine_any: dict[str, Any] = {}
     mine_hand: dict[str, Any] | None = None
-    if hand_checked:
-        for tid in want:
+    mine_stall: dict[str, Any] | None = None
+    # 三格（等待意图 / 交差账 / 步进落痕）问的是同一个编号表上的"第一个命中的"：
+    # 原先各扫一趟 `want`，现在合成一趟 —— 三格互不依赖，各自命中次序仍是 `want` 原序
+    # ⇒ 每一格拿到的还是它单独扫时的那一条。逐格口径：
+    #   · 等待意图：这个编号确实挂着"等任意计时器返回"时给（账上那一行 + 它的编号）；
+    #   · 交差账：只在这个编号确实在账上时给，读不成 ⇒ `None`（= 不知道，不许折成"交过差"）；
+    #   · 步进落痕（停滞读数）：只在这个编号确实有落痕时给，没有 / 读不成 ⇒ `None`。
+    #     它不像交差账那样"缺省即否定"：一个老工作区里的行本来就没有这一格，把它读成
+    #     "它没走过步"会让每一行都变成停滞 —— 没有证据就不下结论。
+    for tid in want:
+        if not mine_any:
+            row = by_any.get(tid)
+            if row:
+                mine_any = dict(row)
+                mine_any["task_id"] = tid
+        if mine_hand is None and hand_checked:
             got = hand_by_task.get(tid)
             if isinstance(got, Mapping):
                 mine_hand = dict(got)
-                break
+        if mine_stall is None and stall_checked:
+            got = stall_by_task.get(tid)
+            if isinstance(got, Mapping):
+                mine_stall = dict(got)
     base: dict[str, Any] = {
         "checked": bool(clock.get("checked")),
         "rows": [],
@@ -678,18 +690,6 @@ def waiters_of(clock: Mapping[str, Any], task_ids: Iterable[str]) -> dict[str, A
                      "at": str(mine_any.get("at") or ""),
                      "reason": wait_any_reason},
     }
-    # 步进落痕那一格（停滞读数）：只在这个编号确实有落痕时给，没有 / 读不成 ⇒ `None`。
-    # 它不像交差账那样"缺省即否定"：一个老工作区里的行本来就没有这一格，把它读成
-    # "它没走过步"会让每一行都变成停滞 —— 没有证据就不下结论，这一格给的是 `None`。
-    stall_checked = bool(clock.get("stall_checked", False))
-    stall_by_task = dict(clock.get("stall_by_task") or {})
-    mine_stall: dict[str, Any] | None = None
-    if stall_checked:
-        for tid in want:
-            got = stall_by_task.get(tid)
-            if isinstance(got, Mapping):
-                mine_stall = dict(got)
-                break
     base.update({"stall": mine_stall,
                  "stall_checked": stall_checked,
                  "stall_reason": str(clock.get("stall_reason") or ""),
