@@ -193,12 +193,12 @@ class CancelToken:
 
     # ------------------------------------------------- 子进程出生表
     def _is_cancelled_locked(self) -> bool:
-        """持锁状态下的三态取消判定（与 `cancelled` 同一判据，不重复实现）。
+        """持锁状态下的三态取消判定（`cancelled` 与登记子进程共用这一处）。
 
         为什么要单独一个"持锁版"：`_register_spawned` 已经在锁里，
         而 `cancelled` 自己会再抢一次同一把非重入锁 ⇒ 直接调它会死锁
         （`deadline` 到点时 `run_cancellable` 会永久卡住）。
-        所以这里只能内联同一套条件，并且必须与 `cancelled` 同步改。
+        所以两处都走这一个判据，条件只写一遍。
         """
         if self._cancelled_flag:
             return True
@@ -255,11 +255,7 @@ class CancelToken:
     def cancelled(self) -> bool:
         """是否已取消。到点的 deadline 也算取消（不需要谁来按按钮）。"""
         with self._lock:
-            if self._cancelled_flag:
-                return True
-            if self._deadline is not None and time.monotonic() >= self._deadline:
-                return True
-            return False
+            return self._is_cancelled_locked()
 
     @property
     def reason(self) -> CancelReason | None:
@@ -364,9 +360,20 @@ class CancelToken:
         所以由 `cancel()` 主动杀（`_kill_spawned`），而不是等它自己发现。
         杀子进程不破坏上面那条理由：子进程不写我们的表，它写的是自己的工作目录。
         """
-        if self.cancelled:
-            r = self.reason
-            raise CancelRequested(detail_of(r) if r else "cancelled")
+        with self._lock:
+            # 判据与理由在同一次持锁里取（判据即 `_is_cancelled_locked` 那两条）。
+            reason = self._reason
+            if (reason is None and self._deadline is not None
+                    and time.monotonic() >= self._deadline):
+                reason = CancelReason(
+                    "deadline",
+                    f"墙钟截止已到（deadline={self._deadline:.3f}，单调时钟）",
+                    outcome_known=False,
+                    by="deadline",
+                )
+            if not self._cancelled_flag and reason is None:
+                return
+        raise CancelRequested(detail_of(reason) if reason else "cancelled")
 
     def to_dict(self) -> dict:
         """台账/日志形态。`reason` 为 None 时原样是 None（不折叠成默认理由）。
@@ -540,34 +547,35 @@ def run_cancellable(
                     if tok is not None and tok.cancelled:
                         _kill(proc)
                         out, err = _drain_after_kill(proc)
-                        prog.finish(outcome="killed")
-                        return {"exit_code": None, "stdout": out or "", "stderr": err or "",
-                                "timed_out": False, "cancelled": True,
-                                "program_timer": prog.reading()}
+                        return _result(prog, out, err, timed_out=False, cancelled=True,
+                                       outcome="killed")
                     if timeout_sec is not None and waited >= timeout_sec:
                         timed_out = True
                         _kill(proc)
                         out, err = _drain_after_kill(proc)
                         break
             if timed_out:
-                prog.finish(outcome="timed_out")
-                return {"exit_code": None, "stdout": out or "", "stderr": err or "",
-                        "timed_out": True, "cancelled": False,
-                        "program_timer": prog.reading()}
+                return _result(prog, out, err, timed_out=True, cancelled=False,
+                               outcome="timed_out")
             if tok is not None and tok.cancelled:
                 # 取消是在 `communicate` 返回前发生的（kill 由 `cancel()` 发出）⇒
                 # 退出码是 -15/-9 那一类，不是检查器对这份输入给出的结论。
-                prog.finish(outcome="killed")
-                return {"exit_code": None, "stdout": out or "", "stderr": err or "",
-                        "timed_out": False, "cancelled": True,
-                        "program_timer": prog.reading()}
-            prog.finish(outcome="exited", exit_code=int(proc.returncode))
-            return {"exit_code": int(proc.returncode), "stdout": out or "",
-                    "stderr": err or "", "timed_out": False, "cancelled": False,
-                    "program_timer": prog.reading()}
+                return _result(prog, out, err, timed_out=False, cancelled=True,
+                               outcome="killed")
+            return _result(prog, out, err, timed_out=False, cancelled=False,
+                           outcome="exited", exit_code=int(proc.returncode))
         finally:
             if tok is not None:
                 tok._unregister_spawned(proc)
+
+
+def _result(prog: Any, out: Any, err: Any, *, timed_out: bool, cancelled: bool,
+            outcome: str, exit_code: int | None = None) -> dict:
+    """收口程序计时器并拼出同形的返回值（四个出口共用；键与键序逐字相同）。"""
+    prog.finish(outcome=outcome, exit_code=exit_code)
+    return {"exit_code": exit_code, "stdout": out or "", "stderr": err or "",
+            "timed_out": timed_out, "cancelled": cancelled,
+            "program_timer": prog.reading()}
 
 
 def _kill(proc: "subprocess.Popen") -> None:
