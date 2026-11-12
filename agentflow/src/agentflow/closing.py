@@ -722,9 +722,10 @@ def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
     if not draft.is_file():
         raise LegNotApplicable("paper_ledger_rows", f"这个工作区没有论文主稿：{draft}")
     text = draft.read_text(encoding="utf-8", errors="replace")
+    sections = _tex_sections(text)
     result_sections: list[dict[str, Any]] = []
     check_sections: list[dict[str, Any]] = []
-    for title, body in _tex_sections(text):
+    for title, body in sections:
         cites = sorted({f"{p}{m}" for p in PAPER_LEDGER_PREFIXES
                         for m in re.findall(re.escape(p) + r"(\d{3,4})", body)})
         if not cites:
@@ -739,7 +740,7 @@ def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
         # 5 节稿；而测试夹具与某些工作区里那一份只是一个占位文件（`\date{}` + 一行 body），
         # 拿"参考文献 ≥ 2"去要求占位文件是判错了对象。
         "looks_like_article": ("\\documentclass" in text or "\\begin{document}" in text),
-        "sections": [t[:60] for t, _ in _tex_sections(text)],
+        "sections": [t[:60] for t, _ in sections],
         "result_sections": result_sections,
         "check_sections": check_sections,
         "result_citations": sorted({c for s in result_sections
