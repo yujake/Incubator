@@ -732,33 +732,33 @@ def list_candidates(
     scoped = _scoped_rows(all_rows, rid)
     if batch is not None:
         scoped = [r for r in scoped if int(r.get("batch") or 0) == int(batch)]
+    # 三态只判一次：状态过滤、counts 与重复组三层原先各自再算一遍 `judged_state`。
+    judged = [(r, judged_state(r)) for r in scoped]
     if status is not None:
-        rows = [fold_legacy(r) for r in scoped
+        rows = [fold_legacy(r) for r, state in judged
                 if str(r.get("status") or "") == status
-                or judged_state(r) == status]
+                or state == status]
     else:
-        rows = [fold_legacy(r) for r in scoped]
+        rows = [fold_legacy(r) for r, _state in judged]
     rows.sort(key=lambda r: str(r.get("slot") or ""))
     # 计数按委托过滤后、状态过滤前那一份算：调用方问"这一批还有几篇 pending"时
     # 需要同时看到全部态，否则 status=admitted 那一次查询会把"总数 12"读成"总数 9"。
     # 键集合仍是 `schema.CANDIDATE_STATUSES` 那五个（`lit.stage_list` 的冻结声明
     # 就是这么写的），但两个历史档永远是 0：它们已经折进 `rejected`。
     counts = {s: 0 for s in S.CANDIDATE_STATUSES}
-    for r in scoped:
-        s = judged_state(r)
-        if s in counts:
-            counts[s] += 1
+    # 同一委托内同一篇占多个槽的读数（G9 修法 ②：只报数，不动 counts 的分子分母）。
+    groups: dict[str, list[str]] = {}
+    for r, state in judged:
+        if state in counts:
+            counts[state] += 1
+        groups.setdefault(candidate_identity(r.get("title"), r.get("doi")), []).append(
+            str(r.get("slot") or ""))
     slots = [str(r.get("slot") or "") for r in rows]
     gaps: list[str] = []
     if slots:
         have = {int(s) for s in slots}
         gaps = [S.format_id(n) for n in range(min(have), max(have) + 1) if n not in have]
     waiting = undecided(scoped)
-    # 同一委托内同一篇占多个槽的读数（G9 修法 ②：只报数，不动 counts 的分子分母）。
-    groups: dict[str, list[str]] = {}
-    for r in scoped:
-        groups.setdefault(candidate_identity(r.get("title"), r.get("doi")), []).append(
-            str(r.get("slot") or ""))
     dup_groups = sorted(
         ({"key": k, "slots": sorted(v)} for k, v in groups.items() if len(v) > 1),
         key=lambda g: g["slots"][0])
@@ -818,9 +818,10 @@ def _terminal(store: Store, slot: str, *, code: str, note: str,
         if row is None:
             raise LitStageError(f"待新增列表里没有槽位 {slot!r}", kind="unknown_slot",
                                 detail={"slot": slot})
-        if judged_state(row) != "pending":
+        state = judged_state(row)
+        if state != "pending":
             raise LitStageError(
-                f"槽位 {slot!r} 已经判过了（{judged_state(row)}，盘上 status="
+                f"槽位 {slot!r} 已经判过了（{state}，盘上 status="
                 f"{row.get('status')!r}）⇒ 只有还没判的那一槽能改成 rejected",
                 kind="not_pending", detail={"slot": slot, "status": row.get("status")},
             )
