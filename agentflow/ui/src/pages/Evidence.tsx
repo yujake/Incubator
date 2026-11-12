@@ -18,34 +18,29 @@
  * 6. 证明级 `verifications`（裁定 K2：盘上无真机样本 ⇒ 夹具造一行；页面标明）；
  * 7. 秘书决策 `secretary`。
  *
- * ## 2026-10-23（业主：显示格式过时了）
+ * ## 每一栏各说各的
  *
  * - sha 原文一律不上屏：证明那一栏只印"一致 / 不一致 / unknown（没得比）"
  *   （比的是 V 签的那一份 vs 命题现在这一份，见那一栏的副标题）；
  * - 命题多两格：非平凡度（`T0`–`T4` 或"未判"）与形式化第 4 位的逐路径读数
  *   （`{证明号: 状态}` 是二维的，折成一条汇总就等于让 `#p2` 借 `#p1` 的光）；
  * - reviewed 按证明逐条显示：逐份证明的号与"签没签"在命题台账那一栏
- *   （`reviewed_paths`；2026-11-11 起 `VerificationRow.proof_no` 已退役，
- *   验证台账那一栏改按验证号 / 命题号读，页面与 `VerificationRow` 现值对齐）。
+ *   （`reviewed_paths`）；验证台账那一栏按验证号 / 命题号读，与 `VerificationRow` 现值对齐。
  *
- * ## 2026-10-23 第二批（业主：五元位只展开了第 4 位 / 实验表没挂报告）
+ * ## 五元位与「优化」
  *
  * - 五元位每一位一格：第 1 位 numeric、第 2 位 proof、第 3 位 reviewed、
- *   第 4 位 formal（仍是按路径那一格）、第 5 位 audited 各占一列 ——
- *   改前只有第 4 位在屏幕上，其余四位要从派生的等级去猜；
+ *   第 4 位 formal（按路径那一格）、第 5 位 audited 各占一列；
  * - 第 3 位与第 4 位同一个样式：一份证明一格（`#p1 已签 ｜ #p2 未签`）；
- * - 实验表补「报告」一列：`out/experiments/<号>/exhaustion.md`（②③ 的唯一落点）。
- *   链接指向产物页那张实验落点卡（报告不在 web 服务的静态路由下，直接链文件是死链），
- *   没有报告写「无」而不是留空。
- *
- * ## 2026-11-03（业主 goal ⑤：网页端「是否优化」）
- *
  * - 命题台账补一列「优化」，与第 3 位 reviewed 并排：读后端逐份的 `optimized_paths`
  *   （`[{proof_no, state}]`，三态由 `evidencebits.optimized_state` 给）；
  * - 三档词逐字是「已优化 / 未优化 / 未记录」：缺格（`not_recorded`）不许折成
  *   「未优化」—— 那一格在存量行上根本不存在，折平会让整库一次全变「未优化」；
  * - 一行证明一格（`#p1 已优化 ｜ #p2 未优化`），`#p2` 不借 `#p1` 的光；
- *   这一条没有逐证明记录时写「未记录（…说不出是哪一份）」，不写「未优化」。
+ *   这一条没有逐证明记录时写「未记录（…说不出是哪一份）」，不写「未优化」；
+ * - 实验表补「报告」一列：`out/experiments/<号>/exhaustion.md`（②③ 的唯一落点）。
+ *   链接指向产物页那张实验落点卡（报告不在 web 服务的静态路由下，直接链文件是死链），
+ *   没有报告写「无」而不是留空。
  */
 import { api } from "../api";
 import { Badge } from "../components/Badge";
@@ -181,11 +176,10 @@ const REPORT_SPOT_HREF = "/artifacts#experiment-spots";
  */
 /** 实验表的「代码一致」那一格：四档（一致 / 已撤销 / 不一致 / unknown）。
  *
- * 2026-10-24（业主：改脚本后重新登记并撤销老登记）：第四档「已撤销」不是红 ——
- * 它说的是"这件事已经处置过：老登记作废、新登记接上"，而「不一致」说的是
- * "脚本改过却没重新登记"，是异常。折平之后读者看见一片红，分不清哪一条要动手。
- * 「已撤销」还要印出从哪一份换到哪一份（两个 sha 前 16 位与撤销理由）——
- * 只写「已撤销」三个字，读者仍然不知道它换成了哪一份脚本。
+ * 第四档「已撤销」不是红 —— 它说的是"这件事已经处置过：老登记作废、新登记接上"，
+ * 而「不一致」说的是"脚本改过却没重新登记"，是异常。折平之后读者看见一片红，
+ * 分不清哪一条要动手。「已撤销」还要印出从哪一份换到哪一份（两个 sha 前 16 位与
+ * 撤销理由）—— 只写「已撤销」三个字，读者仍然不知道它换成了哪一份脚本。
  */
 function codeCell(r: ExperimentRow) {
   if (r.code_sha_consistency === "revoked") {
@@ -332,8 +326,8 @@ export function Evidence() {
             columns={[
               { key: "stmt_id", title: "命题号" },
               {
-                // 2026-10-23（业主：命题要标注非平凡度等级）：一格 `T0`–`T4` 或"未判"，
-                // hover 给这一档的语义。未判不是 T0（0 从 2026-10-23 起是一档真的档位）。
+                // 一格 `T0`–`T4` 或"未判"，hover 给这一档的语义。
+                // 未判不是 T0（T0 是一档真的档位）。
                 key: "nontriviality_label",
                 title: "非平凡度",
                 render: (r) => (
@@ -360,8 +354,8 @@ export function Evidence() {
                   ),
               },
               {
-                // 五元位第 1 位（2026-10-23 第二批：每一位一格）。数值实验那一位
-                // 是四态（`pending` / `na` / `failed` / `verified`），不是布尔。
+                // 五元位第 1 位。数值实验那一位是四态
+                // （`pending` / `na` / `failed` / `verified`），不是布尔。
                 key: "bit_numeric",
                 title: "第 1 位·numeric（数值实验）",
                 render: (r) => bitCell(r.bit_numeric),
@@ -378,14 +372,14 @@ export function Evidence() {
                 render: (r) => reviewedCell(r),
               },
               {
-                // 2026-11-03（业主 goal ⑤）：是否优化，与 reviewed 并排、同一条证明一格。
+                // 是否优化，与 reviewed 并排、同一条证明一格。
                 // 三档词：已优化 / 未优化 / 未记录（缺格不许折成「未优化」）。
                 key: "optimized_paths",
                 title: "优化",
                 render: (r) => optimizedCell(r),
               },
               {
-                // 五元位第 4 位（2026-10-22 起是二维的）：一份证明一行。
+                // 五元位第 4 位：一份证明一行。
                 key: "formal_paths",
                 title: "第 4 位·formal（按路径）",
                 render: (r) => formalCell(r),
@@ -397,10 +391,10 @@ export function Evidence() {
               },
               {
                 // 正文（R93 体检）：盘上 `statement_text`（短版）常常是空的，而
-                // `statement_full`（含完整假设的那一版）有字 —— 旧版直接印
-                // `statement_text`，于是整列 7 行全是 `unknown`，看着像"没读到"。
-                // 两者的分工是"短版 / 含假设全文"（`schema.Statement` 的 docstring），
-                // 不是"有 / 没有"，所以这里按"短版优先、缺席退回全文"读，并说清退的是哪一版。
+                // `statement_full`（含完整假设的那一版）有字 —— 直接印短版会让整列
+                // 全是 `unknown`，看着像"没读到"。两者的分工是"短版 / 含假设全文"
+                // （`schema.Statement` 的 docstring），不是"有 / 没有"，所以这里按
+                // "短版优先、缺席退回全文"读，并说清退的是哪一版。
                 key: "statement_text",
                 title: "正文",
                 render: (r) => {
@@ -419,7 +413,7 @@ export function Evidence() {
                 },
               },
               {
-                // 引文回验（2026-10-23：五档）。比对对象是 `proof_text` 那一栏的逐字
+                // 引文回验（五档）。比对对象是 `proof_text` 那一栏的逐字
                 // 摘录，概念行结构上就没有引文 ⇒ 那一档是不适用，不是"未查"。
                 // 五档：逐字通过 / 语义通过 / 不一致 / 未查 / 没有可复核的区间
                 // （最后一档是"说通过了、而盘上拿不出可复核的区间"，与"还没查"欠的
@@ -429,8 +423,6 @@ export function Evidence() {
                 render: (r) => quoteCell(r),
               },
               {
-                // 2026-10-23 第二批：五元位那五格插在「派生等级」后面，这一格
-                // （回验理由）跟着往后挪了一格 —— 内容一个字没动。
                 key: "quote_reason",
                 title: "回验理由",
                 render: (r) => cell(r.quote_reason),
@@ -499,18 +491,16 @@ export function Evidence() {
               },
               { key: "code_path", title: "代码", render: (r) => cell(r.code_path) },
               {
-                // 2026-10-23（业主：sha 原文不显示）：这一格只说"台账钉的代码 sha 与盘上
-                // 现在这一份脚本"一致不一致。三种"没得比"（没记 sha / 脚本不在盘上 /
-                // 读不出来）都落 unknown，不冒充"不一致"。
-                // 2026-10-24：第四档「已撤销」（脚本已改：旧 → 新）—— 不是红。
+                // 这一格只说"台账钉的代码 sha 与盘上现在这一份脚本"一致不一致。
+                // 三种"没得比"（没记 sha / 脚本不在盘上 / 读不出来）都落 unknown，
+                // 不冒充"不一致"。第四档「已撤销」（脚本已改：旧 → 新）不是红。
                 key: "code_sha_consistency",
                 title: "代码一致",
                 render: (r) => codeCell(r),
               },
               {
-                // 2026-10-23 第二批（业主：实验表没挂穷举论证报告）：②③ 的落点是
-                // `out/experiments/<号>/exhaustion.md`（V 会照它判证据档）。
-                // 这一格把那份报告挂出来，没有就写「无」。
+                // ②③ 的落点是 `out/experiments/<号>/exhaustion.md`
+                // （V 会照它判证据档）。这一格把那份报告挂出来，没有就写「无」。
                 key: "exhaustion_path",
                 title: "报告",
                 render: (r) => reportCell(r),
@@ -630,8 +620,7 @@ export function Evidence() {
                 ),
               },
               {
-                // 2026-10-23（业主：sha 原文不显示）：这一格就是原来的「证明 sha」，
-                // 现在只说两份是不是同一份。
+                // 这一格只说两份是不是同一份（sha 原文不上屏）。
                 key: "proof_sha_consistency",
                 title: "证明一致",
                 render: (r) => (
@@ -667,10 +656,9 @@ export function Evidence() {
               {
                 // 判据那一栏（R93 体检）：盘上它是一个**整份判定记录**（`basis`/`checked`/
                 // `cost`/`decision`/`reason`…），只有"建议不派"那一类才有；"已执笔"这类
-                // 不经判据的行它是 `null`。旧版直接 `cell()` ——对象被 String() 成
-                // `[object Object]`（后来改成 JSON 一大坨），`null` 则印成 `unknown`。
-                // 两种都不是给人看的。这里只读人真正要问的两件事：这一行经不经判据、
-                // 判过没有；细节（依据/花销）折在理由那一栏里已有。
+                // 不经判据的行它是 `null`。直接 `cell()` 会把对象印成 JSON 一大坨、
+                // 把 `null` 印成 `unknown` —— 两种都不是给人看的。这里只读人真正要问的
+                // 两件事：这一行经不经判据、判过没有；细节（依据/花销）折在理由那一栏里。
                 key: "judge",
                 title: "判据",
                 render: (r) => {
@@ -701,9 +689,9 @@ export function Evidence() {
                 title: "fail_open",
                 // 走 `cell()`，与同页其余列同一个取值器：`out/secretary/` 下那份旁支台账
                 // （`nontriviality.jsonl` / `proposition_verdicts.jsonl`）的行**根本没有**
-                // `fail_open` 这一栏（真机读数：613 行里 143 行没有），改前这里
-                // `String(r.fail_open)` 把它们印成字面量 `undefined`。
-                // `undefined` 是"没读到"，不是"false"：这一列的三态就是 cell() 承诺的那三档。
+                // `fail_open` 这一栏（真机读数：613 行里 143 行没有），`String()` 会把它们
+                // 印成字面量 `undefined`。`undefined` 是"没读到"，不是"false"：这一列的
+                // 三态就是 cell() 承诺的那三档。
                 render: (r) => cell(r.fail_open),
               },
               { key: "target", title: "对象", render: (r) => cell(r.target) },
