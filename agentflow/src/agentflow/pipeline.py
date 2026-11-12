@@ -182,8 +182,19 @@ def _all_request_ids(store: Store) -> set[str]:
 def _status_counts(store: Store) -> dict[str, int]:
     out: dict[str, int] = {}
     for r in store.rows("research_questions"):
-        out[str(r.get("status"))] = out.get(str(r.get("status")), 0) + 1
+        key = str(r.get("status"))
+        out[key] = out.get(key, 0) + 1
     return out
+
+
+def _round_state(store: Store) -> tuple[int, dict[str, int], int, int]:
+    """一轮的库状态快照（问题数 / 状态分布 / 请求数 / 文献数）：轮初与轮末必须用同一把尺。"""
+    return (
+        len(store.rows("research_questions")),
+        _status_counts(store),
+        len(_all_request_ids(store)),
+        len(store.rows("literature")),
+    )
 
 
 def _select_reports(store: Store, report_ids: Sequence[str] | None, skip: Iterable[str]) -> list[dict]:
@@ -368,11 +379,11 @@ def run_pipeline(
                 "或先用 C 把报告登记进 analysis_reports 再以 replay 模式运行。"
             )
     else:
+        by_report_id: dict[str, dict] = {}
+        for r in store.rows("analysis_reports"):
+            by_report_id.setdefault(str(r.get("report_id")), r)
         summary["reports"] = [
-            next(
-                (dict(r) for r in store.rows("analysis_reports") if str(r.get("report_id")) == rid),
-                {},
-            )
+            dict(by_report_id[rid]) if rid in by_report_id else {}
             for rid in summary["report_ids"]
         ]
 
@@ -394,12 +405,7 @@ def run_pipeline(
     for round_no in range(1, rounds + 1):
         rsum: dict[str, Any] = {"round": round_no, "request": request}
         #: 轮初快照（问题数/状态分布、请求数、文献数）。用于 4.7 的"什么都没变"判据。
-        round_start = (
-            len(store.rows("research_questions")),
-            _status_counts(store),
-            len(_all_request_ids(store)),
-            len(store.rows("literature")),
-        )
+        round_start = _round_state(store)
 
         # ---- 4.1 D：提取问题（只做一次 —— C 的报告不会因为轮次变化而变化）
         d_rounds: list[dict] = []
@@ -469,8 +475,9 @@ def run_pipeline(
             )
         # 记下"已经被 A 领走过"的请求：请求表里的 done/outcome 才是权威状态，
         # 这里只是编排层避免反复指派同一个请求。
+        request_rows = store.rows("search_requests")
         for rid in to_run:
-            row = next((r for r in store.rows("search_requests") if str(r.get("request_id")) == rid), None)
+            row = next((r for r in request_rows if str(r.get("request_id")) == rid), None)
             if row is None or row.get("done") or row.get("outcome") or row.get("last_error"):
                 handled.add(rid)
         rsum["requests_pending_after_a"] = _pending_request_ids(store, include_claimed=True)
@@ -500,9 +507,10 @@ def run_pipeline(
         # ---- 4.6 本轮落盘与统计（可中断、可续跑、可审计）
         rsum["questions"] = _status_counts(store)
         rsum["requests_total"] = len(_all_request_ids(store))
+        lit_rows = store.rows("literature")
         rsum["literature"] = {
-            "total": len(store.rows("literature")),
-            "processed": sum(1 for r in store.rows("literature") if r.get("processed")),
+            "total": len(lit_rows),
+            "processed": sum(1 for r in lit_rows if r.get("processed")),
         }
         summary["rounds"].append(rsum)
 
@@ -524,12 +532,7 @@ def run_pipeline(
         # 第二种收敛：库里什么都没变（问题数/状态、请求数、文献数都与轮初相同）。
         # 这意味着"外部世界没有给我新东西"，再评估一次只会得到同样的结论。
         # 记录轮初快照是为了让这条判断可核实 —— 而不是靠"感觉没有进展"。
-        now_state = (
-            len(store.rows("research_questions")),
-            _status_counts(store),
-            len(_all_request_ids(store)),
-            len(store.rows("literature")),
-        )
+        now_state = _round_state(store)
         if now_state == round_start:
             rsum["converged"] = "本轮结束时库状态与轮初完全相同（无新问题/新请求/新文献），提前结束"
             break
