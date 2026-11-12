@@ -1106,13 +1106,23 @@ def stop_programs(root: str | Path, *, force: bool, grace_sec: float = STOP_PROG
                                  "优雅停只提醒、不杀；这一行由等它的那一趟按自己的结局收口")
     out["waited_sec"] = round(waited, 3)
     out["programs"] = entries
-    out["killed"] = sum(1 for e in entries if e["status"] in ("killed", "killed_orphan"))
-    out["still_running"] = sum(1 for e in entries if e["status"] == "still_running")
-    out["already_exited"] = sum(1 for e in entries if e["status"] == "already_exited")
-    out["no_pid"] = sum(1 for e in entries if e["status"] == "no_pid")
-    out["failed"] = sum(1 for e in entries if e["status"] == "failed")
-    out["left"] = [int(e["pid"]) for e in entries
-                   if e["status"] in ("still_running", "failed") and e.get("pid")]
+    # 五档条数与 `left` 的收尾读数走一趟：改前是 5 次 `sum(1 for e in entries if
+    # e["status"] == …)` + 1 次列表推导（同一张 entries 扫 6 遍，每遍逐条取 status）。
+    # 判据与取值逐字未变：`killed` 仍把 `killed_orphan` 并进来，`left` 仍按 entries
+    # 原序取 `int(pid)`（且只取 status 属于 still_running/failed 且有 pid 的那些）。
+    tally: dict[str, int] = {}
+    left: list[int] = []
+    for e in entries:
+        status = e["status"]
+        tally[status] = tally.get(status, 0) + 1
+        if status in ("still_running", "failed") and e.get("pid"):
+            left.append(int(e["pid"]))
+    out["killed"] = tally.get("killed", 0) + tally.get("killed_orphan", 0)
+    out["still_running"] = tally.get("still_running", 0)
+    out["already_exited"] = tally.get("already_exited", 0)
+    out["no_pid"] = tally.get("no_pid", 0)
+    out["failed"] = tally.get("failed", 0)
+    out["left"] = left
     out["notice"] = _program_stop_notice(out)
     return out
 
@@ -1211,18 +1221,22 @@ def running_loops(root: str | Path) -> dict[str, Any]:
     dead_sids: set[str] = set()
     seen_sids: set[str] = set()
     try:
+        # 一趟收齐两件事：哪些 sid 名下至少有一个登记还活着、哪些 sid 的登记全都死了。
+        # 改前这里读了两轮盘：第一轮逐条判活，第二轮又对**每个 sid** 重新
+        # `_registered_pids(root)`（每次都把 `*.pid` 全部读出来再解析一遍）去问
+        # "这个 sid 还有活的吗"—— O(sid 数) 次整目录重读 + 重复的探活。
+        # "某个 sid 还有活着的登记 ⇒ 它不是死 sid" 这条判据逐字未变。
+        alive_sids: set[str] = set()
         for entry in _registered_pids(root):
             sid_of = str(entry.get("sid") or "")
             if not sid_of:
                 continue
             seen_sids.add(sid_of)
             if alive(int(entry.get("pid") or 0)):
+                alive_sids.add(sid_of)
                 continue
             dead_sids.add(sid_of)
-        dead_sids -= {sid_of for sid_of in seen_sids
-                      if any(alive(int(e.get("pid") or 0))
-                             for e in _registered_pids(root)
-                             if str(e.get("sid") or "") == sid_of)}
+        dead_sids -= alive_sids
     except Exception:  # noqa: BLE001 —— 登记读不成就是"没查到"（不算已死）
         dead_sids = set()
     from . import sessions as _SESS
