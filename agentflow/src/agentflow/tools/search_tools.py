@@ -1182,13 +1182,16 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
             read_error=read_error,
         )
 
-    coverage_before = _shelf_coverage(ctx, rows)
+    # 重取前的覆盖率与「还有哪些行缺全文」共用一趟 `_shelf_row`：两处判的是同一件事
+    # （文件在不在盘上），再扫一遍整表只是把同一份文件检查做两次。
+    judged = [_shelf_row(ctx, row) for row in rows]
+    coverage_before = _shelf_coverage(ctx, rows, judged=judged)
     pending: list[Mapping[str, Any]] = []
-    for row in rows:
+    for i, row in enumerate(rows):
         if lit_id and str(row.get("lit_id") or "") != lit_id:
             continue
         # 「已经有了可离线引用的全文」不在这一件的职责里（那一行不需要再取）。
-        if _shelf_row(ctx, row) is None:
+        if judged[i] is None:
             pending.append(row)
     pending.sort(key=lambda r: str(r.get("lit_id") or ""))
     scanned = len(pending)
