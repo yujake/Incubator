@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""进程树治理：Windows 作业对象（`draft/39` §3.21 五 I13）—— D03 的根因修法。
+"""进程树治理：Windows 作业对象 —— 强制停止的根因修法。
 
-## 这一层解决什么（D03 的真机读数）
+## 这一层解决什么
 
 强制停止那条路上，`taskkill /T /F` 与 `os.kill` 在受限环境里都会被拒
-（实测：`taskkill ERROR: Access denied`、`os.kill` `WinError 5`），于是"强停"看起来做了、
-进程还在跑 —— 而更早的一次实测更直白：包装进程被杀之后 python 子进程又跑了 12 分钟。
+（`taskkill ERROR: Access denied`、`os.kill` `WinError 5`），于是"强停"看起来做了、
+进程还在跑 —— 更直白的形态是：包装进程被杀之后 python 子进程又跑了起来。
 
-I13 的立场是"循环怎么死都行，最后一个句柄一关，OS 收掉整棵传递树"：
+这里的立场是"循环怎么死都行，最后一个句柄一关，OS 收掉整棵传递树"：
 把每一轮的进程装进一个作业对象（`KILL_ON_JOB_CLOSE`），终止时只需 `CloseHandle` ——
 不依赖 `taskkill` 能不能成功，也不需要在父进程活着的时候逐个去杀子孙。
 
@@ -218,7 +218,7 @@ def terminate(job: Job, *, exit_code: int = 1) -> bool:
 def descendants_of(pid: int, *, max_depth: int = 8) -> list[int]:
     """这个 pid 的后代（按 `ParentProcessId` 走，纯 ctypes 的 Toolhelp 快照）。
 
-    为什么必须有它（E14 实测，2026-10-05）：作业归属不向前追溯 ——
+    为什么必须有它：作业归属不向前追溯 ——
     把一个已经跑起来的进程 `assign` 进作业，不会把它此前已经生出来的子进程带进来。
     于是"停一棵已经在跑的树"只 assign 根是不够的：必须把现有后代逐个也 assign 进去
     （新生的子进程才会自动继承）。`wmic` 在新版 Windows 上已经不带了，所以这里走
