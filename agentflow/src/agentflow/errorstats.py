@@ -14,8 +14,8 @@
 
 1. 谁是"错的那一方"（角色归属）。事件流里一条 `tasks` 行的 `role` 是"被召唤的角色"、
    `called_by` 是"发起这次召唤的角色"。越权/禁边是发起方把这条边派错了，算发起方的错；
-   而"这条边被拒"这件事记在被召唤的那一行上。真机现场（`projects/r34d`，`t-000019`）：
-   `role=B`、`called_by=G`，拒信逐字是 "G → B 不在策略允许的边里"。所以归属按码分流：
+   而"这条边被拒"这件事记在被召唤的那一行上。例（`role=B`、`called_by=G`）：
+   拒信逐字是 "G → B 不在策略允许的边里"。所以归属按码分流：
    - `CALLER_ATTRIBUTED_CODES`（召唤期结构判据，产出见 `policy.check`）⇒ 记 `called_by`；
    - 其余（写入期判据 / 判据层 / 角色自己的回执）⇒ 记 `role`；
    - 会话记录 `agent_step` / `llm_call` ⇒ 记记录里的 `role`；
@@ -54,14 +54,13 @@
   - `agent_message` 的 `subject`（`请代唤` = 越权被拒之后的转投）。
   刻意不读 `payload`：那是模型自己写的原话，"提到一个码"不等于"撞上那个码"。
   也刻意不读 `runs/*.json`：它与 `agent_step` 是同一批步的两份落盘，两份都读会把同一步
-  算两次（真机核查：`runs/B-*.json` 与 `sessions/*.jsonl` 的 `agent_step` 逐条对应）。
+  算两次（`runs/B-*.json` 与 `sessions/*.jsonl` 的 `agent_step` 逐条对应）。
 
-## 拆分是能力，不是错（D-65，业主逐字「修，且不再认为 multi_call 有问题」）
+## 拆分是能力，不是错（D-65：multi_call 不是错误）
 
 一步给多条调用是正常能力：`stepdispatch` 把它整包接住、按原顺序拆成条目、逐条执行与记账。
 所以"这一步被拆开逐条执行了"这件事不是错误动作，它是"系统在按设计工作"的证据 ——
-把它算进错误总数，等于把正常行为记成错误（真机 `projects/sylow3`：38 个这种步 + 84 条拆出来的
-调用，一度贡献了错误总数的八成）。
+把它算进错误总数，等于把正常行为记成错误。
 
 因此类目分成两张表，`by_role` / `role_total` / `total` 只数错误那一张：
 
@@ -71,11 +70,11 @@
   （超上限：这一趟还剩的步数/花销不够，那几条没执行）。三档全 0 才是绿。
 - `PROCESS_CATEGORIES`（过程读数，单独一栏、不计错）：`steps_split`（被拆分的步数）与
   `multi_call_executed_calls`（拆出来并真的执行了的调用条数），外加
-  `direct_write_routed`（直写请求被系统转交正路并办成的条数，2026-10-26 加）。
+  `direct_write_routed`（直写请求被系统转交正路并办成的条数）。
 
-## 路由成功也是过程读数，不是错误（2026-10-26）
+## 路由成功也是过程读数，不是错误
 
-直写兜底那一档（`routed_to_backstop`）此前把三件不同的事混在一个类目里：路由办成了 /
+直写兜底那一档（`routed_to_backstop`）若把三件不同的事混在一个类目里：路由办成了 /
 兜底方拒了 / 兜底方不可达。前一件是"系统按设计接管"，后两件才是"这一笔没落成" ——
 混在一起的后果是"系统替模型办成了"照样进错误总数（与 multi_call 当初的形态一模一样）。
 所以按同一手法拆开：办成的进过程读数 `direct_write_routed`，拒的 / 不可达的留在错误表
@@ -95,29 +94,25 @@
 判据 `tests/test_multi_call_is_a_capability_not_an_error.py` 把上面每一条都钉住
 （含"改前红"与"把拆分打桩成没拆分 ⇒ 必红"的反真空）。
 
-## 扩面（2026-11-01，业主逐字「错误动作监控的覆盖面有些小了，请扩大监控范围」）
+## 覆盖面：新类只从字段取
 
-真机 82 现场逐类核过（只读探针 `temp/probe82_*.py`）：改前六类一共收到 14 条，而同一份
-盘上"出错 / 被拒 / 被挡"的结构化信号约有 69 条 —— 漏掉约四分之三。漏的原因不是数错
-了，是入口只有一条：改前每个类目都靠"文案里出现某个码"命中，于是三种漏法同时成立：
+盘上"出错 / 被拒 / 被挡"的结构化信号远多于按文案类目数到的量。漏的原因不是数错，
+是入口只有一条：每个类目都靠"文案里出现某个码"命中，于是三种漏法同时成立：
 
 1. 真相在字段里，文案里没有码：`ok=False`、`item_state="seen"`、`target.judge`、
    `outcome="cut_off_by_parent"` —— 这些字段一个都不带码名；
-2. 有些源整个没被读：`verifications/`、`out/roster/`、`out/secretary/` 三个目录，
-   改前一行都没进过这个模块；
-3. 有些码在真机上恒为 0：82 的 `tasks.outcome="refused"` 是 0 行 —— 真正的拒绝全
-   发生在工具层（33 条 `ok=false`）与名册层（2 条写口拒绝）。于是
-   `STATUS-*.json` 的 `action_refusals.total` 也恒为 0：监控在盯一个恒为 0 的字段。
+2. 有些源整个没被读：`verifications/`、`out/roster/`、`out/secretary/` 三个目录；
+3. 有些码恒为 0：`tasks.outcome="refused"` 可以是 0 行 —— 真正的拒绝全
+   发生在工具层（`ok=false`）与名册层（写口拒绝）。于是 `STATUS-*.json` 的
+   `action_refusals.total` 也恒为 0：监控在盯一个恒为 0 的字段。
 
 ### 一、新 15 类全部是结构化类目，不进 `_MATCH_ORDER`
 
-这是本次唯一一条硬口径，理由是真机实测的假阳性：
+这是唯一一条硬口径，理由是文案判据的假阳性：
 
-- `judge_bad_json` 这个字符串在 82 的 22 个步里出现，只有 2 条是真的（16 条在
-  `result.data` 里 —— 那是 `table.describe` 打印的码表清单；2 条在 `reasoning`；1 条在
-  `payload`）。按文案数是 11 倍。
-- `timeout` 17 次、`重试` 20 次、`回滚` 4 次、`cancelled` 51 次，全部是提示词原文，
-  真的超时 / 重试 / 回滚是 0 条。
+- `judge_bad_json` 这个字符串大多出现在 `result.data`（`table.describe` 打印的码表清单）、
+  `reasoning`、`payload` 里，真正的坏 JSON 极少。按文案数会十倍级虚高。
+- `timeout` / `重试` / `回滚` / `cancelled` 多数是提示词原文，真的超时 / 重试 / 回滚极少。
 - `warn` 里的多调用汇总逐条复述"第 2 条 fs.read 被拒：. 是目录" —— 按文案数会把同一件事
   数两遍（与 D-65 那条纪律正面冲突）。
 
@@ -139,7 +134,7 @@
 
 ### 三、六档归属（`ATTRIBUTION_BUCKETS` / `attribution_of`）
 
-改前只有两档（`CALLER_ATTRIBUTED_CODES` 记 `called_by`，其余记 `role`）。新类里出现了四种
+归属原本只有两档（`CALLER_ATTRIBUTED_CODES` 记 `called_by`，其余记 `role`）。新类里有四种
 "错的那一方不是记录里那个人"的形态，所以扩成六档，逐档写明理由：
 
 | 档 | 什么时候 | 记谁 |
@@ -151,8 +146,8 @@
 | `roster` | 名册写口拒了一个名字 | 要这个名字的那一方（`owner` 的 `role`） |
 | `system` | 判据没判成 / 外部面掉了 / 收工门拦下 | `（系统）`，进 `system` 桶 |
 
-`author` 那一档是这次最要紧的一条：82 里 V 判「有毛病」2 条，命题的 `proof_authors` 是
-`["F"]` —— 记到 V 头上就等于"复核的人替写证明的人背锅"，那正是判据
+`author` 那一档是最要紧的一条：V 判「有毛病」而命题的 `proof_authors` 是 `["F"]` 时，
+记到 V 头上就等于"复核的人替写证明的人背锅"，那正是判据
 `test_error_action_stats.py` 钉的第一条（"一方的错不算到另一方头上"）的反面。
 
 ### 四、去重：三对必须点名（否则一扩面就翻倍）
@@ -168,14 +163,14 @@
 
 ### 五、明确不算错误动作（不写死这一条，一扩面就一定报警疲劳）
 
-四条主排除（每一条都在 82 上有量：73 / 4 / 11 / 2 —— 记进去就会把真信号淹掉）：
+四条主排除（记进去就会把真信号淹掉）：
 
 | # | 事件 | 为什么不算 | 归到哪 |
 |---|---|---|---|
-| ① | `item_close="acked"`（正常 ack） | 82 有 73 条，占板项 81% | 不记 |
-| ② | `retire`（正常销号） | 收口的正常形态（82 主册 4 条） | 不记 |
-| ③ | `cancelled` 当且仅当 `runs/stop-history.jsonl` 里有 `by="user"` 的记录 | 人叫停不是错误（82 是 11 条，全部有停机记录解释） | 单列读数 `task_stopped` |
-| ④ | `roster_repair` 成功补登记 | 自愈成功 ⇒ 与 `direct_write_routed` 同一手法：办成了不算错 | 单列读数 `roster_repaired`（82 是 2） |
+| ① | `item_close="acked"`（正常 ack） | 占板项的绝大多数 | 不记 |
+| ② | `retire`（正常销号） | 收口的正常形态 | 不记 |
+| ③ | `cancelled` 当且仅当 `runs/stop-history.jsonl` 里有 `by="user"` 的记录 | 人叫停不是错误 | 单列读数 `task_stopped` |
+| ④ | `roster_repair` 成功补登记 | 自愈成功 ⇒ 与 `direct_write_routed` 同一手法：办成了不算错 | 单列读数 `roster_repaired` |
 
 四条同族排除（同一理由，只是量小）：
 
@@ -187,10 +182,9 @@
 | `multi_call` 拆步 / `direct_write_routed` | 已有裁定（D-65） | 已在 `process` |
 
 `cancelled` 那一条是本表最容易改坏的一格：它现在是"先看停机流水、再决定算不算"。谁把
-这一步改成"看到 cancelled 就记一条错误"，82 上会立刻多出 11 条假错误，而且那 11 条恰好是
-业主自己按的停止键。
+这一步改成"看到 cancelled 就记一条错误"，用户自己按的停止键就会变成假错误。
 
-### 六、本模块读七个源（四个是这次新加的）
+### 六、本模块读七个源
 
 | 源 | 路径 | 三态口径 |
 |---|---|---|
@@ -207,8 +201,8 @@
 
 ## 码 → 类目这张表从哪来
 
-`CODE_TABLE` 每行是（码, 类目, 出处）。出处逐条去代码里 grep 过，写的是定义或产出那一
-行的 `file:line`。判据 `tests/test_error_action_stats.py` 会扫源码断言表里每个码真的出现
+`CODE_TABLE` 每行是（码, 类目, 出处）。出处写符号名而不写行号（行号在并行开发下会漂）。
+判据 `tests/test_error_action_stats.py` 会扫源码断言表里每个码真的出现
 在 `src/agentflow/` 的某个文件里（扫的时候排除本文件，否则这张表会自己证明自己）。
 类目本身逐类写过一行含义（`ERROR_CATEGORIES`）。
 """
@@ -284,7 +278,7 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "论文对应表的逐行缺口（mapping_* 一族：孤立行、引文定位缺、文件缺、程序缺…）"),
     ("relay_after_refusal",
      "流程层：被禁边拒掉之后发起的代唤请示（转投，不是重试同一条边）"),
-    # ---- 以下 11 类全部是 2026-11-01 扩面时追加的（业主「覆盖面有些小了」）。
+    # ---- 以下 11 类是结构化类目扩面追加的。
     #
     # 一律追加在末尾，一条都不许插到上面去：`_MATCH_ORDER` 的优先级是"类目表靠前优先"，
     # 插在中间会让老例子的主码换类目 —— 而 `test_error_action_stats.py` 把六个老例子
@@ -326,11 +320,10 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
     ("proof_defect_found",
      "证明有毛病：V 判`有毛病`或 `unresolved_errors > 0` ⇒ 产出不达标"
      "（判据读 `verifications/<号>.jsonl`；记命题作者 `proof_authors`，不是记 V）"),
-    # 2026-11-04（业主：「受控拒绝在 errorstats 上不可见」）：`conductor_tools._out` 的最后
-    # 一句把 `data` 的每一格都当 meta 再交给 `ok(...)` ⇒ 一次"拒绝"在工具层是 `ok=True`，
-    # 拒因住在 `data.state == "refused"` / `data.refusal_code` 里。而本模块此前只认
-    # `ok is False`，于是真形受控拒绝 total 0（真机夹具：`conductor.ack(close="nope")`）。
-    # 有 `data.refusal_code` 的按那个码登记的类目记（`target_not_silent` 等）；只有
+    # 受控拒绝（`conductor_tools._out` 的最后一句把 `data` 的每一格都当 meta 再交给
+    # `ok(...)`）：一次"拒绝"在工具层是 `ok=True`，拒因住在 `data.state == "refused"` /
+    # `data.refusal_code` 里。只认 `ok is False` 会让真形受控拒绝 total 0。有
+    # `data.refusal_code` 的按那个码登记的类目记（`target_not_silent` 等）；只有
     # `state=="refused"` 而没有码的落这一类 —— 码位留空：状态不是码，不把
     # `data.state` 的状态值登记成假码（那是"状态≠码"的折平）。
     ("tool_refused_controlled",
@@ -340,7 +333,7 @@ ERROR_CATEGORIES: tuple[tuple[str, str], ...] = (
      "有受控码的那一档按码表登记的类目记，例如 `target_not_silent`）"),
 )
 
-#: 2026-11-01 扩面追加的 11 个角色侧类目 + 2026-11-04 的 `tool_refused_controlled`
+#: 扩面追加的 11 个角色侧类目 + `tool_refused_controlled`
 #: （全部是结构化类目，判据读字段不读文案）。
 #: 显式列出而不是拿 `ERROR_CATEGORIES[-11:]` 切片：切片会在有人再追加一类时静默变形，
 #: 而这张表是"哪些类目不参与文案匹配"的唯一依据。
@@ -389,7 +382,7 @@ PROCESS_CATEGORIES: tuple[tuple[str, str], ...] = (
      "直写被转交正路并办成：通用写口碰到'只能经正路写'的表时，系统把这一笔交给兜底方，"
      "兜底方按它自己的判据跑完、行真的落了盘（过程读数，不计错；判据读结局码 "
      "routed_to_backstop.<兜底方>，拒的 / 不可达的在错误表里那一档）"),
-    # ---- 2026-11-01 扩面加的两条：它们都是"发生了、但不是错误动作"，
+    # ---- 扩面加的两条：它们都是"发生了、但不是错误动作"，
     # 与 `direct_write_routed`（转交办成）同一手法 —— 办成了 / 叫停了都不进错误表，
     # 但必须有一个地方能看见它，否则"没有错误"与"没有人干活"分不开。
     ("task_stopped",
@@ -420,7 +413,7 @@ STATE_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in STATE_CATE
 PROCESS_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in PROCESS_CATEGORIES)
 
 #: 结构化类目：它们的判据只读字段，不进 `_MATCH_ORDER`（模块 docstring 第一节）。
-#: 为什么必须显式排除：真机实测的三条假阳性 ——
+#: 为什么必须显式排除：三条假阳性 ——
 #: ① `warn` 里的多调用汇总逐条复述"第 2 条 fs.read 被拒：. 是目录"，按文案数会把一次
 #:    被拒的调用数成两次（与 D-65 正面冲突）；
 #: ② `item_state` 这个词在 `table.describe` 的输出里满天飞，按文案数会把"打印了一张表结构"
@@ -484,10 +477,9 @@ CALLER_ATTRIBUTED_CODES: frozenset[str] = frozenset({
 
 #: 码 → 类目 → 出处。出处写的是符号名（`src/agentflow/x.py::函数或常量`），不是行号。
 #:
-#: 为什么不再写行号（`R-BE4`，2026-10-27 业主批准）：行号在并行开发下几十分钟就漂。
-#: 改前这张表 80 行里只有 16 行的行号还指在码上（探针 `temp/rbe4_codetable_provenance.py`
-#: 逐条核过），而没有任何判据会红 —— "出处"于是变成一句没人验的空话。口径改成
-#: 符号名之后，判据 `tests/test_errorstats_provenance_symbols_exist.py` 可以逐条断言
+#: 为什么不再写行号（`R-BE4`，业主批准）：行号在并行开发下几十分钟就漂，而没有任何判据
+#: 会红 —— "出处"于是变成一句没人验的空话。口径改成符号名之后，判据
+#: `tests/test_errorstats_provenance_symbols_exist.py` 可以逐条断言
 #: "那个符号真的在那个文件里"（与 `.noai-paths` / `AGENTS.md` 的同一条纪律：
 #: 理由里写符号名，行号易失）。
 CODE_TABLE: tuple[tuple[str, str, str], ...] = (
@@ -505,7 +497,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("unknown_role", "unknown_tool",
      "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/policy.py::check_action（产出）"),
     ("direct_write_refused", "direct_write", "src/agentflow/store.py::DIRECT_WRITE_REFUSED（常量定义点；拒信由 `direct_write_refusal()` 拼）"),
-    # ---- 时钟的两条"前置条件不成立"（p210，业主 2026-10-26）
+    # ---- 时钟的两条"前置条件不成立"
     #
     # 归 `not_in_roster`：`waiter_not_resolvable` 的语义就是"这一句 wait_for 在名册
     # （或程序簿记）里解析不到唯一一台账号"—— 与"不在你的名册里"是同一类东西，
@@ -520,10 +512,10 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("no_timers_to_wait", "controlled_refusal",
      "src/agentflow/clock.py::no_timers_refusal（NO_TIMERS_TO_WAIT / `request_wait_any` 的前置判据；"
      "拒信由 `no_timers_refusal()` 拼）"),
-    # ---- 直写兜底（业主 2026-10-24：「不应该是提醒智能体要走秘书，而是自动将直写请求
-    # 路由到秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
+    # ---- 直写兜底（口径：「不应该是提醒智能体要走秘书，而是自动将直写请求路由到
+    # 秘书接管」）。路由不再计入 `direct_write`：那一档只留"兜底方也接不住"的野路。
     # 结局码逐条登记在 `ROUTED_CODES`（字面量），拼装只允许拼出那张表里的东西。
-    # 2026-10-26 拆开（与 multi_call 同一手法）：办成的两档进过程读数 `direct_write_routed`
+    # 与 multi_call 同一手法：办成的两档进过程读数 `direct_write_routed`
     # —— "系统替模型办成了"不是错误动作；只有拒的 / 不可达的留在错误表上。
     ("routed_to_backstop.secretary", "direct_write_routed",
      "src/agentflow/tools/table_tools.py::ROUTED_CODES（登记表；拼装见 `_route_code`）"),
@@ -555,7 +547,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("缺少必填参数", "param_invalid", "src/agentflow/tools/base.py::validate_params（ParamError 原文）"),
     ("参数错误：", "param_invalid", "src/agentflow/tools/base.py::ToolRegistry.call（ToolResult.fail 原文）"),
     ("param_error", "param_invalid", "src/agentflow/tools/base.py::ToolRegistry.call（kind）"),
-    # 2026-10-28（`draft/156` 的 D4）：模型按前缀直觉手填了本该由台账分配的主键
+    # 模型按前缀直觉手填了本该由台账分配的主键
     # （`rel-000001` / `stmt-1` / `p-000001`）。归 `param_invalid`：这次调用不成立的原因是
     # "多给了一格本不该给的参数"，不是行内容不合法。单独成码是为了让"同一个坑连踩几次"
     # 在读数上数得出来 —— 折进 `param_error` 就数不出来了。
@@ -572,8 +564,8 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("duplicate_claim_id", "duplicate_conflict", "src/agentflow/claimanatomy.py::validate_document_claims"),
     ("duplicate_id", "duplicate_conflict", "src/agentflow/verify.py::_check_1"),
     ("invalid_params", "controlled_refusal", "src/agentflow/schema.py::REFUSAL_REASONS（词表）/ src/agentflow/refusals.py::PRECONDITION_REASON"),
-    # ---- 空正文的两档（业主 2026-10-24 裁定 B2 的第 1 条）：写侧与判档位那一侧共用一个字面量
-    # （真身在 `refusals.py`）。`bad_statement` 是它们的前身：改前"0 字"与"只有短版"混在
+    # ---- 空正文的两档（裁定 B2 的第 1 条）：写侧与判档位那一侧共用一个字面量
+    # （真身在 `refusals.py`）。`bad_statement` 是它们的前身："0 字"与"只有短版"混在
     # 那一个码里，于是同一种输入在写侧与判档位侧拿到两个名字。
     ("empty_statement_text", "controlled_refusal",
      "src/agentflow/refusals.py::EMPTY_STATEMENT_TEXT（真身）/ src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement（写侧产出）"
@@ -596,7 +588,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("secretary_unavailable", "controlled_refusal", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     # ---- 判据层
     ("judge_bad_json", "judge_bad_json", "src/agentflow/judge.py::JUDGE_PROBLEMS（problem 码）"),
-    # 2026-10-26：原生工具调用面里"点了一个没广告过的函数名"此前折成 `judge_bad_json`
+    # 原生工具调用面里"点了一个没广告过的函数名"折成 `judge_bad_json`
     # （`llmseam.ToolFace.to_shape`），而文本协议下同一个动作记的是 `unknown_tool` ——
     # 同一件事两个类目，于是"名字不存在"这一类在两种协议下各数一半。现在它归到一个类目
     # （`unknown_tool`：名字不存在），码保留判据层自己的名字 —— 与 `judge_not_wired`
@@ -610,7 +602,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("judge_output_limit", "judge_no_reply", "src/agentflow/agent_loop.py::_NO_REPLY_NAMED"),
     ("judge_failed:", "judge_failed", "src/agentflow/agent_loop.py::LoopRun（真机 judge_failed:ModelReplyNotOk）"),
     ("judge_not_wired", "not_wired", "src/agentflow/judge.py::JUDGE_PROBLEMS（没接线那一档）"),
-    # 拆分口径（2026-10-24，业主 D-65「修，且不再认为 multi_call 有问题」）：
+    # 拆分口径（D-65：multi_call 不是错误）：
     # 一步给多条调用是正常能力，所以这一步的读数进过程读数表：
     #   `steps_split` 数被拆分的步数 —— 它从 `result` 里的结构字段取（键名就是
     #   `multi_call`，`agent_loop` 写在回合的每一条上，取 `call_index == 0` 的那一条）；
@@ -646,12 +638,12 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("mapping_package_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::PAPER_KINDS"),
     ("mapping_lean_missing", "paper_mapping_gap", "src/agentflow/papermapping.py::LEAN_KINDS"),
     ("请代唤", "relay_after_refusal", "src/agentflow/agent_loop.py::RELAY_SUBJECT（RELAY_SUBJECT）"),
-    # ---- 2026-11-01 扩面的 15 类（出处一律写符号名，不写行号）。
+    # ---- 扩面的 15 类（出处一律写符号名，不写行号）。
     #
     # 这些码不进 `_MATCH_ORDER`（`STRUCTURAL_ONLY_CATEGORIES`）：它们的码登记在这里是
     # 为了两件事 —— ① 判据 `test_every_category_has_a_code_that_really_exists_in_the_source`
     # 能逐条断言"这个码真的在源码里"；② 人读出处时知道去哪一格看。判定本身读字段，
-    # 不找字（理由见模块 docstring 第一节的三条实测假阳性）。
+    # 不找字（理由见模块 docstring 第一节的三条假阳性）。
     ("name_taken", "roster_write_refused",
      "src/agentflow/secretary.py::refusals_path（写口拒绝流水；`name_taken` 由 roster_add 产出）"),
     ("文件不存在：", "tool_refused_path",
@@ -709,7 +701,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
      "src/agentflow/schema.py::TASK_OUTCOMES（被叫停的终态；算不算错看 runs/stop-history.jsonl）"),
     ("repaired", "roster_repaired",
      "src/agentflow/secretary.py::Secretary.roster_repair（补登记行的标记）"),
-    # ---- 2026-11-04：12 个「模型面拒因码」（受控拒绝的码）。
+    # ---- 12 个「模型面拒因码」（受控拒绝的码）。
     #
     # 它们都是"框架按受控理由拒了模型这一次操作"的码：有的写在工具结果的
     # `data.refusal_code` 里（`target_not_silent`），有的写在写入口的结论里
@@ -771,9 +763,9 @@ _CODE_INDEX: dict[str, int] = {code: i for i, (code, _c, _w) in enumerate(CODE_T
 #: 类目顺序把结构性判据排在前面（根因先看），同类目里再让长码胜出 ——
 #: 于是 `judge_not_wired` 不会被 `not_wired` 抢先（两者同类目，长的那个更准）。
 #:
-#: 2026-11-01：`STRUCTURAL_ONLY_CATEGORIES` 那一批不进来（模块 docstring 第一节）。
+#: `STRUCTURAL_ONLY_CATEGORIES` 那一批不进来（模块 docstring 第一节）。
 #: 它们由读侧的显式函数产出，一个都不靠找字 —— 所以这里过滤掉之后，`primary_code`
-#: 的行为与扩面之前逐字相同（老的六个例子仍然逐条成立）。
+#: 的行为与不加这些类目时逐字相同（老的六个例子仍然逐条成立）。
 _MATCH_ORDER: tuple[tuple[str, str], ...] = tuple(
     (code, cat)
     for code, cat, _where in sorted(
@@ -1132,10 +1124,9 @@ def _read_events(root: Path, store: Any) -> tuple[list[dict[str, Any]], dict[str
 def _read_sessions(root: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """读会话记录 —— 转发 `sessions.read_all_sessions`（真身在那里）。
 
-    2026-10-27（R-BE1 的 ②-1，业主批准）：这一支此前是本文件里的第二份实现（自己
-    glob + splitlines + json.loads），与 `sessions.read_session` 对"读不明白"各有一套
-    判定 —— 同一份坏目录，一处说"坏行 3 条"、另一处说"文件读不出来"。现在只有
-    `sessions` 一处实现；本函数保留名字与返回形状，因为 `sources["sessions"]` 的那几个键
+    这一支曾经是本文件里的第二份实现（自己 glob + splitlines + json.loads），与
+    `sessions.read_session` 对"读不明白"各有一套判定 —— 同一份坏目录，一处说"坏行 3 条"、
+    另一处说"文件读不出来"。现在只有 `sessions` 一处实现；本函数保留名字与返回形状，因为 `sources["sessions"]` 的那几个键
     是既有输出面的一部分（`readouts.errors_readout` 的 `data.sources` 逐字带着它们）。
     """
     return SS.read_all_sessions(root)
@@ -1181,7 +1172,7 @@ def _step_text(record: Mapping[str, Any]) -> str:
     只取 `result.error` / `result.warn` / `result.problem` / `result.kind` 与记录自己的
     `problem`，不取 `payload`（理由见模块 docstring：模型"提到一个码"不等于"撞上那个码"）。
 
-    2026-11-04 补一档（受控拒绝）：`result.data` 里 `refusal_code` / `reason` 两格也进
+    受控拒绝补一档：`result.data` 里 `refusal_code` / `reason` 两格也进
     可扫段 —— 前提是这一条是受控拒绝形状（`ok=True` + `data.state=="refused"`，或
     `data.refusal_code` 非空）。理由：这两格是受控码 / 受控理由，不是模型自由文本
     （与 `table.describe` 把 schema 词表铺进 `data` 那一档严格分开：形状不对时 `data`
@@ -1246,7 +1237,7 @@ def _is_split_step(record: Mapping[str, Any]) -> bool:
 
 # ---------------------------------------------------------------- 辅助源（只读）
 #
-# 2026-11-01 扩面新加的四个目录 + 两个只取一格的源。每个都是独立的读函数：
+# 扩面新加的四个目录 + 两个只取一格的源。每个都是独立的读函数：
 # `test_stats_all_reads_disk_once` 数的是 `_read_events` / `_read_sessions` 那两个口，
 # 所以这里不会把那条判据带动；而 `readouts` 每条读数只调一次 `_read_aux`。
 
@@ -1375,8 +1366,8 @@ def _read_closing(root: Path) -> dict[str, Any]:
         from .store import Store
 
         # 必须绝对路径：`check_closing` 按 store 的 root 解析 `data/` 与 `statements`，
-        # 给一个相对路径会让它读不到表 —— 实测（82，相对路径）多出第三条 blocker
-        # `statements_unsigned_without_v_or_abandon`，而绝对路径下只有两条。读数会因此
+        # 给一个相对路径会让它读不到表，多出一条 blocker
+        # `statements_unsigned_without_v_or_abandon`。读数会因此
         # 静默变成"另一个工作区"的结论，所以这里显式 resolve。
         store = Store(Path(root).resolve())
         rep = CL.check_closing(store, project_dir=".", report_path="out/review/REPORT.md")
@@ -1419,7 +1410,7 @@ def _read_aux(root: Path) -> dict[str, Any]:
     # 直接数会把"B1 重开 10 次"读成"10 个重名"。折叠口径与 `secretary.child_counts` 一致。
     #
     # 只折 `-index.jsonl`：主册（`<owner>.jsonl`）与索引记的是同一批名字（`add` 与 `bind`
-    # 一一对应），两份一起折会让每个名字都变成"同名多开"的假数（实测 82：42 个假重名）。
+    # 一一对应），两份一起折会让每个名字都变成"同名多开"的假数。
     live: dict[str, dict[str, list[str]]] = {}
     for row in roster_rows:
         if not str(row.get("_file") or "").endswith("-index.jsonl"):
@@ -1453,7 +1444,7 @@ def _read_aux(root: Path) -> dict[str, Any]:
     return {
         "verifications": {"rows": verifications, "reading": ver_reading},
         # 名册这一格只带它自己的行；拒绝流水单列成 `roster_refusals`（下一行）。
-        # 2026-11-01：这里原先把拒绝流水的 `refusals` 又塞进名册那一格一次 ⇒ 同一个量
+        # 拒绝流水的 `refusals` 不许再塞进名册那一格一次 ⇒ 同一个量
         # 两个裸键名（三义那条判据点名要治的形态）。读侧只走 `roster_refusals`。
         "roster": {"rows": roster_rows, "repaired": repaired, "reading": roster_reading},
         "roster_refusals": {"rows": refusals, "reading": ref_reading},
@@ -1530,7 +1521,7 @@ def _controlled_refusal_shape(result: Mapping[str, Any]) -> bool:
 
     形状（`conductor_tools._out` 那一族）：`result.ok is True`，而拒因写在
     `data.state == "refused"` 或 `data.refusal_code`（非空）里 —— 工具把"拒了"当成
-    "成功"返回，于是 `ok is False` 那条老路一条都数不到（2026-11-04 实测）。
+    "成功"返回，于是 `ok is False` 那条老路一条都数不到。
     """
     if result.get("ok") is not True:
         return False
@@ -1592,7 +1583,7 @@ def error_action_stats(target: Any) -> ErrorStats:
     """按角色统计错误动作计数。`target` 可以是工作区根路径，也可以是 `Store`。
 
     纯读：不写库、不写盘、不建目录、不加锁（`Store.read_events` 本身只读文件；
-    `closing.check_closing` 也只读，实测跑完工作区 350 个文件的 mtime 一个都没动）。
+    `closing.check_closing` 也只读，跑完工作区的 mtime 一个都没动）。
     三态见模块 docstring 第 3 条：读不到 ⇒ `checked=False` / `state="unknown"`，
     不把"没读到"折成 0。
     """
@@ -1611,12 +1602,11 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                             aux: Mapping[str, Any] | None = None) -> ErrorStats:
     """同一份计数，但输入是已经读好的记录（不再读事件流与会话记录）。
 
-    为什么要这一支（2026-10-27，R-BE1 的 ⑥-5）：`stats all` 那四条读数各读一遍盘
-    （实测 `events.jsonl` 读 4 次、`sessions/*.jsonl` 读 4 次；同一份 2.9 MB 的会话
-    被解析四遍）。`readouts` 把它自己那份扫描交给这里，计数口径仍然只有这一处 ——
+    为什么要这一支：`stats all` 那四条读数各读一遍盘（`events.jsonl` 与
+    `sessions/*.jsonl` 各被读、解析四遍）。`readouts` 把它自己那份扫描交给这里，计数口径仍然只有这一处 ——
     在这里复制一份分类逻辑就是第二套口径，而那正是 `readouts` 这一层存在的理由。
 
-    `aux`（2026-11-01 扩面）：扩面新读的四个目录 + 两个只取一格的源，由
+    `aux`（扩面）：新读的四个目录 + 两个只取一格的源，由
     `_read_aux(root)` 一次读好传进来。不传 ⇒ 那 7 个类目一律 `unknown`，不是 0
     （它们藏在辅助源里，"没查"与"没有"必须分得开）。`readouts.errors_readout` 传它；
     判据 `tests/test_stats_all_reads_disk_once.py` 拿同一夹具对拍两条路的 `as_dict()`。
@@ -1831,8 +1821,7 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
     if ss_reading.get("checked"):
         # 同一次失败在会话里落两条记录：`llm_call`（带网关原话）与它的 `agent_step`
         # （`shape="invalid"`，正文只有一句码名）。两处都数会把一次断网关数成两次 ——
-        # 真机 2026-10-28 17:15（`projects/paper-rewrite-78c`）：`judge_no_reply` 页面
-        # 4、真实 2。去重键取"同 ts + 同角色 + 同类目"：那是这两条记录共享的全部身份，
+        # 去重键取"同 ts + 同角色 + 同类目"：那是这两条记录共享的全部身份，
         # 并且只在这一格生效（不同失败照旧各算各的，见判据的反真空那一条）。
         counted_from_llm: set[tuple[str, str, str]] = set()
         for record in records:
@@ -1878,7 +1867,7 @@ def error_action_stats_from(events: Iterable[Mapping[str, Any]] | None,
                             _bump(_caller_or_actor(record, role), "statement_missing",
                                   "verdict_missing")
                         elif _controlled_refusal_shape(result):
-                            # 受控拒绝（2026-11-04）：工具把"拒了"写在 `data` 里，`ok` 位却
+                            # 受控拒绝：工具把"拒了"写在 `data` 里，`ok` 位却
                             # 仍是 True（`conductor_tools._out` 的最后一句）。有受控码就按
                             # 码表登记的类目记；只有 `state=="refused"` 的落
                             # `tool_refused_controlled`（码位留空）；码认不出 ⇒ 不猜，记兜底。
@@ -2259,7 +2248,7 @@ def stats_json(stats: ErrorStats) -> str:
     """机器可读一行（`--json` 用）。
 
     `default=json_default`：`as_dict()` 今天全是纯 JSON 值，但它是 `--json` 那条出口的
-    唯一形态 —— 这一格一旦有非原生值（`sources` 里塞进一个 `Path` 就会），改前是
+    唯一形态 —— 这一格一旦有非原生值（`sources` 里塞进一个 `Path` 就会），没有它是
     `TypeError` 而不是读数。纯 JSON 载荷不走 `default`，既有输出逐字不变。
     """
     return json.dumps(stats.as_dict(), ensure_ascii=False, indent=2, default=json_default)
