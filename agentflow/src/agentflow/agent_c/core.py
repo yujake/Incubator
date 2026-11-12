@@ -127,12 +127,14 @@ class _Core:
     def _relation_brief_for_report(self, g: RelationGraph, rel: Mapping[str, Any], focus: str | None = None) -> dict:
         """报告里展示关系时统一用它，避免每处各写一套字段名。"""
         cids = [str(c) for c in (rel.get("concept_ids") or [])]
+        names = [g.name_of(c) for c in cids]
         return {
             "relation_id": rel.get("relation_id"),
             "concept_ids": cids,
-            "concept_names": [g.name_of(c) for c in cids],
+            "concept_names": names,
             "other_concepts": [
-                {"concept_id": c, "name": g.name_of(c)} for c in cids if focus is None or c != focus
+                {"concept_id": c, "name": name}
+                for c, name in zip(cids, names) if focus is None or c != focus
             ],
             "description": rel.get("description") or "",
             "statement": rel.get("statement") or "",
@@ -160,18 +162,26 @@ class _Core:
         w = self.weights
         hops = len(chain_ids)
         n = max(1, len(rels))
-        verified = [r.get("quote_verified") for r in rels]
-        ratio_true = sum(1 for v in verified if v is True) / n
-        ratio_false = sum(1 for v in verified if v is False) / n
-        ratio_suspect = sum(1 for r in rels if str(r.get("status") or "") == "suspect") / n
-        n_true = sum(1 for v in verified if v is True)
-        n_false = sum(1 for v in verified if v is False)
-        n_none = sum(1 for v in verified if v is None)
-        n_suspect = sum(1 for r in rels if str(r.get("status") or "") == "suspect")
-        lits = {str(r.get("lit_id") or "") for r in rels}
+        n_true = n_false = n_none = n_suspect = 0
+        lits: set[str] = set()
+        desc_total = 0
+        for r in rels:
+            v = r.get("quote_verified")
+            if v is True:
+                n_true += 1
+            elif v is False:
+                n_false += 1
+            elif v is None:
+                n_none += 1
+            if str(r.get("status") or "") == "suspect":
+                n_suspect += 1
+            lits.add(str(r.get("lit_id") or ""))
+            desc_total += len(str(r.get("description") or "").strip())
+        ratio_true = n_true / n
+        ratio_false = n_false / n
+        ratio_suspect = n_suspect / n
         n_lits = len(lits)
-        desc_lens = [len(str(r.get("description") or "").strip()) for r in rels]
-        avg_desc = (sum(desc_lens) / len(desc_lens)) if desc_lens else 0.0
+        avg_desc = (desc_total / n) if rels else 0.0
         hot = set(hot_ids)
         off_hot = [cid for cid in path_nodes if cid not in hot]
         avoids_top = 1.0 if off_hot else 0.0
@@ -298,30 +308,39 @@ class _Core:
         points = 0
         reasons: list[str] = []
         qv = rel.get("quote_verified")
+        status = str(rel.get("status") or "")
         if qv is not True:
             points += 1
             reasons.append(f"引文未获证实（quote_verified={qv}）")
-        if str(rel.get("status") or "") == "suspect":
+        if status == "suspect":
             points += 1
             reasons.append("状态为 suspect（判重存疑）")
         if g.degree(cid) <= 1:
             points += 1
             reasons.append("它是该概念唯一的连接（一旦失效该概念即完全孤立）")
         peer_degree = _cfg_int(self.cfg, "cold_weak_peer_degree", 1)
-        cold_peers = sorted(
-            o for o in others if o in cold_ids or g.degree(o) <= peer_degree
-        )
+        cold_peers: list[tuple[str, int | None]] = []
+        for o in others:
+            if o in cold_ids:
+                cold_peers.append((o, None))
+                continue
+            degree = g.degree(o)
+            if degree <= peer_degree:
+                cold_peers.append((o, degree))
+        cold_peers.sort(key=lambda od: od[0])
         if cold_peers:
             points += 1
             reasons.append(
                 "另一端也很冷门（无法借力）："
-                + "、".join(f"{g.name_of(o)}(degree={g.degree(o)})" for o in cold_peers)
+                + "、".join(
+                    f"{g.name_of(o)}(degree={degree if degree is not None else g.degree(o)})"
+                    for o, degree in cold_peers)
             )
         return {
             "weak_points": points,
             "weak_score": round(points / 4.0, 4),
             "weak_reasons": reasons or ["四条弱判据都不成立：引文已证实、状态正常、存在多条连接、另一端是热门概念"],
-            "has_rejected": str(rel.get("status") or "") == "rejected",
+            "has_rejected": status == "rejected",
         }
     def _looks_like_non_concept(self, g: RelationGraph, cid: str) -> str | None:
         """"概念名明显不是概念"的可核实判据，返回理由或 None。
@@ -394,7 +413,21 @@ class _Core:
             pos += add
             pos_signals.append(f"热门概念参与：{'、'.join(g.name_of(c) for c in hot_in)} 在热门集里")
         rels = self._concepts_relations(g, concepts)
-        lits = {str(r.get("lit_id") or "") for r in rels}
+        n_rel = len(rels)
+        lits: set[str] = set()
+        n_false = n_sus = 0
+        has_duplicate = has_rejected = False
+        for rel in rels:
+            lits.add(str(rel.get("lit_id") or ""))
+            if rel.get("quote_verified") is False:
+                n_false += 1
+            status = str(rel.get("status") or "")
+            if status == "suspect":
+                n_sus += 1
+            elif status == "rejected":
+                has_rejected = True
+            if rel.get("duplicate_of"):
+                has_duplicate = True
         if len(lits) >= 2:
             pos += 0.5
             pos_signals.append(f"文献充足：相关关系分布在 {len(lits)} 篇文献里")
@@ -404,34 +437,34 @@ class _Core:
             why = self._looks_like_non_concept(g, cid)
             if why:
                 veto_reasons.append(f"概念名明显不是概念：{why}")
-        if any(r.get("duplicate_of") for r in rels):
+        if has_duplicate:
             veto_reasons.append("相关关系里有已被判重（duplicate_of 非空）的条目：这两个概念已被判定为同一个/重复关系")
-        qvs = [r.get("quote_verified") for r in rels]
-        if rels and all(v is False for v in qvs):
+        if rels and n_false == n_rel:
             veto_reasons.append(
-                f"相关关系的引文校验**全部**失败（{len(qvs)}/{len(qvs)} 条 quote_verified=False）："
+                f"相关关系的引文校验**全部**失败（{n_rel}/{n_rel} 条 quote_verified=False）："
                 "这条候选没有任何能在原文里逐字核实的依据"
             )
 
         # ---------------- 扣分项（仍参与净分）
-        n_rel = len(rels)
-        n_false = sum(1 for v in qvs if v is False)
         if n_rel and 0 < n_false < n_rel:
             neg += 0.5
             neg_signals.append(f"引文校验部分失败（{n_false}/{n_rel} 条）")
-        n_sus = sum(1 for r in rels if str(r.get("status") or "") == "suspect")
         if n_rel and n_sus:
             neg += 0.5 * (n_sus / n_rel)
             neg_signals.append(f"status=suspect 占 {n_sus}/{n_rel}")
-        if any(str(r.get("status") or "") == "rejected" for r in rels):
+        if has_rejected:
             neg += 0.5
             neg_signals.append("相关关系里有 status=rejected 的条目")
         peer_degree = _cfg_int(self.cfg, "cold_weak_peer_degree", 1)
-        thin = [c for c in concepts if g.degree(c) <= peer_degree]
+        thin: list[tuple[str, int]] = []
+        for c in concepts:
+            degree = g.degree(c)
+            if degree <= peer_degree:
+                thin.append((c, degree))
         if thin:
             neg += 0.25 * (len(thin) / max(1, len(concepts)))
             neg_signals.append(
-                "候选端连接薄弱：" + "、".join(f"{g.name_of(c)}(degree={g.degree(c)})" for c in thin)
+                "候选端连接薄弱：" + "、".join(f"{g.name_of(c)}(degree={degree})" for c, degree in thin)
             )
 
         net = pos - neg
@@ -516,14 +549,25 @@ class _Core:
         免得 `gaps` 的 payload 被一份可以随时再查的清单撑大（报告要可读、可存）。
         """
         pairs = self._structural_pairs(g)
-        cands = [p for p in pairs if not p.get("is_truncation_notice")]
-        notices = [p for p in pairs if p.get("is_truncation_notice")]
+        cands: list[dict] = []
+        merge_count = review_count = 0
+        truncated = False
+        for p in pairs:
+            if p.get("is_truncation_notice"):
+                truncated = True
+                continue
+            cands.append(p)
+            proposal = p.get("proposal")
+            if proposal == "merge":
+                merge_count += 1
+            elif proposal == "review":
+                review_count += 1
         return {
             "checked": bool(g.concept_by_id),
             "candidate_count": len(cands),
-            "merge_proposals": sum(1 for p in cands if p.get("proposal") == "merge"),
-            "review_proposals": sum(1 for p in cands if p.get("proposal") == "review"),
-            "truncated": bool(notices),
+            "merge_proposals": merge_count,
+            "review_proposals": review_count,
+            "truncated": truncated,
             "sample": [
                 {
                     "concept_ids": p.get("concept_ids"),
@@ -866,15 +910,11 @@ class _Core:
         row = D.find_concept(list(rows), q)
         if row is None and q:
             nq = T.normalize(q)
-            hits = [
-                r
-                for r in rows
-                if nq
-                and (
-                    nq in (r.get("normalized_name") or T.normalize(r.get("name", "")))
-                    or (r.get("normalized_name") or T.normalize(r.get("name", ""))) in nq
-                )
-            ]
+            hits: list[dict] = []
+            for r in rows:
+                name = r.get("normalized_name") or T.normalize(r.get("name", ""))
+                if nq and (nq in name or name in nq):
+                    hits.append(r)
             if len(hits) == 1:
                 row = hits[0]
         if row is None:
