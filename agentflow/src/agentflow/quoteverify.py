@@ -99,8 +99,8 @@ def _pages_unreadable(doc, start: int | None, end: int | None) -> bool | None:
             return None
     fp = getattr(doc, "failed_pages", None)
     if not callable(fp):
-        # 既没有 `page_unreadable` 也没有 `failed_pages`：这是"没有逐页信息"，
-        # 与旧行为（历史替身一律当可读）逐字一致，不是"取不到诊断"。
+        # 既没有 `page_unreadable` 也没有 `failed_pages`：这是"没有逐页信息"
+        # （历史替身一律当可读），不是"取不到诊断"。
         return False
     try:
         failed = tuple(int(x) for x in fp())
