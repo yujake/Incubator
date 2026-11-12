@@ -23,7 +23,6 @@ class _Research:
         if verdict.get("l3_needed") and not ev.get("l3"):
             ev = self.trace_l3(ev)
 
-        qrow = next((r for r in self.store.rows("research_questions") if r.get("question_id") == qid), None) or {}
         confidence = verdict["confidence"]
         analysis, conclusion, suggestions, llm_used = self._compose(ev, verdict)
         conclusion, suggestions = self._apply_c_evidence_caveat(ev, verdict, conclusion, list(suggestions))
@@ -53,10 +52,11 @@ class _Research:
                         row["status"] = "researching"
                     row["updated_at"] = self._stamp()
                     csum = self._c_summary(ev.get("c_queries") or [])
+                    claims = ev.get("claims") or []
                     note = (
                         f"[research] 置信度={confidence}（判据：{'/'.join(c['id'] for c in verdict['criteria']) or '无'}；"
-                        f"证据 {len(ev.get('claims') or [])} 条，quote_verified=True "
-                        f"{sum(1 for c in ev.get('claims') or [] if c.get('quote_verified') is True)} 条；"
+                        f"证据 {len(claims)} 条，quote_verified=True "
+                        f"{sum(1 for c in claims if c.get('quote_verified') is True)} 条；"
                         f"C 查询成功 {csum['ok']}/{csum['attempted']}；"
                         f"LLM={'yes' if llm_used else 'no'}）"
                         + ("" if csum["any_success"] else f" ⚠️ {C_NO_EVIDENCE}：结论未经 C 的图查询核对")
