@@ -415,10 +415,11 @@ MANUSCRIPT_PROOF_HEADING = "## 证明"
 MANUSCRIPT_STATEMENT_HEADING = "## 命题"
 #: 依赖段的标题（与 F 的手稿逐字相同：`depsection.SECTION_HEADING`）。
 MANUSCRIPT_DEPENDENCY_HEADING = "## 依赖"
-#: 依赖段的四列表头（与 F 的手稿逐字相同；空表也要给表头 —— 空表是声明）。
+#: 依赖段的表头（与 F 的手稿逐字相同；路径号由 B 的秘书在收录时分配，产出侧不写）。
+#: 空表也要给表头 —— 空表是声明。
 MANUSCRIPT_DEPENDENCY_HEADER = (
-    "| 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |",
-    "|---|---|---|---|",
+    "| 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |",
+    "|---|---|---|",
 )
 
 
@@ -595,8 +596,7 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
                        script_path: Any, script_sha256: Any = "",
                        design: Any, enumeration: Any,
                        search_space: Any = None, result: Any = "",
-                       evidence_kind: Any = "", proof_no: Any = None,
-                       kind: Any = "") -> str:
+                       evidence_kind: Any = "", kind: Any = "") -> str:
     """把 E 的穷举证明拼成一份与 F 同形的证明手稿（纯函数，逐字节可复现）。
 
     形态（段序固定、标题逐字；V 只读 `## 证明` 那一节，B 登记时也读同一节）::
@@ -604,7 +604,6 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
         # E 的证明手稿：<命题首行>
 
         - 实验号：exp:000000
-        - 证明号：2
         - 命题：...
         - 命题键：...
         - 程序：code/enum.py（sha256 ...）
@@ -619,8 +618,8 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
 
         ## 依赖
 
-        | 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |
-        |---|---|---|---|
+        | 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |
+        |---|---|---|
         （这一份证明没有引用任何在册命题 —— 空表就是声明。）
 
     ## `## 证明` 只剩 ③
@@ -631,12 +630,10 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     只有 ③ 穷举论证。于是「稿上被签的那一份」与「`statements.proof_text` 登记的那一份」
     仍然逐字相同（`numericproof.compose_proof_column` 单段），而两段各自有唯一居所。
 
-    ## `proof_no`（稿号）
-    这一份是这条命题的哪个稿号（一个稿号 = 一份文件 = 一份证明）。给了就写一行
-    `- 证明号：<N>`；不给就省略 ——
-    "不知道"等于稿号 1（读侧按 `#p1` 处理），不许猜成别的号。
-    为什么不给个默认 1 写死：写死会让"E 知道这是第 3 份"与"E 不知道"在稿上一个样，
-    而前者正是 B 收录时要用的那一格（`depsection.manuscript_proof_no` 读它）。
+    ## `- 证明号：` 在写侧退役
+    产出侧不再写这一行（一个稿号 = 一份文件 = 一份证明；稿号与实验的对应关系由
+    稿头 `- 实验号：` 回答）。读侧仍认盘上老稿里的那一行
+    （`depsection.manuscript_proof_no` / `proofregistry.parse_entry`）—— 只停"写"。
 
     ## `kind`（玩具例子）
     这一条命题的种类标签（`theorem` / `lemma` / `proposition` / `corollary` /
@@ -652,18 +649,11 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     title = " ".join(str(claim or "").split())
     if len(title) > 60:
         title = title[:60] + "…"
-    try:
-        no = int(proof_no or 0)
-    except (TypeError, ValueError):
-        no = 0
     head = [
         f"# E 的证明手稿：{title or '（这一条没有写命题）'}",
         "",
         f"- 实验号：{EVIDENCE_PREFIX}{eid}",
     ]
-    if no >= 1:
-        # 只在知道时写（不知道就省略这一行 = 第 1 份，读侧按 #p1 处理）。
-        head.append(f"- 证明号：{no}")
     head.extend([
         f"- 命题：{str(claim or '').strip()}",
         f"- 命题键：{str(claim_key or '').strip()}",
@@ -751,7 +741,7 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     out["manuscript_id"] = mid
     text = compose_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "script_path", "script_sha256",
-        "design", "enumeration", "search_space", "result", "evidence_kind", "proof_no",
+        "design", "enumeration", "search_space", "result", "evidence_kind",
         "kind")})
     target, why = _resolve(root, rel)
     if target is None:
