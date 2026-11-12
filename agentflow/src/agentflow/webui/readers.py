@@ -5553,7 +5553,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("VerificationRow",
      "verifications.list_verifications()（裁定 K2：无真机样本 ⇒ 夹具造一行）",
      (("verification_id", "string"), ("statement_id", "string"),
-      # 2026-10-22（多证明模型）：签名行多了 `stmt_id`（被审的那条命题，与
+      # 多证明模型：签名行多了 `stmt_id`（被审的那条命题，与
       # `statement_id` 同值）。`proof_no` 在 V 签侧退役：一份证明的身份由
       # 正文 sha + `statement_id` + 路径回答 ⇒ 类型面不声明它（页面也不再印
       # "第几份"）。
@@ -5563,7 +5563,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("why", "string"), ("findings", "Record<string, unknown>[]"),
       ("unresolved_errors", "number"), ("proof_sha256", "string"),
       ("proof_chars", "number"), ("round", "number"), ("used_faces", "string[]"),
-      # 2026-11-02（V 三轮送审的口径，逐字：「不允许跨两次送审累计成功数」）：
+      # V 三轮送审的口径（逐字：「不允许跨两次送审累计成功数」）：
       # 新写的台账行多两格 —— `review_call` 是同一趟 `verify_proof` 的调用 id
       # （同趟三行逐字相同），`review_pass` 是这趟里的第几轮（1..need）。
       # 类型取 `verifications.record_verification` 写行的真值：前者恒为 `str(...)`，
@@ -5593,7 +5593,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("citation_checks",
        "{ stmt_id: string; verdict: string; quote_verbatim: boolean; note: string; "
        "in_material: boolean }[]"),
-      # 2026-11-06（「打回即站住」落地后）：台账写口现在无条件写这一格
+      # 「打回即站住」之后，台账写口无条件写这一格
       # （`verifications.secretary_judge_cell`：给了判定写判定，没给写"未判成"），
       # 于是夹具/真盘上的新行都读得出它 —— C 条拿行逐键比 ⇒ 这里必须声明，
       # 否则类型面读不出"这一行的轴是不是秘书给的"（轴是签发唯一来源）。
@@ -5606,7 +5606,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("at", "string"), ("path", "string"), ("sha256", "string"), ("bytes", "number"),
       ("producer", "string"), ("kind", "string"), ("task_id", "string"),
       ("exit_code", "number | null"), ("note", "string"),
-      # 2026-10-23（业主：sha 原文不显示）：这一格取同一路径的核对行读数
+      # sha 原文不显示：这一格取同一路径的核对行读数
       # （match / mismatch / unknown），页面只印它。
       ("sha_consistency", "string"),
       # 台账行没有 `created_by`（`artifacts.FIELDS` 里没有那一栏）⇒ `by_role` 是空串。
@@ -5632,7 +5632,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("bytes", "number"), ("path", "string"), ("note", "string"),
       ("created_at", "string"), ("revises?", "string"), ("kind?", "string"),
       ("ref_problems?", "Record<string, string>"),
-      # 收件人的绝对编码（Q2，2026-10-26）：`to_task_id` = 具体收件人的台账号，
+      # 收件人的绝对编码：`to_task_id` = 具体收件人的台账号，
       # `to_task_ids` = 广播面（`to=ALL`）的编号列表。写侧只在这一行真有编号时才落
       # 这两个键 ⇒ 读模型把它们归一成"永远给得出"（缺 ⇒ 空串 / 空列表），而
       # 「旧账无号」那一档由下面两格说清（`handoff_to_label` 按盘上的原样算）。
@@ -5666,9 +5666,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "（`got <= max`，真机 60/99 份工作区里有这种行），`na` 档是「这一档对这个项目"
      "不适用」（三态，不是通过也不是失败）⇒ 三格都写成可选，谁都不冒充必填",
      (("id", "string"), ("kind", "string"),
-      # 2026-11-03（E4）：这三格原先是必填 `min`、`max`/`na` 压根没声明。于是
-      # `types.ts` 里 `AcceptanceCheck.min` 是必填 number，而盘上 60 份工作区的
-      # C3/C4 是 max-only 行 ⇒ `Artifacts.tsx` 的 `String(r.min)` 印出 `undefined`。
+      # 三格都写成可选：`min` 若必填、而 `max`/`na` 没声明，`types.ts` 里
+      # `AcceptanceCheck.min` 就是必填 number，而盘上 60 份工作区的 C3/C4 是 max-only
+      # 行 ⇒ `Artifacts.tsx` 的 `String(r.min)` 会印出 `undefined`。
       # 形状真身是 `closing.py` 的阈值那一段（`want_min` / `want_max` / `row["na"]`）。
       ("min?", "number | null"), ("max?", "number | null"),
       ("na?", "boolean"),
@@ -5695,12 +5695,12 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("kind", "string"), ("expects", "string"), ("item_state", "string"),
       ("item_close", "string"), ("seen_by", "string"), ("seen_step", "number | null"),
       ("keep_alive", "boolean"),
-      # 2026-10-26（D22 的连带）：父代理退场结算写成的那一格（`schema.child_ending`
+      # 父代理退场结算写成的那一格（`schema.child_ending`
       # 的三档里只有"被父退场掐断"那一档为真）。它是 `Task` 的列，盘上有它就得上
       # 声明 —— 否则契约 C 会报"后端有而 types.ts 没有"，而那一格正是剪断与交付
       # 分不开的地方（跨 lane 的连带，由 Q2 这一批顺手补上）。
       ("settled_at_parent_exit", "boolean"),
-      # 2026-11-06（裁定 ① 的丙件）：撤销之后 `expects` 被清空，原值落在这一格。
+      # 撤销之后 `expects` 被清空，原值落在这一格。
       # 同上一条：它是 `Task` 的列，盘上有它就得在 types.ts 里声明。
       ("expects_was", "string"),
       # 任务行的编号就是它自己的 `task_id`（按它反查，命中的是这一趟自己的收尾事件）。
@@ -5708,7 +5708,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"),
-      # 2026-11-09（D12）：板项行的"状态"读数（`statusreport.tasks_row_reading` 的
+      # 板项行的"状态"读数（`statusreport.tasks_row_reading` 的
       # 投影：`板项 done/acked` / `板项 queued/未收口`；代理行仍是 `<status>/<outcome>`）。
       # 它不在 `schema.Task` 里 —— 是这一面现算的投影，与 `.md` 报告同一处口径。
       # 盘上的 `status` 一个字都不改（板项行那一格恒为 `pending`，那是类型标记）。
@@ -5743,15 +5743,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("runtime_sec", "number | null"), ("notes", "string"),
       ("created_at", "string"), ("created_by", "string"),
       ("for_question_id", "string"),
-      # 2026-10-23（业主：sha 原文不显示）：`code_sha_consistency` 是"台账钉的代码 sha
+      # sha 原文不显示：`code_sha_consistency` 是"台账钉的代码 sha
       # vs 盘上现在这一份脚本"的读数（`code_hash` 留在数据里，页面不印）。
-      # 2026-10-24（业主：改脚本后重新登记并撤销老登记）：它多了第四档 `revoked`，
+      # 改脚本后重新登记并撤销老登记 ⇒ 它多了第四档 `revoked`，
       # 另带三格 —— 两个 sha 前 16 位（`code_sha_from` / `code_sha_to`）与那句撤销理由
       # （`void_reason`，逐字「脚本 <旧> → <新>」）。有效行上这三个是空串。
       ("code_sha_consistency", "string"),
       ("code_sha_from", "string"), ("code_sha_to", "string"),
       ("void_reason", "string"),
-      # 2026-10-23 第二批（业主：实验表没挂穷举论证报告）：`exhaustion_path` 是那份
+      # 实验表没挂穷举论证报告：`exhaustion_path` 是那份
       # 报告的仓库相对落点（`out/experiments/<号>/exhaustion.md`，口径在
       # `exhaustionreport.report_relpath`），`exhaustion_tri` 是它的三态
       # （computed / not_applicable / unreadable；`not_applicable` 时路径是空串）。
@@ -5776,7 +5776,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("lease_until", "string | null"), ("attempts", "number"),
       ("last_error", "string"), ("result_lit_ids", "string[]"),
       ("timestamp", "string"))),
-    # 2026-10-21（业主的「名册监视」）：`out/roster/<父编号>.jsonl` 折出来的那棵树。
+    # 名册监视：`out/roster/<父编号>.jsonl` 折出来的那棵树。
     # 逐字段的盘上出处写在 `roster_face` 的 docstring 里那张表上（这里不抄第二份）。
     ("RosterView",
      "roster_face() —— 当前工作区整棵名册树（`out/roster/<父编号>.jsonl` 与 "
@@ -5788,7 +5788,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("max_depth", "number | null"), ("files", "string[]"),
       ("diagnostics", "string[]"), ("coverage", "RosterCoverage"),
       ("tasks_tri", "Tri"), ("tasks_reason", "string"), ("truncated", "boolean"),
-      # 三态合计（2026-10-26 业主：「『在飞』的读数要随着时钟式待机进行适配」）：
+      # 三态合计（业主：「『在飞』的读数要随着时钟式待机进行适配」）：
       # 四档各几个 + `active`（= 在飞 + 待机）。计数格是 `number | null`
       # （`null` = 没读到，不是 0）。刻意写成行内对象而不是另立一个接口：
       # 它是 RosterView 的一格、不是一张独立的表（前端用 `RosterView["states"]` 取）。
@@ -5811,14 +5811,14 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 三态（在飞 / 待机 / 静默 / 未读到）与"为什么是这一档"的那一句人话。
       # 判定只有 `conductor.agent_state` 一处；`state_reason` 在 `unknown` 时必有。
       ("state", "string"), ("state_reason", "string"),
-      # 疑似停滞（业主 2026-10-26 第二条）：`state` 仍是 flying 的那一格旁边多一个读数
+      # 疑似停滞（业主第二条）：`state` 仍是 flying 的那一格旁边多一个读数
       # —— 最近一步离现在多少秒。`stalled_sec` 是 `number | null`（null = 没读到，不是 0）。
       ("stalled", "boolean"), ("stalled_sec", "number | null"),
       ("stalled_reason", "string"),
       ("in_flight", "number | null"), ("inbox", "RosterInbox"),
-      # 这个子代理接过的每一件活（业主 2026-10-24：「一个子代理可接收多个任务」）。
+      # 这个子代理接过的每一件活（业主：「一个子代理可接收多个任务」）。
       ("tasks", "RosterTask[]"),
-      # 2026-10-25（业主截图：「子 N」只数名册项，漏掉"有父但没落名册"的那些）：
+      # 「子 N」只数名册项，漏掉"有父但没落名册"的那些：
       # `children_in_ledger` 是台账里的子数（台账读不到 ⇒ null，不是 0；这个名字量的
       # 是"这个节点在台账里挂了几个子"，与收工读数的 `children_unretired`（名册未销号项数）
       # 是两个量），
@@ -5826,7 +5826,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # （编号 + 角色 + 状态；它们同时仍进页面底部的 `unplaced`，两处同一口径）。
       ("children_in_ledger", "number | null"), ("roster_child_count", "number"),
       ("unrostered_children", "RosterUnrostered[]"),
-      # 2026-11-03（E10）：这一格只在「台账兜底档」（`_roster_from_tasks`）出现，
+      # 这一格只在「台账兜底档」（`_roster_from_tasks`）出现，
       # 恒为 `False`；名册档的节点不带它 —— 不带就是"它在名册上"（那一档的名册项
       # 必然登记过，`test_roster_registration_covers_every_path.py` 逐字钉着"名册
       # 节点不带 `registered` 这一格"）。所以写成可选：写成必填，名册档的
