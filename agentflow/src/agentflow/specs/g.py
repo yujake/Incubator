@@ -1,10 +1,10 @@
-"""角色 G 的声明（`goal-7f5116c1` M3）：动作表 + 边 + 写集 + 职责与门面。
+"""角色 G 的声明：动作表 + 边 + 写集 + 职责与门面。
 
 这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
-`WRITE_SETS`，`agent_g.py` 只是把它再导出一次。
+`WRITE_SETS`，`agent_g` 包只是把它再导出一次。
 所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
-动作表的每一行都从 `capabilities.py` 逐字搬来（含注释），判据见
-`tests/test_agent_spec_reconciliation.py` 与 `tests/test_capabilities_two_layer.py`。
+与派生表逐格一致的判据见 `tests/test_agent_spec_reconciliation.py` 与
+`tests/test_capabilities_two_layer.py`。
 """
 from __future__ import annotations
 
@@ -26,31 +26,30 @@ from ..agentspec import (
     _obj,
 )
 
-#: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
+#: 本角色的动作表。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "G", "compose_claim",
         "构造一条合规断言（转发工具层，判据只有一份）",
         _obj({"text": _S,
               # 工具层（`doc.compose_claim`）的 `citations` 有 `minItems: 1`：一条断言至少要
-              # 引一份证据。动作面原来只写 `_ARR_S` ⇒ 派活面放行"零引用的断言"，
+              # 引一份证据。只写 `_ARR_S` ⇒ 派活面放行"零引用的断言"，
               # 而工具层必然拒收（判据：`capabilities.param_type_divergences()`）。
               "citations": {**_ARR_S, "minItems": 1},
               "evidence_kind": _S, "section": _S,
               "is_negative": _B, "negation_kind": _S, "claim_id": _S,
-              # ---- 2026-11-04（业主裁定）：把实现**已经接收**的 11 格补进动作面。
+              # ---- 把这 11 格补进动作面（实现早就逐个接收它们）。
               #
-              # 这三行不是新行为：`agent_g/compose_claim.py:20-30` 的签名早就逐个接收
-              # 它们（`kind` / `status` / `proof_location` / `numeric_evidence` /
+              # 这三行不是新行为：`agent_g/compose_claim.py` 的签名逐个接收它们
+              # （`kind` / `status` / `proof_location` / `numeric_evidence` /
               # `counterexamples` / `frozen` / `freeze_reason` / `allowed_use` /
-              # `scope_caveat` / `revision_hash` / `errata_ids`），并在 `:50-60` 原样
-              # 转发给 `doc_tools.compose_claim`，后者把它们逐格写进 claim dict
-              # （`doc_tools.py:1104-1121` 那个 `extra` 循环；`frozen` 在 `:1142-1143`）。
-              # 类型/边界逐字对齐工具面的 `@tool` 声明（`doc_tools.py:2164-2174`）。
+              # `scope_caveat` / `revision_hash` / `errata_ids`），并原样转发给
+              # `doc_tools.compose_claim`，后者把它们逐格写进 claim dict。
+              # 类型/边界逐字对齐工具面的 `@tool` 声明。
               #
-              # 为什么这 11 格必须进动作面：没有 `proof_location`（D-1 写入期判据要的
-              # 那一格）就造不出一条能过 `build_document` 的 proof 断言 —— 主控只能
-              # 派「无法交付的活」。判据：`temp/n6_p1_compose_claim.py`
+              # 为什么这 11 格必须进动作面：没有 `proof_location`（写入期判据要的那一格）
+              # 就造不出一条能过 `build_document` 的 proof 断言 —— 主控只能派「无法交付的活」。
+              # 判据：`temp/n6_p1_compose_claim.py`
               # （a 参数门放行 / b 端到端过 build_document / c 摘掉就回到被拒）。
               "kind": {"type": "string", "enum": list(CA.CLAIM_KINDS)},
               "status": {"type": "string", "enum": list(CA.CLAIM_STATUSES)},
@@ -73,9 +72,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "登记外部依赖（`closed` 时必须核到已入库的来源，FC-23）",
         _obj({"used_by": _S, "kind": _S, "label": _S, "source_lit_id": _S,
               "source_experiment_id": _S,
-              # 2026-10-09（业主：「B走乙……如果证明路径不唯一，可增另一组依赖，
-              # 实现用二维列表」+「concept表真并进statements」）：依赖的第四种来源
-              # 是"我们自己的一条命题"（定理用到定理/用到某个概念），
+              # 依赖的第四种来源是"我们自己的一条命题"（定理用到定理/用到某个概念），
               # 而"多组路径"落成 `path_group`（同一 used_by + 同一组 = 一条路径，
               # 组内都要；不同组 = 可选路径，组间任一）。两格与工具层逐字对齐
               # （`doc_tools.register_dependency` 的 `@tool` 声明），
@@ -84,8 +81,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "source_stmt_id": _S, "path_group": _I,
               # 工具层（`doc.register_dependency`）的 `page_range` 是
               # `{"type":"array","items":{"type":"integer"},"minItems":1,"maxItems":2}`
-              # —— `[start, end]` 两格、至少一格。动作面原来只写 `_ARR_I`，边界只在工具面
-              # （`_coerce_page_range` 也按 `[start, end]` 读），判据同 `citations` 那一行。
+              # —— `[start, end]` 两格、至少一格。只写 `_ARR_I` 会丢掉边界（边界只在工具面，
+              # `_coerce_page_range` 也按 `[start, end]` 读），判据同 `citations` 那一行。
               "page_range": {**_ARR_I, "minItems": 1, "maxItems": 2}, "quote": _S,
               "status": {"type": "string", "enum": list(S.DEP_STATUSES)},
               "status_reason": _S},
@@ -100,9 +97,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "claims": {"type": "array", "items": _OBJ, "minItems": 1},
               "sections": {"type": "array", "items": _OBJ},
               "open_problems": _ARR_S,
-              # `draft/37` §91：这一格原先是个光秃秃的 `_S`（只声明类型、没有描述），
-              # 于是真机上主控把它当成了"论文本体该写在哪"，把 26 KB 的正文覆盖成
-              # 4 KB 的台账稿（那一趟就此作废）。要求写清：它是生成物落点，不是主稿。
+              # 这一格只写 `_S` 的话没有描述，主控会把它当成"论文本体该写在哪"，把 26 KB
+              # 的正文覆盖成 4 KB 的台账稿（不可逆）。要求写清：它是生成物落点，不是主稿。
               "out_path": {"type": "string", "description":
                            "生成 markdown 的落点（工作区内相对路径；缺省 "
                            "`<工作区>/<documents>/<doc_id>.md`）。**它是这份稿件的渲染产物，"
@@ -141,14 +137,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "G", "write_mapping",
         "写论文对应表三份（json / md / 正文附录）：先出表、再写正文",
         _obj({
-            # ## 这两格参数的「真身」在工具层（2026-10-22 业主裁定：同一件事只有一个真身）
+            # ## 这两格参数的「真身」在工具层（同一件事只有一个真身）
             #
             # 真身是 `tools/doc_tools.py` 里 `doc.write_mapping` 的 `@tool` 声明 —— 它是
             # `papermapping.parse_rows` 之前真正跑 `validate_params` 的那一份：
             # `project` 有 `minLength=1 / maxLength=300`，`rows` 有 `minItems=1`，
             # 且每一行必填六格（kind / label / env_no / ledger_id / proof_no / file）。
-            # 动作面原来只有 `_S` 与 `_ARR_OBJ` ⇒ 动作门 PASS、工具门 REJECT，
-            # 而三层对账返回 `[]`（审计 D-2）。这里只镜像工具层的那几个约束键，
+            # 只给 `_S` 与 `_ARR_OBJ` ⇒ 动作门 PASS、工具门 REJECT，
+            # 而三层对账返回 `[]`。这里只镜像工具层的那几个约束键，
             # 漂移由 `capabilities.assert_capabilities()` 第 [9c] 条逐键对拍
             # （`_PARAMS_DERIVED_FROM_TOOL`）：改工具层的 `minItems` 而不改这里 ⇒ 导入期当场红。
             "project": {**_S, "minLength": 1, "maxLength": 300},
@@ -174,7 +170,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                 # 判据：tests/test_g_mapping_rows_declare_the_papermapping_cells.py。
                 "items": {**_OBJ,
                           "properties": {
-                              # 数值实验定理那两格（业主 2026-10-23，E-1）。
+                              # 数值实验定理那两格。
                               "numeric_evidence": _S,
                               "exhaustion_note": _S,
                               # `file` 有两种落点，都对。
@@ -188,8 +184,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                       "**不在论文包里是正常的** —— 按「必须在包里」去核会把"
                                       "每一条合规的数值定理都误判成错）。",
                               },
-                              # 机器核验凭据那一格（业主 2026-11-04：Lean 程序与数值证明
-                              # 程序同用一格，功能是「这条命题是百分百真的」）。
+                              # 机器核验凭据那一格（Lean 程序与数值证明程序同用一格，
+                              # 功能是「这条命题是百分百真的」）。
                               "lean_file": {
                                   "type": "string",
                                   "description":
@@ -212,7 +208,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                       "Lean 声明名，必须留空（填了反受控拒绝）；通道为空 ⇒ "
                                       "必须留空（填了同受控拒绝：没有通道就没有凭据）。",
                               },
-                              # 索引四格（D-34）：D 的报告是目录，B 顺着它去取正文
+                              # 索引四格：D 的报告是目录，B 顺着它去取正文
                               # （F 的证明 / E 的报告）。列义只有一份（`numericproof.INDEX_*`）。
                               "evidence_kind": {
                                   "type": "string",
@@ -247,14 +243,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "mapping json", side_effect="write_local", handler_name="write_mapping",
     ),
 
-    # ---- `paper_package` 已退场（2026-10-13，业主裁定逐字：「paper_package 里那些东西都是
-    # 古早废案了，我们要智能体写文章」）。原先是 G 的角色级动作"重渲染 → 重编译 → 核锚"，
-    # 它要求项目里自带一对渲染/编译脚本（`code/make_paper.py` / `code/compile_paper.py`），
-    # 而从零研究工作区没有那对脚本 ⇒ 第二次 T2 里 `G.paper_package` 四次 `package_build_failed`，
-    # 主控只好自己现写一个 Python 生成器（排版固化成脚本模板：一节一整段、摘要硬编码、
-    # 非 ASCII 静默变空格、没有 fontenc）。现在正文由智能体自己写进 `out/paper/main.tex`，
+    # ---- `paper_package` 已退场：它原是 G 的角色级动作"重渲染 → 重编译 → 核锚"，
+    # 要求项目里自带一对渲染/编译脚本（`code/make_paper.py` / `code/compile_paper.py`），
+    # 而从零研究工作区没有那对脚本（于是它只能 `package_build_failed`，主控只好自己现写
+    # 一个 Python 生成器）。现在正文由智能体自己写进 `out/paper/main.tex`，
     # 框架只保留一件工具 `doc.paper_compile`（内置编译 + 回执）。
-    # 退场面与逐条理由见 `draft/117`；渲染锚那一格也随之从收工门拿掉。
+    # 退场理由：那对脚本把排版固化成脚本模板（一节一整段、摘要硬编码、非 ASCII 静默变
+    # 空格、没有 fontenc），而它本该是智能体自己写的散文。渲染锚那一格也随之从收工门拿掉。
 )
 
 
@@ -265,10 +260,8 @@ def _build(d: BuilderDeps) -> Any:
     return AgentG(d.store, config=dict(d.config), llm=d.llm, workspace_root=d.workspace_root)
 
 
-# 2026-10-24 业主裁定（D-40 的根因）：「G 的写作只参照 B 侧收录的证明，如果参照 L 侧的形式化
-# 会切割太细。」＋ 同日口径更正：「形式化细节不进论文正文。」
-# 判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py（五条）。
-#: D-40 那一条政策：正文结构照 B 台账的命题，形式化细节不进正文。
+#: 那一条政策：正文结构照 B 台账的命题，形式化细节不进正文。
+#: 判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py（五条）。
 #:
 #: 为什么单独拎成常量：它必须点名 L（开档时"形式化找谁"要指得到，`tests/test_lean_switch_points_at_l.py`
 #: 的判据 ① 逐句核这一条），而关档时 L 不是这一档的角色 —— 那时用
@@ -311,21 +304,21 @@ WRITING_SCOPE_NO_LEAN = (
 #: 与 `specs/b.py` / `specs/e.py` 那两张表同一机制：左边与右边都是本文件的常量，
 #: 应用点唯一（`agent_prompts._apply_no_lean_variant`）。
 #:
-#: 2026-11-04（业主口径：`lean_file` 是「机器核验凭据」那一格，功能是「这条命题是百分百真的」）：
-#: 这一行按证明通道写 —— numeric 通道填证明栏第 ① 段那份 .py 程序、lean_target 留空；
-#: formal 通道填 .lean 与它验的声明名；通道为空两格必须空（填了受控拒绝：
-#: 没有通道就没有凭据），空通道时 numeric_evidence / exhaustion_note 也不许填。
+#: `lean_file` 是「机器核验凭据」那一格（功能是「这条命题是百分百真的」）：这一行按
+#: 证明通道写 —— numeric 通道填证明栏第 ① 段那份 .py 程序、lean_target 留空；formal
+#: 通道填 .lean 与它验的声明名；通道为空两格必须空（填了受控拒绝：没有通道就没有凭据），
+#: 空通道时 numeric_evidence / exhaustion_note 也不许填。
 #:
 #: 关档替身只能说"formal 这一条这一档走不到"，不许再说"两格留空"：数值通道在关档会话里
 #: 仍然必填 lean_file（那份 .py 与 Lean 工具链无关）—— 旧替身把合规的数值定理一起放空了。
 #: 判据：tests/test_lean_file_is_taught_by_channel.py。
 #:
-#: 2026-11-04（第三处措辞：同一句话的两面）：② 一度写成「formal（形式化，由 L 交出那份 .lean 与声明名）」，
-#: 那一版同时踩两把尺子 —— `test_l_collab_surface_is_respected_everywhere` ① 判「除 L 自己外谁的提示词里
-#: 都不许出现 L」（连提都不许），而 `test_lean_switch_points_at_l` ① 判「讲 Lean 形式化的句子要点着 L」。
-#: 第三条尺子 `test_lean_file_is_taught_by_channel` 又逐字要「formal（形式化）」这个锚点 ⇒ 三条同时成立的
-#: 唯一出口是让这一行不落进「讲 Lean 形式化」的射程：② 里不出现 L，且「形式化」前后 60 字里不放 Lean
-#: 那一族的记号（同一行 ① 的「没有 Lean 声明名」因此改成「没有声明名可填」，凭据格的要求一个字没动）。
+#: 三把尺子同时成立的唯一出口：② 里不出现 L
+#: （`test_l_collab_surface_is_respected_everywhere` ① 判「除 L 自己外谁的提示词里都不许
+#: 出现 L」），而「形式化」前后 60 字里也不放 Lean 那一族的记号（`test_lean_switch_points_at_l`
+#: ① 判「讲 Lean 形式化的句子要点着 L」、`test_lean_file_is_taught_by_channel` 又逐字要
+#: 「formal（形式化）」这个锚点）—— 于是 ① 的「没有 Lean 声明名」改成「没有声明名可填」，
+#: 凭据格的要求一个字没动。
 #: 判据：tests/test_lean_file_is_taught_by_channel.py + tests/test_l_collab_surface_is_respected_everywhere.py。
 #:
 #: 顺序与 E 那张表同一条纪律：具体的长条目在前、短条目在后。
@@ -369,8 +362,8 @@ SPEC = AgentSpec(
             "发现证据不足时要回去要：把「缺什么、要什么样的证据」写清**交给 D**（D 是子任务，补完向上汇报；你只能召唤 C / D / H）—— 而不是把话说软；形式化要不要做由**用户指定**，指定之后由 B 逐条安排（一条才做一条）、回执由 B 带回 —— 你按回执取用那一条结论。",
         ),
         policy=(
-            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
-            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
+            # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）
+            # ⇒ 这一句是他们唯一的说明书。
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
             "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
@@ -390,9 +383,9 @@ SPEC = AgentSpec(
             "→（可选）**Appendix B**；合格线只有一句：读者读完应知道「问题是什么、已知什么、你新增了什么、凭什么相信」，且**不依赖"
             "任何内部编号／台账／验收表**。**没有新增结论的稿子不许投**：要么不写，要么用 `build_document` 如实写成综述"
             "（`kind=\"survey\"`）并在摘要首句标明「本文是综述，不含新结论」。",
-            # 2026-10-24（业主裁定，D-40）：环境数量由台账定，不再写死一个下限 ——
-            # 定写下限会逼作者"凑数"，而凑数的两条路（虚构命题 / 把一份证明拆细）都已经被
-            # 这一条下面那一段禁掉了。判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
+            # 环境数量由台账定，不写死下限 —— 定写下限会逼作者"凑数"，而凑数的两条路
+            # （虚构命题 / 把一份证明拆细）都已经被这一条下面那一段禁掉了。
+            # 判据：tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
             "**第 3 节的合格线：台账登记的每条命题各占一个定理类环境，每个都带 `\\begin{proof}…\\end{proof}` 且分 (1)(2)(3) "
             "步**（环境数量由 `statements` 里 kind 是定理类的那几条定：**一条命题对一个环境，不凑数、不拆细**；台账里只有 1 "
             "条命题就只写 1 个定理类环境）：每一步写成「由 X 得 Y」，粒度 = 假设 → 推理链 → 结论，可被人逐行检查；**不许**用"
@@ -400,12 +393,11 @@ SPEC = AgentSpec(
             "N」代替论证；平凡或已知的事实也要写成引理并给出处，不许用「众所周知」蒙过去；**证不了的写成 `Conjecture` 或 "
             "`Open problem` 并写明缺哪一步**（缺引理／缺估计／缺无穷情形）；无 Lean 时**自然语言证明必须有**，但不许写「机器验证」"
             "「Lean 已验证」（等级 `theorem` 的凭据是 `experiments` 那一行 + V 的签，穷举证书与 Lean 同级）—— 文字证明签完这一格的等级是 `pre_theorem`（人逐行审过），不是 `theorem`。",
-            # 2026-10-24 业主裁定（D-40 的根因）：正文结构照 B 台账的命题，形式化细节不进正文。
-            # 那一段单独拎成常量 `WRITING_SCOPE`（关档有替身，见本文件末尾的
-            # `NO_LEAN_REPLACEMENTS`）；判据见 tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
+            # 正文结构照 B 台账的命题，形式化细节不进正文。那一段单独拎成常量 `WRITING_SCOPE`
+            # （关档有替身，见本文件末尾的 `NO_LEAN_REPLACEMENTS`）；
+            # 判据见 tests/test_d40_paper_follows_the_b_registry_not_the_lean_split.py。
             WRITING_SCOPE,
-            # 2026-10-24 业主裁定（cube2 / r34d 真机：G 直接派 B 要收录，被判 forbidden_edge）：
-            # D-40 那一段只写了「正文结构以 B 台账登记的命题为准」，没有写「命题不够、证明不够
+            # 上面那一段只写了「正文结构以 B 台账登记的命题为准」，没有写「命题不够、证明不够
             # 该找谁补」⇒ 模型把「让 B 去登记一条」读成了下一步动作，撞在边表上（边表那一半本来
             # 就对：G → B 不在 ALLOWED_EDGES 里）。这里补的是正向路径 —— 缺的命题与证明由 D 出
             # 研究手稿并登记，B 从 D 的手稿收录入库，G 把缺口提给 D。
@@ -420,8 +412,8 @@ SPEC = AgentSpec(
             "**G→B 这条边不存在**，你也**不需要、不能直接召唤 B**：收录由 D 那侧的交付触发；"
             "**G→D 是一条真边**，**你只能召唤 C / D / H**（C 做关系推断、D 去补材料、H 判稿）；"
             "你唯一要做的就是派活的文字要够具体（否则 D 补回来的不是你缺的那一块）。",
-            # 2026-11-11 业主裁定（逐字）：「关于 G 派 C 的说明：当 G 要成文时，对一个台账上已有成果，
-            # 需要向 C 请求分析其依赖链，从而 G 能保证成文时逻辑清晰、凭据完整」。
+            # 成文之前先派 C 拿依赖链：G 要成文时，对一个台账上已有成果，需要向 C 请求分析
+            # 它的依赖链，从而 G 能保证成文时逻辑清晰、凭据完整。
             "**成文之前，先派 C 把每一条要用到的成果的依赖链拿来**（业主 2026-11-11）：对台账上已有的成果，"
             "向 C 请求分析它的依赖链 —— C 的对应动作是 `proof_chain`（一条成果的最短证明依赖链）或 `paths`，"
             "要展开一层由 C 用台账的 `resolve` / `expand` 手法；派活里**优先把命题号给 C**（`stmt:<六位>`）；"
@@ -430,8 +422,8 @@ SPEC = AgentSpec(
             "与凭据引用：**先根后叶**，每一步都点得到它依赖的那一条；**不许自己猜依赖**、不许在论文里写"
             "「由标准事实可知」这类不点名的话（C 给不出链 ⇒ 如实写「这一条的依赖链没拿到」，不许编）。"
             "这条只管**理结构**；补材料走 D、要判词走 H —— 三件事各管一件，别混成一句「缺什么就找 D」。",
-            # 丙（2026-11-11）：G→H 是新增的真边（出边 = C/D/H）⇒ 改完稿由 G 自己送回 H。
-            # 措辞照 `specs/m.py` 那句「改完之后要再复核（D57）」，不自造新词。
+            # `G→H` 是真边（出边 = C/D/H）⇒ 改完稿由 G 自己送回 H。
+            # 措辞照 `specs/m.py` 那句「改完之后要再复核」，不自造新词。
             "**改完稿必须送回 H 复审，未复审不许交差**（业主 2026-11-11）：你是父、H 是下级，`G→H` 是你**能自己派的**"
             "边。`revise` 会把稿子推成 `revised`，而签名还钉着改之前那一版 —— 所以改完就派 `H.verify_fixes`（它按 "
             "`round_no` 复核这一版）或 `H.review`，让签名钉到现行版上。收工门的 `reviewed_current_rows` 数的是「现行版本"
@@ -454,9 +446,9 @@ SPEC = AgentSpec(
             "接在后面（`\\newcommand` / `\\DeclareMathOperator`）。**这只是推荐**：宏包可以增删、定理环境可以改名、边距可以改。"
             "**硬线只有一条：语言必须是英文** —— 标题、摘要、正文、定理与证明、图表标题、参考文献一律英文，全文 CJK 字符数为 0，"
             "连 `%` 注释里也不留中文（要写中文解释就写进 `documents` 手稿或回报里）。",
-            # 2026-10-24（业主裁定，D-45）：上面那条语言硬线只写到"正文"，而几个抬头不在正文里
-            # —— 摘要/参考文献/附录的标题由文档类印，证明的开头由 `\proofname` 印，附录的说明段
-            # 由渲染器印。于是英文论文的 PDF 上出现了「摘要」「参考文献」「证明。」与整段中文说明。
+            # 上面那条语言硬线只写到"正文"，而几个抬头不在正文里 —— 摘要/参考文献/附录的
+            # 标题由文档类印，证明的开头由 `\proofname` 印，附录的说明段由渲染器印。
+            # 于是英文论文的 PDF 上会出现「摘要」「参考文献」「证明。」与整段中文说明。
             # 判据：tests/test_d45_d46_paper_language_and_appendix_width.py。
             "**论文语言 = 正文语言，标题与页眉也是同一种语言**（业主 2026-10-24，D-45）：这批论文写英文，"
             "那就是**整份英文** —— 正文、`Abstract` / `References` / `Appendix` 这些**标题**、页眉里的节名、"
@@ -469,10 +461,9 @@ SPEC = AgentSpec(
             "**附录那一段说明由渲染函数按论文语言生成**（`doc.write_mapping` 渲染出 `mapping-appendix.tex`）："
             "不许手抄、不许混语言、不许为了「看着一致」去手改渲染出来的那一段 —— 手改的与 json 对不上"
             "（`mapping_paper_mismatch`），而且那一段印出来的语言就是读者看到的论文语言。",
-            # 2026-10-24（D-47，清点 cube2 的 main.log 时发现）：上面几条只写到「写什么」与
-            # 「抬头用哪种语言」，没写「长串进正文能不能断」—— 于是正文把 out/experiments/…、
-            # code/…、64 位 sha256 整串排进 typewriter，日志里 5 条 Overfull（125.28 / 185.70 /
-            # 61.81 / 41.43 / 68.80pt）。判据：tests/test_d47_long_paths_break_in_the_body.py。
+            # 上面几条只写到「写什么」与「抬头用哪种语言」，没写「长串进正文能不能断」——
+            # 于是正文把 `out/experiments/…`、`code/…`、64 位 sha256 整串排进 typewriter，
+            # 日志里出现多条 Overfull。判据：tests/test_d47_long_paths_break_in_the_body.py。
             "**正文里出现长路径、长哈希时必须可断行**（业主 2026-10-24，D-47）：`out/experiments/000001/…`、"
             "`code/…`、64 位 sha256 这类长串在 typewriter 字体里**不可断行**，整串排进正文就会把一行撑出页宽"
             "（cube2 实测：一串声明名连排 125.28pt，一个 64 位 sha256 185.70pt）。正文里**不许**出现整串不可断的 "
@@ -485,11 +476,10 @@ SPEC = AgentSpec(
             "**断言只能声称它所引实验的 `result` 支持的东西**：引到一条 `result=inconclusive`（脚本没打印结构化结论 / 超时 / 编译失败）"
             "的实验时，这句话必须写成「没得出结论」那一档（`is_negative=true` 且给 `negation_kind`），或者先把实验缺口派给 D，"
             "由 D 安排 E 跑出一个真给出 `REPRO_RESULT:` 的实验。",
-            # 2026-10-21：原「「引用一个与断言相反的证据行，比没有引用更坏」：读者会以为它被核过。」
-            # 已压成下面一行 —— 判据守得住的那一半（`result=refutes` 被当支撑）由判据点名；
-            # 另一半（否定断言引 `supports`）判不了：`supports` 是相对实验行自己的 `claim`
-            # 说的，要判它得让实验行声明"它检验的命题相对这条断言的极性"（schema 改动），
-            # 所以那一半「留着」，不删。
+            # 「引用一个与断言相反的证据行，比没有引用更坏」按判据守得住的那一半写：
+            # `result=refutes` 被当支撑由判据点名；另一半（否定断言引 `supports`）判不了 ——
+            # `supports` 是相对实验行自己的 `claim` 说的，要判它得让实验行声明"它检验的
+            # 命题相对这条断言的极性"（schema 改动），所以那一半留着、不删。
             "**引用一条与断言方向相反的实验行，比不引更坏**：`result=refutes` 被当支撑由判据报 error；"
             "反向（否定断言引 `supports`）判不了，写正文时自己说清。",
             # 判据：tests/test_g_evidence_obligations.py::test_a_claim_may_not_cite_an_experiment_that_refutes_it
@@ -503,14 +493,12 @@ SPEC = AgentSpec(
             '后来被证否时，压在它上面的正文断言会被逐条点名（`pollution_assertions`）；没写 `stmt:` 的引用指不到任何命题。反过来说：'
             '引了 `stmt:XXXX` 而 `statements` 里没有 `XXXX` 就是悬空引用，写入期与审计期都会判成 error。**2026-10-18 起** `stmt:` 只'
             '活在断言台账与附录 A 里，**论文正文一个字都不写** —— 正文引自己的结果是「由 Theorem 3.2 得」。',
-            # 2026-10-21：原「「同一份证据不能当第二份用」：一条断言引一条实验行；若你的论据是
-            # 「同一个对象被核了两次」，那要说清是复现而不是新证据（实验行的 `notes` 会点名
-            # 「同一份 data 已经支持过 exp:XXXX」）。」一条已删（判据守住了才删）。
+            # 「同一份证据不能当第二份用」已由判据接手：
             # 判据：tests/test_g_evidence_obligations.py::test_the_same_experiment_cannot_support_two_claims
             ("**成稿是四步动作序列，少一步都不算完**（D-38，2026-10-24 两趟真机：`doc.build_document` 都成功、`doc.write_mapping` 两次都是 0，论文包里只有两份验收表）：⓪ 先调 `doc.build_document` 把这份论文落一行（`documents` —— H 的审校对象；没有它，`doc.paper_compile` 会受控拒绝 `paper_not_registered`）→ ① 正文用 `fs.write` 写到 `out/paper/main.tex`（散文体、章节自己排）→ ② 调 `doc.write_mapping` 落 `out/paper/MAPPING.json`（它一次渲染 json / MD / 正文附录三份并把 `\\input{mapping-appendix}` 放进正文；md 与附录不许手写）→ ③ 逐行核「这一行该有的格子齐」→ ④ 最后调 `doc.paper_compile` 编出 `main.pdf`。**只写了正文、没调过 `doc.write_mapping` 等于没成稿**：收工门会记一条 `mapping_not_written`（缺对应表 ⇒ 论文无法从稿件追溯到台账）并拦下这一趟，而这一格不是「可选功能」。对应表是提纲的一部分，每条定理/引理/命题/推论/例子/实验各占一行（kind/label/env_no/ledger_id/proof_no/file），由它渲染 MD 与正文附录；正文与表两个方向都不许有孤儿；多证明每条各占一行；**`file` 有两种落点，都对**：理论定理那一行写论文包内的相对路径（证明栏第 ① 段那份文件的包内位置）；数值实验定理那一行写程序**相对仓库根**的路径（如 `code/r34_check.py`，**不在包里是正常的** —— 按「必须在包里」去核会把每一条合规的数值定理都误判成错） —— 它的证明栏就是那份程序，对应表里另有两格要一起填（还有索引四格，见下）：`numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）" + LEAN_FILE_ROW +
              "**数值实验定理那一行还要索引四格**（D-34：D 的报告是目录，B 顺索引取正文）：`evidence_kind`（那档正文是 `report`（E 的报告）还是 `proof`（F 的证明））、`evidence_path`（相对仓库根）、`evidence_sha256`（那份文件字节的 sha256）、`v_signature`（`{\"verdict\": \"成立\", \"sha256\": <被签那一份的 sha256>}`）；另加两格 `numeric_evidence`（E 那条穷举读数，`exp:NNNNNN`）与 `exhaustion_note`（E 的 ②③ 落在 `out/experiments/<实验号>/exhaustion.md`）—— 它们一起才是 B 取正文的索引，缺一件 `doc.write_mapping` 受控拒绝（`mapping_numeric_*`）。**「三格齐」只是收工门那一档的计数**（`file` + 数值那两格，或 `file` + Lean 那两格）：表里每一行都要齐，但「齐」不等于「这一行写完」—— 凭据格（`lean_file`，以及 formal 通道的 `lean_target`）与数值定理的索引四格也要填；缺任何一格都不算写完，不许说「表已经落好」。顺序是死的：json → MD 与附录 → 编 PDF。"),
-            # 业主 2026-11-04 的裁定（逐字）：「如果数据位置都知道，要给 G 开发辅助工具直接拿到」。
-            # 这一条把「哪几格怎么拿」从"读台账自己拼"改成"先调工具"：工具只读、判据只有一处
+            # 「如果数据位置都知道，要给 G 开发辅助工具直接拿到」：这一条把「哪几格怎么拿」
+            # 从"读台账自己拼"改成"先调工具"：工具只读、判据只有一处
             # （`papermapping.mapping_cells` → `numericproof.proof_channel` / `formal_slot`、
             # `papermapping._lean_problems`、`numerictheorem.evidence_index_problems`）。
             # 判据：tests/test_doc_mapping_cells_tool.py（a–g 七条）。
@@ -529,11 +517,10 @@ SPEC = AgentSpec(
             "`verifications/<命题号>.jsonl`、`out/vsigns/`、盘上那份文件）；③ 还取不到就照 "
             "`problems` 的原话把那一格当缺口上报，**不许先填一个像样的值**。它只读：不改台账、"
             "不改对应表、不起子进程（逐格回退表见 `agent_skills` 的「成稿」那一条）。",
-            # 2026-10-23（业主裁定 E-1 与随后那条硬口径）：纯数值实验证出的定理怎么写。
+            # 纯数值实验证出的定理怎么写。
             # 判据：tests/test_numeric_theorem_writing_spec.py（七条）+ papermapping.NUMERIC_KINDS。
             "**数值实验定理的证明栏有三块，作者是 E**（业主 2026-10-23）：纯数值实验把整个命题穷尽验证掉（覆盖全域）时也算证明，理由写「穷举」，签名是那份程序。正文里这类定理的证明栏就在第 3 节那个 `proof` 环境里（不是脚注、不是附录摘要），必须写全三块：① **程序地址（相对仓库）**（写成 `code/r34_check.py` 这种相对仓库根的路径，不是论文包内路径）；② **程序设计思路**（要解决什么、按什么结构搜、为什么这个结构能覆盖全域）；③ **穷举论证**（搜索空间多大、这个数怎么算出、用了什么对称性/剪枝、为什么不漏、边界怎么处理）；再加运行环境（语言与版本、随机种子若有）。**这三块合起来就是该定理在论文里的证明栏**。**② 与 ③ 都由 E 写，但 E 写的是盘上那份读数、不是台账**：E 把它们落成 `out/experiments/<实验号>/exhaustion.md` 与 `reports/e-proof-<实验号>.md`（由 `exhaustionreport` 写盘；登记进 `proof_text`（`statements` 那一栏） 的只有 ③ 穷举论证那一段 —— 2026-11-08 起程序地址在实验行的 `code_path`、程序设计思路在 `observations[\"design\"]`，两者都不再抄进证明栏）；你只**原样引用** E 的那两块（可以压缩措辞，不许改写实质，不许把 E 的读数变成「我们认为」），并在正文那一段里标出它们来自 E 的那条读数（写出那份程序路径；读数编号属内部编号，只写在附录 A 里、这里指过去）；**E 没给那两块时，正文里不许写成「定理」或「已证明」**，只能写「有数值实验支持」，并点名缺的是哪一块。对应表盯住三件事：证明栏（`file`）写程序地址（相对仓库）；`numeric_evidence` 写 E 那条穷举读数（`exp:NNNNNN`）；`exhaustion_note` 写 E 那两块读数落在哪一份文件（相对仓库，里面要有 `程序设计思路` / `穷举论证` / `运行环境` 三块、署名 `作者：E`、并写出那条 `exp:` 编号）。缺任何一块，`doc.write_mapping` 会受控拒绝（`mapping_not_clean`），不许把它当成「写完了」。",
-            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
-            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
@@ -541,13 +528,12 @@ SPEC = AgentSpec(
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # p204（2026-10-27）：业主 2026-10-25 的三句裁定要做进**每个角色**的政策（不只是 M）：
-            # 「规范所有计时类任务申请的形式为：等待时间（或等待谁）+目的（必填）」；
-            # 「让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的」；
-            # 「计时到点后向智能体发送信息『目的+等待时间+时间到』」。
-            # 工具面的真身是 `tools/clock_tools.py` 那九件（`UNIVERSAL_TOOLS`：对十一个角色都发），
-            # 这一段只写"怎么用它"，不抄工具签名（签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（第 17 条逐个角色数过九件）。
+            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
+            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
+            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
+            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
+            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
+            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
             "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
             "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
             "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
@@ -602,8 +588,7 @@ SPEC = AgentSpec(
     read_only=False,
     summonable=True,
     edges=(
-        # 2026-11-11 业主裁定（逐字）：「出边形状错误。更改 G 的出边集为 C,D,H，
-        # H 为 G 的下级不召唤 G」。再裁定：「G 想补内容都走 D」⇒ G 不再直接调 A/E/F。
+        # G 的出边集是 C/D/H：H 为 G 的下级、不召唤 G；「G 想补内容都走 D」⇒ G 不直接调 A/E/F。
         # 补内容的链：G 派 D（子任务）→ D 自已调 A/E/F 补 → D 交台账、B 收录 →
         # D 向上汇报（只带指针）→ G 去台账读。判据：
         # `tests/test_p1c_edges_and_handoff_chain.py` 的 a/b/f（边集与旧边回注）
