@@ -19,12 +19,12 @@ B 新建命题时按正文 sha 去 `verifications/pending/<sha>.jsonl` 认领 V 
 | b | `object_path="reports/f-proof-<号>.md"` | 照旧认领：`bits.reviewed=True`、台账回写号 |
 | c | `object_path="out/experiments/<实验号>/exhaustion.md"` | 照旧认领（E 那一档） |
 | d | 反真空：把载体闸打桩成恒放行 | a 的裸行被认领（`bits.reviewed=True`）—— a 量的是这道闸 |
-| e | 载体形状（纯读） | 手稿三前缀 / e-proof 报告 / 老盘计划名（`f-proof-plan-*`，2026-11-10 只读兼容）认；空串、`notes/…`、`foo.txt`、`b-proof` 的 plan 名、缺 `.md` 的名字不认 |
+| e | 载体形状（纯读） | 手稿三前缀 / e-proof 报告 / 老盘计划名（`f-proof-plan-*`，2026-11-10 只读兼容）认；空串、`notes/…`、`foo.txt`、`b-proof` 的 plan 名、缺 `.md` 的名字、带 `-pN` 后缀的老名字（2026-11-11 产出侧退役）不认 |
 | f | `vsigns.py` 的 docstring / 注释（字面扫） | 不许再有「计划稿不是签的载体」这一类相反说法；反真空：把任一处改回旧说法 ⇒ 红 |
 | g | `vsigns.issue` 的源码段（AST 定位） | 没有以 `MANUSCRIPT_NAME_PLAN` 为条件的死分支；常量保留（老读数还要能解释） |
 | h | `reports/f-proof-000000`（缺 `.md`） | 签载体与 pending 载体两条口都是假（同源）；带上 `.md` 两条口都认 |
 | i | `agent_v/core.py` 的注释 / docstring / 代码 | 旧口径的「计划稿」措辞一条都不留；以计划码为条件的死分支删掉（AST：零引用）；反真空：把旧原句喂回扫描器 ⇒ 红 |
-| j | 两个同名口（`manuscriptfamily.is_sign_carrier` / `vsigns.is_sign_carrier`） | 9 个形状逐格一致（含缺 `.md`、plan 名、`b-proof-plan`、`notes/`、`e-num`、`exhaustion.md`）；反真空：摘掉「真文件名字」那一格 ⇒ 缺 `.md` 的形状红 |
+| j | 两个同名口（`manuscriptfamily.is_sign_carrier` / `vsigns.is_sign_carrier`） | 9 个形状逐格一致（含缺 `.md`、plan 名、`b-proof-plan`、`notes/`、`e-num`、`exhaustion.md`、`-pN` 老名被拒）；反真空：摘掉「真文件名字」那一格 ⇒ 缺 `.md` 的形状红 |
 | k | ② 的两条运行时 reason 串 + 一条选择式 | 旧串一条不留；`_claim_pending_sign` 不再引用计划码（常量保留）；反真空：把旧串喂回扫描器 ⇒ 红 |
 
 2026-11-10（业主裁定）：「F 的稿自己维护一套号源，不依赖命题号和计划号」；
@@ -99,7 +99,7 @@ MOUTH_SHAPES: tuple[tuple[str, bool], ...] = (
     ("notes/b-proof-000003.md", False),             # 目录不对
     ("reports/e-num-000012.md", False),             # 绿色通道，不签
     ("out/experiments/000000/exhaustion.md", False),  # E 的穷举报告：pending 载体，不是签载体
-    ("reports/f-proof-000000-p2.md", True),
+    ("reports/f-proof-000000-p2.md", False),          # `-pN` 老名（2026-11-11 产出侧退役）
     ("reports/e-proof-000012.md", True),
 )
 
@@ -229,17 +229,24 @@ def test_e_the_carrier_shapes() -> None:
 
     另外三条留在 `no` 当反向：目录不对（`notes/…`）、号形坏（`plan-abc`）、
     不是手稿（`foo.txt`）—— 载体判据没有因为这一撤而变成"什么都认"。
+
+    2026-11-11 业主裁定：`-pN` 后缀在产出侧退役 ⇒ `reports/f-proof-000000-p2.md`
+    不再是一个稿名，两条口都读成 `bad_manuscript_name`。这条不是"放行范围"变了，
+    而是名字只剩一种形式；同一命题的第二份证明是另一份稿、另一个稿号。
+    老盘计划名照旧只读兼容，但 `f-proof-plan-*-pN` 同样认不出（后缀不在任何一族里）。
     """
     yes = [
         "reports/f-proof-000000.md", "reports/e-proof-000001.md",
-        "reports/b-proof-000002.md", "reports/f-proof-000000-p2.md",
+        "reports/b-proof-000002.md",
         # 老盘只读兼容名（2026-11-10 裁定；新稿不再写这种名字）。
-        "reports/f-proof-plan-0001.md", "reports/f-proof-plan-0001-p2.md",
+        "reports/f-proof-plan-0001.md",
     ]
     e_report = "out/experiments/000000/exhaustion.md"
     no = ["", "notes/proof.md", "foo.txt", "reports/f-proof-000000",
           "reports/f-proof-.md", "out/experiments/000000/report.md",
           "out/experiments//exhaustion.md", "reports/x/f-proof-000000.md",
+          # 2026-11-11：`-pN` 后缀退役（产出侧不再标路径号）⇒ 这些名字是坏名。
+          "reports/f-proof-000000-p2.md", "reports/f-proof-plan-0001-p2.md",
           # 反向：`plan-` 号形只属于 f-proof 的老盘兼容；b-proof 里它仍是坏名。
           "reports/b-proof-plan-000016.md",
           # 反向：目录 / 号形不对时，计划名也不认。
@@ -251,6 +258,8 @@ def test_e_the_carrier_shapes() -> None:
                      "out/experiments/000000/report.md",
                      "out/experiments//exhaustion.md",
                      "reports/x/f-proof-000000.md",
+                     "reports/f-proof-000000-p2.md",
+                     "reports/f-proof-plan-0001-p2.md",
                      "reports/b-proof-plan-000016.md",
                      "notes/f-proof-plan-0001.md",
                      "reports/f-proof-plan-abc.md"]
@@ -264,6 +273,11 @@ def test_e_the_carrier_shapes() -> None:
         assert VS._pending_carrier_path({"object_path": path}) == "", path
     for path in not_a_carrier:
         assert VS.is_sign_carrier(path) is False, path
+    # `-pN` 退役的那一格要钉在受控码上，不只是"读成假"：两条口同说坏名。
+    assert VS.sign_carrier_reading("reports/f-proof-000000-p2.md")["code"] == (
+        VS.MANUSCRIPT_NAME_BAD)
+    assert VS.sign_carrier_reading("reports/f-proof-plan-0001-p2.md")["code"] == (
+        VS.MANUSCRIPT_NAME_BAD)
     # 同源正控：缺扩展名的名字在两条口上都为假（2026-11-10 边缘不一致收口）。
     assert VS.is_sign_carrier("reports/f-proof-000000") is False
     assert VS._pending_carrier_path({"object_path": "reports/f-proof-000000"}) == ""
@@ -428,6 +442,9 @@ def test_j_the_two_is_sign_carrier_mouths_agree_on_nine_shapes() -> None:
     后者已同源到「真文件名字」（False）—— 两个同名函数对同一串说两句话。现在那一格
     在表里（`manuscriptfamily._is_file_name`），`vsigns` 只转发（自己不再写第二份
     `.md` 判定）：九个形状逐格相同，缺 `.md` 在两边都是 False。
+
+    2026-11-11 业主裁定 `-pN` 在产出侧退役：`reports/f-proof-000000-p2.md` 由"真"
+    翻成"坏名"（两个同名口都读 `bad_manuscript_name`），不是把载体判据放宽。
     """
     from agentflow import manuscriptfamily as MF
 
@@ -435,6 +452,11 @@ def test_j_the_two_is_sign_carrier_mouths_agree_on_nine_shapes() -> None:
         assert MF.is_sign_carrier(rel) is want, (rel, MF.sign_carrier(rel))
         assert VS.is_sign_carrier(rel) is want, (rel, VS.sign_carrier_reading(rel))
         assert MF.is_sign_carrier(rel) is VS.is_sign_carrier(rel), rel
+    # 退役的那一格钉在受控码上：两个同名口都说是坏名，而不是"碰巧为假"。
+    retired = "reports/f-proof-000000-p2.md"
+    assert MF.sign_carrier(retired)["code"] == MF.CODE_BAD, MF.sign_carrier(retired)
+    assert VS.sign_carrier_reading(retired)["code"] == VS.MANUSCRIPT_NAME_BAD, (
+        VS.sign_carrier_reading(retired))
 
 
 def test_j2_the_file_name_gate_is_what_makes_them_agree() -> None:
