@@ -315,10 +315,9 @@ def _parse_entries(
     section: str | None = None
 
     for line_no, raw in lines:
-        text = _strip_inline_comment(raw).rstrip()
-        if not text.strip():
+        stripped = _strip_inline_comment(raw).strip()
+        if not stripped:
             continue
-        stripped = text.strip()
 
         if stripped.startswith("```"):
             # `AGENTS.md` 里的清单被一对 ``` 围栏包着（人读时为等宽、可复制）。
@@ -831,13 +830,14 @@ def check_paths(
 
     violations: list[dict] = []
     for raw_path in changed:
-        candidates = _path_candidates(str(raw_path), repo)
+        path_text = str(raw_path)
+        candidates = _path_candidates(path_text, repo)
         for rule in rules:
             if _glob_matches(candidates, rule.glob) is None:
                 continue
             violations.append(
                 {
-                    "path": str(raw_path).replace("\\", "/"),
+                    "path": path_text.replace("\\", "/"),
                     "glob": rule.glob,
                     "category": rule.category,
                     "reason": rule.reason,
