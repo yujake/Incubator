@@ -1,24 +1,15 @@
 # -*- coding: utf-8 -*-
 """证明手稿的唯一实现：命名 / 渲染 / 搬签 / 落盘事务（F 与 B 两族共用）。
 
-## 业主裁定（2026-11-04）
+## 业主口径
 
     F 落证明手稿（`reports/f-proof-<号>.md`）与 B 优化证明落稿
     （`reports/b-proof-<号>.md`）在形式上必须完全统一。
 
-改前两族各有一份实现：
-
-| 面 | F 侧（`agent_f/manuscript.py`） | B 侧（`bmanuscript.py`） |
-|---|---|---|
-| 命名 | `_DS.manuscript_relpath` + `manuscript_path` | `_ID_RE` + `relpath`（自己的正则） |
-| 渲染 | `proof_manuscript` 里逐行拼 | `render` 里逐行拼（另一套页头） |
-| 搬签 | 模块级 `carry_sign_block` | `land_rewrite` 里的内联"已签就不覆盖" |
-| 落盘 | `publish` / `promote` 各一份 | `land_rewrite` 一份 |
-| 拒信 | `formal_shape_problem` 的码 | 自己的一组 `why` 文本 |
-
-两份实现必然漂：两份页头一开始就不一样（F 写 `- 计划：`、B 写 `- 标签：`），
+改前两族各有一份实现，两份页头一开始就不一样（F 写 `- 计划：`、B 写 `- 标签：`），
 而"漂"这件事没有任何一条测试会报 —— 它只会在读稿的那一侧表现成"这份稿不是这一族"。
-本模块把上面五面收成一份，`agent_f/manuscript.py` 与 `bmanuscript.py` 只做转发。
+本模块把命名 / 渲染 / 搬签 / 落盘 / 拒信五面收成一份，`agent_f/manuscript.py` 与
+`bmanuscript.py` 只做转发。
 
 ## 口径（逐条对应判据）
 
@@ -44,11 +35,11 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import depsection as _DS
 from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
-from . import manuscriptids as _MID  # F 自己的稿号（2026-11-10）
+from . import manuscriptids as _MID  # F 自己的稿号
 from . import verifications as _VR
 from . import vsigns as _VS
 from . import proofregistry as _PR
-from .manuscriptwrite import (  # 落盘事务的三件零件（2026-11-10 从本模块拆出）
+from .manuscriptwrite import (  # 落盘事务的三件零件
     _atomic_write, _refusal, _signed_version_reading,
 )
 
@@ -63,24 +54,20 @@ FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 #: 本模块的角色名 ⇒ 表里的族名（命名与解析都只走表；这里只做一层翻译）。
 _FAMILY_OF: dict[str, str] = {FAMILY_F: "f-proof", FAMILY_B: "b-proof"}
 
-#: 「一个稿号一份稿」：这几族的新写路径不带 `-pN` 后缀（业主 2026-11-11 裁定）。
+#: 「一个稿号一份稿」：这两族的新写路径不带 `-pN` 后缀。
 #:
 #:     「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
 #       应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
 #:
 #: 落在结构上：落点永远 `reports/<族>-proof-<稿号>.md`；改正文就地改那一份
 #: （`proofregistry` 的 `mode=rewritten` 只动 `## 证明` 与头部的元信息，不换名、
-#: 不涨 `proof_no`；2026-11-11 业主裁定后半：稿头也不再有 `- 证明号：` 那一行）。
-#:
-#: 2026-11-11 晚（业主同一条裁定的后半）：这条对 F 与 B 都成立 ——
-#: 先前这里只写了 B，并注明"F 的 `-pN` 属于一条命题多份证明，另一批裁定"；
-#: 业主随后明确「同稿号多个版本是错误的」⇒ F 也不再产生 `-pN`，因此一并归入本表。
-#: 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）是历史，
-#: 只读兼容：`proofregistry._legacy_proof_no_of` 命中它们时沿用文件名里的 N，不改身份。
+#: 不涨 `proof_no`；稿头也不再有 `- 证明号：` 那一行）。F 与 B 都成立。
+#: 老盘上已经存在的 `-pN`（`reports/f-proof-000012-p2.md` 那一族）是历史，只读兼容：
+#: `proofregistry._legacy_proof_no_of` 命中它们时沿用文件名里的 N，不改身份。
 NO_VERSION_SUFFIX_FAMILIES: tuple[str, ...] = (FAMILY_F, FAMILY_B)
 
 #: 族 ⇒ 文件名前缀（命名的唯一来源；别处不许再写一遍字面量）。
-#: 2026-11-09（T2 收编）：从 `manuscriptfamily` 派生（设计 3.2 第 6 处）。
+#: 从 `manuscriptfamily` 派生。
 PREFIX = {FAMILY_F: _MFAM.prefix_of("f-proof"), FAMILY_B: _MFAM.prefix_of("b-proof")}
 #: 计划名前缀（只有 F 立项那一轮用；`plan-` 是 f-proof 号形的一部分）。
 PLAN_PREFIX = {FAMILY_F: f"{PREFIX[FAMILY_F]}plan-"}
@@ -132,8 +119,8 @@ DETAILS: dict[str, str] = {
         "依赖边没有落成（{reason}）⇒ 这一笔整笔回滚：稿也回到写前，不留半截",
 }
 
-#: 两个节名从 `depsection.SECTION_TITLES` 派生（框架渲染节名的单一来源，
-#: 2026-11-10 业主裁量 ②）：本模块不另写一份 `## 命题` / `## 证明` 字面量。
+#: 两个节名从 `depsection.SECTION_TITLES` 派生（框架渲染节名的单一来源）：
+#: 本模块不另写一份 `## 命题` / `## 证明` 字面量。
 _PROPOSITION_NAME = _DS.SECTION_STATEMENT.lstrip("# ").strip()
 _PROOF_NAME = _DS.SECTION_PROOF.lstrip("# ").strip()
 _PROPOSITION_HEAD_RE = re.compile(r"^##\s*" + re.escape(_PROPOSITION_NAME), re.M)
@@ -180,8 +167,8 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
                  manuscript_id: Any = "", proof_no: Any = 1) -> dict[str, Any]:
     """这一族、这个号 ⇒ 约定路径（工作区相对）；认不出就受控拒绝。
 
-    `manuscript_id` 是这一族自己的手稿号（业主 2026-11-10 / 2026-11-11 裁定）：给了它，
-    这一族的稿只按 `reports/<前缀><稿号>[-p<N>].md` 命名，命题号 / 计划号都不参与。
+    `manuscript_id` 是这一族自己的手稿号：给了它，这一族的稿只按
+    `reports/<前缀><稿号>[-p<N>].md` 命名，命题号 / 计划号都不参与。
     F 与 B 两族都走这一格（「B侧稿和F侧稿的维护方法一致」）。`statement_id` 与
     `plan_id` 仍保留给老盘上的只读兼容（`b-proof-<命题号>` / `f-proof-plan-*`）。
 
@@ -198,8 +185,8 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         no = int(proof_no or 1)
     except (TypeError, ValueError):
         no = 0
-    # 一个稿号一份稿（业主 2026-11-11）：这一族按稿号命名时不写 `-pN` —— 版本记在
-    # 稿头 `- 证明号：` 与登记条目里，不记在文件名里。
+    # 一个稿号一份稿：这一族按稿号命名时不写 `-pN` 后缀（一个稿号 = 一份文件 =
+    # 一份证明）。
     if mid and fam in NO_VERSION_SUFFIX_FAMILIES:
         name_no = 1
     else:
@@ -212,9 +199,9 @@ def name_reading(family: Any, *, statement_id: Any = "", plan_id: Any = "",
         out.update(checked=False, code=BAD_MANUSCRIPT_NAME,
                    why=f"未知的手稿族 {family!r}（只认 {FAMILIES}）")
         return out
-    # 2026-11-09（T2 收编）：拼名只走 `manuscriptfamily.relpath`。号形不对时它按
-    # fail-closed 抛 `ValueError`；这一层仍按旧口径先把候选名拼出来再让解析器拒，
-    # 调用方读到的是同一条 `bad_manuscript_name`，不是一个异常。
+    # 拼名只走 `manuscriptfamily.relpath`。号形不对时它按 fail-closed 抛
+    # `ValueError`；这一层仍先把候选名拼出来再让解析器拒，调用方读到的是同一条
+    # `bad_manuscript_name`，不是一个异常。
     rel = ""
     try:
         if mid and fam in _FAMILY_OF:
@@ -293,7 +280,7 @@ def render_proof_manuscript(
     三节顺序固定：`## 命题` / `## 证明` / `## 依赖`。
     `- 计划：`、`- 标签：`、洗稿行都是"给了才写"，但位置不随族变。
 
-    ## `- 证明号：` 在写侧退役（业主 2026-11-11）
+    ## `- 证明号：` 在写侧退役
 
     「proof_no 确实该退役……手稿产出侧和 V 签侧甚至呈递侧可退役，台账不能退役」
     ⇒ 新渲染的稿不再有这一行（一个稿号 = 一份文件 = 一份证明，身份由稿号 +
@@ -359,8 +346,8 @@ def formal_shape_problem(text: Any) -> tuple[str, str]:
     if len(proofs) > 1:
         return ("multiple_proof_sections",
                 f"稿里有 {len(proofs)} 节 `## 证明`：一份正式稿只承载一条命题的一份证明")
-    # `_PROOF_HEAD_RE` 已保证这里恰好有一节 `## 证明`（present）；`proof_body` 自
-    # 2026-11-09 起缺节返回空串，所以这一句只判"这一节是不是空的"，不回退。
+    # `_PROOF_HEAD_RE` 已保证这里恰好有一节 `## 证明`（present）；`proof_body` 缺节
+    # 返回空串，所以这一句只判"这一节是不是空的"，不回退。
     if not _DS.proof_body(body).strip():
         return "empty_proof_section", "`## 证明` 那一节是空的 ⇒ 没有可签的正文"
     return "", ""
@@ -390,11 +377,11 @@ def dependency_section_problem(text: Any) -> tuple[str, str]:
     if section.get("refused"):
         return str(section.get("refused")), str(section.get("reason") or "")
     if section.get("present"):
-        # 2026-11-05（缺陷甲）：那一节在、但表 0 行，而正文点了在册命题 ⇒ 表与正文对不上。
-        # 改前这一档直接放行（`present` 就算合格），于是"正文引了、表里没写"整份静默通过。
+        # 那一节在、但表 0 行，而正文点了在册命题 ⇒ 表与正文对不上：直接放行会让
+        # 「正文引了、表里没写」整份静默通过。
         return _DS.dependency_consistency_problem(raw)
     # 走到这里说明 `## 依赖` 那一节缺了。证明正文也缺节时 `proof_body` 返回空串
-    # （2026-11-09 起不再退到整份全文）⇒ refs=0 ⇒ 按"自足的证明"放行：没有证明正文
+    # （缺节时不退到整份全文）⇒ refs=0 ⇒ 按"自足的证明"放行：没有证明正文
     # 就没有"正文引了谁"可数，这一档不是"没有这一节却当成引了 0 条"。
     refs = _DS.stmt_refs(_DS.proof_body(raw))
     if refs:
@@ -570,7 +557,7 @@ def commit_manuscript(
     1. 名字：只走 :func:`name_reading`（内部只走 `vsigns.parse_manuscript_name`）；
        认不出 ⇒ `bad_manuscript_name`，零写入。
     2. 形状 / 洗稿 / 依赖段：:func:`validate_manuscript`（同一批码与模板）。
-    3. 不毁签：目标名上签住的是另一版正文 ⇒ `target_holds_a_signed_version`，零写入。
+    3. 不毁签：目标名上签住的是另一份正文 ⇒ `target_holds_a_signed_version`，零写入。
     4. 搬签：:func:`carry_sign_block`（sha 相符才搬，第 9 格按新名重算）。
     5. 落盘：内容没变 ⇒ 不写（`preserved=True`）。
     6. 落边：`write_dependencies(rows)` 返回 `checked=False` / 抛异常 ⇒ 把第 5 步
@@ -757,7 +744,7 @@ def promote_formal(root: Any, *, family: Any = FAMILY_F, statement_id: Any = "",
             out.update(problem={"kind": "source_missing", "stage": "read",
                                 "why": why}, refused="source_missing", why=why)
             return out
-    # ---- 2026-11-11（业主裁定 ②）：拿签之后冻结 —— 老盘搬家也不许动已签的稿 -----
+    # ---- 拿签之后冻结：老盘搬家也不许动已签的稿 --------------------------------
     #
     # 转正（`promote`）会改名 / 搬走源稿：那是"改一份稿"的另一种形态，已拿签的
     # 那一份只读。判据与三处写口同源（`manuscriptfreeze`，数据只来自 V 的颁发表），
