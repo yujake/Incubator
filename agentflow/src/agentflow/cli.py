@@ -4720,39 +4720,38 @@ def _finish_closing(args, root: Path, rep) -> int:
 
 
 def cmd_closing(args) -> int:
-    """跑收工门（`draft/37` §16 P3）。退出码：0 可交付 / 1 被拦住 / 2 没查成。
+    """跑收工门。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
     三态（与 `noai_gate` 同一套口径）：`unknown` 那一档绝不是通过 —— "没查成"（没给项目根、报告还没写）与"查过了有问题"必须给不同的退出码，否则 CI 会把两者读成同一件事。
-    ## 收工门之后再接一段内容级验收（`draft/37` §17.3，题 6 选 A = 接线）：这一层此前在生产面上一次
-    都没被调用过；现在它的唯一生产调用者是这里（只读、零模型调用、不落任何台账）。为什么挑这个出
-    口：收工门问的正是"这份交付能不能交"，而 `reviewaccept` 问的是同一份交付的同一个问题（只是判据
-    在内容层）；两者的入参（`project_dir` / `report_path` / `session_root` / `sid`）本来就是同一批，
-    而那批入参在这里已经收齐了 ⇒ 不新开面、不新开子命令（子命令数被 `test_user_quickstart` /
-    `test_doc_code_consistency` 逐字钉着）。
+    ## 收工门之后再接一段内容级验收：这一层只读、零模型调用、不落任何台账，唯一的生产调用者是
+    这里。为什么挑这个出口：收工门问的正是"这份交付能不能交"，而 `reviewaccept` 问的是同一份
+    交付的同一个问题（只是判据在内容层）；两者的入参（`project_dir` / `report_path` /
+    `session_root` / `sid`）本来就是同一批，而那批入参在这里已经收齐了 ⇒ 不新开面、不新开子
+    命令（子命令数被 `test_user_quickstart` / `test_doc_code_consistency` 逐字钉着）。
     两件事刻意分开、读数分栏打：退出码仍只由收工门定（`tri_state_exit_code`）—— 把内容级验收并进
     退出码等于偷偷改门的强度（那是裁定题）；`unknown` 不折平：六条各自打"通过/不通过/没查成"，
     辅助读数照原样打出，并逐字说明"它们不构成通过"。
     `--acceptance-sid` 缺省传 `closing.NO_SESSION`（"这次调用没有会话身份"），于是「三态分支」那一格
-    是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，那正是 §58/§63 记过两次的假绿形态。
-    ## `--sid`：运行外出口也要说清"你读的是哪一场"（153-U-07）
+    是"没查成" —— 不折进 `sid=None` 的"读缺省会话"，那是记过两次的假绿形态。
+    ## `--sid`：运行外出口也要说清"你读的是哪一场"
     收工门的 `user_pending` 那一格问的是"这一趟有没有话在等用户"。运行内
-    （`conductor.closing`）把这一趟的会话号传下去；运行外此前一个号都不带，于是
-    `check_closing(sid=None)` 落到 `sessions/<今天>.jsonl` —— 问的从"那一趟"变成了"今天那份"。
+    （`conductor.closing`）把这一趟的会话号传下去；运行外不给号时 `check_closing(sid=None)`
+    落到 `sessions/<今天>.jsonl` —— 问的从"那一趟"变成了"今天那份"。
     `--sid` 就是这个显式入口，三态与 `closing.NO_SESSION` 同一套：
     - 给了号且那一段在盘上 ⇒ 读它，读数点名这个号；
     - 给了号但盘上没有那一段 ⇒ 受控拒绝（退出码 2，门不跑）——不许给一份"八格全是没查成"的空读数；
     - 没给 ⇒ `closing.NO_SESSION`（这一次调用没有会话身份），读数点名"缺省会话"并说明那一格是
       "没查成"。缺省值不是 `None`：`None` 的语义是"读缺省会话"（运维口径、合法），
-      两个输入混用就会把"没问过"与"问了还没答"读成同一个值（§58/§63）。
-    ## 退出码由 M 的判据定、机器读数也参与（业主 2026-10-09 + 2026-11-03 的裁决 ②）
+      两个输入混用就会把"没问过"与"问了还没答"读成同一个值。
+    ## 退出码由 M 的判据定、机器读数也参与
     「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 退出码（0 可交付 / 1 被拦住 /
     2 没查成）跟着 M 的判据走：运行内 M 交判据那一次已经把它落到 `out/review/m-verdicts.jsonl`，
     这里缺省读那一份；`--goal-met` / `--goal-not-met` 是"人/CI 代述 M 的说法"的显式入口。
     没有判据 ⇒ 2（"没人判过"既不是"可以交"也不是"被拦住"）。0 要两边都说行：M 判了达成
-    且机器读数也过（八格全 pass、没有 blocker）—— 机器说不行时退出码不许是 0
-    （2026-11-03 的裁决 ②）。八格照旧逐格现算并打出来，它们既进退出码、也进读数。
+    且机器读数也过（八格全 pass、没有 blocker）—— 机器说不行时退出码不许是 0。
+    八格照旧逐格现算并打出来，它们既进退出码、也进读数。
 
-    ## 通关之后建趟次索引（2026-11-03 第二笔，E5 的第三半）
+    ## 通关之后建趟次索引
     退出码 0 之后调 `conductor.run_index_rebuild(by="agentflow closing")` —— 与顶趟收工
     成功那一步、`agentflow project rebuild-run-index` 同一个函数（第三个生产入口）。
     门没过（1/2）不建：索引是"这一趟对过账"的派生读数，建了就等于把"没交付/没查成"
@@ -4779,15 +4778,14 @@ def cmd_closing(args) -> int:
         # 受控拒绝：连"读哪一场"都定不下来时不许跑门 —— 跑出来那张表每一格都是
         # "没查成"，读的人会以为已经读过一遍了（空读数冒充读数）。
         # 这句话与码由 `closing.closing_session_identity` 一处给出：API 那几个出口
-        # 拿到的是同一句、同一个 `exit_code=2`（2026-11-03 第二笔）。
+        # 拿到的是同一句、同一个 `exit_code=2`。
         print(tty.bullet(identity.problem))
         return 2
     sid = identity.sid
     print(tty.bullet("会话：" + identity.note))
-    # 2026-11-03（153-U-01/U-02 第 2 笔，U-07 之后补）：运行外这一趟也喂机器口径的两个喂参
-    # —— 与运行内 `conductor.closing` 走同一个 `machine_feeders`（两个出口一份口径）。
-    # 喂不上（找不到顶趟行 / 读不成）⇒ 两个都是 None ⇒ `can_close` 落 None + `not_wired`
-    # （三态：算不出来既不是过也不是不过）。U-07 的 `sid=sid` 原样保留。
+    # 运行外这一趟也喂机器口径的两个喂参 —— 与运行内 `conductor.closing` 走同一个
+    # `machine_feeders`（两个出口一份口径）。喂不上（找不到顶趟行 / 读不成）⇒ 两个都是
+    # None ⇒ `can_close` 落 None + `not_wired`（三态：算不出来既不是过也不是不过）。
     feed = CL.machine_feeders(st)
     rep = CL.check_closing(st, project_dir=project, report_path=report,
                            sid=sid,
@@ -4802,7 +4800,7 @@ def cmd_closing(args) -> int:
     for f in rep.findings:
         print(f"  [{f.level}] {f.code}：{f.detail}")
     # 非平凡性那一格（S3/S4）：读数必须在人看得见的地方露面 —— 只塞进 readings 字典
-    # 等于"接了一半的线"（业主 2026-10-21 追问"请确认真的接线了"时暴露的缺口）。
+    # 等于"接了一半的线"。
     _nt = (rep.readings or {}).get("nontriviality") or {}
     if _nt:
         if _nt.get("checked"):
