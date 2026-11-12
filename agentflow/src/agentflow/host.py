@@ -467,7 +467,7 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     | （无） | F（`attack.step` 真推一轮） | 不适用：F 的推理不是开关，见下 |
 
     三条同一条纪律：环境里有 key 也不改变行为（`DEFAULT_LLM_LOOPS` 的注释逐字写着）。
-    ## F 没有开关（业主原话）
+    ## F 没有开关（业主 2026-10-26 原话）
     「没有默认开，这个就是F的工作方式，没有开关的说法」。`--attack-reasoning`
     曾经是 F 有没有推理的那道闸：默认关 ⇒ `agent_f.default_llm()` 返回 None ⇒
     计划全是 `rounds=1`、`dead_end(缺工具)`、detail 逐字"本框架尚未接线自动推理"，

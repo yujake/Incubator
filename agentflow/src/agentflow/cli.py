@@ -3242,7 +3242,7 @@ def cmd_run_agent(args) -> int:
     ## 花钱的判断类能力开关：`--semantic-review`（H 的语义判据）/ `--experiment-reasoning`
     （E 的写脚本推理，S-10(a) 的 `author_script`）。两条同一条纪律：环境里有 key 也不改变行为。
     F 的攻坚推理不在这一列：F 出场就有缝（`host.wired_llm_conductor` 无条件装配），
-    那是它的工作方式、没有开关可开（`--attack-reasoning` 已删除）。
+    那是它的工作方式、没有开关可开（业主 2026-10-26 裁定；`--attack-reasoning` 已删除）。
     `--semantic-review` 不连带打开 E 的缝（两件事各自可解释：H 判"结论是否
     强于引文"、E 把判据写成一份能跑的脚本）。代价必须知道：E 没缝时，F 需要脚本的那一轮
     写不出来 ⇒ 落 `dead_end(缺工具)` 并上报 `missing_input`（缺的是 E 的缝）——
