@@ -1,21 +1,20 @@
 """角色 A 的动作 `walk_citations`（引文图那一步的「动作面」）。
 
-业主 2026-10-15 逐字裁定：「「引文图是用新动作的方式落」」。
+为什么必须有这一格（工具通了 ≠ 派得出去）：主控只能 `conductor.summon` 「动作」，而能力表
+里的每个动作都必须在 `AgentA` 上有一个真实的公开方法 —— 这一条由
+`capabilities.assert_capabilities()` 在导入期断言（只在 `specs/a.py` 加动作、不写方法 ⇒
+导入当场报 `AssertionError: AgentA 上没有可调用的 'walk_citations'`）。
 
-为什么必须有这一格（工具通了 ≠ 派得出去）：主控只能 `conductor.summon` 「动作」，而能力表里的每个
-动作都必须在 `AgentA` 上有一个真实的公开方法 —— 这一条由 `capabilities.assert_capabilities()` 在
-「导入期」断言（逐字：「能力表里的动作必须是真实代码里存在的公开方法，不许编造」）；实测先在
-`specs/a.py` 里加动作、没写这个方法 ⇒ 导入当场报 `AssertionError: AgentA 上没有可调用的 'walk_citations'`。
+与工具层的关系（一份实现，不是两份）：只调 `_h_walk_citations` 那「一个」工具处理器，
+不另写一套走查（`T-8` 口径：工具层的判据是禁改面）。它「只读」、没有写集，也「不替调用
+方判重或登记」—— 候选要不要、怎么进台账走既有的 `search.dedup_check` → `search.register`。
+不在动作层登记的理由：判重（`dedup_key` / `existing` / `is_new`）在本仓只有一处实现，
+再写一份就是第二份"同一篇该不该合并"的判断，而它漂了不会报错（这正是 `dedup.py` 被划进
+禁改区的那条理由）。
 
-与工具层的关系（一份实现，不是两份）：只调 `_h_walk_citations` 那「一个」工具处理器，不另写一套走查
-（`T-8` 口径：工具层的判据是禁改面）；它「只读」、没有写集，也「不替调用方判重或登记」—— 候选要不要、
-怎么进台账走既有的 `search.dedup_check` → `search.register`。不在动作层登记的理由：判重（`dedup_key` /
-`existing` / `is_new`）在本仓只有一处实现，再写一份就是第二份"同一篇该不该合并"的判断，而它漂了
-不会报错（这正是 `dedup.py` 被划进禁改区的那条理由）。
-
-三态纪律（这是它与"返回一个空列表"的分界）：工具报"没做成"（`ok=False` ＋ `kind`）⇒「原样透传」
-（`unknown_lit_id` / `table_unreadable` / `no_store` / ...）；走查做成了、这一篇这一侧确实没有邻居 ⇒
-`count=0`（「有效结论」，不是失败）；这次调用本身不成立 ⇒ `refuse(...)`（`draft/37` §88）：
+三态纪律（这是它与"返回一个空列表"的分界）：工具报"没做成"（`ok=False` ＋ `kind`）⇒
+原样透传（`unknown_lit_id` / `table_unreadable` / `no_store` / ...）；走查做成了、这一篇
+这一侧确实没有邻居 ⇒ `count=0`（有效结论，不是失败）；这次调用本身不成立 ⇒ `refuse(...)`：
 没 store / `lit_id` 空 / `direction` 非法 / `limit` < 1。
 """
 from __future__ import annotations
@@ -34,14 +33,15 @@ class _WalkCitations:
                        limit: int = 20) -> dict:
         """由一篇「已登记的」文献出发走一步引文图（回溯 / 前推）。
 
-        参数：lit_id（必给，盘上 `literature` 表的行号 —— 从「我们手上这一篇」出发拿 DOI / OpenAlex
-        id；不接受任意 DOI：那样它就成了第二个检索入口，而"检索"的账只在 `search_literature` 记）、
-        direction（`backward`＝这一篇「引了谁」/ `forward`＝「谁引了这一篇」）、limit（上限 50，与工具面
-        同一格；超出截到 50 并在 note 里说明）。
-        返回 `{"ok", "kind", "lit_id", "doi", "openalex_id", "direction", "count", "candidates",
-        "truncated_to_tool_max", "note"}`：`ok=True` 只说「走查做完了」，走到了什么看 `count` / `candidates`；
-        `ok=False` 读 `kind`（`unknown_lit_id` / `table_unreadable` / `no_source_key`）—— 这三种「都不是」
-        "它没有引文邻居"；`candidates[]` 带 `is_oa` 与 `oa_source`（后者说那条可取全文的链接「从哪来」）。
+        参数：lit_id（必给，盘上 `literature` 表的行号 —— 从「我们手上这一篇」出发拿 DOI /
+        OpenAlex id；不接受任意 DOI：那样它就成了第二个检索入口，而"检索"的账只在
+        `search_literature` 记）、direction（`backward`＝这一篇「引了谁」/ `forward`＝
+        「谁引了这一篇」）、limit（上限 50，与工具面同一格；超出截到 50 并在 note 里说明）。
+        返回 `{"ok", "kind", "lit_id", "doi", "openalex_id", "direction", "count",
+        "candidates", "truncated_to_tool_max", "note"}`：`ok=True` 只说「走查做完了」，
+        走到了什么看 `count` / `candidates`；`ok=False` 读 `kind`（`unknown_lit_id` /
+        `table_unreadable` / `no_source_key`）—— 这三种「都不是」"它没有引文邻居"；
+        `candidates[]` 带 `is_oa` 与 `oa_source`（后者说那条可取全文的链接「从哪来」）。
         """
         from ..tools.search_tools import _h_walk_citations
 
