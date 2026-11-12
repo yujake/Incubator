@@ -71,10 +71,17 @@ def _dict(obj: Any) -> dict[str, Any]:
 
 def _get(obj: Any, *names: str, default: Any = None) -> Any:
     """按候选名字依次取一个字段（dict 与对象两种形态都认）。"""
-    src = _dict(obj)
-    for name in names:
-        if name in src:
-            return src[name]
+    if isinstance(obj, Mapping):
+        # 读模型的每一行、每一格都要过这里，而 `_dict(obj)` 会先整份拷贝一份字典
+        # ⇒ 字典这一档直接按名字读（取值结果与经 `_dict` 之后再读逐格相同）。
+        for name in names:
+            if name in obj:
+                return obj[name]
+    else:
+        src = _dict(obj)
+        for name in names:
+            if name in src:
+                return src[name]
     for name in names:
         if hasattr(obj, name):
             return getattr(obj, name)
@@ -575,12 +582,9 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     orphans.sort(key=lambda o: (o["sid"], o["index"]))
     # 「最近一趟」只认「真的开始了的运行」（有 `agent_run_start`）。整个工作区一趟都
     # 没有 ⇒ `None`（页面写「还没有跑过」），绝不拿一条空壳顶上去。
-    last_run: dict[str, Any] | None = None
-    for run in runs:
-        key = (run["sid"], run["start_index"])
-        if last_run is None or key > (_text(last_run.get("sid")),
-                                      int(last_run.get("start_index") or 0)):
-            last_run = run
+    # `runs` 刚按 `(sid, start_index)` 升序排过 ⇒ 末项就是原来那趟逐项比较选出来的
+    # 最大值（原来的循环用严格大于，并列时留先出现的那个；排序稳定，末项仍是它）。
+    last_run: dict[str, Any] | None = runs[-1] if runs else None
     orphan_summary = _orphan_summary(orphans)
     ledger = _read_ledger(root_p, problems)
     return {
@@ -653,8 +657,13 @@ def _read_ledger(root: Path, problems: list[str]) -> dict[str, Any]:
                                   "（不是「一笔都没写」）")
             return out
         rows = st.read_events()
-        commits = sum(1 for r in rows if str(r.get("op") or "") == "commit")
-        corrupt = sum(1 for r in rows if str(r.get("op") or "") == "corrupt")
+        commits = corrupt = 0
+        for one in rows:
+            op = str(one.get("op") or "")
+            if op == "commit":
+                commits += 1
+            elif op == "corrupt":
+                corrupt += 1
         upserts = len(rows) - commits
         out["upserts"] = upserts
         out["commit_markers"] = commits
