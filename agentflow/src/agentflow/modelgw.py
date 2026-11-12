@@ -423,6 +423,32 @@ class ModelSpec:
         }
 
 
+def _spec_from_settings(ms: Mapping[str, Any], src: Mapping[str, str], *,
+                        vendor: str = "", fallback_url: str = DEFAULT_BASE_URL) -> ModelSpec:
+    """设置块 + 环境变量 ⇒ `ModelSpec`（`spec_for` 与 `spec_from_env` 共用的那一半）。
+
+    两条梯子的差别只有"读哪个设置块"与"要不要带 vendor / 厂商端点回落"；
+    读哪几个环境变量、怎么归一、构造哪几格，逐字只有这一份 —— 两处各写一遍，
+    迟早会有一处漏掉某个变量（于是那条路上的配置静默不生效）。
+    """
+    base_url, _ = SET.env_or_setting(ENV_BASE, ms.get("base_url", ""), env=src)
+    name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
+    api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
+    effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
+    temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
+    return ModelSpec(
+        base_url=(base_url or fallback_url).rstrip("/"),
+        model=name or DEFAULT_MODEL,
+        api_key=api_key,
+        vendor=vendor,
+        timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
+        max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
+        reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
+        temperature=normalize_temperature(temperature),
+        key_source=key_src,
+    )
+
+
 def spec_for(role: str = "", *, secretary: bool = False,
              path: str | Path | None = None,
              env: Mapping[str, str] | None = None) -> tuple[ModelSpec, str]:
@@ -443,33 +469,16 @@ def spec_for(role: str = "", *, secretary: bool = False,
     （见 :data:`VENDOR_BASE_URLS`）。多厂商的价目表在 `modelcost` 那一侧，
     下一批接（口径要与供应商定价页对齐）。
     """
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     if secretary:
         ms, where = SET.secretary_settings(path, env=env)
     elif role:
         ms, where = SET.model_settings_for(role, path, env=env)
     else:
         ms, where = SET.model_settings(path, env=env), "model"
-    base_url, _ = SET.env_or_setting(ENV_BASE, ms.get("base_url", ""), env=src)
-    name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
-    api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
-    effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
-    # 采样温度：同一道梯子（环境变量 > 设置文件 > 缺省 0.2），
-    # 读进来就校验；词表那一格在 `settings.MODEL_KEYS` 里（面板按它画）。
-    temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
     vendor = str(ms.get("vendor") or "").strip().lower()
-    fallback_url = VENDOR_BASE_URLS.get(vendor, DEFAULT_BASE_URL)
-    spec = ModelSpec(
-        base_url=(base_url or fallback_url).rstrip("/"),
-        model=name or DEFAULT_MODEL,
-        api_key=api_key,
-        vendor=vendor,
-        timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
-        max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
-        reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
-        temperature=normalize_temperature(temperature),
-        key_source=key_src,
-    )
+    spec = _spec_from_settings(ms, src, vendor=vendor,
+                               fallback_url=VENDOR_BASE_URLS.get(vendor, DEFAULT_BASE_URL))
     return spec, (where or "")
 
 
@@ -550,32 +559,9 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
     设置文件坏了不吞：解析错原样抛出（带路径与行列号），
     不许折成"没配 key" —— 那会把一个要改文件的问题伪装成"模型不可用"。
     """
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     ms = SET.model_settings(env=env)
-    base_url, _ = SET.env_or_setting(ENV_BASE, ms.get("base_url", ""), env=src)
-    name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
-    # key 与它的来源一起取：来源进 `ModelSpec.key_source`，
-    # 于是"这一次的 key 到底是哪一档给的"在机器面上可查（见该字段的 docstring）。
-    api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
-    # 推理强度走同一条梯子（环境变量 > 设置文件 > 内置默认），
-    # 第三档的"内置默认"就是 `DEFAULT_REASONING_EFFORT`（High）——
-    # 口径：「所有智能体都要能 thinking，且开默认到 High」。
-    # 词表外的取值在 `ModelSpec` 构造时当场抛（见 `normalize_reasoning_effort`），
-    # 不在这里吞成缺省。
-    effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
-    # 采样温度走同一条梯子：环境变量 > 设置文件 > 缺省 0.2。
-    # 区间外/非数在 `normalize_temperature` 当场抛（不在这里吞成缺省）。
-    temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
-    return ModelSpec(
-        base_url=(base_url or DEFAULT_BASE_URL).rstrip("/"),
-        model=name or DEFAULT_MODEL,
-        api_key=api_key,
-        timeout_sec=_float_env(src, ENV_TIMEOUT, 300.0),
-        max_retries=max(0, _int_env(src, ENV_RETRIES, 2)),
-        reasoning_effort=effort or DEFAULT_REASONING_EFFORT,
-        temperature=normalize_temperature(temperature),
-        key_source=key_src,
-    )
+    return _spec_from_settings(ms, src)
 
 
 def key_source(env: Mapping[str, str] | None = None) -> str:
@@ -587,7 +573,7 @@ def key_source(env: Mapping[str, str] | None = None) -> str:
     而"只看来源"的调用方没有理由也能拿到密钥 —— 少一条通路就少一处泄漏面
     （与 `settings._masked_section` 的"key 只写不读"同一条纪律）。
     """
-    src = dict(os.environ if env is None else env)
+    src = os.environ if env is None else env
     ms = SET.model_settings(env=env)
     _value, source = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
     return source
@@ -700,9 +686,9 @@ def _classify_status(status: int) -> str:
     return "unknown"
 
 
-def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
-                     timeout_sec: float) -> tuple[int, str]:
-    """生产传输层：标准库 HTTP。
+def _urllib_call(method: str, url: str, headers: Mapping[str, str],
+                 body: bytes | None, timeout_sec: float) -> tuple[int, str]:
+    """标准库 HTTP 的一次调用（POST / GET 共用这一份错误翻译）。
 
     非 2xx 也读回响应体（上游的报错正文里才有真正的原因，
     直接抛异常会把原因丢掉，只剩一个状态码）。
@@ -717,7 +703,7 @@ def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
     把两者折叠会让排障的人去查网络。
     """
     try:
-        req = urllib.request.Request(url, data=body, headers=dict(headers), method="POST")
+        req = urllib.request.Request(url, data=body, headers=dict(headers), method=method)
         with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
             return int(getattr(resp, "status", 200)), resp.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as exc:
@@ -727,6 +713,12 @@ def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
     except urllib.error.URLError as exc:
         # URLError 覆盖 DNS 失败、连接被拒、证书错误、超时（socket.timeout 会被它包住）
         raise ConnectionError(f"{type(exc.reason).__name__}: {exc.reason}") from exc
+
+
+def urllib_transport(url: str, headers: Mapping[str, str], body: bytes,
+                     timeout_sec: float) -> tuple[int, str]:
+    """生产传输层：标准库 HTTP POST（错误翻译见 :func:`_urllib_call`）。"""
+    return _urllib_call("POST", url, headers, body, timeout_sec)
 
 
 def urllib_get(url: str, headers: Mapping[str, str],
@@ -739,16 +731,7 @@ def urllib_get(url: str, headers: Mapping[str, str],
     换成 GET 之后同一个端点的清单里真的有 `deepseek-flash`
     （`['deepseek-flash', 'deepseek-v4-pro']`）。
     """
-    try:
-        req = urllib.request.Request(url, headers=dict(headers), method="GET")
-        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
-            return int(getattr(resp, "status", 200)), resp.read().decode("utf-8", "replace")
-    except urllib.error.HTTPError as exc:
-        with exc:
-            raw = exc.read().decode("utf-8", "replace") if hasattr(exc, "read") else ""
-        return int(exc.code), raw
-    except urllib.error.URLError as exc:
-        raise ConnectionError(f"{type(exc.reason).__name__}: {exc.reason}") from exc
+    return _urllib_call("GET", url, headers, None, timeout_sec)
 
 
 def _default_sleep(seconds: float) -> None:
