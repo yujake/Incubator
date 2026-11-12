@@ -90,7 +90,7 @@ from .manuscriptproducers import (
     PRODUCER_OF_FAMILY, UNKNOWN, _manuscript_id_of, parents_of, producer_of,
     verification_producer_reading,
 )
-from .manuscriptpaths import (  # 多证明路径号（B 收录时分配）
+from .manuscriptpaths import (  # 路径号（B 收录时分配；一个稿号 = 一份文件 = 一份证明）
     assign_path_group, path_reading, stamp_verification_path_group,
 )
 # --------------------------------------------------------------------- 盘上事实
