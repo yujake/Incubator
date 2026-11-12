@@ -2438,7 +2438,8 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:      `via=sign_issued`，收工再扫一次、幂等；B 那一段另写「交稿也是你的义务」）。
 #:      机制那一半在 `vsigns.issue` 成功之后调 `manuscriptsubmission.mark_sign_submitted`
 #:      （复用 `agent_f/submission.py` 的记号，不新造格式）；收工门
-#:      `agent_loop._v_wait_gate_reading` 挡「送审后没起 wait_for=V 的计时器就收工」。
+#:      `agent_loop._v_wait_gate_reading` 按签拦收工（计划号 / 稿有无现行的 V 签、有无被放弃），
+#:      不按计时器拦。
 #:   ② 丙「有 open findings 就不许 accepted」：`review_document` 的 `target_status`
 #:      加闸（`_open_findings_gate`），并给 `review.review_document` 的 returns 补一格
 #:      `open_findings`（读数；returns 不进 tools_lines ⇒ 提示词只差版本行）。
