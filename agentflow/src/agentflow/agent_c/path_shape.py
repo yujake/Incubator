@@ -266,9 +266,10 @@ def _shape_of(graph: Any, target_node: str, row: Mapping[str, Any], *,
         return out
     spine_nodes = [n for n in dict.fromkeys(spine["nodes"]) if n != target_node]
     gap_nodes = [n for n in spine_nodes if _is_bare_root(graph, n)]
-    seen = set(spine["nodes"]) | set(walked) | {target_node}
-    seen.discard(target_node)
-    detour = sorted({n for n in walked} - set(spine["nodes"]))
+    spine_set = set(spine["nodes"])
+    walked_set = set(walked)
+    seen = (spine_set | walked_set) - {target_node}
+    detour = sorted(walked_set - spine_set)
     out.update({
         "hops": len(spine["edges"]),
         "steps": len(spine_nodes),
@@ -607,11 +608,12 @@ def join_segments(segments: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
                 "所以要复核就回到台账看那几条依赖。这是核对读数，不是判决："
                 "这么拼对不对、拼起来自不自然，由你自己判")
     spine = list(dict.fromkeys(nodes))
+    spine_set = set(spine)
     gap_nodes = sorted({str(g) for _p, r in chosen for g in (r.get("gap_nodes") or [])}
-                       & set(spine))
+                       & spine_set)
     detour = sorted({str(d) for _p, r in chosen for d in (r.get("detour_nodes") or [])}
-                    - set(spine) - {_node_ref(first_start)})
-    seen_all = set(spine) | set(detour)
+                    - spine_set - {_node_ref(first_start)})
+    seen_all = spine_set | set(detour)
     head = chosen[0][1]
     row_out = {
         "path_id": "join-" + "-".join(str(int(p["batch"])) for p, _r in chosen),
