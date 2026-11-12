@@ -1,7 +1,4 @@
-"""角色 B 的动作 `run_once`（`goal-7f5116c1` M6：从 `agent_b.py` 拆出来，逐字未改）。
-
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
-"""
+"""角色 B 的动作 `run_once`。"""
 from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
