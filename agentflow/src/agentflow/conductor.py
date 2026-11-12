@@ -5585,6 +5585,10 @@ class Conductor:
             out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成"
             return out
         by_id = {str(r.get("task_id") or ""): r for r in rows}
+        # 两族义务前缀是模块级常量（`vreceipts.REGISTER_PREFIX` / `RESUBMIT_PREFIX`），
+        # 一次 ack 里不会变 ⇒ 问到第一次就存下来（原先逐条重新去 Import 一遍）。
+        # 仍然是"用到才问"：没有一条项走到那一格时，这一次惰性 Import 照旧不发生。
+        _obligation_prefixes: tuple[str, ...] | None = None
         for tid in ids:
             row = by_id.get(tid)
             if row is None:
@@ -5635,13 +5639,15 @@ class Conductor:
             # 所以 `completed` / `expired` 这两个"看起来像办完了 / 作废了"的收口方式，
             # 对这两族一律在这里拒：收件人自报"我办完了"不是证据。`acked` 那一档已被
             # 上面的配对判据拒掉（acked 只配 ack 类），这里补的是"换个 close 自报完成"。
-            _obligation_prefixes = self._evidence_closed_item_prefixes()
-            if (str(row.get("input_key") or "").startswith(_obligation_prefixes)
+            if _obligation_prefixes is None:
+                _obligation_prefixes = self._evidence_closed_item_prefixes()
+            item_key = str(row.get("input_key") or "")
+            if (item_key.startswith(_obligation_prefixes)
                     and close in ("completed", "expired")):
                 out["refused"].append({
                     "item_id": tid, "code": "obligation_needs_evidence",
                     "reason": (f"{tid} 是「必须收录 / 必须重送」义务"
-                               f"（`{str(row.get('input_key') or '')}`）⇒ 收件人不能自己把它"
+                               f"（`{item_key}`）⇒ 收件人不能自己把它"
                                f"收成 {close!r}：ack 只表示看到了，办完与否由框架按盘上的事实"
                                "核（正文 + `reviewed=true`），放弃要 `statement.abandon` 并"
                                "带理由。这一条一个字都没动")})
