@@ -1,6 +1,6 @@
 """下载层：流式下载、原子落盘、限速重试、镜像回退与安全检查。
 
-设计约束（见 ``DESIGN.md`` §4.1）：
+设计约束：
 
 * 顶层不 import 兄弟模块，保证本模块可单独导入测试。
 * 只依赖标准库 ``urllib``：下载是"一进一出"的大字节流，引入第三方 HTTP 库
@@ -77,7 +77,7 @@ DEFAULT_RETRIES = 3
 #: 需要重试的 HTTP 状态码。
 RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
-#: 本机 TLS 栈那一类失败的识别串（2026-10-16，我亲自下一轮文献后加的）。
+#: 本机 TLS 栈那一类失败的识别串。
 #:
 #: 判据来自现场读数：同一个 UTexas URL，默认走 122 秒才判死
 #: （Schannel `CRYPT_E_REVOCATION_OFFLINE`；Python/OpenSSL 侧报
@@ -104,8 +104,8 @@ _TLS_TIMEOUT_MARKERS = (
 
 #: `FetchResult.kind` 的受控词表（`F-6`）。
 #:
-#: 为什么需要它：改前失败原因是自由字符串（`dir(F)` 里只有 `DownloadError` /
-#: `RETRYABLE_STATUS`），实测形态含 `dest_dir_unusable` / `too_large_declared` /
+#: 为什么需要它：失败原因若是自由字符串（`dir(F)` 里只有 `DownloadError` /
+#: `RETRYABLE_STATUS`），形态会含 `dest_dir_unusable` / `too_large_declared` /
 #: `write_failed` / `read_failed` / `all_sources_failed` / `http_<code>` /
 #: `network_error: …` / `timeout: …` / `io_error: …` / `content_type_mismatch`。
 #: 下游只有四值词表 `schema.DOWNLOAD_STATUSES = (ok, content_mismatch, failed,
@@ -128,9 +128,9 @@ ERROR_KINDS = (
     "empty_body",
     "network_error",
     "timeout",
-    #: 2026-10-16（我亲自下过一轮之后）新分的两档：它们此前都折进 `network_error`
+    #: 新分的两档：它们若都折进 `network_error`
     #: ⇒ 读账的人分不出"网络抖动（该重试）"与"本机证书/对方挡脚本（重试无益）"，
-    #: 于是每个 URL 都被无差别重试三次。现场读数见 `_TLS_CERT_MARKERS` 的注释。
+    #: 于是每个 URL 都会被无差别重试三次。现场读数见 `_TLS_CERT_MARKERS` 的注释。
     "tls_cert",
     "tls_timeout",
     "io_error",
@@ -182,12 +182,12 @@ class DownloadError(RuntimeError):
 
 @dataclass(frozen=True, order=True)
 class FetchResult:
-    """一次下载的结果。字段与 ``DESIGN.md`` §4.1 一致。
+    """一次下载的结果。字段与设计契约一致。
 
     ``error`` 有两种语义，调用方必须都理解：
     * 真失败（``ok=False``）：``error`` 是失败原因，``path`` 为 None；
     * 软警告（``ok=True``）：文件已完整落盘，``error`` 是如 ``content_type_mismatch``
-      的提示，交由上层判断是否可用（§5.2 允许"登记行但内容可疑"）。
+      的提示，交由上层判断是否可用（允许"登记行但内容可疑"）。
 
     ## ``kind`` 是受控的那一半（`F-6`）
 
@@ -264,7 +264,7 @@ def _url_suffix(url: str) -> str:
 def slugify(text: str, max_length: int = 80) -> str:
     """文件名片段的 slug 化 —— 转发到唯一实现 :func:`agentflow.textutil.slugify`。
 
-    ## 为什么这里是转发而不是第二份实现（``INVENTORY.md`` §4.7②）
+    ## 为什么这里是转发而不是第二份实现
 
     本函数曾经自带一套规则：``[^a-z0-9]+`` ⇒ 把 CJK 一并当分隔符剥掉，
     空结果回退 ``"download"``。而 ``textutil.slugify`` 保留 CJK、回退
@@ -441,7 +441,7 @@ class _ConnectThenReadHTTPSConnection(http.client.HTTPSConnection):
 def _split_timeout_opener(connect_timeout: float, read_timeout: float) -> urllib.request.OpenerDirector:
     """构造一个把连接/读取超时拆开的 opener。
 
-    为什么必须自定义：``urlopen`` 只接受单个 timeout，而本机实测
+    为什么必须自定义：``urlopen`` 只接受单个 timeout，而 urllib
     ``urlopen(..., timeout=(20, 120))`` 会在 ``socket.settimeout()`` 处抛
     ``TypeError: 'tuple' object cannot be interpreted as an integer``。
     连接慢往往意味着网络不可达（应快速失败），读取慢可能只是文件大，
@@ -627,7 +627,7 @@ class HttpDownloader:
         try:
             rejected = self._validate_url(url)
         except ValueError as exc:
-            # 2026-10-17（真机探针 _crash_probe_io_1）：畸形 IPv6 主机串让 `urlsplit` 抛
+            # 畸形 IPv6 主机串会让 `urlsplit` 抛
             # `ValueError: Invalid IPv6 URL`，绕过"失败也返回 FetchResult"的契约。
             return FetchResult(ok=False, kind="network_error",
                                error=f"invalid_url: {exc}")
@@ -675,7 +675,7 @@ class HttpDownloader:
     def _validate_url(self, url: str) -> tuple[str, str] | None:
         """返回 `(受控档, 细节文本)` 表示不可下载；`None` 表示通过。
 
-        为什么返回二元组而不是一个字符串、再由调用方去切前缀：改前调用方拿的是
+        为什么返回二元组而不是一个字符串、再由调用方去切前缀：调用方若拿的是
         `"blocked_host: 127.0.0.1"` 这样一个串，要拿到受控档只能 `split(":")[0]`
         —— 那是"同一件事两个落位"的又一例（详情文本一改，档就静默变了）。
         """
@@ -741,7 +741,7 @@ class HttpDownloader:
                         )
                     return self._consume(response, status, url, dest, filename_hint)
             except _http_client.HTTPException as exc:
-                # 2026-10-17（真机探针 _crash_probe_io_2）：URL 里的空格/控制字符让 urllib 在
+                # URL 里的空格/控制字符让 urllib 在
                 # `putrequest` 抛 `http.client.InvalidURL`（`HTTPException` 子类）——它不在
                 # `HTTPError / URLError / OSError` 三支里，于是整趟 `download` 抛 traceback。
                 last_kind = "network_error"
@@ -757,17 +757,15 @@ class HttpDownloader:
                 logger.warning("下载 %s 得到 HTTP %s，%.1fs 后重试（%d/%d）", url, last_status, delay, attempt + 1, self.retries)
                 self._sleep(delay)
             except urllib.error.URLError as exc:
-                # 2026-10-16（我亲自下过一轮文献之后的归因）：这一支此前无差别重试 ——
-                # 而它罩着两类重试永远修不好的故障，实测代价极大（`projects/p8o` 那一趟
-                # 72 分钟只走了 15 次模型调用，全耗在这上面）：
+                # 这一支无差别重试会罩着两类重试永远修不好的故障：
                 #
                 #   * 证书/吊销类（`CERTIFICATE_VERIFY_FAILED`、Schannel 的
                 #     `CRYPT_E_REVOCATION_OFFLINE`）：同一个 URL 重试只会再等一次同样的
-                #     超时。实测：UTexas 那个 URL 每次要 122 秒才判死；加客户端开关
-                #     （`curl --ssl-no-revoke`）后 0.55 秒就拿到状态码 ⇒ 这是本机
+                #     超时（UTexas 那个 URL 每次要 122 秒才判死；加客户端开关
+                #     （`curl --ssl-no-revoke`）后 0.55 秒就拿到状态码）⇒ 这是本机
                 #     TLS 栈的事，不是网络抖动 ⇒ 不重试，如实记成 `tls_cert`。
                 #   * TLS 握手超时（`handshake operation timed out`）：与普通超时不同，
-                #     它多半是对方把我们挡在门外；实测 MDPI 连续三次都是它 ⇒ 至多再试
+                #     它多半是对方把我们挡在门外（MDPI 连续三次都是它）⇒ 至多再试
                 #     一次，记成 `tls_timeout`。
                 #
                 # 其余（连接重置/断流/普通超时）照旧重试 —— 那些换一跳或换镜像真的能过。
@@ -801,12 +799,12 @@ class HttpDownloader:
                 self._sleep(delay)
             except OSError as exc:
                 # TimeoutError 是 OSError 的子类（socket.timeout 自 3.10 起即其别名）。
-                # 断流/超时是瞬时故障——实测 AMS 的大 PDF 会在传到几百 KB 时读超时，
+                # 断流/超时是瞬时故障——AMS 的大 PDF 会在传到几百 KB 时读超时，
                 # 重试一次往往就能读完，所以必须重试；而 ENOSPC/EACCES 这类本地 I/O
                 # 错误重试无用，立即失败更快把问题暴露给上层。
                 #
                 # `F-6` 的归因修正：`ConnectionResetError` 也是 `OSError` 的子类，
-                # 而改前它落在"非 TimeoutError ⇒ io_error"那一支里 ——
+                # 而它若落在"非 TimeoutError ⇒ io_error"那一支里 ——
                 # 于是一次网络中途断流被记成 `io_error`（读账的人会去查磁盘）。
                 is_transient = isinstance(exc, TimeoutError)
                 if is_transient:
@@ -854,7 +852,7 @@ class HttpDownloader:
 
         ## 落盘的 `kind` 归因（`F-6`）
 
-        改前这里只有一个 `except OSError` 兜住写文件与读响应两件事，
+        这里若只有一个 `except OSError` 兜住写文件与读响应两件事，
         于是一次"读到一半连接被重置"（`ConnectionResetError`，`OSError` 子类）
         被归成 `write_failed` —— 读账的人会去查磁盘，而问题在网络。
         现在的结构是：`response.read()` 在内层 try 里单独兜，
@@ -1028,13 +1026,13 @@ def promote_pdf_extension(target: pathlib.Path, extension: str) -> tuple[pathlib
     "优先 Content-Type、URL 后缀兜底"那条规则本身是对的（`/download?id=1` 那种 URL 常撒谎），
     缺的只是"落盘之后用魔数再确认一次"。
 
-    实测（F4 的 A 探针）：OSF 直链 `https://osf.io/jw8xb/download` 回的是 `%PDF-1.5`
+    OSF 直链 `https://osf.io/jw8xb/download` 回的是 `%PDF-1.5`
     （522 KB），URL 无后缀、Content-Type 是 `application/octet-stream` ⇒ 只能给 `.bin`；
     抽取器仍读得出（按内容嗅探，39 页），但"按扩展名挑文件"的人与工具会认不出它是论文。
 
     返回 `(路径, 扩展名)`；改名失败（例如文件被占）原样返回 —— 不许让一次成功的下载
     因为改名失败翻成失败。抽成模块级函数是为了让判据能被直接测（探针里不再抄一份逻辑：
-    抄一份的代价这一轮已经付过一次，见 `draft/28` §159 的"断言太弱"那一段）。
+    抄一份的代价是多一处会漂的实现）。
     """
     if extension != ".bin":
         return target, extension
