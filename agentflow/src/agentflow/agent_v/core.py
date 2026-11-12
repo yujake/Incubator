@@ -2992,7 +2992,7 @@ class AgentV:
         #: 依赖面的机械审计（业主 2026-11-06：V 是第一道）：与在册那一支同一份判据，
         #: 2026-11-08 起可引资格也读被引命题的手稿（V 只对手稿负责）；没有稿
         #: （只有内联正文）时这一格不核。
-        _deps = _DS.parse_dependency_section(raw_manuscript) if raw_manuscript else {}
+        _deps = _section if raw_manuscript else {}  # 依赖段在上面认路径那一支已解析过，不再解析第二遍
         _cited = _cited_manuscripts(
             self.workspace_root, (_deps.get("rows") or []),
             store=self.store) if _deps else {}
