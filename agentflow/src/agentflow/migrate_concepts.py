@@ -195,9 +195,12 @@ def plan_migration(concept_rows: Iterable[Mapping[str, Any]],
     duplicate_names = {k: sorted(v) for k, v in by_name.items() if k and len(v) > 1}
 
     collisions = sorted(set(folded["id_map"]) & taken)
-    had_definition = {str(r.get("concept_id") or ""): bool(str(r.get("definition") or "").strip())
-                      for r in concept_list}
-    names = {str(r.get("concept_id") or ""): str(r.get("name") or "") for r in concept_list}
+    had_definition: dict[str, bool] = {}
+    names: dict[str, str] = {}
+    for r in concept_list:
+        cid = str(r.get("concept_id") or "")
+        had_definition[cid] = bool(str(r.get("definition") or "").strip())
+        names[cid] = str(r.get("name") or "")
     ledger: list[dict[str, Any]] = []
     for old_id, new_id in folded["id_map"].items():
         ledger.append({
@@ -239,7 +242,7 @@ def ledger_lines(plan: Mapping[str, Any]) -> list[dict[str, Any]]:
     """
     out: list[dict[str, Any]] = []
     for rec in plan.get("ledger") or []:
-        out.append({"op": "migrate_map", **dict(rec)})
+        out.append({"op": "migrate_map", **rec})
     for rel_id, old_id, new_id in plan.get("changed") or []:
         out.append({"op": "relation_renumbered", "rel_id": str(rel_id),
                     "old_id": str(old_id), "new_id": str(new_id)})
