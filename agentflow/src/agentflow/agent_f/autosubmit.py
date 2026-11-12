@@ -171,7 +171,13 @@ def auto_submit_signed(*, store: Any, root: Any, plan_id: str, stamp: str) -> di
     #: 「已提交」按稿号（与版本无关）判；范围是所有 F 的 task 行，不只本趟：
     #: 一份稿交过一次就是交过了，换个 task 再收工也不该再写一遍。
     submitted: dict[str, dict[str, Any]] = {}
+    # 「F 自己那一行」的查找与「已提交」的收集共用这一趟遍历（两件事都要扫全表，
+    # 而「第一行 task_id 对上的」与 role 是 F 的行之间没有依赖：先记下第一个对上的，
+    # 循环后仍按原判据（role / 终态）决定要不要用它）。
+    found: dict[str, Any] | None = None
     for one in tasks:
+        if found is None and task_id and str(one.get("task_id") or "") == task_id:
+            found = one
         if str(one.get("role") or "") != "F":
             continue
         got, problems = _DL.submissions_of(one.get("artifacts") or ())
@@ -182,8 +188,6 @@ def auto_submit_signed(*, store: Any, root: Any, plan_id: str, stamp: str) -> di
         row_why = ("这一趟没有召唤号（`conductor.current_task_id()` 是空的："
                    "直调 `F.step` 的那条路）⇒ 没有「F 自己那一行」可写")
     else:
-        found = next((r for r in tasks
-                      if str(r.get("task_id") or "") == task_id), None)
         if found is None:
             row_why = (f"召唤号 {task_id!r} 不在 `tasks` 表里 ⇒ "
                        "没有「F 自己那一行」可写")
