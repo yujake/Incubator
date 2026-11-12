@@ -8,7 +8,7 @@
 解析：不读写盘、不读 store、不读台账；切节复用 `depsection`，不另写一份。
 「把取到的那几格写进哪一行」不在这里 —— 那是接线后的写口。
 
-## 三态（与 D4 同一口径，不许折平）
+## 三态（与手稿录入同一口径，不许折平）
 
 - `present`：稿里有这一节。`value` 是那一节的正文或解析结果；空节也算 present
   （空表 / 空正文是事实，不是"没有这一节"）。
@@ -80,7 +80,7 @@ DEPENDENCY_COLUMNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("quote", ("引用",), "引用（F 的原话）"),
     ("stmt_id", ("命题号", "stmt"), "命题号（stmt:NNNNNN）"),
     ("step", ("步",), "用在哪一步"),
-    ("path_group", ("路径",), "路径号（第几条证明）"),
+    ("path_group", ("路径",), "路径号（path_group）"),
 )
 
 #: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像）。
@@ -443,7 +443,7 @@ def extract_cells(text: Any, family: str, cells: Iterable[str]) -> dict[str, dic
     `cell_not_applicable_for_family`）。
 
     三态：`present` / `absent` / `unreadable`；`absent` 的 `value` 是 `None`、`source`
-    没有行号与 sha —— 不许把别的节或整份全文填进来顶替（与 D4 同一口径）。
+    没有行号与 sha —— 不许把别的节或整份全文填进来顶替（与手稿录入同一口径）。
     """
     family_name = str(family or "").strip()
     if family_name not in FAMILY_NAMES:
