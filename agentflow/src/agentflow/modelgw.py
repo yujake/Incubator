@@ -15,10 +15,9 @@
 受限网络里跑。于是 HTTP 用 `urllib.request`，JSON 用标准库，超时与重试自己实现。
 （这一层自己一个第三方库都不 import：`filelock` 与 `pyyaml` 都不在这条路径上。）
 
-## key 从哪来（2026-10-07 所有者的新裁定）
+## key 从哪来
 
-改前的口径逐字是一句反问："为什么不从配置文件读：密钥一旦落盘就会进版本库与备份"。
-所有者 2026-10-07 裁定改这条：填 key 与"工具链在哪"合并进同一个机器级设置文件
+填 key 与"工具链在哪"合并进同一个机器级设置文件
 `settings.json`（见 :mod:`agentflow.settings`）——理由是"机器相关的事实不该散在
 两个地方，且每次跑之前都靠人 export 一遍环境变量，是这台机器上最容易做错的一步"。
 
@@ -26,7 +25,7 @@
 
     环境变量 > 设置文件 > 内置默认
 
-落盘的代价由三道新安全阀一起承担（改这条时必须一起读）：
+落盘的代价由三道安全阀一起承担（改这条时必须一起读）：
 
 1. 真正的 `agentflow/settings.json` 「被 git 忽略」（`.gitignore` 里逐字写着理由）；
 2. 入库的是示例 `agentflow/settings.example.json`，其中 `api_key` 是空串
@@ -37,34 +36,20 @@
 
 三条各配正控与负控，判据在 `tests/test_settings.py`。
 
-## key 从哪一档取到的，是一个读数（2026-10-10 所有者裁定）
+## key 从哪一档取到的，是一个读数
 
-所有者当轮的两句是："key 从 config 里面接" / "我是说我们系统的 key 在 config 里面设置的"。
-梯子本身没改（逐字仍是 `环境变量 > 设置文件 > 内置默认`）—— 这一批补的是
+梯子本身是 `环境变量 > 设置文件 > 内置默认` —— 这一层补的是
 `ModelSpec.key_source`：`"env"` / `"settings"` / 空串。
 
 为什么它必须存在：没有它，"我以为它在 config 里"与"它其实来自一个残留的环境变量"
 在其余所有读数上完全一样（`configured` 都是 `True`、请求都发得出去、钱都照花）。
-唯一的区别是这一格。少了它，`settings.json` 写错了也不会有人发现。
 
-同一批还把跑批入口 `temp/_run_T.ps1` 里那段"从 `~/.dsh/.credentials.yaml` 正则刮一个
-key 再 export 成 `AGENTFLOW_MODEL_API_KEY`"的接线删了：它让每一趟的 key 都来自环境变量，
-而 config 里那份根本没人读。现在那一趟不设任何 key 环境变量，并在开跑前打出来源读数
-（`temp/_key_source_check.ps1` 是同一段判据的单跑版）。真机对照（本机，2026-10-10）：
+## 推理强度
 
-    干净环境                spec.redacted() → key_source='settings'
-    export 一个残留 key 后   spec.redacted() → key_source='env'
-
-## 推理强度（2026-10-10 所有者裁定）
-
-所有者的原话是两句，先后落在同一件事上：
-
-    现在每个智能体都会 thinking 吗？感觉像不怎么过脑子的。特别是做研究的 D 和 F。
-    所有智能体都要能 thinking，且开默认到 High。
-
-改前的读数是"确实没过脑子"，而且这个事实在网线上只有一行证据：`_payload` 的请求体里
-没有 `reasoning_effort` 这一栏，回复里的 `reasoning_content` 也从没被读过
-（全仓 grep `reasoning` 零命中）。改后：
+"所有智能体都要能 thinking，且开默认到 High"。
+没有这一栏时，网线上只有一行证据：`_payload` 的请求体里
+没有 `reasoning_effort`，回复里的 `reasoning_content` 也从没被读过
+（全仓 grep `reasoning` 零命中）。所以：
 
 - 词表 `REASONING_EFFORTS`（`off | low | high | max`）与缺省
   `DEFAULT_REASONING_EFFORT`（`high`）都在这里，唯一来源；
@@ -76,15 +61,8 @@ key 再 export 成 `AGENTFLOW_MODEL_API_KEY`"的接线删了：它让每一趟�
 - 回复里的 `reasoning_content` 收进 `ModelReply.reasoning`，`to_dict()` 报
   `reasoning_chars` —— "这一趟想了吗"从此是一个读数，而不是一句印象。
 
-真机对照（历史读数：`temp/_thinking_probe.py`，模型 = `deepseek-chat`，同一条 prompt）：
-
-    裸调                        200 reasoning_chars=absent tokens_in=13 tokens_out=1
-    reasoning_effort=high       200 reasoning_chars=76     tokens_in=39 tokens_out=30
-    thinking={type: disabled}   200 reasoning_chars=absent tokens_in=13 tokens_out=1
-    reasoning_effort=medium     200 reasoning_chars=101    tokens_in=39 tokens_out=36
-
-第三行说明 `off` 那条形状端点也认；第四行是词表外取值照样 200 ——
-端点不拦，所以拦的必须是客户端（见 `normalize_reasoning_effort`）。
+词表外的取值端点照样 200 —— 端点不拦，所以拦的必须是客户端
+（见 `normalize_reasoning_effort`）。
 
 ## 三态纪律（本文件的核心）
 
@@ -166,11 +144,11 @@ ENV_NAME = "AGENTFLOW_MODEL_NAME"
 ENV_TIMEOUT = "AGENTFLOW_MODEL_TIMEOUT_SEC"
 ENV_RETRIES = "AGENTFLOW_MODEL_MAX_RETRIES"
 ENV_EFFORT = "AGENTFLOW_MODEL_REASONING_EFFORT"
-#: 采样温度（2026-10-29）：第七个模型档环境变量，同一道梯子（环境变量 > 设置文件 > 缺省）。
+#: 采样温度：第七个模型档环境变量，同一道梯子（环境变量 > 设置文件 > 缺省）。
 ENV_TEMPERATURE = "AGENTFLOW_MODEL_TEMPERATURE"
 
 DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
-#: 缺省模型（S-I / 裁定 19乙，2026-10-10）：从 `deepseek-chat` 换成 `deepseek-flash`。
+#: 缺省模型（S-I / 裁定 19乙）：`deepseek-flash`。
 #:
 #: ## 这次换模型为什么要在读数上留痕（不是改一个字符串）
 
@@ -194,11 +172,11 @@ DEFAULT_MODEL = "deepseek-flash"
 #: 本仓的网关是同一个端点的另一个客户端，形状不一致只会制造一个没人维护的方言。
 REASONING_EFFORTS: tuple[str, ...] = ("off", "low", "high", "max")
 
-#: 缺省强度。2026-10-10 所有者裁定逐字："所有智能体都要能 thinking，且开默认到 High"。
-#: 它取代改前那种"什么也不发"的形态 —— 后者在真机上的读数是"模型没想"。
+#: 缺省强度。口径："所有智能体都要能 thinking，且开默认到 High"。
+#: 它取代"什么也不发"的形态 —— 后者在真机上的读数是"模型没想"。
 DEFAULT_REASONING_EFFORT = "high"
 
-#: 缺省采样温度。它一直是 0.2（`ModelSpec.temperature` 的缺省值），2026-10-29 起只是
+#: 缺省采样温度。它是 0.2（`ModelSpec.temperature` 的缺省值），
 #: 多了一个名字与一道读入校验 —— 别的角色的默认值一个字节都没动。
 DEFAULT_TEMPERATURE = 0.2
 
@@ -328,7 +306,7 @@ class ModelSpec:
     #:
     #: 它今天做两件事：`base_url` 没给时按它选内置端点（`VENDOR_BASE_URLS`），
     #: 以及计价时按它 + `model` 去 `modelcost.VENDOR_PRICES` 取那一档价
-    #: （业主 2026-10-14：「花销计算标准与供应商定价吻合」）。空串 = 没配
+    #: （「花销计算标准与供应商定价吻合」）。空串 = 没配
     #: （计价那一侧会按端点猜一次，猜不到就如实回落并在读数里标出来）。
     vendor: str = ""
     #: 单次请求的墙钟上限（秒）。2026-10-12 从 60 抬到 300 —— 真机读数逼出来的：
@@ -397,7 +375,7 @@ class ModelSpec:
         """
         object.__setattr__(self, "reasoning_effort",
                            normalize_reasoning_effort(self.reasoning_effort))
-        # 采样温度走同一道纪律（2026-10-29）：空值 = 缺省 0.2，非数/区间外当场抛。
+        #: 采样温度走同一道纪律：空值 = 缺省 0.2，非数/区间外当场抛。
         # 为什么也放在构造点：温度错了在上游那侧会被裁掉或 400，而两种都长得像"模型不行"。
         object.__setattr__(self, "temperature",
                            normalize_temperature(self.temperature))
@@ -424,7 +402,7 @@ class ModelSpec:
     def redacted(self) -> dict[str, Any]:
         """可安全写进日志/台账的配置快照（永不包含 key 本体）。
 
-        `vendor` 在 2026-10-14 加进来：它是按角色配模型那一批的可见字段之一
+        `vendor` 是按角色配模型那一批的可见字段之一
         （`settings.MODEL_KEYS` 里有它、面板上每个角色都有一格），而这份快照此前
         只给 `base_url` / `model` ⇒ 机器面读不到"这个角色用的是哪一家"。
         面板那一侧的表现是：盘上写了 `models.A.vendor`，输入框却永远是空的
@@ -477,7 +455,7 @@ def spec_for(role: str = "", *, secretary: bool = False,
     name, _ = SET.env_or_setting(ENV_NAME, ms.get("name", ""), env=src)
     api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
     effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
-    # 采样温度（2026-10-29）：同一道梯子（环境变量 > 设置文件 > 缺省 0.2），
+    # 采样温度：同一道梯子（环境变量 > 设置文件 > 缺省 0.2），
     # 读进来就校验；词表那一格在 `settings.MODEL_KEYS` 里（面板按它画）。
     temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
     vendor = str(ms.get("vendor") or "").strip().lower()
@@ -582,11 +560,11 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
     api_key, key_src = SET.env_or_setting(ENV_KEY, ms.get("api_key", ""), env=src)
     # 推理强度走同一条梯子（环境变量 > 设置文件 > 内置默认），
     # 第三档的"内置默认"就是 `DEFAULT_REASONING_EFFORT`（High）——
-    # 所有者 2026-10-10 的裁定：「所有智能体都要能 thinking，且开默认到 High」。
+    # 口径：「所有智能体都要能 thinking，且开默认到 High」。
     # 词表外的取值在 `ModelSpec` 构造时当场抛（见 `normalize_reasoning_effort`），
     # 不在这里吞成缺省。
     effort, _ = SET.env_or_setting(ENV_EFFORT, ms.get("reasoning_effort", ""), env=src)
-    # 采样温度走同一条梯子（2026-10-29）：环境变量 > 设置文件 > 缺省 0.2。
+    # 采样温度走同一条梯子：环境变量 > 设置文件 > 缺省 0.2。
     # 区间外/非数在 `normalize_temperature` 当场抛（不在这里吞成缺省）。
     temperature, _ = SET.env_or_setting(ENV_TEMPERATURE, ms.get("temperature", ""), env=src)
     return ModelSpec(
@@ -605,7 +583,7 @@ def key_source(env: Mapping[str, str] | None = None) -> str:
     """这次 `spec_from_env` 会从哪一档取到 key：`"env"` / `"settings"` / 空串。
 
     只回来源，不回值：它是给机器面用的（`webui.readers.settings_reading`），
-    用来回答所有者 2026-10-10 那句"key 从 config 里面接"到底成没成立。
+    用来回答"key 从 config 里面接"到底成没成立。
     为什么不回值、也不复用 `spec_from_env`：那一口会把 key 读进内存里的一个对象，
     而"只看来源"的调用方没有理由也能拿到密钥 —— 少一条通路就少一处泄漏面
     （与 `settings._masked_section` 的"key 只写不读"同一条纪律）。
@@ -628,7 +606,7 @@ class ModelReply:
     #:
     #: 把思维链并进 `text` 会让下游（抽取、判 JSON、逐字引文回验）拿到一段
     #: 不该被当成答案的散文；把它丢掉则会让"这次到底想没想"不可回答 ——
-    #: 而所有者 2026-10-10 的那句"感觉像不怎么过脑子"要的正是这个读数。
+    #: 而"感觉像不怎么过脑子"要的正是这个读数。
     #: 所以它单独一栏，且 `to_dict()` 只报字数（原文会随每次调用膨胀，
     #: 与 `tool_call_list` 不进 `to_dict()` 同一条纪律）。
     reasoning: str = ""
@@ -639,7 +617,7 @@ class ModelReply:
     tokens_out: int = 0
     #: 输入 token 里缓存命中的那一部分（上游 `usage.prompt_cache_hit_tokens`）。
     #:
-    #: ## 为什么必须单独有一格（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
+    #: ## 为什么必须单独有一格（「花销计算标准与供应商定价吻合」）
     #:
     #: 供应商的账单价目表不是一个价：命中缓存的输入、未命中缓存的输入、输出
     #: 是三档不同的单价（DeepSeek 的定价页就是这么登的）。只记 `tokens_in` 一个数，
@@ -806,7 +784,7 @@ class ModelGateway:
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        # 请求体里没有 `max_tokens`（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）：
+        # 请求体里没有 `max_tokens`（「我们不卡 token，只卡总花销的钱」）：
         # 额度交回上游 —— 真调用对照过，上游缺省比我们原先给的那一栏更宽
         # （见 `ModelSpec` 那一格上面的读数）。我们这一侧只留"钱"和"墙钟"两道闸。
         body: dict[str, Any] = {
@@ -1113,7 +1091,7 @@ def selftest() -> int:
             continue
         problems.append(f"负控：{label} 必须当场报错，不许静默落进某一档")
 
-    # 第四段：推理强度（2026-10-10 所有者裁定「所有智能体都要能 thinking，默认 High」）。
+    # 第四段：推理强度（「所有智能体都要能 thinking，默认 High」）。
     # 这一段刻意读请求体而不是读 `spec.reasoning_effort`：后者只能证明"想让它开"，
     # 只有前者能证明"真的发出去的请求上有这一栏"（改前缺的正是这一栏）。
     seen: list[dict[str, Any]] = []
@@ -1203,7 +1181,7 @@ def live_smoke() -> int:
     reply = gw.complete("只回答一个数字：1+1=?", scope="reason")
     print(f"[modelgw] live：{reply.to_dict()}")
     print(f"[modelgw] 配置（key 已脱敏）：{spec.redacted()}")
-    # 这一行是"模型过没过脑子"的直读（2026-10-10 所有者裁定的验收面）：
+    # 这一行是"模型过没过脑子"的直读（这是那条裁定的验收面）：
     # 强度 0 字思维链 = 请求发出去了但它没想，先查强度而不是先查模型。
     print(f"[modelgw] 思考读数：强度={spec.reasoning_effort} / "
           f"思维链 {len(reply.reasoning)} 字 / 答案 {len(reply.text)} 字")
