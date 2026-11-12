@@ -94,7 +94,10 @@ class _SearchLiterature:
         # "这一问根本没发出去"。两件事必须分开（三态纪律），而且这一档零写入。
         from .. import providers as P
 
-        decision = P.query_applicability(topic, self._query_description(topic, desc))
+        # 实际进查询串的那份描述只算一次：上面这条 applicability 判据与下面的
+        # `query_description` 读数用的是同一对 `(topic, desc)`（desc 此后不再变）。
+        query_desc = self._query_description(topic, desc)
+        decision = P.query_applicability(topic, query_desc)
         if not decision.applicable:
             return {
                 "ok": True, "admitted": False, "request_id": None,
@@ -154,7 +157,7 @@ class _SearchLiterature:
             "literature": self._literature_brief(lit_ids),
             # 实际进查询串的那份描述（非 ASCII 会被丢，见 `_query_description`）。
             # 给出来是为了"我写了描述但结果不对"这类问题能在读数上直接看出来。
-            "query_description": self._query_description(topic, desc),
+            "query_description": query_desc,
             # ---- 这一次问了谁（三态读数，键名与形状照工具面的同名读数）
             #
             # `providers_requested` 是"这一行点名了哪些源"（第一态为 None，
