@@ -3367,7 +3367,7 @@ def budget_face(root: str | Path) -> dict[str, Any]:
 def _tasks_running_of(root: Path) -> tuple[int | None, str]:
     """`tasks` 台账里 `status == "running"` 的行数 —— 「在飞」的唯一口径（三态）。
 
-    为什么只数 `running`（不数 `pending`）：业主 2026-11-01 的口径逐字是
+    为什么只数 `running`（不数 `pending`）：业主的口径逐字是
     「在飞（tasks 里 running）」；`pending` 是「未收口的活」（`Roster.tsx` 已经把它
     单列成"未收口的活 N 件"），把它并进「在飞」会让 82 这种收工现场读出 90。
 
@@ -3428,10 +3428,10 @@ def _stale_loops_of(root: Path, running: Sequence[dict[str, Any]]) -> tuple[list
 def live_face(root: str | Path) -> dict[str, Any]:
     """`GET /api/live` 的读模型：未收尾的循环 + 活进程 + 停机开关 + 近几条停机历史。
 
-    ## 两个数必须分开读（2026-11-01，82 的定格数据）
+    ## 两个数必须分开读（82 的定格数据）
 
-    改前这一面只有 `running`（"有 start 没 end 的循环记录"）与 `answer`（"有/没有"），
-    页面把前者叫成「在飞」。82 上于是出现两个都"对"、合起来是假的读数：
+    这一面若只给 `running`（"有 start 没 end 的循环记录"）与 `answer`（"有/没有"），
+    页面就会把前者叫成「在飞」。82 上于是出现两个都"对"、合起来是假的读数：
     名册三态合计「在飞 0」，而循环表列着 2 行 D（20:38:22 / 20:38:23）并写着"结论：有"。
     那 2 行是被父叫停打断的循环记录，宿主进程已退出 —— 它们不是活着的。
 
@@ -3772,7 +3772,7 @@ def handle_budget_view(handler: Any, params: Mapping[str, str],
                        query: Mapping[str, Sequence[str]]) -> None:
     """`GET /api/budget`：预算读数（总额度 / 已花 / 剩余 / 追加历史）。
 
-    名字末尾那个 view 后缀不是装饰（2026-10-12 判据当场抓到的）：写面 `writes.py` 里
+    名字末尾那个 view 后缀不是装饰（判据当场抓到的）：写面 `writes.py` 里
     也有一个同名的 `handle_budget`（`POST /api/budget`，追加额度），而
     `routes.handler_for` 是按名字在三条子表里找处理器的 —— 两个模块用同一个
     名字时，先被查到的那个（readers）会吃掉写请求：实测 `POST /api/budget` 回了
@@ -3814,11 +3814,11 @@ CHAT_LINE_CLIP = 4000
 #: 一次最多给多少条对话线（取最近的这么多条，总数照实报）。
 CHAT_LINES_MAX = 300
 
-#: 对话线的三种身份。业主 2026-10-13 要的是"用户 ↔ 主控"的对话框，所以前两档是主角；
+#: 对话线的三种身份。业主的对话框要的是"用户 ↔ 主控"的来回，所以前两档是主角；
 #: 其余角色在公共频道/私有频道说的话单列 `team` 一档（它们对看的人有用，但不是"对话"，
 #: 页面默认把它们折起来）。
 #:
-#: 2026-10-24（D-62）：`team` 这一档现在也收主控自己的公共频道广播 —— 分档判据是"这句话
+#: `team` 这一档也收主控自己的公共频道广播 —— 分档判据是"这句话
 #: 说给谁听"，不是"发信人是不是主控"（见 :func:`_chat_message_who`）。
 CHAT_WHO = ("user", "conductor", "team")
 
