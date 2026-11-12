@@ -802,14 +802,10 @@ def _put_text(value: Any, path: tuple[Any, ...], text: str) -> Any:
         out = {k: v for k, v in value.items()}
         out[head] = _put_text(value[head], rest, text)
         return out
-    if isinstance(value, tuple):
+    if isinstance(value, (list, tuple)):
         items = list(value)
         items[head] = _put_text(value[head], rest, text)
-        return tuple(items)
-    if isinstance(value, list):
-        items = list(value)
-        items[head] = _put_text(value[head], rest, text)
-        return items
+        return tuple(items) if isinstance(value, tuple) else items
     raise ValueError(f"路径 {path!r} 落在一个不可写的节点上（{type(value).__name__}）")
 
 
@@ -860,7 +856,7 @@ def prune_stream(value: Any, *, budget: ContextBudget,
         if end <= removed_start or start >= removed_end:
             # 完全在保留区（或完全被删——那种块的文本整段没了，但要留标记的那一次插在它前面）
             if start >= removed_end and not inserted:
-                kept = marker + ""
+                kept = marker
                 inserted = True
             out_parts.append((path, kept))
             continue
@@ -1002,8 +998,8 @@ def _spec_of(budget: "ContextBudget") -> tuple[CompactSpec | None, str]:
         return None, ("context_window 没配（或不是正整数）⇒ **读不到容量**那一档："
                       "既不静默当 0、也不阻断这一趟（照 DSH 自动路径：警告一次、带完整历史继续）")
     threshold = int(cw * float(budget.threshold_ratio))
-    retain = int(budget.retain_tokens) if int(budget.retain_tokens or 0) > 0 \
-        else int(cw * float(budget.retain_ratio))
+    configured = int(budget.retain_tokens or 0)
+    retain = configured if configured > 0 else int(cw * float(budget.retain_ratio))
     if retain >= threshold:
         raise TargetPressureConfigError(
             f"容量自相矛盾：retainTokens({retain}) >= thresholdTokens({threshold})"
@@ -1035,20 +1031,17 @@ def _pairing_cuts(items: Sequence[Any]) -> list[bool]:
     """
     n = len(items)
     cuts = [True] * (n + 1)
-    for i, item in enumerate(items):
+    for i, item in enumerate(items[:-1]):
         if not isinstance(item, Mapping) or str(item.get("role") or "") != "assistant":
             continue
         ids = {str(c.get("id") or "") for c in (item.get("tool_calls") or [])
                if isinstance(c, Mapping)}
         if not ids:
             continue
-        for j in range(i + 1, n):
-            nxt = items[j]
-            if not isinstance(nxt, Mapping) or str(nxt.get("role") or "") != "tool":
-                break
-            if str(nxt.get("tool_call_id") or "") in ids and j == i + 1:
-                cuts[j] = False          # 切在 assistant 与它的 tool 之间 = 切断配对
-                break
+        nxt = items[i + 1]
+        if (isinstance(nxt, Mapping) and str(nxt.get("role") or "") == "tool"
+                and str(nxt.get("tool_call_id") or "") in ids):
+            cuts[i + 1] = False          # 切在 assistant 与它的 tool 之间 = 切断配对
     return cuts
 
 
@@ -1175,11 +1168,12 @@ def compact_by_pressure(
     if spec is None:
         if strict:
             raise TargetPressureConfigError(problem)
+        texts = [_node_text(it) for it in items]
+        chars = sum(len(t) for t in texts)
         return CompactResult(
-            text=_render_kept([_node_text(it) for it in items]),
+            text=_render_kept(texts),
             dropped_count=0, kept_count=len(items),
-            original_chars=sum(len(_node_text(it)) for it in items),
-            kept_chars=sum(len(_node_text(it)) for it in items),
+            original_chars=chars, kept_chars=chars,
             compacted=False, summarizer="none",
             reason=f"读不到容量 ⇒ 未压缩，带完整历史继续（照 DSH 自动路径）：{problem}",
         )
