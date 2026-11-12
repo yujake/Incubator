@@ -174,6 +174,14 @@ def _edge_sort_key(edge: Mapping[str, Any]) -> tuple:
             str(edge["used_by"]), str(edge["dep_id"]))
 
 
+def _strip_id_prefix(text: str) -> str:
+    """去掉号前面的 `stmt:` / `concept:` 前缀（两种读法共用这一处口径）。"""
+    for prefix in ("stmt:", "concept:"):
+        if text.lower().startswith(prefix):
+            return text[len(prefix):].strip()
+    return text
+
+
 # ---------------------------------------------------------------- 索引
 
 
@@ -234,7 +242,7 @@ class LedgerIndex:
             if not sid:
                 continue
             kind = str(row.get("kind") or "")
-            proof_nos = [int(no) for no, _text in VR.proof_list(dict(row))]
+            proof_nos = [int(no) for no, _text in VR.proof_list(row)]
             nodes[sid] = {
                 "stmt_id": sid,
                 "kind": kind,
@@ -286,11 +294,7 @@ class LedgerIndex:
         找不到且是十进制数字时补零到 `schema.ID_DIGITS` 位再找一次（旧数据里的
         4 位号与"少写前导零"是同一条命题）。不做任何 `kind` 过滤 —— 概念平权。
         """
-        text = str(value or "").strip().strip("`'\"“”《》").strip()
-        for prefix in ("stmt:", "concept:"):
-            if text.lower().startswith(prefix):
-                text = text[len(prefix):].strip()
-                break
+        text = _strip_id_prefix(str(value or "").strip().strip("`'\"“”《》").strip())
         if text in self.nodes:
             return text
         if text.isdigit():
@@ -338,11 +342,7 @@ class LedgerIndex:
                    "给命题号（`stmt:000123` / `000123`）或标签 / 关键字")
             out.update(why=why, reason=why)
             return out
-        body = raw
-        for prefix in ("stmt:", "concept:"):
-            if body.lower().startswith(prefix):
-                body = body[len(prefix):].strip()
-                break
+        body = _strip_id_prefix(raw)
         if body.isdigit():
             got = SL.by_id(rows=self.rows, stmt_id=body)
             out.update(mode=SL.MODE_ID, scanned=int(got["scanned"]),
