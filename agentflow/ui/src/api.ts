@@ -6,8 +6,7 @@
  * 1. 路径只在 ENDPOINTS 里写一次 —— `tests/test_webui_contracts.py` 的 A 条把
  *    这里的路径字面量集合与后端 `webui/routes.py` 的 ROUTES 逐字比对：后端有的
  *    前端必须逐条声明，前端多写一个后端没有的也会红。**谁有多少条不在这里抄** ——
- *    抄一份就会与那边漂移（这一段此前写着"写面只到 W3，停/提交/设置还没落地"、
- *    又漏了 /api/run 与 /api/task，而那七条写端点早已全部接线）。
+ *    抄一份就会与那边漂移。
  * 2. 失败不许折成空读数：HTTP 非 2xx 与网络故障都抛 ApiError，三态走 `tri`
  *    （`unreadable` = 没查成），由页面渲染成 TriState。绝不返回空对象装作读到了。
  * 3. 写请求带 X-CSRF-Token（从 `<meta name="csrf-token">` 读；服务端每进程换一个）。
@@ -47,14 +46,14 @@ import type {
 export const ENDPOINTS = {
   state: "/api/state",
   runIndex: "/api/run-index",
-  // 2026-11-02（业主裁定「甲」）：趟次档案 —— 从事件流现算，不读也不落
+  // 裁定「甲」：趟次档案 —— 从事件流现算，不读也不落
   // `index/run-index.json`。与 runIndex 是两格并排的独立读数。
   runDigest: "/api/run-digest",
   run: "/api/run/{sid}",
   runEvents: "/api/run/{sid}/events",
   evidence: "/api/evidence",
   artifacts: "/api/artifacts",
-  // 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）：文献库那一面。
+  // 文献库那一面。
   // 只读一条：只算「正式入库」的文献，每条带「被哪些命题／哪一份证明用过」，
   // 且下载那一格要与盘上的文件核过（在 / 不在 / 读不到）。没有配对的 POST。
   literature: "/api/literature",
@@ -71,20 +70,18 @@ export const ENDPOINTS = {
   usage: "/api/usage",
   statusReports: "/api/status-reports",
   chat: "/api/chat",
-  // 2026-10-21（业主的「名册监视」）：整棵名册树（父/子/绝对编号/角色/深度/收件箱三格）。
+  // 整棵名册树（父/子/绝对编号/角色/深度/收件箱三格）。
   // 只读一条 —— 这个端点在路由表里没有配对的 POST，前端也不该有写它的函数。
   roster: "/api/roster",
-  // 2026-10-23（业主：「把两档缓存落地为用户使用系统时可调用的工具」）：
   // 两档提示词缓存的状态读数（只读）与预热（写，会花钱）。两条的形状与
   // `webui/cacheface.py` 的两个处理器逐字对应。
   cache: "/api/cache",
   cacheWarm: "/api/cache/warm",
-  // 2026-10-24（业主：「ui侧加一个大栏专门显示各角色错误动作计数」）：
-  // 两条都只读。第一条是 `readouts.errors_readout(root)` 逐字（五个键），
+  // 错误动作的两条只读端点：第一条是 `readouts.errors_readout(root)` 逐字（五个键），
   // 第二条是类目 → 那一句含义（真身 `errorstats.ERROR_CATEGORIES`）。
   errors: "/api/errors",
   errorCategories: "/api/errors/categories",
-  // 2026-11-01（块 3）：论文包三块一次读（A 证明 / B 结构 / C 收工）+ 原文窗口。
+  // 论文包三块一次读（A 证明 / B 结构 / C 收工）+ 原文窗口。
   // 两条都只读；`package` 的入参与 `acceptance` 同源（project_dir / report_path /
   // cap_usd / sid），`source` 只吃 path / line / match。
   package: "/api/package",
