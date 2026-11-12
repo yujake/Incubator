@@ -574,8 +574,7 @@ class HttpDownloader:
     2. 流式：边读边写边算 sha256，内存占用与文件大小无关。
     3. 镜像回退：直连失败后依次尝试镜像；每个 URL 各自享有完整重试预算。
     4. 不覆盖已有文件：同名时追加短哈希后缀，避免两次下载互相踩踏。
-       （改前这里写的是"``sha256`` 已在 `literature.download` 里承担『重复文件』
-       判定的职责"—— 那句话与实现不符：全仓没有任何判重路径读
+       （`sha256` 不是判重键：全仓没有任何判重路径读
        `literature.download.sha256`，它只是"这份字节长这样"的证据。
        同族的两处声明修正见 `dedup` 模块 docstring 与登记册 `F-9`。）
     """
@@ -925,8 +924,7 @@ class HttpDownloader:
         if written == 0:
             # `F-5`：0 字节的 200 响应不是"下载成功"。
             #
-            # 缺陷（2026-09-26 全面体检 · 子代理 F 实测，`temp/auditF-probe3.txt` [L] 段）：
-            # 改前 `written` 不参与成功判定，于是"这个 URL 什么都没给"落成一个空文件 +
+            # 缺陷：`written` 不参与成功判定时，"这个 URL 什么都没给"落成一个空文件 +
             # 空串的 sha256 + `ok=True`；`agent_a._stage_download` 按 `res.ok` 记
             # `download.status='ok'`，B 随后把它抽成 `pages=[]`，结论链变成
             # "下载成功 + 扫描件需要 OCR"。`schema.DOWNLOAD_STATUSES` 的 `ok` 从此
