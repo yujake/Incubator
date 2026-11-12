@@ -1,30 +1,14 @@
 # -*- coding: utf-8 -*-
 """角色 L（Lean 形式化者）的声明：动作表 + 边 + 写集 + 职责与门面。
 
-## 这个角色是怎么来的（业主 2026-10-22 的施工单）
+## 协作面：B 是唯一入口，L 只派 C
 
-照 E 的 Lean 面复制出一个人：E 里与 Lean 开关 / 形式化有关的动作与实现搬过来，
-E 自己一行不删、行为不改。
-
-## 协作面：B 是唯一入口，L 只派 C（业主 2026-10-22 晚的最终裁定）
-
-裁定原文（逐字）：
-
-> 「L 的协作面特别简单：只有 B 可以派 L，L 允许派 C 来梳理证明链，消费 B 的定理证明库，
->   可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新得到 V 签，
->   若缺陷严重，B 应通知 D 开展研究处理证明难点。」
-
-当前生效的唯一口径（2026-10-22 23:25 按业主最终裁定写死，别再改这一行）：
+当前唯一口径（这一行是权限面，别只改一处）：
 
 - 入边只有 `B → L`；出边只有 `L → C`。除 B 之外没有任何角色能派 L，L 也只派 C；
 - 用户那条"指定单条执行"是「入口不是边」：`run-agent L` 直接起，不经过
   `ALLOWED_EDGES` —— 所以它不进下面这张表，也「不许为它加边」（加边就等于把它
-  挂成流水线的一环）；
-- 四版历史逐条留档（别删，它记的是"谁能让 L 干活"这件事被改过几次）：
-  1. 空边集 + 不可召唤（协作面不搭）；
-  2. `F → L`（"F 需要一个形式化下游"）；
-  3. 撤 `F → L`（业主 B-5「要一条才做一条」）；
-  4. 当前这一版：`B → L` + `L → C`（业主 2026-10-22 晚最终裁定，逐字见上）。
+  挂成流水线的一环）。
 
 四条落点各在哪一格：
 
@@ -46,9 +30,7 @@ Lean 关着时这条协作面整条看不见：L 不在角色表里、`formal.*`
 
 ## 动作：三格（`check_formal` / `formalize` / `record`）
 
-E 的动作表有五行：实验（`run_experiment` / `run_script_experiment`）、形式化
-（`check_formal`）、查询（`evidence_for` / `list_experiments`）。L 只搬形式化这一路，
-并把它拆成三个落点各不相同的动作：
+L 只搬形式化这一路（E 的动作表里那一格），并把它拆成三个落点各不相同的动作：
 
 1. `check_formal` —— 与 E 的同名动作逐字同义：把源码交给 `verify.check_formal`
    （桥接层的唯一实现）真跑一次，按检查器原话给出判定。L 只是多一道前置自检
@@ -57,36 +39,33 @@ E 的动作表有五行：实验（`run_experiment` / `run_script_experiment`）
    `code/formal/<声明名>.lean`、再交给同一个桥接层真跑，结论三态
    （`verified` / `failed` / `unknown`）。E 那边这一格是"先 `fs.write` 再
    `run_experiment(method=formal)`"两步拼出来的（E 的 policy 逐字要求把内联源码
-   落进工作区）；L 把它收成一个动作，是因为业主要看见"L 真的写得出 Lean 代码、
-   真的能干活"，而两步拼装的路径在"写没写盘"这件事上没有任何机器判据。
+   落进工作区）；L 把它收成一个动作，是因为两步拼装的路径在"写没写盘"这件事上
+   没有任何机器判据。
 3. `record` —— 把一次形式化检查登记成 `experiments` 表的一行（`method="formal"`）。
-   业主第二句：「L 不写 experiments ⇒ verified 进不了证据链」。这一格只登记
-   形式化实验行，它不动 `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签。
+   L 不写 experiments ⇒ verified 进不了证据链。这一格只登记形式化实验行，它不动
+   `statements`：形式化 ≠ 审过，命题升档仍然要 V 的那一签。
 
 副作用与外部性两根轴都如实声明：`formalize` 写本地文件 + 起检查器子进程
 （`write_local` + `external="exec"`），`check_formal` 只读 + 起子进程
 （`read` + `external="exec"`），`record` 写一行 `experiments` + 起子进程
-（`write_local` + `external="exec"`）。这与 E 的同名动作同一口径（E 的 `check_formal`
-在 `specs/e.py` 里就是这么写的，长理由也在那里）。
+（`write_local` + `external="exec"`）。这与 E 的同名动作同一口径（长理由在 `specs/e.py`）。
 
-## 写集：只有 `experiments` 一格（2026-10-22 第二批之前是空集）
+## 写集：只有 `experiments` 一格
 
 L 的产出是三样：盘上的 `.lean`、检查器原话、以及 `record` 落下的那一行实验。
 前两样不是表行，第三样是 —— 所以 `write_set=frozenset({"experiments"})`。
 刻意不含 `statements`：那一格是"命题升档"的位置，只有 V 的签字与 F/B 的登记能碰。
 写集里没有它，"L 绕过 V 签"在结构上不可能（不是靠纪律）。
 
-## 2026-10-22 第二班：忠实复述变成机器读数（本文件改的那一格）
+## 忠实复述是机器读数，不是一句自述
 
-审计里 L 唯一的硬缺口是"忠实复述 B 的证明链路"只有文字义务、没有读数：`formalize`
-的 `claim` 是一段自由文本，于是"它形式化的到底是不是 B 登记的那一条"没有任何机器判据。
-本班只动 `formalize` 这一格（`check_formal` 一字不改）：
+`formalize` 的 `claim` 是一段自由文本，于是"它形式化的到底是不是 B 登记的那一条"
+需要机器判据（`check_formal` 不涉及这一点）：
 
 1. 参数多一格 `statement_id`（被形式化的那一条在 `statements` 表里的编号）。它是
-   可选而不是必填 —— 工具面 `formal.formalize` 今天还不收它（那一格归另一路改），
-   声明成必填会让每一次真实调用都缺一格。不给编号时的唯一合法来源是"claim 与台账
-   某一行正文逐字相同且唯一"（实现在 `agent_l/formalize.py`，读数里
-   `statement_source` 说明这一趟用的是哪一条来源）；
+   可选而不是必填 —— 工具面 `formal.formalize` 还不收它，声明成必填会让每一次真实
+   调用都缺一格。不给编号时的唯一合法来源是"claim 与台账某一行正文逐字相同且唯一"
+   （实现在 `agent_l/formalize.py`，读数里 `statement_source` 说明这一趟用的是哪一条来源）；
 2. 摘要里写进"源码怎么标落点"的约定（`-- step <k>` / `-- assume <文本>`）：那是
    模型唯一看得见这条约定的地方（提示词只列必填参数，见
    `agent_prompts._params_hint`），所以它必须随动作声明一起走；
@@ -95,14 +74,14 @@ L 的产出是三样：盘上的 `.lean`、检查器原话、以及 `record` 落
    其中 `checker_status` 与 `status` 是刻意分开的两格：前者是检查器原话，
    后者是叠加了逐步对照之后的综合结论 —— "机器核过了"不等于"这一趟算数"。
 
-判据在 `tests/test_l_faithfulness_is_measurable.py`（六条，每条都写明改前红）。
+判据在 `tests/test_l_faithfulness_is_measurable.py`（六条）。
 
 ## 本文件在 `.noai-paths` 里的状态
 
-2026-10-22 第二批起本文件已登记进 `.noai-paths`（`[category: auth-audit]`）：
-它现在有边（`B → L` 那条入边的落点之一是本文件的 `summonable`）、有写集（`experiments`）、
-有可召唤性 —— 那三样正是清单里其余 `specs/<角色>.py` 被登记的同一条理由
-（改它等于改权限面）。两处清单（`.noai-paths` 与 `AGENTS.md`）必须逐条一致，
+本文件已登记进 `.noai-paths`（`[category: auth-audit]`）：它有边（`B → L` 那条
+入边的落点之一是 `summonable`）、有写集（`experiments`）、有可召唤性 —— 那三样正是
+清单里其余 `specs/<角色>.py` 被登记的同一条理由（改它等于改权限面）。两处清单
+（`.noai-paths` 与 `AGENTS.md`）必须逐条一致，
 一致性由 `python scripts/noai_gate.py --check-consistency` 判（退出码 0 = 一致）。
 """
 from __future__ import annotations
@@ -123,7 +102,7 @@ from ..agentspec import (
     _obj,
 )
 
-#: 本角色的动作表。两格都只有 Lean 形式化这一路。
+#: 本角色的动作表：三格都只有 Lean 形式化这一路。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "L", "formalize",
@@ -146,15 +125,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # 的 `checker_name` 是同一个理由，那边逐字登记过）。L 从一开始就叫
         # `declaration_name`，于是动作面与工具面没有"名字对不上"的接缝要登记。
         #
-        # `statement_id` 是 2026-10-22 第二班加的（把"忠实复述 B 的证明链路"从文字义务
-        # 变成机器读数）：它今天只在动作面上有，工具面 `formal.formalize` 还没收它
-        # （那一格由另一路改），所以它按"动作面独有参数"登记在
+        # `statement_id` 是动作面独有的一格（把"忠实复述 B 的证明链路"从文字义务
+        # 变成机器读数）：它今天只在动作面上有，工具面 `formal.formalize` 还没收它，
+        # 所以它按"动作面独有参数"登记在
         # `capabilities._KNOWN_ACTION_ONLY_PARAMS`（导入期第 [9] 条要求有出处）。
         # 不写进 `required`：工具面还没有它，声明成必填会让每一次真实调用都缺一格。
         _obj({"claim": _S, "source": _S, "declaration_name": _S, "statement_id": _S,
-              # 2026-10-22 晚（业主裁定「要指明对哪个路径做了形式化验证」）：
-              # `proof_no` 是这一趟验的第几份证明（1 = canonical，2 起在同行的 `proofs`
-              # 清单里）；`path_source` 记「这个号是谁选的」（B 指定 / 照 C 的建议 /
+              # 路径两格：`proof_no` 是这一趟验的第几份证明（1 = canonical，2 起在同行的
+              # `proofs` 清单里）；`path_source` 记「这个号是谁选的」（B 指定 / 照 C 的建议 /
               # L 自己决定）。两格在工具面同名同类型（两层对账逐名比），
               # 所以不登记进 `capabilities._KNOWN_ACTION_ONLY_PARAMS`。
               "proof_no": {**_I, "minimum": 1},
@@ -242,20 +220,18 @@ SPEC = AgentSpec(
         ),
         policy=(
             "形式化只认检查器真的说过的话：桥接层读不到检查器就说读不到，不许用模型的话代替。",
-            # 2026-10-25（审计 G/H/V/L 第 10 条）：这一格原来从「先看 TOOLCHAIN_FACTS 的第一行
-            # （开关）。那一行说已关闭时，这条路整条不适用……」写起 —— 那一档不可达：关着时
-            # 本角色不存在（`leanscope.require_visible` 抛 RoleHidden），提示词根本渲染不出来，
-            # 于是"关掉时怎么办"这一段只对着一个永远读不到它的读者说话。整块退役：开关这一档
-            # 只剩"开着"这一种存在形态，下面每条都以它为前提。
+            # 这一格不写"先看 TOOLCHAIN_FACTS 第一行、说已关闭时这条路不适用"：那一档
+            # 不可达 —— 关着时本角色不存在（`leanscope.require_visible` 抛 RoleHidden），
+            # 提示词根本渲染不出来，于是"关掉时怎么办"只对着一个永远读不到它的读者说话。
+            # 开关这一档只剩"开着"这一种存在形态，下面每条都以它为前提。
             "你只在开关开着时在场（关着时不是「跑不动」，是不存在）：下面每一条都以「这一趟 Lean "
             "形式化是开着的」为前提；开关状态仍以 TOOLCHAIN_FACTS 的第一行为准（那是读数，不是你要"
             "走的分支）。",
             "任何 Lean 调用之前先过自检（`leantoolchain` 的**五步**：解析 / 版本 / 正样例 / 反控 / Mathlib 与图论）。"
             "自检不是 usable 时，这一趟的全部形式化结论记 unknown 并把原因写清：不起检查器、"
             "不抛栈、不连撞同一条错误 —— 同一条失败只报一行，然后收手。"
-            # 2026-10-24：图论库已装进 _env（`lake exe cache get` + SimpleGraph 编译通过），
-            # 但提示词里 0 处提到它 ⇒ L 只会写自足文件或瞎猜 import。这一句把"库可用"与
-            # "到底该怎么 import"接上；可用性仍以自检第 ⑤ 步那条读数为准（不靠记忆）。
+            # 图论库可用时 import 走具体那一行，别拿 umbrella `import Mathlib` 硬撞：可用性
+            # 以自检第 ⑤ 步那条 Mathlib 读数为准（不靠记忆）。
             "要证图论命题时，库走 `import Mathlib.Combinatorics.SimpleGraph.Basic`（不要只写 umbrella "
             "`import Mathlib`：能过但更重）；它到底可不可用，看自检第 ⑤ 步那条 Mathlib 读数"
             "（`leantoolchain.mathlib_reading`）—— 读数说 absent/unusable 时如实回 unknown，"
@@ -273,16 +249,14 @@ SPEC = AgentSpec(
             "「命题可疑」与「我们没验」。",
             "试错要有代价意识：只改检查器原话指出的那一处，别整篇重写；改不动就把命题改小"
             "（有限、具体、能一次过的形态），或者如实记未核到并把检查器原话留下。",
-            # 2026-10-22 晚（业主的最终协作面裁定）：「L 允许派 C 来梳理证明链」。
-            # 用途必须写进 policy（不是只写在边表里）：模型要知道"派 C 是去做什么"，
+            # 派 C 的用途必须写进 policy（不是只写在边表里）：模型要知道"派 C 是去做什么"，
             # 否则这条边在真机上只会被当成"多一个可以召唤的名字"。
             "**派 C 只为一件事：梳理证明链**。把 B 登记的那条证明逐步摆成一张依赖链 —— "
             "哪一步依赖哪一步、哪一步是旁挂（没有下游用它）、哪一步是跳变（跨了好几步却只给"
             "了一句依据）、缺口在哪一步。C 只读分析，它不写台账、不改证明：结论回到你（或经你"
             "回到 B），不许指望它替谁落库。除 C 之外你派不动任何人（`forbidden_edge`），"
             "那是对的 —— 你的活是形式化，别把别人的活接过来。",
-            # 2026-10-22 晚（同一份裁定）：「可向 B 汇报形式化过程中遇到的困难、要求 B
-            # 完善证明并重新得到 V 签，若缺陷严重，B 应通知 D 开展研究处理证明难点。」
+            # 汇报的落点是 B 的收件箱：形式化失败或对不上时按受控形态交回 B。
             "**形式化失败或对不上时，交回 B（它是你唯一的出口）**：汇报按受控形态 —— "
             "命题号、失败类型（漏一步 `unfaithful_step` / 缺假设 `missing_hypothesis` / "
             "只能 sorry `sorry_needed` / 与台账对不上 `statement_mismatch`）、具体第几步、"
@@ -290,8 +264,7 @@ SPEC = AgentSpec(
             "（返回值 `report` 那一格：`reported` 才是 B 真的收到了）。改证明、重新过 V 的签"
             "都是 B 的事；若缺陷在路线本身，B 会通知 D 开展研究。你不要自己改台账里的命题，"
             "也不要越级找 D 或 V（`forbidden_edge`）。",
-            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
-            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
@@ -299,13 +272,12 @@ SPEC = AgentSpec(
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # p204（2026-10-27）：业主 2026-10-25 的三句裁定要做进**每个角色**的政策（不只是 M）：
-            # 「规范所有计时类任务申请的形式为：等待时间（或等待谁）+目的（必填）」；
-            # 「让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的」；
-            # 「计时到点后向智能体发送信息『目的+等待时间+时间到』」。
-            # 工具面的真身是 `tools/clock_tools.py` 那九件（`UNIVERSAL_TOOLS`：对十一个角色都发），
-            # 这一段只写"怎么用它"，不抄工具签名（签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（第 17 条逐个角色数过九件）。
+            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
+            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
+            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
+            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
+            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
+            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
             "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
             "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
             "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
@@ -351,14 +323,10 @@ SPEC = AgentSpec(
         "能思辨": "先问这条命题写下来还是不是原文那条：加强假设是最容易混过去的一种走偏。",
     },
     read_only=False,
-    #: 2026-10-22 晚（业主的最终协作面裁定）。裁定原文逐字见本文件模块 docstring 的
-    #: 「## 协作面：B 是唯一入口，L 只派 C」一节，此处不再重抄：同一段话抄两处，
-    #: 改一处漏一处就会逐字漂移，而没有任何检查会发现。
-    #: 这一格是那句话的"入边"那一半：`summonable=True`，而只有 B 的出边里有 L
-    #: （`specs/b.py::SPEC.edges`）。别处的每一个角色（A / C / D / E / F / G / H / M / V）
-    #: 都不许有到 L 的边，判据逐角色断言（`tests/test_l_collab_surface_is_exactly_this.py`）。
-    #: 这一格与被撤回的 B-5 口径（"要一条才做一条、谁都别派它"）的差别只在"谁来派"：
-    #: B-5 之后用户仍可以用 `run-agent L` 单条执行；现在多了唯一一条 B → L 的入口。
+    #: `summonable=True`，而只有 B 的出边里有 L（`specs/b.py::SPEC.edges`）。
+    #: 别处的每一个角色（A / C / D / E / F / G / H / M / V）都不许有到 L 的边，
+    #: 判据逐角色断言（`tests/test_l_collab_surface_is_exactly_this.py`）。
+    #: 用户仍可以用 `run-agent L` 单条执行：那是入口，不是边。
     summonable=True,
     #: L 的出边恰好一条：`C`（梳理证明链）。
     #:
@@ -367,7 +335,7 @@ SPEC = AgentSpec(
     #: （跨了好几步却只给了一句依据）、缺口在哪。C 只读分析，所以这条边不改任何写权限。
     #: 除 C 之外 L 不派任何人（判据逐角色断言）。
     edges=('C',),
-    #: 2026-10-22 第二批扩的（此前是空集）：`record` 会落一行 `experiments`。
+    #: `record` 会落一行 `experiments`（所以写集含它）。
     #: 刻意不含 `statements` —— 那一格是"命题升档"的位置，只有 V 的签字与 F/B 的
     #: 登记能碰；写集里没有它，"L 绕过 V 签"在结构上不可能（不是靠纪律）。
     #: 这一格与协作面无关：单条执行同样要落那一行实验。
@@ -379,14 +347,12 @@ SPEC = AgentSpec(
 )
 
 
-#: 2026-10-25（审计 G/H/V/L 第 10 条）：这一段原先有 `_action_summary` / `_tool_summary`
-#: 两个取摘要的函数与 `NO_LEAN_REPLACEMENTS` / `NO_LEAN_DROP_LINE_MARKERS` /
-#: `NO_LEAN_DROP_BLOCKS` 三张改写表（"关掉 Lean 之后 L 的文本改成什么样"）。
-#:
-#: 整块退役，理由是它「不可达」：`leanscope.LEAN_ONLY_ROLES` 只有 `L`，而关着时
-#: `require_visible` 抛 `RoleHidden` —— L 的提示词根本渲染不出来，那三张表因此没有任何
-#: 一行会被应用（`agent_prompts._apply_no_lean_variant` 拿到的是别人的文本，一条都匹配
-#: 不上）。留着它不是"多一层保险"，而是把一段读起来像现行政策的死字挂在声明旁边。
+#: 这一块已整块退役：`_action_summary` / `_tool_summary` 与三张 `NO_LEAN_*` 改写表
+#: 本该是"关掉 Lean 之后 L 的文本改成什么样"，但它「不可达」——
+#: `leanscope.LEAN_ONLY_ROLES` 只有 `L`，而关着时 `require_visible` 抛 `RoleHidden`，
+#: L 的提示词根本渲染不出来，那三张表因此没有任何一行会被应用
+#: （`agent_prompts._apply_no_lean_variant` 拿到的是别人的文本，一条都匹配不上）。
+#: 留着它不是"多一层保险"，而是把一段读起来像现行政策的死字挂在声明旁边。
 #:
 #: 关掉那一档该说的话仍在「能行动的那一档」说：B 的 `PROOF_CHANNEL_NO_LEAN`（它是唯一
 #: 能派 L 的人）与 G 的 `WRITING_SCOPE_NO_LEAN`（正文怎么写）。L 自己不需要"关掉时怎么办"
@@ -396,18 +362,18 @@ SPEC = AgentSpec(
 #: （不被任何代码读）：放在声明文件里，是为了让"为什么 L 的入边只有 B"在改权限面的
 #: 那个人眼前，而不是只活在某份报告的正文里。
 #:
-#: 2026-10-22 晚的最终裁定把入口定成"只有 B 可以派 L"（理由：B 是 `statements` 的
-#: 唯一登记方，所以"只让 B 派 L"结构上等于"L 形式化的东西一定出自 B 的库"，
-#: 而形式化的成本由那个登记证明的人来判断）。下列几条在那句话之后仍然不开：
+#: 入口是"只有 B 可以派 L"（理由：B 是 `statements` 的唯一登记方，所以"只让 B 派 L"
+#: 结构上等于"L 形式化的东西一定出自 B 的库"，而形式化的成本由那个登记证明的人来判断）。
+#: 下列几条仍然不开：
 #:
-#: - `F → L`：本批曾经开过又撤回。F 的攻坚是流水线的一环，挂在它下面就是把形式化
-#:   变成流水线的一步，而业主的裁定把这件事留给 B（B 有那条命题的登记与证明）。
+#: - `F → L`：F 的攻坚是流水线的一环，挂在它下面就是把形式化变成流水线的一步；
+#:   这件事留给 B（B 有那条命题的登记与证明）。
 #: - `E → L`：E 与 L 是同一个桥接层的两个门面（`agent_l._CheckFormalL` 继承
 #:   `agent_e._CheckFormal`）。开它等于让做实验的人绕过攻坚的人直接派形式化，
 #:   而它在今天也不必要：形式化只走 L 的 `formal.formalize` / `formal.check_formal` /
 #:   `formal.record`；E 的 `run_experiment(method="formal")` 已由动作面第一句以理由码
 #:   `formal_not_in_e` 拒绝（它落不出 proof 行，也不起任何检查器）。
-#: - `D → L`：D 是研究总控。裁定给 D 的位置是"B 判断缺陷严重时才被通知去开展研究"
+#: - `D → L`：D 是研究总控。D 的位置是"B 判断缺陷严重时才被通知去开展研究"
 #:   （`B → D`），不是"D 直接派 L"。D 派 L 会把"这一条值不值得付检查器成本"这个
 #:   判断从 B 手上拿走，而那个判断跟着登记证明的人。
 #: - `M → L`：主控不许直连 L（与 `M → F` / `M → V` 同一族：只走间接）。
