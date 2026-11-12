@@ -80,7 +80,7 @@ DEPENDENCY_COLUMNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("quote", ("引用",), "引用（F 的原话）"),
     ("stmt_id", ("命题号", "stmt"), "命题号（stmt:NNNNNN）"),
     ("step", ("步",), "用在哪一步"),
-    ("path_group", ("路径",), "路径号（path_group）"),
+    ("path_group", ("路径",), "路径号（第几条证明）"),
 )
 
 #: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像）。
