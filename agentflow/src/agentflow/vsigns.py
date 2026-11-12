@@ -499,15 +499,17 @@ def archive(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
         # 于是下一次写入把别人的条目全抹掉）。这里按"重建"处理并保留问题读数。
         out["problems"].append(f"{problem} ⇒ 按签文件重建后再写")
         doc = None
-    entries = [dict(e) for e in ((doc or {}).get("signs") or []) if isinstance(e, Mapping)]
+    entries = [e for e in ((doc or {}).get("signs") or []) if isinstance(e, Mapping)]
     fresh = _entry_of(sign)
     entries = [e for e in entries
-               if str(e.get("artifact_sha") or "") != fresh["artifact_sha"]]
-    entries.append(fresh)
+               if str(e.get("artifact_sha") or "") != fresh["artifact_sha"]] + [fresh]
+    # `_sorted_entries` 自己会把每一项复制成新 dict，所以这里不再逐项 `dict(e)`；
+    # 排序也只做一次 —— `updated_at` 与 `signs` 从同一份排好的清单取（改前那两格
+    # 各调一次 `_sorted_entries`：两次全量复制、两次排序）。
+    ordered = _sorted_entries(entries)
     body = {"schema": INDEX_SCHEMA,
-            "updated_at": str(_sorted_entries(entries)[-1].get("at") or "")
-            if entries else "",
-            "signs": _sorted_entries(entries)}
+            "updated_at": str(ordered[-1].get("at") or "") if ordered else "",
+            "signs": ordered}
     try:
         _write_atomic(index_path(root), body)
     except OSError as exc:
@@ -614,7 +616,7 @@ def signed_table(root: Any) -> dict[str, Any]:
                 f"{str(doc.get('artifact_sha') or '（空）')[:12]}…）⇒ 这一份不进表")
             continue
         entries.append(_signed_entry_of(doc, listed=got in listed))
-    out["entries"] = _sorted_entries(entries) if entries else []
+    out["entries"] = _sorted_entries(entries)
     out["count"] = len(out["entries"])
     out["checked"] = True
     in_index = [str(e.get("artifact_sha") or "") for e in out["entries"]]
