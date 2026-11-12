@@ -44,8 +44,9 @@ class _WriteReport:
         path.parent.mkdir(parents=True, exist_ok=True)
 
         conf_count = {"high": 0, "medium": 0, "low": 0}
-        for qid, res in analyses.items():
-            conf_count[res.get("confidence", "low")] = conf_count.get(res.get("confidence", "low"), 0) + 1
+        for res in analyses.values():
+            key = res.get("confidence", "low")
+            conf_count[key] = conf_count.get(key, 0) + 1
 
         lines: list[str] = []
         lines.append("# D 初步研究报告")
@@ -77,7 +78,8 @@ class _WriteReport:
         # ---- 状态统计
         by_status: dict[str, int] = {}
         for r in rows:
-            by_status[r.get("status", "?")] = by_status.get(r.get("status", "?"), 0) + 1
+            status = r.get("status", "?")
+            by_status[status] = by_status.get(status, 0) + 1
         lines.append("## 1. 问题台账总览")
         lines.append("")
         lines.append("| 状态 | 数量 |")
@@ -101,6 +103,8 @@ class _WriteReport:
         # ---- 逐问题
         lines.append("## 2. 逐个问题")
         lines.append("")
+        # 请求表按报告期读一次：逐问题重建同一张索引是把全表重扫一遍（本节只读它）。
+        req_index = {str(x.get("request_id")): x for x in self.store.rows("search_requests")}
         for r in rows:
             qid = str(r.get("question_id"))
             res = analyses.get(qid)
@@ -171,7 +175,8 @@ class _WriteReport:
             # ---- 分段：链条自身的步子（L1）vs 相关概念带来的上下文（L2）
             # 这个划分不是美化排版，而是"按代号溯源"的可读性前提：读者要能顺着链读。
             chain_claims = [by_rid[r] for r in chain_ids if r in by_rid]
-            context_claims = [c for c in claims if str(c["relation_id"]) not in set(chain_ids)]
+            chain_set = set(chain_ids)
+            context_claims = [c for c in claims if str(c["relation_id"]) not in chain_set]
 
             if chain_claims:
                 lines.append("")
@@ -264,7 +269,6 @@ class _WriteReport:
             wait = r.get("waiting_request_ids") or []
             if wait:
                 lines.append(f"- 已提交（等待中）：{', '.join(wait)}")
-            req_index = {str(x.get("request_id")): x for x in self.store.rows("search_requests")}
             for rid in wait:
                 req = req_index.get(rid) or {}
                 lines.append(
@@ -793,7 +797,7 @@ class _WriteReport:
 
         返回 `{carried_missing, checked, statement_ids, reason}`。
         """
-        rows = [dict(r) for r in (carried_rows or [])]
+        rows = carried_rows or []
         if rows:
             return {"carried_missing": False, "checked": True, "statement_ids": [],
                     "reason": f"携带单上有 {len(rows)} 条（这一趟不缺）"}
@@ -808,19 +812,21 @@ class _WriteReport:
         # 号集合的构造只有一处（查口 `index_by_id`）；没号的行由它跳过。
         on_ledger = set(SL.index_by_id(statements))
         refs: list[str] = []
+        referenced: set[str] = set()
         for row in statements:
             sid = str(row.get("stmt_id") or "")
             used = [str(x) for x in (row.get("derived_from") or [])]
             used += _DS.stmt_refs(str(row.get("proof_text") or ""))
-            hit = [x for x in used if x in on_ledger and x != sid]
+            hit = sorted({x for x in used if x in on_ledger and x != sid})
             if hit:
-                refs.append(f"{sid}→{'、'.join(sorted(set(hit)))}")
+                refs.append(f"{sid}→{'、'.join(hit)}")
+                referenced.update(hit)
         if not refs:
             return {"carried_missing": False, "checked": True, "statement_ids": [],
                     "reason": "携带单是空的，而账上没有任何一条在册命题被引用（自足 ⇒ 不缺）"}
         return {
             "carried_missing": True, "checked": True,
-            "statement_ids": sorted({x for item in refs for x in item.split("→")[1].split("、")}),
+            "statement_ids": sorted(referenced),
             "reason": ("携带单是空的，而账上这几条命题引用了在册命题："
                        + "、".join(refs)
                        + " ⇒ 这份研究手稿缺携带单（缺的不是『没有可携带的稿』，是那几份稿"
@@ -962,7 +968,7 @@ class _WriteReport:
             tid = ""
         if not tid:
             return "", "这一趟没有召唤号（直调 `AgentD` / 不在 summon 上下文里）"
-        row = next((dict(r) for r in self.store.rows("tasks")
+        row = next((r for r in self.store.rows("tasks")
                     if str(r.get("task_id")) == tid), None)
         if row is None:
             return "", f"召唤号 {tid} 在 tasks 台账里读不到 ⇒ 判不出父是谁"
@@ -989,7 +995,7 @@ class _WriteReport:
         `stmt_id` / `manuscript_id` / `deps_written` / 拒信原文（截断）；命题正文与
         证明正文一律不写（G 拿东西一律去台账读，见 `specs/g.py` 的转交规则）。
         """
-        results = [dict(r) for r in (delivery.get("results") or []) if isinstance(r, Mapping)]
+        results = [r for r in (delivery.get("results") or []) if isinstance(r, Mapping)]
         ok_rows = [r for r in results if r.get("ok")]
         bad_rows = [r for r in results if not r.get("ok")]
         if not results:
@@ -1221,7 +1227,7 @@ class _WriteReport:
             return rec
         exp_row = None
         try:
-            exp_row = next((dict(r) for r in self.store.rows("experiments")
+            exp_row = next((r for r in self.store.rows("experiments")
                             if str(r.get("experiment_id") or "") == eid), None)
         except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许当成"没有这条实验"
             rec["error"] = f"读不到 experiments：{type(exc).__name__}: {exc}"
@@ -1329,8 +1335,8 @@ class _WriteReport:
         if not delivery.get("checked"):
             lines.append(f"（这一趟没有递交：{delivery.get('why') or '（原因缺失）'}）")
             return lines
-        results = [dict(x) for x in (delivery.get("results") or [])]
-        addressed = [dict(x) for x in (delivery.get("addressed") or [])]
+        results = list(delivery.get("results") or [])
+        addressed = list(delivery.get("addressed") or [])
         lines.append(
             f"D 的这一笔代码调用（`AgentB.register_statement`）覆盖 "
             f"{int(delivery.get('rows') or 0)} 条携带行，B 收下 "
@@ -1338,12 +1344,14 @@ class _WriteReport:
         # 依赖边读数（全部 N / 其中命题→命题 M）：逐条现算，合计写一行 —— 这一行是
         # "依赖面到底建起来没有"在报告里的唯一一句话（改前只有逐行的单个数）。
         edge_rows: list[tuple[str, int, int, str]] = []
+        edge_by_stmt: dict[str, tuple[int, int, str]] = {}
         for r in results:
             sid = str(r.get("statement_id") or "")
             if not sid:
                 continue
             total, from_statement, why = self._dependency_edges(sid)
             edge_rows.append((sid, total, from_statement, why))
+            edge_by_stmt[sid] = (total, from_statement, why)
         unread = [(sid, why) for sid, total, _m, why in edge_rows if total < 0]
         if edge_rows:
             if unread:
@@ -1367,7 +1375,7 @@ class _WriteReport:
                    else f"exp:{r.get('experiment_id')}")
             sid = str(r.get("statement_id") or "")
             if sid:
-                total, from_statement, _why = self._dependency_edges(sid)
+                total, from_statement, _why = edge_by_stmt[sid]
                 cell = ("未读到" if total < 0 else f"{total} / {from_statement}")
             else:
                 cell = "-"
