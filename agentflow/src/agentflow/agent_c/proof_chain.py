@@ -1,39 +1,41 @@
 # -*- coding: utf-8 -*-
-"""角色 C 的动作 `proof_chain`：一条成果的最短证明依赖链（业主 2026-10-09）。
+"""角色 C 的动作 `proof_chain`：一条成果的最短证明依赖链。
 
-> 「想想C怎么找最短依赖链？总归得在记录定理和证明时同样把依赖写清，直到找到最根上的>  依赖（某文献或某无前提依赖的自证定理）为止」> 「B走乙。由于B这边出了多依赖写
-法，C的分析需要做适配」> 「别名按乙，毕竟定理也可能有别名」
+设计（`draft/97` §12.2 / §14.4d / §15.0）：图 = `statements`（定理/定义/引理/命题/
+概念）+ `experiments` + `literature` 为节点，`dependencies` 为边（有向：`used_by` →
+被依赖的那一端）。
 
-设计（`draft/97` §12.2 / §14.4d / §15.0）：
-
-- 图：节点 = `statements`（定理/定义/引理/命题/概念）+ `experiments` + `literature`；边 = `dependencies`
-（有向：`used_by` → 被依赖的那一端）；- 坏尾巴：`used_by` 里的 `#pN` 读不懂（`#pabc` / `#p0` / 多段 …）时那条边不进索引（不折成
-`#p1`，也不折成任何证明号），原串落在 payload 的 `bad_used_by` 并给一条 warning —— 不留痕的
-话它会静默消失：链照样 `ok=True`，而一条承重边不在任何一组里；- 组与证明：一条 `used_by` 的依赖图里，同一 `(证明号, path_group)` 内的多条边 = AND
-（都要走到根）；不同 `(证明号, path_group)` = OR（任一条走到根即算到根）；不同
-`proof_no` 也是 OR。这条规则在每一层都成立（业主 2026-10-22 批准改语义：改前它只在
-顶层成立，子命题那一层退化成"全都要"）。读数给每个 `(证明号, 组)` 一条链并挑最短的
-那一条（`best_proof_no` / `best_group`）；- 长度：`length` 报这条候选路径的最短可行分支
-（组内取最长的边、分支间取最短的分支）；只有全不可行时才报"最深的那条已走前缀"并在
-`why` 里写明没有可行分支；- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
-`evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 2026-10-21 之前要求 
-`proof_text == "concept:primitive"`，那个哨兵正是 mp3 那 1143 条污染行的来源，现在按"定义在不在"判，历史行带哨兵照旧是根）。
-"没有边又没有证明证据" ⇒ 依赖没写（`unknown`），不是根；- 边界：环 / 超 `max_depth` / 悬空边 / 依赖没写，都按"哪条分支、为什么不可行"
-逐条进那一组的 `failures`（`blocking` 说明它是不是那一组不可行的原因；备选分支断了
-不影响另一条走到根），`cycle` / `truncated` 只描述真正挡住这条路的那些；跨组汇总按节点
-去重（多写一组路径不许把"牵动多少节点"吹大）；- 坏尾巴（`used_by` 的 `#pN` 读不懂）且
-没有可用分支 ⇒ 这一趟没查成（`unknown` + `ok=False` + `closed=False`），不许读成
-"已经是根"；- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。- 形状（业主 2026-10-22）：payload 另带 `path_shapes` 一列 —— 每条候选路径
-（`(证明号, 组)` 一行）的跳数 / 大步骤数 / 无依赖跳变 / 旁挂节点 / 承重边 /
-同目标还有几条别的路径（口径逐条写在 `path_shape.py`）。这一列只摆形状、不给分数：
-"哪一条更自然"由模型判（`agent_skills.py` 里 C 那一岗的「最自然路径」）。- 前沿（业主 2026-10-22 第二批）：
-`max_depth` 是"一批能往回搜多深"，不是"这条路最多几跳"。所以因深度用尽而停下的
-那几个节点必须如实交出来：payload 另带 `frontier` / `frontier_checked` /
-`frontier_note` 三格，每条给 `{node, from, via_dep_id, proof_no, path_group,
-depth_reached, why, next_hint}`，`why` 只取 `depth_limit`。下一批把 `target` 换成
-`frontier` 里的节点接着搜，两批的形状交给 `path_shape.join_segments` 核对接缝
-（那是核对材料，不是"框架替模型拼链"）。没有前沿时给空列表而不是省略这一格；
-三态（没有前沿 / 有前沿 / 没查成）由 `frontier_checked` 分开。
+- 坏尾巴：`used_by` 里的 `#pN` 读不懂（`#pabc` / `#p0` / 多段 …）时那条边不进索引
+  （不折成 `#p1`，也不折成任何证明号），原串落在 payload 的 `bad_used_by` 并给一条
+  warning —— 不留痕的话它会静默消失：链照样 `ok=True`，而一条承重边不在任何一组里。
+  坏尾巴且没有可用分支 ⇒ 这一趟没查成（`unknown` + `ok=False` + `closed=False`），
+  不许读成"已经是根"。
+- 组与证明：同一 `(证明号, path_group)` 内的多条边 = AND（都要走到根）；不同
+  `(证明号, path_group)` = OR（任一条走到根即算到根）；不同 `proof_no` 也是 OR。
+  这条规则在每一层都成立。读数给每个 `(证明号, 组)` 一条链并挑最短的那一条
+  （`best_proof_no` / `best_group`）。
+- 长度：`length` 报这条候选路径的最短可行分支（组内取最长的边、分支间取最短的分支）；
+  只有全不可行时才报"最深的那条已走前缀"并在 `why` 里写明没有可行分支。
+- 根只有三种：`lit:`（真实论文，正文里可照引）、无前提自证定理（没有边 +
+  `evidence_kind="proof"`）、概念（`kind="concept"` 且有定义 —— 按"定义在不在"判，
+  历史行上的 `concept:primitive` 哨兵照旧是根）。"没有边又没有证明证据" ⇒ 依赖没写
+  （`unknown`），不是根。
+- 边界：环 / 超 `max_depth` / 悬空边 / 依赖没写，都按"哪条分支、为什么不可行"逐条进
+  那一组的 `failures`（`blocking` 说明它是不是那一组不可行的原因；备选分支断了不影响
+  另一条走到根），`cycle` / `truncated` 只描述真正挡住这条路的那些；跨组汇总按节点去重
+  （多写一组路径不许把"牵动多少节点"吹大）。
+- 别名：`target` 允许给别名 ⇒ 读数里写 `matched_by: "label" | "alias"`。
+- 形状：payload 另带 `path_shapes` 一列 —— 每条候选路径（`(证明号, 组)` 一行）的跳数 /
+  大步骤数 / 无依赖跳变 / 旁挂节点 / 承重边 / 同目标还有几条别的路径（口径逐条写在
+  `path_shape.py`）。这一列只摆形状、不给分数："哪一条更自然"由模型判
+  （`agent_skills.py` 里 C 那一岗的「最自然路径」）。
+- 前沿：`max_depth` 是"一批能往回搜多深"，不是"这条路最多几跳"。因深度用尽而停下的
+  那几个节点必须如实交出来：payload 另带 `frontier` / `frontier_checked` /
+  `frontier_note` 三格，每条给 `{node, from, via_dep_id, proof_no, path_group,
+  depth_reached, why, next_hint}`，`why` 只取 `depth_limit`。下一批把 `target` 换成
+  `frontier` 里的节点接着搜，两批的形状交给 `path_shape.join_segments` 核对接缝（那是
+  核对材料，不是"框架替模型拼链"）。没有前沿时给空列表而不是省略这一格；三态由
+  `frontier_checked` 分开。
 """
 from __future__ import annotations
 from pathlib import Path
