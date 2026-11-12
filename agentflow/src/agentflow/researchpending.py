@@ -128,10 +128,12 @@ def _flag(value: Any) -> bool:
 def _ids(rows: list[Mapping[str, Any]], field: str, limit: int = 12) -> list[str]:
     """逐条点名（前 `limit` 个，保序去重）。"""
     out: list[str] = []
+    seen: set[str] = set()
     for row in rows:
         value = str(row.get(field) or "")
-        if value and value not in out:
+        if value and value not in seen:
             out.append(value)
+            seen.add(value)
         if len(out) >= limit:
             break
     return out
@@ -232,8 +234,13 @@ def pending_reading(store: Any) -> dict[str, Any]:
     conclusive = [r for r in active_experiments
                   if str(r.get("result") or "") in conclusive_results
                   and str(r.get("evidence_kind") or "") in verified_kinds]
-    propositions = [r for r in statements if str(r.get("kind") or "") != "concept"]
-    concepts = [r for r in statements if str(r.get("kind") or "") == "concept"]
+    propositions: list[Mapping[str, Any]] = []
+    concepts: list[Mapping[str, Any]] = []
+    for row in statements:
+        if str(row.get("kind") or "") == "concept":
+            concepts.append(row)
+        else:
+            propositions.append(row)
     # 被明确放弃的命题不算"在册的命题"：它的义务已经作废（`closing.statements_unsigned`
     # 对放过的那一档也不计入）。这里与它同一把尺。
     live_statements = [r for r in propositions
