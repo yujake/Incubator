@@ -221,12 +221,12 @@ class _Core:
         给出可核对的落点（关系代号、节点代号、矛盾对数与配对）。
         """
         if api == "neighbors":
-            nodes = [n for n in (res.get("nodes") or []) if isinstance(n, Mapping)]
+            nodes = [str(n.get("concept_id")) for n in (res.get("nodes") or []) if isinstance(n, Mapping)]
             return {
                 "concept_id": res.get("concept_id"),
                 "depth": res.get("depth"),
                 "node_count": len(nodes),
-                "nodes": [str(n.get("concept_id")) for n in nodes][:20],
+                "nodes": nodes[:20],
                 "edge_count": len(res.get("edges") or []),
                 "empty": bool(res.get("empty")),
             }
@@ -286,8 +286,10 @@ class _Core:
         ``any_success`` 为 False 时，基于该问题产生的结论必须标注
         「无 C 侧证据」并放弃确定语气（见 :meth:`_apply_c_evidence_caveat`）。
         """
-        ok = [q for q in queries if q.get("checked")]
-        failed = [q for q in queries if not q.get("checked")]
+        ok: list[Mapping[str, Any]] = []
+        failed: list[Mapping[str, Any]] = []
+        for q in queries:
+            (ok if q.get("checked") else failed).append(q)
         return {
             "attempted": len(queries),
             "ok": len(ok),
@@ -520,12 +522,14 @@ class _Core:
         try:
             with self.store.tx("research_questions", actor=self.actor, note="ingest_weak_clue") as tx:
                 rows = tx.rows("research_questions")
+                # 每行的关系代号集合只算一次：线索数 × 问题数会到几百，逐线索重算
+                # 是同一段文本被反复集合化（读到的还是同一批行）。
+                row_rids = [
+                    (r, {str(x) for x in (r.get("related_relation_ids") or [])}) for r in rows
+                ]
                 for clue in clues:
                     rids = {str(x) for x in (clue.get("relation_ids") or [])}
-                    target = next(
-                        (r for r in rows if rids & {str(x) for x in (r.get("related_relation_ids") or [])}),
-                        None,
-                    )
+                    target = next((r for r, rr in row_rids if rids & rr), None)
                     if target is None:
                         noted.append({"relation_ids": sorted(rids), "question_id": None,
                                       "reason": "没有共享这些关系代号的已有问题 ⇒ 只留在报告与 last_ingest 里"})
@@ -623,6 +627,7 @@ class _Core:
         out: list[dict] = []
         skipped: list[str] = []
         weak_clues: list[dict] = []
+        rel_by_id: dict[str, dict] | None = None
         for item in raw or []:
             if not isinstance(item, Mapping):
                 skipped.append(f"矛盾记录不是对象：{type(item).__name__} ⇒ 跳过")
@@ -632,9 +637,13 @@ class _Core:
                 skipped.append(f"矛盾记录必须恰有 2 条**不同**的关系代号，收到 {rids!r} ⇒ 跳过")
                 continue
             rids = sorted(set(rids))
+            if rel_by_id is None:
+                # 一次建索引：每条矛盾要按代号取两行，逐条 next(...) 会把
+                # relations 表重扫 2×N 次（N=矛盾记录数）。
+                rel_by_id = {str(r.get("relation_id")): r for r in self.store.rows("relations")}
             rel_rows: list[dict] = []
             for rid in rids:
-                row = next((r for r in self.store.rows("relations") if str(r.get("relation_id")) == rid), None)
+                row = rel_by_id.get(rid)
                 if row is not None:
                     rel_rows.append(row)
             strength = str(item.get("strength") or "")
@@ -726,7 +735,6 @@ class _Core:
         parts = origin.split(":")
         if len(parts) >= 4 and parts[1] == "paths":
             ids = [x.strip() for x in parts[3].split("->") if x.strip()]
-            ids = [x for x in ids if S.is_valid_id(x) or x == "-"]
             ids = [x for x in ids if S.is_valid_id(x)]
             if ids:
                 return list(dict.fromkeys(ids))
@@ -894,9 +902,8 @@ class _Core:
         for r in mine:
             who = str(r.get("submitted_by") or "")
             # 通道名 = `actor` 之后那个冒号后面剩下的部分；没有冒号 ⇒ 缺口那一支（缺省通道）。
-            by_channel[who.split(":", 1)[1] if ":" in who else "gap"] = (
-                by_channel.get(who.split(":", 1)[1] if ":" in who else "gap", 0) + 1
-            )
+            channel = who.split(":", 1)[1] if ":" in who else "gap"
+            by_channel[channel] = by_channel.get(channel, 0) + 1
             # 归属优先读结构化字段（`for_question_id`，`schema.py:226-228`）；
             # 只有老行（那个字段还是空的）才回落到描述文本里的 `[q:NNNN]`。
             # 为什么要有这条回落：并表/加字段之前落下的行没有那个键，
@@ -947,13 +954,15 @@ class _Core:
         names = [c.get("name") for c in concepts if c.get("name")][:4]
         question = str(qrow.get("question") or "")
         topic = " ".join(names) if names else _digest(question, 40)
+        claims = evidence.get("claims") or []
+        verified = sum(1 for c in claims if c.get("quote_verified") is True)
         desc = (
             f"[q:{qrow.get('question_id')}] origin={qrow.get('origin')}；"
             f"研究问题：{_digest(question, 200)}；"
             f"需要检索的是：能补充该问题证据的文献"
-            f"（现有相关关系 {len(evidence.get('claims') or [])} 条，"
+            f"（现有相关关系 {len(claims)} 条，"
             f"其中 quote_verified=True 的 "
-            f"{sum(1 for c in evidence.get('claims') or [] if c.get('quote_verified') is True)} 条）"
+            f"{verified} 条）"
         )
         return topic, desc
     def _note(self, qid: str, text: str) -> None:
@@ -1013,12 +1022,12 @@ class _Core:
         盾问题的行数；- `reconciled` —— 两者相等。不许把它当成"配额是否用完"的判据（那是 `exhausted`），它只回答"这两本账今天对不对得上"。
         """
         rows = self.store.rows("research_questions")
-        contradiction_qids = {
-            str(r.get("question_id")) for r in rows if str(r.get("kind")) == "contradiction"
-        }
-        used = sum(
-            len(r.get("contradiction_request_ids") or []) for r in rows if str(r.get("kind")) == "contradiction"
-        )
+        contradiction_qids: set[str] = set()
+        used = 0
+        for r in rows:
+            if str(r.get("kind")) == "contradiction":
+                contradiction_qids.add(str(r.get("question_id")))
+                used += len(r.get("contradiction_request_ids") or [])
         by_rows = sum(
             1 for r in self._d_requests() if str(r.get("for_question_id") or "") in contradiction_qids
         )
@@ -1046,19 +1055,23 @@ class _Core:
         rows = self.store.rows("relations")
         keys: set[str] = set()
         wanted = {str(x) for x in rel_ids}
+        # 第一趟只定"要带出的概念组"，第二趟才拷贝选中的行：把每行的 copy 从
+        # 全表移到命中集，未命中的行只被读一次。
         keyed: list[tuple[str, str | None, dict]] = []
         for r in rows:
             key = r.get("concept_pair_key") or IX.concept_pair_key(
                 [str(c) for c in (r.get("concept_ids") or []) if c]
             )
-            keyed.append((str(r.get("relation_id")), key, dict(r)))
-            if str(r.get("relation_id")) in wanted and key:
+            rid = str(r.get("relation_id"))
+            keyed.append((rid, key, r))
+            if rid in wanted and key:
                 keys.add(str(key))
         if not keys:
             return []
         out: dict[str, dict] = {}
         for rid, key, row in keyed:
             if key in keys:
+                row = dict(row)
                 row["concept_pair_key"] = key
                 out[rid] = row
         return [out[k] for k in sorted(out)]
@@ -1214,9 +1227,12 @@ class _Core:
         hits = verdict.get("hits") or {}
         conf = verdict.get("confidence")
         lines: list[str] = []
+        verified_any = False
         if not claims:
             lines.append("溯源到 L1/L2 后**没有取到任何关系表述**：这个问题目前完全没有可引用的证据。")
         for c in claims:
+            if c.get("quote_verified") is True:
+                verified_any = True
             lines.append(
                 f"- 关系 {c['relation_id']}（文献 {c.get('lit_id')}，status={c.get('status')}，"
                 f"quote_verified={c.get('quote_verified')}）逐字引用：「{_digest(c.get('quote'), 120)}」"
@@ -1248,7 +1264,7 @@ class _Core:
         suggestions: list[str] = []
         if not claims:
             suggestions.append("先补齐最基本的表述：向 A 提交针对性查询（本轮已按判据提交，见「缺口」一节）。")
-        if not any(c.get("quote_verified") is True for c in claims):
+        if not verified_any:
             suggestions.append("逐条复核引文：当前没有一条关系的 quote 通过校验，无法判断表述是否忠于原文。")
         if verdict.get("contradictions"):
             suggestions.append("围绕矛盾双方各自下钻到文献正文（L3），确认分歧是实质性的还是措辞差异。")
@@ -1287,6 +1303,7 @@ class _Core:
         `complete` 也不可调用 ⇒ 拿到标准缝必然抛`TypeError: 'LlmSeam' object is not callable`（读数：
         `temp/_r1a1_status_probe.py`）。
         """
+        claims = ev.get("claims") or []
         prompt = json.dumps(
             {
                 "task": "基于给定的证据包写一段初步分析。只能引用给出的 relation_id 与 quote，不得引入外部事实。",
@@ -1300,7 +1317,7 @@ class _Core:
                         "quote_verified": c.get("quote_verified"),
                         "status": c.get("status"),
                     }
-                    for c in ev.get("claims") or []
+                    for c in claims
                 ],
                 "criteria": verdict.get("criteria"),
                 "max_confidence": verdict.get("confidence"),
@@ -1312,9 +1329,10 @@ class _Core:
                 },
             },
             ensure_ascii=False,default=str)
-        payload, text, reading = model_json_call(self.llm, prompt, task_id=self._summon_task_id(),
+        task_id = self._summon_task_id()
+        payload, text, reading = model_json_call(self.llm, prompt, task_id=task_id,
                                                  note="D.research 的初步分析")
-        reading["task_id"] = self._summon_task_id()
+        reading["task_id"] = task_id
         # 花销读数（召唤级）：号在 ⇒ 用 `usd_reading(号)` 答"这一趟花了多少"；
         # 号不在 ⇒ `attached=False`（"没挂点"，不是 0 花销）；
         # 同一个召唤内多次调用 ⇒ 成本挂在当次召唤上，`calls` 说清"内几次调用"。
@@ -1341,10 +1359,9 @@ class _Core:
             }, reading
         invented = invented_facts(
             "\n".join([str(payload.get("analysis") or ""), str(payload.get("conclusion") or "")]),
-            known_relation_ids=[str(c.get("relation_id") or "") for c in ev.get("claims") or []],
-            known_lit_ids=[str(c.get("lit_id") or "") for c in ev.get("claims") or []
-                           if c.get("lit_id")],
-            known_quotes=[str(c.get("quote") or "") for c in ev.get("claims") or []],
+            known_relation_ids=[str(c.get("relation_id") or "") for c in claims],
+            known_lit_ids=[str(c.get("lit_id") or "") for c in claims if c.get("lit_id")],
+            known_quotes=[str(c.get("quote") or "") for c in claims],
         )
         if invented:
             # 引入新事实 = 整份丢弃（降级到确定性那一档），并把"引了什么"如实留在读数里。
