@@ -4,7 +4,8 @@
 
     作者只写内容，登记由收方读稿产生（与 V 读 F 的手稿再签字同构）。所以：
 
-- F 在证明手稿里写一节固定格式的依赖段（表格四列，见 :data:`COLUMN_KEYS`）；
+- F 在证明手稿里写一节固定格式的依赖段（表格三列必填：引用 / 命题号 / 用在哪一步，
+  见 :data:`COLUMN_KEYS`）；
 - B 在入库时读那一节，落 `dependencies`（`used_by="stmt:<命题号>#pN"` ＋ `path_group`
   ＋ `source_stmt_id`）；F 自己不写依赖台账，也没有写台账的工具。
 
@@ -17,8 +18,10 @@
 
 ## 三条判据（本文件是它们的唯一实现，B 与 F 的只读预览都读它）
 
-1. 解析：段标题 `## 依赖`，下面一张四列表；缺表头 / 缺列 / 列数不对 / 命题号形状不对 /
-   路径号不是正整数 ⇒ 逐条进 `problems`（带行号与列名），调用方整笔受控拒绝；
+1. 解析：段标题 `## 依赖`，下面一张三列表（引用 / 命题号 / 用在哪一步）；缺表头 / 缺列 /
+   列数不对 / 命题号形状不对 ⇒ 逐条进 `problems`（带行号与列名），调用方整笔受控拒绝。
+   路径号不进稿（由 B 的秘书在收录事务里分配）⇒ 那一列可省；老盘带那一列的四列表仍读得回，
+   只是路径号不是正整数同样进 `problems`；
 2. 引用门槛（读等级）：来源那一行的可引资格只由
    `evidencebits.derive_grade` 现算的等级决定，`pre_theorem` 及以上才可引
    （= 有 V 签）。
@@ -144,9 +147,10 @@ PROOF_UNREADABLE = "unreadable"
 #: 命题正文那一节的段标题（V 只读手稿之后，命题正文从这一节来）。
 SECTION_STATEMENT = "## 命题"
 
-#: 表格的四列：`(字段名, 认得出的关键词, 人读的列名)`。
+#: 表格的列：`(字段名, 认得出的关键词, 人读的列名)`。三列必填（引用 / 命题号 / 用在哪一步），
+#: 路径号那一列可省 —— 它不进稿，由 B 的秘书在收录事务里分配（老盘带那一列的表仍读得回）。
 #:
-#: 识别按关键词（表头写"命题号（stmt:NNNNNN）"也认），但四列缺一不可、顺序不限 ——
+#: 识别按关键词（表头写"命题号（stmt:NNNNNN）"也认），但三列必填缺一不可、顺序不限 ——
 #: 顺序不限不是放宽：缺哪一列会被点名，而"列数不对"同样进 `problems`。
 COLUMN_KEYS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("quote", ("引用",), "引用（F 的原话）"),
@@ -1090,17 +1094,17 @@ def dependency_consistency_problem(
 def _section_problem_fix(why: str) -> str:
     """按解析器那句话给一句可执行的改法（四元组的第四格）。"""
     if "没有表格" in why:
-        return "在 `## 依赖` 下面补一张四列表（表头 + 分隔行 + 每行一条依赖）"
+        return "在 `## 依赖` 下面补一张三列表（引用 / 命题号 / 用在哪一步）"
     if "表头缺列" in why or "表头有" in why:
-        return "把表头改成四列（引用 / 命题号 / 用在哪一步 / 路径号），一列都不许少"
+        return "把表头改成三列（引用 / 命题号 / 用在哪一步），一列都不许少；路径号不进稿"
     if "命题号" in why:
         return ("把那一格写成 `stmt:NNNNNN`（六位十进制号；号要从台账或 `attack.step` "
                 "的清单里取）")
     if "路径号" in why:
         return "把路径号写成正整数（第几条证明；1 = 主证明）"
     if "列" in why:
-        return "把这一行补齐成四列（引用 / 命题号 / 用在哪一步 / 路径号）"
-    return "按上面那句改这一行（四列表，列固定）"
+        return "把这一行补齐成三列（引用 / 命题号 / 用在哪一步）"
+    return "按上面那句改这一行（三列表，三列必填）"
 
 
 def section_problem_findings(text: str,
@@ -1124,7 +1128,8 @@ def section_problem_findings(text: str,
         out.append(citation_finding(
             stmt_id=sid, where=_citation_where(line=line, site="依赖段"),
             kind=REFUSED_SECTION,
-            expected="一张四列表里的一条合法依赖（号形如 `stmt:NNNNNN`）",
+            expected=("一张三列表（引用 / 命题号 / 用在哪一步）里的一条合法依赖"
+                      "（号形如 `stmt:NNNNNN`）"),
             got=why, fix=_section_problem_fix(why)))
     return out
 
@@ -1148,7 +1153,7 @@ def missing_section_findings(text: str, refs: Iterable[str], *,
             got=("手稿里没有 `## 依赖` 这一节（正文点了它，表里没有登记）"
                  + (f"；{got_extra}" if got_extra else "")),
             fix=("让 F 用 `step` 动作重交这一轮（框架会按每一步的 `cites` 渲染 "
-                 f"`{SECTION_HEADING}`），或在手稿里补那一节（四列表，列固定）"
+                 f"`{SECTION_HEADING}`），或在手稿里补那一节（三列必填；路径号不进稿）"
                  "—— 补上那一节再交"),
             step=no))
     return out
@@ -2047,7 +2052,7 @@ def dependency_review(text: str,
     :func:`manuscript_citation_resolver`，判据变成"被引命题的手稿在盘上、且盖着 V 签"）；
     缺省仍是册子那一版（`:func:`uncitable_statement_finding`），B / 旧调用方逐字不变。
 
-    ⑤的边界（如实说）：手稿的四列表里没有被引命题的 `proof_no` / 正文 sha 这两格，
+    ⑤的边界（如实说）：手稿的三列表里没有被引命题的 `proof_no` / 正文 sha 这两格，
     所以"proof_no / sha"那一半没有可核的载体；能核的是"表里说用在第几步"与
     "正文那一步的 `cites`"对不对得上。正文没有编号行（`proof_steps` 为空）时这一项
     不核（"可核时"），不猜。
@@ -2490,9 +2495,9 @@ def wash_dependency_section(text: str, *,
             line=int(section.get("heading_line") or 0),
             quote="（依赖段缺失或读不懂）",
             got=f"present={bool(section.get('present'))}，problems={len(section.get('problems') or [])}",
-            expected="一张四列的表（引用 / 命题号 / 用在哪一步 / 路径号）",
+            expected="一张三列的表（引用 / 命题号 / 用在哪一步）",
             why=(reason or f"手稿里没有 `{SECTION_HEADING}` 这一节，而证明正文里也没有可据以重建的 `stmt:` 引用"),
-            how_to_fix=(f"在证明手稿里补一节 `{SECTION_HEADING}`（四列表，列固定），"
+            how_to_fix=(f"在证明手稿里补一节 `{SECTION_HEADING}`（三列必填；路径号不进稿），"
                         "或者在证明正文的每一步写明依据（`stmt:NNNNNN`）—— 依赖面由代码按它渲染"),
             kind=REFUSED_SECTION))
     for row in rows:
@@ -2648,7 +2653,7 @@ def deps_missing_reading(*, proof_text: Any, deps_written: int,
         base["why"] = (f"手稿里没有 `{SECTION_HEADING}` 这一节，而证明正文里出现了 "
                        f"{refs} 条 `stmt:` 引用 ⇒ 依赖面没有按格式登记（这不是「依赖为零」，"
                        "是「作者没写依赖段」）；B 入库时会整笔拒收 `dependency_section_missing`")
-        base["next_step"] = (f"让 F 在证明手稿里补一节 `{SECTION_HEADING}`（四列表，见 "
+        base["next_step"] = (f"让 F 在证明手稿里补一节 `{SECTION_HEADING}`（三列表，见 "
                              "`agentflow.depsection.COLUMN_KEYS`），再由 B 重新入库")
         return base
     if not (sec.get("rows") or []) and int(base.get("deps_written") or 0) <= 0:
