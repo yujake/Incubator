@@ -331,17 +331,18 @@ def summon_many_payload(targets: list, why: str = "") -> dict[str, Any]:
     # 所以这里做一件确定性的事：同一个角色在一次批量里出现多次、且没给标签时，
     # 自动补上序号（`<role>#1`…），并在返回里逐项标 `auto_instance=True`。
     # 给了标签的一律尊重（那是调用方在明确指定"谁干哪一份"）。
+    targets = list(targets or [])
     seen: dict[str, int] = {}
-    for item in (targets or []):
+    for item in targets:
         if isinstance(item, Mapping) and not str(item.get("instance") or ""):
-            seen[str(item.get("target_role") or "")] = seen.get(
-                str(item.get("target_role") or ""), 0) + 1
+            role = str(item.get("target_role") or "")
+            seen[role] = seen.get(role, 0) + 1
     auto: dict[str, list[str]] = {
         role: [f"{role}#{k}" for k in range(1, n + 1)] for role, n in seen.items() if n > 1
     }
     used: dict[str, int] = {}
     out: list[dict[str, Any]] = []
-    for i, item in enumerate(targets or []):
+    for i, item in enumerate(targets):
         if not isinstance(item, Mapping):
             raise ToolError(f"targets[{i}] 必须是对象（收到 {type(item).__name__}）")
         target_role = str(item.get("target_role") or "")
@@ -456,19 +457,26 @@ def conductor_summon_many(_conductor, targets: list, why: str = "") -> ToolResul
     elapsed = time.monotonic() - t0
     probe = getattr(c, "_last_probe", None)
     waves = [len(w) for w in P.waves_of(calls, limit=c.policy.max_concurrency)]
-    items = [{**_summon_dict(r), "instance": str(getattr(call, "instance", "") or ""),
-              "auto_instance": bool(
-                  str(getattr(call, "instance", "") or "").startswith(
-                      f"{call.role}#") and not str(
-                          (targets[i] or {}).get("instance") or ""))}
-             for i, (r, call) in enumerate(zip(results, calls))]
+    items: list[dict[str, Any]] = []
+    ok_count = refused_count = failed_count = 0
+    for i, (r, call) in enumerate(zip(results, calls)):
+        # 一个 call 的实例标签只取一次（原先 `instance` 在字面量里算两遍），
+        # 三个计数也在这同一趟里数完（原先三个 sum 各扫一遍 results）。
+        inst = str(getattr(call, "instance", "") or "")
+        one = _summon_dict(r)
+        one["instance"] = inst
+        one["auto_instance"] = bool(
+            inst.startswith(f"{call.role}#")
+            and not str((targets[i] or {}).get("instance") or ""))
+        items.append(one)
+        ok_count += bool(getattr(r, "ok", False))
+        refused_count += str(getattr(r, "outcome", "")) == "refused"
+        failed_count += str(getattr(r, "status", "")) == "failed"
     payload = {
         "count": len(items),
-        "ok_count": sum(1 for r in results if getattr(r, "ok", False)),
-        "refused_count": sum(1 for r in results
-                             if str(getattr(r, "outcome", "")) == "refused"),
-        "failed_count": sum(1 for r in results
-                            if str(getattr(r, "status", "")) == "failed"),
+        "ok_count": ok_count,
+        "refused_count": refused_count,
+        "failed_count": failed_count,
         "waves": waves,
         "max_wave": max(waves) if waves else 0,
         "concurrent_peak": int(getattr(probe, "peak", 0) or 0),
