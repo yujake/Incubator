@@ -1,6 +1,6 @@
 """探针：用真实 downloader 对 AMS（病态：.pdf 链接返回 HTML）与 arXiv（正常）各下一次。
 
-这份脚本是缺陷 #8 的证据来源 —— 它证明了"下载成功（HTTP 200）"与"拿到的是论文"是两件不同的事：AMS 那个以 `.pdf` 结尾的 URL 返回的其实是 ≈12 MB 的 `text/html` 落地页。
+这份脚本是"下载成功（HTTP 200）"与"拿到的是论文"是两件不同的事的证据来源 —— AMS 那个以 `.pdf` 结尾的 URL 返回的其实是 ≈12 MB 的 `text/html` 落地页。
 保留它（而不是用完即删）是为了让后来者能一条命令复现该结论。用法：`python tools/probe_download_ams_vs_arxiv.py`（会联网）⏱预期耗时数分钟：AMS 那个链接会老实传完 ≈12 MB 的
 HTML 落地页，再加 arXiv 的一个正常 PDF 与 1.2s 限速间隔。请给足超时（建议 ≥ 10 分钟），不要因为"跑太久"就以为它挂了 —— 这个"慢"本身就是证据的一部分。
 
@@ -13,8 +13,8 @@ HTML 落地页，再加 arXiv 的一个正常 PDF 与 1.2s 限速间隔。请给
 - ``2`` —— 没查成：两条都失败（网络问题）⇒ 没有结论。
 "连不上"与"连上了但现象没了"是两件不同的事，必须分开。
 
-与 `probe_ams_content_type.py` 的分工：那一份只测 HTTP 层的响应头与字节；这一份测的是真实 downloader 的判定（`fetch.default_downloader`）。两份都要有退出码，
-因为它们都曾被当"看一眼输出"的手工脚本用，于是"没输出"与"输出说没问题"在自动化里长得一模一样。
+与 `probe_ams_content_type.py` 的分工：那一份只测 HTTP 层的响应头与字节；这一份测的是真实 downloader 的判定（`fetch.default_downloader`）。两份都要有退出码：
+否则"没输出"与"输出说没问题"在自动化里长得一模一样。
 """
 
 import sys
