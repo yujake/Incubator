@@ -5922,7 +5922,7 @@ def proposition_judgment_reading(store: Any, *, sid: str = "") -> dict[str, Any]
 
 
 def proof_revisions_reading(store: Any) -> dict[str, Any]:
-    """手稿登记 / 证明重写的逐命题读数（业主 2026-11-07 裁定：登记与写证明解耦）。
+    """手稿登记 / 证明重写的逐命题读数（登记与写证明解耦）。
 
     读的是 `reports/*proof-*.md` 头部的登记元信息（`proofregistry.proof_revisions`）。
     逐命题给「登记了几次 / 挂过几次证明 / 每次的 sha 与 proof_no / 有几次被判有毛病」：
@@ -5943,18 +5943,20 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     （`statementabandon.parse_abandon`，写侧 `schema.Statement.validate` 逐条核）。
     "明确"这个词的机器含义就在这里：理由与时间都读得出来。
 
-    ## `relabeled`：同一个 label 被换了多少次号（业主 2026-11-07 裁定）
-    业主原话：「换号需给清理由……」。这一格不拦门（阈值拦截是业主明说不要的），
-    它只让"同一 label 反复换号"在收工输出上显形 —— 98 的真机形态正是它：`lem:cancel`
-    下 000049 与 000050 各有一次放弃，两次的理由一条结构化的都没有。
+    ## `relabeled`：同一个 label 被换了多少次号
+
+    换号必须给清理由。这一格不拦门（按阈值拦截是明确不要的），
+    它只让"同一 label 反复换号"在收工输出上显形：理由一条结构化的都没有的那些换号，
+    正是这里要看得见的那一类。
 
     逐 label 给 `{label, relabels, events[{stmt_id, at, abandon_kind, has_evidence}],
     repeated}`：`relabels` = 这个 label 下"被放弃"的次数（每一次放弃就是一次换号），
     `repeated` = `relabels >= 2`（≥2 次要能一眼看到）。判据本体是
     `statementabandon.relabel_events`（登记那一侧 `supersedes` 读数读的是同一份）。
 
-    ## 按档统计（2026-11-07 第二刀）
-    放弃理由现在有四档（F 侧 `math_error` / `difficulty`，E 侧 `counterexample` /
+    ## 按档统计
+
+    放弃理由有四档（F 侧 `math_error` / `difficulty`，E 侧 `counterexample` /
     `space_too_large`）。读数要能分别数清每一档：顶层 `abandon_kinds` 是这四条被放弃
     命题的逐档计数（四个键恒在，零条也读得出来），`relabeled["kinds"]` 是"换号事件"
     的逐档计数（同一个 label 下的事件按档分开数），`unstructured` 是历史自由文本行的
@@ -5993,7 +5995,7 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                             "at": str(got.get("at") or ""),
                             "reason": str(got.get("reason") or ""),
                             "label": str(row.get("label") or ""),
-                            # 2026-11-07：换号理由的四档读数（历史行三格全空）
+                            # 换号理由的四档读数（历史行三格全空）
                             "abandon_kind": str(parsed.get("abandon_kind") or ""),
                             "abandon_basis": str(parsed.get("abandon_basis") or ""),
                             "defect_ref": str(parsed.get("defect_ref") or ""),
