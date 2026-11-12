@@ -1,10 +1,10 @@
-"""角色 E 的声明（`goal-7f5116c1` M3）：动作表 + 边 + 写集 + 职责与门面。
+"""角色 E 的声明：动作表 + 边 + 写集 + 职责与门面。
 
 这一份是权限面的真身：`capabilities.py` 从它派生 `CAPABILITIES` / `ALLOWED_EDGES` /
-`WRITE_SETS`，`agent_e.py` 只是把它再导出一次。
+`WRITE_SETS`，`agent_e` 包只是把它再导出一次。
 所以本文件在 `.noai-paths` 里受保护（改它等于改权限面 ⇒ 需要 2 名人审）；
-动作表的每一行都从 `capabilities.py` 逐字搬来（含注释），判据见
-`tests/test_agent_spec_reconciliation.py` 与 `tests/test_capabilities_two_layer.py`。
+与派生表逐格一致的判据见 `tests/test_agent_spec_reconciliation.py` 与
+`tests/test_capabilities_two_layer.py`。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from ..agentspec import (
 )
 from ..experiment_methods import COMPUTATIONAL_METHODS
 
-#: 本角色的动作表（从 `capabilities.py` 逐字搬来）。
+#: 本角色的动作表。
 ACTIONS: tuple[ActionSpec, ...] = (
     ActionSpec(
         "E", "run_experiment",
@@ -35,13 +35,13 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 不是 `schema.EXPERIMENT_METHODS` 全表：`formal` 仍留在 schema 里（L 的
               # `formal.record` 要写那张表），但 `AgentE.run_experiment` 第一句就以
               # `formal_not_in_e` 拒它 ⇒ 广告一个必然被拒的值，模型就会按 schema 传参、
-              # 再拿回一次拒绝（D15，2026-11-05 走查）。工具面同轮改
+              # 再拿回一次拒绝。工具面同轮改
               # （`verify_tools.py` 的 `verify.run_experiment`）；常量落在中立模块
               # `experiment_methods.py`，因为从 `agent_e._support` 取它会成环。
               "method": {"type": "string", "enum": list(COMPUTATIONAL_METHODS)},
               "for_question_id": _S, "timeout": _I,
               # `sleep` 不在真实 `AgentE.run_experiment` 的具名形参里，它也不收
-              # `inspect.Parameter.VAR_KEYWORD`（实测 `inspect.signature`：
+              # `inspect.Parameter.VAR_KEYWORD`（`inspect.signature` 上
               # 既没有 sleep、也没有那一档）⇒ 它是本表与替身夹具之间唯一的接缝，
               # 逐条登记在下面的 `PARAM_SEAMS` 里（带理由串）。
               # 保留声明而不是删掉它的理由（两个方向都写在接缝表那一行里）：
@@ -50,15 +50,15 @@ ACTIONS: tuple[ActionSpec, ...] = (
               # 导入期交叉断言（`assert_capabilities` 第 [8] 条）核这一格：
               # 声明了而实现不收、又不登记 ⇒ `import agentflow.capabilities` 直接失败。
               "sleep": _N,
-              # `draft/37` §84 的 D1：`certificate` / `search_bound` 是
-              # `schema.Experiment` 硬约束 2c/2d 要求的事实，而「此前这一层没声明它们」
-              # ⇒ 模型看不见、也就永远满足不了（实测 T1：method='exhaustive_search'
-              # 三次 failed，报「必须给出 certificate」）。方法层与工具层同轮接上。
+              # `certificate` / `search_bound` 是
+              # `schema.Experiment` 硬约束 2c/2d 要求的事实，而「这一层不声明它们」
+              # ⇒ 模型看不见、也就永远满足不了（method='exhaustive_search' 会直接
+              # 报「必须给出 certificate」）。方法层与工具层同轮接上。
               "certificate": _OBJ,
               "search_bound": _OBJ,
-              # D-33（2026-10-23 夜，r34b 真机）：穷举证明的三格凭据此前不在任何声明面里，
-              # 而提示词要求 E 跑之前先报三件套 + 把 `exhaustive` 写成布尔 ⇒ 模型只能传空
-              # params，②③ 落不成（4 条 exhaustive_search 全落 cross_check）。
+              # 穷举证明的三格凭据必须在声明面上：提示词要求 E 跑之前先报三件套 + 把
+              # `exhaustive` 写成布尔，声明面没有这几格 ⇒ 模型只能传空 params，②③ 落不成
+              # （穷举实验只能落成 cross_check）。
               # 四格全部可选（非穷举的实验不该被逼填），但穷举那一档要收得下：
               # 工具 schema（`verify_tools.py` 的 `verify.run_experiment`）与
               # `AgentE.run_experiment` 同轮加了同名同类型的四格 —— 两层对账会强制一致。
@@ -68,7 +68,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
               "enumeration": _S,
               "exhaustive": _B,
               "search_space": _S,
-              # 2026-11-07（玩具例子）：这一条命题的种类标签（theorem / lemma /
+              # 这一条命题的种类标签（theorem / lemma /
               # proposition / corollary / conjecture / example），可选。它只进形态闸的
               # `kind` 与 e-proof 手稿的 `- 证据种类：` 那一行（B 收录时按它落
               # `statements.kind`），不参与等级判定 —— `example` 与 `lemma` 走同一条
@@ -78,18 +78,17 @@ ACTIONS: tuple[ActionSpec, ...] = (
              ("claim", "claim_key", "script_path")),
         "dict（experiment_id / result / evidence_kind / …）",
         side_effect="write_local", handler_name="run_experiment",
-        # `P-6` + `P-20`（B3）：它执行调用方给的脚本，所以逐动作的 external 就是 `exec`。
+        # 它执行调用方给的脚本，所以逐动作的 external 就是 `exec`。
         # 与工具层同轮改（`verify_tools.py` 的 `verify.run_experiment`）—— 两轴改动必须成对，
         # 否则 `declaration_divergences()` 判"能力层低估"、`assert_capabilities()` 在导入期炸
-        # （实测：`pytest tests/test_policy.py` 收集期 ERROR）。
+        # （`pytest tests/test_policy.py` 收集期 ERROR）。
         # `effect` 仍是 `write_local`（它写 experiments 表）：两根轴各说各的真话。
         external="exec",
     ),
 
-    # 2026-10-23 晚裁定（业主逐字：「E 侧与 Lean 相关的工具和动作都该清干净」）：
     # `check_formal` 这一整条动作已从本表摘掉 —— 不是"写死关闭"，是"没有这一支"。
     # 它原来那一格的摘要会说「已停用 …/ 形式化由 L 承担」，而一句话里同时出现
-    # 「本岗」与「形式化」正是裁定要清掉的那种记忆；受控拒绝那一层也不在了
+    # 「本岗」与「形式化」正是要清掉的那种记忆；受控拒绝那一层也不在了
     # （`AgentE` 上没有这个方法，`run_experiment(method='formal')` 由动作面的第一句
     # 以理由码 `formal_not_in_e` 拒绝）。
     # 判据：`tests/test_e_has_no_lean_side.py` 判据 1 / 6。
@@ -130,11 +129,9 @@ def _build(d: BuilderDeps) -> Any:
 SPEC = AgentSpec(
     role='E',
     brief=AgentBrief(
-        # 2026-10-22 晚裁定（「其它角色关于 E 的 Lean 侧记忆可以全面清除」）：`duty` 末尾
-        # 原来挂着「（形式化那一岗是 L）」—— 它是伙伴表里唯一把「E」与「形式化」放在同一句
-        # 的东西，于是十一个格里有五个格靠这一句把 E 记成形式化的邻居。裁定要求清掉这条
-        # 记忆：E 的职责句只说实验与反例，形式化归谁由 `policy` 第一句说（那一句的主语
-        # 是「形式化」，不是「E」，判据见 `tests/test_e_has_no_lean_side.py` 判据 3b）。
+        # `duty` 只说实验与反例：E 的职责句里不挂「形式化那一岗是 L」这类邻居记忆，
+        # 形式化归谁由 `policy` 第一句说（那一句的主语是「形式化」，不是「E」，
+        # 判据见 `tests/test_e_has_no_lean_side.py` 判据 3b）。
         duty="数值实验：把一条断言变成可复现的实验或反例",
         boundary=(
             "数值结果的判读必须是确定性的：脚本输出的数字由代码判，不许过模型。",
@@ -143,8 +140,8 @@ SPEC = AgentSpec(
             "引文无法核实的关系要退回 B；发现反例时把结论交回 D，不要自己改别人的结论。",
         ),
         policy=(
-            # 2026-11-06（业主裁定 ①）：非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M
-            # （他们看不到 `revocable` 格）⇒ 这一句是他们唯一的说明书。
+            # 非 M 的父也拿得到这件工具，而 `conductor.board` 只给 M（他们看不到 `revocable` 格）
+            # ⇒ 这一句是他们唯一的说明书。
             "**你能撤子代理的板项**：孩子名下不再需要做的项，用 "
             "`conductor.void_items(item_ids=[…], why=…)` 撤销 —— 你是它的直接父就够，"
             "不必证明叫不醒（`why` 必填、逐字进留痕）。",
@@ -186,20 +183,17 @@ SPEC = AgentSpec(
             "**先估规模再跑**：枚举类实验先在心里算一遍状态数（m-正则图的个数按 n 指数增长），超过预算就换**构造 / 随机 + 精确核验**"
             "那条路。**每个打印出来的数都要写清它是什么**：数本身来自脚本、口径却没写进实验结论，读者就无从复核；结论里点明每个量的"
             "定义与算法。",
-            # p204（2026-10-27）：这一句与 `attackround.BUDGET_UNREADABLE_NOTE` 逐字同源 ——
+            # 这一句与 `attackround.BUDGET_UNREADABLE_NOTE` 逐字同源 ——
             # 代码侧那一句会写进 F 的 `why_strategy`，提示词侧在这里，两处由
             # `tests/test_agent_f_inference.py::test_p09_..._carries_the_same_sentence` 对拍。
-            # 它此前在压缩提示词那一批里从 E 的 policy 掉了，于是提示词侧只剩反方向
-            # （"读数缺失就按最保守的做法办"）。句子里不许夹强调符：对拍是逐字 substring。
+            # 句子里不许夹强调符：对拍是逐字 substring。
             "**读不到代价读数是常态，别把它当停摆**：代价读数读不到时如实说读不到；那是「读不到」，不是「没有代价」，"
             "也不因此把所有的路都堵死 —— 缺的只是「这一次大概花多少」那一栏，钱仍由全局预算守卫在开工前管。",
-            # 2026-10-23 晚（业主：「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，
-            # 理由是穷举，签名是对应的程序脚本」；「E 写的报告要能落下来，且 V 也要会审这种东西，
-            # 加 E 派 V 的边」）：穷举协议此前在提示词里是 0 处 —— E 是 ② 与 ③ 的作者、
-            # 也是唯一能触发 V 会审的一方，而它读不到「跑穷举要报什么、报告落在哪、什么时候派 V」。
-            # 代码侧的真身是 `numericproof`（签名与档位）与 `exhaustionreport`（`out/experiments/
-            # <实验号>/exhaustion.md` 那份读数）；这一段只是把那一份口径写进 E 的提示词，
-            # 不另立判据。它与后面那几条的分工：这一条讲穷举的协议，上面那几条讲数值实验的写法。
+            # 穷举协议：E 是 ② 与 ③ 的作者、也是唯一能触发 V 会审的一方，所以它必须读得到
+            # 「跑穷举要报什么、报告落在哪、什么时候派 V」。代码侧的真身是 `numericproof`
+            # （签名与档位）与 `exhaustionreport`（`out/experiments/<实验号>/exhaustion.md`
+            # 那份读数）；这一段只是把那一份口径写进 E 的提示词，不另立判据。它与后面那几条
+            # 的分工：这一条讲穷举的协议，上面那几条讲数值实验的写法。
             "**穷举要按一份协议跑**（业主 2026-10-23：纯数值实验把整个命题穷尽验证掉时也算证明，理由是穷举、签名是那份程序）："
             "① 跑之前先报三件套 —— 搜索空间（多大、这个数是怎么算出来的）、穷尽的判据（`exhaustive` 要写成布尔 "
             "`true`（**顶格参数**，不是塞进 `observations` 里），并说清为什么不漏：用了哪些对称性 / 剪枝、为什么这些剪枝不丢解）、边界处理（n 的上界或区间端点在哪儿、"
@@ -213,8 +207,7 @@ SPEC = AgentSpec(
             "`verifications/pending/` 也不落一行。真凭据是 **V 台账那一行**"
             "（`verifications/pending/<对象sha>.jsonl` 或 `verifications/<号>.jsonl`）；`observations.e_signature` 只是**结构标记**，"
             "不算第三方签字，你自己签不了。"
-            # 2026-11-11（业主裁定 甲，与 F / B 同一句口径）：送审之后必须等签；
-            # 签成立那一刻稿就置为已提交（签触发，复用 `mss:` 记号）。
+            # 送审之后必须等签；签成立那一刻稿就置为已提交（签触发，复用 `mss:` 记号）。
             "**送审之后必须挂计时器等 V 的反馈，不许送完就收工、也不许「过一会儿再看」**："
             "派 V 之后立刻用 `clock.timer_start(wait_for=<V 的名册名或刚派出的 V 的编号>, "
             "reason=<等它回什么结论>)` 把这一趟挂上去；**V 判「成立」的那一刻这份穷举稿就已经"
@@ -226,10 +219,8 @@ SPEC = AgentSpec(
             "`reports/e-num-<实验号>.md`（`## 命题` + `## 数值结果`；程序只引用实验行的 `code_path`，不抄进正文）。"
             "这一族**不过 V** —— 它是给 D 提交「有数值实验支持的强猜想」时引用的；穷举那一档仍落 "
             "`reports/e-proof-<实验号>.md`，并照 ③ 派 V。"
-            # 2026-10-23 夜（业主的三句话，D-34）：「E 拿着有 V 签名的报告上报 D 找 B 入库，和 F 拿着 V 签名的证明
-            # 上报 D 找 B 入库是一个逻辑」；「一般 D 会是 E 和 F 的父代理，所以我的用词是上报，即向上找 D 而非向下派 D。
-            # 如果向上直接是 M 也无所谓，M 会派 D」。于是 ④ 之后还差最后一步：上报（不是自己去入库）。
-            # 代码侧的真身是 `numericproof.INDEX_*` 那四格（D 报告里的一行）＋ B 的入库闸
+            # ④ 之后还差最后一步：上报（不是自己去入库）。代码侧的真身是
+            # `numericproof.INDEX_*` 那四格（D 报告里的一行）＋ B 的入库闸
             # （`numericproof.filing_problems` 顺索引取对象、核 `evidence_sha256` 与 `v_signature`）。
             "⑥ 拿到 V 的签之后**上报父代理，不要自己去入库**：把（那份程序的相对路径 + 你写的 ②③ + V 的签）"
             "一起交上去 —— **父是 D 就报 D；父是 M 就报 M，由 M 派 D/B**。这是**上报**（向上找 D）而不是向下派 D："
@@ -242,11 +233,9 @@ SPEC = AgentSpec(
             "**再交 D** 写进研究手稿的「例子与反例」那一节（`E → D` 是直接边）：撞见的那个例子**不落下来就等于没发现**。",
             # 判据：`tests/test_agent_e.py::test_schema_rejects_refutes_without_counterexample`
             # （`schema.Experiment.validate` 对「refutes 但没有 counterexample」直接抛；正控在同文件
-            #  :521 那一行）。原来那 6 行里的真机故事与示例数值（`n=40` / `1681=41×41`）就是这一条
-            #  已经被判据接手之后剩下的叙述 —— 删的是故事，不是义务。
+            #  :521 那一行）。
             "**反例只有一个合法落法：`result=refutes` + 非空 `counterexample`**（只写进 `certificate` 不算法；`claim` 写**被检验的那条命题**，「这条命题为假」是结论、不是 claim）。",
-            # 2026-10-24 业主裁定（逐字：「注意不只是M侧改，其它所有智能体都要知道有监控一层
-            # 子代理的能力」）：只写这一实现里真有的两件 —— `trace.children` 与
+            # 只写这一实现里真有的两件 —— `trace.children` 与
             # `conductor.escalate` 都在本角色的工具面上。判据：
             # tests/test_every_role_knows_it_can_watch_its_children.py。
             "**你能监控自己的直接下级，但只看得见一层**：`trace.children`（不传参数就是看你这一趟名下）"
@@ -254,13 +243,12 @@ SPEC = AgentSpec(
             "（`products`）、最近一次交接（`last_handoff`）；传 `depth` 大于 1 也只给一层。要看更深（例如你想看"
             "「下级的下级的下级」）就用 `conductor.escalate` 向 M 请求 —— M 的指导**沿绝对编号链逐级由秘书转发**，"
             "**内容只有链尾（你）看得到**，中间各跳只转发、不读内容；你看到的是指导，不是原始全树数据。",
-            # p204（2026-10-27）：业主 2026-10-25 的三句裁定要做进**每个角色**的政策（不只是 M）：
-            # 「规范所有计时类任务申请的形式为：等待时间（或等待谁）+目的（必填）」；
-            # 「让老的未依赖时钟的计时工具退场，当智能体忘填目的时不报错，只是让它追加目的」；
-            # 「计时到点后向智能体发送信息『目的+等待时间+时间到』」。
-            # 工具面的真身是 `tools/clock_tools.py` 那九件（`UNIVERSAL_TOOLS`：对十一个角色都发），
-            # 这一段只写"怎么用它"，不抄工具签名（签名在工具说明里，抄一份就是第二个要同步的地方）。
-            # 判据：`tests/test_clock_governs_all_timed_work.py`（第 17 条逐个角色数过九件）。
+            # 计时口径进**每个角色**的政策（不只是 M）：计时类任务申请的形式 = 等待时间
+            # （或等待谁）+ 目的（必填）；忘填目的不报错、只要求追加；到点发回「目的 +
+            # 等待时间 + 时间到」。工具面的真身是 `tools/clock_tools.py` 那九件
+            # （`UNIVERSAL_TOOLS`：对十一个角色都发），这一段只写"怎么用它"，不抄工具签名
+            # （签名在工具说明里，抄一份就是第二个要同步的地方）。
+            # 判据：`tests/test_clock_governs_all_timed_work.py`（逐个角色数过九件）。
             "**要等就用时钟，别空转**：等一段时间用 `clock.timer_start(after_sec=<秒>, reason=<目的>)`；"
             "等某个人交差或回话用 `clock.timer_start(wait_for=<名册名 / 绝对编号 / task:编号>, reason=<目的>)` —— "
             "这两种**选一种**（都给或都不给会被拒），并写一句目的。**目的漏填不报错**：先受理，读数里带 "
@@ -312,15 +300,14 @@ SPEC = AgentSpec(
     edges=(
         'B',
         'D',
-        # 业主 2026-10-23 晚（逐字：「E 写的报告要能落下来，且 V 也要会审这种东西，
-        # 加 E 派 V 的边」）：E 跑出穷举证据之后，要能把它派给 V 会审。
+        # E 跑出穷举证据之后，要能把它派给 V 会审。
         #
         # 为什么这条边必须是真的（而不是"E 在回报里提一句让 M 去派"）：②③ 的作者是 E，
         # 而"这份穷举证据成不成立"的唯一判定者是 V —— 两人之间隔着 M 转一次，就多一处
         # "谁该看什么"的猜测；边在这里，`conductor.summon("V", ..., by="E")` 就能通。
         # 这条是单向的（E -> V）：V 的入边只有 B / E / F 三条，其它角色到 V 的边一条
-        # 都没有动（`specs/v.py` 的 `edges=()` —— V 没有任何出边，业主 2026-11-05 裁定
-        # 「V 不应该有出边」；它的"退回"走回执，不是唤起），本改动也不给 V 加出边。
+        # 都没有动（`specs/v.py` 的 `edges=()` —— V 没有任何出边；它的"退回"走回执，
+        # 不是唤起），本改动也不给 V 加出边。
         'V',
     ),
     write_set=frozenset(('experiments',)),
@@ -330,26 +317,24 @@ SPEC = AgentSpec(
     build=_build,
 )
 
-#: 关掉 Lean 之后，E 的「面」按业主 2026-10-12 的口径改写（逐字）：「负责 Lean 的智能体 E 在开关
-#: 关掉时可不载入有关形式化验证的提示词，全体成员关于 E 的印象也可以没有『负责形式化验证』这个说法，
-#: 一旦提到形式化验证所有人的第一反应是系统做不了」。
+#: 关掉 Lean 之后，E 的「面」按"没有形式化"那一档改写：提到形式化验证时，所有人的
+#: 第一反应是系统做不了。
 #: 为什么是"渲染文本 → 改写文本"的表而不是改声明本身：声明（`SPEC.duty` / `policy` / 官能、`ACTIONS`
 #: 的 `summary`）是权限面的唯一来源，`capabilities` 四张表由它派生、`tests/golden/*_snapshot.json` 钉着
 #: 它 ⇒ 按开关改声明等于让权限面随机器设置漂移。所以「声明不动」，动的只是渲染给模型看的那份文本。
-#: 左边一律手写：2026-10-23 晚裁定把 `check_formal` 那一整条动作摘掉之后，本表不再从
+#: 左边一律手写：`check_formal` 那一整条动作摘掉之后，本表不再从
 #: `ACTIONS` 里读摘要（那一格没有落点了），于是这里没有"读真身"的入口 —— 每一条 `old` 都由
 #: `tests/test_lean_switch.py` 的反真空（开着时逐字出现）守着，写错当场红。
 #: 判据（`tests/test_lean_switch.py`）：① 开着时左边逐字出现（反真空）；② 关掉时左边不出现、右边出现，
 #: 且提示词里必须出现"系统做不了形式化验证"。
 NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
-    # 2026-10-24（业主口径：形式化要不要做由用户指定，指定之后由 B 逐条安排）：
-    # 开档那几句改成"结论以 V 的签与 B 的台账为准"的正向写法，关档 L 与 B 的那条通道
+    # 开档那几句是"结论以 V 的签与 B 的台账为准"的正向写法；关档 L 与 B 的那条通道
     # 在这一档都不存在 ⇒ 统一改成"本会话不做形式化验证（系统做不了）"。
     # 顺序是刻意的：具体的长条目在前、那条统一的括注在最后 —— 反过来的话，
     # 长条目里的括注会先被换成短的那一句，长条目就再也匹配不到了（判据当场报"改写没生效"）。
     ('形式化的结论以 V 的签与 B 的台账为准 —— 要不要做由**用户指定**，指定之后由 B 逐条安排、回执由 B 带回。',
      '形式化那一档本会话产不出来（系统做不了）：证明的判读只认「逐行审阅留下的读数 + V 的签字」。'),
-    # G 与 H 的边界那两句（同一批改写成"要不要做由用户指定"）。它们也进画像文件
+    # G 与 H 的边界那两句（也改成"要不要做由用户指定"）。它们也进画像文件
     # （`AGENT-PROFILES.md` 由 `profiles_markdown` 渲染并过同一张表）—— 关档不改写的话，
     # 画像会告诉读的人"这条路今天由用户指定就行"，而那一档它做不出来。
     ('形式化要不要做由**用户指定**，指定之后由 B 逐条安排（一条才做一条）、回执由 B 带回 —— '
@@ -360,10 +345,9 @@ NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     # 官能注解（有品味那一条里的"验到什么程度算够"）
     ('哪种验证才算证据、验到什么程度算够：这是你的品味，要写出取舍理由。',
      '哪种证据才算数、审到什么程度算够：这是你的品味，要写出取舍理由。'),
-    # 2026-10-23（本批，业主「Lean 没开时隔绝 L」是硬口径）：五元位那一段的 formal 那一行。
-    # 它现算自 `evidencebits.BIT_LEDGERS`，而 owner 已从 E 改成 L（`formal.record` 是唯一落点）
-    # ⇒ 开着时这一行点着 L，而 L 在关档不存在（`leanscope.is_hidden`）。
-    # 关档换成"这一位这一档产不出 proof 行"，一个字都不点 L。
+    # 五元位那一段的 formal 那一行：它现算自 `evidencebits.BIT_LEDGERS`，而 owner 是 L
+    # （`formal.record` 是唯一落点）⇒ 开着时这一行点着 L，而 L 在关档不存在
+    # （`leanscope.is_hidden`）。关档换成"这一位这一档产不出 proof 行"，一个字都不点 L。
     # 判据：`tests/test_l_is_isolated_when_lean_is_off.py::test_off_no_role_prompt_mentions_l`
     # （关档十一格提示词里 0 处 L 记号）＋ 本表的反真空（`old` 在开档逐字出现）。
     ("- `formal`：**L** 签 —— 凭据在 experiments（method='formal'）",
@@ -378,8 +362,7 @@ NO_LEAN_REPLACEMENTS: tuple[tuple[str, str], ...] = (
 #: （每条是单个字符串，内部没有换行），所以"按行删"是安全的；
 #: 判据同样要求每一条标记在「开着时」的提示词里出现（反真空）。
 NO_LEAN_DROP_LINE_MARKERS: tuple[str, ...] = (
-    # 2026-10-24（业主口径：形式化要不要做由用户指定，指定之后由 B 逐条安排）：
-    # 这一格此前是 M 的两条（"开关开着、而用户指定要验某一条时，走两步" 与
+    # 这一格原来是 M 的两条（"开关开着、而用户指定要验某一条时，走两步" 与
     # "形式化这条路：一次只核你给的那份源码"）—— 它们讲的是 M 自己怎么派形式化，
     # 而 M 今天只做一件事：用户指定之后派 B。关掉那一档这条路整条不成立（B 那条通道
     # 也做不了形式化），所以那一格按"整行删掉"处理；剩下那一格（"回执怎么读"）
@@ -391,7 +374,7 @@ NO_LEAN_DROP_LINE_MARKERS: tuple[str, ...] = (
 #:
 #: 为什么还要有这一档（单行删不够）：纸包六的「形式化那一档的凭据长什么样、谁安排」
 #: 是一条跨好几行的项目，而"里面每一行都在讲那条通道"这件事只有整块一起删才成立 ——
-#: 删一半会留下一句没有主语的半句话（真机概率不低：那一块的第一行与第二行之间没有空行）。
+#: 删一半会留下一句没有主语的半句话（那一块的第一行与第二行之间没有空行）。
 #: 块尾刻意选在「替代路线那一条」（`「形式化已关闭」那一档的替代路线`）：它正是删掉之后
 #: 该走的那条路，所以"删到它之前"＝"留下替代路线"。
 NO_LEAN_DROP_BLOCKS: tuple[tuple[str, str], ...] = (
