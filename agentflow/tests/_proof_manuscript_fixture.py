@@ -27,7 +27,7 @@ def write_proof_manuscript(root: Any, statement_id: str, proof_text: str, *,
     """写 `reports/f-proof-<稿号>.md`，返回工作区相对路径。
 
     稿号与命题号是两套号（2026-11-10 业主：F 的稿自己维护号源）。默认稿号取
-    `statement_id` 只是夹具的便利；同一命题的第二份证明是**另一份稿、另一个稿号**
+    `statement_id` 只是夹具的便利；同一命题的第二份证明是另一份稿、另一个稿号
     （2026-11-11 业主：`-pN` 在产出侧退役），调用方传 `manuscript_id` 指定。
     稿头不写 `- 证明号：`：路径号由 B 的秘书在收录时分配，产出侧不标注。
     """
