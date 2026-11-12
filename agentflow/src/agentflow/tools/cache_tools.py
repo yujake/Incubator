@@ -3,34 +3,31 @@
 
 ## 为什么这两件工具只挂给主控 M
 
-它们不是某个角色的职责，而是"用户使用系统"的那一面：看两档缓存落没落地、要不要
-重落。真正的用户面是命令行（`agentflow cache status|warm`）与网页上那两个按钮；
-工具面这一档是给主控在对话里代跑一条只读读数用的。所以 `roles=("M",)`：A–H、V、L
-一个都拿不到 —— 它们既不该看到"缓存花了多少钱"，也不该有一件能自己花钱的工具。
+它们不是某个角色的职责，而是"用户使用系统"的那一面：看两档缓存落没落地、要不要重落。
+真正的用户面是命令行（`agentflow cache status|warm`）与网页上那两个按钮；工具面这一档
+是给主控在对话里代跑一条读数用的。所以 `roles=("M",)`：A–H、V、L 一个都拿不到 ——
+它们既不该看到"缓存花了多少钱"，也不该有一件能自己花钱的工具。
 
 ## 两根轴逐条如实声明
 
-- `cache.status`：只读（`side_effect="read"`）、不起子进程（`external="none"`）。
-  它读的是读数文件加一次现渲染，零模型调用。
-- `cache.warm`：会写读数文件（`side_effect="write_local"`）并起 detached 子进程真发
-  请求（`external="exec"`）。带 `dry_run=true` 时只算计划（零花费），但"能花钱"这件事
-  由声明说清 —— 声明跟着最坏的那一档走，不跟着这一次调用的实参走。
+- `cache.status`：只读（`side_effect="read"`）、不起子进程（`external="none"`），
+  读的是读数文件加一次现渲染，零模型调用。
+- `cache.warm`：会写读数文件（`side_effect="write_local"`）并起 detached 子进程真发请求
+  （`external="exec"`）。带 `dry_run=true` 时只算计划（零花费），但"能花钱"这件事由声明
+  说清 —— 声明跟着最坏的那一档走，不跟着这一次调用的实参走。
 
 ## 三态
 
 `status` 的返回就是 `cachectl.status()` 那一份：两档 × 四格，`unknown` 的档带理由。
-它不是"全部通过"的意思 —— 工具调用成功（`ok(...)`）与"缓存新鲜"是两件事，
-所以判定要看 `data["verdict"]["tri"]`，不看工具调用本身的成败。
+它不是"全部通过"的意思 —— 工具调用成功（`ok(...)`）与"缓存新鲜"是两件事，所以判定要
+看 `data["verdict"]["tri"]`，不看工具调用本身的成败。
 
 ## 本模块没有接线（这是写下来的决定，不是漏掉的）
 
-本文件不在 `src/agentflow/tools/__init__.py` 的 `_MODULES` 里 ⇒ `build_registry()`
-不会装配它，任何角色的工具面上都没有 `cache.status` / `cache.warm`。
-理由与"若要挂上要改什么"写在 `docs/KNOWN-UNWIRED.md`（那份清单可机核：
-`tests/test_known_unwired_modules.py` 逐条核"清单 == 盘上没装配的模块"）。
-业主此前裁定「本轮不挂」：这两件的真实用户面是命令行（`agentflow cache status|warm`）
-与网页上那两个按钮，工具面这一档是"主控在对话里代跑一条只读读数"。
-"""
+本文件不在 `src/agentflow/tools/__init__.py` 的 `_MODULES` 里 ⇒ `build_registry()` 不会
+装配它，任何角色的工具面上都没有 `cache.status` / `cache.warm`。理由与"若要挂上要改什么"
+写在 `docs/KNOWN-UNWIRED.md`（可机核：`tests/test_known_unwired_modules.py` 逐条核
+"清单 == 盘上没装配的模块"）。"""
 from __future__ import annotations
 
 from typing import Any
