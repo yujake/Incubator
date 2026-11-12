@@ -404,7 +404,7 @@ def _window_on_tokens(page: str, toks: list[str], weight: dict[str, float],
         return page[:max_chars].strip()
     occurrences.sort()
 
-    best_score, best_lo, best_hi = -1.0, occurrences[0][0], occurrences[0][0]
+    best_score, best_lo = -1.0, occurrences[0][0]
     for a in range(len(occurrences)):
         seen: set[str] = set()
         for b in range(a, len(occurrences)):
@@ -414,7 +414,7 @@ def _window_on_tokens(page: str, toks: list[str], weight: dict[str, float],
             score = sum(weight.get(t, 0.0) for t in seen)
             # 并列时取更早的那个窗口（结果与页序无关、可复现）。
             if score > best_score:
-                best_score, best_lo, best_hi = score, occurrences[a][0], occurrences[b][0]
+                best_score, best_lo = score, occurrences[a][0]
 
     start = best_lo
     # 向前吸附到最近的句首（最多回退 160 字符，免得窗口被一句超长话吃掉）。
@@ -440,8 +440,32 @@ def _window_on_tokens(page: str, toks: list[str], weight: dict[str, float],
     text = page[start:start + max_chars].strip()
     if not text:
         return page[best_lo:best_lo + max_chars].strip()
-    _ = best_hi
     return text
+
+
+def _token_weights(pages: list[str], toks: list[str]) -> dict[str, float]:
+    df: dict[str, int] = {t: 0 for t in set(toks)}
+    for page in pages:
+        low = page.lower()
+        for t in df:
+            if t in low:
+                df[t] += 1
+    return {t: 1.0 / max(1, n) for t, n in df.items()}
+
+
+def _page_scores(pages: list[str], weight: dict[str, float]) -> list[float]:
+    out: list[float] = []
+    for page in pages:
+        low = page.lower()
+        present = {t for t in weight if t in low}
+        # 主键是覆盖率（这一页到底谈了几个主题词），稀有度只当次键。
+        # 只用 `Σ 1/df(t)` 会让"命中一个稀有词"的页压过"命中三个常见词"的页 ——
+        # 代价见 `_COVERAGE_FIRST` 的说明（cosets 那道题就是这么选错的）。
+        score = len(present) * _COVERAGE_FIRST + sum(weight[t] for t in present)
+        if score > 0 and _looks_like_navigation(page):
+            score *= _NAV_PENALTY
+        out.append(score)
+    return out
 
 
 def page_scores(pages: list[str], query: str) -> list[float]:
@@ -460,26 +484,7 @@ def page_scores(pages: list[str], query: str) -> list[float]:
     toks = _tokens(query)
     if not toks or not pages:
         return [0.0 for _ in pages]
-    df: dict[str, int] = {t: 0 for t in set(toks)}
-    for page in pages:
-        low = page.lower()
-        for t in df:
-            if t in low:
-                df[t] += 1
-    weight = {t: 1.0 / max(1, n) for t, n in df.items()}
-
-    out: list[float] = []
-    for page in pages:
-        low = page.lower()
-        present = {t for t in weight if t in low}
-        # 主键是覆盖率（这一页到底谈了几个主题词），稀有度只当次键。
-        # 只用 `Σ 1/df(t)` 会让"命中一个稀有词"的页压过"命中三个常见词"的页 ——
-        # 代价见 `_COVERAGE_FIRST` 的说明（cosets 那道题就是这么选错的）。
-        score = len(present) * _COVERAGE_FIRST + sum(weight[t] for t in present)
-        if score > 0 and _looks_like_navigation(page):
-            score *= _NAV_PENALTY
-        out.append(score)
-    return out
+    return _page_scores(pages, _token_weights(pages, toks))
 
 
 def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple[int, str]:
@@ -504,15 +509,9 @@ def excerpt_for(pages: list[str], query: str, *, max_chars: int = 1200) -> tuple
     toks = _tokens(query)
     if not toks:
         return (1, pages[0][:max_chars].strip()) if pages else (0, "")
-    scores = page_scores(pages, query)
+    weight = _token_weights(pages, toks)
+    scores = _page_scores(pages, weight)
     best_idx = max(range(len(scores)), key=lambda i: (scores[i], -i))
-    df: dict[str, int] = {t: 0 for t in set(toks)}
-    for page in pages:
-        low = page.lower()
-        for t in df:
-            if t in low:
-                df[t] += 1
-    weight = {t: 1.0 / max(1, n) for t, n in df.items()}
     return best_idx + 1, _window_on_tokens(pages[best_idx], toks, weight, max_chars)
 
 
@@ -599,6 +598,7 @@ def search_fn_for_store(store: Store, *, source_name: str = "localpdf",
                 continue
             page, excerpt = excerpt_for(pages, topic, max_chars=max_chars)
             score = len(excerpt)
+            download = row.get("download") or {}
             hits.append((
                 score,
                 LocalHit(
@@ -607,8 +607,8 @@ def search_fn_for_store(store: Store, *, source_name: str = "localpdf",
                     page=page,
                     excerpt=excerpt,
                     pdf_path=path_text,
-                    bytes=int((row.get("download") or {}).get("bytes") or 0),
-                    sha256=str((row.get("download") or {}).get("sha256") or ""),
+                    bytes=int(download.get("bytes") or 0),
+                    sha256=str(download.get("sha256") or ""),
                 ),
             ))
         if max_books is not None:
