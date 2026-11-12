@@ -57,9 +57,9 @@
 
 ## 起跑时那一行（`run_reading`）
 
-`status` 是"用户主动问一次"，回答不了"跑起来以后这一趟命中的是哪一档"。业主 2026-10-23
-的口径是两档缓存要有"能调用的工具 ＋ 状态显示"，而审计发现运行期一次都没读过读数，
-于是补了这一格：每次起跑读一次 `active`，折成一行读数打出来（新鲜 ⇒ `缓存：使用 …`；
+`status` 是"用户主动问一次"，回答不了"跑起来以后这一趟命中的是哪一档"。两档缓存要有
+"能调用的工具 ＋ 状态显示"，而运行期也得读一次读数，所以每次起跑读一次 `active`，
+折成一行读数打出来（新鲜 ⇒ `缓存：使用 …`；
 不新鲜 / 未落地 / 换了 key ⇒ 一行 warning 指向『试算』）。它只加读数、不拦跑 ——
 不新鲜的缓存跑起来照样是对的，只是按未命中计费，所以这一行绝不改退出码、也绝不
 因此不发请求。读不出来时自己接住异常降级成 warning（这一趟照旧起跑）。
@@ -190,7 +190,7 @@ ENV_WORKSPACE_ROOT = "AGENTFLOW_WORKSPACE_ROOT"
 DEFAULT_READINGS_HINT = "tests/fixtures/prompt_cache_warm.json"
 
 #: 渲染结果的进程内缓存：提示词在一次进程生命周期里不会变，而网页的读数面板会
-#: 跟着每条 SSE 事件重取一次 —— 不缓存的话每次要重新渲染十二个 system（实测 0.53 秒）。
+#: 跟着每条 SSE 事件重取一次 —— 不缓存的话每次要重新渲染十二个 system。
 _RENDERS: dict[str, dict[str, dict[str, Any]]] = {}
 
 #: 切开关渲染要动 `AGENTFLOW_LEAN_ENABLED` 与 `agent_prompts` 的那个闩，两件事都不是
@@ -646,7 +646,7 @@ def record_active_run(*, root: Path | str | None = None, sid: str = "",
     """把这一趟的 lean 状态记进 `<工作区>/runs/cache-active-<会话号>.json`。
 
     为什么要有这一格：环境变量是进程私有的，网页那条进程读不到跑着的那一趟的开关 ——
-    页面上那一格此前只能说网页自己的开关，多进程时就是说反的。把起跑那一刻的开关
+    页面上那一格若只说网页自己的开关，多进程时就是说反的。把起跑那一刻的开关
     落成一份盘上读数，另一条进程才读得到"正在跑的那一趟"用的是哪一档。
 
     三态：`written=True` 写成了；写不成（工作区不可判定 / 目录或文件不可写）返回
@@ -838,7 +838,7 @@ def _active_why(tri: str, fresh: bool, missing: Iterable[str],
 def _active_text(doc: Mapping[str, Any]) -> str:
     """这一行的人读正文（命令行原样打印，网页把星号画成加粗；两处同一份字）。
 
-    星号是"强调"的标记而不是装饰：业主 2026-10-23 那张施工单给的就是这一句的形状
+    星号是"强调"的标记而不是装饰：这一行的形状就是施工单给的那一句
     （"当前使用：Lean 版缓存（版本 · 覆盖 · 那一趟）｜开关：开"）。做成一份字面量放
     在这里，是为了让"网页上说的档"与"命令行说的档"共用同一个产出点。
 
@@ -1035,7 +1035,7 @@ def run_reading(*, path: Path | None = None,
     调这里：档位照读、那一行照印，但 `record_active_run()` 根本不调 —— 不写
     `runs/cache-active-*.json`。回执里 `reason="dry_run"`，`written=False`。
     为什么是"跳过一次调用"而不是"写进去再删"：先写后删在失败/中断时仍会留下字节，
-    而在别人的目录里留下 `runs/` 正是 2026-11-10 那次 `init` 守卫事故的起点。
+    而在别人的目录里留下 `runs/` 正是 `init` 守卫事故的起点。
 
     ## 三态与两种级别（不是判定，只是读数）
 
@@ -1408,7 +1408,7 @@ def _print_status(doc: Mapping[str, Any]) -> None:
     print(f"[cache] 两档提示词缓存（读数文件 {doc.get('readings')}）")
     print(f"  当前开关：{'Lean 开' if doc.get('lean_now') else 'Lean 关'}"
           f"；提示词版本 {doc.get('prompt_version')}")
-    # 业主 2026-10-23 晚要的那一行：网页顶部与这里印的是同一个 `active.text`。
+    # 网页顶部与这里印的是同一个 `active.text`。
     active_text = str((doc.get("active") or {}).get("text") or "")
     print(f"  {active_text}" if active_text
           else "  当前使用：unknown（这一格没读出来 —— 不是『没有缓存』）")
@@ -1560,7 +1560,7 @@ def add_subcommands(sub: Any) -> None:
     真预热会花钱，所以"落哪一档"不许有隐含缺省 —— 少敲一个词就多花一倍钱。
 
     ## 容器这一层也要有 `func`（D-1）
-    两个叶子各设了自己的 `func`，而 `cache` 这一层此前一个都没设。于是
+    两个叶子各设了自己的 `func`，而 `cache` 这一层若一个都不设，
     `agentflow cache`（不带子命令）走到 `cli.main` 的 `args.func(args)` 就炸在
     `AttributeError: 'Namespace' object has no attribute 'func'` 上，退出码 1 ——
     而 1 在这个仓库里的意思是"查过了、有问题"，用法错该是 2（没查成）。这里给容器
