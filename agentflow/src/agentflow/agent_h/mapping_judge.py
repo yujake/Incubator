@@ -118,17 +118,14 @@ def level_of(kind: Any) -> str:
     return LEVEL_BLOCKER
 
 
-def findings_of(reading: Mapping[str, Any] | None) -> list[dict[str, Any]]:
-    """把一次 `papermapping.mapping_reading` 的读数折成 H 形状的发现。
+def _fold_findings(items: Any) -> list[dict[str, Any]]:
+    """`problems` / `warnings` 两处共用的折叠体（同一形状、同一条级别判据）。
 
-    只折 `problems`（拦门那一档）。`warnings` 走 `warnings_of`：它们不改 `state`、
-    不动门的强度，所以不进这份清单 —— 但要照样读得出来（"没拦住"与"没看见"是两件事）。
-
-    零条问题 ⇒ 返回空表（不是 None）：空表是"查过了、没问题"，None 会被读成
-    "没查"。两者在收工输出上必须分得开，所以这个函数的返回值里没有"缺席"这一档。
+    两处的差别只在"读读数里的哪一格"，折叠本身一个字不差 —— 各写一份迟早会
+    只改其中一份，而"拦门清单"与"只点名清单"的形状分家不会有任何东西报。
     """
     out: list[dict[str, Any]] = []
-    for item in ((reading or {}).get("problems") or ()):
+    for item in (items or ()):
         if not isinstance(item, Mapping):
             continue
         kind = str(item.get("kind") or "")
@@ -140,6 +137,18 @@ def findings_of(reading: Mapping[str, Any] | None) -> list[dict[str, Any]]:
             "message": str(item.get("detail") or ""),
         })
     return out
+
+
+def findings_of(reading: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    """把一次 `papermapping.mapping_reading` 的读数折成 H 形状的发现。
+
+    只折 `problems`（拦门那一档）。`warnings` 走 `warnings_of`：它们不改 `state`、
+    不动门的强度，所以不进这份清单 —— 但要照样读得出来（"没拦住"与"没看见"是两件事）。
+
+    零条问题 ⇒ 返回空表（不是 None）：空表是"查过了、没问题"，None 会被读成
+    "没查"。两者在收工输出上必须分得开，所以这个函数的返回值里没有"缺席"这一档。
+    """
+    return _fold_findings((reading or {}).get("problems"))
 
 
 def warnings_of(reading: Mapping[str, Any] | None) -> list[dict[str, Any]]:
@@ -150,19 +159,7 @@ def warnings_of(reading: Mapping[str, Any] | None) -> list[dict[str, Any]]:
     并进去就等于让它拦门，而不并又会让它消失 —— 所以另开一个返回口，
     由 `closing` 数一遍并列进读数（"看见了、这一档不拦"）。
     """
-    out: list[dict[str, Any]] = []
-    for item in ((reading or {}).get("warnings") or ()):
-        if not isinstance(item, Mapping):
-            continue
-        kind = str(item.get("kind") or "")
-        out.append({
-            "kind": kind,
-            "level": level_of(kind),
-            "target": str(item.get("label") or item.get("where") or ""),
-            "where": str(item.get("where") or ""),
-            "message": str(item.get("detail") or ""),
-        })
-    return out
+    return _fold_findings((reading or {}).get("warnings"))
 
 
 def problem_counts(findings: Sequence[Mapping[str, Any]]) -> dict[str, int]:
