@@ -49,6 +49,30 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：`different`（另一条路径）。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
+    fail-closed 拒收（`proof_kind_unjudged`），会把 d 这里的合并稿拒掉 —— 而这一份
+    量的是"合并稿的依赖面写在同一笔事务里"，不是证法是不是同一套（合并稿是各取所长
+    写出来的，本来就不是原稿那一条路径）。真正的剧本桩（same / different / 没判成）
+    在 `tests/test_rehearsal_two_f_independent_proofs.py` 与
+    `tests/test_unjudged_axes_are_fail_closed.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
+
+
 def _row(st: Store, sid: str) -> dict[str, Any]:
     return next(dict(r) for r in st.rows("statements") if str(r.get("stmt_id") or "") == sid)
 
