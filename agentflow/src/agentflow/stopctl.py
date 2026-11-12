@@ -1222,7 +1222,7 @@ def running_loops(root: str | Path) -> dict[str, Any]:
     seen_sids: set[str] = set()
     try:
         # 一趟收齐两件事：哪些 sid 名下至少有一个登记还活着、哪些 sid 的登记全都死了。
-        # 改前这里读了两轮盘：第一轮逐条判活，第二轮又对**每个 sid** 重新
+        # 改前这里读了两轮盘：第一轮逐条判活，第二轮又对每一个 sid 重新
         # `_registered_pids(root)`（每次都把 `*.pid` 全部读出来再解析一遍）去问
         # "这个 sid 还有活的吗"—— O(sid 数) 次整目录重读 + 重复的探活。
         # "某个 sid 还有活着的登记 ⇒ 它不是死 sid" 这条判据逐字未变。
