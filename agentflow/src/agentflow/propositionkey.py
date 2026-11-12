@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """命题同一性与同种证明的判据（纯函数、确定性、零模型调用）。
 
-## 先读这一节：本模块现在管到哪一层（2026-10-24 业主改口径；2026-11-08 收两档）
+## 先读这一节：本模块现在管到哪一层（业主改口径；收两档）
 
 业主逐字：「不用机械判据，让秘书洗定理名，让秘书判。」以及一句准绳：「定理描述一致
 （什么条件推出什么结论），就是一个定理」。
@@ -20,14 +20,14 @@
 | 概念档 | 本模块 `same_concept` | 定义项（标签，或正文里的「概念（X）」/「定义（X）」）相同 ⇒ 同一个概念 | 不发模型调用（概念没有"条件 ⇒ 结论"） |
 | 兜底 | 本模块 `proposition_key` / `same_proposition` | 只在秘书这一格没判成（没缝 / 开关关着 / 超时）时兜住旧口径 | 不许覆盖秘书给过的结论 |
 
-最后一行是历史口径（2026-10-24 上午的裁定 + 判据
+最后一行是兜底口径（判据
 `tests/test_secretary_recognizes_the_same_proposition.py` 钉着它），保留它是因为
 "秘书没接上时整条写入路不许因此瘫掉"：那时它退成"一模一样才并"，比"什么都不并"更接近
 真相。秘书一旦判了（`checked=True`），它说了算 —— 包括判 different；试过而没判成
 （`attempted=True` + `checked=False`）不是第三种结论，上层按受控拒处置（不新建、不合并）；
 没有判断面（没缝 / 开关关着）才退回这一档确定性兜底。
 
-## 这一份回答的两个问题（业主 2026-10-24 的原话）
+## 这一份回答的两个问题（业主的原话）
 
 业主逐字：「我怕 B 的秘书看到对表述几乎相同的定理，不会有种意识它们是同一个，然后把
 截然不同的证明并列记录（如果证明方式几乎相同，视为同种证明，可选：各取所长混合表述，
@@ -37,8 +37,8 @@
 
 | 问题 | 判据 | 命中之后 |
 |---|---|---|
-| 这两条命题是不是同一条 | 秘书挑词 → 关键词检索 → 一次判定（`secretary.adjudicate_proposition`） | 不新建命题行，落成那条命题的第 N 份证明 |
-| 同一命题下这两份证明是不是同一种证法 | `same_kind_proof` | 不新增证明号，受控拒绝 `proof_same_kind`（或 `merge=true` 合成一份并重拿 V 签）；判不了 ⇒ 受控拒 `proof_kind_unjudged` |
+| 这两条命题是不是同一条 | 秘书挑词 → 关键词检索 → 一次判定（`secretary.adjudicate_proposition`） | 不新建命题行，落成那条命题的另一条路径（一个稿号 = 一份文件 = 一份证明） |
+| 同一命题下这两份证明是不是同一种证法 | `same_kind_proof` | 不新增路径号，受控拒绝 `proof_same_kind`（或 `merge=true` 合成一份并重拿 V 签）；判不了 ⇒ 受控拒 `proof_kind_unjudged` |
 
 ## 命题键（`proposition_key`）
 
@@ -68,7 +68,7 @@
 ## 判不了 = 没判成（`judgeable`）
 
 `proposition_key` 与 `prose_similarity` 对"判不了"的文本返回空串 / 0.0。两轴对它的表达
-在 2026-11-08 之后分成两种（业主逐字：「没有判不了」）：
+分成两种（业主逐字：「没有判不了」）：
 
 - `same_proposition`（命题轴的确定性兜底）：仍返回 `state="unknown"` —— 它不归模型判，
   调用方（`statementfission` 的形态读数与 `_same_proposition_candidate` 的兜底）读的是
@@ -77,7 +77,7 @@
   不返回第三种结论。调用方据此 fail-closed（受控拒：不新增证明号 / 不新建概念行）；
   不许把它折成 `different`。
 
-两轴"没判成"的口径（2026-11-08 主笔裁定：不按字数预判死）：
+两轴"没判成"的口径（不按字数预判死）：
 
 - `same_kind_proof`：不再看 `MIN_CONTENT_UNITS` —— 短证明照样判（"取 δ=ε 逐点验证"
   与"用有限覆盖"是两种证法，判得出）。只剩一种没判成：没有可比的文本（空串）。
@@ -106,15 +106,14 @@
 
 一条 `kind="concept"` 的行没有"条件 ⇒ 结论"：它是一句定义。上面那一整套判据在它上面
 等于失效（键比的是条件与结论的记号集合，两条把同一个术语定义了两遍的行会因此退化成
-"不同"—— 真机 mp3-r2 就是这么落下 `000003` / `000004` 两行同一个
-`finite-dimensional Lie algebra` 的）。所以概念这一档另有一条判据，同样是纯函数：
+"不同"）—— 所以概念这一档另有一条判据，同样是纯函数：
 
 | 依据 | 判什么 | `basis` |
 |---|---|---|
 | 定义项（标签） | 两侧的标签规范化后相同 | `concept_label` |
 | 定义项（正文里的术语） | 正文开头「概念（X）」/「定义（X）」抽出的 X 相同 | `concept_defined_term` |
 
-两档（2026-11-08 起）：两侧至少有一侧抽得出定义项、而两侧不相等 ⇒ `different`；定义项相同
+两档：两侧至少有一侧抽得出定义项、而两侧不相等 ⇒ `different`；定义项相同
 ⇒ `same`。两侧都抽不出（空标签、正文不是一句定义）⇒ 判不了 = 没判成
 （`checked=False`、`state=""`）：调用方受控拒、不新建第二行。`checked=False` 不许折成
 `different`（"判不了当不同"会让同一个概念还是被登记两行），也不许折成 `same`。
@@ -151,7 +150,7 @@ from .conceptrows import CONCEPT_GENERIC_TERMS, defined_term
 #:
 #: 0.85 这个数的来由（不是拍的）：命题的两种写法如果只差引导词、编号、记号排版，
 #: 键就已经相同（走不到这一档）；走到这一档的是"多一个词 / 换一个同义词"那一类。
-#: 本仓的实测（`propositionkey` 的自检用例 + sylow3 的三条真数据）里，同一命题的
+#: 同一命题的
 #: 两种写法落在 0.86 以上，而两条不同的定理（哪怕同属一个主题）在 0.55 以下。
 #: 取 0.85 意味着"宁可漏并，不许错并"：错并会让一条真命题在台账上消失。
 SAME_PROPOSITION_JACCARD = 0.85
@@ -165,12 +164,12 @@ PROOF_SAME_JACCARD = 0.80
 
 #: 命题轴"判不了"的下限：内容单元（拉丁词元 + 中文字）少于这个数 ⇒ `unknown`。
 #:
-#: 用途（2026-11-08 起只剩这一处）：命题轴的确定性兜底 —— `judgeable` 被
+#: 用途（只剩这一处）：命题轴的确定性兜底 —— `judgeable` 被
 #: `proposition_key` / `same_proposition` / `prose_similarity` 调用。`x = 1` 与 `y = 1`
 #: 的词面相似度是 2/3，光看相似度会把两条不同断言判成"高度重合"；太短的命题没有足够
 #: 信息支撑任何结论，所以那一档仍走"判不了"（`unknown`），不是"不同"。
 #:
-#: 同种证明 / 概念同一性两轴不再用它（2026-11-08 主笔裁定：短证明照样判，见
+#: 同种证明 / 概念同一性两轴不再用它（短证明照样判，见
 #: `_judge` 的 docstring）。概念轴从来没用过它。
 MIN_CONTENT_UNITS = 4
 
@@ -534,10 +533,10 @@ def _judge(a: str, b: str, *, threshold: float, basis: str,
     不同的只有阈值与命中之后的处置（处置在调用方，不在这里）。
 
     `unknown_is_unjudged`：判不了时怎么表达。`False`（命题轴）照旧 `state="unknown"`；
-    `True`（证明轴，2026-11-08 起）`checked=False` + `state=""` —— "判不了"不是第三种
+    `True`（证明轴）`checked=False` + `state=""` —— "判不了"不是第三种
     结论，是"没判成"。
 
-    ## 2026-11-08（主笔裁定）：两轴不按"内容单元 < `MIN_CONTENT_UNITS`"预判死
+    ## 两轴不按"内容单元 < `MIN_CONTENT_UNITS`"预判死
     短证明照样判："取 δ=ε 逐点验证"与"用有限覆盖"是两种证法，词面相似度判得出来。
     长度阈值只留给命题轴的确定性兜底（`same_proposition` / `proposition_key` /
     `prose_similarity`）。证明轴只剩一种"没判成"：没有可比的文本（空串）——
@@ -598,7 +597,7 @@ def same_proposition(a: str, b: str, *,
     `reason` / `threshold` / `judgeable`。
     `basis` 只有 `proposition_key`、`prose_similarity` 两档；`unknown` 时为空串。
     命题轴的"判不了"仍是第三态 `state="unknown"`（`checked=False`）：这一轴是确定性兜底，
-    不在 2026-11-08 "收两档"的范围内（理由见模块 docstring）。
+    不在 "收两档"的范围内（理由见模块 docstring）。
     """
     return _judge(a, b, threshold=threshold, basis=BASIS_KEY, what="命题")
 
@@ -619,11 +618,11 @@ def same_kind_proof(a: str, b: str, *,
                     threshold: float = PROOF_SAME_JACCARD) -> dict[str, Any]:
     """两份证明是不是同一种证法（两档：same / different；没判成 = `checked=False`）。
 
-    2026-11-08 业主：「没有判不了」⇒ 判不了不是第三种结论，是 `checked=False`
+    业主：「没有判不了」⇒ 判不了不是第三种结论，是 `checked=False`
     （`state=""`）；调用方据此 fail-closed（不新增证明号，受控拒
     `proof_kind_unjudged`）。
 
-    ## 2026-11-08（主笔裁定）：不按字数预判死
+    ## 不按字数预判死
     短证明照样判：词面相似度判得出"取 δ=ε 逐点验证" ≠ "用有限覆盖"。所以这一轴
     不看 `MIN_CONTENT_UNITS`；`checked=False` 只剩"没有可比的文本"（空串）——
     那是没东西可判，不是字数不够。两种折平都不许：折成 different 会让同一种证法被
@@ -654,7 +653,7 @@ def _concept_key_text(text: str) -> str:
 
     门槛只剩一道：通用词（`CONCEPT_GENERIC_TERMS`）不算定义项。
 
-    2026-11-08（主笔裁定：不许按长度预判死）：删掉"规范化之后不足两个字符的不算"。
+    不许按长度预判死：删掉"规范化之后不足两个字符的不算"。
     单字概念名（`群` / `环` / `谱`）是数学文献里最正常不过的东西；按字数把它判成
     "抽不出定义项"会让 fail-closed 把整个概念表堵死（只要有这么一行在册，之后每一条
     新概念都判不了）。通用词那条保留：拿"概念"当键会把所有没命名的概念并成一条，
@@ -673,7 +672,7 @@ def _concept_key_text(text: str) -> str:
 def concept_keys(label: str, statement_full: str = "") -> dict[str, str]:
     """一条概念行的两个定义项键（`label` 那一格与正文里抽出的术语那一格）。
 
-    两个都空 ⇒ 这一行判不了（不是"不同"）。为什么要两个而不是一个：真机里标签与
+    两个都空 ⇒ 这一行判不了（不是"不同"）。为什么要两个而不是一个：标签与
     定义句各有可能缺席（标签是英文而定义句是中文、或者标签只写"概念"），只留一个键
     会把"这一侧读不出"错当成"两侧不一样"。
     """
@@ -689,10 +688,10 @@ def same_concept(a_label: str, a_full: str = "", b_label: str = "",
     `checked` / `state` / `basis` / `key_a` / `key_b` / `label_key_a` / `label_key_b` /
     `term_key_a` / `term_key_b` / `reason`。
     判据顺序固定：标签相同优先（它就是"定义项"的规范落点），其次正文里的术语。
-    标签不同而术语相同 ⇒ 仍判 `same`（真机 mp3-r2 的两行标签相同，但"标签改过一次、
+    标签不同而术语相同 ⇒ 仍判 `same`（两行标签相同，但"标签改过一次、
     正文里的术语还是那个"的形态同样不该新建第二行）。
 
-    两档（2026-11-08 起）：判得出 ⇒ `checked=True` + `state="same"/"different"`；
+    两档：判得出 ⇒ `checked=True` + `state="same"/"different"`；
     两侧都抽不出定义项 ⇒ `checked=False` + `state=""`（没判成，调用方受控拒
     `concept_identity_unjudged`）。第三态 `unknown` 不再从这里出去。
     """
