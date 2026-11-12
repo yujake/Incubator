@@ -93,11 +93,14 @@ def _tree(root: pathlib.Path) -> dict[str, str]:
 def _tree_diff(committed: dict[str, str], built: dict[str, str]) -> list[str]:
     """入库产物 vs 刚构建出来的产物：逐条列出差异（人话）。"""
     rows: list[str] = []
-    for rel in sorted(set(committed) - set(built)):
+    # 两张键集各建一次：下面三段问的是同一对集合的三个方向。
+    committed_keys = set(committed)
+    built_keys = set(built)
+    for rel in sorted(committed_keys - built_keys):
         rows.append(f"入库有、构建没有：{rel}（源码删了？）")
-    for rel in sorted(set(built) - set(committed)):
+    for rel in sorted(built_keys - committed_keys):
         rows.append(f"构建有、入库没有：{rel}（改了前端没重建？）")
-    for rel in sorted(set(committed) & set(built)):
+    for rel in sorted(committed_keys & built_keys):
         if committed[rel] != built[rel]:
             rows.append(f"内容不同：{rel}")
     return rows
@@ -140,9 +143,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"[frontend_gate] fail：构建失败（退出码 {code}）：\n{out[-4000:]}")
             return 1
         print("[frontend_gate] build：pass")
-        rows = _tree_diff(_tree(STATIC), _tree(tmp))
+        # 两棵树各算一次：`_tree` 要读并哈希整棵树的每个文件，而下面两处都要用同一批读数。
+        committed_tree = _tree(STATIC)
+        built_tree = _tree(tmp)
+        rows = _tree_diff(committed_tree, built_tree)
         if not rows:
-            print(f"[frontend_gate] 新鲜度：pass（入库产物 {len(_tree(STATIC))} 个文件与"
+            print(f"[frontend_gate] 新鲜度：pass（入库产物 {len(committed_tree)} 个文件与"
                   "刚构建的结果逐字节相同）")
             return 0
         print("[frontend_gate] fail：入库的前端产物与刚构建的结果不一致 —— "
