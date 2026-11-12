@@ -481,17 +481,17 @@ def test_a_broken_row_is_refused_with_the_line_and_the_missing_column(store: Sto
     assert "命题号" in got2.get("error", ""), got2
     assert _deps(store) == [], _deps(store)
 
-    # 缺"路径号"这一列（表头只有三列）
+    # 缺一列（表头只有两列：缺"用在哪一步"）⇒ 仍受控拒（三列必填，路径号除外）
     missing_col = (
         "## 依赖\n\n"
-        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
-        "|---|---|---|\n"
-        f"| 由定理甲，G 有 p 阶元 | stmt:{THEOREM_A} | 第 1 步 |\n")
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） |\n"
+        "|---|---|\n"
+        f"| 由定理甲，G 有 p 阶元 | stmt:{THEOREM_A} |\n")
     got3 = _register(store, missing_col, statement_full="定理：第三条（判据夹具）。")
     assert got3.get("ok") is False, got3
     assert got3.get("kind") == DS.REFUSED_SECTION, got3
     assert "缺列" in got3.get("error", ""), got3
-    assert "路径号" in got3.get("error", ""), got3
+    assert "用在哪一步" in got3.get("error", ""), got3
     assert _deps(store) == [], _deps(store)
 
 
