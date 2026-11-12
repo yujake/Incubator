@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""规范 JSON 字节串 —— 唯一实现（依据 `draft/28` §143.6 的 R-33）。
+"""规范 JSON 字节串 —— 唯一实现。
 
 ## 这一层解决什么
 
@@ -8,20 +8,18 @@
 - `signatures`：稿件内容的规范哈希（`content_sha256_of`）与 `claims_hash_of`；
 - `scripts/noai_gate.py`：批准台账回执的自身哈希（`_receipt_digest`，回执链就钉在它上面）。
 
-R-33 记的正是"两处各写一份"：口径只要差一个字符（分隔符、是否 `ensure_ascii`、
-键序），同一份内容就会算出两个哈希 —— 而那种偏差不会报错：两个地方各自自洽，
-只有跨过去比对（"这条回执钉的哈希对不对得上 `signatures` 算的那一版"）才会暴露。
+两处各写一份时，口径只要差一个字符（分隔符、是否 `ensure_ascii`、键序），同一份
+内容就会算出两个哈希 —— 而那种偏差不会报错：两个地方各自自洽，只有跨过去比对
+（"这条回执钉的哈希对不对得上 `signatures` 算的那一版"）才会暴露。
 
-## 为什么门最终没有改成 import 本模块（第一版方案被负控推翻）
+## 门的第二份字节为什么留着
 
-`R-33` 的第一版是"让门按文件路径加载本模块"，理由是"门必须能在本包 import 不了时也能跑"。
-它当场被负控推翻：`tests/test_noai_gate_record_audit_cli.py` 的两条负控把门脚本单独复制
-到一个临时目录、注入一处缺陷，证明回执链核对会红 —— 而副本旁边没有本模块 ⇒ 门跑不起来、
-那两条判据无处安放。门要的是"能被单独复制并在任何位置运行"，比"不 import 本包"更强。
-
-所以最终口径是：包里这一份是唯一的实现（`signatures` 用它）；门保留自己的字节，
-并由 `noai_gate.py --check-canonical` 把两者钉在一起（同一载荷两侧哈希必须逐字相等，
-否则 `divergent(1)`）。真正被禁掉的是"没人看着的第二份口径"，不是第二份字节。
+门必须能在本包 import 不了时也能跑：负控会把门脚本单独复制到一个临时目录、注入
+一处缺陷（`tests/test_noai_gate_record_audit_cli.py`），那个副本旁边没有本模块，
+按路径加载本模块就跑不起来。所以口径是：包里这一份是唯一的实现（`signatures`
+用它）；门保留自己的字节，并由 `noai_gate.py --check-canonical` 把两者钉在一起
+（同一载荷两侧哈希必须逐字相等，否则 `divergent(1)`）。真正被禁掉的是"没人看着
+的第二份口径"，不是第二份字节。
 
 ## 为什么单开一个模块，而不是放进 `signatures`
 
@@ -58,11 +56,11 @@ CANONICAL_SEPARATORS: tuple[str, str] = (",", ":")
 def json_default(value: Any) -> Any:
     """`json.dumps(..., default=json_default)` 的唯一实现（全仓一条口径）。
 
-    为什么要有它（2026-10-26）：`tests/test_json_dumps_has_a_default.py` 要求每一处
-    `json.dumps` 都带 `default=`，而当时的九处要么漏着、要么各写一个 `default=str`。
-    一个 lambda 一份口径的结果是"同一类对象在两个地方印出两种形状"，所以收敛成这一个
-    函数；`default=` 只在 json 遇到它自己序列化不了的值时才被调用，"纯 JSON 的载荷"
-    一次都不会走到这里 ⇒ 既有字节、既有哈希一个都不变。
+    全仓每一处 `json.dumps` 都带 `default=`（判据 `tests/test_json_dumps_has_a_default.py`），
+    而这些值此前要么漏着、要么各写一个 `default=str`。各写一个的结果是"同一类对象在
+    两个地方印出两种形状"，所以收敛成这一个函数；`default=` 只在 json 遇到它自己
+    序列化不了的值时才被调用，"纯 JSON 的载荷"一次都不会走到这里 ⇒ 既有字节、
+    既有哈希一个都不变。
 
     顺序是"先尽量保留结构，最后才退化成 str"：
 
@@ -93,10 +91,10 @@ def json_default(value: Any) -> Any:
 def canonical_json_text(obj: Any) -> str:
     """规范 JSON 文本（键排序、无多余空白、非 ASCII 原样）。
 
-    2026-10-17（真机 `t1r`：`TypeError: Object of type TopicalityReport is not
-    JSON serializable`）：**加 `default=str` 当最后的兜底。它不改变任何已有哈希 ——
-    带非 JSON 值的载荷此前根本算不出哈希（直接抛），所以盘上不存在"用别的字节算出来的"历史。
-    这一档正是 `conductor._structured_payload` 的 docstring 里承诺过的那条兜底。
+    `default=str` 是最后的兜底：带非 JSON 值的载荷不接这一档就直接抛 `TypeError`
+    （真机 `t1r` 的 `TopicalityReport` 那一类）。它不改变任何已有哈希 —— 那种载荷
+    此前根本算不出哈希，盘上不存在"用别的字节算出来的"历史。这一档正是
+    `conductor._structured_payload` 的 docstring 里承诺过的那条兜底。
     """
     return json.dumps(obj, sort_keys=True, ensure_ascii=False,
                       separators=CANONICAL_SEPARATORS, default=str)
@@ -132,8 +130,8 @@ def selftest() -> int:
 
     text = canonical_json_text(PROBE_PAYLOAD)
     check("键排序生效", text.startswith('{"a":'), text[:40])
-    # 只查分隔符后没有空白：探针的取值里就有空格（"中文与 ASCII 混排"），
-    # 第一版写成 `" " not in text` ⇒ 把取值里的空格当成了格式问题（夹具不干净）。
+    # 只查分隔符后没有空白：探针的取值里就有空格（"中文与 ASCII 混排"），写成
+    # `" " not in text` 会把取值里的空格当成格式问题（夹具不干净）。
     check("分隔符后无多余空白", ", " not in text and ": " not in text and "\n" not in text, text)
     check("中文未转义", "中文" in text, text[:60])
     check("哈希稳定（同输入同输出）",
@@ -141,7 +139,7 @@ def selftest() -> int:
           canonical_sha256(PROBE_PAYLOAD)[:16])
     check("键序不参与哈希", canonical_sha256({"x": 1, "y": 2}) == canonical_sha256({"y": 2, "x": 1}))
 
-    # 非 JSON 原生值：这一格是 `json_default` 的验收（改前这几种值直接抛 TypeError）。
+    # 非 JSON 原生值：这一格是 `json_default` 的验收。
     @dataclass
     class _Probe:
         name: str
