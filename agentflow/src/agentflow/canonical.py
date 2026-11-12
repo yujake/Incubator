@@ -88,6 +88,12 @@ def json_default(value: Any) -> Any:
     return str(value)
 
 
+#: 预建一份编码器（`json.dumps` 每次调用都会现造一个 `JSONEncoder`；参数与
+#: :func:`canonical_json_text` 里那一组逐字相同，`.encode()` 的字节因此逐位不变）。
+_ENCODER = json.JSONEncoder(sort_keys=True, ensure_ascii=False,
+                            separators=CANONICAL_SEPARATORS, default=str)
+
+
 def canonical_json_text(obj: Any) -> str:
     """规范 JSON 文本（键排序、无多余空白、非 ASCII 原样）。
 
@@ -96,8 +102,7 @@ def canonical_json_text(obj: Any) -> str:
     此前根本算不出哈希，盘上不存在"用别的字节算出来的"历史。这一档正是
     `conductor._structured_payload` 的 docstring 里承诺过的那条兜底。
     """
-    return json.dumps(obj, sort_keys=True, ensure_ascii=False,
-                      separators=CANONICAL_SEPARATORS, default=str)
+    return _ENCODER.encode(obj)
 
 
 def canonical_json_bytes(obj: Any) -> bytes:
