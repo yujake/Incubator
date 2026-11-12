@@ -2739,7 +2739,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                                          "降到 80% 以下。策略名（`observations.strategy`）与成本曲线"
                                          "（`observations.scaling`）是给人看的证据，不进这一档的判据")}
     if kind == PAPER_MAPPING_LEG_KIND:
-        # D-38 第二步（2026-10-24）：M 的验收表里「论文对应表」这一行。
+        # M 的验收表里「论文对应表」这一行。
         # 三态由这一档自己给（判据本体的 docstring 里逐条写了）：表不在盘上 ⇒ 0 行；
         # 表在而解析坏 ⇒ 抛出去 ⇒ 这一行 unreadable、整格 unknown（不是 0）。
         got = paper_mapping_cell_reading(
@@ -2761,13 +2761,13 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
 
 def _acceptance_unknown(rep: ClosingReport, code: str, detail: str, *,
                         checks_file: str = "") -> None:
-    """把「验收表结构级没查成」同时写成 finding 与读数（`draft/39` §6.25 的 D35）。
+    """把「验收表结构级没查成」同时写成 finding 与读数。
 
-    只留给"没有行可读"的那两态（`draft/52` CC-02 裁定 (a)）：
+    只留给"没有行可读"的那两态：
     顶层不是 JSON、或顶层不是数组。行级的坏（一行读不懂）不走这里 ——
     那一行记 `unreadable`、其余行照常判（见 :func:`acceptance_row_state`）。
 
-    为什么读数不能缺：这一格原先只 push 一条 `Finding`，`readings["acceptance"]` 留在
+    为什么读数不能缺：只 push 一条 `Finding` 的话，`readings["acceptance"]` 会留在
     `None` 上 —— 于是"为什么没查成"在交付面（报告 / 我的离线复算 / 状态报告）里只剩一个
     `null`，而三态纪律要的是"没查成"本身可读。
     """
@@ -2784,8 +2784,8 @@ def _acceptance_unknown(rep: ClosingReport, code: str, detail: str, *,
 #: `computed` 真的按台账算出了 `got`（唯一算"这一档被算过"的状态）；`na` 标了 `na` + 理由（D49 第三态出口，只
 #: 豁免这一行）；`not_applicable` 这一档在这个工作区算不出来（缺只读基线，CC-05 第四态）；`unreadable` 这一行
 #: 读不懂（不是对象 / 词表外 `kind` / `na` 无理由 / `na` 非布尔 / `min`·`max` 非整数 / 台账读不到 / `id` 缺失或
-#: 重复）。`unknown` 算得出来、但按口径不许判 pass（业主 2026-10-18：`literature.unprocessed > 0` 时「请求闭环」记
-#: `unknown`；2026-10-19 起同档也接「攻」：计划 `history` 里有 `statement_id` 而 `verifications` 里无对应行）——
+#: 重复）。`unknown` 算得出来、但按口径不许判 pass（`literature.unprocessed > 0` 时「请求闭环」记
+#: `unknown`；同档也接「攻」：计划 `history` 里有 `statement_id` 而 `verifications` 里无对应行）——
 #: 与 `computed` 的区别是"读数有了、结论判不了"：照样带 `got` 与 `detail`，但不进 `rows_read`，整格落 `unknown`。
 #: `informational` 只报数、不判 pass/fail（`INFORMATIONAL_KINDS`：`attack_plan_rows` 的立项计数），不进
 #: `unmet`/`computed_kinds`、也不进研究链覆盖面。三态纪律：`unreadable` 既不是通过、也不进 `unmet`，整格由调用方
@@ -2798,7 +2798,7 @@ def acceptance_row_state(row: Mapping[str, Any]) -> str:
     """一行的状态 —— 全仓唯一的定义（见 :data:`ROW_STATES`）。
 
     兼容老读数行（没有 `state` 键时按旧语义推）：`na` 优先，其次 `not_applicable`，
-    其余算 `computed`。这样 204 行历史读数与测试里手写的行对象仍读得对。
+    其余算 `computed`。这样历史读数与测试里手写的行对象仍读得对。
     """
     explicit = str(row.get("state") or "")
     if explicit in ROW_STATES:
@@ -2841,9 +2841,9 @@ def _acceptance_row_problem(cid: str, raw: Mapping[str, Any],
 
 
 def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
-    """验收表的机器可判行（`draft/37` §94）：逐行现算，任一不满足 ⇒ `fail`。
+    """验收表的机器可判行：逐行现算，任一不满足 ⇒ `fail`。
 
-三态（`draft/52` CC-02 裁定 (a) 之后按结构级 / 行级分界）：
+三态（按结构级 / 行级分界）：
 
 - 文件不在 ⇒ `pass` 并写明"这个项目没有机器可判的验收行"（"没有这一栏"）；
 - 结构级读不懂（顶层不是 JSON / 不是数组）⇒ 整格 `unknown`（没有行可读）；
@@ -2862,9 +2862,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         return
     path = Path(resolve_under_workspace(store, project_dir)) / ACCEPTANCE_CHECKS_NAME
     if not path.is_file():
-        # 研究型项目不许"没有这一栏"：`draft/37` §137 —— 缺表时收工门无从回答
-        # "这一趟的研究链走到哪一步"，而那正是 §133 读出来的那个缺口
-        # （表是人自己写的 ⇒ 只写最容易满足的几行）。
+        # 研究型项目不许"没有这一栏"：缺表时收工门无从回答
+        # "这一趟的研究链走到哪一步"（表是人自己写的 ⇒ 只会写最容易满足的几行）。
         try:
             chain = research_chain_gaps(store, ())
         except RuntimeError as exc:
@@ -2902,29 +2901,29 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 
     out: list[dict[str, Any]] = []
     unmet: list[str] = []
-    #: 标了 `na` 的行（`draft/39` §6.39 的 D49）：它们算"这一环节被如实标注过"，
+    #: 标了 `na` 的行：它们算"这一环节被如实标注过"，
     #: 但不参与阈值判定 —— 最后还要用它挡住"整张表全 na"。
     na_rows: list[str] = []
-    #: 落在 `not_applicable`（第四态，CC-05）上的行：缺只读基线那一类。
+    #: 落在 `not_applicable`（第四态）上的行：缺只读基线那一类。
     #: 它们不算 `na`（`na` 是"这一档对这个项目天然不适用"，由写表的人判断），
     #: 也不算通过、不算失败 —— 是"这个工作区里这一档算不出来"。
     na_kind_rows: list[str] = []
-    #: 落在 `unreadable`（CC-02 裁定 (a)）上的行：这一行读不懂。
+    #: 落在 `unreadable` 上的行：这一行读不懂。
     #: 它们不进 `unmet`、不参与阈值判定、也不算 `computed`（见 `acceptance_row_state`）——
     #: 整格由它们落 `unknown`（绝不 `pass`），而其余行的读数照常留下。
     unreadable_rows: list[dict[str, str]] = []
-    #: 落在 `unknown`（业主 2026-10-18 口径）上的行：读数算得出来、但按口径不许判 pass。
+    #: 落在 `unknown` 上的行：读数算得出来、但按口径不许判 pass。
     #: 两条路子进这里 —— ①`literature.unprocessed > 0` 而「请求闭环」那一行已经算出
     #: pass（且写清了 `unprocessed_reason`）；②`attack_plans` 的 `history` 里有
-    #: `statement_id`、而 `verifications` 里没有对应的那一行（2026-10-19，假 proof_review
-    #: 那一批）。整格由它们落 `unknown`。
+    #: `statement_id`、而 `verifications` 里没有对应的那一行（假 proof_review 那一类）。
+    #: 整格由它们落 `unknown`。
     unknown_rows: list[dict[str, Any]] = []
     #: 落在 `informational`（`INFORMATIONAL_KINDS`）上的行：只报数、不判 pass/fail。
     #: 今天只有一档 —— `attack_plan_rows`（立项计数）。
     informational_rows: list[dict[str, Any]] = []
     #: `literature.unprocessed` 的现算读数（三态：整数 / `None` = 读不到 + 理由）。
     #: 惰性算一次，行循环里那一格用；算不出来时不许读成"没有未消化"（那正是
-    #: 这一条要防的形态：`mp2` 记 32 而被当成 pass）。
+    #: 这一条要防的形态：写出 32 却被当成 pass）。
     _unprocessed_cache: dict[str, Any] = {}
     seen_ids: set[str] = set()
     duplicate_ids: list[str] = []
@@ -2940,7 +2939,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                     {"count": None, "reason": f"{type(exc).__name__}: {exc}"})
         return _unprocessed_cache
 
-    #: 攻坚计划 `history` 里的 `statement_id` 有没有对应的 `verifications` 行（2026-10-19）。
+    #: 攻坚计划 `history` 里的 `statement_id` 有没有对应的 `verifications` 行。
     #:
     #: 惰性算一次（只有真出现 `plan_progress_rows` 那一行时才需要它）—— 判据本体在
     #: `verifications.unverified_statement_refs`（与写入期闸、审计期档读同一处"什么叫一签"）。
