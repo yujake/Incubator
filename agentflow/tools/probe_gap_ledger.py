@@ -1,20 +1,22 @@
-"""写作期探针：把一个 D 问题推进到 needs_evidence，观察台账的产生与 verify 检查。
+"""探针：把一个 D 问题推进到 needs_evidence，观察台账的产生与 verify 检查。
 
-流程：造数据集 → 跑 pipeline（C+D）→ 再让 D 从全部已登记报告 ingest（含 cold）→ 那个"完全孤立概念"的问题必然证据不足 → 提交 gap → 台账产生。随后跑 verify，观察 ledger_*
-检查项是否生效。
+流程：造数据集 → 跑 pipeline（C+D）→ 再让 D 从全部已登记报告 ingest（含 cold）→
+"完全孤立概念"的问题必然证据不足 → 提交 gap → 台账产生；随后跑 verify，观察
+ledger_* 检查项是否生效。
 
 用法：python tools/probe_gap_ledger.py [目标工作区]
 
-## 默认落点不在仓库里（`R3` 的副作用，`draft/28` 83.5 第 1 条）
+## 默认落点不在仓库里
 
-改前这里是 `dest = ... else ROOT / "gapprobe"` —— 不带参数跑一次就往仓库里写16 个产物文件，把"谁在写被审对象"这件事搅浑（实测：一次窗口污染，16
-个`gapprobe/data/*.json`）。现在照抄 `scripts/release_check.py::_artifact_path()`的口径：主落点仓外（`ROOT.parent / "temp"`，仓库根是
-`agentflow/`，所以它落在工作区根下的 `temp/`），建不出来就退到 `tempfile.mkdtemp()`。落点会打印出来，产物在哪仍然找得到。
+产物落在仓外（`ROOT.parent / "temp"`，仓库根是 `agentflow/`），建不出来就退到
+`tempfile.mkdtemp()`；口径照抄 `scripts/release_check.py::_artifact_path()` ——
+探针不能跑一次就往仓库里写产物，把"谁在写被审对象"这件事搅浑。落点会打印出来。
 
-## 缺输入以清晰消息 + 非零退出码收场（`draft/28` 83.5 第 2 条）
+## 缺输入以清晰消息 + 非零退出码收场
 
-"源数据不存在"是可预期的输入缺失（三态纪律：这是 `unknown`，不是 `fail`，更不是崩溃）。改前它在 `src / "concepts.json"` 那一行抛 `FileNotFoundError`traceback；
-现在开跑前先逐张核源表，缺哪张就指名道姓地报出来并以退出码 2 收场（2 = 没查成；0 = 跑通；1 = 跑通了但结论出乎预期 —— 本探针今天不用 1）。
+"源数据不存在"是可预期的输入缺失（三态纪律：这是 `unknown`，不是 `fail`，更不是崩溃）。
+开跑前先逐张核源表，缺哪张就指名道姓地报出来并以退出码 2 收场；0 = 跑通，
+1 = 跑通了但结论出乎预期（本探针今天不用 1）。
 """
 
 from __future__ import annotations
@@ -52,8 +54,8 @@ def _artifact_path() -> tuple[pathlib.Path, str]:
     2. 它建不出来（权限 / 磁盘 / 只读文件系统，Windows 上路径带 NUL 时抛的是
        `ValueError` 而不是 `OSError`）⇒ 回退到 `tempfile.mkdtemp()`。
 
-    绝不回退到 `ROOT / "gapprobe"`：那正是改前那个"跑一次就往仓里写 16 个文件"
-    的落点，而它会让"这次审计窗口里被审对象变了没有"这个问题再也答不清楚。
+    绝不回退到 `ROOT / "gapprobe"`：那个落点会让探针自己改被审对象，
+    "这次审计窗口里被审对象变了没有"就再也答不清楚。
     """
     try:
         ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
@@ -127,14 +129,14 @@ def main(argv: list[str] | None = None) -> int:
     st.init(force=True)
 
     # 直接拷那三张表（省掉造数据）。源表存在性已在上面核过 ⇒ 这里不会再抛
-    # FileNotFoundError（改前正是在这一行崩掉的）。
+    # FileNotFoundError。
     with st.tx(*SEED_TABLES, actor="probe", note="seed") as tx:
         for t in SEED_TABLES:
             for r in json.loads((src / f"{t}.json").read_text(encoding="utf-8"))["rows"]:
                 tx.upsert(t, r)
-    # `c-7`：以前这里直接调私有的 `st._atomic_write(...)` —— 既不拿写者锁、也不进事务，
-    # 与并发 `tx` 的 `alloc_id` 争同一份 counters ⇒ 计数器漂移（跳号，严重时撞号被
-    # `upsert` 静默覆盖）。现在走公开入口 `Store.set_counters()`（它内部拿同一把写者锁）。
+    # 走公开入口 `Store.set_counters()`：私有的 `st._atomic_write(...)` 既不拿写者锁、
+    # 也不进事务，与并发 `tx` 的 `alloc_id` 争同一份 counters ⇒ 计数器漂移（跳号，
+    # 严重时撞号被 `upsert` 静默覆盖）。
     st.set_counters({"lit": 9, "concept": 10, "relation": 15, "question": 0, "report": 0},
                     actor="probe", note="probe_gap_ledger 夹具：把计数器拨到指定位置")
 
@@ -179,15 +181,14 @@ def main(argv: list[str] | None = None) -> int:
     from agentflow.verify import verify_all
 
     rep = verify_all(st)
-    # `VerifyReport` 上的是 `errors` / `warnings` 两个 property（列表），
-    # 不是 `error_count()` / `warning_count()` 两个方法 —— 改前这两行会让探针
-    # 在最后一步以 AttributeError 崩掉（本探针"跑一次留下半个产物"这个形态
-    # 与 §83.5 要治的问题是同一类：崩溃点读起来像"内部出错"，其实是调用方
-    # 用错了 API）。这里按 property 读，并把两个数字分开报。
+    # `VerifyReport` 上的是 `errors` / `warnings` 两个 property（列表），不是
+    # `error_count()` / `warning_count()` 两个方法 —— 读错会让探针在最后一步以
+    # AttributeError 崩掉，那读起来像"内部出错"，其实是调用方用错了 API。
+    # 这里按 property 读，并把两个数字分开报。
     print(f"  错误 {len(rep.errors)} / 警告 {len(rep.warnings)}；checked={rep.checked}")
     for i in rep.issues:
-        # `Issue` 的字段是 table / row_id（没有 `where` 这个属性 —— 改前这里
-        # 也会 AttributeError，同族于上面那两个错方法名）。
+        # `Issue` 的字段是 table / row_id（没有 `where` 这个属性；读错同样会
+        # AttributeError）。
         print(f"  - [{i.level}] {i.code} {i.table}:{i.row_id}: {i.message[:150]}")
 
     print("\n===== 7. 删掉台账后再 verify（受控偏离的代价：退化为可能重复提问一次） =====")
