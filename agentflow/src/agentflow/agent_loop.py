@@ -12566,11 +12566,11 @@ class AgentLoop:
     def _message_by_name(self, payload: Mapping[str, Any], name: str) -> dict[str, Any]:
         """按名册名发一条（译码 → 落到收件人名下的板项）。
 
-        `_do_message` 不走这里（判据在 `roster_addresses`）；它今天只有两个调用点：
+        `_do_message` 不走这里（判据在 `roster_addresses`）；它只有两个调用点：
         `_message_legacy`（判据拿来逐字对照旧行为的那条路）与判据文件对这条实现本身的
         直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 不进这里：它只有
         一种含义（公共频道，见 `_message_by_channel`），逐项开板项的广播语义归
-        `conductor.broadcast`（那个旧实现已删，不许补回）。
+        `conductor.broadcast`。
         """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",
@@ -12591,19 +12591,19 @@ class AgentLoop:
                             reply_to: str) -> dict[str, Any]:
         """`ALL` / 用户 那一档：留言落 `send_message`（append-only），准入逐字不动。
 
-        S6-a（业主 T20/T21 附二 乙）：公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
-        控拒绝（不许退回"全角色可见"—— 那正是 T20 要治的形态：随手发一条公聊就等于全树广播）。谁能走到这一支：只有
+        公共频道的可见面 = 发信人的直接子代理 ⇒ 发公聊必须带发信人的实例号，没有编号就受
+        控拒绝（不许退回"全角色可见"—— 那等于随手一条公聊就是全树广播）。谁能走到这一支：只有
         `ALL` / 用户（以及名册名已翻成角色的 `via_roster` 那一档）；给某个代理的私聊走 `roster_addresses` +
-        `_message_to_member`。名册不可用那一档已经不再回退到这里（2026-10-22：fail-closed，私聊受控拒绝）。
+        `_message_to_member`。名册不可用那一档不回退到这里（fail-closed，私聊受控拒绝）。
         这一支刻意不加名册校验：公共频道不是"给某个代理发消息" —— 它有自己的可见面判据（我名下的直接子代理）。
-        公告栏（业主 2026-10-19 第 5 条："若保留，必须写成公告栏，不是对话"）：公共频道保留，但它是公告栏—— 一条公聊
+        公告栏：公共频道是公告栏，不是对话 —— 一条公聊
         里若点名了名册上的某个成员（名册名 / 绝对编号）并且带指令语气（`PUBLIC_DIRECTIVE_MARKS`）或显式收件人写法（
         `@F1` / `F1：` / `to=F1` / `给 F1`），它就是"对某个具体代理下指令" ⇒ 受控拒绝 `public_is_not_a_conversation`；
         其余公聊照发，但记录上带 `board_kind="bulletin"`。为什么必须机械可判：公聊进的是角色级收件箱（`to == role` 才
         进），所以"公告栏里点名某人"会被那个角色的所有实例读到。
 
         这一档的判据只有一处：`is_all = (to == ALL)` —— 台账号闸、公告栏判据、`channel` 读数、
-        `board_kind` 与回执面全从它取（改前这五处各自跟一个常量比一遍，等于同一件事五份判据）。
+        `board_kind` 与回执面全从它取（五处各自跟一个常量比一遍，等于同一件事五份判据）。
         """
         to = _legacy_all(to)
         is_all = to == ALL
@@ -12620,8 +12620,7 @@ class AgentLoop:
         # 公告栏判据（见 docstring）：点名 + 指令语气 ⇒ 这不是公告，是对某个代理下指令。
         #
         # 判据本体只有一处（`_public_face_refusal`）：这一支与秘书的发出口都调它 ——
-        # 改前它只住在这里，于是同一份内容走 `handoff(to=ALL)` 就绕过去了
-        # （2026-10-26 真机手稿 000000）。
+        # 只住在这里时，同一份内容走 `handoff(to=ALL)` 就绕过去了。
         #
         # 一句明确的口径：框架通报（`by_framework=True`，叫停那一路）与用户插话
         # 不受这条判据限制 —— 它们不是"代理在对话"，是框架/人代表全树说话
@@ -12644,12 +12643,10 @@ class AgentLoop:
         if problem:
             return {"message": "未发出", "to": to, "ok": False, "error": problem}
         where = "公共频道" if is_all else f"给 {to} 的私聊"
-        # 回执三态（`draft/85` §5 的 D76 / `draft/86` §4.2）："写进盘了"不等于"有人读"。
+        # 回执三态："写进盘了"不等于"有人读"。
         #
-        # 真机读数（`draft/89` §2）：128 个会话 579 条留言里只有 8 条被标记读过，
-        # 而 12 次投递登记全部由 M 写 —— 因为生产形态下只有 M 有 LLM 循环，
-        # A–H 是确定性动作 ⇒ 发给它们的留言没有任何进程会读。
-        # 旧回执写的是 `ok: True` + "收件人下次运行时会看到它"，那是一句假话。
+        # 生产形态下只有 M 有 LLM 循环，A–H 是确定性动作 ⇒ 发给它们的留言没有任何进程
+        # 会读；把回执写成 `ok: True` + "收件人下次运行时会看到它"是一句假话。
         #
         # 公聊那一档（S6-a）：读者就是我名下的直接子代理 ⇒ 一个都没有时
         # 如实回 `no_reader`（"展开了"绝不等于"有人读到了"）。
