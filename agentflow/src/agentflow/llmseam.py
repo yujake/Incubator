@@ -230,7 +230,7 @@ def role_seam(role: str) -> Any:
 #: 35 个 `task_id` 上却只有 `t-000054` 一行有 token，A/B/E/F 的钱同样挤在"每个角色
 #: 头几次召唤"那几行上。根因是幂等键：`_charge_ledger` 把 `f"{sid}:{role}"` 当
 #: `task_id` 传进 `modelcost.idempotency_key`，而 `call_index` 取的是「这条缝自己的」
-#: 计数器 —— 缝是每次召唤现造的（`host._default_seam` / `AgentV._seam` 都现造），
+#: 计数器 —— 缝是每次召唤现造的（`host._seam` / `AgentV._seam` 都现造），
 #: 计数器于是每次都从 0 开始。「第一次」召唤把 0,1,2… 这些键全占了，后面每一次召唤的
 #: 第 i 次调用都撞上它 ⇒ 被判 `duplicate`、静默不记账。账本上"钱落在角色第一行"
 #: 正是这么来的（不是有意按行首记，是后到的账全被吞了）。
@@ -679,7 +679,7 @@ class LlmSeam:
         ## 幂等键（判据 a 的另一半根因）
 
         键必须是「这一次召唤的第 i 次调用」，不是"这条缝的第 i 次调用"：缝是每次召唤
-        现造的（`host._default_seam` / `AgentV._seam`），用缝自己的计数器会让第一次
+        现造的（`host._seam` / `AgentV._seam`），用缝自己的计数器会让第一次
         召唤把 `(sid, role, 0..n)` 全占满，后面每一次召唤的同号调用都被判 `duplicate`
         —— 钱静默不记（现场：V 的 61 笔账只有 27 笔真的落账，其余 34 笔撞键被吞）。
         所以 `call_index` 取自 `_next_call_index(...)`（模块级、按召唤号索引），
