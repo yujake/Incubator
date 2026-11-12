@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""审稿场景的内容级验收（`draft/37` §17.3 的 ①②③④⑤，可离线跑）。
+"""审稿场景的内容级验收（五条，可离线跑）。
 
 ## 为什么需要它（而不是又一套"看起来完成了"）
 
-§17.3 对第三档验收写了两半：该验的五条（定理台账每条有完整假设
+第三档验收写了两半：该验的五条（定理台账每条有完整假设
 与出处 / 三态分支正确且落盘可查 / 成本上限内 / 每跳提示词可读 / 附件诚实），以及
 明确不许拿来当"通过"的读数：`sha 变了`、`页数对得上`、`锚 consistent` 单项、
 `任务数增加`、`台账行数增加`。
@@ -25,11 +25,10 @@ from typing import Any, Mapping
 
 #: 五条内容级判据（顺序即交付说明里的顺序）。
 #:
-#: R9（`draft/52` 裁决 1 = C''）：原先的第六条 `report_sections_have_readings`
-#: （"报告九节齐全且每节都有读数"）已废除 —— 那是 review 线的排版规格，
-#: 被当成通用判据用。报告体例由 M 裁定，核对只核对"M 声明的体例有没有兑现"
-#: （落在 `closing._check_report_shape` 的 `REPORT-STYLE.json` 那一支）。
-#: 附件三件套（来源 / 依据 / 版本 sha）保留判实，由 `attachment_is_honest` 这一条承担。
+#: 报告九节那种"排版规格"不在本表：那是 review 线的体例，由 M 裁定，
+#: 核对只核对"M 声明的体例有没有兑现"（落在 `closing._check_report_shape`
+#: 的 `REPORT-STYLE.json` 那一支）。附件三件套（来源 / 依据 / 版本 sha）
+#: 保留判实，由 `attachment_is_honest` 这一条承担。
 CRITERIA: tuple[tuple[str, str], ...] = (
     ("statements_have_assumptions_and_source",
      "定理台账每条都有完整假设与出处（引外部文献的要页码）"),
@@ -40,15 +39,15 @@ CRITERIA: tuple[tuple[str, str], ...] = (
                              "没过 T3 的不许写成「已解决」（R25 的两条负控）"),
 )
 
-#: R25 负控①要挡的形态：把"我们补的"写成"文献里的"（来源造假）。
+#: 负控①要挡的形态：把"我们补的"写成"文献里的"（来源造假）。
 FORGERY_MARKERS: tuple[str, ...] = (
     "文献补充", "原文的补充", "摘自文献", "文献原文补充", "文献补遗",
 )
 
-#: R25 负控②要挡的形态：把没上 T3 的东西写成"已解决"。
+#: 负控②要挡的形态：把没上 T3 的东西写成"已解决"。
 RESOLVED_MARKERS: tuple[str, ...] = ("已解决", "已修复", "已闭合", "resolved")
 
-#: §17.3 逐字列出的"不许当通过"的辅助读数。
+#: 逐字列出的"不许当通过"的辅助读数。
 AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
     ("tex_sha256", "主稿 sha 变了（跑一次就会变）"),
     ("pdf_pages", "页数对得上"),
@@ -57,12 +56,8 @@ AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
     ("ledger_rows", "台账行数增加"),
 )
 
-#: R9（`draft/52` 裁决 1 = C''）之后，本模块不再判报告形状：
-#: 旧的两条实现（节标题正则、"九节齐全且每节有读数"那条判据，以及只被后者用到的
-#: "什么算读数"正则）随 R9 一起删掉了 —— 名字刻意不再写在这里：它们已经不存在，
-#: 把删掉的符号名当引用写进注释，读的人按图索骥只会扑空（引用判据 `R5-AN-10` 的口径）。
-#: 报告体例归 M，核对只核对"M 声明的体例有没有兑现" —— 那一支在
-#: `closing._check_report_shape`（读 `REPORT-STYLE.json`）。
+#: 本模块不判报告形状：报告体例归 M，核对只核对"M 声明的体例有没有兑现" ——
+#: 那一支在 `closing._check_report_shape`（读 `REPORT-STYLE.json`）。
 
 
 @dataclass
@@ -122,7 +117,7 @@ def _range_has_start_or_label(value: Any) -> bool:
 def statement_source_problem(row: Mapping[str, Any]) -> str:
     """一条 `active` 命题的「出处」那一栏该怎么填 ⇒ 空串 = 合格，否则一句可读的缺项。
 
-    ## 按来源分档（§68 人裁的甲档，2026-10-03）
+    ## 按来源分档
 
     - `own_result`（我们自己得的）：出处是「我们自己的产物」⇒ 要 `doc_id` 或
       `line_range`；对它提 `page_range` 是把"文献第几页"套到"我们自己证的"上来；
@@ -132,16 +127,15 @@ def statement_source_problem(row: Mapping[str, Any]) -> str:
     - 词表外的 `origin`：说不出它的出处该填哪一栏 ⇒ 记缺字段（不拿 `external_lit`
       的规则蒙一个结论）。
 
-    ## 概念行为什么不豁免（2026-11-02，84 收工的 60 条读数全是这一类）
+    ## 概念行为什么不豁免
 
-    概念行（`kind="concept"`）同样要页码：本批先按"定义型行给不出页码"判过一次
-    豁免，随后被 83 的真机数据否掉 —— 83 的 `000006`–`000011` 六条概念行就是 B
-    自己用 `own.register_statement(kind="concept", page_range=...)` 写的，页码取自
-    同一概念 `relations` 行的逐字引文页（`quote_reason` 里写着"该定义的逐字原文
-    引文挂在 relations 行（page 3）"）。既然写入面有这一格、页码又拿得到，
+    概念行（`kind="concept"`）同样要页码：按"定义型行给不出页码"判过豁免，
+    随后被真机数据否掉 —— B 自己用 `own.register_statement(kind="concept", page_range=...)`
+    写过概念行，页码取自同一概念 `relations` 行的逐字引文页（`quote_reason` 里写着
+    "该定义的逐字原文引文挂在 relations 行"）。既然写入面有这一格、页码又拿得到，
     缺页码就不是"结构上做不到"，而是写侧没写（摘要路径 `conceptrows.concept_statement`
     没有这个参数，`schema.Concept` 也没有这一格）。判据不因为写侧的缺口放宽：
-    放宽会把"60 条概念行没有出处页码"变成静默通过。
+    放宽会把"概念行没有出处页码"变成静默通过。
 
     所以本函数对 `external_lit` 一律要页码（概念行也一样）；缺的那些进
     `readings["page_range_missing_by_kind"]`（按 `kind` 分栏，给写侧一份收尾清单）。
@@ -169,7 +163,7 @@ def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
     """② 定理台账每条都有完整假设与出处 —— 而"出处"按来源与 `kind` 分档。
 
     只查 `active` 的那些：`disputed`/`refuted`/`superseded` 本来就不许当依据，
-    对它们提"必须有假设与出处"是把处置方向搞反（§17.3 问的是交付里的定理）。
+    对它们提"必须有假设与出处"是把处置方向搞反（问的是交付里的定理）。
 
     ## 哪一栏必填，口径只有一处
 
@@ -186,11 +180,11 @@ def _c_statements(acc: ReviewAcceptance, store: Any) -> None:
 
     缺页码的外部行另给一份 `readings["page_range_missing_by_kind"]`（按 `kind`
     分栏）：判据的裁决不变（它们在 `statements_missing_fields` 里），这一栏只是
-    让"缺的是哪一类行"在读数上直接可见（84/83 两趟 100% 落在概念行）。
+    让"缺的是哪一类行"在读数上直接可见。
 
     为什么必须与写入口说同一件事：判据要求而写入口放行的字段，会在台账里
-    长期躺着"看着有、其实没有"的行（第十三趟那六条空 `page_range` 就是这么进去的）。
-    `agent_b/register_statement.py` 的预检与这里逐条对齐（§68）。
+    长期躺着"看着有、其实没有"的行（空 `page_range` 就是这么进去的）。
+    `agent_b/register_statement.py` 的预检与这里逐条对齐。
     """
     if store is None:
         acc.criteria["statements_have_assumptions_and_source"] = "unknown"
@@ -255,20 +249,20 @@ def _c_triage(acc: ReviewAcceptance, store: Any, session_root: Any,
     `sid=closing.NO_SESSION`（调用方没有会话身份）⇒ 这一格 `unknown`：
     与 `closing.user_pending` 同一套三态，理由见那边的 `NO_SESSION`。
 
-    ## 无人值守的那一趟（`draft/37` §66 的三档，当前采用乙）
+    ## 无人值守的那一趟（三档，当前采用乙）
 
     一次没人值守的运行里，"问了而用户没答"这一格注定是 `fail`。这不是判据的缺陷，
     而是"必须停在等待用户"这条纪律的读数。三档登记（供人改口径）：
 
     - 甲：把"正确地停下来等"判成 `pass`（要能区分"停在等"与"做完了"，
-      今天的数据面上判不了：交付说明里没有"我停在等什么"这一栏的机械位置）；
+      数据面上判不了：交付说明里没有"我停在等什么"这一栏的机械位置）；
     - 乙（「当前」）：保持 `fail` —— 它准确定位了"这一趟不能交付"；
       口径写进 PAPER_PACK（"无人值守那一趟拿不到这一格，答完再 `--resume`"）
       与本节，并由 `tests/test_paper_pack.py` 的内容判据钉住；
     - 丙：给这一格加第四态（"停在等用户"），要动 `CRITERIA` 的三态口径
       （`pass/fail/unknown` 是全项目共用的读数口径）。
 
-    甲/丙都要改口径本身，所以留给人裁；乙这一档今天是「有判据」的。
+    甲/丙都要改口径本身，所以留给人裁；乙这一档是「有判据」的。
     """
     if session_root is None:
         acc.criteria["triage_branch_recorded"] = "unknown"
@@ -308,13 +302,12 @@ def _session_spend_usd(session_root: Any, sid: str | None) -> tuple[float | None
 
     `None` 的合计 = 「没查成」（没有会话根 / 没有 sid / 读不出来），不是"花了零"。
 
-    ## 为什么本判据需要第二个数源（`draft/37` §64 的真机读数）
+    ## 为什么本判据需要第二个数源
 
     `within_cost_cap` 原先只读 `usage_ledger`。而 `run-agent` 这条路
-    「一次调用都没往账本里记过」：第 11 趟会话里 30 次调用合计 0.289069 美元，
-    账本 9 行全是 0.000000 —— 于是这一格报"没超上限"，而真花销是上限的三倍
-    （cap=0.10 时实测 `pass`）。钱一直都在会话事件的 `llm_call.usd` 里，
-    所以判据必须两头都看：账本说多少、这一趟实际花了多少。
+    「一次调用都没往账本里记过」：会话事件里有花销、账本是零 —— 于是这一格
+    报"没超上限"，而真花销可能是上限的几倍。钱一直都在会话事件的
+    `llm_call.usd` 里，所以判据必须两头都看：账本说多少、这一趟实际花了多少。
     """
     if session_root is None or sid is None:
         return None, 0, 0
@@ -345,7 +338,7 @@ def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None, *,
     补法：把 `unknown_usd_calls` 也落进账本（或给它一列），或者让 `usage_ledger`
     允许 `usd=None` 这一档 —— 两者都要动 `schema.py`/`tokenmeter.py`，留给人裁。
 
-  §64 的处置（人已授权这一轮动禁改区，但「没有」动 `schema.py`，理由如下）：
+  处置（这一轮没有动 `schema.py`，理由如下）：
     真正被撞破的不是"算不出价钱"这一档，而是「账本整条路没记账」
     （`LlmSeam` 根本没有 meter ⇒ 30 次调用 0 行）。修法是把缝接上账本
     （`llmseam.LlmSeam.meter`），于是账本对新运行不再说谎；
@@ -354,10 +347,10 @@ def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None, *,
       ① 上限判据用 `max(账本, 会话)` —— 保守，绝不按小的那个放行；
       ② 会话里花得比账本多 ⇒ 「fail」（"账本没跟上这一趟"，处置是修记账，不是改上限）；
       ③ 会话里有算不出价钱的调用 ⇒ 「unknown」（说不清花了多少，不是通过）。
-    为什么不给 `usage_ledger.usd` 加 `None` 档：今天每一个读者都写着
+    为什么不给 `usage_ledger.usd` 加 `None` 档：每一个读者都写着
     `float(r.get("usd") or 0.0)` —— 加一个 `None` 只会多出一条「新的」静默零路径，
     而不是消掉旧的。所以"算不出来"留在 `note` 里（写入方如实写），
-    由这条判据判成 `unknown`。这一条要动 `schema.py`（FC-27），本轮不动。
+    由这条判据判成 `unknown`。这一条要动 `schema.py`（FC-27），不动。
     """
     if store is None:
         acc.criteria["within_cost_cap"] = "unknown"
@@ -400,9 +393,9 @@ def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None, *,
 def _hop_rows(store: Any) -> tuple[list[Any], int]:
     """这一趟的委托（召唤）行；返回 `(召唤行, 被排除的顶趟行数)`。
 
-    ## 为什么必须排除顶趟行（A 线 F1 的"往前走半"之后，主控 2026-10-06 裁定）
+    ## 为什么必须排除顶趟行
 
-    现在每一趟顶层运行会在 `tasks` 里留一条顶趟行（`role=M`、`action="run"`、
+    每一趟顶层运行会在 `tasks` 里留一条顶趟行（`role=M`、`action="run"`、
     `called_by="user"`、`depth=1`、`input_key="top:…"`）。它是用户发起的那一趟，
     不是一次召唤 —— 而这一格（`hops_have_readable_prompts`）数的是委托：
     把用户自己发起的那一趟算进去，"派了几跳 / 成了几跳"会凭空 +1。
@@ -429,7 +422,7 @@ def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
 
  这一条查的是台账那一半：提示词的正文在会话记录的 `llm_call` 事件里
     （`prompt_sha256` / `prompt_chars`），本函数不读它 —— 两个读数各自都有落点，
-    合起来才是"每跳提示词可读"（§15.3）。把边界写出来，免得读的人以为已经全查了。
+    合起来才是"每跳提示词可读"。把边界写出来，免得读的人以为已经全查了。
     """
     if store is None:
         acc.criteria["hops_have_readable_prompts"] = "unknown"
@@ -459,17 +452,14 @@ def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
 
 
 def _dangling_report_refs(text: str, store: Any) -> tuple[list[str], str]:
-    """报告里点名的台账行是否真的存在；返回 `(不存在的那些, 没查成的原因)`（`draft/37` §70）。
+    """报告里点名的台账行是否真的存在；返回 `(不存在的那些, 没查成的原因)`。
 
     ## 为什么要这一条
 
-    第十四趟真机：`reviewaccept` 六条「全过」、`closing.can_close=True`，
-    而交付说明里写着"4 条登记进 `statements`（0000/0001/0002/0003）"、
-    表格里逐行给 `statements 0001 / 0002 / 0003` —— 「台账里只有 0000 一条」。
-    那三行是模型在两次被拒之后（第一次 `page_range` 传成了字符串）自己"补"出来的：
-    它把打算做的事写成了已经做完的事，而「没有任何判据看这件事」
-    （旧的九节判据只问"每节有没有读数"，不问"读数是不是真的" —— 那条判据
-    已按 R9 废除，它的实现也随之删掉，名字不再写在这里：见本模块顶部那段注释）。
+    模型会把打算做的事写成已经做完的事：交付说明里写着"4 条登记进 `statements`
+    （0000/0001/0002/0003）"、表格里逐行给 `statements 0001 / 0002 / 0003` ——
+    而「台账里只有 0000 一条」。此前没有判据看这件事（旧的九节判据只问"每节有没有
+    读数"，不问"读数是不是真的"）。
 
     判据的形状刻意保守：只认「带前缀的 4 位号」（`statements 0001` / `statements:0001` /
     `lit:0000` / `documents 0000` / `doc:0000`），不认裸的 4 位数
@@ -506,32 +496,29 @@ def _dangling_report_refs(text: str, store: Any) -> tuple[list[str], str]:
 
 
 def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
-    """⑥ 附件诚实（R25）：三份都要过 —— 来源不造假、不过度声称、引用的台账行真的存在。
+    """⑥ 附件诚实：三份都要过 —— 来源不造假、不过度声称、引用的台账行真的存在。
 
-    三条负控（`draft/37` §16 P3 的报告行逐字要求 + §70 的真机读数）：
+    三条负控：
 
     1. 来源造假：把"我们补的手稿"写成文献里的东西（`FORGERY_MARKERS`）。
        处置方向是改正来源标注，不是补证据 —— 所以它与下面那条必须分开报；
     2. 没过 T3 写"已解决"：报告里出现 `RESOLVED_MARKERS`，而收工门的
        `load_bearing` 仍然判定"承重结论缺 T3"（同一个工作区里跑一次 `closing` 就知道）。
        处置方向是降档或补 T3；
-    3. 「引用的台账行不存在」（`draft/37` §70 的第十四趟真机读数）：报告里逐条写着
-       `statements 0001/0002/0003`，而台账里只有 `0000` —— 六条判据全绿、
-       `closing.can_close=True`，交付说明却在引用不存在的行。
-       处置方向是「去把它真的登记上」（或把没做成的写成没做成），不是改判据。
+    3. 「引用的台账行不存在」：报告里逐条写着
+       `statements 0001/0002/0003`，而台账里只有 `0000` —— 判据全绿而交付说明
+       在引用不存在的行。处置方向是「去把它真的登记上」（或把没做成的写成没做成），
+       不是改判据。
 
     附件三件套（`origin=own_result` + 依据读数 + 版本 sha）由 `report_shape` 那条管；
     这一条只管诚实：说的是不是实话。
 
-    ## 报告路径必须按工作区根解析（`draft/37` §69 的真机读数）
+    ## 报告路径必须按工作区根解析
 
-    这一格此前用 `Path(report_path).is_file()` 直接判 —— 而模型给的报告路径是
+    这一格曾经用 `Path(report_path).is_file()` 直接判 —— 而模型给的报告路径是
     「相对工作区」的（`out/review/REPORT.md`，见 PAPER_PACK 的第九节口径），
-    于是它在真机上判成"报告不在盘上 ⇒ 没查成"：第十三趟的 8,790 字节报告就在盘上，
-    而这一格是 `unknown`（`unknown` 会挡住 `passed`）。
-    §60 修 `closing` 的锚/报告形状与 `reviewaccept` 的报告节数/辅助读数时「漏了这一处」，
-    而当时的判据（`test_relative_paths_under_workspace`）只断言了报告节数与 tex sha ——
-    判据没看的那一格，正是漏掉的那一格。现在与另外三处共用同一个解析口。
+    于是它在真机上判成"报告不在盘上 ⇒ 没查成"，而报告就在盘上（`unknown` 会挡住
+    `passed`）。现在与另外三处共用同一个解析口。
     """
     from .closing import resolve_under_workspace
 
@@ -580,10 +567,10 @@ def _c_attachment(acc: ReviewAcceptance, store: Any, report_path: str) -> None:
 
 
 def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
-    """那五种"容易拿到、但证明不了内容"的读数（§17.3 逐字禁止拿来当通过）。
+    """那五种"容易拿到、但证明不了内容"的读数（逐字禁止拿来当通过）。
 
     相对路径按工作区根解析（与 `closing` 共用一份实现）：否则"相对工作区"
-    这个契约在两次判据里会有两个口径，而错的读数看起来像"文件不在"（`draft/37` §60）。
+    这个契约在两次判据里会有两个口径，而错的读数看起来像"文件不在"。
     """
     import hashlib
 
@@ -630,10 +617,8 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
 
     ## 生产出口（`agentflow closing`）
 
-    这一层此前在生产面上一条 import 都没有（`tests/test_release_acceptance_wiring.py`
-    改前必红的那条读数）：判据齐、测试齐、而真机上永远没人跑它。现在它的唯一生产
-    调用者是只读出口 CLI `agentflow closing`（`cli.cmd_closing`），读数分栏打在
-    收工门读数之后 —— 为什么挑那个出口：收工门问的正是"这份交付能不能交"，
+    这一层的唯一生产调用者是只读出口 CLI `agentflow closing`（`cli.cmd_closing`），
+    读数分栏打在收工门读数之后 —— 为什么挑那个出口：收工门问的正是"这份交付能不能交"，
     而本模块问的是同一份交付的同一个问题，只是判据在内容层；两者的入参
     （`project_dir` / `report_path` / `session_root` / `sid`）本来就是同一批，
     而那批入参在 `cmd_closing` 里已经收齐了 ⇒ 不需要新开一条面。
@@ -643,17 +628,14 @@ def check_review(store: Any, *, project_dir: str = "", report_path: str = "",
     收工门定 —— 接线不改变任何判定强度。出口缺省就跑，`--no-review-acceptance`
     是显式关掉它（关掉时那一段读数说明自己是"没查成"，不许读成"内容级验收通过了"）。
 
-    `sid` 必须给这一趟运行的那个 sid（`draft/37` §58 的真机读数）：
-    第九趟的提问落在 `sessions/real9.jsonl` 里，而本函数此前不带 `sid` ⇒
-    `pending_questions(root)` 按默认会话读，什么都没读到，于是
-    `triage_branch_recorded` 报"一次都没问过用户" —— 而那一趟明明问了（`q0001`）。
-    判据看不见带 sid 的提问，这一格就永远只能是 unknown，而病因在调用姿势上，
-    不在主控身上。
+    `sid` 必须给这一趟运行的那个 sid：不带它时 `pending_questions(root)` 按默认
+    会话读，这一趟的提问会被读成"一次都没问过用户"，于是 `triage_branch_recorded`
+    永远只能是 unknown —— 病因在调用姿势上，不在主控身上。
 
     `sid=closing.NO_SESSION` 是第三个输入（与 `sid=None` 刻意分开，口径见
     `closing.NO_SESSION`）：它说的是"调用方没有会话身份"，那一格记 `unknown`。
     CLI 出口拿不到运行内那个 sid，所以它传 `NO_SESSION` 而不是 `None`
-    —— 折进 `None` 会按缺省会话读，而那正是 §58/§63 记过两次的假绿形态。
+    —— 折进 `None` 会按缺省会话读，那是假绿形态。
     """
     acc = ReviewAcceptance()
     root = session_root if session_root is not None else getattr(store, "root", None)
