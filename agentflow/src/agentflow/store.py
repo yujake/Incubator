@@ -2044,18 +2044,42 @@ class Store:
             rows = self.rows(t)
             out[t] = {"count": len(rows)}
             if t == "search_requests":
-                out[t]["done"] = sum(1 for r in rows if r.get("done"))
-                out[t]["pending"] = sum(1 for r in rows if not r.get("done"))
-            if t == "literature":
-                out[t]["processed"] = sum(1 for r in rows if r.get("processed"))
-                out[t]["downloaded"] = sum(1 for r in rows if r.get("path"))
-            if t == "relations":
-                by_status: dict[str, int] = {}
+                # 两格在同一次遍历里数完（原先同一批 rows 扫两遍）。
+                done = pending = 0
                 for r in rows:
-                    by_status[r.get("status", "?")] = by_status.get(r.get("status", "?"), 0) + 1
+                    if r.get("done"):
+                        done += 1
+                    else:
+                        pending += 1
+                out[t]["done"] = done
+                out[t]["pending"] = pending
+            if t == "literature":
+                processed = downloaded = 0
+                for r in rows:
+                    if r.get("processed"):
+                        processed += 1
+                    if r.get("path"):
+                        downloaded += 1
+                out[t]["processed"] = processed
+                out[t]["downloaded"] = downloaded
+            if t == "relations":
+                # 四格（分档计数 + 三态引文校验）原本各扫一遍 rows（共四遍），
+                # 现在一趟数完；`status` 每行只取一次（原先键与取值各一次）。
+                by_status: dict[str, int] = {}
+                quote_verified = quote_unverified = quote_unknown = 0
+                for r in rows:
+                    status = r.get("status", "?")
+                    by_status[status] = by_status.get(status, 0) + 1
+                    qv = r.get("quote_verified")
+                    if qv is True:
+                        quote_verified += 1
+                    elif qv is False:
+                        quote_unverified += 1
+                    elif qv is None:
+                        quote_unknown += 1
                 out[t]["by_status"] = by_status
-                out[t]["quote_verified"] = sum(1 for r in rows if r.get("quote_verified") is True)
-                out[t]["quote_unverified"] = sum(1 for r in rows if r.get("quote_verified") is False)
-                out[t]["quote_unknown"] = sum(1 for r in rows if r.get("quote_verified") is None)
+                out[t]["quote_verified"] = quote_verified
+                out[t]["quote_unverified"] = quote_unverified
+                out[t]["quote_unknown"] = quote_unknown
         out["events"] = {"appended": len(self.read_events())}
         return out
