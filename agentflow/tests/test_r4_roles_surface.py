@@ -333,10 +333,17 @@ def test_the_dead_branch_is_gone_and_the_docstring_says_who_calls_this() -> None
     为什么用文本级断言：那一支结构上不可达（唯一调用点传 `True`），
     所以任何行为测试都碰不到它；而它留着的代价是"读起来像有第二条判据"。
     这类"文档承诺 + 不可达分支"的组合，只有文本判据能钉住。
+
+    2026-11-12（E7 清扫之后）：docstring 里那两句"修改说明"（`本方法的行为不因…` /
+    `旧 docstring 逐字写着…`）被清扫删掉了 —— 它们讲的是改前形态，不是现行契约。
+    判据的落点换到现行契约那句上：`## 谁走这里` 与"判据本身只有一份（`for_role` 与
+    `call` 都落在 `_role_surface`）"。守的事一个字没变：读者必须能看出谁走本函数、
+    以及那条死分支的理由不复存在。
     """
     text = BASE.read_text(encoding="utf-8")
-    assert "本方法的行为不因" in text  # 定位：我们读的是 base.py 里那份 docstring
-    assert "旧 docstring 逐字写着" in text, "修改说明不见了（判据的落点变了，请更新本用例）"
+    assert "## 谁走这里" in text  # 定位：我们读的是 base.py 里 `_callable_for` 的 docstring
+    assert "`for_role` 与 `call` 都落在 `_role_surface` 上" in text, (
+        "「判据只有一份」这句不见了（判据的落点变了，请更新本用例）")
     # 2026-10-21：钉"文字"，不钉"装饰"。R009 明令 docstring 里不许 `**…**`（那盏灯我们这轮才熄），
     # 所以这句契约文本现在是裸的；判据要守的是"说清了谁走这里"，不是它外面那对星号。
     assert "只有 `call` 走这里。" in text, "docstring 必须显式说清谁走 _callable_for"
