@@ -5477,6 +5477,16 @@ class Secretary:
                        reason=f"洗格式没跑成（{type(exc).__name__}: {exc}）⇒ 原样发出去")
             return out
 
+    @staticmethod
+    def _unique_rename(key: Any, props: Any, fixed: Mapping[str, Any]) -> str:
+        """错名 → 唯一候选键名；候选不唯一 / 目标已在 `fixed` ⇒ 空串（一个字节都不动）。
+
+        `params` 里那一支与顶层折算那一支问的是同一条判据（唯一候选、且不覆盖真值），
+        原先两处各写一遍同一段 `declarations_candidates(...) + len == 1 + not in fixed`。
+        """
+        cand = declarations_candidates(str(key), props)
+        return cand[0] if len(cand) == 1 and cand[0] not in fixed else ""
+
     def _wash_one(self, payload: dict[str, Any], out: dict[str, Any],
                   *, field: str, refuse: bool = True) -> dict[str, Any]:
         """洗一次派活的格式面（`field` 给了就把这一份摆在那个字段名下，用于批量）。"""
@@ -5501,10 +5511,13 @@ class Secretary:
         # 否则一个用 `to=` 的调用方会被判成"没给角色"（真机判据当场抓出来的）。
         role = after.get("role")
         if not (isinstance(role, str) and role.strip()):
-            role = after.get("to") if isinstance(after.get("to"), str) else ""
+            raw_to = after.get("to")
+            role = raw_to if isinstance(raw_to, str) else ""
         else:
             role = role.strip()
-        action = after.get("action") if isinstance(after.get("action"), str) else ""
+        raw_action = after.get("action")
+        action = raw_action if isinstance(raw_action, str) else ""
+        raw_params = after.get("params")
         # 2026-10-16（业主口径 S2「M 只派活」）：硬拒那一格从"没有角色或没有动作"
         # 收窄成"没有角色 或 既没有动作也没有活"。
         # 原话逐字：「一致改成 task 必填，action 不填」「action 完全不用父代理填」。
@@ -5514,7 +5527,7 @@ class Secretary:
         # 以及 `params["task"]`（派活那条路为了给被派者那一趟循环取用而并进去的那一份）。
         # 真机/判据现场：批量派活被拒的理由码是 `unknown_action`，而它其实写了活
         # （只是写在 `params` 里）⇒ 这一格必须两处都认，否则"派活"永远过不去。
-        work = str(after.get("task") or (after.get("params") or {}).get("task") or "").strip()
+        work = str(after.get("task") or (raw_params or {}).get("task") or "").strip()
         if not role or not (action or work):
             missing = ("角色（派给谁）" if not role
                        else ("动作（做什么）" if action else "活（做什么）"))
@@ -5552,19 +5565,18 @@ class Secretary:
         # ---- `params` 键名归一 + 顶层折叠 —— 一次做完，因为它们是同一件事的两半：
         # 值在哪一格不重要，重要的是它得落在声明的那个键下面。
         props = self._param_props(spec)
-        raw_params = after.get("params")
         if props and (raw_params is None or isinstance(raw_params, Mapping)):
             fixed = dict(raw_params or {})
             for key in list(fixed):
                 if key in props:
                     continue
-                cand = declarations_candidates(str(key), props)
-                if len(cand) == 1 and cand[0] not in fixed:
+                target = self._unique_rename(key, props, fixed)
+                if target:
                     # 目标键已经在 `params` 里 ⇒ 不改（改名会覆盖一个真值：
                     # 那是动内容面，不是洗格式）。
-                    fixed[cand[0]] = fixed.pop(key)
+                    fixed[target] = fixed.pop(key)
                     changes.append({"where": field, "field": f"params.{key}",
-                                    "to": f"params.{cand[0]}", "why": "键名归一（唯一候选）"})
+                                    "to": f"params.{target}", "why": "键名归一（唯一候选）"})
             for key in list(after):
                 if key in fixed or key in self._SHAPE_KEYS or key == "params":
                     continue
@@ -5576,11 +5588,11 @@ class Secretary:
                 # 顶层的错名键：候选唯一 ⇒ 改名并收进 `params`（与 `params` 里
                 # 那一支同一条口径）；候选不唯一 ⇒ 一个字节都不动，留在顶层
                 # （它照样落在步骤记录里，"没洗"看得见）。
-                cand = declarations_candidates(str(key), props)
-                if len(cand) == 1 and cand[0] not in fixed:
-                    fixed[cand[0]] = after.pop(key)
+                target = self._unique_rename(key, props, fixed)
+                if target:
+                    fixed[target] = after.pop(key)
                     changes.append({"where": field, "field": f"<顶层>.{key}",
-                                    "from": str(key), "to": f"params.{cand[0]}",
+                                    "from": str(key), "to": f"params.{target}",
                                     "why": "顶层折算：键名归一（唯一候选）"})
             if fixed or raw_params is not None:
                 if fixed != dict(raw_params or {}):
