@@ -735,8 +735,8 @@
    ],
    "handler_signatures": {
     "decide_structural_duplicate": "(self, candidate: 'Mapping[str, Any] | None', *, concepts: 'Sequence[Mapping[str, Any]] | None' = None, relations: 'Sequence[Mapping[str, Any]] | None' = None) -> 'dict'",
-    "ingest_manuscript": "(self, *, manuscript: 'str', target_stmt_id: 'str' = '', cells: 'Sequence[str]' = (), conflict: 'str' = 'refuse', mode: 'str' = 'apply', proof_no: 'Any' = None, if_match_proof_sha256: 'str' = '', reason: 'str' = '', provenance: 'Any' = None) -> 'dict'",
-    "land_manuscript": "(self, *, statement_id: 'str', statement_full: 'str' = '', proof_text: 'str', label: 'str' = '', proof_no: 'int' = 1, source_manuscript: 'str' = '', if_match_sha256: 'str' = '') -> 'dict'",
+    "ingest_manuscript": "(self, *, manuscript: 'str', target_stmt_id: 'str' = '', cells: 'Sequence[str]' = (), conflict: 'str' = 'refuse', mode: 'str' = 'apply', proof_no: 'Any' = None, path_group: 'int' = 0, if_match_proof_sha256: 'str' = '', reason: 'str' = '', provenance: 'Any' = None) -> 'dict'",
+    "land_manuscript": "(self, *, statement_id: 'str', statement_full: 'str' = '', proof_text: 'str', label: 'str' = '', proof_no: 'int' = 1, path_group: 'int' = 0, source_manuscript: 'str' = '', if_match_sha256: 'str' = '') -> 'dict'",
     "open_polish_copy": "(self, *, statement_id: 'str', source_manuscript: 'str' = '') -> 'dict'",
     "register_statement": "(self, *, statement_full: 'str' = '', source_lit_id: 'str' = '', proof_text: 'str' = '', proofs: 'list | None' = None, proof_manuscript: 'str' = '', kind: 'str' = '', label: 'str' = '', statement_text: 'str' = '', origin: 'str' = '', self_authored: 'bool' = False, page_range: 'dict | None' = None, evidence_kind: 'str' = '', quote_verified: 'bool | None' = None, quote_reason: 'str' = '', quote_mode: 'str' = '', quote_span: 'str' = '', quote_call_sha256: 'str' = '', derived_from: 'list | None' = None, doc_id: 'str' = '', line_range: 'dict | None' = None) -> 'dict'",
     "reprocess_once": "(self) -> 'dict'",
