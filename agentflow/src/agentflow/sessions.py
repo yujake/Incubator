@@ -6,13 +6,13 @@
 `tasks` 表是运行时状态：谁在跑、结局如何、花了多少。它回答"现在怎么样"，
 但它不是"这次运行的叙事"——谁在什么时候对谁说了什么、产出了什么、为什么被拒。
 `draft/31` 的元判据要求"台账能重建 M 的决策序列"，而 M 自己的叙述（计划、改道、
-观察）今天只活在会话里。
+观察）只活在会话里。
 
 harness 的做法是按工作区存会话：换个工作区就是另一段历史，互不污染。
 本项目照做，落点是 `<项目根>/sessions/<会话号>.jsonl`：
 
 - 一个项目一个目录 ⇒ 翻 p2-review 的会话不必读全局目录，也不会把两个项目的
-  叙事混在一起（本项目同时在跑 7 个旧项目 + p2-review）；
+     叙事混在一起；
 - 追加写、一行一事件 ⇒ 中断后仍可读，坏行能逐条报出（不是"读不出来就当没有"）；
 - 会话号默认取环境变量 `AGENTFLOW_SESSION`，否则取当天日期（一天一段，够用且稳定）。
 
@@ -90,12 +90,11 @@ def session_path(root: Any, sid: str | None = None) -> pathlib.Path:
 
 #: 每个会话文件一把进程内写锁（并发写者的交错就在这里被挡住）。
 #:
-#: 为什么必须锁（E5 之后的全量套件实测，2026-10-05）：`LlmBackend` 会在一波里并发跑
+#: 为什么必须锁：`LlmBackend` 会在一波里并发跑
 #: 同一角色的多个实例（线程），它们各自往同一个 `sessions/<sid>.jsonl` 追加事件。
-#: 没有锁时两次 `write` 会在一个多字节字符中间交错 ⇒ 文件里出现非法 UTF-8 字节
-#: （实测报错：`UnicodeDecodeError: byte 0xa8 in position 9472`），于是
-#: "读会话记录"整条路直接炸 —— 而会话记录是本框架唯一的叙事审计面。
-#: 表现形态也记在这里：它不总是红，只在真正并发时才红（所以它此前被当成"偶发 flaky"）。
+#: 没有锁时两次 `write` 会在一个多字节字符中间交错 ⇒ 文件里出现非法 UTF-8 字节，
+#: 于是"读会话记录"整条路直接炸 —— 而会话记录是本框架唯一的叙事审计面。
+#: 表现形态：它不总是红，只在真正并发时才红（容易被当成"偶发 flaky"）。
 _APPEND_LOCKS: dict[str, Any] = {}
 _APPEND_LOCKS_GUARD = threading.Lock()
 
@@ -194,9 +193,9 @@ def append(root: Any, event: Mapping[str, Any], *, sid: str | None = None) -> tu
 def read_session(root: Any, sid: str | None = None) -> tuple[list[dict], list[str]]:
     """读一段会话；返回 `(事件, 问题)`。坏行逐条报出，不静默跳过。
 
-    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`（`draft/36` T-6 合并）。
-    合并前三处（这里、`artifacts`、`signatures`）各写了一份同形的循环 ——
-    漂移的表现是"同一份坏文件，`verify` 说它坏、`session show` 说它好"，而没有东西会报错。
+    JSONL 的读法只有一份实现：:func:`jsonlfile.read_jsonl`。
+    三处（这里、`artifacts`、`signatures`）各写一份同形的循环会漂移 ——
+    表现是"同一份坏文件，`verify` 说它坏、`session show` 说它好"，而没有东西会报错。
     """
     return read_jsonl(session_path(root, sid))
 
@@ -208,16 +207,14 @@ def _iter_sessions(root: Any,
 
     为什么把「读一遍」收成一处：`list_sessions` / `session_ids_with_questions` /
     `compute_run_index` 原先各读一遍盘，于是 `compute_run_index` 一次调用就把整份
-    会话语料读了 4 遍（2026-10-27 实测，探针 `temp/rbe4_sessions_reads.py`：6.6MB 的
-    `sessions/` 被读成 26.3MB / 404ms；合并后 1.0 遍 / 110ms）。
+    会话语料读了好几遍。
     三处读的是同一批文件、同一个口径（`jsonlfile.read_jsonl`），合起来只该读一遍。
     目录不存在 ⇒ 空列表（合法初态，不是错误）。
 
-    `read_cache` 是给调用方的出口（2026-11-01，161 ②）：传一个字典进来，这一遍读出来
+    `read_cache` 是给调用方的出口：传一个字典进来，这一遍读出来
     的 `{sid: (事件, 坏行)}` 会一并填进去，调用方（`webui.state.snapshot`）就能拿同一
-    份事件去扫趟次与待答。没有这个出口，它只能把每个会话文件再读 1–3 遍（真机 81
-    单个文件 26 MB / ~436 ms，一次 `/api/state` 曾读 4 遍）。填进去的就是返回值里那
-    三格，一个字不改；不传则一切照旧。
+    份事件去扫趟次与待答。没有这个出口，它只能把每个会话文件再读 1–3 遍。
+    填进去的就是返回值里那三格，一个字不改；不传则一切照旧。
     """
     d = sessions_dir(root)
     if not d.is_dir():
@@ -234,7 +231,7 @@ def _iter_sessions(root: Any,
 def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
     """读这个工作区的全部会话记录（不按 sid 分）：返回 `(记录, 读数)`。
 
-    ## 与 `read_session` 的分工（2026-10-27，R-BE1 的 ②-1）
+    ## 与 `read_session` 的分工
 
     两件事问的不是一个问题，但"怎么读一个 JSONL"只有一份实现（`jsonlfile.read_jsonl_state`）：
 
@@ -247,7 +244,7 @@ def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
     ## 读数那五格（键名与顺序都是既有输出面的一部分）
 
     `checked` / `files` / `records` / `bad_lines` / `unreadable_files` / `reason`：
-    改前这一份读数是 `errorstats._read_sessions` 自己算的（第二份实现），而它与
+    这一份读数曾经由 `errorstats._read_sessions` 自己算（第二份实现），它与
     `read_session` 对"读不明白"的判定各说一套。现在两者同源于 `read_jsonl_state`：
 
     - `unreadable_files`：`state == "unreadable"` 的文件名（读不出来：权限 / 非 UTF-8 /
@@ -257,7 +254,7 @@ def read_all_sessions(root: Any) -> tuple[list[dict], dict[str, Any]]:
     - `files`：读得出来的文件数；`checked`：至少一个文件读得出来
       （"一个都读不出来"是没查成，不是 0 条记录）。
 
-    `reason` 的三句与改前逐字相同（它们是 `sources["sessions"]` 的一部分，换了字就是换了读数）。
+    `reason` 的三句是 `sources["sessions"]` 的一部分，换了字就是换了读数。
     """
     reading: dict[str, Any] = {"checked": False, "files": 0, "records": 0,
                                "bad_lines": 0, "unreadable_files": [], "reason": ""}
@@ -316,7 +313,7 @@ def list_sessions(root: Any,
 
 # ====================================================================== 趟次索引（裁定 O2）
 #
-# 名字的边界（不许混用，见 `draft/78 §7` 的提醒）：这里的「趟次」是「一个会话文件里
+# 名字的边界（不许混用）：这里的「趟次」是「一个会话文件里
 # 的第几趟运行」（一条 `agent_run_start` 到它自己那条 `agent_run_end` —— 按 `task_id`
 # 配对，会话文件是多代理共写的 —— 或文件尾）。
 # `projects.py` 的 `run_index: int` 是另一个概念（这个项目第几趟，配 `out/run-<n>`），
@@ -340,15 +337,14 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     标记的事件不算一趟：那是「轮次之外的零散事件」，折成"一趟 0 步的运行"会让
     「最近一趟」被一个空壳顶掉（`webui/state.py` 的 `_scan` 把这条纪律写在同一处）。
 
-    ## 配对键是 `task_id`，不是"当前那趟"（`draft/158` §三）
+    ## 配对键是 `task_id`，不是"当前那趟"
 
     会话文件是一个工作区一天一份、所有子代理共写的（见本模块下面 `_append_lock` 那
-    一段），而改前每一条 `agent_run_start` 就覆盖 `cur`、每一条 `agent_run_end` 就关掉"当前
-    那趟"——两端都不看 `task_id`。后果不是"聚合口径选错了"，是"切趟这一步根本没有键"：
-    81 那趟 71 条 start / 71 条 end 实测 63/71 行不可用（36 条 `end_ts=None`；有 end 的
-    35 条里 27 条挂的是别人的 end），M 那趟读出 4 步 / 4 次调用，而它自己的收工行写着
-    111 步 / 110 次调用。两条事件本来就都带 `task_id`（`agent_loop.run` 的写入口），
-    按它配对 71/71 全中。
+    一段），而按"当前那趟"配对时，每一条 `agent_run_start` 就覆盖 `cur`、每一条
+    `agent_run_end` 就关掉"当前那趟"——两端都不看 `task_id`。后果不是"聚合口径选错了"，
+    是"切趟这一步根本没有键"：同一段会话里大量行不可用（`end_ts=None`、或挂的是别人的
+    `end`），M 那趟读出 4 步 / 4 次调用，而它自己的收工行写着 111 步 / 110 次调用。
+    两条事件本来就都带 `task_id`（`agent_loop.run` 的写入口），按它配对才能全中。
 
     三档归属（函数里的 `_owner_of`），顺序就是优先级：
     ① 事件自带 `task_id` ⇒ 同号的那一趟（取最近开始的那一趟：被拒的续跑也写一条
@@ -377,7 +373,7 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     `same_run_spend_usd` 与 `checkpoint_spend_usd` 是页面那一栏"同一趟的两个来源并排"，
     事件求和是这个数「唯一」的独立第二读数。顶替掉它，那张卡就变成"同一个来源的两次抄写"。
 
-    键与 `webui.state._scan` 逐字相同（25 个）—— `draft/75 §1.3` 的 `RunRow`：
+    键与 `webui.state._scan` 逐字相同（25 个）—— `RunRow`：
     `sid, role, task, task_id, task_id_source, start_index, start_ts, steps, llm_calls,
     usd, unknown_usd, spend_usd, spend_unknown_usd_calls, stop_reason, final_chars,
     summons, messages, elapsed_sec, last_shape, end_index, end_ts, waiting_on, waiting,
@@ -518,11 +514,11 @@ def unattributed_usd_of(events: Iterable[Mapping[str, Any]],
 
     ## 它回答的是"那批没人认领的调用去哪了"
 
-    改前这笔钱没有落点，它的去向是「被硬塞给某一趟」：`_owner_of` 的 ② 档"按 role 猜"，
-    于是空 `task_id` 的调用会算进"同角色最近开始的那一趟"。81 上 71 趟里有 18 趟因此与
-    自己的收工行有小数差（合计 +$0.049792），而真实情况是 80 条调用（$0.136779）根本没有
-    主人 —— 其中 70 条是 `secretary:*`（$0.086987，被整条丢掉），10 条是别的（$0.049792，
-    被塞给了 11 趟）。这一格把那 80 条变成一个「会话级」读数，逐趟的 `usd` 不再吃它。
+    这笔钱曾经没有落点，它的去向是「被硬塞给某一趟」：`_owner_of` 的 ② 档"按 role 猜"，
+    于是空 `task_id` 的调用会算进"同角色最近开始的那一趟" —— 那些趟因此与
+    自己的收工行有小数差，而真实情况是大量调用根本没有主人
+    （其中多数是 `secretary:*`，被整条丢掉）。这一格把那些调用变成一个「会话级」
+    读数，逐趟的 `usd` 不再吃它。
 
     ## 三态
 
