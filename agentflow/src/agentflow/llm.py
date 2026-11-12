@@ -293,9 +293,9 @@ def _iter_sentences(page_text: str) -> Iterable[tuple[int, int, str]]:
 class RuleExtractor:
     """规则基线：定义句式 + ``meta['seed_concepts']``，全程离线、确定性。
 
-    ## 它是框架的回退，`AgentB` 默认会拒抽（`R-56`，`draft/28` §157）
+    ## 它是框架的回退，`AgentB` 默认会拒抽
 
-    实测（`projects/p2-review`）：无 LLM 时靠它抽取，会往概念图里灌碎片
+    无 LLM 时靠它抽取，会往概念图里灌碎片
     （`ANU` / `cingled property` / `Ultimately this`），而 `quote_verified=True`
     让那些碎片看起来有证据 —— "引文回验只证明这句话在文件里，不证明这是一个概念"。
     所以 `AgentB` 见到本类（判据：`is_framework_fallback`）就跳过并记
@@ -342,7 +342,7 @@ class RuleExtractor:
     #: 无文本层时，本抽取器不做任何猜测（返回空），使 §6.3 的
     #: "因无文本层未能校验"成为一句可核查的事实，而不是靠报告口径。
     def __init__(self, *, max_relations: int = 10_000) -> None:
-        # 2026-10-15 业主裁定 D2：500 → 10,000。500 是一条静默截断
+        # 截断上限（D2）：10,000。500 是一条静默截断
         # （多出来的关系直接 `[:500]` 丢掉，台账上不留一个字），而"限制产出"
         # 正是裁定要求删掉或抬高的那一类：一本 468 页的书里真关系上千条是正常的。
         # 10,000 是"几乎不可能由正常文献触发"的量级，留着只为挡住解析失控。
@@ -685,8 +685,7 @@ def _strip_code_fence(raw: str) -> str:
 def _repair_stray_quotes(text: str) -> str | None:
     """把字符串值里没转义的双引号补上转义（只在这一档上动手）。
 
-    真机读数（2026-10-05 T2 第 6/7/8 趟，`projects/p6h|p6i|p6j-research-from-zero`）：
-    M 把长命题 / 长 `claim` 内联进 `summon_many`，回复只有几百个 token 却连着三次
+    现场：M 把长命题 / 长 `claim` 内联进 `summon_many`，回复只有几百个 token 却连着三次
     `Expecting ',' delimiter: line 1 column 1xxx` ⇒ `bad_json_limit`，整趟作废
     （三次是三趟里各自都撞上，最短的一趟只走了 24 步）。那一类报错的形态是
     "某个字符串提前结束了"：这个双引号后面跟的不是 `,` / `:` / `}` / `]`（也不是结尾）。
@@ -735,7 +734,7 @@ def _repair_stray_quotes(text: str) -> str | None:
 def _close_missing_brackets(text: str, *, max_close: int = 3) -> str | None:
     """把"少写的最外层闭合括号"补齐（`None` = 不用补）。
 
-    真机（2026-10-28，`projects/paper-rewrite-78c` 的 14 个坏步逐条算过括号平衡）：
+    现场（坏步逐条算过括号平衡）：
     8 条是 `{"summon": {…}` 少最外面那一个 `}` —— 状态机算出未闭合 1 个 `{`、
     最后一字是 `}`、`json.loads` 的报错位置恰好等于文本长度。它与"末尾多了一个 `}`"
     （同一天早些时候修过的那一档）互为镜像：意图毫无歧义，代价却是整步作废。
@@ -766,8 +765,8 @@ def _close_missing_brackets(text: str, *, max_close: int = 3) -> str | None:
                 stack.pop()
     if in_string or not stack:
         return None
-    # ---- 只补最外层那一个左花括号这一形（2026-10-28 收窄）。
-    # 真机那 8 条逐条算过：未闭合的只有一个左花括号（外层对象少最外面那一层）。
+    # ---- 只补最外层那一个左花括号这一形。
+    # 坏步逐条算过：未闭合的只有一个左花括号（外层对象少最外面那一层）。
     # 别的形状（缺方括号、缺两层）不是同一类手滑，补它们等于猜结构；
     # 判据 tests/test_core_audit_efgh.py 的负样本要的正是「少括号不补、直接拒」。
     if stack != ["{"]:
@@ -778,7 +777,7 @@ def _close_missing_brackets(text: str, *, max_close: int = 3) -> str | None:
 def _repair_bad_escapes(text: str) -> str | None:
     """把字符串里"反斜杠 + 不是合法转义字符"的那一处去掉反斜杠（`None` = 不用修）。
 
-    真机（同一天）：`E#6` 的 `` \\`fitz\\` ``、`E#16` 的 `**T\\*(σ0)**` —— 模型把 markdown
+    例：`E#6` 的 `` \\`fitz\\` ``、`E#16` 的 `**T\\*(σ0)**` —— 模型把 markdown
     反引号与 LaTeX 星号当成了需要转义的字符。合法转义一律不动
     （`\\"` `\\\\` `\\/` `\\b` `\\f` `\\n` `\\r` `\\t` `\\u`）；字符串外一个字符都不动。
 
@@ -818,13 +817,13 @@ def _repair_bad_escapes(text: str) -> str | None:
 def parse_llm_json(raw: str) -> dict[str, Any]:
     """宽松解析 LLM 返回的 JSON 对象。
 
-    容忍（每一条都是实测撞出来的，且都只容忍语法噪声，不容忍语义含糊）：
+    容忍（每一条都是踩出来的，且都只容忍语法噪声，不容忍语义含糊）：
     ```json 围栏、前后寒暄文字（截取首个 ``{`` 到末个 ``}``）、
-    数组/对象结尾的多余逗号、以及末尾多一个 ``}``（2026-09-30 加：
-    真机里 M 与 G 的循环连着十几次写出 ``…"why": "…"}}``，每次都因为一个
+    数组/对象结尾的多余逗号、以及末尾多一个 ``}``（M 与 G 的循环会连着十几次写出
+    ``…"why": "…"}}``，每次都因为一个
     多余的右花括号丢掉整步；它的意图毫无歧义 —— 而"丢掉整步"的代价是
-    整条协同链停摆），以及字符串里的裸控制字符（同一天加：真机里
-    ``project run --extract`` 抽一本书时模型把定义里的换行直接写了进去，
+    整条协同链停摆），以及字符串里的裸控制字符（``project run --extract``
+    抽一本书时模型把定义里的换行直接写了进去，
     报 ``Invalid control character at: line 80 column 168`` ⇒ 整本书的抽取作废，
     2 本里废 1 本。``strict=False`` 是标准库自带、文档化的那一档宽容：
     它只影响"字符串里能不能有裸控制字符"，不改变任何键值语义）。
@@ -844,8 +843,8 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
 
     last_error: Exception | None = None
     for candidate in candidates:
-        # 第一个完整对象后面还有东西（`Extra data: line 1 column N`）：真机读数
-        # （T2 第 10 趟 `p6l` 第 26 步）里模型把两个 JSON 对象连着写了 ——
+        # 第一个完整对象后面还有东西（`Extra data: line 1 column N`）：模型会把
+        # 两个 JSON 对象连着写 ——
         # 意图毫无歧义（第一个就是这一步），而"丢掉整步"的代价是整条链停摆。
         # 用标准库的 `raw_decode`：它只认第一个完整对象，剩下的不管。
         head = candidate.lstrip()
@@ -868,7 +867,7 @@ def parse_llm_json(raw: str) -> dict[str, Any]:
         if fixed is not None:
             reps.append(fixed)
             reps.append(re.sub(r",\s*([}\]])", r"\1", fixed))
-        # 少最外层闭合括号 / 字符串里的非法转义（2026-10-28，真机 14 个坏步里 8 + 2 条）：
+        # 少最外层闭合括号 / 字符串里的非法转义（坏步里 8 + 2 条）：
         # 两处修补按组合试 —— 一条回复同时犯两种也救得回来；每种都只在"原样解析失败"之后。
         closed = _close_missing_brackets(candidate)
         if closed is not None:
@@ -919,7 +918,7 @@ class LLMExtractor:
         self.prompt_template = prompt_template
         # 字符上限：`None`（缺省）= 不截断。
         #
-        # 2026-10-15 业主裁定 D1：缺省从 `60_000` 改成 `None`。那一格此前是一条
+        # 缺省 `None`（D1）：`60_000` 那一格是一条
         # 静默截断：一本 468 页、131 万字符的书只喂了前 60,000 字符（4.5%），
         # 而台账上没有任何一行说"这篇只读了 4.5%" —— 抽取结果看起来是"这本书
         # 只有前几页有概念"。裁定标准是「凡是可能阻止智能体完成大项目的
@@ -932,7 +931,7 @@ class LLMExtractor:
         self.max_relations = max_relations
         #: 一次调用最多让模型读多少正文字符（`build_prompt` 的 body 口径）。
         #:
-        #: ## 为什么必须有这一格（2026-10-15，T5 第 8 趟 `t5h` 的实测阈值）
+        #: ## 为什么必须有这一格（切块阈值的依据）
         #:
         #: 抽取此前是"一整篇一次调用、吐一个大 JSON"，而输出额度
         #: （当时是 `ModelSpec.max_tokens`；抽取那条路显式给 8192）是推理与正文共用的。
@@ -1411,8 +1410,8 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
         page_count,
     )
 
-    # 2026-10-26：自检的产物写进临时目录，不再写仓库里的 `demo/selftest/`。
-    # 为什么（实测读数）：那两份 PDF 是 fitz 每次落盘字节都不相同的生成物，跑一次
+    # 自检的产物写进临时目录，不再写仓库里的 `demo/selftest/`。
+    # 为什么：那两份 PDF 是 fitz 每次落盘字节都不相同的生成物，跑一次
     # `python -m agentflow.llm` 就让 `git status -- demo/selftest` 冒出两行 M。
     # 按 HEAD 还原只是遮：再跑一次又脏一次（`tests/test_demo_selftest_leaves_the_repo_clean.py`
     # 记的就是这次事故），要治就得不写进去。
