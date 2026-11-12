@@ -2,9 +2,9 @@
 
 ## 这个模块解决什么
 
-身份文本此前没有"唯一来源"：谁都能往 `AGENT_IDENTITY`（order 0）这个段名上注册，
-而"部署那一份身份"与"某个角色的身份"用的是同一个段名 —— 于是"谁盖住了谁"取决于
-注册顺序，而注册顺序是插件加载的副产品。本模块把 DSH 的答案搬过来：
+身份文本若没有"唯一来源"，谁都能往 `AGENT_IDENTITY`（order 0）这个段名上注册，
+而"部署那一份身份"与"某个角色的身份"共用同一个段名 ⇒ "谁盖住了谁"取决于注册
+顺序，而注册顺序是插件加载的副产品。本模块把 DSH 的答案搬过来：
 
 - 身份占两个具名槽位（不是"某一段"）：`deployment:persona-prefix`（order 0，前缀）
   与 `deployment:persona-suffix`（order 10200，后缀）；
@@ -12,33 +12,28 @@
 - 一个角色的身份靠同名遮蔽：把同一对槽位注册到那个角色自己的作用域里；
 - 于是"这个角色的身份是谁写的"永远只有一个答案 —— 它作用域里那一份，或者部署那一份。
 
-## 为什么 persona 行只能挂在作用域上（DSH 逐字）
+## 为什么 persona 行只能挂在作用域上（DSH 口径）
 
-`dsh-persona/lib/index.js:8-15`：
-
-    This row is scope-only. Mounted inside an agent preset it shadows the deployment
-    persona for that one session ... mounted globally it collides with the registry's
-    own registration and fails loud.
-
-    That constraint is the reason the row exists. An agent preset cannot mount the
-    prompt registry itself, so without a row of its own a preset could change an
-    agent's tools but never its identity.
+DSH 的 `dsh-persona` 把这条写死了：那一行只能在作用域里挂 —— 挂进 agent 预设就是
+遮蔽那一个会话的部署身份；挂到全局则与注册表自己的登记撞名并当场失败。这也是那一
+行存在的理由：预设没法挂整个提示词注册表，没有自己的一行，它就只能改工具、改不了
+身份。
 
 本模块把这条搬成两条结构：`apply_persona()` 的 `scope` 是必填关键字（签名层就拦掉
 "挂全局"这个用法），而 `register_deployment_persona()` 是唯一能写全局槽位的入口。
 
-## 两个开关（`dsh-persona/lib/index.js:23-28` 的四格）
+## 两个开关
 
 - `complete=True`：这一段就是整份 system prompt（前缀槽位带上这个标记）。
-  逐字：`minimal` 预设的整份提示词就是一句 persona 前缀 + 三个工具 description。
+  例：`minimal` 预设的整份提示词就是一句 persona 前缀 + 三个工具 description。
 - `include_runtime_context=False`：抑制全部动态上下文（快照一条都不发）。
 
 ## 与 DSH 的一处偏差（刻意）
 
 DSH 的 `SystemPrompt` 构造器还会注册一段 `harness:identity`（order -1000，文本是
 "你是由 DeepSeek Harness 驱动的 AI 代理"这一类框架自述），由 `includeHarnessIdentity`
-（默认 true）控制。本框架今天那句"你在一套多智能体协同框架里工作"写在
-`agent_prompts` 的 `AGENT_IDENTITY` 那一段正文里，所以这里把开关默认取 False（不写第二句）。
+（默认 true）控制。本框架那句"你在一套多智能体协同框架里工作"写在 `agent_prompts`
+的 `AGENT_IDENTITY` 那一段正文里，所以这里把开关默认取 False（不写第二句）。
 要改成 DSH 的形状（框架自述与角色身份分开成两段）时，把它打开即可 —— 参数已经在这里了。
 """
 from __future__ import annotations
@@ -47,14 +42,14 @@ from dataclasses import dataclass
 
 from .promptkit import PromptError, PromptRegistry, Section
 
-#: 身份前缀槽位的段名（DSH 同名，逐字：`dsh-system-prompt/lib/index.js:54`）。
+#: 身份前缀槽位的段名（DSH 同名）。
 #:
 #: 为什么名字带 `deployment:` 前缀而不是叫 `AGENT_IDENTITY`：槽位是部署面的东西，
 #: 一个角色遮蔽它是靠"注册同一个名字"，名字本身就是那条契约。改动它等于改动
 #: "谁能盖住谁"，所以这个名字与 DSH 逐字一致、由本模块唯一导出。
 PERSONA_PREFIX_SECTION = "deployment:persona-prefix"
 
-#: 身份后缀槽位的段名（DSH 同名，`dsh-system-prompt/lib/index.js:56`）。
+#: 身份后缀槽位的段名（DSH 同名）。
 #: 放在 order 10200（最后）：易变事实（工作目录、这一次的会话范围）越靠后，
 #: 前面那一段稳定前缀的 KV-cache 复用越不受影响。
 PERSONA_SUFFIX_SECTION = "deployment:persona-suffix"
@@ -70,7 +65,7 @@ class PersonaError(PromptError):
 
 @dataclass(frozen=True)
 class Persona:
-    """一份 persona（`dsh-persona/lib/index.js:23-28` 的四格逐字对应）。
+    """一份 persona（`dsh-persona` 的四格）。
 
     `prefix` 必填（DSH 的 schema 是 `z.string().required()`）：一份身份至少要有一句话 ——
     允许"空身份"等于允许"这个角色没有身份"，而那样一来遮蔽就成了静默失联。
@@ -112,8 +107,8 @@ def register_deployment_persona(reg: PromptRegistry, *,
 
     为什么"无条件注册、允许空串"是必须的：它是遮蔽的靶子。若部署这一份只在非空时才
     注册，那么"角色没写身份"与"部署没写身份"在装配里就是同一件事，而遮蔽的语义
-    （同名覆盖）会在某些配置下退化成"新增一段"。DSH 的构造器就是这么做的
-    （`dsh-system-prompt/lib/index.js:218-228`）：两段永远在，文本来自 config。
+    （同名覆盖）会在某些配置下退化成"新增一段"。DSH 的构造器就是这么做的：
+    两段永远在，文本来自 config。
 
     `harness_identity` 给非空文本时才注册框架自述那一段（默认不注册，见模块 docstring）。
     """
