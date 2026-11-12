@@ -364,12 +364,19 @@ def verify_signature(root: str | Path, record: Mapping[str, Any],
     判的顺序与签名的五条逐字对应：谁签的 → 判定档 → 签的是这一版 →
     它读到的输入是这一版 → 证据锚可复核。
     """
+    return _verify_signature(root, record, doc_row, None)
+
+
+def _verify_signature(root: str | Path, record: Mapping[str, Any],
+                      doc_row: Mapping[str, Any], cur: str | None) -> str:
+    """`verify_signature` 的判定本体；`cur` 已算好时直接复用（批量判时省掉重算哈希）。"""
     name = str(record.get("name") or "")
     if name != SIGNER_NAME or name == str(doc_row.get("created_by") or ""):
         return CODE_SIGNER_NOT_REVIEWER
     if str(record.get("verdict") or "") not in ACCEPTING_VERDICTS:
         return CODE_VERDICT_NOT_ACCEPTING
-    cur = content_sha256_of(doc_row)
+    if cur is None:
+        cur = content_sha256_of(doc_row)
     if str(record.get("content_sha256") or "") != cur:
         return CODE_STALE_SIGNATURE
     inputs = record.get("inputs") or {}
@@ -406,8 +413,15 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
     if str(doc_row.get("status") or "") not in SIGNABLE_STATUSES:
         return []
     cur = content_sha256_of(doc_row)
-    mine = [r for r in records if str(r.get("doc_id") or "") == str(doc_row.get("doc_id") or "")]
-    same = [r for r in mine if str(r.get("content_sha256") or "") == cur]
+    doc_id = str(doc_row.get("doc_id") or "")
+    mine: list[Mapping[str, Any]] = []
+    same: list[Mapping[str, Any]] = []
+    for r in records:
+        if str(r.get("doc_id") or "") != doc_id:
+            continue
+        mine.append(r)
+        if str(r.get("content_sha256") or "") == cur:
+            same.append(r)
     if not same:
         if mine:
             return [(CODE_STALE_SIGNATURE,
@@ -418,7 +432,7 @@ def signature_problems(root: str | Path, doc_row: Mapping[str, Any],
                  "「审过了」这件事没有可核的凭据")]
     problems: list[tuple[str, str]] = []
     for r in same:
-        code = verify_signature(root, r, doc_row)
+        code = _verify_signature(root, r, doc_row, cur)
         if code == "valid":
             return []
         problems.append((code, f"稿件 {doc_row.get('doc_id')} 的签名不成立（{code}）："
