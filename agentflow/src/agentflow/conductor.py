@@ -164,8 +164,10 @@ def _parse_revoke_mark(mark: str) -> dict[str, str]:
         key, sep, value = part.partition("=")
         if sep:
             out[key] = value
+    # `rest` 的长度两支都要用（`at` 那一格没有 `:reason=` 时收到串尾）—— 量一次就够。
+    end = len(rest)
     if at_at >= 0:
-        out["at"] = rest[at_at + len(":at="):at_reason if at_reason >= 0 else len(rest)]
+        out["at"] = rest[at_at + len(":at="):at_reason if at_reason >= 0 else end]
     if at_reason >= 0:
         out["reason"] = rest[at_reason + len(":reason="):]
     return out
@@ -1181,8 +1183,10 @@ def retire_refusal(reading: Mapping[str, Any], *, tid: str = "", name: str = "",
         for one in busy:
             if one in waiting_for:
                 continue
-            parts.append(f"这一支里 {_agent_label(one, names)} 还在干活")
-            missing.append(f"{_agent_label(one, names)} 还在干活")
+            # `_agent_label` 是纯函数（只读 `names`），同一格句子与拒信各要一次。
+            who = _agent_label(one, names)
+            parts.append(f"这一支里 {who} 还在干活")
+            missing.append(f"{who} 还在干活")
         body = "；".join(parts) or "它在待机（还在等）"
         why = f"{lead}现在是{label}：{body}；销号只针对静默子代理"
     else:
