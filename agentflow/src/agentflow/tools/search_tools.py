@@ -876,8 +876,14 @@ def _h_literature(
     # 单源来自 `_single_source_reading`（同样复用 providers 层那两处判据）。
     source_rows = (multi["sources"] if multi else
                    _single_source_reading(prov, candidates))
-    source_failures = sorted(r["name"] for r in source_rows if r["status"] == "failed")
-    source_refusals = sorted(r["name"] for r in source_rows if r["refused"])
+    if multi is not None:
+        # 多源那一支的逐源读数已经由 `_multi_source_reading` 折过一遍（`failed` / `refused`
+        # 就是同一批 `sources` 行按同一判据数出来的），这里直接复用，不再重算两遍。
+        source_failures = list(multi["failed"])
+        source_refusals = list(multi["refused"])
+    else:
+        source_failures = sorted(r["name"] for r in source_rows if r["status"] == "failed")
+        source_refusals = sorted(r["name"] for r in source_rows if r["refused"])
 
     candidates = list(candidates or [])
     rows, read_error = _literature_rows(ctx)
@@ -905,6 +911,7 @@ def _h_literature(
             is_new = (existing is None) and (not batch_dup)
         if key:
             seen_keys.add(key)
+        raw = cand.raw or {}
         items.append(
             {
                 "title": cand.title,
@@ -931,21 +938,26 @@ def _h_literature(
                 # `R2b` ⑱：这条合并结果来自哪几个源 —— "哪几条重复"的读数就在这里
                 # （`MultiProvider` 把来源写进 `raw.providers`；单源时它是那一源的名单）。
                 # 不读 `raw.sources`（那是完整原始记录，属于 providers 层内部）。
-                "sources": list((cand.raw or {}).get("providers") or []),
-                "channel": (cand.raw or {}).get("channel"),
-                "cited_by_count": (cand.raw or {}).get("cited_by_count"),
+                "sources": list(raw.get("providers") or []),
+                "channel": raw.get("channel"),
+                "cited_by_count": raw.get("cited_by_count"),
                 # 2026-10-28（阶段 ③ 2C）：broad 模式的主题自检结论（只标不删）。
                 # `providers.mark_topic_selfcheck` 已经把它挂进 `raw`；这里原样转出去 ——
                 # 它是 A 判断"要不要为这条花一次判官调用"的唯一机器读数。
                 # 三态：related / off_topic / unknown（`unknown` = 机器判不了，别当 off_topic）。
                 # 非 broad 模式没有这一格（`None`），不是「判过了、相关」。
-                "topic_selfcheck": (cand.raw or {}).get("topic_selfcheck"),
+                "topic_selfcheck": raw.get("topic_selfcheck"),
             }
         )
 
-    new_count = sum(1 for i in items if i["is_new"] is True)
-    existing_count = sum(1 for i in items if i["existing"] is True)
-    unknown_count = sum(1 for i in items if i["is_new"] is None)
+    # 四个计数一趟数完（`items` 最多 `limit` 条，四遍 sum 只是把同一批行扫四次）。
+    new_count = existing_count = unknown_count = batch_duplicate_count = 0
+    for item in items:
+        flag = item["is_new"]
+        new_count += flag is True
+        existing_count += item["existing"] is True
+        unknown_count += flag is None
+        batch_duplicate_count += bool(item["batch_duplicate"])
     data: dict[str, Any] = {
         "provider": provider_label,
         "mode": mode,
@@ -956,7 +968,7 @@ def _h_literature(
         "new_count": new_count,
         "existing_count": existing_count,
         "unknown_count": unknown_count,
-        "batch_duplicate_count": sum(1 for i in items if i["batch_duplicate"]),
+        "batch_duplicate_count": batch_duplicate_count,
         "store_checked": store_known,
         "store_read_error": read_error,
         "existing_table_size": len(rows) if store_known else None,
