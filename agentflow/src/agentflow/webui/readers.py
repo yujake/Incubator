@@ -1532,7 +1532,8 @@ def _per_proof_numbers(row: Mapping[str, Any]) -> list[int]:
     return sorted(numbers)
 
 
-def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
+def _bit_readings(row: Mapping[str, Any],
+                  bits: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """命题行的五元位逐位读数。
 
     页面若只展开第 4 位（按路径），第 1/2/3/5 位在屏幕上根本不存在 ——
@@ -1556,15 +1557,20 @@ def _bit_readings(row: Mapping[str, Any]) -> dict[str, Any]:
     读出不来时四格都是空串（页面按 `unknown` 处置），不冒充 `pending`；
     `optimized_paths` 读不出来时是空数组（页面写「未记录（说不出是哪一份）」，
     不写「未优化」）。
+
+    `bits` 是调用方已经读出来的那份位读数（`evidencebits.bits_from_row`）——
+    同一行在 :func:`_statement_readings` 里还要拿它派生等级，读一次就够；
+    不给（`None`）就在本函数里读，读不出来仍按上面那一条处置。
     """
     from .. import evidencebits as EB
 
     out: dict[str, Any] = {"bit_numeric": "", "bit_proof": "", "bit_reviewed": "",
                            "bit_audited": "", "reviewed_paths": [], "optimized_paths": []}
-    try:
-        bits = EB.bits_from_row(row)
-    except Exception:  # noqa: BLE001 - 位读不出来 ⇒ 空串（页面写 unknown，不冒充 pending）
-        return out
+    if bits is None:
+        try:
+            bits = EB.bits_from_row(row)
+        except Exception:  # noqa: BLE001 - 位读不出来 ⇒ 空串（页面写 unknown，不冒充 pending）
+            return out
     out["bit_numeric"] = _bit_word(bits.get("numeric"))
     out["bit_proof"] = _bit_word(bits.get("proof"))
     out["bit_reviewed"] = _bit_word(bits.get("reviewed"))
@@ -1626,7 +1632,14 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
         # 这一档是按号命中的、还是读旧行时按 sha 回退的：
         # 读的人要能分辨"正文改了档位还在"与"按文本碰巧对上"，两件事不许折平。
         got["nontriviality_matched_by"] = tier["matched_by"]
-        got.update(_bit_readings(row))
+        # 这五位读数与下面派生的等级读的是同一份位数据（`bits_from_row`）：
+        # 读一次、两处共用 —— 原来同一行要读两遍，而两次之间没有任何东西会变。
+        bits: Mapping[str, Any] | None
+        try:
+            bits = EB.bits_from_row(row)
+        except Exception:  # noqa: BLE001 - 位读不出来 ⇒ 空串（页面按 unknown 处置）
+            bits = None
+        got.update(_bit_readings(row, bits))
         try:
             per = EB.formal_by_proof(row)
         except Exception:  # noqa: BLE001 - 第 4 位读不出来 ⇒ 一条路径都不列（不是"没验过"）
@@ -1635,7 +1648,8 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
                                for no, state in sorted(per.items())]
         grade = ""
         try:
-            grade = EB.derive_grade(EB.bits_from_row(row), kind=str(row.get("kind") or ""))
+            grade = EB.derive_grade(bits if bits is not None else EB.bits_from_row(row),
+                                    kind=str(row.get("kind") or ""))
         except Exception:  # noqa: BLE001 - 等级算不出来 ⇒ 空串（页面按 unknown 处置）
             grade = ""
         got["grade"] = grade
