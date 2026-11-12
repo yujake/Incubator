@@ -200,6 +200,13 @@ def paint(text: Any, *styles: str) -> str:
     return f"{codes}{s}{ANSI['reset']}"
 
 
+def _char_width(ch: str) -> int:
+    """一个字符占几列（组合符 0、宽/全角 2、其余 1）—— 逐字宽度的唯一实现。"""
+    if unicodedata.combining(ch):
+        return 0
+    return 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+
+
 def display_width(text: Any) -> int:
     """一行的显示宽度（列数），不是字符数。
 
@@ -210,9 +217,7 @@ def display_width(text: Any) -> int:
     """
     total = 0
     for ch in str(text):
-        if unicodedata.combining(ch):
-            continue
-        total += 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        total += _char_width(ch)
     return total
 
 
@@ -233,7 +238,8 @@ def truncate(text: Any, limit: int, ellipsis: str = "…") -> str:
     s = " ".join(str(text).split())
     if limit <= 0:
         return ""
-    if display_width(s) <= limit:
+    full_width = display_width(s)
+    if full_width <= limit:
         return s
     room = limit - display_width(ellipsis)
     if room <= 0:
@@ -241,7 +247,7 @@ def truncate(text: Any, limit: int, ellipsis: str = "…") -> str:
     out = ""
     used = 0
     for ch in s:
-        w = display_width(ch)
+        w = _char_width(ch)
         if used + w > room:
             break
         out += ch
@@ -318,7 +324,7 @@ def _wrap(text: str, limit: int) -> list[str]:
             cut = ""
             used = 0
             for ch in word:
-                w = display_width(ch)
+                w = _char_width(ch)
                 if used + w > limit:
                     break
                 cut += ch
@@ -345,14 +351,15 @@ def table(headers: Sequence[str], rows: Sequence[Sequence[Any]], *,
         scale = budget / max(1, sum(widths))
         widths = [max(6, int(x * scale)) for x in widths]
     b = {k: _glyph(k) for k in ("h", "v", "tl", "tr", "bl", "br", "lt", "rt", "tt", "bt", "x")}
+    # 竖线三处（左 / 列间 / 右）是同一个已上色串：每行重算三次 paint 不会给出不同结果。
+    edge = paint(b["v"], "grey")
 
     def _row(cells: Sequence[str], *, head: bool = False) -> str:
         out = []
         for i, cell in enumerate(cells):
             text = truncate(cell, widths[i])
             out.append(" " + pad(text, widths[i], align="left" if head else aligns[i]) + " ")
-        joiner = paint(b["v"], "grey")
-        return f"{paint(b['v'], 'grey')}{joiner.join(out)}{paint(b['v'], 'grey')}"
+        return f"{edge}{edge.join(out)}{edge}"
 
     top = b["tl"] + b["tt"].join(b["h"] * (w + 2) for w in widths) + b["tr"]
     mid = b["lt"] + b["x"].join(b["h"] * (w + 2) for w in widths) + b["rt"]
