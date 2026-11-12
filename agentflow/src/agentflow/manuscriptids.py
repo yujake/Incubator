@@ -1,20 +1,13 @@
 # -*- coding: utf-8 -*-
 """手稿号源：每一族各有一套号，与命题号 / 计划号 / 实验号都无关。
 
-## 业主裁定（逐字）
+## 业主口径
 
-2026-11-10（F 那一族）：「F 的稿自己维护一套号源，不依赖命题号和计划号。」
+「F 的稿自己维护一套号源，不依赖命题号和计划号。」B / E 两族同理：B 侧稿和 F 侧稿
+的维护方法一致。
 
-2026-11-11（B / E 两族，本模块泛化的依据）：
-```text
-「b侧稿号和命题号耦合是错的，这犯了原先F稿号不独立一样的问题，
-  B侧稿和F侧稿的维护方法一致。你也再盯一下E侧稿的形状」
-```
-
-改前只有 F 有自己的号段（`counters.manuscript`），B 与 E 的稿名用的是「命题号 /
-实验号」：`reports/b-proof-<命题号>.md`、`reports/e-proof-<实验号>.md`、
-`reports/e-num-<实验号>.md`。那是同一种耦合 —— 一条命题的第二份证明、或一份稿换了
-落点，都会去动别人那个号段；而"稿"与"命题/实验"本来是两个计数面。
+稿名若挂在命题号 / 实验号上（`reports/b-proof-<命题号>.md` 一类），改稿就会去动
+别人那个号段；而"稿"与"命题/实验"本来是两个计数面。
 
 ## 四条纪律（与 F 那一套逐条相同，判据 `tests/test_manuscript_ids_are_per_family.py`）
 
@@ -61,8 +54,8 @@ from . import schema as _S
 #: 族 ⇒ `data/counters.json` 里这一族的键（每族一条；F 那一格沿用既有的
 #: `manuscript`，改名会让老盘上的计数器失去意义）。
 #:
-#: 为什么键名长这样：`manuscript` 是 F 已经发出去的那一条（2026-11-10 上线，老工作区里
-#: 已经有值）；B / E 两条是 2026-11-11 新开的，用 `<族字母>manuscript` 的形态与它并列。
+#: 为什么键名长这样：`manuscript` 是 F 已在用的那一条（老工作区里已有值）；B / E
+#: 用 `<族字母>manuscript` 的形态与它并列。
 FAMILY_COUNTERS = MappingProxyType({
     "f-proof": "manuscript",
     "b-proof": "bmanuscript",
@@ -126,9 +119,9 @@ def canonical_rel(manuscript_id: Any, proof_no: Any = 1, *,
     """手稿号 ⇒ 规范手稿路径：`reports/<前缀><号>.md`（新写路径不产生 `-p<N>`）。
 
     `family` 缺省是 F（`f-proof-`）—— 老调用方的位置参数与返回值逐字不变。
-    2026-11-11（业主裁定）：一个稿号 = 一份文件 = 一份证明。新写路径不再按
-    `proof_no` 拼后缀；`proof_no` 只在 `legacy=True`（老盘只读兼容：`reports/
-    f-proof-<号>-p2.md` 那一族仍在盘上）时参与命名。缺省两格都等于"不带后缀"。
+    一个稿号 = 一份文件 = 一份证明：新写路径不再按 `proof_no` 拼后缀；`proof_no`
+    只在 `legacy=True`（老盘只读兼容：`reports/f-proof-<号>-p2.md` 那一族仍在盘上）
+    时参与命名。缺省两格都等于"不带后缀"。
     号形不对 / 未知族 ⇒ 空串（不猜、不拼一个看起来像号的路径）。
     """
     mid = str(manuscript_id or "").strip()
