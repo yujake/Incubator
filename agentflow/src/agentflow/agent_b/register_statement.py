@@ -3823,6 +3823,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 写的，不是权威 —— 这一份证明的全部依赖行都排进分配出来的那个号。
             # 不这么改的话，第 2 份证明的依赖会顶着 `used_by="stmt:<号>"` /
             # `path_group=1` 落进第 1 条路径（读数上就是"两条入口给了两个号"）。
+            # 两个名字各管一件事（2026-11-12 逐行读证，别再把它们并成一个数）：
+            #   · `proof_no` ⇒ `used_by` 的 `#pN` 尾巴 = "这条依赖出自第几份证明正文"
+            #     → 交付里声明的那个号（`proof_no_placement`，稿头优先）
+            #   · `path_group` ⇒ 那一列 = "这一份证明里的第几条可选路径"
+            #     → 收录分配的号（`_path_no`）
+            # 手稿依赖段那一路（`depsection.deps_groups`）恰好两值相同，但那是那一路的性质，
+            # 不是全局不变量：证明正文里分段扫出来的那一路就是 path_group 1/2、proof_no 1。
             deps_groups = [[dict(step, proof_no=int(proof_no_placement),
                                  path_group=int(_path_no)) for step in group]
                            for group in deps_groups]

@@ -9790,11 +9790,25 @@ class Secretary:
         count = 0
         for step in steps:
             dep_id = tx.alloc_id(S.TABLES["dependencies"]["id_kind"])
+            # 两个数各管一件事，不许混：
+            #   · `proof_no` ⇒ `used_by` 的 `#pN` 尾巴（"这一条依赖出自哪一份证明正文"）
+            #   · `path_group` ⇒ 那一列（"同一份证明里的第几条可选路径"，组内 AND / 组间 OR）
+            # 手稿依赖段那一路两者同值（`deps_groups` 已赋同样的数）；证明正文里分段扫出来
+            # 的那一路，`path_group` 1/2… 而 `proof_no` 仍是 1 —— 那是正常形态，不是错位。
             proof_no = step.get("proof_no") or body.get("proof_no") or _PL.DEFAULT_PROOF_NO
             try:
                 proof_no = int(proof_no)
             except (TypeError, ValueError):
                 proof_no = _PL.DEFAULT_PROOF_NO
+            if proof_no < _PL.DEFAULT_PROOF_NO:
+                proof_no = _PL.DEFAULT_PROOF_NO
+            group_raw = step.get("path_group")
+            try:
+                path_group = int(group_raw) if group_raw not in (None, "") else proof_no
+            except (TypeError, ValueError):
+                path_group = proof_no
+            if path_group < _PL.DEFAULT_PROOF_NO:
+                path_group = _PL.DEFAULT_PROOF_NO
             dep = S.Dependency(
                 dep_id=dep_id,
                 used_by=_PL.used_by_of(f"stmt:{stmt_id}", proof_no),
@@ -9810,7 +9824,7 @@ class Secretary:
                 # （扫出来的悬空引用在 `_resolve_write_steps` 里已经写好了这一格）。
                 status_reason=str(step.get("status_reason") or ""),
                 page_range=S.PageRange(),
-                path_group=int(step["path_group"]),
+                path_group=path_group,
                 created_at=S.now_iso(), created_by=f"secretary-{self.role}")
             dep.validate()
             tx.upsert("dependencies", dep.to_dict(), note="record_statement:dependency")
