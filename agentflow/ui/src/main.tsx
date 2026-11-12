@@ -56,13 +56,12 @@ export function matchRoute(path: string): { route: Route; sid: string } {
 const NAV: ReadonlyArray<{ path: string; label: string }> = [
   { path: "/", label: "对话" },
   /*
-   * 2026-10-24（业主：「ui侧加一个大栏专门显示各角色错误动作计数」；同日补正：
-   * 「对话页和错误动作页完全一致是怎么回是？」）：这一格是它自己的一条路由 `/errors`。
+   * 业主：「ui侧加一个大栏专门显示各角色错误动作计数」（补正：「对话页和错误动作页
+   * 完全一致是怎么回是？」）：这一格是它自己的一条路由 `/errors`。
    *
-   * 上一版链的是 `/#role-errors` 锚点，并且刻意不新增路由 —— 想法是"加一格导航"
-   * 不必变成"加一张契约表"。但 `matchRoute` 读的是 `window.location.pathname`，
-   * 锚点不在里面：点这一格读到的仍是 `/`，画出来的仍是首页那一屏（对话 + 错误动作
-   * 计数），两页因此一模一样。所以现在它有自己的路由与自己的页面文件，
+   * 它不能链 `/#role-errors` 锚点：`matchRoute` 读的是 `window.location.pathname`，
+   * 锚点不在里面 —— 点这一格读到的仍是 `/`，画出来的仍是首页那一屏（两页一模一样）。
+   * 所以它有自己的路由与自己的页面文件，
    * C4 表（`draft/75 §1.4`）与 `ROUTES` 同步多了这一行。
    */
   { path: "/errors", label: "错误动作" },
@@ -115,7 +114,7 @@ function Body() {
   return (
     <main class="wrap">
       {/*
-        换 key 的提醒（2026-10-23）：挂在全站最上面 —— 它说的是"整个工作区的提示词
+        换 key 的提醒：挂在全站最上面 —— 它说的是"整个工作区的提示词
         缓存作废了"，与在哪一页无关。可关掉；换 key 之后它会自己再出现一次
         （`reminder.dismiss_key` 带 key 指纹）。
       */}
