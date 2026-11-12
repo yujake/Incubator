@@ -215,9 +215,9 @@ def normalize_reasoning_effort(raw: Any) -> str:
 
     ## 为什么词表外的取值必须当场炸，而不是回落到缺省
 
-    该模型对
+    真机读数（2026-10-10，`temp/_thinking_probe.py`，模型 = `deepseek-chat`）：该模型对
     `reasoning_effort` 的词表外取值（试了 `medium`）不报错，照样 200、照样回
-    `reasoning_content`。也就是说端点把"拼错一个字母"和"一个合法的更高档"
+    `reasoning_content`（101 字）。也就是说端点把"拼错一个字母"和"一个合法的更高档"
     当同一件事办了 —— 客户端这边若也回落成缺省，那么
     `settings.json` 里写 `"hgih"` 的效果与写 `"high"` 逐位相同，而没有任何读数说得出
     "你那个值没人认"。这正是本项目反复登记的那一类静默缺陷形态。
