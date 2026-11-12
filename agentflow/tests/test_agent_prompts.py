@@ -2479,7 +2479,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # `specs/g.py` 的 `revise` 动作说明从「review_rounds+1、status=revised」改成
 # 「改稿开启/推进这一轮；「复审收过几次」看 review_rounds」（239e23a7 起轮次账跟着复审走）。
 # 十一格不是手抄：`temp/_p279_recompute.py` 的现算值（口径同上一支）。
-_FROZEN_PROMPT_VERSION = "p279"
+# p279 → p280（2026-11-13，教法对齐）：四格换值 —— B / E / F / M；其余七格逐字未动
+# （版本行已归一）。十一格不是手抄：`temp/_p280_recompute.py`（导入本文件的
+# `_surface_digest`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。逐格旧值 → 新值：
+#   B 5ea2affa… → 4a58462d…：`b_sign_policy` 的「送审之后必须挂计时器等 V 的反馈」改成
+#     「送审之后这一趟还不能收工 —— 收工门按签拦（`b-proof` 没有现行的 V 签、且那条命题
+#     没被放弃 ⇒ 受控拒）」，计时器只当"要等才挂"。
+#   E 0dc0d45d… → 063d2d72…：`specs/e.py` 同一句改成按签拦（`e-proof` 没签、且这一条没被
+#     撤销 ⇒ 拒；`e-num` 只拦无稿）。
+#   F 163dde59… → b9b8482b…：`specs/f.py` 的同一句改成按签拦（计划号没有现行的 V 签、且
+#     没被放弃 ⇒ 拒），并把「老盘 `-p2` 只读兼容（仍能分类 / 读 / 认签）」改成「不再被
+#     认成手稿」。
+#   M bbcad379… → 2c197af4…：`specs/m.py` 的「另一份证明用 `-p2`」改成「另一份证明就是
+#     另一个稿号 —— 一个稿号 = 一份文件 = 一份证明」。
+# A / C / D / G / H / L / V 七格与 p279 逐字同值（这几句只落在 B/E/F/M 各自的 policy 上；
+# `agent_skills` 的手册正文与 `specs/l.py` 的注释不进提示词）。
+_FROZEN_PROMPT_VERSION = "p280"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2730,15 +2745,15 @@ _FROZEN_PROMPT_VERSION = "p279"
 #:   那一道"F 的稿叫什么"的字面，B 的收录面一个字没改）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "32b293f6106065c6bf8f07e4e33f22400aa3f9e7cfe87565462b828a7bf26706",
-    "B": "5ea2affad0bd4007d27cf5e996876d0cdd7cf26ed90522b376d96b9da930c8d0",
+    "B": "4a58462dbac557f1c6dc33da6d24d6c5119004205aa559f61965f6d501c3702d",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "bc209de75aed2228473898357eb384f2406b2d885086e3e259e57acbbcc7c2f6",
-    "E": "0dc0d45df4ff2f034034f7f3a07e5d5363d9ddea08d640e3d134e00ed03896fc",
-    "F": "163dde5989e099b9653b4aec3a7df90a4bd1f9d8a0c4dc91b19c19a9512ebc82",
+    "E": "063d2d72dc8a9a9ced099f15f4d2f81a86a86055ce8fcb638d00f3fbf07c7e6b",
+    "F": "b9b8482b42e048ef408c63f6a0deb558e80ed81618170069282a4fd8543e409a",
     "G": "4f8dc27ea967fb0a5c917c6c65249227b2d27c30b390b1f95e0894c3e7a11790",
     "H": "6dda638560012a8d2842bddb413295b74d7e8e2ec4660e4335bee90fb1b9123a",
     "L": "cc1068bca4175f983fa323e9c853e70833e3eb2f1badfef247d54a420513770a",
-    "M": "bbcad379cdcd08c99da772c041af862d46f9e1663acfa395f16405f9d482ada8",
+    "M": "2c197af400acc1f9c5219ca920bf335f4b100edea9edfbca28854b4ca8434a38",
     "V": "983eefc06c583904e4d2a10d864b0fb7f382cde30503610f6f4e7c9d9dc42384",
 }
 

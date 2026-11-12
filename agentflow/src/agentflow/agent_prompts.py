@@ -2468,7 +2468,38 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `docs/READING-MAP.md` 三格按现盘重算。
 #: 判据：`tests/test_jia_review_rounds_follow_reviews.py`（a–d，行为面已钉）与
 #: `tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（题面面）。
-PROMPT_VERSION = "p279"
+#: p279 → p280（2026-11-13，设计对齐的最后一项 · 教法）：产出侧已经只认一套形式
+#: （无 `-pN`、稿头无「证明号」、依赖表三列、路径号由 B 的秘书分配），这一批把还在教
+#: 旧写法的提示词 / 手册 / 政策正文逐句改成现行为（入口闸 / 收录闸 / closing 判定、
+#: 工具面一个字未动）：
+#:   ① `agent_skills`（B 手册）：携带单第四格改教「路径号（由 B 收录时分配；产出侧不写
+#:      证明号、稿名不带 `-pN`）」（两处）；`own.ingest_manuscript` 的 `proof_no` 一格
+#:      写成已退役。
+#:   ② `agent_skills`（E 手册）：删掉「稿头那一行 `- 证明号：` 由框架写」，改成「稿头
+#:      没有这一行」（老盘稿头仍读得出、省略 ⇒ `#p1`；产出侧不写、不猜、不补）。
+#:   ③ `specs/m.py`：另一份证明 = 另一个稿号（删「另一份证明用 `-p2`」）。
+#:   ④ `specs/f.py`：删掉「老盘 `-p2` 只读兼容（仍能分类 / 读 / 认签）」—— `-pN` 已
+#:      退出解析侧，改成「不再被认成手稿」。
+#:   ⑤ `specs/e.py` / `specs/f.py` / `specs/b_sign_policy.py`：送审之后那一条从「必须挂
+#:      计时器等 V 的反馈」改成现行为 —— 收工门按签拦（计划号 / `e-proof` / `b-proof`
+#:      有没有现行的 V 签、有没有被明确放弃），`e-num` 只拦无稿；要等才挂
+#:      `clock.timer_start(wait_for=…)`，它不是硬要求。
+#:   ⑥ `specs/l.py`：`path_id` 的显示名口径写成 `p<路径号>g<组号>`（注释）；
+#:      `agent_prompts.py` 两处维护注释去掉 `- 证明号：<N>` / `-p<N>`。
+#: 变化格 = B / E / F / M（其余七格逐字未动；版本行已归一）。十一格由判据自己的
+#: `_surface_digest` 现算（`temp/_p280_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。
+#: 逐格旧值 → 新值：
+#:   B 5ea2affa… → 4a58462dbac557f1c6dc33da6d24d6c5119004205aa559f61965f6d501c3702d
+#:   E 0dc0d45d… → 063d2d72dc8a9a9ced099f15f4d2f81a86a86055ce8fcb638d00f3fbf07c7e6b
+#:   F 163dde59… → b9b8482b42e048ef408c63f6a0deb558e80ed81618170069282a4fd8543e409a
+#:   M bbcad379… → 2c197af400acc1f9c5219ca920bf335f4b100edea9edfbca28854b4ca8434a38
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p280）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p279 同值）；`agent_surface_snapshot.json`
+#: 按现值重冻（十一格的版本行 + B/E/F/M 四格的段；tool 面一个字没动）；两文档重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
+#: 判据：`tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（题面面）与
+#: `tests/test_b_manual_teaches_the_carried_sheet_four_columns.py`（B 手册的第四格）。
+PROMPT_VERSION = "p280"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
