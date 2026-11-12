@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""命题的五元证据位与派生等级（`draft/39` §3.14，用户 2026-10-05 定）。
+"""命题的五元证据位与派生等级。
 
 ## 五个位（每一位都有明确的 owner，owner 是判据的一部分）
 
@@ -7,33 +7,31 @@
 |---|---|---|---|
 | 1 | 数值验证 `numeric` | E | 四态：`verified` / `failed` / `na`（不适用，必须写理由）/ `pending`（还没做）；`verified`/`failed` 要记被哪个脚本测的（script + sha + 实验号） |
 | 2 | 有证明 `proof` | F | 证明过程（逐步论证，每步引到的 id 在册） |
-| 3 | 审过 `reviewed` | V（自己产出的命题）／引用（引用命题：凭据是文献代号） | 自己产出 ⇒ V 按 `proof_no` 逐份签的三态结论（`bits.evidence.reviewed_by_proof[证明号]`，单份时 = 1）；引用 ⇒ `lit:`/`known_lit_id` + 逐字核验 |
+| 3 | 审过 `reviewed` | V（自己产出的命题）／引用（引用命题：凭据是文献代号） | 自己产出 ⇒ V 的成立签（三态结论；`bits.evidence.reviewed`，逐份凭据见 `reviewed_by_proof`）；引用 ⇒ `lit:`/`known_lit_id` + 逐字核验 |
 | 4 | 形式化通过 `formal` | L | 二维 `{证明号: 四态}`（一份证明一行，写侧只写四态）；读侧另有第五档 `stale`（验过、但现行那一份证明不是当时那一份）；任一路径 `verified` 即算过，而"验的是哪一条路径"逐条可读 |
 | 5 | 正式审查 `audited` | H（G 申请） | H 的审校轮次与结论（H 只看证据是否确凿 + 引用是否得当，不读证明判数学） |
 
-## 位与台账的映射（业主 2026-10-09：五元状态是哪张表在维护，要做好映射）
+## 位与台账的映射
 
 上面的表说的是"这一位属于谁"，`BIT_LEDGERS` 说的是"这一位去哪张表里查"：
 `proof` 去 `statements.proof_text`（B 维护的那张表）、`numeric`/`formal` 去
 `experiments`（`method` 要对得上）、`reviewed` 去 `bits.evidence.reviewed_by_proof[证明号]`
-（V 按 `proof_no` 逐份签，读数在 `verifications/<命题号>.jsonl`）、`audited` 去稿件上的 H 结论。
-判据（`bit_evidence_gaps`）只做一件业主点名的事：位上说有，表里要查得到。
+（V 的成立签逐份落，读数在 `verifications/<命题号>.jsonl`）、`audited` 去稿件上的 H 结论。
+判据（`bit_evidence_gaps`）只做一件事：位上说有，表里要查得到。
 
-## 第 4 位是二维的（业主 2026-10-22 的裁定，逐字）
+## 第 4 位是二维的
 
-> 「一个定理有多种证明路径，lean 形式化需指明对哪个路径做了形式化验证，即五元判据有关
->   形式化的那一位也要改成二维列表。但关于一个定理的正确性，但凡任意一个路径通过核验，
->   它就是对的」
+一个定理可能对应多份证明，形式化要指明验的是哪一份。关于定理的正确性：
+任一份证明通过核验，它就是对的。
 
 于是这一位有两层读法，两层都必须在（缺一层就会出现下面两种坏法之一）：
 
 - 汇总（:func:`_bit_state`）：按 `BIT_STATES` 的顺序取最强那一档 —— 即"任一路径通过
-  就算通过"（裁定的第二句）。等级派生只读这一层，定理的正确性判定就是它；
+  就算通过"。等级派生只读这一层，定理的正确性判定就是它；
 - 逐路径（:func:`formal_by_proof`）：`{证明号: 状态}`，一份证明一行。它是"这一位说的
-  是哪一条路径"的唯一读法 —— 折成汇总就等于让 `#p2` 借 `#p1` 的光，而那正是多证明
-  模型要堵的东西。
+  是哪一条路径"的唯一读法 —— 折成汇总就等于让一份证明借另一份的光。
 
-键只能是证明号（`proof_no`）：`path_id` 是 C 的显示名（`p<证明号>g<组号>`，见
+键只能是证明号：`path_id` 是 C 的显示名（`p<证明号>g<组号>`，见
 `agent_c.path_shape`），同一份证明的路径会按组分裂成好几条 —— 拿它当键就是把"组"
 混进"证明"里，于是读数里的路径数比证明数多，而没有任何东西会报。
 
@@ -41,9 +39,8 @@
 
 ## 等级机械派生（不许任何角色自报等级）
 
-等级是唯一的轴（业主 2026-11-05 裁定，逐字：「cross_check 等价于强猜想等价于有普通
-数值实验支撑的猜想（这很坏，为啥要叫 cross_check）。不妨就用等级制平替掉」+
-「穷举证书相当于 lean 形式化，表示绝对正确」）：
+等级是唯一的轴：cross_check 等价于强猜想（有普通数值实验支撑的猜想），
+穷举证书相当于 Lean 形式化：
 
 ```
 conjecture        = 没有证据
@@ -56,14 +53,14 @@ theorem           = V 签 ∧ 机器可核（Lean 形式化 或 穷举证书，�
 - 第 1 位 `verified` ⇒ 强猜想；
 - 第 2 位 + 第 3 位 ⇒ 预备定理级；
 - 第 2 位 + 第 4 位（二维里任一路径 `verified`）或 第 2 位 + 第 1 位 `verified`
-  ⇒ 正式定理（穷举证书与 Lean 同级：两者都是"机器可核"，业主 2026-11-05）；
+  ⇒ 正式定理（穷举证书与 Lean 同级：两者都是"机器可核"）；
 - 第 5 位 ⇒ 追加"已过正式审查"（并列，不覆盖）。
 
 `evidence_kind`（`proof` / `proof_review` / `cross_check` / `heuristic`）自此只是一列
 历史：它若还出现，只能由等级反算（:func:`kind_from_grade` / :func:`kind_from_bits`），
 不许有第二套真值；判定面一律读等级。
 
-## 作废（`draft/39` §3.15/§3.18）
+## 作废
 
 只有两种能作废：① 数值实验出真反例（四条判据同时成立）；② 理论构造出反例。
 作废后五位读数全部作废（保留历史 + `refuted_by`），条目保留。
@@ -91,7 +88,7 @@ def _sign_sha(proof_text: Any) -> str:
     return _PR.proof_sha(proof_text)
 
 
-#: 引文状态的第五档（D1，2026-10-22 第二版）：说"通过"，而盘上拿不出可复核的区间。
+#: 引文状态的第五档：说"通过"，而盘上拿不出可复核的区间。
 #:
 #: ## 为什么不折进已有的两档
 #:
@@ -99,8 +96,8 @@ def _sign_sha(proof_text: Any) -> str:
 #: "还没人查过"。两者欠的东西不同 —— 前者欠一次重核（把它降回 None 再查），
 #: 后者欠一次回验。一个词盖住两件事，读的人就会去补一条不存在的工序。
 #:
-#: 折进 `verbatim`：那正是 D1 的现场。真机 `saxl-ws/data/statements.json`（2026-10-22
-#: 修复前）13 行全是 `quote_verified=true` / `quote_mode=verbatim` / `quote_span=""`，
+#: 折进 `verbatim`：那会把"说通过、却指不出核的是哪一段"读成"逐字通过"。
+#: 真机曾有一批行全是 `quote_verified=true` / `quote_mode=verbatim` / `quote_span=""`，
 #: 而读侧把它们读成"逐字通过" —— 于是"核了哪一段、在第几页"这条读数在盘上根本不存在，
 #: 而引用学分（`clean_statement_ids`）照发。
 #:
@@ -134,14 +131,14 @@ GRADE_LABELS: dict[str, str] = {
     GRADE_NOT_APPLICABLE: "不适用（概念行不参与等级）",
 }
 
-#: 等级 ⇒ 历史档位（`statements.evidence_kind` 的唯一反算表，业主 2026-11-05）。
+#: 等级 ⇒ 历史档位（`statements.evidence_kind` 的唯一反算表）。
 #:
 #: ## 为什么方向只能是这一边
 #: 档位是等级的历史别名，不是第二个真值：`evidence_kind` 一列仅作存量保留，
 #: 判定面读等级。任何写档位的地方都必须从这里反算（:func:`kind_from_grade`），
 #: 不许把调用方声明的档位原样落盘 —— 那就等于允许"自报档位"绕过五元位。
 #:
-#: 映射逐字取自业主裁定：
+#: 映射：
 #: `conjecture → heuristic`、`strong_conjecture → cross_check`、
 #: `pre_theorem → proof_review`、`theorem → proof`。
 GRADE_TO_KIND: dict[str, str] = {
@@ -157,17 +154,16 @@ LEGACY_KINDS: tuple[str, ...] = tuple(GRADE_TO_KIND[g] for g in GRADES)
 #:
 #: 为什么两个方向都要有：判定面读等级，而存量行上只有档位。审计要回答"这一行按档位
 #: 自报的是哪一档、按五元位现算的是哪一档"，两列并列才看得见 :data:`GRADE_TO_KIND`
-#: 之外的漂移（真机 362 行里 169 行不一致）。它绝不参与 `derive_grade` —— 那会把
+#: 之外的漂移（存量行里档位与五元位不一致）。它绝不参与 `derive_grade` —— 那会把
 #: 自报档位变成证据。
 KIND_TO_GRADE: dict[str, str] = {v: k for k, v in GRADE_TO_KIND.items()}
 #: 五位的名字（对外读数、台账字段都用这一套）。
 BIT_NAMES: tuple[str, ...] = ("numeric", "proof", "reviewed", "formal", "audited")
 #: 每一位的 owner（引用命题的第 3 位 owner 是"引用"，不是 V）。
 #:
-#: 2026-10-23：第 4 位的 owner 从 E 改成 L。业主 2026-10-22 晚裁定「E 的 Lean 侧开关
-#: 全写死成关闭」之后，`formal` 那一行只由 `formal.record` 落（`recorded_by="agent-L"`），
-#: 而 E 的 formal 那一支一律回受控拒绝 `formal_moved_to_l` ⇒ 改前那句「formal 归 E 签」
-#: 是假话（`agent_prompts.collab_fivebits_text` 会把它印进全部十一个角色的提示词）。
+#: 第 4 位的 owner 是 L：`formal` 那一行只由 `formal.record` 落（`recorded_by="agent-L"`），
+#: 而 E 的 formal 那一支一律回受控拒绝 `formal_moved_to_l` —— "formal 归 E 签"是假话
+#: （`agent_prompts.collab_fivebits_text` 会把它印进全部角色的提示词）。
 #: 第 1 位仍是 E：数值实验那一位确实归 E，那一句是真话、不许跟着改。
 BIT_OWNERS: dict[str, str] = {
     "numeric": "E", "proof": "F", "reviewed": "V", "formal": "L", "audited": "H",
@@ -189,7 +185,7 @@ FORMAL_PATH_STATES: tuple[str, ...] = (*BIT_STATES, "stale")
 #:
 #: 为什么夹在这里：它比 `pending` 强（确实验过一次），比其余三档弱（那一次验的不是
 #: 现在这一份）。`BIT_STATES` 的四个取值在这一条序列里的相对顺序逐字不变 ——
-#: 所以"按 `BIT_STATES` 顺序取 max"对四态的行为与这一条改前逐字相同。
+#: 所以"按 `BIT_STATES` 顺序取 max"对四态的行为逐字相同。
 _BIT_OR_ORDER: tuple[str, ...] = ("pending", "stale", "na", "failed", "verified")
 
 
@@ -197,7 +193,7 @@ def _state(value: Any) -> str:
     """把一个位的取值规范化成四态之一；`None`/空 ⇒ `pending`（还没做）。
 
     只收标量。二维位（第 4 位）是 `{证明号: 状态}`，它落到这里会被 `str()` 成一个
-    认不出的串、再静默折成 `pending`（改前正是这样：二维 dict 喂进来读成"还没做"，
+    认不出的串、再静默折成 `pending`（二维 dict 喂进来会读成"还没做"，
     而盘上明明写着某个路径 verified）—— 所以这里对 Mapping 直接抛错，
     把"该走 :func:`_bit_state`"这件事变成一次响亮的失败，而不是一条假读数。
     """
@@ -235,7 +231,7 @@ def _bit_value(value: Any) -> Any:
 
     形状刻意原样保留（标量仍是标量、二维仍是二维）：`bits["formal"]` 是盘上那一栏的
     逐字读数，把它统一成二维会让 62 行存量行在第一次读的时候就被当成"迁移过"，
-    而迁移是要有写者、有凭据的（业主口径：零迁移）。
+    而迁移是要有写者、有凭据的（口径：零迁移）。
     """
     if isinstance(value, Mapping):
         return {str(key): _path_state(item) for key, item in value.items()}
@@ -246,7 +242,7 @@ def _bit_state(bits: Mapping[str, Any], name: str) -> str:
     """一个位现在的状态（唯一读口；标量与二维都从这里读）。
 
     判据只有一句：标量 ⇒ :func:`_state`；Mapping（二维位）⇒ 按 :data:`_BIT_OR_ORDER`
-    取最强那一档，也就是"任一路径通过就算通过"（业主 2026-10-22 裁定的第二句）。
+    取最强那一档，也就是"任一路径通过就算通过"。
     空 Mapping 与"没有这一格"同档（`pending`）：一条路径都没写，就是还没做。
 
     为什么必须有一个唯一读口：二维 dict 落进 `_state` 会被静默折成 `pending`
@@ -264,7 +260,7 @@ def _bit_state(bits: Mapping[str, Any], name: str) -> str:
                if item in _BIT_OR_ORDER else 0)
 
 
-#: 第 3 位的两个凭据档（`bits.evidence.reviewed_source`，2026-11-02 两阶段录入）。
+#: 第 3 位的两个凭据档（`bits.evidence.reviewed_source`，两阶段录入）。
 #:
 #: `REVIEWED_SOURCE_V`：V 走过的那一签（真签，`reviewed` 为真时就是它）；
 #: `REVIEWED_SOURCE_CITATION`：文献编号占位（假签，业主原话「V 签位填文献编号（和
@@ -286,11 +282,11 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
             kind: str = "") -> dict[str, Any]:
     """把各方标下的读数组装成五元位（纯函数：不读盘、不写盘）。
 
-    ## 引用命题那一条（`draft/39` §3.15 三；2026-11-02 收口）
+    ## 引用命题那一条
 
     `origin=external_lit` 且引到一条逐字核过的来源（`quote_verified is True`）⇒
     第 2 位（有证明）为真，凭据是文献代号（不是 V 的走查）。第 3 位不再跟着翻真：
-    业主 2026-11-02 逐字「文献侧第一趟录入时没有V签，是假V签，但要允许进台账」+
+    「文献侧第一趟录入时没有 V 签，是假 V 签，但要允许进台账」+
     「`bits.reviewed` 的汇总位不许把占位签读成已签」—— 占位签不是签，它只是"允许进台账"
     的那一张凭据。凭据本身不丢：仍在 `evidence.reviewed_by`（`{"evidence": "lit:<编号>"}`），
     并用 `evidence.reviewed_source` 三态说清这一格凭什么是真/假
@@ -316,7 +312,7 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
             # "自己写了证明却没写过程"而报缺陷（判据分不出两者等于两者被压成一件事）。
             "proof_source": "citation" if cited else ("own" if proof else ""),
             "reviewed_by": dict(reviewed_by or ({"evidence": f"lit:{source_lit_id}"} if cited else {})),
-            # 第 3 位凭什么是这个值（三态，2026-11-02）：`v` = 真签 / `citation` = 文献编号
+            # 第 3 位凭什么是这个值（三态）：`v` = 真签 / `citation` = 文献编号
             # 占位（假签）/ 空 = 没有凭据。读侧不许把 `citation` 读成"已签"。
             "reviewed_source": (REVIEWED_SOURCE_V if reviewed
                                 else (REVIEWED_SOURCE_CITATION if cited else "")),
@@ -333,9 +329,9 @@ def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None =
 
 
 def quote_state(row: Mapping[str, Any]) -> str:
-    """一条引文现在的状态（引文回验的唯一读口径，2026-10-14 业主裁定之后）。
+    """一条引文现在的状态（引文回验的唯一读口径）。
 
-    业主那句话：「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」。
+    "回验不必呆板到逐字，保持语义相同即可"。
     于是"通过"这件事分两档，五个取值：
 
     - `"verbatim"`：逐字命中（`quoteverify.check_quote` 那一档，不花模型钱）；
@@ -347,17 +343,16 @@ def quote_state(row: Mapping[str, Any]) -> str:
     - `"no_evidence"`：说通过了，而盘上拿不出可复核的区间（见 :data:`QUOTE_NO_EVIDENCE`）
       —— 逐字与语义两档都要求 `quote_span` 非空（语义还要 `quote_call_sha256`）。
 
-    ## 空 `quote_mode` 那一条（历史事实，2026-10-22 起多一个前提）
+    ## 空 `quote_mode` 那一条
 
-    这一栏是 2026-10-14 才有的，在那之前 `quote_verified=True` 只可能来自
-    `quoteverify.check_quote`（逐字那一档）—— 所以"空方式 + 有区间"按 `verbatim` 读，
+    `quote_verified=True` 只可能来自 `quoteverify.check_quote`（逐字那一档）时，
+    "空方式 + 有区间"按 `verbatim` 读，
     判据 `test_a_legacy_external_lit_row_keeps_its_citation_credit` 钉着这条读法。
 
     但"空方式"本身不再够：区间才是"核过"的证据。没有区间时，无论方式那一栏
     写着 `verbatim` 还是空着，读侧一律给 `no_evidence` —— 这不是追溯性降级，
-    而是把一直缺的那一格补上：真机 13 行正是"空方式/verbatim + 空区间"，
-    它们此前被读成逐字通过，于是引用学分（`clean_statement_ids`）与收工门的
-    `quote_verified_rows` 都被这 13 行顶高。
+    而是把一直缺的那一格补上：只凭"空方式/verbatim + 空区间"会被读成逐字通过，
+    于是引用学分（`clean_statement_ids`）与收工门的 `quote_verified_rows` 会被顶高。
 
     为什么读侧还要再判一次（写侧 `schema._normalize_quote_mode` 已经归一过）：盘上是
     JSON —— 手改的行、旧版本写的行、别的工具写的行都可能绕过构造器。这一条是"读的人
@@ -390,11 +385,11 @@ def quote_explains_itself(row: Mapping[str, Any]) -> bool:
 
 def _citation_review_cleared(bits: dict[str, Any], row: Mapping[str, Any],
                              *, kind: str) -> dict[str, Any]:
-    """引用命题的"第 3 位"在读侧降档：文献编号是占位签，不是签（2026-11-02）。
+    """引用命题的"第 3 位"在读侧降档：文献编号是占位签，不是签。
 
-    为什么读侧还要再判一次（写侧 `bits_of` 已经不再翻这一位）：盘上有 32 行是改前写的，
-    它们的 `bits.reviewed` 停在 `true`、凭据是 `{"evidence": "lit:…"}` —— 不降档的话
-    "假绿"在历史台账里一直留着（等级照样读出「预备定理级」），而业主的口径是
+    为什么读侧还要再判一次（写侧 `bits_of` 已经不再翻这一位）：存量行里有的
+    `bits.reviewed` 停在 `true`、凭据是 `{"evidence": "lit:…"}` —— 不降档的话
+    "假绿"在历史台账里一直留着（等级照样读出「预备定理级」），而口径是
     「`bits.reviewed` 的汇总位不许把占位签读成已签」。
 
     ## 判据（只看"凭据长什么样"，不猜）
@@ -446,7 +441,7 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
                        quote_verified=quote_explains_itself(row), kind=kind)
     bits = normalize_raw(raw, origin=origin, kind=kind,
                          voided_by=dict(raw.get("voided_by") or row.get("refuted_by") or {}))
-    # 占位签（文献编号）在读侧降档：写侧从 2026-11-02 起不再翻这一位，而改前写下的
+    # 占位签（文献编号）在读侧降档：写侧不再翻这一位，而旧逻辑写下的
     # 32 行还停在 `true` 上 —— 两处都必须同一个结论，否则"假绿"只在新行上被修掉。
     bits = _citation_review_cleared(bits, row, kind=kind)
     bits = _stale_review_cleared(bits, row, kind=kind)
@@ -515,7 +510,7 @@ def _stale_review_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
                           kind: str = "") -> dict[str, Any]:
     """第 3 位写的时候记了「签的是哪一份」而现行正文不是那一份 ⇒ 这一位读成没审过。
 
-    ## 为什么读侧要判这一条（业主 2026-10-22 口径：哈希是读数，不是授权凭证）
+    ## 为什么读侧要判这一条（哈希是读数，不是授权凭证）
     写侧把 `reviewed` 翻真时会把这一签盖住的那一份正文的 `proof_sha256` 连同证明号
     `proof_no` 记进 `evidence.reviewed_by`。此后正文可能又被改过（改稿是正常动作，
     不许因此拒写），而位还停在 `True` 上 —— 于是"审过"这个读数会过期。读侧的判据
@@ -601,7 +596,7 @@ def bits_after_proof_recorded(bits: Mapping[str, Any] | None, *,
                               kind: str = "") -> dict[str, Any]:
     """收录一份正文之后的那一份五元位：第 2 位翻真 + 第 3 位带这一笔认到的签。
 
-    ## 为什么这一格必须存在（真机 `R-mk-infinite-92` 的 `statements:000000`）
+    ## 为什么这一格必须存在
 
     现场那一行：`proof_text` 1325 字已在行上、V 的签块在稿上（连续 3/3 成立）、
     台账也在，而行上仍是 `bits.proof=False` / `grade=conjecture` /
@@ -709,7 +704,7 @@ def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
     return out
 
 
-#: 逐条证明「这一份洗过没有」（业主 2026-11-02 的两阶段录入，`draft/179` 二之一）。
+#: 逐条证明「这一份洗过没有」（两阶段录入）。
 #:
 #: 结构逐字与 :data:`REVIEWED_BY_PROOF_KEY` 同形："证明号 ⇒ 布尔"，
 #: `{"1": true, "2": false}`；住同一格口袋（`bits.evidence`），理由也一样 ——
@@ -718,10 +713,10 @@ def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
 #: 这条口径要的"二维布尔"就是这一格。
 #:
 #: ## 为什么必须三态（:data:`OPTIMIZED_STATES`）
-#: 业主 2026-11-02 收口：「第二阶段逐个优化时只要读那栏记录是否优化的新参数即可。
-#: 若为否……总之都要洗一遍」。于是这一格是第二阶段唯一的判据 ——
+#: 第二阶段逐个优化时，只要读那栏记录"是否优化的新参数"即可；若为否，总之都要洗一遍。
+#: 于是这一格是第二阶段唯一的判据 ——
 #: 而"没有这一格"（存量行）与"这一份确实没洗"在盘上长得一模一样。折成 `false` 会让
-#: 整库存量行一次全变"等洗"（真机 3134 行 `own_result`），折成 `true` 更坏（等于自报洗过）。
+#: 整库存量行一次全变"等洗"，折成 `true` 更坏（等于自报洗过）。
 #: 所以读口给三档：`true` / `false` / `not_recorded`；缺格不进
 #: `optimized_by_proof` 那张表（那张表只回答"记过的几份各是什么"）。
 #:
@@ -771,7 +766,7 @@ def optimized_state(row: Mapping[str, Any], proof_no: Any) -> str:
     号认不出（`0` / `"abc"`）⇒ `not_recorded`：那不是"没洗"，是"问的是哪一份都没有答案"，
     与逐份签那一侧"号认不出 ⇒ unreadable"同一条纪律（`verifications.review_standing`）。
 
-    ## 它读的是"能不能声称已优化"，不是"盘上那一格写着什么"（2026-11-03 改）
+    ## 它读的是"能不能声称已优化"，不是"盘上那一格写着什么"
     87 的漏洞暴露了这两件事的分家：四条命题的 `optimized_by_proof` 写着 true，而
     `reviewed_by_proof` 里根本没有那一份 —— "优化过"成了比签更强、却可以是空的声称。
     所以这一格现在走 :func:`optimized_standing`：true 只在"这一格写着 true、且那一签
@@ -799,7 +794,7 @@ def optimized_signature(row: Mapping[str, Any], proof_no: Any, *,
                         proof_text: str | None = None) -> dict[str, Any]:
     """① 那条核：这一份正文有没有签、那一签盖住的是不是它（打 `optimized=true` 前的唯一判据）。
 
-    ## 判据两件（业主 2026-11-03，逐字）
+    ## 判据两件
     「洗过的肯定能保证V签」「优化后拿V签，用有V签的优化后的证明精准替换原证明」——
     于是"这份替换进来的正文已经有签"落成两句可机器判的：
 
@@ -940,7 +935,7 @@ def optimized_standing(row: Mapping[str, Any], proof_no: Any, *,
 def with_optimized_defaults(bits: Mapping[str, Any], proof_numbers: Any) -> dict[str, Any]:
     """把还没记过的那几份证明补成 `optimized=false`（机械录入的默认态）。
 
-    为什么是"补"而不是"整表写"：这一笔可能只是再交一次同一条命题（真机 D 的每一次
+    为什么是"补"而不是"整表写"：这一笔可能只是再交一次同一条命题（D 的每一次
     交付都会这样），整表写会把别的证明已经洗过的事实擦掉。已有的值一律不动 ——
     "洗过"这件事只由换正文那一笔（拿到覆盖新正文的签）翻真。
     """
@@ -1052,7 +1047,7 @@ def formal_evidence_by_proof(row: Mapping[str, Any]) -> dict[int, dict[str, Any]
     1. `bits.evidence.formal_by_proof`（写侧逐条落的那张表，:data:`FORMAL_BY_PROOF_KEY`）；
     2. `bits.evidence.formal`（单格载荷，老形态）⇒ 它说的是 canonical 那一份，读成 `{1: …}`。
 
-    第 2 条为什么必须留着：`bits.evidence.formal` 是这一格改前唯一的落点（`bits_of`
+    第 2 条为什么必须留着：`bits.evidence.formal` 是这一格原先唯一的落点（`bits_of`
     的 `formal_evidence` 参数写的就是它），历史行与手写行都只有它。丢掉它等于让所有
     历史行的 `formal=verified` 变成"没有凭据"（判据会当场报错，而错的是读侧）。
     空载荷与"没有这一格"同档：返回空表，由 `bit_problems` 决定该不该报。
@@ -1096,7 +1091,7 @@ def normalize_raw(raw: Mapping[str, Any], *, origin: str = "own_result",
     若各归一一次，就会出现"写进去判合规、读出来是另一个意思"的分家。
 
     第 4 位走 :func:`_bit_value`（标量仍是四态、二维仍是逐路径表）：它不是"一个状态"，
-    它是"每个证明号一个状态"—— 把它统一压成一档，改前那条"二维 dict 被静默读成
+    它是"每个证明号一个状态"—— 把它统一压成一档，原先那条"二维 dict 被静默读成
     pending"的路就会在这一格里复活。
     """
     bits: dict[str, Any] = {
@@ -1166,7 +1161,7 @@ def bits_shape_problems(raw: Mapping[str, Any] | None, *,
 def _numeric_is_certificate(bits: Mapping[str, Any]) -> bool:
     """第 1 位是不是"机器可核的证书"（穷举 + V 签），而不是普通数值抽样。
 
-    业主 2026-11-08：一个命题可以追加多份数值实验；普通数值实验只抬到
+    一个命题可以追加多份数值实验；普通数值实验只抬到
     `strong_conjecture`，不许因为同一行还有一份 V 签证明就把等级读成定理。
     判据落在 `bits.evidence.numeric.certificate`（由写侧按
     `numericproof.is_signed_exhaustion` 填）。旧行没有这一格 ⇒ 保持既有读法
@@ -1182,14 +1177,14 @@ def _numeric_is_certificate(bits: Mapping[str, Any]) -> bool:
 def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     """五元位 ⇒ 等级（唯一的等级来源；任何角色自报的等级都不认）。
 
-    ## 正式定理 = 第 2 位 + 一条机器可核的凭据（业主 2026-11-05 裁定）
+    ## 正式定理 = 第 2 位 + 一条机器可核的凭据
     「穷举证书相当于 lean 形式化，表示绝对正确」。所以 `theorem` 的两个入口同级：
 
     - 第 2 位（证明）∧ 第 4 位任一形式化路径 `verified`（Lean/Coq/Isabelle 真编译过）；
     - 第 2 位（证明）∧ 第 1 位 `verified`（E 的穷举证书：程序穷尽了整个论域，
       V 签下的那一份 —— `numericproof` 的 `is_signed_exhaustion` 口径）。
 
-    改前第 1 位只把等级抬到强猜想（"数值验证不构成证明"）；业主 2026-11-05 把
+    第 1 位若只把等级抬到强猜想（"数值验证不构成证明"），则
     穷举证书与"普通数值实验"分开：前者穷尽论域、是可机器复核的证书，后者只是抽样。
     第 1 位不区分这两者的形态由 `numericproof` 负责（位的凭据里指名的实验必须是
     签下的穷举行）；本函数只读位。第 1 位 `pending`/`na`/`failed` 都不构成定理。
@@ -1207,8 +1202,8 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
         return "conjecture"          # 作废之后等级清零（历史留在 voided_by 里）
     has_proof = bool(bits.get("proof"))
     reviewed = bool(bits.get("reviewed"))
-    # 第 1/4 位都是"机器可核"的入口：穷举证书与 Lean 形式化同级（业主 2026-11-05）。
-    # 第 4 位是二维的：这里读的是汇总（任一路径通过即通过，业主 2026-10-22 裁定的第二句）。
+    # 第 1/4 位都是"机器可核"的入口：穷举证书与 Lean 形式化同级。
+    # 第 4 位是二维的：这里读的是汇总（任一路径通过即通过）。
     # 逐条路径各自的等级由 `verifications.statement_review_reading` 的 `proofs[*]` 给 ——
     # 函数级只回答"这条命题到不到定理"，不回答"是哪一条路径撑起来的"。
     formal = _bit_state(bits, FORMAL_BIT) == "verified"
@@ -1236,18 +1231,18 @@ def kind_from_bits(bits: Mapping[str, Any], *, kind: str = "") -> str:
 
     为什么还要这一层：`evidence_kind` 只作历史列保留，而它每次被写都必须与
     "按五位现算的等级"逐字对应（:data:`GRADE_TO_KIND`）。任何调用方拿"提交方声明的
-    档位"来写这一列，都是第二套真值 —— 业主 2026-11-05：「档位不再是一套词表」。
+    档位"来写这一列，都是第二套真值 —— 档位不再是一套词表。
     `kind="concept"` 经 :func:`derive_grade` 短路成 `not_applicable` ⇒ 这里返回空串。
     """
     return kind_from_grade(derive_grade(bits, kind=kind))
 
 
-#: D-37（2026-10-24）：`kind` 能跟着证据走的起点与终点。
+#: `kind` 能跟着证据走的起点与终点。
 #:
 #: 只允许"猜想 → theorem / lemma"这一个方向：`conjecture`（以及空串这个历史形态）
 #: 是唯一可以往上抬的声明，`theorem` / `lemma` 是唯一两个可以落下的名字。别的声明
 #: （`proposition` / `definition` / `concept` …）一个字都不动 —— 那是作者写下的判断，
-#: 读侧没有资格替它改（业主口径：不要覆盖 author 明确写下的更强 kind）。
+#: 读侧没有资格替它改（不要覆盖 author 明确写下的更强 kind）。
 KIND_UPGRADABLE_FROM: tuple[str, ...] = ("conjecture", "")
 KIND_UPGRADE_TARGETS: tuple[str, ...] = ("theorem", "lemma")
 
@@ -1261,7 +1256,7 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     这一行现在该叫什么"，而调它本身不会改盘。写侧只有两处落点：秘书的升档那一支、
     B 同步第 4 位那一支。）
 
-    ## 现场（2026-10-24 真机 `cube-ws` 抓到，只读取数）
+    ## 现场（只读取数）
     `statements 000000`：`kind="conjecture"`、`evidence_kind="proof_review"`、
     `bits.grade="theorem"`（proof=true / reviewed=true / formal={"1": "verified"}），
     `verifications/000000.jsonl#v-000001` 判「成立」且 `proof_sha256` 与现行正文相符
@@ -1281,7 +1276,7 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
           台账那一行。B 的登记 / 收录路走这一档，理由见 `_attach_proofs` 的调用点）；
        b. `bits.evidence.formal_by_proof[证明号] == "verified"`（第 4 位逐条里
           真有一条 `verified`；`stale` 不算 —— 那是"验过旧稿"）；
-       c. `signed_via`（2026-11-04，缺口 ②）：调用方已经判过"有一份 V 的签覆盖
+       c. `signed_via`（缺口 ②）：调用方已经判过"有一份 V 的签覆盖
           这一份正文"（手稿签块 / `bits.reviewed`），把依据的人话传进来 ——
           E 那一签在"手稿签块 + pending 台账"里，`verifications/<命题号>.jsonl`
           读不到它，所以那一条路只能由调用方（秘书的升档支）先判、再把结论交给
@@ -1322,11 +1317,11 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
     （形如 `verifications/000000.jsonl#v-000001 判成立` 或
     `bits.evidence.formal_by_proof[1]=verified`）。
 
-    `allow_pending`（2026-11-10，业主裁量 ② 的补口）只影响 V 那一签的来路：
+    `allow_pending`（V 那一签的补口）只影响 V 那一签的来路：
     默认 True = 认 D-34 的"命题还没在册时审的那一签"（读侧 / 秘书那一支的既有口径）；
     False = 升档不认“未认领”的 pending 那一签（B 的登记 / 收录路：新行连台账行都
     还没有时，pending 那一签只能过准入闸，不能当"这条命题的定理凭据"）。
-    2026-11-11（p283）：认领（`bind_pending_claim` 回写 `statement_id`）完成之后，
+    认领（`bind_pending_claim` 回写 `statement_id`）完成之后，
     这一签已经是本条命题自己的签 —— `verifications.proof_review_gap` 会报
     `pending=False / claimed=True`，于是 `allow_pending=False` 也照样认它；
     "只是 pending（没认领）仍不够升"的旧射程一个字没动。
@@ -1376,13 +1371,13 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
         return out
     basis: list[str] = []
     missing: list[str] = []
-    # `signed_via`（2026-11-04，缺口 ②）：调用方已经判过"有一份 V 的签覆盖这一份正文"，
+    # `signed_via`（缺口 ②）：调用方已经判过"有一份 V 的签覆盖这一份正文"，
     # 并把"凭什么"写成了一句人话。两个调用点今天用它：① 秘书的升档那一支读
     # 手稿签块 / `bits.reviewed`（E 那一签不在 `verifications/<命题号>.jsonl` 里，
     # `_signature_basis` 读不到）；② B 的那一支仍走默认（空串 ⇒ 读台账）。
     # 判据不在这里另写一份：给 `signed_via` 的调用方必须自己已经核过签（三态由它负责）。
     #
-    # 2026-11-10（业主裁量 ②）：留痕措辞不再由调用方各写一句。只要 `_signature_basis`
+    # 留痕措辞不再由调用方各写一句。只要 `_signature_basis`
     # 能点名"签文件 + 台账那一行"（`witness`），就优先用它 —— 于是秘书那一支即使传了
     # `signed_via`，`_kind_upgrade.basis` 与 B 那一支也是同一句；只有凭据指名不到
     # （例如 E 的签只在手稿块里、pending 也读不到）时才退回调用方那句人话。
@@ -1402,7 +1397,7 @@ def kind_following_grade(row: Mapping[str, Any], *, root: Any = None,
                        "判「成立」的签；命题还没在册时审的那一签只够过准入闸，"
                        "不够升 kind —— 它指不出这条命题自己的台账那一行）")
     elif str(sig.get("state") or "") == "holding":
-        # 2026-11-11（p284）：认领之后那一签仍是"判过成立、票数/正文没到门槛"。
+        # 认领之后那一签仍是"判过成立、票数/正文没到门槛"。
         # 这一格必须把它与"一次都没签"分开说 —— 否则 shortfall 说"没有判成立的签"，
         # 而盘上明明已经有 1、2 票成立（只是不够发签）。
         from . import verifications as _VR   # 惰性：门槛只有一处定义
@@ -1596,8 +1591,7 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     return problems
 
 
-#: 五元位 ⇒ 哪张表在维护它（业主 2026-10-09：「再确认一条命题的五元状态是哪张表在维护，
-#: 要做好映射（如果五元状态里说有证明，证明应该在 B 维护的表里可查）」）。
+#: 五元位 ⇒ 哪张表在维护它。
 #:
 #: 每一格四件事：`owner`（谁签的字）/ `ledger`（去哪张表的哪个字段查）/ `pointer`
 #: （位里写的那个可追查凭据字段）/ `criteria`（位说 `verified` 时，台账里必须查得到什么）。
