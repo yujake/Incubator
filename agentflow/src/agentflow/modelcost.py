@@ -14,7 +14,7 @@
 ## 单价从哪来
 
 `AGENTFLOW_MODEL_PRICE_IN_USD_PER_M` / `AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M`
-是每百万 token 的美元价。默认值（输入 0.27 / 输出 1.10）是按 DeepSeek 公开价
+是每百万 token 的美元价。默认值（输入 0.15 / 输出 0.6）是按 DeepSeek 公开价
 登记的观测值，会随官方调价而过时 —— 因此它必须能被环境变量覆盖，
 而不是被当成事实写死在代码里。价格不是从模型问来的：让模型回答"这次花了多少钱"
 就是把可复核的算术换成一次无法复核的生成（`usd_for` 的全部意义是确定性算术）。
@@ -54,8 +54,7 @@
   "扫全表 + 拆 token"，且别的写入方理论上能写出同形 token），以及
   `UsageEntry.idem_key` 字段（`schema.validate_table` 对非空该字段断言整表唯一，
   `verify` 的 `duplicate_idem_key` 复查）。字段层的洞是混合版本窗口：
-  未升级进程写下的行不带这个键，在滚动升级期间它逃过字段级唯一性
-  （`docs/SCHEMA-MIGRATION-PROPOSAL-usage-ledger-idem-key.md` §3.3）。
+  未升级进程写下的行不带这个键，在滚动升级期间它逃过字段级唯一性。
   另外字段会被回滚后的 `rebuild` 静默丢掉，`note` 标记不会 —— 这正是两层都要留的理由。
 - `charge_reply` 里的快速通道（`_find_by_marker`，无锁）只用于省一次抢锁，
   不承担正确性责任；把它当成判据就会把这个窗口重新引回来。
@@ -95,10 +94,10 @@ __all__ = [
     "charge_reply",
 ]
 
-#: 每百万输入 token 的美元价。DeepSeek 官方定价页的观测值（抓取时刻见下），
+#: 每百万输入 token 的美元价。DeepSeek 官方定价页的观测值，
 #: 调价后请用环境变量覆盖，或把新数补进 :data:`VENDOR_PRICES`。
 #:
-#: 2026-10-14 抓 `https://api-docs.deepseek.com/quick_start/pricing`（英文页）：
+#: 价目表来源 `https://api-docs.deepseek.com/quick_start/pricing`（英文页）：
 #: 官方把输入拆成 cache hit / cache miss 两档，且峰谷两价（低谷 = 峰值的一半），
 #: 所以"一个数"只能是最保守的那一档。这里的缺省取 `deepseek-flash` 的低谷价
 #: （$0.15 / $0.6）—— 真正该走的是 :func:`price_for`（按厂商 × 模型 × 峰谷取）。
@@ -106,9 +105,9 @@ DEFAULT_PRICE_IN_USD_PER_M = 0.15
 #: 每百万输出 token 的美元价。同上（`deepseek-flash` 低谷）。
 DEFAULT_PRICE_OUT_USD_PER_M = 0.6
 
-#: 厂商 × 模型 × 峰谷的价目表（业主 2026-10-14：「花销计算标准与供应商定价吻合」）。
+#: 厂商 × 模型 × 峰谷的价目表（口径：花销计算标准与供应商定价吻合）。
 #:
-#: 口径来源逐字：`https://api-docs.deepseek.com/quick_start/pricing`，抓取于 2026-10-14。
+#: 口径来源逐字：`https://api-docs.deepseek.com/quick_start/pricing`。
 #: 单位是每百万 token 的美元，形状 `{键: {"hit"/"in"/"out": (peak, off_peak)}}`：
 #:
 #: | 模型 | 输入(命中) | 输入(未命中) | 输出 |
@@ -135,7 +134,7 @@ PEAK_HOURS_UTC: tuple[tuple[int, int], ...] = ((1, 4), (6, 10))
 #: 峰谷判定的显式覆盖：`1`/`0`（认得的真假写法同 `settings`）。
 #:
 #: 为什么要有它：峰谷判据读的是墙钟，于是同一份判据在不同时刻会算出两个不同的
-#: 数（差一倍）—— 那让"花销"这件事在判据里不可复现。真机当然按钟走；判据与
+#: 数（差一倍）—— 那让"花销"这件事在判据里不可复现。生产运行当然按钟走；判据与
 #: 离线复算用这一格把它钉住（也顺手给运维一个"按谷价批账"的显式开关）。
 ENV_PEAK = "AGENTFLOW_MODEL_PEAK"
 _TRUE_WORDS: tuple[str, ...] = ("1", "true", "yes", "on")
@@ -156,7 +155,7 @@ ENV_PRICE_IN = "AGENTFLOW_MODEL_PRICE_IN_USD_PER_M"
 ENV_PRICE_OUT = "AGENTFLOW_MODEL_PRICE_OUT_USD_PER_M"
 #: 命中缓存那一档的输入价（每百万 token 美元）。故意没有默认值：
 #: 这一档的价是供应商价目表上的一个具体数字，没登记就按未命中价算并留痕，
-#: 不许由一个"看起来差不多"的数字顶上（业主 2026-10-14：口径要与供应商定价吻合）。
+#: 不许由一个"看起来差不多"的数字顶上（口径要与供应商定价吻合）。
 ENV_PRICE_IN_HIT = "AGENTFLOW_MODEL_PRICE_IN_HIT_USD_PER_M"
 
 #: 记账时的角色名。这一层只调模型、不扮演编排角色，所以默认登记为 modelgw
@@ -170,10 +169,10 @@ _PER_M = 1_000_000.0
 class Price:
     """一档单价（每百万 token 的美元价）。负价直接拒绝。
 
-    ## 为什么是三格而不是两格（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
+    ## 为什么是三格而不是两格（花销计算标准与供应商定价吻合）
 
     供应商的价目表按三种 token 分开登：命中缓存的输入、未命中缓存的输入、输出。
-    我们此前只记两格（`in` / `out`），于是"命中缓存的那部分按未命中价算"——
+    只记两格（`in` / `out`）时，"命中缓存的那部分按未命中价算"——
     系统性偏高，而且偏得没法核对（供应商账单上那三档是分开列的）。
 
     `usd_per_m_in_hit` 的三态：`None` = 我们不知道这一档的价（不是 0）。
@@ -262,9 +261,9 @@ def price_of(spec: Any = None, *, at: Any = None,
     （`runflow` 的清单、`cost.json`）。要用上缓存命中那一档，请用
     :func:`price_of_full`。
 
-    本函数现在也看厂商与峰谷（2026-10-14）：从 `spec` 上读 `vendor` / `model`
+    本函数也看厂商与峰谷：从 `spec` 上读 `vendor` / `model`
     （认不出厂商就按端点认，见 `modelgw.vendor_model_of`），再走 :func:`price_for`。
-    改之前它只读环境变量与缺省价 ⇒ `agentflow run` 那条路的账与多智能体那条路
+    只读环境变量与缺省价时 ⇒ `agentflow run` 那条路的账与多智能体那条路
     口径不一致（两边都自洽，谁也不会报错）。`spec=None` / 认不出厂商时行为逐字不变
     （回落成 env/default），所以既有调用点不受影响。
 
@@ -406,7 +405,7 @@ def usd_for(reply: Any, price: tuple[float, float] | Price) -> float:
     （与 UsageEntry.usd 的存储精度一致，避免"账上一个数、汇总里另一个数"
     这种对不上的假不一致）。
 
-    ## 三档 token（业主 2026-10-14：「花销计算标准与供应商定价吻合」）
+    ## 三档 token（花销计算标准与供应商定价吻合）
 
     上游回 `prompt_cache_hit_tokens` / `prompt_cache_miss_tokens` 时，输入那一块按
     两档价分别算：命中部分用 `usd_per_m_in_hit`，未命中部分用 `usd_per_m_in`。
@@ -634,7 +633,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
 
     这个返回值有四个出口（`meter=None` 的未接线、无锁快速通道判重放、写入竞态
     判重放、真的入账），它们必须给出同形的 dict：调用方按 `d["scope"]` 取值
-    时，四种结局不该有两种行为。此前那个无锁快速通道的 duplicate 分支漏了
+    时，四种结局不该有两种行为。无锁快速通道的 duplicate 分支若漏了
     `scope`（另外三支都有），于是重放路径上 `cost.json` 的 `per_call[].scope`
     静默变成空串 —— 而 G-20 的承诺是"逐笔看得见归口，汇总才对得上账"。
     `runflow` 自己用 `.get(...) or ""` 兜住了，别的调用方不一定。
@@ -665,7 +664,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
 
     `usd_for` 给的是这一笔账的总额（已含重试），`Charge.usd` 要的是单次价
     （`Charge.usd_total` 会自己乘 `attempts` —— 这是 `tokenmeter` 已经定下的口径，
-    这里不去造第二份）。两者同名不同口径，是本项目实测踩过的坑，所以这里：
+    这里不去造第二份）。两者同名不同口径，是本项目踩过的坑，所以这里：
     把 `usd_for(...) / attempts` 交给 `Charge`，把 `usd_for(...)` 返回给调用方。
     把一个总额当成单次价传进去，会让重试被乘两遍，账面静默翻倍。
 
@@ -718,7 +717,7 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
             "tokens_out": int(prior.get("tokens_out") or 0),
             "usd": float(prior.get("usd") or 0.0),
             "reason": "duplicate",
-            # `R5-AN-2`：这一支此前没有 `scope`，于是重放路径上逐笔的归口是空串。
+            # 这一支若没有 `scope`，重放路径上逐笔的归口是空串。
             # 取 `prior` 行的值（判重放的是账本，归口也以账本为准）；
             # `prior` 行理论上可能没有这一列（手工写的行），那时退回本次实参
             # —— 实参已经过 `USAGE_SCOPES` 校验，不会是空串。
@@ -732,11 +731,10 @@ def charge_reply(meter: TokenMeter | None, reply: Any, *, role: str = DEFAULT_RO
     # 这次请求在它那边是计费的（失败不等于免费）。真正的零值只有一种来源：
     # 上游一个 token 都没回。
     #
-    # 口径陷阱（实测踩过一次，记在这里）：`Charge.usd` 要的是单次尝试的价，
+    # 口径陷阱（踩过一次，记在这里）：`Charge.usd` 要的是单次尝试的价，
     # 因为 `Charge.usd_total` 会自己乘 `attempts`；而 `usd_for` 返回的是含重试的
-    # 总额。把 `usd_for` 的结果直接当 `Charge.usd` 传进去，会让重试被乘两遍：
-    # 实测 1000+1000 token、attempts=2 时账上写成 0.00548（应为 0.00274），
-    # 同时 `tasks.tokens` 那类派生值也跟着虚高。所以这里显式除回去。
+    # 总额。把 `usd_for` 的结果直接当 `Charge.usd` 传进去，会让重试被乘两遍、
+    # 账面静默翻倍，同时 `tasks.tokens` 那类派生值也跟着虚高。所以这里显式除回去。
     usd_total = 0.0 if missing else usd_for(reply, price if price is not None else price_of())
     usd_per_attempt = round(usd_total / attempts, 9)
     usd = usd_total
