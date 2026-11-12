@@ -66,6 +66,23 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
     ("agent_v/core.py", ""):
         "V 的一转审校没查成（拿不到合法结论 / 台账写不进去）—— 执行了、没成功，"
         "该落 failed 且逐条带 reason；冒充 refused 会把「没查成」说成「审过了」",
+    # 2026-11-12（F1「V 认稿先认逐路径记录」）：同一模块新增的三处身份判定子结果。
+    # `_decide_registered_manuscript_identity` 的 `ok=False` 说的是「这一份稿不是这一条
+    # 命题的稿 / 逐路径记录没读成」，调用方 `_registered_manuscript_body` 把它们折成
+    # `verify_proof` 的 `checked=False`（`kind` / `reason` 照传），终态 payload 里根本没有
+    # `refused` / `refusal_reason` 这一格（判据
+    # `tests/test_the_first_path_is_still_auditable_after_the_second_one_lands.py` 断言的
+    # 正是 `checked is False` + `kind == "bad_manuscript_name"`）⇒ 这是"没查成"的子结果，
+    # 不是动作自己手写的终态拒绝。不走 `refusals.refuse`：走它会给「没读成 / 不是这条
+    # 命题的稿」盖上 `refusal_reason=invalid_params`，把「没查成」错贴成「你参数写错了」
+    # —— 与 `agent_e/author_script.py` 那三条登记在防的是同一个错贴标签。
+    # 处数 3 见 `_REPEAT_COUNTS`（逐路径记录认领 / 记录没读成 / 退回老口径后号不等）。
+    ("agent_v/core.py", "bad_manuscript_name"):
+        "身份判定的三处子结果（行上稿号不是这一条命题的稿 / 逐路径记录没读成 / 退回"
+        "老口径「稿名里的号 == 命题号」后仍不等）：`_registered_manuscript_body` 折成"
+        "`verify_proof` 的 `checked=False`（没查成），不是终态的受控拒；走 `refuse` 会"
+        "给「没查成」错盖 `refusal_reason=invalid_params`（同 `agent_e/author_script.py` "
+        "那三条在防的错贴标签）。按处数 3 登记。",
     # 注：`agent_g/paper_package.py` 的三档（`package_build_failed` / `state_failed` /
     # `anchor_script_failed`）2026-10-13 随整条 `paper_package` 路退场而删除
     # （业主裁定与退场面见文件头 docstring 与 `draft/117`）。
@@ -207,6 +224,10 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
     # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
     ("agent_v/core.py", ""): 3,
+    # 2026-11-12（F1）：同一模块身份判定的三处子结果（`bad_manuscript_name`，见
+    # `_FAILURES_NOT_REFUSALS` 里那一格的理由）—— 逐路径记录认领 / 记录没读成 /
+    # 退回老口径后号不等，三处逐条都在盘上。
+    ("agent_v/core.py", "bad_manuscript_name"): 3,
     # `agent_e/run_experiment.py` 一般数值实验那一支的两处读数格：`report`（报告没落）
     # 与 `manuscript`（`reports/e-proof-<号>.md` 没落，2026-11-03 E 的手稿读数落地时
     # 成为第二处）。两处 kind 都是空串，所以靠这张表记处数。
