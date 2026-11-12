@@ -64,15 +64,21 @@ export function missingText(taskId: string): string {
   return `这次读数里没有 ${taskId === "" ? "unknown" : taskId}（可能被截断）`;
 }
 
-/** 摊平成一串行（画的时候要递归，判据要数"到底画了哪些"）。 */
+/** 摊平成一串行（画的时候要递归，判据要数"到底画了哪些"）。
+ *
+ * 一趟递归往同一个数组里压（前序）：与"每层递归各建一个数组再逐条搬进来"的
+ * 遍历次序逐行相同（父在子前、同辈按落盘行序），只是不再为每个子节点新建一个
+ * 中转数组 —— 树深越大，省下的那批短命数组越多。
+ */
 export function flattenRows(rows: TreeRow[]): TreeRow[] {
   const out: TreeRow[] = [];
-  for (const row of rows) {
-    out.push(row);
-    for (const kid of flattenRows(row.kids)) {
-      out.push(kid);
+  const visit = (list: TreeRow[]): void => {
+    for (const row of list) {
+      out.push(row);
+      visit(row.kids);
     }
-  }
+  };
+  visit(rows);
   return out;
 }
 
@@ -114,15 +120,21 @@ function asDict(value: unknown): Record<string, number> {
   return out;
 }
 
-/** 编号数组那一格：只认字符串与 `{task_id: ...}` 两种形状，空编号丢掉。 */
+/** 编号数组那一格：只认字符串与 `{task_id: ...}` 两种形状，空编号丢掉。
+ *
+ * 去重靠 Set：`includes` 每收一个编号都要重扫一遍已收的那些（平方），而这一格
+ * 在父→子那一份读数里是逐父一条的 —— 收的顺序不变（先出现的留下），只是不再平方。
+ */
 function idsOf(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
   }
   const out: string[] = [];
+  const seen = new Set<string>();
   for (const item of value) {
     const id = typeof item === "string" ? item : isRecord(item) ? asText(item["task_id"]) : "";
-    if (id !== "" && !out.includes(id)) {
+    if (id !== "" && !seen.has(id)) {
+      seen.add(id);
       out.push(id);
     }
   }
