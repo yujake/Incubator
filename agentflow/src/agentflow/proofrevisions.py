@@ -84,7 +84,9 @@ def proof_revisions(store: Any) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 —— 台账读不到只少一格，不改"查过了"的那一半
         out["problems"].append(f"形态闸台账读不出来：{type(exc).__name__}: {exc}")
     for one in on_disk:
-        versions = [dict(v) for v in (one.get("versions") or [])]
+        # `entries_on_disk` 交出来的每一条版本已经是那份手稿的新 dict；本函数只读它们
+        # （写进 `propositions` 的是下面现造的三个键），所以不再整批拷一遍。
+        versions = one.get("versions") or []
         if not versions:
             versions = [{"proof_no": int(one.get("proof_no") or 0),
                          "at": "", "sha256": str(one.get("sha256") or "")}]
