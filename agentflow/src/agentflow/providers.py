@@ -5,9 +5,8 @@
 * 本模块顶层不 import 任何兄弟模块（``schema`` / ``store`` / ``textutil`` 等），
   以便在其余模块尚未落地时也能独立导入与离线测试；确有需要时走惰性 import。
 * 所有网络调用都必须带礼貌 ``User-Agent``、做最小间隔限速、对 429/5xx 指数退避重试。
-* 本机 hosts 把 ``github.com`` 系域名劫持到 127.0.0.1，因此不提供任何依赖
-  GitHub 的数据源；``export.arxiv.org`` 实测返回 406、``api.semanticscholar.org``
-  实测 429，均不纳入实现。
+* 不提供任何依赖 GitHub 的数据源；``export.arxiv.org`` 返回 406、
+  ``api.semanticscholar.org`` 返回 429，均不纳入实现。
 
 线程安全：限速状态是进程级全局的。原因是"礼貌访问"针对的是上游服务，
 而不是某个 provider 实例；同一进程里新建多个 provider（如 MultiProvider 内）
@@ -94,11 +93,12 @@ DEFAULT_FIXTURE_PATH = (
 
 #: 需要重试的 HTTP 状态码：限流与瞬时服务端故障。
 #: 限流最多原地等多久（秒）。超过它就不等、直接报 `rate_limited` 让调用方换源。
-#: 真机依据（T2）：OpenAlex 回 `Retry-After: 60`，原地等 60s × 多轮 ⇒ 20 分钟只烧 $0.09。
+#: 真机依据：OpenAlex 回 `Retry-After: 60`，而原地等 60s × 多轮会把整趟研究的时间
+#: 全耗在限流上。
 RATE_LIMIT_MAX_WAIT_SEC = 10.0
 
 #: provider 冷却时长（秒）。被限流过的源在这段时间内不再被问 —— 换一个 query
-#: 也不许立刻回头试它（缺陷 ⑰：真机 T2 里 A 对 OpenAlex 连续 8 次 429，时间全耗在
+#: 也不许立刻回头试它（对同一个源反复撞 429，时间全耗在
 #: 同一个源上）。整趟研究通常几分钟到几十分钟，5 分钟是个"先别试了"的量级。
 PROVIDER_COOLDOWN_SEC = 300.0
 
@@ -155,7 +155,7 @@ _KEYWORD_TITLE_HITS_PER_KEY = 6
 #: 而且没有任何东西会报错。取值是三态：`True` / `False` / `None`（弃权）。
 _TOPICALITY_VERDICT_FIELD = "topicality_verdict"
 
-#: "这一次检索对上游库不适用"的第三态名（`X-NEW-1` 的 D 选项）。
+#: "这一次检索对上游库不适用"的第三态名。
 #:
 #: 语义逐字写清（名字可以改，含义不许含糊）：题面里抽不出任何英文关键词
 #: （纯中文题面是常态），于是"拿这段查询去打 OpenAlex/Crossref 这类以英文文献
@@ -163,10 +163,10 @@ _TOPICALITY_VERDICT_FIELD = "topicality_verdict"
 #: 也不是"查失败了"（`failed`），而是这一问对这条通道不适用。
 #:
 #: 为什么需要一个显式的取值而不是让调用方自己看查询串：
-#: 改前这条路上两个读数把三种意思折成了两个 —— 查询串照样是中文原串，
-#: 上游照样返回（噪音）结果，而 `last_filter_notes` 里只有一句内部记号
-#: `no_ascii_keywords`。下游（含报告）读到的是 `status=ok` / `count>0`，
-#: 于是"这条通道其实没接线"看起来与"检索成功"一模一样。
+#: 若不用这个取值，查询串照样是中文原串、上游照样返回（噪音）结果，而
+#: `last_filter_notes` 里只有一句内部记号 `no_ascii_keywords`。下游（含报告）
+#: 读到的是 `status=ok` / `count>0`，于是"这条通道其实没接线"看起来与
+#: "检索成功"一模一样。
 QUERY_NOT_APPLICABLE_CJK = "query_not_applicable_cjk"
 
 #: 没有查询串（topic 与 description 都是空）时的第三态名。
@@ -742,8 +742,9 @@ def reconstruct_abstract(inv_index: dict | None, max_chars: int = SUMMARY_MAX_CH
 def normalize_doi(doi: str | None) -> str | None:
     """DOI 归一化 —— 转发到唯一实现 :func:`agentflow.dedup.normalize_doi`。
 
-    本函数曾经是第二份独立实现（``INVENTORY.md`` §4.7③ 实测：``http://dx.doi.org/…``、
-    尾随 ``.``、全角数字三组输入给出与 ``dedup`` 不同的结果）。
+    本函数是 `agentflow.dedup.normalize_doi` 的转发，不再留第二份独立实现
+    （否则 `http://dx.doi.org/…`、尾随 ``.``、全角数字三组输入会给出与 ``dedup``
+    不同的结果）。
 
     为什么唯一实现放在 ``dedup``：DOI 是判重键的来源（§3.5 第一级）。
     ``providers.dedup_key_of`` 用它给候选的 ``dedup_key`` 赋值，而
@@ -932,17 +933,16 @@ def dedup_key_of(candidate: Candidate) -> str:
     * 两者都没有（既无 DOI、标题又规范化成空串）时返回
       :data:`DEDUP_KEY_UNIDENTIFIED`，这是一个显式的"无法判定"。
 
-    ## 改前是什么，为什么必须改（2026-09-26 全面体检 · 子代理 F 实测）
+    ## 为什么键族只有一套
 
-    改前这是一条自己一套的键（`F-8`）：
+    若这里自己造一条键：
 
     - 无年份时给 `title:<norm>|na`；而 `dedup.literature_keys` 给 `title:<norm>|*`。
       两者不是同一个字符串，于是"同一次搜索里一个源带年份、另一个不带"
       （跨库的常态）合并失败，而事后跨库判重又会把它们合上 ——
       两个判重口径互相矛盾，且没有任何报错；
     - 标题为空时给 `unknown:{abs(hash(title)):x}`。`hash()` 对 `str` 是
-      每进程随机加盐的（实测两个新进程给出 `fe05bf94c9fe44e` 与
-      `564d0c0c94914967`）—— 一个"每个进程一个新值"的键不是键，
+      每进程随机加盐的（两个新进程给出的值不同）—— 一个"每个进程一个新值"的键不是键，
       只是把"无法判定"伪装成了一个稳定标识。
 
     现在标题键直接取 `literature_keys` 的产物，所以
@@ -1086,8 +1086,8 @@ def http_get_json(
             delay = _retry_after_seconds(getattr(exc, "headers", None))
             if delay is None:
                 delay = min(2.0**attempt, 20.0) * (0.8 + 0.4 * random.random())
-            # 2026-10-18（真机 T2，缺陷 ⑭）：OpenAlex 回 `Retry-After: 60`，而这里会原地睡 60 秒
-            # 再试 —— 真机读数：20 分钟只烧掉 $0.09，因为每轮都在等限流。
+            # OpenAlex 回 `Retry-After: 60`，而这里若原地睡 60 秒
+            # 再试，整趟研究的时间就全耗在等限流上。
             # 与 `_h_download` 里那条"Forbidden/限流要换源而不是原地耗时间"同一个原则：
             # 等待超过这道闸就不再等，立刻把 `rate_limited` 抛给检索层去换 provider。
             if delay > RATE_LIMIT_MAX_WAIT_SEC:
@@ -1470,20 +1470,19 @@ class OpenAlexProvider:
         ## 为什么必须有这个降级
 
         `_phrase_query` 把整段 ASCII 题面包进一对引号，而 OpenAlex 的引号是
-        字面短语匹配。实测同一条题面：加引号
+        字面短语匹配。同一条长题面：加引号
         `"spectral sequence of a filtered complex and its convergence"` 的
-        `meta.count` 是 0，去掉引号是 92549（`temp/_oa_probe.py`，2026-09-28）。
+        `meta.count` 是 0，去掉引号才回到正常量级。
         生产检索路径（`evidence._default_sources`）恰好传
         `mode="precise", description=""`，于是整条链上召回恒为 0：材料为空
-        （`T3` 的 `tokens_in` 恒 272）⇒ 模型如实回答"材料里没有可据以陈述的
-        实质结论"⇒ O6 回验率 0/120。函数自己的 docstring 早就写了"只适用于
-        短的 topic"，但没有实现这个前提。
+        ⇒ 模型如实回答"材料里没有可据以陈述的实质结论"⇒ 回验率归零。函数自己的
+        docstring 早就写了"只适用于短的 topic"，但没有实现这个前提。
 
         ## 口径（为什么不是"按词数阈值决定加不加引号"）
 
         阈值是凭空的魔数；"短语零召回就退词项"自适应、无常数，且顺带覆盖
         其它零召回原因（例如短题面恰好没有这条字面短语）。短语命中非零时
-        行为逐字不变 —— 短题面（实测 "abelian group"）的精度收益不受影响。
+        行为逐字不变 —— 短题面的精度收益不受影响。
 
         两次请求都留在读数里：`last_phrase_fallbacks[channel]` 记下原短语、
         词项串与词项串的条数，所以"发出去过哪两条"不会被读成"只发了那一条"。
@@ -1496,7 +1495,7 @@ class OpenAlexProvider:
         ## 同一次调用里不重复发同一条零召回的短语（`FINAL-R3-01`）
 
         `topical` 有两条路（奠基 / 前沿），两条路的主查询串完全相同（只差 `sort`）。
-        改前它们各自先发一次短语、再各自降级 ⇒ 一条题面 2 次变 4 次请求，
+        两条路若各自先发一次短语、再各自降级 ⇒ 一条题面 2 次变 4 次请求，
         而这个翻倍恰好发生在限流场景附近（零召回的常见成因就是上游给空载荷/限流）。
         现在把"这一跑里已经确认零召回的短语串"记在 `_zero_recall_phrases` 里：
         第二条路直接用词项形态开局（`last_phrase_fallbacks` 里仍然记着这条路降过级），
@@ -1628,10 +1627,10 @@ class OpenAlexProvider:
         ## 不排序（`sort=None`），且这是刻意的
 
         本仓别处按 `cited_by_count:desc` 排序是为了找"主流/奠基"那一批；而引文走查的
-        典型用途恰恰是找更冷门的那条路（业主点名的"更短证明路径"就是这一类）——
+        典型用途恰恰是找更冷门的那条路（"更短证明路径"就是这一类）——
         按热度排对这件事是反的。所以这里交回 OpenAlex 的默认次序，由调用方自己判。
 
-        ## 实测（`temp/_probe_citation_walk.py`，2026-10-15，$0）
+        ## 现场读数
 
         源论文 `10.1098/rsos.181055`：自己引了 123 篇；解析前 5 个 id ⇒ 回来 5 条真候选
         （有题名/年份/DOI）。前推 `cites:W2883591297` ⇒ 29 条，前 5 条里 4 条 `is_oa=True`
@@ -1842,10 +1841,9 @@ class _QueryPlan:
     #:
     #: 为什么需要第三档：`precise` 的主串与降级串都带着 description 的词项
     #: （`term_query(description) OR …`），而 OpenAlex 的长串 OR 查询会真的零召回
-    #: （不是被标题过滤掉、是上游 `meta.count=0`）。真机读数（T2 第 23 趟 `t2r`）：
-    #: topic=`edge-girth-regular graphs` + 一段 30 词的 description ⇒ 主串 0 条、
-    #: 降级串 0 条 ⇒ 台账写 `no_results`（三次）；而同一个 topic 只留短 description
-    #: 或清空 description ⇒ 10 条（含标题就是《Edge-girth-regular graphs》那一篇）。
+    #: （不是被标题过滤掉、是上游 `meta.count=0`）。现场：topic 加一段 30 词的
+    #: description ⇒ 主串 0 条、降级串 0 条 ⇒ 台账写 `no_results`；而同一个 topic
+    #: 只留短 description 或清空 description ⇒ 能拿回条目。
     #: 也就是说"查不到"的真原因是查询串太长，而既有降级链两次都不脱开 description。
     #: 第三档只脱开 description、保留 topic，代价是精度下降 —— 与
     #: `keyword_hit` docstring 里那条取舍同向（"漏掉一篇好文献比多留几篇噪音代价更大"），
@@ -1856,12 +1854,12 @@ class _QueryPlan:
 def _phrase_query(text: str) -> str:
     """把检索词收成"短语优先"的查询串。
 
-    裸词检索会被 OpenAlex 的 OR 式相关性打分拉开：实测 ``search=abelian group``
+    裸词检索会被 OpenAlex 的 OR 式相关性打分拉开：``search=abelian group``
     的按被引降序结果里混进了石墨烯、希格斯玻色子等无关高被引论文。给 ASCII
     词加上引号做短语匹配能显著提高 topic 的约束力；中文词加引号无益（分析器
     不同），故只对 ASCII 词生效。
 
-    只适用于短的 topic：OpenAlex 的引号是字面短语匹配，实测
+    只适用于短的 topic：OpenAlex 的引号是字面短语匹配，
     ``"definition of abelian group and its relation to group"`` 命中数为 0
     （没有任何文章的连续文本包含这一整串），因此长 description 绝不能用本函数。
 
@@ -1870,7 +1868,7 @@ def _phrase_query(text: str) -> str:
     本函数不自己判断长短 —— 它只负责"短语优先"这一件事；长题面的召回兜底
     由调用方给的那条降级串承担：`_plan_mode` 在 `topical`/`precise` 两路上同时
     给出词项形态（`_term_query`），`OpenAlexProvider._fetch_with_fallback`
-    在主查询零召回时用它再抓一次。实测（2026-09-28）这道兜底是必需的：
+    在主查询零召回时用它再抓一次。这道兜底是必需的：
     生产检索路径传 ``description=""``，整条链上唯一的查询串就是这里的整串短语。
     """
     cleaned = re.sub(r"\s+", " ", (text or "").strip())
@@ -2675,24 +2673,12 @@ def _pdf_url_rank(c: "Candidate") -> int:
 def _europepmc_urls(entry: Mapping[str, Any], doi: str | None) -> tuple[str | None, str | None]:
     """从 ``fullTextUrlList`` 找取得到的全文直链与落地页。
 
-    2026-10-15 修（真机读数驱动）：此前这里把 Europe PMC 自己在
-    `fullTextUrlList` 里报的 `https://europepmc.org/articles/PMC…?pdf=render` 当直链。
-    实测（$0 探针，逐条 GET）那一个永远 403，而且与 User-Agent 无关
-    —— 它是网站页，不是可编程取的 API：
-
-    | 取法 | `PMC6502358`（真 OA） | `PMC6365842` | `pmc299930` |
-    |---|---|---|---|
-    | `europepmc.org/articles/{PMC}?pdf=render`（项目的 UA） | 403 | 403 | 403 |
-    | 同上，浏览器 UA | 403 | 403 | 403 |
-    | `www.ebi.ac.uk/europepmc/webservices/rest/{PMC}/fullTextXML` | 200 + JATS XML | 500 | 500 |
-
-    代价（T5 第 8 趟 `p8h` 的盘上读数）：41 条文献里 17 条 `http_403`，其中 12 条是
-    europepmc —— 全部 `download.status=failed`，而那 41 条里本来就只有 6 条有可读全文。
-
-    ⇒ 改法：报来的网页直链不再当下载目标（它取不到，报出去只是把"我们取不到"
-    伪装成"下载失败"）；有 `pmcid` 时走 EBI 的 OA 全文路由。
-    量化收益（同一次探针，那 12 条逐条试）：5 条走 EBI 路由能取到真全文
-    （551 KB / 367 KB / 302 KB / 85 KB / 38 KB），另 7 条 500（不在 OA 子集，如实失败）。
+    Europe PMC 自己在 `fullTextUrlList` 里报的
+    `https://europepmc.org/articles/PMC…?pdf=render` 是网站页，不是可编程取的 API：
+    它永远 403，而且与 User-Agent 无关。所以报来的网页直链不再当下载目标
+    （它取不到，报出去只是把"我们取不到"伪装成"下载失败"）；有 `pmcid` 时走 EBI
+    的 OA 全文路由 `www.ebi.ac.uk/europepmc/webservices/rest/{PMC}/fullTextXML`
+    （不在 OA 子集的仍会如实失败）。
 
     另一处同类错也在这里修掉：兜底曾写
     `…fulltextRepo?pprId={pmcid}…` —— `pprId` 收的是预印本号（PPR…），
@@ -2872,7 +2858,7 @@ class FixtureProvider:
 
 
 class ProviderStat:
-    """一个源这一次检索的读数（`F-6` 的三态 + `Y-1` 的第三态）。
+    """一个源这一次检索的读数（三态 + 第三态）。
 
     取值一律是 :data:`PROVIDER_STAT_STATUSES` 之一，语义逐条：
 
@@ -2880,20 +2866,20 @@ class ProviderStat:
     * `"failed"` —— 检索抛了异常，`count` 一定是 0，`error_kind` 非空；
     * `"not_run"` —— 这个方法没跑过它；
     * `query_not_applicable_cjk` / `query_empty` —— 这一问根本没发给上游
-      （`Y-1` 的第三态：一个请求都没发出去，`count` 一定是 0，`error` 带着理由，
+      （一个请求都没发出去，`count` 一定是 0，`error` 带着理由，
       `error_kind` 是空串 —— 拒绝不属于"限流/被墙/解析失败/网络失败"那条轴）。
 
     为什么第三态落在 `status` 而不是另开一个字段：同一件事在 `evidence` 侧
-    已经落在 `sources_detail[*].status` 上（`R12-R3-3` 把这两个取值加进了
+    已经落在 `sources_detail[*].status` 上（这两个取值也加进了
     `SOURCE_STATUSES`）。统计面另开一个字段，等于让"这一问没发出去"在两个
-    出口上各有各的读法 —— 而 `Y-1` 要修的正是这条跨面不一致。
+    出口上各有各的读法 —— 那正是要修的跨面不一致。
 
     为什么 `failed` 一个字都不改：`failed` 说的是"上游坏了"。第三态不是它的
     子集，也不是它的同义词。要问"这个源到底交没交货"的读者用 `delivered` /
     `refused` 两个属性（或直接看 `status`），不要用 `failed` 当一个含括的
     "没结果"判据 —— 那会把第三态静默漏掉。
 
-    为什么要有 `status`：改前失败与"零命中"都写进 `last_stats[name] = 0`，
+    为什么要有 `status`：若失败与"零命中"都写进 `last_stats[name] = 0`，
     两者同值，唯一的分开手段是 `on_error` 回调 —— 而全仓没有任何调用点
     提供过它。也就是说"某源被墙/限流"会以"该源没命中"的形式静默进入统计。
     """
@@ -3312,11 +3298,11 @@ def _selftest() -> int:
         sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
         from agentflow.fetch import default_downloader  # type: ignore[no-redef]
 
-    # read_timeout 给得比较宽松，但必须有限：实测 AMSNet 会用 200 返回一个
-    # 12MB 的 HTML 落地页并以约 25KB/s 的速度吐，无限等待会让自检看起来像挂死。
+    # read_timeout 给得比较宽松，但必须有限：有的站会用 200 返回一个
+    # 十几 MB 的 HTML 落地页并以很慢的速度吐，无限等待会让自检看起来像挂死。
     downloader = default_downloader({"read_timeout": 60, "retries": 1})
-    # 真实世界里 pdf_url 经常撒谎：出版商落地页会用 HTML 顶替直链（实测 AMSNet
-    # 就是如此，URL 以 .pdf 结尾却返回 text/html）。因此自检逐个候选尝试，
+    # 真实世界里 pdf_url 经常撒谎：出版商落地页会用 HTML 顶替直链
+    # （URL 以 .pdf 结尾却返回 text/html）。因此自检逐个候选尝试，
     # 直到拿到"ok 且无 content_type_mismatch 警告"的结果。
     result = None
     winner = None
