@@ -66,10 +66,8 @@ _MS_PER_SEC = 1000.0
 
 def assert_timer_delay(timeout_ms: float, name: str = "timeoutMs") -> None:
     """DSH 的 `dsh-timeout/lib/index.js` 逐字搬来的注册期/装表期校验。"""
-    if not isinstance(timeout_ms, (int, float)) or timeout_ms != timeout_ms:
-        raise ValueError(f"{name} must be a positive finite number no greater than "
-                         f"{MAX_TIMER_DELAY_MS}")
-    if timeout_ms <= 0 or timeout_ms > MAX_TIMER_DELAY_MS:
+    if (not isinstance(timeout_ms, (int, float)) or timeout_ms != timeout_ms
+            or timeout_ms <= 0 or timeout_ms > MAX_TIMER_DELAY_MS):
         raise ValueError(f"{name} must be a positive finite number no greater than "
                          f"{MAX_TIMER_DELAY_MS}")
 
@@ -438,12 +436,16 @@ def table_reading() -> dict[str, Any]:
     三样：声明了几件 / 其中几件已经接了检查点 / 几件还挂着（`pending` 那一档）。
     `pending` 那一档必须列出来而不是只报一个数：只报数的话，"谁还挂着"要人去读源码。
     """
-    rows = {name: decl.checkpoint for name, decl in TIMEOUT_TABLE.items()}
+    declared = sorted(TIMEOUT_TABLE)
+    with_checkpoint: list[str] = []
+    pending: list[str] = []
+    for name, decl in TIMEOUT_TABLE.items():
+        (with_checkpoint if decl.checkpoint == "handler" else pending).append(name)
     return {
-        "declared": sorted(rows),
-        "with_checkpoint": sorted(n for n, c in rows.items() if c == "handler"),
-        "pending": sorted(n for n, c in rows.items() if c != "handler"),
-        "count": len(rows),
+        "declared": declared,
+        "with_checkpoint": sorted(with_checkpoint),
+        "pending": sorted(pending),
+        "count": len(declared),
     }
 
 
