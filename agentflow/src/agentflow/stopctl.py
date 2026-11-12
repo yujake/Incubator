@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
-"""停机的唯一实现（`draft/37` §128）：优雅停止与强制停止，以及"把子进程一起停掉"。
+"""停机的唯一实现：优雅停止与强制停止，以及"把子进程一起停掉"。
 
 ## 为什么要有这一个模块
 
-用户口径（2026-10-04）：
+用户口径：优雅停止还要提醒那些 Agent 把发起的进程一起停掉，强制停止是直接杀掉；
+两档都应该是主控 M 的 tool。
 
-> 优雅停止还要提醒那些 Agent 把发起的进程一起停掉，还要写个强制停止是直接杀掉
-> 优雅停止和强制停止应该是主控 M 的 tool
-
-在这之前，"停机"这件事散在三处、且「没有一处管得住子进程」：
+"停机"这件事散在三处、且「没有一处管得住子进程」：
 
 - `conductor.stop`（工具，M 专用）：优雅停止 —— 喊停 → 有界收尾 → 合成终态 → 落续跑简报，
-  但它「不停 M 自己的步循环」，也「不管 E 起的那条实验子进程」（真机实测：一个 600 s 的
-  枚举实验会继续把这 600 s 跑完）；
-- `--stop-file`：单趟 `run-agent` 此前根本不看它（§125 已修：步循环顶上看一眼）；
+  但它「不停 M 自己的步循环」，也「不管 E 起的那条实验子进程」（一个 600 s 的枚举实验会
+  继续把这 600 s 跑完）；
+- `--stop-file`：单趟 `run-agent` 要靠步循环顶上看一眼才看得到它；
 - 多轮自主跑：`autonomy._stop_before_round` 在每轮之间看一次。
 
 现在三处共用本模块的「一个停机文件 + 一份子进程登记」：
@@ -33,9 +31,9 @@
 
 ## 子进程为什么要登记而不是"随父进程一起死"
 
-在 Windows 上杀掉父进程「不会」带走子进程（真机实测：`job_kill` 之后 python 子进程照旧把
-那一趟跑完，见 §127）。所以：① 起进程时登记 pid；② 强制停止时按登记逐个 `taskkill /T /F`
-（`/T` 连子孙一起）；③ 优雅停止时把停机文件给子进程看见 —— E 的脚本等待循环每 0.2 s 看一次它。
+在 Windows 上杀掉父进程「不会」带走子进程（`job_kill` 之后 python 子进程照旧把那一趟跑完）。
+所以要：① 起进程时登记 pid；② 强制停止时按登记逐个 `taskkill /T /F`（`/T` 连子孙一起）；
+③ 优雅停止时把停机文件给子进程看见 —— E 的脚本等待循环每 0.2 s 看一次它。
 """
 from __future__ import annotations
 
@@ -115,7 +113,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
                         force: bool = False, sid: str | None = None,
                         explicit: str | Path | None = None,
                         root_task_id: str = "") -> tuple[dict[str, Any], str]:
-    """写下停机开关，并回答"这把开关是谁的"（`draft/39` §3.11 D25）。
+    """写下停机开关，并回答"这把开关是谁的"。
 
     返回 `(负载, 结局)`，结局三态：
 
@@ -128,7 +126,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     把"上一次是谁写的"与"这一次是谁在问"混起来。驱动器按这个结局决定要不要清：
     只有 `created` 才清（`3`/`4` 一律不动别人的痕迹）。
 
-    ## `root_task_id`（S4，`draft/90` E7 / `draft/84` §2.2）：这把开关管哪一支
+    ## `root_task_id`：这把开关管哪一支
 
     缺省（空串）= 全工作区（老行为逐字不变）；给了台账里的一个实例号 ⇒ 只对
     那一支（它自己 + 它的子孙）生效 —— 于是"停 D 那一支"不必停掉整个工作区。
@@ -141,7 +139,7 @@ def request_stop_detail(root: str | Path, *, reason: str = DEFAULT_REASON, by: s
     path = stop_path(root, explicit)
     existing = read_stop(root, explicit=explicit)
     if existing is not None:
-        # 幂等：理由取第一次那份。「但 `force` 可以升级」（`draft/37` §128）：
+        # 幂等：理由取第一次那份。但 `force` 可以升级：
         # 先有人说了"优雅停"、随后用户要求"直接杀掉"，那次强制必须生效 ——
         # 否则"我现在就要它停"会被一个更早的软请求挡掉。升级只在 false→true 一个方向，
         # 并把"什么时候升级的"写进负载（可复核）。
@@ -203,7 +201,7 @@ INTERRUPT_REASON = "interrupted_by_parent"
 #: 全归 4，与 `budget` 同档但不同族 —— `budget` 是钱到顶，不是有人叫停）。
 #:
 #: 为什么要有一份显式的族表，而不是各处写 `== "stop_file"`：多轮驱动层在「下一轮开跑前」
-#: 要判"上一轮是不是被用户叫停的"，而它此前只认 `waiting_for_user` / `escalated` 两档 ——
+#: 要判"上一轮是不是被用户叫停的"，而它只认 `waiting_for_user` / `escalated` 两档的话 ——
 #: 于是上一轮以 `stop_file` 收工之后，第二轮照开（D19 的最深那一层）。三档分散在
 #: `agent_loop._user_stop_reason`、`cli.EXIT_CODE_BY_STOP` 与这里各写一遍时，
 #: 少写一档不会有任何东西变红；现在它们读同一份。
@@ -286,7 +284,7 @@ def interrupt_applies(state: Mapping[str, Any] | None, my_task_id: str) -> dict[
 
 def consume_interrupt(root: str | Path, task_id: str, *, sid: str | None = None,
                       level: str = INTERRUPT_REASON) -> dict[str, Any]:
-    """撤走这一份信号并把审计写进 `runs/interrupt-history.jsonl`（一次性信号，§140 同族）。"""
+    """撤走这一份信号并把审计写进 `runs/interrupt-history.jsonl`（一次性信号）。"""
     path = interrupt_path(root, task_id)
     state = read_interrupt(root, task_id) or {}
     entry = {"at": _now_iso(), "level": str(level), "target_task_id": str(task_id or ""),
@@ -350,7 +348,7 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
     第三态为什么要单列：一个坏掉的开关文件被读成"没人叫停"，等于「停机请求消失」 ——
     而"没查成"与"查过了没问题"必须分得开（本项目的三态纪律）。
 
-    开关的生命周期见 `consume_stop`（`draft/37` §140 修的 bug）：它是一份"信号"，
+    开关的生命周期见 `consume_stop`：它是一份"信号"，
     被一趟运行消费之后就撤走，审计留在 `runs/stop-history.jsonl` 里。全工作区那一档
     是树根在那一趟收尾时才撤（业主裁定「M 停整棵树」：读的时候谁都不删，
     见 `AgentLoop._consume_stop_at_teardown`），不是"第一个读到的"。
@@ -377,7 +375,7 @@ def read_stop(root: str | Path, *, explicit: str | Path | None = None) -> dict[s
 def stop_reason_of(state: Mapping[str, Any] | None) -> str:
     """开关负载 → 循环的停止理由码（`force_stop` / `stop_file`；没开关 = 空串）。
 
-    为什么把它收成一处：这个三行判断此前在 `agent_loop._user_stop_reason` 里写了两遍、
+    为什么把它收成一处：这个三行判断若在 `agent_loop._user_stop_reason` 里写两遍、
     在 `autonomy` 与 `cli` 又要各写一遍。四处各写一份时，"强制那一档被少写一次"不会
     有任何东西变红，而它正是"用户要它立刻停、它却按优雅停收工"的那种错。
 
@@ -399,12 +397,12 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
                  programs: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """消费掉这一把开关：把"谁在什么时候为什么叫停、被哪一趟用掉"记进历史，然后撤掉它。
 
-    ## 为什么必须撤（`draft/37` §140 的 bug，实测 `temp/_stop_probe.py`）
+    ## 为什么必须撤
 
-    改前：`conductor.stop` 停了一趟之后开关留在盘上 ⇒ 紧接着的 `--resume` 在第 0 步
+    开关若留在盘上：`conductor.stop` 停了一趟之后，紧接着的 `--resume` 在第 0 步
     就被同一把开关停掉（0 步、0 次模型调用），而同一个工具的产物里写着"可续跑的步检查点 +
     续跑简报" —— 两件事互相拆台；连带 E 的实验子进程也会一出现就被它杀掉。
-    改后：开关是一次性信号（停一趟、记一笔、撤走），下一次叫停要重新写一份
+    所以开关是一次性信号（停一趟、记一笔、撤走），下一次叫停要重新写一份
     （`request_stop` 于是不会把"用户第二次叫停"当成幂等请求吃掉）。
 
     ## `remove=False`（S4 子树开关 + 业主裁定的「整棵树」）
@@ -415,7 +413,7 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     那一支的根（`my_task_id == root_task_id`）；别的人都只记一笔
     （`removed=False`，`level` 里带自己是哪一档）。否则"先读到的那个把开关吃掉"，
     后面的成员下一刻读到的就是"没人叫停"、静默继续跑
-    （与 §140 那个 bug 同一族，只是方向反过来）。
+    （与"开关留在盘上"同一族，只是方向反过来）。
 
     读的时候连树根也不删（业主裁定「M 停整棵树」的删除半）：树根的删除推迟到
     这一趟自己的收尾（`AgentLoop._consume_stop_at_teardown`，排在 `agent_run_end`
@@ -429,11 +427,10 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     历史行落在 `runs/stop-history.jsonl`（append-only）：`{…开关负载…, consumed_at,
     consumed_by_sid, level, removed}`；`agentflow stop --status` 在开关不在时会把它读出来。
 
-    ## `programs`（G4，2026-10-26 新增的那一格读数）
+    ## `programs`（停机对程序做了什么）
 
-    停机对程序做了什么（`stop_programs` 的读数：强停杀了哪几个、优雅停在宽限里点了谁的名、
-    或者"程序状态没查成"）随这一笔一起落盘。此前这一格里只有"停了哪一趟"，没有
-    "这一停对程序做了什么" —— 而那正是昨晚那 15 个野进程在审计面上完全看不见的原因。
+    `stop_programs` 的读数（强停杀了哪几个、优雅停在宽限里点了谁的名、或者"程序状态
+    没查成"）随这一笔一起落盘。没有这一格，"这一停对程序做了什么"在审计面上完全看不见。
     不给（`None`）就一个字节都不多写：与"特意写了空"分开。
     """
     path = stop_path(root, explicit)
@@ -484,7 +481,7 @@ def stop_history(root: str | Path, *, limit: int = 5) -> list[dict[str, Any]]:
 def clear_stop(root: str | Path, *, explicit: str | Path | None = None) -> bool:
     """撤掉停机开关（返回"撤掉了没有"）。
 
-    `draft/37` §140 之后不再需要为了续跑而显式撤：开关被消费（停一趟）时就撤走了。
+    开关被消费（停一趟）时就撤走了，不需要为了续跑而显式撤。
     这条命令仍然有用：在开关生效之前撤销这次叫停（例如刚写完发现写错了）。
 
     真的撤掉了才通知 `set_stop_hook` 装上的监听器（action=`"cleared"`）：
@@ -538,10 +535,10 @@ def unregister_pid(root: str | Path, role: str, sid: str | None = None) -> bool:
 def alive(pid: int) -> bool:
     """这个 pid 还活着吗。
 
-    实现按平台分两条（都实测过，别换成"看起来能用"的写法）：
+    实现按平台分两条（别换成"看起来能用"的写法）：
 
     - Windows：`OpenProcess(SYNCHRONIZE)` + `WaitForSingleObject(h, 0) == WAIT_TIMEOUT`。
-      为什么不用 `tasklist`：沙箱里它拿不到读数（本机实测：登记了自己的 pid 也判"不活着"，
+      为什么不用 `tasklist`：沙箱里它拿不到读数（登记了自己的 pid 也判"不活着"，
       于是"还活着的进程"整个消失）；为什么不用 `os.kill(pid, 0)`：Windows 上那不是探活，
       它会 `TerminateProcess`（把被探测的进程杀掉）。
     - 其它平台：`os.kill(pid, 0)`（POSIX 的探活语义）。
@@ -618,10 +615,9 @@ def kill_tree(pid: int, *, timeout: float = 60) -> dict[str, Any]:
     """「直接杀掉」这个进程及其子孙（`taskkill /T /F` / `kill -9`）。
 
     返回值如实给出用了哪条路与命令输出 —— "杀没杀掉"必须能复核，
-    不许写成"应该杀掉了"。`/T` 是关键：只杀父进程会留下子进程继续跑
-    （§127 的真机读数：包装进程被 kill 之后 python 子进程又跑了 12 分钟）。
+    不许写成"应该杀掉了"。`/T` 是关键：只杀父进程会留下子进程继续跑。
 
-    受限环境里 `taskkill` 可能被拒（本机沙箱实测 `ERROR: Access denied`，rc=1）
+    受限环境里 `taskkill` 可能被拒（沙箱里 `ERROR: Access denied`，rc=1）
     ⇒ 返回值里 `killed=False` + 原样理由，「由调用方补刀」（`Popen.kill()`），
     而不是在这里假装杀掉了。
     """
@@ -633,7 +629,7 @@ def kill_tree(pid: int, *, timeout: float = 60) -> dict[str, Any]:
     try:
         from . import clock as _CLK
 
-        # 业主 2026-10-27 第一条裁定：起程序（这一处是 taskkill）就登记一条程序计时器。
+        # 起程序（这一处是 taskkill）就登记一条程序计时器。
         with _CLK.program_span(program=cmd[0], argv=cmd,
                                workspace=(_CLK.current_workspace() or None),
                                where="stopctl.kill_tree",
@@ -668,7 +664,7 @@ def _kill_via_job(pid: int) -> dict[str, Any]:
     except JB.JobObjectUnavailable as exc:
         return {"pid": int(pid), "killed": False, "via": "", "detail": str(exc)}
     try:
-        # 作业归属不向前追溯（E14 实测）：只 assign 根，不会把它此前已经生出来的
+        # 作业归属不向前追溯：只 assign 根，不会把它已经生出来的
         # 子进程带进来 ⇒ 必须把现有后代逐个也放进去（新生的才自动继承）。
         placed = JB.assign_tree(job, int(pid))
         if not placed.get("assigned"):
@@ -698,10 +694,10 @@ def kill_registered(root: str | Path, *, role: str = "",
     `stop_reason="force_stop"`）；「外部」的 `agentflow stop --force` 不给 `exclude_pid`，
     于是连父进程一起杀 —— 那正是"直接杀掉"的语义。
 
-    `prefer_job=True`（缺省）时优先走作业对象（`draft/39` §3.21 五 I13）：受限环境里
-    `taskkill /T /F` 会被拒（实测 `Access denied`），而"把进程放进作业对象再关句柄"
+    `prefer_job=True`（缺省）时优先走作业对象：受限环境里
+    `taskkill /T /F` 会被拒（`Access denied`），而"把进程放进作业对象再关句柄"
     由 OS 收掉整棵传递树 —— 不依赖那条命令能不能成功。作业对象这条路不通时照旧
-    退回 `taskkill`（并在结果里记 `via`），所以这条改动只增不减。
+    退回 `taskkill`（并在结果里记 `via`），所以这条退路只增不减。
     """
     victims = [v for v in live_pids(root, role=role)
                if exclude_pid is None or int(v["pid"]) != int(exclude_pid)]
@@ -709,7 +705,7 @@ def kill_registered(root: str | Path, *, role: str = "",
     kept: list[int] = []
     for v in victims:
         pid = int(v["pid"])
-        # 自己的 pid 不走作业对象那一路（`draft/39` §6.12 的实测教训）：
+        # 自己的 pid 不走作业对象那一路：
         # 把自己放进作业再关句柄，会把调用者连同它的返回值、台账、续跑简报一起收掉
         # —— 而"要不要把自己排除"本来就是调用方的显式决定（`exclude_pid`）。
         # 于是 pid == 本进程时只用 `taskkill` 那条退路（成败照实报，登记该留就留）。
@@ -726,10 +722,10 @@ def kill_registered(root: str | Path, *, role: str = "",
         results.append(got)
         # 只有"确实杀掉了"或"它本来就死了"才注销登记。
         #
-        # `draft/37` §140 的真机读数（这条改前是反的）：受限环境里 `taskkill /T /F`
-        # 会被拒（`ERROR: Access denied`，`os.kill(SIGTERM)` 同样 `WinError 5`），
-        # 而改前照删登记 ⇒ `agentflow stop --status` 随后报"登记着的活进程：0 个"，
-        # 而那个进程还活着 —— 一个把"没杀成"折叠成"没有活进程"的假绿
+        # 受限环境里 `taskkill /T /F` 会被拒（`ERROR: Access denied`，
+        # `os.kill(SIGTERM)` 同样 `WinError 5`）。照删登记 ⇒ `agentflow stop --status`
+        # 随后报"登记着的活进程：0 个"，而那个进程还活着 —— 一个把"没杀成"
+        # 折叠成"没有活进程"的假绿
         # （三态纪律里最忌的那一类）。杀不成就把登记留着：status 会照实报它在册。
         if bool(got.get("killed")) or not alive(pid):
             try:
@@ -747,19 +743,17 @@ def kill_registered(root: str | Path, *, role: str = "",
 
 # ---------------------------------------------------------------- 停机与程序（G4）
 #
-# 业主 2026-10-26 的原话（逐字）：「停机开关也要能杀程序（优雅停是提醒，强停是强杀）」。
+# 业主口径：「停机开关也要能杀程序（优雅停是提醒，强停是强杀）」。
 #
-# 背景（真机读数）：昨晚机器上跑出 15 个野 python 进程（智能体起的"研究程序"），停机开关
-# 只让代理收工 —— 那些程序继续跑，把 CPU 打满。改前本模块里没有任何一处"停机时碰过程序"：
-# 两档开关都只写开关、消费开关、杀"登记在 `runs/*.pid` 里的代理进程"（`kill_registered`），
-# 而程序是记在时钟簿记里的另一份账（`clock.start_program` 的 `kind="program"` 行）。
+# 背景：代理起的"研究程序"（`clock.start_program` 的 `kind="program"` 行）与登记在
+# `runs/*.pid` 里的代理进程是两份账；停机开关若只让代理收工，那些程序会继续跑、
+# 把 CPU 打满。
 #
-# 两档语义刻意不合并（合并之后"提醒了它、它没理"与"我把它砍了"在读数上长得一样，
-# 那正是昨晚留下的那一族错）：
+# 两档语义刻意不合并（合并之后"提醒了它、它没理"与"我把它砍了"在读数上长得一样）：
 #
 # | 档 | 对程序做什么 | 收口 |
 # |---|---|---|
-# | 优雅停 `force=False` | 每条先 `terminate`（`clock._terminate_pid`：POSIX 是真 SIGTERM；Windows 上没有可发给 console 子进程的请停信号，见那里的实测），再给一个共享的宽限窗口 | 窗口过了还在跑的只点名，一根手指都不动 |
+# | 优雅停 `force=False` | 每条先 `terminate`（`clock._terminate_pid`：POSIX 是真 SIGTERM；Windows 上没有可发给 console 子进程的请停信号），再给一个共享的宽限窗口 | 窗口过了还在跑的只点名，一根手指都不动 |
 # | 强停 `force=True` | 每条立刻收掉（`clock._force_kill_pid`：作业对象一次收整棵树） | `finish_program(outcome="killed")` + 推一次等它的人 |
 #
 # 两档共用同一条三态纪律：程序读数没查成（`conductor.programs_reading` 的
@@ -812,7 +806,7 @@ def _program_knife(pid: int, *, force: bool) -> dict[str, Any]:
     两条路都是 G1 已经落地的助手，本模块不另写一份：
     `clock._force_kill_pid`（Windows 上作业对象一次收整棵树；POSIX 是 SIGKILL）与
     `clock._terminate_pid`（POSIX 是真 SIGTERM；Windows 上如实说"没有可发的请停信号"
-    —— 那一档的"优雅"由宽限窗口承担，见 `clock._terminate_pid` 的实测）。
+    —— 那一档的"优雅"由宽限窗口承担）。
 
     助手不在（改了名/还没落地）时：强停退回本模块既有的两条（`_kill_via_job` →
     `kill_tree`），优雅停如实报"这一刀没发出去"—— 绝不假装发过。
@@ -919,7 +913,7 @@ def stop_programs(root: str | Path, *, force: bool, grace_sec: float = STOP_PROG
                   wait_sec: float = STOP_PROGRAM_WAIT_SEC,
                   task_ids: "set[str] | None" = None, why: str = "",
                   exclude_pid: int | None = None) -> dict[str, Any]:
-    """停机对程序的那一半（业主 2026-10-26）：优雅停提醒 + 宽限，强停立刻杀。
+    """停机对程序的那一半：优雅停提醒 + 宽限，强停立刻杀。
 
     ## 两档语义（不许混）
 
@@ -1184,7 +1178,7 @@ def _program_stop_notice(out: Mapping[str, Any]) -> str:
 
 
 def running_loops(root: str | Path) -> dict[str, Any]:
-    """现在有没有在跑的循环（`draft/39` §2 D07 那一行要求 `--status` 显式回答它）。
+    """现在有没有在跑的循环（`--status` 要显式回答它）。
 
     判据两路取并集，缺一路都会把"没人消费的开关"读成"没事"：
 
@@ -1194,10 +1188,10 @@ def running_loops(root: str | Path) -> dict[str, Any]:
     2. 进程面：`live_pids` 里登记着且真的活着的进程 ⇒ 也报出来。
        进程面单独用会漏"登记没写/被清理"的情况。
 
-    ## E-13 改掉的两处假阳性（`draft/56 §2 主线 A`）
+    ## 两处必须避开的假阳性
 
     - 按角色配平，而不是整个会话取最后一条 `agent_run_start`：一个会话里可以
-      先后跑过多个角色（主控派活、被召唤者各跑一趟）。旧口径只看"最后一条 start"，
+      先后跑过多个角色（主控派活、被召唤者各跑一趟）。只看"最后一条 start"，
       于是 `M 起 → C 起 → M 收` 这种会话被判成"没人在跑"（最后一条 start 是 C，
       而 M 的 end 在它之后）—— 真正在跑的 C 被静默吞掉。反过来，
       `C 起 → C 收 → D 起 → D 收` 也会因为"最后一条 start 之后有任意 end"被判成没在跑。
@@ -1211,7 +1205,7 @@ def running_loops(root: str | Path) -> dict[str, Any]:
     running: list[dict[str, Any]] = []
     stale: list[str] = []
     stale_rows: list[dict[str, Any]] = []
-    # 2026-10-28：会话面与进程面对齐。子循环跑在父进程里（线程），它们没有各自的
+    # 会话面与进程面对齐。子循环跑在父进程里（线程），它们没有各自的
     # pid 登记 ⇒ 只能按会话对齐：这个 sid 登记过的进程全都不在了 ⇒ 它名下"没关
     # 的行"是死读数；只要还有一个活着、或者压根没登记 ⇒ 仍按在飞读（fail-closed）。
     dead_sids: set[str] = set()
@@ -1240,15 +1234,9 @@ def running_loops(root: str | Path) -> dict[str, Any]:
             # 读不出来的会话 ⇒ 这一路判不了，如实说（"没查成"不许读成"没在跑"）
             stale.append(sid)
             continue
-        # 按台账号配平（2026-10-28）：同一角色可以同时有好几趟在飞，而"该角色最后
-        # 一条 start 之后有没有 end"这种按角色的口径，会把"先起、还没结"的那一趟吞掉。
-        # 真机现场（`projects/paper-rewrite-78c` 17:44，逐条从会话里抄的）：
-        #   start t-000079 / start t-000080 / start t-000082 / end t-000080 /
-        #   end t-000079 / start t-000092 / end t-000092
-        # ⇒ 最后一条 start 是 t-000092、它自己已经 end ⇒ 旧口径判"V 没在跑"，
-        # 而 t-000082 一行 end 都没有。于是页面上两处读数打架：顶上"在飞"只列 M/D/F，
-        # 下面名册树里 V 的 t-000082 标着"在飞"。`agent_run_start` 与 `agent_run_end`
-        # 两条事件都带 `task_id` —— 精确的配对键一直在盘上，只是当年没读它。
+        # 按台账号配平：同一角色可以同时有好几趟在飞，而"该角色最后一条 start 之后
+        # 有没有 end"这种按角色的口径，会把"先起、还没结"的那一趟吞掉。`agent_run_start`
+        # 与 `agent_run_end` 两条事件都带 `task_id` —— 精确的配对键一直在盘上。
         # 老会话（没有 `task_id` 的那些）退回按角色配平，不许把老读数全丢。
         open_rows: dict[str, dict[str, Any]] = {}
         closed_keys: set[str] = set()
@@ -1303,7 +1291,6 @@ def running_loops(root: str | Path) -> dict[str, Any]:
             "answer": "有" if (running or live) else "没有",
             "stale_rows": stale_rows,
             #: 读的人先看这一句：这一份读数有几成是"会话面"（弱证据）撑起来的。
-            #: 真机 78c：3 条在飞全是会话面 —— 进程退出后没写 run_end 的残留。
             "evidence_note": ("在飞的行逐条带 evidence（会话面 / 进程面）；"
                               "只有会话面证据的行，可能是强杀/退出后没写 agent_run_end "
                               "的残留，不能只凭它就断定\"有人在跑\"")}
@@ -1311,9 +1298,9 @@ def running_loops(root: str | Path) -> dict[str, Any]:
 
 def block_remaining_tasks(store: Any, *, task_id: str = "", why: str,
                           all_runs: bool = False) -> dict[str, Any]:
-    """优雅停止：把这一趟还没做完的任务与委托由框架翻成 `block`（业主 2026-10-13）。
+    """优雅停止：把这一趟还没做完的任务与委托由框架翻成 `block`。
 
-    业主的原话：「接收到停的时候，剩余任务委托状态自动变成block」+「最终由M整理汇报用户」。
+    口径：接收到停的时候，剩余任务委托状态自动变成 block，最终由 M 整理汇报用户。
     所以这一层的三件事，一件都不许靠模型自觉：
 
     1. 它翻谁：`task_id` 那一行自己（还 `pending`/`running` 时），以及它派出去的
