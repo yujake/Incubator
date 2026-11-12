@@ -1,7 +1,4 @@
-"""角色 F 的动作 `step`（`goal-7f5116c1` M6：从 `agent_f.py` 拆出来，逐字未改）。
-
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
-"""
+"""角色 F 的动作 `step`。"""
 from __future__ import annotations
 
 from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, TERMINAL_STATUSES, _budget_left, _step_outcome
