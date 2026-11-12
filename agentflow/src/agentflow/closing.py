@@ -6458,24 +6458,20 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         # 的唯一口径）。改前这里数的是"台账里出现过任意一签「成立」" —— 签完之后正文
         # 又被改过的行也会被算成"V 审过"，而"审过的那一份还是不是现在这一份"正是
         # 这一格要回答的（`stale` 不算凭据）。
-        signed: set[str] = set()
-        for s in stmts:
-            if str(s.get("kind") or "") == "concept":
-                continue
-            if not str(s.get("proof_text") or "").strip():
-                continue
-            got = _VR.statement_review_reading(store.root, s)
-            if got.get("reviewed"):
-                signed.add(str(s.get("stmt_id") or ""))
         # 概念行不算"我方走完「有证明过程 + 审过」的命题"（2026-10-21，本批缺陷一的读侧）：
         # 真机 mp3 有 1143 条概念行，每一条都带 `proof_text`（哨兵 `concept:primitive`），
         # 于是"`proof_text` 非空 且 V 签了成立"这条读数只要撞上一次签名就把概念算进去 ——
         # 而概念不参与等级链（`draft/97` §14.5），它没有"证明过程"这一档。
         # 这一格与 `verifications.proof_review_gap` 的概念行那一支同一口径。
-        prose_reviewed = [s for s in stmts
-                          if str(s.get("kind") or "") != "concept"
-                          and str(s.get("proof_text") or "").strip()
-                          and str(s.get("stmt_id")) in signed]
+        # 同一趟里收下"审过"的那几条（原先先建 signed 集合、再拿它把 stmts 扫第二遍）。
+        prose_reviewed: list[Any] = []
+        for s in stmts:
+            if str(s.get("kind") or "") == "concept":
+                continue
+            if not str(s.get("proof_text") or "").strip():
+                continue
+            if _VR.statement_review_reading(store.root, s).get("reviewed"):
+                prose_reviewed.append(s)
         #: 替代读数（这一档里"审过"的凭据）：有证明过程 且 V 逐行走查签了「成立」。
         rep.readings["load_bearing"] = {
             "disabled": True,
@@ -6500,9 +6496,6 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         return
     docs = store.rows("documents")
     exps = {str(r.get("experiment_id")): r for r in store.rows("experiments")}
-    closed_exp_ids = {str(r.get("source_experiment_id"))
-                      for r in store.rows("dependencies")
-                      if str(r.get("status") or "") == "closed" and r.get("source_experiment_id")}
     statements = store.rows("statements")
     load_bearing = 0
     downgraded = 0
@@ -6524,10 +6517,9 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             load_bearing += 1
             cites = {str(c) for c in (claim.get("citations") or [])}
             cited = [(eid, row) for eid, row in exps.items() if f"exp:{eid}" in cites]
-            closed = [(eid, row) for eid, row in cited if eid in closed_exp_ids]
             # 穷举那一路的读数：只对"自签穷举行"问（别的行不在这一问的射程里）。
             got_by_eid: dict[str, dict[str, Any]] = {}
-            for eid, row in {e: r for e, r in cited + closed}.items():
+            for eid, row in cited:
                 if not _NP.is_signed_exhaustion(row):
                     continue
                 got = _NP.exhaustion_backing(row, root=store.root, statements=statements)
@@ -6537,10 +6529,10 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
                     ("state", "verdict", "defect_step", "statement_id", "report_path",
                      "report_sha256", "ledger", "why")
                 }
+            # closed 依赖指向的实验按构造是 cited 的子集：对它再跑一遍 any(_has_t3)
+            # 只会在 cited 已经全假之后再判一次同一批行，返回值不可能因此变真。
             backed = any(_has_t3(row, root=store.root, statements=statements)
                          for _eid, row in cited)
-            backed = backed or any(_has_t3(row, root=store.root, statements=statements)
-                                   for _eid, row in closed)
             if backed:
                 continue
             # 没背书 ⇒ 逐条给理由（四种结局各有各的话；`defect_step` 写在理由里）。
