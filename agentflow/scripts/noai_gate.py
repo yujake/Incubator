@@ -58,7 +58,7 @@ CATEGORY_ORDER: tuple[str, ...] = tuple(CATEGORY_TITLES)
 #: 可配置的准入门槛等于没有门槛（下一个人会把它改成 0）。
 REQUIRED_APPROVALS_ON_HIT = 2
 
-#: 与"2 名人审"并行的第二条通路（口径变更，2026-09-26 由所有者批准）：
+#: 与"2 名人审"并行的第二条通路：
 #: 多个子代理 × 多个维度独立审计、全部未发现问题 ⇒ 视为通过。
 #:
 #: 为什么仍然要求"多个"与"多维度"：
@@ -714,7 +714,7 @@ def _path_candidates(path: str, root: Path | None) -> list[str]:
 
     另外，glob 可能不带前导目录（`*.toml`），所以要给出各级后缀。
 
-    `FINAL-R1d-03`：相对路径必须按 `--root` 解析，不是按进程 CWD。改前这里只做 `Path(path).resolve()`（CWD 相对）再 `relative_to(root)`，于是
+    相对路径必须按 `--root` 解析，不是按进程 CWD：只做 `Path(path).resolve()`（CWD 相对）再 `relative_to(root)` 时，
     `--root <仓库>` 而 CWD 在别处时，`--paths SRC/AGENTFLOW/PROVIDERS.PY`这种大小写变体会判"均未命中禁改区"（假绿）；CWD 恰好等于 root 时才命中。现在先试
     `root / path`（那才是"这条路径相对哪个根"的正解），再退回原样。
     """
@@ -863,9 +863,9 @@ def check_paths(
         f"并需要 {REQUIRED_APPROVALS_ON_HIT} 名 reviewer 批准。"
         f"命中：{', '.join(hit_paths)}"
     )
-    # ---- `R-62`（`draft/28` §164 咬出）：默认路径也要报 `stale`
+    # ---- 默认路径也要报 `stale`
     #
-    # `stale`（台账里钉的那一版与盘上不是同一版）原来只在 `--check-approvals`
+    # `stale`（台账里钉的那一版与盘上不是同一版）不能只在 `--check-approvals`
     # 那一支里算，而 CI 跑的是 `--git --since <ref>` ⇒ 走的是本函数这一支
     # ⇒ 台账漂移在 CI 的路径上一句话都看不到。
     #
@@ -1009,7 +1009,7 @@ def _repo_rel_key(changed: str | Path, repo: Path) -> str:
     绝对路径先相对化；相对化不成（在仓库之外）就退回归一化的原样 ——
     这不是静默兜底：键仍然唯一且可比较，`check_paths` 的命中判定另有一套候选串逻辑。
 
-    `R2-N2`（2026-09-26 实测）：旧版对 `agentflow/.noai-paths` 这样的伞形前缀路径
+    对 `agentflow/.noai-paths` 这样的伞形前缀路径，按原样算键会
     给出 `agentflow/.noai-paths` 这个不存在的键 ⇒ 台账明明登记过，门却报
     `unregistered`（"从没登记"）。那不是"未批准"，是键错了。
     现在先试"去掉一层仓库目录名"，命中就用仓库相对键。
@@ -1051,9 +1051,9 @@ def _receipt_digest(record_without_hash: dict) -> str:
 
     ## 为什么这里不 import `agentflow.canonical`（`R-33` 的最终口径）
 
-    规范 JSON 的口径在包里只有一份实现（`src/agentflow/canonical.py`），但门不能依赖它：门必须能在被单独复制的情况下跑。证据不是推断 —— `R-33` 的第一版让门按路径
+    规范 JSON 的口径在包里只有一份实现（`src/agentflow/canonical.py`），但门不能依赖它：门必须能在被单独复制的情况下跑。证据不是推断：让门按路径加载 `canonical.py` 时，
     加载 `canonical.py`，结果 `tests/test_noai_gate_record_audit_cli.py` 的两条负控（把门脚本单独复制到临时目录、注入一处缺陷，证明回执链核对会红）当场变红：副本旁边没有
-    `canonical.py`。那两条负控测的是"门自己坏了会不会被抓到"，而"门必须先有邻居文件才能跑"会让这条判据无处安放。
+    那两条负控测的是"门自己坏了会不会被抓到"，而"门必须先有邻居文件才能跑"会让这条判据无处安放。
     - `import agentflow.canonical` 更不行：那会把门的可运行性押在被它审计的那棵树上。所以这里保留一份字节（`sort_keys=True` / `ensure_ascii=False` /
     `separators=(",", ":")`），并由 :func:`check_canonical_consistency`（CLI `--check-canonical`）把它与 `signatures`那一份钉在一起：
     同一载荷两侧哈希必须逐字相等，否则报 `divergent(1)`。"两处字节 + 一条机器判据相连"是本仓在"结构上无法共用"时的既定形态（`[5c]` 同族）；真正被禁掉的是没人看着的第二份口径，不是第二份字节。
@@ -1073,8 +1073,8 @@ def check_canonical_consistency() -> dict:
     - `unknown`：本包 import 不了 ⇒ 没查成，不许读成一致。
 
     为什么这条判据是"允许两份字节"的唯一理由：它把"又分叉了"变成一次可复现的红灯。
-    门为什么不能共用那一份实现，见 :func:`_receipt_digest` 的 docstring（它记着那条
-    被负控推翻的第一版方案）。
+    门为什么不能共用那一份实现，见 :func:`_receipt_digest` 的 docstring。
+
     """
     probe = {"b": [1, 2, {"nested": True}], "a": "中文与 ASCII 混排", "c": 3.5}
     payload = list(probe["b"]) + [probe["a"]]
@@ -1289,8 +1289,8 @@ class Reviewer:
 
     「写"看过了"等于没看」—— 与清单理由"只在一边写理由，等价于另一边没有理由"同一个道理。
 
-    `FINAL-R1d-04`：人审通路此前没有任何内容锚 —— 判定只看台账 JSON 里的名字字符串与"名字去重"，于是"改受保护文件 + 改台账 sha +
-    编两个名字"就能拿到`[clean]`（副本实测：`temp/r1d-final-ws/F2c-forge-full.txt`）。现在每条人审记录可以带一个证据锚（`evidence_path` +
+    人审通路必须有内容锚：判定只看台账 JSON 里的名字字符串与"名字去重"时，"改受保护文件 + 改台账 sha +
+    编两个名字"就能拿到`[clean]`。现在每条人审记录可以带一个证据锚（`evidence_path` +
     `evidence_sha256`）：`--approve --evidence-path <走查记录>` 会把那份记录的 sha256 一起写进台账，判定时核对文件仍在盘上且逐字节未变；核对不过 ⇒ 这条批准不算数。
     老记录（本字段为空）仍然有效（否则现存全部批准会一次性作废），但它们会被逐条标成"无内容锚"，并在 approved 那一行带上固定保留 ——读的人因此知道每一条批准的实际强度是什么。
     """
@@ -1350,12 +1350,12 @@ def reviewer_anchor_problem(reviewer: Mapping[str, Any] | Reviewer, *, repo: Pat
 @dataclass(frozen=True)
 class ReviewAudit:
     """一次机器审计的记录（与 `Reviewer` 平行的那条通路，两者永不混写）。
-    ## 为什么要有这个类型（口径变更，2026-09-26 由所有者批准）
+    ## 为什么要有这个类型
     FC-27 原本只认"2 名人逐行走查"（`Reviewer`）。所有者批准了一条并行通路：多个子代理从多个维度独立审计、全部未发现任何问题 ⇒ 视为通过。这条通路不是"AI
     代替人签字"：`reviewers` 数组仍然只能由人写，审计记录写进 `audits` 数组，两者在台账里分列、在输出里分行，读门的报告永远能看出"这一条是靠人签的、还是靠机审的"。
     ## 四个不许省掉的字段（防"没发现问题"变成一句空话）
     1. `dimension`：受控词表里的一个维度（`AUDIT_DIMENSIONS`）。"多维度"必须是可数的，否则"多个维度"与"多看两眼"不可区分。2. `evidence`：证据的位置（人读的那一句）。3.
-    `evidence_sha256`：证据文件的内容 hash。这一条是`temp/verify-audit-forge.txt` 那次伪造复现之后加的：在那之前`evidence` 只被检查"非空"，
+    `evidence_sha256`：证据文件的内容 hash。这一条来自伪造复现：没有它，`evidence` 只被检查"非空"，
     于是编一个不存在的路径也算通过 ——谁能写 `.noai-approvals.json`，谁就能给清单自己报 clean。有了它，"证据存在且没被换过"至少变成一件可机器核对的事：门在判定时会重算那个文件的 sha256，
     不一致 ⇒ 这一条判 `unknown`（没查成）。它不是签名：能改台账的人一样能把 hash 改成新值。它挡住的是"顺手编一句证据"，挡不住"有权限的人蓄意伪造"（后者需要外部锚，见 §6.1）。4. `sha256`：
     审的是哪一版。与台账条目不一致的审计一律不算数 ——否则"改了之后再补一次审计"就能批准一版没人看过的内容。
@@ -1446,7 +1446,7 @@ class LedgerEntry:
             and not negative_control_problem(a.negative_control)
             # `H-1d`：`scope` 必须说清这次覆盖了哪些符号
             and bool(a.scope.strip())
-            # `R5-R1b-7`：`at` 必须可解析且不在未来（它此前是唯一"写了就信"的字段）
+            # `at` 必须可解析且不在未来（它是唯一一个"写了就信"的字段）
             and not audit_timestamp_problem(a.at)
             # `H-1e` / `c-16` / `R5-R1b-4`：署名者未知时，"我不是作者"这句话必须
             # 由审计者说出来，而且必须是一句话（一个 `x` 与一段声明不可区分）
@@ -1502,8 +1502,8 @@ class LedgerEntry:
         批准数按不同姓名计，不按记录条数计：同一个人签两次不是"2 名 reviewer"，而 FC-27 要求 2 名正是为了拿到互相独立的复核（1 名 reviewer 与"作者自己再看一遍"在结构上无法区分）。
         重复的签名记录照实保留（它是事实），只是不增加批准数。
 
-        `R5-R1b-3`：这里曾经用 `r.name not in out` 做原始字符串比较，一处归一化都没有 —— 与 `H-1a` 给审计者标识加的那一套不对称，也与 `_parse_reviewer`会
-        strip 首尾空白不一致。实测：同一条台账的 `reviewers` 手写成`reviewer-甲` / `ｒｅｖｉｅｗｅｒ－甲` / `reviewer-甲\\u200b` 三种写法（同一个人），门打印"已有 3
+        这里必须用归一化后的名字比较：用 `r.name not in out` 做原始字符串比较，一处归一化都没有，与 `_parse_reviewer` 会
+        strip 首尾空白不一致。同一条台账的 `reviewers` 手写成`reviewer-甲` / `ｒｅｖｉｅｗｅｒ－甲` / `reviewer-甲\\u200b` 三种写法（同一个人），门打印"已有 3
         名不同 reviewer 完成逐行走查（通路 = 人审）"并 approved。判据五的核心恰恰是"人必须亲自签字"，所以人审通路必须与机审通路用同一把刀（`normalize_subject`，
         见它的模块级契约注释）。
         """
@@ -1594,8 +1594,8 @@ def _parse_reviewer(item: object, *, where: str) -> Reviewer:
 NEGCTL_MIN_CHARS = 40
 #: 负控里必须出现其中之一 —— 它回答的是"拿什么去比"（改前那一版 / 已知坏样本 / 注入）。
 NEGCTL_MARKERS = ("改前", "HEAD", "坏样本", "注入", "git show", "旧版", "before", "negative")
-#: `R5-R1b-6`：负控还必须写出看见了什么 —— 只写"拿改前那一版去比"是半句话。
-#: 旧判据只剩"长度 ≥ 40 + 出现标记词"，于是 `'改前' + '啊'*60`、`'negative ' + 'x'*60`、
+#: 负控还必须写出看见了什么 —— 只写"拿改前那一版去比"是半句话。
+#: 只判"长度 ≥ 40 + 出现标记词"时， `'改前' + '啊'*60`、`'negative ' + 'x'*60`、
 #: `'负控：（此栏无内容）' + '占位'*20 + ' 改前'` 三种空话全部通过 —— 而"负控真的跑过一次"
 #: 与"只写了标记词"在字符串上仍然不可区分（代码注释自己承认 `n/a` 不可区分，这一条把
 #: 范围说全：受控词表 + 长度同样不可区分）。
@@ -1638,14 +1638,14 @@ def _content_chunks(text: str) -> tuple[set[str], int, int]:
 
 def negative_control_problem(text: str) -> str:
     """负控内容的判据：合格返回空串，否则返回"为什么不合格"。写入侧（`record_audit`）与判定侧（`clean_audits`）共用这一处实现 ——两处各写一份就会出现"写得进去、判不出来"，那是本项目记过的老毛病。
-    判据（`R5-R1b-6` 改的就是这里）——四条都要满足：长度 ≥ :data:`NEGCTL_MIN_CHARS`（`H-1c` 的原始门，保留）；2. 出现 :data:`NEGCTL_MARKERS` 之一：拿什么去比（改前那一版 / 坏样本
+    判据 —— 四条都要满足：长度 ≥ :data:`NEGCTL_MIN_CHARS`（原始门，保留）；2. 出现 :data:`NEGCTL_MARKERS` 之一：拿什么去比（改前那一版 / 坏样本
     / 注入）；3. 出现 :data:`NEGCTL_OBSERVED_MARKERS` 之一：比出来看到了什么（`报红` / `被拒` / `失败` / `退出码`…）；4. 这段文字不是重复堆出来的（`_content_chunks`：不同片段 ≥:
     data:`NEGCTL_MIN_DISTINCT_CHUNKS`、同一片段重复 ≤:data:`NEGCTL_MAX_CHUNK_REPEATS` 次、不同片段占比 ≥ :data:`NEGCTL_MIN_CHUNK_RATIO`）。为什么第 1、2
-    条之上还要第 3、4 条：旧判据只剩"长度 ≥ :data:`NEGCTL_MIN_CHARS` +标记词"，于是 `'改前' + '啊'*60`、`'negative ' + 'x'*60`、`'负控：（此栏无内容）' + '占位'*20 + ' 改前'`
-    三种空话全部通过 —— 而"负控真的跑过一次"与"只写了标记词"在字符串上仍然不可区分。第 3 条要求写清"比出了什么"；第 4 条挡住"同一段占位字重复到够长"。门只加不减：四条缺一不可。口径说明（口径裁决②，2026-09-27）：
-    本函数一度去掉过"长度 ≥ 40"这条门（为了让 `tests/test_noai_gate_audit_channel.py` 里那句 13 字符的夹具负控`'改前会报出 network'` 能写进去）。那个理由不成立：那个测试文件今天已经有 13
-    条红（根因是它的写入侧夹具没给 `--audit-scope`，与负控判据无关；实测对着改前那一版`noai_gate.py` 跑也是 13 failed）。为一个本来就在红的夹具放宽判据，等于拿门的强度换一个假绿，所以长度门已恢复。代价如实登记：
-    那个夹具现在连"负控不合格"这一层也过不去，预期由专门修 `tests/test_noai_gate_audit_channel.py` 的批次把夹具连同样例一起改成合规写法。残余（如实登记）：负控仍然只是自述 —— 写足这四条的人一样可以没跑过。
+    条之上还要第 3、4 条：只判"长度 ≥ :data:`NEGCTL_MIN_CHARS` + 标记词"时， `'改前' + '啊'*60`、`'negative ' + 'x'*60`、`'负控：（此栏无内容）' + '占位'*20 + ' 改前'`
+    三种空话全部通过 —— 而"负控真的跑过一次"与"只写了标记词"在字符串上仍然不可区分。第 3 条要求写清"比出了什么"；第 4 条挡住"同一段占位字重复到够长"。门只加不减：四条缺一不可。
+    长度门不能为一个夹具放宽：
+    为一个本来就在红的夹具放宽判据，等于拿门的强度换一个假绿。
+    残余（如实登记）：负控仍然只是自述 —— 写足这四条的人一样可以没跑过。
     判据能把"看起来像负控的空话"与"说清了怎么比、比出了什么"分开，不能证明它真跑过。
     """
     t = str(text or "").strip()
@@ -1761,7 +1761,7 @@ def normalize_subject(name: str) -> str:
 def _reviewer_identity_problem(name: str) -> str:
     """`Reviewer.name` 的判据：这个姓名能不能作为一个"人"的标识（合格 ⇒ 空串）。
 
-    `R5-R1b-3`：人审通路的 `--reviewer` 曾经只查"非空"，于是同一个人把名字写成
+    人审通路的 `--reviewer` 不能只查"非空"：同一个人把名字写成
     全角 / 带零宽 / 带尾空格，门就会打印"已有 3 名不同 reviewer 完成逐行走查"并批准。
 
     为什么是"至少要有一个字母或数字"而不是"只允许 ASCII"：`.noai-approvals.json`
@@ -1869,13 +1869,13 @@ def _assignment_target_names(node: object) -> set[str]:
 
 
 def _identifiers_of(text: str) -> set[str]:
-    """被审对象里出现的标识符集合（`R5-R1b-5` 修正后的口径）。修的是什么：这里曾经是纯词法扫描——`re.finditer(r"[A-Za-z_][A-Za-z0-9_.]{2,}")`把 Python
+    """被审对象里出现的标识符集合。纯词法扫描——`re.finditer(r"[A-Za-z_][A-Za-z0-9_.]{2,}")`把 Python
     关键字与内建名也算成标识符（实测 `import` / `return` / `int` / `def` /`math` 全算），于是
     `--audit-scope 'import return int'` 能过`_evidence_cross_check` ③ —— 那三个词与"这次审计覆盖了哪些符号"毫无关系，而每个 `.py` 文件里都有它们。
     判据的强度因此从"自称覆盖的符号必须落在那个文件上"退化成"必须落在那类文件都会有的词上"。现在的口径分两层：被审对象是能被 `ast` 解析的 Python ⇒ 取定义处的名字：`def` / `class` /
     `import` / `import … as` / 赋值目标（含 `self.z` 的属性名）。`scope` 里要求"这个文件真的定义了它"比"这个文件反正有这个词"强得多。
     2. 解析不了（非 `.py`、或语法不完整）⇒ 退回词法扫描，但排除
-    `keyword.kwlist` 与 `builtins`。它比第 1 层弱，却比原来那版强：至少 `import` / `return` / `int` 不再算标识符。
+    `keyword.kwlist` 与 `builtins`。它比第 1 层弱，却足以让 `import` / `return` / `int` 不再算标识符。
 
     调用方（`_evidence_cross_check` ③ 与 `dimension_independence_problem` 判据 2）仍然只要求"至少一个 token 落在这个集合上"—— 逐条要求会把
     `scope`写成"全文"/"小节名"的合规形态一并拒掉。
@@ -1985,7 +1985,7 @@ def _read_target_text(path: str, repo: str | Path | None) -> str:
     """把被审对象读成文本；读不到 ⇒ 空串（`R7-R1d-1`）。
 
     为什么要抽成一个函数、并在 `evaluate_approval` 里提前调一次：那几处
-    "观察面报数"此前用的是没有目标文本的弱口径（`reuse_across` 自指），而判定口径用的是
+    "观察面报数"必须与判定口径用同一份文本：没有目标文本时只能退回 `reuse_across` 自指，而判定口径用的是
     读到的文本 ⇒ 同一份报告里两个分支两种口径（能批准的那一支过滤、未批准的那一支不过滤）。
     读到一次、两处共用，是"同一个概念只有一处实现"的落地。
 
@@ -2067,10 +2067,10 @@ def dimension_independence_problem(
     它修的是 `R5-R1b-1`：`MIN_DISTINCT_DIMENSIONS` 数的是提交者自填的 `dimension`（受控词表里的一员），`c-17` 的 `counted_audits` 只挡"同一份文件重复计数"（键 = 归一化路径 + 内容
     hash），挡不住"同一份观察复制 N 份、每份改一个字节"（hash 各不相同）⇒ 一名审计者单独就能供满 3 个维度（`temp/reaudit5-R1b-solo.txt` 对照 B ⇒ approved），门槛退化成"≥2 个不同名字的字符串"。
     四条判据都机器可判定（合格返回空串）。0 一名审计者不能独占门槛：贡献维度最多的那一名，它的维度数超过 `max_share = max(1, ceil(require / 2))` ⇒ 报红（`require = 3` 时一人至多 2 个 ⇒ 3
-    个维度必须来自 ≥2 名审计者；理由同"人审为什么要 2 名 reviewer"）。`R6-R1d-4` 修正：此前只挡完全独占（`len(owned) == len(dims)`）；现在直接判 `len(owned) > max_share` ——
+    个维度必须来自 ≥2 名审计者；理由同"人审为什么要 2 名 reviewer"）。直接判 `len(owned) > max_share`（只挡完全独占太弱）——
     这是变严。
     1 同一名审计者的多条记录不许共用同一个观察面：观察面 = `_observation_key(scope)`（`scope` 归一化后的符号 token 集合）—— 同一个人、同一批符号、换一个 `dimension` 字符串不产生第二次独立观察。
-    2 计数的维度必须落在两两不相交的观察面上（口径裁决①，2026-09-27）：把每个 `scope` 归一化成符号集合，数出最多能挑出多少个两两不相交的观察面（贪心、按集合大小升序），要求 ≥ 维度数 —— 比"数不同字符串"强：`VALUE bump` 与
+    2 计数的维度必须落在两两不相交的观察面上：把每个 `scope` 归一化成符号集合，数出最多能挑出多少个两两不相交的观察面（贪心、按集合大小升序），要求 ≥ 维度数 —— 比"数不同字符串"强：`VALUE bump` 与
     `VALUE` 是两个字符串、两个相交集合，算一次。`R6-R1d-5` 修正：观察面只由被审对象里真实存在的标识符构成（`_observation_tokens(scope, target_text)`）——
     否则与观察对象无关的自由文本就能把"两两不相交"撑开，报数 `independent_observation_surfaces` 会照那个虚高的面数说话。
     3 落点真实：至少一条记录的 `scope` token 是被审对象里真实存在的标识符（`_identifiers_of(target_text)`）；只要求至少一条（逐条会把 `scope` 只有"全文"这类短词的合规写法拒掉，而写入侧
@@ -2210,7 +2210,7 @@ def _parse_audit_at(at: str) -> _dt.datetime | None:
 def audit_timestamp_problem(at: str, *, now: _dt.datetime | None = None) -> str:
     """`at` 的判据（`R5-R1b-7`）：时间戳必须可解析、且不许来自未来。合格 ⇒ 空串。
 
-    为什么要有它：`at` 曾经是整个通路里唯一一个"写了就信、读回不校验"的字段（实测：把门的时钟拨到 2099 写进去，`record_audit` 照收，判定侧从不读它）。
+    为什么要有它：`at` 不能"写了就信、读回不校验"：把门的时钟拨到 2099 写进去，`record_audit` 会照收，而判定侧从不读它。
     台账里"谁在什么时候走查的"这句话因此在时间维度上没有下限 —— 对"这次审计是否发生在本轮冻结窗口内"这类问题，台账给不出可判定的答案。判据刻意只有两条（其余窗口留给外部锚，不在这里造）：必须能被
     `datetime.fromisoformat` 解析（ISO-8601；容忍末尾 `Z`）；
     - 不许晚于 `now`（判定时刻）—— 未来时间戳只可能来自时钟错乱或手改台账，
@@ -2723,11 +2723,11 @@ def evaluate_approval(
     out["dirty_audits"] = [a.to_dict() for a in entry.audit_dirty]
     out["distinct_auditors"] = len(entry.distinct_auditors())
     out["distinct_dimensions"] = list(entry.distinct_dimensions())
-    # `R7-R1d-1`：被审对象在这里就读（此前它只在下面机审通路那一支里读）——
-    # 理由：观察面报数必须在所有分支都用同一处口径。此前那两处报数发生在读对象之前，
+    # 被审对象在这里就读：观察面报数必须在所有分支都用同一处口径。
+    # 若报数发生在读对象之前，
     # 只能退回"自指"弱口径（`reuse_across`），于是同一份报告里出现两种口径：
     # 能批准的那一支过滤掉无关 token、未批准的那一支不过滤（未批准才是操作者
-    # 真正要去处理的那一档）。读到一次、分支共用，是 `R6-R1d-5` 想修的那件事的完整版。
+    # 真正要去处理的那一档）。读到一次、分支共用。
     # 读不到 ⇒ 空串 ⇒ 判据 3 会报"没查成"，不在这里折叠成"没问题"。
     target_text = _read_target_text(entry.path, repo)
     # 这两个字段描述的是"记录本身写了什么"，必须在每一条输出里都出现（无论
@@ -2748,7 +2748,7 @@ def evaluate_approval(
     out["audit_timestamps"] = audit_timestamp_report(entry.counted_audits)
 
     if got >= need:
-        # `FINAL-R1d-04` / `FINAL-R1d-05`：人审通路此前没有内容锚，而且输出只说
+        # 人审通路的输出必须说清内容锚：只报
         # "N 名不同 reviewer" —— 读的人无从知道这 N 个名字是不是同一个主体、
         # 也看不出这条批准有没有可核的走查记录。这里把两件事一次说清：
         # 逐条核证据锚（有锚但文件不在/内容变了 ⇒ 这一条不算数，落到下面重算），
@@ -2787,7 +2787,7 @@ def evaluate_approval(
     #
     # 单条的 `audit_timestamp_problem` 只判"能不能解析 / 是不是未来"（那一层在
     # `clean_audits` 里已经生效）；整串倒挂（先记 03:00、再记 02:00、最后记 01:00）
-    # 此前没有任何一层看得见 —— 门照样 approved，而输出会把时间戳按写入顺序打成递减。
+    # 没有这一层时门照样 approved，而输出会把时间戳按写入顺序打成递减。
     # 放在这里而不是 `clean_audits` 里是刻意的：`clean_audits` 是逐条的字段判据，
     # 次序是整串的性质，混进那一层会让"这一条本身合不合规"这句话变得不可判定。
     order_problem = audit_timestamps_not_monotonic(entry.counted_audits)
@@ -2826,7 +2826,7 @@ def evaluate_approval(
         # `R6-R1d-5` / `R7-R1d-1`：观察面只由被审对象里真实存在的标识符构成 ——
         # 无关的 scope token 不许把"两两不相交"的报数撑大。这两处与上面那两处
         # 用的是同一个 `target_text`、同一处实现 ⇒ 同一份报告里没有两种口径
-        # （此前这里"覆盖"上面那一处，未批准的那一支就没有覆盖到）。
+        # （若这里"覆盖"上面那一处，未批准的那一支就没有覆盖到）。
         surfaces = sorted({_observation_key(a.scope, target_text) for a in counted} - {""})
         out["observation_surfaces"] = surfaces
         out["independent_observation_surfaces"] = _disjoint_face_count(counted, target_text)
@@ -2843,12 +2843,12 @@ def evaluate_approval(
         # ---- 证据锚核对（`temp/verify-audit-forge.txt` 那次伪造复现的修法）
         #
         # 进到这一支说明"记录本身合规且够 2×3、维度各有独立观察面"。但记录合规 ≠ 证据在。
-        # 旧版只检查 `evidence` 非空，于是编一个不存在的路径也走得到 `approved`。
+        # 只检查 `evidence` 非空的话，编一个不存在的路径也走得到 `approved`。
         # 现在逐条重算证据文件的 sha256：读不到、或与登记值不一致 ⇒ 整体 unknown。
         #
-        # `R1-AN-4` 的延伸（第 5 轮重审的真 CLI 正控当场撞出来的同一类错误）：交叉核对里那条
-        # "scope 的符号必须是被审对象里真实存在的标识符"要用到被审对象的文本，
-        # 而判定侧这里原来没读它、没传下去 ⇒ `target_text` 默认空串 ⇒ 标识符集合恒为空 ⇒
+        # 交叉核对里那条
+        # "scope 的符号必须是被审对象里真实存在的标识符"要用到被审对象的文本，判定侧必须读它并传下去；
+        # 漏了它 ⇒ `target_text` 默认空串 ⇒ 标识符集合恒为空 ⇒
         # 每一条合规审计都被判 `unknown / audit_evidence_unverifiable`
         # （写入侧有牙、判定侧读不到 —— 与 `R1-AN-1` 是同一个毛病：改了一侧，另一侧没接）。
         ev_problems = _check_audit_evidence(entry.clean_audits, repo, target_text)
@@ -3044,11 +3044,11 @@ def check_approvals(
 
     # ---- clean 的措辞必须与这一批实际的通路一致
     #
-    # 旧版无论哪条通路放行都逐字写"各 ≥2 名不同 reviewer 完成逐行走查"，而机审放行时
-    # `reviewers` 是空的 —— 于是报告在说假话（`temp/verify-audit-forge.txt` 那次复现里，
-    # 两个假 auditor 名就让门打印了那句"逐行走查"）。
-    # 下一条是"本仓库不是 git 仓库"：那是上一版留下的错误事实（本仓库的 `.git` 在上一级，
-    # `--git` 能正常返回改动集），留着它会让人以为 `--git` 不可用。
+    # 不能无论哪条通路放行都写"各 ≥2 名不同 reviewer 完成逐行走查"：机审放行时
+    # `reviewers` 是空的 —— 报告就在说假话（
+    # 两个假 auditor 名就能让门打印那句"逐行走查"）。
+    # 不能写"本仓库不是 git 仓库"：本仓库的 `.git` 在上一级，
+    # `--git` 能正常返回改动集；那句话会让人以为 `--git` 不可用。
     by_human = [a for a in approvals if a.get("approval_reason") == REASON_APPROVED
                 and a.get("distinct_reviewers", 0) >= REQUIRED_APPROVALS_ON_HIT]
     by_audit = [a for a in approvals if a.get("approval_reason") == REASON_APPROVED
@@ -3332,7 +3332,7 @@ def add_approval(
         authored_basis=entry.authored_basis,
         change_note=entry.change_note,
         reviewers=(*entry.reviewers, record),
-        #  `audits` 必须原样带过去。旧版在这里漏了它，而 `LedgerEntry` 的默认值是 `()` ⇒
+        #  `audits` 必须原样带过去：漏了它，而 `LedgerEntry` 的默认值是 `()` ⇒
         # `--approve` 会把该条已记录的机审静默清空（人签一次字，机审记录就没了）。
         # 这类"重建对象时漏一个字段"的缺陷不会报错：台账照样是合法 JSON。
         audits=entry.audits,
@@ -3376,10 +3376,10 @@ def record_audit(
     """给某一条追加一个机器审计记录（第二条通路）。与 `add_approval` 的三处刻意不同：不校验 `--scope` 非空（审计有 `dimension` 就够具体了）；但仍然要求 `evidence` 与
     `negative_control` 非空 —— 后两者才是这条通路的信用来源。2. 允许记 `findings`：审计发现了问题就如实记下来，门会把这一条判成"不放行"并把 finding 原文列出来。不许把 finding 藏掉只记一次"通过"。
     3. 仍然绝不写 `reviewers`：两条通路分列，机器审计永远不冒充人。台账自指：与 `add_approval` 一样的拒绝（`c-19`）：目标路径就是台账自己时，本函数与 :
-    func:`add_approval` 一样拒绝写入（`LedgerError`）。此前这条拒绝只有 `add_approval` 有，于是"往台账自己那条记录里追加一次审计"写得进去 —— 放行确实仍被
+    func:`add_approval` 一样拒绝写入（`LedgerError`）。若这条拒绝只有 `add_approval` 有，"往台账自己那条记录里追加一次审计"就写得进去 —— 放行确实仍被
     `evaluate_approval` 的自指分支挡住，所以它不是一条提权路径；但两条通路的前置条件不对称本身就是缺陷：下一次有人把 `evaluate_approval`那一层兜底拿掉时，能写进去的那一条就会变成真的口子。修法取对称的那三行，
-    而不是给两条通路各写一套判据。证据锚（`evidence_path` + `evidence_sha256`）为什么是必需的：这一条是 2026-09-26 那次伪造复现（`temp/verify-audit-forge.txt`）之后加的：旧版只检查
-    `evidence` 非空，于是编一个不存在的路径也能让门报 clean。现在写入时就要满足：`evidence_path` 相对仓库根（也接受绝对路径）能读到；- 它的内容 hash 与 `evidence_sha256` 一致（不给
+    而不是给两条通路各写一套判据。证据锚（`evidence_path` + `evidence_sha256`）为什么是必需的：它来自伪造复现 —— 只检查
+    `evidence` 非空时，编一个不存在的路径也能让门报 clean。现在写入时就要满足：`evidence_path` 相对仓库根（也接受绝对路径）能读到；- 它的内容 hash 与 `evidence_sha256` 一致（不给
     `evidence_sha256` 时由本函数算）。并且若 `evidence` 这句描述指向的是一个读不到的文件，本函数也会拒绝 ——那是"证据写在别处"的常见形态，让它在写入时就暴露，而不是等门在判定时才发现（那时报的是 unknown，
     处置却发生在很久以后）。回执链：写入成功后本函数会 `append_receipt()` 追加一环（只增、带前环 hash）。链自身不通过校验时拒绝写入 —— "记不下来的一次审计"不该进台账，否则台账会先显示一条没有回执的记录，
     而回执链的缺失要等到判定时才发现。
@@ -3441,7 +3441,7 @@ def record_audit(
     # ---- 证据锚：文件必须存在，hash 必须对得上（不给 hash 就现场算）
     ev_rel = str(evidence_path).strip()
     # `R1-4`：解析规则只有 `_resolve_evidence_file` 一处实现 —— 写入侧与核对侧
-    # 必须走同一个函数。这里原先内联了同一段"仓库根优先、其次 cwd"的逻辑，
+    # 必须走同一个函数。内联同一段"仓库根优先、其次 cwd"的逻辑时，
     # 两份实现当时行为一致，但改一份漏一份就会出现"写得进去、核不出来"，
     # 而那种分裂没有任何测试会响（正是 `temp/verify-audit-forge.txt` 那一族）。
     ev_file = _resolve_evidence_file(ev_rel, repo)
@@ -3504,7 +3504,7 @@ def record_audit(
             "（`H-1e`：实测 16 条里有 13 条 `authored=unknown`，旧代码在那种情况下永不触发。）"
         )
     # `R5-R1b-4`：独立性声明的内容判据与判定侧共用 `_independence_problem` 一处实现
-    # （曾经只判 non-empty ⇒ `--independence x` 三条全过）。
+    # （只判 non-empty 时 `--independence x` 三条全过）。
     if not author_known:
         ind_problem = _independence_problem(independence)
         if ind_problem:
@@ -3595,7 +3595,7 @@ def record_audit(
         "distinct_auditors": len(updated.distinct_auditors()),
         # `R6-R1d-6`：这里的口径与 `evaluate_approval` 的输出必须同类型同值 ——
         # 两处都报"这次记录之后有哪些维度"：这里给列表，另给一个显式的计数名，
-        # 免得调用方（与读报告的人）把 `len(...)` 当成字段本身（曾经 CLI 打的是
+        # 免得调用方（与读报告的人）把 `len(...)` 当成字段本身（否则 CLI 会打
         # `len(info['distinct_dimensions'])`，而 JSON 里同名字段是列表）。
         "distinct_dimensions": list(updated.distinct_dimensions()),
         "distinct_dimension_count": len(updated.distinct_dimensions()),
@@ -3619,10 +3619,10 @@ def record_audit(
         "evidence_sha256": actual_ev_sha,
         "receipt": receipt,
     }
-    # `R6-R1d-6`：这里曾经多一个 `"_target_text": target_text` —— 一个只给 CLI 一层用的
-    # 私有中间量塞在公开返回值里（注释自己写着"内部用"）。后果不是"多一个键"，
+    # 不要把 `"_target_text"` 这类只给 CLI 一层用的私有中间量塞进公开返回值：
+    # 后果不是"多一个键"，
     # 而是 `info` 同时承担"给人看的报告 / 给调用方的读数 / 给写侧判据的中间量"三种职责，
-    # 于是 `_run_record_audit` 改签名时漏改接收变量就变成 `R6-R1d-1`（整条 CLI 通路 NameError）。
+    # 于是 `_run_record_audit` 改签名时漏改接收变量就变成整条 CLI 通路 NameError。
     # 现在 `_run_record_audit` 自己读被审对象（与判定侧同构），这个私有键不再存在。
     return Ledger(
         ledger_version=LEDGER_VERSION, generated_at=_now_iso(now), entries=entries
@@ -4115,7 +4115,7 @@ def _run_record_audit(args: argparse.Namespace, root: Path) -> int:
         return _fail(args, "record-audit", f"台账写入失败（**审计没有落盘**）：{exc}")
 
     a = info["appended"]
-    # `R6-R1d-6`：这里曾经用 `len(info['distinct_dimensions'])`（先取长度再格式化），
+    # 不要用 `len(info['distinct_dimensions'])`（先取长度再格式化）：
     # 而 `evaluate_approval` 的 JSON 里同名字段是列表 —— 同一条通路的同名字段
     # 两处口径不一致。现在用写入侧显式给出的计数名，两处口径逐字相同。
     dimension_count = info["distinct_dimension_count"]
@@ -4133,8 +4133,8 @@ def _run_record_audit(args: argparse.Namespace, root: Path) -> int:
         "`dimension` 是自填标签，判定侧还要问『这些维度背后有几个**不同的 scope 落点**、"
         "是不是同一名审计者独占』（`R5-R1b-1`）",
     )
-    # `R6-R1d-1` / `R6-R1d-6`：写入侧这一处判据要自己读被审对象 ——
-    # 此前它读的是 `info["_target_text"]`（`record_audit` 的内部中间量：
+    # 写入侧这一处判据要自己读被审对象 —— 不要读内部中间量（
+    # 例如 `info["_target_text"]`：
     # 变量名从 `updated` 换成 `new_ledger` 时那一行被漏改 ⇒ 整条 CLI 通路
     # 以未捕获的 `NameError` 结束）。现在与判定侧同构：自己 `_target_path()` + 读文本。
     target_text = ""
@@ -4299,7 +4299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         # 两个落点都按 `--root` 显式解析出来，不交给 `load_manifest(None)` /
         # `parse_agents_block(None)`：那两条路走 `project_root()`，是"这个脚本恰好
         # 在哪个目录"，与 `--root` 无关（`check_paths` 的注释与 `--check-ledger`
-        # 都是显式拼 `repo`，一致性检查此前是唯一没跟上的）。
+        # 都是显式拼 `repo`，一致性检查也必须跟上）。
         manifest_p = Path(args.manifest) if args.manifest else (root / MANIFEST_NAME)
         agents_p = Path(args.agents_md) if args.agents_md else (root / AGENTS_NAME)
 
@@ -4332,7 +4332,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"一致：{MANIFEST_NAME} 与 {AGENTS_NAME} 的清单逐条相同")
         # 一致性检查是前置门，但它有自己的码表（与改动集判定模式不是同一套）：
         # 0 = 一致；1 = 不一致（门坏了，必须人改清单）；2 = 没查成（读不到清单/AGENTS.md）。
-        # 原来这里把"不一致"返回 2，而 2 在本项目里是 unknown（没查成）—— 同一个码背两个
+        # 不能把"不一致"返回 2：2 在本项目里是 unknown（没查成），同一个码背两个
         # 互相排斥的含义，调用方就没法据码行事。
         return 0 if not diffs else 1
 
