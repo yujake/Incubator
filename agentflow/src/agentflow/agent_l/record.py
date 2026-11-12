@@ -2,86 +2,51 @@
 """角色 L 的动作 `record`：把一次形式化检查登记成一行 `experiments`（`method="formal"`）。
 
 口径：`experiments` 表是「机器核验与实验台账」—— E 写 numeric / symbolic /
-exhaustive_search（数值与穷举实验），L 写 formal（Lean 核验）。所以本模块写的是这张
-台账里 formal 那一类机器核验行，不是数值实验：两者的凭据形态（检查器原话 vs 程序脚本）
-与读法都不同，共用一张表是账面的口径，不是把两类证据混成一件事。
+exhaustive_search，L 写 formal。本模块写的是 formal 那一类机器核验行，不是数值实验：
+两者的凭据形态（检查器原话 vs 程序脚本）与读法都不同，共用一张表是账面的口径，
+不是把两类证据混成一件事。
 
-## 这一格补的是什么缝
+这一格补的缝：L 的形式化产出原先进不了证据链 —— 它写了 `.lean`、跑了检查器、也说对
+了三态，可是台账里一行都没有，于是 `evidence_kind="proof"` 这一档只能由 E 产生。
+所以本格只做一件事：把"这次真的跑过的形式化检查"写成 `experiments` 的一行。
 
-业主 2026-10-22 的第二句施工单（逐字）：
+与 `formalize` 的分工（为什么两格而不是一格）：`formalize` 的产物是盘上的文件
+（`code/formal/<名>.lean` + sha256 + 检查器原话），`record` 的产物是台账里的一行。
+两者失败得不一样：`formalize` 可以写盘成功而检查器不在（结论 unknown）—— 那时文件
+是真的、行不该有；`record` 会自己现跑一次检查器，于是它可以独立于 `formalize` 被调用，
+也可以接在它之后复核同一份文件。合成一格会让"写没写盘"与"登记没登记"互相遮蔽，
+而它们正是要点名分开看的两件事。
 
-「L 的形式化产出今天进不了证据链：它写了 `.lean`、跑了检查器、也说对了三态，
-可是台账里一行都没有 —— 于是 `evidence_kind="proof"` 这一档在本框架里永远
-只能由 E 产生，而 E 的形式化面是从前那一条路。」
+为什么它自己现跑一次，而不是信调用方口述的读数：参数里的 `status` / `verified` /
+`checker` / `verifier_output` 是调用方看到的读数，本动作不信它们 —— 自己再跑一次
+检查器（走 `check_formal`，即"自检闸 + 桥接层"这条唯一实现），那四格只用于对账，
+不一致（更强）就受控拒绝 `reading_mismatch`，一个字节都不写。理由：`evidence_kind=
+"proof"` 的全部价值来自"那句话是检查器说的"；允许调用方把 `verified=True` 与一段
+现编的 `verifier_output` 交进来，这一档就成了可随手搬运的标签（`schema.Experiment` 的
+硬约束 2 / 2b 只拦"没有输出"与"输出绑错命题"，拦不出"这段输出跑没跑过"）。对账是
+这一格唯一能加在 schema 上面的东西。那四格也不能删 —— 它们是调用契约要求的读数，
+本动作的做法是"收下来、对账、写进去的是现跑的那一份"。
 
-所以这一格只做一件事：把"这次真的跑过的形式化检查"写成 `experiments` 表的一行。
+`checker` 那一格记下来 + 比版本号：它进 `observations.checker_claimed`，与现跑的真名
++ 版本并排；写了版本号而对不上 ⇒ 拒收（那是"另一台机器"的读数），只写泛称（`lean`）
+不拒。留着而不是删掉，是因为那一格是调用契约要求的，删掉等于把契约改窄；而留下来
+不记账，就是"一个收下来就扔的参数"，最容易骗过评审。
 
-## 它与 `formalize` 的分工（为什么两格而不是一格）
+它绝不碰 `statements`（"形式化 ≠ 审过"）：`record` 的写集只有 `experiments`
+（`specs/l.py::SPEC.write_set`），结构化地改不了任何命题行。`statements.
+evidence_kind="proof_review"` 仍然只能由 V 那一签支撑（`verify.py` 的
+`proof_review_without_verification` 是 error 级判据本体）；返回值里的
+`statement_evidence_kind_before` / `_after` 两格逐字相等是这个动作的不变量，机器可判
+（`tests/test_l_collab_and_secretary.py`）。
 
-`formalize` 的产物是盘上的文件（`code/formal/<名>.lean` + sha256 + 检查器原话）；
-`record` 的产物是台账里的一行。分成两个动作的理由是它们失败得不一样：
-
-- `formalize` 可以写盘成功而检查器不在（结论 unknown）—— 那时文件是真的，行不该有；
-- `record` 会自己现跑一次检查器（见下），于是它可以独立于 `formalize` 被调用，
-  也可以接在 `formalize` 之后复核同一份文件。
-
-把两者合成一格会让"写没写盘"与"登记没登记"这两个读数互相遮蔽，而它们正是业主
-点名要看的两件事。
-
-## 为什么它自己现跑一次，而不是信调用方口述的读数
-
-参数里有 `status` / `verified` / `checker` / `verifier_output` 四格 —— 它们是
-调用方看到的读数，本动作不信它们：
-
-1. 自己再跑一次检查器（走 `check_formal`，即"自检闸 + 桥接层"这条唯一实现）；
-2. 调用方那四格只用于对账：与现跑值不一致 ⇒ 受控拒绝 `reading_mismatch`，
-   一个字节都不写。
-
-`checker` 那一格的口径（`draft/146` D27，2026-10-23）：记下来 + 比版本号。
-此前它收下来既不比也不记（这一格是死的，而模块说"四格都用于对账" —— 声明与实现
-分家）。现在它进 `observations.checker_claimed`，并与现跑的真名 + 版本并排；
-写了版本号而对不上 ⇒ 拒收（那是"另一台机器"的读数），只写泛称（`lean`）不拒。
-为什么用"记进 observations + 对账"而不是"从形参表里删掉"：那一格是业主施工单
-逐字要求的调用契约（`status/verified/checker/output_sha256`），删掉等于把契约改窄；
-而留下来不记账，就是这一格今天的形态 —— 一个收下来就扔的参数最容易骗过评审。
-
-为什么不是"直接信"：`experiments.evidence_kind="proof"` 是整条证据链里最强的一档，
-它的全部价值来自"那句话是检查器说的，不是某个模型/某段脚本说的"。允许调用方把
-`verified=True` 与一段现编的 `verifier_output` 交进来，这一档就成了可随手搬运的标签
-（`schema.Experiment` 的硬约束 2 / 2b 拦的是"没有输出"与"输出绑错命题"，拦不出
-"这段输出到底跑没跑过"）。对账这一步是这一格唯一能加在 schema 上面的东西。
-
-为什么不干脆不要那四格：业主的施工单逐字要求这一行动带 `status/verified/checker/
-output_sha256` —— 那四格是读数，必须出现在调用契约里；本动作的做法是
-"收下来、对账、写进去的是现跑的那一份"。给的与跑的一致时，两者逐字相同。
-
-## 它绝不碰 `statements`（"形式化 ≠ 审过"）
-
-`record` 的写集只有 `experiments`（`specs/l.py::SPEC.write_set`），结构化地
-改不了任何命题行。所以"一次机器核过的形式化"不会让某条命题升档：
-
-- `statements.evidence_kind="proof_review"` 仍然只能由"V 那一签"支撑
-  （`verify.py` 的 `proof_review_without_verification` 是 error 级的判据本体）；
-- 本动作的返回值里带 `statement_evidence_kind_before` / `statement_evidence_kind_after`
-  两格 —— 它们是同一行写前写后的读数，逐字相等是这个动作的不变量，
-  而它是机器可判的（判据：`tests/test_l_collab_and_secretary.py`）。
-
-## 三态与落库口径（与 E 保留下来的那份形式化实现逐条同源）
-
-`experiments` 那一行的 `result` / `evidence_kind` / `negation_kind` / `exit_code`
-按检查器的三态映射（同一套映射，不是第二份口径）：
-
-| 检查器 | `evidence_kind` | `result` | `negation_kind` |
-|---|---|---|---|
-| `verified` | `proof` | `supports` | `not_proved` |
-| 查了没通过（`compile_error` 等） | `heuristic` | `inconclusive` | `not_proved` |
-| 没查成（`timeout` / 无后端 / 自检不过） | `heuristic` | `inconclusive` | `not_searched_here` / `no_local_evidence` |
-
-映射本体在 `agent_e._support` 的 `_FORMAL_REASON_BY_TOOL_REASON` 与
-`agent_e/check_formal.py` 的那一份实现里（E 的 formal 动作 2026-10-23 晚已摘掉，
-这里指的是被保留下来的那份实现），本模块
-不抄第二份：它直接调 `build_experiment`（同一个装配函数），只把"这一行属于
-哪条命题、哪一版源码"这几格换成 L 自己的读数。
+三态与落库口径（与 E 保留下来的那份形式化实现逐条同源）：`experiments` 那一行的
+`result` / `evidence_kind` / `negation_kind` / `exit_code` 按检查器的三态映射 ——
+`verified` ⇒ `proof` / `supports` / `not_proved`；查了没通过 ⇒ `heuristic` /
+`inconclusive` / `not_proved`；没查成（timeout / 无后端 / 自检不过）⇒ `heuristic` /
+`inconclusive` / `not_searched_here` 或 `no_local_evidence`。映射本体在
+`agent_e._support._FORMAL_REASON_BY_TOOL_REASON` 与 `agent_e/check_formal.py` 那一份
+实现里，本模块不抄第二份：它直接调 `build_experiment`，只把"这一行属于哪条命题、
+哪一版源码"这几格换成 L 自己的读数。
 """
 from __future__ import annotations
 
@@ -116,15 +81,13 @@ _RECORD_KEYS: tuple[str, ...] = (
     "evidence_kind", "result", "negation_kind", "exit_code", "verifier_output",
     "statement_evidence_kind_before", "statement_evidence_kind_after",
     "verification_required", "detail", "problems", "reason",
-    # 2026-10-22 晚（业主裁定：形式化那一位要指明路径）：这一行验的是哪一份证明、
-    # 那份正文的指纹、以及"这个号是谁选的"。四格都随返回值给出 —— 它们是
-    # `experiments.observations` 里同一批字段的读数面。
+    # 这一行验的是哪一份证明、那份正文的指纹、以及"这个号是谁选的"。四格都随返回值
+    # 给出 —— 它们是 `experiments.observations` 里同一批字段的读数面。
     "proof_no", "path_id", "proof_sha256", "path_source",
-    # `draft/146` D27（2026-10-23）：受控拒绝要能被派发层认出来。
-    # 此前拒绝只写在 `recorded=False` + `reason` 里，而那两格 `_end_from_payload`
-    # 一个都不读 ⇒ 一次"框架正确地说了不"在 `tasks.outcome` 上落成 `ok`（三档同形）。
-    # 所以拒绝那一支必须自报 `refused=True` + 受控的 `refusal_reason`（与
-    # `formalize` 的拒绝同形：`refused` 是第三态位，不是 `unknown`）。
+    # 受控拒绝要能被派发层认出来：`recorded=False` + `reason` 那两格
+    # `_end_from_payload` 一个都不读，只写它们的话，一次"框架正确地说了不"会在
+    # `tasks.outcome` 上落成 `ok`。所以拒绝那一支必须自报 `refused=True` + 受控的
+    # `refusal_reason`（与 `formalize` 的拒绝同形：`refused` 是第三态位，不是 unknown）。
     "refused", "refusal_reason",
 )
 
@@ -174,7 +137,7 @@ class _Record:
         前两个位置参数是绑定（哪条命题、哪份产物），其余是读数与对账项。
         返回值的键集合见 :data:`_RECORD_KEYS`（每一条分支上都成立）。
 
-        ## 这一行绑的是"哪一份证明"（业主 2026-10-22：「要指明对哪个路径做了形式化验证」）
+        ## 这一行绑的是"哪一份证明"
         `proof_no` 是这一趟验的那一份证明（`#p1` 是行上的 `proof_text`，`#p2` 起在
         `proofs` 清单里）。规矩与 `formalize` 逐条相同：号不在册 ⇒ `proof_path_not_found`；
         多路径没给号 ⇒ `proof_path_unspecified`，一行都不写；只有一份证明时缺省就是它。
@@ -331,9 +294,9 @@ class _Record:
             "status_source": "caller" if status not in (None, "") else "checker",
             "downgraded": bool(fresh_verified and not effective_verified),
             "checker": checker_label,
-            # `draft/146` D27：调用方口述的那台检查器记下来（不是默默丢掉）。
-            # 与 `checker`（现跑那一台的真名 + 版本）并排放，读的人一眼看得出
-            # "它自称跑在哪台机器上、实际跑在哪台"。空串 = 调用方没声明（不是撒谎）。
+            # 调用方口述的那台检查器记下来（不是默默丢掉）。与 `checker`（现跑那一台
+            # 的真名 + 版本）并排放，读的人一眼看得出"它自称跑在哪台机器上、实际跑在
+            # 哪台"。空串 = 调用方没声明（不是撒谎）。
             "checker_claimed": str(checker or ""),
             "output_sha256": sha256_of_bytes(output.encode("utf-8")),
             "statement_id": sid,
@@ -341,7 +304,7 @@ class _Record:
             "declaration_name": checker_name,
             "code_hash": code_hash,
             "recorded_by": self.actor,
-            # ---- 路径四格（业主 2026-10-22：「要指明对哪个路径做了形式化验证」）。
+            # ---- 路径四格。
             # `proof_sha256` 是"这次形式化验的是哪一份正文"的指纹：B 的登记那条路
             # （`register_statement`）把它抄进 `bits.evidence.formal_by_proof[证明号]`，
             # 读侧拿它与现行正文比 —— 不符就是"验过、过期了"（stale），不是"验过"。
@@ -425,10 +388,8 @@ class _Record:
     def _statement_row(self, sid: str) -> tuple[Mapping[str, Any] | None, str]:
         """按号取一条 `statements` 行：`(行, 没有时的人话)`。
 
-        2026-11-09：按号定位改走查口（`statementledger.by_id`，口径一）。改前这里
-        手写「读一次全表再线性找」，并在注释里写明理由是「不新造一个按主键查的入口
-        （多一个读法就多一处能漂的口径）」—— 那条理由现在由查口兑现：按主键查的实现
-        只有一处，各角色（含 L）都问它，不再各写一份。
+        按号定位走查口（`statementledger.by_id`）：按主键查的实现只有一处，各角色
+        （含 L）都问它，不再各读一次全表、各写一份线性找。
         """
         if not sid:
             return None, "没给 statement_id ⇒ 登记不了（这一行必须绑定到台账里的一条命题）"
@@ -445,9 +406,9 @@ class _Record:
     def _record_refuse(self, reason: str, detail: str, **fields: Any) -> dict:
         """受控拒绝（固定键集合 + `recorded=False` + `refused=True` + 一行原因）。
 
-        `refused` / `refusal_reason` 是给派发层看的（`draft/146` D27）：`record` 的
-        六条拒绝理由码（`statement_not_found` / `reading_mismatch` / …）是这一格的细一档，
-        不在 `schema.REFUSAL_REASONS` 里；行上落 `invalid_params`（词表定义正是"参数 /
+        `refused` / `refusal_reason` 是给派发层看的：`record` 的这几条拒绝理由码
+        （`statement_not_found` / `reading_mismatch` / …）是这一格的细一档，不在
+        `schema.REFUSAL_REASONS` 里；行上落 `invalid_params`（词表定义正是"参数 /
         前置条件不满足：这次调用本身不成立"），细一档留在 `reason` 与 `detail` 里。
         """
         assert reason in RECORD_REASONS or reason in (
@@ -496,15 +457,11 @@ def _readings_mismatch(*, given_status: Any, given_verified: Any, given_output: 
     - 给了 `verifier_output` 而它与现跑的那段不是同一段 ⇒ 不一致（拒绝：那是一段
       来路不明的话，而 `evidence_kind="proof"` 的全部价值就在"这句话是检查器说的"）。
 
-    `checker` 的判据（`draft/146` D27，2026-10-23 补）：比版本号，不比写法。
-    此前这里明写"checker 刻意不比"，于是那个形参收下来既不比也不记（那一格是死的）。
-    现在的口径是三条：
-
-    - 没给（空）⇒ 不比，也不拒：它是可选读数，缺席不是谎；
-    - 给了但没有版本号（`lean` / `Lean checker`）⇒ 不比：那是泛称，不是更强的声称；
-    - 给了版本号而现跑那一台读得到版本且不同 ⇒ 不一致（拒收：这一行写进去的会是
-      "另一台机器"的读数，而 `params["checker"]` 与调用方口述从此分家、台账上看不出来）。
-      现跑版本读不到（`checker_label` 只有名字）时也不拒 —— 那是"没读成"，不是"不一致"。
+    `checker` 的判据：比版本号，不比写法。口径三条：没给（空）⇒ 不比也不拒（可选
+    读数，缺席不是谎）；给了但没有版本号（`lean` / `Lean checker`）⇒ 不比（泛称不是
+    更强的声称）；给了版本号而现跑那一台读得到版本且不同 ⇒ 不一致（拒收：这一行写进去
+    的会是"另一台机器"的读数，而 `params["checker"]` 与调用方口述从此分家、台账上看
+    不出来）。现跑版本读不到（标签只有名字）时也不拒 —— 那是"没读成"，不是"不一致"。
     """
     if str(given_status or "") == "verified" and not fresh_verified:
         return f"调用方说 status='verified'，现跑是 {fresh_status!r}"
