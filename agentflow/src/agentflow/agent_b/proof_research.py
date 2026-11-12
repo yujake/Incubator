@@ -1,25 +1,19 @@
 # -*- coding: utf-8 -*-
-"""B 的「把严重的证明难点升级给 D 开展研究」这一格（业主 2026-10-22 晚裁定第四句）。
-
-## 裁定原文（逐字）
-
-> 「若缺陷严重，B 应通知 D 开展研究处理证明难点。」
+"""B 的「把严重的证明难点升级给 D 开展研究」这一格。
 
 三条落点，缺一条这一句就还是口号：
 
-1. 边：`specs/b.py` 的 `edges` 里有 `D` —— B 本来就够不到 D（那之前 B 的出边是
-   `C / H / V`），这一条是为这句话单独加的边，没有顺带放宽别的边；
-2. 落点：D 的收件箱（`agent_loop.send_message`，标题前缀 `研究请求`）——
-   与 L 的汇报同一条通道、同一套准入（`agent_loop.message_admission`）；
+1. 边：`specs/b.py` 的 `edges` 里有 `D` —— 这一条是为"升级给 D"单独加的边，没有顺带
+   放宽别的边；
+2. 落点：D 的收件箱（`agent_loop.send_message`，标题前缀 `研究请求`）—— 与 L 的汇报
+   同一条通道、同一套准入（`agent_loop.message_admission`）；
 3. 判据：只有 `severity="research"` 才写。普通缺陷（`normal`）什么都不写 ——
-   "打扰 D"本身是一条要被守住的边界（否则 D 的收件箱会退化成一张杂事清单，
-   而"哪一件真的需要研究"就没人读得出来）。
+   "打扰 D"本身是一条要被守住的边界（否则 D 的收件箱会退化成一张杂事清单，而
+   "哪一件真的需要研究"就没人读得出来）。
 
-## 谁判严重
-
-B。这一格收的是 B 给的 `severity`，它替 B 判 —— "路线本身不成立"这种判断是从证明
-内容来的，不由框架猜。`proofreport.SEVERITIES` 把它钉成两档受控值，
-于是"没有 severity"与"severity 普通"分得开。
+谁判严重：B。这一格收的是 B 给的 `severity`，它替 B 判 —— "路线本身不成立"这种判断
+是从证明内容来的，不由框架猜。`proofreport.SEVERITIES` 把它钉成两档受控值，于是
+"没有 severity"与"severity 普通"分得开。
 """
 from __future__ import annotations
 
