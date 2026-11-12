@@ -1337,10 +1337,14 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     signed_now = body
     matched_no = 0
     matched_text = ""
+    matched_sha = ""
     proofs = _VR.proof_list(row)
     for no, one in proofs:
-        if _sign_sha(one) == signed_now:
-            matched_no, matched_text = int(no), str(one)
+        one_sha = _sign_sha(one)
+        if one_sha == signed_now:
+            # 这一行的 sha 就是命中条件用的那一个（`proof_list` 的正文一律是 `str`），
+            # 下面那一格不再把同一段正文哈希第二遍。
+            matched_no, matched_text, matched_sha = int(no), str(one), one_sha
             break
     # 册里现行那一版（最新一份带正文的证明行）：stale 档必须把它点名 ——
     # "册里是旧版"与"册里没有任何证明行"是两个问题，读数要能分开。
@@ -1349,7 +1353,7 @@ def sign_filing_reading(root: Any, *, manuscript_path: Any = "",
     per = dict(_EB.reviewed_by_proof(row) or {})
     reviewed = bool(per.get(matched_no, per.get(str(matched_no), False))) if matched_no else False
     stmt.update(proof_no=matched_no,
-                proof_sha256=(_sign_sha(matched_text) if matched_text else ""),
+                proof_sha256=(matched_sha if matched_text else ""),
                 reviewed=reviewed,
                 grade=str((_EB.bits_from_row(row) or {}).get("grade") or ""),
                 #: 册里带正文的证明行数 / 现行那一版的号与正文 sha（2026-11-08 六档收口）：
