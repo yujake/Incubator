@@ -558,7 +558,7 @@ def _checkpoint_spend(checkpoint: Any) -> dict[str, Any] | None:
     与"这一栏是 0"必须分得开。
 
     为什么判断权放在这里：页面要比"同一趟"的两个数，而"检查点有没有花销读数"
-    这件事此前在 TS 里判一次、在 Python 里没人判 —— 两个数一个来自这里、一个来自
+    这件事若在 TS 里判一次、Python 里没人判 —— 两个数一个来自这里、一个来自
     `runs[]`，谁都不许自己再猜一遍形状。
     """
     if not isinstance(checkpoint, Mapping):
@@ -603,7 +603,7 @@ def run_view(root: str | Path, sid: str) -> dict[str, Any]:
     `spend_usd`，它就与检查点那一格同源（都是这一趟自己的缝），那张并排卡从此永远绿 ——
     而它是这个数唯一的独立交叉验证。
 
-    为什么要有这两格（此前页面拿"整段会话每一趟之和"去比"一份检查点"）：会话跑过
+    为什么要有这两格（页面若拿"整段会话每一趟之和"去比"一份检查点"）：会话跑过
     两趟、或跑过子代理时两者结构上必然不等，于是页面恒挂一条红徽标"两处不一致"，
     而那两个数根本不是同一件事。跨趟的合计另有其数（`runs[]` 逐趟给），不许拿来比。
 
@@ -1061,7 +1061,7 @@ LEDGER_TASK_TRI_MISSING = "missing"
 #: - `conjectures` / `review_findings`：`schema.CITATION_PREFIXES` 里没有它们的引用前缀，
 #:   于是事件正文里没有一个能唯一定位的写法（裸六位号会误命中）。要让这两栏也有编号，
 #:   必须先在 `schema.CITATION_PREFIXES` 里登记 `conj:` / `find:` —— 那在禁改区
-#:   （`schema.py`，FC-27 人审），本批刻意不动；
+#:   （`schema.py`，FC-27 人审），这里刻意不动；
 #: - `handoffs`：手稿号是裸号（编号空间就是账本行号），同一个问题；
 #: - `secretary` / `checks` / `products`：秘书台账没有稳定的行编号，验收表是配置行
 #:   （`C1`–`C8`），六件产物是文件清单 —— 它们都不是"某一条写入"。
@@ -1425,7 +1425,7 @@ def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[st
     代价：一条命题读一遍旁支台账（`nontriviality_of` 的读法就是逐行扫）。命题行在
     真机上是个位数（p9b 7 行）、台账是几十行，一次请求的可接受代价就在这里。
     要再省就得在 `secretary` 那边加一个批量读口（一次读完建索引）—— 那会动一个
-    今晚刚变过的文件，本批刻意不动：这一层只搬运，不给别处添新的读法。
+    那会动 `secretary.py`，这里刻意不动：这一层只搬运，不给别处添新的读法。
     """
     from .. import statementbody as SB
 
@@ -5275,7 +5275,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 三个数、三套口径（84 的现场：signed_proofs=31、sign_files=3、recomputable_signs=2）：
       # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
       # `out/vsigns/*.json` 的文件数（含 issued.json 归档）；`recomputable_signs` 是
-      # 复算通过的凭据份数（D268 批 2 的"签数"唯一读数，前端本批改读它）。
+      # 复算通过的凭据份数（"签数"的唯一读数，前端读它）。
       ("signed_proofs", "number | null"), ("sign_files", "number | null"),
       ("recomputable_signs", "number | null"),
       ("gaps_missing_runs", "number | null"),
@@ -5461,7 +5461,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("quote_reason", "string"), ("evidence_kind", "string"),
       # `bits` 是五元证据位那一份对象（`evidencebits.bits_from_row` 的读数：
       # numeric / proof / reviewed / formal / audited + evidence / grade …），
-      # 不是数字。此前声明成 `number` ⇒ 类型面读不出 `bits.reviewed`（运行时能读，
+      # 不是数字。声明成 `number` 时类型面读不出 `bits.reviewed`（运行时能读，
       # 于是这条错误只在 `tsc` 那一侧沉默）。
       ("bits", "Record<string, unknown>"),
       ("status", "string"), ("derived_from", "string"), ("doc_id", "string"),
@@ -6447,7 +6447,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
 
 
 # ====================================================================== 11 文献库
-# 2026-10-24（D-57：业主「ui侧文献库无法读出，请确认」）。
+# 文献库这一节的来由：「ui侧文献库无法读出，请确认」。
 #
 # 现场：`literature` 表在盘上、行也在盘上，而 `readers` 里没有任何文献读数函数 ——
 # 前端「文献库」那格挂着的 reason 是「今天也没有别的端点给它」。所以页面读不出不是
@@ -6459,7 +6459,7 @@ def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
 # 判不出的不显示，但在 `problems` 里留一条 `admission_undecidable`（A 侧的实现问题，
 # 留痕不拦门）。
 #
-# 2026-10-24 追裁（原话「老工作区就是读不出来」）：判据只认候选台账那一格，不退回
+# 追裁（原话「老工作区就是读不出来」）：判据只认候选台账那一格，不退回
 # `literature.matched`；没有候选台账的工作区整面记「读不出来」（`count` 是 null，不是 0）。
 
 #: 这一面外壳里 `state` 的两档。为什么不是别处的 `tri` 三档：`state` 回答的是页面
@@ -6469,7 +6469,7 @@ LIBRARY_STATE_COMPUTED = "computed"
 LIBRARY_STATE_UNKNOWN = "unknown"
 
 #: 入库判据的唯一依据：`lit_candidates.status == "admitted"`。
-#: 业主 2026-10-24 的裁定（原话「老工作区就是读不出来」）：没有候选台账的工作区不许
+#: 业主的裁定（原话「老工作区就是读不出来」）：没有候选台账的工作区不许
 #: 退回 `literature.matched` 那一格 —— 那一格回答的是「这一篇是不是我要的那一篇」，
 #: 不是「它在不在库里」；拿一个近似的格子顶替唯一的那一格，入库与待入库就又混在一起了。
 ADMISSION_BASIS_CANDIDATE = "lit_candidates.status=admitted"
@@ -6484,7 +6484,7 @@ PROBLEM_LITERATURE_UNREADABLE = "literature_unreadable"
 PROBLEM_USES_UNREADABLE = "uses_unreadable"
 PROBLEM_ADMITTED_WITHOUT_ROW = "admitted_without_row"
 PROBLEM_DOWNLOAD_CLAIMED_ABSENT = "download_claimed_but_absent"
-#: 2026-10-26（Q16 第 ⑥ 条）：同一秒入库条数超过阈值的读数。信息格，不是门 ——
+#: 同一秒入库条数超过阈值的读数（Q16 第 ⑥ 条的那个 N）。信息格，不是门 ——
 #: 它不进 `_library_admission`、不改任何一条显示与否，只把"这一批看起来是整批搬进来的"
 #: 这件事留痕（真机 `projects/mp3-r3` 正是 10 条落在同一秒、`relevance` 48/48 全空）。
 PROBLEM_BULK_ADMISSION_SUSPECTED = "bulk_admission_suspected"
@@ -6596,7 +6596,7 @@ def _library_admission(row: Mapping[str, Any], *,
     另外两档现行值 `pending` / `rejected` 一律按「没入库」处置 —— 它们与 `admitted`
     分得开，正是这张表存在的理由。
 
-    2026-10-26（Q16）之后状态只有三态：盘上的历史档 `withdrawn` / `cleared` 由
+    现在状态只有三态：盘上的历史档 `withdrawn` / `cleared` 由
     `litstage.fold_legacy` 折成 `rejected`（+ `withdrawn_by_reviewer` / `over_cap`），
     所以它们本来就不是 `admitted`，这一格一个字都没改（业主 Q16 第 ④ 条：
     入库判据仍然只读 `status == "admitted"`）。这里刻意不引入"没有 relevance
@@ -6604,7 +6604,7 @@ def _library_admission(row: Mapping[str, Any], *,
     两个问题；把后者改严会让真机上那 33 条已登记的文献从文献库页上消失。
 
     没有候选行 ⇒ 判不出（返回 `None`）：调用方不显示它，并在 `problems` 里留一条
-    `admission_undecidable`。业主 2026-10-24 的裁定：不退回 `literature.matched`
+    `admission_undecidable`。业主的裁定：不退回 `literature.matched`
     —— 那一格回答「这一篇是不是我要的那一篇」，与「它在不在库里」是两个问题；
     拿它顶替入库判据，等于用一个近似的格子冒充唯一的那一格。
 
@@ -6756,14 +6756,14 @@ def library_face(root: str | Path) -> dict[str, Any]:
     `{checked, state, reason, data, problems}` —— 五键在每一档上都在（三态纪律：
     同一面同一批键，页面不必先判有没有这一格才敢读）。
 
-    ## 三态（业主 2026-10-24 的口径）
+    ## 三态（业主的口径）
 
     - 文献表不在盘上 / 表是坏 JSON ⇒ `checked=False` + `state="unknown"` + `reason`
       （不是 0 条：折成 0 会让页面说「库里一篇文献都没有」，而真相是这一面没读成）；
     - 表读到了、入库判据也在用 ⇒ `checked=True` + `state="computed"`，`data.count`
       是真数字（可以是 0：那是「读到了，这一档里 0 条入库」）；
     - 表读到了、可是没有候选台账（`lit_candidates` 表不在、或表在但一行候选都没有）
-      ⇒ `checked=True` 但 `state="unknown"` + `reason`（业主原话「老工作区就是读不出来」：
+      ⇒ `checked=True` 但 `state="unknown"` + `reason`（业主「老工作区就是读不出来」：
       正式入库的判据只有候选台账那一格，没有它就读不出来，`count` 是 null 不是 0）。
 
     ## 只算正式入库的那一档
@@ -6813,7 +6813,7 @@ def library_face(root: str | Path) -> dict[str, Any]:
     candidates = {str(row.get("lit_id")): row for row in cand_rows
                   if str(row.get("lit_id") or "")}
     if cand_state in ("absent", "unreadable") or not cand_rows:
-        # 业主 2026-10-24：「老工作区就是读不出来」。三档都落这里：表不在盘上 /
+        # 业主：「老工作区就是读不出来」。三档都落这里：表不在盘上 /
         # 表读不出来 / 表在但一行候选都没有。它们都不许折成"0 条入库" ——
         # 正式入库的判据只有候选台账那一格，没有它就没法判，`count` 只能是 null。
         data["admission_tri"] = (TRI_UNREADABLE if cand_state == "unreadable"
@@ -6880,7 +6880,7 @@ def library_face(root: str | Path) -> dict[str, Any]:
                     "候选台账说这几篇已入库，而 literature 表里没有它们的行："
                     + "、".join(dangling))
 
-    # 2026-10-26（Q16 第 ⑥ 条）：同一秒整批入库的读数。信息格，不是门 ——
+    # 同一秒整批入库的读数（Q16 第 ⑥ 条）。信息格，不是门 ——
     # 它加在、也只加在 `problems` 里，`works` 与 `count` 一个字都不改。
     for item in _bulk_admission_problems(cand_rows):
         add_problem(item["code"], item["detail"])
