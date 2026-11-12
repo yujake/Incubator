@@ -2924,7 +2924,7 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
         lines.append("- 没读成的：" + "；".join(problems[:4])
                      + (f"（另 {len(problems) - 4} 条）" if len(problems) > 4 else ""))
     if report_defects:
-        # D3 批 2：程序性 / 文风那几档不是"要 F 改"的缺陷（正文没被指出数学缺陷），
+        # 程序性 / 文风那几档不是"要 F 改"的缺陷（正文没被指出数学缺陷），
         # 但它们也不许静默消失 —— 点名几条、说清义务在谁身上。
         lines.append(
             f"- 另 {len(report_defects)} 条只是报告层面（程序性/文风："
@@ -2937,15 +2937,14 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
 
 def _v_delivery_lines(root: str | Path, details: Sequence[Mapping[str, Any]],
                       *, store: Any = None) -> list[str]:
-    """「这几条判决送到 F 手上没有」那一段（业主 2026-11-01：回执不落文件、送达现算）。
+    """「这几条判决送到 F 手上没有」那一段（回执不落文件、送达现算）。
 
     为什么加在 `v_rejections_digest` 里而不是新造一份摘要：板项的开项与幂等键本来就长在
     这一条链上（`V_VERDICT_ITEM_PREFIX` + `<label>@<verification_id>`），送达读数离开
     这份明细就得多读一遍台账；两处各读一遍，迟早对同一批判决给出两个数。
 
-    三档分开报（`delivered` / `dispatched_only` / `not_dispatched`）—— 81 的真机读数就是
-    "8 条判决、4 条送达、后 4 条连板项都没有"（F 03:54 之后再没起跑），
-    把三档折成一个"未送达"会让"没人投"与"投了没人读"在读数上同形。
+    三档分开报（`delivered` / `dispatched_only` / `not_dispatched`）—— 把三档折成一个
+    "未送达"会让"没人投"与"投了没人读"在读数上同形。
     """
     if not details:
         return []
@@ -2981,7 +2980,7 @@ def _v_delivery_lines(root: str | Path, details: Sequence[Mapping[str, Any]],
 
 def global_v_rejections_text(root: str | Path, store: Any = None, *,
                              limit: int = 8) -> tuple[str, list[str]]:
-    """「全局」的 V 打回读数（`(文本, 问题)`）—— M 侧那一格（业主 2026-11-01 的取证 A/D）。
+    """「全局」的 V 打回读数（`(文本, 问题)`）—— M 侧那一格。
 
     为什么 M 需要它、而 F 那一份不够：`v_rejections_digest` 问的是"「我名下」被 V 判
     「有毛病」的证明"，而 M 名下没有命题、也没有证明 —— 于是它那一格永远渲染成缺省句
@@ -3026,11 +3025,11 @@ def global_v_rejections_text(root: str | Path, store: Any = None, *,
 def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = "F",
                        details: Sequence[Mapping[str, Any]] = (),
                        called_by: str = "V", note: str = "") -> dict[str, Any]:
-    """把 V 的意见写进收件人的收件板（业主 B-3：递到人，不只加读数）。
+    """把 V 的意见写进收件人的收件板（递到人，不只加读数）。
 
     「V 的意见」两档：V 自己判了「有毛病」的（`via="verdict"`），以及 V 的结论词写
-    「成立」而秘书语义判定说"这一回复指出了缺陷"的（`via="secretary_fault"`，
-    业主 2026-10-29 的 B 段接到 C 段）。两档都走同一条通道、同一个幂等键前缀，
+    「成立」而秘书语义判定说"这一回复指出了缺陷"的（`via="secretary_fault"`）。
+    两档都走同一条通道、同一个幂等键前缀，
     措辞按 `via` 分开（见下面「两档明细」那一节）。
 
     ## 用的就是既有通道（不新造机制）
@@ -3051,13 +3050,13 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
     - 开项抛异常 ⇒ 那一条进 `problems`，其余照开（一条坏不许带走整批）；
     - 已经在了 ⇒ 进 `existing`（不重开，但读得出来它早就在那儿）。
 
-    ## 「洗过的文本」那一档（业主 2026-10-29 的 C 段）
+    ## 「洗过的文本」那一档
     `details[*]["washed"]` 非空 ⇒ 这一项递出去的是秘书洗过的意见
     （`Secretary.wash_v_reply` 的 `text`），而不是 V 的原话：
     「V 的意见经秘书清洗后交给 F」。板项的形状一个字不变（`kind="notice"` /
     `expects="ack"` 是 `ITEM_KINDS` / `ITEM_EXPECTS` 的冻结面，不许新增档），
     变的只是 `detail` 的正文。
-    `washed` 为空 ⇒ 逐字回到改前那一版（老调用点 / 洗不出来那一批），
+    `washed` 为空 ⇒ 递的是 V 的原话（老调用点 / 洗不出来那一批），
     并对读的人写明"这一条是 V 的原话（没洗过）"——不许让"洗过"与"没洗过"
     在板上长得一样（那会让一次洗稿失败静默变成一次转达）。
 
@@ -3089,7 +3088,7 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
         return out
     have = {str(r.get("input_key") or "") for r in board if str(r.get("input_key") or "")}
     for d in details:
-        # 幂等键（业主 2026-11-01 裁定）：`v-verdict@<label>@<vid>@<收件人>`。
+        # 幂等键：`v-verdict@<label>@<vid>@<收件人>`。
         # 为什么带收件人：同一 vid 可能先落 outbox 后被补投；"两者都收"这一档被否，
         # 所以键要回答"这一条投给这个收件人了没有"。旧盘上的项没有收件人后缀
         # （`v-verdict@<label>@<vid>`）⇒ 只作为读旧盘的兼容键，不许用它写新项。
@@ -3101,18 +3100,18 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
             out["existing"].append(key)
             continue
         if legacy in have:
-            # 改前投过的那一条（81 的 4 条就是这一档）：不重开，读数照旧。
+            # 旧盘上投过的那一条（没有收件人后缀）：不重开，读数照旧。
             out["existing"].append(legacy)
             continue
         step = (f"第 {d['defect_step']} 步" if d.get("defect_step") else "步号没读到")
-        # 业主 2026-10-29 的 C 段：`washed` 非空 ⇒ 递的是秘书洗过的意见（V 的原文不转达）。
-        # 空 ⇒ 逐字回到改前那一版，并写明"这一条没洗过"（洗过与没洗过不许在板上长得一样）。
+        # `washed` 非空 ⇒ 递的是秘书洗过的意见（V 的原文不转达）。
+        # 空 ⇒ 递 V 的原话，并写明"这一条没洗过"（洗过与没洗过不许在板上长得一样）。
         washed = str(d.get("washed") or "").strip()
         what = washed or str((d.get("finding") or {}).get("detail") or "")
         via = str(d.get("via") or "verdict")
         if via == "secretary_fault" and not washed:
             # 第二道（第一道在读侧）：这一档没有洗过的文本 ⇒ 不投递。
-            # 理由就是 C 段那一句：洗不出来就不输出 V 的原文；这一档的"原文"里没有
+            # 理由就是洗稿纪律：洗不出来就不输出 V 的原文；这一档的"原文"里没有
             # 一条 V 自己判过的缺陷，递过去只会变成一次未洗的转达。
             out["problems"].append(
                 f"{d['label']}：秘书判了 fault 而这一条没有洗过的文本 ⇒ 不投递"
@@ -3131,11 +3130,11 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
                     f"{'True' if d.get('in_sync') else 'False'}")
             summary = f"V 的意见指出缺陷：{d['label']}（错在{step}）"
         elif via == "report":
-            # ---- D3 批 2（业主裁定 ③④⑥）：程序性 / 文风那一档的回执 -------------
+            # ---- 程序性 / 文风那一档的回执 ---------------------------------
             #
             # 它不是"要 F 改"的意见（正文没被指出数学缺陷），所以措辞与上面两档不同：
             # 说清"本轮无有效判定"、说清"不需要改稿"、说清"可原样再送同一 sha"。
-            # `attempts` / `last_at` 让反复重送可见（裁定 ④：不设趟数上限）。
+            # `attempts` / `last_at` 让反复重送可见（不设趟数上限）。
             _kind = str(d.get("fault_kind") or "") or "程序性"
             _attempts = d.get("attempts")
             _last_at = str(d.get("last_at") or "")
@@ -3167,7 +3166,7 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
                     f"这一签盖的就是现在这一份（proof_text 与现文一致）："
                     f"{'True' if d.get('in_sync') else 'False'}")
             summary = f"V 判「有毛病」：{d['label']}（错在{step}）"
-        # 附加读数（167，业主 2026-11-01）：替人送审那一档必须出现在收件人读得到的地方。
+        # 附加读数：替人送审那一档必须出现在收件人读得到的地方。
         # 放在正文最前面而不是末尾：`set_item_detail` 只留前 400 字，接在末尾等于丢掉。
         if note:
             body = f"{note}\n{body}"
