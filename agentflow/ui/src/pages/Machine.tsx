@@ -14,9 +14,8 @@
  * 3. `lean_ready` / `can_do_formal` 与 `provers.checked` 一样是**三态**：
  *    `null` 渲染成 `unknown`，不许折成 `false`。
  *
- * 一处**已经接上的缺口**（2026-10-12 更正）：`draft/74 §3.5` 第 6 行要的
- * "活着的 loop / 进程"此前没有端点，那一栏渲染成 `not_applicable` 并写明；
- * 现在 `GET /api/live`（在飞面）给了它，卡片改成指路「在飞」页 ——
+ * 一处**已经接上的缺口**：`draft/74 §3.5` 第 6 行要的"活着的 loop / 进程"由
+ * `GET /api/live`（在飞面）提供，卡片指路「在飞」页 ——
  * 说明文与读数说同一件事，别留一句"没有端点"的旧话在页面上。
  */
 import { useState } from "preact/hooks";
@@ -56,7 +55,7 @@ const FIELDS: ReadonlyArray<{ key: string; hint: string }> = [
  * `ALLOWED_EDGES`）里，而"每个角色用哪把 key"这件事对 M 同样成立。 */
 const ROLES: readonly string[] = ["A", "B", "C", "D", "E", "F", "G", "H", "V", "M"];
 
-/** 按角色那一档要填的键（业主 2026-10-14：「允许不同角色智能体用不同模型厂商的不同 api key」）。
+/** 按角色那一档要填的键（业主：「允许不同角色智能体用不同模型厂商的不同 api key」）。
  *
  * 只给"换厂商 / 换端点 / 换模型 / 换 key"四格：逐角色配全套等于让人在十个角色上抄五遍
  * 同一份配置，而梯子（`models.<角色>` → `models.default` → `model`）本来就是为"只改一格"
@@ -85,7 +84,7 @@ function roleCell(settings: SettingsReading, role: string): Record<string, unkno
 /** 按角色那一档现读的值（`settings.models.<角色>.<键>`）。 */
 function roleValue(settings: SettingsReading, role: string, key: string): string {
   if (key === "api_key") {
-    // key 那一格不回填（2026-10-27）：读数里它是掩码（后端 MASKED_KEY），
+    // key 那一格不回填：读数里它是掩码（后端 MASKED_KEY），
     // 回填等于让人在输入框里看到一个假 key —— 动一下它就把掩码当 key 写回去。
     // 这一条与 `presetOf` 对 `model.api_key` 的例外是同一条纪律（key 只写不读）。
     return "";
@@ -104,11 +103,11 @@ function field(rec: Record<string, unknown>, key: string): string {
 
 /** 设置文件里某一格现在的值（按 `段.键` 取；取不到 ⇒ 空串 = 盘上没设过）。
  *
- * 为什么要它（业主 2026-10-13：「设置面板启动后应该同步设置文件里的参数，不然空空的就像
+ * 为什么要它（业主：「设置面板启动后应该同步设置文件里的参数，不然空空的就像
  * 啥都没设置过一样」）：这一格的读数后端早就在给（`GET /api/machine` 的 `settings` 三段），
  * 但输入框初值一直是空串 ⇒ 打开面板看到的永远是"没配"。
  *
- * ⚠️ 2026-10-13（R90）改一处**要命的**地方：这里不许走 `cell()`。`cell("")` 的口径是
+ * ⚠️ 这里有一处**要命的**地方：不许走 `cell()`。`cell("")` 的口径是
  * `unknown`（那一套是给**读数表**用的），可这一格的返回值会直接进输入框的 `value` ——
  * 于是盘上没写的四格（`coq_bin` / `isabelle_bin` / `lean_enabled` / `projects_dir`）
  * 全被填上了字面量 `unknown`，用户一按「写这些设置」就把 `lean_enabled=unknown` 写进盘上：
@@ -153,7 +152,7 @@ function pairs(rec: Record<string, unknown>): Array<{ k: string; v: string; raw:
  * 为什么不用 `cell()` 的默认读法：它的口径是"空串 ⇒ `unknown`"（三态纪律：读不到 ≠ 空），
  * 可这一格读到的是一个**盘上没写**的键 —— 文件已经读出来了（这一卡只有在
  * `settings_tri` 不是 unreadable 时才渲染）。把"没写"显成 `unknown`，用户看到的就是
- * 「lean_enabled unknown」，像是开关读不出来 —— 业主 2026-10-13 就是这么读的
+ * 「lean_enabled unknown」，像是开关读不出来 —— 业主就是这么读的
  * （原话：「lean 开关网页上没法真的开关」）。
  */
 function settingsCell(value: unknown): string {
@@ -173,7 +172,7 @@ const SWITCH_SOURCES: Record<string, string> = {
 /** 初值：设置文件里的现值；`api_key` 那几格例外（读数是掩码，回填等于写回它）。 */
 function presetOf(settings: SettingsReading, key: string): string {
   if (key === "model.api_key" || key.endsWith(".api_key")) {
-    // 2026-10-27：`model.api_key` 之外，`secretary.api_key` 与每个角色那一档的
+    // `model.api_key` 之外，`secretary.api_key` 与每个角色那一档的
     // `api_key` 也是掩码（后端 MASKED_KEY）—— 三处都是同一份读数里的掩码，
     // 所以按后缀一律不回填。
     return "";
@@ -266,11 +265,11 @@ export function Machine() {
         title="Lean / Mathlib"
         subtitle={`lean_ready=${triBool(m.lean_ready)} · can_do_formal=${triBool(m.can_do_formal)}`}
       >
-        {/* 开关那一行（R90）：业主 2026-10-13「lean 开关网页上没法真的开关」。
-            原先这一页只显示 `lean_ready`（这台机器装没装 Lean）与 `can_do_formal`
-            （装了能不能用），**不显示 `lean_enabled`（用户设的开关）** —— 于是页面上
-            根本看不出开关是开是关，改它只能去下面那个自由文本框里手打 true/false。
-            两条事实必须同框（`readers.py` 里写过同一句：只看后者会把"关掉了"读成"没装"）。 */}
+        {/* 开关那一行（R90）：业主「lean 开关网页上没法真的开关」。
+            只有 `lean_ready`（这台机器装没装 Lean）与 `can_do_formal`（装了能不能用）
+            时，页面上看不出 `lean_enabled`（用户设的开关）是开是关，改它只能去下面
+            那个自由文本框里手打 true/false。两条事实必须同框（`readers.py` 里写过
+            同一句：只看后者会把"关掉了"读成"没装"）。 */}
         <div class="readings">
           形式化开关{" "}
           <b>{leanOn === null ? "unknown（这一格没查成）" : leanOn ? "开" : "关"}</b>
@@ -410,7 +409,7 @@ export function Machine() {
  写的是机器级设置文件（上面那一格里的路径）。每一格的初值就是设置文件里的现值（打开即可见；model.api_key 只写不读，
  所以那一格不回填）。逐格改，清空某一格表示"这一格不动"
  （settings.write_settings 的口径是只写给了值的键）。model.api_key 落盘、
- 回执里恒为 ***（key 只写不读）。lean_enabled 那一格是业主 2026-10-12 的
+ 回执里恒为 ***（key 只写不读）。lean_enabled 那一格是业主的
  省钱开关，取值只认 true / false；缺省是关。
         </div>
         <div class="readings">
@@ -435,7 +434,7 @@ export function Machine() {
             </label>
           ))}
         </div>
-        {/* 按角色那一档（业主 2026-10-14）：十个角色各四格，留空 = 沿用下一档。
+        {/* 按角色那一档（业主）：十个角色各四格，留空 = 沿用下一档。
             表单键是三段的 `models.<角色>.<键>` —— 后端 `handle_settings` 对
             `models` 那段再切一刀（`writes.py`），其余段仍是两段。 */}
         <div class="readings">
@@ -446,7 +445,7 @@ export function Machine() {
           // `settings.models.<角色>.configured` / `.source`）。为什么要显出来：
           // 不显的话，只有点开每一格才知道哪个角色真的配了自己的 key ——
           // 而"哪个角色在用哪一把"正是这一页要回答的问题。
-          // 名字叫 `slot` 而不是 `cell`（2026-10-27 业主裁定 W9）：`cell` 是从
+          // 名字叫 `slot` 而不是 `cell`：`cell` 是从
           // `components/Table` 导进来的那个读数渲染函数，这里一个局部变量把同名
           // 函数遮住 —— 今天没错用（对象不可调用，`tsc` 会红），但它是定时炸弹。
           const slot = roleCell(settings, role);
