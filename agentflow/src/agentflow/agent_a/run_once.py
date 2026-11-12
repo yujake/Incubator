@@ -1,12 +1,9 @@
-"""角色 A 的动作 `run_once`（`goal-7f5116c1` M6：从 `agent_a.py` 拆出来，逐字未改）。
+"""角色 A 的动作 `run_once`：处理至多一条待办请求。
 
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
-
-2026-10-20 业主口径（待新增文献列表）之后，上面那句"逐字未改"「不再成立」：
-本方法多了一段"先暂存、后入库"的接线（见 `agentflow/litstage.py` 的模块 docstring
-与 `stage_entries` / `admission_plan` 的说明）。原来那条判据是迁移期的临时锚点，
-它守的是"拆文件没有顺手改行为"；本轮是「业主明确要求的行为变更」，
-所以锚点让位给新判据（`tests/test_agent_a*.py` 与新判据文件）。
+"先暂存、后入库"的接线见 `agentflow/litstage.py` 的模块 docstring 与 `stage_entries` /
+`admission_plan` 的说明。拆文件的判据是"源码非空行与拆分前逐字相同"；这一条随后因为
+「广搜结果先进待新增列表、A 筛完再入库」的行为变更而让位给新判据
+（`tests/test_agent_a*.py`）—— 它守的是"不要顺手改行为"，而明确要求的行为变更不算。
 """
 from __future__ import annotations
 
@@ -54,9 +51,9 @@ def _hits_reading(hits: int, rows: Sequence[dict], *, registered: int) -> str:
     读数里必须有"命中数"与"理由码分布"两格：只给一个总数答不出"是被挡了
     还是丢了"，只给理由分布答不出"一共找回几条"。
 
-    2026-10-26（Q16）起多一格 `待裁 N 条`：A 的自动链路不再能整批入库
-    （候选没有 `relevance` 就进不了库），于是"入库 0 条"最常见的原因是
-    "这几条还在等 A 逐条判" —— 不写这一格，它就会与"全被重叠闸挡掉"同形。
+    还要有 `待裁 N 条`：A 的自动链路不再能整批入库（候选没有 `relevance` 就进不了库），
+    于是"入库 0 条"最常见的原因是"这几条还在等 A 逐条判" —— 不写这一格，它就会与
+    "全被重叠闸挡掉"同形。
     """
     declined = _declined_reason_counts(rows)
     distribution = ("、".join(f"{code}={n}" for code, n in sorted(declined.items()))
@@ -71,9 +68,9 @@ def _source_failure_reading(errors: Sequence[str], sources: Sequence[dict]) -> s
     """「哪几个源失败了」的一句话读数（没有源失败时返回空串）。
 
     为什么有命中也要写：`outcome=ok` 只说"至少登记了一篇"，它答不出
-    "这一问是不是还有源没交货"。改前这一档把 `last_error` 写成 `None`，
-    于是"两个源被限流、第三个源交回 1 篇"与"三个源都正常、其中两个 0 命中"
-    在盘上同形，而前者意味着这篇文献的证据面可能少了一半来源。
+    "这一问是不是还有源没交货"。不写这一格的话，"两个源被限流、第三个源交回 1 篇"
+    与"三个源都正常、其中两个 0 命中"在盘上同形，而前者意味着这篇文献的证据面
+    可能少了一半来源。
     """
     failed = [str(s.get("name") or "") for s in sources
               if str(s.get("status") or "") == "failed"]
@@ -101,7 +98,7 @@ class _RunOnce:
 
         三态纪律的落点：取不到请求时不返回"看起来正常的空结果"，而是把"没做"的原因原样带出来
         （`skipped_reason` 四选一，取值与优先级见 `_claim`）；计数（"做了多少"）与它正交，必须分别看。
-        2026-10-20 接线改成「先 stage 后 admit」（业主口径：广搜结果先进待新增列表，A 筛完再入库）：
+        本轮是「先 stage 后 admit」（广搜结果先进待新增列表，A 筛完再入库）：
         ① `litstage.stage_entries` 暂存每个候选（`batch=1`、槽位号只增不复用，不设条数上限）；
         ② `litstage.admission_plan`（`on_over_cap="truncate"`）判库配额与重叠 —— 本文件不重写一份；
         ③ `litstage.apply_settlement` / `write_report` 结算并写报告。
@@ -197,11 +194,11 @@ class _RunOnce:
                 plan = L.admission_plan(
                     self.store, request_id=req["request_id"], slots=slots,
                     on_over_cap="truncate", duplicate_branch_ok=True,
-                    # 2026-10-26（Q16）：这条路是"整批提交"（一次把这一轮暂存的全部候选
-                    # 搬进 literature），所以它要走同一道提交闸。而它暂存的候选
-                    # 没有 relevance（自动链路读不懂"为什么相关"）⇒ 闸会整批拒，
-                    # 一条也进不了库 —— 这是业主口径要的效果，不是回退：入库只能
-                    # 逐条判过（A 的模型动作），自动链路只负责把它们暂存进列表。
+                    # 这条路是"整批提交"（一次把这一轮暂存的全部候选搬进 literature），
+                    # 所以它要走同一道提交闸。而它暂存的候选没有 relevance（自动链路
+                    # 读不懂"为什么相关"）⇒ 闸会整批拒，一条也进不了库 —— 这是口径要
+                    # 的效果，不是回退：入库只能逐条判过（A 的模型动作），自动链路只
+                    # 负责把它们暂存进列表。
                     require_judged=True,
                 )
             admit_slots = [str(it["slot"]) for it in (plan or {}).get("admitted") or []]
@@ -210,10 +207,11 @@ class _RunOnce:
             # 没通过入库判断的候选不下载：它们是"待裁/已挡"的行，下载一份不会带来
             # 任何新信息，只会让 staging 里多出一堆永远不会被引用的字节。
             #
-            # 2026-10-26（Q16）那一个例外：这一篇已经在库里、只是缺文件的候选照样下载。
-            # 理由是两件事：入库（要逐条判过）与"给已登记的那一行补上字节"（`draft/30`
-            # §T0-10 的补下载）不是同一件事 —— 后者不新增任何 literature 行、也不改任何
-            # 候选行的状态。不把这一档捞出来，Q16 落地就会顺手砍掉补下载这条路。
+            # 那一个例外：这一篇已经在库里、只是缺文件的候选照样下载。
+            # 理由是两件事：入库（要逐条判过）与"给已登记的那一行补上字节"
+            # （`draft/30` §T0-10 的补下载）不是同一件事 —— 后者不新增任何 literature
+            # 行、也不改任何候选行的状态。不把这一档捞出来，自动链路落地就会顺手砍掉
+            # 补下载这条路。
             lit_rows_now = self.store.rows("literature")
             known_slots: set[str] = set()
             for entry, slot in zip(fresh_entries, slots):
@@ -357,10 +355,9 @@ class _RunOnce:
 
                 # ---- 结算候选行：入库成功的落 admitted；被重叠/登记挡掉的落 rejected；
                 # 超配额的落 rejected(over_cap)。「绝不物理删」（可追）。
-                # 注意 2026-10-26（Q16）之后最常见的结局不在这三类里：整批被判据
-                # 拦下（候选没有 relevance ⇒ `missing_relevance`）时，一行都不结算，
-                # 它们留在 pending 等 A 逐条判 —— 那一档由 `_hits_reading` 的
-                # 「待裁 N 条」如实报出来。
+                # 注意最常见的结局不在这三类里：整批被判据拦下（候选没有 relevance
+                # ⇒ `missing_relevance`）时，一行都不结算，它们留在 pending 等 A 逐条
+                # 判 —— 那一档由 `_hits_reading` 的「待裁 N 条」如实报出来。
                 if plan is not None:
                     for slot in admit_slots:
                         if slot not in lit_id_by_slot:
@@ -455,7 +452,7 @@ class _RunOnce:
                 # 因此恒为 0，把 `_claim()` 里真正数到的放弃条数覆盖成 0：
                 # 字段存在、名字合理、永远是 0 —— 典型的"看起来在统计、实际恒为假"。
 
-            # ---- 阶段 3（锁外）：写「委托报告」（业主 2026-10-20 第 3 条：这是交付物）。
+            # ---- 阶段 3（锁外）：写「委托报告」（报告是交付物，不是可选）。
             # 放在事务之后：报告写的是"这一轮结束时盘上的样子"，而盘上的样子由事务定。
             # 写失败不许吞掉整轮结果（文献已经落库了）—— 但它必须可见：
             # `ARunResult.note` 里有它，`reports/lit-<request_id>.md` 不在盘上也能查出来。
