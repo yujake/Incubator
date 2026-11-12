@@ -2974,7 +2974,7 @@ def _exit_badge(code: Any) -> str:
     """退出码徽标：0/1/2 对应本项目的三态，不许把 2 折成 1。
 
     0 = 成功产出（绿）· 1 = 查过了、发现问题（红）· 2 = 没查成（黄）。
-    第一版写成 `success if code == 0 else failed`，于是"没 key ⇒ 退出码 2"被画成了
+    写成 `success if code == 0 else failed` 的话，"没 key ⇒ 退出码 2"会被画成
     红色的 failed —— 那正是本项目反复强调不许折叠的那一档：
     它说的是"这一次没查成"，要做的动作是去配 key 或重试，而不是去查结论。
     """
@@ -2989,9 +2989,9 @@ def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: f
                         store: Any = None):
     """按角色造一个模型缝（key 与端点一律来自环境变量）。
 
-    `store` 给定时，缝同时把每次调用记进 `usage_ledger`（`draft/37` §64）：
-    `run-agent` 这条路此前「没有任何地方记账」，钱只活在内存与会话事件里 ——
-    于是账本对一次真花了 0.289069 美元的运行报"0.000000"，而按账本判上限的
+    `store` 给定时，缝同时把每次调用记进 `usage_ledger`：
+    不给它记账的话，钱只活在内存与会话事件里 ——
+    账本会对一次真花了钱的运行报"0.000000"，而按账本判上限的
     `reviewaccept.within_cost_cap` 据此报"没超上限"（假绿）。
     不给 `store` ⇒ `meter=None` ⇒ 如实报"没有入账"（不是记一笔零）。
     """
@@ -2999,8 +2999,8 @@ def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: f
     from .llmseam import LlmSeam
     from .tokenmeter import TokenMeter
 
-    # `budget_of`：每一次花钱之前现读这一趟的总预算（业主 2026-10-12：
-    # 「用户可追加预算，运行消耗的钱从总预算里实时扣除」）。`usd_budget`（命令行给的）
+    # `budget_of`：每一次花钱之前现读这一趟的总预算（用户可追加预算，
+    # 运行消耗的钱从总预算里实时扣除）。`usd_budget`（命令行给的）
     # 是寄存器缺席时的兜底 —— 两者都在 `budget.limit_usd` 里合一，别在这里再判一次。
     read_limit = (lambda: B.limit_usd(root, fallback=usd_budget))
     meter = TokenMeter(store, budget_usd=usd_budget) if store is not None else None
@@ -3019,17 +3019,16 @@ def _parse_drive(items) -> tuple[dict, str]:
     return table, ""
 
 
-#: 单趟 `run-agent` 的退出码分类表（业主 2026-10-19 重排；`--help`、`cmd_run_agent` 的
+#: 单趟 `run-agent` 的退出码分类表（`--help`、`cmd_run_agent` 的
 #: docstring、`_run_agent_exit_code` 的 docstring 三处同口径，逐档都对得上这里）。
 #:
 #: 域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["loop"]`，全仓统一的三条口径见
-#: `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）：同一个 `1` 在四条命令里
+#: `stop_reasons.EXIT_CODE_UNIFIED`：同一个 `1` 在四条命令里
 #: 含义不同，那句话只登记在那张表里，不在这里复述。
 #:
 #: 表体不在这里写：它与界面徽标同源于 :data:`agentflow.stop_reasons.STOP_REASONS`
-#: （Q23，2026-10-26）。改前它与 `webui.server._STOP_BADGES` 各写一份，`final_refused`
-#: 只进了这一边，界面于是显示一个空徽标；反方向还多一格 `max_steps`。现在这里只投影
-#: `live=True` 的那一列，新增一档时两张表不可能再漏一边。
+#: （两处各写一份的话，某一档只进一边，界面就显示一个空徽标）。
+#: 现在这里只投影 `live=True` 的那一列，新增一档时两张表不可能再漏一边。
 #:
 #: 为什么是一张表而不是一串 `if`：这是防漏，不是风格 —— 新增一个 `stop_reason` 时若
 #: 有人忘了来这张表登记，它就落进 `EXIT_CODE_WHEN_UNKNOWN`（= 1，行为异常），一次
@@ -3066,7 +3065,7 @@ def _run_agent_exit_code(run) -> int:
     - `5` 系统行为正常且自行停止，但没有 final。
     为什么 4 与 5 必须分成两档：都不是异常，但下一步该谁动不同（4 是"有人叫停"：人 / 父 / 钱，加预算
     或人答完即可 `--resume`；5 是"它自己判定收工"：原地打转 / `escalated` 交给召唤者）。未登记的
-    `stop_reason` 一律 1（安全侧）：落进 1 会当场被看见，落进 0 会把新故障读成"做完了"（`--help` 与 `cmd_run_agent` 的 docstring 必须同口径；业主 2026-10-19 重排）。
+    `stop_reason` 一律 1（安全侧）：落进 1 会当场被看见，落进 0 会把新故障读成"做完了"（`--help` 与 `cmd_run_agent` 的 docstring 必须同口径）。
     """
     return EXIT_CODE_BY_STOP.get(str(getattr(run, "stop_reason", "") or ""),
                                  EXIT_CODE_WHEN_UNKNOWN)
@@ -3094,8 +3093,8 @@ def _rounds_has_final(auto) -> bool:
 def _autonomy_exit_code(auto) -> int:
     """多轮驱动层（`--rounds N`）的退出码：查同一张表，只多"轮数用完"这一档。
 
-    业主 2026-10-19 裁定（这条是根因，不是特例）：同一件事不许在两处有两套口径。改前这一层自成一条
-    `if` 链（`rounds`/`stop_file`/`resumed_done ⇒ 0`、`其余 ⇒ 1`），于是同一个 `budget` 在单趟是 4、
+    同一件事不许在两处有两套口径。这一层如果自成一条
+    `if` 链（`rounds`/`stop_file`/`resumed_done ⇒ 0`、`其余 ⇒ 1`），同一个 `budget` 在单趟就是 4、
     在多轮是 1，`stop_file` 在单趟是 4、在多轮是 0 —— 两种口径都会漂，而且漂了没有任何东西会红。
     现在：所有 `stop_reason` 一律查 :data:`EXIT_CODE_BY_STOP`，未登记的落进 :data:`EXIT_CODE_WHEN_UNKNOWN`。
     表里没有、只有这一层有的两种形态：`rounds`（轮数用完）最后那一轮产出了 final ⇒ `0`；没有 final
