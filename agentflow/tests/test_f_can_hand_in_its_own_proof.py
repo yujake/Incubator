@@ -192,10 +192,12 @@ def test_a_f_can_hand_in_a_proof_and_the_framework_lands_the_manuscript(
     # 三节齐（缺一节就不是框架手稿；真机那份 21KB 草稿正是三节都没有）。
     assert "## 命题" in text and "## 证明" in text and "## 依赖" in text, text[:400]
     # `## 依赖` 由框架按 `cites` 渲染：表头 + 一条数据行，F 一个字都不用抄。
-    assert ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | "
-            "路径号（第几条证明） |") in text, text
-    # 依赖行的四格由框架填：引用原话 / 命题号 / 用在哪几步 / 第几条证明。
-    assert re.search(rf"\| [^|]+ \| stmt:{sid} \| 第 [0-9、]+ 步 \| 1 \|", text), text
+    # 2026-11-12 对齐：产出侧不再标注路径（「路径在产出侧也不标注了，这些都是 B 秘书的活」）
+    # ⇒ 表头只有三列；路径号由 B 的秘书在收录时分配，不写进稿子。
+    assert ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |") in text, text
+    assert "路径号（第几条证明）" not in text, text
+    # 依赖行的三格由框架填：引用原话 / 命题号 / 用在哪几步。
+    assert re.search(rf"\| [^|]+ \| stmt:{sid} \| 第 [0-9、]+ 步 \|", text), text
     # 那一份交进来的 product 里根本没有 `## 依赖` 这个键（F 只给了 steps）。
     assert "## 依赖" not in _proof_product(sid)
     # 登记那一刻手上有稿（结构事实，不是时序运气）。
