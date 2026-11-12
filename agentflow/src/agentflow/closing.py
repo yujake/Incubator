@@ -4288,14 +4288,14 @@ def _mapping_row_missing_cells(row: Any, *, channel: str,
 
     - 「这一行走哪条通道」由调用方用 `papermapping._credential_slot` 现算后传进来
       （那条链路只通向一处真身：`numericproof.proof_channel` —— 这里不再判一次，
-      否则「这一行算不算数值定理」会长出第二个答案，就是本档要修的那个缺陷）；
+      否则「这一行算不算数值定理」会长出第二个答案）；
     - 数格清单与 `papermapping._lean_problems` 对齐：数值通道 ⇒ `file` +
       `numeric_evidence` + `exhaustion_note` + `lean_file`（证明栏第 ① 段那份程序；
       `lean_target` 不填，数值程序没有 Lean 声明名）；形式化通道 ⇒ `file` +
       `lean_file` + `lean_target`；空通道 ⇒ 只数 `file`（凭据两格是「不适用」，不是
       「缺」）；
     - `numeric_theorem` 是「要不要那两格附加义务」的唯一判据（调用方传
-      `papermapping.is_numeric_theorem_row` 的结论，2026-11-05 缺陷 1）：例子 / 实验按
+      `papermapping.is_numeric_theorem_row` 的结论）：例子 / 实验按
       通道填了 `lean_file` 就齐，不再被 `numeric_evidence` / `exhaustion_note` 判成
       「凭据不够」；它不按 `kind` 在这里重判一次 —— 判据只有 `papermapping` 那一处；
     - 索引四格不在这里数：它们由 `numerictheorem.evidence_index_problems` 一处判
@@ -4387,7 +4387,7 @@ def _numeric_row_index_problems(row: Any, workspace: Path,
 
 def paper_mapping_cell_reading(project_root: Path | str, *,
                                workspace_root: Path | str | None = None) -> dict[str, Any]:
-    """论文对应表里「该有的格子都齐」的行数（D-38 第二步的唯一实现；`_leg_reading` 只转发）。
+    """论文对应表里「该有的格子都齐」的行数（唯一实现；`_leg_reading` 只转发）。
 
     三态：
 
@@ -4398,22 +4398,22 @@ def paper_mapping_cell_reading(project_root: Path | str, *,
     - 读到 ⇒ `rows`（分母）/ `complete`（格子齐的行数）/ `incomplete`（逐行点名缺哪格），
       缺省下限 = 表里的行数：这一档问的是「表里每一行都齐了吗」，不是「至少有一行齐」。
 
-    口径不在这里重写（2026-11-04 按通道改口径，第二笔补凭据格的「多填/错填」）：
+    口径不在这里重写（按通道分格，凭据格的「多填/错填」也在同一处）：
 
     - 通道由 `papermapping._credential_slot` 现算（真身只有一处：
       `numericproof.proof_channel`），`_mapping_row_missing_cells` 只按它列格子；
     - 凭据两格「填了但不该填 / 填错类别 / 声明名找不到」这一族，结论整段来自
       `papermapping._lean_problems`（与 `mapping_reading` 同一个调用）：它报红 ⇒ 这一行
-      不齐；原话收进该行的 `problems`（新键），`missing` 里补上对应格名
+      不齐；原话收进该行的 `problems` 键，`missing` 里补上对应格名
       （空通道点名「通道为空却填了 lean_*」、数值通道点名「lean_target（数值通道不填）」）；
     - 数值通道那一行另要索引四格（判据 `numerictheorem.evidence_index_problems`）；
-      判据原话收进该行的 `index_problems`（新键），缺的格名收进 `missing`（旧键照旧）；
-      每一行的通道收进该行的 `channel`（新键，读的人据此知道为什么是这几格）；
+      判据原话收进该行的 `index_problems` 键，缺的格名收进 `missing`；
+      每一行的通道收进该行的 `channel`（读的人据此知道为什么是这几格）；
     - 数值实验定理那两格（`numeric_evidence` / `exhaustion_note`）与索引四格只压在
       `papermapping.is_numeric_theorem_row` 为真的行上：例子 / 实验按通道填了
       `lean_file`（= 证明栏第 ① 段那份 `.py`）就齐，不因 `kind` 不是命题类环境被读成
-      「凭据不够」（2026-11-05 缺陷 1）；这条边界也只有 `papermapping` 一处判据；
-    - 旧键一个不改（`path` / `exists` / `rows` / `complete` / `incomplete` /
+      「凭据不够」；这条边界也只有 `papermapping` 一处判据；
+    - 既有键一个不改（`path` / `exists` / `rows` / `complete` / `incomplete` /
       `implicit_min` / `lean` / `note`），M 与 webui 的读法不用跟着改。
 
     反真空用例把 `_mapping_row_missing_cells` 打桩成恒真 ⇒ 不齐的行也会被数成齐的
