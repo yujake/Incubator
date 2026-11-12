@@ -11,7 +11,7 @@
 它独立于 `ARTIFACTS.jsonl`（那是产物台账）与 `sessions/*.jsonl`（那是运行事件）：
 那两份记的是「框架产出/经历了什么」，这一份记的是「谁在什么时候从网页上动了什么手」。
 
-## 一行的形状（七个字段，逐条对应 `draft/73` §2.5 那一句）
+## 一行的形状（逐条对应 `draft/73` §2.5 那一句）
 
 | 字段 | 是什么 |
 |---|---|
@@ -72,11 +72,10 @@ __all__ = ["KIND", "LEDGER_NAME", "MAX_TEXT", "REDACTED", "actions_path", "diges
 
 #: 一处命名上的刻意偏离（对着 `draft/73` §2.5 的那两行签名看）：草案把读写两口
 #: 叫 `record` / `read`，而这两个名字在盘上分别与 `artifacts.record`、
-#: `manuscripts.read` 撞名 —— lint 的 R003（同名多实现）会因此多出 6 条 warning，
+#: `manuscripts.read` 撞名 —— lint 的 R003（同名多实现）会因此多出一族 warning，
 #: 而 `tests/test_release_all.py` 把 `lint_rules_warning` 的读数与 `DEVELOPMENT.md`
-#: 里记的那一份逐字比对（实测：17 → 23 会让那条判据红）。
-#: 那 6 条 warning 讲的是"同一判据两份实现"，而这两处本来就不是同一件事
-#: （产物台账 vs 网页操作台账），所以正确的处置是避开撞名，不是去改文档。
+#: 里记的那一份逐字比对。那些 warning 讲的是"同一判据两份实现"，而这两处本来就不
+#: 是同一件事（产物台账 vs 网页操作台账），所以正确的处置是避开撞名，不是去改文档。
 #: 语义一个字没变：`record_action` 就是草案的 `record`，`read_actions` 就是 `read`。
 
 #: 台账文件名（落在工作区根下）。
