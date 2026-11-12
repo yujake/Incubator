@@ -1,14 +1,12 @@
 # -*- coding: utf-8 -*-
-"""`revise` 的三道闸（2026-11-11 体量拆分：把 217 行的动作拉回 200 行线内）。
+"""`revise` 的三道闸（为了把 `revise` 拉回 200 行软基线而单独成文件）。
 
-这三段原样活在 `agent_g/revise.py::_Revise.revise` 里：机械检查
-（`DT.normalize_claims`）、引用存在性（`DT.check_citations`）、proof 级断言的证据锚
-（`DT.check_proofs`）。搬出来只为一件事：`revise` 越过 200 行线（业主口径：不许抬
-体量软基线）。三段的判断、顺序、异常类型与消息串逐字照旧 —— 不是"两份实现要一致"，
-而是同一条路上只剩这一份实现。
+机械检查（`DT.normalize_claims`）、引用存在性（`DT.check_citations`）、proof 级断言的
+证据锚（`DT.check_proofs`）。搬出来只为体量：这三段的判断、顺序、异常类型与消息串逐字
+照旧 —— 不是"两份实现要一致"，而是同一条路上只剩这一份实现。
 
 `tx_rows` 是事务内的读表口（`tx.rows`）：三处检查与随后写 `documents` /
-`review_findings` 看到同一份快照。这条约束原本就在，搬出来时没有放宽成"事务外先读一次"。
+`review_findings` 看到同一份快照。这条约束没有放宽成"事务外先读一次"。
 """
 from __future__ import annotations
 
@@ -30,16 +28,16 @@ def checked_claims(
     try:
         normalized = DT.normalize_claims(merged)
     except ValueError as exc:
-        # 2026-10-17（子代理 agents #11）：`normalize_claims` 是「纯函数校验」，抛裸
-        # `ValueError` ⇒ 绕过工具层的包装穿出动作，被记成 `failed/执行中异常`，
-        # 模型拿不到"哪一条断言、缺什么字段"。翻成 `DocumentError`（在
-        # `_BUSINESS_ERROR_NAMES` 里）⇒ 落 `refused/invalid_params`，可自救。
+        # `normalize_claims` 是「纯函数校验」，抛裸 `ValueError` ⇒ 绕过工具层的包装
+        # 穿出动作，被记成 `failed/执行中异常`，模型拿不到"哪一条断言、缺什么字段"。
+        # 翻成 `DocumentError`（在 `_BUSINESS_ERROR_NAMES` 里）⇒ 落
+        # `refused/invalid_params`，可自救。
         raise DocumentError(f"修订未通过机械检查：{exc}") from exc
 
     # 第二道闸：引用存在性。与 `doc.build_document` 复用同一个判据，
     # 理由见 `revise` 的 docstring —— 少了它，"修订"就是绕过引用检查的后门。
-    # `citing_kind` 必须传（业主义 2026-10-09 的两阶段口径）：正式论文
-    # （`kind="paper"`）里不许直接引我方手稿，手稿内容要在正文里重建。
+    # `citing_kind` 必须传（两阶段口径）：正式论文（`kind="paper"`）里不许直接引
+    # 我方手稿，手稿内容要在正文里重建。
     cites = DT.check_citations(tx_rows, normalized, citing_kind=kind)
     if not cites["checked"]:
         # 理论上不可达（这里必然有 tx）。留着是为了让"没法查"这条状态
@@ -59,10 +57,9 @@ def checked_claims(
         )
 
     # 第三道闸：proof 级断言的证据锚（`D-1`）。与 `doc.build_document`
-    # 复用同一个 `DT.check_proofs`，理由与上面那条逐字相同 ——
-    # 少一道，"修订"就是绕过它的后门。这条不是推演：实测把 `revise` 的
-    # 新断言换成一条只引 `lit:`、没有 `proof_location` 的 proof 断言，
-    # 它能成功写库（`temp/r2-revise-bypass.txt`，本文件修之前跑出来的）。
+    # 复用同一个 `DT.check_proofs`，理由与上面那条相同 —— 少一道，"修订"就是绕过
+    # 它的后门。这不是推演：把 `revise` 的新断言换成一条只引 `lit:`、没有
+    # `proof_location` 的 proof 断言，它能成功写库。
     proofs = DT.check_proofs(tx_rows, normalized, workspace_root=workspace_root)
     if not proofs["checked"]:
         raise DocumentError(
