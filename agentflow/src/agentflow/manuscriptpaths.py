@@ -17,11 +17,13 @@ from .manuscriptproducers import _manuscript_id_of
 def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
     """一条命题现在有几条「证明路径」、每条是哪份稿（稿号 + 正文 sha）。
 
-    两条来源 join：
+    三条来源 join：
     - `dependencies` 行的 `path_group`（B 收录时写的那个号；老盘只有 1）；
+    - `statements` 行的证明清单（每条路径的正文 sha）；
     - `verifications` 行的 `path_group`（V 落行时可能还没有，B 收录后由
-      :func:`stamp_verification_path_group` 补齐；老行没有这一格 ⇒ 只按 sha 读，
-      不硬填一个号）。
+      :func:`stamp_verification_path_group` 补齐）。没有这一格的签行按正文 sha
+      认回已有那条路径、只补 `manuscript`，不新增路径；认不回来才留成 0 号
+      （不计入 `paths`，不替它编组号）。
     """
     sid = str(statement_id or "").strip()
     out: dict[str, Any] = {"checked": False, "statement_id": sid, "paths": [],
@@ -30,6 +32,10 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
         out["why"] = "没有命题号 ⇒ 路径数判不了"
         return out
     by_group: dict[int, dict[str, Any]] = {}
+    #: 没有 `path_group` 的签行里、只有 `object_path` 的那几行（路径号 ⇒ 对象路径）。
+    #: 它们只在同一条路径找不到任何带 `manuscript` 的签行时才兜底 —— 否则同一份正文
+    #: 的副本会把路径指到副本上（见下面那段注释）。
+    objects_only: dict[int, str] = {}
     problems: list[str] = []
     try:
         deps = [dict(r) for r in store.rows("dependencies")] if store is not None else []
@@ -103,7 +109,25 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
         except (TypeError, ValueError):
             group = None
         if group is None:
-            # 老行没有这一格：只按 sha 记一条读数，不替它编组号。
+            # 老行没有这一格：先按正文 sha 认回已有那条路径 —— 收录之前 / 之后由 V
+            # 落下的签行都可能没有路径号，而它记的那份稿仍是这条路径的载体。
+            if sha:
+                same = next(
+                    (one for one in by_group.values()
+                     if str(one.get("body_sha") or "").strip().lower() == sha), None)
+                if same is not None:
+                    # 优先用 `manuscript` 那一格（签的载体）；pending 行的 `object_path`
+                    # 是"被审的对象"，同一份正文可以有多份副本，拿它当路径的稿会把
+                    # 路径指到副本上。只有整条路径都找不到 `manuscript` 时才兜底用它。
+                    rel_man = str(doc.get("manuscript") or "").strip()
+                    if rel_man and not same["manuscript"]:
+                        same["manuscript"] = rel_man
+                        same["manuscript_id"] = _manuscript_id_of(rel_man)
+                    elif rel and not same["manuscript"]:
+                        objects_only.setdefault(
+                            int(same.get("path_group") or 0), rel)
+                    continue
+            # 认不回来（老盘 / 正文改过）：只按 sha 记一条读数，不替它编组号。
             if not sha and not rel:
                 continue
             group = 0
@@ -116,6 +140,11 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
             one["manuscript"] = rel
             one["manuscript_id"] = _manuscript_id_of(rel)
         if not one["manuscript_id"] and rel:
+            one["manuscript_id"] = _manuscript_id_of(rel)
+    for group, rel in objects_only.items():
+        one = by_group.get(int(group))
+        if one is not None and not one["manuscript"]:
+            one["manuscript"] = rel
             one["manuscript_id"] = _manuscript_id_of(rel)
     paths = [by_group[g] for g in sorted(by_group) if int(g) >= 1]
     out.update(checked=True, paths=paths, count=len(paths),

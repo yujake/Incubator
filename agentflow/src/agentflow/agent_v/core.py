@@ -895,8 +895,174 @@ def fail_closed_manuscript_identity(*, statement_id: str = "",
         "checked": False, "statement_id": str(statement_id or ""),
         "manuscript_id": str(manuscript_id or ""),
         "row_manuscript_id": "", "matched_by": "", "fallback": False,
-        "row_checked": False, "found": None, "problem": "", "why": "",
+        "row_checked": False, "found": None, "problem": "",
+        # 逐路径记录（`manuscriptpaths.path_reading`）的读数：2026-11-12 起它是
+        # 「这一份稿是不是这条命题的稿」的第一来源，行上那一格是退路。
+        "path_checked": False, "path_count": 0, "path_group": 0,
+        "path_problem": "", "why": "",
     }
+
+
+def _manuscript_path_membership(*, store: Any, root: Any, statement_id: str,
+                                manuscript_id: str,
+                                manuscript: str) -> dict[str, Any]:
+    """这一份稿在不在某条「逐路径记录」上（只读 `manuscriptpaths.path_reading`）。
+
+    2026-11-12（F1）：命题行上的 `manuscript_id` 只有一格，B 收录第 2 条路径时会
+    覆写它 ⇒ 单看那一格，第 1 条路径在收录第 2 条之后永远判「不是这一条的稿」。
+    逐路径的权威记录在 `manuscriptpaths`：每条路径有自己的 `path_group` 与
+    `manuscript`（`verifications` 同号签行 / 命题行证明清单 join 出来的）。
+
+    返回 `{checked, on_path, count, path_group, manuscript, problem, why}`：
+    - `checked=False` ⇒ 逐路径记录没读成（不是「不在任何路径上」）；
+    - `checked=True, on_path=False` ⇒ 查过了、这一份不在任何路径上；
+    - `checked=True, on_path=True` ⇒ 这一份在某条路径上（`path_group` 是第几条）。
+
+    `path_reading` 的 `checked=True` 但带 `problems`（某一路读不全）时，找不到这一份
+    也不算「不在」：把它折成 `checked=False` + `problem`，由调用方 fail-closed。
+    """
+    out: dict[str, Any] = {"checked": False, "on_path": False, "count": 0,
+                           "path_group": 0, "manuscript": "", "problem": "",
+                           "why": ""}
+    try:
+        from .. import manuscriptpaths as _MP
+
+        got = _MP.path_reading(store, root, statement_id=statement_id)
+    except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许折成「不在」
+        out["problem"] = f"读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["count"] = int(got.get("count") or 0)
+    if not got.get("checked"):
+        out["problem"] = str(got.get("why") or "没有读数")
+        return out
+    out["checked"] = True
+    want_mid = str(manuscript_id or "").strip()
+    want_rel = str(manuscript or "").strip().replace("\\", "/")
+    for one in got.get("paths") or ():
+        one = dict(one or {})
+        rel = str(one.get("manuscript") or "").strip().replace("\\", "/")
+        mid = str(one.get("manuscript_id") or "").strip()
+        if (want_mid and mid == want_mid) or (want_rel and rel == want_rel):
+            group = int(one.get("path_group") or 0)
+            out.update(on_path=True, path_group=group, manuscript=rel,
+                       why=(f"稿号 {want_mid or '?'} 在第 {group} 条逐路径记录上"
+                            + (f"（`{rel}`）" if rel else "")))
+            return out
+    problems = [str(x) for x in (got.get("problems") or ()) if str(x).strip()]
+    if problems:
+        out.update(checked=False,
+                   problem=("只读出一部分：" + "；".join(problems)))
+        return out
+    out["why"] = (f"这条命题有 {out['count']} 条逐路径记录，这一份"
+                  f"（{want_mid or want_rel or '没有稿号'}）不在其中")
+    return out
+
+
+def _decide_registered_manuscript_identity(*, statement_id: str,
+                                           manuscript_id: str, manuscript: str,
+                                           owner: Mapping[str, Any],
+                                           paths: Mapping[str, Any]) -> dict[str, Any]:
+    """在册闸的「这一份稿是不是这一条命题的稿」：逐路径记录 → 行上那一格。
+
+    判据次序（2026-11-12 业主口径：多路径是要保留的设计）：
+
+    ① 这一份稿的稿号在某条逐路径记录上 ⇒ 是（`matched_by="path_manuscript"`；
+       若行上那一格也正好指它，仍报 `manuscript_id` —— 两个来源同向，读数不变）；
+    ② 否则行上那一格指它 ⇒ 是（`matched_by="manuscript_id"`）；
+    ③ 行上那一格是空的、而逐路径记录读得出来（确实没有这一份）⇒ 退回老口径
+       「号名 == 命题号」（`fallback=True`），退回理由进 `why`；
+    ④ 其余 ⇒ 受控拒（`ok=False`）。逐路径记录没读成也要拒 —— 行上那一格是空的
+       也不许拿「老盘」的退路放行：`path_checked=False` + `path_problem` 说清
+       「没读成」，不与「不在任何路径上」或「行上没有这一格」折平。
+
+    返回 `{ok, identity, kind, reason, detail}`；`ok=True` 时后三格为空串。
+    """
+    sid = str(statement_id or "").strip()
+    mid = str(manuscript_id or "").strip()
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    identity: dict[str, Any] = fail_closed_manuscript_identity(
+        statement_id=sid, manuscript_id=mid)
+    identity.update(
+        row_checked=bool(owner.get("checked")),
+        found=owner.get("found"),
+        row_manuscript_id=str(owner.get("manuscript_id") or ""),
+        problem=str(owner.get("problem") or ""),
+        path_checked=bool(paths.get("checked")),
+        path_count=int(paths.get("count") or 0),
+        path_group=int(paths.get("path_group") or 0),
+        path_problem=str(paths.get("problem") or ""),
+    )
+    row_mid = str(identity["row_manuscript_id"])
+    on_path = bool(paths.get("on_path"))
+    if on_path:
+        if row_mid and row_mid == mid:
+            identity.update(
+                checked=True, matched_by="manuscript_id", fallback=False,
+                why=(f"稿号 {mid} == stmt:{sid} 行上的 `manuscript_id`，也在"
+                     f"第 {identity['path_group']} 条逐路径记录上 ⇒ 这是这一条命题的稿"))
+        else:
+            identity.update(
+                checked=True, matched_by="path_manuscript", fallback=False,
+                why=(str(paths.get("why") or "")
+                     + f" ⇒ 这是 stmt:{sid} 的稿（行上那一格"
+                     + (f"是 {row_mid}，" if row_mid else "是空的，")
+                     + "不影响逐路径记录）"))
+        return {"ok": True, "identity": identity, "kind": "", "reason": "",
+                "detail": ""}
+    if row_mid and mid == row_mid:
+        identity.update(
+            checked=True, matched_by="manuscript_id", fallback=False,
+            why=(f"稿号 {mid} == stmt:{sid} 行上的 `manuscript_id` ⇒ "
+                 "这是这一条命题的稿"))
+        return {"ok": True, "identity": identity, "kind": "", "reason": "",
+                "detail": ""}
+    #: 拒绝时对逐路径记录的那一句：三种形态分开说（没读成 / 查过不在 / 没有记录）。
+    if identity["path_problem"]:
+        path_note = f"逐路径记录没读成（{identity['path_problem']}）"
+    elif identity["path_count"]:
+        path_note = (f"逐路径记录里也没有它（这条命题有 {identity['path_count']} 条路径）")
+    else:
+        path_note = "这一条命题还没有逐路径记录（老盘 / 收录那一笔还没落路径）"
+    if row_mid:
+        identity.update(matched_by="manuscript_id", fallback=False)
+        return {
+            "ok": False, "identity": identity, "kind": "bad_manuscript_name",
+            "reason": "bad_manuscript_name",
+            "detail": (f"`{rel}` 的稿号是 {mid}，不是这一条命题的稿：stmt:{sid} "
+                       f"那一行上记的 `manuscript_id` 是 {row_mid}；{path_note} ⇒ "
+                       "不审、不落签：签盖的必须是这一条命题自己的那一份稿（行上记的"
+                       "那一份稿号，或某条逐路径记录上的那一份稿）"),
+        }
+    if identity["path_problem"]:
+        # 行上那一格是空的、逐路径记录又没读成 ⇒ 两种来源都不认。这一档不许拿
+        # 「老盘 / 行上没有这一格」的退路放行：那是「查过了、确实没有」，不是「没查成」。
+        identity.update(matched_by="statement_id", fallback=False,
+                        why=("行上没有 `manuscript_id`，而逐路径记录没读成（"
+                             + identity["path_problem"] + "）⇒ 判不了这一份属于哪条路径"))
+        return {
+            "ok": False, "identity": identity, "kind": "bad_manuscript_name",
+            "reason": "bad_manuscript_name",
+            "detail": (f"`{rel}` 的稿号是 {mid}，而 stmt:{sid} 行上没有 `manuscript_id`；"
+                       f"{path_note} ⇒ 不审、不落签：这一份是不是这条命题的稿判不了"
+                       "（没读成不是「没有」）"),
+        }
+    identity.update(fallback=True, checked=bool(identity["row_checked"]),
+                    matched_by="statement_id",
+                    why=("行上没有 `manuscript_id`（"
+                         + (identity["problem"] or "这一格是空的")
+                         + "）⇒ 退回老口径「稿名里的号 == 命题号」"))
+    if mid != sid and not rel.startswith("reports/e-proof"):
+        return {
+            "ok": False, "identity": identity, "kind": "bad_manuscript_name",
+            "reason": "bad_manuscript_name",
+            "detail": (f"`{rel}` 的稿号是 {mid}，而这一签要给 stmt:{sid} ⇒ "
+                       "不审、不落签：签盖的必须是这一条命题自己的那一份稿"
+                       "（`reports/{f,b,e}-proof-<命题号>.md`）。这一条走的是退回口径："
+                       f"行上没有 `manuscript_id`（{identity['problem'] or '这一格是空的'}）；"
+                       f"{path_note}——收录那一笔要把它写上（B 收录时记 F 自己的稿号）"),
+        }
+    return {"ok": True, "identity": identity, "kind": "", "reason": "",
+            "detail": ""}
 
 
 class AgentV:
@@ -2596,10 +2762,11 @@ class AgentV:
                                " ⇒ 这一格没审、不落签")}
         # ---- 2026-11-10（业主裁定）：在册闸认「稿号」，不认「命题号」 -------------
         #
-        # 稿号与命题号是两个号段（F 的稿自建号源；命题号由 B 收录时现取）。B 收录那
-        # 一笔把稿号写进这一行的 `manuscript_id` —— 「这一份稿是不是这条命题的稿」
-        # 只看这一格。老盘（行上没有这一格）退回老口径「稿名里的号 == 命题号」，
-        # 退回的理由必须进读数（`identity.fallback` / `identity.why`），不许静默。
+        # 稿号与命题号是两个号段（F 的稿自建号源；命题号由 B 收录时现取）。
+        # 2026-11-12（F1）：命题行上的 `manuscript_id` 只有一格，B 收录第 2 条路径时
+        # 会覆写成「最后一次收录的那份稿」⇒ 只看它会让第 1 条路径在收录第 2 条之后
+        # 永远判「不是这一条的稿」。逐路径的权威记录在 `manuscriptpaths`：先认它，
+        # 再退回行上那一格（老盘 / 没有逐路径记录）；两种都不认才受控拒。
         #
         # 保留不动的三样：正文 sha 与参数给的正文对得上（本方法末段；签与这一份正文
         # 的 sha 相符在调用方 `manuscript_sign_standing` 那一格）、载体合法（上面两道）、
@@ -2608,50 +2775,17 @@ class AgentV:
         identity: dict[str, Any] = fail_closed_manuscript_identity(
             statement_id=_sid, manuscript_id=_mid)
         if _sid:
-            _owner = self._statement_manuscript_reading(_sid)
-            identity.update(row_checked=bool(_owner.get("checked")),
-                            found=_owner.get("found"),
-                            row_manuscript_id=str(_owner.get("manuscript_id") or ""),
-                            problem=str(_owner.get("problem") or ""))
-            _row_mid = str(identity["row_manuscript_id"])
-            if _row_mid:
-                # 认稿号：行上记的就是这一条命题的稿。
-                if _mid != _row_mid:
-                    # 2026-11-05（业主）的「签盖错对象」那一条照旧成立，只是判据换了：
-                    # 改前比命题号，`reports/b-proof-000016.md` 可以被当成 000014 的
-                    # 证明签下去（第 9 格写 000016、台账写 000014）。现在比的是行上的
-                    # 稿号 —— 别的命题的稿、或同一条换了一份稿，都进这一档。
-                    return {"failed": True, "kind": "bad_manuscript_name",
-                            "reason": "bad_manuscript_name",
-                            "identity": dict(identity, matched_by="manuscript_id",
-                                             checked=True),
-                            "detail": (f"`{rel}` 的稿号是 {_mid}，不是这一条命题的稿："
-                                       f"stmt:{_sid} 那一行上记的 `manuscript_id` 是 "
-                                       f"{_row_mid} ⇒ 不审、不落签：签盖的必须是这一条"
-                                       "命题自己的那一份稿（行上记的那一份稿号）")}
-                identity.update(checked=True, matched_by="manuscript_id",
-                                why=(f"稿号 {_mid} == stmt:{_sid} 行上的 "
-                                     f"`manuscript_id` ⇒ 这是这一条命题的稿"))
-            else:
-                # 退回老口径：行上没有稿号（老盘 / 收录那一笔还没写这一格 / 读不出来）。
-                # E 的数值证明稿按实验号寻址（`reports/e-proof-<实验号>.md`），命题号在
-                # 登记那一行上 ⇒ 这一族的稿号与命题号本来就不同名。其余两族（F 的证明稿
-                # / B 的改写稿）在退回口径下必须号名同名。
-                identity.update(fallback=True, checked=bool(identity["row_checked"]),
-                                matched_by="statement_id",
-                                why=("行上没有 `manuscript_id`（"
-                                     + (identity["problem"] or "这一格是空的")
-                                     + "）⇒ 退回老口径「稿名里的号 == 命题号」"))
-                if (_mid != _sid and not rel.startswith("reports/e-proof")):
-                    return {"failed": True, "kind": "bad_manuscript_name",
-                            "reason": "bad_manuscript_name",
-                            "identity": dict(identity),
-                            "detail": (f"`{rel}` 的稿号是 {_mid}，而这一签要给 stmt:"
-                                       f"{_sid} ⇒ 不审、不落签：签盖的必须是这一条命题"
-                                       "自己的那一份稿（`reports/{f,b,e}-proof-<命题号>.md`）。"
-                                       "这一条走的是退回口径：行上没有 `manuscript_id`"
-                                       f"（{identity['problem'] or '这一格是空的'}）——"
-                                       "收录那一笔要把它写上（B 收录时记 F 自己的稿号）")}
+            _decided = _decide_registered_manuscript_identity(
+                statement_id=_sid, manuscript_id=_mid, manuscript=rel,
+                owner=self._statement_manuscript_reading(_sid),
+                paths=_manuscript_path_membership(
+                    store=self.store, root=self.workspace_root,
+                    statement_id=_sid, manuscript_id=_mid, manuscript=rel))
+            identity = dict(_decided["identity"])
+            if not _decided.get("ok"):
+                return {"failed": True, "kind": str(_decided["kind"]),
+                        "reason": str(_decided["reason"]),
+                        "identity": identity, "detail": str(_decided["detail"])}
         path = Path(self.workspace_root) / rel
         if not path.is_file():
             return {"failed": True, "kind": "manuscript_missing",
