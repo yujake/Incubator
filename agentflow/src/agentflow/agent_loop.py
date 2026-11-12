@@ -1,19 +1,19 @@
 """LLM 驱动的角色循环：模型决定调哪个工具、唤起谁、给谁留言，框架负责执行与留痕。
 
-`draft/28` §178 的实测：A-H 里六个角色一份提示词都没有（C 两处、D 一处钩子）；更根本的是，角色之间没有一条"
-由模型决定"的协作路径 —— `Conductor.summon` 是给编排层用的（`run_plan` 拿一份写死的计划去跑），于是"互相唤起
-"只发生在脚本里。这一层把三件事接起来：提示词（`agent_prompts`）、模型缝（`llmseam`，每次调用带版本与哈希落
-档）、工具与召唤（`ToolRegistry.call` 与 `Conductor.summon`，被拒的理由原样回到模型手里）。
+角色之间原本没有一条"由模型决定"的协作路径 —— `Conductor.summon` 是给编排层用的
+（`run_plan` 拿一份写死的计划去跑），于是"互相唤起"只发生在脚本里。这一层把三件事
+接起来：提示词（`agent_prompts`）、模型缝（`llmseam`，每次调用带版本与哈希落档）、
+工具与召唤（`ToolRegistry.call` 与 `Conductor.summon`，被拒的理由原样回到模型手里）。
 
 循环形状（正典清单与条数只在 `SHAPES` 一处定义）：`{"tool": ...}` → `ToolRegistry.call(name, role=...)`，角
 色面不对就 `role_denied`；`{"summon": ...}` → `Conductor.summon(..., by=<本角色>)`；`{"message": ...}` → 一
 条 `agent_message` 事件（持久，收件人下次运行时在收件箱里看到）；`{"final": ...}` → 收工，带自报证据 id。
 
 三态与"不许静默"：没接线 ⇒ 不发请求 + `stop_reason="not_wired"` 并落一条记录；坏 JSON ⇒ `bad_json_limit`（总
-数 `run.bad_json` 与连击 `run.bad_json_streak` 分开记，判据是连击，§68）；参数不是合法 JSON（
-`judge_bad_args`）另计 `run.bad_args` ⇒ `bad_args_limit`（§65）；没拿到可用回复（`judge_timeout` /
+数 `run.bad_json` 与连击 `run.bad_json_streak` 分开记，判据是连击）；参数不是合法 JSON（
+`judge_bad_args`）另计 `run.bad_args` ⇒ `bad_args_limit`；没拿到可用回复（`judge_timeout` /
 `judge_output_limit` / `judge_no_reply:<kind>`）另计 `run.no_reply` ⇒ `model_timeout` / `model_output_limit`
-（判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`，读数见 2026-10-12 T2）；其中连接类
+（判据与处置见 `LoopRun.no_reply` 与 `_no_reply_line`）；其中连接类
 （`judge_no_reply:<kind>`）另走 `reconnect.BackoffGate`：失败先等（单飞 + 指数退避 + 抖动）
 再重试同一轮，等待写进 `kind=reconnect` 事件；补满 `max_bad_json` 次或总等待超限
 （`AGENTFLOW_RECONNECT_TOTAL_SEC`，默认 300 秒）⇒ `model_unreachable` 停机，收场那句话
@@ -48,8 +48,8 @@ from .llmseam import LlmSeam
 
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
           "retire", "roster", "interrupt")
-#: 出站门：哪些形状由秘书接管（所有者的裁定逐字"如果有些形状涉及到结构化交互，
-#: 则需要秘书接管"）。判据是"这个形状是不是跨智能体的结构化交互"——
+#: 出站门：哪些形状由秘书接管（涉及结构化交互的形状要秘书接管）。
+#: 判据是"这个形状是不是跨智能体的结构化交互"——
 #: `summon` / `summon_many`（委托）· `handoff`（手稿通道）· `message`（私聊/公共频道，
 #: 带 `to`/`subject`/`body`/`reply_to` 四个字段与一条协作边准入）。
 #: 不在门里的四个（`tool` = 代码的硬闸与参数表；`note` = 写自己的台账；
@@ -58,12 +58,13 @@ SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_us
 #: （形状表与登记表等额：新增一个形状不登记就红）。
 SECRETARY_OUTBOUND_SHAPES: tuple[str, ...] = ("summon", "summon_many", "handoff", "message")
 
-#: `own.<动作>` 的受控拒绝要原样带回模型的读数键（2026-11-08，业主"读数说谎"那一批）。
+#: `own.<动作>` 的受控拒绝要原样带回模型的读数键。
 #:
-#: 改前只有 `problems` / `missing` / `stmt_id` 那一小撮：动作自己的受控拒（`_refuse` 的
-#: 形态）里那些"为什么没判成"的读数全丢 —— `same_statement`（同一命题检索：关键词 /
-#: 命中几条 / 实际给模型看了哪几条 / 判了没有 / 发了几个模型调用）、`searched`、`same_as`、
-#: `seam_source` 到了模型眼前一个都不剩，于是它只能猜"我是不是参数写错了"。
+#: 为什么要有这张白名单：动作自己的受控拒（`_refuse` 的形态）若只带 `problems` /
+#: `missing` / `stmt_id` 那一小撮，那些"为什么没判成"的读数就全丢 —— `same_statement`
+#: （同一命题检索：关键词 / 命中几条 / 实际给模型看了哪几条 / 判了没有 / 发了几个模型
+#: 调用）、`searched`、`same_as`、`seam_source` 到了模型眼前一个都不剩，于是它只能猜
+#: "我是不是参数写错了"。
 #:
 #: 白名单而不是"全透传"：动作返回值里可能有内部行缓存（`_row`）与大块原文，那些不该
 #: 借受控拒漏给模型。新增读数时在这里登记 —— 这是"模型看得见什么"的唯一落点。
@@ -77,27 +78,27 @@ _OWN_REFUSAL_READING_KEYS: tuple[str, ...] = (
     "judged", "model_calls", "proposition_adjudication",
 )
 
-#: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`（`draft/37` §68）。
+#: 扁平形态的别名表：`(规范形状, 必须同时出现的键, 留痕标签)`。
 #:
 #: 这些键集来自「提示词里那个原生函数面」（`framework_summon(role=…, action=…, params=…)`、
-#: `framework_summon_many(targets=[…])`）。第十二趟真机第 13 步里，模型把 `framework_summon`
-#: 的实参直接当成一句话写了出来 —— 没有 `summon` 这个外层键 —— 整趟运行因此以
-#: `bad_json_limit` 收场。收下它的判据与 §61 逐字相同：「这组键没有第二种含义」
-#: （`role`+`action` 只可能是召唤；`targets` 只可能是批量召唤），而拒收的代价是整趟作废。
+#: `framework_summon_many(targets=[…])`）：模型可能把 `framework_summon` 的实参直接当成
+#: 一句话写出来 —— 没有 `summon` 这个外层键 —— 整趟运行因此以 `bad_json_limit` 收场。
+#: 收下它的判据是「这组键没有第二种含义」（`role`+`action` 只可能是召唤；`targets` 只可能
+#: 是批量召唤），而拒收的代价是整趟作废。
 #:
-#: 只登记这两个：`ask_user` / `note` / `message` 的扁平形态今天没有真机证据，
+#: 只登记这两个：`ask_user` / `note` / `message` 的扁平形态没有证据支持，
 #: 而且它们的键（`question` / `text` / `to`）更容易与将来的工具参数撞名 ——
 #: 有读数再加，不预先放宽。
 FLAT_SHAPE_ALIASES: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("summon", ("role", "action"), "role"),
     ("summon_many", ("targets",), "targets"),
-    # S1k-2 的 `retire`（业主 T22 的名册口径）：必填键表也在这里一处 ——
+    # `retire`（名册口径）：必填键表也在这里一处 ——
     # 父拿着名册名说"A1 退役"。`roster` 不进这张表：它的 `of` 可省（缺省 = 自己），
     # 没有"必填的扁平键"这回事（空键表会让扁平化那条路写出一个没有键的对象）。
     ("retire", ("name",), "name"),
 )
 
-#: 这些拒绝理由 ⇒ 自动转成"请主控代唤"的申请（2026-09-30）。
+#: 这些拒绝理由 ⇒ 自动转成"请主控代唤"的申请。
 #:
 #: `forbidden_edge`：目标不在 `capabilities.ALLOWED_EDGES` 里（例如 G 想找 A 要文献）；
 #: `depth_exceeded`：召唤链已经到 `policy.max_depth`。两者都是"这条路今天不通"，
@@ -107,53 +108,50 @@ RELAY_REFUSALS: frozenset[str] = frozenset({"forbidden_edge", "depth_exceeded"})
 #: 代唤申请的留言标题（机器可识别的那一位；改它要同时改提示词里的同一句）。
 RELAY_SUBJECT = "请代唤"
 
-#: 定义待补那件事的向上报文标题（`draft/97` §15.4 的①档：问直接父）。
+#: 定义待补那件事的向上报文标题（问直接父）。
 #:
 #: 为什么与 `RELAY_SUBJECT` 分开：那一条是"我要做的事被策略拒了，请父替我召唤"，
 #: 这一条是"我缺一条定义，请父就地给我"。收件人同一套（`_relay_recipient`），
 #: 但载荷与事件种类不同 —— 折成同一个标题，审计就分不出"这一次到底是哪种请求"。
 DEFINITION_ASK_SUBJECT = "定义待补：请就地给出"
 
-#: 每一步最后读到的那段输出契约（`draft/28` §195）。
+#: 每一步最后读到的那段输出契约。
 #:
 #: 为什么要在最后一行重述一遍：系统提示词有 6k+ token，循环协议埋在中间；
-#: 真机实测（2026-09-30，M 做"核验定理与引理的证明"）—— 模型连着三次回 1400–2400 字的散文，
-#: `judge_bad_json` × 3 ⇒ `bad_json_limit`，那次运行对交付物零贡献。
-#: 它不是不听指令，是没读到：中间那句"请只输出一个 JSON 对象"离它的回答太远了。
+#: 模型不是不听指令，是没读到 —— 中间那句"请只输出一个 JSON 对象"离它的回答太远了
+#: （照抄不全会连续产出散文，三次 `judge_bad_json` 就把这一趟判死）。
 JSON_TAIL = (
     "只回一行 JSON（不要解释、不要 Markdown 围栏、不要前后缀）。形状取其一"
     "（键名与嵌套层级照抄，`<...>` 与 `{...}` 是占位符）。把下面这些行**连括号一起抄**、"
     "只把占位符换成你的内容：不要自己数括号、也不要自己加一层嵌套 —— "
     "实测最常见的坏 JSON 就是最后多补一个 `}`：\n"
     '{"tool": "<工具名>", "args": {...}}\n'
-    # 2026-10-25（审计 G/H/V/L 第 9 条）：骨架里不再有 `action` 这一格，也不再教 `A-H`
+    # 骨架里没有 `action` 这一格，也不教 `A-H`
     # 这种角色级寻址 —— `_do_summon` 只读 `role` + `task` + `params`（形状里没有填动作的
     # 位置，见那里的注释），而寻址一律落在一个真的角色名上（伙伴表里那一格）。
     '{"summon": {"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>", "params": {...}}}\n'
     '{"summon_many": {"targets": [{"role": "<伙伴表里的角色名>", "task": "<一件可判定的活>",'
     ' "instance": "<可选>"}], "why": "<为什么一次派这一批>"}}\n'
     '{"message": {"to": "<伙伴或 ALL>", "subject": "...", "body": "..."}}\n'
-    # 骨架里的字段名用协议的首选名（2026-10-07 修）：这里原写 `"title"` + `"brief"`，
-    # 而 `HANDOFF_PROTOCOL` 逐字写着"旧名仍然接受，但新写的一律用 `summary`" —— 骨架是
-    # 每一步都发的那份文档、模型照抄它，两边口径相反却因为解码器三个名字都收而没有任何
-    # 地方会报错。判据：`tests/test_agent_loop.py::test_the_skeleton_teaches_the_preferred_handoff_field_names`
+    # 骨架里的字段名用协议的首选名：`HANDOFF_PROTOCOL` 逐字写着"旧名仍然接受，但新写的
+    # 一律用 `summary`" —— 骨架是每一步都发的那份文档、模型照抄它，两边口径相反却因为
+    # 解码器三个名字都收而没有任何地方会报错。判据：
+    # `tests/test_agent_loop.py::test_the_skeleton_teaches_the_preferred_handoff_field_names`
     # （骨架必须用 `summary`；且"旧名仍然接受"这半句兼容性也当场真调验证）。
     '{"handoff": {"to": "<伙伴/M/ALL>", "summary": "<一句话描述>", "body": "<markdown 正文>",'
     ' "refs": ["<前序手稿编号>"], "revises": "<要订正的手稿号，可不填>"}}\n'
     '{"note": "一句话"}\n'
     '{"ask_user": {"question": "...", "options": ["..."]}}\n'
-    # S1k-2（业主 T22 的名册口径）：两个新形状。`brief` 是"造一个子代理"时必给的一句简介；
+    # 名册口径的两个新形状。`brief` 是"造一个子代理"时必给的一句简介；
     # 复用已有子代理写 `reuse:"D1"`（名册名，不是台账号）—— 它不新增名册项，只多一次调用。
     '{"retire": {"name": "A1"}}\n'
     '{"roster": {"of": "self"}}\n'
-    # S-H（裁定 14）：`interrupt` 停的是某一个子代理当前那一轮 —— 它不是全局叫停
+    # `interrupt` 停的是某一个子代理当前那一轮 —— 它不是全局叫停
     # （那是 `conductor.stop`，所有人都停），也不是"结束它"（那是 `retire`）。
     '{"interrupt": {"name": "D1"}}\n'
-    # `final` 的层级曾经是错的（2026-10-11 修，业主口径"一切以代码为参考"）：
-    # 骨架原写 `{"final": {"final": "<结论>", "evidence": []}}`（嵌套两层），而解码器读的是
-    # 顶层 `{"final": <字符串>, "evidence": [...]}`（`_decode_shape` 的 final 那一支），
-    # 原生工具面的 schema 也是顶层（`llmseam.py` 的 `framework_final`）。
-    # 实测照抄骨架的后果：`final` 落成一个 JSON 字符串（`'{"final": "结论", …}'`）、
+    # `final` 的层级：骨架写顶层 `{"final": <字符串>, "evidence": [...]}`，解码器读的也是
+    # 顶层（`_decode_shape` 的 final 那一支），原生工具面的 schema 也是顶层（`llmseam.py` 的
+    # `framework_final`）。写成嵌套两层会出事：模型照抄后 `final` 落成一个 JSON 字符串、
     # `evidence` 恒为空 —— 也就是"结论不是一句话、引用全丢"，而形状名两边都是 `final`，
     # 所以 `_shape_of` 那条同源判据照不到这一跳（判据只认形状名，不认字段怎么读）。
     # 判据（已扩到解码器那一跳）：`test_the_skeleton_and_the_parser_speak_the_same_shape`。
