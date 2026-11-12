@@ -3950,10 +3950,24 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
         return out
     out["callable"] = _callable_line(members)
     mine = str(my_task_id or "")
+    # 同一批成员原先被逐支各扫一遍（按号 / 按名 / 按角色的在册与退役各一支）：
+    # 一趟建三张索引，后面按 token 取列表 —— 每个桶里的顺序仍是名册顺序，
+    # 于是 `hit[0]` 与候选排序（`sorted(...)`）的输入与改前逐条相同。
+    by_id: dict[str, list[Mapping[str, Any]]] = {}
+    by_name: dict[str, list[Mapping[str, Any]]] = {}
+    by_role: dict[str, list[Mapping[str, Any]]] = {}
+    for m in members:
+        tid = str(m.get("task_id") or "")
+        if tid:
+            by_id.setdefault(tid, []).append(m)
+        nm = str(m.get("name") or "")
+        if nm:
+            by_name.setdefault(nm, []).append(m)
+        row_role = str(m.get("role") or "")
+        if row_role:
+            by_role.setdefault(row_role, []).append(m)
     # ① 绝对编号（第一公民）；自己那一行不算（"发给我自己"没有意义）
-    hit = [m for m in members
-           if str(m.get("task_id") or "") and str(m["task_id"]) == token
-           and str(m["task_id"]) != mine]
+    hit = [m for m in by_id.get(token, ()) if str(m.get("task_id") or "") != mine]
     how_hint = token
     addressed_by = "task_id" if hit else ""
     if len(hit) > 1:
@@ -3971,14 +3985,14 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
         return out
     # ② 名册名
     if not hit:
-        hit = [m for m in members if str(m.get("name") or "") and str(m["name"]) == token]
+        hit = list(by_name.get(token, ()))
         if hit:
             addressed_by = "roster_name"
     # ③ 角色名（便利写法：名册内唯一匹配）
     if not hit and token.upper() in S.ROLES:
         role = token.upper()
-        live = [m for m in members if str(m.get("role") or "") == role
-                and not m.get("retired")]
+        role_rows = by_role.get(role, ())
+        live = [m for m in role_rows if not m.get("retired")]
         if len(live) == 1:
             hit = live
             addressed_by = "role_fallback"
@@ -3994,8 +4008,7 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                        why=f"名册内同名多匹配：{names}")
             return out
         else:
-            dead = [m for m in members
-                    if str(m.get("role") or "") == role and m.get("retired")]
+            dead = [m for m in role_rows if m.get("retired")]
             if dead:
                 m = dead[0]
                 return _retired_member(out, m)
