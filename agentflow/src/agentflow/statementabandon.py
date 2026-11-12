@@ -403,10 +403,10 @@ def _has_enumeration_scale(mapping: Mapping[str, Any]) -> bool:
     from . import numericproof as _NP
 
     try:
-        bound_cases, _dims = _NP._bound_dimensions(dict(mapping))
+        bound_cases, _dims = _NP._bound_dimensions(mapping)
     except Exception:  # noqa: BLE001 —— 读不出来就是"没有规模"
         bound_cases = None
-    cases = _NP._case_count_of(dict(mapping))
+    cases = _NP._case_count_of(mapping)
     if bound_cases is not None or cases:
         return True
     for value in mapping.values():
@@ -454,14 +454,14 @@ def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
     cert = raw.get("certificate") if isinstance(raw.get("certificate"), Mapping) else {}
     bound = raw.get("search_bound") if isinstance(raw.get("search_bound"), Mapping) else {}
     if obs or cert or bound:
-        value, where = _NP._space_reading(dict(obs), dict(cert), dict(bound))
+        value, where = _NP._space_reading(obs, cert, bound)
     else:
         # 直接给搜索空间对象：先按 observations 那一格读（`SPACE_KEYS` 的既有读口），
         # 读不到再把整份当 `search_bound` 读（同一份读口对非空 search_bound 原样返回）——
         # 两种形态都是 `numericproof._space_reading` 认的，不新造字段。
-        value, where = _NP._space_reading(dict(raw), {}, {})
+        value, where = _NP._space_reading(raw, {}, {})
         if value is None:
-            value, where = _NP._space_reading({}, {}, dict(raw))
+            value, where = _NP._space_reading({}, {}, raw)
     if value is None or value == "" or value == {} or value == []:
         return {}, "abandon_space_unreadable", (
             "space 里读不到搜索空间（`numericproof._space_reading` 的 "
@@ -865,7 +865,6 @@ def parse_abandon_reason(text: Any) -> dict[str, Any]:
                experiment_id=str(data.get("experiment_id") or "").strip(),
                space=(dict(data.get("space")) if isinstance(data.get("space"), Mapping) else {}),
                salvaged=[dict(x) for x in (data.get("salvaged") or []) if isinstance(x, Mapping)])
-    out["at"] = str(got.get("at") or "")
     if not out["abandon_basis"]:
         out["why"] = "结构化理由里没有 abandon_basis（理由正文）⇒ 换号理由不齐"
         return out
@@ -987,12 +986,11 @@ def _statement_of(row: Mapping[str, Any]) -> Any:
     """盘上那一行 ⇒ `schema.Statement`（`page_range` 是唯一需要还原的对象字段）。"""
     from . import schema as _S
 
-    body = dict(row)
-    pr = body.get("page_range")
+    body = {k: v for k, v in row.items() if k in _S.Statement.__dataclass_fields__}
+    pr = row.get("page_range")
     body["page_range"] = (_S.PageRange.from_dict(pr) if isinstance(pr, Mapping)
                           else _S.PageRange())
-    return _S.Statement(**{k: v for k, v in body.items()
-                           if k in _S.Statement.__dataclass_fields__})
+    return _S.Statement(**body)
 
 
 def _replayed_marker(current: Mapping[str, Any], was: Mapping[str, Any], *,
