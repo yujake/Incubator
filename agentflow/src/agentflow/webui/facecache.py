@@ -196,7 +196,17 @@ def _scan_files(root: Path) -> list[tuple[str, int, int]]:
     它照样进键，于是"读不成 → 读得成"这件事也会让缓存作废。
     """
     out: list[tuple[str, int, int]] = []
-    stack = [str(root)]
+    root_s = str(root)
+    base = root_s if root_s.endswith(os.sep) else root_s + os.sep
+    stack = [root_s]
+
+    def _rel_of(path: str) -> str:
+        """`path` 的工作区相对路径（快路径只省掉一次 `normpath`，判定不变）。"""
+        # `os.scandir` 给的 `entry.path` 就是"上一层路径 + 分隔符 + 名字"，而栈里
+        # 每一层都是从根那一趟拼下来的 ⇒ 它必以 `base` 开头。不是的话（根自身带
+        # `..` / 空串一类的怪写法）退回标准算法 —— 两种算法给出同一个串。
+        return path[len(base):] if path.startswith(base) else os.path.relpath(path, root_s)
+
     while stack:
         current = stack.pop()
         try:
@@ -208,13 +218,13 @@ def _scan_files(root: Path) -> list[tuple[str, int, int]]:
                             continue
                         info = entry.stat(follow_symlinks=True)
                     except OSError:
-                        out.append((os.path.relpath(entry.path, str(root)), -1, -1))
+                        out.append((_rel_of(entry.path), -1, -1))
                         continue
-                    out.append((os.path.relpath(entry.path, str(root)),
-                                int(info.st_mtime_ns), int(info.st_size)))
+                    out.append((_rel_of(entry.path), info.st_mtime_ns, info.st_size))
         except OSError:
-            out.append((os.path.relpath(current, str(root)), -1, -2))
-    out.sort(key=lambda row: row[0])
+            out.append((os.path.relpath(current, root_s), -1, -2))
+    # 相对路径在一次扫描里互不相同 ⇒ 按整行排与按第一格排是同一个次序。
+    out.sort()
     return out
 
 
@@ -231,26 +241,19 @@ def disk_key(face: str, root: str | Path,
     if extra is not None:
         files.append(extra)
     seq = last_event_seq(root_p)
-    digest = hashlib.sha256()
-    digest.update(b"agentflow.webui.facecache\0")
-    digest.update(str(CACHE_SCHEMA).encode("ascii"))
-    digest.update(b"\0")
-    digest.update(str(face).encode("utf-8"))
-    digest.update(b"\0")
-    digest.update(_canonical(dict(params)))
-    digest.update(b"\0")
-    digest.update(os.fsencode(str(root_p)))
-    digest.update(b"\0")
-    digest.update(str(seq).encode("ascii"))
-    digest.update(b"\n")
+    # 键的字节串一次拼好、一次 `update`：字段序列与逐段 `update` 逐字节相同
+    # （`sha256` 只看喂进去的字节流），省掉每个文件四次跨语言调用。
+    parts = [b"agentflow.webui.facecache\0", str(CACHE_SCHEMA).encode("ascii"),
+             b"\0", str(face).encode("utf-8"), b"\0", _canonical(dict(params)),
+             b"\0", os.fsencode(str(root_p)), b"\0", str(seq).encode("ascii"), b"\n"]
     for rel, mtime_ns, size in files:
-        digest.update(os.fsencode(rel))
-        digest.update(b"\0")
-        digest.update(str(mtime_ns).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(str(size).encode("ascii"))
-        digest.update(b"\n")
-    return digest.hexdigest(), len(files), seq
+        parts.append(os.fsencode(rel))
+        parts.append(b"\0")
+        parts.append(str(mtime_ns).encode("ascii"))
+        parts.append(b"\0")
+        parts.append(str(size).encode("ascii"))
+        parts.append(b"\n")
+    return hashlib.sha256(b"".join(parts)).hexdigest(), len(files), seq
 
 
 # ====================================================================== 入口
