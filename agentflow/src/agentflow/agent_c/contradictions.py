@@ -75,12 +75,22 @@ class _Contradictions:
         # 为什么必须在返回值里分档：下游（D 的追问、人的复核）要能一眼看出
         # "这条是真对立"还是"这条只是否定词不一致"。混在一起报，就等于
         # 把 24% 假阳性的线索当成矛盾 —— 那会让 `status=suspect` 这个标记失去意义。
-        strong = [x for x in kept if str(x.get("strength") or "") == "strong"]
-        weak = [x for x in kept if str(x.get("strength") or "") != "strong"]
+        # 全量计数（reason 用）与截断前缀的分类（返回用）同一趟完成：改前这里对
+        # `kept` 扫两遍（strong/weak）、再对 `found` 扫两遍（两个 sum）。
+        strong: list[dict] = []
+        weak: list[dict] = []
+        n_strong = n_weak = 0
+        for i, x in enumerate(found):
+            is_strong = str(x.get("strength") or "") == "strong"
+            if is_strong:
+                n_strong += 1
+            else:
+                n_weak += 1
+            if i < lim:
+                (strong if is_strong else weak).append(x)
         reason = (
             f"范围={scope}，扫描 {len(prepared)} 条关系，命中 {len(found)} 对字面候选"
-            f"（strong {sum(1 for x in found if str(x.get('strength')) == 'strong')} 对、"
-            f"weak {sum(1 for x in found if str(x.get('strength')) != 'strong')} 对）"
+            f"（strong {n_strong} 对、weak {n_weak} 对）"
         )
         if truncated:
             reason += f"；⚠️ 仅返回前 {lim} 对（truncated=True）：**不能据此说'只有这些矛盾'**"
