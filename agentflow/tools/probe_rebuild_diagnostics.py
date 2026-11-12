@@ -1,10 +1,9 @@
 """独立验证：`agentflow rebuild` 会不会丢掉诊断字段（`_keys` / `_quote_check`）。
 
-报告 §附录B 把这条列为"未实跑验证"。这里把它跑实：
 rebuild 的事件折叠走 `schema.row_from_dict()`，而它只保留 dataclass 字段 ——
 所以带下划线前缀的非 schema 诊断字段应当会丢。
 
-结论无论正反都有用：证实 → 报告该缺口成立；证伪 → 报告不该写这条。
+结论无论正反都有用：证实 → 缺口成立；证伪 → 这条担心不成立。
 """
 
 from __future__ import annotations
