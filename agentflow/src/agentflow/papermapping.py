@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""论文对应表（业主 2026-10-22）：G 写正文之前先有这张表，H 依据它逐行核。
+"""论文对应表：G 写正文之前先有这张表，H 依据它逐行核。
 
-业主原话：「G 产出论文时需附上对应表，说明每条定理、引理、命题、例子、实验对应产出物的
-真实文件和序号是什么，H 依据此核查，G 也依据此写作」。
+G 产出论文时需附上对应表，说明每条定理、引理、命题、例子、实验对应产出物的
+真实文件和序号是什么，H 依据此核查，G 也依据此写作。
 
 ## 三个落点、一份内容（都在论文包里）
 
@@ -24,8 +24,8 @@
 | `kind` | 是 | 受控词表 `ENV_KINDS`（theorem / lemma / proposition / corollary / example / experiment） |
 | `label` | 是 | 正文里那个 `\\label{...}` 的值（不带花括号） |
 | `env_no` | 是 | 正文里第几个该环境，1 起，按正文出现顺序按类计数（theorem 单独数、lemma 单独数；分节 `\\input` 进来的按内联顺序算） |
-| `ledger_id` | 是 | `stmt:NNNNNN` / `exp:NNNNNN` / `rel:NNNNNN`；多证明带 `#pN`（`stmt:000004#p2`） |
-| `proof_no` | 是 | 这条定理名下第几号证明：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份 |
+| `ledger_id` | 是 | `stmt:NNNNNN` / `exp:NNNNNN` / `rel:NNNNNN`；老行可能带 `#pN` 尾巴（`stmt:000004#p2`） |
+| `proof_no` | 是 | 这条定理名下的稿号（一个稿号 = 一份文件 = 一份证明）：1 = canonical（台账行上的 `proof_text`）；2 及以上 = 该行 `proofs` 清单里那一份 |
 | `file` | 是 | 该条完整证明或实验所在的真实文件，论文包内的相对路径（`proofs/000004-p1.md`） |
 | `page_or_section` | 否 | 给人看的定位（`3` / `p.7`） |
 | `citation_loc` | 视来源 | 引文的本地位置：`{"file": 包内相对路径, "page_range"|"line_range"|"char_range": [起点, 终点]}` |
@@ -36,18 +36,18 @@
 `file` 与 `citation_loc.file` 都是包内相对路径：绝对路径在别人的机器上等于不存在，
 而指向包外的相对路径同样过不了"换一台机器也能复核"这一关（两者都判红）。
 
-`lean_file` 是唯一收「项目根相对路径」的那一格（2026-10-25，审计 G/H/V/L 第 4 条）：
+`lean_file` 是唯一收「项目根相对路径」的那一格：
 L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文包是 `out/paper/`，
 全仓没有任何一步把前者拷进后者 —— 只认包内相对路径时，那条真实存在的源码永远填不进
 这一格（三个落点各说各话）。所以这一格两个根都解析：先按包内找，找不到再按项目根找。
-字段名保持 `lean_file`（不改名：表头、解析与两份渲染产物都不动），但它的语义从
-2026-11-04 起是「机器核验凭据」那一格，不再只是 Lean 源码的位置。
+字段名保持 `lean_file`（不改名：表头、解析与两份渲染产物都不动），但它的语义是
+「机器核验凭据」那一格，不再只是 Lean 源码的位置。
 
 ### `proof_no` 的口径
 
-多证明时 `ledger_id` 与 `proof_no` 说的是同一件事：`stmt:000004#p2` 的 `proof_no` 必须是 2。
-`proof_no` 不许省：默认成 1 会让"没写"与"第 1 条"分不开，而多证明模型要挡的正是这个。
-它解析到哪一份证明只走 `verifications.proof_list`（`#p1` 恒在且排第一），不在这里
+老行的 `#pN` 尾巴与 `proof_no` 说的是同一件事：`stmt:000004#p2` 的 `proof_no` 必须是 2。
+`proof_no` 不许省：默认成 1 会让"没写"与"稿号 1"分不开，而逐份认签要挡的正是这个。
+它解析到哪一份证明只走 `verifications.proof_list`，不在这里
 重写那份清单的读法。`file` 的指向随之分档：`proof_no` = 1 指台账行本身或附录里那一段正文，
 2 及以上指那一份证明自己的文件。
 
@@ -61,9 +61,9 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 区间三种任选其一（至少一种），值写成 `[起点, 终点]` 或 `{"start": ..., "end": ...}`，
 两者都必须是正整数且起点不大于终点。
 
-### 机器核验凭据那一格的三态（业主 2026-11-04：Lean 程序与数值证明程序同用一格）
+### 机器核验凭据那一格的三态（Lean 程序与数值证明程序同用一格）
 
-业主原话：「lean 和数值证明程序同用一格不会打架，这一格的功能就是说这个命题是百分百真的」。
+lean 和数值证明程序同用一格不会打架，这一格的功能就是说这个命题是百分百真的。
 所以 `lean_file` 那一格的语义是「这条命题有机器核验过的凭据（百分百为真）」，而不是
 「Lean 开关开着时必填的一格」。填的类别必须与这条命题的证明通道一致 —— 通道只有一处判据
 （`numericproof.formal_slot`，本模块只接线，不另写一套）：
@@ -77,7 +77,7 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
   `foobar`）；
 - 通道空（没有 `proof_text`、台账里也没有穷举或形式化实验）⇒ 这一格允许为空 —— 那是
   「不适用」，不是「没填」。盘上有没有 Lean 产物都不改变这一条：有产物是一个读数，
-  不是这一条命题的凭据（改前"有产物 ⇒ 定理行必须给两格"正是把不适用读成没填的形态）；
+  不是这一条命题的凭据（"有产物 ⇒ 定理行必须给两格"正是把不适用读成没填的形态）；
 
 `lean_target` 在那一份 `.lean` 里找不到 => `mapping_lean_target_missing`；同一个
 `lean_target` 出现在两行 => `mapping_lean_target_ambiguous`。一条命题有多条证明时，
@@ -90,7 +90,7 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 `mapping_lean_missing`：填了就是声称，声称就得能复核。空着也绝不等于「验过了」：
 它说的是「这一条命题没有机器核验凭据」，读数里说得出来。
 
-### 数值实验定理那两格（业主 2026-10-23 的裁定 E-1）
+### 数值实验定理那两格
 
 纯数值实验把整个命题穷尽验证掉（覆盖全域）时也能到 `proof` 这一档，理由写「穷举」，
 签名是那份程序；入定理证明库时证明栏写程序地址（相对仓库）。于是这类定理在对应表里
@@ -114,14 +114,14 @@ L 的产物落在 `code/formal/`（`agent_l._support.FORMAL_DIR`），而论文�
 被证明的命题：它们照旧按通道填「机器核验凭据」那一格（`lean_file` = 证明栏第 ① 段那份程序；
 E 还没签成穷举时那份 `.py` 也认 —— 例子 / 实验的凭据就是它），
 但没有「这条定理压在哪条 E 的读数上」那几格（`numeric_evidence` / `exhaustion_note` / 索引四格）
-—— 2026-11-05 缺陷 1：`kind` 只决定要不要这几格附加义务，凭据格始终按通道判
+—— `kind` 只决定要不要这几格附加义务，凭据格始终按通道判
 （:func:`is_numeric_theorem_row` 是这条边界的唯一落点）。
 其余行（自然语言证明的定理）一格都不要动 —— 防误伤那一条判据就在
 `tests/test_numeric_theorem_writing_spec.py` 第 4b 条。
 
-### 索引四格（D-34，业主 2026-10-23 夜：D 的报告是目录）
+### 索引四格（D 的报告是目录）
 
-业主那三句话把这条链的模型说死了：D 的报告是目录（新成果＋索引），F 的证明 / E 的报告是
+D 的报告是目录（新成果＋索引），F 的证明 / E 的报告是
 正文，V 的签是盖章，B 是读者 ——「B 基本都是从 D 的报告看到定理（命题），经索引看 F 侧
 证明或 E 侧报告，并核实 V 签」。于是数值实验定理那一行（以及任何"正文在别处"的行）还要
 带四格，缺一件 B 就取不到正文：
@@ -141,9 +141,9 @@ E 还没签成穷举时那份 `.py` 也认 —— 例子 / 实验的凭据就是
 四格只进 `MAPPING.json`（机器读那一份）：md 与附录的列已经排满，加列会让旧附录整份对不上，
 而那两份的用途是给人看"哪一行对应哪一份文件"，不是给 B 取对象。
 
-### 台账那两格（D-69，2026-10-24：让「论文说定理 / 台账说猜想 / V 签没签」自己暴露）
+### 台账那两格（让「论文说定理 / 台账说猜想 / V 签没签」自己暴露）
 
-业主原话（D-69）：「论文对应表要能自己暴露『论文说定理 / 台账说猜想 / V 签没签』」。
+「论文对应表要能自己暴露『论文说定理 / 台账说猜想 / V 签没签』」。
 于是每一行多两格，与既有的九列同源渲染（json / md / 附录三份都由 `Row` 渲染，
 手写第二份照样过不了逐字比对）：
 
@@ -157,7 +157,7 @@ E 还没签成穷举时那份 `.py` 也认 —— 例子 / 实验的凭据就是
 这件事在表上自己就是可见的 —— 不需要读者去翻两个文件对。G 手填的值会被这一次现读
 盖掉：填了就是声称，而这两格的声称必须来自台账。
 
-`reviewed` 的取值是四档（业主 2026-11-02 裁定：「应该分：已签/未通过/未审/未读到」），
+`reviewed` 的取值是四档（「应该分：已签/未通过/未审/未读到」），
 空着不许折成任何一边：
 
 - `已签（判决：成立）`：逐份那张表里这一份为真（`reviewed_by_proof[证明号] is True`），
@@ -293,9 +293,8 @@ ENV_KINDS: tuple[str, ...] = (
 
 #: 六类环境在正文里"印出来的抬头"（环境识别面的唯一一张表）。
 #:
-#: 业主 2026-11-07（`_canon_F_manuscript_protocol.md` 第六节，逐字）：
-#: 「登记里 `kind=example` 的行（玩具例子）：正文用 `Example` 环境，不用 Lemma/Theorem；
-#: 其余按既有映射。example 只是给人看的标签，处理与普通命题一致。」
+#: `kind=example` 的行（玩具例子）：正文用 `Example` 环境，不用 Lemma/Theorem；
+#: 其余按既有映射。example 只是给人看的标签，处理与普通命题一致。
 #:
 #: 为什么单列一张表：对应表的 `kind` 是机器面（`\begin{example}` 的环境名），读者
 #: 看到的是抬头（"Example 1.2"）。两者可以不一致 —— `\newtheorem{example}{Lemma}`
@@ -1045,8 +1044,8 @@ def _newtheorem_titles(tex: str) -> dict[str, str]:
 def environment_titles(rows: Iterable[Row], *, tex: str = "") -> dict[str, Any]:
     """对应表逐行「该用哪个环境抬头」的读数，以及正文导言区实际印的是什么。
 
-    业主 2026-11-07（protocol 第六节）：「`kind=example` 的行（玩具例子）：正文用
-    `Example` 环境，不用 Lemma/Theorem；其余按既有映射。」这一格就是那句话的机器读数。
+    `kind=example` 的行（玩具例子）：正文用
+    `Example` 环境，不用 Lemma/Theorem；其余按既有映射。这一格就是这条口径的机器读数。
 
     逐行给：
 
@@ -1057,7 +1056,7 @@ def environment_titles(rows: Iterable[Row], *, tex: str = "") -> dict[str, Any]:
     | `declared` | 导言区 `\\newtheorem{<kind>}{…}` 实际印出来的抬头；读不到 ⇒ 空串 |
     | `ok` | `env_title` 非空，且（没有声明 或 声明与它同名，不分大小写） |
 
-    `declared` 为空是"没查成"（没有 `\\newtheorem` 可对 —— 夹具与大部分真机稿的
+    `declared` 为空是"没查成"（没有 `\\newtheorem` 可对 —— 夹具与大部分手稿的
     环境由文档类直接给），不是"印错了"：三态纪律在这里就是"读不到 ⇒ 不据此判红"。
 
     返回 `{"checked": True, "titles": {kind: title}, "rows": [...], "unknown": [...],
@@ -1533,7 +1532,7 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
     `review_ledger` 是这条命题那份审校台账 `verifications/<命题号>.jsonl` 的三态
     （`REVIEW_LEDGER_STATES`），由调用点现读一遍传进来 —— 渲染函数不自己读盘。
 
-    四档（业主 2026-11-02 裁定：「应该分：已签/未通过/未审/未读到」）：
+    四档（「应该分：已签/未通过/未审/未读到」）：
 
     - `已签（判决：<原话>）`：逐份表里这一份为真（`reviewed_by_proof[证明号] is True`），
       而且那一签盖的就是这一份正文（`reviewed_sha_by_proof[证明号]` 与正文现算的
@@ -1550,14 +1549,14 @@ def reviewed_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any, *,
     判「审过没审过」只认台账在不在：写侧只在真签时建 `reviewed_by_proof` 的键，
     按"没键"读会把"审过、从没签"读成"从没审过"（这一个反向形态本轮一并治掉）。
 
-    ## 为什么"没这一号"有时是「未读到」而不是「未通过」（2026-11-11 缺陷）
+    ## 为什么"没这一号"有时是「未读到」而不是「未通过」
 
-    真机形态：同一命题的两份证明都已签，而 `reviewed_by_proof` 只有 `{1: True}`
+    现场形态：同一命题的两份证明都已签，而 `reviewed_by_proof` 只有 `{1: True}`
     （B 收录第 2 份时用了 canonical 号，见 `register_statement._ingest_apply_evidence`）。
     这时表上给第 2 条路径写「未通过」= 替 V 下了一个假结论（V 根本没判过它）。
     判据要能分辨"读不到"与"判过没通过"：只有这一份确实被判过才落「未通过」。
     所以：这一份正文的 sha 在 sha 表里记在别的号上 ⇒ 那一签盖的就是这份正文、
-    只是号记错了 ⇒ 落「未读到」；否则（正文 sha 哪里都没记）⇒ 老口径「未通过」。
+    只是号记错了 ⇒ 落「未读到」；否则（正文 sha 哪里都没记）⇒ 「未通过」。
     """
     if not isinstance(ledger_row, Mapping):
         return LEDGER_CELL_UNREADABLE
@@ -3463,16 +3462,16 @@ def _row_checks(row: Row, ledger: Mapping[str, Sequence[Mapping[str, Any]]],
 def is_numeric_row(row: Row,
                    ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
                    experiments: Sequence[Mapping[str, Any]] | None = None) -> bool:
-    """这一行算不算数值实验定理 —— 只按证明通道判，`kind` 不参与（2026-11-04 修）。
+    """这一行算不算数值实验定理 —— 只按证明通道判，`kind` 不参与。
 
     判法只有一处：:func:`_numeric_row_reading`（通道的真身是
     `numericproof.proof_channel`；通道判不出来时用 E-1 的"证明栏是不是程序"兜底）。
-    这一版删掉的两条旧口径，逐条说明为什么：
+    为什么两条旧口径不能留：
 
     - 旧口径有"`kind` 必须在 `LEAN_TARGETED_KINDS` 里"这一道门。于是 `kind="example"`
       而台账里那条命题的证明栏是程序（`proof_channel == numeric`）时，收工门读数按通道
       要 `numeric_evidence` / `exhaustion_note` / 索引四格（`complete=0`），而这里被
-      kind 门挡住 ⇒ `mapping_reading` 报 `pass`：同一张表两个答案（2026-11-04 缝隙一）。
+      kind 门挡住 ⇒ `mapping_reading` 报 `pass`：同一张表两个答案（缝隙一）。
       现在 `kind` 一格都不参与 —— 一条命题的证明走哪条通道，与它在正文里排成哪类环境无关。
     - 旧口径有"这一行自己填了 `numeric_evidence` / `exhaustion_note` 就算数值定理"。
       那会把空通道的自称读成判据：现在空通道而填了那两格是"两边不一致"，由
@@ -3483,7 +3482,7 @@ def is_numeric_row(row: Row,
 
     它只管「凭据那一格与 `file` 走哪一类」：数值那一档要再带 `numeric_evidence` /
     `exhaustion_note` / 索引四格的那几行由 :func:`is_numeric_theorem_row` 判（`kind` 决定
-    档位，2026-11-05 缺陷 1）—— 本函数对六类环境一视同仁，不因 `kind` 是 example /
+    档位）—— 本函数对六类环境一视同仁，不因 `kind` 是 example /
     experiment 就把按通道填好的 `.py` 判成「凭据不够」。凭据格对这一档的认法（例子 / 实验
     的证明栏第 ① 段是程序时，那份 `.py` 就是凭据）在 `_lean_problems` 第 7 条。
     """
@@ -3495,7 +3494,7 @@ def is_numeric_theorem_row(row: Row,
                            experiments: Sequence[Mapping[str, Any]] | None = None) -> bool:
     """这一行要不要「数值实验定理」那几格附加义务 —— 通道优先，`kind` 只决定档位。
 
-    2026-11-05 缺陷 1（误拦）：`kind="example"` / `"experiment"` 的行按数值通道填了
+    误拦的形态：`kind="example"` / `"experiment"` 的行按数值通道填了
     `lean_file`（= 证明栏第 ① 段那份 `.py`），读数却还要 `numeric_evidence` /
     `exhaustion_note` / 索引四格，于是被判成「凭据不够」。修法是把两件事拆开：
 
@@ -3508,7 +3507,7 @@ def is_numeric_theorem_row(row: Row,
       例子与实验不是被证明的命题（`STATEMENT_ENV_KINDS` 的 docstring 已经这么说），
       它们没有这一档。
 
-    这不退回 2026-11-04 修掉的那道 kind 门：那道门问的是「这一行算不算数值行」，
+    这不退回那道 kind 门：那道门问的是「这一行算不算数值行」，
     `file` 与凭据格都跟着 `kind` 走（例子行按通道填的 `.py` 反而被判凭据不够）；
     这里的门只问「要不要再要那四格附加义务」，凭据格仍按通道 —— 例子 / 实验的证明栏
     第 ① 段是程序时，那份 `.py` 在 `_lean_problems` 第 7 条里认（连 E 还没签成穷举时也认）。
@@ -4149,10 +4148,10 @@ def kind_gap_reading(rows: Iterable[Row],
                      ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None, *,
                      review_states: Mapping[str, str]
                      ) -> tuple[dict[str, Any], dict[str, Any]]:
-    """落差读数（D-69 ②）：论文说定理 / 台账说猜想，以及论文排成定理 / V 没签。
+    """落差读数：论文说定理 / 台账说猜想，以及论文排成定理 / V 没签。
 
-    业主原话：「论文里以 theorem/lemma 环境出现、而台账 kind 仍是 conjecture 的行：
-    N 条（逐条 label → stmt）」；同理一条「论文里排成定理但 V 没签的行」。
+    论文里以 theorem/lemma 环境出现、而台账 kind 仍是 conjecture 的行：
+    N 条（逐条 label → stmt）；同理一条「论文里排成定理但 V 没签的行」。
 
     两条都只看 `THEOREM_ENV_KINDS`（theorem / lemma）那几行，读数取自台账现读
     （不读表上那两格：表可能还没填、也可能写完之后台账又动过 —— 落差说的是
