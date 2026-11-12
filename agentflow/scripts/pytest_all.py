@@ -12,19 +12,12 @@
   · 证据：每路一个独立日志文件，直接重定向，不建管道；run 目录带 run-id，
     默认全部保留（`MAX_LOG_BYTES` 只负责在失控时停跑并提示，不删任何日志）。
 
-用法（在 agentflow/ 下）：
-
-    python -B scripts/pytest_all.py --jobs 4
-    python -B scripts/pytest_all.py --jobs 1 --filter test_park_is_a_real_stop.py
-    python -B scripts/pytest_all.py --dry-run --jobs 4
-    python -B scripts/pytest_all.py --jobs 4 --passthrough   # e2e：加 -s 看服务端日志
-
 退出码：0 全绿 / 1 有红且每一路都查得成 / 2 有任何一路没查成（unknown 不是 pass）。
 
 `--jobs 1` 与直接 `python -m pytest` 的收集顺序等价（用于定位顺序依赖）：整棵树
-不逐个列文件（799 个路径约 3.2 万字符，会撞 Windows 的 32767 上限），而是把
-`tests` 交给 pytest —— 与 `pyproject.toml` 的 `testpaths = ["tests"]` 是同一次收集。
-"""
+不逐个列文件（路径字符数会撞 Windows 的 32767 上限），而是把 `tests` 交给 pytest
+—— 与 `pyproject.toml` 的 `testpaths = ["tests"]` 是同一次收集。用法与全部开关见
+`python -B scripts/pytest_all.py --help`。"""
 
 from __future__ import annotations
 
@@ -39,7 +32,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-#: 默认并发数。4 是实测过的：上一趟 705 个文件、4 路的最慢一路 1232.5s。
+#: 默认并发数。4 是实测可用值：再高时磁盘与 CPU 抢占会把单路拖慢。
 DEFAULT_JOBS = 4
 
 #: 两种分块口径。默认 size-balance：按文件字节数做 LPT，避免一个大文件拖死一路。
@@ -228,9 +221,9 @@ def pytest_argv(
 ) -> list[str]:
     """拼一路的 pytest argv。
 
-    整棵树（`files` 与 `all_files` 是同一个集合）走 `tests` 捷径：799 个相对路径
-    合计约 3.2 万字符，逐个列会撞 Windows 32767 的命令行上限。过滤后的子集才逐个列，
-    超过 `MAX_ARGV_CHARS` 就抛 `ArgvTooLong`（调用方按「没查成」处理，不静默截断）。
+    整棵树（`files` 与 `all_files` 是同一个集合）走 `tests` 捷径：测试文件数已多到
+    相对路径合计逼近 Windows 32767 的命令行上限。过滤后的子集才逐个列，超过
+    `MAX_ARGV_CHARS` 就抛 `ArgvTooLong`（调用方按「没查成」处理，不静默截断）。
     """
     argv = [sys.executable, "-B", "-m", "pytest", *PYTEST_FLAGS]
     if passthrough:
@@ -305,7 +298,7 @@ def classify_rc(rc: int, read: ChunkRead) -> str:
     """把 `(rc, 日志读数)` 映射成一路的状态；三态纪律：unknown 绝不折成 pass。
 
     关键的一格是 `rc=1` 且日志里只有 `ERROR`（collection error / setup error）：
-    旧实现只匹配 `^FAILED`，会给出 `failed_count=0`。这里把 `error` 计入红，
+    只匹配 `^FAILED` 会把它数成 `failed_count=0`。这里把 `error` 计入红，
     并且要求「汇总行的 failed/error 数」与「日志里认领到的行数」一致；不一致就判
     `inconsistent`（退出码 2），不拿一份读漏的日志冒充完整结论。
     """
