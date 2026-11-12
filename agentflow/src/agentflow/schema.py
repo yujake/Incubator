@@ -1067,10 +1067,11 @@ class ResearchQuestion:
         # （排序会把推理路径改成另一条路径）。它的"保序"由 round-trip 测试守。
         for rid in self.relation_chain:
             require_id(rid, "relation_chain[]")
-        if self.relation_chain and set(self.relation_chain) - set(self.related_relation_ids):
+        chain_extra = set(self.relation_chain) - set(self.related_relation_ids)
+        if self.relation_chain and chain_extra:
             raise ValueError(
                 "relation_chain 含 related_relation_ids 里没有的代号 "
-                f"{sorted(set(self.relation_chain) - set(self.related_relation_ids))} —— "
+                f"{sorted(chain_extra)} —— "
                 "链条必须由本问题引用的关系构成（否则链与集合会各自漂移）"
             )
         for lid in self.evidence_lit_ids:
@@ -1684,9 +1685,10 @@ class Experiment:
 
     def validate(self) -> None:
         require_id(self.experiment_id, "experiment_id")
+        claim_key = self.claim_key.strip()
         if not self.claim.strip():
             raise ValueError("claim 不能为空")
-        if not self.claim_key.strip():
+        if not claim_key:
             raise ValueError("claim_key 不能为空（没有它就无法回答'这条实验检验的是哪个命题'）")
         if self.method not in EXPERIMENT_METHODS:
             raise ValueError(f"method 必须是 {EXPERIMENT_METHODS} 之一，收到 {self.method!r}")
@@ -1711,7 +1713,8 @@ class Experiment:
         # 且拒信逐条列出缺什么 —— 它要能让人/模型当场改对。
         # 为什么仍然不是"随你标"：`a+b=b+a` 那种数值扫描也会喊"我都算过了"，
         # 而"算了很多点"与"穷尽了整个论域"之间隔着覆盖说明这一句人话。
-        if self.method != "formal" and self.evidence_kind == "proof":
+        _numeric_proof = (self.method != "formal" and self.evidence_kind == "proof")
+        if _numeric_proof:
             from . import numericproof as _NP
 
             _problems = _NP.exhaustion_problems(
@@ -1776,7 +1779,6 @@ class Experiment:
         # （它的凭据是 code_path + code_hash + certificate/search_bound，硬约束 2c 与 6
         # 已经各自强制过）。两档都要有凭据，只是凭据的形态不同 —— 缺了它，
         # "已证明"与 cross_check 在证据上是同一件事，不应享受 proof 的待遇。
-        _numeric_proof = (self.method != "formal" and self.evidence_kind == "proof")
         if self.evidence_kind == "proof" and not _numeric_proof and not self.verifier_output.strip():
             raise ValueError(
                 "evidence_kind='proof' 时必须给出 verifier_output（证明检查器的原始输出）。"
@@ -1790,13 +1792,14 @@ class Experiment:
         # 这不是理论风险：任何"批量跑了一堆检查、再批量写记录"的实现都会踩到它。
         # 穷举那一档没有"检查器输出"，它的上下文绑定是 code_path + code_hash（硬约束 6）
         # 与 certificate/search_bound（硬约束 2c）—— 所以这一条只对形式化那一路强制。
+        subject_key = self.verifier_subject_key.strip()
         if (self.evidence_kind == "proof" and not _numeric_proof
-                and not self.verifier_subject_key.strip()):
+                and not subject_key):
             raise ValueError(
                 "evidence_kind='proof' 时必须给出 verifier_subject_key（检查器输出管的是哪个命题）。"
                 "否则无法排除'把 A 命题的检查器输出贴到 B 命题的记录上'"
             )
-        if self.verifier_subject_key.strip() and self.verifier_subject_key.strip() != self.claim_key.strip():
+        if subject_key and subject_key != claim_key:
             raise ValueError(
                 f"verifier_subject_key={self.verifier_subject_key!r} 与本行的 claim_key="
                 f"{self.claim_key!r} 不一致 ⇒ 检查器输出管的不是这条命题。"
