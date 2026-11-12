@@ -5462,11 +5462,10 @@ def dependency_face_reading(store: Any, project_root: Any = None) -> dict[str, A
     counts["inconsistent"] = 0
     counts["malformed"] = 0
     for sid in sorted(rows_by_id):
-        row = dict(rows_by_id[sid] or {})
+        row = rows_by_id[sid] or {}
         # 没有正文的行（概念 / 定义 / 还没写证明）不进这一格：依赖面那一格对它是
         # "不适用"，不是"零依赖"（与 `_deps_missing_reading` 的三态逐字对齐）。
-        texts = [str(text or "") for _no, text in _VR.proof_list(row)]
-        if not any(text.strip() for text in texts):
+        if not any(str(text or "").strip() for _no, text in _VR.proof_list(row)):
             continue
         out["scanned"] += 1
         edges = int(edges_by_id.get(sid) or 0)
@@ -5676,17 +5675,16 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
         "E": {"judged": 0, "well_formed": 0, "refused": 0, "unchecked": 0},
     }
     for one in rows:
+        checked = one.get("checked")
+        well_formed = one.get("well_formed")
+        # 一行的三档只判这一次：顶层合计与逐角色桶原先各判一遍同样的两个布尔。
+        key = "unchecked" if not checked else ("well_formed" if well_formed else "refused")
         out["judged"] += 1
-        if not one.get("checked"):
-            out["unchecked"] += 1
-        elif one.get("well_formed"):
-            out["well_formed"] += 1
-        else:
-            out["refused"] += 1
+        out[key] += 1
         code = str(one.get("refused") or "")
         if code:
             codes[code] = codes.get(code, 0) + 1
-        if (not out["sample"] and one.get("checked") and one.get("well_formed")
+        if (not out["sample"] and checked and well_formed
                 and str(one.get("conditions") or "") and str(one.get("conclusion") or "")):
             out["sample"] = {"at": str(one.get("at") or ""),
                              "label": str(one.get("label") or ""),
@@ -5698,12 +5696,7 @@ def proposition_form_reading(store: Any) -> dict[str, Any]:
         bucket = roles.setdefault(
             role, {"judged": 0, "well_formed": 0, "refused": 0, "unchecked": 0})
         bucket["judged"] += 1
-        if not one.get("checked"):
-            bucket["unchecked"] += 1
-        elif one.get("well_formed"):
-            bucket["well_formed"] += 1
-        else:
-            bucket["refused"] += 1
+        bucket[key] += 1
         if code:
             bucket_codes = bucket.setdefault("codes", {})
             bucket_codes[code] = int(bucket_codes.get(code, 0)) + 1
