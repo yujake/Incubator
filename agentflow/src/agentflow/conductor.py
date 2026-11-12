@@ -10104,20 +10104,30 @@ class Conductor:
         by_status: dict[str, int] = {}
         by_depth: dict[str, int] = {}
         refused_reasons: dict[str, int] = {}
+        # 五行计数 + `unknown_outcome` + `top_level_runs` 一趟数完（原先这张表被走了
+        # 三遍：主循环一遍、`unknown` 一遍、`top_level_runs` 一遍）。三个读数的判据一个
+        # 字没改：`by_role` / `by_status` / `by_depth` 按 `str(...)` 记账（`None` ⇒ "None"），
+        # `unknown_outcome` 认"`status` 原值等于 cancelled 且 detail 里写着结果未知"，
+        # `top_level_runs` 认"`action` 转成字符串后等于 run"。
+        unknown = 0
+        top_level_runs = 0
         for r in rows:
-            by_role[str(r.get("role"))] = by_role.get(str(r.get("role")), 0) + 1
-            by_status[str(r.get("status"))] = by_status.get(str(r.get("status")), 0) + 1
+            role_key = str(r.get("role"))
+            by_role[role_key] = by_role.get(role_key, 0) + 1
+            status_key = str(r.get("status"))
+            by_status[status_key] = by_status.get(status_key, 0) + 1
             oc = r.get("outcome")
             key = str(oc) if oc is not None else "<未结束>"
             by_outcome[key] = by_outcome.get(key, 0) + 1
-            by_depth[str(r.get("depth"))] = by_depth.get(str(r.get("depth")), 0) + 1
+            depth_key = str(r.get("depth"))
+            by_depth[depth_key] = by_depth.get(depth_key, 0) + 1
             if r.get("refusal_reason"):
                 rr = str(r["refusal_reason"])
                 refused_reasons[rr] = refused_reasons.get(rr, 0) + 1
-        unknown = sum(
-            1 for r in rows
-            if r.get("status") == "cancelled" and "结果未知" in str(r.get("detail") or "")
-        )
+            if r.get("status") == "cancelled" and "结果未知" in str(r.get("detail") or ""):
+                unknown += 1
+            if str(r.get("action") or "") == "run":
+                top_level_runs += 1
         return {
             "total": len(rows),
             "by_role": by_role,
@@ -10145,7 +10155,7 @@ class Conductor:
                 "total / by_*": "tasks 台账全量（含顶趟行 action=run）",
                 "started_total / peak_running": "本实例发起的召唤数（顶趟不计）",
             },
-            "top_level_runs": sum(1 for r in rows if str(r.get("action") or "") == "run"),
+            "top_level_runs": top_level_runs,
             # 板自己的读数（业主 2026-10-08 裁 A1=甲、T16）：既有那些格只数实例行，
             # 板项在这里单列 —— "派了几件活"与"板上还挂着什么"是两个问题，不许混。
             "board": self.board_readings(),
