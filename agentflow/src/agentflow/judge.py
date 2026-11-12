@@ -2,10 +2,9 @@
 
 ## 这一层解决什么
 
-`draft/29` §3.1 要求所有角色用同一个 LLM 缝：角色自己不做 prompt 拼装与结果解析的
-分支（那是"把智能体写成大程序"），而是调这里的一个函数，拿到
-"判定 + 没查成的原因"。原因非空时，调用方必须走确定性回退并把它留痕 ——
-既不许当成功，也不许折成"没找到"。
+所有角色用同一个 LLM 缝：角色自己不做 prompt 拼装与结果解析的分支（那是"把智能体写
+成大程序"），而是调这里的一个函数，拿到"判定 + 没查成的原因"。原因非空时，调用方必须
+走确定性回退并把它留痕 —— 既不许当成功，也不许折成"没找到"。
 
 ## 三态在这里的落点
 
@@ -16,21 +15,17 @@
   两条路都归它：缝抛 `TimeoutError`（走 `_problem_of`），或网关不抛、只回了
   `ok=False`/`error_kind="timeout"`（走 `problem_of_reply`）。
 - `judge_output_limit`：输出预算被思考吃光（`finish_reason=length` + 正文为空 +
-  思维链非空；2026-10-12 T2 真机读数 109,397 字思维链 / `max_tokens=32768`）。
-  它与 `judge_timeout` 同族（都是"我们没拿到可用的回复"，不是"它说错了"），
-  处置却不同：这一档要的是"把这一步拆小、把思考压短"，不是重发同一个请求。
-- `judge_no_reply:<error_kind>`（2026-10-15 加）：其余"没查成"那一档
-  （`modelgw.NOT_CHECKED` 里除上面两档以外的 `network` / `server_error` / `unknown` /
-  `no_key`，以及重试完仍失败的 `rate_limited`）—— 后缀逐字带上网关自己的 `error_kind`。
-  为什么它有资格占一个码（真机读数，T5 第 8 趟 `t5h`）：本机 DNS 中途失效，网关把
-  `gaierror: [Errno 11002] getaddrinfo failed` 折成 `error_kind="network"`，
-  而本函数当时只认两档 ⇒ 三次网络失败落成 `judge_failed:ModelReplyNotOk`、
-  被循环按坏 JSON 计数、三次连击把整趟 run 判成 `bad_json_limit`，
-  收场那句话是「连续 3 次没有给出可解析的 JSON」—— 模型一个字都没说，是我们没连上。
-  这与 2026-10-12 那次（超时被当成坏 JSON）是同一个病，病根就在"只认两档"这一行。
-- `judge_auth_failed`（2026-10-15 加）：key 无效/无权。它不是"没查成"
-  （`modelgw.NOT_CHECKED` 里没有它：查过了、确定不行），也不是"它说错了"；
-  处置只有一条（换 key / 查额度），所以调用方应当立刻停，不必等三次连击。
+  思维链非空）。它与 `judge_timeout` 同族（都是"我们没拿到可用的回复"，不是"它说错
+  了"），处置却不同：这一档要的是"把这一步拆小、把思考压短"，不是重发同一个请求。
+- `judge_no_reply:<error_kind>`：其余"没查成"那一档（`modelgw.NOT_CHECKED` 里除上面
+  两档以外的 `network` / `server_error` / `unknown` / `no_key`，以及重试完仍失败的
+  `rate_limited`）—— 后缀逐字带上网关自己的 `error_kind`。为什么它有资格占一个码：
+  只认两档时，网络失败会落成 `judge_failed:ModelReplyNotOk`、被循环按坏 JSON 计数，
+  三次连击把整趟 run 判成 `bad_json_limit` —— 模型一个字都没说，是我们没连上。
+  病根就在"只认两档"这一行。
+- `judge_auth_failed`：key 无效/无权。它不是"没查成"（`modelgw.NOT_CHECKED` 里没有
+  它：查过了、确定不行），也不是"它说错了"；处置只有一条（换 key / 查额度），所以
+  调用方应当立刻停，不必等三次连击。
 - `judge_bad_json`：返回的不是合法 JSON（LLM 的输出形态不可控）。
 - `judge_over_budget`：预算耗尽（由调用方抛 `BudgetExhausted`，或由计量层拒绝）。
 - `judge_refused`：判定方明确拒绝（由调用方抛 `JudgeRefused`）。
@@ -49,7 +44,7 @@ from .llm import parse_llm_json
 
 #: 受控词表：`judge_failed` 是前缀，实际串是 `judge_failed:<异常类名>`。
 #:
-#: `judge_bad_args`（2026-10-03 加，`draft/37` §49/§50）：工具名是对的、参数不是合法 JSON。
+#: `judge_bad_args`：工具名是对的、参数不是合法 JSON。
 #: 它与 `judge_bad_json` 必须分开，理由是"下一步该说什么"完全不同：
 #: 坏 JSON 要提醒模型"只回一行 JSON"；而坏参数要提醒它"工具 X 的参数不是对象" ——
 #: 名字已经从传输层的结构化字段拿到了，所以这条错误比"认不出的形状"精确得多
@@ -57,16 +52,16 @@ from .llm import parse_llm_json
 JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_not_wired",
     "judge_timeout",
-    # `judge_output_limit`（2026-10-12 加）：输出预算被思考吃光 —— 见模块 docstring 那一行。
+    # `judge_output_limit`：输出预算被思考吃光 —— 见模块 docstring 那一行。
     "judge_output_limit",
-    # `judge_no_reply`（2026-10-15 加）：其余"没查成"（网络 / 5xx / 未知 / 没 key / 限流），
+    # `judge_no_reply`：其余"没查成"（网络 / 5xx / 未知 / 没 key / 限流），
     # 实际串是 `judge_no_reply:<error_kind>`。加它的理由见模块 docstring。
     "judge_no_reply",
-    # `judge_auth_failed`（2026-10-15 加）：key 无效/无权 —— 立刻停，不必等三次连击。
+    # `judge_auth_failed`：key 无效/无权 —— 立刻停，不必等三次连击。
     "judge_auth_failed",
     "judge_bad_json",
     "judge_bad_args",
-    # `judge_unknown_tool`（2026-10-26 加）：原生工具调用面里"点了一个没广告过的函数名"。
+    # `judge_unknown_tool`：原生工具调用面里"点了一个没广告过的函数名"。
     # 它与 `judge_bad_json` 必须分开，理由是"下一步该说什么"完全不同：坏 JSON 要提醒模型
     # "只回一行 JSON"，而点错名字要提醒它"这一趟广告的是哪几个函数、并列候选是哪几个" ——
     # 后者在文本协议下记的是 `unknown_tool`（工具层那一档），于是同一件事在两种协议下
@@ -77,12 +72,12 @@ JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_over_budget",
     "judge_refused",
     "judge_failed",
-    # ---- `L-05b-1`（`draft/52` D3）：`judges.judge` 自造的两个码收进同一张表。
+    # ---- `judges.judge` 自造的两个码收进同一张表。
     #
-    # 它们此前不在本表里 ⇒ `is_judge_problem("judge_bad_verdict")` 返回 `False`，
+    # 它们必须在本表里，否则 `is_judge_problem("judge_bad_verdict")` 返回 `False`，
     # 于是"判定词表外的取值"与"凭印象的评审被降级"这两个本层产出的失败码
     # 在调用方看来不像失败码（`judges.py` 的 docstring 却逐字写着"复用 JUDGE_PROBLEMS"）。
-    # 只加不删、只加不改名（旧码的历史读数要能原样对照，`46-05` §4.4）。
+    # 只加不删、只加不改名（旧码的历史读数要能原样对照）。
     "judge_bad_verdict",
     "judge_ungrounded_findings",
 )
@@ -107,16 +102,15 @@ def is_judge_problem(code: str) -> bool:
 
 
 def _problem_of(exc: BaseException) -> str:
-    """异常 → 失败码的唯一映射（`L-05b-3`，`draft/52` D3）。
+    """异常 → 失败码的唯一映射。
 
     为什么单列一个函数（而不是在各个 `except` 链里各写一遍）：
-    这套映射此前有两份（本模块的 `judge_json` 与 `judges.judge` 的裸 `ask_json`），
-    而 `judges` 那份根本没有归类（`BudgetExhausted`/`JudgeRefused`/`TimeoutError`
-    会落成 `judge_failed:<类名>`，词表外的异常也会）。两份实现必然漂移，
-    漂移的症状是同一件事在两个入口上给两个码。
+    这套映射只许有一份。两份实现必然漂移，漂移的症状是同一件事在两个入口上给两个码
+    （没有归类的那一份会把 `BudgetExhausted`/`JudgeRefused`/`TimeoutError` 落成
+    `judge_failed:<类名>`，词表外的异常也会）。
 
-    只做归类不做判断：`judge_failed:<类名>` 里的类名刻意保留（`judge.py` 的
-    docstring 第 19 行解释了为什么它不是一个受控枚举）。
+    只做归类不做判断：`judge_failed:<类名>` 里的类名刻意保留（见模块 docstring：
+    它不是一个受控枚举）。
     """
     if isinstance(exc, BudgetExhausted):
         return "judge_over_budget"
@@ -130,28 +124,21 @@ def _problem_of(exc: BaseException) -> str:
 def problem_of_reply(reply: Any) -> str:
     """网关的一次结局对象（不是异常）→ 本层的失败码；成功给空串。
 
-    为什么要有它：同一个"没查成"有两条路进本层，而它们此前给了两个码 ——
+    为什么要有它：同一个"没查成"有两条路进本层，必须给同一个码 ——
     抛异常那条走 `_problem_of`（`TimeoutError` ⇒ `judge_timeout`），
-    不抛那条在 `llmseam` 里写死成 `judge_failed:ModelReplyNotOk`。
+    不抛那条在 `llmseam` 里曾写死成 `judge_failed:ModelReplyNotOk`。
     后者不是罕见路径：`modelgw.ModelGateway.complete` 从不抛 —— 它把超时、网络、
     认证失败一律折成 `ok=False` 的回复，把"哪一档"放在 `error_kind` 里。
-
-    真机读数（2026-10-12 无 Lean 模式 T2 步 1）：三次 `detail=超过 60.0s 未返回`
-    落成的都是 `judge_failed:ModelReplyNotOk`，循环据此按"坏 JSON"计数、
-    收场措辞写成"连续 3 次没有给出可解析的 JSON" —— 三句话没有一句是真的：
-    它没有"给出"任何东西，是我们没等到。归因错在"码"这一格，不在读数。
-    第二次真机读数（2026-10-15 T5 第 8 趟 `t5h`）：同一个病换了外衣 ——
-    当时只认 `timeout` 与 `output_exhausted` 两档，于是本机 DNS 失效
-    （`gaierror: getaddrinfo failed`，`error_kind="network"`）连续三次落成
-    `judge_failed:ModelReplyNotOk`，又把整趟 run 判成 `bad_json_limit`。
-    所以现在按 `modelgw.NOT_CHECKED` 这张已声明的词表分流，而不是列举两档：
-    词表加了新档，这里自动跟着走（这正是"一处定义"要的效果）。
+    写死成 `ModelReplyNotOk` 的后果是循环按"坏 JSON"计数、收场措辞写成"连续 3 次
+    没有给出可解析的 JSON"—— 它没有"给出"任何东西，是我们没等到；归因错在"码"
+    这一格，不在读数。所以现在按 `modelgw.NOT_CHECKED` 这张已声明的词表分流，
+    而不是列举两档：词表加了新档，这里自动跟着走（这正是"一处定义"要的效果）。
 
     分流表（只做归类，不做判断）：
 
     | 网关的 `error_kind` | 本层的码 | 为什么 |
     |---|---|---|
-    | `timeout` | `judge_timeout` | 没等到 —— 历史读数点名的那一档 |
+    | `timeout` | `judge_timeout` | 没等到 |
     | `output_exhausted` | `judge_output_limit` | 预算被思考吃光 —— 处置是拆小这一步 |
     | 其余 `NOT_CHECKED`（`network` / `server_error` / `unknown` / `no_key`） | `judge_no_reply:<kind>` | 都是"我们没拿到可用的回复"，却各有各的原因；后缀逐字保留原因，便于事后归因 |
     | `auth_failed` | `judge_auth_failed` | 查过了、确定不行（key 无效）—— 立刻停 |
@@ -181,7 +168,7 @@ def is_no_reply(code: str) -> bool:
 
     为什么是函数而不是一张元组常量：`judge_no_reply:` 带后缀（与 `judge_failed:` 同形），
     拿 `in ("judge_timeout", "judge_output_limit")` 判会漏，而漏的表现就是
-    它被算进坏 JSON —— 这件事在真机上已经发生过两次（2026-10-12 超时、2026-10-15 网络）。
+    它被算进坏 JSON —— 超时与网络各踩过一次。
     判据只许有这一处：计数、纠正行、停止理由三处都按它分流。
     """
     text = str(code or "")
@@ -193,12 +180,12 @@ def seam_json(seam: Any, prompt: str, *,
               point: str = "") -> tuple[dict[str, Any] | None, str, Any]:
     """`ask_json` 形态的缝的共用入口：`(判定, 没查成的原因, 这次调用的审计事实)`。
 
-    为什么把共用入口放在本文件（`L-05b-4` / `46-05` §4.2）：本模块是"失败码表 +
-    异常类"的唯一定义处，把"调一次缝并把异常归成码"也放在这里最自然 ——
-    `judges.judge` 与 `judge.judge_json` 从此都转调它，两个入口名都保留
-    （`agent_f/core.py` 调 `judge_json`，`agent_h/core.py` 调 `judges.judge`）。
+    为什么把共用入口放在本文件：本模块是"失败码表 + 异常类"的唯一定义处，把"调一次
+    缝并把异常归成码"也放在这里最自然 —— `judges.judge` 与 `judge.judge_json` 从此都
+    转调它，两个入口名都保留（`agent_f/core.py` 调 `judge_json`，`agent_h/core.py` 调
+    `judges.judge`）。
 
-    `seam` 没有 `ask_json`（按 `draft/30` §T0-8 写的 `complete` 形态）不归这里管：
+    `seam` 没有 `ask_json`（只有 `complete` 的形态）不归这里管：
     那是 `judge_json` 的兼容分支，转调方自己分流。
     """
     if seam is None or not getattr(seam, "wired", True):
@@ -223,23 +210,21 @@ def judge_json(llm: Any, prompt: str, *, point: str = "") -> tuple[dict[str, Any
     `point` 只用于留痕（调用方把它写进审计字段：这一格是哪一条判断点），
     不参与任何分支 —— 分支只由 `llm` 是否接线与异常类型决定。
 
-    ## 两种缝的形状都收（`draft/39` §6.44 的 D55）
+    ## 两种缝的形状都收
 
-    调用约定（与 `draft/30` §T0-8 逐字一致）：`llm` 只需实现
-    `complete(prompt: str) -> str`；解析走 `llm.parse_llm_json`。
-    而真机里接进来的那个缝（`llmseam.LlmSeam`）没有 `complete` —— 它实现的是
-    `ask(prompt) -> SeamCall` / `ask_json(prompt) -> (dict|None, SeamCall)`。
-    于是任何拿真缝调本函数的调用点都会得到 `judge_failed:AttributeError`
-    （真机读数 T5 第 4 趟 `p8d`：F 的攻坚推理两条计划都卡在这一句上，
-    M 只好如实记"推理缝没查成"）。两件事都修在这一处（它是"要一份 JSON 判定"的唯一缝）：
+    调用约定：`llm` 只需实现 `complete(prompt: str) -> str`；解析走
+    `llm.parse_llm_json`。而真机里接进来的那个缝（`llmseam.LlmSeam`）没有 `complete` ——
+    它实现的是 `ask(prompt) -> SeamCall` / `ask_json(prompt) -> (dict|None, SeamCall)`。
+    于是任何拿真缝调本函数的调用点都会得到 `judge_failed:AttributeError`。
+    两件事都修在这一处（它是"要一份 JSON 判定"的唯一缝）：
 
     - 缝有 `ask_json` ⇒ 直接用它（它自己会把坏 JSON 归成 `judge_bad_json`，还带上解析原话）；
-    - 只有 `complete` ⇒ 走原来的路（兼容按 `draft/30` §T0-8 写的替身与旧接线）。
+    - 只有 `complete` ⇒ 走原来的路（兼容按 `complete` 约定写的替身与旧接线）。
     """
     if llm is None:
         return None, "judge_not_wired"
     if hasattr(llm, "ask_json"):
-        # `L-05b-4`：共用入口只有一处（异常→码的映射也只有一处）
+        # 共用入口只有一处（异常→码的映射也只有一处）
         data, problem, _call = seam_json(llm, prompt, point=point)
         return data, problem
     try:
