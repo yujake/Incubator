@@ -262,9 +262,15 @@ class TokenMeter:
         "预算判断按哪一份"这类问题的来源。
         """
         rows = self.store.rows("usage_ledger")
-        tokens = sum(int(r.get("tokens_total") or 0) for r in rows)
-        usd = sum(float(r.get("usd") or 0.0) for r in rows)
-        attempts = sum(int(r.get("attempts") or 1) for r in rows)
+        # 三个汇总（token / 美元 / 尝试数）原先各扫一趟同一张表；合成一趟，
+        # 逐行按原顺序累加 —— 浮点加法的次序没变，`usd` 逐位相同。
+        tokens = 0
+        usd = 0.0
+        attempts = 0
+        for r in rows:
+            tokens += int(r.get("tokens_total") or 0)
+            usd += float(r.get("usd") or 0.0)
+            attempts += int(r.get("attempts") or 1)
         return {"entries": len(rows), "tokens": tokens, "usd": usd, "attempts": attempts}
 
     # ---------------------------------------------------------------- 记账
@@ -708,8 +714,13 @@ class TokenMeter:
             name: {"tokens": 0, "usd": 0.0, "entries": 0, "attempts": 0, "roles": {}}
             for name in tuple(S.USAGE_SCOPES) + (S.SCOPE_UNCLASSIFIED,)
         }
+        # 词表外的原始取值原先在收尾时把整张表再扫一遍才收出来；并在这一趟里收。
+        # 判据照旧按 `strip()` 后的值比对，记下的仍是未 strip 的原串。
+        raw_values: set[str] = set()
         for r in self.store.rows("usage_ledger"):
             raw = str(r.get("scope") or "").strip()
+            if raw not in S.USAGE_SCOPES:
+                raw_values.add(str(r.get("scope") or ""))
             # 词表外的值（历史行、或别的写入方）落在显式的"未分类"档里，
             # 而不是被丢掉、也不是被塞进"其它"：丢掉会让总额对不上，
             # 塞进 other 会把"有人写了编外的归口"这件事藏起来。
@@ -721,10 +732,7 @@ class TokenMeter:
             acc["attempts"] += int(r.get("attempts") or 1)
             role = str(r.get("role") or "unknown")
             acc["roles"][role] = acc["roles"].get(role, 0) + 1
-        out[S.SCOPE_UNCLASSIFIED]["raw_values"] = sorted({
-            str(r.get("scope") or "") for r in self.store.rows("usage_ledger")
-            if str(r.get("scope") or "").strip() not in S.USAGE_SCOPES
-        })
+        out[S.SCOPE_UNCLASSIFIED]["raw_values"] = sorted(raw_values)
         return out
 
     def retry_overhead(self) -> dict:
