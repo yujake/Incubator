@@ -94,11 +94,12 @@ class _Poll:
                         )
                         continue
 
+                    existing_rids = set(qrow.get("related_relation_ids") or [])
                     new_rids = sorted(
                         str(r.get("relation_id"))
                         for r in rels
                         if cids & set(r.get("concept_ids") or [])
-                        and str(r.get("relation_id")) not in set(qrow.get("related_relation_ids") or [])
+                        and str(r.get("relation_id")) not in existing_rids
                     )
                     qrow["related_relation_ids"] = S.sorted_unique(
                         list(qrow.get("related_relation_ids") or []) + new_rids
