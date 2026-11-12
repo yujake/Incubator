@@ -72,9 +72,10 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
             ("0009", "素理想", "商环为整环的理想"),
         ]
         def rel(rid, cids, desc, lit, qv, status="active", page=None):
+            ordered = sorted(cids)
             return {
                 "relation_id": rid,
-                "concept_ids": sorted(cids),
+                "concept_ids": ordered,
                 "description": desc,
                 "lit_id": lit,
                 "page_range": page or {"start": 1, "end": 1, "label": "p. 1"},
@@ -83,7 +84,7 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
                 "quote_verified": qv,
                 "statement": desc,
                 "status": status,
-                "concept_group_key": "|".join(sorted(cids)),
+                "concept_group_key": "|".join(ordered),
             }
 
         relations = [
@@ -471,11 +472,12 @@ if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块
     st4 = make_store("service")
 
     def _svc_rel(rid, cids, desc, lit, qv=True):
+        ordered = sorted(cids)
         return {
-            "relation_id": rid, "concept_ids": sorted(cids), "description": desc, "lit_id": lit,
+            "relation_id": rid, "concept_ids": ordered, "description": desc, "lit_id": lit,
             "page_range": {"start": 1, "end": 1, "label": "p. 1"}, "quote": f"引文 {rid}",
             "quote_normalized": f"引文 {rid}", "quote_verified": qv, "statement": desc,
-            "status": "active", "concept_group_key": "|".join(sorted(cids)),
+            "status": "active", "concept_group_key": "|".join(ordered),
         }
 
     with st4.tx(*CR.tables_for_concept_write("relations", "literature"),
