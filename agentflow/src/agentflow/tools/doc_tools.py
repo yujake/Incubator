@@ -1,22 +1,29 @@
 """G 的工具：论文撰写。
+
 ## 这一层唯一的核心规矩
-没有引用的断言不允许进入稿件。
-这不是文风要求，而是本领域可信度的技术基础：数学断言的价值完全取决于"它来自哪里"。一旦允许无引用的断言，稿件就退化成一个听起来很合理的文本 —— 而"听起来合理"与"有证
-据"之间的差距，正是幻觉最容易藏身的地方。
-因此本模块把三条约束做成了可机械判定的检查（`scan_claim`），并由 `schema.Document.validate` 在写入时强制执行：
-1. `citations` 非空（FC-02）； 2. `evidence_kind="cross_check"` 的断言必须自带 `disclaimer`（"数值交叉验
-证，不构成证明"）—— 这句话由结构强制，不靠人记得写（FC-22）； 3. 否定型断言必须给 `negation_kind`（FC-25，"未证明"≠"已证否"）。
+没有引用的断言不允许进入稿件。这不是文风要求，而是本领域可信度的技术基础：数学断言的
+价值完全取决于"它来自哪里"；一旦允许无引用的断言，稿件就退化成"听起来很合理"的文本，
+而"听起来合理"与"有证据"之间的差距正是幻觉最容易藏身的地方。因此三条约束被做成可机械
+判定的检查（`scan_claim`），并由 `schema.Document.validate` 在写入时强制执行：
+1. `citations` 非空（FC-02）；
+2. `evidence_kind="cross_check"` 的断言必须自带 `disclaimer`（"数值交叉验证，不构成证明"）
+   —— 由结构强制，不靠人记得写（FC-22）；
+3. 否定型断言必须给 `negation_kind`（FC-25，"未证明" ≠ "已证否"）。
+
 ## 本模块的入口
-| 函数 | 作用 | 关键纪律 ||---|---|---|| `scan_claim` | 一条断言的机械检查（纯函数） | 唯一判据；G 与 H 共用同一份 || 
-`compose_claim` | 构造一条合规断言 | `cross_check` 自动补 disclaimer；否定型未分类、无引用、过度声称 ⇒ 构造时抛 || 
-`build_document` | 落库 + 渲染 markdown | 先逐条 `scan_claim`、再核 citations 指向的对象真的存在（两张闸都过才写库）
-|| `register_dependency` | 登记外部依赖（FC-23 第一道闸） | `closed` 必须用真实数据核到已入库来源 || 
-`render_markdown` | 人可读渲染（FC-10 / FC-22 / FC-23 / FC-25 的呈现层） | 三分档计数、否定分类、依赖表都必须出现
-|| `list_documents` | 只读列举 | 供 H / F / D 消费 |
-|| `write_mapping` | 论文对应表的三份写口（json / md / 正文附录） | 内部只调 `papermapping.write_package`：不自己渲染任何一段，手抄就与渲染器逐字对不上 |
+| 函数 | 作用 | 关键纪律 |
+|---|---|---|
+| `scan_claim` | 一条断言的机械检查（纯函数） | 唯一判据；G 与 H 共用同一份 |
+| `compose_claim` | 构造一条合规断言 | `cross_check` 自动补 disclaimer；否定型未分类、无引用、过度声称 ⇒ 构造时抛 |
+| `build_document` | 落库 + 渲染 markdown | 先逐条 `scan_claim`、再核 citations 指向的对象真的存在（两张闸都过才写库） |
+| `register_dependency` | 登记外部依赖（FC-23 第一道闸） | `closed` 必须用真实数据核到已入库来源 |
+| `render_markdown` | 人可读渲染（FC-10 / FC-22 / FC-23 / FC-25 的呈现层） | 三分档计数、否定分类、依赖表都必须出现 |
+| `list_documents` / `write_mapping` | 只读列举 / 论文对应表三份写口 | `write_mapping` 只调 `papermapping.write_package`，手抄就与渲染器逐字对不上 |
+
 ## 为什么"在构造时就抛"比"写库时才抛"重要
-`schema.Document.validate` 已经拦得住无引用断言，但它的报错形如"claims[3] 没有 citations" —— 读者得自己回去数"第 3 
-条到底是哪句话"，而构造现场（手里正拿着那句话、那段引用）才是信息最全的地方。写库时的 schema 是最后一道闸，不是唯一一道。
+`schema.Document.validate` 已拦得住无引用断言，但它的报错形如"claims[3] 没有 citations"
+—— 读者得自己回去数"第 3 条到底是哪句话"，而构造现场（手里正拿着那句话、那段引用）才是
+信息最全的地方。写库时的 schema 是最后一道闸，不是唯一一道。
 """
 
 from __future__ import annotations
@@ -277,15 +284,12 @@ def scan_claim(claim: Mapping[str, Any]) -> dict:
 
 
 #: `ClaimIssue.code` → `schema.FINDING_KINDS` 的受控词（唯一的映射处，FC-03）。
-#: 为什么需要这一层：`claimanatomy` 的 code 是判据层的词（`missing_field` / `bad_enum` /
-#: `inconsistent_status` …），而 `review_findings.kind` 是落库层的词（`schema.FINDING_KINDS`，
-#: 而 `schema.py` 在禁 AI 区、不能加成员）；两者必须能对上，否则 H 的发现落库时会被 schema 拒。
-#: 映射：`missing_field` / `empty_required` / `incomplete_numeric_evidence` / `missing_disclaimer` /
-#: `uncontrolled_disclaimer` → `unsupported_claim`（缺的字段是断言成立的前提 / 数值证据四元组不齐 /
-#: 受控声明没写或写错）；`bad_enum` / `bad_type` / `checker_error` → `garbled`（取值非法 / 检查器没跑成）；
-#: `inconsistent_status` / `overclaim` → `overclaim`；`unknown_status_axis` / `undeclared_field` →
-#: `scope_drift`（前者不与 `garbled` 撞 kind、也不与"否定未分类"撞级别）；`duplicate_claim_id` /
-#: `lifecycle_incomplete` → `inconsistent_number`。
+#: 为什么需要这一层：`claimanatomy` 的 code 是判据层的词，而 `review_findings.kind` 是落库
+#: 层的词（`schema.FINDING_KINDS`，`schema.py` 在禁 AI 区、不能加成员）—— 两者必须能对上，
+#: 否则 H 的发现落库时会被 schema 拒。映射：缺字段 / 数值证据不齐 / 受控声明没写或写错 →
+#: `unsupported_claim`；取值非法 / 检查器没跑成 → `garbled`；`inconsistent_status` /
+#: `overclaim` → `overclaim`；轴未知 / 字段未声明 → `scope_drift`；重复 id / 生命周期不完整
+#: → `inconsistent_number`。
 _FINDING_KIND_OF_CODE: dict[str, str] = {
     "missing_field": "unsupported_claim",
     "empty_required": "unsupported_claim",
@@ -334,15 +338,14 @@ def _finding_kind_of(issue: "CA.ClaimIssue") -> str:
 
 
 # ---------------------------------------------------------------- 引用存在性（FC-02 第二道闸）
-# 这一节是 `scan_claim` 的补集：`scan_claim` 只查"有没有引用"（形状），查不出"引用的东西在不在"
-# （存在性）。两者缺一不可：`register_dependency` 早就对 `status='closed'` 用真实数据核过来源（见本文件
-# `:753-768` 的长注释），而 `build_document` 此前没有这道闸 —— `citations=["lit:9999"]` 能通过全部检查、
-# 写库、渲染，直到 `verify` 事后才报 `dangling_citation`，那时坏引用已经进了稿件。
-# 引用前缀 → 它必须存在于哪张表。与 `verify.py` 的 `dangling_citation` 同口径（`partition(":")` 取前缀、
-# `split("#")` 去页码后缀）：写入期比审计期更严可以，两处对同一个字符串给出不同结论则不行。
-# 这张表不再内联：它从唯一声明面 `schema.CITATION_PREFIXES` 派生（2026-10-07 所有者裁定 `draft/68` 题 1
-# 选 A）；改前它与 `verify.CITATION_KINDS`、`gates.gate_g2` 内联的四个前缀是三处各写一份，于是 `stmt:`
-# 加进一处之后其余两处各自自洽 —— "写入期认、审计期不认"没有任何读数会响。
+# 这一节是 `scan_claim` 的补集：后者只查"有没有引用"（形状），查不出"引用的东西在不在"
+# （存在性）。`register_dependency` 早就对 `status='closed'` 用真实数据核过来源，而
+# `build_document` 此前没有这道闸 —— `citations=["lit:9999"]` 能通过全部检查、写库、渲染，
+# 直到 `verify` 事后才报 `dangling_citation`。引用前缀 → 它必须存在于哪张表，与
+# `verify.py` 的 `dangling_citation` 同口径（`partition(":")` 取前缀、`split("#")` 去页码
+# 后缀）：写入期比审计期更严可以，两处对同一个字符串给出不同结论则不行。这张表从唯一声明面
+# `schema.CITATION_PREFIXES` 派生；改前它与 `verify.CITATION_KINDS`、`gates.gate_g2` 的内联
+# 前缀是三处各写一份，`stmt:` 加进一处之后其余两处各自自洽 —— 没有任何读数会响。
 _CITATION_TABLES: dict[str, str] = dict(S.CITATION_PREFIXES)
 
 
@@ -1132,16 +1135,14 @@ def compose_claim(
     # ---- EE-06 的产出方那一半（`status` / `allowed_use`）：只在该字段真有依据时写。
     #
     # 依据不是这里新造的判据，是 `claimanatomy` 早就写死的两条一致性规则：
-    #   * `evidence_kind="proof"` ⇒ `status="证"`
-    #     （`claimanatomy` 的规则表逐字："`status=证` + `evidence_kind != proof` ⇒ 不一致"，FC-22）；
+    #   * `evidence_kind="proof"` ⇒ `status="证"`（"`status=证` + `evidence_kind != proof`
+    #     ⇒ 不一致"，FC-22）；
     #   * `evidence_kind="cross_check"` ⇒ `status="验"` + `allowed_use="Remark only"`
-    #     （`ALLOWED_USE_KINDS` 的 why 逐字："只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark"）；
+    #     （"只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark"）；
     #   * 其余（`heuristic` 或空）⇒ 一个都不写 —— 没有依据就是没有依据。
-    #
-    # 三态的理由（EE-06 原本的读数是 `status` 0/449、`allowed_use` 0/449 = 这两个字段
-    # 从来没有产出方）：正解是"有依据的写、没依据的不写"，不是"给每条补一个默认值"
-    # —— 后者会把"从没问过"伪造成"待精化"（`docs/SCHEMA-MIGRATION-PROPOSAL-claims.md` §3.2 逐字）。
-    # 调用方显式给了就以调用方为准（上面那个循环已经写进去了，这里不覆盖）。
+    # 三态：正解是"有依据的写、没依据的不写"，不是"给每条补一个默认值"—— 后者会把"从没
+    # 问过"伪造成"待精化"（`docs/SCHEMA-MIGRATION-PROPOSAL-claims.md` §3.2）。调用方显式
+    # 给了就以调用方为准（上面那个循环已经写进去了，这里不覆盖）。
     if status is None and evidence_kind == "proof":
         claim["status"] = "证"
     elif status is None and evidence_kind == "cross_check":
@@ -1466,24 +1467,21 @@ def render_markdown(
 # 业主 2026-10-24：「只对论文负责是正确的，documents等都是中间产物」＋
 # 「H 审论文（out/paper/main.tex / pdf），documents 只是它的登记行」。
 #
-# 于是 `documents` 这一行是中间产物，它指向的 markdown 只是 `render_markdown`
-# 的一份呈现。这一节记的是"写这一行时盘上那份 markdown 的字节 sha256"：
+# 于是 `documents` 这一行是中间产物，它指向的 markdown 只是 `render_markdown` 的一份呈现。
+# 这一节记的是"写这一行时盘上那份 markdown 的字节 sha256"：
+#   * 唯一口径 = `artifacts.sha256_of`（字节级，不做任何归一化）。不接收调用方传进来的值，
+#     也不在别处再算一份 —— sha 一旦有两个来源，"这一份有没有变过"就没有答案了；
+#   * 落点是事件流里的一条 info（`Tx.info`），不是那一行上的新字段：`documents` 的字段面
+#     归 `schema.py`（FC-27 禁改区）；而它现有的 `content_sha256` 是"这一版内容"的规范哈希
+#     （签名台账与 `doc:@hash` 内部引用都钉它）—— 把文件 sha 塞进那一格会让 `verify` 的
+#     重算判据与整条签名链同时失效（改写侧每写一次文件就换一次字节，而内容一个字节没变）；
+#   * 只用于人工追溯「这份中间产物后来有没有被人改过」，不作任何收工门的判据（读侧
+#     `document_artifact_readings` 的结论没有进 `verify`、也没有进 `closing`）。
 #
-#   * 唯一口径 = `artifacts.sha256_of`（字节级，不做任何归一化）。不接收调用方传进来的
-#     值，也不在别处再算一份 —— sha 一旦有两个来源，"这一份有没有变过"就没有答案了；
-#   * 落点是事件流里的一条 info（`Tx.info`），不是那一行上的新字段：`documents` 的
-#     字段面归 `schema.py`（FC-27 禁改区）；而它现有的 `content_sha256` 是
-#     "这一版内容"的规范哈希（`signatures.content_sha256_of`，签名台账与
-#     `doc:@hash` 内部引用都钉它）——把文件 sha 塞进那一格会让 `verify` 的重算判据与
-#     整条签名链同时失效（实测：改写侧每写一次文件就会换一次字节，而内容一个字节没变）；
-#   * 它只用于人工追溯「这份中间产物后来有没有被人改过」，不作任何收工门的判据：
-#     读侧 `document_artifact_readings` 的结论没有进 `verify`、也没有进 `closing`。
-#
-# 为什么"文件字节"不等于"内容哈希"（这也是这一条不能折进 `content_sha256` 的原因）：
-# `render_markdown` 会把 `status` / 审校轮次画进文件，而 H 审完只改 `status` ⇒
-# 同一份内容、状态一翻，盘上那份文件的 sha 就变了；`Path.write_text` 在 Windows 上
-# 还会把 "\n" 翻成 "\r\n" ⇒ 同一份内容在两个平台上也是两个字节串。所以文件的 sha
-# 只能是"这一份产物"的指纹，不能是"这一版内容"的指纹。
+# 为什么"文件字节"不等于"内容哈希"：`render_markdown` 会把 `status` / 审校轮次画进文件，
+# 而 H 审完只改 `status` ⇒ 同一份内容、状态一翻，盘上那份文件的 sha 就变了；`Path.write_text`
+# 在 Windows 上还会把 "\n" 翻成 "\r\n" ⇒ 同一份内容在两个平台上也是两个字节串。所以文件的
+# sha 只能是"这一份产物"的指纹，不能是"这一版内容"的指纹。
 
 #: 事件流里记"这条中间产物的 sha"的 message（读侧按它反查）。
 ARTIFACT_EVENT = "documents.markdown_sha256"
