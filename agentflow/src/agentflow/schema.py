@@ -6,7 +6,7 @@
   旧数据里的四位号按读侧兼容照样读得进来），不用 int，避免前导零在序列化时丢失。
 - 数组字段（related_concepts / concept_ids / source_request_ids）在写入前统一走
   `sorted_unique()`，把"保持升序、去重"从"调用方记得做"变成"结构上不可能做错"。
-  "写入前"那一步的落点是 `normalize_set_fields()`（写侧归一，2026-10-28）：它按
+  "写入前"那一步的落点是 `normalize_set_fields()`（写侧归一）：它按
   `ARRAY_FIELD_KINDS` 里声明为 `set` 的那些字段就地排序去重，并把改动过的字段名
   回给调用方；`check_array_invariants()` 仍是落盘那一侧的判据（归一化不是放宽它）。
 - 时间戳统一 ISO-8601 带时区，由 `now_iso()` 产生，保证同库内可比。
@@ -19,12 +19,11 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Iterable, Literal, Mapping
 
-#: 磁盘格式契约的版本号（`F-7`：读期 fail-closed，版本不符一律拒读）。
+#: 磁盘格式契约的版本号（读期 fail-closed，版本不符一律拒读）。
 #:
-#: `2`（S1r 并表那一笔，业主 2026-10-09「concept表真并进statements」+「并干净」）：
-#: `concepts` 表从 `TABLES` / `LOCK_ORDER` / `ARRAY_FIELD_KINDS` 里真删，
-#: 概念行以 `kind="concept"` 住进 `statements`（号由同一个分配器重发）。
-#: 老盘（v1）不靠读期兼容 —— 读期照旧拒（`F-7` 人裁不变），唯一的兼容点是
+#: `2`：`concepts` 表不存在了 —— 概念行以 `kind="concept"` 住进 `statements`
+#: （号由同一个分配器重发），`TABLES` / `LOCK_ORDER` / `ARRAY_FIELD_KINDS` 里都没有它。
+#: 老盘（v1）不靠读期兼容 —— 读期照旧拒，唯一的兼容点是
 #: `store.rebuild`：它接受上一版的事件（`known_old`），把 `concepts` 那一段
 #: 折进 `statements` 再写快照（折叠内核在 `migrate_concepts`，改号逐条落
 #: `out/migrate-map.jsonl`）。
@@ -70,11 +69,10 @@ SUBMITTER_DEFAULT_PRIORITY: dict[str, str] = {
     "agent-E": "low",
     "agent-G": "low",
     "agent-H": "low",
-    # A 自己的检索需求：业主 2026-10-12 裁定（CS-15 的残留项）—— 显式登记为 low。
-    # 它是写下来的决定，不是"没登记所以碰巧低"：A 实例提交的行（真机 280 行里约 270 行，
-    # `agent-A-A1` / `agent-A-egr` 这类带后缀的写法）经 `interactions.role_key_of_submitter`
-    # 折到 `agent-A` 之后命中的就是这一行；理由串因此读作"按提交方 … 的角色 agent-A 的
-    # 默认优先级"，不再把它说成"陌生来源"。
+    # A 自己的检索需求：显式登记为 low（写下来的决定，不是靠兜底）。
+    # A 实例提交的行（`agent-A-A1` / `agent-A-egr` 这类带后缀的写法）经
+    # `interactions.role_key_of_submitter` 折到 `agent-A` 之后命中的就是这一行；
+    # 理由串因此读作"按提交方 … 的角色 agent-A 的默认优先级"。
     "agent-A": "low",
     "unknown": "low",
 }
@@ -92,7 +90,7 @@ RELATION_STATUS = ("active", "suspect", "rejected")
 #:
 #: 别与 `TASK_OUTCOMES` 串了（两套命名空间只差一个字母）：本词表（`search_requests.outcome`）
 #: 用复数 `no_results`，`TASK_OUTCOMES`（`tasks.outcome`）用单数 `no_result`。错一个字母不会
-#: 有任何东西变红 —— 两处 `validate` 都只说"不在词表里"，不会告诉你串了哪一套（见 `P-21`）。
+#: 有任何东西变红 —— 两处 `validate` 都只说"不在词表里"，不会告诉你串了哪一套。
 SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 
 #: `literature.download.status` 的受控词表。
@@ -108,8 +106,8 @@ SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 #:   skipped           —— 未尝试下载（无 pdf_url / 关闭下载 / 达到单请求上限）
 DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 
-#: 「待新增文献列表」(`lit_candidates`) 的槽位状态词表：五态，不是"在/不在"两态（业主口径
-#: 2026-10-20）。折成一个布尔会让四种处置在盘上同形，而它们的下一步动作相反。
+#: 「待新增文献列表」(`lit_candidates`) 的槽位状态词表：五态，不是"在/不在"两态。
+#: 折成一个布尔会让四种处置在盘上同形，而它们的下一步动作相反。
 #:   pending    —— 在列表里等着被审（唯一可被 stage_withdraw / stage_reject / admit 的态）
 #:   withdrawn  —— 被撤掉：槽位仍在列表里（序号不复用），`withdrawn_reason` 必须非空
 #:   rejected   —— 审内容后拒收：`reject_reason` 必须非空（重叠检查没通过也走这一档）
@@ -117,7 +115,7 @@ DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 #:   cleared    —— 迁移结算时被清空的残留（超配额/未审完）：`cleared_at` 与 `clear_reason` 必须非空
 CANDIDATE_STATUSES: tuple[str, ...] = ("pending", "withdrawn", "rejected", "admitted", "cleared")
 
-#: 「待新增文献列表」的筛选理由受控词表（业主 2026-10-20 第 3 条：理由用受控取值，不许自由发挥）。
+#: 「待新增文献列表」的筛选理由受控词表（理由用受控取值，不许自由发挥）。
 #: 为什么要受控：这些理由会进委托报告的"未入库"一块，而报告交给下一次委托的 D/H 读 —— 自由
 #: 文本没法按类统计（这一轮挡了几篇重复、几篇低质），也没法被机器判据检查。每一档都是一个
 #: 可判定的情形：`withdrawn_by_reviewer` / `rejected_off_topic` / `rejected_low_quality` /
@@ -157,22 +155,21 @@ assert set(CANDIDATE_REASON_LABELS) == set(CANDIDATE_REASON_CODES), (
     "报告里会出现只有码没有说法的条目（加一个理由码必须同时加一条标签）"
 )
 
-#: `literature.matched` 的受控词表（`draft/37` §2 R1b）：检索回来的到底是不是这一篇。
+#: `literature.matched` 的受控词表：检索回来的到底是不是这一篇。
 #:   exact —— 题名/年份/DOI 都对得上派活时点名的那一篇；partial —— 同一篇但元数据有出入；
-#:   mismatch —— 不是同一篇（实测反例：要 Brown 1971，下回来 2022 年另一篇 CLT 论文，真 PDF、
+#:   mismatch —— 不是同一篇（例如要 Brown 1971，下回来 2022 年另一篇 CLT 论文，真 PDF、
 #:                 登记成功，没有任何地方报出来）。
 #: 空串是第四态、不是缺席："" = 还没做命中校验（三态纪律："没查"不能折成"查过了没问题"）。
-#: 别与 §5.2 / §16 P2 的另一个 `matched` 串了（同 `SEARCH_OUTCOMES` 那一族的形态）：本栏问
+#: 别与"这条定理在不在这篇里"那一栏的 `matched` 串了（同 `SEARCH_OUTCOMES` 那一族的形态）：本栏问
 #: "这一篇是不是我要的那一篇"（文献身份）⇒ 第三态叫 `mismatch`；那处问"这条定理在不在这篇
 #: 里"（文内定位）⇒ 第三态叫 `none`。处置方向相反（重取 vs 换关键词/如实回报），折平即同形。
 LIT_MATCH_STATUSES = ("exact", "partial", "mismatch")
 
-#: 编号宽度的唯一定义处（业主 2026-10-14：「所有四位编号改成六位（`0000`→`000000`，防溢出）」）。
+#: 编号宽度的唯一定义处（六位十进制，防溢出）。
 #:
 #: 为什么必须是一处：`store.MAX_ID`（上限）与三个形态判据（`_ID_RE` / `_PROCESS_ID_RE` /
-#: 各消费方的正则）此前各写各的 4 —— 而 `assert_id_space_contract()` 存在的理由
-#: 就是"上限与形态不许分家"。宽度改成一处定义之后，这条对账依然是同一条：
-#: 改 `ID_DIGITS` 而忘了改 `MAX_ID`，导入期当场炸。
+#: 各消费方的正则）都从它派生 —— `assert_id_space_contract()` 存在的理由
+#: 就是"上限与形态不许分家"：改 `ID_DIGITS` 而忘了改 `MAX_ID`，导入期当场炸。
 ID_DIGITS = 6
 
 #: 当前宽度的编号形态（新写的号必须是它）。
@@ -180,7 +177,6 @@ ID_PATTERN = rf"\d{{{ID_DIGITS}}}"
 
 #: 旧数据（4 位）的读侧兼容形态。
 #:
-#: 处置（业主同一条裁定：「留一条『六位』的反真空判据 + 旧四位数据的读侧兼容」）：
 #: 盘上已有的 4 位号照样读得进来（`is_valid_id` 两条形态都认），
 #: 但发号器只发六位（`format_id()` 一处；判据见 `tests/test_id_width.py`）。
 #: 不这么做的话，`store.rebuild()` 会把所有历史行当坏行静默跳过 —— 那是数据毁灭，
@@ -332,8 +328,8 @@ class SearchRequest:
     def validate(self) -> None:
         if not self.request_id:
             raise ValueError("request_id 不能为空")
-        # `c-1` / `c-2`：非空之外还必须过过程记录 ID 的完整判据（形态 + 前缀）。
-        # 此前只查非空 ⇒ `r--0001` / `0000` / `gb-0001` 全部通过 `validate()`。
+        # 非空之外还必须过过程记录 ID 的完整判据（形态 + 前缀）：
+        # 只查非空时 `r--0001` / `0000` / `gb-0001` 全部通过 `validate()`。
         require_process_id(self.request_id, "request")
         if self.mode not in SEARCH_MODES:
             raise ValueError(f"mode 必须是 {SEARCH_MODES} 之一，收到 {self.mode!r}")
@@ -372,8 +368,8 @@ class SearchRequest:
             raise ValueError(f"outcome 必须是 {SEARCH_OUTCOMES} 之一或 None，收到 {self.outcome!r}")
         # done 的语义：必须能说清"是怎么结束的"。
         # 这里不强制 outcome 必填（历史数据与测试夹具可能只有 result_lit_ids /
-        # last_error），但明确拒绝"三样都没有"的情况 —— 那正是曾经的 bug：
-        # 搜索正常返回空结果时既不写 lit_ids 也不写 error，于是无法与"没跑过"区分。
+        # last_error），但明确拒绝"三样都没有"的情况：搜索正常返回空结果时既不写
+        # lit_ids 也不写 error，于是无法与"没跑过"区分。
         if self.done:
             if self.outcome is None and not (self.result_lit_ids or self.last_error):
                 raise ValueError(
@@ -396,17 +392,11 @@ LIT_PATH_PREFIX = "library/"
 def literature_path_problem(path: str | None) -> str | None:
     """`literature.path` 的形状判据（唯一实现）：合法 ⇒ `None`，否则 ⇒ 拒信正文。
 
-    ## 为什么这里专门拒 `library/` 前缀（2026-11-05，M4 补写入闸）
-    改前 `Literature.validate` 的注释逐字写着「path 必须是 `library/` 下的相对路径」，
-    而代码只查了绝对路径 / 盘符 / `..` —— 注释承诺了一句它没做的事。后果在真机上可量：
-    B 用 `table.update` 把 `library/000001/…txt`（比库根多一层）原样写了进去，抽取器按
-    `library` 基准拼成 `library/library/000001/…` ⇒ `file_missing`。真机证据：
-    `literature[000001].path`、`last_mine_error=file_missing:…\\library\\library\\000001\\…`。
-    同族先例：`search_tools._lit_file` 的 docstring 记着 paper-rewrite-78 的同一事故。
-
-    口径：这一格存的是相对 `library/` 的路径（`000001/x.pdf`），库根本身不写进来。
-    所以 `library/` 前缀不是"风格"，是多一层：带它必然解析到库里不存在的
-    `library/library/…`。拒信必须说清该怎么写 —— 只说"不合法"，模型只能再猜一次。
+    ## 为什么这里专门拒 `library/` 前缀
+    这一格存的是相对 `library/` 的路径（`000001/x.pdf`），库根本身不写进来。
+    所以 `library/` 前缀不是"风格"，是多一层：带它会被下游按 `library` 基准再拼一次，
+    解析到库里不存在的 `library/library/…` ⇒ `file_missing`。
+    拒信必须说清该怎么写 —— 只说"不合法"，模型只能再猜一次。
 
     ## 为什么只判形状、不判盘（"文件在不在"不在这里）
     `validate()` 是字段级的，手上没有工作区根（同样的话写在 `store._refuse_fake_proof_review`
@@ -461,8 +451,8 @@ class Literature:
     #: 为什么是字符串而不是 PageRange：row_from_dict 对 literature 只按 __dataclass_fields__ 过滤、
     #: 不做 PageRange.from_dict（对照 relations 那一支），直接放 PageRange 字段会让盘上的 dict 原样贴进来。
     pages: str = ""
-    #: 命中校验结论（`draft/37` §2 R1b）：`exact` / `partial` / `mismatch` / `""`（= 还没核）。
-    #: 词表与"为什么它和 §5.2 的另一个 matched 不是一回事"见 `LIT_MATCH_STATUSES`。
+    #: 命中校验结论：`exact` / `partial` / `mismatch` / `""`（= 还没核）。
+    #: 词表与"为什么它和文献定位那一栏的 matched 不是一回事"见 `LIT_MATCH_STATUSES`。
     matched: str = ""
     # --- 扩展：B 的并发控制（与 requests 表同样的租约思路）
     claimed_by: str | None = None
@@ -480,7 +470,7 @@ class Literature:
             raise ValueError("processed 必须是 bool")
         # path 允许为 None（下载失败），但不能是绝对路径、越出 library/ 的相对路径，
         # 也不能带多余的 `library/` 前缀。判据本体在 `literature_path_problem`（唯一实现，
-        # 那句"为什么注释改前承诺了一句它没做的事"也写在那里）：`table_tools` 的归一化
+        # 为什么专拒 `library/` 前缀也写在那里）：`table_tools` 的归一化
         # 与反真空都钉同一个函数名，判据不许有第二份。
         if self.path is not None:
             problem = literature_path_problem(self.path)
@@ -499,7 +489,7 @@ class Literature:
                     "注意：agent_b 依赖 'content_mismatch' 这个精确字符串来跳过非论文内容，"
                     "拼错会让缺陷 #8 静默复发。"
                 )
-        # 命中校验（§2 R1b）：空串是合法的第四态（= 还没核），非空必须在词表里。
+        # 命中校验：空串是合法的第四态（= 还没核），非空必须在词表里。
         if self.matched and self.matched not in LIT_MATCH_STATUSES:
             raise ValueError(
                 f"matched 必须是 {LIT_MATCH_STATUSES} 之一，或空串（= 还没做命中校验），"
@@ -513,9 +503,9 @@ class Literature:
 
 @dataclass
 class LitCandidate:
-    """「待新增文献列表」的一行（业主 2026-10-20 口径）。
+    """「待新增文献列表」的一行。
 
-    ## 它为什么必须是一张自己的表，而不是 `literature` 的一个 processed 值：业主要的两件事实在 literature 上
+    ## 它为什么必须是一张自己的表，而不是 `literature` 的一个 processed 值：它要存的两件事实在 literature 上
     无处可写 —— 塞进 `download.error` 或自由文本等于把证据藏进一句散文：谁都没法按状态查，也无法证明"12 条
     里只入了 9 条"是因为撤了 3 条而不是丢了 3 条。那两件事实是：
     1. 槽位 —— 列表内序号自动分配、不复用，撤掉之后那一位空着（"第 3 号被撤了哪一篇、为什么"必须还查得出来）；
@@ -527,7 +517,7 @@ class LitCandidate:
     在崩溃点上会留下一行撤了但说不出为什么的记录。
     ## 字段口径：`slot` 主键，列表内序号，由 `store.alloc_id("candidate")` 发（六位、只增不复用），批次之间
     连续编号（第 2 批从第 1 批的下一个号起，所以"12 条 + 3 条"是 1..15）；`request_id` 属于哪一次查询委托
-    （`r-NNNNNN` = `search_requests` 的一行，业主 2026-10-20 第 1 条：生命周期 = 一次委托，旧委托的行不参与
+    （`r-NNNNNN` = `search_requests` 的一行：生命周期 = 一次委托，旧委托的行不参与
     本次筛选但不删掉，审计时按 `request_id` 查得到）；`batch` 第几批；`relevance` 一句"为什么与本次检索
     相关"；`reason_code` 筛除理由的受控取值（`CANDIDATE_REASON_CODES`）；`overlap_score` / `overlap_kind` /
     `overlap_with` 与本地库的重叠读数（受控取值见 `litstage.OVERLAP_KINDS`：`doi_exact` / `title_jaccard`；
@@ -689,8 +679,8 @@ class Concept:
         return asdict(self)
 
 
-#: 「这条引文是怎么回验通过的」（业主 2026-10-14：「回验不应该是十分呆板的逐字
-#: 验证，而是保持语义相同即可」）。两栏的分工，别混成一件：
+#: 「这条引文是怎么回验通过的」：回验不要求呆板的逐字相同，语义相同也算通过。
+#: 两栏的分工，别混成一件：
 #:
 #: - `quote_verified`：三态结论（`True` 通过 / `False` 不一致 / `None` 还没查）；
 #: - `quote_mode`：通过的方式 ——
@@ -700,15 +690,12 @@ class Concept:
 #:
 #: 两栏不许互相冒充：`quote_verified is True` 而 `quote_mode` 说不出方式的行按没查算
 #: （`evidencebits.quote_state()` 是这条口径的唯一实现）。`validate()` 会把
-#: "只说了通过、没说方式而给了区间"的行记实成 `verbatim` —— 这条通路存在之前，
-#: `True` 只可能来自逐字那一档，所以那是历史事实、不是猜测；反过来，没通过/还没查的行，
-#: 方式一律归空串（方式对它没有意义）。
+#: "只说了通过、没说方式"的行记实成 `verbatim`，但只在 `quote_span` 非空时；反过来，
+#: 没通过/还没查的行，方式一律归空串（方式对它没有意义）。
 #:
-#: 2026-10-22（D1 第二版）：「只说了通过、没说方式」不再是记实成 `verbatim` 的理由 ——
-#: 还要求 `quote_span` 非空。理由：区间是"核了哪一段、在第几页"的唯一载子，没有它，
-#: `verbatim` 这个字在盘上只是一句自我描述（真机 13 行：`true` + `verbatim` + 空区间，
-#: 读侧当成逐字通过）。区间为空 ⇒ 方式记空串，由读侧 `evidencebits.quote_state` 读成
-#: `no_evidence`，由 `closing` 那一格点名。
+#: 为什么还要求 `quote_span` 非空：区间是"核了哪一段、在第几页"的唯一载子，没有它，
+#: `verbatim` 这个字在盘上只是一句自我描述，读侧会当成逐字通过。区间为空 ⇒ 方式记空串，
+#: 由读侧 `evidencebits.quote_state` 读成 `no_evidence`，由 `closing` 那一格点名。
 QUOTE_MODES: tuple[str, ...] = ("verbatim", "semantic")
 
 
@@ -718,7 +705,7 @@ def _normalize_quote_mode(obj: Any, *, what: str) -> None:
     三条，逐条对应 `QUOTE_MODES` 那段 docstring 的口径：
 
     1. `quote_verified is True` 而 `quote_mode` 空 ⇒ 有区间才记实成 `verbatim`；
-       区间为空就记空串（不许盖成 `verbatim`，见上面 D1 那一段）；
+       区间为空就记空串（不许盖成 `verbatim`）；
     2. 不是 `True`（`False` / `None`）⇒ 方式一律归空串：方式对"没通过/还没查"没有意义，
        留着会让人误读成"用某种方式查过了"；
     3. 认不出的词 ⇒ 抛错（词表外的值不许进库；两栏不许互相冒充这条靠它兜住）。
@@ -726,7 +713,7 @@ def _normalize_quote_mode(obj: Any, *, what: str) -> None:
     verified = getattr(obj, "quote_verified", None)
     mode = str(getattr(obj, "quote_mode", "") or "")
     if verified is True and mode == "":
-        # D1（2026-10-22）：空方式只在拿得出区间时才记实成逐字档。
+        # 空方式只在拿得出区间时才记实成逐字档。
         # 这一格是"写侧唯一会给 mode 补值的地方"，补错了就是把一句自报升成结论：
         # 区间为空时保持空串，让读侧按 no_evidence 读（而不是读成正好在那一档的 verbatim）。
         span_now = str(getattr(obj, "quote_span", "") or "").strip()
@@ -737,7 +724,7 @@ def _normalize_quote_mode(obj: Any, *, what: str) -> None:
         raise ValueError(f"{what} 的 quote_mode 必须是 {QUOTE_MODES} 之一或空串，"
                          f"收到 {mode!r}（引文回验只有'逐字命中'与'语义相同'两档）")
     obj.quote_mode = mode
-    # 语义那一档要求证据（业主 2026-10-14）：对着哪一段原文、哪一次调用判的，
+    # 语义那一档要求证据：对着哪一段原文、哪一次调用判的，
     # 两样都要落在行上 —— 否则"语义相同"就是一句谁都能说的话。
     if mode == "semantic":
         span = str(getattr(obj, "quote_span", "") or "").strip()
@@ -768,7 +755,7 @@ class Relation:
     quote_mode: str = ""
     #: 为什么这么判（人话；语义那一档就是 H 的判定理由）。
     quote_reason: str = ""
-    #: 语义那一档的证据（业主 2026-10-14：「语义那一档必须留证据」）：
+    #: 语义那一档的证据：
     #: `quote_span` 是来源里那一段逐字取来的正文，`quote_call_sha256` 是那次模型调用的
     #: 提示词指纹（可复查的调用记录）。两条都由 `_normalize_quote_mode` 在
     #: `quote_mode="semantic"` 时要求非空 —— 说不出"对着哪一段、哪一次判的"，
@@ -781,7 +768,7 @@ class Relation:
     status: str = "active"
     duplicate_of: str | None = None
     created_at: str = ""
-    #: 这条关系正式并进概念图的时刻（12-C=甲，业主 2026-10-10 裁定）。
+    #: 这条关系正式并进概念图的时刻。
     #:
     #: 与 `created_at` 的区别（这一格存在的全部理由）：`created_at` 是"这一行什么时候
     #: 建出来的"（任何行都有，包括还没并进去的 `suspect` / `rejected`），
@@ -791,15 +778,14 @@ class Relation:
     #:
     #: 空串那一档要按 `status` 读（三态纪律）：
     #: `status in ("suspect", "rejected")` 且空串 ⇒ 还没并进图；
-    #: `status == "active"` 且空串 ⇒ 这一格出现之前的历史行，并表时间未知
-    #: （不是"没并进去"——它已经在图里了）。把这两者折成一个空串会让
+    #: `status == "active"` 且空串 ⇒ 并表时间未知（旧行没有这一格），
+    #: 不是"没并进去"——它已经在图里了。把这两者折成一个空串会让
     #: "老数据没有这一格"看起来像"这些边没并进图"。
     merged_at: str = ""
     #: 本条关系还引用了哪些文献（除主引文 `lit_id` 之外）。
     #:
-    #: 为什么必须补这个字段：上一版"一条关系只能引一篇文献"是明确记录的缺口
-    #: （`10-...md` §13.1 P0-4 标 未完成）。数学上一条关系常常由两篇文献
-    #: 共同支持（例如"K(m) 与 S̃_m 同谱"需要一篇给 K(m) 的谱、另一篇给 S̃_m 的谱）。
+    #: 为什么必须有这个字段：数学上一条关系常常由两篇文献共同支持
+    #: （例如"K(m) 与 S̃_m 同谱"需要一篇给 K(m) 的谱、另一篇给 S̃_m 的谱）。
     #: 只有 `lit_id` 时，第二篇支持文献无处可写，于是依赖集无法闭合 ——
     #: 而依赖集不闭合正是"把引用的定理当成自己的定理"的技术根源（FC-23）。
     supporting_lit_ids: list[str] = field(default_factory=list)
@@ -825,7 +811,7 @@ class Relation:
         if self.quote_verified is not None and not isinstance(self.quote_verified, bool):
             raise ValueError("quote_verified 必须是 bool 或 None")
         _normalize_quote_mode(self, what=f"relation {self.relation_id}")
-        # 12-C：并表时间与状态必须自洽（一处判据，别让读者自己去猜空串的含义）
+        # 并表时间与状态必须自洽（一处判据，别让读者自己去猜空串的含义）
         if self.merged_at and self.status != "active":
             raise ValueError(
                 f"relation {self.relation_id} 标了 merged_at={self.merged_at!r} 而 "
@@ -859,7 +845,7 @@ CONTRADICTION_VERDICTS = ("resolved", "unresolved", "new_contradiction", "persis
 #: 研究问题的驱动类型（I2）。见 `ResearchQuestion.kind`。
 QUESTION_KINDS = ("gap", "contradiction")
 
-#: 猜想的状态（`draft/29` §7.5；依据 `draft/30` §T1）。
+#: 猜想的状态。
 #:
 #: 为什么不复用 `QUESTION_STATUSES` 的 `answered`：问题由"查明"了结，猜想由
 #: "证明或否证"了结 —— 同一个词同时意味着两件事，正是本仓反复禁止的形态。
@@ -871,17 +857,14 @@ CONJECTURE_FORMS = ("universal", "existential", "identity", "bound", "structural
 
 #: 陈述句里出现这些词 ⇒ 它是问题而不是猜想（`Conjecture.validate` 用它拒收）。
 #:
-#: `draft/37` §140 修正：这一栏此前按子串匹配（`w in statement`），于是
-#: 普通陈述句里的 `which`/`what` 一律被拒 —— 实测（T2 第 5 趟）拒掉的是定义句
-#: *"An R(m,k)-example is an m-regular graph of girth exactly k in which every edge …"*，
-#: 而"猜想的可检验形式"那一步因此一次也没落库（`D.register_conjecture` 连撞 18 次，
-#: 整条研究链停在这里）。子串匹配还会误伤 `somewhat`（含 `what`）。
-#: 现在改成"按疑问句形态判"：见 `CONJECTURE_QUESTION_PATTERNS` 与 `looks_like_a_question()`。
+#: 按子串匹配会误伤普通陈述句里的 `which`/`what`（定义句 "…in which every edge …"
+#: 会被拒，`somewhat` 含 `what` 也会），于是"猜想的可检验形式"那一步整条落不了库。
+#: 所以按"疑问句形态"判：见 `CONJECTURE_QUESTION_PATTERNS` 与 `looks_like_a_question()`。
 CONJECTURE_QUESTION_WORDS = ("谁", "什么", "是否", "吗", "？", "?", "which", "what", "whether")
 
 #: 疑问句的字面标记（出现在任何位置都算 —— 它们几乎只在问句里出现，
 #: 且不会像 `which` 那样嵌在数学术语里）。`?`/`？` 单列在这里而不是当正则，
-#: 因为它本身是正则元字符（写成 `?` 会以 `re.error` 收场 —— 实测踩过）。
+#: 因为它本身是正则元字符（写成 `?` 会以 `re.error` 收场）。
 CONJECTURE_QUESTION_MARKS = ("?", "？", "是否", "吗")
 
 #: 疑问句的形态（正则；只认句首的疑问词/助动词，不认"出现在任何位置"）：
@@ -897,7 +880,7 @@ def looks_like_a_question(text: str) -> list[str]:
     """这句话读起来是不是一个问题？返回命中的形态（空列表 = 是陈述句）。
 
     判据只有一份：`Conjecture.validate` 与工具层的拒信都调它 —— 拒信里要能把
-    "你为什么被拒"说清（`draft/37` §140：M 因为一条不可操作的拒信猜了 18 次）。
+    "你为什么被拒"说清，不可操作的拒信只会让调用方反复猜。
     """
     import re as _re
 
@@ -966,7 +949,7 @@ class ReprocessRequest:
     def validate(self) -> None:
         if not self.reprocess_id:
             raise ValueError("reprocess_id 不能为空")
-        # `c-1` / `c-2`：与 `SearchRequest.validate` 同一条判据（前缀是 p-）。
+        # 与 `SearchRequest.validate` 同一条判据（前缀是 p-）。
         require_process_id(self.reprocess_id, "reprocess")
         if self.reason not in REPROCESS_REASONS:
             raise ValueError(f"reason 必须是 {REPROCESS_REASONS} 之一，收到 {self.reason!r}")
@@ -1033,8 +1016,8 @@ class ResearchQuestion:
     #: 后者是集合（引用了哪些知识，升序去重、可比较、可判重），
     #: 本字段是序列（按什么顺序走的 —— 推理路径本身）。
     #:
-    #: 为什么必须成对存在：上一版只有集合字段，于是"跳序"（A→C→B 与 A→B→C 的区别）
-    #: 被 `sorted(set(...))` 静默吃掉，只能从 `origin` 字符串反解。
+    #: 为什么必须成对存在：只有集合字段时，"跳序"（A→C→B 与 A→B→C 的区别）
+    #: 会被 `sorted(set(...))` 静默吃掉，只能从 `origin` 字符串反解。
     #: 顺序是数学论证的一部分，它不是"同一集合的另一种写法"。
     relation_chain: list[str] = field(default_factory=list)
 
@@ -1108,7 +1091,7 @@ class ResearchQuestion:
 
 @dataclass
 class Conjecture:
-    """一条猜想（`draft/29` §7.4 的 Shape C；依据 `draft/30` §T1）。
+    """一条猜想。
 
     ## 为什么它是独立对象，而不是 `research_questions` 的一个 kind：
     1. 会撞既有不变量 —— `ResearchQuestion` 的 `status="needs_evidence"` 必须带非空 `waiting_request_ids`
@@ -1154,15 +1137,14 @@ class Conjecture:
     def validate(self) -> None:
         """单行内可判的拒收条件（跨对象判据在 `verify.verify_all`）。
 
-        每一条对应 `draft/29` §7.5 状态机里的一句"禁止的读法"：把"没检验"与
+        每一条对应状态机里的一句"禁止的读法"：把"没检验"与
         "检验过没结论"与"检验过有支持"与"检验过被否证"分开，不许折叠。
         """
         require_id(self.conjecture_id, "conjecture_id")
-        # ---- 2026-10-17：一次把问题说齐（业主当日授权动禁改区；亲测口径） ----------
-        # 这里原本是十条顺序抛 ⇒ 实测（`draft/132` 第十节）要走四轮才凑齐一条猜想的字段：
+        # ---- 一次把问题说齐：先收集，再一次抛 ----
+        # 逐条顺序抛会让调用方走四轮才凑齐一条猜想的字段：
         #   form 词表 → status/proposed 要 testable → testable 要对象 → needs_evidence 要 notes。
-        # 业主口径："真实智能体也会在这里困惑并浪费 token" ⇒ 先收集，再一次抛。
-        # 与 B（`register_statement`）/ F（`create_plan`）两处逐字同形：
+        # 真实智能体会在这里困惑并浪费 token。与 B（`register_statement`）/ F（`create_plan`）两处逐字同形：
         # 只有一条问题时原文案一字不动；多于一条时补一行整份清单。
         _probs: list[tuple[str, str]] = []          # (短标签, 原文案)
         if not self.statement.strip():
@@ -1267,18 +1249,16 @@ class AnalysisReport:
 #:   exhaustive_search  —— 在有限范围内穷举；E 写
 #:   formal             —— formal（Lean 核验），交给证明检查器核验；L 写
 #:
-#: 业主裁定（逐字）「不新增，直接改口径」：L 的形式化行不新开一张表，就落在本表里 ——
-#: 所以 `method="formal"` 在这里是口径如此，不是把 Lean 核验当成数值实验。
+#: L 的形式化行不新开一张表，就落在本表里 —— `method="formal"` 是口径如此，
+#: 不是把 Lean 核验当成数值实验。
 EXPERIMENT_METHODS = ("numeric", "symbolic", "exhaustive_search", "formal")
 
-#: 证据等级（FC-22 落地核心）：proof（形式化检查器核验过，只有 `method="formal"` 才可能拿到）·
+#: 证据等级（FC-22 落地核心）：proof（形式化检查器核验过，或穷举程序把整个命题证掉了）·
 #: proof_review（`proof_text` 非空 ＋ V 签「成立」；不是机器检查 ⇒ 必须自带 disclaimer，是"没有 Lean 也要能写
 #: 论文"的落点）· cross_check（数值/穷举交叉验证，不构成证明，报告必须自动附这句话）· heuristic（最弱）。
-#: 2026-10-23 业主裁定：「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，
-#: 签名是对应的程序脚本……这些有关数值实验的都由 E 来签。」（晚间更正：签字由 V、②③ 由 E 写）
-#: 形式化（检查器说的）与穷举（E 按 `numericproof` 的穷尽证据签的，`proof_reason="exhaustion"`，
-#: 凭据是程序脚本 + 搜索空间 + 覆盖说明）。上面那句"只有 method='formal' 才可能拿到"因此
-#: 由 `numericproof.exhaustion_problems` 那一支改写 —— 计算类仍然拿不到"随手的" proof。
+#: 穷举那一档的凭据是程序脚本 + 搜索空间 + 覆盖说明（`proof_reason="exhaustion"`，判据在
+#: `numericproof.exhaustion_problems`）：纯数值实验把整个命题证掉时也拿 proof，签字由 V 签、
+#: ②③ 由 E 写。计算类仍然拿不到"随手的" proof —— 没有程序脚本与覆盖说明就没有这一档。
 #: 强制三处：`verifications.proof_review_gap`（判据本体：最后一签「成立」且 `proof_sha256` 对得上现在这一版）·
 #: `store._refuse_fake_proof_review`（写入期当场拒收，`proof_review_without_evidence`）· `verify._check_13` 的
 #: `proof_review_without_verification`（审计期 error，逐条点名存量）。
@@ -1299,7 +1279,6 @@ EXPERIMENT_RESULTS = ("supports", "refutes", "inconclusive")
 
 #: 实验行的状态（`Experiment.status`）。只有两档：仍有效 / 已撤销。
 #:
-#: 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
 #: 撤销不是删行：`store` 的删除会让读者连「这一条曾经算数」都看不见，而课题台账要的
 #: 正是「哪一条还算数、为什么不算了」。所以撤销是两档状态加四条留痕（谁 / 何时 /
 #: 为什么 / 换成哪一份脚本）。
@@ -1311,10 +1290,8 @@ EXPERIMENT_STATUSES = (EXPERIMENT_ACTIVE, EXPERIMENT_VOIDED)
 
 #: 撤销实验行的受控理由码（`Experiment.void_reason_code`）。
 #:
-#: 今天只有一档：脚本改了。出处是业主 2026-10-24 裁定（逐字）：「改脚本后应该重新
-#: 登记并把老登记撤销」—— 现场是 `projects/sylow3` 的 `exp 000000` 与 `exp 000001`
-#: 挂在同一个 `code_path` 上、`code_hash` 不同，页面上只报「代码不一致」，两条并列
-#: 挂着，读者无从判断哪一条还算数。
+#: 今天只有一档：脚本改了 —— 同一个 `code_path` 上挂着 `code_hash` 不同的两行时，
+#: 页面上只报「代码不一致」，两条并列挂着，读者无从判断哪一条还算数。
 #: 为什么是受控词表而不是自由文本：理由是机器可判的那一半（判据逐字钉
 #: `code_changed`），而「为什么撤」那句人话另有 `void_reason` 一栏。
 #: 加一档 = 加一种「老登记不再算数」的合法理由，必须先有人裁定。
@@ -1328,8 +1305,7 @@ def experiment_is_voided(row: Any) -> bool:
     为什么读侧也要一个函数：`tools.verify_tools.evidence_for`（读数）与
     `closing._leg_reading` 的验收档必须用同一个谓词问「这条还算不算证据」——
     两处各写一份，口径一分家就没有任何测试能看见，而读者会同时看到两个数。
-    `None` / 非对象一律按「没撤销」读；`status` 缺席的历史行同理（它们是加这一列
-    之前写的，当时每一行都是有效行）。
+    `None` / 非对象一律按「没撤销」读；`status` 缺席的行同理（缺这一列 ⇒ 按有效行读）。
     """
     if not isinstance(row, dict):
         return False
@@ -1373,14 +1349,11 @@ ATTACK_STATUSES = ("open", "attacking", "progress", "supported_not_proved", "sta
 
 #: 攻坚计划的终态：一旦到达就不再推进。
 #:
-#: 这份名单曾经有两处实现且已经漂移：
-#: `attack_tools.TERMINAL_STATUSES` 写的是 `("resolved","abandoned","stalled")`，
-#: 漏了 `supported_not_proved` —— 而 `agent_f` 会真的写这个状态（"子目标都有数值支持，
-#: 但没有任何形式化证明"）。后果：一个已达该状态的计划被 `pick_next_subgoal` 当成活计划
-#: 重新拾起，于是终止条件形同虚设（正是 `attack_tools` 那段注释自己警告的形态，
-#: 只是它漏列了那个状态）。
+#: 每一档都必须在列。漏一档的后果是：一个已达该状态的计划被 `pick_next_subgoal`
+#: 当成活计划重新拾起，于是终止条件形同虚设 —— 而 `agent_f` 会真的写
+#: `supported_not_proved`（"子目标都有数值支持，但没有任何形式化证明"）。
 #:
-#: 现在它是唯一来源：`attack_tools.TERMINAL_STATUSES` 就是这个名字的 import。
+#: 它是唯一来源：`attack_tools.TERMINAL_STATUSES` 就是这个名字的 import。
 #: 之所以放进 `schema` 而不是工具层：这是领域状态的分类，数据层必须权威。
 ATTACK_TERMINAL_STATUSES = ("resolved", "abandoned", "stalled", "supported_not_proved")
 
@@ -1396,18 +1369,17 @@ DOC_KINDS = ("reproduction_report", "survey", "paper", "note")
 DOC_STATUSES = ("draft", "in_review", "revised", "accepted", "rejected", "unresolved_review")
 
 #: 一次审核的裁决。空串 = 还没审过。
-#: 为什么单列一根轴：`status` 兼表"通过"，而"审过"与"通过"是完全不同的状态
-#: （业主 2026-10-17）。`reviewed_documents` 读这根轴；`accepted_documents` 读 `成立`。
+#: 为什么单列一根轴：`status` 兼表"通过"，而"审过"与"通过"是完全不同的状态。
+#: `reviewed_documents` 读这根轴；`accepted_documents` 读 `成立`。
 #:
-#: 2026-10-30 业主裁定（逐字）：「不应该有『看不出来』，『看不出错』就是没毛病」——
-#: 这条裁定在 2026-11-04 落到 H 这一轴：H 的「看不出来」不是第三种结论，必须从数据层
-#: 删掉。于是这里只剩三格（空串 + 两态）。旧行里可能残留「看不出来」（2026-10-30 之前
-#: 写侧才产得出它）：读侧一律折成「没查成」（checked=False + 一条「这是旧数据」的读数），
+#: H 这一轴没有第三种结论：「看不出错」就是没毛病，而「看不出来」的意思是"这一轮没查成"。
+#: 所以这里只剩三格（空串 + 两态）。旧行里可能残留「看不出来」：
+#: 读侧一律折成「没查成」（checked=False + 一条「这是旧数据」的读数），
 #: 不是「成立」，也不是「有毛病」—— 那两格都是查过之后的裁决，而「没查成」恰恰不是。
 #: 读侧唯一入口是下面的 `read_review_verdict`；写侧只许写这里的三格。
 REVIEW_VERDICTS = ("", "成立", "有毛病")
 
-#: 旧行里可能残留、而写侧再也写不出的那一格（2026-10-30 之前写下的「看不出来」）。
+#: 旧行里可能残留、而写侧再也写不出的那一格（「看不出来」）。
 #: 它只在读侧有意义：按「没查成」读（不是第三态，也不是「成立」）。
 REVIEW_LEGACY_VERDICTS = ("看不出来",)
 
@@ -1421,11 +1393,11 @@ def read_review_verdict(row: Mapping[str, Any]) -> dict[str, Any]:
 
     ## 为什么旧值「看不出来」读成「没查成」，而不是「成立」
 
-    V 那一轴的历史值按「成立（没找到缺陷）」读（V 的 2026-11-01 裁定）；H 这一轴不同：
+    V 那一轴的历史值按「成立（没找到缺陷）」读；H 这一轴不同：
     H 写下「看不出来」时说的是"这一轮我没查成"（缺材料 / 没跑），不是"我查了、没找到
-    缺陷"。把它读成「成立」正是业主 2026-10-30 点名的最贵折平 —— 没查过的东西变成
-    一条通过裁决。所以这里折成 ``checked=False``，且 ``legacy=True`` 让读的人看得见
-    "这条读数来自旧数据"，不许静默当成没审过。
+    缺陷"。把它读成「成立」是最贵的折平 —— 没查过的东西变成一条通过裁决。所以这里
+    折成 ``checked=False``，且 ``legacy=True`` 让读的人看得见"这条读数来自旧数据"，
+    不许静默当成没审过。
     """
     raw = str(row.get("review_verdict") or "")
     if raw in REVIEW_LEGACY_VERDICTS:
@@ -1449,45 +1421,45 @@ def read_review_verdict(row: Mapping[str, Any]) -> dict[str, Any]:
 #: 引用了但拿不到的来源（例如论文里"companion book [6, Thm 6.5]"）
 #: 既不是 closed，也不该被含糊地写成 dangling。
 DEP_KINDS = ("theorem", "definition", "lemma", "proposition", "dataset", "experiment", "prior_art")
-#: 依赖的状态。四态而不是两态（`draft/37` §16 P1 加的 `refuted` / `disputed`）。
+#: 依赖的状态。四态而不是两态。
 #:
 #:   closed                —— 来源已入库、且引用本身没问题
 #:   dangling              —— 引用悬空（该有的来源没登记）
 #:   external_unavailable  —— 来源可得性之外的原因：我们拿不到它
-#:   refuted               —— 这条被引用的东西本身被证否了（文献错了，§9 那个场景）
+#:   refuted               —— 这条被引用的东西本身被证否了（文献错了）
 #:   disputed              —— 这条引用有争议、尚未裁决（可能是我们错了，也可能是文献错了）
 #:
 #: 为什么 `refuted` / `disputed` 不能折进 `dangling`：三者的处置方向相反。
 #: `dangling` 要去做的是"把来源补齐"；`refuted` 要做的可能是"把我们的结论一起撤下来"
-#: （§9：如果错的是文献，那么压在这条引用上的结论就不能再算数）；`disputed` 要做的
-#: 是"送去裁决"（`draft/37` §8/§9 的矛盾闭环）。折成一档，等于把"补一个引用"与
+#: （如果错的是文献，那么压在这条引用上的结论就不能再算数）；`disputed` 要做的
+#: 是"送去裁决"（矛盾闭环）。折成一档，等于把"补一个引用"与
 #: "撤一条结论"合并成同一个动作 —— 而后者是不可逆的那一类。
 DEP_STATUSES = ("closed", "dangling", "external_unavailable", "refuted", "disputed")
 
-#: 一条命题台账（`statements` 表）的来源（`draft/37` §16 P1）。
+#: 一条命题台账（`statements` 表）的来源。
 #:
 #:   external_lit —— 从文献里摘出来的（B 的"消化"：完整假设 + 证明逐字 + 出处）
-#:   own_result   —— 我们自己得到的结果（§10 的"自产定理该不该进事实库"）
+#:   own_result   —— 我们自己得到的结果（"自产定理该不该进事实库"）
 #:
 #: 为什么 origin 必须是独立字段、而不从 `source_lit_id` 推：自产的定理同样会引文献
 #: （我们的证明用了 Brown 的定理），于是"有 source_lit_id"既可能是"抄来的"也可能是
-#: "我们证的过程中引的"。这两个意思在报告里必须分栏（§16 P3：我们补的与原文的分栏），
+#: "我们证的过程中引的"。这两个意思在报告里必须分栏（我们补的与原文的分栏），
 #: 而"分栏"这件事靠推导是推不出来的。
 STATEMENT_ORIGINS = ("external_lit", "own_result")
 
-#: 命题台账的状态（`draft/37` §16 P1，与 §8/§9 的裁决闭环配套）：active（在册、可用作依据）·
+#: 命题台账的状态（与裁决闭环配套）：active（在册、可用作依据）·
 #: disputed（有争议、尚未裁决，不许当依据用，见 verify 的不变量）· refuted（被证否）·
 #: superseded（被后来的一条取代）· pending_definition（概念行：行已登记、定义还没到）·
 #: abandoned（明确放弃原命题：`quote_reason` 里必须是一条可解析的放弃标记
 #: `abandoned@<ISO8601>@<理由>`，唯一实现 `statementabandon`）。
 #:
-#: `abandoned` 为什么必须是一等状态（业主 2026-11-01 裁定，逐字）：
-#: 「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」
-#: —— "一直改"与"放弃"是两条合法终点，只有它们都读得出来，收工门才敢对"既没签
+#: `abandoned` 为什么必须是一等状态：每个命题和证明的产出最终必须以 V 签收尾，
+#: 拿不到 V 签就得一直改，或者放弃原命题 —— "一直改"与"放弃"是两条合法终点，
+#: 只有它们都读得出来，收工门才敢对"既没签
 #: 也没放弃"那一档判红（`closing.statements_unsigned` → blocker）。把它折进
 #: `superseded`（被取代）或 `refuted`（被证否）都会说一句假话：放弃的命题既没有
 #: 后来者，也没被证否。
-#: 最后一档的边界（`draft/93·续` D12，业主 2026-10-09 选甲）：① 它不是"可用依据"（与
+#: 最后一档的边界：① 它不是"可用依据"（与
 #: `disputed`/`refuted`/`superseded` 同列，见 `STATEMENT_UNUSABLE_STATUSES`）；② 必须带待补标记
 #: （`quote_reason` 里的 `concept:pending_search` / `concept:self_authored`，唯一出处是
 #: `migrate_concepts`）⇒ "为什么空着"与"谁来补"在盘上读得到（`pending_inbox` 扫的就是它）。
@@ -1504,44 +1476,41 @@ STATEMENT_UNUSABLE_STATUSES = ("disputed", "refuted", "superseded", "pending_def
 
 # ---------------------------------------------------------------- 断言的语义词表
 #
-# 下面六张是 `documents.claims[]` 各字段的受控词表（`draft/17` 正式文稿体例
-# §8.3 与 `draft/31` P3 台账）。它们决定"一条断言能写成什么"，而稿件是落库
+# 下面六张是 `documents.claims[]` 各字段的受控词表。它们决定"一条断言能写成什么"，而稿件是落库
 # 对象，所以按 `DEVELOPMENT.md` §2.3（跨模块受控词表定义在 `schema.py`）它们
 # 与上面那些 `*_KINDS` / `*_STATUSES` 同族，真身放在这里。
 #
-# 它们此前定义在 `claimanatomy.py`（判据层）。2026-10-07 所有者裁定
-# `draft/68` 题 2 选 B：把真身搬进 `schema.py`；本次改动由所有者授权、主控代改。
-# `claimanatomy` 侧改为从本模块 import —— 于是同一张表在两边是同一个对象
+# `claimanatomy` 从本模块 import —— 于是同一张表在两边是同一个对象
 # （`CA.CLAIM_KINDS is S.CLAIM_KINDS`），不再有第二份字面量（FC-03）。
 #
 # 派生的东西（`CLAIM_FIELDS` / 别名表 / 家族表）仍然留在 `claimanatomy.py`：
 # 搬的只是"真身词表"，不是判据表。
 
-#: §8.3 的 `kind`：这是数学对象的类型，不是文稿的体裁。
+#: 断言的 `kind`：这是数学对象的类型，不是文稿的体裁。
 #: 检查脚本靠这个前缀建索引，且编号规则是"按类型内连续" ——
 #: 所以它必须来自受控词表，而不是自由文本。
 CLAIM_KINDS = ("定义", "定理", "命题", "引理", "推论", "例", "注", "反例")
 
-#: §8.3 的 `status`：生命周期轴（与 `evidence_kind` 正交）。
+#: 断言的 `status`：生命周期轴（与 `evidence_kind` 正交）。
 #: `作废` 是"这条断言已被撤销"——它必须能表达，否则"作废的断言仍被当作有效结论引用"
 #: 这件事在数据模型里不可见。
 CLAIM_STATUSES = ("证", "验", "待精化", "作废")
 
-#: §8.3 的 `allowed_use`：论文线的硬性降级规则（RP/00_STANDARD.md:105-110）。
+#: `allowed_use`：论文线的硬性降级规则（RP/00_STANDARD.md 的体例要求）。
 #: 只有数值支撑的结论不得出现在摘要/主结果，必须降为 Remark。
 ALLOWED_USE_KINDS = ("主结果", "Remark only", "移入 open")
 
-#: §8.3 的 `numeric_evidence` 四元组。键名固定，多一个少一个都不可判定。
+#: `numeric_evidence` 四元组。键名固定，多一个少一个都不可判定。
 NUMERIC_EVIDENCE_KEYS = ("script", "range", "n_cases", "n_counterexamples")
 
-#: `draft/31` P3 的三档来源（断言台账的「来源」列）。
+#: 断言台账「来源」列的三档。
 #:
 #: 三档必须分开，理由与 FC-25 的四类否定同族：「我们自己算出来的」与
 #: 「某篇文献说它是这样」在证据力上不是一回事，而「来源至今没查清」
 #: 更不是前两者中的任何一个 —— 合并之后，读表的人会把「未决」读成「已核实」。
 CLAIM_SOURCE_KINDS: tuple[str, ...] = ("自证", "文献", "未决")
 
-#: `draft/31` P3 的「我方核到什么程度」。分档判据是「我们做了什么」，
+#: 「我方核到什么程度」这一列。分档判据是「我们做了什么」，
 #: 不是结论有多可信：`证明`（形式化/逐步推导，我方自己走通）·
 #: `数值`（复算 / 反例搜索）· `只读了陈述`（连数值核对都没做）。
 #: 中间那一档刻意不叫「验证」：那会把"跑过脚本"说成"验过了"。
@@ -1552,10 +1521,10 @@ CLAIM_CHECK_KINDS: tuple[str, ...] = ("证明", "数值", "只读了陈述")
 #: （citations 为空）· dangling_dep（依赖悬空/外部不可得）· overclaim（把 cross_check 写成 proved）·
 #: missing_negation_kind（否定型结论没分类）· scope_drift（把假设当公理、结论范围被放大）·
 #: garbled（表述错误/自相矛盾）· inconsistent_number（同一数字在不同处不一致）。
-#: 这里曾经有一个引文档 `E-10`（2026-09-27 裁定 (b) 删掉）：`quoteverify.check_quote` 的 reason
-#: 取值里从来没有"找到了但不一样"这一档，也没有任何生产路径能产出它 ⇒ 那句"可判定"是假承诺。
+#: 没有"找到了但不一样"这一档：`quoteverify.check_quote` 的 reason 取值里从来没有它，
+#: 也没有任何生产路径能产出它 ⇒ 那句"可判定"是假承诺。
 #: 系统只能判"逐字不在"，不能判"被改写/拼接"（边界写在 :func:`agentflow.quoteverify.check_quote`
-#: 的 docstring 里）；删它不改写历史（从未被产出过 ⇒ 历史 `findings` 行里不可能有这个取值）。
+#: 的 docstring 里）。
 FINDING_KINDS = (
     "unsupported_claim", "dangling_dep", "overclaim",
     "missing_negation_kind", "scope_drift", "garbled", "inconsistent_number",
@@ -1571,14 +1540,13 @@ FINDING_LEVELS = ("error", "warning", "info")
 
 #: 审校发现的状态。`wontfix` / `disputed` 必须写理由（同 `dropped` 必须写 notes）。
 #:
-#: `superseded`（乙，2026-11-11 业主裁定）：同一 `(kind, target)` 在**更晚的轮次**又记了
-#: 一条判词 ⇒ 更早那条被新判覆盖。它不是删除：原文、轮次、证据都留着，只把状态推成
-#: `superseded` 并用 `superseded_by` 指到新那条。`open` 的判定仍只看 `status == "open"`
-#: ⇒ 覆盖之后 open 数应当下降。`fixed` / `wontfix`（以及 `disputed`）是已了结的判词，
-#: **不被覆盖** —— 已了结的不动。
+#: `superseded`：同一 `(kind, target)` 在更晚的轮次又记了一条判词 ⇒ 更早那条被新判覆盖。
+#: 它不是删除：原文、轮次、证据都留着，只把状态推成 `superseded` 并用 `superseded_by`
+#: 指到新那条。`open` 的判定仍只看 `status == "open"` ⇒ 覆盖之后 open 数应当下降。
+#: `fixed` / `wontfix`（以及 `disputed`）是已了结的判词，不被覆盖 —— 已了结的不动。
 FINDING_STATUSES = ("open", "fixed", "wontfix", "disputed", "superseded")
 
-#: `maths` 的取值域（`P-9` 候选 A，2026-09-27 所有者裁定；落点见 `docs/PROPOSALS.md`）。
+#: `maths` 的取值域（落点见 `docs/PROPOSALS.md`）。
 #:
 #: 名字刻意不以 `_KINDS` / `_STATUSES` / `_OUTCOMES` / `_SCOPES` 结尾：它不是一张
 #: "产出方从中挑一个"的业务词表，而是 `gates.gate_g10` 那条 `maths: yes/no` 判据的
@@ -1586,7 +1554,7 @@ FINDING_STATUSES = ("open", "fixed", "wontfix", "disputed", "superseded")
 #: 一条"死取值/无产出点"的诊断噪音（它的产出方是 H 的审校发现，不在 `src/` 里）。
 FINDING_MATHS_VALUES = ("yes", "no")
 
-#: 审校格式契约（`P-9` 候选 A）的生效日。唯一的读者是 `gates.gate_g10`。
+#: 审校格式契约的生效日。唯一的读者是 `gates.gate_g10`。
 #:
 #: 语义只有一句：`created_at` 早于这一天的发现是"契约生效前落盘的历史行"，
 #: G10 对它们不要求 `line` / `verbatim_quote` / `suggestion`(=`minimal_fix`) / `maths`
@@ -1599,14 +1567,14 @@ REVIEW_FINDING_FORMAT_SINCE = "2026-09-27"
 def experiment_preflight_problems(*, method: str, certificate: Any = None,
                                   search_bound: Any = None,
                                   for_question_id: str | None = None) -> list[str]:
-    """`Experiment` 里不需要跑脚本就能判的那几条硬要求（R-01，`draft/44`）。
+    """`Experiment` 里不需要跑脚本就能判的那几条硬要求。
 
-    为什么要有它：这几条原先只在 `Experiment.validate()` 里判，而那里跑在子进程之后 —— 真机读数：52 次失败
-    / 110.7 分钟 / 0 行（脚本先跑完，行才被拒；钱与时间已经花了）。调用方（`agent_e.run_experiment`）在起
-    子进程之前调本函数，一次都不该白花。口径只有一处：`Experiment.validate()` 调的就是本函数，所以"前移"
-    不会带来两个会漂的判据。
+    为什么要有它：这几条若只在 `Experiment.validate()` 里判，而那里跑在子进程之后，
+    脚本先跑完、行才被拒，钱与时间已经花了。调用方（`agent_e.run_experiment`）在起子进程
+    之前调本函数，一次都不该白花。口径只有一处：`Experiment.validate()` 调的就是本函数，
+    不会有两个会漂的判据。
     覆盖四条：① 穷举/枚举类必须给 `certificate`；② `certificate` 必须是对象且含 `kind`；③ 给了 `certificate`
-    就必须给 `search_bound`；④ `for_question_id` 必须是 4 位号。其余硬约束依赖跑完才知道的量（`exit_code` /
+    就必须给 `search_bound`；④ `for_question_id` 必须是合法编号。其余硬约束依赖跑完才知道的量（`exit_code` /
     `result` / `evidence_kind` / 证书内容与结论的一致性），留在 `validate()` 里 —— 本函数不假装能判它们。
     """
     problems: list[str] = []
@@ -1627,7 +1595,7 @@ def experiment_preflight_problems(*, method: str, certificate: Any = None,
     if for_question_id is not None:
         try:
             require_id(for_question_id, "for_question_id")
-        except ValueError as exc:            # 4 位号的判据在 `require_id` 里（一处）
+        except ValueError as exc:            # 编号判据在 `require_id` 里（一处）
             problems.append(str(exc))
     return problems
 
@@ -1637,20 +1605,19 @@ class Experiment:
     """机器核验与实验台账的一行（DESIGN-ROLES.md §2.1）。
 
     这张表收两类账：E 写 numeric / symbolic / exhaustive_search（数值与穷举实验），
-    L 写 formal（Lean 核验）。业主裁定「不新增，直接改口径」—— L 的形式化行就落在
-    本表里，所以它记的是「机器核过没有」与「算过什么」两种账，不是把两者混成一件事。
+    L 写 formal（Lean 核验）。L 的形式化行也落在本表里，所以它记的是「机器核过没有」
+    与「算过什么」两种账，不是把两者混成一件事。
 
     本表最重要的一条规矩：`method` 是"计算类"（numeric / symbolic /
     exhaustive_search）时，`evidence_kind` 不得为 `"proof"` —— 除非整个论域
-    被穷尽验证过（业主 2026-10-23：穷举能拿 proof，签字由 V、②③ 由 E 写，证明栏写程序脚本；
+    被穷尽验证过（穷举能拿 proof：签字由 V、②③ 由 E 写，证明栏写程序脚本；
     判据本体 `numericproof.exhaustion_problems`）。
     这条由 :meth:`validate` 机械执行，不靠人记得。
 
-    为什么必须机械执行：数学里数值实验一般不构成证明（`09-...md` §6.2(1)
-    "验证通过 ≠ 数学正确"）。而"我算了几千个点都对"写成"已证明"是本领域
-    最自然也最危险的过度声称。把它变成 schema 约束，就让这句谎话
-    在写入的那一刻炸掉，而不是等到审校（或读者）发现。业主 2026-10-23 补的那一档
-    不是放宽这条：它要的是"整个论域"这三件可核的证据（搜索空间 / exhaustive /
+    为什么必须机械执行：数学里数值实验一般不构成证明（"验证通过 ≠ 数学正确"）。
+    而"我算了几千个点都对"写成"已证明"是本领域最自然也最危险的过度声称。把它变成
+    schema 约束，就让这句谎话在写入的那一刻炸掉，而不是等到审校（或读者）发现。
+    穷举那一档不是放宽这条：它要的是"整个论域"这三件可核的证据（搜索空间 / exhaustive /
     覆盖说明），而"算了几千个点"恰恰拿不出它们。
     """
 
@@ -1682,11 +1649,11 @@ class Experiment:
     #: 检查器输出管的是哪个命题（来自对本地先例 DeepMath 的观摩）。
     #:
     #: DeepMath 的做法是"验证工具与上下文绑定"：越界调用直接 raise。
-    #: 我们此前 `verifier_output` 是一个自由字符串 —— 于是把"命题 A 的检查器输出"
-    #: 粘到"命题 B 的记录行"上，结构上完全允许，而且没有任何地方会报错。
+    #: `verifier_output` 若是自由字符串，把"命题 A 的检查器输出"粘到"命题 B 的记录行"
+    #: 上，结构上完全允许，而且没有任何地方会报错。
     #: 有了这个字段，`validate()` 就能要求"输出管的就是本行声称的命题"。
     verifier_subject_key: str = ""
-    #: 搜索类结果必须携带证书（来自对本地先例 dsh 数学模式的观摩）。
+    #: 搜索类结果必须携带证书。
     #:
     #: 形态：`{"kind": "witness"|"unsat"|"enumeration_bound"|"counterexample",
     #:        "detail": {...}}`。
@@ -1699,7 +1666,6 @@ class Experiment:
     notes: str = ""
     #: 这一行还算不算数（受控词表 `EXPERIMENT_STATUSES`）。
     #:
-    #: 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
     #: 两档：`active`（仍有效）/ `voided`（已撤销）。撤销不是删除 —— 手稿里引过的
     #: `exp:<号>` 必须还能打开，读者要能看见「这一条曾经算数、为什么不算了」。
     status: str = EXPERIMENT_ACTIVE
@@ -1737,10 +1703,9 @@ class Experiment:
 
         # ---- 硬约束 1：计算类方法要 proof 必须拿出"整个论域被穷尽验证"的三件证据
         #
-        # 2026-10-23 业主裁定的机械落地（改前是"计算类方法永远拿不到 proof"）：
-        # 「如果纯数值实验直接把整个命题证掉了，那也能拿 proof 标识，理由是穷举，
-        #   签名是对应的程序脚本……这些有关数值实验的都由 E 来签。」
-        # 于是这一条从"永远不许"变成"只有穷尽证据齐备才许"，判据本体只有一处：
+        # 计算类方法不是永远拿不到 proof：纯数值实验把整个命题证掉时也拿 proof
+        # （理由是穷举，签名是对应的程序脚本）。所以这一条是"只有穷尽证据齐备才许"，
+        # 判据本体只有一处：
         # `numericproof.exhaustion_problems`（搜索空间 + 布尔 true 的 exhaustive +
         # 覆盖说明 + 程序脚本的相对路径）。缺任何一条（含"说不清"那一档）⇒ 拒，
         # 且拒信逐条列出缺什么 —— 它要能让人/模型当场改对。
@@ -1765,8 +1730,7 @@ class Experiment:
                     "要主张已证明也可以走 method='formal' 并给出 verifier_output。"
                 )
             # ---- 硬约束 1b：穷举那一档的签名主体必须是 V、②③ 的作者必须含 E
-            #      （业主 2026-10-23 晚：「签字仍然由 V 签……E 是 ②③ 的原作者，
-            #      但签名主体是 V」）。
+            #      （签字仍然由 V 签；E 是 ②③ 的原作者，但签名主体是 V）。
             #
             # 判据本体 `numericproof.is_signed_exhaustion`：signed_by=V、proof_authors 含 E、
             # 证明理由在受控词表里。缺它 ⇒ 这一行是"手写的 proof"，没有任何人签过 ——
@@ -1789,14 +1753,13 @@ class Experiment:
                     "签名只由 E 的 run_experiment 在判定穷尽之后写"
                     "（`numericproof.sign_experiment`）"
                 )
-            # ---- 硬约束 1c：②③ 必须已经落成盘上一份可核的读数
-            #      （业主 2026-10-23 晚：「E 写的报告要能落下来」）。
+            # ---- 硬约束 1c：②③ 必须已经落成盘上一份可核的读数（E 写的报告要能落下来）。
             #
             # 判据本体在 `exhaustionreport.exhaustion_problems`
             # （`numericproof.report_problems` 只转发）：它读行上的落盘事实
             # （路径 / 字节数 / sha256 / 三块齐不齐）。没有这一条时，一条 proof 行
-            # 可以在盘上什么都没有的情况下写进库 —— 而"②③ 写了"正是业主口中
-            # "这条证据能不能叫证明"的那一半。
+            # 可以在盘上什么都没有的情况下写进库 —— 而"②③ 写了"正是"这条证据能不能
+            # 叫证明"的那一半。
             _report_problems = _NP.report_problems({
                 "experiment_id": self.experiment_id, "method": self.method,
                 "evidence_kind": self.evidence_kind, "observations": self.observations})
@@ -1845,8 +1808,8 @@ class Experiment:
         # "在 B 内没有反例"若不说清 B 是什么、用什么算法搜的，就只是一句无法复核的话 ——
         # 它看起来是结论，实际上是一个没有定义域的断言。
         #
-        # R-01（`draft/44`）：这一段与下面 `for_question_id` 那一条不需要跑脚本就能判
-        # ⇒ 口径搬进 `experiment_preflight_problems()`，由调用方
+        # 这一段与下面 `for_question_id` 那一条不需要跑脚本就能判
+        # ⇒ 口径在 `experiment_preflight_problems()`，由调用方
         # （`agent_e.run_experiment`）在起子进程之前判一次；这里调同一个函数
         # ⇒ 判据仍然只有一处。
         _pre = experiment_preflight_problems(
@@ -1889,12 +1852,11 @@ class Experiment:
                     "给了 code_path 就必须给 code_hash —— 没有哈希的'可复现'只是口号"
                     "（脚本一改，记录就指向了另一段代码）"
                 )
-        # `for_question_id` 必须是 4 位号：那一条由上面那次
-        # `experiment_preflight_problems()`（R-01）判过 —— 同一处口径，不在这里重复判。
+        # `for_question_id` 的编号形态由上面那次 `experiment_preflight_problems()` 判过
+        # —— 同一处口径，不在这里重复判。
 
         # ---- 硬约束 7：撤销是「两档状态 ＋ 四条留痕」，不许撤一半
         #
-        # 业主 2026-10-24 裁定（逐字）：「改脚本后应该重新登记并把老登记撤销」。
         # 为什么要在 schema 层判：撤销是「这一行不再是证据」的唯一开关，而读侧
         # （`experiment_is_voided`）只看 `status` 一个词 —— 一条 `status="voided"`
         # 却没有理由的行，在读数里会变成「无缘无故不算数了」，那种行比不撤更坏。
@@ -2032,12 +1994,9 @@ class AttackPlan:
                 )
         # ---- 轮次历史上限 & 单调性
         #
-        # 上限是 `max_rounds × 子目标数 + 1`，那个 +1 是必要的。
-        #
-        # 曾经的判据恰好等于"每轮每子目标一条"，于是轮数用尽的那一轮无法追加
-        # 一条 `action="stop"` 的如实记录 —— "说停"这件事本身被 schema 挡住
-        # （实测 `ValueError: history 长度超出预算允许的轮数 × 子目标数`），
-        # 实现方只能把停止理由塞进 `best_partial` 绕过去。
+        # 上限是 `max_rounds × 子目标数 + 1`，那个 +1 是必要的：没有它，轮数用尽的
+        # 那一轮无法追加一条 `action="stop"` 的如实记录 —— "说停"这件事本身被
+        # schema 挡住，实现方只能把停止理由塞进 `best_partial` 绕过去。
         # 一条记录"我停下了"的审计行必须被允许存在，否则"为什么停"就只能靠猜。
         hist = self.history or []
         cap = int(self.budget.get("max_rounds", 0)) * max(1, len(self.subgoals) or 1) + 1
@@ -2083,10 +2042,10 @@ class Document:
     #:    "is_negative","negation_kind","disclaimer"}``
     #: 其中 `citations` 的元素形如 ``"rel:0007"`` / ``"lit:0003#p.4"`` / ``"exp:0002"``
     #: / ``"eval:0005"`` / ``"doc:0002#claim-1@<内容哈希前 16 位>"`` /
-    #: ``"stmt:0004"``（引我们自己的命题 —— `draft/68` 题 1，2026-10-07 所有者裁定 A：
-    #: 有了它，`closing` 才判得了"哪几条正文断言压在这条命题上"）。
+    #: ``"stmt:0004"``（引我们自己的命题：有了它，`closing` 才判得了
+    #: "哪几条正文断言压在这条命题上"）。
     #: 认哪些前缀、各指向哪张表：唯一声明面是 `CITATION_PREFIXES`（见那里的说明）。
-    #: 反例字段有两个来源，语义互不替代（`P-10` 候选 A，2026-09-27 所有者裁定）：
+    #: 反例字段有两个来源，语义互不替代：
     #: `counterexamples` = 人 / 文献已知的清单；`numeric_evidence.n_counterexamples`
     #: = 那一次数值运行机器扫到的条数。两者不等时 `scope_caveat` 必填
     #: （判据在下面的 `validate()` 里，不在 G12 那道门上）。
@@ -2097,19 +2056,19 @@ class Document:
     #: 一次审核的裁决：`""`（未审）/ `成立` / `有毛病`（`REVIEW_VERDICTS`）。
     #: 与 `status` 分开：审过 ≠ 通过（`status` 只表生命周期与历史上的通过/驳回）。
     #: 旧行里的 `看不出来` 只作兼容读：`read_review_verdict` 把它折成「没查成」
-    #: （`checked=False`），不是「成立」（业主 2026-10-30 裁定）。
+    #: （`checked=False`），不是「成立」。
     review_verdict: str = ""
     #: 裁决写下时的时间与主（谁审的）。空串 = 没审过。
     reviewed_at: str = ""
     reviewed_by: str = ""
     created_at: str = ""
     updated_at: str = ""
-    #: 内容第几版（G 每次改内容 +1；`draft/30` §T4-A）。新建稿件是 1。
+    #: 内容第几版（G 每次改内容 +1）。新建稿件是 1。
     #: 它不参与 `content_sha256`（那算的是内容本身），只作"改了几次"的可读刻度。
     revision: int = 0
     #: 这一版内容的规范哈希（`signatures.content_sha256_of`；"" = 还没算过）。
     #: 为什么必须有：审批与引用都是对某一版的 —— 没有它，"审批过的版本"与
-    #: "被引用的版本"会静默变成两版（`draft/29` §8.5 第 2 条）。
+    #: "被引用的版本"会静默变成两版。
     content_sha256: str = ""
     created_by: str = "agent-G"
 
@@ -2195,7 +2154,7 @@ class Document:
                     f"claims[{cid}] 不是否定型断言却带了 negation_kind={c.get('negation_kind')!r}"
                     "（会让'否定'的计数虚高）"
                 )
-            # ---- 硬约束 4：反例的两个来源（`P-10` 候选 A，2026-09-27 所有者裁定）----
+            # ---- 硬约束 4：反例的两个来源 ----
             #
             # 两个字段各司其职，谁都不许被读成另一个（口径写清 = 本候选的全部内容）：
             #   * `counterexamples` = 人 / 文献已知的反例清单（可能来自别处）。
@@ -2251,21 +2210,18 @@ class Dependency:
     #: "依赖没闭合"这个结论本身也要有依据。
     status_reason: str = ""
     created_at: str = ""
-    #: 内部来源：本仓的稿件（`draft/30` §T4-A）。与 `source_lit_id` / `source_experiment_id`
+    #: 内部来源：本仓的稿件。与 `source_lit_id` / `source_experiment_id`
     #: 并列的第三种来源 —— "这条断言依赖我们自己另一篇稿子的某条断言"。
     source_doc_id: str | None = None
     #: 内部来源：该稿件里的哪一条断言（`documents.*.claims[].claim_id`）。
     #: 给了它就必须给 `source_doc_id`（断言脱离稿件没有意义）。
     source_claim_id: str | None = None
-    #: 这条边属于哪一条证明路径（业主 2026-10-09：「B走乙」+「证明路径不唯一，
-    #: 可增另一组依赖，实现用二维列表」）。同一 `used_by` + 同一 `path_group` 的行 =
+    #: 这条边属于哪一条证明路径：同一 `used_by` + 同一 `path_group` 的行 =
     #: 一条路径（组内 AND：都要）；不同 `path_group` = 可选路径（组间 OR：任一）。
     #: 缺省 1 ⇒ 历史行（与"只有一条路径"的写法）语义一个字不变。
     path_group: int = 1
     #: 被依赖的那一端是本表的一条命题（"定理 A 用到定理 B / 用到某个概念"）。
-    #: 与 `source_lit_id` / `source_experiment_id` / `source_doc_id` 并列的第四种来源；
-    #: `schema.Dependency` 的注释早就写着"`used_by` → 本表的 `stmt_id` 是自然延伸"，
-    #: 而这一格此前不存在（现场核实：字段表里没有它）⇒ 那种边无处安放。
+    #: 与 `source_lit_id` / `source_experiment_id` / `source_doc_id` 并列的第四种来源。
     source_stmt_id: str | None = None
     created_by: str = "agent-G"
 
@@ -2304,8 +2260,8 @@ class Dependency:
                 f"status={self.status!r} 时必须写 status_reason（依赖为什么没闭合 / 为什么不可得）。"
                 "只标一个状态而不说原因，等于把问题记了一笔却没人能接手"
             )
-        # `refuted` / `disputed`（`draft/37` §16 P1）：这两档同样必须说清"为什么"，
-        # 而且比上面那一档更要紧 —— 它们要触发的是"压在它上面的结论怎么办"（§9），
+        # `refuted` / `disputed`：这两档同样必须说清"为什么"，
+        # 而且比上面那一档更要紧 —— 它们要触发的是"压在它上面的结论怎么办"，
         # 而不只是"去把来源补齐"。动机写成一句话，接手的人才知道该撤哪条结论。
         if self.status in ("refuted", "disputed") and not self.status_reason.strip():
             raise ValueError(
@@ -2315,7 +2271,7 @@ class Dependency:
             )
         if self.kind == "experiment" and self.source_experiment_id is None:
             raise ValueError("kind='experiment' 的依赖必须给 source_experiment_id")
-        # ---- 2026-10-09（业主：B 走乙 / 证明路径可多组）：
+        # ---- 证明路径可多组：
         if int(self.path_group) < 1:
             raise ValueError(
                 f"path_group 必须是正整数（收到 {self.path_group!r}）：同一 used_by + 同一组 = "
@@ -2342,18 +2298,18 @@ class Dependency:
 
 @dataclass
 class Statement:
-    """一条命题台账行：命题原文 + 完整假设 + 证明逐字摘录 + 出处（`draft/37` §16 P1）。
+    """一条命题台账行：命题原文 + 完整假设 + 证明逐字摘录 + 出处。
 
-    ## 为什么要有这张表：真机那一轮（2026-10-01）"审阅并 polish 一篇论文"跑完之后，台账里有依赖、有发现、
-    有报告，却没有一处放得下"定理 1.5 的假设是什么、它的证明原文长什么样"。于是"审这条证明对不对"在数据面
-    上无处落脚：B 消化完只能在会话记录里留一段话，D 要审它得再读一遍 PDF，H 要判"正文与台账逐字一致"也没
-    有可比的第二份文本。这张表就是那个落点。
+    ## 为什么要有这张表：台账里有依赖、有发现、有报告，却没有一处放得下"定理 1.5 的假设是什么、
+    它的证明原文长什么样"。于是"审这条证明对不对"在数据面上无处落脚：B 消化完只能在会话记录里
+    留一段话，D 要审它得再读一遍 PDF，H 要判"正文与台账逐字一致"也没有可比的第二份文本。
+    这张表就是那个落点。
     它与相邻三张表的分工：`literature`（那篇文献）、`statements`（文献里或我们手里的那条命题 —— 本表）、
     `dependencies`（某个使用点依赖了哪条命题，`used_by` → 本表的 `stmt_id` 是自然延伸）。
     ## 四个字段为什么必须分开：`statement_full`（含完整假设）vs `statement_text`（短版/人话）—— 数学里"定理
     成立"与"在什么假设下成立"是两件事，省掉假设的命题会被下游当成无条件成立（这正是 FC-23 在命题级的同一种
-    病）；`proof_text`（逐字摘录）—— `quote_verified` 的比对对象就是它，没有逐字原文"引文回验"无从做起
-    （§3）；`origin`（`external_lit` / `own_result`）—— 报告的"我们补的"与"原文的"要分栏（§16 P3），靠
+    病）；`proof_text`（逐字摘录）—— `quote_verified` 的比对对象就是它，没有逐字原文"引文回验"无从做起；
+    `origin`（`external_lit` / `own_result`）—— 报告的"我们补的"与"原文的"要分栏，靠
     `source_lit_id` 推不出来；`kind`（theorem / lemma / …）刻意不是受控词表 —— 它不参与任何判据分支（只看
     `origin` / `status` / `evidence_kind` / `bits`），而论文里的命题种类比 `DEP_KINDS` 宽，给它词表会立刻
     产生五六个死取值（R011 的债）；它有非空要求。
@@ -2379,7 +2335,7 @@ class Statement:
     source_lit_id: str | None = None
     page_range: PageRange = field(default_factory=PageRange)
     #: 三态：True 通过 / False 比对不一致 / None 没校验。见类 docstring。
-    #: 2026-10-14 起"通过"分两档（`QUOTE_MODES`）：逐字命中 / 语义相同。
+    #: "通过"分两档（`QUOTE_MODES`）：逐字命中 / 语义相同。
     quote_verified: bool | None = None
     #: 这条引文是怎么回验通过的（`QUOTE_MODES` 之一，或空串 = 没有方式可言）。
     quote_mode: str = ""
@@ -2389,14 +2345,14 @@ class Statement:
     quote_span: str = ""
     quote_call_sha256: str = ""
     #: 证据等级（复用 `EVIDENCE_KINDS`）：proof / cross_check / heuristic。
-    #: `draft/39` §3.14 起它是派生只读视图：真正判等级的是 `bits`（五元证据位）。
+    #: 它是派生只读视图：真正判等级的是 `bits`（五元证据位）。
     evidence_kind: str = "heuristic"
-    #: 五元证据位（`draft/39` §3.14）：`numeric` / `proof` / `reviewed` / `formal` / `audited`。
+    #: 五元证据位：`numeric` / `proof` / `reviewed` / `formal` / `audited`。
     #:
     #: 空对象 = 这一行还没有任何位记录（旧行）⇒ 一律按"五位全空"读（等级 = 猜想）。
     #: 第 4 位（`formal`）的形状与另外四位不同：它是二维的 `{证明号: 四态}`
-    #: （业主 2026-10-22 的裁定：「lean 形式化需指明对哪个路径做了形式化验证……但关于一个
-    #: 定理的正确性，但凡任意一个路径通过核验，它就是对的」）。键只能是证明号
+    #: （对哪个路径做了形式化验证要指明；而定理的正确性只要任意一个路径通过核验即可）。
+    #: 键只能是证明号
     #: （`verifications.as_proof_no` 归一，1 = canonical），值只能是 `BIT_STATES` 的四态
     #: —— `stale` 是读侧按"记下来的 proof_sha256 与现行正文不符"现算出来的，不许写进盘上。
     #: 标量形态仍然合法（老行 / 单路径：等价 `{1: 那个四态}`），所以存量零迁移。
@@ -2407,9 +2363,9 @@ class Statement:
     #: 见 `STATEMENT_STATUSES` / `STATEMENT_UNUSABLE_STATUSES`。
     status: str = "active"
     #: 这条命题用到了哪些别的命题（本表内的 `stmt_id`，升序去重）。
-    #: 它是"承重结论"可追踪的落点：§16 P3 的收工门问的就是"承重的那些有没有 T3 或已降档"。
+    #: 它是"承重结论"可追踪的落点：收工门问的就是"承重的那些有没有 T3 或已降档"。
     derived_from: list[str] = field(default_factory=list)
-    #: 同一个东西的别的写法（业主 2026-10-09：「别名按乙，毕竟定理也可能有别名」）。
+    #: 同一个东西的别的写法（定理也可能有别名）。
     #: 与 `concepts.aliases` 同一件事，并表之后住在这里 —— 任何 kind 都能有
     #: （定理/定义/引理/命题/概念），秘书查重时按 `textutil.normalize` 比它。
     #: 形状与顺序纪律由 `ARRAY_FIELD_KINDS['statements']['aliases']`（`seq`）统一守。
@@ -2453,14 +2409,14 @@ class Statement:
             require_id(self.source_lit_id, "source_lit_id")
         if self.doc_id is not None:
             require_id(self.doc_id, "doc_id")
-        # ---- 自产结果缺 `proof_text`：不拒（P-06 / 裁决 1 的"降级 + 待办"）。
-        # 这里此前是一条 `raise`。删它不是放宽门槛：降级是现算的（缺第 2 位 ⇒ `evidencebits.derive_grade`
-        # 直接给"猜想"，`bits` 与等级都不需要新字段、等级本来就不落盘）；待办有既有载体（`quote_verified`
-        # 的三态 + `quote_reason`，消费端扫的就是"该有而没有"）。反过来（拒收）的代价是实测过的：13 条
-        # `own_result` 全带 `proof_text` 而现算等级 13/13 全是 `conjecture` ⇒ 那条 raise 一条真猜想都没
-        # 挡住，只挡住了"如实登记"。
-        # 边界（不许顺手做）：不加字段、不造新表；`STATEMENT_STATUSES` 加值只走人裁（`pending_definition`
-        # 就是人裁过的，见 `draft/93·续` D12）· 负控（§16 P1 逐字要求）：缺完整假设的行不许进 active。
+        # ---- 自产结果缺 `proof_text`：不拒（"降级 + 待办"）。
+        # 不拒不是放宽门槛：降级是现算的（缺第 2 位 ⇒ `evidencebits.derive_grade` 直接给"猜想"，
+        # `bits` 与等级都不需要新字段、等级本来就不落盘）；待办有既有载体（`quote_verified`
+        # 的三态 + `quote_reason`，消费端扫的就是"该有而没有"）。反过来（拒收）的代价更重：
+        # `own_result` 行里带 `proof_text` 的居多而现算等级全是 `conjecture` ⇒ 拒收一条真猜想
+        # 也挡不住，只挡住"如实登记"。
+        # 边界（不许顺手做）：不加字段、不造新表；`STATEMENT_STATUSES` 加值只走人裁。
+        # 负控：缺完整假设的行不许进 active。
         if self.status == "active" and not self.statement_full.strip():
             raise ValueError(
                 "status='active' 必须有 statement_full（含完整假设）："
@@ -2468,7 +2424,7 @@ class Statement:
                 "概念行还没抽到定义时走 `pending_definition`（D12 甲：那一档不是依据，"
                 "且必须带待补标记）；其余情形请补全假设或标成 disputed/refuted/superseded"
             )
-        # ---- 放弃那一档（业主 2026-11-01）：必须带理由与时间。
+        # ---- 放弃那一档：必须带理由与时间。
         #
         # 为什么这一格要在数据面拦：`status="abandoned"` 只是换了一个字面量 ——
         # 一条被标成放弃、却读不出"为什么、什么时候"的命题，与"悬着"没有区别
@@ -2485,7 +2441,7 @@ class Statement:
                     f"{got.get('why') or '标记读不出来'} —— 只标状态不写理由与时间，"
                     "等于把'为什么放下'记成一笔没人能接手的账（与 `quote_verified` "
                     "的三态纪律同一条）")
-        # ---- 待补那一档的配套纪律（D12 甲的第 ② 条）：空定义必须说清"为什么空、谁来补"。
+        # ---- 待补那一档的配套纪律：空定义必须说清"为什么空、谁来补"。
         # 只对概念行要求：别的命题若落成 pending_definition，那是把"还没做"记成一笔
         # 没人能接手的账（与 `quote_verified` 的三态纪律同一条）。
         if self.status == "pending_definition":
@@ -2518,7 +2474,7 @@ class Statement:
             require_id(dep, "derived_from[]")
         if self.stmt_id in self.derived_from:
             raise ValueError("derived_from 不能包含自身（自环会让'承重链'永远闭合）")
-        # ---- 别名（业主 2026-10-09：「别名按乙，毕竟定理也可能有别名」）
+        # ---- 别名（定理也可能有别名）
         #
         # 只在数据面把两件明显不合规的事挡住（形状与顺序纪律由
         # `ARRAY_FIELD_KINDS['statements']['aliases'] = 'seq'` 那一处统一守，不在这里抄第二份）：
@@ -2534,11 +2490,11 @@ class Statement:
                     f"aliases 里有与自身 label 相同的写法（{a!r}）⇒ 那是'没有别名'，"
                     "不是'有一条别名'（查重时会把自己当成自己的别名）"
                 )
-        # ---- 五元证据位（`draft/39` §3.14）：形状与"四态纪律"在这里把一次关。
+        # ---- 五元证据位：形状与"四态纪律"在这里把一次关。
         #
         # 判据本体在 `evidencebits`（唯一来源）：这里只转发，不抄第二份口径 ——
         # 两份口径一旦分家，"没做过"与"做过没通过"就会在某一处被压平，而门照样亮绿。
-        # 第 4 位是二维的（`{证明号: 四态}`，业主 2026-10-22 的裁定）：键是不是证明号、
+        # 第 4 位是二维的（`{证明号: 四态}`）：键是不是证明号、
         # 值是不是写侧那四态、逐条凭据有没有落在 `evidence.formal_by_proof` 里，
         # 都由 `bits_shape_problems` 逐条判 —— 这一格只负责"写库之前必须过它"。
         # 为什么必须在数据面把这一关：盘上写进一个形状不对的 `bits`，下游（收工门、
@@ -2546,7 +2502,7 @@ class Statement:
         if self.bits:
             from . import evidencebits as _EB
 
-            # `kind` 必须传进去：概念行不参与等级链（`draft/97` §14.5），
+            # `kind` 必须传进去：概念行不参与等级链，
             # 而"自报等级 vs 现算等级"那一比也要按同一个 kind 算 —— 不传的话
             # 概念行存下的 `grade="not_applicable"` 会被当成"与现算不符"而拒收。
             problems = _EB.bits_shape_problems(self.bits, kind=self.kind)
@@ -2570,15 +2526,15 @@ class Statement:
 class ReviewFinding:
     """H 的一条审校发现（DESIGN-ROLES.md §2.4）。
 
-    `evidence` 必填非空，这是本表的设计核心。本项目最刺痛的一条教训是：审校者的判断也需要证据 —— 上一阶段
-    评审里，评审方（我）提出的"medium 泄漏进正文"是错的，是实现方拿证据顶回来才纠正的。若审校记录可以只写
-    "这里有问题"而不给依据，审校就会变成另一种幻觉来源，而且因为审校者的位置更高，它更难被纠正。
-    ---- `P-9` 候选 A（2026-09-27 所有者裁定）：G10 六键里的四键 ----
-    `draft/17` §8.4 的 G10 审校格式门要求"每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法 +
-    `maths: yes/no`"。这六格里 `axis` / `line` / `verbatim_quote` / `maths` 原本不存在，"最小修法"是"概念上
-    有、键名不同"（G10 读 `minimal_fix`，本表叫 `suggestion`）—— 所以补齐是"4 个新字段 + 1 处键名对齐"，
-    不是 5 个新字段。两条纪律写在这里，因为它们都是"看起来更严、实际更糟"的形态：
-    1. 本表的 `validate()` 刻意不含"这四个字段必须非空"这类断言。理由不是宽容，是 `store.rebuild()` 的实测：
+    `evidence` 必填非空，这是本表的设计核心。本项目最刺痛的一条教训是：审校者的判断也需要证据 ——
+    若审校记录可以只写"这里有问题"而不给依据，审校就会变成另一种幻觉来源，而且因为审校者的位置
+    更高，它更难被纠正。
+    ---- G10 六键里的四键 ----
+    G10 审校格式门要求"每条发现必须有：轴 + 严重度 + 行号 + ≤20 词逐字引文 + 最小修法 +
+    `maths: yes/no`"。这六格里 `axis` / `line` / `verbatim_quote` / `maths` 在本表都有同名字段；
+    "最小修法"概念上有、键名不同（G10 读 `minimal_fix`，本表叫 `suggestion`）。两条纪律写在这里，
+    因为它们都是"看起来更严、实际更糟"的形态：
+    1. 本表的 `validate()` 刻意不含"这四个字段必须非空"这类断言。理由不是宽容，是 `store.rebuild()`：
     它逐行调 `S.row_from_dict(...)` + `obj.validate()`，任何异常都被 `except Exception: skipped += 1; continue`
     吃掉 —— 加上非空断言，契约生效前落盘的历史 finding 行会在下一次重建时整行消失，而且不报错。完整性由
     `gates.gate_g10` 判，且 G10 只对 `created_at >= REVIEW_FINDING_FORMAT_SINCE` 的行要求它；历史行按
@@ -2599,9 +2555,9 @@ class ReviewFinding:
     suggestion: str = ""
     status: str = "open"
     resolution_note: str = ""
-    #: 乙（2026-11-11 业主裁定）：被哪一条更晚的判词覆盖（`superseded_by` = 新 finding 的
-    #: `finding_id`）。三态口径：**空串 = 没有被覆盖**（所有老行、以及今天绝大多数行都是
-    #: 这一档），非空串 = 本行 status 已推成 `superseded` 且覆盖它的是那一条。
+    #: 被哪一条更晚的判词覆盖（`superseded_by` = 新 finding 的 `finding_id`）。
+    #: 三态口径：空串 = 没有被覆盖（所有老行、以及今天绝大多数行都是这一档），
+    #: 非空串 = 本行 status 已推成 `superseded` 且覆盖它的是那一条。
     #: 它只在 `status == "superseded"` 时才有意义；`validate()` 对"说了被覆盖却不给指针"
     #: 当场拒（指针是这条状态唯一的可追溯落点），其余情形一个字都不判。
     superseded_by: str = ""
@@ -2613,8 +2569,8 @@ class ReviewFinding:
     #: 1 起的行号，指向 `doc_id` 那一行。`None` = "这一次拿不到行号"，此时必须给
     #: `line_unavailable_reason`（否则"拿不到"是一个没有结论的空白）。行号只有在版本冻结（G11）之后
     #: 才有意义 —— 未冻结时记下的行号在改稿之后就是错的，而它看起来一样精确。
-    #: `X-96.3-2`：接线落在 `gates` 侧（`GateContext.findings_version_pinned` + `gate_g10`，判据
-    #: `draft/28` §96.3 第 2 条）；本表不加非空断言 —— `store.rebuild()` 会把任何 `validate()` 抛异常
+    #: 接线落在 `gates` 侧（`GateContext.findings_version_pinned` + `gate_g10`）；本表不加非空断言
+    #: —— `store.rebuild()` 会把任何 `validate()` 抛异常
     #: 的行静默丢掉，所以"必填"这件事由门判、不由写入期契约判。口径：版本已冻结（G11 通过）时
     #: `line_unavailable_reason` 不是合规的第三态（"行号拿不到"与"版本已冻住"互相矛盾），G10 按缺字段打回。
     line: int | None = None
@@ -2624,7 +2580,7 @@ class ReviewFinding:
     #: `maths` 档。取值域 = `FINDING_MATHS_VALUES`（`"yes"` / `"no"`）。
     maths: str = ""
     #: `line is None` 时必须非空的理由（"为什么这一次拿不到行号"）。
-    #: `X-96.3-2`：这一格只在版本未冻结时才是合规的第三态；G11 通过
+    #: 这一格只在版本未冻结时才是合规的第三态；G11 通过
     #: （`observed_hash` 与被审版本 hash 逐字相等）时 `line` 必填，
     #: 此时填了本字段也会被 G10 按"缺 `行号(line)`"打回。
     line_unavailable_reason: str = ""
@@ -2654,7 +2610,7 @@ class ReviewFinding:
                 f"status={self.status!r} 时必须写 resolution_note"
                 "（不接受修但不说明为什么，与 'dropped 必须写 notes' 同一条纪律）"
             )
-        # 乙：被覆盖的那一条必须指得到"被谁覆盖" —— 指针是 `superseded` 这个状态唯一
+        # 被覆盖的那一条必须指得到"被谁覆盖" —— 指针是 `superseded` 这个状态唯一
         # 的可追溯落点（原文与轮次都留着，删掉的是"它还算数"这件事，不是这一行）。
         # 反方向不判：`superseded_by` 非空而状态不是 superseded 的情形不存在于写入面，
         # 但老行里多这一格不该被 `store.rebuild()` 静默丢掉（见类 docstring 第 1 条）。
@@ -2662,7 +2618,7 @@ class ReviewFinding:
             raise ValueError(
                 "status='superseded' 时必须给 superseded_by（被哪一条更晚的判词覆盖）"
             )
-        # ---- `P-9` 候选 A 的取值判据（2026-09-27 所有者裁定）----
+        # ---- 取值判据 ----
         #
         # 只判"给了值就必须给对"，刻意不判"必须给值"（见类 docstring 第 1 条：
         # 非空断言会让 store.rebuild() 静默丢历史行）。完整性由 G10 判。
@@ -2696,13 +2652,11 @@ class ReviewFinding:
 
 #: 全项目唯一的角色名单（FC-03 单一来源）。
 #:
-#: 此前它只活在 `tools/__init__.py` 里，而 `schema` 需要一个"role 是不是合法"
-#: 的判据时只能自己再写一份 —— 那就是"跨模块字符串约定有两处定义"。
-#: 现在 `tools.ROLES` 就是这一个对象（它 import 这里），
+#: `tools.ROLES` 就是这一个对象（它 import 这里），
 #: 所以改角色名单只需要改一行，也不可能不一致。
 #:
-#: `L`（Lean 形式化者，2026-10-22 新设）：照 E 的 Lean 面复制出来的一个可运行角色。
-#: 协作面（2026-10-22 晚的最终裁定）：入边恰好 `B → L`、出边恰好 `L → C`、可召唤
+#: `L`（Lean 形式化者）：照 E 的 Lean 面复制出来的一个可运行角色。
+#: 协作面：入边恰好 `B → L`、出边恰好 `L → C`、可召唤
 #: （`specs/l.py` 与 `specs/b.py` 的 `edges`/`summonable`）—— 这两件事都由声明派生，
 #: 本行的加一个字不构成任何一条边。判据见
 #: `tests/test_l_collab_surface_is_exactly_this.py`。
@@ -2718,39 +2672,37 @@ CONDUCTOR_ROLE = "M"
 #: 一次召唤（summon）的任务状态：pending（已立项，尚未开始）· running（正在跑）· done（正常结束，
 #: 结果可能是"没做成"，那看 outcome）· cancelled（被取消，含超时/预算耗尽）· failed（异常终止）。
 #: `done` 与 `failed`/`cancelled` 必须分开：前者的语义是"这个任务跑完了"，后者是"它没跑完"；三者合并成"结束"之后就答不出"这条结论是在一次成功完成的召唤里产出的、还是在崩溃里被顺手写下的"。
-# ---- 工作项板（`draft/85` §2.1；业主 2026-10-08 裁 A1=甲）
-# 为什么这四条词表定义在 `schema.py`：`manuscripts.py:50` 就 `from . import schema as S`（它要用
-# `S.TABLES` / `S.ROLES`）⇒ 反过来 import 会成环；而本仓既有裁定（`draft/68` 题 2 选 B，判据
+# ---- 工作项板
+# 为什么这四条词表定义在 `schema.py`：`manuscripts` 就 `from . import schema as S`（它要用
+# `S.TABLES` / `S.ROLES`）⇒ 反过来 import 会成环；而本仓既有规矩（判据
 # `tests/test_claimanatomy.py::test_the_six_claim_vocabularies_have_exactly_one_definition_in_schema`）
 # 是"受控词表的真身在 `schema.py`，工具侧只引用不内联"。
 
-#: 板上一行的四种 `kind`（`draft/85` §2.1）。空串 = 老行 / 纯实例行（不进板）。
-#: 为什么"空串"也算合法取值：真机 59 个工作区共 2276 行老行（实测 `draft/89` §1.2），
-#: 加列之后它们必须天然被读成"不是板项"，不许要求逐行迁移。
+#: 板上一行的四种 `kind`。空串 = 老行 / 纯实例行（不进板）。
+#: 为什么"空串"也算合法取值：盘上已有的老行没有这一列，加列之后它们必须天然被读成
+#: "不是板项"，不许要求逐行迁移。
 ITEM_KINDS: tuple[str, ...] = ("delegation", "message", "report", "notice")
-#: 一条工作项"要什么行为"——这一格决定"什么算做完"（业主 T16：最小行为是"确认读过"）。
+#: 一条工作项"要什么行为"——这一格决定"什么算做完"（最小行为是"确认读过"）。
 ITEM_EXPECTS: tuple[str, ...] = ("ack", "work")
-#: 工作项轴的四档（`draft/88` §3）。措辞由业主定：`claimed` = 接手（写 `running` 行那一刻）、
+#: 工作项轴的四档：`claimed` = 接手（写 `running` 行那一刻）、
 #: `seen` = 渲染（被读进某一步的提示词）。它与 `status` 是两根轴，不许共用一个名字。
-#: 2026-10-13：加 `block` 一档（与 `TASK_STATUSES` 同一件事的另一根轴）—— 优雅停止时
+#: `block`（与 `TASK_STATUSES` 同一件事的另一根轴）—— 优雅停止时
 #: 被停掉的委托，它在板上的那一项也不许继续写着"待办"（`stopctl.block_remaining_tasks`
 #: 把两根轴一起翻）。它不进 `ITEM_CLOSES`：`block` 不是收口方式，是"停在这里"。
 ITEM_STATES: tuple[str, ...] = ("queued", "claimed", "seen", "done", "block")
 #: `done` 的两种收口：`acked`（知道了）与 `completed`（做完了）必须分得开 ——
 #: 折平它就是把"光知道个信息"读成"交付了"。
-#: 板项收口的三档（2026-10-28 加 `expired`）。
+#: 板项收口的三档。
 #:
-#: 为什么必须有第三档（真机 `projects/paper-rewrite-78` 2026-10-28 02:48 实测）：
-#: 子代理静默/退役后，它名下"只许本人 ack"的到点通知**永远不会有人 ack**，而销号闸
-#: 要求"名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟
-#: 连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、**final 为空**。
+#: 为什么必须有第三档：子代理静默/退役后，它名下"只许本人 ack"的到点通知永远不会有人 ack，
+#: 而销号闸要求"名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，
+#: 那一趟连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、final 为空。
 #: 出口只能是"作废"这一档：它不是"知道了"（acked），也不是"做完了"（completed），
 #: 而是"这条通知永远不会再被收件人处理"。折进前两档会让读数再也分不清这三件事 ——
 #: 那正是这套系统反复禁止的折平。
 ITEM_CLOSES: tuple[str, ...] = ("acked", "completed", "expired")
 
-#: 2026-10-13（业主：「接收到停的时候，剩余任务委托状态自动变成block」）：加 `block`
-#: 一档 —— 它说的是"停了、但这件活没做完"，与 `cancelled`（被取消）和 `failed`（崩了）
+#: `block` 一档说的是"停了、但这件活没做完"，与 `cancelled`（被取消）和 `failed`（崩了）
 #: 都不同：前者是"人不让它做了"，后者是"它做坏了"，而 `block` 是"优雅停止时它还在手上"。
 #: 翻这一档的是框架（`stopctl.block_remaining_tasks`），不是模型自己声明 ——
 #: 于是"停的时候手上还剩什么"在台账上有主人、有理由（`detail` 必填）、有时间（`ended_at`）。
@@ -2777,10 +2729,9 @@ CHILD_ENDINGS = ("delivered", "cut_off_by_parent", "stopped")
 
 #: 三档的命名常量：`child_ending()` 的三个分支各返回其中一档（不是再写一遍字面量）。
 #:
-#: 为什么要这一层（2026-10-26）：改前 `CHILD_ENDINGS` 全仓 0 读者 —— 三档在
-#: `child_ending()` 里各写一遍字面量，于是"词表说三档"与"判定点给三档"只是碰巧一致：
-#: 词表改一个字母、加一档、删一档，判定点一个字节都不会跟着变，也没有任何判据会红。
-#: 现在是解包：`CHILD_ENDINGS` 被改短/改长，`schema.py` 的导入期当场抛
+#: 为什么要这一层：三档若在 `child_ending()` 里各写一遍字面量，"词表说三档"与
+#: "判定点给三档"只是碰巧一致 —— 词表改一个字母、加一档、删一档，判定点一个字节都不会
+#: 跟着变，也没有任何判据会红。解包之后：`CHILD_ENDINGS` 被改短/改长，`schema.py` 的导入期当场抛
 #: `ValueError`（不是静默漂移）；词表与分支的"一一对应"（不许有档没人产、也不许产出
 #: 词表外的档）由 `tests/test_child_endings_are_a_closed_set.py` 穷举判。
 CHILD_DELIVERED, CHILD_CUT_OFF_BY_PARENT, CHILD_STOPPED = CHILD_ENDINGS
@@ -2798,12 +2749,12 @@ def child_ending(*, status: str = "", outcome: str | None = None,
                  stop_code: str = "", cut_off: bool = False) -> dict:
     """一个子代理的结局 —— 三档只在这一处判（唯一判定点）。
 
-    为什么必须有这一处（业主 2026-10-26 的 D22）：改前"一个子的结局"散在四个写者手里
-    ——子自己交付（`Conductor._end_from_payload`）、子读到取消（`summon_run` 的
-    `except CancelRequested`）、`dispose()`、以及父退场那一处；各自拼自己的
-    `status`/`outcome` 字面量，于是"被父退场掐断"这一档在台账上根本没有位置
-    （父退场时一个字段都不写，子行留在 `running`，或在自己的线程里照常写成 `done`/`ok`
-    —— 两种都和"正常交付"长得一模一样）。三档从同一处判出来之后，"这个子是被谁结束的"
+    为什么必须有这一处："一个子的结局"若散在四个写者手里 —— 子自己交付
+    （`Conductor._end_from_payload`）、子读到取消（`summon_run` 的
+    `except CancelRequested`）、`dispose()`、以及父退场那一处 —— 各自拼自己的
+    `status`/`outcome` 字面量，"被父退场掐断"这一档在台账上就没有位置（父退场时
+    一个字段都不写，子行留在 `running`，或在自己的线程里照常写成 `done`/`ok` ——
+    两种都和"正常交付"长得一模一样）。三档从同一处判出来之后，"这个子是被谁结束的"
     只需要读一个函数。
 
     参数（都是事实，不是判断）：
@@ -2833,13 +2784,12 @@ def child_ending(*, status: str = "", outcome: str | None = None,
 
 #: 框架拒绝执行的具体理由（受控词表）。`outcome="refused"` 必须带其中之一。
 #:
-#: `invalid_params` 是 2026-09-29 补的一档（`draft/28` §154 的 R-46）：这张表原来
-#: 没有"这次调用本身不成立"的位置，于是参数门只好借用 `unknown_action`
-#: （"这个角色没这个动作"）来报"参数不合法" —— 实测代价是 M 拿到
+#: `invalid_params`：「这次调用本身不成立」这一档。没有它，参数门只好借用
+#: `unknown_action`（"这个角色没这个动作"）来报"参数不合法" —— 调用方拿到
 #: `refusal_reason=unknown_action` 却看到 detail 写着"dependencies. 必须是对象"，
 #: 排查方向被引到"角色能力表"上去了（那是查名字的方向，而真相是改参数）。
 #: 同一件事在 handler 内部发生时更糟：那里落的是 `failed / 执行中异常`
-#: （"业务拒绝"与"代码崩了"同形）。补这一档之后，两处都落到同一个诚实的位置。
+#: （"业务拒绝"与"代码崩了"同形）。有了这一档，两处都落到同一个诚实的位置。
 REFUSAL_REASONS = (
     "unknown_role",  # 角色不存在
     "unknown_action",  # 该角色没有这个动作
@@ -2886,14 +2836,12 @@ class Task:
     outcome: str | None = None
     #: `outcome == "refused"` 时的受控理由（见 `REFUSAL_REASONS`）。
     refusal_reason: str | None = None
-    #: 实例标签（`draft/37` §16 P1）。空串 = 这个角色只有那一个实例。
+    #: 实例标签。空串 = 这个角色只有那一个实例。
     #:
-    #: 为什么必须落到台账上：`instance` 此前只存在于日志行与后端调用参数里
-    #: （`conductor.summon(..., instance=…)` → `_log("… , instance=X")`），于是
+    #: 为什么必须落到台账上：`instance` 若只存在于日志行与后端调用参数里
+    #: （`conductor.summon(..., instance=…)` → `_log("… , instance=X")`），
     #: "这一轮里 N 个并行实例各自做了什么"在读台上无法归因 —— 台账里同角色同动作的
-    #: 多行长得一模一样（`conductor.py` 早已为"按角色找 running 行会找到 N 条"打过补丁，
-    #: 而那个补丁正是这个缺口的症状）。R17 要的"同一份文献只被一个实例领走"
-    #: 没有这一栏根本判不了。
+    #: 多行长得一模一样。R17 要的"同一份文献只被一个实例领走"没有这一栏根本判不了。
     instance: str = ""
     #: 人可读的说明。"为什么是这个结果"必须能读，否则台账就只是个计数器。
     detail: str = ""
@@ -2908,12 +2856,11 @@ class Task:
     #: 该次召唤读过的行（审计用；也让"这条结论的依据是哪次召唤"可回答）。
     inputs: list[str] = field(default_factory=list)
 
-    # ---- 工作项板（业主 2026-10-08 裁 A1=甲：板就在这张表上；送审单 `draft/88`）
+    # ---- 工作项板（板就在这张表上）
     #
     # 七格都追加在末尾：`to_dict()` 是 `asdict`（键序 = 字段序），而 I-9 要求
-    # `rebuild()` 之后 `tasks.json` 逐字节一致。先例就是上一次给本表加列
-    # （`instance`，`draft/37` §16 P1）：判据在
-    # `tests/test_task_instance.py::test_...`（"加了这一栏之后 rebuild 逐字节不变"）。
+    # `rebuild()` 之后 `tasks.json` 逐字节一致（判据见
+    # `tests/test_task_instance.py`："加了这一栏之后 rebuild 逐字节不变"）。
     #
     # 为什么工作项轴不叫 `status`：`status` 说的是实例的生命周期
     # （pending/running/done/cancelled/failed），而"这一项被读过没有"是另一根轴
@@ -2924,7 +2871,7 @@ class Task:
     #:
     #: 唯一允许为空的行是撤销/作废之后的那一行（`item_state="done"` 且
     #: `item_close="expired"`）：它不再欠任何动作，原值记在 `expects_was`
-    #: （业主 2026-11-06 裁定 ① 的丙件；判据 `tests/test_revocation_shape_improvements.py`）。
+    #: （判据 `tests/test_revocation_shape_improvements.py`）。
     expects: str = ""
     #: 工作项轴（`ITEM_STATES`）。
     item_state: str = ""
@@ -2932,17 +2879,17 @@ class Task:
     item_close: str = ""
     #: 谁读的（`item_state` 走到 `seen` 那一刻、渲染它的那个实例的 `task_id`）。
     seen_by: str = ""
-    #: 第几步读的（业主 A5 的"跨多步未读"升级档要用）。
+    #: 第几步读的（"跨多步未读"升级档要用）。
     seen_step: int | None = None
-    #: 派活参数（业主 A6=丙）：父声明"这个实例做完一件还待命"。只对 `kind == "delegation"` 有意义。
+    #: 派活参数：父声明"这个实例做完一件还待命"。只对 `kind == "delegation"` 有意义。
     keep_alive: bool = False
 
-    # ---- D22（业主 2026-10-26）：这一行是不是"父代理退场时被结算的"
+    # ---- 这一行是不是"父代理退场时被结算的"
     #
     # 为什么必须是一格显式的标记（而不是让读的人去比 `detail` 的措辞）：`outcome` 里
     # 那一个 `cut_off_by_parent` 档回答"它怎么结束的"，这一格回答"是谁写的这一行"
     # ——父退场时子代理可能还活着，它会晚些时候在自己的线程里写自己的终态；两件事
-    # 必须分得开，否则"被掐断"与"自己交差"在台账上又会长得一样（那正是 D22）。
+    # 必须分得开，否则"被掐断"与"自己交差"在台账上又会长得一样。
     #
     # 位置在最后一位（不是美观问题）：`to_dict()` 是 `asdict`（键序 = 字段序），而
     # `_write_new_row` 与 `finish` 都把行补齐到全字段 —— 新键追加在末尾才让 `rebuild()`
@@ -2950,7 +2897,7 @@ class Task:
     #: `True` = 这一行的终态是父代理退场时结算的（子当时还在跑，结果未知）。
     settled_at_parent_exit: bool = False
 
-    # ---- 撤销（业主 2026-11-06 裁定 ① 的丙件）：`expects` 被清空之后，原值留在哪
+    # ---- 撤销：`expects` 被清空之后，原值留在哪
     #
     # 为什么必须有这一格（一个数一个名，撤销不是删除）：撤销之后那一行不再欠任何动作，
     # 于是 `expects`（"什么算做完"的唯一一格）被清空 —— 可它原来要的是 `ack` 还是
@@ -2966,18 +2913,17 @@ class Task:
     def validate(self) -> None:
         if not str(self.task_id or "").strip():
             raise ValueError("task_id 不能为空")
-        # `c-1` / `c-2`：与 `SearchRequest.validate` 同一条判据（前缀是 t-）。
+        # 与 `SearchRequest.validate` 同一条判据（前缀是 t-）。
         require_process_id(self.task_id, "task")
         if self.role not in (*ROLES, CONDUCTOR_ROLE):
             raise ValueError(f"role 必须是 {(*ROLES, CONDUCTOR_ROLE)} 之一，收到 {self.role!r}")
-        # 2026-10-16（业主口径 S2「M 只派活」；本文件在 FC-27 禁改区，按"先改后签"登记待 2 名人审）：
-        # 这一格放开空动作。原话逐字：「M 只是个派活的……不指定能力」「不是忽略 action，完全不要有填
-        # action 的位置」。⇒ 一次派活可以没有动作（动作由被派者自己选），此时那句"空话"是 `task`（活），
+        # 这一格放开空动作（口径「M 只派活」：不指定能力，也不该有填 action 的位置）。
+        # 一次派活可以没有动作（动作由被派者自己选），此时那句"空话"是 `task`（活），
         # 而 `task` 必填由派活四个入口逐处守：`agent_loop._do_summon` / `_do_summon_many`、
         # `tools/conductor_tools.py` 的 `conductor.summon` / `conductor.summon_many`（`required` 里都有
         # `task`，处理器在不点时当场拒）。
-        # 为什么必须放开（真机读数）：T5 第 12/13 趟 M 六次/两次发出 `{"role":"A","task":…}`，而 `tasks`
-        # 表里空动作的行 = 0 —— 那几次死在写行这一刻，连"派活被拒"的证据都没留下。放开之后判据改成"由派活入口保证带活"。
+        # 为什么必须放开：空动作的行会死在写行这一刻，连"派活被拒"的证据都留不下；
+        # 判据改成"由派活入口保证带活"。
         if self.status not in TASK_STATUSES:
             raise ValueError(f"status 必须是 {TASK_STATUSES} 之一，收到 {self.status!r}")
         if self.outcome is not None and self.outcome not in TASK_OUTCOMES:
@@ -3040,7 +2986,7 @@ class Task:
                 "status=cancelled 时 outcome 必须是 'cancelled'（被取消）"
                 "或 'refused'（因超预算/超截止被拒）—— 二者语义不同，但都属于'没做完'"
             )
-        # ---- D22：父退场掐断那一档的两格必须成对（不许只有一半）
+        # ---- 父退场掐断那一档的两格必须成对（不许只有一半）
         #
         # 为什么两个方向都判：`outcome=cut_off_by_parent` 是"它怎么结束的"，`settled_at_parent_exit`
         # 是"谁写的这一行"。只判一个方向的话，会出现"写着被掐断、却没有标记"（读侧按标记筛
@@ -3071,10 +3017,10 @@ class Task:
             if not str(a).strip():
                 raise ValueError("artifacts 不能含空元素")
 
-        # ---- 工作项板的七条（送审单 `draft/88` §4；业主 2026-10-08 晚答"方向一致 + 补交叉校验"）
+        # ---- 工作项板的七条
         #
         # 口径：`kind == ""` ⇒ 老行 / 纯实例行，其余六格与 `keep_alive` 必须全空
-        # ⇒ 加列对 59 个真机工作区的 2276 行老行零影响（实测 `draft/89` §1.2）。
+        # ⇒ 加列对盘上已有的老行零影响（它们没有这几列）。
         if not self.kind:
             if (self.expects or self.item_state or self.item_close or self.seen_by
                     or self.seen_step is not None or self.keep_alive
@@ -3119,7 +3065,7 @@ class Task:
                     )
             elif self.item_close:
                 raise ValueError("item_close 只在 item_state='done' 时有意义")
-            # 交叉校验（业主点名的第 6 条）：两个字段各自为真、合起来是假话 —— 在这里拦。
+            # 交叉校验：两个字段各自为真、合起来是假话 —— 在这里拦。
             if self.item_close == "acked" and self.expects != "ack":
                 raise ValueError(
                     "用 acked 收口只允许 expects='ack' 的项 —— "
@@ -3148,12 +3094,11 @@ class Task:
 #: 花销台账的归口。为什么必须有受控词表：没有它，"这次花了多少"就没有可比口径
 #: （"搜索"与"审校"的 token 花在一个池子里，等于什么也没说）。
 #:
-#: 六档，没有 `"other"`。为什么删掉它（`G-6`，2026-09-26 全面体检）：
-#: `modelgw.complete` 的 docstring 自己写着"缺省也不许是「其它」：一个「其他」档会把
-#: 「有人忘了写」伪装成一个正常的分类"，而 `"other"` 恰恰就在词表里 ——
-#: 于是那句承诺在数据上不成立：`Charge(scope="other")` 不拒，
+#: 六档，没有 `"other"`。为什么没有它：`modelgw.complete` 的 docstring 自己写着
+#: "缺省也不许是「其它」：一个「其他」档会把「有人忘了写」伪装成一个正常的分类"，
+#: 而 `"other"` 若在词表里，那句承诺在数据上就不成立：`Charge(scope="other")` 不拒，
 #: `by_scope["other"]` 与正常档长得一模一样。一个"什么都不是"的档要么有真实产出点、
-#: 要么不在词表里；本仓今天没有任何地方会产出 `"other"`，所以按后者处置。
+#: 要么不在词表里；今天没有任何地方会产出 `"other"`，所以按后者处置。
 #: 编外的值不会被丢掉 —— `tokenmeter.by_scope` 把它们归到显式的 `SCOPE_UNCLASSIFIED`
 #: 档并记下原值（那里能看出"有人写了一个编外归口"）。
 USAGE_SCOPES = ("summon", "experiment", "search", "extract", "review", "reason")
@@ -3165,7 +3110,7 @@ USAGE_SCOPES = ("summon", "experiment", "search", "extract", "review", "reason")
 #: （`tokenmeter.by_scope`）里；写入方必须给出 `USAGE_SCOPES` 里的一个值。
 SCOPE_UNCLASSIFIED = "unclassified"
 
-#: 每一档归口的产出点登记（`G-6`）。值是一个二元组：
+#: 每一档归口的产出点登记。值是一个二元组：
 #: `(产出点标识, 说明)`，或 `None` 表示"本版本没有产出点"。
 #:
 #: 为什么需要它：`by_scope` 对每一档都给固定键，零值档也在场 ——
@@ -3183,17 +3128,15 @@ USAGE_SCOPE_PRODUCERS: dict[str, tuple[str, str] | None] = {
     "summon": ("conductor._charge_and_settle", "召唤级结算：Charge(scope='summon')"),
     "experiment": None,
     "search": None,
-    # `extract` 原先登记为 None（"本版本没有产出点"）。2026-09-28 加了模型抽取那条
-    # 通路（`projects.extract_with_model` 经 `modelclient.ModelClient` 调模型，
-    # 归口 scope='extract'）⇒ 这一档从此有产出点，声明必须跟上：
+    # `extract` 的产出点是模型抽取那条通路（`projects.extract_with_model` 经
+    # `modelclient.ModelClient` 调模型，归口 scope='extract'）：
     # 声明写着"没有代码会产出它"而实际有，就是一句假话（`G-6` 要防的正是这个）。
     "extract": ("modelclient.ModelClient.complete",
                 "模型读本地文献那一步：charge_reply(scope='extract')"),
     "review": None,
     # `reason` 有两个产出点：`runflow` 的作答调用点，以及 `run-agent` 那条路的模型缝
-    # （`llmseam.LlmSeam._charge_ledger`，2026-10-03 接上，`draft/37` §64）。
-    # 这里原先只写了前者 —— 于是"谁产出这一档"这句声明在缝接上账本之后就成了一句
-    # 半真的话（`G-6` 要防的正是"声明与产出脱节"）。
+    # （`llmseam.LlmSeam._charge_ledger`）。漏掉后者会让"谁产出这一档"这句声明
+    # 变成一句半真的话（`G-6` 要防的正是"声明与产出脱节"）。
     "reason": ("runflow.SCOPE_ANSWER + llmseam.LlmSeam._charge_ledger",
                "两条路的 charge_reply/Charge 都归口 scope='reason'："
                "runflow 的作答调用点，与 run-agent 的模型缝（每次 LLM 调用一行）"),
@@ -3201,7 +3144,7 @@ USAGE_SCOPE_PRODUCERS: dict[str, tuple[str, str] | None] = {
 
 
 def usage_scope_production() -> dict[str, str]:
-    """每一档归口的三态产出状态（`G-6`）：`produced` / `not_produced`。
+    """每一档归口的产出状态（`G-6`）：`produced` / `not_produced`。
 
     刻意不把"没有产出点"折成 `False` 或空串：读的人要能一眼看出
     "这一档是查过没花钱"还是"根本没有代码会产出它"。两者在 `by_scope` 的全零里
@@ -3249,7 +3192,7 @@ class UsageEntry:
     1. 零值也记。一次"跑了但没花 token"（例如纯本地计算）必须留下一条零值记录 ——
        否则"没记账"与"花了零"无法区分，而"预算还剩多少"这个问题就永远答不准。
     2. `attempts` 单独记。它是"这笔钱花了几次才花出去"的直接证据：
-       `04-…md` §B6 的原话是 "Each retry is another billed provider request"。
+       每次重试都是一次新的计费请求（"Each retry is another billed provider request"）。
        只记总量不记次数，就无法发现"某条路径一直在重试"。
     3. `usd` 允许为 0（没有单价表时），但 `tokens_total` 与 `usd` 不能同时为 0
        且 `note` 为空 —— 那样这条记录不携带任何信息。
@@ -3270,7 +3213,7 @@ class UsageEntry:
     #: 幂等键：同一个非空值在整张表里只能出现一次。
     #: 空串 = "这一行没有幂等身份"（历史行、以及直接调 `TokenMeter.charge` 的行），
     #: 不受唯一性约束 —— 把它也算进唯一性会让所有历史行互相冲突、整表提交炸掉。
-    #: 为什么是字段而不是 `note` 里的文本标记：见本提案 §1、§3.3。
+    #: 为什么是字段而不是 `note` 里的文本标记：唯一性要由结构保证，不能靠文本约定。
     idem_key: str = ""
 
     def validate(self) -> None:
@@ -3364,11 +3307,9 @@ class EvalResult:
             raise ValueError("claim_key 不能为空（这条数字检验的是哪个命题）")
         # `k` 由下面 `_validate_k` 独占校验，所以它先从这条泛化判据里摘出去。
         #
-        # 缺陷（2026-09-26 全面体检 · 子代理 E 实测，`temp/auditE-quote-eval-probe.json`，
-        # 登记册 `E-13`）：`EVAL_REQUIRED_FIELDS` 里的 `k` 走的是
-        # `str(getattr(self, f) or "")` 这条非空判据，而它把 `0` 读成"空" ——
-        # 于是 `k=0` 报的是"缺少必填口径字段 ['k']"。那句话把修法指错了方向：
-        # 读者会去补字段，而真因是 `k < 1`（pass@k 的 k 从 1 开始）。
+        # `EVAL_REQUIRED_FIELDS` 里的 `k` 不走这条泛化判据：`str(getattr(self, f) or "")`
+        # 会把 `0` 读成"空"，于是 `k=0` 报的是"缺少必填口径字段 ['k']"，把修法指错方向
+        # （读者会去补字段，而真因是 `k < 1`）。
         # 剩下六个字段仍然走泛化判据 —— 它们没有第二处独立判据，不存在这个问题。
         missing = [
             f for f in EVAL_REQUIRED_FIELDS
@@ -3395,15 +3336,19 @@ class EvalResult:
     def _validate_k(self) -> None:
         """`k` 的唯一判据：非空、不是布尔、是整数、从 1 开始。
 
-        ## 为什么这四件事必须在同一处（登记册 `E-13`）：改前 `k` 有两处判据、各自只说对一半：
-        `EVAL_REQUIRED_FIELDS` 的非空判据 `str(k or "")` 把 `0` 当空串，于是 `k=0` 报"缺少必填口径字段 ['k']"
-        （真因是 `k < 1`）；`if self.k < 1` 让 `k=True` 因为 `bool` 是 `int` 的子类而通过（`True < 1` 为假），
-        于是"pass@True"这种无意义口径能进库；更坏的是 `k="1"`：它过得了非空判据，然后在 `<` 上抛 `TypeError`
-        —— 一个不是 `ValueError` 的异常从 `validate()` 里逃出去，而所有调用方都按"`validate()` 抛 `ValueError`"处理；合并成一处之后，"什么样的 k 合法"只有一个答案，且失败形态恒为 `ValueError`。
-        ## 为什么拒绝 `bool` 与 `float`（加严，不是放宽）：`k=True` 与 `k=1.0` 今天都能过 —— 它们不是"另一种
-        写法"，而是口径不明：读 `eval_results` 的人无法判断 `1.0` 是"k=1"还是某处做了浮点运算漏了取整；`EvalResult.k`
-        的声明类型是 `int`，留着"声明是 int、实际可以是 bool/float"这种缺口正是 `E-13` 的条目名本身。`allows_sorry` /
-        `samples` 是否升为必填不在本次改动内（按批次纪律只增判据、不改口径）。
+        ## 为什么这四件事必须在同一处
+        四件事（非空、不是布尔、是整数、从 1 开始）分散判会各自只说对一半：
+        `str(k or "")` 把 `0` 当空串，于是 `k=0` 报"缺少必填口径字段 ['k']"（真因是 `k < 1`）；
+        `if self.k < 1` 让 `k=True` 因为 `bool` 是 `int` 的子类而通过（`True < 1` 为假），
+        于是"pass@True"这种无意义口径能进库；`k="1"` 过得了非空判据，然后在 `<` 上抛 `TypeError`
+        —— 一个不是 `ValueError` 的异常从 `validate()` 里逃出去，而所有调用方都按
+        "`validate()` 抛 `ValueError`"处理。合并成一处之后，"什么样的 k 合法"只有一个答案，
+        且失败形态恒为 `ValueError`。
+        ## 为什么拒绝 `bool` 与 `float`
+        `k=True` 与 `k=1.0` 都能过宽松判据 —— 它们不是"另一种写法"，而是口径不明：读
+        `eval_results` 的人无法判断 `1.0` 是"k=1"还是某处做了浮点运算漏了取整；`EvalResult.k`
+        的声明类型是 `int`，留着"声明是 int、实际可以是 bool/float"这种缺口就是口径漏洞。
+        `allows_sorry` / `samples` 是可选字段（口径未变）。
         """
         if self.k is None or (isinstance(self.k, str) and not self.k.strip()):
             raise ValueError("k 不能为空（pass@k 的 k 必填，见 EVAL_REQUIRED_FIELDS）")
@@ -3427,9 +3372,9 @@ class EvalResult:
 
 # ---------------------------------------------------------------- FC-05 顺序与集合分离
 
-#: 每一个数组字段都必须在这里声明它是"集合"还是"序列"（FC-05 的由来，`test/test2/LESSONS.md` §6.1）。
-#: 根因：数组字段的语义没被显式声明 ⇒ 所有数组都被默认当成集合（升序去重），而"顺序本身携带信息"
-#: 的那些被静默破坏（本项目因此丢掉了关系链的跳序，只能从 `origin` 字符串反解）。
+#: 每一个数组字段都必须在这里声明它是"集合"还是"序列"（FC-05）。
+#: 不显式声明 ⇒ 所有数组都被默认当成集合（升序去重），而"顺序本身携带信息"
+#: 的那些会被静默破坏（本项目因此丢掉了关系链的跳序，只能从 `origin` 字符串反解）。
 #: - "set" —— 集合：必须升序且去重。`validate_table` 会集中检查，所以新增集合字段时不需要（也不
 #:   应该）在自己的 `validate()` 里再手写一遍 `if x != sorted(set(x))` —— 那就是同一判据两处实现。
 #: - "seq" —— 序列：保序、不许排序去重。必须有 round-trip 测试（写→读→逐元素相等），否则"保序"
@@ -3448,8 +3393,8 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     # 作者顺序是有意义的（第一作者 ≠ 末位作者），所以是 seq。
     "literature": {"source_request_ids": "set", "authors": "seq"},
     # 别名顺序影响展示与"主名"判断；`related_concepts` 是纯集合。
-    # `concepts` 那一行随并表退役（S1r）：概念的别名落在
-    # `statements.aliases`（同表已声明 "seq"），`related_concepts` 由 `relations` 表管。
+    # 概念行已并进 `statements`：概念的别名落在 `statements.aliases`（同表已声明 "seq"），
+    # `related_concepts` 由 `relations` 表管。
     "relations": {"concept_ids": "set", "supporting_lit_ids": "set"},
     "reprocess_requests": {"relation_ids": "set", "touched_relation_ids": "set"},
     "research_questions": {
@@ -3462,11 +3407,10 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
         # 这一对就是 FC-05 的正面范例：同一个链条，两个字段。
         # `related_relation_ids` 是集合（"引用了哪些知识"，升序、可比较、可查重）；
         # `relation_chain` 是序列（"按什么顺序走的"，保序、就是推理路径本身）。
-        # 合成一个字段就必然丢掉一半信息 —— 这正是上一版踩过的坑。
+        # 合成一个字段就必然丢掉一半信息。
         "relation_chain": "seq",
     },
-    # 第 9 处触点（`draft/30` §T1 原列了 7 处，实测又漏了这一处）：
-    # `ARRAY_FIELD_KINDS` 是"哪些数组字段当集合/序列"的登记表，未声明即 `verify` 报
+    # 触点：`ARRAY_FIELD_KINDS` 是"哪些数组字段当集合/序列"的登记表，未声明即 `verify` 报
     # `undeclared_array_field`（不静默 —— 这正是 FC-05 要防的"静默把序列当集合"）。
     # `experiment_ids` 是纯集合（检验过它的实验，顺序无意义），故 "set"。
     "conjectures": {"experiment_ids": "set"},
@@ -3486,7 +3430,7 @@ ARRAY_FIELD_KINDS: dict[str, dict[str, str]] = {
     "tasks": {"artifacts": "set", "inputs": "set"},
     "usage_ledger": {},
     "eval_results": {},
-    # 待新增文献列表（业主 2026-10-20）：没有任何数组字段 —— 空 dict 是"这张表没有
+    # 待新增文献列表：没有任何数组字段 —— 空 dict 是"这张表没有
     # 数组字段"这个事实本身，不是"忘了登记"。登记它是必须的：未登录的表会让
     # `verify` 的 `undeclared_array_field` 在将来有人加一个 list 字段时失去对象。
     "lit_candidates": {},
@@ -3501,7 +3445,7 @@ def array_kinds(table: str) -> dict[str, str]:
 def _set_problems(field: str, val: Any) -> list[str]:
     """一个「声明为集合」的数组字段现在的形状问题（先把元素类型判掉，再做升序去重）。
 
-    ## R-05：为什么必须先判类型：`related_concepts=["0001", 2]` 这样的混合类型数组，此前会让
+    ## R-05：为什么必须先判类型：`related_concepts=["0001", 2]` 这样的混合类型数组会让
     `list(val) != sorted(set(val))` 在比较 `str` 与 `int` 时抛 `TypeError`。那不是"库里有一条坏数据"，而是
     判据自己炸了：`validate_table` 只把 `ValueError` 当"这一行不合法"（`except ValueError`）；`store.rebuild`
     的灾难恢复链同样只接 `ValueError` ⇒ 一条混类型的行会以 `TypeError` 打断整次重建，而重建是不可逆的那条路。
@@ -3522,11 +3466,11 @@ def _set_problems(field: str, val: Any) -> list[str]:
 def normalize_set_fields(table: str, raw: Any) -> list[str]:
     """把「声明为集合」的数组字段在写入前排序去重（就地改 `raw`，返回被改动的字段名）。
 
-    ## 写侧为什么是归一化而不是拒收（2026-10-28 真机 `draft/156` 的 D5，同一条拒信连挡 3 次）
+    ## 写侧为什么是归一化而不是拒收
     模型的输入 `concept_ids=["000004","000002"]` 与 `["000002","000002"]` 表达得完全
     清楚 —— "这几个概念之间有关系"。"集合的规范形态是升序去重"是我们自己的存储
-    契约，不是它对这件事的表态。此前写侧只有拒收（`_set_problems` 的"未升序去重"），
-    于是同一个坑连踩 3 次：模型写错次序一次、读一次拒信、再猜一次。
+    契约，不是它对这件事的表态。写侧若只有拒收（`_set_problems` 的"未升序去重"），
+    模型写错次序一次、读一次拒信、再猜一次，同一个坑会连踩好几次。
     ⇒ 写侧改成"排序去重后照收"，并把改动过的字段名回给调用方（`tools/table_tools.py`
     把这份读数落在返回值的 `normalized` 格上）。"我改过你的输入"因此可查，不是静默改。
 
@@ -3602,12 +3546,12 @@ def check_array_invariants(table: str, obj: Any) -> list[str]:
 TABLES: dict[str, dict] = {
     "search_requests": {"file": "search_requests.json", "row": SearchRequest, "id_field": "request_id", "id_kind": "request"},
     "literature": {"file": "literature.json", "row": Literature, "id_field": "lit_id", "id_kind": "lit"},
-    # `concepts` 在这里真删（S1r 并表那一笔，`SCHEMA_VERSION=2`）：概念行以
+    # `concepts` 表不存在（`SCHEMA_VERSION=2` 并进 `statements`）：概念行以
     # `kind="concept"` 住进下面的 `statements`。删掉之后 `store.rows("concepts")`
     # 走 `store._MOVED_TABLES` 那条受控错 + 指路，不是"未知表"这种读不出下一步的错。
     "relations": {"file": "relations.json", "row": Relation, "id_field": "relation_id", "id_kind": "relation"},
     "research_questions": {"file": "research_questions.json", "row": ResearchQuestion, "id_field": "question_id", "id_kind": "question"},
-    # 猜想（`draft/29` §7.4 Shape C）：独立对象，不是问题的一个 kind —— 理由见类的 docstring。
+    # 猜想：独立对象，不是问题的一个 kind —— 理由见类的 docstring。
     "conjectures": {"file": "conjectures.json", "row": Conjecture, "id_field": "conjecture_id", "id_kind": "conjecture"},
     "analysis_reports": {"file": "analysis_reports.json", "row": AnalysisReport, "id_field": "report_id", "id_kind": "report"},
     "reprocess_requests": {"file": "reprocess_requests.json", "row": ReprocessRequest, "id_field": "reprocess_id", "id_kind": "reprocess"},
@@ -3615,25 +3559,25 @@ TABLES: dict[str, dict] = {
     "attack_plans": {"file": "attack_plans.json", "row": AttackPlan, "id_field": "plan_id", "id_kind": "plan"},
     "documents": {"file": "documents.json", "row": Document, "id_field": "doc_id", "id_kind": "doc"},
     "dependencies": {"file": "dependencies.json", "row": Dependency, "id_field": "dep_id", "id_kind": "dep"},
-    # 命题台账（`draft/37` §16 P1）：知识实体，所以吃 4 位编号空间（见 ID_COUNTERS）。
+    # 命题台账：知识实体，所以吃编号空间（见 ID_COUNTERS）。
     # 放在 dependencies 之后：命题是依赖的锚点，两者相邻便于读图（`store.LOCK_ORDER` 同序）。
     "statements": {"file": "statements.json", "row": Statement, "id_field": "stmt_id", "id_kind": "stmt"},
     "review_findings": {"file": "review_findings.json", "row": ReviewFinding, "id_field": "finding_id", "id_kind": "finding"},
     "tasks": {"file": "tasks.json", "row": Task, "id_field": "task_id", "id_kind": "task"},
     "usage_ledger": {"file": "usage_ledger.json", "row": UsageEntry, "id_field": "usage_id", "id_kind": "usage"},
     "eval_results": {"file": "eval_results.json", "row": EvalResult, "id_field": "eval_id", "id_kind": "eval"},
-    # 待新增文献列表（业主 2026-10-20 口径）：一次检索的候选先进这里，审完才入 literature。
-    # `slot` 吃的是 4 位编号空间（`ID_COUNTERS["candidate"]`）：它必须只增不复用
+    # 待新增文献列表：一次检索的候选先进这里，审完才入 literature。
+    # `slot` 吃的是编号空间（`ID_COUNTERS["candidate"]`）：它必须只增不复用
     # （撤掉的槽位照样占着号），而"不复用"这件事只能由发号器保证 —— 手写序号迟早会重用。
     "lit_candidates": {"file": "lit_candidates.json", "row": LitCandidate,
                        "id_field": "slot", "id_kind": "candidate"},
 }
 
 #: 编号空间计数器覆盖的表（search_requests 用 r-NNNNNN，reprocess_requests 用 p-NNNNNN，
-#: 都不占用 4 位编号空间 —— 它们是过程记录，而 4 位空间留给知识实体）。
+#: 都不占用编号空间 —— 它们是过程记录，而编号空间留给知识实体）。
 ID_COUNTERS = {
     "lit": "lit_id",
-    # `concept` 那一档随并表退役（S1r）：表没了而类别还在的话，`verify` 的
+    # `concept` 那一档随并表退役：表没了而类别还在的话，`verify` 的
     # `verify._check_1` 的计数器那一段会反查不到表，每次审计都报一条 `counter_table_missing` ——
     # 那是"已经不存在的表"，不是缺陷。`counters.json` 里那份残留值无害
     # （`verify` 只遍历这张表，未知类别根本不看）。
@@ -3645,20 +3589,20 @@ ID_COUNTERS = {
     "plan": "plan_id",
     "doc": "doc_id",
     "dep": "dep_id",
-    # 命题台账吃 4 位空间（`draft/37` §16 P1）：一条命题是知识实体，
+    # 命题台账吃编号空间：一条命题是知识实体，
     # 不是过程记录 —— 它会被别处引用（`dependencies.used_by`、报告的承重栏），
     # 而过程记录式的短号（`s-NNNN`）在跨会话引用时读不出"这是哪一条"。
     "stmt": "stmt_id",
     "finding": "finding_id",
     "usage": "usage_id",
     "eval": "eval_id",
-    # 待新增文献列表的槽位号（业主 2026-10-20）：与其余知识实体同样吃 4 位编号空间 ——
+    # 待新增文献列表的槽位号：与其余知识实体同样吃编号空间 ——
     # "序号不复用"必须由发号器保证（见 `TABLES["lit_candidates"]` 的注释）。
     "candidate": "slot",
 }
 
 
-# ---------------------------------------------------------------- 过程记录 ID（P-17）
+# ---------------------------------------------------------------- 过程记录 ID
 
 #: 过程记录 ID 的形态：`<前缀>-NNNNNN`（前缀是字母数字、且不带连接号）。
 #: 与编号空间的 `_ID_RE` 成对：两者互斥，而"互斥"正是
@@ -3668,15 +3612,13 @@ ID_COUNTERS = {
 _PROCESS_ID_RE = re.compile(rf"^[A-Za-z][A-Za-z0-9]*-{ID_OR_LEGACY_PATTERN}$")
 
 #: 过程记录前缀的唯一来源就是"哪些表不在 `ID_COUNTERS` 里"。
-#: 不写死前缀名单（`r` / `p` / `t`）的理由：那会是第二份实现，而本项目
-#: 已经因为"另写一张名单"崩过 —— `verify.py` 曾写死
-#: `if table == "search_requests": continue`，新增 `reprocess_requests` 后
-#: `_id_contiguity` 对 `p-0001` 做 `int()` 直接把 verify 自己搞崩。
+#: 不写死前缀名单（`r` / `p` / `t`）的理由：那会是第二份实现，而两份名单一旦漂移，
+#: `verify` 的 `_id_contiguity` 会对过程记录号做 `int()` 并把审计自己搞崩。
 #: 这里的判据只有一条：`id_field` 不被 `ID_COUNTERS` 覆盖的表就是过程记录。
 #: 于是新增一张过程记录表时它会自动被算进来，不需要谁记得改这里。
 
 
-#: 过程记录类别 -> 它的 ID 前缀（`P-17` 的声明面）。
+#: 过程记录类别 -> 它的 ID 前缀（声明面）。
 #:
 #: 为什么需要一个声明面，而不是全靠从 `ID_COUNTERS` 推：那样推出来的判据是
 #: 同义反复。`process_id_kinds()` 的定义是"`id_field` 不被 `ID_COUNTERS`
@@ -3687,19 +3629,19 @@ _PROCESS_ID_RE = re.compile(rf"^[A-Za-z][A-Za-z0-9]*-{ID_OR_LEGACY_PATTERN}$")
 #: 的标准做法，见 `.noai-paths` 与 `AGENTS.md` 的按位比对）：
 #: 声明面（本表）与派生面（`TABLES` + `ID_COUNTERS`）一旦不一致就导入期炸。
 PROCESS_ID_PREFIXES: dict[str, str] = {
-    "request": "r",     # search_requests.request_id  = "r-NNNN"
-    "reprocess": "p",   # reprocess_requests.reprocess_id = "p-NNNN"
-    "task": "t",        # tasks.task_id = "t-NNNN"（见 Task.task_id 的说明）
+    "request": "r",     # search_requests.request_id  = "r-NNNNNN"
+    "reprocess": "p",   # reprocess_requests.reprocess_id = "p-NNNNNN"
+    "task": "t",        # tasks.task_id = "t-NNNNNN"（见 Task.task_id 的说明）
 }
 
 
-# ---------------------------------------------------------------- 主键由谁分配（`draft/156` D4）
+# ---------------------------------------------------------------- 主键由谁分配
 
 #: 带前缀的号：`rel-000001` / `stmt-1` / `p-1` 这一族（"模型按直觉手填"的形态）。
 #:
 #: 与 `_PROCESS_ID_RE` 刻意不同：那条要求"前缀 + 连接号 + 当前宽度（或旧四位）的数字"，
-#: 于是 `stmt-1` / `rel-1` 会从它下面溜过去 —— 而它们正是真机上模型写出来的形态
-#: （`draft/156` D4：B 按 `rel-` 前缀的直觉填了 `relation_id`）。这里问的只是形态
+#: 于是 `stmt-1` / `rel-1` 会从它下面溜过去 —— 而它们正是模型写出来的形态
+#: （B 会按 `rel-` 前缀的直觉填 `relation_id`）。这里问的只是形态
 #: "这是不是一个带前缀的号"，不问它合不合法、位数够不够。
 _PREFIXED_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-")
 
@@ -3707,7 +3649,7 @@ _PREFIXED_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*-")
 def looks_like_prefixed_id(value: Any) -> bool:
     """这个值是不是"带前缀的号"（`rel-000001` / `stmt-1` / `p-1`）。
 
-    唯一用途：`tools/table_tools.py` 判"模型把一个本该由台账分配的号手填了"（D4）。
+    唯一用途：`tools/table_tools.py` 判"模型把一个本该由台账分配的号手填了"。
     它是那条受控拒绝的检测谓词，所以单独成一条函数：负控（"把它打桩成永假 ⇒
     那条拒绝必须变红"）才有对象可打。
 
@@ -3729,9 +3671,9 @@ def id_allocator_kind(table: str) -> str:
         这一格允许手填人工号，但前缀必须是那张表自己的（`search_requests` 只认 `r`）。
 
     ## 为什么这条要显式写成一个函数而不是留在注释里
-    "哪些编号自动分配、哪些要手填"此前只散落在各表的 `id_field` 与几个 `validate()` 里，
-    模型读不到 ⇒ 它按 `rel-` 前缀编了一个号（真机 `draft/156`）。判据一旦可执行，
-    就能被对账：`tests/test_hand_filled_ids_are_refused.py` 遍历 `TABLES` 断言
+    "哪些编号自动分配、哪些要手填"若只散落在各表的 `id_field` 与几个 `validate()` 里，
+    模型读不到 ⇒ 它会按 `rel-` 前缀编一个号。判据一旦可执行，就能被对账：
+    `tests/test_hand_filled_ids_are_refused.py` 遍历 `TABLES` 断言
     "没有任何一张表的主键是外部给的"（返回值不为空串），于是将来新增一张"主键由
     调用方给"的表时，那句"所有主键都由台账分配"的文案会当场变红。
     """
@@ -3741,16 +3683,16 @@ def id_allocator_kind(table: str) -> str:
     return "counter" if spec["id_kind"] in ID_COUNTERS else "prefix"
 
 
-# ---------------------------------------------------------------- 引用前缀（`draft/68` 题 1）
+# ---------------------------------------------------------------- 引用前缀
 
 #: 引用前缀 -> 它指向哪张表（`documents.claims[].citations` 的受控前缀表）。元素是 `前缀:代号`
 #: （`lit:0003#p.4` 这种带页码/锚点的写法按同一个代号算，见 `textutil.citation_ref_parts`）。
-#: "这个前缀认不认、指向哪张表"必须有一处真身：它此前散在三个落位（`verify.CITATION_KINDS`、
-#: `tools/doc_tools._CITATION_TABLES`、`gates.gate_g2` 内联的四个前缀），三处各自自洽 ⇒ 同一个
-#: 字符串"写入期认、审计期不认"不会有任何东西会红。同范式的对账：`assert_citation_prefix_contract()`（导入期自动跑一次）。
-#: `stmt` 是 2026-10-07 所有者裁定 `draft/68` 题 1 选 A 的落点（所有者授权、主控代改）：正文断言可以
-#: 引命题 ⇒ `closing` 的污染面从"命题之间"扩到"哪几条正文断言压在这条命题上"。
-#: 顺序刻意沿用历史上第一个落位的顺序（`verify.CITATION_KINDS`），于是"同一个集合的不同排列"在 diff 里一眼可见。
+#: "这个前缀认不认、指向哪张表"必须有一处真身：散在多个落位时，同一个字符串
+#: "写入期认、审计期不认"不会有任何东西会红。对账见
+#: `assert_citation_prefix_contract()`（导入期自动跑一次）。
+#: `stmt` 是正文断言引命题的落点 ⇒ `closing` 的污染面从"命题之间"扩到
+#: "哪几条正文断言压在这条命题上"。
+#: 顺序沿用 `verify.CITATION_KINDS` 的顺序，于是"同一个集合的不同排列"在 diff 里一眼可见。
 CITATION_PREFIXES: dict[str, str] = {
     "rel": "relations",
     "lit": "literature",
@@ -3771,12 +3713,12 @@ def citation_prefix_table(prefix: Any) -> str | None:
 
 
 def assert_citation_prefix_contract() -> None:
-    """引用前缀声明面与 `TABLES` 的对账。导入期自动跑一次（同 `P-17` 的写法）。
+    """引用前缀声明面与 `TABLES` 的对账。导入期自动跑一次。
 
     判据三条：
     1. 每个前缀指向的表名真的在 `TABLES` 里 —— 否则那是个"谁也核不了"的前缀，症状是写入期与审计期对同一个
        字符串给出不同结论；
-    2. `stmt` 必须在表里、且指向 `statements` —— 这是 `draft/68` 题 1 选 A 的落点：这条写法一旦被摘掉，
+    2. `stmt` 必须在表里、且指向 `statements` —— 这条写法一旦被摘掉，
        "哪几条正文断言压在这条命题上"就重新变成判不了，而 `closing` 那一格只会退回一句边界文字；
     3. 前缀形态：首字符是字母、其余是小写 ASCII 字母或数字。`citations` 按第一个冒号切前缀、代号里的 `#`
        之后按锚点处理，所以前缀里出现冒号或大写就有歧义。
@@ -3802,7 +3744,7 @@ def assert_citation_prefix_contract() -> None:
 
 
 def process_id_kinds() -> frozenset[str]:
-    """不占 4 位编号空间的 ID 类别（`P-17`）。
+    """不占编号空间的 ID 类别。
 
     返回 `id_kind`（`search_requests` 是 `"request"`、`reprocess_requests` 是
     `"reprocess"`、`tasks` 是 `"task"`），因为 `id_kind` 才是与 `ID_COUNTERS`
@@ -3821,19 +3763,18 @@ def process_id_kinds() -> frozenset[str]:
 def id_space_kinds() -> frozenset[str]:
     """占编号空间的那几类（= `ID_COUNTERS` 的键）。与 `process_id_kinds()` 互斥。
 
-    名字里的"编号空间"随 `ID_DIGITS` 一起动（2026-10-14 业主裁定：4 位 → 6 位）；
-    此前叫 `four_digit_id_kinds`，那个名字在改宽度之后会是一句假话。
+    名字里的"编号空间"随 `ID_DIGITS` 一起动（宽度写进名字，改宽度之后就会是一句假话）。
     """
     return frozenset(ID_COUNTERS)
 
 
 def is_valid_process_id(value: Any, id_kind: str | None = None) -> bool:
-    """过程记录 ID 的形态判据（如 `r-0001` / `p-0001` / `t-0001`）。
+    """过程记录 ID 的形态判据（如 `r-000001` / `p-000001` / `t-000001`；旧四位照样读）。
 
-    为什么不并进 `is_valid_id`：那个是 4 位知识实体 ID 的判据。两者必须能互相排除 —— 合并成一个"两种都接受"
-    的函数，就等于把"占不占编号空间"这个区分抹掉了，而那正是 `P-17` 说"不可判定"的成因。
-    ## 第二个参数 `id_kind`（`c-2`）：不给时这条判据只校形态（前缀-4 位数字），它刻意是宽的 ——
-    `assert_process_id_contract()` 用它证明"过程 ID 与 4 位 ID 互斥"。给了就同时校前缀：`id_kind='request'`
+    为什么不并进 `is_valid_id`：那个是知识实体编号的判据。两者必须能互相排除 —— 合并成一个"两种都接受"
+    的函数，就等于把"占不占编号空间"这个区分抹掉了，而那正是"不可判定"的成因。
+    ## 第二个参数 `id_kind`：不给时这条判据只校形态（前缀-号码），它刻意是宽的 ——
+    `assert_process_id_contract()` 用它证明"过程 ID 与编号 ID 互斥"。给了就同时校前缀：`id_kind='request'`
     只接受 `r-`。
     为什么前缀比对必须挂在这里而不是另写一份正则：`PROCESS_ID_PREFIXES` 是"哪张表用哪个前缀"的唯一声明面。
     另写一份 `^r-\d{4}$` 就是第二份实现，而"同一件事两个落位"正是 `normalize_doi` 那族缺陷的成因。前缀比对
@@ -3842,7 +3783,7 @@ def is_valid_process_id(value: Any, id_kind: str | None = None) -> bool:
     if not (isinstance(value, str) and bool(_PROCESS_ID_RE.match(value))):
         return False
     if id_kind is None:
-        # 只校形态：这是 `P-17` 的"两半互斥"契约需要的宽口径，不许收紧 ——
+        # 只校形态：这是"两半互斥"契约需要的宽口径，不许收紧 ——
         # 收紧它会连带拒绝 `assert_process_id_contract()` 里 `gb-` 那类样本，
         # 而那条负控正是靠"形态判据本身不认前缀"来证明前缀是另一条判据。
         return True
@@ -3855,9 +3796,9 @@ def is_valid_process_id(value: Any, id_kind: str | None = None) -> bool:
 def require_process_id(value: Any, id_kind: str) -> str:
     """过程记录 ID 的完整判据（形态 + 前缀），失败即抛。
 
-    `c-1` 与 `c-2` 的共同落点：三个行校验器（`SearchRequest.validate` /
-    `ReprocessRequest.validate` / `Task.validate`）此前只查"非空"，
-    于是 `r--0001` / `r-10000` / `0000` / `gb-0001` 这类号可以静默落库。
+    三个行校验器（`SearchRequest.validate` / `ReprocessRequest.validate` /
+    `Task.validate`）都走这里：只查"非空"时 `r--0001` / `r-10000` / `0000` / `gb-0001`
+    这类号可以静默落库。
     这里把"该表的 `id_kind`"显式传进来，于是两张判据（形态、前缀）
     都由调用点强制走一遍 —— 而不是靠每个调用方记得自己比一遍前缀。
     """
@@ -3874,10 +3815,9 @@ def require_process_id(value: Any, id_kind: str) -> str:
 
 # ---- `P-17` 的断言：把这条契约变成导入期就炸的东西。
 #
-# 在此之前，这条契约唯一的"实现"是 `ID_COUNTERS` 的键里恰好没有 `task` ——
-# 一个"缺失"在替一条"契约"说话。于是有人给任务号装一个计数器（或把 `task`
-# 塞进 `ID_COUNTERS`）时没有任何东西会红，而
-# `interactions.next_prefixed_id` 越界产 5 位号的那个口子（`P-4`）就多一个入口。
+# 若只靠"`ID_COUNTERS` 的键里恰好没有 `task`"，那是用一个"缺失"在替一条"契约"说话：
+# 有人给任务号装一个计数器（或把 `task` 塞进 `ID_COUNTERS`）时没有任何东西会红，而
+# `interactions.next_prefixed_id` 越界产号的入口就多一个。
 #
 # 写成函数再在导入期调用，而不是把断言直接摊在模块级：函数可被测试再次调用，
 # 于是"往 ID_COUNTERS 里塞一个过程前缀 ⇒ 必须红"这条负控才是可写的
@@ -3885,7 +3825,7 @@ def require_process_id(value: Any, id_kind: str) -> str:
 
 
 def assert_process_id_contract() -> None:
-    """断言"过程记录不占 4 位编号空间"（`P-17`）。导入期自动跑一次。
+    """断言"过程记录不占编号空间"。导入期自动跑一次。
 
     四条判据。声明面与派生面互相对账，所以它们不是同义反复：
     1. `set(ID_COUNTERS)` 与过程前缀（`r`/`p`/`t`）的交集为 空 —— 直接钉住"占号空间"这件事本身；
@@ -3931,14 +3871,14 @@ def assert_process_id_contract() -> None:
 
 
 def assert_id_space_contract() -> None:
-    """断言"4 位契约"只有一个定义处，且它真的还是 4 位（`F-9` 第 4 条）。导入期自动跑一次。
+    """断言"编号宽度契约"只有一个定义处。导入期自动跑一次。
 
     为什么需要这一条：`store.MAX_ID` 是"编号上限"的唯一定义处（`interactions.py` 明确说它 import 那个常量而
-    不是另抄一份），`schema._ID_RE` 是形态的唯一定义处，而两者之间此前没有任何对账 —— 把 `MAX_ID` 改成 999
-    （三位）或 99999（五位）不会有任何东西响，而 `is_valid_id` 照样只认一种宽度 ⇒ "上限"与"形态"分家，发出来
-    的号要么被 `require_id` 拒掉、要么永久无法表达。判据两条：
-    1. `MAX_ID` 必须是 `_ID_RE` 那种宽度的最大值（`10位数 - 1`）—— 改窄/改宽都会红，而"改它等于改磁盘契约"
-       这句话此前只写在注释里；
+    不是另抄一份），`schema._ID_RE` 是形态的唯一定义处，而两者之间若没有对账，把 `MAX_ID` 改成三位或五位数
+    不会有任何东西响，而 `is_valid_id` 照样只认一种宽度 ⇒ "上限"与"形态"分家，发出来的号要么被 `require_id`
+    拒掉、要么永久无法表达。判据两条：
+    1. `MAX_ID` 必须是 `_ID_RE` 那种宽度的最大值（`10 的宽度次方 - 1`）—— 改窄/改宽都会红：
+       "改它等于改磁盘契约"不能只写在注释里；
     2. 每一类 ID（`TABLES` 的 `id_kind`）必须恰好落在两半之一：要么进 `ID_COUNTERS` 吃编号空间，要么进
        `PROCESS_ID_PREFIXES` 不占 —— 一个 `id_kind` 两边都不在，意味着有一张表的 ID 形态没有声明面管它。
     """
@@ -4040,7 +3980,7 @@ def row_from_dict(table: str, raw: dict):
         return Relation(**d)
     if table == "research_questions":
         return ResearchQuestion(**{k: raw[k] for k in raw if k in ResearchQuestion.__dataclass_fields__})
-    # 第 8 处触点（`draft/30` §T1 原列了 7 处，实测漏了这一处）：
+    # 触点：
     # `row_from_dict` 是"表名 → 行类"的第二份名单，`TABLES` 里有它这里没有，
     # 症状是 `validate_table` 报"未知表名：conjectures"（写盘当场炸，不是静默）。
     if table == "conjectures":
