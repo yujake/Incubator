@@ -12,9 +12,9 @@
 |---|---|---|
 | a | 同一份正文 + 同一个号，两族各落一份 ⇒ 除前缀与角色名外逐字相同 | `manuscriptform.render_proof_manuscript` 是唯一渲染 |
 | a2 | 反真空：把 B 的渲染改回它自己那一套 ⇒ a 立刻红 | a 的绿来自"同一段代码"，不是比较器太松 |
-| b | `f-proof-000000-p2.md` / `b-proof-000000-p2.md` 都得到 (000000, 2)；乱名两族都受控拒 | 命名与解析同源（`vsigns.parse_manuscript_name`） |
+| b | `f-proof-000000` / `b-proof-000000` 只在两族的同一解析器里落名（`proof_no` 不进名字）；乱名两族都受控拒 | 命名与解析同源（`vsigns.parse_manuscript_name`） |
 | c | 带签块的稿改名（两族各一次）⇒ 签块跟着搬、第 9 格按新名重算；sha 不符 ⇒ 不搬 | 搬签块只有一份 |
-| d | 带 `## 依赖` 四列表的 f-稿与 b-稿 ⇒ 各落 1 条 `dependencies`；打桩落边失败 ⇒ 两边都不留半截 | 写稿 + 依赖段 + 落边是一次事务 |
+| d | 带 `## 依赖` 三列表的 f-稿与 b-稿 ⇒ 各落 1 条 `dependencies`；打桩落边失败 ⇒ 两边都不留半截 | 写稿 + 依赖段 + 落边是一次事务 |
 | e | 第二份实现不能复活（AST 扫描：同一件事只许一处定义/一处渲染） | "统一"不靠自觉 |
 
 全部 tmp 工作区，不读写 `projects/`（真机工作区只读）。
@@ -407,7 +407,7 @@ def _writer(st: Store, used_by: str):
 
 def test_d_dependency_edges_land_in_the_same_transaction(
         tmp_path: pathlib.Path) -> None:
-    """d：两族各落一份带四列表的稿 ⇒ 各 1 条依赖边；落边打桩失败 ⇒ 两边都不留半截。"""
+    """d：两族各落一份带三列表的稿 ⇒ 各 1 条依赖边；落边打桩失败 ⇒ 两边都不留半截。"""
     # F 那一族：转正（notes/ → reports/f-proof-<号>.md）
     st_f = _ws(tmp_path / "f")
     _seed(st_f, DEP, reviewed=True)
