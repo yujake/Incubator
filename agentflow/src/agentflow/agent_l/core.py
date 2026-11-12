@@ -305,7 +305,7 @@ class AgentL(_Record, _Formalize, _CheckFormalL, _Report, _Core):
     - :meth:`record` —— 把一次形式化检查登记成一行 `experiments`（`method="formal"`），
       并不动 `statements`（形式化 ≠ 审过，见 `agent_l/record.py` 的 docstring）；
     - :meth:`report_to_b` —— 把形式化困难按受控形态投进 B 的收件箱
-      （业主 2026-10-22 晚裁定："可向 B 汇报形式化过程中遇到的困难"）。
+      （"可向 B 汇报形式化过程中遇到的困难"）。
 
     与 E 的分工：E 做实验与形式化两件事，L 只做形式化这一件；两侧共用同一个桥接层。
     协作面：唯一入口是 B（`B → L`），L 只派 C（`L → C`，梳理证明链）；两个读数都
