@@ -61,7 +61,7 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("`data/research_questions.json`", "写", "立问题、追进度、记失败原因"),
         ("`data/conjectures.json`", "写", "register_conjecture（D 的主力动作，判重命中即返回既有行）"),
         ("`data/attack_plans.json` 与 `attack_rounds.json`", "写", "攻坚计划与每轮进展"),
-        # 2026-11-04（业主裁定：D 只提供想法，证明的落稿与拿签归 F）：`out/proofs/` 是 D 的
+        # D 只提供想法，证明的落稿与拿签归 F：`out/proofs/` 是 D 的
         # 攻坚过程记录，不是证明稿的落点 —— 这一格与新口径逐字一致（判据
         # `tests/test_system_docs_are_generated.py::test_the_attack_record_permission_...`）。
         ("`out/proofs/*.md`", "写",
@@ -321,11 +321,10 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
 def _registry_build() -> Any:
     """按生产同源的装配造一次工具面（临时工作区；不碰仓库里的任何工作区）。
 
-    为什么必须给 `store` 与 `workspace_root`（审计 C 第 ① 条，2026-11-01）：
+    为什么必须给 `store` 与 `workspace_root`：
     不给这两个依赖时 `fs_tools` / `research_tools` 会在 `build_registry` 里
     被跳过，而 `build_registry` 的既定契约是"跳过记进 `skipped`、不报错"——
-    于是生成物安静地少 4–13 件工具（A 46→54、C 32→36、E 32→40、G 46→54、
-    H 42→46、L 31→39），`test_system_docs_are_generated` 却照样绿（它只比
+    于是生成物安静地少若干件工具，`test_system_docs_are_generated` 却照样绿（它只比
     "盘上 == 现算"，两边一起错时它什么也不说）。`strict=True` 让"少装"当场抛；
     `_registry()` 另有一道显式检查，防止将来有人把 `strict` 去掉后又退回静默。
 
@@ -333,13 +332,13 @@ def _registry_build() -> Any:
     Lean 关着时 L 这一格不存在（`leanscope.LEAN_ONLY_ROLES`），于是文档会少一整节
     —— 而"少一节"与"这一节写错了"在 diff 里长得一样。十一格是完整面；关档少的
     只是 L 那一格，读者看 L 那一节开头的说明即可。钉死在这里而不是靠调用方的环境
-    变量：判据在 pytest 里跑、人在终端里跑，两处的 env 不一定一样（实测踩过：
-    两次生成差了 30 件工具面）。
+    变量：判据在 pytest 里跑、人在终端里跑，两处的 env 不一定一样（env 不同时
+    生成的工具面会差几十件）。
 
     为什么用 `roles=tuple(agentflow.tools.ROLES)`（不带主控 M）：生产面
     （`agentflow tools` 与 `test_tool_surface_snapshot`）就是这一份口径；把 M
-    也塞进注入角色会让 `_effective_roles` 把写工具发给主控（实测 M 36→42，
-    其中多出来的不是主控该有的那几件）。
+    也塞进注入角色会让 `_effective_roles` 把写工具发给主控（M 的工具面会多出
+    不是主控该有的那几件）。
     """
     import os
     import tempfile
@@ -452,9 +451,9 @@ def _role_section(role: str, registry: Any) -> list[str]:
     for name, summary, se, need in tools:
         lines.append(f"| `{name}` | {summary} | `{se}` | {need} |")
     if spec.read_only:
-        # 2026-11-02（业主 2026-11-01 的口径）：只读 = 对其它智能体的产出只读，
-        # 自己侧的产物与簿记照写（C / H / V 的工具面上各有 10 / 13 / 9 件 write_local）。
-        # 旧句「只读角色在结构上拿不到写工具」与紧挨着的那张表自相矛盾。
+        # 只读 = 对其它智能体的产出只读，自己侧的产物与簿记照写（C / H / V 的
+        # 工具面上都有 write_local）。「只读角色在结构上拿不到写工具」这句会与
+        # 紧挨着的那张表自相矛盾。
         face_note = ("只读角色对其它智能体的产出只读；上表里那些 write_local 全是它自己侧的"
                      "产物与簿记")
     else:
