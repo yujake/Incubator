@@ -1,26 +1,23 @@
 # -*- coding: utf-8 -*-
-"""H 的语义审校里"论文对应表"那一档（业主 2026-10-22）。
+"""H 的语义审校里"论文对应表"那一档。
 
-## 这一档判什么、凭什么拦
-
-业主原话：「G 产出论文时需附上对应表……H 依据此核查」。表与正文的自洽性是客观的
-（有没有这一行、指的文件在不在、证明号能不能解析），所以这一类归客观档：判出来
-就拦门。另一半（逻辑颠倒、缺铺垫、术语没定义……）是读稿人的判断，维持只点名不拦。
+这一档判什么、凭什么拦：表与正文的自洽性是客观的（有没有这一行、指的文件在不在、
+证明号能不能解析），所以这一类归客观档：判出来就拦门。另一半（逻辑颠倒、缺铺垫、
+术语没定义……）是读稿人的判断，维持只点名不拦。
 
 四类客观 kind 的真身在 `papermapping.MAPPING_KINDS`（这里只导入，不抄第二份）；
 `citation_loc` 那两格与"人读的那一份"分别由 `papermapping.CITATION_KINDS` /
 `papermapping.MD_KINDS` 给 —— 它们同样是可判事实，所以也在拦门那一档。
-Lean 那两格的四条（`mapping_lean_*`，业主 2026-10-22 追加）同样如此：
-"验它的是哪一份源码、哪个声明名"可判，所以拦门；而"开关开着却没有 Lean 产物"
-（`lean_on_but_no_artifact`）说的是另一件事（形式化一个文件都没落），落在 warning 档。
+Lean 那两格的四条（`mapping_lean_*`）同样如此："验它的是哪一份源码、哪个声明名"
+可判，所以拦门；而"开关开着却没有 Lean 产物"（`lean_on_but_no_artifact`）说的是另
+一件事（形式化一个文件都没落），落在 warning 档。
 
-## 为什么 H 写不进 review_findings
-
-`schema.FINDING_KINDS` 是禁改区（FC-27）里的受控词表，这几个 `mapping_*` 不在里面，
-而 `tools/review_tools.record_finding` 按那张词表硬校验 —— 所以这一类暂时只能落
-收工读数（`closing` 的 `mapping` 格），落不进 `review_findings`。
-这是一条待批的边界，不是"忘了接"：要么批"给 FINDING_KINDS 加这些取值"，
-要么长期接受"只在收工读数里可见"。本模块与 `papermapping` 都不许拿别的 kind 冒充。
+为什么 H 写不进 review_findings：`schema.FINDING_KINDS` 是禁改区（FC-27）里的受控
+词表，这几个 `mapping_*` 不在里面，而 `tools/review_tools.record_finding` 按那张词表
+硬校验 —— 所以这一类暂时只能落收工读数（`closing` 的 `mapping` 格），落不进
+`review_findings`。这是一条待批的边界，不是"忘了接"：要么批"给 FINDING_KINDS 加这些
+取值"，要么长期接受"只在收工读数里可见"。本模块与 `papermapping` 都不许拿别的 kind
+冒充。
 """
 
 from __future__ import annotations
@@ -33,7 +30,7 @@ from .. import papermapping as PM
 #: 真身是 `papermapping.MAPPING_KINDS`（业主点名的四类），这里是同一个对象的别名。
 MAPPING_OBJECTIVE_KINDS: tuple[str, ...] = PM.MAPPING_KINDS
 
-#: 客观档的第二组：`citation_loc` 两格（业主 2026-10-22 追加）。
+#: 客观档的第二组：`citation_loc` 两格。
 CITATION_OBJECTIVE_KINDS: tuple[str, ...] = PM.CITATION_KINDS
 
 #: 客观档的第三组：人读的那一份（少了它，交付物里只剩机器读的一份）。
@@ -42,7 +39,7 @@ MD_OBJECTIVE_KINDS: tuple[str, ...] = PM.MD_KINDS
 #: 客观档的第四组：论文侧三条（包里有没有表 / 正文有没有印出来 / 印出来的与 json 一致）。
 PAPER_OBJECTIVE_KINDS: tuple[str, ...] = PM.PAPER_KINDS
 
-#: 客观档的第五组：Lean 那两格的四条（业主 2026-10-22 追加）。
+#: 客观档的第五组：Lean 那两格的四条。
 #:
 #: 「Lean 程序在哪一份源码里、验的是哪个声明名」是可判事实（文件在不在包里、
 #: 名字在不在那份源码里、同一个名字有没有被两行共用），所以照 `level_of` 的既有写法
