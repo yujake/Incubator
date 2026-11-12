@@ -1,30 +1,13 @@
 """角色 B 的动作 `B.open_polish_copy`：把「已拿签的那份稿」复制成一份 B 号优化副本。
 
-业主 2026-11-11 裁定 ④（逐字）：
+这一步解决什么：稿通过后相当于这个命题证完了，后续对稿只有只读权；"同稿号多个版本"
+是错误的 —— 一个稿号相当于该稿的文件名，拿 V 签冻结后交哪份是明确的。所以"优化"必须
+先分叉：已拿签的那一份只读，要改就复制一份、注册成新的 B 号、把复制件里的 V 签清掉
+（它是另一份稿，签不该跟着走）。四步：
 
-```text
-「B侧进入证明优化阶段时，选中一个待优化的命题后系统自动帮其拿到稿件并复制一份
-  注册成B号并清除复制版本内的V签」
-```
-
-## 这一步解决什么
-
-改前 B 的"证明优化"是就地改那份已拿签的稿（2026-11-07 裁定 ③：只换 `## 证明`、
-`proof_no` 递增）。它在"稿 = 命题的证明"那个口径下是自洽的，但业主 2026-11-11 的
-口径变了：
-
-```text
-「稿通过后相当于这个命题证完了，后续只对稿允许有只读权」
-「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名……拿 V 签冻结后交哪份是明确的」
-```
-
-于是"优化"必须先分叉：已拿签的那一份只读，要改就复制一份、注册成新的 B 号、
-把复制件里的 V 签清掉（它是另一份稿，签不该跟着走）。四步逐条对应业主那句话：
-
-1. 拿到稿件 —— 走乙的读口（`vsigns.signed_manuscripts`，复用 V 的颁发表）；
-   这一条还没有签 ⇒ 受控拒 `no_signed_manuscript`（"无可优化"，且一个字节都不写）；
-2. 复制一份 —— 源稿那一份文件逐字复制（2026-11-11 追加口径：一份对一份，
-   不带 `-pN`）；
+1. 拿到稿件 —— 走乙的读口（`vsigns.signed_manuscripts`，复用 V 的颁发表）；这一条还
+   没有签 ⇒ 受控拒 `no_signed_manuscript`（"无可优化"，一个字节都不写）；
+2. 复制一份 —— 源稿那一份文件逐字复制（一份对一份，不带 `-pN`）；
 3. 注册成 B 号 —— 号由 `manuscriptids.next_manuscript_id(root, family="b-proof")`
    发（B 自己那条号段），落点 `reports/b-proof-<B稿号>.md`；
 4. 清除复制版本内的 V 签 —— 删掉 `- V 签：…` 那一行（`vsigns.SIGN_MARK`）。
@@ -32,11 +15,9 @@
 之后 B 在那份 B 稿上改正文（`fs.edit`），再走既有送审口派 V 三转签 —— 那一签盖的是
 新正文的 sha，与源稿的签互不相干。
 
-## 这一格不做什么
-
-- 不改源稿一个字节（源稿的只读权由 `丁` 的三处写口守）；
-- 不把复制件写成"已签"（清签之后它是未签的新稿）；
-- 不自己判"该优化哪一步"（那是 B 的判断，这里只负责把材料摆到手上）。
+这一格不做什么：不改源稿一个字节（源稿的只读权由 `丁` 的三处写口守）；不把复制件写成
+"已签"（清签之后它是未签的新稿）；不自己判"该优化哪一步"（那是 B 的判断，这里只负责
+把材料摆到手上）。
 """
 from __future__ import annotations
 
@@ -63,24 +44,19 @@ class _OpenPolishCopy:
                          source_manuscript: str = "") -> dict:
         """把「这一条命题已拿签的那份稿」复制成一份 B 号优化副本（四步见模块 docstring）。
 
-        ## 参数
+        参数：`statement_id` 是待优化的那条命题的号（必填；它是"找哪一份稿"的唯一入口）；
+        `source_manuscript` 可以不给 —— 不给就从 V 的颁发表里找这一条命题签过的那份稿，
+        给了就必须是签过的那一份（否则受控拒 `source_not_signed`，不许拿一份没签的稿当
+        "已拿签的稿"复制）。
 
-        - `statement_id`：待优化的那条命题的号（必填；它是"找哪一份稿"的唯一入口）；
-        - `source_manuscript`：可以不给。不给 ⇒ 从 V 的颁发表里找这一条命题签过的
-          那份稿；给了 ⇒ 必须是签过的那一份（否则受控拒 `source_not_signed`，
-          不许拿一份没签的稿当"已拿签的稿"复制）。
-
-        ## 返回（键固定）
-
-        `{ok, checked, refused, why, source_path, source_manuscript_id,
-        source_sign_sha, source_body_sha, source_text_sha256, path, manuscript_id,
-        copy_body_sha, copy_text_sha256, cleared, cleared_lines, signed_before,
-        signed_after, sign_block, matched_by}`。受控拒时 `path` 为空、盘上一个字节都没写。
-
-        `matched_by` 是"源稿是哪一条证据认出来的"：`"statement_manuscript_id"` 表示
-        第 ④ 条（命题行上的 `manuscript_id`）；前三条老证据命中时仍为空串。
-
-        `cleared` 是删掉了几行 `- V 签：…`（正常是一行；历史稿可能不止一行）。
+        返回（键固定）：`{ok, checked, refused, why, source_path,
+        source_manuscript_id, source_sign_sha, source_body_sha, source_text_sha256,
+        path, manuscript_id, copy_body_sha, copy_text_sha256, cleared, cleared_lines,
+        signed_before, signed_after, sign_block, matched_by}`。受控拒时 `path` 为空、
+        盘上一个字节都没写。`matched_by` 是"源稿是哪一条证据认出来的"：
+        `"statement_manuscript_id"` 表示第 ④ 条（命题行上的 `manuscript_id`）；前三条
+        老证据命中时仍为空串。`cleared` 是删掉了几行 `- V 签：…`（正常是一行；历史稿
+        可能不止一行）。
         """
         out: dict[str, Any] = {
             "ok": False, "checked": True, "refused": "", "why": "",
@@ -188,25 +164,24 @@ class _OpenPolishCopy:
                        source_manuscript: str) -> dict[str, Any]:
         """找「这一条命题已拿签的那份稿」（源稿）；找不到 ⇒ `found=False` + 受控码。
 
-        四种证据按强度排（前三条的语义一个字没动；第 ④ 条是 2026-11-11 补的兜底）：
+        四种证据按强度排：
 
         1. 调用方点名了 `source_manuscript` ⇒ 只认那一份，并且它必须签过
            （`vsigns.signed_manuscripts(artifact_path=…)`）；
         2. V 的颁发表里 `statement_id` 等于这条命题的签 ⇒ 它盖在哪份稿上就用哪份
-           （`artifact_path` 那一格；2026-11-11 起 `issue` 会写它）；
-        3. 颁发表里那些 `artifact_path` 是手稿、而签文件没记命题号（未在册那一档，
-           业主 2026-11-05：「V 就不能假定有号，全签在稿上」）⇒ 读那份稿的稿头
-           `- 命题号：stmt:<号>` 认领；
-        4. 这一条命题的 `statements` 行上记着 `manuscript_id` ⇒ 那份稿就是它的
-           规范名（`manuscriptids.canonical_rel` 拼，不写前缀字面量），再回 V 的颁发表
-           按 `artifact_path` 核对「它确实签过」。这一条补的是收录之后才出现的现场：
-           F 的稿在收录时「不改名也不改稿头」（一稿一份的纪律），稿头仍是
-           `stmt:（还没落号）`，而未在册那一签的 `statement_id` 是空串 —— 于是 ②③
-           都够不着，只有行上那一格记得住「这条命题的稿是哪一份」。
+           （`artifact_path` 那一格；`issue` 会写它）；
+        3. 颁发表里那些 `artifact_path` 是手稿、而签文件没记命题号（未在册那一档 ——
+           V 不假定有号，全签在稿上）⇒ 读那份稿的稿头 `- 命题号：stmt:<号>` 认领；
+        4. 这一条命题的 `statements` 行上记着 `manuscript_id` ⇒ 那份稿就是它的规范名
+           （`manuscriptids.canonical_rel` 拼，不写前缀字面量），再回 V 的颁发表按
+           `artifact_path` 核对「它确实签过」。这一条补的是收录之后才出现的现场：F 的
+           稿在收录时「不改名也不改稿头」（一稿一份的纪律），稿头仍是
+           `stmt:（还没落号）`，而未在册那一签的 `statement_id` 是空串 —— 于是 ②③ 都
+           够不着，只有行上那一格记得住「这条命题的稿是哪一份」。
 
         三条老证据都没有、第 ④ 条也核不上 ⇒ `no_signed_manuscript`：这一条还没有签，
-        无可优化。`why` 把第 ④ 条差在哪一格分开说清（行上没记稿号 / 记了但那一份
-        没签 / 那一格没查成），不折成同一句话。
+        无可优化。`why` 把第 ④ 条差在哪一格分开说清（行上没记稿号 / 记了但那一份没签 /
+        那一格没查成），不折成同一句话。
         """
         from .. import bmanuscript as _BM
 
