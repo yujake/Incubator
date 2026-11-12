@@ -1,36 +1,29 @@
 # -*- coding: utf-8 -*-
-"""M 的状态报告（`draft/39` §4，用户 2026-10-05 口径）—— 旁路观测，谁都不停。
+"""M 的状态报告（旁路观测，谁都不停）。
 
-## 用户口径（逐字）
+用户中途想知道项目情况时，正确形态是旁路观测：读盘 → 出报告，不打断任何循环。
+`ask_user` 那条路是反向的（它让 M 停下来等人），不能用。
 
-> 给 M 再加一个动作：当用户中途想知道当前项目情况时，M 通过搜集最近产出和手稿交接来分析情况，
-> 向用户报告，从而不打断智能体协作
+## 第一条纪律：只读
 
-## 为什么不能只是"问 M 一句"
-
-`ask_user` 那条路是反向的：它让 M 停下来等人。用户中途想知道情况时，正确的形态是
-旁路观测：读盘 → 出报告，谁都不停。所以这一层的第一条纪律是只读：
-
-- 读 `store` 的行、手稿账本、停机状态、会话列表、待答问题；
-- 不写任何台账、不写会话事件、不落停机开关、不发模型调用、不碰任何循环；
-- 唯一的写是把报告本身落到 `out/review/STATUS-<ts>.{md,json}`（它是产物文件，不是台账）。
+读 `store` 的行、手稿账本、停机状态、会话列表、待答问题；不写台账、不写会话事件、
+不落停机开关、不发模型调用、不碰任何循环。唯一的写是把报告落到
+`out/review/STATUS-<ts>.{md,json}`（产物文件，不是台账）。
 
 ## 两个入口（一个实现）
 
-1. 用户侧 CLI（首选）：`agentflow --root <ws> status-report [--since <ts>] [--out <dir>]`
-   —— 只读、零模型调用 ⇒ 真正"不打断"；
-2. M 的工具/动作：`conductor.status_report`（`side_effect=read`）+ `specs/m.py` 的动作
-   `report_status` —— 用户通过留言问"M 现在什么情况"时走它（不发 ask_user、不停任何人的循环）。
-   注：入口 2 的动作声明在 `specs/m.py`（FC-27），按 `draft/39` §6.10 排在下一轮与 V 的注册一起做；
-   这一层已经把它的实现（`collect` / `render_markdown`）交出来了，接上去只是声明。
+1. 用户侧 CLI：`agentflow --root <ws> status-report [--since <ts>] [--out <dir>]`
+   —— 只读、零模型调用；
+2. M 的工具/动作：`conductor.status_report`（`side_effect=read`）+ `specs/m.py` 的
+   `report_status` —— 用户留言问"M 现在什么情况"时走它。
 
-## 板项行的"状态"不在这个文件里算（2026-11-09）
+## 板项行的"状态"不在这个文件里算
 
-`tasks` 表里板项行（`kind` 非空）的状态投影（D12）搬到了 :mod:`agentflow.boardrows`：
-`statusreport.tasks_row_reading` 仍可用（按名字回引），但它与三个 `BOARD_ITEM_*`
-常量的实现在那个小模块里。为什么拆：本文件越过 repo survey 的 `>800 行` 软判据线，
-业主口径是拆、不是抬基线；而这一族与报告渲染没有共享状态，拆开之后两边各自只做一件事。
+`tasks` 里板项行（`kind` 非空）的状态投影在 :mod:`agentflow.boardrows`；
+`statusreport.tasks_row_reading` 仍可用（按名字回引），实现与三个 `BOARD_ITEM_*` 常量
+都在那个小模块里。
 """
+
 from __future__ import annotations
 
 import datetime as _dt
