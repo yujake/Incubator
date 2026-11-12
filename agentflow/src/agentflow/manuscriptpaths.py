@@ -38,7 +38,7 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
     objects_only: dict[int, str] = {}
     problems: list[str] = []
     try:
-        deps = [dict(r) for r in store.rows("dependencies")] if store is not None else []
+        deps = store.rows("dependencies") if store is not None else []
     except Exception as exc:  # noqa: BLE001
         return {"checked": False, "statement_id": sid, "paths": [], "count": 0,
                 "why": f"`dependencies` 读不出来（{type(exc).__name__}: {exc}）"}
@@ -66,7 +66,7 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
     # 读口，canonical 是 #p1）。
     row_self = None
     try:
-        rows_self = [dict(r) for r in store.rows("statements")] if store is not None else []
+        rows_self = store.rows("statements") if store is not None else []
     except Exception:  # noqa: BLE001 —— 读不到就不加这一面（"没查成"不冒充"没有"）
         rows_self = []
         problems.append("statements 读不出来 ⇒ 路径面只按依赖行 / 签行读")
@@ -99,7 +99,7 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
         rows = []
         problems.append(f"`verifications` 读不出来（{type(exc).__name__}: {exc}）")
     for row in rows or ():
-        doc = dict(row or {})
+        doc = row or {}
         sha = str(doc.get("proof_sha256") or "").strip().lower()
         rel = str(doc.get("manuscript") or doc.get("object_path") or "").strip()
         raw_group = doc.get("path_group")
@@ -233,7 +233,6 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
         except OSError as exc:
             out["problems"].append(f"{path.name} 读不出来（{type(exc).__name__}: {exc}）")
             continue
-        import json
 
         lines = raw.splitlines(keepends=True)
         changed = 0
