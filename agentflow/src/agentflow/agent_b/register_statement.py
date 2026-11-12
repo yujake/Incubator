@@ -3528,13 +3528,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `own.land_manuscript`（`AgentB.land_manuscript`），不再由登记顺手造。
         b_manuscript: dict = {}
         _b_source_text = str(manuscript_text or "")
-        _rewrite_body = bool(
-            stmt_id_now and str(proof_text or "").strip()
-            and str(proof_text) != str((redelivery or {}).get("proof_text") or "")
-            # 换了稿 ⇒ 同一命题的另一条证明路径，不是改在册那一份（见判据的 docstring）。
-            and self._rewrite_is_the_same_proof(
+        #: 这一份稿是哪条路径的（C2：逐路径记录优先）。登记入口只关心 bool；号留给
+        #: 下面"回写 verification 行"那一格用（重复登记时秘书不会重新分配一个号）。
+        _path_read: dict = {}
+        _rewrite_body = False
+        if (stmt_id_now and str(proof_text or "").strip()
+                and str(proof_text) != str((redelivery or {}).get("proof_text") or "")):
+            _path_read = self._proof_path_reading(
                 stmt_id=str(stmt_id_now), row=dict(redelivery or {}),
-                manuscript_path=manuscript_path, proof_text=str(proof_text or "")))
+                manuscript_path=manuscript_path, proof_text=str(proof_text or ""))
+            _rewrite_body = bool(_path_read.get("same_proof"))
         if _rewrite_body:
             b_manuscript = self._preview_b_manuscript(
                 statement_id=stmt_id_now, statement_full=full,
@@ -4742,18 +4745,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         _stamp_text = str(proof_text or "")
         if not _stamp_text.strip() and len(proofs_listed) == 1:
             _stamp_text = str(proofs_listed[0].get("text") or "")
-        if _alloc_no >= 1 and _sid_written.strip():
+        #: 回写用的号：秘书这一笔分了号就用它；重复登记（秘书不再分配）而逐路径记录
+        #: 已经认得这一份稿的号 ⇒ 用记录里的号补盖新落的签行（同一个号，不是重新分配）。
+        _stamp_no = int(_alloc_no or int(_path_read.get("path_group") or 0))
+        if _stamp_no >= 1 and _sid_written.strip():
             from .. import manuscriptsubmission as _MSUB
 
             _path_receipt = {
-                "path_group": dict(written.get("path_group_reading") or {}),
+                "path_group": dict(written.get("path_group_reading") or _path_read or {}),
                 "path_group_stamp": dict(_MSUB.stamp_verification_path_group(
                     root=getattr(self.store, "root", ""), statement_id=_sid_written,
                     body_sha=_PR.proof_sha(_stamp_text),
                     manuscript=_norm_manuscript_rel(manuscript_path),
-                    path_group=int(_alloc_no))),
+                    path_group=int(_stamp_no))),
             }
-            if _alloc_no < 2:
+            if _stamp_no < 2:
                 # 第 1 条路径是既有口径的默认值（老返回形状里没有这两格）⇒ 只做回写、
                 # 不回读数：`proof_text=P1` 与 `proofs=[{1, P1}]` 的返回键集合保持逐字相同。
                 _path_receipt = {}
@@ -6089,33 +6095,98 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 return True
         return False
 
-    def _rewrite_is_the_same_proof(self, *, stmt_id: str, row: Mapping,
-                                   manuscript_path: str, proof_text: str) -> bool:
-        """这一笔是"改在册同一份证明的正文"还是"同一命题的另一条证明路径"。
+    def _proof_path_reading(self, *, stmt_id: str, row: Mapping,
+                            manuscript_path: str, proof_text: str = "") -> dict:
+        """这一份稿是「改哪一条路径的正文」还是「同一命题的另一条证明路径」。
+        2026-11-12：路径身份不写稿头（业主：「路径在产出侧也不标注」），所以「第几条」
+        只能从 `manuscriptpaths` 的逐路径记录读：先读 `path_reading` 里那条路径的
+        `manuscript`，再读同号的 `verifications[].manuscript`（`path_reading` 每条路径
+        只留第一份稿，B 的改写稿常排在 F 的源稿之后）。两处都匹配不到，才退回改前的
+        稿名 / 稿号 / canonical 签行判据 —— 退的时候 `fallback` / `why` 必须写明
+        （不许静默把「不知道第几条」读成「第 1 条」）。
 
-        产出侧不再写 `- 证明号：N` 之后，"第几份"在交付里没有字面号可读了。判据改成
-        稿的身份：同一份稿改了正文 ⇒ 改稿（旧正文进 `proof_history`，那一份的签
-        转 stale，B 的改写载体 `reports/b-proof-<号>.md` 照旧）；换了一份稿 ⇒
-        同一命题的另一条证明路径（路径号由秘书分配，这条判据不决定号）。
-
-        这条判据只决定"要不要走 B 的改写载体"那一支，不决定路径号 —— 号仍由
-        秘书在 `record_statement` / `record_manuscript_dependency_face` 的锁里分。
-        读不到台账里那份正文的稿 ⇒ 走保守的那一档（只认 `reports/b-proof-*` 是
-        B 自己的改写载体，其余按新路径），不把一个新路径塞进改写支。
+        返回 `{checked, same_proof, path_group, basis, fallback, why}`：
+        - `same_proof=True` ⇒ 这一笔是改在册某一条路径的正文（`path_group` 是那条路径）；
+        - `False` ⇒ 换了一份稿 / 换了一套证法（新路径，号由秘书分）；
+        - `path_group=0` + `same_proof=False` ⇒ 新路径（没有"第几条"可读）；
+        - `checked=False` ⇒ 逐路径记录没查成（调用方按既有口径保守处理，不猜号）。
         """
+        out: dict = {"checked": False, "same_proof": False, "path_group": 0,
+                     "basis": "", "fallback": "", "why": ""}
         rel = _norm_manuscript_rel(manuscript_path)
         canon = str(row.get("proof_text") or "")
         if not rel or not canon.strip():
             # 没有稿（内联正文）或 canonical 还空着 ⇒ 既有口径：按改 canonical 处理。
-            return True
-        # 这一条命题的"正本稿名"（一个稿号一份文件）：同名的正文变了 ⇒ 改稿。
-        # 换了一份稿（另一个稿号 / 另一族）⇒ 同一命题的另一条证明路径。
+            out.update(checked=True, same_proof=True, path_group=1,
+                       basis="inline_canonical",
+                       why="没有稿（内联正文）或 canonical 还空着 ⇒ 按改 canonical 处理")
+            return out
+        sid = str(stmt_id or "")
+        from .. import manuscriptsubmission as _MS_path
+
+        reading = _MS_path.path_reading(self.store, getattr(self.store, "root", ""),
+                                        statement_id=sid)
+        if not reading.get("checked"):
+            out.update(why=("逐路径记录读不出来 ⇒ 不猜这是第几条："
+                            + str(reading.get("why") or "未知原因")))
+        else:
+            for one in reading.get("paths") or ():
+                hit = _norm_manuscript_rel(str((one or {}).get("manuscript") or ""))
+                if rel and hit == rel:
+                    out.update(
+                        checked=True, same_proof=True,
+                        path_group=int((one or {}).get("path_group") or 0) or 1,
+                        basis="path_manuscript",
+                        why=(f"逐路径记录里第 "
+                             f"{int((one or {}).get('path_group') or 0)} 条路径的稿就是它"))
+                    return out
+        # ---- 同号签行（`path_reading` 每条路径只留第一份 manuscript） -------------
+        saw_unstamped = False
+        try:
+            rows, _bad = _VR.list_verifications(
+                getattr(self.store, "root", ""), statement_id=sid, limit=None)
+        except Exception:  # noqa: BLE001 —— 读不到签行就退回下面那一条（不猜成"新路径"）
+            rows = []
+        for one in rows or ():
+            doc = dict(one or {})
+            rec = _norm_manuscript_rel(
+                str(doc.get("manuscript") or doc.get("object_path") or ""))
+            if not rec or rec != rel:
+                continue
+            try:
+                group = int(doc.get("path_group") or 0)
+            except (TypeError, ValueError):
+                group = 0
+            if group >= 1:
+                out.update(checked=True, same_proof=True, path_group=group,
+                           basis="verification_manuscript",
+                           why=f"同号签行里这一份稿记在第 {group} 条路径")
+                return out
+            saw_unstamped = True
+        # ---- 退回改前的判据（名字 / 行上稿号 / canonical 签行） -------------------
+        same, basis = self._rewrite_reading_legacy(
+            stmt_id=sid, row=row, rel=rel, rows=rows)
+        out.update(
+            checked=True, same_proof=same, path_group=(1 if same else 0),
+            basis=basis, fallback="canonical",
+            why=("逐路径记录里没有这一份稿的路径号"
+                 + ("（签行还没有 path_group）" if saw_unstamped else "")
+                 + " ⇒ 退回 canonical 判据："
+                 + ("这一笔按改 canonical 处理" if same else "按新路径处理")))
+        return out
+
+    def _rewrite_reading_legacy(self, *, stmt_id: str, row: Mapping, rel: str,
+                                rows: Any) -> tuple[bool, str]:
+        """改前的「同一份稿」判据（C2 的退回档；返回 `(same_proof, basis)`）。
+
+        只在逐路径记录给不出号时用（老盘 / 签行还没回写 `path_group`）。判据本身与
+        C2 之前逐字相同：正本稿名 / 行上稿号 / canonical 签行，最后一条"B 的改写载体
+        按 canonical 处理"（那是优化线还没有显式路径号时的老口径）。
+        """
         sid = str(stmt_id or "")
         for family in ("f", "e", "b"):
             if sid and rel == f"reports/{family}-proof-{sid}.md":
-                return True
-        # 行上记的稿号 == 这份稿的稿号 ⇒ 这就是本行那一份稿：正文变了是改稿，
-        # 不是第二条路径（D 把 F 的稿重交、或 F 的稿在登记后才写全的那一档）。
+                return True, "canonical_name"
         try:
             from .. import vsigns as _VS
 
@@ -6123,14 +6194,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         except Exception:  # noqa: BLE001 —— 认不出稿号就退回下面那一条判据
             mid = ""
         if mid and str(row.get("manuscript_id") or "") == str(mid):
-            return True
-        canon_sha = _PR.proof_sha(canon)
-        try:
-            rows, _bad = _VR.list_verifications(
-                getattr(self.store, "root", ""), statement_id=str(stmt_id or ""),
-                limit=None)
-        except Exception:  # noqa: BLE001 —— 读不到就退回下面那一条（不猜成"新路径"）
-            rows = []
+            return True, "row_manuscript_id"
+        canon_sha = _PR.proof_sha(str(row.get("proof_text") or ""))
         for one in rows or ():
             doc = dict(one or {})
             if str(doc.get("proof_sha256") or "") != canon_sha:
@@ -6138,8 +6203,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             rec = _norm_manuscript_rel(
                 str(doc.get("manuscript") or doc.get("object_path") or ""))
             if rec:
-                return rec == rel
-        return rel.startswith("reports/b-proof-")
+                return rec == rel, "canonical_verification"
+        return rel.startswith("reports/b-proof-"), "b_proof_prefix"
+
+    def _rewrite_is_the_same_proof(self, *, stmt_id: str, row: Mapping,
+                                   manuscript_path: str, proof_text: str) -> bool:
+        """这一笔是"改在册同一份证明的正文"还是"同一命题的另一条证明路径"（bool 包装）。
+
+        判据本体在 :meth:`_proof_path_reading`（逐路径记录优先）。保留这个名字是因为
+        登记入口只关心"要不要走 B 的改写载体"这一问；要号 / 要认法读那个 dict。
+        """
+        return bool(self._proof_path_reading(
+            stmt_id=str(stmt_id or ""), row=row, manuscript_path=manuscript_path,
+            proof_text=str(proof_text or "")).get("same_proof"))
 
     def _existing_statement_for(self, full: str) -> dict | None:
         """按 `statement_full` 的规范化值找在册那一行（"是不是同一条"的唯一判据在

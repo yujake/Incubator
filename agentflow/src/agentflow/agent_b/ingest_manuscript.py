@@ -191,10 +191,19 @@ class _IngestManuscript:
         path_no, _code, _why = 0, "", ""
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
+        #: 这一份稿是哪条路径的（C2：逐路径记录优先，退 canonical 时读数里写明）。
+        #: 提取在锁外、判定在锁外；这里只读，不写一个字节。register 没有目标行 ⇒ 空。
+        path_reading: dict = {}
+        if row is not None:
+            path_reading = self._proof_path_reading(
+                stmt_id=target, row=row, manuscript_path=rel,
+                proof_text=str((got_cells.get("proof_text") or {}).get("value") or ""))
+            out["path_group_reading"] = dict(path_reading)
         plan = _MI.plan_cells(
             row, got_cells, str(conflict), family=family, proof_no=int(want_no or 1),
             append_new_path=self._ingest_new_proof_path(
-                mode=str(mode), row=row, target=target, rel=rel, got_cells=got_cells))
+                mode=str(mode), row=row, target=target, rel=rel, got_cells=got_cells,
+                path_reading=path_reading))
         cells_out = self._ingest_plan_cells(plan, requested)
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),
@@ -220,18 +229,24 @@ class _IngestManuscript:
         return self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no)
 
     def _ingest_new_proof_path(self, *, mode: str, row: Mapping, target: str,
-                               rel: str, got_cells: Mapping) -> bool:
+                               rel: str, got_cells: Mapping,
+                               path_reading: Mapping | None = None) -> bool:
         """这一份是同一命题的另一条证明路径吗（换了稿 / 换了正文）？
 
-        判据与登记那一支同一处（`_rewrite_is_the_same_proof`：同一份稿改正文 ⇒ 改稿；
+        判据与登记那一支同一处（`_proof_path_reading`：同一份稿改正文 ⇒ 改稿；
         换稿 ⇒ 新路径）。只决定"计划说追加还是冲突"，不决定路径号（号归秘书）。
+        调用方已经算过那份读数就传进来（同一笔里不读两遍）。
         """
         value = str((got_cells.get("proof_text") or {}).get("value") or "")
-        return bool(
-            str(mode) == "apply" and row is not None and value.strip()
-            and str(row.get("proof_text") or "").strip()
-            and not self._rewrite_is_the_same_proof(
-                stmt_id=target, row=row, manuscript_path=rel, proof_text=value))
+        if str(mode) != "apply" or row is None or not value.strip():
+            return False
+        if not str(row.get("proof_text") or "").strip():
+            return False
+        reading = dict(path_reading or {})
+        if not reading:
+            reading = self._proof_path_reading(
+                stmt_id=target, row=row, manuscript_path=rel, proof_text=value)
+        return not bool(reading.get("same_proof"))
 
     def _mark_ingested(self, out: dict, *, rel: str, family: str,
                        path_group: int = 0) -> dict:
