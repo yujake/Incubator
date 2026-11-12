@@ -438,6 +438,12 @@ class _Core:
                 (r for r in rows if str(r.get("status") or "") == "pending"),
                 key=lambda r: (r.get("timestamp") or "", r.get("reprocess_id") or ""),
             )
+
+            def _reject(t_row: dict, t_rid: str, why: str) -> None:
+                """标 rejected 并把这一行记进本次拒绝清单（五条判据共用的同一份记账形状）。"""
+                self._reject_reprocess(t_row, why, tx)
+                rejected.append({"reprocess_id": t_rid, "reason": t_row["result_note"]})
+
             for row in cands:
                 # 同 D-2：租约仍在走就不可领，不附加 `claimed_by` 非空 ——
                 # 失败释放后的那条行写的是 `claimed_by=None` + 未来的租约（见
@@ -447,51 +453,44 @@ class _Core:
                 rid = str(row.get("reprocess_id") or "")
                 n = int(row.get("attempts") or 0)
                 if n >= self.max_attempts:
-                    self._reject_reprocess(
+                    _reject(
                         row,
+                        rid,
                         f"超过最大处理尝试次数 {self.max_attempts}，已放弃。"
                         f"上一次错误：{row.get('last_error')}（失败是环境问题，不是结论，所以标 rejected 而不是 done）",
-                        tx,
                     )
-                    rejected.append({"reprocess_id": rid, "reason": row["result_note"]})
                     continue
                 targets = [str(x) for x in (row.get("relation_ids") or []) if x]
                 if not targets:
-                    self._reject_reprocess(
-                        row, "目标关系为空 ⇒ **无目标的重抽取会退化成全量重抽**，拒绝", tx
-                    )
-                    rejected.append({"reprocess_id": rid, "reason": row["result_note"]})
+                    _reject(row, rid, "目标关系为空 ⇒ **无目标的重抽取会退化成全量重抽**，拒绝")
                     continue
                 missing = [t for t in targets if t not in known_relations]
                 if missing:
-                    self._reject_reprocess(
+                    _reject(
                         row,
+                        rid,
                         f"目标关系不存在：{'、'.join(missing)}（可能已被删除或被 I5 合并到 survivor 上）"
                         "⇒ 不做任何猜测性重抽",
-                        tx,
                     )
-                    rejected.append({"reprocess_id": rid, "reason": row["result_note"]})
                     continue
                 reason = str(row.get("reason") or "")
                 if reason == "structural_duplicate":
                     # I5 的合并决定需要"C 的候选"（概念对 + 名字证据 + 邻域），
                     # 仅凭 relation_ids 无法判定两个概念是否同义。猜一个合并就是绕过
                     # "两路独立证据"这条规则，所以拒绝，并把请求交回候选路径。
-                    self._reject_reprocess(
+                    _reject(
                         row,
+                        rid,
                         "reason=structural_duplicate 无法用 relation_ids 判定：合并必须走 "
                         "decide_structural_duplicate(candidate)（候选里有概念对与名字证据）"
                         "⇒ 拒绝，不做猜测性合并",
-                        tx,
                     )
-                    rejected.append({"reprocess_id": rid, "reason": row["result_note"]})
                     continue
                 adm = I.admit_reprocess_request(
                     self._quota_rows(rows, rid), relation_ids=targets, reason=reason
                 )
                 if not adm.get("admitted"):
-                    self._reject_reprocess(row, f"准入闸门拒绝：{adm.get('reason')}", tx)
-                    rejected.append({"reprocess_id": rid, "reason": row["result_note"]})
+                    _reject(row, rid, f"准入闸门拒绝：{adm.get('reason')}")
                     continue
                 row["claimed_by"] = self.actor
                 row["lease_until"] = make_lease(self.lease_seconds)
