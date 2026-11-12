@@ -9,7 +9,7 @@
 其余一切人可读的东西都由前端渲染。路由不再写成 `if path == …` 链 —— 它是
 :data:`agentflow.webui.routes.ROUTES` 那张表（`draft/73` §1.2 的 R1 拆包）。
 
-## 路由这一层做过的四件事（第 1、2 件是 W0 的，第 3 件 2026-10-07，第 4 件 W5）
+## 路由这一层做的四件事
 
 1. 静态路由 `GET /static/<file>`：只服务 `agentflow/src/agentflow/web/static/` 之下的
    真实文件。防线是 `Path.resolve()` 之后必须仍在根内（目录穿越一律拒：
@@ -17,14 +17,13 @@
    `immutable` 缓存，其余（`index.html`）按 `no-store`。
 2. SPA 回退（裁定 Q1）：`/api/*` 未知 ⇒ JSON 404（绝不吐 HTML，前端要能区分）；
    其余未知路径 ⇒ 有 `web/static/index.html` 就吐它，否则沿用今天的 404 页。
-3. `GET /` 与 `GET /index.html` 直接服务 SPA 外壳（裁定 P1 的第一块迁移，
-   2026-10-07）：这一格原来是服务端渲染的旧壳。SPA 只在"未知路径"的回退分支上挂得
-   起来，而 `/` 是已知路径 ⇒ 不改这一格，浏览器地址栏就永远进不了 SPA 首页。
-4. `GET /run/{sid}` 也服务那一支外壳（P1 的最后一块迁移，W5 清仓）：它是 C4 表里的
-   一条客户端路由，SPA 的 `Run` 页按 `sid` 去读 `GET /api/run/{sid}`；会话不在盘上
-   这件事由那份读数如实报成 `unreadable`（三态），服务端不再为它渲染任何盘上数据。
-   旧壳 `webui/views.py` 随之整件退场，服务器自己还写 HTML 的地方只剩错误页
-   （见 :func:`_error_page`：外壳不在盘上 / 静态未命中 / 写失败）。
+3. `GET /` 与 `GET /index.html` 直接服务 SPA 外壳（裁定 P1）：SPA 只在"未知路径"的
+   回退分支上挂得起来，而 `/` 是已知路径 ⇒ 不改这一格，浏览器地址栏就永远进不了
+   SPA 首页。
+4. `GET /run/{sid}` 也服务那一支外壳：它是 C4 表里的一条客户端路由，SPA 的 `Run` 页
+   按 `sid` 去读 `GET /api/run/{sid}`；会话不在盘上这件事由那份读数如实报成
+   `unreadable`（三态），服务端不为它渲染任何盘上数据。服务器自己还写 HTML 的地方
+   只剩错误页（见 :func:`_error_page`：外壳不在盘上 / 静态未命中 / 写失败）。
 
 ## 一处刻意的收窄（必须写在最显眼的地方）
 
@@ -41,7 +40,7 @@ Q1 说"其余未知路径吐 index.html"，而既有判据
 浏览器地址栏、`curl` 与 `http.client` 拿到的都是那一支（`GET /` 的 200 与"未知路径
 回退到 404"是两件事，不要混起来）。
 
-## 安全与失败姿态（与拆包前逐条相同）
+## 安全与失败姿态
 
 - 服务默认只听 `127.0.0.1`；`--token` 给一个共享口令（或 `AGENTFLOW_WEB_TOKEN`），
   给了就要求 `?token=` / `Authorization: Bearer` / 口令 cookie（见下一节）；
@@ -52,10 +51,9 @@ Q1 说"其余未知路径吐 index.html"，而既有判据
 - 写失败不许折成 200（`writes.answer` 的三态）；
 - 每个响应都带 `X-Content-Type-Options: nosniff`。
 
-## 口令档（`--token`）：自证与页面各带一次口令（2026-11-03 修 E1 / E2）
+## 口令档（`--token`）：自证与页面各带一次口令
 
-口令档原先有两条同时存在、互相独立的缺陷，合起来的效果是"这个开关一开，服务根本
-站不住，站住了也是白屏"：
+口令档不能"开关一开，服务站不住、站住了也是白屏"，所以有两条硬约束：
 
 1. 自证不带口令（E1）：`run()` 的 `_self_check` 调 `verify_serving(url, root=root)`
    去打 `/api/state`，而口令那一格（:meth:`WebHandler._token_ok`）没有查询串就回 401
@@ -93,9 +91,9 @@ cookie 只多一个响应头，`_token_ok` 的口径（`secrets.compare_digest`�
 - `POST /answer` 不在这道闸门后面（它的闸门是 `userio.answer_question`，
   `draft/73` §2.5 的"现状，不动"），但它的审计也跟随 `allow_writes`（只读不落盘）。
 
-`--help` 里逐字写着这三条（2026-11-03 修 E8：改前那两句"本批还没有接线：现在给不给
-都一样"与实现相反，而 `agentflow web --help` 早就说的是对的 —— 同一仓库两套 help
-互相打脸）。`cli.py::cmd_web` 的 docstring 是第三份公开文本，三处必须同一口径。
+`--help` 里逐字写着这三条（那两句"本批还没有接线：现在给不给都一样"与实现相反，
+`agentflow web --help` 早就说的是对的 —— 同一仓库两套 help 不许互相打脸）。
+`cli.py::cmd_web` 的 docstring 是第三份公开文本，三处必须同一口径。
 """
 
 from __future__ import annotations
@@ -288,7 +286,7 @@ class WebHandler(BaseHTTPRequestHandler):
     """路由表驱动的小服务（表在 :data:`agentflow.webui.routes.ROUTES`）。
 
     四个由 :func:`serve` 挂上去的事实：工作区根、共享口令、静态根、CSRF 令牌；
-    外加两个开关（`allow_writes` / `settings_write`，本批只透传不判断）。
+    外加两个开关（`allow_writes` / `settings_write`，由 `writes.authorize` 真的判）。
     """
 
     server_version = "agentflow-webui"
@@ -299,7 +297,7 @@ class WebHandler(BaseHTTPRequestHandler):
     token: str = ""
     static_root: Path = default_static_root()
     csrf_token: str = ""
-    #: 两个开关（裁定 C2 / E1）：W0 只解析并透传，W3/W4 才真正判它们。
+    #: 两个开关（裁定 C2 / E1）：`writes.authorize` 把它们当第 3 / 第 4 层真的判。
     allow_writes: bool = False
     settings_write: bool = True
     #: 路由表可注入（`serve(routes_table=...)`）：空元组 = 用 `routes.ROUTES`（缺省）。
