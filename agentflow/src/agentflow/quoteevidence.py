@@ -1,11 +1,11 @@
-"""引文回验的「证据叶子」：三态结论必须带上可以复核的那几栏（D1 的落点）。
+"""引文回验的「证据叶子」：三态结论必须带上可以复核的那几栏。
 
 ## 为什么单独成模块
 
-真机读数（`saxl-ws/data/statements.json`，2026-10-22 修复前）：8 条命题写着
-`quote_verified=true` / `quote_mode=verbatim`，而 `quote_span` / `quote_reason` /
-`quote_call_sha256` 三栏全是空串。于是"逐字回验通过"这句话在盘上没有任何读数：
-核了哪一段、在第几页、是逐字命中还是归一化后命中、有没有花模型钱，一条都读不出来。
+盘上出现过这样的行：8 条命题写着 `quote_verified=true` / `quote_mode=verbatim`，
+而 `quote_span` / `quote_reason` / `quote_call_sha256` 三栏全是空串。于是
+"逐字回验通过"这句话在盘上没有任何读数：核了哪一段、在第几页、是逐字命中还是
+归一化后命中、有没有花模型钱，一条都读不出来。
 
 追下去是三个洞，一个都不在 `quoteverify.py`（那是禁改区，且它本身判得没错 ——
 它会把 `matched_page` / `window` / `reason` 如实回报）：
@@ -23,7 +23,7 @@
   翻成落盘需要的四栏（区间、方式、理由、调用指纹）；
 - :func:`enforce_quote_evidence` 是写侧断言：说"逐字通过"就必须在这一次写里定位出
   区间，否则降成 unknown 档（不是 false、也不是 true）；"有理由、没区间"同样降档 ——
-  理由不是证据（D1 的第二版口径，见该函数 docstring 的"为什么理由不够"一节）；
+  理由不是证据（见该函数 docstring 的"为什么理由不够"一节）；
 - :func:`scan_quote_evidence` 是读侧判据：扫盘上所有行，把"说通过而拿不出区间"的行
   逐条点名（历史脏数据因此不会被当成通过放过）。
 
@@ -40,7 +40,7 @@
 没有模型调用（不是"忘了记"），这一栏留空；:func:`enforce_quote_evidence` 会把
 "确实没有调用"写进 `quote_reason` —— 空栏不加说明时，读的人分不清"没调用"与"忘了记"。
 
-## 「无来源可核」那一档（业主 2026-10-22 裁定 B-4）
+## 「无来源可核」那一档（业主裁定 B-4）
 
 `quote_reason` 里出现 `no_source` / `无来源` 这一类记号，说的是"这条引文没有外部原文
 可核"。裁定原文：「所谓"无来源可核"却仍然写上去了，一定有我方研究手稿当背书 ⇒
@@ -74,7 +74,7 @@ NO_CALL_NOTE = "没有模型调用（逐字档是纯文本比对）⇒ quote_cal
 #: 三态里"没查成"那一档的理由前缀（读侧/写侧都用它，免得两处措辞分家）。
 UNKNOWN_NOTE = "unknown：没查成 ≠ 查过不存在"
 
-#: 「无来源可核」那一档在 `quote_reason` 里的记号（业主 2026-10-22 裁定 B-4）。
+#: 「无来源可核」那一档在 `quote_reason` 里的记号（业主裁定 B-4）。
 #:
 #: 这一档说的是"这条引文拿不到外部原文可核"（原文不在盘上 / 只有元数据 / 来源被指认
 #: 不可信）。裁定原文：「所谓"无来源可核"却仍然写上去了，一定有我方研究手稿当背书
@@ -99,7 +99,7 @@ BACKING_STMT = re.compile(r"stmt:\s*\d{4,}")
 
 #: 四态的受控取值（`no_source` 那一族 + 概念行的"不适用"）。
 #:
-#: 为什么单独给它们四个名字：改前概念行与"无来源可核"的行在读数里都被折成
+#: 为什么单独给它们四个名字：概念行与"无来源可核"的行若被折成
 #: `mismatch`（假）或 `unchecked`（未查）—— 而"这一行不该有引文"与"这一行没查"
 #: 是两件事，把它们印成同一个词，读的人会去追一条根本不存在的欠账。
 NO_SOURCE_BACKED = "no_source_backed"
@@ -143,7 +143,7 @@ def manuscript_backing(text: Any) -> str:
 def no_source_state(row: Mapping[str, Any]) -> str:
     """这一行的「无来源/不适用」四态读数（空串 = 不属于这四态，走三态那一套）。
 
-    四态（业主 2026-10-22 裁定 B-4 的三档 + 概念行那一档）：
+    四态（裁定 B-4 的三档 + 概念行那一档）：
 
     - `not_applicable`：概念行（`kind="concept"`）—— 概念不参与引文回验，
       既不是"假"也不是"未查"；
@@ -395,8 +395,8 @@ def enforce_quote_evidence(fields: Mapping[str, Any], *, quote: str = "",
     - `mismatch`：有全文、有要比对的那一段，而整份全文里都没有它 ⇒ 改判 `False`
       （查过了、不一致）。这一档不是降级：它是这一趟真查出来的结论；
     - `downgrade`：说"逐字通过"而这一趟根本没有可比对的全文（或没有要比对的那一段）
-      ⇒ 降成 `None` + 原因（"没查成"是 unknown 档，既不是 false 也不是 true）。
-      真机那 13 条命题落到这一档：`quote_verified=true` 而没有区间；
+      ⇒ 降成 `None` + 原因（"没查成"是 unknown 档，既不是 false 也不是 true）；
+      有一批命题落到这一档：`quote_verified=true` 而没有区间；
     - `refuse`：说"语义相同"却缺 span 或调用指纹 ⇒ 调用方应当整笔不写（说不出
       对着哪一段、哪一次判的，就不是语义通过）；理由走了「无来源可核」那一档却
       指不出我方手稿的哪一处也是这一档（`no_source_without_backing`）。
@@ -412,12 +412,12 @@ def enforce_quote_evidence(fields: Mapping[str, Any], *, quote: str = "",
     只是"该去哪一段核"的线索（调用方给的可能是自报的定位，也可能是 H 判时对着的那一段
     原文）；能不能落成区间要重算一遍。
 
-    ## 为什么理由不够（第二版口径，2026-10-22）
+    ## 为什么理由不够
 
-    第一版留下过一档"有理由、没区间 ⇒ 保留 `True`、把缺口写进理由"，当时的理由是
+    曾经有一档"有理由、没区间 ⇒ 保留 `True`、把缺口写进理由"，当时的理由是
     "B 的动作面没有 `quote_span` 参数，一律降档会把所有合规登记都降成 unknown"。
     那一档已经把病治反了：`quote_reason` 是一句人话，复现不出核的是哪一段——
-    真机那 13 行里就有写着"逐字比对通过"而 span 为空的，读的人照样无从复核。
+    盘上就有写着"逐字比对通过"而 span 为空的，读的人照样无从复核。
     参数面补齐之后（`specs/b.py` 的 `quote_span` / `quote_call_sha256`），
     "说不出位置就不算通过"这条才真正可执行，所以那一档并入 `downgrade`。
 
@@ -432,7 +432,7 @@ def enforce_quote_evidence(fields: Mapping[str, Any], *, quote: str = "",
     reason = str(out.get("quote_reason") or "").strip()
     reading: dict[str, Any] = {"ok": True, "action": "keep", "why": "", "where": field}
 
-    # ---- B-4（业主 2026-10-22）：走「无来源可核」那一档，就必须指到我方手稿的哪一处。
+    # ---- B-4（业主裁定）：走「无来源可核」那一档，就必须指到我方手稿的哪一处。
     #
     # 为什么这是一条拒收（而不是像 `downgrade` 那样改判决）：这一档说的不是"没查成"，
     # 是"我们明明没有外部原文可核，却仍然把它写上去了" —— 它唯一的正当性来自
@@ -501,7 +501,7 @@ def enforce_quote_evidence(fields: Mapping[str, Any], *, quote: str = "",
     #
     # 入参里的 `quote_span` 只是线索，不是结论：它有值时也只用来指"该去核哪一段"，
     # 落盘的那个区间一律由 `locate_span` 在这一份全文上重算 —— 接受自报的区间等于
-    # 把"证据"换回"声明"，而那正是 D1 要堵的东西。
+    # 把"证据"换回"声明"，而那正是要堵的东西。
     claimed = span
     hint = int(hint_page or 0) or int(getattr(_page_range(page_range), "start", 0) or 0)
     quote_now = str(quote or "").strip()
@@ -617,7 +617,7 @@ def scan_quote_evidence(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     `{id, why, class}`，三类：
 
     - `no_span_no_reason`：`quote_verified=true` 而 `quote_span` 与 `quote_reason`
-      都空 —— 真机那 13 行就是这一档，盘上连"为什么算通过"都读不到；
+      都空 —— 盘上连"为什么算通过"都读不到；
     - `no_span`：说通过、也写了理由，但没有区间 —— 仍然不可复核（理由本身不是证据，
       复现不出核的是哪一段）；
     - `no_call`：`quote_mode=semantic` 而 `quote_call_sha256` 空 —— 说不出是哪一次
