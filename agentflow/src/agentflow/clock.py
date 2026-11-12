@@ -811,8 +811,10 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
     干预指引，并点名那个子的绝对编号（业主：「M可通过发送指导意见干预」）。
     某一类读不到 => 那一类写"条数读不到（理由）"，不许折成 0。
     """
-    cells = {key: (anomalies.get(key) if isinstance(anomalies.get(key), Mapping) else {})
-             for key in ("stalled", "silent", "open_items", "final_refusals")}
+    cells: dict[str, Mapping[str, Any]] = {}
+    for key in ("stalled", "silent", "open_items", "final_refusals"):
+        got = anomalies.get(key)
+        cells[key] = got if isinstance(got, Mapping) else {}
 
     def _count_of(cell: Mapping[str, Any], label: str) -> str:
         if not cell.get("checked", True) or cell.get("count") is None:
@@ -887,7 +889,8 @@ def patrol_text(anomalies: Mapping[str, Any]) -> str:
         return f"{head}{'；'.join(bits)} => {PATROL_CLEAN_TEXT}"
 
     body = f"{head}{'；'.join(bits)}"
-    targets = _patrol_ids(stalled) + [t for t in _patrol_ids(silent) if t not in _patrol_ids(stalled)]
+    stalled_ids = _patrol_ids(stalled)
+    targets = stalled_ids + [t for t in _patrol_ids(silent) if t not in stalled_ids]
     if targets:
         body = (f"{body}。干预指引：{PATROL_GUIDE_HEAD}给上面点名的那个子 —— 走既有的名册"
                 f"寻址（名册名或绝对编号都行）与秘书链：用 message 到 {'、'.join(targets)}，"
