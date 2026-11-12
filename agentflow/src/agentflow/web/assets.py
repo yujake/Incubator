@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""用户端的样式资产：DSH 的令牌整份照搬（W5 之后只剩这一件）。
+"""用户端的样式资产：DSH 的令牌整份照搬。
 
 ## 这是什么
 
@@ -11,16 +11,11 @@
 （`AppData/Roaming/npm/node_modules/@deepseek-ai/dsh/**/LICENSE`），
 用户 2026-10-03 明确允许「复制人家的代码微调」，本项目照此办理并在此注明来源。
 
-## 我们自己的组件样式搬去了哪里（W5 清仓）
+## 组件样式在哪
 
-这里原来还有两件：`APP_CSS`（我们自己的组件样式：骨架 / 卡片 / 行 / 徽标 / 按钮 /
-输入框 / 等宽读数）与 `STYLESHEET = THEME_CSS + APP_CSS`（旧壳把它内联进 `<style>`）。
-六页面全部迁到 SPA 之后（裁定 P1 的最后一块，`/run/{sid}` 也改吐外壳），
-`views.py` 整件退场 ⇒ 这两件都没有调用方了，于是删掉：
-
-- 组件样式今天住在前端源码 `ui/src/theme/app.css`（构建时打进 `web/static/assets/`）；
-- 「组件样式只用令牌、不写字面色值」那条判据跟着搬到那份文件上
-  （`tests/test_webui.py::test_app_css_uses_only_tokens`，强度不变）。
+组件样式住在前端源码 `ui/src/theme/app.css`（构建时打进 `web/static/assets/`）；
+「组件样式只用令牌、不写字面色值」那条判据跟着落在那份文件上
+（`tests/test_webui.py::test_app_css_uses_only_tokens`，强度不变）。
 
 ## 为什么令牌仍然留在这里、而不是搬进前端
 
