@@ -487,14 +487,18 @@ class RelationGraph:
         """
         if not candidates:
             return None
-        ordered = sorted(candidates, key=relation_sort_key)
-        head = ordered[0]
+        # 排序键只算一次：改前 `sorted(candidates, key=relation_sort_key)` 之后，
+        # 找"同主键桶"那一趟又对每条候选重算一遍 `relation_sort_key(r)`（那里面要走
+        # `relation_info_len`，读 description / quote 的长度），同一批候选取两次键。
+        # 这里先配成 `(键, 候选)` 再按同一个键稳定排序 —— 次序、桶成员、返回值都逐字不变。
+        keyed = [(relation_sort_key(r), r) for r in candidates]
+        keyed.sort(key=lambda item: item[0])
+        head = keyed[0][1]
         used = set(used_lit_ids)
         if used:
-            head_key = relation_sort_key(head)[:3]  # 只比较 (verified, status, 信息量)
-            bucket = [r for r in ordered if relation_sort_key(r)[:3] == head_key]
-            for r in bucket:
-                if str(r.get("lit_id") or "") not in used:
+            head_key = keyed[0][0][:3]  # 只比较 (verified, status, 信息量)
+            for item_key, r in keyed:
+                if item_key[:3] == head_key and str(r.get("lit_id") or "") not in used:
                     return r
         return head
 
