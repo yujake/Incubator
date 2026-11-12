@@ -1860,20 +1860,18 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             # 说通过而拿不出区间的行既不进"有结论"也不进"未查+理由"
             # （它不是未查，也不是结论）—— 单独一栏，别让它们从读数里消失。
             "no_evidence": sum(1 for r in rows if EB.quote_state(r) == EB.QUOTE_NO_EVIDENCE),
-            # 四态（B-4，与 `quote_verified_rows` 同一口径）：这一档的分母只数"有结论"
+            # 四态（与 `quote_verified_rows` 同一口径）：这一档的分母只数"有结论"
             # 与"有理由"两类，而"无来源可核"/概念行在这两个数里既不是假也不是未查 ——
             # 单独给出来，读的人才知道那几条去哪了（不是被静默丢掉）。
             **{name: count for name, count in QE.no_source_reading(rows).items()},
         }
     if kind == "manuscript_rows":
-        # 交接手稿那一档（`draft/37` §134/§140；`draft/39` §C1 起存储改成追加式 JSONL）：数
-        # `manuscripts/handoffs.jsonl` 的行数（一份交接一行）。为什么从"数文件"改成"数行"（用户 2026-10-05 裁）：
-        # 旧口径要求文件名能被 `<编号>-<谁>to<谁>.md` 认出来，于是改个名或少个字段就读成 0 —— 读数被文件名的形状
-        # 绑住；而账本是追加写的，撞号与覆盖在结构上不可能发生（这正是 D16/D17 的终结判据）。旧格式 `.md` 不计入
-        # 这一档，但在明细里另列一栏：既不假装没有，也不让它冒充新格式。`draft/39` §6.49 的 D64（用户 2026-10-06
-        # 裁）：口径再收紧成只数自写的 —— 真机读数（T1–T5 五趟逐行分类）92 / 96 / 118 / 62 / 94 行里 100% 是框架
-        # 派生的模板（`note` 写着「框架据动作结果派生」/「框架据派活派生」），且每行 `refs` 都是空的；用户原话
-        # 「handoffs 里面没有几条有效信息全在强调纪律」。被模板灌满的读数会替噪声背书 ⇒ 只数模型自写的那些。
+        # 交接手稿那一档：数 `manuscripts/handoffs.jsonl` 的行数（一份交接一行）。
+        # 按行而不按文件名：旧口径要文件名能被 `<编号>-<谁>to<谁>.md` 认出来，改个名或
+        # 少个字段就读成 0（读数被文件名的形状绑住），而账本是追加写的，撞号与覆盖在结构
+        # 上不可能发生。旧格式 `.md` 不计入这一档，但在明细里另列一栏 —— 既不假装没有，
+        # 也不让它冒充新格式。口径只数模型自写的：`note` 写着「框架据动作结果派生」/
+        # 「框架据派活派生」而 `refs` 全空的模板行不算交接（被模板灌满的读数会替噪声背书）。
         from . import manuscripts as MS
 
         all_rows, bad_lines = MS.read_rows(project_root)
@@ -1907,7 +1905,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                               "逐条去查（读不出不等于没有）")
         return len(authored), detail
     if kind == "retrieval_ok_rows":
-        # 「真的取回了东西」那一档（`draft/39` §6.47 的 D60）。
+        # 「真的取回了东西」那一档。
         #
         # 阈值不是拍出来的数：它等于台账里 `research_questions` 的行数 ——
         # 「每个立起来的问题至少要被一次成功取回服务过」。问题数由台账算，
@@ -1928,7 +1926,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "—— `no_result_topics` 就是用来核这件事的读数"),
         }
     if kind == "document_body_rows":
-        # 「有正文的稿件」那一档（`draft/39` §6.48 的 D63）：有 sections 却每节都空 ⇒ 骨架，不是手稿。
+        # 「有正文的稿件」那一档：有 sections 却每节都空 ⇒ 骨架，不是手稿。
         docs = [dict(r) for r in store.rows("documents")]
         with_body: list[dict[str, Any]] = []
         empty_sections: list[dict[str, Any]] = []
@@ -1955,7 +1953,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         }
         return len(with_body), detail
     if kind == "claim_evidence_fit_rows":
-        # 「断言与它引的证据对得上」那一档（`draft/39` §6.48 的 D61/D62），判据在 `citation_fit`。
+        # 「断言与它引的证据对得上」那一档，判据在 `citation_fit`。
         fit = citation_fit(store)
         detail = {
             "claims": len(fit["claims"]), "fit": fit["fit"], "mismatch": fit["mismatch"],
@@ -1968,7 +1966,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         }
         return fit["fit"], detail
     if kind == "document_claim_rows":
-        # 「手稿有没有把立起来的问题说进去」那一档（`draft/39` §6.48 的 D63）：阈值随问题数走。
+        # 「手稿有没有把立起来的问题说进去」那一档：阈值随问题数走。
         docs = [dict(r) for r in store.rows("documents")]
         rows = [c for d in docs for c in (d.get("claims") or []) if isinstance(c, Mapping)]
         with_cites = [c for c in rows if list(c.get("citations") or [])]
@@ -1984,11 +1982,10 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "这一档问「它有没有把问题说进去」"),
         }
     if kind == "document_rows":
-        # 「任务说要交的那份东西在不在」那一档（`draft/39` §6.47 的 D59）。
+        # 「任务说要交的那份东西在不在」那一档。
         #
-        # `draft/39` §6.49 的 D65：按内容去重（`content_sha256`）。真机读数
-        # （T2 第 15 趟 `p6q`）：`documents` 4 行，而 0000/0001/0002/0003 的 claims 逐字相同
-        # —— 那是同一份内容重复登记，不是四份稿子；按行数会让"反复重建同一份"看起来像产出。
+        # 按内容去重（`content_sha256`）：`documents` 里 4 行 claims 逐字相同
+        # 是同一份内容重复登记，不是四份稿子；按行数会让"反复重建同一份"看起来像产出。
         docs = [dict(r) for r in store.rows("documents")]
         seen: dict[str, str] = {}
         unique: list[dict[str, Any]] = []
@@ -2015,7 +2012,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "而 `substance` 那一格可能已经是绿的（它只看五张表里有没有非空的）"),
         }
     if kind == "unfinished_request_rows":
-        # 「提交了、没人做」那一档（`draft/39` §6.45 的 D56）。
+        # 「提交了、没人做」那一档。
         #
         # 两处刻意的口径：
         # ① 两条队列一起数 —— `search_requests`（A 的：去外面找新东西）与
@@ -2026,9 +2023,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #    「没做完的请求」越少越好，0 才是达标。`_check_acceptance` 认这个方向
         #    （缺省 `min` 变成 0、`max` 缺省取这一档给的上限）。
         #
-        # 真机读数（T5 第 5 趟 `p8e-fermat-shorter-proof`）：`r-0004` 由 F 的攻坚计划
-        # 0000 子目标 s1 提交，`done=false` / `claimed_by=null` / `attempts=0`；
-        # 计划那一行写着「等 A 完成检索请求 r-0004」，而七格全绿。这档读数就是那件事。
+        # 一条请求可以提交完就停在那里：`done=false` / `claimed_by=null` / `attempts=0`，
+        # 而计划那一行写着「等 A 完成检索请求」，收工门七格却全绿 —— 这一档读数就是那件事。
         search_rows = [dict(r) for r in store.rows("search_requests")]
         try:
             repro_rows = [dict(r) for r in store.rows("reprocess_requests")]
@@ -2063,18 +2059,16 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             detail["table_note"] = repro_note
         return len(open_search) + len(open_repro), detail
     if kind == "literature_unprocessed_rows":
-        # 「登记了但没被 B 消化」那一档（业主 2026-10-18 口径）。
+        # 「登记了但没被 B 消化」那一档。
         #
         # 为什么需要它：`literature.unprocessed` 此前只是报告里的一句话 ——
-        # `projects/mp2` R10 逐字写「`literature.unprocessed`=32 未清零」却记 pass；
-        # `projects/mp3` P8 记 20 记 pass；`projects/t3d` ⑧ 记 12 记成立。
-        # 三份验收表都能「如实写出这个读数」而照样绿，因为没有任何一行判它。
+        # 验收表可以「如实写出这个读数」而照样绿，因为没有任何一行判它。
         # 这一档把那个读数变成一条可复算的判据：缺省上限 0（与 `unfinished_request_rows`
         # 同一根轴：越少越好），超过就要红；同时它给「请求闭环」那一行提供降级判据
         # （`unprocessed > 0` ⇒ 那一行记 `unknown`，并要求写清为什么可以带着它收工）。
         rows = [dict(r) for r in store.rows("literature")]
         # 与 `pipeline.py` 的那条读法逐字一致（`not r.get("processed")`）：这是同一件事
-        # 的第二个消费点，不许在这里另定一套"什么叫没消化"（FC-03）。
+        # 的第二个消费点，不许在这里另定一套"什么叫没消化"。
         unprocessed = [r for r in rows
                        if not r.get("processed")]
         return len(unprocessed), {
