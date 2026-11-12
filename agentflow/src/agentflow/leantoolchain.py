@@ -682,11 +682,12 @@ def _mathlib_default_candidates(root: str | Path | None) -> list[str]:
                 # 读不了目录这件事在这里不是缺陷（候选表本来就是"有就多一条"）。
                 pass
             for path in paths:
-                key = os.path.normcase(str(path))
+                path_text = str(path)
+                key = os.path.normcase(path_text)
                 if key in seen:
                     continue
                 seen.add(key)
-                out.append(str(path))
+                out.append(path_text)
     return out
 
 
@@ -888,15 +889,17 @@ def mathlib_command(reading: Mapping[str, Any], lean_exe: str,
                 "cwd": root, "env_overlay": {},
                 "why": f"用 `lake env lean`（cwd = 工程根 {root}）"}
     if root and segments:
+        # 这两处用的是同一份切分结果（拼 LEAN_PATH 与报"几段"）。
+        segment_list = segments.split(os.pathsep)
         have = [s for s in str(os.environ.get("LEAN_PATH") or "").split(os.pathsep) if s]
         merged: list[str] = []
-        for seg in segments.split(os.pathsep) + have:
+        for seg in segment_list + have:
             if seg and seg not in merged:
                 merged.append(seg)
         return {"runner": "lean_path", "argv": [exe, path], "cwd": str(workdir),
                 "env_overlay": {"LEAN_PATH": os.pathsep.join(merged)},
                 "why": (f"没有与 {exe} 同目录的 lake ⇒ 显式给 LEAN_PATH"
-                        f"（{len([s for s in segments.split(os.pathsep) if s])} 段）")}
+                        f"（{len([s for s in segment_list if s])} 段）")}
     if root:
         return {"runner": "bare", "argv": [exe, path], "cwd": str(workdir),
                 "env_overlay": {},
@@ -1291,12 +1294,13 @@ def formal_evidence_state(reading: Mapping[str, Any] | None) -> tuple[str, str]:
     `reading` 读不出来（`None` 或者形状不对）同样给 `unknown`：读数缺失不是通过。
     """
     state = ""
-    if isinstance(reading, Mapping):
+    is_mapping = isinstance(reading, Mapping)
+    if is_mapping:
         state = str(reading.get("state") or "")
     if state == "usable":
         return "verified", ""
     problems = []
-    if isinstance(reading, Mapping):
+    if is_mapping:
         problems = [str(p) for p in (reading.get("problems") or [])]
     blocking = [p for p in problems if not p.startswith(HYGIENE_PREFIX)]
     if blocking:
