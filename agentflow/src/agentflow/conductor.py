@@ -2544,24 +2544,28 @@ def _business_refusal_code(exc: BaseException) -> str | None:
 def _occupies_fanout_slot(row: Mapping[str, Any]) -> bool:
     """这条子行算不算"曾经受理过的派活"（审计面读数）。
 
-    ## 它今天不判上限了（所有者 2026-10-08 裁定）：扇出上限的口径已改成"此刻在飞的子代理数"
-    （`_in_flight_children_of`：`status ∈ {pending, running}`；子代理返回即腾位）。这个函数保留下来只为
-    `_admitted_children_of` 那份累计读数（"这一趟总共派出去过几件"），不再参与策略判定。
-    ## 口径：受理数，不是尝试数：闸门拒掉的召唤也落台账（`_refuse`：谁试过什么必须留痕），但它根本没跑，所以不
-    计入"曾经受理过"。真机读数（工作区 `agentflow/projects/p9-post-merge-probe` 的台账，2026-10-07）：顶趟行
-    `t-0001` 名下 10 个子行，末 5 条（`t-0007`…`t-0011`）全是 `refused/fanout_exceeded`，detail 里的读数从"已派生
-    5 个"一路涨到"已派生 9 个"（那就是自我毒化的机器形态）。
-    ## 判据为什么是"受理标记"而不是"拒绝理由"，也不是"结算标记"：拒绝理由是受控词表
-    （`schema.REFUSAL_REASONS`），闸门与角色共用它：角色跑完之后自己拒绝也落 `invalid_params`（真机 `t-0006`，
-    `_business_refusal_code` 把领域错误映到这个词上）—— 按理由过滤会把"跑过又拒了"误判成"没跑"。区分二者的是
-    这条事实：只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`，而闸门拒绝在写 running 行之前就
-    返回了。所以：`outcome == "refused"` 且行上没有受理标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；其余一切
-    （`running` / `ok` / `failed` / `cancelled`、以及跑过又拒的）⇒ 占名额（有负控咬着：
-    `tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
-    为什么不继续用 `_SETTLED_MARK`（题 21 选 B 改的就是这一处）：那是"事后"的记账写回打的标记，而记账能炸、炸了
-    之后那一行就缺标记 ⇒ "跑了又拒"被当成"没跑" ⇒ 扇出少算。受理标记在受理那一刻就落盘，与后续收尾的成败无关。
-    判据见 `tests/test_fanout_admission.py::test_a_failed_charge_writeback_still_occupies_the_slot`。老行（本题
-    之前落盘的）没有受理标记：它们退回读 `_SETTLED_MARK` —— 历史台账里"跑过又拒"的行仍然算占名额。
+    ## 它不判上限
+    扇出上限的口径是"此刻在飞的子代理数"（`_in_flight_children_of`）；这个函数只为
+    `_admitted_children_of` 那份累计读数提供一格（"这一趟总共派出去过几件"），
+    不参与策略判定。
+
+    ## 口径：受理数，不是尝试数
+    闸门拒掉的召唤也落台账（`_refuse`：谁试过什么必须留痕），但它根本没跑，所以不计入
+    "曾经受理过"：把这些行算进来，读数会随拒绝次数自我毒化。
+
+    ## 判据为什么是"受理标记"，而不是"拒绝理由"、也不是"结算标记"
+    拒绝理由是受控词表（`schema.REFUSAL_REASONS`），闸门与角色共用它：角色跑完之后
+    自己拒绝也落 `invalid_params` —— 按理由过滤会把"跑过又拒了"误判成"没跑"。区分二者
+    的是这条事实：只有走完第 [5] 步（写 `running` 行）的召唤才带 `_ADMITTED_MARK`，
+    而闸门拒绝在写 running 行之前就返回了。所以：`outcome == "refused"` 且行上没有受理
+    标记 ⇒ 闸门拒掉、根本没跑 ⇒ 不占名额；其余一切（`running` / `ok` / `failed` /
+    `cancelled`、以及跑过又拒的）⇒ 占名额
+    （负控：`tests/test_fanout_admission.py::test_ran_and_failed_child_still_counts`）。
+
+    不用 `_SETTLED_MARK` 当主判据：那是事后的记账写回打的标记，记账一炸那一行就缺标记
+    ⇒ "跑了又拒"被当成"没跑" ⇒ 扇出少算；受理标记在受理那一刻就落盘，与收尾成败无关
+    （负控：`test_a_failed_charge_writeback_still_occupies_the_slot`）。没有受理标记的
+    行（旧工作区落盘的）退回读 `_SETTLED_MARK` —— 历史台账里"跑过又拒"仍然算占名额。
     """
     if row.get("outcome") != "refused":
         return True
@@ -2838,14 +2842,16 @@ class Conductor:
     def _children_of(self, task_id: str) -> list[str]:
         """`task_id` 名下子代理的编号（展示面 / 审计面：谁试过什么都要看得见）。
 
-        ## 为什么必须排除板项（`kind` 非空）—— 2026-10-08 深夜 S1d 审计出来的：`tasks` 从业主 A1=甲 起装两类行：
-        实例行（`kind == ""`）与工作项行（`kind` 非空）。板项那一行的 `parent_task_id` 口径是"收件人的编号"
-        （`draft/84` §T21 附二 / D89），于是一条"某子代理已收工"的 `notice` 挂在父名下、一条"派给你的活"的
-        `delegation` 挂在子名下。按 `parent_task_id` 数行而不看出身，会把这两种东西算成"子代理"：交付面
-        （`SummonResult.children` 与提示词里的 `{{children}}`，业主 T21 附）会把工作项当成子代理报给模型；实测
-        （`temp/_probe_board_vs_fanout_and_dispose.py`）：父名下挂 20 条 `notice` 之后，`_in_flight_children_of(父)`
-        读数就是 20。修法就是把两轴分开：本方法只数代理（实例行），工作项那一边的唯一读数是 `open_items_of(task_id)`
-        （"某条边名下未消的项"）。两者一起才是 `draft/84` §T2 的消边谓词（实例轴 + 工作项轴），不是互相代替。
+        ## 为什么必须排除板项（`kind` 非空）
+        `tasks` 装两类行：实例行（`kind == ""`）与工作项行（`kind` 非空）。板项那一行的
+        `parent_task_id` 口径是"收件人的编号"，于是一条"某子代理已收工"的 `notice` 挂在
+        父名下、一条"派给你的活"的 `delegation` 挂在子名下。按 `parent_task_id` 数行而
+        不看出身，会把这两种东西算成"子代理"：交付面（`SummonResult.children` 与提示词里
+        的 `{{children}}`）会把工作项当成子代理报给模型；`_in_flight_children_of(父)` 也会
+        被 20 条 `notice` 读成 20 个在飞的子。
+        修法就是把两轴分开：本方法只数代理（实例行），工作项那一边的唯一读数是
+        `open_items_of(task_id)`（"某条边名下未消的项"）。两者一起才是消边谓词
+        （实例轴 + 工作项轴），不是互相代替。
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id and self._is_instance_row(r)]
@@ -2854,17 +2860,19 @@ class Conductor:
         """`task_id` 受理过的子召唤（累计读数；审计面用，不再是扇出判据）。
 
         ## 与 `_children_of` / `_in_flight_children_of` 的分工（刻意三个口径）：
-        - `_children_of` 数"台账里有几行子行"：展示面/审计面用，含被闸门拒掉的尝试（`SummonResult.children` 由它填）；
-        - `_admitted_children_of` 数"累计真的派出去过几件"：审计面（"这一趟用了多少派活额度"），不再当判据 ——
-          所有者 2026-10-08 把扇出口径改成单时刻的（见 `_in_flight_children_of`）；
+        - `_children_of` 数"台账里有几行子行"：展示面/审计面用，含被闸门拒掉的尝试
+          （`SummonResult.children` 由它填）；
+        - `_admitted_children_of` 数"累计真的派出去过几件"：审计面（"这一趟用了多少派活
+          额度"），不再当判据 —— 扇出口径是单时刻的（见 `_in_flight_children_of`）；
         - `_in_flight_children_of` 数"此刻还没返回的子代理"：扇出判据的分子。
-        为什么不就地改 `_children_of`：它不只服务扇出（`summon` 末尾的 `res.children` 也用它），把它的口径改窄等于顺手
-        改坏展示面 —— 那一改没有任何地方会报错，只会让"谁试过什么"从台账视图里静默消失。判据见
-        `tests/test_fanout_admission.py::test_display_face_still_lists_attempts`。占不占名额的判据在
-        `_occupies_fanout_slot`（含真机读数与"为什么不是按拒绝理由过滤"）。
-        出身过滤（2026-10-08 深夜 S1e）：`tasks` 从业主 A1=甲 起装两类行，本方法只数代理行（`kind == ""`）—— 板项行
-        （`kind` 非空）的 `parent_task_id` 口径是"收件人的编号"，把它们算进"派出去过几件"是两轴混算（实测：父名下
-        20 条 `notice` ⇒ 这条读数 20，而一个代理都没有）。
+        为什么不就地改 `_children_of`：它不只服务扇出（`summon` 末尾的 `res.children`
+        也用它），把它的口径改窄等于顺手改坏展示面 —— 那一改没有任何地方会报错，只会让
+        "谁试过什么"从台账视图里静默消失。判据见
+        `tests/test_fanout_admission.py::test_display_face_still_lists_attempts`。
+        占不占名额的判据在 `_occupies_fanout_slot`（含"为什么不是按拒绝理由过滤"）。
+        出身过滤：本方法只数代理行（`kind == ""`）—— 板项行的 `parent_task_id` 口径是
+        "收件人的编号"，把它们算进"派出去过几件"是两轴混算（20 条 `notice` 就会读成
+        20，而一个代理都没有）。
         """
         return [str(r["task_id"]) for r in self._tasks()
                 if r.get("parent_task_id") == task_id
@@ -2874,30 +2882,29 @@ class Conductor:
     def _in_flight_children_of(self, task_id: str) -> list[str]:
         """`task_id` 派出去、此刻还没返回的子代理（= 扇出判据的分子）。
 
-        ## 口径（所有者 2026-10-08 逐字裁定）：「我认为的"派活上限"不是累计的，是单时刻的，即 M 同时派出在后台运行
-        的子代理数不超过 20，各角色智能体允许同时向其它智能体派活数不超过 5，智能体返回后腾出空间。」
-        所以分子 = 子行里 `status ∈ {"pending", "running"}` 的那些；子代理一返回（`done` / `failed` / `cancelled` ——
-        三者都带 `ended_at`，互相不覆盖）就腾出名额，与它返回得好不好无关（`schema.TASK_STATUSES` 是状态词表的唯一
-        来源）。闸门拒掉的召唤根本没跑、连 `running` 行都没有（`_refuse` 只落一行 `outcome="refused"` 的终态行）⇒
-        天然不计 —— 上一版那条"不受自我毒化"的防线在这一版里是自然成立的，不需要额外规则。
-        真机代价（累计口径）：T1 第 18/19 趟（`t1r` / `t1s`）在第 51–88 步就用完了 20 个累计名额，此后
-        `G.build_document` 与修好的 Lean 重派全部进不去 —— `documents` 0 行、P8/P9 两行红。一趟 78–138 步的研究型跑批
-        只许派 20 次活，是结构性不够；而"同时在飞 20 个"在同一份 `Policy` 里被 `max_concurrency` 另管着。
-        ## 只数代理行（2026-10-08 深夜 S1e，业主 T22 的"两轴分开"）：分子多一个出身过滤 `kind == ""`（代理行）：
-        - 板项行由 `open_item` 建，`status="pending"`，而板的状态机（`_set_item`）只改 `item_state`、从不改 `status`
-          ⇒ 一条已 ack 的板项永远是"在飞的子代理"；
-        - 实测（`temp/_probe_board_vs_fanout_and_dispose.py`、`..._refusal_reason.py`）：父名下挂 20 条"子代理已收工"
-          的 `notice`（零代理）⇒ 本读数 = 20 ⇒ 同一父下派活被拒 `fanout_exceeded`（detail 逐字「此刻在飞 20 个子
-          代理，达到发起方 M 的同时在飞上限 20」）；不挂板项时同一个调用走到执行（`not_wired`）。
-        工作项那一边归 `open_items_of(task_id)`（纯读数，不参与任何判定）。判据：
-        `tests/test_board_does_not_eat_the_fanout_quota.py`。
-        ## 判据只有一处（2026-10-26 Q27）
-        上面那两条过滤（`kind` 与"`status` 在活档"）改前是本方法自己写的，现在整条交给
-        `secretary.is_live_agent`（轴 + 活不活拆开之后的那个读侧，2026-10-26 Q27）。
-        为什么换名是等价的、而不是"看起来等价"：`is_live_agent` 比这里旧判据多排一类
-        （`action == "run"` 且没有父的顶趟行），而本方法的每一行都已经被
-        `parent_task_id == task_id` 过滤 ⇒ 那一类要求父为空 ⇒ 两个集合结构上不相交。
-        判据：`tests/test_the_axis_and_liveness_are_asked_separately.py` 的 c 与 e 两条
+        ## 口径：单时刻，不是累计
+        「派活上限不是累计的，是单时刻的，即 M 同时派出在后台运行的子代理数不超过 20，
+        各角色智能体允许同时向其它智能体派活数不超过 5，智能体返回后腾出空间。」
+        分子 = 子行里 `status ∈ {"pending", "running"}` 的那些；子代理一返回（`done` /
+        `failed` / `cancelled` —— 三者都带 `ended_at`，互相不覆盖）就腾出名额，与它
+        返回得好不好无关（`schema.TASK_STATUSES` 是状态词表的唯一来源）。闸门拒掉的召唤
+        根本没跑、连 `running` 行都没有（`_refuse` 只落一行 `outcome="refused"` 的终态
+        行）⇒ 天然不计。按累计算则一趟几十上百步的研究型跑批会在前几十步用完名额，此后
+        重派全部进不去；而"同时在飞 20 个"在同一份 `Policy` 里由 `max_concurrency` 另管。
+
+        ## 只数代理行（两轴分开）：分子多一个出身过滤 `kind == ""`
+        板项行由 `open_item` 建、`status="pending"`，而板的状态机（`_set_item`）只改
+        `item_state`、从不改 `status` ⇒ 一条已 ack 的板项永远像"在飞的子代理"；父名下挂
+        20 条"子代理已收工"的 `notice`（零代理）就会把本读数读成 20 ⇒ 同一父下派活被拒
+        `fanout_exceeded`。工作项那一边归 `open_items_of(task_id)`（纯读数，不参与任何
+        判定）。判据：`tests/test_board_does_not_eat_the_fanout_quota.py`。
+
+        ## 判据只有一处
+        上面那两条过滤（`kind` 与"`status` 在活档"）不在这里自己写，整条交给
+        `secretary.is_live_agent`。它比这里旧的判据多排一类（`action == "run"` 且没有父的
+        顶趟行），而本方法的每一行都已经被 `parent_task_id == task_id` 过滤 ⇒ 那一类要求
+        父为空 ⇒ 两个集合结构上不相交。判据：
+        `tests/test_the_axis_and_liveness_are_asked_separately.py` 的 c 与 e 两条
         （同夹具对拍 + 把 row_axis 打桩成"status 恒活"之后必须变红）。
         """
         from .secretary import is_live_agent      # 惰性：与本模块其余几处引用秘书同姿态
@@ -2911,16 +2918,16 @@ class Conductor:
 
         ## 它为什么必须有（而不是让拒绝报文只说"满了"）
         触顶那一刻，父手上其实有两类名额：被"还在干活 / 还在等"的子代理占住的那些
-        （只能等），与被"已经交差、但那一行还没落终态"的子代理占住的那些 —— 后者
-        业主 2026-10-27 第四条已经记为静默，父的下一步就是销号它（`conductor.retire_child`），
-        销完名额立刻回来。拒信不点名这一档，父就只能干等一个永远不会返回的子代理。
+        （只能等），与被"已经交差、但那一行还没落终态"的子代理占住的那些 —— 后者按
+        三态已经是静默，父的下一步就是销号它（`conductor.retire_child`），销完名额立刻
+        回来。拒信不点名这一档，父就只能干等一个永远不会返回的子代理。
 
         ## 口径只有一处
         占位 = `_in_flight_children_of(parent_task_id)`（`status ∈ {pending, running}` 的
-        代理行；2026-10-08 裁定的单时刻口径，与 `policy` 判据用的是同一个数）；
+        代理行，单时刻口径，与 `policy` 判据用的是同一个数）；
         每一格的三态 = `activity_snapshot()`（`agent_state` 的唯一实现，与销号门同一份），
-        所以这里读出来的"静默"就是销号门认的那一个"静默"。两处口径分家过一次，代价
-        具体：拒信说"静默子可销"，父去销又吃到 `target_not_silent`。
+        所以这里读出来的"静默"就是销号门认的那一个"静默"。两处口径不许分家：一旦分家，
+        拒信说"静默子可销"，父去销又吃到 `target_not_silent`。
 
         ## 返回
         `{"checked", "count", "seats", "silent", "flying", "standby", "unknown", "reason"}`：
