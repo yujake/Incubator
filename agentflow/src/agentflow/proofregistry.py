@@ -240,9 +240,21 @@ def _replace_section(text: str, name: str, body: str) -> tuple[str, bool]:
 
 # ---------------------------------------------------------------- 头部元信息（解析 / 改写）
 
+def _head_of(text: Any) -> str:
+    """手稿头部（第一个框架节之前那些行；没有节 ⇒ 整份）。
+
+    与 :func:`split_sections` 同一份切节口径，只是不构造各节正文：只要头部的两处
+    （:func:`parse_entry` / :func:`_head_for_new_version`）不必为一小段头部把整份稿
+    切成一节一节、再把每一节 join 回来。
+    """
+    lines = str(text or "").replace("\r\n", "\n").split("\n")
+    starts = _section_start_indices(lines)
+    return "\n".join(lines if not starts else lines[: starts[0]])
+
+
 def parse_entry(text: Any) -> dict[str, Any]:
     """读手稿头的登记元信息（纯读；读不出来给空串，不猜）。"""
-    head, _sections = split_sections(text)
+    head = _head_of(text)
     out: dict[str, Any] = {
         "statement_id": "", "plan_id": "", "sid": "", "label": "", "proof_no": 0,
         "sha256": "", "fingerprint": "", "kind": "", "registered_at": "",
@@ -534,7 +546,7 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
     "未落号的登记条目"，D 的携带单于是把同一份稿再列一遍（`mss:<号>` 与 `stmt:<号>`
     两行、路径与 sha 相同），按号核对的那一侧找不到它。号已经拿到 ⇒ 这一行必须写它。
     """
-    head_now = split_sections(text)[0]
+    head_now = _head_of(text)
     head_new = _rewrite_head(head_now, {
         SHA_MARK: new_sha, FINGERPRINT_MARK: new_fp,
         _MF.LABEL_MARK: str(label or ""),
