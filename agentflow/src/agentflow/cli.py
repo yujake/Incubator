@@ -2475,21 +2475,24 @@ def cmd_artifacts(args) -> int:
     records, bad = A.read_ledger(root)
     checks = A.verify_entries(root, records)
     counts: dict[str, int] = {}
-    for c in checks:
-        counts[c["status"]] = counts.get(c["status"], 0) + 1
     bad_statuses = ("changed", "missing", "unreadable", "not_a_file")
+    bad_rows: list[dict] = []
+    for c in checks:
+        status = c["status"]
+        counts[status] = counts.get(status, 0) + 1
+        if status in bad_statuses:
+            bad_rows.append(c)
     if not records and not bad:
         print(tty.bullet("台账里一条记录都没有 —— **没查成**，不是'都对得上'"
                          "（先 `artifacts record` 登记，别把空台账读成绿灯）"))
         return 2
-    for c in checks:
-        if c["status"] in bad_statuses:
-            print(tty.bullet(f"{c['status']}：{c['path']}"
-                             f"（台账 {c['sha256'][:16] or '—'} / 盘上 {c['sha256_now'][:16] or '—'}）"))
+    for c in bad_rows:
+        print(tty.bullet(f"{c['status']}：{c['path']}"
+                         f"（台账 {c['sha256'][:16] or '—'} / 盘上 {c['sha256_now'][:16] or '—'}）"))
     for b in bad:
         print(tty.bullet(f"台账坏行：{b}"))
     print(tty.bullet(f"核对 {len(checks)} 条：{counts}；坏行 {len(bad)}"))
-    if bad or any(counts.get(s) for s in bad_statuses):
+    if bad or bad_rows:
         return 1
     return 0
 
