@@ -5049,13 +5049,9 @@ def _human_span(seconds: float | None) -> str:
 def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     """I1 的收工读数：既没有 V 签、也没有被明确放弃的非概念命题（逐条点名）。
 
-    业主 2026-11-01 逐字裁定：
-
-    > 「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者放弃原命题」
-
-    所以"已登记的命题"只许落在两处：「有 V 签」，或「被明确放弃（带理由与时间）」。
-    这一格就是"第三种状态"的机器读数 —— 它必须能数得出来、点得出名，否则那句话在盘上
-    没有载体（81/82 两趟真机的形态：打回之后没有任何读数说"这一条还欠一个签"）。
+    判据是「已登记的命题只许落在两处」：有 V 签，或被明确放弃（带理由与时间）。
+    这一格就是"第三种状态"的机器读数 —— 它必须能数得出来、点得出名，否则那条判据在盘上
+    没有载体：一条打回之后既没签也没放弃的命题，没有任何读数说"这一条还欠一个签"。
 
     ## 口径（三个判据都从既有唯一实现取，不写第二份）
 
@@ -5063,7 +5059,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
       （`evidencebits.derive_grade` 对它短路成 `not_applicable`），也没有可签的证明 ——
       既有读数对概念一律短路（`verifications.statement_review_reading` 的概念分支、
       `agent_loop.v_rejections_digest` 的 `continue`），这一格与它们同口径。
-    - 有签：逐条证明读 `vsigns.sign_reading`（D268 批 2 起唯一判据）：
+    - 有签：逐条证明读 `vsigns.sign_reading`（唯一判据）：
       `state=="signed"` 才算已将签（且册里 `filed=False` 时归 `signed_pending_filing`，
       不计欠签）；`holding` 是 1..need-1 票 ⇒ 欠签（`awaiting_streak`），不再当已签。
     - 明确放弃：`status == "abandoned"` 且 `quote_reason` 是一条可解析的
@@ -5082,7 +5078,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     | `borrowed` | 凭据是别条命题的（借光）⇒ 不算签 |
     | `stale` | 签过，但签的是旧版正文（正文在那之后改过，需重签） |
     | `unissued` | 够票（≥need）却没有签文件（签发那一步没写盘） |
-    | `awaiting_report` | 停因程序性/文风 ⇒ 同一份正文原样再送、不用改稿（D3） |
+    | `awaiting_report` | 停因程序性/文风 ⇒ 同一份正文原样再送、不用改稿 |
     | `awaiting_streak` | 1..need-1 票、停在 clean 上 ⇒ 欠签（不是"没审过"） |
     | `signed_pending_filing` | 凭据复算通过、而册里还没收录（等 B；不计欠签） |
     | `judgment_missing` | 判了「成立」而秘书那一问没判成（这一签不发，等判定接上之后重签） |
@@ -5093,8 +5089,8 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     排在最前：它有人被要求改，其余几档还在等一个动作）。
 
     `signed_pending_filing` 不进 `rows` / `count`（它不是欠签、不阻塞收工门），
-    单列在 `pending_filing` / `pending_filing_count`，并在 `reason` 里点名。
-    这是 2026-11-08「V 只对手稿负责」之后的新中间态：V 签在稿上、B 还没收录。
+    单列在 `pending_filing` / `pending_filing_count`，并在 `reason` 里点名 ——
+    那是「V 签在稿上、B 还没收录」的中间态（V 只对手稿负责）。
 
     ## 每一行给的读数
 
@@ -5131,8 +5127,8 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         out["problems"].append(f"outbox 读不出来（{type(exc).__name__}: {exc}）"
                                "⇒ 负责人那一格没查成（记 unknown）")
     #: 一条命题有多份证明时取最重的那一档（表见 docstring）。
-    #: 2026-11-08：`signed_pending_filing` 排在 `stale` 之后 —— 它是"稿上签了、
-    #: 册里还没收录"的新中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
+    #: `signed_pending_filing` 排在 `stale` 之后 —— 它是"稿上签了、册里还没收录"
+    #: 的中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
     rank = {"fault_unrepaired": 0, "abandoned_without_reason": 1,
             "unbacked": 2, "borrowed": 3, "stale": 4, "unissued": 5,
             "awaiting_report": 6, "awaiting_streak": 7,
@@ -5163,12 +5159,10 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                            rank: Mapping[str, int],
                            pending_rows: list[dict[str, Any]],
                            store: Any = None) -> None:
-    """逐条判「既无 V 签也未放弃」（`statements_unsigned_reading` 的内层，只搬移）。
+    """逐条判「既无 V 签也未放弃」（`statements_unsigned_reading` 的内层）。
 
-    2026-11-08 从 `statements_unsigned_reading` 拆出：那 110 行循环是同一件事（逐条读
-    证明清单 / 台账 / 稿上的签，判它属于哪一档），拆出来之后外层回到 100 行上下 ——
-    体量基线是读数，不许为了它抬（业主口径：拆函数，不抬基线）。读数经 `out` 与
-    `pending_rows` 带出，不开新返回值。
+    一条命题的多份证明各读一遍（证明清单 / 台账 / 稿上的签），按 `rank` 取最重的一档。
+    读数经 `out` 与 `pending_rows` 带出，不开新返回值。
     """
     from . import statementabandon as _SA
     from . import verifications as _VR
