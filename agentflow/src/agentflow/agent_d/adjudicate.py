@@ -163,13 +163,17 @@ class _Adjudicate:
             ]
 
             # ---- (1) new_contradiction：为新的矛盾对新建问题（同一事务）
+            # 事务里的表只读一次，新建的行手工挂进这份清单：改前每处理一对新矛盾
+            # 都重读一次 `research_questions` 全表（new_pairs 有几对就读几次）。
+            q_rows = list(tx.rows("research_questions"))
+            scope_by_id = {str(r.get("relation_id")): r for r in scope}
             for pair in new_pairs:
                 pair_ids = sorted({str(x) for x in pair})
                 if len(pair_ids) != 2:
                     continue
                 cids: list[str] = []
                 for rid in pair_ids:
-                    row_rel = next((r for r in scope if str(r.get("relation_id")) == rid), None)
+                    row_rel = scope_by_id.get(rid)
                     if row_rel:
                         cids.extend(str(x) for x in (row_rel.get("concept_ids") or []) if x)
                 cids = sorted(set(cids))
@@ -182,7 +186,7 @@ class _Adjudicate:
                 same = next(
                     (
                         r
-                        for r in tx.rows("research_questions")
+                        for r in q_rows
                         if str(r.get("kind")) == "contradiction"
                         and sorted(str(x) for x in (r.get("contradiction_relation_ids") or [])) == pair_ids
                     ),
@@ -240,6 +244,7 @@ class _Adjudicate:
                 )
                 new_row.validate()
                 tx.upsert("research_questions", new_row.to_dict(), note=f"adjudicate_new:{qid}")
+                q_rows.append(new_row.to_dict())
                 result["new_question_ids"].append(nq)
                 notes.append(f"新矛盾对 {'+'.join(pair_ids)} ⇒ 新建矛盾问题 {nq}（priority=high）")
 
