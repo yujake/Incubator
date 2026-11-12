@@ -12,9 +12,9 @@
 
 ## 判据四条
 
-1. `specs/b.py` 的非注释源码里零命中 `(?<!非)平凡`；注释里允许命中，但只认同时提到
-   「业主」「裁定」的历史留痕注释（引用裁定原文那一行），其余注释命中照样红 ——
-   否则"注释豁免"会变成藏措辞的后门；
+1. `specs/b.py` 里零命中 `(?<!非)平凡` —— 源码与注释一律算。2026-11-12 起
+   不再有"历史留痕注释"豁免：E4 清扫已按设计把那些裁定引语删掉，整份文件现在是
+   零命中；再留一条豁免就是一条没有对象的暗门（"注释里藏措辞"不再有任何放行通道）；
 2. B 的职责声明（`agent_prompts.ROLE_BRIEFS["B"]` 的 duty / boundary / policy /
    signature_error / deliverable / stance）里零命中；
 3. 负控（不许把档位口径一起删掉）：`T0`、`T4`、`T0–T4`、`非平凡性档位`、`未判`
@@ -51,9 +51,6 @@ _B_SPEC = _REPO / "src" / "agentflow" / "specs" / "b.py"
 #: "太平凡 / 平凡"；"非平凡"不算（那是档位轴的正式名字）。
 TRIVIAL_WORDING = re.compile(r"(?<!非)平凡")
 
-#: 历史留痕注释的标记（两条同时出现才算引用裁定原文）。
-HISTORY_MARKS = ("业主", "裁定")
-
 #: B 的声明的六个字段（顺序同 `AgentBrief`）。
 _BRIEF_FIELDS = ("duty", "boundary", "policy", "signature_error", "deliverable", "stance")
 
@@ -83,22 +80,13 @@ def _brief_hits(brief: object | None = None) -> list[tuple[str, str]]:
             if TRIVIAL_WORDING.search(text)]
 
 
-def _source_scan(path: pathlib.Path) -> tuple[list[str], list[str]]:
-    """扫一个源码文件：返回 (非注释命中, 历史留痕注释命中)。"""
+def _source_scan(path: pathlib.Path) -> list[str]:
+    """扫一个源码文件：返回命中（注释与源码一律算）。空表 = 干净。"""
     bad: list[str] = []
-    history: list[str] = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-        if not TRIVIAL_WORDING.search(line):
-            continue
-        stripped = line.lstrip()
-        if stripped.startswith("#"):
-            if all(mark in line for mark in HISTORY_MARKS):
-                history.append(f"{number}:{stripped}")
-            else:
-                bad.append(f"{number}:{stripped}")
-        else:
-            bad.append(f"{number}:{stripped}")
-    return bad, history
+        if TRIVIAL_WORDING.search(line):
+            bad.append(f"{number}:{line.lstrip()}")
+    return bad
 
 
 def _full_prompt() -> str:
@@ -116,39 +104,41 @@ def b_prompt() -> str:
 # ---------------------------------------------------------------- ① 源码
 
 
-def test_b_source_has_no_trivial_wording_outside_history_comments() -> None:
-    """① 非注释源码零命中；有命中的注释必须是引用业主裁定的历史留痕。
+def test_b_source_has_no_trivial_wording_at_all() -> None:
+    """① `specs/b.py` 零命中（源码与注释一律算）。
 
     若这条破了：B 的政策里还挂着"判太平凡就降为 T0"这类说法，读的人会以为
     还有一道"收不收"的关 —— 而行为侧早已改成"判哪一档"。
+
+    2026-11-12：同文件里原先"注释可以是引用业主裁定的历史留痕"那一档撤掉。
+    它要求的那几行已被 E4 清扫按设计删掉（"历史篇数/引语不留在源码里"是现在的口径），
+    而它守的意图（有人把旧措辞塞进注释 ⇒ 当场红）由本用例自己 + 下面两条注入口
+    负控继续守，且现在注释不再有放行通道 —— 判据比原来更严，不是更松。
     """
-    bad, history = _source_scan(_B_SPEC)
+    bad = _source_scan(_B_SPEC)
     assert bad == [], (
-        "`specs/b.py` 的非注释源码里还有 '太平凡/平凡' 这套措辞（应当只用 T0–T4 ＋「未判」）：\n  "
+        "`specs/b.py`（含注释）里还有 '太平凡/平凡' 这套措辞（应当只用 T0–T4 ＋「未判」）：\n  "
         + "\n  ".join(bad))
-    # 反真空的另一半：豁免的那几行必须真的存在（否则"历史注释"这一档没被走到，
-    # 这条判据就退化成"全文件零命中"，下一次有人删掉裁定留痕也没人知道）。
-    assert history, "`specs/b.py` 里一条历史留痕注释都没有 ⇒ 这一档豁免没有被走到"
 
 
 def test_a_trivial_wording_smuggled_into_a_comment_is_red(tmp_path: pathlib.Path) -> None:
-    """①的反真空：往注释里塞回措辞（不带裁定留痕）⇒ 必须红；塞进字符串 ⇒ 也必须红。
+    """①的反真空：往注释里塞回措辞 ⇒ 必须红；塞进字符串 ⇒ 也必须红。
 
-    若这条破了：`_source_scan` 豁免了整个注释面，"藏进注释"就成了后门。
+    若这条破了：`_source_scan` 漏扫了注释或字符串面，"藏进注释"就成了后门。
     """
     lines = _B_SPEC.read_text(encoding="utf-8").splitlines()
     comment_variant = tmp_path / "b_comment.py"
     comment_variant.write_text(
         "\n".join(lines[:290] + ["            # 这里塞回一句：太平凡的命题不许收。"] + lines[290:]),
         encoding="utf-8")
-    bare_comment, _history = _source_scan(comment_variant)
-    assert bare_comment, "不带裁定留痕的注释里塞回措辞，扫描却绿了 ⇒ 注释豁免是个后门"
+    bare_comment = _source_scan(comment_variant)
+    assert bare_comment, "注释里塞回措辞，扫描却绿了 ⇒ 注释面漏扫，是个后门"
 
     string_variant = tmp_path / "b_string.py"
     string_variant.write_text(
         "\n".join(lines[:290] + ['            "这里塞回一句：太平凡的命题不许收。",'] + lines[290:]),
         encoding="utf-8")
-    bad_string, _ = _source_scan(string_variant)
+    bad_string = _source_scan(string_variant)
     assert bad_string, "往源码字符串里塞回措辞，扫描却绿了 ⇒ 这条判据没有牙"
 
 
