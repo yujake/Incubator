@@ -241,7 +241,8 @@ def _parse_dependency_table(body: Sequence[tuple[int, str]]) -> tuple[list[dict[
     problems: list[dict[str, Any]] = []
     if not table:
         problems.append({"line": int(body[0][0]) if body else 0,
-                         "why": "这一节下面没有表格：要给一张四列的表"})
+                         "why": ("这一节下面没有表格：要给一张三列的表"
+                                 "（引用 / 命题号 / 用在哪一步；路径号不进稿）")})
         return [], problems
     header_line, header_raw = table[0]
     header_cells = _cells_of(header_raw)

@@ -2828,14 +2828,14 @@ class AgentV:
         if not section.get("present"):
             return {"failed": True, "kind": "dependency_section_missing",
                     "reason": "dependency_section_missing",
-                    "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（四列表）⇒ 不审、不落签："
+                    "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（三列表）⇒ 不审、不落签："
                                "依赖面只能从稿的这一节读；没有引用任何在册命题也要写一张"
                                "空表（表头在、0 行）—— 空表是声明，缺节不是")}
         if str(section.get("refused") or "").strip():
             return {"failed": True, "kind": "dependency_section_unreadable",
                     "reason": "dependency_section_unreadable",
                     "detail": (f"`{rel}` 的 `## 依赖` 段不合格（{section.get('refused')}）⇒ "
-                               "不审、不落签：按四列表头重写那一节再来")}
+                               "不审、不落签：按三列表头（引用 / 命题号 / 用在哪一步）重写那一节再来")}
         # 2026-11-09（亲自跑通道时发现）：`body` 是"稿里那一节去首尾空行"的形态，
         # 而调用方给的 `proof_text` 往往带着自己那一份的换行习惯（照 `manuscripts.read`
         # 原样抄下来就带前后空行）。两侧用同一把尺比内容，不拿"末尾有几个换行"
@@ -2980,7 +2980,7 @@ class AgentV:
             _section = _DS.parse_dependency_section(raw_manuscript)
             if not _section.get("present"):
                 return {"failed": True, "reason": "dependency_section_missing",
-                        "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（四列表）⇒ 不审、不落签："
+                        "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（三列表）⇒ 不审、不落签："
                                    "依赖面只能从稿的这一节读；没有引用也要写一张空表"
                                    "（表头在、0 行）")}
             if str(_section.get("refused") or "").strip():
@@ -3377,7 +3377,7 @@ class AgentV:
         _section = _DS.parse_dependency_section(read.get("text") or "")
         if not _section.get("present"):
             return None, {"failed": True, "reason": "dependency_section_missing",
-                          "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（四列表）⇒ 不审、不落签："
+                          "detail": (f"`{rel}` 里没有 `## 依赖` 那一节（三列表）⇒ 不审、不落签："
                                      "依赖面只能从稿的这一节读；没有引用也要写一张空表"
                                      "（表头在、0 行）"),
                           "passes": [], "manuscript": rel}
