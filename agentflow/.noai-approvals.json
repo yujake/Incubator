@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-12T20:42:37+08:00",
+  "generated_at": "2026-11-12T22:49:05+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -110,10 +110,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "f1558f2517cbb5a391befa3e834c7bfcf1670bb00ff9bfd25b4a04f0abca6036",
+      "sha256": "dd6c2291f9ae083981a4d89cdfafe157559d768957983df8ffb7fa84c837fdf7",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "清扫（D5 路·capabilities）：只改注释与 docstring —— 把「H 能召唤 A/E/G」改成「H 的出边只有 A/E，不指向 G」，并补「G 的出边是 C/D/H」；其余六条作废口径的历史叙述删除。可执行语句、字符串常量、键名与 returns/params 未动（AST 去 docstring 后逐字相同）。authored=ai-agent/attested，reviewers=0（登记≠批准）",
+      "change_note": "（未提供变更说明：内容 hash 从 f1558f2517cb 变为 dd6c2291f9ae，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -245,10 +245,10 @@
       "path": "src/agentflow/specs/b.py",
       "glob": "src/agentflow/specs/b.py",
       "category": "auth-audit",
-      "sha256": "9dd5c862cf9be97331544ada0a1750bed704928f6a63e93eb778f942f1ff1f1a",
+      "sha256": "78df75c39d928a2eecacba8feae04f4b9bd049b142099584299d7b4066871e91",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 bf6c1117b197 变为 9dd5c862cf9b，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "（未提供变更说明：内容 hash 从 9dd5c862cf9b 变为 78df75c39d92，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
