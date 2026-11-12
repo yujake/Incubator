@@ -231,10 +231,13 @@ def pytest_argv(
     if set(files) == set(all_files):
         argv.append("tests")
         return argv
-    if sum(len(item) + 1 for item in files) > MAX_ARGV_CHARS:
+    # 命令行长度原先算两遍（判据一次、异常文案一次）；同一个数只算一次，
+    # 判据与文案读的是同一份（`sum(len(item) + 1 ...)` 是纯计算）。
+    argv_chars = sum(len(item) + 1 for item in files)
+    if argv_chars > MAX_ARGV_CHARS:
         raise ArgvTooLong(
             f"过滤后仍有 {len(files)} 个文件、命令行约 "
-            f"{sum(len(item) + 1 for item in files)} 字符 > {MAX_ARGV_CHARS}；"
+            f"{argv_chars} 字符 > {MAX_ARGV_CHARS}；"
             "请收窄 --filter，或加 --jobs 把这一路拆开"
         )
     argv.extend(files)
