@@ -556,17 +556,17 @@ def test_r2_ignoring_instead_of_replacing_turns_q_red(tmp_path, monkeypatch):
 
 
 # ================================================================== l / m / n / o 多证明
-def _proof_manuscript(store: Store, *, sid: str, proof_no: int,
+def _proof_manuscript(store: Store, *, sid: str,
                       proof_text: str, proposition: str) -> str:
     rel = f"reports/f-proof-{sid}.md"
     path = pathlib.Path(store.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# F 的证明手稿（夹具）\n\n- 命题号：stmt:{sid}\n- 证明号：{proof_no}\n"
+        f"# F 的证明手稿（夹具）\n\n- 命题号：stmt:{sid}\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         f"## 命题\n\n{proposition}\n\n## 证明\n\n{proof_text}\n\n"
-        "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-        "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
+        "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+        "|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
         encoding="utf-8")
     return rel
 
@@ -604,7 +604,7 @@ def test_l_a_second_proof_of_the_same_proposition_appends_a_proof_path(tmp_path)
     store = _store(tmp_path)
     sid = _first_proof(store)
     _sign_proof(store, sid=sid, proof_no=2, proof_text=P2)
-    rel = _proof_manuscript(store, sid=sid, proof_no=2, proof_text=P2,
+    rel = _proof_manuscript(store, sid=sid, proof_text=P2,
                             proposition=S1)
     got = _register_proof(store, Seam(keywords=["弦长函数"], found=sid), S2, rel)
     assert got.get("ok") is True, got
@@ -624,7 +624,7 @@ def test_m_resubmitting_the_same_proof_body_does_not_grow_the_list(tmp_path):
     store = _store(tmp_path)
     sid = _first_proof(store)
     _sign_proof(store, sid=sid, proof_no=2, proof_text=P2)
-    rel = _proof_manuscript(store, sid=sid, proof_no=2, proof_text=P2,
+    rel = _proof_manuscript(store, sid=sid, proof_text=P2,
                             proposition=S1)
     first = _register_proof(store, Seam(keywords=["弦长函数"], found=sid), S2, rel)
     assert first.get("ok") is True, first
@@ -714,7 +714,7 @@ def test_o_without_semantic_found_l_would_register_a_second_proposition(tmp_path
     sid = _first_proof(store)
     _sign_proof_pending(store, proof_no=2, proof_text=P2)
     # 稿名 / 稿头不能点名在册那一行：这一条测的是"摘掉语义 found 之后会新注册"。
-    rel = _proof_manuscript(store, sid="999998", proof_no=2, proof_text=P2,
+    rel = _proof_manuscript(store, sid="999998", proof_text=P2,
                             proposition=S1)
     monkeypatch.setattr(
         AgentB, "_resolve_same_statement",
