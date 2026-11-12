@@ -119,8 +119,7 @@ MODEL_ERROR_KINDS: tuple[str, ...] = (
     "network",        # DNS / 连接被拒 / 证书等 —— 没查成
     "bad_response",   # 响应不是预期的 JSON / 缺字段 / 内容为空
     #: 输出预算被思考吃光（`finish_reason=length` + 正文为空 + 思维链非空）——
-    #: 2026-10-12 第一次无 Lean T2 的真机读数：步 2 思维链 109,397 字、步 18 96,969 字，
-    #: 两条都是"一个字正文都没留下"。它不是 `bad_response`（响应是对的，只是没有正文），
+    #: 思维链上万字、两条都是"一个字正文都没留下"。它不是 `bad_response`（响应是对的，只是没有正文），
     #: 也不是"它没想"（正好相反）—— 归因不同，处置也不同（拆小这一步 / 压缩思考）。
     "output_exhausted",
     "server_error",   # 5xx —— 没查成
@@ -152,7 +151,7 @@ DEFAULT_BASE_URL = "https://api.deepseek.com/v1"
 #:
 #: ## 这次换模型为什么要在读数上留痕（不是改一个字符串）
 
-#: 本仓此前的每一趟真机读数（T1–T5、判据里的 token/usd 基线）都是在 `deepseek-chat` 上取的，
+#: 本仓早期的每一趟真机读数（T1–T5、判据里的 token/usd 基线）都是在 `deepseek-chat` 上取的，
 #: 而换模型之后两种读数不可比：同一个任务在 flash 与 chat 上的 token 数、reasoning 长度、
 #: 甚至会不会想，都可能不同。处置（施工单 §9）：
 #: ① 内置默认改成 flash（这一行）；② 旧的读数逐条标注"模型 = deepseek-chat"
@@ -216,9 +215,9 @@ def normalize_reasoning_effort(raw: Any) -> str:
 
     ## 为什么词表外的取值必须当场炸，而不是回落到缺省
 
-    真机读数（2026-10-10，`temp/_thinking_probe.py`，模型 = `deepseek-chat`）：该模型对
+    该模型对
     `reasoning_effort` 的词表外取值（试了 `medium`）不报错，照样 200、照样回
-    `reasoning_content`（101 字）。也就是说端点把"拼错一个字母"和"一个合法的更高档"
+    `reasoning_content`。也就是说端点把"拼错一个字母"和"一个合法的更高档"
     当同一件事办了 —— 客户端这边若也回落成缺省，那么
     `settings.json` 里写 `"hgih"` 的效果与写 `"high"` 逐位相同，而没有任何读数说得出
     "你那个值没人认"。这正是本项目反复登记的那一类静默缺陷形态。
@@ -403,7 +402,7 @@ class ModelSpec:
         """可安全写进日志/台账的配置快照（永不包含 key 本体）。
 
         `vendor` 是按角色配模型那一批的可见字段之一
-        （`settings.MODEL_KEYS` 里有它、面板上每个角色都有一格），而这份快照此前
+        （`settings.MODEL_KEYS` 里有它、面板上每个角色都有一格），而这份快照若
         只给 `base_url` / `model` ⇒ 机器面读不到"这个角色用的是哪一家"。
         面板那一侧的表现是：盘上写了 `models.A.vendor`，输入框却永远是空的
         （前端按 `settings.models.A.vendor` 取初值，后端不给这一格）。
@@ -429,7 +428,7 @@ def spec_for(role: str = "", *, secretary: bool = False,
              env: Mapping[str, str] | None = None) -> tuple[ModelSpec, str]:
     """按角色（或按秘书那一档）取模型配置：返回 `(spec, 来源)`。
 
-    业主 2026-10-14：「允许不同角色智能体用不同模型厂商的不同 api key
+    口径：「允许不同角色智能体用不同模型厂商的不同 api key
     （所有智能体的秘书另外共用一个 api key）」。梯子在 `settings` 里实现（唯一一处）：
 
         `models.<角色>`（或 `secretary`） → `models.default` → `model` 段 → 空串，
@@ -530,11 +529,11 @@ def spec_from_env(env: Mapping[str, str] | None = None) -> ModelSpec:
     名字里的 `from_env` 保留（调用点有十几处，改名只会制造噪声），
     但它现在读的是两档：环境变量优先，缺席时读 `settings.json` 的 `model` 段。
 
-    ## 为什么改了旧口径（2026-10-07 所有者裁定，逐字登记）
+    ## 为什么 key 不从配置文件读（旧口径已改）
 
-    改前的 docstring 逐字写着："为什么不从配置文件读：密钥一旦落盘就会进版本库与备份。
+    旧口径是一句反问："为什么不从配置文件读：密钥一旦落盘就会进版本库与备份。
     环境变量是客户环境里最容易轮换、最容易被密钥管理系统注入的形态。"
-    所有者 2026-10-07 裁定把"填 key"与"工具链在哪"合并进同一个机器级设置文件，
+    现在的口径把"填 key"与"工具链在哪"合并进同一个机器级设置文件，
     理由是「机器相关的事实只该有一个落点」，且"每次跑之前先 export 一遍"
     在实践中是最常做错的一步（做错的症状是 `no_key`，而它长得像"模型不行"）。
 
@@ -941,8 +940,7 @@ class ModelGateway:
 
         ## "从不抛异常"是怎么做到的（`G-7` 口径一）
 
-        缺陷（2026-09-26 全面体检 · 子代理 G 实测，`temp/auditG-probe1.txt` P6 段）：
-        改前这句话不成立 —— `_once` 只捕 `TimeoutError` / `ConnectionError`，
+        缺陷：这句话曾不成立 —— `_once` 只捕 `TimeoutError` / `ConnectionError`，
         传输层抛 `ValueError` / `KeyError` / `ssl.SSLError` 都会原样穿出去，
         而调用方按这句话不写 `try` ⇒ 一个配置错误（`AGENTFLOW_MODEL_BASE_URL` 写错）
         让整条 run 崩在调用上：产物一件不写、账本一行没有、熔断完全不生效，
@@ -995,7 +993,7 @@ class ModelGateway:
             except Exception as exc:  # noqa: BLE001 —— 见 docstring：兜底成"没查成"
                 # `G-7` 口径一：`_once` 只翻译 `TimeoutError` / `ConnectionError`，
                 # 别的异常（传输层实现抛的 `ValueError`、`ssl.SSLError`、
-                # 第三方 transport 的任意异常）此前会直接穿出本方法 ——
+                # 第三方 transport 的任意异常）会直接穿出本方法 ——
                 # 而 docstring 承诺"从不抛异常"，调用方也就不会去接。
                 #
                 # 兜底成 `unknown`：它在 `NOT_CHECKED` 里（属于"没查成"），
@@ -1093,7 +1091,7 @@ def selftest() -> int:
 
     # 第四段：推理强度（「所有智能体都要能 thinking，默认 High」）。
     # 这一段刻意读请求体而不是读 `spec.reasoning_effort`：后者只能证明"想让它开"，
-    # 只有前者能证明"真的发出去的请求上有这一栏"（改前缺的正是这一栏）。
+    # 只有前者能证明"真的发出去的请求上有这一栏"（缺的正是这一栏）。
     seen: list[dict[str, Any]] = []
     thought = ModelGateway(ModelSpec(api_key="k"),
                            transport=_grab_transport(seen, _ok_body("4", reasoning="一加一等于二。")))
