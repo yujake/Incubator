@@ -55,8 +55,8 @@ BODY_A = "1. 按自然数的后继定义，1+1 就是 s(1)，而 s(1)=2。\n2. �
 FULL_B = "命题 B：2+2=4，由命题 A 推得。"
 BODY_B = "1. 由 stmt:{a} 得 1+1=2。\n2. 因此 2+2=4。"
 EMPTY_TABLE = (
-    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-    "|---|---|---|---|\n"
+    "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+    "|---|---|---|\n"
     "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")
 
 
@@ -95,7 +95,6 @@ def _manuscript(*, sid: str, proposition: str, body: str,
         head.append(f"- 计划：{plan} · 子目标：{sgid}")
     if wash_actor:
         head.append(f"- 依赖面洗稿：已洗=true；执行者={wash_actor}")
-    head.append("- 证明号：1")
     head += ["", "## 命题", "", proposition, "", "## 证明", "", body,
              "", "## 依赖", "", deps]
     return "\n".join(head)
@@ -228,9 +227,9 @@ def test_d1_c_the_dependency_face_comes_from_the_manuscripts_table(
     b = _register_conjecture(st, FULL_B)
     body = BODY_B.format(a=a)
     table = (
-        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-        "|---|---|---|---|\n"
-        f"| 由命题 A，1+1=2。 | stmt:{a} | 第 1 步 | 1 |\n")
+        "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+        "|---|---|---|\n"
+        f"| 由命题 A，1+1=2。 | stmt:{a} | 第 1 步 |\n")
     text = _manuscript(sid=b, proposition=FULL_B, body=body, deps=table)
     rel = f"reports/f-proof-{b}.md"
     _sign_three(st, sid=b, text=text, rel=rel, body=body)
@@ -452,9 +451,9 @@ def _d6_case(tmp_path: pathlib.Path, *, with_ref: bool,
     table = EMPTY_TABLE
     if with_ref:
         table = (
-            "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
-            "|---|---|---|---|\n"
-            f"| 由命题 A，1+1=2。 | stmt:{a} | 第 1 步 | 1 |\n")
+            "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
+            "|---|---|---|\n"
+            f"| 由命题 A，1+1=2。 | stmt:{a} | 第 1 步 |\n")
     text = _manuscript(sid=b, proposition=FULL_B, body=body, deps=table)
     rel = f"reports/f-proof-{b}.md"
     _sign_three(st, sid=b, text=text, rel=rel, body=body)
@@ -509,8 +508,11 @@ def test_d6_d_reverse_vacuum_dropping_the_post_write_edges_makes_it_missing(
     """D6 d：把"写完之后补落的那几条"从回执里摘掉 ⇒ a 变红（回落到 missing）。"""
     real = AgentB._manuscript_deps_after_write
 
-    def _under_report(self, sec, stmt_id, deps_groups):
-        got = real(self, sec, stmt_id, deps_groups)
+    def _under_report(self, sec, stmt_id, deps_groups, **kw):
+        # `**kw`：这条桩只改"写后回报"的读数，而被打的真函数后来多收了命名关键字
+        # （`manuscript=` / `body_sha=` 一类）。桩要跟着收下它们、原样转给真实现，
+        # 否则红的是"桩的签名"，而不是它要反真空的那条判据。
+        got = real(self, sec, stmt_id, deps_groups, **kw)
         if got:
             return {**dict(got), "deps_written": 0}
         return got
