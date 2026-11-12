@@ -114,6 +114,36 @@ def _agent(st: Store) -> AgentB:
     return AgentB(st, extractor=None, extract_text=None, config={})
 
 
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：由模块级 `_PROOF_KIND_ANSWER` 给。
+
+    这一组判据量的是命题同一性与多证明落点，不是同种证明的语义判别；改前那条
+    Jaccard 判定线退役之后，没有判定面就等于"判不了 ⇒ fail-closed"，会把这里每一笔
+    第二份证明都拒掉。所以给一个明确的回答（默认 different = "另一条路径"），需要
+    "同种"的那两段自己把 `_PROOF_KIND_ANSWER` 调成 same。真正的剧本桩在
+    `tests/test_rehearsal_two_f_independent_proofs.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            same = _PROOF_KIND_ANSWER["decision"] == "same"
+            return {"checked": True, "decision": _PROOF_KIND_ANSWER["decision"],
+                    "same_path": 1 if same else 0,
+                    "reason": "夹具：与第 1 条路径同一套证法" if same else "夹具：不同种",
+                    "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
+
+
+#: 这一问的默认回答（需要"同种"的那两段自己改，见 `_proof_kind_default`）。
+_PROOF_KIND_ANSWER: dict[str, str] = {"decision": "different"}
+
+
 def _model_says_same(stmt_id: str):
     """把"模型说了什么"填成 `verdict=same / same_as=<stmt_id>`（只替换那一处判定）。
 
@@ -245,22 +275,29 @@ def _unrelated_merge_problems(base: pathlib.Path) -> list[str]:
     return problems
 
 
-def _same_kind_refusal_problems(base: pathlib.Path) -> list[str]:
-    """② 的读数：几乎相同的第二份证明是不是被拒、且没新增证明号。"""
+def _same_kind_refusal_problems(base: pathlib.Path, *, same: bool = True) -> list[str]:
+    """② 的读数：几乎相同的第二份证明是不是被拒、且没新增证明号。
+
+    `same=False` 是反真空那一档（把同种证明的判断打回"永远不同" = 改前的行为）。
+    """
     st = _ws(base)
     b = _agent(st)
     problems: list[str] = []
-    first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
-    if not first.get("ok"):
-        return [f"首登失败：{first}"]
-    near = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_A_NEAR)
+    _PROOF_KIND_ANSWER["decision"] = "same" if same else "different"
+    try:
+        first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
+        if not first.get("ok"):
+            return [f"首登失败：{first}"]
+        near = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_A_NEAR)
+    finally:
+        _PROOF_KIND_ANSWER["decision"] = "different"
     rows = _rows(st)
     if near.get("ok") is not False:
         problems.append(f"几乎相同的第二份证明被照收了（ok={near.get('ok')!r}）")
     if str(near.get("kind") or "") != "proof_same_kind":
         problems.append(f"拒绝码不是 proof_same_kind：{near.get('kind')!r}")
-    if "#1" not in str(near.get("error") or ""):
-        problems.append(f"拒信没点名与第几份同种：{str(near.get('error') or '')[:80]!r}")
+    if "第 1 条路径" not in str(near.get("error") or ""):
+        problems.append(f"拒信没点名与第几条路径同种：{str(near.get('error') or '')[:80]!r}")
     if rows and _proof_nos(rows[0]) != [1]:
         problems.append(f"被拒之后证明号仍变成了 {_proof_nos(rows[0])}")
     if len(rows) != 1:
@@ -387,13 +424,27 @@ def test_two_phrasings_of_one_proposition_become_one_row_with_proof_two(
 # ============================================================ ② 同种证明 ⇒ 拒，不新增号
 
 def test_two_nearly_identical_proofs_are_refused_as_the_same_kind(
-        tmp_path: pathlib.Path) -> None:
-    """② 两条证明几乎相同 ⇒ 不新增 `proof_no`、`proof_same_kind`、拒信点名与 `#k` 同种。
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """② 两条证明几乎相同 ⇒ 不新增路径、`proof_same_kind`、拒信点名第 1 条路径同种。
 
-    判据读数与拒信读数各核一次：前者来自 `propositionkey.same_kind_proof`（0.8538 ≥ 0.80），
-    后者是秘书交回给调用方的那句话（点名第几份 + 两条处置）。负控：拒了这一笔之后
-    盘上仍只有 #p1，且那一条命题还在（不是"整条丢掉"）。
+    判据原来是 `propositionkey.same_kind_proof` 的阈值（0.8538 ≥ 0.80）；2026-11-12
+    业主裁定「语义判别，千万别做任何机械闸，结论是二态的」之后，收不收只由秘书的
+    `proof_kind` 判定给。机械读数仍写在下面作材料对照（它不再决定收不收）。
     """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            same = str(context.get("proof_text") or "") == PROOF_A_NEAR
+            return {"checked": True, "decision": "same" if same else "different",
+                    "same_path": 1 if same else 0,
+                    "reason": "打桩：与第 1 条路径同一套证法" if same else "打桩：不同种",
+                    "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
     st = _ws(tmp_path)
     b = _agent(st)
     first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
@@ -406,7 +457,7 @@ def test_two_nearly_identical_proofs_are_refused_as_the_same_kind(
     near = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_A_NEAR)
     assert near.get("ok") is False, near
     assert near.get("kind") == "proof_same_kind", near
-    assert "#1" in near.get("error", ""), near.get("error")
+    assert "第 1 条路径" in near.get("error", ""), near.get("error")
     assert "同种" in near.get("error", ""), near.get("error")
     # 2026-11-08（缺陷④①）：拒信只许教 `own.register_statement` 真能做到的改法。
     # 改前它教"给 merge=true、proof_no=N"，而参数面（`specs/b.py`）与动作签名里
@@ -526,14 +577,18 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     """
     st = _ws(tmp_path)
     b = _agent(st)
-    first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
-    assert first.get("ok") is True, first
-    signed = _sign_n(st, text=PROOF_A, proof_no=1)
-    assert signed.get("statement_writeback", {}).get("written") is True, signed
-    assert _reading(st).get("reviewed") is True, _reading(st)
+    _PROOF_KIND_ANSWER["decision"] = "same"
+    try:
+        first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
+        assert first.get("ok") is True, first
+        signed = _sign_n(st, text=PROOF_A, proof_no=1)
+        assert signed.get("statement_writeback", {}).get("written") is True, signed
+        assert _reading(st).get("reviewed") is True, _reading(st)
 
-    refused = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_A_NEAR)
-    assert refused.get("ok") is False and refused.get("kind") == "proof_same_kind", refused
+        refused = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_A_NEAR)
+        assert refused.get("ok") is False and refused.get("kind") == "proof_same_kind", refused
+    finally:
+        _PROOF_KIND_ANSWER["decision"] = "different"
 
     sec = Secretary("B", root=st.root, store=st)
     # 这一条判的是合并机制（覆盖 / proof_history / 重签），不是"正文必须有手稿签"那道闸：
@@ -617,19 +672,13 @@ def test_reverting_one_judge_turns_its_criterion_red(
         tmp_path: pathlib.Path, monkeypatch) -> None:
     """⑤ 的同族：把"同种证明"那道判断打回改前（永远不同）⇒ ② 必红。
 
-    改前没有这道判断：几乎相同的第二份证明照收成 `#p2`。打桩 `same_kind_proof` 回到
-    "永远不同"就是那个行为，② 的那组读数必须当场变红（证明它钉的是这道判断本身）。
+    改前没有这道判断：几乎相同的第二份证明照收成第 2 条路径。把 `proof_kind` 的回答
+    打回"永远 different"就是那个行为，② 的那组读数必须当场变红（证明它钉的是这道
+    判断本身；判据的答案由 `_PROOF_KIND_ANSWER` 给，见 `_proof_kind_default`）。
     """
     assert _same_kind_refusal_problems(tmp_path / "baseline") == [], (
         "夹具前提：注入之前 ② 应当是绿的")
-    monkeypatch.setattr(
-        PK, "same_kind_proof",
-        lambda a, b, threshold=PK.PROOF_SAME_JACCARD: {
-            "checked": True, "state": PK.STATE_DIFFERENT, "basis": "", "similarity": 0.0,
-            "threshold": float(threshold), "what": "证明",
-            "reason": "打桩：永远不同（改前的行为）"},
-        raising=True)
-    problems = _same_kind_refusal_problems(tmp_path / "no-same-kind-judge")
+    problems = _same_kind_refusal_problems(tmp_path / "no-same-kind-judge", same=False)
     assert problems, "去掉同种证明的判断之后 ② 仍然全绿 ⇒ 那组断言没有对象"
     assert any("照收" in p or "证明号" in p for p in problems), problems
 

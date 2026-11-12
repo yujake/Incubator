@@ -5037,7 +5037,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 这一笔带了这条命题自己的手稿 ⇒ 它的依赖面在正文写完之后补落（D7 的 A）。
             md = self._manuscript_deps_after_write(
                 sec, stmt_now, deps_groups, manuscript=manuscript_path,
-                body_sha=_PR.proof_sha(_stamp_text))
+                body_sha=_PR.proof_sha(_stamp_text), proof_text=_stamp_text)
             if md:
                 out["manuscript_deps"] = md
                 # ---- D6（2026-11-05 走查）：回执要读"写完之后"的依赖面 ----------
@@ -5180,7 +5180,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 # 这一笔带了这条命题自己的手稿 ⇒ 它的依赖面在正文写完之后补落（D7 的 A）。
                 md = self._manuscript_deps_after_write(
                     sec, stmt_dup, deps_groups, manuscript=manuscript_path,
-                    body_sha=_PR.proof_sha(_stamp_text))
+                    body_sha=_PR.proof_sha(_stamp_text), proof_text=_stamp_text)
                 if md:
                     out["manuscript_deps"] = md
                     # ---- D6（2026-11-05 走查）：同升档那一支，读"写完之后"的依赖面。
@@ -6013,7 +6013,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _manuscript_deps_after_write(self, sec: Any, stmt_id: str,
                                      deps_groups: list[list[dict]], *,
                                      manuscript: str = "",
-                                     body_sha: str = "") -> dict:
+                                     body_sha: str = "",
+                                     proof_text: str = "") -> dict:
         """正文写进在册那一行之后，把这份稿的依赖面也落下去（D7 的 A 那一半）。
 
         为什么需要它：上面那条"收方读稿登记"早退支路在"这一笔带了正文/清单"时让路
@@ -6032,7 +6033,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return {}
         written = dict(sec.record_manuscript_dependency_face(
             stmt_id, deps_groups, note="b.register_statement:canonical",
-            manuscript=manuscript, body_sha=body_sha) or {})
+            manuscript=manuscript, body_sha=body_sha,
+            proof_text=proof_text) or {})
         return {"deps_written": int(written.get("deps_written") or 0),
                 "deps_duplicates": [dict(x) for x in (written.get("duplicates") or [])],
                 "checked": bool(written.get("checked")),
@@ -6214,7 +6216,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         written = dict(sec.record_manuscript_dependency_face(
             stmt_id, deps_groups, note="b.receive_carried_manuscript",
             manuscript=str((manuscript or {}).get("path") or ""),
-            body_sha=_PR.proof_sha(_carried_body)) or {})
+            body_sha=_PR.proof_sha(_carried_body),
+            proof_text=str(proof_text or "")) or {})
         if not written.get("checked"):
             return _refuse(str(written.get("refused") or "dependency_face_not_written"),
                            str(written.get("reason") or ""))
@@ -7471,7 +7474,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if str((cells.get("dependencies") or {}).get("outcome") or "") == "filled":
             got = self._ingest_apply_dependencies(
                 cells, sec, target=target, want_no=want_no, path=path,
-                body_sha=str(reading.get("proof_sha256") or ""))
+                body_sha=str(reading.get("proof_sha256") or ""),
+                proof_text=str(((reading.get("cells") or {}).get("proof_text")
+                                or {}).get("value") or ""))
             if got["code"]:
                 return _cell_refused("dependencies", got["code"], got["why"])
             if got.get("path_group"):
@@ -7691,7 +7696,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_apply_dependencies(self, cells: dict, sec: Any, *,
                                    target: str, want_no: int,
-                                   path: str = "", body_sha: str = "") -> dict:
+                                   path: str = "", body_sha: str = "",
+                                   proof_text: str = "") -> dict:
         """`mode=apply` 的 dependencies 那一格：集合语义（追加 + 去重；永不删）。
 
         先把稿里的依赖表过 `depsection` 的闸（等级够不够、能不能引、表与正文是否
@@ -7742,7 +7748,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         written = dict(sec.record_manuscript_dependency_face(
             target, groups, proof_no=want_no,
             note=f"own.ingest_manuscript:dependencies:{target}",
-            manuscript=_norm_manuscript_rel(path), body_sha=str(body_sha or "")) or {})
+            manuscript=_norm_manuscript_rel(path), body_sha=str(body_sha or ""),
+            proof_text=str(proof_text or "")) or {})
         if not written.get("checked"):
             return {"written": False,
                     "code": str(written.get("refused") or "dependency_face_not_written"),

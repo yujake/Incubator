@@ -126,15 +126,21 @@ def test_c_judge_without_an_answer_refuses_a_new_proof_number(
         tmp_path: pathlib.Path, monkeypatch) -> None:
     """c：判定面没给出可用结论 ⇒ 受控拒 `proof_kind_unjudged`、证明号不变。
 
-    短证明现在会照常判（见 a），所以这一档用打桩的"没答"判定面来造：契约是
-    "判定面没答 ⇒ 不新增证明号"（未来判定面换成模型时，超时 / 坏 JSON / 没给可用
-    答案都走这一档）。
+    同种证明那一问（`proof_kind`）改由秘书的语义判定给（2026-11-12，禁机械闸）：
+    这里把判定面打桩成"没答"，契约是"没答 ⇒ 不新增证明号"（超时 / 坏 JSON /
+    没给可用答案都走这一档）。
     """
-    monkeypatch.setattr(
-        PK, "same_kind_proof",
-        lambda *a, **k: {"checked": False, "state": "", "basis": "", "similarity": 0.0,
-                         "reason": "打桩：判定面没给出可用结论"},
-        raising=True)
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": False, "reason": "打桩：判定面没给出可用结论",
+                    "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
     st = _ws(tmp_path)
     b = _agent(st)
     first = b.register_statement(**_own(FULL_A), proof_text=PROOF_A)
@@ -142,7 +148,7 @@ def test_c_judge_without_an_answer_refuses_a_new_proof_number(
     refused = b.register_statement(**_own(FULL_A_KEY), proof_text=PROOF_B)
     assert refused.get("ok") is False, refused
     assert refused.get("kind") == SEC.PROOF_KIND_UNJUDGED, refused
-    assert "#1" in str(refused.get("error") or ""), refused
+    assert "第 1 条路径" in str(refused.get("error") or ""), refused
     rows = _rows(st)
     assert len(rows) == 1, [r.get("stmt_id") for r in rows]
     assert _proof_nos(rows[0]) == [1], _proof_nos(rows[0])

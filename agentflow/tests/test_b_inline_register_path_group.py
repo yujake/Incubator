@@ -345,3 +345,27 @@ def test_e_removing_the_allocation_turns_a_red(tmp_path, monkeypatch):
     assert (not ver) or any(int(g or 0) != 2 for g in ver), (
         f"分配被摘掉之后 verification 行仍带 2：{ver!r}")
     monkeypatch.setattr(MS, "assign_path_group", real)
+
+# ============================================================ 同种证明那一问的默认回答
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """这一组量的是路径号 / 收录，不是同种证明的语义判别 ⇒ 默认回 different。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）；没有判定面时按
+    fail-closed 拒收，会把这里的第二份证明全部拒掉。语义判别本身的判据在
+    `tests/test_rehearsal_two_f_independent_proofs.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)

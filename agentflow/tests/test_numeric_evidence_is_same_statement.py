@@ -584,8 +584,9 @@ def _sign_proof(store: Store, *, sid: str, proof_no: int, proof_text: str) -> No
     # 2026-11-10（D268 批 2）：签只认可复算凭据 `out/vsigns/<正文 sha>.json`；只落
     # 三行台账 = `unissued`（够票、没发签），登记会被 `proof_without_v_sign` 拒。
     # 改用批 2 的公共夹具（三票同源 + `vsigns.issue`）—— 签的仍是同一份正文。
+    # 2026-11-12（路径号归秘书）：签只盖正文，不再绑第几份 —— 路径号由收录事务分配。
     issue_credential(store.root, proof_text=proof_text, statement_id=sid,
-                     proof_no=int(proof_no))
+                     proof_no=1)
 
 
 def _first_proof(store: Store) -> str:
@@ -731,3 +732,27 @@ def test_o_without_semantic_found_l_would_register_a_second_proposition(tmp_path
 
 if __name__ == "__main__":          # pragma: no cover - 手动跑这一份时用
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+# ============================================================ 同种证明那一问的默认回答
+import pytest as _pytest  # noqa: E402
+
+
+@_pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """这一组量的是路径号 / 收录，不是同种证明的语义判别 ⇒ 默认回 different。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）；没有判定面时按
+    fail-closed 拒收，会把这里的第二份证明全部拒掉。语义判别本身的判据在
+    `tests/test_rehearsal_two_f_independent_proofs.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)

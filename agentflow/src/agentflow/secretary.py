@@ -7913,39 +7913,10 @@ class Secretary:
                            reason=(f"路径号没分成（{type(exc).__name__}: {exc}）"
                                    " ⇒ 这一笔按'没写成'读"))
             return out
-        # ---- 同种证明：事务外先问一次（锁内不许发模型），结论带进事务 ----------
-        #
-        # 只在"这一份正文是新的"时问：同一份正文（sha 已在册）是幂等重交，不是另一套
-        # 证法。判 same ⇒ 拒收并点名第 N 条路径；判不了 ⇒ fail-closed；different 才
-        # 往下分号。这是 apply 那条入口的分配点（仍是秘书的唯一实现）。
-        if str(proof_text or "").strip():
-            from . import verifications as _VRkind
-
-            got_row = SL.by_id(self.store, stmt_id=sid)
-            if got_row.get("checked") and got_row.get("found"):
-                row_now = dict(got_row.get("row") or {})
-                _known = {_VRkind.text_sha(str(t)) for _n, t in
-                          _VRkind.proof_list(row_now) if str(t or "").strip()}
-                if _VRkind.text_sha(str(proof_text)) not in _known:
-                    _kind = self._same_kind_hits(row_now, str(proof_text))
-                    _sim = float(_kind.get("similarity") or 0.0)
-                    if not _kind.get("checked"):
-                        out.update(checked=False, refused=PROOF_KIND_UNJUDGED,
-                                   reason=("这一份证明与在册各路径是不是同种没判成"
-                                           "（没判成 ≠ 不同）⇒ 不收录、不新增路径："
-                                           + str(_kind.get("reason")
-                                                 or "判定面没给可用结论")))
-                        return out
-                    if str(_kind.get("decision") or "") == "same":
-                        _n = int(_kind.get("same_path") or 1)
-                        out.update(checked=False, refused=PROOF_SAME_KIND,
-                                   same_kind_material={"similarity": _sim},
-                                   reason=(f"这一份证明与 stmt:{sid} 的第 {_n} 条路径同种"
-                                           "（秘书的语义判定：两套证法是同一路，不是两条"
-                                           "独立路径）⇒ 不收录、不新增路径。材料读数"
-                                           f"（只作参考）：相似度 {_sim:.4f}。处置：换一条"
-                                           "真正不同的证法再交，或本次不再提交"))
-                        return out
+        _gate = self._manuscript_dependency_refusal(sid=sid, proof_text=proof_text)
+        if _gate:
+            out.update(_gate)
+            return out
         try:
             with self.store.tx("statements", "dependencies",
                                actor=f"secretary-{self.role}",
@@ -8047,6 +8018,42 @@ class Secretary:
             out.update(checked=False, refused="write_failed",
                        reason=f"依赖面落盘没成（{type(exc).__name__}: {exc}）⇒ 这一笔按'没写成'读")
         return out
+
+    def _manuscript_dependency_refusal(self, *, sid: str, proof_text: str) -> dict[str, Any]:
+        """同种证明那一问（事务外先问，锁内只落）：same / 判不了 ⇒ 拒收读数。
+
+        只在"这一份正文是新的"时问：同一份正文（sha 已在册）是幂等重交，不是另一套
+        证法。判 same ⇒ 点名第 N 条路径；判不了 ⇒ fail-closed；different ⇒ 空字典
+        （调用方继续分号、写边）。这是 apply 那条入口的分配点（仍是秘书的唯一实现）。
+        """
+        if not str(proof_text or "").strip():
+            return {}
+        from . import verifications as _VRkind
+
+        got_row = SL.by_id(self.store, stmt_id=sid)
+        if not (got_row.get("checked") and got_row.get("found")):
+            return {}
+        row_now = dict(got_row.get("row") or {})
+        _known = {_VRkind.text_sha(str(t)) for _n, t in
+                  _VRkind.proof_list(row_now) if str(t or "").strip()}
+        if _VRkind.text_sha(str(proof_text)) in _known:
+            return {}
+        _kind = self._same_kind_hits(row_now, str(proof_text))
+        _sim = float(_kind.get("similarity") or 0.0)
+        if not _kind.get("checked"):
+            return {"checked": False, "refused": PROOF_KIND_UNJUDGED,
+                    "reason": ("这一份证明与在册各路径是不是同种没判成"
+                               "（没判成 ≠ 不同）⇒ 不收录、不新增路径："
+                               + str(_kind.get("reason") or "判定面没给可用结论"))}
+        if str(_kind.get("decision") or "") != "same":
+            return {}
+        _n = int(_kind.get("same_path") or 1)
+        return {"checked": False, "refused": PROOF_SAME_KIND,
+                "same_kind_material": {"similarity": _sim},
+                "reason": (f"这一份证明与 stmt:{sid} 的第 {_n} 条路径同种"
+                           "（秘书的语义判定：两套证法是同一路，不是两条独立路径）"
+                           "⇒ 不收录、不新增路径。材料读数（只作参考）：相似度 "
+                           f"{_sim:.4f}。处置：换一条真正不同的证法再交，或本次不再提交")}
 
     def _abandon_reason_gate(self, row: Mapping[str, Any], wanted: Mapping[str, Any],
                              given: Mapping[str, Any]) -> dict[str, Any]:
@@ -10474,7 +10481,10 @@ class Secretary:
             except Exception:  # noqa: BLE001 —— 抽不出键 ⇒ 没有可比行（不猜）
                 row = None
         if row is None:
-            return {}
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "similarity": 0.0, "paths": [], "hits": [], "unjudged": [],
+                    "reason": ("在册没有可比的那一条命题（新命题 / 首份）"
+                               "⇒ 没有同种可言，按 different 走")}
         known = {VR.text_sha(str(t)) for _no, t in VR.proof_list(row)
                  if str(t or "").strip()}
         if VR.text_sha(proof) in known:
