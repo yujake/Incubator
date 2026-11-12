@@ -176,7 +176,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
         # 采信它们等于让 `evidence_kind="proof"` 变成可随手搬运的标签。
         _obj({"statement_id": _S, "code_path": _S, "declaration_name": _S,
               # 路径三格（与 `formalize` 同一套口径，另一处落点）：这一行绑的是第几份
-              # 证明、C 给这条路径的显示名（`p<证明号>g<组号>`，只做标记、不当键）、
+              # 证明、C 给这条路径的显示名（`p<路径号>g<组号>`，只做标记、不当键）、
               # 以及这个号是谁选的。
               "proof_no": {**_I, "minimum": 1}, "path_id": _S,
               "path_source": {"type": "string", "enum": ["B", "C", "L"]},

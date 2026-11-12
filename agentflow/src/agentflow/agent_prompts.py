@@ -1624,7 +1624,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:    说明把「`proof_text` 可缺」改成「没有稿不拒收：落最低等级并进待办」。
 #: ② F（`4e43a81b`）：派 V 审的是那一份证明稿（`proof_manuscript` 一律给，在册也给）；
 #:    中间结论「正文走手稿」（`F.step` 落 `reports/f-proof-<命题号>.md`，B 读稿登记）；
-#:    多证明每份各自落稿（`- 证明号：<N>`）。
+#:    多证明每份各自落稿（另一份证明 = 另一个稿号）。
 #: ③ G / H / M（`7970eacc` / `4e43a81b`）：`PAPER_PACK` 的 `proof_review` 档改成「正文由 B 从
 #:    手稿收进 `proof_text`，V 带 `proof_manuscript` 审」；「形式化已关闭」那一档的交付形状
 #:    同步改成「证明过程先落成手稿（F/E/B 三种命名的 `*-proof-*.md`），再派 V 带稿走查」。
@@ -2310,7 +2310,7 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: p271 → p272（2026-11-10 晚，业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号。
 #: 停掉错误的口径。」）：
 #: 三个号各管一件事 —— 稿号（F 自己发，`data/counters.json` 的 `manuscript` 号段；
-#: 签的单位，同一份稿改稿仍是同一个稿号、另一份证明用 `-p<N>`）/ 计划号（继续 / 放弃 /
+#: 签的单位，同一份稿改稿仍是同一个稿号、另一份证明 = 另一个稿号）/ 计划号（继续 / 放弃 /
 #: 更改的单位；计划不拥有稿，一个计划期间可产出若干份独立编号的稿）/ 命题号（B 收录时现取）。
 #: 上游六笔（全是教法 + 编号实现；V 的入口闸 / B 的收录闸 / closing 的判定一个字没改）：
 #:   ① `agentflow/manuscriptids.py` 新增 `next_manuscript_id(root)`：`counters.manuscript`

@@ -461,7 +461,8 @@ SPEC = AgentSpec(
             # 判据 `tests/test_f_manuscript_ids_are_its_own_source.py` 与
             # `tests/test_registration_is_the_hard_sequence.py`。
             "**三个号各管一件事，别绑在一起**：**稿号**是 F 自己发的（签的单位；同一份稿"
-            "改稿仍是同一个稿号，另一份证明用 `-p2`）；**计划号**管继续/放弃/更改（立项拿"
+            "改稿仍是同一个稿号，另一份证明就是另一个稿号 —— 一个稿号 = 一份文件 = 一份证明）；"
+            "**计划号**管继续/放弃/更改（立项拿"
             "计划号，**不建 statements 行**）；**命题号是 B 收录时现取的**（V 判成立之后才取）。"
             "**F 的稿按自己的稿号命名**（`reports/f-proof-<稿号>.md`；不用命题号、不用计划号）"
             "→ V 送审时点那份稿（不传 `statement_id`：此刻还没有命题号；判「成立」签就落在"
