@@ -42,16 +42,22 @@ class _Assess:
             qrow.get("question") or ev.get("question") or "",
             extra=[c.get("name") or "" for c in concepts],
         )
+        claim_rows = _claim_rows(ev.get("claims"))
         verdict = analyze_gaps(
             # 2026-10-17（agents #4）：`claims` 可能是 str 或 `{代号: 行}` 字典 ——
             # 只收 Mapping 元素（字典按值迭代，`c["relation_id"]` 就不会撞到 str）。
-            [c["relation_id"] for c in _claim_rows(ev.get("claims"))],
-            _claim_rows(ev.get("claims")),
+            # `_claim_rows` 会逐条 `dict(c)`，所以只调一次：改前两个实参各调一次，
+            # 等于把同一批 claims 拷两遍。
+            [c["relation_id"] for c in claim_rows],
+            claim_rows,
             keywords=keywords,
             degree=degree,
             degree_threshold=self.degree_threshold,
             concept_count=len(concepts),
         )
+        _cq = ev.get("c_queries")
+        c_queries = ([c for c in _cq if isinstance(c, Mapping)]
+                     if isinstance(_cq, (list, tuple)) else [])
         verdict.update(
             {
                 "question_id": qid,
@@ -60,10 +66,8 @@ class _Assess:
                 "claim_count": len(ev.get("claims") or []),
                 "sufficient": not verdict["insufficient"],
                 "l3_needed": self._l3_needed(verdict, ev),
-                "c_queries": list(ev.get("c_queries") or []),
-                "c_evidence": self._c_summary(
-                [c for c in (ev.get("c_queries") or [])
-                 if isinstance(c, Mapping)] if isinstance(ev.get("c_queries"), (list, tuple)) else []),
+                "c_queries": list(_cq or []),
+                "c_evidence": self._c_summary(c_queries),
                 "c_wiring": dict(self.c_wiring),
             }
         )
