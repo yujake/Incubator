@@ -2043,6 +2043,16 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     except Exception as exc:  # noqa: BLE001 —— 读不成不许折成"没有这一行"
         return _out("unknown", f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成",
                     checked=False, missing=["tasks 台账"])
+    # 台账按编号、按父各建一次索引：后面要按 `task_id` 找行、按父列子行（板项闸、
+    # 三态读数的 kid_names、级联逐项核各扫一遍）—— 每次都对整张 `tasks` 做 `next(...)`
+    # 是 O(n²)。`setdefault` 保住「同号取第一行」与「按原行序」这两个原有语义。
+    rows_by_id: dict[str, Mapping[str, Any]] = {}
+    children_by_parent: dict[str, list[Mapping[str, Any]]] = {}
+    for r in rows:
+        rid = str(r.get("task_id") or "")
+        if rid:
+            rows_by_id.setdefault(rid, r)
+        children_by_parent.setdefault(str(r.get("parent_task_id") or ""), []).append(r)
     # 指称只有一条正路：名册名（`child_name`）。`task_id` 是旧的兼容写法 —— 它只收绝对编号，
     # 按对照表换算成名册名，并在读数里标 `task_id_compat=true`（谁还在用旧写法，读得出）。
     # `name` 是兼容别名：只在"按映射整体传入"的调用里走得到（模型的 JSON args 会被
@@ -2082,7 +2092,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         return _out("refused",
                     "销号要点名：给 child_name（名册名，如 D1）；task_id 只是旧的兼容写法",
                     missing=["没有给 child_name"])
-    row = next((r for r in rows if str(r.get("task_id") or "") == tid), None)
+    row = rows_by_id.get(tid)
     if row is None:
         return _out("refused", f"台账里没有 {tid} 这一行（这是查过了、确实没有）",
                     missing=[f"{tid} 不在 tasks 里"])
@@ -2167,8 +2177,8 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     # 先读它，理由是板项闸与静默闸都要带同一份读数回去（读数在拒信里），而板项闸排在
     # 前面说话 —— 板项清单是父下一步真正要处置的那件事，缺了它这条拒信只是"不许"。
     kid_names: dict[str, str] = {}
-    for r in rows:
-        if str(r.get("parent_task_id") or "") != tid or str(r.get("kind") or ""):
+    for r in children_by_parent.get(tid, ()):
+        if str(r.get("kind") or ""):
             continue
         kid = str(r.get("task_id") or "")
         try:
@@ -2189,9 +2199,8 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     data["blocking"] = list(probe.get("blocking") or [])
     data["readings"]["target_state"] = data["target_state"]
     # ---- 板项闸（既有闸，排在最具体的那一档）：queued / seen 都算没清
-    open_rows = [r for r in rows
-                 if str(r.get("parent_task_id") or "") == tid
-                 and str(r.get("kind") or "")
+    open_rows = [r for r in children_by_parent.get(tid, ())
+                 if str(r.get("kind") or "")
                  and str(r.get("item_state") or "") != "done"]
     items_open = int(((hit.get("reading") or {}).get("items_open")) or 0)
     if items_open > 0 or open_rows:
@@ -2355,8 +2364,7 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         pid = str(parent_of.get(node) or "")
         plan: dict[str, Any] = {
             "task_id": node, "parent": pid, "depth": int(depth_of.get(node) or 0),
-            "role": str(next((r.get("role") for r in rows
-                              if str(r.get("task_id") or "") == node), "") or ""),
+            "role": str((rows_by_id.get(node) or {}).get("role") or ""),
             "name": "", "branch": "", "state": "ready", "why": "",
         }
         plans.append(plan)
@@ -2381,9 +2389,8 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             settled_ids.add(node)
             continue
         plan["branch"] = str(layer["branch_of"].get(node) or "")
-        kid_open = [r for r in rows
-                    if str(r.get("parent_task_id") or "") == node
-                    and str(r.get("kind") or "")
+        kid_open = [r for r in children_by_parent.get(node, ())
+                    if str(r.get("kind") or "")
                     and str(r.get("item_state") or "") != "done"]
         if kid_open:
             blocked.append(f"{node} 名下还有 {len(kid_open)} 条未消的板项"
