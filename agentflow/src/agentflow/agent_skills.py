@@ -4116,8 +4116,8 @@ def materialize(root: str | pathlib.Path) -> list[str]:
 
     幂等：内容与盘上逐字节相同就不写（免得每次开跑都把工作区搅一遍）。
 
-    业主 2026-10-22（「在Lean开关没开时隔绝L」）：由 Lean 开关决定存在性的角色，开关
-    关着时一份都不落盘 —— 落在 `<工作区>/skills/<角色>/` 里的手册是用户看得见的东西，
+    由 Lean 开关决定存在性的角色，开关关着时一份都不落盘 —— 落在
+    `<工作区>/skills/<角色>/` 里的手册是用户看得见的东西，
     那里出现 `skills/L/…` 就等于"L 今天存在、只是没派活"。
     """
     from . import leanscope as _LEANSCOPE
@@ -4161,9 +4161,9 @@ def validate() -> list[str]:
 
     三态纪律：查不成的（工具注册表读不出来）也要报出来 —— 不许把它读成"没问题"。
 
-    业主 2026-10-22（「在Lean开关没开时隔绝L」）：开关关着时由它决定存在性的角色
-    （`leanscope` 那份名单）这一趟不存在 ⇒ 不对它的 skills 下结论。这不是"查过了没问题"：
-    那一档下它本来就不该出现在任何面上，落盘也被跳过（见 `materialize`）。
+    由 Lean 开关决定存在性的角色（`leanscope` 那份名单）这一趟不存在 ⇒ 不对它的 skills
+    下结论。这不是"查过了没问题"：那一档下它本来就不该出现在任何面上，落盘也被跳过
+    （见 `materialize`）。
     """
     from . import leanscope as _LEANSCOPE
 
@@ -4229,12 +4229,12 @@ def _body_tool_problems(surface: dict[str, set[str]]) -> list[str]:
 
     ## `shared` 那一槽为什么豁免（这是明写出来的豁免，不是漏查）
 
-    `shared` 是每个角色都读得到的同一份文件。它此前声明用 `table.*`，
-    而 M 的工具面里没有库表类工具 ⇒ 那两句对 M 是做不到的指令。改法不是"把它删干净"，
-    而是在正文里点明这一格与角色有关（"库表工具在多数角色手上、主控用 `fs.read`
-    读同一份 JSON"）—— 那句话里必然同时出现 `table.get` 与 `fs.read`，
-    所以对共享那一份，按"每个角色都必须在面上"判会把它自己判死。
-    共享那一份的纪律因此是声明那一格（`tools`）取交集，判据在 `validate()` 的工具循环里。
+    `shared` 是每个角色都读得到的同一份文件，而 M 的工具面里没有库表类工具 ⇒
+    正文若直接写 `table.*`，那两句对 M 就是做不到的指令。所以正文点明这一格与角色有关
+    （"库表工具在多数角色手上、主控用 `fs.read` 读同一份 JSON"）—— 那句话里必然同时
+    出现 `table.get` 与 `fs.read`，所以对共享那一份，按"每个角色都必须在面上"判会把它
+    自己判死。共享那一份的纪律因此是声明那一格（`tools`）取交集，判据在 `validate()`
+    的工具循环里。
     """
     known: set[str] = set()
     for names in surface.values():
@@ -4262,7 +4262,7 @@ def _unknown_tool_problems(surface: dict[str, set[str]]) -> list[str]:
     它的判据是「这个名字存在，但不在你这个角色的面上」（`tok in known`）。一个根本
     不存在的名字在那边静默放过：`conductor.stats` 的真身是
     `conductor.ledger(view="stats")`，全仓没有前一件工具，于是模型照着它调只会拿到
-    `unknown_action`，而手册与 validate 都一声不吭（2026-10-26 实测）。
+    `unknown_action`，而手册与 validate 都一声不吭。
 
     ## 为什么按「工具组」收窄
     正文里还有 `data/statements.json`（路径）、`main.tex`（文件名）、
@@ -4312,22 +4312,16 @@ _BODY_ACTION_TOKEN = re.compile(r"`([A-Z])\.([a-z][a-z0-9_]*)`")
 #:
 #: 只查存在性会漏掉真缺陷：一条 skill 说"你自己去调 `F.step`"时，动作确实存在，
 #: 而那个角色做不到。而如果为了抓这一句就把"指到别人"也判红，判据立刻变成噪音
-#: （实测这三处都是正当的指到别人）——所以豁免必须具名，且必须能被反查（见下）。
+#: （这三处都是正当的指到别人）——所以豁免必须具名，且必须能被反查（见下）。
 _BODY_CROSS_REFS: dict[tuple[str, str, str], str] = {
-    # 2026-10-20 业主裁定：改回 C 无出边、由 D 唤起 C ⇒ 这条豁免按原句恢复
-    # （2026-10-20 那一批曾因 `ALLOWED_EDGES["C"] = {"D"}` 把它删掉：那时 C 够得到 D）。
-    # 现在 C 又够不到 D 了 ⇒ 那句"矛盾问题的闭环由 D 的 `D.adjudicate` 收口"重新是
-    # "指到别人"，不登记就会被 `_body_action_problems` 第 3 件事当场报出来。
+    # C 没有出边 ⇒ 那句"矛盾问题的闭环由 D 的 `D.adjudicate` 收口"是"指到别人"，
+    # 不登记就会被 `_body_action_problems` 第 3 件事当场报出来。
     ("C", "矛盾-三态并指到那一对", "D.adjudicate"):
         "「C 只判、不改：矛盾问题的闭环由 D 的 `D.adjudicate` 收口（I2）」—— 指到别人",
-    # 2026-11-11（业主裁定「G 的出边集为 C,D,H」）：G 现在够得到 H.review ⇒ 这一条豁免
-    # 不再成立，按 `_body_action_problems` 第 3 件事的纪律删掉（留着会让豁免表腐烂）。
-    # 2026-10-22 第四批：这句里的动作从 `E.check_formal` 改成 `L.check_formal`
-    # （形式化那一岗从 E 划到 L），登记跟着换键 —— 换键之后它仍然"够不到"（V 没有到 L 的边），
-    # 所以它仍然是"指到别人"那一档，不是该删的腐烂条目。
+    # V 没有到 L 的边 ⇒ 这句里的 `L.check_formal` 仍然够不到，是"指到别人"那一档。
     ("V", "假设轴-前提是否真被满足", "L.check_formal"):
         "「能机器核的（`L.check_formal` 过的那几条）」—— 指到别人（形式化那一岗）产出的证据",
-    # 2026-11-10（递审只递框架手稿）：这一句教 V 把递错稿的调用方退回，让调用方改用
+    # 这一句教 V 把递错稿的调用方退回，让调用方改用
     # `F.step` 的 `manuscript_path` —— V 没有到 F 的边，这是"指到别人"（调用方）。
     ("V", "产出-只产意见-签分两档", "F.step"):
         "「先回一句『这不是手稿』并让它改用 `F.step` 的 `manuscript_path`」—— 指到调用方（F/D），V 不派 F",
@@ -4343,8 +4337,8 @@ def _body_action_problems() -> list[str]:
 
     三件事各查一遍：
 
-    1. 存在：正文里任何一个 `角色.动作` 都必须在 `capabilities` 里（业主 ④：
-       严禁虚构本系统不存在的动作）；
+    1. 存在：正文里任何一个 `角色.动作` 都必须在 `capabilities` 里（不许虚构本系统
+       不存在的动作）；
     2. 够得到：从拥有这条 skill 的角色出发，要么是自己的动作、要么在它的出边里；
        够不到但确实是"指到别人"的，必须登记进 `_BODY_CROSS_REFS`；
     3. 登记不许腐烂：登记过的每一条都必须还成立（skill 还在、正文里还有那一句、
@@ -4383,7 +4377,7 @@ def _body_action_problems() -> list[str]:
     return out
 
 
-#: 工作区里允许被点名的路径根（业主 2026-10-14「现做现读」那一批的落点全集）。
+#: 工作区里允许被点名的路径根（"现做现读"那一批的落点全集）。
 #:
 #: 为什么要有这张表：一条 skill 说"去 `foo/report.md` 读结论"，而没有任何东西会产出那个文件
 #: —— 读的人找不到，写的人也没错，两边都不报错。所以落点必须落在这张表里的某个根下。
@@ -4419,12 +4413,12 @@ _PATH_SUFFIXES: tuple[str, ...] = (".md", ".json", ".jsonl", ".tex", ".pdf", ".p
 def _looks_like_a_path(tok: str) -> bool:
     """这个反引号串是"一个落点"吗（而不是别的东西碰巧带斜杠）。
 
-    ## 为什么必须加这一道筛子（现算读数）
+    ## 为什么必须加这一道筛子
 
-    第一版只按"带目录"判，于是 `heuristic/inconclusive` 当场被报成"没人写的落点" ——
+    只按"带目录"判会把 `heuristic/inconclusive` 报成"没人写的落点" ——
     而它是证据等级的词表取值（`heuristic` / `inconclusive` 那一档），
     提示词里出现它是正文，不是路径。这类假阳性最贵：它让判据变成噪音，
-    然后没人再看它（本仓在 R114 的正文工具判据上已经栽过一次同款的坑）。
+    然后没人再看它。
 
     口径因此收成两条之一：带已知后缀（`.md` / `.json` / …）或结尾是 `/`（目录）。
     `heuristic/inconclusive` 两条都不占 ⇒ 出局；而真的落点（`out/paper/main.tex`、
@@ -4439,7 +4433,7 @@ def _path_problems() -> list[str]:
 
     ## 为什么只查"带目录的"
 
-    裸文件名（`main.pdf`、`dedup.py`）在这一批文本里都是同句内已经给过全路径之后的简写
+    裸文件名（`main.pdf`、`dedup.py`）在这些文本里都是同句内已经给过全路径之后的简写
     （"`out/paper/main.tex`（正文…）+ `main.pdf`"），或者是在点一个模块名
     （"归一化规则是盘上那一份（`dedup.py` 的 `normalize_doi`）"）。
     把裸名字也管起来只会制造假阳性，而假阳性让判据变成噪音 —— 所以这一格只查带目录的：
@@ -4490,9 +4484,9 @@ def _slug_problems() -> list[str]:
 
     ## 为什么值得单独查
 
-    真机里出现过一条 slug 是 `" pessimistic-先找边界与反例"` —— 行首多了一个空格。
-    它不会让任何一格判据变红：`summary` / `when` / `body` 都齐，动作与工具都对，
-    正文也确实能落盘。代价在两个看不见的地方：
+    一条 slug 行首多了一个空格（例如 `" pessimistic-先找边界与反例"`）不会让任何一格判据
+    变红：`summary` / `when` / `body` 都齐，动作与工具都对，正文也确实能落盘。
+    代价在两个看不见的地方：
 
     1. 盘上会多出一个 `skills/H/ pessimistic-先找边界与反例.md`（名字里有空格的首字符），
        而 `index_block` 印出来的路径与它逐字一致 —— 模型照抄那个路径 `fs.read` 是能读到的，
@@ -4527,19 +4521,18 @@ def _role_tool_surface(problems: list[str]) -> dict[str, set[str]]:
 
     ## 为什么不查"全注册表里有没有这个名字"
 
-    第一版就是那样写的，而它当场把自己写坏的那四个工具名放过去了 ——
+    不查"全注册表里有没有这个名字"，因为那会放过四个真工具名 ——
     错在两个地方，两处都是"查了个假面"：
 
     1. `build_registry()` 不带 `workspace_root` 时 `fs.*` 整组不注册
-       （`secretary.py` 记过同一件事：不带 `store` 出 68 件、`fs.read` 不在里面；
-       带上出 81 件、在里面）。于是 `fs.read` 这种真名会被报成"不在工具面上"
+       （同 `secretary.py` 记过的那件事）。于是 `fs.read` 这种真名会被报成"不在工具面上"
        —— 假阳性，而假阳性会让人开始不信这份判据。
     2. "注册表里存在"不等于"这个角色拿得到"：`fs.write` 在注册表里，
        而 H 是只读角色，`for_role("H")` 里没有它。一条 skill 说"H 用 fs.write 落盘"
        就是一句做不到的指令 —— 这正是本模块三条硬约束里第 2 条要挡的东西。
 
     所以这里按角色算面：`for_role(role)` 是 `tools/base.py` 里那份已经过只读过滤
-    的工具面（它的 docstring 记着"实测就发生过 `fs.write` 混进 H 的工具面"）。
+    的工具面（只读过滤若失守，`fs.write` 就会混进 H 的工具面）。
 
     三态：装配不出来 ⇒ 记一条 `problems`（"没查成"，不是"没问题"），返回空表；
     调用方见空表就跳过工具那一格（动作那一格仍然照查）。
@@ -4551,25 +4544,19 @@ def _role_tool_surface(problems: list[str]) -> dict[str, set[str]]:
         from .tools import TOOL_ROLES, build_registry
 
         root = tempfile.mkdtemp(prefix="agentflow-skills-surface-")
-        # 2026-10-16 补 `store`：只给 `workspace_root` 仍然是个假面 ——
-        # 注册器里依赖 store 的那一组整组不注册。实测（同一台机、同一份代码）：
-        #   `build_registry(workspace_root=…)`            ⇒ D 的工具面 36 件；
-        #   `build_registry(store=…, workspace_root=…)`   ⇒ D 的工具面 41 件。
-        # 差的那 5 件逐字是 `research.list_gaps` / `research.poll_waiting` /
-        # `research.set_status` / `research.submit_gap` / `research.write_note`
-        # —— 全是只有 D 用的那些，所以这一格此前只在 D 上是错的（其余九格两个面相同）。
-        # 后果与上面第 1 点同型：一条 D 的手册只要正经点名 `research.set_status`，
-        # 就会被报成"不在你的工具面上"（假阳性）。今天没有手册提到 `research.*`，
-        # 所以它是潜伏的，不是活的 —— 但下一次写 D 的收口那一格就会撞上。
+        # 只给 `workspace_root` 仍然是个假面：注册器里依赖 store 的那一组整组不注册 ——
+        # 差的那几件是 `research.list_gaps` / `research.poll_waiting` /
+        # `research.set_status` / `research.submit_gap` / `research.write_note`，
+        # 全是只有 D 用的那些。后果与上面第 1 点同型：一条 D 的手册只要正经点名
+        # `research.set_status`，就会被报成"不在你的工具面上"（假阳性）。
         # 而提示词实际渲染的那一面是带 store 的（`tools_lines(role, registry)` 读的
         # 是宿主的注册器）⇒ 判据查的必须与模型看到的是同一个面，否则它守的是另一个东西。
         store = Store(root)
         store.init()
         reg = build_registry(store=store, workspace_root=root).registry
-        # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：这是判据读的工具面，而
-        # `TOOL_ROLES` 是声明词表（刻意完整）。开关关着时不存在的角色不进这张面
-        # —— 它与 `validate()` 里"跳过那几格"是同一条口径（否则会对着一个不存在的
-        # 角色报"你的手册点名了不存在的工具"）。
+        # 这是判据读的工具面，而 `TOOL_ROLES` 是声明词表（刻意完整）。开关关着时
+        # 不存在的角色不进这张面 —— 它与 `validate()` 里"跳过那几格"是同一条口径
+        # （否则会对着一个不存在的角色报"你的手册点名了不存在的工具"）。
         from . import leanscope as _LEANSCOPE
 
         return {str(r): {s.name for s in reg.for_role(str(r))}
