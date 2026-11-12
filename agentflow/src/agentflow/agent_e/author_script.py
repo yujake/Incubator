@@ -144,9 +144,12 @@ class _AuthorScript:
                     "script_path": "", "sha256": "",
                     "note": (f"脚本没能落盘（{type(exc).__name__}: {exc}）⇒ 这一条子目标"
                              "没有可跑的脚本")}
-        out = {"ok": True, "reason": "", "script_path": rel, "sha256": VT.code_hash(full),
+        # 落盘之后算一次哈希：返回值里两处要的是同一个数（`sha256` 与 `note` 的前 16 位），
+        # 而 `code_hash` 要重读一遍盘上那份文件。
+        code_sha = VT.code_hash(full)
+        out = {"ok": True, "reason": "", "script_path": rel, "sha256": code_sha,
                "chars": len(source), "model_why": why,
-               "note": (f"脚本已落进工作区 {rel}（sha256 前 16 位 {VT.code_hash(full)}）——"
+               "note": (f"脚本已落进工作区 {rel}（sha256 前 16 位 {code_sha}）——"
                         "它仍要跑出 REPRO_RESULT 才作数（判读那一段一个字没改，FC-16）")}
         self.last_authored = out
         return out
