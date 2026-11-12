@@ -4237,10 +4237,9 @@ class Conductor:
 
     def wake_blocked(self, ids: Sequence[str] | None = None, *, approve: str = "",
                      dry_run: bool = True) -> dict[str, Any]:
-        """读 block 行、逐条审计、批准了才逐条直写并唤醒（业主 2026-10-29）。
+        """读 block 行、逐条审计、批准了才逐条直写并唤醒。
 
-        业主原话（逐字）：「直接读 block 表，并将自动审计工具和 block 表结合起来做
-        自动的逐个审批唤醒工具」。
+        口径是「直接读 block 表，并把自动审计与 block 表结合起来做逐个审批唤醒」。
 
         ## 它读哪几行（按 `item_state` 筛，不按 `status`）
         `tasks` 里 `item_state == "block"` 的行 —— 那是 `stopctl.block_remaining_tasks`
@@ -4257,9 +4256,8 @@ class Conductor:
         skip    已销号 / owner 在飞 / 板项已终态 / 子树有在跑 / 不是静默 / 没批准
         ```
         逐条给理由码（`refusal_code`），八格回执项一个不多一个不少（见下）。
-        销号名单读不全那一档是 `review` ＋ `unknown_retired`（不叫醒，2026-10-31
-        业主裁定的 fail-closed）；一笔里所有候选都停在 `review` 时顶层 `state="unknown"`
-        （"没查成"，不是"叫不动"）。
+        销号名单读不全那一档是 `review` ＋ `unknown_retired`（不叫醒，fail-closed）；
+        一笔里所有候选都停在 `review` 时顶层 `state="unknown"`（"没查成"，不是"叫不动"）。
 
         ## 批：`approve="yes"` 才算有令牌
         `approve` 是"允许按审计结论动作"的令牌，不是"要不要真写"的开关。没有令牌的那
@@ -4285,9 +4283,9 @@ class Conductor:
 
         ## 醒：只调 `wake_on_lifeline`
         它是唯一带"已销号 / 在飞"双闸的那一层。绝不直接调 `resume_dispatched`：
-        那条路没有闸，绕过它就等于允许同号起第二个循环（业主 2026-10-29 的自我唤醒
-        事故：两个自己互相喂事件，直到把进程挂死）。owner 在飞 ⇒ 本方法按 `skip` 记
-        `refusal_code="in_flight"` 并且一次都不叫 —— 那条消息会进它自己的收件箱。
+        那条路没有闸，绕过它就等于允许同号起第二个循环（两个自己互相喂事件，直到把进程
+        挂死）。owner 在飞 ⇒ 本方法按 `skip` 记 `refusal_code="in_flight"` 并且一次都不叫
+        —— 那条消息会进它自己的收件箱。
 
         ## 三条必须写在明面上的后果
         1. 唤醒清不掉板项本身：它把 `item_state` 从 `block` 翻成 `queued`，板项还在板上
@@ -4308,7 +4306,7 @@ class Conductor:
         - `items[]`：每项 `{item_id, task_id, owner, verdict, started, refusal_code,
           why, mark}`（逐项同形同集）—— `item_id` 是板项号，`task_id` 是要唤醒的那个号，
           `owner` 是它的角色，`mark` 是写进 `inputs` 的那条落痕（没写就是空串）。
-          `task_id` / `owner` 在每一档都给（`skip` 那几档也一样，2026-10-30）；
+          `task_id` / `owner` 在每一档都给（`skip` 那几档也一样）；
           只有"台账里根本没有那一行"（`no_such_item`）时这两格是空串 —— 那一档读不出来，
           不许拿 `item_id` 顶替（那会让"点错了"看起来像"叫对了"）；
         - `count` 数的是真正被叫起来的条数（`started=True`）；`requested` 是给了几个号；
@@ -4350,13 +4348,11 @@ class Conductor:
                 cell["why"] = (f"台账里没有 {item_id} 这一行 ⇒ 这个号点错了"
                                "（不是「已经唤醒了」）")
                 continue
-            # 先回填"哪一条、谁的"（2026-10-30，C）：`item_id` 是板项号，`task_id` 是要
-            # 唤醒的那个号，`owner` 是它的角色。这三格必须在每一档回执里都齐 ——
-            # 包括下面那几个早退档（已终态 / 不是 block）。改前这两格写在早退之后，
-            # 于是 `item_closed` 与 `not_blocked` 两档的 `task_id` / `owner` 是空串：
-            # 读的人只能拿板项号去叫，而板项不是代理，叫它没有对象；"这是谁的活"
-            # 也在回执里消失了。修法是把回填挪到早退之前，而不是给某一档单独补一句 ——
-            # 单独补就是把"逐项同形同集"拆成两份实现，下一档早退时又会漏。
+            # 先回填"哪一条、谁的"：`item_id` 是板项号，`task_id` 是要唤醒的那个号，
+            # `owner` 是它的角色。这三格必须在每一档回执里都齐 —— 包括下面那几个早退档
+            # （已终态 / 不是 block）。漏到早退之后，那两档的 `task_id` / `owner` 就是
+            # 空串：读的人只能拿板项号去叫，而板项不是代理，叫它没有对象。给某一档单独
+            # 补一句也不行 —— 那会把"逐项同形同集"拆成两份实现，下一档早退时又会漏。
             owner = str(row.get("parent_task_id") or "")
             cell["task_id"] = owner
             owner_row = by_id.get(owner) or {}
@@ -4394,7 +4390,7 @@ class Conductor:
                                "也不该动它名下的行；要它干活就重新派一个")
                 continue
             if verdict == "unknown":
-                # 2026-10-31 业主裁定 fail-closed：销号名单读不全 ⇒ 不叫醒，交人看。
+                # 销号名单读不全 ⇒ 不叫醒，交人看（fail-closed）。
                 # 这一档的下一步不是"别叫了"，而是"去看那一份名单的那几行" ——
                 # 那正是 `review` 的既有定义（"任一读数没查成 ⇒ 交人看，不猜"）。
                 # 理由码单列 `unknown_retired`（不复用 `unknown_reading`）：同一项上可能
@@ -4477,8 +4473,7 @@ class Conductor:
                     else:
                         patch = dict(now)
                         # 不改 status：直写跑在唤醒之前，而 wake_on_lifeline 的闸门正是
-                        # "目标在跑就不叫"。先写 running，闸门立刻判 in_flight，一条都叫不起来
-                        # （业主自查实测：板上 queued、回执 started=False、没人读）。
+                        # "目标在跑就不叫"。先写 running，闸门立刻判 in_flight，一条都叫不起来。
                         # status 留给执行侧 resume_dispatched 去翻，它翻的同时起线程。
                         patch["item_state"] = "queued"
                         patch["item_close"] = ""
@@ -4508,8 +4503,8 @@ class Conductor:
             cell["started"] = started
             if started:
                 woken += 1
-                # 回执措辞的硬要求（2026-10-29 接线小模拟的读数）：这一句是模型读到的
-                # 唯一一句"接下来该做什么"。只写"翻成 queued 了"会让它以为板项没了 ——
+                # 回执措辞的硬要求：这一句是模型读到的唯一一句"接下来该做什么"。
+                # 只写"翻成 queued 了"会让它以为板项没了 ——
                 # 板项还在板上，收口要收件人自己 ack，销号闸照旧挡着。
                 cell["why"] = (f"{owner} 已按同号叫起：板项 {item_id} 已由 block 翻成 "
                                "queued，它醒来就能在板上读到这一条。板项仍在板上：收口要"
@@ -4532,7 +4527,7 @@ class Conductor:
                                   for c in out["items"]):
             # 每一条都停在 `review`（读数没查成）⇒ 这一笔的顶层结论是"没查成"，
             # 不是"叫不动"。折进 `refused` 会让读的人以为"查过了、它们都叫不醒"，
-            # 而真相是"一条都没查成"（`draft/145` §3.2 顺带修的那一格）。
+            # 而真相是"一条都没查成"。
             out["state"] = "unknown"
             n_retired = sum(1 for c in out["items"]
                             if str(c.get("refusal_code") or "") == "unknown_retired")
