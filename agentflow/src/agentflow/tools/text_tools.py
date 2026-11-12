@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """文字层抽取的工具面（`text.extract`）：把盘上已有的 PDF/文本抽成 `out/texts/<名>.txt`。
+
 ## 为什么有这一件（2026-10-17 真机读数驱动，`draft/136`）
-T5 那趟（`projects/t5pdfs`）「最大的卡点」就是这一格：
-- A 侧：`extract.run` → `unknown_tool`（并列候选只有 `ocr.run`）；`ocr.run` → 「`role_denied`」（"角色
-'A' 拿不到工具 'ocr.run'"）；- B 侧：`fs.read(library/*.pdf)` → `binary`（"需要它的内容请走抽取链（extract/OCR）
-"）； B 能调 `ocr.run` 但 `any_ocr_backend_available=false`（easyocr 的 torch/numpy ABI 断裂、
-tesseract 不在 PATH）。
-⇒ 「"把 PDF 变成正文"没有任何角色的可达能力」，最后是 「M 自己写脚本 ＋ 派 E 跑」才解开（`out/texts/extract_pdfs.py`）—— 也就
-是说：「知识的入口靠主控越权动手」，这与"M 只派活、不指定能力"的口径直接冲突。
-⇒ 这一件把它接成 「A/B 可达的能力」。要点：「四份 PDF 全都 `has_text_layer=true`」 ——缺的从来不是 OCR，而是「抽取链本身」；扫描件才
-需要 `ocr.run`（分工见两边说明）。
+T5 那趟（`projects/t5pdfs`）的卡点是「"把 PDF 变成正文"没有任何角色的可达能力」：A 侧
+`extract.run` 不在面上、`ocr.run` 被 `role_denied`，B 侧 `fs.read(library/*.pdf)` 只回
+`binary` 且 OCR 后端不可用（easyocr 的 torch/numpy ABI 断裂、tesseract 不在 PATH）。
+最后靠「M 自己写脚本 ＋ 派 E 跑」才解开 —— 「知识的入口靠主控越权动手」，与"M 只派活、
+不指定能力"的口径冲突。这一件把它接成「A/B 可达的能力」：那四份 PDF 全都
+`has_text_layer=true`，缺的从来不是 OCR，而是「抽取链本身」。
+
 ## 与 `ocr.run` 的分工（别混）
-| 工具 | 用什么 | 什么时候 ||---|---|---|| `text.extract`（本模块） | PDF 「自带的文字层」（`extract.extract_text`）
-| 电子排版 PDF（绝大多数）—— 「不联网、不需要后端」 || `ocr.run`（`ocr_tools`） | 真 OCR 后端（easyocr/pytesseract）
-| 「扫描件/图片」：没有文字层，只能识别 |
+| 工具 | 用什么 | 什么时候 |
+|---|---|---|
+| `text.extract`（本模块） | PDF 自带的文字层（`extract.extract_text`） | 电子排版 PDF（绝大多数）—— 不联网、不需要后端 |
+| `ocr.run`（`ocr_tools`） | 真 OCR 后端（easyocr / pytesseract） | 扫描件/图片：没有文字层，只能识别 |
 """
 from __future__ import annotations
 
@@ -38,11 +38,10 @@ DEFAULT_OUT_DIR = ""          # 空 = 落在 library/（"入库"）
 def _safe_stem(raw: str, fallback: str = "text") -> str:
     """把 `lit_id`/文件名净化成「能当文件名」的形态。
 
-    「2026-10-17 真机读数驱动（T5 第 2 趟）」：A 传的是 `lit_id="lit:000000"`，
-    而原实现写 `f"{lit_id}.txt"` ⇒ 文件名里带「冒号」 ⇒ 在 Windows 上
-    `lit:000000.txt` 被解释成 「NTFS 备用数据流」，结果盘上留下一个 「0 字节的 `library/lit`」
-    （一个看不出所以然的幽灵文件）。这里统一：取冒号后的「裸编号」、再把
-    Windows 非法字符替换成 `_`；空则用 fallback。
+    T5 第 2 趟的真机读数：A 传 `lit_id="lit:000000"`，而原实现写 `f"{lit_id}.txt"` ——
+    冒号让 Windows 把 `lit:000000.txt` 当成 NTFS 备用数据流，盘上留下一个 0 字节的幽灵
+    文件 `library/lit`。这里统一：取冒号后的裸编号、把 Windows 非法字符换成 `_`，空则用
+    fallback。
     """
     body = str(raw or "").strip()
     if body:
@@ -155,8 +154,8 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
             "先确认它是不是扫描件（你面上有 OCR 工具就用它；没有就把这一份交 B 转文本 —— 本机无 OCR 后端时那一侧也会如实说）",
             kind="no_text_layer", path=str(p), lit_id=str(lit_id or ""))
 
-    # 口径：「转成纯文字稿入库」 ⇒ 直接落在 `library/` 里（与那份 PDF 同处一层），
-    # 下游角色 `fs.read library/<名>.txt` 就能读 —— 不必再碰 PDF（PDF 是二进制，读不了）。
+    # 口径「转成纯文字稿入库」⇒ 直接落在 `library/`（与那份 PDF 同层）：下游 `fs.read
+    # library/<名>.txt` 就能读，不必再碰二进制的 PDF。
     garbled, q = _quality(body)
     if garbled:
         return fail(
