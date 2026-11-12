@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """命题台账的索引：代码侧一次建好（本次唤醒缓存一次），不进上下文、只读。
 
-## 它是什么、不是什么（业主 2026-11-10 的口径，逐字见 `draft/181`）
+## 它是什么、不是什么（业主口径）
 
 业主逐字：「C 的建树不是全建，是选定一个节点（一个命题或概念，按需求主动查找现选）后
 上下按某层数（它自行决定）展开其父（依赖谁）和子(谁在引用它)，建立局部树，且可按需拼接
@@ -25,7 +25,7 @@
 支持外部传入已建好的索引），一次唤醒内只建一次；`ledger.expand` 只把这一次要的那棵
 局部树交回，其余一律不出内存。`ledger.resolve` 只交候选节点（五格），不交树。
 
-## 概念平权（业主 2026-11-10 追加口径，逐字）
+## 概念平权（业主追加口径，逐字）
 
 「概念只是命题台账里的一个标签，处理方式和命题平权」⇒ 概念行就是 `statements` 里
 `kind=concept` 的那一行，就是普通节点：同一套 `resolve` / `expand` / 同一组字段。
@@ -33,10 +33,10 @@
 没有入边 / 出边（因为命题不引概念），就如实给空并说明原因 ——「台账里没有命题依赖它」
 不等于「它没有关系」。
 
-## 依赖面：全路径 + 按证明路径分组（业主 2026-11-10 追加口径）
+## 依赖面：全路径 + 按路径分组（业主追加口径）
 
 每个被查到的节点的 `dependency_face` 是全路径（一路向上到根），并按
-`(证明号, path_group)` 分组：同一条证明里的依赖一组，`#p2` 那份另起一组。
+`(path_no, path_group)` 分组：同一个路径号的依赖一组，`#p2` 那一组另起一组。
 组内保留"引在哪一步"（`used_at`：依赖行自带的 `label` / `quote`，见 `_edge_reading`）
 与到根的链；某一组走不到根 ⇒ `status="broken"` + `break_at` 指出断在哪，
 不许悄悄少给几层。根有三种：文献 / 实验 / 本仓另一份稿（`source_` 三种来源），
@@ -86,7 +86,7 @@ SOURCE_ROOT_KINDS: tuple[tuple[str, str], ...] = (
     ("source_doc_id", "document"),
 )
 
-#: `proof_no` 缺省（老行不带尾巴 ⇒ 第 1 条证明）。与 `proofloc.DEFAULT_PROOF_NO` 同值，
+#: `proof_no` 缺省（老行不带尾巴 ⇒ 路径号 1）。与 `proofloc.DEFAULT_PROOF_NO` 同值，
 #: 这里不另立一份口径：直接用 `PL.DEFAULT_PROOF_NO`，只在本模块里留一个可读别名。
 DEFAULT_PROOF_NO = PL.DEFAULT_PROOF_NO
 
@@ -163,7 +163,7 @@ def _edge_reading(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _group_label(key: tuple[int, int]) -> str:
-    """`(证明号, path_group)` ⇒ 人读的组名（`#p1` / `#p2·g3`）。"""
+    """`(path_no, path_group)` ⇒ 人读的组名（`#p1` / `#p2·g3`）。"""
     proof_no, path_group = key
     tail = f"#p{proof_no}"
     return tail if int(path_group) <= 1 else f"{tail}·g{path_group}"
@@ -242,7 +242,7 @@ class LedgerIndex:
                 "grade": _grade_of(row),
                 "label": str(row.get("label") or ""),
                 "statement_full": str(row.get("statement_full") or ""),
-                #: 这条命题现在挂着的证明号（`#p1` 恒在；多证明时升序）。
+                #: 这条命题现在挂着的路径号（`#p1` 恒在；多条路径时升序）。
                 "proof_no": int(proof_nos[0]) if proof_nos else DEFAULT_PROOF_NO,
                 "proof_nos": proof_nos,
             }
@@ -316,7 +316,7 @@ class LedgerIndex:
     def resolve(self, query: Any) -> dict[str, Any]:
         """把一次"选根"查询 ⇒ 候选节点列表（不是树）。
 
-        三条口径（业主 2026-11-10 的 4.1）：
+        三条口径：
 
         - 按号：`stmt:000123` / `000123` / `123`（概念号同形 —— 概念就是台账里的一行）；
         - 按标签 / 关键字：走既有检索口径 `statementledger.by_keywords`
@@ -424,7 +424,7 @@ class LedgerIndex:
         """转发到 `ledgerface._read_node`（节点读数的唯一实现）。
 
         保留成方法而不是只在 `ledgerface` 里留函数：`expand` 装配每个节点时按
-        `index._read_node(...)` 取（判据 h③ 就是打桩这一格），路径与拆前一致。
+        `index._read_node(...)` 取（判据就是打桩这一格），路径与拆分前一致。
         """
         return _LF._read_node(self, sid, relation)
 
