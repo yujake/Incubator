@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""交接手稿（`draft/37` §134；存储改为追加式 JSONL：`draft/39` §C1–C4，用户 2026-10-05 裁）。
+"""交接手稿（存储是追加式 JSONL）。
 
-## 用户口径（逐字，2026-10-04）
+## 用户口径
 
 > 我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集手稿的文件夹，
 > 每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿最新的，从 0000 开始顺次标），
@@ -16,7 +16,7 @@
 | 领域对象 | `<工作区>/documents/<doc_id>.md`（`documents` 表） | 论文/手稿本体（进台账、要审校） |
 | 「交接手稿」 | `<工作区>/manuscripts/handoffs.jsonl`（一行一份） | 「写给某个同伴（或所有人）的工作交接」：我做了什么、依据是什么、你要做什么、我还卡在哪 |
 
-## 为什么从「一份一个 .md 文件」改成「追加式 JSONL」（用户 2026-10-05 裁）
+## 为什么是一行一份的追加式 JSONL
 
 1. 一行一份，追加写入：并发写者不需要"抢一个文件名"，id 由持锁的读-算-写序列分配，
    撞号与覆盖这两件事在结构上不可能发生（旧格式靠"文件已存在就往后挪"兜底，
@@ -24,17 +24,17 @@
 2. 收工门读数不打折：`closing.manuscript_rows` 改成数行（不是数文件）——
    "盘上有几份交接"这个数不再依赖文件名能不能被解析（旧口径下改个名就少一份）；
 3. 查询由脚本做（`scripts/manuscripts_query.py`）：按编号/收发/时间/引用检索，
-   并顺手把被引用命题的五元位快照（`draft/39` §3.14）打出来 —— 这件事不进模型上下文，
+   并顺手把被引用命题的五元位快照打出来 —— 这件事不进模型上下文，
    需要时脚本现算。
 
 每行的字段：`id` / `sender` / `to` / `summary` / `body` / `refs` / `created_at` /
 `task_id` / `sid` / `sha256` / `bytes`。其中 `to` / `summary` / `body` 三者必填
 （`summary` 是进留言的那一句话：`[手稿 NNNN] <summary>`；`body` 是 markdown 正文）。
 
-收件人的绝对编码另占两格（2026-10-26，Q2「发 / 收两栏只显示角色名」）：
+收件人的绝对编码另占两格：
 `to_task_id`（具体收件人 ⇒ 它的台账号）与 `to_task_ids`（`to=ALL` ⇒ 发信人此刻的
 直接子代理编号）。`task_id` 那一格本来就是发信人的台账号。两格都是「有就带上」：
-改前落的那一批行一个都没有，读侧照实写「旧账无号」，不许拿角色名拼一个编号出来
+旧账里没有这两格，读侧照实写「旧账无号」，不许拿角色名拼一个编号出来
 （拼出来的那个数字看起来像证据，其实是猜）。
 
 旧格式（`<编号>-<From>to<To>.md`）仍然读得回来（`read` / `list_all` 有旧文件回退），
@@ -65,13 +65,13 @@ LOCK_NAME = ".lock"
 ALL = "ALL"
 #: 旧格式文件名（`0007-DtoF.md` / `0011-AtoALL.md`）：只读回退用，不再写。
 #: 号身认"当前宽度或旧四位"（编号宽度在 `schema.ID_DIGITS` 一处定义；
-#: 2026-10-14 由四位改六位，旧文件必须照样读得进来）。
+#: 宽度改过，旧文件必须照样读得进来）。
 NAME_RE = re.compile(rf"^({S.ID_OR_LEGACY_PATTERN})-([A-Za-z]+)to([A-Za-z]+)\.md$")
 #: 一行的必填字段（缺一 ⇒ 这一行不是一份可溯源的交接）。
 REQUIRED_FIELDS: tuple[str, ...] = ("to", "summary", "body")
-#: 修订行的 `kind` 取值（`draft/53` §2.1「改」/ `draft/55` §3.1）：追加修订行、不改旧行。
+#: 修订行的 `kind` 取值：追加修订行、不改旧行。
 #: 为什么要有这一格：`revises` 指回被订正的那一份，"这一行是新写还是订正"必须机读得出来
-#: ——否则读账本的人会把"订正"读成"又交接了一次"（那正是 #1 的一半）。
+#: ——否则读账本的人会把"订正"读成"又交接了一次"。
 KIND_REVISION = "revision"
 
 
@@ -92,9 +92,9 @@ def ensure_dir(root: str | Path) -> Path:
 def valid_recipient(token: str) -> bool:
     """收件人：八个角色、主控（`M`）或 `ALL`。
 
-    主控必须在列（`draft/39` §6.4）：强制 `notify` 落地后，被召唤来的角色最常见的交接对象
+    主控必须在列：强制 `notify` 落地后，被召唤来的角色最常见的交接对象
     就是召唤它的主控；把 M 排除在外会让"给主控的交接"在写入期被拒 ——
-    而那种拒在真机上的表现是"手稿写不进去"（看起来像模型不会用这个工具）。
+    而那种拒的症状是"手稿写不进去"（看起来像模型不会用这个工具）。
     """
     return str(token) in set(S.ROLES) | {S.CONDUCTOR_ROLE, ALL}
 
@@ -122,9 +122,8 @@ def parse_name(path: str | Path) -> dict[str, str] | None:
 #: `handoffs.jsonl` 的解析缓存：`路径 -> ((mtime_ns, size), 行, 坏行说明)`。
 #:
 #: 为什么要缓存：这个账本在一次动作里会被读很多次 —— `write` 每核一条引用就
-#: `row_of` 一次（全表读），`next_id` 再读一次（`_scan_ids`）；
-#: 实测 3 条引用的 `write` 在 300 行账本上解析 4 次、15 ms（`temp/rbe3_measure.py`，
-#: 2026-10-27）。键里带 `(mtime_ns, size)`，所以别的进程追加之后下一次读就会重解析；
+#: `row_of` 一次（全表读），`next_id` 再读一次（`_scan_ids`）。
+#: 键里带 `(mtime_ns, size)`，所以别的进程追加之后下一次读就会重解析；
 #: 本进程的 `write` 追加完还会显式清一次这一格，于是"自己刚写的那一行读不到"在
 #: 结构上不可能（不靠时间戳精度）。
 _ROWS_CACHE: dict[str, tuple[tuple[int, int], list[dict[str, Any]], list[str]]] = {}
@@ -136,9 +135,6 @@ _ROWS_CACHE_MAX: int = 64
 #: 它与上面那格是两件事：账本行变了不一定多出/少掉一个旧文件（追加一行不动目录），
 #: 目录变了也不一定动了账本。所以键是"目录自己的"盘上读数，而且与解析缓存
 #: 走同一条失效路径（`_forget_cache`）—— 本进程一写就两格一起清。
-#: 实测（`temp/rbe3_measure_legacy.py`，2026-10-27）：一次 `_legacy_files` 在有 50 个
-#: 旧格式文件时 1.25 ms、0 个时 0.39 ms，而 `write` 全程 5.5–6.3 ms ⇒ 这一格占
-#: 一次写的一成上下；缓存之后 `next_id` 从 1.33 ms 降到 stat 一次的量级。
 _LEGACY_CACHE: dict[str, tuple[tuple[int, int], list[tuple[str, Path, dict[str, str]]]]] = {}
 
 
@@ -223,13 +219,12 @@ def _legacy_row(root: str | Path, mid: str, path: Path, got: Mapping[str, str]) 
 def _scan_ids(root: str | Path) -> list[str]:
     """盘上出现过的全部编号（账本行 + 旧文件，两处取并集 —— 任何一处漏读都不该导致撞号）。
 
-    ## 为什么要按数值排序（2026-10-14，四位改六位这一笔抓出来的）
+    ## 为什么要按数值排序
 
     原实现只收 `len(mid) == 4` 的行、再把它当字符串排序取 `ids[-1]`：
     宽度一改，"新写的号"整类被这个长度过滤挡在外面 ⇒ 扫描结果永远看不到刚写下的
-    那一行，`next_id` 于是一直返回同一个号（实测：并发 8 个写者全部拿到 `000000`，
-    8 份手稿撞在一个号上）。这是"按固定宽度写死的过滤 + 字符串序当数值序"两个形态
-    叠在一起的结果，所以这里两条一起改：两种宽度都收、按 int 排序。
+    那一行，`next_id` 于是一直返回同一个号。这是"按固定宽度写死的过滤 + 字符串序
+    当数值序"两个形态叠在一起的结果，所以这里两条一起改：两种宽度都收、按 int 排序。
     """
     ids: set[str] = set()
     for rec in rows(root):
@@ -302,16 +297,16 @@ def _render_body(sender: str, recipient: str, summary: str, body: str, *,
         f"- 台账：{task_id or '（未记）'}" + (f" / sid {sid}" if sid else ""),
     ]
     if str(note or "").strip():
-        # 「这一行是怎么来的」（`draft/39` §6.4）：模型自己填的表 / 框架据派活派生 ——
+        # 「这一行是怎么来的」：模型自己填的表 / 框架据派活派生 ——
         # 读账本的人要能分清这两者，否则"留痕"会看起来都是模型写的。
         head.append(f"- 附注：{str(note).strip()}")
     head.append("")
     return "\n".join(head) + "\n" + str(body or "").rstrip() + "\n"
 
 
-#: 引用里 `前缀:编号` 的写法能指向的台账（`draft/39` §C4：手稿的引用面不止前序手稿）。
+#: 引用里 `前缀:编号` 的写法能指向的台账（手稿的引用面不止前序手稿）。
 #:
-#: ## 2026-10-14 真机读数：加了 `q` / `c` 两个前缀
+#: ## 为什么有 `q` / `c` 两个前缀
 #:
 #: 一次真机跑里 M 派的活带着 `refs=["q:000000"]`（它要引自己派出去的那条研究问题），
 #: 而这张表当时只有 `stmt/exp/lit/rel` ⇒ `ref_problem` 报「前缀不认识」。
@@ -331,7 +326,7 @@ OBJECT_REFS: dict[str, str] = {
 def ref_problem(root: str | Path, ref: str) -> str:
     """这一条引用能不能立住（空串 = 可以）。
 
-    两条合法写法（`draft/39` §C2）：
+    两条合法写法：
 
     - 四位手稿编号（`"0007"`）⇒ 必须在盘上存在（行或旧文件）；
     - `前缀:编号`（`stmt:0007` / `exp:0002` / `lit:0004` / `rel:0011` / `q:0000` / `c:0000`）
@@ -369,7 +364,7 @@ def ref_problem(root: str | Path, ref: str) -> str:
 def rows_for_task(root: str | Path, task_id: str, *, sender: str = "") -> list[dict[str, Any]]:
     """这一条任务（`tasks.task_id`）已经留下了哪些行（可按发件人过滤）。
 
-    用途（`draft/39` §6.6 F1）：动作驱动的一趟结束时要由框架代写一份"我干完了、交给谁"，
+    用途：动作驱动的一趟结束时要由框架代写一份"我干完了、交给谁"，
     而循环驱动的一趟已经由该角色自己的 `notify` 写了 —— 两种形态都要留痕、不许写两份。
     判据就是"这一条任务号下已经有行了吗"。
     """
@@ -391,23 +386,23 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
     拒绝（抛 `ValueError`，「零写入」）：发件人/收件人不是合法角色、没有一句话说明、
     正文为空。"空手稿"必须被拒：它是"我交接了"的假证据，而这一层存在的全部意义就是可溯源。
 
-    `to_task_id` / `to_task_ids`（2026-10-26，Q2）：收件人的绝对编码，由调用方给
+    `to_task_id` / `to_task_ids`：收件人的绝对编码，由调用方给
     （具体收件人 ⇒ 它的台账号；`to=ALL` ⇒ 发信人此刻的直接子代理编号列表）。为什么是
     调用方给而不是这里现算：这一层不知道名册，算出来只能是猜；而解析处
     （`agent_loop._do_handoff` → `_handoff_address`）手里本来就有那个实例的 `task_id`。
     "编号在写侧就落进行里"是这一条的全部要点 —— 读侧只做展示，不许自己拼。
 
-    `refs` 不再拒写（D10，`draft/52:103`）：立不住的引用被记进 `ref_problems`
+    `refs` 不拒写：立不住的引用被记进 `ref_problems`
     并可由 :func:`ref_readings` 读出来（详见那里的说明）。形状仍然管：
     `refs` 必须是字符串数组（形状错 ⇒ 抛 `ValueError`）。
 
     `title` 是旧参数名：它现在与 `summary` 是同一件事（进留言的那一句话）。
     两者都给了就以 `summary` 为准，不给 `summary` 时把 `title` 当它 —— 旧调用点不用改。
 
-    `note` 是"这一行是怎么来的"（模型自己填的表 / 框架据派活派生，见 `draft/39` §6.4）：
+    `note` 是"这一行是怎么来的"（模型自己填的表 / 框架据派活派生）：
     它进正文头部，因为读账本的人要能分清这两种留痕。
 
-    `revises`（`draft/53` §2.1）非空 ⇒ 这一行是一条修订行（`kind="revision"`，
+    `revises` 非空 ⇒ 这一行是一条修订行（`kind="revision"`，
     指回被订正的那一份编号）。两条纪律：
 
     - append-only：旧行一个字节都不改（订正靠追加，不靠改写 —— 溯源链要能复现
@@ -434,12 +429,12 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
     if not text_body:
         raise ValueError("正文不能为空（空手稿是『我交接了』的假证据）")
     refs_list = [str(x).strip() for x in refs if str(x).strip()]
-    # ---- D10（`draft/52:103` 逐字："改成『建议』（不动 `REQUIRED_FIELDS` 其它项）+ 一条读数"）
+    # ---- refs 从"拒写"降成"建议 + 一条读数"
     #
-    # 以前这里对每条 ref 调 `ref_problem`，悬空就拒写。真机读数（`draft/44` D10）：
-    # `refs` 在 1542 行手稿里全空 —— 一条"要么填对、要么整份手稿写不进去"的判据，
-    # 在真机上的效果不是"引用得更好"，而是"没人敢引用"（引用一错，交接本身丢了）。
-    # 于是这条链上最该有的东西（溯源边）在账本里一个都没有。
+    # 以前这里对每条 ref 调 `ref_problem`，悬空就拒写。一条"要么填对、要么整份手稿
+    # 写不进去"的判据，在真机上的效果不是"引用得更好"，而是"没人敢引用"
+    # （引用一错，交接本身丢了）—— 于是这条链上最该有的东西（溯源边）在账本里
+    # 一个都没有。
     #
     # 新口径：记下来 + 读数可见，不拒写。形状仍然管（`refs` 必须是字符串数组），
     # 而"这一条引用立不立得住"从写入期硬拦降成写入期的如实标记：
@@ -483,10 +478,10 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
             if ref_problems:
                 # 同一条纪律：只有真的有问题时才多这一个键。
                 rec["ref_problems"] = dict(ref_problems)
-            # 收件人的绝对编码（Q2，2026-10-26）：两格分形状，谁也不顶替谁 ——
+            # 收件人的绝对编码：两格分形状，谁也不顶替谁 ——
             # `to_task_id` 是"那一个实例"（字符串），`to_task_ids` 是"广播面"（列表）。
             # 混成一格之后「发给一个实例」与「发给一批实例」在读侧就分不开了。
-            # 同一条"有就带上"的纪律：缺键 = 这一行没记下编号（改前的旧行、以及写的时候
+            # 同一条"有就带上"的纪律：缺键 = 这一行没记下编号（旧行、以及写的时候
             # 名册读不成的那一批），读侧照实写「旧账无号」，不拿角色名拼一个出来。
             to_code = str(to_task_id or "").strip()
             if to_code:
@@ -517,12 +512,11 @@ def revise(root: str | Path, *, mid: str, title: str = "", summary: str = "", bo
            sender: str = "", recipient: str = "", refs: Iterable[str] = (),
            task_id: str = "", sid: str = "", note: str = "", reason: str = "",
            timeout: float = 30.0) -> dict[str, Any]:
-    """订正一份手稿：追加一条修订行，旧行一个字节都不改（`draft/53` §2.1「改」）。
+    """订正一份手稿：追加一条修订行，旧行一个字节都不改。
 
-    为什么是追加而不是改写（`draft/39` §C1 的同一条理由）：手稿层存在的全部意义是
-    "可溯源"。改写旧行会让"当时写的是什么"永久消失，而订正本身恰恰是最需要
-    留下证据的一件事 —— 读账本的人要能同时看到原文与订正版（`draft/55` §5.1 第 3 条：
-    过程的原文与加工后必须并列留痕）。
+    为什么是追加而不是改写：手稿层存在的全部意义是"可溯源"。改写旧行会让
+    "当时写的是什么"永久消失，而订正本身恰恰是最需要留下证据的一件事 ——
+    读账本的人要能同时看到原文与订正版（过程的原文与加工后必须并列留痕）。
 
     与 `write` 的关系：这是 `write` 的一层薄封装（`revises=<旧编号>`），
     所以"空手稿被拒 / 引用悬空被拒 / 编号在同一把锁里分配"这些判据只有一份实现。
@@ -581,13 +575,13 @@ def revisions_of(root: str | Path, mid: str) -> list[dict[str, Any]]:
 
 
 def ref_readings(root: str | Path) -> dict[str, Any]:
-    """D10 的那条读数：账本里哪些行的 `refs` 立不住、为什么（只读，不改任何行）。
+    """账本里哪些行的 `refs` 立不住、为什么（只读，不改任何行）。
 
-    为什么"改建议"之后必须有一条读数（`draft/52:103`）：判据从"拒写"降成"标记"之后，
+    为什么"改建议"之后必须有一条读数：判据从"拒写"降成"标记"之后，
     若没有读数，"引用写错了"就变成没有任何地方会说话的一件事 —— 那正是
     本项目最忌的形态（把"检查"换成"沉默"）。这条读数把它重新变成看得见的事实：
 
-    - `rows_with_refs`：账本里有引用的行数（D10 之前这一栏在真机上恒为 0 —— 1542 行全空）；
+    - `rows_with_refs`：账本里有引用的行数；
     - `problems`：`[{id, sender, to, ref, why}]` 逐条列出立不住的那些引用；
     - `checked` / `reason`：读数本身有没有做成（坏行由 `read_rows` 报，不折成"干净"）。
     """
@@ -679,7 +673,7 @@ def query(root: str | Path, *, mid: str = "", to: str = "", sender: str = "",
 
 
 def missing_fields(rec: Mapping[str, Any]) -> list[str]:
-    """这一行缺了哪个必填字段（`draft/39` §C2：`to` / `summary` / `body` 缺一即不合格）。"""
+    """这一行缺了哪个必填字段（`to` / `summary` / `body` 缺一即不合格）。"""
     return [k for k in REQUIRED_FIELDS if not str(rec.get(k) or "").strip()]
 
 
