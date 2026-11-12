@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""手稿族的产出方读数（甲：路径族 + V 的父名单）。
+"""手稿族的产出方读数。
 
 事实来源只有手稿路径的族前缀；父名单从 `capabilities.ALLOWED_EDGES` 现算
 （形状是 `dict[str, frozenset[str]]`，不是 `list[tuple]`）。本模块不做写盘、
