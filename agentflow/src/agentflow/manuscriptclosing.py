@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""E 的收工自动提交（业主 2026-11-11 裁定 ②）。
+"""E 的收工自动提交。
 
 与 F 那套同形：选 E 名下（`e-proof` / `e-num` 两族）已签、尚未提交的稿，把
 `mss:` 记号写进 E 自己那一行 `tasks.artifacts`。记号格式与解析复用
@@ -237,7 +237,7 @@ def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
                 proof_no=int(cand.get("proof_no") or 1),
                 statement_id=str(cand.get("statement_id") or ""),
                 at=str(cand.get("at") or stamp), submitted_at=stamp,
-                # 收工这一条路（E）：签触发那一条写 `sign_issued`（2026-11-11 甲）。
+                # 收工这一条路（E）：签触发那一条写 `sign_issued`。
                 via=VIA_CLOSING)
         except ValueError as exc:
             out["still_unsubmitted"].append(_still(cand, "bad_token", str(exc)))
