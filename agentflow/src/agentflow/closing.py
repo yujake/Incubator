@@ -2219,7 +2219,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         review_states: dict[str, int] = {s: 0 for s in _VR_R10.REVIEW_STATES}
         stale_ids: list[str] = []
         rejected_ids: list[str] = []
-        #: V 判「有毛病」而这一条今天仍然 `active` 的那些（D10 的那一格原因）。
+        #: V 判「有毛病」而这一条今天仍然 `active` 的那些。
         #: 为什么要单列：`rejected` 是"这一份被签过、结论不是成立"，而"这一行还挂着"
         #: 才是"框架里还有人该去修"的那一半 —— 判定的那一半 V 已经做了，缺的是 F 去补那几步。
         rejected_active_ids: list[str] = []
@@ -2282,9 +2282,9 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 grades_with_bits[grade] = grades_with_bits.get(grade, 0) + 1
             # 引用命题（origin="external_lit"）不进这一档的计数，与等级无关。
             #
-            # 2026-11-02（两阶段录入）：引用侧的"第 3 位"降成占位签（凭据是文献编号），
-            # 于是它再也到不了 pre_theorem。改前这条跳过写在 grade 判据里面，靠"引用命题
-            # 也能到预备定理级"这个前提工作；那个前提没了，跳过就必须挪到判据的真身上：
+            # 引用侧的"第 3 位"是占位签（凭据是文献编号），于是它再也到不了
+            # pre_theorem；把跳过写在 grade 判据里面会靠"引用命题也能到预备定理级"
+            # 这个已经不存在的前提工作，所以跳过落在判据的真身上：
             # 这一档数的是"我方造出的判决性证据"，判据是 origin，不是等级。读数
             # cited_skipped 照旧逐条点名（它是这条理由的载体）。
             if str(bits.get("origin") or "") == "external_lit":
@@ -2303,7 +2303,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 # 有台账 ⇒ 用台账现算出来的逐条等级（`statement_review_reading` 的
                 # `proofs[*]["grade"]`：只有 signed 的那一份才到 pre_theorem/theorem）。
                 # 没台账（历史行 / 夹具）⇒ 位是命题级汇总，落在 canonical #p1 上
-                # （老数据只有那一条证明）—— 读数与改前逐字相同。
+                # （老数据只有那一条证明）。
                 per_proof: list[tuple[int, str]] = [(1, grade)]
                 if reading is not None and reading.get("ledger_present"):
                     per_proof = []
@@ -2356,7 +2356,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "stale_ids": stale_ids[:8],
             "stale_total": len(stale_ids),
             "rejected_ids": rejected_ids[:8],
-            #: V 判「有毛病」而这一行仍然 `active` 的那些（D10）：判定那一半 V 已经做了，
+            #: V 判「有毛病」而这一行仍然 `active` 的那些：判定那一半 V 已经做了，
             #: 缺的是"有人去补 V 指的那几步" —— 它与 `rejected_ids` 的差就是"还挂着"。
             "rejected_active_ids": rejected_active_ids[:8],
             "rejected_active_total": len(rejected_active_ids),
@@ -2399,13 +2399,13 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "③有记录且我方到 `pre_theorem`/`theorem` = 这一档要数的（见 `counted`）。"
                 "「没算过」不等于「算了、不够档」，所以这两件事的分母必须分开给"),
         }
-        # ---- 业主 2026-11-01：签的侧文件 + "没送到"的判决（只读数，「不参与任何等级」） --
+        # ---- 签的侧文件 + "没送到"的判决（只读数，「不参与任何等级」） --
         #
         # 为什么要放在这一格而不是新造一门：R10 已经在数"第 3 位相对现行正文"，
         # 而"这一签在盘上有没有一份按正文 sha 命名的侧文件"是同一个问题的另一半
         # （B 收录时靠它认签）。两处各数一遍就会对同一批签给出两个数。
-        # 三态：没有 `out/vsigns/` ⇒ `not_applicable`（66 行历史签补不出侧文件，不补 ⇒ 不红）。
-        # `undelivered_reviews` 是 81 那条真缺陷（8 判 4 送）在收工门上的可读落点。
+        # 三态：没有 `out/vsigns/` ⇒ `not_applicable`（历史签补不出侧文件，不补 ⇒ 不红）。
+        # `undelivered_reviews` 让「判了却没送到」在收工门上有一个可读落点。
         try:
             from . import vsigns as _VSP_GATE
 
@@ -2416,11 +2416,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "delivery_checked": bool(_undelivered.get("delivery_checked")),
                 "receipts": int(_undelivered.get("receipts") or 0),
                 "delivered": int(_undelivered.get("delivered") or 0),
-                # 167：`dispatched` 与 `delivered` 是两个数（业主 2026-11-01）——
+                # `dispatched` 与 `delivered` 是两个数：
                 # "投出去了、没人读"（dispatched_only）不许与"连板项都没有"折成一档。
                 "dispatched": int(_undelivered.get("dispatched") or 0),
                 "not_dispatched": int(_undelivered.get("not_dispatched") or 0),
-                # 「替人送审」按 error 级别可见（业主 2026-11-01 定稿：这属于缺陷，
+                # 「替人送审」按 error 级别可见（这属于缺陷，
                 # 不是分流问题）；「作者未记录」是另一档 —— 它不是"没问题"。
                 "submitter_is_not_author": int(
                     _undelivered.get("submitter_is_not_author") or 0),
