@@ -10358,8 +10358,6 @@ def prompt_facts(*, task: str = "", summoned_by: str = "", task_id: str = "",
         # `verifications.statement_review_reading`，与收工门 R10 同一个函数）。
         "v_rejections": v_rejections or "（名下没有被 V 判「有毛病」的证明）",
     }
-
-
 #: 这条「证明审阅」的路，谁真的走得通：写 statements 的写面、`verify.verify_proof`、
 #: 或 `formal.*` 入口，三样有一样即可。E8（2026-10-25）：E 三样都没有，而 TOOLCHAIN_FACTS
 #: 此前把「把证明写进 statements 的 proof_text，再请 V 用 verify_proof 走查」发给每一个角色
@@ -10372,14 +10370,10 @@ def _reaches_proof_review(role: str, registry: Any) -> bool:
     if "verify.verify_proof" in names:
         return True
     return any(name in _FORMAL_ENTRY_TOOLS for name in names)
-
-
 #: TOOLCHAIN_FACTS 里「这条路怎么走」那一族的第一行标记（走不通的角色只读机器读数）。
 _TOOLCHAIN_PATH_PREFIXES: tuple[str, ...] = (
     "- Lean 形式化：", "- 形式化开关", "- 这一趟走替代路线",
 )
-
-
 def _filter_toolchain_facts(role: str, registry: Any, text: str) -> str:
     """E8：把「这条路怎么走」的指令从走不通的角色的 TOOLCHAIN_FACTS 里摘掉。
 
@@ -10398,62 +10392,23 @@ def _filter_toolchain_facts(role: str, registry: Any, text: str) -> str:
     kept = [ln for ln in str(text).splitlines()
             if "已关闭" in ln or not ln.startswith(_TOOLCHAIN_PATH_PREFIXES)]
     return "\n".join(kept)
-
-
 def role_prompt_registry(role: str, *, registry: Any = None,
-
-
-
                         task: str = "", summoned_by: str = "",
-
-
-
                         task_id: str = "", depth: int = 1,
-
-
-
                         parent_task_id: str = "", children: str = "", board: str = "",
-
-
-
                         budget_left: str = "", inbox: str = "", notebook: str = "",
-
-
-
                         user_replies: str = "",
-
-
-
                         workspace_root: str = "", extra_facts: Mapping[str, str] | None = None,
-
-
-
                         availability: Mapping[str, str] | str | None = None,
-
-
-
                         toolchain_facts: str = "", toolchain_formal: str = "",
-
-
-
                         parent_limits: str = "",
-
                         #: 2026-10-22（业主 B-3）：F 名下被 V 判「有毛病」的证明明细。
                         #: system 那一侧由 `promptstability.split_facts` 换成指路语
                         #: （段名集合未变：没有哪一段正文引用 `{{v_rejections}}`），
                         #: 原值念在开场那条 user 消息里（`_opening_transcript`）。
                         v_rejections: str = "",
-
-
-
                         preset_root: str | Path | None = None,
-
-
-
                         ) -> PromptRegistry:
-
-
-
     """按角色装配一份提示词注册表（段 + 变量），供 `render` 或审计使用。
 
 
@@ -10483,192 +10438,56 @@ def role_prompt_registry(role: str, *, registry: Any = None,
 
 
     """
-
-
-
     if role not in ROLE_BRIEFS:
-
-
-
         raise ValueError(f"未登记的角色 {role!r}（已知 {tuple(ROLE_BRIEFS)}）")
-
-
-
     # 业主 2026-10-22（「在Lean开关没开时隔绝L」）：开关关着时不存在的角色连提示词都
-
     # 不生成。判在函数入口（而不是渲染完再丢）是因为"渲染了一半才失败"会让调用方拿到
-
     # 一份半成品；拒绝的理由是受控的 `RoleHidden`（`reason="lean_off"`）。
-
     _LEANSCOPE.require_visible(role, surface="agent_prompts.role_prompt_registry")
-
-
-
     brief = ROLE_BRIEFS[role]
-
-
-
     reg = PromptRegistry()
-
-
-
-
-
-
-
     # ---- 预设那一层（`draft/103` §4.1b 的契约：预设决定"写死的块由哪段文件给"，
-
-
-
     # 代码永远给现算的块）。三态纪律：预设坏 ⇒ 回落内置注册，并把"为什么回落"
-
-
-
     # 记进 `prompt_audit["preset"]`（读数的算法见 `composition.preset_reading` ——
-
-
-
     # 它涵盖两档：发现期的 `broken` 与组装期抛出的异常）；绝不半组装
-
-
-
     # （`apply_preset` 一抛就把注册表整个丢掉重来）。
-
-
-
     #
-
-
-
     # 谁接管了哪一段由 `apply_preset` 的返回值给（`provided`），下面注册写死块时按它跳过 ——
-
-
-
     # 因为 `promptkit` 对同名两次注册是注册期即抛（那是对的：两份文本抢一个段名时
-
-
-
     # "哪一份是真的"必须有答案，而答案就是组装文件）。
-
-
-
     provided: set[str] = set()
-
-
-
     _preset = _composition.role_preset(role, root=preset_root)
-
-
-
     if _preset is not None and not _preset.broken:
-
-
-
         try:
-
-
-
             provided = _composition.apply_preset(reg, _preset, role=role)
-
-
-
         except Exception:  # noqa: BLE001 —— 坏预设回落（理由由 `preset_reading` 给出）
-
-
-
             provided = set()
-
-
-
             reg = PromptRegistry()      # 半组装必须整个丢掉：不许留半份提示词
-
-
-
-
-
-
-
     # 身份的两个槽位（`persona.py` 是它们唯一的注册入口）：无条件注册、文本今天为空
-
-
-
     # （空段会被丢掉 ⇒ 提示词一字不变）。它在这里的作用是给"某个角色换一份身份/加一句
-
-
-
     # 身份后缀"留下唯一入口 —— 部署这一份是遮蔽的靶子，换身份就是
-
-
-
     # `persona.apply_persona(reg, Persona(...), scope=role)`。
-
-
-
     P.register_deployment_persona(reg)
-
-
-
-
-
-
-
     facts: dict[str, str] = {
-
-
-
-
         "role": role,
-
-
-
-
         "duty": brief.duty,
-
-
-
-
         #: 这十二格是「这一趟的事实」—— 值与缺省句由 `prompt_facts` 一处给（2026-10-21）：
         #: 它们从 system 挪进了 user 消息，于是有两个读者 —— 这里的 system 模板
         #: （经 `promptstability.split_facts` 换成静态指路语），与
         #: `agent_loop._opening_transcript`（user 消息里念出来的原值）。
         #: 两处各写一份缺省句，"留空时说什么"就会漂，而漂了没有任何判据会红。
-
-
-
-
         **prompt_facts(task=task, summoned_by=summoned_by, task_id=task_id, depth=depth,
                        parent_task_id=parent_task_id, children=children, board=board,
                        budget_left=budget_left, inbox=inbox, notebook=notebook,
                        user_replies=user_replies, workspace_root=workspace_root,
                        availability=availability, parent_limits=parent_limits,
                        v_rejections=v_rejections),
-
-
-
-
         "prompt_version": PROMPT_VERSION,
-
-
-
-
     }
-
-
-
     for key, value in (extra_facts or {}).items():
-
-
-
         facts[str(key)] = str(value)
-
-
-
     for name, value in facts.items():
-
-
-
         reg.variable(name, value)
-
     #: 未收编的本地材料（业主 2026-10-16 的 T5 口径："直接建工作区、把 PDF 丢进去，
     #: 看 M 一上来会不会注意到它们并让 A 收编"）。
     #:
@@ -10687,276 +10506,72 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         # （`system_prompt` 里是 `render(Scope(role=role))`）—— 我第一次就栽在这里，
         # 段注册了却永远返回空串（"没有这一行"）。
         lambda _scope, _root=_ws_root: _pending_local_materials(_root)))
-
-
-
-
-
-
-
     reg.section(Section("AGENT_IDENTITY", SECTION_ORDERS["AGENT_IDENTITY"],
-
-
-
                         "你是 {{role}} 号角色，职责是：{{duty}}。\n"
-
-
-
                         "你在一套多智能体协同框架里工作：你只做自己职责内的事，"
-
-
-
                         "其余的交给伙伴（见下面的伙伴表）。"
-
-
-
                         "你这次是被 {{summoned_by}} 唤起/发起的，台账号为 {{task_id}}，"
-
-
-
                         "在召唤链上的深度是 {{depth}}。\n"
-
-
-
                         "你的父代理台账号：{{parent_task_id}}；"
-
-
-
                         "这一趟开始那一刻你名下的子代理（名册摘要：名字 · 一句简介 · 状态。"
-
-
-
                         "**这是快照** —— 这一趟里新派的不会自己出现在这里，要看活的用 "
-
-
-
                         "`{\"roster\": {\"of\": \"self\"}}`）：{{children}}。"
-
-
-
                         "（编号用来对账与回报：造新子代理给它名册名（`name`），复用旧子代理写 `reuse`；父子关系由框架"
-
-
-
                         "按台账号记；要谁做事就让谁**亲自**做，传话/代读不算送达。）"))
-
-
-
     # A 轴批 2（`draft/103` §2.1）：官能 / 证据契约 / 论文包 / 任务框 / 手稿协议各按空行切块。
-
-
-
     # 切点全在空行上 ⇒ 渲染逐字节不变；换来的是 `prompt_audit["sections"]` 能逐块点名。
-
-
-
     _faculties = faculties_text(role, registry)
-
-
-
     for section in _block_sections(_faculties, _faculty_block_names(_faculties.count("\n\n") + 1)):
-
-
-
         reg.section(section)
-
-
-
     # 五格身份文本（`brief_sections` 是它们唯一的渲染口）：预设接管的那些跳过
-
-
-
     # （`provided` 来自组装文件；同名两次注册在 `promptkit` 里是注册期即抛）。
-
-
-
     for _name, _order, _text in brief_sections(role):
-
-
-
         if _name in provided:
-
-
-
             continue
-
-
-
         reg.section(Section(_name, _order, _text))
-
-
-
-
-
-
-
     for i, section in enumerate(_numbered_sections("TOOL", tools_lines(role, registry),
-
-
-
                                                   SECTION_ORDERS["TOOL_GUIDANCE_BASE"])):
-
-
-
         reg.section(section)
-
-
-
         del i
-
-
-
     for section in _block_sections(EVIDENCE_CONTRACT, _EVIDENCE_BLOCK_NAMES):
-
-
-
         reg.section(section)
-
-
-
     if role in PAPER_PACK_ROLES:
-
-
-
         # 论文包专用段：只给碰它的角色（M 统筹交付 / G 写稿与打包 / H 审校）。
-
-
-
         # 顺序放在证据契约之后、输出契约之前：它是对"这次交付什么"的补充说明，
-
-
-
         # 压过它会把通用契约挤到看不见的地方。
-
-
-
         # `R6` 缺陷 4：这一段按角色渲染 —— M 得完整那节，G/H 得"体例由 M 裁定（不是你的活）"。
-
-
-
         # A 轴批 2：10 块分别登记 ⇒ `paper_pack_for` 那处"替换标题行"的补丁仍然照旧
-
-
-
         # （它换的是第八块内部的标题行）；要改成"第八块按角色给不同文本"属于 B 轴，留到那一批。
-
-
-
         for section in _block_sections(paper_pack_for(role), _PAPER_BLOCK_NAMES):
-
-
-
             reg.section(section)
-
-
-
-
-
-
-
     acts = actions_lines(role)
-
-
-
     reg.section(Section("OUTPUT_CONTRACT", SECTION_ORDERS["OUTPUT_CONTRACT"],
-
-
-
                         ("你对外可被调用的动作（这些是伙伴唤起你时用的名字）：\n"
-
-
-
                          + "\n".join(acts)) if acts else
-
-
-
                         # `draft/106` §4 的第三块（`M_DELIVERABLE`）：这一句对 M 是"真的"，
-
-
-
                         # 但只说"你没有动作"读起来像缺省值/像"我什么都做不了"。
-
-
-
                         # 所以 M 那一档把它的三张面写清（`draft/103` §5.2 第 2 条点过这一处）。
-
-
-
                         "你没有对外可被调用的动作 —— **这是设计，不是缺口**："
-
-
-
                         "你的产出由框架直接读。你的三张面各有各的落点："
-
-
-
                         "**对用户**的接口是收工那句 `final`（例外句见上面的留痕那块）；"
-
-
-
                         "**对同伴**的接口是任务行（`summon` / `summon_many` 落的账）与交接手稿；"
-
-
-
                         f"**对框架**的接口是 `conductor.*` 那 {conductor_tool_count(role, registry)} 件读数与操作。"
-
-
-
                         "交付物是一份**落在盘上**的交付说明（`out/review/REPORT.md`）——"
-
-
-
                         "只写在对话里、没有落盘的交付不算交付。"))
-
-
-
     reg.section(Section("THREE_STATE", SECTION_ORDERS["THREE_STATE"],
-
-
-
                         "三态词表（框架用这几个码表示「没查成」，它们不等于「没有这个问题」）：\n"
-
-
-
                         + "、".join(J.JUDGE_PROBLEMS)
-
-
-
                         + "。拿到这些码时，正确做法是走确定性回退并在结论里写明来源，"
-
-
-
                           "不许折成「没问题」，也不许折成「不存在」。"))
-
-
-
     # 任务框按空行切成 4 栏（实测恒为 4）—— 每一栏一段，于是"哪一栏落后于代码"能点名。
-
-
-
     for section in _block_sections(_TASK_FRAME_TEXT, _TASK_FRAME_BLOCK_NAMES):
-
-
-
         reg.section(section)
-
-
-
     # 2026-10-21：伙伴行里不再带"（现在没接线：X）"那个标记 —— 它在 system 里，
     # 换一次伙伴配置就把这一段前缀劈成两半（`partners_lines` 仍认 `availability`：
     # 落盘的 `PROFILES_FILE` 画像要用它，而那份文件不是前缀，信息一个字不丢）。
     partners = partners_lines(role)
-
-
-
     reg.section(Section("PARTNERS", SECTION_ORDERS["PARTNERS"],
-
-
-
                         "可协作的伙伴：\n" + "\n".join(partners)))
-
-
-
     # 2026-10-21：这一段从「这一次的接线态」换成静态指路语（逐字节静态）。
     #
     # 根因：`host.wiring_status` 随伙伴配置变 ⇒ 这一段一变，它后面那 37% 的前缀
@@ -10965,289 +10580,79 @@ def role_prompt_registry(role: str, *, registry: Any = None,
     # 真值只进开场那条 user 消息（`agent_loop._opening_transcript`），三态在那里写清。
     reg.section(Section("PARTNER_AVAILABILITY", SECTION_ORDERS["PARTNERS"] + 20,
                         PARTNER_WIRING_POINTER))
-
-
-
     for section in _block_sections(HANDOFF_PROTOCOL, _HANDOFF_BLOCK_NAMES):
-
-
-
         reg.section(section)
-
-
-
     # 循环协议（`R6` §2-⑥ 按角色渲染）：主控那一版就是 `LOOP_PROTOCOL` 常量本身，
-
-
-
     # 其余九个角色少掉里面几块只有 M 用得到的文本（见 `loop_protocol_for`）。
-
-
-
     #
-
-
-
     # `draft/103` §2.1 的 A 轴第一步（业主 2026-10-11 口径：代码超前提示词太多，
-
-
-
     # 要让提示词追上代码）：把这一段按空行切成 15 块分别登记 ——
-
-
-
     # 切点全在空行上 ⇒ 渲染逐字节不变（判据：十角色 `prompt_sha256` 一格不变），
-
-
-
     # 换来的是 `prompt_audit["sections"]` 能逐块报出"哪一块是形状、哪一块是规则"，
-
-
-
     # 于是"哪一块落后于代码"才定位得到（`draft/104` §1.2 与 `draft/105` 的 C 节全靠这个粒度）。
-
-
-
     for section in _block_sections(loop_protocol_for(role), _LOOP_BLOCK_NAMES):
-
-
-
         reg.section(section)
-
-
-
     # 「什么时候停」那三条（预算 / 打转 / 上报两档）：正文从 `LOOP_PROTOCOL` 里逐字搬出来
-
-
-
     # 的（`draft/104` §4.9 要求合成一块讲"什么时候停"）。十个角色都有 —— 谁都可能预算耗尽、
-
-
-
     # 谁都可能原地打转、谁都有做不了的活。
-
-
-
     reg.section(Section("PARENT_STOP", SECTION_ORDERS["PARENT_STOP"], PARENT_STOP_TEXT))
-
-
-
     # 一条命题的五个证据位（现算自 `evidencebits`）：证据语法对十个角色都有用。
-
-
-
     reg.section(Section("COLLAB_FIVEBITS", SECTION_ORDERS["COLLAB_FIVEBITS"],
-
-
-
                         collab_fivebits_text()))
-
-
-
     # 工作项板的语义（现算自 `schema` 的四张词表）：板项可以开在任何一个角色名下。
-
-
-
     reg.section(Section("COLLAB_BOARD", SECTION_ORDERS["COLLAB_BOARD"],
-
-
-
                         collab_board_text()))
-
-
-
     # 十一种形状"什么时候用哪个"（决策表）：选择是每个角色每一步都要做的事。
-
-
-
     reg.section(Section("COLLAB_SHAPES", SECTION_ORDERS["COLLAB_SHAPES"],
-
-
-
                         COLLAB_SHAPES_TEXT))
-
-
-
     # 这一岗的 skills：只放索引（slug + 一句话 + 什么时候读它 + 盘上路径）。
-
-
-
     # 正文在盘上（`agent_skills.materialize` 开跑时落到工作区），角色按需 `fs.read`
-
-
-
     # —— 业主 2026-10-14：「写成各智能体的 skills，以防止前置大量提示词，现做现读」。
-
-
-
     _skills = agent_skills.index_block(role)
-
-
-
     if _skills:
-
-
-
         reg.section(Section("SKILLS_INDEX", SECTION_ORDERS["SKILLS_INDEX"], _skills))
-
-
-
     # 派活上限（业主裁定 A：数字写、且现算）。受众 = 派得出活的角色（`partners_out`
-
-
-
     # 非空 ⇒ 它真的会 `summon`）；出边为 0 的角色（实测 C）拿到这一段只会读到
-
-
-
     # "你能派几个"这种与它无关的话 —— 它那一档的处置在协作块族里（`draft/104` §5.2 的 C 行）。
-
-
-
     if partners_out(role):
-
-
-
         # 2026-10-21：数字（四类上限 + 墙钟 + 你现在在深度几）挪进开场那条 user
         # 消息的「派活上限」；这里只剩口径与处置 —— 它们与数字无关，且每一趟都该读到。
         reg.section(Section("PARENT_LIMITS", SECTION_ORDERS["PARENT_LIMITS"],
                             PARENT_LIMITS_RULES))
-
-
-
         # 三种指称的总判据（同一条受众判据：能派活才有"我名下的子代理"要说）。
-
-
-
         reg.section(Section("COLLAB_NAMES", SECTION_ORDERS["COLLAB_NAMES"],
-
-
-
                             _COLLAB_NAMES_TEXT))
-
-
-
         # 名册的用法（同一条受众判据：没有子代理就没有名册可看）。
-
-
-
         reg.section(Section("PARENT_ROSTER", SECTION_ORDERS["PARENT_ROSTER"],
-
-
-
                             PARENT_ROSTER_TEXT))
-
-
-
     # 证明工具链那一轴（`draft/37` §89）：读数是机器相关的，所以由调用方传；
-
-
-
     # 没传就如实写"这一次没有读到读数"（不是"没有检查器"，也不是什么都不说）。
-
-
-
     reg.section(Section("TOOLCHAIN_FACTS", SECTION_ORDERS["TOOLCHAIN_FACTS"],
-
-
                         _filter_toolchain_facts(
                             role, registry,
                             (toolchain_facts or "").strip() or _no_toolchain_text())))
-
-
-
     # 会写 Lean 源码的角色才有"怎么写"这一段（业主裁定 G；谁算"会写"由工具面现算，
-
-
-
     # 不写死角色名 —— 拿到 `formal.*` 就拿到它（2026-10-22 之前是 `verify.check_formal`，
     # 那件工具现在不属于任何角色），理由见
-
-
-
     # `toolchain_formal_text` 的 docstring）。开关关掉时整段不载入
-
-
-
     # （业主 2026-10-12：「E 在开关关掉时可不载入有关形式化验证的提示词」）——
-
-
-
     # 这一档没有"怎么写"可讲，因为这条路整个不存在；那一档的"系统做不了"由
-
-
-
     # `TOOLCHAIN_FACTS` 的第一行说清（每一段都载入它）。
-
-
-
     if _writes_lean(role, registry) and _lean_switch()[0]:
-
-
-
         reg.section(Section("TOOLCHAIN_FORMAL", SECTION_ORDERS["TOOLCHAIN_FORMAL"],
-
-
-
                             (toolchain_formal or "").strip() or _NO_TOOLCHAIN_FORMAL))
-
-
-
     reg.section(Section("WORKSPACE_FACTS", SECTION_ORDERS["WORKSPACE_FACTS"],
-
-
-
                         "工作区事实（现算，不是记忆）：\n"
-
-
-
                         + f"- 工作区根目录：{{{{workspace_root}}}}\n"
-
-
-
                         + f"- 数据结构版本：{S.SCHEMA_VERSION}；表："
-
-
-
                         + "、".join(S.TABLES)
-
-
-
                         + f"\n- 提示词版本：{{{{prompt_version}}}}"))
-
-
-
     return reg
-
-
-
-
-
-
-
-
-
-
-
 #: 交接手稿协议（`draft/37` §134，用户口径 2026-10-04 逐字）：
-
-
-
 #: 「各智能体在互相传递信息时可以借助手稿的方式……每个智能体要交接工作前写一份手稿放在里面，
-
-
-
 #: 且有标号（这个标号靠脚本拿最新的，从 0000 开始顺次标），传信息时就传手稿编号……
-
-
-
 #: 至于手稿的命名就是标号+谁to谁，特别地如果是给所有人就是谁toALL。手稿格式就用 markdown。」
-
-
-
 #: 外加用户随后的一句补充：「就传个编号感觉有点尬，可以再附一句简要描述」——
-
-
 #: 所以 `brief` 是这一形状的一部分，框架会把它拼进那条留言。
 HANDOFF_PROTOCOL = """\
 交接手稿（handoff；交接工作前的标准动作，也是"派活依据"与"溯源"落在盘上的那条通道）。
