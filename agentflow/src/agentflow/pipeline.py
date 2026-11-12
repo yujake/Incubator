@@ -86,12 +86,12 @@ def _reports_dir(store: Store) -> Path:
 
 
 def _conductor_for_c(store: Store, agent_c: Any) -> Any:
-    """把调用方给的那个 `AgentC` 实例接到主控的召唤面上（L-03）。
+    """把调用方给的那个 `AgentC` 实例接到主控的召唤面上。
 
-    为什么必须经 `conductor.summon`：`pipeline` 以前直呼
-    `agent_c.handle(...)` 再自己把报告写进 `analysis_reports` —— 那条路
+    为什么必须经 `conductor.summon`：若 `pipeline` 直呼 `agent_c.handle(...)`
+    再自己把报告写进 `analysis_reports`，那条路
     ① 不写 `role=C` 的 `tasks` 行（于是 `c_analysis_runs` 读 0），
-    ② 绕过策略/预算/台账三道闸门。现在报告只由 C 的动作（`handle`，它的写集里
+    ② 绕过策略/预算/台账三道闸门。报告只由 C 的动作（`handle`，它的写集里
     本来就有 `analysis_reports`，见 `capabilities.WRITE_SETS["C"]`）产出，
     pipeline 只从这一步的返回值里读 `report_id`。
 
@@ -253,17 +253,11 @@ def run_pipeline(
     if not resume:
         d_cfg["dedup_by_origin"] = False
     # `auto_build_c` 必须在装配 D 之前读出来：D 需要知道"有没有 C 可以点菜"。
-    # 之前这行在读它的地方（第 1 步）才定义，于是"装配 D"与"C 分析"两步对
-    # 同一个配置键各读一次 —— 两处口径一旦分叉（比如一处读 `auto_build_c`、
-    # 另一处读 `auto_build_agents`），I1 会以"没有 C 侧证据"的形式静默失效。
-    #
-    # 现在 C 的装配只发生在这里一次，D 与第 1 步共用同一个实例。修之前
-    # 这里与第 1 步各装配一个 AgentC（两个实例），而两处的条件还不一样：
-    # 注入 D 的判据只看 `auto_build_c`，第 1 步却看
-    # `auto_build_c or auto_build_agents or build_agent_c`。于是
-    # `config={"auto_build_c": False, "auto_build_agents": True}` 会得到
-    # "C 在跑、D 手里却没有 C" —— 正是 I1 要求避免的那种静默退化，
-    # 而它连一行警告都不会产生。现在判据合并成一个 `want_c`，不可能再分叉。
+    # C 的装配只发生在这里一次，D 与第 1 步共用同一个实例，判据合并成一个
+    # `want_c`。两处各读一次配置键就会分叉：一处读 `auto_build_c`、另一处读
+    # `auto_build_agents`，I1 会以"没有 C 侧证据"的形式静默失效；而
+    # `auto_build_c=False, auto_build_agents=True` 还会得到"C 在跑、D 手里没有 C"，
+    # 连一行警告都不会产生。
     auto_build_c = bool(cfg.get("auto_build_c", True))
     want_c = bool(auto_build_c or cfg.get("auto_build_agents") or cfg.get("build_agent_c"))
     c_autobuild_failed = False
@@ -305,12 +299,12 @@ def run_pipeline(
     # （C 已在上面装配好并被同一个实例交给了 D —— 这里不再重复装配。）
     if agent_c is not None:
         summary["mode"] = "analyze"
-        # ---- L-03：经 `conductor.summon`（报告只由 C 的动作产出）
+        # ---- 经 `conductor.summon`（报告只由 C 的动作产出）
         #
-        # 旧形态是 `_make_request_fn(agent_c)(request)` + `_persist_report(...)`：
-        # 那样分析没有 `role=C` 的 `tasks` 行、也没过策略/预算闸门 ——
+        # 若用 `_make_request_fn(agent_c)(request)` + `_persist_report(...)`：
+        # 分析没有 `role=C` 的 `tasks` 行、也没过策略/预算闸门 ——
         # `c_analysis_runs` 会读 0（台账上像"C 一次都没跑过"）。
-        # 现在走 `summon("C", "handle", {"request_text": request})`：C 的 `handle`
+        # 走 `summon("C", "handle", {"request_text": request})`：C 的 `handle`
         # 自己 `persist()`（它的写集里本来就有 `analysis_reports`），
         # pipeline 只读回 `report_id` —— 于是"谁产出了报告"与"谁派了这活"都在台账上。
         try:
@@ -432,12 +426,12 @@ def run_pipeline(
                 continue
             v = agent_d.assess(qid)
             considered.add(qid)
-            # 即使 agent_a=None 也要提问（缺陷修复，见文件顶部"缺陷 3 的结论"）：
+            # 即使 agent_a=None 也要提问：
             # assess 是纯确定性判断（三条判据），它不依赖 A 是否接线；
             # 提交请求也只是往 `search_requests` 写一行，同样不需要 A 在线。
-            # 早先这里在 agent_a=None 时跳过提问，结果是"证据不足"这件事在台账里
-            # 完全看不见（问题停在 open），用户会以为 D 没工作。
-            # 现在的语义：不接 A = 本轮不执行检索，但缺口照记、等待集照建；
+            # 若在这里按 agent_a=None 跳过提问，"证据不足"这件事在台账里就完全
+            # 看不见（问题停在 open），用户会以为 D 没工作。
+            # 语义：不接 A = 本轮不执行检索，但缺口照记、等待集照建；
             # 等哪次运行接上了 A，`poll` 就能把它们接下去。
             decision = agent_d.consider(qid)
             resum["assessed"].append(
