@@ -1,32 +1,23 @@
 # -*- coding: utf-8 -*-
-"""E 侧的第二道闸：数值证明型命题落库之前的「命题形态闸」（业主 2026-11-07 第二刀）。
-
-业主原话（逐字，这就是本模块的验收标准）：
-
-> 「F侧的注册+放弃闸需同步到E侧的数值证明路线」
+"""E 侧的第二道闸：数值证明型命题落库之前的「命题形态闸」。
 
 F 侧那半是「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了从什么条件导出
 什么结论」。同步到 E 侧之后，判的对象与判据一字不改 —— 仍然是
-:meth:`secretary.Secretary.judge_proposition_form` 那一次判定（本模块不写第二份
-形态判据），只是调用方从 F 的手稿登记换成了 E 的数值证明路线。
+:meth:`secretary.Secretary.judge_proposition_form` 那一次判定（本模块不写第二份形态
+判据），只是调用方从 F 的手稿登记换成了 E 的数值证明路线。
 
-## 闸装在哪（E 侧的「登记/收录之前」）
+闸装在哪（E 侧的「登记/收录之前」）：E 把一条 conjecture 收成 `evidence_kind="proof"`
+的凭据，落点是 `experiments` 那一行（`numericproof.sign_experiment` 现算档位）。所以闸
+必须在那一行写盘之前：`AgentE.run_experiment` 在算完 `wants_numeric_proof`、还没开
+`store.tx` 的时候问一次；不过 ⇒ 受控拒，一个字节都不写（实验行、原始输出、②③ 报告、
+e-proof 手稿都不落）。
 
-E 把一条 conjecture 收成 `evidence_kind="proof"` 的凭据，落点是
-`experiments` 那一行（`numericproof.sign_experiment` 现算档位）。所以闸必须在
-那一行写盘之前：`AgentE.run_experiment` 在算完 `wants_numeric_proof`、还没开
-`store.tx` 的时候问一次；不过 ⇒ 受控拒，一个字节都不写（实验行、原始输出、
-②③ 报告、e-proof 手稿都不落）。
-
-## 三态（与 F 侧同一套纪律）
-
-- `submittable=True`：判定做了、`well_formed=True` ⇒ 放行；
-- `submittable=False` + `checked=True, well_formed=False`：判过了、不合格 ⇒ 受控拒；
-- `submittable=False` + `checked=False`：没判成（没有秘书 / 没缝 / 超时 / 坏 JSON /
-  词表外 / 判定那一问自己抛了）⇒ 同样受控拒（没判成不许折成没毛病）。
-
-三档都要落进 `out/secretary/proposition_form.jsonl`（`role="E"`）——
-否则"这一趟没跑过闸"与"跑过了、都合格"在收工读数上不可分。
+三态（与 F 侧同一套纪律）：`submittable=True`（判定做了、`well_formed=True`）⇒ 放行；
+`submittable=False` + `checked=True, well_formed=False`（判过了、不合格）⇒ 受控拒；
+`submittable=False` + `checked=False`（没有秘书 / 没缝 / 超时 / 坏 JSON / 词表外 / 判定
+那一问自己抛了）⇒ 同样受控拒（没判成不许折成没毛病）。三档都要落进
+`out/secretary/proposition_form.jsonl`（`role="E"`）—— 否则"这一趟没跑过闸"与"跑过了、
+都合格"在收工读数上不可分。
 """
 from __future__ import annotations
 
