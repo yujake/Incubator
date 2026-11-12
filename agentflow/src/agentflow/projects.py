@@ -591,7 +591,12 @@ def _close_extract_task(store: Store, task_id: str, extraction: Mapping[str, Any
         # 读取必须在锁内（`tx.rows` 而不是 `store.rows`）：`store.rows` 是无锁快照读，
         # 拿它读到的东西去写，中间就是一个窗口 —— 别的进程刚改过的那条行在这里看不见，
         # 于是这行会以旧内容被写回（`TokenMeter.charge_once` 的 docstring 逐字踩过同一个坑）。
-        row = {str(r.get("task_id")): dict(r) for r in tx.rows("tasks")}.get(task_id)
+        # 只拷命中那一行：整表 `{task_id: dict(r)}` 会把每一行都复制一遍，而这里只用一条；
+        # 同名取最后一行（与原先字典推导的"后者覆盖前者"一致，表内顺序不变）。
+        row: dict | None = None
+        for found in tx.rows("tasks"):
+            if str(found.get("task_id")) == task_id:
+                row = dict(found)
         if row is None:
             return
         row.update(status="done", outcome="ok", ended_at=S.now_iso(),
@@ -750,11 +755,11 @@ def run_project(root: Path | str, *, name: str | None = None, start: str = "auto
     notes: list[str] = []
     if ref.mode == "cold":
         create_project(ref, now=now)
-    else:
-        card = _load_card(ref.path)
-        if card.get("card_unreadable"):
-            notes.append("project.json 读不了（内容坏了）⇒ 本次运行不会覆盖它，请人看一眼")
+    # 项目卡只读一次：热启动原先"读一次查 card_unreadable、紧接着再读一次进 card"，
+    # 两次之间没有任何写盘（`create_project` 只在冷启动那一支走），两次读的是同一份。
     card = _load_card(ref.path)
+    if ref.mode != "cold" and card.get("card_unreadable"):
+        notes.append("project.json 读不了（内容坏了）⇒ 本次运行不会覆盖它，请人看一眼")
 
     # ---- 显式额度落盘（C4）：工作区已经存在、第一次模型调用还没发生。
     budget_landing: dict[str, Any] = {}
