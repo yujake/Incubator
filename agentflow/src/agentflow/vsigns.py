@@ -3,17 +3,13 @@
 
 ## 这一层解决的是什么断链
 
-业主 2026-11-01 的口径（逐字）：
+「有毛病」是给提供证明的一方看的，具体信息是叫它们优化证明，只有连续三次审核通过才叫
+V 签。V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到；B 侧自己写的证明
+想要 V 签时一样是拿到 V 签，B 再录入。
 
-```text
-「有毛病」是给提供证明的一方看的，具体信息是叫它们优化证明，只有连续三次审核通过这才叫 V 签。
-「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到。B 侧自己写的证明想要 V
-签时一样是拿到 V 签，B 再录入。」
-```
-
-改前「签」这个事实只活在两处：`statements.bits.reviewed`（行内一个布尔）与
-`verifications/<命题号>.jsonl` 的尾部连续数（行序）。两处都「按命题号」索引 ——
-所以「这一份稿拿到签了没有」这个问题，B 拿着手稿（`reports/f-proof-<号>.md`）问不出来，
+若「签」这个事实只活在两处：`statements.bits.reviewed`（行内一个布尔）与
+`verifications/<命题号>.jsonl` 的尾部连续数（行序）—— 两处都「按命题号」索引 ——
+那么「这一份稿拿到签了没有」这个问题，B 拿着手稿（`reports/f-proof-<号>.md`）就问不出来，
 带着稿去哪里也带不走。这一层就是那条断链的补口：把签落成「按被签正文的 sha 命名」的
 一份侧文件，谁拿到正文谁就能问「它签过没有」。
 
@@ -48,11 +44,11 @@
 要落 V 的回复原文得给台账行加一格 `reply_text`（另批）：那会把台账从"读数账"变成"全文账"，
 与本模块无关，所以这里只在 `source_note` 里写明去哪读。
 
-## 历史签无法留档，也不许回填（α 口径）
+## 历史签无法留档，也不许回填
 
-本模块上线之前，全仓已有 「66 行 `bits.reviewed=true` / 11 个工作区」，而 `out/vsigns/`
-是 0 个。那些签没有 `at`、没有三转读数 —— 「补一份就是伪造 `at`」，正是
-:func:`index_drift` 的「伪造痕迹」那一条要抓的形态。所以：
+本模块上线之前已有大量 `bits.reviewed=true` 的历史行，而 `out/vsigns/` 是空的。那些签
+没有 `at`、没有三转读数 —— 补一份就是伪造 `at`，正是 :func:`index_drift` 的「伪造痕迹」
+那一条要抓的形态。所以：
 
 - 判据的作用域按「`out/vsigns/` 目录存在」划：不存在 ⇒ :func:`index_drift` 报
   `tri="not_applicable"`（「不红，也不假装通过」）；
@@ -552,7 +548,7 @@ def _signed_entry_of(sign: Mapping[str, Any], *, listed: bool = False) -> dict[s
 
     `manuscript_id` 从 `artifact_path` 的名字读（`reports/<族>-<号>.md` 的号）——
     它回答"哪一份稿"，`artifact_sha` 回答"哪一版正文"。两格都不是"第几版证明"：
-    业主 2026-11-11：「一个稿号就相当于是该稿的文件名，不再细分 version 几」。
+    一个稿号就相当于该稿的文件名，不再细分 version 几。
     """
     path = str(sign.get("artifact_path") or "")
     return {
@@ -791,13 +787,14 @@ MANUSCRIPT_NAME_BAD = "bad_manuscript_name"
 #: `ok=True / code=""`。
 MANUSCRIPT_NAME_PLAN = "plan_is_not_a_sign_carrier"
 
-#: 证明手稿名的显式规则（业主 2026-11-04 裁定）：
+#: 证明手稿名的显式规则：
 #: `<prefix>-proof-<号>[-p<N>].md` ⇒ `(裸稿号, proof_no=N)`。
 #: - 号：4–6 位十进制（在册命题）或 `plan-<数字>`（F 立项那一轮，落稿名合法）；
-#: - `-p<N>`：N 是 ≥1 的十进制，缺省 1（canonical）；`-p0` / `-pabc` / 号里带别的
+#: - `-p<N>`：老盘上的版本尾巴，只用于读旧稿（N 是 ≥1 的十进制，缺省 1）；
+#:   新稿不写它 —— 一个稿号 = 一份文件 = 一份证明。`-p0` / `-pabc` / 号里带别的
 #:   后缀一律不认（认不出就受控拒绝，不猜）。
 #:
-#: 2026-11-09（T2 收编）：解析与签载体都只读 `manuscriptfamily` 那一张表 ——
+#: 解析与签载体都只读 `manuscriptfamily` 那一张表 ——
 #: 本模块不再保有自己的正则（设计 3.2 第 3/4 处）。`_MANUSCRIPT_NAME_RE` /
 #: `_SIGN_CARRIER_RE` 两个名字已删除；旧调用方读 `parse_manuscript_name` /
 #: `sign_carrier_reading`，返回形状不变。
@@ -846,9 +843,9 @@ def is_sign_carrier(path: Any) -> bool:
 
 
 def parse_manuscript_name(path: Any) -> dict[str, Any]:
-    """把手稿文件名解析成 `(裸稿号, proof_no)`（显式规则，认不出不猜）。
+    """把手稿文件名解析成 `(裸稿号, 老盘的 proof_no)`（显式规则，认不出不猜）。
 
-    2026-11-09（T2）：解析整体转发到 `manuscriptfamily.parse` —— 族/号/后缀只有
+    解析整体转发到 `manuscriptfamily.parse` —— 族/号/后缀只有
     那一张表一个落点（设计 3.2 第 4 处）。返回键与旧版兼容并多两格：
 
     `{"checked", "family", "is_family", "manuscript_id", "proof_no", "code",
@@ -856,17 +853,17 @@ def parse_manuscript_name(path: Any) -> dict[str, Any]:
     `e-proof` / `e-num`），`legacy` 档的族名是 `legacy`。旧调用方要的布尔读法在
     `is_family` 里（名字形状属于四族即为真，含 `bad_name`）。
 
-    结论翻的三处（设计 3.2 第 4 处 / §3.3）：
+    读法：
 
-    | 名字 | 旧读法 | 新读法 |
-    |---|---|---|
-    | `reports/f-proof-000000-p2.md` | `family=True, id=000000, proof_no=2` | 同左（`family="f-proof"`） |
-    | `notes/b-proof-000003-v2.md` | `checked=False, family=True, code=bad_manuscript_name` | `checked=True, tier=legacy, family="legacy", proof_no=0, code=legacy_manuscript_name` |
-    | `reports/e-num-000012.md` | `family=False` | `family="e-num"`（进族） |
-    | `notes/b-proof-000003.md` | 按名字认成 `b-proof` | `tier=legacy`（目录不对） |
+    | 名字 | 读数 |
+    |---|---|
+    | `reports/f-proof-000000-p2.md` | `family="f-proof", id=000000, proof_no=2` |
+    | `notes/b-proof-000003-v2.md` | `tier=legacy, family="legacy", proof_no=0` |
+    | `reports/e-num-000012.md` | `family="e-num"`（进族） |
+    | `notes/b-proof-000003.md` | `tier=legacy`（目录不对） |
 
     计划名仍是合法的落稿名（`reports/f-proof-plan-0001.md` ⇒ `id=plan-0001`）；
-    2026-11-10 业主裁定之后它同时也是合法的签载体（老盘只读兼容；判据在
+    它同时也是合法的签载体（老盘只读兼容；判据在
     :func:`sign_carrier_reading`）。新稿不再写这种名字（F 的稿自己维护号源）。
     """
     return _MFAM.parse(path)
@@ -876,7 +873,7 @@ def manuscript_id_of(path: Any) -> str:
     """手稿路径 ⇒ 裸稿号（`reports/f-proof-000000.md` ⇒ `000000`；`...-plan-0001.md` ⇒ `plan-0001`）。
 
     2026-11-04（业主裁定，多证明命名）：`f-proof-000000-p2.md` 的裸稿号是 `000000`
-    （`-p2` 是证明号，不是稿号的一部分）—— 否则 B 的签块闸会拿 `000000-p2` 去
+    （`-p2` 是旧盘上的证明号尾巴，不是稿号的一部分）—— 否则 B 的签块闸会拿 `000000-p2` 去
     `statements` 里找，永远对不上。解析本体在 :func:`parse_manuscript_name`；
     认不出就回空串（不猜一个号），第 9 格宁可落 `unmatched`。
     """
@@ -2157,7 +2154,7 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     "写签"的唯一入口，若它只看调用方说的 `written=True`，那 `sign_statement` 那一侧的
     连续闸一旦泄漏，盘上就会出现"一次成立也有一份签"——而那正是这一笔要堵的形态。
 
-    ## `proof_no` 在写侧退役（业主 2026-11-11）
+    ## `proof_no` 在写侧退役
 
     `proof_no` 参数保留只为旧调用点不必改签名：canonical（缺省 1）不再写进签文件
     —— 一稿一份之后它不携带任何身份（`artifact_sha` / `artifact_path` / `statement_id`
