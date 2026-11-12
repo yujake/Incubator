@@ -38,8 +38,8 @@
 
 另加四条护栏（不属业主点名那五条，但同一条断链上的读数）：`weaker` 可签但点名、
 `unknown` 不许签（结论仍是两态里的 `成立`，由引用闸挡住）、材料里有引用而 V 没给结论
-按 `unknown`、`#p2` 的依赖不进 `#p1` 的审查材料；以及台账/读侧那两格的硬闸
-（`signs_bit3` 与 `bit3_payload`）。
+按 `unknown`、另一份稿的依赖不进这一份稿的审查材料（依赖面按"被审的那一份稿"读，
+不是按证明号从台账挑）；以及台账/读侧那两格的硬闸（`signs_bit3` 与 `bit3_payload`）。
 
 全部 tmp 工作区、零模型调用（V 的模型缝用一个按剧本回答的替身，不花一分钱），
 不读写 `projects/`。
@@ -98,6 +98,29 @@ class _Seam:
     def ask(self, prompt: str, **_kw: Any) -> Any:
         self.prompts.append(prompt)
         return SimpleNamespace(text=self.reply, problem="")
+
+
+
+@pytest.fixture(autouse=True)
+def _proof_kind_says_different(monkeypatch):
+    """这一组量的是"V 核实 F 的引用"，不是"两份证明是不是同一套证法"。
+
+    `709dd579` 把同种证明判定接进了收录主链（判不了 ⇒ `proof_kind_unjudged` ⇒ 不收录）。
+    这组夹具里 `_register(..., proofs=[#p1, #p2])` 会走那条判定，而它没有装配判定面 ——
+    于是第二份证明被拒、台账只剩一份，"另一条路径的依赖不进这一份的材料"这条就无从判起。
+    这里给 `proof_kind` 一个明确的二态答案（`different`：两条路径是不同证法），
+    其余 kind 原样透传真实现。断言一条没改。
+    """
+    from agentflow import secretary as _SEC
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, *a, **kw):
+        if str(kind) == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "", "basis": {}, "cost": {}}
+        return real(self, kind, *a, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -184,6 +207,39 @@ def _cite(store: Store, *, citing: str, cited: str, note: str = F_NOTE,
 _PENDING_CITES: dict[str, list[dict]] = {}
 
 
+def _write_named_manuscript(store: Store, main: str, manuscript_id: str,
+                            proof: str, deps_rows: list[dict]) -> tuple[str, str]:
+    """按稿号落一份新形式稿：`reports/f-proof-<稿号>.md`，返回 `(路径, 全文)`。
+
+    新身份（2026-11-12 业主口径）：一份稿 = 一个稿号 = 一份证明 = 一条路径 ⇒ 名字里
+    没有 `-pN`、稿头没有「证明号」、`## 依赖` 只有三列（路径号由 B 的秘书收录时分配，
+    不进稿）。两份稿各一个稿号，所以这里显式落盘，不靠夹具的缺省号。
+    """
+    rel = f"reports/f-proof-{manuscript_id}.md"
+    text = ("# 证明手稿（夹具）\n\n"
+            f"- 命题号：stmt:{main}\n\n"
+            f"## 命题\n\n{MAIN_FULL}\n\n"
+            f"## 证明\n\n{proof}\n\n"
+            + _DS.render_dependency_section(deps_rows))
+    path = pathlib.Path(store.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return rel, text
+
+
+def _point_row_at_manuscript(store: Store, sid: str, manuscript_id: str) -> None:
+    """把命题行上的 `manuscript_id` 指到某一份稿（B 收录那一笔写的就是这一格）。
+
+    V 认"这一份稿是不是这条命题的稿"只读这一格（`agent_v/core.py` 的
+    `_registered_manuscript_body`）；两条路径各一份稿时，被审的是哪一份就由它说。
+    """
+    row = next(dict(r) for r in store.rows("statements")
+               if str(r.get("stmt_id") or "") == sid)
+    row["manuscript_id"] = str(manuscript_id)
+    with store.tx("statements", actor="test", note="fixture:manuscript_id") as tx:
+        tx.upsert("statements", row, note="fixture:manuscript_id")
+
+
 def _lemma(store: Store, *, evidence_kind: str = "proof_review") -> str:
     """造一条够格（或刻意不够格）被引的引理，返回它的命题号。
 
@@ -263,10 +319,17 @@ def _three(agent: AgentV, main: str, **kw: Any) -> dict:
 
     2026-11-08（V 只对手稿负责）：依赖面也从稿的 `## 依赖` 读 —— `_cite` 登记的那些行
     按证明号铺进这份稿；再挂一个真实送审的 parent（落块只能由收方秘书做）。
+
+    2026-11-12（两份稿 = 两条路径）：`manuscript=` 给了就审那一份现成的稿，不再按
+    表示号的 `proof_no` 另写一份 —— 被审的是哪一份由稿本身回答，`-pN` 与稿头证明号
+    已从产出侧退役。
     """
     text = str(kw.get("proof_text") or "")
     no = int(kw.get("proof_no") or 1)
-    if text.strip():
+    given = str(kw.pop("manuscript", "") or "")
+    if given:
+        kw["proof_manuscript"] = given
+    elif text.strip():
         cites = [row for row in _PENDING_CITES.get(str(agent.workspace_root), [])
                  if int(row.get("_proof_no") or 1) == no]
         if cites:
@@ -285,7 +348,7 @@ def _three(agent: AgentV, main: str, **kw: Any) -> dict:
             text = "\n".join(lines)
         kw["proof_text"] = text
         kw["proof_manuscript"] = write_proof_manuscript(
-            agent.workspace_root, main, text, proof_no=no,
+            agent.workspace_root, main, text,
             statement_full=str(kw.pop("statement_full", "") or MAIN_FULL),
             deps_rows=cites)
     out: dict = {}
@@ -647,33 +710,106 @@ def test_a_cited_proposition_without_a_verdict_is_unknown_and_cannot_sign(
     assert out["signed_bit3"] is False and _blocked_by(out, "unknown"), out
 
 
-# ============================================================ 护栏：证明号不串份
+# ============================================================ 护栏：另一份稿不串份
 
-def test_dependencies_of_another_proof_do_not_enter_this_proofs_material(
-        tmp_path: pathlib.Path) -> None:
-    """护栏：`#p2` 的依赖不进 `#p1` 的审查材料（"这一份证明登记的依赖行"要逐份读）。
+#: 同一命题的两条路径 = 两份稿、各一个稿号（一个稿号 = 一份文件 = 一份证明）。
+MID_ONE = "000123"
+MID_TWO = "000124"
 
-    两半都判：审 `#p1` 时材料是空的（那条边属于 #p2）；审 `#p2` 时材料里才有它。
-    把两半折平（例如不按证明号过滤）这一条会红。
+
+def _second_proof(lemma: str) -> str:
+    """第二条路径的证明正文：带 `stmt:<引理>`，与它那份稿的 `## 依赖` 表对得上。"""
+    return MAIN_PROOF_2.replace(
+        "1. 用类方程数共轭类。", f"1. 用类方程数共轭类（依据：stmt:{lemma}）。")
+
+
+def _two_paths(base: pathlib.Path) -> dict[str, Any]:
+    """造"同一命题的两条路径"：两份稿（各一个稿号），各带自己的 `## 依赖` 表。
+
+    - 稿 000123：第 1 条路径，依赖表是空的（自足）；
+    - 稿 000124：第 2 条路径，依赖表里有一条 `stmt:<引理>`。
+
+    台账里也照 B 收录的形态写一行（`used_by=...#p2` + `path_group=2`）—— V 不该读它；
+    两半断言之所以有意义，正因为那条依赖在别处（另一份稿 + 台账）都真实存在。
     """
-    store = _ws(tmp_path)
+    store = _ws(base)
     lemma = _lemma(store)
+    second = _second_proof(lemma)
     main = _register(store, full=MAIN_FULL, proof=MAIN_PROOF,
                      proofs=[{"proof_no": 1, "text": MAIN_PROOF},
-                             {"proof_no": 2, "text": MAIN_PROOF_2}])
-    _cite(store, citing=main, cited=lemma, note="第二条路线才用到这条引理", proof_no=2)
+                             {"proof_no": 2, "text": second}])
+    _cite(store, citing=main, cited=lemma, note="第二条路线才用到这条引理",
+          proof_no=2, path_group=2)
+    rel1, _text1 = _write_named_manuscript(store, main, MID_ONE, MAIN_PROOF, [])
+    rel2, _text2 = _write_named_manuscript(store, main, MID_TWO, second, [
+        {"quote": "第二条路线才用到这条引理", "stmt_id": lemma, "step": 1}])
+    return {"store": store, "main": main, "lemma": lemma, "second": second,
+            "rel1": rel1, "rel2": rel2}
+
+
+def test_dependencies_of_another_manuscript_do_not_enter_this_manuscripts_material(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """护栏：另一份稿的依赖不进这一份稿的审查材料（依赖面按"被审的那一份稿"读）。
+
+    新身份（2026-11-12 业主口径）：一份稿 = 一个稿号 = 一份证明 = 一条路径；
+    稿名不再带 `-pN`、稿头不再有「证明号」、`## 依赖` 表只有三列（没有「路径号」）。
+    所以"这是第几条证明"不再由稿里/表里的某个号回答 —— 它由这一份稿本身（稿号 /
+    稿路径）回答，路径号由 B 的秘书在收录时分配。
+
+    两半都判（同一命题的两份稿，各一个稿号，各带自己的 `## 依赖` 表）：
+    - 审稿 000123 时材料是空的：那条边写在 000124 那份稿的 `## 依赖` 里；
+    - 审稿 000124 时材料里才有它。
+    反向真空：把"按被审的那份稿取依赖"打桩成"一律取 000124 的依赖" ⇒ 前一半必红
+    （审 000123 时也会看见那条引理）。
+
+    改前红（2026-11-12 实测）：用例还按证明号造数据（一份稿 + 台账 `#p2` 依赖行 +
+    `proof_no=2`），而 V 的材料早已改从被审那份稿的 `## 依赖` 表读 ⇒ 那份稿的表里
+    没有这条引用，`out2["citations"] == []`。
+    """
+    # ---- 反向真空：把"按稿取依赖"打桩成"不挑"（恒取 000124 那份） ---------------
+    fixed = _two_paths(tmp_path / "fixed")
+    real_parse = _DS.parse_dependency_section
+    second_reading = real_parse(
+        (pathlib.Path(fixed["store"].root) / fixed["rel2"]).read_text(encoding="utf-8"))
+
+    def _always_the_second_manuscript(text: str) -> dict:
+        """不挑被审的是哪一份，恒返回第二份稿的依赖段（"折平"的桩）。"""
+        return second_reading if str(text or "").strip() else real_parse(text)
+
+    monkeypatch.setattr(_DS, "parse_dependency_section", _always_the_second_manuscript)
+    _point_row_at_manuscript(fixed["store"], fixed["main"], MID_ONE)
+    fixed_agent, _fixed_seam = _v(fixed["store"], _reply(checks=[]))
+    out_stub = _three(fixed_agent, fixed["main"], proof_text=MAIN_PROOF,
+                      manuscript=fixed["rel1"])
+    assert [c["stmt_id"] for c in out_stub["citations"]] == [fixed["lemma"]], (
+        "打桩之后审 000123 仍然看不到 000124 的依赖 ⇒ 打桩没生效，"
+        "「按稿挑依赖」这句话没有被这条用例量到", out_stub["citations"])
+    monkeypatch.undo()
+
+    # ---- 正控：V 从被审的那份稿读依赖 ------------------------------------------
+    picked = _two_paths(tmp_path / "picked")
+    store, main, lemma = picked["store"], picked["main"], picked["lemma"]
+    _point_row_at_manuscript(store, main, MID_ONE)
 
     agent, _seam = _v(store, _reply(checks=[]))
-    out1 = _three(agent, main, proof_text=MAIN_PROOF, proof_no=1)
-    assert out1["citations"] == [], "把 #p2 的依赖塞进了 #p1 的材料（串份）"
+    out1 = _three(agent, main, proof_text=MAIN_PROOF, manuscript=picked["rel1"])
+    assert out1["citations"] == [], (
+        "把另一份稿（000124）的依赖塞进了这一份（000123）的材料"
+        f"（按证明号/按台账挑）：{out1['citations']}")
     assert out1["signed_bit3"] is False, out1
     assert out1["review_write"].get("manuscript_signed") is True, out1["review_write"]
+    assert _ledger_row(store, main).get("manuscript") == picked["rel1"], (
+        "台账那一行没记被审的是哪一份稿", _ledger_row(store, main))
 
+    # B 收录第二份稿时把行上的稿号指到它（被审的换成另一份稿）。
+    _point_row_at_manuscript(store, main, MID_TWO)
     agent2, seam2 = _v(store, _reply(checks=[_check(lemma, "consistent", note="用法一致")]))
-    out2 = _three(agent2, main, proof_text=MAIN_PROOF_2, proof_no=2)
+    out2 = _three(agent2, main, proof_text=picked["second"], manuscript=picked["rel2"])
     assert [c["stmt_id"] for c in out2["citations"]] == [lemma], out2["citations"]
-    # 2026-11-11：`proof_no` 从 V 的顶层读数退役 ⇒ "审的是哪一份"仍从台账那一行读。
-    assert int(_ledger_row(store, main)["proof_no"]) == 2, _ledger_row(store, main)
+    # 2026-11-11/12：`proof_no` 从 V 的读数退役 ⇒ "审的是哪一份"由稿本身回答，
+    # 台账那一行的 `manuscript` 记的就是被审的稿。
+    disk = _ledger_row(store, main)
+    assert disk.get("manuscript") == picked["rel2"], disk
     assert out2["signed_bit3"] is False, out2
     assert out2["review_write"].get("manuscript_signed") is True, out2["review_write"]
     assert LEMMA_FULL in seam2.prompts[0]
