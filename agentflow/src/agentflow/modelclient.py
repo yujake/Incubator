@@ -99,13 +99,13 @@ class ModelClient:
     #: 审计挂点（`usage_ledger.task_id`）。没接线就原样留 `None`：
     #: `verify.py` 的 `dangling_usage_task` 逐字容忍 `None`（那是"未接线"），
     #: 只在"非 None 且不在 `tasks` 表里"时报 error。折成一个假字符串
-    #: （曾经是 `"(未接线)"`）会让每一笔未接线的花销都落成一条 dangling 行 ——
-    #: 那是三态被折平：把"没有台账号"伪装成"有一个叫 (未接线) 的台账号"。
+    #: 会让每一笔未接线的花销都落成一条 dangling 行 —— 那是三态被折平：把"没有
+    #: 台账号"伪装成"有一个叫 (未接线) 的台账号"。
     task_id: str | None = None
     role: str = "B"
-    #: `max_tokens` 这一格已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
-    #: 它此前是"抽取那条路显式给 8192"的落点，而真调用对照证明：不带这一栏时上游给得更宽
-    #: （`finish_reason=stop`、`tokens_out=14,015`）。请求体里从此不出现 `max_tokens`。
+    #: `max_tokens` 这一格刻意不设（业主口径「我们不卡 token，只卡总花销的钱」）：
+    #: 不带这一栏时上游给得更宽（`finish_reason=stop`，输出比我们自己设的上限还大）。
+    #: 请求体里不出现 `max_tokens`。
     #: 逐笔记账结局（`modelcost.charge_reply` 的原样返回值）。
     charges: list[dict] = field(default_factory=list)
     #: 已经发出去的调用次数（含失败的那几次）。
@@ -134,9 +134,8 @@ class ModelClient:
             )
         except Exception as exc:  # noqa: BLE001 —— 见 `runflow._complete_or_not_checked`：
             # `ModelGateway.complete` 承诺"从不抛异常"，但传输层实现抛出的意外异常
-            # 仍可能穿出来（`G-7` 口径一）。这里把它折成"没查成"，理由是这一档在
-            # 调用方看来与超时、网络失败同类（都要重试或换配置），而"代码崩了"
-            # 不该伪装成"模型说了什么"。
+            # 仍可能穿出来。这里把它折成"没查成"，理由是这一档在调用方看来与超时、
+            # 网络失败同类（都要重试或换配置），而"代码崩了"不该伪装成"模型说了什么"。
             raise ModelUnavailable(
                 f"网关抛出了 {type(exc).__name__}: {exc}"
                 "（`ModelGateway.complete` 承诺从不抛异常，`G-7` 登记了这个缺口）"
@@ -185,10 +184,9 @@ class ModelClient:
             "tokens_in": tin,
             "tokens_out": tout,
             "scope": self.scope,
-            # 采样温度。2026-10-17 那一版在这里写死 0，并以"请求体里钉死了采样"的名义
-            # 被判据 grep 过 —— 那是假绿：请求体由 `modelgw` 组装，用的是
-            # `ModelSpec.temperature`（缺省 0.2），这个 0 从没进过网线。
-            # 现在它是"这一档配置的那个数"（读数与请求体同源），
+            # 采样温度。别在这里写死一个数：请求体由 `modelgw` 组装，用的是
+            # `ModelSpec.temperature`（缺省 0.2），写死的 0 从没进过网线（判据 grep
+            # 到它只会是假绿）。所以这里回显"这一档配置的那个数"（读数与请求体同源）；
             # 显式温度走 `LlmSeam.ask(temperature=…)`（见 `llmseam.SeamCall.temperature`）。
             "temperature": getattr(self.gateway.spec, "temperature", None),
             "model": getattr(self.gateway.spec, "model", ""),
@@ -210,11 +208,10 @@ def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
     由 `verify.dangling_usage_task` 按"未接线"容忍；给了号就必须是 `tasks` 里
     真有的那一行（否则审计会如实地报它挂不上 —— 那正是我们要它报的）。
 
-    `max_tokens` 这一栏已删（2026-10-15 业主裁定「我们不卡 token，只卡总花销的钱」）。
-    它此前是"抽取那条路必须显式给 8192"的落点，理由是"概念表一长，输出的 JSON 就被
-    4096 截在半句上"—— 那个诊断对，处方错了：不该由我们再设一个更大的上限，而该不设。
-    真调用对照（2026-10-15）：同一段 prompt 不带 `max_tokens` 时上游回
-    `finish_reason=stop`、`tokens_out=14,015`；带上 `32768` 时 `12,987` ⇒ 缺省比我们给的更宽。
+    `max_tokens` 这一栏刻意不给（业主口径「我们不卡 token，只卡总花销的钱」）：
+    "概念表一长，输出的 JSON 就被 4096 截在半句上"那个诊断对，处方错了 —— 不该由
+    我们再设一个更大的上限，而该不设。不带它时上游回 `finish_reason=stop`，给的输出
+    比我们自己设的任何上限都宽。
     """
     spec = spec_from_env(env)
     gateway = ModelGateway(spec, transport=transport)
