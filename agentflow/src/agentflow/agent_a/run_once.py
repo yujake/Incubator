@@ -218,13 +218,14 @@ class _RunOnce:
             # 补下载这条路。
             lit_rows_now = self.store.rows("literature")
             known_slots: set[str] = set()
+            downloads = 0
+            # "已在库"的判定与"要不要下载"共用这一趟遍历：两件事读的是同一份
+            # `lit_rows_now`，而下载只往 staging 写、不改这张表（改前分了两趟）。
             for entry, slot in zip(fresh_entries, slots):
                 hit, _key = D.find_existing_literature(
                     lit_rows_now, entry["title"], entry["year"], entry["doi"])
                 if hit is not None:
                     known_slots.add(str(slot))
-            downloads = 0
-            for entry, slot in zip(fresh_entries, slots):
                 if slot not in admit_slots and str(slot) not in known_slots:
                     entry["download"] = {"status": "skipped", "error": "not_admitted",
                                          "http_status": None, "bytes": 0, "sha256": None}
@@ -266,13 +267,16 @@ class _RunOnce:
                         # 死局：候选每次都被判重跳过，而 P1 要求必查的那几篇必须落盘。
                         old_dl = existing.get("download") or {}
                         needs_file = (not existing.get("path")) or str(old_dl.get("status")) != "ok"
+                        existing_id = str(existing["lit_id"])
                         got_path, dl_clean = self._attach_staged(
-                            str(existing["lit_id"]), dict(entry.get("download") or {}))
+                            existing_id, dict(entry.get("download") or {}))
+                        # 这一格下面三处分支都要读，先算一次（`_attach_staged` 之后不再改）。
+                        dl_status = str(dl_clean.get("status"))
                         backfilled = bool(needs_file and got_path)
                         # 真的试过（不是"没有 PDF URL"/"预算用尽"那种 skipped）就记账 ——
                         # 与新建行那一支同一个口径：新建行会让失败留在行上，
                         # 补下载若什么都不记，"这一篇试过但没拿到"就只活在计数里。
-                        tried = needs_file and str(dl_clean.get("status")) in (
+                        tried = needs_file and dl_status in (
                             "ok", "failed", "content_mismatch")
                         if backfilled:
                             existing["path"] = got_path
@@ -288,7 +292,7 @@ class _RunOnce:
                             # —— "下到论文"那个数字被一次可疑补下载抬高了（B3）。
                             # `_attach_staged` 只认两档带字节的状态（`ok` / `content_mismatch`），
                             # 所以这个二分与那一处是同一份口径。
-                            if str(dl_clean.get("status")) == "ok":
+                            if dl_status == "ok":
                                 result.downloaded += 1
                             else:
                                 result.download_suspect += 1
@@ -298,7 +302,7 @@ class _RunOnce:
                                 "previous": {"status": old_dl.get("status"),
                                              "error": old_dl.get("error")},
                             }
-                            if str(dl_clean.get("status")) == "failed":
+                            if dl_status == "failed":
                                 result.download_failed += 1
                             else:
                                 result.download_suspect += 1
@@ -306,7 +310,7 @@ class _RunOnce:
                         tx.upsert("literature", existing, note=note)
                         result.duplicated += 1
                         new_ids.append(existing["lit_id"])
-                        lit_id_by_slot[slot] = str(existing["lit_id"])
+                        lit_id_by_slot[slot] = existing_id
                         continue
 
                     lit_id = tx.alloc_id("lit")
