@@ -4093,8 +4093,11 @@ def index_block(role: str) -> str:
         "| 名字（相对工作区根的路径） | 一句话 | 什么时候读它 |",
         "|---|---|---|",
     ]
+    #: 共享那一槽建一次集合：原先每一行都在那份共享表里线性找一遍（比的是正文长串）。
+    #: 集合只服务"这一条是不是共享的"这一问，归属口径与 `skills_for` 一字未变。
+    shared = set(CATALOG.get(SHARED, ()))
     for s in rows:
-        owner = SHARED if s in CATALOG.get(SHARED, ()) else str(role)
+        owner = SHARED if s in shared else str(role)
         lines.append(f"| `{skill_path(owner, s.slug)}` | {s.summary} | {s.when} |")
     lines.append("")
     lines.append("读了之后按它做；做了什么要落台账（**没有台账的那一步等于没发生**）。")

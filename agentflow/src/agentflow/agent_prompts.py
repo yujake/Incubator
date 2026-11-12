@@ -5546,10 +5546,9 @@ def role_prompt_registry(role: str, *, registry: Any = None,
         if _name in provided:
             continue
         reg.section(Section(_name, _order, _text))
-    for i, section in enumerate(_numbered_sections("TOOL", tools_lines(role, registry),
-                                                  SECTION_ORDERS["TOOL_GUIDANCE_BASE"])):
+    for section in _numbered_sections("TOOL", tools_lines(role, registry),
+                                      SECTION_ORDERS["TOOL_GUIDANCE_BASE"]):
         reg.section(section)
-        del i
     for section in _block_sections(EVIDENCE_CONTRACT, _EVIDENCE_BLOCK_NAMES):
         reg.section(section)
     if role in PAPER_PACK_ROLES:
