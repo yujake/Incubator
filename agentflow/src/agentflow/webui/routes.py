@@ -28,16 +28,12 @@
 `writes.ROUTES`（C 线的写面）。三条零交线各自往自己的子表里加端点，本文件不必被
 别人碰 —— 反过来，本文件里也不许再出现"别人的端点"。
 
-## 本批（W0）的表
+## 这张表现在有什么
 
-A 线自有五条（`/`、`/index.html`、`/run/{sid}`、`/api/state`、`/static/{file...}`）
-＋ C 线的一条既有写路径（`POST /answer`，W0 就由 `writes.ROUTES` 提供）。
-W1 又加了一条 A 线自有端点 `GET /api/run-index`（裁定 O2：趟次索引与它的对账结论，
-Run 页的第二个读数）。
-`draft/75 §1.1` 的 C1 表里另外那些（`/api/run/{sid}` 的 JSON 形态、`/api/evidence`、
-`/api/artifacts`、`/api/acceptance`、`/api/machine`、`/api/stop`、`/api/submit`、
-`/api/settings`、`/api/stream`）分别在 W1/W2/W3 由各自那一行落地 —— 它们不在这张表里，
-因为"前端声明了而后端没有"正是 A 条要抓的漂移（反过来也一样：这一张表里有的，
+A 线自有：页面与静态（`/`、`/index.html`、`/run/{sid}`、`/static/{file...}`）与四条
+读数（`/api/run-index`、`/api/run-digest`、`/api/errors`、`/api/errors/categories`）。
+其余全部来自两条子表：`readers.ROUTES`（只读面）与 `writes.ROUTES`（写面）。
+「前端声明了而后端没有」正是 A 条要抓的漂移（反过来也一样：这一张表里有的，
 `api.ts` 就必须有）。
 """
 
@@ -91,31 +87,29 @@ def handler_for(name: str):
 
 #: A 线（自有：页面 + 静态资源）那一段子表。
 #:
-#: 注意 `("GET", "/api/state", ...)` 不在这里：所有者裁定 2b 把那条路由迁到了
-#: `readers.ROUTES`（B 线），A 线原来的 `WebHandler.handle_state` 也一并删掉 ——
+#: 注意 `("GET", "/api/state", ...)` 不在这里：那条路由归 `readers.ROUTES`（B 线），
 #: 于是"哪条线上的模块声明这条路由"与"谁实现它"落在同一个文件里（`readers.py`），
 #: 而公开面不变：`readers.handle_state` 回的就是 `state.snapshot(root)` 本身。
 _OWN: tuple[tuple[str, str, str], ...] = (
-    # --- 页面：两条入口都吐同一支 SPA 外壳（裁定 P1；旧壳 views.py 已在 W5 退场，
-    #     `/run/{sid}` 是最后迁的那一面 —— 会话不在盘上由 /api/run/{sid} 的三态说）
+    # --- 页面：两条入口都吐同一支 SPA 外壳（裁定 P1；会话不在盘上由 /api/run/{sid}
+    #     的三态说）
     ("GET", "/", "handle_root"),
     ("GET", "/index.html", "handle_root"),
     ("GET", "/run/{sid}", "handle_run"),
     # --- 读数 JSON
     # 趟次索引的读数（裁定 O2 的页面消费端）：Run 页要同时拿到"索引本身"与
     # "索引与事件现算结果的对账结论"，两样必须来自同一次读（`sessions.run_index_report`
-    # 的理由逐字写在它的 docstring 里）。它是一条自有端点，不是 B 线六个面里的一个：
-    # 六个面读的是"盘上的事实"，这一条读的是"一条派生数据是否还与源一致"。
+    # 的理由逐字写在它的 docstring 里）。它是一条自有端点，不是 B 线只读面里的一个：
+    # 只读面读的是"盘上的事实"，这一条读的是"一条派生数据是否还与源一致"。
     ("GET", "/api/run-index", "handle_run_index"),
-    # 趟次档案（业主 2026-11-02 裁定「甲」）：索引只在"收工成功"时建；未走完的趟
+    # 趟次档案（业主裁定「甲」）：索引只在"收工成功"时建；未走完的趟
     # 另给一份从事件流现算的档案 —— 不读也不落 `index/run-index.json`。
     # 它与上一条是两条独立读数（Run 页两格并排），谁都不许拿对方的数据顶替自己。
     ("GET", "/api/run-digest", "handle_run_digest"),
-    # 错误动作计数那一栏（业主 2026-10-24「ui侧加一个大栏专门显示各角色错误动作计数」）：
-    # 两条都只读。第一条回 `readouts.errors_readout(root)` 逐字（五个键，口径全在
-    # `errorstats`），第二条回类目含义那几句（真身是 `errorstats.ERROR_CATEGORIES`，
-    # 网页那一层不许自己再写一份释义）。两条的处理都在 `WebHandler` 上，与
-    # `handle_run_index` 同一档：只读盘、不花钱、不需要写权限。
+    # 错误动作计数那一栏：两条都只读。第一条回 `readouts.errors_readout(root)` 逐字
+    # （五个键，口径全在 `errorstats`），第二条回类目含义那几句（真身是
+    # `errorstats.ERROR_CATEGORIES`，网页那一层不许自己再写一份释义）。两条的处理都在
+    # `WebHandler` 上，与 `handle_run_index` 同一档：只读盘、不花钱、不需要写权限。
     ("GET", "/api/errors", "handle_errors"),
     ("GET", "/api/errors/categories", "handle_errors_categories"),
     # --- 静态资源（前端构建产物：裁定 B1 的落点）
