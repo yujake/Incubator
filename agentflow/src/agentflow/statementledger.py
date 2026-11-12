@@ -33,31 +33,30 @@
   `label` / `statement_full` 经 `textutil.normalize` 后包含任一关键词
   （全半角 / 大小写 / 标点归一，多词任一命中）。它永远不能把 0 命中当成
   「不在册」—— 同义词（「质数」/「素数」）、记号差异（`p^a` / `pᵃ`）、换了行文
-  都会漏。今天唯一的正式用法就是这样读它的：0 命中 ⇒ 判 different，
+  都会漏。唯一的正式用法就是这样读它的：0 命中 ⇒ 判 different，
   但读数里 `why` 明写「命中 0 条」，好让读的人知道那是「这批词没命中」而不是
-  「台账里没有」（业主 2026-11-08：「检索只是取候选，不参与判定」）。
+  「台账里没有」（业主：「检索只是取候选，不参与判定」）。
 
 正因为这两条口径认识论上不同，它们互不调用：`by_id` 不用关键词、`by_keywords`
 不用编号。判据 `tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`
 用静态 AST 检查钉住这一点（不是靠运行时打桩），另外各有一条「把这一条口径降级
 ⇒ 依赖它的判据红」的反真空。
 
-## 与工具层 `table.search` 的关系（2026-11-09 起：statements 上同一把尺）
+## 与工具层 `table.search` 的关系（statements 上同一把尺）
 
 通用表工具（`tools/table_tools.py` 的 `table.get` / `table.search`）对别的表仍是列文本：
 `casefold` 子串、对该表全部标量字符串字段。本模块是命题语义面的查：只比 `label` /
 `statement_full`，用 `textutil.normalize`（与判重、查重同一把尺）。
 
-在 `statements` 表上，两边从 2026-11-09 起是一把尺：`table.search` 的 statements 分支
+在 `statements` 表上，两边是一把尺：`table.search` 的 statements 分支
 不再用 `casefold`，而是调同一份判据（`textutil.normalized_keywords` /
 `textutil.matched_keywords`），搜索面也收敛到 `label` / `statement_full`；点名别的列
 （`proof_text` / `status` / `stmt_id` …）会受控拒绝，不静默忽略。
 所以「同一个查询在两处给出不同命中」这个形态在命题台账上已被消掉（判据：
 `tests/test_the_two_rulers_agree_on_the_ledger.py`，反真空是把那一路换回 `casefold` ⇒ 红）。
-差异清单与"哪些差异是有意为之、不统一"见 `temp/_design_two_rulers.md`。
 
-`table_tools.py` 在 `.noai-paths` 的 FC-27 禁改区（`auth-audit` 类）：这次改动是按
-`scripts/noai_gate.py --baseline` 登记的，登记 ≠ 批准，仍需 2 名 reviewer 逐行走查。
+`table_tools.py` 在 `.noai-paths` 的 FC-27 禁改区（`auth-audit` 类）：改它要按
+`scripts/noai_gate.py --baseline` 登记，登记 ≠ 批准，仍需 2 名 reviewer 逐行走查。
 
 ## 池（查哪一批）归调用方，不归本模块
 
@@ -71,7 +70,7 @@
   （`secretary.PROPOSITION_VERDICT_TEXT_CHARS`）都由调用方传进来：本模块不复制
   这两份常量，也不给自己定新的阈值。
 
-## 第三种问法？不是 —— 「被引面」是依赖账的反向投影（业主 2026-11-10）
+## 第三种问法？不是 —— 「被引面」是依赖账的反向投影
 
 业主逐字：「在命题台账加被引面读数，是手稿录入时获取依赖面和将注册的命题号，
 把命题号打进各依赖面的被引面，是自动维护，暂不研究消费者」。
@@ -109,7 +108,7 @@
 | `found` | 被引条数（int）；`None` = 没查成。0 不是「没人引」，`None` 也不是。它数的是引用条数（依赖行），引用方个数另看 `citers_total`（详见 `cited_by` 的 docstring 那个「3 条引用 / 2 个引用方」的例子） |
 | `citations` | 每条一条：`dep_id` / `used_by` / `citer_stmt_id` / `proof_no` / `kind` / `label` / `status` / `created_at` / `path_group` / `used_by_problem` |
 | `by_status` | 按 `dependencies.status` 计数（`closed` / `dangling` / `refuted` / `disputed` …）；「那一行后来作废了」在这里看得见，但不被折成「没人引」 |
-| `citers` | `used_by` 的去重集合（逐字，含 `#pN` 尾巴；同一条命题的第 2 份证明是另一个 `used_by`） |
+| `citers` | `used_by` 的去重集合（逐字，含 `#pN` 尾巴；同一个命题的另一条路径是另一个 `used_by`） |
 """
 from __future__ import annotations
 
@@ -137,7 +136,7 @@ MATCHED_BY_CITED_BY = "source_stmt_id 逐字相等（被引方 = 这一条；引
 #: 命题台账那本账（取数口的默认表）。
 TABLE_STATEMENTS = "statements"
 #: 依赖账：`source_stmt_id` 是被引方、`used_by` 是引用方 —— 被引面就住在这里
-#: （2026-10-09 加的第四种来源；`schema.Dependency` 的 `used_by` / `source_stmt_id`）。
+#: （`schema.Dependency` 的 `used_by` / `source_stmt_id`）。
 TABLE_DEPENDENCIES = "dependencies"
 
 #: 取数口的三种来源（进读数 `source`，让「查的是哪一份快照」可复核）。
@@ -205,7 +204,7 @@ def by_id(source: Any = None, *, stmt_id: Any, rows: Iterable[Mapping[str, Any]]
           ) -> dict[str, Any]:
     """口径一：按编号查一行（主键逐字相等；不过滤 kind / status）。
 
-    业主 2026-11-08：「查必须明确有两种口径」。这一条是「按编号」那一条：
+    业主：「查必须明确有两种口径」。这一条是「按编号」那一条：
 
     - 它是确定性事实：命中就是那一行，0 命中就是「台账里没有这一行」；
     - 它不做任何过滤：编号指的是那一行本身，不是「active 的那一行」。
@@ -261,7 +260,7 @@ def by_keywords(source: Any = None, *,
                 text_chars: int | None = None) -> dict[str, Any]:
     """口径二：按内容关键字查（`label` / `statement_full` 归一后包含；多词任一命中）。
 
-    ## 匹配规则（业主 2026-11-08 的口径，逐字搬自原 `_statements_matching_keywords`）
+    ## 匹配规则（业主口径，逐字搬自 `_statements_matching_keywords`）
 
     `label` 或 `statement_full` 里「包含」该关键词；大小写 / 全半角 / 标点按
     `textutil.normalize` 归一。多关键词任一命中即进候选，并记下命中的词
@@ -351,7 +350,7 @@ def _cited_by_one(row: Mapping[str, Any]) -> dict[str, Any]:
     `used_by` 的 `#pN` 尾巴走 `proofloc.parse_used_by_checked`（全仓唯一解析点）：
     坏尾巴不折成 canonical，原文进 `used_by_problem` —— 留痕比"读成一个看起来
     像的号"更重要（那也是 `proofloc` 对全仓的承诺）。坏尾巴那一档不给
-    `citer_stmt_id`：`#pabc` 不是"第几条证明"，硬折成 1 就等于替它编一个号。
+    `citer_stmt_id`：`#pabc` 不是路径号，硬折成 1 就等于替它编一个号。
     """
     used = str(row.get("used_by") or "")
     head, proof_no, problem = PL.parse_used_by_checked(used)
@@ -382,7 +381,7 @@ def cited_by(source: Any = None, *, stmt_id: Any,
              ) -> dict[str, Any]:
     """被引面：谁引用了 `stmt_id` 这一条（反向读 `dependencies`，只读、零模型）。
 
-    ## 它是怎么派生的（业主 2026-11-10）
+    ## 它是怎么派生的
 
     一条依赖行里：`source_stmt_id` 是被引方、`used_by` 是引用方。所以
 
@@ -406,7 +405,7 @@ def cited_by(source: Any = None, *, stmt_id: Any,
     ## 带哪些格
 
     每条引用带 `used_by`（逐字，含 `#pN`）、`citer_stmt_id`（引用方命题号）、
-    `proof_no`（第几份证明）、`kind` / `label` / `status` / `created_at`
+    `proof_no`（路径号）、`kind` / `label` / `status` / `created_at`
     （依赖行的四格，与业主原话逐字对应）、`path_group`、`dep_id`；
     另有 `citers`（`used_by` 去重集合）与 `by_status`（按依赖行状态计数）——
     前者回答"谁引了我"，后者回答"这些引用里有没有后来作废/悬空的"。
@@ -418,14 +417,14 @@ def cited_by(source: Any = None, *, stmt_id: Any,
     是两件事，读数必须分得开：
 
         某命题 A 的被引面，盘上有 3 条依赖行：
-            used_by="stmt:000001"     （B 的第 1 份证明）
-            used_by="stmt:000001#p2"  （B 的第 2 份证明）
-            used_by="stmt:000007"     （C 的第 1 份证明）
+            used_by="stmt:000001"     （B 的第一条路径）
+            used_by="stmt:000001#p2"  （B 的第二条路径）
+            used_by="stmt:000007"     （C 的第一条路径）
         ⇒ found = 3（3 条引用），citers_total = 3（`stmt:000001` / `stmt:000001#p2` /
           `stmt:000007` 三个 used_by 逐字不同），而引用方命题只有 2 个（000001 / 000007）。
         要把"2 个引用方"读出来：`sorted({one["citer_stmt_id"] for one in citations})`
         —— 本模块不把 `#pN` 折掉（拆尾巴是 `proofloc` 的唯一职责，折平会让
-        "第 2 份证明引了它"这件事实消失）。
+        "另一条路径引了它"这件事实消失）。
 
     `rows=` 可以直接给一批依赖行快照（事务里 `tx.rows("dependencies")`）；
     不给就经唯一取数口读 `store` / `tx`。不读 `statements`：这一面不判在册、
@@ -525,7 +524,7 @@ def index_by_id(rows: Iterable[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
 def duplicate_hits(rows: Iterable[Mapping[str, Any]], *, text: Any) -> dict[str, Any]:
     """写入路径的查重判据：按 `statement_full` 的规范化值找在册行（不是查口径）。
 
-    业主 2026-10-24 的老口径「同一条正文已在册」就是这一句：`textutil.normalize`
+    业主的口径「同一条正文已在册」就是这一句：`textutil.normalize`
     后逐字相等。它住在查口这一层只因为它也是「在台账里找行」，但它回答的
     不是「有哪些行提到了这件事」，而是「这一条正文是不是已经在册」——
     所以它不进两种口径，只给写入路径当判据用（`record_statement` 的老查重、
