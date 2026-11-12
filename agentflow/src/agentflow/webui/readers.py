@@ -4145,6 +4145,16 @@ def chat_face(root: str | Path, sid: str = "", *,
                  "events": int(s.get("events") or 0),
                  "bad_lines": int(s.get("bad_lines") or 0)}
                 for s in SS.list_sessions(root_p)]
+    # 这一次请求里每一段会话最多读一遍：下面是"挑哪一段"（要判它有没有起过一趟）与
+    # "把它映射成对话线"两步，两步问的是同一份盘（同一个 `read_session` 入口）。
+    scanned: dict[str, tuple[list[dict], list[str]]] = {}
+
+    def _session_of(sid: str) -> tuple[list[dict], list[str]]:
+        got = scanned.get(sid)
+        if got is None:
+            got = scanned[sid] = SS.read_session(root_p, sid=sid)
+        return got
+
     chosen = str(sid or "")
     notes: list[str] = []
     if chosen == "":
@@ -4157,10 +4167,23 @@ def chat_face(root: str | Path, sid: str = "", *,
         # 那一段还新，于是对话框一打开就停在一段几乎没有来回的会话上。
         # 口径：先在最近的若干段里找最近起过一趟（有 `agent_run_start` 的对话线）
         # 的那一段，找不到才退回"最近有动静的那一段"，并把这次选择写进 `reason`。
+        from ..schema import CONDUCTOR_ROLE as _M
+
         def _has_run_start(row: dict[str, str]) -> bool:
-            events, _bad = SS.read_session(root_p, sid=row["sid"])
-            return any(_chat_line(i, ev) is not None and str(ev.get("kind") or "")
-                       == "agent_run_start" for i, ev in enumerate(events))
+            """这一段的对话线里有没有一条是"起一趟"。
+
+            判据就是 :func:`_chat_line` 对 `agent_run_start` 的那一支（role 是主控、
+            且不是被下级召唤的）—— 原来逐条调 `_chat_line` 只为拿这一个布尔量，
+            等于把整段会话的每一条事件都投影一遍再丢掉。
+            """
+            for ev in _session_of(row["sid"])[0]:
+                if str(ev.get("kind") or "") != "agent_run_start":
+                    continue
+                if str(ev.get("role") or "") != _M:
+                    continue
+                if str(ev.get("summoned_by") or "") in ("", _M):
+                    return True
+            return False
 
         newest_first = sorted(sessions, key=lambda s: s["last_ts"], reverse=True)
         pick = next((s for s in newest_first[:10] if _has_run_start(s)), None)
@@ -4175,7 +4198,7 @@ def chat_face(root: str | Path, sid: str = "", *,
         return {"tri": TRI_UNREADABLE, "sid": chosen, "lines": [], "total": 0,
                 "shown": 0, "clipped": False, "sessions": sessions,
                 "reason": f"会话文件不在盘上：{path}"}
-    events, bad = SS.read_session(root_p, sid=chosen)
+    events, bad = _session_of(chosen)
     mapped = [line for i, ev in enumerate(events)
               if (line := _chat_line(i, ev)) is not None]
     # 老数据的有把握回填（`inherited`）：只补"某个代理说的话"那两类线，且只在同一岗
