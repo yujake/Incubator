@@ -1,22 +1,31 @@
 """B 专用 OCR 工具：后端探测 / 文本层判断 / 按页 OCR。
+
 基于 ``tools/base.py`` 的 ``ToolSpec`` / ``ToolResult`` 写（见 ``DESIGN-TOOLS.md`` §7）。
-| 后端 | 状态 | 实测证据 ||---|---|---|| ``easyocr`` | 装了但跑不了 | ``import easyocr`` 成功（3.4s，1.7.2）；但 ① ``torch 2.0.1+cpu`` 与 
-``numpy 2.4.6`` ABI 不匹配，``torch.from_numpy(...)`` 抛 ``RuntimeError: Numpy is not available``（easyocr 的检测/识别路径里确实有 
-``torch.from_numpy``，见 ``detection.py`` / ``recognition.py``）；② ``~/.EasyOCR`` 建不出来，构造 ``Reader`` 直接 
-``PermissionError [WinError 5]``。模型也未缓存（``~/.EasyOCR/model`` 不存在）。 || ``pytesseract`` | 装了但缺二进制 | ``import pytesseract`` 成
-功（0.3.13），``get_tesseract_version()`` 抛 ``TesseractNotFoundError``：``tesseract`` 不在 PATH。 || ``fitz`` / ``PIL`` / 
-``numpy`` / ``cv2`` | 可用 | 栅格化用 ``fitz``（PyMuPDF），不依赖 MiKTeX 带来的 ``pdftoppm``，少一个外部依赖。
-1. ``available()`` 必须真探测。``pytesseract`` 要真的调 ``get_tesseract_version()``并捕获异常（"装了 pytesseract" ≠ "装了 tesseract"）；
-``easyocr`` 只检查``import``、``Reader`` 可调用性、torch↔numpy 桥、模型目录可写性 ——绝不在探测阶段真去构造 Reader（那会下 ~100MB 模型，让 ``ocr.backends``卡上几分钟，
-探测本身就成了故障）。
-这与 ``DESIGN.md`` §6.3"无文本层返回 ``None`` 而不是 ``False``"同源："没做"和"做了但没结果"是两件事。于是：- 没有可用后端 ⇒ ``fail("无可用 OCR 后端…")``，一个字符都不返回；- 
-后端抛异常的那一页 ⇒ 记 ``error``，不算成功；- 后端真的跑了但结果是空串 ⇒ ``ok`` + 逐页 ``empty=True`` + ``warnings``里明说"做了但没结果"，不把它包装成识别成功。
-3. ``max_pages`` 是硬保护。OCR 慢得离谱（一页数秒到数十秒），必须限量，并且必须在 ``warnings`` 里说明截断了多少页 —— 静默截断会让"我没看到那几页"伪装成"那几页没有内容"。
-副作用等级：这三个工具不都是 ``read``曾经三个工具一律声明 ``read``（"OCR 不改盘，模型缓存是后端自己的事"），这是权限面在说假话 —— ``base.SIDE_EFFECTS`` 的 ``read`` 意味着不需要审批：
-- ``ocr.run`` ⇒ ``network``：``EasyOcrBackend._reader``（``:252``）会构造``easyocr.Reader``，首次构造要下载约 100MB 模型。- ``ocr.backends``
-⇒ ``write_local``：``EasyOcrBackend.available``（``:220``）会对 easyocr 的真实模型目录 ``mkdir(parents=True, exist_ok=True)``—— 该目录在 
-``~/.EasyOCR/model``，在工作区之外；``PytesseractBackend``还会起一个 ``tesseract --version`` 子进程。这里刻意保留这次 mkdir （它是"模型目录到底可不可写"的唯一可靠判据，
-``os.access`` 在沙箱里会说谎），因此如实声明 ``write_local`` 而不是偷偷写盘。- ``ocr.detect_text_layer`` ⇒ ``read``：只读文件、不写盘、不起进程。
+
+实测：``easyocr`` 装了但跑不了（``torch 2.0.1+cpu`` 与 ``numpy 2.4.6`` ABI 不匹配，
+``torch.from_numpy`` 抛 ``RuntimeError``；``~/.EasyOCR`` 建不出来，构造 ``Reader`` 直接
+``PermissionError``，模型也未缓存）；``pytesseract`` 装了但缺二进制（``tesseract`` 不在
+PATH）；栅格化用 ``fitz``（PyMuPDF），不依赖 MiKTeX 带来的 ``pdftoppm``。
+
+三条纪律：
+1. ``available()`` 必须真探测：``pytesseract`` 要真的调 ``get_tesseract_version()`` 并捕获
+   异常（"装了 pytesseract" ≠ "装了 tesseract"）；``easyocr`` 只查 ``import``、``Reader``
+   可调用性、torch↔numpy 桥、模型目录可写性 —— 绝不在探测阶段真构造 Reader（那会下
+   ~100MB 模型，让 ``ocr.backends`` 卡上几分钟，探测本身就成了故障）。
+2. "没做"和"做了但没结果"是两件事（与 ``DESIGN.md`` §6.3 同源）：没有可用后端 ⇒
+   ``fail(...)``，一个字符都不返回；后端抛异常的那一页 ⇒ 记 ``error``，不算成功；后端真
+   跑了但结果是空串 ⇒ ``ok`` + 逐页 ``empty=True`` + ``warnings`` 里明说"做了但没结果"。
+3. ``max_pages`` 是硬保护：OCR 慢得离谱（一页数秒到数十秒），必须限量并在 ``warnings``
+   里说明截断了多少页 —— 静默截断会让"我没看到那几页"伪装成"那几页没有内容"。
+
+副作用等级：这三个工具不都是 ``read``。曾经三个一律声明 ``read``（"OCR 不改盘，模型缓存
+是后端自己的事"），那是权限面在说假话：
+- ``ocr.run`` ⇒ ``network``：``EasyOcrBackend._reader`` 构造 ``easyocr.Reader``，首次要下载
+  约 100MB 模型；
+- ``ocr.backends`` ⇒ ``write_local``：``available`` 对 ``~/.EasyOCR/model`` 做 ``mkdir``
+  （工作区之外），``PytesseractBackend`` 还会起 ``tesseract --version``；刻意保留这次
+  mkdir（它是"模型目录到底可不可写"的唯一可靠判据，``os.access`` 在沙箱里会说谎）；
+- ``ocr.detect_text_layer`` ⇒ ``read``：只读文件、不写盘、不起进程。
 """
 
 from __future__ import annotations
@@ -167,10 +176,9 @@ class EasyOcrBackend:
             checks["reader"] = "SKIPPED（导入失败）"
             blockers.append(f"import easyocr 失败：{type(exc).__name__}: {exc}")
 
-        # ② torch ↔ numpy 的桥。这一步是实测换来的检查：easyocr 的
-        #    detection/recognition 路径里有 torch.from_numpy / .numpy()，
-        #    ABI 不匹配时导入能成功、推理必炸。不查这一项就会把
-        #    "能 import" 当成 "能跑"，而 ocr.run 会在真正识别时才崩。
+        # ② torch ↔ numpy 的桥。实测换来：easyocr 的 detection/recognition 路径里有
+        #    torch.from_numpy / .numpy()，ABI 不匹配时导入能成功、推理必炸 —— 不查这项
+        #    就会把"能 import"当成"能跑"，而 ocr.run 在真正识别时才崩。
         import_ok = not blockers
         if import_ok:
             try:
@@ -190,13 +198,11 @@ class EasyOcrBackend:
         else:
             checks["torch_numpy_bridge"] = "SKIPPED（导入失败）"
 
-        # ③ 模型目录：既要能写（首次要下 ~100MB），也要如实报告"是否已缓存"。
-        #    这里真的 mkdir 一次 —— 那是权限的唯一可靠判据（os.access 走 ACL，
-        #    在沙箱里会说"可写"却实际拒绝），而且这个目录本来就是 easyocr 要建的。
-        #
-        #    ③ 与 ② 互相独立，所以用 import_ok 而不是 not blockers 作守卫：
-        #    ② 失败不该掩盖"模型目录不可写"这个独立故障 —— 两个原因都要报出来，
-        #    否则修好 ABI 之后又撞上权限问题，等于白跑一轮。
+        # ③ 模型目录：既要能写（首次要下 ~100MB），也要如实报告"是否已缓存"。这里真的
+        #    mkdir 一次 —— 那是权限的唯一可靠判据（os.access 走 ACL，在沙箱里会说"可写"却
+        #    实际拒绝），而且这个目录本来就是 easyocr 要建的。
+        #    ③ 与 ② 互相独立，所以用 import_ok 而不是 not blockers 作守卫：② 失败不该掩盖
+        #    "模型目录不可写"这个独立故障，否则修好 ABI 后又撞上权限，等于白跑一轮。
         model_dir = self._model_dir()
         if import_ok:
             cached = sorted(p.name for p in model_dir.glob("*.pth")) if model_dir.is_dir() else []
@@ -566,22 +572,18 @@ def _h_detect_text_layer(ctx: _Ctx, path: str = "", lit_id: str = "") -> Any:
             kind="page_count_failed",
             path=str(p),
         )
-    # 唯一判据是 `pages == []`（extract.py 的契约）：扫描版 PDF 能正常打开、
-    # 页数正常，但每页抽出来都是空白，此时 pages 被置空。调用方据此把
-    # quote_verified 置 null 而不是 false（DESIGN.md §6.3）。
+    # 唯一判据是 `pages == []`（extract.py 的契约）：扫描版 PDF 能正常打开、页数正常，
+    # 但每页抽出来都是空白，此时 pages 被置空。调用方据此把 quote_verified 置 null。
     has_layer = bool(doc.pages)
     pages_with_text = [i + 1 for i, t in enumerate(doc.pages) if t.strip()]
     # `F-4`：逐页三态。`pages[i] == ""` 有两种原因（本来空白 / 抽取时抛异常），
     # 而下游的引文校验必须能分开它们：把后者读成前者会把真引文判成幻觉。
     failed_pages = tuple(int(x) for x in getattr(doc, "failed_pages", lambda: ())())
-    # `R3B-1`（第二轮重审实测的修法）：页数也要三态。`page_count()` 只认 `.pdf` 后缀，别的一律 `None`；而抽取
-    # 是按内容魔数分派的：一份真 PDF 只要扩展名不是 `.pdf`（例如快照存成 `.bin`），内容照样走 PDF 链、
-    # `pages=[]` 照样是"无文本层"—— 但 `total` 是 `None`，于是旧版 `elif total:` 为假、落到最后那一支，报出
-    # 方向相反的处置。后果：① 该走 OCR 的扫描件被劝退；② `R3-2` 刚修好的"整篇抽取失败"那一支在一整类真实
-    # 文件上仍不可达。修法：`total` 只表示"后端报的页数"，需要页数时优先用抽取结果自己的长度。
-    # `R6-AN-4`："已知为 0"与"真取不到"还必须分开（旧写法把两者都折成 None）：后端报了页数 ⇒ 用它；抽取结果
-    # 自带长度 ⇒ 用那个长度；文本类文件（txt/md/html）抽出来是空的 ⇒ 已知为 0；PDF 后端一页都没返回、也没有
-    # 逐页状态 ⇒ 才是未知。
+    # `R3B-1`（页数三态）：`page_count()` 只认 `.pdf` 后缀，而抽取按内容魔数分派 —— 一份
+    # 真 PDF 只要扩展名不是 `.pdf`，内容照样走 PDF 链、`pages=[]` 照样是"无文本层"，但
+    # `total` 是 `None`，旧版 `elif total:` 为假会落到方向相反的处置（该走 OCR 的被劝退、
+    # "整篇抽取失败"那一支不可达）。所以 `total` 只表示"后端报的页数"，需要页数时优先用
+    # 抽取结果自己的长度；"已知为 0"与"真取不到"也必须分开。
     pages_known = len(doc.pages) or len(getattr(doc, "page_status", ()) or ())
     if total:
         known_total = total
@@ -613,9 +615,8 @@ def _h_detect_text_layer(ctx: _Ctx, path: str = "", lit_id: str = "") -> Any:
         )
         suggestion = "无需 OCR：优先用文本层（快且可定位页码）。"
     elif known_total:
-        # 这里曾经无条件写"每页抽出的文本去空白后都为空" —— 但"全空"也可能
-        # 是每一页都抽取失败造成的。两者都该走 OCR，但报告里必须说清是哪一种：
-        # 前者是"扫描件"，后者是"我们的抽取链在这份文件上全崩了"（处置不同）。
+        # 不能无条件写"每页抽出的文本去空白后都为空"：那也可能是每页都抽取失败造成的。
+        # 两者都该走 OCR，但报告里必须说清是哪一种（扫描件 / 抽取链全崩，处置不同）。
         if failed_pages:
             reason = (
                 f"**无文本层，且原因是抽取失败**：文件共 {known_total} 页，"
@@ -1005,12 +1006,10 @@ def _ocr_backends(ctx, refresh=False):
            },
     side_effect="read",
     roles=("B",),
-    # 键名从一个真实调用读出（`_h_detect_text_layer`）。
-    # 2026-10-15 补齐：`page_count_known` / `page_count_source` 是"这个页数是怎么来的"
-    # （三态：数出来的 / 猜的 / 数不了），`failed_pages` 是"哪几页没做成"。
-    # `returns` 只是台账/冻结快照的声明契约（`tools/base.py:674-679`：description 不带
-    # returns，模型面看不到它）；缺这三格会让契约与实跑分家（判据/探针会红），而
-    # `page_count=0` 的"未知 vs 真没有页"就少了一处书面口径。
+    # 键名从一个真实调用读出（`_h_detect_text_layer`）。`page_count_known` /
+    # `page_count_source` 是"这个页数是怎么来的"（三态：数出来的 / 猜的 / 数不了），
+    # `failed_pages` 是"哪几页没做成"。`returns` 只是台账/冻结快照的契约（模型面看不到
+    # 它），缺这三格就会让契约与实跑分家。
     returns="{'path','source_kind','has_text_layer','pages','page_count','pages_with_text','chars','encoding','reason','suggested_next','rule','page_count_known','page_count_source','failed_pages'}；"
             "失败：ok=False + kind(no_target/unknown_lit_id/lit_without_path/file_missing/not_a_file/extract_error)"
             "（unknown_lit_id 会把盘上有的编号一起给出来）",
