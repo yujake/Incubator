@@ -397,11 +397,9 @@ def _action_rows(role: str) -> list[tuple[str, str, str, str]]:
     return rows
 
 
-def _role_section(role: str, registry: Any) -> list[str]:
+def _role_section(role: str, registry: Any, spec: Any) -> list[str]:
     from agentflow import capabilities as C
-    from agentflow import specs as SP
 
-    spec = SP.builtin_specs()[role]
     brief = spec.brief
     lines: list[str] = [f"## 角色 {role}", "", "### 角色设定", "", f"**{brief.duty}**", ""]
     if getattr(brief, "deliverable", ""):
@@ -468,10 +466,15 @@ def _role_section(role: str, registry: Any) -> list[str]:
 
 def render_role_guide() -> str:
     from agentflow import capabilities as C
+    from agentflow import specs as SP
 
     registry = _registry()
+    # 声明表与工具面各算一次：`builtin_specs()` 每次调用都会把十一个声明模块重新收成
+    # 一张表，而十个角色节原先各调一次；合计那一行原先也为每个角色重造一遍工具行
+    # （只要件数，`for_role` 的列表长度就是它）。
+    specs = SP.builtin_specs()
     total_actions = sum(len(C.CAPABILITIES.get(r) or ()) for r in ROLES)
-    total_tools = sum(len(_tool_rows(registry, r)) for r in ROLES)
+    total_tools = sum(len(registry.for_role(r)) for r in ROLES)
     lines = [
         "# 角色指南（十个角色 + 主控）",
         "",
@@ -494,7 +497,7 @@ def render_role_guide() -> str:
         "",
     ]
     for role in ROLES:
-        lines += _role_section(role, registry)
+        lines += _role_section(role, registry, specs[role])
     return "\n".join(lines).rstrip() + "\n"
 
 
