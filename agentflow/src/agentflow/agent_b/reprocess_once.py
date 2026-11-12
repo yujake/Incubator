@@ -29,13 +29,15 @@ class _ReprocessOnce:
         except Exception as e:
             # 读文件/抽取可能因为缺依赖、文件损坏而失败。不标 done：
             # "我压根没看成"和"我看过了、原文里没有"是两回事（I4 的三态纪律）。
-            self._record_reprocess_failure(claimed, f"{type(e).__name__}: {e}")
+            # 这一句同时进失败记录与返回读数：格式化一次。
+            err = f"{type(e).__name__}: {e}"
+            self._record_reprocess_failure(claimed, err)
             return {
                 "handled": False,
                 "reprocess_id": rid,
                 "rejected": rejected,
                 "skipped_reason": None,
-                "error": f"{type(e).__name__}: {e}",
+                "error": err,
             }
         out = self._finish_reprocess(claimed, outcome)
         out["rejected"] = rejected
