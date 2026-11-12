@@ -1,22 +1,31 @@
 """A 专用检索工具：provider 探测 / 文献检索 / 下载 / 判重检查 / 文献登记。
+
 基于 ``tools/base.py`` 的 ``ToolSpec`` / ``ToolResult`` 写（见 ``DESIGN-TOOLS.md`` §1）。
+
 ## 为什么需要这一层
-A 的思维链只该花在"判断该调哪个工具、该用哪个检索词"上，不该花在"怎么把 provider 的参数拼对"、"这条是不是已经登记过"上。工具层把这些标准动作固化成有名字、有 schema、有校验、有结构化返
-回、声明副作用的原子动作。
+A 的思维链只该花在"判断该调哪个工具、该用哪个检索词"上，不该花在"怎么把 provider 的参数
+拼对""这条是不是已经登记过"上。工具层把这些标准动作固化成有名字、有 schema、有校验、有
+结构化返回、声明副作用的原子动作。
+
 ## 三条贯穿全模块的原则
-``search.literature`` 的每条候选都带``dedup_key`` / ``existing`` / ``is_new``：A 看到候选列表的同时就知道哪几条是新的。
-2. "没做"与"做了没结果"必须分开（与 ``DESIGN.md`` §6.3 的"无文本层返回``None`` 而不是 ``False``"同源）：- provider 检索抛异常 ⇒ ``fail``（没
-做成）；检索正常但零命中 ⇒``ok`` + 空列表（做了，结论就是"没有"）。- 未配置 ``store`` 时无法比对既有文献表 ⇒ 候选的 ``existing`` 是 ``None``（未知），而不是
-``False``（"新的"）。
-``search.providers`` 对每个 provider 发一次极小的真实请求；``ABFLOW_SKIP_NETWORK=1`` 时明确标 ``unverified``（未探测），而不是把"没探测
-"写成"可用"或"不可用"。
-正因为它真的发 HTTP，它的 ``side_effect`` 是 ``network``（需要审批），不是 ``read``。这一处曾经声明成 ``read``：那等于在权限面上说"这个工具不联网、不必审批
-"，而它每次调用都会向外部源发起请求 ——声明与实际不符的副作用等级会让"审批"这个闸门在该拦的地方不拦。（``ABFLOW_SKIP_NETWORK=1`` 只是"这一次没探测"，不是"这个工具不联网"；
+1. ``search.literature`` 的每条候选都带 ``dedup_key`` / ``existing`` / ``is_new``：A 看到
+   候选列表的同时就知道哪几条是新的。
+2. "没做"与"做了没结果"必须分开（与 ``DESIGN.md`` §6.3 同源）：provider 检索抛异常 ⇒
+   ``fail``（没做成）；检索正常但零命中 ⇒ ``ok`` + 空列表（结论就是"没有"）；未配置
+   ``store`` 时无法比对既有文献表 ⇒ 候选的 ``existing`` 是 ``None``（未知），不是 ``False``。
+3. ``search.providers`` 对每个 provider 发一次极小的真实请求；``ABFLOW_SKIP_NETWORK=1`` 时
+   明确标 ``unverified``（未探测），而不是把"没探测"写成"可用"或"不可用"。正因为它真的发
+   HTTP，``side_effect`` 是 ``network``（需要审批）而不是 ``read`` —— 声明成 ``read`` 等于
+   在权限面上说"这个工具不联网、不必审批"，而它每次调用都会向外部源发起请求；声明与实际
+   不符会让审批这个闸门在该拦的地方不拦。
+
 ## 文件落点（为什么这样定）
-- ``search.download`` 下到 ``<workspace>/downloads/`` —— 这是一个中间态：文件名由 ``fetch`` 层 slug 化并去重，下载器保证"不覆盖已有文件"。
-- ``search.register`` 把文件收编进 ``<store.library>/<lit_id>/``：因为``schema.Literature.path`` 必须是 library/ 下的相
-对路径，绝对路径会被``Literature.validate()`` 直接拒绝。收编失败时行照建、``path`` 置 ``null``并给 warning —— "知道有这篇但拿不到全文"本身就是有价值的
-结果（DESIGN.md §2.4）。
+- ``search.download`` 下到 ``<workspace>/downloads/`` —— 中间态：文件名由 ``fetch`` 层
+  slug 化并去重，下载器保证"不覆盖已有文件"。
+- ``search.register`` 把文件收编进 ``<store.library>/<lit_id>/``：``schema.Literature.path``
+  必须是 library/ 下的相对路径，绝对路径会被 ``Literature.validate()`` 直接拒绝。收编失败
+  时行照建、``path`` 置 ``null`` 并给 warning —— "知道有这篇但拿不到全文"本身就是有价值的
+  结果（DESIGN.md §2.4）。
 """
 
 from __future__ import annotations
@@ -2016,18 +2025,14 @@ def _search_register(ctx, title, type_code, summary, path=None, doi=None, year=N
 
 # --------------------------------------------------------------------------- 待新增文献列表
 #
-# 业主 2026-10-20 口径（逐条落在这七件工具上）：
-#   ① 一次委托正式入库至多 10 篇（`lit.admit` / `lit.admit_all` 挡住；广搜本身可以超过 10 条）；
-#   ② 入库前要审内容 —— 即使只拿到 3 篇也要逐篇过（`lit.stage_list` 看得到每一条）；
-#   ③ 内容不好可以撤掉换一篇：撤 = 槽位置空 + 写理由（`lit.stage_withdraw`），
-#      序号不复用、记录不物理删除；拒收走 `lit.stage_reject`；
-#   ④ 与本地库重叠度高的：只有给了 `new_content` 才许入库（`lit.overlap_check` 的读数）；
-#   ⑤ 待新增列表支持增/删/查、可多次追加（第 2 批序号接着第 1 批）；
-#   ⑥ 列表按「委托」重置（默认视图只看当前委托）+ 提交整批 `lit.admit_all`（判完之后收口、
-#      结算不物理删、写委托报告 `reports/lit-<request_id>.md`：已入库 / 未入库 / 待裁三块）。
-#
-# 判据的真身全在 `agentflow/litstage.py`（上限、阈值、状态机、报告结构只有那一处）；
-# 这七件只做两件事：把参数校验交给 schema、把结论翻成 `ToolResult`。
+# 业主 2026-10-20 口径（逐条落在这几件工具上）：① 一次委托正式入库至多 10 篇（`lit.admit` /
+# `lit.admit_all` 挡住；广搜本身可以超过 10 条）；② 入库前要审内容，即使只拿到 3 篇也要逐篇
+# 过（`lit.stage_list` 看得到每一条）；③ 内容不好可以撤掉换一篇：撤 = 槽位置空 + 写理由
+# （`lit.stage_withdraw`），序号不复用、记录不物理删除；拒收走 `lit.stage_reject`；④ 与本地
+# 库重叠度高的只有给了 `new_content` 才许入库（`lit.overlap_check` 的读数）；⑤ 待新增列表
+# 支持增/删/查、可多次追加；⑥ 列表按「委托」重置（默认视图只看当前委托）+ 提交整批
+# `lit.admit_all`（判定完收口、结算不物理删、写委托报告）。判据真身全在 `agentflow/litstage.py`
+# （上限、阈值、状态机、报告结构只有那一处）；工具层只做参数校验与把结论翻成 `ToolResult`。
 
 
 def _stage_fail(exc: Exception) -> Any:
@@ -2740,16 +2745,11 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
     side_effect="write_local",
     roles=("A",),
     # 2026-10-26（G12）：`admitted[]` / `refused[]` / `cleared[]` 三个数组的元素形状改成散文
-    # （不再带引号），顶层 15 键与 `report` 的 6 键照旧带引号（它们是可达的，一格没动）。
-    # 为什么：Q16 的提交闸只在本委托"一条未判都没有"时放行，而那一刻已经没有要入的行
-    # ⇒ 本工具在"整批提交"口径下不再逐条登记（登记支不可达），三个数组恒空。键列表里
-    # 留着它们的元素键，等于让"声明 ⊆ 实跑"这条判据在一个永不出现的形状上恒红
-    # （`tests/test_tools_returns_declaration.py` 的 `MAX_SKIPPED = 0` 不许把它读成跳过）。
-    # 这不是放宽判据：同一套元素形状与 `lit.admit` 同形，由那一条的声明照旧带引号声明，
-    # 并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）。
-    # 这条支不可达不是我一个人这么说，项目自己写在
-    # `tests/test_search_tools_stage_admit.py::test_the_whole_list_is_refused_until_every_item_is_judged`
-    # 里：逐条 `lit.admit` 之后 `lit.admit_all` 以 `registered == 0` 收口。
+    # （不再带引号），顶层 15 键与 `report` 的 6 键照旧带引号。为什么：Q16 的提交闸只在"一条
+    # 未判都没有"时放行，而那一刻已经没有要入的行 ⇒ 本工具在"整批提交"口径下不再逐条登记
+    # （登记支不可达），三个数组恒空；键列表里留着它们的元素键，等于让"声明 ⊆ 实跑"在一个
+    # 永不出现的形状上恒红。这不是放宽判据：同一套元素形状由 `lit.admit` 的声明带引号声明并
+    # 由它的探针真跑验着（`tests/test_search_tools_stage_admit.py` 也断言这条支不可达）。
     returns=(
         "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit',"
         "'delegation_admitted','delegation_limit','admitted','refused','cleared','registered',"
