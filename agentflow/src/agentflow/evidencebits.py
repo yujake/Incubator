@@ -639,6 +639,21 @@ def bits_after_proof_recorded(bits: Mapping[str, Any] | None, *,
                          voided_by=dict(raw.get("voided_by") or {}), kind=kind)
 
 
+def _proof_pocket(row: Mapping[str, Any], key: str) -> Mapping[str, Any] | None:
+    """逐份证明表的口袋：正位 `bits.evidence.<key>`，兼容写在 `bits` 顶层。
+
+    三个读口（签过没有 / 签的是哪一份 / 洗过没有）原先各抄一遍这段取法；
+    判定条件与优先级逐字相同：顶层的同名键若不认识 Mapping 才看 `evidence`，
+    两处都不是 Mapping ⇒ `None`（调用方各自返回空表）。
+    """
+    outer = row if isinstance(row, Mapping) else {}
+    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
+    pocket = bits.get(key)
+    if not isinstance(pocket, Mapping):
+        pocket = dict(bits.get("evidence") or {}).get(key)
+    return pocket if isinstance(pocket, Mapping) else None
+
+
 def reviewed_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
     """按证明看第 3 位：`{证明号: 有没有签}`（写侧签下的那张表）。
 
@@ -654,12 +669,8 @@ def reviewed_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
     （手写或别的写者），这里也读。认不出的键跳过（它们不是证明号）；值按 `bool` 归一一遍
     （盘上是 JSON，可能是 `true` / `1` / `"true"`）。
     """
-    outer = row if isinstance(row, Mapping) else {}
-    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
-    pocket = bits.get(REVIEWED_BY_PROOF_KEY)
-    if not isinstance(pocket, Mapping):
-        pocket = dict(bits.get("evidence") or {}).get(REVIEWED_BY_PROOF_KEY)
-    if not isinstance(pocket, Mapping):
+    pocket = _proof_pocket(row, REVIEWED_BY_PROOF_KEY)
+    if pocket is None:
         return {}
     from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
 
@@ -684,12 +695,8 @@ def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
     判法，绝不把"判不了"读成"过期"）。键按证明号归一（与 `reviewed_by_proof` 同一口径）；
     收 statements 行或一份 `bits` dict 都可以。
     """
-    outer = row if isinstance(row, Mapping) else {}
-    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
-    pocket = bits.get(REVIEWED_SHA_BY_PROOF_KEY)
-    if not isinstance(pocket, Mapping):
-        pocket = dict(bits.get("evidence") or {}).get(REVIEWED_SHA_BY_PROOF_KEY)
-    if not isinstance(pocket, Mapping):
+    pocket = _proof_pocket(row, REVIEWED_SHA_BY_PROOF_KEY)
+    if pocket is None:
         return {}
     from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
 
@@ -742,12 +749,8 @@ def optimized_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
     值按 `bool` 归一（盘上是 JSON，可能是 `true` / `1` / `"true"`）。
     缺格不进这张表 —— 要三态就读 :func:`optimized_state`。
     """
-    outer = row if isinstance(row, Mapping) else {}
-    bits = outer.get("bits") if isinstance(outer.get("bits"), Mapping) else outer
-    pocket = bits.get(OPTIMIZED_BY_PROOF_KEY)
-    if not isinstance(pocket, Mapping):
-        pocket = dict(bits.get("evidence") or {}).get(OPTIMIZED_BY_PROOF_KEY)
-    if not isinstance(pocket, Mapping):
+    pocket = _proof_pocket(row, OPTIMIZED_BY_PROOF_KEY)
+    if pocket is None:
         return {}
     from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
 
@@ -1529,10 +1532,11 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
     for name, key in (("numeric", "numeric"), ("formal", "formal")):
         state = _bit_state(bits, name)
         carried = ev.get(key) or (formal_per if name == "formal" else None)
-        if state == "na" and not str(ev.get(f"{key}_reason") or "").strip():
+        # 这一格的"为什么"只取一次（na 与 failed 两档判断看的是同一句）。
+        reason_text = str(ev.get(f"{key}_reason") or "").strip()
+        if state == "na" and not reason_text:
             problems.append(f"{name}=na 必须写理由（为什么这条命题不适合{'数值验证' if name == 'numeric' else '形式化'}）")
-        if state == "failed" and not (str(ev.get(f"{key}_reason") or "").strip()
-                                      or carried):
+        if state == "failed" and not (reason_text or carried):
             problems.append(f"{name}=failed 必须带原文（脚本/检查器输出）")
         if state == "verified" and not carried:
             problems.append(f"{name}=verified 必须带凭据（脚本 + sha，或检查器输出）")
@@ -1575,8 +1579,9 @@ def bit_problems(bits: Mapping[str, Any]) -> list[str]:
         # 逐条读：一条路径说 verified，就要有它自己那一格凭据（不许拿别条路径的顶）。
         # 单格形态（老行）读成 `{1: …}`（见 `formal_evidence_by_proof`），所以老行的
         # 行为与改前逐字相同。
-        checked = [dict(item) for item in formal_per.values()] or [
-            dict(ev.get("formal") or {})]
+        # `formal_evidence_by_proof` 交出来的已经是逐条的副本，这里只读 checker，
+        # 不再每条再复制一遍。
+        checked = list(formal_per.values()) or [dict(ev.get("formal") or {})]
         for payload in checked:
             if payload and not str(payload.get("checker") or "").strip():
                 problems.append("formal=verified 必须写明是哪个检查器（checker：lean4 / coq / isabelle…）")
@@ -1914,12 +1919,13 @@ def clean_statement_ids(rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
             reasons[sid] = ("概念行（不参与等级）：引用概念要引它的定义，"
                             "而不是把它当定理用")
             continue
-        if str(bits.get("grade") or "") in ("pre_theorem", "theorem"):
+        grade = str(bits.get("grade"))
+        if grade in ("pre_theorem", "theorem"):
             clean.append(sid)
-            reasons[sid] = (f"我方命题：{GRADE_LABELS.get(str(bits.get('grade')))}"
+            reasons[sid] = (f"我方命题：{GRADE_LABELS.get(grade)}"
                             "（第 2 位 + 第 3/4 位）")
         else:
-            reasons[sid] = (f"等级只有「{GRADE_LABELS.get(str(bits.get('grade')))}」"
+            reasons[sid] = (f"等级只有「{GRADE_LABELS.get(grade)}」"
                             "⇒ 引用它要小心")
     return {"clean": clean, "reasons": reasons}
 
