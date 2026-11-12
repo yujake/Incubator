@@ -143,7 +143,7 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
     | `threshold` / `scope` | 这一次用的阈值与趟标签 |
     | `reason` | 空 = 查过了；非空 = 没查成（可用命题少于 2 条） |
     """
-    material = [dict(row) for row in rows if isinstance(row, Mapping)]
+    material = [row for row in rows if isinstance(row, Mapping)]
     skipped: list[dict[str, str]] = []
     usable: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
@@ -198,9 +198,9 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
     for i in range(len(usable)):
         clusters.setdefault(_find(parent, i), []).append(i)
 
-    pairs_by_cluster: dict[int, list[dict[str, Any]]] = {}
-    # 读数要给人看"凭什么"：相似度取自上面那一轮的同一份判定，不重算。
-    for root, members in clusters.items():
+    # 簇与"凭什么"在同一趟里收齐：相似度取自上面那一轮的同一份判定，不重算。
+    for root in sorted(clusters):
+        members = clusters[root]
         if len(members) < 2:
             continue
         pairs: list[dict[str, Any]] = []
@@ -218,18 +218,12 @@ def suspected_splits(rows: Iterable[Mapping[str, Any]], *,
                     "basis": str(verdict.get("basis") or ""),
                 })
         pairs.sort(key=lambda p: (p["a"], p["b"]))
-        pairs_by_cluster[root] = pairs
-
-    for root in sorted(clusters):
-        members = clusters[root]
-        if len(members) < 2:
-            continue
         ids = sorted(usable[i]["stmt_id"] for i in members)
         proof_nos = {usable[i]["stmt_id"]: proof_numbers(usable[i]["row"]) for i in members}
         top = max((max(no) if no else 1) for no in proof_nos.values())
         entry: dict[str, Any] = {
             "stmt_ids": ids,
-            "pairs": pairs_by_cluster.get(root, []),
+            "pairs": pairs,
             "max_proof_no": int(top),
             "proof_nos": {sid: sorted({int(n) for n in proof_nos[sid]} or {1})
                           for sid in sorted(proof_nos)},
