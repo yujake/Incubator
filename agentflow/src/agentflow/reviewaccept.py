@@ -314,16 +314,19 @@ def _session_spend_usd(session_root: Any, sid: str | None) -> tuple[float | None
     from . import sessions as SS
 
     events, _problems = SS.read_session(session_root, sid=sid)
-    calls = [e for e in events if str(e.get("kind") or "") == "llm_call"]
     total = 0.0
     unknown = 0
-    for e in calls:
+    calls = 0
+    for e in events:
+        if str(e.get("kind") or "") != "llm_call":
+            continue
+        calls += 1
         usd = e.get("usd")
         if usd is None:
             unknown += 1
         else:
             total += float(usd or 0.0)
-    return round(total, 6), unknown, len(calls)
+    return round(total, 6), unknown, calls
 
 
 def _c_cost(acc: ReviewAcceptance, store: Any, cap_usd: float | None, *,
@@ -410,11 +413,17 @@ def _hop_rows(store: Any) -> tuple[list[Any], int]:
     """
     if store is None:
         return [], 0
-    done = [r for r in store.rows("tasks")
-            if str(r.get("status") or "") == "done"
-            and str(r.get("outcome") or "") == "ok"]
-    hops = [r for r in done if str(r.get("called_by") or "") != "user"]
-    return hops, len(done) - len(hops)
+    done = 0
+    hops: list[Any] = []
+    for r in store.rows("tasks"):
+        if str(r.get("status") or "") != "done":
+            continue
+        if str(r.get("outcome") or "") != "ok":
+            continue
+        done += 1
+        if str(r.get("called_by") or "") != "user":
+            hops.append(r)
+    return hops, done - len(hops)
 
 
 def _c_hops(acc: ReviewAcceptance, store: Any) -> None:
@@ -580,11 +589,12 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
 
     project_dir = resolve_under_workspace(store, project_dir)
 
+    base = Path(project_dir) if project_dir else None
     aux: dict[str, Any] = {}
-    tex = Path(project_dir) / "out" / "paper" / "main.tex" if project_dir else None
+    tex = base / "out" / "paper" / "main.tex" if base is not None else None
     aux["tex_sha256"] = (hashlib.sha256(tex.read_bytes()).hexdigest()[:12]
                          if tex is not None and tex.is_file() else "")
-    pdf = Path(project_dir) / "out" / "paper" / "main.pdf" if project_dir else None
+    pdf = base / "out" / "paper" / "main.pdf" if base is not None else None
     aux["pdf_pages"] = None
     if pdf is not None and pdf.is_file():
         try:  # 页数只作辅助：读不出来就 None，不许编一个数
