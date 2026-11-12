@@ -1,4 +1,4 @@
-"""智能体 E：数值实验与形式化验证。
+"""智能体 E：数值实验与反例。
 
 设计基线：``test/test1/DESIGN-ROLES.md`` §2.1 与 `schema.Experiment` 的硬约束。
 
@@ -38,7 +38,7 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
 
 1. `exit_code != 0`（崩溃 / 超时 / 启动失败）
    ⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
-     `evidence_kind="heuristic"`。绝不允许把崩溃写成支持（FC-21/F C-25）。
+     `evidence_kind="heuristic"`。绝不允许把崩溃写成支持（FC-21/FC-25）。
    理由：崩溃只说明"这次没跑成"，它既不是对命题的支持也不是反驳。
 2. 脚本在 stdout 打印了一行 `REPRO_RESULT: {json}`（约定格式见
    :data:`REPRO_RESULT_PREFIX`）：
@@ -56,7 +56,7 @@ E 记下"脚本声称过 proof，已被拒绝"这件事 —— 拒绝本身要�
    ⇒ `result="inconclusive"`, `negation_kind="no_local_evidence"`,
      `evidence_kind="heuristic"`，`notes` 写明"脚本未给出结构化结论"。
 
-## 形式化不在这一岗（业主 2026-10-23 晚：「E 侧与 Lean 相关的工具和动作都该清干净」）
+## 形式化不在这一岗
 
 本模块的动作表没有 `check_formal`，`AgentE` 上也没有这个方法；`run_experiment` 收到
 `method="formal"` 时在第一句以受控理由码 `formal_not_in_e` 拒绝，一行都不落、也不起
