@@ -1,25 +1,19 @@
-"""登记 / 重写这两档的「结局读数」（2026-11-11 从 `proofregistry.py` 拆出）。
+"""登记 / 重写这两档的「结局读数」。
 
-## 为什么有这一份
+`register_or_rewrite` 里有两段「不碰稿件字节、只决定这一笔怎么读」的逻辑：
 
-`proofregistry.py` 正好落在 `>800` 那条线上（800 行），而 `register_or_rewrite` 又越过
-200 行 —— 业主口径是基线不许抬，所以不往那份文件里加东西：把 `register_or_rewrite`
-里两段「不碰稿件字节、只决定这一笔怎么读」的逻辑搬到本模块：
+1. :func:`form_gate_reading` —— 新命题登记前跑一次 F 秘书的形态闸，把
+   「放行 / 受控拒 / 闸自己炸了（fail-closed）」解释成同一形状的读数；
+2. :func:`preserved_reading` —— 幂等那一格：同一份正文再挂一次 ⇒ 一个字节都不动
+   （版本号也不涨），读数说 `preserved=True`。
 
-1. `form_gate_reading` —— 新命题登记前跑一次 F 秘书的形态闸，把「放行 / 受控拒 /
-   闸自己炸了（fail-closed）」解释成同一形状的读数；
-2. `preserved_reading` —— 幂等那一格：同一份正文再挂一次 ⇒ 一个字节都不动（版本号也
-   不涨），读数说 `preserved=True`。
+受控码 `REFUSED_*` 六格也只在这里定义，`proofregistry` 按名字回引它们 ——
+公开面与受控码字符串不变。
 
-受控码也在这里定义（`REFUSED_*` 六格）：它们只被这两段用来拼读数 —— 搬出去之后
-`proofregistry` 仍然 `from .proofoutcomes import ...` 回引同样的名字，公开面与
-受控码字符串一个字没变（其他模块按 `proofregistry.REFUSED_*` 取用的写法照旧可读）。
-
-## 依赖方向
-
-本模块不在顶层 import `proofregistry`：`preserved_reading` 只在需要时（真的幂等那一
-刻）惰性取 `proof_sha` / `section_hashes` 的既有实现 —— 那是同一把尺，不另写一份。
+依赖方向：本模块不 import `proofregistry`；`preserved_reading` 只在真到幂等那一刻
+惰性取 `proof_sha` / `section_hashes`，同一把尺不另写一份。
 """
+
 from __future__ import annotations
 
 from typing import Any, Callable, Mapping, Sequence
