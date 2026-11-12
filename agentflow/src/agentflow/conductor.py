@@ -3109,9 +3109,9 @@ class Conductor:
                      roster_pending: bool = False) -> str:
         """在一笔事务里取号 + 建行（`_write_new_row` 与批量建行共用的唯一一处）。
 
-        为什么抽出来而不是让批量那一路自己写一遍（2026-10-27）：落盘的键集与键序
+        为什么抽出来而不是让批量那一路自己写一遍：落盘的键集与键序
         （`task_id` 必须第一）与"取号在临界区内"这两条都是逐字节级别的判据
-        （I-9 的 `tasks.json` 重建一致），两处各写一遍的代价不是"重复代码"，而是
+        （`tasks.json` 重建一致），两处各写一遍的代价不是"重复代码"，而是
         "一条路径的 `task_id` 排到了最后 ⇒ `rebuild()` 之后快照变了"。
         """
         from .interactions import next_prefixed_id
@@ -3132,10 +3132,9 @@ class Conductor:
         task.validate()
         # 落盘的行一律补齐到全字段（`Task.to_dict()` = dataclass 字段顺序）。
         #
-        # 为什么不是"调用方给什么就写什么"（2026-10-08 加"工作项板"那七格时实测）：
-        # 调用方的行 dict 是手写的字面量，加列之后它们不会自动多出那七格，
-        # 而 `rebuild()` 用 `Task.to_dict()` 重建 —— 于是"第一次落盘 19 键、
-        # 重建后 26 键"，`tasks.json` 逐字节不一致，I-9 当场红
+        # 为什么不是"调用方给什么就写什么"：调用方的行 dict 是手写的字面量，加列之后
+        # 它们不会自动多出那几格，而 `rebuild()` 用 `Task.to_dict()` 重建 —— 于是
+        # "第一次落盘的键比重建后少几格"，`tasks.json` 逐字节不一致，判据当场红
         # （`tests/test_conductor.py::test_i9_tasks_snapshot_rebuilds_byte_identical`
         # 与 `tests/test_task_instance.py` 就是抓住它的那两条）。
         # 键集与键序只留一处口径：这里，用 dataclass 自己吐出来的那一份。
@@ -3144,25 +3143,16 @@ class Conductor:
 
     # ---------------------------------------------------------------- 名册登记（唯一漏斗）
     #
-    # 2026-10-21 真机缺陷（`projects/p3-verify`）：`tasks` 里 5 个带父的代理行，而
-    # `out/roster/` 连目录都没有、三份秘书台账里提到 roster 的行数 = 0。只读盘上证据：
-    #   · M 第 9 步调的是原生工具 `conductor.summon_many`（3 个 target，`instance`
-    #     分别是 lit / num / audit34）⇒ `tools/conductor_tools.py` → `Conductor.run_plan`
-    #     → `scheduler` → `Conductor.summon` —— 这条链上一次 `roster_add` 都没有；
-    #   · `t-000006`（`called_by=D` / `parent=t-000005` / `depth=3`）的派活卡在
-    #     `Conductor.summon` 里被 `cli stop --force` 杀掉 ⇒ D 那一步连 `agent_step`
-    #     事件都没有（事件是在 handler 返回之后才落的）。
-    # 两条合起来说明：登记必须发生在"受理那一行落盘之后、`backend.call` 之前",
-    # 而不是等子代理跑完再登记。改前那两处（`_do_summon` / `_do_summon_many`）都排在
-    # 返回之后 ⇒ 被杀在途中的子代理永远不登记，而且批量那一路要等整批跑完。
+    # 登记必须发生在"受理那一行落盘之后、`backend.call` 之前"，而不是等子代理跑完再
+    # 登记：否则被杀在途中的子代理永远不登记，批量那一路还要等整批跑完才登记第一行。
     #
     # 为什么收在 `Conductor.summon` 这一处：所有派活路径最后都经过它（形状那两条、
     # `tools/conductor_tools` 的两个工具、队列认领、`scheduler` / `deliver` / `pipeline`）。
     # 谁调它不重要，重要的是"子行建立成功"这件事只有一个发生点。
     #
-    # 副产品（同一处时序缺陷的另一半）：`LlmBackend.call` 给子代理起循环时按
-    # `surface_of(owner=父, task_id=子)` 从名册里读那一趟的读写面；改前名册行是返回之后
-    # 才有的 ⇒ 面切割从来没生效过。登记提前之后它第一次有行可读。
+    # 同一处时序还决定另一件事：`LlmBackend.call` 给子代理起循环时按
+    # `surface_of(owner=父, task_id=子)` 从名册里读那一趟的读写面 —— 名册行若在返回
+    # 之后才建，面切割读不到它，等于从来没生效过。
 
     #: 名册三份（写侧兜底与"写没写成"的读数都以这三份为口径，顺序即报错顺序）。
     _ROSTER_FILES: tuple[tuple[str, str], ...] = (
@@ -3185,11 +3175,11 @@ class Conductor:
           被写侧兜底换过（改由秘书代写简介），兜底自愈补了 N 条历史漏行，或
           兜底自愈跳过了 N 条在飞（`skipped` 号清单随 `note` 交回）。
 
-        ## 兜底自愈与「在飞」窗口（`draft/159` §三-甲）
+        ## 兜底自愈与「在飞」窗口
 
         自愈跑在这里（`roster_add` 之后），它读的是"台账有、名册没有"，而本条自己的
         台账行在 [5] 就已经落盘 —— 若没有在飞标记，兄弟线程的这次自愈会把还没走到
-        自己 `roster_add` 的那几行当成漏行补掉（81 趟 6 条 `repaired=true` 的成因）。
+        自己 `roster_add` 的那几行当成漏行补掉，并给它们打上 `repaired=true`。
         在飞标记由 `_row_with_id` 在"取号之后、行提交之前"落下，`_summon_preflight`
         的 finally 在登记之后清掉；`Secretary.roster_repair` 把它并进已知集。
 
@@ -3199,9 +3189,9 @@ class Conductor:
         `tests/test_sibling_registration_race_is_not_backfilled.py`。
 
         写口拒绝（`refusal_code` 非空或 `problem` 非空，即"秘书那一侧一个字都没写"）
-        一律原样返回：不重试、不跑下面的兜底自愈（业主 2026-11-02：撞名字不再由框架
-        顺延换名，交父决定；2026-11-02 补：任何拒绝都算 —— 自愈会把刚被拒的这一条
-        按新名字补进名册，那等于换个地方继续静默改名，`draft/151` 三-1）。
+        一律原样返回：不重试、不跑下面的兜底自愈（撞名字不再由框架顺延换名，交父决定；
+        任何拒绝都算 —— 自愈会把刚被拒的这一条按新名字补进名册，那等于换个地方继续
+        静默改名）。
 
         六条口径（与 :meth:`summon` 的第 [5] 步一起构成"恰好登记一次"）：
         1. 只在这里登记 —— 调用点一个都不许再自己调 `roster_add`（重复行会让名册里出现
@@ -3215,9 +3205,8 @@ class Conductor:
            不靠父记得给名字，也不会把同一个名字发给两个子代理；
         5. 父给的那一句简介进不了名册（超长 / 多行）⇒ 不拿它去撞秘书的内容闸：
            改交空简介 + 任务原文，走秘书代写那一支（登记行里 `brief_source=secretary`）。
-           这一条是 2026-10-24 sylow4 真机缺陷的修法：两个 F 给的那句简介是 68 / 70 字，
-           内容闸把整份登记拒在写盘之前 ⇒ 三份名册文件一份都没建出来（`out/roster/` 里
-           连 ``<父>-surfaces.jsonl`` 都没有），读侧那两个 V 只能落在 `unplaced`；
+           内容闸会把整份登记拒在写盘之前 ⇒ 三份名册文件一份都没建出来（`out/roster/`
+           里连 ``<父>-surfaces.jsonl`` 都没有），读侧只能落在 `unplaced`；
         6. 写没写成要读盘，不许只信返回值：秘书报了成功而盘上没有那一行，同样按
            "没写成"报。三份任一份缺，都不许让这次召唤静默通过。
         """
@@ -3251,7 +3240,7 @@ class Conductor:
         kwargs: dict[str, Any] = {
             "owner": str(owner), "role": str(role), "task_id": str(task_id),
             "brief": brief_for_add,
-            # `task` 一并交给秘书：简介没写时由它代写并留痕（2026-10-20 裁定），
+            # `task` 一并交给秘书：简介没写时由它代写并留痕，
             # 所以这里不写 `brief or task`（那是"任务原文顶替"）。
             "task": task,
             "want_name": want_name,
@@ -3269,29 +3258,27 @@ class Conductor:
         name = str(got.get("name") or "")
         raised = str(got.get("problem") or "")
         refusal_code = str(got.get("refusal_code") or "")
-        # ---- 写口拒绝（业主 2026-11-02：「撞名 ⇒ 静默换名」去掉，改成 name_taken 拒绝）
+        # ---- 写口拒绝：任何拒绝都原样交回父决定 --------------------------------
         #
-        # 改前这里在 `want_name` 撞车时替父改主意：改发一个顺延的新名字继续登记，
-        # 只把换名写进 note（`draft/150` §5.2-④ 点名的第二次入口）。
+        # 不在 `want_name` 撞车时替父改主意：改发一个顺延的新名字继续登记、只把换名写进
+        # note，那是换个地方继续静默改名。所以任何拒绝（不只是带码的那三种）都原样交回
+        # 父决定：不重试、也不跑下面的兜底自愈。判据是"秘书那一侧有没有报 problem"而
+        # 不是"有没有码"—— 自愈会把刚被拒的这一条当成"台账有、名册没有"的漏行，按一个
+        # 新名字补进名册。
         #
-        # 现在任何拒绝（不只是带码的那三种）都原样交回父决定：不重试、也不跑下面的
-        # 兜底自愈。判据是"秘书那一侧有没有报 problem"而不是"有没有码"—— 自愈会把刚被拒的
-        # 这一条当成"台账有、名册没有"的漏行，按一个新名字补进名册 ⇒ 换个地方继续静默改名
-        # （`draft/151` 三-1；改前读数 `temp/probe_h11_leftovers.py` 的 H/I/J：拒绝之后名册
-        # 里仍多出 `D2/t-000006 repaired=true`）。代价是"被拒的那一条这一次没有名字"——
-        # 它由收口那一刻的收工兜底（`Secretary.retire` 里的 `roster_repair`）负责补，
-        # 两件事不是一个时刻：派活时不自作主张，收口时必须给得出名字（`draft/151` 三-6）。
+        # 代价是"被拒的那一条这一次没有名字"—— 它由收口那一刻的收工兜底
+        # （`Secretary.retire` 里的 `roster_repair`）负责补，两件事不是一个时刻：
+        # 派活时不自作主张，收口时必须给得出名字。
         #
-        # 2026-11-01 业主裁定（`draft/160` 三-4 的丁案）把"给得出名字"的对象定死了：
-        # 没跑过的号（`outcome="refused"`）永远没有名字；真跑过的号（`status` 是终态、
-        # 有 `ended_at`）会在自愈时补一个从未用过的新名字，add 行带
-        # `named_after_run` / `requested_name` / `refusal_code` 三格留痕（被拒的那个
-        # 名字不复用）。所以这里"交回父决定"的口径一个字没变，变的是收口那一侧：拒过
-        # 但跑过的号不再永久无名。
+        # "给得出名字"的对象是定死的：没跑过的号（`outcome="refused"`）永远没有名字；
+        # 真跑过的号（`status` 是终态、有 `ended_at`）会在自愈时补一个从未用过的新名字，
+        # add 行带 `named_after_run` / `requested_name` / `refusal_code` 三格留痕
+        # （被拒的那个名字不复用）。所以"交回父决定"的代价只是"这一次没有名字"，
+        # 拒过但跑过的号不会永久无名。
         if raised:
             # 拒绝已在写口那一刻落成流水（`Secretary.roster_add` 的包装层，同一个
             # per-owner 临界区）；这里只把"记录没写成"那一句如实带出来
-            # —— 回执的 `note` 是它唯一的落点（业主 2026-11-02 的裁定）。
+            # —— 回执的 `note` 是它唯一的落点。
             if str(got.get("note") or ""):
                 note = (note + "；" if note else "") + str(got.get("note"))
             return {"name": name, "considered": True, "state": "missing",
@@ -3322,11 +3309,11 @@ class Conductor:
             state = "missing"
             problem = (f"{task_id}：秘书没有发名（返回的 name 是空串）⇒ 名册项没有名字，"
                        "按没写成报" + (f"；{problem}" if problem else ""))
-        # ---- 兜底自愈（2026-10-29）：把"台账有、名册没有"的其他代理行补上。
+        # ---- 兜底自愈：把"台账有、名册没有"的其他代理行补上。
         #
         # 位置必须在 `roster_add` 之后：`_write_new_row` 先于 [5b] 把这一条子行写进台账，
         # 而它此刻还没进名册 —— 若自愈跑在登记之前，它会把这一条也当成"漏掉的"补一次，
-        # 于是同一条子行在名册里出现两行（实测：D1|t-000002 与 D2|t-000002，名字跳号 D2/D4/D6）。
+        # 于是同一条子行在名册里出现两行（名字还会跳号）。
         # 放在登记之后、且只在"这一条真的写成"时跑 ⇒ 自愈只补历史漏行，不补刚被拒的这一条
         # （拒绝在上面那条早返里已经交回父了）。
         try:
@@ -3335,7 +3322,7 @@ class Conductor:
             fixed, why, skipped = 0, f"{type(exc).__name__}: {exc}", []
         if fixed:
             note = (note + "；" if note else "") + f"兜底自愈：补了 {fixed} 条当时没写进名册的代理行"
-        # 丁（业主 2026-11-01）：补名必须说清"它当初点名要什么、现在叫什么" ——
+        # 补名必须说清"它当初点名要什么、现在叫什么" ——
         # 否则读回执的人只会看到"多了一行"，而名字在人的视角里像是丢了。
         named = list(getattr(sink, "last_repair_named", None) or [])
         if named:
@@ -3351,7 +3338,7 @@ class Conductor:
             note = (note + "；" if note else "") + "补名：" + "、".join(bits)
         if skipped:
             # 读数：因为「还在飞（名册登记还没发生）」而跳过的号。不回这一格，
-            # 「该补没补」在盘上就只剩一条谁也读不出来的沉默（`draft/159` §三-甲）。
+            # 「该补没补」在盘上就只剩一条谁也读不出来的沉默。
             note = (note + "；" if note else "") + (
                 f"跳过 {len(skipped)} 条在飞（名册还没登记）：" + "、".join(skipped))
         elif why:
