@@ -85,10 +85,17 @@ class _Gaps:
         # 三分法：否决项剔除 / 净分不足 / 真正的候选。
         # 只有 passed_veto 且净分 >= medium 的才进 candidate_gaps ——
         # 这是 verdict 语义干净的前提（见 _evaluate_gap 的 docstring）。
-        vetoed = [c for c in all_cands if not c["passed_veto"]]
-        survivors = [c for c in all_cands if c["passed_veto"]]
-        candidates = [c for c in survivors if c["confidence"] in ("high", "medium")]
-        low_conf = [c for c in survivors if c["confidence"] == "low"]
+        vetoed: list[dict] = []
+        candidates: list[dict] = []
+        low_conf: list[dict] = []
+        for c in all_cands:
+            if not c["passed_veto"]:
+                vetoed.append(c)
+                continue
+            if c["confidence"] in ("high", "medium"):
+                candidates.append(c)
+            elif c["confidence"] == "low":
+                low_conf.append(c)
         reported = candidates[:limit]
         overflow = candidates[limit:]
         if overflow:
