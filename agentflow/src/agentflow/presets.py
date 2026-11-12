@@ -7,23 +7,22 @@
 DSH 把这一层做成数据：一个预设就是一个目录，目录里有一份显示元数据与一份组装文件；
 发现、优先级、健康、生效时机、创作面都由机制规定，内容由目录里的文件决定。
 
-## 搬过来的七条（逐条带 DSH 出处）
+## 搬过来的七条
 
 1. 一个预设一个目录：`preset.yml`（显示三件：name / description / order）+
-   组装文件（必需）。DSH 的对应物是 `presets/<id>/preset.yml` + `agent.cordis.yml`
-   （实测四个随包预设的目录形状见 `draft/101` §2.1）。
-2. 根按优先级扫（`README:54-60`）：随包根前置（所以内置永远赢同 id）→ 部署配置的根
+   组装文件（必需）。DSH 的对应物是 `presets/<id>/preset.yml` + `agent.cordis.yml`。
+2. 根按优先级扫：随包根前置（所以内置永远赢同 id）→ 部署配置的根
    → 用户的根（追加在最后）。`trust` 三档：`system` / `configured` / `user`。
-3. 坏预设列出来带理由，不跳过（`README:85/:102`）。逐字理由：
+3. 坏预设列出来带理由，不跳过。逐字理由：
    "a skipped directory would still occupy its id while no surface shows anything to delete"。
-4. 一个预设一个常驻组装，进程内挂一次（`README:99`）；前缀在 agent 一生里稳定
-   （`README:164` 逐字："a composition is installed once, before the agent is published and
+4. 一个预设一个常驻组装，进程内挂一次；前缀在 agent 一生里稳定
+   （DSH 逐字："a composition is installed once, before the agent is published and
    therefore before its first request, and is never re-read while the agent runs"）。
-5. 生成键 = 组装文件的 mtime + size（`README:100`）：戳变了就开新一代；
+5. 生成键 = 组装文件的 mtime + size：戳变了就开新一代；
    已经在跑的会话留在它那一代（所以改文件不打断在跑的会话）。
-6. 创作面只有复制（`README:75-77`）：新建 = 复制一个已有预设的整目录；复制永不覆盖；
+6. 创作面只有复制：新建 = 复制一个已有预设的整目录；复制永不覆盖；
    删只允许删本地创作的那些（随部署发的不可删）。
-7. id 是一条正则（`README:77`）：`^[a-z0-9][a-z0-9-]*$` —— 因为 id 会成为目录名。
+7. id 是一条正则：`^[a-z0-9][a-z0-9-]*$` —— 因为 id 会成为目录名。
 
 ## 与 DSH 的偏差（两条，都写在下面各自的位置上）
 
@@ -32,7 +31,7 @@ DSH 把这一层做成数据：一个预设就是一个目录，目录里有一�
 - DSH 的"用户根"是 `<dshHome>/.agent-presets`；本框架没有 `dshHome`，默认取
   `~/.agentflow/agent-presets`（同样可关掉）。
 
-## 文件格式（业主 2026-10-11 裁定："就用 dsh 的格式"）
+## 文件格式（业主裁定："就用 dsh 的格式"）
 
 用 YAML，文件名照 DSH 的形状：`preset.yml`（显示三件）+
 `agent.agentflow.yml`（组装；DSH 的宿主是 Cordis，所以它那份叫 `agent.cordis.yml`）。
@@ -41,7 +40,7 @@ DSH 把这一层做成数据：一个预设就是一个目录，目录里有一�
 `disabled` 上有一处必须记账的形状差异：DSH 写 `disabled: !!js process.platform === 'win32'`
 （它在 Node 上直接求值）。本仓是 Python，求不了 JS ⇒ 那个标签被解析成一个
 不被求值的门（`Gate.expression`），它的状态是 `conditional` 而不是 `false`。
-这不是妥协，而是 DSH 自己也有的口径（`dsh-agent-presets/README:125` 逐字：
+这不是妥协，而是 DSH 自己也有的口径（逐字：
 "A gate the evaluator refuses stays `'conditional'`"）—— 三态纪律：
 "没求值"不许读成"不生效"。求值不了就说求值不了。
 """
@@ -82,7 +81,7 @@ class PresetError(ValueError):
 
 #: 一行/一个预设的三种状态。第三态是刻意留的：DSH 的 `disabled` 可以是一个
 #: 求值不了的门（`!!js`），那时它的状态是 conditional 而不是 false
-#: （`dsh-agent-presets/README:125` 逐字："A gate the evaluator refuses stays 'conditional'"）。
+#: （DSH 逐字："A gate the evaluator refuses stays 'conditional'"）。
 GATE_ENABLED = "enabled"
 GATE_DISABLED = "disabled"
 GATE_CONDITIONAL = "conditional"
@@ -114,8 +113,7 @@ class _PresetLoader(yaml.SafeLoader):
     所以这一刀是向 DSH 对齐，不是本地偏好。
     判据是 `tests/test_presets.py::test_yaml_1_1_booleans_do_not_swallow_row_ids`
     （收窄之前 `id: off` 与 `id: on` 分别是 `False` 与 `True`，`id: off` 那一行被判成
-    "缺 id 或 name"）。刻意不引 `temp/` 下的探针路径：那种路径会随探针一起消失，
-    而注释里的引用必须指向盘上真有的东西（判据 `test_the_quoted_references_in_comments_all_exist`）。
+    "缺 id 或 name"）。
     """
 
 
@@ -151,7 +149,7 @@ class PresetRoot:
     """一个被扫的根目录。
 
     `trust` 不是标签而是权限面：只有第一个 `user` 根底下的预设有创作权
-    （删除与新建都落在那里）。DSH 逐字（`README:173`）：复制/删除只认第一个 user 根，
+    （删除与新建都落在那里）。DSH 逐字：复制/删除只认第一个 user 根，
     "不在可写根下"是一个明确答案，而不是"试试看"。
     """
 
@@ -249,7 +247,7 @@ def scan_roots(*, roots: Sequence[PresetRoot] = (), shipped_root: pathlib.Path |
                home: pathlib.Path | None = None) -> tuple[PresetRoot, ...]:
     """按优先级排出要扫的根：随包（前置）→ 配置的 → 用户的（最后）。
 
-    顺序就是优先级（前一个赢同名 id）。DSH 逐字（`README:60`）：随包根前置是刻意的，
+    顺序就是优先级（前一个赢同名 id）。DSH 逐字：随包根前置是刻意的，
     "so the built-in set remains available and wins duplicate ids even when a patch replaces
     the roster configuration"。
     """
@@ -409,10 +407,9 @@ def discover(*, roots: Sequence[PresetRoot] = (), shipped_root: pathlib.Path | N
 class PresetMount:
     """一个进程里的常驻挂载表：一个预设挂一次，戳变了才开新一代。
 
-    为什么"挂一次"而不是每会话挂一次（DSH `README:164` 逐字）：组装决定的是前缀，
+    为什么"挂一次"而不是每会话挂一次（DSH 逐字）：组装决定的是前缀，
     而前缀稳定才谈得上复用（KV cache）；每会话重挂会把"这次跑的是哪一套"变成每会话
-    都可能不同，且旧代与它在跑的会话必须一起留着（DSH 自认的代价：`README:176`，
-    旧代不回收）。
+    都可能不同，且旧代与它在跑的会话必须一起留着（旧代不回收是已知代价）。
 
     本模块只记"该开新一代了没有"：真正的组装由调用方给的 `compose` 做（见模块 docstring）。
     """
@@ -436,10 +433,9 @@ class PresetMount:
         """戳与上一次挂的时候不一样（含"还没挂过"与"组装文件不在了"两种情况）。
 
         为什么"文件不在了"必须算过期：两种情况下 `stamp_of` 都是 None ——
-        "从没挂过"与"挂过但文件被删了"。旧写法只比 `stamps.get(id) != stamp`，
-        于是"从没挂过 + 文件不在"会判成不过期，接着去取一个并不存在的挂载值
-        （KeyError）。它不是理论情形：`tests/test_presets.py` 里那条"组装文件消失"
-        的用例第一次跑就撞上了。所以这里把 None 显式归到过期那一档。
+        "从没挂过"与"挂过但文件被删了"。只比 `stamps.get(id) != stamp`，
+        会把"从没挂过 + 文件不在"判成不过期，接着去取一个并不存在的挂载值
+        （KeyError）。所以这里把 None 显式归到过期那一档。
         """
         stamp = self.stamp_of(preset)
         if stamp is None:
@@ -481,7 +477,7 @@ def copy_preset(source: Preset, new_id: str, *, roots: Sequence[PresetRoot] = ()
                 name: str = "") -> pathlib.Path:
     """把一个已有预设整目录复制成新的本地预设，返回新目录。
 
-    四条拒绝（DSH `README:77` 逐字）：id 不合法、id 已被占用、来源未知、
+    四条拒绝（DSH 逐字）：id 不合法、id 已被占用、来源未知、
     没有可写根。复制永不覆盖；复制之后 `preset.yml` 被改写（保留 description、
     丢掉 name 与 order）—— 理由逐字：复制保留来源的描述是给作者改的，
     而 name/order 丢掉是为了"名册分得清副本与来源"。
