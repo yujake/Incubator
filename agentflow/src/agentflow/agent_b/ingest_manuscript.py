@@ -2,8 +2,8 @@
 
 提取只在秘书层（`Secretary.extract_manuscript`），本动作不切节、不解析依赖表、不读稿头；
 写库仍只走 `record_statement` / `land_statement` / `amend_statement_meta` 这三个既有口。
-`goal-7f5116c1` M6/M7 的拆包契约：一个动作一个文件 —— 本类只由
-`agent_b/register_statement.py` 的 `_RegisterStatement` 混入，成员装配面在 `core.py`。
+一个动作一个文件 —— 本类只由 `agent_b/register_statement.py` 的 `_RegisterStatement`
+混入，成员装配面在 `core.py`。
 """
 from __future__ import annotations
 
@@ -26,32 +26,23 @@ class _IngestManuscript:
                           provenance: Any = None) -> dict:
         """按「位置 + 格」从手稿里提取并回填（T1 的唯一入口）。
 
-        ## 参数（设计 §2.3.1；工具面的 ActionSpec 是这一份的广告）
+        参数（设计 §2.3.1；工具面的 ActionSpec 是这一份的广告）：`manuscript` 是工作区
+        相对路径、只收 `reports/` 下过族表的规范名；`target_stmt_id` 是位置（录到哪一条
+        命题，`mode!="register"` 时必填）；`proof_no` 是这一行的第几份证明，与稿名
+        `-p<N>` 不一致 ⇒ 受控拒 `proof_no_mismatch`（不重定向、不"就近取一个"）；
+        `cells` 是格（闭集），派生列请求 ⇒ 受控拒 `derived_cell_not_requestable`；
+        `conflict` 是 `refuse`（默认）/ `overwrite` / `append` / `keep`；`mode` 是
+        `preview`（只提取、零写）/ `apply`（按格回填）/ `register`（登记新命题）；
+        `if_match_proof_sha256` 是调用方"我以为这一行现在的正文 sha 是它"，不符 ⇒
+        `stale_target`（写入方带 sha，不符受控拒、不静默覆盖）。
 
-        - `manuscript`：工作区相对路径；只收 `reports/` 下过族表的规范名；
-        - `target_stmt_id`：位置（录到哪一条命题；`mode!="register"` 时必填）；
-        - `proof_no`：这一行的第几份证明；与稿名 `-p<N>` 不一致 ⇒ 受控拒
-          `proof_no_mismatch`（不重定向、不"就近取一个"）；
-        - `cells`：格（闭集）；派生列请求 ⇒ 受控拒 `derived_cell_not_requestable`；
-        - `conflict`：`refuse`（默认）/ `overwrite` / `append` / `keep`；
-        - `mode`：`preview`（只提取、零写）/ `apply`（按格回填）/ `register`（登记新命题，
-          继承"按手稿路径收录"那条路）；
-        - `if_match_proof_sha256`：调用方"我以为这一行现在的正文 sha 是它"；不符 ⇒
-          `stale_target`（protocol §五：写入方带 sha，不符受控拒、不静默覆盖）。
+        三条边界：提取只在秘书层（本方法不切节、不解析依赖表、不读稿头）；写库仍只有
+        `record_statement` / `land_statement` / `amend_statement_meta`；`mode=apply`
+        刻意不跑同一性判定（判了就可能并到调用方没点名的行）。
 
-        ## 三条边界（设计 §2.1，任何一条破了这一批就白做）
-
-        ```
-        · 提取只在秘书层：本方法不切节、不解析依赖表、不读稿头；
-        · 写库仍只有 record_statement / land_statement / amend_statement_meta；
-        · mode=apply 刻意不跑同一性判定（判了就可能并到调用方没点名的行 = T1 要修的缺陷）。
-        ```
-
-        ## 返回
-
-        固定键（设计 §2.4）：`ok / mode / manuscript / target / requested_cells / cells /
-        diff / derived_write / write / refused / reason`。`diff` 是"请求格 vs 实填格"的
-        逐格对拍；I1/I2 由 `_ingest_invariant_problem` 机器核（不成立 ⇒ 整笔 `ok=False`）。
+        返回固定键：`ok / mode / manuscript / target / requested_cells / cells / diff /
+        derived_write / write / refused / reason`。`diff` 是"请求格 vs 实填格"的逐格
+        对拍；I1/I2 由 `_ingest_invariant_problem` 机器核（不成立 ⇒ 整笔 `ok=False`）。
         """
         from .. import manuscriptfamily as _MFAM
         from .. import manuscriptintake as _MI
