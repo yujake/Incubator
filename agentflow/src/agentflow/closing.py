@@ -5940,27 +5940,24 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
     """I3 的另一格读数：明确放弃的命题（带理由与时间）+ 换号读数（`relabeled`）。
 
     判据只有一条：`status == "abandoned"` 且 `quote_reason` 是一条可解析的放弃标记
-    （`statementabandon.parse_abandon`，写侧 `schema.Statement.validate` 逐条核）。
-    "明确"这个词的机器含义就在这里：理由与时间都读得出来。
+    （`statementabandon.parse_abandon`，写侧 `schema.Statement.validate` 逐条核）——
+    "明确"的机器含义就是理由与时间都读得出来。
 
     ## `relabeled`：同一个 label 被换了多少次号
 
-    换号必须给清理由。这一格不拦门（按阈值拦截是明确不要的），
-    它只让"同一 label 反复换号"在收工输出上显形：理由一条结构化的都没有的那些换号，
-    正是这里要看得见的那一类。
-
+    换号必须给清理由；这一格不拦门（按阈值拦截是明确不要的），只让"同一 label 反复换号"
+    在收工输出上显形 —— 尤其是理由一条结构化的都没有的那些。
     逐 label 给 `{label, relabels, events[{stmt_id, at, abandon_kind, has_evidence}],
     repeated}`：`relabels` = 这个 label 下"被放弃"的次数（每一次放弃就是一次换号），
-    `repeated` = `relabels >= 2`（≥2 次要能一眼看到）。判据本体是
-    `statementabandon.relabel_events`（登记那一侧 `supersedes` 读数读的是同一份）。
+    `repeated` = `relabels >= 2`。判据本体是 `statementabandon.relabel_events`
+    （登记那一侧 `supersedes` 读数读的是同一份）。
 
     ## 按档统计
 
     放弃理由有四档（F 侧 `math_error` / `difficulty`，E 侧 `counterexample` /
-    `space_too_large`）。读数要能分别数清每一档：顶层 `abandon_kinds` 是这四条被放弃
-    命题的逐档计数（四个键恒在，零条也读得出来），`relabeled["kinds"]` 是"换号事件"
-    的逐档计数（同一个 label 下的事件按档分开数），`unstructured` 是历史自由文本行的
-    条数（读不出档，不是"没有理由"）。
+    `space_too_large`）：顶层 `abandon_kinds` 是这四条被放弃命题的逐档计数（四个键恒在，
+    零条也读得出来），`relabeled["kinds"]` 是"换号事件"的逐档计数（同一个 label 下的事件
+    按档分开数），`unstructured` 是历史自由文本行的条数（读不出档，不是"没有理由"）。
 
     三态：`statements` 读不出来 ⇒ `checked=False` + `reason`（没查成，不是"没有放弃"）。
     自称放弃而标记读不出来的行不计入这一格（它们进 `statements_unsigned` 的
