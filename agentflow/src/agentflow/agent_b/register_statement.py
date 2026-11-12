@@ -6873,12 +6873,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_proof_no(reading: Mapping, proof_no: Any) -> tuple[int, str, str]:
         """`proof_no` 参数只校验形态，不定号（号由秘书在收录事务里分配）。
 
-        改前这一格是"稿名 `-p<N>` 与参数对拍、不一致 ⇒ 受控拒 `proof_no_mismatch`"。
-        产出侧不再写 `-pN` / 「证明号」之后，这条比对没有对象了：稿名里的号不再是
-        权威，参数里的号也不再是 —— 路径号只有一处来源（`assign_path_group`，在
-        `Secretary.record_statement` / `record_manuscript_dependency_face` 的锁里）。
-        所以这里只剩"形态不对就拒"（`bad_proof_no`），对得上的那一档一律返回 1
-        （调用方据此走的只是"这一笔没有指定号"的既有路径）。
+        产出侧不写 `-pN`、稿头不写「证明号」⇒ 稿名与参数之间没有可对拍的两个号；
+        路径号只有一处来源（`assign_path_group`，在 `Secretary.record_statement` /
+        `record_manuscript_dependency_face` 的锁里）。所以这一格只校验形态
+        （`bad_proof_no`），对得上的那一档一律返回 1 —— 调用方据此走的只是
+        "这一笔没有指定号"的既有路径。
         """
         if proof_no in (None, ""):
             return 1, "", ""
