@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-r"""把 `concepts` 折进 `statements`（S1r 的迁移内核）—— 纯函数，不碰盘。
+r"""把 `concepts` 折进 `statements`（迁移内核）—— 纯函数，不碰盘。
 
-业主 2026-10-09：「concept表真并进statements。由于你用"类型"标记了concept的身份，
-proof里就证这个概念为什么是良定义的」+「并表了就并干净」。
+业主口径：concept 表真并进 statements（用"类型"标记 concept 的身份，proof 里就证这个
+概念为什么是良定义），并且"并表了就并干净"。
 
 ## 为什么单独一个模块（而不是塞进 `store.rebuild`）
 
@@ -10,17 +10,17 @@ proof里就证这个概念为什么是良定义的」+「并表了就并干净�
 把它单独放一处，判据可以直接喂夹具（不需要真工作区、不需要跑一次迁移），
 `rebuild` 那一侧只留"读事件 → 调这里 → 写快照"三行。改口径只有一处可改。
 
-## 口径（`draft/97` §10.1 / §10.3b / §14.4b / §14.13）
+## 口径
 
 | 旧字段（`concepts`） | 新字段（`statements`） |
 |---|---|
-| `concept_id` | `stmt_id`（由调用方用同一分配器重发，见 `alloc` 参数 —— 业主 D2：「同表同分配器不可能撞号」） |
+| `concept_id` | `stmt_id`（由调用方用同一分配器重发，见 `alloc` 参数 —— 同表同分配器不可能撞号） |
 | `name` | `label` |
 | `definition` | `statement_full`（可以为空，但必须带待补标记，见下） |
-| `aliases` | `aliases`（留着：888 条有别名，且不可现算） |
+| `aliases` | `aliases`（留着：别名不可现算） |
 | `definition_source_lit_id` | 有定义 ⇒ `source_lit_id`；没有定义 ⇒ 待补标记 `pending_search` + `quote_reason` 写清 |
 | `merged_into` / `merge_reason` | 没有承载点（业主：秘书会查重 ⇒ 合并不会发生）。迁移若碰到非零值 ⇒ 进 `notes` 点名，不静默丢 |
-| `normalized_name` | 丢弃（读侧用唯一实现 `textutil.normalize(label)` 现算；现场 640/2233 条与"lower+去空白"对不上，成因是 `pipeline.py:627` 把原始名字写进了这一格） |
+| `normalized_name` | 丢弃（读侧用唯一实现 `textutil.normalize(label)` 现算；盘上这一格不是"lower+去空白"，不能直接信） |
 | `related_concepts` | 丢弃（那件事由 `relations` 表管） |
 
 固定三格：`kind="concept"`（身份标记）、`origin="own_result"`、
@@ -30,7 +30,7 @@ proof里就证这个概念为什么是良定义的」+「并表了就并干净�
 不许做的事：不许给迁移行编良定义性证明（`proof_text` 固定写"原始概念"这一档）；
 不许把"定义空着"读成"定义就是空的"（空 ⇒ `pending_search`，等 A 去搜或 B 自撰）。
 
-## 两步走：先算计划，再照抄进 `rebuild`（业主 2026-10-09「并干净」）
+## 两步走：先算计划，再照抄进 `rebuild`
 
 并表要动磁盘格式（`SCHEMA_VERSION 1→2`、`TABLES` 删 `concepts`、读侧统一新标准），
 而迁移是错误不可逆的那一类（`AGENTS.md` 的七类之一）⇒ 顺序定成：
@@ -39,23 +39,17 @@ proof里就证这个概念为什么是良定义的」+「并表了就并干净�
    可在真盘上只读预演）—— 折出的行、改过的关系、逐条改号账、号冲突 / 悬空号 /
    定义待补 / 并表后同名四组读数；
 2. `store.rebuild` 那一笔照抄它（同一套内核 ⇒ 预演与真跑不可能分家）。
-
-真盘预演读数（2026-10-09，62 个工作区、28 个有概念；只读）：
-2233 条概念、1752 条关系、既有 147 条命题；813 条要改号（其中 22 条与既有命题撞号
-—— 不重发号就会静默顶掉那 22 行）、1342 条关系改号、悬空概念号 0、
-定义待补 94 条（全在 p6c/p6e）、并表后同名 0。
-报告：`D:\Incubator\temp\_s1r_plan_readings.txt`（脚本 `temp/_s1r_plan_readings.py`）。
 """
 from __future__ import annotations
 
 from typing import Any, Callable, Iterable, Mapping
 
-#: 待补标记（`draft/97` §14.13）：定义内容空着时必须带一个，写进 `quote_reason`。
+#: 待补标记：定义内容空着时必须带一个，写进 `quote_reason`。
 PENDING_SEARCH = "concept:pending_search"
 SELF_AUTHORED = "concept:self_authored"
 
-#: 定义待补那一行的状态（`D12` 已裁，2026-10-09 业主选甲）：`STATEMENT_STATUSES` 加了
-#: 这一档，且它在 `STATEMENT_UNUSABLE_STATUSES` 里（定义还没到的概念不是依据）。
+#: 定义待补那一行的状态（业主裁定）：`STATEMENT_STATUSES` 加了这一档，且它在
+#: `STATEMENT_UNUSABLE_STATUSES` 里（定义还没到的概念不是依据）。
 #: 折叠与写入都必须同时落"待补标记"（`PENDING_SEARCH` / `SELF_AUTHORED`）——
 #: `Statement.validate` 会把"没有标记的待补行"当场拒掉（判据在 schema.py 那两条）。
 PENDING_DEFINITION = "pending_definition"
@@ -69,7 +63,7 @@ def fold_concepts(concept_rows: Iterable[Mapping[str, Any]],
     """把 `concepts` 的行折成 `statements` 的行。
 
     `alloc()` 每调一次发一个新号（生产里传 `tx.alloc_id("statements")` 的包装）——
-    概念的新号一律由它给，所以"与既有命题撞号"在结构上不可能（业主 D2 的口径）。
+    概念的新号一律由它给，所以"与既有命题撞号"在结构上不可能。
 
     返回 `{"rows": [...], "id_map": {旧号: 新号}, "notes": [...]}`：
     `notes` 是读数（不是错误）：合并痕迹、空定义待补、没有来源……逐条点名。
@@ -174,7 +168,7 @@ def plan_migration(concept_rows: Iterable[Mapping[str, Any]],
     1. 发号：不给 `alloc` 就用 `counter_alloc(start, taken=existing_stmt_ids)`
        （确定性替身）；给了就用它（生产传 `tx.alloc_id("stmt")` 的包装）。
     2. 逐条落账：`ledger` 每改一个号一行（旧号、新号、名字、有没有定义、待补标记），
-       末行是汇总 —— "这次迁移到底动了什么"必须能逐条复算（`draft/97` §15.2）。
+       末行是汇总 —— "这次迁移到底动了什么"必须能逐条复算。
     3. 边界读数：号冲突（概念号与既有命题号撞上 —— 由分配器跳过，但要点名）、
        重复概念名（按 `textutil.normalize` 比）、悬空 `concept_ids`（关系表挂着概念表里
        没有的号）、定义待补条数。这些都是读数，不是错误：迁移照做，但读的人必须看得见。
@@ -265,12 +259,11 @@ def remap_concept_ids(relation_rows: Iterable[Mapping[str, Any]],
     `changed` 是 `(rel_id, 旧号, 新号)`，`missing` 是"映射表里没有这个号"的那些
     （点名，不静默丢 —— 那说明关系表里挂着一个概念表里没有的号）。
 
-    ## 改号必须连带重算派生字段（实测抓到的一条真缺陷）
+    ## 改号必须连带重算派生字段
 
-    这一格第一版只改了 `concept_ids`。合成 v1 库跑 `rebuild` 之后 `verify` 当场报
-    `relations.0001: stale_group_key`（错误级）—— 因为 `verify` 判的是
+    只改 `concept_ids` 会让迁移出来的库自己就带着一条"判重会失效"：`verify` 判的是
     `concept_group_key == textutil.concept_group_key(concept_ids)`（现算比对），
-    而号改了、键没改 ⇒ 迁移出来的库自己就带着一条"判重会失效"。
+    号改了、键没改 ⇒ 它当场报 `relations.0001: stale_group_key`（错误级）。
     所以这里把 `concept_group_key` 与 `dedup_key` 一并按当前的唯一实现重算
     （`textutil.concept_group_key` / `dedup.relation_dedup_key`，不在这里抄第三份口径）。
     """
@@ -282,10 +275,9 @@ def remap_concept_ids(relation_rows: Iterable[Mapping[str, Any]],
     missing: list[tuple[str, str]] = []
     for raw in relation_rows:
         r = dict(raw)
-        # 主键字段是 `relation_id`（`Relation` 的声明）；`rel_id` 是这一格早期写错的
-        # 名字 —— 那时 `changed` 里每一条的 `rel_id` 都是空串，于是 `out/migrate-map.jsonl`
-        # 上写着"关系改了号"却指不出是哪一条（账本的意义正是"逐条可复算"）。
-        # 两个都认（老行的兼容），但正名优先。
+        # 主键字段是 `relation_id`（`Relation` 的声明）；`rel_id` 是旧行的兼容名 ——
+        # 只认 `rel_id` 时 `changed` 里每一条都指不出是哪一条关系（账本的意义正是
+        # "逐条可复算"）。两个都认，但正名优先。
         rid = str(r.get("relation_id") or r.get("rel_id") or "")
         old_ids = [str(x) for x in (r.get("concept_ids") or [])]
         new_ids: list[str] = []
