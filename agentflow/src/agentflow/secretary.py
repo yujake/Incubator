@@ -11611,10 +11611,10 @@ class Secretary:
             if shape == "summon":
                 role = str(payload.get("role") or "")
                 action = str(payload.get("action") or "")
+                raw_params = payload.get("params")
                 got = self.surface_fit(action=action,
-                                       params=(payload.get("params")
-                                               if isinstance(payload.get("params"),
-                                                             Mapping) else {}),
+                                       params=(raw_params
+                                               if isinstance(raw_params, Mapping) else {}),
                                        face=face, base=base)
                 # 能力面那一维（业主 2026-10-14）：这个动作被派人（连同它出边上的伙伴）
                 # 做不做得成。与路径面各判一维，两条一起给父看。
@@ -11625,28 +11625,37 @@ class Secretary:
                     return {"shape": shape, "checked": False, "fits": None, "items": [],
                             "reason": "targets 不是数组 ⇒ 面这一维判不了"}
                 items = []
+                # 汇总与两张名单同趟收（原先同一批 items 扫四遍）：有 False ⇒ False；
+                # 非空且没有"不是 True" ⇒ True；其余 ⇒ None —— 三态照旧保留。
+                bad: list[dict[str, Any]] = []
+                reach_bad: list[dict[str, Any]] = []
+                saw_false = saw_not_true = False
                 for i, item in enumerate(targets):
                     sub = item if isinstance(item, Mapping) else {}
                     action = str(sub.get("action") or "")
-                    items.append({"index": i,
-                                  **self.surface_fit(action=action,
-                                                     params=(sub.get("params")
-                                                             if isinstance(
-                                                                 sub.get("params"), Mapping)
-                                                             else {}),
-                                                     face=face, base=base),
-                                  "reach": reach_fit(str(sub.get("role") or ""), action)})
+                    raw_params = sub.get("params")
+                    fit = self.surface_fit(
+                        action=action,
+                        params=(raw_params if isinstance(raw_params, Mapping) else {}),
+                        face=face, base=base)
+                    reach = reach_fit(str(sub.get("role") or ""), action)
+                    row = {"index": i, **fit, "reach": reach}
+                    items.append(row)
+                    if fit.get("fits") is False:
+                        saw_false = True
+                        bad.append(row)
+                    elif fit.get("fits") is not True:
+                        saw_not_true = True
+                    # 能力面那一维的汇总：哪几项在"被派人 + 它出边上的伙伴"里没人做得到
+                    if (reach or {}).get("verdict") == "unreachable":
+                        reach_bad.append(row)
                 fits: bool | None
-                if any(x.get("fits") is False for x in items):
+                if saw_false:
                     fits = False
-                elif items and all(x.get("fits") is True for x in items):
+                elif items and not saw_not_true:
                     fits = True
                 else:
                     fits = None
-                bad = [x for x in items if x.get("fits") is False]
-                # 能力面那一维的汇总：哪几项在"被派人 + 它出边上的伙伴"里没人做得到
-                reach_bad = [x for x in items
-                             if (x.get("reach") or {}).get("verdict") == "unreachable"]
                 return {"shape": shape, "checked": True, "fits": fits, "items": items,
                         "reach_bad": [x["index"] for x in reach_bad],
                         "reason": "；".join(f"targets[{x['index']}]：{x.get('reason')}"
