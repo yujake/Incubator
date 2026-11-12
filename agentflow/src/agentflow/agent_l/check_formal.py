@@ -51,7 +51,10 @@ class _CheckFormalL(_ECheckFormal):
         state, why = self._lean_selfcheck()
         if state != "usable":
             return self._refusal(claim, self._selfcheck_reason(state), one_line(why))
-        data = dict(super().check_formal(
+        # `super().check_formal` 每条分支交出的都是新建的 dict（E 那边 `data =
+        # dict(res.data or {})` / `_formal_refusal` 现造的键表），而 `_finalize`
+        # 自己会 `dict(data)` 再改 `out` —— 这里不再多拷一层。
+        data = super().check_formal(
             claim,
             script_path=script_path,
             source=source,
@@ -60,5 +63,5 @@ class _CheckFormalL(_ECheckFormal):
             name=declaration_name,
             imports=imports,
             timeout_sec=timeout_sec,
-        ))
+        )
         return self._finalize(data)
