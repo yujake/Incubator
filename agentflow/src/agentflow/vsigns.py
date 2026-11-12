@@ -1723,16 +1723,18 @@ def ledger_anchor(root: Any, *, statement_id: Any, proof_no: Any = 1,
                         f"{key}.jsonl#{vid}")
         return f"{_VR.VERIFICATIONS_DIR}/{sid}.jsonl#{vid}"
 
-    picked: dict[str, Any] | None = None
+    picked: Mapping[str, Any] | None = None
     for row in rows:
-        one = dict(row)
-        if int(_VR.as_proof_no(one.get("proof_no")) or 1) != no:
+        # 不再逐行 `dict(row)`：下面那几格（`read_verdict` / `ledger_axis` /
+        # `defect_steps` / `_anchor_of`）都只读不写，而一趟台账常是几十行、命中的
+        # 只有一行 —— 不为被跳过的那几十行各复制一份。
+        if int(_VR.as_proof_no(row.get("proof_no")) or 1) != no:
             continue
-        if str(one.get("proof_sha256") or "").strip().lower() != sha:
+        if str(row.get("proof_sha256") or "").strip().lower() != sha:
             continue
-        if clean_only and _VR.ledger_axis(one) != "clean":
+        if clean_only and _VR.ledger_axis(row) != "clean":
             continue
-        picked = one
+        picked = row
     if picked is None:
         out["why"] = (f"台账里没有盖着 {sha[:12]}… 的"
                       + ("干净「成立」" if clean_only else "")
@@ -2659,9 +2661,11 @@ def index_drift(root: Any) -> dict[str, Any]:
                            "这一格「没查成」（不是「归档一致」）"))
         return out
     out.update(checked=True, tri="computed", index=doc)
-    stored = {str(e.get("artifact_sha") or ""): dict(e)
+    # 两边的归档项都只拿来判等与读格（`got != exp` / `got.get(...)`），没有一处写回去
+    # ⇒ 不再逐项 `dict(e)` 复制（`_sorted_entries` 现算那一侧本来就是新 dict）。
+    stored = {str(e.get("artifact_sha") or ""): e
               for e in (doc.get("signs") or []) if isinstance(e, Mapping)}
-    want = {str(e.get("artifact_sha") or ""): dict(e) for e in (computed.get("signs") or [])}
+    want = {str(e.get("artifact_sha") or ""): e for e in (computed.get("signs") or [])}
     for sha in sorted(set(want) - set(stored)):
         drift.append(f"漏记：`{SIGNS_DIR}/{sha}.json` 在盘上，而 `{INDEX_NAME}` 里没有这一条")
     for sha in sorted(set(stored) - set(want)):
