@@ -1,22 +1,29 @@
 # -*- coding: utf-8 -*-
 """交接手稿的工具面（`draft/37` §134）：写 / 读 / 列。
-用户口径（逐字）：
-> 我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集手稿的文件夹，> 每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿最新的，从
-0000 开始顺次标），> 传信息时就传手稿编号。这样的话派活也有依据，溯源也很清晰。
-实现本体只有一份：`agentflow.manuscripts`（编号分配 + 追加式账本 + 读回）。存储是`manuscripts/handoffs.jsonl`（一行
-一份交接，`draft/39` §C1 起；旧格式 `.md` 仍读得回来）。这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，与 
-`notes/<角色>.md` 同族）都能用。
-三件工具：
-| 工具 | 谁用 | 作用 ||---|---|---|| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 
-`id` —— 它不是工具：走循环形状 `handoff` || `manuscripts.read` | 全部可召唤角色 | 按编号读全文（留言里传的就是这个编号） ||
-`manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
-`manuscripts.submission_reading` | 全部可召唤角色 | 读一份证明稿的提交状态（E/F 收工自动提交、B 收录即提交）：产出方 / 已签 / 已提交 / 时刻 / `via`（2026-11-11 补：`manuscriptsubmission.submission_reading` 此前 src 里零调用点，E 读不到自己的提交状态） |
+
+用户口径（逐字）：「我觉得各智能体在互相传递信息时可以借助手稿的方式，即建一个收集
+手稿的文件夹，每个智能体要交接工作前写一份手稿放在里面，且有标号（这个标号靠脚本拿
+最新的，从 0000 开始顺次标），传信息时就传手稿编号。这样的话派活也有依据，溯源也很
+清晰。」
+
+实现本体只有一份：`agentflow.manuscripts`（编号分配 + 追加式账本 + 读回）；存储是
+`manuscripts/handoffs.jsonl`（一行一份交接，`draft/39` §C1 起；旧格式 `.md` 仍读得
+回来）。这里只是把它包成工具，让「每个角色」（含只读的 C/H —— 交接手稿不是领域表，与
+`notes/<角色>.md` 同族）都能用。三件工具：
+
+| 工具 | 谁用 | 作用 |
+|---|---|---|
+| `manuscripts.write` | 所有角色（含 M） | 交接前写一份（编号由脚本给），返回 `id` —— 它不是工具：走循环形状 `handoff` |
+| `manuscripts.read` | 全部可召唤角色 | 按编号读全文（留言里传的就是这个编号） |
+| `manuscripts.list` | 全部可召唤角色 | 列最近的手稿（可按收件人过滤，`to=ALL` 表示广播） |
+| `manuscripts.submission_reading` | 全部可召唤角色 | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / `via`） |
+
 ## 为什么主控 M 不在这张工具面上（口径，别改回去）
 M 的工具面是"编排面 + 文件面白名单"（`draft/37` §38/§57，判据
-`tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），而 
-`manuscripts.read` / `manuscripts.list` 是领域读面：把它们塞进 M 的面里，扩的就不是"能不能碰盘"这条边界，而是"M 拿什么读"这
-条边界 —— 那要先有裁定。 M 不是看不见手稿：它手上有 `fs.list` / `fs.read` / `fs.search`（§38 的白名单），
-`manuscripts/` 就在工作区里，读文件这条路本来就通。
+`tests/test_conductor_tools.py::test_m_tool_surface_is_orchestration_only`），而
+`manuscripts.read` / `manuscripts.list` 是领域读面：塞进 M 的面里，扩的就不是"能不能
+碰盘"而是"M 拿什么读"这条边界 —— 那要先有裁定。M 不是看不见手稿：它手上有
+`fs.list` / `fs.read` / `fs.search`（§38 的白名单），`manuscripts/` 就在工作区里。
 """
 from __future__ import annotations
 
@@ -24,7 +31,7 @@ from .. import manuscripts as M
 from .. import schema as S
 from . import ToolError, ToolResult, fail, ok, tool
 
-#: 读/列交接手稿：「八个角色」（读自己的交接链是本职）。
+#: 读/列交接手稿：所有在册角色都能读自己的交接链（交接手稿不是领域表）。
 #: 写不在这里 —— 见下面 `_TOOL_FUNCTIONS` 的理由：写走循环形状 `handoff`。
 #: 主控 M 也不在这里 —— 理由见模块 docstring（M 的读面是 fs.* 白名单，扩它要裁定）。
 _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
@@ -38,10 +45,9 @@ _READ_ROLES: tuple[str, ...] = tuple(S.ROLES)
      "required": ["id"], "additionalProperties": False},
     side_effect="read",
     roles=_READ_ROLES,
-    # 2026-10-15 补齐（`draft/124` §17）：实跑返回的是整份手稿行（含正文 `body`），
-    # 而声明里只列了 `text` 那一格 ⇒ 声明契约与实跑分家（`body`/`refs`/`format`/`sid`/
-    # `created_at`/`task_id` 六格没进键集合）。`returns` 只是台账/冻结快照的契约
-    # （`tools/base.py:674-679`：description 不带 returns，模型面看不到它）。
+    # `returns` 与实跑分家过一次（`draft/124` §17）：实跑返回整份手稿行（含 `body` 等
+    # 六格），声明只列了 `text`。`returns` 只是台账/冻结快照的契约（模型面看不到它），
+    # 但两边必须同形。
     returns="{'id','path','sender','to','summary','text','sha256','bytes',"
             "'body','created_at','format','note','refs','sid','task_id'}",
 )
@@ -52,13 +58,9 @@ def manuscripts_read(store, id: str) -> ToolResult:
         raise ToolError("manuscripts.read 需要一个带 root 的 store")
     got = M.read(root, id)
     if got is None:
-        # 2026-10-16（亲测 A 的工具面时当场撞出来的真 bug）：这里原写成
-        # `raise ToolError(msg, kind="manuscript_not_found")` —— 而 `ToolError.__init__`
-        # 不收 `kind`（只有 `message/tool/detail`）⇒ 本该是"没有这份手稿，去看
-        # `manuscripts.list`"的可读拒绝，「变成了 `TypeError: ToolError.__init__() got an
-        # unexpected keyword argument 'kind'`」。第一次凭感觉调 `manuscripts.read` 的智能体
-        # 会拿到一个 Python 异常，既看不懂也学不到下一步（业主说的"会困惑并浪费 token"）；
-        # 类别要交给工具层的统一出口 `fail(...)`，不要塞给 `ToolError`。
+        # 2026-10-16 亲测 A 的工具面时撞出的真 bug：原写成 `ToolError(msg, kind=...)`，
+        # 而 `ToolError.__init__` 不收 `kind` ⇒ 可读拒绝变成 `TypeError`，第一次调它的
+        # 智能体既看不懂也学不到下一步。类别要交给工具层的统一出口 `fail(...)`。
         return fail(
             f"没有编号 {id!r} 的手稿（`manuscripts.list` 看现有的编号）",
             kind="manuscript_not_found", id=id,
@@ -133,12 +135,10 @@ _TOOL_FUNCTIONS: tuple[tuple[Any, tuple[str, ...]], ...] = (
 
 # ---- 板的两件（`manuscripts.items` / `manuscripts.ack`）暂不注册（2026-10-08 晚，S1b）
 #
-# 为什么不先挂上去：它们要判两件本层拿不到的事实 ——
-#   ① "谁在 ack"（必须知道调用方实例的 `task_id`，那在循环上下文里，
-#      落点是 `conductor.current_task_id()`，要先确认装配期 `deps` 里有没有 `conductor`）；
-#   ② "这一项是不是发给我的"（按 `to` 目标实例或角色判）。
-# 本仓的纪律是"不许挂空：要么真跑，要么不注册"（`draft/44 L-06` 那一族）。
-# ⇒ 先把它们从注册面拿掉，等这两处接线确认之后在同一步里补齐（连同
+# 为什么不先挂上去：它们要判两件本层拿不到的事实 —— ① "谁在 ack"（必须知道调用方实例
+# 的 `task_id`，那在循环上下文里，落点是 `conductor.current_task_id()`）；② "这一项是不是
+# 发给我的"（按 `to` 目标实例或角色判）。本仓纪律是"不许挂空：要么真跑，要么不注册"
+# （`draft/44 L-06` 那一族）⇒ 等这两处接线确认之后再补齐（连同
 # `tests/test_tools_returns_declaration.py` 的 `observations` 夹具与 `EXECUTED_KEY_SOURCE`）。
 # M 的那一半（`conductor.board`）已经真跑，见 `conductor_tools.py`。
 
