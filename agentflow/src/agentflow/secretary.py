@@ -1417,9 +1417,10 @@ STATEMENT_KEY_ALIASES: dict[str, tuple[str, ...]] = {
     "proof_paths": ("proof_groups", "proof_segments"),
     "concepts": ("definitions",),
 }
-#: 同一命题的判据：命中键或命中相似度 ⇒ 这一笔不是新命题，
-#: 而是那条命题的第 N 份证明。缺省阈值与唯一实现都在 `propositionkey`，
-#: 这里只是把它们摆到秘书这一层（可注入：构造参数 `same_proposition_jaccard`）。
+#: 同一命题的判据：确定性键相同 ⇒ 这一笔不是新命题，而是那条命题的第 N 份证明；
+#: 词面相似度只作材料读数（`_fail_closed_reason` 报"离阈值有多远"），不决定并。
+#: 缺省阈值与唯一实现都在 `propositionkey`，这里只是把它们摆到秘书这一层
+#: （可注入：构造参数 `same_proposition_jaccard`）。
 SAME_PROPOSITION_JACCARD = _PK.SAME_PROPOSITION_JACCARD
 #: 同种证明的判据（同一命题下的第 N 份证明）：判成 `same` ⇒ 不新增证明号，受控拒绝
 #: `proof_same_kind`（或 `merge=True` 合成一份并重拿 V 签）。判据是秘书的语义二态
