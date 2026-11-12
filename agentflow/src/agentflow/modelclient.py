@@ -157,18 +157,36 @@ class ModelClient:
 
     # -- 读数（给报告与产物用） ------------------------------------------- #
 
+    def _totals(self) -> tuple[float, int, int, int]:
+        """`charges` 一趟收齐：入账金额、未入账笔数、两个 token 和。
+
+        四个和只有这一份实现（`charged_usd` / `uncharged` / `tokens` 与 `to_dict`
+        都从这里取）。`charged` 从 int 0 起加：空账时与 `sum(...)` 的起点一样是
+        int 0，有账时才是 float。
+        """
+        charged: float = 0
+        uncharged = 0
+        tin = 0
+        tout = 0
+        for charge in self.charges:
+            charged += float(charge.get("usd") or 0.0)
+            if not charge.get("charged"):
+                uncharged += 1
+            tin += int(charge.get("tokens_in") or 0)
+            tout += int(charge.get("tokens_out") or 0)
+        return charged, uncharged, tin, tout
+
     def charged_usd(self) -> float:
         """本次客户端真的入账的美元合计（未接线的那些笔计 0，且由 `uncharged` 单列）。"""
-        return round(sum(float(c.get("usd") or 0.0) for c in self.charges), 6)
+        return round(self._totals()[0], 6)
 
     def uncharged(self) -> int:
         """没有真的入账的笔数（`meter=None` 或判重放）。这个数不许折进 0 里。"""
-        return sum(1 for c in self.charges if not c.get("charged"))
+        return self._totals()[1]
 
     def tokens(self) -> tuple[int, int]:
         """本次累计的 `(tokens_in, tokens_out)`（只统计真的入账的那几笔）。"""
-        tin = sum(int(c.get("tokens_in") or 0) for c in self.charges)
-        tout = sum(int(c.get("tokens_out") or 0) for c in self.charges)
+        _, _, tin, tout = self._totals()
         return tin, tout
 
     def to_dict(self) -> dict[str, Any]:
@@ -176,11 +194,11 @@ class ModelClient:
 
         刻意不含 key：`base_url` 与 `model` 可以进产物，key 不行。
         """
-        tin, tout = self.tokens()
+        charged, uncharged, tin, tout = self._totals()
         return {
             "calls": self.calls,
-            "charged_usd": self.charged_usd(),
-            "uncharged_calls": self.uncharged(),
+            "charged_usd": round(charged, 6),
+            "uncharged_calls": uncharged,
             "tokens_in": tin,
             "tokens_out": tout,
             "scope": self.scope,
