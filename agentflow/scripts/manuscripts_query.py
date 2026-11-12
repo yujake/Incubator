@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
-"""查交接手稿 + 顺手打印被引用命题的五元位快照（`draft/39` §C4）。
+"""查交接手稿 + 顺手打印被引用命题的五元位快照。
 
-## 为什么要有这个脚本（而不是让模型现读）
+## 为什么由脚本查（而不是让模型现读）
 
-用户 2026-10-05 的口径：五元位快照由脚本查。理由有两层：
+五元位快照由脚本查，理由有两层：
 
 1. 手稿是"跨角色的交接记录"，读它的场合往往不是模型在跑循环（人验收、另一个角色冷启动、
 收工后复核）—— 那些场合没有模型上下文可用，只有盘；
@@ -12,11 +12,18 @@
 
 ## 用法
 
-```text python scripts/manuscripts_query.py <工作区>                 # 最近 20 份python scripts/manuscripts_query.py <工作区> --id 0007        # 读一份（正文全文）python scripts/manuscripts_query.py <工作区> --to F --since 2026-10-05 python scripts/manuscripts_query.py <工作区> --refs 0004 --json python scripts/manuscripts_query.py <工作区> --bits           # 附五元位快照```
+```text
+python scripts/manuscripts_query.py <工作区>                 # 最近 20 份
+python scripts/manuscripts_query.py <工作区> --id 0007        # 读一份（正文全文）
+python scripts/manuscripts_query.py <工作区> --to F --since 2026-10-05
+python scripts/manuscripts_query.py <工作区> --refs 0004 --json
+python scripts/manuscripts_query.py <工作区> --bits          # 附五元位快照
+```
 
-`--bits` 做的事：把每份手稿 `refs` 里的 `stmt:<id>` / `exp:<id>` 解析出来，去工作区`data/statements.json` /
-`data/experiments.json` 里取出对应行，用 `evidencebits` 现算五位与派生等级。读了但没有那两处引用的手稿，快照写"（没有可算的命题引用）
-"——"没有引用"与"引用算不出来"必须分得开（三态纪律）。
+`--bits` 做的事：把每份手稿 `refs` 里的 `stmt:<id>` / `exp:<id>` 解析出来，去工作区
+`data/statements.json` / `data/experiments.json` 里取出对应行，用 `evidencebits` 现算
+五位与派生等级。没有那两处引用的手稿写"（没有可算的命题引用）" —— "没有引用"与
+"引用算不出来"必须分得开（三态纪律）。
 """
 from __future__ import annotations
 
