@@ -1,6 +1,6 @@
-"""固定密度估值器：把"一段消息/内容"折成 token 数（S-B / 裁定 12-H=甲）。
+"""固定密度估值器：把"一段消息/内容"折成 token 数。
 
-## 搬的是什么
+## 这一层的口径
 
 `dsh-token-meter/lib/types/estimate.js`：`CHARS_PER_TOKEN = 4`、`BLOCK_OVERHEAD = 4`、
 `ROLE_OVERHEAD = 4`，每块 `ceil(len / CHARS_PER_TOKEN) + BLOCK_OVERHEAD`，
@@ -9,7 +9,7 @@
 常量名原样保留（`CHARS_PER_TOKEN` / `BLOCK_OVERHEAD` / `ROLE_OVERHEAD`）——
 它们是别人论文/文档里能对得上的名字，改一个字母就再也对不上。
 
-## 一处必须说清的偏差（12-H=甲 逐字要求的）
+## 一处必须说清的偏差
 
 DSH 的 `4 chars/token` 对 CJK 会低估（我们的语料以中文为主：一个汉字通常约 1 个
 token 甚至更多，而按 4 字符/token 算会把"一千个汉字"估成 250 token）。
@@ -125,7 +125,7 @@ def estimate_message(message: Mapping[str, Any], *,
         return int(-(-len(text) // _rate(chars_per_token))) + ROLE_OVERHEAD
     blocks = content if isinstance(content, (list, tuple)) else [content]
     tokens = estimate_content(blocks, chars_per_token=chars_per_token)
-    # assistant 那条还带 `tool_calls` 与 `reasoning_content`（12-A=乙 之后思维链也进历史）
+    # assistant 那条还带 `tool_calls` 与 `reasoning_content`（思维链也进历史）
     for call in (message.get("tool_calls") or ()):
         if isinstance(call, Mapping):
             fn = call.get("function") if isinstance(call.get("function"), Mapping) else {}
@@ -187,7 +187,7 @@ def chars_per_token_from(config: Mapping[str, Any] | None) -> tuple[float | None
 
     `unknown` 不许被当成默认值：配置写了 `chars_per_token: "4"`（字符串）或 `0`
     会让估值悄悄换一把尺，而读数里看不出来。调用方（压缩那条路）据此走
-    "警告一次 + 带完整历史继续"，与 DSH 自动路径 `CB:803-808` 同一姿态。
+    "警告一次 + 带完整历史继续"，与 DSH 自动路径同一姿态。
     """
     block = config if isinstance(config, Mapping) else {}
     inner = block.get("context_budget")
