@@ -107,15 +107,18 @@ def question_keywords(question: str, extra: Iterable[str] = ()) -> list[str]:
     就是这里产出的词。
     """
     words: list[str] = []
+    seen: set[str] = set()
     for raw in _TOKEN_SPLIT_RE.split(str(question or "")):
         token = raw.strip()
         if len(token) < 2 or token.lower() in _STOPWORDS:
             continue
-        if token not in words:
+        if token not in seen:
+            seen.add(token)
             words.append(token)
     for extra_text in extra:
         token = str(extra_text or "").strip()
-        if len(token) >= 2 and token not in words:
+        if len(token) >= 2 and token not in seen:
+            seen.add(token)
             words.append(token)
     # 中文长片段补 2-gram：整段"阿贝尔群与域之间的交换性条件"几乎不可能
     # 逐字出现在某条 quote 里，2-gram 才是有实际召回力的单位。
@@ -124,7 +127,8 @@ def question_keywords(question: str, extra: Iterable[str] = ()) -> list[str]:
         if len(token) >= 5 and not re.fullmatch(r"[\x00-\x7f]+", token):
             grams.extend(token[i : i + 2] for i in range(len(token) - 1))
     for g in grams:
-        if g not in words:
+        if g not in seen:
+            seen.add(g)
             words.append(g)
     return words[:40]
 def keyword_hits(keywords: Sequence[str], relations: Sequence[Mapping[str, Any]]) -> dict:
@@ -136,15 +140,19 @@ def keyword_hits(keywords: Sequence[str], relations: Sequence[Mapping[str, Any]]
     """
     per: dict[str, int] = {}
     samples: dict[str, str] = {}
+    blobs = [
+        (rel.get("relation_id"),
+         f"{rel.get('quote') or ''}\n{rel.get('description') or ''}")
+        for rel in relations
+    ]
     for kw in keywords:
         n = 0
         sample = ""
-        for rel in relations:
-            blob = f"{rel.get('quote') or ''}\n{rel.get('description') or ''}"
+        for rid, blob in blobs:
             if kw and kw in blob:
                 n += 1
                 if not sample:
-                    sample = f"{rel.get('relation_id')}:{_digest(blob, 80)}"
+                    sample = f"{rid}:{_digest(blob, 80)}"
         per[kw] = n
         if sample:
             samples[kw] = sample
@@ -193,7 +201,7 @@ def analyze_gaps(
     || c 内在矛盾 | 存在矛盾关系对 | high | 文献之间真实分歧，最值得研究 |
     ``insufficient`` 只要任一条成立。没有"感觉不够"这一条，也没有"关系太少就说不够"这种看上去合理、实则无法反驳的软判据。
     """
-    verified = [r for r in relations if r.get("quote_verified") is True]
+    verified_count = sum(1 for r in relations if r.get("quote_verified") is True)
     hits = keyword_hits(keywords, relations)
     contradictions = detect_contradictions(relations)
 
@@ -210,7 +218,7 @@ def analyze_gaps(
                 ),
             }
         )
-    if degree < degree_threshold and not verified:
+    if degree < degree_threshold and not verified_count:
         criteria.append(
             {
                 "id": "b_low_degree_unverified",
@@ -254,7 +262,7 @@ def analyze_gaps(
         ),
         "hits": hits,
         "contradictions": contradictions,
-        "verified_count": len(verified),
+        "verified_count": verified_count,
         "degree": degree,
         "degree_threshold": degree_threshold,
     }
@@ -281,9 +289,10 @@ def evidence_confidence(
         return "low"
     score = 0.0
     for r in relations:
-        if r.get("quote_verified") is True:
+        verified = r.get("quote_verified")
+        if verified is True:
             score += 1.0
-        elif r.get("quote_verified") is False:
+        elif verified is False:
             score -= 1.0
     if degree >= 3:
         score += 1.0
@@ -787,16 +796,17 @@ def invented_facts(text: str, *, known_relation_ids: Sequence[str] = (),
     而"不得引入新事实"是这一层的存在理由 —— 与置信度那条（`_rank_min`）同一条纪律。
     """
     out: list[str] = []
+    text = str(text or "")
     rel_known = {str(x) for x in known_relation_ids}
     lit_known = {str(x) for x in known_lit_ids}
-    for prefix, ident in _REF_TOKEN_RE.findall(str(text or "")):
+    for prefix, ident in _REF_TOKEN_RE.findall(text):
         pool = rel_known if prefix == "rel" else (lit_known if prefix == "lit" else None)
         if pool is None:
             continue                       # `exp:` / `stmt:` 不在 D 的证据包里，不判
         if ident not in pool:
             out.append(f"{prefix}:{ident}")
     quotes = [str(q) for q in known_quotes if str(q)]
-    for span in _QUOTED_RE.findall(str(text or "")):
+    for span in _QUOTED_RE.findall(text):
         if not any(span in q for q in quotes):
             out.append(f"「{span[:24]}…」")
     return sorted(set(out))
