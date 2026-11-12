@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -269,18 +270,20 @@ def expand(index: Any, node: Any, depth: int, direction: str = "both", *,
     visited: list[str] = [sid]
     expanded: set[str] = set()
     edges_out: list[dict[str, Any]] = []
+    edge_keys: set[tuple[str, str, str]] = set()
     chars = 0
     reasons: list[str] = []
     truncated = False
 
-    queue: list[tuple[str, int]] = [(sid, 0)]
+    queue: deque[tuple[str, int]] = deque([(sid, 0)])
     while queue:
-        current, distance = queue.pop(0)
+        current, distance = queue.popleft()
         expanded.add(current)
         for nxt, edge, kind in _neighbors(index, current, direction):
             edge_view = _tree_edge(current, nxt, edge, kind)
-            if all(e["dep_id"] != edge_view["dep_id"] or e["dir"] != edge_view["dir"]
-                   or e["from"] != edge_view["from"] for e in edges_out):
+            edge_key = (edge_view["dep_id"], edge_view["dir"], edge_view["from"])
+            if edge_key not in edge_keys:
+                edge_keys.add(edge_key)
                 edges_out.append(edge_view)
             if not edge_view["to_is_statement"]:
                 continue                     # 外部根：只作为边的读数
