@@ -83,7 +83,7 @@ def test_the_normative_text_says_flash_and_history_stays_chat() -> None:
             assert any(m in line for m in HISTORY_MARKERS), (
                 f"{path.name}:{i} 里的 `deepseek-chat` 没有标成历史读数：{line.strip()[:80]}")
     # 这里原先还有一条 `count("deepseek-chat") >= 4`（要求"历史读数别删"）。2026-11-12 撤掉：
-    # 那是**钉住历史篇数**的判据 —— 清扫压缩那几段之后篇数自然变少，而"旧读数有没有被改写成
+    # 那是「钉住历史篇数」的判据 —— 清扫压缩那几段之后篇数自然变少，而"旧读数有没有被改写成
     # 新模型名"这件事已由上面那条逐行检查（每一处必须带历史标记）守住。为了凑篇数去恢复旧段落，
     # 是"为守判据保留过时东西"，业主明确不要。
     assert (SRC / "src" / "agentflow" / "modelgw.py").is_file()
