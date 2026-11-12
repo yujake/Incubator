@@ -194,6 +194,10 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
 GARBLED_REPLACEMENT_MAX = 0
 GARBLED_CONTROL_RATIO_MAX = 0.02
 
+#: 控制字符（`ord < 32` 且不是换行/回车/制表）：交给正则的 C 层扫描，
+#: 不再对整份正文跑一遍 Python 逐字符生成器（同一读数、同一字符集）。
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
 
 def _quality(text: str) -> tuple[bool, dict[str, Any]]:
     """核一遍"这段文本能不能读"。返回 `(是否疑似乱码, 读数)`。"""
@@ -201,8 +205,7 @@ def _quality(text: str) -> tuple[bool, dict[str, Any]]:
     total = max(1, len(body))
     nuls = body.count("\x00")
     replacement = body.count("\ufffd")
-    control = sum(1 for ch in body
-                  if ord(ch) < 32 and ch not in ("\n", "\r", "\t"))
+    control = len(_CONTROL_CHARS.findall(body))
     ratio = control / total
     garbled = (nuls > 0 or replacement > GARBLED_REPLACEMENT_MAX
                or ratio > GARBLED_CONTROL_RATIO_MAX)
