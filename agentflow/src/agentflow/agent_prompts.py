@@ -6900,9 +6900,6 @@ def _specs_for(role: str, registry: Any) -> list[Any]:
 #: 实测（2026-10-11）：E / F / G 三家持有 `verify.check_formal`。
 #: 2026-10-22 晚裁定之后那三家的工具面上都不再挂它（`roles=()`）：判据已收成
 #: `_FORMAL_ENTRY_TOOLS`（`formal.*`），`_LEAN_TOOLS` 只留作历史读数与别名。
-
-
-
 #: 2026-10-22（新设 L）：判据从"一个工具名"改成"这一族工具名"。L 的形式化工具挂在
 #: 自己的组下（`formal.check_formal` / `formal.formalize`），因为 L 走的是"自检闸 +
 #: E 的实现（函数级复用）"这条路，两条入口的差别必须看得见（理由见
@@ -6916,7 +6913,6 @@ _LEAN_TOOLS: tuple[str, ...] = (
 )
 #: 兼容别名（不是第二份真身）：本模块之外还有两处注释按单数名引用它。
 _LEAN_TOOL = _LEAN_TOOLS[0]
-
 #: "形式化入口"那一族：只有手上有它的人才拿 `TOOLCHAIN_FORMAL`（今天只有 L）。
 #:
 #: 2026-10-22 第四批（业主「所有受 Lean 开关控制的提示词/工具/动作全部指向 L」）：
@@ -6928,87 +6924,22 @@ _LEAN_TOOL = _LEAN_TOOLS[0]
 #: 2026-10-22 晚裁定把那批角色的工具面也一起收了（`verify.check_formal` 的 `roles=()`）——
 #: 于是"E/F/G 的工具面上仍挂着它"这句话不再成立；判据本身没变，仍然只认 `formal.*`。
 _FORMAL_ENTRY_TOOLS: tuple[str, ...] = ("formal.check_formal", "formal.formalize")
-
-
-
-
-
-
-
 #: "走冷启动入口"这件事的判据 = 它的实现类是 `agentflow.agent_v`（从声明现算，不写死 "V"）。
-
-
-
 #: 今天只有 V 走这条路（`specs/v.py::SPEC.class_path == "agentflow.agent_v:AgentV"`，
-
-
-
 #: 而 `agent_v/core.py` 的 `verify_proof` 用 `verifications.cold_start_prompt` 拼好问题
-
-
-
 #: 直接问一次）。判据 `test_the_cold_start_role_is_told_it_has_two_entries` 用同一函数。
-
-
-
 _COLD_START_MODULE = "agentflow.agent_v"
-
-
-
-
-
-
-
-
-
-
-
 def _is_cold_start_role(role: str) -> bool:
-
-
-
     """这个角色的实现类是不是"冷启动入口"那一个（`agentflow.agent_v`）。"""
-
-
-
     try:
-
-
-
         spec = builtin_registry().get(role)
-
-
-
     except (KeyError, ValueError):
-
-
-
         # `ValueError` 这一支是 2026-10-22 补的：开关关着时 `get("L")` 抛的是
-
         # `leanscope.RoleHidden`（受控拒绝，挂在 `ValueError` 下）而不是 `KeyError`。
-
         # 两档在这里的处置相同：读不到声明 ⇒ 不是冷启动入口（这条判据只回答"是不是 V"）。
-
         return False
-
-
-
     return str(getattr(spec, "class_path", "")).split(":", 1)[0] == _COLD_START_MODULE
-
-
-
-
-
-
-
-
-
-
-
 def _writes_lean(role: str, registry: Any) -> bool:
-
-
-
     """这个角色手上有没有 `formal.*` 那族入口（决定它拿不拿 `TOOLCHAIN_FORMAL`）。
 
 
@@ -7034,78 +6965,18 @@ def _writes_lean(role: str, registry: Any) -> bool:
 
 
     """
-
-
-
     return any(str(getattr(s, "name", "")) in _FORMAL_ENTRY_TOOLS
                for s in _specs_for(role, registry))
-
-
-
-
-
-
-
-
-
-
-
 def _required_of(spec: Any) -> tuple[str, ...]:
-
-
-
     params = getattr(spec, "params", None) or {}
-
-
-
     req = params.get("required") if isinstance(params, Mapping) else None
-
-
-
     return tuple(str(x) for x in (req or ()))
-
-
-
-
-
-
-
-
-
-
-
 def _props_of(spec: Any) -> tuple[str, ...]:
-
-
-
     """参数表里允许出现的键（封闭集合：多传一个键就会被拒）。"""
-
-
-
     params = getattr(spec, "params", None) or {}
-
-
-
     props = params.get("properties") if isinstance(params, Mapping) else None
-
-
-
     return tuple(sorted(str(k) for k in (props or {})))
-
-
-
-
-
-
-
-
-
-
-
 def _params_hint(spec: Any) -> str:
-
-
-
     """参数说明：只列必填。可用键交给"被拒时那张表"。
 
 
@@ -7159,212 +7030,53 @@ def _params_hint(spec: Any) -> str:
 
 
     """
-
-
-
     req = _required_of(spec)
-
-
-
     props = _props_of(spec)
-
-
-
     bits = ["必填 " + ("、".join(req) if req else "无")]
-
-
-
     if not props:
-
-
-
         bits.append("不许传任何参数")
-
-
-
     else:
-
-
-
         # 2026-11-01（业主裁定 + 审计 174 §1.2）：可选键也要教 —— 123 件里 92 件有可选键、
         # 合计 286 个，其中 43 件至少有一个键从没在提示词里出现过。兜底（被拒时给全表）
         # 只在"第一次调用就被拒"时生效；一个一次成功、从不重试的工具，它的可选键等于没教。
         # 这里用 `?key` 的紧凑写法（一个键一个 token，不带描述），与"必填"分开：
         # 必填是硬条件，`?` 是可给可不给。
         opt = [k for k in props if k not in req]
-
-
-
         if opt:
-
-
-
             bits.append("可选 " + "、".join("?" + k for k in opt))
-
-
-
     return "（" + "；".join(bits) + "）"
-
-
-
-
-
-
-
-
-
-
-
 def tools_lines(role: str, registry: Any) -> list[str]:
-
-
-
     """工具面逐条：名字 + 摘要 + 参数（只列必填，可用键见被拒时那张表）+ 副作用。"""
-
-
-
     out: list[str] = []
-
-
-
     for spec in _specs_for(role, registry):
-
-
-
         side = getattr(spec, "side_effect", "none")
-
-
-
         out.append(f"- {spec.name}：{spec.summary}{_params_hint(spec)}；副作用 {side}")
-
-
-
     return out
-
-
-
-
-
-
-
-
-
-
-
 def conductor_tool_count(role: str, registry: Any) -> int:
     """该角色工具面上 conductor.* 有几件（现算：加了工具提示词自己会跟上，不写死数字）。"""
     return sum(1 for spec in _specs_for(role, registry)
                if str(getattr(spec, "name", "")).startswith("conductor."))
-
-
 def actions_lines(role: str) -> list[str]:
-
-
-
     """动作表逐条：动作名 + 摘要 + 参数 + 产出 + 副作用。"""
-
-
-
     out: list[str] = []
-
-
-
     for spec in C.actions_for(role):
-
-
-
         returns = f"；产出：{spec.returns}" if spec.returns else ""
-
-
-
         out.append(f"- {spec.action}：{spec.summary}{_params_hint(spec)}；"
-
-
-
                    f"副作用 {spec.side_effect}{returns}")
-
-
-
     return out
-
-
-
-
-
-
-
-
-
-
-
 def _duty_of(role: str) -> str:
-
-
-
     brief = ROLE_BRIEFS.get(role)
-
-
-
     return brief.duty if brief else "（未登记职责）"
-
-
-
-
-
-
-
-
-
-
-
 def _names(items: Sequence[str], limit: int | None = 12) -> str:
-
-
-
     """列名字（超过 limit 就截断并写明还有几个；limit=None 表示全列）。"""
-
-
-
     if not items:
-
-
-
         return "（无）"
-
-
-
     shown_items = list(items) if limit is None else list(items[:limit])
-
-
-
     shown = "、".join(shown_items)
-
-
-
     if len(items) <= len(shown_items):
-
-
-
         return shown
-
-
-
     return f"{shown} …（共 {len(items)} 件）"
-
-
-
-
-
-
-
-
-
-
-
 def faculties_text(role: str, registry: Any) -> str:
-
-
-
     """十项官能在这个角色上分别是什么：主战的写细，次要的一句带过，结构禁止的写成不许。
 
 
@@ -7390,57 +7102,17 @@ def faculties_text(role: str, registry: Any) -> str:
 
 
     """
-
-
-
     specs = _specs_for(role, registry)
-
-
-
     reads = sorted(s.name for s in specs if str(getattr(s, "side_effect", "read")) == "read")
-
-
-
     writes = sorted(s.name for s in specs if str(getattr(s, "side_effect", "read")) != "read")
-
-
-
     acts = [a.action for a in C.actions_for(role)]
-
-
-
     graphish = [n for n in reads if n.startswith(("graph.", "trace."))]
-
-
-
     formalish = [n for n in reads if n.startswith(("verify.", "search.", "ocr."))]
-
-
-
     emphasis = FACULTY_EMPHASIS.get(role, {})
-
-
-
-
-
-
-
     means: dict[str, str] = {
-
-
-
         "眼睛": f"可读 {len(reads)} 件：{_names(reads)}",
-
-
-
         "耳朵": "公共频道 + 与有协作边的伙伴私聊 + 每步自动附上的新消息",
-
-
-
         "脑子": f"可推进的动作 {len(acts)} 个：{_names(acts)}",
-
-
-
         # p204（2026-10-27）：手这一档必须全列，理由与上面两档相反。
         # 眼睛/脑子那两档答的是"有多少可读的东西"（截断 + 件数就够）；
         # 手答的是"我能不能改这个东西"——被省略号吃掉的工具等于对模型不存在。
@@ -7449,221 +7121,56 @@ def faculties_text(role: str, registry: Any) -> str:
         # 代价：每角色这一行多 200 到 400 字；换来的是写面看得全。
         "手": (f"可改 {len(writes)} 件：{_names(writes, limit=None)}" if writes
                else "数据面上没有写工具"),
-
-
-
         "能讨论": (("message（公共频道 to=ALL / 私聊）+ 回执（结论 / 指到第几步）；结论要落盘")
                    if not C.ALLOWED_EDGES.get(str(role), ())
                    else "message（公共频道 to=ALL / 私聊）+ 唤起伙伴；结论要落盘"),
-
-
-
         "高观点": f"结构类工具：{_names(graphish) if graphish else '（本岗没有图/溯源工具）'}",
-
-
-
         "能互动": "把要确认或要汇报的写成 message（to=ALL）或写进 final",
-
-
-
         "能思辨": ("读原文 + 溯源 + 可复现实验三条路"
-
-
-
                    + (f"（可用：{_names(formalish)}）" if formalish else "")),
-
-
-
         "敢创新": "把猜想写进草稿本，并给出可判定它真假的路径",
-
-
-
         "有品味": "取舍要能说出口（删了什么、换了什么、为什么更干净）",
-
-
-
     }
-
-
-
-
-
-
-
     core = [f for f, _w, _b in FACULTIES if emphasis.get(f) == "core"]
-
-
-
     minor = [f for f, _w, _b in FACULTIES if emphasis.get(f) == "minor"]
-
-
-
     denied = [f for f, _w, _b in FACULTIES if emphasis.get(f) == "denied"]
-
-
-
     what_of = {f: w for f, w, _b in FACULTIES}
-
-
-
     broken_of = {f: b for f, _w, b in FACULTIES}
-
-
-
-
-
-
-
     out = ["十项官能。主战的那几项写细，次要的一句带过，结构上不许的写成不许 —— "
-
-
-
            "这不是能力清单，是你在这一岗上的分工。"
-
-
-
            "每一项后面标的「层」是它的保证方式，三种取值："
            "［代码保证］＝框架结构上保证；［你自己把握］＝只靠你判断（做法可以分歧，"
            "框架不判你对错）；［代码保证 + 你自己把握］＝两半都有（结构管得住的那一半它管，"
            "剩下的靠你）。"]
-
-
-
-
-
-
     out.append("")
-
-
-
     out.append(f"主战官能（{len(core)} 项）：")
-
-
-
     for f in core:
-
-
-
         local = FACULTY_LOCAL.get((role, f), "")
-
-
-
         layer = FACULTY_LAYERS.get(f, ("prompt", ""))[0]
-
-
-
         tag = {"code": "代码保证", "both": "代码保证 + 你自己把握", "prompt": "你自己把握"}[layer]
-
-
-
         out.append(f"- {f}［{tag}］：{what_of[f]}。{local}".rstrip("。") + "。")
-
-
-
         out.append(f"    手段：{means.get(f, '（见下）')}")
-
-
-
     if minor:
-
-
-
         out.append("")
-
-
-
         out.append("次要官能（有，但不是你的主战场：" + "、".join(minor) + "）："
-
-
-
                    + "；".join(f"{f}＝{means.get(f, '')}" for f in minor))
-
-
-
     if denied:
-
-
-
         out.append("")
-
-
-
         out.append("结构上不许（做了也不算数，原因逐条写在边界里）：")
-
-
-
         for f in denied:
-
-
-
             local = FACULTY_LOCAL.get((role, f), broken_of[f])
-
-
-
             out.append(f"- {f}：{local}")
-
-
-
     out.append("")
-
-
-
     out.append("框架用结构而不是用请求来保证的事（这些你违反了会被拒，不是被劝）：")
-
-
-
     out.extend(f"- {what}：{how}" for what, how in STRUCTURE_NOT_PROMPT)
-
-
-
     out.append("")
-
-
-
     out.append("只由你自己把握的事（框架不判对错）：" + "；".join(PROMPT_ONLY) + "。")
-
-
-
     out.append("")
-
-
-
     out.append(SHARED_FACULTIES_NOTE)
-
-
-
     return "\n".join(out)
-
-
-
-
-
-
-
-
-
-
-
 def partners_out(role: str) -> tuple[str, ...]:
-
-
-
     """这个角色能唤起谁（`ALLOWED_EDGES` 的出边，排序后）。"""
-
-
-
     return tuple(sorted(C.ALLOWED_EDGES.get(role, frozenset())))
-
-
-
-
-
-
-
-
-
-
-
 #: 主控伙伴表里刻意不出现的那一格（其余角色仍然按"全体简介"排期）。
 #:
 #: 2026-10-24（业主口径：是否形式化由用户指定，指定之后 M 派 B、B 派 L）：L 与主控之间
@@ -7672,12 +7179,7 @@ def partners_out(role: str) -> tuple[str, ...]:
 #: 主控把形式化当成自己可以安排的一件事。判据
 #: `tests/test_l_collab_surface_is_respected_everywhere.py` 逐角色钉住这一格。
 _CONDUCTOR_PARTNER_ROLES = tuple(r for r in S.ROLES if r != "L")
-
-
 def visible_partners(role: str) -> tuple[str, ...]:
-
-
-
     """这个角色在提示词里看得到谁：主控看全体，其余角色看自己的出边。
 
 
@@ -7715,33 +7217,10 @@ def visible_partners(role: str) -> tuple[str, ...]:
     L 不给主控留行（理由在 `_CONDUCTOR_PARTNER_ROLES` 上面那段）。
 
     """
-
-
-
     if role == S.CONDUCTOR_ROLE:
-
-
-
         return tuple(sorted(_LEANSCOPE.visible_roles(_CONDUCTOR_PARTNER_ROLES)))
-
-
-
     return _LEANSCOPE.visible_roles(partners_out(role))
-
-
-
-
-
-
-
-
-
-
-
 def partners_in(role: str) -> tuple[str, ...]:
-
-
-
     """谁能唤起这个角色（边表的入边；主控永远不在里面）。
 
 
@@ -7767,29 +7246,9 @@ def partners_in(role: str) -> tuple[str, ...]:
 
 
     """
-
-
-
     return _LEANSCOPE.visible_roles(
-
-
-
         sorted(r for r, to in C.ALLOWED_EDGES.items() if role in to))
-
-
-
-
-
-
-
-
-
-
-
 def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> list[str]:
-
-
-
     """伙伴表：出边逐个带职责、动作与参数，加上入边、接线态与不可召唤的说明。
 
 
@@ -7823,569 +7282,144 @@ def partners_lines(role: str, availability: Mapping[str, str] | None = None) -> 
 
 
     """
-
-
-
     out: list[str] = []
-
-
-
     outs = partners_out(role)
-
-
-
     seen = visible_partners(role)
-
-
-
     # 指路（§109）：画像已经落盘，随时可查 —— 开头注入的那一份跑到后面会被挤远。
-
-
-
     out.append(f"（每个伙伴的完整画像——职责 / 交付物 / 边界 / 立场——"
-
-
-
                f"也落在工作区根的 `{PROFILES_FILE}` 里，随时用 fs.read 查）")
-
-
-
     if seen:
-
-
-
         if set(seen) != set(outs):
-
-
-
             # 主控这一档：看得到全体，但其中几个唤不起（2026-10-10 裁定第 4 条）。
-
-
-
             # 这句话必须在这里说，因为下面的表头写的是"你可以唤起这些伙伴"。
-
-
-
             out.append("下面这些伙伴里，带「你唤不起它」标记的那几个只能间接由父代理转达"
-
-
-
                        # 2026-10-16 更正：这里原写"主控不许直接控制 B / F / V"，
-
-
-
                        # 而边表实测 `ALLOWED_EDGES['M'] = ['A','B','C','D','E','G','H']`
-
-
-
                        # —— B 在 M 的出边里（7 条）。那句话是旧读数，按边表改掉。
-
-
-
                        # 判据：`tests/test_dispatch_without_action.py::`
-
-
-
                        # `test_a_blank_action_still_checks_the_edge`（只有 F/V 拦）。
-
-
-
                        "（业主 2026-10-10 裁定：主控不许直接控制 F）："
-
-
-
                        "派 F 会被判 `forbidden_edge` —— 那句话的意思是「这条边不存在」，"
-
-
-
                        "不是故障；要 F 干活就派 D 转达（policy 里写了走哪条链）；"
-
-
-
                        "其余那些是你的直接出边。")
-
-
-
         # 2026-10-16（业主口径）：这里不再印"可调用动作（必填…）"。
-
-
-
         # 原话逐字：「M 只是个派活的，对所有角色都一样，只根据它们的能力范围派活，
-
-
-
         # 不指定能力。M 能看到的只是各角色描述，看不到具体的工具箱与动作，
-
-
-
         # 但可在角色描述中暗示它各角色能干什么。」
-
-
-
         # 所以伙伴行只剩：职责 ＋ 它交付什么 ＋ 它自己的边界 ＋ 立场暗示 ＋ 唤不唤得起。
-
-
-
         out.append("你可以唤起这些伙伴（用 summon 形状**派活**：写清**要它干什么**，"
-
-
-
                    "**可以捎上你的起手建议**（从哪篇开始、要不要追引文、先做哪一步）；"
-
-
-
                    "**怎么做最终由它自己定** —— 它有权不照你的建议做）：")
-
-
-
         for other in seen:
-
-
-
             # 这一段曾经逐条印每个动作的名字与必填参数（`draft/39` §6.45 的 D56 加的），
-
-
-
             # 理由是"无参动作等于只有一个名字"。2026-10-16 按上面那条口径删掉：
-
-
-
             # 代价（M 会照着点动作、并亲手写别人家的内容参数）在真机里比收益大得多 ——
-
-
-
             # 第十一趟 T5 的 8 条被拒全是 M 写的别人家参数（`claims` / `testable` /
-
-
-
             # `certificate`）。capability 的可见面从"动作清单"改成"描述里的暗示"。
-
-
-
             mark = ""
-
-
-
             if other not in outs:
-
-
-
                 # 看得到但唤不起（主控那一档的 F；V 那条边 2026-10-20 已由业主撤掉）。
-
-
-
                 # 2026-10-22（新设 L 之后）：这一句必须按边表分成两档；
-
-
-
                 # 2026-10-23 对齐：入边是不是 B（`B → L`）决定写哪一档 —— 有入边的
-
-
-
                 # 写"经谁转达"，一条入边都没有的才写"谁也唤不起它"。
-
-
-
                 # 判据从 `ALLOWED_EDGES` 现算，不写死角色名。
-
-
-
                 _relay = sorted(frm for frm, targets in C.ALLOWED_EDGES.items()
-
-
-
                                 if other in targets)
-
-
-
                 if _relay:
-
-
-
                     mark += "（你唤不起它：只能间接由父代理转达）"
-
-
-
                 else:
-
-
-
                     mark += ("（你唤不起它；今天也没有任何角色能唤起它 ——"
-
-
-
                              "它只能由用户直接用 run-agent 起）")
-
-
-
             if availability is not None:
-
-
-
                 state = str(availability.get(other) or "unknown")
-
-
-
                 if state != "wired":
-
-
-
                     mark += f"（现在没接线：{state}）"
-
-
-
             # `draft/37` §108（用户口径"先加强描述"）：伙伴画像此前只有"它有什么动作"，
-
-
-
             # 没有"它交付什么、它不许做什么"。真机代价：主控把 `ingest_local` 派给了 B
-
-
-
             # （那是 A 的动作，`refused/unknown_action`），也会拿"越权请求"去撞拒绝 ——
-
-
-
             # 这些在事前本来就能避免。数据来自声明层（`agentspec.AgentBrief`），现算。
-
-
-
             extra = ""
-
-
-
             brief = ROLE_BRIEFS.get(other)
-
-
-
             if brief is not None:
-
-
-
                 first = next((str(x) for x in brief.boundary if str(x).strip()), "")
-
-
-
                 # 边界那几句是对它自己说的（第二人称），嵌进别人看到的伙伴表里
-
-
-
                 # 必须标明是引用，否则读起来像对当前角色说的。
-
-
-
                 extra = (f"；它交付：{brief.deliverable}"
-
-
-
                          + (f"；它自己的边界（原话）：「{first}」"
-
-
-
                             f"（它的边界共 {len(brief.boundary)} 条）" if first else ""))
-
-
-
             out.append(f"- {other}：{_duty_of(other)}{mark}{extra}")
-
-
-
         if "A" in outs:
-
-
-
             # `A` 的检索面是英文文献库（`providers.query_applicability` 对抽不出
-
-
-
             # 英文关键词的题面是 fail-closed：抛 `query_not_applicable_cjk`，
-
-
-
             # 落第三态"这一问没发出去"）。这条不写进提示词，模型就会拿中文题面去唤起，
-
-
-
             # 拿到一个"没问出去"的结果却当成"没有这篇文献"（实测：§203 的中文 description
-
-
-
             # 把 precise 的查询清零，而两层闸门都不拦）。
-
-
-
             out.append("唤起 A 时注意：它的检索后端以**英文文献**为主 —— `topic` 里要带"
-
-
-
                        "英文关键词（纯中文题面会被挡在门外，返回 `query_not_applicable`，"
-
-
-
                        "意思是「这一问没发出去」，不是「没有这篇文献」）；"
-
-
-
                        "把英文检索式写进 `description` 同样能让它适用。")
-
-
-
             # `draft/37` §111 的真机读数（2026-10-04 演练）：M 按 5 条盘外引文各派了一次 A
-
-
-
             # （`P7b: retrieve original for bibitem …`）—— 分工对了，但 5 次里 4 次
-
-
-
             # `no_results`：它把"作者 + 题名 + 一串关键词"串成长句，而 `precise` 那一档带
-
-
-
             # `keyword_hit` 后置过滤，词袋越长越容易被整批滤掉。离线对照：同一个后端，
-
-
-
             # `An overview of periodic elliptic operators` 一次命中 9 条。
-
-
-
             out.append("topic 要短：按题名找原文就只给题名（必要时加年份），"
-
-
-
                        "不要把作者与一串关键词串成长句 —— precise 的关键词后置过滤会把长词袋"
-
-
-
                        "整批滤掉（实测：同一后端，短题名一次命中 9 条，长串 5 次里 4 次 "
-
-
-
                        "no_results）。找不到再换 topical 或换关键词重试。")
-
-
-
     else:
-
-
-
         out.append("你没有任何可以唤起的伙伴（你的边是空的）——这是设计，不是遗漏："
-
-
-
                    "你的产出由别人来收取。")
-
-
-
     ins = partners_in(role)
-
-
-
     if ins:
-
-
-
         out.append("这些伙伴可以唤起你：" + "、".join(ins)
-
-
-
                    + "。他们给你的任务会出现在下面的任务框里，参数就是他们给的原文。")
-
-
-
     if _is_cold_start_role(role):
-
-
-
         # A26（`draft/105`）：V 的真实入口是冷启动提示词，不是这套循环。
-
-
-
         # 证据：`agent_v/core.py` 的 `verify_proof` 用 `verifications.cold_start_prompt(...)`
-
-
-
         # 拼好问题直接问一次（`self._ask(prompt)`），读完结论就落台账；
-
-
-
         # 全仓没有任何生产路径渲染 `system_prompt("V")`（只有审计与判据面渲染十格）。
-
-
-
         # 那这套循环对 V 是不是死的？不是 —— 调用方可以用 `--drive V.<动作>` 把 V 当循环角色
-
-
-
         # 驱动。所以这一句的落点不是"删掉协议"，而是把两个入口的关系说清：
-
-
-
         # 只讲循环会让读的人（或模型）以为"V 的日常就是跑这套循环"。
-
-
-
         out.append("你的**真实入口**不是这套循环：V 是**一次性问答** —— 框架用 "
-
-
-
                    "`verifications.cold_start_prompt` 把问题拼好直接问你一次，"
-
-
-
                    "读完结论就落台账（`verifications/<命题号>.jsonl`）。"
-
-
-
                    "下面这一套循环形状与工具只在有人用 `--drive V.<动作>` 把你当"
-
-
-
                    "循环角色驱动时才用得上 —— 两种入口各照各的规矩做，"
-
-
-
                    "但别把「跑循环」当成你的日常。")
-
-
-
     if role in C.NON_SUMMONABLE:
-
-
-
         out.append("你不可以被任何人唤起（不可召唤名单里有你）：你的行动一律由你自己发起。")
-
-
-
     # ---- 代唤通道（2026-09-30）：边表之外的那条路
-
-
-
     #
-
-
-
     # 为什么每个角色都要读到这一句：真机实测（17 个 review 会话）里，非 M 的召唤
-
-
-
     # 只有 F→E 七次，而"缺文献证据"这件事恰恰大多发生在 G/H/E 身上 ——
-
-
-
     # 它们要么没有到 A 的边，要么连边都没有（C）。边表是设计（"发现者≠修正者"），
-
-
-
     # 但"派不动就什么都不做"不是设计。所以这里把兜底路写清楚。
-
-
-
     if role not in C.NON_SUMMONABLE:
-
-
-
         out.append("如果这件活需要的人**不在**上面的名单里（典型：C 想请 A 去查文献、"
-
-
-
                    "链已到最大深度、或你要找的人这一轮根本没接线）：不要重试越权的边，"
-
-
-
                    "直接把 message 发给**你的直接父**（`to` 写它的角色号；"
-
-
-
                    "你在顶层、或父那一行读不成时才是主控 M），**subject 固定写「请代唤」**，"
-
-
-
                    "body 里写清四件事：要谁、什么动作、什么参数、为什么要。"
-
-
-
                    "框架在你越权召唤被拒时也会自动帮你发这一条（返回里带 relay_requested），"
-
-
-
                    "但你自己发能写得更清楚。")
-
-
-
     # 上报规则（`draft/37` §110，用户逐字：「如果一个任务自己做不了且同伴做不了则报告主控」）：
-
-
-
     # 这条此前只隐含在"找不在名单里的人 ⇒ 发给 M"里 —— 而"我自己做不了"是另一种情形，
-
-
-
     # 必须明说，否则它会静默少做或把没做成的写成做成了。
-
-
-
     #
-
-
-
     # 收件人按代码改（`draft/104` §4.1 甲案；业主 2026-10-09 逐字「和父代理 A 交流即可」）：
-
-
-
     # `agent_loop._relay_recipient` 发给直接父，只有顶层 / 父那一行读不成才落回 M
-
-
-
     # ⇒ 提示词这一句必须与它一致，否则模型会照着自己那一版手动越级发给 M
-
-
-
     # （中间那一层看不见，M 被当路由器）。
-
-
-
     if role != S.CONDUCTOR_ROLE:
-
-
-
         out.append("做不了就上报：这件事你自己做不到、上面名单里的伙伴也做不到 ⇒ "
-
-
-
                    "**报告你的直接父**（`message` 的 `to` 写它的角色号；你在顶层、"
-
-
-
                    "或父那一行读不成时才是主控 M，body 写清「我做不了什么、"
-
-
-
                    "缺什么、已经试过什么」）。不许静默放弃，也不许把没做成的写成做成了 —— "
-
-
-
                    "主控是唯一能把缺口变成派活的人（它有全体画像，见 "
-
-
-
                    f"`{PROFILES_FILE}`）。")
-
-
-
     return out
-
-
-
-
-
-
-
-
-
-
-
 def _numbered_sections(prefix: str, lines: Sequence[str], base_order: int) -> list[Section]:
     """把一组行拆成多段（每行一段），顺序 = base_order + 序号 * 10。"""
     return [
