@@ -593,8 +593,11 @@ def clock_waiters(workspace: str | Path) -> dict[str, Any]:
     # 交出去。"它现在有没有事"的三个证据（挂着什么 / 交没交差 / 最近一步是什么时候）
     # 分成三次读，会让同一份三态看到三个时刻的盘。
     steps = step_beats(workspace)
+    # "有几条挂在钟上"只量一次：`count` 与 `pending_total` 是同一个数（判据见下面那一行
+    # 注释 —— 两个键说的是同一份 `rows`），改前这一个 `len(rows)` 写了两遍。
+    pending_total = len(rows)
     out.update({"checked": True, "by_task": by_task, "rows": rows,
-                "count": len(rows), "reason": "",
+                "count": pending_total, "reason": "",
                 # 兜底计时器单列一格（业主 2026-10-29）：三态里"只挂着它"就是静默。
                 "lifeline_rows": lifeline_rows,
                 "lifeline_count": len(lifeline_rows),
@@ -616,7 +619,7 @@ def clock_waiters(workspace: str | Path) -> dict[str, Any]:
                 "stall_now": str(steps.get("now") or ""),
                 # 时钟上"还有东西没回来"的总数（含不属于任何台账号的那些：程序计时器
                 # 常常 `task_id=""`）。`wait_any` 那一档用它回答"还有可等的吗"。
-                "pending_total": len(rows)})
+                "pending_total": pending_total})
     return out
 
 
