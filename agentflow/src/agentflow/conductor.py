@@ -4795,38 +4795,32 @@ class Conductor:
                    revoke: bool = False) -> dict[str, Any]:
         """把"永远不会再被收件人处理"的板项作废（`item_close="expired"`）。
 
-        为什么必须有这一条（真机 `projects/paper-rewrite-78` 2026-10-28 02:48 实测）：
-        到点通知是 `expects="ack"` 的板项 —— 父不许代 ack（业主 2026-10-08 裁定），
-        而收件人（子代理）已经静默/退役 ⇒ 它永远不会被 ack。可另一头，销号闸要求
-        "名下没有未消的板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟
-        连续被拒满 `max_final_refused` 拍后以 `final_refused` 收尾、final 为空。
+        为什么必须有这一条：到点通知是 `expects="ack"` 的板项，父不许代 ack，而收件人
+        （子代理）已经静默/退役 ⇒ 它永远不会被 ack。可另一头，销号闸要求"名下没有未消的
+        板项"、收工闸要求"整棵树都已销号" ⇒ 四个环节互锁，那一趟会连续被拒满
+        `max_final_refused` 拍后以 `final_refused` 收尾、final 为空。
 
         出口是作废 —— 今天它的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久
-        抑制，2026-10-29 起）。"只是静默"不够，那一档在下面边界 2 逐项判。
+        抑制）。"只是静默"不够，那一档在下面边界 2 逐项判。
 
-        `revoke=False` 那一档（旧口径）的三条硬边界（少一条就等于把这条路变成"父代 ack"）：
+        `revoke=False` 那一档（缺省）的三条硬边界（少一条就等于把这条路变成"父代 ack"）：
         1. 只处理 `expects="ack"` 的项 —— 要交付的活（`expects="work"`）不许作废；
         2. 调用方必须已经证明收件人叫不醒（已销号，或兜底表被永久抑制）：只是静默
            不够 —— 一条消息或一次委托就会把它叫起来，那时它自己能 ack（本方法逐项核
            `retire_state_of` 与 `lifeline_suppressed` / `retired_verdict`，两个读数都
            不是"叫不醒"就拒）—— 不许把还可能被叫醒的活清掉。销号名单读不全
            （`unknown`）也不算"叫不醒"：那一档的拒信带理由码 `unknown_retired`，
-           因为"读不出来"证明不了"它叫不醒"（fail-closed，2026-10-31）；
+           因为"读不出来"证明不了"它叫不醒"（fail-closed）；
         3. 作废不经过状态机（`item_move` 描述的是"有人读过/办过"，作废恰恰是
            "不会有人读"），但一律过 `schema.Task.validate`；来路写进 `inputs`
            （`void:expired:<父台账号>:<理由>`），于是事后能回答"谁作废的、为什么"。
 
-        ## 业主 2026-11-06 裁定 ①：按权限撤销（`revoke=True`）
+        ## 按权限撤销（`revoke=True`）
 
-        上面那三条是"作废"（`revoke=False`，缺省）的口径，2026-11-06 之后它不再是
-        唯一的改法。裁定原文（逐字）：
-
-            1.给父代理可以更改子代理板项状态的能力，可将不再需要做的任务标为撤销，
-              特别地 M 可通过审计工具更改任意代理的板项状态。
-
-        于是 `revoke=True` 这一档：改的人是「直接父代理」或「M」（`_item_authority`
-        判，判据只有那一处）⇒ 可以撤"不再需要做"的板项，不再要求证明"收件人叫不醒"
-        —— 权限替代了那道证明。但「必须留痕」，而且留痕是六格：
+        上面那三条是"作废"（`revoke=False`，缺省）的口径；`revoke=True` 换一条正当性：
+        改的人是「直接父代理」或「M」（`_item_authority` 判，判据只有那一处）⇒ 可以撤
+        "不再需要做"的板项，不再要求证明"收件人叫不醒" —— 权限替代了那道证明。
+        但「必须留痕」，而且留痕是六格：
 
         - `by`（谁改的，台账号）/ `owner`（这条项原来归谁）/ `reason`（为什么，理由串）
         - `from`（原状态）/ `to="done"`（新状态）/ `at`（时刻）
@@ -4841,24 +4835,22 @@ class Conductor:
         ⇒ 受控拒绝 `not_authorized`，一个格都不动。收件人自己那条路不受影响 ——
         他仍是 `ack_items`（`conductor.ack`），不是这里。
 
-        ## 业主 2026-11-06 裁定 ① 的乙件 / 丙件（同一笔撤销要一起做完）
+        ## 撤销要一并做完的两件（乙件 / 丙件）
 
-        乙件：撤销成功后要提醒收件人，且那条提醒不欠任何动作。改前它落成一条新的
-        `notice` 行（`_revocation_notice_row`）；2026-11-09（D13）起不再落行 ——
-        见 `REVOKE_POSTS_NOTICE_ROW` 的说明：撤 N 条就多 N 行，而板项行的 `status`
-        恒为 `pending`，于是清理动作在读数上让"待办"变多。现在的落法：
+        乙件：撤销成功后要提醒收件人，且那条提醒不欠任何动作。提醒的正文是那条留痕
+        本身：`REVOKE_POSTS_NOTICE_ROW=False`（缺省）时不另落 `notice` 行 —— 撤 N 条就
+        多 N 行，而板项行的 `status` 恒为 `pending`，于是清理动作在读数上让"待办"变多。
 
         - 提醒的正文仍在，但载体是被撤那一行自己的 `inputs`
           （`revoke:expired:by=…:owner=…:from=…:to=done:at=…:reason=…`，上一节那六格）；
         - 收件人那一侧的读法是 :meth:`revoked_recent_of`（`agent_loop.mailbox_digest`
           每拍投一次，渲染成【最近被撤销的项】）——它只读那条留痕，不进任何 open 计数；
         - 返回的 `notified` 逐条给 `{item_id, owner, kind, expects, carrier, text}`：
-          没有 `notice_id` 这一格（撤销不落通知行 ⇒ 那一格只能是空串，而空串是
-          一句谎：它暗示"曾经有过一条通知行"，业主 2026-11-09 裁定 ③ 摘掉它），
-          `carrier` 写明提醒从哪儿读得到（`revoked_recent@<收件人>`），`text` 是那句
-          逐字正文。没有收件人的项（顶层项）进 `notification_problems`，撤销本身不回滚。
-          旧行为那一档（`REVOKE_POSTS_NOTICE_ROW=True`，默认死代码）落的是真通知行，
-          所以它那一档才带 `notice_id`（那时它指得出是哪一行）。
+          缺省这一档没有 `notice_id` 这一格（撤销不落通知行 ⇒ 那一格只能是空串，而空串是
+          一句谎：它暗示"曾经有过一条通知行"），`carrier` 写明提醒从哪儿读得到
+          （`revoked_recent@<收件人>`），`text` 是那句正文。没有收件人的项（顶层项）进
+          `notification_problems`，撤销本身不回滚。`REVOKE_POSTS_NOTICE_ROW=True` 那一档
+          落的是真通知行，所以它那一档才带 `notice_id`（那时它指得出是哪一行）。
 
         丙件：撤销后 `expects` 清空、原值写进 `expects_was`（`schema.Task` 末尾那一格；
         `validate` 只允许 `done` + `expired` 的行为空）。留着 `expects="ack"` 会让读侧
@@ -4867,9 +4859,9 @@ class Conductor:
         返回：`{"checked","voided":[id],"refused":[{"id","why"}],"traces":[…],
         "notified":[…],"notification_problems":[…],"reason"}`；
         拒信只有 `unknown_retired` 那一档多一个 `code` 格（`{"id","code","why"}` ——
-        理由码是机器读的那一格，改前那一句"它只是静默"是没有根据的结论、也没有
-        理由码）；权限拒绝那一档也带 `code`（`no_actor` / `unknown_actor` /
-        `not_authorized`）；`expects` 为空的行带 `no_obligation`（它没有可撤的义务）。
+        理由码是机器读的那一格：只写一句"它只是静默"是没有根据的结论、也没有理由码）；
+        权限拒绝那一档也带 `code`（`no_actor` / `unknown_actor` / `not_authorized`）；
+        `expects` 为空的行带 `no_obligation`（它没有可撤的义务）。
         三态：读不成 ⇒ `checked=False`，不许折成"没有要作废的"。
         """
         self._refuse_write_in_snapshot("作废板项（void_items）")
@@ -4920,7 +4912,7 @@ class Conductor:
         """`void_items` 的逐项前置判据。
 
         返回 `(refusal, cur, authority)`：`refusal` 非 None ⇒ 这一条不改，原样进
-        `out["refused"]` 并跳过；否则 `cur` 是改前的状态、`authority` 是权限读数
+        `out["refused"]` 并跳过；否则 `cur` 是写之前的状态、`authority` 是权限读数
         （写盘那一段的留痕要用它）。刻意用元组而不是再定义一种 dict 返回形状：
         它只在 `void_items` 的一次循环里活着。
         """
@@ -4931,7 +4923,7 @@ class Conductor:
         cur = str(row.get("item_state") or "queued")
         if cur == "done":
             return {"id": iid, "why": "已经是终态（重复作废不改任何格）"}, cur, {}
-        # ---- 权限（业主 2026-11-06 裁定 ①）：两档都先过这一关 -------------
+        # ---- 权限：两档都先过这一关 -------------
         # 顺序刻意的：先判"你是谁、能不能动这一条"，再判"这一条该不该作废"。
         # 反过来（先判 deaf 再判权限）会让没有权限的人也能把一条项"推进到
         # 某个分支"，读数上分不清"它没权限"与"它没证明"。
@@ -4946,15 +4938,15 @@ class Conductor:
         if str(row.get("expects") or "") == "":
             # 撤销后的行（`done` + `expired`）已经在上面被终态那一档拦下；走到
             # 这里的空 expects 只可能是"通知"那种本来就不要求任何动作的行 ——
-            # 没有义务可撤。旧工作区里那些 `revoke-notice@…` 行（D13 之前落的）
-            # 也正是这一档：它们出生就是 done+expired、expects 为空 ⇒ 撤不动，
-            # 于是"撤通知又生成通知"的环在结构上已经不成立。
+            # 没有义务可撤。旧工作区里那些 `revoke-notice@…` 行也正是这一档：它们出生
+            # 就是 done+expired、expects 为空 ⇒ 撤不动，于是"撤通知又生成通知"的环在
+            # 结构上已经不成立。
             return {
                 "id": iid, "code": "no_obligation",
                 "why": ("它不要求任何动作（expects 为空）⇒ 没有可撤的义务"
                         "（撤销不是删行）")}, cur, authority
         if not revoke:
-            # 旧口径（作废）：只收 expects=ack 的通知，而且收件人必须叫不醒。
+            # 作废那一档：只收 expects=ack 的通知，而且收件人必须叫不醒。
             if str(row.get("expects") or "") != "ack":
                 return {"id": iid,
                         "why": f"expects={row.get('expects')!r}：要交付的活不许作废"
@@ -4971,17 +4963,17 @@ class Conductor:
             if not gate.get("silent"):
                 return {"id": iid, "why": (
                     f"{who} 还在跑（state={gate.get('state')}）⇒ 它自己会 ack，不许代它作废")}, cur, authority
-            # 2026-10-29（业主：「静默的唤醒就是接到消息被唤醒」）：静默不再等于
-            # "永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，它自己能 ack。
-            # 所以作废的正当性只剩一条：这个号叫不醒了（已销号 / 兜底表被永久抑制）。
+            # 静默不等于"永远不会再处理这条通知" —— 兜底表被打掉就会把它叫起来，
+            # 它自己能 ack。所以作废的正当性只剩一条：这个号叫不醒了
+            # （已销号 / 兜底表被永久抑制）。
             receiver = str(row.get("parent_task_id") or "")
             # 销号名单按父存：收件人自己的父就是"该读哪一份名单"（`rows` 里就有那一行，
-            # 不必在事务里再读一趟台账）。这一半此前"永远不成立"，于是 deaf 只剩
-            # `lifeline_suppressed` 那一半在工作。
+            # 不必在事务里再读一趟台账）。它与 `lifeline_suppressed` 各答一半：
+            # 一半是"号销了"，一半是"兜底表被打掉了"。
             receiver_parent = str((rows.get(receiver) or {}).get("parent_task_id") or "")
             # `deaf` 只在读成了的"已销号"（或兜底表被永久抑制）上成立。
             # 销号名单读不全（`unknown`）⇒ 证明不了"它叫不醒" ⇒ 不作废：
-            # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed，2026-10-31）。
+            # 作废不可逆，而"读不出来"不是"它叫不醒"（fail-closed）。
             verdict = "unknown"
             suppressed = False
             try:
@@ -5016,7 +5008,7 @@ class Conductor:
         new["item_state"] = "done"
         new["item_close"] = "expired"
         if revoke:
-            # 丙件（业主 2026-11-06）：撤销之后这一行不再欠任何动作 ——
+            # 丙件：撤销之后这一行不再欠任何动作 ——
             # `expects` 清空、原值进 `expects_was`（schema 只允许 done/expired
             # 的行为空）。留着 `expects="ack"` 会让读的人看着它像还欠一个 ack，
             # 而读侧（open_items_of / board / ack_items）其实都已经不数它了。
@@ -5045,25 +5037,25 @@ class Conductor:
             "reason": reason_text, "from": cur, "to": "done", "at": at,
             "close": "expired", "mode": ("revoke" if revoke else "void"),
             "authority": str(authority.get("mode") or ""),
-            # 刻意没有 `notice_id` 这一格：改后不再落通知行，留一个恒空的键等于
-            # 说"曾经有过一条通知行"（业主 2026-11-09 裁定 ③）。旧行为那一档在下面
-            # 真落了行，它才补上这一格。
+            # 刻意没有 `notice_id` 这一格：缺省这一档不落通知行，留一个恒空的键等于
+            # 说"曾经有过一条通知行"。`REVOKE_POSTS_NOTICE_ROW=True` 那一档真落了行，
+            # 它才补上这一格。
         }
         out["traces"].append(trace)
         if not revoke:
             return
-        # ---- 乙件（业主 2026-11-06）在 2026-11-09（D13）之后换了落法 --------------
+        # ---- 乙件：缺省只留痕，不另落通知行 --------------------------------------
         #
-        # 业主要的是「撤销时自动提醒收件人，且不要 ack」。改前那条提醒另落一条新
-        # `tasks` 行（`kind="notice"`、`done`/`expired`）⇒ 撤 N 条就多 N 行
-        # （真机 t-000095..t-000106 共 12 条）：清理动作让 `tasks` 行数变多，而板项行的
-        # `status` 恒为 `pending`，于是那 N 行在状态报告/网页上又变成"N 条待办"。
+        # 口径是「撤销时自动提醒收件人，且不要 ack」。另落一条新 `tasks` 行
+        # （`kind="notice"`、`done`/`expired`）会让撤 N 条就多 N 行：清理动作让 `tasks`
+        # 行数变多，而板项行的 `status` 恒为 `pending`，于是那 N 行在状态报告/网页上又
+        # 变成"N 条待办"。
         #
-        # 现在提醒不走新行：被撤那一行自己的 `inputs` 已经落了六格留痕
+        # 所以提醒不走新行：被撤那一行自己的 `inputs` 已经落了六格留痕
         # （`revoke:expired:…`，上面那一笔 append-only 的 `mark`），收件人那一侧的
         # 读口 `revoked_recent_of` 读的就是它，`agent_loop.mailbox_digest` 每一拍把最近
         # N 条渲染成【最近被撤销的项】。于是新增 notice 行 = 0，而"谁撤的 / 为什么 /
-        # 你不需要再处理它"一个字都没少（判据 c 的那条可查性读数）。
+        # 你不需要再处理它"一个字都没少。
         if not self.REVOKE_POSTS_NOTICE_ROW:
             if not owner:
                 # 顶层项没有收件人 ⇒ 没有要提醒的人。如实记读数，不编一个收件人。
@@ -5079,7 +5071,7 @@ class Conductor:
                          f"（理由：{reason_text}），你不需要再处理它"),
             })
             return
-        # ---- 旧行为（改前口径）：另落一条 done+expired 的通知行 ------------------
+        # ---- `REVOKE_POSTS_NOTICE_ROW=True` 那一档：另落一条 done+expired 的通知行 ----
         # 保留的唯一理由是反真空（判据把 `REVOKE_POSTS_NOTICE_ROW` 打开，证明"新增行数
         # = 0"真的在数行）；正文与"为什么它必须落成 done + expired"见
         # `_revocation_notice_row` 的 docstring。
