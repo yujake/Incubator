@@ -8057,15 +8057,19 @@ def _paper_text(root: str | Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
-def _paper_statement_rows(root: str | Path) -> list[dict[str, Any]]:
-    """读论文侧要用的台账行（自成一路：不改既有的 `_statement_rows(root, store)`）。"""
-    path = Path(root) / "data" / "statements.json"
+def _ledger_rows(root: str | Path, table: str) -> list[dict[str, Any]]:
+    path = Path(root) / "data" / f"{table}.json"
     if not path.is_file():
         return []
     try:
         return list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
     except (json.JSONDecodeError, OSError):
         return []
+
+
+def _paper_statement_rows(root: str | Path) -> list[dict[str, Any]]:
+    """读论文侧要用的台账行（自成一路：不改既有的 `_statement_rows(root, store)`）。"""
+    return _ledger_rows(root, "statements")
 
 
 def _norm(text: str) -> str:
@@ -8238,16 +8242,6 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         "reason": "" if rows else "`statements` 一行都没有 ⇒ 这一格没读到（不是\"全是 T1\"）",
     }
 
-def _ledger_rows(root: str | Path, table: str) -> list[dict[str, Any]]:
-    path = Path(root) / "data" / f"{table}.json"
-    if not path.is_file():
-        return []
-    try:
-        return list((json.loads(path.read_text(encoding="utf-8")) or {}).get("rows") or [])
-    except (json.JSONDecodeError, OSError):
-        return []
-
-
 def t4_ladder_problems(root: str | Path, *,
                        levels: Iterable[Mapping[str, Any]] | None = None) -> list[str]:
     """T4 的"造梯子"记录：每条 T4 的命题都要能指到一次尝试（成了或没成都算）。空清单 = 合格。
@@ -8265,7 +8259,7 @@ def t4_ladder_problems(root: str | Path, *,
     命题重读一次 `nontriviality.jsonl`（改前两处各跑一遍 = 每条命题两份全文件解析）。
     不给 ⇒ 自己现判（`agentflow closing --t4` 那条 CLI 入口就是这么调的），读数同值。
     """
-    items: list[Mapping[str, Any]]
+    items: Iterable[Mapping[str, Any]]
     if levels is None:
         from . import secretary as _SEC
 
@@ -8276,7 +8270,7 @@ def t4_ladder_problems(root: str | Path, *,
                           "level": _SEC.nontriviality_of(
                               root, text, stmt_id=str(row.get("stmt_id") or "")).get("level")})
     else:
-        items = [dict(x) for x in levels]
+        items = levels
     questions = _ledger_rows(root, "research_questions")
     plans = _ledger_rows(root, "attack_plans")
     haystack = " ".join(json.dumps(r, ensure_ascii=False, default=str) for r in questions + plans)
