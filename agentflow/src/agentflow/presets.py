@@ -296,23 +296,23 @@ def read_preset(path: pathlib.Path, *, root: pathlib.Path, trust: str,
             return Preset(**base, broken=f"{PRESET_MANIFEST_NAME} 的最外层必须是映射")
         meta = dict(loaded)
 
+    name = str(meta.get("name", ""))
+    description = str(meta.get("description", ""))
     composition = path / COMPOSITION_NAME
     if not composition.is_file():
-        return Preset(**base, name=str(meta.get("name", "")),
-                      description=str(meta.get("description", "")),
+        return Preset(**base, name=name, description=description,
                       broken=f"缺组装文件 {COMPOSITION_NAME}")
 
     try:
         rows_raw = load_yaml(composition)
     except (OSError, ValueError, yaml.YAMLError) as exc:
-        return Preset(**base, name=str(meta.get("name", "")),
-                      description=str(meta.get("description", "")),
+        return Preset(**base, name=name, description=description,
                       broken=f"组装文件读不了：{type(exc).__name__}: {exc}")
 
     rows, broken = _read_rows(rows_raw, resolve=resolve)
     preset = Preset(**base,
-                    name=str(meta.get("name", "")),
-                    description=str(meta.get("description", "")),
+                    name=name,
+                    description=description,
                     order=int(meta.get("order", 100) or 100),
                     rows=rows, broken=broken)
     return preset
@@ -349,7 +349,7 @@ def _read_rows(rows_raw: Any, *, resolve: Callable[[str], Any] | None) -> tuple[
         rows.append(PresetRow(
             id=row_id, name=row_name, config=raw.get("config"),
             disabled=gate, group=bool(raw.get("group")),
-            isolate={str(k): bool(v) for k, v in dict(isolate).items()},
+            isolate={str(k): bool(v) for k, v in isolate.items()},
         ))
     return tuple(rows), ""
 
@@ -383,7 +383,7 @@ def discover(*, roots: Sequence[PresetRoot] = (), shipped_root: pathlib.Path | N
     悄悄换掉内置预设的全部行为，而列表面上看不出哪一份在跑。
     """
     out: list[Preset] = []
-    seen: dict[str, Preset] = {}
+    seen: set[str] = set()
     for root in scan_roots(roots=roots, shipped_root=shipped_root,
                            include_shipped=include_shipped, include_user=include_user,
                            home=home):
@@ -396,7 +396,7 @@ def discover(*, roots: Sequence[PresetRoot] = (), shipped_root: pathlib.Path | N
             preset = read_preset(child, root=base, trust=root.trust, resolve=resolve)
             if preset.id in seen:
                 continue                      # 前一个根赢（含"坏的那一份也占住 id"）
-            seen[preset.id] = preset
+            seen.add(preset.id)
             out.append(preset)
     return tuple(out)
 
@@ -449,9 +449,9 @@ class PresetMount:
         """
         if preset.broken:
             raise PresetError(f"预设 {preset.id!r} 不能挂：{preset.broken}")
-        if not self.is_stale(preset):
-            return self._mounted[preset.id]
         stamp = self.stamp_of(preset)
+        if stamp is not None and self._stamps.get(preset.id) == stamp:
+            return self._mounted[preset.id]
         if stamp is None:
             raise PresetError(f"预设 {preset.id!r} 的组装文件不见了：{preset.composition_path}")
         value = compose(preset)
