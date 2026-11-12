@@ -1,37 +1,23 @@
 """F 收工自动提交：把「已拿签、尚未提交」的稿写进 F 自己那一行的 `tasks.artifacts`。
 
-（2026-11-11 从 `agent_f/step.py::_Step._auto_submit_signed` 的方法体搬出；业主裁定 ①
-「F侧报告收工时自动提交其名下未提交的V签稿」。拆出的理由：同一批把 `step.py` 556 → 813
-行、把那个方法推到 215 行 —— 业主口径是基线不许抬，所以按「读 / 写」拆：记号与
-扫描住在 `agent_f/submission.py`，本模块只回答「这一趟选谁、怎么落进 artifacts」。）
+为什么由框架写、不读模型给的清单：模型只说「收工」这件事；提交哪几份是盘上的事实
+（V 的颁发表 × 现行文件），由框架现读现写 —— 于是"提交单"不可能被模型漏报或虚报。
 
-## 为什么由框架写、不读模型给的清单（业主 2026-11-11 裁定 ①）
+三态（不许把「没提交」写成「提交了」）：`auto_submitted` 是这一趟真写进 artifacts 的
+那几份（稿号 + 正文 sha + 签 sha + 文件字节 sha + 时刻），并发下别人先写的那一份不算
+这一趟的；`still_unsubmitted` 是有文件、这一趟没提交的，逐条给理由（`unsigned` /
+`body_changed_after_sign` / `sign_unbacked` / `already_submitted` / `no_task_row` /
+`write_failed` / `ambiguous_path`）；`checked=False` 是这一格没查成（颁发表读不出来 /
+写不进去），不是「没有要提交的」。
 
-模型只说「收工」这件事；提交哪几份是盘上的事实（V 的颁发表 × 现行文件），
-由框架现读现写 —— 于是"提交单"不可能被模型漏报或虚报。
-
-## 三态（不许把「没提交」写成「提交了」）
-
-- `auto_submitted`：这一趟真写进 artifacts 的那几份（稿号 + 正文 sha +
-  签 sha + 文件字节 sha + 时刻）；并发下别人先写的那一份不算这一趟的；
-- `still_unsubmitted`：有文件、这一趟没提交的，逐条给理由
-  （`unsigned` / `body_changed_after_sign` / `sign_unbacked` /
-  `already_submitted` / `no_task_row` / `write_failed` / `ambiguous_path`）；
-- `checked=False`：这一格没查成（颁发表读不出来 / 写不进去）——
-  不是「没有要提交的」。
-
-## 幂等
-
-`artifacts` 里已有该稿号的 `mss:` 记号 ⇒ 一个字节都不再写（判据是稿号，
-与版本无关 —— 业主 2026-11-11 追加裁定）。
-
-## 为什么写 `tasks` 而不新建表
-
-`tasks.artifacts` 是既有的「这次召唤产出了哪些引用」那一格（`conductor.finish`
-本来就 append-only 合并它），F 的提交单落在那里，D 才有一处可读的「已提交」。
+幂等：`artifacts` 里已有该稿号的 `mss:` 记号 ⇒ 一个字节都不再写（判据是稿号，与版本
+无关）。为什么写 `tasks` 而不新建表：`tasks.artifacts` 是既有的「这次召唤产出了哪些
+引用」那一格（`conductor.finish` 本来就 append-only 合并它），提交单落在那里，D 才有
+一处可读的「已提交」。
 
 公开入口只有 :func:`auto_submit_signed`；`_still` / `_select` / `_write_fresh` 是它的
-三段（选谁 / 事务里落 artifacts），拆开只为不把一件事写成两百行。
+三段（选谁 / 事务里落 artifacts），拆开只为不把一件事写成两百行。记号与扫描住在
+`agent_f/submission.py`。
 """
 from __future__ import annotations
 
