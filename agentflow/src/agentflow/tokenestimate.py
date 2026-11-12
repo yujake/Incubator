@@ -72,7 +72,9 @@ def estimate_text_tokens(text: Any, *, chars_per_token: float | None = None) -> 
     """
     body = "" if text is None else str(text)
     rate = _rate(chars_per_token)
-    return int(-(-len(body) // rate)) + BLOCK_OVERHEAD if rate else BLOCK_OVERHEAD
+    # `_rate` 只会给出正数（含 inf），所以"rate 为假"那一支结构上到不了 ——
+    # 留着它只是让读者以为还有一条零密度分支。
+    return int(-(-len(body) // rate)) + BLOCK_OVERHEAD
 
 
 def estimate_structural_block(block: Any, *, chars_per_token: float | None = None) -> int:
@@ -175,10 +177,12 @@ def estimate_messages(messages: Sequence[Mapping[str, Any]], *,
     rate = _rate(chars_per_token)
     tokens = 0
     chars = 0
+    count = 0
     for m in (messages or ()):
         tokens += estimate_message(m, chars_per_token=rate)
         chars += len(str(m.get("content") or ""))
-    return Estimate(tokens=tokens, chars=chars, messages=len(messages or ()),
+        count += 1
+    return Estimate(tokens=tokens, chars=chars, messages=count,
                     chars_per_token=rate, source=str(source))
 
 
