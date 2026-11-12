@@ -818,7 +818,7 @@ def _verification_from_ledger(rows: Sequence[Mapping[str, Any]], split: Any,
                               quote_fn_name: str = "quoteverify.check_quote",
                               text_ref_problems: Sequence[str] = ()) -> dict[str, Any]:
     """把原子断言台账折成 `verify_claims` 同形的返回值（下游读数字的唯一入口）。
-    为什么要这一层：下游（报告证据段、`run-manifest.json` 的 `claims`、`evidence.json` 的 `claims`）此前读的
+    为什么要这一层：下游（报告证据段、`run-manifest.json` 的 `claims`、`evidence.json` 的 `claims`）读的
     是 `verify_claims` 的返回，而台账现在由 `claims.ledger_rows` 给（多带 `claim_id` / `basis` / 没有引文也
     必须落一行），所以这里做一次投影，而不是让每个读点各算一遍计数 —— 各算一遍就是第二份口径，而"报告与
     台账数字不一致"正是这一层最该防的形态。计数口径与 `evidence.verify_claims` 逐字一致、便于对照：`total`
