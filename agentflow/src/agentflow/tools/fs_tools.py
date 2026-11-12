@@ -1486,17 +1486,18 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     `MAX_EDIT_BYTES` 就拒 —— 那说明这次改动不是"定点"。
     """
     target = _resolve(ctx, path)
+    # 相对路径在这一支里被读十一次（每条拒信、成功返回的 data 与 meta），算一次。
+    rel = _rel(ctx, target)
     # 保留路径闸同样在最前面（`fs.edit` 能改正文，等于绕过同一条保留表）：
     # 与 `fs.write` 共用 `_reserved_refusal` 这一个入口（账本区 + 手稿两半都在里面），
     # 不是两份表、也不是每个口各判一遍。`root` 供"研究手稿里那一节是不是引用 F"的判据用；
     # `edit=True` 是 2026-11-11（甲）那格窄豁免的唯一开关（只对 B / 自己号段 / 未签 /
     # `reports/b-proof-<六位号>.md`）。
-    denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root, edit=True)
+    denied = _reserved_refusal(rel, _caller_role(), root=ctx.root, edit=True)
     if denied is not None:
         return denied
     # 读后写那一闸在最前面（policy 层先于 provider 层，逐字照 DSH `POL:64-70` → `FSL:840`）：
     # DSH 的编辑闸跑在逐字匹配之前，为的是"陈旧的编辑绝不报成误导性的「找不到」"。
-    rel = _rel(ctx, target)
     owner = OBS.current_owner()
     key = str(target)
     try:
@@ -1521,43 +1522,47 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
         return fail(OBS.remedy_stale(f'不能改 "{rel}"：它在你读过之后变过了'),
                     path=rel, kind=OBS.CODE_STALE_VERSION,
                     observed_version=observed_version, version_now=OBS.stat_version(target))
-    if sha256 and sha256 != hashlib.sha256(before).hexdigest():
+    # `before` 的哈希只在"调用方给了 sha256"时算一次：前置核对与失败支的
+    # `sha256_now` / 成功返回的 `sha256_before` 要的是同一个值（改前各算一遍，
+    # 等于把整份正文哈希两次）；没给 sha256 时仍留到成功返回处现算（失败路径不付这笔钱）。
+    before_sha = hashlib.sha256(before).hexdigest() if sha256 else ""
+    if sha256 and sha256 != before_sha:
         return fail(
             f"{rel} 现在这一版的 sha256 与调用方给的不符 ⇒ 拒绝改。"
             "（这一条防的是「我拿到的是别人改之前的那一版」—— 盲改会把别人的改动覆盖掉。）"
             "建议：先 `fs.read` 这一份，按返回的 `meta.sha256` 重交（那是现在这一版）",
             path=rel, kind="sha_mismatch",
-            sha256_now=hashlib.sha256(before).hexdigest(),
+            sha256_now=before_sha,
         )
     text, encoding, had_errors = _decode_text(before)
     if had_errors:
-        return fail(f"{_rel(ctx, target)} 不是干净的 UTF-8（解码时有替换字符）⇒ 拒绝改，"
+        return fail(f"{rel} 不是干净的 UTF-8（解码时有替换字符）⇒ 拒绝改，"
                     "免得把编码问题写坏成内容问题；建议：先 `fs.read` 看 `meta.encoding` / "
                     "`meta.had_errors`，确要换掉整份正文就用 `fs.write(overwrite=true)` "
                     "写正确编码的内容",
-                    path=_rel(ctx, target), kind="not_utf8", encoding=encoding)
+                    path=rel, kind="not_utf8", encoding=encoding)
     if not old_string:
         return fail("old_string 不能为空（空串会在每一处之间插入 new_string）",
-                    path=_rel(ctx, target), kind="empty_old_string")
+                    path=rel, kind="empty_old_string")
     count = text.count(old_string)
     if count == 0:
-        return fail(f"old_string 在 {_rel(ctx, target)} 里找不到（逐字比对，含空白）⇒ 拒绝改；"
+        return fail(f"old_string 在 {rel} 里找不到（逐字比对，含空白）⇒ 拒绝改；"
                     "建议：先 `fs.read` 这一份，把 `old_string` 从原文逐字复制（含空白）；"
                     "整份重写用 `fs.write`",
-                    path=_rel(ctx, target), kind="not_found_old_string")
+                    path=rel, kind="not_found_old_string")
     if count > 1 and not allow_multiple:
         return fail(
-            f"old_string 在 {_rel(ctx, target)} 里出现了 {count} 次 ⇒ 拒绝改。"
+            f"old_string 在 {rel} 里出现了 {count} 次 ⇒ 拒绝改。"
             "要改哪一处，就把 old_string 写长到唯一（带上前后文），"
             "或显式 allow_multiple=true 表示「每一处都换」。",
-            path=_rel(ctx, target), kind="ambiguous", occurrences=count,
+            path=rel, kind="ambiguous", occurrences=count,
         )
     payload = new_string.encode("utf-8")
     if len(payload) > MAX_EDIT_BYTES:
         return fail(
             f"new_string 有 {len(payload)} 字节 > 单次定点替换上限 {MAX_EDIT_BYTES} 字节 ⇒ 拒绝。"
             "（一次改动这么大就不是「定点」了：请拆成几处，或改用整文件 fs.write。）",
-            path=_rel(ctx, target), kind="too_large", bytes=len(payload),
+            path=rel, kind="too_large", bytes=len(payload),
             max_bytes=MAX_EDIT_BYTES,
         )
     after_text = text.replace(old_string, new_string)
@@ -1574,15 +1579,15 @@ def fs_edit(ctx: FsContext, *, path: str, old_string: str, new_string: str,
     OBS.observed_gate().note_present(owner, target)
     return ok(
         {
-            "path": _rel(ctx, target),
-            "sha256_before": hashlib.sha256(before).hexdigest(),
+            "path": rel,
+            "sha256_before": before_sha or hashlib.sha256(before).hexdigest(),
             "sha256_after": hashlib.sha256(after_bytes).hexdigest(),
             "replacements": count,
             "bytes_before": len(before),
             "bytes_after": len(after_bytes),
             "note": str(note or ""),
         },
-        path=_rel(ctx, target),
+        path=rel,
         replacements=count,
         note=str(note or ""),
     )
