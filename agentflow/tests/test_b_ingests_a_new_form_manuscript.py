@@ -219,7 +219,7 @@ def test_e_the_path_number_no_longer_comes_from_the_delivery(tmp_path):
     assert not hasattr(RS._RegisterStatement, "_pointer_path_reading")
     assert not hasattr(RS._RegisterStatement, "_inline_path_reading")
     for fn in (Secretary.record_statement, Secretary._record_statement_tx,
-               Secretary._merge_into_proposition,
+               Secretary._merge_into_proposition, Secretary.extract_manuscript,
                RS._RegisterStatement._register_statement_impl):
         text = inspect.getsource(fn)
         assert "manuscript_proof_no" not in text, (

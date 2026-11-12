@@ -31,12 +31,11 @@
 | b | 正控：step 只给 `path_group=2` ⇒ `used_by` 不带尾巴、`path_group=2` | 分段扫出来的那一路的形态 |
 | c | 负控（canonical）：两格都不给 ⇒ 不带尾巴、`path_group=1` | 老写法逐字不变 |
 | d | 解析侧：`depsection.deps_groups` 的手稿那一路两格相等 | 那一路的性质不变（谁把它拆开就红） |
-| e | 源码面：`register_statement` 拼依赖步骤时两格仍取自两个表达式 | 防止有人（包括我）再"顺手合并"一次 |
+| e | 源码面：唯一决定这两个号的地方（秘书 `_stamp_path_number`）里两格仍由两个表达式分别给出 | 防止有人（包括我）再"顺手合并"一次 |
 """
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -44,7 +43,6 @@ from agentflow import depsection as DS
 from agentflow import secretary as SEC
 
 REPO = Path(__file__).resolve().parents[1]
-B_SOURCE = REPO / "src" / "agentflow" / "agent_b" / "register_statement.py"
 
 
 class _Tx:
@@ -114,51 +112,20 @@ def test_d_the_manuscript_dependency_section_gives_both_numbers_the_same_value()
         assert int(step["proof_no"]) == int(step["path_group"]), step
 
 
-def test_e_the_b_action_still_sources_the_two_numbers_separately():
-    """e：源码面 —— 拼依赖步骤时两格的表达式不同（各自来自各自的来源）。
+def test_e_the_single_writer_still_sources_the_two_numbers_separately():
+    """e：源码面 —— 唯一决定这两个号的地方两格仍取自两个表达式。
 
-    这一条防的是"顺手合并"：谁把 `path_group=` 那格改成与 `proof_no=` 同一个表达式，
-    第 2 条路径的依赖就会顶着第 1 份证明的 `used_by` 落库（或反过来），
-    而所有正题仍然绿 —— 那次实测的代价是既有判据红了两条。
+    这一条防的是"顺手合并"。2026-11-12 之后"写入路径号"只剩一处：B 的秘书在收录事务
+    里调 `_stamp_path_number`（`register_statement` 里那两处 `dict(step, proof_no=…,
+    path_group=…)` 已随分配下沉一起删掉）。所以扫描面从 B 的那个文件挪到这里：
+    两格仍是两条赋值、右端仍是两个不同的来源（`proof_no` = 这一份证明正文，
+    `path_group` = 这一条可选路径），而且 `path_group` 只在该盖的那一档盖
+    （证明正文分段扫出来的那一路保留段落下标）。谁把它们并成一个表达式，这条就红。
     """
-    text = B_SOURCE.read_text(encoding="utf-8")
-    pairs = _dep_step_pairs(text)
-    assert len(pairs) >= 2, f"反真空：应当能找到两处拼依赖步骤的地方（找到 {pairs!r}）"
-    assert any(left != right for left, right in pairs), (
-        "两处拼依赖步骤的地方，至少有一处必须让两个号来自不同来源（那一处就是 inline 支）："
-        f"{pairs!r}"
-    )
+    import inspect
 
-
-def _balanced(text: str, start: int, *, stops: str) -> tuple[str, int]:
-    """从 `start` 起读一段，括号配平后停在 `stops` 里的那个字符（顶层）。"""
-    depth = 0
-    out: list[str] = []
-    i = start
-    while i < len(text):
-        ch = text[i]
-        if depth == 0 and ch in stops:
-            break
-        if ch in "([{":
-            depth += 1
-        elif ch in ")]}":
-            if depth == 0:
-                break
-            depth -= 1
-        out.append(ch)
-        i += 1
-    return "".join(out).strip(), i
-
-
-def _dep_step_pairs(text: str) -> list[tuple[str, str]]:
-    """把源码里每个 `dict(step, proof_no=…, path_group=…)` 的两段表达式取出来。"""
-    pairs: list[tuple[str, str]] = []
-    for m in re.finditer(r"dict\(step,\s*proof_no=", text):
-        left, at = _balanced(text, m.end(), stops=",")
-        rest = text[at:]
-        m2 = re.match(r",\s*path_group=", rest)
-        if not m2:
-            continue
-        right, _end = _balanced(text, at + m2.end(), stops=")")
-        pairs.append((left, right))
-    return pairs
+    src = inspect.getsource(SEC._stamp_path_number)
+    assert 'one["proof_no"] = int(proof_no)' in src, src
+    assert 'one["path_group"] = int(path_group)' in src, src
+    # 分段扫出来的那一路：`path_group` 不被盖（保留段落下标）。
+    assert "proof_scan" in src and "single_group" in src, src

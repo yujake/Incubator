@@ -6112,6 +6112,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         for family in ("f", "e", "b"):
             if sid and rel == f"reports/{family}-proof-{sid}.md":
                 return True
+        # 行上记的稿号 == 这份稿的稿号 ⇒ 这就是本行那一份稿：正文变了是改稿，
+        # 不是第二条路径（D 把 F 的稿重交、或 F 的稿在登记后才写全的那一档）。
+        try:
+            from .. import vsigns as _VS
+
+            mid = _VS.manuscript_id_of(rel)
+        except Exception:  # noqa: BLE001 —— 认不出稿号就退回下面那一条判据
+            mid = ""
+        if mid and str(row.get("manuscript_id") or "") == str(mid):
+            return True
         canon_sha = _PR.proof_sha(canon)
         try:
             rows, _bad = _VR.list_verifications(
@@ -6198,10 +6208,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return _refuse("secretary_unavailable",
                            "这一趟没有秘书 ⇒ 收下的稿写不进依赖面（不许退回'B 自己写'）："
                            + (f"{self.secretary_problem}" if self.secretary_problem else ""))
+        #: 这一份稿的身份：传了正文就用它；只递指针（正文空）⇒ 用这一行在册的正文
+        #: （收方读稿登记收的是"这一条命题的那一份稿"，号必须认回它，不许另开一条）。
+        _carried_body = str(proof_text or "") or str(row.get("proof_text") or "")
         written = dict(sec.record_manuscript_dependency_face(
             stmt_id, deps_groups, note="b.receive_carried_manuscript",
             manuscript=str((manuscript or {}).get("path") or ""),
-            body_sha=_PR.proof_sha(proof_text)) or {})
+            body_sha=_PR.proof_sha(_carried_body)) or {})
         if not written.get("checked"):
             return _refuse(str(written.get("refused") or "dependency_face_not_written"),
                            str(written.get("reason") or ""))
@@ -6990,17 +7003,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         上的，签文件里没有号（见 `vsigns._sign_is_for_this_path`）。
         """
         text = str((cells.get("proof_text") or {}).get("value") or "")
+        #: 落点号 = 秘书分到的路径号（`write_no`，没有就用 canonical）。签闸按这个号
+        #: 认签：V 的签可以带号，号是路径号（改前用调用方的 `want_no` ⇒ 第二条路径的
+        #: 签被当成"没签 #p1"，整笔拒）。
+        no = max(int(write_no or 0), int(want_no or 1))
         gate = self._unsigned_proof_gate(
             origin=str(row.get("origin") or ""),
             lit_id=str(row.get("source_lit_id") or ""),
-            proof_text=(text if want_no == 1 else ""),
-            proofs_listed=([{"proof_no": want_no, "text": text}]
-                           if want_no >= 2 else None),
-            row=row, v_sign={}, store=self.store, proof_no=want_no)
+            proof_text=(text if no == 1 else ""),
+            proofs_listed=([{"proof_no": no, "text": text}]
+                           if no >= 2 else None),
+            row=row, v_sign={}, store=self.store, proof_no=no)
         if gate.get("refused"):
             return {"written": False, "code": str(gate["refused"]),
                     "why": str(gate.get("reason") or "")}
-        no = max(int(write_no or 0), int(want_no or 1))
         # ---- 2026-11-11（缺陷 ①）：这一号要交 bits 进写口，逐条表才补得上 ----
         #
         # 为什么只补 `no >= 2` 这一支：canonical（#p1）那一笔的签名早就在
@@ -7393,8 +7409,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,
-                      want_no: int, target: str, path: str,
-                      append_new_path: bool = False) -> dict:
+                      want_no: int, target: str, path: str) -> dict:
         """`mode=apply`：逐格回填（先 dependencies，再 statements；部分写如实回执）。
 
         ## 路径号（业主口径：归秘书）
@@ -7474,7 +7489,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 这一笔是"同一命题的另一条证明路径"、而没请求依赖格 ⇒ 号仍要由秘书分
             # （只分号、不写边：`reserve=True`）。号在秘书那一笔事务里定下来，正文写口
             # 用它；两条路的冲突由写口的 `proof_no_taken` 兜住（不会静默覆盖）。
-            if append_new_path and not deps_written:
+            if bool(plan.get("append_new_path")) and not deps_written:
                 reserved = dict(sec.record_manuscript_dependency_face(
                     target, [], note=f"own.ingest_manuscript:reserve:{target}",
                     manuscript=_norm_manuscript_rel(path),
@@ -7560,41 +7575,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "proof_text",
                     str(evidence.get("refused") or "evidence_recompute_failed"),
                     str(evidence.get("reason") or ""))
-            # ---- 7) `kind` 格的 receipt 反映派生升档（业主裁量 ③ / 2026-11-10 裁量 ④） ---
-            #
-            # 稿头没有 `- 证据种类：` ⇒ 这一格没有"从稿里写"：`outcome` 记 `kept`
-            # （不是 not_applicable —— 它确实被派生证据满足了一部分），并带
-            # `kind_upgraded={from,to,basis}`；`_ingest_diff` 会把它从
-            # `requested_not_filled` 里排除（见 `_ingest_derived_satisfied`），diff 只留
-            # 真的没满足的格。已 filled / unchanged 的格保持原 outcome，只补这一格读数。
-            _kind_cell = cells.get("kind")
-            if isinstance(_kind_cell, Mapping):
-                _up = dict(evidence.get("kind_upgraded") or {})
-                if not _up:
-                    _trace = dict(evidence.get("kind_trace") or {})
-                    if (str(_trace.get("to") or "") == str(evidence.get("kind") or "")
-                            and str(_trace.get("to") or "") in _EB.KIND_UPGRADE_TARGETS
-                            and not bool(_trace.get("downgraded"))):
-                        _up = dict(_trace)
-                if str(_up.get("to") or "") in _EB.KIND_UPGRADE_TARGETS:
-                    one = dict(_kind_cell)
-                    one["kind_upgraded"] = {
-                        "from": str(_up.get("from") or ""),
-                        "to": str(_up.get("to") or ""),
-                        "basis": str(_up.get("basis") or ""),
-                    }
-                    if (bool(one.get("requested"))
-                            and str(one.get("outcome") or "") not in ("filled", "unchanged")):
-                        one["outcome"] = "kept"
-                        one["writable"] = False
-                        one.pop("code", None)
-                        one["reason"] = (
-                            "稿头没有声明更强的档 ⇒ 这一格没有从稿里写；但派生证据把它"
-                            f"升到 {one['kind_upgraded']['to']}"
-                            f"（依据 {one['kind_upgraded']['basis'] or '（未记录）'}）"
-                            "⇒ 回执记 kept + kind_upgraded，不计入 diff.requested_not_filled")
-                    cells["kind"] = one
-                    out["cells"] = cells
+            self._ingest_apply_kind_receipt(cells, evidence)
         out["diff"] = self._ingest_diff(out, requested)
         problem = self._ingest_invariant_problem(out)
         if problem:
@@ -7624,6 +7605,46 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                 "record_manuscript_dependency_face"}
         out["reason"] = str(out.get("reason") or "逐格回填完成")
         return out
+
+    @staticmethod
+    def _ingest_apply_kind_receipt(cells: dict, evidence: Mapping) -> None:
+        """`kind` 格的 receipt 反映派生升档（`outcome=kept` + `kind_upgraded`）。
+
+        稿头没有 `- 证据种类：` ⇒ 这一格没有"从稿里写"：`outcome` 记 `kept`（不是
+        `not_applicable` —— 它确实被派生证据满足了一部分），并带
+        `kind_upgraded={from,to,basis}`；`_ingest_diff` 会把它从
+        `requested_not_filled` 里排除（见 `_ingest_derived_satisfied`），diff 只留
+        真的没满足的格。已 filled / unchanged 的格保持原 outcome，只补这一格读数。
+        """
+        _kind_cell = cells.get("kind")
+        if not isinstance(_kind_cell, Mapping):
+            return
+        _up = dict(evidence.get("kind_upgraded") or {})
+        if not _up:
+            _trace = dict(evidence.get("kind_trace") or {})
+            if (str(_trace.get("to") or "") == str(evidence.get("kind") or "")
+                    and str(_trace.get("to") or "") in _EB.KIND_UPGRADE_TARGETS
+                    and not bool(_trace.get("downgraded"))):
+                _up = dict(_trace)
+        if str(_up.get("to") or "") not in _EB.KIND_UPGRADE_TARGETS:
+            return
+        one = dict(_kind_cell)
+        one["kind_upgraded"] = {
+            "from": str(_up.get("from") or ""),
+            "to": str(_up.get("to") or ""),
+            "basis": str(_up.get("basis") or ""),
+        }
+        if (bool(one.get("requested"))
+                and str(one.get("outcome") or "") not in ("filled", "unchanged")):
+            one["outcome"] = "kept"
+            one["writable"] = False
+            one.pop("code", None)
+            one["reason"] = (
+                "稿头没有声明更强的档 ⇒ 这一格没有从稿里写；但派生证据把它"
+                f"升到 {one['kind_upgraded']['to']}"
+                f"（依据 {one['kind_upgraded']['basis'] or '（未记录）'}）"
+                "⇒ 回执记 kept + kind_upgraded，不计入 diff.requested_not_filled")
+        cells["kind"] = one
 
     def _ingest_apply_numeric_evidence(self, cells: dict, row: Mapping, *,
                                        path: str) -> dict:

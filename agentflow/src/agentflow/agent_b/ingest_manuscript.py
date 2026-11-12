@@ -155,11 +155,10 @@ class _IngestManuscript:
             return self._ingest_fail(out, _code, _why)
         out["manuscript"]["proof_no"] = want_no
         if proof_no not in (None, ""):
-            #: 调用方还塞了旧口径的号 ⇒ 忽略，但要让读的人看见"这个号不是它给的"。
+            #: 旧口径的号：忽略，但要让读的人看见"这个号不是它给的"。
             out["proof_no_ignored"] = {
                 "given": str(proof_no), "by": "调用方",
-                "why": ("路径号 / 证明号由秘书在收录事务里分配（`assign_path_group`）"
-                        "⇒ 调用方给的这个数不采信；稿名里的 `-p<N>` 也不再是判据"),
+                "why": "号由秘书在收录事务里分配；调用方给的这个数不采信",
             }
 
         # ---- 目标行（apply / preview 必须已在册；register 没有目标行）
@@ -192,19 +191,10 @@ class _IngestManuscript:
         path_no, _code, _why = 0, "", ""
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
-        #: 这一份是同一命题的另一条证明路径吗（换了稿 / 换了正文）？判据与登记
-        #: 那一支同一处（`_rewrite_is_the_same_proof`：同一份稿改正文 ⇒ 改稿；换稿
-        #: ⇒ 新路径）。只在这里决定"计划说追加还是冲突"，不决定路径号。
-        _proof_value = str((got_cells.get("proof_text") or {}).get("value") or "")
-        _append_new_path = bool(
-            str(mode) == "apply" and row is not None and _proof_value.strip()
-            and str(row.get("proof_text") or "").strip()
-            and not self._rewrite_is_the_same_proof(
-                stmt_id=target, row=row, manuscript_path=rel,
-                proof_text=_proof_value))
-        plan_no = int(want_no or 1)
-        plan = _MI.plan_cells(row, got_cells, str(conflict), family=family,
-                              proof_no=plan_no, append_new_path=_append_new_path)
+        plan = _MI.plan_cells(
+            row, got_cells, str(conflict), family=family, proof_no=int(want_no or 1),
+            append_new_path=self._ingest_new_proof_path(
+                mode=str(mode), row=row, target=target, rel=rel, got_cells=got_cells))
         cells_out = self._ingest_plan_cells(plan, requested)
         out.update(requested_cells=list(requested), cells=cells_out,
                    derived_write=list(plan.get("derived_write") or []),
@@ -224,11 +214,24 @@ class _IngestManuscript:
             return out
         got = self._ingest_apply(
             reading=reading, row=row, plan=plan, out=out, requested=requested,
-            family=family, want_no=want_no, target=target, path=rel,
-            append_new_path=_append_new_path)
+            family=family, want_no=want_no, target=target, path=rel)
         _pg = got.get("path_group")
         _pg_no = int((_pg or {}).get("path_group") or 0) if isinstance(_pg, Mapping) else int(_pg or 0)
         return self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no)
+
+    def _ingest_new_proof_path(self, *, mode: str, row: Mapping, target: str,
+                               rel: str, got_cells: Mapping) -> bool:
+        """这一份是同一命题的另一条证明路径吗（换了稿 / 换了正文）？
+
+        判据与登记那一支同一处（`_rewrite_is_the_same_proof`：同一份稿改正文 ⇒ 改稿；
+        换稿 ⇒ 新路径）。只决定"计划说追加还是冲突"，不决定路径号（号归秘书）。
+        """
+        value = str((got_cells.get("proof_text") or {}).get("value") or "")
+        return bool(
+            str(mode) == "apply" and row is not None and value.strip()
+            and str(row.get("proof_text") or "").strip()
+            and not self._rewrite_is_the_same_proof(
+                stmt_id=target, row=row, manuscript_path=rel, proof_text=value))
 
     def _mark_ingested(self, out: dict, *, rel: str, family: str,
                        path_group: int = 0) -> dict:

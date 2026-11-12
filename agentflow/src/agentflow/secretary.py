@@ -2444,6 +2444,37 @@ def _assign_path_group_in_tx(tx: Any, *, root: Any, statement_id: str,
     return got
 
 
+def _path_material_numbers(groups: Any) -> list[int]:
+    """依赖组里"材料说这是第几条路径"的那几个号（手稿依赖表第 4 列 / 显式给的组号）。
+
+    它们只是材料：产出侧 / 调用方可以写，但最终号由秘书在收录事务里分配。两者
+    不一致时由调用方把读数记进 `path_group_material`（"材料说 X、秘书定为 Y"），
+    不静默丢掉材料那一份说法。
+    """
+    seen: set[int] = set()
+    for group in (groups or ()):
+        for step in (group or ()):
+            try:
+                no = int(step.get("path_group") or 0)
+            except (TypeError, ValueError):
+                continue
+            if no >= 1:
+                seen.add(no)
+    return sorted(seen)
+
+
+def _note_path_material(out: dict, material: list[int], *, decided: int) -> None:
+    """材料号与秘书定的号不一致 ⇒ 在回执里点名（读的人要看得出"谁说了算"）。"""
+    if not material or all(int(x) == int(decided) for x in material):
+        return
+    out["path_group_material"] = {
+        "material": [int(x) for x in material],
+        "secretary": int(decided),
+        "why": (f"材料说 {[int(x) for x in material]}、秘书定为 {int(decided)}"
+                "（最终号以秘书分配为准；材料只作参考）"),
+    }
+
+
 def _stamp_path_number(steps: Any, *, path_group: int, proof_no: int,
                        single_group: bool = True) -> list[dict]:
     """把秘书分到的号盖到已解析的依赖步骤上（返回新列表，不改调用方那份载荷）。
@@ -7716,9 +7747,12 @@ class Secretary:
         ## 返回（键固定）
 
         `{checked, path, family, tier, manuscript_id, proof_no, name_proof_no,
-        canonical, head_statement_id, head_proof_no, head_experiment_id,
+        canonical, head_statement_id, head_experiment_id,
         head_statement_text, head_label, declared_kind, sha256, proof_sha256,
         proof_state, cells, why, error}`。
+
+        稿头不再有「证明号」那一格可读（产出侧废掉了 `pN`；路径号由收录事务分配），
+        所以返回里没有 `head_proof_no` —— 「第几份」唯一来源是秘书在锁里分出来的号。
 
         - `cells` 是 `extract_cells` 的原样读数（每格 `present / absent / unreadable`）；
         - `proof_state` 是 `## 证明` 那一节的三态（缺节 ≠ 空节）；
@@ -7747,8 +7781,7 @@ class Secretary:
             "proof_no": int(shape.get("proof_no") or 0),
             "name_proof_no": int(shape.get("proof_no") or 0),
             "canonical": str(shape.get("canonical") or ""),
-            "head_statement_id": "", "head_proof_no": 0,
-            "head_experiment_id": "", "head_statement_text": "",
+            "head_statement_id": "", "head_experiment_id": "", "head_statement_text": "",
             "head_label": "", "declared_kind": "",
             "sha256": "", "proof_sha256": "",
             "proof_state": _MI.EXTRACT_UNREADABLE,
@@ -7775,10 +7808,6 @@ class Secretary:
         out["proof_state"] = str(proof.get("outcome") or _MI.EXTRACT_ABSENT)
         out["proof_sha256"] = str((proof.get("source") or {}).get("sha") or "")
         out["head_statement_id"] = str(_DS.manuscript_statement_id(text) or "").strip()
-        try:
-            out["head_proof_no"] = int(_DS.manuscript_proof_no(text) or 0)
-        except (TypeError, ValueError):
-            out["head_proof_no"] = 0
         head = _manuscript_head_fields(text)
         out["head_experiment_id"] = str(head.get("实验号") or "").strip()
         out["head_statement_text"] = str(head.get("命题键") or "").strip()
@@ -7878,17 +7907,44 @@ class Secretary:
                                        "（收方读稿登记的是在册命题的依赖面）"))
                     return out
                 # ---- 路径号：这一笔的依赖面属于「第几条证明」，由秘书在锁里分 ----
-                _alloc = _assign_path_group_in_tx(
-                    tx, root=self.root, statement_id=sid,
-                    manuscript=manuscript, body_sha=body_sha)
-                if not _alloc.get("checked"):
-                    out.update(refused="path_group_unreadable",
-                               reason=("路径数读不出来 ⇒ 这一份的依赖面不落（不猜第几条）："
-                                       + str(_alloc.get("why") or "未知原因")))
-                    return out
-                group_no = int(_alloc.get("path_group") or 1)
-                out["path_group"] = group_no
-                out["path_group_reading"] = dict(_alloc)
+                #
+                # 只有在调用方给了这一份稿的身份（`manuscript` / `body_sha`）时才分号：
+                # 没有身份就无法认"同一份正文已经在第几条路径上"，硬分号会把同一份稿的
+                # 第二遍携带记成新路径（D3 的幂等就是这条）。没有身份 ⇒ 按材料给的号落
+                # （老调用面 / 夹具的既定口径）。
+                # 只请求依赖格（没读证明正文）时 `body_sha` 是空的 ⇒ 用这一行在册的
+                # 正文补上：这一笔收的就是它那一份稿，不许因此另开一条路径。
+                if not str(body_sha or "").strip():
+                    from . import verifications as _VR_canon
+
+                    _canon_row = SL.by_id(rows=tx.rows("statements"), stmt_id=sid)["row"]
+                    _canon_text = str((_canon_row or {}).get("proof_text") or "")
+                    if _canon_text.strip():
+                        body_sha = _VR_canon.text_sha(_canon_text)
+                _has_identity = bool(str(body_sha or "").strip()
+                                     or str(manuscript or "").strip())
+                if _has_identity:
+                    _alloc = _assign_path_group_in_tx(
+                        tx, root=self.root, statement_id=sid,
+                        manuscript=manuscript, body_sha=body_sha)
+                    if not _alloc.get("checked"):
+                        out.update(refused="path_group_unreadable",
+                                   reason=("路径数读不出来 ⇒ 这一份的依赖面不落（不猜第几条）："
+                                           + str(_alloc.get("why") or "未知原因")))
+                        return out
+                    group_no = int(_alloc.get("path_group") or 1)
+                    # 材料（手稿依赖表第 4 列）与秘书定的号不一致 ⇒ 点名；号以秘书为准。
+                    _note_path_material(out, _path_material_numbers(groups),
+                                        decided=group_no)
+                    out["path_group"] = group_no
+                    out["path_group_reading"] = dict(_alloc)
+                else:
+                    group_no = int(proof_no or 1)
+                    out["path_group"] = group_no
+                    out["path_group_reading"] = {
+                        "checked": False, "path_group": group_no,
+                        "why": ("没有稿身份（`manuscript` / `body_sha` 都没给）"
+                                "⇒ 按材料给的号落，不去认第几条")}
                 if int(proof_no or 0) >= 1 and int(proof_no or 0) != group_no:
                     out["path_group_ignored"] = {
                         "given": int(proof_no), "by": "调用方",
@@ -7900,9 +7956,11 @@ class Secretary:
                 if steps is None:
                     return out
                 # 号盖在已解析的步骤上：手稿依赖段那一路 `used_by` 尾巴与
-                # `path_group` 同号（一份稿 = 一份证明 = 一条路径）。
-                steps = _stamp_path_number(steps, path_group=group_no,
-                                           proof_no=group_no)
+                # `path_group` 同号（一份稿 = 一份证明 = 一条路径）。没有稿身份时
+                # 不盖 —— 材料自己那几格就是这一笔要落的口径（幂等靠它们）。
+                if _has_identity:
+                    steps = _stamp_path_number(steps, path_group=group_no,
+                                               proof_no=group_no)
                 existing = set()
                 for row in tx.rows("dependencies"):
                     existing.add(_dep_step_key(dict(row)))
@@ -9658,6 +9716,8 @@ class Secretary:
                                    + str(_new_alloc.get("why") or "未知原因")))
                 return out
             _new_path_no = int(_new_alloc.get("path_group") or 1)
+            _note_path_material(out, _path_material_numbers(groups)
+                                if len(groups) <= 1 else [], decided=_new_path_no)
             out["path_group"] = _new_path_no
             out["path_group_reading"] = dict(_new_alloc)
             # ---- 内部工作名不许当定理名（D1；真机 mp3-r2 的 000000 / 000001）---------
@@ -10713,6 +10773,8 @@ class Secretary:
             listed.append({"proof_no": proof_no, "text": proof,
                            "created_at": S.now_iso()})
             row[VR.PROOFS_KEY] = listed
+        _note_path_material(out, _path_material_numbers(groups)
+                            if len(groups) <= 1 else [], decided=proof_no)
         written = ["statements"]
         # ---- 洗定理名 + 路线进证明层（业主 2026-10-24：「路线写在证明这一层」）。
         #
