@@ -1,8 +1,8 @@
-"""角色 B 的动作 `own.land_manuscript`：把一版证明正文落成可签的稿（T1 从登记里拆出来）。
+"""角色 B 的动作 `own.land_manuscript`：把一版证明正文落成可签的稿。
 
 只写文件、不写台账；签名与返回口径见 :meth:`_LandManuscript.land_manuscript`。
-`goal-7f5116c1` M6/M7 的拆包契约：一个动作一个文件 —— 本类只由
-`agent_b/register_statement.py` 的 `_RegisterStatement` 混入，成员装配面在 `core.py`。
+本类只由 `agent_b/register_statement.py` 的 `_RegisterStatement` 混入，成员装配面在
+`core.py`。
 """
 from __future__ import annotations
 
@@ -16,44 +16,33 @@ class _LandManuscript:
                         proof_text: str, label: str = "", proof_no: int = 1,
                         source_manuscript: str = "",
                         if_match_sha256: str = "") -> dict:
-        """B 的显式落稿动作（只写文件，不写台账；D1 从登记里拆出来的那一步）。
+        """B 的显式落稿动作（只写文件，不写台账；从登记里拆出来的那一步）。
 
-        ## 为什么需要它（不是"登记顺手落"）
+        为什么需要它（不是"登记顺手落"）：B 的工具面没有文件写口，而 V 只审盘上的稿。
+        这件事原先由 `register_statement` 在被拒之前顺手做（被拒的登记留下稿）；拆出来
+        之后顺序是"显式落稿 → 派 V 签 → 带签 `own.register_statement`"，两步各自成立、
+        各自可解释。工具面的薄壳是 `own.land_manuscript`。
 
-        B 的工具面没有文件写口，而 V 只审盘上的稿。改前这件事由
-        `register_statement` 在被拒之前顺手做（D1：被拒的登记留下稿）；拆出来之后
-        顺序是 "显式落稿 → 派 V 签 → 带签 `own.register_statement`"，两步各自成立、
-        各自可解释。工具面的薄壳是 `own.land_manuscript`（T1 起已注册）。
+        参数：`statement_id` 是这条命题的号，必须已经在册（稿名由号拼出，不接受调用方给
+        路径）；`proof_text` 是这一版证明正文（逐字；作者交内容、框架渲染落稿）；
+        `statement_full` 可以不给 —— 不给就取在册那一行的命题正文，给了也只是那一行的
+        副本，落稿用的是它；`proof_no` 是想落成第几份，缺省 1；`if_match_sha256` 是并发
+        纪律 —— 调用方"我以为目标稿现在是这一版"，不符 ⇒ 受控拒 `stale_target`，一个
+        字节都不写。
 
-        ## 参数（T1 接线后）
-
-        - `statement_id`：这条命题的号；必须已经在册（稿名由号拼出，不接受调用方给路径）；
-        - `proof_text`：这一版证明正文（逐字；作者交内容、框架渲染落稿）；
-        - `statement_full`：可以不给 —— 不给就取在册那一行的命题正文（"命题拿已经登记的"，
-          业主 2026-11-07 裁定）；给了也只是那一行的副本，落稿用的是它；
-        - `proof_no`：想落成第几份；缺省 1；
-        - `if_match_sha256`：并发纪律（protocol §五）—— 调用方"我以为目标稿现在是这一版"；
-          不符 ⇒ 受控拒 `stale_target`，一个字节都不写。
-
-        ## 概念行也走这一格（2026-11-10 业主裁定 甲）
-
-        概念（`kind="concept"`）的良定义证明同样由 B 落稿：族仍是 `b-proof`（不新开
-        手稿族），`## 命题` 是这一行的定义（`statement_full`），`## 证明` 是良定义证明，
-        稿名 `reports/b-proof-<B稿号>.md`（B 自己那条号段发的号，2026-11-11 业主裁定 ①；
-        稿头那一行 `- 命题号：stmt:<号>` 才是稿与命题的对应）。V 照常三转签（它只对手稿
-        负责，不需要知道这是概念）；签回来之后 B 用
+        概念行也走这一格：概念（`kind="concept"`）的良定义证明同样由 B 落稿，族仍是
+        `b-proof`（不新开手稿族），`## 命题` 是这一行的定义（`statement_full`），
+        `## 证明` 是良定义证明，稿名 `reports/b-proof-<B稿号>.md`（B 自己那条号段发的
+        号；稿头那一行 `- 命题号：stmt:<号>` 才是稿与命题的对应）。V 照常三转签（它只对
+        手稿负责，不需要知道这是概念）；签回来之后 B 用
         `own.ingest_manuscript(apply, cells=["proof_text"])` 收录。这一格本身不判断这一行
         是不是概念 —— 只按在册那一行的正文拼稿，所以概念与一般命题在这条链上逐字同形。
 
-        ## 返回
-
-        `{ok, path, written, preserved, signed, sha256, sha, proof_no, text, why,
+        返回 `{ok, path, written, preserved, signed, sha256, sha, proof_no, text, why,
         problem, refused}`。`sha256` / `sha` 是签尺（`proofregistry.proof_sha(proof_text)`）：
         这份稿将来被 V 签时对拍的就是这个值，不是整份文件的字节 sha。
 
-        ## 幂等
-
-        同一份正文重放：目标稿内容没变 ⇒ `written=False, preserved=True`（不出现
+        幂等：同一份正文重放、目标稿内容没变 ⇒ `written=False, preserved=True`（不出现
         第二个文件、不改名、不毁签）；已签的那一版不会被另一版正文盖掉
         （`target_holds_a_signed_version`，零写入）。
         """
