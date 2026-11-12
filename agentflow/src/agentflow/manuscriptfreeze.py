@@ -129,7 +129,9 @@ def freeze_reading(root: Any, rel: Any) -> dict[str, Any]:
                    message=UNCHECKED_MESSAGE.format(
                        why=str(table.get("why") or "颁发表列不出来")))
         return out
-    entries = [dict(e) for e in (table.get("entries") or [])]
+    # 这些行只读（数条数、取最后一行的签 sha），不再整批 `dict(...)` 拷一遍：
+    # `signed_table` 每次交出的就是那一趟新读出来的 dict。
+    entries = table.get("entries") or []
     by_path = [e for e in entries if str(e.get("artifact_path") or "") == raw]
     if by_path:
         out["attributed"] = True
