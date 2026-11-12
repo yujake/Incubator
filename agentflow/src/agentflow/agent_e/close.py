@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""E 的「收工读数」（业主 2026-11-11 裁定 ②）。
+"""E 的「收工读数」。
 
 F 的收工读数在 `agent_f/step.py::_close_reading`；E 没有 `step` 动作（它的活是
-`run_experiment`，收口在循环那一趟的退出），所以这里给 E 一个同形的
-`close_reading()`：三格 `auto_submitted` / `auto_submitted_count` /
-`still_unsubmitted`，外加候选级理由（`why` / `problems`）。
+`run_experiment`，收口在循环那一趟的退出），所以这里给 E 一个同形的 `close_reading()`：
+三格 `auto_submitted` / `auto_submitted_count` / `still_unsubmitted`，外加候选级理由
+（`why` / `problems`）。
 
 `agent_loop` 在 E 这一趟退场时调 `agent_e.autosubmit.auto_submit_at_close`，把同样三格
-落进 `agent_run_end`（那一行才是盘上的收工读数）。本方法给直调 / 判据用，两处读的
-是同一个实现（`manuscriptsubmission.auto_submit_for`），不各算一份。
+落进 `agent_run_end`（那一行才是盘上的收工读数）。本方法给直调 / 判据用，两处读的是
+同一个实现（`manuscriptsubmission.auto_submit_for`），不各算一份。
 """
 from __future__ import annotations
 
