@@ -1,21 +1,32 @@
 """主控工具：给主控 M 配手与眼。
-`registry.for_role("M") == []` —— 主控此前一件工具都没有：它作为确定性执行者能被 `Conductor` 调用，却没有"派活"这个动作可用。
-于是一句"评审这篇论文并给我更好的论文包"要落地，只能靠调用方在代码里替它把`plan` 拼出来 —— 那不是主 Agent，那是"人在派活"。
-本模块只提供两件事：能不能做（闸门在 `Conductor` 内部：`ALLOWED_EDGES` / `CAPABILITIES` /参数接缝 / `policy` 四上
-限 / 预算）与做了什么（`tasks` 台账）。
-工具面（一个模块一个组前缀：`conductor.`）| 工具 | 侧效 | 作用 ||---|---|---|| `conductor.summon`
-| write_local | 唯一的派活动作（过全部闸门） || `conductor.ledger` | read | 看台账：派了什么、被拒什么、剩多少 || 
-`conductor.stop` | write_local | 优雅停止：不再新开任务 → 等在飞收尾 → 合成终态（无僵尸）→ 落续跑简报 || 
-`conductor.resume_brief` | read | 读续跑简报（做了什么 / 剩什么 / 从哪继续） || `conductor.cancel`
-| write_local | 硬取消（不等收尾，协作式） || `conductor.ensure_project` | write_local | 冷启动 / 热启动由
-M 决定（四态如实给） || `conductor.state` | read | 只读状态视图（给 M 判断用） || `conductor.role_spec`
-| read | 某角色的动作与工具面（派给谁、怎么写 brief） || `conductor.summon_many` | write_local | 批量派活（分波与
-峰值在返回里；同角色多实例） || `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） || 
-`conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` = M 自己交的判据 
-`goal_met`，八格退成读数 `status`/`machine_pass`） || `conductor.board` | read | 板上还挂着什么（工作项
-+ 走到哪一档 + 谁读的） || `conductor.broadcast` | write_local | 给我名下的直接子代理广播一条通告（每人一条 ack 板项；
-写侧工具改的是编排状态（台账行、取消信号、工作区目录、停止回执），`CAPABILITIES["M"] = ()`（零动作）与 `WRITE_SETS["M"] = {}`
-（不写领域表）一个字都没动 —— 领域表仍然只有 A–H 能写。
+
+`registry.for_role("M") == []` —— 主控此前一件工具都没有：它作为确定性执行者能被
+`Conductor` 调用，却没有"派活"这个动作可用；一句"评审这篇论文并给我更好的论文包"要落地，
+只能靠调用方在代码里替它把 `plan` 拼出来 —— 那不是主 Agent，那是"人在派活"。
+本模块只提供两件事：能不能做（闸门在 `Conductor` 内部：`ALLOWED_EDGES` / `CAPABILITIES` /
+参数接缝 / `policy` 四上限 / 预算）与做了什么（`tasks` 台账）。
+
+工具面（一个模块一个组前缀：`conductor.`）：
+
+| 工具 | 侧效 | 作用 |
+|---|---|---|
+| `conductor.summon` | write_local | 唯一的派活动作（过全部闸门） |
+| `conductor.ledger` | read | 看台账：派了什么、被拒什么、剩多少 |
+| `conductor.stop` | write_local | 优雅停止：不再新开任务 → 等在飞收尾 → 合成终态（无僵尸）→ 落续跑简报 |
+| `conductor.resume_brief` | read | 读续跑简报（做了什么 / 剩什么 / 从哪继续） |
+| `conductor.cancel` | write_local | 硬取消（不等收尾，协作式） |
+| `conductor.ensure_project` | write_local | 冷启动 / 热启动由 M 决定（四态如实给） |
+| `conductor.state` | read | 只读状态视图（给 M 判断用） |
+| `conductor.role_spec` | read | 某角色的动作与工具面（派给谁、怎么写 brief） |
+| `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
+| `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
+| `conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` = M 自己交的判据 `goal_met`，八格退成读数 `status` / `machine_pass`） |
+| `conductor.board` | read | 板上还挂着什么（工作项 + 走到哪一档 + 谁读的） |
+| `conductor.broadcast` | write_local | 给我名下的直接子代理广播一条通告（每人一条 ack 板项） |
+
+写侧工具改的是编排状态（台账行、取消信号、工作区目录、停止回执）：
+`CAPABILITIES["M"] = ()`（零动作）与 `WRITE_SETS["M"] = {}`（不写领域表）一个字都没动 ——
+领域表仍然只有 A–H 能写。
 """
 from __future__ import annotations
 
@@ -1615,18 +1626,13 @@ def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolRe
 
 
 #: 上行成功那一支里不属于载荷的两格（`data` 里不给，`meta` 里照旧给全）：
-#:
 #: - `addressing`：`_escalation_roster_check` 的原样读数（`checked` / `how` / `kind` /
-#:   `error` / `candidates` …）—— 它回答的是「这个编号是怎么被认成父的」；
+#:   `error` / `candidates` …）—— 它回答「这个编号是怎么被认成父的」；
 #: - `roster_unavailable`：上一条派生出来的三态位（名册没读成 ⇒ 按运行期解析的父投递）。
-#:
-#: 为什么要分出来（2026-10-21，判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare`）：
-#: 这两格是框架读数，不是这次上行的载荷；`returns=` 声明的就是 `data` 的键集合
-#: （同一张面的先例：`conductor.broadcast` 的 `returns` 与它的 `data` 逐键相同）。
-#: 读数一个字都没少：`ok(payload, got)` 的 `got` 把它们留在 `meta` 里，而 `meta`
-#: 整格都渲染进模型看到的那条工具结果（`agent_loop._flatten_one_level` 只摊平 `data`，
-#: `meta` 原样保留）⇒ 「模型不知道这两格存在」这个后果不会发生。
-#: 为什么不反向补进 `returns=`：那会让工具面与冻结快照
+#: 为什么分出来（判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare`）：这两格
+#: 是框架读数、不是这次上行的载荷，而 `returns=` 声明的就是 `data` 的键集合。读数一个字都
+#: 没少：`ok(payload, got)` 把 `got` 留在 `meta`，而 `meta` 整格渲染进模型看到的结果 ⇒
+#: 「模型不知道这两格存在」不会发生。不反向补进 `returns=`：那会让工具面与冻结快照
 #: （`tests/golden/tool_surface_snapshot.json`，FC-27 禁改区）不一致，重冻必须由人逐格看过。
 _ESCALATE_READING_KEYS: tuple[str, ...] = ("addressing", "roster_unavailable")
 
@@ -2698,17 +2704,13 @@ def conductor_void_items(_conductor: Any, item_ids: list, why: str) -> ToolResul
                 count=len(voided),
                 state=("voided" if voided else ("refused" if refused else "nothing")),
                 ok=bool(voided), reason=str(got.get("reason") or ""))
-    # 六格留痕（by / owner / reason / from / to / at）放 `meta` 而不进 `data`：
-    # `returns=` 声明的是 data 的键集，而工具面是冻结快照（`tests/golden/`，FC-27）；
-    # 在没得到人重冻之前，多一个 data 键会让 `test_no_tool_returns_a_top_level_key_it_does_not_declare`
-    # 当场红。`meta` 整格都渲染进模型看到的那条结果 ⇒ 读数一个字都不少。
-    # 乙件的 `notified`（撤销提醒逐条：item_id / owner / kind / expects / carrier / text）
-    # 与 `notification_problems` 同一条理由走 `meta`。
-    # 2026-11-09（D13 + 业主裁定 ③）：撤销不再落通知行 ⇒ 这一档没有 `notice_id`
-    # 这一格（恒空 = 暗示"曾经有过一条通知行"），`carrier` 写明提醒从哪儿读得到
-    # （`revoked_recent@<收件人>`，即被撤行自己的 `revoke:expired:` 留痕）。
-    # 旧行为那一档（`REVOKE_POSTS_NOTICE_ROW=True`，默认死代码）真落了行，它才带
-    # `notice_id`（那时它指得出是哪一行）—— 那一档不经工具面，是判据的反真空用的。
+    # 六格留痕（by / owner / reason / from / to / at）放 `meta` 而不进 `data`：`returns=`
+    # 声明的是 data 的键集，而工具面是冻结快照（`tests/golden/`，FC-27）；没得到人重冻
+    # 之前，多一个 data 键会让 `test_no_tool_returns_a_top_level_key_it_does_not_declare`
+    # 当场红。`meta` 整格都渲染进模型看到的结果 ⇒ 读数一个字都不少。乙件的 `notified`
+    # （撤销提醒逐条）与 `notification_problems` 同一条理由走 `meta`。撤销不再落通知行
+    # ⇒ 这一档没有 `notice_id`（恒空 = 暗示"曾经有过一条通知行"），`carrier` 写明提醒从
+    # 哪儿读得到（`revoked_recent@<收件人>`）。
     return ok(data, **data, traces=traces, notified=notified,
               notification_problems=notification_problems)
 
@@ -3372,21 +3374,17 @@ def conductor_guide(_conductor: Any, store: Any, *, to: str, text: str) -> ToolR
 # 现在在做哪项）、计时器列表（等谁或等待时长+purpose+已等待时间）。M要做的只是根据这些信息
 # 对逐个活跃子代理给出"过"、指导意见（行为干预）……」
 #
-# 病根是业主那句「M 不起巡查是因为太繁琐」：所以这三件把"M 要一个一个数过去"整件事搬进
-# 一次调用。三件的分工（读数只有一份实现 = `_patrol_reading`，谁都不许再写第二套）：
-#
+# 病根是业主那句「M 不起巡查是因为太繁琐」：这三件把"M 要一个一个数过去"整件事搬进一次
+# 调用。分工（读数只有一份实现 = `_patrol_reading`，谁都不许再写第二套）：
 #   - `conductor.patrol`：一次拿全部活跃子代理（按名册深度优先排好）；
 #   - `conductor.review_child`：M 点名一个绝对编码，拿同一份读数里的那一项 + 名册树；
 #   - `conductor.patrol_verdict`：对那一个号说「过」（落痕）或给指导意见（走既有秘书链）。
-#
-# 三态纪律在这三件上是同一条：台账 / 时钟读不成 ⇒ `checked=false` 加原因，绝不折成
-# 「没有活跃子代理」。`unknown` 是第四档，它既不折成在飞、也不折成静默。
-#
-# 复用（一处都不另写）：三态判据 = `conductor.agent_states`；活跃子代理 = 秘书的
-# `is_live_agent`；绝对编码链 = `Conductor.chain_of`；计时器分组 = `conductor.clock_waiters`；
-# 目的 / 等谁 / 已等待 = `clock.purpose_of` / `clock.waiting_on_text` / `Timer.waited_seconds`；
-# 「活跃子代理 ⇒ 必有一条等它的计时器」= `Conductor.child_wait_invariant`；指导投递 =
-# `conductor.guide`（同一个 handler，不另开投递路）。
+# 三态纪律：台账 / 时钟读不成 ⇒ `checked=false` 加原因，绝不折成「没有活跃子代理」；
+# `unknown` 是第四档，既不折成在飞、也不折成静默。复用（一处都不另写）：三态判据 =
+# `conductor.agent_states`；活跃子代理 = 秘书的 `is_live_agent`；绝对编码链 =
+# `Conductor.chain_of`；计时器分组 = `conductor.clock_waiters`；目的 / 等谁 / 已等待 =
+# `clock.purpose_of` / `clock.waiting_on_text` / `Timer.waited_seconds`；「活跃子代理 ⇒
+# 必有一条等它的计时器」= `Conductor.child_wait_invariant`；指导投递 = `conductor.guide`。
 
 #: `legal_codes` 一次最多列几个（M 一眼能抄一个号；再多就只给总数）。
 LEGAL_CODES_LIMIT = 20
