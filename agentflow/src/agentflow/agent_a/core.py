@@ -1,7 +1,7 @@
-"""角色 A 的实现核心（`goal-7f5116c1` M6）：其余成员 + 把动作 mixin 装起来。
+"""角色 A 的实现核心：其余成员 + 把动作 mixin 装起来。
 
-动作方法一个都没留在这里 —— 它们各自在 `agent_a/<动作>.py`。
-这一层与各动作文件共用 `_support.py`（模块级 helper 与常量）。
+动作方法一个都没留在这里 —— 它们各自在 `agent_a/<动作>.py`。这一层与各动作文件
+共用 `_support.py`（模块级 helper 与常量）。
 """
 from __future__ import annotations
 
@@ -196,15 +196,15 @@ class _Core:
     def _query_description(topic: str, description: str) -> str:
         """挑"能进查询串的那一份 description"：只留英文关键词，非 ASCII 的部分丢掉。
 
-        真机实测（2026-09-30，`temp/_probe_precise_desc.py`）：G 写了一段中文 description，`precise`
-        把它拼进查询串 ⇒ OpenAlex 0 条；同一句 topic 换成英文短语 ⇒ 8 条里 7 条对题。中文描述不是
-        "信息少"，而是把检索带偏；而两层闸门都不拦它 —— `providers` 只对纯中文题面 fail-closed
-        （抛 `query_not_applicable_cjk`），题面+中文描述混排走 `applicable_as_is`，于是静默清零。
-        判据不是"含不含 ASCII 字母"（第一版就是这条，被 `used_by=main.tex:introduction` 这种"中文里
-        夹一个英文路径"骗过）：丢掉非 ASCII 后至少还剩两个英文词才拿它当查询描述，否则传空串
-        （provider 只用题面构造查询）。
-        留痕不受影响：`content_description` 在请求行上原样保留；`search_literature` 的返回里另给
-        `query_description`，让调用方知道实际用了什么。
+        真机读数：G 写了一段中文 description，`precise` 把它拼进查询串 ⇒ OpenAlex 0 条；
+        同一句 topic 换成英文短语 ⇒ 8 条里 7 条对题。中文描述不是"信息少"，而是把检索
+        带偏；而两层闸门都不拦它 —— `providers` 只对纯中文题面 fail-closed（抛
+        `query_not_applicable_cjk`），题面+中文描述混排走 `applicable_as_is`，于是静默
+        清零。判据不是"含不含 ASCII 字母"（那条会被 `used_by=main.tex:introduction`
+        这种"中文里夹一个英文路径"骗过）：丢掉非 ASCII 后至少还剩两个英文词才拿它当
+        查询描述，否则传空串（provider 只用题面构造查询）。
+        留痕不受影响：`content_description` 在请求行上原样保留；`search_literature` 的
+        返回里另给 `query_description`，让调用方知道实际用了什么。
         """
         raw = str(description or "")
         ascii_only = "".join(ch if ch.isascii() else " " for ch in raw)
@@ -221,13 +221,13 @@ class _Core:
     def _split_errors(self, errors: Sequence[str]) -> tuple[list[str], list[str]]:
         """把 provider 的失败分成 `(没发出去的, 发出去但失败的)`。
 
-        为什么要分（2026-09-30 加）：`providers` 对抽不出英文关键词的题面是 fail-closed，
-        抛出的 `ProviderError` 消息里逐字带第三态名。若把它与"网络抖动"混成一档，
-        `run_once` 就按可重试处理 —— 试满 `max_attempts`、每次留退避租约，
-        最后落 `search_failed`。而"这一问没发出去"是确定性的：重试一万次也不会变。
-        混档的代价有两个：① 白烧三次上游配额与三次等待；② 读数上"没问"与"问了失败"
-        长得一样（三态被折平）。这一分割不动 `run_once` 对网络抖动的重试语义 ——
-        它只把"不可能靠重试变好的那一类"提前终结。
+        为什么要分：`providers` 对抽不出英文关键词的题面是 fail-closed，抛出的
+        `ProviderError` 消息里逐字带第三态名。若把它与"网络抖动"混成一档，`run_once`
+        就按可重试处理 —— 试满 `max_attempts`、每次留退避租约，最后落 `search_failed`。
+        而"这一问没发出去"是确定性的：重试一万次也不会变。混档的代价有两个：① 白烧三次
+        上游配额与三次等待；② 读数上"没问"与"问了失败"长得一样（三态被折平）。这一
+        分割不动 `run_once` 对网络抖动的重试语义 —— 它只把"不可能靠重试变好的那一类"
+        提前终结。
         """
         states = self._not_sent_states()
         not_sent = [e for e in errors if any(s in e for s in states)]
@@ -316,11 +316,10 @@ class _Core:
                 # 写成空数组会与"点名了、但一个都没接上"同形。
                 "providers_requested": None,
                 "role_providers": self._wired_provider_names(),
-                # 第一态也逐源报状态：改前这里是空数组，于是"两个源被限流"
-                # 与"接线上的源全都 0 命中"在读数上完全同形（都只剩
-                # `outcome=no_results`）。逐源读数由 `_search_along_wiring`
-                # 产生，形状与点名那一态、与工具面 `search.literature` 的
-                # `sources[]` 逐键相同。
+                # 第一态也逐源报状态：不报的话，"两个源被限流"与"接线上的源全都
+                # 0 命中"在读数上完全同形（都只剩 `outcome=no_results`）。逐源读数由
+                # `_search_along_wiring` 产生，形状与点名那一态、与工具面
+                # `search.literature` 的 `sources[]` 逐键相同。
                 "sources": self._source_rows(stats),
                 "cost": {"provider_calls": len(self.providers),
                          "elapsed_s": round(time.monotonic() - t0, 3)},
@@ -377,13 +376,12 @@ class _Core:
 
         ## 第三个返回值为什么必须有（逐源三态）
 
-        改前这一态不产出 `sources`，于是"两个源被限流"与"接线上的源全都 0 命中"
-        在动作读数上同形：两者都只剩 `outcome=no_results` 与一个空的 errors。
-        区分它们靠的是 `providers.ProviderStat` 那一套受控状态，本方法只负责
-        按源把事实填进去 —— 分类的真身仍在 `providers`（`provider_error_kind` /
-        `_refusal_state_of_message` / `_provider_refusal`），这里不另写一份
-        "限流还是被墙"的判据，否则两处一漂，"限流"就会在动作面上重新变成一个
-        普通失败（FC-03 的老形态）。
+        不产出 `sources` 的话，"两个源被限流"与"接线上的源全都 0 命中"在动作读数上
+        同形：两者都只剩 `outcome=no_results` 与一个空的 errors。区分它们靠的是
+        `providers.ProviderStat` 那一套受控状态，本方法只负责按源把事实填进去 ——
+        分类的真身仍在 `providers`（`provider_error_kind` / `_refusal_state_of_message` /
+        `_provider_refusal`），这里不另写一份"限流还是被墙"的判据，否则两处一漂，
+        "限流"就会在动作面上重新变成一个普通失败（FC-03 的老形态）。
 
         三档在读数上如何分开：跑成了（`status="ok"`，`count` 可能是 0）、
         上游抛了（`status="failed"` + `error_kind`，其中 `error_kind=rate_limited`
