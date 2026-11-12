@@ -1,15 +1,12 @@
 # -*- coding: utf-8 -*-
-#
-# ③ 跑 `python scripts/lint_rules.py` 确认 error 0（本模块每个公开函数都写了 docstring，
 
 """抽取正文的内容寻址库：整本书的正文只存一份，产物里只留引用。
 
 ## 它解决什么
 
-`evidence.json` 曾经把每条来源的逐页正文内联两份（`text` 与 `text_pages`），
-于是同一批书在每份产物里各存一份完全相同的文本：实测 14 份产物共 112,013,714 字节，
-其中 109,101,969 字节（97.4%）是正文，而按内容哈希归并只有 7 份不同正文 / 85 份副本
-（读数见 `temp/_ev_store_inventory.py`）。同一次运行里断言级证据其实只有 388 字符。
+`evidence.json` 里每条来源的逐页正文若内联两份（`text` 与 `text_pages`），同一批书就会
+在每份产物里各存一份完全相同的文本：正文占了产物体积的绝大部分，而按内容哈希归并之后
+只有少数几份不同的正文。
 
 本模块把正文按内容寻址存进项目根的 `.fulltext/` 目录，产物里只留 `text_ref`
 （绝对路径 + 两个哈希 + 页数 + 字符数）。文件名里带内容哈希 ⇒ 追加式：
@@ -21,8 +18,8 @@
 
 - 只按 pdf 哈希命名 ⇒ 换个抽取器就覆盖同名文件，历史产物的引用当场失效
   （把已登记的证据弄坏，比浪费字节严重得多）；
-- `text_sha256` 的口径逐字沿用被删掉的那个 `text` 字段的构造式
-  `sha256("\\n".join(pages))` ⇒ 复核者一行就能重算，不必猜新口径。
+- `text_sha256` 的口径就是 `sha256("\\n".join(pages))` ⇒ 复核者一行就能重算，
+  不必猜新口径。
 
 ## 状态纪律（三态）
 
@@ -52,7 +49,7 @@ HASH_PREFIX = 16
 
 
 def pages_text_sha256(pages: Sequence[str]) -> str:
-    """正文的内容哈希：口径与被删掉的 `text` 字段逐字一致（`"\\n".join(pages)`）。"""
+    """正文的内容哈希：口径与 `evidence.json` 里旧的 `text` 字段一致（`"\\n".join(pages)`）。"""
     return hashlib.sha256("\n".join(str(p) for p in pages).encode("utf-8")).hexdigest()
 
 
