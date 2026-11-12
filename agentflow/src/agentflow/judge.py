@@ -82,6 +82,9 @@ JUDGE_PROBLEMS: tuple[str, ...] = (
     "judge_ungrounded_findings",
 )
 
+#: 带后缀那一族码的前缀（由词表派生一次，判定时直接当 `str.startswith` 的前缀元组用）。
+_PROBLEM_PREFIXES: tuple[str, ...] = tuple(one + ":" for one in JUDGE_PROBLEMS)
+
 
 class BudgetExhausted(RuntimeError):
     """预算耗尽：计费层拒绝这一次判定时抛它（由 `judge_json` 归成 `judge_over_budget`）。"""
@@ -98,7 +101,7 @@ def is_judge_problem(code: str) -> bool:
     直接 `in JUDGE_PROBLEMS` 会漏。判据只有这一处，别处不许再写一遍。
     """
     text = str(code or "")
-    return any(text == p or text.startswith(p + ":") for p in JUDGE_PROBLEMS)
+    return text in JUDGE_PROBLEMS or text.startswith(_PROBLEM_PREFIXES)
 
 
 def _problem_of(exc: BaseException) -> str:
