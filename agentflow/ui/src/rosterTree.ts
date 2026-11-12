@@ -2,15 +2,15 @@
  * 名册树的纯逻辑：把 `GET /api/roster` 的那一份读数变成"要画哪些行"。
  *
  * ## 为什么从组件里抽出来（真机故障：名册页整片不显示）
- * 改前这一段递归住在 `Roster.tsx` 里，写法是 `data.roots.map(renderBranch)`，
+ * 这一段递归若住在 `Roster.tsx` 里（写成 `data.roots.map(renderBranch)`），
  * `renderBranch` 里第一句就是 `ctx.childrenOf[tid] ?? []` —— 只要后端那一份读数
  * 里没有 `children_of` 这一格，`ctx.childrenOf` 就是 `undefined`，取属性这一步当场
  * 抛 TypeError（`?? []` 救不了"表本身是 undefined"）。异常从渲染里冒出去，正文那
  * 一段就永远到不了 DOM：抬头（`count` / `max_depth`）已经提交了，树一行都没有，
  * 控制台之外没人看得见为什么。
  *
- * 真机上那一次就是这么来的：`web` 进程 17:36:34 起，D-51 18:15:10 才落盘 ⇒
- * 浏览器拿到新前端、旧后端，旧后端那 15 个键里没有 `children_of`。
+ * 真机上那一次就是这么来的：浏览器拿到新前端、旧后端，而旧后端那一份读数
+ * （15 个键）里没有 `children_of`。
  *
  * 所以这一层立三条规矩：
  * 1. 它是纯函数（不 import preact、不碰 DOM），于是"画哪些行"可以被判据直接跑；
@@ -173,7 +173,7 @@ function asInboxItems(value: unknown): RosterInboxItem[] {
 /** 这个子代理接过的那些活（`nodes[].tasks[]`；读不到就是空数组，不是"没干过活"）。 */
 /** 未落名册的子（台账里有父、名册正文与对照表都没说谁接过它）。
  *
- * 旧后端给的读数里没有这一格 ⇒ 空数组（那时名册页与改前逐字一样，不是"没有未落名册"。）
+ * 旧后端给的读数里没有这一格 ⇒ 空数组（不是"没有未落名册"，是这一份读数没给）。
  */
 function asUnrostered(value: unknown): RosterUnrostered[] {
   if (!Array.isArray(value)) {
@@ -291,7 +291,7 @@ function asNode(value: unknown): RosterNode | null {
     // 而不是把它当成"静默" —— 那正是这一批要修的那个读数的反面）。
     state: asAgentState(value["state"]),
     state_reason: asText(value["state_reason"]),
-    // 疑似停滞（业主 2026-10-26 第二条）：旧后端不给这三格 ⇒ `stalled=false` 且秒数
+    // 疑似停滞（业主第二条）：旧后端不给这三格 ⇒ `stalled=false` 且秒数
     // `null`（那一枚标记不画）。这不是"没有停滞"的结论，只是"这一份读数没给这一格" ——
     // 所以秒数的缺省是 `null`，不是 0（0 会被读成"刚刚还走过一步"）。
     stalled: value["stalled"] === true,
@@ -304,7 +304,7 @@ function asNode(value: unknown): RosterNode | null {
   };
 }
 
-/** 一件活那一行的文字（业主 2026-10-24：「一个子代理后面可展开它管的任务号」）。
+/** 一件活那一行的文字（业主：「一个子代理后面可展开它管的任务号」）。
  *
  * 读不到的格子写"未读到"，不折成 0 / 空串冒充"没有"：这一行的用途是让人认出
  * "这个子代理管过哪几件活、各是什么时候跑的、什么结局"，缺一格就少一格的可判性。
@@ -594,7 +594,7 @@ export function tallyKids(kids: TreeRow[]): StateTally {
 
 /** 行尾那一格「活 N（飞 a · 待 b）」：N = 非静默 = 在飞 + 待机。
  *
- * 业主 2026-10-26：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」。
+ * 业主：「『▸ 活 N』改成 ▸ 活 N（飞 a · 待 b），N = 非静默」。
  * 为什么不用 `children.length`：那个数把已收工（静默）的子也算进来，于是"名下 5 个、
  * 其中 4 个早在昨天就收工了"与"名下 5 个都在干活"长得一模一样 —— 这正是这一批要修的
  * 那个读数。`unknown` 不进 N（判不了不等于活跃），但它一定单独显示出来，不许被吃掉。
@@ -615,7 +615,7 @@ export const ACTIVE_TEXT = "活跃（非静默）";
 
 /** 疑似停滞那一枚标记的文案与悬停说明（`null` = 这个节点不标）。
  *
- * 业主 2026-10-26 第二条裁定（真机证据在 `projects/mp3-r3` 的 B1 / t-000006：
+ * 业主第二条裁定（真机证据在 `projects/mp3-r3` 的 B1 / t-000006：
  * 81 分钟里只有 4 个 step，状态却一直是 `running`）：
  * 一个任务仍是 `running`、可最近 N 分钟没有新步 ⇒ 页面必须看得见这件事。
  *
