@@ -935,9 +935,9 @@ def content_leg_unmet(store: Any, project_root: Path, *,
 
 
 def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
-    """产物台账（`ARTIFACTS.jsonl`）与盘上一致吗（EE-05，`draft/52` C4）。
+    """产物台账（`ARTIFACTS.jsonl`）与盘上一致吗：返回 `(对不上的行数, 明细)`。
 
-    返回 `(对不上的行数, 明细)`；三档分开报，不折成一个布尔：
+    三档分开报，不折成一个布尔：
 
     - `changed`：登记时钉的 sha256 与盘上现在这一版不同（登记之后被改写）；
     - `missing`：台账里登记过、盘上没了；
@@ -953,9 +953,8 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
         raise LegNotApplicable(
             "artifact_ledger_bad_rows", f"这个工作区没有产物台账：{led}")
     records, bad_lines = A.read_ledger(project_root)
-    # ---- D9（业主 2026-10-09 裁"收窄"，即选择题 T1c 的 1c-1）：
-    # 台账是 append-only 历史，逐行比必然把任何被改写过的文件读成 `changed`
-    # （真机 t1u：23 条全是框架自己幂等重写的 `out/tasks/*.json`）⇒
+    # ---- D9 的收窄：台账是 append-only 历史，逐行比必然把任何被改写过的文件读成
+    # `changed`（框架自己幂等重写 `out/tasks/*.json` 就会命中）⇒
     # 按路径取最后一条登记比 —— 那才是"交出去的那一版"。
     latest: dict[str, dict[str, Any]] = {}
     for rec in records:
@@ -995,9 +994,8 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
 def _round_advanced(rec: Mapping[str, Any]) -> tuple[bool, str]:
     """这一条 `attack_plans.history` 记录算不算"这一轮真的推进了"（`plan_progress_rows` 的唯一口径）。
 
-改前那一档的口径只有一句"`history` 非空"（`closing.py` 的 `advanced = [r for r in rows if
-r["history"]]`）⇒ 两轮全 `no_change` 与四轮全 `progress` 的计划在「攻（攻坚推进）」那一格上等值
-（真机 mp3：`000000` 与 `000001` 读到同一个数）—— 这一格就什么都没量到。
+只判"`history` 非空"是不够的：两轮全 `no_change` 与四轮全 `progress` 的计划会在
+「攻（攻坚推进）」那一格上等值 —— 这一格就什么都没量到。
 
 判据三条（`outcome` 那一半与"产出了什么"那一半缺一不可）：
 ① `outcome == "progress"` —— `no_change` / `blocked` 都不是推进：前者是"这一轮没有新事实"
@@ -1043,10 +1041,10 @@ r["history"]]`）⇒ 两轮全 `no_change` 与四轮全 `progress` 的计划在�
 def _review_locator(bits: Mapping[str, Any]) -> str:
     """无台账按位读时，这条"审过"能不能定位到一次具体的签名（空串 = 判不了）。
 
-    ## 为什么需要这一格（2026-10-22 审计的第 4 条）
+    ## 为什么需要这一格
     `bits.reviewed=True` 是写侧留下的一个布尔，它本身不说明"谁在哪一版上签的"。
-    有台账的行由台账现算（`verifications.review_standing`）；没有台账的历史行改前一律
-    按位读，于是"位说审过、台账一次没签、凭据里也没有任何可定位的东西"也会被算进 R10 ——
+    有台账的行由台账现算（`verifications.review_standing`）；没有台账的历史行按位读，
+    于是"位说审过、台账一次没签、凭据里也没有任何可定位的东西"也会被算进 R10 ——
     同一行在 `statement_review_reading` 那边读成 `unsigned` / `conjecture`，两条读侧
     对同一行给出两个等级。
 
@@ -1066,10 +1064,10 @@ def _review_locator(bits: Mapping[str, Any]) -> str:
 
 # ------------------------------------------------------------------ G8 的回执有没有台账背书
 #
-# D-41（2026-10-24 真机 r34d）：`out/review/RUN-EVIDENCE.json` 在盘上、`checked` 也是
-# true，可它是 E 用旁路脚本（`code/e_g8_recheck.py`）自己写出来的 —— 只要没有任何判据
-# 拿它逐条去对 `experiments` 台账行，"本轮实跑过"这件事就仍然是一句自述。
-# 这一组读数的口径只有一条：回执里的每条 `command` 都要对上一条台账行 ——
+# D-41 的读数：`out/review/RUN-EVIDENCE.json` 自己在盘上、`checked` 也是 true，
+# 也仍然可能是一句自述 —— E 可以用旁路脚本（`code/e_g8_recheck.py` 这一类）自己写出
+# 这份文件。只要没有任何判据拿它逐条去对 `experiments` 台账行，"本轮实跑过"这件事就
+# 没有载体。这一组读数的口径只有一条：回执里的每条 `command` 都要对上一条台账行 ——
 # 同一个脚本（`code_path` / `script_path`，或 `code_hash`）且 `exit_code` 一致。
 # 对不上 ⇒ 收工门拦（`run_evidence_unbacked`）；回执读不懂 ⇒ 记没查成（不判 pass）；
 # 成稿里根本没有数值/穷举结论 ⇒ 这一档不适用（不误报）。
@@ -1087,15 +1085,15 @@ NUMERIC_CONCLUSION_KINDS: tuple[str, ...] = ("proof", "cross_check")
 #: 必要时出一条 blocker —— `machine_pass` 只看 blocker 与 `status`，所以它会真的拦住）。
 RUN_EVIDENCE_READING = "run_evidence"
 
-#: 回执没有台账背书时的理由码（D-41）。
+#: 回执没有台账背书时的理由码。
 RUN_EVIDENCE_UNBACKED_CODE = "run_evidence_unbacked"
 
 #: 回执在盘上但读不懂时的理由码（没查成 = 不判 pass，但它不是"对不上"）。
 RUN_EVIDENCE_UNREADABLE_CODE = "run_evidence_unreadable"
 
-#: M 的验收表里「G8 那一行」的受控档名（D-41 ②，业主 2026-10-24 裁"做成全形"）。
+#: M 的验收表里「G8 那一行」的受控档名（做成全形）。
 #:
-#: 语义（业主口径逐字）：被台账背书、且成稿引用的数值结论覆盖到的结论条数；缺省阈值 =
+#: 语义：被台账背书、且成稿引用的数值结论覆盖到的结论条数；缺省阈值 =
 #: 本轮成稿引用的数值结论条数。0 条而正文引了数值结论 ⇒ 这一行不成立。它答的是
 #: 「本轮真的重跑过吗」，不是「那个文件在不在」。
 #:
@@ -1176,9 +1174,9 @@ def _row_script(row: Mapping[str, Any]) -> str:
 def match_run_evidence_entry(entry: Mapping[str, Any],
                              rows: Sequence[Mapping[str, Any]],
                              ) -> tuple[dict[str, Any] | None, str]:
-    """回执里的一条命令对得上哪一行 `experiments` —— 唯一实现（D-41）。
+    """回执里的一条命令对得上哪一行 `experiments` —— 唯一实现。
 
-    返回 `(那一行, "")`；对不上时返回 `(None, 为什么)`。判据只有两条（业主口径）：
+    返回 `(那一行, "")`；对不上时返回 `(None, 为什么)`。判据只有两条：
     同一个脚本（路径或 `code_hash`）＋ `exit_code` 一致。两条都成立才算"这一条命令是
     台账里某一次真实运行的复述" —— 只对上路径而对不上退出码，说明回执声称的那次运行
     在台账上不存在（或结论正相反）。
@@ -1203,7 +1201,7 @@ def match_run_evidence_entry(entry: Mapping[str, Any],
         row_hash = str(row.get("code_hash") or "").strip().lower()
         path_ok = bool(script and row_script and _same_script(script, row_script))
         hash_ok = bool(digest and row_hash and _hash_prefixed(digest, row_hash))
-        # 身份两条腿（业主口径：「同一个 script_path（或 code_hash）」）：显式给了路径就按路径认
+        # 身份两条腿（同一个 script_path，或 code_hash）：显式给了路径就按路径认
         # （同时给了 `code_hash` 就两条都要成立）；只给了 `code_hash` 就按哈希认 —— 那时
         # 命令串里的那份路径只是给人读的，不拿它当身份。
         if explicit:
@@ -1250,7 +1248,7 @@ def _active_experiment_rows(store: Any) -> list[dict[str, Any]]:
     """仍然有效的实验行（已撤销的那些不在里面：`schema.experiment_is_voided`）。
 
     验收档问的是「这条结论现在还有几条证据」，而撤销说的是「那一条不再算数」
-    （业主 2026-10-24：「改脚本后应该重新登记并把老登记撤销」）。所以数证据的
+    （改脚本之后要重新登记并把老登记撤销）。所以数证据的
     那几档一律走这里，不直接数台账行数 —— 判据只有一处，与读数侧的
     `verify_tools.evidence_for` 用同一个谓词（两边口径分家会让同一个问题给出两个数）。
     """
@@ -1308,7 +1306,7 @@ def numeric_conclusions(store: Any, rows: Sequence[Mapping[str, Any]] | None = N
 
 
 def run_evidence_reading(store: Any, project_root: Path | str) -> dict[str, Any]:
-    """G8 的回执有没有台账背书 ⇒ 四态读数（D-41 的唯一实现）。
+    """G8 的回执有没有台账背书 ⇒ 四态读数（唯一实现）。
 
     四态（与收工门的其它读数同一套纪律）：
 
@@ -1326,7 +1324,7 @@ def run_evidence_reading(store: Any, project_root: Path | str) -> dict[str, Any]
 
     为什么分母数"结论条数"而不是"脚本个数"：成稿可能引两条结论而它们出自同一个脚本
     （一次运行支持两句话）—— 那时数脚本会把一条覆盖率算成 1，把两条结论读成没覆盖；
-    业主口径也是「min = 本轮成稿引用的数值结论条数」。
+    分母也是「min = 本轮成稿引用的数值结论条数」。
     """
     root = Path(project_root)
     path = root / RUN_EVIDENCE_NAME
@@ -1410,7 +1408,7 @@ def run_evidence_reading(store: Any, project_root: Path | str) -> dict[str, Any]
     matched_scripts = {_row_script(r) for r in matched_rows} - {""}
     missing = [s for s in concl["scripts"]
                if not any(_same_script(s, got) for got in matched_scripts)]
-    # 结论那一层（业主口径的分母）：成稿引用的每条数值结论，它背后的脚本有没有被
+    # 结论那一层（分母）：成稿引用的每条数值结论，它背后的脚本有没有被
     # 对上台账的命令覆盖到。一条结论一条账 —— 同一脚本上的两条结论算两条。
     cited_scripts = _cited_scripts(concl, rows)
     missing_concl = [eid for eid, script in cited_scripts.items()
@@ -1419,9 +1417,8 @@ def run_evidence_reading(store: Any, project_root: Path | str) -> dict[str, Any]
     unbacked.sort(key=lambda e: e["claim_id"])
     # 「来路」那一格（读数，不拦门）：回执的 `claim_id` 若不是成稿里引着这些实验的那条
     # 断言，就说一声。G8 的回执按 `documents.claims[].claim_id` 对断面（`gates.gate_g8`
-    # 就是那么比的），而 r34d 的那份旁路回执写的是 `stmt:000007` —— 它对上了台账，
-    # 却不是任何一个断言的编号。这件事要看得见，但它不再多判一条 fail：
-    # 对账那一半（脚本 + 退出码）已经在上面判过了。
+    # 就是那么比的），而旁路脚本自己写的回执可能给一个对上台账、却不是任何断言编号的值。
+    # 这件事要看得见，但它不再多判一条 fail：对账那一半（脚本 + 退出码）已经在上面判过了。
     manuscript_claims = {str(c.get("claim_id") or "") for c in concl["claims"]} - {""}
     foreign_claims = sorted({e["claim_id"] for e in entries
                              if e["claim_id"] and e["claim_id"] not in manuscript_claims})
@@ -1473,8 +1470,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
     if kind == "artifact_ledger_bad_rows":
         return artifact_ledger_reading(project_root)
     if kind == RUN_EVIDENCE_LEG_KIND:
-        # D-41 ②（业主 2026-10-24 裁"做成全形"）：G8 那一行按回执有没有台账背书判，
-        # 不按"那个文件在不在"判。分母是成稿引用的数值结论条数（由台账算），分子是被
+        # G8 那一行按回执有没有台账背书判，不按"那个文件在不在"判（"做成全形"就是这个
+        # 意思）。分母是成稿引用的数值结论条数（由台账算），分子是被
         # 对上台账的命令覆盖到的结论条数 —— 于是"正文引了结论、一条回执都没有"是
         # 0 < min，而不是"文件在 ⇒ 成立"。
         # 三态由这一档自己给：没有数值结论 ⇒ 这一行 not_applicable（不误伤那些本来就不
