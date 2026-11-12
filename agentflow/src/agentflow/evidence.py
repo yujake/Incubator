@@ -444,9 +444,9 @@ def _default_search(topic: str, *, limit: int, timeout_sec: float) -> Sequence[A
             f"检索客户端造不出来（{type(exc).__name__}: {exc}）⇒ 本次没有发起检索"
         ) from exc
 
-    # [踩过] 用 `precise` 而不是 `topical`：`topical` 的两路查询按被引/年份排序，
-    # 主题 "abelian group" 会混进石墨烯、希格斯玻色子这类条目 —— 材料一旦跑偏，
-    # "只能用给定材料作答"就变成了"只能引用不相干的材料"。
+    # [踩过] 用 `precise` 而不是 `topical`：实测（2026-09，本机联网）`topical` 的两路查询
+    # 按被引/年份排序，主题 "abelian group" 会混进石墨烯、希格斯玻色子这类条目 —— 材料一旦
+    # 跑偏，"只能用给定材料作答"就变成了"只能引用不相干的材料"。
     # `precise` 走短语检索 + 标题关键词过滤，返回的是标题真对得上的条目
     # （`Infinite Abelian groups` / `Abelian groups` 一类）。
     # description 传空：本层的输入只有一个 topic，没有第二段描述可用。

@@ -72,8 +72,10 @@ class _Adjudicate:
         )
         detected = IX.detect_contradictions(scope)
         this_pair = next((x for x in detected if set(x["relation_ids"]) == set(rel_ids)), None)
-        #: 当前这对关系的对立强度。只有 strong 允许驱动状态变更与追问；
-        #: [踩过] weak（"否定标记出现与否不一致"）的假阳性极高 —— 实测（`draft/12` §2）：
+        #: [契约] 当前这对关系的对立强度：只有 strong 允许驱动状态变更与追问。
+        #: [为什么] weak（"否定标记出现与否不一致"）的假阳性极高，把 weak 拿去问 A 等于用
+        #: A 的产能换一堆假问题，而 I7 的配额正是为保护产能设的。
+        #: [踩过] 实测（`draft/12` §2）：
         #: 25 条真实关系里旧"字面矛盾"判据报出 6 条 `suspect`（24%），没有一条是真矛盾。
         #: 把 weak 也拿去问 A，等于用 A 的产能换一堆假问题，而 I7 的配额正是为保护产能而设的。
         pair_strength = str((this_pair or {}).get("strength") or "weak")
