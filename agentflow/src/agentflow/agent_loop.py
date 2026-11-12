@@ -3771,12 +3771,12 @@ def message_admission(role: str, to: str, reply_to: str = "") -> str:
 
 def _callable_members(secretary: Any, *, owner: str
                       ) -> tuple[list[dict[str, Any]], str]:
-    """我「能通话的人」 = 我的父 + 我的子（业主 2026-10-19，逐字：「只有这些编号能通话」）。
+    """我「能通话的人」 = 我的父 + 我的子（「只有这些编号能通话」）。
 
     返回 `(成员, 问题)`；问题非空 ⇒ 名册这一格没读成（调用方按 `roster_unavailable` 处理 —— 不许当成"名册里一个人都
     没有"，那会把一次读失败变成一次静默的按角色名投递）。每个成员：
-    `{"kind": "parent"|"child", "name", "task_id", "role", "brief", "retired"}`，`task_id` 是「绝对编号」（业主的要
-    求），`name` 是名册名（父的名册名记在祖父的名册里，由 `roster_view` 的 `parent` 那一格换算好；读不到就是空串）。
+    `{"kind": "parent"|"child", "name", "task_id", "role", "brief", "retired"}`，`task_id` 是「绝对编号」，
+    `name` 是名册名（父的名册名记在祖父的名册里，由 `roster_view` 的 `parent` 那一格换算好；读不到就是空串）。
 
     三件刻意的事：只读 `roster_view(owner=我自己)` 这一份（父在 `parent`、子在 `rows`，不另造视图）；`limit` 给到极
     大（默认只回 20 行，用默认值数匹配会在第 21 个子代理上悄悄数错，`more` 是读数不是判据）；父的 `checked` 为假（台
@@ -3838,7 +3838,7 @@ _ROSTER_UNAVAILABLE_REFUSAL = (
 def delivery_addressing(base: Mapping[str, Any], addr: Mapping[str, Any]) -> dict[str, Any]:
     """成功那一档的 `addressing`：只讲「这一条实际怎么投的」，名册探针另起一格。
 
-    为什么不能把 `addr` 原样合进成功的结果（2026-10-22 查实的缺陷）：`to` 写角色名、
+    为什么不能把 `addr` 原样合进成功的结果：`to` 写角色名、
     而那个角色不在我的名册上时，探针给的是 `refused="not_in_roster"` 加一句拒信；
     角色级那一支（按协作边）本来就能把这一条发出去 —— 于是同一个 `addressing` 里
     `ok=true` 与 `refused="not_in_roster"` 并存。走 `ok` 的判据不会因此误判，但事后
@@ -3849,7 +3849,7 @@ def delivery_addressing(base: Mapping[str, Any], addr: Mapping[str, Any]) -> dic
     这句话必须还读得到（收紧规则不等于把理由抹掉）。探针没有拒绝时那一格不出现
     （成功的一步不为空读数长出一个键）。
 
-    D-63 起 `addressed_by`（`roster_name` / `task_id` / `role_fallback` /
+    `addressed_by`（`roster_name` / `task_id` / `role_fallback` /
     `role_dispatch` / `channel`）留在成功那一档的 `addressing` 里：它不属于"被拒"，
     而是"这一条是靠哪一种写法定到收件人的" —— 抹掉它，兼容档（角色代号兜到的那些）
     就数不出来了。它也不进 `roster_probe`：那是"名册探针怎么答的"，与"最终用了哪一档"
@@ -3865,25 +3865,25 @@ def delivery_addressing(base: Mapping[str, Any], addr: Mapping[str, Any]) -> dic
 
 def roster_addresses(secretary: Any, *, to: str, owner: str = "",
                      my_task_id: str = "", sender: str = "") -> dict[str, Any]:
-    """把收件人写法 `to` 解析成"名册上的那个成员"（业主 2026-10-19 的裁定）。
+    """把收件人写法 `to` 解析成"名册上的那个成员"。
 
-    口径（业主逐字）：名册 = 自己的父与子（含绝对编号），「只有这些编号能通话」，其余 `to` 一律拒收（不许按角色名随便
-    发）。可接受的写法三种，且三种都必须落在"父 ∪ 子"里：①绝对编号（`task_id`，业主点名的第一公民）；②名册名（`F1` /
+    口径：名册 = 自己的父与子（含绝对编号），「只有这些编号能通话」，其余 `to` 一律拒收（不许按角色名随便
+    发）。可接受的写法三种，且三种都必须落在"父 ∪ 子"里：①绝对编号（`task_id`，第一公民）；②名册名（`F1` /
     `D1`）；③角色名（`F`，只作便利写法 —— 名册内唯一匹配才算，匹配到 0 个或多个都拒）。
     返回三态（不许折平）：`checked`（名册读成了没有，`False` 不等于"名册里没有这个人"）、`how`（这一条为什么这么投）、
     `kind`/`name`/`task_id`/`role`（解析到的成员）、`candidates`（同名多匹配时全部的候选名册名）、`callable`（「你能通
     话的是：…」，每一张拒信都带它）、`refused`（受控拒绝的理由码，空串 = 没拒）、`error`（给人/给模型读的那句拒信）。
     `how` 的取值（每一个都由某一行产出，没有死取值）：`outside_roster`（① `ALL` —— 公共频道有自己那一套可
-    见面判据，业主 T20/T21；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
+    见面判据；②用户；③主控 M —— 代唤协议逐字要求任何角色都能把申请发给它；外加主控当发信人时按角色名派活
     /通知那一档）、`roster_unavailable`（没有秘书 / 没有台账号 / 名册读不成 ⇒ 私聊「不投递」：
-    这一档带 `refused="roster_unavailable"` 与一句拒信，调用方按受控拒绝处理 —— 2026-10-22 按业主
-    口径从 fail-open 改成 fail-closed，那之前它是"退回原来的路照发，读数标出来"）、`parent` / `child`
+    这一档带 `refused="roster_unavailable"` 与一句拒信，调用方按受控拒绝处理 —— fail-closed：名册读不出来
+    就不投递，不退回按角色名照发）、`parent` / `child`
     （解析到了 ⇒「只投那一个」）、`member_retired`（已退役 ⇒ 受
-    控拒绝，业主 B1：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名或
+    控拒绝：名字永久不复用）、`not_in_roster`（不在"父 ∪ 子"里 ⇒ 受控拒绝）、`ambiguous_in_roster`（角色名或
     绝对编号匹配到多个 ⇒ 受控拒绝 + 列候选，「不替你挑一个」）。
     这一格「只判"发给谁"」，不判"能不能发"：协作边准入仍是 `message_admission` 那一份唯一实现。
 
-    ## `addressed_by`（D-63，业主 2026-10-24：「现在怎么还有to谁的写法？已经是名册机制了！」）
+    ## `addressed_by`
 
     这一格回答「这一次的收件人是靠哪一种写法定下来的」，取值与产出它的那一行一一对应：
 
@@ -3896,10 +3896,10 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
     | `channel` | `ALL` / 用户 / 主控 M | 频道（不归名册管） |
     | 空串 | 没有解析到任何收件人（含全部受控拒绝） | 无 |
 
-    为什么必须有这一格：改前"按名册名发"与"按角色代号发"在回执上长得一样 ——
+    为什么必须有这一格：没有它，"按名册名发"与"按角色代号发"在回执上长得一样 ——
     `how` 都是 `parent` / `child`，读的人分不出这一次到底用的是哪一档，于是
     「角色代号还能不能当收件人」这件事在盘上没有读数。有了它，兼容档是可见的、
-    也是可数的（`role_fallback` 出现的次数就是"还有多少条在用老写法"）。
+    也是可数的（`role_fallback` 出现的次数就是"还有多少条在用角色代号"）。
     它刻意不是"收件人是不是唯一的"那种判断：唯一性由 `ambiguous_in_roster` 那一档拒。
     """
     out: dict[str, Any] = {
@@ -3934,15 +3934,15 @@ def roster_addresses(secretary: Any, *, to: str, owner: str = "",
         return out
     out["callable"] = _callable_line(members)
     mine = str(my_task_id or "")
-    # ① 绝对编号（业主点名的第一公民）；自己那一行不算（"发给我自己"没有意义）
+    # ① 绝对编号（第一公民）；自己那一行不算（"发给我自己"没有意义）
     hit = [m for m in members
            if str(m.get("task_id") or "") and str(m["task_id"]) == token
            and str(m["task_id"]) != mine]
     how_hint = token
     addressed_by = "task_id" if hit else ""
     if len(hit) > 1:
-        # ⑦（业主 2026-11-02）：同一个号在名册上对应多个成员 ⇒ 拒歧义，不静默取 hit[0]。
-        # 改前这里 `member = hit[0]`：按号寻址会静默把信投给名字排序第一个的那个成员，
+        # ⑦ 同一个号在名册上对应多个成员 ⇒ 拒歧义，不静默取 hit[0]：
+        # 取 hit[0] 会把信静默投给名字排序第一个的那个成员，
         # 而"同一个号两个名字"正是名册重复里最危险的一档（第二个名字永远收不到）。
         names = sorted(str(m.get("name") or m.get("task_id") or "") for m in hit)
         out.update(checked=True, how="ambiguous_in_roster", task_id=token,
