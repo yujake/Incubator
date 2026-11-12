@@ -118,7 +118,7 @@ def _write_manuscript(store: Store, rel: str = REL) -> str:
     path = pathlib.Path(store.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        "# 证明手稿（判据夹具）\n\n- 命题号：stmt:000000\n- 证明号：1\n"
+        "# 证明手稿（判据夹具）\n\n- 命题号：stmt:000000\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         "## 命题\n\n红色互连集的定义是良定义的。\n\n"
         f"## 证明\n\n{WELLDEF}\n\n" + DS.render_dependency_section([]),
