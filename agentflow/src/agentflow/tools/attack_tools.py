@@ -1,21 +1,28 @@
 """F 的工具：多轮难题攻坚。
+
 ## [为什么] 为什么"攻坚"需要独立的预算模型
-因此本模块把三维预算（FC-18）做成可机械检查的东西：
-- `max_rounds` —— 生命周期总量：这个难题总共允许几轮；- `max_parallel_subgoals` —— 瞬时并发：一轮里允许同时推进几个子目标；- 
-`max_persist_attempts` —— 单点重试：同一个子目标最多重试几次；- `max_depth` —— 嵌套深度：攻坚中派生出的新难题最多嵌套几层。
+三维预算（FC-18）要做成可机械检查的东西：`max_rounds`（生命周期总量：这个难题总共
+允许几轮）/ `max_parallel_subgoals`（瞬时并发：一轮里允许同时推进几个子目标）/
+`max_persist_attempts`（单点重试：同一个子目标最多重试几次）/ `max_depth`（嵌套深度：
+攻坚中派生出的新难题最多嵌套几层）。
+
 ## [契约] `can_round` 的两个维度不能混为一谈（读代码前先看这一段）
-`can_round(budget, rounds_done=..., depth=...)` 同时检查两件事，但它们的后果完全不同：
-- 轮数用尽 ⇒ 这个计划该停了（交出 `best_partial`，标 `stalled`）；
-所以 `AgentF.step` 只在轮数维度用 `can_round` 做终止判据（见 `agent_f.py` 的说明），深度维度由 `can_derive` 单独暴露给"要不要派生"这个决策。
+`can_round(budget, rounds_done=..., depth=...)` 同时检查两件事，后果完全不同：轮数用尽
+⇒ 这个计划该停了（交出 `best_partial`，标 `stalled`）；深度用尽 ⇒ 只是不许再派生，计划
+本身还能推进。所以 `AgentF.step` 只在轮数维度用 `can_round` 做终止判据，深度维度由
+`can_derive` 单独暴露给"要不要派生"这个决策。
+
 ## [契约] 工具与智能体的分工
-`attack.create_plan` / `attack.step` / `attack.status` / `attack.list_plans`是对 
-`agentflow.agent_f.AgentF` 的薄封装（惰性导入避免成环）：写入逻辑只有一份。`attack.check_budget` / `attack.pick_next_subgoal` 是纯
-函数，直接在这里实现，`AgentF` 转发过来 —— 与此前一样，"不要发明第二套判据"。
+`attack.create_plan` / `attack.step` / `attack.status` / `attack.list_plans` 是对
+`agentflow.agent_f.AgentF` 的薄封装（惰性导入避免成环）：写入逻辑只有一份。
+`attack.check_budget` / `attack.pick_next_subgoal` 是纯函数，直接在这里实现，`AgentF`
+转发过来 —— 与此前一样，"不要发明第二套判据"。
+
 ## [踩过] 六个 handler 都过 `_guard`（修过的缺陷；`DEVELOPMENT.md` §3 纪律 3）
-六个 handler 此前只有"成功"一条路：`PlanError` / `schema` 的 `ValueError` /`StoreError` 会直接逃出工具层，被 `tools/base.py` 兜成
-`kind="unexpected"`。那是已知失败原因，不是"未预期的异常" —— 调用方要靠 kind 决定"重试还是改输入"（`DEVELOPMENT.md` §3 纪律 3）。
-- `PlanError` ⇒ `kind="plan_error"`（带原始原因）；- `ValueError`（`schema` 行校验）⇒ `kind="validation_error"`；- 
-`StoreError` ⇒ `kind="store_error"`；- 未接线仍走 `_need_store()` ⇒ `kind="not_wired"`。
+六个 handler 此前只有"成功"一条路：`PlanError` / `schema` 的 `ValueError` / `StoreError`
+会直接逃出工具层，被 `tools/base.py` 兜成 `kind="unexpected"` —— 那是已知失败原因，不是
+"未预期的异常"，而调用方要靠 kind 决定"重试还是改输入"。现在分别落成
+`plan_error` / `validation_error` / `store_error`，未接线仍走 `kind="not_wired"`。
 守卫实现只有一份（本模块的 `_guard`），`graph_tools` 从本模块 import 它。
 """
 
@@ -52,14 +59,10 @@ DEFAULT_BUDGET: dict[str, int] = {
 
 _REQUIRED_BUDGET_KEYS = ("max_rounds", "max_parallel_subgoals", "max_persist_attempts", "max_depth")
 
-#: 终结状态（不能自动重入）。`stalled` 也在其中：它表示"预算用尽仍未解决"，
-#: 不是"暂时停下等一会儿"。把它排除在外，循环下一轮就会把它当活计划重新拾起，
-#: 于是"预算用尽"这个终止条件形同虚设。
-#: 不再自持一份名单：它就是 `schema.ATTACK_TERMINAL_STATUSES`。
-#:
-#: 这里原先写死 `("resolved","abandoned","stalled")`，漏了 `supported_not_proved` ——
-#: 而 `agent_f` 会真的写它。后果是一个已达终态的计划被当成活计划重新拾起。
-#: 两处名单的存在本身就是缺陷（FC-03）：同一个"终态"概念不可能有两个定义。
+#: 终结状态（不能自动重入）。`stalled` 也在其中：它表示"预算用尽仍未解决"，不是"暂时
+#: 停下等一会儿" —— 排除它，循环下一轮就会把它当活计划重新拾起，"预算用尽"这个终止条件
+#: 形同虚设。名单不自持：它就是 `schema.ATTACK_TERMINAL_STATUSES`（两处名单的存在本身
+#: 就是缺陷，FC-03：同一个"终态"概念不可能有两个定义）。
 from ..schema import ATTACK_TERMINAL_STATUSES as TERMINAL_STATUSES  # noqa: E402
 #: 子目标状态的「词表」（`pick_next_subgoal` 要在给结论之前拿它校验：
 #: 状态写错时若直接回"没有可推进的子目标"，就把输入写错读成了"确实没有待办"）。
@@ -301,23 +304,24 @@ def _plan_error_kind(exc: Exception) -> str:
 
 def _guard(fn: Callable[[], Any]) -> ToolResult:
     """把已知的失败原因变成结构化失败，绝不让它逃成 `kind="unexpected"`。
-    这是 `attack_tools` 与 `graph_tools` 共用的一份实现（FC-03：同一判据只有一份）。`graph_tools` 由 `from .attack_tools import _guard` 转发，不另写一份。
-    [踩过] 为什么必须捕这三类（修之前的实测形态，见报告；`draft/28` §150）
-    ===================  ==========================================  ==========================异常                  谁抛
-    修之前调用方看到的 kind===================  ==========================================  ==========================`StoreError`
-    `store.rows`/`store.tx`：表不是合法 JSON、   `"unexpected"`（`RuntimeError`）    锁超时、编号用尽`PlanError`          `AgentF` 的攻坚拒绝（计划不存在、
-    子目标缺   `"tool_error"`（`ToolError`）      owner、预算不完整）`ValueError`         `schema` 的行校验 / `AttackPlan.validate()`  
-    `"tool_error"`===================  ==========================================  ==========================
-    `kind="unexpected"` 的语义是"我们没预料到"—— 把已知原因混进去，调用方就无法区分"重试可能成功"与"重试一百次也一样"。`StoreError` 那一格尤其严重：它是环境故障，与"这次调用写错了"需要完全不同的处置。
-    - `tools/doc_tools.py::guard_result`：`ValueError` ⇒ `validation_error`、`StoreError` ⇒ `store_error`；- 
-    `tools/verify_tools.py::_run_experiment_tool`：`except ToolError: raise`把工具层自己的异常留给 `ToolRegistry.call` 分类，其余各给一个结构化 kind。
-    为什么 `except PlanError` 要排在 `except ToolError` 之前`PlanError` 是 `ToolError` 的子类。`ToolError` 那一支刻意 `raise`（工具层自己的异常由 
-    `base.py:456-459` 映射成 `tool_error`），所以 `PlanError` 必须在它之前接住 —— 否则"攻坚计划层面的拒绝"会被压成笼统的 `tool_error`，具体失败类型又丢一次（这正是本函数要修的东西）。
-    为什么 `PlanError` 的类型要运行时取（`_plan_error_type()`）`agent_f` 在模块级 `from .tools import attack_tools as AT`，所以本模块不能在模块级 
-    `from ..agent_f import PlanError`（成环）。用`except _plan_error_type() as e:` —— `except` 的表达式在异常真的发生时才求值，那时 `agent_f` 早已装载完成。这
-    样拿到的是 `agent_f` 模块当前的属性（不是首次使用时的缓存），`tests` 里对 `agent_f.PlanError` 打桩/换类也不会失效。
-    `ValueError` 分支的文案带具体原因（`e` 本身就是 `schema` 的字段级报错，例如 `invalid literal for int() with base 10: 'abc'`）。只说"校验失败"对调用方没有可操作性
-    —— 它必须知道是哪个字段读不动才能改输入（形态照 `verify_tools.py:477` 的 `f"…：{exc}（没有落库）"`）。
+
+    这是 `attack_tools` 与 `graph_tools` 共用的一份实现（FC-03：同一判据只有一份）；
+    `graph_tools` 由 `from .attack_tools import _guard` 转发。
+
+    [踩过] 为什么必须捕这三类（修之前的实测形态，`draft/28` §150）：`StoreError`（表不是
+    合法 JSON / 锁超时 / 编号用尽）、`PlanError`（攻坚拒绝：计划不存在 / 子目标缺 owner /
+    预算不完整）与 `ValueError`（`schema` 行校验）此前都逃成 `kind="unexpected"`，调用方
+    分不清"重试可能成功"与"重试一百次也一样"。
+
+    - `PlanError` 必须排在 ``except ToolError`` 之前：它是 `ToolError` 的子类，而
+      `ToolError` 那一支刻意 `raise`（留给 `base.py:456-459` 映射成 `tool_error`）——
+      否则"攻坚计划层面的拒绝"会被压成笼统的 `tool_error`，具体失败类型又丢一次。
+    - `PlanError` 的类型要运行时取：`agent_f` 在模块级反向 import 本模块，模块级导入必
+      成环；`except` 的表达式在异常真发生时求值，那时 `agent_f` 已装载完成。这样拿到的是
+      模块当前属性（不是首次使用的缓存），`tests` 里换类也不会失效。
+    - `ValueError` 分支的文案带具体原因（`e` 本身就是字段级报错，如
+      `invalid literal for int() with base 10: 'abc'`）：只说"校验失败"没有可操作性，
+      调用方要知道哪个字段读不动才能改输入。
     """
     try:
         return ok(fn())
@@ -439,13 +443,9 @@ def _attack_pick_next_subgoal(subgoals):
     side_effect="write_local",
     roles=_WRITE_ROLES,
     # 键名逐个从实现读出（`agent_f.AgentF.create_plan`）：四条分支（成功 / 判重命中 /
-    # 预算被拒 / 缺 testable）的键集合逐字相同（2026-10-27 统一）—— 声明只有一套键，
-    # 两套键之间必然有一格"声明了却永远不出现"或"出现了却没声明"。
-    # 拒绝那两支配 `missing`（缺哪几类预算键）/ `kind` / `error` / `refusal_reason` /
-    # `subgoal_id`；没有拒绝的那两支这几格是空串 / 空表。没有计划可读数的那几格同理
-    # （`status=''`、`subgoals=0`）。
-    # `ok` 三态都有（`draft/37` §127）：`False` = 这一笔被拒（调用方据它落
-    # `outcome=refused`，而不是"执行完成"），`True` = 立项成功或"已经立过项了"。
+    # 预算被拒 / 缺 testable）的键集合逐字相同 —— 两套键之间必然有一格"声明了却永远不
+    # 出现"或"出现了却没声明"。拒绝那两支配 `missing` / `kind` / `error` /
+    # `refusal_reason` / `subgoal_id`；`ok` 三态都有（`False` = 这一笔被拒，不是"执行完成"）。
     returns=("{'ok','created','plan_id','duplicate','status','budget','subgoals','reason',"
              "'missing','kind','error','refusal_reason','subgoal_id'}"
              "（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，"
@@ -493,25 +493,14 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
            },
     side_effect="write_local",
     roles=_WRITE_ROLES,
-    # 键名从实现读出（`agent_f.AgentF.step`）：`sid` 是被推进的那个子目标
-    # 的代号（没有可推进的子目标时为 null）；`budget_known` / `budget_reading`
-    # 是这一轮的预算读数（P-09：读不到也如实给，`status="unknown"` + `why`）。
-    # 2026-11-03（p233）：补齐实现的真返回（只加不减）—— 逐条交差读数
-    # （`agent_f/delivery.py::delivery_summary`）与收工那几格（`agent_f/step.py`
-    # 的 `_CLOSE_KEYS`）；键清单取自探针实跑观测，不猜。
-    # 2026-11-04：再补三格（只加不减，原有 37 个键一个未删）—— `v_sign` /
-    # `delivery_state` / `delivery_label`。它们在 `agent_f/step.py:445-448` 真写
-    # （`if deploy.get("v_sign"): out["v_sign"] = …` 那三行），`specs/f.py:50` 也声明了，
-    # 而 `agent_skills.py:1915-1916` 直接教模型去读这三格（"F.step 不替你送审，它只回读签：
-    # 返回值的 `v_sign` 那一格与 `history` 里是这一轮这一份的四档 `delivery_state` /
-    # `delivery_label`"）—— 声明里没有它们，模型就不知道这一格存在。
-    # 与已声明的 `delivery_state_plan` / `delivery_label_plan` 是两件事：那两个是整份任务
-    # 的读数（`delivery_summary` 的 `state`），这三个是"这一轮这一份"的四档。
-    # 2026-11-11（业主裁定 ①）：再补四格（只加不减）—— 收工自动提交的读数
-    # （`auto_submit` 是候选级全文；另外三格进 `_CLOSE_KEYS`，按 `_close_reading` 的
-    # 同一排复制）。它们在 `agent_f/step.py::_close_reading` 与
-    # `agent_f/autosubmit.py::auto_submit_signed` 真写；声明里没有它们时，模型
-    # （读的就是这段 `returns`）不知道收工那一趟提交了哪几份 —— 缺一格就是撒谎。
+    # 键名从实现读出（`agent_f.AgentF.step`）：`sid` 是被推进的那个子目标的代号（没有可
+    # 推进的子目标时为 null）；`budget_known` / `budget_reading` 是这一轮的预算读数
+    # （P-09：读不到也如实给，`status="unknown"` + `why`）。其余键同理只加不减：逐条交差
+    # 读数（`agent_f/delivery.py::delivery_summary`）、收工那几格（`agent_f/step.py` 的
+    # `_CLOSE_KEYS`）、这一轮这一份的四档 `delivery_state` / `delivery_label` 与收工自动
+    # 提交读数。声明漏一格，模型（读的就是这段 `returns`）就不知道那一格存在 —— 缺一格
+    # 就是撒谎。`delivery_state_plan` / `delivery_label_plan` 是整份任务的读数
+    # （`delivery_summary` 的 `state`），与"这一轮这一份"那三格是两件事。
     returns=("{'plan_id','round','sid','action','outcome','status','budget_left',"
              "'reason','budget_known','budget_reading',"
              "'delivery','delivered',"
