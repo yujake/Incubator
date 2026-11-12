@@ -274,6 +274,17 @@ def _match_definition(sentence: str) -> tuple[str, str] | None:
     return None
 
 
+def _aliases_of(raw: Any) -> list[str]:
+    """`aliases` 那一格归一成"去掉首尾空白、丢掉空串"的字符串数组。
+
+    `seed_concepts` 与模型回包里的 `aliases` 是同一种形状，两处共用这一份读法：
+    各写一遍的话，"空别名算不算一条"会在两条入口上各有一套答案。
+    """
+    if not isinstance(raw, list):
+        return []
+    return [text for a in raw if (text := str(a).strip())]
+
+
 def _iter_sentences(page_text: str) -> Iterable[tuple[int, int, str]]:
     """切句，产出 ``(start, end, sentence)``。
 
@@ -366,12 +377,7 @@ class RuleExtractor:
             if not name:
                 continue
             definition = str(item.get("definition") or "").strip()
-            aliases_raw = item.get("aliases") or []
-            aliases = (
-                [str(a).strip() for a in aliases_raw if str(a).strip()]
-                if isinstance(aliases_raw, list)
-                else []
-            )
+            aliases = _aliases_of(item.get("aliases") or [])
             out.append({"name": name, "definition": definition, "aliases": aliases})
         return out
 
@@ -461,9 +467,10 @@ class RuleExtractor:
             # 先挖掉被定义概念自身的出现，再找其它已知概念：
             # 否则 "abelian group is a group …" 会把 "group" 算成"另一个概念"。
             probe = re.sub(re.escape(name), " ", sentence, flags=re.IGNORECASE)
+            self_norm = _norm(name)
             others: list[str] = []
             for key, canonical in known.items():
-                if key == _norm(name):
+                if key == self_norm:
                     continue
                 if self._occurrences(probe, canonical) or (
                     key != _norm(canonical) and self._occurrences(probe, key)
@@ -1214,12 +1221,7 @@ class LLMExtractor:
             if key in seen:
                 continue
             seen.add(key)
-            aliases_raw = item.get("aliases") or []
-            aliases = (
-                [str(a).strip() for a in aliases_raw if str(a).strip()]
-                if isinstance(aliases_raw, list)
-                else []
-            )
+            aliases = _aliases_of(item.get("aliases") or [])
             out.append(
                 ConceptDraft(
                     name=name,
