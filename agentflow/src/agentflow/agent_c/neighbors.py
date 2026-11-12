@@ -81,14 +81,15 @@ class _Neighbors:
             )
         truncated = bool(nb["truncated"]) or bool(clamped)
         empty = len(nodes) <= 1
+        name = g.name_of(cid)
         if empty:
             reason = (
-                f"{g.name_of(cid)}（{cid}）在概念表里，但 {eff_depth} 跳内**没有任何邻居**"
+                f"{name}（{cid}）在概念表里，但 {eff_depth} 跳内**没有任何邻居**"
                 "（它是孤立概念）⇒ 查过了、确实没有邻居"
             )
         else:
             reason = (
-                f"{g.name_of(cid)}（{cid}）在 {eff_depth} 跳内命中 {len(nodes) - 1} 个邻居"
+                f"{name}（{cid}）在 {eff_depth} 跳内命中 {len(nodes) - 1} 个邻居"
                 f"（含起点共 {len(nodes)} 个节点、{len(edges)} 条边）"
             )
         if truncated:
@@ -99,7 +100,7 @@ class _Neighbors:
         return {
             "checked": True,
             "concept_id": cid,
-            "name": g.name_of(cid),
+            "name": name,
             "depth": eff_depth,
             "max_nodes": eff_nodes,
             "nodes": nodes,
