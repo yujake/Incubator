@@ -498,7 +498,7 @@ def research_chain_gaps(store: Any, kinds: Iterable[str], *,
         "na_groups": na_groups,
         #: 只被 `na` 行覆盖的环节（E-04b 的读数）。它的存在不改变 `missing`：
         #: 一行 `na` 依旧让整环在覆盖面这一层"算覆盖"，但这件事现在是看得见的。
-        #: 判"算不算覆盖"由 M/秘书做（`draft/52` 裁决 5 / C1）。
+        #: 判"算不算覆盖"由 M/秘书做。
         "na_only_groups": na_only,
         "missing": missing,
         "note": ("研究型项目（有 `research_questions` 行）的验收表要覆盖研究链八个环节，"
@@ -641,7 +641,7 @@ def citation_fit(store: Any) -> dict[str, Any]:
 
 # ============================================================ 内容判据（D66 / D67 / T1 / T3 口径）
 
-#: 「算」那一环算不算有结论（`draft/39` §6.49 八 的 D66，用户 2026-10-06 裁）：
+#: 「算」那一环算不算有结论：
 #: 「跑过实验」不是产出，「跑出结论」才是。这两个取值就是 `EXPERIMENT_RESULTS` 里
 #: 的非 `inconclusive` 两项（见 `schema.EXPERIMENT_RESULTS`）。
 CONCLUSIVE_EXPERIMENT_RESULTS: tuple[str, ...] = ("supports", "refutes")
@@ -652,9 +652,8 @@ CONCLUSIVE_EXPERIMENT_RESULTS: tuple[str, ...] = ("supports", "refutes")
 #: 我们自己的命题 / 实验 / 关系（这三个前缀各有一张本工作区的表）。
 PAPER_LEDGER_PREFIXES: tuple[str, ...] = ("stmt:", "exp:", "rel:")
 
-#: 论文里「核查章节」的节名特征（T3 口径：核查章节不能替代结果章节）。
-#: 真机读数（`p6r-paper-from-results/out/paper/main.tex` 第 112 行）：那一篇 5 节里
-#: 有一节叫 `Evidence and status`，本轮结果（`exp:0008`）只出现在那一节里。
+#: 论文里「核查章节」的节名特征（T3 口径：核查章节不能替代结果章节 —— 结果只出现在
+#: 「证据 / 状态」那一节里，读起来像交付了，实际没有承载）。
 PAPER_CHECK_SECTION_WORDS: tuple[str, ...] = (
     "evidence", "status", "verification", "verify", "audit", "check",
     "limitation", "disclaimer", "self-check",
@@ -663,14 +662,14 @@ PAPER_CHECK_SECTION_WORDS: tuple[str, ...] = (
 
 
 def experiment_concludes(row: Mapping[str, Any]) -> bool:
-    """这一条实验有没有给出结论（D66「算」半边的机械判据）。
+    """这一条实验有没有给出结论（「算」半边的机械判据）。
 
     三条同时成立才算：
 
-    1. `result` 是 `supports` / `refutes`（`inconclusive` 不是结论 —— 真机读数
-       T2 `p6q`：10 条实验全 `inconclusive`，而旧口径照样让「算」那一环变绿）；
+    1. `result` 是 `supports` / `refutes`（`inconclusive` 不是结论 —— 让它算结论，
+       「算」那一环就变成自报的）；
     2. 结论带着它的适用范围：`search_bound` 或 `certificate` 非空
-       （用户原话「supports|refutes + 界/证书」）—— 脱开边界的「在 N 以内没有反例」
+       （口径是 `supports|refutes` + 界/证书）—— 脱开边界的「在 N 以内没有反例」
        是一句无法复核的话，`schema` 对穷举类已经强制这一条（见 `Experiment.validate`）；
     3. 形式化那一支（`method="formal"`）走检查器输出的口子：`evidence_kind="proof"`
        且 `verifier_output` 非空（`schema` 同样已强制）。
@@ -708,13 +707,13 @@ def _is_check_section(title: str) -> bool:
 
 
 def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
-    """论文有没有承载本轮结果（T3 口径，用户 2026-10-06 裁）。
+    """论文有没有承载本轮结果（T3 口径）。
 
 三条读数（都不看自述，只看 `out/paper/main.tex` 这一份盘上的稿子）：
 
-- `bibitems`：主稿里 `\\bibitem` 的条数（真机读数 `p6r`：1 条）；
+- `bibitems`：主稿里 `\\bibitem` 的条数；
 - `result_sections`：正文里出现 `stmt:` / `exp:` / `rel:` 的非核查章节（这一条才是「承载本轮结果」：
-  真机 `p6r` 的 `exp:0008` 只出现在 `Evidence and status` 那一节里 ⇒ 结果被写进了核查章节）；
+  结果只出现在核查章节里，就等于没承载）；
 - `check_sections`：只出现在核查章节里的那些引用（读数，用来分开报）。
 
 没有 `out/paper/main.tex` ⇒ `LegNotApplicable`（这个工作区没有论文，这一档用不上；不是「查过了没问题」）。
@@ -751,11 +750,11 @@ def paper_ledger_reading(project_root: Path) -> dict[str, Any]:
 
 
 def c_products_in_delivery(store: Any, project_root: Path) -> dict[str, Any]:
-    """C 的分析产物有没有进交付面（`draft/39` §6.49 八 的 D67）。
+    """C 的分析产物有没有进交付面。
 
-真机读数（T5 第 7 趟 `p8g-fermat-shorter-proof`）：`tasks` 里 role=C 四行 `done`（`hottest` /
-`contradictions` / `gaps` / `cold`）、`relations` 107 行，而 `analysis_reports` 0 行、手稿 `refs`
-里一条 `rel:` 都没有 —— C 是这几趟里唯一产出真知识的角色，产物却被扔掉了。
+为什么是这一格：C 的产物（报告与 `rel:` 关系引用）最容易在交付面上不见 —— `tasks` 里四行都
+`done`、`relations` 也有行，而 `analysis_reports` 是 0、手稿 `refs` 里一条 `rel:` 都没有，
+读起来却像做完了。
 
 两条出口（任一成立即算进了交付面）：`rel:` 引用出现在手稿账本的 `refs` 里，或出现在 `documents` 的
 断言 `citations` 里（`manuscripts.OBJECT_REFS` 已认这个前缀并逐条校验指向的关系行在不在册）；或
@@ -792,15 +791,13 @@ def c_products_in_delivery(store: Any, project_root: Path) -> dict[str, Any]:
 def content_leg_unmet(store: Any, project_root: Path, *,
                       researched: bool,
                       computed_kinds: Iterable[str]) -> tuple[list[str], dict[str, Any]]:
-    """五条内容判据（`draft/39` §6.49 八；用户 2026-10-06 裁「产出太保守」）。
+    """五条内容判据（「产出读数」而不是「过程读数」）。
 
-根因（第一层）：门的判据只会因「过程/诚实」拦人、永不因「这数学太平凡」拦人，而最省力的过关方式是如
-实记缺口（`na` + 理由）⇒ 系统学到「少做、如实说」（用户逐字：「我检查了 T1 到 T4 的产出，都是颇为保
-守……看 handoffs 里面没有几条有效信息全在强调纪律」）。这一批把五条「过程读数」升级成「产出读数」
-（前四条对应 §6.49 八的四条，第五条是 T5 第 7 趟暴露的「论文没承载本轮结果」）：
-1. 「算」那一环要结论（D66 算半边，只对研究型项目说话）；2. 「造」那一环要我方派生的命题（D66 造
-半边，只在表里声明了这一环时判）；3. C 的分析产物要进交付面（D67）；4. 逐字引文一条都没核到不算
-交付（T1 口径）；5. 论文要承载本轮结果（T3 口径）。
+根因：门的判据只会因「过程/诚实」拦人、永不因「这数学太平凡」拦人，而最省力的过关方式是如
+实记缺口（`na` + 理由）⇒ 系统学到「少做、如实说」。这一批把五条「过程读数」升级成「产出读数」：
+1. 「算」那一环要结论（只对研究型项目说话）；2. 「造」那一环要我方派生的命题（只在表里
+声明了这一环时判）；3. C 的分析产物要进交付面；4. 逐字引文一条都没核到不算交付；
+5. 论文要承载本轮结果。
 
 三态纪律：读不出来的一律不当成「没有」（那一档各自 try 住，读数里留 `unreadable`）。
     """
@@ -808,10 +805,10 @@ def content_leg_unmet(store: Any, project_root: Path, *,
     unmet: list[str] = []
     readings: dict[str, Any] = {}
 
-    # ---- ① 「算」那一环要结论（D66 算半边）。
+    # ---- ① 「算」那一环要结论。
     # 只在「表里真的声明了这一环」时判（`kinds` = 真算过的行）：研究链覆盖面那一格
     # 已经管「一行都没写」，这一格管的是「写了却说不出结论」。这样既不会误伤
-    # 调查型项目（T4 的清单不声明算/造），也不会被 `na` 关掉（E-04a 的守卫口径）。
+    # 调查型项目（它的清单不声明算/造），也不会被 `na` 关掉。
     compute_leg_kinds = {"numeric_experiment_rows", "search_frontier_rows",
                          "enumeration_optimization_rows", "reviewed_proof_rows",
                          "counterexample_or_proof_rows"}
