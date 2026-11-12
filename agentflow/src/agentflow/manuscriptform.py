@@ -398,40 +398,38 @@ def validate_manuscript(text: Any, *, require_washed: bool = False) -> dict[str,
 
 # ---------------------------------------------------------------- 补 / 改「命题号」行
 
-def ensure_statement_line(text: str, statement_id: str) -> tuple[str, bool]:
-    """稿头那行 `- 命题号：stmt:<号>`：有就改、没有就插在标题之后（前 12 行内）。"""
+def _statement_line(text: str, statement_id: str, *, insert: bool) -> tuple[str, bool]:
+    """`- 命题号：stmt:<号>` 那一行的唯一实现：前 12 行里有就改，没有看 `insert`。
+
+    两个公开入口只差"缺行时插不插"这一格（`ensure_statement_line` 插、
+    `retitle_statement_line` 不插）：行怎么认、新值怎么拼、返回值怎么表达只写这一份。
+    """
     sid = str(statement_id or "").strip()
     raw = str(text or "").replace("\r\n", "\n")
     if not sid:
         return raw, False
-    lines = raw.split("\n")
     want = f"{STATEMENT_MARK}stmt:{sid}"
+    lines = raw.split("\n")
     for i, line in enumerate(lines[:12]):
         if line.strip().startswith(STATEMENT_MARK):
             if line.strip() == want:
                 return raw, True
             lines[i] = want
             return "\n".join(lines), True
-    at = 1 if lines and lines[0].lstrip().startswith("# ") else 0
-    lines.insert(at, want)
+    if not insert:
+        return raw, False
+    lines.insert(1 if lines and lines[0].lstrip().startswith("# ") else 0, want)
     return "\n".join(lines), True
+
+
+def ensure_statement_line(text: str, statement_id: str) -> tuple[str, bool]:
+    """稿头那行 `- 命题号：stmt:<号>`：有就改、没有就插在标题之后（前 12 行内）。"""
+    return _statement_line(text, statement_id, insert=True)
 
 
 def retitle_statement_line(text: str, statement_id: str) -> tuple[str, bool]:
     """只改已有的 `- 命题号：` 行（没有就不插）—— 改名那一笔的"只是改名不是改稿"。"""
-    sid = str(statement_id or "").strip()
-    raw = str(text or "").replace("\r\n", "\n")
-    if not sid:
-        return raw, False
-    want = f"{STATEMENT_MARK}stmt:{sid}"
-    lines = raw.split("\n")
-    for i, line in enumerate(lines[:12]):
-        if line.strip().startswith(STATEMENT_MARK):
-            if line.strip() == want:
-                return raw, True
-            lines[i] = want
-            return "\n".join(lines), True
-    return raw, False
+    return _statement_line(text, statement_id, insert=False)
 
 
 # ---------------------------------------------------------------- 搬签块（唯一实现）
