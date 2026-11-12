@@ -1,4 +1,4 @@
-"""调度：按写集互斥分波并发（`DESIGN-CONDUCTOR.md` §5）。
+"""调度：按写集互斥分波并发。
 
 ## 为什么用"写集"而不是"依赖图"
 
@@ -14,11 +14,11 @@
 1. 波内并发、波间串行 —— `run_waves` 里每波 `ThreadPoolExecutor`，
    一波结束才进下一波。
 2. 合并顺序按输入顺序 —— 结果先按下标放进 `out`，最后按原顺序返回。
-   完成顺序绝不影响输出顺序（"可复现性优先于速度"，设计 §5）。
+   完成顺序绝不影响输出顺序（"可复现性优先于速度"）。
 3. 峰值并发 ≤ max_concurrency —— 两道闸：划分时单波容量就是上限
    （`policy.waves_of(limit=...)`），运行时再加一个 `Semaphore`。
    两道都要：划分保证正常路径不超，信号量保证即使有人绕过划分也不超。
-   2026-11-05 业主裁定「丙：全局不设限」之后这一条只在 policy 显式给了数时
+   业主裁定「丙：全局不设限」之后这一条只在 policy 显式给了数时
    成立（`max_concurrency=None` ⇒ 不设上限：`waves_of(limit=None)` 只按写集分波，
    信号量整个不拿）。缺省不装闸 ≠ 把闸拆了：显式设数的调用方行为逐字不变。
    为什么不靠 `ThreadPoolExecutor(max_workers=...)` 兜底：那只是线程数上限，
@@ -56,11 +56,9 @@ class TaskCall:
 
     `lineage`：祖先链上已出现过的 `(role, action, input_key)`（含父自己）。
 
-    缺省是 `None`（不是 `()`） —— `44 J-32` / `draft/56 §2 主线 A` 的第一条
-    零风险改动。`()` 与"这条链上什么都没有"长得一样，于是 `scheduler` 每一次
-    都把一个空链塞给 `Conductor`，而 `Conductor` 那边"给了 lineage 就不重建"
-    ⇒ `policy` 的 `cycle` 判据（`d.key in d.ancestry`）永远不可达：真机读数里
-    `cycle/depth/fanout/concurrency` 全 0、`parent_task_id` 全空、`depth` 全 1。
+    缺省是 `None`（不是 `()`） —— `()` 与"这条链上什么都没有"长得一样，于是
+    `scheduler` 每一次都把一个空链塞给 `Conductor`，而 `Conductor` 那边"给了
+    lineage 就不重建" ⇒ `policy` 的 `cycle` 判据（`d.key in d.ancestry`）永远不可达。
 
     `None` 的语义是"调用方没表达过祖先链" ⇒ `Conductor` 从 `tasks` 表按
     `parent_task_id` 重建（跨进程/跨会话之后调用栈就没了，台账是唯一的权威来源）。
@@ -75,15 +73,14 @@ class TaskCall:
     parent_task_id: str | None = None
     input_key: str = ""
     #: 本次召唤的钱上限（`{"max_usd": 0.05}`）。None = 用全局预算。
-    #: 2026-10-15 业主裁定 A7：这里此前写的是 `{"max_tokens": 5000}` ——
     #: token 那一轴已删（「我们不卡 token，只卡总花销的钱」）。
     budget: Mapping[str, Any] | None = None
     lineage: tuple[tuple[str, str, str], ...] | None = None
-    #: 实例标签（2026-09-30 加）：同一角色的第 N 个并发实例，例如 `"1"` / `"2"`。
+    #: 实例标签：同一角色的第 N 个并发实例，例如 `"1"` / `"2"`。
     #: 空串 = "这个角色只有那一个实例"，与从前逐字同义（写集冲突照旧按角色算）。
     #: 显式给两个不同的标签 ⇒ 这两个调用允许同波并发（见 `policy.estimate_write_conflict`）。
     instance: str = ""
-    #: 名册登记要用的那几格（`brief` / `task` / `name` / `reuse`；2026-10-21）。
+    #: 名册登记要用的那几格（`brief` / `task` / `name` / `reuse`）。
     #:
     #: 为什么挂在 TaskCall 上而不是让 `summon` 从台账读：`schema.Task` 里没有
     #: `brief` / `task` 两格（禁改区），而"父给的那句简介"只活在派活的那个载荷里
@@ -240,7 +237,7 @@ def run_waves(
     表达（例如 `failed`），不由列表变短表达 —— 变短的列表会让调用方
     静默地把"第 3 个失败了"读成"只有 2 个任务"。
 
-    D-64：这是同一台引擎的阻塞式拼法（`start_waves(...).results()`）。
+    这是同一台引擎的阻塞式拼法（`start_waves(...).results()`）。
     要"派完立刻返回句柄、父代理继续拿回合"就用 `start_waves`。
     两条拼法共用一份分派代码，所以结果集/顺序/refusal 不可能漂移。
     """
@@ -292,7 +289,7 @@ def _note(kind: str, purpose: str, budget: float | None, started: float,
 
     为什么这些点不换成 `clock.await_io`：它们等的是条件变量/事件的信号，
     "一有信号就返回"是语义的一部分；换成一个 sleep 会把返场延迟到睡满。
-    账要的是"等了多久、等的是什么"，那不需要改阻塞方式（业主 2026-10-25 的口径是
+    账要的是"等了多久、等的是什么"，那不需要改阻塞方式（口径是
     "所有计时类工作进同一本账"，不是"所有等待都必须睡"）。
     """
     waited = max(0.0, _time() - started)
@@ -307,7 +304,7 @@ def _note(kind: str, purpose: str, budget: float | None, started: float,
 
 
 class WaveHandle:
-    """一批派活的句柄：派完第一波就返回，不等到全部完成（D-64）。
+    """一批派活的句柄：派完第一波就返回，不等到全部完成。
 
     ## 为什么是"第一波"而不是"全部"
 
@@ -348,8 +345,8 @@ class WaveHandle:
         self._all_done = threading.Event()
         self._coordinator: threading.Thread | None = None
         # 并发名额：policy 显式给了数才有这道闸（`None` = 不设限 ⇒ 不拿信号量）。
-        # 2026-11-05 业主裁定「丙：全局不设限」：缺省不装闸；`waves_of(limit=None)`
-        # 只按写集分波，波内并发数由写集互斥决定，不由一个数决定。
+        # 缺省不装闸：`waves_of(limit=None)` 只按写集分波，波内并发数由写集互斥
+        # 决定，不由一个数决定。
         self._sem = (None if policy.max_concurrency is None
                      else threading.Semaphore(max(1, int(policy.max_concurrency))))
         self._started_at = _time()
@@ -534,10 +531,9 @@ class WaveHandle:
         两条理由，任一条都足够：
 
         1. 探针的口径。`concurrent_peak` 回答的是"同一时刻在飞几个"，
-           而"在飞"从这一项被派出那一刻起算（与改前 `_guarded` 逐字同口径：
-           它也是先 `enter` 再调 `Conductor.summon`）。如果 begin 在派活方
-           顺序跑，秒级就能跑完的那几个会"一个接一个地开始并结束"
-           ——`concurrent_peak` 会读成 2 而不是 3（实测：三个实例同波）。
+           而"在飞"从这一项被派出那一刻起算（先 `enter` 再调 `Conductor.summon`）。
+           如果 begin 在派活方顺序跑，秒级就能跑完的那几个会"一个接一个地开始并结束"
+           ——`concurrent_peak` 会读成 2 而不是 3。
         2. 真并发。begin 里有几笔台账写（落 running 行、名册登记），
            顺序跑它们等于把"并发开 3 个 B"变成"串行写 3 行再并发跑"。
 
@@ -591,11 +587,11 @@ class WaveHandle:
         ticket.handle = handle
         ticket.begin_done.set()
         if getattr(start, "refusal", None) is not None:
-            # 没派出去：窗口立刻关（它没有执行窗口可言，与改前一致）。
+            # 没派出去：窗口立刻关（它没有执行窗口可言）。
             self._close_window(label, began, peak)
             handle.settle(start.refusal)
             return
-        if self._sem is not None:      # None = 不设限（2026-11-05 裁定）：不拿名额
+        if self._sem is not None:      # None = 不设限：不拿名额
             self._sem.acquire()
         try:
             res = self.conductor.summon_run(start)
@@ -622,8 +618,9 @@ class WaveHandle:
     def _settle_failure(self, i: int, exc: BaseException) -> None:
         """前半就炸了（存储层）：如实落一张"失败"的票，不让这一批变短。
 
-        改前这条异常经线程池的 `fut.result()` 炸给 `run_waves` 的调用方 ⇒
-        整批丢结果。"列表长度恒等于输入长度"因此更强了，不是更弱。
+        这条异常若经线程池的 `fut.result()` 炸给 `run_waves` 的调用方，整批会丢结果。
+        这里如实落一张"失败"的票，不让这一批变短。于是
+        "列表长度恒等于输入长度"更强了，不是更弱。
         """
         from .conductor import SummonResult, SummonStart
 
@@ -660,7 +657,7 @@ def start_waves(
     token: CancelToken | None = None,
     probe: ConcurrencyProbe | None = None,
 ) -> WaveHandle:
-    """按写集分波派出去，派完第一波就返回句柄（D-64 的可抢占拼法）。
+    """按写集分波派出去，派完第一波就返回句柄（可抢占拼法）。
 
     与 `run_waves` 的唯一差别是"什么时候返回"：这一支不等结果，
     父代理因此可以继续拿回合（watch / guide / 补派 / 收口），
@@ -729,7 +726,7 @@ def _guarded(
 
 
 def run_tasks(calls: Sequence[TaskCall], *, policy: P.Policy, conductor: Any, token: CancelToken | None = None) -> list[Any]:
-    """`run_waves` 的别名（设计 §5 的伪代码用的是这个名字）。
+    """`run_waves` 的别名（设计里的伪代码用的是这个名字）。
 
     保留两个名字是因为设计文档里的名字与实现里的名字不一致本身就是
     一种文档漂移。这里两个都导出，且指向同一个实现（不是第二份代码）。
