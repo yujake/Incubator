@@ -263,10 +263,14 @@ def row_of(root: str | Path, mid: str) -> dict[str, Any] | None:
     if not wants or not wants[0]:
         return None
     rows_now = rows(root)
+    # 首次出现的那一行胜出（与"逐个写法扫一遍"同一条优先级，只扫一趟表）。
+    by_id: dict[str, dict[str, Any]] = {}
+    for rec in rows_now:
+        by_id.setdefault(str(rec.get("id") or ""), rec)
     for want in wants:
-        for rec in rows_now:
-            if str(rec.get("id") or "") == want:
-                return rec
+        hit = by_id.get(want)
+        if hit is not None:
+            return hit
     d = dir_of(root)
     if d.is_dir():
         for want in wants:
@@ -323,6 +327,57 @@ OBJECT_REFS: dict[str, str] = {
 }
 
 
+def _table_ids(root: str | Path, table: str,
+               cache: dict[Any, Any] | None = None) -> tuple[str, Any]:
+    """`data/<table>.json` 的 id 集合 ⇒ `("ok", 集合)` / `("missing", None)` / `("bad", 异常类名)`。
+
+    同一趟里多条引用常常指向同一张表：`cache` 给了就按表复用（一次写/一次读数里
+    `data/<table>.json` 只解析一遍，拷问结果逐字不变）。
+    """
+    key = ("ref-table", table)
+    if cache is not None and key in cache:
+        return cache[key]
+    p = Path(root) / "data" / f"{table}.json"
+    if not p.is_file():
+        got: tuple[str, Any] = ("missing", None)
+    else:
+        try:
+            table_rows = list(json.loads(p.read_text(encoding="utf-8")).get("rows") or [])
+        except ValueError as exc:
+            got = ("bad", type(exc).__name__)
+        else:
+            id_field = str((S.TABLES.get(table) or {}).get("id_field") or "id")
+            got = ("ok", {str(r.get(id_field) or "") for r in table_rows})
+    if cache is not None:
+        cache[key] = got
+    return got
+
+
+def _ref_problem(root: str | Path, ref: str,
+                 table_cache: dict[Any, Any] | None = None) -> str:
+    """`ref_problem` 的判定本体；`table_cache` 让多条引用共用一次读盘。"""
+    text = str(ref).strip()
+    if not text:
+        return ""
+    if ":" in text:
+        ns, _, obj = text.partition(":")
+        table = OBJECT_REFS.get(ns)
+        if table is None:
+            return (f"引用 {text!r} 的前缀不认识：认 {'/'.join(sorted(OBJECT_REFS))}: 这几种，"
+                    "或者四位手稿编号")
+        kind, payload = _table_ids(root, table, table_cache)
+        if kind == "missing":
+            return f"引用 {text!r}，而工作区里没有 `data/{table}.json` ⇒ 这条引用悬空"
+        if kind == "bad":
+            return f"引用 {text!r} 核不了：`data/{table}.json` 读不出来（{payload}）"
+        if obj not in payload:
+            return f"引用 {text!r} 不在 `{table}` 台账里 ⇒ 不许凭空引用（溯源链断了）"
+        return ""
+    if row_of(root, text) is None:
+        return f"引用的前序手稿 {text!r} 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
+    return ""
+
+
 def ref_problem(root: str | Path, ref: str) -> str:
     """这一条引用能不能立住（空串 = 可以）。
 
@@ -336,29 +391,7 @@ def ref_problem(root: str | Path, ref: str) -> str:
     "这份手稿的依据是什么"在半年后变成一句无法复核的话 —— 而写入期是唯一能指出
     "你引错了"的时刻（那时作者还在）。
     """
-    text = str(ref).strip()
-    if not text:
-        return ""
-    if ":" in text:
-        ns, _, obj = text.partition(":")
-        table = OBJECT_REFS.get(ns)
-        if table is None:
-            return (f"引用 {text!r} 的前缀不认识：认 {'/'.join(sorted(OBJECT_REFS))}: 这几种，"
-                    "或者四位手稿编号")
-        p = Path(root) / "data" / f"{table}.json"
-        if not p.is_file():
-            return f"引用 {text!r}，而工作区里没有 `data/{table}.json` ⇒ 这条引用悬空"
-        try:
-            rows = list(json.loads(p.read_text(encoding="utf-8")).get("rows") or [])
-        except ValueError as exc:
-            return f"引用 {text!r} 核不了：`data/{table}.json` 读不出来（{type(exc).__name__}）"
-        id_field = str((S.TABLES.get(table) or {}).get("id_field") or "id")
-        if not any(str(r.get(id_field) or "") == obj for r in rows):
-            return f"引用 {text!r} 不在 `{table}` 台账里 ⇒ 不许凭空引用（溯源链断了）"
-        return ""
-    if row_of(root, text) is None:
-        return f"引用的前序手稿 {text!r} 不在盘上 ⇒ 不许凭空引用（溯源链断了）"
-    return ""
+    return _ref_problem(root, ref)
 
 
 def rows_for_task(root: str | Path, task_id: str, *, sender: str = "") -> list[dict[str, Any]]:
@@ -440,8 +473,9 @@ def write(root: str | Path, *, sender: str, recipient: str, title: str = "", bod
     # 而"这一条引用立不立得住"从写入期硬拦降成写入期的如实标记：
     # 行里多一个 `ref_problems`（哪一条引用有什么问题），并由 `ref_readings` 汇总成读数。
     ref_problems: dict[str, str] = {}
+    ref_cache: dict[Any, Any] = {}          # 同一趟里每张 `data/<table>.json` 只解析一遍
     for ref in refs_list:
-        why = ref_problem(root, ref)
+        why = _ref_problem(root, ref, ref_cache)
         if why:
             ref_problems[ref] = why
     revises_id = ""
@@ -588,6 +622,7 @@ def ref_readings(root: str | Path) -> dict[str, Any]:
     all_rows, bad_lines = read_rows(root)
     problems: list[dict[str, Any]] = []
     with_refs = 0
+    ref_cache: dict[Any, Any] = {}          # 整趟读数里每张 `data/<table>.json` 只解析一遍
     for rec in all_rows:
         refs = [str(x).strip() for x in (rec.get("refs") or []) if str(x).strip()]
         if refs:
@@ -596,7 +631,7 @@ def ref_readings(root: str | Path) -> dict[str, Any]:
         # 之后再复算一次，是为了抓住"写的时候在、现在被删了"这种漂移。
         recorded = rec.get("ref_problems") if isinstance(rec.get("ref_problems"), Mapping) else {}
         for ref in refs:
-            why = str(recorded.get(ref) or "") or ref_problem(root, ref)
+            why = str(recorded.get(ref) or "") or _ref_problem(root, ref, ref_cache)
             if why:
                 problems.append({"id": str(rec.get("id") or ""),
                                  "sender": str(rec.get("sender") or ""),
@@ -615,18 +650,24 @@ def read(root: str | Path, mid: str) -> dict[str, Any] | None:
     return {"record": rec, "text": str(rec.get("body") or ""), "path": got}
 
 
+def _with_legacy(root: str | Path, ledger_rows: Iterable[Mapping[str, Any]],
+                 ) -> list[dict[str, Any]]:
+    """账本行 + 旧格式文件（同号以账本行为准），按号排序 —— `list_all` / `query` 共用。"""
+    out: list[dict[str, Any]] = [dict(r) for r in ledger_rows]
+    seen = {str(r.get("id") or "") for r in out}
+    for mid, path, parsed in _legacy_files(root):
+        if mid not in seen:
+            out.append(_legacy_row(root, mid, path, parsed))
+    out.sort(key=lambda r: str(r.get("id") or ""))
+    return out
+
+
 def list_all(root: str | Path, *, to: str = "", sender: str = "", limit: int = 50) -> list[dict[str, Any]]:
     """列手稿（可按收件人/发件人过滤；`to=ALL` 也把广播给所有人的那批算进来）。
 
     新格式（账本行）与旧格式（`.md` 文件）都列出来；旧的那些带 `format=md_legacy`。
     """
-    out: list[dict[str, Any]] = [dict(r) for r in rows(root)]
-    seen = {str(r.get("id") or "") for r in out}
-    for mid, path, parsed in _legacy_files(root):
-        if mid in seen:
-            continue
-        out.append(_legacy_row(root, mid, path, parsed))
-    out.sort(key=lambda r: str(r.get("id") or ""))
+    out = _with_legacy(root, rows(root))
     if to:
         want = str(to).upper()
         out = [r for r in out
@@ -646,12 +687,7 @@ def query(root: str | Path, *, mid: str = "", to: str = "", sender: str = "",
     返回 `(命中行, 坏行说明)` —— 坏行照样报出来（"读不出"不许被读成"没有"）。
     """
     all_rows, problems = read_rows(root)
-    out: list[dict[str, Any]] = [dict(r) for r in all_rows]
-    seen = {str(r.get("id") or "") for r in out}
-    for rid, path, parsed in _legacy_files(root):
-        if rid not in seen:
-            out.append(_legacy_row(root, rid, path, parsed))
-    out.sort(key=lambda r: str(r.get("id") or ""))
+    out = _with_legacy(root, all_rows)
     if mid:
         wants = set(_mid_forms(mid))
         out = [r for r in out if str(r.get("id")) in wants]
