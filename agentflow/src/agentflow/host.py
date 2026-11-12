@@ -126,7 +126,9 @@ class _Builder:
 
     def _llm_for(self, role: str) -> Any:
         """该角色用的模型缝：逐角色优先，否则用共用的那个。"""
-        return self.llms.get(role, self.llm) if role in self.llms else self.llm
+        # 一次 `get` 就够：命中时值就在字典里（值是 None 也照样返回 None，与原先
+        # 「命中 ⇒ 取那个值」同义），未命中时才落到共用缝。
+        return self.llms.get(role, self.llm)
 
     def _cfg_for(self, role: str) -> dict[str, Any]:
         """该角色的配置段（`config["agent_c"]` 这类；没有就给空 dict）。"""
@@ -486,7 +488,6 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
     """
     from .agent_loop import LlmBackend
     from .conductor import LocalBackend
-    from .llmseam import LlmSeam
     from .tokenmeter import TokenMeter
     from .tools import build_registry
     from .tools.conductor_tools import conductor_for
@@ -620,14 +621,11 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         inner = LocalBackend(role_reg)
         inner.store = store
 
-    def _default_seam(role: str) -> LlmSeam:
-        # `meter=`：缝是模型调用的唯一入口，记账挂在它身上 ——
-        # 不挂的话，`run-agent` 这条路一次调用都不会进 `usage_ledger`。
-        return LlmSeam.for_role(role, session_root=root, sid=eff_sid, usd_budget=usd_budget,
-                                meter=TokenMeter(store, budget_usd=usd_budget))
-
+    # 默认缝只留一处构造：`_seam` 里那一份（`meter=` 挂在它上面，不挂的话
+    # `run-agent` 这条路一次调用都不会进 `usage_ledger`）。这里原先另抄了一份逐字相同的
+    # `LlmSeam.for_role(...)`；`seam_factory` 没给时两者本来就指向同一次构造。
     backend = LlmBackend(inner=inner, loops=table, session_root=root,
-                         seam_factory=seam_factory or _default_seam, store=store,
+                         seam_factory=seam_factory or _seam, store=store,
                          max_steps=max_steps, workspace_root=ws, sid=eff_sid,
                          # 单趟 `run-agent` 的停机点只有一个：步循环顶上看这个开关文件。
                          # —— 步循环顶上看这个开关文件。多轮的自主跑不接它
