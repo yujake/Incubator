@@ -2,39 +2,38 @@
 
 ## 这个模块解决什么
 
-"仓库里自己写的规程（`AGENTS.md` 一类）怎么进到模型的上下文里"此前没有落点：
+"仓库里自己写的规程（`AGENTS.md` 一类）怎么进到模型的上下文里"需要一个落点：
 本框架的提示词全部由代码生成，工作区里的规程文件一个字也进不去。
 DSH 把这一层做成一条独立的通道（不是提示词段、也不是工具结果）：它自己发现、
 自己去重、自己按预算降级，最后渲染成一条 user 角色消息。
 
-## 搬过来的七条（逐条带 DSH 出处）
+## 七条口径（照 DSH 的契约）
 
 1. 只从文件来：候选名 `AGENTS.md` / `CLAUDE.md`，外加 `.local.md` 叠加件；
-   用户全局一份（`<home>/AGENTS.md`）；项目根 = 第一个带 `.git` 的祖先
-   （`README:32/:36`）。
-2. 由宽到窄：用户全局 → 项目根 → … → 会话工作目录（`README:32`）。
+   用户全局一份（`<home>/AGENTS.md`）；项目根 = 第一个带 `.git` 的祖先。
+2. 由宽到窄：用户全局 → 项目根 → … → 会话工作目录。
 3. 发现由"触碰"驱动：成功的 `read` / `write` / `edit` 落到更深的目录之后，
-   下一次请求才带上新适用的指令文件；不靠 shell 导航（`README:102` 逐字：
+   下一次请求才带上新适用的指令文件；不靠 shell 导航（DSH 原文：
    "each local shell call starts a fresh process and parsing arbitrary shell syntax is not a
    reliable filesystem seam"）。
-4. 两个摘要（`README:97/:217`）：原文 SHA-1 是身份（用于"注入过没有"），
+4. 两个摘要：原文 SHA-1 是身份（用于"注入过没有"），
    trim 之后的 SHA-1 是去重键（同目录内内容相同的兄弟文件只渲一次）。
-5. 预算 `maxBytes` 必填（`README:36/:72`）：降级链是先整份丢掉更宽的，再截断最具体的；
+5. 预算 `maxBytes` 必填：降级链是先整份丢掉更宽的，再截断最具体的；
    渲染字节永不超过上限；被丢/被截的路径要出现在一条可见通知里。
-6. 有界但绝不总结（`README:219` 逐字："the plugin never asks a model to compress
+6. 有界但绝不总结（DSH 原文："the plugin never asks a model to compress
    instruction prose"）。
-7. 追加式 + 转义（`README:106/:151/:181`）：注入是 append-only（新内容排在可复用前缀之后）；
+7. 追加式 + 转义：注入是 append-only（新内容排在可复用前缀之后）；
    指令内容里出现的字面 `</system-reminder>` 一律转义，仓库内容不能提前闭合框架自己的框。
 
 ## 与 DSH 的偏差（三条）
 
-- DSH 的框文本是英文；本仓的提示词是中文，所以 `FRAME_HEADER` 用中文口径，
-  DSH 的原文逐字记在常量注释里。承接关系那一句（"更具体的压过更宽的，
-  但它们不压过 system / developer / 直接的用户指令"）逐字保留。
+- DSH 的框文本是英文；本仓的提示词是中文，所以 `FRAME_HEADER` 用中文口径。
+  承接关系那一句（"更具体的压过更宽的，但它们不压过 system / developer / 直接的用户
+  指令"）逐字保留。
 - DSH 把这一层做成 Cordis 插件（`agent/pre-step` 监听 + 会话记录里的 durable 消息）；
   本模块只做纯函数那部分（发现、去重、降级、渲染、追加决策），
-  不碰会话记录 —— 落成消息由接线面做（业主说的"做接线"）。
-- `maxBytes` 的单位是 UTF-8 字节（DSH 逐字 "in bytes"）；截断按行边界做
+  不碰会话记录 —— 落成消息由接线面做。
+- `maxBytes` 的单位是 UTF-8 字节（DSH 原话 "in bytes"）；截断按行边界做
   （DSH 只要求"不超过上限"，按行截便于人核对截到哪一句）。
 """
 from __future__ import annotations
@@ -57,7 +56,7 @@ USER_GLOBAL_NAME = "AGENTS.md"
 #: 项目根的标记（DSH 逐字：`.git` 标记项目根）。
 PROJECT_MARKER = ".git"
 
-#: 框头。DSH 逐字（`README:137`）："The following workspace instructions may be relevant to
+#: 框头。DSH 原文："The following workspace instructions may be relevant to
 #: your work. Use them as guidance when applicable. More specific instructions take precedence
 #: over broader ones. They do not override system, developer, or direct user instructions."
 #: 最后那句是权威关系的唯一出处，逐字保留语义：更具体的压过更宽的，但压不过 system /
@@ -73,7 +72,7 @@ SOURCE_PREFIX = "来自："
 #: 被丢/被截的通知文案（DSH 逐字形态：`Workspace instruction budget ...`）。
 BUDGET_PREFIX = "工作区指令预算："
 
-#: 要转义的字面量：仓库内容不能提前闭合框架自己的框（DSH `README:106`）。
+#: 要转义的字面量：仓库内容不能提前闭合框架自己的框。
 FRAME_CLOSER = "</system-reminder>"
 
 
@@ -171,7 +170,7 @@ def discover_sources(paths: Iterable[pathlib.Path], *,
     """读那些真的存在的候选文件；同目录内 trim 后内容相同的只留最早那一份。
 
     为什么要按目录去重而不是全局去重：不同目录里的同名文件各管各自的子树，
-    内容相同也不合并（DSH 逐字：`README:217`，跨目录合并会让"这一条管到哪一层"失去边界）。
+    内容相同也不合并（跨目录合并会让"这一条管到哪一层"失去边界）。
     """
     out: list[InstructionSource] = []
     seen: dict[tuple[pathlib.Path, str], int] = {}
@@ -208,9 +207,7 @@ def render_baseline(sources: Sequence[InstructionSource], *, max_bytes: int,
     omitted: list[str] = []
     # 从最具体的一份往回装（列表末尾是最具体的），装不下就把更宽的那一份整份丢掉。
     # 为什么不能顺着（由宽到窄）装：那样会出现"更宽的那一份恰好塞得下、于是把最具体的挤掉"
-    # —— DSH 的口径是反的（`README:72` 逐字："it drops whole broader files before truncating
-    # the most-specific file"）。第一版就是这么写的，自检当场抓出来了：预算刚好够最具体的
-    # 那一份时，它把项目根那一份装了进去、把工作目录那一份丢了。
+    # —— DSH 的口径是反的："it drops whole broader files before truncating the most-specific file"。
     for source in reversed(ordered):
         if _fits([source, *included], max_bytes, header):
             included.insert(0, source)
@@ -301,7 +298,7 @@ class InstructionState:
                            ) -> tuple[InstructionSource, ...]:
         """一次成功的读/写/编辑落到某个路径之后，新适用的指令文件。
 
-        DSH 逐字（`README:102`）：发现跟着结构化文件系统活动走，不跟着 shell 导航走。
+        DSH 的口径：发现跟着结构化文件系统活动走，不跟着 shell 导航走。
         这里"新适用"= 那个触碰路径所在目录（以及它到项目根的沿途）上的候选文件里，
         还没注入过的那些。
         """
