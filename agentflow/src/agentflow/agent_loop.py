@@ -13964,13 +13964,14 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
     events, _problems = SS.read_session(root, sid=sid)
     role_starts = [i for i, e in enumerate(events)
                    if e.get("kind") == "agent_run_start" and str(e.get("role")) == role]
-    fresh_mine = [i for i in role_starts
-                  if _is_fresh_run_start(events[i]) and str(events[i].get("task")) == task]
+    # 「全新开始」那个谓词每一条 run_start 只问一次（原先 `fresh_mine` 问一遍、
+    # `fresh_any` 又问一遍，同一份事件被两趟各判一次）。
+    fresh = [i for i in role_starts if _is_fresh_run_start(events[i])]
+    fresh_mine = [i for i in fresh if str(events[i].get("task")) == task]
     if not fresh_mine:
         return [], 0
     begin = fresh_mine[-1]
-    fresh_any = [i for i in role_starts if _is_fresh_run_start(events[i])]
-    end = next((i for i in fresh_any if i > begin), len(events))
+    end = next((i for i in fresh if i > begin), len(events))
     head = events[begin]
     # 恢复那一趟也要按"我是谁"读公聊（S6-a）：`agent_run_start` 里写着这一趟的
     # 父实例号与发起方，正是可见面要的那两格。
@@ -13986,8 +13987,8 @@ def resume_messages(session_root: Path | str, role: str, sid: str | None,
     #   重建路上唯一"该变"的一格，写在 `resume_messages` 的 docstring 第 1 条边界里。
     #   于是"重建 == 当时那一份"在没有新留言时逐条成立，有新留言时只差收件箱那一段
     #   （只会变新，不会变假）。
-    opening: dict[str, Any] = {k: (head.get("opening_facts") or {}).get(k, "")
-                               for k in OPENING_FACT_KEYS}
+    facts = head.get("opening_facts") or {}
+    opening: dict[str, Any] = {k: facts.get(k, "") for k in OPENING_FACT_KEYS}
     opening.update({
         "task": task,
         "inbox": inbox,
