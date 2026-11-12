@@ -232,7 +232,7 @@ def _is_separator(cells: Sequence[str]) -> bool:
 
 def _parse_dependency_table(body: Sequence[tuple[int, str]]) -> tuple[list[dict[str, Any]],
                                                                       list[dict[str, Any]]]:
-    """`## 依赖` 的四列表 ⇒ `(rows, problems)`（缺列 / 列数不对 / 号形不对都进 problems）。
+    """`## 依赖` 的三列表 ⇒ `(rows, problems)`（缺列 / 列数不对 / 号形不对都进 problems）。
 
     为什么按表头取列而不是按位置：表头换个顺序时位置读法会把 `step` 与 `path_group`
     静默互换，而那种错误不会让任何判据红（`depsection` 记过同一课）。
@@ -346,7 +346,8 @@ def _extract_proof(text: str) -> dict[str, Any]:
 
 
 def _extract_dependencies(text: str) -> dict[str, Any]:
-    """`## 依赖` ⇒ 四列表的行；缺节时把证明正文里的 `stmt:` 引用一并带出（判缺节要不要拒）。"""
+    """`## 依赖` ⇒ 三列表的行（老盘带路径号那一列的四列表仍读得回）；缺节时把证明正文里的
+    `stmt:` 引用一并带出（判缺节要不要拒）。"""
     body, heading = _section(text, SECTION_BY_CELL["dependencies"])
     proof = _extract_proof(text)
     refs = _stmt_refs(proof["value"]) if proof["outcome"] == EXTRACT_PRESENT else []

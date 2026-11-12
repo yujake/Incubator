@@ -233,7 +233,7 @@ ACTIONS: tuple[ActionSpec, ...] = (
                                       "当场拒（说不出是哪一次判的，就不算语义通过）"},
                 "derived_from": _ARR_S,
                 # 作者只写内容，登记由收方读稿产生 —— B 读 F 手稿里那一节
-                # `## 依赖`（四列表），把每一行落成一条 `dependencies`（`used_by="stmt:<号>#pN"`
+                # `## 依赖`（三列必填；路径号不进稿），把每一行落成一条 `dependencies`（`used_by="stmt:<号>#pN"`
                 # ＋ `path_group` ＋ `source_stmt_id`）。F 自己不写依赖台账。
                 "proof_manuscript": {**_S, "description":
                                      "`proof_manuscript` 是**证明正文的载体**"

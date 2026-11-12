@@ -607,7 +607,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
 def _citation_material(*, rel: str, deps: Mapping[str, Any],
                        cited: Mapping[str, Mapping[str, Any]],
                        proof_no: int = 1) -> tuple[list[dict[str, Any]], str]:
-    """V 的引用核实材料：手稿 `## 依赖` 四列表 + 每条被引命题手稿的正文 / 签。
+    """V 的引用核实材料：手稿 `## 依赖` 三列表 + 每条被引命题手稿的正文 / 签。
 
     与改前的键集合相同（`stmt_id` / `paths` / `path_groups` / `dep_ids` /
     `statement_full` / `statement_digest` / `statement_missing` / `statement_label` /
@@ -2816,7 +2816,7 @@ class AgentV:
         #
         # 业主点名的三样（签块 / 依赖面 / 按号命名）里，依赖面只能从稿的这一节读。
         # 只读 `## 证明` 会签出一份"没有依赖面"的稿，B 收稿时读到空表声明 —— 而那与
-        # "作者根本没写"在读数上分不开。空表（四列表头在、0 行）是合法形态（自足证明），
+        # "作者根本没写"在读数上分不开。空表（三列表头在、0 行）是合法形态（自足证明），
         # 缺整节不是。判据：`temp/probe_manuscript_gate.py` 的 g 组。
         try:
             section = _DS.parse_dependency_section(raw)
