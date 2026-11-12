@@ -1144,6 +1144,16 @@ def _ledger_token(field_name: str, prefix: str, row: Mapping[str, Any]) -> str:
     return f"{prefix}:{bare}" if prefix else bare
 
 
+def _token_pattern(tokens: Sequence[str]) -> re.Pattern[str]:
+    """把一批反查口令编成一条正则（词边界那一条见 :func:`_ledger_by_task_id` 第 3 条）。
+
+    口令按长度倒序进交替：`re` 在同一个起点上按书写顺序试候选，长的排在前才不会被
+    自己的前缀抢走（`stmt:000001` 与它后面更长的编号是两条口令）。
+    """
+    return re.compile("|".join(
+        f"(?<![0-9A-Za-z_])(?:{re.escape(one)})(?![0-9A-Za-z_])" for one in tokens))
+
+
 def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
     """口令 -> 绝对编号：在一段有界的事件流里反查"这一行是哪一趟写的"。
 
@@ -1164,7 +1174,7 @@ def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
     （别的事后引用别人的编号），这个答案可能是"引用者"—— 这是本口径的已知边界，写在
     `missing` 之外的读数要按这一条读。
 
-    ## 为什么先解析、再跑正则
+    ## 为什么先解析、再跑正则，且正则只跑"这一行里真有的那些口令"
 
     "先 `findall`、命中才 `json.loads`"这个次序在原理上省的是 JSON 解析，实测却把
     99% 的时间花在那条 168/293 路交替的巨正则上（真机 81：`findall` 5,604 ms /
@@ -1172,16 +1182,22 @@ def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
     `temp/161_scan_variants.py` 与同目录的 161 报告）。所以现在两件事的次序反过来：
     先解析（便宜，而且能拿到 `kind` 做确定性过滤），只对那五种 kind 的行跑正则。
 
+    第三件事是"按行窄化候选"：一条口令的匹配文本就是它自己，所以一行里根本没有的那条
+    口令结构上匹配不到 —— 把它从交替里去掉不改变任何一个命中。窄化只在"这一行真有的
+    那几条"上重建那条正则（`found.setdefault` 只关心集合，行内次序不影响结果），
+    真正决定命中与否的仍是上面四条。真机 83 上这一面从 13,900 ms 降到 90 ms
+    （`temp/probe_o5_ledger.py`：同一批行、同一个 `found`）。
+
     口径一个字没改：决定"哪一行能成为答案"的仍是上面那四条。两个次序的输入集合
     完全相同（先 kind 后正则 vs 先正则后 kind，取的是同一个交集；`findall` 的输入
     文本也还是那一行原文），只有通过 kind 的行才会被收，所以 `found` 逐号相同 ——
-    真机 81 上实测 68/68、176/176 逐号一致（`temp/161_scan_variants.py` 的 B 口径）。
+    真机 81 上实测 68/68、176/176 逐号一致（`temp/161_scan_variants.py` 的 B 口径），
+    窄化这一刀在 83 / t5b / chain-v1 / p9b 四份真机上也是逐号一致。
     """
     wanted = sorted({str(t) for t in tokens if str(t)}, key=len, reverse=True)
     if not wanted:
         return {}
-    pattern = re.compile("|".join(
-        f"(?<![0-9A-Za-z_])(?:{re.escape(one)})(?![0-9A-Za-z_])" for one in wanted))
+    pattern = _token_pattern(wanted)
     kinds = set(LEDGER_EVENT_SCAN_KINDS)
     found: dict[str, str] = {}
     for path in _recent_session_files(root_p):
@@ -1200,7 +1216,11 @@ def _ledger_by_task_id(root_p: Path, tokens: Sequence[str]) -> dict[str, str]:
             task_id = str(event.get("task_id") or "").strip()
             if not task_id:
                 continue
-            for token in pattern.findall(line):
+            present = [one for one in wanted if one in line]
+            if not present:
+                continue          # 这一行一条口令都不含 ⇒ 正则在那条上不可能命中
+            rx = pattern if len(present) == len(wanted) else _token_pattern(present)
+            for token in rx.findall(line):
                 found.setdefault(token, task_id)
     return found
 
