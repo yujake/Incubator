@@ -296,26 +296,36 @@ def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
     """
     out: list[dict] = []
     seen: set[tuple[str, str]] = set()
+    if len(relations) < 2:
+        return out
+    # `concept_pair_key` 是派生态，不是输入。
+    #
+    # 曾经的写法是 `a.get("concept_pair_key")`，直接读行里的字段。这造成了一个
+    # 完全静默的失效：`relations` 表里存的字段名是 `concept_group_key`，
+    # 于是对直接从表里读出来的行（C 的 `contradictions()`、任何脚本），
+    # 本函数恒返回 `[]` —— 不报错、不告警，看起来就像"没有矛盾"。
+    # 只有 agent_d 自己悄悄补过 `concept_pair_key` 的那条路径能正常工作。
+    #
+    # 这正是"缓存/派生态与真源不一致"的教科书形态：派生态一旦被当成输入，
+    # 忘了算的那一方就会静默拿到空结果。修法是就地推导 ——
+    # 与 `RelationGraph.group_counts` 的做法一致（"由 concept_ids 现场推导
+    # 才是唯一权威"）。
+    #
+    # 每行的键只由这一行决定、与配对的另一行无关 ⇒ 在配对循环之前算一次，
+    # 而不是在 O(n²) 的每一对里把同一行的 concept_ids 重新归一化两遍。
+    keys = [
+        r.get("concept_pair_key")
+        or concept_pair_key([str(c) for c in (r.get("concept_ids") or []) if c])
+        for r in relations
+    ]
     for i in range(len(relations)):
         for j in range(i + 1, len(relations)):
             a, b = relations[i], relations[j]
-            # `concept_pair_key` 是派生态，不是输入。
-            #
-            # 曾经的写法是 `a.get("concept_pair_key")`，直接读行里的字段。这造成了一个
-            # 完全静默的失效：`relations` 表里存的字段名是 `concept_group_key`，
-            # 于是对直接从表里读出来的行（C 的 `contradictions()`、任何脚本），
-            # 本函数恒返回 `[]` —— 不报错、不告警，看起来就像"没有矛盾"。
-            # 只有 agent_d 自己悄悄补过 `concept_pair_key` 的那条路径能正常工作。
-            #
-            # 这正是"缓存/派生态与真源不一致"的教科书形态：派生态一旦被当成输入，
-            # 忘了算的那一方就会静默拿到空结果。修法是就地推导 ——
-            # 与 `RelationGraph.group_counts` 的做法一致（"由 concept_ids 现场推导
-            # 才是唯一权威"）。
-            key_a = a.get("concept_pair_key") or concept_pair_key([str(c) for c in (a.get("concept_ids") or []) if c])
-            key_b = b.get("concept_pair_key") or concept_pair_key([str(c) for c in (b.get("concept_ids") or []) if c])
+            key_a, key_b = keys[i], keys[j]
             if key_a is None or key_a != key_b:
                 continue
-            if a.get("relation_id") == b.get("relation_id"):
+            a_id, b_id = a.get("relation_id"), b.get("relation_id")
+            if a_id == b_id:
                 continue
             ta, tb = _text_of(a), _text_of(b)
             if not ta.strip() or not tb.strip():
@@ -333,7 +343,7 @@ def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
                 neg_b = contains(tb, negform)
                 if (pos_a and neg_b) or (neg_a and pos_b):
                     strong.append(
-                        f"对立表述（{a.get('relation_id')} 与 {b.get('relation_id')} 对「{affirm}／{negform}」"
+                        f"对立表述（{a_id} 与 {b_id} 对「{affirm}／{negform}」"
                         "给出了相反的主张）"
                     )
 
@@ -341,13 +351,13 @@ def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
             neg_a_mark, neg_b_mark = negated(ta), negated(tb)
             if neg_a_mark != neg_b_mark:
                 weak.append(
-                    f"否定标记出现与否不一致（{a.get('relation_id')} neg={neg_a_mark} / "
-                    f"{b.get('relation_id')} neg={neg_b_mark}）—— **这只是线索，不是对立主张**"
+                    f"否定标记出现与否不一致（{a_id} neg={neg_a_mark} / "
+                    f"{b_id} neg={neg_b_mark}）—— **这只是线索，不是对立主张**"
                 )
 
             if not strong and not weak:
                 continue
-            rk = tuple(sorted([str(a.get("relation_id")), str(b.get("relation_id"))]))
+            rk = tuple(sorted([str(a_id), str(b_id)]))
             if rk in seen:
                 continue
             seen.add(rk)
@@ -363,8 +373,8 @@ def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
                     "weak_signals": weak,
                     #: 兼容字段：全部信号（strong 在前）。
                     "signals": strong + weak,
-                    "a": {"relation_id": a.get("relation_id"), "lit_id": a.get("lit_id"), "statement": _digest(ta)},
-                    "b": {"relation_id": b.get("relation_id"), "lit_id": b.get("lit_id"), "statement": _digest(tb)},
+                    "a": {"relation_id": a_id, "lit_id": a.get("lit_id"), "statement": _digest(ta)},
+                    "b": {"relation_id": b_id, "lit_id": b.get("lit_id"), "statement": _digest(tb)},
                 }
             )
     return out
@@ -483,6 +493,8 @@ def adjudicate_contradiction(
             f"（期望 2 个，实际是 {rel_ids!r}）—— 矛盾只可能发生在谈同一件事的两句话之间"
         )
     a_id, b_id = rel_ids
+    pair = {a_id, b_id}
+    rounds_i = int(rounds)
     mr = DEFAULTS["max_rounds_per_contradiction"] if max_rounds is None else int(max_rounds)
 
     if scope_relations is None:
@@ -499,9 +511,9 @@ def adjudicate_contradiction(
             ),
             "winner_relation_id": None,
             "new_relation_ids": [],
-            "rounds": int(rounds),
+            "rounds": rounds_i,
             # 没查成就不推进轮次：推进了会把"追问预算"凭空消耗掉。
-            "rounds_after": int(rounds),
+            "rounds_after": rounds_i,
         }
 
     by_id: dict[str, Mapping[str, Any]] = {}
@@ -535,8 +547,8 @@ def adjudicate_contradiction(
             "reason": reason,
             "winner_relation_id": winner,
             "new_relation_ids": sorted({str(x) for x in new_ids}),
-            "rounds": int(rounds),
-            "rounds_after": int(rounds) + 1,
+            "rounds": rounds_i,
+            "rounds_after": rounds_i + 1,
         }
 
     if not alive_a and not alive_b:
@@ -555,11 +567,12 @@ def adjudicate_contradiction(
         )
 
     now = detect_contradictions(scope_relations)
-    still = any(set(x["relation_ids"]) == {a_id, b_id} for x in now)
-    new_pairs = [
-        x for x in now
-        if set(x["relation_ids"]) != {a_id, b_id} and ({a_id, b_id} & set(x["relation_ids"]))
-    ]
+    still = any(set(x["relation_ids"]) == pair for x in now)
+    new_pairs = []
+    for x in now:
+        x_ids = set(x["relation_ids"])
+        if x_ids != pair and pair & x_ids:
+            new_pairs.append(x)
 
     if not still:
         return _pack(
@@ -575,7 +588,7 @@ def adjudicate_contradiction(
             new_ids=new_ids,
         )
 
-    if int(rounds) >= mr:
+    if rounds_i >= mr:
         return _pack(
             "persistent", "budget_exhausted",
             f"{a_id} 与 {b_id} 已追问 {rounds} 轮（上限 {mr}）仍对立 ⇒ 停止自动追问，交人复核。"
@@ -666,6 +679,7 @@ def check_conflict(
     draft["relation_id"] = str(draft.get("relation_id") or "")
     if not draft["relation_id"]:
         draft["relation_id"] = "<draft>"
+    draft_id = draft["relation_id"]
 
     scope: list[Mapping[str, Any]] = []
     for r in existing_relations:
@@ -680,9 +694,9 @@ def check_conflict(
     hits: list[dict] = []
     weak_hits: list[dict] = []
     for x in found:
-        if draft["relation_id"] not in x["relation_ids"]:
+        if draft_id not in x["relation_ids"]:
             continue
-        other = [i for i in x["relation_ids"] if i != draft["relation_id"]]
+        other = [i for i in x["relation_ids"] if i != draft_id]
         item = {
             "relation_id": other[0] if other else "",
             "strength": x.get("strength"),
@@ -816,19 +830,20 @@ def structural_duplicate_pairs(
                 continue
             name_ev = _name_evidence(by_id.get(a, {}), by_id.get(b, {}))
             common_rels = sorted(shared_rels.get(a, set()) & shared_rels.get(b, set()))
+            ns = sorted(na)
             out.append(
                 {
                     "concept_ids": [a, b],
                     "concept_names": [str(by_id[a].get("name") or ""), str(by_id[b].get("name") or "")],
                     "neighborhood_size": len(na),
-                    "neighbors": sorted(na),
-                    "neighbor_names": [str((by_id.get(n) or {}).get("name") or f"(未知 {n})") for n in sorted(na)],
+                    "neighbors": ns,
+                    "neighbor_names": [str((by_id.get(n) or {}).get("name") or f"(未知 {n})") for n in ns],
                     "shared_relation_ids": common_rels,
                     "name_evidence": name_ev,
                     "proposal": "merge" if name_ev != "none" else "review",
                     "reason": (
                         f"邻域完全相同（{len(na)} 个共同邻居："
-                        f"{'、'.join(str((by_id.get(n) or {}).get('name') or n) for n in sorted(na))}），"
+                        f"{'、'.join(str((by_id.get(n) or {}).get('name') or n) for n in ns)}），"
                         f"且两者之间无直接关系"
                         + (
                             f"；名字侧证据：{_NAME_EVIDENCE_TEXT[name_ev]}"
@@ -876,15 +891,15 @@ def _name_evidence(a: Mapping[str, Any], b: Mapping[str, Any]) -> str:
     """
     from . import textutil as T
 
-    def _forms(row: Mapping[str, Any]) -> set[str]:
-        out = {str(row.get("normalized_name") or "") or T.normalize(str(row.get("name") or ""))}
-        out |= {T.normalize(str(x)) for x in (row.get("aliases") or [])}
-        out.discard("")
-        return out
+    def _forms(row: Mapping[str, Any]) -> tuple[set[str], str]:
+        base = str(row.get("normalized_name") or "") or T.normalize(str(row.get("name") or ""))
+        forms = {base}
+        forms |= {T.normalize(str(x)) for x in (row.get("aliases") or [])}
+        forms.discard("")
+        return forms, base
 
-    fa, fb = _forms(a), _forms(b)
-    na = str(a.get("normalized_name") or "") or T.normalize(str(a.get("name") or ""))
-    nb = str(b.get("normalized_name") or "") or T.normalize(str(b.get("name") or ""))
+    fa, na = _forms(a)
+    fb, nb = _forms(b)
     if na and na == nb:
         return "same_normalized_name"
     if fa & fb:
@@ -938,7 +953,8 @@ def find_equivalent_question(
             }
             return cand
         union = want_cs | qcs
-        jac = (len(want_cs & qcs) / len(union)) if union else 0.0
+        inter = want_cs & qcs
+        jac = (len(inter) / len(union)) if union else 0.0
         if want_cs and jac >= thr:
             cand = {
                 "matched": True,
@@ -946,7 +962,7 @@ def find_equivalent_question(
                 "by": "concept_jaccard",
                 "detail": f"概念集合 Jaccard={jac:.2f} ≥ 阈值 {thr:.2f}",
                 "similarity": round(jac, 4),
-                "shared": sorted(want_cs & qcs),
+                "shared": sorted(inter),
                 "existing_status": str(q.get("status") or ""),
                 "existing_question": str(q.get("question") or ""),
             }
@@ -1000,14 +1016,14 @@ def evidence_relevance(
             "reason": "未提供新关系（new_relations=None）⇒ **没查**，不得读成'不相关'",
         }
     want = {str(x) for x in (question.get("related_concept_ids") or []) if x}
+    evidence_lits = {str(x) for x in (question.get("evidence_lit_ids") or [])}
     rel_ids: list[str] = []
     lit_ids: set[str] = set()
     for r in new_relations:
         cids = {str(x) for x in (r.get("concept_ids") or []) if x}
         hit = want & cids
-        if not hit and str(r.get("lit_id") or "") and str(r.get("lit_id")) in {
-            str(x) for x in (question.get("evidence_lit_ids") or [])
-        }:
+        lid = str(r.get("lit_id") or "")
+        if not hit and lid and lid in evidence_lits:
             # 该文献已被认定是这个问题的证据来源 ⇒ 它的新关系也算相关
             hit = cids
         if not hit:
@@ -1015,7 +1031,6 @@ def evidence_relevance(
         rid = str(r.get("relation_id") or "")
         if rid:
             rel_ids.append(rid)
-        lid = str(r.get("lit_id") or "")
         if lid:
             lit_ids.add(lid)
     rel_ids = sorted(set(rel_ids))
@@ -1315,11 +1330,15 @@ def next_prefixed_id(rows: Sequence[Mapping[str, Any]], field: str, prefix: str)
             "历史上这里接受过 'r-' 并产出 'r--0001'，而它能通过 schema 校验静默落库"
         )
     n = 0
+    used: set[str] = set()
+    head = prefix + "-"
     for r in rows:
         v = str(r.get(field) or "")
-        if v.startswith(prefix + "-") and v[len(prefix) + 1 :].isdigit():
-            n = max(n, int(v[len(prefix) + 1 :]))
-    used = {str(r.get(field) or "") for r in rows}
+        used.add(v)
+        if v.startswith(head):
+            suffix = v[len(head) :]
+            if suffix.isdigit():
+                n = max(n, int(suffix))
     n += 1
     while f"{prefix}-{S.format_id(n)}" in used:
         n += 1
