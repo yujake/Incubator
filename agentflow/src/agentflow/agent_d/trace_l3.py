@@ -1,6 +1,6 @@
-"""角色 D 的动作 `trace_l3`（`goal-7f5116c1` M6：从 `agent_d.py` 拆出来，逐字未改）。
+"""角色 D 的动作 `trace_l3`：按需下钻到文献（元数据 + 本地文件 + 正文是否可得）。
 
-拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。
+一动作一文件；判据 `tests/test_agent_split_is_one_action_one_file.py`。
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ class _TraceL3:
         """
         want = list(lit_ids or [])
         if not want:
-            # 2026-10-17（agents #6）：只收 Mapping 元素（str 上 `.get` 会抛 AttributeError）。
+            # 只收 Mapping 元素（str 上 `.get` 会抛 AttributeError）。
             want = [str(c.get("lit_id")) for c in evidence.get("claims") or []
                     if isinstance(c, Mapping) and c.get("lit_id")]
         want = sorted(set(want))[: self.max_l3_lits]
