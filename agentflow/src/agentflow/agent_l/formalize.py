@@ -1,140 +1,83 @@
 # -*- coding: utf-8 -*-
 """角色 L 的动作 `formalize`：把一条命题写成 `.lean` 落盘，然后交给检查器真跑。
 
-## 为什么需要这一格（它是 L 与 E 唯一的结构差别）
+为什么需要这一格（L 与 E 唯一的结构差别）：E 那条路是两步拼的 —— `fs.write` 把源码
+写进 `code/lean/`，再 `run_experiment(method="formal", script_path=…)` 让它落一行
+`experiments`。两步之间"到底写没写盘"没有机器判据；内联 `check_formal(source=…)` 在
+临时目录跑完就删，那份文件既不是 `proof_location`、也无法复跑。这一格把"写盘 + 检查
++ 三态结论"收成一个动作，让"写没写盘"变成返回值里的 `path` / `sha256` / `bytes` 三格，
+而不是一句自述。
 
-E 那条路是两步拼出来的：`fs.write` 把源码写进 `code/lean/`，再
-`run_experiment(method="formal", script_path=…)` 让它落一行 `experiments`。
-两步之间的"到底写没写盘"没有任何机器判据 —— 内联 `check_formal(source=…)`
-把源码放在临时目录里跑完就删，那份文件既不是 `proof_location`，也无法复跑。
-业主 2026-10-22 要的是"L 真的能写 Lean 代码、真的能干活"，所以这一格把
-"写盘 + 检查 + 三态结论"收成一个动作，让"写没写盘"变成返回值里的
-`path` / `sha256` / `bytes` 三格，而不是一句自述。
-
-## 落点
-
-`code/formal/<短名>.lean`（工作区相对路径）。为什么不是 E 的 `code/lean/`：
+落点：`code/formal/<短名>.lean`（工作区相对路径）。为什么不是 E 的 `code/lean/`：
 "这个 .lean 是谁写的"要一眼看得出来；两个角色写同一个目录时它只能靠猜。
 
-## 名称的两件事（真机读数逼出来的）
+名称的两件事：盘上的文件名用短名（好认）；交给检查器的是全名 —— 桥接层会往源码尾部
+追加一条 `#print axioms <名字>`（公理审计），而 Lean 4 里命名空间内的定理在文件作用域
+叫 `LProbe.<短名>`，只给短名时检查器报 `unknown constant`，于是一条真定理被记成
+compile_error。所以 L 自己从源码里把 `namespace … end` 的限定算出来
+（:func:`declaration_name_in`），调用方给了短名时自动升级成全名，给了全名就照用。
 
-盘上的文件名与交给检查器的声明名不是同一件东西：
+三件必须一起成立的事：① 真的写盘 —— `write_bytes`（不是 `write_text`：Windows 上它
+会把 `\\n` 刷成 `\\r\\n`，于是"这份源码的 sha256"变成一个与内容无关的数），行尾先统一
+成 `\\n`，sha256 算的是盘上那串字节；② 真的检查 —— `usable` 时把刚写的相对路径交给
+`check_formal`（E 的实现 + 同一个桥接层），结论三态，不是 `usable` 时不起检查器、
+`unknown` + 自检理由码；③ 真的拒绝 —— 源码里没有具名 `theorem` / `lemma`、声明名
+不合法、目标路径越界 ⇒ 受控 `param_error` / `path_outside_workspace`，一个字节都不写
+（"先写一半再报错"会让盘上留一份来路不明的文件）。
 
-- 文件名用短名（`code/formal/add_zero_probe.lean`，好认）；
-- 交给检查器的是全名：桥接层会往源码尾部追加一条 `#print axioms <名字>`
-  （公理审计），而 Lean 4 里命名空间内的定理在文件作用域叫 `LProbe.add_zero_probe`
-  —— 只给短名时检查器会报 `unknown constant 'add_zero_probe'`，于是一条真定理
-  被记成 compile_error（实测：2026-10-22，本机 Lean 4.7.0）。
-  所以 L 自己从源码里把 `namespace … end` 的限定算出来（`:func:`declaration_name_in`），
-  调用方给了短名时自动升级成全名；给了全名就照用。
+忠实复述是机器读数，不是文字义务：`statement_id` 给了就逐格核它（行在、
+`statementbody.body_of(row)` 非空、`proof_text` 非空、`claim` 与该行正文逐字相同），
+四条任一不成立 ⇒ 受控拒绝、一个字节都不写；没给时只认一种可证明的来源 —— `claim` 与
+某一行的正文逐字相同且唯一（`statement_source="claim_match"`）；两者都做不到时，
+表里一行命题都没有 ⇒ `no_ledger`，否则拒绝。`code/formal/<名字>.steps.jsonl` 是逐步
+对照表，一行一步 `{"proof_step", "quote", "lean_lines", "how"}`：`quote` 是
+`proof_text` 第 k 步压掉连续空白之后的前 60 字（逐字截取，不转述、不摘要），
+`lean_lines` 是 `[起, 止]` 行号，`how` 见 `HOW_VALUES`。`coverage` 随返回值给出
+（`steps_total` / `steps_mapped` / `unmapped` / `sorry_lines` / `assumptions_added`
+外加几格诊断），硬规则只有一条：`steps_mapped < steps_total` 或源码里出现 `sorry` /
+`admit` ⇒ 综合结论只能是 `unknown`（带理由码），不许 `verified`。
 
-## 三件必须一起成立的事
-
-1. 真的写盘：`write_bytes`（不是 `write_text`：Windows 上它会把 `\\n` 刷成
-   `\\r\\n`，于是"这份源码的 sha256"变成一个与内容无关的数）；行尾先统一成 `\\n`，
-   sha256 算的是盘上那串字节；
-2. 真的检查：`usable` 时把刚写的那个相对路径交给 `check_formal`
-   （E 的实现 + 同一个桥接层），结论三态；不是 `usable` 时不起检查器，
-   结论 `unknown` + 自检理由码（同一条失败只报一行）；
-3. 真的拒绝：源码里没有具名 `theorem` / `lemma`、或者声明名不合法、
-   或者目标路径越界 ⇒ 受控 `param_error` / `path_outside_workspace`，
-   一个字节都不写（"先写一半再报错"会让盘上留一份来路不明的文件）。
-
-## 忠实复述：从文字义务变成机器可核的读数（2026-10-22 第二班）
-
-改前这一格只核"声明名在源码里"（`_declared_in_source`），而 `claim` 是一段自由
-文本 —— 于是"L 形式化的到底是不是 B 登记的那一条"没有任何机器读数，只有一句自述。
-这一班补三件东西，缺一件这一格就还是文字义务：
-
-1. `statement_id` 参数：被形式化的那一条命题在 `statements` 表里的编号。给了就
-   逐格核它（行在、`statementbody.body_of(row)` 非空、`proof_text` 非空、
-   `claim` 与该行正文逐字相同）；四条任一条不成立 ⇒ 受控拒绝（`reason` 是一条
-   受控理由码），一个字节都不写。没给时只有一种可证明的来源：`claim` 与某一行的
-   正文逐字相同且唯一 —— 那就认这一行（`statement_source="claim_match"`）。
-   两者都做不到时：表里一行命题都没有 ⇒ `no_ledger`（见下），否则拒绝。
-2. `code/formal/<名字>.steps.jsonl`：逐步对照表，一行一步，
-   `{"proof_step", "quote", "lean_lines", "how"}`。`quote` 是 `proof_text` 第 k 步
-   压掉连续空白之后的前 60 字（逐字截取，不转述、不摘要），`lean_lines` 是
-   `[起, 止]` 行号，`how` 是四档之一（见 `HOW_VALUES`）。
-3. `coverage` 读数随返回值一起给出：`steps_total` / `steps_mapped` / `unmapped` /
-   `sorry_lines` / `assumptions_added`（外加几格诊断读数）。硬规则只有一条：
-   `steps_mapped < steps_total` 或源码里出现 `sorry` / `admit` ⇒ 综合结论只能是
-   `unknown`（带理由码），不许 `verified`。
-
-### 消费 B 的定理证明库（2026-10-22 晚业主裁定的第三句）
-
-返回值与 `coverage` 里各有一格 `b_library`（四格读数 + `found`，见
-:func:`_library_reading`）。取不到 B 的库（编号不在册 / 没有正文 / 没有证明 / claim
+消费 B 的定理证明库：返回值与 `coverage` 里各有一格 `b_library`（四格读数 + `found`，
+见 :func:`_library_reading`）。取不到 B 的库（编号不在册 / 没有正文 / 没有证明 / claim
 与正文不是同一句）⇒ 受控拒绝、一个字节都不写、也不起检查器；那一分支上
 `b_library.found=False` 但仍然在。
 
-### 向 B 汇报形式化困难（同一份裁定的第四句）
+向 B 汇报形式化困难：`formalize` 判"形式化失败或对不上"时，自己把一条受控形态的汇报
+投进 B 的收件箱（`agent_l/report.py` + `proofreport.py`），返回值里那一格是 `report`
+（`reported` / `skipped` / `refused`）。检查器/本地环境那一档不汇报（B 改不动），理由
+写在 `report.reason` 里 —— "没汇报"与"汇报了"是两个 `state`。
 
-`formalize` 判"形式化失败或对不上"时，自己把一条受控形态的汇报投进 B 的收件箱
-（`agent_l/report.py` + `proofreport.py`），返回值里那一格是 `report`
-（`state` 三档：`reported` / `skipped` / `refused`）。检查器/本地环境那一档
-不汇报（B 改不动），理由写在 `report.reason` 里 —— "没汇报"与"汇报了"是两个 `state`。
+步骤切分口径（写死在这里，判据照它；`split_proof_steps()` 按顺序择一）：① 空行分段
+（连续两个换行以上）—— 主口径，也是唯一不依赖"有没有编号"的口径；② 只切出一段、而
+文本里有编号行（`1.` / `（1）` / `第 1 步`）时按编号行切；③ 仍然只有一段时按句末标点
+切（`。` / `；` / 英文句点后跟空白）；④ 都不成立 ⇒ 整份算一步（`steps_total=1`）。
+`how` 记的是"Lean 这一边怎么接上的"，不是切分口径 —— 把切分口径也塞进 `how` 会让
+两件事共用一个格子，读者分不出"这一步被哪条规则切出来的"与"这一步是不是直接对应"。
 
-### 步骤切分口径（写死在这里，判据照它）
+Lean 这一边的落点（约定写在这里，L 照着写）：源码里的注释行是唯一机械可认的落点 ——
+`-- step <k>`（也认 `-- 步骤 <k>`、`-- step: <k>`）标记第 k 步 Lean 块的起点，到下一个
+标记行的前一行结束（最后一块到源码最后一行非空处）；`-- assume <文本>`（也认
+`-- 假设 <文本>`、`-- 补假设 <文本>`）记一处补上的隐含假设，文本原样进
+`assumptions_added`；没有标记 ⇒ `how="未映射"`、`lean_lines=[]`，并在
+`coverage.unmapped` 里点名。不许用 `sorry` / `admit` 堵住：含 sorry 的文件照样编译
+通过（退出码 0），那不是证明 —— 所以 `sorry` 单独一格读数，且它自己就足以把综合结论
+压回 `unknown`。`how` 四档（优先级从高到低，越靠前越"不是直接复述"）：`未映射`；
+`自足定义`（块里有 `def` / `abbrev` / `structure` 行）；`补假设`（块里有
+`-- assume`）；`直接对应`。
 
-`split_proof_steps()` 按三种形态择一切分，顺序即优先级：
+综合结论与检查器结论是两件事（不许折叠）：`status` 是综合结论（检查器说了什么，叠加
+忠实复述的读数），`checker_status` / `checker_reason` / `verified` / `exit_code` /
+`verifier_output` 是检查器原话；`faithfulness` 是第三件事的读数（`complete` /
+`incomplete` / `holes` / `unknown`）。压回 unknown 的边界（两类理由强度不同）：
+`faithfulness_sorry` 把 verified 与 failed 两档都盖成 unknown（含 sorry 的文件照样
+编译通过，读成通过与读成失败都不是我们要的读数）；漏步与多标步只盖 verified ——
+检查器已经说 failed 时不动它，因为"我们写的那份源码编译不过"比逐步对照更强。无论
+哪一档，检查器原话都留在 `checker_*` 两格与 `verifier_output` / `exit_code` 里。
 
-1. 主口径 —— 空行分段（连续两个换行以上）。B 的 `proof_text` 最常见的写法是
-   一步一段，它也是唯一不依赖"有没有编号"的口径；
-2. 退化一 —— 只切出一段、而文本里有编号行（`1.` / `（1）` / `第 1 步`）时按编号行切；
-3. 退化二 —— 仍然只有一段时按句末标点切（`。` / `；` / 英文句点后跟空白）；
-4. 都不成立 ⇒ 整份算一步（`steps_total=1`）。
-
-`how` 记的是"Lean 这一边怎么接上的"，不是切分口径 —— 切分只有一套（上面那个
-优先级），把切分口径也塞进 `how` 会让两件事共用一个格子，读者分不出
-"这一步被哪条规则切出来的"与"这一步在 Lean 里是不是直接对应"。
-
-### Lean 这一边怎么找到落点（约定写在这里，L 照着写）
-
-源码里的注释行是唯一机械可认的落点：
-
-- `-- step <k>`（也认 `-- 步骤 <k>`、`-- step: <k>`）：第 k 步的 Lean 块从这一行
-  开始，到下一个标记行的前一行结束（最后一个到源码最后一行非空处）；
-- `-- assume <文本>`（也认 `-- 假设 <文本>`、`-- 补假设 <文本>`）：这一处补了一个
-  原文里隐含的假设，文本原样进 `assumptions_added`；
-- 没有任何标记的步骤 ⇒ `how="未映射"`，`lean_lines=[]`，并在 `coverage.unmapped`
-  里点名。不许用 `sorry` / `admit` 把它堵住：含 `sorry` 的文件照样编译通过
-  （退出码 0），那不是证明 —— 所以 `sorry` 单独有一格读数，且它自己就足以把
-  综合结论压回 `unknown`。
-
-`how` 的四档判定（优先级从高到低，越靠前越"不是直接复述"）：
-
-1. `未映射` —— 没有标记；
-2. `自足定义` —— 这一块里有 `def` / `abbrev` / `structure` 行（原文用了私有定义，
-   Lean 这边换成了自足定义）；
-3. `补假设` —— 这一块里有 `-- assume` 标记；
-4. `直接对应` —— 以上都没有。
-
-### 综合结论与检查器结论是两件事（不许折叠）
-
-返回值里 `status` 是综合结论（检查器说了什么，叠加忠实复述的读数），
-`checker_status` / `checker_reason` / `verified` / `exit_code` / `verifier_output`
-是检查器原话。于是"机器核过了"（`checker_status="verified"`）与
-"这一趟算数"（`status="verified"`）各有一格读数：前者是检查器的，后者还要
-逐步对照过。`faithfulness` 那一格是第三件事的读数
-（`complete` / `incomplete` / `holes` / `unknown`）。
-
-压回 unknown 的边界（两类理由的强度不同）：`faithfulness_sorry` 会把
-verified 与 failed 两档都盖成 unknown（含 sorry 的文件照样编译通过，把它读成
-通过与读成失败都不是我们要的读数）；漏步与多标步只盖 verified —— 检查器已经
-说 failed 时不动它，因为"我们写的那份源码编译不过"比逐步对照更强。无论哪一档，
-检查器原话都留在 `checker_*` 两格与 `verifier_output` / `exit_code` 里，一个字节不丢。
-
-## 它不做什么
-
-- 不调模型：L 不"生成"Lean 代码，源码是调用方给的（B 的命题 + 证明链路、
-  或派活的人写好的）。这条与 E 的 `author_script` 分工相同：模型可以写脚本，
-  但判读一步都不许过模型（FC-16）；
-- 不写任何数据表：产物是盘上的文件与检查器原话（L 的 `write_set` 因此是空的）；
-- 不猜 imports：源码自己 import 什么就加载什么，与 E 的政策同一口径；
-- 不核"假设等价"：这一步要读出 Lean 里那条定理的类型再与原文假设置换比对，
-  今天的机器读数只到"这一步落在哪几行、它是直接对应还是补了假设"。缺口如实
-  记在 `assumptions_added` 里，不假装它被核过。
+它不做什么：不调模型（L 不"生成"Lean 代码，源码是调用方给的，判读一步都不许过模型，
+FC-16）；不写任何数据表（产物是盘上的文件与检查器原话，L 的 `write_set` 因此是空的）；
+不猜 imports（源码自己 import 什么就加载什么）；不核"假设等价"（今天的机器读数只到
+"这一步落在哪几行、它是直接对应还是补了假设"，缺口如实记在 `assumptions_added` 里）。
 """
 from __future__ import annotations
 
@@ -205,8 +148,7 @@ STATEMENT_REASONS: tuple[str, ...] = (
     "statement_ledger_unreadable",
 )
 
-#: 路径这一格的受控拒绝理由码（业主 2026-10-22：「lean 形式化需指明对哪个路径做了
-#: 形式化验证」）。两个码各守一种病，处置完全不同：
+#: 路径这一格的受控拒绝理由码。两个码各守一种病，处置完全不同：
 #:
 #: - `proof_path_not_found`：给了一个号，而那个号不在这条命题的证明清单里（含"号认不出"）
 #:   ⇒ 要的是"换一个号"；
@@ -220,9 +162,9 @@ PROOF_PATH_REASONS: tuple[str, ...] = (
 
 #: "这一趟的路径是谁选的"（`path_source`）的三档：B 指定 / 照 C 的建议 / L 自己决定。
 #:
-#: 业主的补裁（逐字）：「L 可以通过 C 的建议选择路径，也可以由 B 指定路径，也可以自行决定，
-#: 只是在标记和五元位更新时要忠实」。所以这一格是"谁选的"，而"谁验的"是另一个读数
-#: （`record` 落的那一行 `observations.recorded_by` = L）—— 两者不许折成一格。
+#: L 可以通过 C 的建议选路径，也可以由 B 指定，也可以自行决定，只是在标记与五元位更新
+#: 时要忠实。所以这一格是"谁选的"，而"谁验的"是另一个读数（`record` 落的那一行
+#: `observations.recorded_by` = L）—— 两者不许折成一格。
 PATH_SOURCES: tuple[str, ...] = ("B", "C", "L")
 
 #: 忠实复述这一格的受控理由码（综合结论被压回 `unknown` 时用它）。
@@ -247,15 +189,15 @@ FAITHFULNESS_KEYS: tuple[str, ...] = (
     "refused",
     "checker_status",
     "checker_reason",
-    # 2026-10-22 晚（业主裁定："消费 B 的定理证明库"）：这一趟从 B 的库读到的
-    # 是哪一条、它有多大、依赖链几步 —— 判据（`tests/test_l_collab_surface_is_exactly_this.py`）
-    # 读的就是这一格；取不到库的那些分支上它是 `found=False` 的空壳，照样在。
+    # 这一趟从 B 的库读到的是哪一条、它有多大、依赖链几步 —— 判据
+    # （`tests/test_l_collab_surface_is_exactly_this.py`）读的就是这一格；取不到库的
+    # 那些分支上它是 `found=False` 的空壳，照样在。
     "b_library",
     # 向 B 汇报的那一条（`agent_l/report.py`）：`state` 三档，`reported` 才是"B 收到了"。
     "report",
-    # 2026-10-22 晚（业主裁定：形式化那一位要指明路径）：这一趟验的是哪一份证明、
-    # 那份正文的指纹、以及"这个号是谁选的"。四格在每条分支上都成立（被拒时是空值 +
-    # `refused=True`）—— 缺一格就会让"验的是哪条路径"在那条分支上无从查起。
+    # 这一趟验的是哪一份证明、那份正文的指纹、以及"这个号是谁选的"。四格在每条分支上
+    # 都成立（被拒时是空值 + `refused=True`）—— 缺一格就会让"验的是哪条路径"在那条
+    # 分支上无从查起。
     "proof_no",
     "proof_sha256",
     "path_id",
@@ -295,8 +237,8 @@ class _Formalize:
         - 忠实复述读数：`statement_id` / `statement_source` / `coverage` /
           `faithfulness` / `steps_path` / `refused`；
         - 检查器原话（不被忠实复述的读数覆盖）：`checker_status` / `checker_reason`；
-        - 路径读数（2026-10-22 晚）：`proof_no`（验的是第几份证明）/ `proof_sha256`
-          （那一份正文的指纹）/ `path_source`（这个号是 B 定的、照 C 的建议、还是 L 自己选的）。
+        - 路径读数：`proof_no`（验的是第几份证明）/ `proof_sha256`（那一份正文的
+          指纹）/ `path_source`（这个号是 B 定的、照 C 的建议、还是 L 自己选的）。
 
         全部键在每一条分支上都成立（被拒时 `written=False`、`coverage={}`、
         `refused=True`）—— 键集合随分支变会让判据在缺失的那条分支上失效。
@@ -305,12 +247,11 @@ class _Formalize:
         正文逐字相同且唯一 → 台账里一行命题都没有（`no_ledger`，此时没有可对照的
         原文，`faithfulness="unknown"`）。前两条之外一律受控拒绝，一个字节都不写。
 
-        `proof_no` 的两条规矩（业主 2026-10-22：「要指明对哪个路径做了形式化验证」）：
-        给了就按它（号不在册 ⇒ `proof_path_not_found`）；没给而这条命题有好几份证明
-        ⇒ `proof_path_unspecified`，一个字节都不写。只有一份证明时不拒绝（存量 62 行
-        都是这种，它们只有 `#p1`）。落盘名字跟着号走：`#p1` 仍是
-        `code/formal/<声明名>.lean`（逐字不变），`#p2` 起是
-        `code/formal/<声明名>__p<n>.lean`（不然第二条会把第一条覆盖掉）。
+        `proof_no` 的两条规矩：给了就按它（号不在册 ⇒ `proof_path_not_found`）；
+        没给而这条命题有好几份证明 ⇒ `proof_path_unspecified`，一个字节都不写；
+        只有一份证明时不拒绝。落盘名字跟着号走：`#p1` 是
+        `code/formal/<声明名>.lean`，`#p2` 起是 `code/formal/<声明名>__p<n>.lean`
+        （不然第二条会把第一条覆盖掉）。
         """
         # ---- 第 0 道闸：`path_source` 是受控三值（业主补裁：「只是在标记和五元位更新时
         # 要忠实」）。空串是"没交代"，不是第四个取值 —— 三态纪律：不许替调用方编一个来源。
@@ -377,7 +318,7 @@ class _Formalize:
 
         stmt_id = str(picked.get("statement_id") or "")
         stmt_source = str(picked.get("source") or "")
-        # ---- 第二道闸：这一趟验的是哪一份证明（业主 2026-10-22 的裁定）。
+        # ---- 第二道闸：这一趟验的是哪一份证明。
         # 位置与上面那道闸一样，在所有写操作之前：多路径未给号时盘上不许出现新文件。
         chosen = _path_choice(picked, proof_no=proof_no)
         if not chosen.get("ok"):
@@ -643,13 +584,11 @@ def _flat(text: Any) -> str:
 def _path_choice(picked: Mapping[str, Any], *, proof_no: Any = None) -> dict[str, Any]:
     """这一趟形式化的是哪一份证明：`{ok, proof_no, proof_text, paths, reason, detail}`。
 
-    判据（业主 2026-10-22：「lean 形式化需指明对哪个路径做了形式化验证」）：
-
-    - 给了号：号必须是这条命题证明清单里的一个（`verifications.proof_list` 是唯一口径），
-      否则 `proof_path_not_found`（含"号认不出"：`0` / `'abc'` / `'#p0'` 都算）；
-    - 没给号：这条命题只有一份证明 ⇒ 就是它（存量行全是这种，不拒绝）；有两份及以上
-      ⇒ `proof_path_unspecified`。这一档绝不默认 `#p1` —— 那会把"验了第 2 条"记成
-      "验了第 1 条"，而第 4 位（二维）里两条路径的读数正好相反。
+    判据：给了号 ⇒ 号必须是这条命题证明清单里的一个（`verifications.proof_list` 是唯一
+    口径），否则 `proof_path_not_found`（含"号认不出"：`0` / `'abc'` / `'#p0'` 都算）；
+    没给号 ⇒ 只有一份证明就是它，有两份及以上 ⇒ `proof_path_unspecified`。这一档绝不
+    默认 `#p1` —— 那会把"验了第 2 条"记成"验了第 1 条"，而第 4 位（二维）里两条路径
+    的读数正好相反。
 
     `picked` 是 `_pick_statement` / `_checked_row` 的返回值；`no_ledger` 那一档没有
     `row`，按"一条证明都没有的命题"读（`proof_list({})` = `#p1` 空正文）。
@@ -742,13 +681,13 @@ def _library_reading(*, stmt_id: Any, row: Mapping[str, Any],
                      proof_text: Any) -> dict[str, Any]:
     """这一趟从 B 的定理证明库读到了什么（`b_library` 的唯一产出点）。
 
-    四格读数（业主 2026-10-22 晚裁定："消费 B 的定理证明库"）：
+    读数：
 
     - `stmt_id`：被形式化的那一条在 `statements` 里的编号；
     - `label`：那一行的标题（人读的那一格；没有就是空串）；
     - `proof_chars`：`proof_text` 的字符数（"这一条证明有多大"）；
     - `dependency_steps`：依赖链的步数（与逐步对照同一个切分口径
-      `split_proof_steps` —— 两处口径分家会让"12 步"有两种意思）。
+      `split_proof_steps` —— 两处口径分家会让"12 步"有两种意思）；
     - `found`：这一趟真的读到了可用的那一条（有正文且有证明）没有。
 
     `found=False` 时前四格仍是空的但键都在：取不到库那条分支上也要能读
@@ -987,9 +926,9 @@ def faithfulness_reading(*, proof_text: Any, source: Any) -> dict[str, Any]:
 def coverage_reason(coverage: Mapping[str, Any] | None) -> str:
     """coverage ⇒ 综合结论不许是 `verified` 的那条理由码（空串 = 没有拦的理由）。
 
-    硬规则（业主 2026-10-22）：`steps_mapped < steps_total` 或出现 `sorry` ⇒ 只能是
-    `unknown`。`extra_steps`（源码里标了台账没有的那一步）也是同一族：它是"编造落点"
-    的形态，比"漏一步"更坏，所以一并拦下。
+    硬规则：`steps_mapped < steps_total` 或出现 `sorry` ⇒ 只能是 `unknown`。
+    `extra_steps`（源码里标了台账没有的那一步）也是同一族：它是"编造落点"的形态，
+    比"漏一步"更坏，所以一并拦下。
     """
     if not isinstance(coverage, Mapping) or not coverage:
         return ""
@@ -1092,8 +1031,8 @@ def declaration_name_in(text: Any) -> str:
 
     为什么要算限定名：桥接层会往源码尾部追加 `#print axioms <名字>`，而 Lean 4 里
     `namespace LProbe` 之内的定理在文件作用域叫 `LProbe.<短名>` —— 只给短名时
-    检查器报 `unknown constant`，一条真定理会被记成 `compile_error`（真机读数，
-    2026-10-22）。这里用"命名空间栈"把前缀拼出来；它刻意不做 Lean 语法解析：
+    检查器报 `unknown constant`，一条真定理会被记成 `compile_error`。这里用"命名空间
+    栈"把前缀拼出来；它刻意不做 Lean 语法解析：
     认 `namespace` / `section` / `end` 三种行，别的行一概不看（少认一种的后果是
     退回短名，而短名的行为与加这个函数之前逐字相同）。
     """
