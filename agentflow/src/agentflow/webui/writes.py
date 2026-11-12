@@ -115,7 +115,7 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     ("POST", "/api/stop", "handle_stop"),
     ("POST", "/api/submit", "handle_submit"),
     ("POST", "/api/settings", "handle_settings"),
-    # 业主 2026-10-12 的预算窗口：追加 / 重设额度（写面，走同一套授权、
+    # 预算窗口：追加 / 重设额度（写面，走同一套授权、
     # CSRF、审计与 `confirm=1`）。
     ("POST", "/api/budget", "handle_budget"),
     ("POST", "/api/run", "handle_start_run"),
@@ -218,7 +218,7 @@ def _source_of(handler: Any) -> tuple[str, str]:
     返回 `(来源, 问题)`：问题非空 = 拒。三处都看：`Origin`（跨站 POST 会带）、
     `Host`、以及 socket 对端地址 —— 只看一处会漏掉另一处能伪造的那一格。
 
-    头里那一格分三档（2026-10-27 的 D9）：真回环 ⇒ 过；通配绑定地址
+    头里那一格分三档：真回环 ⇒ 过；通配绑定地址
     （`_BIND_HOSTS`）⇒ 这一格不当证据、也不算"本机"，由第三层定；其余 ⇒ 拒。
     """
     client = ""
@@ -317,7 +317,7 @@ def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, An
     `state` 是"被起的这件事到哪一步了"（D-60 ③：缓存的 `plan` / `running`），
     与 `tri` 分处两根轴；不给就不带这一格（其余写端点的回执一个字节都不变）。
 
-    只读档（`--allow-writes` 没开）不落盘（E7，2026-11-03）：审计台账是
+    只读档（`--allow-writes` 没开）不落盘：审计台账是
     `<工作区>/web-actions.jsonl`，写它就是在别人的目录里新建文件 —— 而缺省档在
     `--help` 与模块 docstring 里叫"只读"。于是这一档的写法是：只把这一笔打进
     stderr，回执里 `extra.audit.tri = not_applicable` 并说清"没落盘"。
@@ -447,8 +447,8 @@ def handle_submit(handler: Any, params: Mapping[str, str],
         store = Store(root)
         store.init()
     except (StoreError, OSError) as exc:
-        # E6（2026-11-03）：`Store.init()` 原本写在 `try` 之外。根上有网页自己写的
-        # `.agentflow-stop` / `budget.json` / `web-actions.jsonl`、又没有 `data/` 时
+        # `Store.init()` 若写在 `try` 之外，而根上有网页自己写的
+        # `.agentflow-stop` / `budget.json` / `web-actions.jsonl`、又没有 `data/`，
         # 它抛 `StoreError` ⇒ 冒到 `server._invoke` 的兜底分支 ⇒ 500
         # `handler_crashed`，而且 `_finish()` 没被调用（这一笔被拒的写尝试不进台账）。
         # 这是查得清的拒绝（"这个工作区没 init 过"），不是处理器崩了：
@@ -505,7 +505,7 @@ def handle_settings(handler: Any, params: Mapping[str, str],
             continue                      # confirm 之类的顶层字段不进设置
         text = _text(vals[0]) if vals else ""
         section, rest = str(raw_key).split(".", 1)
-        # `models` 是三段的键（`models.<角色>.<键>`，业主 2026-10-14 的按角色配置）：
+        # `models` 是三段的键（`models.<角色>.<键>`，按角色配置）：
         # 表单是平的，所以这里再切一刀；其余段仍是两段。
         if section == SET.MODELS_SECTION and "." in rest:
             slot, key = rest.split(".", 1)
@@ -543,7 +543,7 @@ def handle_budget(handler: Any, params: Mapping[str, str],
                   query: Mapping[str, Sequence[str]]) -> dict[str, Any]:
     """`POST /api/budget`：追加一笔额度（`action=add`）或重设总额（`action=set`）。
 
-    业主 2026-10-12：「用户可追加预算，运行消耗的钱从总预算里实时扣除」。
+    业主：「用户可追加预算，运行消耗的钱从总预算里实时扣除」。
     这一条端点是那句话的台面落点 —— 运行中途点一下，下一个花钱之前的闸门
     （`llmseam.budget_limit`）就现读到新上限（`budget` 模块的 docstring 逐字解释了
     为什么这件事必须走盘上寄存器而不是一个内存参数）。
@@ -635,10 +635,10 @@ def _run_argv(root: Path, task: str, *, sid: str = "",
 def _spawn_detached(root: Path, argv: Sequence[str], prefix: str) -> tuple[int, str]:
     """起一个 detached 子进程，stdout/stderr 追加进 `runs/<prefix>-<时间>.log`。
 
-    为什么抽成一处（2026-10-27，业主裁定 W3）：`/api/run` 的"起一趟"与
-    `/api/cache/warm` 的"起一趟预热"此前各写了一遍这套五件事 —— 建 `runs/`、
-    按时间戳命名日志、两个编码环境变量、Windows 的 detached 旗标、Popen 的形状。
-    两份同时改才不出事，而"文件句柄没 close"那个缺陷（D7）就是两份都没写对。
+    为什么抽成一处：`/api/run` 的"起一趟"与 `/api/cache/warm` 的"起一趟预热"
+    若各写一遍这套五件事 —— 建 `runs/`、按时间戳命名日志、两个编码环境变量、
+    Windows 的 detached 旗标、Popen 的形状 —— 就得两份同时改才不出事，而
+    "文件句柄没 close"那个缺陷正是两份都没写对。
 
     两处各自保留的东西：日志前缀（`web-run` / `web-cache-warm`，判据按它们 glob）
     与 `runs/` 这个落点（"在飞"页与 `cwd` 都按它认）。
@@ -804,7 +804,7 @@ def answer(root: Path, form: Mapping[str, Sequence[str]],
     不该被折叠成"写失败"（那会把一次真实的落盘说成没发生）。所以审计失败走 stderr，
     而 `/api/*` 那三条端点的回执把 `extra.audit` 如实带给调用方。
 
-    `audit_enabled`（E7，2026-11-03）：只读档（没开 `--allow-writes`）传 `False` ——
+    `audit_enabled`：只读档（没开 `--allow-writes`）传 `False` ——
     那时台账不落盘，这一笔只进 stderr。"只读"这个词必须守住：写
     `<工作区>/web-actions.jsonl` 就是在别人的目录里新建文件。
     """
@@ -918,7 +918,7 @@ def answer(root: Path, form: Mapping[str, Sequence[str]],
     return done(303, "/", "")
 
 # ====================================================================== 两档提示词缓存的写端点
-# 业主 2026-10-23：「换 key 时自动提醒重落受影响智能体的缓存」这一条要能在网页上按下去，
+# 业主：「换 key 时自动提醒重落受影响智能体的缓存」这一条要能在网页上按下去，
 # 所以缓存预热也走写面。两条端点（`GET /api/cache` 只读 + `POST /api/cache/warm` 写）的
 # 实现落在 `cacheface.py`，这里只是把它的子表并进本模块那两张表 —— 于是写面的授权矩阵
 # （回环来源 → CSRF → `--allow-writes`）与审计台账对它逐条生效，不是因为"它长得像写端点"。
