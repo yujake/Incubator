@@ -53,10 +53,11 @@ class _RegisterConjecture:
                            "known_lit_id": row.get("known_lit_id")},
             "output_format": {"restatement": "字符串", "next_check": "字符串"},
         }, ensure_ascii=False, default=str)
-        payload, text, got = model_json_call(self.llm, prompt, task_id=self._summon_task_id(),
+        task_id = self._summon_task_id()
+        payload, text, got = model_json_call(self.llm, prompt, task_id=task_id,
                                              note="D.register_conjecture 的可检验性复述")
-        got["task_id"] = self._summon_task_id()
-        got["spend"] = spend_reading(self.store, got["task_id"])
+        got["task_id"] = task_id
+        got["spend"] = spend_reading(self.store, task_id)
         if payload is None and text.strip() and got.get("kind") == KIND_CLIENT:
             # 裸 client 回了散文：仍按旧口径收下（它没有 `problem` 词表），但不进库。
             got["state"] = STATE_USED
