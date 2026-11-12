@@ -157,6 +157,7 @@ def check_paper_ledger(paper: Mapping[str, Any], moved: Sequence[Mapping[str, An
         by_id = SL.index_by_id(statement_rows)
         deps = [dict(d) for d in dep_rows]
         cites = _citations_of(paper)
+        cite_set = set(cites)
         moved_list = [dict(m) for m in moved]
         ref_set = {str(r) for r in refs} if refs else {str(m.get("ref") or "") for m in moved_list}
     except Exception as exc:  # noqa: BLE001 —— 读不成要如实报
@@ -188,25 +189,28 @@ def check_paper_ledger(paper: Mapping[str, Any], moved: Sequence[Mapping[str, An
             problems.append({"code": "not_verbatim", "stmt_id": sid, "paper_number": num,
                              "why": ("搬进正文的片段与台账那一行不是逐字相等 ⇒ "
                                      "回验无从做起（逐字是回验的前提）")})
-        if f"stmt:{sid}" not in cites:
+        if f"stmt:{sid}" not in cite_set:
             problems.append({"code": "missing_citation", "stmt_id": sid, "paper_number": num,
                              "why": (f"正文里那一处断言没有 `stmt:{sid}` 引用 ⇒ "
                                      "'搬进去的东西从哪来'不可复算")})
         numbers.setdefault(num, sid)
     # 3b 重号：两条映射行指向同一个论文号就是红 —— 判的是映射行，不是"正文里那两条
     # 各写了什么号"：后者在同号时本来就看不出撞（两条各自的号字段都写着 `1.1`）。
+    # 同一趟里也收齐"映射行指着的论文号"（判据 4 用它）。
     by_label: dict[str, set[str]] = {}
+    mapped_numbers: set[str] = set()
     for d in deps:
-        if str(d.get("used_by") or "").startswith("doc:"):
-            by_label.setdefault(str(d.get("label") or ""), set()).add(str(d.get("used_by") or ""))
+        if not str(d.get("used_by") or "").startswith("doc:"):
+            continue
+        label = str(d.get("label") or "")
+        by_label.setdefault(label, set()).add(str(d.get("used_by") or ""))
+        mapped_numbers.add(label)
     for num, users in by_label.items():
         if num and len(users) > 1:
             problems.append({"code": "duplicate_paper_number", "paper_number": num,
                              "why": (f"论文号 {num} 被 {len(users)} 条映射行共用了 "
                                      f"（{sorted(users)}）⇒ 两个不同的定理不许共用一个论文号")})
     # 4 映射：一对一（悬空 \ref / 缺映射 / 多余映射，两个方向都判）
-    mapped_numbers = {str(d.get("label") or "") for d in deps
-                      if str(d.get("used_by") or "").startswith("doc:")}
     for num, sid in numbers.items():
         if num not in mapped_numbers:
             problems.append({"code": "missing_mapping", "stmt_id": sid, "paper_number": num,
