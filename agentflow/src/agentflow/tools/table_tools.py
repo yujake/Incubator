@@ -1,19 +1,26 @@
 """表 CRUD 工具（A/B/C/D 共用的数据面原子动作）。
+
 ## 为什么这些工具长这样
-`base.py` 已经把"工具"这件事的形状定下来了（名字 / JSON Schema / 副作用声明 /结构化返回）。本模块只负责把这些形状接上真实数据，因此有三条硬性
-规矩：
-1. 写操作一律走 `store.tx(...)`，并且显式声明它要碰的每一张表。包括 `counters` —— `alloc_id` 在事务内改计数器，没声明就会 
-`StoreError`。更要紧的是：`Tx.rows()` 只允许读已声明的表，所以"声明"实际上就是"这次操作会依赖哪些表的一致性"，漏声明会在运行时报错而不是悄悄读到
-脏数据。
-2. 读操作不加锁。 `store.rows()` 是无锁快照读，只用于展示/统计。 C 的分析任务会对同一批数据反复组合查询；如果每次只读都去抢排他锁，就会把 A/B 的
-写入挡在外面。写工具独占锁、读工具无锁 —— 这个分工是刻意的。
-3. 业务性失败返回 `fail(...)`，不抛异常。"名字重复""被关系引用所以不能删""字段拼错了"这些都不是环境故障，而是调用方需要看到并纠正的信息。抛异常会打断智
-能体的循环，而它恰恰是唯一能修好这个错误的一方。
+形状由 `base.py` 定（名字 / JSON Schema / 副作用声明 / 结构化返回），本模块只负责
+把形状接上真实数据。三条硬规矩：
+1. 写操作一律走 `store.tx(...)`，并显式声明要碰的每一张表 —— 包括 `counters`
+   （`alloc_id` 在事务内改它，没声明就会 `StoreError`）。`Tx.rows()` 只允许读已声明的
+   表，所以"声明"实际就是"这次操作依赖哪些表的一致性"，漏声明会在运行时报错，而不是
+   悄悄读到脏数据。
+2. 读操作不加锁：`store.rows()` 是无锁快照，只用于展示/统计。C 的分析任务会对同一批
+   数据反复组合查询；每次只读都抢排他锁，就会把 A/B 的写入挡在外面。写工具独占锁、
+   读工具无锁 —— 这个分工是刻意的。
+3. 业务性失败返回 `fail(...)`，不抛异常："名字重复""被关系引用所以不能删""字段拼错"
+   都不是环境故障，而是调用方需要看到并纠正的信息。抛异常会打断智能体的循环，而它
+   恰恰是唯一能修好这个错误的一方。
+
 ## 派生字段：为什么工具要顺手补
-`relations.concept_group_key` / `quote_normalized` / `dedup_key` 都是纯派生字段（见 
-`agent_b.py` 的写入路径）。`verify` 会用 `textutil.concept_group_key(concept_ids)`独立复算并比对，不一致就是
-`stale_group_key`（错误级）。工具建的行若不补这几个字段，就会造出"结构合法但 verify 报错"的行 ——所以 create 时字段为空就补、
-update 时依赖变了且调用方没显式给就重算。调用方显式给的值永远优先（否则"给定字段被悄悄改写"比缺字段更难排查）。
+`relations.concept_group_key` / `quote_normalized` / `dedup_key` 是纯派生字段（写入
+路径见 `agent_b/` 的登记路径）。`verify` 会用
+`textutil.concept_group_key(concept_ids)` 独立复算并比对，不一致就是
+`stale_group_key`（错误级）—— 建行不补就会造出"结构合法但 verify 报错"的行。所以
+create 时字段为空就补，update 时依赖变了且调用方没显式给就重算；调用方显式给的值永远
+优先（"给定字段被悄悄改写"比缺字段更难排查）。
 """
 
 from __future__ import annotations
@@ -346,15 +353,17 @@ def _next_process_id(rows: Sequence[Mapping[str, Any]], *, id_field: str, prefix
 
 def _next_request_id(rows: Sequence[Mapping[str, Any]]) -> str:
     """`search_requests` 的主键是 `r-NNNN`（转发给唯一实现 + 空间守卫）。
-    见 `schema.ID_COUNTERS` 的注释：`search_requests` 的 id_kind 是 "request"，它不在 `ID_COUNTERS` 里，所以 `alloc_id("request")` 会直接报"未知
-    ID 类别"。本函数原先自己扫描行取最小可用号，而 `research_tools` 里另有一份"取 max+1"的副本、`interactions.next_prefixed_id` 里还有第三份（带前缀守卫）—— 同一个
-    `search_requests`表有三个取号器，语义互相冲突：表里只有 `r-0001`、`r-0003` 时这边给 `r-0000`、那边给 `r-0004`。"最小可用号"还有更坏的一面：它会复用已删行的号，而
-    `literature.source_request_ids` 与 `research_questions.waiting_request_ids`都长期引用 `r-NNNN` —— 号一旦被复用，溯源会静默指向另一条请求。
-    `interactions.next_prefixed_id` 的 docstring 自己写着"删除中间行不会导致撞号"。所以那个语义被放弃了（连同`tests/test_tools_table_fs.py`里断言 `"r-0000"` 的那
-    一行一起改）——那是修正一条编码了错误行为的断言，不是放宽断言。`P-4` 之后：上限在 `next_prefixed_id` 里，类型在这里翻译`interactions.next_prefixed_id` 现在自己挡越界（判据只有一份）。它
-    抛的是具名的 `IdSpaceExhausted`（继承`ValueError`），这里把它精确翻成工具层的`ToolError` —— 否则它会一路冒到 `ToolRegistry.call` 被兜成 `kind='unexpected'`，
-    于是"编号空间用尽"（已知、可处理）与"工具内部有 bug"在下游同形。不把整个 `ValueError` 都翻掉：`next_prefixed_id` 也会因为"prefix 带了连接号"抛 `ValueError`，那是调用方编码错误，应当
-    保持原样冒出去。实现只有一份：`_next_process_id`（过程记录通用），这里只固定"`request_id` + `r` + `search_requests`"这三个参数。
+
+    取号语义是 `interactions.next_prefixed_id` 的"最大号 + 1"，不是"最小可用号"：
+    后者会复用已删行的号，而 `literature.source_request_ids` /
+    `research_questions.waiting_request_ids` 长期引用 `r-NNNN` —— 号一旦复用，溯源
+    会静默指向另一条请求。
+
+    它抛的 `IdSpaceExhausted` 在这里精确翻成 `ToolError`：否则会一路冒到
+    `ToolRegistry.call` 被兜成 `kind='unexpected'`，"编号空间用尽"（已知、可处理）
+    与"工具内部有 bug"在下游同形。不翻整个 `ValueError`：`next_prefixed_id` 也会因
+    "prefix 带了连接号"抛它，那是调用方编码错误，应当原样冒出去。实现只有一份
+    （`_next_process_id`），这里只固定"`request_id` + `r` + `search_requests`"三个参数。
     """
     return _next_process_id(rows, id_field="request_id", prefix="r",
                             table="search_requests")
@@ -695,18 +704,11 @@ def _obj(props: Mapping[str, Any], required: Iterable[str] = ()) -> dict:
 
 # ---------------------------------------------------------------- 直写兜底（路由）
 #
-# 历史（读这一节之前先看一眼，否则会以为"判据被放宽了"）：
-#   2026-10-19 晚的形态是「拒 + 拒信里逐字指路」（`projects/mp2/sessions/mp2-7.jsonl`
-#   第 97 行：`table.create(table="statements")` 手写 `bits={}` 与
-#   `evidence_kind="heuristic"`）。业主 2026-10-24 的裁定把「处置」换掉了：
-#   「不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管」。
-#   模型那一侧现在读到的是 `_direct_write_disposal`（先兜底、兜不了才拒）；
-#   判据本身仍是 `store.direct_write_refusal`（`Store.tx` 的提交块读同一个函数）。
-#
-# 业主 2026-10-24 两段逐字：
-#   「关于直写statements的问题，不应该是提醒智能体要走秘书，而是自动将直写请求路由到秘书接管」
-#   「还有哪些动作是被"需要经秘书"拦截的？都走自动路由。甚至包装得足够好后可以让智能体
-#    对秘书的存在无感，只是知道某些动作会有人帮他兜底。」
+# 由来：业主 2026-10-24 裁定「不应该是提醒智能体要走秘书，而是自动将直写请求路由
+# 到秘书接管」，并且「包装得足够好后可以让智能体对秘书的存在无感，只是知道某些动作
+# 会有人帮他兜底」。于是模型那一侧读到的是 `_direct_write_disposal`（先兜底、
+# 兜不了才拒），判据本身仍是 `store.direct_write_refusal`（`Store.tx` 的提交块读
+# 同一个函数）。
 #
 # 分工（与 `store.DIRECT_WRITE_ROUTES` 那一格逐字对齐）：
 #   判据 = `store.direct_write_refusal`（没变：通用写口就是不许自己写这些表）；
@@ -888,18 +890,11 @@ _TASKS_VISIBLE_CHILD_DEPTH = 1
 
 # ---------------------------------------------------------------- `tasks` 的写侧判据
 #
-# 这一节堵的是"通用写口能伪造任务台账"这个权限面缺口（D12，2026-10-27 实测）。
+# 堵的是"通用写口能伪造任务台账"这个权限面缺口（D12，2026-10-27 实测）：
+# `store.direct_write_refusal` 只拒 `statements` 与 `lit_candidates`（store.py:251），
+# `tasks` 不在其中 —— 于是 `table.create(table="tasks")` 对任何角色都敞开。
 #
-# 背景：`store.direct_write_refusal` 只拒 `statements` 与 `lit_candidates`（store.py:251），
-# `tasks` 不在其中 —— 于是 `table.create(table="tasks")` 对任何角色都是敞开的。
-# 改前实测（那一趟的一次性写宽探针，已随 temp 清理；D 角色，全部 ok=True）：
-#
-#     [1_给自己一条 work]            id=t-000004
-#     [2_种到别人名下]               id=t-000005   ← 把一条 delegation 种进 E 的板，called_by 写成自己
-#     [3_直接写成 done]              id=t-000006   ← 绕过状态机伪造一条"已收口"
-#     [4_kind=notice+expects=ack]    id=t-000007
-#
-# 为什么这不是"参数校验"而是权限面：一条伪造的板项会让销号门的"板项没清"读数失真
+# 这不是"参数校验"而是权限面：一条伪造的板项会让销号门的"板项没清"读数失真
 # （`conductor_retire_child` 读的就是"名下还有几条 item_state != done"），也会让
 # `Conductor._set_item` 的两条不变量（只许往后走 / 没 seen 不许 done）整个失效 ——
 # 而盘上那一行看起来完全合法。
@@ -1358,18 +1353,14 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
                         table=table, id=id, found=False, kind="not_found")
         keys = {str(k) for k in (payload or {}) if not str(k).startswith("_")}
         if not (keys & STATEMENT_BODY_PATCH_KEYS):
-            # ---- 非正文 patch ⇒ 秘书的"就地改三格"写口（真机 82 · A-1…A-4）
+            # ---- 非正文 patch ⇒ 秘书的"就地改三格"写口（真机 82 · A-1…A-4）。
             #
-            # 改前这一支把"盘上那一行 + patch"整份再交一次 `record_statement`，而查重
-            # 判据正是"同一条 statement_full 已在册" ⇒ 改 kind / status / quote_reason
-            # 这类非正文 patch 100% 落 duplicate 拒。四次 routed 全是它（A-1 改 kind、
-            # A-2/A-3 改 status、A-4 改 quote_reason）。
-            #
-            # 为什么选"在兜底处认出"而不是"新加一条 B 的动作"：后者会改动作面/权限面
-            # （新增 ActionSpec + handler + 工具面），而这一笔要做的事已经有了主人
-            # （秘书的写侧）。所以这里只做路由识别，写仍然由
-            # `Secretary.amend_statement_meta` 在 `store.tx` 里做、过
-            # `schema.Statement.validate()`；白名单之外的键由它受控拒绝。
+            # 若把"盘上那一行 + patch"整份再交一次 `record_statement`，查重判据
+            # （"同一条 statement_full 已在册"）会让 kind / status / quote_reason 这类
+            # 非正文 patch 100% 落 duplicate 拒。不新加一条 B 的动作：这一笔要做的事
+            # 已有主人（秘书的写侧），写仍由 `Secretary.amend_statement_meta` 在
+            # `store.tx` 里做、过 `schema.Statement.validate()`，白名单之外的键由它
+            # 受控拒绝。
             from ..secretary import for_role_wired
 
             try:
@@ -1391,19 +1382,16 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
             what = ("已由系统就地改写非正文格（" + "、".join(changes) + "）"
                     if changes else
                     "已由系统核对非正文格（已经是这些值 ⇒ 一个字节都没写）")
-            # ---- 2026-11-02（真机 83 · ①）：放弃命题必须当场作废名下的重送义务。
+            # ---- 放弃命题必须当场作废名下的重送义务（真机 83 · ①）。
             #
-            # 真机代价：83 里那 4 条 `abandoned` 全是经 `table.update(status=abandoned)`
-            # 写的，而这条正路此前只改 `statements` 那一行、不认识板项 ⇒ 该命题名下开着的
-            # `v-resubmit@<命题>@<sha>` 一直留在板上（`item_state=queued`、`expects=work`），
-            # 要等到收工前那一趟对账（`vreceipts.reconcile_resubmits`）才关得掉；在那之前
+            # 若只改 `statements` 那一行，该命题名下开着的 `v-resubmit@<命题>@<sha>`
+            # 会一直留在板上，要等到收工前那一趟对账才关得掉；在那之前
             # `retire_integrity` 的"名下还有未消的板项"把"放弃"这条出口反锁死。
-            #
-            # 为什么调 `statementabandon.apply_abandonment` 而不是在这里搬一遍 close 逻辑：
-            # "放弃"的语义（状态 + 标记 + 义务作废）只有那一处实现，且它自带"已经是
-            # abandoned"的幂等档（`already=True`：不写 statements、只作废义务）。于是
-            # 这里只加一个调用点，判据仍是一份。失败不带走这一笔已经落盘的改写：
-            # 读数进 `detail.abandon`（`checked=False` + `problems`），不折成"没有义务"。
+            # 调 `statementabandon.apply_abandonment` 而不是在这里搬一遍 close 逻辑：
+            # "放弃"的语义只有那一处实现，且它自带"已经 abandoned"的幂等档
+            # （`already=True`：不写 statements、只作废义务）。失败不带走已经落盘的
+            # 改写：读数进 `detail.abandon`（`checked=False` + `problems`），不折成
+            # "没有义务"。
             abandon = _abandon_reading(ctx, statement_id=str(id), row=got.get("row"))
             if abandon:
                 closed = list((abandon.get("resubmits") or {}).get("closed") or ())
@@ -1422,18 +1410,14 @@ def _route_to_secretary(ctx: TableContext, *, entry: str, table: str, op: str,
         body = merged
         requested = str(id)
     try:
-        # ---- 2026-10-26（真机 sylow5）：这一支必须带着缝造秘书。
+        # ---- 这一支必须带着缝造秘书（真机 sylow5）。
         #
-        # 改前是 `Secretary(role, root=..., store=...)` —— 没传 `seam=`，于是
-        # `record_statement` 里那条命题同一性判定（`adjudicate_proposition` →
-        # `judge`）每次都在第二道闸（`if self.seam is None`）上折成
-        # `checked=False`，静默退回机械判据：相似度 0.15–0.33 ⇒ 判 different ⇒
-        # 同一条定理被登记 2–3 次，而 `out/secretary/proposition_verdicts.jsonl`
-        # 一次都没建出来（sylow5 的真机读数）。
-        #
-        # `for_role_wired` 与 `Secretary(...)` 只差一件事：造秘书之前先把缝拿来
-        # （秘书档没配 key ⇒ 缝是 None + `model_source` 写明为什么）。判不了时
-        # 返回值里的 `proposition_adjudication` 会把这一句原样透出来。
+        # 若用 `Secretary(role, root=..., store=...)`（没传 `seam=`），命题同一性判定
+        # 每次都在第二道闸（`if self.seam is None`）上折成 `checked=False`、静默退回
+        # 机械判据（相似度 0.15–0.33 ⇒ 判 different），同一条定理被登记 2–3 次。
+        # `for_role_wired` 与它只差一件事：造秘书之前先把缝拿来（秘书档没配 key ⇒
+        # 缝是 None + `model_source` 写明为什么）；判不了时返回值里的
+        # `proposition_adjudication` 会把这一句原样透出来。
         from ..secretary import for_role_wired
 
         sec = for_role_wired(role, root=ctx.store.root, store=ctx.store)
@@ -2239,18 +2223,13 @@ def table_schema(ctx: TableContext, table: str | None = None) -> ToolResult:  # 
                 "type": _type_name(tp),
                 "required": required,
                 "default": default,
-                # 「这三格每个元素都要在」，哪怕它不适用（2026-10-15 修）。
+                # 「这三格每个元素都要在」，哪怕它不适用。
                 #
-                # 改前它们只在适用时才 `item[...] = …`，于是同一个 `fields[]` 里
-                # 「一部分元素有、另一部分没有」 —— 而本工具的用途恰恰是"让智能体
-                # 读受控词表"：调用方按自己在别的字段上看到的形状去读 `field["enum"]`，
-                # 在不带这三格的那些字段上会拿到 「KeyError」，而不是"这个字段没有词表"。
-                # 实测（`test_tools_returns_declaration.py` 的逐元素判据）：
-                # 全 79 个工具里只有这一件有这个形态，而它有 「132 处」。
-                #
-                # 为什么给"如实空值"而不是干脆不声明：三态纪律 ——
-                # 「空集是有效读数」（"这个字段确实没有候选值"），
-                # `None` 是"没有词表这件事本身"；两者都不等于"我没读到"。
+                # 只在适用时才给 ⇒ 同一个 `fields[]` 里一部分元素有、另一部分没有，而
+                # 本工具的用途恰恰是让智能体读受控词表：调用方按同一形状读
+                # `field["enum"]` 会拿到 KeyError，而不是"这个字段没有词表"。所以如实
+                # 给空值：`[]` = 这个字段确实没有候选值，`None` = 没有词表这件事本身；
+                # 两者都不等于"我没读到"（三态纪律）。
                 "literal_values": [],
                 "vocabulary": None,
                 "enum": [],
@@ -2578,11 +2557,8 @@ def _selftest() -> int:
             row={"timestamp": S.now_iso(), "topic": "群与域", "mode": "broad", "done": False},
         )
         # `r-NNNN` 是 `interactions.next_prefixed_id` 的 max+1 语义（不是"最小可用"）：
-        # 空表给 `r-0001`（业主口径：删中间行不复用号，否则溯源会静默指向另一条请求）。
-        # 这一格原先写死断言 `r-0000` —— 那是"最小可用号"时代的残留，
-        # 与 `tests/test_tools_table_fs.py` 里被改掉的那一条同一形态。
-        # 判据改成"号由那一处语义给出"并且后面一律用拿到的这个号，
-        # 而不是再写死一次（写死第二处就是这次漂移的成因）。
+        # 空表给 `r-0001`（删中间行不复用号，否则溯源会静默指向另一条请求）。
+        # 断言只认"号由那一处语义给出"，后面一律用拿到的这个号 —— 再写死一次就是漂移。
         req_id = r.data
         check("search_requests 自动分配 r-NNNN（max+1 语义）",
               r.ok and req_id == f"r-{S.format_id(1)}", f"id={r.data}")
@@ -2602,23 +2578,14 @@ def _selftest() -> int:
               f"id={r.data} err={r.error}")
         # ---- 概念行（`statements` 里 `kind="concept"`）「走正路」：B 交内容、秘书落盘。
         #
-        # 2026-10-19 晚：这一节原先用 `table.create(table="statements")` 铺样品，而那条路
-        # 现在被 `store.direct_write_refusal` 受控拒绝（真机形态：`projects/mp2/sessions/
-        # mp2-7.jsonl` 第 97 行 —— 手写 `bits={}` + `evidence_kind="heuristic"`）。
-        # 自检的职责是"真走一遍生产路径"，所以这里改成「生产路径本身」：秘书落盘；
-        # 而"直写被拒"这件事在 [4] 里单独判一次（否则这一节会变成一条恒真断言的集合）。
+        # 自检的职责是真走一遍生产路径，所以这里不用 `table.create(table="statements")`
+        # （那条路被 `store.direct_write_refusal` 受控拒绝，[4] 里单独判一次），而用
+        # 「生产路径本身」。装配也要与直写路由同一支构造点（`for_role_wired`：先把缝
+        # 拿来），否则自检会在一条"没接线"的形态上永远亮绿。
         #
-        # 2026-10-24（本批缺陷 B）：夹具显式写了 origin="own_result"，就必须同时
-        # 声明 self_authored=True —— `conceptrows.concept_origin_problem` 的 docstring
-        # 第 3 条写着"它不是默认值"，秘书写入侧读的是同一份判据。此前的夹具只写了
-        # origin，于是三条概念行都被 concept_origin_refused 拒掉，后面那条链
-        # （relations / statements.count / 删除保护 / search / list）跟着一起红 14 项。
-        # 错在夹具一侧，不在判据：判据的负控见
-        # `tests/test_tools_table_fs.py::test_a_concept_declaring_own_result_without_self_authored_is_refused`。
-        # 自检走的是生产路径，所以秘书也要按生产路径装（`for_role_wired`：先把缝拿来）。
-        # 这一节铺的是概念行（`kind="concept"`），不参与命题同一性判定；但它与直写路由
-        # 那条路必须是同一支构造点 —— 否则自检会在一条"没接线"的形态上永远亮绿
-        # （2026-10-26 真机 sylow5：实现与判据都在，只有装配处漏了一根线）。
+        # 夹具显式写 `origin="own_result"` 就必须同时声明 `self_authored=True`
+        # （`conceptrows.concept_origin_problem` 第 3 条：它不是默认值）；只写 origin
+        # 会被 `concept_origin_refused` 拒掉，后面整条链跟着红。错在夹具一侧，判据不动。
         from ..secretary import for_role_wired
 
         sec = for_role_wired("B", root=st.root, store=st)
