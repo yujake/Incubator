@@ -12145,9 +12145,14 @@ class Secretary:
             return out
         out["scanned"] = len(rows)
         want = str(owner or "")
-        owners = [want] if want else sorted(
-            {str(r.get("parent_task_id") or "") for r in rows
-             if str(r.get("parent_task_id") or "")})
+        # 先按父归组一趟：原先外层每换一个父就把整张台账再扫一遍挑自己的子行
+        # （父数 × 全表）。归组只改"从哪儿取"，桶内顺序仍是台账顺序。
+        by_parent: dict[str, list[Mapping[str, Any]]] = {}
+        for r in rows:
+            pid = str(r.get("parent_task_id") or "")
+            if pid:
+                by_parent.setdefault(pid, []).append(r)
+        owners = [want] if want else sorted(by_parent)
         out["owners"] = list(owners)
         bad: list[str] = []
         got: list[dict[str, Any]] = []
@@ -12169,9 +12174,7 @@ class Secretary:
                 if tid:
                     refusals[tid] = item
             holders = self._name_holders(own) if refusals else {}
-            for row in rows:
-                if str(row.get("parent_task_id") or "") != own:
-                    continue
+            for row in by_parent.get(own, ()):
                 if not ran_but_unnamed(row, known):
                     continue
                 tid = str(row.get("task_id") or "")
