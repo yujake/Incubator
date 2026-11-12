@@ -39,6 +39,30 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
+@pytest.fixture(autouse=True)
+def _proof_kind_default(monkeypatch):
+    """同种证明那一问（`proof_kind`）的默认回答：`different`（另一条路径）。
+
+    2026-11-12 起"同种证明"改由秘书的语义判定给（禁机械闸）：没有判定面时按
+    fail-closed 拒收（`proof_kind_unjudged`），会把 e/f/h/i 这里收的第二份证明
+    全部拒掉 —— 而这一份量的是路径号与「已提交」记号，不是语义判别。真正的
+    剧本桩（same / different / 没判成）在
+    `tests/test_rehearsal_two_f_independent_proofs.py` 与
+    `tests/test_unjudged_axes_are_fail_closed.py`。
+    """
+    import agentflow.secretary as _SEC
+
+    real = _SEC.Secretary.judge
+
+    def _judge(self, kind, context, **kw):
+        if kind == "proof_kind":
+            return {"checked": True, "decision": "different", "same_path": 0,
+                    "reason": "夹具：不同种（这一份不量语义判别）", "basis": [], "cost": {}}
+        return real(self, kind, context, **kw)
+
+    monkeypatch.setattr(_SEC.Secretary, "judge", _judge)
+
+
 SID = "000001"
 DEP_SID = "000002"
 PROPOSITION = "对任意有限群 G，若 p 整除 |G|，则 G 有 p 阶元。"
