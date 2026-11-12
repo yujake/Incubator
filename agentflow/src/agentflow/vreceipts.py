@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""V 回执的投递：先落意图，再开板项（业主 2026-11-01 裁定 · 167 的丙案）。
+"""V 回执的投递：先落意图，再开板项。
 
-## 这一层治的是什么（81 的真机读数）
+## 这一层治的是什么
 
-V 判「有毛病」的 8 条回执里只有 4 条到了收件人手上。根因不在"投递函数写错了"，而在
+V 判「有毛病」的回执，曾经只有一部分真正到了收件人手上。根因不在"投递函数写错了"，而在
 投递发生在收件人下一次起跑那一刻（`agent_loop.deliver_v_verdicts` 的唯一调用点是
-`AgentLoop.run` 的 F 分支）：F 03:54 之后再没起跑，后 4 条（04:05–04:14）连板项都没开。
+`AgentLoop.run` 的 F 分支）：收件人不再起跑，回执就连板项都开不出来。
 于是"送到"成了"收件人醒着"的副产品 —— 收件人不醒，回执就不存在。
 
 ## 两层，两件事（别把它们折平）
@@ -17,13 +17,12 @@ V 判「有毛病」的 8 条回执里只有 4 条到了收件人手上。根因
 
 `dispatched`（有板项）与 `delivered`（收件人真的读过：`item_close=="acked"` +
 `agent_mailbox` 的 `seen_by`/`seen_step`）是两个数，读数分别给。把它们折成一个
-"未送达"会让"没人投"与"投了没人读"同形 —— 那正是 81 之前那一版读数的毛病。
+"未送达"会让"没人投"与"投了没人读"同形。
 
-## 收件人 = 送审者（业主裁定，不是"谁先醒来"）
+## 收件人 = 送审者（不是"谁先醒来"）
 
-`deliver_v_verdicts` 原来把判决投给"下一次起跑的 F"。81 的取证把这条打掉了：8 条判定
-全部由 B 召唤的 V 跑产出，却被投给了两次与它们无关的 F 跑 —— 收件人是按"谁先
-醒来"算的，不是按"谁送的审"算的。
+`deliver_v_verdicts` 曾经把判决投给"下一次起跑的 F"：判定由 B 召唤的 V 跑产出，
+却可能被投给与它无关的 F 跑 —— 收件人是按"谁先醒来"算的，不是按"谁送的审"算的。
 
 现在的收件人只有一个来源：`conductor.current_parent()` —— 这一趟工具调用所属的那次
 召唤的父（`AgentLoop._resolve_parent` 在 `calling_as` 里挂上来的，与 `escalate` 读的是
@@ -43,8 +42,8 @@ V 判「有毛病」的 8 条回执里只有 4 条到了收件人手上。根因
 
 ## 并发（两个负控钉住的正是这里）
 
-幂等原来靠"先读板、再开项"，两个投递者同时拿到一份"还没有这一条"的板快照就会各开
-一项（实测：同键 2 行）。本模块把整段 ①→③ 放进同一把跨进程锁（`filelock`）里，
+幂等不能靠"先读板、再开项"：两个投递者同时拿到一份"还没有这一条"的板快照就会各开
+一项。本模块把整段 ①→③ 放进同一把跨进程锁（`filelock`）里，
 于是第二个投递者看到的是第一个已写下的 `dispatched`，直接返回 `existing`。
 `tasks.input_key` 仍然没有唯一约束（那要动 `schema.py`，是禁改区）—— 所以这条锁是
 唯一的并发保证，改动本模块时不许把 `deliver_v_verdicts` 的调用挪到锁外面。
@@ -57,13 +56,12 @@ V 判「有毛病」的 8 条回执里只有 4 条到了收件人手上。根因
 - 读不到送审者（`current_parent` 空 / 台账里没有那一行）⇒ `undelivered`（终态：不猜），
   但 `backfill` 仍会用"台账号时间窗唯一"重解析一次（见 :func:`resolve_recipient`）。
 
-## 历史判定（本笔之前的 8 条）
+## 没有 outbox 意图的旧行
 
-81 那 8 条是在本笔之前判的：盘上没有 outbox 意图，也就没有"送审者"这一格。
+盘上没有 outbox 意图的行，也就没有"送审者"这一格。
 `backfill` 对它们走 :func:`resolve_recipient`：只有那一拍恰好只有一趟 V 在跑时才认
 （时间窗来自 `tasks` 的 `started_at`/`ended_at`）；两趟以上在跑 = 不可判 = `undelivered`。
-81 的后 4 条恰好满足（04:05–04:14 只有 t-000206 / t-000213 在跑）⇒ 补投能落地；前 4 条
-本来就已经送达，不需要解析。
+已经送达的行不需要解析。
 """
 from __future__ import annotations
 
@@ -99,18 +97,15 @@ UNDELIVERED = "undelivered"
 
 # ------------------------------------------------------------------ 重送义务（I2）
 #
-# 业主 2026-11-01 的裁定把"打回"变成了两种东西：一条回执（已送到），以及一条
-# 必须重送的义务。改前只有前者 —— 82 的真机读数说得很直白：8 条 V 判决回执全部
-# dispatched，其中 t-000022(000001) 与 t-000027(000002) 甚至已经 acked/done，而这两条
-# 命题至今没有 V 签；同一批判决还被重复投给后来的 F 台账号（t-000082/083/089/090
-# 全 seen）。"知道了"（ack）与"改完了"（新的成立行）是两件事，而只有后者能关掉
-# 一条重送义务。
+# 业主裁定把"打回"变成了两种东西：一条回执（已送到），以及一条必须重送的义务。
+# 只发回执时，回执可以全部 dispatched、甚至 acked/done，而命题至今没有 V 签；
+# 同一批判决还会被重复投给后来的 F 台账号。"知道了"（ack）与"改完了"（新的成立行）
+# 是两件事，而只有后者能关掉一条重送义务。
 #
 # 所以这一档单独立一条板项（复用 `conductor.open_item` / `set_item_detail`，
 # 不新造第二套板项）：
 #   · 幂等键 `v-resubmit@<命题号>@<proof_sha256>`：不带收件人后缀。带后缀的键会
-#     为每一次 F 起跑各开一条 —— 82 那四条重复项（t-000082/089/090 + 原项）就是
-#     后缀的后果；
+#     为每一次 F 起跑各开一条，同一份正文因此长出多条重复项；
 #   · 负责人 = 那一次送审的送审者（`outbox` 里的 recipient/submitter）。取不到就记
 #     `owner="unknown"`，由收工读数 `statements_unsigned` 的 `owner_known` 说清楚
 #     （"记 unknown 并进收工读数"），不拿"谁醒着"当负责人；
@@ -127,9 +122,9 @@ RESUBMIT_PREFIX = "v-resubmit@"
 def resubmit_key(label: str, proof_sha: str) -> str:
     """重送义务的幂等键：`v-resubmit@<命题号>@<proof_sha256>`。
 
-    为什么键里是 sha 而不是 proof 编号：sha 是"哪一份正文"的指纹（业主 2026-10-22
-    的多证明模型里，同一命题下 #p1/#p2 各自独立）；换了 sha 就是另一份正文，
-    该开新的义务。刻意不带收件人后缀（见上面那一段）。
+    为什么键里是 sha 而不是 proof 编号：sha 是"哪一份正文"的指纹；一个稿号 = 一份
+    文件 = 一份证明，换了 sha 就是另一份正文（另一个稿号），该开新的义务。
+    刻意不带收件人后缀（见上面那一段）。
     """
     sid = str(label or "").split("#", 1)[0]
     return f"{RESUBMIT_PREFIX}{sid}@{str(proof_sha or '').strip()}"
@@ -188,11 +183,11 @@ def _ledger_rows(*, root: str | Path, statement_id: str
 
 
 def _proof_no_of_sha(rows: Sequence[Mapping[str, Any]], sha: str) -> int | None:
-    """这个 sha 属于第几份证明（从台账行反查；认不出 ⇒ `None`）。
+    """这个 sha 在老台账行里的证明号（从行反查；认不出 ⇒ `None`）。
 
-    为什么不从 statements 行现算：F 改过稿之后，旧 sha 已经不在现行正文里了
-    （真机 000006：20:42 打回的是 f6e…，20:50 重送的是 2203…）。台账是追加式的，
-    它记得那份旧正文属于哪个证明号 —— 那正是"关闭条件按证明号匹配"要的东西。
+    为什么不从 statements 行现算：F 改过稿之后，旧 sha 已经不在现行正文里了。
+    台账是追加式的，它记得那份旧正文属于哪个证明号 —— 那正是"关闭条件按证明号
+    匹配"要的东西。
     """
     from . import verifications as VR
 
@@ -230,7 +225,7 @@ def resubmit_cleared(*, root: str | Path, label: str, proof_sha: str) -> dict[st
         out["why"] = (f"台账里没有任何一行盖着 sha={sha[:12]}… ⇒ 认不出这是第几份证明"
                       "（那就不猜它有没有被清掉）")
         return out
-    # ---- 2026-11-06（业主裁定 3）：作废行不许清义务 ---------------------------
+    # ---- 作废行不许清义务 ---------------------------------------------------
     #
     # 现场见 `verifications._hold_runs` 的 docstring（同一份正文重开一趟 ⇒ 那三行作废）：
     # 作废行不是"打回之后更干净的「成立」"。尺与连续计数同一处（`void_after_rejection`
@@ -305,7 +300,7 @@ def ensure_resubmit(*, store: Any, root: str | Path, label: str,
     - `opened`：新开了一条；
     - `existing`：同键的项已经在板上（不重开 —— 这是幂等的落点）；
     - `cleared`：这次打回之后已经有一条更新的干净「成立」⇒ 义务本来就没了，不开
-      （历史补投会走到这一支：81/82 的旧判决不该在收工时凭空长出一条待办）；
+      （历史补投会走到这一支：旧判决不该在收工时凭空长出一条待办）；
     - `closed`：板上那条已经 done（不重开，读数说"已经收口"）；
     - `unowned`：读不到送审者 ⇒ 不猜负责人、不开项，负责人记 `unknown`（收工读数里
       `statements_unsigned.rows[].owner_known=False` 会把它说清楚）；
@@ -383,7 +378,7 @@ def settle_resubmitted(*, store: Any, root: str | Path,
     """一条干净的「成立」签落下之后：把同一份证明名下开着的重送项收口。
 
     判据（缺一不可）：这一行的结论词是「成立」，且秘书没有判 fault（判 fault 的
-    "成立"仍然是一次打回 —— 82 的 000001/000006 就是这一档）。收口方式
+    "成立"仍然是一次打回）。收口方式
     `close="completed"`（"做完了"，不是"知道了"），由 `conductor.close_item_by_evidence`
     落盘：那是唯一一条不是收件人 ack 的收口语义。
 
@@ -500,16 +495,12 @@ def resubmit_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
 
 # ------------------------------------------------------------------ 「签了但没人收录」（B 侧，I2 的同形）
 #
-# 真机 `projects/paper-rewrite-87` 2026-11-05 现场：
+# 现场：一份 `reports/f-proof-<号>.md` 上有 `secretary:F` 的成立签块，`b-proof-<号>.md`
+# 也已落盘；而 `statements:<号>` 仍是 ek=heuristic / 正文=0 / reviewed=false —— 没人登记。
 #
-# ```text
-# reports/f-proof-000000.md 有 `secretary:F` 的成立签块；b-proof-000000/2/3 也已落盘。
-# 而 statements:000000 仍是 ek=heuristic / 正文=0 / reviewed=false —— 没人登记。
-# ```
-#
-# 盘上核过的根因：87 里 B 只被派过 1 次（`t-000027`，called_by=A，文献侧），D 从头没派 B
-# 收录。教学里其实有那条（`specs/d.py`：「② 那一行写进你的报告之后派 B 入库」），
-# D 没走到 ⇒ 缺的不是"教"，是义务：签发之后没有任何东西把"这一份还没入库"摆到 B 面前。
+# 根因：B 只被派去收过文献，D 把签发当成终点、没派 B 收录。教学里其实有那条
+# （`specs/d.py`：「② 那一行写进你的报告之后派 B 入库」）—— 缺的不是"教"，是义务：
+# 签发之后没有任何东西把"这一份还没入库"摆到 B 面前。
 #
 # 所以这一档与 `v-resubmit@` 同形（同一个 `conductor.open_item`、同一种"凭证据收口"，
 # 不靠 ack）：
@@ -519,7 +510,7 @@ def resubmit_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
 # - 触发：一份 `reports/{f,b}-proof-<号>.md` 上有成立的签块，而 `statements` 对应行
 #   拿不出"正文 + reviewed=true"（签发那一刻由 `_vsigns_write_after_flip` 开；收工前
 #   由 :func:`sweep_registrations` 补开 —— 漏开不许靠"下一次有人想起来"补）；
-# - 收口只有一条：那一行出现正文 且 `reviewed=true`（逐份口径，`#p2` 不借 `#p1` 的
+# - 收口只有一条：那一行出现正文 且 `reviewed=true`（逐份口径，一份证明不借另一份的
 #   光）；另一条明确出口是"明确不收录并给理由"—— 它落在既有载体上：命题被标成
 #   `abandoned` 且 `quote_reason` 是一条可解析的放弃标记（`statementabandon.parse_abandon`
 #   的同一份判据，理由与时间缺一不可），届时这一项作废 `expired`；
@@ -529,12 +520,12 @@ def resubmit_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
 #   事实"谁送审"，猜不得；这一条的责任是角色 B，项本身必须存在 —— 它由 `board_view`
 #   亮给主控去派，且父为空的项不挂在任何人的销号闸上）。
 
-#: 「签了但没人收录」义务的幂等键前缀（缺陷 B，2026-11-05）。与 `v-resubmit@` 分开。
+#: 「签了但没人收录」义务的幂等键前缀（缺陷 B）。与 `v-resubmit@` 分开。
 REGISTER_PREFIX = "b-register@"
 
-#: 这一条义务认的载体（业主 2026-11-05 逐字：`reports/f-proof-<号>.md` 或
-#: `b-proof-<号>.md`）。E 的穷举证据稿不在这一档（它走 `bits.proof` 那条通道）。
-#: 2026-11-09（T2 收编）：从表派生（f-proof / b-proof 两族；设计 3.2 第 9 处）。
+#: 这一条义务认的载体（`reports/f-proof-<号>.md` 或 `b-proof-<号>.md`）。
+#: E 的穷举证据稿不在这一档（它走 `bits.proof` 那条通道）。
+#: 从表派生（f-proof / b-proof 两族）。
 REGISTRATION_CARRIERS: tuple[str, ...] = tuple(
     f"{_MFAM.MANUSCRIPT_DIR}/{_MFAM.prefix_of(name)}"
     for name in ("f-proof", "b-proof"))
@@ -720,11 +711,10 @@ def _register_body(*, label: str, detail: Mapping[str, Any], manuscript: str,
                    at: str = "") -> tuple[str, str]:
     """这一条义务的一句话摘要 + 正文（上限 = `agent_loop.BOARD_DETAIL_CHARS`，480 字）。
 
-    为什么上限不在这里另拍一个数（2026-11-05，业主裁定「同一笔做」）：改前这里是
-    `body[:400]`，而完整正文 462 字 ⇒ 第 ② 条「明确放弃 + 理由与时间」在进板之前
-    就被切掉了（存进 `tasks.detail` 的结尾是"…；② 确"）。渲染层再怎么调都读不回来 ——
+    为什么上限不在这里另拍一个数：写入侧若自己截断（例如 `body[:400]`），完整正文里
+    靠后的「明确放弃 + 理由与时间」会在进板之前被切掉。渲染层再怎么调都读不回来 ——
     写入侧定"存多少"，渲染侧定"念多少"，念的那个不许小于存的；两层共用一个常量，
-    这条缝才在结构上不存在（`agent_loop.BOARD_DETAIL_CHARS` 的注释里写着 480 的实测依据）。
+    这条缝才在结构上不存在。
     """
     from .agent_loop import BOARD_DETAIL_CHARS
 
@@ -796,7 +786,7 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
     照样开项（`owner_known=False`，由 `registration_digest` 的 `unowned` 数出来，
     `board_view` 把这一条亮给主控去派）。
 
-    `skip_gap=True`（2026-11-08，V 的签后义务）：不读 `statements` 判断"是不是已经收录"。
+    `skip_gap=True`（V 的签后义务）：不读 `statements` 判断"是不是已经收录"。
     义务的存在与它是否已满足是两件事：V 只对手稿负责 ⇒ 签落成后无条件开；"满足了没有"
     由 B 收录时消账、收工时 `sweep_registrations` 收口。
     """
@@ -902,7 +892,7 @@ def sweep_registrations(*, store: Any, root: str | Path, limit: int = 50,
     """扫一遍 `reports/{f,b}-proof-*.md`：带成立的签而没入库 ⇒ 逐份开义务（幂等）。
 
     为什么还要扫盘（签发那一刻已经会开一条）：义务不能只依赖"签发那一路跑到了"——
-    87 的病根正是"没有任何东西把这件事摆到 B 面前"。这一趟是收工前的看门：谁漏开、
+    病根正是"没有任何东西把这件事摆到 B 面前"。这一趟是收工前的看门：谁漏开、
     谁在签发之后才改的稿，都在这里被数一遍。判据只认手上这份稿：`manuscript_sign_standing`
     说 signed 才算（负判 / stale / 没块 ⇒ 不是这一档的事）。
     """
@@ -1163,7 +1153,7 @@ def _lock(root: str | Path) -> Iterator[None]:
 def key_of(label: str, verification_id: str, recipient: str) -> str:
     """幂等键的唯一实现：`v-verdict@<label>@<vid>@<recipient>`。
 
-    为什么要带收件人（业主 2026-11-01 裁定）：同一 vid 可能先落 outbox 后被补投，
+    为什么要带收件人：同一 vid 可能先落 outbox 后被补投，
     而"两者都收"这一档被否 —— 带上收件人之后，键回答的是"这一条投给这个收件人
     了没有"，不是"这一条投过没有"。
     """
@@ -1171,7 +1161,7 @@ def key_of(label: str, verification_id: str, recipient: str) -> str:
 
 
 def legacy_key_of(label: str, verification_id: str) -> str:
-    """改前那一版的键（没有收件人后缀）：只用于读旧盘，不许用它写新项。"""
+    """没有收件人后缀的旧键：只用于读旧盘，不许用它写新项。"""
     return f"{_prefix()}{label}@{verification_id}"
 
 
@@ -1202,7 +1192,7 @@ def _detail_of_row(row: Mapping[str, Any],
         no = int(row.get("proof_no") or 1)
     except (TypeError, ValueError):
         no = 1
-    # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— 回执明细也不再带这一格。
+    # `proof_no` 在 V 签侧退役 —— 回执明细也不再带这一格。
     # 身份由 `label`（老行才带 `#pN` 尾巴）/ `verification_id` / `proof_sha256` 回答；
     # `no` 仍用于老行上的报告面查询（`report_fix_list`），只是不再写进明细。
     entry = {"label": label, "verification_id": vid,
@@ -1302,13 +1292,13 @@ def _recipient_now(store: Any) -> dict[str, Any]:
 def resolve_recipient(store: Any, at: str) -> dict[str, Any]:
     """历史判定的收件人：按 V 台账号的时间窗解析，唯一才认。
 
-    口径（业主裁定：不猜）：
+    口径（不猜）：
 
     - 那一拍恰好只有一趟 V 在跑 ⇒ 收件人 = 它的 `parent_task_id`（送审者）；
     - 0 趟或 2 趟以上 ⇒ `checked=False` + 原因（不是"没有收件人"）。
 
     为什么可以这么读：V 台账号的 `started_at` / `ended_at` 在 `tasks` 上逐秒可读，
-    而一条判定只能由一趟 V 产出。两趟并发的现场（81 的 03:35 那一拍就是）不可判 ——
+    而一条判定只能由一趟 V 产出。两趟并发时不可判 ——
     那时"哪一趟审的"只能靠 run 工件与会话对时，那不是运行期该做的事（也不是"讲证据"，
     是"讲推断"）。
     """
@@ -1415,7 +1405,7 @@ def _author_of(store: Any, label: str) -> dict[str, Any]:
     - `statements.created_by` 且它点名的是角色（`agent-F`）：那是"谁创建了这一行"。
 
     `created_by="secretary-B"` 不算作者：B 的秘书写这一行 = B 把证明收录进册，
-    那是登记动作，不是写作（业主 2026-11-01：「F 写的证明，F 送审……B 侧收录」）。
+    那是登记动作，不是写作（「F 写的证明，F 送审……B 侧收录」）。
     认成作者会让"替人送审"这一档永远看不见 —— 而那正是本笔要它可见的东西。
 
     读不到作者时返回 `checked=False` + 原因；调用方记 `author_not_recorded`，
@@ -1426,7 +1416,7 @@ def _author_of(store: Any, label: str) -> dict[str, Any]:
     if store is None or not sid:
         out["reason"] = "没有 store / 没有命题号 ⇒ 作者读不到"
         return out
-    # 按号定位走查口（口径一）；`row={}` 与改前同一个默认值（falsy ⇒ 「不在册」那一支）。
+    # 按号定位走查口（口径一）；`row={}` 与同一个默认值（falsy ⇒ 「不在册」那一支）。
     by_id = SL.by_id(store, stmt_id=sid)
     if not by_id["checked"]:
         err = by_id.get("error") or {}
@@ -1470,7 +1460,7 @@ def _resubmit_or_skip(*, requires_rewrite: bool, store: Any, root: str,
 
     - `requires_rewrite=True`（math / contract / 历史行）⇒ 照旧 `ensure_resubmit`；
     - `False`（程序性 / 文风）⇒ 不开义务，回一个 `state="skipped"` 的读数：
-      待改的是 V 的报告，不是这份正文；同一份正文可以原样再送（业主裁定 ③④⑥）。
+      待改的是 V 的报告，不是这份正文；同一份正文可以原样再送。
 
     为什么不返回空 dict：`_publish` 的调用方/判据读 `resubmit.state`；"没开义务"必须是
     一条有内容的读数（reason 说明为什么），不能与"没读到"折平。
@@ -1496,16 +1486,16 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
              requires_rewrite: bool = True) -> dict[str, Any]:
     """① 意图 → ② 板项 → ③ dispatched/undelivered。整段在锁里（并发只开一项）。
 
-    `requires_rewrite`（D3 批 2）：这一条判定开不开 `v-resubmit@…` 那条"改稿"义务。
+    `requires_rewrite`：这一条判定开不开 `v-resubmit@…` 那条"改稿"义务。
     `math` / 历史行是 True（照旧）；程序性 / 文风是 False —— 那一档待改的是 V 的
-    报告，不是这份正文；同一份正文可以原样再送（业主裁定 ③④⑥）。
+    报告，不是这份正文；同一份正文可以原样再送。
     """
     from . import agent_loop as AL
 
     who = dict(author or {})
     author_role = str(who.get("author") or "")
     author_known = bool(who.get("checked"))
-    # 替人送审：送审者（收件人）与登记作者不是同一个角色 ⇒ 缺陷（业主 2026-11-01），
+    # 替人送审：送审者（收件人）与登记作者不是同一个角色 ⇒ 缺陷，
     # 但不许因此改投给作者（那是把定义读成路由）；只把它记下来、让它可见。
     violation = bool(author_known and author_role and role
                      and author_role != _role_of(role))
@@ -1603,10 +1593,10 @@ def _publish(*, store: Any, root: str, label: str, verification_id: str,
             else:
                 out.update(state=UNDELIVERED,
                            reason=str(got.get("reason") or "板项没开成（原因没读到）"))
-            # ---- I2（业主 2026-11-01）：「打回」不只是一条回执，还是一条必须重送的
+            # ---- I2：「打回」不只是一条回执，还是一条必须重送的
             # 义务。义务单独一条板项（`v-resubmit@<命题>@<sha>`，无收件人后缀），
             # 关闭条件是"同一份证明出现更新的干净成立行"，不是 ack。
-            # D3 批 2：程序性 / 文风不是打回 —— 只发回执，不开这条义务。
+            # 程序性 / 文风不是打回 —— 只发回执，不开这条义务。
             out["resubmit"] = _resubmit_or_skip(
                 requires_rewrite=requires_rewrite, store=store, root=root,
                 label=label, verification_id=verification_id, detail=detail,
@@ -1630,7 +1620,7 @@ def publish_row(store: Any, row: Mapping[str, Any], *, at: str = "",
     收件人 = `current_parent()`（召唤这一趟 V 的那个任务）。不是"有毛病"那一档就
     不投回执（`state="skipped"`）—— 但"干净的成立"那一档要做另一件事：把同一份
     证明名下开着的重送义务收口（`settle_resubmitted`，`state="settled"`）。
-    这就是业主 2026-11-01 裁定的关闭条件：不是 ack，而是"更新的成立行"。
+    关闭条件：不是 ack，而是"更新的成立行"。
     """
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
                            "opened": False, "reason": "", "problems": [],
@@ -1698,8 +1688,8 @@ def reconcile_resubmits(*, store: Any, root: str | Path) -> dict[str, Any]:
 
     - 干净的「成立」签落下时由 `publish_row` 收口（`settle_resubmitted`）；
     - 命题被明确放弃时，可能走 `statementabandon.apply_abandonment`（它自己会作废），
-      也可能走 `table.update(status=abandoned)` 那条就地写口（业主 2026-11-01 加的
-      `Secretary.amend_statement_meta`）—— 后者不认识板项，义务会留在板上，
+      也可能走 `table.update(status=abandoned)` 那条就地写口
+      （`Secretary.amend_statement_meta`）—— 后者不认识板项，义务会留在板上，
       反过来把销号闸（`retire_integrity` 的"名下还有未消的板项"）锁死。
 
     所以补一条对账：逐条看板上开着的 `v-resubmit@<命题>@<sha>`，按盘上的事实决定
@@ -1819,8 +1809,8 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
     """乙 的入口：把 `receipt_digest` 的全部「有毛病」行扫一遍，补投漏的。
 
     为什么补投源是 `receipt_digest`（`_fault_rows`）而不是 `v_rejections_digest`：
-    后者只给"每份证明最近那一签"。81 上它给 7 条，而真值 8 条 —— `000000#p1`
-    的 `v-000001` 被后来的 `v-000002` 顶掉了。拿它当补投源，那一条永远补不回来。
+    后者只给"每份证明最近那一签"：同一份证明有多条判定时，较早的那条会被后来的
+    顶掉。拿它当补投源，那一条永远补不回来。
 
     幂等：板上已有（任意收件人后缀 / 旧键）⇒ 只记一条 `dispatched`（adopted），不开项；
     同一个 key 再扫一遍 ⇒ 只读不写（见 `_publish` 的 `latest` 判断）。
@@ -1963,7 +1953,7 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
         elif res.get("state") == UNDELIVERED:
             out["undelivered"].append(f"{label}@{vid}：{res.get('reason') or why}")
         out["problems"].extend(str(x) for x in (res.get("problems") or []))
-    # 三个数分开报（业主 2026-11-01：投出去与送到了不是一个数）。
+    # 三个数分开报（投出去与送到了不是一个数）。
     try:
         again = VSP.receipt_digest(root, store, limit=10_000)
         out["dispatched"] = int(again.get("dispatched") or 0)
@@ -1979,10 +1969,10 @@ def backfill(*, store: Any, caller: str = "conductor.closing") -> dict[str, Any]
         out["resubmit_reconcile"] = {"checked": False, "closed": [], "expired": [],
                                      "left": [], "problems": [],
                                      "reason": f"对账没跑成（{type(exc).__name__}: {exc}）"}
-    # ---- 缺陷 B（2026-11-05）：收工前再把"签了但没人收录"扫一遍（看门的那一半）----
+    # ---- 缺陷 B：收工前再把"签了但没人收录"扫一遍（看门的那一半）----
     #
     # 签发那一刻已经会开一条（`_vsigns_write_after_flip`），但义务不能只依赖"那一路跑到了"
-    # —— 87 的病根正是"没有任何东西把这件事摆到 B 面前"。这一趟做两件事，顺序固定：
+    # —— 病根正是"没有任何东西把这件事摆到 B 面前"。这一趟做两件事，顺序固定：
     # ① 扫盘补开漏的（`sweep_registrations`，幂等：同键只一条）；
     # ② 与盘上的事实对账收口（`reconcile_registrations`：入库了就 completed、明确放弃就
     #    expired，都不靠 ack）。
