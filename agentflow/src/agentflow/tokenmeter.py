@@ -2,21 +2,21 @@
 
 ## 为什么这一条最后才做，以及它为什么必须自己成一个模块
 
-FC-19 的原文（`test/test2/LESSONS.md` §6.5）：
+FC-19 的原文：
 
 > token 预算是硬约束，重试也计入
-> 为什么："Each retry is another billed provider request"（`04-…md` §B6）；
+> 为什么："Each retry is another billed provider request"；
 > 且框架不能假设它一定给你 token 预算 —— DSH 的 Ralph 目前只有轮次上限，
-> token 预算是 deferred（`04-…md` §D3 ⑧）。
+> token 预算是 deferred。
 > 判据：① 每个子任务有 token 上限与最长轮次，超额即降级或返回当前最好答案。
 > ② 重试计入预算（可判定：注入 N 次失败重试后，预算消耗 ≥ N × 单次成本）。
 > ③ D 向 A 提问的预算必须已定值并写进配置。
 > 落地形态：`token_meter` + 预算守卫 + 一条"重试也扣预算"的测试。
 
- 2026-10-15 业主裁定修正了 ①：「我们不卡 token，只卡总花销的钱」。
-理由是实测（`draft/121`、`draft/122`）：卡 token 卡的恰好是"它想清楚"那一段 ——
-同一个提示词下不设 `max_tokens` 反而花 14,015 token 正常收尾，而设了额度的
-6 份文献全部 `output_exhausted`。于是：
+ ① 已被业主裁定修正：「我们不卡 token，只卡总花销的钱」。
+理由是实测：卡 token 卡的恰好是"它想清楚"那一段 ——
+同一个提示词下不设 `max_tokens` 反而正常收尾，而设了额度的
+文献输出全部 `output_exhausted`。于是：
 
 - `budget_tokens` 参数、`MeterReading.budget_tokens`/`remaining_tokens` 两格、
   `Policy.token_budget`、`Decision.tokens_left/tokens_wanted`、以及
@@ -184,7 +184,7 @@ class Charge:
     def tokens(self) -> int:
         """计费口径：每次尝试的量 × 尝试次数。
 
-        为什么不是"一次调用记一笔"：`04-…md` §B6 的原话是
+        为什么不是"一次调用记一笔"：原话是
         "Each retry is another billed provider request"。
         只记一次的后果是一直在重试的路径在账面上与一次就成功的路径一样贵 ——
         而那正是最该被看见的浪费。
@@ -209,9 +209,8 @@ class MeterReading:
     allowed: bool
     spent_tokens: int
     spent_usd: float
-    #: `budget_tokens` / `remaining_tokens` 两格已删（2026-10-15 业主裁定
-    #: 「我们不卡 token，只卡总花销的钱」）。留下的 `spent_tokens` 是读数：
-    #: "这一趟花了多少 token"要看得见，但它不参与 `allowed`。
+    #: `budget_tokens` / `remaining_tokens` 两格不存在（「不卡 token，只卡总花销的钱」）。
+    #: 留下的 `spent_tokens` 是读数："这一趟花了多少 token"要看得见，但它不参与 `allowed`。
     budget_usd: float | None
     remaining_usd: float | None
     estimate_tokens: int
@@ -240,13 +239,12 @@ class TokenMeter:
 
     def __init__(self, store: Any, *, budget_usd: float | None = None,
                  log: Any = None) -> None:
-        """ 只有钱这一轴（2026-10-15 业主裁定：「我们不卡 token，只卡总花销的钱」）。
+        """ 只有钱这一轴（业主裁定：「我们不卡 token，只卡总花销的钱」）。
 
         这里此前还有一个 `budget_tokens` 参数（"预算从配置来"那条纪律的落点）。
-        它删掉了：T5 实测（`draft/121`）里卡住智能体的正是它 ——
-        6 份有全文的文献全部 `output_exhausted`（reasoning 吃掉 26,995–39,076 字符），
-        而未卡住的两份都 ≤10,396 字符。"想得久"不是一种过错，它是好结果的必要条件。
-        token 从此只是读数（:meth:`spent` / :meth:`usd_reading`）。
+        它删掉了：卡 token 卡的恰好是"它想清楚"那一段 —— 有全文的文献会
+        因推理吃光输出额度而全部 `output_exhausted`。"想得久"不是一种过错，
+        它是好结果的必要条件。token 从此只是读数（:meth:`spent` / :meth:`usd_reading`）。
         """
         if budget_usd is not None and budget_usd < 0:
             raise ValueError(f"budget_usd 不能为负（收到 {budget_usd}）")
@@ -296,7 +294,7 @@ class TokenMeter:
     def usd_for(self, task_id: str) -> float:
         """`usd` 的对应读取口（与 :meth:`tokens_for` 同一口径、同一理由）。
 
-        ## 粒度口径（P-09 要求先定死的那一条）
+        ## 粒度口径
 
         记账的粒度是召唤级：一笔账对应 `tasks` 里的一行（一次
         `conductor.summon`），由 `Conductor._charge_and_settle` 在召唤结束时写。
@@ -318,7 +316,7 @@ class TokenMeter:
     def usd_reading(self, task_id: str) -> dict:
         """某一次召唤的花销读数（三态；空 `task_id` 不返回一个像真数的 0）。
 
-        为什么要有它（`44 J-07` + P-09）：现记账是召唤级，而"这一单还准花多少"
+        为什么要有它：现记账是召唤级，而"这一单还准花多少"
         与"这一单已经花了多少"必须能当场答出来；同时"没有挂点"与"花了零"是两件事
         —— 前者是"这笔钱根本没记到任何一次召唤上"（未接线），后者是"记了、金额是 0"。
         把它们折成同一个 `0.0`，正是本项目最贵的那个缺陷形态。
@@ -384,8 +382,8 @@ class TokenMeter:
 
         ## 为什么键要同时进字段与 `note`
 
-        `note` 里的键是跨版本的那一层（老进程写的行也带它，提案 §3.3），
-        字段是有结构、有表级唯一性断言的那一层（提案 A）。
+        `note` 里的键是跨版本的那一层（老进程写的行也带它），
+        字段是有结构、有表级唯一性断言的那一层。
         两层判据指向同一个键，所以它们必须由同一个值填充 ——
         两处各生成一次的话，将来只改一处就会写出"判重按 A、落盘按 B"的行，
         而那会让同一笔账被记两次且没有任何检查会响。
@@ -410,13 +408,11 @@ class TokenMeter:
     def _sync_task_usage(self, tx: Any, task_id: Any) -> dict:
         """在「记账的同一笔事务里」把 `tasks.tokens/usd` 抄成账本上该号的汇总。
 
-        ## 为什么必须在同一笔事务里（判据 a 的实现本体）
+        ## 为什么必须在同一笔事务里
 
-        现场（`temp/rmk90-audit/REPORT-R-mk-infinite-90-20261105.md` §A-5）：389 行
-        `tasks` 里只有 9 行有 tokens/usd，而账本 416 行 —— 差的 $0.3146 里 17 条是
-        "还在跑、永远不会结算"的行（钱在账本上、行上永远是 0）。病因是回写只发生在
-        召唤结束那一刻（`conductor._charge_and_settle` ⇒ `_set_usage`）：一次召唤
-        只要没走到收尾，它花过的钱就一条都不在 `tasks` 上。
+        曾经回写只发生在召唤结束那一刻（`conductor._charge_and_settle` ⇒ `_set_usage`）：
+        一次召唤只要没走到收尾，它花过的钱就一条都不在 `tasks` 上 ——
+        于是 `tasks` 里有大量行没有 tokens/usd，而账本上钱已经记了。
 
         这里把回写挪到"每一笔记账"上：账本一行落下去的同时，它挂的那个 `task_id`
         的 `tasks` 行就被改成账本上的累计值。于是"两处相等"从「时序假设」
@@ -466,7 +462,7 @@ class TokenMeter:
 
         返回 ``{"recorded", "usage_id", "tokens", "cumulative_tokens",
         "cumulative_usd", "over_budget", "reason"}``。
-        （`remaining_tokens` 那一格已随 token 轴一起删，见 2026-10-15 业主裁定。）
+        （`remaining_tokens` 那一格不存在：token 轴已删。）
 
         `over_budget=True` 时照样写：钱已经花了，账必须记。
         拦住新工作的权力在 :meth:`guard`。
@@ -530,8 +526,8 @@ class TokenMeter:
         按主键（`usage_id`）去重在这里救不了 —— 两行的主键本来就不同，
         `validate_table` 的"重复 ID"检查也不会响。
 
-        实测（修复前，4 个进程、1 个幂等键）：账本落 4 行、总 token 6000，
-        而只调用了一次的那个键应记 1500 —— 即 4 倍重复扣费。
+        没把它们放进同一个临界区的后果（4 个进程、1 个幂等键）：账本落 4 行、
+        总 token 是应记数的 4 倍 —— 即 4 倍重复扣费。
 
         本方法把"读账"搬进 `charge` 本来就已持有的那把锁里，窗口因此消失。
 
@@ -582,7 +578,7 @@ class TokenMeter:
             if prior is not None:
                 # 判重这一支也要回写：典型现场是"账已落、`tasks` 还没写回就断了"
                 # （或两个写者竞争、其中一个先落了账）。早退会把回写一起跳过，
-                # 于是两处又分家 —— 与 `conductor._charge_and_settle` 的 `G-8` 同一条理由。
+                # 于是两处又分家 —— 与 `conductor._charge_and_settle` 同一条理由。
                 # 只按本笔的 `task_id` 回写：`task_id` 为空时 `tables` 里没有
                 # `tasks`（省一把锁），而 `prior` 那一行的回写属于当初写它的那一笔。
                 self._sync_task_usage(tx, c.task_id)
@@ -607,11 +603,11 @@ class TokenMeter:
     # ---------------------------------------------------------------- 守卫
 
     def _over(self, tokens: int, usd: float) -> bool:
-        """"花爆了没有" —— 只算钱（2026-10-15 业主裁定 A7：不卡 token）。
+        """"花爆了没有" —— 只算钱。
 
         边界口径与 `policy.check` 对齐：这里是 `usd >= budget_usd`，
         `policy.check` 那边是 `usd_left = max(0, budget - spent) <= 0`，
-        两者都在"恰好花光"这一刻判停。此前这里是严格 `>`，于是
+        两者都在"恰好花光"这一刻判停。若这里用严格 `>`，
         "花光了"这一格在两处给出相反答案（守卫说还能做、策略说不能再做）——
         同一件事两处判且不一致，比哪一处更宽松都更危险。
         """
@@ -678,8 +674,7 @@ class TokenMeter:
 
     def by_role(self) -> dict[str, dict]:
         """按角色汇总。为什么要有它：花销总量只说明"花了多少"，
-        而"是谁花的"才决定下一步该压谁 —— `04-…md` §B6 的教训是
-        "不能假设预算一定给"，所以每一分钱都要能归口。"""
+        而"是谁花的"才决定下一步该压谁 —— 每一分钱都要能归口。"""
         out: dict[str, dict] = {}
         for r in self.store.rows("usage_ledger"):
             k = str(r.get("role") or "unknown")
@@ -691,7 +686,7 @@ class TokenMeter:
         return out
 
     def by_scope(self) -> dict[str, dict]:
-        """按用途归口汇总（G-20）：账本要能回答"搜索/抽取/审校各花了多少"。
+        """按用途归口汇总：账本要能回答"搜索/抽取/审校各花了多少"。
 
         与 `by_role` 是两条不同的轴，谁也不能代替谁：角色回答"是谁"，
         归口回答"为了什么"。同一次工作可以是 D 角色在做 search 归口的事。
@@ -702,7 +697,7 @@ class TokenMeter:
         为什么零值档也要出现：`{"search": {...}}` 与"没有 search 这一档"
         在 `dict.get("search")` 眼里是一样的，而两者含义完全不同 ——
         前者是"查过、没花钱"，后者是"根本没有这个归口"。做成固定键之后，
-        "某一档归零"这件事在产物里是可见的（这正是 G-20 负控要的形态）。
+        "某一档归零"这件事在产物里是可见的。
 
         ## 内容
 
