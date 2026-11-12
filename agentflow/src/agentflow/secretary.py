@@ -7577,6 +7577,17 @@ class Secretary:
         items = [dict(c) for c in (candidates or ()) if isinstance(c, Mapping)]
         return ([items[i:i + size] for i in range(0, len(items), size)] or [[]])
 
+    @staticmethod
+    def _named_hits(items: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        """命中 / 候选的对外读数：`stmt_id` + `hit_words` 两格，逐条。
+
+        「调用方给的候选」与「自己检索到的命中」两条来路给的是同一份形状，
+        原先两处各写一遍同一段推导 —— 这里合并成一处，形状只有一份。
+        """
+        return [{"stmt_id": str(h.get("stmt_id") or ""),
+                 "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
+                for h in items]
+
     def _identity_candidates(self, out: dict[str, Any], *,
                              candidates: Sequence[Mapping[str, Any]] | None,
                              rows: Iterable[Mapping[str, Any]] | None,
@@ -7598,9 +7609,7 @@ class Secretary:
             out.update(
                 keywords=[], hits_total=len(supplied),
                 # 读了哪几条 = 全部（分页之后每页都会看到；这里不再截到一页）。
-                hits_named=[{"stmt_id": str(h.get("stmt_id") or ""),
-                             "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
-                            for h in supplied],
+                hits_named=self._named_hits(supplied),
                 candidates=list(supplied),
                 candidates_total=len(supplied),
                 why=("调用方给了候选表 ⇒ 这一趟不再自己检索" if supplied
@@ -7629,14 +7638,17 @@ class Secretary:
             else:
                 kw = self.pick_statement_keywords(statement_full=full, label=label,
                                                   kind=kind, task_id=task_id)
+                # 三格取自同一份 `kw`：checked / why 各读一次（原先 why 读两遍）。
+                kw_checked = bool(kw.get("checked"))
+                kw_why = str(kw.get("why") or "")
                 out["keywords"] = [str(x) for x in (kw.get("keywords") or ())]
-                out["keyword_checked"] = bool(kw.get("checked"))
-                out["why"] = str(kw.get("why") or "")
-                if not kw.get("checked"):
+                out["keyword_checked"] = kw_checked
+                out["why"] = kw_why
+                if not kw_checked:
                     out.update(
                         checked=False, verdict="",
                         reason=("关键词没提取成 ⇒ 这一问没判成（不新建、不合并、受控拒）："
-                                + str(kw.get("why") or "（没有给原因）")))
+                                + (kw_why or "（没有给原因）")))
                     return True
                 search = SL.by_keywords(rows=pool_rows, keywords=out["keywords"],
                                         text_chars=PROPOSITION_VERDICT_TEXT_CHARS)
@@ -7649,10 +7661,7 @@ class Secretary:
                 hits = list(search.get("hits") or [])
                 out["hits_total"] = len(hits)
                 # 读了哪几条 = 全部命中（分页之后每页都会看到；不再是"前 4 条"）。
-                out["hits_named"] = [
-                    {"stmt_id": str(h.get("stmt_id") or ""),
-                     "hit_words": [str(x) for x in (h.get("hit_words") or ())]}
-                    for h in hits]
+                out["hits_named"] = self._named_hits(hits)
                 out["candidates_total"] = len(hits)
                 out["candidates"] = hits
                 if not hits:
