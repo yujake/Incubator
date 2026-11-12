@@ -11487,18 +11487,26 @@ class Secretary:
             out["reason"] = f"面/基准读不成（{type(exc).__name__}: {exc}）⇒ 判不了"
             out["checked"] = True
             return out
+        given = params or {}
         rows: list[dict[str, Any]] = []
+        # 判定与坏路径名单同趟收：原先 rows 建好后再扫两遍（verdicts 一遍、bad 一遍）。
+        verdicts: set[str] = set()
+        bad: list[dict[str, Any]] = []
         for key in names:
-            raw = (params or {}).get(key)
+            raw = given.get(key)
             if not isinstance(raw, str) or not raw.strip():
                 continue                       # 没给这一格 ⇒ 没有可判的路径（如实记在 reason 里）
-            rows.append(self._judge_one_path(key, raw.strip(), root=root, face_dir=face_dir))
+            row = self._judge_one_path(key, raw.strip(), root=root, face_dir=face_dir)
+            verdict = str(row.get("verdict") or "")
+            rows.append(row)
+            verdicts.add(verdict)
+            if verdict in ("escapes", "not_in_face"):
+                bad.append(row)
         if not rows:
             out.update(checked=True,
                        reason=f"{action} 这一件没给路径参数（{'/'.join(names)}）⇒ 判不了"
                               "（不是通过）")
             return out
-        verdicts = {str(r.get("verdict") or "") for r in rows}
         fits: bool | None
         if verdicts & {"escapes", "not_in_face"}:
             fits = False
@@ -11506,7 +11514,6 @@ class Secretary:
             fits = True
         else:
             fits = None                        # 全是 unknown ⇒ 判不了（三态不许折平）
-        bad = [r for r in rows if str(r.get("verdict") or "") in ("escapes", "not_in_face")]
         reason = ""
         if fits is False:
             reason = "；".join(
