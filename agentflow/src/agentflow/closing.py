@@ -4731,6 +4731,47 @@ def _statement_citations(rows: Iterable[Any]) -> list[dict[str, str]]:
     return out
 
 
+def _cited_and_statements(store: Any,
+                          ) -> tuple[dict[str, Any], dict[str, Any] | None, str, str]:
+    """`statements_cited_by_claims` 的读数 + 它内部用到的那一份命题索引。
+
+    两个调用方（`statements_cited_by_claims` 与 `assertions_pressing_on`）原先各读一遍
+    `statements` 表，而 `store.rows` 每次调用都重新解析 JSON；这一处把"documents 与
+    statements 各读一次"合到一起。四个返回值依次是：公开读数、命题索引（`None` = 读不到）、
+    documents 失败原因、statements 失败原因 —— 后两格让调用方按各自原来的口径挑那一句。
+    """
+    rows, doc_why = _document_rows(store)
+    srows, stmt_why = _statement_rows(store)
+    if rows is None:
+        return ({"state": "unreadable", "reason": doc_why, "documents": None,
+                 "claims_total": None, "citations": None, "claims": None,
+                 "by_statement": None, "dangling": None}, srows, doc_why, stmt_why)
+    claims_total = sum(len(r.get("claims") or []) for r in rows if isinstance(r, Mapping))
+    cites = _statement_citations(rows)
+    claims = {(x["doc_id"], x["claim_id"]) for x in cites}
+    if srows is None:
+        return ({"state": "unreadable", "reason": stmt_why, "documents": len(rows),
+                 "claims_total": claims_total, "citations": len(cites),
+                 "claims": len(claims), "by_statement": None, "dangling": None},
+                None, "", stmt_why)
+    by: dict[str, list[dict[str, str]]] = {}
+    dangling: list[dict[str, str]] = []
+    for x in cites:
+        if x["stmt_id"] in srows:
+            by.setdefault(x["stmt_id"], []).append(x)
+        else:
+            dangling.append(x)
+    return ({
+        "state": "computed",
+        "reason": (f"查过了：{len(cites)} 条 `stmt:` 引用（{len(claims)} 条正文断言）"
+                   + (f"，其中 {len(dangling)} 条指向不存在的命题（悬空引用）" if dangling
+                      else "，全部指向存在的命题")),
+        "documents": len(rows), "claims_total": claims_total,
+        "citations": len(cites), "claims": len(claims),
+        "by_statement": by, "dangling": dangling,
+    }, srows, "", "")
+
+
 def statements_cited_by_claims(store: Any) -> dict[str, Any]:
     """正文断言引了哪些命题（按命题号归拢）+ 其中悬空的那几条。
 
@@ -4744,35 +4785,7 @@ def statements_cited_by_claims(store: Any) -> dict[str, Any]:
 被静默算成"压在 9999 上"，也不许被静默丢掉 —— 它是悬空引用，写入期（`doc_tools.check_citations`）与
 审计期（`verify`）各自报 error。
     """
-    rows, why = _document_rows(store)
-    if rows is None:
-        return {"state": "unreadable", "reason": why, "documents": None,
-                "claims_total": None, "citations": None, "claims": None,
-                "by_statement": None, "dangling": None}
-    claims_total = sum(len(r.get("claims") or []) for r in rows if isinstance(r, Mapping))
-    cites = _statement_citations(rows)
-    claims = {(x["doc_id"], x["claim_id"]) for x in cites}
-    srows, swhy = _statement_rows(store)
-    if srows is None:
-        return {"state": "unreadable", "reason": swhy, "documents": len(rows),
-                "claims_total": claims_total, "citations": len(cites),
-                "claims": len(claims), "by_statement": None, "dangling": None}
-    by: dict[str, list[dict[str, str]]] = {}
-    dangling: list[dict[str, str]] = []
-    for x in cites:
-        if x["stmt_id"] in srows:
-            by.setdefault(x["stmt_id"], []).append(x)
-        else:
-            dangling.append(x)
-    return {
-        "state": "computed",
-        "reason": (f"查过了：{len(cites)} 条 `stmt:` 引用（{len(claims)} 条正文断言）"
-                   + (f"，其中 {len(dangling)} 条指向不存在的命题（悬空引用）" if dangling
-                      else "，全部指向存在的命题")),
-        "documents": len(rows), "claims_total": claims_total,
-        "citations": len(cites), "claims": len(claims),
-        "by_statement": by, "dangling": dangling,
-    }
+    return _cited_and_statements(store)[0]
 
 
 def assertions_pressing_on(store: Any, stmt_id: str) -> dict[str, Any]:
@@ -4786,11 +4799,10 @@ def assertions_pressing_on(store: Any, stmt_id: str) -> dict[str, Any]:
 本里没有这条命题 ⇒ 判不了（不是"没有断言引它"）；`unreadable` = 这一趟没查成（`documents` 或
 `statements` 读不到）。
     """
-    cites = statements_cited_by_claims(store)
+    cites, srows, _doc_why, _stmt_why = _cited_and_statements(store)
     if cites["state"] != "computed":
         return {"state": "unreadable", "assertions": None, "dangling": None,
                 "reason": cites["reason"]}
-    srows, _ = _statement_rows(store)
     if srows is None or str(stmt_id) not in srows:
         return {"state": "no_such_statement", "assertions": None, "dangling": None,
                 "reason": (f"`statements` 里没有 {stmt_id} ⇒ "
@@ -4815,8 +4827,7 @@ def pollution_reading(store: Any, stmt_id: str) -> dict[str, Any]:
       - `assertions`：`documents.claims[].citations` 里写了 `stmt:<这条命题>` 的
         那些正文断言（`draft/68` 题 1 选 A 之后才判得了）。`None` = 这一层没查成。
     """
-    rows, why = _statement_rows(store)
-    pressed = statements_cited_by_claims(store)
+    pressed, rows, _doc_why, why = _cited_and_statements(store)
     if pressed["state"] == "computed":
         hits: list[dict[str, str]] | None = list(
             pressed["by_statement"].get(str(stmt_id), []))
