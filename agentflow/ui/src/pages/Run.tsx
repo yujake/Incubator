@@ -5,7 +5,7 @@
  *
  * - `api.getRun(sid)` → `RunView`（`runs` / `report` / `checkpoint`）；
  * - `api.getRunIndex()` → `RunIndexDrift`（裁定 O2：趟次索引与它对账的结论）；
- * - `api.getRunArchive(sid)` → `RunDigestView`（业主 2026-11-02 裁定「甲」：从事件流
+ * - `api.getRunArchive(sid)` → `RunDigestView`（裁定「甲」：从事件流
  *   **现算**的趟次档案 —— 收工没做成/被叫停的趟也有值，且不读也不落
  *   `index/run-index.json`。它与上面那一条是**两格并排**的独立读数）；
  * - `api.getRunEvents(sid, { sinceIndex, limit })` → `RunEventsView`（题 T2-a：一趟的
@@ -54,7 +54,7 @@ const EVENTS_PAGE = 50;
 
 /** 检查点的花销子树（类型上是联合：读不到时后端给的是空对象）。
  *
- * 2026-10-27 起它只供 `calls` / `tokens_in` / `tokens_out` 三格用（后端没把这三格
+ * 它只供 `calls` / `tokens_in` / `tokens_out` 三格用（后端没把这三格
  * 单列）；金额那一格统一走 `RunView.checkpoint_spend_usd` —— 同一件事只许有一条
  * 读数路径，否则"两处一致"这条判据自己就站在一个可能漂的数上。
  */
