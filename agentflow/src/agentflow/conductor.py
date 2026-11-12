@@ -7113,15 +7113,19 @@ class Conductor:
             released = released_by_parent.get(pid) or set()
             retired = tid in released
             mine = sorted(open_items.get(tid, ()))
+            # 三态那一格只取一次：这个节点的 `state` / `state_label` / `stalled` /
+            # `stalled_sec` 与 `blocking` 读的是同一格读数（原先每次 `three.get(tid)`
+            # 再加一次 `or {}`，一个节点七遍）。判据一个字没动 —— `three` 在这之后只读。
+            three_of = three.get(tid) or {}
             cell = {"task_id": tid, "role": str(row.get("role") or ""),
                     "status": str(row.get("status") or ""), "retired": bool(retired),
                     "open_items": len(mine), "open_item_ids": mine[:8],
-                    "state": str((three.get(tid) or {}).get("state") or AGENT_STATE_UNKNOWN),
-                    "state_label": str((three.get(tid) or {}).get("state_label") or ""),
+                    "state": str(three_of.get("state") or AGENT_STATE_UNKNOWN),
+                    "state_label": str(three_of.get("state_label") or ""),
                     # 疑似停滞：读数（拒信拿它说"其中 M 个已停滞"），不参与 complete。
-                    "stalled": bool((three.get(tid) or {}).get("stalled")),
-                    "stalled_sec": (three.get(tid) or {}).get("stalled_sec"),
-                    "blocking": retire_blocking(three.get(tid) or {})}
+                    "stalled": bool(three_of.get("stalled")),
+                    "stalled_sec": three_of.get("stalled_sec"),
+                    "blocking": retire_blocking(three_of)}
             if retired and mine:
                 cell["why"] = "已经销号，可名下还有没消的项（结构矛盾那一档）"
                 out["dirty"].append(cell)
