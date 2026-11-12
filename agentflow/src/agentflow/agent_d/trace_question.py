@@ -38,13 +38,24 @@ class _TraceQuestion:
         # 混在一个列表里，读者无法分辨"哪几条是这条链的步子、哪些只是顺带捞到的"，
         # 而"按代号溯源"的要求恰恰是让人顺着链读。判据计算仍然用全部 claims
         # （广度是判断证据够不够的依据），受限的只是呈现。
+        # 概念 → 参与的关系代号索引只建一次：改前每个概念都把整张关系图扫一遍
+        # （概念数个 × 关系表行数）。索引按关系行的出现次序 append，所以
+        # 接下来按 qrow 的概念次序 extend，得到的代号序列与逐行扫描逐项相同。
+        rids_by_cid: dict[object, list[str]] = {}
+        for r in rel_index.values():
+            rid = str(r.get("relation_id"))
+            for cid in (r.get("concept_ids") or []):
+                rids_by_cid.setdefault(cid, []).append(rid)
         for cid in qrow.get("related_concept_ids") or []:
-            for r in rel_index.values():
-                if cid in (r.get("concept_ids") or []):
-                    wanted_rids.append(str(r.get("relation_id")))
+            wanted_rids.extend(rids_by_cid.get(cid, []))
         # 排序：链条自身在前且按跳序，其余按代号升序（稳定、可复现）
         ordered: list[str] = list(chain_ids) + sorted(set(wanted_rids) - set(chain_ids))
         wanted_rids = list(dict.fromkeys(ordered))
+        # 判断"在不在链上/第几跳"的落点也只建一次（改前每条 claim 里 index() 与
+        # set(...) 各现算，最多四次线性扫描）。
+        on_path = set(qrow.get("related_relation_ids") or [])
+        chain_pos = {rid: i for i, rid in enumerate(chain_ids)}
+        chain_len_ok = len(chain_cpath) == len(chain_ids) + 1
 
         claims: list[dict] = []
         traces: list[dict] = []
@@ -81,14 +92,14 @@ class _TraceQuestion:
                     "status": data.get("status") or row.get("status"),
                     "quote_verified": data.get("quote_verified", row.get("quote_verified")),
                     "concept_pair_key": row.get("concept_pair_key"),
-                    "on_path": rid in set(qrow.get("related_relation_ids") or []),
-                    "in_chain": rid in chain_ids,
-                    "hop": (chain_ids.index(rid) + 1) if rid in chain_ids else None,
+                    "on_path": rid in on_path,
+                    "in_chain": rid in chain_pos,
+                    "hop": (chain_pos[rid] + 1) if rid in chain_pos else None,
                     # 这一跳的两个端点（按 C 的走向）；拿不到就是 None，绝不猜。
-                    "hop_from": self._concept_name(chain_cpath[chain_ids.index(rid)])
-                    if rid in chain_ids and len(chain_cpath) == len(chain_ids) + 1 else None,
-                    "hop_to": self._concept_name(chain_cpath[chain_ids.index(rid) + 1])
-                    if rid in chain_ids and len(chain_cpath) == len(chain_ids) + 1 else None,
+                    "hop_from": self._concept_name(chain_cpath[chain_pos[rid]])
+                    if rid in chain_pos and chain_len_ok else None,
+                    "hop_to": self._concept_name(chain_cpath[chain_pos[rid] + 1])
+                    if rid in chain_pos and chain_len_ok else None,
                 }
             )
 
