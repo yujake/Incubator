@@ -2,12 +2,12 @@
 
 ## 为什么这一层必须单独存在
 
-`tools/verify_tools.py`（禁改区）的 `check_formal` 曾经如实声明自己没有接线：
-它只做探测与三态判定，从不真的跑检查器。那条路线上，"有后端"与"证完了"
-之间没有任何东西 —— 于是 `proof` 级证据只能是一句人写的断言。
+`tools/verify_tools.py`（禁改区）的 `check_formal` 只做探测与三态判定，从不真的跑检查器。
+那条路线上，"有后端"与"证完了"之间没有任何东西 —— 于是 `proof` 级证据只能是一句
+人写的断言。
 
-P1 已把两者接上：`check_formal` 现在转发到本模块的 :func:`check_lean`，
-本模块因此成为"什么算证明"的唯一定义处（工具层只做参数归一与三态折算）。
+`check_formal` 转发到本模块的 :func:`check_lean`，本模块因此成为"什么算证明"的
+唯一定义处（工具层只做参数归一与三态折算）。
 
 本模块补的正是"真的跑一次、并逐条判它算不算证明"这一段：
 
@@ -25,7 +25,7 @@ P1 已把两者接上：`check_formal` 现在转发到本模块的 :func:`check_
 | 公理审计 | 一个用到 `MyAxiom` 的"证明"是"假设了结论再宣布结论"，退出码同样正常 |
 | 声明名必须被检查到 | 声称证明了 `foo`、文件里却没有 `foo`：退出码可能仍是 0，而不检查名字就会放过它 |
 | 超时是"没查成" | `timeout` 与 `compile_error` 折叠成一个之后，"没查完"会被读成"证伪了" |
-| 库不可得是"没查成" | 包没装时检查器连编译都没开始（`error: unknown package 'Mathlib'`），把它说成 `compile_error`（查了没通过）是一句假话，而"这次没查成"与"这个命题不成立"的处置完全相反。判据只认检查器自己的诊断行：被检查源码自己打印的那一句话不算（`E-5`，见 `_MISSING_PACKAGE`） |
+| 库不可得是"没查成" | 包没装时检查器连编译都没开始（`error: unknown package 'Mathlib'`），把它说成 `compile_error`（查了没通过）是一句假话，而"这次没查成"与"这个命题不成立"的处置完全相反。判据只认检查器自己的诊断行：被检查源码自己打印的那一句话不算（见 `_MISSING_PACKAGE`） |
 
 外加一条贯穿全模块的三态纪律：`no_backend`（可判定地没有后端）
 绝不等同于通过，也绝不等同于失败 —— 它是"本次没有结论"。
@@ -36,7 +36,7 @@ P1 已把两者接上：`check_formal` 现在转发到本模块的 :func:`check_
 :data:`STATUSES` 十值。除了 `verified`，任何一个都不得产出 `proof` 级证据。
 默认状态刻意是 `tool_crashed`：任何没有走到结论的代码路径都不许看起来像通过。
 
-`source_unreadable` 是 `E-3` 补上的第五种"没查成"：`source_path` 给的源码文件
+`source_unreadable` 是第五种"没查成"：`source_path` 给的源码文件
 读不出来（文件不存在 / 权限拒绝 / 非 UTF-8）。它与 `decl_mismatch` 的处置相反 ——
 `decl_mismatch` 说"我读了这份源码，里面没有你要证的东西"，`source_unreadable`
 说"这份源码我根本没读到"。把后者折成前者，等于把"路径写错了"报成
@@ -49,7 +49,7 @@ P1 已把两者接上：`check_formal` 现在转发到本模块的 :func:`check_
    后面所有判据都建立在"检查器真的回了话"之上。
    `import_unavailable` 排在 `compile_error` 之前：`error: unknown package 'X'`
    说明编译根本没开始，它不是"这份证明没通过"。这一档只认检查器自己的诊断行
-   （`error:` 标记），源码自己打印的 `unknown package 'X'` 不构成这一档（`E-5`）。
+   （`error:` 标记），源码自己打印的 `unknown package 'X'` 不构成这一档。
 2. `decl_mismatch`（静态）—— 待检查文件里根本没有这个名字。
    它在编译之前就能判，且比 `compile_error` 更有信息量：
    "文件里有语法错"与"文件里压根没有你要证的东西"是两件不同的事。
@@ -122,7 +122,7 @@ __all__ = [
 BACKEND_NAME = "lean"
 
 #: `check_lean` 的 `status` 受控词表。只有 `verified` 允许产出 `proof` 级证据。
-#: `source_unreadable`（`E-3`）是"没查成"里最容易被折错的那一档：
+#: `source_unreadable` 是"没查成"里最容易被折错的那一档：
 #: 它既不是"文件里没有那条声明"（`decl_mismatch`），也不是"工具崩了"
 #: （`tool_crashed`）—— 它是"调用方给的那个文件我们没读到"。
 STATUSES: tuple[str, ...] = (
@@ -137,7 +137,7 @@ STATUSES: tuple[str, ...] = (
     "tool_crashed",
     "source_unreadable",
     #: 用户把这条路关掉了（`settings.json` 的 `toolchain.lean_enabled=false`，
-    #: 或环境变量 `AGENTFLOW_LEAN_ENABLED=0`；业主 2026-10-12 口径）。
+    #: 或环境变量 `AGENTFLOW_LEAN_ENABLED=0`）。
     #: 它是"没查成"这一组（`evidence_of` ⇒ `checked=False`），
     #: 而不是"查了没通过" —— 后者读起来像一个数学结论，会污染台账。
     "lean_disabled",
@@ -197,7 +197,7 @@ _GIT_HEAD = re.compile(r"^ref:\s*(.+)$")
 #: 真的下过结论的那些状态（"查了"）。其余各态都是"没查成"。
 #: `import_unavailable` 刻意不在这一组里：库不可得时编译根本没开始，
 #: 那次检查没有发生 —— 它不是"查了没通过"。
-#: `source_unreadable`（`E-3`）同理、而且更靠前：源码文件根本没读到，
+#: `source_unreadable` 同理、而且更靠前：源码文件根本没读到，
 #: 连静态判据都没跑，说它"查了"是一句假话（`evidence_of` 的 `checked` 位
 #: 会因此变成 `True`，工具层再折成 `verified=False`）。
 _CONCLUDED_STATUSES = ("verified", "compile_error", "uses_sorry", "extra_axioms",
@@ -216,10 +216,10 @@ _NAMED_DECL_KEYWORDS = tuple(k for k in _DECL_KEYWORDS if k != "example")
 
 #: 命名空间栈的三条行形态（`namespace X` / `section X` / `end X`）。
 #:
-#: 为什么必须认它们（`draft/146` D26 的缺陷本体）：Lean 4 里 `namespace LProbe` 之内的
+#: 为什么必须认它们：Lean 4 里 `namespace LProbe` 之内的
 #: 定理在文件作用域叫 `LProbe.<短名>`，而 `#print axioms <短名>` 在那时是一条未知
 #: 常量 —— 检查器照实报 `error: unknown constant 'add_zero_probe'`，于是一条真定理被
-#: 记成 `compile_error`（真机读数，2026-10-22 / 2026-10-23 两次）。
+#: 记成 `compile_error`。
 #: 这三条正则刻意不做语法分析：只认独占一行的三种形态，别的行一概不看（少认一种的
 #: 后果是退回短名，而短名的行为与加这一段之前逐字相同 —— 收敛而不是冒险）。
 _NAMESPACE_LINE = re.compile(r"^[ \t]*namespace[ \t]+([A-Za-z_][A-Za-z0-9_'.]*)[ \t]*$")
@@ -245,7 +245,7 @@ _SORRY = re.compile(r"\b(?:sorry|admit)\b")
 _AXIOM_LIST = re.compile(r"depends on axioms:\s*\[([^\]]*)\]", re.S)
 _NO_AXIOMS = re.compile(r"does not depend on any axioms")
 
-#: 绑名的公理诊断（事后审计侧读"这条 proof 的依据"时用；`R2-AN-2`）。
+#: 绑名的公理诊断（事后审计侧读"这条 proof 的依据"时用）。
 #:
 #: 与上面的 `_AXIOM_LIST` / `_NO_AXIOMS` 的区别只有一个，但它是全部意义所在：
 #: 名字绑不绑得上。上面那两条不绑名，因为 `_axioms_of` 要回答的是
@@ -255,28 +255,26 @@ _NO_AXIOMS = re.compile(r"does not depend on any axioms")
 #: 台账上这条 proof 的依据能不能被读出来 —— "名字被别处提了一句"
 #: （例如一句 `warning: unused variable 'foo'`）不构成依据，所以只认
 #: `#print axioms <name>` 自己打印的那种绑名形态。
-#: 这也是"写入期比审计期宽"的刻意取舍（写入期要保的是真跑过检查器且退出码 0），
-#: 详见 `draft/28` §41.2 的登记。
+#: 这也是"写入期比审计期宽"的刻意取舍（写入期要保的是真跑过检查器且退出码 0）。
 _NAMED_NO_AXIOMS = re.compile(r"'([^']+)'\s+does not depend on any axioms")
 _NAMED_AXIOM_LIST = re.compile(r"'([^']+)'\s+depends on axioms:\s*\[[^\]]*\]", re.S)
 
 #: "库不可得"的证据形态。裸 `lean` 解析不了 `import X` 时逐字回的是
-#: `error: unknown package 'X'`（实测 Lean 4.7.0；`import Nonexistent.Pkg`
-#: 报的是首段 `'Nonexistent'`，所以这里只许把它当线索）。
+#: `error: unknown package 'X'`（`import Nonexistent.Pkg` 报的是首段
+#: `'Nonexistent'`，所以这里只许把它当线索）。
 #:
 #: 判据是「检查器自己的诊断行」：`error:` 标记与 `unknown package` 名同时出现。
-#: 为什么必须带上 `error:`（`E-5`）：此前只认 `unknown package 'X'` 这半句，
-#: 于是被检查的源码自己写一句 `#eval IO.println "unknown package 'Zzz'"`
+#: 为什么必须带上 `error:`：若只认 `unknown package 'X'` 这半句，
+#: 被检查的源码自己写一句 `#eval IO.println "unknown package 'Zzz'"`
 #: 就能把一次真编译失败（输出里同时有 `error: type mismatch`）改判成
 #: `import_unavailable` —— 而"这次没查成（装库）"与"查了没通过（改数学）"
-#: 的处置完全相反（实测形态见 draft/28 的 `E-5` A10；本模块的自检里
-#: 对应的负控是"源码打印的那句话不许改判"，夹具逐字用它）。
+#: 的处置完全相反。
 #:
 #: 残留（如实登记）：源码若能逐字打印出 `error: unknown package 'X'` 这一整句，
 #: 仍可骗过本判据。更强的口径是"输出里没有别的 error: 行"，但那会把
 #: 检查器同时报出的两条真诊断（缺库 + 语法错）也折叠掉，而后者有回归用例守着
-#: （tests/test_formalgw.py 的 test_a_real_compile_error_is_still_a_compile_error
-#: 第 2 条）—— 那一处取舍属人的口径裁定，本函数只做不会误伤正控的收窄。
+#: （`tests/test_formalgw.py` 的"注入语法错仍须 compile_error"）——
+#: 那一处取舍属人的口径裁定，本函数只做不会误伤正控的收窄。
 _MISSING_PACKAGE = re.compile(r"error:\s*unknown package\s+'([^']*)'")
 
 #: 代码块（模型答复里的 Lean 片段）。`lean` / `lean4` 两种语言标注都收。
@@ -380,14 +378,14 @@ def detect_backend(*, probe_fn: ProbeFn | None = None) -> dict:
     )
 
 
-# -------------------------------------------------- 版本要求：三态可核（G-13）
+# -------------------------------------------------- 版本要求：三态可核
 
 
 def lean_commit_of(version_text: str) -> str:
     """从 `lean --version` 的一行里取 commit 全长哈希；取不到返回空串。
 
-    为什么取全长：实测 `lean --version` 给的是 12 位短哈希，而
-    `lean --githash` 给 40 位全长；两者是同一个 commit 的两种写法。
+    为什么取全长：`lean --version` 给的是短哈希，而 `lean --githash` 给全长；
+    两者是同一个 commit 的两种写法。
     判据要在全长上做，短哈希只用于填回（见 `_short`），
     否则"12 位前缀相同"与"同一个 commit"会被混为一谈。
     """
@@ -413,9 +411,9 @@ def find_lean(*, which: Callable[[str], str | None] | None = None) -> str:
     「查找口径只有一处」（:mod:`agentflow.toolchain`）：显式配置
     （`AGENTFLOW_LEAN_BIN`，文件或目录）→ `AGENTFLOW_PROVER_PATH` → PATH。
     为什么不再自己 `shutil.which` 一次：探测（`tools/verify_tools.detect_verifier`）
-    与调用（本函数）此前各看一遍 PATH，于是"探测说没有、调用却能跑"是可能的 ——
-    2026-10-03 实测到的形态是：Lean 就装在机器上（仓库临时区里），探测报 `available=[]`，
-    形式化那一条腿静默降级成 cross_check。
+    与调用（本函数）各看一遍 PATH 时，"探测说没有、调用却能跑"是可能的 ——
+    Lean 就装在机器上而探测报 `available=[]`，形式化那一条腿就会静默降级成
+    cross_check。
 
     `which` 注入那条路保留：离线判据靠它构造"装了但版本不符"这类本机拿不到的状态。
     """
@@ -453,8 +451,8 @@ def find_mathlib_root(env: Mapping[str, str] | None = None,
     1. `AGENTFLOW_MATHLIB_ROOT`（环境变量，最高）；
     2. `LEAN_PATH` 里各段回推到工程根（也是环境变量：`…/mathlib4-<tag>/.lake/build/lib`
        ⇒ 往上四级；调用方自己配过的那一串同样是"显式给我的"）；
-    3. 设置文件 `settings.json` 的 `toolchain.mathlib_root`（2026-10-07 起；
-       相对路径相对工作区根解析，见 `settings.resolve_setting_path`）；
+    3. 设置文件 `settings.json` 的 `toolchain.mathlib_root`
+       （相对路径相对工作区根解析，见 `settings.resolve_setting_path`）；
     4. `candidates`（调用方显式给的那一份）—— 最后那一档自动探测。
 
     本机路径写在设置文件里，代码与文档里不再写某台机器的绝对路径
@@ -558,7 +556,7 @@ def mathlib_imports(root: str | Path, *, timeout_sec: float = 900,
     """真的跑一次 `import Mathlib`，回答"这棵树现在能不能用"。
 
     为什么必须真跑而不能只看 `.olean` 在不在：oleans 在、但 Lean 版本变了，
-    或少了某个包（实测：4100 个 olean 里缺 2 个 blob 时 `Mathlib.olean` 仍在），
+    或少了某个包（oleans 看着齐、其实缺了 blob 时 `Mathlib.olean` 仍在），
     都会让 import 失败而文件树看起来完好。判据只能是"检查器回话"。
 
     为什么走 `lake env` 而不是自己拼 `LEAN_PATH`：路径拼法随 lake 版本变，
@@ -583,7 +581,7 @@ def mathlib_imports(root: str | Path, *, timeout_sec: float = 900,
                 "command": "lake env lean <tmp>.lean",
                 "output": "", "reason": f"建不了 {checkdir}（{type(exc).__name__}: {exc}）"}
     # 探针文件写成临时文件、跑完即删：这次试跑不往工程里留下任何东西。
-    # 为什么不用 `lean -`（从 stdin 读）：实测 Lean 4.7.0 把它当文件名，
+    # 为什么不用 `lean -`（从 stdin 读）：Lean 把它当文件名，
     # 回的是 `file '-' not found` —— 那会把一次"没查成"伪装成"import 失败"。
     probe = checkdir / "_agentflow_import_probe.lean"
     try:
@@ -614,7 +612,7 @@ def _run_import_probe(cmd: Sequence[str], *, cwd: str, timeout_sec: float) -> di
     """起一次 `lake env lean <探针>` 并把它的输出归一。
 
     单独一个函数是为了让"起进程"这件事只有一处（`mathlib_imports` 只负责
-    判据与返回形状）。业主 2026-10-27 第一条裁定：起程序就登记一条程序计时器，
+    判据与返回形状）。起程序就登记一条程序计时器，
     程序结束它返回并带上结局（`clock.programs(…)` 读得到那条读数）。
     """
     import subprocess
@@ -731,7 +729,7 @@ def _check_lean_axis(which: Callable[[str], str | None] | None,
 
             from . import clock as _CLK
 
-            # 业主 2026-10-27：起程序就登记一条程序计时器（这一处是 `lean --version`）。
+            # 起程序就登记一条程序计时器（这一处是 `lean --version`）。
             with _CLK.program_span(program=exe, argv=[exe, "--version"],
                                    workspace=(_CLK.current_workspace() or None),
                                    where="formalgw._check_lean_axis",
@@ -889,18 +887,15 @@ def _sorry_count(source: str) -> int:
 def declaration_names(source: str) -> list[str]:
     """源码里全部具名声明的短名（按出现顺序去重；不拼命名空间前缀）。
 
-    为什么要"全部"而不只是第一条（`goal-a5334ee8` 的 ④，真机实测 2026-10-01）：
-    调用方只想给一份 `.lean` 文件、不想再报一遍声明名时，唯一的两种诚实做法是
-    "文件里恰好只有一条声明 ⇒ 用它"或"不止一条 ⇒ 请调用方点名"。
-    此前那两种都不是：工具层拿文件名词干当声明名（`agent_e` 那条 formal 路径与
-    `verify_tools.check_formal` 各有一处；`agent_e` 那条 2026-10-23 晚已随 E 的
-    Lean 侧一起摘掉），于是"源码里没有这个名字"被报成
+    为什么要"全部"而不只是第一条：调用方只想给一份 `.lean` 文件、不想再报一遍
+    声明名时，唯一的两种诚实做法是"文件里恰好只有一条声明 ⇒ 用它"或
+    "不止一条 ⇒ 请调用方点名"。拿文件名词干当声明名会让"源码里没有这个名字"被报成
     `decl_mismatch`（`checked=True`，读起来像"查了没通过"），而它其实是
     "调用方写错了参数" —— 两者的处置完全相反（见本模块 docstring 的判定顺序一节）。
 
     这一条只回答"解析层面出现了哪些短名"。要交给检查器（`#print axioms <名字>`）
     的名字不许从这里取：`namespace` 之内的声明在文件作用域是限定名，
-    取短名会把一条真定理判成 `compile_error`（`draft/146` D26）。
+    取短名会把一条真定理判成 `compile_error`。
     "该交给检查器哪个名字"的唯一答案是 :func:`qualified_declaration_names`。
     """
     body = _strip_lean_noise(str(source or ""))
@@ -924,16 +919,16 @@ class DeclarationNameError(ValueError):
 def qualified_declaration_names(source: str) -> list[str]:
     """源码里全部具名声明的限定名（按出现顺序去重；命名空间栈在这里拼前缀）。
 
-    ## 为什么短名不够（`draft/146` D26）
+    ## 为什么短名不够
     桥接层会往源码尾部追加一条 `#print axioms <名字>`，而 Lean 4 里
     `namespace LProbe` 之内的定理在文件作用域叫 `LProbe.<短名>` —— 只给短名时
-    检查器报 `error: unknown constant`，一条真定理被记成 `compile_error`
-    （真机读数，2026-10-22 / 2026-10-23 两次）。`declaration_names` 回答的是
+    检查器报 `error: unknown constant`，一条真定理被记成 `compile_error`。
+    `declaration_names` 回答的是
     "文件里出现了哪些短名"（那是解析层面的事实），这一条回答的是"交给检查器时
     该写哪个名字"（那是语义层面的事实）。两个问题分开，因为它们的答案本来就不同。
 
     ## 与 `agent_l/formalize.py::declaration_name_in` 的关系
-    那一份是 L 在二维改造里自己算同一个前缀的实现。这一份是桥接层的落点
+    那一份是 L 自己算同一个前缀的实现。这一份是桥接层的落点
     （`check_lean` 走它），于是"不给声明名时拼全名"这件事不再依赖 L 把名字先算好；
     L 那一侧看到的是同一个结果，不是第二套口径。
 
@@ -1004,7 +999,7 @@ def declaration_name(source: str) -> str:
 
     为什么是限定名而不是短名：这个返回值会被原样拼进 `#print axioms <name>`，
     而那一行写在文件作用域里 —— `namespace LProbe` 之内的定理在那里叫
-    `LProbe.<短名>`，短名是一条未知常量（`draft/146` D26 的缺陷本体）。
+    `LProbe.<短名>`，短名是一条未知常量。
 
     与 `sole_declaration_name` 的分工：这一条回答"第一条是谁"（给 `lean_snippets`
     这类"一段文本里可能有多个片段"的场景用），那一条回答"这一段只有一个候选吗"
@@ -1065,14 +1060,12 @@ def _as_text(value: Any) -> str:
 
 @lru_cache(maxsize=1)
 def _mathlib_lean_path() -> str:
-    """解析一次 Mathlib 的 `LEAN_PATH` 段（`draft/37` §103）。
+    """解析一次 Mathlib 的 `LEAN_PATH` 段。
 
     为什么必须由框架做：`check_lean` 起检查器的命令是裸的 `[lean, <file>]` —— 它靠
     进程环境里的 `LEAN_PATH` 找包。框架已经知道 Mathlib 根在哪（`find_mathlib_root`），
-    就不该要求调用方记得把那一串环境变量配好。真机读数（2026-10-04）：盘上有一份
-    编译完整的 Mathlib（工程根由设置文件或 `AGENTFLOW_MATHLIB_ROOT` 给出来），
-    而 E 的每一次形式化尝试都报 `unknown package 'Mathlib'` —— 直到跑之前
-    手工把 `LEAN_PATH` 配上才通。按进程记忆一次（根不会在进程中途换）。
+    就不该要求调用方记得把那一串环境变量配好；否则盘上有编译完整的 Mathlib，
+    形式化尝试仍会报 `unknown package 'Mathlib'`。按进程记忆一次（根不会在进程中途换）。
     """
     from . import toolchain as TC
 
@@ -1104,11 +1097,11 @@ def _default_run(cmd: Sequence[str], *, cwd: str, timeout_sec: float) -> dict:
     "这次没查完"，而一个抛出去的 `TimeoutExpired` 在别处很容易被兜成"检查失败"——
     那就把"没查成"读成了"证伪了"。半截输出照样带回来（可能已经有编译错误）。
 
-    ## `G-1`：这个进程可被取消
+    ## 这个进程可被取消
 
-    改前是 `subprocess.run(...)` —— 一个跑 600 秒的 Lean 检查会一直跑完，
+    用 `subprocess.run(...)` 时，一个跑 600 秒的 Lean 检查会一直跑完，
     与"有人按了停止"这件事完全无关（取消只到任务入口，到不了正在跑的 handler）。
-    现在走 `cancellation.run_cancellable(..., token=current_token())`：
+    这里走 `cancellation.run_cancellable(..., token=current_token())`：
     进程注册到当前 token 上，`CancelToken.cancel()` 会主动杀掉它
     （杀子进程不破坏"不在事务中间强杀"那条纪律 —— 子进程不写我们的表）。
 
@@ -1125,7 +1118,7 @@ def _normalize_run(raw: Any) -> dict:
     """把运行函数的返回值归一。垃圾返回值是错误（`check_lean` 会兜成 `tool_crashed`），
     因为"看不懂运行结果"与"检查器说通过"之间隔着整个可信度问题。
 
-    `cancelled`（`G-1`）是新增的第五个键：既有 run_fn（含全部测试替身）
+    `cancelled` 是第五个键：既有 run_fn（含全部测试替身）
     不给它时默认 `False`，于是"没接取消"与"接了但没取消"在这条契约上分得开。
     """
     if not isinstance(raw, Mapping):
@@ -1144,15 +1137,15 @@ def _normalize_run(raw: Any) -> dict:
 def _axioms_of(text: str, *, name: str = "") -> list[str]:
     """从检查器输出里解析公理表。
 
-    ## `E-1`（2026-09-26 全面体检发现）：这里不许做全局短路
+    ## 为什么这里不许做全局短路
 
-    旧实现的第一句是 `if _NO_AXIOMS.search(text): return []`，而 `text` 是检查器
-    全部 stdout+stderr。后果（真 Lean 实测，`temp/auditE-lean-probe.json` A8）：
-    被检查的源码里只要任何一处带出 `does not depend on any axioms`
-    （一句 `#eval IO.println "..."` 就够），整份公理表就被丢弃 ——
-    于是一个 `axiom e_ax : P` + `theorem bad : P := e_ax`（假设结论再宣布结论）
-    被判成 `status=verified` + `proved=True` + `evidence_kind="proof"`。
-    同一条短路也吃掉了 `"sorryAx" in axioms` 那道 sorry 判据（两者读同一个列表）。
+    若第一句是 `if _NO_AXIOMS.search(text): return []`，而 `text` 是检查器
+    全部 stdout+stderr，那么：被检查的源码里只要任何一处带出
+    `does not depend on any axioms`（一句 `#eval IO.println "..."` 就够），
+    整份公理表就被丢弃 —— 于是一个 `axiom e_ax : P` + `theorem bad : P := e_ax`
+    （假设结论再宣布结论）会被判成 `status=verified` + `proved=True` +
+    `evidence_kind="proof"`。同一条短路也会吃掉 `"sorryAx" in axioms` 那道
+    sorry 判据（两者读同一个列表）。
 
     ## 现在的判据（按声明解析 + 公理列表优先，fail-closed）
 
@@ -1185,19 +1178,19 @@ def _axioms_of(text: str, *, name: str = "") -> list[str]:
 def concluded_names(text: str) -> set[str]:
     """从检查器输出里取出被指名下过公理结论的声明名集合（保序无关，去重）。
 
-    ## 为什么它是审计侧唯一的读法（`FC-03`）
+    ## 为什么它是审计侧唯一的读法
 
     "这条 proof 有检查器依据"在事后只能从 `verifier_output` 里读。读法有两种：
 
     1. 名字出现在输出里 —— `check_lean` 的写入期判据就是这个
        （`seen = f"'{nm}'" in blob or nm in blob`）。它太宽：名字被一句与结论
        无关的告警提过（`warning: unused variable 'foo'`）也会被读成
-       "检查器管过它"（`R2-AN-2` 的 A4 读数）。
+       "检查器管过它"。
     2. 输出里有一条绑了名字的公理诊断（`'<名>' does not depend on any axioms`
        / `'<名>' depends on axioms: [...]`）—— 本函数。
 
     事后审计用的是 ②：它要保的是"这条 proof 的依据能被读出来"。
-    写入期与审计期不同严是刻意的，不是判据漂移（`draft/28` §41.2 有登记）——
+    写入期与审计期不同严是刻意的，不是判据漂移 ——
     写入期要保的是"真跑过检查器且退出码 0"，那时诊断行必然存在。
 
     返回名字集合而不是布尔：调用方要做的是"我这条记录声称检查的声明名
@@ -1229,7 +1222,7 @@ def missing_imports_of(text: str) -> list[str]:
     而"这次没查成"与"这个命题不成立"是相反的结论。
 
     判据只认检查器自己的诊断行（`error: unknown package 'X'`，见
-    `_MISSING_PACKAGE` 的注释）：被检查源码自己打印的一句话不算证据（`E-5`）。
+    `_MISSING_PACKAGE` 的注释）：被检查源码自己打印的一句话不算证据。
     """
     out: list[str] = []
     for m in _MISSING_PACKAGE.finditer(str(text or "")):
@@ -1278,9 +1271,9 @@ def evidence_of(result: Mapping[str, Any]) -> dict:
       `import_unavailable` 在这里而不是在"跑了但没通过"那一组：
       库没装时编译根本没开始，那次检查没有发生 —— 把它读成"查了没通过"
       等于把一次环境配置问题说成一个数学结论。
-      `source_unreadable`（`E-3`）同理：`source_path` 读不到时连"文件里有没有
+      `source_unreadable` 同理：`source_path` 读不到时连"文件里有没有
       那条声明"都没判过，`checked=True` 会把一次路径写错说成"查了、命题不成立"。
-      `lean_disabled`（业主 2026-10-12 的开关）同理，而且更硬：用户关掉这条路时
+      `lean_disabled` 同理，而且更硬：用户关掉这条路时
       连检查器都没起过进程 —— 这一格必须读成"没查成"，否则一套 proof 级证据
       会从"被关掉的形式化"里凭空长出来。
     """
@@ -1338,24 +1331,20 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
     正是同一判据长出两份实现的典型形态。两个都为空时抛 `ValueError` ——
     "没有源码"与"源码里没有那个声明"是两件必须分开的事，前者是调用方写错了。
 
-    `imports` 默认空（`goal-a5334ee8` 的 ④，真机实测 2026-10-01 改的口径）：
+    `imports` 默认空：
     源码自己写 `import Mathlib` 就加载 Mathlib，没写就什么都不注入 ——
-    "源码说什么就是什么"。此前默认注入 `("Mathlib",)`，代价是桥接层替调用方
-    改了被检查的那份源码：工作区里那三份纯核心 Lean 源码（`p2_L0_identity` /
-    `p2_rho_sum_zero` / `p2_step_norm`）因为首行被塞进 `import Mathlib`，
-    在没装 Mathlib 的本机上一律报 `import_unavailable`（= 没查成），
-    而 E 把它读成了"这条路走不通"，于是"核验证明"这一整条主路径看起来不成立。
-    实测探针（`temp/_m8_probe_lean.py`）：
-    默认 ⇒ `missing_imports=['Mathlib']`；`imports=[]` ⇒ `verified=True`，
-    检查器原话 `'rho_sum_zero' does not depend on any axioms`。
+    "源码说什么就是什么"。默认注入 `("Mathlib",)` 的代价是桥接层替调用方
+    改了被检查的那份源码：纯核心 Lean 源码因为首行被塞进 `import Mathlib`，
+    在没装 Mathlib 的机器上会一律报 `import_unavailable`（= 没查成），
+    于是"核验证明"这一整条主路径看起来不成立。
     要 Mathlib 就显式传 `imports=("Mathlib",)`（或在源码里 import 它）——
     库不可得时仍是 `import_unavailable`（不是 `compile_error`，也不是 `no_backend`），
     那两条区分的理由见下。
 
-    `name` 为空时自动认名（同一次实测的另一半）：源码里恰好一条具名声明就用它；
+    `name` 为空时自动认名：源码里恰好一条具名声明就用它；
     0 条或多条 ⇒ 抛 `DeclarationNameError`（`ValueError` 的子类 ⇒ 工具层折成
-    `param_error`）。此前是"拿文件名词干当声明名"，于是 `decl_mismatch`
-    （`checked=True`，读起来像"查了没通过"）掩盖了真正的问题：调用方没点名。
+    `param_error`）。拿文件名词干当声明名会让 `decl_mismatch`
+    （`checked=True`，读起来像"查了没通过"）掩盖真正的问题：调用方没点名。
     """
     src = str(source or "")
     read_failed = ""
@@ -1431,8 +1420,6 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
     result["source_path"] = str(source_path) if source_path is not None and source == "" else ""
 
     # ---- 开关：用户可以用 `toolchain.lean_enabled=false` 明确关掉这条路
-    # （业主 2026-10-12：「有没有 Lean 环境做一个 bool 让用户设置，全流程涉及 Lean 的
-    # 都要跟进这个开关的状态」）。
     #
     # 三条刻意的做法：
     # 1. 连探测都不做：关掉时不起任何子进程（`detect_backend` 会跑 `lean --version`）
@@ -1514,7 +1501,7 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
     result["checked_source"] = text
     path, tmp = _materialize(text, nm, workdir)
     result["path"] = str(path)
-    # `draft/37` §103：起检查器之前把 Mathlib 的 `LEAN_PATH` 补上（只加不改）。
+    # 起检查器之前把 Mathlib 的 `LEAN_PATH` 补上（只加不改）。
     # 这一步是"框架已经知道的事实不该让调用方记得"的同一条纪律 ——
     # 源码里 `import Mathlib` 能不能编过，取决于这一串在不在，而不是取决于谁记得配它。
     result["lean_path_segments"] = len(
@@ -1526,7 +1513,7 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
         )
         outcome = _normalize_run(raw)
         # 到这里才是"检查器回了一个可用的结果"。超时与取消都不算：
-        # 那两种情况下检查器还没对这份输入给出结论（`G-1` 把取消加了进来）。
+        # 那两种情况下检查器还没对这份输入给出结论（取消也归这一档）。
         result["ran"] = not outcome["timed_out"] and not outcome["cancelled"]
     except FileNotFoundError as exc:
         return _conclude(
@@ -1557,7 +1544,7 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
     result["axioms"] = axioms
 
     if outcome["cancelled"]:
-        # `G-1`：被取消 ≠ 超时。两者的处置完全相反（后者加时间，前者不该重试），
+        # 被取消 ≠ 超时。两者的处置完全相反（后者加时间，前者不该重试），
         # 而 `status` 的十值词表里没有 `cancelled` 这一档 —— 所以用 `tool_crashed`
         # （同样是"没查成"），但理由逐字写清是取消，并带上取消原因。
         from .cancellation import current_reason_text
@@ -1584,7 +1571,7 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
         # 要求退出码非零是 fail-closed 的一半：真编译错（少了 `:=` 之类）也非零退出，
         # 但它的输出里不会出现检查器的 `unknown package` 诊断，所以不会被这一条吞掉
         # （负控：`tests/test_formalgw.py` 里"注入语法错仍须 compile_error"那两条）。
-        # 另一半是 `missing_imports_of` 只认带 `error:` 的诊断行（`E-5`）：
+        # 另一半是 `missing_imports_of` 只认带 `error:` 的诊断行：
         # 被检查源码自己打印的同一句话不许把真编译失败改判成本档。
         result["missing_imports"] = missing_pkgs
         return _conclude(
@@ -1604,7 +1591,7 @@ def check_lean(source: str, *, name: str = "", imports: Sequence[str] = (),
         # 退出码非零 ⇒ 这次没精化通过，因此它首先是编译失败，
         # 不是"用了 sorry"。判据顺序在这里是有意的：
         # Lean 的文件级 `#print axioms` 输出里会带出被 import 的 `sorryAx`
-        # 之类的痕迹（实测：`theorem bad_one_eq_two : (1:Nat) = 2 := rfl`
+        # 之类的痕迹（例如 `theorem bad_one_eq_two : (1:Nat) = 2 := rfl`
         # 报 type mismatch，而 `#print axioms` 照样打出 `[sorryAx]`）。
         # 把那种残渣当成"这段证明里有一处被跳过了"，就把一次编译失败
         # 说成了另一件事。而"源码里真有 sorry"的情形在上面的静态判据
@@ -1711,7 +1698,7 @@ def selftest() -> int:
     if r["status"] != "decl_mismatch":
         problems.append(f"负控③：退出码 0 但声明没被检查到不许判 verified：{r['status']}")
 
-    # 负控④（G-18）：库不可得不许被读成 compile_error，也不许被读成 verified。
+    # 负控④：库不可得不许被读成 compile_error，也不许被读成 verified。
     nolib = {"exit_code": 1, "stderr": "probe.lean:1:0: error: unknown package 'Mathlib'\n",
              "stdout": "", "timed_out": False}
     r = check_lean(good, name="one_plus_one", imports=("Mathlib",),
@@ -1722,7 +1709,7 @@ def selftest() -> int:
     if r.get("missing_imports") != ["Mathlib"]:
         problems.append(f"负控④：库不可得必须带上包名：{r.get('missing_imports')!r}")
 
-    # 负控⑤（G-18 的核心）：真编译错不许被上一条吞成"库不可得"。
+    # 负控⑤：真编译错不许被上一条吞成"库不可得"。
     syntax = {"exit_code": 1, "stderr": "probe.lean:1:9: error: unexpected token 'x'\n",
               "stdout": "", "timed_out": False}
     r = check_lean(good, name="one_plus_one", imports=(), run_fn=lambda *a, **k: syntax)
@@ -1730,8 +1717,8 @@ def selftest() -> int:
     if r["status"] != "compile_error":
         problems.append(f"负控⑤：真编译错必须仍是 compile_error：{r['status']}")
 
-    # 负控⑥（E-5）：被检查源码自己打印的那句话不许把一次真编译失败
-    # 改判成"环境缺库"。夹具逐字重现 E-5 的 A10 形态：
+    # 负控⑥：被检查源码自己打印的那句话不许把一次真编译失败
+    # 改判成"环境缺库"。夹具逐字重现这个形态：
     # 源码里 `#eval IO.println "unknown package 'Zzz'"`，而检查器真报的是
     # `error: type mismatch` —— 编译没过的证据在，源码打印的那一句不是证据。
     selfprinted = {
@@ -1751,7 +1738,7 @@ def selftest() -> int:
             f"负控⑥：这一档不许带上包名（那句话不是检查器的诊断）：{r.get('missing_imports')!r}"
         )
 
-    # 负控⑦（E-3）：源码文件读不到 ⇒ `source_unreadable`（"没查成"），
+    # 负控⑦：源码文件读不到 ⇒ `source_unreadable`（"没查成"），
     # 不许被折成 `decl_mismatch`（"查了、声明对不上"）。两者的机器可读位相反：
     # 前者 `checked=False`、工具层折成 `verified=None`；后者 `checked=True`、
     # 折成 `verified=False`。夹具用一个必然不存在的路径，不依赖任何后端 ——
