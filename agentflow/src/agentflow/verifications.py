@@ -2889,6 +2889,7 @@ def report_fix_list(root: str | Path, *, statement_id: str,
     out["checked"] = True
     attempts: dict[str, int] = {}
     items: list[dict[str, Any]] = []
+    last: dict[str, str] = {}
     for row in rows:
         if proof_no_of(row) != no:
             continue
@@ -2897,6 +2898,7 @@ def report_fix_list(root: str | Path, *, statement_id: str,
         if kind not in ("procedural", "style"):
             continue
         sha = str(row.get("proof_sha256") or "")
+        at = str(row.get("at") or "")
         attempts[sha] = attempts.get(sha, 0) + 1
         got = row.get(SECRETARY_JUDGE_KEY)
         quote = (str(got.get("reason") or "").strip()
@@ -2905,7 +2907,7 @@ def report_fix_list(root: str | Path, *, statement_id: str,
             "kind": kind,
             "cause": str(reading.get("cause") or ""),
             "verification_id": str(row.get("verification_id") or ""),
-            "at": str(row.get("at") or ""),
+            "at": at,
             "sha": sha,
             #: 待改的是 V 的报告；板项收件人仍然是送审者（V 没有台账号）——
             #: 这一格是"该谁看"，不是"投给谁"（红线见 `vreceipts._recipient_now`）。
@@ -2913,13 +2915,11 @@ def report_fix_list(root: str | Path, *, statement_id: str,
             "quote": quote,
             "requires_rewrite": False,
             "attempts": attempts[sha],
-            "last_at": str(row.get("at") or ""),
+            "last_at": at,
             "why": str(reading.get("why") or ""),
         })
-    # `last_at`：同一 sha 上最后一趟的时刻（不是每一条各自那一刻）。
-    last: dict[str, str] = {}
-    for one in items:
-        last[str(one["sha"])] = str(one["at"] or "")
+        #: 同一 sha 的"最后一趟"：随追加就地更新，不再回头扫一遍 items。
+        last[sha] = at
     for one in items:
         one["last_at"] = last.get(str(one["sha"]), str(one["at"] or ""))
     out["items"] = items
