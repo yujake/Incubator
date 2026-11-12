@@ -4,7 +4,7 @@
 而幻觉引文是 LLM 做文献整理时最典型、也最危险的失败模式 —— 它看起来完全合理。
 所以这里的判定必须严格、且必须能被复核（因此返回匹配到的页码窗口，而不是一个布尔值）。
 
-判定原则（DESIGN.md §6.3）：
+判定原则：
 - 用保守规范化后的子串匹配，不用相似度。相似度会放过"改了几个词"的引文，
   而需求要求的是"完全引用"。
 - 定位不到就不要声称校验过。页码未知时不做"全文搜索后就算通过"的默认放宽 ——
@@ -13,7 +13,7 @@
 - 无文本层（扫描版）时返回 `None` 而不是 `False`：
   "没校验"和"校验失败"是两件不同的事，前者需要 OCR，后者需要改引文。
 
-## 边界：本模块只判「逐字不在」，不判「被改写/拼接」（`E-10` 裁定 (b)，2026-09-27）
+## 边界：本模块只判「逐字不在」，不判「被改写/拼接」
 
 `reason` 的取值面刻意只有匹配成功那三档与"没找到 / 没法判"那几档 ——
 没有一档叫"找到了但不一样"。于是：
@@ -29,9 +29,8 @@
 "逐字不在"是这里能给的唯一失败判决，读者不要把它读成"这篇文献里一定有/没有这句话"
 以外的任何结论。
 
-相应地，`schema.FINDING_KINDS` 里那条"引文与原文不符"的发现类型也被删掉了
-（它没有任何生产路径能产出，见 `schema.py` 那一处的注释）—— 词表不许承诺
-这里办不到的事。
+相应地，`schema.FINDING_KINDS` 里刻意没有"引文与原文不符"这一档发现类型：
+它没有任何生产路径能产出 —— 词表不许承诺这里办不到的事。
 """
 
 from __future__ import annotations
@@ -73,28 +72,24 @@ def _pages_unreadable(doc, start: int | None, end: int | None) -> bool | None:
     三态返回值：`True` = 有不可读的页；`False` = 没有（或这份文档没有逐页信息）；
     `None` = 诊断取不到（`page_unreadable` / `failed_pages` 抛了异常）。
 
-    ## `R3-5`：判据只有一份实现
+    ## 窗口收窄只有一份实现
 
-    这个窗口收窄逻辑此前是本模块里的一个闭包（`failed_pages()` + 区间过滤），
-    与 `DocumentText.page_unreadable`（`extract.py`）是同一件事的两份实现 ——
-    而那一份在当时生产代码里 0 个调用点，只有测试在用，它的 docstring 却写着
-    "引文校验用它来区分…"。那句话当时是假的，两份实现也没有任何断言把它们钉在一起
-    （今天在越界/None/反向区间上恰好一致，明天不一定）。
-    现在删掉闭包、直接问文档对象：窗口收窄只有 `DocumentText.page_unreadable` 一处实现。
+    收窄逻辑不许有第二份实现，也不许留一个与 `DocumentText.page_unreadable`
+    （`extract.py`）并行的闭包：两份实现没有任何断言把它们钉在一起，越界 / None /
+    反向区间上迟早会分叉。所以这里直接问文档对象。
 
     历史替身（只有 `failed_pages`、没有 `page_unreadable`）走保守分支：
     只要能读出任何一页失败，就按"不可读"处理。这一支不看 `[start, end]`
-    —— 它不是"窗口仍在起作用、只是没收窄到声明窗口"，而是任何一页失败都算
-    （`R6-AN-5` 把措辞改到与实现一致：旧措辞会让读的人以为窗口语义还在）。
+    —— 它不是"窗口仍在起作用、只是没收窄到声明窗口"，而是任何一页失败都算。
     两条理由：收窄逻辑不许有第二份实现；而且这个方向更保守
     （宁可判"无法判定"，也不判"不存在"）。
 
-    ## `R3-6`：诊断取不到时不许折成"没有失败页"
+    ## 诊断取不到时不许折成"没有失败页"
 
-    旧实现在 `except Exception` 里 `return ()`，于是"`failed_pages()` 抛异常"
-    被折成"文档真的可读、这句话确实不在"（`verified=False / not_found`）——
-    逐字同形，而那是 `F-4` 要防的最贵方向（把真引文记成幻觉）。
-    现在这一支返回 `None`，调用方据此判"无法判定"并留一条 warning。
+    在 `except Exception` 里 `return ()` 会把"`failed_pages()` 抛异常"折成
+    "文档真的可读、这句话确实不在"（`verified=False / not_found`）—— 逐字同形，
+    而那是把真引文记成幻觉的最贵方向。这一支返回 `None`，调用方据此判"无法判定"
+    并留一条 warning。
     """
     fn = getattr(doc, "page_unreadable", None)
     if callable(fn):
@@ -135,7 +130,7 @@ def check_quote(
     allow_fulltext_fallback : bool
         是否允许退化为全文搜索。默认 False —— 见模块 docstring 的说明。
 
-    三态与 `reason` 的边界（`E-10` 裁定 (b)）：
+    三态与 `reason` 的边界：
 
     * `True`  + `substring_match` / `substring_match_outside_declared_range` /
       `substring_match_fulltext` —— 逐字命中（后两档把"窗口不对"如实标出来）；
@@ -145,7 +140,7 @@ def check_quote(
       不是本函数的补丁（见模块 docstring 的"边界"一节）；
     * `None` + `no_text_layer` / `empty_quote` / `empty_page_range` /
       `page_unreadable` / `page_status_unknown` —— 没法判（"没校验"不是"校验失败"）。
-      `empty_page_range`（`R-08` = B1 候选 C）是"声明的窗口是空的（`start > end`）"：
+      `empty_page_range` 是"声明的窗口是空的（`start > end`）"：
       空区间里不可能有页 ⇒ "在这段里没找到"没有信息量，不许据此判 `not_found`。
     """
     pages = list(getattr(doc, "pages", []) or [])
@@ -168,19 +163,19 @@ def check_quote(
 
     tried: list[str] = []
     pr = page_range or PageRange(None, None, "")
-    # ---- `R-08` = B1 候选 C（`draft/52`）：空窗口（`start > end`）判"没法判"。
+    # ---- 空窗口（`start > end`）判"没法判"。
     #
     # 为什么这不是"没找到"：声明的是一个空区间 —— 它里面不可能有任何一页，
-    # 于是"在这段里没找到"这句话没有信息量（分母是 0）。旧实现会让 `scan`
-    # 直接返回 `None`（`lo > hi`），再靠 `widen` 把窗口撑开去数页外命中，
-    # 得出 `substring_match_outside_declared_range`（"页码错了"）—— 而那是
-    # 拿一个编码错误去指控引文/页码错了（`True` 会被下游读成"引文可靠"）。
+    # 于是"在这段里没找到"这句话没有信息量（分母是 0）。若让 `scan` 直接返回
+    # `None`（`lo > hi`），再靠 `widen` 把窗口撑开去数页外命中，会得出
+    # `substring_match_outside_declared_range`（"页码错了"）—— 那是拿一个编码错误
+    # 去指控引文/页码错了（`True` 会被下游读成"引文可靠"）。
     #
     # 守卫必须带 `pr.known`：页码未知（`start=end=None`）走的是另一档
     # （`not_found_page_unknown`）—— 没有这个守卫会把它一起吃掉。
-    # 2026-10-17（IO #10）：调用方可能把台账里的 dict 直接传进来（`page_range` 是
-    # `{"start":…,"end":…}`）。原来直接 `pr.known` ⇒ AttributeError；这里改成可读拒信
-    # （类型契约是 `schema.PageRange`，静默接受 dict 会让 `known` 的语义在半路丢）。
+    # 调用方可能把台账里的 dict 直接传进来（`page_range` 是
+    # `{"start":…,"end":…}`）：直接 `pr.known` ⇒ AttributeError，所以这里改成可读
+    # 拒信（类型契约是 `schema.PageRange`，静默接受 dict 会让 `known` 的语义在半路丢）。
     if isinstance(pr, Mapping):
         raise ValueError(
             "check_quote 的 page_range 必须是 `schema.PageRange`（收到 dict）—— "
@@ -195,9 +190,9 @@ def check_quote(
         if hit:
             return hit
         if widen > 0:
-            # `widened` 的标签必须与真的扫过的窗口一致（T / R-08 的标签修正）：
-            # 越界被收窄到空集时说 `empty`，不写出 `widened:4-3` 这种反向区间
-            # （反向标签会让人以为"从第 4 页往第 3 页扫过"）。
+            # `widened` 的标签必须与真的扫过的窗口一致：越界被收窄到空集时说
+            # `empty`，不写出 `widened:4-3` 这种反向区间（反向标签会让人以为
+            # "从第 4 页往第 3 页扫过"）。
             w_lo = max(1, pr.start - widen)
             w_hi = min(len(pages), pr.end + widen)
             label_w = f"widened:{w_lo}-{w_hi}" if w_lo <= w_hi else "widened:empty"
@@ -220,7 +215,7 @@ def check_quote(
             return QuoteCheck(True, matched_page=hit.matched_page, window="fulltext",
                               reason="substring_match_fulltext", tried=tuple(tried))
 
-    # ---- `F-4`：没命中且声明窗口里有无可读页 ⇒ 不判 `not_found`
+    # ---- 没命中且声明窗口里有无可读页 ⇒ 不判 `not_found`
     #
     # 这一步必须在全部分支之后、返回 `not_found` 之前：命中过的都在上面返回了，
     # 走到这里说明"在所有试过的窗口里都没找到"。此时若其中任何一页是抽取失败
@@ -231,16 +226,15 @@ def check_quote(
         lo: int | None = pr.start - max(0, widen)
         hi: int | None = pr.end + max(0, widen)
     else:
-        # 页码未知 ⇒ 考虑范围就是全篇。这与旧闭包 `unreadable(None, None)` 的口径
-        # 逐字一致（那时 start/end 为 None 会被解释成 [1, len(pages)]）。
-        # 不许写成 `(None, None)`：`DocumentText.page_unreadable` 对 None 一律
-        # 返回 False（"窗口未给 ⇒ 判不了"），那会把这一支变成"凡页码未知就一律
-        # 判 not_found" —— 那是把 F-4 的保守方向反过来（`R3-5` 的接线里最容易
-        # 踩的一处，见 tests/test_f4_page_level_tristate.py 的交叉断言）。
+        # 页码未知 ⇒ 考虑范围就是全篇。不许写成 `(None, None)`：
+        # `DocumentText.page_unreadable` 对 None 一律返回 False（"窗口未给 ⇒
+        # 判不了"），那会把这一支变成"凡页码未知就一律判 not_found" —— 那是把
+        # 保守方向反过来（最容易踩的一处，见 tests/test_f4_page_level_tristate.py
+        # 的交叉断言）。
         lo, hi = 1, len(pages)
     bad = _pages_unreadable(doc, lo, hi)
     if bad is None:
-        # `R3-6`：诊断取不到 ⇒ 不许折成"没有失败页"。
+        # 诊断取不到 ⇒ 不许折成"没有失败页"。
         # 折过去的话，一个坏掉的历史替身会让 quoteverify 静默退回旧行为，
         # 把"我们没读到"报成"这句话不存在"（真引文判成幻觉，且没有日志）。
         logger.warning(
