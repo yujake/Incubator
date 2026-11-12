@@ -299,7 +299,8 @@ def _row_has_location(row: Mapping[str, Any]) -> bool:
     return False
 
 
-def _shelf_coverage(ctx: _Ctx, rows: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+def _shelf_coverage(ctx: _Ctx, rows: Iterable[Mapping[str, Any]],
+                    judged: list | None = None) -> dict[str, Any]:
     """``search.shelf`` 的 ``coverage`` 块：整张文献表的全文覆盖率。
 
     为什么它必须自己数一遍（而不是从 `books` 那里拿 `len`）：`query` /
@@ -313,13 +314,17 @@ def _shelf_coverage(ctx: _Ctx, rows: Iterable[Mapping[str, Any]]) -> dict[str, A
       missing       total - with_fulltext（"没有离线全文"）
       no_location   既没有 `path`、也没有任何定位的条数 —— 没去取 ≠ 不存在
       rate          with_fulltext / total；total=0 时给 `None`（不许折成 0）
+
+    `judged` 是调用方已经逐行做过的 `_shelf_row` 结果（与 `rows` 同序）：给了就直接用它，
+    不再把同一行的文件存在性判第二遍 —— 判据仍是 `_shelf_row` 那一份，这里只是复用结论。
     """
     total = 0
     with_fulltext = 0
     no_location = 0
-    for row in rows:
+    for i, row in enumerate(rows):
         total += 1
-        if _shelf_row(ctx, row) is not None:
+        item = judged[i] if judged is not None else _shelf_row(ctx, row)
+        if item is not None:
             with_fulltext += 1
         elif not str(row.get("path") or "").strip() and not _row_has_location(row):
             # 行上有 `path` 但文件不在盘上 ⇒ 它有定位（只是定位坏了），
@@ -360,11 +365,16 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
     # 可选 `query`，按「题名/路径」做子串过滤（大小写不敏感）。它不读全文
     # （全文按主题取片段是 `search.local` 的事，两者的分工在说明里写清）。
     needle = str(query or "").strip().lower()
-    matched = 0
-    for row in rows:
+    # 每行的书架判定只做一次：`books` / `missing_files` / `coverage` 三处共用这份结论
+    # （`_shelf_coverage` 拿到的是同一份 `judged`，不再逐行重判文件存在性）。
+    judged = [_shelf_row(ctx, row) for row in rows]
+    filtered_out = 0
+    for i, row in enumerate(rows):
+        if needle and needle not in f"{row.get('title') or ''} {row.get('path') or ''}".lower():
+            filtered_out += 1
         if lit_id and str(row.get("lit_id") or "") != lit_id:
             continue
-        item = _shelf_row(ctx, row)
+        item = judged[i]
         if item is None:
             if row.get("path"):
                 missing += 1
@@ -373,7 +383,6 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
             hay = f"{item.get('title') or ''} {item.get('path') or ''}".lower()
             if needle not in hay:
                 continue
-            matched += 1
         books.append(item)
     books.sort(key=lambda b: b["lit_id"])
     truncated = False
@@ -384,10 +393,7 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
         {
             "count": len(books),
             "query": str(query or ""),
-            "filtered_out": (len(books) + sum(
-                1 for r in rows if needle and needle not in
-                f"{r.get('title') or ''} {r.get('path') or ''}".lower()))
-                - len(books) if needle else 0,
+            "filtered_out": filtered_out,
             "rows_total": len(rows),
             "have_path": sum(1 for r in rows if r.get("path")),
             "missing_files": missing,
@@ -397,7 +403,7 @@ def _h_shelf(ctx: _Ctx, limit: int | None = None, lit_id: str = "", query: str =
             "books": books,
             # 整张表的覆盖率（2026-10-28，阶段 ③ 第 2A 步）：A 从这一天起看得见
             # "32 篇里只有 5 篇能离线引用"这个缺口，而不是只知道书架上摆着哪几本。
-            "coverage": _shelf_coverage(ctx, rows),
+            "coverage": _shelf_coverage(ctx, rows, judged=judged),
             "note": (
                 "这是**离线**来源：这些文件的正文就在工作区里，"
                 "可以用 search.local 按主题取逐字摘录。"
