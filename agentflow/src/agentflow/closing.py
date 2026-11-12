@@ -2443,9 +2443,9 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "reason": (f"打回与送达那一格没查成（{type(exc).__name__}: {exc}）"
                            "⇒ 不是「没有打回」"), "problems": []}
         if rows and not counted:
-            # ---- 「0 条高档」是哪一种 0（D10）：四种原因分开给，不折成一句"没审过"。
+            # ---- 「0 条高档」是哪一种 0：四种原因分开给，不折成一句"没审过"。
             #
-            # 改前这一格只有一句"要么没有证明过程、要么没审过"，而这两种的下一步完全不同
+            # "要么没有证明过程、要么没审过"不够用：这两种的下一步完全不同
             # （前者要产出方写证明、后者要 V 去签），第三种（V 判了「有毛病」而这一行还
             # 挂着 active）当时连提都没提 —— 而那恰恰是"V 的判决到达不了 F"在收工门上的形态。
             low_grade = sum(int(n) for g, n in grades_with_bits.items()
@@ -2485,10 +2485,8 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # （键 `(stmt_id, proof_no)`）与 `counted_total` 里。
         return len(counted_stmts), detail
     if kind == "numeric_experiment_rows":
-        # `draft/39` §6.49 八 的 D66（用户 2026-10-06 裁「产出太保守」）：这一档从
-        # 「跑过多少次数值实验」改成「跑出过几个结论」—— 旧口径只数
-        # `method="numeric"`，于是全 `inconclusive` 也能让「算」那一环变绿
-        # （真机 T2 `p6q`：10 条实验全 `inconclusive`，读数 10 ⇒ 绿）。
+        # 这一档从「跑过多少次数值实验」改成「跑出过几个结论」—— 只数
+        # `method="numeric"` 的话，全 `inconclusive` 也能让「算」那一环变绿。
         # 判据见 `experiment_concludes`：结论 + 界/证书（形式化那一支看检查器输出）。
         numeric = [r for r in _active_experiment_rows(store)
                    if str(r.get("method") or "") == "numeric"]
@@ -2504,7 +2502,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "——「跑过」不算产出（D66）"),
         }
     if kind == "document_literature_citations":
-        # 「手稿有没有引用文献」那一档（`draft/37` §120）。口径（写清楚，免得下次又问错）：
+        # 「手稿有没有引用文献」那一档。口径写清楚：
         # 数 `documents` 各行 claims 的 `citations` 里出现过的「不同」代号，只算
         # `lit:<id>` 与 `rel:<id>`（`exp:` 是自家实验、不是文献；`rel:` 是 B 从文献里
         # 逐字提取出来的关系，按定义带着文献来源）。
@@ -2536,7 +2534,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                           "relations": len(store.rows("relations"))},
         }
     if kind == "claims_supported_by_their_evidence":
-        # 「断言与它引的实验说的一样吗」那一档（`draft/37` §122）。判据逐条写死：
+        # 「断言与它引的实验说的一样吗」那一档。判据逐条写死：
         #   - 引了 `exp:` 的断言 ⇒ 每条被引实验的 `result` 都必须是 `supports`；
         #   - 或者这条断言本身是「没得出结论」那一档（`is_negative` 且 `negation_kind` 非空）
         #     —— 那是「诚实」的形态：它与一条 `inconclusive` 的实验是一致的；
@@ -2580,7 +2578,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "两条路都算改对了"),
         }
     if kind == "supported_claims":
-        # 「本轮有没有真跑出结论并写进稿子」那一档（`draft/37` §126）。与
+        # 「本轮有没有真跑出结论并写进稿子」那一档。与
         # `claims_supported_by_their_evidence` 是一对：那一档罚"夸大"，这一档逼"真东西"。
         # 口径：一条 claim 只要至少引到一条 `result=supports` 的实验就算一条；
         # 读数里同时给出那些实验的 id（"被什么支持的"要能一眼查到）。
@@ -2635,13 +2633,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "with_quote_verdict": len(verified), "derived": len(derived),
             "note": "文献来的要带 `quote_verified`（真/假/未查+理由），我方派生的要在 `derived_from` 里给出处"}
     if kind == "plan_progress_rows":
-        # 口径（2026-10-19 修，`draft/44` 的「攻」那一格）：真的推进过的计划才算。
+        # 「攻」那一格唯一认的口径：真的推进过的计划才算。
         #
-        # 改前的实现是 `advanced = [r for r in rows if r["history"]]` —— 它只问
-        # "这份计划被 step 过没有"，不问"step 出了什么"。于是两轮全 `no_change`
-        # 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全 `progress` 的计划
-        # 在这一格上等值（真机 mp3：`000000` 与 `000001` 读到同一个数）。
-        # 这一格是"攻（攻坚推进）"的唯一读数，等值 = 那一格量不到任何东西。
+        # "这份计划被 step 过没有"不等于"step 出了什么"：
+        # 两轮全 `no_change` 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全
+        # `progress` 的计划若在这一格上等值，那一格就量不到任何东西。
         # 判据本体在 :func:`_round_advanced`（一处口径，读不到两种说法）。
         rows = list(store.rows("attack_plans"))
         plans: list[dict[str, Any]] = []
