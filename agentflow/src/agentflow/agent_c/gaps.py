@@ -1,7 +1,4 @@
-"""角色 C 的动作 `gaps`（`goal-7f5116c1` M6：从 `agent_c.py` 拆出来，逐字未改）。
-
-拆出来的判据：一动作一文件与「方法真住在那里」由 `tests/test_agent_split_is_one_action_one_file.py` 钉住；「搬移逐字」那半是一次性证明（`temp/_m6_verify_verbatim.py`），不是常驻判据。
-"""
+"""角色 C 的动作 `gaps`（一动作一文件；判据 `tests/test_agent_split_is_one_action_one_file.py`）。"""
 from __future__ import annotations
 
 from ._support import AnalysisReport, LEVELS, Mapping, _cfg_int
