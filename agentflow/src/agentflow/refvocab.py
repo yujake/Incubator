@@ -74,6 +74,21 @@ from .refspecs import (
     _manuscript_from_name, _pad6, _text,
 )
 
+#: 认得的命名空间串（`parse_ref` 的报错文案要用；词表在导入期定死，不必每次调用重拼）。
+_KNOWN_NAMESPACES = "/".join(one.namespace for one in REF_NAMESPACES)
+
+
+def _family_and_ident(text: str) -> tuple[str, str]:
+    """`mss:` 的目标 ⇒ `(族, 号)`；没有族前缀时返回 `("", 原文)`。
+
+    `parse_ref`（写形状）与 `ref_reading`（判存在）共用这一条拆分，免得两套前缀循环。
+    """
+    for one in _MANUSCRIPT_FAMILIES:
+        prefix = f"{one}-"
+        if text.startswith(prefix):
+            return one, text[len(prefix):]
+    return "", text
+
 
 def _blank(raw: str) -> dict[str, Any]:
     """`parse_ref` 的完整返回形状（每一格都先给默认值，调用方不用 `.get` 猜键）。"""
@@ -216,7 +231,7 @@ def parse_ref(text: Any) -> dict[str, Any]:
                     f"引用 {raw!r} 像一条路径，但认不出族/号；"
                     "要引证明稿请写 `mss:<family>-<id>`（family=f-proof/b-proof/e-proof/e-num）")
     if not sep or spec is None:
-        known = "/".join(one.namespace for one in REF_NAMESPACES)
+        known = _KNOWN_NAMESPACES
         return _bad(out, CODE_UNKNOWN_NAMESPACE,
                     f"引用 {raw!r} 的前缀不认识：认 {known} 这几种，"
                     "或者四位/六位裸交接号")
@@ -262,12 +277,7 @@ def parse_ref(text: Any) -> dict[str, Any]:
         if re.fullmatch(r"\d{4,6}", rest):
             ident = _pad6(rest)
         else:
-            for one in _MANUSCRIPT_FAMILIES:
-                prefix = f"{one}-"
-                if rest.startswith(prefix):
-                    family = one
-                    ident = rest[len(prefix):]
-                    break
+            family, ident = _family_and_ident(rest)
             if not family:
                 return _bad(out, CODE_BAD_ADDRESS,
                             f"证明稿要写成 {spec.address}，收到 {rest!r}")
@@ -589,14 +599,7 @@ def ref_reading(text: Any, *, root: Any = "", cache: dict[Any, Any] | None = Non
             return _finish(parsed, state=STATE_UNCHECKED, code=CODE_UNCHECKED,
                            why=str(got["why"]), checked=False, found=None)
         by_family = got["by_family"]
-        family = ""
-        ident = target
-        for one in _MANUSCRIPT_FAMILIES:
-            prefix = f"{one}-"
-            if target.startswith(prefix):
-                family = one
-                ident = target[len(prefix):]
-                break
+        family, ident = _family_and_ident(target)
         if family:
             found = ident in by_family.get(family, {})
             if found:
@@ -668,8 +671,6 @@ def explain(reading: Any) -> str:
         return f"{raw}（读得通）"
     if state == STATE_UNCHECKED:
         return f"{raw}：没查成（{why or '没有工作区根'}）—— 不是『不存在』"
-    if state == STATE_AMBIGUOUS:
-        return f"{raw}：{why}"
-    if state == STATE_BAD:
+    if state == STATE_AMBIGUOUS or state == STATE_BAD:
         return f"{raw}：{why}"
     return f"{raw}：{why}（目标不存在）"
