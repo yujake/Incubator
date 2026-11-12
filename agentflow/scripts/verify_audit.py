@@ -1,24 +1,23 @@
 # -*- coding: utf-8 -*-
-"""`agentflow verify-audit`：D3 批 1 的只读读数口（零模型、零写盘）。
+"""`agentflow verify-audit`：只读的证明台账读数口（零模型、零写盘）。
 
-它回答四个问题（对应 D3 §8.3 批 1 的四张表）：
-
-1. 每条证明的票数：这一份正文最近那一趟送审里，从 `review_pass=1` 起连续
+它回答四个问题（四张表）：
+1. 每条证明的票数：最近那一趟送审里，从 `review_pass=1` 起连续
    :func:`agentflow.verifications.is_a_vote` 为真的轮数；停在哪一行、停因是哪一类
    （`math` / `procedural` / `style` / `contract` / `report_gap`）。
-2. `report_gap` 清单：业主 2026-11-09 裁定 ① 之后「没记录反例构造尝试」不再是缺陷；
-   这一张表把它逐条列出来（哪条命题、哪一行、什么理由），让"V 的报告缺了什么"可见。
-3. `legacy_*` 三类计数：老行没有 `secretary_judge.fault_kind` 这一格，
-   读侧按确定性规则推定（`legacy_math_evidence` / `legacy_shape` / `legacy_default`）；
-   三类各多少条必须能一眼读出来，否则"哪些行是被推定的"就不可复核了。
-4. 同一 sha 同一 review_call 里 clean → fault 的逐条点名：这是 D3 §2.3 的那个
-   硬事实（同一份正文、同一趟调用，前一转 clean、后一转 fault，只差回复里的半句话）。
-   它不改任何判定，只让"这条轴测的是什么"在读数里显形。
+2. `report_gap` 清单：「没记录反例构造尝试」不算缺陷，这里逐条列出（哪条命题、
+   哪一行、什么理由），让"V 的报告缺了什么"可见。
+3. `legacy_*` 三类计数：老行没有 `secretary_judge.fault_kind` 这一格，读侧按确定性
+   规则推定（`legacy_math_evidence` / `legacy_shape` / `legacy_default`）；三类各多少
+   条必须能一眼读出来，否则"哪些行是被推定的"就不可复核。
+4. 同一 sha 同一 review_call 里 clean → fault 的逐条点名：同一份正文、同一趟调用，
+   前一转 clean、后一转 fault，只差回复里的半句话。它不改任何判定，只让"这条轴
+   测的是什么"在读数里显形。
 
-读什么：`<root>/verifications/*.jsonl`（唯一正本，`verifications.list_verifications`）。
-写什么：一个字节都不写。不建目录、不加锁、不写报告、不碰台账。
-退出码：`0` 查过了（含"0 行"）/ `2` 没查成（工作区不在盘上 / 台账有读不出来的行）。
-`2` 不是"没有问题"：它是"这一格没查成"，与 `0` 必须分开（三态纪律）。
+读 `<root>/verifications/*.jsonl`（唯一正本，`verifications.list_verifications`）；
+一个字节都不写 —— 不建目录、不加锁、不写报告、不碰台账。退出码：`0` 查过了（含"0 行"）
+/ `2` 没查成（工作区不在盘上 / 台账有读不出来的行）。`2` 不是"没有问题"：它是"这一格
+没查成"，与 `0` 必须分开（三态纪律）。
 
 跑法：
 
@@ -61,8 +60,8 @@ def _latest_call_rows(group: Sequence[Mapping[str, Any]],
                       ) -> tuple[list[Mapping[str, Any]], str]:
     """这一份证明的"最近一趟送审"：最后一个非空 `review_call` 的那一组。
 
-    没有 `review_call` 的行走 legacy 支（整组按台账序读）——与 D3 §5.5 的
-    `votes` 算法同一条：老行没有"哪一趟"这回事，只能按历史形态读。
+    没有 `review_call` 的行走 legacy 支（整组按台账序读）—— 与 :func:`_votes_of`
+    同一条口径：老行没有"哪一趟"这回事，只能按历史形态读。
     """
     by_call: "OrderedDict[str, list[Mapping[str, Any]]]" = OrderedDict()
     for row in group:
@@ -90,7 +89,7 @@ def _votes_of(rows: Sequence[Mapping[str, Any]]) -> tuple[int, dict[str, Any] | 
 
 
 def _state_of(votes: int, need: int, stop: Mapping[str, Any] | None) -> str:
-    """D3 §5.4 的 `state` 投影（只作读数；本脚本不据此改任何行为）。"""
+    """`state` 投影（只作读数；本脚本不据此改任何行为）。"""
     if stop is not None:
         kind = str(stop.get("kind") or "")
         cause = str(stop.get("cause") or "")
