@@ -1,39 +1,36 @@
 # -*- coding: utf-8 -*-
-"""父子链的只读追踪：一层工具与全树工具共用的读侧（业主 2026-10-24 裁定）。
+"""父子链的只读追踪：一层工具与全树工具共用的读侧。
 
-## 业主原话（唯一权威）
+## 谁能看几层
 
-「普通代理能追一层，M能想追几层追几层。下层父代理若想监控地下最末端分支行为时可向M请求
- （一般提出的都是d2想看到d4甚至d5，毕竟再往下的层级派不了太深（深度锁：5级））」
+普通代理只能看一层；M 想看几层看几层（深度锁仍是 5 级）。非 M 角色的深度由
+`clamp_depth` 钉成 1 —— 就算传了 `depth=3` 也只给一层，返回值里的 `deeper` 一格
+写清"更深要看请向 M 请求"。
 
 ## 三件事的落点（本模块只做读，不注册工具、不写盘）
 
-1. 一层：`children_with_facts(...)` 给"我直接下级"的行为读数。能看几层的主体是
-   调用方（`caller_role`，不是被看的那一行）：非 M 角色的深度由 `clamp_depth`
-   钉成 1（就算调用方传了 depth=3 也只给一层），并在返回值里带 `deeper` 那一格，
-   逐字写清"更深要看请向 M 请求"。
-2. 全树：`watch_rows(...)` 沿 `parent_task_id` 向下走，给 M 想追几层追几层。
-   它与 `Conductor.tree` 的父子谓词逐条一致（只数实例行 `kind == ""`，板项行
-   `parent_task_id` 的口径是"收件人"，不是父代理）。测试会断言两份读数同集。
-3. 请求路径：非 M 角色看更深的地方，用已有的上行工具 `conductor.escalate`
-   （本模块只给那句可复制的调用文本，不新造一条边）。M 看完之后的指导由
-   `conductor.guide` 沿树下发，那件工具在 `tools/conductor_tools.py` 里。
+1. 一层：`children_with_facts(...)` 给"我直接下级"的行为读数；能看几层的主体是
+   调用方（`caller_role`，不是被看的那一行）。
+2. 全树：`watch_rows(...)` 沿 `parent_task_id` 向下走；父子谓词与 `Conductor.tree`
+   逐条一致（只数实例行 `kind == ""`，板项行的 `parent_task_id` 是收件人不是父代理），
+   测试断言两份读数同集。
+3. 请求路径：非 M 角色看更深用已有的 `conductor.escalate`（本模块只给可复制的调用文本，
+   不新造边）；M 的指导由 `conductor.guide` 沿树下发。
 
-## 每个节点给什么（业主四格）
+## 每个节点给什么
 
-- 状态：`tasks` 行上的 status / outcome / refusal_reason / detail / tokens / usd；
-- 最近 N 步在做什么：会话记录里的 `agent_step`（窗口口径见 `_steps_for_task`）；
-- 被拒次数与类目：复用 `errorstats` 的主码规则与类目表（`primary_code` /
-  `CODE_TO_CATEGORY`），不另写一份码表；
-- 产出是否真落盘：`experiments` / `statements` / `documents` 里署名是本实例的
-  行，以及任务行 `artifacts` 里那些引用在盘上/表里是否真的存在；
-- 最近一次 handoff 摘要：`manuscripts/handoffs.jsonl` 里 `task_id` 对得上的最后一行。
+状态（status / outcome / refusal_reason / detail / tokens / usd）、最近 N 步在做什么
+（会话记录里的 `agent_step`）、被拒次数与类目（复用 `errorstats` 的 `primary_code` /
+`CODE_TO_CATEGORY`，不另写码表）、产出是否真落盘（`experiments` / `statements` /
+`documents` 里署名本实例的行 + `artifacts` 引用在盘上/表里是否真的存在）、
+最近一次 handoff 摘要。
 
-## 三态（与全仓同一纪律）
+## 三态
 
-读不到会话记录 / 读不到某张表 一律 `checked=False` 加原因，不折成"0 条"。
-"这个节点没有子代理"是 `checked=True` + 空列表，与"没读成"分得开。
+读不到会话记录 / 读不到某张表一律 `checked=False` 加原因，不折成"0 条"；
+"没有子代理"是 `checked=True` + 空列表，与"没读成"分得开。
 """
+
 
 from __future__ import annotations
 
