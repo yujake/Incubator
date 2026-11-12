@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-12T02:17:26+08:00",
+  "generated_at": "2026-11-12T16:29:36+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -129,10 +129,10 @@
       "path": "src/agentflow/capabilities.py",
       "glob": "src/agentflow/capabilities.py",
       "category": "auth-audit",
-      "sha256": "8ee9f310de73c2c2cba135f916758747e71f651236d78f92dc659d9645770952",
+      "sha256": "f1558f2517cbb5a391befa3e834c7bfcf1670bb00ff9bfd25b4a04f0abca6036",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "2026-11-11 丙组 R4：capabilities.two_layer_reconciliation 的 docstring 现读沿革 66=25+41 → 67=25+42（B 的 open_polish_copy 进 unmatched）；只改注释，声明面（ALLOWED_EDGES/CAPABILITIES 等）一字未动。登记 = 写这一版 sha256，reviewers 仍为空（登记≠批准）—— 仍需 2 名 reviewer 逐行走查。",
+      "change_note": "清扫（D5 路·capabilities）：只改注释与 docstring —— 把「H 能召唤 A/E/G」改成「H 的出边只有 A/E，不指向 G」，并补「G 的出边是 C/D/H」；其余六条作废口径的历史叙述删除。可执行语句、字符串常量、键名与 returns/params 未动（AST 去 docstring 后逐字相同）。authored=ai-agent/attested，reviewers=0（登记≠批准）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
