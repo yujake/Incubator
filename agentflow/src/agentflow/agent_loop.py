@@ -339,16 +339,19 @@ def _continue_hint(result: Mapping[str, Any]) -> str:
     if not isinstance(meta, Mapping):
         return ""
     tool = str(result.get("tool") or "该工具")
-    if meta.get("next_line") is not None:
+    # 续读那一格与总行数各只读一次（`total_lines` 原先三处各 `.get` 一遍）。
+    next_line = meta.get("next_line")
+    total_lines = meta.get("total_lines")
+    if next_line is not None:
         return (f"【续读】{tool} 本次到第 {meta.get('start_line')}–"
                 f"{meta.get('start_line', 1) + max(0, int(meta.get('lines_read') or 0)) - 1} 行"
-                f"（共 {meta.get('total_lines')} 行）：再调一次 {tool}(path=…, "
-                f"start_line={meta['next_line']}) 接着读")
+                f"（共 {total_lines} 行）：再调一次 {tool}(path=…, "
+                f"start_line={next_line}) 接着读")
     if meta.get("truncated"):
         return (f"【没读完】{tool} 只读了前 {meta.get('bytes_read')} / {meta.get('total_bytes')} 字节："
                 f"要剩余部分就再调一次并给更大的 max_bytes")
-    if meta.get("total_lines") and not meta.get("windowed"):
-        return (f"【分段】{tool} 这次给的是整段（共 {meta.get('total_lines')} 行）："
+    if total_lines and not meta.get("windowed"):
+        return (f"【分段】{tool} 这次给的是整段（共 {total_lines} 行）："
                 f"要后面的部分再调一次 {tool}(path=…, start_line=N, max_lines=M) —— "
                 f"别反复重读同一个开头")
     return ""
@@ -2669,8 +2672,18 @@ def _v_rejection_detail(sid: str, e: Mapping[str, Any], sign: Mapping[str, Any],
     不回 `defect_step`）—— 这一格是"读侧那一份"的唯一落点，别处不许再拼一遍。
     """
     from . import verifications as VR      # 惰性：与 `v_rejections_digest` 同一处依赖
-    steps = [int(f.get("step")) for f in (sign.get("findings") or [])
-             if isinstance(f.get("step"), int)]
+    # findings 只走一遍：步号列（原式）与 `first`（第一个带 int 步号的行）同源，
+    # 原先同一份 findings 被两处各扫一遍、每格 `step` 还被各取两次。
+    findings = sign.get("findings") or ()
+    steps: list[int] = []
+    first: dict[str, Any] = {}
+    for f in findings:
+        step_no = f.get("step")
+        if not isinstance(step_no, int):
+            continue
+        steps.append(int(step_no))
+        if not first and isinstance(f, Mapping):
+            first = dict(f)
     defect = sign.get("defect_step")
     if isinstance(defect, int) and defect not in steps:
         steps.insert(0, defect)
@@ -2684,9 +2697,6 @@ def _v_rejection_detail(sid: str, e: Mapping[str, Any], sign: Mapping[str, Any],
         if m:
             steps.append(int(m.group(1)))
             defect = int(m.group(1))
-    first = next((dict(f) for f in (sign.get("findings") or [])
-                  if isinstance(f, Mapping)
-                  and isinstance(f.get("step"), int)), {})
     return {
         "stmt_id": sid,
         "proof_no": int(e.get("proof_no") or 1),
