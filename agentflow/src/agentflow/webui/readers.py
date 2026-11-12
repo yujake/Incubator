@@ -2111,11 +2111,11 @@ def _report_style(root: Path, project_dir: str = "") -> dict[str, Any]:
             "sections": [str(s) for s in data["sections"]]}
 
 
-# ============================================ 4.4 交接手稿的「发 / 收」怎么显示（Q2）
-# 业主 2026-10-26（Q2）逐字：「交接手稿『发 / 收』两栏只显示角色名（M / ALL / A），
-# 要显示绝对编码」。真机读数（`projects/mp3-r3/manuscripts/handoffs.jsonl`）：14 个行键里
-# 发信人的编号本来就有（`task_id` 就是发信人的台账号），收件人的编号改前从来没记过
-# （`to_task_id` / `to_task_ids` 是 2026-10-26 才补的写侧格子，见 `manuscripts.write`）。
+# ============================================ 4.4 交接手稿的「发 / 收」怎么显示
+# 业主逐字：「交接手稿『发 / 收』两栏只显示角色名（M / ALL / A），要显示绝对编码」。
+# 真机读数（`projects/mp3-r3/manuscripts/handoffs.jsonl`）：14 个行键里发信人的编号
+# 就在 `task_id`（发信人的台账号），收件人的编号落在写侧补的 `to_task_id` /
+# `to_task_ids` 两格（见 `manuscripts.write`）。
 #
 # 于是读侧只做展示，三档不许折平（折平之后"没有编号"会变成"有一个看起来像编号的东西"，
 # 而那个东西是猜的）：
@@ -2125,12 +2125,12 @@ def _report_style(root: Path, project_dir: str = "") -> dict[str, Any]:
 # | `to_task_id`（具体收件人） | `A（t-000002）` |
 # | `to_task_ids` 非空（`to=ALL`） | `ALL（t-000002、t-000003）` |
 # | `to_task_ids` 是空列表 | `ALL（广播；无直接子代理）` |
-# | 两格都没有（改前落的那一批） | `A（旧账无号）` / `ALL（广播；旧账无编号）` |
+# | 两格都没有（旧账落的那一批） | `A（旧账无号）` / `ALL（广播；旧账无编号）` |
 #
 # 为什么角色名与编号各留一格（`sender` / `to` 一个字都不改写）：那两格是台账的键
 # （`handoff_query(to=…)` / `manuscripts.read` 的过滤都按它们），把它们改写成
 # `A（t-000002）` 就等于把台账的口径搞脏；渲染另起两格，页面读那两格。
-#: 这一行没记下编号时写的那句（改前落的那批行都在这一档：不假装有，也不报错）。
+#: 这一行没记下编号时写的那句（旧账那批行都在这一档：不假装有，也不报错）。
 HANDOFF_NO_CODE_WORD = "旧账无号"
 #: 广播行没记下编号时写的那句（与"具体收件人没有编号"分开：它同时还说了"这是广播"）。
 HANDOFF_NO_BROADCAST_WORD = "广播；旧账无编号"
@@ -2143,8 +2143,8 @@ HANDOFF_BROADCAST = _MS.ALL
 def handoff_sender_label(row: Mapping[str, Any]) -> str:
     """发件人那一格：`M（t-000001）`（发信人的台账号就在 `task_id` 那一格）。
 
-    为什么"发"这一栏也要编号：改前它只印 `sender`，读起来像角色级的公告；
-    而台账里 `task_id` 一直有值 —— 缺的只是把它摆到同一格里。
+    为什么"发"这一栏也要编号：只印 `sender` 读起来像角色级的公告；而台账里
+    `task_id` 一直有值 —— 缺的只是把它摆到同一格里。
     """
     who = str(row.get("sender") or "")
     code = str(row.get("task_id") or "").strip()
@@ -2173,7 +2173,7 @@ def _handoff_rows(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
     """交接行补两格给人看的「发 / 收」，并把两个编号格归一成"永远给得出"的形状。
 
     为什么要归一：声明面（`HandoffRow`）里那两格是必填的，而盘上它们是"有就带上"
-    （改前的旧行两格都没有）。归一成 `""` / `[]` 之后，"没有编号"这件事仍然由
+    （旧行两格都没有）。归一成 `""` / `[]` 之后，"没有编号"这件事仍然由
     :func:`handoff_sender_label` / :func:`handoff_to_label` 说清 —— 它们按盘上的原样
     算，所以"那一格在不在"这条三态在渲染里没有丢。
     """
@@ -2208,7 +2208,7 @@ def artifacts_face(root: str | Path, store: Any = None, *,
     整面 `unreadable` 并把这些栏点名，而读得出来的那些栏照常给行 —— 少给一栏会让
     "这一栏没读成"变成"这一栏是空的"，那两者在界面上必须分得开。
 
-    ## 2026-10-23（业主：sha 原文不显示，只显示一致不一致）
+    ## sha 原文不显示，只显示一致不一致
     两栏台账各多一格 `sha_consistency`（`match` / `mismatch` / `unknown`）：
     `ledger_verify` 那一格由 `artifacts.STATUSES` 的五档折过来，`ledger` 那一格取
     同一路径的核对行的读数（没有对应核对行 ⇒ `unknown`：没得比）。
@@ -2289,7 +2289,7 @@ def artifacts_face(root: str | Path, store: Any = None, *,
         key: out.get(key) or []
         for key in ("ledger", "ledger_verify", "handoffs", "checks", "secretary",
                     "products", "tasks")}))
-    # ---- 2026-10-23（业主：sha 原文不显示，只显示一致不一致）：
+    # ---- sha 原文不显示，只显示一致不一致：
     # 台账行的一致性取自同一路径的核对行（`verify_entries` 已经把两份 sha 读出来了），
     # 核对行自己的一致性由 `sha_consistency` 真比一次（见 `_ledger_verify_consistency`）。
     out["ledger_verify"] = [
@@ -2301,7 +2301,7 @@ def artifacts_face(root: str | Path, store: Any = None, *,
         {**dict(r), "sha_consistency": consistency_by_path.get(
             str(r.get("path") or ""), SHA_UNKNOWN)}
         if isinstance(r, Mapping) else r for r in out.get("ledger") or []]
-    # ---- 板项行的"状态"按 `item_state`/`item_close` 投影（D12 ②，2026-11-09）。
+    # ---- 板项行的"状态"按 `item_state`/`item_close` 投影。
     # 与状态报告同一个函数（`statusreport.tasks_row_reading`）：`tasks` 表里板项行的
     # `status` 恒为 `pending`（`conductor._item_row` 建行写死），于是网页「任务产物」
     # 那一栏把 71 条 `item_state=done` 的 notice 全印成 pending —— 与 `.md` 报告是
