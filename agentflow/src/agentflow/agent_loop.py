@@ -4692,6 +4692,28 @@ def _sign_gate_e(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
         })
 
 
+def _summon_batch_counts(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """批量派活的读数前六格：`summoned` / `count` 与四格计数，一趟数完。
+
+    为什么单独一格函数：`_do_summon_many` 的返回值前六键原先各扫一遍 `items`
+    （`summoned` 一趟 + 四个 `sum()` 各一趟）。合并成一趟之后键序仍与原来逐字一致
+    （后四格由调用方接在 `**` 之后）；`outcome` 与 `status` 是两根轴，各判各的 ——
+    合成一根（或并成 `elif`）会让 `status="failed"` 与 `outcome="failed"` 那一档
+    互相替对方作答，读数的口径就变了。
+    """
+    summoned: list[str] = []
+    ok_count = refused_count = failed_count = running_count = 0
+    for i in items:
+        summoned.append(f"{i['role']}.{i['action']}")
+        ok_count += i["outcome"] == "ok"
+        refused_count += i["outcome"] == "refused"
+        failed_count += i["status"] == "failed"
+        running_count += i["status"] == "running"
+    return {"summoned": summoned, "count": len(items), "ok_count": ok_count,
+            "refused_count": refused_count, "failed_count": failed_count,
+            "running_count": running_count}
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -11241,13 +11263,10 @@ class AgentLoop:
                           # （与单条拒信的 `REFUSAL_HEAD_CHARS` 刻意分开，`R-BE4`）。
                           "refusal_reason": r.refusal_reason,
                           "detail": _clip(r.detail, P.SUMMON_MANY_DETAIL_CHARS)})
+        # 一趟数完（原先 `summoned` 与四格计数各扫一遍 `items`）：前六键的顺序即
+        # `out` 的前六键；`outcome` 与 `status` 是两根轴，各判各的，谁也不替谁作答。
         out: dict[str, Any] = {
-            "summoned": [f"{i['role']}.{i['action']}" for i in items],
-            "count": len(items),
-            "ok_count": sum(1 for i in items if i["outcome"] == "ok"),
-            "refused_count": sum(1 for i in items if i["outcome"] == "refused"),
-            "failed_count": sum(1 for i in items if i["status"] == "failed"),
-            "running_count": sum(1 for i in items if i["status"] == "running"),
+            **_summon_batch_counts(items),
             "waves": waves, "concurrent_peak": int(getattr(probe, "peak", 0) or 0),
             "results": items,
             "ok": True,
