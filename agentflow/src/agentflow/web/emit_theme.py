@@ -1,32 +1,21 @@
 # -*- coding: utf-8 -*-
 """把 :mod:`agentflow.web.assets` 的令牌层写成前端的 `ui/src/theme/generated/theme.css`。
 
-## 这是什么
+生成器而非样式：令牌的单一来源仍是 `web/assets.py` 的 :data:`THEME_CSS`（逐字照搬 DSH，
+MIT，来源见 `docs/USER-END-DSH-STYLE.md`），前端只消费它 —— 「换皮只换一层」对前端同样成立。
+不让前端自己抄一份：抄一份就有两份，而两份一定会漂。判据是「生成物与源一致」
+（`tests/test_webui_contracts.py` 里的新鲜度那两条）：手改生成物一个字节就红 ——
+这与 `types.ts` 由脚本生成是同一条纪律。
 
-一份生成器，不是一份样式。令牌的单一来源仍然是 `web/assets.py` 的
-:data:`THEME_CSS`（逐字照搬 DSH，MIT，来源见 `docs/USER-END-DSH-STYLE.md`）；
-前端工程只消费它 —— 于是「换皮只换一层」这条对前端同样成立。
+命名不用 `render` / `emit` / `main`：lint 的 R003 会点"同一个公开名在多个模块里各有一份
+独立实现"，而本包两个生成器做的事不同（一个吐 CSS、一个吐 TS），谁也不是谁的转发 ——
+所以名字各自具体：`render_css` / `write_theme`。入口刻意私有（`_main`，由 `__main__`
+块调用）：`main` 在 `cli.py` 已是"整套命令行"的入口。
 
-## 为什么要有它（而不是让前端自己抄一份）
+确定性：同样的 `THEME_CSS` 一定产出逐字节相同的文件 —— 没有时间戳、没有随机、换行统一
+成 LF、末尾恰好一个换行。判据按字节比对，这一条是它的前提。
 
-抄一份就有两份，而两份一定会漂。判据是「生成物与源一致」
-（`tests/test_webui_contracts.py` 里的新鲜度那两条）：手改生成物一个字节就红。
-这与裁定 M2（`types.ts` 由脚本生成）是同一条纪律的两个落点。
-
-## 命名为什么不是 `render` / `emit` / `main`
-
-lint 的 R003 会点"同一个公开名在多个模块里各有一份独立实现"，而本包两个生成器
-做的事不同（一个吐 CSS、一个吐 TS），谁也不是谁的转发 —— 那就只能让名字各自
-具体：`render_css` / `write_theme`。入口刻意私有（`_main`，由 `__main__` 块调用）：
-`main` 这个名字在 `cli.py` 已经是"整套命令行"的入口，再要一个同名公开入口正是
-R003 要问的那件事。
-
-## 确定性
-
-同样的 `THEME_CSS` 一定产出逐字节相同的文件：没有时间戳、没有随机、换行统一
-成 LF、末尾恰好一个换行。判据要按字节比对，这一条是它的前提。
-
-## 用法
+用法：
 
     python -m agentflow.web.emit_theme            # 写默认落点
     python -m agentflow.web.emit_theme --target <路径>
