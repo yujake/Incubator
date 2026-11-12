@@ -1,7 +1,4 @@
-"""角色 E 的动作 `check_formal`（`goal-7f5116c1` M6：从 `agent_e.py` 拆出来，逐字未改）。
-
-拆出来的判据：这个方法的源码非空行与拆分前逐字相同（`temp/_m6_verify_verbatim.py`）。
-"""
+"""角色 E 的动作 `check_formal`。"""
 from __future__ import annotations
 
 from ._support import ExperimentError, Sequence, VT, _FORMAL_REASON_BY_TOOL_REASON, _relpath
