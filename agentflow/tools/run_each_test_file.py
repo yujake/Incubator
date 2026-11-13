@@ -96,9 +96,10 @@ def audit_exemptions(
     for rel, why in table.items():
         if not (base / rel).is_file():
             notes.append(f"豁免的 {rel} 不在当前 root（{base}）下 ⇒ 本次没有豁免对象")
-        if len(why.strip()) < MIN_EXEMPT_REASON_CHARS:
+        why_len = len(why.strip())
+        if why_len < MIN_EXEMPT_REASON_CHARS:
             problems.append(
-                f"豁免 {rel} 的理由只有 {len(why.strip())} 字符"
+                f"豁免 {rel} 的理由只有 {why_len} 字符"
                 f"（下限 {MIN_EXEMPT_REASON_CHARS}）"
             )
         elif not any(k in why for k in EXEMPT_REASON_KEYWORDS):
