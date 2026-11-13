@@ -29,14 +29,8 @@ from .. import manuscriptform as _MF
 from .. import manuscriptids as _MID
 from .. import proofregistry as _PR
 from .. import vsigns as _VS
+from ..agent_f.submission import POLISH_SOURCE_KIND
 from ..manuscriptwrite import _atomic_write
-
-
-def source_head_statement_id(text: Any) -> str:
-    """一份稿的稿头 `- 命题号：` 那一行 ⇒ 裸命题号（认不出 ⇒ 空串）。"""
-    from .. import bmanuscript as _BM
-
-    return _BM._head_statement_id(text)
 
 
 class _OpenPolishCopy:
@@ -149,8 +143,87 @@ class _OpenPolishCopy:
                 out, "sign_not_cleared",
                 why=(f"复制件里还读得到签块（{after.get('why') or '认不出'}）⇒ "
                      "清签没清干净：这一份不能当未签的优化副本用"))
+        # ---- ⑤ 记一条来源（事实：谁复制了谁） ---------------------------------
+        #
+        # 2026-11-13 业主裁定「B 做优化表述的那一份，命题已在台账上审过」——
+        # 收方（B 的按稿收录）要靠这条记录认出"这是优化副本、不是新命题"。
+        # 记录写在它自己那一行 task 的 artifacts（与 `mss:` 同族、多两格
+        # `kind=polish` / `source=<源稿号>`），不加新表、不加新列。
+        # 记录没写成不带走复制本身（副本已经在盘上）：读数如实带 `polish_source`。
+        out["polish_source"] = self._record_polish_source(
+            manuscript_id=mid,
+            source_manuscript_id=str(out.get("source_manuscript_id") or ""),
+            path=target_rel)
         out.update(ok=True, why="")
         return out
+
+    #: 优化副本来源记录里 `kind` 那一格的值（与 `agent_f.submission.POLISH_SOURCE_KIND`
+    #: 是同一枚字面量：写法只有一处）。
+    POLISH_KIND = POLISH_SOURCE_KIND
+
+    def _record_polish_source(self, *, manuscript_id: Any,
+                              source_manuscript_id: Any,
+                              path: Any = "") -> dict[str, Any]:
+        """往「自己那一行 task」的 `artifacts` 记一条优化副本来源（事实，不是判断）。
+
+        记号与 `mss:` 同族（`agent_f/submission.py` 那套），多两格：
+        `mss:<新稿号>#kind=polish#source=<源稿号>#path=<副本路径>#at=<时刻>`。
+        写口是 `tasks.artifacts`（append-only、`sorted_unique` 去重），不新表不新列。
+
+        三态：`checked=False` = 没查成 / 没有可写的行（"不在任务上下文"是其中一档，
+        副本照落，只是这条来历没留下）；`recorded=True` = 记上了（幂等：同一枚记号
+        重复写不算第二次）。
+        """
+        from .. import schema as S
+
+        out: dict[str, Any] = {"checked": False, "recorded": False, "token": "",
+                               "task_id": "", "why": ""}
+        mid = str(manuscript_id or "").strip()
+        src = str(source_manuscript_id or "").strip()
+        if not mid or not src:
+            out["why"] = ("缺新稿号 / 源稿号 ⇒ 记不了「谁复制了谁」"
+                          "（这一份的来历不完整）")
+            return out
+        rel = str(path or "").strip().replace("\\", "/")
+        token = f"mss:{mid}#kind={self.POLISH_KIND}#source={src}"
+        if rel:
+            token += f"#path={rel}"
+        token += f"#at={S.now_iso()}"
+        out["token"] = token
+        try:
+            from ..conductor import current_task_id
+
+            tid = str(current_task_id() or "")
+        except Exception:  # noqa: BLE001 —— 读不到召唤号 = 不在任务上下文（不是崩溃）
+            tid = ""
+        out["task_id"] = tid
+        store = getattr(self, "store", None)
+        if not tid:
+            out["why"] = ("没有召唤号（不在任务上下文里）⇒ 没有「自己那一行」可写；"
+                          "副本已落，这条来历没记上")
+            return out
+        if store is None:
+            out["why"] = "没有 store ⇒ 写不了 `tasks.artifacts`"
+            return out
+        try:
+            with store.tx("tasks", actor="agent-B", note="b.open_polish_copy") as tx:
+                cur = tx.find("tasks", task_id=tid)
+                if cur is None:
+                    out["why"] = f"召唤号 {tid!r} 不在 `tasks` 表里 ⇒ 没有可写的行"
+                    return out
+                arts = list(cur.get("artifacts") or ())
+                if token in arts:
+                    out.update(checked=True, recorded=True, why="同一枚记号已经记过（幂等）")
+                    return out
+                cur["artifacts"] = S.sorted_unique(arts + [token])
+                tx.upsert("tasks", cur, note="b.open_polish_copy")
+        except Exception as exc:  # noqa: BLE001 —— 写不进去要如实说，不改复制结果
+            out["why"] = f"来源记录没写成（{type(exc).__name__}: {exc}）"
+            return out
+        out.update(checked=True, recorded=True)
+        return out
+
+
 
     # ------------------------------------------------------------------ 内部
 
@@ -164,24 +237,23 @@ class _OpenPolishCopy:
                        source_manuscript: str) -> dict[str, Any]:
         """找「这一条命题已拿签的那份稿」（源稿）；找不到 ⇒ `found=False` + 受控码。
 
-        四种证据按强度排：
+        三种证据按强度排：
 
         1. 调用方点名了 `source_manuscript` ⇒ 只认那一份，并且它必须签过
            （`vsigns.signed_manuscripts(artifact_path=…)`）；
         2. V 的颁发表里 `statement_id` 等于这条命题的签 ⇒ 它盖在哪份稿上就用哪份
            （`artifact_path` 那一格；`issue` 会写它）；
-        3. 颁发表里那些 `artifact_path` 是手稿、而签文件没记命题号（未在册那一档 ——
-           V 不假定有号，全签在稿上）⇒ 读那份稿的稿头 `- 命题号：stmt:<号>` 认领；
-        4. 这一条命题的 `statements` 行上记着 `manuscript_id` ⇒ 那份稿就是它的规范名
+        3. 这一条命题的 `statements` 行上记着 `manuscript_id` ⇒ 那份稿就是它的规范名
            （`manuscriptids.canonical_rel` 拼，不写前缀字面量），再回 V 的颁发表按
            `artifact_path` 核对「它确实签过」。这一条补的是收录之后才出现的现场：F 的
-           稿在收录时「不改名也不改稿头」（一稿一份的纪律），稿头仍是
-           `stmt:（还没落号）`，而未在册那一签的 `statement_id` 是空串 —— 于是 ②③ 都
-           够不着，只有行上那一格记得住「这条命题的稿是哪一份」。
+           稿在收录时「不改名也不改稿头」（一稿一份的纪律），未在册那一签的
+           `statement_id` 是空串 ⇒ ② 够不着，只有行上那一格记得住「这条命题的稿是
+           哪一份」。改前还有一条"读稿头 `- 命题号：` 认领"的证据 —— 业主 2026-11-13
+           裁定「稿里没有命题号，任何稿里都没有命题号」⇒ 那一条随稿头那一行删除。
 
-        三条老证据都没有、第 ④ 条也核不上 ⇒ `no_signed_manuscript`：这一条还没有签，
-        无可优化。`why` 把第 ④ 条差在哪一格分开说清（行上没记稿号 / 记了但那一份没签 /
-        那一格没查成），不折成同一句话。
+        三条证据都没有 ⇒ `no_signed_manuscript`：这一条还没有签，无可优化。`why` 把
+        第 ③ 条差在哪一格分开说清（行上没记稿号 / 记了但那一份没签 / 那一格没查成），
+        不折成同一句话。
         """
         from .. import bmanuscript as _BM
 
@@ -212,21 +284,10 @@ class _OpenPolishCopy:
             got = self._polish_source_of(root, entry, dict(out))
             if got.get("found"):
                 return got
-        # 未在册那一档：签文件里没有命题号，但稿头写着它
-        for entry in entries:
-            rel = str(entry.get("artifact_path") or "").strip().replace("\\", "/")
-            if not rel or not _MF.is_safe_relpath(rel):
-                continue
-            try:
-                text = (Path(root) / rel).read_text(encoding="utf-8")
-            except (OSError, UnicodeDecodeError):
-                continue
-            if source_head_statement_id(text) != sid:
-                continue
-            got = self._polish_source_of(root, entry, dict(out))
-            if got.get("found"):
-                return got
-        # ④ 命题行上的 `manuscript_id`（2026-11-11：收录之后 B 反而找不到那份已签的稿）
+        # 未在册那一档（签文件里没有命题号）不再按稿头认领：稿里没有命题号
+        # （业主 2026-11-13）⇒ 那一档只由下面第 ③ 条（行上 `manuscript_id` + 颁发表
+        # 核对）回答；③ 也核不上 ⇒ `no_signed_manuscript`。
+        # ③ 命题行上的 `manuscript_id`（2026-11-11：收录之后 B 反而找不到那份已签的稿）
         row_reading = self._statement_manuscript_id(sid)
         row_mid = str(row_reading.get("manuscript_id") or "")
         if row_mid:
@@ -347,3 +408,57 @@ def _strip_sign_lines(text: Any) -> tuple[str, list[str]]:
             continue
         kept.append(line)
     return "\n".join(kept), removed
+
+
+def polish_source_reading(store: Any, *, manuscript: Any = "") -> dict[str, Any]:
+    """这份稿有没有「优化副本」来源记录（`open_polish_copy` 写的那一枚）。
+
+    读口只有 `tasks.artifacts`（与 `mss:` 同一张表、同一族记号）：扫所有行，找
+    `kind=polish` 且稿号 / 路径对得上这一份的那一枚。三态：
+      · `checked=True, found=True`  ⇒ 它是优化副本，`source_manuscript_id` 是源稿号；
+      · `checked=True, found=False` ⇒ 查过，没有这份稿的记录（按"不是优化副本"处置）；
+      · `checked=False`             ⇒ 没查成（没有 store / tasks 读不出来）——
+        调用方不许把这一档折成"没有记录"再当成"不是优化副本"而不留痕。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "manuscript_id": "",
+                           "source_manuscript_id": "", "token": "", "why": ""}
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    if not rel:
+        out["why"] = "没给稿路径 ⇒ 不知道问哪一份"
+        return out
+    try:
+        from .. import vsigns as _VS
+
+        mid = str(_VS.manuscript_id_of(rel) or "")
+    except Exception:  # noqa: BLE001 —— 认不出号就只按路径匹配
+        mid = ""
+    if store is None:
+        out["why"] = "没有 store ⇒ 读不到 `tasks.artifacts`"
+        return out
+    try:
+        rows = [dict(r) for r in store.rows("tasks")]
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        out["why"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+        return out
+    out["checked"] = True
+    for row in rows:
+        for token in row.get("artifacts") or ():
+            text = str(token or "").strip()
+            if not text.startswith("mss:"):
+                continue
+            chunks = text.split("#")
+            head = chunks[0][len("mss:"):].strip()
+            fields: dict[str, str] = {}
+            for chunk in chunks[1:]:
+                key, sep, value = chunk.partition("=")
+                if sep:
+                    fields[key.strip()] = value.strip()
+            if fields.get("kind") != _OpenPolishCopy.POLISH_KIND:
+                continue
+            if (mid and head == mid) or (rel and fields.get("path") == rel):
+                out.update(found=True, manuscript_id=head, token=text,
+                           source_manuscript_id=str(fields.get("source") or ""),
+                           why="")
+                return out
+    out["why"] = "`tasks.artifacts` 里没有这份稿的优化副本来源记录"
+    return out

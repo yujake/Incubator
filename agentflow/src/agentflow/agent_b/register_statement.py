@@ -1490,6 +1490,38 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "checked": False, "model_calls": 0, "ledger_appended": False,
                 "reason": str(self.MANUSCRIPT_FORM_RELEASE_REASONS.get(fam) or ""),
             }
+        # ---- 2026-11-13（业主）：`b-proof` 的「优化副本」按来源记录放行 ----------
+        #
+        # 业主：「B 做优化表述的那一份，命题已保证在台账上审过」⇒ 收方不该再判它的
+        # `## 命题`。识别不用稿头命题号（它正在退役），用 `open_polish_copy` 写下的
+        # 事实记录（`tasks.artifacts` 里 `mss:<新稿号>#kind=polish#source=<源稿号>`）。
+        # 记录是"谁复制了谁"，不是判断；没有记录 = 按「其它手稿录入」照判。
+        if fam == "b-proof":
+            from .open_polish_copy import polish_source_reading
+
+            _polish = polish_source_reading(getattr(self, "store", None),
+                                            manuscript=rel)
+            if _polish.get("found"):
+                return {}, {
+                    "judged": False, "released": True, "family": fam,
+                    "checked": bool(_polish.get("checked")),
+                    "model_calls": 0, "ledger_appended": False,
+                    "release_basis": "polish_source",
+                    "source_manuscript_id": str(
+                        _polish.get("source_manuscript_id") or ""),
+                    "polish_token": str(_polish.get("token") or ""),
+                    "reason": ("这一份是 B 的优化副本（`open_polish_copy` 记录了来源 "
+                               f"{str(_polish.get('source_manuscript_id') or '?')}）："
+                               "命题已在台账上审过 ⇒ 放行，不判、不写形态台账、"
+                               "零次模型调用"),
+                }
+        if str(reading.get("head_statement_id") or "").strip():
+            return {}, {
+                "judged": False, "released": True, "family": fam,
+                "checked": False, "model_calls": 0, "ledger_appended": False,
+                "release_basis": "head_statement_id",
+                "reason": str(self.MANUSCRIPT_FORM_NOT_JUDGED_REASONS["head_statement_id"]),
+            }
         if str(reading.get("head_statement_id") or "").strip():
             return {}, {
                 "judged": False, "released": True, "family": fam,

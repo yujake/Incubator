@@ -34,6 +34,15 @@ FAMILY_F = "f-proof"
 #: 「已提交」记号的前缀（`tasks.artifacts` 里的一项，形态沿用 `table:id` 那一套）。
 SUBMISSION_PREFIX = "mss:"
 
+#: 「这不是一次提交、是一条来源记录」的那一档 `kind=` 取值（2026-11-13 业主裁定）。
+#:
+#: `B.open_polish_copy` 复制出一份优化副本时，会往自己那一行 `tasks.artifacts` 记
+#: `mss:<新稿号>#kind=polish#source=<源稿号>#path=<副本>#at=<时刻>`：它答的是
+#: 「这份 b-稿是从哪份已签稿复制来的」（事实），不是「这份稿被提交了」。
+#: 两者同族（都是 `mss:` 记号、同一张表），但读侧必须分得开：`submissions_of`
+#: 跳过这一档（否则优化副本会被读成"已提交"）。
+POLISH_SOURCE_KIND = "polish"
+
 #: 记号的字段分隔符（路径、sha 与 ISO 时刻都不含 `#`）。
 SUBMISSION_SEP = "#"
 
@@ -123,6 +132,9 @@ def parse_submission(token: Any) -> dict[str, Any] | None:
         "manuscript_id": mid, "token": text, "path": "", "body_sha": "",
         "sign_sha": "", "file_sha": "", "proof_no": 0, "statement_id": "",
         "at": "", "submitted_at": "", "via": "",
+        # `kind`：本模块写出的提交记号不带这一格；`kind=polish` 是
+        # `B.open_polish_copy` 的来源记录（同族、不同义，`submissions_of` 跳过它）。
+        "kind": "",
     }
     for chunk in chunks[1:]:
         key, sep, value = chunk.partition("=")
@@ -150,6 +162,11 @@ def submissions_of(artifacts: Any) -> tuple[dict[str, dict[str, Any]], list[str]
         rec = parse_submission(text)
         if rec is None:
             problems.append(f"`{text}` 不是一条可读的提交记号（`mss:<稿号>`）⇒ 跳过")
+            continue
+        # 来源记录不是提交：`B.open_polish_copy` 写的 `kind=polish` 那一档答的是
+        # "这份副本是从哪份已签稿复制来的"（事实）。把它当提交会让优化副本一出生
+        # 就被读成"已提交"（`submission_reading.state`），而它明明还没送审。
+        if str(rec.get("kind") or "") == POLISH_SOURCE_KIND:
             continue
         out.setdefault(str(rec["manuscript_id"]), rec)
     return out, problems

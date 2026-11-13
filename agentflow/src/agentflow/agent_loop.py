@@ -4555,7 +4555,10 @@ def _step_report_wording(max_steps: Any) -> str:
 
 
 def _sign_gate_entry(root: str, rel: str) -> dict[str, Any]:
-    """稿头元信息（计划号 / 命题号）的唯一读口 —— `proofregistry.parse_entry`。
+    """稿头元信息（计划号 / 标签 / 证据种类 / 版本）的唯一读口 —— `proofregistry.parse_entry`。
+
+    稿里没有命题号（业主 2026-11-13）⇒ 新写的稿不再产生那一行；本函数读到的
+    `statement_id` 只会来自盘上老稿（读兼容），不参与任何"这份稿属于哪条命题"的判断。
 
     读不出来给空 dict（不猜一个号）：那一份稿因此不会被算成「某个计划号的签稿」，
     也不会被算成「已放弃」—— 两者都会让这道门静默放行。
@@ -4643,8 +4646,19 @@ def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
         try:
             from .agent_f import delivery as _DL
 
-            srow = next((dict(r) for r in store.rows("statements")
-                         if str(r.get("stmt_id") or "") == sid), None) if sid else None
+            _rows = [dict(r) for r in store.rows("statements")]
+            srow = next((r for r in _rows
+                         if sid and str(r.get("stmt_id") or "") == sid), None)
+            # 2026-11-13（Z2）：稿头不再写命题号 ⇒ 稿↔行的对应只剩行上的
+            # `manuscript_id` / `manuscripts` 两格（`proof_receipt` 写的）。
+            # 认不出是哪一条命题时，这道门就没有"它对应的命题放没放弃"可读。
+            if srow is None and (mid or rel):
+                srow = next(
+                    (r for r in _rows
+                     if str(r.get("manuscript_id") or "") == str(mid)
+                     or rel in [str(v) for v in
+                                dict(r.get("manuscripts") or {}).values()]),
+                    None)
             abandoned = bool(srow and _DL.abandoned_of(srow).get("abandoned"))
         except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed
             out.update(checked=False, complete=False,
