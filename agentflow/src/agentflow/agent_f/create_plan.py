@@ -15,6 +15,29 @@ from ..refusals import refuse
 #: 这一个是在立项那一刻就说"别写它"。两个码说的是两件事，都不许折进对方。
 FORMAL_IS_NOT_F_TODO = "formal_is_not_f_todo"
 
+#: 一个 F 同时推进的计划上限（业主 2026-11-13 逐字）：
+#:
+#: > 「若一个F开了多plan且未finish的同时推进的大于2个（已finish或放弃的不计入该数），
+#: >   系统需拦截并给出提醒」
+#:
+#: 计数口径按业主字面（Q4 裁定）：**只有 `resolved`（finish）与 `abandoned`（放弃）不计入**，
+#: 其余一律计入 —— `stalled` / `supported_not_proved` 也占一个位置。理由：`stalled` 的
+#: 计划不该白占名额，要腾位就先把它放弃成「不再需要」（`attack.abandon_plan`）。
+#: 刻意**不**复用 `TERMINAL_STATUSES`（那四档是"不再推进"，比业主的"finish/放弃"宽）——
+#: 两者混用会让"上游把 stalled 排除在外"这条口径静默变成"stalled 不占位"。
+PLAN_CAP_TERMINAL_STATUSES: tuple[str, ...] = ("resolved", "abandoned")
+PARALLEL_PLANS_LIMIT = 2
+
+#: 拦下来时逐字给模型的提醒（业主原话；末句按业主补完「让父派其它F攻坚」）。
+PARALLEL_PLANS_LIMIT_TEXT = (
+    "同时推进的plan个数已达上限2，请先推进已有plan，"
+    "或将新plan的计划汇报父D，让父派其它F攻坚。"
+)
+
+#: 这一档的受控码（`refuse` 的 `kind`；终态落 `refused / invalid_params`）。
+PARALLEL_PLANS_LIMIT_KIND = "parallel_plans_limit"
+
+
 class _CreatePlan:
     def create_plan(
         self,
@@ -100,6 +123,34 @@ class _CreatePlan:
                     "重复立项会让同一个难题被并行攻两遍，两边的 history 互相看不见"
                 ),
             }
+
+        # ---- 并发上限（业主 2026-11-13）：一个 F 同时推进的计划不许超过 2 条 ----------
+        #
+        # 位置：判重之后、写库之前。判重命中的那一条是"同一件事已经立过项"（幂等成功），
+        # 它不开新计划 ⇒ 不吃这个上限；而上限只拦**新开 plan**，不拦推进已有 plan
+        # （推进走 `step`，与这里无关）。
+        #
+        # 分桶键是 `created_by`（= 这个 F 的归因名，见 `AgentF._plan_owner`）：业主的口径是
+        # "**一个 F** 开了多 plan"，按全体计数会把"按研究方向开多个 F"（同一批裁定的 R1）
+        # 误拦成超限。归因读不到时退回未归因桶，读数里看得出来（`created_by` 逐字可比）。
+        owner = self._plan_owner()
+        live = [dict(r) for r in self.store.rows("attack_plans")
+                if str(r.get("created_by") or "") == owner
+                and str(r.get("status") or "") not in PLAN_CAP_TERMINAL_STATUSES]
+        if len(live) >= PARALLEL_PLANS_LIMIT:
+            ids = "、".join(str(r.get("plan_id") or "") for r in live)
+            msg = (f"拒绝创建：{PARALLEL_PLANS_LIMIT_TEXT}"
+                   f"（你名下在推的计划已有 {len(live)} 条：{ids}。"
+                   "「已 finish / 已放弃」的不计入，「stalled」计入 —— 要腾位就先把它放弃成"
+                   "「不再需要」（`attack.abandon_plan`））")
+            return refuse(
+                PARALLEL_PLANS_LIMIT_KIND, msg,
+                # `reason` 这一键既有调用方与既有判据在读：统一形态不许把它们的读数弄丢。
+                reason=msg,
+                created=False, plan_id=None, duplicate=False,
+                status="", subgoal_id="", subgoals=len(list(subgoals or ())),
+                missing=[], budget=dict(budget or {}),
+            )
 
         goal_rows = [self._normalize_subgoal(s, i) for i, s in enumerate(subgoals or [])]
         # ---- 形式化那一档在 F 这里不许立项（业主 2026-10-27：「我们现在不准边研究边 lean，
@@ -198,7 +249,9 @@ class _CreatePlan:
                     best_partial="",
                     created_at=self._stamp(),
                     updated_at=self._stamp(),
-                    created_by=self.actor,
+                    # 归因名（`agent-F` 或 `agent-F-<名册名>`）：它是并发上限的分桶键，
+                    # 也是"这一条计划属于哪个 F"的唯一读数。见 `AgentF._plan_owner`。
+                    created_by=owner,
                 )
                 # 早炸：非法子目标/深度/预算在写入前就会被拒，事务里什么都留不下。
                 row.validate()

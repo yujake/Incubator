@@ -708,6 +708,58 @@ class _Core:
 
     def _stamp(self) -> str:
         return S.now_iso()
+
+    #: 未归因的 actor（`host._actor_for` 在没给实例标签时给的就是这个）。计划归属
+    #: 只在 `self.actor` 恰好是它时才去补全 —— 否则装配期已经折进来的实例标签优先。
+    DEFAULT_ACTOR: str = "agent-F"
+
+    def _plan_owner(self) -> str:
+        """这一笔计划该记在哪个 F 名下（`attack_plans.created_by`，也是并发上限的分桶键）。
+
+        ## 为什么不能直接把 `self.actor` 写进 `created_by`
+        业主 2026-11-13 的口径是"**一个 F** 同时推进的 plan 不超过 2 条"。而 `self.actor`
+        在真机路径上有两种取值：装配期由 `host._actor_for(role, instance)` 生成
+        `agent-<role>-<instance>`（给了实例标签时），或者退回默认的 `agent-F`
+        （没给时）。默认那一档下，**所有** F 实例的计划都写同一个 `created_by`
+        ⇒ "一个 F 开了几条"在盘上分不开，上限就只能按全体计数（那会把"按研究方向
+        开多个 F"判成超限 —— 与业主同一批裁定的 R1 直接打架）。
+
+        ## 补全只做一件事：拿当前召唤号问名册名（读不到就不编）
+        两条执行路径都把台账号挂在 ContextVar 上：conductor 调角色动作
+        （`LocalBackend.call` 的 `_CURRENT_TASK_ID`）与循环里的工具调用
+        （`AgentLoop._do_tool` 的 `calling_as`）。名册名是"这个 F 是谁"的唯一权威
+        读法（`Secretary.name_of` —— `conductor._roster_name_of` 也转交给它，
+        不另写一份）。读到就拼成 `agent-F-<名>`（与 `host._actor_for` 逐字同形），
+        读不到（名册没写成 / 脚本直调 / 单测）⇒ **原样** `self.actor`，绝不编一个名字。
+        """
+        actor = str(self.actor or "")
+        if actor != self.DEFAULT_ACTOR:
+            return actor
+        try:
+            from .. import conductor as _C
+
+            tid = str(_C.current_task_id() or "")
+        except Exception:  # noqa: BLE001 —— 读不到上下文 ⇒ 保持未归因（不编名字）
+            return actor
+        if not tid:
+            return actor
+        row: dict | None = None
+        try:
+            row = next((dict(r) for r in self.store.rows("tasks")
+                        if str(r.get("task_id") or "") == tid), None)
+        except Exception:  # noqa: BLE001 —— 台账读不出来 ⇒ 同上
+            return actor
+        parent = str((row or {}).get("parent_task_id") or "")
+        try:
+            from .. import secretary as _SEC
+
+            name, _why = _SEC.Secretary("F", root=self.store.root).name_of(
+                owner=parent, task_id=tid)
+        except Exception:  # noqa: BLE001 —— 同上
+            return actor
+        name = str(name or "").strip()
+        return f"agent-F-{name}" if name else actor
+
     @property
     def e(self) -> Any:
         """E 的惰性实例。

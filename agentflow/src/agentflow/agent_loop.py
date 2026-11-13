@@ -12003,6 +12003,16 @@ class AgentLoop:
         brief_arg = str(payload.get("brief") or "")
         name_arg = str(payload.get("name") or "")
         reuse_arg = str(payload.get("reuse") or "")
+        # ---- 实例标签（业主 2026-11-13 裁定 Q3）：点名要的那个 F 名就是它的实例标签。
+        #
+        # 为什么必须传下去：`attack_plans.created_by` 由角色的 `actor` 填，而 `actor`
+        # 在装配期由 `host._actor_for(role, instance)` 生成 `agent-<role>-<instance>`
+        # —— `instance` 空着时全部实例都写同一个 `agent-F`，"一个 F 开了几条计划"
+        # 在盘上就分不开（并发上限按 `created_by` 分桶，见 `agent_f/create_plan.py`）。
+        # `reuse="F1"` 是"同一个 F 再接一件活"：它同样是那个实例的名字，所以也带上。
+        # 没点名（全新、名字由秘书发号）时留空 —— 那一路由 `AgentF._plan_owner`
+        # 用台账号现查名册名补全（同一个格式，不编名字）。
+        instance_arg = str(name_arg or reuse_arg or "")
         out: dict[str, Any] = {"summoned": role, "action": ""}   # 派活不点动作（S2 最终形态）
         if self.conductor is None:
             out.update(ok=False, error="本次运行没有接线主控（summon 不可用）")
@@ -12047,7 +12057,8 @@ class AgentLoop:
                     # 名册登记的材料（登记发生在 `summon_begin` 的 [5b]：
                     # 子行落盘之后、子代理跑起来之前）。
                     roster={"brief": brief_arg, "task": task_arg,
-                            "name": name_arg, "reuse": reuse_arg})
+                            "name": name_arg, "reuse": reuse_arg},
+                    instance=instance_arg)
                 rec = self._register_child_handle(handle, kind="summon", calls=[])
                 # 等"它回来"或"有时钟唤醒到点"，最多 `child_step_wait_sec`。
                 # 走 `_wait_for_children` 而不是 `handle.wait`：一条 180 秒的等待
@@ -12110,7 +12121,8 @@ class AgentLoop:
                                             # 名册登记的材料（登记发生在 `Conductor.summon`
                                             # 的 [5b]：子行落盘之后、子代理跑起来之前）。
                                             roster={"brief": brief_arg, "task": task_arg,
-                                                    "name": name_arg, "reuse": reuse_arg})
+                                                    "name": name_arg, "reuse": reuse_arg},
+                                            instance=instance_arg)
         except Exception as exc:
             out.update(ok=False, error=f"{type(exc).__name__}: {exc}")
             return out
