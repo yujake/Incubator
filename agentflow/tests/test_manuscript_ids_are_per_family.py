@@ -144,9 +144,14 @@ def test_b_the_b_manuscript_is_named_by_the_b_counter(tmp_path) -> None:
     rel_b = str(second.get("path") or "")
     assert str(second.get("manuscript_id") or "") == "000001", second
     assert rel_b == MID.canonical_rel("000001", family=B_FAMILY), second
-    # 稿与命题的对应关系在稿头那一行（不是名字里的数字）
+    # 稿与命题的对应关系在 `statements` 行的逐路径记录（`manuscripts`），不在稿头：
+    # 业主 2026-11-13「稿里没有命题号，任何稿里都没有命题号」⇒ 稿头那一行不再写。
+    from agentflow import bmanuscript as _BM_READ
+
     text = (pathlib.Path(st.root) / rel_a).read_text(encoding="utf-8")
-    assert "- 命题号：stmt:000005" in text, text.split("\n")[:6]
+    assert "- 命题号：" not in text, text.split("\n")[:6]
+    found = _BM_READ.manuscript_id_for_statement(st.root, "000005", store=st)
+    assert found.get("found") is True and found.get("path") == rel_a, found
     # 同一命题再落一版 ⇒ 就地改它自己那份，不新开第二份
     again = b.land_manuscript(statement_id="000005", proof_text="甲的证明（第二版）。")
     assert again.get("ok") is True, again

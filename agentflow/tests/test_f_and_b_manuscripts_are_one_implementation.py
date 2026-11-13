@@ -126,7 +126,6 @@ def _draft(*, dep_table: str = DEP_TABLE, washed: bool = True,
            title_role: str = "F") -> str:
     text = (
         f"# {title_role} 的证明手稿：判据夹具\n\n"
-        "- 命题号：stmt:（还没落号）\n"
         f"- 计划：{PLAN} · 子目标：{SGID}\n\n"
         "## 命题\n\n"
         f"{PROPOSITION}\n\n"
@@ -169,8 +168,8 @@ def _product() -> dict:
 
 def _f_text(st: Store) -> str:
     f = AgentF(st, config={"workspace_root": st.root})
-    # 2026-11-10：F 的稿按自己的稿号命名（不传命题号）。命题号由 B 收录时现取，
-    # 所以 F 这一份的稿头是 `- 命题号：stmt:（还没落号）` —— 那正是这一轮的真实形态。
+    # 2026-11-10：F 的稿按自己的稿号命名（不传命题号）。业主 2026-11-13：稿里没有
+    # 命题号 ⇒ 这一份的页头只有 `- 计划：`，没有 `- 命题号：` 那一行。
     got = f.proof_manuscript(
         _product(), sg={"sid": SGID, "text": PROPOSITION, "testable": ""},
         plan={"plan_id": PLAN}, manuscript_id=MID,
@@ -180,15 +179,12 @@ def _f_text(st: Store) -> str:
 
 
 def _number_normalized(text: str) -> str:
-    """把页头 `- 命题号：` 那一行抹成同一个占位：F 的稿在收录前还没有命题号。
+    """两族页头的归一：业主 2026-11-13 起稿里没有 `- 命题号：` 那一行 ⇒ 无号可抹。
 
-    两族比的是"同一段渲染骨架"；稿头那一格按新口径本来就可以不同（F 的稿号与命题号
-    是两件事），把它当差异会让这条判据量错对象。
+    保留这个入口只为调用点不必改：它现在等价于 `_role_normalized`（这也正是判据要的
+    "两稿除角色名外逐字相同"）。另有一条反向断言（两稿都没有 `- 命题号：`）。
     """
-    import re
-
-    body = _role_normalized(text)
-    return re.sub(r"^- 命题号：.*$", "- 命题号：stmt:<号>", body, flags=re.M)
+    return _role_normalized(text)
 
 
 def _role_normalized(text: str) -> str:
@@ -229,8 +225,9 @@ def test_a_the_two_families_land_the_same_manuscript(tmp_path: pathlib.Path) -> 
     # 骨架顺序也是同一条（不是"两稿刚好都含这三节"）。
     for text in (f_text, b_text):
         assert text.index("## 命题") < text.index("## 证明") < text.index("## 依赖"), text
-    assert f"- 命题号：stmt:{SID}" in b_text, b_text
-    assert f"- 命题号：stmt:{SID}" not in f_text, f_text
+    # 业主 2026-11-13：稿里没有命题号 ⇒ 两族新写的稿都没有这一行（反向断言）。
+    assert "- 命题号：" not in b_text, b_text
+    assert "- 命题号：" not in f_text, f_text
     # 洗稿行由同一段代码产出、落在同一个位置（`- 计划：` 的下一行）。
     rows = [{"stmt_id": DEP, "quote": "由定理甲", "step": "第 1 步",
              "path_group": 1}]
@@ -364,7 +361,6 @@ def test_c_the_sign_block_moves_for_both_families(tmp_path: pathlib.Path) -> Non
     st3 = _ws(tmp_path / "B-retitle")
     target3 = f"reports/b-proof-{SID}.md"
     old_title = ("# B 的证明手稿：旧标题\n\n"
-                 f"- 命题号：stmt:{SID}\n\n"
                  "## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + PROOF_TEXT
                  # 2026-11-05：这里原来用空表，而 PROOF_TEXT 的正文点了 `stmt:{DEP}`
                  # —— 那正是缺陷甲的形态（正文引了、表里没写）。现在它会被
@@ -517,7 +513,7 @@ def test_f_the_five_refusal_codes_are_shared(tmp_path: pathlib.Path) -> None:
     assert MF.detail(MF.NO_PROOF_SECTION) == dict(fout2.get("problem") or {}).get("why")
 
     # dependency_section_missing：正文里有引用、而稿里没有那一节 ⇒ 两族同一个码。
-    no_dep = ("# F 的证明手稿：判据夹具\n\n- 命题号：stmt:（还没落号）\n\n"
+    no_dep = ("# F 的证明手稿：判据夹具\n\n"
               "## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + PROOF_TEXT + "\n")
     st_f3 = _ws(tmp_path / "nodep-f")
     _write(st_f3, "notes/nd.md", DS.mark_washed(no_dep, actor="secretary-F"))
@@ -566,18 +562,17 @@ def test_e_there_is_no_second_implementation_to_come_back() -> None:
             defs = _module_defs(path)
         except SyntaxError:  # pragma: no cover - 源码树里不该有语法错
             continue
-        for name in ("carry_sign_block", "ensure_statement_line",
-                     "formal_shape_problem", "parse_manuscript_name"):
+        for name in ("carry_sign_block", "formal_shape_problem",
+                     "parse_manuscript_name"):
             if name in defs:
                 defined.setdefault(name, []).append(str(path.relative_to(root)))
     assert defined["carry_sign_block"] == ["manuscriptform.py"], defined
-    assert defined["ensure_statement_line"] == ["manuscriptform.py"], defined
     assert defined["formal_shape_problem"] == ["manuscriptform.py"], defined
     assert defined["parse_manuscript_name"] == ["vsigns.py"], defined
     # 2. 旧模块里没有自己的正则 / 渲染体：只许剩下对唯一实现的转发。
     af_defs = _module_defs(af)
     bm_defs = _module_defs(bm)
-    for name in ("carry_sign_block", "ensure_statement_line", "formal_shape_problem"):
+    for name in ("carry_sign_block", "formal_shape_problem"):
         assert name not in af_defs, (
             f"`agent_f/manuscript.py` 里又出现了第二份 `{name}`（应只从 manuscriptform 转发）")
     assert "render" in bm_defs, bm_defs.keys()
@@ -725,8 +720,11 @@ def test_a2_the_real_entries_land_the_same_manuscript(tmp_path: pathlib.Path) ->
         f"{f_unsigned}\n--- B ---\n{b_text}")
     # 三行页头与三节都在（改前 B 缺 `- 计划：` / 洗稿行、多 `- 标签：`）。
     # 2026-11-11 业主裁定：`- 证明号：` 在手稿产出侧退役 ⇒ 两族新写的稿都没有这一行。
-    for mark in ("- 命题号：stmt:", "- 计划：", "- 依赖面洗稿："):
+    # 2026-11-13 业主裁定：稿里没有命题号 ⇒ 两族新写的稿也都没有 `- 命题号：`。
+    for mark in ("- 计划：", "- 依赖面洗稿："):
         assert mark in b_text, (mark, b_text.split("\n")[:8])
+    assert "- 命题号：" not in b_text, b_text.split("\n")[:8]
+    assert "- 命题号：" not in f_unsigned, f_unsigned.split("\n")[:8]
     assert "- 证明号：" not in b_text, b_text.split("\n")[:8]
     assert "- 证明号：" not in f_unsigned, f_unsigned.split("\n")[:8]
     assert "- 标签：" not in b_text, b_text.split("\n")[:8]

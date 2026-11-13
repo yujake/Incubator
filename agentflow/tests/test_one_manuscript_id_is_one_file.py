@@ -128,7 +128,8 @@ def test_a_three_submissions_stay_in_one_file(tmp_path: pathlib.Path) -> None:
     text = (root / paths[0]).read_text(encoding="utf-8")
     head = _header(text)
     assert "- 证明号：" not in text, ("新写的稿不该再有这一行", head)
-    assert head.get("- 命题号：") == "stmt:（还没落号）", head
+    # 业主 2026-11-13：稿里没有命题号 ⇒ 新写的稿也没有 `- 命题号：` 那一行。
+    assert "- 命题号：" not in text, ("新写的稿不该再有这一行", head)
 
     # 正文确实换了（三次不同），但仍是同一份文件
     assert "v3" in text, "最后一次改正文的标记应当在这份文件里"
@@ -149,7 +150,7 @@ def test_c_restoring_the_proof_no_line_turns_a_red(
     def _with_the_retired_line(*args, **kw):  # noqa: ANN002, ANN003 - 打桩
         text = real(*args, **kw)
         lines = text.split("\n")
-        at = next(i for i, line in enumerate(lines) if line.startswith("- 命题号："))
+        at = next(i for i, line in enumerate(lines) if line.startswith("# "))
         lines.insert(at + 1, "- 证明号：1")   # 改前的渲染（业主 2026-11-11 已作废）
         return "\n".join(lines)
 

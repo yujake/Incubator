@@ -553,40 +553,24 @@ def test_d_carries_the_f_manuscript_and_b_reads_it(tmp_path: pathlib.Path,
 
 def test_a_cited_statements_carried_manuscript_does_not_lend_its_number(
         tmp_path: pathlib.Path, monkeypatch) -> None:
-    """反真空（候选号）：把"被引命题的稿不是本笔自己的稿"摘掉 ⇒ 又撞 000002。
+    """候选号不再来自稿（业主 2026-11-13：稿里没有命题号，任何稿里都没有命题号）。
 
-    D 的携带单里那份稿属于 F 的在册命题（稿头 `stmt:<F 的号>`），它是「被引命题」
-    的依赖面来源，不是这一笔要登记的新命题的稿。候选号只许来自"本笔自己的稿"：
-    把那条判据打桩成恒 False（= 摘掉）之后，同一条链必须回到
-    `stmt_id_taken`（000002 已被 F 的命题占用）—— 那正是修前的红。
+    改前这一条打桩的是 `_manuscript_belongs_to_a_cited_statement`：它靠稿头那一行
+    `- 命题号：stmt:<号>` 认出"这份稿是被引命题的稿"，拦住"把被引的号借给本笔"。
+    稿头那一行删掉之后，这个读口与被读的那一行一起退役 ⇒ 判据变成结构性的：
+    候选号只由秘书在收录事务里分配，稿名里的号（产出侧自己的号段）永远不进候选。
+
+    这一条守的是"读口不许回潮"：源码里再出现 `manuscript_statement_id` /
+    `_manuscript_belongs_to_a_cited_statement` / `manuscript_head` 就红。
     """
-    store = _ws(tmp_path)
-    _library(store)
-    out = _run_proof_round(store, [f"stmt:{THEOREM_A}"])
-    f_stmt = str(out["statement_id"])
-    # 2026-11-10（夹具归一，老盘形态）：解耦之前 F 会把在册命题号写进稿头
-    # （`- 命题号：stmt:<号>`）；新口径不再写（稿号就是稿的身份）。这一条量的正是
-    # 「老盘上那种写着被引命题号的稿，不许把那个号借给本笔」—— 把那一行按老盘形态
-    # 补回去，判据（`_manuscript_belongs_to_a_cited_statement`）才有输入。
-    # 不补它，候选号两边都为空，打桩与不打桩读数相同（反真空会空转）。
-    from agentflow import manuscriptform as _MF_FIX
+    import inspect
 
-    _rel_fix = str(out["manuscript_path"])
-    _path_fix = pathlib.Path(store.root) / _rel_fix
-    _old_fix = _path_fix.read_text(encoding="utf-8")
-    _new_fix, _applied_fix = _MF_FIX.ensure_statement_line(_old_fix, f_stmt)
-    assert _applied_fix is True, (_old_fix[:300], f_stmt)
-    _path_fix.write_text(_new_fix, encoding="utf-8")
-    _d_report(store)
-    body = f"1. 由 F 的证明手稿直接得到结论（见 stmt:{f_stmt}）。"
-    sign_before_registration(store.root, proof_text=body)
-    monkeypatch.setattr(RS, "_manuscript_belongs_to_a_cited_statement",
-                        lambda **kw: False, raising=False)
-    got = _register(store,
-                    statement_full="定理：D 的研究手稿引用了 F 的证明手稿（反真空）。",
-                    proof_text=body, derived_from=[f_stmt])
-    assert got.get("ok") is False, got
-    assert got.get("kind") == "stmt_id_taken", got
+    from agentflow.agent_b import register_statement as _RS_MOD
+
+    src = inspect.getsource(_RS_MOD)
+    assert "manuscript_statement_id" not in src, "从稿头读命题号的读口又回来了"
+    assert "_manuscript_belongs_to_a_cited_statement" not in src, "候选号读口又回来了"
+    assert "manuscript_head" not in src, "候选号来源又指回稿头了"
 
 
 def test_the_delivery_really_hands_the_manuscript_to_b(tmp_path: pathlib.Path,
@@ -729,7 +713,7 @@ def test_a_rows_own_numbered_manuscript_is_read_for_its_dependency_face(
     body = f"1. 由定理甲直接得到结论（见 stmt:{THEOREM_A}）。"
     rel = f"{MANUSCRIPT_DIR}/f-proof-{sid}.md"
     text = (
-        f"# F 的证明手稿：自己的按号稿\n\n- 命题号：stmt:{sid}\n\n"
+        f"# F 的证明手稿：自己的按号稿\n\n"
         "## 命题\n\n" + full + "\n\n## 证明\n\n" + body + "\n\n"
         + _DEP_TABLE.format(quote="由定理甲，G 有 p 阶元", sid=THEOREM_A))
     text = DS.mark_washed(text, actor="secretary-F")
@@ -1015,7 +999,6 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     _dep_rows = DS.parse_dependency_section(text).get("rows") or []
     _b_man.write_text(
         "# F 的证明手稿（整条链夹具）\n\n"
-        f"- 命题号：stmt:{b_stmt}\n\n"
         f"## 命题\n\n定理：研究手稿引用了 F 的证明手稿（整条链）。\n\n"
         f"## 证明\n\n{PROOF_BODY}\n\n"
         + DS.render_dependency_section(_dep_rows),
@@ -1253,7 +1236,6 @@ def _plan_named_manuscript() -> str:
     """F 在拿到命题号之前写的那一份稿（页头 + 命题 + 证明 + 依赖三列，且已洗过）。"""
     text = (
         "# F 的证明手稿：由定理甲推出目标结论（判据夹具）\n\n"
-        "- 命题号：stmt:（还没落号）\n"
         "- 计划：000009 · 子目标：L1\n\n"
         "## 命题\n\n"
         "由定理甲推出目标结论。\n\n"

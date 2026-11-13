@@ -36,7 +36,6 @@ def write_proof_manuscript(root: Any, statement_id: str, proof_text: str, *,
     path = Path(root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     text = ("# 证明手稿（夹具）\n\n"
-            f"- 命题号：stmt:{statement_id}\n\n"
             f"## 命题\n\n{statement_full or '（夹具命题）'}\n\n"
             f"## 证明\n\n{proof_text}\n\n"
             + _DS.render_dependency_section(list(deps_rows)))

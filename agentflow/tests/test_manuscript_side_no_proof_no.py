@@ -234,7 +234,7 @@ def test_d_an_old_manuscript_header_line_still_reads(tmp_path: pathlib.Path) -> 
     st = _ws(tmp_path)
     rel = "reports/f-proof-000012.md"
     text = ("# F 的证明手稿：老盘的第二份证明\n\n"
-            "- 命题号：stmt:（还没落号）\n- 计划：000004 · 子目标：S1\n"
+            "- 计划：000004 · 子目标：S1\n"
             "- 证明号：2\n\n## 命题\n\n老盘那一份的命题。\n\n"
             "## 证明\n\n" + PROOF + "\n\n" + _DS.render_dependency_section([]))
     target = pathlib.Path(st.root) / rel
@@ -270,7 +270,7 @@ def test_e_putting_the_retired_cells_back_turns_a_and_b_red(
     def _with_the_retired_line(*args, **kwargs):  # noqa: ANN002, ANN003 - 打桩
         out = real(*args, **kwargs)
         lines = out.split("\n")
-        at = next(i for i, line in enumerate(lines) if line.startswith("- 命题号："))
+        at = next(i for i, line in enumerate(lines) if line.startswith("# "))
         lines.insert(at + 1, "- 证明号：1")   # 改前的页头（业主 2026-11-11 已作废）
         return "\n".join(lines)
 
