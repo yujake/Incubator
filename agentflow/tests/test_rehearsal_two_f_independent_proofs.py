@@ -326,7 +326,7 @@ def _manuscript(sid: str, proof: str) -> str:
     """一份三节稿：`## 命题` / `## 证明` / `## 依赖`（依赖段只写三列）。"""
     deps = ("| 引用 | 命题号 | 步 |\n|---|---|---|\n"
             f"| 引理：p 阶元的存在性 | stmt:{DEP_SID} | 1 |\n")
-    head = ("# F 的证明手稿\n\n" + (f"- 命题号：stmt:{sid}\n" if sid else "")
+    head = ("# F 的证明手稿\n\n" + (f"" if sid else "")
             + f"- 命题键：{PROPOSITION}\n")
     return (head + "\n## 命题\n\n" + PROPOSITION + "\n\n## 证明\n\n" + proof
             + "\n\n## 依赖\n\n" + deps)

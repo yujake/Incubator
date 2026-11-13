@@ -177,7 +177,7 @@ def _manuscript(st: Store, sid: str, body: str = PROOF) -> str:
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# 证明手稿\n\n- 命题号：stmt:{sid}\n\n"
+        f"# 证明手稿\n\n\n"
         f"## 命题\n\n{S_WITH_PROOF}\n\n"
         f"## 证明\n\n{body}\n\n" + DS.render_dependency_section([]),
         encoding="utf-8")

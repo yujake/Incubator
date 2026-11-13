@@ -109,7 +109,7 @@ def _land_f_manuscript(root: pathlib.Path, *, sid: str = "000001",
     返回 `(工作区相对路径, 文件字节的 sha256)` —— 后者就是携带单要转载的那一格。
     """
     rel = f"reports/f-proof-{sid}.md"
-    text = (f"# F 的证明手稿\n\n- 命题号：stmt:{sid}\n\n"
+    text = (f"# F 的证明手稿\n\n\n"
             f"## 命题\n\n命题 {sid} 的完整正文（含假设）。\n\n"
             f"## 证明\n\n{body}\n\n"
             "## 依赖\n\n"

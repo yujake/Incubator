@@ -120,7 +120,7 @@ def _folded(root: pathlib.Path, reply: str) -> dict:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"# 证明手稿（夹具）\n\n\n"
         f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
         + _DS.render_dependency_section([]),
         encoding="utf-8")
@@ -188,7 +188,7 @@ def test_s2_i_cannot_judge_stays_a_statement_and_is_not_signed(tmp_path):
     path2 = other / rel2
     path2.parent.mkdir(parents=True, exist_ok=True)
     path2.write_text(
-        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"# 证明手稿（夹具）\n\n\n"
         f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
         + _DS2.render_dependency_section([]),
         encoding="utf-8")

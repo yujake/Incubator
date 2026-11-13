@@ -280,7 +280,6 @@ def test_c_b_catches_an_unregistered_sign_without_proof_no(tmp_path):
     st = _ws(tmp_path)
     # ---- F 交卷：一份未在册的三节手稿（`reports/f-proof-000000.md`）----
     bman = ("# F 的证明手稿：一致连续\n\n"
-            "- 命题号：stmt:（还没落号）\n\n"
             "## 命题\n\n"
             f"{FULL}\n\n"
             "## 证明\n\n"

@@ -56,7 +56,6 @@ def _task(st: Store, *, task_id: str = "t-000001", role: str = "E") -> dict:
 
 def _e_text(body: str) -> str:
     return ("# E 的证明手稿：一致连续\n\n"
-            "- 命题号：stmt:（还没落号）\n"
             "- 实验号：exp:000001\n\n"
             f"## 命题\n\n{FULL}\n\n## 证明\n\n{body}\n\n"
             + DS.render_dependency_section([]))

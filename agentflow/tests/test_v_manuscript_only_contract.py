@@ -45,7 +45,7 @@ def _manuscript(st: Store, *, proof: str, full: str) -> str:
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# 证明手稿\n\n- 命题号：stmt:000000\n\n## 命题\n\n{full}\n\n"
+        f"# 证明手稿\n\n\n## 命题\n\n{full}\n\n"
         f"## 证明\n\n{proof}\n\n" + DS.render_dependency_section([]),
         encoding="utf-8")
     return rel
@@ -181,7 +181,7 @@ def test_citation_material_comes_from_the_manuscripts(tmp_path: pathlib.Path) ->
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        "# 证明手稿\n\n- 命题号：stmt:000000\n\n## 命题\n\n主命题。\n\n"
+        "# 证明手稿\n\n\n## 命题\n\n主命题。\n\n"
         "## 证明\n\n1. 由 stmt:000001 得结论（依据：stmt:000001）。\n\n"
         + DS.render_dependency_section([
             {"quote": "由引理，条件成立", "stmt_id": "000001", "step": "第 1 步",
@@ -191,7 +191,7 @@ def test_citation_material_comes_from_the_manuscripts(tmp_path: pathlib.Path) ->
     lemma_rel = "reports/f-proof-000001.md"
     lemma_body = "1. 引理的证明。"
     (pathlib.Path(st.root) / lemma_rel).write_text(
-        "# 引理手稿\n\n- 命题号：stmt:000001\n\n## 命题\n\n引理正文。\n\n"
+        "# 引理手稿\n\n\n## 命题\n\n引理正文。\n\n"
         f"## 证明\n\n{lemma_body}\n\n" + DS.render_dependency_section([]),
         encoding="utf-8")
     raw = (pathlib.Path(st.root) / lemma_rel).read_text(encoding="utf-8")
@@ -246,7 +246,7 @@ def test_dependency_audit_admits_by_manuscript_sign_not_by_statements_bits(
         path = pathlib.Path(st.root) / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            f"# 证明手稿\n\n- 命题号：stmt:{main}\n\n## 命题\n\n主命题（依赖面夹具）。\n\n"
+            f"# 证明手稿\n\n\n## 命题\n\n主命题（依赖面夹具）。\n\n"
             f"## 证明\n\n{body}\n\n"
             + DS.render_dependency_section([
                 {"quote": "由引理得结论", "stmt_id": lemma, "step": "第 1 步",
@@ -276,7 +276,7 @@ def test_dependency_audit_admits_by_manuscript_sign_not_by_statements_bits(
     st, rel, _ = _scene("unsigned")
     lemma_rel = "reports/f-proof-000002.md"
     (pathlib.Path(st.root) / lemma_rel).write_text(
-        "# 引理手稿\n\n- 命题号：stmt:000002\n\n## 命题\n\n引理正文。\n\n"
+        "# 引理手稿\n\n\n## 命题\n\n引理正文。\n\n"
         "## 证明\n\n1. 引理的证明。\n\n" + DS.render_dependency_section([]),
         encoding="utf-8")
     v = AgentV(st, workspace_root=st.root, llm=_Seam())

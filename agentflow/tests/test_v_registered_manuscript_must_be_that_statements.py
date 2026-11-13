@@ -96,7 +96,6 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 def _manuscript(*, proof: str = PROOF, statement_id: str = SID) -> str:
     """三节齐全的 F 稿（稿头写「还没落号」那一档：F 的稿本来没有命题号）。"""
     return ("# F 的证明手稿：一致连续\n\n"
-            f"- 命题号：stmt:{statement_id}\n- 计划：0000\n\n"
             "## 命题\n\n" + FULL + "\n\n## 证明\n\n" + proof + "\n\n"
             + DS.render_dependency_section([]) + "\n")
 
@@ -404,7 +403,6 @@ def _cited_manuscript_with_a_real_sign(st: Store, *, mid: str) -> str:
     """
     rel = f"reports/f-proof-{mid}.md"
     text = ("# F 的证明手稿（被引命题）\n\n"
-            f"- 命题号：stmt:{CITED}\n\n"
             "## 命题\n\n" + CITED_FULL + "\n\n"
             "## 证明\n\n" + CITED_PROOF + "\n\n"
             + DS.render_dependency_section([]) + "\n")
@@ -433,7 +431,6 @@ def _target_manuscript_citing(*, proof: str = "") -> str:
             "|---|---|---|---|\n"
             f"| 引理乙 | stmt:{CITED} | 1 | 1 |\n")
     return ("# F 的证明手稿：定理甲\n\n"
-            f"- 命题号：stmt:{SID}\n\n"
             "## 命题\n\n" + FULL + "\n\n"
             "## 证明\n\n" + proof + "\n\n## 依赖\n\n" + deps)
 

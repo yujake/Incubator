@@ -99,17 +99,17 @@ def _text(*, head: str, claim: str, body: str) -> str:
 
 
 def _f_text() -> str:
-    return _text(head=f"- 命题号：stmt:（还没落号）\n- 计划：{PLAN}",
+    return _text(head=f"- 计划：{PLAN}",
                  claim=F_CLAIM, body=F_BODY)
 
 
 def _e_text() -> str:
-    return _text(head=f"- 命题号：stmt:（还没落号）\n- 实验号：exp:{E_MID}",
+    return _text(head=f"- 实验号：exp:{E_MID}",
                  claim=E_CLAIM, body=E_BODY)
 
 
 def _b_text() -> str:
-    return _text(head=f"- 命题号：stmt:{B_MID}", claim=B_CLAIM, body=B_BODY)
+    return _text(head="", claim=B_CLAIM, body=B_BODY)
 
 
 def _write(st: Store, rel: str, text: str) -> str:

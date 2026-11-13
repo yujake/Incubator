@@ -167,7 +167,6 @@ def _citation(st: Store, seam: _Seam, *, text: str = NOTE,
 
 def _manuscript(proposition: str = NOTE) -> str:
     head = ("# F 的证明手稿：按 V u-000005 的唯一缺陷修订第 7 步\n\n"
-            "- 命题号：stmt:（还没落号）\n"
             "- 计划：000002 · 子目标：S4\n"
             "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n")
     return (head + "## 命题\n\n" + proposition + "\n\n"

@@ -57,7 +57,7 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 def _manuscript(st: Store, proof: str = PROOF, *, full: str = FULL) -> str:
     path = pathlib.Path(st.root) / REL
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = (f"# 证明手稿\n\n- 命题号：stmt:{SID}\n\n"
+    text = (f"# 证明手稿\n\n\n"
             f"## 命题\n\n{full}\n\n"
             f"## 证明\n\n{proof}\n\n" + DS.render_dependency_section([]))
     path.write_text(text, encoding="utf-8")

@@ -169,7 +169,6 @@ def _cited_manuscript_with_a_real_sign(store: Store, stmt_id: str, *, label: str
     full = f"命题 {stmt_id} 的完整正文（含假设）。"
     rel = f"reports/f-proof-{stmt_id}.md"
     text = ("# F 的证明手稿（判据夹具：被引命题）\n\n"
-            f"- 命题号：stmt:{stmt_id}\n"
             "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
             f"## 命题\n\n{full}\n\n"
             f"## 证明\n\n{body}\n\n"

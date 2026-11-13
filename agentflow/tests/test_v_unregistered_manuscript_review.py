@@ -66,7 +66,6 @@ REJECT_REPLY = json.dumps({"verdict": "有毛病", "defect_step": 2,
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 #: 与 `agent_f/manuscript.py::proof_manuscript` 同一个形状（V 只读 `## 证明` 那一节）。
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
-              "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
               "## 命题\n\n"
               f"{FULL}\n\n"

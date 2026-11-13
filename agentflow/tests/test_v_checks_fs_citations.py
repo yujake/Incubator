@@ -219,7 +219,6 @@ def _write_named_manuscript(store: Store, main: str, manuscript_id: str,
     """
     rel = f"reports/f-proof-{manuscript_id}.md"
     text = ("# 证明手稿（夹具）\n\n"
-            f"- 命题号：stmt:{main}\n\n"
             f"## 命题\n\n{MAIN_FULL}\n\n"
             f"## 证明\n\n{proof}\n\n"
             + _DS.render_dependency_section(deps_rows))

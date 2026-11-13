@@ -118,7 +118,7 @@ def _run(tmp_path: pathlib.Path, secretary) -> dict:
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"# 证明手稿（夹具）\n\n\n"
         f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
         + _DS.render_dependency_section([]),
         encoding="utf-8")
@@ -233,7 +233,7 @@ def test_j_a_secretary_fault_fills_the_step_when_v_omits_it(tmp_path):
     path = root / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# 证明手稿（夹具）\n\n- 命题号：stmt:{SID}\n\n"
+        f"# 证明手稿（夹具）\n\n\n"
         f"## 命题\n\n（夹具命题）\n\n## 证明\n\n{PROOF}\n\n"
         + _DS.render_dependency_section([]),
         encoding="utf-8")
