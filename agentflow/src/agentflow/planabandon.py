@@ -5,7 +5,7 @@
 
 > 「F 应该有新的放弃理由为不再需要」
 
-- **只有一档**：`不再需要`。业主点名"plan 级没有「失败 / 冲突」的对应物，不许自己编"，
+- 只有一档：`不再需要`。业主点名"plan 级没有「失败 / 冲突」的对应物，不许自己编"，
   所以这里不搬 `statementabandon.ABANDON_KINDS` 那四档命题级换号理由 ——
   它们各自要缺陷引用 / 拆出的引理 / 实验号 / 空间读数，而一条 plan 没有这些证据面。
 - 自由文本在这里没有位置：词表外的 `reason` 由 `agent_f.abandon_plan` 受控拒。
@@ -20,5 +20,5 @@
 """
 from __future__ import annotations
 
-#: plan 级放弃理由：**只有这一档**。
+#: plan 级放弃理由：只有这一档。
 PLAN_ABANDON_REASONS: tuple[str, ...] = ("不再需要",)

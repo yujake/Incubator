@@ -7,11 +7,11 @@
 
 ## 裁定（Q2，逐条落地）
 
-- **谁有权**：F 自己（plan 归 F）—— 动作在 `specs/f.py` 的动作表里，工具只登记给
+- 谁有权：F 自己（plan 归 F）—— 动作在 `specs/f.py` 的动作表里，工具只登记给
   `_WRITE_ROLES = ("F",)`；D 没有这个动作、也没有 `attack_plans` 的写集。
-- **词表**：只加「不再需要」一档（plan 级没有"失败/冲突"的对应物，不许自己编）。
-- **落点**：`attack_plans.history` 一行（**不加列、不做 schema 迁移**），`status→abandoned`。
-- **已终态不许再放弃**（幂等/受控拒）。
+- 词表：只加「不再需要」一档（plan 级没有"失败/冲突"的对应物，不许自己编）。
+- 落点：`attack_plans.history` 一行（不加列、不做 schema 迁移），`status→abandoned`。
+- 已终态不许再放弃（幂等/受控拒）。
 
 ## 判据
 

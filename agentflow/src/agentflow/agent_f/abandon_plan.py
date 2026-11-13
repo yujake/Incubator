@@ -4,19 +4,19 @@ from __future__ import annotations
 from ._support import PlanError, TERMINAL_STATUSES
 from ..planabandon import PLAN_ABANDON_REASONS
 
-#: plan 级放弃理由的受控词表 —— **只有一档**（业主 2026-11-13 裁定 Q2）。
+#: plan 级放弃理由的受控词表 —— 只有一档（业主 2026-11-13 裁定 Q2）。
 #:
 #: 真身在 `agentflow.planabandon`（工具声明那边的参数 enum 也读那一份：`attack_tools`
 #: 被本包在模块加载期导入，反过来 import 这里会成环）。这里只把名字带进来给读的人看：
 #: 为什么不复用 `statementabandon.ABANDON_KINDS`（`math_error` / `difficulty` /
-#: `counterexample` / `space_too_large`）—— 那四档是**命题级**的换号理由，每一档都带
+#: `counterexample` / `space_too_large`）—— 那四档是命题级的换号理由，每一档都带
 #: 自己的证据要求（`defect_ref` / `salvaged` / `experiment_id` / `space`），而 plan 没有
 #: 这些证据面。业主的口径也只有一条：「F 应该有新的放弃理由为不再需要」⇒ 只加这一档。
 
 
 #: 四条拒信的读指标签（写进拒信正文，便于人/模型逐条对得上）。
 #:
-#: 为什么它们只是**正文里的标签**、不是 `refuse()` 的 `kind`：这一层的拒绝是
+#: 为什么它们只是正文里的标签、不是 `refuse()` 的 `kind`：这一层的拒绝是
 #: `PlanError`（`ToolError` 子类）—— 走工具层时由 `attack_tools._guard` 落成受控的
 #: `plan_error`，走召唤层时由 `conductor._business_refusal_code` 落成
 #: `refused / invalid_params`（`PlanError` 在那张业务拒信名单里）。把细码塞进
@@ -36,11 +36,11 @@ class _AbandonPlan:
 
         ## 三条硬规矩（业主 2026-11-13 裁定 Q2）
 
-        1. **只有 F 自己有权**：这是 F 的动作（`specs/f.py` 的动作表），工具侧也只登记给
+        1. 只有 F 自己有权：这是 F 的动作（`specs/f.py` 的动作表），工具侧也只登记给
            `_WRITE_ROLES = ("F",)`；别的角色的动作表里没有它、写集里也没有 `attack_plans`。
-        2. **理由只认一档**：`reason` 必须逐字是 :data:`PLAN_ABANDON_REASONS` 之一。
+        2. 理由只认一档：`reason` 必须逐字是 :data:`PLAN_ABANDON_REASONS` 之一。
            词表外的值受控拒 —— 不拿自由文本兜底（那等于给"理由"开一条无判据的后门）。
-        3. **已终态的不许再放弃**：`resolved` / `abandoned` / `stalled` /
+        3. 已终态的不许再放弃：`resolved` / `abandoned` / `stalled` /
            `supported_not_proved` 都已经"不再推进"（`ATTACK_TERMINAL_STATUSES` 那一列）。
            再放弃一次是改写历史：受控拒并点名现在的状态 —— 想重新攻就另立一条计划，
            不要在这条行上翻烙饼。
@@ -49,7 +49,7 @@ class _AbandonPlan:
         `status` 改 `abandoned`，`history` 追加一行 `{action:"abandon", outcome:"abandoned",
         detail:"不再需要", …}`。`history` 是既有格（`AttackPlan.history` 的 docstring 写着
         "轮次历史（append-only）"），所以这一笔不动磁盘契约。
-        **不收工读数**：`closing._round_advanced` 只认 `outcome=="progress"`，这一行的
+        不收工读数：`closing._round_advanced` 只认 `outcome=="progress"`，这一行的
         `outcome="abandoned"` 不会被读成"又推进了一轮"（放弃 ≠ 推进）。
 
         ## 为什么不是"再推一轮让它停"
@@ -58,7 +58,7 @@ class _AbandonPlan:
         必须真的落到那一格上，不能靠"不再调用它"表达。
 
         ## 拒绝为什么抛 `PlanError`（而不是返回 `refuse()` 那个 dict）
-        与 `step` 的"计划不存在"同族：这是**计划层面**的拒绝。召唤层按 `PlanError` 落
+        与 `step` 的"计划不存在"同族：这是计划层面的拒绝。召唤层按 `PlanError` 落
         `refused / invalid_params`（`conductor._business_refusal_code`），工具层按
         `attack_tools._guard` 落受控 `plan_error` —— 两条路都不会滑成 `unexpected`。
         """

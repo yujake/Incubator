@@ -275,14 +275,14 @@ def dispatch_text_problems(root: Any, *, conjectures: Sequence[Mapping[str, Any]
 # ---------------------------------------------------------------- 派了几个 F、各自方向
 #
 # 业主 2026-11-13（R1）：「plan由F自己决定，所以D不可能做出按plan个数派F，于是D只能按
-# 研究方向开多个F而非把一堆方向委托给一个F」。这一条只要**读数**：这一趟 D 派了几个 F、
+# 研究方向开多个F而非把一堆方向委托给一个F」。这一条只要读数：这一趟 D 派了几个 F、
 # 各自的方向是什么 —— 一个字段都不新造，全从既有数据现算：
 #
 #   ① 名册（`out/roster/D.jsonl` 折叠后）：有几个 F、各自的 `brief` 与 `task_text`；
 #   ② `tasks` 行（`role=F`、`called_by=D`）：派过几趟（对拍用）；
 #   ③ D 派活原文（:func:`d_dispatch_records` 的 `agent_step` payload）：方向的正本。
 #
-# 为什么不从 `attack_plans.problem_key` 读方向：**派了方向但还没立计划的 F 会漏掉**
+# 为什么不从 `attack_plans.problem_key` 读方向：派了方向但还没立计划的 F 会漏掉
 # （R1 的口径：D 按方向开 F，F 自己决定 plan）—— 那一格是 F 落成计划之后的产物，
 # 不是派活的读数。
 
@@ -300,7 +300,7 @@ def _flat(text: Any) -> str:
 def _d_roster(root: Any, owners: Sequence[str]) -> tuple[list[dict[str, Any]], list[str]]:
     """D 各趟的名册折叠后状态（读口；只读 root）。
 
-    `owners` 是 D 自己的台账号（`tasks` 里 `role="D"` 的行）：名册按**父**分片
+    `owners` 是 D 自己的台账号（`tasks` 里 `role="D"` 的行）：名册按父分片
     （`out/roster/<父>.jsonl`），所以"D 派了几个 F"要把 D 每一趟的名册并起来。
     重复的名字不算两个 F（同一个名字 = 同一个实例）；不同父名册里的同名项是不同实例。
     判据要能打桩这一处（反真空：打桩成空 ⇒ 调用方必须报"没读成"）。
@@ -330,13 +330,13 @@ def dispatch_directions(root: Any, *, roster: Sequence[Mapping[str, Any]] | None
     - `count`：名册上（未退役的）F 的个数 —— "派了几个 F"；
     - `fs`：每个 F 一项 `{name, owner, task_id, brief, brief_source, direction,
       direction_source, roster_task_text, dispatch_task, direction_agrees, brief_overlap}`；
-      `direction` 的正本是**D 派活那一刻写下的原文**（③）；名册的 `task_text` 只是同一段
+      `direction` 的正本是D 派活那一刻写下的原文（③）；名册的 `task_text` 只是同一段
       原文的副本（它按 `TASK_TEXT_MAX` 截断），两处都有时 `direction_agrees` 给一个读数；
     - `directions`：非空的那些方向（逐条原文）；
-    - `unmatched`：有派活原文、但对不上任何在册 F 的条数（**不许静默丢**）；
+    - `unmatched`：有派活原文、但对不上任何在册 F 的条数（不许静默丢）；
     - `checked`：这一格读成了没有。三态：名册有坏行 / `tasks` 里有 F 的派活行而名册里
       一个 F 都没有（两处对不上）/ 派活记录读不出来 ⇒ `False` + `reason` ——
-      **"没读成"绝不许读成"0 个 F"**。
+      "没读成"绝不许读成"0 个 F"。
 
     `roster` / `tasks` / `dispatches` 三个形参是给判据打桩用的（反真空）；生产调用不给。
     """

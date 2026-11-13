@@ -132,8 +132,8 @@ def _known_abandon_tokens() -> set[str]:
 
     两处都要扫（2026-11-13）：命题级在 `statementabandon`，plan 级在
     `planabandon` + `agent_f/abandon_plan`（业主同批裁定 Q2：plan 的放弃理由只认
-    「不再需要」，入口是 `attack.abandon_plan`）。只扫一处时，提示词里那个**真的
-    存在**的 plan 级入口会被判成"不存在"——那会把一条正确的教法判红。
+    「不再需要」，入口是 `attack.abandon_plan`）。只扫一处时，提示词里那个真的
+    存在的 plan 级入口会被判成"不存在"——那会把一条正确的教法判红。
     """
     from agentflow import planabandon as PA
     from agentflow.agent_f import abandon_plan as AP

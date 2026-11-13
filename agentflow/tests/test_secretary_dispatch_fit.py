@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""D 的秘书审 D 的派活：这一条是不是**一个研究方向**（业主 2026-11-13，R2）。
+"""D 的秘书审 D 的派活：这一条是不是一个研究方向（业主 2026-11-13，R2）。
 
 业主原话（逐字）：
 
@@ -13,7 +13,7 @@
 |---|---|---|
 | a | 模型判「不合适」⇒ 建议变成「建议重排」且提醒正文带上"该怎么拆"；台账一行 `verdict=不合适` | 改前没有 `dispatch_fit` 这一轴（`judge("dispatch_fit")` 直接回"不认识的判断类别"） |
 | b | 模型判「合适」⇒ 结论不动（可派）；台账一行 `verdict=合适` | 同上 |
-| c | 判不了（没有缝）⇒ `checked=False` + 台账 `decision=没查成`，而**派活照发**（只提醒不拦） | 同上 |
+| c | 判不了（没有缝）⇒ `checked=False` + 台账 `decision=没查成`，而派活照发（只提醒不拦） | 同上 |
 | d | 反真空：把内核打桩成恒「合适」⇒ a 的红必须变绿（证明 a 的红来自判定） | —— |
 | e | 端到端：D 的循环里这一步的 `秘书.assessment` 带上提醒，而 `attack_plans` 真的多了一行（没被拦） | 同上 |
 
@@ -219,7 +219,7 @@ def test_e_the_reminder_reaches_the_step_and_the_dispatch_still_runs(
     assessment = dict(note.get("assessment") or {})
     assert assessment.get("decision") == "建议重排", (note, step.result)
     assert UNSUITABLE_WHY in str(assessment.get("reason") or ""), assessment
-    # 只提醒不拦：这一步的结果里**没有**因为派活审阅而拒收的痕迹，而且派活真的发出去了
+    # 只提醒不拦：这一步的结果里没有因为派活审阅而拒收的痕迹，而且派活真的发出去了
     # （`tasks` 里有一行 `role=F`）。这一行的终态在本夹具里是 `not_wired` —— 这条夹具没有
     # 给 F 配循环，那是"F 自己怎么执行"的另一件事；本判据要证的是"秘书的意见没有挡住它"，
     # 落点是 `_execute` 真的跑了（有台账行），不是 F 跑成了。

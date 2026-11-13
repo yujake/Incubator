@@ -724,7 +724,7 @@ def test_p09_the_reading_keys_are_on_every_return_path(store: Store):
     def _one(tag: str, reply, **kw) -> dict:
         llm = None if reply == "unwired" else (BrokenLLM() if reply == "broken"
                                                else FakeLLM(*reply))
-        # 每条收尾路径一个**独立的 F**：本判据要证的是"每条路都有预算读数"，
+        # 每条收尾路径一个独立的 F：本判据要证的是"每条路都有预算读数"，
         # 六条路各自造一条计划；而业主 2026-11-13 的并发上限按 `created_by`
         # 分桶（一个 F 在推的 plan ≤2 条）⇒ 六条计划必须属于六个不同的 F，
         # 否则第 3 条会被上限受控拒（那是 `test_f_parallel_plan_cap.py` 的事）。

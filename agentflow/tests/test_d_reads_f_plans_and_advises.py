@@ -8,20 +8,20 @@
 
 ## 落点（都是既有面，不另开旁路）
 
-- **读口**：`attack.status` / `attack.list_plans` 的 `roles` 里本来就有 D
-  （`agent_f/tools/attack_tools._READ_ROLES = ("F", "D", "G", "H")`）—— 这一条是**回归**，
+- 读口：`attack.status` / `attack.list_plans` 的 `roles` 里本来就有 D
+  （`agent_f/tools/attack_tools._READ_ROLES = ("F", "D", "G", "H")`）—— 这一条是回归，
   不是判据（改前也绿）。
-- **发建议**：走既有的跨角色消息面（`handoff` → `manuscripts/handoffs.jsonl`；或 `message`
+- 发建议：走既有的跨角色消息面（`handoff` → `manuscripts/handoffs.jsonl`；或 `message`
   形状 → 名册成员的收件板项）。这里用 `Secretary.handoff_add` —— 它正是循环里
   `_do_handoff` 调的那一个写口（`sender` 仍是 D），不新造通道。
-- **F 照做**：`attack.abandon_plan`（R3 的写入口）⇒ `status=abandoned` + `history` 含
+- F 照做：`attack.abandon_plan`（R3 的写入口）⇒ `status=abandoned` + `history` 含
   「不再需要」。这是本文件真正的判据：建议链路的终点是 F 的台账真的变了。
 
 ## 判据
 
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
-| a | D 的动作面里有读口，且 `attack.status` 真能读出 plan 的方向/状态 | 回归（改前也绿），**不作判据** |
+| a | D 的动作面里有读口，且 `attack.status` 真能读出 plan 的方向/状态 | 回归（改前也绿），不作判据 |
 | b | D 的建议落进 `handoffs.jsonl`（既有消息面，无旁路），正文点名 plan 与「不再需要」 | 改前没有 `attack.abandon_plan`，这条链路走不到底（F 收得到、做不了） |
 | c | F 用 `attack.abandon_plan` 放弃那条 plan ⇒ `status=abandoned` + `history` 含「不再需要」 | 改前 F 没有这个动作（`abandon_plan` 不存在） |
 """

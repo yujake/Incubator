@@ -9,12 +9,12 @@
 
 ## 读数从哪来（Q1 的口径，逐条对上）
 
-- **计数**：名册（`out/roster/D.jsonl` 折叠后，未退役的 `role=F`）＋ `tasks`（`role=F`、
+- 计数：名册（`out/roster/D.jsonl` 折叠后，未退役的 `role=F`）＋ `tasks`（`role=F`、
   `called_by=D`）现算 —— 不新开读数键；
-- **方向**：D 派活那一刻写下的**原文**（`dispatchpolicy.d_dispatch_records` 的
+- 方向：D 派活那一刻写下的原文（`dispatchpolicy.d_dispatch_records` 的
   `agent_step.payload.task`）。名册的 `task_text` 只是同一段原文的副本（按
   `TASK_TEXT_MAX` 截断），`roster.brief` 只作"同向性"对拍（≤60 字可能被压短）。
-- **不用** `attack_plans.problem_key`：派了方向但还没立计划的 F 会漏掉（R1 的口径是
+- 不用 `attack_plans.problem_key`：派了方向但还没立计划的 F 会漏掉（R1 的口径是
   "D 按方向开 F、plan 由 F 自己决定"）。
 
 ## 判据
@@ -22,7 +22,7 @@
 | 判据 | 它要证明的事 | 改前红在哪 |
 |---|---|---|
 | a | 两个 F ⇒ `count=2`，每个 `direction` 逐字是派活原文（`direction_source=dispatch`），brief 与方向对得上 | 改前没有这个读数（`dispatch_directions` 不存在） |
-| b | 有派活原文却对不上在册 F ⇒ 记 `unmatched`，**不许静默丢** | 同上 |
+| b | 有派活原文却对不上在册 F ⇒ 记 `unmatched`，不许静默丢 | 同上 |
 | c | 反真空：名册读口打桩成空 ⇒ `checked=False`（"没读成"不是"0 个 F"） | 同上 |
 | d | 方向不取 `attack_plans.problem_key`：盘上有一条计划却没有任何派活原文 ⇒ 它不算方向 | 同上 |
 | e | 空工作区（真没派过 F）⇒ `checked=True` + `count=0`（与 c 的三态分开） | 同上 |

@@ -20,10 +20,10 @@ FORMAL_IS_NOT_F_TODO = "formal_is_not_f_todo"
 #: > 「若一个F开了多plan且未finish的同时推进的大于2个（已finish或放弃的不计入该数），
 #: >   系统需拦截并给出提醒」
 #:
-#: 计数口径按业主字面（Q4 裁定）：**只有 `resolved`（finish）与 `abandoned`（放弃）不计入**，
+#: 计数口径按业主字面（Q4 裁定）：只有 `resolved`（finish）与 `abandoned`（放弃）不计入，
 #: 其余一律计入 —— `stalled` / `supported_not_proved` 也占一个位置。理由：`stalled` 的
 #: 计划不该白占名额，要腾位就先把它放弃成「不再需要」（`attack.abandon_plan`）。
-#: 刻意**不**复用 `TERMINAL_STATUSES`（那四档是"不再推进"，比业主的"finish/放弃"宽）——
+#: 刻意不复用 `TERMINAL_STATUSES`（那四档是"不再推进"，比业主的"finish/放弃"宽）——
 #: 两者混用会让"上游把 stalled 排除在外"这条口径静默变成"stalled 不占位"。
 PLAN_CAP_TERMINAL_STATUSES: tuple[str, ...] = ("resolved", "abandoned")
 PARALLEL_PLANS_LIMIT = 2
@@ -127,11 +127,11 @@ class _CreatePlan:
         # ---- 并发上限（业主 2026-11-13）：一个 F 同时推进的计划不许超过 2 条 ----------
         #
         # 位置：判重之后、写库之前。判重命中的那一条是"同一件事已经立过项"（幂等成功），
-        # 它不开新计划 ⇒ 不吃这个上限；而上限只拦**新开 plan**，不拦推进已有 plan
+        # 它不开新计划 ⇒ 不吃这个上限；而上限只拦新开 plan，不拦推进已有 plan
         # （推进走 `step`，与这里无关）。
         #
         # 分桶键是 `created_by`（= 这个 F 的归因名，见 `AgentF._plan_owner`）：业主的口径是
-        # "**一个 F** 开了多 plan"，按全体计数会把"按研究方向开多个 F"（同一批裁定的 R1）
+        # "一个 F 开了多 plan"，按全体计数会把"按研究方向开多个 F"（同一批裁定的 R1）
         # 误拦成超限。归因读不到时退回未归因桶，读数里看得出来（`created_by` 逐字可比）。
         owner = self._plan_owner()
         live = [dict(r) for r in self.store.rows("attack_plans")
