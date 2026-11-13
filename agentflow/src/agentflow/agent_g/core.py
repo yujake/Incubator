@@ -313,7 +313,12 @@ def _selftest() -> int:
         quote="Spec S̃_m = [−m, m]",
     )
     d2 = g.register_dependency(
-        f"doc:{doc_id}#claim-1", "dataset", "外部数据集（本项目拿不到）",
+        # `prior_art` 而不是 `dataset`：`DEP_KINDS.dataset` 已于 2026-11-13 删除
+        # （`09866d61`「删 DEP_KINDS.dataset —— 值 + `dep_kind_of` 映射（0 行、无读点）」），
+        # 而这一格要演的语义没变：外部材料、本项目拿不到（`status="external_unavailable"`）。
+        # 活着的六档里只有 `prior_art`（别人的既有工作 / 外部来源）对得上这个意思 ——
+        # `experiment` 指的是我们自己跑过的实验行，不能拿来指一份拿不到的外部数据集。
+        f"doc:{doc_id}#claim-1", "prior_art", "外部数据集（本项目拿不到）",
         status="external_unavailable", status_reason="该数据集需机构订阅，本项目不可得（已知边界）",
     )
     line(f"    dep:{d1['dep_id']} status={d1['status']}；dep:{d2['dep_id']} status={d2['status']}")
