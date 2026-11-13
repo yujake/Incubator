@@ -147,7 +147,6 @@ def _secretary(store: Store):
 
 def _manuscript(*, step_line: str, dep_rows: str, section: bool = True) -> str:
     text = ("# F 的证明手稿：判据夹具\n\n"
-            "- 命题号：stmt:（还没落号）\n"
             "- 计划：000000 · 子目标：s1\n\n"
             "## 命题\n\n由定理推出目标结论。\n\n"
             "## 证明\n\n" + step_line + "\n")
@@ -357,7 +356,6 @@ def test_a_below_proof_review_source_is_caught_here_not_at_b(
 
 def _bad_manuscript(*, statement_id_hint: str = "（还没落号）") -> str:
     return ("# F 的证明手稿：判据夹具\n\n"
-            f"- 命题号：stmt:{statement_id_hint}\n"
             "- 计划：000000 · 子目标：s1\n\n"
             "## 命题\n\n由定理推出目标结论。\n\n"
             "## 证明\n\n"

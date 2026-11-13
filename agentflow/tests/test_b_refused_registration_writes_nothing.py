@@ -105,7 +105,6 @@ def _manuscript(body: str, *, sid: str, dep_sid: str) -> str:
     """一份三节齐全的来源稿：形状过得了落稿校验，档位由依赖面闸拒。"""
     return (
         "# F 的证明手稿：D1 判据\n\n"
-        f"- 命题号：stmt:{sid}\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         f"## 命题\n\n{FULL}\n\n"
         f"## 证明\n\n{body}\n\n"

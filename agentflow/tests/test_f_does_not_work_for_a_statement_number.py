@@ -647,7 +647,8 @@ def test_d_the_whole_chain_reads_five_ways(tmp_path: pathlib.Path) -> None:
     assert rel == f"reports/f-proof-{mid}.md", made
     assert _naming_problems(mid, SID, rel) == [], rel
     raw = (root / rel).read_text(encoding="utf-8")
-    assert "- 命题号：stmt:（还没落号）" in raw, raw[:200]
+    # 业主 2026-11-13：稿里没有命题号 ⇒ F 的稿上连占位都不写。
+    assert "- 命题号：" not in raw, raw[:200]
     assert SID not in raw, "F 的稿上出现了命题号 ⇒ 那一步又按号写了"
 
     # ---- ③ 送审签出：V 的签按正文 sha 落 pending（还没有号也能签）

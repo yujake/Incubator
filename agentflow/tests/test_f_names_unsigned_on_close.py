@@ -104,7 +104,7 @@ def _two_unsigned_outputs(st: Store) -> tuple[AgentF, str, list[str]]:
         path = pathlib.Path(st.root) / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
-            f"# F 的证明手稿\n\n- 命题号：stmt:{sid}\n\n## 命题\n\n{text}\n\n"
+            f"# F 的证明手稿\n\n\n## 命题\n\n{text}\n\n"
             f"## 证明\n\n{body}\n\n## 依赖\n\n（自足证明，空表就是声明。）\n",
             encoding="utf-8")
         sids.append(sid)

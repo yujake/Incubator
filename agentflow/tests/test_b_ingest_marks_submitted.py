@@ -95,7 +95,7 @@ def _manuscript(*, sid: str = SID, proof: str = PROOF1, dep: str = "",
             "|---|---|---|---|\n")
     if dep:
         deps += f"| 引理 | stmt:{dep} | 1 | 1 |\n"
-    head = f"- 命题号：stmt:{sid}\n- 证据种类：theorem\n"
+    head = f"- 证据种类：theorem\n"
     suffix = f"-p{proof_no}" if proof_no >= 2 else ""
     return (head + "\n## 命题\n\n" + PROPOSITION + "\n\n"
             "## 证明\n\n" + proof + "\n\n## 依赖\n\n" + deps)

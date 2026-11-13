@@ -141,7 +141,6 @@ def _store(tmp_path: pathlib.Path) -> Store:
 def _manuscript(proposition: str) -> str:
     """F 稿的骨架（稿头 / 三节 / 空依赖表），只换 `## 命题` 那一节。"""
     return ("# F 的证明手稿：按 V u-000005 的唯一缺陷修订第 7 步\n\n"
-            "- 命题号：stmt:（还没落号）\n"
             "- 计划：000002 · 子目标：S4\n"
             "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
             "## 命题\n\n" + proposition + "\n\n"

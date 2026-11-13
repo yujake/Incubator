@@ -28,7 +28,7 @@ def _text() -> str:
     block = (f"{VS.SIGN_MARK}已签=true；判词=成立；连续=3/3；正文sha={sha}；"
              "时间=2026-11-04T00:00:00+08:00；签名者=secretary:F；"
              f"台账={REL}#V签；命题号=未在册；手稿号=000000")
-    return ("# F 的证明手稿（被搬过的块）\n\n- 命题号：stmt:（还没落号）\n"
+    return ("# F 的证明手稿（被搬过的块）\n\n"
             f"{block}\n\n"
             f"## 命题\n\n{FULL}\n\n## 证明\n\n{PROOF}\n\n## 依赖\n\n"
             "（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n")

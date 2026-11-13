@@ -86,7 +86,6 @@ FULL = (TRUNCATED.replace("故 ω^n/", "") + "ω^{n+1} 是商，维数上界由�
 #: 带洗稿元信息与一张空的依赖表。
 FOREIGN_MANUSCRIPT = (
     "# F 的证明手稿：逆命题：dim_k g = n < ∞ ⇒ U(g) 左右诺特\r\n\r\n"
-    "- 命题号：stmt:000000\r\n"
     "- 计划：000000 · 子目标：S2\r\n"
     "- 依赖面洗稿：已洗=true；执行者=secretary-F\r\n\r\n"
     "## 命题\r\n\r\n逆命题：dim_k g = n < ∞ ⇒ U(g) 左右诺特。\r\n\r\n"
@@ -112,8 +111,13 @@ SID = "000008"
 
 
 def _own(st: Store, *, statement_full: str = STATEMENT, proof_text: str = TRUNCATED,
-         kind: str = "conjecture", stmt_id: str = SID) -> str:
-    """铺一行在册命题（走真正的 `store.tx`，它必须成功）。"""
+         kind: str = "conjecture", stmt_id: str = SID,
+         manuscript_id: str = "") -> str:
+    """铺一行在册命题（走真正的 `store.tx`，它必须成功）。
+
+    `manuscript_id`（业主 2026-11-13）：稿里没有命题号之后，"这一条的稿是哪一份"只由
+    行上这一格认。b2/b3 量的是"点名递来的稿不是行上那一份 ⇒ 别人的稿"。
+    """
     row = {
         "stmt_id": stmt_id, "origin": "own_result", "kind": kind,
         "label": "U(g) 左右诺特蕴含 dim_k g<∞", "statement_full": statement_full,
@@ -127,6 +131,8 @@ def _own(st: Store, *, statement_full: str = STATEMENT, proof_text: str = TRUNCA
         "bits": EB.bits_of(proof=bool(proof_text.strip()),
                            proof_process=proof_text, kind=kind),
     }
+    if manuscript_id:
+        row["manuscript_id"] = manuscript_id
     with st.tx("statements") as tx:
         tx.upsert("statements", row, note="seed:real-mp3r2-000008")
     return str(row["stmt_id"])
@@ -213,7 +219,7 @@ def test_a_a_superseding_proof_text_is_written_with_history(tmp_path: pathlib.Pa
     而 `proof_text` 仍是那份截断正文、`proof_history` 是空的。
     """
     st = _ws(tmp_path)
-    sid = _own(st)
+    sid = _own(st, manuscript_id=SID)
     _foreign_manuscript_on_disk(st)
     # 准入闸（2026-11-02 默认 strict）：换在册正文也必须有覆盖「新」正文的 V 签
     # （「改稿要重签」这条口径在写入口上的形态）。旧签仍在台账里，只是被降为历史。
@@ -368,7 +374,7 @@ def test_b2_a_manuscript_of_another_statement_is_refused_by_name(
     这条命题的稿（`ok:true / received_manuscript:true`），依赖面记到错误的号上。
     """
     st = _ws(tmp_path)
-    sid = _own(st)
+    sid = _own(st, manuscript_id=SID)
     _foreign_manuscript_on_disk(st)
     out = _agent(st).register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
@@ -381,9 +387,12 @@ def test_b2_a_manuscript_of_another_statement_is_refused_by_name(
     assert out["ok"] is False, out
     assert out["kind"] == "manuscript_owner_mismatch", out
     msg = str(out["error"])
-    assert "stmt:000000" in msg and f"stmt:{sid}" in msg, msg
+    # 稿里没有命题号、这一笔递的是正文（不是路径）⇒ 那份稿的号"认不出"是诚实的；
+    # 判据仍站得住：行上 `manuscript_id` 记着这一条自己的稿，递来的不是它 ⇒ 整笔拒。
+    assert f"stmt:{sid}" in msg, msg
+    assert out.get("manuscript_owner") == "", out
     assert _deps_count(st) == 0, "拒了却把别条命题的依赖记到了这条头上"
-    assert out.get("manuscript_owner") == "000000", out
+    assert out.get("manuscript_owner") == "", out
     row = _row(st)
     assert row["proof_text"] == TRUNCATED, "拒了却改了正文"
 
@@ -396,7 +405,7 @@ def test_b3_a_foreign_manuscript_never_feeds_the_dependency_face(
     读数里 `manuscript_owner` 点名那份稿属于谁、`manuscript_owner_ok=False`。
     """
     st = _ws(tmp_path)
-    sid = _own(st)
+    sid = _own(st, manuscript_id=SID)
     _foreign_manuscript_on_disk(st)
     # 准入闸（2026-11-02 strict）：这一笔要在册正文换成 FULL ⇒ 先有新正文的签。
     _sign_three(st, proof_text=FULL, stmt_id=sid)
@@ -413,7 +422,8 @@ def test_b3_a_foreign_manuscript_never_feeds_the_dependency_face(
     assert _row(st)["proof_text"] == FULL, _row(st)["proof_text"][-40:]
     assert _deps_count(st) == 0, "别条命题的依赖面被记到这条头上了"
     deps = dict(out.get("deps_missing") or {})
-    assert deps.get("manuscript_owner") == "000000", deps
+    # 递的是正文 ⇒ 稿号认不出；"不是这一条的稿"仍由行上 `manuscript_id` 判出来。
+    assert deps.get("manuscript_owner") == "", deps
     assert deps.get("manuscript_owner_ok") is False, deps
 
 

@@ -53,7 +53,6 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 def _draft() -> str:
     text = (
         "# F 的证明手稿：conj:000000 攻坚（P1）\n\n"
-        "- 命题号：stmt:（还没落号）\n"
         "- 计划：000000 · 子目标：s1\n\n"
         "## 命题\n\n"
         f"{FULL}\n\n"

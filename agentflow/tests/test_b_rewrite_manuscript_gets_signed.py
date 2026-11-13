@@ -177,7 +177,7 @@ def test_b_an_unsigned_manuscript_is_still_refused_by_the_gate(
         tmp_path: pathlib.Path) -> None:
     """b：没有签的手稿 ⇒ 入库仍被 `proof_without_v_sign` 拒（闸不许被绕）。"""
     st = _ws(tmp_path)
-    unsigned = ("# B 的改写手稿：R(3,4)=9\n\n- 命题号：stmt:（还没落号）\n\n"
+    unsigned = ("# B 的改写手稿：R(3,4)=9\n\n\n"
                 "## 命题\n\n" + FULL + "\n\n## 证明\n\n" + NEW_BODY + "\n\n"
                 "## 依赖\n\n"
                 "| 引用（B 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"

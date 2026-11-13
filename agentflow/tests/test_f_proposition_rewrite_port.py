@@ -104,7 +104,6 @@ def _manuscript(proposition: str = NOTE) -> str:
     body_sha = PR.proof_sha(PROOF)
     fp = PR.proposition_fingerprint(proposition)
     return ("# F 的证明手稿：按 V u-000005 的唯一缺陷修订第 7 步\n\n"
-            "- 命题号：stmt:（还没落号）\n"
             "- 计划：000002 · 子目标：S4\n"
             f"- 正文sha：{body_sha}\n"
             f"- 命题指纹：{fp}\n"

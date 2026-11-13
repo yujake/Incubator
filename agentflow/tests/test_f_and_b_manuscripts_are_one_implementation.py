@@ -257,7 +257,6 @@ def test_a2_putting_b_render_back_makes_a_red(
                       proof_no=0, dependency_section="", **_kw):
         """改前 B 的页头（`- 改写手稿：` + `- 标签：`，没有 `- 计划：`）。"""
         return ("# B 的改写手稿：" + str(label or statement_full)[:60] + "\n\n"
-                f"- 命题号：stmt:{statement_id}\n"
                 f"- 标签：{label}\n\n## 命题\n\n{statement_full}\n\n"
                 f"## 证明\n\n{proof_text}\n\n{dependency_section}\n")
 

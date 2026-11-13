@@ -236,7 +236,7 @@ def test_c_a_signed_f_manuscript_with_a_revision_note_is_released(
     path = pathlib.Path(st.root) / F_REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        "# F 的证明手稿：夹具\n\n- 命题号：stmt:（还没落号）\n"
+        "# F 的证明手稿：夹具\n\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         "## 命题\n\n" + NOTE + "\n\n## 证明\n\n" + PROOF + "\n\n"
         + DS.render_dependency_section([]) + "\n", encoding="utf-8")

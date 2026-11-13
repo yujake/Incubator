@@ -210,7 +210,7 @@ def test_c_old_disk_names_still_classify_and_recognize_signs(tmp_path) -> None:
     # 老盘 `b-proof-<命题号>`：一个真实的六位号，读侧不许因为"号不是 B 的"就拒它
     old_b = "reports/b-proof-000041.md"
     (reports / "b-proof-000041.md").write_text(
-        "# B 的证明手稿：老盘\n\n- 命题号：stmt:000041\n\n"
+        "# B 的证明手稿：老盘\n\n\n"
         "## 命题\n\n老盘命题。\n\n## 证明\n\n老盘的证明。\n\n"
         "## 依赖\n\n| 引用（E 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
         "|---|---|---|---|\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",

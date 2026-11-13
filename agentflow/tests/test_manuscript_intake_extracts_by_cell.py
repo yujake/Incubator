@@ -29,7 +29,6 @@ from agentflow import manuscriptintake as MI
 
 #: 一份五格齐全的稿（命题 / 证明 / 数值结果 / 依赖 + 稿头证据种类）。
 FULL_TEXT = (
-    "- 命题号：stmt:000001\n"
     "- 实验号：exp:000012\n"
     "- 证据种类：lemma\n"
     "\n"
@@ -54,7 +53,7 @@ FULL_TEXT = (
 EXPECTED_PRESENT: dict[str, object] = {
     "statement_full": "命题正文：对所有实数 x，x^2 >= 0。",
     "proof_text": "证明第一行。\n证明第二行。",
-    "dependencies": [{"line": 19, "quote": "原话一", "stmt_id": "000002",
+    "dependencies": [{"line": 18, "quote": "原话一", "stmt_id": "000002",
                       "step": "1", "path_group": 1}],
     "kind": "lemma",
     "numeric_evidence": {"experiment_id": "000012", "method": "numeric",
@@ -182,7 +181,6 @@ def test_empty_proof_section_is_present_not_absent() -> None:
     三态纪律：空正文与"没有这一节"是两件事；计划那一层再按"空正文不是一份证明"拒。
     """
     text = (
-        "- 命题号：stmt:000001\n"
         "\n"
         "## 命题\n"
         "P\n"
@@ -209,7 +207,6 @@ def test_level_two_subheads_do_not_truncate_the_proof_cell() -> None:
     `manuscript_proof_empty`，而稿其实写满了。
     """
     text = (
-        "- 命题号：stmt:000001\n"
         "\n"
         "## 命题\n"
         "P\n"

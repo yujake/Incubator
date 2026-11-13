@@ -90,7 +90,7 @@ def _row(st: Store, sid: str) -> dict:
 def _manuscript(*, sid: str, proposition: str, body: str,
                 deps: str = EMPTY_TABLE, plan: str = "000001", sgid: str = "s1",
                 wash_actor: str = "secretary-F") -> str:
-    head = [f"# F 的证明手稿：{proposition[:40]}", "", f"- 命题号：stmt:{sid}"]
+    head = [f"# F 的证明手稿：{proposition[:40]}", ""]
     if plan:
         head.append(f"- 计划：{plan} · 子目标：{sgid}")
     if wash_actor:
@@ -492,7 +492,7 @@ def test_d6_c_an_edge_that_cannot_be_written_is_refused(tmp_path: pathlib.Path) 
     a = _register_conjecture(st, FULL_A)
     _promote_to_proof_review(st, a, BODY_A)
     body = BODY_B.format(a=a)
-    no_section = ("# F 的证明手稿：夹具\n\n- 命题号：stmt:（还没落号）\n\n"
+    no_section = ("# F 的证明手稿：夹具\n\n\n"
                   "## 命题\n\n夹具命题。\n\n## 证明\n\n" + body + "\n")
     got = _agent(st).register_statement(
         **_own(FULL_B, proof_text=body, proof_manuscript=no_section,

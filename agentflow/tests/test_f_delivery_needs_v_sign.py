@@ -42,7 +42,6 @@ from _credential_fixture import issue_credential
 
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
-              "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
               "## 命题\n\n"
               f"{FULL}\n\n"

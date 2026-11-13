@@ -64,7 +64,6 @@ def _task(st: Store, *, task_id: str = "t-000001") -> dict:
 
 def _manuscript_text(body: str = BODY) -> str:
     return ("# F 的证明手稿：一致连续\n\n"
-            "- 命题号：stmt:（还没落号）\n"
             "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
             f"## 命题\n\n{FULL}\n\n## 证明\n\n{body}\n\n"
             + DS.render_dependency_section([]))

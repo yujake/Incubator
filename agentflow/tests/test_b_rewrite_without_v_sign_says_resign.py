@@ -217,7 +217,7 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
     man_rel = "reports/f-proof-000000.md"
     man_path = pathlib.Path(st.root) / man_rel
     man_path.parent.mkdir(parents=True, exist_ok=True)
-    man_text = (f"# F 的证明手稿：{TEXT}\n\n- 命题号：stmt:{SID}\n"
+    man_text = (f"# F 的证明手稿：{TEXT}\n\n"
                 "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
                 f"## 命题\n\n{FULL}\n\n## 证明\n\n{P2}\n\n"
                 "## 依赖\n\n"

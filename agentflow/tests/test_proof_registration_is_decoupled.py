@@ -688,7 +688,6 @@ def test_a3_a_handwritten_labelled_head_is_not_a_registration_entry(tmp_path):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "# F 的证明手稿：手写的\n\n"
-        "- 命题号：stmt:（还没落号）\n"
         "- 计划：0000 · 子目标：s1\n"
         "- 标签：F 攻坚 0000 子目标 s1\n\n"
         "## 命题\n\n" + TEXT + "\n\n"

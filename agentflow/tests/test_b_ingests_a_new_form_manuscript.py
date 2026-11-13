@@ -106,7 +106,6 @@ def _new_form_manuscript(sid: str, proof: str, *, head_proof_no: int = 0) -> str
     head = ""
     if head_proof_no >= 1:
         head += f"- 证明号：{head_proof_no}\n"
-    head += f"- 命题号：stmt:{sid}\n"
     deps = ("| 引用 | 命题号 | 步 |\n|---|---|---|\n"
             f"| 引理：p 阶元 | stmt:{DEP_SID} | 1 |\n")
     return ("# B 的证明手稿\n\n" + head + "\n## 命题\n\n" + PROPOSITION + "\n\n"
@@ -135,8 +134,9 @@ def _deliver(st: Store, b: AgentB, sid: str, rel: str, proof: str, *,
              head_proof_no: int = 0) -> dict:
     """写一份新形式稿、签上，再走 B 的收录入口（→ 秘书 `record_statement`）。
 
-    `statement_full` 与在册那一行逐字相同 ⇒ 这一笔是"给在册命题补一份证明"，
-    走的正是 `Secretary.record_statement` 那一笔事务（命题行 / 依赖 / 路径号）。
+    `statement_full` 与在册那一行逐字相同 + 位置点名 `stmt:<号>` ⇒ 这一笔是"给在册
+    命题补一份证明"（业主 2026-11-13：稿里没有命题号 ⇒ 位置由调用方点名），走的正是
+    `Secretary.record_statement` 那一笔事务（命题行 / 依赖 / 路径号）。
     """
     _write(st, rel, _new_form_manuscript(sid, proof, head_proof_no=head_proof_no))
     conftest.sign_for_the_gate(st.root, statement_id=sid, proof_text=proof,
@@ -145,7 +145,7 @@ def _deliver(st: Store, b: AgentB, sid: str, rel: str, proof: str, *,
         statement_full=PROPOSITION, statement_text="p 阶元", label="p 阶元",
         origin="own_result", kind="conjecture", doc_id=S.format_id(0),
         quote_reason="自产命题，没有外部引文要比对",
-        proof_manuscript=rel)
+        proof_manuscript=rel, line_range={"label": f"stmt:{sid}"})
 
 
 def _deps(st: Store, sid: str) -> list[dict]:

@@ -201,12 +201,12 @@ def test_c_b_register_accepts_only_a_manuscript_sign(tmp_path):
     from agentflow import depsection as DS
 
     manuscript = (
-        "# F 的证明手稿\n\n- 命题号：stmt:" + sid2 + "\n\n## 命题\n\n" + STATEMENT
+        "# F 的证明手稿\n\n## 命题\n\n" + STATEMENT
         + "\n\n## 证明\n\n" + PROOF + "\n\n" + DS.render_dependency_section([]))
     b2 = AgentB(st2, extractor=None, extract_text=None)
     ok = b2.register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
-        proof_text=PROOF, line_range={"start": 1, "end": 3},
+        proof_text=PROOF, line_range={"label": f"stmt:{sid2}"},
         quote_verified=None, quote_reason="我方自证", proof_manuscript=manuscript)
     assert ok.get("ok") is True, ok
     assert _row(st2, sid2).get("proof_text") == PROOF, _row(st2, sid2)
@@ -252,7 +252,7 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
     from agentflow import depsection as DS
 
     manuscript = (
-        "# F 的证明手稿\n\n- 命题号：stmt:" + sid + "\n\n## 命题\n\n" + STATEMENT
+        "# F 的证明手稿\n\n## 命题\n\n" + STATEMENT
         + "\n\n## 证明\n\n" + PROOF + "\n\n"
         + DS.render_dependency_section([{
             "quote": "引理 A", "stmt_id": str(lemma1["stmt_id"]),
@@ -260,7 +260,7 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
     b = AgentB(st, extractor=None, extract_text=None)
     first = b.register_statement(
         statement_full=STATEMENT, origin="own_result", kind="conjecture",
-        proof_text=PROOF, line_range={"start": 1, "end": 3},
+        proof_text=PROOF, line_range={"label": f"stmt:{sid}"},
         quote_verified=None, quote_reason="我方自证", proof_manuscript=manuscript)
     assert first.get("ok") is True, first
     assert len(st.rows("dependencies")) == 1, st.rows("dependencies")

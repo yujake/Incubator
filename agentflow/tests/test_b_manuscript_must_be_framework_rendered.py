@@ -113,7 +113,6 @@ def _handwritten(sid: str) -> str:
     return (
         "# 证明手稿（手写）\n"
         "\n"
-        f"- 命题号：stmt:{sid}\n"
         "\n"
         + DS.SECTION_PROOF + "\n"
         "\n"

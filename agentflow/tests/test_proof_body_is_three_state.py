@@ -34,7 +34,6 @@ from agentflow.agent_b import register_statement as RS
 
 #: 有一节 `## 证明`：present。
 WITH_PROOF = (
-    "- 命题号：stmt:000000\n"
     "\n"
     "## 命题\n"
     "命题正文（这一行不是证明）。\n"
@@ -51,7 +50,6 @@ WITH_PROOF = (
 
 #: 没有 `## 证明`（e-num-* 那一族的形状：命题 + 数值结果 + 依赖段）。
 WITHOUT_PROOF = (
-    "- 命题号：stmt:000000\n"
     "\n"
     "## 命题\n"
     "命题正文（这一行不是证明）。\n"
@@ -72,7 +70,6 @@ PROOF_BODY = "第一步：由定义直接推出。\n第二步：两步合起来�
 #: `## 第一步` 分小节 —— 真实数学写作最常见的样子。改前这些行每一行都被当成
 #: "下一节的标题" ⇒ 证明正文被截成空串 ⇒ 落稿闸报 `empty_proof_section`。
 WITH_LEVEL2_SUBHEADS = (
-    "- 命题号：stmt:000000\n"
     "\n"
     "## 命题\n"
     "命题正文（这一行不是证明）。\n"

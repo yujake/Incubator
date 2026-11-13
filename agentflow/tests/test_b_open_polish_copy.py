@@ -66,7 +66,6 @@ SIGN_LINE = ("- V 签：已签=true；判词=成立；连续=3/3；正文sha={sh
 
 MANUSCRIPT = f"""# F 的证明手稿：夹具命题
 
-- 命题号：stmt:{SID}
 {SIGN_LINE.format(sha="__SHA__")}
 - 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无
 
@@ -154,8 +153,9 @@ def test_a_the_signed_manuscript_is_copied_under_a_new_b_number(tmp_path) -> Non
     assert got["source_text_sha256"] != got["copy_text_sha256"], got
     assert got["copy_text_sha256"] == hashlib.sha256(
         copy_text.encode("utf-8")).hexdigest(), got
-    # 稿头还写着这条命题（下一轮落稿靠它找回自己那份）
-    assert f"- 命题号：stmt:{SID}" in copy_text, copy_text.split("\n")[:5]
+    # 业主 2026-11-13：稿里没有命题号 ⇒ 副本也没有那一行；对应关系靠来源记录
+    # （`polish_source_reading`）与 `statements.manuscripts` 回答。
+    assert "- 命题号：" not in copy_text, copy_text.split("\n")[:5]
     # 乙的读口：这一份副本自己没有签（签在源稿上）
     assert VS.signed_manuscripts(st.root, artifact_path=cp)["found"] is False
     assert VS.signed_manuscripts(st.root, artifact_path=src)["found"] is True
@@ -260,7 +260,6 @@ def _unregistered_manuscript(*, manuscript_id: str, signed: bool) -> str:
     lines = [
         "# F 的证明手稿：夹具命题（未在册签）",
         "",
-        "- 命题号：stmt:（还没落号）",
     ]
     if signed:
         lines.append(
@@ -329,13 +328,13 @@ def test_a2_the_row_manuscript_id_finds_the_signed_source(tmp_path) -> None:
     # 收录那一笔真的把稿号记在行上（第 ④ 条证据的源头，不是夹具手写）
     assert str(row.get("manuscript_id") or "") == mid, row
     assert bool((row.get("bits") or {}).get("reviewed")) is True, row
-    # 前三条证据确实够不着：签里的命题号是空串、稿头也还不是这一条命题的号
+    # 前三条证据确实够不着：签里的命题号是空串、稿里也没有命题号（业主 2026-11-13）
     table = VS.signed_manuscripts(st.root, artifact_path=rel)
     assert table["found"] is True, table
     assert str(table["latest"].get("statement_id") or "") == "", table
     assert str(table["latest"].get("manuscript_id") or "") == mid, table
     head = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
-    assert "stmt:（还没落号）" in head, head.split("\n")[:6]
+    assert "- 命题号：" not in head, head.split("\n")[:6]
 
     got = _b(st).open_polish_copy(statement_id=sid)
     assert got.get("ok") is True, got
