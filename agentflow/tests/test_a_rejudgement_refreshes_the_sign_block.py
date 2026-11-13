@@ -164,11 +164,16 @@ def test_a_a_clean_rejudgement_moves_the_block_to_the_newest_row(tmp_path, clock
     assert after["at"] == str(row["at"]), (
         f"`时间=` 没跟着变成新那一行的 at：块上 {after['at']!r}，账上 {row['at']!r}")
     assert after["at"] != first["at"], "时间格没变 ⇒ 这一条断言会变成恒真"
-    # 刷的只有那两格：签本身（sha / 连续 / 签名者 / 命题号）一个字不动。
+    # 刷的只有那两格：签本身（sha / 连续 / 签名者）一个字不动。
     assert after["proof_sha256"] == first["proof_sha256"], after
     assert (after["streak"], after["need"]) == (3, 3), after
     assert after["signer"] == "secretary:F", after
-    assert after["statement_id"] == SID, after
+    # 第 8 格 `命题号` 是 2026-11-13 之前的写法：业主「稿里没有命题号，任何稿里都没有」
+    # ⇒ 这一次新写（刷块要整行重渲染）不再写它。老块上的那一格仍读得出
+    # （`manuscript_sign_reading` 的 `statement_id` 格），只是新写不产出；
+    # 「这一块归哪条命题」改由 `statements` 行上的 `manuscript_id` / `manuscripts` 回答，
+    # 所以下面那三条（signed / 手稿号 / identity_state）一个字没松。
+    assert after["statement_id"] == "", after
     assert after["identity_state"] == "resolved", after
     # 读数：刷块那一笔自己也要说清它落在哪一档。
     assert str(row.get("sign_block_refresh", {}).get("state")) == "refreshed", row

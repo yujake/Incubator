@@ -732,13 +732,19 @@ def manuscript_proof_body(text: str) -> str:
 #: 手稿里签块的固定前缀（写与读共用这一处；B 侧也按它读）。
 SIGN_MARK = "- V 签："
 
-#: 签块里那几格的键（顺序即写法；读侧按 `；` 与 `=` 拆）。
+#: 签块里那几格的键（读侧按 `；` 与 `=` 拆；写侧不再写第 8 格，见下）。
 #:
 #: 2026-11-02（业主裁定）：加第 9 格 `手稿号`，值是裸稿号（`000000` / `plan-0001` / `a`），
 #: 不是文件名 —— 写法上要把"哪一种号"带进值里（`f-proof-plan-0001.md` ⇒ `plan-0001`），
 #: 否则 `f-proof-plan-0001.md` 与 `f-proof-0001.md` 会在数字上撞车（都读成 `0001`）。
 #: 这一格回答"这一块属于哪一份稿"，与 `正文sha`（回答"签的是哪一份正文"）是两件事：
 #: 稿会被改名 / 搬走 / 复制，正文 sha 不会跟着变，所以两格都要有。
+#:
+#: 2026-11-13（业主：「稿里没有命题号，任何稿里都没有命题号」）⇒ 第 8 格 `命题号` 退役：
+#: 新写的块不再有它（:func:`render_manuscript_sign` 不渲染），这一格只留给读侧解释老盘。
+#: 稿 → 命题行的对应关系改由 `statements` 行上那两格（`manuscript_id` / `manuscripts`
+#: 逐路径记录）+ 正文 sha 回答（:func:`_manuscript_owns_the_sign`）。键表保留 9 格是
+#: 读侧词表（老盘还能读出这一格），不是写侧顺序 —— 写侧现在写 8 格。
 SIGN_BLOCK_KEYS: tuple[str, ...] = ("已签", "判词", "连续", "正文sha", "时间",
                                     "签名者", "台账", "命题号", "手稿号")
 
@@ -898,13 +904,22 @@ def render_manuscript_sign(*, proof_sha: Any, streak: Any, need: Any,
 
     `manuscript_id` 是第 9 格（裸稿号，业主 2026-11-02）：写侧由
     :func:`manuscript_id_of` 从稿路径现算，不接受"手抄一个号"。
+
+    ## 第 8 格 `命题号` 不再写（业主 2026-11-13）
+
+    「稿里没有命题号，任何稿里都没有命题号」⇒ 新块只写 8 格（`手稿号` 仍在第 9 个位置，
+    只是它前面不再有 `命题号`）。`statement_id` 参数保留只为旧调用面逐字能调：
+    它不再进块，也不再是「稿 → 命题行」的线索 —— 那条线索改由 `statements` 行上的
+    `manuscript_id` / `manuscripts` 逐路径记录 + 正文 sha 回答
+    （:func:`_manuscript_owns_the_sign`）。老盘上带这一格的块仍按原样读得出
+    （:func:`manuscript_sign_reading` 的 `statement_id` 格），一个字节不迁移。
     """
     sha = str(proof_sha or "").strip().lower()
     return (f"{SIGN_MARK}已签={'true' if signed else 'false'}；"
             f"判词={str(verdict or '成立')}；"
             f"连续={int(streak or 0)}/{int(need or 0)}；正文sha={sha}；"
             f"时间={str(at or '')}；签名者={str(signer or 'V')}；"
-            f"台账={str(ledger or '')}；命题号={str(statement_id or '未在册')}；"
+            f"台账={str(ledger or '')}；"
             f"手稿号={str(manuscript_id or '')}")
 
 
@@ -918,12 +933,17 @@ def stamp_manuscript_sign(text: str, *, proof_sha: Any, streak: Any, need: Any,
     先删掉旧的同一行再插到 `- 计划：` 之后：手稿是替换式写的（`publish_manuscript`
     改名 / `mark_washed` 插行都会整文件重写），同一份稿上只该有一行签块。
     找不到 `- 计划：` 时插在第 3 行之前（与 `mark_washed` 的兜底位置同一处）。
+
+    `statement_id` 保留只为旧调用面能调；新块不写第 8 格（见
+    :func:`render_manuscript_sign` 那一节）。重刷老盘上带这一格的块时，那一格也会
+    随这一次新写消失（业主 2026-11-13：任何稿里都没有命题号）；归属改由
+    `refresh_manuscript_sign` 传进来的那一行台账的命题号 + `手稿号` 继续回答。
     """
     raw = str(text or "").replace("\r\n", "\n")
     lines = [ln for ln in raw.split("\n") if not ln.strip().startswith(SIGN_MARK)]
     mark = render_manuscript_sign(
         proof_sha=proof_sha, streak=streak, need=need, verdict=verdict,
-        signer=signer, at=at, ledger=ledger, statement_id=statement_id,
+        signer=signer, at=at, ledger=ledger,
         manuscript_id=manuscript_id, signed=signed)
     at_i = 0
     for i, ln in enumerate(lines):
@@ -948,6 +968,13 @@ def manuscript_sign_reading(text: str, *, manuscript_path: Any = "") -> dict[str
     并在 `problem` 里说缺什么 —— 不许折成"没有签"。
     `identity_state` 同理：旧 8 格块是 `legacy`（当时真的签过），不是"没有这一格所以不算"
     （那一档会把 84 的两份真签读成没签）。
+
+    ## 第 8 格 `命题号` 是可选的（2026-11-13 起新块不写）
+
+    这一格只回答一条历史读数："老盘上那一块自称属于哪条命题"。新块没有它 ⇒
+    `statement_id=""`（与 `命题号=未在册` 读成同一个空串：两者都不是拒签理由）。
+    归属不再由它判：`手稿号` + `正文sha` 给稿件身份，命题行由 `statements` 行上的
+    `manuscript_id` / `manuscripts` 记录回答（:func:`_manuscript_owns_the_sign`）。
     """
     out: dict[str, Any] = {"found": False, "signed": False, "verdict": "", "streak": 0,
                            "need": 0, "proof_sha256": "", "at": "", "signer": "",
@@ -1767,7 +1794,8 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
     2. 块盖的就是这一行落的 sha（不是 ⇒ `not_this_sha`：不拿别人的签刷这一份）；
     3. 这份稿的「## 证明」正文仍是被签的那一份（不是 ⇒ `body_changed`：块本来就 stale，
        给它一个新锚等于把改过的稿盖成"刚重判过"）；
-    4. 块有命题号（没有 ⇒ `no_statement`：未在册那一档没有台账）；
+    4. 块有命题号（老盘）或调用方递了命题号（新块不写第 8 格 ⇒ 用这一行台账的号）；
+       两处都没有 ⇒ `no_statement`（未在册那一档没有台账）；
     5. 台账读得出来、且有一行盖着这个 sha（否则 `ledger_unreadable` / `no_row`）。
 
     然后按锚那一行分两档：
@@ -1824,6 +1852,11 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
         out.update(state="body_changed", why=f"块本来就 stale：{match.get('why')}")
         return out
     sid = str(block.get("statement_id") or "")
+    if not sid:
+        # 新块不写第 8 格（业主 2026-11-13）⇒ 「这一块归哪条命题」只能由这一行台账
+        # 自己的命题号回答（`_retrack_sign_block` 把那一行的 `stmt_id` 递进来）。
+        # 老块照旧先读它自己那一格：老盘的解释权留在老格里，新块才用调用方的号。
+        sid = str(statement_id or "").strip()
     if not sid:
         out.update(state="no_statement",
                    why="签块没有命题号（未在册那一档）⇒ 没有台账可锚，两格保持原值")
@@ -4153,6 +4186,10 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
        但归属对不上 ⇒ `borrowed`；对得上 ⇒ `signed`。归属不按号比：新签文件
        不写 `proof_no`（2026-11-11 业主裁定，见 `_sign_is_for_this_path`），身份是
        正文 sha + `statement_id` + 稿路径；老签里带 `proof_no` 的仍按老口径比号。
+       换锚（2026-11-13）之后多一条正路：签文件里那一格 `statement_id` 与本行
+       不符时，改问 `_manuscript_owns_the_sign`（`手稿号` + 正文 sha + 这一行上的
+       `manuscript_id` / `manuscripts` 记录）。它说"是"⇒ 照样 `signed`（读数在
+       `credential.anchor`）；说"不是"或"判不了"⇒ `borrowed` 一个字不改。
     4. 没有凭据 ⇒ 数票：该 sha 上最近一趟 `review_call` 内、从 pass 1 起连续
        `verifications.is_a_vote` 的轮数（遇到第一个非票就停；后面的 fault 不抹掉
        已经数到的票）。停因按 D3 的 `fault_kind` 分：
@@ -4165,7 +4202,8 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
     `checked`（False = 没查成）/ `state` / `body_state` / `votes` / `need` /
     `votes_source`（call | legacy | none）/ `sha` / `statement_id` / `proof_no` /
     `credential`（path / artifact_sha / at / verification_id / review_call /
-    recomputable / problem / found / tier / got）/ `evidence`（rows / covering /
+    recomputable / problem / found / tier / got / anchor（used / checked / owned /
+    path / manuscript_id / why））/ `evidence`（rows / covering /
     last_row / axis / verdict / fault_kind / kind_source / fault_at / void_rows /
     last_call）/ `filed`（True/False/None，给 store 才算）/ `abandoned`
     （True/False/None；另一根轴，与 `signed` 可以同时成立）/ `filed_why` /
@@ -4187,7 +4225,13 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
         "credential": {
             "path": "", "artifact_sha": "", "at": "", "verification_id": "",
             "review_call": "", "recomputable": False, "problem": "", "found": False,
-            "tier": "", "got": 0, "why": ""},
+            "tier": "", "got": 0, "why": "",
+            #: 换锚之后"签是谁的"的第二份读数（2026-11-13）：签文件里那一格与本行不符
+            #: 时才查这一格。`used=False` = 没查（不需要：签文件自己那一格相符 / 未在册）；
+            #: `used=True, checked=False` = 没查成；`owned=True` = 本行的那份稿。
+            #: 键集合固定，每一条读数都带它（"没查"与"查了没有"靠 `used` 分开）。
+            "anchor": {"used": False, "checked": False, "owned": False,
+                       "path": "", "manuscript_id": "", "why": ""}},
         "evidence": {
             "rows": 0, "covering": 0, "last_row": {}, "axis": "", "verdict": "",
             "fault_kind": "", "kind_source": "", "fault_at": "", "void_rows": 0,
@@ -4266,7 +4310,9 @@ def sign_reading(root: Any, statement_id: str = "", proof_text: str = "",
     # ---- 凭据（文件在不算签：必须复算）----
     cred = credential_reading(root, sha)
     if cred.get("found"):
-        return _reading_with_credential(out, cred, sid=sid, no=no)
+        return _reading_with_credential(out, cred, sid=sid, no=no, root=root,
+                                        store=store,
+                                        manuscript_path=manuscript_path)
     return _reading_from_rows(out, root, sid=sid, no=no, sha=sha, mine=mine,
                               covering=covering)
 
@@ -4369,9 +4415,193 @@ def _sign_is_for_this_path(sign: Mapping[str, Any], *, sid: str,
     return True, ""
 
 
+def _row_manuscript_record(root: Any, store: Any, *, statement_id: str) -> dict[str, Any]:
+    """这一条命题的行上记着的那几份稿（新锚的第三件：`statements` 的两格）。
+
+    换锚（业主 2026-11-13）之后「稿 → 命题行」不再由稿里那一格回答（稿头与签块都不写
+    命题号了）⇒ 归属只能由这一行自己的 durable 记录回答：
+
+    - `manuscripts`（`{路径号: 稿路径}`，读口 `manuscriptpaths.path_reading`）：每条路径
+      各一份稿，收录那一笔写下（`proof_receipt.write_proof_receipt` /
+      `_record_landed_manuscript`）；
+    - `manuscript_id`：最近一次收录的那份稿的裸稿号（老盘 / `path_group=0` 只有这一格）。
+
+    三态（不折平）：`checked=False` = 这一格没查成（没有 store / 行读不出来）；
+    `checked=True, found=False` = 册里没有这一行；`found=True` + 两份记录都空 = 这一行
+    还没记过稿（老盘 / 只给正文的那一档）—— 那一档不贡献任何归属，调用方不许拿
+    它放行。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "manuscript_id": "",
+                           "paths": [], "why": ""}
+    sid = str(statement_id or "").strip()
+    if not sid:
+        out.update(checked=True, why="没有命题号 ⇒ 没有可查的行（不是「没有记稿」）")
+        return out
+    if store is None:
+        out["why"] = "没有 store ⇒ 手稿记录读不出来（这一格没查成，不拿它放行）"
+        return out
+    try:
+        from . import statementledger as _SL
+
+        got = _SL.by_id(store, stmt_id=sid)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        return out
+    if not got.get("checked"):
+        err = got.get("error") or {}
+        out["why"] = (f"`statements` 读不出来（{err.get('type', '?')}: "
+                      f"{err.get('message', '?')}）⇒ 这一格没查成")
+        return out
+    if not got.get("found"):
+        out.update(checked=True, found=False,
+                   why=f"`statements` 里没有命题 {sid} 那一行 ⇒ 没有记过稿")
+        return out
+    row = dict(got.get("row") or {})
+    out.update(checked=True, found=True,
+               manuscript_id=str(row.get("manuscript_id") or "").strip())
+    try:
+        from . import manuscriptpaths as _MP
+
+        per = _MP.path_reading(store, root, statement_id=sid)
+    except Exception as exc:  # noqa: BLE001 —— 逐路径那一格读不出来 = 这一部分没查成
+        out["why"] = (f"逐路径记录读不出来（{type(exc).__name__}: {exc}）"
+                      "⇒ 手稿记录只读了 `manuscript_id` 那一格")
+        return out
+    if per.get("checked"):
+        paths: list[str] = []
+        for one in per.get("paths") or ():
+            rel = str((one or {}).get("manuscript") or "").strip().replace("\\", "/")
+            if rel and rel not in paths:
+                paths.append(rel)
+        out["paths"] = paths
+    else:
+        out["why"] = ("逐路径记录读不出来（"
+                      + str(per.get("why") or "没有理由")
+                      + "）⇒ 手稿记录只读了 `manuscript_id` 那一格")
+    return out
+
+
+def _sign_names_another_manuscript(root: Any, store: Any, *,
+                                   cred_statement_id: Any, matched_rel: str,
+                                   matched_mid: str) -> str:
+    """签文件里那个命题号若登记在册、且记着另一份稿 ⇒ 一句拒绝理由（空串 = 不冲突）。
+
+    为什么要有这一道：新锚按"这一行的稿记录"认归属，若签文件自己说它是 stmt:A 的签、
+    而 stmt:A 那一行记着的是另一份稿，那这一签要么被搬过、要么号写错了 ——
+    拿"B 这一行也记着同一份正文"来认它，就是把 A 的签借给 B。未在册（A 不是一行）
+    不算冲突：那时签文件里那一格只是"签发时的旧号"，没有可比的对家
+    （老盘 84 / 真机 883c3097 都是这一档）。
+    """
+    cred = str(cred_statement_id or "").strip()
+    if not cred:
+        return ""
+    rec = _row_manuscript_record(root, store, statement_id=cred)
+    if not (rec.get("checked") and rec.get("found")):
+        return ""
+    other_mid = str(rec.get("manuscript_id") or "")
+    if other_mid and matched_mid and other_mid != matched_mid:
+        return (f"签文件说它是 stmt:{cred} 的签，而那一行记着另一份稿"
+                f"（手稿号 {other_mid}，这一签盖的是 {matched_mid}）⇒ 借光不算签")
+    other_paths = list(rec.get("paths") or [])
+    if other_paths and matched_rel and matched_rel not in other_paths:
+        return (f"签文件说它是 stmt:{cred} 的签，而那一行记着的稿里没有 "
+                f"`{matched_rel}` ⇒ 借光不算签")
+    return ""
+
+
+def _manuscript_owns_the_sign(root: Any, *, store: Any, statement_id: Any,
+                              manuscript_path: Any, artifact_sha: Any,
+                              cred_statement_id: Any = ""
+                              ) -> dict[str, Any]:
+    """这一份签的正文，是不是本行记着的那一份稿的正文（新锚的唯一判据）。
+
+    三件合起来回答"签是谁的"（2026-11-13 业主：「稿里没有命题号，任何稿里都没有」）：
+
+    1. `手稿号`：稿路径现算（:func:`manuscript_id_of`），与行上 `manuscript_id` 比；
+    2. 正文 sha：被签的 `artifact_sha` 与那份稿现在 `## 证明` 的 sha 逐字比
+       （`ARTIFACT_SHA_RULE` 同一把尺）；
+    3. 行上记录：`statements.manuscripts`（逐路径）或 `statements.manuscript_id`。
+
+    三件都成立 ⇒ `owned=True`：签文件里那一格命题号即使写着旧号 / 别号，这一签也归本行
+    （V 签的是一份正文，命题号是收录时才有的）。缺一件 ⇒ `owned=False`，调用方必须
+    继续按 `borrowed` 处置（判不了 ≠ 放行）。
+
+    返回 `{checked, owned, path, manuscript_id, paths, why}`；`checked=False` 只在
+    "这一格没查成"（没有 store / 行读不出来 / 稿读不出来）时出现。
+    """
+    out: dict[str, Any] = {"checked": False, "owned": False, "path": "",
+                           "manuscript_id": "", "paths": [], "why": ""}
+    sid = str(statement_id or "").strip()
+    sha = str(artifact_sha or "").strip().lower()
+    if not sid:
+        out.update(checked=True, why="没有命题号 ⇒ 没有「本行的稿记录」可比"
+                                    "（签文件自己那一格说了算）")
+        return out
+    if len(sha) != 64 or any(ch not in _HEX for ch in sha):
+        out["why"] = f"被签的正文 sha 认不出（收到 {artifact_sha!r}）⇒ 归属这一格没查成"
+        return out
+    rec = _row_manuscript_record(root, store, statement_id=sid)
+    out["paths"] = list(rec.get("paths") or [])
+    out["manuscript_id"] = str(rec.get("manuscript_id") or "")
+    if not rec.get("checked"):
+        out["why"] = str(rec.get("why") or "手稿记录没查成")
+        return out
+    out["checked"] = True
+    if not rec.get("found"):
+        out["why"] = str(rec.get("why") or f"`statements` 里没有命题 {sid} 那一行")
+        return out
+    named = str(manuscript_path or "").strip().replace("\\", "/")
+    candidates: list[str] = ([named] if named else []) + [
+        rel for rel in (rec.get("paths") or []) if rel != named]
+    if not candidates:
+        out["why"] = ("这一行没记过稿（`manuscript_id` 与 `manuscripts` 都是空的）"
+                      "⇒ 签的归属判不了（不拿它放行）")
+        return out
+    for rel in candidates:
+        mid = manuscript_id_of(rel)
+        recorded = (rel in (rec.get("paths") or [])
+                    or bool(rec.get("manuscript_id") and mid
+                            and mid == rec["manuscript_id"]))
+        if not recorded:
+            continue
+        try:
+            text = (Path(str(root or "")) / rel).read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            out["why"] = (f"`{rel}` 读不出来（{type(exc).__name__}: {exc}）"
+                          "⇒ 归属这一格没查成（不拿它放行）")
+            continue
+        body = _sign_sha(manuscript_proof_body(text))
+        if body != sha:
+            out["why"] = (f"`{rel}` 现在的正文 sha 是 {body[:12]}…，与签的 {sha[:12]}… "
+                          "不是同一份 ⇒ 这一份稿不给这一签作证")
+            continue
+        blocked = _sign_names_another_manuscript(
+            root, store, cred_statement_id=cred_statement_id,
+            matched_rel=rel, matched_mid=mid)
+        if blocked:
+            out["why"] = blocked
+            continue
+        out.update(owned=True, path=rel, manuscript_id=mid,
+                   why=(f"`{rel}` 是 stmt:{sid} 记着的那一份稿"
+                        f"（手稿号 {mid}），正文 sha {sha[:12]}… 与签相符 ⇒ 签归本行"))
+        return out
+    return out
+
+
 def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
-                             sid: str, no: int) -> dict[str, Any]:
-    """有签文件这一支的结论（`signed` / `borrowed` / `unbacked`；本模块不写盘）。"""
+                             sid: str, no: int, root: Any = "",
+                             store: Any = None, manuscript_path: Any = "",
+                             ) -> dict[str, Any]:
+    """有签文件这一支的结论（`signed` / `borrowed` / `unbacked`；本模块不写盘）。
+
+    ## 换锚之后"签是谁的"多一条正路（2026-11-13）
+
+    `_sign_is_for_this_path` 只按签文件里那一格 `statement_id` 判；新写不再把命题号
+    写进稿里，而签往往发生在收录之前（那一格是旧号 / 空号）。所以它说不符时，
+    再问一次 :func:`_manuscript_owns_the_sign`：这一行记着的那份稿的正文是不是
+    这一签盖的那一份。是 ⇒ `signed`（读数落在 `credential.anchor` 里）；不是 ⇒
+    `borrowed`（"借光不算签"一个字不改）。
+    """
     out["credential"].update({
         "path": cred["path"], "artifact_sha": cred["artifact_sha"],
         "found": cred["found"], "recomputable": cred["recomputable"],
@@ -4391,6 +4621,27 @@ def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
         return out
     if cred.get("recomputable"):
         same_path, why_not = _sign_is_for_this_path(sign, sid=sid, no=no)
+        anchored: dict[str, Any] = {}
+        # 老签的"号绑定"优先：签文件里带 `proof_no`（2026-11-11 之前发的）而号对不上，
+        # 那是 `_sign_is_for_this_path` 的老口径（借光），新锚不去覆盖它 —— 那一格是那些
+        # 文件唯一可用的归属凭据。新锚只补"号这一半没有 / 对得上、只是命题号不同"那一档。
+        _raw_no = sign.get("proof_no")
+        _number_binds = _raw_no not in (None, "")
+        if _number_binds:
+            try:
+                _number_binds = int(_raw_no) != int(no)
+            except (TypeError, ValueError):
+                _number_binds = True
+        if not same_path and not _number_binds:
+            anchored = _manuscript_owns_the_sign(
+                root, store=store, statement_id=sid,
+                manuscript_path=manuscript_path,
+                artifact_sha=str(cred.get("artifact_sha") or ""),
+                cred_statement_id=str(sign.get("statement_id") or ""))
+            out["credential"]["anchor"] = {**anchored, "used": True}
+            if anchored.get("owned"):
+                same_path = True
+                why_not = ""
         if not same_path:
             out.update(state="borrowed", votes=0,
                        votes_source=(cred["tier"] or "none"),
@@ -4398,11 +4649,17 @@ def _reading_with_credential(out: dict[str, Any], cred: Mapping[str, Any], *,
             out["need"] = int(cred["need"] or out["need"])
             return out
         need = int(cred["need"] or out["need"])
+        anchored_why = ""
+        if anchored.get("owned"):
+            anchored_why = ("；签文件里的命题号是 "
+                            f"{str(sign.get('statement_id') or '（空）')!r}，而手稿记录说"
+                            f"`{anchored.get('path')}`（手稿号 {anchored.get('manuscript_id')}）"
+                            "就是这一行的稿 ⇒ 按新锚认归本行")
         out.update(checked=True, state="signed", votes=need, need=need,
                    votes_source=(cred["tier"] or "call"),
                    why=(f"凭据 `{cred['path']}` 复算通过："
                         f"{cred['got']}/{need} 转同源、每行签得住 ⇒ 这一份签了"
-                        f"（{need}/{need} 才算签）"))
+                        f"（{need}/{need} 才算签）{anchored_why}"))
         out["evidence"].update(last_call=out["credential"]["review_call"])
         return out
     out.update(state="unbacked", votes=0,

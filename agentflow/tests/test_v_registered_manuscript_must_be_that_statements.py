@@ -179,7 +179,10 @@ def test_a_a_manuscript_with_its_own_id_is_signed_in_register(
     text = (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
     block = VS.manuscript_sign_reading(text, manuscript_path=REL)
     assert block["signed"] is True, block
-    assert block["statement_id"] == SID, block
+    # 2026-11-13（业主：「稿里没有命题号，任何稿里都没有命题号」）：落块是新写 ⇒
+    # 第 8 格不写（读成空串）。"这一块是 stmt:SID 的"由下面两条回答：第 9 格 `手稿号`
+    # 与稿对得上（`identity_state=resolved`）、`sign_reading` 按签文件的号认成 signed。
+    assert block["statement_id"] == "", block
     assert block["manuscript_id"] == MID, block
     reading = VS.sign_reading(st.root, statement_id=SID, proof_text=PROOF,
                               proof_no=1, store=st)
@@ -369,7 +372,10 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
     assert new_block["proof_sha256"] == VR.text_sha(PROOF_V2), new_block
     assert new_block["proof_sha256"] != old_block["proof_sha256"], (
         "签块还盖着改写之前那一份正文", new_block, old_block)
-    assert new_block["statement_id"] == sid, new_block
+    # 2026-11-13（业主：「稿里没有命题号，任何稿里都没有命题号」）：新块不写第 8 格
+    # ⇒ 这一格读成空串。归属不靠它：行上 `manuscript_id` 已在上一条断言里钉住，
+    # 下面 `sign_reading(store=…)` 仍读得出 signed（按手稿记录 + 正文 sha 认归本行）。
+    assert new_block["statement_id"] == "", new_block
     assert new_block["manuscript_id"] == MID, new_block
     reading = VS.sign_reading(st.root, statement_id=sid, proof_text=PROOF_V2,
                               proof_no=1, store=st)
