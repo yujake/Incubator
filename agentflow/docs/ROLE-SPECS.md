@@ -1176,7 +1176,7 @@ C 的产出有两类，状态语义完全不同。
 
 **(a) `attack_plans.status`**
 
-`ATTACK_STATUSES = ("open","attacking","progress","supported_not_proved","stalled","resolved","abandoned")`（`schema.ATTACK_STATUSES`）。
+`ATTACK_STATUSES = ("open","attacking","supported_not_proved","stalled","resolved","abandoned")`（`schema.ATTACK_STATUSES`）。
 
 | 迁移 | 允许？ | 谁拦 |
 |---|---|---|

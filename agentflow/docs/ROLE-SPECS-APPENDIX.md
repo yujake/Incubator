@@ -685,13 +685,12 @@ C 的产出有两类，状态语义完全不同。
 
 **(a) `attack_plans.status`**
 
-`ATTACK_STATUSES = ("open","attacking","progress","supported_not_proved","stalled","resolved","abandoned")`（`schema.ATTACK_STATUSES`）。
+`ATTACK_STATUSES = ("open","attacking","supported_not_proved","stalled","resolved","abandoned")`（`schema.ATTACK_STATUSES`）。
 
 | 状态 | 终态？ | 判据 |
 |---|---|---|
 | `open` | 否 | 刚立项 |
 | `attacking` | 否 | 有子目标 `in_progress` |
-| `progress` | 否 | 本轮有推进 |
 | `supported_not_proved` | **是**（`tools.attack_tools.TERMINAL_STATUSES` 未列，但 `agent_f.AgentF._deploy_e` 会写它） | 全部子目标 `closed`/`supported_not_proved` 且**无任何 `proof`** |
 | `stalled` | **是**（`TERMINAL_STATUSES` 含它） | 连续 3 轮无进展 或 轮数用尽 |
 | `resolved` | **是** | 有 `proof` 级证据 |

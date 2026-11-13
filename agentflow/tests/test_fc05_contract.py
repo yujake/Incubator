@@ -477,9 +477,11 @@ def test_terminal_statuses_covers_every_status_agent_f_can_finish_with():
     from agentflow import schema as S
 
     src = inspect.getsource(AF)
+    # 2026-11-13 删掉的 `progress`：词表里不许再有它（教法面同批已删）。
+    assert "progress" not in S.ATTACK_STATUSES, S.ATTACK_STATUSES
     # `_derive_status` 里出现的所有字符串字面量状态，若它是 ATTACK_STATUSES 的成员，
     # 且不是"进行中"的那几个，就必须在终态名单里。
-    in_progress = {"open", "attacking", "progress"}
+    in_progress = {"open", "attacking"}
     mentioned = {st for st in S.ATTACK_STATUSES if f'"{st}"' in src or f"'{st}'" in src}
     terminal_mentioned = mentioned - in_progress
     missing = terminal_mentioned - set(S.ATTACK_TERMINAL_STATUSES)

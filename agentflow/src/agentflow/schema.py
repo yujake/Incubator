@@ -1342,11 +1342,16 @@ def experiment_void_reason(*, code_hash_from: Any, code_hash_to: Any) -> str:
 NEGATION_KINDS = ("disproved", "not_proved", "not_searched_here", "no_local_evidence")
 
 #: F 的攻坚计划状态。
-#:   open / attacking / progress —— 在推进
+#:   open / attacking           —— 在推进
 #:   supported_not_proved       —— 子目标都有数值支持，但没有任何形式化证明
 #:   stalled                    —— 预算用尽仍未解决（不是失败，也不是成功）
 #:   resolved / abandoned       —— 终局
-ATTACK_STATUSES = ("open", "attacking", "progress", "supported_not_proved", "stalled", "resolved", "abandoned")
+#:
+#: 2026-11-13 按业主裁定删掉 `progress`：`agent_f._derive_status` 从不返回它
+#: （推进中的计划一律记 `attacking`），72 个工作区 0 行，读点只有 `AttackPlan.validate`
+#: 的成员判断 ⇒ 它是一句「词表说有、代码永远给不出」的假承诺。教法面
+#: （`ROLE-SPECS` 附录 §F.5 那张表里的「本轮有推进」一行）同批删除。
+ATTACK_STATUSES = ("open", "attacking", "supported_not_proved", "stalled", "resolved", "abandoned")
 
 #: 攻坚计划的终态：一旦到达就不再推进。
 #:
