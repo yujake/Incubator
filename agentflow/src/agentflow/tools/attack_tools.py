@@ -483,8 +483,11 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
 @tool(
     "attack.abandon_plan",
     (
-            # 业主 2026-11-13：「F 应该有新的放弃理由为不再需要」。plan 级只开这一档。
-            "明确放弃一条计划（理由只认「不再需要」）：status→abandoned ＋ history 落一行；"
+            # 业主 2026-11-13（更正后）：plan 级理由三档 —— math_error / difficulty /
+            # 不再需要；「需要调整」不是理由，是"不再需要放弃原 plan + 新开一条"的组合操作。
+            "明确放弃一条计划（理由三档：math_error / difficulty / 不再需要；"
+            "「需要调整」不是理由，是组合操作）：status→abandoned ＋ history 落一行；"
+            "math_error 要给 basis 点出错误，difficulty 另给 difficulty＋salvaged；"
             "已终态（finish/已放弃/stalled/有支持未证）的不许再放弃。"
             ),
     {
@@ -492,22 +495,31 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
            "properties": {
             "plan_id": {"type": "string"},
             "reason": {"type": "string", "enum": list(PLAN_ABANDON_REASONS)},
+            "basis": {"type": "string",
+                      "description": "证据正文：math_error 点出哪一步/错的是什么；difficulty 说清难在哪"},
+            "difficulty": {"type": "string",
+                           "description": "difficulty 档必填：一句困难描述（卡在哪条引理/哪一步/哪条假设）"},
+            "salvaged": {"type": "array", "items": {"type": "object"},
+                         "description": "difficulty 档必填：旧证明里可取之处拆成的引理，每条给 {label, stmt_id}"},
            },
            "required": ["plan_id", "reason"],
            "additionalProperties": False,
            },
     side_effect="write_local",
     roles=_WRITE_ROLES,
-    # 键名从实现读出（`agent_f.AgentF.abandon_plan`）：成功支与四种受控拒逐字相同
-    # （`_abandon_refusal` 由同一个字典起手）。
+    # 键名从实现读出（`agent_f.AgentF.abandon_plan`）：成功支的键集合固定
+    # （拒绝一律 `PlanError` ⇒ 工具层受控 `plan_error`，不在这份 returns 里）。
     returns=("{'ok','kind','error','refusal_reason','plan_id','status','reason',"
              "'abandoned','history_len','at'}"),
     tags=("attack", "plan"),
 )
-def _attack_abandon_plan(_need_store, store, plan_id, reason):
+def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
+                         difficulty="", salvaged=None):
     """attack.abandon_plan 的工具体（注入 `_need_store` / `store`，与另外几件同形）。"""
     return _need_store("attack.abandon_plan") or _guard(
-        lambda: _agent_for(store).abandon_plan(plan_id, reason=reason)
+        lambda: _agent_for(store).abandon_plan(
+            plan_id, reason=reason, basis=basis, difficulty=difficulty,
+            salvaged=salvaged)
     )
 
 @tool(

@@ -118,6 +118,15 @@ ABANDON_DIFFICULTY_NOT_JUDGED = "abandon_difficulty_not_judged"
 ABANDON_DIFFICULTY_NOT_GENUINE = "abandon_difficulty_not_genuine"
 ABANDON_SALVAGED_NOT_FROM_PROOF = "abandon_salvaged_not_from_proof"
 
+#: 形状那三道受控码（原先只以字面量散在三处 `out.update(refused=...)` 里）。
+#:
+#: 收成常量是为了让同一套判据在另一个层级也能引用同一批码（2026-11-13 业主裁定：
+#: plan 级的 `math_error` / `difficulty` 沿用命题级的语义与证据口径，
+#: 见 `agent_f/abandon_plan.py`）—— 两处各写一份字面量就是"同一件事两个名字"。
+ABANDON_REASON_MISSING = "abandon_reason_missing"
+ABANDON_DIFFICULTY_REQUIRED = "abandon_difficulty_required"
+ABANDON_SALVAGED_MISSING = "abandon_salvaged_missing"
+
 
 def abandon_exempt_kinds() -> tuple[str, ...]:
     """哪些 `kind` 明确不是命题、不归放弃闸管（真身 `secretary.NOT_APPLICABLE_KINDS`）。
@@ -197,6 +206,17 @@ def _salvaged_items(raw: Any) -> tuple[list[dict[str, str]], str]:
         return [], ("salvaged 是空的 ⇒ 受控拒绝（业主原话：将原先证明中可取之处"
                     "拆出落成引理 —— 一条都没有，等于没有可取的旧证明）")
     return out, ""
+
+
+def salvaged_items(raw: Any) -> tuple[list[dict[str, str]], str]:
+    """`salvaged` 归一的公开名（唯一实现仍是 :func:`_salvaged_items`）。
+
+    为什么要有公开名：plan 级的 `difficulty` 档沿用命题级的"把可取之处拆成引理写清"
+    这条口径（业主 2026-11-13：「plan 级那两个理由沿用命题级那套」），写侧在
+    `agent_f/abandon_plan.py`。让那个模块直接调私有名也行，但"跨模块调私有函数"
+    会把"这是同一份判据"藏进下划线里；给一个公开名只转发、不另立判据。
+    """
+    return _salvaged_items(raw)
 
 
 def _defect_row(store: Any, root: str, sid: str, vid: str) -> tuple[dict[str, Any] | None, str]:
@@ -530,14 +550,14 @@ def _difficulty_refusal(out: dict[str, Any], *,
     """
     diff = str(difficulty or "").strip()
     if not diff:
-        out.update(refused="abandon_difficulty_required",
+        out.update(refused=ABANDON_DIFFICULTY_REQUIRED,
                    why=("difficulty 这一档必须给 `difficulty`（说清难在哪）—— 业主原话："
                         "「需指出困难」；只写一句「做不动了」不是指出困难"))
         return out
     out.update(difficulty=diff)
     items, why = _salvaged_items(salvaged)
     if why:
-        out.update(refused="abandon_salvaged_missing", why=why)
+        out.update(refused=ABANDON_SALVAGED_MISSING, why=why)
         return out
     problems: list[str] = []
     kept: list[dict[str, str]] = []
@@ -677,13 +697,13 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     got_kind = str(kind or "").strip()
     got_basis = str(basis or "").strip()
     if not got_kind and not got_basis:
-        out.update(refused="abandon_reason_missing",
+        out.update(refused=ABANDON_REASON_MISSING,
                    why=("放弃/换号必须给 `abandon_kind`（" + "/".join(ABANDON_KINDS) +
                         "）与 `abandon_basis`（理由正文）两格 —— 只写 status='abandoned' 的"
                         "自由文本理由不算给清了理由（业主 2026-11-07）"))
         return out
     if not got_kind:
-        out.update(refused="abandon_reason_missing",
+        out.update(refused=ABANDON_REASON_MISSING,
                    why=(f"`abandon_basis` 有了，而 `abandon_kind` 是空的 —— 它只许 "
                         f"{list(ABANDON_KINDS)}：不接受「是哪一档我自己看着办」"))
         return out
@@ -693,7 +713,7 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
                         "词表外的档不接受：多一档就是给自由文本留后门"))
         return out
     if not got_basis:
-        out.update(refused="abandon_reason_missing",
+        out.update(refused=ABANDON_REASON_MISSING,
                    why=(f"`abandon_kind={got_kind}` 有了，而 `abandon_basis`（理由正文）是空的 "
                         "⇒ 读的人看不出错在哪 / 难在哪"))
         return out
@@ -1145,7 +1165,7 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
                                     judgment_required=bool(difficulty_judge))
         out["form"] = dict(form)
         if not form.get("checked"):
-            out.update(refused=str(form.get("refused") or "abandon_reason_missing"),
+            out.update(refused=str(form.get("refused") or ABANDON_REASON_MISSING),
                        why=str(form.get("why") or "换号理由不齐 ⇒ 整笔不写"))
             return out
         reason = structured_reason(kind=str(form["abandon_kind"]),

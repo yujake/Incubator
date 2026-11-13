@@ -88,13 +88,19 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "F", "abandon_plan",
-        # 业主 2026-11-13：「F 应该有新的放弃理由为不再需要」。plan 级只开这一档
-        # （不搬命题级那四档 —— 它们各自要缺陷引用 / 拆出的引理 / 实验号 / 空间读数，
-        # 而 plan 没有这些证据面）。摘要里写清"只认这一档"，否则模型会自己造理由。
-        ("明确放弃一条计划（理由**只认一档**：「不再需要」）：写成 `status=abandoned` ＋ "
-         "`history` 一行（含「不再需要」四字）。**已终态的不许再放弃**"
+        # 业主 2026-11-13（更正后）：plan 级理由三档 —— math_error / difficulty /
+        # 不再需要；「需要调整」不是理由，是"用不再需要放弃原 plan + 新开一条"的组合操作。
+        # 摘要里把三档写全，否则模型会自己造理由（或把"需要调整"当理由填进来）。
+        ("明确放弃一条计划，理由**三档**：`math_error`（命题有实质数学错误，`basis` 点出错误）/"
+         "`difficulty`（难以逾越的困难，`basis` 说清难在哪 ＋ `difficulty` ＋ `salvaged` "
+         "把旧证明可取之处拆成引理写清）/ `不再需要`（plan 没毛病、但已不是推进目标所必需）。"
+         "**「需要调整」不是理由**：它是「用不再需要放弃原 plan ＋ 另设一条新 plan」的组合操作。"
+         "写成 `status=abandoned` ＋ `history` 一行；**已终态的不许再放弃**"
          "（finish / 已放弃 / stalled / 有支持未证 都算不再推进）—— 想重新攻就另立一条计划。"),
-        _obj({"plan_id": _S, "reason": _S}, ("plan_id", "reason")),
+        _obj({"plan_id": _S, "reason": _S, "basis": _S, "difficulty": _S,
+              "salvaged": {"type": "array", "items": {"type": "object",
+                     "description": "旧证明里可取之处拆成的引理：{label, stmt_id}"}}},
+             ("plan_id", "reason")),
         "dict（plan_id / status / reason / abandoned / history_len / at；被拒 ⇒ 受控拒"
         "（召唤层落 `refused / invalid_params`；工具层落受控 `plan_error`，"
         "细码与原因在拒信正文））",

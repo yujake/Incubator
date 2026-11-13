@@ -7090,6 +7090,52 @@
           "item": "superseded"
         }
       ]
+    },
+    {
+      "tools": [
+        "attack.abandon_plan"
+      ],
+      "key": "params",
+      "reason": "2026-11-13 业主更正：plan 级放弃理由改三档（math_error / difficulty / 不再需要；「需要调整」是操作不是理由），并加两档证据格 basis / difficulty / salvaged（沿用命题级的必填与证据口径）。JSON Schema 只加可选属性，既有参数名与 required 一字未动。",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/basis",
+          "value": {
+            "type": "string",
+            "description": "证据正文：math_error 点出哪一步/错的是什么；difficulty 说清难在哪"
+          }
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/difficulty",
+          "value": {
+            "type": "string",
+            "description": "difficulty 档必填：一句困难描述（卡在哪条引理/哪一步/哪条假设）"
+          }
+        },
+        {
+          "op": "append_item",
+          "path": "params/properties/reason/enum",
+          "item": "math_error"
+        },
+        {
+          "op": "append_item",
+          "path": "params/properties/reason/enum",
+          "item": "difficulty"
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/salvaged",
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "difficulty 档必填：旧证明里可取之处拆成的引理，每条给 {label, stmt_id}"
+          }
+        }
+      ]
     }
   ],
   "summary_lens_before": {
