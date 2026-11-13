@@ -368,7 +368,9 @@ def _is_main_block(node: ast.AST | None) -> bool:
     return False
 
 
-def _enclosing_scope(tree: ast.AST, node: ast.AST) -> tuple[str, str] | None:
+def _enclosing_scope(
+    tree: ast.AST, node: ast.AST, parents: dict[ast.AST, ast.AST] | None = None
+) -> tuple[str, str] | None:
     """`node` 是否定义在另一个函数体、私有类体或 `__main__` 自检块内？返回 (种类, 宿主限定名)。
 
     ## 为什么需要（三个例子）
@@ -380,7 +382,7 @@ def _enclosing_scope(tree: ast.AST, node: ast.AST) -> tuple[str, str] | None:
     `@tool` 的：`tools/graph_tools.py` 的 `register.graph_build`等 8 个 handler 也是嵌套定义，但它们是货真价实的工具面（带 `side_effect` 声明），
     一刀切会把这些工具从清单里静默抹掉。这条例外在 `collect_src` 里落实。
     """
-    parents = _parent_map(tree)
+    parents = _parent_map(tree) if parents is None else parents
     cur = parents.get(node)
     while cur is not None:
         if isinstance(cur, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -408,12 +410,13 @@ def collect_src(root: Path, write_sides: frozenset[str]) -> tuple[list[FuncInfo]
         except SyntaxError as e:
             raise CoverageError(f"解析失败：{p}：{e}") from e
         rel = str(p.relative_to(root)).replace("\\", "/")
+        parents = _parent_map(tree)
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if node.name.startswith("_"):
                 continue
-            priv = _enclosing_scope(tree, node)
+            priv = _enclosing_scope(tree, node, parents)
             tool_name, se = _decorator_tool(node)
             if priv is not None and tool_name is None:
                 # 只排除不是工具的嵌套函数。为什么这条狭窄的例外必须有：
@@ -440,12 +443,10 @@ def collect_src(root: Path, write_sides: frozenset[str]) -> tuple[list[FuncInfo]
                 continue
             qual = node.name
             is_method = False
-            for parent in ast.walk(tree):
-                if isinstance(parent, ast.ClassDef) and node in parent.body:
-                    qual = f"{parent.name}.{node.name}"
-                    is_method = True
-                    break
-            tool_name, se = _decorator_tool(node)
+            parent = parents.get(node)
+            if isinstance(parent, ast.ClassDef):
+                qual = f"{parent.name}.{node.name}"
+                is_method = True
             info = FuncInfo(
                 module=rel,
                 qualname=qual,
@@ -611,10 +612,11 @@ def _test_bodies(root: Path) -> dict[str, str]:
     """
     out: dict[str, str] = {}
     for p in _iter_py(root / TESTS_REL):
-        if not _readable(p):
+        text = _read_text(p)
+        if text is None:
             continue
         try:
-            tree = ast.parse(p.read_text(encoding="utf-8"))
+            tree = ast.parse(text)
         except SyntaxError:
             continue
         for node in ast.walk(tree):
@@ -632,15 +634,24 @@ def _exoneration_for(info: FuncInfo) -> tuple[tuple[str, ...], str] | None:
 
 def _test_text(root: Path) -> str:
     """把 tests/ 下所有 py 文件读成一大段文本。"""
-    return "\n".join(p.read_text(encoding="utf-8") for p in _iter_py(root / TESTS_REL) if _readable(p))
+    texts: list[str] = []
+    for p in _iter_py(root / TESTS_REL):
+        text = _read_text(p)
+        if text is not None:
+            texts.append(text)
+    return "\n".join(texts)
 
 
-def _readable(p: Path) -> bool:
+def _read_text(p: Path) -> str | None:
+    """读一个文件；读不出（OSError / 非 UTF-8）返回 None。
+
+    只读一次：此前 `_readable(p)` 读一遍判可读、调用方再读一遍取内容 ——
+    同一条门里同一份 tests/ 因此被读两遍。
+    """
     try:
-        p.read_text(encoding="utf-8")
-        return True
+        return p.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
-        return False
+        return None
 
 
 def _name_pattern(needle: str) -> re.Pattern[str]:
@@ -849,9 +860,13 @@ def mark_indirect_only(funcs: list[FuncInfo]) -> int:
     这是"按名出现算"这条口径的误报上界 —— 真值只会更小（因为扩散用的是
     名字匹配，同名会互相顶包，把范围算大）。
     """
-    by_bare: dict[str, list[FuncInfo]] = {}
-    for f in funcs:
-        by_bare.setdefault(f.bare, []).append(f)
+    # 名字 → 调用了这个名字的函数们。原实现在不动点迭代里对每个候选函数
+    # 都把整张 funcs 表扫一遍（O(n²)）；这里先扫一遍调用边，迭代时只查
+    # "这个裸名的调用者里有没有 already reached 的"。
+    callers_by_bare: dict[str, list[FuncInfo]] = {}
+    for caller in funcs:
+        for c in caller.calls:
+            callers_by_bare.setdefault(c, []).append(caller)
 
     reached: set[int] = {id(f) for f in funcs if f.tested}
     # 种子：任何 tested 的函数。然后迭代：若 X 被某个 reached 的函数调用，则 X 也 reached。
@@ -860,8 +875,8 @@ def mark_indirect_only(funcs: list[FuncInfo]) -> int:
         for f in funcs:
             if id(f) in reached:
                 continue
-            for caller in funcs:
-                if id(caller) in reached and f.bare in caller.calls:
+            for caller in callers_by_bare.get(f.bare, ()):
+                if id(caller) in reached:
                     reached.add(id(f))
                     changed = True
                     break
@@ -981,12 +996,13 @@ def _selftest(root: Path) -> int:
         return 2
 
     tree = ast.parse(_SELFTEST_SRC)
+    selftest_parents = _parent_map(tree)
     got: dict[str, FuncInfo] = {}
     excluded: list[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name.startswith("_"):
             continue
-        priv = _enclosing_scope(tree, node)
+        priv = _enclosing_scope(tree, node, selftest_parents)
         if priv is not None:
             excluded.append(f"{priv[1]}.{node.name}")
             continue
@@ -1050,11 +1066,12 @@ def _selftest(root: Path) -> int:
     try:
         _CRITERIA["open_write_modes"] = lambda node: ["w"]
         fake_tree = ast.parse(_SELFTEST_SRC)
+        fake_parents = _parent_map(fake_tree)
         fake_got: dict[str, int] = {}
         for node in ast.walk(fake_tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or node.name.startswith("_"):
                 continue
-            if _enclosing_scope(fake_tree, node) is not None:
+            if _enclosing_scope(fake_tree, node, fake_parents) is not None:
                 continue
             info = FuncInfo("selftest", node.name, node.name, node.lineno, False)
             _classify(info, node, write_sides)
