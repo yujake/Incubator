@@ -37,6 +37,7 @@ __all__ = [
     "CONJECTURE_PREFIX_RE",
     "conjecture_ids_of",
     "d_dispatch_records",
+    "dispatch_directions",
     "dispatch_text_problems",
 ]
 
@@ -269,3 +270,187 @@ def dispatch_text_problems(root: Any, *, conjectures: Sequence[Mapping[str, Any]
         out["reason"] = ("D 的派活文本里没有点名任何一条它自己登记的猜想号"
                          "（方向由文本给，号不作为命令）")
     return out
+
+
+# ---------------------------------------------------------------- 派了几个 F、各自方向
+#
+# 业主 2026-11-13（R1）：「plan由F自己决定，所以D不可能做出按plan个数派F，于是D只能按
+# 研究方向开多个F而非把一堆方向委托给一个F」。这一条只要**读数**：这一趟 D 派了几个 F、
+# 各自的方向是什么 —— 一个字段都不新造，全从既有数据现算：
+#
+#   ① 名册（`out/roster/D.jsonl` 折叠后）：有几个 F、各自的 `brief` 与 `task_text`；
+#   ② `tasks` 行（`role=F`、`called_by=D`）：派过几趟（对拍用）；
+#   ③ D 派活原文（:func:`d_dispatch_records` 的 `agent_step` payload）：方向的正本。
+#
+# 为什么不从 `attack_plans.problem_key` 读方向：**派了方向但还没立计划的 F 会漏掉**
+# （R1 的口径：D 按方向开 F，F 自己决定 plan）—— 那一格是 F 落成计划之后的产物，
+# 不是派活的读数。
+
+
+def _bigrams(text: Any) -> set[str]:
+    """连续两字（去空白后）。只用来给"brief 与该方向是不是同一件事"一个机械读数。"""
+    s = "".join(str(text or "").split())
+    return {s[i:i + 2] for i in range(len(s) - 1)}
+
+
+def _flat(text: Any) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _d_roster(root: Any, owners: Sequence[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    """D 各趟的名册折叠后状态（读口；只读 root）。
+
+    `owners` 是 D 自己的台账号（`tasks` 里 `role="D"` 的行）：名册按**父**分片
+    （`out/roster/<父>.jsonl`），所以"D 派了几个 F"要把 D 每一趟的名册并起来。
+    重复的名字不算两个 F（同一个名字 = 同一个实例）；不同父名册里的同名项是不同实例。
+    判据要能打桩这一处（反真空：打桩成空 ⇒ 调用方必须报"没读成"）。
+    """
+    from . import secretary as SEC
+
+    sec = SEC.Secretary("D", root=str(root))
+    items: list[dict[str, Any]] = []
+    bad: list[str] = []
+    for owner in owners:
+        got, bad_rows = sec.roster_rows(str(owner))
+        for row in got:
+            one = dict(row)
+            one["owner"] = str(owner)
+            items.append(one)
+        bad += [str(x) for x in bad_rows]
+    return items, bad
+
+
+def dispatch_directions(root: Any, *, roster: Sequence[Mapping[str, Any]] | None = None,
+                        tasks: Sequence[Mapping[str, Any]] | None = None,
+                        dispatches: Sequence[Mapping[str, Any]] | None = None) -> dict:
+    """D 派了几个 F、各自方向（唯一读数口；只从既有数据现算，不新造字段）。
+
+    返回 `{checked, reason, count, fs, directions, unmatched, roster_f, tasks_f, problems}`：
+
+    - `count`：名册上（未退役的）F 的个数 —— "派了几个 F"；
+    - `fs`：每个 F 一项 `{name, owner, task_id, brief, brief_source, direction,
+      direction_source, roster_task_text, dispatch_task, direction_agrees, brief_overlap}`；
+      `direction` 的正本是**D 派活那一刻写下的原文**（③）；名册的 `task_text` 只是同一段
+      原文的副本（它按 `TASK_TEXT_MAX` 截断），两处都有时 `direction_agrees` 给一个读数；
+    - `directions`：非空的那些方向（逐条原文）；
+    - `unmatched`：有派活原文、但对不上任何在册 F 的条数（**不许静默丢**）；
+    - `checked`：这一格读成了没有。三态：名册有坏行 / `tasks` 里有 F 的派活行而名册里
+      一个 F 都没有（两处对不上）/ 派活记录读不出来 ⇒ `False` + `reason` ——
+      **"没读成"绝不许读成"0 个 F"**。
+
+    `roster` / `tasks` / `dispatches` 三个形参是给判据打桩用的（反真空）；生产调用不给。
+    """
+    out: dict[str, Any] = {"checked": False, "reason": "", "count": 0, "fs": [],
+                           "directions": [], "unmatched": 0, "roster_f": 0,
+                           "tasks_f": 0, "problems": []}
+    if tasks is None:
+        try:
+            from .store import Store
+
+            task_rows = [dict(r) for r in Store(str(root)).rows("tasks")]
+        except Exception as exc:  # noqa: BLE001
+            out["reason"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+            return out
+    else:
+        task_rows = [dict(r) for r in tasks]
+    owners = sorted({str(r.get("task_id") or "") for r in task_rows
+                     if str(r.get("role") or "") == "D"
+                     and str(r.get("task_id") or "")})
+    if roster is None:
+        try:
+            items, bad = _d_roster(root, owners)
+        except Exception as exc:  # noqa: BLE001 —— 读不成如实报（不是"0 个 F"）
+            out["reason"] = (f"名册读不出来（{type(exc).__name__}: {exc}）"
+                             "⇒ 这一格没查成（不是「0 个 F」）")
+            return out
+    else:
+        items, bad = [dict(r) for r in roster], []
+    if dispatches is None:
+        reading = d_dispatch_records(root)
+        if not reading.get("checked"):
+            out["reason"] = str(reading.get("reason") or "D 的派活记录没查成")
+            return out
+        recs = [dict(x) for x in (reading.get("dispatches") or [])]
+    else:
+        recs = [dict(x) for x in dispatches]
+    out["problems"] = [str(x) for x in bad]
+
+    f_items = [r for r in items
+               if str(r.get("role") or "") == "F" and not bool(r.get("retired"))]
+    out["roster_f"] = len(f_items)
+    f_tasks = [r for r in task_rows
+               if str(r.get("role") or "") == "F"
+               and str(r.get("called_by") or "") == "D"]
+    out["tasks_f"] = len({str(r.get("task_id") or "") for r in f_tasks})
+    # ---- 派活原文按 F 归位：先按点名（name / reuse），再按原文对得上 ----
+    unmatched: list[str] = []
+    for rec in recs:
+        if str(rec.get("role") or "") != "F":
+            continue
+        text = _flat(rec.get("task"))
+        if not text:
+            continue
+        payload = dict(rec.get("payload") or {}) if isinstance(rec.get("payload"), Mapping) else {}
+        want = {str(payload.get("name") or ""), str(payload.get("reuse") or "")} - {""}
+        hit = next((it for it in f_items
+                    if want and str(it.get("name") or "") in want), None)
+        if hit is None:
+            hit = next((it for it in f_items
+                        if _flat(it.get("task_text")) and
+                        (text in _flat(it.get("task_text"))
+                         or _flat(it.get("task_text")) in text)), None)
+        if hit is None:
+            unmatched.append(text)
+            continue
+        if not str(hit.get("dispatch_task") or ""):
+            hit["dispatch_task"] = str(rec.get("task") or "")
+            hit["dispatch_sid"] = str(rec.get("sid") or "")
+    out["unmatched"] = len(unmatched)
+    # ---- 每个 F 的方向与两处读数 ----
+    for it in f_items:
+        name = str(it.get("name") or "")
+        roster_text = str(it.get("task_text") or "")
+        dispatch_text = str(it.get("dispatch_task") or "")
+        direction = dispatch_text or roster_text
+        source = "dispatch" if dispatch_text else ("roster_task_text" if roster_text else "")
+        both = bool(dispatch_text and roster_text)
+        agrees: bool | None
+        if both:
+            a, b = _flat(dispatch_text), _flat(roster_text)
+            # 名册那一段会被 `TASK_TEXT_MAX` 截断 ⇒ 只问"是不是同一段原文的开头"
+            agrees = bool(a == b or b in a or a in b)
+        else:
+            agrees = None
+        brief = str(it.get("brief") or "")
+        g1, g2 = _bigrams(brief), _bigrams(direction)
+        overlap = (round(len(g1 & g2) / len(g1), 3) if g1 and g2 else None)
+        entry = {"name": name, "owner": str(it.get("owner") or ""),
+                 "task_id": str(it.get("task_id") or ""),
+                 "brief": brief, "brief_source": str(it.get("brief_source") or ""),
+                 "direction": direction, "direction_source": source,
+                 "roster_task_text": roster_text, "dispatch_task": dispatch_text,
+                 "direction_agrees": agrees, "brief_overlap": overlap}
+        out["fs"].append(entry)
+        if direction:
+            out["directions"].append(direction)
+    out["count"] = len(f_items)
+    # ---- 三态：两处对不上 / 名册有坏行 ⇒ 没读成 ----
+    if bad:
+        out["reason"] = (f"名册有 {len(bad)} 行读不出来 ⇒ 这一格没查成"
+                         "（不是「0 个 F」）")
+        return out
+    if out["roster_f"] == 0 and out["tasks_f"] > 0:
+        out["reason"] = ("`tasks` 里有 F 的派活行，而名册里一个（未退役的）F 都没有 "
+                         f"（{out['tasks_f']} 趟）⇒ 两处对不上：这一格没查成，"
+                         "不是「0 个 F」")
+        return out
+    out["checked"] = True
+    if not f_items:
+        out["reason"] = "这一趟 D 没派过 F（名册上一个 F 都没有，`tasks` 也没有 F 的行）"
+    elif out["unmatched"]:
+        out["reason"] = (f"派了 {out['count']} 个 F；另有 {out['unmatched']} 条派活原文"
+                         "对不上任何在册 F（没丢，见 problems / 调用方读数）")
+    else:
+        out["reason"] = f"派了 {out['count']} 个 F，各自方向都读得到"
+    return out
+
