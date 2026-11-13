@@ -123,13 +123,42 @@ GRADES: tuple[str, ...] = ("conjecture", "strong_conjecture", "pre_theorem", "th
 #: 刻意不在 `GRADES` 里：进了那条序列就会被排序、被算进"定理有几条"的计数，
 #: 而"这个概念是猜想"这句话本身是错的（概念没有真值，只有良定义没良定义）。
 GRADE_NOT_APPLICABLE = "not_applicable"
+
+#: 「错误」那一档（业主 2026-11-13 裁定：「新增一档 grade 错误」「error 绝对是最低等级」）。
+#:
+#: ## 为什么它现在是一个常量、还不是 `GRADES` 的第一个元素
+#: `GRADES` 是排序轴，而轴上的每一档都必须在 :data:`GRADE_TO_KIND` 里反算成一个历史
+#: 档位（:data:`LEGACY_KINDS` 在 import 期就是 `tuple(GRADE_TO_KIND[g] for g in GRADES)`）；
+#: 那个历史档位词表是 `schema.EVIDENCE_KINDS`，属 FC-27（schema-migration）——
+#: 改它要人写 / 人逐行走查 + 2 名 reviewer。所以本笔只落「读侧认它、且绝对最低」；
+#: 词表那一行由人落，且三处必须同一笔：`schema.EVIDENCE_KINDS` 加一档、
+#: `GRADE_TO_KIND` 加一格、把 `GRADE_ERROR` 挪到 `GRADES` 的第一格。
+GRADE_ERROR = "错误"
+
+#: 等级由弱到强的「唯一」序（含「错误」）。要比较强弱就读它，
+#: 不要拿 `GRADES.index`：它认不出「错误」，会抛 `ValueError` 或落到某个默认值。
+#: 「错误」排在最前 = 业主那句「error 绝对是最低等级」的唯一落点。
+GRADE_ORDER: tuple[str, ...] = (GRADE_ERROR, *GRADES)
+
 GRADE_LABELS: dict[str, str] = {
     "conjecture": "猜想",
     "strong_conjecture": "强猜想",
     "pre_theorem": "预备定理级",
     "theorem": "正式定理",
     GRADE_NOT_APPLICABLE: "不适用（概念行不参与等级）",
+    GRADE_ERROR: "错误（证伪签）",
 }
+
+
+def grade_index(value: Any) -> int:
+    """等级在 :data:`GRADE_ORDER` 里的位置（0 = 最弱，越大越强）。
+
+    认不出 ⇒ `-1`。「它不代表"比错误还低"」：调用方要先判
+    `str(value) in GRADE_ORDER`，再拿本函数比较（三态纪律：判不了 ≠ 最低）。
+    空串也落 -1：它是"没有等级"（老行 / 概念行），不是"最弱的那一档"。
+    """
+    text = str(value or "").strip()
+    return GRADE_ORDER.index(text) if text in GRADE_ORDER else -1
 
 #: 等级 ⇒ 历史档位（`statements.evidence_kind` 的唯一反算表）。
 #:
@@ -269,6 +298,83 @@ def _bit_state(bits: Mapping[str, Any], name: str) -> str:
 #: 正本仍是 `bits.reviewed`（布尔），`reviewed_source` 只回答"凭什么"。
 REVIEWED_SOURCE_V = "v"
 REVIEWED_SOURCE_CITATION = "citation"
+
+#: 证伪签的口袋（`bits.evidence.refutation_sign`）与它的作废载荷档名
+#: （`bits.voided_by.kind`）。
+#:
+#: ## 为什么不写进签文件（`out/vsigns/<正文 sha>.json`）
+#: 签文件是「一稿一签」（`vsigns.issue` 的既有纪律），而证伪签的对象是「另一条命题」 P：
+#: 签盖的是 Q 的证伪论证，被否决的是 P。写进签文件会变成"一稿两签"（同一份正文挂两个
+#: 结论），还要把 `vsign/1` 升版、动每一个读签的人。所以翻译结果落在「被证伪那一行」的
+#: 口袋里，签文件一个字不动。
+#:
+#: ## 它压过一切（业主：「证伪签在则否决其它等级且 error 绝对是最低等级」）
+#: `derive_grade` 在五个位之前先读这一格 ⇒ 哪怕同一行另有真签 / 形式化 / 穷举证书，
+#: 等级都读「错误」。它不是"第六位"，是一个「否决项」（`voided_by` 的兄弟）。
+REFUTATION_SIGN_KEY = "refutation_sign"
+REFUTATION_SIGN_KIND = "refutation_sign"
+#: 一格证伪签至少要能回答"签的是哪一份正文 / 哪一行台账 / 几时"。
+#: 缺格 ⇒ 读不出来 ⇒ 「不许当证伪」（fail-closed：宁可读成"没有"，不读成"有"）。
+REFUTATION_SIGN_REQUIRED: tuple[str, ...] = ("artifact_sha", "ledger", "at")
+
+
+def refutation_reading(bits: Any) -> dict[str, Any]:
+    """证伪签的唯一读口（三态：有且合规 / 没有 / 读不出来）。
+
+    ## 为什么要有三态而不是一个布尔
+    「这一行没有证伪签」与「这一行自称有、而那一格读不出来」是两句话：
+    - 前者是正常的（绝大多数行都没有证伪签）；
+    - 后者是坏数据（`voided_by.kind` 写着 `refutation_sign`、口袋却是空的 / 形状不对）。
+    折平之后，一条"自称被证伪却拿不出签"的行会被读成"只是没证伪"，等级照旧按五元位
+    往上抬 —— 那正好是业主那句「证伪签在则否决其它等级」要防的反面。
+
+    ## 判据（看一眼就够，全部本地）
+    - `bits.evidence.refutation_sign` 是 Mapping，且 :data:`REFUTATION_SIGN_REQUIRED`
+      三格都非空 ⇒ `checked=True` + `sign=<副本>`；
+    - 没有这一格、而 `bits.voided_by.kind` 也不是 `refutation_sign` ⇒ `checked=True` +
+      `sign={}`（正常：没有证伪签）；
+    - 有这一格但形状不对，或 `voided_by` 自称证伪签而口袋不在 ⇒ `checked=False` +
+      `sign={}` + `why`（「读不出来 ⇒ 不许当证伪」）。
+
+    返回 `{checked, sign, why}`。
+    """
+    out: dict[str, Any] = {"checked": True, "sign": {}, "why": ""}
+    if not isinstance(bits, Mapping):
+        out.update(checked=False, why="bits 不是对象 ⇒ 证伪签这一格没查成（不许当证伪）")
+        return out
+    ev = bits.get("evidence")
+    raw = ev.get(REFUTATION_SIGN_KEY) if isinstance(ev, Mapping) else None
+    void = bits.get("voided_by")
+    claims = (isinstance(void, Mapping)
+              and str(void.get("kind") or "") == REFUTATION_SIGN_KIND)
+    if raw is None:
+        if claims:
+            out.update(checked=False, why=(
+                "`bits.voided_by.kind=refutation_sign` 而 `bits.evidence.refutation_sign` "
+                "不在 ⇒ 证伪签读不出来（不许当证伪：宁可读成没有，不读成有）"))
+        return out
+    if not isinstance(raw, Mapping):
+        out.update(checked=False, why=(
+            f"`bits.evidence.refutation_sign` 不是对象（读到 {type(raw).__name__}）⇒ "
+            "证伪签读不出来（不许当证伪）"))
+        return out
+    missing = [k for k in REFUTATION_SIGN_REQUIRED if not str(raw.get(k) or "").strip()]
+    if missing:
+        out.update(checked=False, why=(
+            f"`bits.evidence.refutation_sign` 缺 {missing} ⇒ 这一份签说不出签的是哪一份"
+            "正文 / 哪一行台账 / 几时，证伪签读不出来（不许当证伪）"))
+        return out
+    out["sign"] = dict(raw)
+    return out
+
+
+def refutation_sign(bits: Any) -> dict[str, Any]:
+    """这一行的证伪签（「只有有且合规时才非空」；空 = 不是证伪签）。
+
+    它是 :func:`refutation_reading` 的窄读口：`derive_grade` 用这一句做否决判定，
+    调用方要"为什么否决 / 为什么没否决"时用宽读口（那里带 `why`）。
+    """
+    return dict(refutation_reading(bits).get("sign") or {})
 
 
 def bits_of(*, numeric: Any = None, numeric_evidence: Mapping[str, Any] | None = None,
@@ -1295,9 +1401,25 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     于是并表之后每条概念都会被读成"猜想"，而"猜想"在报告里是一句关于真值的话，
     概念根本没有真值可言（它只有"良定义没良定义"）。所以这一档单独给一个值
     （`GRADE_NOT_APPLICABLE`），它不在 `GRADES` 里 —— 不参与排序、不算进定理计数。
+
+    ## 证伪签是这条链之前的一道否决（业主 2026-11-13）
+    `bits.evidence.refutation_sign` 存在且合规 ⇒ 直接 `GRADE_ERROR`（「错误」）。
+    它先于 `voided_by` 的清零、也先于五元位的抬档：一条另有真签 / 形式化 / 穷举的
+    命题被证伪之后，读数必须是「错误」，不许还是 `theorem`（否决项的唯一落点）。
+    `voided_by` 仍然只清零（回「猜想」）—— 两种作废的读数不同是「有意的」：
+    只有凭反例 / 构造 / 判词作废的那一档没有"一份被 V 签过的证伪论证"，
+    所以它给不出「错误」这一档（业主：「error 等级根据证伪签算」）。
     """
     if str(kind or "") == "concept":
         return GRADE_NOT_APPLICABLE
+    #: 证伪签在 ⇒ 「错误」，「否决其它一切」（业主 2026-11-13：「证伪签在则否决其它等级
+    #: 且 error 绝对是最低等级」）。位置必须在 `voided_by` 与五元位「之前」：这条命题
+    #: 哪怕另有真签 / 形式化 / 穷举证书（照五元位本可读成 `theorem`），只要那一行挂着
+    #: 一格合规的证伪签，等级就是「错误」—— 否则"另有更高档"会把否决读没。
+    #: 读不出来的证伪签（`refutation_reading().checked=False`）在这里等同"没有"：
+    #: 那一条由写入口（`refutation`）受控拒，读侧不许拿坏数据抬等级。
+    if refutation_sign(bits):
+        return GRADE_ERROR
     if bits.get("voided_by"):
         return "conjecture"          # 作废之后等级清零（历史留在 voided_by 里）
     has_proof = bool(bits.get("proof"))

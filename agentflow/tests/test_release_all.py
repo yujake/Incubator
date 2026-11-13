@@ -3104,6 +3104,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "只动 `bits.evidence.hard_to_prove_by_proof`，status 与占位签一个"
                           "字节不动）/ _write_row（整行重建 + `Statement.validate` + 单事务）"
                           "—— 被 `Secretary.amend_statement_meta` 转调",
+    # 2026-11-13（业主裁定「专门通过证伪通道（锁定命题号）提交……证伪通道系统自动将 V 签
+    # 翻译成证伪签」）：证伪通道的库层入口。为什么必须是顶层而不是工具 / 动作：
+    # 「不通过秘书」= 判据与写入都不经 ActionSpec、不读稿上的签块；而它要写的两样
+    # （`statements.proof_text` / `bits`）只有顶层模块能拿 store 直接落（角色包不许直写
+    # `statements`）。声明面（B 的新动作）属 p282/FC-27，另批人审 —— 判据走本模块入口。
+    "refutation.py": "证伪通道（2026-11-13）：sign_payload（把 V 对 Q 证伪论证的签翻译成"
+                     " P 的证伪签；唯一翻译点，缺格 ⇒ 空 ⇒ 受控拒）/ refute_by_sign（锁 P + "
+                     "锁稿：稿的形态 → P 在册 → 终态纪律 → `## 证明` 正文 + `## 依赖` 形式 → "
+                     "`vsigns.sign_reading` 的 signed → 同事务写 `proof_text|proofs[n]`（旧正文进 "
+                     "`proof_history`）+ `status=refuted` + `bits.evidence.refutation_sign` + "
+                     "`bits.voided_by`）/ reading（纯读：`refuted_by_sign` 与其它作废分开）",
     # 2026-11-13（业主「统一 B、E、F 注册稿和写稿的流程：写命题 → 命题形式过审 → 拿稿号
     # → 写稿」）：三族共用的唯一开稿口。为什么必须是顶层：`fs.write/edit/delete/move` 的
     # 写面（工具层）、B 的引文落稿（角色包）、E/F 的开稿三处都要用同一份"谁能写哪份稿"，
