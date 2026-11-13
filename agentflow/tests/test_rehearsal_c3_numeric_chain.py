@@ -7,13 +7,21 @@
 AgentE.run_experiment(..., method="numeric")            # 普通数值：reports/e-num-<稿号>.md
 AgentE.run_experiment(..., method="exhaustive_search")  # 穷举证明：reports/e-proof-<稿号>.md（有 ## 证明）
 AgentV.verify_proof(proof_manuscript=<e-proof>)         # 三转 clean ⇒ vsigns + 收方秘书落签块
-AgentB.ingest_manuscript(mode="register", <e-num>)      # 数值通道：命题形态闸 + 数值证据位
+AgentB.ingest_manuscript(mode="register", <e-num>)      # 数值通道：放行 + 数值证据位
 AgentB.ingest_manuscript(mode="register", <e-proof>)    # 按稿收编：证明正文 + 第 1 条路径
 ```
 
 真入口：真 `Store` / 真事务 / 真 `AgentE.run_experiment`（真起子进程、真解析
 `REPRO_RESULT`、真落台账与两份手稿）/ 真 `AgentV.verify_proof`（穷举会审 + 三转）/ 真
-`Secretary`（E 与 B 的形态闸、B 的切稿与登记）。只有"模型这一轮说什么"是假缝。
+`Secretary`（E 的形态闸、B 的切稿与登记）。只有"模型这一轮说什么"是假缝。
+
+## 形态闸归谁（业主 2026-11-13 裁决，本文件按它写）
+
+「B 侧只对 B 自己登记的命题审注册名，E 和 F 手稿侧录入放行」⇒ 形态闸的持有者是
+产出侧（E 的 `agent_e/proposition_form.py::_proposition_form_gate`，在写 experiments
+行 / e-proof 稿之前判一次）；B 收录 `e-num` / `e-proof` 时不判、零次模型调用、
+不写形态台账（回执里 `judged=False / released=True / model_calls=0 /
+ledger_appended=False`）。
 
 ## 这条链的"走通"按盘上读数认（不是看回执里的 ok=True）
 
@@ -26,12 +34,17 @@ AgentB.ingest_manuscript(mode="register", <e-proof>)    # 按稿收编：证明�
 | 5 | 数值通道的 `statements` 一行：`kind="conjecture"`、`bits.numeric="verified"`、`proof_text` 空 |
 | 6 | 穷举那一条的 `statements` 一行：`kind="theorem"`、`evidence_kind="proof"`、`proof_list=[1]`、`path_reading.count=1` |
 
-## 反真空（打坏 B 的数值通道形态闸）
+## 反真空（打坏产出侧的形态闸）
 
-把 `AgentB._proposition_form_gate` 打桩成「形态不合规」⇒ 两次收编都必须受控拒：
-普通数值通道回 `proposition_form_refused`（改法写在拒信里），按稿收录回
-`proposition_form_refused` + 非空 `fix` + `next_step`；`statements` 一行都不落
-⇒ 第 5 / 6 条必须红。它证明这条链的绿来自"形态闸真的判过并放行"，不是恒真。
+把 E 的 `_proposition_form_gate` 打桩成「形态不合规」⇒ 穷举那一趟在写盘之前受控拒
+（`ExperimentError`，拒信里带 `proposition_form_refused` 与 E 自己的改法句），
+experiments 行 / e-proof 稿 / statements 一个字节都不落 ⇒ 第 1 / 3 / 6 条必须红。
+它证明这条链的绿来自"产出侧那道闸真的判过并放行"，不是恒真。
+
+另一条判据钉新裁决本身：B 收录这两族时回执 `judged=False / released=True /
+model_calls=0 / ledger_appended=False`，B 的秘书缝一次都没被问过 `proposition_form`，
+形态台账一行没多 —— 防止以后有人把闸又搬回 B（那会既白花钱、又把判据放到错误的
+持有者手里）。
 
 零真实模型调用；`tmp_path` 工作区，不碰 `projects/` / `demo/`。
 """
@@ -148,10 +161,6 @@ CLEAN = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失�
 FORM_OK = {"checked": True, "well_formed": True, "conditions": "n 为偶数",
            "conclusion": "n^2 + 2 不是 3 的倍数", "problems": [],
            "decision": "形态合规", "refused": "", "reason": "夹具：形态合规"}
-FORM_BAD = {"checked": True, "well_formed": False, "conditions": "",
-            "conclusion": "", "problems": ["没有写出「从什么条件导出什么结论」"],
-            "decision": "形态不合规", "refused": "proposition_form_refused",
-            "reason": "打桩：这一段不是一条可判真假的命题"}
 IDENTITY_DIFFERENT = {"checked": True, "decision": "different",
                       "canonical_name": "另一条命题", "same_as": "", "route": "",
                       "condition": "夹具", "conclusion": "夹具",
@@ -176,9 +185,15 @@ def _workspace(base: pathlib.Path) -> Store:
     return st
 
 
-def _run_chain(base: pathlib.Path) -> dict:
-    """把 C3 那条链整条跑一遍，返回盘上的读数（反真空拿同一份读数打红）。"""
+def _run_chain(base: pathlib.Path, *, trace: dict | None = None) -> dict:
+    """把 C3 那条链整条跑一遍，返回盘上的读数（反真空拿同一份读数打红）。
+
+    `trace` 给一个 dict 时，工作区在建好那一刻就挂进去 —— 反真空那一条要在
+    `run_experiment` 抛出来之后仍然读得到盘（"一个字节都没写"是判据）。
+    """
     st = _workspace(base)
+    if trace is not None:
+        trace["store"] = st
     e_seam = _Seam({"proposition_form": _forms()})
     e = AgentE(st, config={}, workspace_root=st.root,
                secretary=SEC.Secretary("E", root=st.root, store=st, seam=e_seam,
@@ -217,8 +232,10 @@ def _run_chain(base: pathlib.Path) -> dict:
                secretary=SEC.Secretary("B", root=st.root, store=st, seam=b_seam,
                                        enable_model=True))
     numeric_ms = str(numeric.get("numeric_manuscript") or "")
+    form_rows_before = [dict(r) for r in SEC.proposition_form_rows(st.root)]
     filed_numeric = b.ingest_manuscript(manuscript=numeric_ms, mode="register")
     filed_proof = b.ingest_manuscript(manuscript=rel, mode="register")
+    form_rows_after = [dict(r) for r in SEC.proposition_form_rows(st.root)]
 
     return {
         "store": st,
@@ -227,6 +244,9 @@ def _run_chain(base: pathlib.Path) -> dict:
         "reviewed": dict(reviewed),
         "filed_numeric": dict(filed_numeric),
         "filed_proof": dict(filed_proof),
+        "b_seam": b_seam,
+        "form_rows_before": form_rows_before,
+        "form_rows_after": form_rows_after,
         "rel": rel,
         "text": text,
         "numeric_rel": numeric_ms,
@@ -389,50 +409,82 @@ def test_the_numeric_chain_runs_end_to_end(tmp_path):
     assert reading["reviewed"].get("kind") == "proof_unregistered_signed", reading["reviewed"]
 
 
-# ============================================================ ② 反真空：形态闸坏
+# ============================================================ ② 反真空：产出侧形态闸坏
 
 
-def test_a_broken_form_gate_turns_the_chain_red(tmp_path, monkeypatch):
-    """反真空（B 的数值通道形态闸）：闸判「形态不合规」⇒ 两次收编都必须受控拒。
+def test_a_broken_producer_form_gate_turns_the_chain_red(tmp_path, monkeypatch):
+    """反真空（产出侧形态闸）：E 的 `_proposition_form_gate` 判「形态不合规」⇒ 链必须红。
 
-    打桩的是 B 那一侧"命题形态合不合规"的判定（`AgentB._proposition_form_gate`），
-    不是判据：E 照样跑、V 照样签，断的是"闸放行"这一环。两次拒收都必须带受控码；
-    按稿那一路还必须带非空的 `fix`（改法）与 `next_step`。若这一条不红，
-    上面第 5 / 6 条就只是"收过稿"，而不是"形态闸真的判过并放行"。
+    2026-11-13 业主裁决之后，形态闸的持有者是产出侧（E 的数值证明路线），B 侧对
+    `e-num` / `e-proof` 放行。所以这一条打的是 E 的那一格：`run_experiment` 在写
+    experiments 行 / e-proof 稿之前受控拒（`ExperimentError`），一个字节都不写。
+    它证明第 3 / 6 条不是"跑过 E 就算数"，而是"产出侧那道闸真的判过并放行"。
     """
-    from agentflow.agent_b import AgentB as _B
+    from agentflow.agent_e import ExperimentError
+    from agentflow.agent_e import proposition_form as EFORM
 
     def _refuse(self, **_kw):
         return {"checked": True, "well_formed": False, "submittable": False,
                 "refused": "proposition_form_refused",
-                "reason": str(FORM_BAD["reason"]),
-                "problems": list(FORM_BAD["problems"]),
-                "decision": str(FORM_BAD["decision"])}
+                "reason": "打桩：这一条没有写清条件与结论",
+                "problems": ["没有写出「从什么条件导出什么结论」"],
+                "decision": "形态不合规"}
 
-    monkeypatch.setattr(_B, "_proposition_form_gate", _refuse)
+    monkeypatch.setattr(EFORM._NumericProofFormGate, "_proposition_form_gate", _refuse)
 
+    trace: dict = {}
+    with pytest.raises(ExperimentError) as excinfo:
+        _run_chain(tmp_path, trace=trace)
+    message = str(excinfo.value)
+    # 受控码与 E 自己的改法句都在拒信里（E 侧没有 B 那对 fix / next_step 键）。
+    assert "proposition_form_refused" in message, message
+    assert "设…则…" in message, message
+
+    # 零写入（指被拒的那一趟）：普通数值那一行照旧在（它不过这道闸）；
+    # 穷举那一趟的实验行 / e-proof 稿 / statements 一个都没有（闸在写盘之前）。
+    st: Store = trace["store"]
+    experiments = [dict(r) for r in st.rows("experiments")]
+    assert [str(r.get("method") or "") for r in experiments] == ["numeric"], experiments
+    reports = pathlib.Path(st.root) / "reports"
+    leftovers = ([p.name for p in reports.glob("e-proof-*.md")]
+                 if reports.is_dir() else [])
+    assert leftovers == [], leftovers
+    assert st.rows("statements") == [], st.rows("statements")
+
+
+# ============================================================ ③ 新裁决：B 侧放行
+
+
+def test_b_releases_the_e_families_without_a_second_form_judgement(tmp_path):
+    """新裁决（2026-11-13）：B 收录 e-num / e-proof 时不再判形态、零次模型调用。
+
+    读数按收编回执里那一格认（`proposition_form`：`judged=False` / `released=True` /
+    `model_calls=0` / `ledger_appended=False`），并核两处旁证：
+    B 的秘书缝一次都没被问过 `proposition_form`；形态台账在两次收编前后一行没多。
+    """
     reading = _run_chain(tmp_path)
-    problems = _chain_problems(reading)
-    assert problems, "形态闸被打成不合规，链却读成了通 —— 这一组判据是橡皮图章"
+    assert _chain_problems(reading) == [], _chain_problems(reading)
 
-    # 普通数值通道：受控码 + 改法写在拒信里（这一路没有独立的 fix 键）。
-    got_num = reading["filed_numeric"]
-    assert got_num.get("ok") is not True, got_num
-    assert str(got_num.get("refused") or got_num.get("kind") or "") == "proposition_form_refused", got_num
-    assert "把命题改成" in str(got_num.get("reason") or ""), (
-        f"普通数值通道的拒信里没有改法：{str(got_num.get('reason'))[:300]!r}")
+    # 回执里的放行读数：两族各一条。
+    for got, family in ((reading["filed_numeric"], "e-num"),
+                        (reading["filed_proof"], "e-proof")):
+        form = dict(got.get("proposition_form") or {})
+        assert form.get("released") is True, (family, form)
+        assert form.get("judged") is False, (family, form)
+        assert int(form.get("model_calls") or 0) == 0, (family, form)
+        assert form.get("ledger_appended") is False, (family, form)
+        assert str(form.get("family") or "") == family, (family, form)
+        assert "放行" in str(form.get("reason") or ""), (family, form)
 
-    # 按稿收录：受控码 + 非空 fix + next_step（改法由拒收自己带出来）。
-    got_prf = reading["filed_proof"]
-    assert got_prf.get("ok") is not True, got_prf
-    assert str(got_prf.get("refused") or "") == "proposition_form_refused", got_prf
-    fix = str(got_prf.get("fix") or "")
-    assert fix.strip(), f"按稿收录的拒收回执里没有 fix：{got_prf}"
-    assert "`## 命题`" in fix, fix
-    assert str(got_prf.get("next_step") or "").strip(), got_prf
-
-    # 一行 statements 都不许落（形态闸拦在落库之前）。
-    assert reading["statements"] == [], reading["statements"]
+    # 旁证①：B 的秘书缝没被问过形态（问过的只有同一命题检索那一族）。
+    assert reading["b_seam"].asked("proposition_form") == 0, reading["b_seam"].seen
+    # 旁证②：形态台账一行没多（E 那一次仍在；B 一次都没写）。
+    before = {str(r.get("statement_sha256") or "") for r in reading["form_rows_before"]}
+    after = {str(r.get("statement_sha256") or "") for r in reading["form_rows_after"]}
+    assert after == before, (reading["form_rows_before"], reading["form_rows_after"])
+    b_rows = [r for r in reading["form_rows_after"]
+              if str(r.get("role") or "") == "B"]
+    assert b_rows == [], b_rows
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工复跑用
