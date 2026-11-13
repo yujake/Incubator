@@ -1288,7 +1288,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     #:     （`run_experiment` 在写 `experiments` 那一行 / e-proof 稿之前判一次）；
     #:   · `e-num` —— E 的普通数值路线没有独立的形态闸（`_wants_proof` 之外不判），
     #:     按业主同一条放行口径由 B 侧放行：命题逐字取自 `## 命题`、`proof_text` 留空；
-    #:   · `b-proof` —— 2026-11-13 业主裁定 ④（甲）：B 的闸只剩**开稿那一刻**
+    #:   · `b-proof` —— 2026-11-13 业主裁定 ④（甲）：B 的闸只剩「开稿那一刻」
     #:     （`_land_citation_manuscript` → `manuscriptopen.open_manuscript`，判据仍是
     #:     `Secretary.judge_proposition_form`）；引文侧新命题在开稿之前已经判过
     #:     （`_own_registration_form_refusal`），优化副本按 `open_polish_copy` 的来源记录
@@ -1518,7 +1518,32 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 reading = dict(reading)
                 reading["polish_source"] = dict(_polish)
         # ---- 2026-11-13（业主裁定 ④，甲）：闸只剩开稿那一刻 ⇒ 按稿收录一律放行 ----
-        if fam in self.MANUSCRIPT_FORM_RELEASED_FAMILIES:
+        #
+        # `b-proof` 多一道正面证据：这一族的稿只有两个合法来源 ——（一）引文侧开稿
+        # （`_land_citation_manuscript` → `open_manuscript`，判过才发号）、（二）优化副本
+        # （按 `open_polish_copy` 的来源记录放行，上面那一支已经先返回）。第一档的证据是
+        # 「形态台账里真有一行判过这段字节」（按 sha 命中、跨 role 读）—— 没有那一行
+        # 就说明这份稿没经过开稿口（例如记录被删掉 / 从别处拷进来的稿），这时按
+        # 「其它手稿录入」照判（fail-closed：放行只认正面证据，不认"应该是判过"）。
+        if fam == "b-proof":
+            from ..secretary import proposition_form_of
+
+            _root = str(getattr(self.store, "root", "") or "")
+            _form_row = (proposition_form_of(_root, statement_full=statement)
+                         if _root else {})
+            if _form_row and bool(_form_row.get("checked")):
+                return {}, {
+                    "judged": False, "released": True, "family": fam,
+                    "checked": True, "model_calls": 0, "ledger_appended": False,
+                    "release_basis": "form_ledger",
+                    "reason": ("这一族的闸在开稿那一刻（`manuscriptopen.open_manuscript`）："
+                               "同一段命题字节的判定已经在形态台账里（按 sha 命中、"
+                               "跨 role 读）⇒ 按稿收录这一路不判第二次、"
+                               "不写形态台账、零次模型调用"),
+                }
+        # 没有正面证据的 `b-proof` 不在这张表上放行：落到下面按「其它手稿录入」照判。
+        if (fam in self.MANUSCRIPT_FORM_RELEASED_FAMILIES
+                and fam != "b-proof"):
             return {}, {
                 "judged": False, "released": True, "family": fam,
                 "checked": False, "model_calls": 0, "ledger_appended": False,
@@ -6540,7 +6565,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         - `path_group >= 1`（优化线，路径在册）⇒ 写 `statements.manuscripts[组号]`
           （逐路径记录；`manuscriptpaths` 的唯一读口就在那一格）；
         - `path_group == 0`（老调用面 / 首次落稿）⇒ 只写 `manuscript_id`（"这一条
-          命题现在那份稿"）。**不写 `manuscripts`**：那一格是"每条证明路径各一份稿"，
+          命题现在那份稿"）。「不写 `manuscripts`」：那一格是"每条证明路径各一份稿"，
           落稿时正文还没挂进台账、路径号也还没分配 —— 提前写一格会让
           `manuscriptpaths.path_reading` 把这一份算成"已有第 1 条路径"，
           接着的真收录就被排成第 2 条（`used_by=stmt:<号>#p2` 那个形态）。
