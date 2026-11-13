@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ._support import Any, DT, DocumentError, Mapping, S, SIG, Sequence
+from .hard_to_prove import report_held_back, settle_claims
 from .revise_gates import checked_claims
 
 #: `revise` 回来时必须点名的下一步（丙，2026-11-11）。措辞照 `specs/m.py` 那句
@@ -90,6 +91,12 @@ class _Revise:
                 kind=str(doc.get("kind") or ""),
                 workspace_root=self.workspace_root,
             )
+            # ---- 「难以自证」那一关（业主 2026-11-13 裁定）：改稿与写稿是同一条纪律的
+            # 两个入口，所以这里调的是 `build_document` 同一个 `settle_claims`。
+            # 只接一边等于给另一边留后门 —— 与 `check_citations` / `check_proofs`
+            # 在这条路上各补过一次的那两处完全同形（见本文件上面两段注释）。
+            settled = settle_claims(tx.rows, normalized)
+            normalized = settled["claims"]
 
             doc["claims"] = normalized
             # ---- 甲（2026-11-11 业主裁定）：轮次账跟着复审走，不跟着改稿走。
@@ -180,6 +187,17 @@ class _Revise:
             f"正文 {artifact.get('body_path') or '（无）'} sha={(artifact.get('body_sha256') or '')[:16]}…"
             f"；下一步：{REVISE_NEXT_STEP}"
         )
+        # 承重的「难以自证」条目：改稿这一趟也要上报（与写稿那一趟同一句话、同一个收件箱）。
+        # 上报在事务之外：稿子已经落库，留言是另一条通道。
+        report = report_held_back(self.store, settled, kind=str(doc.get("kind") or ""))
+        readings = dict(settled["readings"])
+        readings["report"] = report
+        for row in readings["rows"]:
+            self._emit(
+                f"「难以自证」{row['claim_id']}：引 "
+                + "、".join(f"stmt:{x}" for x in row["statement_ids"])
+                + f" ⇒ {'不进正文（承重）' if row['action'] == 'held_back' else '保守形态'}"
+            )
         return {
             "doc_id": doc_id,
             "review_rounds": payload["review_rounds"],
@@ -204,4 +222,7 @@ class _Revise:
             # 与 `doc.build_document` 的 `meta.citation_coverage` 是同一份实现的同一份读数
             # （那边走工具结果的 meta，这边是角色方法的返回值）。
             "citation_coverage": coverage,
+            # ---- 业主 2026-11-13：「难以自证」的读数（逐条点名 + 上报成没成）。
+            # 与 `build_document` 那一格同一份实现、同一个形状。
+            "hard_to_prove": readings,
         }

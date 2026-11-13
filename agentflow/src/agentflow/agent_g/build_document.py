@@ -24,18 +24,53 @@ class _BuildDocument:
         渲染是无条件的（不是"给了 out_path 才渲染"）：`markdown_path` 是
         FC-02 追溯链的一环，稿件必须有一个能被人打开的落点，否则
         "H 审的是哪个版本"无法回答。
+
+        ## 写之前先过「难以自证」那一关（业主 2026-11-13 裁定）
+
+        `hard_to_prove.settle_claims` 是唯一实现（`revise` 那条路调的是同一个函数）：
+
+        - 引到了「难以自证」命题的辅助断言 ⇒ 改写成保守形态（不写成已证定理）；
+        - 承重断言 ⇒ 摘出正文（原因进开放问题区）、并发一条 message 给召唤者。
+
+        读数挂在返回值的 `hard_to_prove` 那一格；承重被摘掉时**上报的成没成**也在里面
+        （`report` 子格），"没报成"不许被读成"报过了"。上报在写库之前发生：一份稿若
+        被摘得一条不剩（承重的那条就是它的全部），写库会以"claims 不能为空"拒掉，
+        而"这条承重、需仔细研究"不许跟着那一笔一起失败。
         """
+        from .hard_to_prove import report_held_back, settle_claims
+
+        settled = settle_claims(self.store.rows, [dict(c) for c in claims])
+        problems = [str(x) for x in (open_problems or [])]
+        problems.extend(settled["open_problems"])
+        # 上报放在写库之前：承重条目被摘光时（一份稿只剩它一条）`doc.build_document`
+        # 会以"claims 不能为空"拒掉这一笔 —— 而"这条承重、需仔细研究"这件事
+        # 与"这一笔写不写得进去"是两件事，上报不许跟着写库一起失败。
+        report = report_held_back(self.store, settled, kind=kind)
         data = self._call(
             "doc.build_document",
             kind=kind,
             title=title,
-            claims=[dict(c) for c in claims],
+            claims=[dict(c) for c in settled["claims"]],
             sections=[dict(s) for s in (sections or [])] or None,
-            open_problems=[str(x) for x in (open_problems or [])] or None,
+            open_problems=problems or None,
             out_path=str(out_path) if out_path is not None else None,
         )
+        readings = dict(settled["readings"])
+        readings["report"] = report
+        for row in readings["rows"]:
+            self._emit(
+                f"「难以自证」{row['claim_id']}：引 "
+                + "、".join(f"stmt:{x}" for x in row["statement_ids"])
+                + f" ⇒ {'不进正文（承重）' if row['action'] == 'held_back' else '保守形态'}"
+            )
+        if report.get("sent"):
+            self._emit(f"已把承重的那几条上报召唤者 {report.get('to')}（msg_id={report.get('msg_id')}）")
         self._emit(f"写出稿件 doc:{data.get('doc_id')} → {data.get('markdown_path')}")
-        return {**data, "citation_coverage": self._citation_coverage(data, kind=kind)}
+        return {
+            **data,
+            "citation_coverage": self._citation_coverage(data, kind=kind),
+            "hard_to_prove": readings,
+        }
 
     def _citation_coverage(self, data: Mapping[str, Any], *, kind: str) -> dict:
         """这份稿子引了几条台账凭据 / 库里还有多少可引的。
