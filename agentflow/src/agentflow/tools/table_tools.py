@@ -517,10 +517,15 @@ def _match_filter(rows: Sequence[Mapping[str, Any]], filt: Mapping[str, Any] | N
 
     刻意只做等值：模糊匹配是 `table.search` 的活。把两种语义混在一个参数里，
     调用方就再也说不清"我这次到底要的是哪种匹配"。
+
+    返回的就是 `rows` 里命中的那几个对象本身，不再逐行 `dict(...)` 拷一层：
+    两个调用点（`table_list` / `table_count`）交进来的都是 `_rows()` 现造的副本
+    （`Store.rows` 出口逐行新建 dict，`_visible_tasks` 出口同样新建），
+    而 `table_count` 取完 `len()` 就丢掉（一张 6000 行的表白拷 6000 个 dict）。
     """
     if not filt:
-        return [dict(r) for r in rows]
-    return [dict(r) for r in rows if all(r.get(k) == v for k, v in filt.items())]
+        return list(rows)
+    return [r for r in rows if all(r.get(k) == v for k, v in filt.items())]
 
 
 def _type_hints(cls: type) -> dict[str, Any]:
