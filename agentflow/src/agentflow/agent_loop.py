@@ -4702,14 +4702,16 @@ def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
             continue
         # ---- 2026-11-13（业主裁定）：另外两个「不再要签」的终态 --------------------
         #
-        # `refuted`（标记为错误）：稿随命题一并作废 ⇒ 永远不会再被签，要它签就是永远红。
+        # 错误那一档（今天叫 `refuted`，词表补丁落地后叫 `error`）：稿随命题一并作废
+        # ⇒ 永远不会再被签，要它签就是永远红。
         # `hard_to_prove`（优化栏 = 难以自证）：优化做过了、结论是证不出来 ⇒ 它不欠签，
         # 但也不算已签（要不要上报成研究任务由父代理裁）。
         # 这一档显式判一次，不靠下面那条 `external_lit` 占位签豁免兜着：那条豁免的
         # 理由是"引文侧的证据是引文本身"，与"证不出来"是两件事，两件事不能互相代表。
+        from . import errorstate as _ES
         from . import evidencebits as _EB
 
-        if srow and str(srow.get("status") or "") == "refuted":
+        if srow and _ES.statement_refuted(row=srow)["state"] == _ES.STATE_ERROR:
             continue
         if srow and _EB.hard_to_prove_by_proof(srow):
             out.setdefault("hard_to_prove", []).append(str(mid))

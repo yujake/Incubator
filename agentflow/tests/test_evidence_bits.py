@@ -59,8 +59,8 @@ def test_e1_lifecycle_4_proof_plus_formalisation_is_a_theorem():
     assert audited["grade"] == "theorem" and audited["audited_badge"] is True, audited
 
 
-def test_e1_lifecycle_5_a_voided_proposition_drops_back_to_a_conjecture():
-    """第 5 条：数值路出真反例 ⇒ 作废；五位读数全部作废，但历史留在 `voided_by` 里。"""
+def test_e1_lifecycle_5_a_voided_proposition_reads_as_error():
+    """第 5 条：数值路出真反例 ⇒ 作废；等级读「错误」（两种作废同一个终态）。"""
     exp = {"experiment_id": "exp-0009", "exit_code": 0, "result": "refutes",
            "counterexample": "n=14 时该族不存在（枚举 262 个候选，无一满足）",
            "code_path": "code/scan.py", "code_hash": "aa11bb"}
@@ -70,10 +70,11 @@ def test_e1_lifecycle_5_a_voided_proposition_drops_back_to_a_conjecture():
                       reviewed=True, reviewed_by={"round": "V-0001"},
                       formal="verified", formal_evidence={"checker": "lean4"},
                       voided_by=mark)
-    assert bits["grade"] == "conjecture", bits
+    # 2026-11-13 第二次裁定：反例 / 构造 / 判词作废也读「错误」（与证伪签同一个终态）。
+    assert bits["grade"] == EB.GRADE_ERROR, bits
     assert bits["voided_by"]["kind"] == "numeric_counterexample", bits
     assert bits["voided_by"]["counterexample"], bits
-    # 作废是"等级清零"，不是"把记录抹掉"：原来的证明过程还在证据栏里（历史可查）。
+    # 作废不是"把记录抹掉"：原来的证明过程还在证据栏里（历史可查）。
     assert bits["evidence"]["proof_process"], bits
 
 
@@ -313,14 +314,15 @@ def test_a_new_row_with_bits_is_re_normalised_and_the_grade_is_recomputed():
     assert bits["formal"] == "failed", bits              # ("false" ⇒ failed)
 
 
-def test_a_voided_row_stays_a_conjecture_even_with_a_cached_higher_grade():
-    """作废行：等级清零（缓存的"定理"不算数），`refuted_by` 也能当 `voided_by` 读进来。"""
+def test_a_voided_row_reads_error_even_with_a_cached_higher_grade():
+    """作废行：等级读「错误」（缓存的高档不算数），`refuted_by` 也能当 `voided_by` 读进来。"""
     row = {"stmt_id": "stmt-0004", "origin": "own_result",
            "refuted_by": {"kind": "numeric_counterexample", "experiment_id": "exp-0009"},
            "bits": {"proof": True, "reviewed": True, "grade": "theorem",
                     "evidence": {"proof_process": "（旧证明）", "reviewed_by": {"round": "V-1"}}}}
     bits = EB.bits_from_row(row)
-    assert bits["grade"] == "conjecture", bits
+    # 缓存写的是 theorem，现算必须压过它 —— 而且压到的不是"猜想"，是「错误」（2026-11-13）。
+    assert bits["grade"] == EB.GRADE_ERROR, bits
     assert bits["voided_by"]["experiment_id"] == "exp-0009", bits
 
 

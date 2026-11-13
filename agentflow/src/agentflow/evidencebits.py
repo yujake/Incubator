@@ -317,6 +317,23 @@ REFUTATION_SIGN_KIND = "refutation_sign"
 #: 缺格 ⇒ 读不出来 ⇒ 「不许当证伪」（fail-closed：宁可读成"没有"，不读成"有"）。
 REFUTATION_SIGN_REQUIRED: tuple[str, ...] = ("artifact_sha", "ledger", "at")
 
+#: 「作废载荷里哪些 kind 等于『这条命题是错的』」（业主 2026-11-13 第二次裁定：
+#: 反例 / 构造 / 判词作废的那条路也要落到「错误」，与证伪签同一个终态）。
+#:
+#: 两张写路各有各的凭据（`refutation.refute_by_sign` 落证伪签；
+#: `statementrefute.refute_statement` 落反例实验 / 构造 / 判词），但等级不许因此分家：
+#: 只要 `voided_by.kind` 在这张表里，`derive_grade` 就给「错误」。
+#: `cascade` 刻意不在表里：级联作废说的是"它被牵连"，不是"它是错的"。
+REFUTATION_EVIDENCE_KINDS: tuple[str, ...] = (
+    "numeric_counterexample", "construction", "defect_ref",
+)
+#: 证伪凭据的全族（含证伪签）：读口判"这一行的载荷自称什么"时用。
+#: 注意 `derive_grade` 只对 :data:`REFUTATION_EVIDENCE_KINDS` 无条件给「错误」——
+#: 证伪签那一档要先过"签读得出来"（`refutation_sign`），坏签不许否决、也不许冒充「错误」。
+REFUTATION_VOID_KINDS: tuple[str, ...] = (
+    REFUTATION_SIGN_KIND, *REFUTATION_EVIDENCE_KINDS,
+)
+
 
 def refutation_reading(bits: Any) -> dict[str, Any]:
     """证伪签的唯一读口（三态：有且合规 / 没有 / 读不出来）。
@@ -1406,9 +1423,17 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     `bits.evidence.refutation_sign` 存在且合规 ⇒ 直接 `GRADE_ERROR`（「错误」）。
     它先于 `voided_by` 的清零、也先于五元位的抬档：一条另有真签 / 形式化 / 穷举的
     命题被证伪之后，读数必须是「错误」，不许还是 `theorem`（否决项的唯一落点）。
-    `voided_by` 仍然只清零（回「猜想」）—— 两种作废的读数不同是「有意的」：
-    只有凭反例 / 构造 / 判词作废的那一档没有"一份被 V 签过的证伪论证"，
-    所以它给不出「错误」这一档（业主：「error 等级根据证伪签算」）。
+
+    ## 两种作废都读「错误」（业主 2026-11-13 第二次裁定改口径）
+    凭反例实验 / 一条构造 / 一行「有毛病」判词作废的那条路，`bits.voided_by.kind` 落在
+    :data:`REFUTATION_VOID_KINDS` 里 ⇒ 同样读「错误」。改前这里把两种作废分开
+    （"证伪签⇒错误、其它作废⇒清零回猜想"），那条口径已被业主推翻：`status=错误` 与
+    等级「错误」是同一个概念的两处读法，一个有一个没有就是缺陷
+    （判据在 `errorstate.statement_refuted`）。
+
+    仍然清零（回「猜想」）的只剩不是"它错了"的那几类：`cascade`（被牵连）、以及
+    旧口径留下的其它作废载荷。证伪签那一格"自称有、读不出来"的坏数据也不否决
+    —— 它由读口报"读不出来"（fail-closed），等级不许拿坏数据抬，也不许拿它冒充「错误」。
     """
     if str(kind or "") == "concept":
         return GRADE_NOT_APPLICABLE
@@ -1417,11 +1442,20 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
     #: 哪怕另有真签 / 形式化 / 穷举证书（照五元位本可读成 `theorem`），只要那一行挂着
     #: 一格合规的证伪签，等级就是「错误」—— 否则"另有更高档"会把否决读没。
     #: 读不出来的证伪签（`refutation_reading().checked=False`）在这里等同"没有"：
-    #: 那一条由写入口（`refutation`）受控拒，读侧不许拿坏数据抬等级。
+    #: 那一条由写入口（`refutation`）受控拒、由读口（`errorstate`）报冲突，等级侧不许
+    #: 拿坏数据抬档。
     if refutation_sign(bits):
         return GRADE_ERROR
+    #: 反例 / 构造 / 判词（`REFUTATION_EVIDENCE_KINDS`）⇒ 也是「错误」。
+    #: 这是业主 2026-11-13 第二次裁定要的那条恒等：两种作废的终态是同一个，不许一个读
+    #: 「错误」、另一个读「猜想」。
+    #: 证伪签那一档不走这一句：它必须先过 `refutation_sign`（签读得出来才算数），
+    #: 否则一句 `voided_by.kind="refutation_sign"` 就能把坏数据变成「错误」。
+    _void = bits.get("voided_by")
+    if isinstance(_void, Mapping) and str(_void.get("kind") or "").strip() in REFUTATION_EVIDENCE_KINDS:
+        return GRADE_ERROR
     if bits.get("voided_by"):
-        return "conjecture"          # 作废之后等级清零（历史留在 voided_by 里）
+        return "conjecture"          # 不是"它错了"的作废（cascade / 坏签）：等级清零
     has_proof = bool(bits.get("proof"))
     reviewed = bool(bits.get("reviewed"))
     # 第 1/4 位都是"机器可核"的入口：穷举证书与 Lean 形式化同级。

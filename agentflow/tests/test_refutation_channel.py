@@ -160,9 +160,11 @@ def test_a_end_to_end_locks_p_and_translates_the_sign(tmp_path):
     # Q 一个字节不动（它是"P 不成立"那条正常命题）
     q = _row(st, Q)
     assert q["status"] == "active" and q["proof_text"] == "（待写）"
-    # 读数口
-    read = RF.refutation_of(st, statement_id=P)
-    assert read["status"] == "refuted" and read["refuted_by_sign"] is True, read
+    # 读数口（唯一读口：三态 + `by_sign`）
+    from agentflow import errorstate as ES
+    read = RF.statement_refuted(st, stmt_id=P)
+    assert read["state"] == "error" and read["error_by_sign"] is True, read
+    assert read["status"] == ES.ERROR_WORD, read
     assert read["grade"] == "错误", read
 
 

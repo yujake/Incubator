@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple, Sequence
 
+from . import errorstate as _ES   # 「这条命题是不是错了」的唯一读口（三态）
 from . import papercompile as PC
 from . import schema as S
 from . import statementbody as _SB   # D2：命题正文的唯一读口（真身 statement_full）
@@ -5102,10 +5103,10 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     #: 一条命题有多份证明时取最重的那一档（表见 docstring）。
     #: `signed_pending_filing` 排在 `stale` 之后 —— 它是"稿上签了、册里还没收录"
     #: 的中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
-    #: `refuted_without_evidence` 与 `abandoned_without_reason` 同档（1）：两者都是
+    #: `error_without_evidence` 与 `abandoned_without_reason` 同档（1）：两者都是
     #: "自称终态却拿不出凭据"，比其余几档更该先被人看见。
     rank = {"fault_unrepaired": 0, "abandoned_without_reason": 1,
-            "refuted_without_evidence": 1,
+            "error_without_evidence": 1,
             "unbacked": 2, "borrowed": 3, "stale": 4, "unissued": 5,
             "awaiting_report": 6, "awaiting_streak": 7,
             "signed_pending_filing": 8, "judgment_missing": 9, "unreadable": 10,
@@ -5157,13 +5158,13 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
         out["scanned"] += 1
         # ---- 2026-11-13（业主裁定）：退休的命题不是「欠签」 ----------------------
         #
-        # `abandoned` 与 `refuted` 都是终态：前者"明确放弃"，后者"标记为错误"。
+        # `abandoned` 与错误那一档都是终态：前者"明确放弃"，后者"标记为错误"。
         # 两个都要从这里摘掉，否则收工门会对一条已经判死的命题永远要签
         # （blocker `statements_unsigned_without_v_or_abandon` 会一直红）。
         # `abandoned` 那一支仍要求"拿得出理由与时间"：自称放弃却写不出标记的行照旧
         # 计成一档（`abandoned_without_reason`）—— 标个状态不能绕过整条裁定。
-        # `refuted` 同一条纪律：凭据是 `bits.voided_by`，没有载荷的 refuted 行记
-        # `refuted_without_evidence`（说不出凭什么判它错）。
+        # 错误那一档同一条纪律：判它错的凭据由唯一读口判（`errorstate.statement_refuted`），
+        # 读不出来的行记 `error_without_evidence`（说不出凭什么判它错）。
         status_now = str(row.get("status") or "")
         if status_now in _MR.RETIRED_STATUSES:
             if status_now == "abandoned":
@@ -5177,14 +5178,16 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                                "⇒ 不算明确放弃"})
                     out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
                 continue
-            payload = dict((row.get("bits") or {}).get("voided_by") or {})
-            if not payload:
+            reading = _ES.statement_refuted(row=row)
+            if reading["state"] != _ES.STATE_ERROR:
                 out["rows"].append({
-                    "stmt_id": sid, "kind": kind, "class": "refuted_without_evidence",
+                    "stmt_id": sid, "kind": kind, "class": "error_without_evidence",
                     "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
                     "owner": "", "owner_known": False, "proofs": [],
-                    "why": "status=refuted 而 `bits.voided_by` 是空的 ⇒ 说不出凭什么判它错"})
-                out["problems"].append(f"{sid}：refuted 但没有作废载荷（凭什么错读不出来）")
+                    "why": (f"status={status_now} 而这一行读不出「错误」"
+                            f"（{reading['conflict'] or reading['state']}：{reading['why']}）"
+                            "⇒ 说不出凭什么判它错")})
+                out["problems"].append(f"{sid}：错误那一档读不出来（凭什么错读不出来）")
             continue
         try:
             ledger_rows, ledger_problems = _VR.list_verifications(
@@ -6014,9 +6017,9 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                            "unstructured": 0,
                            #: 另一个终态（2026-11-13）：标记为错误的命题。
                            #: 它不进 `abandon_kinds`（那不是"放弃理由"，是"被证否"），
-                           #: 但必须在这一格读出来 —— 否则 refuted 的行在收工读数里
+                           #: 但必须在这一格读出来 —— 否则错误那一档的行在收工读数里
                            #: 完全不出现（既不欠签、也不可见），静默就是另一种谎。
-                           "refuted": [], "refuted_count": 0,
+                           "error": [], "error_count": 0,
                            "relabeled": {"checked": False, "labels": [], "repeated": 0,
                                          "kinds": {kind: 0 for kind in _SA.ABANDON_KINDS},
                                          "reason": ""}}
@@ -6027,14 +6030,17 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
         return out
     for sid, row in sorted(rows.items()):
         status_now = str(row.get("status") or "")
-        if status_now == "refuted":
-            payload = dict((row.get("bits") or {}).get("voided_by") or {})
-            out["refuted"].append({
+        reading = _ES.statement_refuted(row=row)
+        if reading["state"] == _ES.STATE_ERROR:
+            payload = dict(reading.get("voided_by") or {})
+            out["error"].append({
                 "stmt_id": sid, "kind": str(row.get("kind") or ""),
                 "label": str(row.get("label") or ""),
                 "voided_kind": str(payload.get("kind") or ""),
                 "at": str(payload.get("at") or ""),
                 "reason": str(payload.get("reason") or ""),
+                "error_by_sign": bool(reading["error_by_sign"]),
+                "grade": str(reading["grade"]),
                 "evidence": {k: payload.get(k) for k in
                              ("experiment_id", "defect_ref", "construction", "script", "sha")
                              if payload.get(k)}})
@@ -6091,15 +6097,16 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                                          for one in repeated)
                    + " 这几条同一 label 换号 ≥2 次（读数，不拦门）"),
     }
-    out["refuted_count"] = len(out["refuted"])
+    out["error_count"] = len(out["error"])
     out["reason"] = ("查过了：没有明确放弃的命题" if not out["rows"] else
                      f"查过了：{out['count']} 条命题被明确放弃（带理由与时间）"
                      "；按档 " + "/".join(f"{kind}={n}"
                                          for kind, n in out["abandon_kinds"].items())
                      + (f"；另有 {out['unstructured']} 条历史自由文本行"
                         if out["unstructured"] else ""))
-    if out["refuted_count"]:
-        out["reason"] += (f"；另有 {out['refuted_count']} 条被标记为错误（refuted，"
+    if out["error_count"]:
+        out["reason"] += (f"；另有 {out['error_count']} 条被标记为错误（"
+                          f"{out['error'][0].get('voided_kind') or '作废载荷'}，"
                           "凭据在 `bits.voided_by`）")
     return out
 
@@ -6297,7 +6304,10 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
         if st == "disputed":
             disputed_source.append(f"命题 {row.get('stmt_id')} status=disputed"
                                    f"（{str(row.get('label') or '')[:40]}）")
-        if st in ("refuted", "disputed"):
+        # 「这条命题是不是错了」只走唯一读口（三态）：读不出来的行不许当"不是错"。
+        error_reading = _ES.statement_refuted(row=row)
+        is_error = error_reading["state"] == _ES.STATE_ERROR
+        if is_error or st == "disputed":
             # ③ 我们自己的证明压在一条不可用的命题上 ⇒ 洞在我们这边
             #
             # 2026-11-05：这里改读等级（`theorem`），不再读 `statements.evidence_kind`
@@ -6306,7 +6316,7 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             for other_id in theorem_parents.get(str(row.get("stmt_id")), ()):
                 own_hole.append(f"命题 {other_id} 的证明压在 {row.get('stmt_id')}"
                                 f"（status={st}）上")
-            if st == "refuted":
+            if is_error:
                 sid = str(row.get("stmt_id"))
                 reading = pollution_reading(store, sid)
                 pollution_states[sid] = str(reading["state"])

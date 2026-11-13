@@ -295,8 +295,10 @@ def test_d_the_three_false_reds_are_gone(tmp_path):
 
     # 两个终态在「放弃/错误」那一格里都要看得见（静默是另一种谎）
     retired = CL.statements_abandoned_reading(st)
-    assert retired["refuted_count"] == 1, retired["refuted"]
-    assert retired["refuted"][0]["voided_kind"] == "construction"
+    assert retired["error_count"] == 1, retired["error"]
+    assert retired["error"][0]["voided_kind"] == "construction"
+    assert retired["error"][0]["grade"] == EB.GRADE_ERROR
+    assert retired["error"][0]["error_by_sign"] is False
 
     # B / E 两道签门都不再要签
     out_b: dict = {"problems": []}
@@ -376,8 +378,8 @@ def test_h_a_half_write_turns_the_atomicity_assertion_red(tmp_path, monkeypatch)
     _put(st)
     real = SR._write_row
 
-    def _half(store, *, before, merged, note, actor):
-        real(store, before=before, merged=merged, note=note, actor=actor)
+    def _half(store, *, before, merged, note, actor, **kw):
+        real(store, before=before, merged=merged, note=note, actor=actor, **kw)
         return None, "refute_write_failed", "打桩：写成了却报拒"
 
     monkeypatch.setattr(SR, "_write_row", _half)
@@ -385,7 +387,8 @@ def test_h_a_half_write_turns_the_atomicity_assertion_red(tmp_path, monkeypatch)
     assert got["checked"] is False
     row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
     # e 的断言是 `status == "active"`；半途之后它必红 —— 证明 e 量的就是这一条。
-    assert row["status"] == "refuted", "打桩没生效 ⇒ e 量不到原子性"
+    from agentflow import errorstate as ES
+    assert row["status"] == ES.ERROR_WORD, "打桩没生效 ⇒ e 量不到原子性"
 
 
 # ============================================================ k：生产写口（table.update）

@@ -3104,6 +3104,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "只动 `bits.evidence.hard_to_prove_by_proof`，status 与占位签一个"
                           "字节不动）/ _write_row（整行重建 + `Statement.validate` + 单事务）"
                           "—— 被 `Secretary.amend_statement_meta` 转调",
+    # 2026-11-13（业主：台账命题「错误」与等级「错误」是同一个概念的两处读法，必须恒等；
+    # 临时命题的 `refuted` 是另一件事，不参与这条恒等）：把"这条命题错了"收成一个读口。
+    # 为什么必须是顶层：`agent_loop` / `closing` / `manuscriptretire` / `statementabandon` /
+    # `refutation` / `statementrefute` 六处都要问同一件事，问法各写一份就会漂（本仓最贵的
+    # 那类缺陷）；而它只读台账与位、不写盘、不注册工具 —— 写侧 settle 仍是
+    # `statementrefute._write_row`（同事务读回校验也在那里）。
+    "errorstate.py": "「命题错了」的唯一读口（2026-11-13）：statement_refuted（台账：三态 "
+                     "error / not_error / unknown + 三个冲突码 status_without_payload / "
+                     "payload_without_status / status_grade_disagree）/ conjecture_refuted"
+                     "（临时命题：refuted / not_refuted / unknown；证据 = 反例实验号或 "
+                     "refusal_ref）/ ERROR_WORD（写侧唯一落点，从 `schema.STATEMENT_STATUSES` "
+                     "现取：双读过渡）—— 纯读，零写盘、零工具注册",
     # 2026-11-13（业主裁定「专门通过证伪通道（锁定命题号）提交……证伪通道系统自动将 V 签
     # 翻译成证伪签」）：证伪通道的库层入口。为什么必须是顶层而不是工具 / 动作：
     # 「不通过秘书」= 判据与写入都不经 ActionSpec、不读稿上的签块；而它要写的两样

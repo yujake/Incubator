@@ -1485,11 +1485,15 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
 
 
 def test_the_grade_reading_comes_from_bits_from_row(tmp_path: pathlib.Path):
-    """R3 读侧（`draft/57` 组 9）：等级只许来自 `bits_from_row` / `derive_grade`。
+    """R3 读侧（`draft/57` 组 9）：等级只许来自 `bits_from_row` / `derive_grade` / 唯一读口。
 
-    判据（AST）：`closing.py` 里读 `bits.get("grade")` 的那个 `bits` 必须由
+    判据（AST）：`closing.py` 里读 `bits.get("grade")`（或 `x["grade"]`）的那个名字必须由
     `EB.bits_from_row(...)`（或 `derive_grade(...)`）赋值 —— 也就是说盘上那份
-    `bits["grade"]` 只当缓存，读侧现算。今天已经如此；这条把它固化成"以后改坏会红"。
+    `bits["grade"]` 只当缓存，读侧现算。
+
+    2026-11-13：`errorstate.statement_refuted(...)` 也是合格来源 —— 它内部就是
+    `bits_from_row` + `derive_grade` 现算，而且是"这条命题错没错"的唯一读口
+    （业主：单一访问口）。这条判据仍然点名"直接读盘上 dict 的 grade"那种形态。
 
     负控（两份，缺一不可）：
     1. 「合成」：把一段"直接读盘上 dict 的 grade"的源码喂给同一个判据 ⇒ 必须报违规
@@ -1505,12 +1509,13 @@ def test_the_grade_reading_comes_from_bits_from_row(tmp_path: pathlib.Path):
     def _grade_reads(text: str) -> tuple[list[int], list[int]]:
         tree = ast.parse(text)
         ok_names: set[str] = set()
+        ok_sources = ("bits_from_row", "derive_grade", "statement_refuted")
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
                 fn = node.value.func
                 fname = (fn.attr if isinstance(fn, ast.Attribute)
                          else (fn.id if isinstance(fn, ast.Name) else ""))
-                if fname in ("bits_from_row", "derive_grade"):
+                if fname in ok_sources:
                     for t in node.targets:
                         if isinstance(t, ast.Name):
                             ok_names.add(t.id)
@@ -1529,7 +1534,11 @@ def test_the_grade_reading_comes_from_bits_from_row(tmp_path: pathlib.Path):
             if (isinstance(node, ast.Subscript)
                     and isinstance(getattr(node, "slice", None), ast.Constant)
                     and node.slice.value == "grade"):
-                bad.append(node.lineno)
+                recv = node.value
+                if isinstance(recv, ast.Name) and recv.id in ok_names:
+                    good.append(node.lineno)
+                else:
+                    bad.append(node.lineno)
         return good, bad
 
     good, bad = _grade_reads(src)

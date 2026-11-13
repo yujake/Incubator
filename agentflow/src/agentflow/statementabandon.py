@@ -41,6 +41,7 @@ import re
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Sequence
 
+from . import errorstate as _ES   # 「这条命题是不是错了」的唯一读口（三态）
 from . import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from . import proofregistry as _PR
 
@@ -1137,14 +1138,14 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
         out.update(refused="abandon_unknown_statement",
                    why=f"命题 {sid} 不在册 ⇒ 放弃一条不存在的命题（不新建行）")
         return out
-    # ---- 2026-11-13：`refuted` 是另一个终态，不能在同一行上换档 -----------------
+    # ---- 2026-11-13：错误那一档是另一个终态，不能在同一行上换档 ----------------
     #
     # 两个终态回答的是两件不同的事：「放弃」= 我们不做了（没有后来者、也没被证否）；
     # 「标记为错误」= 这条命题是假的（凭据在 `bits.voided_by`）。换档会把"当初是
-    # 放弃还是被证否"读没（`closing.statements_abandoned` 与 `refuted` 两格分开数）。
-    if str(current.get("status") or "") == "refuted":
-        out.update(refused="abandon_on_refuted",
-                   why=(f"命题 {sid} 已经被标记为错误（refuted）⇒ 不能改成放弃："
+    # 放弃还是被证否"读没（`closing.statements_abandoned` 与 `error` 两格分开数）。
+    if _ES.statement_refuted(row=current)["state"] == _ES.STATE_ERROR:
+        out.update(refused="abandon_on_error",
+                   why=(f"命题 {sid} 已经被标记为错误（{_ES.ERROR_WORD}）⇒ 不能改成放弃："
                         "两个终态是两件事，换了档就读不出「当初为什么不做它」"))
         return out
     already = str(current.get("status") or "") == "abandoned"

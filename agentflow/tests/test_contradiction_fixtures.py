@@ -20,18 +20,25 @@ from __future__ import annotations
 import pytest
 
 from agentflow import closing as CL
+from agentflow import errorstate as ES
 from agentflow import evidencebits as EB
 from agentflow import schema as S
 from conftest import TS, sync_counters
 from agentflow.store import Store
 
 
-def _stmt(store: Store, sid: str, *, level: str = "", **kw) -> dict:
+def _stmt(store: Store, sid: str, *, level: str = "", voided_by: dict | None = None,
+          **kw) -> dict:
     """一条命题（默认 active + external_lit + 逐字已核）。
 
     等级是唯一的轴（2026-11-05）：档位由五元位现算，不再由调用方声明。
     `level="theorem"` 预置「证明 + 机器可核（第 4 位某个证明号 verified）」那两格；
     别的档位只预置第 2 位（有证明）。
+
+    2026-11-13（「状态=错误 ⇔ 等级=错误」恒等）：`status` 是错误那一档时必须带
+    作废载荷 —— 一份"如实登记被证否"的夹具，凭据不能空着（空载荷的行现在读成
+    "读不出来"，不再是"它错了"）。下面那几个用例只关心污染面，所以这里给一份最小
+    可复核的构造凭据；要测坏行的用例自己传 `voided_by={}`。
     """
     base = dict(stmt_id=sid, origin="external_lit", kind="theorem", label=f"Theorem {sid}",
                 statement_text="命题短版", statement_full="若假设 A 成立，则结论 B 成立",
@@ -40,6 +47,11 @@ def _stmt(store: Store, sid: str, *, level: str = "", **kw) -> dict:
                 status="active", created_at=TS)
     base.update(kw)
     body = str(base.get("proof_text") or "")
+    status_now = str(base.get("status") or "")
+    payload = dict(voided_by) if voided_by is not None else None
+    if payload is None and status_now in ES.ERROR_WORDS:
+        payload = {"kind": "construction", "construction": "夹具：原文条件少了正性假设",
+                   "reason": "原文条件少了正性假设", "at": TS}
     bits = EB.bits_of(
         origin=str(base.get("origin") or "own_result"),
         source_lit_id=str(base.get("source_lit_id") or ""),
@@ -47,9 +59,15 @@ def _stmt(store: Store, sid: str, *, level: str = "", **kw) -> dict:
         proof=bool(body.strip()), proof_process=body,
         formal=("verified" if level == "theorem" else None),
         formal_evidence=({"checker": "lean4"} if level == "theorem" else None),
+        voided_by=dict(payload or {}),
         kind=str(base.get("kind") or ""))
     base["bits"] = bits
-    base["evidence_kind"] = EB.kind_from_bits(bits, kind=str(base.get("kind") or ""))
+    # 档位是登记那一刻等级的反算名（历史列），不是"判它错之后"再反算一次：
+    # 「错误」在 FC-27 词表补丁落地前还没有别名（`kind_from_grade("错误") == ""`），
+    # 拿带载荷的 bits 现算会得到空串、撞 `Statement.validate`。生产路的
+    # `refute_statement` 也不重算这一列（它只改 status / bits / 等级），所以这里照它来。
+    plain = {**bits, "voided_by": {}}
+    base["evidence_kind"] = EB.kind_from_bits(plain, kind=str(base.get("kind") or ""))
     row = S.Statement(**base)
     row.validate()
     with store.tx("statements", actor="test") as tx:

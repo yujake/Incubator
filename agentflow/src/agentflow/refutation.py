@@ -43,8 +43,10 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from . import errorstate as _ES
 from . import evidencebits as _EB
 from . import schema as _S
+from .errorstate import conjecture_refuted, statement_refuted  # noqa: F401 —— 读口在这里转出
 
 #: 受控拒绝码（一个码一件事；调用方按码分句，不许折成"系统故障"）。
 MISSING_ID = "refutation_missing_id"
@@ -53,6 +55,9 @@ MISSING_MANUSCRIPT = "refutation_missing_manuscript"
 BAD_MANUSCRIPT = "refutation_bad_manuscript"
 UNKNOWN_STATEMENT = "refutation_unknown_statement"
 ON_RETIRED = "refutation_on_retired"
+#: 这一行现在读不出状态（`status` 不在词表 / 作废载荷在而状态没跟上 / 证伪签口袋坏）
+#: ⇒ 不许覆盖：覆盖等于拿一笔新历史盖住"这一行本来就读不出来"。
+STATE_UNREADABLE = "refutation_state_unreadable"
 NOT_A_PROPOSITION = "refutation_not_a_proposition"
 DRAFT_UNREADABLE = "refutation_draft_unreadable"
 PROOF_ABSENT = "refutation_proof_absent"
@@ -317,21 +322,26 @@ def refute_by_sign(store: Any, *, statement_id: Any, manuscript: Any,
                      f"命题 {sid} 的 kind 是 concept（概念行不参与等级链，也没有真值）"
                      " ⇒ 它不能被证伪")
     status_now = str(row.get("status") or "")
-    if status_now == "refuted":
+    reading = _ES.statement_refuted(row=row)
+    if reading["state"] == _ES.STATE_ERROR:
         # 幂等：同一笔重放不写第二遍；但也只认"确实挂着证伪签"那一档 ——
         # 一条凭反例实验作废（没有证伪签）的行被这条通道"认领"，等于把
-        # 另一种作废读成证伪（两种作废的等级读数不同：猜想 vs 错误）。
-        already = bool(_EB.refutation_sign(row.get("bits") or {}))
+        # 另一种作废读成证伪（两种作废凭据不同，读数里 `by_sign` 分得开）。
+        already = bool(reading["error_by_sign"])
         out.update(checked=True, already=already, statement_id=sid,
-                   grade=_EB.derive_grade(_EB.bits_from_row(row),
-                                          kind=str(row.get("kind") or "")),
-                   why=("这一条早就是 refuted、且挂着证伪签 ⇒ 一个字节都没写（幂等）"
-                        if already else
-                        "这一条已经是 refuted，但不是凭证伪签（没有证伪签口袋）⇒ "
+                   grade=reading["grade"],
+                   why=(f"这一条早就是错误那一档（{_ES.ERROR_WORD}）、且挂着证伪签 ⇒ "
+                        "一个字节都没写（幂等）" if already else
+                        f"这一条已经是错误那一档，但不是凭证伪签（没有证伪签口袋）⇒ "
                         "不接管：它当初凭什么作废的，读数里已有一份载荷"))
         if not already:
             out["refused"] = ON_RETIRED
         return out
+    if reading["state"] == _ES.STATE_UNKNOWN:
+        # 读不出来的一行（载荷在而状态没跟上 / 签口袋坏 / 状态词不在词表）不许覆盖。
+        return _fail(out, STATE_UNREADABLE,
+                     f"这一行现在读不出状态（{reading['conflict'] or '未知'}："
+                     f"{reading['why']}）⇒ 整笔不写：先把它读出来，再判它错")
     if status_now in ("abandoned", "superseded"):
         return _fail(out, ON_RETIRED,
                      f"命题 {sid} 已经是 {status_now}（终态 / 墓碑）⇒ 不能在同一条上再标"
@@ -401,19 +411,20 @@ def _write(store: Any, *, row: Mapping[str, Any], sid: str, rel: str, body: str,
     merged["proof_history"] = history
     if no == 1:
         merged["proof_text"] = body
-    merged["status"] = "refuted"
     bits = dict(row.get("bits") or {})
     evidence = dict(bits.get("evidence") or {})
     evidence[_EB.REFUTATION_SIGN_KEY] = dict(payload)
     bits["evidence"] = evidence
-    bits["voided_by"] = dict(payload)
     kind = str(row.get("kind") or "")
     merged["bits"] = _EB.normalize_raw(bits,
                                        origin=str(row.get("origin") or "own_result"),
                                        kind=kind)
+    #: status（错误那一档）/ `voided_by` / 等级三件事由 `_write_row` 一处 settle：
+    #: 它写完会在同一个事务里读回校验"状态=错误 ∧ 等级=错误"，否则整笔回滚。
     data, code, why = _SR._write_row(
         store, before=row, merged=merged,
-        note=f"statement:refutation_sign:{stamp}", actor=f"refutation:{actor}")
+        note=f"statement:refutation_sign:{stamp}", actor=f"refutation:{actor}",
+        payload=dict(payload))
     if code:
         # `statements_unreadable` 是"没查成"；其余是受控拒（校验不过 / 写不进去）。
         out.update(checked=(code != "statements_unreadable"),
@@ -422,7 +433,7 @@ def _write(store: Any, *, row: Mapping[str, Any], sid: str, rel: str, body: str,
     out.update(checked=True, wrote=True, statement_id=sid, manuscript=rel,
                at=stamp, old_sha=entry.get("sha", ""),
                grade=_EB.derive_grade(dict(data.get("bits") or {}), kind=kind),
-               changes=[f"status: {str(row.get('status') or '')} → refuted",
+               changes=[f"status: {str(row.get('status') or '')} → {_ES.ERROR_WORD}",
                         f"proof_text#{no} ← 证伪论证（旧正文进 proof_history）",
                         "bits.evidence.refutation_sign",
                         "bits.voided_by: refutation_sign"],
@@ -432,38 +443,10 @@ def _write(store: Any, *, row: Mapping[str, Any], sid: str, rel: str, body: str,
     return out
 
 
-def refutation_of(store: Any, *, statement_id: Any) -> dict[str, Any]:
-    """读一条命题的证伪读数（纯读；报告 / 页面 / 判据共用这一个口）。
-
-    返回 `{checked, found, status, refuted_by_sign, sign, grade, why}`。
-    `refuted_by_sign` 只在「证伪签」这一档为真（凭反例 / 构造 / 判词作废的行是
-    `False` 而 `status` 仍是 `refuted`）—— 两种作废的读数不许折平。
-    """
-    out: dict[str, Any] = {"checked": False, "found": False, "status": "",
-                           "refuted_by_sign": False, "sign": {}, "grade": "",
-                           "why": ""}
-    sid = str(statement_id or "").strip()
-    if not sid:
-        out["why"] = "没给命题号 ⇒ 不猜"
-        return out
-    if store is None:
-        out["why"] = "这一层没有 store ⇒ 读不了"
-        return out
-    row, why, checked = _by_id(store, sid)
-    if not checked:
-        out["why"] = why
-        return out
-    if row is None:
-        out.update(checked=True, why=f"命题 {sid} 不在册")
-        return out
-    bits = _EB.bits_from_row(row)
-    reading_ = _EB.refutation_reading(bits)
-    out.update(checked=True, found=True, status=str(row.get("status") or ""),
-               refuted_by_sign=bool(reading_.get("sign")),
-               sign=dict(reading_.get("sign") or {}),
-               grade=_EB.derive_grade(bits, kind=str(row.get("kind") or "")),
-               why=str(reading_.get("why") or ""))
-    return out
+#: 读口的旧名（`refutation_of`）已并入 `errorstate.statement_refuted`：
+#: 一个概念只留一个口。下面这行只是把老名字指过去，防止外部手工调用报 AttributeError；
+#: 新代码一律用 `statement_refuted`（模块顶部已转出）。
+refutation_of = statement_refuted
 
 
 __all__ = [
@@ -481,9 +464,12 @@ __all__ = [
     "PROOF_ABSENT",
     "SIGN_MISSING",
     "SIGN_UNREADABLE",
+    "STATE_UNREADABLE",
     "UNKNOWN_PROOF_PATH",
     "UNKNOWN_STATEMENT",
+    "conjecture_refuted",
     "refutation_of",
     "refute_by_sign",
     "sign_payload",
+    "statement_refuted",
 ]

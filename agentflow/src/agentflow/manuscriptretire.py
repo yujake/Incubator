@@ -40,12 +40,15 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from . import errorstate as _ES
+
 #: 哪些 `status` 算「退休」（该命题名下那份稿一并作废）。
 #:
-#: 只有这两档：`abandoned`（明确放弃）与 `refuted`（被证否 / 标记为错误）。
+#: 只有这两档：`abandoned`（明确放弃）与错误那一档（今天的词是 `refuted`，词表补丁
+#: 落地后是 `error` —— 词从 `errorstate.ERROR_WORDS` 现取，不在这里抄第二份）。
 #: `superseded` 不在列：它是概念行的墓碑（"被后来的一条取代"），取代者还在，
 #: 稿不该跟着作废；`disputed` 也不在列：争议未裁，稿还要继续改。
-RETIRED_STATUSES: tuple[str, ...] = ("abandoned", "refuted")
+RETIRED_STATUSES: tuple[str, ...] = ("abandoned", *_ES.ERROR_WORDS)
 
 #: 写面拒信的正文（与 `manuscriptfreeze` 的三句拒信同形：一句原因 + 一句指路）。
 RETIRED_MANUSCRIPT_MESSAGE = (
@@ -55,7 +58,7 @@ RETIRED_MANUSCRIPT_MESSAGE = (
 
 
 def status_is_retired(status: Any) -> bool:
-    """这个 `status` 是不是「退休」（`abandoned` / `refuted`）。"""
+    """这个 `status` 是不是「退休」（`abandoned` / 错误那一档）。"""
     return str(status or "").strip() in RETIRED_STATUSES
 
 

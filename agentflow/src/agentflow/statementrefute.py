@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
+from . import errorstate as _ES
 from . import evidencebits as _EB
 from . import schema as _S
 from . import statementabandon as _SA
@@ -41,6 +42,14 @@ from . import statementledger as _SL
 #: 作废证据三档：实验反例 / 一条构造 / 一行判词（`verifications/<号>.jsonl#v-…`）。
 #: 多给一档 ⇒ 受控拒：凭哪一条作废必须说得清（"两件证据说不清"就是给自己留后路）。
 REFUTE_EVIDENCE = ("experiment_id", "construction", "defect_ref")
+
+
+class _InvariantBroken(ValueError):
+    """同事务读回时"两处读法不恒等"（`status=错误` 而等级 / 载荷对不上）。
+
+    它不是写失败，是写完之后这一行不合恒定式：整笔回滚比"写成功但读数分家"好 ——
+    后者会让一行"状态说错、等级说猜想"的数据留在盘上，而没有任何一处会响。
+    """
 
 
 def _by_id(store: Any, stmt_id: str, *, tx: Any = None) -> tuple[dict | None, str, bool]:
@@ -60,12 +69,33 @@ def _by_id(store: Any, stmt_id: str, *, tx: Any = None) -> tuple[dict | None, st
 
 
 def _write_row(store: Any, *, before: Mapping[str, Any], merged: Mapping[str, Any],
-               note: str, actor: str) -> tuple[dict | None, str, str]:
+               note: str, actor: str, payload: Mapping[str, Any] | None = None,
+               ) -> tuple[dict | None, str, str]:
     """整行重建 → 过 `Statement.validate` → 在一个事务里落盘。
 
     返回 `(写成的行, 拒码, 原因)`；拒码为空 = 写成了。受控拒要求一个字节都不写，
     所以校验全部赶在 `tx.upsert` 之前。
+
+    ## 判它错的那一笔在这里 settle（业主 2026-11-13：同一事务）
+    `payload` 非空 = 这一笔是"把命题判成错误"。三件事在这一处一起落盘：
+
+    ① `status` 写 :data:`errorstate.ERROR_WORD`（词表里活着的那个词，补丁落地后自动 `error`）；
+    ② `bits.voided_by` 写这份载荷；
+    ③ `bits` 整份走 `normalize_raw` ⇒ `bits.grade` 由 `derive_grade` 现算（两种作废都读
+       「错误」），不会留着旧的缓存等级。
+
+    写完在同一個事务里读回跑 `errorstate.statement_refuted`：不是 `error` ⇒ 抛
+    `_InvariantBroken` ⇒ 事务不提交。这就是"两处读法必须恒等"在写侧的落点 ——
+    它防的不是"校验不严"，是"写成功了、而状态与等级各说一套"。
     """
+    merged = dict(merged)
+    if payload is not None:
+        merged["status"] = _ES.ERROR_WORD
+        bits = dict(merged.get("bits") or {})
+        bits["voided_by"] = dict(payload)
+        merged["bits"] = _EB.normalize_raw(
+            bits, origin=str(merged.get("origin") or "own_result"),
+            kind=str(merged.get("kind") or ""))
     history = [dict(h) for h in (before.get("_statement_amend_history") or [])
                if isinstance(h, Mapping)]
     changed = {k: {"from": before.get(k), "to": v}
@@ -94,6 +124,17 @@ def _write_row(store: Any, *, before: Mapping[str, Any], merged: Mapping[str, An
                 return None, "refute_unknown_statement", (
                     f"命题 {sid} 在写事务里不见了 ⇒ 整笔不写")
             tx.upsert("statements", data, note=note)
+            if payload is not None:
+                # 同事务读回：这一笔是"判它错"，就必须读得出「状态=错误 ∧ 等级=错误」。
+                after, _why2, _ok2 = _by_id(store, sid, tx=tx)
+                reading = _ES.statement_refuted(row=after)
+                if reading["state"] != _ES.STATE_ERROR:
+                    raise _InvariantBroken(
+                        f"写完之后同事务读回来不是「错误」（"
+                        f"{reading['conflict'] or reading['state']}：{reading['why']}）"
+                        "⇒ 整笔回滚（状态与等级不许只落一半）")
+    except _InvariantBroken as exc:
+        return None, "refute_invariant_broken", str(exc)
     except ValueError as exc:
         return None, "refute_write_refused", str(exc)
     except Exception as exc:  # noqa: BLE001 —— 写不进去要受控报出来
@@ -121,7 +162,10 @@ def refute_statement(store: Any, *, statement_id: Any, reason: Any = "", at: Any
                      experiment_id: Any = "", construction: Any = "",
                      defect_ref: Any = "", counterexample_valid: Any = None,
                      actor: str = "secretary-B") -> dict[str, Any]:
-    """把一条命题标记为错误（`status="refuted"` + `bits.voided_by` 载荷）。
+    """把一条命题标记为错误（`status=错误那一档` + `bits.voided_by` 载荷）。
+
+    状态词取 :data:`errorstate.ERROR_WORD`（今天是 `refuted`，词表补丁落地后自动 `error`），
+    与等级「错误」是同一个概念的两处读法：写完由 `_write_row` 在同一个事务里读回校验。
 
     证据三选一（多给 / 不给都受控拒）：
     - `experiment_id`：`experiments` 里真有一行，且过 §3.18 四条（`void_refusal`）；
@@ -130,8 +174,9 @@ def refute_statement(store: Any, *, statement_id: Any, reason: Any = "", at: Any
       且审的是现行正文（判据本体 `statementabandon._defect_refusal`，这里只转调）。
 
     ## 终态纪律
-    `refuted` 与 `abandoned` 都是终态：再作废一次是改写历史 ⇒ 受控拒（不是幂等放行）。
-    已经是 `refuted` 的同一笔重放 ⇒ `already=True`、一个字节不写。
+    错误那一档与 `abandoned` 都是终态：再作废一次是改写历史 ⇒ 受控拒（不是幂等放行）。
+    已经是错误那一档的同一笔重放 ⇒ `already=True`、一个字节不写；读不出来的一行
+    （`conflict` 非空）也不许覆盖（`refute_state_unreadable`）。
 
     ## 级联只落读数
     依赖它的那些命题（`derived_from`）按 `cascade_void` 读一遍，读数放在 `cascade` 里
@@ -184,15 +229,23 @@ def refute_statement(store: Any, *, statement_id: Any, reason: Any = "", at: Any
                    why=f"命题 {sid} 不在册 ⇒ 作废一条不存在的命题（不新建行）")
         return out
     status_now = str(row.get("status") or "")
-    if status_now == "refuted":
+    reading = _ES.statement_refuted(row=row)
+    if reading["state"] == _ES.STATE_ERROR:
         out.update(checked=True, already=True, row=row, at=stamp,
-                   reason=("这一条早就是 refuted（终态）⇒ 一个字节都没写"
+                   reason=(f"这一条早就是错误那一档（{_ES.ERROR_WORD}，终态）⇒ 一个字节都没写"
                            "（再作废一次是改写历史）"))
         return out
     if status_now == "abandoned":
         out.update(refused="refute_on_abandoned",
-                   why=(f"命题 {sid} 已经被明确放弃（abandoned）⇒ 不能在同一条上再标 refuted："
+                   why=(f"命题 {sid} 已经被明确放弃（abandoned）⇒ 不能在同一条上再标错误："
                         "两个终态是两件事，换了档就读不出'当初是放弃还是被证否'"))
+        return out
+    if reading["state"] == _ES.STATE_UNKNOWN:
+        # 读不出来的行（状态词不在词表 / 载荷在而状态没跟上 / 签口袋坏）不许覆盖：
+        # 覆盖等于拿一笔新历史去盖住"这一行本来就读不出来"。
+        out.update(refused="refute_state_unreadable",
+                   why=(f"这一行现在读不出状态（{reading['conflict'] or '未知'}："
+                        f"{reading['why']}）⇒ 整笔不写：先把它读出来，再判它错"))
         return out
     # ---- 证据：三选一，全部转调既有判据 -------------------------------------
     payload: dict[str, Any] = {}
@@ -236,21 +289,19 @@ def refute_statement(store: Any, *, statement_id: Any, reason: Any = "", at: Any
     #: 作废时刻随载荷落盘（`voided_by.at`）：读数要能回答"几时判它错的"。
     #: 只标状态不写时刻，与放弃那一档"理由与时间缺一不可"是同一条纪律。
     payload["at"] = stamp
-    merged = dict(row)
-    merged["status"] = "refuted"
-    bits = dict(row.get("bits") or {})
-    bits["voided_by"] = dict(payload)
-    merged["bits"] = bits
-    data, code, rwhy = _write_row(store, before=row, merged=merged,
-                                 note=f"statement:refuted:{stamp}", actor=actor)
+    #: status / 载荷 / 等级三件事由 `_write_row` 一处 settle（同一事务）⇒ 调用方不再各自拼。
+    data, code, rwhy = _write_row(store, before=row, merged=dict(row),
+                                 note=f"statement:error:{stamp}", actor=actor,
+                                 payload=dict(payload))
     if code:
         out.update(refused=code, why=rwhy, form={**detail, "voided_by": dict(payload)})
         return out
     out.update(checked=True, amended=True, row=data, at=stamp, voided_by=dict(payload),
                form=dict(detail),
-               changes=[f"status: {status_now} → refuted",
-                        f"bits.voided_by: {str(payload.get('kind') or '')}"],
-               reason=(f"命题 {sid} 已标记为错误（refuted，{stamp}）：凭据是 "
+               changes=[f"status: {status_now} → {_ES.ERROR_WORD}",
+                        f"bits.voided_by: {str(payload.get('kind') or '')}",
+                        f"bits.grade: → {_EB.GRADE_ERROR}"],
+               reason=(f"命题 {sid} 已标记为错误（{_ES.ERROR_WORD}，{stamp}）：凭据是 "
                        f"{str(payload.get('kind') or '')}"))
     out["cascade"] = _cascade_reading(store, sid, reason=text)
     out["resubmits"] = _SA.close_resubmits(store, statement_id=sid,
@@ -323,7 +374,8 @@ def mark_hard_to_prove(store: Any, *, statement_id: Any, basis: Any = "",
                    why=(f"命题 {sid} 的 kind 是 {row.get('kind')!r}（概念 / 定义）⇒ "
                         "它不是命题，没有「优化」这件事"))
         return out
-    if status_now in ("abandoned", "refuted"):
+    reading = _ES.statement_refuted(row=row)
+    if status_now == "abandoned" or reading["state"] == _ES.STATE_ERROR:
         out.update(refused="hard_to_prove_on_retired",
                    why=(f"命题 {sid} 已经退休（{status_now}）⇒ 优化栏不再有意义"
                         "（退休的命题不会再被洗）"))

@@ -163,12 +163,22 @@ def test_a_concept_row_has_no_legacy_tier_either():
     assert EB.kind_from_bits(bits, kind="concept") == ""
 
 
-def test_a_voided_row_back_to_conjecture_and_heuristic():
-    """作废 ⇒ 等级清零，档位反算也回到 heuristic（历史留在 voided_by 里）。"""
+def test_a_voided_row_reads_error_and_the_kind_follows():
+    """判它错的作废 ⇒ 等级「错误」，档位反算成 `refuted`；被牵连的作废仍然清零。
+
+    2026-11-13 第二次裁定：反例 / 构造 / 判词与证伪签同一个终态（`status=错误` ⇔
+    等级「错误」）。`cascade` 不在那一族：它说的是"被牵连"，不是"它是错的"。
+    """
     bits = _bits(numeric="verified", proof=True, reviewed=True,
                  voided_by={"kind": "numeric_counterexample"})
-    assert EB.derive_grade(bits) == "conjecture"
-    assert EB.kind_from_bits(bits) == "heuristic"
+    assert EB.derive_grade(bits) == EB.GRADE_ERROR
+    # 档位只由反算表现取：词表那一行（FC-27）落地前 `错误` 还没有别名 ⇒ 空串（不是猜一档）。
+    assert EB.kind_from_bits(bits) == EB.GRADE_TO_KIND.get(EB.GRADE_ERROR, "")
+    # 边界（反真空的另一半）：cascade 不许被顺手读成「错误」。
+    cascaded = _bits(numeric="verified", proof=True, reviewed=True,
+                     voided_by={"kind": "cascade", "root": "0001"})
+    assert EB.derive_grade(cascaded) == "conjecture"
+    assert EB.kind_from_bits(cascaded) == "heuristic"
 
 
 # ============================================================ 可引门槛：两处门给出同一结论
