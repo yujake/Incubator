@@ -97,7 +97,7 @@ def _scene(tmp_path: pathlib.Path) -> tuple[Store, str]:
     """
     st = Store(tmp_path / "ws")
     st.init()
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(AgentB(st, extractor=None, extract_text=None, config={}))
     _write(st, REL1, _manuscript("", P1))
     conftest.sign_before_registration(st.root, proof_text=P1)
     first = b.ingest_manuscript(manuscript=REL1, mode="register")
@@ -175,7 +175,7 @@ def test_b_register_stamps_the_pending_rows_path_group(tmp_path: pathlib.Path) -
     """
     st = Store(tmp_path / "ws")
     st.init()
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(AgentB(st, extractor=None, extract_text=None, config={}))
     _write(st, REL1, _manuscript("", P1))
     conftest.sign_before_registration(st.root, proof_text=P1)
     files = _pending_files(st.root)
@@ -289,7 +289,8 @@ def _manuscript_workspace(tmp_path: pathlib.Path) -> tuple[Store, AgentB]:
     st.init()
     _write(st, REL1, _manuscript("", P1))
     conftest.sign_before_registration(st.root, proof_text=P1)
-    return st, AgentB(st, extractor=None, extract_text=None, config={})
+    return st, conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
 
 
 def test_e_the_write_whitelist_is_what_lets_the_per_path_record_land(

@@ -48,6 +48,8 @@ import pathlib
 
 import pytest
 
+import conftest  # noqa: E402
+
 from agentflow import conductor as CND
 from agentflow import depsection as DS
 from agentflow import manuscriptform as MF
@@ -318,7 +320,8 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
     assert old_block["signed"] is True, old_block
 
     # ---- ③ B 按稿号收录：行上记 F 的稿号，命题号由 B 现取 ----------------------
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
     ing = b.ingest_manuscript(manuscript=rel, mode="register",
                               cells=["statement_full", "proof_text", "dependencies"])
     assert ing.get("ok") is True, ing

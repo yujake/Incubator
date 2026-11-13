@@ -28,7 +28,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import sign_before_registration  # noqa: E402
+from conftest import b_form_gate_ok, sign_before_registration  # noqa: E402
 from agentflow import conductor as CND  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
@@ -54,7 +54,9 @@ def _workspace(tmp_path: pathlib.Path) -> dict:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     sign_before_registration(st.root, proof_text=PROOF)
-    return {"store": st, "b": AgentB(st, extractor=None, extract_text=None, config={}),
+    return {"store": st,
+            "b": b_form_gate_ok(AgentB(st, extractor=None, extract_text=None,
+                                       config={})),
             "text": text}
 
 

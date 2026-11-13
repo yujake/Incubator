@@ -63,7 +63,7 @@ def _ws(tmp_path: pathlib.Path, *, seed: bool = True) -> Store:
 
 
 def _b(st: Store) -> AgentB:
-    return AgentB(st, extractor=None, extract_text=None)
+    return conftest.b_form_gate_ok(AgentB(st, extractor=None, extract_text=None))
 
 
 @pytest.fixture(autouse=True)

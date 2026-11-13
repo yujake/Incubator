@@ -109,7 +109,7 @@ def _signed_source(st: Store, *, body: str = BODY) -> str:
 
 
 def _b(st: Store) -> AgentB:
-    return AgentB(st, extractor=None, extract_text=None)
+    return conftest.b_form_gate_ok(AgentB(st, extractor=None, extract_text=None))
 
 
 def _files(st: Store) -> list[str]:

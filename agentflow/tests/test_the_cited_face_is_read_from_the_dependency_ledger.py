@@ -84,7 +84,8 @@ _DEP_ROW = "| 由引理甲，n(n-1) 是偶数 | stmt:{sid} | 第 1 步 | 1 |\n"
 def _ws(tmp_path: pathlib.Path) -> tuple[Store, AgentB]:
     st = Store(tmp_path / "ws")
     st.init()
-    return st, AgentB(st, extractor=None, extract_text=None, config={})
+    return st, conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
 
 
 def _write(st: Store, rel: str, text: str) -> pathlib.Path:

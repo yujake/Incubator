@@ -64,7 +64,8 @@ def _manuscript(*, sid: str = "000001", proposition: str = PROPOSITION,
 def _ws(tmp_path: pathlib.Path) -> tuple[Store, AgentB]:
     st = Store(tmp_path / "ws")
     st.init()
-    return st, AgentB(st, extractor=None, extract_text=None, config={})
+    return st, conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
 
 
 def _write(st: Store, rel: str, text: str) -> pathlib.Path:

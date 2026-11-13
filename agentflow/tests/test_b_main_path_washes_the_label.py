@@ -29,7 +29,8 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import seed_statement_row, sign_before_registration  # noqa: E402
+from conftest import (b_form_gate_ok, seed_statement_row,  # noqa: E402
+                      sign_before_registration)
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
@@ -64,7 +65,8 @@ def _workspace(tmp_path: pathlib.Path) -> dict:
     seed_statement_row(st, statement_full="另一条命题：设 n<=3，则 Q(n) 成立。",
                        kind="conjecture", label="Q(n)")
     return {"store": st,
-            "b": AgentB(st, extractor=None, extract_text=None, config={})}
+            "b": b_form_gate_ok(AgentB(st, extractor=None, extract_text=None,
+                                       config={}))}
 
 
 def _stub(monkeypatch, *, canonical_name: str, route: str) -> None:

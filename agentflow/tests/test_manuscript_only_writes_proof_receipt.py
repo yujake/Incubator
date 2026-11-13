@@ -32,7 +32,8 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import seed_proposition_form_ok, sign_before_registration  # noqa: E402
+from conftest import (b_form_gate_ok, seed_proposition_form_ok,  # noqa: E402
+                      sign_before_registration)
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
@@ -61,7 +62,8 @@ def _workspace(tmp_path: pathlib.Path) -> dict:
     target.write_text(text, encoding="utf-8")
     sign_before_registration(st.root, proof_text=PROOF)
     return {"store": st,
-            "b": AgentB(st, extractor=None, extract_text=None, config={})}
+            "b": b_form_gate_ok(AgentB(st, extractor=None, extract_text=None,
+                                       config={}))}
 
 
 def _rows(env: dict) -> list[dict]:

@@ -478,6 +478,46 @@ def e_form_gate_ok(agent):
     return agent
 
 
+def b_form_gate_ok(agent):
+    """给一个 `AgentB` 钉上"形态合格"的那一问（其余写口仍走真秘书）。
+
+    与 :func:`e_form_gate_ok` 同一条取舍：B 的按稿收录现在也会问一次命题形态闸
+    （`_manuscript_form_refusal`），判据本体与 F / E 是同一个
+    `Secretary.judge_proposition_form`。大量用例测的是收录链路本身（路径号 / 依赖面 /
+    逐路径记录 / 提交记号），而夹具的 `## 命题` 本来都是规范陈述 —— 钉这一格表示
+    "形态这一关已经过了"；闸本身（判不过 / 没判成 / 反真空）由
+    `tests/test_b_proposition_form_refusal_says_the_fix.py` 用真秘书 + 假模型缝覆盖。
+
+    为什么不像 E 那样整个换掉秘书：B 的收录要真的读稿（`Secretary.extract_manuscript`）
+    与真的写台账（`Secretary.record_statement`），所以这里只替换判定那一问，别的照旧。
+
+    为什么把秘书派生推迟到第一次用（而不是在这里就造一个）：同一批用例会先把
+    `LlmSeam.for_secretary` 换成替身再收录（`_same_statement_stub.wire_for_secretary`）；
+    此刻就把秘书钉下来的话，本模块造出来的那一名没有缝，同一命题检索会跟着"没判成"。
+    """
+    real = agent._statement_secretary
+    if getattr(real, "b_form_gate_ok", False):   # 已经包过一层
+        return agent
+
+    form_ok = {"checked": True, "well_formed": True,
+               "conditions": "夹具：设…", "conclusion": "夹具：则…",
+               "problems": [], "decision": "夹具：形态合规",
+               "refused": "", "reason": "夹具：形态合规", "cached": False}
+
+    def _judge(**_kw):
+        return dict(form_ok)
+
+    def _secretary():
+        sec = real()
+        if sec is not None and "judge_proposition_form" not in getattr(sec, "__dict__", {}):
+            sec.judge_proposition_form = _judge
+        return sec
+
+    _secretary.b_form_gate_ok = True             # type: ignore[attr-defined]
+    agent._statement_secretary = _secretary
+    return agent
+
+
 def seed_proposition_form_ok(root, statement_full, *, kind: str = "conjecture",
                              label: str = "", role: str = "E"):
     """在工作区里预置一条"形态判定合格"的读数（给只能经工具面构造 E 的用例）。

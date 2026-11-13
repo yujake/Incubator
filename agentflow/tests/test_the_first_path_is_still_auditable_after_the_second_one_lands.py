@@ -197,7 +197,8 @@ def test_a_the_first_path_is_still_auditable_after_the_second_one_lands(
     """
     st = Store(tmp_path / "ws")
     st.init()
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
     seam = _CleanSeam()
     sid, v = _land_both_paths(st, b, seam)
     _rewrite_first_path(st, sid)
@@ -227,7 +228,8 @@ def test_b_the_second_path_is_auditable_and_signable_too(
     """两条路径互不遮蔽：路径 2 的稿也能在册审、在册签。"""
     st = Store(tmp_path / "ws")
     st.init()
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
     seam = _CleanSeam()
     sid, v = _land_both_paths(st, b, seam)
 
@@ -255,7 +257,8 @@ def test_c_stubbing_the_per_path_records_turns_a_red(
     """
     st = Store(tmp_path / "ws")
     st.init()
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
     seam = _CleanSeam()
     sid, v = _land_both_paths(st, b, seam)
     _rewrite_first_path(st, sid)
@@ -291,7 +294,8 @@ def test_d_unreadable_per_path_records_are_not_a_silent_pass(
     """
     st = Store(tmp_path / "ws")
     st.init()
-    b = AgentB(st, extractor=None, extract_text=None, config={})
+    b = conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}))
     seam = _CleanSeam()
     sid, v = _land_both_paths(st, b, seam)
     _rewrite_first_path(st, sid)

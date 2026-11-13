@@ -300,7 +300,8 @@ def _ws(base: pathlib.Path) -> Store:
 
 def _agent(st: Store, seam: _Seam) -> AgentB:
     sec = Secretary("B", root=st.root, store=st, seam=seam, enable_model=True)
-    return AgentB(st, extractor=None, extract_text=None, config={}, secretary=sec)
+    return conftest.b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None, config={}, secretary=sec))
 
 
 def _citable(st: Store) -> None:

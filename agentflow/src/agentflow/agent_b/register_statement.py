@@ -1270,13 +1270,52 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         out["ok"] = True
         return out
 
-    def _numeric_form_gate(self, *, full: str, kind: str = "conjecture",
-                           label: str = "", task_id: str = "") -> dict[str, Any]:
-        """普通数值通道收录那一刻的形态闸（一次调用，不是每条实验判一次）。
+    #: 命题形态闸没放行时，B 回给产出方的可执行改法（2026-11-13，W2 真机）。
+    #:
+    #: 真机现场（`projects/octahedron-20261113`，B→D 的 `manuscripts/handoffs.jsonl#000013`）：
+    #: B 核到 V 的签已通过，而稿的 `## 命题` 节是一段修订说明（「按 V u-000005 的唯一缺陷
+    #: 修订第 7 步……其余八步一字不动；同一份稿就地重写后重送 V」）⇒ 它停在动作外面，
+    #: 把"让 F 重落一版还是走改写重签"甩给 D。V 的签已经花掉，而 D 手上没有命题形态的
+    #: 判据（他对命题台账只有只读权限，业主 2026-11-08）。所以这两句话必须由拒收自己带出来：
+    #:   · 第一句说改哪一节，以及"不要重落新稿号"（新稿号会多出一份未签稿）；
+    #:   · 第二句说为什么不用重签（签盖的是 `## 证明` 那一节的正文 sha，`## 命题` 不在签名里）。
+    #:
+    #: 反真空：把本格打桩成空串 ⇒
+    #: `tests/test_b_proposition_form_refusal_says_the_fix.py::test_c_an_empty_fix_text_makes_a_red`
+    #: 必红（它证明判据读的确实是这一格，而不是自己长出来的）。
+    PROPOSITION_FORM_FIX = (
+        "把稿上 `## 命题` 那一节重写成那条定理的完整陈述（前提 → 结论）；"
+        "`## 证明` 与 `## 依赖` 一个字节都别动 —— V 的签盖在 `## 证明` 的正文 sha 上，"
+        "这一节改了正文 sha 不变，所以**不要重落新稿号、也不用重签**；"
+        "同一稿号、同一份稿原位改完，再把这份稿重交一次 "
+        "`own.ingest_manuscript(mode=\"register\", manuscript=<同一路径>)`")
+
+    #: 与上一条同出处的「下一步」（受控拒的 `next_step` 那一格）。
+    PROPOSITION_FORM_NEXT_STEP = (
+        "① F 原位重写 `## 命题`（不是新开稿号：新稿号会多出一份未签稿，"
+        "提交单与收工门都会再拦一次）；② 同一路径重交 "
+        "`own.ingest_manuscript(mode=\"register\")`，按同一正文 sha 认原来那一签；"
+        "③ 这件事不用 D 裁：命题形态的判据在 B 的秘书"
+        "（`Secretary.judge_proposition_form`），D 对命题台账只有只读权限")
+
+    def _proposition_form_gate(self, *, full: str, kind: str = "conjecture",
+                              label: str = "", task_id: str = "") -> dict[str, Any]:
+        """B 收录那一刻的命题形态闸（一处判据，两个调用点）。
 
         判据本体只有一处：:meth:`secretary.Secretary.judge_proposition_form`（与 F / E
         同一道判定口）；本方法只做三件本层的事：① 把这条命题递过去；② 把"没判成"也写进
-        形态台账（`role="B"`）；③ 折成 `submittable`（两态）。
+        形态台账（`role="B"`，收工门那本 `proposition_form.jsonl` 按角色读得到）；③ 折成
+        `submittable`（两态）。
+
+        ## 两个调用点（2026-11-13，W2）
+
+        - 普通数值通道（E 的 `reports/e-num-*`）：收录那一刻判一次，不是每条实验判一次；
+        - 按稿收录（F / E 的 `f-proof-*` / `e-proof-*` / `b-proof-*`）：
+          :meth:`_manuscript_form_refusal` 在落 statements 行之前问同一问 ——
+          改前那一路一次都不问（真机 `projects/octahedron-20261113`：B 把一段修订说明
+          当 `statement_full` 收了进去，只能靠模型在动作外面拦住、再写一封 B→D 的"请裁"）。
+        名字不再叫 `_numeric_form_gate`：它从来不是"数值通道专用的判据"，只是原先只有那
+        一个调用方。
         """
         out: dict[str, Any] = {
             "checked": False, "well_formed": False, "submittable": False,
@@ -1341,6 +1380,58 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if not got.get("ledger"):
                 _note(str(out.get("reason") or "没判成"))
         return out
+
+    def _manuscript_form_refusal(self, *, reading: Mapping, family: str,
+                                 rel: str) -> dict[str, Any]:
+        """按稿收录那一刻的命题形态闸 ⇒ 受控拒的那几格（`{}` = 放行）。
+
+        ## 位置与为什么在这里
+
+        `_ingest_register` 的第一件事：在 `Secretary.record_statement`（分配路径号、
+        落 `statements` 行）之前，也在 `_register_statement_impl` 的同一命题检索与签闸
+        （两次模型调用）之前。改前这一路一次都不问 —— 真机探针（W2，
+        `temp/w2_probe/probe_before.py`）逐字是：`ok=true`、`statements` 多一行、
+        那一行的 `statement_full` 就是那段修订说明。于是 B 只有两个出口：把修订说明当
+        命题收进去，或者像真机那样停在动作外面、写一封 B→D 的"请裁"（V 的签已经花掉）。
+
+        ## 只判「这一笔真要把 `## 命题` 落成一条新命题」那一档
+
+        - `e-num` 不判：普通数值通道在 `_register_statement_impl` 里有同一道闸
+          （同一本台账按正文 sha 缓存命中，不重复花钱）；
+        - 稿头点了在册命题号 ⇒ 这一笔是"给在册命题挂一份证明"，命题正文取在册那一行
+          （业主 2026-11-07：「改证明不需要重新登记」）⇒ 稿上那一节不参与登记，不判；
+        - `## 命题` 缺节 / 0 字 ⇒ 交给既有 `pointer_manuscript_missing_statement`
+          （那一档的拒信更准；"没有可登记的对象"与"有对象、形状不合规"是两个码）。
+        """
+        if str(family or "") == "e-num":
+            return {}
+        if str(reading.get("head_statement_id") or "").strip():
+            return {}
+        cell = dict((reading.get("cells") or {}).get("statement_full") or {})
+        statement = str(cell.get("value") or "").strip()
+        if cell.get("outcome") != _MI.EXTRACT_PRESENT or not statement:
+            return {}
+        form = self._proposition_form_gate(
+            full=statement, kind=str(reading.get("declared_kind") or ""), label="")
+        if form.get("submittable"):
+            return {}
+        from ..secretary import PROPOSITION_FORM_REFUSED
+
+        problems = [str(x) for x in (form.get("problems") or []) if str(x).strip()]
+        # 判据打桩（反真空）也照样读得到空串 —— 拒收里那两格与台账里那一条同一来源。
+        fix = str(self.PROPOSITION_FORM_FIX or "").strip()
+        why = ("按稿收录：`" + str(rel) + "` 的 `## 命题` 节没通过命题形态闸 ⇒ 受控拒、"
+               "不落 statements 行（正文没进台账，路径号也没有分配）："
+               + str(form.get("reason") or "形态不合规")
+               + ("；逐条缺什么：" + "；".join(problems[:6]) if problems else ""))
+        return {
+            "refused": str(form.get("refused") or PROPOSITION_FORM_REFUSED),
+            "why": why + ("。改法：" + fix if fix else ""),
+            "fix": fix,
+            "next_step": str(self.PROPOSITION_FORM_NEXT_STEP or "").strip(),
+            "problems": problems,
+            "proposition_form": form,
+        }
 
     # ---- 同一命题检索：只留秘书那一条路（2026-11-08 缺陷 ②） -----------------------
     #
@@ -4341,7 +4432,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 与 F / E 同一道判定口（`Secretary.judge_proposition_form`），不是每条实验判一次。
         # 判不过 / 没判成 ⇒ 受控拒，一个 statements 行都不落。
         if _green.get("ok"):
-            _form = self._numeric_form_gate(full=full, kind=kind_now, label=label)
+            _form = self._proposition_form_gate(full=full, kind=kind_now, label=label)
             _green["proposition_form"] = dict(_form)
             if not _form.get("submittable"):
                 _why = str(_form.get("reason") or "").strip()
@@ -6849,6 +6940,27 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         out.update(extra)
         return out
 
+    def _ingest_refused(self, out: dict, requested: Sequence[str], *, code: str,
+                        why: str, **extra: Any) -> dict:
+        """`mode=register` 在写盘之前被受控拒：翻掉结论，并逐格给 `refused` 读数。
+
+        为什么逐格也要给：`diff` 与 I2 读的是"请求的每一格都有 outcome"；只翻
+        `ok=False` 会让"请求了 5 格、一格读数都没有"看起来像"提取还没跑"。
+        受控拒的 `fix` / `next_step`（可执行的改法）走 `**extra` 原样带到顶层 ——
+        真机的那一封 B→D"请裁"就是因为拒收里没有这两格。
+        """
+        out = self._ingest_fail(out, code, why, **extra)
+        out["cells"] = {
+            str(cell): {"requested": True, "writable": False,
+                        "outcome": "refused", "code": str(code), "reason": str(why),
+                        "source": {"section": _MI.SECTION_BY_CELL.get(str(cell), ""),
+                                   "lines": [], "sha": ""}}
+            for cell in requested}
+        out["requested_cells"] = list(requested)
+        out["diff"] = {"requested_not_filled": list(requested),
+                       "filled_not_requested": []}
+        return out
+
     @staticmethod
     def _ingest_requested_cells(cells: Any, mode: str) -> tuple[list[str], str, str]:
         """校验 `cells` 闭集 ⇒ `(请求格, 受控码, 人话)`（码空 = 过关）。"""
@@ -7066,6 +7178,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         from .. import manuscriptfamily as _MFAM
         from .. import manuscriptintake as _MI
 
+        # ---- 2026-11-13（W2）：命题形态闸排在"读稿之后、写盘之前"的第一位 ----------
+        #
+        # 这一格是"B 收编那条路"的前置检查：读稿（秘书切节）→ 命题形态 → 签闸 /
+        # 同一命题检索 → 秘书事务里分配路径号 → 落 statements。改前"命题形态"这一步
+        # 在按稿收录这一路根本不存在（只有普通数值通道有），于是签已通过、`## 命题`
+        # 却是修订说明的稿，只能由模型在动作外面拦住、再甩给 D 裁。
+        _form_refusal = self._manuscript_form_refusal(
+            reading=reading, family=family, rel=path)
+        if _form_refusal:
+            return self._ingest_refused(
+                out, requested, code=str(_form_refusal["refused"]),
+                why=str(_form_refusal["why"]), fix=str(_form_refusal["fix"]),
+                next_step=str(_form_refusal["next_step"]),
+                problems=list(_form_refusal["problems"]),
+                proposition_form=dict(_form_refusal["proposition_form"]))
         got, origin, kind = self._register_pointer_manuscript(
             path, provenance=provenance, reading=reading)
         if not isinstance(got, dict):
@@ -7076,17 +7203,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                        or "registration_refused")
             why = str(got.get("error") or got.get("reason")
                       or got.get("why") or "登记被拒 ⇒ 这一笔不写")
-            out = self._ingest_fail(out, code, why)
-            out["cells"] = {
-                str(cell): {"requested": True, "writable": False,
-                            "outcome": "refused", "code": code, "reason": why,
-                            "source": {"section": _MI.SECTION_BY_CELL.get(str(cell), ""),
-                                       "lines": [], "sha": ""}}
-                for cell in requested}
-            out["requested_cells"] = list(requested)
-            out["diff"] = {"requested_not_filled": list(requested),
-                           "filled_not_requested": []}
-            return out
+            return self._ingest_refused(out, requested, code=code, why=why)
         # 签后升档与 pointer 老路同一条判据；稿头那一格用秘书给的那份读数（不再读盘）。
         got = self._apply_declared_manuscript_kind(
             got, statement_full="", origin=origin, kind=kind, proof_manuscript=path,
