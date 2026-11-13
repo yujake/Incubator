@@ -1287,11 +1287,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     #:   · `e-proof` —— `agent_e/proposition_form.py` 的 `_proposition_form_gate`
     #:     （`run_experiment` 在写 `experiments` 那一行 / e-proof 稿之前判一次）；
     #:   · `e-num` —— E 的普通数值路线没有独立的形态闸（`_wants_proof` 之外不判），
-    #:     按业主同一条放行口径由 B 侧放行：命题逐字取自 `## 命题`、`proof_text` 留空。
+    #:     按业主同一条放行口径由 B 侧放行：命题逐字取自 `## 命题`、`proof_text` 留空；
+    #:   · `b-proof` —— 2026-11-13 业主裁定 ④（甲）：B 的闸只剩**开稿那一刻**
+    #:     （`_land_citation_manuscript` → `manuscriptopen.open_manuscript`，判据仍是
+    #:     `Secretary.judge_proposition_form`）；引文侧新命题在开稿之前已经判过
+    #:     （`_own_registration_form_refusal`），优化副本按 `open_polish_copy` 的来源记录
+    #:     放行 ⇒ 按稿收录这一路不再判第二次（同一段字节只判一次）。
     #: 判据只有这一处：`_manuscript_form_refusal` 的早退与 `_manuscript_form_reading`
     #: 都读这张表；读数里逐字写「这一族由产出侧闸负责，B 侧放行」。
     MANUSCRIPT_FORM_RELEASED_FAMILIES: tuple[str, ...] = (
-        "f-proof", "e-proof", "e-num")
+        "f-proof", "e-proof", "e-num", "b-proof")
 
     #: 逐族的放行理由（读数原样带出去 —— 三态纪律：放行也要说清"凭什么放"）。
     MANUSCRIPT_FORM_RELEASE_REASONS: Mapping[str, str] = MappingProxyType({
@@ -1309,6 +1314,12 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "这一族按业主 2026-11-13 的放行口径由 B 侧放行：E 的普通数值路线"
             "（`e-num`）没有独立的形态闸，而这一档的命题逐字取自稿的 `## 命题`、"
             "`proof_text` 留空 ⇒ 按稿收录这一路不判、不写形态台账、零次模型调用"),
+        "b-proof": (
+            "这一族由 B 侧开稿口负责，B 侧放行：B 的形态闸只剩开稿那一刻"
+            "（`_land_citation_manuscript` → `manuscriptopen.open_manuscript`，判据仍是"
+            "`Secretary.judge_proposition_form`），引文侧新命题在开稿之前已由"
+            "`_own_registration_form_refusal` 判过、优化副本按 `open_polish_copy` 的来源"
+            "记录放行 ⇒ 按稿收录这一路不判第二次、不写形态台账、零次模型调用"),
     })
 
     #: 按稿收录这一路「没有可判的对象」的那一档读数（缺节 / 0 字）。
@@ -1462,11 +1473,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         from ..secretary import PROPOSITION_FORM_REFUSED
 
         fam = str(family or "")
-        if fam in self.MANUSCRIPT_FORM_RELEASED_FAMILIES:
+        # ---- 先读「有没有可判的对象」：它不是"放行"，是"这一笔不判" ----------------
+        #
+        # 三态必须先分：`missing_statement`（稿里没有可登记的 `## 命题`）交给
+        # `pointer_manuscript_missing_statement` 那一档的拒信，比"放行"更准；把它排在
+        # 放行表之后，这一条读数就永远出不来（2026-11-13 统一开稿时按次序修正）。
+        cell = dict((reading.get("cells") or {}).get("statement_full") or {})
+        statement = str(cell.get("value") or "").strip()
+        if cell.get("outcome") != _MI.EXTRACT_PRESENT or not statement:
             return {}, {
                 "judged": False, "released": True, "family": fam,
                 "checked": False, "model_calls": 0, "ledger_appended": False,
-                "reason": str(self.MANUSCRIPT_FORM_RELEASE_REASONS.get(fam) or ""),
+                "release_basis": "missing_statement",
+                "reason": str(self.MANUSCRIPT_FORM_NOT_JUDGED_REASONS["missing_statement"]),
             }
         # ---- 2026-11-13（业主）：`b-proof` 的「优化副本」按来源记录放行 ----------
         #
@@ -1498,14 +1517,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if not bool(_polish.get("checked")):
                 reading = dict(reading)
                 reading["polish_source"] = dict(_polish)
-        cell = dict((reading.get("cells") or {}).get("statement_full") or {})
-        statement = str(cell.get("value") or "").strip()
-        if cell.get("outcome") != _MI.EXTRACT_PRESENT or not statement:
+        # ---- 2026-11-13（业主裁定 ④，甲）：闸只剩开稿那一刻 ⇒ 按稿收录一律放行 ----
+        if fam in self.MANUSCRIPT_FORM_RELEASED_FAMILIES:
             return {}, {
                 "judged": False, "released": True, "family": fam,
                 "checked": False, "model_calls": 0, "ledger_appended": False,
-                "release_basis": "missing_statement",
-                "reason": str(self.MANUSCRIPT_FORM_NOT_JUDGED_REASONS["missing_statement"]),
+                "release_basis": "producer_gate",
+                "reason": str(self.MANUSCRIPT_FORM_RELEASE_REASONS.get(fam) or ""),
             }
         form = self._proposition_form_gate(
             full=statement, kind=str(reading.get("declared_kind") or ""), label="")
@@ -4949,7 +4967,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 在这一档静默失效）。
         if _citation_landing:
             _cited = self._land_citation_manuscript(
-                statement_full=full, proof_text=str(proof_text or ""), label=label)
+                statement_full=full, proof_text=str(proof_text or ""), label=label,
+                # 2026-11-13（统一开稿）：上面刚判过的那份读数交给开稿口复用
+                # （同一段字节、同一道判据；开稿口不再问第二次模型）。
+                form_reading=_own_form_reading)
             _citation_reading = dict(_cited)
             if not _cited.get("ok"):
                 return _refuse(
@@ -6512,32 +6533,49 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _record_landed_manuscript(self, stmt_id: str, rel: str, *,
                                   path_group: int = 0) -> dict:
-        """落稿那一刻把「命题号 → 这份稿」写进 `statements.manuscripts`（不新表）。
+        """落稿那一刻把「命题号 → 这份稿」写成一条 durable 记录（不新表）。
 
-        路径号给了就用它，没给（老调用面）就记 canonical 那一格（`1`）。写口与收录
-        回执同一格、同一个秘书白名单（`STATEMENT_LAND_OPS["attach_proofs"]` 收
-        `manuscripts`）：B 不直接改盘，只交"这一行要改成什么"。
+        记在哪一格，取决于这一笔知不知道"第几条路径"：
+
+        - `path_group >= 1`（优化线，路径在册）⇒ 写 `statements.manuscripts[组号]`
+          （逐路径记录；`manuscriptpaths` 的唯一读口就在那一格）；
+        - `path_group == 0`（老调用面 / 首次落稿）⇒ 只写 `manuscript_id`（"这一条
+          命题现在那份稿"）。**不写 `manuscripts`**：那一格是"每条证明路径各一份稿"，
+          落稿时正文还没挂进台账、路径号也还没分配 —— 提前写一格会让
+          `manuscriptpaths.path_reading` 把这一份算成"已有第 1 条路径"，
+          接着的真收录就被排成第 2 条（`used_by=stmt:<号>#p2` 那个形态）。
+        写口与收录回执同一白名单（`STATEMENT_LAND_OPS["attach_proofs"]` 收这两格）：
+        B 不直接改盘，只交"这一行要改成什么"。
         三态：`checked=False` ⇒ 这一格没写成（不冒充写过了）。
         """
+        from .. import vsigns as _VS_LAND
+
         sec = self._statement_secretary()
         if sec is None:
             return {"checked": False, "written": False,
                     "reason": "这一趟没有秘书 ⇒ 记不了这一格（不是「已经记过」）"}
-        group = int(path_group or 0) or 1
+        group = int(path_group or 0)
+        mid = str(_VS_LAND.manuscript_id_of(rel) or "").strip()
 
         def _transition(row):
             if row is None:
                 return {"write": False,
                         "result": {"written": False,
                                    "reason": f"`statements` 里没有 {stmt_id} 这一行"}}
-            per = dict(row.get("manuscripts") or {})
-            if str(per.get(str(group)) or "") == str(rel):
-                return {"write": False, "result": {"written": False, "preserved": True}}
-            per[str(group)] = str(rel)
             new = dict(row)
-            new["manuscripts"] = per
-            return {"write": True, "row": new,
-                    "result": {"written": True, "path_group": group}}
+            if group >= 1:
+                per = dict(row.get("manuscripts") or {})
+                if str(per.get(str(group)) or "") == str(rel):
+                    return {"write": False, "result": {"written": False, "preserved": True}}
+                per[str(group)] = str(rel)
+                new["manuscripts"] = per
+                return {"write": True, "row": new,
+                        "result": {"written": True, "path_group": group}}
+            if mid and str(row.get("manuscript_id") or "") != mid:
+                new["manuscript_id"] = mid
+                return {"write": True, "row": new,
+                        "result": {"written": True, "manuscript_id": mid}}
+            return {"write": False, "result": {"written": False, "preserved": True}}
 
         try:
             landed = sec.land_statement(
@@ -7055,11 +7093,25 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return []
 
     def _land_citation_manuscript(self, *, statement_full: str, proof_text: str,
-                                  label: str = "") -> dict[str, Any]:
+                                  label: str = "",
+                                  form_reading: Mapping[str, Any] | None = None
+                                  ) -> dict[str, Any]:
         """引文侧登记：先给这条新命题落一份 B 稿（`reports/b-proof-<B稿号>.md`）。
 
         业主 2026-11-13（甲）：「从引文侧录入命题…每个命题落手稿（落是正确的）」，
         闸（`_own_registration_form_refusal`）放在这一笔之前。
+
+        ## 2026-11-13（统一开稿四步）：开稿走唯一开稿口（闸 → 号 → 骨架），再写正文
+
+        业主：「写命题 → 命题形式过审 → 拿稿号 → 写稿（稿允许慢慢 edit）」。这一格
+        因此先调 `manuscriptopen.open_manuscript`（角色-族绑定 B/b-proof；闸在发号之前；
+        骨架 = 稿头 + `## 命题` 逐字 + 空的分节），拿到稿号与落点之后再用
+        `bmanuscript.land_rewrite` 写正文（引文侧这一版正文就是逐字引文）。
+
+        `form_reading`：调用方（`_register_statement_impl`）刚在
+        `_own_registration_form_refusal` 判过的那份读数 —— 传进来复用，开稿口不再问
+        第二次模型（同一段字节、同一道判据）。直调面不给读数 ⇒ 开稿口按 `judge=` 现问
+        （命中形态台账缓存 ⇒ 零次模型调用）。
 
         ## 为什么走 `bmanuscript.land_rewrite` 而不是 `_land_b_manuscript`
 
@@ -7070,24 +7122,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         命题号」）—— 这一份稿与命题行的对应关系只落在 `statements` 行的
         `manuscript_id` / `manuscripts` 两格上（写口在 `_attach_proofs` 那一笔）。
 
-        ## 号源（解耦那条事实）
-
-        稿号来自 B 自己那条号段：`manuscriptids.next_manuscript_id(root,
-        family="b-proof")`；落点由 `manuscriptids.canonical_rel(稿号, family="b-proof")`
-        拼。不拿命题号当稿号（业主 2026-11-11 裁定：B 侧稿号和命题号耦合是错的）。
-
         ## 三态
 
         - `{ok: True, written: True, ...}`：稿落成了（`text` / `path` / `manuscript_id` 都在）；
         - `{ok: False, refused: ...}`：一个字节都不写 / 写不成 —— 调用方整笔拒。
-          号发不出来、没有 workspace、没有逐字引文（`## 证明` 会空）各是各的受控码。
+          开稿口不给号 / 闸没过 / 没有逐字引文（`## 证明` 会空）各是各的受控码。
         """
         from .. import bmanuscript as _BM
-        from .. import manuscriptids as _MID
+        from .. import manuscriptopen as _MO
 
         out: dict[str, Any] = {"ok": False, "checked": True, "path": "",
                                "manuscript_id": "", "text": "", "written": False,
-                               "why": "", "refused": "", "problem": {}}
+                               "why": "", "refused": "", "problem": {},
+                               "fix": "", "next_step": "", "problems": [],
+                               "form": {}}
         root = str(getattr(self.store, "root", "") or "")
         if not root:
             out.update(checked=False, refused="no_workspace",
@@ -7101,14 +7149,28 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      "可签的稿。改法：把文献里那一句逐字摘进 `proof_text`"
                      "（逐字回验要比对的就是它）再重交"))
             return out
-        try:
-            mid = _MID.next_manuscript_id(root, family="b-proof")
-        except Exception as exc:  # noqa: BLE001 —— 号发不出来要如实说
-            out.update(checked=False, refused="manuscript_id_unavailable",
-                       why=(f"B 的稿号发不出来（{type(exc).__name__}: {exc}）⇒ "
-                            "这一份没有可签的载体"))
+        opened = _MO.open_manuscript(
+            root, role="B", family="b-proof",
+            proposition=str(statement_full or ""),
+            judge=self._proposition_form_gate, form_reading=form_reading,
+            kind="conjecture", label=label, title=str(statement_full or ""),
+            fix=str(self.PROPOSITION_FORM_REGISTER_FIX or ""),
+            next_step=str(self.PROPOSITION_FORM_REGISTER_NEXT_STEP or ""))
+        if not opened.get("ok"):
+            out.update(
+                checked=bool(opened.get("checked", True)),
+                refused=str(opened.get("refused") or "manuscript_open_refused"),
+                why=str(opened.get("why") or ""),
+                fix=str(opened.get("fix") or ""),
+                next_step=str(opened.get("next_step") or ""),
+                problems=[str(x) for x in (opened.get("problems") or [])
+                          if str(x).strip()],
+                form=dict(opened.get("form") or {}),
+                problem={"kind": str(opened.get("refused") or ""),
+                         "stage": "open", "why": str(opened.get("why") or "")})
             return out
-        rel = _MID.canonical_rel(mid, family="b-proof")
+        mid = str(opened.get("manuscript_id") or "")
+        rel = str(opened.get("path") or "")
         out.update(manuscript_id=mid, path=rel)
         try:
             got = _BM.land_rewrite(

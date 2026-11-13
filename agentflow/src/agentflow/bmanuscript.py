@@ -142,6 +142,39 @@ def manuscript_id_for_statement(root: Any, statement_id: Any, *,
                    why=(f"逐路径记录里 stmt:{sid} 的稿指向 `{rel}`（候选 "
                         f"{len(hits)} 份；这一份{'已' if signed_any else '未'}签）"))
         return out
+    # ---- 落稿那一刻记下的 `manuscript_id`（`path_group=0` 那一档的 durable 记录） ----
+    #
+    # 路径还没分（首次落稿 / 老调用面）时 `manuscripts` 那一格不写（写了会让
+    # `path_reading` 把"还没挂进台账的那一份"算成一条路径）。这一档记在行上的
+    # `manuscript_id`：只有它确实是**本族**的稿（`reports/b-proof-<号>.md` 在盘上）
+    # 才算 —— 否则那一格是 F 的稿号（同一格两个号段），不能当 B 稿。
+    if store is not None:
+        try:
+            from . import statementledger as _SL
+
+            _row_got = _SL.by_id(store, stmt_id=sid)
+        except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+            out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+            return out
+        if _row_got.get("checked"):
+            _row = dict(_row_got.get("row") or {}) if _row_got.get("found") else {}
+            _mid_now = str(_row.get("manuscript_id") or "").strip()
+            if _mid_now:
+                _rel_now = f"{MANUSCRIPT_DIR}/{PREFIX}{_mid_now}.md"
+                _path_now = Path(str(root)) / _rel_now
+                if _path_now.is_file():
+                    try:
+                        _text_now = _path_now.read_text(encoding="utf-8")
+                    except (OSError, UnicodeDecodeError):
+                        _text_now = ""
+                    _block_now = (_VS.manuscript_sign_reading(
+                        _text_now, manuscript_path=_rel_now) if _text_now else {})
+                    out.update(checked=True, found=True, manuscript_id=_mid_now,
+                               path=_rel_now, candidates=[_rel_now],
+                               signed=bool(_block_now.get("found")),
+                               why=(f"行上的 `manuscript_id` 指着本族稿 `{_rel_now}`"
+                                    "（落稿那一刻记的）"))
+                    return out
     # ---- 老盘的只读兼容：按命题号拼的名字（新写路径不再产生这一形状） -----------
     legacy_rel = f"{MANUSCRIPT_DIR}/{PREFIX}{sid}.md"
     legacy_path = Path(str(root)) / legacy_rel
