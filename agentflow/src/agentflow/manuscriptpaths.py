@@ -3,6 +3,20 @@
 
 一条命题已有 N 条路径 ⇒ 新正文排第 N+1；同一份稿（同正文 sha / 同路径）重复
 收录 ⇒ 沿用原号。依赖行与 `verifications` 行都用这个号。
+
+## 「难以自证」那条路径 = 空号（业主 2026-11-13 裁定）
+
+> 「B 秘书应该认为难以自证状态的证明路径号是空号，即如果路径 1 是难以自证状态，
+>   后续提交 V 签稿时应替换该路径的证明稿、依赖面、V 签、引文状态等等，且将优化栏
+>   更新为新稿提交一致的未优化。」
+
+所以路径占用这一面要把「优化栏记着难以自证」的那几条扣掉：它们不是"已有证明"，
+不占号、也不参与"同种证明"的比较（判据只在 :func:`vacant_path_reading` 一处读）。
+新稿因此落在同一个路径号上（替换），而不是被排在 N+1 或被
+`Secretary._same_kind_hits` 以"与第 k 条路径同种"拒掉。
+
+三态：读不出来（`checked=False`）不是"没有空号"——调用方必须按普通路径处置
+（fail-closed），否则一行坏字节就能把"已有证明"这道判断整条抹掉。
 """
 from __future__ import annotations
 
@@ -226,6 +240,96 @@ def path_reading(store: Any, root: Any, *, statement_id: str) -> dict[str, Any]:
     return out
 
 
+def vacant_path_reading(row: Any) -> dict[str, Any]:
+    """哪几条路径处于「难以自证」状态（= 空号）：三态读数。
+
+    判据只有一处：`bits.evidence.hard_to_prove_by_proof` 里记着的那几条（写侧唯一
+    入口是 `evidencebits.with_hard_to_prove`）。这一格不是"这一行没有证明"，
+    也不是"status 变了"—— 业主原话：「其它栏保留引文侧录入的样子，如 V 签还是
+    占位」；它只让路径号那一面把这一条读成空号。
+
+    返回 `{"checked", "groups", "entries", "why"}`：
+
+    - `checked=True` + `groups=[]` ⇒ 这一行没有「难以自证」的记录（含存量行：没有
+      `bits` / 没有 `evidence` 这一格都不算"读不出来"）；
+    - `checked=True` + `groups=[n, …]` ⇒ 第 n 条是空号；
+    - `checked=False` ⇒ 没查成（行不是映射 / `bits.evidence` 不是映射 / 那一格
+      不是映射 / 有条目读不出形状）。调用方据此按普通路径处置（fail-closed）：
+      "读不出来"绝不折成"没有空号"，也绝不折成"有空号"。
+    """
+    from . import evidencebits as _EB   # 惰性：口袋的键名只有那一处
+
+    out: dict[str, Any] = {"checked": False, "groups": [], "entries": {}, "why": ""}
+    if not isinstance(row, Mapping):
+        out["why"] = "命题行读不出来 ⇒ 空号这一格没查成（不许当成「没有空号」）"
+        return out
+    bits = row.get("bits")
+    if bits is None:
+        out.update(checked=True, why="这一行没有 `bits` ⇒ 没有「难以自证」的记录"
+                                     "（存量合法初态，不是读不出来）")
+        return out
+    if not isinstance(bits, Mapping):
+        out["why"] = f"`statements.bits` 不是映射（{type(bits).__name__}）⇒ 空号读不出来"
+        return out
+    evidence = bits.get("evidence")
+    if evidence is None:
+        out.update(checked=True, why="`bits.evidence` 还没有这一版 ⇒ 没有「难以自证」的记录")
+        return out
+    if not isinstance(evidence, Mapping):
+        out["why"] = (f"`bits.evidence` 不是映射（{type(evidence).__name__}）"
+                      "⇒ 空号读不出来（按普通路径处置）")
+        return out
+    pocket = evidence.get(_EB.HARD_TO_PROVE_KEY)
+    if pocket is None:
+        out.update(checked=True, why="这一行没有「难以自证」记录 ⇒ 没有空号")
+        return out
+    if not isinstance(pocket, Mapping):
+        out["why"] = (f"`bits.evidence.{_EB.HARD_TO_PROVE_KEY}` 不是映射"
+                      f"（{type(pocket).__name__}）⇒ 哪几条是空号读不出来"
+                      "（按普通路径处置）")
+        return out
+    entries: dict[int, dict[str, Any]] = {}
+    bad: list[str] = []
+    for raw_no, value in pocket.items():
+        try:
+            no = int(raw_no)
+        except (TypeError, ValueError):
+            bad.append(f"路径号 {raw_no!r} 读不出")
+            continue
+        if no < 1:
+            bad.append(f"路径号 {no} 不是正整数")
+            continue
+        if not isinstance(value, Mapping) or not str(value.get("basis") or "").strip():
+            bad.append(f"第 {no} 条没有可读的理由（`basis` 空或不是映射）")
+            continue
+        entries[no] = dict(value)
+    if bad:
+        out["why"] = ("「难以自证」那一格里有读不出来的条目（" + "；".join(bad[:4])
+                      + f"{'…' if len(bad) > 4 else ''}）⇒ 哪几条是空号读不出来"
+                      "（按普通路径处置，fail-closed）")
+        return out
+    groups = sorted(entries)
+    out.update(checked=True, groups=groups, entries=entries,
+               why=(f"第 {'、'.join(str(g) for g in groups)} 条路径处于「难以自证」状态"
+                    " ⇒ 读成空号（不计入路径占用、不参与同种证明的比较）"
+                    if groups else "没有处于「难以自证」状态的路径"))
+    return out
+
+
+def statement_row_of(store: Any, statement_id: str) -> dict[str, Any] | None:
+    """事务快照 / store 里读一条命题行（读不出来 ⇒ `None`，不猜）。"""
+    sid = str(statement_id or "").strip()
+    if not sid or store is None:
+        return None
+    try:
+        for row in store.rows("statements"):
+            if str(row.get("stmt_id") or "") == sid:
+                return dict(row)
+    except Exception:  # noqa: BLE001 —— 读不出来 ⇒ 调用方按"没查成"处置
+        return None
+    return None
+
+
 def assign_path_group(*, store: Any, root: Any, statement_id: str,
                       manuscript: str, body_sha: str = "") -> dict[str, Any]:
     """B 收录时给这一份证明分配「第几条路径」。
@@ -233,6 +337,18 @@ def assign_path_group(*, store: Any, root: Any, statement_id: str,
     规则：这条命题已经有 N 条路径 ⇒ 新正文排第 N+1 条；同一份稿（同正文 sha / 同
     路径）重复收录 ⇒ 沿用原来的号，不新增路径。老盘没有 `path_group` 的行不猜号
     （只贡献它有的组号；一条都没有 ⇒ 第 1 条）。
+
+    ## 空号（业主 2026-11-13 裁定）
+
+    「优化栏记着难以自证」的那几条路径不计入占用：它们不是"已有证明"。新稿
+    于是落在那个空号上（`min(空号)`，替换它），而不是排成 N+1 —— 「如果路径 1 是
+    难以自证状态，后续提交 V 签稿时应替换该路径的证明稿 …」。空号只在
+    `max(已占号)+1` 之内才算"一个洞"（`{1,2}` 占着、`5` 记着难以自证 ⇒ 那一条不是
+    洞，新稿仍排第 3 条：空号的号必须是对得上的那一条路径，不替它编一个跳号）。
+
+    三态：`vacant_path_reading` 读不出来 ⇒ `vacant_paths=[]` + 读数
+    `vacant_reading.checked=False`，占用按普通路径算（fail-closed：不把那一行当成
+    空号，也绝不把"没查成"说成"查过了、没有空号"）。
     """
     sid = str(statement_id or "").strip()
     rel = str(manuscript or "").strip().replace("\\", "/")
@@ -242,14 +358,25 @@ def assign_path_group(*, store: Any, root: Any, statement_id: str,
                            "existing": False, "count": int(got.get("count") or 0),
                            "statement_id": sid, "manuscript": rel, "body_sha": sha,
                            "paths": list(got.get("paths") or []), "why": "",
-                           "problems": list(got.get("problems") or [])}
+                           "problems": list(got.get("problems") or []),
+                           #: 空号读数（三态）：哪几条路径处于「难以自证」状态。
+                           "vacant_paths": [], "vacant_reading": {},
+                           "vacant_filled": False}
     if not sid:
         out.update(checked=False, why="没有命题号 ⇒ 路径号分不了（不是「第 1 条」）")
         return out
     if not got.get("checked"):
         out.update(checked=False, why=f"路径数没读成：{got.get('why') or '未知原因'}")
         return out
+    vac = vacant_path_reading(statement_row_of(store, sid))
+    out["vacant_reading"] = dict(vac)
+    vacant = [int(g) for g in (vac.get("groups") or [])] if vac.get("checked") else []
+    out["vacant_paths"] = sorted(vacant)
     for one in got.get("paths") or []:
+        if int(one.get("path_group") or 0) in vacant:
+            # 空号上的那份正文是上一版（引文占位）；这一份新稿不该"沿用"它的号，
+            # 也不该被读成"已经在册"。号仍由下面那一支给（会落成同一个数）。
+            continue
         same_sha = sha and str(one.get("body_sha") or "").lower() == sha
         same_path = rel and str(one.get("manuscript") or "") == rel
         if same_sha or same_path:
@@ -258,8 +385,20 @@ def assign_path_group(*, store: Any, root: Any, statement_id: str,
                            why=(f"这一份正文（sha {sha[:12]}…）已经是第 "
                                 f"{one['path_group']} 条路径 ⇒ 沿用，不新增"))
                 return out
-    groups = [int(p.get("path_group") or 0) for p in (got.get("paths") or [])]
-    group = max([g for g in groups if g >= 1] or [0]) + 1
+    groups = [int(p.get("path_group") or 0) for p in (got.get("paths") or [])
+              if int(p.get("path_group") or 0) not in vacant]
+    occupied = [g for g in groups if g >= 1]
+    if vacant:
+        top = (max(occupied) if occupied else 0) + 1
+        holes = [g for g in vacant if g <= top]
+        if holes:
+            group = min(holes)
+            out.update(path_group=group, existing=False, vacant_filled=True,
+                       why=(f"第 {group} 条路径处于「难以自证」状态 ⇒ 读成空号："
+                            "这一份落在同一个路径号上（替换那一条的证明稿 / 依赖面 / "
+                            "V 签 / 引文状态），不新增路径"))
+            return out
+    group = max(occupied or [0]) + 1
     out.update(path_group=group, existing=False,
                why=(f"这条命题已有 {out['count']} 条路径 ⇒ 新收的这一份排第 {group} 条"))
     return out

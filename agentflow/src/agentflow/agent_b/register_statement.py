@@ -7951,6 +7951,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     "refused": "sign_reading_unreadable",
                     "reason": (f"认签那一格没查成（{type(exc).__name__}: {exc}）"
                                "⇒ 证据重算没做成（没查成 ≠ 没签）")}}
+            # ---- 认签成功 ⇒ 第 3 位的凭据档就是真签（`reviewed_source="v"`）--------
+            #
+            # `_statement_bits` 是按"这一行有什么"构造出来的（`bits_of` 只在构造时
+            # `reviewed=True` 才写 `v`，否则空串 / 占位签写 `citation`）⇒ 认签这一步
+            # 若不补这一格，`_evidence_bits_for_replay` 会把 delivered 里那个空串
+            # 覆盖到行上：一份刚从引文占位换成真签的正文读起来是
+            # `reviewed=true ∧ reviewed_source=""`（"凭什么是真"读不出来）。
+            # 业主 2026-11-13 裁定的"引文状态……替换"就是这一格；取值仍只有词表里
+            # 那两个，不新增一档。
+            if bool(dict(sign_claim or {}).get("applied")):
+                _dv = dict(delivered or {})
+                _dvev = dict(_dv.get("evidence") or {})
+                _dvev["reviewed_source"] = _EB.REVIEWED_SOURCE_V
+                _dv["evidence"] = _dvev
+                delivered = _dv
             signed = bool(dict(delivered or {}).get("reviewed"))
             # 三态：认签"没查成"不是"没签" —— 不许把读不出来当成一次降档。
             if not signed and not bool(dict(sign_claim or {}).get("checked")):
