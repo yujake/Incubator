@@ -85,6 +85,20 @@ ACTIONS: tuple[ActionSpec, ...] = (
         _obj({"problem_key": _S, "include_terminal": _B}),
         "dict", side_effect="read", handler_name="list_plans",
     ),
+
+    ActionSpec(
+        "F", "abandon_plan",
+        # 业主 2026-11-13：「F 应该有新的放弃理由为不再需要」。plan 级只开这一档
+        # （不搬命题级那四档 —— 它们各自要缺陷引用 / 拆出的引理 / 实验号 / 空间读数，
+        # 而 plan 没有这些证据面）。摘要里写清"只认这一档"，否则模型会自己造理由。
+        ("明确放弃一条计划（理由**只认一档**：「不再需要」）：写成 `status=abandoned` ＋ "
+         "`history` 一行（含「不再需要」四字）。**已终态的不许再放弃**"
+         "（finish / 已放弃 / stalled / 有支持未证 都算不再推进）—— 想重新攻就另立一条计划。"),
+        _obj({"plan_id": _S, "reason": _S}, ("plan_id", "reason")),
+        "dict（plan_id / status / reason / abandoned / history_len / at；"
+        "被拒那几支配 kind / error / refusal_reason）",
+        side_effect="write_local", handler_name="abandon_plan",
+    ),
 )
 
 

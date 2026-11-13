@@ -64,6 +64,10 @@ _REQUIRED_BUDGET_KEYS = ("max_rounds", "max_parallel_subgoals", "max_persist_att
 #: 形同虚设。名单不自持：它就是 `schema.ATTACK_TERMINAL_STATUSES`（两处名单的存在本身
 #: 就是缺陷，FC-03：同一个"终态"概念不可能有两个定义）。
 from ..schema import ATTACK_TERMINAL_STATUSES as TERMINAL_STATUSES  # noqa: E402
+#: plan 级放弃理由的受控词表（唯一真身 `agentflow.planabandon`）：`attack.abandon_plan`
+#: 的参数 enum 与 `agent_f.abandon_plan` 的判据读同一份 —— 两处各写一份就会漂成
+#: "工具说收这个理由、判据说不是这一档"。
+from ..planabandon import PLAN_ABANDON_REASONS  # noqa: E402
 #: 子目标状态的「词表」（`pick_next_subgoal` 要在给结论之前拿它校验：
 #: 状态写错时若直接回"没有可推进的子目标"，就把输入写错读成了"确实没有待办"）。
 from ..schema import SUBGOAL_STATUSES as SUBGOAL_STATUSES  # noqa: E402
@@ -477,6 +481,36 @@ def _attack_create_plan(_need_store, store, problem, problem_key, for_question_i
     )
 
 @tool(
+    "attack.abandon_plan",
+    (
+            # 业主 2026-11-13：「F 应该有新的放弃理由为不再需要」。plan 级只开这一档。
+            "明确放弃一条计划（理由只认「不再需要」）：status→abandoned ＋ history 落一行；"
+            "已终态（finish/已放弃/stalled/有支持未证）的不许再放弃。"
+            ),
+    {
+           "type": "object",
+           "properties": {
+            "plan_id": {"type": "string"},
+            "reason": {"type": "string", "enum": list(PLAN_ABANDON_REASONS)},
+           },
+           "required": ["plan_id", "reason"],
+           "additionalProperties": False,
+           },
+    side_effect="write_local",
+    roles=_WRITE_ROLES,
+    # 键名从实现读出（`agent_f.AgentF.abandon_plan`）：成功支与四种受控拒逐字相同
+    # （`_abandon_refusal` 由同一个字典起手）。
+    returns=("{'ok','kind','error','refusal_reason','plan_id','status','reason',"
+             "'abandoned','history_len','at'}"),
+    tags=("attack", "plan"),
+)
+def _attack_abandon_plan(_need_store, store, plan_id, reason):
+    """attack.abandon_plan 的工具体（注入 `_need_store` / `store`，与另外几件同形）。"""
+    return _need_store("attack.abandon_plan") or _guard(
+        lambda: _agent_for(store).abandon_plan(plan_id, reason=reason)
+    )
+
+@tool(
     "attack.step",
     (
             # 摘要只留一句指路（压缩批次的体量口径按全 cohort 算，见
@@ -599,6 +633,7 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     (_attack_check_budget, ()),
     (_attack_pick_next_subgoal, ()),
     (_attack_create_plan, ('_need_store', 'store')),
+    (_attack_abandon_plan, ('_need_store', 'store')),
     (_attack_step, ('_need_store', 'store')),
     (_attack_status, ('_need_store', 'store')),
     (_attack_list_plans, ('_need_store', 'store')),

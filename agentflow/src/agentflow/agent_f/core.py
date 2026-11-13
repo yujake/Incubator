@@ -8,6 +8,7 @@ from __future__ import annotations
 from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import vsigns as _VS_NAME    # 稿名 ⇒ 稿号（只读解析；`_resolve_manuscript_id` 用）
+from .abandon_plan import _AbandonPlan
 from .create_plan import _CreatePlan
 from .manuscript import _Manuscript, proposition_text
 from .step import _Step
@@ -4248,7 +4249,7 @@ class _Core:
             tx.upsert("attack_plans", obj.to_dict(), note=note)
 
 
-class AgentF(_CreatePlan, _Step, _Status, _ListPlans, _Manuscript, _Core):
+class AgentF(_CreatePlan, _AbandonPlan, _Step, _Status, _ListPlans, _Manuscript, _Core):
     """多轮难题攻坚智能体。
 
     每个方法都可以被独立调用与单测：
