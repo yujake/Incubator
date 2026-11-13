@@ -95,8 +95,9 @@ ACTIONS: tuple[ActionSpec, ...] = (
          "`history` 一行（含「不再需要」四字）。**已终态的不许再放弃**"
          "（finish / 已放弃 / stalled / 有支持未证 都算不再推进）—— 想重新攻就另立一条计划。"),
         _obj({"plan_id": _S, "reason": _S}, ("plan_id", "reason")),
-        "dict（plan_id / status / reason / abandoned / history_len / at；"
-        "被拒那几支配 kind / error / refusal_reason）",
+        "dict（plan_id / status / reason / abandoned / history_len / at；被拒 ⇒ 受控拒"
+        "（召唤层落 `refused / invalid_params`；工具层落受控 `plan_error`，"
+        "细码与原因在拒信正文））",
         side_effect="write_local", handler_name="abandon_plan",
     ),
 )
