@@ -219,14 +219,14 @@ def _a_holds(out: dict) -> bool:
 #: 这是"作者没写依赖段"的形状本身 —— B 对它是整笔拒（`dependency_section_missing`），
 #: 而读数层必须能把这件事说出来（`missing`）。
 def _manuscript_missing_dependency_section(body: str) -> str:
-    return ("# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n\n"
+    return ("# F 的证明手稿（夹具）\n\n\n"
             "## 命题\n\n（夹具命题）\n\n"
             f"## 证明\n\n{body}\n\n")
 
 
 #: 手稿正文（夹具）：`## 依赖` 是空表（表头在、0 行）—— 这是合法的"自足"声明。
 def _manuscript_empty_dependency_table(body: str) -> str:
-    return ("# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n\n"
+    return ("# F 的证明手稿（夹具）\n\n\n"
             "## 命题\n\n（夹具命题）\n\n"
             f"## 证明\n\n{body}\n\n"
             "## 依赖\n\n"

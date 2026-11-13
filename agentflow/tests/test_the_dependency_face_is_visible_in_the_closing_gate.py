@@ -76,7 +76,7 @@ def _manuscript(*, dep_section: bool = True, body: str = "", with_table: bool = 
 
     `with_table=False` ⇒ 那一节在、表是空的（表头 + 分隔行，0 行）—— 这是"自足"的形态。
     """
-    text = (f"# 证明手稿 f-proof-{SID}\n\n- 命题号：{SID}\n\n"
+    text = (f"# 证明手稿 f-proof-{SID}\n\n\n"
             "## 命题\n\n引理 000000 的陈述全文。\n\n"
             f"## 证明\n\n{body or _body()}\n")
     if dep_section:

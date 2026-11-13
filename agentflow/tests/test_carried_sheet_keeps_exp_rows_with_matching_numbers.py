@@ -70,7 +70,7 @@ def _put_f_manuscript(env: dict, sid: str) -> None:
     target = pathlib.Path(env["store"].root) / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        f"# F 的证明手稿：R(3,4)=9\n\n- 命题号：stmt:（还没落号）\n\n"
+        f"# F 的证明手稿：R(3,4)=9\n\n\n"
         "## 命题\n\n" + FULL + "\n\n## 证明\n\n1. 由定义直接得到。\n",
         encoding="utf-8")
     row = dict(next(r for r in env["store"].rows("statements")

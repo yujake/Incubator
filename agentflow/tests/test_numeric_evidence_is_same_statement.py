@@ -562,7 +562,7 @@ def _proof_manuscript(store: Store, *, sid: str,
     path = pathlib.Path(store.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# F 的证明手稿（夹具）\n\n- 命题号：stmt:{sid}\n"
+        f"# F 的证明手稿（夹具）\n\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         f"## 命题\n\n{proposition}\n\n## 证明\n\n{proof_text}\n\n"
         "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"

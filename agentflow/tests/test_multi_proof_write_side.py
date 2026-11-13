@@ -195,7 +195,7 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     _empty_then_sign(st_new, text=P1, manuscript="reports/f-proof-000000.md")
     from agentflow import depsection as DS
 
-    ms = ("# F 的证明手稿\n\n- 命题号：stmt:000000\n\n## 命题\n\n" + STATEMENT
+    ms = ("# F 的证明手稿\n\n\n## 命题\n\n" + STATEMENT
           + "\n\n## 证明\n\n" + P1 + "\n\n" + DS.render_dependency_section([]))
     out_old = _agent(st_old).register_statement(**OWN, proof_text=P1,
                                                 proof_manuscript=ms)
@@ -221,7 +221,11 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     # 也要有（第几份证明由 B 收录时决定；只在一支上写反而让两条等价写法落出不同的行）。
     # 它们不是 `schema.Statement` 的字段（改磁盘格式契约要人审），`_attach_proofs` 一直
     # 就以非 schema 键写这两格；这里沿用既有容忍度，所以从"只差内部留痕"的集合里排除。
-    allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY, "proof_no", "proof_sha256"}
+    # 2026-11-13（业主：一命题一稿号）：落稿那一刻把「命题号 → 这份稿」记在行上
+    # （`manuscript_id`；路径分了的档记 `manuscripts`）—— 这两格与收录回执同族，
+    # 也不是 `schema.Statement` 的字段。
+    allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY, "proof_no", "proof_sha256",
+               "manuscript_id", "manuscripts"}
     assert set(row_old) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_old)
     assert set(row_new) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_new)
     for row, store in ((row_old, st_old), (row_new, st_new)):
@@ -284,7 +288,7 @@ def test_a2_without_the_receipt_write_the_new_row_has_no_proof_number(
     _empty_then_sign(st, text=P1, manuscript="reports/f-proof-000000.md")
     from agentflow import depsection as DS
 
-    ms = ("# F 的证明手稿\n\n- 命题号：stmt:000000\n\n## 命题\n\n" + STATEMENT
+    ms = ("# F 的证明手稿\n\n\n## 命题\n\n" + STATEMENT
           + "\n\n## 证明\n\n" + P1 + "\n\n" + DS.render_dependency_section([]))
     out = _agent(st).register_statement(**OWN, proof_text=P1, proof_manuscript=ms)
     assert out["ok"] is True, out

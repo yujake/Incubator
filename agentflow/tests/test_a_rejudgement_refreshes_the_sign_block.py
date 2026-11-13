@@ -80,7 +80,6 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     path = pathlib.Path(st.root) / REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("# F 的证明手稿\n\n"
-                    f"- 命题号：stmt:{SID}\n"
                     f"- 计划：{SID} · 子目标：S3\n\n"
                     f"## 命题\n\n{FULL}\n\n## 证明\n\n{PROOF}\n\n"
                     + _DS.render_dependency_section([]), encoding="utf-8")

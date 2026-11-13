@@ -79,7 +79,7 @@ def _put(st: Store) -> dict:
 
 
 def _manuscript() -> str:
-    return ("# F 的证明手稿：一致连续\n\n- 命题号：stmt:000000\n- 计划：0000\n\n"
+    return ("# F 的证明手稿：一致连续\n\n- 计划：0000\n\n"
             "## 命题\n\n" + FULL + "\n\n## 证明\n\n" + PROOF + "\n\n"
             + DS.render_dependency_section([]) + "\n")
 

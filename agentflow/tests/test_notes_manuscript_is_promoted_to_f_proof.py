@@ -95,13 +95,11 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
-def _draft(*, number_line: str = "- 命题号：stmt:（还没落号）",
-           more_propositions: bool = False, with_proof: bool = True,
+def _draft(*, more_propositions: bool = False, with_proof: bool = True,
            washed: bool = True) -> str:
     """一份攻坚手稿（`notes/…` 的形状：页头 + 命题 + 证明 + 依赖）。"""
     parts = [
         "# F 的证明手稿：conj:000000 攻坚（P1）\n",
-        f"{number_line}\n",
         "- 计划：000000 · 子目标：s1\n",
         "\n## 命题\n\n",
         f"{FULL}\n",
@@ -165,8 +163,8 @@ def test_a_a_signed_notes_draft_becomes_the_numbered_manuscript(tmp_path):
     assert _read(st, NOTES_REL) == before, "转正改了攻坚稿（应一个字节都不动）"
 
     final = _read(st, FORMAL_REL)
-    # 转正不写命题号：草稿那行原样在，而且那个号一次都没被写进来。
-    assert "- 命题号：stmt:（还没落号）" in final, final
+    # 业主 2026-11-13：稿里没有命题号 ⇒ 转正也不写；草稿那份本来就没有这一行。
+    assert "- 命题号：" not in final, final
     assert f"stmt:{SID}" not in final, (
         "转正把命题号写进了稿头 ⇒ 被撤掉的那条口子回来了（命题号由 B 收录时现取）")
     block = _block(st, FORMAL_REL)
@@ -200,7 +198,6 @@ def test_a3_a_proof_with_level_two_subheads_is_promoted(tmp_path):
     st = _ws(tmp_path)
     text = "".join([
         "# F 的证明手稿：勒贝格控制收敛定理\n",
-        "- 命题号：stmt:（还没落号）\n",
         "- 计划：000000 · 子目标：s1\n",
         "\n## 命题\n\n",
         "设 (X, A, μ) 为测度空间，f_n → f μ-几乎处处；若存在可积 g 使 "

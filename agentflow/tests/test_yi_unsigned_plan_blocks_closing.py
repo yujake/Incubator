@@ -84,8 +84,6 @@ def _manuscript(st: Store, mid: str, *, family: str = "f-proof",
     head = ["# 手稿（夹具）", ""]
     if family == "f-proof":
         head.append(f"- 计划：{plan_id} · 子目标：g1")
-    head.append(f"- 命题号：stmt:{statement_id}（还没落号）" if not statement_id
-                else f"- 命题号：stmt:{statement_id}")
     head.append("- 依赖面洗稿：已洗=true；执行者=fixture")
     head += ["", "## 命题", "", FULL, "", "## 证明", "", BODY, "",
              DS.render_dependency_section([])]

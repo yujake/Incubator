@@ -51,7 +51,7 @@ def _seed(st: Store) -> dict:
         proofs=[{"proof_no": 1, "proof_text": PROOF}])
     (pathlib.Path(st.root) / REL).parent.mkdir(parents=True, exist_ok=True)
     (pathlib.Path(st.root) / REL).write_text(
-        "# 证明手稿\n\n- 命题号：stmt:" + SID + "\n\n## 命题\n\n夹具命题。\n\n"
+        "# 证明手稿\n\n## 命题\n\n夹具命题。\n\n"
         "## 证明\n\n" + PROOF + "\n\n## 依赖\n\n| 依赖 | 类型 | 状态 | 说明 |\n"
         "|---|---|---|---|\n", encoding="utf-8")
     return row

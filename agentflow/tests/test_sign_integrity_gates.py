@@ -70,7 +70,7 @@ def _manuscript(st: Store, sid: str, *, plan: bool = False) -> str:
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# F 的证明手稿：K4 的刻画\n\n- 命题号：stmt:{sid}\n\n## 命题\n\n{FULL}\n\n"
+        f"# F 的证明手稿：K4 的刻画\n\n\n## 命题\n\n{FULL}\n\n"
         f"## 证明\n\n{PROOF}\n\n## 依赖\n\n"
         "| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
         "|---|---|---|---|\n（空表就是声明。）\n",

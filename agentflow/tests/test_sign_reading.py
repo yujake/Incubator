@@ -83,7 +83,6 @@ def _manuscript(root: pathlib.Path, sid: str, text: str = PROOF) -> tuple[str, s
     """
     rel = f"reports/f-proof-{sid}.md"
     body = ("# 证明手稿（夹具）\n\n"
-            f"- 命题号：stmt:{sid}\n\n"
             f"## 命题\n\n夹具命题。\n\n## 证明\n\n{text}\n\n"
             "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |\n"
             "|---|---|---|\n")

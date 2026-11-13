@@ -53,7 +53,6 @@ SIGN_LINE = ("- V 签：已签=true；判词=成立；连续=3/3；正文sha={sh
 
 MANUSCRIPT = f"""# F 的证明手稿：夹具命题
 
-- 命题号：stmt:{SID}
 {SIGN_LINE.format(sha="__SHA__")}
 - 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无
 

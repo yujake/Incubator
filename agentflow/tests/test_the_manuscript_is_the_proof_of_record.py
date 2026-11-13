@@ -103,7 +103,7 @@ def _manuscript(st: Store) -> str:
     rel = f"reports/f-proof-{SID}.md"
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# F 的证明手稿\n\n- 命题号：stmt:{SID}\n\n## 命题\n\n{STATEMENT}\n\n"
+    path.write_text(f"# F 的证明手稿\n\n\n## 命题\n\n{STATEMENT}\n\n"
                     f"## 证明\n\n{PROOF}\n\n" + _DS.render_dependency_section([]),
                     encoding="utf-8")
     return rel

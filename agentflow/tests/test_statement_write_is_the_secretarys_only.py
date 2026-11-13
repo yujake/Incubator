@@ -54,7 +54,7 @@ _PAYLOAD: dict[str, Any] = {
     "quote_reason": "own_result：我方推导，没有第二份文本可比对；证明未机器检查",
     # 2026-11-04（业主裁定 ⑥-1-b）：要写正文的这一笔必须带 `proof_manuscript`。
     "proof_manuscript": (
-        "# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n"
+        "# F 的证明手稿（夹具）\n\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         f"## 命题\n\n{STATEMENT}\n\n## 证明\n\n{PROOF}\n\n"
         "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"

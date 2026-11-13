@@ -62,7 +62,7 @@ HEAD = ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一�
 def _manuscript(*, body: str, rows: str = "", sid: str = "") -> str:
     """一份最小手稿（证明一节 + 依赖一节；三列表头逐字与解析器对齐）。"""
     return ("# F 的证明手稿：判据\n\n"
-            + (f"- 命题号：stmt:{sid}\n\n" if sid else "")
+            + (f"\n" if sid else "")
             + "## 命题\n\n判据命题（夹具）。\n\n## 证明\n\n" + body + "\n\n"
             + "## 依赖\n\n" + HEAD + rows)
 

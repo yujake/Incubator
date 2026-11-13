@@ -177,8 +177,14 @@ def test_optimized_is_three_state_and_a_missing_cell_is_not_false(tmp_path):
     assert EB.optimized_state(row2, 1) == "false"
     assert EB.optimized_state(row2, 2) == "true"
     assert EB.optimized_state(row2, 3) == "not_recorded"
-    # 三态是一个受控词表（R011 的死取值普查认它）。
-    assert set(EB.OPTIMIZED_STATES) == {"true", "false", "not_recorded"}
+    # 三态是一个受控词表（R011 的死取值普查认它）。2026-11-13 业主裁定加了第四档
+    # `hard_to_prove`（优化栏 = 难以自证）：原三档各自的断言一个不动，只把词表
+    # 对齐到「三档仍在 + 第四档新增」。
+    assert set(EB.OPTIMIZED_STATES) == {"true", "false", "not_recorded", "hard_to_prove"}
+    # 第四档的正控：记着「难以自证」的那一份既不是 true、也不是 false / not_recorded。
+    hard_bits = EB.with_hard_to_prove(row2["bits"], 2, basis="引文没给完整严密证明",
+                                      at=TS)
+    assert EB.optimized_state({"bits": hard_bits}, 2) == "hard_to_prove"
 
     # 反真空（与 87 同形）：把 #2 的签拆掉 ⇒ 盘上那一格仍是 true，而"能不能声称"
     # 变成 false + no_sign。没有这一条，上面的 true 可能来自"只读那一张表"。
@@ -225,7 +231,7 @@ def test_a_cited_literature_row_is_not_read_as_signed(store):
 def _write_manuscript(store, stmt_id: str, body: str) -> pathlib.Path:
     """按框架形态写一份 F 的证明手稿（带命题号与洗稿元信息），再写 D 的报告。"""
     text = (f"# F 的证明手稿：{STATEMENT}\n"
-            f"\n- 命题号：stmt:{stmt_id}\n- 计划：000002 · 子目标：a\n"
+            f"\n- 计划：000002 · 子目标：a\n"
             "\n## 命题\n\n" + STATEMENT + "\n"
             "\n## 证明\n\n" + body + "\n"
             "\n## 依赖\n\n"

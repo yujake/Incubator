@@ -76,7 +76,6 @@ REJECT_REPLY = json.dumps({"verdict": "有毛病", "defect_step": 2,
 #: 会被 `_registered_manuscript_body` 读成 `dependency_section_unreadable`（空表也是声明，
 #: 但声明要写成表）。渲染走唯一实现，夹具不手抄表头。
 MANUSCRIPT = ("# F 的证明手稿：弦长函数\n\n"
-              "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
               "## 命题\n\n"
               f"{FULL}\n\n"
@@ -172,9 +171,7 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
     st = _ws(tmp_path)
     _put(st)
     rel = f"reports/f-proof-{SID}.md"
-    path = _manuscript_file(st, rel=rel,
-                            text=MANUSCRIPT.replace("- 命题号：stmt:（还没落号）\n",
-                                                    f"- 命题号：stmt:{SID}\n"))
+    path = _manuscript_file(st, rel=rel, text=MANUSCRIPT)
     before = path.read_text(encoding="utf-8")
     v, seam = _v(st, [REJECT_REPLY])
 

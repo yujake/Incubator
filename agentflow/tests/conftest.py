@@ -570,7 +570,7 @@ def sign_before_registration(root, *, proof_text: str,
     target = Path(str(root)) / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(
-        "# F 的证明手稿（夹具，pending）\n\n- 命题号：stmt:（待登记）\n"
+        "# F 的证明手稿（夹具，pending）\n\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
         "## 命题\n\n（夹具：这一份审的是证明正文）\n\n"
         f"## 证明\n\n{proof_text}\n\n"
@@ -799,7 +799,7 @@ def signed_v_handoffs(monkeypatch):
             from agentflow import depsection as _DS
 
             kw["proof_manuscript"] = (
-                "# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n"
+                "# F 的证明手稿（夹具）\n\n"
                 "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
                 f"## 命题\n\n{str(kw.get('statement_full') or '')}\n\n"
                 f"## 证明\n\n{text}\n\n" + _DS.render_dependency_section([]))

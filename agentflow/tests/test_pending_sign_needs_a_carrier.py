@@ -125,7 +125,7 @@ def _manuscript_text() -> str:
     """B 登记这一笔必须带的手稿（2026-11-04 甲之后在册也要稿）。"""
     from agentflow import depsection as DS
 
-    return ("# F 的证明手稿（夹具）\n\n- 命题号：stmt:（待登记）\n- 计划：0000\n\n"
+    return ("# F 的证明手稿（夹具）\n\n- 计划：0000\n\n"
             "## 命题\n\n" + FULL + "\n\n## 证明\n\n" + PROOF + "\n\n"
             + DS.render_dependency_section([]) + "\n")
 

@@ -44,7 +44,6 @@ REL = "reports/f-proof-000011.md"
 REPORT = "reports/000011-research.md"
 #: 一份 F 的证明手稿，没有签块（这正是要退回的那一档）。
 RAW = ("# F 的证明手稿：一致连续\n\n"
-       "- 命题号：stmt:000011\n"
        "- 计划：0011 · 子目标：s1\n"
        "- 依赖面洗稿：已洗=true；执行者=secretary-F\n\n"
        "## 命题\n\n"

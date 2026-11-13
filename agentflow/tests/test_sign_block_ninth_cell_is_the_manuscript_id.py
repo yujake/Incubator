@@ -42,7 +42,6 @@ from agentflow import vsigns as VS
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 PROOF = "1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\n2. 按定义即一致连续。"
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
-              "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
               "## 命题\n\n"
               f"{FULL}\n\n"

@@ -108,7 +108,7 @@ def _manuscript(st: Store, sid: str, body: str = PROOF) -> str:
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        f"# 证明手稿\n\n- 命题号：stmt:{sid}\n\n"
+        f"# 证明手稿\n\n\n"
         f"## 命题\n\n设 G 是有限群；则这条命题有一个可逐行走查的证明。\n\n"
         f"## 证明\n\n{body}\n\n" + DS.render_dependency_section([]),
         encoding="utf-8")

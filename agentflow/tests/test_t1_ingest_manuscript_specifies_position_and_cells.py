@@ -56,7 +56,7 @@ def _manuscript(*, sid: str = "000001", proposition: str = PROPOSITION,
             "|---|---|---|---|\n")
     if dep_stmt:
         deps += f"| {DEP_TARGET} | stmt:{dep_stmt} | 1 | 1 |\n"
-    head = f"- 命题号：stmt:{sid}\n- 证据种类：conjecture\n"
+    head = f"- 证据种类：conjecture\n"
     return (head + "\n## 命题\n\n" + proposition + "\n\n"
             "## 证明\n\n" + proof + "\n\n## 依赖\n\n" + deps)
 
@@ -325,23 +325,28 @@ def test_a3b_register_refuses_an_incomplete_cell_set(tmp_path: pathlib.Path) -> 
 # ===================================================== b1 位置优先 / 不重定向
 def test_b1_position_is_authoritative_and_not_redirected(
         tmp_path: pathlib.Path) -> None:
-    """稿头指 B、target 指 A ⇒ 受控拒 `manuscript_points_elsewhere`，零写入、不录到 B。"""
+    """业主 2026-11-13：位置只有 `target_stmt_id` 一个来源（稿里没有命题号）。
+
+    改前这条判据是「稿头指 B、target 指 A ⇒ 受控拒 `manuscript_points_elsewhere`」。
+    稿头那一行删掉之后没有第二个来源，也就没有"两个来源不一致"可判 ⇒ 这条改为守
+    两件事：① 那个读口不许回潮；② 位置仍必填（不点名 ⇒ 受控拒，工具不替它挑行）。
+    """
+    import inspect
+
+    from agentflow.agent_b.ingest_manuscript import _IngestManuscript
+
+    src = inspect.getsource(_IngestManuscript)
+    # 只看"受控码 / 读口名字面量"：注释里提到这两个名字是历史说明，不算回潮。
+    assert '"manuscript_points_elsewhere"' not in src, "稿头交叉校验又回来了"
+    assert '"head_statement_id"' not in src, "从稿头读命题号的读口又回来了"
+
     st, b = _ws(tmp_path)
     _signed_row(st)
-    conftest.seed_statement_row(st, stmt_id="000009", statement_full="另一条命题")
-    _write(st, "reports/f-proof-000009.md", _manuscript(sid="000009"))
-    before_rows = _rows(st)
-    before_deps = [dict(r) for r in st.rows("dependencies")]
-
     got = b.ingest_manuscript(
-        manuscript="reports/f-proof-000009.md", target_stmt_id="000001",
+        manuscript="reports/f-proof-000001.md",
         cells=["proof_text"], mode="apply")
     assert got["ok"] is False, got
-    assert got["refused"] == "manuscript_points_elsewhere", got
-    assert "stmt:000009" in got["reason"] and "stmt:000001" in got["reason"]
-    assert _rows(st) == before_rows, "被拒的这一笔改了台账（不许重定向）"
-    assert [dict(r) for r in st.rows("dependencies")] == before_deps
-    assert _row(st, "000009").get("proof_text") == "", "录到了调用方没点名的行"
+    assert got["refused"] == "target_required", got
 
 
 def test_b2_an_old_pn_name_is_no_longer_a_manuscript(

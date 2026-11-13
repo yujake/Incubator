@@ -52,7 +52,6 @@ from test_v_reviews_three_times_before_signing import CLEAN_REPLY, _ReviewSeam, 
 
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 MANUSCRIPT = ("# F 的证明手稿：一致连续\n\n"
-              "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
               "## 命题\n\n"
               f"{FULL}\n\n"
@@ -167,7 +166,7 @@ def test_b_a_registered_statement_still_signs_into_its_own_ledger(tmp_path):
         kind="theorem", label="uniform-continuity", origin="own_result",
         evidence_kind="heuristic", bits={})["stmt_id"])
     rel = f"reports/f-proof-{sid}.md"
-    _put(st, rel, MANUSCRIPT.replace("- 命题号：stmt:（还没落号）", f"- 命题号：stmt:{sid}"))
+    _put(st, rel, MANUSCRIPT)
     for _ in range(int(VR.SIGN_STREAK_NEED)):
         VR.record_verification(str(st.root), statement_id=sid, proof_text=PROOF,
                                verdict=dict(OK), verifier="agent-V", store=st,

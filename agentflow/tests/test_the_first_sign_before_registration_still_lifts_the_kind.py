@@ -108,7 +108,6 @@ def _manuscript(*, manuscript_id: str = MANUSCRIPT_ID) -> tuple[str, str]:
     """F 的稿（稿头不点名命题号：这一份还没有号）—— 返回 `(相对路径, 全文)`。"""
     rel = f"reports/f-proof-{manuscript_id}.md"
     text = ("# 证明手稿（夹具：先签后收录）\n\n"
-            "- 命题号：stmt:（待登记）\n"
             "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
             f"## 命题\n\n{FULL}\n\n"
             f"## 证明\n\n{PROOF}\n\n"

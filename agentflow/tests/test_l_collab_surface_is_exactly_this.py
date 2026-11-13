@@ -558,7 +558,6 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     man_rel = _DS.manuscript_relpath(statement_id=sid)
     assert man_rel, sid
     old_man = ("# F 的证明手稿：加零不改变自然数\n\n"
-               f"- 命题号：stmt:{sid}\n\n"
                f"## 命题\n\n{CLAIM}\n\n"
                f"## 证明\n\n{old}\n\n" + _DS.render_dependency_section([]))
     (ws / man_rel).parent.mkdir(parents=True, exist_ok=True)
@@ -571,7 +570,6 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
     new = _proof_text(LINKS + 1)
     assert man_rel, sid
     man_text = ("# F 的证明手稿：加零不改变自然数\n\n"
-                "- 命题号：stmt:（还没落号）\n"
                 "- 计划：0000 · 子目标：s1\n\n"
                 f"## 命题\n\n{CLAIM}\n\n"
                 f"## 证明\n\n{new}\n\n"

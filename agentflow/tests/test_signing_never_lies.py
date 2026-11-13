@@ -161,7 +161,6 @@ def _new_form_manuscript(store: Store, rel: str, proof: str) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         "# F 的证明手稿\n\n"
-        f"- 命题号：stmt:{SID}\n\n"
         f"## 命题\n\n{FULL}\n\n"
         f"## 证明\n\n{proof}\n\n"
         + _DS.render_dependency_section([]),
@@ -731,7 +730,6 @@ def _n1_workspace(root: pathlib.Path) -> tuple[str, str, str]:
     """D268 附录 D 的夹具：一块手写 3/3 + 台账只 1 条 clean + 无签文件。"""
     rel = "reports/b-proof-000001.md"
     text = ("# 证明手稿（夹具）\n\n"
-            "- 命题号：stmt:000001\n\n"
             f"## 命题\n\n设 G 是 3-正则群；则弦长函数不是常值。\n\n"
             f"## 证明\n\n{P1}\n\n"
             "## 依赖\n\n| 依赖 | 类型 | 状态 | 说明 |\n|---|---|---|---|\n")
@@ -789,7 +787,6 @@ def test_three_votes_from_one_call_are_a_sign(tmp_path: pathlib.Path) -> None:
     """N1 正控：三票同源 + `issue` 写签 ⇒ `signed`、`applied=True`（判据不许退化成"一律不签"）。"""
     rel = "reports/b-proof-000001.md"
     text = ("# 证明手稿（夹具）\n\n"
-            "- 命题号：stmt:000001\n\n"
             f"## 命题\n\n夹具命题。\n\n## 证明\n\n{P1}\n\n"
             "## 依赖\n\n| 依赖 | 类型 | 状态 | 说明 |\n|---|---|---|---|\n")
     (tmp_path / "reports").mkdir(parents=True)

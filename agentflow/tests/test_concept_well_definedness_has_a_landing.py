@@ -209,7 +209,7 @@ def test_c_land_manuscript_puts_a_concept_on_the_b_proof_family(
     path = pathlib.Path(st.root) / rel
     assert path.is_file(), rel
     text = path.read_text(encoding="utf-8")
-    assert f"- 命题号：stmt:{sid}" in text, text[:400]
+    assert "- 命题号：" not in text, text[:400]
     assert "## 命题" in text and DEF in text, text[:600]
     assert "## 证明" in text and WELLDEF in text, text[:800]
     assert "## 依赖" in text, text[:400]

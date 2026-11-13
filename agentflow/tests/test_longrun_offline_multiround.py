@@ -149,7 +149,6 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
     man_path.parent.mkdir(parents=True, exist_ok=True)
     man_path.write_text(
         "# F 的证明手稿：自证命题\n\n"
-        "- 命题号：stmt:（还没落号）\n"
         "- 计划：000001 · 子目标：s1\n\n"
         "## 命题\n\n若 n≥3 则 n^2+n 是偶数（自证）。\n\n"
         f"## 证明\n\n{PROOF}\n\n"

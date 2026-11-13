@@ -98,7 +98,7 @@ def _write(st: Store, rel: str, text: str) -> pathlib.Path:
 def _manuscript(proposition: str, proof: str, *, dep_sid: str,
                 head_sid: str) -> str:
     """三节齐全的手稿；`## 依赖` 里引 `stmt:<dep_sid>`。"""
-    head = f"- 命题号：stmt:{head_sid}\n- 证据种类：conjecture\n"
+    head = f"- 证据种类：conjecture\n"
     return (head + "\n## 命题\n\n" + proposition + "\n\n"
             + "## 证明\n\n" + proof + "\n\n"
             + _DEP_HEAD + _DEP_ROW.format(sid=dep_sid))

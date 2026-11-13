@@ -45,7 +45,6 @@ FULL = "若 n≥3 则 n^2+n 是偶数（自证）。"
 
 #: 与 `agent_f/manuscript.py::proof_manuscript` 同一个形状（V 只读 `## 证明` 那一节）。
 MANUSCRIPT = ("# F 的证明手稿：n^2+n 是偶数\n\n"
-              "- 命题号：stmt:（还没落号）\n"
               "- 计划：0000 · 子目标：s1\n\n"
               f"## 命题\n\n{FULL}\n\n"
               f"## 证明\n\n{PROOF}\n\n"

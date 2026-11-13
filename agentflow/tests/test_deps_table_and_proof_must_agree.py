@@ -59,7 +59,7 @@ SELF = ("1. 设 G 是连通、简单、3-正则的有限图。（前提）\n"
 
 def _manuscript(*, body: str, rows: str = "", sid: str = "") -> str:
     text = ("# F 的证明手稿：判据\n\n"
-            + (f"- 命题号：stmt:{sid}\n\n" if sid else "")
+            + (f"\n" if sid else "")
             + "## 命题\n\n判据命题（夹具）。\n\n## 证明\n\n" + body + "\n\n"
             + "## 依赖\n\n" + HEAD + rows)
     return text

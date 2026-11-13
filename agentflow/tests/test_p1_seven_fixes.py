@@ -92,7 +92,7 @@ def _proof_kind_default(monkeypatch):
 
 def _f_manuscript(*, statement_id: str, body: str) -> str:
     """F 的一族规范名正文（稿头一行命题号；签块由调用方决定加不加）。"""
-    return (f"# F 的证明手稿：夹具命题\n\n- 命题号：stmt:{statement_id}\n"
+    return (f"# F 的证明手稿：夹具命题\n\n"
             "- 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无\n"
             f"\n## 命题\n\n夹具命题。\n\n## 证明\n\n{body}\n\n"
             "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
@@ -326,7 +326,7 @@ def _d_path_fixture(tmp_path):
         deps = ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
                 "|---|---|---|---|\n"
                 f"| 由引理，得所需 | stmt:{_DEP} | 1 | 1 |\n")
-        text = (f"# F 的证明手稿：夹具命题\n\n- 命题号：stmt:{SID}\n{block}\n"
+        text = (f"# F 的证明手稿：夹具命题\n\n{block}\n"
                 "- 依赖面洗稿：已洗=true；洗的人=secretary:F；补写=无\n"
                 f"\n## 命题\n\n夹具命题。\n\n## 证明\n\n{body}\n\n## 依赖\n\n{deps}")
         (pathlib.Path(st.root) / rel).write_text(text, encoding="utf-8")

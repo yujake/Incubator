@@ -100,7 +100,7 @@ def _proof_kind_different(monkeypatch):
 
 
 def _manuscript(sid: str, proof: str) -> str:
-    head = f"- 命题号：stmt:{sid}\n" if sid else ""
+    head = f"" if sid else ""
     return ("# F 的证明手稿\n\n" + head + "\n## 命题\n\n" + PROPOSITION
             + "\n\n## 证明\n\n" + proof + "\n\n"
             + DS.render_dependency_section([]) + "\n")
