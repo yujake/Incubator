@@ -1016,17 +1016,20 @@ def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
             "看自己的直接下级用 trace.children；要看更深的分支请向 M 请求："
             "conductor.escalate(need=\"深看请求：…\", kind=\"other\")"
         )
-    by_id = {str(r.get("task_id") or ""): dict(r) for r in rows}
-    mine = by_id.get(me) or {}
-    parent = str(mine.get("parent_task_id") or "")
+    # 先用一趟只取"我自己那一行"的父号（同号多行取最后一行，与原先 by_id 的
+    # "后者覆盖前者"同一口径；这里不再为整张表逐行 `dict(...)` 拷一份 —— 那份副本
+    # 只被 `mine.get("parent_task_id")` 读一次），再把"我 / 我的父 / 我的实例下级"
+    # 一趟挑出来。输出仍是入参行序，`keep` 的成员集合与原先逐元素相同。
+    parent = ""
+    for r in rows:
+        if str(r.get("task_id") or "") == me:
+            parent = str(r.get("parent_task_id") or "")
     keep = {me}
     if parent:
         keep.add(parent)
-    keep |= {
-        str(r.get("task_id") or "") for r in rows
-        if str(r.get("parent_task_id") or "") == me and not str(r.get("kind") or "")
-    }
-    return [dict(r) for r in rows if str(r.get("task_id") or "") in keep]
+    return [dict(r) for r in rows
+            if str(r.get("task_id") or "") in keep
+            or (str(r.get("parent_task_id") or "") == me and not str(r.get("kind") or ""))]
 
 
 
