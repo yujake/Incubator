@@ -1522,13 +1522,6 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "release_basis": "head_statement_id",
                 "reason": str(self.MANUSCRIPT_FORM_NOT_JUDGED_REASONS["head_statement_id"]),
             }
-        if str(reading.get("head_statement_id") or "").strip():
-            return {}, {
-                "judged": False, "released": True, "family": fam,
-                "checked": False, "model_calls": 0, "ledger_appended": False,
-                "release_basis": "head_statement_id",
-                "reason": str(self.MANUSCRIPT_FORM_NOT_JUDGED_REASONS["head_statement_id"]),
-            }
         cell = dict((reading.get("cells") or {}).get("statement_full") or {})
         statement = str(cell.get("value") or "").strip()
         if cell.get("outcome") != _MI.EXTRACT_PRESENT or not statement:
