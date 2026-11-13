@@ -81,7 +81,7 @@ LIVE-READINGS:BEGIN
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
 lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
-lint_rules_info         = 46   # 同一档的 info 栏（2026-11-13：R011 删掉三条死取值登记 ⇒ 49→46）
+lint_rules_info         = 45   # 同一档的 info 栏（2026-11-13：R011 删掉可见的死取值登记 ⇒ 49→45）
 lint_rules_strict_warning = 88 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 48   # 同一档的 info 栏
 noai_paths_glob         = 49   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`

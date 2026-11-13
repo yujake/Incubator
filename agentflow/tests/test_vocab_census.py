@@ -114,7 +114,7 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     `agent_b/register_statement.py:855` 的 `_CONTEXT_EDGE_KINDS`（严格规矩 B 的
     "上下文定理认哪几种 kind"）里就有 `"proposition"` 这个字面量。那一处是读侧
     （拿它去比 `Dependency.kind`），不是产出点，但普查的字面量判据分不出读写 ⇒
-    它按 `lemma` / `dataset` 那两条同样的口径落进 `registered_not_dead`（栏一附），
+    它按 `lemma` 那条同样的口径落进 `registered_not_dead`（栏一附），
     仍然打印、仍然带理由，只是不再算"死取值"。
     所以本条现在按「两栏都算登记过」来判（`reserved` 或 `registered_not_dead` 之一），
     这不是放宽判据：`unclaimed` 那一条（真正要红的那一档）一条都没放松。
@@ -161,7 +161,8 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     # 2026-11-13 删掉的三个 C 值：同一套反向断言。
     _retired = (("DOC_KINDS", "reproduction_report"),
                 ("CLAIM_SOURCE_KINDS", "自证"),
-                ("CLAIM_SOURCE_KINDS", "未决"))
+                ("CLAIM_SOURCE_KINDS", "未决"),
+                ("DEP_KINDS", "dataset"))
     _vocabs = V._vocab_constants(REPO / "src" / "agentflow" / "schema.py")
     for vocab, value in _retired:
         assert value not in _vocabs.get(vocab, []), (vocab, value, _vocabs.get(vocab))
@@ -172,7 +173,7 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     # "同形不同义 / 读侧字面量"的五条：普查看不见它们是死取值（字面量在别的命名空间
     # 或读侧命中），所以它们落在 `registered_not_dead` 里 —— 但必须照样打印，不许静默。
     for vocab, value in (("DOC_KINDS", "survey"), ("DEP_KINDS", "lemma"),
-                         ("DEP_KINDS", "dataset"), ("DEP_KINDS", "proposition"),
+                         ("DEP_KINDS", "proposition"),
                          ("DEP_KINDS", "prior_art")):
         assert value in result["registered_not_dead"].get(vocab, []), (vocab, value, result["registered_not_dead"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])

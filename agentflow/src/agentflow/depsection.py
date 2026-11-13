@@ -545,7 +545,6 @@ def dep_kind_of(statement_kind: str) -> str:
         "concept": "definition",
         "conjecture": "proposition",
         "prior_art": "prior_art",
-        "dataset": "dataset",
         "experiment": "experiment",
     }.get(got, "theorem")
 

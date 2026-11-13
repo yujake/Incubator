@@ -1430,7 +1430,7 @@ def read_review_verdict(row: Mapping[str, Any]) -> dict[str, Any]:
 #: 依赖类型（FC-23）。`external_unavailable` 是必须存在的一档：
 #: 引用了但拿不到的来源（例如论文里"companion book [6, Thm 6.5]"）
 #: 既不是 closed，也不该被含糊地写成 dangling。
-DEP_KINDS = ("theorem", "definition", "lemma", "proposition", "dataset", "experiment", "prior_art")
+DEP_KINDS = ("theorem", "definition", "lemma", "proposition", "experiment", "prior_art")
 #: 依赖的状态。四态而不是两态。
 #:
 #:   closed                —— 来源已入库、且引用本身没问题

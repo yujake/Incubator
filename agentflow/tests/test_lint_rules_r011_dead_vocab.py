@@ -65,7 +65,7 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     `agent_b/register_statement.py:855`（`_CONTEXT_EDGE_KINDS`，严格规矩 B 的
     "上下文定理认哪几种 kind"）里出现了 `"proposition"` 这个字面量。那一处是读侧
     （拿它比 `Dependency.kind`），不是产出点，但普查的字面量判据分不出读写 ⇒
-    它按 `lemma` / `dataset` 同样的口径落进栏一附。
+    它按 `lemma` 同样的口径落进栏一附。
     所以本条现在分两半判：`reserved` 栏非真空由 `reproduction_report` / `prior_art`
     钉住；`proposition` 必须出现在栏一附里（照样打印、照样带理由），且两栏都不许
     出现 `unclaimed`（那一档才是要变红的那一档，一条都没放松）。
@@ -75,7 +75,7 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     旧期望把 `prior_art` 钉在 `reserved`。这一批 `src/agentflow/depsection.py:182`
     有了 `"prior_art": "prior_art"` —— 那是依赖小节解析的读侧别名表（把正文里的词
     映射到 `Dependency.kind`），不是产出点，而普查按字面量判读写，分不出这两件事
-    ⇒ 它按 `proposition` / `lemma` / `dataset` 同样的口径落进栏一附。
+    ⇒ 它按 `proposition` / `lemma` 同样的口径落进栏一附。
     现在 `reserved` 栏的非真空改由今天仍然死的那三条钉住
     （`CONJECTURE_FORMS.existential` / `CONJECTURE_STATUSES.testing` /
     `CONJECTURE_STATUSES.known_in_literature` —— 2026-11-13 删掉
