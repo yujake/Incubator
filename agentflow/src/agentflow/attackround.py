@@ -93,7 +93,7 @@ PRODUCT_SPECS: dict[str, str] = {
         "给一个能判决这条命题的实验请求。要给 `script_spec`"
         "（{criterion, params, expected_bound} 三项都非空）与 `why_it_decides`。"),
     "proof": (
-        "给出逐步论证。要给 `steps`（非空数组，每步 {text, cites, assumption}）—— "
+        "给出逐步论证。**要给 `proposition`（那条定理的完整陈述：前提 → 结论；`## 命题` 只从它渲染，子目标正文不进 `## 命题`）与 `steps`**（非空数组，每步 {text, cites, assumption}）—— "
         "`text` 是这一步说了什么，`cites` 是它引到的**在册 id**（只许引这一轮列出的那些），"
         "**前提步**才可以声明成前提（`assumption: true`）；**推导步声明成前提 = 这一步没做**"
         "（V 会按这个读）："
@@ -151,16 +151,16 @@ HANDED_PRODUCT_SCHEMA: dict[str, Any] = {
                     "这一份的档：`proof` = 逐步论证（给 `steps`）；`reduction` = 把目标"
                     "归约成 1–3 条新子目标（给 `new_subgoals` 与 `reason`）。"),
             },
-            # 2026-11-13（业主裁定 B）：proof 档必填，只声明类型 —— 文案随 p281 写，
-            # 现在先让工具参数门认它（否则 `attack.step` 在参数门就拒，
+            # 2026-11-13（业主裁定 B）：proof 档必填；description 随 p281 落（工具参数门
+            # 先认类型，否则 `attack.step` 在参数门就拒，
             # `parse_handed_product` 的 `proposition_missing` 走不到）。
             "proposition": {
                 "type": "string",
+                "description": ("`kind=proof` 的这一轮所证那条定理的完整陈述（前提 → 结论）：稿上 `## 命题` 就逐字取它。不是作业要求、不是「改哪一步 / 重送谁」那类流程话 —— 那些写进 `steps` 或 `label`。"),
             },
             "label": {
                 "type": "string",
-                "description": (
-                    "这一份产物的一句话标签（只进台账读数；不参与稿号 / 命题号命名）。"),
+                "description": ("这一份产物的一句话标签（只进台账读数；**不是命题**，不进 `## 命题`；不参与稿号 / 命题号命名）。"),
             },
             "steps": {
                 "type": "array",
