@@ -183,7 +183,7 @@ def _plan(text: str, testable: str = "") -> dict:
 def _product(proposition: str) -> dict:
     """这一轮的 proof 产物（2026-11-13 业主裁定 B：`proposition` 必填）。
 
-    这一份文件判的是**形态闸**那一轴：`proposition` 就是这一轮声明的命题正文
+    这一份文件判的是形态闸那一轴：`proposition` 就是这一轮声明的命题正文
     （可以是那段作业话 —— 那时闸的任务就是把它判成"不是命题"）。
     """
     return {"product": "proof", "proposition": proposition,
