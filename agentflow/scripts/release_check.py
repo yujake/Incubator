@@ -433,8 +433,9 @@ def item_selftests(rep: Report) -> Item:
     results: dict[str, dict] = {}
     for mod in SELFTEST_MODULES:
         src = SRC / "agentflow" / f"{mod}.py"
-        text = src.read_text(encoding="utf-8") if src.exists() else ""
-        if not src.exists():
+        exists = src.exists()
+        text = src.read_text(encoding="utf-8") if exists else ""
+        if not exists:
             # 八个角色模块是包，`__main__` 自检块在 `<角色>/__main__.py`（`python -m
             # agentflow.<角色>` 在包形态下执行的正是它）。
             # 不认这个落点的话，"有自检块"会被读成"没有" ⇒ 判据从 pass 掉成 unknown。
@@ -1073,10 +1074,11 @@ def item_imports(rep: Report) -> Item:
             "这一项不能判 pass：那次审计本次没有运行"
         )
         return it
+    cap_tail = _tail(r2["stdout"] + r2["stderr"], 6)
     it.detail["capability_selfcheck"] = {
         "verdict": "pass" if r2["exit_code"] == 0 else "fail",
         "exit_code": r2["exit_code"],
-        "tail": _tail(r2["stdout"] + r2["stderr"], 6),
+        "tail": cap_tail,
     }
     if r2["exit_code"] != 0:
         it.verdict = "fail"
@@ -1086,7 +1088,7 @@ def item_imports(rep: Report) -> Item:
             "『能力表与实现已经漂移』（写集 ↔ 效果轴、两层声明对账、handler 存在性、"
             "词表单一来源等）。这不是「没查成」，是一件真实的违约。"
         )
-        it.notes.extend(_tail(r2["stdout"] + r2["stderr"], 6))
+        it.notes.extend(cap_tail)
         return it
     # ---- 子检查②：导入普查
     it.verdict = "pass" if not d["bad"] else "fail"
