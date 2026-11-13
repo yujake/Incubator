@@ -36,6 +36,8 @@ import json
 import pathlib
 import sys
 
+import pytest
+
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
@@ -50,6 +52,25 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
+
+
+@pytest.fixture(autouse=True)
+def _proposition_form_answers_ok(monkeypatch):
+    """2026-11-13（W1）：F 的 proof 档在写稿之前过命题形态闸。
+
+    本文件判的是"洗稿与登记的时点"（wash 在 outlet 之前、打回的那一份不送 V），
+    不是命题形态那一轴；而这道闸现在在写稿之前就跑（真机 000002 的修法）⇒ 这里只把
+    那一次模型调用换成"夹具：合规"。闸照跑、判据仍是同一处实现
+    （`Secretary.judge_proposition_form`），做法与 `test_agent_f_closed_loop.py` 的同名
+    夹具一致。
+    """
+    monkeypatch.setattr(
+        SEC.Secretary, "judge_proposition_form",
+        lambda self, **_kw: {"checked": True, "well_formed": True,
+                             "conditions": "夹具：前提", "conclusion": "夹具：结论",
+                             "problems": [], "decision": "夹具：形态合规",
+                             "refused": "", "reason": "夹具：形态合规"})
+
 
 THEOREM_A = S.format_id(0)
 THEOREM_B = S.format_id(1)
@@ -363,12 +384,13 @@ def test_the_wash_happens_before_the_outlet_and_marks_the_manuscript(
         order.append("wash")
         return real_wash(self, manuscript, **kw)
 
-    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
+    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id="",
+                   form_reading=None):
         order.append("outlet")
         received["text"] = str(proof_manuscript or "")
         return real_outlet(self, product, sg, plan=plan,
                            proof_manuscript=proof_manuscript,
-                           manuscript_id=manuscript_id)
+                           manuscript_id=manuscript_id, form_reading=form_reading)
 
     monkeypatch.setattr(SEC.Secretary, "wash_dependency_face", wash_spy)
     monkeypatch.setattr(AgentF, "_proof_outlet", outlet_spy)
@@ -394,11 +416,12 @@ def test_a_refused_wash_stops_the_round_before_v_and_reaches_the_next_prompt(
     outlets: list[str] = []
     real_outlet = AgentF._proof_outlet
 
-    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
+    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id="",
+                   form_reading=None):
         outlets.append(str(proof_manuscript or ""))
         return real_outlet(self, product, sg, plan=plan,
                            proof_manuscript=proof_manuscript,
-                           manuscript_id=manuscript_id)
+                           manuscript_id=manuscript_id, form_reading=form_reading)
 
     def bad_manuscript(self, product, *, sg, statement_id="", plan, manuscript_id=""):
         return {"ok": True, "path": "reports/f-proof-plan-000000.md",
@@ -448,11 +471,12 @@ def test_stubbing_the_wash_out_turns_b_and_c_red(tmp_path: pathlib.Path,
     outlets: list[str] = []
     real_outlet = AgentF._proof_outlet
 
-    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
+    def outlet_spy(self, product, sg, *, plan, proof_manuscript="", manuscript_id="",
+                   form_reading=None):
         outlets.append(str(proof_manuscript or ""))
         return real_outlet(self, product, sg, plan=plan,
                            proof_manuscript=proof_manuscript,
-                           manuscript_id=manuscript_id)
+                           manuscript_id=manuscript_id, form_reading=form_reading)
 
     def bad_manuscript(self, product, *, sg, statement_id="", plan, manuscript_id=""):
         text = _bad_manuscript()

@@ -21,9 +21,31 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from agentflow import attackround as AR
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
+
+
+@pytest.fixture(autouse=True)
+def _proposition_form_answers_ok(monkeypatch):
+    """2026-11-13（W1）：F 的 proof 档在写稿之前过命题形态闸。
+
+    本文件判的是"推理那一侧"的读数（轮次 / 产物校验 / 自评），不是命题形态那一轴；
+    而这道闸现在在写稿之前就跑（真机 000002 的修法）⇒ 这里只把那一次模型调用换成
+    "夹具：合规"。闸照跑、判据仍是同一处实现（`Secretary.judge_proposition_form`），
+    做法与 `test_agent_f_closed_loop.py` 的同名夹具一致。
+    """
+    from agentflow import secretary as _SEC
+
+    monkeypatch.setattr(
+        _SEC.Secretary, "judge_proposition_form",
+        lambda self, **_kw: {"checked": True, "well_formed": True,
+                             "conditions": "夹具：前提", "conclusion": "夹具：结论",
+                             "problems": [], "decision": "夹具：形态合规",
+                             "refused": "", "reason": "夹具：形态合规"})
+
 
 
 class FakeLLM:

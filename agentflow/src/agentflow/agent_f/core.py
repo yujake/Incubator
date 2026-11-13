@@ -9,7 +9,7 @@ from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import vsigns as _VS_NAME    # 稿名 ⇒ 稿号（只读解析；`_resolve_manuscript_id` 用）
 from .create_plan import _CreatePlan
-from .manuscript import _Manuscript
+from .manuscript import _Manuscript, proposition_text
 from .step import _Step
 from .status import _Status
 from .list_plans import _ListPlans
@@ -2037,7 +2037,8 @@ class _Core:
 
     def _proof_outlet(self, product: Mapping[str, Any], sg: Mapping[str, Any], *,
                       plan: Mapping[str, Any], proof_manuscript: str = "",
-                      manuscript_id: str = "") -> dict:
+                      manuscript_id: str = "",
+                      form_reading: Mapping[str, Any] | None = None) -> dict:
         """把这一轮的 `proof` 交给 B 的登记正路（P3-6 的第一半）。
 
         2026-10-26（D8）：改前这一格在 F 进程里直接开一笔 `statements` 事务，落下来的行
@@ -2203,11 +2204,11 @@ class _Core:
             manuscript_text=manuscript_text, manuscript_received=manuscript_received,
             cites=cites, tier=tier,
             dependency_rows=self.dependency_rows(product),
-            existing_row=existing_row)
+            existing_row=existing_row, form_reading=form_reading)
 
     def _proposition_form_gate(self, *, full: str, kind: str, body: str,
                                label: str, task_id: str = "") -> dict[str, Any]:
-        """登记一条新命题之前过一道命题形态闸（业主 2026-11-07 裁定；唯一调用点）。
+        """登记一条新命题之前过一道命题形态闸（业主 2026-11-07 裁定；判据的唯一实现）。
 
         业主原话（逐字）：
 
@@ -2220,6 +2221,11 @@ class _Core:
         就是手稿登记这一步（`proofregistry.register_or_rewrite` 的
         `MODE_REGISTERED` 分支）：新命题 + 它那份证明首次落成手稿条目时判一次。
         已有命题的证明重写不过这道闸 —— 改证明不需要重新登记。
+
+        2026-11-13（W1 真机缺陷）之后位置往前挪了一格：同一个判据还要在
+        **写盘之前**问一次（`_proposition_form_precheck` —— 真机上闸判过不合格、
+        稿还是落了盘并被送 V）。调用点因此有两处，判据仍只有这一处实现：
+        写前闸（判过就复用读数）与登记那一笔（`_registration_form_gate`）。
 
         ## 三态（fail-closed，全部落进形态台账）
 
@@ -2306,13 +2312,204 @@ class _Core:
                 _note(str(out.get("reason") or "没判成"))
         return out
 
+    def _proposition_form_precheck(self, *, product: Mapping[str, Any],
+                                   sg: Mapping[str, Any], plan: Mapping[str, Any],
+                                   manuscript_id: str
+                                   ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+        """写盘之前的命题形态闸：`(登记要复用的读数, 受控拒读数)`。
+
+        - `(None, None)`：这一格没问（已有登记条目 / 已拿签 / 拼不出落点）⇒ 登记那一步
+          照旧自己问；
+        - `(读数, None)`：问过、放行 ⇒ 登记那一步复用这一份读数，不再问第二次模型；
+        - `(读数, 受控拒读数)`：问过、判不过（或没判成）⇒ 这一轮到此为止。
+
+        ## 为什么闸在这里（2026-11-13，W1 真机缺陷）
+
+        真机 `projects/octahedron-20261113`：`reports/f-proof-000002.md` 的 `## 命题`
+        是修订说明，F 自己的秘书判过、判的是「不是命题」
+        （`out/secretary/proposition_form.jsonl` 12:28:39 那一行
+        `checked=True / well_formed=False`），可稿还是落了盘、被送 V、拿到「成立」的签；
+        B 收录时按 `## 命题` 取 `statement_full` ⇒ 拒收「未登记」。签了却永远入不了
+        台账，F 再落一版、白花钱。
+
+        根因是位置：改前这道闸只在 `proofregistry.register_or_rewrite`（登记那一步）跑，
+        而手稿在那一步之前已经由 `proof_manuscript` 写进盘（死结 1 的修法：先写稿、
+        后登记）。闸拦得住登记，拦不住稿 —— 稿在盘上，F 下一步就是把它送 V。所以这一格
+        在写稿之前问。
+
+        ## 三档（与 `_proposition_form_gate` 同一份判据，不在这里另判）
+
+        - 已经有登记条目（`_registered_entry_text` 非 `None`）⇒ 这一轮只重写 `## 证明`，
+          业主 2026-11-07 的口径是「重写证明不过这道闸」⇒ 放行、不问模型；
+        - 稿已经拿签（`freeze_reading` 为真）⇒ 放行给写口去受控拒 `manuscript_frozen`
+          （那一档的受控码与拒信由写口给，这里只让开，不抢它的判据顺序）；
+        - 其余（= 这一轮会写一份还没登记的新稿，即 `register_or_rewrite` 的
+          `MODE_REGISTERED` 那一档）⇒ 问一次。判不过 / 没判成 ⇒ 受控拒。
+
+        判的字节是 `proposition_text(sg.text, sg.testable)` —— 也就是稿上 `## 命题`
+        那一节的逐字字节，不是再拼上「显式声明的前提」之后的另一段（真机：判 977 字、
+        写 311 字）。判过之后这一份读数经 `_proof_outlet` 递给登记那一步
+        （`form_reading=`）：同一段字节不重复判，登记那一笔一个模型钱都不再花。
+
+        ## 受控拒的读数
+
+        `refusal.kind = proposition_form_refused`，并把「改哪一节、怎么改」写成可粘的
+        下一步；这一轮 `outcome=no_change`、不登记、不送审、`manuscript_path` 留空
+        （一个字节都没写，不许留一个"稿在哪"的假地址）。
+        """
+        from .. import proofoutcomes as _PO
+        from . import vsign as _VS_GATE
+        from .manuscript import proof_body_text
+
+        sid = str(sg.get("sid") or "")
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or ""
+        mid = str(manuscript_id or "").strip()
+        rel = self.manuscript_path(mid) if mid else ""
+        if not rel:
+            # 拼不出落点 ⇒ 写口自己会受控拒（`manuscript_path_unavailable`），不抢它的判据。
+            return (None, None)
+        if self._registered_entry_text(root, rel) is not None:
+            # 已有登记条目 ⇒ 这一轮只重写 `## 证明`（业主 2026-11-07：重写不过这道闸）。
+            return (None, None)
+        try:
+            from .. import manuscriptfreeze as _FZ
+
+            if _FZ.freeze_reading(root, rel).get("frozen"):
+                # 已拿签那一档由写口受控拒（`manuscript_frozen`）；这里不花那一次模型钱。
+                return (None, None)
+        except Exception:  # noqa: BLE001 —— 冻结读数读不出来时照常问闸（fail-closed）
+            pass
+        form = dict(self._proposition_form_gate(
+            full=proposition_text(sg.get("text"), sg.get("testable")),
+            kind=(product_kind(product) or str(sg.get("kind") or "").strip()
+                  or "conjecture"),
+            body=proof_body_text(product),
+            label=f"F 攻坚 {str(plan.get('plan_id') or '')} 子目标 {sid}") or {})
+        if form.get("submittable"):
+            return (form, None)
+        problems = [str(x) for x in (form.get("problems") or []) if str(x).strip()]
+        detail = (
+            "命题形态闸没放行 ⇒ 这一份稿一个字节都没写（闸判的就是要写进 `## 命题` 的"
+            "那段文字）、没有登记、也没有送审："
+            + str(form.get("reason") or "形态不合规")
+            + (("；逐条缺什么：" + "；".join(problems[:6])) if problems else "")
+            + "。`## 命题` 那一节就是 B 收录时的命题正文（B 按它登记 `statement_full`，"
+            "V 也按它读这一份稿）⇒ 改的是这一节：把它写成那条定理的完整陈述"
+            "（前提 → 结论）；改法说明 / 作业要求（改哪一步、重送谁、签怎么读）写进步骤"
+            "或 `label`，不许塞进 `## 命题`。子目标正文就是 `## 命题` ⇒ 立项时"
+            "（`attack.create_plan`）就该把定理陈述写进子目标正文；已经是作业话的子目标，"
+            "就新开一条计划把命题正文写对。没签 ⇒ 这一趟不算交差")
+        sign = _VS_GATE.delivery_reading(root, statement_id="", proof_text="")
+        delivery = self._delivery_reading(
+            plan, assessment=(product.get("self_assessment")
+                              if isinstance(product, Mapping) else None))
+        return (form, {
+            "action": "no_change",
+            "outcome": "no_change",
+            "detail": (detail + "；V 签：" + str(sign.get("label"))
+                       + f"（{sign.get('why')}）"
+                       + "；交差（逐条）：已签 "
+                       + str(delivery.get("coverage_reading") or "0/0")
+                       + f"（待签 {delivery.get('pending_count')} 条、未签 "
+                       + f"{delivery.get('unsigned_count')} 条）"),
+            "evidence": [],
+            "status": "in_progress",
+            "blocked_reason": "",
+            "in_flight": False,
+            "count_attempt": True,
+            "statement_id": "",
+            "manuscript_id": mid,
+            "v_sign": {"reading": sign,
+                       "hint": ("先把 `## 命题` 写成定理陈述再送审 —— "
+                                "形态闸没放行的稿没有可送的对象")},
+            "delivered": bool(delivery.get("delivered")),
+            "delivery": delivery,
+            "signed_count": delivery.get("signed_count"),
+            "pending_count": delivery.get("pending_count"),
+            "unsigned_count": delivery.get("unsigned_count"),
+            "coverage": delivery.get("coverage"),
+            "proof_count": delivery.get("proof_count"),
+            "draft_count": delivery.get("draft_count"),
+            "proof_statements": list(delivery.get("proof_statements") or []),
+            "self_assessment": dict(delivery.get("self_assessment") or {}),
+            "self_assessment_raw": (product.get("self_assessment")
+                                    if isinstance(product, Mapping) else None),
+            "delivery_state": str(sign.get("state") or ""),
+            "delivery_label": str(sign.get("label") or ""),
+            "report_path": "",
+            "manuscript_path": "",
+            "manuscript": "",
+            "manuscript_source": "",
+            "manuscript_received": {},
+            "manuscript_published": False,
+            "manuscript_renamed_from": "",
+            "manuscript_retitled": False,
+            "manuscript_sign_moved": False,
+            "manuscript_publish_problem": {},
+            "manuscript_sign_step": {},
+            "manuscript_washed": False,
+            "deps_preview": {},
+            "deps_section_filled": "",
+            "deps_washing": [],
+            "deps_refused": "",
+            "deps_refused_findings": [],
+            "wash_checked": False,
+            "wash_reason": "",
+            "wash_actor": "",
+            "proof_mode": "",
+            "proof_registered": False,
+            "proof_rewritten": False,
+            "proof_sha256": "",
+            "proof_label": "",
+            "proof_section_hashes": {},
+            "manuscript_migrated": False,
+            "refusal": {
+                "kind": _PO.REFUSED_GATE,
+                "streak": 1,
+                "problems": problems,
+                "next_step": ("把子目标正文（= `## 命题`）写成那条定理的完整陈述"
+                              "（前提 → 结论）再跑一轮；改法说明写进步骤，"
+                              "不许写进 `## 命题`"),
+                "manuscript_id": mid,
+                "manuscript_path": rel,
+                "proposition_form": form,
+            },
+            "waiting_on": [],
+            "new_subgoals": [],
+        })
+
+    def _registration_form_gate(self, *, proposition: str, kind: str, body: str,
+                                label: str,
+                                form_reading: Mapping[str, Any] | None = None,
+                                ) -> Mapping[str, Any]:
+        """登记那一步的形态闸回调（判据只有一处：`Secretary.judge_proposition_form`）。
+
+        ## 递哪一段字节（2026-11-13，W1 真机缺陷）
+
+        递的是 `proposition` —— 也就是稿上 `## 命题` 那一节的逐字字节，不是 `full`。
+        改前递 `full`（= 命题 + 可检验形式 + 「显式声明的前提：…」），于是闸判的、
+        B 收录时读的、F 写进盘的是两段不同的文字（真机 000002：判 977 字、写 311 字）
+        ⇒ "判过了"证明不了"写下去的那一段合格"。
+
+        ## 已经判过就复用（不重复花钱）
+
+        `form_reading` 非空 ⇒ 这一轮的闸已经在写盘之前判过
+        （`_proposition_form_precheck`）：登记用同一份读数，不再问第二次模型。
+        判据仍是同一处实现；这一格只是"同一段字节不重复判"。
+        """
+        if form_reading is not None:
+            return form_reading
+        return self._proposition_form_gate(
+            full=proposition, kind=kind, body=body, label=label)
+
     def _hand_proof(self, *, full: str, text: str, body: str, sid: str,
                     plan: Mapping[str, Any], manuscript_id: str = "",
                     sg: Mapping[str, Any] | None = None,
                     manuscript_text: str, manuscript_received: dict[str, Any],
                     cites: list[str], tier: Mapping[str, Any],
                     dependency_rows: list | None = None,
-                    existing_row: Mapping[str, Any] | None = None) -> dict:
+                    existing_row: Mapping[str, Any] | None = None,
+                    form_reading: Mapping[str, Any] | None = None) -> dict:
         """把这一轮的「命题 + 证明」落成 / 更新 F 的手稿登记条目（不再交给 B 登记）。
 
         ## 业主 2026-11-07 的裁定（这就是本方法的全部职责）
@@ -2320,7 +2517,8 @@ class _Core:
         > 「要让注册命题和写证明两件事解耦，不然无法做到只一遍又一遍修改证明」
         > 「F侧反复修改一个命题的证明时要直接动那个命题所指手稿的 proof 板块」
 
-        - 手稿登记里没有这个稿号的条目 ⇒ 登记：过 F 秘书的形态闸一次（只在这里），
+        - 手稿登记里没有这个稿号的条目 ⇒ 登记：过 F 秘书的形态闸一次（写前闸已经判过的
+          那一档复用 `form_reading`，同一段字节不重复判），
           落 `reports/f-proof-<稿号>.md`（稿号由 `manuscriptids` 发，与命题号/计划号无关）；
         - 已有同 label 的条目 ⇒ 重写：只换 `## 证明` 那一节（顺手按 cites 重渲
           `## 依赖`），不涨 `proof_no`、正文 sha256 重算；不过闸、不登记、不新增
@@ -2346,10 +2544,9 @@ class _Core:
         plan_id = str(plan.get("plan_id") or "")
         label = f"F 攻坚 {plan_id} 子目标 {sid}"
         subgoal = dict(sg or {})
-        proposition = str(text or "").strip()
-        testable = str(subgoal.get("testable") or "").strip()
-        if testable:
-            proposition = proposition + f"；这一条的可检验形式：{testable}"
+        #: 稿上 `## 命题` 那一节的字节 —— 唯一算式在 `agent_f/manuscript.py::proposition_text`
+        #: （2026-11-13，W1：改前这一层与 `proof_manuscript` 各拼一遍，两段字节可能不同）。
+        proposition = proposition_text(text, subgoal.get("testable"))
         kind_now = str(subgoal.get("kind") or row_now.get("kind") or "conjecture") or "conjecture"
         stmt_id = str(row_now.get("stmt_id") or "")
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
@@ -2413,11 +2610,9 @@ class _Core:
                     freeze=dict(_frozen))
 
         def _gate(**_kw: Any) -> Mapping[str, Any]:
-            # 闸的判据只有一处（`Secretary.judge_proposition_form`）：这里只把这一条
-            # 命题的描述、种类与证明正文递过去；判不过 / 没判成都在它里面折成受控读数
-            # （异常也在那一层记账 —— 见 `_proposition_form_gate` 的三态）。
-            return self._proposition_form_gate(
-                full=full, kind=kind_now, body=body, label=label)
+            return self._registration_form_gate(
+                proposition=proposition, kind=kind_now, body=body, label=label,
+                form_reading=form_reading)
 
         # ---- 交接面只有两样：F 的稿号 ＋ 正文（2026-11-10 第二刀，业主裁定）--------
         #
@@ -2857,6 +3052,23 @@ class _Core:
             # 依赖台账仍不在这里写：业主 2026-10-24 最终形态是"作者只写内容，登记由收方
             # 读稿产生"（F 是作者，B 是收方），写盘失败不许静默（FC-21）。
             manuscript_id = self._resolve_manuscript_id(plan=plan, sid=sid, product=product)
+            # ---- 2026-11-13（W1 真机缺陷）：命题形态闸在写盘之前（唯一生产调用点）------
+            #
+            # 现场（`projects/octahedron-20261113`）：`reports/f-proof-000002.md` 的
+            # `## 命题` 是修订说明；F 自己的秘书判过、判的是「不是命题」（台账
+            # 12:28:39 那一行 `checked=True / well_formed=False`），可稿还是落了盘、
+            # V 还是签了、B 收录时拒 ⇒ 签了却永远入不了台账，F 再落一版、白花钱。
+            #
+            # 根因是位置：改前这道闸只在登记那一步（`register_or_rewrite`）跑，而手稿在
+            # 那一步之前已经由 `proof_manuscript` 写进盘（先写稿、后登记的既有次序）。
+            # 现在同一道闸在写稿之前问一次：判不过 ⇒ 一个字节都不写、不登记、没有稿可送 V。
+            # 判据本体没有第二份（`_proposition_form_precheck` → `_proposition_form_gate`
+            # → `Secretary.judge_proposition_form`）；登记那一步会用同一段字节再问一次，
+            # 命中秘书台账的缓存 ⇒ 不重复花钱。
+            _form_reading, _refused_round = self._proposition_form_precheck(
+                product=product, sg=sg, plan=plan, manuscript_id=manuscript_id)
+            if _refused_round is not None:
+                return _refused_round
             try:
                 manuscript = self.proof_manuscript(
                     product, sg=sg, plan=plan, manuscript_id=manuscript_id)
@@ -3027,7 +3239,8 @@ class _Core:
             outlet = self._proof_outlet(
                 product, sg, plan=plan,
                 proof_manuscript=str(manuscript.get("text") or ""),
-                manuscript_id=str(manuscript.get("manuscript_id") or manuscript_id))
+                manuscript_id=str(manuscript.get("manuscript_id") or manuscript_id),
+                form_reading=_form_reading)
             statement_id = str(outlet.get("statement_id") or "")
             received = dict(outlet.get("manuscript_received") or {})
             _landed = bool(outlet.get("proof_registered") or outlet.get("proof_rewritten"))

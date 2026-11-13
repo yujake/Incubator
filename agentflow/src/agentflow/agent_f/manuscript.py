@@ -118,9 +118,51 @@ def _notes_text(counts: Sequence[str], truncations: Sequence[str]) -> str:
     return "；".join(parts)
 
 
+def proposition_text(text: Any, testable: Any = "") -> str:
+    """`## 命题` 那一节的字节（唯一算式；渲染与形态闸都读它）。
+
+    ## 为什么这一格必须只有一份实现（2026-11-13，W1 真机缺陷）
+
+    真机 `projects/octahedron-20261113` 的 `reports/f-proof-000002.md` 里，
+    `## 命题` 是一段修订说明（「按 V u-000005 的唯一缺陷修订第 7 步…其余八步一字不动」），
+    而 B 收录时按这一段登记 `statement_full` ⇒ B 拒收「未登记」。F 自己的形态闸
+    （`_proposition_form_gate`）判过这段文字：它在台账上留的是
+    `checked=True / well_formed=False`，但那一次判的是另一段字节 ——
+    `_proof_outlet` 喂给闸的 `full` 是 `## 命题` 再拼上「显式声明的前提：…」（那条稿上是
+    311 字 vs 977 字），而写进盘的是前者。两个算式各写一遍，于是"判的"与"写的"不是同一段。
+
+    现在渲染（本模块 `proof_manuscript`）、登记（`_hand_proof` 的 `proposition`）与形态闸
+    （`_hand_proof._gate` / `_apply_round` 的写前闸）都调这一个函数：它们判的、写的、
+    登记的必须是同一段字节。反真空：把任何一个调用点换回自己的拼法，
+    `tests/test_f_form_gate_precedes_the_write.py::test_d_*` 当场红
+    （它钉的是"闸判的那段 == 稿上 `## 命题` 那一节"）。
+
+    `testable` 在这里 strip（与 `_hand_proof` 改前那一份逐字相同）：它是从子目标那一格
+    抄过来的，空白不该变成稿上的字节。
+    """
+    body = str(text or "").strip()
+    extra = str(testable or "").strip()
+    return body + (f"；这一条的可检验形式：{extra}" if extra else "")
+
+
+def proof_body_text(product: Mapping[str, Any]) -> str:
+    """`## 证明` 那一节的字节（唯一算式；渲染与写前闸都读它）。
+
+    与 :func:`proposition_text` 同一条纪律：写进盘的那一段与形态闸看到的那一段必须由
+    同一个函数给出。闸只判命题形态（`proof_text` 只进材料摘要的 `proof_chars`），
+    但"闸看到的稿"与"写下的稿"是同一份的这件事，不该靠两处各拼一遍来保证。
+    """
+    steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
+    lines = []
+    for i, step in enumerate(steps, 1):
+        cites = [str(c) for c in (step.get("cites") or [])]
+        suffix = f"（依据：{'、'.join(cites)}）" if cites else "（前提）"
+        lines.append(f"{i}. {str(step.get('text') or '').strip()}{suffix}")
+    return "\n".join(lines or ["（这一轮没有交出论证正文）"])
+
+
 class _Manuscript:
     """F 的证明手稿（依赖段 ＋ 只读预览）＋ 提示词里那份"可引用的在册命题"。"""
-
     #: 手稿落点（工作区相对）：与 `_Core.REPORT_DIR` 同一个目录（`reports/`）。
     MANUSCRIPT_DIR = "reports"
     #: 依赖段里"引用（F 的原话）"那一格最多占多少字（超出截断，并写明截断了）。
@@ -328,6 +370,22 @@ class _Manuscript:
         数据行，`preview` 是"这份手稿交给 B 会怎样"的只读预览（`preview_dependencies`），
         `text` 是整份手稿（调用方可以直接把它交给 B 入库，不必再读盘）。
 
+        ## 写盘之前的命题形态闸不在这里（2026-11-13，W1 真机缺陷）
+
+        真机 `projects/octahedron-20261113`：F 的稿 `reports/f-proof-000002.md` 的 `## 命题`
+        是修订说明，F 自己的秘书判过、判的是"不是命题"（台账 12:28:39 那一行
+        `checked=True / well_formed=False`），可稿还是落了盘、V 还是签了、B 收录时拒 ——
+        签了却永远入不了台账。
+
+        根因是位置：改前这道闸只在 `proofregistry.register_or_rewrite`（登记那一步）跑，
+        而手稿在那一步之前已经由本方法写进盘（先写稿、后登记的既有次序）。修法是把同一道
+        闸挪到本方法的调用之前（`_Core._proposition_form_precheck`，唯一生产调用点是
+        `_apply_round` 的 proof 档）。
+
+        为什么不把闸塞进本方法：本方法是手稿写口，生产之外还有直调（测试 / 内部复用）；
+        把"要不要过闸"塞进写口会让直调也凭空多一次模型调用。判据本体仍然只有一处
+        （`Secretary.judge_proposition_form`），位置只有一处（调用之前），写口本身只写。
+
         ## 命名（2026-11-10 业主裁定：「F 的稿自己维护一套号源，不依赖命题号和计划号」）
 
         稿名只由手稿号决定：`reports/f-proof-<稿号>.md`。命题号是 B 收录时现取的，
@@ -362,22 +420,19 @@ class _Manuscript:
                     "why": (f"手稿号 {mid!r} 不是六位号 ⇒ 这一份稿不落盘"
                             "（稿号由 `manuscriptids.next_manuscript_id` 发）")}
         rows = self.dependency_rows(product)
-        steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
-        proof_lines = []
-        for i, step in enumerate(steps, 1):
-            cites = [str(c) for c in (step.get("cites") or [])]
-            suffix = f"（依据：{'、'.join(cites)}）" if cites else "（前提）"
-            proof_lines.append(f"{i}. {str(step.get('text') or '').strip()}{suffix}")
         # 命题正文与可检验形式各只取一次：标题要的是未 strip 的原串、proposition 用 strip 版
         # （两者都从同一个值派生，不改变各自拿到的东西）。
         sg_text = str(sg.get("text") or "")
         testable = sg.get("testable")
-        proposition = sg_text.strip() + (
-            f"；这一条的可检验形式：{testable}" if testable else "")
+        #: 这一段就是稿上 `## 命题` 那一节的字节（唯一算式，见模块级 `proposition_text`）。
+        #: 形态闸判的必须是这一段（不是它再拼上"显式声明的前提"之后的另一段）。
+        proposition = proposition_text(sg_text, testable)
+        #: `## 证明` 那一节的字节（唯一算式，见模块级 `proof_body_text`）。
+        proof_text = proof_body_text(product)
         text = _MF.render_proof_manuscript(
             _MF.FAMILY_F, title=sg_text,
             proposition=proposition,
-            proof_text="\n".join(proof_lines or ["（这一轮没有交出论证正文）"]),
+            proof_text=proof_text,
             dependency_rows=rows, plan_id=plan_id, sid=sid,
             label=label)
         # 一个稿号 = 一份文件：落点只按稿号拼（`proof_no` 不再进名字，业主 2026-11-11）。

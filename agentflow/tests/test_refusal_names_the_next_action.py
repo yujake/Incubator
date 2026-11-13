@@ -37,6 +37,8 @@ from __future__ import annotations
 import pathlib
 import sys
 
+import pytest
+
 _TESTS = pathlib.Path(__file__).resolve().parent
 _SRC = _TESTS.parents[0] / "src"
 for _p in (str(_SRC), str(_TESTS)):
@@ -50,6 +52,26 @@ from agentflow.agent_f.core import AgentF  # noqa: E402
 import test_b_manuscript_must_be_framework_rendered as T  # noqa: E402
 
 SHAPE = 'framework_summon(role="F", action="step", params={"plan_id":'
+
+
+@pytest.fixture(autouse=True)
+def _proposition_form_answers_ok(monkeypatch):
+    """2026-11-13（W1）：`_apply_round` 的 proof 档在写盘之前过命题形态闸。
+
+    本文件判的是"拒信点名下一步 + 同形重试计数"，不是命题形态那一轴；而这一道闸现在
+    在写稿之前就跑（真机 000002 的修法）⇒ 这里只把那一次模型调用换成"夹具：合规"。
+    闸照跑、判据仍是同一处实现（`Secretary.judge_proposition_form`），做法与
+    `test_agent_f_closed_loop.py` 的同名夹具一致。
+    """
+    from agentflow import secretary as _SEC
+
+    monkeypatch.setattr(
+        _SEC.Secretary, "judge_proposition_form",
+        lambda self, **_kw: {"checked": True, "well_formed": True,
+                             "conditions": "夹具：前提", "conclusion": "夹具：结论",
+                             "problems": [], "decision": "夹具：形态合规",
+                             "refused": "", "reason": "夹具：形态合规"})
+
 
 
 def _refusing_register(tmp_path: pathlib.Path):
@@ -159,13 +181,15 @@ def test_e_the_streak_lands_in_the_round_detail_and_in_history(
     seen: dict = {}
 
     def _refusing_outlet(self, product, sg, *, plan, proof_manuscript="",
-                         manuscript_id=""):
+                         manuscript_id="", form_reading=None):
         """F 的 proof 出口的替身：受控拒（缺洗稿元信息）。
 
         2026-11-10（F 稿自建号源，ade25081）：`_apply_round` 现在把这一轮手上的
         稿号一并递给 `_proof_outlet`（`manuscript_id=`）—— 桩必须同形接收，否则
         这一条走不到后面的拒信读数。变的是内部签名；这一条判的契约（拒信点名下一步
         + 同形重试计数落进 detail 与 history）一个字没动。
+        2026-11-13（W1）：写前闸那一份读数也经 `_proof_outlet` 递到登记
+        （`form_reading=`），桩同形接收、原样忽略（这一条不判形态）。
         """
         seen["manuscript_id"] = manuscript_id
         seen["proof_manuscript"] = proof_manuscript

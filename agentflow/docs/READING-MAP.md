@@ -4,9 +4,15 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-13，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **304 个 `.py`、277,675 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,844 行（`agent_loop.py`，14,569 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **304 个 `.py`、277,943 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，14,844 行（`agent_loop.py`，14,569 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-13 W1（F 的命题形态闸挪到写盘之前，本批记账）**：304 个 `.py` 不变（本笔不加模块）；
+> 本笔动 `agent_f/core.py`（+213）与 `agent_f/manuscript.py`（+55），合计 **+268** 行 ⇒ 这条读数
+> 是**本笔提交后的树**（277,675 + 268）。并行 lane 的在途字节不计入本读数（共用工作区里此刻还会
+> 多出它们，那是它们自己那一笔要认领的数）。三格（75 / 92 / 2）一格未抬：`>800 行` 仍 **75**、
+> `>200 行` def 仍 **92**、重复 docstring 段仍 **2**（判据
+> `tests/test_f_form_gate_precedes_the_write.py` 与 `tools/repo_survey.py`）。
 > **2026-11-13 p280（提示词批路 · 设计对齐最后一项，本批记账）**：304 个 `.py` 不变；
 > 总行数 277,127 → **277,168**（净 +41：`agent_prompts.py` +32 的 p280 版本账、
 > `agent_skills.py` +5 的教法文本、`specs/{b,b_sign_policy,e,f,l,m}.py` 合计 +4 同段改写）；

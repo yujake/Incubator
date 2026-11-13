@@ -327,7 +327,8 @@ def test_the_proof_outlet_is_what_hands_the_statement_to_b(store: Store, monkeyp
     （判据见 `tests/test_dependency_wiring_is_live.py` 的 a0）。不带就是 `TypeError`，
     那红的是"桩没跟上形参"，不是这条负控要证明的事。
     """
-    def gone(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
+    def gone(self, product, sg, *, plan, proof_manuscript="", manuscript_id="",
+             form_reading=None):
         return {"ok": False, "statement_id": "", "reused": False,
                 "why": "（负控：出口被摘掉）", "cites": [],
                 "manuscript_received": {}}

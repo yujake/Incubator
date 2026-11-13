@@ -353,7 +353,8 @@ class _RegistrationSpy:
         self.agent = agent
         return self
 
-    def __call__(self, product, sg, *, plan, proof_manuscript="", manuscript_id=""):
+    def __call__(self, product, sg, *, plan, proof_manuscript="", manuscript_id="",
+                 form_reading=None):
         agent = self.agent
         root = pathlib.Path(agent.cfg.get("workspace_root") or agent.store.root)
         reports_dir = root / MANUSCRIPT_DIR
@@ -363,7 +364,7 @@ class _RegistrationSpy:
         self.calls.append({"received": str(proof_manuscript or ""), "files": files,
                            "texts": texts})
         return self.real(agent, product, sg, plan=plan, proof_manuscript=proof_manuscript,
-                         manuscript_id=manuscript_id)
+                         manuscript_id=manuscript_id, form_reading=form_reading)
 
 
 def _without_proposition_line(text: str) -> str:
