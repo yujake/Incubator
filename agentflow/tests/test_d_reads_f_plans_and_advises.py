@@ -99,3 +99,24 @@ def test_d_reads_fs_plans_advises_and_f_abandons(tmp_path: pathlib.Path) -> None
     keep_row = next(dict(r) for r in store.rows("attack_plans")
                     if str(r.get("plan_id")) == str(keep))
     assert keep_row["status"] == "open", keep_row
+
+
+def test_e_anti_vacuum_without_the_real_writer_the_plan_stays_open(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """e 判据（反真空）：把写盘那一格打桩成"什么都不写" ⇒ 同一笔调用后计划仍是 open。
+
+    证明 c 的绿来自 `attack.abandon_plan` 真的写了库，而不是来自
+    "调用返回 ok 就算过了"（返回 ok 但没落盘的那种实现在这条下必红）。
+    """
+    store = _ws(tmp_path)
+    f = _f(store)
+    pid = f.create_plan("方向三", "PK-STUB", budget=dict(BUDGET))["plan_id"]
+    monkeypatch.setattr(AF.AgentF, "_write_plan",
+                        lambda self, row, *, note: None)   # 夹具：写盘整格打桩
+    out = f.abandon_plan(pid, reason=REASON)
+    assert out.get("ok") is True, out
+    row = next(dict(r) for r in store.rows("attack_plans")
+               if str(r.get("plan_id")) == str(pid))
+    assert row["status"] == "open", (
+        "写盘被打桩成空之后计划竟然变成 abandoned ⇒ c 的绿不是来自真的落盘", row)
+    assert [h for h in (row.get("history") or []) if h.get("action") == "abandon"] == [], row
