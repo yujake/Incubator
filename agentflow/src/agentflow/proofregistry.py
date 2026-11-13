@@ -275,7 +275,13 @@ def _head_of(text: Any) -> str:
 
 
 def parse_entry(text: Any) -> dict[str, Any]:
-    """读手稿头的登记元信息（纯读；读不出来给空串，不猜）。"""
+    """读手稿头的登记元信息（纯读；读不出来给空串，不猜）。
+
+    稿里没有命题号（业主 2026-11-13 裁定逐字：「稿里没有命题号，任何稿里都没有命题
+    号」）⇒ 新写的稿不再有 `- 命题号：` 那一行。本函数仍认盘上老稿里那一行（读兼容，
+    与 `- 证明号：` 同法，业主点名保留），但新写的路径不再产生它，也没有任何判断
+    依赖它 —— 见 `same_slot_reading` 的第一条（`manuscript_id` 是主键）。
+    """
     head = _head_of(text)
     out: dict[str, Any] = {
         "statement_id": "", "plan_id": "", "sid": "", "label": "", "proof_no": 0,

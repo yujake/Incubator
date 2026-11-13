@@ -158,7 +158,6 @@ class _IngestManuscript:
             "sha256": str(reading.get("sha256") or ""),
             "proof_sha256": str(reading.get("proof_sha256") or ""),
             "proof_state": str(reading.get("proof_state") or ""),
-            "head_statement_id": str(reading.get("head_statement_id") or ""),
         })
         if not reading.get("checked"):
             return self._ingest_fail(
@@ -166,16 +165,10 @@ class _IngestManuscript:
                 str(reading.get("why") or f"读不到 `{rel}`")
                 + "（读不到的稿不能当成没有）")
 
-        # ---- 稿头点名的号：target 是权威，稿头只作校验（不一致 ⇒ 拒，不重定向）
-        head = str(reading.get("head_statement_id") or "").strip()
-        if str(mode) != "register" and head and head != target:
-            return self._ingest_fail(
-                out, "manuscript_points_elsewhere",
-                (f"这一份稿点的是 stmt:{head}（稿头 `- 命题号：`），而 `target_stmt_id` "
-                 f"是 stmt:{target} ⇒ 整笔不写。**不重定向**：要么改稿头、要么改位置"
-                 "（位置由调用方指定，工具不许替它挑一行）"))
-        if head and str(mode) != "register":
-            out["target"]["stmt_id"] = target
+        # 稿里没有命题号（业主 2026-11-13 裁定逐字：「稿里没有命题号，任何稿里都没有
+        # 命题号」）⇒ 位置只由调用方的 `target_stmt_id` 回答，不再拿稿头做第二来源；
+        # 改前那一支「稿头与 target 不一致 ⇒ manuscript_points_elsewhere」随之删除：没有
+        # 第二个来源，就没有"两个来源不一致"这件事可判。
 
         # ---- proof_no：只校验形态；号由秘书分配（稿名里的 `-pN` 不再比对） --------
         want_no, _code, _why = self._ingest_proof_no(reading, proof_no)

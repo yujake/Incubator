@@ -249,12 +249,14 @@ def _concept_manuscript_sign_reading(store: Any, *, proof_manuscript: Any
                                      ) -> dict[str, Any]:
     """这一份稿是不是已经由 V 签在一条在册概念行上（纯读；判据只调 `sign_reading`）。
 
-    三态：读不到稿 / 稿头没有号 / 号不是在册概念行 ⇒ `checked=False` + `why`
-    （这条判据的折向是"不收"，不是"放行"——没查成不等于签过）；读到、签在 ⇒
-    `signed=True`。`proof_text` 取稿里 `## 证明` 那一节（与 V 签的是同一把尺）。
+    三态：读不到稿 / 反查不到在册概念行 ⇒ `checked=False` + `why`（这条判据的折向是
+    "不收"，不是"放行"——没查成不等于签过）；读到、签在 ⇒ `signed=True`。
+    `proof_text` 取稿里 `## 证明` 那一节（与 V 签的是同一把尺）。
 
-    为什么这一层要自己读稿头：`register_statement` 的参数面没有 `statement_id`
-    （声明面冻结），而"这一份稿签的是哪一条"只写在稿头 `- 命题号：stmt:<号>` 里。
+    稿里没有命题号（业主 2026-11-13）⇒ "这一份稿签的是哪一条"不能再读稿头：
+    `register_statement` 的参数面没有 `statement_id`（声明面冻结），于是唯一 durable
+    的对应关系是 `statements` 行上那一格 `manuscript_id`（收录回执写它，语义是
+    "最近一次收录的那份稿"）。反查它，读不到 ⇒ 按"没查成"处理（照旧不收）。
     """
     out: dict[str, Any] = {"checked": False, "signed": False, "statement_id": "",
                            "path": "", "proof_text": "", "state": "", "why": ""}
@@ -276,27 +278,31 @@ def _concept_manuscript_sign_reading(store: Any, *, proof_manuscript: Any
                             "判不了这一份稿有没有签"))
             return out
         out["path"] = rel
-    sid = _DS.manuscript_statement_id(text)
-    if not sid:
-        out["why"] = ("这一份稿的稿头没有 `- 命题号：stmt:<号>` ⇒ 不知道它签的是哪一条"
-                      "（概念行没有号就没有落点）")
+    from .. import vsigns as _VS
+
+    mid = str(_VS.manuscript_id_of(rel) or "")
+    if not mid:
+        out["why"] = "这一份稿的路径认不出稿号 ⇒ 反查不到它属于哪一条在册命题"
         return out
+    try:
+        rows = [dict(r) for r in (store.rows("statements") if store is not None else [])]
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+        return out
+    row = next((r for r in rows
+                if str(r.get("manuscript_id") or "").strip() == mid
+                and str(r.get("kind") or "").strip() == "concept"), None)
+    if row is None:
+        out["why"] = (f"`statements` 里没有一条概念行的 `manuscript_id` 指着稿号 {mid}"
+                      " ⇒ 这一份稿没有在册概念行可签")
+        return out
+    sid = str(row.get("stmt_id") or "").strip()
     out["statement_id"] = sid
-    got = SL.by_id(store, stmt_id=sid)
-    if not got.get("checked") or not got.get("found"):
-        out["why"] = (f"`statements` 里没有 stmt:{sid}（或读不出来）⇒ 这一份稿没有"
-                      "在册概念行可签")
-        return out
-    if str((got.get("row") or {}).get("kind") or "") != "concept":
-        out["why"] = f"stmt:{sid} 不是概念行（kind={str((got.get('row') or {}).get('kind') or '')!r}）"
-        return out
     proof = _DS.proof_body(text)
     out["proof_text"] = str(proof or "")
     if not str(proof or "").strip():
         out["why"] = "这一份稿没有 `## 证明` 正文 ⇒ 没有可签的对象"
         return out
-    from .. import vsigns as _VS
-
     reading = _VS.sign_reading(root, statement_id=sid, proof_text=str(proof),
                                proof_no=1, manuscript_path=rel, store=store)
     out.update(checked=bool(reading.get("checked")),
@@ -953,8 +959,8 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     - 本行还没在册（没有号）⇒ 不是：没有"本行"可比对，就不许拿任何号去猜
       （被引命题的号不是"本行"的）—— 拿被引命题的号去读，会把别人的那一行
       连正文带签一起读走；
-    - 本行在册 ⇒ 稿自己的号（稿头 `- 命题号：stmt:<号>`，没有再按号的文件名）
-      必须等于本行号。稿头声明了别人号、或文件名是别人号，都不是自己的稿；
+    - 本行在册 ⇒ 稿名里那个稿号（`reports/<族>-proof-<稿号>.md` 的唯一一把尺）
+      必须等于本行号 —— 文件名是别人号，就不是自己的稿；
     - 稿号与命题号是两个号段：本行在册、且行上记着
       `manuscript_id` ⇒ 稿自己的号等于「行上那个稿号」也算自己的稿。F 的稿按 F 自己
       的稿号命名，命题号是 B 收录时现取的 ⇒ 拿命题号去比稿名，会让"这一条自己的稿"
@@ -977,10 +983,8 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     own = str(stmt_id_now or "").strip()
     if not own:
         return False
-    declared = str(_DS.manuscript_statement_id(str(manuscript_text or "")) or "").strip()
-    if declared:
-        # 稿头自己声明了命题号：那是作者写的归属，只按它判（声明了别人就是别人的稿）。
-        return declared == own
+    # 稿里没有命题号（业主 2026-11-13）⇒ 所有权只由「稿名里的稿号」与「行上那个
+    # 稿号」两格回答；改前那条"稿头自己声明了号，只按它判"的分支随稿头那一行删除。
     named = str(_VS.manuscript_id_of(str(manuscript_path or "")) or "").strip()
     if not named:
         return False
@@ -999,33 +1003,6 @@ def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any,
         manuscript_text=got.get("text"), manuscript_path=got.get("path"),
         stmt_id_now=stmt_id_now, matched_by=got.get("matched_by"),
         row_manuscript_id=row_manuscript_id)
-
-
-def _manuscript_belongs_to_a_cited_statement(*, declared_id: Any = "",
-                                             derived_from: Any = (),
-                                             proof_text: Any = "") -> bool:
-    """这份稿的号是不是「被引命题」的号（而不是本笔要登记的新命题的号）。
-
-    ## 为什么候选号要问这一句（2026-11-06 真退化）
-
-    D 的携带单按命题号点名，而 B 新登记一条派生命题时，`derived_from` 与正文里的
-    `stmt:` 引用会把「被引命题」的稿一并带进来（`read_carried_manuscript` 的候选
-    就是这些号）。那些稿的号属于被引命题，不是这一笔将要发的号；把它当候选号，
-    B 就会撞在被引命题自己头上（`stmt_id_taken`）—— D 携带 F 稿 → B 登记派生命题
-    这条主链整笔拒。
-
-    判据只有一句：稿名 / 稿头认出来的号在"这一笔引了谁"（`derived_from` ∪
-    正文里的 `stmt:` 引用）里 ⇒ 它是被引命题的稿，不许当本笔的候选号。
-
-    与"稿是不是本行的"（`_manuscript_is_own`）分工：那一格管正文 / 签 / 依赖面
-    用不用这份稿；这一格管「号」。两格都不许让被引命题的稿说话。
-    """
-    declared = str(declared_id or "").strip()
-    if not declared:
-        return False
-    cited = {str(x).strip() for x in (derived_from or ()) if str(x).strip()}
-    cited.update(str(x) for x in _DS.stmt_refs(str(proof_text or "")))
-    return declared in cited
 
 
 #: 这一笔的调用方角色（`conductor.current_parent()` 的父角色；没挂点 ⇒ 空串）。
@@ -1334,12 +1311,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "`proof_text` 留空 ⇒ 按稿收录这一路不判、不写形态台账、零次模型调用"),
     })
 
-    #: 按稿收录这一路「没有可判的对象」的那几档读数（缺节 / 0 字 / 稿头点了在册号）。
-    #: 它们不是"放行"，是"这一笔不判"—— 三态必须分得开（不判 ≠ 判过了没毛病）。
+    #: 按稿收录这一路「没有可判的对象」的那一档读数（缺节 / 0 字）。
+    #: 它不是"放行"，是"这一笔不判"—— 三态必须分得开（不判 ≠ 判过了没毛病）。
+    #:
+    #: 改前还有一档 `head_statement_id`（「稿头点了在册命题 ⇒ 不判」）。稿里没有命题号
+    #: （业主 2026-11-13）⇒ 那一档随稿头那一行删除；「这一笔是不是给在册命题挂证明」
+    #: 只由调用方的 `target_stmt_id` / `provenance.label` 回答（见 `_ingest_pointer`）。
     MANUSCRIPT_FORM_NOT_JUDGED_REASONS: Mapping[str, str] = MappingProxyType({
-        "head_statement_id": (
-            "稿头点了在册命题 ⇒ 这一笔是给在册命题挂一份证明，命题正文取在册那一行"
-            "（业主 2026-11-07：「改证明不需要重新登记」）⇒ 稿上那一节不参与登记、不判"),
         "missing_statement": (
             "稿里没有可登记的 `## 命题`（缺节 / 0 字）⇒ 这里没有可判的对象，"
             "交给 `pointer_manuscript_missing_statement` 那一档受控拒"),
@@ -1474,10 +1452,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         ## 还判的族（`b-proof`）只判「这一笔真要把 `## 命题` 落成一条新命题」那一档
 
-        - 稿头点了在册命题号 ⇒ 这一笔是"给在册命题挂一份证明"，命题正文取在册那一行
-          （业主 2026-11-07：「改证明不需要重新登记」）⇒ 稿上那一节不参与登记，不判；
-          业主点名豁免的"B 做优化表述"副本（`open_polish_copy`）正是这一档：它复制的是
-          已签稿，稿头带着在册命题号；
+        - B 的优化副本 ⇒ 按 `open_polish_copy` 的来源记录放行（`release_basis=polish_source`）；
+          稿里没有命题号（业主 2026-11-13）⇒ 改前那条「稿头点了在册号 ⇒ 不判」随之删除：
+          "这一笔是不是给在册命题挂证明"由调用方的 `target_stmt_id` / `provenance.label`
+          回答（`_ingest_pointer`），不读稿头；
         - `## 命题` 缺节 / 0 字 ⇒ 交给既有 `pointer_manuscript_missing_statement`
           （那一档的拒信更准；"没有可登记的对象"与"有对象、形状不合规"是两个码）。
         """
@@ -1515,13 +1493,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "命题已在台账上审过 ⇒ 放行，不判、不写形态台账、"
                                "零次模型调用"),
                 }
-        if str(reading.get("head_statement_id") or "").strip():
-            return {}, {
-                "judged": False, "released": True, "family": fam,
-                "checked": False, "model_calls": 0, "ledger_appended": False,
-                "release_basis": "head_statement_id",
-                "reason": str(self.MANUSCRIPT_FORM_NOT_JUDGED_REASONS["head_statement_id"]),
-            }
+            # 没查成 ≠ 没有记录：读数留着原因，仍按「其它手稿录入」照判
+            # （放行只认正面证据：一条来源记录；查不出来就不放）。
+            if not bool(_polish.get("checked")):
+                reading = dict(reading)
+                reading["polish_source"] = dict(_polish)
         cell = dict((reading.get("cells") or {}).get("statement_full") or {})
         statement = str(cell.get("value") or "").strip()
         if cell.get("outcome") != _MI.EXTRACT_PRESENT or not statement:
@@ -3687,11 +3663,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # 与 `_manuscript_is_own`（取正文那一段，见下）。
         probe_ids = _DS.candidate_statement_ids(
             derived_from=derived_from, proof_text=proof_text,
-            # 手稿头那一行"命题号：stmt:<号>"：D 递过来的那一份稿用它自己的号
-            # 去对携带单（`derived_from` 是承重链，不是这份稿自己的号）。
             # 在册那一行的号也进候选（2026-11-02）：D 的清单按号点名，而"已在册"这一档
-            # 除了它没有别的号可用。
-            extra=[_DS.manuscript_statement_id(manuscript_text), stmt_id_now])
+            # 除了它没有别的号可用。稿里没有命题号（业主 2026-11-13）⇒ 不再把稿头那一行
+            # 当候选：稿名里的号是产出侧自己的号段，与命题号无关。
+            extra=[stmt_id_now])
         if manuscript_text.strip():
             # ---- D 的递交（2026-10-26 晚：「D 到 B 没有路吗？加」） -------------------
             #
@@ -3835,19 +3810,25 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ---- 这份稿是这条命题的稿吗 -----------------
         #
         # 兜底读盘 / D 的携带单若按证明正文里的 `stmt:` 引用找到别条命题的稿
-        # （`reports/f-proof-000000.md`，头一行写着 `- 命题号：stmt:000000`），只判
-        # "同一条 statement_full 已在册"、不判"这份稿是谁的"，就会拿它的稿给本行做
-        # 读稿登记，还把那份稿的依赖面记到本行头上（源与收方错配，而读数上一切正常：
-        # `manuscript_source` 只说是 carried_by_D / disk）。
+        # （`reports/f-proof-000000.md`），只判"同一条 statement_full 已在册"、不判
+        # "这份稿是谁的"，就会拿它的稿给本行做读稿登记，还把那份稿的依赖面记到本行
+        # 头上（源与收方错配，而读数上一切正常）。
         #
-        # 判据用稿自己声明的那一行（`depsection.manuscript_statement_id`），不靠猜：
-        #  - 声明了号、而号不是这一条 ⇒ 这份稿是别人的；
-        #  - 没声明号（手写稿 / 框架渲染前的那一版）⇒ 不判所有权（`param` 直递是调用方
-        #    明确递上来的，既有语义就是"这一笔用它"）。
-        declared_owner = (_DS.manuscript_statement_id(manuscript_text)
-                          if manuscript_text.strip() else "")
-        manuscript_foreign = bool(declared_owner and stmt_id_now
-                                  and declared_owner != stmt_id_now)
+        # 稿里没有命题号（业主 2026-11-13）⇒ 所有权只由 R7 的那一把尺判：
+        # `_manuscript_is_own`（按证明正文认出来的 / 稿名里的稿号等于本行号 / 等于行上
+        # 记的稿号）。改前那条"稿头自己声明的号"随稿头那一行删除。
+        #
+        # 调用方点名递上来的（`param` / D 的携带单）不判所有权：那是"这一笔要给它的
+        # 稿"（既有语义），兜底读盘 / 按号搜出来的才要问（D1）。
+        _explicit_manuscript = bool(str(proof_manuscript or "").strip()) or (
+            str(manuscript_source or "") in (_DS.SOURCE_PARAM, _DS.SOURCE_CARRIED))
+        manuscript_foreign = bool(
+            manuscript_text.strip() and stmt_id_now and not _explicit_manuscript
+            and not _manuscript_is_own(
+                manuscript_text=manuscript_text, manuscript_path=manuscript_path,
+                stmt_id_now=stmt_id_now,
+                matched_by=manuscript_probe.get("matched_by"),
+                row_manuscript_id=str((redelivery or {}).get("manuscript_id") or "")))
         # ---- 寻址来的稿正文落成 `proof_text`（「F侧实际上是D侧，
         #      F的东西都在D的手稿上记了一笔」） ------------------------------------
         #
@@ -3970,10 +3951,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if manuscript_foreign and not carries_write:
             foreign_path = (str(manuscript_carried.get("path") or "")
                             or str(manuscript_probe.get("path") or ""))
+            from .. import vsigns as _VS_OWN
+
+            _foreign_named = str(_VS_OWN.manuscript_id_of(foreign_path) or "").strip()
             return _refuse(
                 "manuscript_owner_mismatch",
-                (f"这份稿属于 stmt:{declared_owner}，不是 stmt:{stmt_id_now} —— "
-                 "它是按证明正文里的引用 / 携带单找到的，不是这条命题的稿。"
+                (f"这份稿的稿号是 {_foreign_named or '（认不出）'}，不是 stmt:{stmt_id_now} "
+                 "这一条的稿 —— 它是按证明正文里的引用 / 携带单找到的，不是这条命题的稿。"
                  "拿它给这一条登记依赖面等于把别条命题的依赖记到这条头上，整笔不写。"
                  "要登记这一条的依赖面，请交这条命题自己的稿 —— 必须用 "
                  "`proof_manuscript` 把这条命题的手稿直接递进来（在册也要给稿；"
@@ -3981,7 +3965,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                  "一起交上来（那一笔走 canonical 覆盖，旧正文进 `proof_history`）。"),
                 manuscript_source=manuscript_source,
                 manuscript_path=foreign_path,
-                manuscript_owner=declared_owner,
+                manuscript_owner=_foreign_named,
                 stmt_id=stmt_id_now)
         #: 这一份稿是不是 F 的秘书洗过的那一版（B 读到的必须是
         #: "秘书洗过"的版本，读数带 `manuscript_washed=true`）。那一行元信息由
@@ -4221,10 +4205,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 base["proof_body_state"] = str(manuscript_proof.get("state") or "")
             #: 这一份稿是不是 F 的秘书洗过的那一版（跟着文件走的读数，见上面）。
             base["manuscript_washed"] = manuscript_washed
-            #: 这份稿声明自己属于哪一条命题（稿头那一行 `- 命题号：stmt:NNNNNN`），
+            #: 这一份稿的稿号（稿名里那个号；稿里没有命题号，见业主 2026-11-13），
             #: 以及它是不是这一笔要写的那一条。两格都在，于是"稿是别人的"这件事在
             #: 读数里不可能被漏看（改前它根本不进读数，`manuscript_source` 只说来源）。
-            base["manuscript_owner"] = declared_owner
+            from .. import vsigns as _VS_OWN_READ
+
+            base["manuscript_owner"] = str(
+                _VS_OWN_READ.manuscript_id_of(str(manuscript_path or "")) or "")
             base["manuscript_owner_ok"] = not manuscript_foreign
             if manuscript_probe:
                 base["manuscript_probe"] = dict(manuscript_probe)
@@ -5154,46 +5141,14 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                requested_evidence_kind=str(evidence_kind or ""),
                                canonical_written=False,
                                **trunc_reading)
-        # ---- D2（2026-11-05 走查）：新建档把稿名 / 稿头的号当候选号 ------------------
+        # ---- D2（2026-11-05 走查）：新建档不再把稿名 / 稿头的号当候选号 ----------------
         #
-        # 现象：B 按计数器发号、不认稿名/稿头的号 ⇒ 稿 000001、命题 000000 错位；
-        # 第 4 步靠"新命题 stmt_id_now=''"使 owner 判据短路才过；第 5 步同一条命令被
-        # `manuscript_owner_mismatch` 拒；收工扫盘按稿名开 `b-register@000001@…` 的义务
-        # 永远关不上（`reconcile_registrations` left=1，而 `verify_all` 0 error —— 真空的绿）。
-        #
-        # 口径：候选号只从稿头那一行 `- 命题号：stmt:<id>` 取（稿名是 F 自己的稿号，
-        # 与命题号是两个号段，不能当命题候选）；只在这一笔「确实要新建」时当候选
-        # （在册那一档的号由在册行给，候选号不许改变它）。候选号被占 ⇒ 秘书受控拒绝
-        # `stmt_id_taken`，不另发号（发号那一步在 `Secretary.record_statement` /
-        # `_record_statement_tx`）。
+        # 改前这条口径让"稿头那一行 `- 命题号：stmt:<id>`"当候选号；稿里没有命题号
+        # （业主 2026-11-13 裁定）⇒ 候选号一律为空：号由秘书在收录事务里发
+        # （`Secretary.record_statement` / `_record_statement_tx`）。稿名里的号是产出侧
+        # 自己的号段（`f-proof-<稿号>.md`），与命题号是两个号段，不能当候选。
         candidate_stmt_id = ""
         candidate_source = ""
-        #: 候选号只从"明确递进来的稿"取：`param`（调用方点名给 `proof_manuscript`）与
-        #: `carried_by_D`（D 的携带单点了名、且 sha 与盘上那份相符）。「`disk` 兜底读盘
-        #: 不算」：那一支可能捡到被引命题的稿（真机 `walk-e2e` 就是按 `derived_from` 读到
-        #: 别条命题的 `reports/f-proof-<别人的号>.md`），拿它的稿名当新命题的候选号 =
-        #: 把别人的号借来用；稿是不是本行的由 `_manuscript_is_own` 判，那一判据管正文，
-        #: 这一格管号 —— 两条都不能让"捡来的稿"说话。
-        _explicit_manuscript = str(manuscript_source or "") in (
-            _DS.SOURCE_PARAM, _DS.SOURCE_CARRIED)
-        if (not stmt_id_now and not manuscript_foreign and _explicit_manuscript
-                and str(manuscript_text or "").strip()):
-            # ---- 候选号只从稿头那一行取 --------------
-            #
-            # 稿名是 F 自己的稿号（`f-proof-<稿号>.md`），与命题号是两个号段 ——
-            # 把稿名当命题候选，遇到"稿号恰好等于某条在册命题号"就会把别人的号
-            # 借来用（`stmt_id_taken` 整笔拒，主链断掉）。
-            # 稿头那一行 `- 命题号：stmt:<id>` 才是"这份稿说自己是哪一条命题"。
-            _from_head = _DS.manuscript_statement_id(str(manuscript_text or ""))
-            # 被引命题的稿不是本笔的稿：`derived_from` / 正文的
-            # `stmt:` 引用把它们的号带进来是正常的；拿那个号当候选号会撞在被引
-            # 命题自己头上（`stmt_id_taken`），主链整笔拒（D 携带 F 稿 → B 登记）。
-            _cited_manuscript = _manuscript_belongs_to_a_cited_statement(
-                declared_id=_from_head,
-                derived_from=derived_from, proof_text=proof_text)
-            if not _cited_manuscript:
-                if _from_head and S.is_valid_id(_from_head):
-                    candidate_stmt_id, candidate_source = str(_from_head), "manuscript_head"
         written = sec.record_statement(payload, role="B",
                                        candidate_id=candidate_stmt_id,
                                        adjudication=_same_adjudication)
@@ -6321,17 +6276,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         prov_label = ""
         if isinstance(provenance, Mapping):
             prov_label = str(provenance.get("label") or "").strip()
-        # ---- 这一份稿点名的是"哪一条命题"（B 自己从稿里读，不由调用方另传） --------
+        # ---- 这一份稿说的是"哪一条命题"（由调用方点名，不由 B 从稿里读） ----------
         #
-        # 已在册的命题：稿头 `- 命题号：stmt:<号>`（F 的登记条目 / 按号命名的稿）或
-        # 调用方给的出处标签 `stmt:<号>`。命中在册那一行 ⇒ 命题正文、短版与 label 取
-        # 在册那一行（B 自己的台账）：这一笔是"给一条在册命题挂上这份证明"，
-        # 不是"重新登记它的命题"—— 拿稿里那段去重会让同一命题因措辞漂移落成第二行。
-        # 读数 `pointer.proposition_source` 说清正文取的是哪一处，`proposition_matches_manuscript`
-        # 记稿里那一段与在册正文字面是否一致（不一致是读数，不是静默改写）。
-        head_sid = str(reading.get("head_statement_id") or "").strip()
-        if not head_sid and prov_label.startswith("stmt:"):
-            head_sid = prov_label.split(":", 1)[-1].strip()
+        # 稿里没有命题号（业主 2026-11-13 裁定逐字：「稿里没有命题号，任何稿里都没有
+        # 命题号」）⇒ 唯一的"位置"是调用方给的出处标签 `stmt:<号>`（D 的携带单 /
+        # 调用方显式点名）。命中在册那一行 ⇒ 命题正文、短版与 label 取在册那一行
+        # （B 自己的台账）：这一笔是"给一条在册命题挂上这份证明"，不是"重新登记它的
+        # 命题"—— 业主 2026-11-07「改证明不需要重新登记」正是这一档；空 ⇒ 新登记。
+        # 读数 `pointer.proposition_source` 说清正文取的是哪一处，
+        # `proposition_matches_manuscript` 记稿里那一段与在册正文字面是否一致。
+        head_sid = prov_label.split(":", 1)[-1].strip() if prov_label.startswith("stmt:") else ""
         row_now: dict | None = None
         if head_sid:
             # 按号定位走查口（口径一）；读不到台账 ⇒ 这一格没查成（不是不在册）。
@@ -6340,15 +6294,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 err = got.get("error") or {}
                 return _refuse(
                     "pointer_ledger_unreadable",
-                    f"按手稿路径收录：稿头点名了在册命题 stmt:{head_sid}，而 `statements` "
+                    f"按手稿路径收录：调用方点名的在册命题 stmt:{head_sid}，而 `statements` "
                     f"台账读不出来（{err.get('type', '?')}: {err.get('message', '?')}）"
                     "⇒ 整笔不写（读不到 ≠ 不在册）", "", "")
             row_now = got["row"] if got["found"] else None
             if row_now is None:
                 return _refuse(
                     "pointer_statement_missing",
-                    f"按手稿路径收录：稿 `{rel}` 点名了 stmt:{head_sid}，而它在 `statements` "
-                    "台账里找不到 ⇒ 整笔不写（B 不替它另发一个号：那会让稿头号与登记号错位）"), "", ""
+                    f"按手稿路径收录：调用方点名了 stmt:{head_sid}，而它在 `statements` "
+                    "台账里找不到 ⇒ 整笔不写（B 不替它另发一个号：那会让点名号与登记号错位）"), "", ""
         kind = declared or (str(row_now.get("kind") or "").strip() if row_now else "") \
             or default_kind
         if row_now is not None:
@@ -6502,11 +6456,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _land_rewrite_manuscript(self, row: Mapping, *, proof_text: str,
                                  proof_manuscript: str,
-                                 manuscript_id: str = "") -> dict:
+                                 manuscript_id: str = "",
+                                 path_group: int = 0) -> dict:
         """把这一版 B 的证明落进 `reports/b-proof-<B稿号>.md`（就地重写那一节）。
 
         `manuscript_id`（2026-11-11）：B 自己那条号段发的稿号 —— 落点只按它拼。
         不给则退回老盘的只读口径（`reports/b-proof-<命题号>.md`）。
+
+        ## 落稿那一刻写一条「命题号 → B 稿号」的 durable 记录
+
+        稿里没有命题号（业主 2026-11-13）⇒ "同一命题的下一版要落回同一份稿"不能再靠
+        稿头那一行。落成之后把这一份稿写进 `statements` 行的逐路径记录
+        （`manuscriptpaths` 的 `manuscripts`：路径号 ⇒ 稿路径，复用同一格，不新表）——
+        于是 `bmanuscript.manuscript_id_for_statement` 与 `path_reading` 在收录之前
+        也读得到这一条对应关系。
         """
         from .. import manuscriptform as _MF
         from .. import proofregistry as _PR
@@ -6542,7 +6505,50 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             except (OSError, UnicodeDecodeError) as exc:
                 out.update(ok=False, refused="manuscript_unreadable",
                            why=f"重写稿读不回来（{type(exc).__name__}: {exc}）")
+            if out.get("ok") and sid:
+                out["landed_record"] = self._record_landed_manuscript(
+                    sid, target, path_group=path_group)
         return out
+
+    def _record_landed_manuscript(self, stmt_id: str, rel: str, *,
+                                  path_group: int = 0) -> dict:
+        """落稿那一刻把「命题号 → 这份稿」写进 `statements.manuscripts`（不新表）。
+
+        路径号给了就用它，没给（老调用面）就记 canonical 那一格（`1`）。写口与收录
+        回执同一格、同一个秘书白名单（`STATEMENT_LAND_OPS["attach_proofs"]` 收
+        `manuscripts`）：B 不直接改盘，只交"这一行要改成什么"。
+        三态：`checked=False` ⇒ 这一格没写成（不冒充写过了）。
+        """
+        sec = self._statement_secretary()
+        if sec is None:
+            return {"checked": False, "written": False,
+                    "reason": "这一趟没有秘书 ⇒ 记不了这一格（不是「已经记过」）"}
+        group = int(path_group or 0) or 1
+
+        def _transition(row):
+            if row is None:
+                return {"write": False,
+                        "result": {"written": False,
+                                   "reason": f"`statements` 里没有 {stmt_id} 这一行"}}
+            per = dict(row.get("manuscripts") or {})
+            if str(per.get(str(group)) or "") == str(rel):
+                return {"write": False, "result": {"written": False, "preserved": True}}
+            per[str(group)] = str(rel)
+            new = dict(row)
+            new["manuscripts"] = per
+            return {"write": True, "row": new,
+                    "result": {"written": True, "path_group": group}}
+
+        try:
+            landed = sec.land_statement(
+                stmt_id, _transition, op="attach_proofs",
+                note=f"agent_b.register_statement:landed:{stmt_id}")
+        except Exception as exc:  # noqa: BLE001 —— 记不成不改这一笔的结论
+            return {"checked": False, "written": False,
+                    "reason": f"{type(exc).__name__}: {exc}"}
+        got = dict(landed.get("result") or {})
+        got["checked"] = bool(landed.get("checked"))
+        return got
 
     def _declared_kind_gate(self):
         """B 的重写没有形态闸（业主：「B侧收录不拦」）；登记那一刻不判形态。"""
@@ -7144,8 +7150,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         落点由 B 自己那条号段 决定（`manuscriptids.next_manuscript_id(root,
         family="b-proof")`），不再由命题号拼。同一命题的下一版要落回它自己那份稿：
-        先按稿头 `- 命题号：stmt:<号>` 找回已有那份（`bmanuscript.manuscript_id_for_statement`），
-        找不到才发新号。老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
+        按 `statements` 行的逐路径记录找回已有那份（`bmanuscript.manuscript_id_for_statement`；
+        稿里没有命题号，业主 2026-11-13，落稿那一刻会写这一格），找不到才发新号。
+        老盘上的 `reports/b-proof-<命题号>.md` 仍在原处就地重写
         （不新写第二个名字）—— 那是只读兼容的既存量，改名会把它变成第二份稿。
 
         `path_group >= 1`（两条路径各一份 B 改写稿）时，载体按
@@ -7183,7 +7190,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         found: dict = {"checked": True, "found": False, "why": ""}
         legacy_rel = ""
         if int(path_group or 0) < 1:
-            found = _BM.manuscript_id_for_statement(root, statement_id)
+            found = _BM.manuscript_id_for_statement(
+                root, statement_id, store=self.store)
             if not mid and found.get("found"):
                 mid = str(found.get("manuscript_id") or "")
             if not mid:
@@ -7219,7 +7227,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 {"stmt_id": statement_id, "statement_full": statement_full,
                  "label": label, "kind": ""},
                 proof_text=proof_text, proof_manuscript=source_manuscript,
-                manuscript_id=mid)
+                manuscript_id=mid, path_group=int(path_group or 0))
             if landed.get("ok"):
                 from .. import vsigns as _VS_READ
 
@@ -7291,7 +7299,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                  "label": (str(head.get("label") or "") if from_source
                            else str(label or "")), "kind": ""},
                 proof_text=proof_text, proof_manuscript=str(out.get("path") or ""),
-                manuscript_id=mid)
+                manuscript_id=mid, path_group=int(path_group or 0))
             if stamped.get("ok"):
                 _rel = str(stamped.get("manuscript_path") or out.get("path") or "")
                 try:

@@ -105,9 +105,9 @@ class _LandManuscript:
         # ---- 稿号（2026-11-11 业主裁定 ①）：B 自己的号段 -------------------------
         #
         # `if_match_sha256` 要核的是「这一条命题自己那份 B 稿现在是哪一版」。改前那一格
-        # 按命题号拼名（`b-proof-<命题号>`），现在稿号与命题号解耦 ⇒ 先按稿头找回这份稿
-        # （`bmanuscript.manuscript_id_for_statement`），找不到就是"还没有这份稿"
-        # （受控拒 `stale_target`，一个字都不写）。
+        # 按命题号拼名（`b-proof-<命题号>`），现在稿号与命题号解耦 ⇒ 按 `statements` 行
+        # 的逐路径记录找回这份稿（`bmanuscript.manuscript_id_for_statement`，稿里没有
+        # 命题号，业主 2026-11-13），找不到就是"还没有这份稿"（受控拒 `stale_target`）。
         #
         # 2026-11-12 补：优化线给了 `path_group` 时，两份稿的载体按「路径」认
         # （`manuscript_id_for_path`）—— 按命题找只会挑中其中一份，第二条路径会覆盖
@@ -141,7 +141,8 @@ class _LandManuscript:
             from .. import proofregistry as _PR
 
             if path_no < 1:
-                _found = _BM_READ.manuscript_id_for_statement(self.store.root, sid)
+                _found = _BM_READ.manuscript_id_for_statement(
+                    self.store.root, sid, store=self.store)
                 _mid_now = str(_found.get("manuscript_id") or "")
                 if not _mid_now:
                     _legacy = _PR.entry_relpath(family="B", statement_id=sid)

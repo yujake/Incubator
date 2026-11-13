@@ -1761,26 +1761,6 @@ def manuscript_proof_no(text: str) -> int:
     return 0
 
 
-def manuscript_statement_id(text: str) -> str:
-    """手稿开头元信息里那个"命题号：stmt:<号>"⇒ 裸号（没有 ⇒ 空串）。
-
-    为什么需要它：D 把一份稿递给 B 时，B 要判"这份稿是不是 D 携带单里点名的那一条"。
-    携带单是按命题号索引的，而调用方递进来的 `derived_from` 是那条命题的承重链
-    （被它引用的别的东西）—— 两处都不是"这份稿自己的号"。手稿头那一行就是它。
-    """
-    head = str(text or "").replace("\r\n", "\n").split("\n")[:12]
-    import re as _re
-
-    for raw in head:
-        line = raw.strip()
-        if not line.startswith("- 命题号"):
-            continue
-        hit = _re.search(r"stmt:\s*([0-9]{4,})", line)
-        if hit and S.is_valid_id(hit.group(1)):
-            return hit.group(1)
-    return ""
-
-
 def candidate_statement_ids(*, derived_from: Iterable[Any] = (), proof_text: Any = "",
                             extra: Iterable[Any] = ()) -> list[str]:
     """"去盘上试哪几个命题号"⇒ 候选号（裸号，按出现次序去重）。

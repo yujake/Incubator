@@ -18,8 +18,9 @@ B 的稿名曾经是 `reports/b-proof-<命题号>.md`（`relpath(statement_id)` 
 与 F 早先"稿名带命题号/计划号"是同一个毛病：名字里的数字同时被当成两种身份。
 现在 B 的稿号由 `manuscriptids.next_manuscript_id(root, family="b-proof")` 发
 （`counters.bmanuscript` 一条独立号段），稿名只回答"这是第几份 B 稿"。稿与命题的
-对应关系记在稿头那一行 `- 命题号：stmt:<号>`：重新落同一命题时，靠
-:func:`manuscript_id_for_statement` 按那一行找回它自己那份稿（而不是按名字里的数字猜）。
+对应关系不写在稿头（业主 2026-11-13：「稿里没有命题号，任何稿里都没有命题号」），
+记在 `statements` 行的逐路径记录里（`manuscriptpaths` 的 `manuscripts`：路径号 ⇒
+稿路径，落稿那一刻写一条）；重新落同一命题时按那一格找回它自己那份稿。
 
 一个稿号 = 一份文件 = 一份证明。老盘上的 `reports/b-proof-<命题号>.md` 只读兼容：
 名字形状与新名字逐字相同（都是六位），所以分类 / 读正文 / 认签三件事一个字都不用
@@ -66,9 +67,6 @@ PREFIX = _MF.PREFIX[_MF.FAMILY_B]
 #: 稿头里"第几份证明"那一行（渲染与读侧同一个拼法）。
 PROOF_NO_PREFIX = _MF.PROOF_NO_MARK
 
-#: 稿头 `- 命题号：` 那一行的引用前缀（与 `schema` 的 `stmt:` 同一套）。
-STATEMENT_PREFIX = "stmt:"
-
 
 def relpath(statement_id: Any, proof_no: Any = 1) -> str:
     """这一条命题的 B 改写手稿落点（工作区相对）；号不合法 ⇒ 空串（不猜位置）。
@@ -86,31 +84,26 @@ def relpath(statement_id: Any, proof_no: Any = 1) -> str:
                  strict=False)
 
 
-def _head_statement_id(text: Any) -> str:
-    """一份稿的稿头 `- 命题号：` 那一行 ⇒ 裸命题号（认不出 ⇒ 空串）。"""
-    raw = str(header_reading(text).get("statement_id") or "").strip()
-    if raw.startswith(STATEMENT_PREFIX):
-        raw = raw[len(STATEMENT_PREFIX):].strip()
-    return raw
+def manuscript_id_for_statement(root: Any, statement_id: Any, *,
+                                store: Any = None) -> dict[str, Any]:
+    """这一条命题「自己那份 B 稿」是哪一份（读 durable 记录，不读稿头）。
 
+    ## 稿里没有命题号（业主 2026-11-13）
 
-def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
-    """这一条命题「自己那份 B 稿」是哪一份（按稿头的 `- 命题号：` 行找）。
+    改前这一格扫 `reports/b-proof-*.md`、读稿头 `- 命题号：stmt:<号>` 那一行。裁定
+    逐字：「稿里没有命题号，任何稿里都没有命题号」⇒ 那一行不再写，也就不能再拿它
+    当证据。现在的证据链按强度：
 
-    ## 为什么不能按名字里的数字找
+    1. `manuscriptpaths.path_reading` 的逐路径记录（`statements.manuscripts`：
+       路径号 ⇒ 稿路径；B 落稿那一刻就写一条，收录回执再核一次）里属于本族的那一份；
+    2. 老盘按命题号拼的名字 `reports/b-proof-<命题号>.md`（只读兼容，不新写）；
+    3. 两处都没有 ⇒ `found=False`（查过了、没有）。
 
-    B 的稿名曾经是 `reports/b-proof-<命题号>.md`，于是"这一条命题的稿"= "名字里那个
-    数字等于命题号的那份文件"。B 稿号独立之后，名字里那个数字是 B 的号段，与命题号
-    没有关系 —— 再按数字比就会把别人的稿当成自己的。
-
-    唯一能把稿与命题钉在一起的证据是稿头那一行（框架渲染时写进去的
-    `- 命题号：stmt:<号>`）。本函数扫 `reports/b-proof-*.md`、读那一行。
-
-    三态：`checked=False` ⇒ 这一趟没法查（没给根）；`found=False` ⇒ 查过了、没有；
-    `found=True` ⇒ 找到了（`manuscript_id` / `path`）。"没查成"绝不折成"没有"。
+    多条同命题（优化副本会让同一命题短暂有两份 B 稿）：未签的那一份优先 —— B 正在改
+    的就是它；已签的那一份按冻结纪律只读。三态不折平：`checked=False` ⇒ 这一趟没法查。
     """
     out: dict[str, Any] = {"checked": False, "found": False, "manuscript_id": "",
-                           "path": "", "candidates": [], "why": ""}
+                           "path": "", "candidates": [], "signed": False, "why": ""}
     sid = str(statement_id or "").strip()
     if not sid:
         out.update(checked=True, why="没给命题号 ⇒ 没有可找的稿（不是「没有这份稿」）")
@@ -118,40 +111,54 @@ def manuscript_id_for_statement(root: Any, statement_id: Any) -> dict[str, Any]:
     if root is None or str(root) == "":
         out["why"] = "这一趟没有工作区根 ⇒ 查不了（不是「没有这份稿」）"
         return out
-    base = Path(str(root)) / MANUSCRIPT_DIR
-    if not base.is_dir():
-        out.update(checked=True, why=f"`{MANUSCRIPT_DIR}/` 不存在 ⇒ 还没有任何 B 稿")
-        return out
     hits: list[tuple[bool, str, str]] = []
-    for path in sorted(base.glob(f"{PREFIX}*.md")):
-        rel = f"{MANUSCRIPT_DIR}/{path.name}"
-        parsed = _VS.parse_manuscript_name(rel)
-        if not (parsed.get("checked") and parsed.get("family")):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if _head_statement_id(text) != sid:
-            continue
-        block = _VS.manuscript_sign_reading(text, manuscript_path=rel)
-        hits.append((bool(block.get("found")), rel,
-                     str(parsed.get("manuscript_id") or "")))
+    if store is not None:
+        from . import manuscriptpaths as _MP
+
+        reading = _MP.path_reading(store, root, statement_id=sid)
+        if reading.get("checked"):
+            for one in reading.get("paths") or ():
+                rel = str((one or {}).get("manuscript") or "").strip().replace("\\", "/")
+                if not rel or not is_relpath(rel):
+                    continue
+                text = ""
+                try:
+                    text = (Path(str(root)) / rel).read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    pass
+                block = _VS.manuscript_sign_reading(text, manuscript_path=rel) if text else {}
+                hits.append((bool(block.get("found")), rel,
+                             str((one or {}).get("manuscript_id") or "")))
+        else:
+            out["why"] = ("逐路径记录读不出来 ⇒ 查不了（不是「没有这份稿」）："
+                          + str(reading.get("why") or "未知原因"))
+            return out
     out["candidates"] = [rel for _signed, rel, _mid in hits]
-    if not hits:
-        out.update(checked=True,
-                   why=f"`{MANUSCRIPT_DIR}/{PREFIX}*.md` 里没有一份稿头写着 "
-                        f"stmt:{sid} ⇒ 这一条命题还没有 B 稿")
+    if hits:
+        hits.sort(key=lambda item: (item[0], item[1]))
+        signed_any, rel, mid = hits[0]
+        out.update(checked=True, found=True, manuscript_id=mid, path=rel,
+                   signed=signed_any,
+                   why=(f"逐路径记录里 stmt:{sid} 的稿指向 `{rel}`（候选 "
+                        f"{len(hits)} 份；这一份{'已' if signed_any else '未'}签）"))
         return out
-    # 多条同命题（优化副本会让同一命题短暂有两份 B 稿 —— 已签的源稿与
-    # 未签的优化副本）：未签的那一份优先。B 正在改的就是它；已签的那一份按冻结
-    # 纪律只读（丁），不该被下一笔落稿挑中。同档再按名字序，读数里给全部候选。
-    hits.sort(key=lambda item: (item[0], item[1]))
-    signed_any, rel, mid = hits[0]
-    out.update(checked=True, found=True, manuscript_id=mid, path=rel,
-               signed=signed_any,
-               why=(f"稿头 `- 命题号：stmt:{sid}` 指向 `{rel}`（候选 "
-                    f"{len(hits)} 份；这一份{'已' if signed_any else '未'}签）"))
+    # ---- 老盘的只读兼容：按命题号拼的名字（新写路径不再产生这一形状） -----------
+    legacy_rel = f"{MANUSCRIPT_DIR}/{PREFIX}{sid}.md"
+    legacy_path = Path(str(root)) / legacy_rel
+    if legacy_path.is_file():
+        try:
+            text = legacy_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            text = ""
+        block = _VS.manuscript_sign_reading(text, manuscript_path=legacy_rel) if text else {}
+        out.update(checked=True, found=True, manuscript_id=sid, path=legacy_rel,
+                   candidates=[legacy_rel], signed=bool(block.get("found")),
+                   why=(f"老盘按命题号命名的稿 `{legacy_rel}`（只读兼容）"))
+        return out
+    out.update(checked=True,
+               why=(f"stmt:{sid} 的逐路径记录里没有 B 稿、老盘名字 `{legacy_rel}` 也不在盘上 "
+                    "⇒ 这一条命题还没有 B 稿"))
+    return out
     return out
 
 
@@ -159,11 +166,11 @@ def manuscript_id_for_path(root: Any, statement_id: Any, path_group: Any,
                           *, store: Any = None) -> dict[str, Any]:
     """这一条路径的 B 改写稿是哪一份（逐路径记录的唯一读口）。
 
-    ## 为什么不能再用 `manuscript_id_for_statement`
-    那个函数回答的是"这一条命题自己那份 B 稿"（按稿头的 `- 命题号：` 找，未签优先）。
-    业主 2026-11-12 的裁定是「两条路径各一份 B 改写稿」：同一命题的路径 1 与路径 2
-    必须落在两个稿号上。按命题找只会挑中其中一份 ⇒ 第二条路径会覆盖第一条的载体。
-    路径身份不写稿头（业主：「路径在产出侧也不标注」），唯一的事实来源是
+    ## 为什么不能再用 `manuscript_id_for_statement` 当唯一证据
+    那个函数回答的是"这一条命题自己那份 B 稿"（按 `statements` 行的逐路径记录找，
+    未签优先）。业主 2026-11-12 的裁定是「两条路径各一份 B 改写稿」：同一命题的路径 1
+    与路径 2 必须落在两个稿号上。按命题找只会挑中其中一份 ⇒ 第二条路径会覆盖第一条
+    的载体。路径身份不写稿头（业主：「路径在产出侧也不标注」），唯一的事实来源是
     `manuscriptpaths` 的逐路径记录（`verifications[].path_group` + `manuscript`）。
 
     ## 三态（不折平）
@@ -298,12 +305,14 @@ def header_reading(text: Any) -> dict[str, Any]:
     里。运行期必须由调用点把它们读出来传全，否则 b-稿会缺 `- 计划：`、缺洗稿行，
     或凭 `label` 多出一行 `- 标签：`。
 
-    返回 `{checked, title, statement_id, plan_id, sid, label, wash_actor, wash_filled}`：
+    返回 `{checked, title, plan_id, sid, label, wash_actor, wash_filled}`：
     读不出来的格子回空串（不猜）；`checked=False` = 这一份没有页头可读（空稿）。
+
+    稿里没有命题号（业主 2026-11-13）⇒ 改前那一格 `statement_id` 随稿头那一行删除。
     """
     raw = str(text or "").replace("\r\n", "\n")
     out: dict[str, Any] = {
-        "checked": bool(raw.strip()), "title": "", "statement_id": "",
+        "checked": bool(raw.strip()), "title": "",
         "plan_id": "", "sid": "", "label": "", "wash_actor": "", "wash_filled": ""}
     if not raw.strip():
         return out
@@ -314,9 +323,6 @@ def header_reading(text: Any) -> dict[str, Any]:
             # `# <族> 的证明手稿：<标题>`：取最后一个全角冒号之后那一段（标题里允许有冒号）。
             head, sep, tail = stripped.rpartition("：")
             out["title"] = tail.strip() if sep else stripped.lstrip("# ").strip()
-            continue
-        if stripped.startswith(_MF.STATEMENT_MARK):
-            out["statement_id"] = stripped[len(_MF.STATEMENT_MARK):].strip()
             continue
         if stripped.startswith(_MF.PLAN_MARK):
             body = stripped[len(_MF.PLAN_MARK):].strip()

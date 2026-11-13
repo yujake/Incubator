@@ -748,7 +748,8 @@ def signed_v_handoffs(monkeypatch):
                 _pointer_stmt = next(
                     (str(_b).strip() for _n, _b in _secs if _n == "命题"), "")
                 _pointer_text = _DS.proof_body(_ms).strip("\n")
-                _pointer_sid = str(_DS.manuscript_statement_id(_ms) or "").strip()
+                # 稿里没有命题号（业主 2026-11-13）⇒ 这里不再读稿头那一行；
+                # "这一笔的目标行"只由调用方给的 `line_range.label`（`stmt:<号>`）回答。
         text = str(kw.get("proof_text") or "") or _pointer_text
         if not text.strip():
             for _item in list(kw.get("proofs") or []):
@@ -765,13 +766,12 @@ def signed_v_handoffs(monkeypatch):
             str(kw.get("statement_full") or "") or _pointer_stmt) or {}
         sid = str(row.get("stmt_id") or "")
         if not sid:
-            # 指针形态：稿头 `- 命题号：stmt:<号>` 或调用方给的 `stmt:<号>` 出处
-            # （与 B 的 `_register_pointer_manuscript` 同一处判据）就是这一笔的目标行。
+            # 指针形态：调用方给的 `stmt:<号>` 出处（`line_range.label`）就是这一笔的
+            # 目标行（与 B 的 `_register_pointer_manuscript` 同一处判据）。稿头那一行
+            # 已退役（业主 2026-11-13）⇒ 不再从稿里读命题号。
             _label = str((kw.get("line_range") or {}).get("label") or "")
             if _label.startswith("stmt:"):
-                _pointer_sid = _pointer_sid or _label.split(":", 1)[-1].strip()
-            if _pointer_sid:
-                sid = str(_pointer_sid)
+                sid = _label.split(":", 1)[-1].strip()
         # 2026-11-04（业主裁定 ⑥-1-b）：要写正文的这一笔必须带 `proof_manuscript`。
         # 夹具替它造一份三节稿（正文就是这一笔要写的那一份；依赖面空表）。
         #

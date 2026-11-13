@@ -525,9 +525,9 @@ class _WriteReport:
         seen_paths: set[str] = set()
         # ---- 登记条目先读一次：F 的稿按自己的稿号命名，按命题号拼路径找不到它 ---
         #
-        # 2026-11-10：稿名与命题号不再绑定 ⇒ "这一条的稿在哪"有两处可靠来源：
-        # ① `statements` 行上的 `manuscript_id`（B 收录时记）；② 稿里登记条目的
-        # `statement_id`（F 重写那一路会把它写在稿头）。两处都读，按命题号拼名只当兜底。
+        # 2026-11-10：稿名与命题号不再绑定 ⇒ "这一条的稿在哪"的可靠来源是
+        # `statements` 行上的 `manuscript_id` 与逐路径记录（B 收录 / 落稿时记）；
+        # 稿里没有命题号（业主 2026-11-13）⇒ 不再读稿头那一行，按命题号拼名只当兜底。
         note_prefix = ""
         try:
             from .. import proofregistry as _PR_CARRIED

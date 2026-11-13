@@ -2547,25 +2547,9 @@ def _existing_path_group_in_tx(tx: Any, *, root: Any, statement_id: str,
                            "新路径由秘书在收录事务里分配）"))
         return out
     out.update(checked=True, existing=True)
-    # ---- 稿头那一行：这一份稿确实是这一条命题的稿（不是别条命题的） -------------
-    #
-    # 路径号不写稿头（业主：「路径在产出侧也不标注」），但 `- 命题号：stmt:<号>` 那一行
-    # 本来就在（B 的改写稿由框架渲染）。它不是路径号，只回答"这份稿属于谁"—— 拿它
-    # 挡住"把别条命题的稿回填到这一条路径上"。
-    if rel:
-        try:
-            _text = (Path(str(root)) / rel).read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError):
-            _text = ""
-        if _text:
-            from . import depsection as _DS
-
-            _head_sid = str(_DS.manuscript_statement_id(_text) or "").strip()
-            if _head_sid and _head_sid != sid:
-                out.update(refused="path_mismatch",
-                           reason=(f"`{rel}` 的稿头点的是 stmt:{_head_sid}，不是 "
-                                   f"stmt:{sid} ⇒ 不改写"))
-                return out
+    # 路径身份不写稿头（业主：「路径在产出侧也不标注」），稿里也没有命题号
+    # （业主 2026-11-13：「稿里没有命题号，任何稿里都没有命题号」）⇒ "这份稿属于
+    # 哪条命题"只由逐路径记录与同号签行回答（下面两支），不读稿头。
     hit_rel = str(hit.get("manuscript") or "").strip().replace("\\", "/")
     hit_sha = str(hit.get("body_sha") or "").strip().lower()
     if rel and hit_rel and hit_rel == rel:
@@ -8101,7 +8085,7 @@ class Secretary:
         ## 返回（键固定）
 
         `{checked, path, family, tier, manuscript_id, proof_no, name_proof_no,
-        canonical, head_statement_id, head_experiment_id,
+        canonical, head_experiment_id,
         head_statement_text, head_label, declared_kind, sha256, proof_sha256,
         proof_state, cells, why, error}`。
 
@@ -8135,7 +8119,7 @@ class Secretary:
             "proof_no": int(shape.get("proof_no") or 0),
             "name_proof_no": int(shape.get("proof_no") or 0),
             "canonical": str(shape.get("canonical") or ""),
-            "head_statement_id": "", "head_experiment_id": "", "head_statement_text": "",
+            "head_experiment_id": "", "head_statement_text": "",
             "head_label": "", "declared_kind": "",
             "sha256": "", "proof_sha256": "",
             "proof_state": _MI.EXTRACT_UNREADABLE,
@@ -8161,7 +8145,6 @@ class Secretary:
         proof = readings.get("proof_text") or {}
         out["proof_state"] = str(proof.get("outcome") or _MI.EXTRACT_ABSENT)
         out["proof_sha256"] = str((proof.get("source") or {}).get("sha") or "")
-        out["head_statement_id"] = str(_DS.manuscript_statement_id(text) or "").strip()
         head = _manuscript_head_fields(text)
         out["head_experiment_id"] = str(head.get("实验号") or "").strip()
         out["head_statement_text"] = str(head.get("命题键") or "").strip()
