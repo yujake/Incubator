@@ -93,7 +93,7 @@ class _AbandonPlan:
             "round": int(row.get("rounds") or 0),
             "sid": "",
             "action": "abandon",
-            # 这里**没有** `outcome` 这一格，刻意不是漏写：`history` 里的 `outcome`
+            # 这里没有 `outcome` 这一格，刻意不是漏写：`history` 里的 `outcome`
             # 是"这一轮推进的结果"（`STEP_OUTCOMES` = no_change / progress / blocked，
             # 停滞检测读的就是它）。放弃不是一轮推进 —— 给它写一个词表外的
             # `outcome="abandoned"`，会把"这一轮发生了什么"与"这条计划怎么收场"折进
