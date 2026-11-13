@@ -2465,20 +2465,21 @@ class _Core:
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or ""
         mid = str(manuscript_id or "").strip()
         rel = self.manuscript_path(mid) if mid else ""
-        if not rel:
-            # 拼不出落点 ⇒ 写口自己会受控拒（`manuscript_path_unavailable`），不抢它的判据。
-            return (None, None)
-        if self._registered_entry_text(root, rel) is not None:
+        # 2026-11-13（统一开稿四步）：这一轮是新稿（还没有号）时，`rel` 是空的 ——
+        # 那不是"拼不出落点"，而是"号还没发"（发号在闸之后）。所以这里不再早退：
+        # 新命题照样要过闸，只是它没有登记条目 / 冻结面可查（两个 if 都带 rel 条件）。
+        if rel and self._registered_entry_text(root, rel) is not None:
             # 已有登记条目 ⇒ 这一轮只重写 `## 证明`（业主 2026-11-07：重写不过这道闸）。
             return (None, None)
-        try:
-            from .. import manuscriptfreeze as _FZ
+        if rel:
+            try:
+                from .. import manuscriptfreeze as _FZ
 
-            if _FZ.freeze_reading(root, rel).get("frozen"):
-                # 已拿签那一档由写口受控拒（`manuscript_frozen`）；这里不花那一次模型钱。
-                return (None, None)
-        except Exception:  # noqa: BLE001 —— 冻结读数读不出来时照常问闸（fail-closed）
-            pass
+                if _FZ.freeze_reading(root, rel).get("frozen"):
+                    # 已拿签那一档由写口受控拒（`manuscript_frozen`）；这里不花那一次模型钱。
+                    return (None, None)
+            except Exception:  # noqa: BLE001 —— 冻结读数读不出来时照常问闸（fail-closed）
+                pass
         # ---- 2026-11-13（业主裁定 B）：proof 档没有 `product.proposition` ⇒ 受控拒 ----
         #
         # 只在"这一轮会写一份还没登记的新稿"时立这条规矩：重写证明那一档不动 `## 命题`
@@ -2526,6 +2527,51 @@ class _Core:
             manuscript_id=mid, intended_path=rel, form=form,
             plan=plan, product=product, root=root))
 
+    def _open_gate(self, **kw: Any) -> Mapping[str, Any]:
+        """开稿口的形态闸适配（把 `manuscriptopen` 的入参翻译成本方法的同义形参）。
+
+        判据仍是 `_proposition_form_gate` → `Secretary.judge_proposition_form`；这一层
+        只补 `body`（骨架里 `## 证明` 是空的 ⇒ 递空串，材料摘要的 `proof_chars` 就是 0）。
+        """
+        return self._proposition_form_gate(
+            full=str(kw.get("full") or ""), kind=str(kw.get("kind") or ""),
+            body="", label=str(kw.get("label") or ""),
+            task_id=str(kw.get("task_id") or ""))
+
+    def _open_manuscript(self, *, product: Mapping[str, Any],
+                         sg: Mapping[str, Any], plan: Mapping[str, Any],
+                         mid: str, form_reading: Mapping[str, Any] | None) -> dict:
+        """落骨架：命题一过审就在盘上有身份（正文之后一次次填）。
+
+        位置：`_apply_round` 的 proof 档，闸之后、`proof_manuscript` 之前。F 的稿号
+        这时已经发出来（发号也在闸之后），所以骨架的稿头写着这一轮的计划 / 子目标，
+        命题那一节是 `product.proposition` 的逐字字节。
+
+        `form_reading` 是写前闸刚判过的那份读数：传进去复用，开稿口不再问第二次
+        （同一段字节不重复花钱）。新命题这一档 `_proposition_form_precheck` 一定会
+        给读数；「已有登记条目 / 已拿签」那两档它给 `None`，这时开稿口要么发现稿已
+        在盘上（一个字节不写），要么按 `judge=_open_gate` 现问（命中台账缓存）。
+        """
+        from .. import manuscriptopen as _MO
+        from .manuscript import proposition_text
+
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        plan_id = str(plan.get("plan_id") or "")
+        sid = str(sg.get("sid") or "")
+        label = f"F 攻坚 {plan_id} 子目标 {sid}"
+        header: list[str] = []
+        if plan_id or sid:
+            header.append(f"- 计划：{plan_id} · 子目标：{sid}")
+        header.append(f"- 标签：{label}")
+        return _MO.open_manuscript(
+            root, role="F", family="f-proof",
+            proposition=proposition_text(product.get("proposition")),
+            judge=self._open_gate, form_reading=form_reading,
+            kind=(product_kind(product) or str(sg.get("kind") or "").strip()
+                  or "conjecture"),
+            label=label, title=str(sg.get("text") or ""),
+            header_lines=tuple(header), manuscript_id=str(mid or ""))
+
     def _refused_round(self, *, kind: str, detail: str, problems: list[str],
                        next_step: str, hint: str, manuscript_id: str,
                        intended_path: str, form: Mapping[str, Any],
@@ -2533,9 +2579,16 @@ class _Core:
                        root: str) -> dict:
         """写前闸的受控拒读数（缺命题 / 形态判不过共用这一处）。
 
-        三态纪律：这一轮 `outcome=no_change`、`manuscript_path` 留空（一个字节都没写，
-        不许留一个"稿在哪"的假地址）；`refusal.manuscript_path` 是"本来要落在哪"（可读，
-        不是已写）；`delivered=False`、`statement_id=""`（没有登记也没有送审）。
+        三态纪律：这一轮 `outcome=no_change`；`manuscript_path` 是「盘上真有这一份
+        稿」才写（见下），不许留一个「稿在哪」的假地址；`refusal.manuscript_path` 是
+        「本来要落在哪」（可读，不是已写）；`delivered=False`、`statement_id=""`。
+
+        ## 2026-11-13（统一开稿四步）：分「没稿」与「有稿未登记」两档
+
+        开稿口可能已经把骨架落盘（上一轮过审、写正文那一步失败 / 这一轮闸判不过），
+        这时「一个字节都没写」是假话：盘上有一份未登记的稿，`manuscript_path` 必须
+        如实指它（`draft=True`），否则模型会去别处找自己的稿、或者以为要重开。
+        没有骨架那一档才留空（`draft=False`）。
         """
         from . import vsign as _VS_GATE
 
@@ -2543,10 +2596,23 @@ class _Core:
         delivery = self._delivery_reading(
             plan, assessment=(product.get("self_assessment")
                               if isinstance(product, Mapping) else None))
+        rel = str(intended_path or "")
+        draft = ""
+        if rel:
+            try:
+                path = Path(str(root or ".")) / rel
+                if path.is_file():
+                    draft = path.read_text(encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                draft = ""
+        on_disk = bool(rel) and bool(draft)
         return {
             "action": "no_change",
             "outcome": "no_change",
-            "detail": (detail + "；V 签：" + str(sign.get("label"))
+            "detail": (detail
+                       + ("；盘上那一份骨架还在（`" + rel + "`，未登记、可继续改）"
+                          if on_disk else "")
+                       + "；V 签：" + str(sign.get("label"))
                        + f"（{sign.get('why')}）"
                        + "；交差（逐条）：已签 "
                        + str(delivery.get("coverage_reading") or "0/0")
@@ -2575,9 +2641,11 @@ class _Core:
             "delivery_state": str(sign.get("state") or ""),
             "delivery_label": str(sign.get("label") or ""),
             "report_path": "",
-            "manuscript_path": "",
-            "manuscript": "",
-            "manuscript_source": "",
+            # ---- 两档：没稿 ⇒ 空串；有稿未登记 ⇒ 如实指它 + 带回正文 ------------
+            "manuscript_path": rel if on_disk else "",
+            "manuscript": draft if on_disk else "",
+            "draft": on_disk,
+            "manuscript_source": "draft" if on_disk else "",
             "manuscript_received": {},
             "manuscript_published": False,
             "manuscript_renamed_from": "",
@@ -2607,7 +2675,8 @@ class _Core:
                 "problems": list(problems),
                 "next_step": next_step,
                 "manuscript_id": manuscript_id,
-                "manuscript_path": intended_path,
+                "manuscript_path": rel,
+                "on_disk": on_disk,
                 "proposition_form": dict(form),
             },
             "waiting_on": [],
@@ -2793,12 +2862,74 @@ class _Core:
         # 现在不递：`manuscript_id` 是这一份稿的身份，正文 sha 由 `register_or_rewrite`
         # 自己按 `proof_text` 现算（它返回的 `sha256` 就是交接面另一半）。
         # 稿头那一行于是如实写「还没落号」—— F 的稿本来就没有命题号（B 收录时现取）。
+        # ---- 2026-11-13（统一开稿四步）：第一次登记只读盘上那一份，不重渲正文 --------
+        #
+        # 业主裁定：「拿到稿号以后慢慢 edit」。第一次登记若拿"现渲的那一份"当底稿，
+        # 就会把模型用 `fs.edit` 改过的 `## 证明` / `## 依赖` 覆盖回渲染结果 —— 那是
+        # 「一次成稿」的最后一条后门。所以这一档先读盘：`template` 与 `proof_text` 都取
+        # 盘上那一份（`## 证明` 逐字），登记只补头部元信息（正文 sha / 命题指纹 / 版本），
+        # 正文一个字节不动。
+        #
+        # 只对「第一次登记」生效（`read_entry` 说还没有登记条目）：
+        #   · 已有登记条目 ⇒ 这一笔是重写证明（`mode=rewritten`），换 `## 证明` 那一节
+        #     是它的职责（业主 2026-11-07「反复修改证明时直接动那个命题所指手稿的
+        #     proof 板块」）；拿盘上那份去"重写"会让产品里的新正文永远落不了盘；
+        #   · 盘上没有 / 读不出来 ⇒ 沿用调用方给的那一份（直调 `_hand_proof` 的旧路）；
+        #   · 盘上有、但 `## 命题` 与这一轮判过的那一段不同 ⇒ 受控拒
+        #     `proposition_text_changed`（改命题等于换一条定理，要重新过形态闸 / 换号）；
+        #   · 盘上有、命题一致、`## 证明` 还空 ⇒ 受控拒 `proof_manuscript_empty`
+        #     （骨架还没写正文：登记不是"替它把正文写完"）。
+        from .. import depsection as _DS_REG
+
+        _entry_now = _PR.read_entry(root, family=_MF.FAMILY_F, manuscript_id=mid) if mid \
+            else {"checked": True, "entry": {}}
+        _first_registration = not bool((_entry_now.get("entry") or {}).get("checked"))
+        disk_text = ""
+        disk_rel = _MID_HAND.canonical_rel(mid) if mid else ""
+        if _first_registration and disk_rel:
+            try:
+                disk_text = (Path(str(root or ".")) / disk_rel).read_text(
+                    encoding="utf-8")
+            except (OSError, UnicodeDecodeError):
+                disk_text = ""
+        if _first_registration and disk_text.strip():
+            disk_prop = _DS_REG.statement_body(disk_text).strip()
+            if disk_prop and disk_prop != str(proposition or "").strip():
+                return _R.refuse(
+                    "proposition_text_changed",
+                    ("盘上那一份的 `## 命题` 与这一轮判过的那一段不同 ⇒ 受控拒："
+                     "改命题不是改证明（它要重新过形态闸、也换一份稿），"
+                     "不要用 edit 把命题换掉再登记"),
+                    refused_kind="proposition_text_changed",
+                    statement_id=stmt_id, reused=bool(row_now), promoted=False,
+                    manuscript_id=mid, manuscript_received=manuscript_received,
+                    proof_text=body, proof_attached=False,
+                    proposition_form=dict(form_reading or {}),
+                    why="盘上 `## 命题` 与判过的那一段不同",
+                    cites=cites, manuscript_path=disk_rel)
+            template_now = disk_text
+            proof_now = _DS_REG.proof_body(disk_text).strip("\n")
+            if not proof_now.strip():
+                # 盘上那一份还没有证明正文（骨架）⇒ 这一笔没有可登记的正文。
+                return _R.refuse(
+                    "proof_manuscript_empty",
+                    ("盘上那一份的 `## 证明` 还是空的（骨架）⇒ 先写证明再登记；"
+                     "这一笔没有登记，也没有送审"),
+                    refused_kind="proof_manuscript_empty",
+                    statement_id=stmt_id, reused=bool(row_now), promoted=False,
+                    manuscript_id=mid, manuscript_received=manuscript_received,
+                    proof_text="", proof_attached=False,
+                    proposition_form=dict(form_reading or {}),
+                    why="盘上 `## 证明` 为空", cites=cites, manuscript_path=disk_rel)
+        else:
+            template_now = str(manuscript_text or "")
+            proof_now = str(body or "")
         got = _PR.register_or_rewrite(
             root, family=_MF.FAMILY_F, label=label, proposition=proposition,
-            proof_text=body, dependency_rows=list(dependency_rows or []),
+            proof_text=proof_now, dependency_rows=list(dependency_rows or []),
             plan_id=plan_id, sid=sid, title=text,
             manuscript_id=mid,
-            kind=kind_now, template=str(manuscript_text or ""), gate=_gate)
+            kind=kind_now, template=template_now, gate=_gate)
         refused_kind = str(got.get("refused") or "")
         if not got.get("ok"):
             why = str(got.get("why") or "手稿登记没成")
@@ -3130,26 +3261,44 @@ class _Core:
                 return str(got)
         return ""
 
+    def _known_manuscript_id(self, *, plan: Mapping[str, Any], sid: str,
+                             product: Mapping[str, Any]) -> str:
+        """这一轮「已经有」的稿号（只读，绝不动号源）。
+
+        次序：① 产物显式给了 `manuscript_id` ⇒ 用它；② 这个子目标在 history 里已经
+        写过一份稿 ⇒ 沿用同一个稿号（改稿不换号）；③ 都没有 ⇒ 空串（这一轮是新稿；
+        号要等形态闸放行之后才发）。
+
+        ## 为什么把「发号」从这一格里拆出去（2026-11-13，统一开稿四步）
+
+        业主裁定：「写命题 → 命题形式过审 → 拿稿号 → 写稿」。改前本方法在
+        `_apply_round` 的 proof 档一开始就被调用，于是先发号、后过闸：闸判不过时号
+        已经被消耗掉（`data/counters.json` 往前走了、盘上一份稿都没有）。新的生产
+        路径用本方法 ＋ `_open_manuscript`：判过之后才向号源要号。
+        """
+        mid = str(product.get("manuscript_id") or "").strip()
+        if mid:
+            return mid
+        return self._subgoal_manuscript_id(plan=plan, sid=sid)
+
     def _resolve_manuscript_id(self, *, plan: Mapping[str, Any], sid: str,
                                product: Mapping[str, Any]) -> str:
         """这一轮该写哪一份稿：F 自己的稿号（业主 2026-11-10：不靠命题号/计划号）。
 
-        次序（一处判据，`_apply_round` 的 proof 档只调它）：
-        ① 产物显式给了 `manuscript_id`（换一份稿 / 第 N 份证明）⇒ 用它；
-        ② 这个子目标在 history 里已经写过一份稿 ⇒ 沿用同一个稿号（改稿不换号）；
+        ①② 见 :meth:`_known_manuscript_id`（产物显式给的号 / 子目标已经写过的号）；
         ③ 都没有 ⇒ 向 :func:`manuscriptids.next_manuscript_id` 要一个新号。
+
+        生产路径（`_apply_round` 的 proof 档）已改为「先问 `_known_manuscript_id`、
+        过闸之后再发号」；本方法留着给直调方与既有判据，签名与返回值逐字不变。
 
         为什么能沿用 history：那条记录是 F 自己的工作留痕（`manuscript_path` 是上一轮
         落稿的路径），不是"计划拥有稿"—— 计划号不进稿名，也不决定稿号。
         """
         from .. import manuscriptids as _MID
 
-        mid = str(product.get("manuscript_id") or "").strip()
-        if mid:
-            return mid
-        found = self._subgoal_manuscript_id(plan=plan, sid=sid)
-        if found:
-            return found
+        got = self._known_manuscript_id(plan=plan, sid=sid, product=product)
+        if got:
+            return got
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
         return _MID.next_manuscript_id(root)
 
@@ -3218,7 +3367,9 @@ class _Core:
             #
             # 依赖台账仍不在这里写：业主 2026-10-24 最终形态是"作者只写内容，登记由收方
             # 读稿产生"（F 是作者，B 是收方），写盘失败不许静默（FC-21）。
-            manuscript_id = self._resolve_manuscript_id(plan=plan, sid=sid, product=product)
+            # 2026-11-13（统一开稿四步）：先只问「这一轮已经有哪份稿」，不发号。
+            root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+            manuscript_id = self._known_manuscript_id(plan=plan, sid=sid, product=product)
             # ---- 2026-11-13（W1 真机缺陷）：命题形态闸在写盘之前（唯一生产调用点）------
             #
             # 现场（`projects/octahedron-20261113`）：`reports/f-proof-000002.md` 的
@@ -3236,6 +3387,62 @@ class _Core:
                 product=product, sg=sg, plan=plan, manuscript_id=manuscript_id)
             if _refused_round is not None:
                 return _refused_round
+            # ---- 2026-11-13（统一开稿四步）：过审之后才发号，并且只先落骨架 ----------
+            #
+            # 「写命题 → 命题形式过审 → 拿稿号 → 写稿（稿允许慢慢 edit，不必一次成稿）」。
+            # 发号在闸之后 ⇒ 判不过时号源一个字节都不动（判据 `peek_manuscript_counter`
+            # 不变）；落骨架在写正文之前 ⇒ 命题一过审就在盘上有身份，正文可以后来一次次
+            # 填（`manuscriptopen.write_section` / `fs.edit`）。
+            if not manuscript_id:
+                try:
+                    from .. import manuscriptids as _MID_OPEN
+
+                    manuscript_id = str(_MID_OPEN.next_manuscript_id(root) or "")
+                except Exception as exc:  # noqa: BLE001 —— 号发不出来要受控报，不是没号可用
+                    return self._refused_round(
+                        kind="manuscript_id_unavailable",
+                        detail=("这一族的稿号发不出来（" + type(exc).__name__ + ": "
+                                + str(exc) + "）⇒ 这一轮一个字节都没写、没有登记、"
+                                "也没有送审；修好 `data/counters.json` 再跑一轮"),
+                        problems=[f"{type(exc).__name__}: {exc}"],
+                        next_step="修好 `data/counters.json`（号源）再跑一轮",
+                        hint="号源坏了：先修计数器，再送审",
+                        manuscript_id="", intended_path="",
+                        form=dict(_form_reading or {}),
+                        plan=plan, product=product, root=root)
+            # 已拿签那一档不在开稿口判：它由写口受控拒（`manuscript_frozen`，那一段
+            # 还要读 `statements.manuscript_id` 才能说清「这是哪一条命题的稿」）。
+            # 开稿口只负责「还没有稿 / 稿还没签」的骨架。
+            _skip_open = False
+            if manuscript_id:
+                try:
+                    from .. import manuscriptfreeze as _FZ_OPEN
+
+                    _skip_open = bool(_FZ_OPEN.freeze_reading(
+                        root, self.manuscript_path(manuscript_id)).get("frozen"))
+                except Exception:  # noqa: BLE001 —— 冻结读数读不出来时照常开（写口会拦）
+                    _skip_open = False
+            _opened: dict[str, Any] = {}
+            if not _skip_open:
+                _opened = self._open_manuscript(product=product, sg=sg, plan=plan,
+                                                mid=manuscript_id,
+                                                form_reading=_form_reading)
+            if _opened and not _opened.get("ok"):
+                return self._refused_round(
+                    kind=str(_opened.get("refused")
+                             or "manuscript_open_refused"),
+                    detail=("开稿口没放行（" + str(_opened.get("refused") or "") + "）："
+                            + str(_opened.get("why") or "")
+                            + "。这一轮没有登记、也没有送审"),
+                    problems=[str(x) for x in (_opened.get("problems") or [])
+                              if str(x).strip()],
+                    next_step=str(_opened.get("next_step")
+                                  or "改好之后重跑一轮，再由你派 V 审这一份"),
+                    hint="开稿口没放行：先改命题 / 修号源",
+                    manuscript_id=str(_opened.get("manuscript_id") or manuscript_id),
+                    intended_path=str(_opened.get("path") or ""),
+                    form=dict(_opened.get("form") or {}),
+                    plan=plan, product=product, root=root)
             try:
                 manuscript = self.proof_manuscript(
                     product, sg=sg, plan=plan, manuscript_id=manuscript_id)

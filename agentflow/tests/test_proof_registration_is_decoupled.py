@@ -631,12 +631,16 @@ def test_a1_negative_control_no_manuscript_reuse_makes_it_red(tmp_path, monkeypa
 
     2026-11-10：槽位身份从"计划 + 子目标 + label"换成了 F 自己的稿号 ——
     `register_or_rewrite` 看到同一个 `manuscript_id` 就是同一份稿（改证明），看到新号
-    就是新稿（过闸登记）。把"沿用稿号"摘掉（`_resolve_manuscript_id → ""` 让
-    `proof_manuscript` 每轮发一个新号）⇒ 3 轮变成 3 次登记、闸 3 次、盘上 3 份稿。
+    就是新稿（过闸登记）。把"沿用稿号"摘掉（`_known_manuscript_id → ""`：生产路径
+    每轮都向号源要一个新号）⇒ 3 轮变成 3 次登记、闸 3 次、盘上 3 份稿。
+
+    2026-11-13（统一开稿四步）：生产路径的"找已有稿号"从 `_resolve_manuscript_id`
+    拆成了 `_known_manuscript_id`（发号挪到形态闸之后）；反真空打桩点跟着移到新
+    方法上 —— 打桩的语义（不沿用稿号）一个字没变。
     """
     from agentflow.agent_f import AgentF
 
-    monkeypatch.setattr(AgentF, "_resolve_manuscript_id",
+    monkeypatch.setattr(AgentF, "_known_manuscript_id",
                         lambda self, *, plan, sid, product: "")
     st = _ws(tmp_path)
     _pid, rounds, stub = _production_rounds(st, PROOFS[:3])

@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import pathlib
 
+from agentflow import manuscriptids as MID
 from agentflow import secretary as SEC
 from agentflow.agent_f.core import AgentF
 from agentflow.store import Store
@@ -245,7 +246,14 @@ def test_a_the_revision_note_never_reaches_the_disk(tmp_path):
     assert out.get("delivered") is False, out
     refusal = dict(out.get("refusal") or {})
     assert refusal.get("kind") == "proposition_form_refused", out
-    assert refusal.get("manuscript_path") == "reports/f-proof-000000.md", out
+    # 2026-11-13（统一开稿四步，业主裁定「命题形式过审 → 拿稿号」）：闸判不过时
+    # 号还没发 ⇒ 这一轮连「本来要落在哪」都没有具体路径可点名（改前是
+    # `reports/f-proof-000000.md`，那是先发号后过闸留下的读数）。这一格从「点一个
+    # 假地址」收成「空 + on_disk=False」，同时补一条更强的判据：号源一个字节都没动。
+    assert refusal.get("manuscript_path") == "", out
+    assert refusal.get("manuscript_id") == "", out
+    assert refusal.get("on_disk") is False, out
+    assert MID.peek_manuscript_counter(st.root) == 0, "闸判不过 ⇒ 号源不许动（改前会吃掉一号）"
     assert "一个字节都没写" in str(out.get("detail") or ""), out.get("detail")
     assert "## 命题" in str(out.get("detail") or ""), out.get("detail")
 
