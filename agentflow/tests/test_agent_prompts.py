@@ -2505,14 +2505,15 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   p281：B 由 4a58462d… → 0236ed0c…，因为 `specs/b_ingest_policy.py` 的 `INGEST_POLICY`
 #     补第十条「`## 命题` 不是定理陈述 ⇒ 让动作出受控拒，不要把这件「怎么办」写成给 D 的
 #     handoff」（受控拒 `proposition_form_refused` 带 `fix` / `next_step`）。
-#   p281：D 由 bc209de7… → b39f1871…，因为 `specs/d.py` 的派活段新增「plan 由 F 自己定、
-#     一个方向一个 F、D 可查 plan 并发建议、`attack.abandon_plan` 的放弃理由只认「不再
-#     需要」、`dispatch_fit` 只提醒不拦」。
-#   p281：F 由 8fce808f… → 12acb87b…，因为 `specs/f.py` 的形态闸三句（`## 命题` 只从
+#   p281：D 由 bc209de7… → eff9aa3f…，因为 `specs/d.py` 的派活段新增「plan 由 F 自己定、
+#     一个方向一个 F、D 可查 plan 并发建议、`attack.abandon_plan` 的放弃理由三档
+#     （`math_error` / `difficulty` / 不再需要；「需要调整」是操作不是理由）、
+#     `dispatch_fit` 只提醒不拦」。
+#   p281：F 由 8fce808f… → 3de77cc8…，因为 `specs/f.py` 的形态闸三句（`## 命题` 只从
 #     `product.proposition` 渲染）＋ `attackround.PRODUCT_SPECS["proof"]` 要求
-#     `proposition`，以及 `attack.step` 参数面那两个 description（proposition / label）
-#     与 `attack.abandon_plan` 的 returns 措辞（受控拒的形状：`refused / invalid_params` /
-#     `plan_error`）。
+#     `proposition`，`attack.step` 参数面那两个 description（proposition / label），以及
+#     X1 更正后 `attack.abandon_plan` 的说明 / 参数改成三档（`math_error` / `difficulty` /
+#     不再需要；另加 `basis` / `difficulty` / `salvaged` 证据格）。
 # A / C / E / G / H / L / M / V 八格与 p280 逐字同值。
 _FROZEN_PROMPT_VERSION = "p281"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
@@ -2767,9 +2768,9 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "32b293f6106065c6bf8f07e4e33f22400aa3f9e7cfe87565462b828a7bf26706",
     "B": "0236ed0cdb1dc4795adc6610b8565475729b28b5e1182ef286d47071ada1be1e",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
-    "D": "b39f187149492650af1cf9f7f9763a2247c75bb328b9ed7687f10a7271be1319",
+    "D": "eff9aa3ff986d6d69c9963c4197c3d410c3c913bf303aa3c465c4bee95208df5",
     "E": "063d2d72dc8a9a9ced099f15f4d2f81a86a86055ce8fcb638d00f3fbf07c7e6b",
-    "F": "12acb87b2514870822b039eba0929833c0dc59294af141e216c45b0788ca4f69",
+    "F": "3de77cc88088a4e76ceeee7bed5bf607a1e450084623d890aefaa0b878857e52",
     "G": "4f8dc27ea967fb0a5c917c6c65249227b2d27c30b390b1f95e0894c3e7a11790",
     "H": "6dda638560012a8d2842bddb413295b74d7e8e2ec4660e4335bee90fb1b9123a",
     "L": "cc1068bca4175f983fa323e9c853e70833e3eb2f1badfef247d54a420513770a",

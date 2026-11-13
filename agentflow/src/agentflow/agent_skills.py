@@ -3123,11 +3123,10 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 3. **你可以查 F 的 plan**：`attack.status` / `attack.list_plans`（计划号 / 状态 / 方向 `problem_key` /
    最近 `history_tail`）；要它放弃或调整就走既有消息面（`handoff` / `message`）——"这条不再需要了"直说；
    "这条需要调整"说清是**放弃原来那条、另设一条新的**。
-4. **放弃由 F 动手，理由只有三档**：写入口「attack.abandon_plan」（`plan_id` + `reason`）——
-   `math_error`（这条 plan 的命题有实质数学错误：点出错在哪一步、错的是什么）、`difficulty`
-   （遇到难以逾越的困难：说清为什么在合理成本内做不到，并写清这条 plan 还留下了什么可取之处）、
-   「不再需要」（plan 没毛病，只是不再是推进目标所必需的那一条）。**「需要调整」不是理由，是操作**：
-   放弃原来那条（理由写「不再需要」）再另设一条新的。别自造理由；已终态的计划不能再放弃。
+4. **放弃由 F 动手，理由三档：`math_error`（点出错误）/ `difficulty`（说清困难＋把可取之处拆成引理）/
+   `不再需要`**；「需要调整」不是理由，是"用不再需要放弃原 plan ＋ 另设一条新 plan"的组合操作。
+   写入口「attack.abandon_plan」（`plan_id` + `reason`；`math_error` 另给 `basis`，
+   `difficulty` 另给 `basis` ＋ `difficulty` ＋ `salvaged`）；别自造理由；已终态的计划不能再放弃。
    一个 F 同时推进（未 finish、未放弃）的计划最多 2 条 —— 满了还塞方向，`create_plan` 会受控拒并给提醒
    （"同时推进的plan个数已达上限2…让父派其它F攻坚"），那时候**另开一个 F** 或让它先推进已有计划。
 

@@ -6959,8 +6959,8 @@
         "attack.step"
       ],
       "key": "params",
-      "reason": "2026-11-11 真机第三轮的通道断：`attack.step` 增加**可选** `product` —— F 写好的证明 / 归约可以直接交进来（`proof` 的 `steps`、`reduction` 的 `new_subgoals` / `reason`），框架照既有的产物校验逐条核过，过了照现有路径落 `reports/f-proof-<稿号>.md`。改前这一格只有 `plan_id`（`additionalProperties=False`）⇒ F 没有把证明正文交进来的入口（那一轮 5 次 `attack.step` 0 次 proof、盘上 statements 0 / vsigns 0）。新增的只有这一个可选键：既有 `plan_id` 与 `required` / `additionalProperties` 一字未动，其余 125 件工具的契约一个字未动；不给 `product` 时行为与改前逐字相同。",
-      "date": "2026-11-11",
+      "reason": "2026-11-11 真机第三轮的通道断：`attack.step` 增加**可选** `product` —— F 写好的证明 / 归约可以直接交进来（`proof` 的 `steps`、`reduction` 的 `new_subgoals` / `reason`），框架照既有的产物校验逐条核过，过了照现有路径落 `reports/f-proof-<稿号>.md`。改前这一格只有 `plan_id`（`additionalProperties=False`）⇒ F 没有把证明正文交进来的入口（那一轮 5 次 `attack.step` 0 次 proof、盘上 statements 0 / vsigns 0）。新增的只有这一个可选键：既有 `plan_id` 与 `required` / `additionalProperties` 一字未动，其余 125 件工具的契约一个字未动；不给 `product` 时行为与改前逐字相同。 2026-11-13（p281，W1 命题字段与教法）：`product` 里新增 `proposition` 一格（`kind=proof` 的完整定理陈述，稿上 `## 命题` 逐字取它），`label` 的说明补「不是命题、不进 `## 命题`」。JSON Schema 只加一个可选属性、改两处 description，既有参数名与 required 一字未动。",
+      "date": "2026-11-13",
       "edits": [
         {
           "op": "add_key",
@@ -6977,9 +6977,13 @@
                 ],
                 "description": "这一份的档：`proof` = 逐步论证（给 `steps`）；`reduction` = 把目标归约成 1–3 条新子目标（给 `new_subgoals` 与 `reason`）。"
               },
+              "proposition": {
+                "type": "string",
+                "description": "`kind=proof` 的这一轮所证那条定理的完整陈述（前提 → 结论）：稿上 `## 命题` 就逐字取它。不是作业要求、不是「改哪一步 / 重送谁」那类流程话 —— 那些写进 `steps` 或 `label`。"
+              },
               "label": {
                 "type": "string",
-                "description": "这一份产物的一句话标签（只进台账读数；不参与稿号 / 命题号命名）。"
+                "description": "这一份产物的一句话标签（只进台账读数；**不是命题**，不进 `## 命题`；不参与稿号 / 命题号命名）。"
               },
               "steps": {
                 "type": "array",

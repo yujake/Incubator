@@ -2519,16 +2519,18 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   ③ X1（派活与 abandon）：`specs/d.py` 的派活段 —— plan 由 F 自己定、一个研究方向派
 #:      一个 F（不按 plan 个数派）；D 可以查 F 的 plan（`attack.status` /
 #:      `attack.list_plans`）并经既有消息面提建议；放弃由 F 走 `attack.abandon_plan`、
-#:      理由只认「不再需要」；派活不合适由秘书提醒（`dispatch_fit` 轴，只提醒不拦）；
-#:      改稿沿用同一稿号。
+#:      理由三档（`math_error` / `difficulty` / 「不再需要」；「需要调整」是操作不是理由）；
+#:      派活不合适由秘书提醒（`dispatch_fit` 轴，只提醒不拦）；改稿沿用同一稿号。
+#:      同日业主更正后 `attack.abandon_plan` 的说明 / 参数面改成三档（另加 `basis` /
+#:      `difficulty` / `salvaged` 证据格）—— 进 F 的动作面。
 #:   ④ secretary 的 `dispatch_fit` 题面（`DISPATCH_FIT_QUESTION` 与词表「是一个方向 /
 #:      不是一个方向」）已在 cf8520f5（R2）落好；本批只核口径，文案一个字未改。
 #: 变化格 = B / D / F（其余八格逐字未动；版本行已归一）。十一格由判据自己的
 #: `_surface_digest` 现算（`temp/_p280_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。
 #: 逐格旧值 → 新值：
 #:   B 4a58462d… → 0236ed0cdb1dc4795adc6610b8565475729b28b5e1182ef286d47071ada1be1e
-#:   D bc209de7… → b39f187149492650af1cf9f7f9763a2247c75bb328b9ed7687f10a7271be1319
-#:   F 8fce808f… → 12acb87b2514870822b039eba0929833c0dc59294af141e216c45b0788ca4f69
+#:   D bc209de7… → eff9aa3ff986d6d69c9963c4197c3d410c3c913bf303aa3c465c4bee95208df5
+#:   F 8fce808f… → 3de77cc88088a4e76ceeee7bed5bf607a1e450084623d890aefaa0b878857e52
 #: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p281）+ `_VOLATILE_FACT_SETS` 末尾追加一格
 #: （facts 键集仍 15 格、count / keys_sha256 与 p280 同值）；两份 golden 按现值重冻
 #: （agent 面 11 格 prompt / F 的 `attack.step` 参数说明 / 工具面 `attack.step.params`

@@ -322,13 +322,16 @@ def test_e_the_real_revision_note_shape_can_never_land(tmp_path):
 def test_f_the_tool_schema_declares_the_proposition_so_the_tool_path_can_carry_it():
     """f：`attack.step` 的工具 schema 声明了 `proposition`（否则工具参数门先拒）。
 
-    2026-11-13（业主裁定 A）：这一格只声明类型、故意不带 description —— 文案随
-    p281 与 `PRODUCT_SPECS` 一起写。这一条钉的是"工具入口真的收得下它"，
-    以及 `parse_handed_product` 的"未声明的键"闸与 schema 同源。
+    2026-11-13（p281，业主批准合批）：这一格在 3b7501ea 先只声明类型（让工具参数门认它），
+    p281 把 description 写全 —— 判据跟着改成「类型是 string、且说明里点明是那条定理的完整
+    陈述（前提 → 结论）」。这一条钉的是"工具入口真的收得下它"，以及
+    `parse_handed_product` 的"未声明的键"闸与 schema 同源。
     """
     props = dict(AR.HANDED_PRODUCT_SCHEMA.get("properties") or {})
     assert "proposition" in props, sorted(props)
-    assert props["proposition"] == {"type": "string"}, props["proposition"]
+    assert props["proposition"]["type"] == "string", props["proposition"]
+    assert "完整陈述（前提 → 结论）" in str(props["proposition"].get("description") or ""), \
+        props["proposition"]
     parsed = FC.parse_handed_product({
         "kind": "proof", "proposition": POSITIVE,
         "steps": [{"text": "取 a=1 的八面体。", "assumption": True}]})
