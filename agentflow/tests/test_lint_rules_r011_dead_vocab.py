@@ -76,10 +76,10 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     有了 `"prior_art": "prior_art"` —— 那是依赖小节解析的读侧别名表（把正文里的词
     映射到 `Dependency.kind`），不是产出点，而普查按字面量判读写，分不出这两件事
     ⇒ 它按 `proposition` / `lemma` 同样的口径落进栏一附。
-    现在 `reserved` 栏的非真空改由今天仍然死的那三条钉住
-    （`CONJECTURE_FORMS.existential` / `CONJECTURE_STATUSES.testing` /
-    `CONJECTURE_STATUSES.known_in_literature` —— 2026-11-13 删掉
-    `reproduction_report` / `自证` / `未决` 之后剩下的、仍然「死且已登记」的那三条），
+    现在 `reserved` 栏的非真空改由今天仍然死的那两条钉住
+    （`CONJECTURE_FORMS.existential` / `CONJECTURE_STATUSES.known_in_literature` ——
+    2026-11-13 删掉 `reproduction_report` / `自证` / `未决` 之后剩下的、仍然「死且已登记」
+    的那两条；`testing` 当晚因并行路新增产出点 `conjectureledger.py:112` 而离开死取值），
     `prior_art` 与 `proposition` 一起落栏一附，两栏都照旧不许出现 `unclaimed`，
     且每一条都必须带着登记表里那段理由打印出来 —— 这三件事一条都没放松。
     删掉的 `reproduction_report` 另有一条反向断言：R011 的任何一栏都不许再出现它。
@@ -88,8 +88,10 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     reserved = " ".join(f.message for f in got if "[栏一 reserved]" in f.message)
     registered = " ".join(f.message for f in got if "[栏一附]" in f.message)
     unclaimed = " ".join(f.message for f in got if "[栏二 unclaimed]" in f.message)
-    # 栏一 reserved 的非真空：这三条今天仍无产出点（条数写死，不是删掉断言）。
-    for name in ("testing", "existential", "known_in_literature"):
+    # 栏一 reserved 的非真空：这两条今天仍无产出点（条数写死，不是删掉断言）。
+    # 为什么不是三条：并行路当晚落的 `conjectureledger.py:112` 让 `testing` 有了产出点
+    # （那是好消息），本批按当次 census 钉在两条。
+    for name in ("existential", "known_in_literature"):
         assert name in reserved, f"{name} 不在 reserved 栏：{reserved}"
         assert name not in unclaimed, f"{name} 被挪进了 unclaimed 栏：{unclaimed}"
     # 2026-11-13 删掉的三个 C 值：R011 输出里不许留痕

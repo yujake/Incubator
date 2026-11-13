@@ -122,9 +122,11 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     ## 2026-11-13（业主裁定「清死代码」）：`reproduction_report` / `自证` / `未决` 已删
 
     三条都 0 行 / 无读点 / 无写入口 ⇒ 词表值与登记表条目一起删。`reserved` 栏的非真空
-    改由「今天仍然死的三条」钉住（`CONJECTURE_FORMS.existential`、
-    `CONJECTURE_STATUSES.testing`、`CONJECTURE_STATUSES.known_in_literature`），条数
-    写死到 3（不是删掉这条断言）。删掉的三个取值另有
+    改由「今天仍然死的两条」钉住（`CONJECTURE_FORMS.existential`、
+    `CONJECTURE_STATUSES.known_in_literature`），条数写死到 2（不是删掉这条断言）。
+    为什么不是 3：并行路当晚落的 `conjectureledger.py:112`（`return "testing"`）让
+    `testing` 从死取值里出来了 —— 那是一条真的产出点，属于好消息；本批的硬计数按
+    当次 census 钉在 2，两路合流后按同一条口径复跑再钉一次（判据形态不变）。删掉的三个取值另有
     一条反向断言：它们不许在任何栏、任何词表、任何登记里留痕（与 `E-10` 同一条纪律）。
 
     ## 2026-10-26：`DEP_KINDS.prior_art` 按同一条口径从 `reserved` 挪进 `registered_not_dead`
@@ -141,7 +143,6 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     # 条数写死到 3：删掉一条预留之后，剩下的必须一条不少地仍然在栏一里
     # （业主口径：删的是其中一档，就改「剩下的都出现」并把数量写死，不是删掉断言）。
     _still_dead = (("CONJECTURE_FORMS", "existential"),
-                   ("CONJECTURE_STATUSES", "testing"),
                    ("CONJECTURE_STATUSES", "known_in_literature"))
     for vocab, value in _still_dead:
         assert value in result["reserved"].get(vocab, []), (vocab, value, result["reserved"])
@@ -183,7 +184,7 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     # 也不许无中生有（`reserved + unclaimed == dead` 是分栏正确性的恒等式）。
     assert result["reserved_total"] + result["unclaimed_total"] == result["dead_total"], result
     # 每一条预留都必须有理由：登记表的价值全在理由上，没有理由的登记是静默豁免。
-    for vocab, value in (("CONJECTURE_STATUSES", "testing"), ("DOC_KINDS", "survey")):
+    for vocab, value in (("CONJECTURE_STATUSES", "known_in_literature"), ("DOC_KINDS", "survey")):
         why = result["reserved_reasons"].get(f"{vocab}.{value}", "")
         assert why.strip(), (vocab, value)
 
@@ -196,10 +197,10 @@ def test_unregistering_a_reserved_value_moves_it_to_unclaimed(monkeypatch) -> No
     上面那条正控在"登记表被清空"时也会绿（因为那时 `reserved` 是空字典，
     `in []` 为假……但它会被 `reserved_total` 那条抓住一部分）。所以这条负控是必需的。
 
-    对象是 `CONJECTURE_STATUSES.testing`（`reproduction_report` 已于 2026-11-13 删掉，
-    拿它当夹具会失去对象；`testing` 今天仍是「死且已登记」的那一档）。
+    对象是 `CONJECTURE_STATUSES.known_in_literature`（`reproduction_report` 已于 2026-11-13
+    删掉，拿它当夹具会失去对象；`testing` 当晚因并行路新增产出点而离开死取值，也不能用）。
     """
-    key = ("CONJECTURE_STATUSES", "testing")
+    key = ("CONJECTURE_STATUSES", "known_in_literature")
     vocab, value = key
     assert key in V.RESERVED_VALUES, "登记表里没有这一条 ⇒ 本负控失去对象"
     before = V.census(REPO)

@@ -66,7 +66,7 @@
 0–6 之间跳（那些 R009 的落点全在并行路的文件里，不在本批改动里；本批引入的唯一一条
 R009 已在收尾时清掉）。`warning` / `info` 是当次读数，判据逐行拿它们对账。
 **严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**
-（2026-11-13 复跑是 `90 / 43`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+（2026-11-13 复跑是 `88 / 43`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
 ```powershell
 cd D:\Incubator\agentflow
@@ -83,7 +83,7 @@ LIVE-READINGS:BEGIN
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
 lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 44   # 同一档的 info 栏（2026-11-13：R011 撤掉过期死取值登记 ⇒ 49→44）
-lint_rules_strict_warning = 90 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 88 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
 lint_rules_strict_info  = 43   # 同一档的 info 栏（2026-11-13：R011 清死代码 ⇒ 48→43）
 noai_paths_glob         = 49   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 46   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
