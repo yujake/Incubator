@@ -529,10 +529,19 @@ def foreign_refusal(*, rel: Any, role: Any, root: Any, edit: bool) -> dict[str, 
         }
     reading = write_allowed(rel=shape["rel"], role=who, root=root)
     if edit:
-        return None if reading.get("allowed") else {
-            "kind": str(reading.get("code") or "reserved_framework_artifact"),
-            "why": str(reading.get("why") or ""),
-        }
+        if reading.get("allowed"):
+            return None
+        code = str(reading.get("code") or "")
+        if code == NOT_ON_DISK:
+            # 不在盘上不是"权限"问题：让 `fs.edit` 自己报 `not_found`（同一句话，
+            # 不要抢它的拒信）。
+            return None
+        # `kind` 留在工具层既有的闭集里（`reserved_framework_artifact` /
+        # `manuscript_frozen` 两档）：具体是哪一条判据拒的写在 why 里 —— 既有判据按
+        # `kind` 分档，不按"码"分档。
+        kind = (_FZ.MANUSCRIPT_FROZEN if code == _FZ.MANUSCRIPT_FROZEN
+                else "reserved_framework_artifact")
+        return {"kind": kind, "why": str(reading.get("why") or "")}
     return {
         "kind": "reserved_framework_artifact",
         "why": (f"拒绝 {shape['rel']}：自家未签稿也不许整份覆盖 / 删除 / 换名（"
