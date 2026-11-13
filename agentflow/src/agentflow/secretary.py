@@ -427,6 +427,26 @@ JUDGE_UNCHECKED = "没查成"
 #: 定义必须早于 `JUDGE_VERDICTS`（那张表在模块加载期就取它）。
 PROOF_KIND_VERDICTS: tuple[str, ...] = ("same", "different")
 
+#: 「这一条派给 F 的活，是不是**一个研究方向**」那一轴的词表（两态、语义）。
+#:
+#: 业主 2026-11-13 的裁定（本批 R1/R2）：「plan由F自己决定，所以D不可能做出按plan个数派F，
+#: 于是D只能按研究方向开多个F而非把一堆方向委托给一个F」——D 的秘书要审这一件事，
+#: **不合适时给提醒**（不是拒收）。两档：
+#:   `是一个方向`   —— 这一条交给 F 的是一件事（要弄清什么、可试哪条路），一个 F 接得住；
+#:   `不是一个方向` —— 一条派活里捆了多个互不相干的研究方向（该按方向拆成多个 F），
+#:                    或者它其实是一张"计划列表 / 进度督办"（plan 由 F 自己决定，
+#:                    派活不该点名它们）。
+#: 判不了 ⇒ `checked=False`（不设第三档：第三档会被读成一个结论词）。
+#:
+#: 为什么不用「合适 / 不合适」：`_judge_system` 的泄漏判据是**子串**判的
+#: （`test_the_head_is_the_one_of_that_kind_not_a_placeholder`：别的轴的词不许整张混进
+#: 这一类的题面），而「合适」是「更合适」的子串（派活轴 rearrange 那一问里就有
+#: "换一个收件方更合适"）⇒ 一加就会把那一问判红。这两个词是这一问自己的说法，
+#: 不与任何别的轴共用字串。
+DISPATCH_FIT_OK = "是一个方向"
+DISPATCH_FIT_UNSUITABLE = "不是一个方向"
+DISPATCH_FIT_VERDICTS: tuple[str, ...] = (DISPATCH_FIT_OK, DISPATCH_FIT_UNSUITABLE)
+
 JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "duplicate_retry": DECISIONS,
     "tool_name": DECISIONS,
@@ -441,6 +461,9 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     # 这一份证明与在册各路径是不是同一套证法（二态、语义：对比证明方法，不做任何机械闸）。
     # 不加第三档：判不了走 `checked=False`（fail-closed，调用方不收录）。
     "proof_kind": PROOF_KIND_VERDICTS,
+    # 这一条 D 派给 F 的活是不是**一个研究方向**（二态：合适 / 不合适）。
+    # 独立一张表：它不复用派活轴的 `DECISIONS`（"建议重排"是处置，不是"合不合适"）。
+    "dispatch_fit": DISPATCH_FIT_VERDICTS,
 }
 
 #: 判断"没查成"时，台账那一行的 `decision` 该写什么（按类别）。
@@ -452,6 +475,7 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
 _JUDGE_UNDECIDED: dict[str, str] = {
     "v_reply_defect": JUDGE_UNCHECKED, "sign_issuance": JUDGE_UNCHECKED,
     "statement_aesthetic": JUDGE_UNCHECKED, "proof_kind": JUDGE_UNCHECKED,
+    "dispatch_fit": JUDGE_UNCHECKED,
 }
 
 
@@ -3483,9 +3507,16 @@ class Secretary:
     #: 两处各写一份的话，"加了一类判断却忘了给它词表"会静默落进 `DECISIONS` 的校验里。
     JUDGE_KINDS = tuple(JUDGE_VERDICTS)
 
-    def judge(self, kind: str, context: Mapping[str, Any], *, task_id: str = "",
-              note: str = "") -> dict[str, Any]:
-        """判断类：用本智能体自己的缝做一次模型调用，把结论落台账。
+    def _judge_core(self, kind: str, context: Mapping[str, Any], *, task_id: str = "",
+                    note: str = "") -> dict[str, Any]:
+        """判断类的内核：用本智能体自己的缝做一次模型调用，**不写任何台账**。
+
+        ## 为什么把"判"与"记"拆开（业主 2026-11-13 裁定 Q5）
+        有的判断只该落**一本轴台账**（`judge_dispatch_fit` → `out/secretary/dispatch_fit.jsonl`），
+        不该再往角色台账（`out/secretary/<role>.jsonl`）里抄一行 —— 双写就是"同一件事两个
+        落点"，读的人分不清哪一本算数。拆法只有一种：判据、词表校验、三态全在本方法
+        （一处实现），谁记账由调用方决定（:meth:`judge` 记角色台账；`judge_dispatch_fit`
+        记轴台账）。**判据不允许复制第二份**。
 
         `note` 是这一次调用的读数目（缺省 `secretary:<kind>`）：同一类判定有两问
         （挑词 / 认定）时，读数要分得开哪一问花的那一笔钱。判据本身仍按 `kind`。
@@ -3518,10 +3549,14 @@ class Secretary:
             why = "没有装配模型缝（本智能体自己的 llmseam）⇒ 这一格没查成"
             if str(self.model_source or ""):
                 why = f"{why}（装配读数：{self.model_source}）"
-            return {"checked": False, "reason": why,
+            # `_no_ledger`：这一档**不落角色台账**（与改前逐字相同 —— 没缝是装配
+            # 事实，`model_source` 已经记了；把这一趟的材料再 dump 一遍既没信息量，
+            # 材料里带环时还会抛 `Circular reference detected`，见
+            # `tests/test_secretary_noise.py::test_assess_delegation_survives_noise`）。
+            return {"checked": False, "reason": why, "_no_ledger": True,
                     "cost": {"ledger": "", "reason": "没发调用（没有缝）"}}
         if not self.enable_model:
-            return {"checked": False,
+            return {"checked": False, "_no_ledger": True,
                     "reason": "enable_model=False（判断类的模型调用被显式关掉）⇒ 这一格没查成",
                     "cost": {"ledger": "", "reason": "没发调用（开关关着）"}}
         t0 = time.monotonic()
@@ -3545,18 +3580,18 @@ class Secretary:
                                             task_id=task_id,
                                             note=note or f"secretary:{kind}")
         except Exception as exc:  # noqa: BLE001 - fail-open：超时/出错 ⇒ 没查成 + 留痕
-            return self._record_judge(kind, context, {
+            return {
                 "checked": False, "reason": f"调用失败：{type(exc).__name__}: {exc}",
-                "cost": self.last_judge_cost(kind)})
+                "cost": self.last_judge_cost(kind)}
         finally:
             self._last_judge_elapsed = round(time.monotonic() - t0, 3)
         cost = self.last_judge_cost(kind)
         if not getattr(call, "ok", False) or data is None:
-            return self._record_judge(kind, context, {
+            return {
                 "checked": False,
                 "reason": f"没查成（{getattr(call, 'problem', '') or 'no_reply'}）："
                           f"{str(getattr(call, 'detail', '') or '')[:200]}",
-                "cost": cost})
+                "cost": cost}
         raw_decision = data.get("decision")
         decision = str(raw_decision or "").strip()
         allowed = JUDGE_VERDICTS[kind]
@@ -3579,8 +3614,7 @@ class Secretary:
                        f"{list(allowed)} ⇒ 这一格没查成")
             else:
                 why = f"模型给的结论 {decision!r} 不在 {kind} 的词表 {list(allowed)} 里 ⇒ 不采信"
-            return self._record_judge(kind, context, {"checked": False, "reason": why,
-                                                      "cost": cost})
+            return {"checked": False, "reason": why, "cost": cost}
         level = _nontriviality_level(decision) if kind == "statement_aesthetic" else None
         if level is not None:
             # 容忍模型把档位给成 2 / "2"（老形状）：台账与读侧一律写 "T2"，不写数字串。
@@ -3635,7 +3669,73 @@ class Secretary:
                 out["same_path"] = int(data.get("same_path") or 0)
             except (TypeError, ValueError):
                 out["same_path"] = 0
-        return self._record_judge(kind, context, out)
+        return out
+
+    def judge(self, kind: str, context: Mapping[str, Any], *, task_id: str = "",
+              note: str = "") -> dict[str, Any]:
+        """判断类：一次模型调用（判据与三态全在 :meth:`_judge_core`）＋ 落**角色台账**。
+
+        这一层只做"记账"这一件事：`_record_judge` 把结果写成 `out/secretary/<role>.jsonl`
+        的一行（花销归因与三态都在那里完整）。**只落轴台账**的那几问
+        （:meth:`judge_dispatch_fit`）直接调 `_judge_core`、不经过这里 —— 判据只有
+        一份，双写（角色台账 + 轴台账）是业主 2026-11-13 裁定 Q5 明确不要的形态。
+        """
+        result = self._judge_core(kind, context, task_id=task_id, note=note)
+        if result.pop("_no_ledger", False):
+            # 「没缝 / 开关关着」不落角色台账 —— 这一档与改前逐字相同（不是判定，
+            # 是装配事实；`model_source` 已经记了它）。见 `_judge_core` 那一支。
+            return result
+        return self._record_judge(kind, context, result)
+    def judge_dispatch_fit(self, *, task: str, to: str = "F", action: str = "",
+                           params: Mapping[str, Any] | None = None,
+                           task_id: str = "") -> dict[str, Any]:
+        """D 的秘书专属：这一条派给 F 的活是不是**一个研究方向**（业主 2026-11-13）。
+
+        业主原话（逐字）：
+
+        > 「plan由F自己决定，所以D不可能做出按plan个数派F，于是D只能按研究方向开多个F
+        >   而非把一堆方向委托给一个F（这里D秘书要审D的派活，不合适需要给出提醒）。」
+
+        ## 它判什么、不判什么
+        - 判：**方向个数** —— 这一条派活交给 F 的是一件事，还是几件互不相干的事
+          （或一张"计划列表 / 进度督办"，而 plan 由 F 自己决定）。
+        - 不判：难不难 / 值不值得做 / F 能不能证出来（研究判断），也不判 F 该开几条计划。
+        - 不用词面线索代替判断：一次模型调用，没有关键词表、没有字数阈值。
+
+        ## 三态与"只提醒不拦"
+        | 结局 | 返回 |
+        |---|---|
+        | 判了 | `{"checked": True, "verdict": "是一个方向"|"不是一个方向", "why", "basis", "cost"}` |
+        | 判不了 | `{"checked": False, "verdict": "", "why": …}`（没缝 / 关着 / 超时 / 坏 JSON / 词表外） |
+        调用方（:meth:`assess_delegation`）只在 `checked=True` 且
+        `verdict==DISPATCH_FIT_UNSUITABLE` 时把结论并进建议与提醒正文 ——
+        **不改派活本身**（业主：「不合适需要给出提醒」，不是拒收）。
+
+        ## 台账（Q5：只落一本）
+        走 :meth:`_judge_core`（判据与三态只有那一处），结果落
+        `out/secretary/dispatch_fit.jsonl`（读侧 :func:`dispatch_fit_rows`），
+        **不写角色台账** —— 双写就是同一件事两个落点。
+        """
+        material = {"to": str(to or ""), "action": str(action or ""),
+                    "task": str(task or "")[:JUDGE_MATERIAL_CAP],
+                    "params": dict(params or {})}
+        result = self._judge_core("dispatch_fit", material, task_id=task_id,
+                                  note="secretary:dispatch_fit")
+        checked = bool(result.get("checked"))
+        verdict = str(result.get("decision") or "") if checked else ""
+        why = str(result.get("reason") or "")
+        root = str(getattr(self.store, "root", "") or self.root or "")
+        row = append_dispatch_fit(
+            root, to=to, task=task, checked=checked, verdict=verdict, why=why,
+            basis=[str(x) for x in (result.get("basis") or [])],
+            # 没查成时台账那一栏写 `没查成`（不是"合适"）——三态纪律。
+            decision=str(result.get("decision") or _JUDGE_UNDECIDED["dispatch_fit"]),
+            cost_ledger=str((result.get("cost") or {}).get("ledger") or ""),
+            role=str(self.role), task_id=str(task_id or self.task_id or ""))
+        return {"checked": checked, "verdict": verdict, "why": why,
+                "decision": str(result.get("decision") or ""),
+                "basis": [str(x) for x in (result.get("basis") or [])],
+                "cost": dict(result.get("cost") or {}), "at": str(row.get("at") or "")}
 
     def _record_judge(self, kind: str, context: Mapping[str, Any],
                       result: dict[str, Any]) -> dict[str, Any]:
@@ -5928,7 +6028,8 @@ class Secretary:
 
     def assess_delegation(self, *, to: str, action: str, params: Mapping[str, Any],
                           input_key: str = "", duplicates: Sequence[Mapping[str, Any]] = (),
-                          novel: bool = False, reuse: str = "", base: str = "") -> dict[str, Any]:
+                          novel: bool = False, reuse: str = "", base: str = "",
+                          task: str = "") -> dict[str, Any]:
         """职责 2：委派评估（"收件方真做得到吗、该不该派"）。
 
         结论 ∈ :data:`DECISIONS` 的四档（`draft/55` §2 的 B 类）+ 理由 + 依据。不擅自改派（改派权在 M）：它只给
@@ -5997,6 +6098,25 @@ class Secretary:
                 if judged.get("reason"):
                     reason = f"{reason}；判断：{judged['reason']}"
                 basis = list(basis) + list(judged.get("basis") or [])
+        # ---- 派活审阅（业主 2026-11-13 R2）：D 派 F 的活是不是**一个研究方向** ------
+        #
+        # 与上面那条判断分两问、两本账：
+        # - 上面问"这一件该怎么派"（`duplicate_retry` / `rearrange`，落角色台账）；
+        # - 这一问"这条派活是不是把一堆方向塞给了一个 F"（`dispatch_fit`，落轴台账
+        #   `out/secretary/dispatch_fit.jsonl`）—— 业主：「D秘书要审D的派活，不合适需要
+        #   给出提醒」。**只提醒不拦**：结论并进 `reason`（本体读得到），派活照发。
+        # 只在 D→F 且拿到了派活原文时问：`conductor._note_delegation_quality` 那条路
+        # 没有原文（`task=""`），在那里问只会拿空材料去问一次模型（白花钱，还可能编一个
+        # "不合适"出来）。
+        if str(self.role) == "D" and str(to) == "F" and str(task or "").strip():
+            fit = self.judge_dispatch_fit(task=task, to=str(to), action=str(action or ""),
+                                          params=dict(params or {}))
+            if fit.get("checked") and fit.get("verdict") == DISPATCH_FIT_UNSUITABLE:
+                # 处置沿用派活轴既有的词（"建议重排" = 按研究方向拆成多个 F），
+                # 提醒正文由模型给（它写清了该怎么拆）。**不改派活**：这只是建议。
+                decision = "建议重排"
+                reason = f"{reason}；派活审阅：{fit.get('why')}"
+                basis = list(basis) + list(fit.get("basis") or [])
         rec = self.note_decision(
             duty=2, kind=KIND_PROPOSAL, decision=decision, reason=reason, basis=basis,
             target={"to": to, "action": action, "input_key": input_key},
@@ -13972,6 +14092,65 @@ STATEMENT_SAME_LEDGER = "statement_same.jsonl"
 #: 这一闸的受控码（模型读得到的那一个）。
 PROPOSITION_FORM_REFUSED = "proposition_form_refused"
 
+#: 派活审阅（"这一条派给 F 的活是不是一个研究方向"）的旁支台账（业主 2026-11-13 裁定 Q5）。
+#:
+#: 为什么是**一本轴台账**而不是再往角色台账抄一行：这一问的结论要能被"这一趟派了几个 F、
+#: 各自方向"那条读数复用，也要能在派活之后逐条复核"秘书当时为什么说不合适"。Q5 的裁定是
+#: 只落这一本 —— 双写会让"同一件事两个落点"，读的人分不清哪一本算数。
+DISPATCH_FIT_LEDGER = "dispatch_fit.jsonl"
+
+
+def dispatch_fit_path(root: str | Path) -> Path:
+    """派活审阅台账的路径：`out/secretary/dispatch_fit.jsonl`。"""
+    return Path(root).joinpath(*SECRETARY_DIR, DISPATCH_FIT_LEDGER)
+
+
+def append_dispatch_fit(root: str | Path, *, to: str, task: str, checked: bool,
+                        verdict: str = "", why: str = "", basis: Sequence[str] = (),
+                        decision: str = "", cost_ledger: str = "", role: str = "",
+                        task_id: str = "") -> dict[str, Any]:
+    """追加一行派活审阅读数（append-only；显式 LF，与 `append_proposition_form` 同一口径）。
+
+    **每一次判定都记**（含 `checked=False` 的"没查成"）：只记"不合适"的那几行，会让
+    "秘书这一趟到底审过没有"在盘上消失 —— 那正是这条提醒要防的"静默放行"。
+    `verdict` 只在 `checked=True` 时有值（`是一个方向` / `不是一个方向`）；
+    `decision` 是台账那一栏
+    的结论词（没查成时是 `没查成`，不是"合适"）。
+    """
+    path = dispatch_fit_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {"at": _now_iso(),
+           "to": str(to or ""), "task": str(task or ""),
+           "task_chars": len(str(task or "")),
+           "checked": bool(checked), "verdict": str(verdict or ""),
+           "why": str(why or ""), "basis": [str(x) for x in (basis or ())],
+           "decision": str(decision or ""), "cost_ledger": str(cost_ledger or ""),
+           "role": str(role or ""), "task_id": str(task_id or "")}
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        # `default=str` 与全仓同一口径（`tests/test_json_dumps_has_a_default.py`）。
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n")
+    return row
+
+
+def dispatch_fit_rows(root: str | Path) -> list[dict[str, Any]]:
+    """这本台账的全部行（读不出来 ⇒ 空列表，并把原因留给调用方那条三态读数去报）。"""
+    path = dispatch_fit_path(root)
+    if not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            row = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, Mapping):
+            out.append(dict(row))
+    return out
+
+
 
 def proposition_form_path(root: str | Path) -> Path:
     """命题形态判定台账的路径：`out/secretary/proposition_form.jsonl`。"""
@@ -14367,6 +14546,33 @@ def _judge_system(kind: str) -> str:
             "不参与判定的东西：定理叫什么名字、证明写得多长、用了哪些字词、文风、"
             "材料里机器算出的相似度读数 —— 那些都不是『证明方法』本身。"
             "reason 一句话；basis 写清你凭哪几步这么判（引证明里的步骤，不要引相似度数字）。"
+        )
+    elif kind == "dispatch_fit":
+        # 业主 2026-11-13（本批 R1/R2 的裁定，逐字）：「plan由F自己决定，所以D不可能做出
+        # 按plan个数派F，于是D只能按研究方向开多个F而非把一堆方向委托给一个F」。
+        # 这一问只判**方向个数**这一件事：D 交给 F 的是"一件事"，还是"几件事捆在一起"。
+        # 不判难不难 / 值不值得做（那是 D 与 F 的研究判断），也不判 F 该开几条计划
+        # （plan 由 F 自己决定 —— 这一问恰恰是"派活别替 F 排计划"）。
+        ask = (
+            "问题：下面这一条是 D 派给 F 的活（材料里的 `task` 是派活原文，"
+            "`action` / `params` 是随附的调用面，可能为空）。它是不是**一个研究方向**？\n"
+            "判据只有一条：这条派活交给 F 的是**一件事**（要弄清什么、可以试哪条路），"
+            "而不是**几件互不相干的事**。\n"
+            "几件事（判「不是一个方向」）：\n"
+            "- 一条派活里捆了几个不同的研究方向，要一个 F 同时攻几条线；\n"
+            "- 它其实是一张**计划列表 / 进度督办**（点名多条计划、多个要证的命题、要求逐个推进），"
+            "而 plan 由 F 自己决定 —— D 派活该按研究方向派，不该按计划个数派；\n"
+            "- 它把「汇报 / 盯进度」写成了一次攻坚方向（那不是方向，是流程要求）。\n"
+            "一件事（判「是一个方向」）：只写方向、约束、可试的路，没有把几个方向捆在一起，"
+            "也没有替 F 决定它要开几条计划、先推哪一条。\n"
+            "不参与判定的东西：这条方向难不难、值不值得做、F 能不能证出来 —— 那些是研究判断，"
+            "不是这一问。\n"
+            "读不清（原文被截断、只有编号、没有可读的方向文字）时不要猜：把 decision 留成空串，"
+            "框架把它当「没判成」处理（这一条只提醒、不拦派活）。\n"
+            "decision 取「是一个方向」/「不是一个方向」之一；reason 一句话；"
+            "basis 引派活原文里的字句。"
+            "判「不是一个方向」时 reason 必须写清**该拆成几件事、每件事各派一个 F 的话该怎么写**"
+            "（这是给 D 的提醒，不是拒收）。"
         )
     elif kind == "v_reply_defect":
         # 题面只给两档（「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」），

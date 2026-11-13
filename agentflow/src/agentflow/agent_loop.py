@@ -13001,6 +13001,10 @@ class AgentLoop:
                     # ⇒ 面适配那一维判得最准；新起一个时槽位还没分（判得了
                     # "越界"与"父视角有、面内没有"两档）。
                     reuse=str(payload.get("reuse") or payload.get("name") or ""),
+                    # 派活原文（业主 2026-11-13 R2）：D 的秘书要审"这一条是不是一个
+                    # 研究方向"（`dispatch_fit`），而它判的就是这一段话。不传就等于
+                    # 让秘书拿空材料去判 —— 那一问会退化成"没查成"，提醒也就没了。
+                    task=str(payload.get("task") or ""),
                     base=base)
             except Exception as exc:  # noqa: BLE001 - 同上
                 out["assessment_fail_open"] = f"{type(exc).__name__}: {exc}"
