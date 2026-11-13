@@ -151,22 +151,25 @@ def _check_write_levels_are_registered(
     两个形参只为让判据能被单独喂表（负控与单元测试用）：真正跑的那一次
     在模块末尾用默认值调用，读的就是真表。形参不许成为第二条产生路径。
     """
-    stray = sorted(set(write_levels) - set(side_effects))
+    effects = set(side_effects)
+    writes = set(write_levels)
+    nonwrites = set(non_write)
+    stray = sorted(writes - effects)
     assert not stray, (
         f"SIDE_EFFECTS_WRITE 里的 {stray} 不在 SIDE_EFFECTS{tuple(side_effects)} 里 —— "
         "写等级登记表引用了不存在的等级，`for_role` 的剥离判据会拿一个词表外的字符串去比"
     )
-    unclaimed_non_write = sorted(set(non_write) - set(side_effects))
+    unclaimed_non_write = sorted(nonwrites - effects)
     assert not unclaimed_non_write, (
         f"_NON_WRITE_EFFECTS 里的 {unclaimed_non_write} 不在 SIDE_EFFECTS{tuple(side_effects)} 里 —— "
         "非写等级名单同样必须取自第一根轴的词表"
     )
-    both = sorted(set(write_levels) & set(non_write))
+    both = sorted(writes & nonwrites)
     assert not both, (
         f"{both} 同时被登记成写等级与非写等级 —— 只读角色的剥离判据读的是写等级这一栏，"
         "同一个等级落在两栏里等于这条判据今天算不算数取决于读取顺序"
     )
-    unregistered = sorted(set(side_effects) - set(write_levels) - set(non_write))
+    unregistered = sorted(effects - writes - nonwrites)
     assert not unregistered, (
         f"SIDE_EFFECTS 里的 {unregistered} 既不在 SIDE_EFFECTS_WRITE{tuple(write_levels)} 里、"
         f"也不在 _NON_WRITE_EFFECTS{tuple(non_write)} 里 —— 新加的等级必须显式落进一栏。"
@@ -542,15 +545,16 @@ def universal_tool_violations(
                     "要么把它从通用集合里撤掉"
                 )
             else:
-                undeclared = sorted(set(actual) - declared)
+                actual_set = set(actual)
+                undeclared = sorted(actual_set - declared)
                 if undeclared:
                     reasons.append(
                         f"实现写了登记之外的表 {undeclared}（登记的是 {sorted(declared)}）"
                     )
-                hits = sorted(set(actual) & know)
+                hits = sorted(actual_set & know)
                 if hits:
                     reasons.append(f"实现写了知识表 {hits}")
-                outside = sorted(set(actual) - allow)
+                outside = sorted(actual_set - allow)
                 if outside:
                     reasons.append(f"实现写了通信/簿记表以外的表 {outside}")
         if reasons:
@@ -616,12 +620,13 @@ def _check_universal_tools_are_registered(
             f"UNIVERSAL_TOOLS[{name!r}] 没有理由串 —— 登记而不写理由，"
             "与没登记在证据上是一回事（写不出理由就该改代码）"
         )
-        stray = sorted(set(entry.tables) - allow)
+        declared = set(entry.tables)
+        stray = sorted(declared - allow)
         assert not stray, (
             f"UNIVERSAL_TOOLS[{name!r}] 登记自己会写 {stray}，而通用工具只许写通信/簿记表 "
             f"{sorted(allow)} —— 写别的表说明它是某个角色的活，不是通用能力"
         )
-        hits = sorted(set(entry.tables) & know)
+        hits = sorted(declared & know)
         assert not hits, (
             f"UNIVERSAL_TOOLS[{name!r}] 登记自己会写知识表 {hits} ⇒ 它会把"
             "『只读角色拿得到』变成『只读角色能改知识表』的后门"
@@ -665,6 +670,7 @@ class RegistryBuild:
         return not self.skipped
 
     def summary(self) -> dict:
+        budget = getattr(self.registry, "default_budget", None)
         return {
             "tools": self.registry.names(),
             "count": len(self.registry),
@@ -678,14 +684,14 @@ class RegistryBuild:
             # `None` = 没启用；一个对象 = 已启用（其 `threshold_chars` 等值可见）。
             "context_budget": (
                 None
-                if getattr(self.registry, "default_budget", None) is None
+                if budget is None
                 else {
                     "enabled": True,
-                    "threshold_chars": getattr(self.registry.default_budget, "threshold_chars", None),
-                    "head_chars": getattr(self.registry.default_budget, "head_chars", None),
-                    "tail_chars": getattr(self.registry.default_budget, "tail_chars", None),
-                    "max_inline_bytes": getattr(self.registry.default_budget, "max_inline_bytes", None),
-                    "spill_dir": getattr(self.registry.default_budget, "spill_dir", None),
+                    "threshold_chars": getattr(budget, "threshold_chars", None),
+                    "head_chars": getattr(budget, "head_chars", None),
+                    "tail_chars": getattr(budget, "tail_chars", None),
+                    "max_inline_bytes": getattr(budget, "max_inline_bytes", None),
+                    "spill_dir": getattr(budget, "spill_dir", None),
                 }
             ),
         }
@@ -893,7 +899,7 @@ def build_registry(
     # 严格档直接抛。「不改」成无条件抛：`build_registry` 允许部分模块缺席
     # （那是它的既定契约），在这里无条件抛会把"某个并行开发的模块还没落地"
     # 升级成"整个工具层不可用"。
-    params_checked = sum(1 for _ in reg._specs.values())
+    params_checked = len(reg)
     stale_seams = stale_tool_param_seams(reg._specs)
     if stale_seams:
         msg = (
