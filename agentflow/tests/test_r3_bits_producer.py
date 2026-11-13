@@ -23,7 +23,8 @@ from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.extract import extract_text
 
-from conftest import add_literature, seed_statement_row, write_library_file
+from conftest import (add_literature, b_form_gate_ok, seed_statement_row,
+                      write_library_file)
 
 CREATED = "2026-01-01T00:00:00+08:00"
 
@@ -31,7 +32,8 @@ CREATED = "2026-01-01T00:00:00+08:00"
 def _agent(store) -> AgentB:
     # D1（2026-10-22 第二版）：写侧会把那一篇重新打开、在全文里定位引文 ——
     # 所以这一组的 B 给真的 `extract_text`（改前给 None，比对那一步根本不会跑）。
-    return AgentB(store, extractor=None, extract_text=extract_text, config={})
+    return b_form_gate_ok(AgentB(
+        store, extractor=None, extract_text=extract_text, config={}))
 
 
 def _lit(store, lid: str = "0000") -> str:

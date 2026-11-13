@@ -37,7 +37,7 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from conftest import add_literature, sync_counters, TS  # noqa: E402
+from conftest import add_literature, b_form_gate_ok, sync_counters, TS  # noqa: E402
 
 from agentflow import closing  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
@@ -62,7 +62,8 @@ OWN = {
 # ------------------------------------------------------------------ 小工具
 
 def _agent(store) -> AgentB:
-    return AgentB(store, extractor=None, extract_text=None, config={})
+    return b_form_gate_ok(AgentB(
+        store, extractor=None, extract_text=None, config={}))
 
 
 def _row(store, stmt_id: str = "") -> dict:
@@ -364,7 +365,8 @@ def test_resubmitting_the_same_proof_is_not_a_same_kind_refusal(
 
     pos = Store(str(tmp_path / "model-same-ws"))
     pos.init()
-    pos_b = AgentB(pos, extractor=None, extract_text=None, config={})
+    pos_b = b_form_gate_ok(AgentB(
+        pos, extractor=None, extract_text=None, config={}))
     pos_first = pos_b.register_statement(**own_a, proof_text=P1)
     assert pos_first["ok"] is True, pos_first
     pos_sid = str(pos_first.get("stmt_id") or "")

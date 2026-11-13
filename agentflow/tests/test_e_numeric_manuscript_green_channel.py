@@ -206,12 +206,19 @@ def test_c_b_collects_the_e_num_proposition_without_a_v_signature(tmp_path):
         ledger.rglob("*.jsonl") if ledger.is_dir() else [])
 
 
-def test_c2_the_plain_numeric_proposition_is_refused_when_the_form_is_bad(tmp_path):
-    """c 的边界：手稿里的命题不过形态闸 ⇒ 受控拒，一行都不落。"""
+def test_c2_the_plain_numeric_proposition_is_released_without_a_form_judgement(
+        tmp_path):
+    """c 的边界（2026-11-13 裁决改口径）：E 的普通数值档在 B 侧放行，不再判形态。
+
+    改前这一条判的是"手稿里的命题不过形态闸 ⇒ 受控拒"。业主 2026-11-13：
+    「E 和 F 手稿侧录入放行」—— 这一档的命题逐字取自 E 手稿的 `## 命题`，
+    产出侧负责；B 侧再判一次既白花钱、又把判据放到错误的持有者手里。
+    于是这里反过来钉：一条「形状判不过」的命题不再挡住收编，且
+    B 一次模型调用都不发、形态台账零新增 —— 读数里写明"由产出侧闸负责，B 侧放行"。
+    """
     store = _store(tmp_path)
     out = _run_numeric(store)
-    # 这一笔没有预置缓存（E 的普通数值路不过形态闸）⇒ B 的判定就是那一问本身：
-    # 秘书回"不是命题" ⇒ 受控拒。
+    calls: list[str] = []
 
     class _BadSeam:
         class _Call:
@@ -224,6 +231,7 @@ def test_c2_the_plain_numeric_proposition_is_refused_when_the_form_is_bad(tmp_pa
             prompt_sha256 = "0" * 64
 
         def ask_json(self, prompt, *, system="", task_id="", note=""):
+            calls.append(str(note or ""))
             return ({"well_formed": False, "conditions": "", "conclusion": "",
                      "problems": ["这是流程要求，不是数学命题"],
                      "decision": "不是命题"}, self._Call())
@@ -236,11 +244,15 @@ def test_c2_the_plain_numeric_proposition_is_refused_when_the_form_is_bad(tmp_pa
         proof_text="", evidence_kind="cross_check",
         proof_manuscript=str(out["numeric_manuscript"]),
         quote_verified=False, quote_reason="own_result：E 的实验读数")
-    assert got.get("ok") is False, got
-    assert got.get("refused") == "proposition_form_refused", got
-    assert _rows(store, "statements") == [], _rows(store, "statements")
-    rows = SEC.proposition_form_rows(store.root)
-    assert rows and rows[-1]["role"] == "B" and rows[-1]["well_formed"] is False, rows
+    assert got.get("ok") is True, got
+    rows = _rows(store, "statements")
+    assert len(rows) == 1, rows
+    channel = dict(got.get("numeric_channel") or {})
+    form = dict(channel.get("proposition_form") or {})
+    assert form.get("released") is True and form.get("family") == "e-num", form
+    assert form.get("model_calls") == 0, form
+    assert not [c for c in calls if c.endswith("secretary:proposition_form")], calls
+    assert SEC.proposition_form_rows(store.root) == [], SEC.proposition_form_rows(store.root)
 
 
 # ================================================================== d 穷举档仍要 V

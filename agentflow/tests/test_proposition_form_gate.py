@@ -24,7 +24,7 @@
 | F 登记新命题（手稿登记：`proofregistry.register_or_rewrite` 的 `registered` 那一档） | 装 | 「就是F侧登记新命题F秘书闸拦的那块」 |
 | 已有命题的证明重写 | 不装 | 「已经在登记里的命题重写证明时不再过这一步 —— 改证明不需要重新登记」 |
 | `D.register_conjecture` | 不装 | 「D侧给的猜想只是参考」 |
-| `B.register_statement` | 不装 | 「B侧收录不拦」（那条路还承载文献侧定理的收录） |
+| `B.register_statement`（2026-11-13 起：引文侧新命题那一档） | 装 | 业主 2026-11-13 改裁：「B 侧只对 B 自己登记的命题审注册名（如来自引文的内容），E 和 F 手稿侧录入放行」——闸在 B 登记引文侧命题那一刻、写那份 b-稿之前（判据见 `tests/test_b_citation_registration_lands_a_manuscript.py` 与 `tests/test_b_proposition_form_refusal_says_the_fix.py`）；改前这条写的是「B侧收录不拦」（2026-11-07 口径，已作废） |
 
 ## 两根轴必须分开（这是最容易做错的一格）
 
@@ -348,7 +348,12 @@ def test_f_removing_the_gate_makes_a_red(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- c/d 两处不受影响
 
 def test_c_b_collects_a_literature_theorem_without_this_gate(tmp_path):
-    """c：B 自己收录文献侧定理（不经 F）⇒ 这条路一个字节都没被动。"""
+    """c：秘书的写口（`Secretary.record_statement`）不经过这道闸。
+
+    2026-11-13 之后 B 的动作入口（`AgentB.register_statement` 的引文侧）会过形态闸，
+    但判据在动作层、不在秘书的写口 —— 所以"直接调秘书写一条命题"这条路一个字都没被动。
+    动作层那一道闸由 `tests/test_b_citation_registration_lands_a_manuscript.py` 钉着。
+    """
     st = _ws(tmp_path)
     sec = SEC.Secretary("B", root=st.root, store=st)
     got = sec.record_statement({

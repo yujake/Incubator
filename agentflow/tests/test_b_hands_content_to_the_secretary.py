@@ -23,7 +23,8 @@ from __future__ import annotations
 
 import importlib
 
-from conftest import TS, add_literature, sign_for_the_gate, sync_counters
+from conftest import (TS, add_literature, b_form_gate_ok, sign_for_the_gate,
+                      sync_counters)
 from agentflow import depsection as DS
 from agentflow import evidencebits as EB
 from agentflow import schema as S
@@ -263,7 +264,9 @@ def test_b_register_statement_writes_through_the_secretary(store):
     from agentflow.agent_b import AgentB
 
     add_literature(store, S.format_id(0))
-    b = AgentB(store, extractor=None, extract_text=None)
+    # 2026-11-13（甲）：引文侧登记会问一次形态；本文件量的是「写口经秘书」，
+    # 不是形态闸 ⇒ 钉住「这一关已过」。
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     assert b._statement_secretary() is not None, "生产口径下 B 必须能拿到秘书（自动派生）"
     out = b.register_statement(
         origin="external_lit", kind="theorem", label="Theorem 1.5",

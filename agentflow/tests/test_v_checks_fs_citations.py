@@ -70,6 +70,7 @@ from agentflow import vsigns as _VS
 from agentflow.agent_b import AgentB
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
+from conftest import b_form_gate_ok  # noqa: E402
 
 #: 被引命题（引理）与它的证明：V 先给它签过「成立」⇒ 它才够格是 `proof_review` 级。
 LEMMA_FULL = "设 G 是有限 p-群且 p 整除 |G|。则 G 的中心 Z(G) 非平凡。"
@@ -137,7 +138,8 @@ def _register(store: Store, *, full: str, proof: str, proofs: list[dict] | None 
             "doi": "", "type": "J", "path": "", "processed": True, "source_request_ids": [],
             "download": {"status": "ok"},
         })
-    b = AgentB(store, extractor=None, extract_text=None, config={})
+    b = b_form_gate_ok(AgentB(
+        store, extractor=None, extract_text=None, config={}))
     kwargs: dict[str, Any] = dict(
         origin="external_lit", statement_full=full, kind="theorem",
         source_lit_id="000000", page_range={"start": 1},

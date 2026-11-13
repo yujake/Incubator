@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import pathlib
 
-from conftest import TS, sync_counters
+from conftest import TS, b_form_gate_ok, sync_counters
 from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.agent_loop import LlmBackend
@@ -110,7 +110,8 @@ def _world(tmp_path: pathlib.Path):
     # 内层后端里放真实现：`own.register_statement` 的 handler 走 `self.inner.call`，
     # 于是闸门一个不少（出处核对 / 页码形状 / 五元位 / 秘书落盘）。
     inner = LocalBackend({"A": ("object", _StubA()),
-                          "B": ("object", AgentB(st, extractor=None, extract_text=extract_text))})
+                          "B": ("object", b_form_gate_ok(
+            AgentB(st, extractor=None, extract_text=extract_text)))})
     backend = LlmBackend(inner=inner, loops=LOOPS, session_root=st.root,
                          seam_factory=lambda role: LlmSeam(role=role, session_root=st.root,
                                                            gateway=gw, price=(0.0, 0.0),

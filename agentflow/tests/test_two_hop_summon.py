@@ -114,7 +114,12 @@ def _world(tmp_path: pathlib.Path):
     # 不注册 B ⇒ 注入不发生（`role not in inner.known_roles()`）⇒ 那一步 `unknown_tool`。
     from agentflow.agent_b import AgentB
 
-    inner = LocalBackend({"B": ("object", AgentB(st, extractor=None, extract_text=None))})
+    from conftest import b_form_gate_ok
+
+    # 2026-11-13（甲）：B 的动作入口对引文侧新命题会问一次形态，而这一条链量的是
+    # 「三跳各自落台账」；形态那一关用夹具钉住「已过」（与 E / F 同一取舍）。
+    inner = LocalBackend({"B": ("object", b_form_gate_ok(
+        AgentB(st, extractor=None, extract_text=None)))})
     backend = LlmBackend(
         inner=inner, loops=LOOPS, session_root=st.root,
         seam_factory=lambda role: LlmSeam(role=role, session_root=st.root,

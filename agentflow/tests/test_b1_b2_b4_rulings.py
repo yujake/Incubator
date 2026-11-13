@@ -38,7 +38,7 @@ import pathlib
 
 import pytest
 
-from conftest import sign_before_registration
+from conftest import b_form_gate_ok, sign_before_registration
 from _proof_manuscript_fixture import write_proof_manuscript
 from _same_statement_stub import SameStatementStub
 
@@ -68,10 +68,16 @@ def _b(st: Store) -> AgentB:
     要指到我方手稿）顶掉。所以这里按生产同形接一名秘书 —— 缝是离线替身，只答
     "挑词 + 判 different"，检索面与两档形状仍走那一处实现（见
     `_same_statement_stub` 的模块 docstring）。断言一个字没动。
+
+    2026-11-13（甲）之后 B 的动作入口还会问一次命题形态（只在引文侧新命题那一档）：
+    本文件量的是 B-2 / B-4，不是形态闸，所以用 `b_form_gate_ok` 钉住"这一关已过"
+    （与 E / F 那两条链同一个夹具取舍；形态闸本身由
+    `tests/test_b_citation_registration_lands_a_manuscript.py` 用真秘书 + 假缝覆盖）。
     """
-    return AgentB(st, extractor=None, extract_text=None, config={},
-                  secretary=Secretary("B", root=st.root, store=st,
-                                      seam=SameStatementStub(), enable_model=True))
+    return b_form_gate_ok(AgentB(
+        st, extractor=None, extract_text=None, config={},
+        secretary=Secretary("B", root=st.root, store=st,
+                            seam=SameStatementStub(), enable_model=True)))
 
 
 def _prompt(role: str) -> str:
@@ -213,6 +219,9 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     ext = _ok(_b(store).register_statement(
         statement_full="设 G 是有限群，则 G 的阶有限。", origin="external_lit",
         source_lit_id="0000", page_range={"start": 1}, kind="lemma",
+        # 2026-11-13（甲）：引文侧登记要落一份 b-稿，而那份稿的 `## 证明` 就是逐字引文
+        # ⇒ 这一笔必须带 `proof_text`（改前不带也能登记，那条口径已作废）。
+        proof_text="Theorem. Let G be a finite group. Then |G| is finite.",
         quote_verified=False, quote_reason="与原文表述不一致（探针）"))
     assert ext.get("ok") is True, ext
 

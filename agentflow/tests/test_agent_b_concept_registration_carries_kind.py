@@ -37,7 +37,7 @@ from agentflow.agent_b import AgentB
 from agentflow.extract import extract_text
 from agentflow.store import Store
 
-from conftest import add_literature, write_library_file
+from conftest import add_literature, b_form_gate_ok, write_library_file
 
 #: 真机 `r34d` 第 240 行那一步的 `payload.args`，逐字照抄。
 #:
@@ -79,8 +79,11 @@ def _store_with_paper(store: Store) -> Store:
 
 
 def _agent_b(store: Store) -> AgentB:
-    return AgentB(store, extractor=None, extract_text=extract_text,
-                  config={"lease_seconds": 900, "max_attempts": 3})
+    # 2026-11-13（甲）：B 的动作入口对引文侧新命题会问一次形态。本文件量的是
+    # `bits.grade` / `kind` 的派生，不是形态闸 ⇒ 钉住"这一关已过"（与 E / F 同一取舍）。
+    return b_form_gate_ok(AgentB(
+        store, extractor=None, extract_text=extract_text,
+        config={"lease_seconds": 900, "max_attempts": 3}))
 
 
 def _rows(store: Store) -> list[dict]:

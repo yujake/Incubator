@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import TS, add_literature, sync_counters
+from conftest import TS, add_literature, b_form_gate_ok, sync_counters
 from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
@@ -77,6 +77,10 @@ def _external(**patch) -> dict:
         "statement_full": "设 X 是紧致流形；则原文 Theorem 1.5 成立（含完整假设）。",
         "origin": "external_lit", "kind": "theorem", "label": "Theorem 1.5",
         "source_lit_id": S.format_id(0), "page_range": {"start": 12, "end": 13},
+        # 2026-11-13（甲）：引文侧登记要落一份 b-稿，那份稿的 `## 证明` 就是逐字引文
+        # ⇒ 夹具必须给 `proof_text`（改前不带也能登记，那条口径已作废）。
+        "proof_text": ("Theorem 1.5. Let X be a compact manifold. Then the assertion "
+                       "holds under the stated hypotheses."),
         "quote_verified": None,
         "quote_reason": "还没逐字核对（这一份判据只测落库闸门，不测引文回验）",
     }
@@ -86,7 +90,7 @@ def _external(**patch) -> dict:
 
 def _agent(store: Store) -> AgentB:
     """B 的真实现（没有抽取器、不花模型钱），秘书由它自己派生。"""
-    return AgentB(store, extractor=None, extract_text=None)
+    return b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
 
 
 # ==================================================== 一、规矩 A（写入期三态核）

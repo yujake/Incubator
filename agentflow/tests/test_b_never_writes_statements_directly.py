@@ -27,7 +27,8 @@ from typing import Any
 
 import pytest
 
-from conftest import add_literature, sign_before_registration, sign_for_the_gate
+from conftest import (add_literature, b_form_gate_ok, sign_before_registration,
+                      sign_for_the_gate)
 from agentflow import schema as S
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
@@ -137,7 +138,7 @@ def test_b1_a_new_row_lands_and_every_statement_upsert_is_the_secretarys(store) 
     """b①：新建行 ⇒ 行落盘，`statements` 的每一次 upsert 都是 `secretary-B` 落的。"""
     add_literature(store, S.format_id(0))
     sign_before_registration(store.root, proof_text=PROOF)
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     out = b.register_statement(**_payload())
     assert out.get("ok") is True, out
     sid = str(out.get("stmt_id") or "")
@@ -154,7 +155,7 @@ def test_b2_appending_a_proof_lands_through_the_secretary(store) -> None:
     """b②：追加证明（`#p2`）⇒ 进 `proofs` 清单，那一笔 upsert 是 `secretary-B`。"""
     add_literature(store, S.format_id(0))
     sign_before_registration(store.root, proof_text=PROOF)
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     out = b.register_statement(**_payload())
     assert out.get("ok") is True, out
     sid = str(out.get("stmt_id") or "")
@@ -182,7 +183,7 @@ def test_b3_updating_the_numeric_evidence_bit_lands_through_the_secretary(store)
     assert seeded.get("created") is True, seeded
     sid = str(seeded["stmt_id"])
     row = next(dict(r) for r in store.rows("statements") if str(r.get("stmt_id")) == sid)
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     got = b._update_numeric_evidence(
         row=row, green=_numeric_green(), same={"why": "夹具：秘书判这一份就是在册的同一条"})
     assert got.get("ok") is True, got
@@ -229,7 +230,7 @@ def test_c_without_the_secretarys_landing_nothing_is_written(store, monkeypatch)
                            "reason": "探针：秘书的落盘被关掉了"}}
 
     monkeypatch.setattr(SEC.Secretary, "land_statement", _no_write, raising=True)
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     from agentflow import evidencebits as EB
 
     bits = EB.bits_of(origin="own_result", proof=True, proof_process=PROOF, kind="conjecture")

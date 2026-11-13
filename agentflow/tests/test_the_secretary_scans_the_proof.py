@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import TS, add_literature, sign_for_the_gate
+from conftest import TS, add_literature, b_form_gate_ok, sign_for_the_gate
 from _proof_manuscript_fixture import carry_proof_manuscript
 from agentflow import depsection as DS
 from agentflow import secretary as SEC
@@ -271,7 +271,7 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     from agentflow.agent_b import AgentB
 
     add_literature(store, "0003", title="群论引理", processed=True)
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     out = b.register_statement(
         origin="own_result", kind="conjecture", label="T1",
         statement_full="定理：对任意群 G，命题 ph 成立。",
@@ -316,7 +316,7 @@ def test_b_refuses_a_proof_that_cites_an_unregistered_statement(store):
     from agentflow.agent_b import AgentB
 
     add_literature(store, "0003", title="群论引理", processed=True)
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     out = b.register_statement(
         origin="own_result", kind="conjecture", label="T1",
         statement_full="定理：证明里点了一个不在册的号。",

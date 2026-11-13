@@ -30,6 +30,7 @@ from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
 from _proof_manuscript_fixture import write_proof_manuscript
+from conftest import b_form_gate_ok  # noqa: E402
 
 
 def _ws(tmp_path: pathlib.Path) -> Store:
@@ -46,10 +47,13 @@ def _register_a_statement(store: Store) -> str:
             "doi": "", "type": "J", "path": "", "processed": True, "source_request_ids": [],
             "download": {"status": "ok"},
         })
-    b = AgentB(store, extractor=None, extract_text=None)
+    b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     got = b.register_statement(
         origin="external_lit", statement_full="探针命题：若 n≥3 则无解（V 判据用）",
         kind="theorem", source_lit_id="000000", page_range={"start": 1},
+        # 2026-11-13（甲）：引文侧登记要落一份 b-稿，而那份稿的 `## 证明` 就是逐字引文
+        # ⇒ 这一笔必须带 `proof_text`。
+        proof_text="Theorem. For n >= 3 there is no solution (probe).",
         quote_verified=False, quote_reason="探针：引文还没查",
     )
     row = got if isinstance(got, dict) else got.to_dict()

@@ -4654,6 +4654,13 @@ def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
             return
         if abandoned:
             continue
+        # 2026-11-13（甲）：引文侧登记现在会落一份 b-稿（命题 + 出处 + 逐字引文），
+        # 那份稿的"证据"是引文本身（逐字回验那条线），不是 V 读一遍论证 ——
+        # 与 `_unsigned_proof_gate` 的「文献侧占位签」同一条豁免：`external_lit` +
+        # `source_lit_id` 的行的载体不要求 V 签，也不挡收工。
+        if (srow and str(srow.get("origin") or "") == "external_lit"
+                and str(srow.get("source_lit_id") or "").strip()):
+            continue
         out["problems"].append({
             "where": f"稿 {mid}（{rel or '路径没读到'}）",
             "what": (f"这一份 b-proof 没有现行的 V 签"
