@@ -214,7 +214,17 @@ def _check_1(rep, store):
         rows = store.rows(table)
         idf = spec["id_field"]
         ids = [r.get(idf) for r in rows]
-        dupes = {i for i in ids if ids.count(i) > 1}
+        # 判重一趟扫完：原先对每个 id 各做一次 `ids.count(i)` —— 每张表 O(n²)
+        # （6000 行 = 3600 万次比较），而"出现两次以上"只要一份见过的集合：
+        # 第一次见到入 `seen`，再见到入 `dupes`。结果集与
+        # `{i for i in ids if ids.count(i) > 1}` 相同（`sorted(dupes)` 的次序未变）。
+        seen_ids: set[Any] = set()
+        dupes: set[Any] = set()
+        for i in ids:
+            if i in seen_ids:
+                dupes.add(i)
+            else:
+                seen_ids.add(i)
         for d in sorted(dupes):
             rep.issues.append(Issue("error", table, d, "duplicate_id", f"{idf}={d} 重复出现"))
         if idf not in counter_fields:
