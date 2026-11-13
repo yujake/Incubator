@@ -334,8 +334,8 @@ def register(registry: ToolRegistry, *, store: Any = None, root: Any = None,
     `tools.build_registry` 的"register 跑通却一件都没装"那条判据。
     """
     added = 0
+    bound = {"_store": store, "_root": root}
     for fn, deps in _TOOL_FUNCTIONS:
-        bound = {"_store": store, "_root": root}
         registry.register(_replace_handler(fn, partial(fn, *[bound[k] for k in deps])))
         added += 1
     return added
