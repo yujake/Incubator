@@ -3056,7 +3056,7 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
             title="一轮怎么跑：有界地串，卡在哪一步说哪一步",
             summary="run_round 有界；攻坚经 D→F，复核只能经 F→V，D 没有到 V 的边",
             when="证据已经就绪、要把 ingest → … → research 串起来跑一轮的时候",
-            actions=("D.run_round", "D.probe_c", "D.register_conjecture", "F.step"),
+            actions=("D.run_round", "D.probe_c", "F.step"),
             tools=("attack.pick_next_subgoal", "attack.status", "table.get"),
             body="""# 一轮怎么跑
 
@@ -3068,9 +3068,10 @@ D 自己不检索：`submit_gaps` 之后由 **A** 领跑（A 过 I7 准入闸门
 
 ## 攻坚与复核走哪条链（这一格最容易写错）
 
-- **攻坚**：`D.probe_c` 按问题向 C 点菜，`D.register_conjecture` 落猜想，
+- **攻坚**：`D.probe_c` 按问题向 C 点菜，**方向的立案与落行由产出侧自己负责**（F 开稿那一刻、
+  E 实验落盘后、B 收录后各落一行 conjecture；**你没有登记猜想的动作**），
   计划的推进交 **F**（`F.step` 之类；D → F 是直接边）。
-  **创建那一步**是按你的 policy 走的：登记完猜想之后由**你**用循环的 **`summon` 形状**
+  **创建那一步**是按你的 policy 走的：给出方向之后由**你**用循环的 **`summon` 形状**
   唤起 F 的建计划动作 —— **交出去的是研究方向，不是命令**（业主 2026-11-08）：`problem` /
   `subgoals` 写清要弄清什么、可以试哪条路，**不要点名任何 `conjecture_id`**
   （`conj:NNNNNN` 或裸 6 位号都不行）。你登记的猜想只是**参考意见**，F / E 可以选择
@@ -3210,7 +3211,7 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
             title="研究手稿：落点是 write_report 渲染的那份工作稿",
             summary="研究记忆落在 reports/RESEARCH.md（七节、先读后改，收录 F/E 成果）与 research.write_note、write_report 的工作稿；证明的落稿与拿签归 F",
             when="一趟研究开始（先读它）或收尾（更新它）的时候；也是别人把料交给你的时候",
-            actions=("D.write_report", "D.propose_question", "D.register_conjecture"),
+            actions=("D.write_report", "D.propose_question"),
             tools=("fs.read", "fs.write", "fs.edit", "table.get"),
             body="""# 研究记忆就这一份
 
