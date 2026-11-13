@@ -557,16 +557,13 @@ def _legacy_proof_no_of(rel: Any, entry: Mapping[str, Any]) -> int:
 
 def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str,
                           label: Any, kind: Any, mode: str, entry: Mapping[str, Any],
-                          at_text: str, versions_line: str,
-                          statement_id: Any) -> str:
-    """把稿头元信息改成本笔这一版（`## 证明` 之后一个字节不动），并补上命题号那一行。
+                          at_text: str, versions_line: str) -> str:
+    """把稿头元信息改成本笔这一版（`## 证明` 之后一个字节不动）。
 
-    稿头那一行必须写上这一笔的命题号：`_rewrite_head` 只管元信息那几行、不碰这一行，
-    而登记条目常常是从一份"还没落号"的底稿起家的（渲染时写的是
-    `- 命题号：stmt:（还没落号）`）。不补就会出现双读数 —— 登记落在
-    `reports/f-proof-<号>.md` 上而稿头仍说"还没落号"，`entries_on_disk` 会把它读成
-    "未落号的登记条目"，D 的携带单于是把同一份稿再列一遍（`mss:<号>` 与 `stmt:<号>`
-    两行、路径与 sha 相同），按号核对的那一侧找不到它。号已经拿到 ⇒ 这一行必须写它。
+    稿里没有命题号（业主 2026-11-13 裁定逐字：「稿里没有命题号，任何稿里都没有命题
+    号」）⇒ 改前在这里补 `- 命题号：stmt:<号>` 那一步（`ensure_statement_line`）已删：
+    写稿那一刻本来也拿不到号，号只落在 `statements` 那一行上。盘上老稿若还留着那一行，
+    本函数不动它（读侧照旧读得回）。
     """
     head_now = _head_of(text)
     head_new = _rewrite_head(head_now, {
@@ -578,10 +575,7 @@ def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str
                              else str(entry.get("registered_at") or at_text)),
         VERSION_MARK: versions_line,
     })
-    text = head_new + text[len(head_now):]
-    if str(statement_id or "").strip():
-        text, _applied = _MF.ensure_statement_line(text, str(statement_id))
-    return text
+    return head_new + text[len(head_now):]
 
 
 def register_or_rewrite(
@@ -750,11 +744,11 @@ def register_or_rewrite(
         deps_body = (deps_section[len(_DS.SECTION_HEADING):]
                      if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
         text, _ok_deps = _replace_section(text, "依赖", deps_body)
-    # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"），并补上命题号那一行。
+    # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"）。
     text = _head_for_new_version(
         text, proof_no=proof_no, new_sha=new_sha, new_fp=new_fp, label=label,
         kind=kind, mode=mode, entry=entry, at_text=at_text,
-        versions_line=versions_line, statement_id=statement_id)
+        versions_line=versions_line)
     # ---- 落盘（框架写；原子替换） ------------------------------------------------
     target = Path(str(root or "")) / rel
     try:

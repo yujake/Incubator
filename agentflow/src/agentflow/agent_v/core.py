@@ -4133,7 +4133,6 @@ def selftest() -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             "# F 的证明手稿（自检）\n\n"
-            f"- 命题号：stmt:{stmt_id}\n\n"
             "## 命题\n\n（自检：这一份审的只是证明正文）\n\n"
             f"## 证明\n\n{proof}\n\n"
             "## 依赖\n\n"

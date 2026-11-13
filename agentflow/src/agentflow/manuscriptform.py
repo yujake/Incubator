@@ -15,9 +15,10 @@
 
 - 命名：`<prefix>-proof-<号>.md`，解析只走
   :func:`vsigns.parse_manuscript_name`；认不出 ⇒ 受控拒绝 `bad_manuscript_name`。
-- 渲染：三节（`## 命题` / `## 证明` / `## 依赖`）+ 洗稿元信息行 +
-  `- 命题号：stmt:<号>` 那一行，两族由 :func:`render_proof_manuscript` 同一段代码产出，
-  前缀与角色名只是参数。
+- 渲染：三节（`## 命题` / `## 证明` / `## 依赖`）+ 洗稿元信息行，两族由
+  :func:`render_proof_manuscript` 同一段代码产出，前缀与角色名只是参数。
+  稿头不写命题号（业主 2026-11-13 裁定逐字：「稿里没有命题号，任何稿里都没有
+  命题号」）—— 稿号由产出侧自己发，命题号由 B 收录时现取、只落在 `statements` 行上。
 - 搬签：:func:`carry_sign_block` 只有一份；签块按 sha 相符才搬，第 9 格
   `手稿号` 按新名重算。
 - 落盘事务：:func:`commit_manuscript` 一处；写稿 + `## 依赖` 段 + 落
@@ -264,9 +265,16 @@ def render_proof_manuscript(
 ) -> str:
     """渲染一份证明手稿（纯函数，逐字节可复现；两族只差前缀与角色名）。
 
-    页头顺序固定：标题 → `- 命题号：` → `- 计划：` → 洗稿行 → `- 标签：`。
+    页头顺序固定：标题 → `- 计划：` → 洗稿行 → `- 标签：`。
     三节顺序固定：`## 命题` / `## 证明` / `## 依赖`。
     `- 计划：`、`- 标签：`、洗稿行都是"给了才写"，但位置不随族变。
+
+    ## `- 命题号：` 在写侧退役（业主 2026-11-13 裁定）
+
+    裁定逐字：「稿头：`- 命题号：stmt:` 是错误的，稿里没有命题号，任何稿里都没有
+    命题号。」⇒ 新渲染的稿不再有这一行；写稿那一刻本来也拿不到号（号由 B 收录时
+    现取）。`statement_id` 形参保留只为旧调用点不必改签名，它不参与渲染。盘上老稿
+    若还留着那一行，读侧照旧读得回（读能力不删，只是新写的稿不再产生它）。
 
     ## `- 证明号：` 在写侧退役
 
@@ -278,7 +286,6 @@ def render_proof_manuscript(
     """
     fam = str(family or "")
     role = fam if fam in FAMILIES else FAMILY_F
-    sid_text = str(statement_id or "").strip()
     pid = str(plan_id or "").strip()
     sgid = str(sid or "").strip()
     label_text = " ".join(str(label or "").split())
@@ -286,7 +293,6 @@ def render_proof_manuscript(
     head: list[str] = [
         f"# {role} 的证明手稿：{heading}",
         "",
-        f"{STATEMENT_MARK}stmt:{sid_text or '（还没落号）'}",
     ]
     if pid or sgid:
         head.append(f"{PLAN_MARK}{pid} · 子目标：{sgid}")
@@ -396,42 +402,6 @@ def validate_manuscript(text: Any, *, require_washed: bool = False) -> dict[str,
     return {"checked": True, "ok": True, "code": "", "why": ""}
 
 
-# ---------------------------------------------------------------- 补 / 改「命题号」行
-
-def _statement_line(text: str, statement_id: str, *, insert: bool) -> tuple[str, bool]:
-    """`- 命题号：stmt:<号>` 那一行的唯一实现：前 12 行里有就改，没有看 `insert`。
-
-    两个公开入口只差"缺行时插不插"这一格（`ensure_statement_line` 插、
-    `retitle_statement_line` 不插）：行怎么认、新值怎么拼、返回值怎么表达只写这一份。
-    """
-    sid = str(statement_id or "").strip()
-    raw = str(text or "").replace("\r\n", "\n")
-    if not sid:
-        return raw, False
-    want = f"{STATEMENT_MARK}stmt:{sid}"
-    lines = raw.split("\n")
-    for i, line in enumerate(lines[:12]):
-        if line.strip().startswith(STATEMENT_MARK):
-            if line.strip() == want:
-                return raw, True
-            lines[i] = want
-            return "\n".join(lines), True
-    if not insert:
-        return raw, False
-    lines.insert(1 if lines and lines[0].lstrip().startswith("# ") else 0, want)
-    return "\n".join(lines), True
-
-
-def ensure_statement_line(text: str, statement_id: str) -> tuple[str, bool]:
-    """稿头那行 `- 命题号：stmt:<号>`：有就改、没有就插在标题之后（前 12 行内）。"""
-    return _statement_line(text, statement_id, insert=True)
-
-
-def retitle_statement_line(text: str, statement_id: str) -> tuple[str, bool]:
-    """只改已有的 `- 命题号：` 行（没有就不插）—— 改名那一笔的"只是改名不是改稿"。"""
-    return _statement_line(text, statement_id, insert=False)
-
-
 # ---------------------------------------------------------------- 搬签块（唯一实现）
 
 def carry_sign_block(root: Any, titled: str, *, old_rel: str, new_rel: str,
@@ -533,10 +503,13 @@ def commit_manuscript(
     require_washed: bool = False, delete_old: bool = False,
     write_dependencies: Callable[[Sequence[Mapping[str, Any]]], Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """写一份证明手稿（三节 + 洗稿行 + 命题号行），并把依赖边一起落盘。
+    """写一份证明手稿（三节 + 洗稿行），并把依赖边一起落盘。
 
     `text is None` ⇒ 用 :func:`render_proof_manuscript` 现渲染；否则按给定正文落盘
-    （`publish` / `promote` 那一档：正文是作者的作品，只改文件名与稿头那一行）。
+    （`publish` / `promote` 那一档：正文是作者的作品，只改文件名）。
+
+    `retitle` 形参保留只为旧调用点不必改签名：稿里没有命题号（业主 2026-11-13），
+    于是不再有"把稿头那一行改成真号"这一步，它不参与落盘。
 
     ## 事务
 
@@ -579,14 +552,7 @@ def commit_manuscript(
             label=label, proof_no=proof_no)
     else:
         body = str(text or "").replace("\r\n", "\n")
-    if str(statement_id or "").strip():
-        if str(retitle) == "ensure":
-            body, applied = ensure_statement_line(body, str(statement_id))
-        elif str(retitle) == "replace":
-            body, applied = retitle_statement_line(body, str(statement_id))
-        else:
-            applied = True
-        out["retitled"] = bool(applied)
+    # 稿头那一行 `- 命题号：` 已退役（业主 2026-11-13）：落稿这一步不再回填真号。
     if not rows and dependency_rows is None:
         section = _DS.parse_dependency_section(body)
         if section.get("present") and not section.get("refused"):
@@ -684,8 +650,11 @@ def promote_formal(root: Any, *, family: Any = FAMILY_F, statement_id: Any = "",
     """把盘上已有的一份稿转成 `<prefix>-proof-<稿号>.md`（两族共用；签块跟着搬）。
 
     `manuscript_id` 是 F 自己的稿号（给了它就只按稿号命名）；`statement_id` 保留给
-    b-proof / e-proof 与老盘只读兼容。只搬不写：正文一个字不改，只补/改稿头
-    `- 命题号：` 那一行；源稿默认留着。
+    b-proof / e-proof 与老盘只读兼容。只搬不写：正文一个字不改。
+
+    返回 `{"promoted", "path", "source", "renamed_from", "retitled", "sign_moved",
+    "sign_step", ...}`。转正只改名 / 搬签（稿里没有命题号，也就没有"补一行号"
+    这一步 —— `retitled` 恒为 `False`）。
     """
     out: dict[str, Any] = {
         "promoted": False, "path": "", "source": _norm_rel(source),

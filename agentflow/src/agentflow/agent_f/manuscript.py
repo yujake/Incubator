@@ -25,7 +25,6 @@ F 一件依赖写入口都没有；而秘书那条"从证明正文扫依赖"只�
 ```
 # F 的证明手稿：<子目标>
 
-- 命题号：stmt:（还没落号）—— 命题号由 B 收录时现取，F 的稿只认稿号
 - 计划：<plan_id> · 子目标：<sid>
 
 ## 命题
@@ -55,7 +54,6 @@ from .. import manuscriptids as _MID
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from ..manuscriptform import (  # noqa: F401 —— 两族唯一实现在这里，本模块只转发
     carry_sign_block,
-    ensure_statement_line,
     formal_shape_problem,
 )
 
