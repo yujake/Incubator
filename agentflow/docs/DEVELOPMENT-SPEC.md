@@ -59,13 +59,13 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 21 / info 49`（观测 2026-11-11，
-复跑 `python -B scripts/lint_rules.py`；与 2026-10-27 那次同值 —— 本批只改声明/教法与
-判据，未新增规则或 error 档；`warning` / `info` 是当次读数，判据逐行拿它们对账。
-`error` 那一格写的是发布门第 5 项的**要求值**、不是读数 —— 它按"必须为 0"强制，而并行施工期间
-同一棵树上的实测在 0–4 之间跳（那一刻是 4，全部落在 `readouts.py` / `cli.py` 与它们的判据文件的
-docstring 星号强调上，不在本批改动里）。**严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**
-（2026-11-12 复跑是 `88 / 48`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+**linter 的当次三栏（日常档）**：`error 1 / warning 21 / info 44`（观测 2026-11-13，
+复跑 `python -B scripts/lint_rules.py`；本批是「清死代码」——R011 删掉三个死取值与
+一条过期登记、词表收窄，`info` 因此 49→44；`warning` 未变。`error` 那一格本期实测是 **1**，
+是并行路还没清完的 R009（注释里的 Markdown 强强调），不是词表这一批；发布门第 5 项的
+**要求值**仍是 0 —— 并行施工期间同一棵树上的实测在 0–6 之间跳。`warning` / `info` 是当次读数，
+判据逐行拿它们对账。**严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**
+（2026-11-13 复跑是 `90 / 43`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
 ```powershell
 cd D:\Incubator\agentflow
@@ -82,8 +82,8 @@ LIVE-READINGS:BEGIN
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
 lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
 lint_rules_info         = 44   # 同一档的 info 栏（2026-11-13：R011 撤掉过期死取值登记 ⇒ 49→44）
-lint_rules_strict_warning = 88 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
-lint_rules_strict_info  = 48   # 同一档的 info 栏
+lint_rules_strict_warning = 90 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_info  = 43   # 同一档的 info 栏（2026-11-13：R011 清死代码 ⇒ 48→43）
 noai_paths_glob         = 49   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 46   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数

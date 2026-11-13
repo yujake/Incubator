@@ -122,8 +122,9 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     ## 2026-11-13（业主裁定「清死代码」）：`reproduction_report` / `自证` / `未决` 已删
 
     三条都 0 行 / 无读点 / 无写入口 ⇒ 词表值与登记表条目一起删。`reserved` 栏的非真空
-    改由**今天仍然死的三条**钉住（`CONJECTURE_FORMS.existential`、
-    `CONJECTURE_STATUSES.testing`、`CONJECTURE_STATUSES.known_in_literature`），条数**写死到 3**（不是删掉这条断言）。删掉的三个取值另有
+    改由「今天仍然死的三条」钉住（`CONJECTURE_FORMS.existential`、
+    `CONJECTURE_STATUSES.testing`、`CONJECTURE_STATUSES.known_in_literature`），条数
+    写死到 3（不是删掉这条断言）。删掉的三个取值另有
     一条反向断言：它们不许在任何栏、任何词表、任何登记里留痕（与 `E-10` 同一条纪律）。
 
     ## 2026-10-26：`DEP_KINDS.prior_art` 按同一条口径从 `reserved` 挪进 `registered_not_dead`
