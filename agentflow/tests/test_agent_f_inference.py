@@ -25,6 +25,7 @@ import pytest
 
 from agentflow import attackround as AR
 from agentflow.agent_f import AgentF
+from agentflow.agent_f.create_plan import PARALLEL_PLANS_LIMIT_TEXT as PARALLEL_TEXT
 from agentflow.store import Store
 
 
@@ -73,9 +74,17 @@ class BrokenLLM:
         raise RuntimeError("网关炸了")
 
 
-def _f(store: Store, llm=None, *, budget_reading=None, **cfg) -> AgentF:
+def _f(store: Store, llm=None, *, budget_reading=None, actor: str = "agent-F",
+       **cfg) -> AgentF:
+    """造一个 F。`actor` 是**归因名**（并发上限按它分桶，见 `create_plan` 的上限）。
+
+    这里显式给：本文件有几处用例要在同一个 store 里造两条以上计划，而业主
+    2026-11-13 的并发上限是"**一个 F** 在推的计划 ≤2 条"（`created_by` 分桶）。
+    给每个不相干的子用例一个不同的 actor，等于"它们是不同的 F"——判据要测的
+    仍是原来那一件事，没有放宽任何断言。
+    """
     return AgentF(store, config={"workspace_root": store.root, **cfg}, llm=llm,
-                  budget_reading=budget_reading)
+                  budget_reading=budget_reading, actor=actor)
 
 
 def _new_plan(f: AgentF, *, owner: str = "F", testable: str = "存在反例或有限界",
@@ -291,8 +300,14 @@ def test_s10_the_counterexample_request_carries_its_spec_into_the_e_subgoal(stor
     assert sg["script_spec"]["expected_bound"] == "n_max=18", sg
 
     # 派给 E 那一条（另起一张计划：`pick_next_subgoal` 会把 `in_progress` 的 s1 排在前面，
-    # 这里要单独测 `_deploy_e` 的拒绝文案）⇒ 拒绝里必须逐字念出判据
-    pid2 = f.create_plan("难题二", "PK-S10", subgoals=[
+    # 这里要单独测 `_deploy_e` 的拒绝文案）⇒ 拒绝里必须逐字念出判据。
+    #
+    # 这两条计划用**另一个 F**（`actor="agent-F-S10B"`）：业主 2026-11-13 的并发上限
+    # 按 `created_by` 分桶（一个 F 在推的 plan ≤2 条），而本用例要测的是 `_deploy_e`
+    # 的拒绝文案，不是上限 —— 一个 F 造三条会被上限受控拒，那是另一条判据
+    # （`tests/test_f_parallel_plan_cap.py`）。原断言一条不动。
+    f2 = _f(store, llm=llm, actor="agent-F-S10B")
+    pid2 = f2.create_plan("难题二", "PK-S10", subgoals=[
         {"sid": "s1", "text": "按判据跑实验", "owner": "E", "testable": "n<=18",
          "script_spec": {"criterion": "每条边的 k-圈数 >= 2", "params": "m=3, k=6, n<=18",
                          "expected_bound": "n_max=18"}},
@@ -303,10 +318,18 @@ def test_s10_the_counterexample_request_carries_its_spec_into_the_e_subgoal(stor
     assert "每条边的 k-圈数 >= 2" in out["reason"], out
     assert "n_max=18" in out["reason"], out
     # 反负控：没有判据的那种 E 子目标 ⇒ 文案里不该多出判据那半句（判据是读数，不是模板）
-    pid3 = f.create_plan("难题三", "PK-S10B", subgoals=[
+    pid3 = f2.create_plan("难题三", "PK-S10B", subgoals=[
         {"sid": "s1", "text": "做个实验", "owner": "E", "testable": "判据夹具：这一步做完能一句话判它成立或不成立"}])["plan_id"]
     plain = f.step(pid3)
     assert "script_path" in plain["reason"] and "criterion=" not in plain["reason"], plain
+    # 业主 2026-11-13 的并发上限（Q4）：这个 F（`agent-F-S10B`）已经在推 2 条
+    # （pid2 / pid3）⇒ 第 3 条必须受控拒、`plan_id` 为 None、拒信逐字含那句提醒。
+    # 上限的完整判据在 `tests/test_f_parallel_plan_cap.py`；这里只钉"同一现场也生效"。
+    capped = f2.create_plan("难题四", "PK-S10C", subgoals=[
+        {"sid": "s1", "text": "再开一条", "owner": "F", "testable": "判据夹具"}])
+    assert capped.get("ok") is False and capped.get("kind") == "parallel_plans_limit", capped
+    assert capped.get("plan_id") is None, capped
+    assert PARALLEL_TEXT in str(capped.get("error") or ""), capped
 
 
 def test_a_dead_end_round_is_blocked_with_a_controlled_reason(store: Store):
@@ -697,8 +720,13 @@ def test_p09_the_reading_keys_are_on_every_return_path(store: Store):
     def _one(tag: str, reply, **kw) -> dict:
         llm = None if reply == "unwired" else (BrokenLLM() if reply == "broken"
                                                else FakeLLM(*reply))
+        # 每条收尾路径一个**独立的 F**：本判据要证的是"每条路都有预算读数"，
+        # 六条路各自造一条计划；而业主 2026-11-13 的并发上限按 `created_by`
+        # 分桶（一个 F 在推的 plan ≤2 条）⇒ 六条计划必须属于六个不同的 F，
+        # 否则第 3 条会被上限受控拒（那是 `test_f_parallel_plan_cap.py` 的事）。
         f = AgentF(store, config={"workspace_root": store.root, **kw.pop("cfg", {})},
-                   llm=llm, budget_reading=kw.pop("reading", None))
+                   llm=llm, budget_reading=kw.pop("reading", None),
+                   actor=f"agent-F-KEYS-{tag}")
         out = f.step(_new_plan(f, key=f"PK-KEYS-{tag}", **kw))
         assert keys <= set(out), (tag, sorted(set(out)))
         seen.append(tag)
