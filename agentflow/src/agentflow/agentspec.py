@@ -360,13 +360,14 @@ def audit_registry(registry: AgentRegistry) -> list[str]:
     把"工具面只读"误读成"动作不许写"，是编造不变量去否决既有设计；判据要先在已知对象上跑一遍。
     """
     fields = set(BuilderDeps.__dataclass_fields__)
-    known = set(registry.roles())
+    roles = registry.roles()
+    known = set(roles)
     out: list[str] = []
 
     def _bad(msg: str) -> None:
         out.append(msg)
 
-    for role in registry.roles():
+    for role in roles:
         spec = registry.get(role)
         if spec.role != role:
             _bad(f"{role}：声明的 role 是 {spec.role!r}，与注册键不一致")
