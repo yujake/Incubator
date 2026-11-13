@@ -848,6 +848,7 @@ def test_attack_tools_are_role_filtered_and_only_f_add_uses_them(store):
         return set(build_for_role(role, store=store, workspace_root=store.root).registry.names())
 
     assert {n for n in names_for("F") if n.startswith("attack.")} == {
+        "attack.abandon_plan",
         "attack.check_budget",
         "attack.create_plan",
         "attack.list_plans",

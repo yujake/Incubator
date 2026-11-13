@@ -39,6 +39,7 @@ from agentflow import specs
 from agentflow.agent_f import abandon_plan as AP
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from agentflow.tools import attack_tools as AT
 
 BUDGET = {"max_rounds": 3, "max_parallel_subgoals": 2,
           "max_persist_attempts": 2, "max_depth": 2}
@@ -110,17 +111,23 @@ def test_b_a_terminal_plan_cannot_be_abandoned_again(tmp_path: pathlib.Path,
     """b 判据：四档终态各受控拒一次，行一个字节不改（幂等不是"再写一行"）。
 
     改前红：改前没有这个入口（同 a）。
+
+    "受控拒"的形状 = `PlanError`（`ToolError` 子类）：召唤层落
+    `refused / invalid_params`（`conductor._business_refusal_code` 认它），工具层落
+    `plan_error`（`attack_tools._guard` 认它）—— 两条路都不是 `unexpected`。
+    细码写在拒信正文里（`plan_already_terminal`）。
     """
     store = _ws(tmp_path)
     f = _f(store)
     pid = _plan(store, key=f"PK-{status}", status=status)
     before = _row(store, pid)
 
-    out = f.abandon_plan(pid, reason=REASON)
+    with pytest.raises(AF.PlanError) as ei:
+        f.abandon_plan(pid, reason=REASON)
 
-    assert out.get("ok") is False, out
-    assert out.get("kind") == "plan_already_terminal", out
-    assert str(status) in str(out.get("error") or ""), out
+    err = str(ei.value)
+    assert "plan_already_terminal" in err, err
+    assert str(status) in err, err
     assert _row(store, pid) == before, "终态计划被改写了"
 
 
@@ -135,12 +142,28 @@ def test_c_a_reason_outside_the_vocabulary_is_refused(tmp_path: pathlib.Path) ->
     pid = _plan(store)
     before = _row(store, pid)
 
-    out = f.abandon_plan(pid, reason="失败")
+    with pytest.raises(AF.PlanError) as ei:
+        f.abandon_plan(pid, reason="失败")
 
-    assert out.get("ok") is False, out
-    assert out.get("kind") == "plan_abandon_reason_not_allowed", out
-    assert "不再需要" in str(out.get("error") or ""), out
+    err = str(ei.value)
+    assert "plan_abandon_reason_not_allowed" in err, err
+    assert "不再需要" in err, err
     assert _row(store, pid) == before, "被拒的那一笔写了库"
+
+
+def test_c2_the_tool_layer_maps_the_refusal_to_a_controlled_kind(
+        tmp_path: pathlib.Path) -> None:
+    """c2 判据：同一笔拒收走工具层 ⇒ 受控 `plan_error`（不滑成 `unexpected`）。"""
+    from agentflow.tools.base import ToolRegistry
+
+    store = _ws(tmp_path)
+    reg = ToolRegistry(name="agent-F")
+    AT.register(reg, store=store)
+    reg.bound_role = "F"
+    res = reg.call("attack.abandon_plan", plan_id="999999", reason=REASON)
+    assert res.ok is False, res
+    assert res.meta.get("kind") == "plan_error", res.meta
+    assert "plan_not_found" in str(res.error or ""), res.error
 
 
 def test_e_stubbing_the_vocabulary_accepts_the_same_reason(
@@ -182,3 +205,5 @@ def test_d_only_f_has_the_abandon_action_and_tool(tmp_path: pathlib.Path) -> Non
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+

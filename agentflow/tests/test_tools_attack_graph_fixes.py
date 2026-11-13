@@ -823,7 +823,7 @@ def test_attack_handlers_are_wrapped_by_the_guard(store: Store, monkeypatch: pyt
     from agentflow.tools.base import validate_params
 
     reg = _attack_reg(store)
-    assert len(reg.names()) == 6, reg.names()
+    assert len(reg.names()) == 7, reg.names()
 
     def _boom(*_a: object, **_kw: object) -> dict:
         raise ValueError("内部炸了（夹具故意）")
@@ -852,8 +852,11 @@ def test_attack_handlers_are_wrapped_by_the_guard(store: Store, monkeypatch: pyt
         "attack.step": {"plan_id": "9999"},
         "attack.status": {"plan_id": "9999"},
         "attack.list_plans": {},
+        # 2026-11-13（R3）：plan 级放弃口也走 `_guard`。自然输入是"计划不存在"⇒
+        # `PlanError` ⇒ 守卫给出受控 `plan_error`（不是 `unexpected`）。
+        "attack.abandon_plan": {"plan_id": "9999", "reason": "不再需要"},
     }
-    assert set(probes) == set(reg.names()), "六个工具的名字变了 —— 这条门要跟着改"
+    assert set(probes) == set(reg.names()), "七个工具的名字变了 —— 这条门要跟着改"
 
     seen_raise: set[str] = set()
     seen_kind: set[str] = set()
