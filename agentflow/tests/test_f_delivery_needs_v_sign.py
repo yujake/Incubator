@@ -189,7 +189,7 @@ def _apply_one_proof_round(st: Store) -> dict:
     plan = {"plan_id": "0000", "rounds": 0, "history": [], "subgoals": [],
             "budget": {"max_rounds": 9}, "status": "open"}
     sg = {"sid": "s1", "text": FULL, "owner": "F", "status": "in_progress"}
-    product = {"product": "proof", "strategy": "direct",
+    product = {"product": "proof", "strategy": "direct", "proposition": FULL,
                "steps": [{"n": 1, "text": "取 δ=ε，逐点验证。", "cites": [],
                           "assumption": False},
                          {"n": 2, "text": "δ 只依赖 ε ⇒ 一致连续。", "cites": []}],

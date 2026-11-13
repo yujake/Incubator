@@ -55,6 +55,9 @@ def _round(**fields) -> str:
     """造一份成形产物的 JSON 文本（缺省补上公共字段）。"""
     base = {"strategy": "小情形搜索找模式", "why_strategy": "先看小情形有没有模式"}
     base.update(fields)
+    if base.get("product") == "proof" and not str(base.get("proposition") or "").strip():
+        # 2026-11-13（业主裁定 B）：proof 档必填 `proposition`（本文件判的是题面契约）。
+        base["proposition"] = "设命题成立；则由它得结论。"
     return json.dumps(base, ensure_ascii=False)
 
 

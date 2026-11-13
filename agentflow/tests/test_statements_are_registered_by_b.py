@@ -168,6 +168,7 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
     f = AgentF(st, config={"workspace_root": st.root})
     sg = {"sid": "s1", "text": "判定这条", "testable": "存在反例或有限界"}
     product = {"product": "proof", "strategy": "反证",
+               "proposition": "设 S 是有限集；则 S 的子集个数为 2^|S|。",
                "steps": [{"n": 1, "text": "反设存在反例，取最小者", "assumption": True}]}
     outlet = f._proof_outlet(product, sg, plan={"plan_id": "000000"})
     assert outlet["ok"] is True, outlet

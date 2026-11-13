@@ -10,7 +10,12 @@ from .. import statementledger as SL   # 命题台账的查口（按号 / 按关
 from .. import vsigns as _VS_NAME    # 稿名 ⇒ 稿号（只读解析；`_resolve_manuscript_id` 用）
 from .abandon_plan import _AbandonPlan
 from .create_plan import _CreatePlan
-from .manuscript import _Manuscript, proposition_text
+from .manuscript import (
+    _Manuscript,
+    PROPOSITION_MISSING,
+    proposition_missing_why,
+    proposition_text,
+)
 from .step import _Step
 from .status import _Status
 from .list_plans import _ListPlans
@@ -332,6 +337,15 @@ def parse_handed_product(product: Any) -> dict[str, Any]:
         problems.append(f"`label` 必须是字符串，收到 {type(label_raw).__name__}")
     label = str(label_raw or "").strip()
 
+    # ---- 2026-11-13（业主裁定 B）：proof 档没有 `proposition` ⇒ 受控拒 -------------
+    proposition_raw = product.get("proposition")
+    if proposition_raw is not None and not isinstance(proposition_raw, str):
+        problems.append(
+            f"`proposition` 必须是字符串，收到 {type(proposition_raw).__name__}")
+    proposition = str(proposition_raw or "").strip()
+    if kind == "proof" and not proposition:
+        problems.append(proposition_missing_why())
+
     strategy = str(product.get("strategy") or "").strip()
     if strategy and strategy not in AR.STRATEGIES:
         problems.append(
@@ -352,6 +366,8 @@ def parse_handed_product(product: Any) -> dict[str, Any]:
     if mid:
         clean["manuscript_id"] = mid
     if kind == "proof":
+        # 2026-11-13（B）：`## 命题` 只从这一格渲染（`proposition_text`）。
+        clean["proposition"] = proposition
         steps, step_problems = AR.clean_proof_steps(product.get("steps"))
         problems.extend(step_problems)
         clean["steps"] = steps
@@ -364,7 +380,9 @@ def parse_handed_product(product: Any) -> dict[str, Any]:
         clean["new_subgoals"] = goals
         clean["reason"] = str(product.get("reason") or "").strip()
 
-    out.update(kind=kind, label=label, problems=problems,
+    # 受控码：只在这一格缺的时候给 `proposition_missing`（别的校验问题沿用调用方那一档）。
+    refused = PROPOSITION_MISSING if (kind == "proof" and not proposition) else ""
+    out.update(kind=kind, label=label, problems=problems, refused=refused,
                product=({} if problems else clean), ok=not problems)
     return out
 
@@ -718,10 +736,10 @@ class _Core:
         """这一笔计划该记在哪个 F 名下（`attack_plans.created_by`，也是并发上限的分桶键）。
 
         ## 为什么不能直接把 `self.actor` 写进 `created_by`
-        业主 2026-11-13 的口径是"**一个 F** 同时推进的 plan 不超过 2 条"。而 `self.actor`
+        业主 2026-11-13 的口径是"一个 F 同时推进的 plan 不超过 2 条"。而 `self.actor`
         在真机路径上有两种取值：装配期由 `host._actor_for(role, instance)` 生成
         `agent-<role>-<instance>`（给了实例标签时），或者退回默认的 `agent-F`
-        （没给时）。默认那一档下，**所有** F 实例的计划都写同一个 `created_by`
+        （没给时）。默认那一档下，所有 F 实例的计划都写同一个 `created_by`
         ⇒ "一个 F 开了几条"在盘上分不开，上限就只能按全体计数（那会把"按研究方向
         开多个 F"判成超限 —— 与业主同一批裁定的 R1 直接打架）。
 
@@ -731,7 +749,7 @@ class _Core:
         （`AgentLoop._do_tool` 的 `calling_as`）。名册名是"这个 F 是谁"的唯一权威
         读法（`Secretary.name_of` —— `conductor._roster_name_of` 也转交给它，
         不另写一份）。读到就拼成 `agent-F-<名>`（与 `host._actor_for` 逐字同形），
-        读不到（名册没写成 / 脚本直调 / 单测）⇒ **原样** `self.actor`，绝不编一个名字。
+        读不到（名册没写成 / 脚本直调 / 单测）⇒ 原样 `self.actor`，绝不编一个名字。
         """
         actor = str(self.actor or "")
         if actor != self.DEFAULT_ACTOR:
@@ -1568,12 +1586,28 @@ class _Core:
         label = str(got.get("label") or "")
         if not got.get("ok"):
             problems = [str(x) for x in (got.get("problems") or [])]
-            detail = (
-                f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
-                "这一份没通过**既有的产物校验**（一条闸都没有放宽）。逐条如下：\n"
-                + "\n".join(f"- {p}" for p in problems)
-                + "\n改这几处，再把同一份交一次（这一轮**没有落稿、没有登记**，"
-                "也没有花推理的那一笔）")
+            refused_kind = str(got.get("refused") or self.HANDED_PRODUCT_REFUSED)
+            if refused_kind == PROPOSITION_MISSING:
+                # 2026-11-13（业主裁定 B）：缺命题是"没给够一格"，不是"形状写错了"——
+                # 拒信点名要给哪一格，而不是让他从头猜。
+                next_step = ("给 `product.proposition`（那条定理的完整陈述：前提 → 结论）——"
+                             " 子目标正文不是命题；改法说明写进 `steps` 或 `label`，"
+                             "再把同一份 `product` 交一次")
+                detail = (
+                    f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
+                    "这一份没有 `proposition`（proof 档必填）——\n"
+                    + "\n".join(f"- {p}" for p in problems)
+                    + f"\n下一步：{next_step}。这一轮**没有落稿、没有登记**，"
+                    "也没有花推理的那一笔")
+            else:
+                next_step = ("按上面逐条改那几步 / 那几格，再把同一份 `product` "
+                             "交一次（`attack.step(plan_id=…, product=…)`）")
+                detail = (
+                    f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
+                    "这一份没通过**既有的产物校验**（一条闸都没有放宽）。逐条如下：\n"
+                    + "\n".join(f"- {p}" for p in problems)
+                    + "\n改这几处，再把同一份交一次（这一轮**没有落稿、没有登记**，"
+                    "也没有花推理的那一笔）")
             return {
                 "action": "no_change",
                 "outcome": "no_change",
@@ -1586,10 +1620,9 @@ class _Core:
                 "in_flight": False,
                 "count_attempt": False,
                 "refusal": {
-                    "kind": self.HANDED_PRODUCT_REFUSED,
+                    "kind": refused_kind,
                     "problems": problems,
-                    "next_step": ("按上面逐条改那几步 / 那几格，再把同一份 `product` "
-                                  "交一次（`attack.step(plan_id=…, product=…)`）"),
+                    "next_step": next_step,
                     "label": label,
                 },
             }
@@ -2160,15 +2193,20 @@ class _Core:
             manuscript_received["why"] = (
                 "调用方没有把手稿正文递进来 ⇒ 这一笔登记手上没有稿（收方仍可按约定路径去盘上找）")
         cites = [str(c) for s in steps for c in (s.get("cites") or [])]
-        assumptions = [str(s.get("text") or "") for s in steps if s.get("assumption") is True]
         body = "\n".join(
             f"{int(s.get('n') or i)}. {s.get('text')}"
             + (f"（依据：{'、'.join(str(c) for c in (s.get('cites') or []))}）"
                if s.get("cites") else "（前提）")
             for i, s in enumerate(steps, 1))
         text = str(sg.get("text") or "").strip()
-        full = (text + (f"；这一条的可检验形式：{sg.get('testable')}" if sg.get("testable") else "")
-                + ("；显式声明的前提：" + "／".join(assumptions) if assumptions else ""))
+        # ---- 2026-11-13（业主裁定 B）：`## 命题` 只认 `product.proposition` -------------
+        #
+        # 改前 `full` = 子目标正文 + 可检验形式 + 显式前提，而子目标正文是派给 F 的活
+        # （真机 000002 就是一段修订说明）⇒ 那段作业话被当成命题写进稿、被 V 签、被 B 拒。
+        # 现在 `full` 与 `## 命题` 都只取 `product.proposition`；没有它 ⇒ 受控拒
+        # `proposition_missing`（`_proposition_form_precheck` 在写盘之前就拒）。
+        declared = proposition_text(product.get("proposition"))
+        full = declared
         # 取数走查口的唯一取数口；读不到就当"没有可复用的"，但要说出来（不当成 0 行）。
         existing, problem, error = SL.rows_of(self.store)
         if problem:
@@ -2245,6 +2283,13 @@ class _Core:
             # 这一轮漂移过的 `full` / `text` 只用于渲染稿，不用来造新号。
             full = str(existing_row.get("statement_full") or full)
             text = str(existing_row.get("statement_text") or text)
+            if not declared:
+                # 2026-11-13（B）：重写证明那一档不需要产物再报一次命题 —— 盘上那一行
+                # 的 `statement_full` 就是 canonical（读它，不是拿子目标正文回退）。
+                # 新命题那一档不走这里：`declared` 为空 ⇒ `_proposition_form_precheck`
+                # 在写盘之前就受控拒 `proposition_missing`。
+                declared = str(existing_row.get("statement_full") or "").strip()
+                full = declared
         if existing_row:
             tier = self._proof_tier(str(existing_row.get("stmt_id") or ""), body)
         else:
@@ -2257,7 +2302,8 @@ class _Core:
             manuscript_text=manuscript_text, manuscript_received=manuscript_received,
             cites=cites, tier=tier,
             dependency_rows=self.dependency_rows(product),
-            existing_row=existing_row, form_reading=form_reading)
+            existing_row=existing_row, form_reading=form_reading,
+            proposition=declared)
 
     def _proposition_form_gate(self, *, full: str, kind: str, body: str,
                                label: str, task_id: str = "") -> dict[str, Any]:
@@ -2276,7 +2322,7 @@ class _Core:
         已有命题的证明重写不过这道闸 —— 改证明不需要重新登记。
 
         2026-11-13（W1 真机缺陷）之后位置往前挪了一格：同一个判据还要在
-        **写盘之前**问一次（`_proposition_form_precheck` —— 真机上闸判过不合格、
+        写盘之前问一次（`_proposition_form_precheck` —— 真机上闸判过不合格、
         稿还是落了盘并被送 V）。调用点因此有两处，判据仍只有这一处实现：
         写前闸（判过就复用读数）与登记那一笔（`_registration_form_gate`）。
 
@@ -2397,21 +2443,22 @@ class _Core:
         - 稿已经拿签（`freeze_reading` 为真）⇒ 放行给写口去受控拒 `manuscript_frozen`
           （那一档的受控码与拒信由写口给，这里只让开，不抢它的判据顺序）；
         - 其余（= 这一轮会写一份还没登记的新稿，即 `register_or_rewrite` 的
-          `MODE_REGISTERED` 那一档）⇒ 问一次。判不过 / 没判成 ⇒ 受控拒。
+          `MODE_REGISTERED` 那一档）⇒ 先看有没有 `product.proposition`（业主裁定 B：
+          硬必填，缺 ⇒ 受控拒 `proposition_missing`），有才问形态闸；判不过 / 没判成
+          ⇒ 受控拒。
 
-        判的字节是 `proposition_text(sg.text, sg.testable)` —— 也就是稿上 `## 命题`
-        那一节的逐字字节，不是再拼上「显式声明的前提」之后的另一段（真机：判 977 字、
-        写 311 字）。判过之后这一份读数经 `_proof_outlet` 递给登记那一步
-        （`form_reading=`）：同一段字节不重复判，登记那一笔一个模型钱都不再花。
+        判的字节是 `proposition_text(product.proposition)` —— 也就是稿上 `## 命题`
+        那一节的逐字字节（真机 000002 那一段作业话就是这么被拒的）。判过之后这一份
+        读数经 `_proof_outlet` 递给登记那一步（`form_reading=`）：同一段字节不重复判，
+        登记那一笔一个模型钱都不再花。
 
-        ## 受控拒的读数
+        ## 受控拒的读数（`_refused_round` 一处构造）
 
-        `refusal.kind = proposition_form_refused`，并把「改哪一节、怎么改」写成可粘的
-        下一步；这一轮 `outcome=no_change`、不登记、不送审、`manuscript_path` 留空
-        （一个字节都没写，不许留一个"稿在哪"的假地址）。
+        `refusal.kind` 是 `proposition_missing` 或 `proposition_form_refused`，并把
+        「改哪一格、怎么改」写成可粘的下一步；这一轮 `outcome=no_change`、不登记、
+        不送审、`manuscript_path` 留空（一个字节都没写，不许留一个"稿在哪"的假地址）。
         """
         from .. import proofoutcomes as _PO
-        from . import vsign as _VS_GATE
         from .manuscript import proof_body_text
 
         sid = str(sg.get("sid") or "")
@@ -2432,8 +2479,28 @@ class _Core:
                 return (None, None)
         except Exception:  # noqa: BLE001 —— 冻结读数读不出来时照常问闸（fail-closed）
             pass
+        # ---- 2026-11-13（业主裁定 B）：proof 档没有 `product.proposition` ⇒ 受控拒 ----
+        #
+        # 只在"这一轮会写一份还没登记的新稿"时立这条规矩：重写证明那一档不动 `## 命题`
+        # （已有登记条目，上面已经让开），盘上那一行的 `statement_full` 是 canonical。
+        proposition = proposition_text(product.get("proposition"))
+        if not proposition:
+            why = proposition_missing_why()
+            return (None, self._refused_round(
+                kind=PROPOSITION_MISSING,
+                detail=("命题缺一格 ⇒ 这一份稿一个字节都没写、没有登记、也没有送审："
+                        + why + "。没签 ⇒ 这一趟不算交差"),
+                problems=[why],
+                next_step=("给 `product.proposition`（前提 → 结论）再跑一轮 —— "
+                           "子目标正文不是命题；改法说明写进步骤或 `label`"),
+                hint=("先把 `product.proposition` 写成定理陈述再送审 —— "
+                      "没有命题就没有可送的对象"),
+                manuscript_id=mid, intended_path=rel,
+                form={"checked": False, "well_formed": False, "submittable": False,
+                      "refused": PROPOSITION_MISSING, "reason": why, "problems": []},
+                plan=plan, product=product, root=root))
         form = dict(self._proposition_form_gate(
-            full=proposition_text(sg.get("text"), sg.get("testable")),
+            full=proposition,
             kind=(product_kind(product) or str(sg.get("kind") or "").strip()
                   or "conjecture"),
             body=proof_body_text(product),
@@ -2447,16 +2514,36 @@ class _Core:
             + str(form.get("reason") or "形态不合规")
             + (("；逐条缺什么：" + "；".join(problems[:6])) if problems else "")
             + "。`## 命题` 那一节就是 B 收录时的命题正文（B 按它登记 `statement_full`，"
-            "V 也按它读这一份稿）⇒ 改的是这一节：把它写成那条定理的完整陈述"
-            "（前提 → 结论）；改法说明 / 作业要求（改哪一步、重送谁、签怎么读）写进步骤"
-            "或 `label`，不许塞进 `## 命题`。子目标正文就是 `## 命题` ⇒ 立项时"
-            "（`attack.create_plan`）就该把定理陈述写进子目标正文；已经是作业话的子目标，"
-            "就新开一条计划把命题正文写对。没签 ⇒ 这一趟不算交差")
+            "V 也按它读这一份稿）⇒ 改的是 `product.proposition` 那一格：把它写成那条"
+            "定理的完整陈述（前提 → 结论）；改法说明 / 作业要求（改哪一步、重送谁、"
+            "签怎么读）写进 `steps` 或 `label`，不许塞进 `## 命题`。没签 ⇒ 这一趟不算交差")
+        return (form, self._refused_round(
+            kind=_PO.REFUSED_GATE, detail=detail, problems=problems,
+            next_step=("把 `product.proposition` 改成那条定理的完整陈述（前提 → 结论）"
+                       "再跑一轮；改法说明写进 `steps` 或 `label`"),
+            hint=("先把 `product.proposition` 写成定理陈述再送审 —— "
+                  "形态闸没放行的稿没有可送的对象"),
+            manuscript_id=mid, intended_path=rel, form=form,
+            plan=plan, product=product, root=root))
+
+    def _refused_round(self, *, kind: str, detail: str, problems: list[str],
+                       next_step: str, hint: str, manuscript_id: str,
+                       intended_path: str, form: Mapping[str, Any],
+                       plan: Mapping[str, Any], product: Mapping[str, Any],
+                       root: str) -> dict:
+        """写前闸的受控拒读数（缺命题 / 形态判不过共用这一处）。
+
+        三态纪律：这一轮 `outcome=no_change`、`manuscript_path` 留空（一个字节都没写，
+        不许留一个"稿在哪"的假地址）；`refusal.manuscript_path` 是"本来要落在哪"（可读，
+        不是已写）；`delivered=False`、`statement_id=""`（没有登记也没有送审）。
+        """
+        from . import vsign as _VS_GATE
+
         sign = _VS_GATE.delivery_reading(root, statement_id="", proof_text="")
         delivery = self._delivery_reading(
             plan, assessment=(product.get("self_assessment")
                               if isinstance(product, Mapping) else None))
-        return (form, {
+        return {
             "action": "no_change",
             "outcome": "no_change",
             "detail": (detail + "；V 签：" + str(sign.get("label"))
@@ -2471,10 +2558,8 @@ class _Core:
             "in_flight": False,
             "count_attempt": True,
             "statement_id": "",
-            "manuscript_id": mid,
-            "v_sign": {"reading": sign,
-                       "hint": ("先把 `## 命题` 写成定理陈述再送审 —— "
-                                "形态闸没放行的稿没有可送的对象")},
+            "manuscript_id": manuscript_id,
+            "v_sign": {"reading": sign, "hint": hint},
             "delivered": bool(delivery.get("delivered")),
             "delivery": delivery,
             "signed_count": delivery.get("signed_count"),
@@ -2517,19 +2602,18 @@ class _Core:
             "proof_section_hashes": {},
             "manuscript_migrated": False,
             "refusal": {
-                "kind": _PO.REFUSED_GATE,
+                "kind": kind,
                 "streak": 1,
-                "problems": problems,
-                "next_step": ("把子目标正文（= `## 命题`）写成那条定理的完整陈述"
-                              "（前提 → 结论）再跑一轮；改法说明写进步骤，"
-                              "不许写进 `## 命题`"),
-                "manuscript_id": mid,
-                "manuscript_path": rel,
-                "proposition_form": form,
+                "problems": list(problems),
+                "next_step": next_step,
+                "manuscript_id": manuscript_id,
+                "manuscript_path": intended_path,
+                "proposition_form": dict(form),
             },
             "waiting_on": [],
             "new_subgoals": [],
-        })
+        }
+
 
     def _registration_form_gate(self, *, proposition: str, kind: str, body: str,
                                 label: str,
@@ -2555,6 +2639,31 @@ class _Core:
         return self._proposition_form_gate(
             full=proposition, kind=kind, body=body, label=label)
 
+    def _missing_proposition_refusal(self, *, row_now: Mapping[str, Any],
+                                     manuscript_id: str,
+                                     manuscript_received: Mapping[str, Any],
+                                     body: str, cites: list[str]) -> dict:
+        """写口 / 登记那一层的兜底：没有 `product.proposition` ⇒ 受控拒，一个字节不写。
+
+        正常路径由 `_proposition_form_precheck` 在写盘之前拒（连模型都不问）；
+        这里兜的是直调 `_hand_proof` 的那条路（测试 / 内部复用）。
+        """
+        from .. import refusals as _R
+
+        return _R.refuse(
+            PROPOSITION_MISSING, proposition_missing_why(),
+            refused_kind=PROPOSITION_MISSING,
+            statement_id=str(row_now.get("stmt_id") or ""), reused=False,
+            promoted=False, manuscript_id=str(manuscript_id or ""),
+            manuscript_received=dict(manuscript_received), proof_text=body,
+            proof_attached=False,
+            proposition_form={"checked": False, "well_formed": False,
+                              "submittable": False,
+                              "refused": PROPOSITION_MISSING,
+                              "reason": proposition_missing_why(),
+                              "problems": []},
+            why=proposition_missing_why(), cites=cites, manuscript_path="")
+
     def _hand_proof(self, *, full: str, text: str, body: str, sid: str,
                     plan: Mapping[str, Any], manuscript_id: str = "",
                     sg: Mapping[str, Any] | None = None,
@@ -2562,7 +2671,8 @@ class _Core:
                     cites: list[str], tier: Mapping[str, Any],
                     dependency_rows: list | None = None,
                     existing_row: Mapping[str, Any] | None = None,
-                    form_reading: Mapping[str, Any] | None = None) -> dict:
+                    form_reading: Mapping[str, Any] | None = None,
+                    proposition: str = "") -> dict:
         """把这一轮的「命题 + 证明」落成 / 更新 F 的手稿登记条目（不再交给 B 登记）。
 
         ## 业主 2026-11-07 的裁定（这就是本方法的全部职责）
@@ -2598,8 +2708,12 @@ class _Core:
         label = f"F 攻坚 {plan_id} 子目标 {sid}"
         subgoal = dict(sg or {})
         #: 稿上 `## 命题` 那一节的字节 —— 唯一算式在 `agent_f/manuscript.py::proposition_text`
-        #: （2026-11-13，W1：改前这一层与 `proof_manuscript` 各拼一遍，两段字节可能不同）。
-        proposition = proposition_text(text, subgoal.get("testable"))
+        #: （2026-11-13 业主裁定 B：只认 `product.proposition`，没有回退算式）。
+        proposition = proposition_text(proposition)
+        if not proposition:
+            return self._missing_proposition_refusal(
+                row_now=row_now, manuscript_id=manuscript_id,
+                manuscript_received=manuscript_received, body=body, cites=cites)
         kind_now = str(subgoal.get("kind") or row_now.get("kind") or "conjecture") or "conjecture"
         stmt_id = str(row_now.get("stmt_id") or "")
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
@@ -4308,7 +4422,12 @@ def selftest() -> int:
         encoding="utf-8",
     )
 
-    f = AgentF(st, config={"workspace_root": root})
+    # 自检里的"工具层建计划"那一格用另一个 F 桶（`actor=`）：本自检在前面已经立了
+    # 两条计划（主计划 + [8b] 的"预算烧干"路径），而业主 2026-11-13 的并发上限按
+    # `created_by` 分桶（一个 F 在推的 plan ≤2 条，`stalled` 也计入）。自检要测的是
+    # "工具层与 AgentF 口径一致"，不是"一个 F 能不能开第三条"（那是
+    # `tests/test_f_parallel_plan_cap.py` 的事）——两个桶各自都没超限。
+    f = AgentF(st, config={"workspace_root": root}, actor="agent-F-selftest")
     print(f"[1] 工具栏：{f.tools.names()}")
 
     # ---- 1. 预算不完整 ⇒ 不创建

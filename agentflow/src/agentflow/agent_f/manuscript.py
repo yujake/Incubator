@@ -118,31 +118,39 @@ def _notes_text(counts: Sequence[str], truncations: Sequence[str]) -> str:
     return "；".join(parts)
 
 
-def proposition_text(text: Any, testable: Any = "") -> str:
-    """`## 命题` 那一节的字节（唯一算式；渲染与形态闸都读它）。
+#: 受控码：proof 档没有 `product.proposition`（2026-11-13，业主裁定 B 硬必填）。
+PROPOSITION_MISSING = "proposition_missing"
 
-    ## 为什么这一格必须只有一份实现（2026-11-13，W1 真机缺陷）
 
-    真机 `projects/octahedron-20261113` 的 `reports/f-proof-000002.md` 里，
-    `## 命题` 是一段修订说明（「按 V u-000005 的唯一缺陷修订第 7 步…其余八步一字不动」），
-    而 B 收录时按这一段登记 `statement_full` ⇒ B 拒收「未登记」。F 自己的形态闸
-    （`_proposition_form_gate`）判过这段文字：它在台账上留的是
-    `checked=True / well_formed=False`，但那一次判的是另一段字节 ——
-    `_proof_outlet` 喂给闸的 `full` 是 `## 命题` 再拼上「显式声明的前提：…」（那条稿上是
-    311 字 vs 977 字），而写进盘的是前者。两个算式各写一遍，于是"判的"与"写的"不是同一段。
+def proposition_missing_why() -> str:
+    """`proposition_missing` 的 fix 文案（拒信与三处兜底共读这一句）。
 
-    现在渲染（本模块 `proof_manuscript`）、登记（`_hand_proof` 的 `proposition`）与形态闸
-    （`_hand_proof._gate` / `_apply_round` 的写前闸）都调这一个函数：它们判的、写的、
-    登记的必须是同一段字节。反真空：把任何一个调用点换回自己的拼法，
-    `tests/test_f_form_gate_precedes_the_write.py::test_d_*` 当场红
-    （它钉的是"闸判的那段 == 稿上 `## 命题` 那一节"）。
-
-    `testable` 在这里 strip（与 `_hand_proof` 改前那一份逐字相同）：它是从子目标那一格
-    抄过来的，空白不该变成稿上的字节。
+    业主给的逐字口径：「给 `product.proposition`（前提 → 结论）；子目标正文不是命题」。
     """
-    body = str(text or "").strip()
-    extra = str(testable or "").strip()
-    return body + (f"；这一条的可检验形式：{extra}" if extra else "")
+    return ("这一轮没有 `product.proposition` ⇒ 稿上 `## 命题` 没有可渲染的那段文字。"
+            "给 `product.proposition`（那条定理的完整陈述：前提 → 结论）—— "
+            "子目标正文不是命题（那是派给你的活）；改法说明 / 作业要求写进 `steps` 或 "
+            "`label`。这一份稿一个字节都没写")
+
+
+def proposition_text(proposition: Any) -> str:
+    """`## 命题` 那一节的字节：只认 `product.proposition`（B 硬必填，没有回退算式）。
+
+    ## 为什么没有回退（2026-11-13，W1 真机缺陷 + 业主裁定 B）
+
+    改前 `## 命题` = 子目标正文 ＋「这一条的可检验形式：…」，而子目标正文是派给 F 的活
+    （真机 `projects/octahedron-20261113` 的 `reports/f-proof-000002.md`：「按 V u-000005 的
+    唯一缺陷修订第 7 步…其余八步一字不动；同一份稿就地重写后重送 V」）⇒ 那段作业话被写进
+    `## 命题`、被 V 签、被 B 拒（B 按这一节登记 `statement_full`）。回退算式等于把病根留在
+    数据形状里；B 硬必填把它从形状上掐掉：没有 `proposition` ⇒ 受控拒
+    `proposition_missing`（`proposition_missing_why()` 是那句 fix 文案）。
+
+    `testable` 从此只属于计划 / 子目标，不再进 `## 命题` 的渲染（它是验收口径，不是定理）。
+
+    反真空：把任何一个调用点换回"子目标正文拼可检验形式"，
+    `tests/test_f_proposition_comes_from_the_product.py::test_c_*` 当场红。
+    """
+    return str(proposition or "").strip()
 
 
 def proof_body_text(product: Mapping[str, Any]) -> str:
@@ -420,13 +428,11 @@ class _Manuscript:
                     "why": (f"手稿号 {mid!r} 不是六位号 ⇒ 这一份稿不落盘"
                             "（稿号由 `manuscriptids.next_manuscript_id` 发）")}
         rows = self.dependency_rows(product)
-        # 命题正文与可检验形式各只取一次：标题要的是未 strip 的原串、proposition 用 strip 版
-        # （两者都从同一个值派生，不改变各自拿到的东西）。
+        # 标题要的是子目标原串（它是这一轮的活的名），`## 命题` 只认 `product.proposition`。
         sg_text = str(sg.get("text") or "")
-        testable = sg.get("testable")
-        #: 这一段就是稿上 `## 命题` 那一节的字节（唯一算式，见模块级 `proposition_text`）。
-        #: 形态闸判的必须是这一段（不是它再拼上"显式声明的前提"之后的另一段）。
-        proposition = proposition_text(sg_text, testable)
+        #: 这一段就是稿上 `## 命题` 那一节的字节（只认 `product.proposition`，B 硬必填；
+        #: 见模块级 `proposition_text`）。形态闸判的也必须是这一段。
+        proposition = proposition_text(product.get("proposition"))
         #: `## 证明` 那一节的字节（唯一算式，见模块级 `proof_body_text`）。
         proof_text = proof_body_text(product)
         text = _MF.render_proof_manuscript(
@@ -441,6 +447,19 @@ class _Manuscript:
             return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
                     "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
                     "why": f"手稿号 {mid!r} 拼不出规范路径 ⇒ 这一份稿不落盘"}
+        if not proposition:
+            # ---- 2026-11-13（业主裁定 B）：没有命题就没有可渲染的 `## 命题` -----------
+            # 写口这一层也拒（fail-closed）：正常路径由 `_proposition_form_precheck` 在
+            # 更早一步拒，这里是直调 `proof_manuscript` 的兜底，一个字节都不写。
+            # 次序：已拿签那一档先判（下一段）—— 冻结是"这一份只读"这个更具体的事实，
+            # 缺命题只是"这一版没给够"，不该抢它的拒信。
+            _missing = {"ok": False, "path": rel, "text": "", "rows": [], "preview": {},
+                        "named_by": "manuscript", "preserved": False, "written": False,
+                        "manuscript_id": mid, "refused": PROPOSITION_MISSING,
+                        "kind": PROPOSITION_MISSING, "proposition": "",
+                        "why": proposition_missing_why()}
+        else:
+            _missing = {}
         # ---- 2026-11-11（业主裁定 ②）：已拿签的那一份只读 -------------------------
         #
         # 这是 F 的手稿写口：`attack.step(product=…)` 与 `proof_manuscript` 直调都
@@ -456,7 +475,9 @@ class _Manuscript:
                     "manuscript_id": mid, "refused": _FZ.MANUSCRIPT_FROZEN,
                     "kind": _FZ.MANUSCRIPT_FROZEN, "freeze": dict(_frozen),
                     "why": str(_frozen.get("message") or "")}
-        preview = self.preview_dependencies(text)
+        if _missing:
+            # 没拿签、又没给命题 ⇒ 这一版没有可渲染的 `## 命题`：受控拒 `proposition_missing`。
+            return _missing
         # ---- A1：这一份"预写"不许擦掉已经登记的那一条 ------------------------------
         #
         # 生产路径的次序是"先写稿、后登记"（死结 1 的修法），而登记条目就住在同一个
@@ -467,6 +488,11 @@ class _Manuscript:
         # 解耦要成立，这一笔就不能动登记条目：稿在手上（`text` 照给），盘上那一份留给
         # `register_or_rewrite` 去就地重写 `## 证明`。
         kept = self._registered_entry_text(root, rel)
+        if kept is not None and not proposition:
+            # 重写证明那一档不动 `## 命题`（盘上那一份的命题正文照旧）⇒ 缺 `proposition`
+            # 不是错：`text` 用盘上那一份，别拿一份"命题为空"的渲染结果当读数。
+            text = kept
+        preview = self.preview_dependencies(text)
         if kept is not None:
             got = {"ok": True, "checked": True, "path": rel, "written": False,
                    "preserved": True, "text": kept, "why": ""}

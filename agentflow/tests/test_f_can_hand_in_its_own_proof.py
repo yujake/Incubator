@@ -120,6 +120,7 @@ def _citable_statement(st: Store) -> dict:
 def _proof_product(stmt_id: str) -> dict:
     return {
         "kind": "proof",
+        "proposition": "设 g ≥ 0 可积、|f_n| ≤ g；则 ∫|f_n − f| → 0。",
         "label": "控制收敛（Fatou 路线）的一段",
         "steps": [
             {"text": "设 g ≥ 0 可积、|f_n| ≤ g（本步是前提）", "assumption": True},
@@ -217,6 +218,7 @@ def test_b_a_cite_that_is_not_on_the_ledger_is_refused_step_by_step(
 
     bad = {
         "kind": "proof",
+        "proposition": "设 g ≥ 0 可积、|f_n| ≤ g；则 ∫|f_n − f| → 0。",
         "steps": [
             {"text": "设 g 可积（前提）", "assumption": True},
             {"text": "由控制收敛直接得结论", "cites": ["stmt:999999"]},

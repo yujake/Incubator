@@ -178,7 +178,9 @@ def _gate_ok(monkeypatch) -> None:
 
 
 def _proof_product(dep: str) -> dict:
-    return {"kind": "proof", "label": "控制收敛的一段",
+    return {"kind": "proof",
+            "proposition": "设 g ≥ 0 可积；则 |f_n−f| ≤ 2g 且 ∫2g 有界。",
+            "label": "控制收敛的一段",
             "steps": [{"text": "设 g ≥ 0 可积（本步是前提）", "assumption": True},
                       {"text": "由控制函数得 |f_n-f| ≤ 2g，且 2g 可积",
                        "cites": [f"stmt:{dep}"]}]}

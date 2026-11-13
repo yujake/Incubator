@@ -46,7 +46,8 @@ def _f(store: Store) -> AgentF:
 
 
 def _product(text: str = "由定义直接得到") -> dict:
-    return {"product": "proof", "strategy": "直接计算", "why_strategy": "由定义与假设直接得到",
+    return {"product": "proof", "proposition": "设前提成立；则由定义直接得到结论。",
+            "strategy": "直接计算", "why_strategy": "由定义与假设直接得到",
             "steps": [{"n": 1, "text": text, "cites": [], "assumption": False}]}
 
 

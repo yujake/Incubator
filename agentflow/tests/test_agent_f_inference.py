@@ -76,10 +76,10 @@ class BrokenLLM:
 
 def _f(store: Store, llm=None, *, budget_reading=None, actor: str = "agent-F",
        **cfg) -> AgentF:
-    """造一个 F。`actor` 是**归因名**（并发上限按它分桶，见 `create_plan` 的上限）。
+    """造一个 F。`actor` 是归因名（并发上限按它分桶，见 `create_plan` 的上限）。
 
     这里显式给：本文件有几处用例要在同一个 store 里造两条以上计划，而业主
-    2026-11-13 的并发上限是"**一个 F** 在推的计划 ≤2 条"（`created_by` 分桶）。
+    2026-11-13 的并发上限是"一个 F 在推的计划 ≤2 条"（`created_by` 分桶）。
     给每个不相干的子用例一个不同的 actor，等于"它们是不同的 F"——判据要测的
     仍是原来那一件事，没有放宽任何断言。
     """
@@ -117,6 +117,10 @@ def _round(**fields) -> str:
     """造一份成形产物的 JSON 文本（缺省补上公共字段）。"""
     base = {"strategy": "小情形搜索找模式", "why_strategy": "先看小情形有没有模式"}
     base.update(fields)
+    if base.get("product") == "proof" and not str(base.get("proposition") or "").strip():
+        # 2026-11-13（业主裁定 B）：proof 档必填 `proposition`。本文件判的是推理那一侧，
+        # 命题正文给一句固定陈述即可（它不是本文件的判据）。
+        base["proposition"] = "设 f 在 [0,1] 上连续；则 f 在 [0,1] 上一致连续。"
     return json.dumps(base, ensure_ascii=False)
 
 
@@ -302,7 +306,7 @@ def test_s10_the_counterexample_request_carries_its_spec_into_the_e_subgoal(stor
     # 派给 E 那一条（另起一张计划：`pick_next_subgoal` 会把 `in_progress` 的 s1 排在前面，
     # 这里要单独测 `_deploy_e` 的拒绝文案）⇒ 拒绝里必须逐字念出判据。
     #
-    # 这两条计划用**另一个 F**（`actor="agent-F-S10B"`）：业主 2026-11-13 的并发上限
+    # 这两条计划用另一个 F（`actor="agent-F-S10B"`）：业主 2026-11-13 的并发上限
     # 按 `created_by` 分桶（一个 F 在推的 plan ≤2 条），而本用例要测的是 `_deploy_e`
     # 的拒绝文案，不是上限 —— 一个 F 造三条会被上限受控拒，那是另一条判据
     # （`tests/test_f_parallel_plan_cap.py`）。原断言一条不动。

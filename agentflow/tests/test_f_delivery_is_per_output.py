@@ -107,15 +107,16 @@ def _proof_round(f: AgentF, plan: dict, *, sid: str, text: str) -> dict:
     期望值一个字没改。
     """
     sg = next(dict(s) for s in plan["subgoals"] if s["sid"] == sid)
-    product = {"product": "proof", "strategy": "direct", "why_strategy": "直接按定义",
+    full = str(sg.get("text") or "")
+    if str(sg.get("testable") or ""):
+        full += f"；这一条的可检验形式：{sg.get('testable')}"
+    product = {"product": "proof", "proposition": full, "strategy": "direct",
+               "why_strategy": "直接按定义",
                "steps": [{"n": 1, "text": f"{text}：取 ε>0，按定义逐点验证。", "cites": [],
                           "assumption": False},
                          {"n": 2, "text": "ε 任意 ⇒ 结论成立。", "cites": []}]}
     manuscript = f.proof_manuscript(product, sg=sg, plan=plan)
     body = _DS.proof_body(str(manuscript.get("text") or "")).strip("\n")
-    full = str(sg.get("text") or "")
-    if str(sg.get("testable") or ""):
-        full += f"；这一条的可检验形式：{sg.get('testable')}"
     existing = next((dict(r) for r in f.store.rows("statements")
                      if str(r.get("statement_full") or "").strip() == full.strip()), None)
     if existing is not None:
@@ -389,6 +390,7 @@ def test_f_a_signed_output_does_not_end_the_plan(tmp_path):
     # （同一份正文 ⇒ 同一个 sha ⇒ 签仍然成立），其余读数一个字不改。
     f.llm = _FakeLLM(json.dumps({
         "product": "proof", "strategy": "套用已知定理", "why_strategy": "直接按定义",
+        "proposition": "引理 A：设 f 在 [0,1] 上连续；则 f 一致连续。",
         "steps": [{"n": 1, "text": "引理 A：取 ε>0，按定义逐点验证。", "cites": [],
                    "assumption": False},
                   {"n": 2, "text": "ε 任意 ⇒ 结论成立。", "cites": []}]},

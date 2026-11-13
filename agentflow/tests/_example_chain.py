@@ -140,6 +140,7 @@ def run_f_example(st: Store) -> dict:
                                   enable_model=True)
     got = f._hand_proof(
         full=FULL, text=FULL, body=PROOF, sid=SID_SLOT,
+        proposition=FULL,
         plan={"plan_id": PLAN, "problem_key": "k1"},
         sg={"sid": SID_SLOT, "text": FULL, "kind": "example"},
         manuscript_id=F_MID,

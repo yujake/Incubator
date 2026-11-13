@@ -222,6 +222,7 @@ def _proof_product(*, cites: list[str]) -> dict:
               "assumption": False}]
     steps.append({"n": 2, "text": "由 1 得结论。", "cites": cites[:1], "assumption": False})
     return {"product": "proof", "strategy": "套用已知定理",
+            "proposition": "设 A、B 是两条在册定理；则由它们直接得到结论。",
             "why_strategy": "两条已收录定理直接给出结论，不需要新的构造", "steps": steps}
 
 

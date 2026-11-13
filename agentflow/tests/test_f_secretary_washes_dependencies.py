@@ -170,6 +170,7 @@ class FakeSeam:
 
 def _no_cite_payload() -> dict:
     return {"product": "proof", "strategy": "套用已知定理",
+            "proposition": "设 n 是正整数；则 n 的阶乘为正。",
             "why_strategy": "把结论写成两条前提",
             "steps": [{"n": 1, "text": "设 n 是正整数（前提）。", "cites": [],
                        "assumption": True},
@@ -207,6 +208,7 @@ def test_the_rendered_manuscript_always_has_the_dependency_section(
     store = _ws(tmp_path)
     f = _f(store)
     product = {"product": "proof", "strategy": "套用已知定理", "why_strategy": "两条前提",
+               "proposition": "设 n 是正整数；则 n 的阶乘为正。",
                "steps": [{"n": 1, "text": "设 n 是正整数（前提）。", "cites": [],
                           "assumption": True}]}
     got = f.proof_manuscript(product, sg={"sid": "s1", "text": "目标"},

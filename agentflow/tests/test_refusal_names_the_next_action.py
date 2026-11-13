@@ -157,6 +157,7 @@ def _plan(agent: AgentF) -> dict:
 
 #: 这一轮 F 的 proof 产物（一步，引一条在册号）。
 PRODUCT = {"product": "proof", "strategy": "局部—整体", "why_strategy": "判据夹具",
+           "proposition": "由在册定理得结论。",
            "steps": [{"n": 1, "text": "由在册定理得结论", "cites": ["stmt:000013"],
                       "assumption": False, "role": "推导步", "problem": ""}]}
 

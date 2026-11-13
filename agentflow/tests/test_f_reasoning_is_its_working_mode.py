@@ -99,6 +99,7 @@ def _plan(f, *, key: str = "PK-F-WORKING") -> str:
 
 def _proof_payload() -> dict:
     return {"product": "proof", "strategy": "套用已知定理",
+            "proposition": "设 n 是正整数；则 n 的阶乘为正。",
             "why_strategy": "把子目标直接写成两步：一步前提、一步由前提得结论",
             "steps": [{"n": 1, "text": "设 n 是正整数（这一轮的前提）。", "cites": [],
                        "assumption": True},

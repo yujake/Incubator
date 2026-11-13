@@ -93,6 +93,7 @@ def _round(**fields) -> str:
 def _proof_round(text: str = "反设存在反例，取最小者", strategy: str = "反证") -> str:
     """一份成形的 `proof`：只有显式前提（不引 id ⇒ 不会被 R-03 拒收）。"""
     return _round(product="proof", strategy=strategy,
+                  proposition="设 G 是有限群；则 |G|=p^2 时 G 交换。",
                   steps=[{"text": text, "assumption": True}])
 
 
@@ -204,7 +205,9 @@ def test_the_same_strategy_twice_asks_for_a_different_one(store: Store):
 def test_a_malformed_round_is_asked_again_with_its_own_reason(store: Store):
     """判据：第一次不成形 ⇒ 带着它自己的原因重问；第二次成形 ⇒ 这一轮真推进。"""
     bad = _round(product="reduction", new_subgoals=[])          # 归约必须给 1–3 条
-    good = _round(product="proof", steps=[{"text": "这才是论证", "assumption": True}])
+    good = _round(product="proof",
+                  proposition="设 G 是有限群；则 |G|=p^2 时 G 交换。",
+                  steps=[{"text": "这才是论证", "assumption": True}])
     llm = FakeLLM(bad, good)
     f = _f(store, llm=llm)
     pid = _new_plan(f)

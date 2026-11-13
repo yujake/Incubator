@@ -114,6 +114,7 @@ def _proof_body() -> str:
 
 def _proof_product() -> dict:
     return {"product": "proof", "strategy": "套用已知定理",
+            "proposition": "设 f 在 [0,1] 上连续；则 f 在 [0,1] 上一致连续。",
             "why_strategy": "直接按定义",
             "steps": [{"n": 1, "text": "取 δ=ε，按定义逐点验证。", "cites": [],
                        "assumption": False}]}

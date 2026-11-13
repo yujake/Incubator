@@ -165,7 +165,8 @@ def test_i4_feeds_the_attack_round_defect_judge():
     rows = [_own("0001", graded=True), _citation("0008", verified=False)]
     clean = EB.clean_statement_ids(rows)["clean"]
     proof = AR.parse_round(
-        '{"product": "proof", "strategy": "套用已知定理", "why_strategy": "直接引用",'
+        '{"product": "proof", "proposition": "设命题成立；则由它得结论。",'
+        ' "strategy": "套用已知定理", "why_strategy": "直接引用",'
         ' "steps": [{"text": "由 0001 得到", "cites": ["0001"]},'
         '           {"text": "由 0008 得到", "cites": ["0008"]}]}')
     defects = AR.inherit_defects(proof, clean_ids=clean)

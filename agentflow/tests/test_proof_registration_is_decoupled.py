@@ -110,7 +110,7 @@ def _f(st: Store, stub: _FormStub | None = None) -> AgentF:
 def _hand(f: AgentF, body: str, *, text: str = TEXT, sid: str = SID,
           stable_row: dict | None = None, at: str = AT):
     return f._hand_proof(
-        full=text, text=text, body=body, sid=sid,
+        full=text, text=text, body=body, sid=sid, proposition=text,
         plan={"plan_id": PLAN, "problem_key": "PK"},
         sg={"sid": sid, "text": text},
         manuscript_id=MID,
@@ -381,7 +381,7 @@ def test_h_a_lemma_lands_as_lemma_in_the_manuscript_and_b_can_read_it(tmp_path):
     stub = _FormStub()
     f = _f(st, stub)
     got = f._hand_proof(
-        full=TEXT, text=TEXT, body=PROOFS[0], sid=SID,
+        full=TEXT, text=TEXT, body=PROOFS[0], sid=SID, proposition=TEXT,
         plan={"plan_id": PLAN, "problem_key": "PK"},
         sg={"sid": SID, "text": TEXT, "kind": "lemma"},
         manuscript_id=MID,
@@ -556,25 +556,30 @@ def test_the_closing_reading_shows_registration_once_and_n_versions(tmp_path):
 class _ProofSeam:
     """一次性推理缝：每轮回一份 proof 产物（`complete(prompt) -> str`）。"""
 
-    def __init__(self, body: str) -> None:
+    def __init__(self, body: str, proposition: str = TEXT) -> None:
         self.body = str(body)
+        #: 2026-11-13（业主裁定 B）：`## 命题` 只从 `product.proposition` 渲染 ——
+        #: 所以"换命题正文"这一条夹具改的是这一格，不是子目标正文。
+        self.proposition = str(proposition)
 
     def complete(self, prompt: str) -> str:
-        return json.dumps({"product": "proof", "strategy": "套用已知定理",
+        return json.dumps({"product": "proof", "proposition": self.proposition,
+                           "strategy": "套用已知定理",
                            "why_strategy": "夹具：由在册定理逐条读出",
                            "steps": [{"n": 1, "text": self.body,
                                       "cites": [], "assumption": True}]},
                           ensure_ascii=False)
 
 
-def _production_rounds(st: Store, bodies, monkeypatch=None):
+def _production_rounds(st: Store, bodies, monkeypatch=None, *,
+                       proposition: str = TEXT):
     """生产路径跑 N 轮 F 的 proof 档（`AgentF.step`，与真机同一入口）。
 
     返回 `(plan_id, rounds, stub)`；`rounds` 是每一轮 `step` 的返回值。
     """
     stub = _FormStub()
     f = AgentF(st, config={"workspace_root": str(st.root)},
-               llm=_ProofSeam(bodies[0] if bodies else ""))
+               llm=_ProofSeam(bodies[0] if bodies else "", proposition))
     f.f_secretary = stub
     plan = f.create_plan("引理：由定义推出目标结论", "PK-A1-PRODUCTION", subgoals=[
         {"sid": "s1", "text": "由定义推出目标结论", "owner": "F",
@@ -582,7 +587,7 @@ def _production_rounds(st: Store, bodies, monkeypatch=None):
     pid = str(plan["plan_id"])
     rounds = []
     for body in bodies:
-        f.llm = _ProofSeam(body)
+        f.llm = _ProofSeam(body, proposition)
         rounds.append(dict(f.step(pid)))
     return pid, rounds, stub
 
@@ -647,6 +652,10 @@ def test_a2_changing_the_proposition_in_the_same_window_is_refused(tmp_path):
     改前：`proposition_text_changed` 只在 `same_slot` 生效，而生产路径上 `same_slot`
     永远是 False ⇒ 改命题正文被当成"新命题"静默登记（盘上 `## 命题` 被换掉）。
     现在：槽位从稿头元信息认出来，改命题正文走受控拒，盘上一个字节都不动。
+
+    2026-11-13（业主裁定 B）：命题正文的来源是 `product.proposition`，不再是子目标正文
+    —— 所以这一条夹具"换命题"换的是那一格（`proposition=OTHER`），不是 plan 上的
+    `subgoal.text`。判的契约（同窗口换命题 ⇒ 受控拒、盘上一个字节不动）没有变。
     """
     st = _ws(tmp_path)
     pid, rounds, stub = _production_rounds(st, PROOFS[:1])
@@ -654,14 +663,7 @@ def test_a2_changing_the_proposition_in_the_same_window_is_refused(tmp_path):
     sheet = pathlib.Path(st.root) / (
         f"reports/f-proof-{rounds[0]['manuscript_id']}.md")
     before = R.section_hashes(sheet.read_text(encoding="utf-8"))
-    # 同一个子目标换命题正文（同窗口）：只改 plan 台账上的 subgoal.text
-    row = dict(st.rows("attack_plans")[0])
-    subs = [dict(s) for s in (row.get("subgoals") or [])]
-    subs[0]["text"] = OTHER
-    row["subgoals"] = subs
-    with st.tx("attack_plans", actor="test", note="fixture:a2") as tx:
-        tx.upsert("attack_plans", row)
-    _pid, second, _stub = _production_rounds(st, [PROOFS[1]])
+    _pid, second, _stub = _production_rounds(st, [PROOFS[1]], proposition=OTHER)
     out = second[0]
     assert "命题正文与登记条目里那一条不一致" in str(out.get("reason") or ""), out
     after = R.section_hashes(sheet.read_text(encoding="utf-8"))

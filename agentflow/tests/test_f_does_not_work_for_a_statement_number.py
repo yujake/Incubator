@@ -92,7 +92,8 @@ def _f(st: Store) -> AgentF:
 
 
 def _product() -> dict:
-    return {"product": "proof", "strategy": "套用已知定理", "why_strategy": "直接套控制收敛",
+    return {"product": "proof", "proposition": PROPOSITION,
+            "strategy": "套用已知定理", "why_strategy": "直接套控制收敛",
             "steps": [{"n": i, "text": t, "cites": []}
                       for i, t in enumerate(PROOF_STEPS, 1)]}
 

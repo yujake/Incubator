@@ -241,6 +241,7 @@ class SameSearchSeam:
 
 def _proof_payload(cite: str) -> dict:
     return {"product": "proof", "strategy": "套用已知定理",
+            "proposition": "设 A、B 是两条在册定理；则由它们直接推出结论。",
             "why_strategy": "由在册定理直接推出结论",
             "steps": [{"n": 1, "text": "由在册定理直接得到第一步。",
                        "cites": [cite], "assumption": False},

@@ -17,6 +17,9 @@
 """
 from __future__ import annotations
 
+#: 2026-11-13（业主裁定 B）：proof 档必填的命题正文（夹具用）。
+_PROP = "设命题成立；则由它得结论。"
+
 import json
 
 import pytest
@@ -50,7 +53,7 @@ def test_e11_reduction_is_a_product(tmp_path=None):
 def test_e11_proof_is_a_product_and_the_proof_goes_somewhere():
     """E11②：`proof` ⇒ 逐步论证（每步引 id 或声明成前提）—— 它就是要置第 2 位的那件东西。"""
     got = AR.parse_round(json.dumps({
-        "product": "proof", "strategy": "反证", "why_strategy": "假设不存在族导出矛盾",
+        "product": "proof", "proposition": _PROP, "strategy": "反证", "why_strategy": "假设不存在族导出矛盾",
         "steps": [{"text": "假设对所有 n 都不存在", "assumption": True},
                   {"text": "由 stmt:0004 的界得到 girth ≤ 6", "cites": ["stmt:0004"]}]},
         ensure_ascii=False))
@@ -102,9 +105,9 @@ def test_e11_no_change_is_not_a_product(tmp_path=None):
                                    "why_strategy": "还没接线自动推理"}))
     assert "dead_end" in str(exc.value), str(exc.value)
     with pytest.raises(AR.RoundError):
-        AR.parse_round(json.dumps({"product": "proof", "why_strategy": "x", "steps": []}))
+        AR.parse_round(json.dumps({"product": "proof", "proposition": _PROP, "why_strategy": "x", "steps": []}))
     with pytest.raises(AR.RoundError):
-        AR.parse_round(json.dumps({"product": "proof", "strategy": "随便", "why_strategy": "x",
+        AR.parse_round(json.dumps({"product": "proof", "proposition": _PROP, "strategy": "随便", "why_strategy": "x",
                                    "steps": [{"text": "a"}]}))
 
 
@@ -114,24 +117,24 @@ def test_the_banned_phrase_needs_one_of_the_two_legal_exits():
     """#5：出现"易证/显然"这类缝 ⇒ 打回，并逐字给出两条合法出口。"""
     with pytest.raises(AR.RoundError) as exc:
         AR.parse_round(json.dumps({
-            "product": "proof", "strategy": "归约", "why_strategy": "x",
+            "product": "proof", "proposition": _PROP, "strategy": "归约", "why_strategy": "x",
             "steps": [{"text": "易证该族非空"}]}))
     msg = str(exc.value)
     assert "合法出口" in msg and "assumption" in msg, msg
     # 出口 ①：把这一步写出来（给出依据）
     ok1 = AR.parse_round(json.dumps({
-        "product": "proof", "strategy": "构造参数族", "why_strategy": "显式构造",
+        "product": "proof", "proposition": _PROP, "strategy": "构造参数族", "why_strategy": "显式构造",
         "steps": [{"text": "取 G=C_n：2-正则、围长 n", "cites": ["stmt:0001"]}]}))
     assert ok1["steps"][0]["cites"] == ["stmt:0001"]
     # 出口 ②：显式声明成前提
     ok2 = AR.parse_round(json.dumps({
-        "product": "proof", "strategy": "归约", "why_strategy": "先接受这条前提",
+        "product": "proof", "proposition": _PROP, "strategy": "归约", "why_strategy": "先接受这条前提",
         "steps": [{"text": "设该族非空（本文的前提）", "assumption": True}]}))
     assert ok2["steps"][0]["assumption"] is True
     # 既没引据也没声明 ⇒ 打回（"每一步都要指出依据"是 I10 的最小形态）
     with pytest.raises(AR.RoundError):
         AR.parse_round(json.dumps({
-            "product": "proof", "strategy": "归约", "why_strategy": "x",
+            "product": "proof", "proposition": _PROP, "strategy": "归约", "why_strategy": "x",
             "steps": [{"text": "由上面的讨论得到结论"}]}))
 
 
@@ -140,7 +143,7 @@ def test_the_banned_phrase_needs_one_of_the_two_legal_exits():
 def test_e12_a_proof_citing_a_refuted_statement_inherits_the_defect():
     """E12：证明引了一条已作废的命题 ⇒ 那一步记继承缺陷（I11），并且指到步号。"""
     row = AR.parse_round(json.dumps({
-        "product": "proof", "strategy": "套用已知定理", "why_strategy": "直接用它",
+        "product": "proof", "proposition": _PROP, "strategy": "套用已知定理", "why_strategy": "直接用它",
         "steps": [{"text": "由 stmt:0007 的界得到结论", "cites": ["stmt:0007"]},
                   {"text": "由 stmt:0004 得到 girth ≤ 6", "cites": ["stmt:0004"]}]}))
     defects = AR.inherit_defects(row, clean_ids=["stmt:0004"])
@@ -154,7 +157,7 @@ def test_e12_a_proof_citing_a_refuted_statement_inherits_the_defect():
 def test_e12_a_declared_assumption_does_not_inherit_a_defect():
     """I11 的边界：显式声明成前提的那一步引用"不干净"的东西是已知的，不算继承缺陷。"""
     row = AR.parse_round(json.dumps({
-        "product": "proof", "strategy": "归约", "why_strategy": "先接受它",
+        "product": "proof", "proposition": _PROP, "strategy": "归约", "why_strategy": "先接受它",
         "steps": [{"text": "设 stmt:0007 成立（本轮前提）", "cites": ["stmt:0007"],
                    "assumption": True}]}))
     assert AR.inherit_defects(row, clean_ids=[]) == [], AR.inherit_defects(row, clean_ids=[])

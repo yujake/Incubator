@@ -47,6 +47,7 @@ def _f(store: Store) -> AgentF:
 def _round(store: Store) -> dict:
     got = _f(store).proof_manuscript(
         {"product": "proof", "strategy": "反证", "why_strategy": "由整除性",
+         "proposition": STATEMENT,
          "steps": [{"n": 1, "text": "反设两者都是素数", "cites": []},
                    {"n": 2, "text": "由整除性推出矛盾", "cites": []}]},
         sg={"sid": "s1", "text": STATEMENT, "testable": ""},

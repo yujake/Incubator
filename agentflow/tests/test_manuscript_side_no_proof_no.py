@@ -178,7 +178,7 @@ def test_c_b_catches_the_new_manuscript_without_any_proof_no(tmp_path: pathlib.P
     st = _ws(tmp_path)
     f = AgentF(st, config={"workspace_root": str(st.root)})
     man = f.proof_manuscript(
-        {"kind": "proof", "label": "彩排",
+        {"kind": "proof", "proposition": FULL, "label": "彩排",
          "steps": [{"text": "取 G = C_n。", "cites": []},
                    {"text": "由第 1 步得结论。", "cites": []}]},
         sg={"sid": "S1", "text": FULL}, plan={"plan_id": "0001"},

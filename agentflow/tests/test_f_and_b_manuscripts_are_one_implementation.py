@@ -162,7 +162,7 @@ def _sign(st: Store, rel: str, *, sha: str = "") -> str:
 
 
 def _product() -> dict:
-    return {"product": "proof", "strategy": "套用已知定理",
+    return {"product": "proof", "proposition": PROPOSITION, "strategy": "套用已知定理",
             "why_strategy": "由在册定理逐条读出",
             "steps": [{"n": 1, "text": STEP_TEXT, "cites": [f"stmt:{DEP}"]}]}
 
@@ -617,7 +617,7 @@ def _role_only(text: str) -> str:
 
 def _no_cite_product() -> dict:
     """不引用任何在册命题的证明（这样稿里是空依赖表，不用抬被引命题的档位）。"""
-    return {"product": "proof", "strategy": "直接计算", "why_strategy": "由定义与假设直接得到",
+    return {"product": "proof", "proposition": PROPOSITION, "strategy": "直接计算", "why_strategy": "由定义与假设直接得到",
             "steps": [{"n": 1, "text": STEP_TEXT, "cites": [], "assumption": False}]}
 
 

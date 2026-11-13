@@ -109,6 +109,7 @@ def test_a2_the_proof_product_can_declare_example_and_the_registry_lands_it(tmp_
     f.f_secretary = SEC.Secretary("F", root=st.root, store=st, seam=seam,
                                   enable_model=True)
     product = {"product": "proof", "kind": "example",
+               "proposition": "设 G 是有限群；则 |G|=p^2 时 G 交换。",
                "steps": [{"n": 1, "text": "由 Sylow 定理，n_3=1。", "cites": [],
                           "assumption": False}]}
     got = f._proof_outlet(product, {"sid": SID_SLOT, "text": FULL, "testable": ""},

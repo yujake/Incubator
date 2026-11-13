@@ -156,6 +156,7 @@ def _hand(agent: AgentF, full: str, *, kind: str = "conjecture", sid: str = "S1"
           body: str = PROOF):
     return agent._hand_proof(
         full=full, text=full, body=body, sid=sid,
+        proposition=full,
         plan={"plan_id": "0001", "problem_key": "k1"},
         sg={"sid": sid, "text": full, "kind": kind},
         manuscript_text="",

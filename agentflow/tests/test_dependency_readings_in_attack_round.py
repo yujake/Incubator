@@ -9,6 +9,9 @@
 """
 from __future__ import annotations
 
+#: 2026-11-13（业主裁定 B）：proof 档必填的命题正文（夹具用）。
+_PROP = "设命题成立；则由它得结论。"
+
 import json
 
 from agentflow import attackround as AR
@@ -17,7 +20,7 @@ from agentflow import attackround as AR
 def _proof(steps: list[dict]) -> dict:
     """造一份成形的一轮（`parse_round` 的返回就是"返回读数"）。"""
     return AR.parse_round(json.dumps({
-        "product": "proof", "strategy": "反证", "why_strategy": "反设结论不成立",
+        "product": "proof", "proposition": _PROP, "strategy": "反证", "why_strategy": "反设结论不成立",
         "steps": steps,
     }, ensure_ascii=False))
 

@@ -180,18 +180,25 @@ def _plan(text: str, testable: str = "") -> dict:
             "subgoals": [sg]}
 
 
-def _product() -> dict:
-    return {"product": "proof", "strategy": "按定义", "why_strategy": "直接算截面",
+def _product(proposition: str) -> dict:
+    """这一轮的 proof 产物（2026-11-13 业主裁定 B：`proposition` 必填）。
+
+    这一份文件判的是**形态闸**那一轴：`proposition` 就是这一轮声明的命题正文
+    （可以是那段作业话 —— 那时闸的任务就是把它判成"不是命题"）。
+    """
+    return {"product": "proof", "proposition": proposition,
+            "strategy": "按定义", "why_strategy": "直接算截面",
             "steps": [{"n": 1, "text": "取 a=1 的八面体 O_1，按 n 的三个分量分两支。",
                        "cites": [], "assumption": True},
                       {"n": 2, "text": "由 Brunn 凹性，最大截面必过原点。",
                        "cites": [], "assumption": False}]}
 
 
-def _round(f: AgentF, *, text: str, testable: str = "") -> tuple[dict, dict]:
+def _round(f: AgentF, *, text: str, testable: str = "",
+           proposition: str = NEGATIVE) -> tuple[dict, dict]:
     plan = _plan(text, testable)
     sg = plan["subgoals"][0]
-    out = f._apply_round(_product(), sg, plan=plan, owner="F")
+    out = f._apply_round(_product(proposition), sg, plan=plan, owner="F")
     return out, plan
 
 
@@ -263,7 +270,7 @@ def test_b_a_normal_theorem_statement_lands_and_registers(tmp_path):
     """b：规范的「设…则…，等号当且仅当…」⇒ 过闸、落成手稿、登记；只问一次模型。"""
     st = _ws(tmp_path)
     f = _agent(st, {POSITIVE: ANSWER_POSITIVE})
-    out, _plan_now = _round(f, text=POSITIVE)
+    out, _plan_now = _round(f, text=POSITIVE, proposition=POSITIVE)
 
     assert out.get("proof_registered") is True, out
     assert out.get("proof_mode") == "registered", out

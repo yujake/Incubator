@@ -123,6 +123,7 @@ PRODUCT_MENU: str = " / ".join(f"`{name}`" for name in PRODUCT_SPECS)
 HANDED_PRODUCT_KINDS: tuple[str, ...] = ("proof", "reduction")
 
 
+
 #: `attack.step(product=…)` 的参数面（工具层与 `specs/f.py` 的动作表共用这一处）。
 #:
 #: 为什么这里必须是模块级字面量而不是函数：两层参数对账
@@ -149,6 +150,12 @@ HANDED_PRODUCT_SCHEMA: dict[str, Any] = {
                 "description": (
                     "这一份的档：`proof` = 逐步论证（给 `steps`）；`reduction` = 把目标"
                     "归约成 1–3 条新子目标（给 `new_subgoals` 与 `reason`）。"),
+            },
+            # 2026-11-13（业主裁定 B）：proof 档必填，只声明类型 —— 文案随 p281 写，
+            # 现在先让工具参数门认它（否则 `attack.step` 在参数门就拒，
+            # `parse_handed_product` 的 `proposition_missing` 走不到）。
+            "proposition": {
+                "type": "string",
             },
             "label": {
                 "type": "string",
@@ -472,9 +479,18 @@ def parse_round(text: str) -> dict[str, Any]:
         out["new_subgoals"] = clean
         out["reason"] = str(got.get("reason") or "").strip()
     elif product == "proof":
+        # 2026-11-13（业主裁定 B）：`## 命题` 只从 `proposition` 渲染（真机 000002 那段
+        # 作业话就是改前从子目标正文拼出来的）。
+        proposition = str(got.get("proposition") or "").strip()
+        if not proposition:
+            raise RoundError(
+                "proof 必须给 `proposition`（那条定理的完整陈述：前提 → 结论）—— "
+                "`## 命题` 只从它渲染；子目标正文不是命题（那是派给你的活）；"
+                "改法说明 / 作业要求写进 `steps` 或 `label`")
         clean, problems = clean_proof_steps(got.get("steps"))
         if problems:
             raise RoundError("；".join(problems))
+        out["proposition"] = proposition
         out["steps"] = clean
         # 读数（不是判据）：把"前提步"与"推导步被声明成前提"分开交回去 ——
         # 后者一进 `history` 的 `product_detail`，下一轮谁读这一轮都看得见。

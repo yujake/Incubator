@@ -203,7 +203,9 @@ def test_b_frozen_refusal_points_to_the_copy_and_b_gets_one(
                                     "testable": _TESTABLE}])
     assert made.get("created") is True, made
     plan_id = str(made["plan_id"])
-    product = {"kind": "proof", "label": "紧性一段", "steps": list(_STEPS)}
+    product = {"kind": "proof",
+               "proposition": "设 (X,d) 为紧度量空间；则 X 中任一序列有收敛子列。",
+               "label": "紧性一段", "steps": list(_STEPS)}
 
     first = dict(f.tools.call("attack.step", plan_id=plan_id, product=product).data or {})
     assert first.get("action") == "proof", first

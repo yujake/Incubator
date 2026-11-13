@@ -86,6 +86,7 @@ def _plan(f: AgentF) -> str:
 def _submit(f: AgentF, pid: str, tag: str) -> dict:
     with CND.calling_as(f"t-of-{tag}", "F", parent_task_id="t-of-m", parent_role="M"):
         return f.step(pid, product={"kind": "proof", "label": f"探针 {tag}",
+                                    "proposition": STMT,
                                     "steps": _steps(tag)})
 
 
