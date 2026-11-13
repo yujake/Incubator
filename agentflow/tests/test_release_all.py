@@ -3081,6 +3081,29 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "index + conjecture_id；只写研究方向 ⇒ 绿；认不出归属的 "
                          "`attack_plans` 记 `self_authored_plans`、不算违规）—— 纯函数、"
                          "不注册工具、零模型调用、不写盘",
+    # 2026-11-13（业主裁定「放弃命题时就是这个稿也一并作废」）：这条判据被三处共用 ——
+    # `manuscriptopen.write_allowed`（写面：退休的稿只读）、收工门的 B/E/F 三道签门、
+    # 以及 `closing` 的读数 —— 而三处分属工具层 / 循环 / 收工三个不同层。挂进任一侧
+    # 都会让另外两侧反向依赖它；且「哪几份稿属于这条命题」必须只有一个答案（三源并集
+    # 反查），写两份必然漂。它只读台账、不写盘、不注册工具。
+    "manuscriptretire.py": "「命题退休 ⇒ 它名下那份稿一并作废」的唯一判据（2026-11-13）："
+                           "RETIRED_STATUSES（abandoned / refuted）/ status_is_retired / "
+                           "manuscripts_of_statement（三源并集：`manuscript_id` × "
+                           "`manuscripts` × `verifications[].manuscript`）/ "
+                           "statement_of_manuscript（唯一反查）/ retire_reading（写面用）/ "
+                           "flow_reading（收工门用：retired 与 hard_to_prove 分开给）——"
+                           " 纯读，稿文件留着（删/移不是这一档的处置）",
+    # 2026-11-13（业主裁定「数学错误应该将命题标记为错误」）：`evidencebits` 里那整套
+    # 作废载荷（§3.18 四条 / void / cascade_void）一直没有生产写入口，这一格是"把它接到
+    # 命题行上"的唯一写口。为什么必须是顶层：命题的写侧归秘书，而工具层 / 角色包都不许
+    # 直接写 statements；判据要能被测试当普通函数直接喂 store（不建工具注册表、不起循环）。
+    "statementrefute.py": "命题的另外两个终态（2026-11-13）：refute_statement（标记为错误："
+                          "证据三选一 —— 反例实验 / 一条构造 / 一行「有毛病」判词，载荷落 "
+                          "`bits.voided_by`，证据判据全部转调 `evidencebits.void_refusal` / "
+                          "`void`，不另造第二套）/ mark_hard_to_prove（优化栏写「难以自证」："
+                          "只动 `bits.evidence.hard_to_prove_by_proof`，status 与占位签一个"
+                          "字节不动）/ _write_row（整行重建 + `Statement.validate` + 单事务）"
+                          "—— 被 `Secretary.amend_statement_meta` 转调",
 }
 
 

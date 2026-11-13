@@ -91,6 +91,12 @@ NOT_ON_DISK = "manuscript_not_on_disk"
 #: 受控码：这一节不是「写内容」能碰的（`## 命题` 归开稿口；未知节名不受理）。
 SECTION_NOT_WRITABLE = "manuscript_section_not_writable"
 
+#: 受控码：所属命题已经退休（`abandoned` / `refuted`）⇒ 这份稿一并作废、只读。
+#:
+#: 与 `manuscriptfreeze.MANUSCRIPT_FROZEN` 是两件事：冻结说的是"它拿过签"，
+#: 这一档说的是"命题已经不做了"。一份没签过的稿也会落这一档（引文侧的占位签稿）。
+MANUSCRIPT_RETIRED = "manuscript_retired"
+
 #: 受控码：这一份稿读不出来 / 写不进去（没查成，不是没毛病）。
 UNREADABLE = "manuscript_unreadable"
 WRITE_FAILED = "manuscript_write_failed"
@@ -434,18 +440,25 @@ def _shape(rel: Any) -> dict[str, Any]:
     }
 
 
-def write_allowed(*, rel: Any, role: Any, root: Any) -> dict[str, Any]:
+def write_allowed(*, rel: Any, role: Any, root: Any, store: Any = None) -> dict[str, Any]:
     """这一笔能不能改这份稿（`fs.edit` 与 `write_section` 共用的唯一判据）。
 
     返回 `{checked, is_manuscript, owns, allowed, code, why, family,
-    manuscript_id, rel, state}`。`is_manuscript=False` ⇒ 不归这一层管（调用方照旧走
-    `RESERVED_ARTIFACT_TABLE` 那张表）。
+    manuscript_id, rel, state, retirement}`。`is_manuscript=False` ⇒ 不归这一层管
+    （调用方照旧走 `RESERVED_ARTIFACT_TABLE` 那张表）。
 
     逐条：① 角色必须在 `ROLE_FAMILIES` 里，且族是它自己那一族；② 路径必须是
     `reports/<族前缀><六位号>.md` 这一种规范名（`-v2` / 别的目录 ⇒ 先落成规范名）；
     ③ 号必须是这一族号段已经发出去的（`peek_manuscript_counter(family) - 1`；
-    读不出来 ⇒ 不放行）；④ 拿签之后只读（`manuscriptfreeze`，四档里只放
-    `unsigned`；`unchecked` 按只读处理）；⑤ 这一份得在盘上。
+    读不出来 ⇒ 不放行）；④ 所属命题已退休 ⇒ 这份稿一并作废、只读（2026-11-13
+    业主裁定「放弃命题时就是这个稿也一并作废」；判据 `manuscriptretire.retire_reading`）；
+    ⑤ 拿签之后只读（`manuscriptfreeze`，四档里只放 `unsigned`；`unchecked` 按只读处理）；
+    ⑥ 这一份得在盘上。
+
+    ## `store` 为什么是可选的
+    退休判据要读 `statements` 台账，所以只有拿得到 store 的调用方判得了这一格。
+    不带 `store` 时这一条不说话（`retirement.checked=False`），不折成"没退休"：
+    读数里明写"这一格没查"，`fs_tools` 那一层转发时把 store 带进来就生效。
     """
     shape = _shape(rel)
     out: dict[str, Any] = {
@@ -453,6 +466,7 @@ def write_allowed(*, rel: Any, role: Any, root: Any) -> dict[str, Any]:
         "owns": False, "allowed": False, "code": "", "why": "",
         "family": str(shape["family"]), "manuscript_id": str(shape["manuscript_id"]),
         "rel": str(shape["rel"]), "state": "unsigned",
+        "retirement": {"checked": False, "retired": False, "why": "这一笔没带 store"},
     }
     if not shape["is_manuscript"]:
         out["why"] = "不是手稿形名字 ⇒ 不归手稿写口管"
@@ -493,17 +507,31 @@ def write_allowed(*, rel: Any, role: Any, root: Any) -> dict[str, Any]:
         out.update(code=NOT_ON_DISK,
                    why=f"`{shape['rel']}` 不在盘上 ⇒ 没有可改的对象（骨架由开稿口写）")
         return out
+    # ---- ④ 所属命题已退休 ⇒ 这份稿一并作废、只读 --------------------------------
+    #
+    # 位置在冻结之前：一份已签的稿所属命题被作废之后，正确的处置不是"开优化副本
+    # 继续改"（那是冻结那句拒信指的路），而是"这份稿随命题作废、不再动"。
+    # 判据本体 `manuscriptretire.retire_reading`（三源并集反查所属命题）。
+    if store is not None:
+        from . import manuscriptretire as _MR
+
+        retired = _MR.retire_reading(store, shape["rel"])
+        out["retirement"] = dict(retired)
+        if retired.get("retired"):
+            out.update(code=MANUSCRIPT_RETIRED, why=str(retired.get("message") or ""))
+            return out
     frozen = _FZ.freeze_reading(root, shape["rel"])
     out["state"] = str(frozen.get("state") or "")
     if frozen.get("frozen"):
         out.update(code=str(_FZ.MANUSCRIPT_FROZEN),
                    why=str(frozen.get("message") or ""))
         return out
-    out.update(allowed=True, why="未签、自家号段、规范落点 ⇒ 可以改")
+    out.update(allowed=True, why="未签、自家号段、规范落点、命题未退休 ⇒ 可以改")
     return out
 
 
-def foreign_refusal(*, rel: Any, role: Any, root: Any, edit: bool) -> dict[str, Any] | None:
+def foreign_refusal(*, rel: Any, role: Any, root: Any, edit: bool,
+                    store: Any = None) -> dict[str, Any] | None:
     """`RESERVED_ARTIFACT_TABLE` 没管到的那一半：手稿形名字的「谁能写」。
 
     只在表会放行的那几档上给结论（跑在表之后）：
@@ -527,7 +555,7 @@ def foreign_refusal(*, rel: Any, role: Any, root: Any, edit: bool) -> dict[str, 
                     "手稿只由它自己那一族的产出侧开与改（角色-族绑定；改前这一格是"
                     "一个洞：E 能改任何手稿、F 能改 b/e 两族）"),
         }
-    reading = write_allowed(rel=shape["rel"], role=who, root=root)
+    reading = write_allowed(rel=shape["rel"], role=who, root=root, store=store)
     if edit:
         if reading.get("allowed"):
             return None
@@ -538,10 +566,11 @@ def foreign_refusal(*, rel: Any, role: Any, root: Any, edit: bool) -> dict[str, 
             return None
         # `kind` 留在工具层既有的闭集里（`reserved_framework_artifact` /
         # `manuscript_frozen` 两档）：具体是哪一条判据拒的写在 why 里 —— 既有判据按
-        # `kind` 分档，不按"码"分档。
+        # `kind` 分档，不按"码"分档。退休那一档的细码另给一格 `code`
+        # （`manuscript_retired`）：转发层要单独认这一档时读它，不必去解 why 那句话。
         kind = (_FZ.MANUSCRIPT_FROZEN if code == _FZ.MANUSCRIPT_FROZEN
                 else "reserved_framework_artifact")
-        return {"kind": kind, "why": str(reading.get("why") or "")}
+        return {"kind": kind, "code": code, "why": str(reading.get("why") or "")}
     return {
         "kind": "reserved_framework_artifact",
         "why": (f"拒绝 {shape['rel']}：自家未签稿也不许整份覆盖 / 删除 / 换名（"
@@ -551,11 +580,11 @@ def foreign_refusal(*, rel: Any, role: Any, root: Any, edit: bool) -> dict[str, 
 
 
 def write_section(root: Any, *, role: str, rel: Any, section: str, body: Any,
-                  task_id: str = "") -> dict[str, Any]:
+                  task_id: str = "", store: Any = None) -> dict[str, Any]:
     """把稿上某一节换成给定正文（框架侧的「写内容」写口；不是整份重渲）。
 
     只换那一节，其余字节原样（判据：`## 命题` 一个字节都不动 —— 它只许开稿口写）。
-    先过 `write_allowed`（未签、自家号段、规范落点、在盘上），再过节名白名单。
+    先过 `write_allowed`（未签、自家号段、规范落点、命题未退休、在盘上），再过节名白名单。
     """
     from . import proofregistry as _PR  # 只借它的换节实现，不借它的整份重渲
 
@@ -564,7 +593,7 @@ def write_section(root: Any, *, role: str, rel: Any, section: str, body: Any,
         "path": str(_norm_rel(rel)), "section": "", "written": False,
         "preserved": False, "sha256": "", "body_sha": "", "task_id": str(task_id or ""),
     }
-    reading = write_allowed(rel=rel, role=role, root=root)
+    reading = write_allowed(rel=rel, role=role, root=root, store=store)
     if not reading.get("is_manuscript"):
         out.update(refused=FAMILY_NOT_OWNED, kind=FAMILY_NOT_OWNED,
                    why=str(reading.get("why") or "不是手稿"))

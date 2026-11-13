@@ -4606,13 +4606,40 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                 mids.append(one)
         mids = list(dict.fromkeys(mids + by_plan.pop(pid, [])))
         signed = [m for m in mids if bool(cands.get(m, {}).get("signed"))]
+        # ---- 2026-11-13（业主裁定）：计划下那份稿所属命题已退休 ⇒ 不算「缺签」 ----
+        #
+        # 计划的口径是"继续 / 放弃 / 更改"，而"这条命题被标成错误或明确放弃了"
+        # 是另一件事、已经落到 statements 上。若那条计划唯一那份 f-稿的命题退休了，
+        # 计划仍然可能要有别的产出，但不该因为"那份稿没签"而判 missing ——
+        # 它永远不会再被签（稿随命题作废）。`hard_to_prove` 同档：那一份也不再等签。
+        retired_mids: list[str] = []
+        hard_mids: list[str] = []
+        try:
+            from . import manuscriptretire as _MR
+
+            for mid in mids:
+                flow = _MR.flow_reading(
+                    store, rel=str(cands.get(mid, {}).get("manuscript") or ""),
+                    manuscript_id=mid)
+                if flow.get("retired"):
+                    retired_mids.append(mid)
+                elif flow.get("hard_to_prove"):
+                    hard_mids.append(mid)
+        except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed（照旧算缺签）
+            out.update(checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：稿↔命题的退休读数读不出来"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+            return
         abandoned = str(row.get("status") or "") == "abandoned"
         out["plans"].append({
             "plan_id": pid, "abandoned": abandoned,
             "manuscripts": mids, "signed_manuscripts": signed,
-            "missing": (not abandoned) and (not signed),
+            "retired_manuscripts": retired_mids, "hard_to_prove_manuscripts": hard_mids,
+            "missing": (not abandoned) and (not signed)
+                       and (not retired_mids) and (not hard_mids),
         })
-        if abandoned or signed:
+        if abandoned or signed or retired_mids or hard_mids:
             continue
         lack = ("这一条计划一份稿都没有" if not mids else
                 "这些稿都不是现行的签：" + "、".join(
@@ -4636,29 +4663,34 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
 
 def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                  out: dict[str, Any]) -> None:
-    """B：`b-proof` 稿没有现行的签、且那条命题没有明确放弃 ⇒ 欠签。"""
+    """B：`b-proof` 稿没有现行的签、且那条命题没有退休 ⇒ 欠签。
+
+    "稿属于哪一条命题"只走一个读口（`manuscriptretire.flow_reading`：三源并集反查），
+    不在这道门里再写一份扫描 —— B / E 两道门读同一份事实。
+    """
     for mid, cand in cands.items():
         if bool(cand.get("signed")):
             continue
         rel = str(cand.get("manuscript") or "")
         sid = str(_sign_gate_entry(root, rel).get("statement_id") or "")
         abandoned = False
+        srow: dict = {}
         try:
+            from . import manuscriptretire as _MR
             from .agent_f import delivery as _DL
 
-            _rows = [dict(r) for r in store.rows("statements")]
-            srow = next((r for r in _rows
-                         if sid and str(r.get("stmt_id") or "") == sid), None)
-            # 2026-11-13（Z2）：稿头不再写命题号 ⇒ 稿↔行的对应只剩行上的
-            # `manuscript_id` / `manuscripts` 两格（`proof_receipt` 写的）。
-            # 认不出是哪一条命题时，这道门就没有"它对应的命题放没放弃"可读。
-            if srow is None and (mid or rel):
-                srow = next(
-                    (r for r in _rows
-                     if str(r.get("manuscript_id") or "") == str(mid)
-                     or rel in [str(v) for v in
-                                dict(r.get("manuscripts") or {}).values()]),
-                    None)
+            flow = _MR.flow_reading(store, rel=rel, manuscript_id=mid)
+            if not flow.get("checked"):
+                out.update(checked=False, complete=False,
+                           reason=str(flow.get("why") or "稿↔命题的反查没查成"),
+                           why=(f"还没收工：稿↔命题的反查没查成"
+                                f"（{flow.get('why') or '没给原因'}）⇒ 按『没查成』挡"))
+                return
+            srow = dict(flow.get("row") or {})
+            if not srow and sid:
+                # 老盘：稿头仍写着命题号的那一档（Z2 起新稿不再写，但存量行要读得出）
+                srow = next((dict(r) for r in store.rows("statements")
+                             if str(r.get("stmt_id") or "") == sid), {})
             abandoned = bool(srow and _DL.abandoned_of(srow).get("abandoned"))
         except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed
             out.update(checked=False, complete=False,
@@ -4667,6 +4699,20 @@ def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                             f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
             return
         if abandoned:
+            continue
+        # ---- 2026-11-13（业主裁定）：另外两个「不再要签」的终态 --------------------
+        #
+        # `refuted`（标记为错误）：稿随命题一并作废 ⇒ 永远不会再被签，要它签就是永远红。
+        # `hard_to_prove`（优化栏 = 难以自证）：优化做过了、结论是证不出来 ⇒ 它不欠签，
+        # 但也不算已签（要不要上报成研究任务由父代理裁）。
+        # 这一档显式判一次，不靠下面那条 `external_lit` 占位签豁免兜着：那条豁免的
+        # 理由是"引文侧的证据是引文本身"，与"证不出来"是两件事，两件事不能互相代表。
+        from . import evidencebits as _EB
+
+        if srow and str(srow.get("status") or "") == "refuted":
+            continue
+        if srow and _EB.hard_to_prove_by_proof(srow):
+            out.setdefault("hard_to_prove", []).append(str(mid))
             continue
         # 2026-11-13（甲）：引文侧登记现在会落一份 b-稿（命题 + 出处 + 逐字引文），
         # 那份稿的"证据"是引文本身（逐字回验那条线），不是 V 读一遍论证 ——
@@ -4705,6 +4751,31 @@ def _sign_gate_e(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
         except Exception:  # noqa: BLE001 —— 认不出族 ⇒ 不在这道门的对象里
             fam = ""
         if fam != "e-proof" or bool(cand.get("signed")):
+            continue
+        # ---- 2026-11-13：稿所属命题退休 / 优化栏=难以自证 ⇒ 不再要签 --------------
+        #
+        # E 这一道门此前完全不看命题状态（它按 experiment 认稿）⇒ 一条被标成
+        # `refuted` 的命题，它的 e-proof 会永远被要签。反查走 `manuscriptretire`
+        # （三源并集，与 B 那道门同一个判据），不在这里再写一份"稿属于哪条命题"。
+        try:
+            from . import manuscriptretire as _MR
+
+            flow = _MR.flow_reading(store, rel=rel, manuscript_id=mid)
+            if not flow.get("checked"):
+                out.update(checked=False, complete=False,
+                           reason=str(flow.get("why") or "稿↔命题的反查没查成"),
+                           why=(f"还没收工：稿↔命题的反查没查成"
+                                f"（{flow.get('why') or '没给原因'}）⇒ 按『没查成』挡"))
+                return
+        except Exception as exc:  # noqa: BLE001 —— 读不成 fail-closed
+            out.update(checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：稿↔命题的退休读数读不出来"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+            return
+        if flow.get("retired") or flow.get("hard_to_prove"):
+            if flow.get("hard_to_prove"):
+                out.setdefault("hard_to_prove", []).append(str(mid))
             continue
         eid = ""
         try:

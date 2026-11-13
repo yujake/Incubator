@@ -5085,6 +5085,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
                            "checked_from": "statements", "rows": [], "by_class": {},
                            "pending_filing": [], "pending_filing_count": 0,
+                           "hard_to_prove": [], "hard_to_prove_count": 0,
                            "problems": [], "reason": ""}
     rows, why = _statement_rows(store)
     if rows is None:
@@ -5101,7 +5102,10 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     #: 一条命题有多份证明时取最重的那一档（表见 docstring）。
     #: `signed_pending_filing` 排在 `stale` 之后 —— 它是"稿上签了、册里还没收录"
     #: 的中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
+    #: `refuted_without_evidence` 与 `abandoned_without_reason` 同档（1）：两者都是
+    #: "自称终态却拿不出凭据"，比其余几档更该先被人看见。
     rank = {"fault_unrepaired": 0, "abandoned_without_reason": 1,
+            "refuted_without_evidence": 1,
             "unbacked": 2, "borrowed": 3, "stale": 4, "unissued": 5,
             "awaiting_report": 6, "awaiting_streak": 7,
             "signed_pending_filing": 8, "judgment_missing": 9, "unreadable": 10,
@@ -5114,6 +5118,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
     out["pending_filing"] = pending_rows
     out["pending_filing_count"] = len(pending_rows)
+    out["hard_to_prove_count"] = len(out.get("hard_to_prove") or [])
     out["checked"] = True
     out["count"] = len(out["rows"])
     out["reason"] = ("查过了：没有「既无 V 签也未放弃」的命题"
@@ -5123,6 +5128,9 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     if pending_rows:
         out["reason"] += (f"；另有 {len(pending_rows)} 条是「稿上已签、册里还没收录」"
                           "（不欠签，等 B 收录）")
+    if out["hard_to_prove_count"]:
+        out["reason"] += (f"；另有 {out['hard_to_prove_count']} 条优化栏记着「难以自证」"
+                          "（不欠签；要不要上报成研究任务由父代理裁）")
     return out
 
 
@@ -5136,6 +5144,8 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
     一条命题的多份证明各读一遍（证明清单 / 台账 / 稿上的签），按 `rank` 取最重的一档。
     读数经 `out` 与 `pending_rows` 带出，不开新返回值。
     """
+    from . import evidencebits as _EB
+    from . import manuscriptretire as _MR
     from . import statementabandon as _SA
     from . import verifications as _VR
     from . import vsigns as _VSP
@@ -5145,17 +5155,36 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
         if kind == "concept":
             continue
         out["scanned"] += 1
-        if str(row.get("status") or "") == "abandoned":
-            got = _SA.parse_abandon(row.get("quote_reason"))
-            if got.get("checked"):
+        # ---- 2026-11-13（业主裁定）：退休的命题不是「欠签」 ----------------------
+        #
+        # `abandoned` 与 `refuted` 都是终态：前者"明确放弃"，后者"标记为错误"。
+        # 两个都要从这里摘掉，否则收工门会对一条已经判死的命题永远要签
+        # （blocker `statements_unsigned_without_v_or_abandon` 会一直红）。
+        # `abandoned` 那一支仍要求"拿得出理由与时间"：自称放弃却写不出标记的行照旧
+        # 计成一档（`abandoned_without_reason`）—— 标个状态不能绕过整条裁定。
+        # `refuted` 同一条纪律：凭据是 `bits.voided_by`，没有载荷的 refuted 行记
+        # `refuted_without_evidence`（说不出凭什么判它错）。
+        status_now = str(row.get("status") or "")
+        if status_now in _MR.RETIRED_STATUSES:
+            if status_now == "abandoned":
+                got = _SA.parse_abandon(row.get("quote_reason"))
+                if not got.get("checked"):
+                    out["rows"].append({
+                        "stmt_id": sid, "kind": kind, "class": "abandoned_without_reason",
+                        "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
+                        "owner": "", "owner_known": False, "proofs": [],
+                        "why": f"status=abandoned 而拿不出理由与时间（{got.get('why') or '没读成'}）"
+                               "⇒ 不算明确放弃"})
+                    out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
                 continue
-            out["rows"].append({
-                "stmt_id": sid, "kind": kind, "class": "abandoned_without_reason",
-                "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
-                "owner": "", "owner_known": False, "proofs": [],
-                "why": f"status=abandoned 而拿不出理由与时间（{got.get('why') or '没读成'}）"
-                       "⇒ 不算明确放弃"})
-            out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
+            payload = dict((row.get("bits") or {}).get("voided_by") or {})
+            if not payload:
+                out["rows"].append({
+                    "stmt_id": sid, "kind": kind, "class": "refuted_without_evidence",
+                    "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
+                    "owner": "", "owner_known": False, "proofs": [],
+                    "why": "status=refuted 而 `bits.voided_by` 是空的 ⇒ 说不出凭什么判它错"})
+                out["problems"].append(f"{sid}：refuted 但没有作废载荷（凭什么错读不出来）")
             continue
         try:
             ledger_rows, ledger_problems = _VR.list_verifications(
@@ -5168,6 +5197,20 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
         proofs: list[dict[str, Any]] = []
         for no, text in _VR.proof_list(row):
             label = _VR.proof_label(sid, no)
+            # ---- 优化栏 = 难以自证 ⇒ 这一份不欠签（2026-11-13 业主裁定） ----------
+            #
+            # 位置在 `sign_reading` 之前：这一档的结论不需要再看签（它本来就没有真签），
+            # 而"没有真签"正是它被漏成 blocker 的原因。单列一档、不进 `count` ——
+            # 与 `signed_pending_filing` 同一档处理：不是欠签，但必须在读数里看得见。
+            hard = _EB.hard_to_prove_entry(row, no)
+            if hard:
+                proofs.append({"proof_no": no, "label": label, "state": "hard_to_prove",
+                               "class": "hard_to_prove", "verdict": "", "verification_id": "",
+                               "fault_at": "", "owner": "", "owner_known": False,
+                               "manuscript": "", "manuscript_signed": False,
+                               "why": (f"优化栏记着「难以自证」（{str(hard.get('basis') or '')[:120]}）"
+                                       "⇒ 这一份不再等签（也不算已签）")})
+                continue
             try:
                 st = _VSP.sign_reading(root, statement_id=sid, proof_text=text,
                                        proof_no=no, store=store)
@@ -5230,8 +5273,19 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
             continue
         #: 2026-11-08：全部证明都是"已签未收录" ⇒ 这一条不算欠签，单列进
         #: `pending_filing`（收工门不把它当 blocker；它是一条给 B 的待办）。
-        _blocking = [p for p in proofs if p["class"] != "signed_pending_filing"]
+        #: 2026-11-13：`hard_to_prove` 同一条纪律 —— 它是"优化过了、证不出来"的
+        #: 终态结论，不是欠签；但也要单列（静默丢掉另一句谎）。
+        _blocking = [p for p in proofs
+                     if p["class"] not in ("signed_pending_filing", "hard_to_prove")]
         if not _blocking:
+            if any(p["class"] == "hard_to_prove" for p in proofs):
+                out.setdefault("hard_to_prove", []).append({
+                    "stmt_id": sid, "kind": kind, "class": "hard_to_prove",
+                    "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
+                    "owner": "", "owner_known": False, "proofs": proofs,
+                    "why": ("优化栏记着「难以自证」⇒ 这一份不再等签；"
+                            "它要不要变成一条研究任务由父代理裁")})
+                continue
             pending_rows.append({
                 "stmt_id": sid, "kind": kind, "class": "signed_pending_filing",
                 "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
@@ -5282,11 +5336,13 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     `statements` 读不出来 ⇒ `checked=False` + `reason`：没查成不是「一条都不欠洗」。
     """
     from . import evidencebits as _EB
+    from . import manuscriptretire as _MR
     from . import statementabandon as _SA
     from . import verifications as _VR
 
     out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
-                           "by_class": {}, "rows": [], "problems": [], "reason": ""}
+                           "by_class": {}, "rows": [], "problems": [], "reason": "",
+                           "hard_to_prove": [], "hard_to_prove_count": 0}
     rows, why = _statement_rows(store)
     if rows is None:
         out["reason"] = why
@@ -5299,8 +5355,12 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
         # 明确放弃的命题不在这一格里追（它不是「等洗」，是「不做了」；那一档有
         # `statements_abandoned` 专门数）。自称放弃而标记读不出来的照旧算等洗 ——
         # 标个状态不能把它从这一格里摘掉。
-        if (str(row.get("status") or "") == "abandoned"
-                and _SA.parse_abandon(row.get("quote_reason")).get("checked")):
+        status_now = str(row.get("status") or "")
+        if status_now == "abandoned":
+            if _SA.parse_abandon(row.get("quote_reason")).get("checked"):
+                continue
+        elif status_now in _MR.RETIRED_STATUSES:
+            # `refuted`（标记为错误）同一条纪律：不做了的命题不再等洗。
             continue
         ev = (row.get("bits") or {}).get("evidence") or {}
         source = str(ev.get("proof_source") or "")
@@ -5314,6 +5374,17 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
             state = _EB.optimized_state(row, no)
             if state == "true":
                 continue
+            # 「难以自证」（2026-11-13）：优化已经做过、结论是证不出来 ⇒ 它不是「等洗」。
+            # 单列一档（不进三档、不进 `count`），并保持"三档之和 == 逐条数"不变式。
+            if state == "hard_to_prove":
+                out["hard_to_prove"].append({
+                    "stmt_id": sid, "kind": kind, "class": "hard_to_prove",
+                    "proof_no": int(no), "optimized": state,
+                    "source": source or "(未记录)",
+                    "proof_chars": len(str(text or "").strip()),
+                    "why": ("优化栏记着「难以自证」⇒ 这一份不再等洗"
+                            "（要不要变成研究任务由父代理裁）")})
+                continue
             out["rows"].append({
                 "stmt_id": sid, "kind": kind, "class": cls, "proof_no": int(no),
                 "optimized": state, "source": source or "(未记录)",
@@ -5326,6 +5397,7 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
         out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
     out["checked"] = True
     out["count"] = len(out["rows"])
+    out["hard_to_prove_count"] = len(out["hard_to_prove"])
     total = sum(int(v) for v in out["by_class"].values())
     if total != out["count"]:
         # 防空集：三档之和必须等于逐条数（同一个事实两个算法不一致 = 这一格坏了）。
@@ -5334,6 +5406,9 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     out["reason"] = ("查过了：没有待洗的证明（三档都是 0）" if not out["count"] else
                      (f"查过了：{out['count']} 份证明还没洗过（按来源：{out['by_class']}；"
                       f"扫了 {out['scanned']} 条非概念命题）"))
+    if out["hard_to_prove_count"]:
+        out["reason"] += (f"；另有 {out['hard_to_prove_count']} 份的优化结论是"
+                          "「难以自证」（不再等洗）")
     return out
 
 
@@ -5937,6 +6012,11 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                            "abandon_kinds": {kind: 0 for kind in _SA.ABANDON_KINDS},
                            #: 历史行（`quote_reason` 是自由文本 / 读不出档）的条数。
                            "unstructured": 0,
+                           #: 另一个终态（2026-11-13）：标记为错误的命题。
+                           #: 它不进 `abandon_kinds`（那不是"放弃理由"，是"被证否"），
+                           #: 但必须在这一格读出来 —— 否则 refuted 的行在收工读数里
+                           #: 完全不出现（既不欠签、也不可见），静默就是另一种谎。
+                           "refuted": [], "refuted_count": 0,
                            "relabeled": {"checked": False, "labels": [], "repeated": 0,
                                          "kinds": {kind: 0 for kind in _SA.ABANDON_KINDS},
                                          "reason": ""}}
@@ -5946,7 +6026,20 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
         out["relabeled"]["reason"] = why
         return out
     for sid, row in sorted(rows.items()):
-        if str(row.get("status") or "") != "abandoned":
+        status_now = str(row.get("status") or "")
+        if status_now == "refuted":
+            payload = dict((row.get("bits") or {}).get("voided_by") or {})
+            out["refuted"].append({
+                "stmt_id": sid, "kind": str(row.get("kind") or ""),
+                "label": str(row.get("label") or ""),
+                "voided_kind": str(payload.get("kind") or ""),
+                "at": str(payload.get("at") or ""),
+                "reason": str(payload.get("reason") or ""),
+                "evidence": {k: payload.get(k) for k in
+                             ("experiment_id", "defect_ref", "construction", "script", "sha")
+                             if payload.get(k)}})
+            continue
+        if status_now != "abandoned":
             continue
         got = _SA.parse_abandon(row.get("quote_reason"))
         if not got.get("checked"):
@@ -5998,12 +6091,16 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                                          for one in repeated)
                    + " 这几条同一 label 换号 ≥2 次（读数，不拦门）"),
     }
+    out["refuted_count"] = len(out["refuted"])
     out["reason"] = ("查过了：没有明确放弃的命题" if not out["rows"] else
                      f"查过了：{out['count']} 条命题被明确放弃（带理由与时间）"
                      "；按档 " + "/".join(f"{kind}={n}"
                                          for kind, n in out["abandon_kinds"].items())
                      + (f"；另有 {out['unstructured']} 条历史自由文本行"
                         if out["unstructured"] else ""))
+    if out["refuted_count"]:
+        out["reason"] += (f"；另有 {out['refuted_count']} 条被标记为错误（refuted，"
+                          "凭据在 `bits.voided_by`）")
     return out
 
 
@@ -7736,6 +7833,19 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             f"{len(_pf)} 条命题在稿上已经有 V 签、而 statements 里还没收录"
             f"（{_pf_named}{'…' if len(_pf) > 6 else ''}）⇒ 这不是「没签」："
             "签块与侧文件都在，等 B 按正文 sha 收录。收工门不把它当 blocker。"))
+    #: 2026-11-13（业主裁定）：优化栏记着「难以自证」的那几条也不是欠签 ——
+    #: 优化已经做过、结论是"我们证不出来"。它不是 blocker（那是终态结论，不是欠一笔活），
+    #: 但必须单独点名：要不要把它上报成一条研究任务，由父代理裁（业主原话）。
+    _hp = list(_su.get("hard_to_prove") or [])
+    if _hp:
+        _hp_named = "、".join(str(one.get("stmt_id")) for one in _hp[:6])
+        rep.findings.append(Finding(
+            "statements_unsigned", "statements_hard_to_prove", "warning",
+            f"{len(_hp)} 条命题的优化栏记着「难以自证」"
+            f"（{_hp_named}{'…' if len(_hp) > 6 else ''}）⇒ 它们不欠签、也不算已优化："
+            "优化阶段试过了、证不出来。处置：由父代理判断这条命题要不要紧 ——"
+            "要紧就作为一条研究任务上报（业主 2026-11-13：「若父代理认为这个命题重要，"
+            "则应上报作为一个研究任务」），不要把它读成「还欠一个签」。"))
     # ---- 引文证据那一格（D1，2026-10-22 第二版）：说"通过"就必须拿得出区间。
     #
     # 这一格拦门（`blocker`），与上面那几格"只说、不拦"的读数不同。理由：

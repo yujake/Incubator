@@ -734,11 +734,18 @@ def reviewed_sha_by_proof(row: Mapping[str, Any]) -> dict[int, str]:
 #: 它回答的是"洗过没有"，不是"签过没有"。
 OPTIMIZED_BY_PROOF_KEY = "optimized_by_proof"
 
-#: `optimized` 的三档读数（读侧词表；写侧只写前两档）。
+#: `optimized` 的四档读数（读侧词表；写侧写前两档 + 第四档）。
 #:
 #: `not_recorded` 刻意不叫 `unknown`：它不是"没查成"，而是"这一行还没有这一格" ——
 #: 存量零迁移的合法初态。任何判据不许把它当 false，也不许当 true。
-OPTIMIZED_STATES: tuple[str, ...] = ("true", "false", "not_recorded")
+#:
+#: `hard_to_prove`（2026-11-13 业主裁定）：优化阶段试过了、证不出来（引文里
+#: 没给完整严密的证明）。它不是 `true`（没有真签、也谈不上"洗过"），也不是 `false`
+#: （那会把它永远留在"等洗"里、派活永远派不完），更不是 `not_recorded`（那是存量行）。
+#: 它只说一句可复核的话："这一份的优化结论是『难以自证』，理由与时刻在
+#: `bits.evidence.hard_to_prove_by_proof` 里"。行上其它读数（`status` / 占位签 /
+#: `reviewed=False`）一个都不动 —— 业主原话：「其它栏保留引文侧录入的样子，如 V 签还是占位」。
+OPTIMIZED_STATES: tuple[str, ...] = ("true", "false", "not_recorded", "hard_to_prove")
 
 
 def optimized_by_proof(row: Mapping[str, Any]) -> dict[int, bool]:
@@ -910,6 +917,18 @@ def optimized_standing(row: Mapping[str, Any], proof_no: Any, *,
         out["why"] = (f"证明号认不出（收到 {proof_no!r}）⇒ 不知道问的是哪一份，"
                       "这一格读成 not_recorded（不是「被拦下」）")
         return out
+    # 优化栏记着「难以自证」（2026-11-13 业主裁定）⇒ 第四档。位置在 optimized_by_proof
+    # 之前：这一格说的不是"洗过没有"，而是"洗过了、证不出来"——它必须盖住
+    # `optimized=false`（否则那一档永远留在"等洗"里），也不许被读成 true。
+    # 与 true 并存只会出现在手写行里（写口互斥），那一档按"证不出来"读：它更强、
+    # 也更诚实（"洗过且带真签"与"证不出来"不可能同时成立）。
+    hard = hard_to_prove_entry(row, no)
+    if hard:
+        out.update(state="hard_to_prove", optimized=False,
+                   why=("优化栏记着「难以自证」（"
+                        f"{str(hard.get('basis') or '')[:120]}）⇒ 这一份不再等洗，"
+                        "但也不算已优化：真 V 签的位与凭据一个都没翻"))
+        return out
     table = optimized_by_proof(row)
     if no not in table:
         out["why"] = ("这一行没有记过这一份的优化态（not_recorded）⇒ 它没有声称过 "
@@ -989,6 +1008,84 @@ def with_optimized_flag(bits: Mapping[str, Any], proof_no: Any, value: bool) -> 
     table = {str(n): bool(v) for n, v in optimized_by_proof(dict(out)).items()}
     table[str(no)] = bool(value)
     ev[OPTIMIZED_BY_PROOF_KEY] = table
+    out["evidence"] = ev
+    return out
+
+
+#: 「优化栏 = 难以自证」那一格（逐份证明，住 `bits.evidence` 这个凭据口袋）。
+#:
+#: 结构是"证明号 ⇒ 那一句可复核的话"：`{"1": {"basis": "…", "at": "<ISO8601>"}}`。
+#:
+#: ## 为什么不是 `optimized_by_proof` 里的一个字符串值
+#: 那一格的值按 `bool` 归一（`optimized_by_proof` 的 `bool(value)`）：把
+#: `"hard_to_prove"` 塞进去会被读成 `True`，于是"证不出来"变成"已优化"—— 那正是
+#: 87 那个"可以没有签就声称洗过"的形态。同一格不许有两种语义，所以另开一格。
+#:
+#: ## 为什么不是 `quote_reason`
+#: `quote_reason` 回答的是"引文为什么没通过 / 还没查"（`schema.Statement.validate`
+#: 按这个意思强制它非空）。把"证不出来"写进去会让同一格承载两件事，而读侧
+#: `statementabandon.parse_abandon` 还会把它当放弃标记去解。优化结论住优化栏。
+HARD_TO_PROVE_KEY = "hard_to_prove_by_proof"
+
+
+def hard_to_prove_by_proof(row: Mapping[str, Any]) -> dict[int, dict[str, str]]:
+    """按证明看「优化栏是不是记着难以自证」：`{证明号: {"basis","at"}}`。
+
+    与 :func:`optimized_by_proof` 同一套口袋口径（正位 `bits.evidence.<key>`，
+    兼容写在 `bits` 顶层；键按 `verifications.as_proof_no` 归一，认不出的键跳过）。
+    只收形状读得懂的条目：值必须是对象且 `basis` 非空 —— 半个条目（只有时刻没有
+    理由）不进这张表，读侧因此不会拿"没写清理由"当结论（三态纪律）。
+    """
+    pocket = _proof_pocket(row, HARD_TO_PROVE_KEY)
+    if pocket is None:
+        return {}
+    from . import verifications as _VR   # 惰性：证明号的归一只有一处口径
+
+    out: dict[int, dict[str, str]] = {}
+    for raw_no, value in pocket.items():
+        no = _VR.as_proof_no(raw_no)
+        if no < 1 or not isinstance(value, Mapping):
+            continue
+        basis = str(value.get("basis") or "").strip()
+        if not basis:
+            continue
+        out[no] = {"basis": basis, "at": str(value.get("at") or "").strip()}
+    return out
+
+
+def hard_to_prove_entry(row: Mapping[str, Any], proof_no: Any) -> dict[str, str]:
+    """这一份证明的「难以自证」条目：`{basis, at}` 或空字典。
+
+    号认不出 / 没记过 ⇒ 空字典。它只回答"优化栏记了什么"，不回答"该不该算已优化"
+    —— 后者仍走 :func:`optimized_state`（它把这一档折成 `state="hard_to_prove"`）。
+    """
+    from . import verifications as _VR
+
+    no = _VR.as_proof_no(proof_no)
+    if no < 1:
+        return {}
+    return dict(hard_to_prove_by_proof(row).get(no) or {})
+
+
+def with_hard_to_prove(bits: Mapping[str, Any], proof_no: Any, *, basis: Any,
+                       at: Any = "") -> dict[str, Any]:
+    """把某一份证明的优化栏写成「难以自证」（写侧唯一入口，返回新的 `bits`）。
+
+    只动 `bits.evidence.<HARD_TO_PROVE_KEY>` 这一格：状态、占位签、`reviewed`、
+    `quote_reason` 一个都不碰（业主原话：「其它栏保留引文侧录入的样子」）。
+    理由为空 ⇒ 原样返回（受控拒由调用方在更外层给码，不在这里静默写半条）。
+    """
+    from . import verifications as _VR
+
+    no = _VR.as_proof_no(proof_no)
+    text = str(basis or "").strip()
+    if no < 1 or not text:
+        return dict(bits or {})
+    out = dict(bits or {})
+    ev = dict(out.get("evidence") or {})
+    table = {str(n): dict(v) for n, v in hard_to_prove_by_proof(dict(out)).items()}
+    table[str(no)] = {"basis": text, "at": str(at or "").strip()}
+    ev[HARD_TO_PROVE_KEY] = table
     out["evidence"] = ev
     return out
 
@@ -2050,14 +2147,41 @@ def void_refusal(experiment: Mapping[str, Any] | None, *,
 
 
 def void(experiment: Mapping[str, Any], *, verdict: str = "", counterexample_valid: Any = None,
-         construction: str = "") -> dict[str, Any]:
-    """作废一个命题：返回 `voided_by` 载荷（调用方把它写进台账；五位读数一并作废、条目保留）。"""
+         construction: str = "", defect_ref: str = "",
+         reason: str = "") -> dict[str, Any]:
+    """作废一个命题：返回 `voided_by` 载荷（调用方把它写进台账；五位读数一并作废、条目保留）。
+
+    三条证据路，各自留下可复核的凭据：
+
+    1. `construction` 非空 ⇒ `kind="construction"`（一条构造，跳过 §3.18 四条：
+       构造本身就是"这条命题为什么假"的正文）；
+    2. `defect_ref` 非空 ⇒ `kind="defect_ref"`（2026-11-13 新增：指向一行判词
+       「有毛病」的 V 台账，`verifications/<号>.jsonl#v-…`；判据与 sha 新鲜度在
+       `statementabandon._defect_refusal`，这里只搬凭据）；
+    3. 其余 ⇒ 走 §3.18 四条（`void_refusal`），载荷是那条反例实验的复现三件套。
+
+    `reason` 是写给读的人那一句（"错在哪"），随载荷一起落盘 —— 只标状态不写理由，
+    等于把"为什么作废"记成一笔没人能接手的账。
+    """
+    text = str(reason or "").strip()
     if construction.strip():
-        return {"kind": "construction", "construction": construction.strip()}
-    reason = void_refusal(experiment, verdict=verdict, counterexample_valid=counterexample_valid)
-    if reason:
-        raise ValueError(f"不许作废：{reason}")
+        payload: dict[str, Any] = {"kind": "construction", "construction": construction.strip()}
+        if text:
+            payload["reason"] = text
+        return payload
+    if str(defect_ref or "").strip():
+        payload = {"kind": "defect_ref", "defect_ref": str(defect_ref).strip()}
+        if text:
+            payload["reason"] = text
+        return payload
+    reason_refused = void_refusal(experiment, verdict=verdict,
+                                  counterexample_valid=counterexample_valid)
+    if reason_refused:
+        raise ValueError(f"不许作废：{reason_refused}")
     e = dict(experiment)
-    return {"kind": "numeric_counterexample", "experiment_id": e.get("experiment_id"),
-            "script": e.get("code_path"), "sha": e.get("code_hash"),
-            "counterexample": e.get("counterexample")}
+    payload = {"kind": "numeric_counterexample", "experiment_id": e.get("experiment_id"),
+               "script": e.get("code_path"), "sha": e.get("code_hash"),
+               "counterexample": e.get("counterexample")}
+    if text:
+        payload["reason"] = text
+    return payload

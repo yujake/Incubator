@@ -437,6 +437,9 @@ OPTIMIZED_FIELD = "optimized"
 OPTIMIZED_YES = "已优化"
 OPTIMIZED_NO = "未优化"
 OPTIMIZED_UNKNOWN = "未记录"
+#: 优化栏第四档（2026-11-13 业主裁定）：优化阶段试过了、证不出来。
+#: 它既不是「已优化」（没有真 V 签），也不是「未优化」（那会一直等洗、派活派不完）。
+OPTIMIZED_HARD_TO_PROVE = "难以自证"
 
 #: 来源那一格（收工门按来源分档的同一口径，与 `evidencebits.bits_of` 的 proof_source 同词）：
 #: own = 我们自己的证明（F 的自动工具那一笔）；citation = 文献侧录入
@@ -452,6 +455,7 @@ def optimized_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> str:
     - 已优化：`bits.evidence.optimized_by_proof[证明号] is True`；
     - 未优化：那一格在、值为假；
     - 未记录：这一行还没有那一格（存量行）—— 不许读成"未优化"，也不许读成"已优化"；
+    - 难以自证：优化栏记着"试过了、证不出来"（第四档，2026-11-13）；
     - 未读到：行读不到 / 证明号认不出（这一格没查成，三态里的"没查成"）。
 
     判据只走 `evidencebits.optimized_state`（唯一读口）：这里再判一次就等于第二份口径。
@@ -466,6 +470,8 @@ def optimized_cell(ledger_row: Mapping[str, Any] | None, proof_no: Any) -> str:
         return OPTIMIZED_YES
     if state == "false":
         return OPTIMIZED_NO
+    if state == "hard_to_prove":
+        return OPTIMIZED_HARD_TO_PROVE
     return OPTIMIZED_UNKNOWN
 
 #: 审校台账 `verifications/<命题号>.jsonl` 的三态：在、不在、读不出。

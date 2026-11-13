@@ -1137,6 +1137,16 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
         out.update(refused="abandon_unknown_statement",
                    why=f"命题 {sid} 不在册 ⇒ 放弃一条不存在的命题（不新建行）")
         return out
+    # ---- 2026-11-13：`refuted` 是另一个终态，不能在同一行上换档 -----------------
+    #
+    # 两个终态回答的是两件不同的事：「放弃」= 我们不做了（没有后来者、也没被证否）；
+    # 「标记为错误」= 这条命题是假的（凭据在 `bits.voided_by`）。换档会把"当初是
+    # 放弃还是被证否"读没（`closing.statements_abandoned` 与 `refuted` 两格分开数）。
+    if str(current.get("status") or "") == "refuted":
+        out.update(refused="abandon_on_refuted",
+                   why=(f"命题 {sid} 已经被标记为错误（refuted）⇒ 不能改成放弃："
+                        "两个终态是两件事，换了档就读不出「当初为什么不做它」"))
+        return out
     already = str(current.get("status") or "") == "abandoned"
     existing_marker = str(current.get("quote_reason") or "")
     was = parse_abandon(existing_marker)
