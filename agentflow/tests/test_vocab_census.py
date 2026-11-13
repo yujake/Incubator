@@ -117,8 +117,14 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     它按 `lemma` / `dataset` 那两条同样的口径落进 `registered_not_dead`（栏一附），
     仍然打印、仍然带理由，只是不再算"死取值"。
     所以本条现在按「两栏都算登记过」来判（`reserved` 或 `registered_not_dead` 之一），
-    另把 `reserved` 栏非真空这件事钉在 `reproduction_report` 上 ——
     这不是放宽判据：`unclaimed` 那一条（真正要红的那一档）一条都没放松。
+
+    ## 2026-11-13（业主裁定「清死代码」）：`reproduction_report` / `自证` / `未决` 已删
+
+    三条都 0 行 / 无读点 / 无写入口 ⇒ 词表值与登记表条目一起删。`reserved` 栏的非真空
+    改由**今天仍然死的三条**钉住（`CONJECTURE_FORMS.existential`、
+    `CONJECTURE_STATUSES.testing`、`CONJECTURE_STATUSES.known_in_literature`），条数**写死到 3**（不是删掉这条断言）。删掉的三个取值另有
+    一条反向断言：它们不许在任何栏、任何词表、任何登记里留痕（与 `E-10` 同一条纪律）。
 
     ## 2026-10-26：`DEP_KINDS.prior_art` 按同一条口径从 `reserved` 挪进 `registered_not_dead`
 
@@ -130,11 +136,16 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     """
     result = V.census(REPO)
     assert result["checked"] is True, result
-    # 普查看得见它是死取值、且已登记 ⇒ 必须在 `reserved` 栏。
-    # （`reserved` 栏非真空的钉子就在这一条上：它今天仍是死取值。）
-    for vocab, value in (("DOC_KINDS", "reproduction_report"),):
+    # 普查看得见它们是死取值、且已登记 ⇒ 必须在 `reserved` 栏。
+    # 条数写死到 3：删掉一条预留之后，剩下的必须一条不少地仍然在栏一里
+    # （业主口径：删的是其中一档，就改「剩下的都出现」并把数量写死，不是删掉断言）。
+    _still_dead = (("CONJECTURE_FORMS", "existential"),
+                   ("CONJECTURE_STATUSES", "testing"),
+                   ("CONJECTURE_STATUSES", "known_in_literature"))
+    for vocab, value in _still_dead:
         assert value in result["reserved"].get(vocab, []), (vocab, value, result["reserved"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])
+    assert result["reserved_total"] == len(_still_dead), result["reserved"]
     # 已登记、而普查今天看不见它是死取值的那几条（同形不同义 / 读侧字面量）⇒
     # 落 `registered_not_dead`（栏一附），照样打印、照样带理由 —— 不许静默。见下面那一圈。
     # `E-10` 裁定 (b)：`FINDING_KINDS` 里没有这个取值了 —— 词表、登记表、
@@ -147,6 +158,17 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
         assert _removed not in values, (column, values)
     assert (("FINDING_KINDS", _removed)) not in V.RESERVED_VALUES, (
         "词表值已经删了，登记表里却还留着它 —— 那是一条『登记已过期』")
+    # 2026-11-13 删掉的三个 C 值：同一套反向断言。
+    _retired = (("DOC_KINDS", "reproduction_report"),
+                ("CLAIM_SOURCE_KINDS", "自证"),
+                ("CLAIM_SOURCE_KINDS", "未决"))
+    _vocabs = V._vocab_constants(REPO / "src" / "agentflow" / "schema.py")
+    for vocab, value in _retired:
+        assert value not in _vocabs.get(vocab, []), (vocab, value, _vocabs.get(vocab))
+        assert (vocab, value) not in V.RESERVED_VALUES, (
+            f"词表值 {vocab}.{value} 已经删了，登记表里却还留着它 —— 那是一条『登记已过期』")
+        for column in ("dead", "reserved", "unclaimed", "registered_not_dead"):
+            assert value not in result[column].get(vocab, []), (column, vocab, value, result[column])
     # "同形不同义 / 读侧字面量"的五条：普查看不见它们是死取值（字面量在别的命名空间
     # 或读侧命中），所以它们落在 `registered_not_dead` 里 —— 但必须照样打印，不许静默。
     for vocab, value in (("DOC_KINDS", "survey"), ("DEP_KINDS", "lemma"),
@@ -159,7 +181,7 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     # 也不许无中生有（`reserved + unclaimed == dead` 是分栏正确性的恒等式）。
     assert result["reserved_total"] + result["unclaimed_total"] == result["dead_total"], result
     # 每一条预留都必须有理由：登记表的价值全在理由上，没有理由的登记是静默豁免。
-    for vocab, value in (("DOC_KINDS", "reproduction_report"), ("DOC_KINDS", "survey")):
+    for vocab, value in (("CONJECTURE_STATUSES", "testing"), ("DOC_KINDS", "survey")):
         why = result["reserved_reasons"].get(f"{vocab}.{value}", "")
         assert why.strip(), (vocab, value)
 
@@ -172,24 +194,24 @@ def test_unregistering_a_reserved_value_moves_it_to_unclaimed(monkeypatch) -> No
     上面那条正控在"登记表被清空"时也会绿（因为那时 `reserved` 是空字典，
     `in []` 为假……但它会被 `reserved_total` 那条抓住一部分）。所以这条负控是必需的。
 
-    对象是 `DOC_KINDS.reproduction_report`（`E-10` 之后 `FINDING_KINDS` 那条登记
-    已经随词表值一起删掉，拿它当夹具会失去对象）。
+    对象是 `CONJECTURE_STATUSES.testing`（`reproduction_report` 已于 2026-11-13 删掉，
+    拿它当夹具会失去对象；`testing` 今天仍是「死且已登记」的那一档）。
     """
-    key = ("DOC_KINDS", "reproduction_report")
-    value = key[1]
+    key = ("CONJECTURE_STATUSES", "testing")
+    vocab, value = key
     assert key in V.RESERVED_VALUES, "登记表里没有这一条 ⇒ 本负控失去对象"
     before = V.census(REPO)
-    assert value in before["reserved"]["DOC_KINDS"]
+    assert value in before["reserved"].get(vocab, [])
 
     monkeypatch.delitem(V.RESERVED_VALUES, key)
     after = V.census(REPO)
-    assert value not in after["reserved"].get("DOC_KINDS", [])
-    assert value in after["unclaimed"].get("DOC_KINDS", []), after["unclaimed"]
+    assert value not in after["reserved"].get(vocab, [])
+    assert value in after["unclaimed"].get(vocab, []), after["unclaimed"]
 
     monkeypatch.undo()
     restored = V.census(REPO)
-    assert value in restored["reserved"]["DOC_KINDS"]
-    assert value not in restored["unclaimed"].get("DOC_KINDS", [])
+    assert value in restored["reserved"].get(vocab, [])
+    assert value not in restored["unclaimed"].get(vocab, [])
 
 
 def test_the_unimplemented_direction_is_declared(tmp_path: Path) -> None:

@@ -62,11 +62,6 @@ MIN_PRODUCER_LINES = 50
 #: 理由是这个"）；本工具只提供位置，不替谁填。登记表只能有一处：不许在 `schema.py` 里另写一份"预留"标记
 #: （两个落点必然漂移）。 `reserved` 不是"通过"：必须照样打印（含理由）—— 静默豁免是本项目最忌的形态； 表里的键不要求出现在 `dead` 里；`UNKNOWN_SIDE_EFFECT` 是唯一不进本表的被点名项（`capabilities.py` 的 模块级常量，不是词表取值）。
 RESERVED_VALUES: dict[tuple[str, str], str] = {
-    ("DOC_KINDS", "reproduction_report"): (
-        "死取值。agent_g 只写 note/paper 一类的稿件，没有任何地方建 kind="
-        "'reproduction_report' 的文档行。留着的理由：它对应 E→G 的『独立复现报告』这条交付物，"
-        "是设计里明确存在、只是尚未接线的一类产物；删掉它会让『复现报告』在词表里无处安放。"
-    ),
     # 同一条登记只许有一份：字典字面量里后一条会静默覆盖前一条，读登记表的人
     # 却会以为两条理由各自独立。`survey` 只有下面那一条（它写明"普查看不见它是死取值"）。
     ("DEP_KINDS", "proposition"): (
@@ -135,6 +130,7 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "而『撤下』这个动作在 T3 才接线。"
     ),
     # ---- 取词表面拓宽之后新看见的 17 条里，由数据产出的那 7 条。
+    # （2026-11-13：`CLAIM_SOURCE_KINDS.自证` 已按业主裁定删除 ⇒ 下面剩 6 条。）
     # 它们不是"没有产出点"，而是"产出点不在代码里"：
     # 普查的判据是"这个字面量在 `src/` 里出现过吗"，而这几张词表的值是由文档/数据
     # 写进去的（谁写见每条的理由）。⇒ 判据对它们不适用，登记在这里（栏一）。
@@ -158,9 +154,6 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "由数据产出：`documents.claims[].source_kind`，实测 16 行（2026-09-29）。"
         "『这条断言是从文献里读来的』只能由写稿件的一方给出，代码侧没有产出点。"
     ),
-    ("CLAIM_SOURCE_KINDS", "自证"): (
-        "由数据产出：`documents.claims[].source_kind`，实测 8 行（2026-09-29）。同 `文献`。"
-    ),
     ("CLAIM_CHECK_KINDS", "只读了陈述"): (
         "由数据产出：`documents.claims[].our_check`，实测 4 行（2026-09-29）。"
         "它是 P3 台账里那三条 `lem:*` 的 `our_check` 取值（`draft/28` 的 R-40 说的就是这一档）。"
@@ -170,10 +163,13 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "`form` 由提出猜想的一方写（D/人），代码里只有 `universal` 出现过字面量。"
     ),
     # ---- 下面 10 条是拓宽取词表面之后第一次看得见、且"代码与数据都不产出"的取值。
+    # （2026-11-13：`CLAIM_SOURCE_KINDS.未决` 已按业主裁定删除 ⇒ 下面剩 9 条。）
     # 三条出路里选的是登记为预留（选项 c）：它们是各自分类法里的合法成员，
     # 只是本工作区（`projects/p2-review`）没用到；删值会让"这一类断言/形状"无处安放。
     #  这 10 条同样是 AI 代写的登记（窗口见 `docs/NOAI-SUSPENSION-2026-09-28.md`）⇒
     # 逐条走查时请判"留还是删"；若判"删"，要动的是 `schema.py`/`claimanatomy.py` 的词表值。
+    # （2026-11-13 删掉 `未决` 之后实际在册 9 条：`定义`/`推论`/`例`/`注`/`待精化`/
+    #  `Remark only`/`existential`/`bound`/`structural`。）
     ("CLAIM_KINDS", "定义"): (
         "死取值（无产出且无人认领 ⇒ 本批登记为预留）。它是数学稿件里与定理/引理并列的标准断言种类；"
         "本包实测 `documents.claims[].kind` 只出现 命题/引理/定理 ⇒ 这一档没有被用到。"
@@ -197,9 +193,6 @@ RESERVED_VALUES: dict[tuple[str, str], str] = {
         "本包的 `claims[].allowed_use` 没有行用过它。"
         "⚠️ 顺带记一条：这张词表里三条取值**语言不统一**（`主结果` / `Remark only` / `移入 open`）——"
         "统一命名是一次独立的清理，不在本批。"
-    ),
-    ("CLAIM_SOURCE_KINDS", "未决"): (
-        "死取值 ⇒ 预留：来源未定档；本包 24 行的 `source_kind` 只出现 文献/自证。"
     ),
     ("CONJECTURE_FORMS", "existential"): (
         "死取值 ⇒ 预留：猜想形状轴上的三档之一（T1 声明的那张词表）；"

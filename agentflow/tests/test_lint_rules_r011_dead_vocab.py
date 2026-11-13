@@ -76,18 +76,27 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     有了 `"prior_art": "prior_art"` —— 那是依赖小节解析的读侧别名表（把正文里的词
     映射到 `Dependency.kind`），不是产出点，而普查按字面量判读写，分不出这两件事
     ⇒ 它按 `proposition` / `lemma` / `dataset` 同样的口径落进栏一附。
-    现在 `reserved` 栏的非真空由 `reproduction_report` 一件钉住（它仍然没有产出点），
+    现在 `reserved` 栏的非真空改由今天仍然死的那三条钉住
+    （`CONJECTURE_FORMS.existential` / `CONJECTURE_STATUSES.testing` /
+    `CONJECTURE_STATUSES.known_in_literature` —— 2026-11-13 删掉
+    `reproduction_report` / `自证` / `未决` 之后剩下的、仍然「死且已登记」的那三条），
     `prior_art` 与 `proposition` 一起落栏一附，两栏都照旧不许出现 `unclaimed`，
     且每一条都必须带着登记表里那段理由打印出来 —— 这三件事一条都没放松。
+    删掉的 `reproduction_report` 另有一条反向断言：R011 的任何一栏都不许再出现它。
     """
     got = L.rule_R011_dead_vocab(ROOT)
     reserved = " ".join(f.message for f in got if "[栏一 reserved]" in f.message)
     registered = " ".join(f.message for f in got if "[栏一附]" in f.message)
     unclaimed = " ".join(f.message for f in got if "[栏二 unclaimed]" in f.message)
-    # 栏一 reserved 的非真空：`reproduction_report` 今天仍无产出点。
-    assert "reproduction_report" in reserved, f"reproduction_report 不在 reserved 栏：{reserved}"
-    assert "reproduction_report" not in unclaimed, (
-        f"reproduction_report 被挪进了 unclaimed 栏：{unclaimed}")
+    # 栏一 reserved 的非真空：这三条今天仍无产出点（条数写死，不是删掉断言）。
+    for name in ("testing", "existential", "known_in_literature"):
+        assert name in reserved, f"{name} 不在 reserved 栏：{reserved}"
+        assert name not in unclaimed, f"{name} 被挪进了 unclaimed 栏：{unclaimed}"
+    # 2026-11-13 删掉的三个 C 值：R011 输出里不许留痕
+    # （词表值删了、登记表却没删 ⇒ 它会以「栏一附」的样子长期挂在报告里）。
+    for gone in ("reproduction_report", "自证", "未决"):
+        assert gone not in reserved, f"reserved 栏里还有 {gone}：{reserved}"
+        assert gone not in registered, f"栏一附里还有 {gone}（登记已过期）：{registered}"
     # `proposition` / `prior_art` 今天落栏一附（同形不同义的读侧字面量）：
     # 仍然必须在报告里被点名、带理由，且两栏都不许出现 unclaimed。
     for name in ("proposition", "prior_art"):

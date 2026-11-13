@@ -1366,7 +1366,11 @@ SUBGOAL_STATUSES = ("todo", "in_progress", "supported_not_proved", "closed", "bl
 SUBGOAL_OWNERS = ("F", "A", "B", "C", "D", "E", "G")
 
 #: G 的文档类型与状态。
-DOC_KINDS = ("reproduction_report", "survey", "paper", "note")
+#:
+#: `reproduction_report` 已于 2026-11-13 按业主裁定删除（0 行 / 无读点 / 无写入口）：
+#: 「独立复现报告」若真要做，要的是一个接线条目（谁产出、谁审、落在哪张表），
+#: 而不是一条永远不可能出现的词表取值。
+DOC_KINDS = ("survey", "paper", "note")
 DOC_STATUSES = ("draft", "in_review", "revised", "accepted", "rejected", "unresolved_review")
 
 #: 一次审核的裁决。空串 = 还没审过。
@@ -1504,12 +1508,13 @@ ALLOWED_USE_KINDS = ("主结果", "Remark only", "移入 open")
 #: `numeric_evidence` 四元组。键名固定，多一个少一个都不可判定。
 NUMERIC_EVIDENCE_KEYS = ("script", "range", "n_cases", "n_counterexamples")
 
-#: 断言台账「来源」列的三档。
+#: 断言台账「来源」列。
 #:
-#: 三档必须分开，理由与 FC-25 的四类否定同族：「我们自己算出来的」与
-#: 「某篇文献说它是这样」在证据力上不是一回事，而「来源至今没查清」
-#: 更不是前两者中的任何一个 —— 合并之后，读表的人会把「未决」读成「已核实」。
-CLAIM_SOURCE_KINDS: tuple[str, ...] = ("自证", "文献", "未决")
+#: 2026-11-13 按业主裁定删掉 `自证` / `未决`（0 行 / 无读点 / 无写入口）：
+#: 这条轴的写入口从来没接上（305 条断言的 `source_kind` 全是空串），
+#: 摆着两档只会让读表的人以为「我们自己算的」与「来源至今没查清」已经被区分开了。
+#: 真要那张三态来源轴，第一步是接线（谁写、写在哪、谁读），不是先在词表里摆三档。
+CLAIM_SOURCE_KINDS: tuple[str, ...] = ("文献",)
 
 #: 「我方核到什么程度」这一列。分档判据是「我们做了什么」，
 #: 不是结论有多可信：`证明`（形式化/逐步推导，我方自己走通）·

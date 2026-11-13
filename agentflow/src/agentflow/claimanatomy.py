@@ -494,9 +494,10 @@ CLAIM_FIELDS: dict[str, FieldSpec] = {
         required=False,
         domain=CLAIM_SOURCE_KINDS,
         why=(
-            "这条断言是自证的、引自文献的、还是来源至今未决的。"
-            "三档合并计数会让人把「未决」读成「已核实」，"
-            "也会让「我们自己算的」与「某篇文献说的」在计数上无法区分。"
+            "这条断言是从哪来的。今天词表里只剩「文献」一档："
+            "另外两档（`自证` / `未决`）2026-11-13 按业主裁定删除 —— "
+            "它们从来没有写入口（305 条断言的 `source_kind` 全是空串），"
+            "摆着只会让读表的人以为这两件事已经被区分开了。"
         ),
         source="draft/31 P3（台账的「来源」列）；draft/30 §T3-P3",
         from_reference=False,
@@ -698,7 +699,7 @@ CLAIM_FAMILIES: dict[int, dict[str, str]] = {
     2: {"name": "受控词表",
         "rule": "`kind`/`status`/`source`/`our_check`/`allowed_use` 的取值必须在各自的词表里，"
                 "且类型要对（`frozen` 是布尔、`numeric_evidence` 是对象）",
-        "example": '{"kind": "引理", "status": "证", "source": "自证", "our_check": "证明"}'},
+        "example": '{"kind": "引理", "status": "证", "source": "文献", "our_check": "证明"}'},
     3: {"name": "status × evidence_kind 交叉",
         "rule": "`status=\"证\"` 必须 `evidence_kind=\"proof\"`；不是 proof 就不许自称「证」",
         "example": '{"status": "证", "evidence_kind": "proof"} 或 {"status": "验", "evidence_kind": "cross_check"}'},
@@ -1106,7 +1107,7 @@ def _bad_type(name: str, val: Any, spec: FieldSpec) -> str:
                   "freeze_reason", "allowed_use", "scope_caveat", "revision_hash",
                   "section",
                   # `draft/31` P3 的四列 + 两列出处：词表与类型都必须受判，
-                  # 否则「来源=自证证」这种取值会静默通过（见 CLAIM_FIELDS 里那一段）。
+                  # 否则「来源=词表外的说法」这种取值会静默通过（见 CLAIM_FIELDS 里那一段）。
                   "source_kind", "our_check", "our_check_note", "falsifiable_note",
                   "paper_ref", "paper_excerpt"):
         if not isinstance(val, str):

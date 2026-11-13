@@ -22,6 +22,15 @@ from agentflow.verify import verify_all
 # ------------------------------------------------------------------ 小工具
 
 
+def test_the_retired_reproduction_report_kind_is_not_in_the_vocab() -> None:
+    """2026-11-13 删掉的 `DOC_KINDS.reproduction_report`：词表里不许再有它。
+
+    夹具改成 `kind="paper"` 之后，"它真的被删了"这件事本身要有机器判据 ——
+    否则别人把值加回来时，这条反向断言会先红。
+    """
+    assert "reproduction_report" not in S.DOC_KINDS, S.DOC_KINDS
+
+
 def _issues(store, *, level: str | None = None, kind: str | None = None):
     """取 verify 的 issue 列表。
 
@@ -78,7 +87,7 @@ def _dependency(store, did: str, **kw) -> dict:
 def _document(store, did: str, **kw) -> dict:
     claim = {"claim_id": "c1", "text": "K(m) 是 m-正则的。", "citations": ["lit:0000"],
              "evidence_kind": "proof"}
-    base = dict(doc_id=did, kind="reproduction_report", title="复现报告", claims=[claim],
+    base = dict(doc_id=did, kind="paper", title="论文稿件", claims=[claim],
                 status="draft", created_at=TS)
     base.update(kw)
     # T4-A：每一行稿件都带内容哈希（G 的写侧口径是"每次写都钉"，不是只在 accepted 时补）。

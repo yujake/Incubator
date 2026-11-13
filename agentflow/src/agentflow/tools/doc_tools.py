@@ -467,8 +467,7 @@ def check_citations(
     ==============================  ============================================`rows_of` 是读表函数             `checked=True`，
     `missing` 可能为空（=都查过了）`rows_of is None`（没有 store）  `checked=False`，不得读成"引用都存在
     "==============================  ============================================`rows_of(table) -> 行序列`：给的是读表能力而不是 store 实例，这
-    样它既能在事务内用 `tx.rows` 跑（拿到一致的快照），也能被单测直接喂假表。`citing_kind`：两阶段口径（业主 2026-10-09 逐字）- 研究手稿阶段（`note` / `survey` / 
-    `reproduction_report` 等）：可以互相引用我方手稿 —— `doc:<稿件>`（引整体成果）与三段式`doc:<稿件>#<断言>@<哈希>` 都合法（后者更精确、能钉版本）；- 正式论文（`kind="paper"`）：只许
+    样它既能在事务内用 `tx.rows` 跑（拿到一致的快照），也能被单测直接喂假表。`citing_kind`：两阶段口径（业主 2026-10-09 逐字）- 研究手稿阶段（`note` / `survey` 等）：可以互相引用我方手稿 —— `doc:<稿件>`（引整体成果）与三段式`doc:<稿件>#<断言>@<哈希>` 都合法（后者更精确、能钉版本）；- 正式论文（`kind="paper"`）：只许
     引真实论文（`lit:`）。`doc:` 一律拒，理由写明"手稿里的内容要进论文必须在正文里重建"—— 重建出来的东西再以`stmt:` / `exp:` / `rel:` 落台账、被论文引用（`closing.PAPER_LEDGER_PREFIXES`
     要的正是这三种）。- 没给 `citing_kind`（历史调用点/单测）⇒ 只判形状与存在性（老行为逐字不变）。返回 ``{"checked", "reason", "missing": [{claim_id, citation, kind, ref, why}],"resolved": n, "doc_whole": [...], "doc_unpinned": [...]}``。
     后两格是读数（两阶段口径之后才有意义）：`doc_whole` = 引"我方那份手稿的整体成果"的那些引用（两段式）；`doc_unpinned` = 其中没钉版本的那些 ——没钉版本是合法的，但"改稿之后旧引用不会失效"这件事必须看得见，不许
@@ -1503,7 +1502,7 @@ ARTIFACT_EVENT = "documents.markdown_sha256"
 #:
 #: 业主口径（`draft` 与本批施工单）：H 审的是论文正文 `out/paper/main.tex`，
 #: `documents` 只是它的登记行。所以 kind="paper" 的行，正文 = `out/paper/main.tex`；
-#: 其它 kind（note / survey / reproduction_report）没有 tex，正文就是它自己的
+#: 其它 kind（note / survey）没有 tex，正文就是它自己的
 #: `markdown_path` 那份渲染产物。
 #:
 #: 为什么记的是"文件字节的 sha"而不是 `content_sha256`：后者是这一版「内容」的规范
