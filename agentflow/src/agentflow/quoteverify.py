@@ -151,13 +151,22 @@ def check_quote(
     if not q:
         return QuoteCheck(None, reason="empty_quote", tried=())
 
+    # 每页的规范化只算一次：声明窗口 / ±widen / 全文三趟扫的是同一批页，
+    # 而 `normalize_for_quote` 是纯函数、`pages` 是一份浅拷贝里的不可变字符串
+    # ⇒ 三趟共用一个按页号缓存的字典（原来的实现每趟都把同一页重新规范化一遍）。
+    norm_pages: dict[int, str] = {}
+
     def scan(start: int, end: int, label: str) -> QuoteCheck | None:
         lo = max(1, start)
         hi = min(len(pages), end)
         if lo > hi:
             return None
         for p in range(lo, hi + 1):
-            if q in normalize_for_quote(pages[p - 1]):
+            page = norm_pages.get(p)
+            if page is None:
+                page = normalize_for_quote(pages[p - 1])
+                norm_pages[p] = page
+            if q in page:
                 return QuoteCheck(True, matched_page=p, window=label, reason="substring_match")
         return None
 
