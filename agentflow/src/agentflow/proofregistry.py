@@ -240,6 +240,29 @@ def _replace_section(text: str, name: str, body: str) -> tuple[str, bool]:
 
 # ---------------------------------------------------------------- 头部元信息（解析 / 改写）
 
+def replace_section(text: Any, name: str, body: Any) -> tuple[str, bool]:
+    """只换 `## <name>` 那一节（对外写口；唯一实现仍是 `_replace_section`）。
+
+    为什么要一个公开名：`propositionrewrite`（W2 的"未入册命题原位重写"写口）要换的
+    正好是 `## 命题` 那一节 —— 它若自己再写一份切节/替换，两处口径迟早分家（"只动
+    那一块"这条判据就管不住新写口了）。所以这里只转发，不另立判据。
+    """
+    return _replace_section(str(text or ""), str(name), str(body or ""))
+
+
+def rewrite_proposition_head(text: Any, *, new_fp: str) -> str:
+    """只改稿头的命题指纹那一行（`## 命题` 原位改写之后用，其余元信息一个字不动）。
+
+    为什么不复用 `_head_for_new_version`：那个函数一次改七格（正文 sha / 指纹 / 标签 /
+    种类 / 登记时刻 / 版本段 / 命题号），而这一笔只改了命题正文——正文 sha、版本段、
+    登记时刻都不该动（动了就等于说"证明换了一版"，而它一个字节没变）。
+    """
+    raw = str(text or "")
+    head_now = _head_of(raw)
+    head_new = _rewrite_head(head_now, {FINGERPRINT_MARK: str(new_fp or "")})
+    return head_new + raw[len(head_now):]
+
+
 def _head_of(text: Any) -> str:
     """手稿头部（与 :func:`split_sections` 同一份切节口径，但不构造各节正文）。
 

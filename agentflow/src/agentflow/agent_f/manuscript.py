@@ -657,6 +657,40 @@ class _Manuscript:
         """
         return _MID.canonical_rel(manuscript_id, proof_no, legacy=True)
 
+    def rewrite_manuscript_proposition(self, *, manuscript: str, proposition: str,
+                                       label: str = "", kind: str = "conjecture",
+                                       task_id: str = "") -> dict:
+        """把一份「未入册」手稿的 `## 命题` 原位换成新陈述（受控写口；W2·甲）。
+
+        ## 这是什么、不是什么
+
+        - 是「已经签了、但命题节写错」那一档的「兜底写口」：只换 `## 命题` 与稿头的
+          命题指纹，`## 证明` 一个字节不动 ⇒ 签盖的正文 sha 不变 ⇒ 不用重签；
+        - 不是主路径：主路径是写稿那一刻的形态闸（`proofregistry:666`），那一关
+          已经把"命题节写成作业话"挡在落盘之前；
+        - 不是动作：F 的动作面没有新增参数（冻结面），这个方法由 F 的维修路径直接调；
+          三条边界与全部读数在 `propositionrewrite.rewrite_proposition`（唯一实现）。
+
+        ## 边界（缺一不许，判据在那边）
+
+        ① 命题已进 `statements` ⇒ 受控拒（走重新登记）；② 改前 / 改后必须判成"同一条
+        命题"（`Secretary.judge_same_proposition`，两态，判不了 ⇒ 拒）；③ 只走受控写口，
+        不在冻结面上开洞（`## 证明` 的 sha 落盘前先核一次）。
+
+        参数：`manuscript` 是工作区相对路径；`proposition` 是新那一节正文（不是"改法说明"）；
+        `label` / `kind` 只进同一性判定的材料与台账读数。
+        """
+        from .. import propositionrewrite as _PRW
+
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        got = _PRW.rewrite_proposition(
+            store=self.store, root=root, manuscript=manuscript,
+            proposition=proposition, secretary=self._secretary(),
+            label=label, kind=kind, task_id=task_id)
+        got = dict(got)
+        got["agent"] = "F"
+        return got
+
 
 
 # ---------------------------------------------------------------- 转正（攻坚稿 → 正式稿）

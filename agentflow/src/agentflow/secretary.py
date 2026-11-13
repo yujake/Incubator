@@ -3823,6 +3823,70 @@ class Secretary:
         except Exception as exc:  # noqa: BLE001 —— 台账写不进去要看得见，但不改判定
             out["ledger_error"] = f"{type(exc).__name__}: {exc}"
 
+    def judge_same_proposition(self, *, before: str, after: str, label: str = "",
+                               kind: str = "conjecture", task_id: str = "",
+                               note: str = "secretary:proposition_identity") -> dict[str, Any]:
+        """同一个稿上改前 / 改后那两段命题正文，是不是同一条命题（两态；判不了 ⇒ 没判成）。
+
+        ## 与 `adjudicate_proposition` 的分工（不是第二份判据）
+
+        那一问是"新命题 vs 在册候选"：判 same 必须点出一个候选号（`same_as`），并落
+        `proposition_verdicts` 缓存。这一问是"同一份稿的 `## 命题` 从 A 改成 B"——
+        两侧都没有台账号，也没有"并进哪一条"这件事。所以：
+
+        - **轴不新造**：`judge("proposition_identity", …)` 与那一问同一类、同一份题面
+          （`_judge_system("proposition_identity")`）；
+        - **材料同形**：`_identity_context(full=after, candidates=[before 那一条])`
+          —— 模型看到的是"要判的这一条 + 一条候选"，读法一字不差；
+        - **不缓存**：`proposition_verdicts` 的键只有 `after` 的 sha，而这一问的答案还取决
+          于 `before` ⇒ 按单一 sha 缓存会把"上次 A→B 判 same"沿用到"C→B"上。这一档不写
+          那本账（这一问是修稿兜底，不是每次登记的常路，花一次调用是可接受的）。
+
+        ## 三态（与全仓同一条纪律）
+
+        | 结局 | 返回 |
+        |---|---|
+        | 判成 | `checked=True` + `decision="same"` / `"different"` + `basis` |
+        | 没判成 | `checked=False` + `decision=""` + `reason`（没缝 / 开关关着 / 超时 / 坏 JSON / 词表外） |
+
+        `same` 是"同一条命题"，`different` 是"另一条命题"——调用方（原位重写的写口）
+        只在 `checked=True and decision=="same"` 时才许动稿，别的两档一律 fail-closed。
+        """
+        out: dict[str, Any] = {"checked": False, "decision": "", "reason": "",
+                               "basis": "", "cost": {}, "before_sha256": "",
+                               "after_sha256": "", "note": note}
+        before_text = str(before or "")
+        after_text = str(after or "")
+        out["before_sha256"] = _proposition_verdict_key(before_text)
+        out["after_sha256"] = _proposition_verdict_key(after_text)
+        if not before_text.strip() or not after_text.strip():
+            out["reason"] = ("改前或改后的命题正文是空的 ⇒ 没有可判的两段"
+                             "（空的那一侧不是「同一条」）")
+            return out
+        if not _is_proposition_kind(str(kind or "")):
+            out["reason"] = (f"kind={kind!r} 不在命题性的那几档 {list(PROPOSITION_KINDS)} 里 "
+                             "⇒ 不是命题，不参与同一性判定")
+            return out
+        context = self._identity_context(
+            full=after_text, label=str(label or ""), kind=str(kind or ""),
+            candidates=[{"stmt_id": "", "label": str(label or ""),
+                         "proof_nos": [], "statement_full": before_text}])
+        got = self.judge("proposition_identity", context, task_id=task_id, note=note)
+        out["cost"] = dict(got.get("cost") or {})
+        if not got.get("checked"):
+            out["reason"] = str(got.get("reason") or "这一格没查成（原因不明）")
+            return out
+        decision = str(got.get("decision") or "")
+        if decision not in PROPOSITION_VERDICTS:
+            out["reason"] = (f"模型给的结论 {decision!r} 不在两档 {list(PROPOSITION_VERDICTS)} "
+                             "里 ⇒ 不采信：这一格没判成")
+            return out
+        parts = [str(x).strip() for x in (got.get("basis") or []) if str(x).strip()]
+        out.update(checked=True, decision=decision,
+                   reason=str(got.get("reason") or ""),
+                   basis="；".join(parts + ([out["reason"]] if out["reason"] else [])))
+        return out
+
     # ------------------------------------------------ 同一命题检索
     #
     # 「B秘书要学会在命题台账里按关键词搜索」「语义判定……应该是主动查询」。
