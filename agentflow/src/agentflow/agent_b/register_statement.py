@@ -3861,17 +3861,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `_manuscript_is_own`（按证明正文认出来的 / 稿名里的稿号等于本行号 / 等于行上
         # 记的稿号）。改前那条"稿头自己声明的号"随稿头那一行删除。
         #
-        # 调用方点名递上来的（`param` / D 的携带单）不判所有权：那是"这一笔要给它的
-        # 稿"（既有语义），兜底读盘 / 按号搜出来的才要问（D1）。
+        # 调用方点名递上来的（`param` / D 的携带单）不先判所有权：那是"这一笔要给它的
+        # 稿"（既有语义）。但本行已经记着 `manuscript_id` 时仍要核 —— 那是"这一条的稿
+        # 是哪一份"的 durable 记录（业主 2026-11-13：稿里没有命题号，行上那一格是唯一
+        # 能认稿的地方）⇒ 点名递来的稿不是它，就是别人的稿（b2/b3 的"按名字拒"）。
         _explicit_manuscript = bool(str(proof_manuscript or "").strip()) or (
             str(manuscript_source or "") in (_DS.SOURCE_PARAM, _DS.SOURCE_CARRIED))
+        _row_mid = str((redelivery or {}).get("manuscript_id") or "").strip()
+        _skip_owner = bool(_explicit_manuscript and not _row_mid)
         manuscript_foreign = bool(
-            manuscript_text.strip() and stmt_id_now and not _explicit_manuscript
+            manuscript_text.strip() and stmt_id_now and not _skip_owner
             and not _manuscript_is_own(
                 manuscript_text=manuscript_text, manuscript_path=manuscript_path,
                 stmt_id_now=stmt_id_now,
                 matched_by=manuscript_probe.get("matched_by"),
-                row_manuscript_id=str((redelivery or {}).get("manuscript_id") or "")))
+                row_manuscript_id=_row_mid))
         # ---- 寻址来的稿正文落成 `proof_text`（「F侧实际上是D侧，
         #      F的东西都在D的手稿上记了一笔」） ------------------------------------
         #
