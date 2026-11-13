@@ -216,7 +216,9 @@ class DocumentText:
         hi = min(len(self.page_status), int(end))
         if lo > hi:
             return False
-        return any(self.page_status_of(p) == "failed" for p in range(lo, hi + 1))
+        # 经 `page_status_of` 走的每一步都要再判一次边界；这里 lo/hi 已经收窄到
+        # `[1, len(page_status)]`，等价于直接索引，省掉每页一次方法调用与两次比较。
+        return any(self.page_status[p - 1] == "failed" for p in range(lo, hi + 1))
 
     def text_at(self, start: int | None, end: int | None) -> str:
         """取第 ``start`` 页到第 ``end`` 页的文本（1-based 闭区间）。
