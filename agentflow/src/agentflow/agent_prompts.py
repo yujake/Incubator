@@ -2500,7 +2500,41 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
 #: 判据：`tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（题面面）与
 #: `tests/test_b_manual_teaches_the_carried_sheet_four_columns.py`（B 手册的第四格）。
-PROMPT_VERSION = "p280"
+#: p280 → p281（2026-11-13，业主批准的「四方合批」：W1 命题字段与教法 / W2 的 B policy
+#: 第十条 / X1 的派活与 abandon / secretary 的 dispatch_fit 题面；四方文案一次抬版）：
+#:   ① W1（命题字段与教法）：真机 f-proof-000002 的 `## 命题` 是修订说明 —— 改前它由子目标
+#:      正文拼出来，闸只能事后判。`specs/f.py` 的交付示例 JSON 给 proof 档加 `proposition`
+#:      （那条定理的完整陈述：前提 → 结论）；形态闸那一段改成三句：`## 命题` 永远是定理陈述、
+#:      由 `product.proposition` 逐字渲染；子目标正文不是命题（那是派给你的活）；判不过 /
+#:      没判成 ⇒ `proposition_form_refused`、稿一个字节都不写（闸在写盘之前）、改的是
+#:      `proposition` 那一格；改法说明 / 作业要求写进 `steps` 或 `label`。
+#:      `agent_skills._f_skills()` 按同一口径改（手册只落盘、不进十一格）；
+#:      `attackround.PRODUCT_SPECS["proof"]` 要求 `proposition` + `steps`，
+#:      `HANDED_PRODUCT_SCHEMA` 的 `proposition` 补 description、`label` 的 description
+#:      改回「一句话标签；不是命题，不进 `## 命题`」。
+#:   ② W2（B 的 policy）：`specs/b_ingest_policy.py` 的 `INGEST_POLICY` 补第十条 ——
+#:      `## 命题` 不是定理陈述 ⇒ 按稿收录时让动作出受控拒（`proposition_form_refused`
+#:      带 `fix` / `next_step`），不要把这件「怎么办」写成给 D 的 handoff（D 对命题台账
+#:      只有只读权限，命题形态的判据在 B 的秘书）；九条 → 十条。
+#:   ③ X1（派活与 abandon）：`specs/d.py` 的派活段 —— plan 由 F 自己定、一个研究方向派
+#:      一个 F（不按 plan 个数派）；D 可以查 F 的 plan（`attack.status` /
+#:      `attack.list_plans`）并经既有消息面提建议；放弃由 F 走 `attack.abandon_plan`、
+#:      理由只认「不再需要」；派活不合适由秘书提醒（`dispatch_fit` 轴，只提醒不拦）；
+#:      改稿沿用同一稿号。
+#:   ④ secretary 的 `dispatch_fit` 题面（`DISPATCH_FIT_QUESTION` 与词表「是一个方向 /
+#:      不是一个方向」）已在 cf8520f5（R2）落好；本批只核口径，文案一个字未改。
+#: 变化格 = B / D / F（其余八格逐字未动；版本行已归一）。十一格由判据自己的
+#: `_surface_digest` 现算（`temp/_p280_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。
+#: 逐格旧值 → 新值：
+#:   B 4a58462d… → 0236ed0cdb1dc4795adc6610b8565475729b28b5e1182ef286d47071ada1be1e
+#:   D bc209de7… → b39f187149492650af1cf9f7f9763a2247c75bb328b9ed7687f10a7271be1319
+#:   F 8fce808f… → 12acb87b2514870822b039eba0929833c0dc59294af141e216c45b0788ca4f69
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p281）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p280 同值）；两份 golden 按现值重冻
+#: （agent 面 11 格 prompt / F 的 `attack.step` 参数说明 / 工具面 `attack.step.params`
+#: 的 sha；`attack.step` 的声明基线同步记一条 amendment）；两文档重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
+PROMPT_VERSION = "p281"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

@@ -1235,6 +1235,23 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "`b-proof` 有无现行的 V 签、有无被明确放弃）；⑥ `path_id` 的显示名口径写成"
              "`p<路径号>g<组号>`。变化格 = B / E / F / M（其余七格逐字未动，版本行已归一）。"
              "facts 键集仍 15 格、落点没动。"},
+    # p280 → p281（2026-11-13，四方合批）：facts 键集一格没动（还是 15 格）—— 本批只改
+    # B / D / F 的 policy 与一处 schema 说明（W1 命题字段 / W2 第十条 / X1 派活段），
+    # 没有哪一格事实换过落点（system ↔ user），所以 count / keys_sha256 与 p280 同值。
+    {"version": "p281", "count": 15,
+     "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+     "note": "抬版本 p281（2026-11-13，业主批准的四方合批）：① W1 —— `specs/f.py` 的交付"
+             "示例 JSON 给 proof 档加 `proposition`，形态闸那一段改成三句（`## 命题` 永远是"
+             "定理陈述、由 `product.proposition` 逐字渲染；子目标正文不是命题；判不过 / "
+             "没判成 ⇒ `proposition_form_refused`、稿一个字节都不写、改的是 `proposition` "
+             "那一格）；`attackround.PRODUCT_SPECS['proof']` 要求 `proposition` + `steps`，"
+             "`HANDED_PRODUCT_SCHEMA` 的 `proposition` 补 description、`label` 改成"
+             "「一句话标签；不是命题」。② W2 —— `INGEST_POLICY` 补第十条（命题节不是定理"
+             "陈述 ⇒ 让动作出受控拒、不要写成给 D 的 handoff）。③ X1 —— `specs/d.py` 的"
+             "派活段（plan 由 F 定、一个方向一个 F、不按 plan 个数派；D 可查 plan 并发建议；"
+             "放弃理由只认「不再需要」；`dispatch_fit` 轴只提醒不拦）。④ secretary 的"
+             "`dispatch_fit` 题面在 R2 已落，本批只核口径。变化格 = B / D / F（其余八格逐字"
+             "未动，版本行已归一）。facts 键集仍 15 格、落点没动。"},
 
 )
 
