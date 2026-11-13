@@ -3104,6 +3104,33 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "只动 `bits.evidence.hard_to_prove_by_proof`，status 与占位签一个"
                           "字节不动）/ _write_row（整行重建 + `Statement.validate` + 单事务）"
                           "—— 被 `Secretary.amend_statement_meta` 转调",
+    # 2026-11-13（业主「统一 B、E、F 注册稿和写稿的流程：写命题 → 命题形式过审 → 拿稿号
+    # → 写稿」）：三族共用的唯一开稿口。为什么必须是顶层：`fs.write/edit/delete/move` 的
+    # 写面（工具层）、B 的引文落稿（角色包）、E/F 的开稿三处都要用同一份"谁能写哪份稿"，
+    # 挂进任一角色包都会让另两方反向依赖；它只读盘与号源、不注册工具。
+    "manuscriptopen.py": "三族共用的开稿口（2026-11-13 裁定）：ROLE_FAMILIES（角色-族绑定）"
+                         " / open_manuscript（写命题 → 形态闸 → 拿稿号 → 落骨架；闸不过"
+                         " 号源一个字节不动）/ write_allowed（fs.edit 与 write_section 共用的"
+                         " 唯一判据：角色-族 / 规范名 / 号已发 / 命题退休 / 拿签冻结 / 在盘上）"
+                         " / foreign_refusal（保留表之外那一半）/ write_section（框架侧的换节"
+                         " 写口，`## 命题` 不归它）",
+    # 2026-11-13（业主「plan 级那两个理由沿用命题级那套」）：plan 级放弃理由的受控词表。
+    # 为什么必须是顶层：写侧（`agent_f/abandon_plan.py`）与工具声明（`tools/attack_tools.py`
+    # 的参数 enum）都要读它，而 `attack_tools` 被 `agent_f._support` 在模块加载期导入 ——
+    # 让工具层反过来 import `agent_f` 会成环。纯数据、零依赖（与 `stop_reasons.py` 同一种放法）。
+    "planabandon.py": "plan 级放弃理由的三档受控词表（2026-11-13）：PLAN_ABANDON_REASONS"
+                      "（math_error / difficulty / 不再需要；前两档直接取 `statementabandon`"
+                      " 的那两个常量）/ PLAN_ABANDON_EVIDENCE_REASONS（哪两档要证据）"
+                      " / PLAN_ABANDON_NOT_NEEDED —— 纯数据、零依赖，写侧与工具声明共用这一份",
+    # 2026-11-13（W2·甲，业主问 2 选 a）：未入册命题的 `## 命题` 原位重写的唯一写口。
+    # 为什么必须是顶层：它的三条边界（未入册 / 语义同一性判定 / 不碰 `## 证明` 与 V 签）
+    # 要被工具层（`fs.edit` 那一侧的改写路）与判据同时引用，而它不属于任何一个角色；
+    # 挂进角色包会让工具层反向依赖角色。它只写一份稿的一节、不写台账。
+    "propositionrewrite.py": "未入册命题的 `## 命题` 原位重写（W2·甲，2026-11-13）："
+                             "rewrite_proposition —— 三条边界缺一不许（只在稿还没被收进 "
+                             "statements 时允许，按稿号 / 逐路径记录 / 命题指纹三处判；改后"
+                             "必须过语义同一性判定，判不了即受控拒；只换 `## 命题` 与稿头"
+                             "命题指纹，`## 证明` 正文 sha 变了整笔不写）—— 受控写口",
 }
 
 

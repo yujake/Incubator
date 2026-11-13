@@ -2074,6 +2074,20 @@ STATEMENT_ABANDON_PATCH_KEYS: tuple[str, ...] = (
     # `experiment_id` 指一条真的证否实验；`space` 是一份结构化的枚举参数与规模读数。
     "experiment_id", "space")
 
+#: 另外两个终态（2026-11-13 业主裁定）随 `table.update` 交上来的那几格。
+#:
+#: - `status="refuted"`（标记为错误）：证据三选一 —— `defect_ref` / `construction` /
+#:   `experiment_id`（前两格里的 `defect_ref` / `experiment_id` 与放弃那几格同名同义，
+#:   所以只在下面补 `construction` 与 `counterexample_valid`），理由正文复用
+#:   `abandon_basis`；
+#: - `hard_to_prove`（「难以自证」）：它的值是那句理由，另可给 `proof_no` 指哪一份
+#:   （缺省 1：引文侧的行只有一份证明）。
+#:
+#: 与 `STATEMENT_ABANDON_PATCH_KEYS` 同一条纪律：它们不是可写列，判过之后落进
+#: `bits` / `quote_reason` 的口袋里；多给一格就受控拒（一个字节都不写）。
+STATEMENT_RETIRE_PATCH_KEYS: tuple[str, ...] = (
+    "construction", "counterexample_valid", "hard_to_prove", "proof_no")
+
 #: 就地改 `kind` 时认的英文词表（命题性的那几档 + 概念/定义两档）。
 #:
 #: 中文 kind（`定理` / `引理`）不在里面：它进不了命题性词表、
@@ -8809,6 +8823,63 @@ class Secretary:
                 space=form.get("space") or None))
         return {"quote_reason": marker, "form": form}
 
+    def _retire_statement(self, *, sid: str, wanted: Mapping[str, Any],
+                          given: Mapping[str, Any], abandon_given: Mapping[str, Any],
+                          role: str, task_id: str) -> dict[str, Any]:
+        """`refuted` / `hard_to_prove` 两个新终态的转调口（唯一实现不在本文件）。
+
+        ## 为什么另立一格而不是塞进 `amend_statement_meta` 那笔事务
+        两件事都要动 `bits`（作废载荷 / 优化栏口袋），而 `bits` 是派生面：
+        `STATEMENT_META_PATCH_KEYS` 的白名单里没有它，也不该有（否则通用写口就能
+        绕开 `evidencebits` 的推导）。所以这一格只做三件本层该做的事：判"一次只交
+        一件"、判 role/task 那一侧的形状、把读数翻成本层既有的返回形状；写盘由
+        `statementrefute` 在它自己的事务里做完（受控拒 = 一个字节都没写）。
+
+        ## 三条形状拒（都在转调之前）
+        - 同时给 `status="refuted"` 与 `hard_to_prove` ⇒ 拒：两个终态不能一笔办；
+        - `status="refuted"` 又给 `abandon_kind` ⇒ 拒：证据格本身就是档
+          （`defect_ref` / `construction` ⇒ math_error，`experiment_id` ⇒ counterexample），
+          再给一个档名会让"凭哪一条"有两个说法；
+        - `hard_to_prove` 的基理由空 ⇒ 拒（由 `mark_hard_to_prove` 给码，这里不另判）。
+        """
+        from . import statementrefute as _SR
+
+        wants_refuted = str(wanted.get("status") or "") == "refuted"
+        wants_hard = "hard_to_prove" in given
+        if wants_refuted and wants_hard:
+            return {"checked": False, "amended": False, "refused": "retire_two_in_one_patch",
+                    "reason": ("这一笔同时要 `status=refuted` 与「难以自证」⇒ 两件事拆开交："
+                               "refuted 是终态（命题错了），难以自证不是终态（命题留着、"
+                               "只是这一份优化不出来）"),
+                    "stmt_id": sid, "changes": [], "row": {}, "form": {}}
+        if wants_refuted and "abandon_kind" in abandon_given:
+            return {"checked": False, "amended": False, "refused": "refute_kind_not_needed",
+                    "reason": ("标记为错误不用另给 `abandon_kind`：证据格本身就是档 —— "
+                               "`defect_ref` / `construction` 是「数学错误」，"
+                               "`experiment_id` 是「发现反例」。一次只认一种说法"),
+                    "stmt_id": sid, "changes": [], "row": {}, "form": {}}
+        actor = f"secretary-{self.role}"
+        if wants_hard:
+            got = _SR.mark_hard_to_prove(
+                self.store, statement_id=sid, basis=given.get("hard_to_prove"),
+                proof_no=given.get("proof_no") or 1, actor=actor)
+        else:
+            got = _SR.refute_statement(
+                self.store, statement_id=sid,
+                reason=abandon_given.get("abandon_basis"),
+                experiment_id=abandon_given.get("experiment_id", ""),
+                construction=given.get("construction", ""),
+                defect_ref=abandon_given.get("defect_ref", ""),
+                counterexample_valid=given.get("counterexample_valid"),
+                actor=actor)
+        out = dict(got)
+        out.setdefault("amended", False)
+        out["task_id"] = str(task_id or "")
+        # 本层既有的返回键：`refused` + `reason`（`refute_statement` 另有一个 `why`，
+        # 那是它自己的逐条读数，两个都留着，别把其中一个抹掉）。
+        out["reason"] = str(got.get("reason") or got.get("why") or "")
+        return out
+
     def amend_statement_meta(self, stmt_id: str, patch: Mapping[str, Any], *,
                              role: str = "B", task_id: str = "") -> dict[str, Any]:
         """就地改一条在册命题的非正文格（`status` / `kind` / `quote_reason`）。
@@ -8866,15 +8937,21 @@ class Secretary:
                                f"{list(STATEMENT_META_PATCH_KEYS)} 之一或多个"))
             return out
         extra_keys = sorted(k for k in wanted if k not in STATEMENT_META_PATCH_KEYS
-                            and k not in STATEMENT_ABANDON_PATCH_KEYS)
+                            and k not in STATEMENT_ABANDON_PATCH_KEYS
+                            and k not in STATEMENT_RETIRE_PATCH_KEYS)
         if extra_keys:
             out.update(refused="statement_patch_key_not_allowed", reason=(
                 f"这一条只允许就地改 {list(STATEMENT_META_PATCH_KEYS)}"
-                f"（放弃命题时另带 {list(STATEMENT_ABANDON_PATCH_KEYS)}），收到 {extra_keys}。"
+                f"（放弃命题时另带 {list(STATEMENT_ABANDON_PATCH_KEYS)}；"
+                f"标记为错误 / 难以自证时另带 {list(STATEMENT_RETIRE_PATCH_KEYS)}），"
+                f"收到 {extra_keys}。"
                 "改正文请把新正文写进 `statement_full` / `proof_text` 再交一次 "
                 "`own.register_statement`（同一条命题会就地覆盖，旧正文进 `proof_history`）；"
                 "其余格没有就地写口 —— 整笔不写，盘上一个字节都没变。"))
             return out
+        #: 另外两个终态的格先摘出来（与放弃那几格同一条纪律：不是可写列）。
+        retire_given = {k: wanted.pop(k) for k in list(wanted)
+                        if k in STATEMENT_RETIRE_PATCH_KEYS}
         #: 换号理由那几格先摘出来：它们不是可写的列（见 `STATEMENT_ABANDON_PATCH_KEYS`），
         #: 只用来拼 `quote_reason` 那一条标记。
         abandon_given = {k: wanted.pop(k) for k in list(wanted)
@@ -8906,6 +8983,15 @@ class Secretary:
                     "「为什么还没查」后重交（空串不是一种理由）"))
                 return out
             wanted["quote_reason"] = text
+        # ---- 2026-11-13（业主裁定）：两个新终态转调唯一实现 ------------------------
+        #
+        # 为什么必须在这里分出去、不能落进下面那一笔：`_abandon_reason_gate` 只认
+        # `status="abandoned"`（其它目标直接返回空字典）⇒ 一条 `status="refuted"` 的
+        # patch 会绕过全部证据判据、把一行直接推成"被证否"而拿不出任何凭据。
+        if retire_given or str(wanted.get("status") or "") == "refuted":
+            return self._retire_statement(sid=sid, wanted=wanted, given=retire_given,
+                                          abandon_given=abandon_given,
+                                          role=role, task_id=task_id)
         try:
             with self.store.tx("statements", actor=f"secretary-{self.role}",
                                note="secretary:amend_statement_meta") as tx:

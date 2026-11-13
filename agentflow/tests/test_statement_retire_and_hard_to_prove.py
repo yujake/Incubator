@@ -9,7 +9,7 @@
 
 ## 一句话结论（也是本文件 a/b 两组守的）
 
-「标记为错误」的机器实现**早就有了**（`evidencebits.VOID_CONDITIONS` / `void_refusal` /
+「标记为错误」的机器实现早就有了（`evidencebits.VOID_CONDITIONS` / `void_refusal` /
 `void` / `cascade_void` / `apply_cascade` + 读侧 `derive_grade` 的清零），只缺一个把
 它写上命题行的写入口 —— 本批补的就是那一笔（`statementrefute.refute_statement`）。
 
@@ -19,7 +19,7 @@
 |---|---|---|
 | a | 三件证据各能写成 `status=refuted` + `bits.voided_by`（构造 / 反例实验 / 判词） | 正控 |
 | b | 「难以自证」只动优化栏：status、占位签、`reviewed` 一个都不动 | 正控 |
-| c | 命题退休 ⇒ 那份稿一并作废（不可 edit、收工门不要它、不算依据），**文件留着** | 正控 |
+| c | 命题退休 ⇒ 那份稿一并作废（不可 edit、收工门不要它、不算依据），文件留着 | 正控 |
 | d | 三处「假红」不再红：`statements_unsigned` / `statements_unoptimized` / E、B 的签门 | 正控 |
 | e | 原子性：写失败 ⇒ 一行都没改（status 与 voided_by 原样） | 正控 |
 | f | 反真空：把退休判据摘掉 ⇒ 写面放行（c 的绿来自那条核） | 反真空 |
