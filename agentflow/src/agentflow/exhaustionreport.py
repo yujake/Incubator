@@ -685,6 +685,49 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     return "\n".join(head + body)
 
 
+#: 直调面（测试 / 内部复用）的形态闸口径：`land_manuscript` 这一层不判形态，调用方
+#: 自己负责上游那一问。这一档在读数里是 `released=True`（不是「判过了」）—— 三态纪律：
+#: 生产路径（`run_experiment` 的 [4e]）必须把真读数 `form_reading=` 传进来。
+DIRECT_CALL_GATE_RELEASED = (
+    "land_manuscript 的直调面（测试 / 内部复用）：这一笔的命题形态由调用方在上游判过；"
+    "生产路径是 `run_experiment` 的 [4e]（`_proposition_form_gate`）⇒ 这一档是放行读数，"
+    "不是「判过了」")
+
+
+def _released_reading(reason: str) -> dict[str, Any]:
+    """「不判、但要留下凭什么放」的读数（与 B 的 `released=True` 同一形态）。"""
+    return {"checked": False, "well_formed": False, "submittable": True,
+            "conditions": "", "conclusion": "", "problems": [],
+            "decision": "放行（不判）", "refused": "", "reason": str(reason or ""),
+            "cached": False, "released": True}
+
+
+def _open_skeleton(root: str | Path, *, family: str, proposition: Any,
+                   experiment_id: str, title: Any, kind: Any,
+                   form_reading: Any, fix: str, next_step: str) -> dict[str, Any]:
+    """E 的开稿口：骨架先落盘（稿头带 `- 实验号：`，命题逐字），正文随后写。
+
+    业主 2026-11-13 裁定：「写命题 → 命题形式过审 → 拿稿号 → 写稿」。E 的闸在
+    `run_experiment` 的 [4e]（事务之前）；这里拿到的 `form_reading` 就是那份读数，
+    开稿口不再问第二次。直调面没有读数 ⇒ :data:`DIRECT_CALL_GATE_RELEASED`
+    （放行读数，不冒充「判过了」）。
+
+    开稿口返回的 `manuscript_id` / `path` 就是这一条实验的稿；正文写口沿用
+    :func:`land_manuscript` 原来的整份渲染（E 的正文是程序产出，一次就有），但
+    「稿号在闸之后发、命题先落盘」这两件事由这里保证。
+    """
+    from . import manuscriptopen as _MO
+
+    reading = (dict(form_reading) if isinstance(form_reading, Mapping)
+               else _released_reading(DIRECT_CALL_GATE_RELEASED))
+    return _MO.open_manuscript(
+        root, role="E", family=family, proposition=str(proposition or ""),
+        form_reading=reading, kind=str(kind or ""),
+        title=str(title or ""),
+        header_lines=(f"- 实验号：{EVIDENCE_PREFIX}{experiment_id}",),
+        fix=str(fix or ""), next_step=str(next_step or ""))
+
+
 def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     """把 E 的证明手稿写进 `reports/e-proof-<E稿号>.md`，读回来记下事实。
 
@@ -697,6 +740,15 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     那一行 `- 实验号：exp:<号>`：同一条实验重落时靠 :func:`find_manuscript_relpath`
     按那一行找回它自己那份稿（不新写第二份）。
 
+    ## 2026-11-13（统一开稿四步）：新稿由开稿口先落骨架
+
+    这一族第一次有稿时走 `manuscriptopen.open_manuscript`（角色-族绑定 E/e-proof；
+    闸在发号之前；骨架 = 稿头 + `## 命题` 逐字 + 空的分节）。闸的读数由调用方经
+    `form_reading=` 递进来（生产路径是 `run_experiment` 的 [4e]）；判不过 ⇒ 零字节、
+    号源不动，本函数把受控拒写进 `problems`（不抛异常）。之后正文仍由本函数整份
+    渲染写盘（E 的正文是程序产出，一次就有）；稿已经写好之后的增量修改走
+    `fs.edit` / `manuscriptopen.write_section`。
+
     与 :func:`land_report` 同一条纪律：写不成就如实记进 `problems`（不抛异常 ——
     这一趟实验真的跑过了，稿没落成是"这一条拿不到 V 签"，不是"实验不算"）；
     sha256 算在字节上，与 `read_proof_manuscript` 读回来的那一格同一个值。
@@ -706,7 +758,6 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     `proof_sha256` 是 `## 证明` 那一节正文的 sha（`proofregistry.proof_sha` 的口径）——
     签块盖的就是它，B 登记时核的也是它。
     """
-    from . import manuscriptids as _MID
     from . import verifications as _VR
 
     problems: list[str] = []
@@ -721,19 +772,29 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
             f"实验号 {facts.get('experiment_id')!r} 不合法 ⇒ E 的证明手稿没有固定落点"
             "（这一条因此拿不到手稿签块）")
         return out
-    # 先找回「这一条实验自己那份稿」，找不到才发新号（同一句话：一条实验只住一份稿）。
+    # 先找回「这一条实验自己那份稿」，找不到才开新稿（同一句话：一条实验只住一份稿）。
     known = find_manuscript_relpath(root, eid, family="e-proof")
     if known.get("found"):
         rel = str(known.get("path") or "")
         mid = str(known.get("manuscript_id") or "")
     else:
-        try:
-            mid = _MID.next_manuscript_id(root, family="e-proof")
-        except Exception as exc:  # noqa: BLE001 —— 号发不出来要如实说，不许静默
-            problems.append(f"E 的证明稿号发不出来（{type(exc).__name__}: {exc}）"
-                            "⇒ 这一条没有可签的手稿")
+        opened = _open_skeleton(
+            root, family="e-proof", proposition=facts.get("claim"),
+            experiment_id=eid, title=facts.get("claim_key"),
+            kind=(facts.get("kind") or "theorem"),
+            form_reading=facts.get("form_reading"),
+            fix=("把命题描述改成「设…则…」（写清条件与结论）再重交；"
+                 "形态判定读数已落 out/secretary/proposition_form.jsonl（role=E）"),
+            next_step="改好命题后重跑这一趟实验（闸在写盘之前）")
+        if not opened.get("ok"):
+            problems.append(
+                "E 的证明手稿没有开稿（"
+                + str(opened.get("refused") or "manuscript_open_refused") + "）："
+                + str(opened.get("why") or "")
+                + " ⇒ 这一条没有可签的手稿（号源未动、盘上零字节）")
             return out
-        rel = _MID.canonical_rel(mid, family="e-proof")
+        mid = str(opened.get("manuscript_id") or "")
+        rel = str(opened.get("path") or "")
     if not rel:
         problems.append(f"实验号 {eid!r} 拼不出 E 证明稿的落点 ⇒ 这一条拿不到手稿签块")
         return out
@@ -960,12 +1021,19 @@ def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     业主 2026-11-11：「E 两族」）。稿与实验的对应关系同样记在稿头
     `- 实验号：exp:<号>` 那一行。
 
+    ## 2026-11-13（统一开稿四步）：新稿由开稿口先落骨架
+
+    与 :func:`land_manuscript` 同形：第一次有稿时走
+    `manuscriptopen.open_manuscript`（角色-族绑定 E/e-num），骨架 = 稿头 +
+    `## 命题` 逐字 + 空的 `## 数值结果`；之后正文整份写盘。
+    `e-num` 这一族按业主 2026-11-13 的放行口径不判形态（B 侧 `e-num` 也放行）——
+    开稿口拿到的是放行读数（`released=True`，不是「判过了」）；要让它也过闸需要
+    业主再裁一句（`form_reading=` 已经留好接口）。
+
     与 :func:`land_manuscript` 同一条纪律：写不成就如实记进 `problems`（不抛异常）；
     sha256 算在字节上。返回 `{"path","bytes","sha256","ok","problems","experiment_id",
     "manuscript_id","at"}`。没有 `proof_sha256` 那一格：这一族没有「被签的正文」。
     """
-    from . import manuscriptids as _MID
-
     problems: list[str] = []
     out: dict[str, Any] = {
         "path": "", "bytes": 0, "sha256": "", "ok": False,
@@ -982,13 +1050,21 @@ def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         rel = str(known.get("path") or "")
         mid = str(known.get("manuscript_id") or "")
     else:
-        try:
-            mid = _MID.next_manuscript_id(root, family="e-num")
-        except Exception as exc:  # noqa: BLE001 —— 号发不出来要如实说
-            problems.append(f"E 的数值稿号发不出来（{type(exc).__name__}: {exc}）"
-                            "⇒ 这一条没有可引用的手稿")
+        opened = _open_skeleton(
+            root, family="e-num", proposition=facts.get("claim"),
+            experiment_id=eid, title=facts.get("claim_key"),
+            kind=(facts.get("kind") or "conjecture"),
+            form_reading=facts.get("form_reading"),
+            fix="这一族按 2026-11-13 放行口径不判形态；要它过闸请业主裁一句",
+            next_step="重跑这一趟实验（正文随实验读数落盘）")
+        if not opened.get("ok"):
+            problems.append(
+                "E 的数值实验手稿没有开稿（"
+                + str(opened.get("refused") or "manuscript_open_refused") + "）："
+                + str(opened.get("why") or "") + " ⇒ 这一条没有可引用的手稿")
             return out
-        rel = _MID.canonical_rel(mid, family="e-num")
+        mid = str(opened.get("manuscript_id") or "")
+        rel = str(opened.get("path") or "")
     if not rel:
         problems.append(f"实验号 {eid!r} 拼不出普通数值手稿的落点")
         return out

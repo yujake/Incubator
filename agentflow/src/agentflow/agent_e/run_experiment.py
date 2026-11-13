@@ -598,7 +598,10 @@ class _RunExperiment:
                     search_space=_blocks["search_space"],
                     result=derived.get("result"),
                     evidence_kind=row.evidence_kind,
-                    kind=kind_now)
+                    kind=kind_now,
+                    # 2026-11-13（统一开稿四步）：开稿口的形态闸读数就是 [4e] 那一份
+                    # （同一段字节、同一个判定）—— 开稿口不再问第二次模型。
+                    form_reading=_form)
                 if manuscript.get("problems"):
                     _manuscript_note = (
                         "[manuscript] E 的证明手稿没有落成："
