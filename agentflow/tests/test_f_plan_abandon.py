@@ -99,7 +99,11 @@ def test_a_abandoning_a_plan_writes_the_four_words_into_history(
     assert row["plan_id"] == pid, row
     hist = list(row.get("history") or [])
     assert len(hist) == 1, hist
-    assert hist[0]["action"] == "abandon" and hist[0]["outcome"] == "abandoned", hist
+    assert hist[0]["action"] == "abandon", hist
+    # 放弃不是"一轮推进"：这一行刻意不写 `outcome`（`history` 的 outcome 是
+    # `STEP_OUTCOMES` 三档、停滞检测读它；`tests/test_agent_f_step_outcomes.py`
+    # 的 AST 普查盯着 agent_f 里每一个 outcome 字面量）。
+    assert "outcome" not in hist[0], hist
     assert REASON in hist[0]["detail"], hist  # 业主点名的四个字逐字在
     assert row.get("updated_at"), row
 

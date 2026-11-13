@@ -46,11 +46,11 @@ class _AbandonPlan:
            不要在这条行上翻烙饼。
 
         ## 落点（不加列、不做 schema 迁移）
-        `status` 改 `abandoned`，`history` 追加一行 `{action:"abandon", outcome:"abandoned",
-        detail:"不再需要", …}`。`history` 是既有格（`AttackPlan.history` 的 docstring 写着
-        "轮次历史（append-only）"），所以这一笔不动磁盘契约。
-        不收工读数：`closing._round_advanced` 只认 `outcome=="progress"`，这一行的
-        `outcome="abandoned"` 不会被读成"又推进了一轮"（放弃 ≠ 推进）。
+        `status` 改 `abandoned`，`history` 追加一行 `{action:"abandon", detail:"不再需要", …}`。
+        `history` 是既有格（`AttackPlan.history` 的 docstring 写着"轮次历史（append-only）"），
+        所以这一笔不动磁盘契约。
+        这一行刻意没有 `outcome`：`history` 的 `outcome` 是"这一轮推进的结果"
+        （`STEP_OUTCOMES` 三档，停滞检测读它），而放弃不是一轮推进 —— 详见下面那一行的注释。
 
         ## 为什么不是"再推一轮让它停"
         停下来的计划（`stalled`）与放弃的计划在收工门上是两件事：`agent_loop._sign_gate_f`
@@ -93,7 +93,13 @@ class _AbandonPlan:
             "round": int(row.get("rounds") or 0),
             "sid": "",
             "action": "abandon",
-            "outcome": "abandoned",
+            # 这里**没有** `outcome` 这一格，刻意不是漏写：`history` 里的 `outcome`
+            # 是"这一轮推进的结果"（`STEP_OUTCOMES` = no_change / progress / blocked，
+            # 停滞检测读的就是它）。放弃不是一轮推进 —— 给它写一个词表外的
+            # `outcome="abandoned"`，会把"这一轮发生了什么"与"这条计划怎么收场"折进
+            # 同一格（`tests/test_agent_f_step_outcomes.py` 的 AST 普查正是钉这件事的：
+            # `agent_f` 里任何 `outcome` 字面量都必须在这张三档词表里）。
+            # 放弃的读数由 `status="abandoned"` 与下面那一行的 `action` 说。
             # 业主点名的那四个字必须逐字落在这里（读的人一眼看得出为什么放弃）
             "detail": got,
             "evidence": [],
