@@ -10,14 +10,15 @@
 
 | # | 判据 |
 |---|---|
-| a | 跑一趟 D 的三个写动作（`propose_question` / `submit_gaps` / `register_conjecture`），拿 `events.jsonl` 里 `(op="upsert"/"delete", table)` 现算"真的写过的表"，与 `WRITE_SETS["D"]` 逐表相等 |
+| a | 跑一趟 D 的两个写动作（`propose_question` / `submit_gaps`），拿 `events.jsonl` 里 `(op="upsert"/"delete", table)` 现算"真的写过的表"，与 `WRITE_SETS["D"]` 逐表相等 |
 | b | policy 里逐字有「命题台账由 B 写、D 只读」 |
 | c | `statements` / `dependencies` 不在 D 的写集里（哪怕这一趟经由 B 写了 statements —— 那是 B 写的，不是 D） |
 | d | 报告落点是文件：`write_report` 之后 `analysis_reports` 一行都不多（它是 C 的表） |
+| e | `conjectures` 也不在 D 的写集里（业主 2026-11-13 裁定甲：D 不该立项临时命题；台账的唯一写点在产出侧 —— 它在 E / F / B 的写集里） |
 
-反真空读数在 a 的内部：`actual` 是从事件流现算的，不是照抄声明；少一张表（例如把
-`conjectures` 从声明里摘掉）会让 a 当场红。
+反真空读数在 a 的内部：`actual` 是从事件流现算的，不是照抄声明；少一张表会让 a 当场红。
 """
+
 from __future__ import annotations
 
 import pathlib
@@ -45,11 +46,6 @@ def _run_d(tmp_path: pathlib.Path) -> tuple[Store, AgentD]:
     qid = str(q.get("question_id") or "")
     gaps = d.submit_gaps(qid)
     assert gaps, f"这一趟没有提交检索请求 ⇒ 写集少一张表就量不到：{gaps}"
-    c = d.register_conjecture(
-        statement="A(n) 随 n 单调不减。", origin="report:r-1",
-        testable={"parameters": {"n": [1, 6]}, "criterion": "枚举到 n=6",
-                  "falsified_by": "找到一个 n 使 A(n+1) < A(n)"})
-    assert c.get("conjecture_id"), c
     return st, d
 
 
@@ -78,7 +74,7 @@ def test_a_the_declared_write_set_equals_the_tables_d_actually_writes(
         f"  实际（events.jsonl）：{sorted(actual)}\n"
         f"  声明（WRITE_SETS['D']）：{sorted(declared)}\n"
         f"  差：实际多 {sorted(actual - declared)} / 声明多 {sorted(declared - actual)}")
-    assert actual == {"conjectures", "research_questions", "search_requests"}, actual
+    assert actual == {"research_questions", "search_requests"}, actual
 
 
 # ============================================================ b policy 逐字
@@ -94,6 +90,17 @@ def test_c_statements_and_dependencies_are_not_in_d_write_set() -> None:
     ws = {str(t) for t in (CAP.WRITE_SETS.get("D") or ())}
     for table in ("statements", "dependencies"):
         assert table not in ws, (table, sorted(ws))
+
+
+# ============================================================ e conjectures 不在写集
+def test_e_conjectures_is_written_by_the_producers_not_by_d() -> None:
+    """e：`conjectures` 撤出 D 的写集，落进三个产出侧（业主 2026-11-13 裁定甲）。"""
+    ws = {str(t) for t in (CAP.WRITE_SETS.get("D") or ())}
+    assert "conjectures" not in ws, (
+        "D 的写集里又有 `conjectures` 了 —— 临时命题由产出侧（E 的实验 / F 的稿命题 / "
+        f"B 的收录）登记，D 只给研究方向：{sorted(ws)}")
+    for role in ("E", "F", "B"):
+        assert "conjectures" in {str(t) for t in (CAP.WRITE_SETS.get(role) or ())}, role
 
 
 # ============================================================ d 报告落点是文件

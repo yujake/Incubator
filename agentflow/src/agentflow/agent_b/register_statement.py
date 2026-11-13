@@ -489,6 +489,40 @@ def _must_start_as_conjecture_refusal(*, kind_now: str, origin: str) -> dict:
         statement_kind=kind_now, declared_origin=str(origin))
 
 
+#: `notes` 里"已进命题台账"那一行的记号前缀（一条命题只该有一处这个记号）。
+_LANDED_MARK = "[landed] stmt:"
+
+
+def _conjecture_row(store: Any, statement: str) -> dict:
+    """按规范化正文找那一行猜想（找不到 ⇒ `{}`）。
+
+    判重键只有一处（`conjectureledger.norm_statement`）：这里自己再写一份规范化，
+    就会出现"同一句话在两个地方算出两个 sha"的形态 —— 那正是 D13 当初要修的病。
+    """
+    from .. import conjectureledger as CL
+
+    key = CL.norm_statement(statement)
+    for row in store.rows("conjectures"):
+        if CL.norm_statement(row.get("statement")) == key:
+            return dict(row)
+    return {}
+
+
+def _ledger_origin(store: Any, statement: str) -> str:
+    """既有那一行的 `origin`（更新语义下不许把来路改掉；没有就写 `statements`）。"""
+    return str(_conjecture_row(store, statement).get("origin") or "statements")
+
+
+def _landed_notes(store: Any, statement: str, stmt_id: str) -> str:
+    """把 `[landed] stmt:<号>` 补进 notes（已经在里面就原样返回，不重复追加）。"""
+    prev = str(_conjecture_row(store, statement).get("notes") or "")
+    mark = f"{_LANDED_MARK}{stmt_id}"
+    if mark in prev:
+        return prev
+    return (prev + "\n" + mark
+            + "（B 已收录进命题台账；猜想行状态不变 —— 2026-11-13 裁定 ①）").strip()
+
+
 def _needs_v_reason(*, sid: str, sha12: str, state: str, verification_id: str = "",
                     streak: int | None = None, need: int | None = None,
                     why: str = "") -> str:
@@ -6178,9 +6212,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # `ingest_manuscript(mode="register")` —— 提取、族表、逐格回执、两条不变量
             # 与两个新动作走同一份实现；`pointer` 读数由 ingest 原样带回（既有判据与
             # D 的直调都还读它）。
-            return self.ingest_manuscript(
-                manuscript=rel, mode="register", cells=(), conflict="refuse",
-                reason="按手稿路径收录（D 只递指针）", provenance=line_range)
+            return self._note_conjecture_landing(
+                self.ingest_manuscript(
+                    manuscript=rel, mode="register", cells=(), conflict="refuse",
+                    reason="按手稿路径收录（D 只递指针）", provenance=line_range),
+                statement_full=statement_full, rel=rel)
         got = self._register_statement_impl(
             statement_full=statement_full, source_lit_id=source_lit_id,
             proof_text=proof_text, proofs=proofs, proof_manuscript=proof_manuscript,
@@ -6191,12 +6227,84 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
             doc_id=doc_id, line_range=line_range)
-        return self._mark_b_register(
-            self._apply_declared_manuscript_kind(
-                got, statement_full=statement_full,
-                origin=str(origin or "external_lit"),
-                kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
-            proof_manuscript)
+        return self._note_conjecture_landing(
+            self._mark_b_register(
+                self._apply_declared_manuscript_kind(
+                    got, statement_full=statement_full,
+                    origin=str(origin or "external_lit"),
+                    kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
+                proof_manuscript),
+            statement_full=statement_full, rel=str(proof_manuscript or ""))
+
+    def _note_conjecture_landing(self, out: dict, *, statement_full: str = "",
+                                 rel: str = "") -> dict:
+        """收录之后把这件事记进猜想台账（业主 2026-11-13 裁定甲 + ① / ②）。
+
+        ## 两种结局，两个落法
+
+        - 收下了：这条命题已经在 `statements` 里 ⇒ 猜想行自己的状态不动（裁定 ①：
+          不用 `promoted` —— 它今天指的是"升格进稿件断言"，而且要求一条 formal 实验的
+          `proof_experiment_id`；把"进了命题台账"硬写成 `promoted` 会被 `verify` 判升格落空）。
+          只加一条读数 `promoted_to_statement=<命题号>`，并往 `notes` 补一行 `[landed]`，
+          让"已进台账"在台账上看得见。台账里一行都没有（B 是第一个见到这条命题的）⇒
+          如实落一行 `needs_evidence` + notes（"B 收录时先于任何实验/稿命题"）。
+        - 拒了：说明这条命题被判死了 ⇒ 落 `refuted` + `refusal_ref`
+          （`b-refusal:<受控码>#<手稿或命题>`）。裁定 ②：被拒不等于"还没有反例实验"，
+          它是另一条来路，`schema.Conjecture` 认这一格。
+
+        ## 为什么记账失败不许改变收录结果
+
+        收录本身是那一笔的主产物（`statements` 行已经落了）。台账这一侧失败只进读数
+        （`ok=False` + 受控 `kind`），让"这条命题没记上"看得见 —— 不许把它折成"没有这条命题"。
+        """
+
+        if not isinstance(out, dict):
+            return out
+        from .. import conjectureledger as CL
+
+        text = str(statement_full or "").strip()
+        if not text:
+            inner = out.get("statement") if isinstance(out.get("statement"), dict) else {}
+            text = str(inner.get("statement_full") or out.get("statement_full") or "").strip()
+        if not text:
+            return out        # 没有正文可对（指针支没读出命题）⇒ 不改任何东西
+        ok = out.get("ok") is not False
+        rel_text = str(rel or "").strip()
+        try:
+            if not ok:
+                code = str(out.get("refused") or out.get("kind") or "refused")
+                ledger = CL.mark_refuted(
+                    store=self.store, statement=text,
+                    refusal_ref=f"b-refusal:{code}#{rel_text or 'statement'}",
+                    actor=self.actor)
+                ledger.setdefault("ok", bool(ledger.get("conjecture_id")))
+            else:
+                landed = CL.promoted_to_statement(self.store, {"statement": text})
+                if landed.get("checked") and not landed.get("stmt_id"):
+                    # B 是第一个见到这条命题的：如实落一行（它已经进了命题台账，
+                    # 但先前没有任何产出侧记过它 ⇒ 没有可检验形式，落 needs_evidence）。
+                    CL.register(
+                        store=self.store, statement=text,
+                        origin=(f"statements:{str(out.get('statement_id') or '')}"
+                                if out.get("statement_id") else "statements"),
+                        status="needs_evidence",
+                        defaults={"notes": ("B 收录时先于任何实验 / 稿命题记到这一条 ⇒ 没有"
+                                            "可检验形式，如实落 needs_evidence")},
+                        actor=self.actor)
+                    landed = CL.promoted_to_statement(self.store, {"statement": text})
+                stmt_id = str(landed.get("stmt_id") or "")
+                if stmt_id:
+                    CL.register(
+                        store=self.store, statement=text,
+                        origin=_ledger_origin(self.store, text),
+                        notes=_landed_notes(self.store, text, stmt_id),
+                        actor=self.actor)
+                ledger = {"ok": bool(stmt_id), CL.PROMOTED_TO_STATEMENT: stmt_id,
+                          "landing": dict(landed)}
+        except Exception as exc:  # noqa: BLE001 —— 记账失败不许把一次成功收录变成失败
+            ledger = {"ok": False, "kind": CL.store_error_kind(exc), "error": str(exc)}
+        out["conjecture_ledger"] = dict(ledger)
+        return out
 
     def _mark_b_register(self, got: dict, proof_manuscript: Any) -> dict:
         """正文登记那条路的「收录即提交」尾巴（裁决 ③）：只对 B 自己的 `b-proof-*`。

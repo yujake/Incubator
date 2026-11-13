@@ -50,12 +50,12 @@ import pathlib
 
 import pytest
 from agentflow import closing as CL
+from agentflow import conjectureledger
 from agentflow import secretary as SEC
 from agentflow import statementabandon as SA
 from agentflow import verifications as VR
 from agentflow.agent_f.core import AgentF
 from agentflow.store import Store
-from agentflow.tools import conjecture_tools
 
 TS = "2026-11-07T10:00:00+08:00"
 SID = "000001"
@@ -370,11 +370,16 @@ def test_c_b_collects_a_literature_theorem_without_this_gate(tmp_path):
     assert SEC.proposition_form_rows(st.root) == []
 
 
-def test_d_register_conjecture_does_not_go_through_this_gate(tmp_path):
-    """d：D 的 `register_conjecture` 只是参考 ⇒ 不受这道闸影响。"""
+def test_the_ledger_does_not_go_through_this_gate(tmp_path):
+    """d：猜想台账的写点（产出侧三族共用）不受这道闸影响。
+
+    撤销 D 的 `register_conjecture`（业主 2026-11-13 裁定甲）之后，这一格判的对象换成
+    库层写点本身：形态闸管的是「稿上 `## 命题` 那一节」，而台账记的是"谁提出过这条"
+    —— 两者不是同一件事，台账那一笔一个字节都不该写进形态台账。
+    """
     st = _ws(tmp_path)
-    got = conjecture_tools.register_conjecture(
-        st, statement=SPEC_036, origin="doc:0000#thm", actor="agent-D",
+    got = conjectureledger.register(
+        store=st, statement=SPEC_036, origin="experiment:000001", actor="agent-E",
         testable={"criterion": "夹具：这条是参考用的猜想，不受形态闸管"})
     assert got.get("conjecture_id"), got
     assert len(list(st.rows("conjectures"))) == 1

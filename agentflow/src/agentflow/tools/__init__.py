@@ -218,13 +218,9 @@ _MODULES: tuple[str, ...] = (
     "formal_tools",
     # 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：D 的主力动作
     # `register_conjecture` 的落地工具（`conjecture.register_conjecture`）。
-    # 在此之前它只被 `capabilities` 的读数"读到"、`build_registry` 从不装配
-    # ⇒ 模型驱动那一面根本拿不到它（D 只靠自己那张自建表）。
-    # 它的 `roles=("D",)`（`tools/conjecture_tools.py`）⇒ 其余十个角色一件不多。
-    # Phase B（不在本批）：让 `install_d_tools` 退场、只留这一张表 —— 现在 D 仍有一张
-    # 自建表（`agent_d/_support.py::install_d_tools`），两张表内容不同（自建那张没有
-    # clock / conductor 那批通用件），所以"注册表只许一张"这件事还没做到。
-    "conjecture_tools",
+    # 2026-11-13（业主裁定甲）已退役：猜想台账的唯一写点搬到库层
+    # `agentflow.conjectureledger.register`（E / F / B 的产出侧各自调一次），
+    # 工具面上不再有"登记一条猜想"这件工具 —— 没有任何角色有"立题"这个动作。
     # 2026-11-10（`draft/181` 的 A + B 批）：C 的关系推断——局部树的按需展开。
     # 两件只读工具 `ledger.resolve`（选根：候选节点，不是树）/ `ledger.expand`
     # （`depth` 必填的局部树）。它们只挂给 C（`roles=("C",)`），索引在

@@ -1124,6 +1124,20 @@ class Conjecture:
     proof_experiment_id: str = ""
     #: 反例所在的实验（`result="refutes"`）。
     counterexample_experiment_id: str = ""
+    #: 被拒那一档的第二条证据：谁拒了它（业主 2026-11-13 裁定 ②）。
+    #:
+    #: 取值形态：V 的 `verifications/<命题号>.jsonl#v-00000N`，或 B 的
+    #: `b-refusal:<受控码>#<手稿/命题>`。与 `counterexample_experiment_id` 并列：
+    #: 一条猜想被判死有两条真实的来路 —— 跑出了反例，或被判死了（V 判「有毛病」/
+    #: B 拒收）。只认前一条会让第二种在台账上永远停在"还没验"；只认后一条会让一次
+    #: 没跑成的实验变成一次判决。两条都空 ⇒ `refuted` 拒收。
+    #:
+    #: 为什么是"多一格可选字段"而不是新状态档：`CONJECTURE_STATUSES` 是受控词表，
+    #: 加一档等于放宽一整根轴（`AGENTS.md` 的 FC-27 一节）；而"被拒"本来就是 `refuted`
+    #: 的一条来路，缺的只是它的证据格。加可选字段不动磁盘格式契约
+    #: （`row_from_dict` 按 dataclass 字段过滤 ⇒ 老行缺这一格取空默认值，不抬
+    #: `SCHEMA_VERSION`；同族先例见 `Literature.pages`）。
+    refusal_ref: str = ""
     #: 升格落点：`{"kind": "document_claim", "id": "..."}`。
     promoted_to: dict = field(default_factory=dict)
     #: 别人已经证过时的文献代号（"别人证过"与"我们证过"是两件事）。
@@ -1173,10 +1187,13 @@ class Conjecture:
                                     "（notes 或 withdraw_reason）"))
         if self.status == "supported_not_proved" and not self.experiment_ids:
             _probs.append(("experiment_ids", "status=supported_not_proved 时必须记至少一条检验过它的实验"))
-        if self.status == "refuted" and not self.counterexample_experiment_id:
+        if self.status == "refuted" and not (self.counterexample_experiment_id.strip()
+                                             or self.refusal_ref.strip()):
             _probs.append(("counterexample_experiment_id", (
-                "status=refuted 时必须给 counterexample_experiment_id（反例来自一次实验；"
-                "inconclusive 不得转 refuted）")))
+                "status=refuted 时必须给 counterexample_experiment_id（反例来自一次实验）"
+                "或 refusal_ref（谁拒了它：V 的 `verifications/<号>.jsonl#v-…` / B 的 "
+                "`b-refusal:<受控码>#…`）—— 两条并列，缺一不可；"
+                "inconclusive 不得转 refuted")))
         if self.status == "proved" and not self.proof_experiment_id:
             _probs.append(("proof_experiment_id", "status=proved 时必须给 proof_experiment_id"))
         if self.status == "promoted" and not (self.proof_experiment_id

@@ -460,6 +460,12 @@ SPEC = AgentSpec(
                      'attack_plans',
                      'reprocess_requests',
                      'search_requests',
+                     # 2026-11-13（业主裁定甲）：F 是"产出了一条命题"的那一侧 ——
+                     # `attack.step` 的 `product.proposition` 过形态闸、开稿那一刻，
+                     # 由 `agentflow.conjectureledger.register` 把这条命题记进 `conjectures`。
+                     # 它与下面那条"`statements` 不在 F 的写集里"不矛盾：进**命题台账**
+                     # 仍只经 B（`secretary.record_statement`），F 记的是"我提出过这条"。
+                     'conjectures',
                      # `dependencies` 不在 F 的写集里 —— 依赖边由 B 读 F 的证明手稿登记
                      # （`B.register_statement(proof_manuscript=...)`，落库走秘书那一条正路）。
                      # 作者的活是把引用写进 `cites`；写集里给它这张表等于让"作者自己登记"

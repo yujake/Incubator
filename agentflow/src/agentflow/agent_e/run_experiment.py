@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ._support import Any, E_NO_FORMAL_REASON, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
+from .. import conjectureledger as CL
 from .. import exhaustionreport as _ER
 from .. import numericproof as _NP
 from .. import verifications as VR
@@ -445,7 +446,8 @@ class _RunExperiment:
         #
         # `alloc_id` 必须在持锁事务内进行，否则两个 E 实例会拿到同一个
         # experiment_id，而按主键 upsert 会静默互相覆盖（ID 发号与建行必须同锁）。
-        with self.store.tx("experiments", actor=self.actor, note="e.run_experiment") as tx:
+        with self.store.tx("experiments", "conjectures", actor=self.actor,
+                           note="e.run_experiment") as tx:
             eid = tx.alloc_id("experiment")
             # 原始输出落成产物文件（`draft/30` §T0-12）：上面那条"支持类不贴
             # stdout 摘要"是刻意的（噪声），但 P4/P5 要求"每条带 code_hash + 退出码 +
@@ -640,6 +642,33 @@ class _RunExperiment:
                     row.notes = (str(row.notes or "") + "\n" + _num_note).strip()
                 row.observations[_ER.NUMERIC_MANUSCRIPT_KEY] = numeric_manuscript
             tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
+            # ---- [6] 这条命题的台账行 -------------------------------------------
+            #
+            # 业主 2026-11-13 裁定甲：猜想台账的唯一写点在生产侧，E 的这一笔就是"它产出了
+            # 一条命题，并且已经用实验判过它"的那个时刻 —— 所以它落在同一个事务里、
+            # 在实验行之后（判据要能核到那行实验确实在库里，`conjectureledger` 会拒
+            # `experiment_ids` 里不存在的号）。状态由 `result` 现算（`status_for_experiment`）：
+            # `supports` ⇒ supported_not_proved、`refutes` ⇒ refuted（带反例实验号）、
+            # `inconclusive` ⇒ testing（没查成不是查过了被否证）。
+            #
+            # 台账落不下不许把实验也吞掉：实验真的跑过了，那是这一趟的主产物。
+            # 失败如实记进 `conjecture_ledger` 读数（`ok=False` + 受控 kind）并写进 notes，
+            # 让"这条命题没进台账"看得见（三态纪律：记账失败 ≠ 没有这条命题）。
+            try:
+                _ledger = CL.register(
+                    tx=tx, statement=str(claim), origin=f"experiment:{eid}",
+                    status=CL.status_for_experiment(row.result),
+                    experiment_ids=[eid],
+                    counterexample_experiment_id=(eid if str(row.result) == "refutes" else ""),
+                    defaults={"notes": (f"E 的实验 exp:{eid}（{row.result}）落地时自动记账："
+                                        "命题正文逐字是这一行的 `claim`，证据是同一行的读数")},
+                    actor=self.actor)
+                _ledger["ok"] = True
+            except (CL.ConjectureError, ValueError) as exc:
+                _ledger = {"ok": False, "kind": CL.store_error_kind(exc), "error": str(exc)}
+                row.notes = (str(row.notes or "")
+                             + f"\n[conjecture] 台账没有落这一条：{_ledger['kind']}：{exc}").strip()
+                tx.upsert("experiments", row.to_dict(), note=f"experiment:{claim_key}")
 
         # 签名那一格（`observations.e_signature`）：谁签、谁写 ②③ —— 读侧不自己去翻台账。
         # 从 `row` 上读而不是从 `derived` 上读：签名是 `build_experiment` 里现算并写进
@@ -682,6 +711,8 @@ class _RunExperiment:
             "proof_authors": [str(a) for a in (_sig.get("proof_authors") or [])],
             "notes": row.notes,
             "reason": _result_reason(row),
+            # 这条命题的台账行（`conjectureledger` 的返回；`ok=False` = 记账失败、实验照旧成立）
+            "conjecture_ledger": dict(_ledger),
         }
         self.last_run = out
         self._log(f"experiment {eid} recorded", **{k: out[k] for k in ("result", "evidence_kind", "exit_code")})

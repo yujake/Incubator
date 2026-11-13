@@ -498,13 +498,9 @@ def install_d_tools(
     """
     reg = registry if registry is not None else ToolRegistry(name="agent-D")
     RT.install(reg, store)
-    # 猜想台账的产出面（`draft/30` §T3-P3）：T1 只落了数据面与判据，
-    # 提出/检验/否证/升格这些语义动作在这里才接线 —— 没有它，
-    # 验收 P7 的第 4 张表（猜想表）没有任何数据可渲染。
-    from ..tools import conjecture_tools as CT
-
-    CT.register(reg, store=store, actor="agent-D")
-
+    # 猜想台账不再装在 D 的工具面上（业主 2026-11-13 裁定甲）：那一行只能由产出侧
+    # （E 的实验 / F 的稿命题 / B 的收录）经 `agentflow.conjectureledger.register` 落账，
+    # 通用写口也被 `store.direct_write_refusal("conjectures")` 挡住 ⇒ D 这边连工具都不该有。
     tt = trace_tools if trace_tools is not None else load_trace_tools()
     last: Exception | None = None
     if tt is not None:

@@ -213,11 +213,14 @@ def test_secretary_prescreens_and_only_engages_on_alarm(tmp_path: pathlib.Path):
     root = tmp_path / "ws"
     root.mkdir()
     s = sec.Secretary("M", root=root)
-    ok = s.prescreen(to="D", action="register_conjecture",
-                     params={"statement": "任一有限图都有...", "origin": "M 派活"})
+    # 2026-11-13：示例动作从 `register_conjecture` 换成 `propose_question` —— D 的那个动作
+    # 随业主裁定甲退役了（猜想台账的唯一写点搬到产出侧），而这一条判的是"预筛按声明面核
+    # 必填格"，换一个真有的 D 动作它才仍有对象。
+    ok = s.prescreen(to="D", action="propose_question",
+                     params={"question": "任一有限图都有...", "origin": "M 派活"})
     assert ok == [], ok
-    bad = s.prescreen(to="D", action="register_conjecture", params={})
-    assert bad and any("statement" in x for x in bad), bad
+    bad = s.prescreen(to="D", action="propose_question", params={})
+    assert bad and any("question" in x for x in bad), bad
     assert s.should_engage(alarms=bad, duplicates=0, overdue=0, novel=True) is True
     assert s.should_engage(alarms=[], duplicates=0, overdue=0, novel=False) is False
 
@@ -239,20 +242,20 @@ def test_secretary_tool_names_fallback_uses_the_registry_it_can_build(
     s = sec.Secretary("M", root=st.root, store=st)          # registry 缺省 = None
     names = s._tool_names()
     assert "fs.read" in names, f"fallback 没带 store ⇒ 真名表残缺（{len(names)} 件）"
-    ok = s.prescreen(to="D", action="register_conjecture",
-                     params={"statement": "x", "origin": "M 派活"}, tool="fs.read")
+    ok = s.prescreen(to="D", action="propose_question",
+                     params={"question": "x"}, tool="fs.read")
     assert not [a for a in ok if "不是注册表里的真名" in a], ok
     # 反负控：错名（真不存在）仍要报警，且并列候选首选应当是 fs.read
-    bad = s.prescreen(to="D", action="register_conjecture",
-                      params={"statement": "x", "origin": "M 派活"}, tool="fs.raed")
+    bad = s.prescreen(to="D", action="propose_question",
+                      params={"question": "x"}, tool="fs.raed")
     hit = [a for a in bad if "不是注册表里的真名" in a]
     assert hit, bad
     assert "fs.read" in hit[0], hit[0]
     # 三态：没有 store ⇒ 空表（"没读到"），且不许因此报"不是真名"
     bare = sec.Secretary("M", root=st.root)
     assert bare._tool_names() == []
-    quiet = bare.prescreen(to="D", action="register_conjecture",
-                           params={"statement": "x", "origin": "M 派活"}, tool="fs.read")
+    quiet = bare.prescreen(to="D", action="propose_question",
+                           params={"question": "x"}, tool="fs.read")
     assert not [a for a in quiet if "不是注册表里的真名" in a], quiet
 
 

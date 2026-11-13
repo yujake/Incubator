@@ -74,30 +74,51 @@ def test_touchpoint_six_vocabulary_map_is_registered():
     assert TT._VOCAB_BY_FIELD[("conjectures", "form")] == "CONJECTURE_FORMS"
 
 
-def test_conjectures_are_usable_through_the_existing_table_tools(tmp_path: Path):
-    """猜想能当数据用：既有的 `table.*` 直接读写，不需要新工具/新动作/新契约。"""
+def test_conjectures_are_readable_through_the_existing_table_tools(tmp_path: Path):
+    """猜想能当数据读：`table.get` / `table.list` 照旧，只读角色也看得到。
+
+    改前这一条判的是"通用写口也能写它"（`table.create` / `table.update`）。业主
+    2026-11-13 裁定甲之后，写这一侧收成了一个写点（`agentflow.conjectureledger.register`，
+    产出侧 E / F / B 各调一次），通用写口被 `store.direct_write_refusal("conjectures")`
+    挡住 —— 这一格因此翻成"读照旧、写只剩一条路"（对齐，不是放宽）。
+    """
+    from agentflow import conjectureledger as CL
+
     st = _store(tmp_path)
     reg = build_registry(store=st).registry
-    created = reg.call("table.create", role="D", table="conjectures", row=dict(GOOD))
-    assert created.ok, created.error
-    got = reg.call("table.get", role="D", table="conjectures", id="0000")
+    made = CL.register(store=st, statement=GOOD["statement"], origin="experiment:0000",
+                       testable=GOOD["testable"], form=GOOD["form"],
+                       status="proposed", actor="agent-E")
+    cid = str(made["conjecture_id"])
+    got = reg.call("table.get", role="D", table="conjectures", id=cid)
     assert got.ok and got.data["statement"] == GOOD["statement"]
-    patched = reg.call("table.update", role="D", table="conjectures", id="0000",
-                       patch={"status": "withdrawn", "withdraw_reason": "与已知结果重复"})
-    assert patched.ok, patched.error
     listed = reg.call("table.list", role="C", table="conjectures")
     assert listed.ok and listed.data["total"] == 1, "只读角色也应当看得到猜想"
+    # 写那一侧：通用写口一律拒（唯一写点在生产侧）
+    created = reg.call("table.create", role="D", table="conjectures", row=dict(GOOD))
+    assert created.ok is False, "通用写口又能造猜想了 —— 后门被重新打开"
+    patched = reg.call("table.update", role="D", table="conjectures", id=cid,
+                       patch={"status": "withdrawn", "withdraw_reason": "与已知结果重复"})
+    assert patched.ok is False, patched.data
+    assert "conjectureledger" in str(created.error), created.error
 
 
-def test_table_update_uses_the_registered_vocabulary(tmp_path: Path):
-    """词表映射真的生效：写一个不在词表里的状态必须被拒。"""
+def test_the_status_vocabulary_is_judged_by_schema_validate(tmp_path: Path):
+    """词表映射真的生效：写一个不在词表里的状态必须被拒（判据在 `Conjecture.validate`）。
+
+    改前这一笔打的是 `table.update` 的词表映射（`_VOCAB_BY_FIELD`）。那条路现在整条被
+    `direct_write_refused` 挡住 ⇒ 判据换成它下游那一份：`schema.Conjecture.validate()`
+    的 `status` 词表（`table_tools._VOCAB_BY_FIELD` 的映射本身仍由
+    `test_touchpoint_six_vocabulary_map_is_registered` 钉着）。
+    """
     st = _store(tmp_path)
     reg = build_registry(store=st).registry
-    reg.call("table.create", role="D", table="conjectures", row=dict(GOOD))
+    with pytest.raises(ValueError, match="status"):
+        S.Conjecture(**{**GOOD, "status": "answered"}).validate()
     bad = reg.call("table.update", role="D", table="conjectures", id="0000",
                    patch={"status": "answered"})
     assert bad.ok is False, "`answered` 不在猜想的词表里（那是问题的状态）"
-    assert "CONJECTURE_STATUSES" in str(bad.error) or "status" in str(bad.error)
+    assert "direct_write_refused" in str(bad.error), bad.error
 
 
 # ---------------------------------------------------------------- validate：九条负控

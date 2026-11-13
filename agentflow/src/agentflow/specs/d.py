@@ -141,22 +141,6 @@ ACTIONS: tuple[ActionSpec, ...] = (
         _obj({"out_path": _S}),
         "写出文件的路径（绝对）", side_effect="write_local", handler_name="write_report",
     ),
-
-    ActionSpec(
-        "D", "register_conjecture",
-        "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；被引用的实验/文献必须在库里",
-        _obj({"statement": _S, "origin": _S, "conjecture_id": _S, "testable": {"type": "object",
-                           "description": "可检验形式（三个键都要给）：{parameters, criterion, falsified_by}"},
-              "form": {"type": "string", "enum": list(S.CONJECTURE_FORMS)},
-              "negation_statement": _S,
-              "status": {"type": "string", "enum": list(S.CONJECTURE_STATUSES)},
-              "experiment_ids": _ARR_S, "proof_experiment_id": _S,
-              "counterexample_experiment_id": _S, "promoted_to": _OBJ,
-              "known_lit_id": _S, "withdraw_reason": _S, "notes": _S},
-             ("statement", "origin")),
-        "dict（落库后的 conjectures 行）", side_effect="write_local",
-        handler_name="register_conjecture",
-    ),
 )
 
 
@@ -522,21 +506,22 @@ SPEC = AgentSpec(
         'F',
     ),
     write_set=frozenset((
-                     # 写集按**实际写过的表**列全 —— D 的代码真的写这三张：
-                     #   · `conjectures`：`conjecture.register_conjecture` 落猜想行
-                     #     （`agent_d/register_conjecture.py` → `tools/conjecture_tools.py`）；
+                     # 写集按**实际写过的表**列全 —— D 的代码真的写这两张：
                      #   · `research_questions`：`ingest` / `propose_question` / `consider` /
                      #     `poll` / `adjudicate` / `research` 写问题行；
                      #   · `search_requests`：`submit_gaps` / `adjudicate` 建检索请求。
                      # 判据 `tests/test_d_write_set_matches_the_tables_it_writes.py`：跑一趟
-                     # D 的三个写动作，拿 `events.jsonl` 的 `(op, table)` 现算写过的表集合，
+                     # D 的写动作，拿 `events.jsonl` 的 `(op, table)` 现算写过的表集合，
                      # 与这一格逐表相等。
+                     # **`conjectures` 撤了**（业主 2026-11-13 裁定甲：D 不该立项临时命题）：
+                     # 猜想台账的唯一写点搬到产出侧（`agentflow.conjectureledger.register`，
+                     # E 的实验 / F 的稿命题 / B 的收录），D 的动作面上也不再登记猜想 ——
+                     # 它只给研究方向（派活文本不许点名任何猜想号）。
                      # **`statements` 不在里面**（也不许补）：命题台账由 B 写、D 只读；
                      # D 交稿只递指针（块甲），B 是唯一写入口。
                      # D 的**报告落点**是文件而不是表：`reports/RESEARCH.md` 与
                      # `reports/<qid>-research.md`（`write_report` 只写文件，不落任何表 ——
                      # `agent_d/_support.report_landing_reading` 是这个事实的读数）。
-                     'conjectures',
                      'research_questions',
                      'search_requests',
                  )),

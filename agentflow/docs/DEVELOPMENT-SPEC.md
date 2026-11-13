@@ -91,18 +91,18 @@ noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组�
 tools_star_tools_py     = 20   # `(Get-ChildItem src/agentflow/tools -Filter '*_tools.py').Count`
 schema_tables           = 17   # `python -c "import sys;sys.path.insert(0,'src');import agentflow.schema as s;print(len(s.TABLES))"`
 noai_gate_pytest_collected = 124 # `python -m pytest tests/test_noai_gate.py --collect-only -q -p no:cacheprovider` 的 `N tests collected`
-cli_tools_total        = 127  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
-cli_tools_modules      = 19  # 同一行"已装模块 N"
+cli_tools_total        = 124  # `python -m agentflow.cli tools` 首行"工具总数：N"（含 store 的完整装配口径；Lean 关档少三件 `formal.*`，本块钉的是 Lean 开档）
+cli_tools_modules      = 17  # 同一行"已装模块 N"
 cli_tools_role_a       = 55  # `python -m agentflow.cli tools` 的"各角色工具数"逐角色格（键名 = 角色小写）
 cli_tools_role_b       = 40
 cli_tools_role_c       = 39
-cli_tools_role_d       = 60
+cli_tools_role_d       = 59
 cli_tools_role_e       = 41
-cli_tools_role_f       = 53
+cli_tools_role_f       = 54
 cli_tools_role_g       = 56
 cli_tools_role_h       = 47
 cli_tools_role_v       = 29
-cli_tools_role_l       = 40
+cli_tools_role_l       = 0
 cli_tools_role_m       = 42
 webui_modules           = 11   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
 webui_routes            = 34   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
@@ -198,7 +198,7 @@ LIVE-READINGS:END
 | 字面量 | 量法（复跑命令） |
 |---|---|
 | 动作总数 **67** | `python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as c;print(c.two_layer_reconciliation()['total'])"`（2026-11-09 T1 收口：B 的「稿 → 签 → 录入」拆成两个显式动作 `land_manuscript` / `ingest_manuscript` ⇒ 64 → 66；2026-11-11 业主裁定：B 补 `open_polish_copy`（优化副本是冻结后的补救入口，此前不在动作表 ⇒ 冻结后不可达）⇒ 66 → 67） |
-| 可召唤动作数 **57** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-11-09 T1 收口：B 新增两条可召唤动作 ⇒ 54 → 56；2026-11-11 B 的 `open_polish_copy` ⇒ 56 → 57；此前 2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；2026-10-20 撤 `M→V` ⇒ 57 → 54） |
+| 可召唤动作数 **56** | 同上，再算 `sum(len(c.actions_for(r)) for r in c.ALLOWED_EDGES['M'])`（2026-11-09 T1 收口：B 新增两条可召唤动作 ⇒ 54 → 56；2026-11-11 B 的 `open_polish_copy` ⇒ 56 → 57；此前 2026-10-22 加 `G.write_mapping` ⇒ 54 → 55；2026-10-20 撤 `M→V` ⇒ 57 → 54） |
 | 子命令数 **29** | `python -m agentflow.cli --help`（数子命令那一栏；判据直接读 `build_parser()` 的 choices。2026-10-24 加 `stats` 那一组 ⇒ 27 → 28；2026-10-27 加 `interject`（给主控 M 插话）⇒ 28 → 29） |
 
 **两条使用规矩**（与 §1.1 同源）：

@@ -1705,11 +1705,13 @@ def _check_12(rep, closed_dep_exps, doc_by_id, exp_by_id, lit_by_id, store):
         if status == "refuted":
             ce_id = str(c.get("counterexample_experiment_id") or "")
             ce = exp_by_id.get(ce_id) if ce_id else None
-            if not ce_id:
+            refusal = str(c.get("refusal_ref") or "")
+            if not ce_id and not refusal:
                 rep.issues.append(Issue(
                     "error", "conjectures", cid, "refuted_without_counterexample",
-                    "status=refuted 却没有任何 counterexample_experiment_id（被否证必须有反例）"))
-            elif ce is not None and str(ce.get("result")) != "refutes":
+                    "status=refuted 却既没有 counterexample_experiment_id（反例实验）"
+                    "也没有 refusal_ref（谁拒了它）—— 被否证必须有证据"))
+            elif ce_id and ce is not None and str(ce.get("result")) != "refutes":
                 rep.issues.append(Issue(
                     "error", "conjectures", cid, "refuted_without_counterexample",
                     f"status=refuted 但反例实验 {ce_id!r} 的 result={ce.get('result')!r}"
@@ -1771,6 +1773,7 @@ def concept_rows_with_proof_text(rows: Iterable[Mapping[str, Any]], *,
     （"把这一条摘掉 ⇒ 判据红"），而"摘掉"必须摘的是判据本体，
     不是某条断言的字符串。这也是 `_check_13` 里唯一读它的地方。
     """
+
     out: list[dict[str, Any]] = []
     for row in rows:
         if str(row.get("kind") or "") != "concept":
@@ -1834,6 +1837,7 @@ def _check_13(rep, store) -> None:
     7. 第 6 条的反方向（`weaker_than_evidence`，warning）：凭据够 `proof_review`，这一行却登记成 `heuristic` / `cross_check`；降档是安全方向，但强度声明会长期虚低而没有任何读数指出（口径只一处：`verifications.weaker_than_evidence_gaps`）。
     8. 概念行带 `proof_text` 而**没有 V 签**（`concept_row_carries_proof_text`，error）：这一格是「良定义证明」，有签才许非空（B 落 b-稿 → V 签 → B 收录）；没签的（哨兵 `concept:primitive` 那一类污染）逐条点名（`stmt_id` + `created_by` + 开头），口径只一处：:func:`concept_rows_with_proof_text`。
     """
+
     statements = store.rows("statements")
     stmt_by_id = {str(s.get("stmt_id")): s for s in statements}
     lit_ids = {str(x.get("lit_id")) for x in store.rows("literature")}

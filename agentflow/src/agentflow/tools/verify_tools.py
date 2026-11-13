@@ -882,13 +882,17 @@ def _verify_detect_verifier():
     # `proof_manuscript` 不重名、不混用）/ `numeric_manuscript_sha256` /
     # `numeric_manuscript_problems`。同样只加不减：没有这一段实验时三格是空串 / 空表，
     # 键本身恒在；漏声明比少返回更危险（模型读 `returns` 认识不到这两份稿的区别）。
+    # 2026-11-13（业主裁定甲）：再多一格 `conjecture_ledger` —— 这条命题的台账行由产出侧
+    # （E，与实验行同一个事务）落，读数里带 `ok` / `conjecture_id` / `duplicate`，记账失败时
+    # 带 `kind` + `error`（实现 `agentflow.conjectureledger.register`）。
     returns=(
             "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason',"
             "'code_hash','runtime_sec','notes',"
             "'signed_by','proof_authors','report_path','report_sha256','report_bytes',"
             "'report_blocks','report_problems',"
             "'proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems',"
-            "'numeric_manuscript','numeric_manuscript_sha256','numeric_manuscript_problems'}"
+            "'numeric_manuscript','numeric_manuscript_sha256','numeric_manuscript_problems',"
+            "'conjecture_ledger'}"
             "；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + "
             "kind(not_wired/validation_error/experiment_error/io_error) + data=None"
             "（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
@@ -1178,6 +1182,7 @@ def _verify_verify_proof(_need_store, _agent_v, statement_id="", proof_text=None
     参数门放行、实现拒绝：拒信才带得出"落一份稿再来"那句处置（参数门的
     `param_invalid` 只有一句"缺少必填参数"）。
     """
+
     return (
     _need_store("verify.verify_proof")
                or ok(_agent_v().verify_proof(statement_id=statement_id or "",

@@ -303,9 +303,9 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
 | B | 10 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` `open_polish_copy` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
-| D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
+| D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `propose_question` |
 | E | 4 | `run_experiment` `evidence_for` `list_experiments` `run_script_experiment` |
-| F | 4 | `create_plan` `step` `status` `list_plans` |
+| F | 5 | `create_plan` `step` `status` `list_plans` `abandon_plan` |
 | G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `write_mapping` |
 | H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |
 | V | 3 | `verify_proof` `list_verifications` `read_proof` |
@@ -363,7 +363,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 
 ---
 
-## R0. 全局工具总表（127 个，逐条；Lean 关着时 124 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（124 个，逐条；Lean 关着时 124 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -938,7 +938,7 @@ C 的产出有两类，状态语义完全不同。
 > 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
 > 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
-### D.4 工具面（60 个，实测）
+### D.4 工具面（59 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role D`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §D.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1168,7 +1168,7 @@ C 的产出有两类，状态语义完全不同。
 > `blocked` + `blocked_reason` 并继续（FC-21 部分落地）。**无
 > `run_best_effort` / `run_all_or_nothing` 两种显式 API**（实测 0 命中）。
 
-### F.4 工具面（53 个，实测）
+### F.4 工具面（54 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role F`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §F.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1702,7 +1702,7 @@ C 的产出有两类，状态语义完全不同。
 | 替调用方编一个"这个证明号是谁选的" | `path_source` 只收 `B` / `C` / `L` 三值，空 = 没交代；"谁选的路径"与"谁验的"必须分开 | **B / C / L**（三选一，但必须写明） |
 | 决定"验的是哪一份证明"却不给号 | 一个定理有多条证明路径时，不给号就一个字节都不写（`proof_path_unspecified`） | 调用方（`proof_no`） |
 
-### L.4 工具面（Lean 开时 40 个 / 关时 0 个，实测）
+### L.4 工具面（Lean 开时 0 个 / 关时 0 个，实测）
 
 **现读**（`AGENTFLOW_LEAN_ENABLED=1`）：`python -m agentflow.cli tools --role L`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单见附录 §L.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1904,7 +1904,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 
 **现读**（`build_registry(...).for_role("M")`：`cli tools --role` 的 choices 里没有 M）⇒ 五格与逐件清单见附录 §M.4 —— 那里逐格现算，本节不抄会变的分份数。
 
-#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（57 个可召唤动作）
+#### M.4.1 M 能召唤的 7 个角色 × 它们的动作（56 个可召唤动作）
 
 > 这张表与 §0.7 是**同一份数据的第二个落点**（都从 `capabilities.CAPABILITIES` 读）。
 > 两处都由 `tests/test_role_specs_action_table.py` 逐角色比对。
@@ -1921,7 +1921,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 | A | 6 | `run_once` `run` `search_literature` `walk_citations` `ingest_local` `shelf_search` |
 | B | 10 | `run_once` `reprocess_once` `run_reprocess` `decide_structural_duplicate` `resolve_structural_duplicate` `run` `register_statement` `land_manuscript` `ingest_manuscript` `open_polish_copy` |
 | C | 10 | `hottest` `paths` `cold` `gaps` `neighbors` `relations_between` `contradictions` `structural_duplicates` `handle` `proof_chain` |
-| D | 15 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `register_conjecture` `propose_question` |
+| D | 14 | `probe_c` `ingest` `ingest_detailed` `trace_question` `trace_l3` `assess` `submit_gaps` `consider` `poll` `adjudicate` `research` `run_round` `write_report` `propose_question` |
 | E | 4 | `run_experiment` `evidence_for` `list_experiments` `run_script_experiment` |
 | G | 7 | `compose_claim` `register_dependency` `build_document` `render` `refresh_markdown` `revise` `write_mapping` |
 | H | 5 | `review` `verify_fixes` `list_findings` `judge_quote_semantics` `review_report` |

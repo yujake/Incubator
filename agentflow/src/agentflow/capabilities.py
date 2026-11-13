@@ -131,6 +131,7 @@ def unmapped_actions() -> list[tuple[str, str]]:
     "读到了、但不注册"这件事仍然是可见的，落点是
     `param_type_coverage()['tools_read_but_not_registered']` —— 两件事分开说，谁也不冒充谁。
     """
+
     tools = _tool_side_effects()
     unmapped: list[tuple[str, str]] = []
     for role, specs in CAPABILITIES.items():
@@ -158,7 +159,10 @@ _TOOL_GROUPS_BY_ROLE: dict[str, tuple[str, ...]] = {
     "A": ("search", "table", "fs", "trace"),
     "B": ("ocr", "table", "fs", "trace", "graph"),
     "C": ("graph", "table", "fs", "trace"),
-    "D": ("research", "search", "trace", "graph", "table", "fs", "conjecture"),
+    # 2026-11-13：`conjecture` 那一组随 D 的 `register_conjecture` 动作一起退役 ——
+    # 猜想台账的唯一写点搬进库层（`agentflow.conjectureledger`），工具面上没有那件工具，
+    # 消歧表里再留着这一组只会让"名字对得上"这件事凭空多一个空候选。
+    "D": ("research", "search", "trace", "graph", "table", "fs"),
     "E": ("verify", "table", "fs"),
     "F": ("attack", "table", "fs"),
     "G": ("doc", "table", "fs"),

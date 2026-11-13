@@ -312,7 +312,15 @@ SPEC = AgentSpec(
         # 不是唤起），本改动也不给 V 加出边。
         'V',
     ),
-    write_set=frozenset(('experiments',)),
+    write_set=frozenset((
+                     'experiments',
+                     # 2026-11-13（业主裁定甲）：猜想台账的唯一写点在生产侧 ——
+                     # `run_experiment` 落实验行的**同一个事务**里把这条命题记进
+                     # `conjectures`（`agentflow.conjectureledger.register`）：E 是"产出了
+                     # 一条命题、并且已经用实验判过它"的那一侧，所以这张表在它的写集里。
+                     # 判据 `tests/test_conjecture_ledger_has_one_write_point.py`。
+                     'conjectures',
+                 )),
     class_path='agentflow.agent_e:AgentE',
     actions=ACTIONS,
     needs=('workspace_root',),

@@ -23,7 +23,6 @@ from .research import _Research
 from .run_round import _RunRound
 from .propose_question import _ProposeQuestion
 from .write_report import _WriteReport
-from .register_conjecture import _RegisterConjecture
 
 
 class _Core:
@@ -1473,7 +1472,7 @@ class _Core:
 
 
 class AgentD(_ProbeC, _Ingest, _IngestDetailed, _TraceQuestion, _TraceL3, _Assess, _SubmitGaps, _Consider,
-             _ProposeQuestion, _Poll, _Adjudicate, _Research, _RunRound, _WriteReport, _RegisterConjecture, _Core):
+             _ProposeQuestion, _Poll, _Adjudicate, _Research, _RunRound, _WriteReport, _Core):
     """研究智能体。§4.1 的状态机在这里被实现成一组可单独调用的方法。
 
     每个方法都可以被独立调用与单测（``ingest`` / ``trace_question`` /

@@ -399,62 +399,30 @@ def test_the_summon_number_is_reset_even_when_the_handler_raises(tmp_path: pathl
     assert current_task_id() == "", "异常路径也必须复位"
 
 
-# ======================================================= ⑦ register_conjecture（裁定 2）
+# ======================================================= ⑦ 猜想那条路（2026-11-13 撤）
+#
+# 改前这一节判的是 `D.register_conjecture` 的模型缝（三个用例：复述只进读数、模型失败照写、
+# 编造编号被丢弃）。业主 2026-11-13 裁定甲把那个动作整个撤了（「D 不该立项临时命题」），
+# 于是那三个用例的对象消失——不是判据放宽，是它测的东西不在树里了。
+# 按同一份纪律翻成反方向：那条路在 D 身上不存在，D 也就没有"给猜想写复述"这件事。
+# 猜想台账的写点搬到产出侧（`agentflow.conjectureledger.register`），它的正负控在
+# `tests/test_conjecture_tools.py` 与 `test_conjecture_ledger_has_one_write_point.py`。
 
-def test_register_conjecture_polishes_but_never_writes_the_model_words(
-        tmp_path: pathlib.Path):
-    """裁定 2：`register_conjecture` 按同一形态接模型 —— 复述进读数，绝不进库。
+def test_the_conjecture_road_is_gone_from_d(tmp_path: pathlib.Path):
+    """⑦（反方向）：D 没有 `register_conjecture`，也就没有"给猜想写复述"那一笔模型调用。
 
-    现算它才是当前树里 D 的真主力（191 次召唤 / 29 条会话行）⇒ 纳入"在用"。
-    硬约束：登记与否、字段取什么值仍是确定性判定；模型只把已有产物写得更通顺。
+    打桩一处：给缝一个"一定会被问到"的剧本；跑完后 `gw.prompts` 必须为空 ——
+    证明这一路不再产生任何模型调用（不是"调了但没落库"）。
     """
+    from agentflow import specs
+
     st = _ws(tmp_path)
-    seam, gw = _seam(st, reply=json.dumps({"restatement": "这条猜想说的是 n≥3 的那个族非空",
-                                           "next_check": "先做 n=3 的枚举"},
+    seam, gw = _seam(st, reply=json.dumps({"restatement": "x", "next_check": "y"},
                                           ensure_ascii=False))
     d = AgentD(st, config={}, llm=seam)
-    out = d.register_conjecture(statement="n≥3 时该族非空。", origin="gap",
-                                testable=_TESTABLE)
-    reading = dict(out["llm_reading"])
-    assert reading["state"] == "used" and reading["calls"] == 1, reading
-    assert reading["restatement"] and reading["next_check"], reading
-    assert reading["spend"]["attached"] is False, reading["spend"]     # 没号 ⇒ 没挂点
-    assert len(gw.prompts) == 1, "缝必须真的被问过一次"
-    # 模型的话不进库：那一行里既没有 restatement，statement 也还是调用方给的那句
-    row = st.rows("conjectures")[0]
-    assert "restatement" not in row and "next_check" not in row, row
-    assert "该族非空" in str(row.get("statement") or ""), row
-
-
-#: `register_conjecture` 的必填可检验形式（三个键都要给，见 `specs/d.py` 的声明）。
-_TESTABLE = {"parameters": "n 的取值范围", "criterion": "枚举 n=3 的最小情形",
-             "falsified_by": "找到一个 n≥3 的反例"}
-
-
-def test_register_conjecture_still_registers_when_the_model_fails(tmp_path: pathlib.Path):
-    """fail-open：模型失败（异常）⇒ 库照写，读数如实说是哪一种失败。"""
-    st = _ws(tmp_path)
-    seam, _ = _seam(st, raise_exc=RuntimeError("llm down"))
-    d = AgentD(st, config={}, llm=seam)
-    out = d.register_conjecture(statement="n≥3 时该族非空。", origin="gap",
-                                testable=_TESTABLE)
-    assert st.rows("conjectures"), "登记是确定性判定：模型失败也必须已经落库"
-    reading = dict(out["llm_reading"])
-    assert reading["state"] == "failed" and "llm down" in reading["reason"], reading
-    assert "restatement" not in reading, reading
-
-
-def test_register_conjecture_discards_a_restatement_that_invents_a_reference(
-        tmp_path: pathlib.Path):
-    """同一形态的另一半：复述里引了这条猜想依据里没有的编号 ⇒ 丢弃那段产出。"""
-    st = _ws(tmp_path)
-    seam, _ = _seam(st, reply=json.dumps({"restatement": "见 lit:9999 的实验",
-                                          "next_check": "照 lit:9999 做"},
-                                         ensure_ascii=False))
-    d = AgentD(st, config={}, llm=seam)
-    out = d.register_conjecture(statement="n≥3 时该族非空。", origin="gap",
-                                testable=_TESTABLE)
-    assert st.rows("conjectures"), "登记本身不受影响"
-    reading = dict(out["llm_reading"])
-    assert reading["state"] == "failed" and "llm_invented_facts" in reading["reason"], reading
-    assert "restatement" not in reading, "编的那段不许留在读数里"
+    assert not hasattr(d, "register_conjecture"), (
+        "`AgentD.register_conjecture` 又回来了 —— 业主 2026-11-13 裁定甲：D 不该立项临时命题")
+    acts = {a.action for a in specs.builtin_specs()["D"].actions}
+    assert "register_conjecture" not in acts, sorted(acts)
+    assert gw.prompts == [], f"这一路仍发起了模型调用：{len(gw.prompts)} 次"
+    assert st.rows("conjectures") == []

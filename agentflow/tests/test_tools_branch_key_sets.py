@@ -111,11 +111,9 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # dict：键由 `Conductor.wake_blocked` 的返回决定），与上面那五件同族 ——
     # 补的是登记，不是口径。数字来自盘上实测（同一套 `(行, 列)` 去重）。
     "conductor_tools.py": 40,
-    # T3-P7（2026-09-29）：猜想台账的产出面。那 1 处是 `_guard_result` 里的
-    # `ok(fn())` —— 键由被包的函数（`register_conjecture` 返回的落库行）决定，
-    # 静态扫描读不出来。该工具的 `returns=` 已逐字声明那 17 个键，并由
-    # `test_tools_returns_declaration.py` 的"声明必须是实跑键集的子集"钉住。
-    "conjecture_tools.py": 1,
+    # T3-P7（2026-09-29）：猜想台账的产出面。那一栏随业主 2026-11-13 的裁定甲退场：
+    # `tools/conjecture_tools.py` 整份删除，写点搬到库层 `agentflow.conjectureledger`
+    # （它不是工具、没有 `ok(...)` 的键面）⇒ 这一格不再有对象，登记一并删掉。
     # 2026-10-04（`draft/37` §134）：交接手稿的读面。那 1 处是 `manuscripts.read` 的
     # `ok(data, data)` —— 键由手稿索引里的那条 record（`manuscripts.write` 落的行）
     # 决定，静态扫描读不出来。与 `conductor_tools.py` 那一栏同族：该工具的 `returns=`

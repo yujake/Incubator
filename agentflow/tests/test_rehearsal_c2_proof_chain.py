@@ -180,12 +180,13 @@ def _run_chain(base: pathlib.Path) -> dict:
 
     cond = CO.Conductor(st, registry={"D": ("factory", factory_d),
                                       "F": ("factory", factory_f)})
-    # ---- M → D：立题 ------------------------------------------------------------
-    d_task = cond.summon("D", "register_conjecture", {
-        "statement": PROBLEM, "origin": "doc:0000#thm-1", "form": "universal",
-        "testable": {"parameters": {"p": "素数"},
-                     "criterion": "G/Z(G) 循环 ⇒ G 交换",
-                     "falsified_by": "找到 |G| = p^2 的非交换群"},
+    # ---- M → D：给研究方向（业主 2026-11-13 裁定甲：D 不立项临时命题，只给方向）--------
+    #
+    # 改前这一趟是 `summon("D", "register_conjecture")`（"立题"）。裁定之后那条动作不存在了，
+    # 猜想台账的行改由产出侧落（F 开稿那一刻 / E 的实验 / B 的收录）；D 在链里的角色
+    # 退成"把研究方向提出来"—— 这正是业主那句「D 只给研究方向让下面的人去研究」。
+    d_task = cond.summon("D", "propose_question", {
+        "question": "|G| = p^2 的非交换群存在吗？", "kind": "gap",
     })
     # ---- D → F：立项 ------------------------------------------------------------
     plan_task = cond.summon("F", "create_plan", {
@@ -225,6 +226,9 @@ def _run_chain(base: pathlib.Path) -> dict:
 
     body = DS.proof_body(text).strip("\n") if text else ""
     sid = str((filed.get("target") or {}).get("stmt_id") or "")
+    from agentflow import conjectureledger as CL
+
+    landing = CL.promoted_to_statement(st, {"statement": PROBLEM})
     return {
         "store": st,
         "d_task": d_task.to_dict(),
@@ -237,6 +241,7 @@ def _run_chain(base: pathlib.Path) -> dict:
         "reviewed": dict(reviewed),
         "filed": dict(filed),
         "conjectures": [dict(r) for r in st.rows("conjectures")],
+        "landing": dict(landing),
         "plans": [dict(r) for r in st.rows("attack_plans")],
         "statements": [dict(r) for r in st.rows("statements")],
         "tasks": [dict(r) for r in st.rows("tasks")],
@@ -255,10 +260,19 @@ def _chain_problems(reading: dict) -> list[str]:
     rel = str(reading["rel"])
     sid = str(reading["sid"])
 
-    # 1. D 立的题。
+    # 1. 猜想台账：一行，且是产出侧落的（F 开稿那一刻），不是 D 立的。
     conjectures = reading["conjectures"]
-    if len(conjectures) != 1 or str(conjectures[0].get("statement") or "") != PROBLEM:
-        problems.append(f"conjectures 不是 D 立的那一条：{conjectures}")
+    if len(conjectures) != 1:
+        problems.append(f"conjectures 应恰好 1 行（F 开稿时落的那条），实得 {len(conjectures)} 行：{conjectures}")
+    else:
+        conj = conjectures[0]
+        origin = str(conj.get("origin") or "")
+        if not origin.startswith("f-manuscript:"):
+            problems.append(f"猜想行的 origin 不是产出侧（F 的稿）：{origin!r}")
+        if str(conj.get("created_by") or "") in ("agent-D", "D"):
+            problems.append(f"猜想行又是由 D 落的：created_by={conj.get('created_by')!r}")
+        if str(conj.get("statement") or "") != PROBLEM:
+            problems.append("猜想行正文不是那一轮 `product.proposition` 的逐字字节")
 
     # 2. F 的立项（方向来自 D）。
     plans = reading["plans"]
@@ -363,6 +377,18 @@ def _chain_problems(reading: dict) -> list[str]:
             problems.append(f"mss: 记号点不到这一份稿（稿号 {wanted_mid!r}）：{mss}")
         if "via=sign_issued" not in mss[0]:
             problems.append(f"mss: 记号不是签发那一刻置的：{mss[0]!r}")
+
+    # 10. 已进命题台账（业主 2026-11-13 裁定 ①：只给读数，不写 `promoted`）。
+    landing = dict(reading.get("landing") or {})
+    if landing.get("checked") is not True or str(landing.get("stmt_id") or "") != sid:
+        problems.append(f"收录之后 `promoted_to_statement` 没指到那一行：{landing}")
+    if conjectures:
+        conj = conjectures[0]
+        if f"[landed] stmt:{sid}" not in str(conj.get("notes") or ""):
+            problems.append(f"猜想行的 notes 里没有 `[landed] stmt:{sid}`：{conj.get('notes')!r}")
+        if str(conj.get("status") or "") == "promoted":
+            problems.append("猜想行被写成了 promoted（裁定 ①：那一档今天不用 —— "
+                            "它指的是'升格进稿件断言'，文字证明进 statements 不是那件事）")
     return problems
 
 
@@ -378,7 +404,7 @@ def test_the_proof_chain_runs_end_to_end(tmp_path):
     # 派活这一侧也要对：M→D 与 D→F 三趟都真的跑完并落了终态。
     tasks = [(str(t.get("role") or ""), str(t.get("action") or ""),
               str(t.get("outcome") or "")) for t in reading["tasks"]]
-    assert sorted(tasks) == sorted([("D", "register_conjecture", "ok"),
+    assert sorted(tasks) == sorted([("D", "propose_question", "ok"),
                                     ("F", "create_plan", "ok"),
                                     ("F", "step", "ok")]), tasks
     # V 的三转是「一次送审里自己转三次」（不是 F 交了三趟）。

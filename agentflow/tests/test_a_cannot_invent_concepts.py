@@ -120,18 +120,24 @@ def test_the_negative_control_an_injected_statement_action_is_caught(
 
 
 def test_the_generic_write_path_refuses_conjectures_from_a() -> None:
-    """①b 通用写入通道：`table.create` 写 `conjectures` 必须被拒（2026-10-21 补的那一格）。
+    """①b 通用写入通道：`table.create` 写 `conjectures` 必须被拒。
 
-    ## 为什么单列一条
+    ## 那一格是怎么关上的
 
     2026-10-21 实机取证（临时库）：`table.create(role="A", table="conjectures", …)` 当时
-    成功落成 `c-000000` —— 也就是说"A 不造概念、不提猜想"这句原先只被 `statements`
-    那一格守着，猜想那条路是开的。`store.STATEMENT_WRITE_TABLES` 补进 `conjectures`
-    之后这条路才真的关上；这条判据守的就是那一格（它自己在 `store.py`，属 FC-27 人审面）。
+    成功落成一行 —— "A 不造概念、不提猜想"这句原先只被 `statements` 那一格守着，猜想那条
+    路是开的。当时把 `conjectures` 塞进 `STATEMENT_WRITE_TABLES` 会把 D 的正当写入路径一起
+    关掉（那张名单按表判、不认识角色），所以缺口一直是读数。
+
+    2026-11-13（业主裁定甲）把那个矛盾从根上解了：D 的"正当写入路径"本身撤了 —— 猜想台账
+    的唯一写点搬到产出侧（`agentflow.conjectureledger.register`），于是 `conjectures` 可以
+    直接进那张拒信表（`store.CONJECTURE_WRITE_TABLES`），没有任何角色的正当路径被误伤。
+    这一条判据就从"登记缺口"翻成"必须拒"（对齐，不是放宽）。
     """
+
     from agentflow import store as ST
 
-    for name in ("statements", "dependencies"):
+    for name in ("statements", "dependencies", "conjectures"):
         why = ST.direct_write_refusal(name)
         assert why, f"通用写入通道没有拒绝 {name} —— A 可以绕过「不造概念」直接写它"
         assert "direct_write_refused" in why
@@ -140,14 +146,9 @@ def test_the_generic_write_path_refuses_conjectures_from_a() -> None:
     for name in ("literature", "search_requests"):
         assert ST.direct_write_refusal(name) == "", f"{name} 被误拦了：A 的正当写入路径被关上"
 
-    # 已知缺口（读数，不是断言它"好"）：`conjectures` 目前不在那张名单里 ——
-    # `direct_write_refusal` 是按表判、不认识角色，所以把 `conjectures` 塞进去会把 D 的
-    # 正当写入路径（`tests/test_conjectures.py` 的既有设计声明）一起关掉。要真正关上
-    # "A 用 `table.create` 写 conjectures" 这条路，需要一个角色感知的闸
-    # （`table_tools` 拿 `capabilities.WRITE_SETS[role]` 判，或给 `direct_write_refusal` 加 role 形参），
-    # 那属 FC-27 `auth-audit` 面。这一格就是那个缺口的机器读数。
-    assert ST.direct_write_refusal("conjectures") == "", (
-        "缺口被补上了（角色感知闸已落地）—— 请把这条断言改成「必须拒」，并把 A 的提示词那一句再收紧")
+    # 拒信要指回唯一写点（否则读的人只看到"不许"，看不到"那该走哪条路"）。
+    assert "conjectureledger" in ST.direct_write_refusal("conjectures"), (
+        "拒信没有指回生产侧的写点（`conjectureledger.register`）")
 
 
 def test_the_same_structural_check_reads_the_builtin_specs() -> None:

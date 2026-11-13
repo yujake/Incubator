@@ -1188,6 +1188,12 @@ def _direct_write_disposal(ctx: TableContext, *, table: str, op: str,
         return fail(f"{STATEMENTS_REGISTERED_BY_B}：{STATEMENTS_BY_B_REFUSAL}",
                     table=name, kind=STATEMENTS_REGISTERED_BY_B,
                     actor_role=_caller_role())
+    if name in _store_mod.CONJECTURE_WRITE_TABLES:
+        # 猜想台账只有一个写点（产出侧：E 的实验 / F 的稿命题 / B 的收录）。
+        # 这里给模型可读的那一份拒信（判据本体仍是 `store.direct_write_refusal`，不抄第二遍）；
+        # 位置在路由解析之前：这张表没有"兜底方"可转交 —— 没有任何角色有"立一条猜想"这个动作。
+        return fail(_store_mod.direct_write_refusal(name), table=name,
+                    kind=_store_mod.DIRECT_WRITE_REFUSED, actor_role=_caller_role())
     keys = {str(k) for k in (payload or {}) if not str(k).startswith("_")}
     if op and str(op) == "update" and idf and str(idf) in keys and str(payload.get(idf)) != str(id):
         # 改主键 = 把 delete+create 伪装成 update（所有外键都指向旧代号）⇒ 不接管。

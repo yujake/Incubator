@@ -1463,6 +1463,52 @@ def _cited_scripts(concl: Mapping[str, Any],
     return out
 
 
+#: 猜想台账的「历史行」作者（业主 2026-11-13 裁定甲之前，D 是唯一写者）。
+#:
+#: 改前：`conjectures` 的唯一生产写口是 D 的动作 `register_conjecture` —— 真机 42 个工作区
+#: 111 行的 `created_by` 全部是它。裁定之后没有任何角色有「立一条猜想」这个动作，写点搬到
+#: 产出侧（E 的实验 / F 的稿命题 / B 的收录，`agentflow.conjectureledger`）⇒ 这些行只能
+#: 是存量，按纪律冻结：不改写、不迁移、不伪造 `created_by`。
+LEGACY_CONJECTURE_AUTHORS: tuple[str, ...] = ("agent-D",)
+
+
+def _conjecture_authors_reading(store: Any) -> dict[str, Any]:
+    """猜想行的作者集合 + 这些行是不是历史行（三态；只读，不写盘）。
+
+    业主 2026-11-13 裁定甲的同一天，业主给的处置是「老盘按历史行冻结，只加一条读数把
+    `legacy_author` 标出来」。这一格就是那条读数：它只回答"这棵树里的猜想行是谁写的、
+    其中多少行属于冻结的那一档"，不判断这些行对不对。
+
+    键：`checked`（读成了没有）、`authors`（逐作者的行数，按作者名排序，每项带 `legacy`）、
+    `legacy_rows`（作者落在 :data:`LEGACY_CONJECTURE_AUTHORS` 里的行数）、`reason`。
+    读不到 ⇒ `checked=False` + 理由（"没读成"不是"没有历史行"）；读得到而一条都没有 ⇒
+    `checked=True` + `authors=[]`（"还没有人提过猜想"，与"没查成"分开）。
+    """
+    out: dict[str, Any] = {"checked": False, "authors": [], "legacy_rows": 0, "reason": ""}
+    try:
+        rows = [dict(r) for r in store.rows("conjectures")]
+    except Exception as exc:  # noqa: BLE001 —— 读不到要说出来，不许折成"没有历史行"
+        out["reason"] = (f"`conjectures` 读不出来（{type(exc).__name__}: {exc}）"
+                         "⇒ 这一格没查成")
+        return out
+    counts: dict[str, int] = {}
+    for row in rows:
+        who = str(row.get("created_by") or "").strip() or "(未记)"
+        counts[who] = counts.get(who, 0) + 1
+    out["checked"] = True
+    out["authors"] = [{"author": who, "rows": counts[who],
+                       "legacy": who in LEGACY_CONJECTURE_AUTHORS}
+                      for who in sorted(counts)]
+    out["legacy_rows"] = sum(counts.get(who, 0) for who in LEGACY_CONJECTURE_AUTHORS)
+    if not rows:
+        out["reason"] = "这棵树里还没有猜想行（查过了，不是没查成）"
+    else:
+        out["reason"] = (f"共 {len(rows)} 行，其中历史行（"
+                         f"{'、'.join(LEGACY_CONJECTURE_AUTHORS)}）{out['legacy_rows']} 行 —— "
+                         "那一档之后没有任何角色能自己登记猜想，所以这些行只增不动")
+    return out
+
+
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
     """按受控档位现算一行验收读数 ⇒ `(条数, 明细)`。
 
@@ -2621,6 +2667,21 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
              "testable_keys": sorted(str(k) for k in dict(r.get("testable") or {})),
              "known_lit_id": str(r.get("known_lit_id") or "")} for r in rows[:8]],
             "total_conjectures": len(store.rows("conjectures")),
+            #: 这棵树里猜想行的作者集合，以及"这些行是不是历史行"（新增键，不改既有键的形状）。
+            #:
+            #: 业主 2026-11-13 裁定甲之后，没有任何角色有"立一条猜想"这个动作：台账的唯一
+            #: 写点是产出侧（E 的实验 / F 的稿命题 / B 的收录，`agentflow.conjectureledger`）。
+            #: 于是 `created_by=agent-D` 的行只能是 2026-11-13 之前的存量 —— 那一版之前
+            #: D 是唯一写者（42 个工作区 111 行，`created_by` 全部是它）。
+            #:
+            #: 为什么要有这一格：老盘上的猜想行按纪律冻结（不改写、不迁移、不伪造
+            #: `created_by`），而"它们停更了"这件事必须有个机器读数看得见 —— 否则下一个人
+            #: 看到 0 条新增，分不清"没人再提猜想"与"提了但落不进来"。
+            #:
+            #: 三态：读不到 `conjectures` 时 `authors` 是空表 + `checked=False`；读得到而
+            #: 一条都没有 ⇒ `authors=[]`、`checked=True`、`legacy_rows=0`（那是"这棵树里
+            #: 还没有人提过猜想"，不是"没查成"）。
+            "conjecture_authors": _conjecture_authors_reading(store),
             "note": ("只有 `statement` 与 `testable` 都非空的才算 —— 给不出可检验形式的猜想"
                      "应当落 `needs_evidence`（那是诚实的「还提不出检验办法」，不是这一档的产物）")}
     if kind == "statement_rows":

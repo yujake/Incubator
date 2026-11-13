@@ -723,6 +723,11 @@ SPEC = AgentSpec(
                      # `register_statement` 让"B 登记命题台账"有了实现 ⇒ 写集必须有这张表
                      # （否则声明落后于边界里那句"三件套缺一不可"）。
                      'statements',
+                     # 2026-11-13（业主裁定甲/①/②）：收录成功之后，B 把"这条命题已经进了
+                     # 命题台账"记进 `conjectures`（`agentflow.conjectureledger`）：既有行 ⇒
+                     # 状态不动 + `promoted_to_statement` 读数；台账里一行都没有（B 是第一个
+                     # 见到这条命题的）⇒ 如实落一行。**拒收那一档**落 `refuted` + `refusal_ref`。
+                     'conjectures',
                  )),
     class_path='agentflow.agent_b:AgentB',
     actions=ACTIONS,

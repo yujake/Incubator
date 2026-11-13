@@ -2563,7 +2563,7 @@ class _Core:
         if plan_id or sid:
             header.append(f"- 计划：{plan_id} · 子目标：{sid}")
         header.append(f"- 标签：{label}")
-        return _MO.open_manuscript(
+        got = _MO.open_manuscript(
             root, role="F", family="f-proof",
             proposition=proposition_text(product.get("proposition")),
             judge=self._open_gate, form_reading=form_reading,
@@ -2571,6 +2571,56 @@ class _Core:
                   or "conjecture"),
             label=label, title=str(sg.get("text") or ""),
             header_lines=tuple(header), manuscript_id=str(mid or ""))
+        return self._ledger_open_manuscript(got, product=product, plan=plan, sid=sid)
+
+    def _ledger_open_manuscript(self, got: Mapping[str, Any], *,
+                               product: Mapping[str, Any], plan: Mapping[str, Any],
+                               sid: str) -> dict:
+        """开稿那一刻把这条命题记进猜想台账（业主 2026-11-13 裁定甲）。
+
+        ## 为什么是这一格，而不是"派活"或"立项"
+
+        命题这时才第一次可被引用：形态闸已经判过（`_proposition_form_precheck`），
+        稿也已经在盘上有身份。派活那一刻命题还只是方向（业主同一轮裁定：D 派活只带方向、
+        不点名任何猜想号），立项那一刻 F 手里只有计划、还没有命题正文。
+
+        ## 起手状态：`proposed` 还是 `needs_evidence`
+
+        `schema.Conjecture` 的硬条件：`proposed` 必须带 `testable`（可检验形式），给不出
+        就只能落 `needs_evidence`，而那一档必须写清"为什么还提不出"。F 的 `product` 通常
+        只有 `proposition` 一段正文 ⇒ 默认落 `needs_evidence` + 一句说明；产品里真带了
+        `testable` 时才落 `proposed`。不许为了凑 `proposed` 编一个 `testable`。
+
+        ## 记账失败不改变开稿结果
+
+        稿真的开了（那是这一轮的主产物）。失败如实进 `conjecture_ledger` 读数
+        （`ok=False` + 受控 `kind`）—— "没记上"与"没有这条命题"是两件事（三态纪律）。
+        """
+
+        out = dict(got)
+        text = str(out.get("proposition") or "").strip()
+        if not out.get("ok") or not text:
+            return out            # 受控拒 / 没有正文 ⇒ 没有可记的命题（一个字节都不写）
+        from .. import conjectureledger as CL
+
+        rel = str(out.get("path") or "").strip()
+        testable = product.get("testable") if isinstance(product, Mapping) else None
+        status = "proposed" if isinstance(testable, Mapping) and testable else "needs_evidence"
+        note = (f"F 的稿命题（{rel or '稿路径未回传'}）开稿时自动记账："
+                + ("这一条还没有可检验形式（缺 testable）—— 等 E 的实验或 B 的收录。"
+                   if status == "needs_evidence" else "可检验形式取自 `product.testable`。"))
+        try:
+            ledger = CL.register(
+                store=self.store, statement=text,
+                origin=(f"f-manuscript:{rel}" if rel else f"f-plan:{plan.get('plan_id') or ''}#{sid}"),
+                status=status,
+                testable=(dict(testable) if status == "proposed" else None),
+                defaults={"notes": note}, actor=self.actor)
+            ledger["ok"] = True
+        except Exception as exc:  # noqa: BLE001 —— 记账失败不许把一次开稿变成失败
+            ledger = {"ok": False, "kind": CL.store_error_kind(exc), "error": str(exc)}
+        out["conjecture_ledger"] = dict(ledger)
+        return out
 
     def _refused_round(self, *, kind: str, detail: str, problems: list[str],
                        next_step: str, hint: str, manuscript_id: str,

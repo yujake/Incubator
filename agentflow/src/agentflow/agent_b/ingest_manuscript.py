@@ -304,6 +304,20 @@ class _IngestManuscript:
                 root=getattr(self.store, "root", ""),
                 statement_id=str((out.get("target") or {}).get("stmt_id") or ""),
                 body_sha=body_sha, manuscript=rel, path_group=int(path_group))
-        return _BAS.mark_b_ingested(
+        got = _BAS.mark_b_ingested(
             self.store, getattr(self.store, "root", ""), manuscript=rel,
             family=family, out=out)
+        # 收录成功之后把这件事记进猜想台账（业主 2026-11-13 裁定甲/①/②）。
+        # 与 `register_statement` 共用同一个实现（`_note_conjecture_landing`）：
+        # 收录这条路也是"B 收下了这条命题"，两个入口对台账必须说同一句话。
+        if isinstance(got, dict):
+            text = ""
+            cells = got.get("cells") if isinstance(got.get("cells"), dict) else {}
+            proof_cell = cells.get("statement_full") if isinstance(cells, dict) else None
+            if isinstance(proof_cell, Mapping):
+                text = str(proof_cell.get("value") or "")
+            if not text:
+                target = got.get("target") if isinstance(got.get("target"), dict) else {}
+                text = str(target.get("statement_full") or "")
+            return self._note_conjecture_landing(got, statement_full=text, rel=rel)
+        return got

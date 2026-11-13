@@ -1422,6 +1422,71 @@ def next_verification_id(root: str | Path, statement_id: str) -> str:
     return f"v-{S.format_id(len(rows) + 1)}"
 
 
+#: 哪一档 `verdict` 算"这条命题被判死了"（业主 2026-11-13 裁定 ②）。
+#:
+#: V 判「有毛病」与 E 跑出反例是两条并列的来路，都落猜想台账的 `refuted`：
+#: 前者带 `refusal_ref`（这一签的落点），后者带 `counterexample_experiment_id`。
+#: 只用一条会把"被判死"折成"还没验"，把一次没跑成的实验折成一次判决。
+_FAULT_VERDICT = "有毛病"
+
+
+def _note_conjecture_refutation(root: str | Path, row: dict[str, Any]) -> dict[str, Any]:
+    """V 判「有毛病」⇒ 把猜想台账那一行落成 `refuted`（唯一写点：`conjectureledger`）。
+
+    ## 为什么挂在 V 这一侧
+
+    业主 2026-11-13 裁定 ②：被拒那一档要落 `refuted`，而"被拒"有两条真实的来路 ——
+    E 跑出了反例（`result=refutes`，由 E 自己的记账那一笔落），或有人把它判死了
+    （V 判「有毛病」/ B 拒收）。B 那一侧接在 `register_statement` 的拒收路上；V 这一侧
+    就是这里：`record_verification` 是"V 的判词落台账"的唯一入口。
+
+    ## 三态
+
+    - 这一签不是「有毛病」⇒ 一个字节都不动，返回行上也不加键（老读数逐字不变）；
+    - 是「有毛病」但命题正文读不到（`statements` 里没有这一条）⇒ 返回行上
+      `checked=False` + 理由 —— 那是"对不上猜想行"，不是"没被拒"；
+    - 是「有毛病」且对上了 ⇒ `refuted` + `refusal_ref=verifications/<号>.jsonl#v-…`，
+      返回行上多一格读数（`checked` / `refuted` / `conjecture_id` / `refusal_ref`）。
+      台账里没有那条猜想 ⇒ `refuted=False` 且不新建一行（被拒的必须是被登记过的那一条）。
+
+    记账失败不许把一次审校变成失败：读数进返回行（`checked=False` + 异常名），
+    台账那一行已经落了，它是正本。
+    """
+    if str(row.get("verdict") or "") != _FAULT_VERDICT:
+        return row
+    sid = str(row.get("statement_id") or "")
+    vid = str(row.get("verification_id") or "")
+    reading: dict[str, Any] = {
+        "checked": False, "refuted": False, "conjecture_id": "",
+        "refusal_ref": f"verifications/{sid}.jsonl#{vid}", "reason": "",
+    }
+    try:
+        from . import conjectureledger as CL
+        from .store import Store
+
+        store = Store(str(root))
+        text = ""
+        for one in store.rows("statements"):
+            if str(one.get("stmt_id") or "") == sid:
+                text = str(one.get("statement_full") or "")
+                break
+        if not text.strip():
+            reading["reason"] = ("这一签的命题在 `statements` 里读不到正文 ⇒ 对不上猜想行"
+                                 "（不是「没被拒」）")
+        else:
+            got = CL.mark_refuted(store=store, statement=text,
+                                  refusal_ref=reading["refusal_ref"], actor="agent-V")
+            reading["conjecture_id"] = str(got.get("conjecture_id") or "")
+            reading["refuted"] = bool(got.get("refuted"))
+            reading["checked"] = reading["refuted"] or bool(reading["conjecture_id"])
+            reading["reason"] = (str(got.get("reason") or "")
+                                 or "猜想台账那一行已落 refuted")
+    except Exception as exc:  # noqa: BLE001 —— 记账失败不许把一次审校变成失败
+        reading["reason"] = f"{type(exc).__name__}: {exc}"
+    row["conjecture_refutation"] = reading
+    return row
+
+
 def record_verification(root: str | Path, *, statement_id: str, proof_text: str, verdict: Mapping[str, Any],
            verifier: str = "V", round_no: int | None = None,
            used_faces: Iterable[str] = (), submission_id: str = "",
@@ -1650,7 +1715,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         # 缺陷 A（2026-11-05）：重判之后把签块那两格刷到台账最新那一行。
         row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
                                                        manuscript=manuscript)
-        return row
+        return _note_conjecture_refutation(root, row)
     if flip is False:
         # ---- 业主 2026-10-29 追加口径：V 不再自己发签 ----
         #
@@ -1684,7 +1749,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         # 缺陷 A（2026-11-05）：台账那一行落下之后刷签块（`vsigns.refresh_manuscript_sign`）。
         row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
                                                        manuscript=manuscript)
-        return row
+        return _note_conjecture_refutation(root, row)
     if not row_signable(row):
         # 签不住的结论也要落台账（它是"看过、结论是没过"的证据），但它不翻任何位。
         # 追加由本函数做（`sign_statement` 在这一支只回一句理由、不碰台账）⇒ 由本函数
@@ -1717,14 +1782,14 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
         _mark_landed(row, writeback)
         row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
                                                        manuscript=manuscript)
-        return row
+        return _note_conjecture_refutation(root, row)
     writeback = sign_statement(store, row=row, proof_text=proof_text,
                                path=path, proof_no=no, sign_issuance=sign_issuance)
     row["statement_writeback"] = writeback
     _mark_landed(row, writeback)
     row["sign_block_refresh"] = _retrack_sign_block(root, row=row,
                                                    manuscript=manuscript)
-    return row
+    return _note_conjecture_refutation(root, row)
 
 
 def _retrack_sign_block(root: str | Path, *, row: Mapping[str, Any],

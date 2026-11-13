@@ -267,6 +267,16 @@ STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
 #: 一个词说清"这次调用不成立"，而不是折成"执行了、没成功"）。
 DIRECT_WRITE_REFUSED = "direct_write_refused"
 
+#: 猜想台账：唯一写点在生产侧（`conjectureledger.register` —— E 的 `run_experiment` /
+#: F 的 `attack.step` 落稿 / B 的 `register_statement` 收录），通用写口一律不许碰。
+#:
+#: 为什么它必须在这里（业主 2026-11-13 裁定甲）：改前 `conjectures` 不在这张拒信表里
+#: （表里只有 `statements` / `dependencies` / `lit_candidates`）⇒ 任何非只读角色都能用
+#: `table.create(table="conjectures")` 落一行，绕开判重、绕开跨对象存在性检查，而盘上那一行
+#: 看起来完全合法。撤掉 D 的 `register_conjecture` 却不堵这里，等于把后门留宽 ——
+#: 所以"撤销"与"唯一写点"是同一笔事。
+CONJECTURE_WRITE_TABLES: tuple[str, ...] = ("conjectures",)
+
 
 def direct_write_refusal(table: str) -> str:
     """要直写 `table` 时返回拒信；空串 = 放行。这条口径只有这一处。
@@ -316,6 +326,19 @@ def direct_write_refusal(table: str) -> str:
             "  `lit.admit`（正式入库：条数上限 10、DOI 重复与高重叠无 new_content 一律拒收）。\n"
             "`table.delete` 同样不适用于这张表：撤掉的槽位必须留在列表里"
             "（「第 3 号被撤了哪一篇、为什么」要能查得出来），请用 `lit.stage_withdraw`。"
+        )
+    if name in CONJECTURE_WRITE_TABLES:
+        return (
+            f"{DIRECT_WRITE_REFUSED}：`{name}` 不由通用写口直写（`table.create` / `table.update` "
+            "以及任何带 `tool:` 记号的裸事务）—— 它只有一个写点：**产出侧把自己已经产出的那条"
+            "命题如实记账**（`agentflow.conjectureledger.register`）：\n"
+            "  · E：`run_experiment` 落实验行的那一笔（同一个事务）；\n"
+            "  · F：`attack.step` 的 `product.proposition` 过形态闸、开稿那一刻；\n"
+            "  · B：`register_statement` 收录成功之后。\n"
+            "任何角色都没有「立一条猜想」这个动作（业主 2026-11-13：D 不该立项临时命题）。"
+            "要立题就把命题写进你自己的产出（E 的实验 `claim` / F 的 `product.proposition` / "
+            "B 收录的那份稿），由那条路落台账；手写这一行会绕开判重与跨对象存在性检查，"
+            "而盘上那一行看起来完全合法。"
         )
     if name not in STATEMENT_WRITE_TABLES:
         return ""
