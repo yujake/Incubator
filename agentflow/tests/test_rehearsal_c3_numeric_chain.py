@@ -15,13 +15,19 @@ AgentB.ingest_manuscript(mode="register", <e-proof>)    # 按稿收编：证明�
 `REPRO_RESULT`、真落台账与两份手稿）/ 真 `AgentV.verify_proof`（穷举会审 + 三转）/ 真
 `Secretary`（E 的形态闸、B 的切稿与登记）。只有"模型这一轮说什么"是假缝。
 
-## 形态闸归谁（业主 2026-11-13 裁决，本文件按它写）
+## 形态闸归谁（业主 2026-11-13 裁决「甲」，本文件按它写）
 
 「B 侧只对 B 自己登记的命题审注册名，E 和 F 手稿侧录入放行」⇒ 形态闸的持有者是
 产出侧（E 的 `agent_e/proposition_form.py::_proposition_form_gate`，在写 experiments
-行 / e-proof 稿之前判一次）；B 收录 `e-num` / `e-proof` 时不判、零次模型调用、
-不写形态台账（回执里 `judged=False / released=True / model_calls=0 /
-ledger_appended=False`）。
+行 / e-proof 稿之前判一次）。
+
+这条放行只覆盖「指针收录」（E / F / D 递一份稿、`own.ingest_manuscript(mode=register)`）：
+`e-num` / `e-proof` / `f-proof` 三族在 B 这一路不判、零次模型调用、不写形态台账
+（回执里 `judged=False / released=True / model_calls=0 / ledger_appended=False`），
+也不因此多落一份 b-稿。「引文侧不是这一档」：`origin="external_lit"` + 无稿 + 未在册
+仍要过 B 的形态闸，判过先落 `reports/b-proof-<B稿号>.md` 再登记、判不过受控拒
+（带 `fix` / `next_step`、零字节、号不发）。那一档不在这条数值链上，本文件不测它，
+但也不断言"B 侧不判形态 / 不落稿" —— 只断言本链这两笔指针收录的放行读数。
 
 ## 这条链的"走通"按盘上读数认（不是看回执里的 ok=True）
 
@@ -41,10 +47,10 @@ ledger_appended=False`）。
 experiments 行 / e-proof 稿 / statements 一个字节都不落 ⇒ 第 1 / 3 / 6 条必须红。
 它证明这条链的绿来自"产出侧那道闸真的判过并放行"，不是恒真。
 
-另一条判据钉新裁决本身：B 收录这两族时回执 `judged=False / released=True /
+另一条判据钉「甲」的放行面：E 这两族走指针收录时回执 `judged=False / released=True /
 model_calls=0 / ledger_appended=False`，B 的秘书缝一次都没被问过 `proposition_form`，
-形态台账一行没多 —— 防止以后有人把闸又搬回 B（那会既白花钱、又把判据放到错误的
-持有者手里）。
+形态台账一行没多，而且这一路「没有」多落一份 b-稿（落 b-稿是引文侧的动作，不是
+指针收录的）—— 防止以后有人把闸又搬回 B，或把"放行"读成"B 什么都不写了"。
 
 零真实模型调用；`tmp_path` 工作区，不碰 `projects/` / `demo/`。
 """
@@ -455,12 +461,17 @@ def test_a_broken_producer_form_gate_turns_the_chain_red(tmp_path, monkeypatch):
 # ============================================================ ③ 新裁决：B 侧放行
 
 
-def test_b_releases_the_e_families_without_a_second_form_judgement(tmp_path):
-    """新裁决（2026-11-13）：B 收录 e-num / e-proof 时不再判形态、零次模型调用。
+def test_pointer_intake_releases_the_e_families_without_a_second_form_judgement(tmp_path):
+    """裁决「甲」（2026-11-13）：E 的两族走「指针收录」时 B 不判形态、零次模型调用。
 
     读数按收编回执里那一格认（`proposition_form`：`judged=False` / `released=True` /
-    `model_calls=0` / `ledger_appended=False`），并核两处旁证：
-    B 的秘书缝一次都没被问过 `proposition_form`；形态台账在两次收编前后一行没多。
+    `model_calls=0` / `ledger_appended=False`），并核三处旁证：
+    ① B 的秘书缝一次都没被问过 `proposition_form`；
+    ② 形态台账在两次收编前后一行没多；
+    ③ 指针收录这条路「没有」多落一份 b-稿 —— 「甲」里落 b-稿的是引文侧（
+    `origin="external_lit"` + 无稿 + 未在册：判过先落 `reports/b-proof-<B稿号>.md`
+    再登记），不是这一档。这一条「不」断言"B 侧不判形态/不落稿"，只断言本链这两笔
+    指针收录的放行读数与其边界。
     """
     reading = _run_chain(tmp_path)
     assert _chain_problems(reading) == [], _chain_problems(reading)
@@ -485,6 +496,11 @@ def test_b_releases_the_e_families_without_a_second_form_judgement(tmp_path):
     b_rows = [r for r in reading["form_rows_after"]
               if str(r.get("role") or "") == "B"]
     assert b_rows == [], b_rows
+    # 旁证③：指针收录不多落 b-稿（落 b-稿是引文侧那一档的动作）。
+    reports = pathlib.Path(reading["store"].root) / "reports"
+    b_copies = ([p.name for p in reports.glob("b-proof-*.md")]
+                if reports.is_dir() else [])
+    assert b_copies == [], b_copies
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工复跑用
