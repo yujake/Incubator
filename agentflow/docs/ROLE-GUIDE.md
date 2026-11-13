@@ -11,7 +11,7 @@
 
 角色之间没有直连通路：想叫谁干活就走 conductor.summon（受 ALLOWED_EDGES 约束）；想给谁说句话就沿秘书链逐跳转发（中间各跳不看正文）。
 
-角色数 **11**｜动作总数 **68**｜工具面合计 **503** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
+角色数 **11**｜动作总数 **67**｜工具面合计 **502** 件（同一件工具可被多个角色拿到，故合计大于总件数）。
 
 ## 角色 A
 
@@ -219,7 +219,7 @@
 - 能召唤：C、D、H、L、V
 - 谁能召唤它：A、D、E、M
 - 可被召唤：是
-- 写集（能改哪些表）：literature、relations、reprocess_requests、statements
+- 写集（能改哪些表）：conjectures、literature、relations、reprocess_requests、statements
 - 与谁怎么说话：只走秘书链（conductor.guide 逐跳转发，中间各跳不看正文；平级之间没有直连通道，回话也经秘书落到板项上）
 - 依赖的缝：extractor
 
@@ -460,14 +460,13 @@
 | `run_round` | 把 ingest ->…-> research 串成一轮（有界：limit） | `write_local` | `report` |
 | `propose_question` | 把一句话研究问题立成 research_questions 一行；D 的其余动作都要求 qid 已存在，所以从零起手先派它 | `write_local` | `question` |
 | `write_report` | 把研究结果渲染成 markdown 报告；相对路径按工作区根解析，跳到工作区外一律拒，`out_path` 缺省 reports/<qid>-research.md | `write_local` | （无） |
-| `register_conjecture` | 登记或更新一条猜想（省略 conjecture_id ⇒ 新建）；被引用的实验/文献必须在库里 | `write_local` | `statement`、`origin` |
 
 ### 协作面
 
 - 能召唤：A、B、C、E、F
 - 谁能召唤它：B、E、F、G、M
 - 可被召唤：是
-- 写集（能改哪些表）：conjectures、research_questions、search_requests
+- 写集（能改哪些表）：research_questions、search_requests
 - 与谁怎么说话：只走秘书链（conductor.guide 逐跳转发，中间各跳不看正文；平级之间没有直连通道，回话也经秘书落到板项上）
 
 ### 工具面（这个角色实际拿到的件）
@@ -493,7 +492,6 @@
 | `conductor.post_task` | 给自己落一条『要办的活』板项（work 项：`kind=delegation`、`expects=work`、收件人只能是你自己）。业主口径（2026-10-27 逐字）：「如果 message 是要求做事，智能体需自己写任务塞进 task_board，这样就消费了真正有信息的 message」—— 收到的消息读到就消费（信息型板项渲染即收口），而『这件事要办』从此是一条可追踪的 work 项：办完用 `conductor.ack`（`close="completed"`）收口，没办完它就一直在板上、销号门也看得见它。只许给自己落项：要让别人办一件事，有出边就走派活那一形（`summon`，见循环协议第 2 条）；你没有任何出边时，把这件事写进交回派你那一方的结论。 | `write_local` | `summary` |
 | `conductor.retire_child` | 给一个已经交差、你不会再用到的子代理销号（退役）：判定与落盘都在秘书那一侧（`Secretary.retire` 那一步，不是工具名），本工具只做「父发起 → 秘书落实」这条链。child_name 给它的名册名（如 D1 —— 名册名才是父子之间的指称）；reason 写为什么销它，原样落进名册/销号名单。task_id 是旧的兼容写法（只收绝对编号，读数里标 task_id_compat）⇒ 新写的一律用 child_name。级联：它名下那一支会从最深的开始一起销号（先叶子后父），而子树里有任何一个节点还在活跃（自己在跑，或它的下级在跑）⇒ 整笔受控拒绝、一处都不销，并在 active_nodes / busy_task_ids 里点名是谁卡在哪件任务上。销号前置：它名下的板项必须已经清干净（queued / seen / block 都算没清）—— 不清就受控拒绝（没读的东西不许跟着名字一起销掉）。逐条怎么清，三档各走各的门：block 那一档先由主控 `conductor.wake_blocked` 唤醒（把它翻回 queued）—— ack 对 block 行必被状态机拒，父也不能代收件人 ack，所以「让父去 ack 一条 block 项」这条路今天走不通；唤醒只是让它重新可处理，那条项要等收件人自己 `conductor.ack`、或由有权限的那一方撤销才不算未消（唤醒不清板项，销号闸照旧挡）；撤销走 `conductor.void_items`，`expects=work` 也收、六格留痕。第三道前置（业主 2026-10-26 G2：「注销前检测的能力」）：这一支名下还有在跑的程序（含目标自己起的、含账上说收口了而进程还在的）⇒ 受控拒绝，拒信点名 program / pid / 已跑秒数，并只指一条正路（先 `program.stop` 停掉它们再销，或等它们自己结束）；程序读数没查成 ⇒ 同样拒（fail-closed，`state=unknown`，拒信写「没查成」）。第二道前置（业主 2026-10-26：「销号可以也只可针对静默子代理」）：目标此刻必须是静默的（已收工、没别的事：只在等与它有关的消息或委托）—— 在飞 ⇒ 拒（销号等于把它手上的活扔掉）、待机 ⇒ 拒并逐条列出它挂的计时器（它还会醒过来）、读不到时钟/名册 ⇒ 一律拒（fail-closed）；这三种都带 refusal_code=target_not_silent 与 blocking。三态：可销 ⇒ state=retired；不可销（还在飞 / 待机 / 名下还有未消的板项 / 不在你的名册里）⇒ state=refused 并在 missing 里点名缺什么；台账或名册读不出来 ⇒ state=unknown（不猜）。销号 ≠ 停止：要它立刻停下来用叫停/停止，销号说的是「它交完了、名字永久不复用」。 | `write_local` | （无） |
 | `conductor.void_items` | 把**不再需要做**的板项撤销（`item_close=expired`）。业主 2026-11-06 裁定 ①：收件人的**直接父代理**、或**主控 M**（可撤任意代理的板项）有权撤 —— 权限替代「收件人叫不醒」那道证明，`expects=work` 也收；越权（兄弟 / 祖父 / 更远层 / 板项行）⇒ `not_authorized`，一格都不改。参数只有 `item_ids` 与 `why`（两格都必填，逐字进留痕）。六格留痕 `by`/`owner`/`reason`/`from`/`to`/`at` 落行 `inputs` 与事件 note（`traces` 逐条同一套）。撤销后该行 `expects` 清空、原值进 `expects_was`；提醒**不落新行**（2026-11-09 D13）：正文记在被撤那一行的 `inputs`，收件人从 `revoked_recent` 读到，不欠 ack。板面四个读数（读板用 `conductor.board`：`board_open_items` / `board_open_count` / patrol 的 `child_open_count` / `tree().items`）各少一。旧的「只作废叫不醒者的 ack 通知」是 `revoke=False` 那一档，工具面走不到 —— 那一档仍要「收件人叫不醒」这道证明；`revoke` 档的正当性是权限，不看叫不醒。block 板项的出路仍是 `conductor.wake_blocked`（撤销撤的是「不再需要做」的项，不是唤醒）：唤醒解除的是「叫不醒」，不是「挡住销号」。 | `write_local` | `item_ids`、`why` |
-| `conjecture.register_conjecture` | 登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。单行内判据只有一份（schema.Conjecture.validate）；被引用的实验/文献必须在库里 | `write_local` | `statement`、`origin` |
 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补「不构成证明」声明；无引用 / 否定未分类 / 过度声称 / 作废无原因在构造时就抛错。可带生命周期字段。 | `none` | `text`、`citations`、`evidence_kind`、`section` |
 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数）。 | `read` | （无） |
 | `doc.scan_claim` | 机械检查一条断言：有无引用、证据等级是否被夸大、否定是否分类。 | `none` | `claim` |
@@ -535,7 +533,7 @@
 | `trace.literature` | L3 溯源（按需、贵）：文献元数据 + 本地文件是否存在 + 正文片段；无文本层如实报告。 | `read` | `lit_id` |
 | `trace.relation` | L1 溯源：由关系代号取回引文/陈述/页码/引文校验三态，概念代号翻成概念名、附文献元数据。 | `read` | `relation_id` |
 
-共 **60** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
+共 **59** 件（声明在 src/agentflow/tools/；写面按上表的 side_effect 读）。
 
 ### 主要读写的文档与细节
 
@@ -598,7 +596,7 @@
 - 能召唤：B、D、V
 - 谁能召唤它：D、F、H、M
 - 可被召唤：是
-- 写集（能改哪些表）：experiments
+- 写集（能改哪些表）：conjectures、experiments
 - 与谁怎么说话：只走秘书链（conductor.guide 逐跳转发，中间各跳不看正文；平级之间没有直连通道，回话也经秘书落到板项上）
 - 依赖的缝：workspace_root
 
@@ -731,7 +729,7 @@
 - 能召唤：A、C、D、E、V
 - 谁能召唤它：D
 - 可被召唤：是
-- 写集（能改哪些表）：attack_plans、reprocess_requests、search_requests
+- 写集（能改哪些表）：attack_plans、conjectures、reprocess_requests、search_requests
 - 与谁怎么说话：只走秘书链（conductor.guide 逐跳转发，中间各跳不看正文；平级之间没有直连通道，回话也经秘书落到板项上）
 
 ### 工具面（这个角色实际拿到的件）
