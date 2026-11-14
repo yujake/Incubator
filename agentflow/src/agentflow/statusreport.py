@@ -723,8 +723,14 @@ def render_status_markdown(report: Mapping[str, Any]) -> str:
 
 def status_report_paths(root: str | Path, *, out_dir: str | Path | None = None,
                  stamp: str = "") -> tuple[Path, Path]:
-    """报告的两个落点：`out/review/STATUS-<YYYYMMDD-HHMM>.{md,json}`。"""
+    """报告的两个落点：`out/review/STATUS-<YYYYMMDD-HHMM>.{md,json}`。
+
+    `out_dir` 相对工作区根解析（与缺省 `root/out/review` 同口径）：按进程 CWD
+    解析会把报告写到工作区外，`artifacts.record` 随后按"不在工作区里"拒收。
+    """
     base = Path(out_dir) if out_dir else Path(root) / "out" / "review"
+    if out_dir and not base.is_absolute():
+        base = Path(root) / base
     ts = stamp or _now().strftime("%Y%m%d-%H%M")
     return base / f"STATUS-{ts}.md", base / f"STATUS-{ts}.json"
 
