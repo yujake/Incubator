@@ -401,3 +401,243 @@ def test_a_too_large_ledger_blocks_the_closure_distribution_instead_of_reporting
     ok = CL.proposition_level_pollution(st)
     assert ok["state"] == "computed" and ok["max_closure"] == 2, ok
     assert ok["closure_sizes"] == {"0": 1, "1": 1, "2": 1}, ok
+
+
+# ==================================================== I2 闭环：图上现算的对立对有没有裁决过
+#
+# 这一组守的是 `contradictions` 这一格的第五条病因（2026-11-14，业主拍板方向）：
+# 前四种读的都是别人已经判过的状态，一条都不回答"图上现算出来的 strong 对立对，
+# 有没有走过裁决闭环"。判据只有两条、且都复用已有实现：
+#   读 relations → `interactions.detect_contradictions` 取 strong
+#   → 每一对去 `research_questions` 找 `kind="contradiction"` 且 ids == {a,b} 的裁决行
+#   → 没有行 = `contradiction_unadjudicated`；有行而 verdict 不在终态 = `contradiction_unresolved`。
+# `persistent` 只进读数（业主尚未裁定它该不该拦，当前口径：不拦）。
+
+#: 5 对 strong 对立（与 `R-mk-infinite-90` 的现场同形：5 对、双方 active、0 行裁决）。
+#: 每一对占一个独立概念组 —— 不同概念组之间永不比较（`detect_contradictions` 的口径）。
+STRONG_PAIRS: tuple[tuple[tuple[str, str], tuple[str, str]], ...] = tuple(
+    ((f"{2 * i:04d}", f"{2 * i + 1:04d}"), (f"{100 + 2 * i:04d}", f"{101 + 2 * i:04d}"))
+    for i in range(5))
+
+
+def _rel(st: Store, rid: str, text: str, *, concept_ids: tuple[str, str] = ("0100", "0101"),
+         status: str = "active", **kw) -> dict:
+    """写一条关系行（默认 active；引文那一格默认 `None` = 还没核，别让它去撞引文回验那一档）。"""
+    base = dict(relation_id=rid, concept_ids=list(concept_ids), description=text,
+                statement=text, lit_id="0000", page_range=S.PageRange(start=1, end=2),
+                status=status, quote_verified=None, created_at=TS)
+    base.update(kw)
+    row = S.Relation(**base)
+    row.validate()
+    with st.tx("relations", actor="test") as tx:
+        tx.upsert("relations", row.to_dict())
+    return row.to_dict()
+
+
+def _seed_strong_pairs(st: Store) -> None:
+    """落 5 对 strong 对立（同一概念组内一句肯定、一句否定）。"""
+    for (a, b), group in STRONG_PAIRS:
+        _rel(st, a, "A 是 B。", concept_ids=group)
+        _rel(st, b, "A 不是 B。", concept_ids=group)
+
+
+def _adjudication_row(st: Store, qid: str, pair: tuple[str, str], verdict: str | None,
+                      *, status: str = "answered", rounds: int = 0, kind: str = "contradiction",
+                      ) -> dict:
+    """写一行裁决行；`needs_evidence` 那一档按 schema 必须带非空等待集。"""
+    extra: dict = {}
+    if status == "needs_evidence":
+        extra["waiting_request_ids"] = ["r0000"]
+    row = S.ResearchQuestion(
+        question_id=qid,
+        question=f"关系 {pair[0]} 与 {pair[1]} 的陈述互相矛盾，需要判定哪一方成立",
+        origin=f"C:contradictions:{pair[0]}+{pair[1]}",
+        related_relation_ids=sorted(pair),
+        kind=kind,
+        contradiction_relation_ids=sorted(pair) if kind == "contradiction" else [],
+        contradiction_verdict=verdict,
+        contradiction_rounds=rounds,
+        status=status,
+        priority="high",
+        created_at=TS,
+        **extra,
+    )
+    row.validate()
+    with st.tx("research_questions", actor="test") as tx:
+        tx.upsert("research_questions", row.to_dict())
+    return row.to_dict()
+
+
+def _pair_codes(rep) -> list[str]:
+    return [f.code for f in rep.findings if f.check == "contradictions"]
+
+
+def test_a_strong_pair_without_an_adjudication_row_blocks_the_gate(tmp_path):
+    """判据 a：5 对 strong、0 行裁决 ⇒ fail，且 blocker 逐对点名（不是一句"有矛盾"）。
+
+    这正是 `R-mk-infinite-90` 的现场：图上现算出 5 对 strong 对立，`research_questions`
+    里 0 行 `kind=contradiction`，而这一格改前照样 `pass`。
+    """
+    st = _store(tmp_path)
+    _seed_strong_pairs(st)
+    rep = _run(st)
+    assert rep.status["contradictions"] == "fail", rep.to_dict()
+    assert _pair_codes(rep) == ["contradiction_unadjudicated"] * 5, _pair_codes(rep)
+    r = rep.readings["contradictions"]
+    assert [p["relation_ids"] for p in r["unadjudicated_pairs"]] == [
+        ["0000", "0001"], ["0002", "0003"], ["0004", "0005"], ["0006", "0007"], ["0008", "0009"]]
+    assert [p["cause"] for p in r["unadjudicated_pairs"]] == ["no_adjudication_row"] * 5
+    assert r["persistent_pairs"] == [] and r["strong_pairs"] == 5, r
+    assert r["suspect_relations"] == {"dedup": 0, "quote_failed": 0, "i6_conflict": 0}, r
+    # 逐对点名：详情里必须出现那一对的关系号（处置把手要能落到具体某一对）
+    details = [f.detail for f in rep.findings if f.check == "contradictions"]
+    assert all(f"{a}+{b}" in " ".join(details) for (a, b), _ in STRONG_PAIRS), details
+
+
+def test_resolved_adjudication_rows_turn_the_same_gate_green(tmp_path):
+    """判据 b：同一个夹具落 5 行 `resolved` 裁决 ⇒ pass，两族 pair 读数归零。
+
+    与上一条是同一个工作区形态，只多 5 行裁决 —— "红变绿"的差别必须全部来自裁决行。
+    """
+    st = _store(tmp_path)
+    _seed_strong_pairs(st)
+    for i, (pair, _group) in enumerate(STRONG_PAIRS):
+        _adjudication_row(st, f"{i:04d}", pair, "resolved")
+    rep = _run(st)
+    assert rep.status["contradictions"] == "pass", rep.to_dict()
+    assert [f for f in rep.findings if f.level == "blocker"] == [], rep.to_dict()
+    r = rep.readings["contradictions"]
+    assert r["unadjudicated_pairs"] == [] and r["persistent_pairs"] == [], r
+    assert r["strong_pairs"] == 5, r
+
+
+def test_persistent_adjudication_is_a_reading_not_a_blocker(tmp_path):
+    """判据 c：`persistent` 不产生 blocker（当前口径），但读数必须点名那 5 对。
+
+    `persistent` 是裁决过的终态（追问预算用尽、双方仍对立、交人复核），不是"没裁决"。
+    业主还没裁定它该不该拦门，所以这一条把当前口径钉住：要翻只改一处（读数已经在了）。
+    """
+    st = _store(tmp_path)
+    _seed_strong_pairs(st)
+    for i, (pair, _group) in enumerate(STRONG_PAIRS):
+        _adjudication_row(st, f"{i:04d}", pair, "persistent")
+    rep = _run(st)
+    assert rep.status["contradictions"] == "pass", rep.to_dict()
+    assert not [f for f in rep.findings if f.level == "blocker"], rep.to_dict()
+    r = rep.readings["contradictions"]
+    assert r["unadjudicated_pairs"] == [], r
+    assert [p["relation_ids"] for p in r["persistent_pairs"]] == [
+        ["0000", "0001"], ["0002", "0003"], ["0004", "0005"], ["0006", "0007"], ["0008", "0009"]]
+    assert all(p["question_id"] for p in r["persistent_pairs"]), r["persistent_pairs"]
+
+
+def test_a_non_terminal_verdict_blocks_as_unresolved(tmp_path):
+    """判据 a 的另一半：有裁决行但 verdict 不在终态 ⇒ `contradiction_unresolved`（带 rounds）。
+
+    "有行"不等于"裁决过"：`unresolved` 是"还要继续追问"的中间态，它不许冒充终态。
+    """
+    st = _store(tmp_path)
+    pair = STRONG_PAIRS[0][0]
+    _rel(st, pair[0], "A 是 B。", concept_ids=STRONG_PAIRS[0][1])
+    _rel(st, pair[1], "A 不是 B。", concept_ids=STRONG_PAIRS[0][1])
+    _adjudication_row(st, "0000", pair, "unresolved", status="needs_evidence", rounds=1)
+    rep = _run(st)
+    assert rep.status["contradictions"] == "fail", rep.to_dict()
+    assert _pair_codes(rep) == ["contradiction_unresolved"], _pair_codes(rep)
+    r = rep.readings["contradictions"]
+    assert r["unadjudicated_pairs"] == [{
+        "relation_ids": ["0000", "0001"], "cause": "verdict_not_terminal",
+        "question_id": "0000", "verdict": "unresolved", "rounds": 1}], r["unadjudicated_pairs"]
+    assert "0000+0001" in rep.findings[0].detail and "0000" in rep.findings[0].detail, \
+        rep.findings[0].detail
+
+
+def test_stubbing_the_detector_turns_the_same_red_off(tmp_path, monkeypatch):
+    """判据 d（反真空）：把 `IX.detect_contradictions` 打桩成恒 `[]` ⇒ 上面那条红变绿。
+
+    这条读法钉住的是"红的来源"：红必须来自现算的检测器，而不是别的格串进来的噪音。
+    所以正确形态是"打桩后 a 变绿"（说明 a 依赖它）；如果打桩后仍然 fail，说明红根本
+    不是这条判据造出来的 —— 那才是判据失焦。
+    """
+    st = _store(tmp_path)
+    _seed_strong_pairs(st)
+    assert _run(st).status["contradictions"] == "fail", "打桩前它必须是红的（否则这条反真空空转）"
+    monkeypatch.setattr(CL.IX, "detect_contradictions", lambda relations: [])
+    rep = _run(st)
+    assert rep.status["contradictions"] == "pass", rep.to_dict()
+    r = rep.readings["contradictions"]
+    assert r["strong_pairs"] == 0 and r["unadjudicated_pairs"] == [], r
+    assert [f for f in rep.findings if f.level == "blocker"] == [], rep.to_dict()
+
+
+def test_suspect_rows_are_readings_and_never_fail_the_cell(tmp_path):
+    """判据 e（负控，两个方向）：suspect 三族只进读数，fail 与否不受它们影响。
+
+    14 条判重中间态 + 12 条引文回验失败，逐条核过 0 条是对立；把它们当"未裁决的矛盾"
+    就是本项目最贵的假红（会训练人忽略告警）。两个方向都造：
+    ① 只有 suspect ⇒ pass；② 同一批 suspect 留在/拿掉，5 对 strong 的 fail 与 blocker 逐条不变。
+    """
+    def _seed_suspects(st: Store) -> None:
+        for i in range(14):                      # 判重中间态：duplicate_of 非空、引文已核
+            _rel(st, f"{100 + i:04d}", "几乎相同的一条", status="suspect",
+                 duplicate_of="0000", concept_ids=(f"{200 + 2 * i:04d}", f"{201 + 2 * i:04d}"))
+        for i in range(12):                      # 引文回验失败：quote_verified=False
+            _rel(st, f"{200 + i:04d}", "引文没核过的一条", status="suspect",
+                 quote_verified=False, concept_ids=(f"{400 + 2 * i:04d}", f"{401 + 2 * i:04d}"))
+
+    # ① 只有 suspect ⇒ 一条都不许拦（假红负控）
+    only_suspect = _store(tmp_path / "a")
+    _seed_suspects(only_suspect)
+    clean = _run(only_suspect)
+    assert clean.status["contradictions"] == "pass", clean.to_dict()
+    assert clean.readings["contradictions"]["suspect_relations"] == \
+        {"dedup": 14, "quote_failed": 12, "i6_conflict": 0}, clean.readings["contradictions"]
+
+    # ② 5 对 strong 在场：留/拿掉同一批 suspect，fail 与 blocker 逐条不变
+    without = _store(tmp_path / "b")
+    _seed_strong_pairs(without)
+    red = _run(without)
+    with_suspect = _store(tmp_path / "c")
+    _seed_strong_pairs(with_suspect)
+    _seed_suspects(with_suspect)
+    red_too = _run(with_suspect)
+    assert red.status["contradictions"] == red_too.status["contradictions"] == "fail"
+    assert _pair_codes(red) == _pair_codes(red_too) == ["contradiction_unadjudicated"] * 5
+    assert red_too.readings["contradictions"]["suspect_relations"] == \
+        {"dedup": 14, "quote_failed": 12, "i6_conflict": 0}
+
+
+def test_unreadable_relations_make_the_cell_unknown_not_pass(tmp_path):
+    """判据 f：relations 读不出来 ⇒ unknown（不是 pass），两族 pair 读数给 None 不是 []。
+
+    `unknown` 既不是过也不是不过：坏表上给 pass 就是"没查成"被折成"没问题"。
+    """
+    st = _store(tmp_path)
+    (st.root / "data" / "relations.json").write_text("{ 这不是 JSON", encoding="utf-8")
+    rep = CL.check_closing(Store(st.root), checks=("contradictions",))
+    assert rep.status["contradictions"] == "unknown", rep.to_dict()
+    r = rep.readings["contradictions"]
+    assert r["relations_reading"] == "unreadable", r
+    assert r["unadjudicated_pairs"] is None and r["persistent_pairs"] is None, r
+    assert r["suspect_relations"] is None, r
+    assert "relation_contradictions_unreadable" in _pair_codes(rep), _pair_codes(rep)
+    assert "StoreError" in " ".join(f.detail for f in rep.findings), rep.findings
+
+
+def test_weak_and_dead_pairs_are_readings_not_blockers(tmp_path):
+    """负控（假红）：weak 对与"一方已不在图里"的对立文本都不许拦门。
+
+    - weak（只有否定标记出现与否不一致）在真实关系上假阳性极高 ⇒ 只进 `weak_pairs`；
+    - 一方 `status=rejected` ⇒ 那场争议已被删边消解，不在册 ⇒ 不现算成"在册的对立对"。
+    """
+    st = _store(tmp_path)
+    _rel(st, "0000", "|S| = 0 的见证是显式的。", concept_ids=("0100", "0101"))
+    _rel(st, "0001", "端点 0 不必用数值搜索。", concept_ids=("0100", "0101"))
+    _rel(st, "0002", "A 是 B。", status="rejected", concept_ids=("0200", "0201"))
+    _rel(st, "0003", "A 不是 B。", concept_ids=("0200", "0201"))
+    rep = _run(st)
+    assert rep.status["contradictions"] == "pass", rep.to_dict()
+    r = rep.readings["contradictions"]
+    assert r["strong_pairs"] == 0 and r["weak_pairs"] == 1, r
+    assert r["active_relations"] == 3, "active 只有 0000 / 0001 / 0003（0002 已 rejected）"
+    assert r["unadjudicated_pairs"] == [], r

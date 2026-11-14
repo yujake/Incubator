@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, NamedTuple, Sequence
 
 from . import errorstate as _ES   # 「这条命题是不是错了」的唯一读口（三态）
+from . import interactions as IX  # I2 的矛盾检测/裁决闭环（这里只调用，不改它）
 from . import papercompile as PC
 from . import schema as S
 from . import statementbody as _SB   # D2：命题正文的唯一读口（真身 statement_full）
@@ -6668,6 +6669,185 @@ def assertion_level_pollution(store: Any) -> dict[str, Any]:
             "reason": reason}
 
 
+#: 这一格认定的「对立对已经裁决过」的两个终态（取自 `schema.CONTRADICTION_VERDICTS`）：
+#: `resolved` = 争议解决；`persistent` = 追问预算用尽、双方仍对立、交人复核 —— 后者也是
+#: 裁决过的终态（「这是真实的文献分歧」本身是结论），不是「没裁决」。
+#: 业主 2026-11-14 尚未裁定 persistent 该不该拦门 ⇒ 当前只进读数，不产生 blocker。
+CONTRADICTION_ADJUDICATED_VERDICTS = tuple(
+    v for v in S.CONTRADICTION_VERDICTS if v in ("resolved", "persistent"))
+
+
+def relation_contradiction_reading(store: Any) -> dict[str, Any]:
+    """从关系图现算「未裁决的 strong 对立对」—— `contradictions` 这一格的第五条病因。
+
+    前四种病因读的都是别人已经判过的状态（`literature.matched` / `dependencies.status` /
+    `statements.status` / `documents.status`），它们回答不了这一格的名字：图上现算出来的
+    对立对，有没有走过裁决闭环。这一条把闭环走完，且判据全部复用已有实现（不新写检测、
+    不新写终态词表）：
+
+        relations ──`interactions.detect_contradictions`──▶ strong 对（weak 只进读数）
+                  ──`research_questions(kind=contradiction, ids={a,b})`──▶ verdict
+
+    | 情形 | 结果 |
+    |---|---|
+    | 没有带 `{a,b}` 的问题行 | blocker `contradiction_unadjudicated` |
+    | 有行而 verdict 不在 {resolved, persistent} | blocker `contradiction_unresolved`（带 rounds） |
+    | verdict == persistent | 只进 `persistent_pairs`，不拦（业主未裁这一条，暂按不拦） |
+    | verdict == resolved | 这一对不再出现在读数里（没有 blocker） |
+
+    为什么只取 strong、只取双方 active：`weak` 的假阳性极高（`detect_contradictions` 自己的
+    docstring：25 条真实关系报 6 条、没有一条是矛盾），所以只进读数；一方已经不在图里
+    （`status` 不是 `active`；缺这一格的老行按 schema 缺省值 `active` 读）的对立对不再「在册」
+    —— 那场争议已被删边或判重消解，拿它拦门是伪红。
+
+    三态：`relations` 读不出来 ⇒ `relations_reading="unreadable"`、两族 pair 读数给 `None`
+    （不是 `[]`：读不到不是「没有对立对」）；`research_questions` 单独读不出来 ⇒
+    `questions_reading="unreadable"` —— 没有裁决台账就判不了「裁决过没有」，这一样是没查成。
+    `suspect_relations` 只数 `status=="suspect"` 的行，三族互斥（I6 > 判重 > 引文回验）：
+    它们不是矛盾，不进任何 blocker（当前 26 条 = 14 条判重中间态 + 12 条引文回验失败，
+    逐条核过 0 条是对立；那 12 条归 `quote_verified_rows` 的 false 栏，不塞进这一格）。
+    """
+    blank = {
+        "relations_reading": "unreadable", "questions_reading": "not_read",
+        "scanned_relations": None, "active_relations": None,
+        "strong_pairs": None, "weak_pairs": None,
+        "unadjudicated_pairs": None, "persistent_pairs": None,
+        "suspect_relations": None, "reason": "",
+    }
+    out: dict[str, Any] = {"reading": blank, "unadjudicated": [], "persistent": [],
+                           "unreadable": ""}
+    if store is None:
+        blank["reason"] = "没有 store ⇒ 关系图读不出来（不是「没有对立对」）"
+        out["unreadable"] = blank["reason"]
+        return out
+    try:
+        rel_rows = [dict(r) for r in store.rows("relations")]
+    except Exception as exc:  # noqa: BLE001 —— 坏表落成"没查成"，不许让整格塌成 traceback
+        blank["reason"] = (f"relations 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                           "这一格没查成（不是「没有对立对」）")
+        out["unreadable"] = blank["reason"]
+        return out
+    active = [r for r in rel_rows if str(r.get("status") or "active") == "active"]
+    detected = IX.detect_contradictions(active)
+    strong = [d for d in detected if str(d.get("strength") or "") == "strong"]
+    suspects = {"dedup": 0, "quote_failed": 0, "i6_conflict": 0}
+    suspect_rows = 0
+    for row in rel_rows:
+        if str(row.get("status") or "") != "suspect":
+            continue
+        suspect_rows += 1
+        if row.get("conflicts_with"):
+            suspects["i6_conflict"] += 1
+        elif row.get("duplicate_of"):
+            suspects["dedup"] += 1
+        elif row.get("quote_verified") is False:
+            suspects["quote_failed"] += 1
+    reading = {
+        "relations_reading": "computed", "questions_reading": "computed",
+        "scanned_relations": len(rel_rows), "active_relations": len(active),
+        "strong_pairs": len(strong), "weak_pairs": len(detected) - len(strong),
+        "unadjudicated_pairs": [], "persistent_pairs": [],
+        "suspect_relations": suspects, "reason": "",
+    }
+    out["reading"] = reading
+    try:
+        q_rows = [dict(r) for r in store.rows("research_questions")]
+    except Exception as exc:  # noqa: BLE001 —— 同上：没有裁决台账就是没查成
+        reading["questions_reading"] = "unreadable"
+        reading["unadjudicated_pairs"] = None
+        reading["persistent_pairs"] = None
+        reading["reason"] = (f"research_questions 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                             "判不了这些对立对裁决过没有")
+        out["unreadable"] = reading["reason"]
+        return out
+    # 同一对关系的裁决行按「终态优先」取：先收终态，再收待决；同一档里取表内第一行。
+    # 为什么不是「取最新一行」：表里没有 `updated_at` 之外的顺序保证，而终态一旦落过
+    # 就不该被一条更晚的待决行顶掉（待决行只可能是重复建行，见 `adjudicate` 的合并逻辑）。
+    terminal: dict[tuple[str, ...], dict[str, Any]] = {}
+    pending: dict[tuple[str, ...], dict[str, Any]] = {}
+    for q in q_rows:
+        if str(q.get("kind") or "") != "contradiction":
+            continue
+        ids = tuple(sorted({str(x) for x in (q.get("contradiction_relation_ids") or []) if x}))
+        if len(ids) != 2:
+            continue
+        rec = {"question_id": str(q.get("question_id") or ""),
+               "verdict": q.get("contradiction_verdict"),
+               "rounds": int(q.get("contradiction_rounds") or 0)}
+        if rec["verdict"] in CONTRADICTION_ADJUDICATED_VERDICTS:
+            terminal.setdefault(ids, rec)
+        else:
+            pending.setdefault(ids, rec)
+    for d in strong:
+        ids = tuple(sorted(str(x) for x in (d.get("relation_ids") or [])))
+        done = terminal.get(ids)
+        if done is None:
+            waiting = pending.get(ids)
+            reading["unadjudicated_pairs"].append({
+                "relation_ids": list(ids),
+                "cause": "no_adjudication_row" if waiting is None else "verdict_not_terminal",
+                "question_id": "" if waiting is None else waiting["question_id"],
+                "verdict": None if waiting is None else waiting["verdict"],
+                "rounds": 0 if waiting is None else waiting["rounds"],
+            })
+        elif done["verdict"] == "persistent":
+            reading["persistent_pairs"].append({
+                "relation_ids": list(ids), "question_id": done["question_id"],
+                "rounds": done["rounds"],
+            })
+    other = suspect_rows - sum(suspects.values())
+    reading["reason"] = (
+        f"查过了：{len(rel_rows)} 条关系里 {len(active)} 条 active，现算出 {len(strong)} 对"
+        f" strong 对立、{reading['weak_pairs']} 对 weak（weak 只作线索、不拦）；"
+        f"其中 {len(reading['unadjudicated_pairs'])} 对还没裁决到终态，"
+        f"{len(reading['persistent_pairs'])} 对裁决为 persistent（只读数、不拦）。"
+        f"suspect 关系 {suspect_rows} 条按三族互斥分开数（I6 > 判重 > 引文回验），"
+        f"未归族的 {other} 条 —— 它们不是矛盾，也不进任何 blocker")
+    out["unadjudicated"] = list(reading["unadjudicated_pairs"])
+    out["persistent"] = list(reading["persistent_pairs"])
+    return out
+
+
+def _apply_relation_contradictions(rep: ClosingReport, store: Any) -> None:
+    """把第五条病因（图上现算的对立对有没有裁决过）落成 blocker 与读数。
+
+    为什么单独一层：`_check_contradictions` 已经贴着「>200 行的 def」软基线的边
+    （`tools/repo_survey.py` 的第三格），把这一族塞进它的函数体会把那一格抬上去；
+    这里只读、只追加，前四族一个字不动。
+
+    三态：这一族读不出来 ⇒ 一条 `relation_contradictions_unreadable` warning，并在本格还没有
+    blocker 时把状态落成 `unknown`（已经 `fail` 的结论比「没查成」强，不折回 unknown；但
+    绝不 `pass`）。`persistent` 只进读数 —— 业主 2026-11-14 尚未裁定它该不该拦门，要拦时
+    只改这里一处（见 `relation_contradiction_reading` 的取舍表）。
+    """
+    got = relation_contradiction_reading(store)
+    bucket = rep.readings.get("contradictions")
+    if isinstance(bucket, dict):
+        bucket.update(got["reading"])
+    for pair in got["unadjudicated"]:
+        name = "+".join(pair["relation_ids"])
+        if pair["cause"] == "no_adjudication_row":
+            rep.findings.append(Finding(
+                "contradictions", "contradiction_unadjudicated", "blocker",
+                f"图上的对立对 {name}（strength=strong）没有裁决行 ⇒ 派 D 立一条 "
+                "kind=contradiction 的问题并裁到 resolved/persistent"
+                "（现算出来的对立对不许当成「没有矛盾」）"))
+        else:
+            rep.findings.append(Finding(
+                "contradictions", "contradiction_unresolved", "blocker",
+                f"图上的对立对 {name}（strength=strong）有裁决行 {pair['question_id']}，"
+                f"但 verdict={pair['verdict']!r}（已追问 {pair['rounds']} 轮）⇒ "
+                "还没收敛到 resolved/persistent"))
+    if got["unreadable"]:
+        rep.findings.append(Finding(
+            "contradictions", "relation_contradictions_unreadable", "warning",
+            "关系图上的对立对没查成（不是「没有对立对」）：" + got["unreadable"]))
+    if got["unadjudicated"]:
+        rep.status["contradictions"] = "fail"
+    elif got["unreadable"] and rep.status.get("contradictions") == "pass":
+        rep.status["contradictions"] = "unknown"
+
+
 def _check_contradictions(rep: ClosingReport, store: Any) -> None:
     """未裁决的矛盾：三种病因各自一个 code（`draft/37` §8 / R19）+ 污染面（R20）。
 
@@ -6679,6 +6859,7 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
 | 来源本身有争议（两篇文献两说） | `contradiction_disputed_source` | D 追原始证明 → 判不了就 `ask_user`（§8 的裁决闭环） |
 | 我们自己的证明有洞 | `contradiction_own_hole` | D 给可挽救性评估，E 补 T3，或如实降档 |
 | 稿件审校未过（H 的未决项） | `review_unresolved` | G 修订 / H 复审（§14.4 的"未决问题"那一节） |
+| 图上现算的 strong 对立对没有裁决行 / 没收敛 | `contradiction_unadjudicated` / `contradiction_unresolved` | D 立一条 `kind="contradiction"` 的问题并裁到 `resolved`/`persistent`（见 `relation_contradiction_reading`） |
 前三种正是 §17.1 要求"三种病因各一条负控"的那三条；第四种来自 §14.4 的报告第九节，单列是因为它的处置是"回稿子"而不是"回证据"。
     """
     if store is None:
@@ -6694,7 +6875,7 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             "pollution_assertion_level": assertion_level_pollution(None),
             # 没查成的那两格给 `None`（不是 `{}`）：空字典会被读成"查过了、没有"。
             "pollution_assertions": None,
-            "pollution_dangling_statements": None,
+            "pollution_dangling_statements": None, **relation_contradiction_reading(None)["reading"],
         }
         rep.findings.append(Finding("contradictions", "no_store", "warning",
                                     "没有 store ⇒ 矛盾没查成（不是没有矛盾）"))
@@ -6866,6 +7047,7 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
             "污染面没查成（不是「没有下游」）：" + "；".join(pollution_unreadable[:3])))
         if not fired:
             rep.status["contradictions"] = "unknown"
+    _apply_relation_contradictions(rep, store)
 
 
 def _statement_grade(row: Mapping[str, Any]) -> str:
