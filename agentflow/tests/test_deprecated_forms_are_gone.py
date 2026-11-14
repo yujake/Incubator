@@ -137,7 +137,10 @@ REMOVED_SYMBOLS: tuple[str, ...] = (
     "_load_document_text_cls",
     "_roster_landing_order",
     "_tool_summary",
-    "_write_row",
+    # 2026-11-14（TR 收口）：`_write_row` 从这张表撤下 —— 它不是"删掉且没有同名重加"
+    # 的旧符号：`8972f94e`（证伪通道·库层）在 `statementrefute.py` 里重新定义了它
+    # （`def _write_row(...)`，且 `refutation.py` / 三条判据都在真调用它）。
+    # 表的前提是"定义已经不在树里"；留着它会把活函数的每一处引用都判成死引用。
 )
 
 #: 族 -> {文件（相对 `agentflow/`）: 为什么它还在}。空表本身也是有内容的读数。
