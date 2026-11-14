@@ -51,6 +51,8 @@ STOP_FILE_NAME = ".agentflow-stop"
 PID_DIR_NAME = "runs"
 #: 停机开关缺省的理由码（与 `conductor` 的取消词表同源，见 `CANCEL_CODES`）。
 DEFAULT_REASON = "user"
+#: 墓碑的文件名（`<工作区>/runs/` 下）：删掉开关之后留下"停过"这件事。
+STOP_CLOSED_NAME = "stop-closed.jsonl"
 
 
 def stop_path(root: str | Path, explicit: str | Path | None = None) -> Path:
@@ -450,6 +452,16 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     `stop_programs` 的读数（强停杀了哪几个、优雅停在宽限里点了谁的名、或者"程序状态
     没查成"）随这一笔一起落盘。没有这一格，"这一停对程序做了什么"在审计面上完全看不见。
     不给（`None`）就一个字节都不多写：与"特意写了空"分开。
+
+    ## 墓碑（B5，2026-11-15）：删掉之后要留下"停过"这件事
+
+    改前删掉开关之后 `read_stop()` 返回 `None` —— 与"从来没有人叫停"同形，停机之后
+    往同一个工作区写盘既不拦也不标记（反例③，真机 22:54 那三份产物就归不到账上）。
+    现在真删掉时会追加一行墓碑 `runs/stop-closed.jsonl`（时间 + 理由 + 哪一趟：sid /
+    level），读口 :func:`stop_closure` 用三态回答"停过没有"：没文件 = `none`、
+    有可读墓碑 = `closed`、文件在但读不出来 = `unknown`（不许当"没停过"）。
+    墓碑只在确实删掉的那一笔写；成员只记一笔（`remove=False`）不写墓碑 —— 开关还在
+    盘上，那不是"停了并已消费"。
     """
     path = stop_path(root, explicit)
     state = read_stop(root, explicit=explicit)
@@ -486,6 +498,16 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
         record["remove_problem"] = remove_problem
     if isinstance(programs, Mapping) and programs:
         record["programs"] = dict(programs)
+    if removed:
+        # ---- B5 墓碑：删掉之后要留一条"停过"的记录 -------------------------------
+        #
+        # 位置在 `removed` 确认之后、写历史之前：只有真删掉才有墓碑。写失败不改变
+        # "这一趟已收工"，但必须在返回值里读得出来（`tombstone_problem`）——
+        # 静默失败正是 B5 要消灭的那一档。
+        logged = _append_tombstone(root, record)
+        record["tombstoned"] = bool(logged.get("written"))
+        if logged.get("problem"):
+            record["tombstone_problem"] = str(logged["problem"])
     try:
         hist = history_path(root)
         hist.parent.mkdir(parents=True, exist_ok=True)
@@ -494,6 +516,95 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     except OSError:
         pass                      # 历史写不下去也不许让"停下"这件事失效
     return record
+
+
+def closed_path(root: str | Path) -> Path:
+    """墓碑落在哪：`<工作区>/runs/stop-closed.jsonl`（append-only，一行一次真删除）。"""
+    return Path(root) / PID_DIR_NAME / STOP_CLOSED_NAME
+
+
+def _append_tombstone(root: str | Path, record: Mapping[str, Any]) -> dict[str, Any]:
+    """把这一次"停过且已删"追加成一行墓碑；返回 `{written, problem, path}`（不抛）。"""
+    line = {
+        "closed_at": str(record.get("removed_at") or record.get("consumed_at") or _now_iso()),
+        "consumed_at": str(record.get("consumed_at") or ""),
+        "reason": str(record.get("reason") or DEFAULT_REASON),
+        "by": str(record.get("by") or ""),
+        "force": bool(record.get("force")),
+        "sid": str(record.get("consumed_by_sid") or ""),
+        "level": str(record.get("level") or "stop_file"),
+        "path": str(record.get("path") or ""),
+        "root_task_id": str(record.get("root_task_id") or ""),
+        "source": "consume_stop",
+    }
+    try:
+        path = closed_path(root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(line, ensure_ascii=False, default=str) + "\n")
+    except OSError as exc:
+        return {"written": False, "problem": f"{type(exc).__name__}: {exc}",
+                "path": str(closed_path(root))}
+    return {"written": True, "problem": "", "path": str(path)}
+
+
+def stop_closure(root: str | Path) -> dict[str, Any]:
+    """这个工作区"停过没有、停完消费掉了没有"的三态读数（墓碑的唯一读口）。
+
+    返回 `{checked, state, count, last, path, problems, why}`：
+
+    | `state` | 含义 | 依据 |
+    |---|---|---|
+    | `none` | 从来没有停机记录 | 墓碑文件不在盘上 |
+    | `closed` | 停过、并且已经消费（删掉）了 | 至少一行可读墓碑；`last` 给时间 / 理由 / 哪一趟 |
+    | `unknown` | 墓碑读不出来 | 文件在但一行都读不出（空文件 / 坏行 / 读失败） |
+
+    为什么 `none` 与 `unknown` 必须分开：`read_stop()` 在删除之后返回 `None`，与
+    "从来没人叫停"同形；把它读成"没停过"就抹掉了"停过"这件事本身（三态纪律）。
+    为什么它不问开关本身：这一格回答的是"历史"，开关在不在由 `read_stop` 回答，
+    两件事各有一格，不折平。
+    """
+    out: dict[str, Any] = {"checked": False, "state": "unknown", "count": 0,
+                           "last": {}, "path": str(closed_path(root)),
+                           "problems": [], "why": ""}
+    path = closed_path(root)
+    if not path.is_file():
+        out.update(checked=True, state="none",
+                   why="墓碑文件不在盘上 ⇒ 这个工作区没有停机记录（不是「读不出来」）")
+        return out
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        out.update(why=(f"墓碑读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成，"
+                        "不许当「没停过」"))
+        return out
+    rows: list[dict[str, Any]] = []
+    bad: list[str] = []
+    for line in raw.splitlines():
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            bad.append(line[:120])
+            continue
+        if isinstance(obj, dict):
+            rows.append(obj)
+        else:
+            bad.append(line[:120])
+    out["problems"] = bad
+    out["checked"] = True
+    if not rows:
+        out.update(state="unknown",
+                   why=(f"`{path.name}` 在盘上但一行可读的墓碑都没有"
+                        f"（坏行 {len(bad)} 条）⇒ 这一格没查成，不许当「没停过」"))
+        return out
+    out.update(state="closed", count=len(rows), last=dict(rows[-1]),
+               why=(f"停过 {len(rows)} 次并已消费；最后一次在 "
+                    f"{rows[-1].get('closed_at', '?')}，理由 "
+                    f"{rows[-1].get('reason', '?')}，由 sid="
+                    f"{rows[-1].get('sid') or '（无 sid）'} 用掉"))
+    return out
 
 
 def consumption_outcome(record: Mapping[str, Any]) -> dict[str, Any]:
