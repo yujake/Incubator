@@ -1459,6 +1459,11 @@ class AgentV:
             #: 形状见 :func:`fail_closed_manuscript_identity`。
             "manuscript_identity": fail_closed_manuscript_identity(
                 statement_id=str(statement_id or "").strip()),
+            #: 2026-11-15（D）：同一正文 sha 已有正式颁发的签时，那一签的指针读数
+            #: （`verifications.issued_sign_short_circuit` 的返回值）。空表 = 这一趟
+            #: 没有走那一格（没签过 / 签块已经由旧路短接 / 没给正文）。键无条件存在 ——
+            #: 与 `review_write` 同一条纪律：读的人不必按分支猜这一格在不在。
+            "issued_sign": {},
         }
         # ---- 2026-11-02 业主定稿：一次送审 = 同一次调用内连判三轮，跨调用绝不累计 ----
         #
@@ -1493,6 +1498,49 @@ class AgentV:
         # 交回的 fail-closed 读数也要带对命题号，而不是空串。
         # （2026-11-11：`proof_no` 在 V 签侧退役 —— 顶层与 sign_issuance 都不再写它。）
         out["sign_issuance"]["statement_id"] = sid
+        # ---- 2026-11-15（D）：这个正文 sha 已经有正式颁发的签 ⇒ 不重复买同一份判定 ----
+        #
+        # 现场（`temp/analysis/10-concurrency-budget.md` §3/§4）：同一份 `f-proof-000001.md`
+        # 被两条送审路径各判一遍 —— 2 趟 × 连判 3 转 = 6 条「成立」，签只有 1 个，第二趟
+        # $0.030761 白花。旧路只认"稿上那块签"（`manuscript_sign_standing`），而正式颁发的
+        # 证据是 `out/vsigns/<sha>.json`（RL1 的指针读的就是它）。
+        #
+        # 位置：命号/证明号判完之后、任何手稿闸与模型调用之前。`block_covers=True` 时
+        # 不在这里返回 —— 那正是旧路自己会短接的那一档，读数形状一个字都不动。
+        # fail-open：签文件缺失/读不出来 ⇒ found=False ⇒ 照常判（旧盘不许被当已签）。
+        _short = VR.issued_sign_short_circuit(
+            self.workspace_root, proof_text=str(proof_text or ""),
+            manuscript_rel=str(proof_manuscript or ""))
+        if _short.get("found") and not _short.get("block_covers"):
+            _short_sign = dict(_short.get("sign") or {})
+            out.update({
+                "checked": True,
+                "kind": "",
+                "verdict": str(_short_sign.get("verdict") or ""),
+                "proof_sha256": str(_short.get("sha") or ""),
+                "signed_bit3": False,
+                # 这一趟零转：没有模型调用、没有台账行。
+                "review_passes": [],
+                "ledger": str(_short.get("ledger") or ""),
+                "verification_id": str(_short.get("verification_id") or ""),
+                "issued_sign": dict(_short),
+                "reason": "already_signed",
+                "review_write": {
+                    "written": False, "rolled_back": False,
+                    "deferred_to": "filing:B", "manuscript_signed": False,
+                    "filed": "not_read_by_v", "already_signed": True,
+                    "reason": (str(_short.get("why") or "")
+                               + " ⇒ 这一趟不重审、不调模型、不写任何东西"
+                               "（稿上那一块没读到，但签文件就是正式颁发的那一份）"),
+                },
+                "detail": (str(_short.get("why") or "")
+                           + "。这一签的载体是 `out/vsigns/<正文 sha>.json`，"
+                           "不是这一趟重新判出来的结论；要重新审这一份，先改稿"
+                           "（正文 sha 变了才会重新买判定）。"),
+            })
+            self._emit(f"verify_proof({sid or '未在册'})：这一份正文已经有签"
+                       f"（{_short.get('ledger') or '签文件'}）—— 不重复判、不调模型")
+            return out
         text = str(proof_text or "")
         #: 这一趟签的载体（工作区相对路径；空串 = 没有手稿）。在册那一支由参数给、
         #: 随台账行交给 `sign_statement`（签块落回同一份稿）；未在册那两支各自处理。

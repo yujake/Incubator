@@ -5209,6 +5209,94 @@ def _issued_verification_pointer(root: str | Path, artifact_sha: Any) -> dict[st
     return out
 
 
+def issued_sign_short_circuit(root: str | Path, *, proof_text: str = "",
+                              manuscript_rel: str = "", sha: str = "") -> dict[str, Any]:
+    """这一份正文是不是已经有正式颁发的签（D，2026-11-15：同一 sha 不重复买判定）。
+
+    ## 为什么要有这一格
+
+    真机同一份 `f-proof-000001.md`（正文 sha `0ac4b14c…`）被两条送审路径各判了一遍：
+    2 趟 V × 每趟连判 3 转 = 6 条「成立」，签只有 1 个，第二趟 $0.030761 白花
+    （`temp/analysis/10-concurrency-budget.md` §3/§4）。原因是"这个 sha 已有签"没有在
+    送审判定入口被读到 —— 只有稿上的签块会在旧路里被认（`manuscript_sign_standing`），
+    而签文件 `out/vsigns/<sha>.json` 这一份正式颁发的证据此前只有 RL1 的指针读它。
+
+    唯一读口就是那份签文件的 `ledger`（内部走 :func:`_issued_verification_pointer`，
+    与 RL1 同源）—— 不是台账里"最后一条成立"（并发两趟时它可能属于没发签的那一趟），
+    也不是命题行的第 3 位（V 只对手稿负责之后它已不是 V 的输入）。
+
+    ## 三态（fail-open 的方向写在这里）
+
+    - `found=True` ⇒ 有正式颁发的签；`block_covers` 说"稿上那块签也读得到"
+      （读到 ⇒ 旧路本来就会短接，调用方让它照旧走；读不到 ⇒ 这才是这一格要补的洞）。
+    - `found=False` ⇒ 签文件缺失 / 没记台账 / 读不出来 ⇒ 照常判，不许当已签
+      （旧盘与坏盘都走这一档；"没查成"留在这一个 `checked` 位上）。
+    - `checked=False` ⇒ 连"问哪一份签"都没有答案（没给正文、手稿也读不出来）；
+      `why` 里说清，调用方照常判。
+
+    返回 `{checked, found, sha, ledger, verification_id, sign, block_covers, reason, why}`。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "sha": "", "ledger": "",
+                           "verification_id": "", "sign": {}, "block_covers": False,
+                           "reason": "", "why": ""}
+    key = str(sha or "").strip().lower()
+    rel = str(manuscript_rel or "").strip().replace("\\", "/")
+    raw = ""
+    if not key:
+        given = str(proof_text or "")
+        if given.strip():
+            key = _sign_sha(given)
+        elif rel:
+            try:
+                raw = (Path(root) / rel).read_text(encoding="utf-8")
+            except OSError as exc:
+                out["why"] = (f"手稿 `{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ "
+                              "不知道问哪一份签（不是「没有签」，照常判）")
+                return out
+            key = _sign_sha(raw)
+    if not key:
+        out["why"] = ("没给正文、也没有可读的手稿 ⇒ 不知道问哪一份签"
+                      "（不是「没有签」，照常判）")
+        return out
+    out["sha"] = key
+    # 稿上那块签读不读得到：读到则旧路自己会短接，这一格只补"读不到"的洞。
+    if not raw and rel:
+        try:
+            raw = (Path(root) / rel).read_text(encoding="utf-8")
+        except OSError:
+            raw = ""
+    if raw:
+        try:
+            from . import vsigns as _VS
+
+            block = dict(_VS.manuscript_sign_reading(raw, manuscript_path=rel) or {})
+            out["block_covers"] = bool(
+                block.get("signed")
+                and str(block.get("proof_sha256") or "") == key)
+        except Exception:  # noqa: BLE001 —— 判不了块不等于没有签，继续问签文件
+            out["block_covers"] = False
+    pointer = _issued_verification_pointer(root, key)
+    out["checked"] = bool(pointer.get("checked"))
+    if not pointer.get("found"):
+        out["why"] = (f"这一份正文没有已颁发的签（{pointer.get('why') or '签文件不在盘上'}）"
+                      "⇒ 照常判（不许当已签）")
+        return out
+    try:
+        from . import vsigns as _VS
+
+        sign = dict(_VS.sign_of(root, key).get("sign") or {})
+    except Exception:  # noqa: BLE001 —— 指针已经读到了，签全文取不到就少给这一格
+        sign = {}
+    out.update(found=True, reason="already_signed", sign=sign,
+               ledger=str(pointer.get("ledger") or ""),
+               verification_id=str(pointer.get("verification_id") or ""))
+    out["why"] = (f"这一份正文（sha {key[:12]}…）已经有正式颁发的签："
+                  f"`{out['ledger'] or '（签文件没记台账）'}`；"
+                  f"连续 {sign.get('streak', '?')}/{sign.get('need', SIGN_STREAK_NEED)} "
+                  "次「成立」⇒ 同一份正文不再重复判")
+    return out
+
+
 def proof_review_gap(root: str | Path, row: Mapping[str, Any],
                      proof_no: Any = None) -> dict[str, Any]:
     """一条 `evidence_kind="proof_review"` 的命题有没有凭据 —— 纯读，不写任何东西。
