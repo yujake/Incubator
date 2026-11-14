@@ -202,12 +202,17 @@ def test_f2_without_a_caller_context_the_gate_is_closed(tmp_path: pathlib.Path) 
 
 
 def test_f3_the_gate_does_not_touch_other_tables(tmp_path: pathlib.Path) -> None:
-    """f 的负控：别的表照旧（这条判据只对 `tasks` 说话）。"""
+    """f 的负控：别的表照旧（这条判据只对 `tasks` 说话）。
+
+    2026-11-13 业主裁定「猜想台账的唯一写点搬到产出侧」之后，`conjectures` 也被
+    `store.direct_write_refusal` 收进了直写拒收面 —— 它不再是"别的表"。这里换一张
+    本角色写集里、且没有被那道闸点名的表（D 的 `research_questions`），量的仍是
+    "tasks 的那道闸不外溢"。
+    """
     env = _env(tmp_path)
     me = _agent(env["cond"], str(env["owner"]), role="D")
     res = _call(env, as_task=me, args={
-        "table": "conjectures",
-        "row": {"statement": "对一切 m，谱落在区间 [-m, m] 内。", "form": "universal",
-                "testable": {"params": {"m": [2, 3]}, "why": "逐 m 数值可判"},
-                "origin": "report:0001", "status": "proposed"}})
+        "table": "research_questions",
+        "row": {"question": "对一切 m，谱是否落在区间 [-m, m] 内？",
+                "origin": "report:0001"}})
     assert res.ok is True, (res.error, res.meta)
