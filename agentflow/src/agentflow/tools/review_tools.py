@@ -1087,6 +1087,36 @@ def _advance_review_round(
     return new_round, None
 
 
+#: 受控码：置 `accepted` 却没有"钉住被接受的是哪一版"的签名 ⇒ 拒绝写这一档
+#: （不是静默置 accepted）。口径同 `verify_fixes` 的 `R-59`：
+#: `accepted` 必须由一条 `signatures.signed_revision` 非空的签名背书。
+CODE_ACCEPT_WITHOUT_PIN = "accept_without_pin"
+
+
+def _accept_refusal(store: Any, doc_id: str, row: Mapping[str, Any]) -> str:
+    """置 `accepted` 的收口：返回受控拒的理由；`""` = 可以写。
+
+    判据用 `signatures.signed_revision`（不许用 `signed()`）：后者对非 `accepted`
+    的稿件一律返回真（草稿本来就不该被签），拿它来判会恰好放过这一格
+    （`verify_fixes` 的 `R-59` 用的就是同一条判据）。`content_sha256` 为空同样拒：
+    `schema.Document.validate` 对 accepted 也有这一条（审批是对某一版的审批）。
+    """
+    from .. import signatures as SIG
+
+    sha = str(row.get("content_sha256") or "").strip()
+    if not sha:
+        return (f"受控拒[{CODE_ACCEPT_WITHOUT_PIN}]：稿件 {doc_id} 没有 content_sha256 ⇒ "
+                "钉不住被接受的是哪一版；状态未改")
+    root = getattr(store, "root", None) or "."
+    recs, bad = SIG.read_ledger(SIG.ledger_path(root))
+    if SIG.signed_revision(row, recs) is not None:
+        return ""
+    return (f"受控拒[{CODE_ACCEPT_WITHOUT_PIN}]：拒绝把稿件 {doc_id} 置 accepted —— "
+            f"签名台账里没有签名钉住当前这一版（content_sha256={sha[:16]}…）"
+            + (f"；台账有坏行：{bad[0]}" if bad else "")
+            + "。先让 H 走 `review` 签发（接受 = 有一次针对这一版的审+签）")
+
+
 def _set_doc_status(
     store: Any,
     doc_id: str,
@@ -1096,10 +1126,20 @@ def _set_doc_status(
     review_verdict: str = "",
     review_checked: bool = False,
     review_reason: str = "",
+    pin: Callable[[dict], None] | None = None,
 ) -> tuple[bool, str | None, str]:
     """只改 `documents` 行的 `status` 字段，并按调用方给的结论写审核轴。
 
     返回 (是否写成, 错误, 当前状态)。
+
+    ## `accepted` 的收口：钉版先于提交（`pin` 回调）
+
+    任何把 status 置 `accepted` 的写口都走这里，所以"接受"与"钉住被接受的是哪一版"
+    必须在这里合流：`pin` 由调用方给（`review_document` 传它的签发动作），在
+    状态事务内、写 status 之前执行；随后 `_accept_refusal` 复读台账确认
+    `signatures.signed_revision` 非空。钉不上 ⇒ 受控拒（`CODE_ACCEPT_WITHOUT_PIN`），
+    status 一个字节不改 —— 不许静默置 accepted（改前正是这个形态：状态先提交、
+    签名后写，签名失败只回报 `signature_error` ⇒ 留下"accepted 但没钉住"）。
 
     ## 审核轴不再从 status 推
 
@@ -1132,17 +1172,31 @@ def _set_doc_status(
             "review_checked=False（没查成）必须给非空 review_reason —— "
             "这一档不写裁决，理由是它在回执里唯一的读数"
         )
-    cur = next(
-        (str(r.get("status")) for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)),
-        "",
+    cur_row = next(
+        (dict(r) for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)),
+        None,
     )
+    cur = str((cur_row or {}).get("status") or "")
     if cur == target:
+        # 已经 accepted 的稿子再 review 一次照旧签一条（`pin` 在，就再钉一次这一版）；
+        # 钉不上时如实拒（读到的是"终态未落全"，不是一次成功的接受）。
+        if target == "accepted" and pin is not None and cur_row is not None:
+            pin(cur_row)
+            why = _accept_refusal(store, doc_id, cur_row)
+            if why:
+                return False, why, cur
         return True, None, cur
     try:
         with store.tx("documents", actor=actor, note=f"review status {cur}->{target}") as tx:
             row = tx.find("documents", doc_id=str(doc_id))
             if row is None:
                 return False, f"稿件 {doc_id} 在事务内不存在", cur
+            if target == "accepted":
+                if pin is not None:
+                    pin(row)   # 钉版：签名要钉住的就是下面这一版（写 status 之前落台账）
+                why = _accept_refusal(store, doc_id, row)
+                if why:
+                    return False, why, cur
             row["status"] = target
             # 2026-10-17（业主：「「H 审过和通过是完全不同的状态」」）：状态被审校推到某一档时，
             # 同一次事务里把「审核轴」写上 —— 于是两件事分得开：
@@ -1829,19 +1883,25 @@ def review_document(
             + f" 等 {len(open_findings_reading['finding_ids'])} 条；本轮 round={round_no}，"
             f"documents.review_rounds={open_findings_reading['review_rounds']}）"
             " ⇒ 不写裁决、不许 accepted；先去 `review.verify_fixes` 逐条判 fixed / 仍 open")
+    # `T4-B`：判 accepted 就签一条（`draft/29` §8.8.3"接受档签一条，毫不犹豫"）。
+    # 签在状态事务内、写 status 之前（`_set_doc_status` 的 `pin` 回调）：签名钉的是
+    # 那一版的内容哈希与它读到的发现，钉不上就不许把状态写成 accepted ——
+    # 改前是"先提交 accepted、再签"，签名失败只回报 `signature_error` ⇒ 留下
+    # "accepted 但没钉住哪一版"（真机缺陷；`CODE_ACCEPT_WITHOUT_PIN` 是现在的受控拒码）。
+    signature: dict | None = None
+    signature_error: str | None = None
+
+    def _pin(row: dict) -> None:
+        nonlocal signature, signature_error
+        signature, signature_error = _sign_accepted_revision(
+            store, doc_id, verdict=verdict, actor=actor, round_no=round_no,
+            coverage=scan.get("coverage"), doc_row=row)
+
     status_updated, status_error, status_now = _set_doc_status(
         store, doc_id, target_status, actor=actor,
         review_verdict=_axis_verdict, review_checked=_axis_checked,
         review_reason=_axis_reason,
-    )
-    # `T4-B`：判 accepted 就签一条（`draft/29` §8.8.3"接受档签一条，毫不犹豫"）。
-    # 签在状态写成之后：签名钉的是那一版的内容哈希与它读到的发现，
-    # 与状态更新是两个动作（状态失败时仍然可以签 —— 但那会让 signature 与 status 不符，
-    # 所以这里只在状态真的成为 accepted 时签，并把失败如实带回去）。
-    signature, signature_error = _sign_accepted_revision(
-        store, doc_id, verdict=verdict, actor=actor, round_no=round_no,
-        status_now=status_now, status_updated=status_updated,
-        coverage=scan.get("coverage"),
+        pin=_pin if target_status == "accepted" else None,
     )
 
     reason_bits = [
@@ -1943,27 +2003,30 @@ def _sign_accepted_revision(
     verdict: str,
     actor: str,
     round_no: int | None,
-    status_now: str,
-    status_updated: bool,
     coverage: Mapping[str, Any] | None = None,
+    doc_row: Mapping[str, Any] | None = None,
 ) -> tuple[dict | None, str | None]:
-    """判 accepted 之后签一条（`draft/29` §8.8；`draft/30` §T4-B）。
+    """判 accepted 时签一条：把"被接受的是哪一版"钉在台账上（`draft/29` §8.8；`draft/30` §T4-B）。
 
-    - 只在状态真的成为 `accepted` 时签：签名钉的是"这一版被审过"，而状态没写成
-      （例如盘上那行不合 schema）说明这一版还不是可引来源 ⇒ 签了会与 status 分家；
+    - 由 `_set_doc_status` 的 `pin` 回调在状态事务内、写 status 之前调用 ——
+      签名钉的是"这一版被审过"，所以钉版先于/同于 `accepted` 的提交：钉不上时调用方
+      受控拒（`CODE_ACCEPT_WITHOUT_PIN`），不会留下"accepted 但没钉住"；
+    - `doc_row` 由回调带进来（就是事务里要改的那一行），不另读一次盘；
     - `instance_id` 取"谁 + 何时"（一次审就是一次调用）。它只作留痕，
       不作门槛（§8.8.4 收尾那一段逐字说了这件事）；
     - 返回 `(签名记录 或 None, 错误说明 或 None)` —— 失败如实带回，
       不吞掉（"审过了但没签上"与"审过并签上"必须分得开）。
     """
-    if not (status_updated and status_now == "accepted"):
-        return None, None
     from .. import schema as S
     from .. import signatures as SIG
 
-    doc = next((r for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)), None)
+    doc = dict(doc_row) if doc_row is not None else next(
+        (r for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)), None)
     if doc is None:
         return None, f"签名时稿件 {doc_id} 读不出来"
+    if not str(doc.get("content_sha256") or "").strip():
+        return None, ("稿件没有 content_sha256 ⇒ 钉不住被接受的是哪一版"
+                      "（`signatures.content_sha256_of` 的口径）；不签发")
     findings = [r for r in store.rows("review_findings") if str(r.get("doc_id")) == str(doc_id)]
     at = S.now_iso()
     try:
