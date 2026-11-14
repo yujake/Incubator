@@ -48,6 +48,9 @@ TS = "2026-11-07T09:00:00+08:00"
 SID = "000001"
 LEMMA = "000002"
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
+#: 夹具里的"旧稿引理"正文：不许与被放弃的 SID 那条逐字相同（2026-11-14 起
+#: `abandon_salvaged_copies_the_abandoned_statement` 挡这个；同一句话换个号不叫拆出引理）。
+LEMMA_FULL = "引理：若 K 在 Re u>=1 有速降，则主链的界一致。"
 PROOF = "取 δ=ε，逐点验证：|x-y|<δ ⇒ |f(x)-f(y)|<ε。"
 DEFECT = "verifications/000001.jsonl#v-000001"
 
@@ -60,11 +63,11 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 def _put(st: Store, sid: str = SID, *, kind: str = "theorem",
          label: str = "", status: str = "active",
-         quote_reason: str = "夹具：自产命题") -> dict:
+         quote_reason: str = "夹具：自产命题", full: str = FULL) -> dict:
     row = {
         "stmt_id": sid, "origin": "own_result", "kind": kind,
-        "label": label or f"探针命题 {sid}", "statement_full": FULL,
-        "statement_text": FULL, "proof_text": PROOF,
+        "label": label or f"探针命题 {sid}", "statement_full": full,
+        "statement_text": full, "proof_text": PROOF,
         "evidence_kind": "heuristic", "status": status,
         "quote_verified": None, "quote_reason": quote_reason,
         "created_at": TS, "created_by": "test", "bits": {},
@@ -308,7 +311,7 @@ def test_c_an_active_lemma_passes(tmp_path):
     """c 正控：给一条在册、active、kind=lemma 的引理 ⇒ 过。"""
     st = _ws(tmp_path)
     _put(st)
-    _put(st, LEMMA, kind="lemma", label="引理 A：K 的速降")
+    _put(st, LEMMA, kind="lemma", label="引理 A：K 的速降", full=LEMMA_FULL)
     res = _abandon(st, patch={"status": "abandoned"},
                    salvaged=[{"label": "引理 A：K 的速降", "stmt_id": LEMMA}], **DIFF)
     assert res.ok is True, (res.error, res.data)
@@ -373,7 +376,7 @@ def test_d_relabeled_shows_two_relabels_for_the_same_label(tmp_path):
     """d：同一 label 下放弃两次 ⇒ `relabeled` 里能看到 2 次（读数，不拦门）。"""
     st = _ws(tmp_path)
     _put(st, SID, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="引理 A")
+    _put(st, LEMMA, kind="lemma", label="引理 A", full=LEMMA_FULL)
     _verify(st)
     first = SA.apply_abandonment(st, statement_id=SID, reason="理由", at=TS,
                                  abandon_kind="math_error",

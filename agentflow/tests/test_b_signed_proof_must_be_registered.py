@@ -340,8 +340,12 @@ def test_e_an_explicit_abandonment_expires_the_duty(tmp_path):
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", {
             "stmt_id": "000009", "origin": "own_result", "kind": "lemma",
-            "label": "引理：旧稿里可取的那一步", "statement_full": FULL,
-            "statement_text": FULL, "proof_text": "", "evidence_kind": "heuristic",
+            "label": "引理：旧稿里可取的那一步",
+            # 2026-11-14 起：salvaged 的正文不许与被放弃那条逐字相同（那是同一句话
+            # 换个号，不是"拆出引理"）—— 夹具给一条真的另一句话。
+            "statement_full": "引理：若序列紧，则它的每个子列都有收敛子列。",
+            "statement_text": "引理：若序列紧，则它的每个子列都有收敛子列。",
+            "proof_text": "", "evidence_kind": "heuristic",
             "status": "active", "quote_verified": None, "quote_reason": "夹具：自产命题",
             "created_at": TS, "created_by": "test", "bits": {}})
     got = SA.apply_abandonment(st, statement_id=SID, reason="这一份稿不进册：重新做",

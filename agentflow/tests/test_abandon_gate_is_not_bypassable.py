@@ -19,7 +19,7 @@
 | c1 | `defect_ref` 引用另一条命题的「有毛病」行 | `abandon_defect_ref_other_statement` |
 | c2 | `defect_ref` 的判词是对旧稿的（改稿后 stale） | `abandon_defect_ref_stale` |
 | c3 | `salvaged` 里出现被放弃的这条自己 | `abandon_salvaged_self_reference` |
-| c4 | `salvaged` 引理的 `created_at` 晚于放弃时刻 | `abandon_salvaged_after_the_abandonment` |
+| c4 | `salvaged` 引理的 `created_at` 晚于放弃时刻（也晚于被放弃的那一条） | `abandon_salvaged_after_the_abandonment`（2026-11-14 起还多一道 `abandon_salvaged_after_the_abandoned_statement`：晚于被放弃的那一条的 `created_at` 同样拒） |
 | d | 反真空：把「放行面」改宽 / 把 `defect_ref` 绑定判据摘掉 | 对应负控当场变绿（证明那两条判据在承重） |
 | e | 锁死 1：F 登记引理 → V 签 → B 收录 `kind=lemma` → 可被 `salvaged` 引用 | 正控走通 |
 | f | 锁死 2：F 秘书不可用 / 超时 / 坏 JSON | 受控拒 且形态台账各写一行（`judged` 不与「没跑过闸」混） |
@@ -51,6 +51,9 @@ LATE = "2026-11-07T23:00:00+08:00"
 SID = "000001"
 LEMMA = "000002"
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
+#: 夹具里的"旧稿引理"正文：不许与被放弃的 SID 那条逐字相同（2026-11-14 起
+#: `abandon_salvaged_copies_the_abandoned_statement` 挡这个；同一句话换个号不叫拆出引理）。
+LEMMA_FULL = "引理：若 K 在 Re u>=1 有速降，则主链的界一致。"
 PROOF = "取 δ=ε，逐点验证：|x-y|<δ ⇒ |f(x)-f(y)|<ε。"
 NEW_PROOF = "换一条路：用有限覆盖，区间分成有限段。"
 DEFECT_SELF = "verifications/000001.jsonl#v-000001"
@@ -75,11 +78,12 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 def _put(st: Store, sid: str = SID, *, kind: str = "theorem", label: str = "",
          status: str = "active", created_at: str = TS,
-         proof_text: str = PROOF, quote_reason: str = "夹具：自产命题") -> dict:
+         proof_text: str = PROOF, quote_reason: str = "夹具：自产命题",
+         full: str = FULL) -> dict:
     row = {
         "stmt_id": sid, "origin": "own_result", "kind": kind,
-        "label": label or f"探针命题 {sid}", "statement_full": FULL,
-        "statement_text": FULL, "proof_text": proof_text,
+        "label": label or f"探针命题 {sid}", "statement_full": full,
+        "statement_text": full, "proof_text": proof_text,
         "evidence_kind": "heuristic", "status": status,
         "quote_verified": None, "quote_reason": quote_reason,
         "created_at": created_at, "created_by": "test", "bits": {},
@@ -92,11 +96,11 @@ def _put(st: Store, sid: str = SID, *, kind: str = "theorem", label: str = "",
 def _just_after(stamp: str) -> str:
     """比 `stamp` 晚一分钟的时刻（夹具时钟：放弃发生在引理真在册之后）。
 
-    `salvaged` 的判据是「这条引理在这笔放弃之前就在册」（按 `created_at` 判，
-    见 `statementabandon._registered_before`）。e 这一条里的引理是由「真登记路」
-    写进来的 ⇒ 它的 `created_at` 是墙钟。放弃时刻若写死成一个绝对日期，过了那一天，
-    一条真在册的引理就会被读成"现造"（`abandon_salvaged_after_the_abandonment`）——
-    所以这一格必须相对这一行算，不许写死。
+    `salvaged` 的判据是「这条引理在这笔放弃之前就在册」且「不晚于被放弃的那一条」
+    （按 `created_at` 判，见 `statementabandon._salvaged_precedes_statement`）。e 这一条
+    里的引理是由「真登记路」写进来的 ⇒ 它的 `created_at` 是墙钟。放弃时刻若写死成一个
+    绝对日期，过了那一天，一条真在册的引理就会被读成"现造"
+    （`abandon_salvaged_after_the_abandonment`）—— 所以这一格必须相对这一行算，不许写死。
     """
     return (datetime.fromisoformat(str(stamp)) + timedelta(minutes=1)).isoformat()
 
@@ -254,7 +258,7 @@ def test_b1_junk_difficulty_is_refused_by_the_secretary_judgement(tmp_path):
     """b1：`difficulty="做不动了"` + 无关旧引理 ⇒ 秘书判不是真困难 ⇒ 受控拒。"""
     st = _ws(tmp_path)
     _put(st, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="引理 A（与本题无关）")
+    _put(st, LEMMA, kind="lemma", label="引理 A（与本题无关）", full=LEMMA_FULL)
     bad = dict(GENUINE, genuine=False, where="", problems=["只有情绪，没有说清难在哪"])
     res = _call(st, patch={"status": "abandoned"},
                 abandon_kind="difficulty", abandon_basis="做不动了",
@@ -270,7 +274,7 @@ def test_b2_salvaged_that_is_not_from_the_old_proof_is_refused(tmp_path):
     """b2：同一问判「那几条不是从原证明拆出来的」⇒ `abandon_salvaged_not_from_proof`。"""
     st = _ws(tmp_path)
     _put(st, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="另一条无关引理")
+    _put(st, LEMMA, kind="lemma", label="另一条无关引理", full=LEMMA_FULL)
     bad = dict(GENUINE, salvaged_from_proof=False, problems=["那条引理与本题无关"])
     res = _call(st, patch={"status": "abandoned"}, judge=bad,
                 salvaged=[{"label": "另一条无关引理", "stmt_id": LEMMA}], **DIFF)
@@ -283,7 +287,7 @@ def test_b3_a_failed_judgement_is_fail_closed(tmp_path):
     """b3：判定没判成（checked=False）⇒ `abandon_difficulty_not_judged`，一个字节不写。"""
     st = _ws(tmp_path)
     _put(st, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="引理 A")
+    _put(st, LEMMA, kind="lemma", label="引理 A", full=LEMMA_FULL)
     res = _call(st, patch={"status": "abandoned"},
                 judge={"checked": False, "refused": "abandon_difficulty_not_judged",
                        "reason": "夹具：没有判定面"},
@@ -297,7 +301,7 @@ def test_b4_a_genuine_difficulty_with_a_lemma_from_the_proof_passes(tmp_path):
     """b4 正控：真困难 + 从原证明拆出的 active lemma ⇒ 过闸。"""
     st = _ws(tmp_path)
     _put(st, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="引理 A：K 的速降")
+    _put(st, LEMMA, kind="lemma", label="引理 A：K 的速降", full=LEMMA_FULL)
     res = _call(st, patch={"status": "abandoned"},
                 salvaged=[{"label": "引理 A：K 的速降", "stmt_id": LEMMA}], **DIFF)
     assert res.ok is True, (res.error, res.data)
@@ -393,7 +397,7 @@ def test_b5_the_seam_is_really_reached_once_in_each_direction(tmp_path, monkeypa
     for verdict, expect_ok, expect_code in cases:
         st = _ws(tmp_path / ("ok" if expect_ok else "no"))
         _put(st, kind="conjecture", label="lem:cancel")
-        _put(st, LEMMA, kind="lemma", label="引理 A：K 的速降")
+        _put(st, LEMMA, kind="lemma", label="引理 A：K 的速降", full=LEMMA_FULL)
         seam = _Seam(verdict)
 
         def _wired(role, *, root=None, store=None, **kw):
@@ -460,7 +464,7 @@ def test_c4_a_lemma_registered_after_the_abandonment_is_refused(tmp_path):
     """c4：`salvaged` 引理的 `created_at` 晚于放弃时刻 ⇒ 不是「原先证明里」的东西。"""
     st = _ws(tmp_path)
     _put(st, SID, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="现造的引理", created_at=LATE)
+    _put(st, LEMMA, kind="lemma", label="现造的引理", created_at=LATE, full=LEMMA_FULL)
     got = SA.apply_abandonment(
         st, statement_id=SID, reason="理由", at=TS,
         salvaged=[{"label": "现造的引理", "stmt_id": LEMMA}], **DIFF)
@@ -562,7 +566,13 @@ def test_e_f_lemma_reaches_salvaged_after_the_v_sign(tmp_path):
     assert lemma["kind"] == "lemma", lemma
     assert lemma["kind"] in SEC.PROPOSITION_KINDS, lemma
     # 正控：把它当 `salvaged`，放弃另一条命题 ⇒ 过闸（改前这里会 `abandon_salvaged_kind_not_lemma`）
-    _put(st, "000099", kind="conjecture", label="要放弃的命题")
+    # 2026-11-14 起 `salvaged` 还要求"不晚于被放弃的那一条"（`created_at` 的基准从
+    # "放弃时刻"改成"被放弃的那一条"）：这一条正控的场景是"先有一条证据齐全的引理，
+    # 再有一道引用它的命题被放弃" ⇒ 目标行按这一笔的真实时刻落，不许写成 11-07 的
+    # 旧日期（那会让它比引理还老，撞上 `abandon_salvaged_after_the_abandoned_statement`）。
+    _put(st, "000099", kind="conjecture", label="要放弃的命题",
+         created_at=str(lemma["created_at"]),
+         full="设 g 在 [0,1] 上连续，则 g 有界。")
     # 放弃时刻 = 这条引理真在册之后（相对它自己的 `created_at` 算；写死绝对日期会
     # 在第二天把"刚登记的引理"读成"现造"）：
     at = _just_after(str(lemma["created_at"]))

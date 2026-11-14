@@ -108,6 +108,14 @@ ABANDON_PARAM_KEYS: tuple[str, ...] = ("abandon_kind", "abandon_basis", "defect_
 #: 那几档的真身在 `secretary.PROPOSITION_KINDS`：
 #: theorem / lemma / proposition / corollary / conjecture）。其中 `lemma` 就是
 #: 业主说的"引理"，所以这里直接用它、不需要退到"最接近的一档"。
+#:
+#: ## 这一档收什么、不收什么（2026-11-14 补的边界）
+#: 只收「本地证明的残骸」：那一条必须是这笔放弃之前就已经在册的引理，而且它的名字
+#: （`kind`）与正文都不是这一笔现造出来的 —— 名字靠就地 patch 抬成 `lemma` 的、
+#: 正文与被放弃那条逐字相同的，都不算残骸，是同一件事换了个说法。
+#: 文献转述不收（它不是"我们自己的旧证明"里的东西，由秘书那一问
+#: `salvaged_from_proof` 挡），被放弃命题自己的正文也不收（拆出来只是把它
+#: 换个号再登记一次，由本模块的正文比对挡）。
 SALVAGED_KINDS: tuple[str, ...] = ("lemma",)
 
 #: 一条 `defect_ref` 的形状：`verifications/<命题号>.jsonl#<验证号>`（业主给的样例
@@ -118,6 +126,13 @@ DEFECT_REF_RE = re.compile(r"^verifications/(\d{6})\.jsonl#(v-\d{6})$")
 ABANDON_DIFFICULTY_NOT_JUDGED = "abandon_difficulty_not_judged"
 ABANDON_DIFFICULTY_NOT_GENUINE = "abandon_difficulty_not_genuine"
 ABANDON_SALVAGED_NOT_FROM_PROOF = "abandon_salvaged_not_from_proof"
+
+#: `salvaged` 那三道"这一条是不是我们自己的旧稿里的残骸"的受控码
+#: （2026-11-14：今天实测能过的三个绕法 —— 就地改 kind / created_at 晚于被放弃的
+#: 那一条 / 抄被放弃命题自己的正文 —— 各一条）。
+ABANDON_SALVAGED_KIND_FROM_PATCH = "abandon_salvaged_kind_from_patch"
+ABANDON_SALVAGED_AFTER_THE_STATEMENT = "abandon_salvaged_after_the_abandoned_statement"
+ABANDON_SALVAGED_COPIES_THE_STATEMENT = "abandon_salvaged_copies_the_abandoned_statement"
 
 #: 形状那三道受控码（原先只以字面量散在三处 `out.update(refused=...)` 里）。
 #:
@@ -508,17 +523,17 @@ def _parse_stamp(value: Any) -> datetime | None:
         return None
 
 
-def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
-    """`created_at` 是否不晚于 `at`（README 口径：按 created_at 判，给读数不靠猜）。
+def _not_later_than(created_at: Any, anchor: Any, *, than: str) -> tuple[bool, str]:
+    """`created_at` 是否不晚于 `anchor`（读不出来 / 不可比 ⇒ 不成立，不猜）。
 
     返回 `(ok, why)`。两个时间戳都读不出来、或一个带时区一个不带而补不齐 ⇒ 不成立
-    （"确认不了它是不是这一次放弃之前就有的"不许折成"是"）。
+    （"确认不了它是不是在那之前"不许折成"是"）。
     """
-    made, ref = _parse_stamp(created_at), _parse_stamp(at)
+    made, ref = _parse_stamp(created_at), _parse_stamp(anchor)
     if made is None:
         return False, f"created_at 读不出来（{created_at!r}）"
     if ref is None:
-        return False, f"放弃时间读不出来（{at!r}）"
+        return False, f"{than}读不出来（{anchor!r}）"
     if (made.tzinfo is None) != (ref.tzinfo is None):
         tz = ref.tzinfo or made.tzinfo
         if made.tzinfo is None:
@@ -528,9 +543,106 @@ def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
     try:
         if made <= ref:
             return True, ""
-        return False, f"created_at={str(created_at)!r} 晚于放弃时刻 {str(at)!r}"
+        return False, f"created_at={str(created_at)!r} 晚于{than} {str(anchor)!r}"
     except TypeError as exc:  # noqa: BLE001 —— 两个时间戳不可比 ⇒ 没查成
         return False, f"两个时间戳不可比（{type(exc).__name__}: {exc}）"
+
+
+def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
+    """`created_at` 是否不晚于放弃时刻 `at`（README 口径：按 created_at 判，给读数不靠猜）。"""
+    return _not_later_than(created_at, at, than="放弃时刻")
+
+
+def _salvaged_precedes_statement(created_at: Any,
+                                 target_created_at: Any) -> tuple[bool, str]:
+    """`salvaged` 那一条是否不晚于「被放弃的那一条」的 `created_at`。
+
+    ## 判据为什么锚在"被放弃的那一条"身上（2026-11-14 的更正）
+
+    改前这里拿 `at`（这一笔放弃的时刻）当基准。那是这一笔自己盖的时间戳：盘上任何
+    一行都早于它，于是这条判据对真实在册的行恒真 —— 只有"未来时间戳"才会被它
+    拦住，而那恰恰不是威胁（现造的东西不会带着未来的 `created_at`）。这就是"形同
+    虚设"的来由：它读的是"这一行是不是在这一笔放弃之前进的盘"，回答永远是"是"。
+
+    真正要问的是"这一条是不是「旧稿」里的残骸"（`apply_abandonment` 的 docstring：
+    「原先证明中可取之处」必须是旧稿时期的东西，不许现造）。旧稿就是这一笔正在处理
+    的那一条 —— 所以基准取它的 `created_at`：晚于它的，是这一条命题之后才出现的东西，
+    不可能是"原先证明"里的残骸。等号放行（同一秒登记的两行分不出先后，那时靠正文
+    比对与秘书的语义判定）。
+    """
+    return _not_later_than(created_at, target_created_at,
+                           than="被放弃的那一条的 created_at")
+
+
+def _salvaged_kind_from_patch(row: Mapping[str, Any]) -> str:
+    """这一行的 `kind` 是被就地 patch 改的、且改的时候没有证据托着（返回那句改法）。
+
+    ## 为什么读 `_statement_amend_history`
+
+    `table.update` 改 `kind` 走 `Secretary.amend_statement_meta`，那一支在行上留
+    `_statement_amend_history`（`{at, by, task_id, changes: {kind: {from, to}}}`）。
+    所以"这个名字是登记时的，还是后来被一条 patch 抬上去的"在盘上读得出来，不需要
+    新列、也不改 schema。
+
+    ## 为什么"改过"不等于"不合格"：还要看证据那一半
+
+    合法的改名只有一条路：`kind` 跟着证据走（`own.register_statement` /
+    `land_statement` 那一支；B 按手稿头收 `lemma` 也走同一道门，见
+    `agent_b/register_statement._upgrade_from_manuscript_kind`：它先算
+    `evidencebits.derive_grade`，够 `pre_theorem` / `theorem` 才敢改）。
+    那一笔改完同样会在这格留痕 —— 所以留痕本身不是罪证。要问的是"改的时候，
+    五元位现算够不够"：够 ⇒ 这个名字有证据托着，放行；不够 ⇒ 它只是一格字面量，
+    按受控拒处理（"同时给出证据"就是这一问）。
+
+    ## 返回
+
+    空串 = 没有 `kind` 变更，或变更时证据够（历史行没有这一格也走这里）。
+    非空 = `"conjecture → lemma"` 那一句改法（拒信里点名用）。
+    """
+    change = ""
+    for entry in (row.get("_statement_amend_history") or ()):
+        if not isinstance(entry, Mapping):
+            continue
+        changes = entry.get("changes")
+        cell = changes.get("kind") if isinstance(changes, Mapping) else None
+        if not isinstance(cell, Mapping):
+            continue
+        old = str(cell.get("from") or "").strip().lower()
+        new = str(cell.get("to") or "").strip().lower()
+        change = f"{old or '（空）'} → {new or '（空）'}"
+        break
+    if not change:
+        return ""
+    from . import evidencebits as _EB
+
+    try:
+        grade = _EB.derive_grade(_EB.bits_from_row(dict(row)),
+                                 kind=str(row.get("kind") or ""))
+    except Exception:  # noqa: BLE001 —— 等级算不出来 = 没查成（不许折成"有证据"）
+        return change
+    if grade in ("pre_theorem", "theorem"):
+        return ""
+    return change
+
+
+def _salvaged_copies_statement(row: Mapping[str, Any],
+                               target: Mapping[str, Any]) -> bool:
+    """`salvaged` 那一条的正文是不是与被放弃的那一条同一段文字（规范化之后）。
+
+    "逐字相同"在这里按 `textutil.normalize` 判：全半角、标点、大小写、空白的差别
+    不是"另一条命题"，只是同一段文字换了写法。正文为空的一侧不参与比对（空正文
+    不是"抄了一遍"，它是另一个缺陷，由登记面管）。
+
+    为什么要这一档：把被放弃那条的 `statement_full` 原样抄成另一行，盘上就多出一条
+    "可引用的旧引理"，而它一个字都不是旧的 —— 拆出来的东西至少得是另一句话。
+    """
+    if not str(row.get("statement_full") or "").strip():
+        return False
+    from . import textutil as _TU
+
+    left = _TU.normalize(str(row.get("statement_full") or ""))
+    right = _TU.normalize(str(target.get("statement_full") or ""))
+    return bool(left) and left == right
 
 
 def _difficulty_refusal(out: dict[str, Any], *,
@@ -548,6 +660,14 @@ def _difficulty_refusal(out: dict[str, Any], *,
 
     `(out_patch, done)` 的等价形状在这里是"就地改传进来的 `out` 并返回它"：这一档的
     每条路径都收场（原实现里每条路径也都是 `return out`），所以不需要再往主函数回。
+
+    ## 2026-11-14 补的三道（这一档只收"本地证明的残骸"）
+
+    今天实测能过的三个绕法各补一道，顺序按"名字 → 正文 → 时间"：`kind` 是就地
+    patch 抬成 `lemma` 的（:func:`_salvaged_kind_from_patch`）、正文与被放弃那条
+    逐字相同的（:func:`_salvaged_copies_statement`）、`created_at` 晚于被放弃那一条的
+    （:func:`_salvaged_precedes_statement`）。三道都拒在同一个循环里、写盘之前，
+    所以受控拒时一个字节都不写。
     """
     diff = str(difficulty or "").strip()
     if not diff:
@@ -590,11 +710,36 @@ def _difficulty_refusal(out: dict[str, Any], *,
                        why=(f"salvaged 里的 {sid} 的 kind 是 {kind_now!r}，而这一档只认引理类 "
                             f"{list(SALVAGED_KINDS)}（业主原话：拆出落成引理）"))
             return out
+        # ---- 名字的来路：patch 抬成 lemma 的不算"拆出落成引理"（2026-11-14）
+        patched = _salvaged_kind_from_patch(row)
+        if patched:
+            out.update(refused=ABANDON_SALVAGED_KIND_FROM_PATCH,
+                       why=(f"salvaged 里的 {sid} 的 kind 是被就地 patch 改的"
+                            f"（{patched}），而五元位现算够不到 `pre_theorem` / `theorem` ⇒ "
+                            "这个名字没有证据托着，只是一格字面量；要它算引理就重交 "
+                            "`own.register_statement` 让 kind 跟着证据走（一个字节都不写）"))
+            return out
+        # ---- 正文：抄被放弃那条自己的正文不算残骸（2026-11-14）
+        if _salvaged_copies_statement(row, target):
+            out.update(refused=ABANDON_SALVAGED_COPIES_THE_STATEMENT,
+                       why=(f"salvaged 里的 {sid} 的正文与被放弃的 {target_id} 逐字相同 ⇒ "
+                            "拆出来的是同一条命题本身，不是旧证明里的另一句话；"
+                            "要留就写清它比原命题多了/少了什么（一个字节都不写）"))
+            return out
         before, age_why = _registered_before(row.get("created_at"), at)
         if not before:
             out.update(refused="abandon_salvaged_after_the_abandonment",
                        why=(f"salvaged 里的 {sid} 不是在这笔放弃之前就在册的引理（{age_why}）"
                             " ⇒ 「原先证明中可取之处」必须是旧稿时期的东西，不许现造"))
+            return out
+        # ---- 时间的方向：必须早于这一笔正在处理的那一条（2026-11-14 更正）
+        before, age_why = _salvaged_precedes_statement(
+            row.get("created_at"), target.get("created_at"))
+        if not before:
+            out.update(refused=ABANDON_SALVAGED_AFTER_THE_STATEMENT,
+                       why=(f"salvaged 里的 {sid} 不是旧稿里的东西（{age_why}）⇒ "
+                            "它比被放弃的那一条还新，只能是这条命题之后现造的；"
+                            "旧稿的残骸不可能晚于旧稿本身（一个字节都不写）"))
             return out
         kept.append({"label": one["label"] or str(row.get("label") or ""), "stmt_id": sid})
         readings.append({"stmt_id": sid, "kind": kind_now,
@@ -661,7 +806,7 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     | `abandon_kind` | 必须给 | 判据 |
     |---|---|---|
     | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 里的命题号必须等于 `statement_id`；那一行必须真的存在、「有毛病」或轴为 `fault`；`proof_sha256` 必须与现行正文一致（陈旧 ⇒ 拒）；`abandon_basis` 必须点名 `defect_step` |
-    | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条在册、`status=active`、引理类；不许指被放弃的这条自己；必须在这笔放弃之前就在册（按 `created_at`）；最后再过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪，以及那几条引理是不是从旧证明里拆出来的） |
+    | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条在册、`status=active`、引理类（且那一格不是就地 patch 抬上去的）；不许指被放弃的这条自己；正文不许与被放弃的那条逐字相同；必须在这笔放弃之前就在册、且不晚于被放弃的那一条（按 `created_at`）；最后再过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪，以及那几条引理是不是从旧证明里拆出来的）。口径是「只收本地证明的残骸」：文献转述与被放弃命题自己的正文都不收 |
     | `counterexample` | `experiment_id` + `abandon_basis` | `experiment_id` 在 `experiments` 里真有一行；那一行 `result="refutes"` 或带非空 `counterexample` 读数；且它检验的是这一条命题（`claim_key` / `claim` 认，见 :func:`_experiment_claims`）。「发现反例」的证据是那一次实验，不是一句"我找到了反例" |
     | `space_too_large` | `space` + `abandon_basis` | `space` 必须是结构化读数（走 `numericproof._space_reading` 的既有字段），且读得出规模（`[lo, hi]` 区间或枚举例数）；读不到 / 只有文字 ⇒ 受控拒（fail-closed） |
 
