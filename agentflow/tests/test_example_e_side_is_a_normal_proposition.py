@@ -10,7 +10,7 @@
 ## b（E 侧那一条链）
 
 `run_experiment(kind="example")` → 同一个形态闸（`Secretary.judge_proposition_form`，
-`kind=example`）→ 落 `reports/e-proof-<实验号>.md`（首页多一行 `- 证据种类：example`，
+`kind=example`）→ 落 `reports/e-proof-<实验号>.md`（首页多一行 `- 命题类型：example`，
 与 F 的手稿同一个头标记）→ B 收录时按它落 `statements.kind=example` → V 三转会审
 （穷举通道）→ 第 1 位（numeric）翻真 ⇒ 等级 `theorem`。没有另起一套 e-proof 产出。
 
@@ -45,9 +45,9 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
     """b：E 的穷举 example 走既有 e-proof 产出、过同一道形态闸、V 签后等级 `theorem`。"""
     st = ws(tmp_path)
     env = run_e_example(st)
-    # 既有 e-proof 产出：手稿落点 + `- 证据种类：example`
+    # 既有 e-proof 产出：手稿落点 + `- 命题类型：example`
     assert env["rel"] == ER.proof_manuscript_relpath(env["out"]["experiment_id"]), env["rel"]
-    assert "- 证据种类：example" in env["signed_text"], env["signed_text"][:400]
+    assert "- 命题类型：example" in env["signed_text"], env["signed_text"][:400]
     assert PR.parse_entry(env["signed_text"])["kind"] == "example"
     # 同一个形态闸（F 与 E 是同一个判定口），且它拿到的 kind 是 example
     form = SEC.proposition_form_rows(st.root)

@@ -302,7 +302,7 @@ def test_sign_carrier_is_exactly_three_families_in_reports() -> None:
 
 @pytest.mark.parametrize("family", list(BEHAVIOUR))
 def test_behaviour_columns_come_from_the_one_table(family: str) -> None:
-    """行为列逐格对拍（设计 3.1.2）：允许格 / 缺省格 / 派生列 / 签 / 证据种类 / 出处。"""
+    """行为列逐格对拍（设计 3.1.2）：允许格 / 缺省格 / 派生列 / 签 / 命题类型 / 出处。"""
     want = BEHAVIOUR[family]
     assert MF.allowed_cells(family) == want["allowed"]
     assert MF.default_cells(family) == want["default"]

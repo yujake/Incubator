@@ -56,7 +56,7 @@ def _manuscript(*, sid: str = "000001", proposition: str = PROPOSITION,
             "|---|---|---|---|\n")
     if dep_stmt:
         deps += f"| {DEP_TARGET} | stmt:{dep_stmt} | 1 | 1 |\n"
-    head = f"- 证据种类：conjecture\n"
+    head = f"- 命题类型：conjecture\n"
     return (head + "\n## 命题\n\n" + proposition + "\n\n"
             "## 证明\n\n" + proof + "\n\n## 依赖\n\n" + deps)
 
@@ -529,7 +529,7 @@ def test_c3b_kind_only_upgrades_after_a_sign_and_never_downgrades(
     st, b = _ws(tmp_path)
     _signed_row(st)
     _write(st, "reports/f-proof-000001.md",
-           _manuscript().replace("- 证据种类：conjecture", "- 证据种类：lemma"))
+           _manuscript().replace("- 命题类型：conjecture", "- 命题类型：lemma"))
     kept = b.ingest_manuscript(
         manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
         cells=["kind"], mode="apply")
@@ -542,7 +542,7 @@ def test_c3b_kind_only_upgrades_after_a_sign_and_never_downgrades(
     conftest.seed_statement_row(st, stmt_id="000001",
                                 statement_full=PROPOSITION, kind="theorem")
     _write(st, "reports/f-proof-000001.md",
-           _manuscript().replace("- 证据种类：conjecture", "- 证据种类：conjecture"))
+           _manuscript().replace("- 命题类型：conjecture", "- 命题类型：conjecture"))
     down = b.ingest_manuscript(
         manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
         cells=["kind"], mode="apply")
@@ -827,13 +827,13 @@ def test_h5_replay_anti_vacuum_without_recompute_the_old_theorem_stays(
 
 def test_h6_kind_cell_receipt_reports_the_derived_upgrade(
         tmp_path: pathlib.Path) -> None:
-    """裁量 ④：稿头没有 `- 证据种类：` ⇒ kind 格 outcome 记 kept（没从稿里写），
+    """裁量 ④：稿头没有 `- 命题类型：` ⇒ kind 格 outcome 记 kept（没从稿里写），
     同一格带 `kind_upgraded={from,to,basis}`，且不再进 `diff.requested_not_filled`
     （派生证据已经把它满足了；diff 只留真的没满足的格）。"""
     st, b = _ws(tmp_path)
     _signed_row(st)
     _write(st, "reports/f-proof-000001.md",
-           _manuscript().replace("- 证据种类：conjecture\n", ""))
+           _manuscript().replace("- 命题类型：conjecture\n", ""))
     got = b.ingest_manuscript(
         manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
         cells=["proof_text", "kind"], mode="apply")
@@ -857,7 +857,7 @@ def test_h6b_removing_the_derived_satisfied_rule_puts_kind_back_in_diff(
         st, b = _ws(base)
         _signed_row(st)
         _write(st, "reports/f-proof-000001.md",
-               _manuscript().replace("- 证据种类：conjecture\n", ""))
+               _manuscript().replace("- 命题类型：conjecture\n", ""))
         return b.ingest_manuscript(
             manuscript="reports/f-proof-000001.md", target_stmt_id="000001",
             cells=["proof_text", "kind"], mode="apply")
@@ -878,7 +878,7 @@ def test_h6b_removing_the_derived_satisfied_rule_puts_kind_back_in_diff(
 # ===================================================== i numeric_evidence（apply 的第 1 位）
 def _numeric_manuscript(*, sid: str = "000007", exp: str = "000001") -> str:
     """e-num 稿：稿头实验号 + `## 数值结果`（这一格唯一的来源）。"""
-    return (f"- 实验号：exp:{exp}\n- 证据种类：conjecture\n\n"
+    return (f"- 实验号：exp:{exp}\n- 命题类型：conjecture\n\n"
             "## 命题\n\n设 n<=3，则 P(n) 成立。\n\n"
             "## 数值结果\n\n- 方法：numeric\n- 结果：ok\n")
 

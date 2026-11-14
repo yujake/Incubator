@@ -27,10 +27,10 @@ from agentflow import depsection as DS
 from agentflow import manuscriptfamily as MF
 from agentflow import manuscriptintake as MI
 
-#: 一份五格齐全的稿（命题 / 证明 / 数值结果 / 依赖 + 稿头证据种类）。
+#: 一份五格齐全的稿（命题 / 证明 / 数值结果 / 依赖 + 稿头命题类型）。
 FULL_TEXT = (
     "- 实验号：exp:000012\n"
-    "- 证据种类：lemma\n"
+    "- 命题类型：lemma\n"
     "\n"
     "## 命题\n"
     "命题正文：对所有实数 x，x^2 >= 0。\n"
@@ -66,7 +66,7 @@ EXPECTED_SECTION: dict[str, str] = {
     "statement_full": "## 命题",
     "proof_text": "## 证明",
     "dependencies": "## 依赖",
-    "kind": "head: - 证据种类：",
+    "kind": "head: - 命题类型：",
     "numeric_evidence": "## 数值结果",
 }
 
@@ -75,7 +75,7 @@ def without_cell(text: str, cell: str) -> str:
     """把某一格所在的节整段删掉（`kind` 删稿头那一行）；其余四格必须原样还在。"""
     if cell == "kind":
         return "\n".join(line for line in text.split("\n")
-                         if "证据种类" not in line)
+                         if "命题类型" not in line and "证据种类" not in line)
     heading = EXPECTED_SECTION[cell]
     out: list[str] = []
     skipping = False

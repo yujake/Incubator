@@ -263,7 +263,7 @@ def product_kind(product: Mapping[str, Any]) -> str:
     业主 2026-11-07（`_canon_F_manuscript_protocol.md` 第六节）：「example 只是给人看的
     标签，处理与普通命题一致」。F 是作者，能表达「这一条是玩具例子」的唯一既有落点是
     这一轮产物里的一个可选字段 —— 不新增动作参数、不改 `attack_plans` 的行形状：
-    读到了就交给手稿登记（`- 证据种类：` 那一行，B 收录时按它落 `statements.kind`），
+    读到了就交给手稿登记（`- 命题类型：` 那一行，B 收录时按它落 `statements.kind`；
     没读到就照旧由 `sg` / 在册那一行决定。
 
     只认 `secretary.PROPOSITION_KINDS`（theorem / lemma / proposition / corollary /
@@ -1416,7 +1416,7 @@ class _Core:
                 # 给人看的标签）。与自评同一手法：`parse_round` 只认受控四档、会把它
                 # 丢掉 ⇒ 在这里从模型原样交回的 JSON 里取出；`product_kind` 负责只认
                 # `PROPOSITION_KINDS`，认不出就当没声明（不猜）。它只在 `proof` 那一支
-                # 有落点（`_proof_outlet` 写进手稿头的 `- 证据种类：`）。
+                # 有落点（`_proof_outlet` 写进手稿头的 `- 命题类型：`）。
                 _declared_kind = product_kind(data)
                 if _declared_kind:
                     product["kind"] = _declared_kind
@@ -2161,7 +2161,7 @@ class _Core:
         sid = str(sg.get("sid") or "")
         # ---- 这一轮产物自己声明的命题种类标签（可选 `kind`；业主 2026-11-07）----
         # 只在给了的时候盖过 `sg` 里的那一格：它随后进 `_hand_proof` 的登记条目
-        # （手稿头 `- 证据种类：`）与形态闸的 `kind`；没给就照旧由 `sg` / 在册那一行定。
+        # （手稿头 `- 命题类型：`）与形态闸的 `kind`；没给就照旧由 `sg` / 在册那一行定。
         _declared_kind = product_kind(product)
         if _declared_kind:
             sg = {**dict(sg), "kind": _declared_kind}
@@ -2815,7 +2815,7 @@ class _Core:
         现在 statements 那一行仍由 B 在 V 签之后收录（既有认领路径），F 这一侧只做手稿登记。
 
         `kind` 按内容如实落（`sg.kind` 优先，其次在册那一行，最后 `conjecture`）：
-        F 登记一条引理 ⇒ 手稿头 `- 证据种类：lemma` ⇒ B 收录时按它落 `kind=lemma`
+        F 登记一条引理 ⇒ 手稿头 `- 命题类型：lemma` ⇒ B 收录时按它落 `kind=lemma`
         （否则"引理"永远当不成 `salvaged` 引用的那一档）。
         """
         from .. import proofregistry as _PR

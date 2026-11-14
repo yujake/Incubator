@@ -26,7 +26,7 @@
    ```
    - 正文sha：<sha256>      （`## 证明` 那一节的 sha256 —— 与 V 签盖的是同一把尺）
    - 命题指纹：<sha256>     （`## 命题` 那一节规范化后的 sha256，判"还是不是同一条命题"）
-   - 证据种类：<kind>       （`lemma` / `theorem` / `conjecture` …，B 收录时按它落 kind）
+   - 命题类型：<kind>       （交叉核对用；权威是台账 `statements.kind`，见 `kind_crosscheck`）
    - 登记时间：<ISO8601>    （这一条第一次落成手稿的时刻；重写不改它）
    - 版本：<ISO8601>@<sha256>   （同一个证明号只有一格：改正文就替换它，不涨版本；
      老盘 `-pN` 的不同号各留一格，读侧写成 `p<N>@<ISO8601>@<sha256>`）
@@ -77,6 +77,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import depsection as _DS
 from . import manuscriptform as _MF
+from . import manuscriptkind as _MK  # 命题类型那一轴（标签 / 交叉核对）的唯一权威来源
 from . import verifications as _VR
 from .proofoutcomes import (  # 登记这一步的两段结局读数
     REFUSED_GATE, REFUSED_PATH, REFUSED_READ, REFUSED_SHAPE, REFUSED_TEXT_CHANGED,
@@ -87,9 +88,12 @@ from .proofrevisions import (  # 收工读数那一半
 )
 
 #: 手稿头里的元信息标记（与 `manuscriptform` 的既有标记同一个风格；只增不改）。
+#: 「命题类型」那一行 2026-11-14 前叫 `- 证据种类：`（借了等级那根轴的词）；
+#: 字面量住在 `manuscriptkind`，旧名只在读侧认（仓的纪律「读能力不删」）。
 SHA_MARK = "- 正文sha："
 FINGERPRINT_MARK = "- 命题指纹："
-KIND_MARK = "- 证据种类："
+KIND_MARK = _MK.PROPOSITION_KIND_MARK
+LEGACY_KIND_MARK = _MK.LEGACY_PROPOSITION_KIND_MARK
 REGISTERED_AT_MARK = "- 登记时间："
 VERSION_MARK = "- 版本："
 
@@ -254,7 +258,7 @@ def rewrite_proposition_head(text: Any, *, new_fp: str) -> str:
     """只改稿头的命题指纹那一行（`## 命题` 原位改写之后用，其余元信息一个字不动）。
 
     为什么不复用 `_head_for_new_version`：那个函数一次改七格（正文 sha / 指纹 / 标签 /
-    种类 / 登记时刻 / 版本段 / 命题号），而这一笔只改了命题正文——正文 sha、版本段、
+    命题类型 / 登记时刻 / 版本段 / 命题号），而这一笔只改了命题正文——正文 sha、版本段、
     登记时刻都不该动（动了就等于说"证明换了一版"，而它一个字节没变）。
     """
     raw = str(text or "")
@@ -285,8 +289,8 @@ def parse_entry(text: Any) -> dict[str, Any]:
     head = _head_of(text)
     out: dict[str, Any] = {
         "statement_id": "", "plan_id": "", "sid": "", "label": "", "proof_no": 0,
-        "sha256": "", "fingerprint": "", "kind": "", "registered_at": "",
-        "versions": [], "checked": False, "problems": [],
+        "sha256": "", "fingerprint": "", "kind": "", "kind_label": "",
+        "registered_at": "", "versions": [], "checked": False, "problems": [],
     }
     for line in head.split("\n"):
         raw = line.strip()
@@ -315,6 +319,12 @@ def parse_entry(text: Any) -> dict[str, Any]:
             out["fingerprint"] = raw[len(FINGERPRINT_MARK):].strip().lower()
         elif raw.startswith(KIND_MARK):
             out["kind"] = raw[len(KIND_MARK):].strip()
+            out["kind_label"] = "命题类型"
+        elif raw.startswith(LEGACY_KIND_MARK):
+            # 老盘旧名照认；两个名字同时出现时新名优先（旧行先读到也不许盖掉新名）。
+            if str(out.get("kind_label") or "") != "命题类型":
+                out["kind"] = raw[len(LEGACY_KIND_MARK):].strip()
+                out["kind_label"] = "证据种类（老盘旧名）"
         elif raw.startswith(REGISTERED_AT_MARK):
             out["registered_at"] = raw[len(REGISTERED_AT_MARK):].strip()
         elif raw.startswith(VERSION_MARK):
@@ -379,6 +389,9 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
         raw = line.strip()
         hit = next((mark for mark in [*order, VERSION_MARK]
                     if raw.startswith(mark)), "")
+        if not hit and raw.startswith(LEGACY_KIND_MARK):
+            # 旧名与「命题类型」是同一格：重写时换成新名，不留第二行。
+            hit = KIND_MARK
         if hit and hit in values and str(values[hit]) != "":
             if hit in touched:   # 同一格出现第二次（手写稿／旧格式）⇒ 只留一份
                 continue

@@ -81,7 +81,7 @@ def test_a2_the_proof_product_can_declare_example_and_the_registry_lands_it(tmp_
     业主 2026-11-07：「example即玩具例子在实现时尽可能复用F和E原先的产出逻辑」。
     F 是作者，能表达「这一条是玩具例子」的既有落点是这一轮 `proof` 产物里的一个可选
     字段（不新增动作参数、不改 `attack_plans` 的行形状）；读到就由 `_proof_outlet`
-    送进手稿登记，写进 `- 证据种类：example`，与 a 的链完全同一条。
+    送进手稿登记，写进 `- 命题类型：example`，与 a 的链完全同一条。
     """
     # 提示词那一面：模型看得见这个可选字段（`parse_round` 只认四档，故在 `_reason_self`
     # 里从原样 JSON 取出；教学写在 `PRODUCT_SPECS`，`_attack_prompt` 逐字印它）。

@@ -528,7 +528,7 @@ def test_e_f_lemma_reaches_salvaged_after_the_v_sign(tmp_path):
     """e：F 登记一条引理 → V 签 → B 收录后 `kind=lemma` → 该行可被 `salvaged` 引用。
 
     改前的互锁：F 的正常交稿只落 `conjecture`，而 `salvaged` 只认 `lemma` ⇒ F 自己
-    永远产不出 `salvaged` 要的那一档。上一笔按手稿头 `- 证据种类` 在 B 收录时落
+    永远产不出 `salvaged` 要的那一档。上一笔按手稿头 `- 命题类型` 在 B 收录时落
     `lemma`；这一条把整条链走一遍，并用它作 `salvaged` 过放弃闸。
     """
     st = _ws(tmp_path)

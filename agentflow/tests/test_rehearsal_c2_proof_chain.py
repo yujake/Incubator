@@ -22,7 +22,7 @@ F 那一轮「模型说什么」与 V 那一轮「模型说什么」——都用
 | 1 | `conjectures` 一行：`statement` 逐字是 D 立的那一条 |
 | 2 | `attack_plans` 一行：`problem_key` 是 D 给的方向、`problem` 逐字是那条命题 |
 | 3 | 稿名 `reports/f-proof-<六位稿号>.md`：不带 `-pN`、不借计划号 / 命题号 |
-| 4 | 稿头：没有 `- 证明号：` 那一行；`- 证据种类：theorem` 在 |
+| 4 | 稿头：没有 `- 证明号：` 那一行；`- 命题类型：theorem` 在 |
 | 5 | 依赖段表头恰好三列（引用 / 命题号 / 步），没有「路径号」那一列 |
 | 6 | `statements` 一行：`kind="theorem"`（按稿头那一格落）、正文 sha 与稿上一致 |
 | 7 | 路径号：`verifications` 三行都回填 `path_group=1`、`proof_list` = `[1]`、`path_reading.count=1` |
@@ -297,14 +297,14 @@ def _chain_problems(reading: dict) -> list[str]:
         if not (pathlib.Path(st.root) / rel).is_file():
             problems.append(f"稿不在盘上：{rel!r}")
 
-    # 4. 稿头：没有「证明号」，证据种类在。
+    # 4. 稿头：没有「证明号」，命题类型在。
     #    稿上的字读「收编之后」那一份：V 的签块与 B 的落签都在这一份上。
     text = ((pathlib.Path(st.root) / rel).read_text(encoding="utf-8") if rel else "")
     if text:
         if "- 证明号：" in text:
             problems.append("稿头还有 `- 证明号：` 那一行（产出侧已退役）")
-        if "- 证据种类：theorem" not in text:
-            problems.append("稿头没有 `- 证据种类：theorem`（kind 无处可落）")
+        if "- 命题类型：theorem" not in text:
+            problems.append("稿头没有 `- 命题类型：theorem`（kind 无处可落）")
 
     # 5. 依赖段表头恰好三列。
     deps_section = text.split("## 依赖", 1)[1] if "## 依赖" in text else ""

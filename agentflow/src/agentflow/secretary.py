@@ -1517,7 +1517,7 @@ CONCEPT_IDENTITY_UNJUDGED = "concept_identity_unjudged"
 #: `example`（玩具例子）也在这
 #: 一张表里：它只是给人看的标签，处理与普通命题一致 —— 落稿 / 过形态闸 / 送 V /
 #: 按五元位算等级，一条都不特殊。它进来是为了让"命题性的那几档"与"正文里能收进
-#: `Example` 环境的那一档"是同一份名单：手稿头写 `- 证据种类：example`、B 收录时按它
+#: `Example` 环境的那一档"是同一份名单：手稿头写 `- 命题类型：example`、B 收录时按它
 #: 落 kind（`_declared_manuscript_kind` 只认这张表）。不是为 example 单开一个分支：
 #: 这里加一个取值，`derive_grade` / `judge_proposition_form` / `verify_proof` 一个字不动。
 PROPOSITION_KINDS: tuple[str, ...] = ("theorem", "lemma", "proposition", "corollary",
@@ -2962,9 +2962,9 @@ _MANUSCRIPT_HEAD_FIELD_RE = re.compile(r"^\s*-\s*(?P<key>[^：:]+?)\s*[：:]\s*(
 def _manuscript_head_fields(text: Any) -> dict[str, str]:
     """稿头（第一个 `##` 之前）的 `- 键：值` ⇒ `{键: 值}`（只读；不猜、不去重语义）。
 
-    为什么放在秘书层：`extract_manuscript` 要把稿头那几格（实验号 / 命题键 / 证据种类）
-    一并带给调用方，而"B 本体不自己读稿"这条边界不许在这里破例 —— 所以切稿头的实现
-    只有这一处，键名的解释由调用方按用途读。
+    为什么放在秘书层：`extract_manuscript` 要把稿头那几格（实验号 / 命题键 /
+    命题类型）一并带给调用方，而"B 本体不自己读稿"这条边界不许在这里破例 —— 所以
+    切稿头的实现只有这一处，键名的解释由调用方按用途读。
     """
     out: dict[str, str] = {}
     for line in str(text or "").split("\n"):
@@ -8167,7 +8167,13 @@ class Secretary:
         except Exception:  # noqa: BLE001 —— 稿头读不出来就是没有登记元信息（不猜）
             entry = {}
         out["head_label"] = str(entry.get("label") or "").strip()
-        declared = str(entry.get("kind") or head.get("证据种类") or "").strip().lower()
+        from . import manuscriptkind as _MK
+
+        declared = str(
+            entry.get("kind")
+            or head.get(_MK.mark_key(_MK.PROPOSITION_KIND_MARK))
+            or head.get(_MK.mark_key(_MK.LEGACY_PROPOSITION_KIND_MARK))
+            or "").strip().lower()
         out["declared_kind"] = declared if declared in PROPOSITION_KINDS else ""
         out["checked"] = True
         return out

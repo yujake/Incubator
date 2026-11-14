@@ -18,7 +18,7 @@
 | d | 反真空：摘掉「已登记 ⇒ 只重写」 | a 那一组断言变红（闸调用次数从 1 变 4） |
 | i | 同一命题重写 3 次 | 盘上始终只有 1 份稿；`## 命题` / `## 依赖` 分节哈希逐次相同，`## 证明` 逐次不同；头部 `proof_no` 恒 1、版本历史恰好 1 条 |
 | g | F→B 绕行 | 调用方是 F ⇒ 受控拒 `f_proposition_must_be_a_manuscript` |
-| h | lemma 死锁 | F 登记一条引理 ⇒ 手稿头 `- 证据种类：lemma`；B 的收录读得到它 |
+| h | lemma 死锁 | F 登记一条引理 ⇒ 手稿头 `- 命题类型：lemma`；B 的收录读得到它 |
 | — | 登记期的异常 | 形态闸抛异常 ⇒ 受控拒 + 形态台账有一行「没判成」 |
 
 零模型调用：形态闸用替身（只记调用次数），落稿与重写走真的 `proofregistry`。
@@ -374,7 +374,7 @@ def test_g_an_f_caller_cannot_register_through_b(tmp_path, monkeypatch):
 # ---------------------------------------------------------------- h：lemma 打通
 
 def test_h_a_lemma_lands_as_lemma_in_the_manuscript_and_b_can_read_it(tmp_path):
-    """h：F 登记一条引理 ⇒ 手稿头 `- 证据种类：lemma` ⇒ B 的收录读得到。"""
+    """h：F 登记一条引理 ⇒ 手稿头 `- 命题类型：lemma` ⇒ B 的收录读得到。"""
     from agentflow.agent_b import register_statement as RS
 
     st = _ws(tmp_path)
@@ -391,14 +391,18 @@ def test_h_a_lemma_lands_as_lemma_in_the_manuscript_and_b_can_read_it(tmp_path):
         dependency_rows=[], existing_row={})
     assert got["ok"] is True, got
     text = (pathlib.Path(st.root) / str(got["manuscript_path"])).read_text(encoding="utf-8")
-    assert "- 证据种类：lemma" in text, text
+    assert "- 命题类型：lemma" in text, text
+    # 反向断言（业主 2026-11-13）：新渲染的稿头没有 `- 命题号：` 那一行。
+    assert "- 命题号：" not in text, text
+    # 旧名不再写进新稿（读侧仍认，见 test_kind_and_grade_axes_are_decoupled.py 的 b）。
+    assert "- 证据种类：" not in text, text
     assert RS._declared_manuscript_kind(text=text) == "lemma"
     # 词表外的手稿头不许落成 kind（作者写的字节不能绕开 kind 的语义）
     assert RS._declared_manuscript_kind(
-        text=text.replace("- 证据种类：lemma", "- 证据种类：whatever")) == ""
+        text=text.replace("- 命题类型：lemma", "- 命题类型：whatever")) == ""
     # 端到端：B 收录同一条命题（V 的 pending 签按正文 sha 认领）⇒ statements 那一行
-    # kind=lemma（手稿头的 `- 证据种类：lemma` 被如实采纳）⇒ 它可以被
-    # `statementabandon` 的 `salvaged` 引用（`SALVAGED_KINDS=("lemma",)`）。
+    # kind=lemma（稿头声明 + V 签已把等级抬到 pre_theorem 以上 ⇒ 走已签的升档那一格）
+    # ⇒ 它可以被 `statementabandon` 的 `salvaged` 引用（`SALVAGED_KINDS=("lemma",)`）。
     from agentflow import depsection as DS
     from agentflow import secretary as SEC
     from agentflow.agent_b import AgentB

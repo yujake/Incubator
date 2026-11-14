@@ -4555,7 +4555,7 @@ def _step_report_wording(max_steps: Any) -> str:
 
 
 def _sign_gate_entry(root: str, rel: str) -> dict[str, Any]:
-    """稿头元信息（计划号 / 标签 / 证据种类 / 版本）的唯一读口 —— `proofregistry.parse_entry`。
+    """稿头元信息（计划号 / 标签 / 命题类型 / 版本）的唯一读口 —— `proofregistry.parse_entry`。
 
     稿里没有命题号（业主 2026-11-13）⇒ 新写的稿不再产生那一行；本函数读到的
     `statement_id` 只会来自盘上老稿（读兼容），不参与任何"这份稿属于哪条命题"的判断。

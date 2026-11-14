@@ -205,7 +205,7 @@ class _RunExperiment:
         `proposition` / `corollary` / `conjecture` / `example`），缺省空串 = 不声明。
         它只做三件事：① 数值证明路线写盘之前过同一道形态闸时，把标签原样递过去
         （`_proposition_form_gate(kind=…)`；闸不按标签分叉）；② 写进 e-proof 手稿的
-        `- 证据种类：` 那一行（B 收录时按它落 `statements.kind`，与 F 的手稿同一个头标记）；
+        `- 命题类型：` 那一行（B 收录时按它落 `statements.kind`，与 F 的手稿同一个头标记）；
         ③ 记进 `observations["statement_kind"]`。等级仍由 `derive_grade` 按五元位现算，
         与标签无关 —— `example` 只是给人看的标签，处理与普通命题一致。
         词表外的取值在跑脚本之前受控拒（`ExperimentError`）：手稿头是作者写的字节，

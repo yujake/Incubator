@@ -1089,7 +1089,8 @@ def _same_search_reading(same: Mapping | None) -> dict:
 
 
 def _declared_manuscript_kind(*, text: str = "", root: str = "") -> str:
-    """手稿头 `- 证据种类：<kind>` 读出来的那一档（认不出 / 词表外 ⇒ 空串，不猜）。
+    """手稿头 `- 命题类型：<kind>` 读出来的那一档（老盘旧名 `- 证据种类：` 照读；
+    认不出 / 词表外 ⇒ 空串，不猜）。
 
     只认 `secretary.PROPOSITION_KINDS` 里的取值：手稿头是作者写的字节，不能让它
     随手发明一个新 kind 落进 `statements`（那等于绕开 kind 的语义）。
@@ -3491,20 +3492,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "那一份是 E 自己跑出来的实验结果，不是文献里摘的 —— 按 external_lit 登记"
                 "会把逐字引文那几道闸（page_range / quote_verified）套到一份数值读数上",
                 numeric_channel={"path": _green.get("path") or ""})
-        # ---- lemma 那条死锁：F 的手稿登记按内容落了
-        # `- 证据种类：lemma` ⇒ B 收录已登记的同一条命题时照它落 kind。
+        # ---- 命题类型：台账是权威，稿头只是交叉核对（2026-11-14 业主裁「解耦」）
         #
-        # 为什么只在"已在册"那一档生效：首次登记受 B-2 管（自产、无出处、无签 ⇒
-        # 必须从「猜想」注册，`_must_start_as_conjecture_refusal` 不许放宽）。升成
-        # lemma 的那一步正是业主点名的"从猜想升成引理"：先立猜想、V 签之后按手稿头
-        # 的声明升档。手稿头是 F 能表达"这是一条引理"的唯一既有落点（不新增参数面、
-        # 不改动作声明）。
-        if (origin == "own_result" and str(kind or "").strip() in ("", "theorem", "conjecture")
-                and self._existing_statement_for(str(statement_full or "").strip()) is not None):
-            declared = _declared_manuscript_kind(
-                text=str(proof_manuscript or ""), root=str(self.store.root))
-            if declared:
-                kind_now = declared
+        # 改前这里按手稿头的声明把 `kind_now` 直接改写（「B 收录已登记的同一条命题时
+        # 照它落 kind」—— lemma 死锁的旧出口）。解耦之后这条静默改写退役：
+        #   · 首次登记受 B-2 管（自产、无出处、无签 ⇒ 必须从「猜想」注册）；
+        #   · 升成 lemma / theorem / example 的那一步走已签的升档那一格
+        #     （`_apply_declared_manuscript_kind`：等级到 `pre_theorem` 以上才落，
+        #     并带 `kind_upgraded_from_manuscript` 读数）；
+        #   · 两侧不一致而升不上去 ⇒ 那一格带 `kind_crosscheck=…mismatch` 读数，
+        #     台账原值不动（不静默取稿头那一侧）。
+        # 稿头声明的读取仍在（`_declared_manuscript_kind`），只是不再有权改台账。
         if _green.get("ok"):
             # 「普通数值实验不写 kind，一律写 conjecture」。
             # 所以这一档不看调用方声明了什么、也不拒收它：kind 直接落 conjecture。
@@ -6357,7 +6355,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         |---|---|
         | 命题正文 | `## 命题` 那一节（三族同形；E 的 `e-num-*` 也是它） |
         | 证明正文 | `## 证明` 那一节（`e-num-*` 没有这一节：普通数值档 `proof_text` 留空） |
-        | `kind` | 稿头 `- 证据种类：<kind>`（认不出 / 词表外 ⇒ 按族取缺省：`e-proof` ⇒ theorem、其余 ⇒ conjecture） |
+        | `kind` | 稿头 `- 命题类型：<kind>`（老盘旧名 `- 证据种类：` 照读；认不出 / 词表外 ⇒ 按族取缺省：`e-proof` ⇒ theorem、其余 ⇒ conjecture） |
         | `evidence_kind` | 按族定：`e-proof` ⇒ `proof`（穷举证明，要 V 签）、`e-num` ⇒ `cross_check`（有数值实验支持）、F 的文字证明 ⇒ `heuristic` |
         | 出处 `line_range` | `e-*` ⇒ `exp:<实验号>`（稿头 / 路径名 / 调用方给的出处，三者同一处）；F ⇒ 稿的路径本身 |
         | 承重链 `derived_from` | 证明正文里的 `stmt:` 引用（与 `depsection.stmt_refs` 同一口径） |
@@ -6594,7 +6592,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # `Secretary.extract_manuscript` 的读数里拿到了 ⇒ 不再为同一格读一次盘。
         declared = str(declared_kind or "").strip() or _declared_manuscript_kind(
             text=str(proof_manuscript or ""), root=str(self.store.root))
-        if declared not in ("lemma", "theorem", "example"):
+        if not declared:
             return out
         sid = str(out.get("stmt_id") or "")
         if not sid:
@@ -6605,7 +6603,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             raise RuntimeError(f"`statements` 读不出来（{_err.get('type') or '?'}: "
                                f"{_err.get('message') or _decl_got.get('reason') or '?'}）")
         row = _decl_got["row"] or {}
-        if not row or str(row.get("kind") or "") == declared:
+        if not row:
+            return out
+        # ---- 交叉核对（2026-11-14 解耦）：台账 `statements.kind` 是权威，稿头
+        # `- 命题类型：` 是交叉核对。两侧不一致时必须留读数（不静默取其一）：
+        # 下面升不升档是另一件事，这个读数在升档被拒（等级不够）时也照样带出去。
+        from .. import manuscriptkind as _MK
+
+        cross = _MK.kind_crosscheck(row.get("kind"), declared)
+        if str(cross.get("outcome") or "") == "mismatch":
+            out["kind_crosscheck"] = cross
+        if str(row.get("kind") or "") == declared:
+            return out
+        if declared not in ("lemma", "theorem", "example"):
             return out
         try:
             grade = _EB.derive_grade(dict(row.get("bits") or {}),
@@ -7764,7 +7774,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_derived_satisfied(cells: Mapping) -> set[str]:
         """被派生证据"满足"的请求格（目前只有 `kind`，2026-11-10 业主裁量 ④）。
 
-        `kind` 是派生格：稿头没有 `- 证据种类：` 时它不会"从稿里写"，但证据重算
+        `kind` 是派生格：稿头没有 `- 命题类型：` 时它不会"从稿里写"，但证据重算
         可能把它升到 theorem / lemma，并在同一格留 `kind_upgraded={from,to,basis}`。
         这一格记 `outcome="kept"`（没有从稿里写）但对 `diff.requested_not_filled`
         来说它已经被派生证据满足了 ⇒ 不列进去；`diff` 只留真的没满足的格。
@@ -8658,7 +8668,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_apply_kind_receipt(cells: dict, evidence: Mapping) -> None:
         """`kind` 格的 receipt 反映派生升档（`outcome=kept` + `kind_upgraded`）。
 
-        稿头没有 `- 证据种类：` ⇒ 这一格没有"从稿里写"：`outcome` 记 `kept`（不是
+        稿头没有 `- 命题类型：` ⇒ 这一格没有"从稿里写"：`outcome` 记 `kept`（不是
         `not_applicable` —— 它确实被派生证据满足了一部分），并带
         `kind_upgraded={from,to,basis}`；`_ingest_diff` 会把它从
         `requested_not_filled` 里排除（见 `_ingest_derived_satisfied`），diff 只留

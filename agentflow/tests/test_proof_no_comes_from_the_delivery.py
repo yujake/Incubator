@@ -52,7 +52,7 @@ def _manuscript(*, sid: str = SID, proof: str, proof_no: int = 0) -> str:
     head = ""
     if proof_no >= 1:
         head += f"- 证明号：{proof_no}\n"   # 老形式那一行：现在只是一个被忽略的字符串
-    head += f"- 证据种类：theorem\n"
+    head += f"- 命题类型：theorem\n"
     deps = ("| 引用 | 命题号 | 步 |\n|---|---|---|\n"
             f"| 引理 | stmt:{DEP_SID} | 1 |\n")
     return (head + "\n## 命题\n\n" + PROPOSITION + "\n\n"

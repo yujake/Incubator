@@ -39,6 +39,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 from . import depsection as _DS  # 切节的唯一实现（`section_lines` / `heading_level`）
+from . import manuscriptkind as _MK  # 命题类型那一轴（标签 / 交叉核对 / 收录计划）
 
 #: 收录格的闭集（与 `manuscriptfamily.INGEST_CELLS` 同一份口径；判据钉住两处相等）。
 INGEST_CELLS: tuple[str, ...] = (
@@ -67,11 +68,13 @@ PLAN_REFUSED = "refused"
 PLAN_NOT_APPLICABLE = "not_applicable"
 
 #: 每一格从稿的哪儿取。`kind` 取稿头的元信息行，不是一个小节。
+#: 2026-11-14 解耦：这一格装的是命题类型（`statements.kind`），不是证据档位；
+#: 读数键跟着改名（老盘旧名 `- 证据种类：` 由 `manuscriptkind.extract_kind` 照读）。
 SECTION_BY_CELL: Mapping[str, str] = {
     "statement_full": "## 命题",
     "proof_text": "## 证明",
     "dependencies": "## 依赖",
-    "kind": "head: - 证据种类：",
+    "kind": f"head: {_MK.PROPOSITION_KIND_MARK}",
     "numeric_evidence": "## 数值结果",
 }
 
@@ -83,12 +86,9 @@ DEPENDENCY_COLUMNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     ("step", ("步",), "用在哪一步"),
     ("path_group", ("路径",), "路径号（第几条证明）"),
 )
-#: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像）。
+#: `kind` 的受控词表（`secretary.PROPOSITION_KINDS` 的镜像；实现在 `manuscriptkind`）。
 #: 顺序按档位从弱到强：`kind` 只升不降，升要签。
-KIND_RANK: Mapping[str, int] = {
-    "conjecture": 0, "example": 1, "proposition": 2,
-    "lemma": 3, "corollary": 4, "theorem": 5,
-}
+KIND_RANK = _MK.KIND_RANK
 
 #: 与族表对齐的两张镜像（真身是 `manuscriptfamily` 的那张表）。
 _ALLOWED_BY_FAMILY: Mapping[str, tuple[str, ...]] = {
@@ -128,7 +128,7 @@ CODE_STATEMENT_LOCKED = "proposition_locked"
 
 #: 正文里点名的 `stmt:` 引用（只用来判"缺 `## 依赖` 时该不该拒"，不判在册）。
 _STMT_REF_RE = re.compile(r"stmt:\s*(\d{4,6})")
-#: 稿头元信息行（`- 证据种类：lemma` / `- 实验号：exp:000000`）。
+#: 稿头元信息行（`- 命题类型：lemma` / `- 实验号：exp:000000`）。
 _HEAD_FIELD_RE = re.compile(r"^\s*-\s*(?P<key>[^：:]+?)\s*[：:]\s*(?P<value>.*?)\s*$")
 _EXPERIMENT_ID_RE = re.compile(r"^exp:(\d{4,6})$")
 
@@ -362,23 +362,6 @@ def _extract_dependencies(text: str) -> dict[str, Any]:
                     rows=len(rows), problems=problems, refs=refs)
 
 
-def _extract_kind(text: str) -> dict[str, Any]:
-    """稿头 `- 证据种类：<kind>` ⇒ kind（小写；不在稿头里猜，也不从正文里猜）。"""
-    for line_no, raw in _head_lines(text):
-        matched = _HEAD_FIELD_RE.match(raw)
-        if not matched:
-            continue
-        if matched.group("key").strip() != "证据种类":
-            continue
-        value = matched.group("value").strip().strip("`").strip().lower()
-        if not value:
-            return _absent("kind", f"稿头第 {line_no} 行声明了证据种类但是空的")
-        return _reading("kind", EXTRACT_PRESENT, lines=[line_no, line_no],
-                        sha=_sha(value), value=value,
-                        why=f"稿头第 {line_no} 行声明的证据种类")
-    return _absent("kind", "稿头没有 `- 证据种类：` 那一行 ⇒ 没有可填的档")
-
-
 def _extract_numeric(text: str) -> dict[str, Any]:
     """`## 数值结果` ⇒ 数值凭据（方法 / 结果 / 逐项字段 + 稿头的实验号）。"""
     body, heading = _section(text, SECTION_BY_CELL["numeric_evidence"])
@@ -413,7 +396,7 @@ _EXTRACTORS = {
     "statement_full": _extract_statement,
     "proof_text": _extract_proof,
     "dependencies": _extract_dependencies,
-    "kind": _extract_kind,
+    "kind": _MK.extract_kind,
     "numeric_evidence": _extract_numeric,
 }
 
@@ -648,44 +631,6 @@ def _plan_dependencies(reading: Mapping[str, Any], row: Mapping[str, Any]) -> di
                     reason=f"追加 {len(rows)} 行（去重 {duplicates} 行；依赖永不删）",
                     rows_written=len(rows), duplicates=duplicates)
 
-
-def _plan_kind(reading: Mapping[str, Any], row: Mapping[str, Any],
-               conflict: str) -> dict[str, Any]:
-    """`kind`：只升不降；升档要签（无签 ⇒ kept + 读数，不写）；降 ⇒ 拒。"""
-    if reading.get("outcome") == EXTRACT_UNREADABLE:
-        return _refused(reading, True, CODE_UNREADABLE,
-                        str(reading.get("why") or "稿头没读到"))
-    if reading.get("outcome") == EXTRACT_ABSENT:
-        return _planned(reading, PLAN_NOT_APPLICABLE, writable=True,
-                        reason="稿头没有声明证据种类 ⇒ 这一格不适用（不拿台账现值冒充稿头）")
-    value = str(reading.get("value") or "")
-    if value not in KIND_RANK:
-        return _refused(reading, True, CODE_KIND_BAD,
-                        f"稿头声明的证据种类 {value!r} 不在受控词表 {tuple(KIND_RANK)} 里")
-    if str(row.get("kind") or "") in ("concept", "definition"):
-        return _refused(reading, True, CODE_CELL_NOT_APPLICABLE,
-                        "概念 / 定义行没有证明档 ⇒ 不收 kind")
-    current = str(row.get("kind") or "")
-    if _is_register(row) or not current:
-        return _planned(reading, PLAN_FILLED, writable=True,
-                        reason="新行：按稿头声明落 kind")
-    if value == current:
-        return _planned(reading, PLAN_UNCHANGED, writable=True, reason="与台账相同")
-    if current not in KIND_RANK:
-        return _refused(reading, True, CODE_KIND_ROW_UNREADABLE,
-                        f"台账上的 kind {current!r} 不在受控词表里 ⇒ 不比较强弱")
-    if KIND_RANK[value] > KIND_RANK[current]:
-        return _planned(reading, PLAN_KEPT, writable=True,
-                        reason=(f"台账更弱（{current}）、稿头更强（{value}）⇒ 签后才升；"
-                                "这一格先 kept"),
-                        code=CODE_KIND_UPGRADE_UNSIGNED)
-    if conflict == "keep":
-        return _planned(reading, PLAN_KEPT, writable=True,
-                        reason=f"conflict=keep：保留台账的 {current}（稿头 {value} 更弱）")
-    return _refused(reading, True, CODE_KIND_DOWNGRADE,
-                    f"只升不降：台账 {current} 强于稿头 {value} ⇒ 拒")
-
-
 def _plan_numeric(reading: Mapping[str, Any], row: Mapping[str, Any]) -> dict[str, Any]:
     """`numeric_evidence`：同一程序 ⇒ unchanged；否则填（只 e-num 适用）。"""
     if reading.get("outcome") == EXTRACT_UNREADABLE:
@@ -778,7 +723,7 @@ def plan_cells(row: Mapping[str, Any] | None, got: Mapping[str, Mapping[str, Any
         elif cell == "dependencies":
             cells[cell] = _plan_dependencies(reading, row_now)
         elif cell == "kind":
-            cells[cell] = _plan_kind(reading, row_now, policy)
+            cells[cell] = _MK.plan_kind(reading, row_now, policy)
         else:
             cells[cell] = _plan_numeric(reading, row_now)
     requested_not_filled = [

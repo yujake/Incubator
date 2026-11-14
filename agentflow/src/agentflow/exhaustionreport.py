@@ -636,11 +636,13 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
     （`depsection.manuscript_proof_no` / `proofregistry.parse_entry`）—— 只停"写"。
 
     ## `kind`（玩具例子）
-    这一条命题的种类标签（`theorem` / `lemma` / `proposition` / `corollary` /
-    `conjecture` / `example`）。给了就写一行 `- 证据种类：<kind>` —— 与 F 的手稿
-    同一个头标记（`proofregistry.KIND_MARK`），B 收录时按它落 `statements.kind`
-    （`_declared_manuscript_kind`）。不给就省略（旧稿逐字节不变）：那是"没声明"，
-    不是"猜一个"。E 这一侧不为 example 单开分支：它与 lemma 走同一条升档路。
+    这一条命题的类型标签（`theorem` / `lemma` / `proposition` / `corollary` /
+    `conjecture` / `example`）。给了就写一行 `- 命题类型：<kind>` —— 与 F 的手稿
+    同一个头标记（`manuscriptkind.PROPOSITION_KIND_MARK`），B 收录时按它落
+    `statements.kind`（`_declared_manuscript_kind`）。2026-11-14 前这一行叫
+    `- 证据种类：`（名字借了等级那根轴）；老稿上的旧名读侧照认、写侧只写新名。
+    不给就省略（旧稿逐字节不变）：那是"没声明"，不是"猜一个"。E 这一侧不为 example
+    单开分支：它与 lemma 走同一条升档路。
     """
     from . import numericproof as _NP
 
@@ -661,7 +663,9 @@ def compose_manuscript(*, experiment_id: Any, claim: Any, claim_key: Any,
         + (f"（sha256 {str(script_sha256).strip()}）" if str(script_sha256 or "").strip() else ""),
     ])
     if str(kind or "").strip():
-        head.append(f"- 证据种类：{str(kind).strip().lower()}")
+        from . import manuscriptkind as _MK
+
+        head.append(f"{_MK.PROPOSITION_KIND_MARK}{str(kind).strip().lower()}")
     if search_space is not None:
         head.append(f"- 搜索空间：{_json_text(search_space)}")
     head.append(f"- 结论：{str(result or '').strip() or '（未记）'}"
