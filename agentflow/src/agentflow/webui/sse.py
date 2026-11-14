@@ -114,6 +114,26 @@ def serving() -> bool:
     return _GENERATION > 0
 
 
+#: 这一代服务被交代的「当前会话」（`serve(sid=…)` 挂上来的那个号）。
+#:
+#: 为什么放在模块级：`state` 帧是广播出去的 —— 产生它的闭包只拿到 `root`，
+#: 没有 handler 可问。而"当前是哪段会话"在同一代服务里只有一个答案，所以它跟着
+#: "哪一代"一起放。空串 = 没人交代（快照退回最近一段会话，并在 `current.source` 里说）。
+_SERVING_SID: str = ""
+
+
+def set_serving_sid(sid: str) -> str:
+    """记下这一代服务的当前会话号；返回记下的那个（给判据与 `serve()` 对账用）。"""
+    global _SERVING_SID
+    _SERVING_SID = str(sid or "")
+    return _SERVING_SID
+
+
+def serving_sid() -> str:
+    """这一代服务被交代的当前会话号（空串 = 没交代）。"""
+    return _SERVING_SID
+
+
 def _generation() -> int:
     """当前这一代的编号（流循环把它取一次，之后只在同一代里继续跑）。"""
     return _GENERATION
@@ -402,7 +422,7 @@ def _snapshot_payload(root: Any) -> dict[str, Any]:
     """
     from .readers import state_face  # noqa: PLC0415 - 见上面那句
 
-    return {"snapshot": state_face(root).get("snapshot")}
+    return {"snapshot": state_face(root, sid=serving_sid()).get("snapshot")}
 
 
 def _question_payload(question: Any, sid: str) -> dict[str, Any]:
@@ -573,7 +593,7 @@ def handle_stream(handler: Any, params: Mapping[str, str],
             if why:
                 from .readers import state_face
 
-                face = state_face(handler.root)
+                face = state_face(handler.root, sid=serving_sid())
                 miss = format_event(kind="state",
                                     data={"snapshot": face.get("snapshot"),
                                           "reason": why})

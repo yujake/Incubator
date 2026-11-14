@@ -38,10 +38,34 @@ export interface OrphanSummary {
   groups: OrphanGroup[];
 }
 
+/** 出处：project_reading() —— 「这一份快照是哪个项目」的读数（名字的唯一来源是项目文件夹名，`projects.resolve` 就是拿它当 `ProjectRef.name` 的；卡/标记只用来自证与交叉核对）。 */
+export interface ProjectReading {
+  tri: Tri;
+  reason: string;
+  name: string;
+  path: string;
+  state: string;
+  why: string;
+  is_project: boolean;
+  card: string;
+  marker: string;
+  source: string;
+}
+
+/** 出处：current_reading() —— 「当前是哪一段会话、第几轮」。sid 由 `serve(sid=…)` 从命令行交下来，`round` 只调 `webui.state.round_of()`（命令行 `--watch` 印的是同一个函数）。 */
+export interface CurrentReading {
+  sid: string;
+  round: number;
+  source: string;
+  found: boolean;
+}
+
 /** 出处：snapshot() —— 工作区盘上事实的只读投影（返回键逐字见它的 docstring）。 */
 export interface StateSnapshot {
   root: string;
   generated_at: string;
+  project: ProjectReading;
+  current: CurrentReading;
   sessions: SessionRow[];
   pending_questions: PendingQuestion[];
   runs: RunRow[];
@@ -308,6 +332,8 @@ export interface EvidenceView {
   conjectures_tri: Tri;
   experiments: ExperimentRow[];
   experiments_tri: Tri;
+  documents: DocumentRow[];
+  documents_tri: Tri;
   review_findings: ReviewFindingRow[];
   review_findings_tri: Tri;
   relations: RelationRow[];
@@ -565,6 +591,27 @@ export interface ChatView {
   shown: number;
   clipped: boolean;
   sessions: ChatSession[];
+}
+
+/** 出处：store.rows("documents")（夹具有 0 行 ⇒ 权威来源是 `schema.Document` 的dataclass；2026-11-14 补这一栏，网页端此前只有命令行读得到稿件台账）。 */
+export interface DocumentRow {
+  doc_id: string;
+  kind: string;
+  title: string;
+  markdown_path: string | null;
+  sections: Record<string, unknown>[];
+  claims: Record<string, unknown>[];
+  open_problems: string[];
+  status: string;
+  review_rounds: number;
+  review_verdict: string;
+  reviewed_at: string;
+  reviewed_by: string;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+  content_sha256: string;
+  created_by: string;
 }
 
 /** 出处：store.rows("statements")（无真机样本 ⇒ 权威来源是 `schema.Statement`）。 */

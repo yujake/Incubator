@@ -1901,20 +1901,14 @@ def _current_round(root: Path, sid: str) -> int:
 
     为什么是 0 而不是 1：网页打开的那一刻可能什么都还没跑过，写 1 会让"还没开始"
     与"正在第 1 轮"长得一样。
-    """
-    try:
-        from . import sessions as SS
 
-        events, _problems = SS.read_session(root, sid=sid)
-    except Exception:  # noqa: BLE001 —— 读不到轮号是"没读到"，不是 0 轮
-        return 0
-    best = 0
-    for event in events:
-        for key in ("round", "rounds", "round_index"):
-            value = event.get(key)
-            if isinstance(value, int) and value > best:
-                best = value
-    return best
+    真身在 `webui.state.round_of()`：网页 `/api/state` 的 `current.round` 调的是同一个
+    函数，所以命令行的 `--watch` 印出来的数与页面上的数是同一个数（两份实现漂移的
+    形态是"命令行说第 3 轮、网页说第 2 轮"，而没有任何东西会报错）。
+    """
+    from .webui import state as W
+
+    return W.round_of(root, sid)
 
 
 def _with_watch(spec: RunSpec, args) -> int:
@@ -1934,6 +1928,9 @@ def _with_watch(spec: RunSpec, args) -> int:
 
     root, _project = _target_workspace(spec, args)
     root.mkdir(parents=True, exist_ok=True)
+    # `sid` 在起服务之前定下来，并交给服务：网页的「当前会话」必须就是这里印出来的
+    # 那一段 —— 否则页面上「当前轮」数的是另一段会话的轮号，而两个数都叫同一个名字。
+    sid = str(getattr(args, "sid", "") or _session_id())
     srv = _WS.serve(
         root,
         host=str(getattr(args, "host", "127.0.0.1") or "127.0.0.1"),
@@ -1941,11 +1938,11 @@ def _with_watch(spec: RunSpec, args) -> int:
         token=str(getattr(args, "token", "") or os.environ.get("AGENTFLOW_WEB_TOKEN", "")),
         allow_writes=bool(getattr(args, "allow_writes", False)),
         settings_write=not bool(getattr(args, "no_settings_write", False)),
+        sid=sid,
     )
     host, port = srv.server_address[0], srv.server_address[1]
     shown = "127.0.0.1" if host in ("0.0.0.0", "::") else host
     url = f"http://{shown}:{port}/"
-    sid = str(getattr(args, "sid", "") or _session_id())
     round_no = _current_round(root, sid)
     if spec.as_json:
         print(json.dumps({"url": url, "root": str(root), "sid": sid, "round": round_no},
@@ -4513,11 +4510,37 @@ def cmd_budget(args) -> int:
 
     读写：读/写 `<工作区>/budget.json` 寄存器（总额、已花、追加历史）；不碰任何表。
     实现方式一句话：`budget` 模块的寄存器读写（运行期的闸门读同一份）。
+
+    `--project <名字>`（2026-11-14）：落点与 `start --project <名字>` 同一条口径
+    （`projects.resolve` ⇒ `<projects-dir>/<名字>`）。这一格不是便利选项 —— 没有它，
+    "网页上追加了一笔"之后 `agentflow budget` 默认读的是当前目录的寄存器，
+    于是在 `projects/P` 上跑的那一趟的真寄存器根本读不到，读数会静静地指到别处。
+    写的那两档（`--set` / `--add`）在项目还不存在时 fail-closed（退出码 2）：
+    只落一个 `budget.json` 的文件夹会被 `projects.classify` 判成 not_a_project，
+    下一次 `--project P` 就会被守卫拒掉 —— 那是自己给自己挖的坑。
     """
     from . import budget as B
     from .tokenmeter import TokenMeter
 
     root = _root_of(args)
+    name = str(getattr(args, "name", None) or "").strip()
+    if name:
+        from . import projects as P
+
+        base = P.projects_dir(getattr(args, "projects_dir", None))
+        try:
+            ref = P.resolve(base, name, start="auto")
+        except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
+            print(f"[budget] 没查成：{exc}", file=sys.stderr)
+            return 2
+        root = ref.path
+        wants_write = (getattr(args, "set_usd", None) is not None
+                       or getattr(args, "add_usd", None) is not None)
+        if wants_write and not ref.exists:
+            print(f"[budget] 没查成：项目 {ref.name} 还不存在（{ref.path}）⇒ 不替它建文件夹。"
+                  "先在它上面跑一趟（`agentflow start --project "
+                  f"{ref.name} --task …`），有了工作区再来设/追加预算。", file=sys.stderr)
+            return 2
     st = make_store(root)
     try:
         meter = TokenMeter(st)
@@ -5702,6 +5725,11 @@ def build_parser() -> argparse.ArgumentParser:
                     help="设一个总额度（覆盖式；第一次设预算用它）")
     sp.add_argument("--add", dest="add_usd", type=float, default=None,
                     help="追加一笔额度（运行期生效：下一个闸门就受新上限约束）")
+    sp.add_argument("--project", dest="name", default=None,
+                    help="项目名：读/写 <projects-dir>/<名字>/budget.json —— 与 "
+                         "`start --project <名字>` 同一个落点。不给就按 --root / 当前目录")
+    sp.add_argument("--projects-dir", default=None,
+                    help="projects 落点（缺省 <root>/projects，与 start 同一条口径）")
     sp.add_argument("--by", default="user", help="谁加的（写进追加历史，默认 user）")
     sp.add_argument("--note", default="", help="一句话说明（写进追加历史）")
     sp.add_argument("--fallback-usd", type=float, default=None,

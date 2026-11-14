@@ -11,7 +11,18 @@
       而源码里照旧只有占位符。
     -->
     <meta name="csrf-token" content="__CSRF__" />
-    <title>agentflow 用户端</title>
+    <!--
+      「我在看哪个项目」的三个占位符（2026-11-14）：服务端吐这一页时换成这一趟
+      服务真读到的项目名 / 工作区根 / 当前会话号（`webui/server.py` 的
+      `_inject_placeholders`）。为什么要落到 HTML 上而不是只走 JSON：业主盯着跑时
+      是看**浏览器标签页**与地址栏的 —— 一页只有一句「agentflow 用户端」时，
+      同时开两个项目的两页分不出谁是谁。SPA 起来之后同一批读数还会由
+      `/api/state` 再画一遍（`project` / `current` 两格，同源）。
+    -->
+    <meta name="agentflow-project" content="__PROJECT_NAME__" />
+    <meta name="agentflow-root" content="__PROJECT_ROOT__" />
+    <meta name="agentflow-sid" content="__CURRENT_SID__" />
+    <title>agentflow 用户端 · __PROJECT_TITLE__</title>
     <link rel="stylesheet" href="./src/theme/generated/theme.css" />
     <link rel="stylesheet" href="./src/theme/app.css" />
   </head>

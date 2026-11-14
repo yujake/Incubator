@@ -36,8 +36,9 @@ from typing import Any, Mapping, Sequence
 
 from .. import sessions as SS
 
-__all__ = ["snapshot", "answer_text_of", "option_view",
-           "TOP_RUN_TASK_ID", "top_run", "top_run_closed", "mark_stale_loops"]
+__all__ = ["snapshot", "answer_text_of", "option_view", "project_reading",
+           "current_reading", "TOP_RUN_TASK_ID", "top_run", "top_run_closed",
+           "mark_stale_loops"]
 
 #: 页面里 JSON 摘要的截断长度（读数页不该被一条超长 payload 撑爆）。
 CLIP = 400
@@ -45,6 +46,49 @@ CLIP = 400
 REPORT_REL = ("out", "review", "REPORT.md")
 #: 会话号允许的字符集（它会被拼进文件名，必须挡目录穿越）。
 _SID_OK = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
+
+#: 项目卡与项目标记的文件名。两件都只由 `projects.create_project` /
+#: `adopt_project` 写，读侧不许另造第三种「这是不是一个项目」的判据。
+PROJECT_CARD_NAME = "project.json"
+PROJECT_MARKER_NAME = ".agentflow-workspace"
+
+#: 事件里记「这是第几轮」的键名。三档都认：不同写入点历史上用过不同的名字。
+ROUND_KEYS: tuple[str, ...] = ("round", "rounds", "round_index")
+
+
+def round_of(root: str | Path, sid: str = "",
+             events: Sequence[Mapping[str, Any]] | None = None) -> int:
+    """这一段会话现在跑到第几轮（读事件里的轮号；读不到就是 0）。
+
+    为什么是 0 而不是 1：网页/命令行打开的那一刻可能什么都还没跑过，写 1 会让
+    「还没开始」与「正在第 1 轮」长得一样。
+
+    为什么住在这里、而不各写一份：`agentflow start --watch` 打印的「当前轮」与网页
+    `/api/state` 的 `current.round` 必须是同一个数。两份实现漂移的形态是「命令行说第 3
+    轮、网页说第 2 轮」，而没有任何东西会报错 —— 所以口径只有这一处，两个读者都调它
+    （命令行那一侧是 `cli._current_round`，它是本函数的薄转发）。
+
+    为什么落在这一层而不是 `sessions.py`：`sessions` 是写入侧（它管落地与格式），
+    这一格是读数，与 `current_reading` 是同一件事的一半。本仓对 >800 行的源文件
+    有硬基线（`tests/test_repo_survey_does_not_get_worse.py`），把它加进 `sessions.py`
+    会把那一格抬上去；而这里已经过线，加它不新增过线文件。
+
+    `events` 给了就不读盘（调用方已经有一份解析好的事件时用它，避免重复读同一段会话）。
+    """
+    if events is None:
+        if not sid:
+            return 0
+        try:
+            events, _problems = SS.read_session(root, sid=sid)
+        except Exception:  # noqa: BLE001 - 读不到轮号是"没读到"，不是 0 轮
+            return 0
+    best = 0
+    for event in events:
+        for key in ROUND_KEYS:
+            value = event.get(key)
+            if isinstance(value, int) and not isinstance(value, bool) and value > best:
+                best = value
+    return best
 
 
 # ====================================================================== 取值帮手
@@ -464,11 +508,160 @@ def _scan(session_root: Path, sid: str, events: Sequence[Mapping[str, Any]],
     }
 
 
-def snapshot(root: str | Path) -> dict[str, Any]:
+def project_reading(root: str | Path) -> dict[str, Any]:
+    """这一份快照是哪个项目的读数（名字 / 路径 / 是不是项目 / 判据出处）。
+
+    ## 为什么要这一格（2026-11-14 的落点事故）
+
+    命令行 `start --project P` 改后落在 `projects/P`，而网页端只印过
+    `workspace`（= 服务起来时的那个根）。于是"我在看哪个项目"这件事在页面上没有名字：
+    同时开两个项目的两页，两页看起来一模一样。这一格把项目名与路径摆出来，并且
+    不许自己算第二份 —— 名字的唯一来源是项目文件夹自己的名字（`projects.resolve`
+    就是拿它当 `ProjectRef.name` 的），`project.json` / `.agentflow-workspace` 里
+    记的那份只用来交叉核对（`source` 说这一格是从哪读来的）。
+
+    ## 三态
+
+    - `tri="computed"`：读到了，`is_project` 说它是不是一个项目文件夹；
+    - `tri="not_applicable"`：这个根不是项目（裸工作区 `kind="workspace"`、空目录
+      `kind="empty"`、不存在 `kind="absent"`）—— 那是合法初态，不是"没查成"；
+    - `tri="unreadable"`：判据本身读不出来（分类器抛异常，或项目卡是坏 JSON）。
+
+    `why` 逐字来自 `projects.classify()`：状态词与理由只有那一处实现，网页这一层
+    不许再判一次"这算不算一个项目"。
+    """
+    root_p = Path(str(root))
+    out: dict[str, Any] = {
+        "tri": "unreadable", "reason": "",
+        # 名字的唯一来源是文件夹名（`projects.resolve` 的口径）；读不到目录名时留空。
+        "name": root_p.name, "path": str(root_p),
+        "state": "unknown", "why": "", "is_project": False,
+        "card": "", "marker": "", "source": "none",
+    }
+    try:
+        from .. import projects as P
+
+        state, why = P.classify(root_p)
+    except Exception as exc:  # noqa: BLE001 - 分类器读不出来 = 没查成，不是"没有项目"
+        out["reason"] = f"项目判据没查成：{type(exc).__name__}: {exc}"
+        return out
+    out["state"], out["why"] = state, why
+    card = root_p / PROJECT_CARD_NAME
+    marker = root_p / PROJECT_MARKER_NAME
+    out["card"] = str(card) if card.is_file() else ""
+    out["marker"] = str(marker) if marker.is_file() else ""
+    out["is_project"] = bool(out["card"] or out["marker"])
+    # 名字的来源：卡 > 标记 > 文件夹名。三档都只读、都不改盘；`source` 如实说是哪一档，
+    # 于是"页面上那个名字是不是卡里记的"不需要猜。
+    from_card = ""
+    if out["card"]:
+        try:
+            data = json.loads(card.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            out["tri"] = "unreadable"
+            out["reason"] = f"项目卡读不出来（{type(exc).__name__}: {exc}）"
+            out["source"] = "card"
+            return out
+        if isinstance(data, Mapping):
+            from_card = _text(data.get("name"))
+            out["source"] = "card"
+    if not from_card and out["marker"]:
+        try:
+            text = marker.read_text(encoding="utf-8")
+        except OSError as exc:
+            out["tri"] = "unreadable"
+            out["reason"] = f"项目标记读不出来（{type(exc).__name__}: {exc}）"
+            out["source"] = "marker"
+            return out
+        for line in text.splitlines():
+            if line.startswith("name="):
+                from_card = line[len("name="):].strip()
+                out["source"] = "marker"
+                break
+    if from_card:
+        out["name"] = from_card
+    elif out["is_project"]:
+        out["source"] = "dirname"
+    out["tri"] = "computed" if out["is_project"] else "not_applicable"
+    if not out["is_project"]:
+        # 「还没初始化」与「这不是一个项目」是两件事：前者是 `--watch` 先起网页、
+        # 真机还没开跑那一刻的正常形态（文件夹刚被 mkdir 出来），后者是有人把网页
+        # 指到了一个别的目录。把它们折成同一句话，读的人会以为落点选错了。
+        if state in ("absent", "empty"):
+            out["reason"] = (f"这个项目还没初始化（{state}：{why}）—— 跑起来之后会落 "
+                             "project.json 与 data/")
+        else:
+            out["reason"] = (f"这不是一个项目文件夹（{state}：{why}）"
+                             "—— 这一份读数是一个裸工作区")
+    return out
+
+
+#: `current.source` 的三个取值（给前端与判据同一份词表）。
+CURRENT_SOURCES: tuple[str, ...] = ("cli", "newest_session", "none")
+
+
+def current_reading(root: str | Path, sid: str = "", *,
+                    sessions: Sequence[Mapping[str, Any]] = (),
+                    events_of: Mapping[str, Sequence[Mapping[str, Any]]] | None = None
+                    ) -> dict[str, Any]:
+    """「当前这一段会话 + 当前轮」—— 与 `agentflow start --watch` 印出来的那两个数同源。
+
+    ## 为什么不能各自算
+
+    `--watch` 的 sid 是它自己定的（`--sid` 或当天），页面上若按"最近一段会话"再挑一次，
+    两个数就可能在多段会话并存时指向不同的段 —— 而两处都写着「当前会话」。所以
+    `serve(sid=…)` 把这个号交给服务，快照照抄（`source="cli"`）；只有没人交代时
+    （直接 `agentflow web`）才退回"最近一段"，并把这件事写进 `source`。
+
+    `round` 只调本模块的 `round_of()`（命令行那个 `_current_round` 是它的薄转发），
+    `events` 沿调用方已经解析好的那份传进去（`snapshot()` 已经读过一遍），
+    于是这一格不额外读盘，也不会与命令行分叉。
+    """
+    root_p = Path(str(root))
+    given = str(sid or "")
+    chosen = given
+    source = "cli" if given else "none"
+    if not chosen:
+        # 没有交代 ⇒ 最近的这一段（按 `last_ts`；并列时留先出现的那个，与
+        # `sessions.list_sessions` 的顺序一致）。选了什么不藏：`source` 说清楚。
+        best: Mapping[str, Any] | None = None
+        for row in sessions:
+            if not _text(row.get("sid")):
+                continue
+            if best is None or _text(row.get("last_ts")) >= _text(best.get("last_ts")):
+                best = row
+        if best is not None:
+            chosen = _text(best.get("sid"))
+            source = "newest_session"
+    found = bool(chosen) and (
+        any(_text(row.get("sid")) == chosen for row in sessions)
+        or (events_of is not None and chosen in events_of))
+    events = None
+    if events_of is not None and chosen in events_of:
+        events = list(events_of.get(chosen) or ())
+    round_no = round_of(root_p, chosen, events=events) if chosen else 0
+    return {
+        "sid": chosen,
+        "round": int(round_no),
+        "source": source,
+        # `found=False` 且 `sid` 非空是合法形态：`--watch` 先起网页、再开跑，
+        # 那一刻这一段会话文件还不存在。它不是"没查成"。
+        "found": found,
+    }
+
+
+def snapshot(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     """把工作区盘上的事实读成一份快照（纯函数：只读盘，不缓存、不写任何东西）。
 
-    返回：`{"root", "generated_at", "sessions", "pending_questions", "runs", "orphans",
-    "orphan_summary", "last_run", "ledger", "problems"}`。
+    返回：`{"root", "generated_at", "project", "current", "sessions",
+    "pending_questions", "runs", "orphans", "orphan_summary", "last_run", "ledger",
+    "problems"}`。
+
+    `project` / `current` 是 2026-11-14 补的两格（见 :func:`project_reading` /
+    :func:`current_reading`）：命令行 `start --watch --project P` 印出来的
+    「项目 / 工作区 / sid / 当前轮」四格里，前两格由 `root` 与 `project` 回答、
+    后两格由 `current` 回答。`sid` 由 `serve(sid=…)` 交下来（`--watch` 定的那一个），
+    不给就退回"最近一段会话"并在 `current.source` 里说明。
 
     三态纪律在这份快照里体现为：读不到的字段是 `None` / `""` 而不是 0，
     页面渲染时再把它们写成 `unknown` / `没查成`。另外两条：
@@ -581,9 +774,17 @@ def snapshot(root: str | Path) -> dict[str, Any]:
     last_run: dict[str, Any] | None = runs[-1] if runs else None
     orphan_summary = _orphan_summary(orphans)
     ledger = _read_ledger(root_p, problems)
+    # 「这是哪个项目」与「当前是哪一段会话、第几轮」两格（2026-11-14 的对齐）：
+    # 它们与命令行 `start --watch --project P` 印出来的四格读数逐字同源 ——
+    # 项目名来自项目文件夹本身（`projects.resolve` 的口径），sid/轮号来自
+    # `serve(sid=…)` 交下来的号 + `webui.state.round_of()`（命令行印的那两个数）。
+    project = project_reading(root_p)
+    current = current_reading(root_p, sid, sessions=listed, events_of=events_of)
     return {
         "root": str(root_p),
         "generated_at": _clock(),
+        "project": project,
+        "current": current,
         "sessions": sessions,
         "pending_questions": pending,
         "runs": runs,
@@ -731,6 +932,16 @@ UNCHECKED_TYPES: dict[str, str] = {
 }
 
 
+#: 本模块声明、而且判据 C 会在夹具工作区上真读出来的接口。
+#:
+#: 为什么是这三个（2026-11-14）：`project_reading()` / `current_reading()` 的键
+#: 在任何工作区上都在（"这不是一个项目"与"没人交代当前会话"都只是三态的另一个取值，
+#: 不是"读不出键"），所以它们进受核对名单 —— 与 `readers.CHECKED_TYPES` 里那批
+#: 「顶层键在任何工作区上都存在」的接口同一条口径。`StateSnapshot` 自己在
+#: `tests/test_webui_contracts.py` 的 W0 名单里。
+CHECKED_TYPES: tuple[str, ...] = ("ProjectReading", "CurrentReading")
+
+
 #: 逐接口的字段表。每一项 `(TS 名字, 后端出处, ((字段, TS 类型), ...))`。
 #: 出处写的是"这个键是从哪段程序读出来的"，不是行号（行号会漂）。
 _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
@@ -746,9 +957,21 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("OrphanSummary",
      "orphan_summary() —— 「轮次之外的零散事件」的汇总读数",
      (("count", "number"), ("groups", "OrphanGroup[]"))),
+    ("ProjectReading",
+     "project_reading() —— 「这一份快照是哪个项目」的读数（名字的唯一来源是项目文件夹名，"
+     "`projects.resolve` 就是拿它当 `ProjectRef.name` 的；卡/标记只用来自证与交叉核对）",
+     (("tri", "Tri"), ("reason", "string"), ("name", "string"), ("path", "string"),
+      ("state", "string"), ("why", "string"), ("is_project", "boolean"),
+      ("card", "string"), ("marker", "string"), ("source", "string"))),
+    ("CurrentReading",
+     "current_reading() —— 「当前是哪一段会话、第几轮」。sid 由 `serve(sid=…)` 从命令行"
+     "交下来，`round` 只调 `webui.state.round_of()`（命令行 `--watch` 印的是同一个函数）",
+     (("sid", "string"), ("round", "number"), ("source", "string"),
+      ("found", "boolean"))),
     ("StateSnapshot",
      "snapshot() —— 工作区盘上事实的只读投影（返回键逐字见它的 docstring）",
      (("root", "string"), ("generated_at", "string"),
+      ("project", "ProjectReading"), ("current", "CurrentReading"),
       ("sessions", "SessionRow[]"), ("pending_questions", "PendingQuestion[]"),
       ("runs", "RunRow[]"), ("orphans", "OrphanRow[]"),
       ("orphan_summary", "OrphanSummary"), ("last_run", "RunRow | null"),

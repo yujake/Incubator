@@ -76,15 +76,30 @@ const NAV: ReadonlyArray<{ path: string; label: string }> = [
 
 function Top() {
   const live = useLive();
-  const root =
-    live.snapshot === null
-      ? "（工作区根还没读到）"
-      : live.snapshot.root;
+  const snap = live.snapshot;
+  const root = snap === null ? "（工作区根还没读到）" : snap.root;
+  // 「我在看哪个项目 / 哪一段会话 / 第几轮」—— 三格都来自同一份 `/api/state`
+  // （`project` / `current` 两栏），不另取一条端点：顶栏每页都在，多一条请求就是
+  // 每页多一份读盘。`current.sid` 与命令行 `start --watch` 印的是同一个号
+  // （`serve(sid=…)` 交下来的那个），轮号两边都调 `sessions.round_of()`。
+  const project =
+    snap === null
+      ? "（还没读到）"
+      : snap.project.is_project
+        ? snap.project.name
+        : "（不是项目文件夹）";
+  const sid = snap === null || snap.current.sid === "" ? "（还没有会话）" : snap.current.sid;
+  const round = snap === null ? "（还没读到）" : String(snap.current.round);
   return (
     <header class="top">
       <div class="brand">agentflow 用户端</div>
       <div class="sub">
-        工作区根 <span class="mono">{root}</span> · 连接{" "}
+        项目 <b class="mono">{project}</b> · 工作区根{" "}
+        <span class="mono">{root}</span>
+      </div>
+      <div class="sub">
+        当前会话 <span class="mono">{sid}</span> · 当前轮{" "}
+        <span class="mono">{round}</span> · 连接{" "}
         <span class="mono">{live.connection}</span>
       </div>
       <nav class="nav">

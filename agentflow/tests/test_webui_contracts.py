@@ -531,6 +531,11 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
 
     snap = W.snapshot(root)
     out["StateSnapshot"] = set(snap)
+    # 2026-11-14：快照多出「这是哪个项目」与「当前会话/当前轮」两格。新接口落地后
+    # 必须在这里让后端真的去读它 —— 否则它们会"既不在受核对名单、也没在欠账名单"
+    # （与下面六面同一条口径：C 条判的是"TS 的键 == 后端真读出来的键"）。
+    out["ProjectReading"] = set(snap["project"] or {})
+    out["CurrentReading"] = set(snap["current"] or {})
     _take(snap["sessions"], "SessionRow")
     if snap["pending_questions"]:
         q = snap["pending_questions"][0]

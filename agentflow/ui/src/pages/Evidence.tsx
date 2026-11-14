@@ -550,6 +550,31 @@ export function Evidence() {
       </Card>
 
       <Card
+        title="稿件台账"
+        subtitle={`${ev.documents.length} 份`}
+        right={<TriState tri={ev.documents_tri} label="documents" />}
+      >
+        {isUnreadable(ev.documents_tri) ? (
+          <span class="empty">这一栏没查成（不是"0 份"）。</span>
+        ) : (
+          <Table
+            rows={ev.documents}
+            empty="0 份稿件（读到了，里面是空的）。"
+            columns={[
+              { key: "doc_id", title: "稿件号", render: (r) => cell(r.doc_id) },
+              { key: "kind", title: "种类", render: (r) => cell(r.kind) },
+              { key: "title", title: "标题", render: (r) => cell(r.title) },
+              { key: "status", title: "状态", render: (r) => cell(r.status) },
+              { key: "review_rounds", title: "审校轮次" },
+              { key: "review_verdict", title: "审校结论", render: (r) => cell(r.review_verdict) },
+              { key: "revision", title: "修订号" },
+              { key: "updated_at", title: "最后改于", render: (r) => cell(r.updated_at) },
+            ]}
+          />
+        )}
+      </Card>
+
+      <Card
         title="引文回验（relations 的五档 quote_state）"
         subtitle={`逐字 ${tally.verbatim} · 语义 ${tally.semantic} · 不一致 ${tally.mismatch} · 未查 ${tally.unchecked} · 没有可复核的区间 ${tally.no_evidence}`}
         right={<TriState tri={ev.relations_tri} label="relations" />}

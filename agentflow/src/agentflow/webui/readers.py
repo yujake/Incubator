@@ -233,6 +233,8 @@ CHECKED_TYPES: tuple[str, ...] = (
 UNCHECKED_TYPES: dict[str, str] = {
     "StatementRow": "夹具没有造 statements 行（真机 p9b/data/statements.json 也是 0 行）"
                     "⇒ 字段以 `schema.Statement` 的 dataclass 为准，无真读数可对账",
+    "DocumentRow": "夹具没有造 documents 行（判据 C 的夹具工作区里稿件台账是空的）"
+                   "⇒ 字段以 `schema.Document` 的 dataclass 为准，无真读数可对账",
     "ReviewFindingRow": "夹具没有造 review_findings 行（同上：真机 0 行）",
     "RelationRow": "夹具没有造 relations 行 ⇒ 以 `schema.Relation` 为准",
     "ConjectureRow": "夹具没有造 conjectures 行 ⇒ 以 `schema.Conjecture` 为准",
@@ -495,7 +497,7 @@ def _face(records: list[dict], state: str, why: str, *, what: str) -> dict[str, 
 
 
 # ====================================================================== 1 快照
-def state_face(root: str | Path) -> dict[str, Any]:
+def state_face(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     """`GET /api/state` 的读模型：`{tri, snapshot, reason}`。
 
     `snapshot` 就是 `webui.state.snapshot()` 的返回值逐字（键集合与拆包前一致，
@@ -503,13 +505,19 @@ def state_face(root: str | Path) -> dict[str, Any]:
     为什么要外挂一层而不是改 `snapshot()`：`snapshot()` 的键是既有判据与旧壳渲染
     共用的公开面（`tests/test_webui.py` 逐条读它），签名稳定比"少一层包装"重要。
 
+    `sid` 是这一趟服务被交代的「当前会话」（`serve(sid=…)`，`start --watch` 交下来的
+    那一个）。它一路透传给 `snapshot(current=…)` —— 于是页面上的 `current.sid` /
+    `current.round` 与命令行 `--watch` 印出来的两个数逐字相同，且都在
+    `webui.state.round_of()` 一处算。不传（直接 `agentflow web`）⇒ 快照退回"最近一段
+    会话"，并把这件事写进 `current.source`，不假装是命令行交代的那一段。
+
     三态：`snapshot()` 自己不抛异常（它把读不到的东西收进 `problems`），所以这一面
     的 `tri` 只有两档 —— 有 `problems` ⇒ `unreadable`（说清是"没查成"），
     没有 ⇒ `computed`。空的但可读的工作区仍然是 `computed`（那是"读到了，里面是空的"）。
     """
     from .state import snapshot
 
-    snap = snapshot(root)
+    snap = snapshot(root, sid=sid)
     problems = [str(p) for p in (snap.get("problems") or [])]
     if problems:
         return {"tri": TRI_UNREADABLE, "reason": "；".join(problems[:5]), "snapshot": snap}
@@ -996,13 +1004,19 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
 
 
 # ====================================================================== 3 证据链
-#: 证据面读的那七族（表名 / 它是不是 store 表 / 给前端的那一栏）。
+#: 证据面读的那几族（表名 / 给前端的那一栏 / 真身出处）。
 _EVIDENCE_TABLES: tuple[tuple[str, str, str], ...] = (
     ("statements", "statements", "store.rows(\"statements\")"),
     ("conjectures", "conjectures", "store.rows(\"conjectures\")"),
     ("experiments", "experiments", "store.rows(\"experiments\")"),
     ("review_findings", "review_findings", "store.rows(\"review_findings\")"),
     ("relations", "relations", "store.rows(\"relations\")"),
+    # 2026-11-14 补：稿件台账（`documents`）此前只有命令行读得到
+    # （`doc.list_documents` 工具 / `table.list documents`），网页端一栏都没有 ——
+    # 于是业主盯页面时看不到"已经写了几份稿、最近几份是什么状态"。
+    # 与上面四张表同一条口径：读的是同一处 `store.rows("documents")`，
+    # 计数就是这份列表的长度（页面不另算一遍）。
+    ("documents", "documents", "store.rows(\"documents\")"),
 )
 
 #: 证据面那七栏的名字（逐行注解时的遍历顺序；与 `_EVIDENCE_TABLES` 的键 + 两栏非表来源）。
@@ -1891,8 +1905,8 @@ def _spot_row(path: Path, root: Path, kind: str) -> dict[str, Any]:
 def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     """`GET /api/evidence` 的读模型：证据链七栏 + 三态。
 
-    `statements` / `conjectures` / `experiments` / `review_findings` / `relations`
-    逐行来自 `store.rows(...)`（不另写一份读法）；`verifications` 来自
+    `statements` / `conjectures` / `experiments` / `documents` / `review_findings` /
+    `relations` 逐行来自 `store.rows(...)`（不另写一份读法）；`verifications` 来自
     `verifications.list_verifications`（一命题一份 `verifications/<4 位>.jsonl`）；
     `secretary` 来自 `out/secretary/<角色>.jsonl`。
 
@@ -3625,14 +3639,18 @@ def handle_state(handler: Any, params: Mapping[str, str],
 
     回的是 :func:`state_face` 里那张 `snapshot` —— 也就是 `webui.state.snapshot(root)`
     的返回值本身，不是外面那层三态包装：`/api/state` 是既有公开面，
-    `temp/_verify_w0.py` 对账的顶层 10 键与页面形状都是按它量的（迁路由不许动它）。
+    `temp/_verify_w0.py` 对账的顶层键与页面形状都是按它量的（迁路由不许动它；
+    2026-11-14 加了 `project` / `current` 两格，是加键不是改键）。
+
+    `sid` 从 handler 上取（`serve(sid=…)` 挂上去的那个）：它让页面上的
+    `current.sid` / `current.round` 与命令行 `start --watch` 印出来的两个数同源。
 
     `handle_state_face`（回 `{tri, snapshot, reason}`）那个三态形态刻意没有留下：
     同一个端点上摆两个形状只差一个字的处理器，早晚有人把错的那个登记进表里。
     要三态读数的地方读 `readers.state_face` 这个函数（它是读模型，不是端点）。
     """
     del params, query
-    _json_of(handler, state_face(handler.root)["snapshot"])
+    _json_of(handler, state_face(handler.root, sid=getattr(handler, "sid", ""))["snapshot"])
 
 
 def handle_run_view(handler: Any, params: Mapping[str, str],
@@ -5343,6 +5361,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("statements", "StatementRow[]"), ("statements_tri", "Tri"),
       ("conjectures", "ConjectureRow[]"), ("conjectures_tri", "Tri"),
       ("experiments", "ExperimentRow[]"), ("experiments_tri", "Tri"),
+      ("documents", "DocumentRow[]"), ("documents_tri", "Tri"),
       ("review_findings", "ReviewFindingRow[]"), ("review_findings_tri", "Tri"),
       ("relations", "RelationRow[]"), ("relations_tri", "Tri"),
       ("verifications", "VerificationRow[]"), ("verifications_tri", "Tri"),
@@ -5509,6 +5528,17 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("tri", "Tri"), ("reason", "string"), ("sid", "string"),
       ("lines", "ChatLine[]"), ("total", "number"), ("shown", "number"),
       ("clipped", "boolean"), ("sessions", "ChatSession[]"))),
+    ("DocumentRow",
+     "store.rows(\"documents\")（夹具有 0 行 ⇒ 权威来源是 `schema.Document` 的"
+     "dataclass；2026-11-14 补这一栏，网页端此前只有命令行读得到稿件台账）",
+     (("doc_id", "string"), ("kind", "string"), ("title", "string"),
+      ("markdown_path", "string | null"),
+      ("sections", "Record<string, unknown>[]"), ("claims", "Record<string, unknown>[]"),
+      ("open_problems", "string[]"), ("status", "string"),
+      ("review_rounds", "number"), ("review_verdict", "string"),
+      ("reviewed_at", "string"), ("reviewed_by", "string"),
+      ("created_at", "string"), ("updated_at", "string"), ("revision", "number"),
+      ("content_sha256", "string"), ("created_by", "string"))),
     ("StatementRow",
      "store.rows(\"statements\")（无真机样本 ⇒ 权威来源是 `schema.Statement`）",
      (("stmt_id", "string"), ("origin", "string"), ("kind", "string"),

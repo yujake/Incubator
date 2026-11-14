@@ -747,7 +747,7 @@ class WebHandler(BaseHTTPRequestHandler):
             self._html(500, _error_page(500, "前端外壳读不出来",
                                         f"{type(exc).__name__}: {exc}"))
             return True
-        self._html(200, self._inject_csrf(shell))
+        self._html(200, self._inject_placeholders(self._inject_csrf(shell)))
         return True
 
     def handle_run_index(self, params: Mapping[str, str],
@@ -922,7 +922,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 return
         self._html(404, _error_page(404, "没有这个页面", f"没有路由：{path}"))
 
-    # ------------------------------------------------------------ CSRF 占位符
+    # ------------------------------------------------------------ 外壳占位符
     def _inject_csrf(self, html_text: str) -> str:
         """把 `index.html` 里的 `__CSRF__` 换成这一次进程的令牌。
 
@@ -931,6 +931,52 @@ class WebHandler(BaseHTTPRequestHandler):
         消费它（写面在 W3）；它先占位，让"令牌从哪来"这件事在链路上是通的。
         """
         return html_text.replace("__CSRF__", self.csrf_token or "")
+
+    def _inject_placeholders(self, html_text: str) -> str:
+        """把外壳里的项目身份占位符换成这一趟服务真读到的读数。
+
+        四个占位符 —— `__PROJECT_NAME__` / `__PROJECT_TITLE__` /
+        `__PROJECT_ROOT__` / `__CURRENT_SID__` —— 都由 `webui.state` 那两个读者给
+        （`project_reading` / `current_reading`），不在这里另算一份：项目名与路径的
+        唯一来源是项目文件夹本身（`projects.resolve` 的口径），当前会话号的唯一来源是
+        `serve(sid=…)` 交下来的那一个。
+
+        为什么本项目要这一步：业主盯着跑时先看的是浏览器标签页。一页只有
+        「agentflow 用户端」时，同时开两个项目的两页分不出谁是谁；而"我点开的到底是
+        哪个项目"正是 2026-11-14 那起落点事故里最难自查的一格。
+
+        读不出来时占位符换成空串/目录名兜底，不留字面量 `__PROJECT_NAME__`
+        （那会被读成"项目的名字就叫这个"）。
+        """
+        import html as _html
+
+        from .state import current_reading, project_reading
+
+        try:
+            proj = project_reading(self.root)
+        except Exception:  # noqa: BLE001 - 外壳不该因为读数失败而 500
+            proj = {}
+        try:
+            cur = current_reading(Path(self.root),
+                                  getattr(self, "sid", "") or "")
+        except Exception:  # noqa: BLE001 - 同上
+            cur = {}
+        name = str(proj.get("name") or "") or Path(str(self.root)).name
+        if proj.get("is_project"):
+            title = name
+        elif str(proj.get("state") or "") in ("absent", "empty"):
+            # `--watch` 先起网页、真机还没开跑：项目文件夹刚 mkdir 出来，还没有
+            # project.json。标题如实说"还没初始化"，不冒充"这不是一个项目"。
+            title = f"{name}（还没初始化）"
+        else:
+            title = "（不是项目文件夹）"
+        return (html_text
+                .replace("__PROJECT_NAME__", _html.escape(name, quote=True))
+                .replace("__PROJECT_TITLE__", _html.escape(title, quote=True))
+                .replace("__PROJECT_ROOT__",
+                         _html.escape(str(self.root), quote=True))
+                .replace("__CURRENT_SID__",
+                         _html.escape(str(cur.get("sid") or ""), quote=True)))
 
 
 # ====================================================================== 服务
@@ -1073,7 +1119,8 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
           static_root: str | Path | None = None,
           csrf_token: str = "",
           routes_table: Sequence[tuple[str, str, str]] | None = None,
-          heartbeat_sec: float = DEFAULT_HEARTBEAT_SEC) -> ThreadingHTTPServer:
+          heartbeat_sec: float = DEFAULT_HEARTBEAT_SEC,
+          sid: str = "") -> ThreadingHTTPServer:
     """建好服务器并返回（不调 `serve_forever`）。
 
     测试用 `port=0` 起随机端口：返回后读 `srv.server_address[1]` 拿真实端口，
@@ -1083,6 +1130,12 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
     挂到句柄上（`handler.allow_writes`），由 `writes.authorize()` 当第 3 / 第 4 层判。
     `static_root` / `csrf_token` 也是可注入的：判据要在临时目录里造一份前端外壳，
     并按需钉住令牌（缺省 = 每进程一个随机值）。
+
+    `sid`（2026-11-14）：命令行 `start --watch` 自己定的那一段会话号，挂到句柄上
+    （`handler.sid`）。它让 `/api/state` 的 `current.sid` / `current.round` 与
+    `--watch` 印出来的两个数逐字同源 —— 不给就是"没人交代"，快照退回最近一段会话
+    并在 `current.source` 里说明（不是假装知道）。SSE 的 `state` 帧也取同一个号
+    （`sse.set_serving_sid`），否则"页面上刷新一下"与"流里推进来"会给出两个不同的当前会话。
 
     ## 起服务时顺带做的两件事（裁定 1a 的装配，B 线只提供钩子，接的是这里）
 
@@ -1123,7 +1176,13 @@ def serve(root: str | Path, *, host: str = DEFAULT_HOST, port: int = DEFAULT_POR
         "csrf_token": csrf_token or secrets.token_hex(16),
         "allow_writes": bool(allow_writes), "settings_write": bool(settings_write),
         "routes_table": tuple(routes_table) if routes_table is not None else (),
+        # 「当前会话」：命令行交代的那一个（空串 = 没交代）。`/api/state` 与 SSE
+        # 的 state 帧都读它，于是两处说的是同一段会话、同一个轮号。
+        "sid": str(sid or ""),
     })
+    # SSE 那一侧也要知道同一个号（广播帧没有 handler 可问）：同一代服务里只有一个
+    # 当前会话，所以这条登记放在"这一代是谁开的"同一个位置。
+    sse.set_serving_sid(str(sid or ""))
     # ---- 起之前先问一句"这个端口上是不是已经有东西在听"。
     # 为什么这一问不能省：Windows 的 SO_REUSEADDR 让第二个 bind 静默成功，于是下面那句
     # `ThreadingHTTPServer(...)` 不报错、URL 照打、请求却永远进不来。`port=0` 不探

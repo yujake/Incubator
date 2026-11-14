@@ -34,6 +34,7 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
 import { CachePanel } from "../components/PromptCache";
+import { formatUsd } from "../components/Money";
 import { Table, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -180,8 +181,19 @@ export function Home() {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<WriteOutcome | null>(null);
   const [result, setResult] = useState("");
-  const chat = useFace(() => api.getChat(target));
+  // 「当前会话」由服务端交代（`serve(sid=…)` ← `start --watch --project P` 定的那个号）。
+  // 只在它**真的在盘上**时才拿它当默认选中项（`current.found`）：命令行先起网页、
+  // 再开跑的那一刻这一段会话文件还不存在，此时硬钉一个空会话会让对话面报
+  // 「没查成」—— 而那其实是「还没有会话（合法初态）」。
+  const pinnedSid =
+    snapshot !== null && snapshot.current.found ? snapshot.current.sid : "";
+  // 选了哪一段就取哪一段；没选（`target` 空）就跟着服务端交代的当前会话走。
+  // 切换时 `onChange` 会调 `chat.reload()`（`useFace` 的依赖只有流版本与 tick，
+  // 不包含闭包 —— 见 `live.tsx` 那段说明），所以这里换值必须配一次显式重取。
+  const sessionParam = target === "" ? pinnedSid : target;
+  const chat = useFace(() => api.getChat(sessionParam));
   const liveFace = useFace(() => api.getLive());
+  const budgetFace = useFace(() => api.getBudget());
 
   if (snapshot === null) {
     return (
@@ -326,6 +338,76 @@ export function Home() {
 
   return (
     <>
+      {/* 监视头（2026-11-14）：业主「盯着跑」要的五格 —— 项目 / 工作区 / 当前会话 /
+          当前轮 / 花费。五格全部来自两条既有端点，页面不自己算第二份：
+          `project` / `current` 是 `/api/state` 的两栏（名字来自项目文件夹本身，
+          sid 与轮号与 `start --watch` 印的是同一个号、同一个函数），花费来自
+          `/api/budget`（总额度取盘上的 `budget.json`、已花取 `usage_ledger`）。 */}
+      <Card
+        title="监视"
+        subtitle="与命令行 `agentflow start --watch` 印的同一批读数（项目 / 工作区 / 会话 / 轮 / 花费）"
+        tone={snapshot.project.tri === "unreadable" ? "problem" : "plain"}
+        right={
+          <TriState
+            tri={snapshot.project.tri}
+            label="项目"
+            reason={snapshot.project.reason}
+          />
+        }
+      >
+        <div class="readings">
+          项目 <b class="mono">{snapshot.project.is_project ? snapshot.project.name : "（不是项目文件夹）"}</b>
+          {snapshot.project.is_project ? (
+            <span class="tri-reason"> · 名字来源 {snapshot.project.source}</span>
+          ) : null}
+        </div>
+        <div class="readings">
+          落点 <span class="mono">{snapshot.project.path}</span>
+          {snapshot.project.is_project ? null : (
+            <span class="tri-reason"> · {snapshot.project.why}</span>
+          )}
+        </div>
+        <div class="readings">
+          工作区根 <span class="mono">{snapshot.root}</span>
+        </div>
+        <div class="readings">
+          当前会话{" "}
+          <span class="mono">
+            {snapshot.current.sid === "" ? "（还没有会话）" : snapshot.current.sid}
+          </span>{" "}
+          · 当前轮 <span class="mono">{snapshot.current.round}</span> · 来源{" "}
+          <span class="mono">{snapshot.current.source}</span>
+          {snapshot.current.sid !== "" && !snapshot.current.found ? (
+            <span class="tri-reason">（这一段会话文件还不在盘上：命令行先起网页、再开跑）</span>
+          ) : null}
+        </div>
+        <div class="readings">
+          总预算{" "}
+          <span class="mono">
+            {budgetFace.data === null ? "（还没读到）" : formatUsd(budgetFace.data.total_usd)}
+          </span>{" "}
+          · 已花{" "}
+          <span class="mono">
+            {budgetFace.data === null ? "（还没读到）" : formatUsd(budgetFace.data.spent_usd)}
+          </span>{" "}
+          · 剩余{" "}
+          <span class="mono">
+            {budgetFace.data === null
+              ? "（还没读到）"
+              : formatUsd(budgetFace.data.remaining_usd)}
+          </span>
+          {" "}
+          <a class="mono" href="/budget">
+            去预算窗口追加
+          </a>
+        </div>
+        {budgetFace.problem === "" ? null : (
+          <div class="readings tri-reason">预算面没查成：{budgetFace.problem}</div>
+        )}
+        {budgetFace.data !== null && isUnreadable(budgetFace.data.tri) ? (
+          <div class="readings tri-reason">{budgetFace.data.reason}</div>
+        ) : null}
+      </Card>
       {/* 两档提示词缓存的面板（2026-10-23）：落在首页最上面 —— 用户一进来就看得到
           "两档落没落地、新不新鲜、缺谁"，两个按钮就在下面（真预热要二次确认）。 */}
       <CachePanel />
