@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-13T15:21:35+08:00",
+  "generated_at": "2026-11-15T05:06:27+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,11 +505,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "71e4f91e71d7549823e6fe94cacafbe6f8c363f8da0df053a5fcf182390d03ec",
+      "sha256": "956592c082d59f0a84d9bbde179f4955e23d663424a286f5cd4785ce3ab22278",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 76d0524c83ff 变为 71e4f91e71d7，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
-      "changed_this_session": null,
+      "change_note": "p282 追账重冻（FR 路）：D1·甲/DC·甲/DC·丁/K1 四笔在基线之外的声明面变化 —— agent 面 D 动作 15→14、conjectures 写集搬家、G 枚举、G/H/M prompt、11 格版本行 p281→p282；tool 面 128→127、conductor.closing 七格、doc 三个枚举、run_experiment returns +conjecture_ledger。逐格 diff 见本轮交付；登记≠批准，reviewers 仍 0。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -531,11 +531,11 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "8d17121883a0cd1859205522bdb46e5e8983e612fc4fc12e965bff39ce596352",
+      "sha256": "88390def6c05345ba839084068d265a8263d83a7a0c8e2d7fd4f3fc58b7c98d9",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 c6866f813628 变为 8d17121883a0，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
-      "changed_this_session": null,
+      "change_note": "p282 追账重冻（FR 路）：D1·甲/DC·甲/DC·丁/K1 四笔在基线之外的声明面变化 —— agent 面 D 动作 15→14、conjectures 写集搬家、G 枚举、G/H/M prompt、11 格版本行 p281→p282；tool 面 128→127、conductor.closing 七格、doc 三个枚举、run_experiment returns +conjecture_ledger。逐格 diff 见本轮交付；登记≠批准，reviewers 仍 0。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []
