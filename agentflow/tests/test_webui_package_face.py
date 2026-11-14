@@ -105,9 +105,11 @@ def test_the_gate_table_agrees_with_the_cli_readout(artifacts_ws: pathlib.Path) 
     文件级落点。不一致时先看是谁改了四态映射，而不是把这条判据改宽。
     """
     pkg = R.package_face(artifacts_ws, project_dir=str(artifacts_ws),
-                         report_path="out/review/REPORT.md")
+                         report_path="out/review/REPORT.md", sid=None)
+    # 会话号显式给 `None`（运维口径）：读数缺省现在是一问「没给运行号」的 unknown
+    # （`readouts.gates_readout` 的 `sid` 三态），网页缺省是读缺省会话 —— 两端要比同一档。
     cli = readouts.gates_readout(artifacts_ws, project_dir=str(artifacts_ws),
-                                 report_path="out/review/REPORT.md")
+                                 report_path="out/review/REPORT.md", sid=None)
     gates = pkg["closing"]["gates"]
     assert gates["counts"] == cli["data"]["counts"], (gates["counts"], cli["data"]["counts"])
     assert gates["machine_pass"] == cli["data"]["machine_pass"]

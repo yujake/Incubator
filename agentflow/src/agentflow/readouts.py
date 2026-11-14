@@ -3,12 +3,9 @@
 
 ## 这一层为什么存在
 
-"这个数是多少"在这套框架里出现过两种坏形态：
-
-1. 同一个数在两个地方各算一遍（CLI 一份、网页一份）⇒ 两处读数分家，而没有任何一条判据
-   会因此变红。教训：`status-report` 与网页的"在飞任务"曾经差一档。
-2. "没读到"被折成 0 ⇒ 用户读到"这一趟 0 次错误"，而实际上是工作区根本不存在
-   （三态纪律的反面，见 `AGENTS.md` 与 `noai_gate` 的退出码表）。
+"这个数是多少"在这套框架里出现过两种坏形态：同一个数在两处各算一遍（CLI 一份、网页一份，
+两处读数分家而没有任何判据会红 —— `status-report` 与网页的"在飞任务"曾差一档）；
+以及"没读到"被折成 0（用户读到"这一趟 0 次错误"，而工作区根本不存在）。
 
 所以这一层只做一件事：把"读盘 ⇒ 一个带三态的 dict"收成一个口径。所有读数共用同一个
 外层五键：
@@ -21,18 +18,15 @@
  "problems": [...]}    # 读到了、但人应该看见的异常（每条 {"code", "detail"}）
 ```
 
-为什么 `state` 与 `checked` 同时给：三态纪律要的是"两个不同的东西不许用同一个值表示"，
-而调用方有的只认布尔、有的只认字符串。两格由同一处同时写（`_envelope`），所以不会漂。
+为什么 `state` 与 `checked` 同时给：调用方有的只认布尔、有的只认字符串；两格由 `_envelope` 同时写，所以不会漂。
 
 ## 四条纪律（判据 `tests/test_readouts_are_the_single_shape.py` 钉的就是这四条）
 
 1. 纯读：不写库、不写盘、不建目录、不加锁、零模型调用。
-2. 不 import 呈现层：这里 import `webui` 或 `cli` 就会让"CLI 与网页读同一份"变成
-   "CLI 与网页互相 import"——循环依赖只是症状，真正的问题是口径又有两个主人。
-3. 没扫到 ≠ 没东西：读不到 ⇒ `checked=False` 且 `state="unknown"`，绝不给一张全 0 的表。
-   反真空：把底下的 `scan` 打桩成空，四条读数必须一起变红（不能静默给 0）。
-4. 空工作区是正控：初始化过、没有内容 ⇒ 全 0 且 `checked=True`。0 与 unknown 分得开，
-   这一条与第 3 条是同一个口径的两面。
+2. 不 import 呈现层：import `webui` / `cli` 就等于口径又有了两个主人（循环依赖只是症状）。
+3. 没扫到 ≠ 没东西：读不到 ⇒ `checked=False` 且 `state="unknown"`，绝不给一张全 0 的表；
+   反真空：把底下的 `scan` 打桩成空，四条读数必须一起变红。
+4. 空工作区是正控：初始化过、没有内容 ⇒ 全 0 且 `checked=True`。0 与 unknown 分得开。
 
 ## 四条读数各自回答什么
 
@@ -44,8 +38,7 @@
 | `gates_readout` | 收工门七格各是什么状态（四态一张表：pass / fail / unknown / na） | `closing.check_closing`（现算，不读缓存） | `agentflow stats gates` |
 
 `errors_readout` 的计数口径不在这里重写：它直接调 `errorstats.error_action_stats`（角色归属、
-主码规则、三态都在那里有逐条注释）。本模块只负责"把它装进统一外层"，外加把同一份扫描
-（`scan`）交给 `flow_readout` —— 两条读数看的是同一批记录，不存在两次读盘两个结果。
+主码规则、三态都在那里有逐条注释）。本模块只把它装进统一外层，并把同一份扫描交给 `flow_readout`。
 """
 from __future__ import annotations
 
@@ -519,14 +512,12 @@ def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
 
     ## 为什么要有这个函数（口径题，不是重构）
 
-    同一份工作区的七格读数有两个出口：命令行 `agentflow stats gates` 走
-    :func:`gates_readout`，网页 `/api/package` 与 `/api/acceptance` 走
-    `webui/readers.py::_closing_block`。改前这两处各写一遍同一个循环
-    （遍历 `closing.DEFAULT_CHECKS`、把不在 :data:`CELL_STATES` 里的状态折成
-    `unknown`、逐档累加），于是"同一份 `rep.status` 数出两个 counts"这件事
-    没有任何结构保证 —— 一处改了归一化规则，另一处照旧，两边都"对"，合起来是假的。
-    现在两边都只调这一个函数：输入是 `closing.ClosingReport`，输出是
-    `(cells, counts)`，不读盘、不看第几端。
+    七格读数有两个出口：命令行 `agentflow stats gates` 走 :func:`gates_readout`，
+    网页 `/api/package` 与 `/api/acceptance` 走 `webui/readers.py::_closing_block`。
+    改前两处各写一遍同一个循环（遍历 `closing.DEFAULT_CHECKS`、把词表外的状态折成
+    `unknown`、逐档累加）⇒"同一份 `rep.status` 数出两个 counts"没有结构保证（一处改了
+    归一化规则，另一处照旧，两边都"对"）。现在两边都只调这一个函数：
+    输入 `closing.ClosingReport`、输出 `(cells, counts)`，不读盘、不看第几端。
 
     ## 形状
 
@@ -534,8 +525,7 @@ def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
       `detail` 是该格被拦时那几条 finding 的原话（用顿号连起来，没有就是空串）；
     - `counts` 的键就是 :data:`CELL_STATES` 四档，值各几格，七格加起来等于格数。
 
-    网页那端还要给每格补 `source`（原文落点）：那是网页自己的呈现面，在这一份
-    读数之外补，不许反过来改这里的格形状 —— 一改，两个出口的 `cells` 就不再逐字相等。
+    网页那端还给每格补 `source`（原文落点）：那是网页的呈现面，在这一份读数之外补，不许反过来改格形状。
     """
     from . import closing as CL
 
@@ -556,7 +546,7 @@ def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
 
 
 def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
-                  sid: str | None = None,
+                  sid: str | None = "",
                   scanned: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """收工门七格的四态一张表（现算，不读任何人缓存过的结论）。
 
@@ -570,11 +560,13 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     （它只是读数：收工由 M 判，见 `closing.ClosingReport.can_close` 的注释）；
     `data.verdict` 是 M 那份判据（没有 ⇒ null，绝不编一个"通过了"）。
 
-    为什么现算而不是读 `out/review/` 里上一次的结论：这张表回答的是"现在能不能交"，
-    缓存过的结论回答的是"上一次能不能交"——两件事用同一个输出就是那次"内外读数分家"的重演。
-    现算的代价是几次磁盘读，零模型调用。
+    为什么现算而不是读上一次落盘的结论：那回答"上一次能不能交"，与"现在"是两件事（同一个输出就是"内外读数分家"的重演）；代价只是几次磁盘读，零模型调用。
 
     `project_dir` / `report_path` 不给 ⇒ 依赖它们的那几格如实记 `unknown`（不是 pass）。
+
+    `sid` 三态（缺省不是 `None`）：不给 ⇒ `closing.NO_SESSION`（没有运行号）⇒ `user_pending`
+    记 `unknown` 并在 `problems` 里点名 —— 真机上缺省会话（`sessions/<今天>.jsonl`）106/107
+    不存在，按它读会把"问了还没答"读成 pass；显式给 `None` 才是运维口径，某一趟就显式给号。
 
     `sid` 给了一个盘上不存在的号 ⇒ 受控拒绝：`checked=False`、
     `reason` 就是 CLI 那一句原话、`data.refusal` 带 `{"code","sid","detail","exit_code": 2}`，
@@ -584,9 +576,7 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     同一份工作区在 API 算出 `can_close=None`、在 CLI 算出 True/False（"一个说不知道、
     一个说可以交"）。
 
-    `scanned`：`stats all` 共读一份扫描。门的"现算"不受影响 ——
-    七格仍然在这次调用里现跑，这里复用的只是事件流/会话记录那份扫描（门本身不读它们，
-    只用它的 `store`）。
+    `scanned`：`stats all` 共读一份扫描（复用的只是事件流/会话记录那份，门只用它的 `store`），七格仍然现跑。
     """
     scanned = scan(target) if scanned is None else scanned
     why = _scan_problem(scanned, need=("events", "sessions"))
@@ -605,6 +595,10 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
             return _envelope(checked=False,
                              reason=f"打开工作区失败（{type(e).__name__}: {e}）", data=empty)
     from . import closing as CL
+
+    # 没给运行号（`closing.NO_SESSION` 或其空白变体）⇒ 这一格问不出来，下面还要点名；
+    # `None` 不算"没给"：它是判据层的运维口径（读缺省会话），见 docstring 的 `sid` 三态。
+    no_sid = sid is not None and not str(sid).strip()
 
     # 机器口径的两个喂参：CLI 与工具体都喂这一份；这一条读数
     # 不喂 ⇒ 同一份工作区在 API 出口算出 `can_close=None`、在 CLI 出口算出
@@ -636,6 +630,11 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
             problems.append(_problem(str(getattr(finding, "code", "") or "blocker"),
                                      f"【{getattr(finding, 'check', '')}】"
                                      f"{getattr(finding, 'detail', '')}"))
+    if no_sid:
+        problems.append(_problem("no_session", (
+            "没给运行号（sid）⇒ 待答问题那一格只能是 unknown（不是 pass）：没给号就没有对象，"
+            "不能按缺省会话猜。要看工作区整体在等什么用 `agentflow inbox`（它扫全部会话）；"
+            "要看某一趟用 `agentflow closing --sid <号>`（或 API `gates_readout(sid=…)`）。")))
     # 逐格与计数只从这一处取（与网页那头同一个函数，见 `gate_cells` 的注释）。
     cells, counts = gate_cells(report)
     data: dict[str, Any] = {

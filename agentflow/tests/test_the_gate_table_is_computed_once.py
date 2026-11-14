@@ -32,6 +32,10 @@ b 是这条判据的存在理由：只做 a 的话，两个入口碰巧数得一
   （“没给项目根”是没查成，不是通过 —— 退出码因此是 2）；
 - 网页（`package_face` / `acceptance_face`）：缺省取工作区根 `.` 与
   `out/review/REPORT.md` ⇒ 同一批格子按真实落点判出 `pass`。
+- 会话号（2026-11-14 补）：命令行读数的缺省是「没给运行号」（`user_pending` 记 unknown，
+  见 `readouts.gates_readout` 的 `sid` 三态），网页的缺省是「读缺省会话」。同属「两个缺省
+  不同」这一类 ⇒ 本判据显式给 `sid=None`（运维口径）让两端比同一档，而不是让两个缺省去拼；
+  「网页那一端要不要也改成没给运行号」是另一道口径裁定，不在这里单方面改。
 
 两边各自都有理由（一边要 fail-closed，一边要页面开箱有读数），所以这一格是
 口径裁定题，不是本判据能单方面改的：改哪一边都会改 `agentflow closing` 的退出码
@@ -71,11 +75,13 @@ def _cells_without_source(cells: list[dict]) -> list[dict]:
 def test_a_same_inputs_give_verbatim_equal_cells(tmp_path: pathlib.Path) -> None:
     """a：同一批入参 ⇒ 两个出口的八格与计数逐字相等。"""
     root = _workspace(tmp_path)
-    readout = RD.gates_readout(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH)
+    readout = RD.gates_readout(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH,
+                               sid=None)
     assert readout["checked"], f"命令行那端没查成（判据失去对象）：{readout['reason']}"
     assert readout["data"]["cells"], "命令行那端八格是空的（判据失去对象）"
 
-    package = R.package_face(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH)
+    package = R.package_face(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH,
+                             sid=None)
     gates = package["closing"]["gates"]
     assert gates["cells"], (
         f"网页那端八格是空的（判据失去对象）：tri={package.get('tri')} "
@@ -104,11 +110,13 @@ def test_b_both_ends_read_the_one_computer(tmp_path: pathlib.Path,
 
     monkeypatch.setattr(RD, "gate_cells", fake_gate_cells)
 
-    readout = RD.gates_readout(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH)
+    readout = RD.gates_readout(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH,
+                               sid=None)
     assert readout["data"]["cells"] == marker_cells, (
         "命令行那端没走 `readouts.gate_cells`（打桩没生效）⇒ 它自己又数了一遍")
 
-    package = R.package_face(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH)
+    package = R.package_face(root, project_dir=PROJECT_DIR, report_path=REPORT_PATH,
+                             sid=None)
     gates = package["closing"]["gates"]
     names = [str(c.get("name") or "") for c in gates.get("cells") or []]
     assert names == [marker_name], (
