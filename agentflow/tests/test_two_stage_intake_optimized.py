@@ -436,8 +436,10 @@ def test_the_closing_gate_splits_unoptimized_by_source(store):
                                        proof_process=P1, kind="conjecture"))
     # B：文献侧录入（占位签 = 文献编号，未优化）
     b = _lit_row(stmt_id=S.format_id(1))
-    # C：来源读不出来（旧行：bits 为空）
-    c = _statement_row(stmt_id=S.format_id(2), bits={}, proof_text="")
+    # C：来源读不出来（旧行：bits 为空）—— 但有证明正文：「等洗」按"有没有可优化的
+    # 正文"排除（2026-11-14），所以这一档必须有一份正文才进得来。
+    c = _statement_row(stmt_id=S.format_id(2), bits={},
+                       proof_text="旧行：没有来源格的那一份证明正文。")
     sync_counters(store)
     _put(store, a)
     _put(store, b)

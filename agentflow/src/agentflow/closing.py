@@ -5388,6 +5388,16 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
 
     一条命题有多份证明时按份出读数：签是逐条的，交差与洗都按份算，不按命题算。
 
+    ## 什么不进这一格：没有可优化正文的行（按正文排除，不按 kind 排除）
+
+    2026-11-14 业主改口径（一般性规定，针对优化侧）：「系统取未优化的命题号及相关
+    信息、命题类型、原证明稿」—— 所以"等洗"的排除面只能按"有没有可优化的正文"划：
+    `verifications.proof_list` 里一份非空正文都没有的行不进这一格（它没有东西可洗，
+    下一步在 `statements_optimization_candidates` 的候选面上）。改前这里按
+    `kind == "concept"` 排除 —— 那是拿 kind 当排除面，将来任何"没有原稿的类型"都得
+    再补一句，而漏补一次就会把 41 条概念算成永不清空的待办。
+    判据与两个反真空见 `tests/test_optimization_candidates_and_wash_scope.py`。
+
     ## 为什么 optimized 用三态（true / false / not_recorded）
 
     存量行没有这一格。缺格折成 false 会让整库一次全变「等洗」；折成 true 更坏
@@ -5413,8 +5423,6 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
         return out
     for sid, row in sorted(rows.items()):
         kind = str(row.get("kind") or "")
-        if kind == "concept":
-            continue
         out["scanned"] += 1
         # 明确放弃的命题不在这一格里追（它不是「等洗」，是「不做了」；那一档有
         # `statements_abandoned` 专门数）。自称放弃而标记读不出来的照旧算等洗 ——
@@ -5426,6 +5434,20 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
         elif status_now in _MR.RETIRED_STATUSES:
             # `refuted`（标记为错误）同一条纪律：不做了的命题不再等洗。
             continue
+        # ---- 「等洗」的判据是「有没有可优化的正文」，不是「是哪一种 kind」-------
+        #
+        # 2026-11-14 业主改口径（一般性规定，针对优化侧）：「系统取未优化的命题号及
+        # 相关信息、命题类型、原证明稿」—— 排除面因此只能按"有没有原稿"划：
+        # 一条命题的 proof_list 里一份非空正文都没有 ⇒ 它不是"等洗"，是"还没稿"
+        # （下一步在 `statements_optimization_candidates` 的候选面上，不在这一格）。
+        # 改前这里写的是 `if kind == "concept": continue` —— 拿 kind 当排除面：
+        # 将来任何"没有原稿的类型"都要再补一句 continue，而漏补一次就会把 41 条
+        # 概念算成永不清空的待办。负控与正控见
+        # `tests/test_optimization_candidates_and_wash_scope.py`。
+        proofs_now = [(int(no), str(text)) for no, text in _VR.proof_list(row)
+                      if str(text).strip()]
+        if not proofs_now:
+            continue
         ev = (row.get("bits") or {}).get("evidence") or {}
         source = str(ev.get("proof_source") or "")
         if source == "citation":
@@ -5434,7 +5456,7 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
             cls = "unoptimized_from_f"
         else:
             cls = "unoptimized_source_not_recorded"
-        for no, text in _VR.proof_list(row):
+        for no, text in proofs_now:
             state = _EB.optimized_state(row, no)
             if state == "true":
                 continue
@@ -5469,10 +5491,247 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
             f"三档之和 {total} 与逐条数 {out['count']} 不一致，这一格自己坏了")
     out["reason"] = ("查过了：没有待洗的证明（三档都是 0）" if not out["count"] else
                      (f"查过了：{out['count']} 份证明还没洗过（按来源：{out['by_class']}；"
-                      f"扫了 {out['scanned']} 条非概念命题）"))
+                      f"扫了 {out['scanned']} 条命题，其中没有可优化正文的不进这一格）"))
     if out["hard_to_prove_count"]:
         out["reason"] += (f"；另有 {out['hard_to_prove_count']} 份的优化结论是"
                           "「难以自证」（不再等洗）")
+    return out
+
+
+#: 优化提示词的三档（`statements_optimization_candidates` 的 `prompt_class` 词表）。
+#:
+#: `well_defined` = 概念行（`statements.kind == "concept"`）—— 它要的是良定义论证，
+#: 与定理的"把证明写清楚"不是一件事（业主 2026-11-14：「良定义类需再做设计」）。
+#: `exhaustive` = 证明栏是穷举型证据的那一档，判据只有 `exhaustionreport.
+#: is_exhaustion_column` 一处（穷举不是一种 `kind`，它是证明写法）。
+#: 其余一律 `theorem`。`kind` 是"概念 / 非概念"的权威：概念行没有稿、稿头也读不出它。
+OPTIMIZATION_PROMPT_CLASSES: tuple[str, ...] = ("theorem", "exhaustive", "well_defined")
+
+
+def _optimization_prompt_class(row: Mapping[str, Any]) -> str:
+    """这一条该发哪一档优化提示词（`OPTIMIZATION_PROMPT_CLASSES` 之一）。"""
+    from . import exhaustionreport as _XR
+
+    if str(row.get("kind") or "") == "concept":
+        return "well_defined"
+    if _XR.is_exhaustion_column(row):
+        return "exhaustive"
+    return "theorem"
+
+
+def _optimization_state_of(states: Mapping[int, str]) -> str:
+    """一条命题的优化态（按份聚合；四档口径取自 `evidencebits.OPTIMIZED_STATES`）。
+
+    聚合规则写死在这里：全 true ⇒ true；有 false ⇒ false；有 not_recorded ⇒
+    not_recorded；只剩 hard_to_prove ⇒ hard_to_prove。没有原稿 ⇒ not_recorded
+    （它没有声称过什么，不是"洗过了"）。
+    """
+    values = list(states.values())
+    if not values:
+        return "not_recorded"
+    if all(v == "true" for v in values):
+        return "true"
+    if any(v == "false" for v in values):
+        return "false"
+    if any(v == "not_recorded" for v in values):
+        return "not_recorded"
+    return "hard_to_prove"
+
+
+def _optimization_draft(root: str, sid: str, row: Mapping[str, Any],
+                        proofs: list[tuple[int, str]], *,
+                        signed_paths: Mapping[str, str] | None = None) -> dict:
+    """这一条的「原证明稿」在哪（三档：手稿文件 / 行上正文 / 没有）。
+
+    三档的次序就是 `agent_b.open_polish_copy` 找源稿的次序（同一份事实、同一条口径）：
+
+    1. `manuscript_id` 指到的那一份 —— 族按 kind 定（概念行是 B 的 `b-proof`，其余
+       按 `f-proof`；E 的 `e-proof` 落在行上正文那一档，因为稿号不带族）；
+    2. V 的颁发表里 `statement_id` 指向的那一份（概念已签、还没收录的那一档）；
+    3. 行上的 `proof_text`（多份按证明号拼起来）—— 机械录入的定理多半只有这一档；
+    4. 都没有 ⇒ `source="none"`（这是"没有可复制的原稿"，不是"没查成"）。
+    """
+    from . import manuscriptids as _MID
+    from . import vsigns as _VS
+
+    out: dict[str, Any] = {"available": False, "source": "none", "manuscript_id": "",
+                           "path": "", "chars": 0, "source_key": f"stmt:{sid}"}
+    mid = str(row.get("manuscript_id") or "").strip()
+    if mid:
+        family = "b-proof" if str(row.get("kind") or "") == "concept" else "f-proof"
+        try:
+            rel = _MID.canonical_rel(mid, family=family)
+        except Exception:  # noqa: BLE001 —— 号拼不出名字 = 这一档核不上，不是崩溃
+            rel = ""
+        if rel and (Path(root) / rel).is_file():
+            out.update(available=True, source="manuscript", manuscript_id=mid,
+                       path=rel, chars=sum(len(t.strip()) for _n, t in proofs),
+                       source_key=mid)
+            return out
+    signed = str((signed_paths or {}).get(sid) or "")
+    if signed and (Path(root) / signed).is_file():
+        try:
+            signed_mid = str(_VS.manuscript_id_of(signed) or "")
+        except Exception:  # noqa: BLE001
+            signed_mid = ""
+        out.update(available=True, source="signed_manuscript", manuscript_id=signed_mid,
+                   path=signed, chars=sum(len(t.strip()) for _n, t in proofs),
+                   source_key=signed_mid or f"stmt:{sid}")
+        return out
+    text = "\n\n".join(str(t).strip() for _n, t in proofs).strip()
+    if text:
+        out.update(available=True, source="statement_proof_text", manuscript_id=mid,
+                   path="", chars=len(text))
+        return out
+    return out
+
+
+def _optimization_next_step(*, sid: str, kind: str, origin: str, draft: Mapping[str, Any],
+                            unoptimized: Iterable[int]) -> str:
+    """这一条下一步该干什么（逐条点名，按"有没有原稿"分两支、概念再按来源分两小支）。"""
+    if draft.get("available"):
+        which = ("手稿 " + str(draft.get("path") or draft.get("manuscript_id") or "")
+                 if draft.get("source") != "statement_proof_text"
+                 else "行上的证明正文")
+        return (f"开优化稿：`B.open_polish_copy(statement_id={sid})` 从{which}复制一份 "
+                "B 号稿（清 V 签）→ 按对应档的优化提示词改正文 → 重派 V 三转签 → "
+                "用优化线收录（`ingest_manuscript` 的 path_group≥1）")
+    if kind == "concept":
+        if origin == "external_lit":
+            return ("文献术语：补 `quote_span` / `page_range`（或改成 own_result 再落 "
+                    "b-稿）—— 两样都没有，这一条就是「没有可复制的原稿」")
+        return ("B 落 b-稿（`reports/b-proof-<号>.md`）→ 派 V 三转签 → "
+                "`ingest_manuscript(cells=[\"proof_text\"])` —— 良定义论证先有，才有得优化")
+    return ("无原稿：先让产出方落稿（定理走 F 的 `f-proof`、穷举走 E 的 `e-proof`）并拿 V 签"
+            " → B 收录，再开优化稿")
+
+
+def statements_optimization_candidates(store: Any) -> dict[str, Any]:
+    """未优化清单（候选面）：哪些命题该开一份优化稿 —— 一般性规定，不按 kind 挑。
+
+    ## 业主 2026-11-14 的口径（逐字）
+
+    「系统取未优化的命题号及相关信息、命题类型、原证明稿，自动注册 B 侧稿号并给出
+    初始稿（就是原证明稿的复制版），针对不同命题类型给 B 发送定制的优化提示词。」
+
+    所以这一格逐条给五样：`stmt_id` / `kind` / 原稿（`draft`）/ `optimized_state` /
+    `prompt_class` / `next_step`。它不是"概念欠良定义论证"的专项读数：概念只是
+    `prompt_class == "well_defined"` 那一档（`by_prompt_class` 里看得见）。
+
+    ## 与 `statements_unoptimized_reading` 的分工（两个问题，不许折平）
+
+    - 那一格是作业面：已经有正文、还没洗的那几份（按证明号逐份）；
+    - 这一格是候选面：该开稿的那几条命题（按命题，含"还没有原稿"的）。
+      一条概念没有良定义论证时只在候选面上（`draft.source == "none"`），不在作业面上
+      —— 后者按正文排除，见 `statements_unoptimized_reading` 的 docstring。
+
+    ## 判据与三态
+
+    候选 = 未放弃 / 未退休，且「没有原稿」或「至少一份正文的优化态不是 true /
+    hard_to_prove」。`hard_to_prove` 不候选（业主 2026-11-13：它不是等洗）。
+    `statements` 读不出来 ⇒ `checked=False` + `reason`（没查成不是"一条都不欠"）。
+
+    `optimization_open` 判"这一条是不是已经开过优化稿"（来源记录在 `tasks.artifacts`
+    的 `mss:…#kind=polish#source=…`）—— 三态，读不到就 `checked=False`，绝不折成
+    "没开过"再让人重复开。`source_key` 与开稿那一笔写的 `source` 是同一枚记号。
+    """
+    from . import evidencebits as _EB
+    from . import manuscriptretire as _MR
+    from . import statementabandon as _SA
+    from . import verifications as _VR
+    from . import vsigns as _VS
+
+    out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
+                           "rows": [], "by_prompt_class": {}, "by_origin": {},
+                           "problems": [], "reason": ""}
+    rows, why = _statement_rows(store)
+    if rows is None:
+        out["reason"] = why
+        return out
+    root = str(getattr(store, "root", "") or "")
+    from .agent_b.open_polish_copy import opened_polish_sources as _opened
+
+    opened = _opened(store)
+    signed_paths = _optimization_signed_paths(root, _VS)
+    for sid, row in sorted(rows.items()):
+        out["scanned"] += 1
+        status_now = str(row.get("status") or "")
+        if status_now == "abandoned":
+            if _SA.parse_abandon(row.get("quote_reason")).get("checked"):
+                continue
+        elif status_now in _MR.RETIRED_STATUSES:
+            continue
+        kind = str(row.get("kind") or "")
+        origin = str(row.get("origin") or "")
+        proofs = [(int(no), str(text)) for no, text in _VR.proof_list(row)
+                  if str(text).strip()]
+        states = {no: _EB.optimized_state(row, no) for no, _text in proofs}
+        unoptimized = [no for no, state in sorted(states.items())
+                       if state in ("false", "not_recorded")]
+        if proofs and not unoptimized:
+            # 每一份都洗过了（或只剩「难以自证」）⇒ 不候选。
+            continue
+        draft = _optimization_draft(root, sid, row, proofs, signed_paths=signed_paths)
+        key = str(draft.get("source_key") or "")
+        open_state = {"checked": bool(opened.get("checked")), "found": None,
+                      "copies": [], "why": str(opened.get("why") or "")}
+        if open_state["checked"]:
+            open_state["found"] = bool(key and key in (opened.get("by_source") or {}))
+            open_state["copies"] = list((opened.get("by_source") or {}).get(key) or [])
+        prompt_class = _optimization_prompt_class(row)
+        out["rows"].append({
+            "stmt_id": sid, "kind": kind, "origin": origin,
+            "status": status_now, "prompt_class": prompt_class,
+            "optimized_state": _optimization_state_of(states),
+            "draft": draft, "proofs": [no for no, _t in proofs],
+            "unoptimized_proofs": unoptimized,
+            "optimization_open": open_state,
+            "next_step": _optimization_next_step(
+                sid=sid, kind=kind, origin=origin, draft=draft, unoptimized=unoptimized),
+        })
+        out["by_prompt_class"][prompt_class] = int(
+            out["by_prompt_class"].get(prompt_class) or 0) + 1
+        out["by_origin"][origin or "(未记录)"] = int(
+            out["by_origin"].get(origin or "(未记录)") or 0) + 1
+    out["checked"] = True
+    out["count"] = len(out["rows"])
+    if out["by_prompt_class"].get("well_defined") and int(out["count"]) != sum(
+            int(v) for v in out["by_prompt_class"].values()):
+        # 防空集：分档之和必须等于逐条数（同一事实两个算法不一致 = 这一格坏了）。
+        out["problems"].append(
+            f"分档之和 {sum(int(v) for v in out['by_prompt_class'].values())} 与逐条数 "
+            f"{out['count']} 不一致，这一格自己坏了")
+    if not opened.get("checked"):
+        out["problems"].append(
+            "「已经开过优化稿没有」没查成（"
+            f"{opened.get('why') or '没给原因'}）⇒ 逐条的 `optimization_open.checked` 是假："
+            "没查成不是「没开过」")
+    out["reason"] = (
+        "查过了：没有该开优化稿的命题（候选 0 条）" if not out["count"] else
+        (f"查过了：{out['count']} 条命题该开优化稿（按提示词档：{out['by_prompt_class']}；"
+         f"按来源：{out['by_origin']}）；其中有原稿的 "
+         f"{sum(1 for r in out['rows'] if (r.get('draft') or {}).get('available'))} 条、"
+         "还没有原稿的 "
+         f"{sum(1 for r in out['rows'] if not (r.get('draft') or {}).get('available'))} 条"))
+    return out
+
+
+def _optimization_signed_paths(root: str, vsigns_mod: Any) -> dict[str, str]:
+    """V 的颁发表里 `statement_id → artifact_path`（候选面的第 2 档原稿来源）。
+
+    读不到 ⇒ 空表 + 不抛：这一档只是"多一条找原稿的路"，`draft.source` 会退到
+    行上正文那一档，不会把"没查成"折成"有原稿"。
+    """
+    try:
+        table = vsigns_mod.signed_table(root)
+    except Exception:  # noqa: BLE001 —— 签表读不出来不带走这一格
+        return {}
+    out: dict[str, str] = {}
+    for entry in table.get("entries") or []:
+        sid = str(entry.get("statement_id") or "")
+        rel = str(entry.get("artifact_path") or "").replace("\\", "/")
+        if sid and rel and sid not in out:
+            out[sid] = rel
     return out
 
 
@@ -7800,6 +8059,28 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         rep.findings.append(Finding(
             "statements_unoptimized", "statements_unoptimized_self_inconsistent",
             "warning", f"「哪些证明还没洗过」这一格自相矛盾：{_p}"))
+    # ---- 未优化清单（候选面）：业主 2026-11-14 的「优化侧一般性规定」-------------
+    #
+    # 与 `statements_unoptimized` 并列、不替换：那一格问"哪些证明还没洗"（按证明号），
+    # 这一格问"哪些命题该开一份优化稿"（按命题，含"还没有原稿"的概念）。
+    # 纪律同一套：只落 `readings`、不产生 Finding（读不到另出一条 warning，与上面同档）、
+    # 不动 `status` 与退出码 ⇒ 门的强度一格没改。写盘不在这里：开稿是 B 的动作
+    # （`B.open_polish_copy` 批量入口），收工门一个字都不写。
+    rep.readings["statements_optimization_candidates"] = _run_reading(
+        rep, "statements_optimization_candidates",
+        statements_optimization_candidates, store)
+    _oc = rep.readings["statements_optimization_candidates"]
+    if not _oc.get("checked"):
+        rep.findings.append(Finding(
+            "statements_optimization_candidates",
+            "statements_optimization_candidates_unreadable", "warning",
+            f"「未优化清单」那一格没查成（{_oc.get('reason') or '没给原因'}）⇒ "
+            "候选数不出来（没查成不是「没有该开优化稿的命题」）"))
+    for _p in list(_oc.get("problems") or []):
+        rep.findings.append(Finding(
+            "statements_optimization_candidates",
+            "statements_optimization_candidates_self_inconsistent", "warning",
+            f"「未优化清单」这一格自相矛盾：{_p}"))
     # ---- D-54 ③ 那一格（业主 2026-11-04）：疑似把一条定理拆成多条独立命题 --------
     #
     # 与上面 `statements_unoptimized` 同档：只落 `readings`、不产生 blocker、不动
