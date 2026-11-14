@@ -1019,7 +1019,9 @@ _EVIDENCE_TABLES: tuple[tuple[str, str, str], ...] = (
     ("documents", "documents", "store.rows(\"documents\")"),
 )
 
-#: 证据面那七栏的名字（逐行注解时的遍历顺序；与 `_EVIDENCE_TABLES` 的键 + 两栏非表来源）。
+#: 会被逐行注解的栏（遍历顺序）：`_EVIDENCE_TABLES` 里除 `documents` 之外的五栏，再加两栏
+#: 非表来源（`verifications` / `secretary`）。注意它是「注解面」的 7 栏、不是证据面的 8 栏 ——
+#: `documents` 要不要进注解面是另一次改动（进了会改行形状：多出 `by_role` / `by_task_id` 几格）。
 _LEDGER_EVIDENCE_COLUMNS: tuple[str, ...] = (
     "statements", "conjectures", "experiments", "review_findings", "relations",
     "verifications", "secretary",
@@ -1903,7 +1905,7 @@ def _spot_row(path: Path, root: Path, kind: str) -> dict[str, Any]:
 
 
 def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
-    """`GET /api/evidence` 的读模型：证据链七栏 + 三态。
+    """`GET /api/evidence` 的读模型：证据链八栏 + 三态。
 
     `statements` / `conjectures` / `experiments` / `documents` / `review_findings` /
     `relations` 逐行来自 `store.rows(...)`（不另写一份读法）；`verifications` 来自
@@ -5350,7 +5352,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("gaps_missing_runs", "number | null"),
       ("stop_reasons", "Record<string, number>"))),
     ("EvidenceView",
-     "evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）",
+     "evidence_chain() —— 证据链八栏（各栏另带 `<栏>_tri`）",
      (("tri", "Tri"), ("reason", "string"), ("store_problems", "string[]"),
       ("statements", "StatementRow[]"), ("statements_tri", "Tri"),
       ("conjectures", "ConjectureRow[]"), ("conjectures_tri", "Tri"),

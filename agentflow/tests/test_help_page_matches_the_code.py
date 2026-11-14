@@ -17,6 +17,14 @@
 | 3 键名 | 页面点名的每个键都在对应接口的声明里（`readers._TS_TYPES` / `state._TS_TYPES`） | 页面写 `upsertz` 而接口里叫 `upserts` |
 | 4 反真空 | 把某个数字改错、把某条命令改成不存在的子命令、把某个键名改歪，前三层必须各自红 | 判据是一枚橡皮图章 |
 
+## 数字对 ≠ 栏名对（第 1 层的同族补丁）
+
+第 1 层只核「八栏」那个数字：把八栏写成七名它照样全绿。2026-11-14 的现场就是这一种 ——
+`documents`（稿件台账）补进了证据面（`8a70fce3`），说明页那一句的名单还是原来那七个，
+只有「七栏」这个数字变了。于是这一份另有一条栏名判据（`_evidence_name_problems`）：
+它把那一句里列出的名字逐个对上 `EvidenceView` 的数据键与 `Evidence.tsx` 的卡片标题，
+并且配着"只改数字、不改名单 ⇒ 必红"的负控。
+
 ## 两条口径
 
 一是"一"不参与第 1 层：它是量词（"一个父一份名册"），不是计数；`0` 与 `1` 同理，除了
@@ -54,6 +62,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 HELP = REPO / "ui" / "src" / "pages" / "Help.tsx"
 MAIN = REPO / "ui" / "src" / "main.tsx"
 ARTIFACTS = REPO / "ui" / "src" / "pages" / "Artifacts.tsx"
+EVIDENCE = REPO / "ui" / "src" / "pages" / "Evidence.tsx"
 MACHINE = REPO / "ui" / "src" / "pages" / "Machine.tsx"
 HOME = REPO / "ui" / "src" / "pages" / "Home.tsx"
 
@@ -166,6 +175,85 @@ def _evidence_columns(_raw: str) -> int:
     skip = {"tri", "reason", "store_problems"}
     return len([f for f in _declared("readers", "EvidenceView")
                 if not f.endswith("_tri") and f not in skip])
+
+
+#: 证据面那一句里列举的栏名：`EvidenceView` 的数据键 → 页面上给它起的名字。
+#:
+#: 顺序 = 卡片在 `Evidence.tsx` 里挂出的顺序（`documents` 在声明里排第 4，卡片却挂在
+#: 「审校发现」之后 —— 一句里的次序跟着卡片走，不跟声明走）。
+_EVIDENCE_COLUMN_NAMES: dict[str, str] = {
+    "statements": "命题",
+    "conjectures": "猜想",
+    "experiments": "实验",
+    "review_findings": "审校发现",
+    "documents": "稿件台账",
+    "relations": "引文回验",
+    "verifications": "证明级验证",
+    "secretary": "秘书决策",
+}
+
+_EVIDENCE_ROW = re.compile(r'page:\s*"证据链[^"]*".*?answers:\s*(.*?)\n\s*\},', re.S)
+_EVIDENCE_PAREN = re.compile(r"（[^（）]*）")
+
+
+def _evidence_paragraph(raw: str) -> str:
+    """说明页「证据链」那一行的 `answers` 正文（TS 的字符串拼接展开成一段、空白压掉）。"""
+    got = _EVIDENCE_ROW.search(raw)
+    assert got is not None, "说明页里找不到「证据链（/evidence）」那一行的 answers"
+    parts = re.findall(r'"((?:[^"\\]|\\.)*)"', got.group(1))
+    assert parts, "证据链那一行的 answers 读不出字符串字面量"
+    return _squash(_plain("".join(parts)))
+
+
+def _evidence_names(raw: str) -> list[str]:
+    """那一句里列出的栏名（按出现顺序）：破折号之前那一段，剥掉括号注解后按「、」切。"""
+    text = _evidence_paragraph(raw)
+    head, sep, _tail = text.partition("——")
+    assert sep, f"证据链那一句里找不到破折号，读不出栏名列表：{text!r}"
+    return [name for name in _EVIDENCE_PAREN.sub("", head).split("、") if name]
+
+
+def _evidence_card_titles() -> list[str]:
+    """`Evidence.tsx` 里 `Evidence()` 挂出的卡片标题（按挂出顺序；整面那张不算一栏）。"""
+    text = EVIDENCE.read_text(encoding="utf-8")
+    start = text.find("export function Evidence()")
+    assert start >= 0, "`Evidence.tsx` 里找不到 `export function Evidence()`"
+    return [t for t in re.findall(r'title="([^"]+)"', text[start:]) if t != "证据链"]
+
+
+def _evidence_name_problems(raw: str) -> list[str]:
+    """第 1 层续：那一句列出的栏名必须逐栏对上代码与卡片（数字对 ≠ 栏名对）。
+
+    为什么单开一条：`_evidence_columns` 只核「八栏」那个数字 —— 把八栏写成七名它照样
+    绿。2026-11-14 的现场就是这一种：`documents`（稿件台账）补进了证据面，说明页那一
+    句的名单还是原来那七个。只改数字等于按住症状，判据得能看见"写八栏、列七名"。
+    """
+    problems: list[str] = []
+    keys = [f for f in _declared("readers", "EvidenceView")
+            if not f.endswith("_tri") and f not in {"tri", "reason", "store_problems"}]
+    unknown = sorted(set(_EVIDENCE_COLUMN_NAMES) ^ set(keys))
+    if unknown:
+        problems.append(f"栏名清单与 `EvidenceView` 的数据键对不上：{unknown}"
+                        "（加了一栏就要在这里也加一个页面上叫得出来的名字）")
+        return problems
+    want = list(_EVIDENCE_COLUMN_NAMES.values())
+    got = _evidence_names(raw)
+    if got != want:
+        problems.append(f"证据链那一句列出的栏名对不上：页面 {got} / 应有 {want}")
+    titles = _evidence_card_titles()
+    if len(titles) != len(want):
+        problems.append(
+            f"`Evidence.tsx` 挂了 {len(titles)} 张栏卡片（应有 {len(want)} 张）：{titles}")
+        return problems
+    if len(got) != len(titles):
+        # 名单的个数已经对不上（上面那条），逐个对位只会再报一串错位的噪声。
+        return problems
+    for name, title in zip(got, titles):
+        head = title.split("（")[0]
+        if name not in head and head not in name:
+            problems.append(f"栏名 {name!r} 在卡片标题 {title!r} 里认不出来"
+                            "（名字要么是标题主干，要么是它的一段）")
+    return problems
 
 
 def _bit_names(_raw: str) -> int:
@@ -348,7 +436,7 @@ class Claim:
 
     `count` 收的是"读到的整份 Help 源码"（前端结构类读数需要它），后端读数忽略这个参数。
     `pin` 是这一段里"归这一条管"的那个数字（一段里有两个数目时必须给，例如
-    "七栏各带自己的三态"同时说了七栏与三态，两条断言各认领一个）。
+    "八栏各带自己的三态"同时说了八栏与三态，两条断言各认领一个）。
     `expected` 只在字面量里没有"数字 + 量词"可读时给（例如 `500` 后面跟的是括号）。
     """
 
@@ -373,8 +461,8 @@ CLAIMS: tuple[Claim, ...] = (
     Claim("五元位五位各一格", "evidencebits.BIT_NAMES 的位数", _bit_names),
     Claim("引文回验（五档，含 no_evidence）", "evidencebits.QUOTE_STATES 的档数",
           _quote_tiers),
-    Claim("七栏各带自己的三态", "EvidenceView 的数据键数", _evidence_columns, pin="七栏"),
-    Claim("七栏各带自己的三态", "三态词表（readers.TRI_ 那三个）的个数", _tri_count,
+    Claim("八栏各带自己的三态", "EvidenceView 的数据键数", _evidence_columns, pin="八栏"),
+    Claim("八栏各带自己的三态", "三态词表（readers.TRI_ 那三个）的个数", _tri_count,
           pin="三态"),
     Claim("台账写入笔数与 commit 标记两格", "LedgerReading 的 upserts/commit_markers",
           _ledger_pair),
@@ -786,6 +874,42 @@ def test_every_number_on_the_help_page_traces_to_the_code() -> None:
     assert len(tokens) >= 20, sorted(tokens)
 
 
+def test_every_evidence_column_on_the_help_page_is_named() -> None:
+    """第 1 层续：那一句把证据面每一栏都点了名，不是一个数字对着一份旧名单。"""
+    raw = HELP.read_text(encoding="utf-8")
+    problems = _evidence_name_problems(raw)
+    assert problems == [], problems
+    # 反真空：这一条真的读到了那一句与那几张卡（不是"两边都是空表所以都过了"）。
+    names = _evidence_names(raw)
+    assert len(names) == _evidence_columns(raw) >= 8, (names, _evidence_columns(raw))
+    assert len(_evidence_card_titles()) == _evidence_columns(raw), _evidence_card_titles()
+
+
+def test_a_counted_but_unnamed_evidence_column_turns_red() -> None:
+    """第 1 层续的反真空：只改数字、不改名单 ⇒ 必红（2026-11-14 的形态）。"""
+    raw = HELP.read_text(encoding="utf-8")
+    assert _evidence_name_problems(raw) == []
+
+    # 一 名单少一栏而数字仍是八 ⇒ 数字那一层照样绿，栏名这一层必须红。
+    dropped = re.sub(r"、稿件台账（[^）]*）", "", raw, count=1)
+    assert dropped != raw, "负控没改到东西（那一句里没有稿件台账那一段）"
+    assert _number_problems(dropped) == [], "这条负控要的就是「数字仍对得上」那一半"
+    got = _evidence_name_problems(dropped)
+    assert got and any("稿件台账" in p for p in got), got
+
+    # 二 名字换成代码里没有的词 ⇒ 也要红。
+    invented = raw.replace("稿件台账", "文档", 1)
+    assert invented != raw, "负控没改到东西（那一句里没有稿件台账）"
+    got = _evidence_name_problems(invented)
+    assert got and any("文档" in p for p in got), got
+
+    # 三 名单多一栏而数字仍是八 ⇒ 也要红。
+    extra = raw.replace("、秘书决策 —— ", "、附录、秘书决策 —— ", 1)
+    assert extra != raw, "负控没改到东西（那一句里没有秘书决策）"
+    got = _evidence_name_problems(extra)
+    assert got and any("附录" in p for p in got), got
+
+
 def test_every_example_command_on_the_help_page_parses() -> None:
     """第 2 层：每条示例命令都能被 `build_parser()` 解析；`--root` 那句抱怨与真实行为同源。"""
     raw = HELP.read_text(encoding="utf-8")
@@ -833,7 +957,7 @@ def test_wrong_numbers_wrong_commands_and_wrong_keys_all_turn_red() -> None:
     assert any("数字对不上" in p for p in got), got
 
     # 一-c 加一个没人核的数目 ⇒ 覆盖性那一半必红。
-    invented = raw.replace("七栏各带自己的三态", "七栏各带自己的三态、共 11 项", 1)
+    invented = raw.replace("八栏各带自己的三态", "八栏各带自己的三态、共 11 项", 1)
     assert any("没有出处" in p for p in _number_problems(invented)), (
         "新加的数字没人核，判据却一声不吭")
 

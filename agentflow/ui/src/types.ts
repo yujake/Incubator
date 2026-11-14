@@ -321,7 +321,7 @@ export interface RunDigestView {
   stop_reasons: Record<string, number>;
 }
 
-/** 出处：evidence_chain() —— 证据链七栏（各栏另带 `<栏>_tri`）。 */
+/** 出处：evidence_chain() —— 证据链八栏（各栏另带 `<栏>_tri`）。 */
 export interface EvidenceView {
   tri: Tri;
   reason: string;

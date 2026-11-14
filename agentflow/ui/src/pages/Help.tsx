@@ -146,9 +146,10 @@ const PAGES: PageRow[] = [
     reads: "GET /api/evidence",
     answers: "命题（含非平凡度 T0–T4 / 未判、五元位五位各一格：numeric / proof / "
       + "reviewed 按证明逐条 / formal 按路径 / audited）、猜想、实验（「报告」一列链到 "
-      + "out/experiments/<号>/exhaustion.md）、审校发现、引文回验（五档，含 no_evidence）、"
+      + "out/experiments/<号>/exhaustion.md）、审校发现、稿件台账（一份稿件的审校轮次与"
+      + "结论）、引文回验（五档，含 no_evidence）、"
       + "证明级验证（reviewed 按证明逐条、证明一致性而非 sha 原文）、秘书决策 —— "
-      + "七栏各带自己的三态",
+      + "八栏各带自己的三态",
   },
   {
     page: "产物（/artifacts）",

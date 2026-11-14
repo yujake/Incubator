@@ -307,12 +307,12 @@ export function Evidence() {
     <>
       <Card
         title="证据链"
-        subtitle={`七栏 · 整面 tri=${ev.tri}`}
+        subtitle={`八栏 · 整面 tri=${ev.tri}`}
         tone={isUnreadable(ev.tri) ? "problem" : "plain"}
         right={<TriState tri={ev.tri} label="证据面" reason={ev.reason} />}
       >
         <div class="readings">
-          七张表 + 验证台账 + 秘书台账；每一栏各有自己的三态。
+          八张表；每一栏各有自己的三态。
         </div>
         {ev.store_problems.length === 0 ? null : (
           <div class="readings">
