@@ -51,6 +51,16 @@ SID2 = "000002"
 FULL = "设 f 在 [0,1] 上连续；则 f 在该区间上一致连续。"
 PROOF = ("1. 取 δ=ε：对任意 x,y∈[0,1]，|x-y|<δ ⇒ |f(x)-f(y)|<ε。\n"
          "2. 第 1 步的 δ 只依赖 ε、不依赖点 ⇒ 按定义即一致连续。")
+#: 第二条命题：与第一条逐字不同（命题与证明都不同）。
+#:
+#: 为什么 d 不能拿 `FULL` / `PROOF` 再登记一条（2026-11-15）：那天起 `verify_proof` 的
+#: 送审入口会读"同一正文 sha 是否已有正式颁发的签"，有就短路（`issued_sign`，
+#: `verifications.issued_sign_short_circuit`）。d 的第二条若与第一条是同一份正文，
+#: 它命中的是"同一 sha 不重复买判定"（这是短路该做的事），而不是"改了正文还得重交"
+#: —— 判据要求的是后者 ⇒ 夹具必须给一条真的另一份正文。
+FULL2 = "设 g 在 [0,1] 上单调；则 g 在该区间上至多可数个不连续点。"
+PROOF2 = ("1. 单调函数的不连续点只能是跳跃点。\n"
+          "2. 每个跳跃点对应一对两两不交的有理数区间 ⇒ 至多可数个。")
 CLEAN_REPLY = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失败，未发现问题。",
                           "findings": []}, ensure_ascii=False)
 FAULT_REPLY = json.dumps({
@@ -115,27 +125,30 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     return st
 
 
-def _manuscript(st: Store, sid: str) -> str:
+def _manuscript(st: Store, sid: str, *, statement: str = FULL,
+                proof: str = PROOF) -> str:
     """写一份按号的证明稿（三列 `## 依赖` 表头不能省，空表就是声明）。"""
     rel = f"reports/f-proof-{sid}.md"
     path = pathlib.Path(st.root) / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("# F 的证明手稿\n\n"
                     f"- 计划：{sid} · 子目标：S3\n\n"
-                    f"## 命题\n\n{FULL}\n\n## 证明\n\n{PROOF}\n\n"
+                    f"## 命题\n\n{statement}\n\n## 证明\n\n{proof}\n\n"
                     + _DS.render_dependency_section([]), encoding="utf-8")
     return rel
 
 
-def _put(st: Store, sid: str = SID, *, proof_text: str = "") -> dict:
+def _put(st: Store, sid: str = SID, *, proof_text: str = "",
+         statement: str = FULL, proof: str = PROOF) -> dict:
     """87 现场那一行：在册、有命题、没有正文、`bits.reviewed=false`。"""
     row = {"stmt_id": sid, "origin": "own_result", "kind": "conjecture",
-           "label": f"探针命题 {sid}", "statement_full": FULL, "statement_text": FULL,
+           "label": f"探针命题 {sid}", "statement_full": statement,
+           "statement_text": statement,
            "proof_text": proof_text, "evidence_kind": "heuristic", "status": "active",
            "quote_verified": None,
            "quote_reason": "这一条还没有命题号 ⇒ 按最弱一档登记（V 签完之后再交一次会升档）",
            "created_at": TS, "created_by": "secretary-B",
-           "bits": EB.bits_of(proof=True, proof_process=PROOF, kind="conjecture"),
+           "bits": EB.bits_of(proof=True, proof_process=proof, kind="conjecture"),
            "proof_authors": ["F"]}
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
@@ -160,7 +173,8 @@ def _agent_row(st: Store, *, role: str, status: str = "running",
         }, note="probe:agent")
 
 
-def _verify_v(st: Store, sid: str, *, proof: str = PROOF, reply: str = CLEAN_REPLY,
+def _verify_v(st: Store, sid: str, *, proof: str = PROOF, statement: str = FULL,
+              reply: str = CLEAN_REPLY,
               parent: str = "t-f1", axis: str = SEC.V_REPLY_CLEAN) -> dict:
     """走 V 的真入口：三转 clean（或一转打回）⇒ 秘书发签 / 落块 / 开义务。
 
@@ -176,7 +190,7 @@ def _verify_v(st: Store, sid: str, *, proof: str = PROOF, reply: str = CLEAN_REP
                                     "sign_issuance": [_axis(SEC.SIGN_ISSUE)]}),
                         enable_model=True)
     agent = AgentV(st, workspace_root=st.root, llm=_ReviewSeam(reply), secretary=sec)
-    rel = _manuscript(st, sid)
+    rel = _manuscript(st, sid, statement=statement, proof=proof)
     with CND.calling_as("t-v1", "V", parent_task_id=parent, parent_role="F"):
         return agent.verify_proof(sid, proof_text=proof, proof_manuscript=rel)
 
@@ -302,16 +316,22 @@ def test_c_without_the_generation_step_the_duty_never_appears(tmp_path, monkeypa
 
 # ====================================================================== d 重送不受影响
 def test_d_the_resubmit_duty_is_untouched(tmp_path):
-    """同一现场再加一条 V 打回 ⇒ 两条义务各一条、键前缀不同；重送读数一个字不动。"""
+    """同一现场再加一条 V 打回 ⇒ 两条义务各一条、键前缀不同；重送读数一个字不动。
+
+    第二条送的是另一份正文（`FULL2` / `PROOF2`，见常量那里的注释）：2026-11-15
+    的「同一 sha 已有签 ⇒ 不重复买判定」只对同一份正文生效；判据要求的
+    "改了正文仍必须重交"正是 sha 变了那一档 —— 所以这里既没有退短路，也没有放宽
+    断言（下面每一条与改前逐字相同），只是让夹具真的造出"改了正文"。
+    """
     st = _ws(tmp_path)
     _put(st)
-    _put(st, SID2)
+    _put(st, SID2, statement=FULL2, proof=PROOF2)
     # 送审者必须真的在 `tasks` 里：回执与「必须重送」义务的负责人都是它那一个台账号。
     submitter = _agent_row(st, role="F", status="done", parent="t-root")
     _verify_v(st, SID, parent=submitter)                     # 签了、没入库 ⇒ 收录义务
     # p247：打回只能由秘书判 fault 造出来；V 写「有毛病」只是陈述。
-    _verify_v(st, SID2, reply=FAULT_REPLY, parent=submitter,
-              axis=SEC.V_REPLY_FAULT)                        # 打回 ⇒ 重送义务
+    _verify_v(st, SID2, statement=FULL2, proof=PROOF2, reply=FAULT_REPLY,
+              parent=submitter, axis=SEC.V_REPLY_FAULT)      # 打回 ⇒ 重送义务
     regs = _register_items(st)
     subs = _resubmit_items(st)
     assert len(regs) == 1, [r.get("input_key") for r in regs]
