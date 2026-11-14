@@ -525,3 +525,123 @@ def stamp_verification_path_group(*, root: Any, statement_id: str, body_sha: str
 
 
 
+
+# ------------------------------------------------------------------ 开稿取源（这一条命题自己的稿）
+
+def manuscript_matches_row(text: Any, row: Any) -> bool:
+    """这份稿的 `## 证明` 是不是这一行上某一份证明（sha 逐字比；纯读）。
+
+    行上还没有任何正文（`proof_text` / `proofs` 全空）⇒ 没有可比的第二份文本，
+    按行上的稿号记录认（`True`）—— 概念已签、还没收录就是这一档。有正文而一份都
+    对不上 ⇒ `False`（撞了别族的号，不许当原稿）。
+    """
+    from . import proofregistry as _PR
+    from . import verifications as _VR
+    from . import vsigns as _VS
+
+    try:
+        have = _PR.proof_sha(_VS.manuscript_proof_body(str(text or "")))
+    except Exception:  # noqa: BLE001 —— 正文读不出来 = 核对不上
+        return False
+    bodies = [str(body) for _no, body in _VR.proof_list(row) if str(body).strip()]
+    if not bodies:
+        return True
+    if not have:
+        return False
+    return any(_PR.proof_sha(body) == have for body in bodies)
+
+
+def source_manuscript_rel(root: Any, row: Any) -> dict[str, Any]:
+    """这一条命题自己的原稿是哪一份（开稿取源的唯一入口；纯读）。
+
+    2026-11-14 真机 lp-ball 的缺陷：42 条里有稿的 6 条，开优化稿时 4 份复制错源。
+    真机上 `000032` 与 `000040` 同号不同族（`manuscript_id` 都是 `000000`，前者自己的
+    稿是 `reports/b-proof-000000.md`、后者是 `reports/f-proof-000000.md`）；改前按
+    `kind` 猜族，于是两条不同命题的副本建在同一份正文上。
+
+    现在只认两个来源，不猜族：
+
+    1. 行上的逐路径记录 `manuscripts[path_group]`（收录时写的：第几条路径 ⇒ 哪一份稿）。
+       它点名的那一份必须正文对得上这一行；对不上就不拿别的稿顶（`found=False` +
+       `rel`，调用方退到行上正文 / 如实拒）。
+    2. 没有那一格时，才退到行上的 `manuscript_id`：按四族依次拼规范名，只认盘上存在
+       且正文对得上的那一份。族由盘上证据回答，不由 `kind` 回答。
+
+    返回 `{found, rel, evidence, why}`；`found=False` + `rel` 非空 = 行上指名的那一份
+    对不上这一行（撞号 / 别族的稿 / 记错了）。
+    """
+    from pathlib import Path
+
+    out: dict[str, Any] = {"found": False, "rel": "", "evidence": "", "why": ""}
+    per = row.get(PER_PATH_KEY) if isinstance(row, Mapping) else None
+    try:
+        group = str(int(row.get("proof_no") or 1)) if isinstance(row, Mapping) else "1"
+    except (TypeError, ValueError):
+        group = "1"
+    rel = ""
+    if isinstance(per, Mapping):
+        rel = str(per.get(group) or per.get("1") or "").strip().replace("\\", "/")
+    if rel:
+        target = Path(str(root)) / rel
+        if not target.is_file():
+            out["why"] = (
+                f"行上 `manuscripts[{group}]` 指的 `{rel}` 不在盘上 ⇒ 不拿别的稿顶，"
+                "退到行上正文")
+            return out
+        try:
+            text = target.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            out["why"] = (f"行上 `manuscripts[{group}]` 指的 `{rel}` 读不出来 ⇒ "
+                          "这一份不能当原稿")
+            return out
+        if manuscript_matches_row(text, row):
+            out.update(found=True, rel=rel, evidence="manuscripts")
+            return out
+        out.update(rel=rel, why=(
+            f"行上 `manuscripts[{group}]` 指的 `{rel}` 正文对不上这一行 ⇒ 不拿它当"
+            "原稿（退到行上正文）"))
+        return out
+    mid = (str(row.get("manuscript_id") or "").strip()
+           if isinstance(row, Mapping) else "")
+    if not mid:
+        return out
+    # 没有逐路径记录、又没有任何可比对的正文时，"稿号属于哪一族"只能靠猜 —— 猜族正是
+    # 这一格的缺陷（同号不同族）。没有可核的正文就 fail-closed：不拿盘上同号的任意一份
+    # 顶上（受控拒 / 退到行上正文）。有正文才按族扫盘，且只认正文 sha 对得上的那一份。
+    from . import manuscriptids as _MID
+
+    if not [body for _no, body in _row_proof_bodies(row)]:
+        out["why"] = (
+            f"行上记着稿号 {mid}，但既没有 `manuscripts` 逐路径记录、也没有正文可核"
+            " ⇒ 不按族猜这份稿是哪一条的（退到行上正文），不拿别族的同号稿顶上")
+        return out
+    tried: list[str] = []
+    for family in _MID.families():
+        cand = _MID.canonical_rel(mid, family=family)
+        if not cand:
+            continue
+        tried.append(cand)
+        target = Path(str(root)) / cand
+        if not target.is_file():
+            continue
+        try:
+            text = target.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if manuscript_matches_row(text, row):
+            out.update(found=True, rel=cand, evidence="manuscript_id")
+            return out
+    out["why"] = (
+        f"行上记着稿号 {mid}（四族同号稿在盘上的是 {' / '.join(tried) or '没有'}），"
+        "但没有一份的正文对得上这一行 ⇒ 不拿别族的同号稿顶上（退到行上正文）")
+    return out
+
+
+def _row_proof_bodies(row: Any) -> list[tuple[int, str]]:
+    """这一行上所有非空证明正文（`[(证明号, 正文)]`；读不出来 ⇒ 空表）。"""
+    from . import verifications as _VR
+    try:
+        return [(no, str(body)) for no, body in _VR.proof_list(row)
+                if str(body).strip()]
+    except Exception:  # noqa: BLE001 —— 读不出来当作"没有可核的正文"（fail-closed）
+        return []

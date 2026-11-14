@@ -374,7 +374,8 @@ def test_b2_a_row_number_without_a_sign_still_opens_an_unsigned_copy(tmp_path) -
     (pathlib.Path(st.root) / rel).write_text(
         _unregistered_manuscript(manuscript_id=mid, signed=False), encoding="utf-8")
     conftest.seed_statement_row(st, stmt_id=SID, statement_full="夹具命题。",
-                                kind="conjecture", manuscript_id=mid)
+                                kind="conjecture", manuscript_id=mid,
+                                manuscripts={"1": rel})
     before = _files(st)
 
     got = _b(st).open_polish_copy(statement_id=SID)

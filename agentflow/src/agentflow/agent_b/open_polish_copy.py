@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -425,48 +426,32 @@ class _OpenPolishCopy:
                 got.update(source_sign="signed", source_kind="signed_manuscript")
                 return got
         # 未在册那一档（签文件里没有命题号）不再按稿头认领：稿里没有命题号
-        # （业主 2026-11-13）⇒ 那一档只由下面第 ③ 条（行上 `manuscript_id` + 颁发表
-        # 核对）回答。
-        # ③ 命题行上的 `manuscript_id`（2026-11-11：收录之后 B 反而找不到那份已签的稿）
+        # （业主 2026-11-13）⇒ 那一档只由下面第 ③ 条（行上 `manuscripts` /
+        # `manuscript_id` + 颁发表核对）回答。
+        # ③ 命题行上的逐路径稿记录 `manuscripts[path_group]`、退一步是 `manuscript_id`
+        # （2026-11-11：收录之后 B 反而找不到那份已签的稿；2026-11-14 RL1：只读行上这两
+        # 处，不再按 `kind` 猜族 —— 概念的稿是 `b-proof-*`，按 kind 猜会去抓 `f-proof-*`
+        # 的同号稿，两份不同命题就共用了一个源）。
         row_reading = self._statement_manuscript_id(sid)
-        row_mid = str(row_reading.get("manuscript_id") or "")
-        if row_mid:
-            row_rel = _MID.canonical_rel(row_mid)   # F 的规范名（前缀由族表拼）
-            if not row_rel:
-                row_evidence_why = (
-                    f"行上记着稿号 {row_mid!r}，而它拼不出 F 那份稿的规范名"
-                    "（`reports/` 下这一族的规范前缀 + 六位稿号）⇒ 这一格核不上")
-            else:
-                hit = next((e for e in entries
-                            if str(e.get("artifact_path") or "").strip().replace("\\", "/")
-                            == row_rel), None)
-                if hit is None:
-                    row_evidence_why = (
-                        f"行上记着稿号 {row_mid}（那份稿应是 `{row_rel}`），而 V 的颁发"
-                        "表里没有一份签盖在它上面 ⇒ 记了稿号、但那一份没签")
-                else:
-                    got = self._polish_source_of(root, hit, dict(out))
-                    if got.get("found"):
-                        got["matched_by"] = "statement_manuscript_id"
-                        got.update(source_sign="signed", source_kind="signed_manuscript")
-                        return got
-                    # 签表里确有这一份、但拿不到稿件（文件没了 / 签后改过）⇒
-                    # 按那一档如实拒，不折成「没有签」。
+        own = self._row_source_rel(root, dict(row_reading.get("row") or {}))
+        row_evidence_why = str(own.get("why") or "") or self._row_evidence_why(
+            sid, row_reading)
+        own_rel = str(own.get("rel") or "")
+        if own_rel:
+            hit = next((e for e in entries
+                        if str(e.get("artifact_path") or "").strip().replace("\\", "/")
+                        == own_rel), None)
+            if hit is not None:
+                got = self._polish_source_of(root, hit, dict(out))
+                if got.get("found"):
+                    got["matched_by"] = "statement_manuscript_id"
+                    got.update(source_sign="signed", source_kind="signed_manuscript")
                     return got
-        elif row_reading.get("checked"):
-            if row_reading.get("found") is False:
-                row_evidence_why = (
-                    f"`statements` 里没有 stmt:{sid} 这一行 ⇒ 读不出稿号"
-                    "（不是「行上没记稿号」，这一格没对象）")
-            else:
-                row_evidence_why = (
-                    "行上没有记稿号（这条命题的 `statements` 行 `manuscript_id` 是空的）")
-        else:
-            row_evidence_why = (
-                "行上那一格没查成（`statements` 台账读不出来："
-                f"{row_reading.get('why') or '没有理由'}）")
-        # ④ 没签的原稿：行上稿号那一份 / 行上的正文（业主 2026-11-14「录入侧可能
-        # 找不到素材」⇒ 优化侧自己造初始稿）。
+                # 签表里确有这一份、但拿不到稿件（文件没了 / 签后改过）⇒
+                # 按那一档如实拒，不折成「没有签」。
+                return got
+        # ④ 没签的原稿：行上 `manuscripts` / 稿号那一份 / 行上的正文（业主 2026-11-14
+        # 「录入侧可能找不到素材」⇒ 优化侧自己造初始稿）。
         unsigned = self._polish_source_unsigned(root, sid, dict(out))
         if unsigned.get("found"):
             return unsigned
@@ -475,6 +460,17 @@ class _OpenPolishCopy:
                         f"stmt:{sid}；行上没有可用的稿号或正文）。差第 ④ 条证据："
                         f"{row_evidence_why}"))
         return out
+
+    @staticmethod
+    def _row_evidence_why(sid: str, row_reading: dict[str, Any]) -> str:
+        """第 ③/④ 条证据没命中时那句人话（三种"差在哪"分开说，不折平）。"""
+        if not row_reading.get("checked"):
+            return ("行上那一格没查成（`statements` 台账读不出来："
+                    f"{row_reading.get('why') or '没有理由'}）")
+        if row_reading.get("found") is False:
+            return (f"`statements` 里没有 stmt:{sid} 这一行 ⇒ 读不出稿号"
+                    "（不是「行上没记稿号」，这一格没对象）")
+        return "行上没有记稿号（这条命题的 `statements` 行 `manuscript_id` 是空的）"
 
     def _polish_source_unsigned_file(self, root: str, rel: str,
                                      out: dict[str, Any]) -> dict[str, Any]:
@@ -500,16 +496,16 @@ class _OpenPolishCopy:
         `unsigned_manuscript`（盘上有稿，逐字复制）与 `statement_proof_text`
         （没有文件，按同一份正文用 `manuscriptform.render_proof_manuscript` 渲染初始稿）。
 
-        这一档比已签那一档多一道核对：稿号只在号段内唯一（`f-proof-000012` 与
-        `b-proof-000012` 是两个不同的号），所以按行上稿号找到的那一份必须正文对得上
-        （`## 证明` 的 sha 等于行上某一份证明的 sha）才当原稿；对不上（撞了别族的号）
-        就退到行上正文那一档，绝不拿一份别的稿当真原稿。行上还没有任何正文时
-        （例如概念已签、还没收录）没有可比的第二份文本，按稿号认。
+        原稿只由行上的两处证据回答（见 :meth:`_row_source_rel`）：`manuscripts[路径号]`
+        优先，退一步才是 `manuscript_id` 逐族核盘；不按 `kind` 猜族。稿号只在号段内
+        唯一（`f-proof-000012` 与 `b-proof-000012` 是两个不同的号），所以找到的那一份必须
+        正文对得上（`## 证明` 的 sha 等于行上某一份证明的 sha）才当原稿；对不上就退到行上
+        正文那一档，绝不拿一份别的稿当真原稿。行上还没有任何正文时（例如概念已签、还没
+        收录）没有可比的第二份文本，按行上的记录认。
 
         这是"优化侧自己造初始稿"的落点：录入侧可能找不到素材，而优化不该因此停摆。
         """
         from .. import manuscriptform as _MF
-        from .. import manuscriptids as _MID
         from .. import statementledger as _SL
 
         got = _SL.by_id(getattr(self, "store", None), stmt_id=sid)
@@ -519,26 +515,14 @@ class _OpenPolishCopy:
                             "不是「没有原稿」）"))
             return out
         row = dict(got.get("row") or {}) if got.get("found") else {}
-        kind = str(row.get("kind") or "")
-        mid = str(row.get("manuscript_id") or "").strip()
-        family = "b-proof" if kind == "concept" else "f-proof"
-        if mid:
-            try:
-                rel = _MID.canonical_rel(mid, family=family)
-            except Exception:  # noqa: BLE001
-                rel = ""
-            if rel and (Path(str(root)) / rel).is_file():
-                got_file = self._polish_source_unsigned_file(str(root), rel, out)
-                if not got_file.get("found"):
-                    return got_file
-                if self._source_matches_row(got_file.get("text"), row):
-                    got_file.update(matched_by="statement_manuscript_id")
-                    return got_file
-                # 撞了别族的号 ⇒ 不用这一份；下面退到行上正文那一档（先把它读出来的那几格
-                # 清掉，否则"对不上"会被后面的分支当成"找到了"）。
-                out.update(found=False, path="", text="", sign_sha="", block={},
-                           refused="", why="", matched_by="",
-                           source_sign="", source_kind="")
+        own = self._row_source_rel(root, row)
+        rel = str(own.get("rel") or "")
+        if own.get("found") and rel:
+            got_file = self._polish_source_unsigned_file(str(root), rel, out)
+            if not got_file.get("found"):
+                return got_file
+            got_file.update(matched_by="statement_manuscript_id")
+            return got_file
         proof = str(row.get("proof_text") or "").strip()
         if proof:
             text = _MF.render_proof_manuscript(
@@ -551,36 +535,37 @@ class _OpenPolishCopy:
         return out
 
     @staticmethod
-    def _source_matches_row(text: Any, row: dict[str, Any]) -> bool:
-        """这份稿的 `## 证明` 是不是这一行上某一份证明（sha 逐字比）。
+    def _row_source_rel(root: str, row: dict[str, Any]) -> dict[str, Any]:
+        """这一条命题自己的原稿是哪一份（开稿取源的唯一入口；纯读）。
 
-        行上还没有任何正文（`proof_text` / `proofs` 全空）⇒ 没有可比的第二份文本，
-        按稿号认（`True`）—— 概念已签、还没收录就是这一档。有正文而一份都对不上
-        ⇒ `False`（号撞了别族的那一份，不许当原稿）。
+        判据本体在 `manuscriptpaths.source_manuscript_rel`（逐路径记录优先、退一步按
+        `manuscript_id` 逐族核盘，绝不按 `kind` 猜族）。这一格只是取源的那一个打桩点：
+        判据 `tests/test_b_open_polish_source_is_the_rows_manuscript.py` 的反真空把它
+        打桩回"按 kind 猜族" ⇒ 那一对同号命题会重新指向同一个源。
         """
-        from .. import proofregistry as _PR
-        from .. import verifications as _VR
+        from ..manuscriptpaths import source_manuscript_rel
 
-        try:
-            have = _PR.proof_sha(_VS.manuscript_proof_body(str(text or "")))
-        except Exception:  # noqa: BLE001 —— 正文读不出来 = 核对不上
-            return False
-        bodies = [str(body) for _no, body in _VR.proof_list(row) if str(body).strip()]
-        if not bodies:
-            return True
-        if not have:
-            return False
-        return any(_PR.proof_sha(body) == have for body in bodies)
+        return source_manuscript_rel(root, row)
+
+    @staticmethod
+    def _source_matches_row(text: Any, row: dict[str, Any]) -> bool:
+        """这份稿的 `## 证明` 是不是这一行上某一份证明（判据本体在 manuscriptpaths）。"""
+        from ..manuscriptpaths import manuscript_matches_row
+
+        return manuscript_matches_row(text, row)
 
     def _statement_manuscript_id(self, sid: str) -> dict[str, Any]:
-        """④ 的证据源：这条命题的 `statements` 行上记的稿号（三态，不折平）。
+        """第 ③ 条证据源：这条命题的 `statements` 行上记的稿号与逐路径稿。
 
-        返回 `{checked, found, manuscript_id, why}`：
+        返回 `{checked, found, manuscript_id, manuscripts, proof_no, row, why}`：
 
         - `checked=True, found=True, manuscript_id=""` ⇒ 查过了，行上没有那一格；
         - `checked=True, found=True, manuscript_id="000000"` ⇒ 行上记着这一份稿；
         - `checked=True, found=False` ⇒ 台账里没有这一行（不是「行上没记」）；
         - `checked=False` ⇒ 台账读不出来（"没查成"不是"行上没记"）。
+
+        `manuscripts` 是逐路径记录（`{路径号: 稿路径}`），`row` 是整行 —— 取源时正文
+        核对要读它（:meth:`_row_source_rel`）。多带这两格不改变三态。
         """
         from .. import statementledger as _SL
 
@@ -588,14 +573,18 @@ class _OpenPolishCopy:
             got = _SL.by_id(getattr(self, "store", None), stmt_id=sid)
         except Exception as exc:  # noqa: BLE001 —— 读不成要如实说，不许折成「没有这一格」
             return {"checked": False, "found": None, "manuscript_id": "",
+                    "manuscripts": {}, "proof_no": None, "row": {},
                     "why": f"读 `statements` 那一行失败（{type(exc).__name__}: {exc}）"}
         if not got.get("checked"):
             return {"checked": False, "found": None, "manuscript_id": "",
+                    "manuscripts": {}, "proof_no": None, "row": {},
                     "why": str(got.get("reason") or got.get("why") or "")}
         row = dict(got.get("row") or {})
+        per = row.get("manuscripts")
         return {"checked": True, "found": bool(got.get("found")),
                 "manuscript_id": str(row.get("manuscript_id") or "").strip(),
-                "why": ""}
+                "manuscripts": dict(per) if isinstance(per, Mapping) else {},
+                "proof_no": row.get("proof_no"), "row": row, "why": ""}
 
     @staticmethod
     def _polish_source_of(root: str, entry: dict, out: dict) -> dict[str, Any]:
