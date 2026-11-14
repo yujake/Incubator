@@ -308,10 +308,13 @@ def _d_roster(root: Any, owners: Sequence[str]) -> tuple[list[dict[str, Any]], l
     from . import secretary as SEC
 
     sec = SEC.Secretary("D", root=str(root))
+    # 构造之后只绑一档只读口径（名册折叠是纯读：`roster_rows` 只读 jsonl、不判命题）：
+    # 装配护栏按"构造点紧跟着只读调用"认这一处（`test_secretary_adjudication_is_wired`）。
+    read_roster = sec.roster_rows
     items: list[dict[str, Any]] = []
     bad: list[str] = []
     for owner in owners:
-        got, bad_rows = sec.roster_rows(str(owner))
+        got, bad_rows = read_roster(str(owner))
         for row in got:
             one = dict(row)
             one["owner"] = str(owner)

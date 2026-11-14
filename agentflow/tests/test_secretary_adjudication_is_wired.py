@@ -396,7 +396,14 @@ def test_an_unwired_seam_is_reported_as_none_not_as_an_empty_seam(tmp_path):
 #: 构造之后只调一个"只读口径"方法的那几处（不判命题，因此不需要缝）。
 #: 这一张表是逐条登记的：多出一条或少一条都会让护栏变红 —— 一张永不生效的
 #: 豁免表会腐烂成"看起来还在挡着什么"。
-_READ_ONLY_CALLS: tuple[str, ...] = ("child_counts(", "surface_of(")
+#:
+#: 2026-11-14（TR 收口）补两档：`name_of`（按号反查名册里的名字）与 `roster_rows`
+#: （名册折叠后的行）都是纯读口 —— 不调 `judge`、不落台账、不改任何字节。它们与
+#: `child_counts` / `surface_of` 同形，只是晚于这张表落地（`agent_f._actor` 的
+#: 命名与 `dispatchpolicy._d_roster` 的名册读）⇒ 在这里逐条登记，而不是给它们
+#: 造一条假缝。
+_READ_ONLY_CALLS: tuple[str, ...] = ("child_counts(", "surface_of(", "name_of(",
+                                     "roster_rows")
 _ALLOWED_READ_ONLY: frozenset[tuple[str, str]] = frozenset({
     # `agent_loop.py` 本轮在"不许碰"的清单里：它只读这一趟的读写面（`surface_of`）。
     ("agent_loop.py", "surface_of"),
@@ -410,6 +417,12 @@ _ALLOWED_READ_ONLY: frozenset[tuple[str, str]] = frozenset({
     # 所以这里不需要缝。它与 `statusreport.py` 那一处同形（只读口径），登记的是
     # 「确实只读」，不是「先放过」。
     ("webui\\readers.py", "child_counts"),
+    # `agent_f/core.py`：`_plan_owner` 拿父任务的台账号反查名册里的名字（只拼一个显示名，
+    # 不判命题、不写台账）—— 与上面同形。
+    ("agent_f\\core.py", "name_of"),
+    # `dispatchpolicy.py`：`_d_roster` 读 D 各趟的名册（`roster_rows` 只折叠 jsonl，
+    # 纯读）；构造点把方法先绑到局部名上再逐个 owner 读，所以尾巴里抓到的是属性名。
+    ("dispatchpolicy.py", "roster_rows"),
 })
 
 #: `from .secretary import <名字> [as _X]` / `from . import secretary [as _Y]` —— 别名也要认
