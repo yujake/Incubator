@@ -2807,22 +2807,16 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
     from .. import closing as CL
     from ..reviewaccept import CRITERIA
 
-    # ---- 八格（与 `readouts.gates_readout` 同一套四态；`test_webui_package_gates`
-    #      在夹具上逐格比对两个出口，防止这里悄悄漂成第二套口径）。
-    detail_of: dict[str, list[str]] = {}
-    for f in (getattr(rep, "findings", []) or []):
-        detail_of.setdefault(str(getattr(f, "check", "")), []).append(
-            str(getattr(f, "detail", "") or ""))
-    counts = {s: 0 for s in ("pass", "fail", "unknown", "na")}
-    cells = []
-    for name in CL.DEFAULT_CHECKS:
-        status = str((getattr(rep, "status", {}) or {}).get(name) or "unknown")
-        if status not in counts:
-            status = "unknown"
-        counts[status] = int(counts[status]) + 1
-        cells.append({"name": name, "status": status,
-                      "detail": "；".join(d for d in detail_of.get(name, []) if d),
-                      "source": _gate_source(name, root_p)})
+    # ---- 八格（与 `readouts.gates_readout` 逐格同一份读数：两边都调
+    #      `readouts.gate_cells(report)`，不存在"第二套计数"；判据
+    #      `tests/test_the_gate_table_is_computed_once.py` 用反真空证明这一点）。
+    from .. import readouts as RD
+
+    cells, counts = RD.gate_cells(rep)
+    # `source` 是网页自己的呈现面（每格的原文落点），在共享读数之外补，
+    # 不改格形状 —— 改了，两个出口的 `cells` 就不再逐字相等。
+    for cell in cells:
+        cell["source"] = _gate_source(str(cell.get("name") or ""), root_p)
     verdict = getattr(rep, "m_verdict", None) or {}
     #: `machine_pass` 是"八格全 pass 且没有 blocker"的合取（`closing.ClosingReport`），
     #: 所以它变假有两条来源：格失败（fail / unknown / na 都不算 pass）与 blocker

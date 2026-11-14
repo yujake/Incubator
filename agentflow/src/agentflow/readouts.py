@@ -514,6 +514,47 @@ def cost_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
 # ---------------------------------------------------------------- 四、收工门
 
 
+def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    """收工门八格的逐格读数与四档计数 —— 这台计算机器只有一份实现。
+
+    ## 为什么要有这个函数（口径题，不是重构）
+
+    同一份工作区的八格读数有两个出口：命令行 `agentflow stats gates` 走
+    :func:`gates_readout`，网页 `/api/package` 与 `/api/acceptance` 走
+    `webui/readers.py::_closing_block`。改前这两处各写一遍同一个循环
+    （遍历 `closing.DEFAULT_CHECKS`、把不在 :data:`CELL_STATES` 里的状态折成
+    `unknown`、逐档累加），于是"同一份 `rep.status` 数出两个 counts"这件事
+    没有任何结构保证 —— 一处改了归一化规则，另一处照旧，两边都"对"，合起来是假的。
+    现在两边都只调这一个函数：输入是 `closing.ClosingReport`，输出是
+    `(cells, counts)`，不读盘、不看第几端。
+
+    ## 形状
+
+    - `cells[i] = {"name", "status", "detail"}`，顺序就是 `closing.DEFAULT_CHECKS`；
+      `detail` 是该格被拦时那几条 finding 的原话（用顿号连起来，没有就是空串）；
+    - `counts` 的键就是 :data:`CELL_STATES` 四档，值各几格，八格加起来等于格数。
+
+    网页那端还要给每格补 `source`（原文落点）：那是网页自己的呈现面，在这一份
+    读数之外补，不许反过来改这里的格形状 —— 一改，两个出口的 `cells` 就不再逐字相等。
+    """
+    from . import closing as CL
+
+    detail_of: dict[str, list[str]] = {}
+    for finding in (getattr(report, "findings", []) or []):
+        detail_of.setdefault(str(getattr(finding, "check", "")), []).append(
+            str(getattr(finding, "detail", "") or ""))
+    cells: list[dict[str, Any]] = []
+    counts = {s: 0 for s in CELL_STATES}
+    for name in CL.DEFAULT_CHECKS:
+        status = str((getattr(report, "status", {}) or {}).get(name) or "unknown")
+        if status not in CELL_STATES:
+            status = "unknown"
+        counts[status] = int(counts[status]) + 1
+        cells.append({"name": name, "status": status,
+                      "detail": "；".join(d for d in detail_of.get(name, []) if d)})
+    return cells, counts
+
+
 def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                   sid: str | None = None,
                   scanned: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -589,24 +630,14 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                          data=data,
                          problems=[_problem(str(refused.get("code") or "refusal"),
                                             str(refused.get("detail") or ""))])
-    detail_of: dict[str, list[str]] = {}
     problems: list[dict[str, str]] = []
     for finding in report.findings:
-        detail_of.setdefault(str(getattr(finding, "check", "")), []).append(
-            str(getattr(finding, "detail", "") or ""))
         if str(getattr(finding, "level", "")) == "blocker":
             problems.append(_problem(str(getattr(finding, "code", "") or "blocker"),
                                      f"【{getattr(finding, 'check', '')}】"
                                      f"{getattr(finding, 'detail', '')}"))
-    cells: list[dict[str, Any]] = []
-    counts = {s: 0 for s in CELL_STATES}
-    for name in CL.DEFAULT_CHECKS:
-        status = str(report.status.get(name) or "unknown")
-        if status not in CELL_STATES:
-            status = "unknown"
-        counts[status] = int(counts[status]) + 1
-        cells.append({"name": name, "status": status,
-                      "detail": "；".join(d for d in detail_of.get(name, []) if d)})
+    # 逐格与计数只从这一处取（与网页那头同一个函数，见 `gate_cells` 的注释）。
+    cells, counts = gate_cells(report)
     data: dict[str, Any] = {
         "cells": cells, "counts": counts,
         "machine_pass": bool(report.machine_pass),

@@ -109,7 +109,7 @@ webui_routes            = 34   # `python -c "import sys;sys.path.insert(0,'src')
 webui_routes_get        = 26   # 同上，按 `x[0] == 'GET'` 计数
 webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 35   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-03：+test_webui_optimized_column.py）
+webui_test_files        = 36   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-14 复跑：+test_webui_cli_landing_alignment.py ⇒ 35 → 36）
 LIVE-READINGS:END
 ```
 
