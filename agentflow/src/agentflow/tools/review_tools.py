@@ -1454,6 +1454,18 @@ def record_finding(
     message_s, evidence_s = str(message or ""), str(evidence or "")
     level_s = str(level or "warning")
     axis_s = str(axis or "")
+    # ---- G10 的 `maths` 那一格：按 kind 读同一张声明表（本批 ②） --------------------
+    #
+    # 现场（`projects/lp-ball`，2026-11-14）：11 条手工判词的 `maths` 全空 ⇒ G10 对
+    # 任何 record_finding 产出恒红。根因是这一格没有输入通道：工具声明面里没有
+    # `maths` 参数（加参数要动 `specs/h.py` 与两份 golden，FC-27），而
+    # `schema.ReviewFinding.maths` 的默认值是空串。
+    # 修法不是放宽 G10，也不是给"手工判词"另立一条判据：`_FOUR_GATE_KEYS_OF_KIND`
+    # 已经按 kind 声明了 axis / maths / suggestion（机械那一支的 `_finding()` 就按它
+    # 补齐），这里读同一张表 —— 一个 kind 的发现"要不要读断言本身才能判"只有这一处声明。
+    # 表外 kind 走 `_FOUR_GATE_KEYS_FALLBACK`（今天走不到：表键恰好等于
+    # `schema.FINDING_KINDS` 的 7 个取值，`ReviewFinding.validate()` 也会拒表外 kind）。
+    maths_s = _FOUR_GATE_KEYS_OF_KIND.get(kind_s, _FOUR_GATE_KEYS_FALLBACK)[1]
     for name, value in (("kind", kind_s), ("target", target_s),
                         ("message", message_s), ("evidence", evidence_s)):
         if not value.strip():
@@ -1532,6 +1544,8 @@ def record_finding(
             suggestion=str(suggestion or ""), axis=axis_s, line=line,
             line_unavailable_reason=str(line_unavailable_reason or ""),
             verbatim_quote=str(verbatim_quote or ""),
+            # ② G10 的 maths 那一格：没有输入通道，按 kind 从产出侧声明表读（见上面那段）。
+            maths=maths_s,
             status="open",
             # P2-4：来源标记 —— 这条是 H 自己读出来的（不是机械 scan 的产物），
             # `verify_fixes` 因此不许拿「本轮 scan 里没有它」当「修好了」。
