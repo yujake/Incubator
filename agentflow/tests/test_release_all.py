@@ -624,11 +624,16 @@ def test_cli_skip_is_recorded_as_unknown_and_exit_code_is_two(tmp_path):
     因为本用例测的是"跳过怎么记账"，不是"那些门能不能过"。
     `per-file`（逐文件单跑，量级与全量测试相同）必须在这个列表里 ——
     漏掉它会让这条用例从"秒级"变成"分钟级"，而慢的用例最后会被跳过。
+    `frontend`（后加的第七步：typecheck + 构建 + 入库产物新鲜度）同理：它加进步骤表时
+    这里没同步，于是本用例真的去跑前端，再因陈旧 dist 以退出码 1 结束 —— 而本用例断言的
+    是 2，红的原因变成了"前端旧"而不是"跳过没记账"。跳过它不是替前端打掩护：前端新鲜度
+    由 `tests/test_webui_static.py` 与 `tools/frontend_gate.py` 守，这里只是把"跳过怎么
+    记账"还原成它自称要测的东西。
     """
     out = tmp_path / "r.json"
     p = subprocess.run(
         [sys.executable, str(SCRIPT),
-         "--skip", "acceptance,repro,release-check,coverage,per-file",
+         "--skip", "acceptance,repro,release-check,coverage,per-file,frontend",
          "--json-out", str(out)],
         cwd=str(REPO), capture_output=True, text=True, encoding="utf-8", errors="replace",
         timeout=300,
