@@ -28,6 +28,8 @@ import pytest
 
 from agentflow import claimanatomy as CA
 from agentflow import closing as CL
+from agentflow import errorstate as ES
+from agentflow import evidencebits as EB
 from agentflow import gates as G
 from agentflow import schema as S
 from agentflow import verify as V
@@ -57,13 +59,34 @@ def _claim(**over: object) -> dict:
 
 
 def _stmt(store: Store, sid: str, **kw: object) -> dict:
-    """一条命题（默认 active + external_lit + 逐字已核）。"""
+    """一条命题（默认 active + external_lit + 逐字已核）。
+
+    2026-11-13 起「状态=错误 ⇔ 等级=错误」是一条恒等：`status` 是错误那一档时必须带
+    作废载荷 —— 一份"如实登记被证否"的台账夹具，凭据不能空着（空载荷的行读成
+    "读不出来"，不再是"它错了"，`errorstate.statement_refuted` 的三态见那里）。
+    这里给一份最小可复核的构造凭据；要测坏行的用例自己传 `bits=`。
+    """
     base = dict(stmt_id=sid, origin="external_lit", kind="theorem", label=f"Theorem {sid}",
                 statement_text="命题短版", statement_full="若假设 A 成立，则结论 B 成立",
                 proof_text="Proof. 逐字摘录……", source_lit_id="0000",
                 quote_verified=True, quote_reason="逐字比对通过", evidence_kind="cross_check",
                 status="active", created_at=TS)
     base.update(kw)
+    if "bits" not in base and str(base.get("status") or "") in ES.ERROR_WORDS:
+        body = str(base.get("proof_text") or "")
+        payload = {"kind": "construction", "construction": "夹具：原文条件少了正性假设",
+                   "reason": str(base.get("quote_reason") or "原文条件少了正性假设"), "at": TS}
+        bits = EB.bits_of(
+            origin=str(base.get("origin") or "own_result"),
+            source_lit_id=str(base.get("source_lit_id") or ""),
+            quote_verified=base.get("quote_verified"),
+            proof=bool(body.strip()), proof_process=body,
+            voided_by=payload, kind=str(base.get("kind") or ""))
+        base["bits"] = bits
+        # 档位那一列是登记那一刻等级的反算名（历史列）：错误那一档不重算它，
+        # 与生产路的 `refute_statement` 同形（见 `test_contradiction_fixtures._stmt`）。
+        base["evidence_kind"] = EB.kind_from_bits(
+            {**bits, "voided_by": {}}, kind=str(base.get("kind") or ""))
     row = S.Statement(**base)
     row.validate()
     with store.tx("statements", actor="test") as tx:
@@ -393,7 +416,7 @@ def test_the_pollution_reading_finds_the_claims_pressing_on_a_statement(tmp_path
     `contradiction_pollution` 这条 blocker 第一次能因为稿件里的断言而亮。
     """
     st = _store(tmp_path)
-    _stmt(st, "0001", status="refuted", quote_reason="原文条件少了正性假设")
+    _stmt(st, "0001", status=ES.ERROR_WORD, quote_reason="原文条件少了正性假设")
     _stmt(st, "0002", derived_from=["0001"])
     _doc(st, "0001", ["stmt:0001", "stmt:0002"])
 
@@ -464,7 +487,7 @@ def test_the_assertion_level_reading_is_not_vacuous(tmp_path):
     两格分开给，才分得清"这一层干净"与"这一层根本没扫到东西"。
     """
     st = _store(tmp_path)
-    _stmt(st, "0001", status="refuted", quote_reason="原文条件少了正性假设")
+    _stmt(st, "0001", status=ES.ERROR_WORD, quote_reason="原文条件少了正性假设")
     _doc(st, "0001", ["lit:0000"])
     rep = CL.check_closing(st, checks=("contradictions",))
     lvl = rep.readings["contradictions"]["pollution_assertion_level"]
