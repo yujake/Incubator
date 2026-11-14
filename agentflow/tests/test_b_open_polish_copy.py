@@ -392,6 +392,55 @@ def test_b2_a_row_number_without_a_sign_still_opens_an_unsigned_copy(tmp_path) -
     assert _files(st) == sorted(before + [pathlib.Path(cp).name]), _files(st)
 
 
+def test_b3_a_same_number_in_another_family_is_not_taken_as_the_source(tmp_path) -> None:
+    """b3：号只在号段内唯一 —— 别族同号的那份稿不是原稿（正文 sha 对不上就退到行上正文）。
+
+    概念行按 `b-proof` 族拼稿名，而 `f-proof-000000.md` 与 `b-proof-000000.md` 是两个
+    不同的号。没有这道核对时，行上稿号一旦撞了别族的号，优化副本就会建在一份别的
+    证明上（这正是"拿一份不对的稿当原稿"）。
+    """
+    st = _ws(tmp_path)
+    other = "reports/f-proof-000000.md"
+    (pathlib.Path(st.root) / "reports").mkdir(parents=True, exist_ok=True)
+    (pathlib.Path(st.root) / other).write_text(
+        "# F 的证明手稿：别的一条\n\n## 命题\n\n别的一条。\n\n## 证明\n\n别族的正文。\n",
+        encoding="utf-8")
+    conftest.seed_statement_row(st, stmt_id=SID, statement_full="夹具命题。",
+                                kind="concept", proof_text="这一条自己的良定义论证。",
+                                manuscript_id="000000")
+
+    got = _b(st).open_polish_copy(statement_id=SID)
+    assert got.get("ok") is True, got
+    assert got.get("source_kind") == "statement_proof_text", got
+    copy_text = (pathlib.Path(st.root) / str(got["path"])).read_text(encoding="utf-8")
+    assert "这一条自己的良定义论证。" in copy_text, copy_text
+    assert "别族的正文" not in copy_text, copy_text
+
+
+def test_b4_a_mismatched_family_number_is_not_a_source_at_all(tmp_path) -> None:
+    """b4：b3 的负控 —— 别族同号、行上又没有正文 ⇒ 不许拿那份稿顶上，受控拒没有原稿。
+
+    没有这一条时，b3 的"退到行上正文"与"把别族那份稿当原稿"在读数上分不开；而且
+    `_polish_source_unsigned_file` 会先把 `out` 写满，退档时必须清干净，否则"对不上"
+    会被读成"找到了"。
+    """
+    st = _ws(tmp_path)
+    other = "reports/f-proof-000000.md"
+    (pathlib.Path(st.root) / "reports").mkdir(parents=True, exist_ok=True)
+    (pathlib.Path(st.root) / other).write_text(
+        "# F 的证明手稿：别的一条\n\n## 命题\n\n别的一条。\n\n## 证明\n\n别族的正文。\n",
+        encoding="utf-8")
+    conftest.seed_statement_row(st, stmt_id=SID, statement_full="夹具命题。",
+                                kind="concept", manuscript_id="000000")
+    before = _files(st)
+    got = _b(st).open_polish_copy(statement_id=SID)
+    assert got.get("ok") is False, got
+    assert got.get("refused") == "no_source_draft", got
+    assert got.get("source_path") == "", got
+    assert got.get("source_kind") == "", got
+    assert _files(st) == before, (_files(st), before)
+
+
 def test_c2_without_a_row_number_the_why_names_the_missing_evidence(tmp_path) -> None:
     """第 ④ 条反控②：行上没记稿号、正文空 ⇒ `no_source_draft`（没有可复制的原稿）。
 

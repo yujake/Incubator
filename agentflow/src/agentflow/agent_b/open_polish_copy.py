@@ -500,6 +500,12 @@ class _OpenPolishCopy:
         `unsigned_manuscript`（盘上有稿，逐字复制）与 `statement_proof_text`
         （没有文件，按同一份正文用 `manuscriptform.render_proof_manuscript` 渲染初始稿）。
 
+        这一档比已签那一档多一道核对：稿号只在号段内唯一（`f-proof-000012` 与
+        `b-proof-000012` 是两个不同的号），所以按行上稿号找到的那一份必须正文对得上
+        （`## 证明` 的 sha 等于行上某一份证明的 sha）才当原稿；对不上（撞了别族的号）
+        就退到行上正文那一档，绝不拿一份别的稿当真原稿。行上还没有任何正文时
+        （例如概念已签、还没收录）没有可比的第二份文本，按稿号认。
+
         这是"优化侧自己造初始稿"的落点：录入侧可能找不到素材，而优化不该因此停摆。
         """
         from .. import manuscriptform as _MF
@@ -523,9 +529,16 @@ class _OpenPolishCopy:
                 rel = ""
             if rel and (Path(str(root)) / rel).is_file():
                 got_file = self._polish_source_unsigned_file(str(root), rel, out)
-                if got_file.get("found"):
+                if not got_file.get("found"):
+                    return got_file
+                if self._source_matches_row(got_file.get("text"), row):
                     got_file.update(matched_by="statement_manuscript_id")
-                return got_file
+                    return got_file
+                # 撞了别族的号 ⇒ 不用这一份；下面退到行上正文那一档（先把它读出来的那几格
+                # 清掉，否则"对不上"会被后面的分支当成"找到了"）。
+                out.update(found=False, path="", text="", sign_sha="", block={},
+                           refused="", why="", matched_by="",
+                           source_sign="", source_kind="")
         proof = str(row.get("proof_text") or "").strip()
         if proof:
             text = _MF.render_proof_manuscript(
@@ -536,6 +549,28 @@ class _OpenPolishCopy:
                        source_sign="unsigned", source_kind="statement_proof_text")
             return out
         return out
+
+    @staticmethod
+    def _source_matches_row(text: Any, row: dict[str, Any]) -> bool:
+        """这份稿的 `## 证明` 是不是这一行上某一份证明（sha 逐字比）。
+
+        行上还没有任何正文（`proof_text` / `proofs` 全空）⇒ 没有可比的第二份文本，
+        按稿号认（`True`）—— 概念已签、还没收录就是这一档。有正文而一份都对不上
+        ⇒ `False`（号撞了别族的那一份，不许当原稿）。
+        """
+        from .. import proofregistry as _PR
+        from .. import verifications as _VR
+
+        try:
+            have = _PR.proof_sha(_VS.manuscript_proof_body(str(text or "")))
+        except Exception:  # noqa: BLE001 —— 正文读不出来 = 核对不上
+            return False
+        bodies = [str(body) for _no, body in _VR.proof_list(row) if str(body).strip()]
+        if not bodies:
+            return True
+        if not have:
+            return False
+        return any(_PR.proof_sha(body) == have for body in bodies)
 
     def _statement_manuscript_id(self, sid: str) -> dict[str, Any]:
         """④ 的证据源：这条命题的 `statements` 行上记的稿号（三态，不折平）。
