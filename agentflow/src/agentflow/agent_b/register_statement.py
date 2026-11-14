@@ -284,11 +284,14 @@ def _concept_manuscript_sign_reading(store: Any, *, proof_manuscript: Any
     if not mid:
         out["why"] = "这一份稿的路径认不出稿号 ⇒ 反查不到它属于哪一条在册命题"
         return out
-    try:
-        rows = [dict(r) for r in (store.rows("statements") if store is not None else [])]
-    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
-        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）⇒ 没查成"
+    # 「取数走查口」（`tests/test_the_statement_ledger_has_two_ways_to_be_asked.py` 的 n）：
+    # 这里要的是"整本台账里哪一行的 `manuscript_id` 指着这个稿号"，用 `rows_of` 取数、
+    # 不自己 `store.rows("statements")`。读不出来时 `rows_of` 给三态里的理由（不抛）。
+    rows, _problem, _error = SL.rows_of(store) if store is not None else ([], "", {})
+    if _problem:
+        out["why"] = f"`statements` 读不出来（{_problem}）⇒ 没查成"
         return out
+    rows = [dict(r) for r in (rows or ())]
     row = next((r for r in rows
                 if str(r.get("manuscript_id") or "").strip() == mid
                 and str(r.get("kind") or "").strip() == "concept"), None)

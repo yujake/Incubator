@@ -1462,14 +1462,16 @@ def _note_conjecture_refutation(root: str | Path, row: dict[str, Any]) -> dict[s
     }
     try:
         from . import conjectureledger as CL
+        from . import statementledger as SL
         from .store import Store
 
         store = Store(str(root))
-        text = ""
-        for one in store.rows("statements"):
-            if str(one.get("stmt_id") or "") == sid:
-                text = str(one.get("statement_full") or "")
-                break
+        # 「取数走查口」：按编号取一行走 `statementledger.by_id`，不再自己扫全表
+        # （`tests/test_the_statement_ledger_has_two_ways_to_be_asked.py` 的 n）。
+        # 三态：`found=False` ⇒ 真的没有这一行；`checked=False` ⇒ 台账没查成 ——
+        # 两档都不给正文，下面那一句把两种情形都写成"对不上猜想行"，与改前同形。
+        hit = SL.by_id(store, stmt_id=sid)
+        text = str((hit.get("row") or {}).get("statement_full") or "") if hit.get("found") else ""
         if not text.strip():
             reading["reason"] = ("这一签的命题在 `statements` 里读不到正文 ⇒ 对不上猜想行"
                                  "（不是「没被拒」）")
