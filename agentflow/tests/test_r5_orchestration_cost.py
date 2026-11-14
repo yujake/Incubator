@@ -1330,6 +1330,16 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_inline_path_reading",        # 同一条注释里成对出现的另一支（逐份 inline 的旧读数）；同上，负控断言它不存在
     "_proof_no_from_delivery",     # 已退役：交付里读落点号那条路（3f53557f 起 proof_no 在产出侧退役）：`tests/test_proof_no_comes_from_the_delivery.py` 与 `tests/test_b_ingests_a_new_form_manuscript.py` 的负控/史实都点名它
     "_rewrite_is_the_same_proof",  # 存活方法（`register_statement.py` 的 def 一处；两处注释在讲"同一份稿改正文 ⇒ 改稿"，真符号只数到定义那一次）
+    # —— 2026-11-14（TR 收口）：六条新登记，逐条写在下面 ——
+    # 四条是「已删 / 改名前的实现名」、一条是「行内字符串键」、一条是「改名前的历史
+    # 名字」；引用处都是"改前这一格叫什么、为什么摘掉"的史实叙述，不是"照着找能得到
+    # 东西"的指针。按本表纪律登记，不改引用处文本（改了就丢掉"改前叫什么"）。
+    "_manuscript_form_reading",    # 已退役的稿面读数（B 的形态闸收口到 `judge_proposition_form` 之前的那一格）：`register_statement.py` 的注释在讲"判据本体只有一处"时点名它
+    "_ingest_pointer",             # 已退役的指针收录读数（路径号下沉到秘书事务之前的那一支）：`register_statement.py` 的两段注释在讲"号不在这里分配"的改前形态
+    "_numeric_form_gate",          # 已退役的数值形态闸名（收进 `judge_proposition_form` 同一道判定口之前）：同上那段注释在讲改前的闸在哪
+    "_resolve_manuscript_id",      # 已改名/搬走的稿号解析实现：`agent_f/core.py` 的 import 注释与 `_hand_proof` 的 docstring 用旧名讲"改证明不换稿"这条口径（今天由 `manuscriptids` / `proofregistry` 那一侧承担）
+    "_no_ledger",                  # 行内字符串键（不是符号）：`Secretary._judge_core` 在"没缝 / 开关关着"那一档返回 `{"_no_ledger": True}`，`secretary.py` 的注释在解释它为什么不落角色台账
+    "_manuscript_belongs_to_a_cited_statement",  # 改名前的判据名：`tests/test_dependency_wiring_is_live.py` 的注释在讲"这份稿是不是某条被引命题的稿"那条判定（今天走 `_manuscript_is_own` / 逐路径记录）
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")
