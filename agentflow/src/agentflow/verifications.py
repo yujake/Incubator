@@ -4984,7 +4984,8 @@ def _pending_claim_streak(passes: Sequence[Mapping[str, Any]],
 
 def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
                       got: Mapping[str, Any], *, statement_id: str,
-                      manuscript_id: str = "") -> dict[str, Any]:
+                      manuscript_id: str = "",
+                      root: str | Path = "") -> dict[str, Any]:
     """:func:`_pending_signed` 认到那一签之后，把 `proof_review_gap` 的读数摊开。
 
     判据与"台账那一路"同一条（`signs_bit3`）：`成立` 且没有未解决 error、且引用核实
@@ -5118,6 +5119,16 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
         return out
     out["state"] = "signed"
     out["ok"] = True
+    # 2026-11-14 RL1：指针以「正式颁发的那一签」为准（见 `_issued_verification_pointer`）。
+    # 这一档（pending 台账）尤其要紧：同一份正文并发审两趟时，台账最后一条可能属于
+    # 没发签的那一趟。`state` / `ok` / 票数一个字不动，只改凭据指回哪一行。
+    if root:
+        issued = _issued_verification_pointer(
+            root, str(row.get("proof_sha256") or ""))
+        if issued.get("found"):
+            out["verification_id"] = (str(issued.get("verification_id") or "")
+                                      or out["verification_id"])
+            out["ledger"] = str(issued.get("ledger") or out["ledger"])
     out["why"] = (f"命题 {statement_id} 的凭据在 `{out['ledger']}`：V 在命题还没在册时"
                   f"审过这一份并判「成立」（连续 {int(streak_read.get('votes') or 0)} 票、"
                   f"门槛 {int(streak_read.get('need') or SIGN_STREAK_NEED)} 票），"
@@ -5152,6 +5163,50 @@ def _bit3_blockers(row: Mapping[str, Any], *, streak: Any = None) -> str:
                     f"连续「成立」{got}/{SIGN_STREAK_NEED} 次（还差 "
                     f"{SIGN_STREAK_NEED - got} 次）"))
     return "；".join(why) or "判据判不了（读数不全）"
+
+
+def _issued_verification_pointer(root: str | Path, artifact_sha: Any) -> dict[str, Any]:
+    """这一份正文正式颁发的那一签指回台账的哪一行（纯读；`_kind_upgrade` 的指针源）。
+
+    ## 为什么不能取"台账里最后一条 pending"（2026-11-14 真机 000041）
+
+    `f-proof-000001` 上并发跑了两个 V 任务：20:55:26 的那一趟满 3 票发签（签文件的
+    `ledger` 记 `...#u-000003`），20:57:25 的另一趟又落 3 条「成立」但没有发签
+    （`landed=pending`、`charged=false`）。台账按行序取"最后一条"会拿到 `u-000006`，
+    于是 `_kind_upgrade.basis` 里签文件被写成 `out/vsigns/<sha>.json#u-000006`、台账被
+    写成 `...#u-000006`，而真正算数的那一签是 `u-000003` —— 同一行两个指针打架。
+
+    这一格回答的就是"哪一签算数"：以 `out/vsigns/<正文 sha>.json` 的 `ledger` 为准
+    （那个 sha 就是被签的正文；签文件是逐份证据，`issued.json` 是它的派生归档）。
+    没有签文件、签文件没记台账、或读不出来 ⇒ `found=False`，调用方保留自己的指针
+    （不编一条凭据，也不把"没查成"折成"没有签"）。
+
+    返回 `{checked, found, ledger, verification_id, why}`。
+    """
+    out: dict[str, Any] = {"checked": False, "found": False, "ledger": "",
+                           "verification_id": "", "why": ""}
+    sha = str(artifact_sha or "").strip()
+    if not sha:
+        out["why"] = "没有正文 sha ⇒ 不知道问哪一签（不是「没有签」）"
+        return out
+    try:
+        from . import vsigns as _VS   # 惰性：签文件目录只有一处口径
+        got = _VS.sign_of(root, sha)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        out["why"] = f"签文件读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        return out
+    out["checked"] = bool(got.get("checked"))
+    doc = dict(got.get("sign") or {})
+    if not got.get("found"):
+        out["why"] = f"`{got.get('path') or sha}` 不在盘上 ⇒ 这一份正文没有颁过签"
+        return out
+    ledger = str(doc.get("ledger") or "").strip()
+    if not ledger:
+        out["why"] = ("签文件没记台账行（`ledger` 是空的）⇒ 指不出那一签是哪一行")
+        return out
+    vid = ledger.rsplit("#", 1)[-1] if "#" in ledger else ""
+    out.update(found=True, ledger=ledger, verification_id=vid, why="")
+    return out
 
 
 def proof_review_gap(root: str | Path, row: Mapping[str, Any],
@@ -5315,7 +5370,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         if pending is not None:
             return _gap_from_pending(
                 out, checks, pending, statement_id=sid,
-                manuscript_id=str(row.get("manuscript_id") or ""))
+                manuscript_id=str(row.get("manuscript_id") or ""), root=root)
         out["checked"] = True
         checks[1]["detail"] = f"`{out['ledger']}` 不在盘上（一次审校都没有）"
         checks[2]["detail"] = "没有那一行，无从比"
@@ -5340,7 +5395,7 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         if pending is not None:
             return _gap_from_pending(
                 out, checks, pending, statement_id=sid,
-                manuscript_id=str(row.get("manuscript_id") or ""))
+                manuscript_id=str(row.get("manuscript_id") or ""), root=root)
         out["checked"] = True
         checks[1]["detail"] = "台账是空文件"
         checks[2]["detail"] = "同上"
@@ -5396,6 +5451,16 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
         "hard_ban_markers": [str(m) for m in (span.get("hard_ban_markers") or [])],
     })
     if state == "signed" and checked:
+        # 2026-11-14 RL1（真机 000041）：指针取值以「正式颁发的那一签」为准，不取
+        # 台账里最后一条 pending —— 同一份正文可能被并发审过两趟（20:55 发签 u-000003、
+        # 20:57 又落 3 条成立但没发签 u-000006），"最后一条"会把没发签的那一趟写成凭据。
+        # `state` / `ok` / 连续票数一个字不动（那是"这一份正文算不算签住"的判定）；
+        # 这一格只改"凭据指回哪一行"，所以后一次否决仍按 `review_standing` 的原判据生效。
+        issued = _issued_verification_pointer(root, str(chosen.get("proof_sha256") or ""))
+        if issued.get("found"):
+            out["verification_id"] = (str(issued.get("verification_id") or "")
+                                      or out["verification_id"])
+            out["ledger"] = str(issued.get("ledger") or out["ledger"])
         checks[1].update(ok=True, detail=f"{out['verification_id']}：{out['verdict'] or '成立'}")
         checks[2].update(ok=True, detail=(
             f"{proof_label(sid, chosen_no)} 的现行正文 sha "
