@@ -15,7 +15,7 @@
 | 3 | `formalgw.check_lean`（桥接层） | 关掉 ⇒ `status="lean_disabled"`、`checked=False`、连探测/进程都不起 |
 | 4 | `agent_e`（实现层） | 关掉 ⇒ `run_experiment(method="formal")` 前置拒绝（2026-10-23 晚起是 `formal_not_in_e`：E 不做形式化，与开关无关）；`_CheckFormal` 那份实现经 L 仍然如实回没查成 |
 | 5 | 提示词（`TOOLCHAIN_FACTS` / `TOOLCHAIN_FORMAL`） | 关掉 ⇒ 先报"已关闭"并给出替代路线（`proof_text` + V 的 `verify_proof`） |
-| 6 | 收工门（`closing` 的 `load_bearing`） | 关掉 ⇒ 记 `na` + 理由（不是 pass、也不是 fail），并给替代读数 |
+| 6 | 收工门（`closing` 的 `load_bearing`） | 关掉 ⇒ 照旧判：零承重断言记 `pass` + `state="not_applicable"`，有承重断言而拿不出背书 ⇒ `fail`；替代口径是"它引用的命题现行版有 V 签"（2026-11-14 拍板撤掉 `na`，判据 `tests/test_load_bearing_without_lean.py`） |
 
 负控的方向一律是"开关开着时逐字不变"：没设这个键 = 与 2026-10-12 之前行为相同。"""
 from __future__ import annotations
@@ -528,7 +528,14 @@ class _Rep:
 
 def test_the_closing_cell_says_not_applicable_instead_of_red(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """收工门：关掉 ⇒ `na` + 理由 + 替代读数（V 审过的证明行），不是 fail。"""
+    """收工门：关掉 ⇒ 这一格照旧判，零承重断言记 `pass` + `state="not_applicable"`。
+
+    2026-11-14 业主拍板：`na` 从这一格消失 —— `na` 不是 `pass`，于是 `machine_pass`
+    在产品缺省（Lean 关）的工作区上永远为假（真机 0/107），而它度量的是开关不是承重。
+    替代口径（"它引用的命题现行版有 V 签"）由 `tests/test_load_bearing_without_lean.py`
+    逐条钉；这一条守的是「零承重断言」那一档：`pass` + 读数 `not_applicable`（学
+    `paper` 那一格），替代读数 `prose_reviewed_statements` 照旧给出来。
+    """
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
@@ -556,7 +563,8 @@ def test_the_closing_cell_says_not_applicable_instead_of_red(
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     rep = _Rep()
     CL._check_load_bearing(rep, st)
-    assert rep.status["load_bearing"] == "na", rep.status
+    assert rep.status["load_bearing"] == "pass", rep.status
+    assert rep.readings["load_bearing"]["state"] == "not_applicable", rep.readings
     assert rep.readings["load_bearing"]["disabled"] is True
     assert rep.readings["load_bearing"]["prose_reviewed_statements"] == 1, \
         rep.readings["load_bearing"]

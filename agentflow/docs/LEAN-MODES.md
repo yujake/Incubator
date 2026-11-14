@@ -75,7 +75,7 @@
 
 | 验收行 | 无 Lean | 有 Lean |
 |---|---|---|
-| `load_bearing` | **`na`**（第四态：不进 `unknowns`/`failed`，但让 `machine_pass` 变假）＋ 替代读数 `prose_reviewed_statements` | `pass` / `fail`（blocker `load_bearing_without_t3`）：每条 `evidence_kind=proof` 的正文断言都要有 T3 背书（`method=formal` ＋ `evidence_kind=proof` ＋ `verifier_output` 非空） |
+| `load_bearing` | `pass` / `fail`（blocker `load_bearing_without_backing`）：每条 `evidence_kind=proof` 的正文断言都要有背书 —— T3 / V 真签过的穷举，**或**它引用的命题现行版有 V 签，或已降档；零承重断言 ⇒ `pass` ＋ 读数 `state="not_applicable"`（2026-11-14 起不再记 `na`：`na` 不是 `pass`，让 `machine_pass` 在产品缺省下永远为假） | `pass` / `fail`（blocker `load_bearing_without_t3`）：同上，但"背书"里**没有** V 签那一条 —— 每条 `evidence_kind=proof` 的正文断言都要有 T3 背书（`method=formal` ＋ `evidence_kind=proof` ＋ `verifier_output` 非空） |
 | `proof_experiment_rows` | **结构性恒 0**；`min` 缺省 **1** ⇒ **unmet** | 可达（要真有 formal 实验） |
 | `reviewed_proof_rows` | 可达（读到 `pre_theorem` 等） | 可达 |
 | `counterexample_or_proof_rows` | 可达 | 可达 |
@@ -111,5 +111,5 @@
 
 ## 7. 一句话总结
 
-- **无 Lean 模式**：一切照旧，但**证据上限是 `proof_review`/`cross_check`**，`load_bearing` 是 `na`，`proof` 档产不出来；V 的「成立」是逐行结论。
-- **有 Lean 模式**：E/M **有形式化义务**、H 要 `proof`、`load_bearing` 变成真判据；但**受环境约束**（`no_backend`/`tool_crashed`/`import_unavailable`），且"开着但没检查器"这一档 **H 必须按"没查"处置**。
+- **无 Lean 模式**：一切照旧，但**证据上限是 `proof_review`/`cross_check`**，`proof` 档产不出来；V 的「成立」是逐行结论。`load_bearing` **照旧判**（2026-11-14）：背书认"它引用的命题现行版有 V 签"，零承重断言记 `pass` ＋ 读数 `not_applicable`（不再是 `na`）。
+- **有 Lean 模式**：E/M **有形式化义务**、H 要 `proof`、`load_bearing` 按 T3 判（V 签那一条替代入口不生效）；但**受环境约束**（`no_backend`/`tool_crashed`/`import_unavailable`），且"开着但没检查器"这一档 **H 必须按"没查"处置**。

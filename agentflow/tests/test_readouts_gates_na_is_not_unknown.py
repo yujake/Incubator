@@ -21,13 +21,21 @@ closing 侧（rep.status 逐格）  pass2 fail1 unknown4 na1
 
 | # | 判据 | 守的是 |
 |---|---|---|
-| ① | 真工作区端到端：`na` 那格在读数侧仍是 `na`，且 `counts` 与 `closing` 逐格相等（八格，含 na 键） | 业主原话「同一现场两读口 counts 逐格相等（含 na）」；用的是真的 `check_closing`（只把 Lean 开关拔到关，那是这副夹具造 na 的唯一办法，不是打桩门） |
-| ② | 打桩八格混合（pass4/fail1/unknown1/na1）：`data.counts` 与 `Counter(rep.status)` 字典相等 | 不是"sum 相等"：折一格时总数照样是 8，只有逐格比对看得见 |
+| ① | 真工作区端到端：Lean 关时那一格不再写 `na`（2026-11-14 起照旧判），且 `counts` 与 `closing` 逐格相等（格数跟 `DEFAULT_CHECKS` 走） | 业主原话「同一现场两读口 counts 逐格相等」；用的是真的 `check_closing`（把 Lean 开关拔到关），不是打桩门 |
+| ② | 打桩混合（pass4/fail1/unknown1/na1）：`data.counts` 与 `Counter(rep.status)` 字典相等 | 不是"sum 相等"：折一格时总数照样等于格数，只有逐格比对看得见；`na` 那一档守的是「历史盘上的旧读数」 |
 | ③ | 负控：把 `CELL_STATES` 打回改前三项 ⇒ 同一条比对必红（`na` 消失、`unknown` +1） | 业主原话「把 na 映射回 unknown ⇒ 红」；也证明 ①② 不是恒绿 |
-| ④ | 类判据：AST 扫 `closing.py` 里 `rep.status[…] = <字面量>`（含 `IfExp` 两支）⇒ 集合 ⊆ `CELL_STATES`，且必须含 `na` | 下一个新状态（今天是 `na`）加进 `closing` 而忘了读数层 ⇒ 红；钉的是"词表覆盖门的状态值"，不是一个状态 |
+| ④ | 类判据：AST 扫 `closing.py` 里 `rep.status[…] = <字面量>`（含 `IfExp` 两支）⇒ 集合 ⊆ `CELL_STATES`，且不含 `na` | 下一个新状态加进 `closing` 而忘了读数层 ⇒ 红；同时守住 2026-11-14 那一刀（"没判"不许再记成一个状态），而 `na` 仍留在词表里给历史读数 |
 
 语义纪律（业主 2026-11-01 的第三条要求）另有一条：`unknown` 与 `na` 各自的含义必须在
 同一个 docstring 里写清（`unknown` = 没查成、`na` = 不适用），判据读源码断言这两句。
+
+## 2026-11-14（业主拍板）：门不再写 `na`，读数层仍认它
+
+`load_bearing` 改前在 Lean 关（产品缺省）时记 `na`；2026-11-14 起那一格照旧判 ——
+零承重断言记 `pass` + 读数 `state="not_applicable"`，有承重断言而拿不出背书记 `fail`
+（判据 `tests/test_load_bearing_without_lean.py`）。于是"真工作区造一个 `na`"这条路
+没有了：① 改成"真工作区跑一遍，状态里没有 `na`、两读口仍逐格相等"；②③ 用打桩的
+状态证明读数层仍能把「历史盘上」的 `na` 原样保留（旧报告里它就是那个词）。
 """
 
 from __future__ import annotations
@@ -79,37 +87,49 @@ def _parity_problems(got: dict, status: dict[str, str]) -> list[str]:
 
 
 # ====================================================================== ① 真工作区
-def test_a_real_gate_that_says_na_stays_na_on_the_reading_side(
+def test_a_real_gate_no_longer_writes_na_and_the_reading_side_still_matches(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """端到端：一个真的会记 `na` 的收工门，读数侧那格必须仍是 `na`，counts 逐格相等。
+    """端到端：真的收工门在 Lean 关时不再写 `na`（2026-11-14 拍板），两读口逐格相等。
 
-    造 `na` 的办法是业主 2026-10-12 那条真实开关：把 Lean 形式化关掉 ⇒ `load_bearing`
-    记 `na`（"这一格问的东西这一趟不适用"）。这里拔的是 `settings` 的开关，不是把
-    `check_closing` 打桩 —— 门是真的跑过的，八格是真的现算的，`na` 是门自己写的。
-    空工作区就是这副夹具：没有东西要交付 ⇒ 另外几格多数是 unknown / fail，正好不是"全 pass"。
+    改前这一条造 `na` 的办法是"把 Lean 关掉"（`load_bearing` 记 `na`）。2026-11-14
+    之后那一格照旧判 ⇒ 没有一格会写 `na`。于是这里钉三件事：
+    ① 空工作区上 `load_bearing` 是 `pass` + 读数 `not_applicable`（零承重断言）；
+    ② `status` 里确实没有 `na`（"没判"不再被记成一个状态）；
+    ③ `gates_readout` 与 `closing` 的逐格 counts 仍相等（`na` 那一档留在词表里，
+       读的是历史盘上的旧读数 —— ②③ 两条打桩用例守它）。
     """
     ws = tmp_path / "ws"
     Store(ws).init()
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
-    assert SET.lean_enabled()[0] is False, "夹具前提变了：Lean 关不掉就造不出 na"
+    assert SET.lean_enabled()[0] is False, "夹具前提变了：Lean 关不掉就测不到缺省那一档"
 
-    rep = CL.check_closing(Store(ws))
-    assert rep.status.get("load_bearing") == "na", rep.status
-    got = R.gates_readout(ws)
+    rep = CL.check_closing(Store(ws), sid=None)
+    assert rep.status.get("load_bearing") == "pass", rep.status
+    assert rep.readings["load_bearing"]["state"] == "not_applicable", rep.readings["load_bearing"]
+    # 会话号显式给 `None`（运维口径：读缺省会话）：读数缺省现在是一问「没给运行号」的
+    # unknown（见 `gates_readout` 的 `sid` 三态，判据
+    # `test_a_gate_readout_without_a_run_says_unknown.py`），两个出口要比同一档才是同一批入参。
+    got = R.gates_readout(ws, sid=None)
     assert got["checked"] is True, got["reason"]
 
     state = dict(rep.status)
-    # 反真空：这一份现场真的混着好几档、且含 na（否则"逐格相等"是空转）
-    assert "na" in set(state.values()), state
+    # 反真空：这一份现场真的混着好几档、且真的没有 na（否则"逐格相等"是空转）
+    assert "na" not in set(state.values()), state
     assert len(set(state.values())) >= 3, state
-    assert _parity_problems(got, state) == [], _parity_problems(got, state)
+    # 逐格相等：cell 一格不差；counts 那一栏是"四档一张表"（0 也占一格），所以拿掉
+    # 零值再比 —— 比的是同一份分布，不是让读数的形状跟着门的分布走。
+    cells_by_name = {str(c["name"]): str(c["status"]) for c in got["data"]["cells"]}
+    assert cells_by_name == {name: state[name] for name in CL.DEFAULT_CHECKS}, cells_by_name
+    assert {k: v for k, v in got["data"]["counts"].items() if v} == _closing_counts(state), (
+        got["data"]["counts"], _closing_counts(state))
+    assert set(got["data"]["counts"]) == set(R.CELL_STATES), got["data"]["counts"]
 
     # 逐字钉住那一格（业主点名要看的那一格）
     cells = {str(c["name"]): c for c in got["data"]["cells"]}
-    assert cells["load_bearing"]["status"] == "na", cells["load_bearing"]
-    assert got["data"]["counts"]["na"] == 1, got["data"]["counts"]
-    # 那一格的原话本身就写着"不适用"：状态栏必须与它同口径（改前状态栏写 unknown）
-    assert "不适用" in str(cells["load_bearing"]["detail"]), cells["load_bearing"]
+    assert cells["load_bearing"]["status"] == "pass", cells["load_bearing"]
+    assert got["data"]["counts"].get("na", 0) == 0, got["data"]["counts"]
+    # 那一格的 finding 原话把替代口径说出来了（改前那句是"T3 判据不适用"）
+    assert "替代口径" in str(cells["load_bearing"]["detail"]), cells["load_bearing"]
 
 
 # ====================================================================== ② 打桩八格
@@ -204,19 +224,30 @@ def _status_literals(path: pathlib.Path) -> set[str]:
 
 
 def test_the_cell_vocabulary_covers_every_status_the_gate_can_write() -> None:
-    """类判据：`closing` 能写出的每个状态词都必须在 `CELL_STATES` 里（今天是四档）。"""
+    """类判据：`closing` 能写出的每个状态词都必须在 `CELL_STATES` 里（今天是四档）。
+
+    2026-11-14（业主拍板）：`load_bearing` 不再把"没判"记成 `na` ⇒ 那个词从
+    `closing.py` 里消失了。所以这条判据的反真空换成两句：
+    ① `closing` 今天写出的词一个都不许落在词表外（新加一档而读数层不认 ⇒ 红）；
+    ② `na` 不许被悄悄写回门里（"没判"折成一个状态正是那一刀要拆的东西），
+       但词表里留着 `na`：历史盘上的旧读数还是那个词（②③ 两条打桩用例守它）。
+    """
     written = _status_literals(CLOSING)
-    # 反真空：真的扫到了字面量，而且就包含那一档（否则下面那句"覆盖"是空谈）
+    # 反真空：真的扫到了字面量，而且词表外一个都没有
     assert len(written) >= 3, written
-    assert "na" in written, (
-        "`closing.py` 里已经没有一个写 `na` 的地方了 —— 是这一格被删了，还是扫描器过期了？"
-        f"（扫到的是 {sorted(written)}）")
+    assert "na" not in written, (
+        "`closing.py` 又在写 `na` 了 —— 2026-11-14 那一刀撤掉的正是「把没判记成一个"
+        f"状态」（今天写到的是 {sorted(written)}）；真要加回来，先改这条判据与读数口径")
     missing = sorted(written - set(R.CELL_STATES))
     assert not missing, (
         f"`closing` 会写这些状态词，而读数层的词表没有：{missing}。"
         "少了它，那一格会被折成 `unknown`「没查成」（改前 na 就是这么丢的）")
+    # 词表里仍然认 `na`：历史盘上的读数不能因为门改了写法就被折成 unknown
+    assert "na" in R.CELL_STATES, (
+        "`na` 从读数层词表里消失了 —— 历史盘上的旧读数会被折成 `unknown`"
+        f"（今天词表是 {list(R.CELL_STATES)}）")
     assert set(R.CELL_STATES) == {"pass", "fail", "unknown", "na"}, (
-        f"词表变了：{R.CELL_STATES}（真身是 closing 能写出的四档；加档要同时改这里与判据）")
+        f"词表变了：{R.CELL_STATES}（真身是四档：门写行三档 + 历史读数那一档；加档要同时改这里与判据）")
 
 
 # ====================================================================== 语义纪律

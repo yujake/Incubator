@@ -6798,6 +6798,23 @@ def _has_t3(exp: Mapping[str, Any], *, root: Any = None,
     return bool(_NP.exhaustion_backing(exp, root=root, statements=statements)["backed"])
 
 
+def _statement_reviewed(root: Any, row: Mapping[str, Any]) -> bool:
+    """这一条命题的「现行版」有没有 V 签（收工门里"现行 V 签"的唯一判据口）。
+
+    为什么单独成函数：2026-11-14 起 `load_bearing` 有两条口径 —— Lean 开时只认 T3/穷举，
+    Lean 关时多认一条"它引用的命题现行版有 V 签"。两条口径必须是同一份判据，否则
+    "V 签过"会在两处各有一个答案（正是 `verifications.review_standing` 的 docstring
+    在防的那件事）。返回值只回答真假：`reviewed` = 至少一条证明 `signed` 且签住的
+    就是现在这一版（`in_sync`；签的是旧版 ⇒ `stale`，不算凭据）。
+
+    它也是那条"反真空"判据的打桩点（`tests/test_load_bearing_without_lean.py`：把这一格
+    打桩成恒真 ⇒ 缺背书的那条断言必须不再判 fail）。概念行由调用方先跳过（概念没有
+    "审过的证明"这一档）；这里对概念行也只回 False，不另开一条路。
+    """
+    from . import verifications as _VR
+
+    return bool(_VR.statement_review_reading(root, row).get("reviewed"))
+
 def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     """承重结论必须有 T3 或已降档（§10.2 的四条"必须上 T3"在收工门上的形态）。
 
@@ -6808,6 +6825,24 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
 
     负控②（`draft/37` §10.2）：非承重的结论没上 T3 不许因此判失败 ——
     省下来的钱要看得见，所以这里只数承重的那些。
+
+    ## 2026-11-14：Lean 关也判，`na` 消失
+
+    改前 Lean 关（产品缺省）时这一格直接写 `na` 并 return：正文断言一条没扫、
+    `claims_with_proof` 恒 0 ⇒ 它度量的是"Lean 开关"，而 `na` 又不是 `pass`
+    ⇒ `machine_pass` 在产品缺省的工作区上永远为假（真机 0/107）。
+
+    现在两档都判，判据同形，Lean 关时"背书"多一条入口：① T3 / V 真签过的穷举
+    （`_has_t3`）；② Lean 关时，这条断言引用的命题「现行版」有 V 签
+    （`_statement_reviewed`）；③ 已降档 —— 不在 `theorem` 档的断言不进这个集合，
+    降档是允许的出路。零承重断言 ⇒ `pass` + 读数 `state="not_applicable"`
+    （学 `paper` 那一格；"没有对象要判"不是"没查成"）。
+
+    判据 `tests/test_load_bearing_without_lean.py`：a) 缺背书 ⇒ fail 且点名该断言、
+    b) 有现行 V 签 ⇒ pass、c) 零承重 ⇒ pass + `not_applicable`、d) 把
+    `_statement_reviewed` 打桩成恒真 ⇒ a 必红、e) Lean 关且有证据的工作区
+    `machine_pass` 能变真。`na` 不许折回 pass 混进 `machine_pass`（那会把"没判"
+    记成"没问题"），所以这一格只写 `pass` / `fail`。
     """
     if store is None:
         rep.status["load_bearing"] = "unknown"
@@ -6856,70 +6891,65 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
         rep.findings.append(Finding(
             "load_bearing", "suspect_self_signed_unchecked", "warning",
             f"可疑自签背书这一格没查成：{suspect.get('why')}（不是「没有可疑行」）"))
-    # ---- 开关（业主 2026-10-12）：这一格的判据整条建立在
-    # 「`method="formal"` 能产出 `evidence_kind="proof"`」之上。用户把形式化关掉时，
-    # 那条路结构上产不出 proof 行，于是这一格的红不再是"承重结论没背书"，
-    # 而是"这一格问的东西这一趟不适用" —— 三态纪律要求把这两件事分开：
-    # 记 `na` + 理由，并把替代读数（V 逐行走查过的证明行）一并给出来。
-    # 为什么不直接继续判：那会让每一个关掉 Lean 的用户都收不了工，
-    # 而红的理由又是假的（"你的定理没形式化" —— 他压根没打算形式化）。
+    # ---- 两条口径（业主 2026-11-14 拍板）：Lean 关不再记 `na` ----------------------
+    #
+    # 改前：Lean 关（产品缺省，`settings.DEFAULT_LEAN_ENABLED = False`）时这一格直接写
+    # `na` 并 return —— 正文断言一条没扫、`claims_with_proof` 恒 0。于是它度量的是
+    # "Lean 开关"；而 `na` 又不是 `pass` ⇒ `machine_pass` 在产品缺省的工作区上永远为假
+    # （2026-11-14 真机读数 0/107）。
+    #
+    # 改后：两档都判，判据同形，只是"背书"多一个入口（这是替代口径，不是放宽）：
+    #   ① T3 / V 真签过的穷举背书（`_has_t3`）—— 两条口径都认（穷举行不取决于本趟开关，
+    #      盘上有那一行，它就是证据）；
+    #   ② Lean 关时：这条断言引用的命题「现行版」有 V 签（`_statement_reviewed`，
+    #      与上面 `prose_reviewed` 同一口判据）；
+    #   ③ 已降档：不在 theorem 档的断言压根不进下面这个集合 —— 降档是允许的出路，
+    #      不是"没判"（§10.2 负控②）。
+    # 零承重断言 ⇒ `pass` + 读数 `state="not_applicable"`（学 `paper` 那一格：
+    # "没有对象要判"与"没查成"是两件事）。
+    #
+    # 不许把 `na` 折成 pass / neutral 混进 `machine_pass` —— 那是把"没判"记成"没问题"，
+    # 正是这门要防的形态。所以这一格现在只写 `pass` / `fail`。
     from . import settings as _SET
     from . import verifications as _VR
 
-    if not _SET.lean_enabled()[0]:
-        stmts = store.rows("statements")
-        # V 的审校不是台账表，是工作区里 `verifications/<命题号>.jsonl`
-        # （`verifications` 模块的 docstring：它唯一的产物就是那个文件）。读法只能走
-        # `VR.list_verifications` —— 那一口也是 `verify.list_verifications` /
-        # `verify.read_proof` 两个工具用的那一口；在这里再解析一遍 JSONL 会有
-        # 两个"什么算一行审校"的答案。
+    lean_on = _SET.lean_enabled()[0]
+    docs = store.rows("documents")
+    statements = store.rows("statements")
+    exps = {str(r.get("experiment_id")): r for r in store.rows("experiments")}
+    #: Lean 关时的替代读数：有证明过程、且现行版被 V 逐行走查签过的命题（只作读数，
+    #: 不直接判真假 —— 真正判真假的是下面逐条断言那一支）。
+    #:
+    #: V 的审校不是台账表，是工作区里 `verifications/<命题号>.jsonl`
+    #: （`verifications` 模块的 docstring：它唯一的产物就是那个文件）。读法只能走
+    #: `VR.list_verifications` / `_statement_reviewed` —— 那两口也是 `verify.list_verifications`
+    #: / `verify.read_proof` 两个工具用的那一口；在这里再解析一遍 JSONL 会有两个
+    #: "什么算一行审校"的答案。概念行不算"我方走完「有证明过程 + 审过」的命题"
+    #: （2026-10-21：概念不参与等级链，它没有"证明过程"这一档）。
+    prose_reviewed: list[Any] = []
+    vrows: list[Any] = []
+    if not lean_on:
         vrows, _problems = _VR.list_verifications(store.root, limit=None)
-        # 2026-10-22：只有「现行这一版被签过」才算凭据（`verifications.review_standing`
-        # 的唯一口径）。改前这里数的是"台账里出现过任意一签「成立」" —— 签完之后正文
-        # 又被改过的行也会被算成"V 审过"，而"审过的那一份还是不是现在这一份"正是
-        # 这一格要回答的（`stale` 不算凭据）。
-        # 概念行不算"我方走完「有证明过程 + 审过」的命题"（2026-10-21，本批缺陷一的读侧）：
-        # 真机 mp3 有 1143 条概念行，每一条都带 `proof_text`（哨兵 `concept:primitive`），
-        # 于是"`proof_text` 非空 且 V 签了成立"这条读数只要撞上一次签名就把概念算进去 ——
-        # 而概念不参与等级链（`draft/97` §14.5），它没有"证明过程"这一档。
-        # 这一格与 `verifications.proof_review_gap` 的概念行那一支同一口径。
-        # 同一趟里收下"审过"的那几条（原先先建 signed 集合、再拿它把 stmts 扫第二遍）。
-        prose_reviewed: list[Any] = []
-        for s in stmts:
+        for s in statements:
             if str(s.get("kind") or "") == "concept":
                 continue
             if not str(s.get("proof_text") or "").strip():
                 continue
-            if _VR.statement_review_reading(store.root, s).get("reviewed"):
+            if _statement_reviewed(store.root, s):
                 prose_reviewed.append(s)
-        #: 替代读数（这一档里"审过"的凭据）：有证明过程 且 V 逐行走查签了「成立」。
-        rep.readings["load_bearing"] = {
-            "disabled": True,
-            "reason": ("本会话的 Lean 形式化已关闭（`toolchain` 段的 `lean_enabled=false`）⇒ "
-                       "`method=\"formal\"` 产不出 proof 行，这一格的 T3 判据**不适用**；"
-                       "替代口径见 prose_reviewed_statements（V 逐行走查签「成立」的那些）"),
-            "claims_with_proof": 0,
-            "prose_reviewed_statements": len(prose_reviewed),
-            "prose_reviewed_ids": [str(s.get("stmt_id")) for s in prose_reviewed[:8]],
-            "verification_rows": len(vrows),
-            "state": "na",
-        }
-        rep.status["load_bearing"] = "na"
-        rep.findings.append(Finding(
-            "load_bearing", "lean_disabled", "info",
-            "形式化已关闭 ⇒ 承重结论的 T3 判据不适用（不是通过，也不是失败）；"
-            f"这一趟的替代凭据是 V 逐行走查过的证明行：{len(prose_reviewed)} 条"
-            "（`statements` 表的 `proof_text` 列非空 且 `verifications/<命题号>.jsonl` 里"
-            "有一行签「成立」）。要恢复 T3 判据：把设置文件 `toolchain` 段的 `lean_enabled` "
-            "改成 true（或 `AGENTFLOW_LEAN_ENABLED=1`）再跑。",
-        ))
-        return
-    docs = store.rows("documents")
-    exps = {str(r.get("experiment_id")): r for r in store.rows("experiments")}
-    statements = store.rows("statements")
+    #: 引文 → 命题行（`citations` 里 `stmt:<号>` 那一形）。只建一次：同一趟里
+    #: "这条断言引到的命题是哪几行"与"那几行的现行版有没有 V 签"必须看同一份快照。
+    stmt_by_cite: dict[str, Mapping[str, Any]] = {}
+    for _s in statements:
+        _sid = str(_s.get("stmt_id") or _s.get("statement_id") or "")
+        if _sid:
+            stmt_by_cite[f"stmt:{_sid}"] = _s
     load_bearing = 0
     downgraded = 0
     bad: list[str] = []
+    #: 逐条断言的判据读数（"逐条给理由"的落点）：`backed_by` 三档 `t3` / `v_sign` / 空。
+    #: 空那一档的 `why` 就是它为什么没背书（与下面 `bad` 里那句同文）。
+    claims_reading: list[dict[str, Any]] = []
     #: 被正文引到的"自签穷举行"的四结局读数（按实验号去重 —— 一条行可以被多条断言引到）。
     #: 判据本体 `numericproof.exhaustion_backing`，与下面 `_has_t3` 的穷举支路同一个函数。
     backing_by_eid: dict[str, dict[str, Any]] = {}
@@ -6933,7 +6963,7 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             # 自己的证据轴（`claimanatomy` 的 status × evidence_kind），词表与命题等级不同名；
             # 走 `KIND_TO_GRADE` 反算成等级再比 —— 与承重命题支、T3 实验支同一个阈值。
             if _tier_grade(claim) != "theorem":
-                continue          # 非承重（conjecture / strong_conjecture）⇒ 这条门不管它
+                continue          # 非承重 / 已降档 ⇒ 这条门不管它（降档是允许的出路）
             load_bearing += 1
             cites = {str(c) for c in (claim.get("citations") or [])}
             cited = [(eid, row) for eid, row in exps.items() if f"exp:{eid}" in cites]
@@ -6949,13 +6979,44 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
                     ("state", "verdict", "defect_step", "statement_id", "report_path",
                      "report_sha256", "ledger", "why")
                 }
+            # ① T3 / 穷举：formal 那一支在 Lean 关时结构上产不出，但穷举那一支照旧认
+            # （`_has_t3` 自己不读开关：盘上真有那一行，它就是证据）。
             # closed 依赖指向的实验按构造是 cited 的子集：对它再跑一遍 any(_has_t3)
             # 只会在 cited 已经全假之后再判一次同一批行，返回值不可能因此变真。
-            backed = any(_has_t3(row, root=store.root, statements=statements)
-                         for _eid, row in cited)
-            if backed:
+            backed_by = "t3" if any(
+                _has_t3(row, root=store.root, statements=statements)
+                for _eid, row in cited) else ""
+            # ② Lean 关时多出来的那条替代：它引用的命题现行版有 V 签。
+            v_signed: list[str] = []
+            if not backed_by and not lean_on:
+                for _key in sorted(cites):
+                    if not _key.startswith("stmt:"):
+                        continue
+                    s = stmt_by_cite.get(_key)
+                    if s is None:
+                        continue
+                    if str(s.get("kind") or "") == "concept":
+                        continue      # 概念行没有"审过的证明"这一档（不许借光）
+                    if _statement_reviewed(store.root, s):
+                        v_signed.append(_key.split(":", 1)[1])
+                if v_signed:
+                    backed_by = "v_sign"
+            entry: dict[str, Any] = {
+                "doc_id": str(doc.get("doc_id") or ""),
+                "claim_id": str(claim.get("claim_id") or ""),
+                "evidence_kind": str(claim.get("evidence_kind") or ""),
+                "text": str(claim.get("text") or "")[:40],
+                "backed_by": backed_by,
+                "v_signed": v_signed,
+                "why": "",
+            }
+            if backed_by:
+                entry["why"] = ("T3 / 穷举背书（`_has_t3`）" if backed_by == "t3" else
+                                "引用的命题现行版有 V 签：" +
+                                "、".join(f"stmt:{i}" for i in v_signed))
+                claims_reading.append(entry)
                 continue
-            # 没背书 ⇒ 逐条给理由（四种结局各有各的话；`defect_step` 写在理由里）。
+            # 没背书 ⇒ 逐条给理由（四种穷举结局各有各的话；`defect_step` 写在理由里）。
             reasons: list[str] = []
             for eid, got in got_by_eid.items():
                 state = str(got.get("state") or _NP.EXHAUSTION_BACKING_UNCHECKED)
@@ -6966,16 +7027,30 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             if not reasons:
                 reasons.append("引到的实验行不是 T3 形态（既没有形式化检查器的原话，"
                                "也不是 V 真签过的穷举证明）")
+            if not lean_on:
+                # Lean 关时把替代口径缺在哪逐字说清：这是"这条断言为什么没背书"的第二半，
+                # 不写它，读的人只会去派一个这一趟根本做不了的 formal 活。
+                cited_ids = sorted(k.split(":", 1)[1] for k in cites
+                                   if k.startswith("stmt:"))
+                if cited_ids:
+                    reasons.append(
+                        "它引用的命题现行版都没有 V 签（"
+                        + "、".join(f"stmt:{i}" for i in cited_ids[:4])
+                        + "：不在命题台账 / 没签住 / 签的是旧版都不算）")
+                else:
+                    reasons.append("它一条命题都没引（没有 `stmt:…` 可供核现行版的 V 签）")
+            entry["why"] = "；".join(reasons[:3])
+            claims_reading.append(entry)
             bad.append(f"{doc.get('doc_id')}#{claim.get('claim_id')}"
                        f"（{str(claim.get('text') or '')[:40]}）：" + "；".join(reasons[:3]))
     # 命题台账那一半：`active` + proof 级 + 有下游（被别人 derived_from 引到）= 承重。
-    stmts = statements      # 同一份快照（上面认号已经读过一次；两次读会给出两个答案）
+    # 这一半只出读数（`MUST_T3_GAP_NOTE` 说清了为什么今天只能数），两条口径都跑。
     downstream: dict[str, int] = {}
-    for s in stmts:
+    for s in statements:
         for dep in s.get("derived_from") or []:
             downstream[str(dep)] = downstream.get(str(dep), 0) + 1
     stmt_load_bearing = 0
-    for s in stmts:
+    for s in statements:
         if str(s.get("status") or "") != "active":
             continue
         if not downstream.get(str(s.get("stmt_id"))):
@@ -6991,9 +7066,16 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     for eid, got in backing_by_eid.items():
         state = str(got.get("state") or _NP.EXHAUSTION_BACKING_UNCHECKED)
         backing_states.setdefault(state, []).append(eid)
-    rep.readings["load_bearing"] = {
+    reading: dict[str, Any] = {
         "claims_with_proof": load_bearing,
         "claims_without_t3": len(bad),
+        # 2026-11-14：这一格现在总是判（Lean 关也一样）⇒ `state` 只有
+        # `pass` / `fail`，唯一的 `not_applicable` 是"零承重断言"（没有对象可判）。
+        # 它不再是 `na`：`na` 让 `machine_pass` 在缺省配置下永远是假的。
+        "state": ("not_applicable" if not load_bearing
+                  else ("fail" if bad else "pass")),
+        "lean": "on" if lean_on else "off",
+        "claims": claims_reading,
         "statements_load_bearing": stmt_load_bearing,
         "statements_downgraded": downgraded,
         "must_t3_conditions": [{"condition": c, "mechanical": m, "status": s}
@@ -7011,6 +7093,31 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
                      "没查成 都不给，理由各不相同"),
         },
     }
+    if not lean_on:
+        reading.update({
+            "disabled": True,
+            "reason": ("本会话的 Lean 形式化已关闭（`toolchain` 段的 `lean_enabled=false`）"
+                       "⇒ T3 那条形式化入口这一趟产不出 proof 行；这一格按替代口径判："
+                       "每条 grade=theorem 的正文断言要么有 T3/穷举背书，要么它引用的命题"
+                       "「现行版」有 V 签，要么已经降档（不在 theorem 档就不进这一问）。"
+                       "不是 `na`：承重结论有没有背书在这一趟照样判得出真假。"),
+            "prose_reviewed_statements": len(prose_reviewed),
+            "prose_reviewed_ids": [str(s.get("stmt_id")) for s in prose_reviewed[:8]],
+            "verification_rows": len(vrows),
+            "v_sign_backed_claims": sum(1 for c in claims_reading
+                                        if c.get("backed_by") == "v_sign"),
+        })
+    rep.readings["load_bearing"] = reading
+    if not lean_on:
+        rep.findings.append(Finding(
+            "load_bearing", "lean_disabled", "info",
+            "形式化已关闭（产品缺省）⇒ 这一格按替代口径判：T3/穷举背书 **或** 它引用的"
+            "命题现行版有 V 签（不是 `na`，也不是自动通过）。"
+            f"这一趟有 {load_bearing} 条承重断言，{len(bad)} 条拿不出背书；"
+            f"V 逐行走查签住的命题 {len(prose_reviewed)} 条。"
+            "要回到 T3 判据：把设置文件 `toolchain` 段的 `lean_enabled` 改成 true"
+            "（或 `AGENTFLOW_LEAN_ENABLED=1`）再跑。",
+        ))
     # 去重（2026-11-03）：承重门那一条 finding 已经逐条点名过的行，这里不再说第二遍
     # —— 同一份判据、同一句话只留一处。这一格只报"没被正文引到"的残余（集合不同：
     # 这一格覆盖全工作区，承重门只判被引到的那些）。
@@ -7030,21 +7137,33 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             "（`verify.verify_proof`），或把那一行的档如实降成 cross_check/heuristic"))
     if bad:
         rep.status["load_bearing"] = "fail"
-        rep.findings.append(Finding(
-            "load_bearing", "load_bearing_without_t3", "blocker",
-            f"有 {len(bad)} 条承重结论（正文里 evidence_kind='proof'）没有 T3 背书："
-            + "；".join(bad[:5])
-            # 2026-10-23：这一句原来指向「E 的 check_formal」。业主 2026-10-22 晚裁定
-            # 「E 的 Lean 侧开关全写死成关闭」之后，E 那一支一律回受控拒绝
-            # `formal_moved_to_l`，形式化只剩 L 那两件（`formal.formalize` 写源码、
-            # `formal.check_formal` 核一遍）。本 finding 会经 `conductor.closing` 的回执
-            # 进 M 的上下文，所以它一旦指错，M 就会去派一个必然被拒的活。
-            + "。要么补形式化（L 的 `formal.check_formal`，"
-            "新写源码走 `formal.formalize`，检查器原话进 verifier_output；"
-            "E 的 Lean 侧已停用，受控理由码 `formal_moved_to_l`），"
-            "要么如实降档成 cross_check/heuristic 并改稿件的措辞（§10.2："
-            "措辞不许出现「已证明/定理/必然」）",
-        ))
+        if lean_on:
+            rep.findings.append(Finding(
+                "load_bearing", "load_bearing_without_t3", "blocker",
+                f"有 {len(bad)} 条承重结论（正文里 evidence_kind='proof'）没有 T3 背书："
+                + "；".join(bad[:5])
+                # 2026-10-23：这一句原来指向「E 的 check_formal」。业主 2026-10-22 晚裁定
+                # 「E 的 Lean 侧开关全写死成关闭」之后，E 那一支一律回受控拒绝
+                # `formal_moved_to_l`，形式化只剩 L 那两件（`formal.formalize` 写源码、
+                # `formal.check_formal` 核一遍）。本 finding 会经 `conductor.closing` 的回执
+                # 进 M 的上下文，所以它一旦指错，M 就会去派一个必然被拒的活。
+                + "。要么补形式化（L 的 `formal.check_formal`，"
+                "新写源码走 `formal.formalize`，检查器原话进 verifier_output；"
+                "E 的 Lean 侧已停用，受控理由码 `formal_moved_to_l`），"
+                "要么如实降档成 cross_check/heuristic 并改稿件的措辞（§10.2："
+                "措辞不许出现「已证明/定理/必然」）",
+            ))
+        else:
+            rep.findings.append(Finding(
+                "load_bearing", "load_bearing_without_backing", "blocker",
+                f"有 {len(bad)} 条承重结论（正文里 evidence_kind='proof'）拿不出背书："
+                + "；".join(bad[:5])
+                + "。本会话的 Lean 形式化已关闭 ⇒ T3 那条形式化入口走不了，替代口径有两条："
+                "① 让 V 把这条断言引用的命题逐行走查签下（`verify.verify_proof`；"
+                "签住的必须是「现行版」，概念行不参与），或 ② 如实降档成 "
+                "cross_check/heuristic 并改稿件的措辞（§10.2：措辞不许出现"
+                "「已证明/定理/必然」）",
+            ))
     else:
         rep.status["load_bearing"] = "pass"
 
