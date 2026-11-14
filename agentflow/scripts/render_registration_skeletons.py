@@ -35,6 +35,7 @@ for _candidate in (ROOT / "tests", ROOT / "src", ROOT):
 
 import _skeleton as SK  # noqa: E402 - 路径注入之后才能 import（见上）
 import conftest as _conftest  # noqa: E402,F401 - 见下：判据跑在它钉住的环境里
+from agentflow.console import pin_utf8  # noqa: E402 - 同上：`src` 注入之后才 import 得到
 
 # 为什么连 `tests/conftest.py` 也一起导入：那五个判据不是在裸环境里跑 —— conftest 在
 # 导入期把本机事实类的环境变量清掉、把 Lean 开关钉成开着（理由见那份文件）。不沿用
@@ -163,6 +164,11 @@ def render(gaps: list[tuple[str, str]]) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     """打印五处缺口，返回三档退出码：0 无缺口 / 1 有缺口 / 2 没查成。"""
+    # 默认 GBK 控制台下，下面每一处骨架都可能编不出 `⇒`(U+21D2) ⇒ `print()` 抛
+    # `UnicodeEncodeError` ⇒ 进程以 1 结束，而 1 在这里恰好是「查过了、有缺口」——
+    # 「打印不出来」被读成「代码有问题」，且 stdout 一个字都没留下。钉住编码，
+    # 三档退出码的含义不变（口径与实现只有 `agentflow/console.py` 那一份）。
+    pin_utf8()
     args = list(sys.argv[1:] if argv is None else argv)
     if any(arg in {"-h", "--help"} for arg in args):
         print(__doc__)

@@ -40,6 +40,9 @@ ENTRIES: list[tuple[str, list[str], bool]] = [
     ("noai_consistency", ["scripts/noai_gate.py", "--check-consistency"], False),
     ("noai_git", ["scripts/noai_gate.py", "--git"], False),
     ("coverage_selftest", ["tools/coverage_zero_test.py", "--selftest"], False),
+    # 第 7 个入口：脚本输出里有 `⇒`（骨架正文），而它此前既不在本矩阵里也没有 pin 编码
+    # ⇒ 默认 GBK 下 stdout 空、rc=1，那个 1 与「有缺口」同码（2026-11-15 实测）。
+    ("render_registration_skeletons", ["scripts/render_registration_skeletons.py"], False),
     ("cli_tools", ["-m", "agentflow.cli", "tools", "--role", "A"], False),
     ("cli_demo", ["-m", "agentflow.cli", "demo"], True),
 ]
