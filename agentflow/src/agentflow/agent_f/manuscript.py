@@ -118,6 +118,10 @@ def _notes_text(counts: Sequence[str], truncations: Sequence[str]) -> str:
 
 #: 受控码：proof 档没有 `product.proposition`（2026-11-13，业主裁定 B 硬必填）。
 PROPOSITION_MISSING = "proposition_missing"
+#: 受控码：这一份稿的路径已经归另一个写者（E，2026-11-15：两个并行的 F 共用一个稿名）。
+MANUSCRIPT_PATH_TAKEN = "manuscript_path_taken"
+#: 受控码：占用判据没查成（登记读不出来 / 写不进去 / 没有写者身份）—— 判不了 ≠ 可以写。
+MANUSCRIPT_OWNER_UNCHECKED = "manuscript_owner_unchecked"
 
 
 def proposition_missing_why() -> str:
@@ -419,7 +423,9 @@ class _Manuscript:
         mid = str(manuscript_id or "").strip()
         if not mid:
             # 没有给号 ⇒ 这是另一份稿（新稿）：向号源要一个，不猜、不借别人的号。
-            mid = _MID.next_manuscript_id(root)
+            # `owner=self.actor`：顺手把发出去的号登记给我，同一路径被别的写者占着时
+            # 号源会跳过它（"自动分号"那一半，E）。
+            mid = _MID.next_manuscript_id(root, owner=str(self.actor or ""), role="F")
         elif not _MID.is_manuscript_id(mid):
             return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
                     "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
@@ -495,6 +501,38 @@ class _Manuscript:
             got = {"ok": True, "checked": True, "path": rel, "written": False,
                    "preserved": True, "text": kept, "why": ""}
         else:
+            # ---- E（2026-11-15）：同一份稿不许两个写者共用一个文件名 -----------------
+            #
+            # 真机两个并行的 F（`F#1` / `F#2`）把稿落到同一个
+            # `reports/f-proof-000001.md` 上（一个起草、一个改稿+转送）。
+            # 写者身份用 `self.actor`（host 造的是 `agent-F-<实例>`，两个实例分得开；
+            # 同一实例跨 task 续写自己的稿仍是"我"）。判据本体在
+            # `manuscriptids.claim_for_write` 一处。
+            #
+            # 为什么这里选"受控拒"而不是"自动分号"：走到这一格时 `mid` 已经是调用方
+            # 点名要写的那一份（`product.manuscript_id` / 上一轮沿用的号），悄悄换成
+            # 下一个号会把它后面的读数（`manuscript_path(mid)` / 送审 / 收录）指到
+            # 另一份稿上。自动分号只发生在"还没有号"的分配那一支（`next_manuscript_id`
+            # 跳过别人占着的号）。拒绝信指名持有人与下一步（另开一份稿）。
+            _claim = _MID.claim_for_write(root, rel, owner=str(self.actor or ""), role="F")
+            if _claim.get("state") in ("other", "unknown"):
+                _code = (MANUSCRIPT_PATH_TAKEN if _claim.get("state") == "other"
+                         else MANUSCRIPT_OWNER_UNCHECKED)
+                _holder = dict(_claim.get("holder") or {})
+                if _code == MANUSCRIPT_PATH_TAKEN:
+                    _why = (f"`{rel}` 已经归另一个写者（"
+                            f"{_holder.get('owner') or '未记'}，"
+                            f"task={_holder.get('task_id') or '未记'}）⇒ 这一份稿不落盘："
+                            "同一路径不许两个写者共用。要写自己的证明，用新的稿号另开一份"
+                            "（不传 `manuscript_id`，号源会发下一个没被占的号）")
+                else:
+                    _why = (f"`{rel}` 的占用判据没查成（{_claim.get('why') or '没有原因'}）"
+                            "⇒ 这一份稿不落盘：判不了「这一份是不是别人的」就不写"
+                            "（判不了 ≠ 可以写）")
+                return {"ok": False, "path": rel, "text": "", "rows": [], "preview": {},
+                        "named_by": "manuscript", "preserved": False, "written": False,
+                        "manuscript_id": mid, "refused": _code, "kind": _code,
+                        "claim": dict(_claim), "why": _why}
             got = _MF.commit_manuscript(
                 root, family=_MF.FAMILY_F, text=text, manuscript_id=mid,
                 retitle="none", dependency_rows=rows)

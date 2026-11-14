@@ -79,6 +79,13 @@ MAX_ID = 10 ** ID_DIGITS - 1
 #: 计数器文件（工作区相对）。
 COUNTERS_REL = "data/counters.json"
 
+#: 稿件占用登记（工作区相对）：`{rel: {owner, role, task_id, at}}`。
+#:
+#: 为什么要它（E，2026-11-15）：真机两个并行的 F（`F#1` / `F#2`）把稿落到同一个
+#: `reports/f-proof-000001.md` 上（一个起草、一个改稿+转送）—— 两个写者共用一个
+#: 文件名。号源只回答"这个号在盘上被占了没有"，回答不了"这一份稿归谁写"。
+CLAIMS_REL = "runs/manuscript-claims.json"
+
 #: 同一进程内串行取号（跨进程不在承诺里，见模块 docstring）。
 _LOCK = threading.RLock()
 
@@ -215,18 +222,157 @@ def _occupied(root: Any, manuscript_id: str, *, family: Any = FAMILY_F) -> bool:
     return bool(rel) and (Path(str(_root_of(root))) / rel).is_file()
 
 
+# ---------------------------------------------------------------- 稿件归谁写（E）
+
+
+def claims_path(root: Any) -> Path:
+    """稿件占用登记落在哪：`<工作区>/runs/manuscript-claims.json`。"""
+    return Path(str(_root_of(root))) / CLAIMS_REL
+
+
+def _read_claims(root: Any) -> tuple[dict[str, dict[str, Any]], bool]:
+    """读占用登记：`({rel: holder}, 查成了没有)`。
+
+    文件不在盘上 = 查成了、没有任何占用（空表）；文件在但读不出来 / 顶层不是对象 =
+    没查成（`False`）—— 三态：不许把"读不出来"折成"没人占"。
+    """
+    path = claims_path(root)
+    if not path.is_file():
+        return {}, True
+    try:
+        raw = path.read_text(encoding="utf-8")
+        doc = json.loads(raw) if raw.strip() else {}
+    except (OSError, ValueError):
+        return {}, False
+    if not isinstance(doc, dict):
+        return {}, False
+    claims = doc.get("claims")
+    if not isinstance(claims, dict):
+        return {}, False
+    return {str(k): dict(v) for k, v in claims.items() if isinstance(v, dict)}, True
+
+
+def _write_claims(root: Any, claims: dict[str, dict[str, Any]]) -> None:
+    """把占用登记原子写回（临时名带 pid + 线程 id，`os.replace` 同目录原子）。"""
+    path = claims_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}-{threading.get_ident()}.tmp")
+    payload = json.dumps({"schema_version": _S.SCHEMA_VERSION, "claims": claims},
+                         ensure_ascii=False, indent=2, default=str) + "\n"
+    try:
+        with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+            fh.write(payload)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except OSError as exc:  # noqa: BLE001 —— 写不进去要受控报出来，不是"没人占"
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:  # noqa: BLE001 —— 清理失败不改变本笔结论
+            pass
+        raise ManuscriptIdError(
+            f"稿件占用登记写不进去（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        ) from exc
+
+
+def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
+                    task_id: Any = "") -> dict[str, Any]:
+    """落稿前登记/核对"这一份稿归谁写"（E；落稿入口的唯一占用判据）。
+
+    `owner` 是写者身份（F 那一侧传 `self.actor`：host 造的是 `agent-F-<实例>`，
+    真机 `F#1` / `F#2` 两个实例因此分得开；同一个实例跨 task 续写自己的稿仍是"我"——
+    所以续跑不会被自己上一次的占用挡住）。
+
+    返回 `{checked, state, rel, holder, why}`，`state` 四档：
+
+    | `state` | 含义 | 调用方 |
+    |---|---|---|
+    | `free` | 没人占 / 文件不在盘上，这一笔把它登记给我 | 照常写 |
+    | `mine` | 原来就是我（同一写者续写同一份稿） | 照常写 |
+    | `other` | 被另一个写者占着 | 受控拒（不许两个写者共用一个文件名） |
+    | `unknown` | 占用判据没查成（登记读不出/写不进/没有写者身份） | 受控拒（判不了 ≠ 可以写） |
+
+    反真空：把本函数打成恒 `{"state": "free"}` ⇒ 同一路径的第二个写者会照写覆盖
+    （判据 `test_two_fs_never_share_one_manuscript_path.py` 的 a 条必红）。
+    """
+    rel_txt = str(rel or "").strip().replace("\\", "/")
+    out: dict[str, Any] = {"checked": True, "state": "free", "rel": rel_txt,
+                           "holder": {}, "why": ""}
+    if not rel_txt:
+        out.update(checked=False, state="unknown", why="没有目标稿件路径 ⇒ 判不了")
+        return out
+    who = str(owner or "").strip()
+    if not who:
+        # 没有写者身份就无法判"是不是别人"。不据此互斥（否则直调 / 夹具全被挡），
+        # 但要如实说这一格没查成 —— 不许折成"没人占"。
+        out.update(checked=False, state="unknown",
+                   why=("没有写者身份（owner 为空）⇒ 判不了这一份稿是不是别人的，"
+                        "不据此互斥"))
+        return out
+    with _LOCK:
+        claims, ok = _read_claims(root)
+        if not ok:
+            out.update(checked=False, state="unknown",
+                       why=(f"`{CLAIMS_REL}` 读不出来 ⇒ 占用判据没查成"
+                            "（不是「没人占」）"))
+            return out
+        holder = dict(claims.get(rel_txt) or {})
+        held = str(holder.get("owner") or "")
+        if held and held != who:
+            out.update(state="other", holder=holder,
+                       why=(f"`{rel_txt}` 已经由 {held} 占着"
+                            f"（task={holder.get('task_id') or '未记'}，"
+                            f"at={holder.get('at') or '未记'}）⇒ 不许两个写者共用同一个文件名"))
+            return out
+        fresh = {"owner": who, "role": str(role or ""),
+                 "task_id": str(task_id or ""), "at": _now_iso()}
+        claims[rel_txt] = fresh
+        try:
+            _write_claims(root, claims)
+        except ManuscriptIdError as exc:
+            out.update(checked=False, state="unknown", why=str(exc))
+            return out
+        out.update(state=("mine" if held == who else "free"), holder=fresh, why="")
+        return out
+
+
+def _claimed_by_other(root: Any, manuscript_id: str, *, family: Any,
+                      owner: Any = "") -> bool:
+    """这个号对应的规范路径已被另一个写者登记（发号时跳过它）。"""
+    rel = canonical_rel(manuscript_id, family=family)
+    if not rel:
+        return False
+    claims, ok = _read_claims(root)
+    if not ok:
+        return False            # 登记读不出来时不据此跳号；落稿入口会受控拒
+    holder = claims.get(rel) or {}
+    held = str(holder.get("owner") or "")
+    return bool(held) and held != str(owner or "")
+
+
+def _now_iso() -> str:
+    import datetime as _dt
+
+    return _dt.datetime.now().astimezone().replace(microsecond=0).isoformat()
+
+
 def reserved_manuscript_id(root: Any, manuscript_id: Any, *,
                            family: Any = FAMILY_F) -> bool:
     """这个号在这一族里已经有一份稿（供调用方判"复用同一份稿"时核占用）。"""
     return _occupied(root, str(manuscript_id or "").strip(), family=family)
 
 
-def next_manuscript_id(root: Any, *, family: Any = FAMILY_F) -> str:
+def next_manuscript_id(root: Any, *, family: Any = FAMILY_F, owner: Any = "",
+                       role: Any = "") -> str:
     """发一个这一族自己的手稿号：`counters.<族键>` + 1，占用就继续往前推。
 
     返回六位号（如 `000003`）；发完把这一族的计数器推到 `号 + 1`。号段用尽 ⇒
     :class:`ManuscriptIdError`（受控，不静默升位宽）。各族互不干扰：B 发号只读
     / 写 `bmanuscript` 那一格，与 F 的 `manuscript`、E 的两条各管各的。
+
+    `owner` 给了 ⇒ 把发出去的号顺手登记给这个写者（与 `claim_for_write` 同一份
+    登记、同一把锁）：这是"自动分号"那一半（同一路径被别的写者占着 ⇒ 跳过这个号）；
+    落稿入口那一半负责"显式指定了别人的号 ⇒ 受控拒"。
     """
     key = counter_key(family)
     with _LOCK:
@@ -239,8 +385,10 @@ def next_manuscript_id(root: Any, *, family: Any = FAMILY_F) -> str:
             nxt = 0
         if nxt < 0:
             nxt = 0
-        # 占用检查：规范名已存在 ⇒ 这不是"空号"，绝不覆盖别人的稿。
-        while nxt <= MAX_ID and _occupied(root, format_id(nxt), family=family):
+        # 占用检查：规范名已存在（或已被别的写者登记）⇒ 这不是"空号"，绝不覆盖别人的稿。
+        while nxt <= MAX_ID and (_occupied(root, format_id(nxt), family=family)
+                                 or _claimed_by_other(root, format_id(nxt),
+                                                      family=family, owner=owner)):
             nxt += 1
         if nxt > MAX_ID:
             raise ManuscriptIdError(
@@ -251,6 +399,9 @@ def next_manuscript_id(root: Any, *, family: Any = FAMILY_F) -> str:
         allocated = format_id(nxt)
         counters[key] = nxt + 1
         _write_doc(root, doc)
+        if str(owner or "").strip():
+            claim_for_write(root, canonical_rel(allocated, family=family),
+                            owner=owner, role=role)
         return allocated
 
 
