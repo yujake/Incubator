@@ -312,11 +312,11 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | L | 3 | `formalize` `check_formal` `record`（逐条契约见 §L.2；**只在 Lean 开关打开时存在**） |
 | M | **0** | `CAPABILITIES["M"] == ()`（可断言的事实） |
 
-> 十一行加起来是 **67**（6+10+10+15+4+4+7+5+3+3+0），与标题那个 67 同源：标题读的是
+> 十一行加起来是 **67**（6+10+10+14+4+5+7+5+3+3+0），与标题那个 67 同源：标题读的是
 > `sum(len(v) for v in CAPABILITIES.values())`，不是"这张表里解析出来几行"。
-> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `66`。
+> 复跑：`python -c "from agentflow import capabilities as C;print(sum(len(v) for v in C.CAPABILITIES.values()))"` ⇒ `67`。
 > **`L` 那 3 个动作在 Lean 关着时也在这张表里**（`capabilities` 是声明面的派生，它不看开关；
-> 现读见上一句的复跑命令，Lean 关着跑同样是 `66`）。开关管的是另外两件事：**能不能派到它**
+> 现读见上一句的复跑命令，Lean 关着跑同样是 `67`）。开关管的是另外两件事：**能不能派到它**
 > （`policy` 判 `forbidden_edge`，理由串点名 `lean_off`）与**它的工具面装不装**
 > （`formal_tools` 不装配 ⇒ `for_role("L")` 是空集）。"声明面不看开关、行为面看"这两根轴
 > 不许折成一句"Lean 关时 L 不存在"。
