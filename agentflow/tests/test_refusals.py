@@ -173,7 +173,13 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "2026-11-13（业主裁定 B）：`proof_manuscript()` 的第四处骨架是 `_missing`"
         "（没有 `product.proposition` ⇒ 这一版没有可渲染的 `## 命题`，"
         "`refused=kind=proposition_missing`）：它由动作层的形态闸折成受控拒，"
-        "这一层只是「一个字节都不写」的兜底读数；处数 4 → 5。",
+        "这一层只是「一个字节都不写」的兜底读数；处数 4 → 5。"
+        "2026-11-15（E，同一稿路径写互斥）：第 5 处骨架是 `_Manuscript.write()` 里的"
+        "占用判据 —— 同一路径已归另一写者（`claim_for_write` 回 `state in "
+        "('other','unknown')`）时返回 `{\"ok\": False, ..., \"refused\": _code, "
+        "\"kind\": _code}`（`manuscript_path_taken` / `manuscript_owner_unchecked`）。"
+        "它同样是子结果：`_hand_proof` 把它折成动作层的受控拒（`refused` + `why`），"
+        "这一层只是「这一份稿不落盘」的读数，不另写一次 `refusals.refuse`；处数 5 → 6。",
     ("agent_f/core.py", ""):
         "子结果（三处）：① 手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给"
         "调用方看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 "
@@ -226,9 +232,12 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # （手稿号不是六位号 / 拼不出规范路径，各一处），加上 `preview_dependencies()` 的
     # 读数一条 ⇒ 1 → 3。2026-11-11（拿签冻结）：`manuscript_frozen` 那一支的返回骨架
     # 也是同形读数（`ok=False` + `refused/kind`），3 → 4。2026-11-13（业主裁定 B）：
-    # `proposition_missing` 那一支的 `_missing` 骨架，4 → 5。五处都是子结果，理由见
+    # `proposition_missing` 那一支的 `_missing` 骨架，4 → 5。2026-11-15（E，同一稿
+    # 路径写互斥）：`_Manuscript.write()` 的占用判据骨架
+    # （`refused=manuscript_path_taken` / `manuscript_owner_unchecked`），5 → 6。
+    # 六处都是子结果（由 `_hand_proof` 折成动作层的受控拒），理由见
     # `_FAILURES_NOT_REFUSALS` 里那一格。
-    ("agent_f/manuscript.py", ""): 5,
+    ("agent_f/manuscript.py", ""): 6,
     # 2026-11-11（p286）：`agent_f/core.py` 的空 kind 处数 1 → 2。新增的那一处是
     # `parse_handed_product()` 的返回骨架 `out` 初值（三态解析器的"还没核完"，不是终态
     # 拒绝；真正的受控拒由 `_handed_product_round` 的 `refusal` 那一支产出）。
