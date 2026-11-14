@@ -538,6 +538,9 @@ def test_e_f_lemma_reaches_salvaged_after_the_v_sign(tmp_path):
         full=FULL, text=FULL, body="第一版：取 δ=ε。", sid="s1",
         plan={"plan_id": "0000", "problem_key": "PK"},
         sg={"sid": "s1", "text": FULL, "kind": "lemma"},
+        # 2026-11-13 业主裁定 B：`## 命题` 只从 `product.proposition` 渲染，
+        # 没有回退算式 ⇒ 夹具要把这一格交上来（子目标正文不是命题）。
+        proposition=FULL,
         manuscript_text="", manuscript_received={"source": "param", "chars": 1,
                                                  "section_rows": 0, "refs_in_proof": 0},
         cites=[], tier={"kind": "heuristic", "why": "夹具"},
