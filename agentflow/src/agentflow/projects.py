@@ -633,7 +633,7 @@ def extract_with_model(store: Store, *, books_limit: int | None = None,
         # `meter` 必须给：不给的话这一次抽取的花销一笔都进不了 `usage_ledger`，
         # 而 CLI 上会打出 0.0 USD —— 那正是"自报比事实好看"的形态。
         # 归口用 `extract`（`schema.USAGE_SCOPES` 里的一档）。
-        # `task_id=task_id or None`：这里给 `None` 表示"装配期不知道号"，**不是**"这笔挂不上"。
+        # `task_id=task_id or None`：这里给 `None` 表示"装配期不知道号"，不是"这笔挂不上"。
         # 真正计费那一刻由 `modelclient.task_id_for_charge()` 现定：显式号 > 那一刻的 ambient > None
         # （`llmseam.ambient_task_id`）。装配期给空是可接受的：收费时上下文就在手上。
         # 若把它折成字符串 `"(未接线)"`：那个字符串不是 `t-NNNN` 契约里的号 ⇒
