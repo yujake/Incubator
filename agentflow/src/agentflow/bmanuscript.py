@@ -125,6 +125,8 @@ def manuscript_id_for_statement(root: Any, statement_id: Any, *,
                 try:
                     text = (Path(str(root)) / rel).read_text(encoding="utf-8")
                 except (OSError, UnicodeDecodeError):
+                    # 读不出来就当他没读过这份稿：这一格的结论只会更保守（宁可判没读成），
+                    # 不会因此放行任何写入。
                     pass
                 block = _VS.manuscript_sign_reading(text, manuscript_path=rel) if text else {}
                 hits.append((bool(block.get("found")), rel,
@@ -146,7 +148,7 @@ def manuscript_id_for_statement(root: Any, statement_id: Any, *,
     #
     # 路径还没分（首次落稿 / 老调用面）时 `manuscripts` 那一格不写（写了会让
     # `path_reading` 把"还没挂进台账的那一份"算成一条路径）。这一档记在行上的
-    # `manuscript_id`：只有它确实是**本族**的稿（`reports/b-proof-<号>.md` 在盘上）
+    # `manuscript_id`：只有它确实是「本族」的稿（`reports/b-proof-<号>.md` 在盘上）
     # 才算 —— 否则那一格是 F 的稿号（同一格两个号段），不能当 B 稿。
     if store is not None:
         try:

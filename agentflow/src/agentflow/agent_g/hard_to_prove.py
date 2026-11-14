@@ -247,11 +247,11 @@ def settle_claims(
     - `readings`：这一趟的读数（`checked` 三态、逐条点名、两个计数）；
     - `open_problems`：要补进稿件开放问题区的那几句（"为什么这条没写进来"）。
 
-    读数里的 `index` 是**候选清单里**的 1 起序号：`build_document` 那条路会把
+    读数里的 `index` 是「候选清单里」的 1 起序号：`build_document` 那条路会把
     `claim_id` 重排成 `claim-1…claim-N`（`doc_tools.normalize_claims` 的口径），
     所以拿进来时那个代号在落库之后对不上；`index` 与 `statement_ids` 是对得上的那两个。
 
-    读不到 `statements` 时**不做任何改写**、`readings["checked"]=False` 并写明为什么：
+    读不到 `statements` 时「不做任何改写」、`readings["checked"]=False` 并写明为什么：
     这时"这一条是不是难以自证"没有答案，按"所有命题都保守"处理正是业主否决过的泛化。
     （实际路径上读不到台账也过不了 `check_citations` 那一关，所以这里不是一条静默放行。）
     """
