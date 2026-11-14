@@ -182,6 +182,89 @@ def stop_scope(state: Mapping[str, Any] | None) -> dict[str, Any]:
             "reason": ""}
 
 
+def dispatch_stop_reading(root: str | Path, *, parent_task_id: str = "",
+                          inside: "Callable[[str, str], Mapping[str, Any]] | None" = None,
+                          explicit: str | Path | None = None) -> dict[str, Any]:
+    """派活前问一句：现在有一把作用于这一支的停机开关吗（A / B2 的唯一判据）。
+
+    与步首那道判据同一把尺：`read_stop` + `stop_scope` + `stop_reason_of`（`agent_loop`
+    的 `_user_stop_reason` 也是这三个），不新造第二套。差别只在"我是谁"的取法：步首
+    问"我是哪一趟"，这里问"我要往哪一支派活"（`parent_task_id`）。
+
+    返回 `{checked, stopped, state, reason, path, why}`：
+
+    | `state` | `stopped` | 含义 |
+    |---|---|---|
+    | `none` | False | 盘上没有开关 ⇒ 照常派 |
+    | `applies` | True | 全工作区开关，或子树开关且这一支在里面 |
+    | `unreadable` | True | 开关在盘上但读不懂 ⇒ 与步首同向：读不懂不等于没人叫停 |
+    | `other_branch` | False | 子树开关只管别的支（"停 D 那一支"不许停到 E） |
+    | `unknown_scope` | False | 子树开关、但判不了在不在那一支 ⇒ 不停（判不了 ≠ 适用） |
+
+    `checked=False` 是第四态：连开关都读不成（异常）⇒ 不停，但 `why` 里说明没查成。
+    """
+    out: dict[str, Any] = {"checked": False, "stopped": False, "state": "unknown_scope",
+                           "reason": "", "path": str(stop_path(root, explicit)), "why": ""}
+    try:
+        state = read_stop(root, explicit=explicit)
+    except Exception as exc:  # noqa: BLE001 —— 读不成不是"没人叫停"，要留读数
+        out["why"] = (f"停机开关读不成（{type(exc).__name__}: {exc}）⇒ 这一格没查成；"
+                      "不据此拦派活，但别把它读成「没有开关」")
+        return out
+    out["checked"] = True
+    if state is None:
+        out.update(state="none", why="盘上没有停机开关 ⇒ 照常派活")
+        return out
+    out["reason"] = stop_reason_of(state)
+    if "unreadable" in state:
+        out.update(state="unreadable", stopped=True,
+                   why=(f"停机开关在盘上但读不懂（{state.get('unreadable')}）⇒ "
+                        "按「停机」处理（读不懂不等于没人叫停）"))
+        return out
+    scope = stop_scope(state)
+    if not scope.get("checked"):
+        out.update(state="unknown_scope",
+                   why=f"开关作用面判不了（{scope.get('reason')}）⇒ 不停（判不了 ≠ 适用）")
+        return out
+    root_task_id = str(scope.get("root_task_id") or "")
+    if scope.get("scope") != "subtree":
+        out.update(state="applies", stopped=True,
+                   why=(f"停机开关在（{out['reason'] or 'stop_file'}，全工作区）⇒ "
+                        "不派新活"))
+        return out
+    me = str(parent_task_id or "")
+    if not me:
+        out.update(state="other_branch",
+                   why=(f"这是一把只管 {root_task_id} 那一支的开关，派活方是树根（没有父任务）"
+                        "⇒ 不在那一支里，不停（子树开关不许变成全停）"))
+        return out
+    if not callable(inside):
+        out.update(state="unknown_scope",
+                   why=(f"这是一把只管 {root_task_id} 那一支的开关，但这一层没有"
+                        "「我这一支在不在里面」的判据 ⇒ 不停（判不了 ≠ 适用）"))
+        return out
+    try:
+        got = dict(inside(root_task_id, me) or {})
+    except Exception as exc:  # noqa: BLE001 —— 判不成不是"在里面"
+        out.update(state="unknown_scope",
+                   why=(f"判 {me} 在不在 {root_task_id} 那一支里时出错"
+                        f"（{type(exc).__name__}: {exc}）⇒ 不停（判不了 ≠ 适用）"))
+        return out
+    if not got.get("checked"):
+        out.update(state="unknown_scope",
+                   why=(f"判不了 {me} 在不在 {root_task_id} 那一支里"
+                        f"（{got.get('reason')}）⇒ 不停（判不了 ≠ 适用）"))
+        return out
+    if not got.get("inside"):
+        out.update(state="other_branch",
+                   why=f"这把开关只管 {root_task_id} 那一支，{me} 不在那一支里 ⇒ 不停")
+        return out
+    out.update(state="applies", stopped=True,
+               why=(f"停机开关在（{out['reason'] or 'stop_file'}，只管 {root_task_id} "
+                    f"那一支，我在里面）⇒ 不派新活"))
+    return out
+
+
 # ============================================================ 单个子代理的中断信号（S-H）
 #
 # 为什么它不与上面那把开关共用一个文件（这是一处刻意的落位差异，理由要说清）：

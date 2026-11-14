@@ -17,6 +17,7 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
+from agentflow import stopctl
 from agentflow.conductor import Conductor
 from agentflow.store import Store
 from agentflow.tools import build_registry
@@ -145,6 +146,16 @@ def test_stop_then_warm_start_then_continue_from_the_brief(tmp_path: Path,
 
     # (c) 新会话：新主控（内存状态全空）+ 同一个库 ⇒ 台账重建得出上一次的全部行，
     #     并且还能继续派活（resume 不是"锁死状态"）
+    #
+    # 2026-11-15（A / B2）：停机开关是一条活信号 —— 派活前会读它（`conductor` 四入口，
+    # 判据 `test_dispatch_refuses_after_the_stop_switch.py`）。`conductor.stop` 只写不删：
+    # 删除是"读到它的那一趟"的收尾（`AgentLoop._consume_stop_at_teardown`）。这一条是
+    # 工具级用例、没有那一趟循环，所以这里显式消费掉它（模拟停下来的那一趟在步首读到并
+    # 撤走），否则新会话派活会被受控拒 —— 那不是"锁死"，是"开关还在盘上"。
+    assert stopctl.read_stop(store.root) is not None, (
+        "`conductor.stop` 之后开关应当在盘上（它就是要给在飞的循环读的）")
+    stopctl.consume_stop(store.root, sid="p11-resume", remove=True)
+    assert stopctl.read_stop(store.root) is None, "消费之后才该接着做"
     fresh = Conductor(store, registry={"E": ("object", _BlockingE(
         threading.Event(), threading.Event()))})
     fresh_reg = build_registry(store=store, conductor=fresh).registry

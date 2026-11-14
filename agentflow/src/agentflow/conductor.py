@@ -29,7 +29,7 @@ import itertools
 import json
 import threading
 import time
-from dataclasses import asdict, dataclass, field, is_dataclass
+from dataclasses import asdict, dataclass, field, is_dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 
@@ -8356,6 +8356,59 @@ class Conductor:
             roster_considered=True,
         )
 
+    # ---------------------------------------------------------------- 派活前看停机开关（A / B2）
+    def _dispatch_stop_gate(self, *, parent_task_id: str | None) -> dict[str, Any]:
+        """派活前读一次停机开关：这一趟还该不该产生新的子代理（A / B2，2026-11-15）。
+
+        判据本体在 `stopctl.dispatch_stop_reading`（`read_stop` + `stop_scope` +
+        `stop_reason_of`）—— 与步首 `AgentLoop._user_stop_reason` 同一把尺，这里不新造
+        第二套。`inside` 用主控自己的 `inside_subtree`：子树开关只停那一支。
+
+        为什么要有这一格：改前 `conductor` 的派活四入口（`summon_begin` /
+        `summon_run` / `summon_many` / `start_summon`）对停机开关零命中，于是父在飞的
+        那一步里仍能派新孩子，孩子起来后才在自己的第 0 步读到开关 —— 真机读数
+        `t-000095`（22:01:10）与 `t-000102`（22:01:35）都在开关落盘（22:00:27）之后
+        被创建，各跑 0 步就停，但落 running 行 / 开线程 / 写 run_start / 结算
+        usage_ledger 这几笔已经发生。
+
+        反真空（判据 `test_dispatch_refuses_after_the_stop_switch.py`）：把本方法打桩成
+        恒 `{"stopped": False}` ⇒ 开关在盘上时派活照常发生 ⇒ 那一条判据必红。
+        """
+        try:
+            from . import stopctl
+        except Exception as exc:  # noqa: BLE001 —— 模块都导不进来 ⇒ 这一格没查成
+            return {"checked": False, "stopped": False, "state": "unknown_scope",
+                    "reason": "", "path": "",
+                    "why": f"stopctl 没导进来（{type(exc).__name__}: {exc}）⇒ 没查成"}
+        return stopctl.dispatch_stop_reading(
+            getattr(self.store, "root", "."),
+            parent_task_id=str(parent_task_id or ""),
+            inside=getattr(self, "inside_subtree", None))
+
+    def _stop_refusal(self, role: str, action: str, *, by: str,
+                      parent_task_id: str | None, gate: Mapping[str, Any]) -> SummonResult:
+        """停机开关在 ⇒ 受控拒：不落 running 行、不开线程、不调后端（A / B2）。
+
+        为什么是 `cancelled` 而不是 `refused`：拒绝要带 `schema.REFUSAL_REASONS` 里的
+        一个理由码，而那张词表（`schema.py`，禁改区）里没有"停机"这一档；借一个现成
+        的码（`budget_exceeded` / `invalid_params`）等于在台账上写一句假原因。取消这条路
+        本来就有"未启动、不产生新任务"的既有语义（`token.cancelled` 那一支与它同形），
+        理由逐字进 `detail`，调用方读得到"停机开关在，不派新活"这句话。
+        """
+        path = str(gate.get("path") or ".agentflow-stop")
+        reason = str(gate.get("reason") or "stop_file")
+        detail = (f"停机开关在（`{path}`，{reason}）：不派新活 —— "
+                  f"停机之后不再产生子代理（{by} → {role}.{action} 未启动；"
+                  "这不是执行失败，也不是没查成）")
+        self._log(f"停机拒派 {by} → {role}.{action}：{detail}", detail=detail)
+        return SummonResult(
+            task_id=None, role=str(role), action=str(action),
+            status="cancelled", outcome="cancelled", detail=detail, elapsed_sec=0.0,
+            roster_considered=True,
+            roster_problem=(f"未受理（停机开关在：{reason}）⇒ 名册不登记"
+                            "（没有子行就没有名册项）"),
+        )
+
     # ---------------------------------------------------------------- 记账（FC-19）
     def _meter_guard(self, role: str, budget: Mapping[str, Any] | None) -> Any:
         """开工前的预算守卫。返回 `tokenmeter.MeterReading`。
@@ -8604,6 +8657,18 @@ class Conductor:
         if start.refusal is not None:
             # 预先判定的拒绝（越权/超深/触顶/预算/取消）：终局已定，不占线程。
             return handle
+        # ---- [0b] 停机开关（A / B2）：不为"开关落盘之前就已建好的那一趟"起线程 ------
+        #
+        # `summon_begin` 已经查过一次；走到这里仍是"没停"说明这一趟的前半发生在开关
+        # 落盘之前。再一次读盘，停了就不起线程 —— 否则线程一起来仍会写 run_start /
+        # 结算 usage_ledger（B2 的现场就是这种 0 步子循环）。
+        _stop = self._dispatch_stop_gate(parent_task_id=start.parent_task_id)
+        if _stop.get("stopped"):
+            start = replace(
+                start, refusal=self._stop_refusal(
+                    start.role, start.action, by=str(start.by),
+                    parent_task_id=start.parent_task_id, gate=_stop))
+            return self.open_handle(start, on_settle=on_settle)
         ctx = contextvars.copy_context()
         th = threading.Thread(
             target=_summon_thread_main,
@@ -8719,6 +8784,16 @@ class Conductor:
                 roster_considered=True,
                 roster_problem="未受理（Conductor 已 dispose）⇒ 名册不登记",
             )
+
+        # ---- [0b] 停机开关：停了就不再产生新任务（A / B2，2026-11-15）--------------
+        #
+        # 位置是判据的一部分：排在取消/dispose 之后（那两条的结论比"停机"更具体：
+        # 这个主控已经明确不产生新任务）、落在 [1] 之前与写任何台账之前 —— 开关在盘上
+        # 时这一趟连一行 tasks 都不落（真机那两笔是 0 步的 running 行）。
+        _stop = self._dispatch_stop_gate(parent_task_id=parent_task_id)
+        if _stop.get("stopped"):
+            return self._stop_refusal(
+                role, action, by=by, parent_task_id=parent_task_id, gate=_stop)
 
         # ---- [1] 角色 / 动作存在性（不落台账的只有"取消"这一种，见上）
         #
@@ -9010,6 +9085,23 @@ class Conductor:
         role, action, params = start.role, start.action, start.params
         token, instance = start.token, start.instance
         roster, roster_rec, t0 = start.roster, start.roster_rec, start.t0
+
+        # ---- [5d] 停机开关：开关落盘之前建好的那一趟，也不许真的开跑（A / B2）------
+        #
+        # 这一支与 `_summon_preflight` 的那一闸是同一个判据的第二次读：前半已经落过
+        # running 行（开关当时还没落盘），所以这里不能像前半那样"什么都不留"——
+        # 按取消收口（`S.child_ending` 的唯一判定点），如实说"不是执行失败"。
+        _stop = self._dispatch_stop_gate(parent_task_id=start.parent_task_id)
+        if _stop.get("stopped"):
+            refusal = self._stop_refusal(role, action, by=str(start.by),
+                                         parent_task_id=start.parent_task_id, gate=_stop)
+            _closing = S.child_ending(stop_code=str(_stop.get("reason") or "stop_file"))
+            self._log(f"停机收口 {role}.{action}（{tid}）：前半建行早于开关落盘，"
+                      "按取消结束、不开跑", task_id=tid)
+            return self.finish(
+                tid, status=_closing["status"], outcome=_closing["outcome"],
+                detail=(refusal.detail
+                        + f"（前半在开关落盘之前已建行 {tid}；按取消收口，不算执行失败）"))
 
         # ---- [6] 执行
         try:
@@ -9585,9 +9677,19 @@ class Conductor:
         token = token or self.token
         P.assert_policy_complete(self.policy)
         self._log(f"summon_many：{len(plan)} 个召唤（可抢占），policy={self.policy.to_dict()}")
+        # ---- [0b] 停机开关（A / B2，2026-11-15）：这一批的每一项都会在 `summon_begin`
+        # 的前半被同一条判据拒掉；这里先读一遍是为了两件事：① 停机时不"顺手认领队列"
+        # （认领本身会造出新活）；② 这一条入口也在盘上留下"为什么不派"的读数，
+        # 而不是让读日志的人只看每一张票各自被拒。
+        _stop = self._dispatch_stop_gate(
+            parent_task_id=str(getattr(plan[0], "parent_task_id", "") or "")
+            if len(plan) else "")
+        if _stop.get("stopped"):
+            self._log(f"停机拒派（整批 {len(plan)} 个）：{_stop.get('why')}")
         # S-03 的消费点在这里（不在 `run_plan`）：两条拼法都要"派活时顺手认领队列"，
         # 放在这条唯一的分派入口上，就不会出现"可抢占那条不认领"的半边。
-        self._consume_queue_before_dispatch()
+        if not _stop.get("stopped"):
+            self._consume_queue_before_dispatch()
         return SC.start_waves(list(plan), conductor=self, policy=self.policy,
                               token=token, probe=probe)
 
