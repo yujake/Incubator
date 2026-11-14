@@ -136,8 +136,10 @@ def test_a_open_polish_copy_is_declared_and_dispatchable(tmp_path) -> None:
     backend = LocalBackend({"B": ("object", _b(st))})
     got = backend.call("B", ACTION, {"statement_id": SID}, token=CancelToken())
     assert isinstance(got, dict) and got.get("checked") is True, got
-    # 这一条命题没有已签的稿 ⇒ 受控拒「无可优化」（不是 NotWiredError、也不是成功）
-    assert got.get("ok") is False and got.get("refused") == "no_signed_manuscript", got
+    # 这一条命题没有任何可复制的原稿（没签的稿也没有、行上正文也空）⇒ 受控拒
+    # 「没有可复制的原稿」（2026-11-14 改口径：没签不再是拒的理由）—— 不是 NotWiredError、
+    # 也不是成功。
+    assert got.get("ok") is False and got.get("refused") == "no_source_draft", got
 
 
 def test_h_removing_the_action_turns_a_red(tmp_path,

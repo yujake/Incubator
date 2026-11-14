@@ -19,6 +19,13 @@ class _Run:
         total = BRunResult()
         quota = _CR.ConceptQuota()
         self._concept_quota = quota
+        # ---- 优化轮（业主 2026-11-14 的「优化侧一般性规定」）------------------------
+        #
+        # 「系统取未优化的命题号及相关信息、命题类型、原证明稿，自动注册 B 侧稿号并给出
+        # 初始稿」⇒ 这一趟先按未优化清单把该开的优化稿开出来，不等人点。写盘只发生在
+        # `open_polish_copy` 的四步里（收工读数纯读，一个字节都不写）；一轮有上限
+        # （`OPTIMIZATION_ROUND_MAX`），下一轮接着开。没有原稿的概念不开，只进读数。
+        drafts = self.open_optimization_drafts()
         n = 0
         while max_docs is None or n < max_docs:
             r = self.run_once()
@@ -64,4 +71,7 @@ class _Run:
         # 文献消化完之后再处理定向重抽取：先把新知识落库，再回头修已有的。
         # 反过来做，刚修好的关系会立刻被新文献的判重/I6 闸门重算一遍，白做一次功。
         out["reprocess"] = self.run_reprocess()
+        # 优化轮那一笔的读数（开了几份 / 跳过几条 / 受控拒几条）：与 `concept_quota`
+        # 同档的"这一轮干了什么"读数，不是判据。
+        out["optimization_drafts"] = drafts
         return out

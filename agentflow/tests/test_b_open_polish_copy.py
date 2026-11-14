@@ -13,7 +13,8 @@
 | # | 判据 | 钉住的东西 |
 |---|---|---|
 | a | 正控：源已拿签 ⇒ 复制成功、B 稿号来自 B 的号段、复制件里没有签块、源稿一个字节没动 | `B.open_polish_copy` 四步走通 |
-| b | 反向：源没签 ⇒ 受控拒（`no_signed_manuscript`），不产生任何文件 | 「拿没签的稿来优化」在结构上不可能 |
+| b | 反向：三档原稿都不在（没签 / 行上没稿号 / 正文空）⇒ 受控拒（`no_source_draft`），不产生任何文件 | 「没有可复制的原稿」才拒；没签不是拒的理由（2026-11-14 改口径） |
+| b1 | 正控：行上稿号指到一份没签的稿 ⇒ 照样开副本、`source_sign="unsigned"` | 优化侧不依赖录入侧有没有好素材 |
 | c | 反向：B 稿号不乱用（来自 `counters.bmanuscript`，不是源稿号、不是命题号） | 号源唯一 |
 | d1 | 反真空：不清签 ⇒ a 红（复制件仍读成已签） | a 的绿来自清签那一步 |
 | d2 | 反真空：复制件用源稿号 ⇒ c 红 | c 的绿来自 B 自己的号段 |
@@ -27,10 +28,10 @@
 
 | # | 判据 | 钉住的东西 |
 |---|---|---|
-| a2 | 未在册签 → 收录（行上真记 `manuscript_id`）→ `open_polish_copy` ⇒ 成功，源稿是 `reports/f-proof-<稿号>.md`，`matched_by="statement_manuscript_id"` | 第 ④ 条证据真的接上了 |
-| b2 | 行上记了稿号、但那一份「没签」⇒ 受控拒（`no_signed_manuscript`），不许拿没签的稿开副本 | 第 ④ 条不是"有号就放行" |
-| c2 | 行上没记稿号、稿头也认不出 ⇒ 仍 `no_signed_manuscript`，且 `why` 点明差的是「行上没记稿号」 | 「没查成」与「行上没记」分得清 |
-| d3 | 反真空：把第 ④ 条证据摘掉 ⇒ a2 红 | a2 的绿来自行上那一格 |
+| a2 | 未在册签 → 收录（行上真记 `manuscript_id`）→ `open_polish_copy` ⇒ 成功，源稿是 `reports/f-proof-<稿号>.md`，`matched_by="statement_manuscript_id"`、`source_sign="signed"` | 第 ④ 条证据真的接上了 |
+| b2 | 行上记了稿号、但那一份「没签」⇒ 照样开，`source_sign="unsigned"` | 优化侧不许要求源稿已签（2026-11-14） |
+| c2 | 行上没记稿号、稿头也认不出、正文空 ⇒ `no_source_draft`，且 `why` 点明差的是「没有可复制的原稿」 | 「没查成」与「没有原稿」分得清 |
+| d3 | 反真空：把第 ④ 条证据摘掉 ⇒ 同一份稿只开得出 `unsigned`（不再认成 `signed`） | a2 的 `signed` 来自行上那一格 |
 
 ## 一句话口径：正文 sha 为什么与源相同
 
@@ -164,10 +165,16 @@ def test_a_the_signed_manuscript_is_copied_under_a_new_b_number(tmp_path) -> Non
                                  pathlib.Path(cp).name]), _files(st)
 
 
-# ------------------------------------------------------------------ b 反向：没签
+# ------------------------------------------------------------------ b 反向：没有原稿
 
-def test_b_an_unsigned_statement_gets_a_controlled_refusal(tmp_path) -> None:
-    """b：源没签 ⇒ 受控拒「这一条还没有签，无可优化」，且一个文件都不新增。"""
+def test_b_a_statement_without_any_draft_gets_a_controlled_refusal(tmp_path) -> None:
+    """b：三档原稿都不在（没签 / 行上没稿号 / 行上正文空）⇒ 受控拒「没有可复制的原稿」。
+
+    改前这一档的拒信是 `no_signed_manuscript`（"没签就不开"）；2026-11-14 业主改口径
+    （「录入侧可能找不到素材」⇒ 优化侧不许要求源稿已签）之后，签不再是门槛，门槛换成
+    "有没有原稿"。这条夹具三档都没有 ⇒ 仍然一个文件都不新增 —— 拒的是"没有原稿"，
+    不是"没有签"。
+    """
     st = _ws(tmp_path)
     (pathlib.Path(st.root) / REL_F).write_text(
         MANUSCRIPT.replace(SIGN_LINE.format(sha=PR.proof_sha(BODY)) + "\n", "")
@@ -175,8 +182,10 @@ def test_b_an_unsigned_statement_gets_a_controlled_refusal(tmp_path) -> None:
     before = _files(st)
     got = _b(st).open_polish_copy(statement_id=SID)
     assert got.get("ok") is False, got
-    assert got.get("refused") == "no_signed_manuscript", got
-    assert "没有签" in str(got.get("why") or ""), got
+    assert got.get("refused") == "no_source_draft", got
+    assert "没有可复制的原稿" in str(got.get("why") or ""), got
+    # 三态：这不是"没查成"（`checked` 仍为真），是查过了、确实没有原稿。
+    assert got.get("checked") is True, got
     assert str(got.get("path") or "") == "", got
     assert _files(st) == before, (_files(st), before)
 
@@ -352,10 +361,12 @@ def test_a2_the_row_manuscript_id_finds_the_signed_source(tmp_path) -> None:
     assert (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") == head
 
 
-def test_b2_a_row_number_without_a_sign_is_refused(tmp_path) -> None:
-    """第 ④ 条反控①：行上记了稿号，但那一份没签 ⇒ 受控拒，一个文件都不新增。
+def test_b2_a_row_number_without_a_sign_still_opens_an_unsigned_copy(tmp_path) -> None:
+    """第 ④ 条（改口径）：行上记了稿号、但那一份没签 ⇒ 照样开，`source_sign="unsigned"`。
 
-    第 ④ 条不是"有号就放行"：它只是把「该去哪一份稿」指出来，签还在 V 的颁发表里核。
+    业主 2026-11-14 逐字：「录入侧可能找不到素材」⇒ 优化侧不能要求源稿已签。
+    改前这一档受控拒 `no_signed_manuscript`；现在签只影响 `source_sign` 那一格与
+    `signed_before`，不影响"开不开"。
     """
     st = _ws(tmp_path)
     mid = MID.next_manuscript_id(st.root)
@@ -367,17 +378,24 @@ def test_b2_a_row_number_without_a_sign_is_refused(tmp_path) -> None:
     before = _files(st)
 
     got = _b(st).open_polish_copy(statement_id=SID)
-    assert got.get("ok") is False, got
-    assert got.get("refused") == "no_signed_manuscript", got
-    assert "记了稿号、但那一份没签" in str(got.get("why") or ""), got
-    assert got.get("matched_by") == "", got
-    assert _files(st) == before, (_files(st), before)
+    assert got.get("ok") is True, got
+    assert got.get("refused") == "", got
+    assert got.get("source_sign") == "unsigned", got
+    assert got.get("signed_before") is False, got
+    assert got.get("source_path") == rel, got
+    assert got.get("matched_by") == "statement_manuscript_id", got
+    # 源稿本来没有签 ⇒ 清签那一格是 0，复制件照旧没有签块
+    assert got.get("cleared") == 0, got
+    cp = str(got.get("path") or "")
+    copy_text = (pathlib.Path(st.root) / cp).read_text(encoding="utf-8")
+    assert VS.SIGN_MARK not in copy_text, copy_text.split("\n")[:6]
+    assert _files(st) == sorted(before + [pathlib.Path(cp).name]), _files(st)
 
 
 def test_c2_without_a_row_number_the_why_names_the_missing_evidence(tmp_path) -> None:
-    """第 ④ 条反控②：行上没记稿号、稿头也认不出 ⇒ 仍 `no_signed_manuscript`。
+    """第 ④ 条反控②：行上没记稿号、正文空 ⇒ `no_source_draft`（没有可复制的原稿）。
 
-    `why` 必须点明差的是「行上没有记稿号」这一条 —— 不许把"行上没记"读成"没有签"，
+    `why` 必须点明差的是「行上没有记稿号」这一条 —— 不许把"行上没记"读成"没有原稿"，
     也不许只说"按命题号、按稿头都找过"（那正是改前那句看不出还差什么的 why）。
     """
     st = _ws(tmp_path)
@@ -391,19 +409,22 @@ def test_c2_without_a_row_number_the_why_names_the_missing_evidence(tmp_path) ->
 
     got = _b(st).open_polish_copy(statement_id=SID)
     assert got.get("ok") is False, got
-    assert got.get("refused") == "no_signed_manuscript", got
+    assert got.get("refused") == "no_source_draft", got
     why = str(got.get("why") or "")
+    assert "没有可复制的原稿" in why, got
     assert "差第 ④ 条证据" in why, got
     assert "行上没有记稿号" in why, got
-    assert "没有签" in why, got
     assert _files(st) == before, (_files(st), before)
 
 
-def test_d3_removing_the_row_number_evidence_turns_a2_red(
+def test_d3_removing_the_row_number_evidence_turns_a2_unsigned(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """第 ④ 条反真空：把它摘掉 ⇒ a2 必须红（`no_signed_manuscript`）。
+    """第 ④ 条反真空：把它摘掉 ⇒ 同一份稿只开得出 `unsigned`（a2 的 `signed` 来自那一格）。
 
-    打桩点就是第 ④ 条的证据源（`_statement_manuscript_id`）：其余三条原样保留。
+    打桩点就是第 ④ 条的证据源（`_statement_manuscript_id`）：签表里那一签没有命题号
+    （未在册），所以 ② 够不着；④ 被摘掉之后只剩"行上稿号"那条没签的退路 ⇒
+    `source_sign` 从 `signed` 掉成 `unsigned`。a2 与 d3 的差别证明 `signed` 这个结论
+    是行上那一格给的，不是"盘上有这份文件"给的。
     """
     st = _ws_bare(tmp_path)
     sid, _rel, _mid = _ingest_unregistered_signed(st)
@@ -414,8 +435,6 @@ def test_d3_removing_the_row_number_evidence_turns_a2_red(
         OPC._OpenPolishCopy, "_statement_manuscript_id",
         lambda self, sid: {"checked": True, "manuscript_id": "", "why": ""})
     got = _b(st).open_polish_copy(statement_id=sid)
-    assert got.get("ok") is False, got
-    assert got.get("refused") == "no_signed_manuscript", got
-    assert got.get("matched_by") == "", got
-    assert "行上没有记稿号" in str(got.get("why") or ""), got
+    assert got.get("ok") is True, got
+    assert got.get("source_sign") == "unsigned", got
     assert real is not None
