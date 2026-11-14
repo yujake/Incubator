@@ -222,6 +222,25 @@ def record(
     return entry
 
 
+def record_or_problem(root: Any, **kwargs: Any) -> tuple[dict, str]:
+    """登记一条产物；返回 `(记录, 问题)` —— 问题非空 = 没登记成（不抛异常）。
+
+    为什么留一个不抛的口子：这些调用点都是"产物已经落盘之后"补记归属，而它们
+    各自已经有一份读数形状（`problems` / `refused` / 返回里的 `why`）。登记失败
+    若直接抛，会被读成"产物没写成"（那不是事实）；返回空字典又不留话，等于把
+    "盘上有产物、台账里没有"这件事吞掉 —— 这正是这条纪律要禁止的形态。
+    所以把失败收成一句话交回调用方：调用方必须把它带进自己的读数
+    （`problems` 里出现，或让这次落盘失败），不许不理。
+
+    它不改变 :func:`record` 的判据：路径越界 / 文件不存在 / 台账写不进去照样是
+    失败，只是失败在这里被收成读数而不是异常。
+    """
+    try:
+        return record(root, **kwargs), ""
+    except Exception as exc:  # noqa: BLE001 —— 登记失败是读数，由调用方点名
+        return {}, f"产物归属没登记成（{type(exc).__name__}: {exc}）"
+
+
 def read_ledger(root: Any) -> tuple[list[dict], list[str]]:
     """读台账；返回 `(记录, 坏行说明)`。
 

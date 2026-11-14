@@ -292,3 +292,58 @@ def test_a_real_engine_compiles_the_minimal_paper(tmp_path: pathlib.Path,
     assert got["tri"] == "computed" and got["ok"] is True, got
     assert (got["pages"] or 0) >= 1, got
     assert PC.receipt_matches_tex(root)[0] is True, got
+
+
+# ============================================================ 六、产物归属（ARTIFACTS.jsonl）
+
+def test_the_compiled_pdf_is_registered_as_an_owned_artifact(tmp_path: pathlib.Path):
+    """编出来的 PDF 是构建产物 ⇒ 台账里有一条，sha 与盘上（与回执里的）一致。"""
+    from agentflow import artifacts as A
+
+    project = tmp_path / "projects/p1"
+    FX.write_paper(project)
+    engine = FX.fake_engine(project / "_engine")
+    with FX.use_engine(engine):
+        got = PC.compile_paper(project)
+    assert got["tri"] == "computed" and got["pdf_fresh"] is True, got
+    rel = "out/paper/main.pdf"
+    rows = [r for r in A.read_ledger(project)[0] if r.get("path") == rel]
+    assert rows, f"{rel} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(project / rel)
+    assert int(rows[-1]["bytes"] or 0) == int(got.get("pdf_bytes") or 0), (rows[-1], got)
+    assert rows[-1]["kind"] == "paper-pdf"
+    assert rows[-1]["producer"] == "agentflow.papercompile"
+    receipt = PC.read_receipt(project)[0] or {}
+    assert receipt.get("pdf_sha256") == rows[-1]["sha256"], (receipt.get("pdf_sha256"),
+                                                             rows[-1]["sha256"])
+
+
+def test_the_old_pdf_is_not_registered_as_this_rounds_product(tmp_path: pathlib.Path):
+    """盘上那份旧 PDF 不是这一趟写的 ⇒ 不许登记成"这一趟的产物"（与 `pdf_fresh` 同一纪律）。"""
+    from agentflow import artifacts as A
+
+    project = tmp_path / "projects/p1"
+    FX.write_paper(project)
+    (PC.package_dir(project)).mkdir(parents=True, exist_ok=True)
+    (PC.package_dir(project) / PC.PDF_NAME).write_bytes(b"%PDF-1.4 old\n")
+    engine = FX.fake_engine(project / "_engine", writes_pdf=False, exit_code=1,
+                            stderr="boom\n")
+    with FX.use_engine(engine):
+        got = PC.compile_paper(project)
+    assert got["pdf_fresh"] is False, got
+    assert [r for r in A.read_ledger(project)[0] if r.get("path") == "out/paper/main.pdf"] == []
+
+
+def test_stubbing_the_recorder_makes_the_pdf_registration_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+    """反真空：`artifacts.record` 不写 ⇒ 同一条读不到归属；PDF 本身照样编出来。"""
+    from agentflow import artifacts as A
+
+    project = tmp_path / "projects/p1"
+    FX.write_paper(project)
+    engine = FX.fake_engine(project / "_engine")
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    with FX.use_engine(engine):
+        got = PC.compile_paper(project)
+    assert got["pdf_fresh"] is True and (project / "out/paper/main.pdf").is_file(), got
+    assert [r for r in A.read_ledger(project)[0] if r.get("path") == "out/paper/main.pdf"] == []

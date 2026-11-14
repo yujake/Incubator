@@ -484,6 +484,23 @@ class _WriteReport:
         text = "\n".join(lines) + "\n"
         path.write_text(text, encoding="utf-8")
         self.last_report_path = path
+        # ---- 产物归属（`ARTIFACTS.jsonl`）：报告落到盘上 ⇒ 补"这个路径归谁产"。
+        #
+        # 登记的是最后那一版（上面那次写 + 交付/汇报两节补齐之后）；中间那一版不进台账
+        # —— 它从来不是读者会打开的那一份（同一个路径取最后一条登记，正是台账的读法）。
+        # 登记失败 ⇒ 这次调用按失败报，但报告留在盘上：那是"写成了、没归属"，不是"没写成"。
+        from .. import artifacts as A
+
+        _producer = str(self.actor or "agent-D").strip()
+        if _producer.startswith("agent-"):
+            _producer = _producer[len("agent-"):]
+        _entry, _problem = A.record_or_problem(
+            self.store.root, path=_rel, producer=_producer or "D",
+            kind="research-report", note="D 的初步研究报告（agent_d.write_report）")
+        if _problem:
+            raise RuntimeError(
+                f"{_problem}。报告已写盘（{path}），但这条路径没有产物归属登记 "
+                "⇒ 这次调用按失败报（补登记：`agentflow artifacts record <路径> --producer D`）")
         return str(path)
 
     def _carried_manuscripts(self) -> tuple[list[dict], str]:

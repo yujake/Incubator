@@ -2079,8 +2079,21 @@ def write_note(session_root: Path, role: str, text: str, *,
             fh.write(line)
     except OSError as exc:
         return str(path), f"{type(exc).__name__}: {exc}"
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：草稿本文件也是内容产物，追加之后补登记。
+    #
+    # 登记失败不折成"便签没写成"（那一行已经在盘上），但必须回到 `problem` 里点名：
+    # `_do_note` 把它读成 `ok=False` —— 于是"有便签、无归属"不会静默过去。
+    # `sha256` 由 `artifacts.record` 从盘上现算（整份文件，不是刚追加那一行）。
+    from . import artifacts as A
+
+    _entry, _reg_problem = A.record_or_problem(
+        session_root, path=f"{NOTES_DIR_NAME}/{role}.md", producer=str(role or ""),
+        kind="note", note="草稿本追加一行（agent_loop.write_note）")
     _p, problem = SS.append(session_root, {"kind": "agent_note", "role": role,
                                            "text": text.strip(), "path": str(path)}, sid=sid)
+    if _reg_problem:
+        problem = (_reg_problem + "；便签本身已追加到盘上"
+                   + (f"；{problem}" if problem else ""))
     return str(path), problem
 
 

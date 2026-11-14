@@ -122,3 +122,33 @@ def test_the_report_files_leg_counts_where_the_writer_actually_writes(tmp_path):
     rep = CL.check_closing(st, project_dir=str(ws))
     r4 = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R4")
     assert r4["got"] == 2 and r4["ok"] is True, r4
+
+
+# ============================================================ 产物归属（ARTIFACTS.jsonl）
+
+def test_the_research_report_is_registered_as_an_owned_artifact(tmp_path):
+    """D 的研究报告是框架自己写的产物 ⇒ 台账里有一行、sha 与盘上一致。"""
+    from agentflow import artifacts as A
+
+    ws, st = _ws(tmp_path)
+    d = AgentD(st)
+    out = d.write_report("out/review/D-analysis.md")
+    rel = pathlib.Path(out).resolve().relative_to(ws.resolve()).as_posix()
+    rows = [r for r in A.read_ledger(ws)[0] if r.get("path") == rel]
+    assert rows, f"{rel} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(pathlib.Path(out))
+    assert rows[-1]["kind"] == "research-report"
+    assert rows[-1]["producer"] == "D"
+
+
+def test_stubbing_the_recorder_makes_that_registration_red(tmp_path, monkeypatch):
+    """反真空：`artifacts.record` 不写 ⇒ 同一条读不到归属；报告照样落盘。"""
+    from agentflow import artifacts as A
+
+    ws, st = _ws(tmp_path)
+    d = AgentD(st)
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    out = d.write_report("out/review/D-analysis.md")
+    rel = pathlib.Path(out).resolve().relative_to(ws.resolve()).as_posix()
+    assert pathlib.Path(out).is_file(), "打桩只该改登记行为，报告照样要落盘"
+    assert [r for r in A.read_ledger(ws)[0] if r.get("path") == rel] == []

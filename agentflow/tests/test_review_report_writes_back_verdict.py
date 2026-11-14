@@ -85,3 +85,59 @@ def test_the_two_verdicts_are_deliberately_two_things(h_store: Store):
     gate = str(rep.get("verdict") or "")
     assert gate in ("rejected", "unverified"), rep
     assert (h_store.root / "out/review/0002-review.md").is_file()
+
+
+# ============================================================ 产物归属（ARTIFACTS.jsonl）
+
+def test_the_review_report_is_registered_as_an_owned_artifact(h_store: Store):
+    """审校报告是框架自己写的产物 ⇒ 它必须在产物台账里有一条，sha 与盘上一致。"""
+    from agentflow import artifacts as A
+
+    seed_document(h_store, "0003", [clean_claim()])
+    rep = RV.review_report(
+        h_store, "0003", own_errors=[], banned_words=["已形式化验证"],
+        workspace_root=h_store.root, actor="agent-H",
+        out_path="out/review/0003-review.md",
+    )
+    rel = str(rep.get("report_path") or "")
+    assert rel == "out/review/0003-review.md", rep
+    rows = [r for r in A.read_ledger(h_store.root)[0] if r.get("path") == rel]
+    assert rows, f"{rel} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(h_store.root / rel)
+    assert rows[-1]["kind"] == "review-report"
+    assert rows[-1]["producer"] == "H"
+
+
+def test_stubbing_the_recorder_makes_the_review_registration_red(
+        h_store: Store, monkeypatch: pytest.MonkeyPatch):
+    """反真空：`artifacts.record` 不写 ⇒ 同一条读不到归属（红压在这一步）。"""
+    from agentflow import artifacts as A
+
+    seed_document(h_store, "0004", [clean_claim()])
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    rep = RV.review_report(
+        h_store, "0004", own_errors=[], banned_words=["已形式化验证"],
+        workspace_root=h_store.root, actor="agent-H",
+        out_path="out/review/0004-review.md",
+    )
+    rel = str(rep.get("report_path") or "")
+    assert (h_store.root / rel).is_file(), "打桩只该改登记行为，报告照样要落盘"
+    assert [r for r in A.read_ledger(h_store.root)[0] if r.get("path") == rel] == []
+
+def test_a_registration_failure_makes_the_review_report_fail(
+        h_store: Store, monkeypatch: pytest.MonkeyPatch):
+    """登记表写不进去 ⇒ 审校报告按失败报（`ValueError`），不吞。"""
+    from agentflow import artifacts as A
+
+    def _boom(*a, **k):
+        raise A.ArtifactError("注入：台账写不进去")
+
+    seed_document(h_store, "0005", [clean_claim()])
+    monkeypatch.setattr(A, "record", _boom)
+    with pytest.raises(ValueError, match="产物归属"):
+        RV.review_report(
+            h_store, "0005", own_errors=[], banned_words=["已形式化验证"],
+            workspace_root=h_store.root, actor="agent-H",
+            out_path="out/review/0005-review.md",
+        )
+    assert (h_store.root / "out/review/0005-review.md").is_file(), "报告本身照样落盘"

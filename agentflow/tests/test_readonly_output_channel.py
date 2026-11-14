@@ -290,3 +290,42 @@ def test_the_two_briefs_name_their_channel() -> None:
 
     h_text = "\n".join(H_SPEC.brief.boundary)
     assert "record_finding" in h_text, "H 的 brief 里没写它的登记通道"
+
+
+# ============================================================ 产物归属（ARTIFACTS.jsonl）
+
+def test_the_analysis_report_markdown_is_registered_as_an_owned_artifact(
+        tmp_path: Path) -> None:
+    """C 的分析报告是内容产物 ⇒ 台账里有一行、sha 与盘上一致（`persist` 的唯一落盘口）。"""
+    from agentflow import artifacts as A
+
+    store = _store(tmp_path)
+    reg = _registry(store)
+    res = reg.call("analysis.register_report", role="C",
+                   kind="paths", summary="归属探针：中心度 6",
+                   markdown="# 图读数\n\n- 中心 0000 度 6\n", request="归属探针",
+                   payload={"bridges": 6})
+    assert res.ok is True, res.error
+    rel = str(store.rows("analysis_reports")[-1]["markdown_path"])
+    rows = [r for r in A.read_ledger(store.root)[0] if r.get("path") == rel]
+    assert rows, f"{rel} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(Path(store.root) / rel)
+    assert rows[-1]["kind"] == "analysis-report-paths"
+    assert rows[-1]["producer"] == "C"
+
+
+def test_stubbing_the_recorder_makes_that_registration_red(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：`artifacts.record` 不写 ⇒ 同一条读不到归属；报告文件与行照样在。"""
+    from agentflow import artifacts as A
+
+    store = _store(tmp_path)
+    reg = _registry(store)
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    res = reg.call("analysis.register_report", role="C",
+                   kind="paths", summary="反真空", markdown="# 图读数\n",
+                   request="反真空", payload={})
+    assert res.ok is True, res.error
+    rel = str(store.rows("analysis_reports")[-1]["markdown_path"])
+    assert (Path(store.root) / rel).is_file(), "打桩只该改登记行为，报告照样要落盘"
+    assert [r for r in A.read_ledger(store.root)[0] if r.get("path") == rel] == []

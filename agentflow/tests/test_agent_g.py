@@ -621,3 +621,66 @@ def test_g_and_h_output_passes_the_global_verify(g: AgentG, g_store: Store):
     assert AgentH(g_store).review(doc["doc_id"])["verdict"] == "accepted"
     errors = [(i.code, i.table, i.row_id, i.message[:70]) for i in verify_all(g_store).errors]
     assert errors == [], f"verify 在 G/H 的产出上报了 error：{errors}"
+
+
+# ============================================================ 产物归属（ARTIFACTS.jsonl）
+#
+# `documents` 行只回答"G 渲染了哪份 markdown"；"这个路径归谁产"由产物台账回答。
+# 真机 `projects/lp-ball` 的 `documents/*.md` 全部 `unowned` 就是这条缺口的形态。
+
+
+def test_build_document_and_revise_register_the_rendered_markdown(
+        g: AgentG, g_store: Store):
+    """`build_document` 与 `revise` 渲染的 markdown 都要有一条可核的归属。"""
+    from agentflow import artifacts as A
+
+    doc = g.build_document("note", "归属探针", claims=_clean_claims(g))
+    rel = doc["markdown_path"]
+    rows = [r for r in A.read_ledger(g_store.root)[0] if r.get("path") == rel]
+    assert rows, f"{rel} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(Path(g_store.root) / rel)
+    assert rows[-1]["kind"] == "document-note"
+    assert rows[-1]["producer"] == "G"
+
+    # 修订会重画同一份 markdown ⇒ 追加新的一行，最新那一行跟着盘上走。
+    g.revise(doc["doc_id"], note="归属探针：重画一次")
+    rows = [r for r in A.read_ledger(g_store.root)[0] if r.get("path") == rel]
+    assert len(rows) >= 2, rows
+    assert rows[-1]["sha256"] == A.sha256_of(Path(g_store.root) / rel)
+
+    # `refresh_markdown` 是第三条重画的路（只重画文件、不改数据行）—— 它也要登记。
+    g.refresh_markdown(doc["doc_id"])
+    rows = [r for r in A.read_ledger(g_store.root)[0] if r.get("path") == rel]
+    assert len(rows) >= 3, rows
+    assert rows[-1]["sha256"] == A.sha256_of(Path(g_store.root) / rel)
+
+
+def test_stubbing_the_recorder_makes_the_document_registration_red(
+        g: AgentG, g_store: Store, monkeypatch: pytest.MonkeyPatch):
+    """反真空：`artifacts.record` 不写 ⇒ 同一条读不到归属（红压在这一步）。"""
+    from agentflow import artifacts as A
+
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    doc = g.build_document("note", "反真空", claims=_clean_claims(g))
+    rel = doc["markdown_path"]
+    assert (Path(g_store.root) / rel).is_file(), "打桩只该改登记行为，稿件照样要落盘"
+    assert [r for r in A.read_ledger(g_store.root)[0] if r.get("path") == rel] == []
+
+def test_a_registration_failure_makes_the_document_action_fail(
+        g: AgentG, g_store: Store, monkeypatch: pytest.MonkeyPatch):
+    """登记表写不进去 ⇒ 这次写稿按失败报（`DocToolError` / `DocumentError`），不吞。"""
+    from agentflow import artifacts as A
+
+    def _boom(*a, **k):
+        raise A.ArtifactError("注入：台账写不进去")
+
+    monkeypatch.setattr(A, "record", _boom)
+    # 动作层把工具失败收成 DocumentError（_call 的唯一出口），消息里带登记失败那句。
+    with pytest.raises(DocumentError, match="产物归属"):
+        g.build_document("note", "登记失败", claims=_clean_claims(g))
+
+    monkeypatch.undo()
+    doc = g.build_document("note", "登记失败（修订）", claims=_clean_claims(g))
+    monkeypatch.setattr(A, "record", _boom)
+    with pytest.raises(DocumentError, match="产物归属"):
+        g.revise(doc["doc_id"], note="登记失败")

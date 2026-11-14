@@ -282,6 +282,23 @@ def compose_report(*, experiment_id: Any, claim: Any, claim_key: Any,
     return "\n".join(header + body)
 
 
+def _record_product(root: Any, *, rel: Any, kind: str, producer: str,
+                    task_id: Any = "", note: Any = "") -> str:
+    """把刚落到盘上的产物登进 `<工作区>/ARTIFACTS.jsonl`；返回问题（空串 = 登记成了）。
+
+    为什么三个写口共用一个私有函数：`kind` / `producer` 的口径必须只有一处，
+    否则同一份 E 的产物会在三条路上各叫一个名字（读台账的人就没法按类筛）。
+    `sha256` 不在这里传：`artifacts.record` 一律从写盘后的字节现算 ——
+    这是"台账里的 sha 与盘上一致"这句话唯一站得住的来源。
+    """
+    from . import artifacts as A
+
+    _entry, problem = A.record_or_problem(
+        root, path=rel, producer=producer, kind=kind,
+        task_id=str(task_id or ""), note=str(note or ""))
+    return problem
+
+
 def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: Any,
                  script_path: Any, design: Any, enumeration: Any,
                  script_sha256: Any = "", search_space: Any = None,
@@ -362,6 +379,14 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
         "ok": True,
         "at": _now_iso(),
     })
+    # ---- 产物归属：报告已经落盘并读回来了，这里补"这个路径归 E 产"。
+    # 登记失败不折成"报告没写成"（ok 仍是真的），但必须进读数：`problems` 非空
+    # 会让调用方把这一条降档/记 note，而不会让"有产物、无归属"悄悄过去。
+    _reg_problem = _record_product(
+        root, rel=rel, kind="experiment-report", producer="E",
+        note=f"exp:{facts['experiment_id']} 的 ②③ 读数（exhaustionreport.land_report）")
+    if _reg_problem:
+        problems.append(f"{_reg_problem}；报告本身已落盘（{rel}）")
     return facts
 
 
@@ -828,6 +853,12 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
                 "ok": bool(body.strip()), "at": _now_iso()})
     if not body.strip():
         problems.append(f"手稿写成了，但 `{MANUSCRIPT_PROOF_HEADING}` 那一节读不出正文：{rel}")
+    # ---- 产物归属：手稿已落盘。登记失败进读数（`problems`），不让它静默消失。
+    _reg_problem = _record_product(
+        root, rel=rel, kind="e-proof-manuscript", producer="E",
+        note=f"exp:{eid} 的 V 签手稿（exhaustionreport.land_manuscript）")
+    if _reg_problem:
+        problems.append(f"{_reg_problem}；手稿本身已落盘（{rel}）")
     return out
 
 
@@ -1099,6 +1130,12 @@ def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
                 "ok": bool(got.get("ok")), "at": _now_iso()})
     if not got.get("ok"):
         problems.extend(list(got.get("problems") or []))
+    # ---- 产物归属：手稿已落盘。登记失败进读数（`problems`），不让它静默消失。
+    _reg_problem = _record_product(
+        root, rel=rel, kind="e-num-manuscript", producer="E",
+        note=f"exp:{eid} 的普通数值手稿（exhaustionreport.land_numeric_manuscript）")
+    if _reg_problem:
+        problems.append(f"{_reg_problem}；手稿本身已落盘（{rel}）")
     return out
 
 

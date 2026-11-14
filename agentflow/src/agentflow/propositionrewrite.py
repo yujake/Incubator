@@ -248,4 +248,20 @@ def rewrite_proposition(*, store: Any, root: Any, manuscript: Any,
     out.update(ok=True, wrote=True, next_step=NEXT_STEP,
                why=("已原位重写 `## 命题`（同一稿号、同一份稿）：正文 sha 未变、签仍有效；"
                     "下一步把这份稿重交 B 收编，不用重签"))
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：这一笔也换了盘上的字节，同样要登记。
+    # 登记失败 ⇒ 按失败报（受控码闭集里已有 `REFUSED_WRITE`），但 `wrote=True` 照实留着：
+    # 稿真的被改了，缺的是归属 —— 折成"没写"会让下一个人以为盘上还是旧命题。
+    from . import artifacts as A
+
+    _reg_role = {"f-proof": "F", "b-proof": "B",
+                 "e-proof": "E", "e-num": "E"}.get(family, "") or "M"
+    _reg_entry, _reg_problem = A.record_or_problem(
+        root, path=rel, producer=_reg_role, kind=f"{family}-manuscript",
+        task_id=str(task_id or ""),
+        note=f"手稿 `{rel}` 的 `## 命题` 原位重写（propositionrewrite）")
+    if _reg_problem:
+        out.update(ok=False, wrote=True, refused=REFUSED_WRITE, why=(
+            f"`{rel}` 的 `## 命题` 换成了，但产物归属没登记成：{_reg_problem} "
+            f"⇒ 这一笔按失败报（补登记：`agentflow artifacts record {rel} "
+            f"--producer {_reg_role}`）"))
     return out

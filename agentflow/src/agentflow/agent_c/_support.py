@@ -250,5 +250,25 @@ class AnalysisReport:
         self.markdown_path = rel_name
         self.created_at = row.created_at
         self.created_by = who
+        # ---- 产物归属（`ARTIFACTS.jsonl`）：报告 markdown 已经落盘 ⇒ 补"归谁产"。
+        #
+        # 放在事务之外：登记失败若让这笔事务回滚，盘上会留一份"有文件、没登记行"的报告
+        # （`verify` 的 `report_file_missing` 反着查不出来）。放在提交之后：行与文件都
+        # 在，"这一条没有归属"由异常大声说出（不是被回滚盖住）。
+        # `reports_dir` 指到工作区外时这里同样会失败 —— 那是"产物离开沙箱"，本该报。
+        from .. import artifacts as A
+
+        _producer = str(who or "agent-C").strip()
+        if _producer.startswith("agent-"):
+            _producer = _producer[len("agent-"):]
+        _entry, _problem = A.record_or_problem(
+            st.root, path=rel_name, producer=_producer or "C",
+            kind=f"analysis-report-{self.kind}",
+            note=f"C 的分析报告（{self.kind}，agent_c.AnalysisReport.persist）")
+        if _problem:
+            raise RuntimeError(
+                f"{_problem}。报告已写盘（{rel_name}）且 analysis_reports 行已落库，"
+                "但这条路径没有产物归属登记 ⇒ 这次落盘按失败报（补登记："
+                f"`agentflow artifacts record {rel_name} --producer {_producer or 'C'}`）")
         return {"report_id": rid, "markdown_path": rel_name, "abs_path": str(abs_path)}
 from ..specs.c import SPEC  # noqa: E402,F401

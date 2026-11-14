@@ -423,6 +423,21 @@ def open_manuscript(root: Any, *, role: str, family: str, proposition: str,
         written = target.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         written = body
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：骨架已经落到盘上，补"这个路径归谁产"。
+    # 登记失败 ⇒ 受控拒（`WRITE_FAILED`：骨架在盘上、归属没落成），不静默。
+    from . import artifacts as A
+
+    _reg_entry, _reg_problem = A.record_or_problem(
+        root, path=rel, producer=who, kind=f"{fam}-manuscript",
+        task_id=str(task_id or ""),
+        note=f"手稿骨架 `{rel}`（manuscriptopen.open_manuscript）")
+    if _reg_problem:
+        return _refusal(
+            WRITE_FAILED,
+            (f"骨架写成了（{rel}），但产物归属没登记成：{_reg_problem} ⇒ 这一笔按失败报"
+             f"（补登记：`agentflow artifacts record {rel} --producer {who}`）"),
+            family=fam, role=who, manuscript_id=mid, proposition=text_prop,
+            path=rel, task_id=str(task_id or ""), written=True, draft=True)
     out.update(ok=True, checked=True, text=written, written=True, draft=True)
     return out
 
@@ -642,6 +657,22 @@ def write_section(root: Any, *, role: str, rel: Any, section: str, body: Any,
         return out
     out.update(ok=True, written=True, sha256=_file_sha(target),
                body_sha=_PR.proof_sha(str(body or "")))
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：这一节已经换到盘上，补"这个路径归谁产"。
+    # `written=True` 才登记：`preserved` 那一档一个字节都没动，不该多一行归属。
+    from . import artifacts as A
+
+    _reg_rel = str(reading.get("rel") or out["path"])
+    _reg_entry, _reg_problem = A.record_or_problem(
+        root, path=_reg_rel, producer=str(role or ""),
+        kind=f"{fam}-manuscript" if fam else "manuscript",
+        task_id=str(task_id or ""),
+        note=f"手稿 `{_reg_rel}` 的 `## {name}` 节改写（manuscriptopen.write_section）")
+    if _reg_problem:
+        out.update(ok=False, refused=WRITE_FAILED, kind=WRITE_FAILED,
+                   why=(f"`{_reg_rel}` 的 `## {name}` 换成了，但产物归属没登记成："
+                        f"{_reg_problem} ⇒ 这一笔按失败报"
+                        f"（补登记：`agentflow artifacts record {_reg_rel} --producer {role}`）"))
+        return out
     return out
 
 

@@ -81,3 +81,62 @@ def test_a_failed_log_write_does_not_lose_the_experiment(tmp_path: Path):
     assert "[log]" in notes and "未能落盘" in notes, notes
     assert row.get("result") == "supports", row
     assert not (root / "out" / "experiments").is_dir(), "夹具前提：那个位置是文件而不是目录"
+
+
+
+# ============================================================ 产物归属（ARTIFACTS.jsonl）
+
+def test_the_run_log_is_registered_as_an_owned_artifact(tmp_path: Path):
+    """原始输出那份 `.log` 是内容产物 ⇒ 台账里有一行、sha 与盘上一致。"""
+    from agentflow import artifacts as A
+
+    st, root = _workspace(tmp_path)
+    e = AgentE(st, workspace_root=root, config={"max_downloads_per_request": 1})
+    e.run_experiment("原始输出要有归属", "T0-12-owned", "code/probe.py")
+    row = st.rows("experiments")[0]
+    rel = f"out/experiments/{row['experiment_id']}.log"
+    rows = [r for r in A.read_ledger(root)[0] if r.get("path") == rel]
+    assert rows, f"{rel} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(root / rel)
+    assert rows[-1]["kind"] == "experiment-log"
+    assert rows[-1]["producer"] == "E"
+
+
+def test_stubbing_the_recorder_makes_the_log_registration_red(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """反真空：`artifacts.record` 不写 ⇒ 同一条读不到归属（红压在这一步）。
+
+    "打桩成不写"改的是登记行为本身；实验行、日志文件、`artifact_paths` 一个都不动
+    —— 判据变红只能是因为那一行归属没了。
+    """
+    from agentflow import artifacts as A
+
+    st, root = _workspace(tmp_path)
+    e = AgentE(st, workspace_root=root, config={"max_downloads_per_request": 1})
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    e.run_experiment("归属失败要说出来", "T0-12-unowned", "code/probe.py")
+    row = st.rows("experiments")[0]
+    rel = f"out/experiments/{row['experiment_id']}.log"
+    assert (root / rel).is_file(), "打桩只该改登记行为，日志照样要落盘"
+    assert [r for r in A.read_ledger(root)[0] if r.get("path") == rel] == []
+
+
+def test_a_registration_failure_is_named_in_the_experiment_row(
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """登记失败（台账写不进去）⇒ 那一行的 `notes` 里点名，实验行照样建。"""
+    from agentflow import artifacts as A
+
+    def _boom(*a, **k):
+        raise A.ArtifactError("注入：台账写不进去")
+
+    st, root = _workspace(tmp_path)
+    e = AgentE(st, workspace_root=root, config={"max_downloads_per_request": 1})
+    monkeypatch.setattr(A, "record", _boom)
+    e.run_experiment("归属失败要说出来", "T0-12-named", "code/probe.py")
+    row = st.rows("experiments")[0]
+    rel = f"out/experiments/{row['experiment_id']}.log"
+    assert (root / rel).is_file()
+    notes = str(row.get("notes") or "")
+    assert "[artifact]" in notes and "没登记成" in notes, notes
+    # 日志仍然被这一行引用（文件真的在盘上，缺的只是归属）。
+    assert list(row.get("artifact_paths") or []) == [rel]

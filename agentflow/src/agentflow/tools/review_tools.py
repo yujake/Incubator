@@ -2636,6 +2636,24 @@ def review_report(
     markdown = G.render_review_report(report)
     absolute.parent.mkdir(parents=True, exist_ok=True)
     absolute.write_text(markdown, encoding="utf-8")
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：审校报告已经落盘 ⇒ 补"这个路径归谁产"。
+    #
+    # 为什么在工具层而不是在读侧：读侧（`closing` 的 `review_files` 读数）只数文件，
+    # 从不回答归属；而这份报告是框架自己写的（路径由框架定），不登记就永远 `unowned`。
+    # 登记失败 ⇒ 抛（与越界 `out_path` 同一档）：工具调用按失败报，报告文件留在盘上。
+    from .. import artifacts as A
+
+    _producer = str(actor or "").strip()
+    if _producer.startswith("agent-"):
+        _producer = _producer[len("agent-"):]
+    _entry, _reg_problem = A.record_or_problem(
+        root, path=str(rel).replace("\\", "/"), producer=_producer or "H",
+        kind="review-report", note=f"doc:{doc_id} 的审校报告（G1–G15 全量）")
+    if _reg_problem:
+        raise ValueError(
+            f"{_reg_problem}。审校报告已写盘（{rel}），但这条路径没有产物归属登记 "
+            "⇒ 这次调用按失败报（补登记：`agentflow artifacts record "
+            f"{str(rel).replace(chr(92), '/')} --producer {_producer or 'H'}`）")
     # 覆盖率（`draft/31` P7 第 4 项）：就地重算而不是让调用方传进来 ——
     # 传进来的覆盖率是可以编的，而这一格的全部意义就是"如实"。
     # 与 `review_document` 同一份判据源（`scan_document`），所以两处不会给出两个数。

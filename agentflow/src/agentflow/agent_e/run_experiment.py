@@ -4,6 +4,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from ._support import Any, E_NO_FORMAL_REASON, ExperimentError, Mapping, S, Sequence, ToolError, VT, _derive, _digest, _relpath, _result_reason, _write_run_log, build_experiment
+from .. import artifacts as _ART
 from .. import conjectureledger as CL
 from .. import exhaustionreport as _ER
 from .. import numericproof as _NP
@@ -460,6 +461,17 @@ class _RunExperiment:
             if log_error:
                 notes.append(f"[log] 原始输出未能落盘（{log_error}）—— 实验行本身照样写")
                 log_rel = ""
+            else:
+                # ---- 产物归属（`ARTIFACTS.jsonl`）：日志已在盘上 ⇒ 补"这个路径归谁产"。
+                # 登记失败进 `notes`（这一行的读数面），但不把 `log_rel` 清掉：
+                # 文件真的在盘上，"这一行引了哪份日志"照实写；缺的是归属，由 note 点名。
+                _log_entry, _log_problem = _ART.record_or_problem(
+                    self.workspace_root, path=log_rel, producer="E",
+                    kind="experiment-log",
+                    note=f"exp:{eid} 的原始输出（agent_e.run_experiment）")
+                if _log_problem:
+                    notes.append(
+                        f"[artifact] {_log_problem}（日志已在盘上：{log_rel}）")
             # ---- [5a] ②③ 落盘（业主 2026-10-23 晚：「E 写的报告要能落下来」）
             #
             # 改前 ②③ 只活在 `observations` 的自由格里：台账上有那两段字，盘上却没有一份

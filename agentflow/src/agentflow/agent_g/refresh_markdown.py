@@ -27,5 +27,16 @@ class _RefreshMarkdown:
         # 正常的重画都报成"内容已变"）。这一步只追加一条 info 事件，不改任何数据行
         # —— 事务开在 `DT.note_markdown_artifact` 内部，本函数一个字都不写表。
         DT.note_markdown_artifact(self.store, doc_id, rel, target)
+        # ---- 产物归属（`ARTIFACTS.jsonl`）：重画也是一次产出，同样要登记。
+        #
+        # 与 `revise` 同一条纪律：登记失败让这次动作按失败报（`DocumentError`），
+        # 不静默 —— 否则"盘上有这份稿、台账里没有归属"会重新变成沉默。
+        _entry, _problem = DT.register_markdown_artifact(
+            self.workspace_root, rel=rel, doc_kind=doc.get("kind"),
+            producer=self.actor, note=f"doc:{doc_id} 由 G.refresh_markdown 重画")
+        if _problem:
+            raise DocumentError(
+                f"{_problem}。稿件已重画（{rel}），但这条路径没有产物归属登记 "
+                "⇒ 这次调用按失败报（先用 `agentflow artifacts record` 补登记，别再重画一次）")
         self._emit(f"重渲染 doc:{doc_id} → {rel}")
         return str(target)

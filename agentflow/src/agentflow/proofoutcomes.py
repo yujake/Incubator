@@ -1,10 +1,12 @@
 """登记 / 重写这两档的「结局读数」。
 
-`register_or_rewrite` 里有两段「不碰稿件字节、只决定这一笔怎么读」的逻辑：
+`register_or_rewrite` 里有三段「不碰稿件字节、只决定这一笔怎么读」的逻辑：
 
 1. :func:`form_gate_reading` —— 新命题登记前跑一次 F 秘书的形态闸，把
    「放行 / 受控拒 / 闸自己炸了（fail-closed）」解释成同一形状的读数；
-2. :func:`preserved_reading` —— 幂等那一格：同一份正文再挂一次 ⇒ 一个字节都不动
+2. :func:`manuscript_artifact` —— 稿落盘之后补一条产物归属（`ARTIFACTS.jsonl`）；
+   失败时把「写成了、没归属」写进调用方的读数（`ok=False`，但 `written=True`）；
+3. :func:`preserved_reading` —— 幂等那一格：同一份正文再挂一次 ⇒ 一个字节都不动
    （版本号也不涨），读数说 `preserved=True`。
 
 受控码 `REFUSED_*` 六格也只在这里定义，`proofregistry` 按名字回引它们 ——
@@ -25,6 +27,43 @@ REFUSED_PATH = "manuscript_path_unavailable"
 REFUSED_READ = "manuscript_unreadable"
 REFUSED_WRITE = "manuscript_write_failed"
 REFUSED_SHAPE = "manuscript_shape_refused"
+
+
+def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any,
+                        mode: Any) -> bool:
+    """把刚落盘的手稿登进 `<工作区>/ARTIFACTS.jsonl`；返回"登记成了吗"。
+
+    失败时把该写进调用方读数的那几格直接更新到 `out` 上（`ok=False` /
+    `refused=REFUSED_WRITE` / `written=True` / `why` 点名），调用方只需
+    `if not ...: return out`。`written=True` 是刻意的：稿真的在盘上，缺的是归属 ——
+    把它折成"没写成"会让下一个人去查一件没发生的事。
+
+    为什么住在 `proofoutcomes` 而不是 `proofregistry`：它是"登记这一步的结局读数"
+    （与 :func:`form_gate_reading` / :func:`preserved_reading` 同族），而
+    `proofregistry` 的体量软基线不许因为补一条读数往上抬
+    （`tests/test_repo_survey_does_not_get_worse.py`）。
+
+    `family` 在调用方是 `manuscriptform.FAMILY_F` / `FAMILY_B`（"F" / "B"）；
+    台账的 `kind` 用族名（`f-proof-manuscript`）—— 读台账的人按族筛，不按那个
+    内部字母筛。`sha256` 由 `artifacts.record` 从盘上现算，不接收调用方手里那把
+    正文尺（「## 证明」的 sha 与整份文件的 sha 不相等是对的）。
+    """
+    from . import artifacts as A
+
+    name = {"F": "f-proof", "B": "b-proof"}.get(str(family or ""), str(family or ""))
+    role = {"f-proof": "F", "b-proof": "B", "e-proof": "E", "e-num": "E"}.get(name, "") or "M"
+    _entry, problem = A.record_or_problem(
+        root, path=rel, producer=role,
+        kind=f"{name}-manuscript" if name else "manuscript",
+        note=f"手稿 `{rel}`（proofregistry.register_or_rewrite，mode={mode}）")
+    if not problem:
+        return True
+    out.update(checked=True, ok=False, refused=REFUSED_WRITE, written=True,
+               manuscript_path=str(rel), why=(
+                   f"手稿写成了（{rel}），但产物归属没登记成：{problem} "
+                   "⇒ 这一笔按失败报：没有归属的稿不进收工链。"
+                   f"补登记：`agentflow artifacts record {rel} --producer {role}`"))
+    return False
 
 
 def form_gate_reading(

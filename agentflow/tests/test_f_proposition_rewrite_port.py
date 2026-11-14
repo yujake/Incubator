@@ -271,3 +271,31 @@ def test_f_the_f_chain_entry_delegates_to_the_one_port(tmp_path):
     assert got.get("ok") is True and got.get("wrote") is True, got
     text = (pathlib.Path(st.root) / REL).read_text(encoding="utf-8")
     assert _sections(text)["命题"] == PROPOSITION, _sections(text)["命题"]
+
+
+# ------------------------------------------------------------------ g 产物归属
+
+def test_g_the_rewritten_manuscript_is_registered_as_an_owned_artifact(tmp_path):
+    """g：原位重写也换了盘上的字节 ⇒ 产物台账里要有一行，sha 与盘上一致。"""
+    from agentflow import artifacts as A
+
+    st = _store(tmp_path)
+    got = _rewrite(st, decision="same")
+    assert got.get("ok") is True and got.get("wrote") is True, got
+    rows = [r for r in A.read_ledger(st.root)[0] if r.get("path") == REL]
+    assert rows, f"{REL} 没有进产物台账（unowned）"
+    assert rows[-1]["sha256"] == A.sha256_of(pathlib.Path(st.root) / REL)
+    assert rows[-1]["kind"] == "f-proof-manuscript"
+    assert rows[-1]["producer"] == "F"
+
+
+def test_h_stubbing_the_recorder_makes_that_registration_red(tmp_path, monkeypatch):
+    """h（反真空）：`artifacts.record` 不写 ⇒ 同一条读不到归属；改写本身照样发生。"""
+    from agentflow import artifacts as A
+
+    st = _store(tmp_path)
+    monkeypatch.setattr(A, "record", lambda *a, **k: {})
+    got = _rewrite(st, decision="same")
+    assert got.get("ok") is True and got.get("wrote") is True, got
+    assert (pathlib.Path(st.root) / REL).is_file()
+    assert [r for r in A.read_ledger(st.root)[0] if r.get("path") == REL] == []

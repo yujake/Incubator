@@ -79,9 +79,9 @@ from . import depsection as _DS
 from . import manuscriptform as _MF
 from . import manuscriptkind as _MK  # 命题类型那一轴（标签 / 交叉核对）的唯一权威来源
 from . import verifications as _VR
-from .proofoutcomes import (  # 登记这一步的两段结局读数
+from .proofoutcomes import (  # 登记这一步的三段结局读数
     REFUSED_GATE, REFUSED_PATH, REFUSED_READ, REFUSED_SHAPE, REFUSED_TEXT_CHANGED,
-    REFUSED_WRITE, form_gate_reading, preserved_reading,
+    REFUSED_WRITE, form_gate_reading, manuscript_artifact, preserved_reading,
 )
 from .proofrevisions import (  # 收工读数那一半
     entries_on_disk, proof_revisions, registration_note,
@@ -783,6 +783,7 @@ def register_or_rewrite(
             (Path(str(root or "")) / relocated_from).unlink(missing_ok=True)
         except OSError:  # noqa: BLE001 —— 旧名删不掉只多一份稿，不改这一笔的结论
             out["relocated_kept"] = relocated_from
+    if not manuscript_artifact(out, root, rel=rel, family=family, mode=mode): return out
     out.update(ok=True, checked=True, mode=mode, proof_no=proof_no, sha256=new_sha,
                deps_rows=rows, written=True, migrated=migrated,
                #: 这一笔之后的登记条目（按盘上那一份读回来）：新写的稿没有

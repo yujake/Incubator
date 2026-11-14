@@ -221,6 +221,22 @@ class _Revise:
             except Exception as exc:  # noqa: BLE001 —— 读数算不出不许影响这笔修订
                 coverage = {"readable": False, "reason": f"{type(exc).__name__}: {exc}"}
 
+        # ---- 产物归属（`ARTIFACTS.jsonl`）：修订把 markdown 重画之后补登记。
+        #
+        # 放在事务提交之后：登记失败若让事务回滚，盘上会留一份"已重画、行还是旧的"
+        # 稿子（两条读数互相矛盾）。提交之后失败 ⇒ 稿与行都新，缺的只是归属 ——
+        # 这件事按失败大声报出来（`DocumentError`），不静默。
+        _reg_rel = str(payload.get("markdown_path") or "")
+        if _reg_rel:
+            _entry, _reg_problem = DT.register_markdown_artifact(
+                self.workspace_root, rel=_reg_rel, doc_kind=payload.get("kind"),
+                producer=self.actor, note=f"doc:{doc_id} 由 G.revise 重画")
+            if _reg_problem:
+                raise DocumentError(
+                    f"{_reg_problem}。修订已落库（doc:{doc_id}）且稿件已重画（{_reg_rel}），"
+                    "但这条路径没有产物归属登记 ⇒ 这次调用按失败报（不要再跑一次修订去补它，"
+                    "先 `agentflow artifacts record` 补登记）")
+
         self._emit(
             f"修订 doc:{doc_id} → review_rounds={payload['review_rounds']}，"
             f"替换 {len(replaced)} 条、新增 {len(appended)} 条断言，标记 {len(fixed_ids)} 条发现为 fixed；"

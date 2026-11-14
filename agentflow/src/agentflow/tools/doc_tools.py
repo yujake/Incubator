@@ -1600,6 +1600,45 @@ def record_markdown_artifact(tx: Any, doc_id: Any, rel: Any, absolute: Any,
     return reading
 
 
+#: `documents` 渲染产物在产物台账里的类别前缀（`document-paper` / `document-note` / …）。
+#:
+#: 为什么不直接写 `documents.kind`：`note` 这一档在台账里还会被"草稿本"
+#: （`notes/<角色>.md`）用；两件事共用一个 kind，读台账的人就分不清"这是稿件"
+#: 还是"某人的便签"。前缀只说一件事：这份产物是 `documents` 那一行指向的 markdown。
+DOCUMENT_ARTIFACT_KIND_PREFIX = "document-"
+
+
+def register_markdown_artifact(root: Any, *, rel: Any, doc_kind: Any,
+                               producer: Any, task_id: Any = "",
+                               note: Any = "") -> tuple[dict, str]:
+    """把刚渲染到盘上的那份 `documents` markdown 登进产物台账（`ARTIFACTS.jsonl`）。
+
+    它补的是 `D-44` 那条读数的另一半：`record_markdown_artifact` 只把 sha 记进
+    事件流（`documents` 行上的那一格），而"这个路径归谁产"此前没有任何地方
+    回答 —— 于是真机上 `documents/` 下的稿件在产物台账里全部是 `unowned`。
+
+    sha256 由 `artifacts.record` 从写盘后的字节现算（不接收传进来的值，也不
+    在别处再算一份）：与 `record_markdown_artifact` 记进事件流的那一格同一个口径、
+    同一个文件 —— 两处对不上时，说明这两份读数看的不是同一份字节。
+
+    `producer` 归一到角色面（`agent-G` ⇒ `G`）：台账那一格回答"哪个角色产的"，
+    实例名/装配前缀不该出现在那里（否则 `summarize()["unregistered"]` 会把
+    框架自己的角色读成"没登记的外部生产者"）。
+    """
+    from .. import artifacts as A
+
+    name = str(producer or "").strip()
+    if name.startswith("agent-"):
+        name = name[len("agent-"):]
+    entry, problem = A.record_or_problem(
+        root, path=rel, producer=name or "G",
+        kind=f"{DOCUMENT_ARTIFACT_KIND_PREFIX}{doc_kind or 'note'}",
+        task_id=str(task_id or ""),
+        note=str(note or "documents 行指向的 markdown（由 doc_tools 渲染）"),
+    )
+    return entry, problem
+
+
 #: `document_artifact_readings` 每行的状态（四态 + 第三态"没记过"）。
 ARTIFACT_STATUSES: tuple[str, ...] = ("ok", "changed", "missing", "unreadable", "unrecorded")
 
@@ -1957,6 +1996,26 @@ def build_document(
         _body_rel, _body_abs = body_artifact_of(root, payload)
         record_markdown_artifact(tx, doc_id, rel, absolute,
                                  body_rel=_body_rel, body_absolute=_body_abs)
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：写完 + 事务提交之后才登记。
+    #
+    # 为什么不在事务体内（文件写就在体内）：登记失败若让事务回滚，盘上会留下一份
+    # 已渲染但没有 `documents` 行的 markdown；下一次同一 `out_path` 的调用会
+    # 撞上上面的覆盖守卫（`rel` 不在 `ours` 里 ⇒ 拒写）—— 一次登记失败换来一个
+    # 只能手工清理的死角。放在提交之后：产物与行都在，"这一条没有归属"这件事由
+    # 异常大声说出（`kind=artifact_not_registered`），而不是被回滚掩盖。
+    _entry, _reg_problem = register_markdown_artifact(
+        root, rel=rel, doc_kind=payload.get("kind"), producer=actor,
+        note=f"doc:{doc_id} 由 doc.build_document 渲染（kind={payload.get('kind')}）")
+    if _reg_problem:
+        raise DocToolError(
+            f"{_reg_problem}。稿件已落库（doc:{doc_id}）且已写盘（{rel}），"
+            "但这条路径没有产物归属登记 ⇒ 这次调用按失败报（重跑会多一条 documents 行，"
+            "先补登记再决定要不要重跑：`agentflow artifacts record <路径> --producer "
+            f"{str(actor or 'G')}`）",
+            kind="artifact_not_registered",
+            details={"created": True, "doc_id": str(doc_id), "path": str(rel),
+                     "problem": _reg_problem},
+        )
     return payload
 
 

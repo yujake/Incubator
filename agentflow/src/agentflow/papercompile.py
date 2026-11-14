@@ -285,6 +285,23 @@ def compile_paper(project_root: str | Path, *, timeout_sec: float = DEFAULT_TIME
     except OSError as exc:
         problems.append(f"回执没写成：{type(exc).__name__}: {exc}")
 
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：这一趟真的编出了 PDF ⇒ 登记它。
+    #
+    # 只登记 `fresh` 那一档：盘上那份旧 PDF 不是这一趟写的，把它登记成"我的产出"
+    # 就是假归属（与上面 `pdf_fresh` 同一条纪律）。
+    # `main.tex` 不在这里登记：它不是本函数写的（正文由智能体自己落盘），
+    # 那个写口是 `fs.write`（FC-27，登记补丁在 `temp/AR-fs-write-draft.patch`）。
+    # sha256 由 `artifacts.record` 从盘上现算 —— 与回执里的 `pdf_sha256` 同一个文件。
+    if fresh:
+        from . import artifacts as A
+
+        _entry, _reg_problem = A.record_or_problem(
+            root, path=f"out/paper/{PDF_NAME}", producer="agentflow.papercompile",
+            kind="paper-pdf",
+            note=f"由 {chosen} 编出（exit_codes={codes}，{pages} 页）")
+        if _reg_problem:
+            problems.append(f"{_reg_problem}；PDF 本身已在盘上（out/paper/{PDF_NAME}）")
+
     base = {"tex": str(tex), "pdf": str(pdf), "engine": chosen,
             "exit_codes": codes, "runs": len(codes), "pdf_fresh": fresh,
             "receipt_path": str(receipt_path),

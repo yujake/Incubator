@@ -2843,12 +2843,17 @@ def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
                                  "at": TS}, ensure_ascii=False) + "\n")
 
     # ① 登记一条真的产物（sha 与盘上一致）⇒ pass
+    #
+    # 基线条数从盘上取（`_good` 自己也会落产物：编出来的 `out/paper/main.pdf` 由
+    # `papercompile` 登记 —— 那是这一格该看见的，不是夹具噪声）。判据仍是"这一条
+    # 登记让台账多了一行"，不是"台账恰好只有这一行"。
+    _base = len(A.read_ledger(tmp_path)[0])
     good = tmp_path / "out" / "paper" / "main.tex"
     _ledger("out/paper/main.tex", A.sha256_of(good))
     rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
                            checks=("artifact_ledger",))
     assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
-    assert rep.readings["artifact_ledger"]["entries"] == 1, rep.readings
+    assert rep.readings["artifact_ledger"]["entries"] == _base + 1, rep.readings
 
     # ② 同一条被改写（sha 变了）⇒ changed ⇒ pass + warning（D9，2026-10-09 裁"收窄"）
     #
@@ -2895,6 +2900,8 @@ def test_the_ledger_compares_against_the_last_registration_per_path(tmp_path: pa
     p.write_text('{"n": 1}', encoding="utf-8")
     A = __import__("agentflow.artifacts", fromlist=["x"])
     led = tmp_path / "ARTIFACTS.jsonl"
+    # 反真空的基线：夹具自己落的那几行（`_good` 会编一份 PDF）不算"这一条的历史"。
+    _base_lines = len(led.read_text(encoding="utf-8").splitlines())
     for body in ('{"n": 1}', '{"n": 2}'):
         p.write_text(body, encoding="utf-8")
         with led.open("a", encoding="utf-8", newline="\n") as fh:
@@ -2906,8 +2913,8 @@ def test_the_ledger_compares_against_the_last_registration_per_path(tmp_path: pa
     assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
     rd = rep.readings["artifact_ledger"]
     assert rd["changed"] == 0 and rd["missing"] == 0, rd
-    # 反真空：台账里确实是两行（append-only 历史还在），只是比对取最后一条
-    assert sum(1 for _ in led.read_text(encoding="utf-8").splitlines()) == 2, rd
+    # 反真空：这个路径的台账里确实是两行（append-only 历史还在），只是比对取最后一条
+    assert sum(1 for _ in led.read_text(encoding="utf-8").splitlines()) == _base_lines + 2, rd
 
 
 # ============================================================ 内容判据（D66 / D67 / T1 / T3）

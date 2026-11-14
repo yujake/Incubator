@@ -636,6 +636,29 @@ def commit_manuscript(
                                             f"（{type(exc).__name__}: {exc}）"
                                             "—— 盘上会有两份同一份稿")})
                 out["why"] = out["problem"]["why"]
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：稿已落盘、依赖边也过了，补"这个路径归谁产"。
+    #
+    # 只在这一笔真的写了字节时登记（`written`）：`preserved=True` 那一档一个字节都
+    # 没动，再记一行只会把"同一份稿写了几次"读成一串重复归属。
+    # 登记失败 ⇒ 这一笔按失败报（`write_failed`），但 `written` 照实留着：稿真的
+    # 在盘上，缺的是归属；把它折成"没写成"会让下一个人去查一件没发生的事。
+    if out["written"]:
+        from . import artifacts as A
+
+        # `fam` 在这一层是 `FAMILY_F` / `FAMILY_B`（"F" / "B"）；台账 `kind` 用族名。
+        _reg_family = {"F": "f-proof", "B": "b-proof"}.get(fam, fam)
+        _reg_role = {"f-proof": "F", "b-proof": "B",
+                     "e-proof": "E", "e-num": "E"}.get(_reg_family, "") or "M"
+        _reg_entry, _reg_problem = A.record_or_problem(
+            root, path=new_rel, producer=_reg_role,
+            kind=f"{_reg_family}-manuscript" if _reg_family else "manuscript",
+            note=f"手稿 `{new_rel}`（manuscriptform.commit_manuscript）")
+        if _reg_problem:
+            return _refusal(out, "write_failed",
+                            (f"手稿写成了（{new_rel}），但产物归属没登记成：{_reg_problem} "
+                             "⇒ 这一笔按失败报：没有归属的稿不进收工链。")
+                            + f"补登记：`agentflow artifacts record {new_rel} --producer {_reg_role}`",
+                            stage="artifact")
     out.update(ok=True, checked=True, why="")
     return out
 

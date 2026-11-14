@@ -738,6 +738,26 @@ def write_status_report(store: Any, root: str | Path, *, out_dir: str | Path | N
     md_path.write_text(render_status_markdown(report), encoding="utf-8", newline="\n")
     json_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True, default=str) + "\n",
                          encoding="utf-8", newline="\n")
+    # ---- 产物归属（`ARTIFACTS.jsonl`）：两份报告都在盘上 ⇒ 各登记一条。
+    #
+    # kind 分两档（`status-report` / `status-report-readout`）：人读的那份与机器读的
+    # 那份是两件产物，读台账的人要能只挑一份。`sha256` 由 `artifacts.record` 从盘上
+    # 现算；路径越界（`out_dir` 指到工作区外）在那里同样是失败而不是"写成了"。
+    # 登记失败 ⇒ 抛（与上面 `write_text` 的 `OSError` 同一档）：调用方按失败报，
+    # 报告文件留在盘上 —— 不许把"有报告、无归属"读成一次成功。
+    from . import artifacts as A
+
+    _problems: list[str] = []
+    for _path, _kind in ((md_path, "status-report"), (json_path, "status-report-readout")):
+        _entry, _problem = A.record_or_problem(
+            root, path=_path, producer="M", kind=_kind,
+            note="项目状态报告（statusreport.write_status_report）")
+        if _problem:
+            _problems.append(f"{_path.name}：{_problem}")
+    if _problems:
+        raise RuntimeError(
+            "状态报告已写盘，但产物归属没登记成（" + "；".join(_problems) + "）"
+            " ⇒ 这一次按失败报（补登记：`agentflow artifacts record <路径> --producer M`）")
     return report, md_path, json_path
 
 
