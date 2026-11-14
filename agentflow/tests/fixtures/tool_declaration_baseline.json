@@ -1,7 +1,7 @@
 {
-  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。 2026-11-05（p242 契约台账追账）：补记七格新演进（table.list.params / table.list.returns / table.search.params / table.search.returns 的字段投影与 meta 那一格；fs.write / fs.edit 的失败 kind；doc.mapping_cells 的空串两种含义），按现值重记四格（doc.write_mapping.params / returns、verify.run_experiment.params、verify.verify_proof.returns —— 前三条与第四条各自把 2026-10-26 / 2026-11-04 的旧账合入），清掉两条过期账（lit_candidates 那条的差异已烘进基线、doc.write_mapping.params 的 2026-10-26 那条被现值重记完全覆盖），并给 search.shelf / search.literature 两条补上原日期。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-05（`conductor.escalate` 的 `side_effect` 说真，业主裁定「乙」）：它往父的收件箱与会话事件流追加 `agent_message` + `agent_escalation` ⇒ 通信事件也是工作区写，声明从 `read` 改 `write_local`，`contract_amendments` 增一条（内容寻址：`side_effect` 的 `read → write_local`）；可达性不受影响（`UNIVERSAL_TOOLS` 不按副作用等级剥离，既有先例 `clock.timer_start`），`READONLY_CALL_EXCEPTIONS` 与 `READ_ONLY_WRITE_EXCEPTIONS` 一格未动，登记写集仍是空集。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-08 p262：verify.verify_proof.params 按现值重记 —— `readonly_facts` 的说明改成手稿事实（命题正文 / 证明 / 依赖 / 签块）；同一格其余演进不变，MAX_RATIO / 分母 / 名单一格未动。 2026-11-08 p262：verify.run_experiment.params 按现值重记 —— `claim` 多一格 description（summary 里那句「自报 proof 降 cross_check / 崩溃记 inconclusive」挪到参数面，summary 腾出位置写两类 E 手稿）；MAX_RATIO / 分母 / 名单一格未动。 2026-11-10 p264：`conductor.status_report.side_effect` read→write_local 记一条 amendment（与 review.report 同类对齐）；压缩批次总量 6473→6343（73.49%），MAX_RATIO / 分母 / 名单一格未动。 2026-11-10：doc.build_document.returns 补 eval:（citation_coverage 把 eval_results 数进去，业主裁定 ③）。 2026-11-11 p277：新增只读工具 manuscripts.submission_reading（roles=全部可召唤角色，side_effect=read；读一份证明稿的提交状态：产出方 / 已签 / 已提交 / 时刻 / via，E/F 走收工自动提交、B 走收录；「未提交」与「没查成」分开报）⇒ n_tools 126 → 127，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）。同一批两件既有工具的 `returns` 按现值重记（attack.step 补 4 格收工自动提交读数、verify.verify_proof 去掉退役的 proof_no；同一格只留一条账，见 contract_amendments 的 date_amended）。既有 126 件其余契约一格未动，MAX_RATIO / 分母 / 压缩批次名单一格未动。 2026-11-11 丙（真机裁定「有 open findings 就不许 accepted」的连带）：review.review_document.returns 再补一格 open_findings（这一轮读到的未关闭 finding 条数，只加不减），该格 amendment 的 to 按现值重记并记 date_amended；declarations / n_tools / MAX_RATIO / 分母 / 压缩批次名单一格未动。",
+  "note": "工具说明压缩（业主批准的打法之一）的**改前基线**，2026-10-20 按「压缩批次」口径重冻。declarations 是每件工具的声明契约（params/returns/side_effect/external/roles/tags/handler_name），逐键冻结：判据 ① 用它证明「只改了说明」。compression_cohort 是压缩那一批的 85 个名字；baseline_summary_chars 是**这批人**压缩前的 summary 字符总数（必须逐件等于 summary_lens_before 之和），判据 ② 只在 cohort 上算比例并要求 ≤ 75% —— 后来新增的工具既不在分子也不在分母。added_after_compression 登记的是 2026-10-20 新增的 8 件（lit.* 七件与 conductor.escalate），它们的说明从来没被压过，不计入压缩比例。contract_amendments 是「契约合法演进」的内容寻址台账：差异必须与某条的 edits 逐项相等才算记过 reason，否则判据 ① 一律红。needles 是 tests 里 `assert X in <声明面>` 形态的字面量 X 中、压缩前逐字出现在该工具 summary 里的那些，判据 ④ 要求一条不少。重冻这张表 = 宣布「契约可以变了」，必须由人逐格看过（与 tests/golden/* 同一纪律）。2026-10-26 这一轮做了四件事，逐件登记、没有改门槛：① verify.check_formal 整条退场（裁定 2026-10-23 晚，真身迁到 formal.check_formal），它从 declarations / compression_cohort / summary_lens_before / needles 四处一起退出，baseline_summary_chars 因此少了它那 301 字符 —— 名额少一件，不是把分母改小；② 20 件新工具登记为 added_after_compression（不计入比例）；③ 26 件老工具的 46 处契约演进记进 contract_amendments（其中两条是 G9 已记过、这一轮只认账，一条 verify.verify_proof.returns 是链式两次演进、并成一条从基线一步记到现值）；④ verify.run_experiment 的 needle formal 随它的来源断言退役。max_ratio 仍是 0.75，MAX_RATIO 那一行判据一个字没动。 2026-10-31 这一轮把基线追到 HEAD：8 处契约演进逐项登记（conductor.board.returns / conductor.closing.params / conductor.closing.returns / conductor.patrol.returns / conductor.retire_child.returns / conductor.state.returns / conductor.watch.returns / trace.children.returns），其中 conductor.state 那条在原记录上补第三次演进、按现值重记；max_ratio 仍是 0.75，MAX_RATIO 一个字没动，也没有改断言或删项。 2026-11-01 这一轮：业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」⇒ 新增 review.scan（七类 kinds 的统一入口，read，roles=H）⇒ n_tools 122 → 123，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 122 件的契约一个字未改，contract_amendments 因此不新增。 2026-11-04 这一轮：业主 2026-11-04 放权动禁改区 · FC-27 ⇒ 新增只读工具 doc.mapping_cells（roles=G，side_effect=read；按命题号取对应表那一行该填的每一格），n_tools 123 → 124，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）；既有 123 件的契约一个字未改，contract_amendments 因此不新增。「按现值重记」的是这一件新工具的说明与声明面，不是把任何一条判据放宽。 2026-11-04 晚（两态写进声明面）：verify.verify_proof 的 `returns` 说明补「`verdict` 是两态之一：`成立` / `有毛病`」，返回键集合一格未动⇒ 该格 amendment 的 `to` 按现值重记；max_ratio 与任何判据一个字未动。 2026-11-05（p242 契约台账追账）：补记七格新演进（table.list.params / table.list.returns / table.search.params / table.search.returns 的字段投影与 meta 那一格；fs.write / fs.edit 的失败 kind；doc.mapping_cells 的空串两种含义），按现值重记四格（doc.write_mapping.params / returns、verify.run_experiment.params、verify.verify_proof.returns —— 前三条与第四条各自把 2026-10-26 / 2026-11-04 的旧账合入），清掉两条过期账（lit_candidates 那条的差异已烘进基线、doc.write_mapping.params 的 2026-10-26 那条被现值重记完全覆盖），并给 search.shelf / search.literature 两条补上原日期。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-05（`conductor.escalate` 的 `side_effect` 说真，业主裁定「乙」）：它往父的收件箱与会话事件流追加 `agent_message` + `agent_escalation` ⇒ 通信事件也是工作区写，声明从 `read` 改 `write_local`，`contract_amendments` 增一条（内容寻址：`side_effect` 的 `read → write_local`）；可达性不受影响（`UNIVERSAL_TOOLS` 不按副作用等级剥离，既有先例 `clock.timer_start`），`READONLY_CALL_EXCEPTIONS` 与 `READ_ONLY_WRITE_EXCEPTIONS` 一格未动，登记写集仍是空集。declarations / n_tools / 分母 / 名单 / MAX_RATIO 一格未动。 2026-11-08 p262：verify.verify_proof.params 按现值重记 —— `readonly_facts` 的说明改成手稿事实（命题正文 / 证明 / 依赖 / 签块）；同一格其余演进不变，MAX_RATIO / 分母 / 名单一格未动。 2026-11-08 p262：verify.run_experiment.params 按现值重记 —— `claim` 多一格 description（summary 里那句「自报 proof 降 cross_check / 崩溃记 inconclusive」挪到参数面，summary 腾出位置写两类 E 手稿）；MAX_RATIO / 分母 / 名单一格未动。 2026-11-10 p264：`conductor.status_report.side_effect` read→write_local 记一条 amendment（与 review.report 同类对齐）；压缩批次总量 6473→6343（73.49%），MAX_RATIO / 分母 / 名单一格未动。 2026-11-10：doc.build_document.returns 补 eval:（citation_coverage 把 eval_results 数进去，业主裁定 ③）。 2026-11-11 p277：新增只读工具 manuscripts.submission_reading（roles=全部可召唤角色，side_effect=read；读一份证明稿的提交状态：产出方 / 已签 / 已提交 / 时刻 / via，E/F 走收工自动提交、B 走收录；「未提交」与「没查成」分开报）⇒ n_tools 126 → 127，declarations 加它一行并登记进 added_after_compression（它不进压缩批次，所以分子分母都不动）。同一批两件既有工具的 `returns` 按现值重记（attack.step 补 4 格收工自动提交读数、verify.verify_proof 去掉退役的 proof_no；同一格只留一条账，见 contract_amendments 的 date_amended）。既有 126 件其余契约一格未动，MAX_RATIO / 分母 / 压缩批次名单一格未动。 2026-11-11 丙（真机裁定「有 open findings 就不许 accepted」的连带）：review.review_document.returns 再补一格 open_findings（这一轮读到的未关闭 finding 条数，只加不减），该格 amendment 的 to 按现值重记并记 date_amended；declarations / n_tools / MAX_RATIO / 分母 / 压缩批次名单一格未动。 2026-11-15（p282 追账：DC·甲 / DC·丁 / D1·甲 / K1 四笔在基线之外改了声明面）这一轮：① `conjecture.register_conjecture` 整条退场（业主 2026-11-13 裁定，D1·甲）⇒ n_tools 128 → 127，declarations 与 added_after_compression 两处一起退出并登记进 `removed_after_compression`；它不在 compression_cohort 里、也没有 needle ⇒ 分母 / 名单 / `baseline_summary_chars` / `summary_lens_before` 一格未动。② 六格契约演进：三格按现值重记（conductor.closing::params 的「八格→七格」、conductor.closing::returns 的七格与 paper 落 readings.paper、verify.run_experiment::returns 的 `conjecture_ledger`），三格新记（doc.build_document / doc.list_documents / doc.register_dependency 的 kind 枚举各删一个死取值）。③ `max_ratio` 仍是 0.75，MAX_RATIO 与任何断言强度一个字没动。",
   "assembly": "build_registry(store=Store(ws), workspace_root=ws, roles=tuple(ROLES), strict=True).registry ⇒ 114 件工具（与 tests/test_tool_summary_readings.py 同一口径）；compression_cohort 是压缩那一批的 85 件",
-  "n_tools": 128,
+  "n_tools": 127,
   "n_cohort": 85,
   "baseline_summary_chars": 8631,
   "max_ratio": 0.75,
@@ -115,7 +115,6 @@
       "conductor.void_items",
       "conductor.wake_blocked",
       "conductor.watch",
-      "conjecture.register_conjecture",
       "doc.mapping_cells",
       "doc.write_mapping",
       "formal.check_formal",
@@ -5402,99 +5401,6 @@
       "handler_name": "functools.partial",
       "added_after_compression": true
     },
-    "conjecture.register_conjecture": {
-      "summary": "登记或更新一条猜想（省略 conjecture_id ⇒ 新建）。单行内判据只有一份（schema.Conjecture.validate）；被引用的实验/文献必须在库里",
-      "params": {
-        "type": "object",
-        "properties": {
-          "statement": {
-            "type": "string"
-          },
-          "origin": {
-            "type": "string"
-          },
-          "conjecture_id": {
-            "type": "string"
-          },
-          "testable": {
-            "type": "object",
-            "description": "可检验形式（三个键都要给）：{parameters, criterion, falsified_by}"
-          },
-          "form": {
-            "type": "string",
-            "enum": [
-              "universal",
-              "existential",
-              "identity",
-              "bound",
-              "structural"
-            ]
-          },
-          "negation_statement": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "proposed",
-              "needs_evidence",
-              "testing",
-              "supported_not_proved",
-              "refuted",
-              "proved",
-              "promoted",
-              "known_in_literature",
-              "withdrawn"
-            ]
-          },
-          "experiment_ids": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "proof_experiment_id": {
-            "type": "string"
-          },
-          "counterexample_experiment_id": {
-            "type": "string"
-          },
-          "promoted_to": {
-            "type": "object"
-          },
-          "known_lit_id": {
-            "type": "string"
-          },
-          "withdraw_reason": {
-            "type": "string"
-          },
-          "notes": {
-            "type": "string"
-          },
-          "force_new": {
-            "type": "boolean",
-            "description": "就算库里已有同一句话也新建一行（缺省 false ⇒ 命中既有行）"
-          }
-        },
-        "required": [
-          "statement",
-          "origin"
-        ],
-        "additionalProperties": false
-      },
-      "returns": "{'conjecture_id','statement','negation_statement','form','testable','origin','status','experiment_ids','proof_experiment_id','counterexample_experiment_id','promoted_to','known_lit_id','withdraw_reason','notes','created_at','updated_at','created_by','duplicate','duplicate_of'}（落库后的 conjectures 行 + D13 的判重读数）",
-      "side_effect": "write_local",
-      "external": "none",
-      "roles": [
-        "D"
-      ],
-      "tags": [
-        "conjecture",
-        "write"
-      ],
-      "handler_name": "functools.partial",
-      "added_after_compression": true
-    },
     "conductor.void_items": {
       "summary": "把**永远不会再被收件人处理**的板项作废（item_close=expired）。它只对一种情形成立、也只允许一种写法：收件人（子代理）已经静默或已退役，而它名下还挂着 receives-a 到点通知（expects=ack）—— 那种通知只许本人 ack，父不许代，于是销号闸「名下不许有未消板项」与收工闸「整棵树都要销号」会互锁，那一趟就只能以 final_refused 收尾、final 为空（真机 2026-10-28 实测）。三条边界：只作废 expects=ack 的项（要交付的活不许作废）；收件人必须已静默/退役（还在跑就拒）；作废记 item_close=expired 并在 inputs 里留 void:expired:<你>:<理由>，所以事后能回答谁作废的、为什么。作废 ≠ ack ≠ 完成，三档分开记。",
       "params": {
@@ -6257,16 +6163,17 @@
         "verify.run_experiment"
       ],
       "key": "returns",
-      "reason": "同一批：signed_by / proof_authors / report_path / report_sha256 / report_bytes / report_blocks / report_problems 进了返回值 —— 穷举签名的签字主体（V）与 E 写的那份 exhaustion.md 的读数是返回值的一部分，不是旁注。 ｜ 2026-11-03 并账（E 的真返回进声明，7b9ee8ee）：穷举那一档落手稿后 `verify.run_experiment` 的**真返回**又多了四格 —— `proof_manuscript` / `manuscript_sha256` / `manuscript_proof_sha256` / `manuscript_problems`（V 的签盖在哪份正文、那份正文的 sha、它核的 proof sha、以及读侧的问题清单）。**只加不减**：原有 17 格一个没动，失败分支那一段一字未动。`returns` 是整格一份编辑清单，同一格里三次演进仍用一条「从基线一步记到现值」的账表达（与 `verify.verify_proof` 的 `params` 那条同族）：旧 reason 原文保留在前段，本条 edits 由 `value_edits()` 现算覆盖基线到现值的全部格子。基线里此前没记这四格 ⇒ 契约判据 ① 红了（判据是对的）。 ｜ 2026-11-08（普通数值实验手稿，业主「E 侧普通数值实验也需写报告」）：`verify.run_experiment` 的**真返回**再多三格 —— `numeric_manuscript` / `numeric_manuscript_sha256` / `numeric_manuscript_problems`（普通数值实验落的 `reports/e-num-<实验号>.md`：D 提交「有数值实验支持的强猜想」时指的就是这一格，与穷举那一档的 `proof_manuscript` 不重名、不混用）。**只加不减**：原有 21 格一个没动，失败分支那一段一字未动。判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare` 先红（实现真返回了三格、声明里没有），本条按现值重记 `to`（`set_scalar` 一条从基线一步记到现值，与前面几次演进同族）。",
+      "reason": "同一批：signed_by / proof_authors / report_path / report_sha256 / report_bytes / report_blocks / report_problems 进了返回值 —— 穷举签名的签字主体（V）与 E 写的那份 exhaustion.md 的读数是返回值的一部分，不是旁注。 ｜ 2026-11-03 并账（E 的真返回进声明，7b9ee8ee）：穷举那一档落手稿后 `verify.run_experiment` 的**真返回**又多了四格 —— `proof_manuscript` / `manuscript_sha256` / `manuscript_proof_sha256` / `manuscript_problems`（V 的签盖在哪份正文、那份正文的 sha、它核的 proof sha、以及读侧的问题清单）。**只加不减**：原有 17 格一个没动，失败分支那一段一字未动。`returns` 是整格一份编辑清单，同一格里三次演进仍用一条「从基线一步记到现值」的账表达（与 `verify.verify_proof` 的 `params` 那条同族）：旧 reason 原文保留在前段，本条 edits 由 `value_edits()` 现算覆盖基线到现值的全部格子。基线里此前没记这四格 ⇒ 契约判据 ① 红了（判据是对的）。 ｜ 2026-11-08（普通数值实验手稿，业主「E 侧普通数值实验也需写报告」）：`verify.run_experiment` 的**真返回**再多三格 —— `numeric_manuscript` / `numeric_manuscript_sha256` / `numeric_manuscript_problems`（普通数值实验落的 `reports/e-num-<实验号>.md`：D 提交「有数值实验支持的强猜想」时指的就是这一格，与穷举那一档的 `proof_manuscript` 不重名、不混用）。**只加不减**：原有 21 格一个没动，失败分支那一段一字未动。判据 `test_no_tool_returns_a_top_level_key_it_does_not_declare` 先红（实现真返回了三格、声明里没有），本条按现值重记 `to`（`set_scalar` 一条从基线一步记到现值，与前面几次演进同族）。 ｜ 2026-11-15 追账（D1·甲，8e398d74）：`conjecture_ledger` 进返回值 —— E 在 `run_experiment` 的事务内、`tx.upsert(\"experiments\")` 之后落猜想台账（起手 supports / refutes），把 `conjectureledger.register()` 的读数一并返回。**只加不减**：原有 24 格一个没动，失败分支那一段一字未动。本条把基线到现值的全部 15 格演进（7 + 4 + 3 + 1）记成同一条账。",
       "date": "2026-10-26",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）",
-          "to": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems','proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems','numeric_manuscript','numeric_manuscript_sha256','numeric_manuscript_problems'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
+          "to": "{'experiment_id','recorded','result','evidence_kind','negation_kind','exit_code','reason','code_hash','runtime_sec','notes','signed_by','proof_authors','report_path','report_sha256','report_bytes','report_blocks','report_problems','proof_manuscript','manuscript_sha256','manuscript_proof_sha256','manuscript_problems','numeric_manuscript','numeric_manuscript_sha256','numeric_manuscript_problems','conjecture_ledger'}；失败（未接线 / 参数与数据校验失败 / 脚本越界或超时 / IO 失败）：ok=False + kind(not_wired/validation_error/experiment_error/io_error) + data=None（失败分支不承诺上面那套键；meta 里留 script_path / claim_key）"
         }
-      ]
+      ],
+      "date_amended": "2026-11-15"
     },
     {
       "tools": [
@@ -6393,32 +6300,40 @@
         "conductor.closing"
       ],
       "key": "params",
-      "reason": "按现值重记（2026-11-05，p242 压缩）：① 2026-10-31 153-U-01/U-02（`can_close` 拆成两个名字）：`goal_met` 的说明从「不给 ⇒ 没有收工判据（`can_close=false`）」改成指向 `m_says_done`；② 同一天 p242 压缩（业主裁定：比例要 ≤74.9%）：把 summary 里「`m_says_done` 是你的判断，不交即 `false`」逐字挪进 `goal_met` 的 description（p239 同一手法：细则进参数面，模型仍看得见），summary 只留指针。两笔都只动说明文字，参数名 / 类型 / required / 其余格一格未动。",
+      "reason": "按现值重记（2026-11-05，p242 压缩）：① 2026-10-31 153-U-01/U-02（`can_close` 拆成两个名字）：`goal_met` 的说明从「不给 ⇒ 没有收工判据（`can_close=false`）」改成指向 `m_says_done`；② 同一天 p242 压缩（业主裁定：比例要 ≤74.9%）：把 summary 里「`m_says_done` 是你的判断，不交即 `false`」逐字挪进 `goal_met` 的 description（p239 同一手法：细则进参数面，模型仍看得见），summary 只留指针。两笔都只动说明文字，参数名 / 类型 / required / 其余格一格未动。 ｜ 2026-11-15 追账（K1，faaaef20）：业主 2026-11-14「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」⇒ `paper` 不是门的一格，`basis` 的说明从「与机器八格不一致」改成「与机器七格不一致」（`paper` 落 `readings.paper`，由 M 判断）。只动说明文字，参数名 / 类型 / required / 其余格一字未动；`goal_met` 那一格的旧文字本节未再改（旧账仍在上文）。",
       "date": "2026-11-05",
       "edits": [
+        {
+          "op": "set_scalar",
+          "path": "params/properties/basis/description",
+          "from": "你凭哪几条读数这么判（可写台账计数 / 交付物路径 / 与机器八格不一致时你为什么不认它）",
+          "to": "你凭哪几条读数这么判（可写台账计数 / 交付物路径 / 与机器七格不一致时你为什么不认它）"
+        },
         {
           "op": "set_scalar",
           "path": "params/properties/goal_met/description",
           "from": "**你的判断**：目标达成了没有（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。不给 ⇒ 这一趟没有收工判据（`can_close=false`）",
           "to": "**你的判断**：目标达成了没有（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。不给 ⇒ 这一趟没有收工判据（`m_says_done` 是你的判断，不交即 `false`）"
         }
-      ]
+      ],
+      "date_amended": "2026-11-15"
     },
     {
       "tools": [
         "conductor.closing"
       ],
       "key": "returns",
-      "reason": "153-U-01/U-02 与 153-U-13 两次演进，本条按「现值」重记一次（`edits` 的 `from` 仍是基线里那一版）：① 2026-10-31 1449d314（153-U-01/U-02）把旧 `can_close`（M 的判断）改名 `m_says_done`，并新增机器口径 `can_close`（`bool | None`）、`can_close_reason` 与给调用方的 `closable` —— 三态纪律：`None` = 没接线/算不出来，既不是过也不是不过；② 2026-10-31 1d32ce18（153-U-13 另一半）把 `child_count` 改名 `children_unretired` —— 它量的是名册里未销号的名册项数，不是台账子数（台账那一格是网页名册面的 `children_in_ledger`），两个量两个名，只改名、计数语义未动。为什么合成一条：`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值。",
+      "reason": "153-U-01/U-02 与 153-U-13 两次演进，本条按「现值」重记一次（`edits` 的 `from` 仍是基线里那一版）：① 2026-10-31 1449d314（153-U-01/U-02）把旧 `can_close`（M 的判断）改名 `m_says_done`，并新增机器口径 `can_close`（`bool | None`）、`can_close_reason` 与给调用方的 `closable` —— 三态纪律：`None` = 没接线/算不出来，既不是过也不是不过；② 2026-10-31 1d32ce18（153-U-13 另一半）把 `child_count` 改名 `children_unretired` —— 它量的是名册里未销号的名册项数，不是台账子数（台账那一格是网页名册面的 `children_in_ledger`），两个量两个名，只改名、计数语义未动。为什么合成一条：`returns` 是字符串标量，`set_scalar` 的 `to` 必须等于现值。 ｜ 2026-11-15 追账（K1，faaaef20）：`paper` 退出收工判定 —— `status` 的键从八格（含 `paper`）改成七格（contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），`paper` 改落 `readings.paper`（verdict 四档，由 M 判断、不进 `machine_pass`）；键集合的其余部分（`m_says_done` / `can_close` / `can_close_reason` / `closable` / `review_acceptance` 等）一字未动。本条把 2026-10-31 那次演进与本笔合成一条「从基线一步记到现值」的账。",
       "date": "2026-10-31",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'can_close','machine_pass','m_verdict','overrode','verdict_conflicts','verdict_note','verdict_written','status','failed','unknowns','findings','readings','summary','review_acceptance'}；**can_close 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，结论写在 `goal_met`），机器八格退成读数（`status`/`machine_pass`），两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名；M 没给判据 ⇒ `can_close=false` + 读数说明『没人判过』；M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；status 的键是八格检查（paper/contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、台账现算值、是否满足（不满足的那几行同时进 findings）；**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / `na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 `unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；findings[] 每项是 {'check','code','level','detail'}；review_acceptance 是那一栏内容级验收读数：{'passed','criteria','failed','auxiliary','auxiliary_note','readings','summary'}，criteria[] 每项是 {'key','name','state','detail'}（`key`/`name` 与顺序现取自 `reviewaccept.CRITERIA`，`state` 是三态之一），auxiliary[] 每项是 {'key','label','value'}（标签现取自 `reviewaccept.AUXILIARY_SIGNALS`，值只作辅助、一个都不参与 `passed`），auxiliary_note 就是那一句『辅助读数逐字禁止拿来当通过』的来源（`reviewaccept.ReviewAcceptance.to_dict` 的原话）",
-          "to": "{'m_says_done','can_close','can_close_reason','closable','machine_pass','m_verdict','overrode','verdict_conflicts','verdict_note','verdict_written','status','failed','unknowns','findings','readings','summary','review_acceptance'}；**`m_says_done` 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，结论写在 `goal_met`），机器八格退成读数（`status`/`machine_pass`），两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名；M 没给判据 ⇒ `m_says_done=false` + 读数说明『没人判过』；`can_close` 是**机器口径**（`bool | None`：`None` = 没接线/算不出来，既不是过也不是不过，不许读成通过）；`closable` 是给调用方的那个布尔（会不会交）；M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；status 的键是八格检查（paper/contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、台账现算值、是否满足（不满足的那几行同时进 findings）；**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / `na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 `unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；findings[] 每项是 {'check','code','level','detail'}；review_acceptance 是那一栏内容级验收读数：{'passed','criteria','failed','auxiliary','auxiliary_note','readings','summary'}，criteria[] 每项是 {'key','name','state','detail'}（`key`/`name` 与顺序现取自 `reviewaccept.CRITERIA`，`state` 是三态之一），auxiliary[] 每项是 {'key','label','value'}（标签现取自 `reviewaccept.AUXILIARY_SIGNALS`，值只作辅助、一个都不参与 `passed`），auxiliary_note 就是那一句『辅助读数逐字禁止拿来当通过』的来源（`reviewaccept.ReviewAcceptance.to_dict` 的原话）"
+          "to": "{'m_says_done','can_close','can_close_reason','closable','machine_pass','m_verdict','overrode','verdict_conflicts','verdict_note','verdict_written','status','failed','unknowns','findings','readings','summary','review_acceptance'}；**`m_says_done` 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，结论写在 `goal_met`），机器七格退成读数（`status`/`machine_pass`），两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名；M 没给判据 ⇒ `m_says_done=false` + 读数说明『没人判过』；`can_close` 是**机器口径**（`bool | None`：`None` = 没接线/算不出来，既不是过也不是不过，不许读成通过）；`closable` 是给调用方的那个布尔（会不会交）；M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；status 的键是七格检查（contradictions/load_bearing/report_shape/user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；`paper` 不是门的一格：它落在 `readings.paper`（verdict 四档），由 M 判断该不该出论文；acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、台账现算值、是否满足（不满足的那几行同时进 findings）；**读不懂的行**各自带 `state=\"unreadable\"` + `reason`（空 id / id 重复 / 词表外的 kind / `na` 无理由 / 阈值不是整数 / 台账读不到），读数里另有 `rows_unreadable`（条数）与 `unreadable_rows`（逐条 id/kind/code/reason）—— `unreadable` 既不是通过、也不进未满足，它让**整格落 `unknown`**（绝不 `pass`）；读表那一层（`conductor.acceptance`）同样把这类行标 `unreadable` 并在 `problems` 里点名（两边同一处口径：`closing.acceptance_row_state`）；artifact_ledger 那一格的 readings 里给出对不上的行数与逐条说明；findings[] 每项是 {'check','code','level','detail'}；review_acceptance 是那一栏内容级验收读数：{'passed','criteria','failed','auxiliary','auxiliary_note','readings','summary'}，criteria[] 每项是 {'key','name','state','detail'}（`key`/`name` 与顺序现取自 `reviewaccept.CRITERIA`，`state` 是三态之一），auxiliary[] 每项是 {'key','label','value'}（标签现取自 `reviewaccept.AUXILIARY_SIGNALS`，值只作辅助、一个都不参与 `passed`），auxiliary_note 就是那一句『辅助读数逐字禁止拿来当通过』的来源（`reviewaccept.ReviewAcceptance.to_dict` 的原话）"
         }
-      ]
+      ],
+      "date_amended": "2026-11-15"
     },
     {
       "tools": [
@@ -7140,6 +7055,51 @@
           }
         }
       ]
+    },
+    {
+      "tools": [
+        "doc.build_document"
+      ],
+      "key": "params",
+      "reason": "2026-11-15（DC·甲，894c532d）：业主 2026-11-13「将死状态相关的死代码清理掉」⇒ `DOC_KINDS.reproduction_report` 是死取值（0 行 / 无读点 / 无写入口）⇒ 从 kind 枚举删掉；参数名 / required / 其余枚举值（survey / paper / note）一字未动。守它的判据是 `tests/test_vocab_census.py` 与 `tests/test_lint_rules_r011_dead_vocab.py` 的反向断言。",
+      "date": "2026-11-15",
+      "edits": [
+        {
+          "op": "remove_item",
+          "path": "params/properties/kind/enum",
+          "item": "reproduction_report"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "doc.list_documents"
+      ],
+      "key": "params",
+      "reason": "2026-11-15（DC·甲，894c532d）：同 `doc.build_document` —— `reproduction_report` 是死取值（0 行 / 无读点 / 无写入口）⇒ 从 kind 枚举删掉；其余枚举值一字未动。",
+      "date": "2026-11-15",
+      "edits": [
+        {
+          "op": "remove_item",
+          "path": "params/properties/kind/enum",
+          "item": "reproduction_report"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "doc.register_dependency"
+      ],
+      "key": "params",
+      "reason": "2026-11-15（DC·丁，09866d61）：同一裁定「清死代码」⇒ `DEP_KINDS.dataset` 是死取值（0 行 / 无读点）⇒ 从 kind 枚举删掉；参数名 / 类型 / 其余枚举值一字未动。",
+      "date": "2026-11-15",
+      "edits": [
+        {
+          "op": "remove_item",
+          "path": "params/properties/kind/enum",
+          "item": "dataset"
+        }
+      ]
     }
   ],
   "summary_lens_before": {
@@ -7285,10 +7245,12 @@
   },
   "removed_after_compression": {
     "tools": [
-      "verify.check_formal"
+      "verify.check_formal",
+      "conjecture.register_conjecture"
     ],
-    "reason": "2026-10-23 晚裁定：E 的 Lean 侧整条清场，verify.check_formal 不是收成 roles=()而是整条删除；形式化入口变成 L 的 formal.formalize / formal.check_formal / formal.record，桥接层的函数实体 VT.check_formal 仍在（L 经它取检查器原话）。这一条登记的是「这一行从声明面退场」，不是「契约可以随便少一件」：守它的判据是 tests/test_e_has_no_lean_side.py 与 tests/test_l_report_and_seam_matrix.py::test_f16_...。",
-    "date": "2026-10-26"
+    "reason": "2026-10-23 晚裁定：E 的 Lean 侧整条清场，verify.check_formal 不是收成 roles=()而是整条删除；形式化入口变成 L 的 formal.formalize / formal.check_formal / formal.record，桥接层的函数实体 VT.check_formal 仍在（L 经它取检查器原话）。这一条登记的是「这一行从声明面退场」，不是「契约可以随便少一件」：守它的判据是 tests/test_e_has_no_lean_side.py 与 tests/test_l_report_and_seam_matrix.py::test_f16_...。 ｜ 2026-11-15（D1·甲，8e398d74）：业主 2026-11-13 裁定「D 不该立项临时命题，D 只给研究方向让下面的人去研究」⇒ `conjecture.register_conjecture` 工具整条退场（真身搬到 `src/agentflow/conjectureledger.py::register()`，由 E/F/B 在产出侧各调一次），它从 `declarations` 与 `added_after_compression` 两处一起退出。这是「这一行从声明面退场」，不是「契约可以随便少一件」：守它的判据是 `tests/test_conjecture_ledger_has_one_write_point.py` 与 `tests/test_d_can_reach_register_conjecture.py`（反向断言）。",
+    "date": "2026-10-26",
+    "date_amended": "2026-11-15"
   },
   "retired_needles": [
     {
