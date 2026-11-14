@@ -378,6 +378,38 @@ DUTIES: dict[str, dict[str, object]] = {
                "数值手稿更新数值证据流水）。B 必须知道这一步有接住方，否则它会把"
                "「我交了」读成「这是一条新命题」",
     },
+    # 2026-11-14（TR 收口）：两句新承诺落进 B / D 的 policy，按本文件纪律各补一条职责。
+    # 两句都来自业主 2026-11-13 的 q1/q5 收口（`specs/b.py` / `specs/d.py` 的 policy 正文），
+    # 代码真身早已在 `secretary.py` 里：这里登记的是「它对角色作出的承诺有接住方」。
+    "judge_proposition_form": {
+        "code": "judge_proposition_form",
+        "where": "secretary.py",
+        "call": ("secretary.py::judge_proposition_form",
+                 "manuscriptopen.py 的 `open_manuscript` 开稿前那一问",
+                 "agent_b/register_statement.py 的 `_manuscript_form_refusal`"),
+        "visibility": "conditional",
+        # B 与 D 的 policy 都写着「命题形态的判据在 B 的秘书」：B 是当事人，
+        # D 被明确告知"别越权替它判" —— 两边都该知道这条判据在哪。
+        "roles": ("B", "D"),
+        "probe": ("命题形态的判据在 B 的秘书",),
+        "why": "命题形态闸（条件 → 结论）的唯一判据在秘书：它判「这段描述有没有明确从"
+               "什么条件导出什么结论」，判不过 / 没判成 ⇒ 受控拒、不落成手稿登记条目。"
+               "B 与 D 的 policy 都点名了它（B 是当事人、D 被明确告知不要越权替它判）"
+               "⇒ 两个角色都必须知道这一步有接住方",
+    },
+    "judge_dispatch_fit": {
+        "code": "judge_dispatch_fit",
+        "where": "secretary.py",
+        "call": ("secretary.py::assess_delegation（派活审阅那一笔）",),
+        "visibility": "conditional",
+        # 只有 D 的 policy 写着「派活不合适时你的秘书会提醒你」—— 这一问只发生在
+        # D 派活给 F 的那一刻（`dispatch_fit` 轴），别的角色不经过它。
+        "roles": ("D",),
+        "probe": ("派活不合适时你的秘书会",),
+        "why": "派活方向轴（`dispatch_fit`）：D 派给 F 的活是不是「一个研究方向」；"
+               "不合适只提醒、不拒收，提醒并进这一次派活的审阅结论。D 必须知道这条"
+               "提醒有接住方，否则它会把「派活照发」读成「没人看这条派活」",
+    },
 }
 
 #: `internal` 那一档的"出口探针"：这些词若出现在任何角色的提示词里，
