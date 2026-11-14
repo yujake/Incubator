@@ -355,8 +355,9 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
     是空（读得出来），错配会被读成"另一趟的终态"（读不出来）。
 
     步数与调用数以这一趟自己的收工行为准（`agent_run_end.steps` / `.spend.calls`）：
-    `agent_step` 事件里没有任务号，多代理交错时按位置数只能算到别家头上，而收工行是这一趟
-    自己写的账。收工行缺这两格（老数据 / 夹具）⇒ 落回逐条数。
+    改前的 `agent_step` 事件里没有任务号（2026-11-15 起写侧补了 `task_id`，但这里是
+    「历史 + 新数据」共用的一条读法，口径不跟着写侧变），多代理交错时按位置数只能算到
+    别家头上，而收工行是这一趟自己写的账。收工行缺这两格（老数据 / 夹具）⇒ 落回逐条数。
 
     ## 花销：两个来源都留着，谁也不许顶替谁（162 ②）
 
@@ -388,8 +389,10 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
       而真实事件只有 6514（10.75 倍）。名字以前叫 `events_in_run`，那是一个假名字。
     - `events_owned` = 按上面那张三档归属表「只数归到这一趟」的事件（含它自己的
       `agent_run_start`）。81 上合计 6254，M 那行 521。
-    - 为什么「不」按 `task_id` 过滤：`agent_step` 里没有 `task_id`（81 上 2419 条都没有），
-      按它过滤会把步数整族丢光 —— M 那行会读成 360，比真值 512 还小。
+    - 为什么「不」按 `task_id` 过滤：改前的 `agent_step` 里没有 `task_id`（81 上 2419 条
+      一条都没有），按它过滤会把历史那一段的步数整族丢光 —— M 那行会读成 360，比真值 512
+      还小。写侧 2026-11-15 起已经补上这一格（新数据可过滤），但这一条读法要同时读历史，
+      所以口径不动。
     """
     rows = list(events)
     runs: list[dict] = []
@@ -463,8 +466,9 @@ def runs_in_session(events: Iterable[Mapping[str, Any]], *, sid: str = "") -> li
             cur["elapsed_sec"] = e.get("elapsed_sec")
             cur["end_index"] = i
             cur["end_ts"] = str(e.get("ts") or "")
-            # 这一趟自己写的账优先（见上面函数注释的最后一段）：`agent_step` 没有任务号，
-            # 交错时按位置数会数到别家头上；`spend.calls` 同理。缺这两格 ⇒ 保留逐条数。
+            # 这一趟自己写的账优先（见上面函数注释的最后一段）：改前的 `agent_step`
+            # 没有任务号（新数据有，但这条读法要同时读历史），交错时按位置数会数到别家
+            # 头上；`spend.calls` 同理。缺这两格 ⇒ 保留逐条数。
             steps = e.get("steps")
             if isinstance(steps, int) and not isinstance(steps, bool) and steps >= 0:
                 cur["steps"] = steps
