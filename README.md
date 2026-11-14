@@ -562,7 +562,7 @@ See the repository root for license information.
 
 ```
 agentflow/.noai-paths            禁改区清单（**49** 条 glob / **46** 条唯一路径，**7** 个分组）
-agentflow/src/agentflow/tools/   **20** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
+agentflow/src/agentflow/tools/   **19** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
 ```
 
 两个工具面读数，口径不同、不许互换：**95** 是 Lean 关着时各角色面的并集（`python -m agentflow.cli tools` 那一档，

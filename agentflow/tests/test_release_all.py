@@ -2410,6 +2410,16 @@ def test_the_design_tools_criterion_is_not_vacuous():
 #:   * 「新增模块要在这里登记」，连同"它为什么必须是一个顶层模块"的一行理由；
 #:     删模块要同时删掉它那一行理由（登记过期与漏登记同样危险：前者让人以为"有人看过了"）。
 _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
+    # 2026-11-13（业主裁定「D 不该立项临时命题，猜想台账的唯一写点搬到产出侧」）：
+    # `conjectures` 的唯一写点从 D 的工具层搬到库层，成为三族（E 的实验 / F 的稿命题 /
+    # B 的收录）共用的一个落账口。为什么必须是顶层模块而不是 `tools/` 下的一件工具：
+    # 写这一行的是三条「库层」路径（它们不经过工具面，也不该各写一套判重与跨对象
+    # 存在性检查）；判据也要能在不建工具注册表的情况下直接调 `register` / `mark_refuted`
+    # 并核三态。它是"唯一写点"这句声明的真身 —— 放进任何角色包都会让另外两族 import
+    # 一个角色模块，那正是这次裁定要拆掉的耦合。
+    "conjectureledger.py": "猜想台账的唯一写点（生产侧三族共用）：register / mark_refuted / "
+                           "status_for_experiment / promoted_to_statement / store_error_kind —— "
+                           "`conjectures` 只由它写；通用写口由 store.direct_write_refusal 拒",
     # 2026-11-01（业主「将 H 的所有机械扫描工具统一成一个方便 H 使用」）：
     # 论文正文的机械扫描（七类 kinds 的唯一实现，`review.scan` 的读数全从这里出）。
     # 为什么必须是顶层模块而不是塞进 `tools/`：它要能被测试当纯函数直接调
