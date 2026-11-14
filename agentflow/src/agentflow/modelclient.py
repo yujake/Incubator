@@ -62,7 +62,7 @@ __all__ = [
 #: 换档位时只改这一处，`by_scope` 的读数才追得回来。
 SCOPE_EXTRACT = "extract"
 
-#: 无主那一笔的 `note` 尾句。**不是措辞**：`reconcile_usage` 的 `unattributed` 那一栏
+#: 无主那一笔的 `note` 尾句。这不是措辞：`reconcile_usage` 的 `unattributed` 那一栏
 #: 读的就是账本行自己说的话，而"这一次本来就不属于任何 task"与"忘了填号"必须在盘上
 #: 分得开（三态纪律；同形措辞见 `llmseam._charge_ledger` 的那一句）。
 UNATTRIBUTED_NOTE = (
@@ -78,7 +78,7 @@ def _ambient_task_id() -> str:
     为什么单独留一层而不是直接 import：
     1. `llmseam` 在 import 图里比 `modelclient` 更靠上（它 import `sessions` / `modelcost`），
        模块级 import 会成环；这里按调用现取，装配期与计费期的依赖面各自独立；
-    2. 反真空需要**唯一一个**可以打桩成空的读口（`tests/test_the_charge_reads_the_identity_at_charge_time.py`
+    2. 反真空需要唯一一个可以打桩成空的读口（`tests/test_the_charge_reads_the_identity_at_charge_time.py`
        的判据 4 打的就是它）—— 散在各处 `llmseam.ambient_task_id()` 的调用点没有那个口子。
     """
     try:
@@ -91,23 +91,23 @@ def _ambient_task_id() -> str:
 
 def task_id_for_charge(given: str | None = None, *,
                        ambient: Any = None) -> str | None:
-    """账本那一行的归口：调用方显式给的优先，否则读**计费那一刻**的 ambient。
+    """账本那一行的归口：调用方显式给的优先，否则读「计费那一刻」的 ambient。
 
     ## 三态（判据 a 的归口那一半）
 
     | 情形 | 返回值 | 账本行的形态 |
     |---|---|---|
     | 调用方显式给了号 | 那个号（`t-NNNNNN`） | 挂在它的 `tasks` 行上 |
-    | 没给号，但**计费那一刻**在某次召唤里 | 那一刻的召唤号 | 挂上；`tasks.usd` 同笔事务回写 |
+    | 没给号，但计费那一刻在某次召唤里 | 那一刻的召唤号 | 挂上；`tasks.usd` 同笔事务回写 |
     | 两处都没有（真·装配期 / 不在任何召唤里） | `None` | `task_id=None` + `UNATTRIBUTED_NOTE` |
 
     ## 为什么不能在装配期取号（② 的 A 组，6.9% 缺口里 97.99% 那一支）
 
-    抽取器是**装配期**造的，而装配发生在 `LocalBackend.call` 把召唤号挂上 ContextVar
-    **之前**（`conductor.py`：先 `resolve`，再 `id_var.set`）。于是装配期读到的 ambient
+    抽取器是装配期造的，而装配发生在 `LocalBackend.call` 把召唤号挂上 ContextVar
+    之前（`conductor.py`：先 `resolve`，再 `id_var.set`）。于是装配期读到的 ambient
     永远是空串 —— 把"装配期没有号"当成"收费时没有号"，就是真机那 13 笔
     `scope=extract` 全部无主的原因（`host.py` 曾经把这个空直接写死成 `task_id=None`）。
-    收费发生在 handler 里（`calling_as` / `LocalBackend.call` 的挂点内），那时**有**号。
+    收费发生在 handler 里（`calling_as` / `LocalBackend.call` 的挂点内），那时有号。
 
     显式号优先，是因为调用方比上下文更知道"这一笔算谁的"（`modelclient` 的
     `task_id=` 是审计挂点，`host.py` 已经不写死它了）。
@@ -160,9 +160,9 @@ class ModelClient:
     scope: str = SCOPE_EXTRACT
     system: str | None = None
     meter: Any = None
-    #: 审计挂点（`usage_ledger.task_id`）的**显式**那一半：装配期确实知道的号才填它。
+    #: 审计挂点（`usage_ledger.task_id`）的显式那一半：装配期确实知道的号才填它。
     #: 缺省 `None` 不等于"这一笔没有台账号"——它只是"装配期没写死"，真正的归口在
-    #: **计费那一刻**由 `task_id_for_charge` 现取（显式号 > 召唤上下文 > `None`）。
+    #: 计费那一刻由 `task_id_for_charge` 现取（显式号 > 召唤上下文 > `None`）。
     #: 直接写死 `None` 的后果见过一次：真机 13 笔 `scope=extract` 全部无主
     #: （$0.108832，占 6.9% 缺口的 97.99%），而它们明明发生在 `t-000017` 那一趟里。
     #: 为什么不折成一个假字符串：`verify.py` 的 `dangling_usage_task` 逐字容忍 `None`
@@ -208,7 +208,7 @@ class ModelClient:
                 "（`ModelGateway.complete` 承诺从不抛异常，`G-7` 登记了这个缺口）"
             ) from exc
         self.calls += 1
-        # 归口在**这一刻**解析（不是装配期）：显式号 > 召唤上下文 > `None`。
+        # 归口在这一刻解析（不是装配期）：显式号 > 召唤上下文 > `None`。
         # 判据见 `task_id_for_charge` 的三态表；这一句是 A 组那 13 笔的唯一修法。
         tid = task_id_for_charge(self.task_id)
         self.charges.append(
@@ -294,8 +294,8 @@ def client_from_env(*, scope: str = SCOPE_EXTRACT, meter: Any = None,
     记进产物与退出码（三态），而不是在装配阶段崩掉。装配阶段崩掉的话，
     连"为什么没跑成"都写不进清单。
 
-    `task_id`（缺省 `None`）= **装配期不写死号**，不是"这一笔没有台账号"：真正的归口由
-    `task_id_for_charge` 在**计费那一刻**现取（显式号 > `conductor.current_task_id()` >
+    `task_id`（缺省 `None`）= 装配期不写死号，不是"这一笔没有台账号"：真正的归口由
+    `task_id_for_charge` 在计费那一刻现取（显式号 > `conductor.current_task_id()` >
     `None`）。装配期取号是错的（那时 `LocalBackend.call` 还没把号挂上 ContextVar）——
     只有两处都没有时才落 `task_id=None` 并在 note 里写 `unattributed`；给了号就必须是
     `tasks` 里真有的那一行（否则审计会如实地报它挂不上 —— 那正是我们要它报的）。

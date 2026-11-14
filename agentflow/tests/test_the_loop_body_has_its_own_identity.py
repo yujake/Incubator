@@ -3,16 +3,16 @@
 
 ## 现场（`temp/analysis/11-ledger-causes.md` ② B 组，2026-11-14 lp-ball 真机）
 
-11 笔 `scope=reason` 的账无主（$0.002238），全是**循环本体**发的秘书判定
+11 笔 `scope=reason` 的账无主（$0.002238），全是循环本体发的秘书判定
 （`secretary:tool_name` 10 条 + `secretary:dispatch_fit` 1 条）。它们走
 `secretary.judge` ⇒ `llmseam.ask_json` ⇒ `_land` 的兜底 `ambient_task_id()`，
 而那个 ContextVar 全仓只有两个挂点：`conductor.calling_as`（只包 `registry.call`）
-与 `LocalBackend.call`（只包确定性 handler）。**模型驱动那一趟是 `LlmBackend.call`，
-它一个挂点都没有** —— 循环明明知道自己是谁（`self.my_task_id`），却没把号传下去。
+与 `LocalBackend.call`（只包确定性 handler）。模型驱动那一趟是 `LlmBackend.call`，
+它一个挂点都没有 —— 循环明明知道自己是谁（`self.my_task_id`），却没把号传下去。
 
 反证（同一份会话）：从工具 handler / 确定性 handler 里发的秘书判定
-（`v_reply_defect` 16/16、`proposition_form` 7/7、`statement_keywords` 5/5）**28/28 有主**；
-只有从循环本体发的 11 条全空。差别不在"秘书"这一层，在**调用它的是哪一段**。
+（`v_reply_defect` 16/16、`proposition_form` 7/7、`statement_keywords` 5/5）28/28 有主；
+只有从循环本体发的 11 条全空。差别不在"秘书"这一层，在调用它的是哪一段。
 
 ## 这一组钉三件事
 
@@ -45,7 +45,7 @@ FREE = (0.0, 0.0)
 
 
 class _AmbientProbeGateway:
-    """照剧本回答的替身模型；每次 `complete` 记下**那一刻**的召唤号。
+    """照剧本回答的替身模型；每次 `complete` 记下那一刻的召唤号。
 
     接口与真模型一致（`tests/test_run_end_events_carry_the_task_id.py` 那只同形），
     多出来的只有 `ambients` 这一格读数 —— 它就是"循环本体有没有挂点"的探针。

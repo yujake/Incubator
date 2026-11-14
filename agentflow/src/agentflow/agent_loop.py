@@ -3194,7 +3194,7 @@ def _step_task_id(loop: Any) -> str:
 
     ## 为什么每一格都要（`temp/analysis/11-ledger-causes.md` ①）
 
-    `agent_step` 真机 **0/564**、run 步 **0/551** 带号，而 `agent_run_start` 是 29/29。
+    `agent_step` 真机 0/564、run 步 0/551 带号，而 `agent_run_start` 是 29/29。
     于是"哪条 task 被拒了几次"在盘上答不了：B 的 19 条拒落在 t-000017 / t-000050 /
     t-000058 / t-000076 哪几行只能靠时间窗猜 —— 而本次 F 有两个并发实例
     （t-000008 / t-000009，同秒起跑），按 `(role, index)` 连两份 run 都分不开。
@@ -13739,12 +13739,12 @@ class LlmBackend:
         #
         # 为什么必须有它（真机 2026-11-14 lp-ball，`temp/analysis/11-ledger-causes.md` ②B）：
         # ContextVar 全仓只有两个挂点 —— `conductor.calling_as`（只包 `registry.call`）
-        # 与 `LocalBackend.call`（只包确定性 handler）。而**模型驱动**这条路由本方法
+        # 与 `LocalBackend.call`（只包确定性 handler）。而模型驱动这条路由本方法
         # 起一趟循环，循环自己发的模型调用（最典型的是秘书在 `_outbound_hook` 里的
         # `tool_name` / `dispatch_fit` 判定）不在任何一个挂点里 ⇒ `ambient_task_id()`
         # 是空串 ⇒ 账本行 `task_id=None`。真机读数把这处分得很干净：同一批
-        # `secretary:` 判定里，从工具 / 确定性 handler 发的 **28/28 有主**，从循环本体发的
-        # **11/11 全空**。差别不在秘书那一层，在"调用它的是哪一段"。
+        # `secretary:` 判定里，从工具 / 确定性 handler 发的 28/28 有主，从循环本体发的
+        # 11/11 全空。差别不在秘书那一层，在"调用它的是哪一段"。
         #
         # 为什么是这里而不是给秘书补参数：号本来就在循环手上（`my_task_id` 就是这一趟
         # 台账行的号），缺的是把它挂进上下文的那一次 `set`。挂在这一层之后，循环里任何
@@ -13939,13 +13939,13 @@ class LlmBackend:
 
         ## 为什么这一份文件比 `LoopRun.to_dict()` 多一列 `task_id`
 
-        `runs/*.json` 是**审计载体**，与 `sessions` 的 `agent_step` 同族
+        `runs/*.json` 是审计载体，与 `sessions` 的 `agent_step` 同族
         （`11-ledger-causes.md` ①：真机 `steps[]` 0/551 带号）。补这一列是为了让
         "哪条 task 的哪几步被拒"在两份载体上都能直接按号过滤 —— 而读侧从来只读
         会话事件重建（`resume_messages`），这个文件里的多一列不会被任何消费者
         读成"某一步属于另一趟"。
 
-        为什么不改 `LoopRun.to_dict()`：它的**键集**本身就是判据
+        为什么不改 `LoopRun.to_dict()`：它的键集本身就是判据
         （`tests/test_summons_and_numbered_addressing.py` 双向核文档与返回值），
         那里加一格是改公开面；而这里加一格是给这一份记录补一个审计列。两件事
         不该混在一次改动里。

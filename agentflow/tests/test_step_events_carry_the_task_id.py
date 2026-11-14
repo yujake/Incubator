@@ -3,18 +3,18 @@
 
 ## 现场（`temp/analysis/11-ledger-causes.md` ①，2026-11-14 lp-ball 真机）
 
-拒信的两个载体**都没有台账号**：`runs/*.json` 的 `steps[]` **0/551**、
-`sessions` 的 `agent_step` **0/564**。后果是"哪条 task 被拒了几次"在盘上答不了 ——
+拒信的两个载体都没有台账号：`runs/*.json` 的 `steps[]` 0/551、
+`sessions` 的 `agent_step` 0/564。后果是"哪条 task 被拒了几次"在盘上答不了 ——
 本次 B 的 19 条拒落在 t-000017 / t-000050 / t-000058 / t-000076 哪几行，只能靠时间窗猜；
-而本次 F 有**两个并发实例**（t-000008 / t-000009，同秒起跑），按 `(role, index)` 配对直接撞键。
+而本次 F 有两个并发实例（t-000008 / t-000009，同秒起跑），按 `(role, index)` 配对直接撞键。
 
-号**本来就在循环手上**：`agent_run_start` 已经带它（29/29）、`tasks` 那行的号也是它
+号本来就在循环手上：`agent_run_start` 已经带它（29/29）、`tasks` 那行的号也是它
 （`self.my_task_id`）。缺的是"每一份作业都把这一格插进去"—— 同一个号，三条载体，
 只有一条带了。这一组钉的就是另外两条。
 
 ## 判据三件事
 
-1. 正控：离线真跑一趟（替身模型、0 元）⇒ **每一条** `agent_step` 都带 `task_id`，
+1. 正控：离线真跑一趟（替身模型、0 元）⇒ 每一条 `agent_step` 都带 `task_id`，
    且号等于这一趟 `tasks` 行的号、也等于 `agent_run_start` 那一条的号（三处同一份）；
 2. run 步：同一趟落下的 `runs/<角色>-<时间戳>-<序号>.json` 里，顶层与 `steps[]`
    每一格都带同一个号；
@@ -65,7 +65,7 @@ class _ScriptedGateway:
 def _replies() -> list[str]:
     """三步：一条正常步、一条解析不了的坏 JSON（步级拒信的同族形态）、收工。
 
-    为什么要那一坏步：它的落点与正常步**不是同一个写入口**（`run()` 里的收尾段 vs
+    为什么要那一坏步：它的落点与正常步不是同一个写入口（`run()` 里的收尾段 vs
     `_land_unusable`），只钉正常步会让"另一个写口忘了插号"永远看不见。
     """
     return [json.dumps({"note": "先记一句进度"}, ensure_ascii=False),
@@ -110,7 +110,7 @@ def _task_rows(st: Store, task_id: str) -> list[dict]:
 
 # ============================================================ 1 正控：每条步都带号
 def test_every_step_event_carries_the_runs_own_task_id(tmp_path: pathlib.Path) -> None:
-    """判据 1：`agent_step` **全带号**，且与 `agent_run_start` / 台账行三处同一份。
+    """判据 1：`agent_step` 全带号，且与 `agent_run_start` / 台账行三处同一份。
 
     改前：`agent_step` 的键集里根本没有 `task_id`（真机 0/564）⇒ "这条步是哪条 task 的"
     只能按角色 + 时间窗猜；并发同角色的两个实例连猜都猜不开。

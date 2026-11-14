@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""判据：`modelclient` 在**计费那一刻**读召唤上下文，不在**装配那一刻**写死。
+"""判据：`modelclient` 在计费那一刻读召唤上下文，不在装配那一刻写死。
 
 ## 现场（`temp/analysis/11-ledger-causes.md` ② A 组，2026-11-14 lp-ball 真机）
 
 `run-agent` 那条路给 B 造抽取器走 `host._Builder._extractor_for` ⇒ `host.b_extractor`，
-而它**装配期**逐字写死 `task_id=None`（`host.py:70-78`）。`ModelClient` 把这个 `None`
-原样透传（`modelclient.py:149-153`），**从不读 `ambient_task_id()`**；对照 `llmseam`
-同一件事读了两处（`llmseam.py:693-694`）。后果是 `scope=extract` 的 **13 笔**
-（227,901 tokens / $0.108832）全部无主，占 6.9% 缺口的 **97.99%** ——
+而它装配期逐字写死 `task_id=None`（`host.py:70-78`）。`ModelClient` 把这个 `None`
+原样透传（`modelclient.py:149-153`），从不读 `ambient_task_id()`；对照 `llmseam`
+同一件事读了两处（`llmseam.py:693-694`）。后果是 `scope=extract` 的 13 笔
+（227,901 tokens / $0.108832）全部无主，占 6.9% 缺口的 97.99% ——
 而它们发生在 B 的 `t-000017` 那一趟里（该趟的另外 45 笔账全部有声有号）。
 
-时间线证据说明："这些调用没有召唤可挂"这句话在**收费那一刻**是假的，
-它只在**装配那一刻**成立。所以判据钉的是**读数发生在哪一刻**，不是"有没有这个字段"。
+时间线证据说明："这些调用没有召唤可挂"这句话在收费那一刻是假的，
+它只在装配那一刻成立。所以判据钉的是读数发生在哪一刻，不是"有没有这个字段"。
 
 ## 这一组钉四件事
 
@@ -59,7 +59,7 @@ def _body(text: str = "抽出结果", tin: int = 11, tout: int = 3) -> str:
 
 
 def _client(*, meter: Any = None) -> ModelClient:
-    """抽取那一路的 client：**装配期不写号**（与 `host.b_extractor` 同形）。"""
+    """抽取那一路的 client：装配期不写号（与 `host.b_extractor` 同形）。"""
     return ModelClient(gateway=ModelGateway(ModelSpec(api_key="fake-model-key"),
                                             transport=_transport(200, _body())),
                        meter=meter)
@@ -131,7 +131,7 @@ def test_outside_every_summon_the_note_names_which_empty_this_is(
         tmp_path: pathlib.Path) -> None:
     """判据 2：不在任何召唤里、调用方也没给号 ⇒ 仍留 `None`，但 note 必须点名 `unattributed`。
 
-    为什么这一条不要求红：这一档**本来就该是空的**。要钉的是"空"与"忘了填"分得开 ——
+    为什么这一条不要求红：这一档本来就该是空的。要钉的是"空"与"忘了填"分得开 ——
     账本行自己说得清"这一次本来就不属于任何 task"。
     """
     store = Store(tmp_path / "ws")

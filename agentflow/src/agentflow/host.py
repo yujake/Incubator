@@ -67,15 +67,15 @@ def b_extractor(store: Any, *, config: Mapping[str, Any] | None = None,
     from .modelclient import SCOPE_EXTRACT, client_from_env
     from .tokenmeter import TokenMeter
 
-    # 装配期**不写死**台账号：`task_id` 缺省 `None` 只表示"这里不知道号"，而真正的归口
-    # 由 `modelclient.task_id_for_charge` 在**计费那一刻**现取（显式号 > 召唤上下文 >
-    # `None`）。装配期取号是错的：`LocalBackend.call` 是**先** `resolve`（本轮装配就发生在
-    # 这一步）**再**把召唤号挂上 ContextVar，所以装配期读 ambient 永远是空串。
+    # 装配期不写死台账号：`task_id` 缺省 `None` 只表示"这里不知道号"，而真正的归口
+    # 由 `modelclient.task_id_for_charge` 在计费那一刻现取（显式号 > 召唤上下文 >
+    # `None`）。装配期取号是错的：`LocalBackend.call` 是先 `resolve`（本轮装配就发生在
+    # 这一步）再把召唤号挂上 ContextVar，所以装配期读 ambient 永远是空串。
     #
     # 教训（真机 2026-11-14 lp-ball，`temp/analysis/11-ledger-causes.md` ②A）：这里曾经
     # 逐字写死 `task_id=None`，于是 B 的 13 笔 `scope=extract`（$0.108832）全部无主 ——
     # 占 6.9% 成本缺口的 97.99%，而它们发生在 `t-000017` 那一趟里（同趟另外 45 笔全有声
-    # 有号）。"编造一个号比留空更坏"是对的；但**留空也不等于必须空**：号在收费时就在旁边。
+    # 有号）。"编造一个号比留空更坏"是对的；但留空也不等于必须空：号在收费时就在旁边。
     client = client_from_env(scope=SCOPE_EXTRACT, meter=TokenMeter(store), role="B")
     if notes is not None:
         notes.append("B：抽取器 = LLMExtractor（client 走 modelclient，作用域 extract、"
