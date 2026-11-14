@@ -60,9 +60,10 @@ STABILITY = PKG / "promptstability.py"
 TASK = "把这条链路走一遍"
 ROOT = "D:/x"
 
-#: 收工门那八格（`conductor.closing` 的读数；真身在 `closing.py`）。
+#: 收工门那七格（`conductor.closing` 的读数；真身在 `closing.py`）。
+#: 2026-11-14：`paper` 退出收工判定（业主裁定）⇒ 它不在格表里，读 `readings["paper"]`。
 CLOSING_GATES: tuple[str, ...] = (
-    "paper", "contradictions", "load_bearing", "report_shape",
+    "contradictions", "load_bearing", "report_shape",
     "user_pending", "substance", "acceptance", "artifact_ledger",
 )
 

@@ -41,7 +41,7 @@
 | `errors_readout` | 每种角色犯了几次"错误动作"，各属哪一类 | 事件流的 `tasks` 行 + `sessions/*.jsonl` | `agentflow stats errors` |
 | `flow_readout` | 每种角色做了哪些动作、被拦下多少、转投多少 | 同一份扫描（`agent_step` 的 `shape` / `result` + `agent_message`） | `agentflow stats flow` |
 | `cost_readout` | 钱与 token 按角色、按阶段（`scope`）怎么分布 | `data/usage_ledger.json` | `agentflow stats cost` |
-| `gates_readout` | 收工门八格各是什么状态（四态一张表：pass / fail / unknown / na） | `closing.check_closing`（现算，不读缓存） | `agentflow stats gates` |
+| `gates_readout` | 收工门七格各是什么状态（四态一张表：pass / fail / unknown / na） | `closing.check_closing`（现算，不读缓存） | `agentflow stats gates` |
 
 `errors_readout` 的计数口径不在这里重写：它直接调 `errorstats.error_action_stats`（角色归属、
 主码规则、三态都在那里有逐条注释）。本模块只负责"把它装进统一外层"，外加把同一份扫描
@@ -79,8 +79,8 @@ COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 #: `gates_readout` 的 `data` 键集。
 #:
 #: `refusal`：`None` = 门真的跑了；非空 = 受控拒绝（会话号不在
-#: 盘上 / 不是一个号），那一份 data 里的 `cells` 是空的而不是八格 `unknown` ——
-#: "门根本没跑"与"跑了、八格都没查成"必须长得不一样。
+#: 盘上 / 不是一个号），那一份 data 里的 `cells` 是空的而不是七格 `unknown` ——
+#: "门根本没跑"与"跑了、七格都没查成"必须长得不一样。
 GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "m_says_done",
                                     "can_close", "closable", "verdict", "refusal")
 
@@ -515,11 +515,11 @@ def cost_readout(target: Any, *, scanned: Mapping[str, Any] | None = None,
 
 
 def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
-    """收工门八格的逐格读数与四档计数 —— 这台计算机器只有一份实现。
+    """收工门七格的逐格读数与四档计数 —— 这台计算机器只有一份实现。
 
     ## 为什么要有这个函数（口径题，不是重构）
 
-    同一份工作区的八格读数有两个出口：命令行 `agentflow stats gates` 走
+    同一份工作区的七格读数有两个出口：命令行 `agentflow stats gates` 走
     :func:`gates_readout`，网页 `/api/package` 与 `/api/acceptance` 走
     `webui/readers.py::_closing_block`。改前这两处各写一遍同一个循环
     （遍历 `closing.DEFAULT_CHECKS`、把不在 :data:`CELL_STATES` 里的状态折成
@@ -532,7 +532,7 @@ def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
 
     - `cells[i] = {"name", "status", "detail"}`，顺序就是 `closing.DEFAULT_CHECKS`；
       `detail` 是该格被拦时那几条 finding 的原话（用顿号连起来，没有就是空串）；
-    - `counts` 的键就是 :data:`CELL_STATES` 四档，值各几格，八格加起来等于格数。
+    - `counts` 的键就是 :data:`CELL_STATES` 四档，值各几格，七格加起来等于格数。
 
     网页那端还要给每格补 `source`（原文落点）：那是网页自己的呈现面，在这一份
     读数之外补，不许反过来改这里的格形状 —— 一改，两个出口的 `cells` 就不再逐字相等。
@@ -558,7 +558,7 @@ def gate_cells(report: Any) -> tuple[list[dict[str, Any]], dict[str, int]]:
 def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                   sid: str | None = None,
                   scanned: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """收工门八格的四态一张表（现算，不读任何人缓存过的结论）。
+    """收工门七格的四态一张表（现算，不读任何人缓存过的结论）。
 
     `data.cells` 每格 `{"name", "status", "detail"}`：`status` 取 :data:`CELL_STATES`
     的四档（`pass` / `fail` / `unknown` / `na`，与 `closing.ClosingReport.status` 同一套词）；
@@ -566,7 +566,7 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     硬口径：前者是"这一档对这个项目天然不成立"，后者是"没查成"—— 折在一起时，同一份
     现场在 `agentflow closing` 与 `agentflow stats gates` 两个出口会给出两套 counts。
     `data.counts` 是这四档各几格（逐格等于 `closing` 侧 `rep.status` 的分布）；
-    `data.machine_pass` 是"八格全 pass 且没有 blocker"这个旧口径
+    `data.machine_pass` 是"七格全 pass 且没有 blocker"这个旧口径
     （它只是读数：收工由 M 判，见 `closing.ClosingReport.can_close` 的注释）；
     `data.verdict` 是 M 那份判据（没有 ⇒ null，绝不编一个"通过了"）。
 
@@ -578,14 +578,14 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
 
     `sid` 给了一个盘上不存在的号 ⇒ 受控拒绝：`checked=False`、
     `reason` 就是 CLI 那一句原话、`data.refusal` 带 `{"code","sid","detail","exit_code": 2}`，
-    `data.cells` 为空（门根本没跑，不是"八格全是 unknown"的空读数）。这一档与
+    `data.cells` 为空（门根本没跑，不是"七格全是 unknown"的空读数）。这一档与
     `agentflow closing` 共用 `closing.closing_session_identity`，所以两个出口同文同码。
     机器口径的两个喂参也在这里现算（`closing.machine_feeders`）—— API 出口不喂 ⇒
     同一份工作区在 API 算出 `can_close=None`、在 CLI 算出 True/False（"一个说不知道、
     一个说可以交"）。
 
     `scanned`：`stats all` 共读一份扫描。门的"现算"不受影响 ——
-    八格仍然在这次调用里现跑，这里复用的只是事件流/会话记录那份扫描（门本身不读它们，
+    七格仍然在这次调用里现跑，这里复用的只是事件流/会话记录那份扫描（门本身不读它们，
     只用它的 `store`）。
     """
     scanned = scan(target) if scanned is None else scanned
@@ -620,7 +620,7 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
                          reason=f"收工门没跑成（{type(e).__name__}: {e}）", data=empty)
     # ---- 受控拒绝：号不在盘上 ⇒ 门根本没跑。
     #
-    # 这一档不许折成"八格全是 unknown 的一张表"（那是空读数）：`checked=False` +
+    # 这一档不许折成"七格全是 unknown 的一张表"（那是空读数）：`checked=False` +
     # 原话进 `reason`，`data.refusal` 带 code/sid/exit_code —— CLI 那边是同一句话、
     # 同一个码（2），两个出口拒绝同一件事。
     if report.refusal:
@@ -774,7 +774,7 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
     elif kind == "gates":
         cells = data.get("cells") or []
         if not cells:
-            lines += ["", "收工门八格：没有读数" if readout.get("checked") else "收工门八格：没查成"]
+            lines += ["", "收工门七格：没有读数" if readout.get("checked") else "收工门七格：没查成"]
         else:
             # 列名逐字是「四态」：这一格的值域就是 `CELL_STATES` 的四档。写成「三态」
             # 会让读的人以为 `na` 是别的什么东西（它曾被折进 `unknown`）。

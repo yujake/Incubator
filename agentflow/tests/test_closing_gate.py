@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
-"""收工门（`draft/37` §16 P3）：八格各自能造红，`unknown` 不算通过。
+"""收工门（`draft/37` §16 P3）：七格各自能造红，`unknown` 不算通过。
 
 ## 这一组守什么
 
 P3 的收工门是"把纪律变成门"，所以判据的重点不是"门能不能跑"，而是每一条都能单独造红：
-把某一条弄坏之后，红的必须正好是它，其余四条仍然绿。只测"全好 ⇒ 全绿"是不够的 ——
+把某一条弄坏之后，红的必须正好是它，其余几条仍然绿。只测"全好 ⇒ 全绿"是不够的 ——
 那样的门完全可能是一条恒真的判据。
 
-五条与它们的负控（`draft/37` §16 P3 逐字要求"每一条都能单独造红（五条负控）"）：
+2026-11-14（业主裁定）：`paper` 退出收工判定（「是否出 paper 退出收工判定，由 M
+自行判断是否到这个时机」）。它照旧算，落 `readings["paper"]`，但不在 `DEFAULT_CHECKS`
+里、不进 `machine_pass`；显式 `checks=("paper",)` 的调用仍会得到那一格（判据本体没变）。
+
+七条与它们的负控（`draft/37` §16 P3 逐字要求"每一条都能单独造红（五条负控）"）：
 
 | 检查 | 负控（本文件里各一条） |
 |---|---|
-| `paper` | 封好（把正文编一遍）之后再改一次 `main.tex` ⇒ PDF 过期（`paper_pdf_is_stale`） |
 | `contradictions` | 挂一条 `status="disputed"` 的依赖 |
 | `load_bearing` | 一条 `evidence_kind="proof"` 的正文断言没有 T3 背书 |
 | `report_shape` | 报告抽掉一节 + 抽掉分栏标记 |
@@ -283,7 +286,9 @@ def test_the_acceptance_cell_goes_red_alone_when_a_named_leg_has_no_ledger_row(
     rep = _gate(st, report)
     assert rep.status["acceptance"] == "fail", rep.to_dict()
     assert [f.code for f in rep.blockers] == ["acceptance_unmet"], rep.to_dict()
-    assert rep.status["paper"] == "pass" and rep.status["substance"] == "pass", rep.to_dict()
+    assert "paper" not in rep.status and rep.readings["paper"]["verdict"] == "consistent", \
+        rep.to_dict()
+    assert rep.status["substance"] == "pass", rep.to_dict()
     detail = rep.blockers[0].detail
     # 夹具里本来就有一条 formal+proof 实验（`_t3_experiment`）⇒ P8 满足、只有 P7 缺。
     # 这一格必须逐行判（不许一票通吃），所以缺的那一行要点名、满足的那一行不进 detail。
@@ -857,21 +862,24 @@ def test_a_project_without_a_paper_has_nothing_to_check(tmp_path: pathlib.Path):
     st = Store(ws)
     st.init()
     rep = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep.status["paper"] == "pass", rep.to_dict()
+    assert "paper" not in rep.status, rep.to_dict()
     assert rep.readings["paper"]["verdict"] == "not_applicable", rep.readings["paper"]
+    # 2026-11-14：这一格不再是门 —— 读数里有一句"由 M 判断，不是门"。
+    assert rep.readings["paper"]["gate"] == CL.PAPER_READING_NOTE, rep.readings["paper"]
 
     # ① 只有验收表（人给的记账）⇒ 还没有正文 ⇒ 仍然「不适用」
     (ws / "out" / "paper").mkdir(parents=True)
     (ws / "out" / "paper" / "ACCEPTANCE.md").write_text("验收表\n", encoding="utf-8")
     rep2 = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep2.status["paper"] == "pass", rep2.to_dict()
+    assert "paper" not in rep2.status, rep2.to_dict()
     assert rep2.readings["paper"]["verdict"] == "not_applicable", rep2.readings["paper"]
 
     # ② 有正文、没编过 ⇒ 回执读不到 ⇒ 那条可操作的 `unknown`（不是失败、也不是通过）
     (ws / "out" / "paper" / "main.tex").write_text("\\documentclass{article}\n",
                                                    encoding="utf-8")
     rep3 = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep3.status["paper"] == "unknown", rep3.to_dict()
+    assert "paper" not in rep3.status, rep3.to_dict()
+    assert rep3.readings["paper"]["verdict"] == "unknown", rep3.readings["paper"]
     assert [f.code for f in rep3.findings if f.check == "paper"] == ["paper_not_checked"]
 
 
@@ -928,29 +936,44 @@ def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathli
     assert unknown.readings["acceptance"]["rows_unreadable"] == 1, unknown.readings["acceptance"]
 
 
-def test_the_paper_check_goes_red_alone(tmp_path: pathlib.Path):
-    """负控①（论文）：封好（编过一遍）之后改一次正文 ⇒ PDF 过期，其余各条仍然绿。
+def test_the_paper_reading_goes_red_alone_but_does_not_gate(tmp_path: pathlib.Path):
+    """负控①（论文）：封好（编过一遍）之后改一次正文 ⇒ PDF 过期。
 
-    按业主 2026-10-09 的口径补后半：这一格红了不阻断 M 停（判据归 M），
-    但 M 说"达成"时 `overrode` 必须逐格点名它 —— 判据归 M ≠ 机器读数可以被盖掉。
+    2026-11-14（业主裁定）之后这一条分两半判：
+    ① 缺省表（七格）：`paper` 只是读数 —— `verdict="drifted"`、一条 warning，
+       不进 `status`、不进 `blockers`，于是七格全绿时 `machine_pass` 仍为真
+       （它是"出不出论文由 M 判断"这句话的机器形态）；
+    ② 显式点名 `checks=("paper",)`：判据本体照旧单独造红（`status="paper"=fail` +
+       blocker `paper_pdf_is_stale`），M 说"达成"时 `overrode` 逐格点名它 ——
+       退出判定的是"它是不是一格"，不是把判据改软。
     """
     st, report = _good(tmp_path)
     # 改正文时保留那一行 `\input{mapping-appendix}`（业主 2026-10-22）：这一条只测
     # "封好之后改正文 ⇒ PDF 过期"，不该顺带把论文对应表那一格弄红。
     (tmp_path / "out" / "paper" / "main.tex").write_text(
         "改过了\n" + PM.APPENDIX_INPUT + "\n", encoding="utf-8")
+
+    # ① 缺省七格：读数红、门不红
     rep = _gate(st, report)
-    assert rep.status["paper"] == "fail", rep.to_dict()
-    assert [f.code for f in rep.blockers] == ["paper_pdf_is_stale"], rep.to_dict()
-    assert {k: v for k, v in rep.status.items() if k != "paper"} == {
-        name: "pass" for name in CL.DEFAULT_CHECKS if name != "paper"}
-    # 没有 M 的判据 ⇒ 不算能交（"没人判过"）；M 判"达成" ⇒ 能停，但那一格被点名
-    assert not rep.m_says_done and CL.tri_state_exit_code(rep) == 2, rep.to_dict()
+    assert "paper" not in rep.status, rep.to_dict()
+    assert rep.readings["paper"]["verdict"] == "drifted", rep.readings["paper"]
+    assert [f.code for f in rep.blockers] == [], rep.to_dict()
+    paper_findings = [f for f in rep.findings if f.check == "paper"]
+    assert [f.code for f in paper_findings] == ["paper_pdf_is_stale"], \
+        [f.to_dict() for f in rep.findings]
+    assert paper_findings[0].level == "warning", paper_findings[0]
+    assert rep.machine_pass is True, (
+        "论文这一格已经退出收工判定（业主 2026-11-14）：PDF 过期不许再让 machine_pass 为假")
+
+    # ② 显式点名它：判据本体一个字没变
+    named = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
+                             checks=("paper",))
+    assert named.status["paper"] == "fail", named.to_dict()
+    assert [f.code for f in named.blockers] == ["paper_pdf_is_stale"], named.to_dict()
     judged = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
+                              checks=("paper",),
                               goal="审完交付", goal_met=True,
                               task_list=[{"what": "审完", "state": "done"}])
-    # 2026-11-03（153-U-03，业主裁决 ②）：`can_close` 仍跟着 M（这一条要测的正是那个），
-    # 但退出码 0 要"两边都说行" —— 这一份 `paper` 那一格是 fail ⇒ 退出码 1。
     assert judged.m_says_done, judged.to_dict()
     assert judged.machine_pass is False, judged.to_dict()
     assert CL.tri_state_exit_code(judged) == 1, judged.to_dict()
@@ -1109,11 +1132,14 @@ def test_missing_readings_are_unknown_and_unknown_is_not_a_pass(tmp_path: pathli
     """
     st, _report = _good(tmp_path)
     rep = CL.check_closing(st, project_dir="", report_path="")
-    assert rep.status["paper"] == "unknown", rep.to_dict()
+    # 论文那一格不在门里（业主 2026-11-14），但它照样有读数：没给项目根 ⇒ `unknown`。
+    assert "paper" not in rep.status, rep.to_dict()
+    assert rep.readings["paper"]["verdict"] == "unknown", rep.readings["paper"]
+    assert rep.readings["paper"]["gate"] == CL.PAPER_READING_NOTE, rep.readings["paper"]
     assert rep.status["report_shape"] == "unknown", rep.to_dict()
     assert not rep.m_says_done, "没查成却报告可交付 —— 这正是这门要防的形态"
-    # 要项目根的每一格都要在名单里：论文 / 报告形状 / 验收表（第七格）/ 产物台账（第八格）
-    assert rep.unknowns == ["acceptance", "artifact_ledger", "paper", "report_shape"], rep.unknowns
+    # 要项目根的格都要在名单里：报告形状 / 验收表 / 产物台账（论文那一格是读数，不在门里）
+    assert rep.unknowns == ["acceptance", "artifact_ledger", "report_shape"], rep.unknowns
     assert rep.failed == []
     assert CL.tri_state_exit_code(rep) == 2, "没查成 ⇒ 退出码 2（不是 1，也不是 0）"
     codes = sorted(f.code for f in rep.findings)
@@ -1146,10 +1172,12 @@ def test_the_wrong_directory_gets_an_actionable_message(tmp_path: pathlib.Path):
     ⇒ 它就是论文包本身（不再依赖路径拼接的读数）。"""
     st, report = _good(tmp_path)
     right = _gate(st, report, project_dir=tmp_path)
-    assert right.status["paper"] == "pass", right.to_dict()
+    assert "paper" not in right.status and right.readings["paper"]["verdict"] == "consistent", \
+        right.to_dict()
 
     wrong = _gate(st, report, project_dir=tmp_path / "out" / "paper")
-    assert wrong.status["paper"] == "unknown", wrong.to_dict()
+    assert "paper" not in wrong.status, wrong.to_dict()
+    assert wrong.readings["paper"]["verdict"] == "unknown", wrong.readings["paper"]
     msg = next(f.detail for f in wrong.findings if f.code == "paper_not_checked")
     # 消息里点出"你给的那个目录下有 main.tex（= 论文包本身）"，以及该改传什么。
     assert str(tmp_path / "out" / "paper") in msg, msg

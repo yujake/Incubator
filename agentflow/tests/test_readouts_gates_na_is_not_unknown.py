@@ -56,9 +56,10 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 READOUTS = REPO / "src" / "agentflow" / "readouts.py"
 CLOSING = REPO / "src" / "agentflow" / "closing.py"
 
-#: 打桩用的八格混合状态（恰好一格 na、一格 unknown、一格 fail —— 任何折叠都看得见）。
+#: 打桩用的七格混合状态（恰好一格 na、一格 unknown、一格 fail —— 任何折叠都看得见）。
+#: 2026-11-14：`paper` 退出收工判定（业主裁定）⇒ 打桩的格表跟着 `DEFAULT_CHECKS` 走。
 MIXED: dict[str, str] = {
-    "paper": "pass", "contradictions": "pass", "load_bearing": "na",
+    "contradictions": "pass", "load_bearing": "na",
     "report_shape": "unknown", "user_pending": "pass", "substance": "pass",
     "acceptance": "fail", "artifact_ledger": "pass",
 }
@@ -158,11 +159,11 @@ def test_counts_are_the_closing_statuses_cell_by_cell(
     Store(ws).init()
     got = _stub_gates(monkeypatch, ws)
     assert _parity_problems(got, MIXED) == [], _parity_problems(got, MIXED)
-    assert got["data"]["counts"] == {"pass": 5, "fail": 1, "unknown": 1, "na": 1}, \
+    assert got["data"]["counts"] == {"pass": 4, "fail": 1, "unknown": 1, "na": 1}, \
         got["data"]["counts"]
     assert got["data"]["counts"]["na"] == 1, got["data"]["counts"]
-    # 8 格不能因为多了一档而被数丢（sum 相等是必要条件，不是充分条件 —— 见负控）
-    assert sum(got["data"]["counts"].values()) == len(CL.DEFAULT_CHECKS) == 8
+    # 7 格不能因为多了一档而被数丢（sum 相等是必要条件，不是充分条件 —— 见负控）
+    assert sum(got["data"]["counts"].values()) == len(CL.DEFAULT_CHECKS) == 7
 
 
 # ====================================================================== ③ 负控
@@ -185,8 +186,8 @@ def test_negative_control_folding_na_back_into_unknown_turns_it_red(
     assert any("load_bearing" in p for p in problems), problems
     assert folded["data"]["counts"].get("na") is None, folded["data"]["counts"]
     assert folded["data"]["counts"]["unknown"] == 2, folded["data"]["counts"]
-    # 总数没变（8）：所以"sum 相等"抓不到这个缺陷，只有逐格比对抓得到
-    assert sum(folded["data"]["counts"].values()) == 8
+    # 总数没变（7）：所以"sum 相等"抓不到这个缺陷，只有逐格比对抓得到
+    assert sum(folded["data"]["counts"].values()) == 7
 
 
 # ====================================================================== ④ 类判据（词表覆盖门的状态值）

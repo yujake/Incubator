@@ -95,7 +95,7 @@ def test_a_relative_project_dir_resolves_under_the_workspace(tmp_path: Path, mon
     st = Store(ws)
     st.init()
     rep = CL.check_closing(st, project_dir=".", report_path="out/review/REPORT.md")
-    assert rep.status["paper"] == "pass", rep.to_dict()
+    assert "paper" not in rep.status, rep.to_dict()
     assert rep.readings["paper"]["verdict"] == "consistent", rep.readings["paper"]
 
 
@@ -140,7 +140,9 @@ def test_an_absolute_path_is_left_alone(tmp_path: Path):
     st = Store(ws)
     st.init()
     rep = CL.check_closing(st, project_dir=str(ws), report_path=str(ws / "out" / "review" / "REPORT.md"))
-    assert rep.status["paper"] == "pass" and rep.status["report_shape"] == "pass", rep.to_dict()
+    assert "paper" not in rep.status and rep.readings["paper"]["verdict"] == "consistent", \
+        rep.to_dict()
+    assert rep.status["report_shape"] == "pass", rep.to_dict()
 
 
 # ------------------------------------------------- 第三个落点：`conductor.acceptance`

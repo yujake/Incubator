@@ -2536,7 +2536,13 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （agent 面 11 格 prompt / F 的 `attack.step` 参数说明 / 工具面 `attack.step.params`
 #: 的 sha；`attack.step` 的声明基线同步记一条 amendment）；两文档重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型）。
-PROMPT_VERSION = "p281"
+#: p281 → p282（2026-11-14，业主裁定「是否出 paper 退出收工判定，由 M 自行判断是否到这个
+#: 时机」）：`conductor.closing` 的说明从「八格」改成「七格」，`status`
+#: 的键名单去掉 `paper`、注明它落 `readings.paper`（由 M 判断，不是门）。段变了 D / G / H /
+#: M 四格（这四格读得到 M 的工具说明）；其余七格逐字未动。连带：`_FROZEN_PROMPT_DIGESTS`
+#: 与 `_FROZEN_PROMPT_VERSION` = p282（现算，不是手抄）；`tests/fixtures/prompt_cache_warm.json`
+#: 两档重跑待做（真调模型，本批未跑）；两份 golden 按现值重冻待做（已在基线之外）。
+PROMPT_VERSION = "p282"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

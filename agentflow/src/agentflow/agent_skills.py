@@ -397,6 +397,22 @@ def _m_skills() -> tuple[Skill, ...]:
    门报 `unknown`（没查成）与报 `pass`（查过了没问题）是两件事，
    读到 `unknown` 不许写成"应该没事"，也不许直接盖掉 —— 写明"这一格没查成 + 为什么"。
 
+## 出不出 paper 由你判断时机，它不是门（`readings["paper"]`）
+
+2026-11-14 业主裁定：「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」。
+于是收工门那七格里**没有**论文那一格：要不要走到"写论文"这一步、什么时候走，由你判断。
+它仍然算，落在这趟收工读数的 `readings["paper"]` 里 —— 判断依据就是那一格的 `verdict`：
+
+- `consistent`：盘上有正文，编译回执里的 `tex_sha256` 与它逐字对得上（这份 PDF 是它编的）；
+- `drifted`：正文改过而 PDF 没跟上 ⇒ 要出论文就让 G 再编一次（那是 G 的活）；
+  不出就如实写"正文改了、PDF 没跟上"，别把它写成已完成；
+- `unknown`：没查成（没给项目根 / 回执读不出来）—— **不是通过，也不是"没有 PDF"**；
+- `not_applicable`：盘上没有 `out/paper/main.tex`（这一趟不出论文，合法）。
+
+这一格不进 `machine_pass`、也不产生 blocker：门不再替你决定"必须有论文"。
+但"读数是读数"那条纪律照旧 —— 盘上有论文、而 PDF 是旧正文编的，不许写成已完成
+（那一档就是 `drifted`）。
+
 ## 卡在哪一档
 
 - 缺**证据** ⇒ 派能出证据的角色（数值 `E.run_experiment`、逐条走查 `B → V`、
@@ -3747,6 +3763,18 @@ def _g_skills() -> tuple[Skill, ...]:
 `revise` 会把 `status` 置 `revised`；`documents.review_rounds` **由 H 的复审推进**
 （改稿本身不再加轮次）—— 轮次是**读数**，不是战绩。
 
+## 要改某条断言：**同号交回**
+
+- **号从哪读**：`fs.read` 本稿 `documents/<doc_id>.md`，正文里每条断言都标着
+  `**`claim-N`**`（也可以读 `documents.claims[*].claim_id`）—— 不要自己编号。
+- **改哪条就把那条的 `claim_id` 原样放进 `new_claims`**：脚本按位置归一化，同号交回 =
+  原位替换（回执 `replaced_claim_ids`），条数不变。要**新增**一条就不给 `claim_id`
+  （`compose_claim` 的内容派生别名可以留着，落库时会被重编号）。
+- **给了本稿没有的号** ⇒ 受控拒 `unknown_claim_id`，拒信会列出本稿现行号 —— 照着交。
+- **`fixed_findings` 不是"我说修好了"**：发现的 `target` 是 `claim-N` 时，这一笔
+  `revise` 必须真的同号换了 claim-N 且内容有变化，否则拒 `finding_target_not_revised`。
+  只把状态标成 `fixed`、正文一个字没改，写口不收。
+
 ## 别把两件工具用混
 
 - `G.refresh_markdown`：按库里当前数据**重画文件**，**不改数据行**；
@@ -4409,6 +4437,7 @@ def _body_action_problems() -> list[str]:
 #: 加新落点时同时加这里（这一条是那件事的机器形态；判据见 `_path_problems`）。
 WORKSPACE_PATH_ROOTS: tuple[str, ...] = (
     "out/",          # 框架的产物区（论文、审校报告、任务全文、秘书台账）
+    "documents/",    # 稿件行登记的可读正文（`build_document` 的 default_subdir）
     "reports/",      # 研究手稿与攻坚台账（D / F 的落点）
     "data/",         # 台账表落盘后的那份 JSON
     "code/",         # 脚本与 Lean 源码

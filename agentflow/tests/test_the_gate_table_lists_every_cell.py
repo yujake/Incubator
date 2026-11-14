@@ -3,7 +3,7 @@
 
 ## 这一份守什么（R-BE1 的 ③-8，2026-10-27）
 
-`closing.py` 的模块 docstring 用一张表说"八格各判什么"。改前那张表只有七行 —— 少了
+`closing.py` 的模块 docstring 用一张表说"七格各判什么"（2026-11-14：`paper` 退出收工判定）。改前那张表只有七行 —— 少了
 `acceptance` 一格，而没有任何判据会红：门的实现与门的说明书各说八格里的七格。
 这一条从 docstring 里现扫表行（反引号里的那一格名字），与 `DEFAULT_CHECKS` 对拍。
 
@@ -40,8 +40,8 @@ def test_the_docstring_table_lists_every_cell_in_order() -> None:
 
 
 def test_the_table_is_not_vacuous() -> None:
-    """反真空：扫出来的行数必须等于八格的数量（扫不到 ≠ 一致）。"""
-    assert len(_documented_cells()) == len(CL.DEFAULT_CHECKS) >= 8, (
+    """反真空：扫出来的行数必须等于七格的数量（扫不到 ≠ 一致）。"""
+    assert len(_documented_cells()) == len(CL.DEFAULT_CHECKS) >= 7, (
         len(_documented_cells()), len(CL.DEFAULT_CHECKS))
 
 

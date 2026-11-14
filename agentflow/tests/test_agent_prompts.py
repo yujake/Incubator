@@ -2515,7 +2515,11 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     X1 更正后 `attack.abandon_plan` 的说明 / 参数改成三档（`math_error` / `difficulty` /
 #     不再需要；另加 `basis` / `difficulty` / `salvaged` 证据格）。
 # A / C / E / G / H / L / M / V 八格与 p280 逐字同值。
-_FROZEN_PROMPT_VERSION = "p281"
+# p282（2026-11-14，业主裁定「是否出 paper 退出收工判定」）：`conductor.closing` 的说明
+# 由「八格」改成「七格」，`status` 的键名单去掉 `paper`（它落
+# `readings.paper`，由 M 判断）。段变 D / G / H / M 四格；其余七格逐字未动。
+# 现算（`temp/k1_recompute_digests.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。
+_FROZEN_PROMPT_VERSION = "p282"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2768,13 +2772,13 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "32b293f6106065c6bf8f07e4e33f22400aa3f9e7cfe87565462b828a7bf26706",
     "B": "0236ed0cdb1dc4795adc6610b8565475729b28b5e1182ef286d47071ada1be1e",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
-    "D": "eff9aa3ff986d6d69c9963c4197c3d410c3c913bf303aa3c465c4bee95208df5",
+    "D": "209d873d15b6e9d6f51306530e8f500d4e9bc6c3d8f7ff5b58237aeba704f129",
     "E": "063d2d72dc8a9a9ced099f15f4d2f81a86a86055ce8fcb638d00f3fbf07c7e6b",
     "F": "3de77cc88088a4e76ceeee7bed5bf607a1e450084623d890aefaa0b878857e52",
-    "G": "4f8dc27ea967fb0a5c917c6c65249227b2d27c30b390b1f95e0894c3e7a11790",
-    "H": "6dda638560012a8d2842bddb413295b74d7e8e2ec4660e4335bee90fb1b9123a",
+    "G": "d39af13d6a595396eb210fcd3a2e0adc5ce7d1f6f186607753f33e0b6296098a",
+    "H": "782e54305f6573202a61069dddf2f0dcde92a386f4190af97708742a56f79394",
     "L": "cc1068bca4175f983fa323e9c853e70833e3eb2f1badfef247d54a420513770a",
-    "M": "2c197af400acc1f9c5219ca920bf335f4b100edea9edfbca28854b4ca8434a38",
+    "M": "c3ee7e36e22a8a5d2daaa57ad2636c5669c419a61447a73f505d35ca6039fe6b",
     "V": "983eefc06c583904e4d2a10d864b0fb7f382cde30503610f6f4e7c9d9dc42384",
 }
 

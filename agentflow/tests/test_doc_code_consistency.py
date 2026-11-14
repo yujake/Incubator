@@ -69,10 +69,10 @@ def _count_of(text: str, label: str) -> int | None:
 #: ② 带括号 + 冒号：「收工门（<出处>）：N 条」—— 子命令 `help=` 与测试 docstring 用的形态。
 #:    这一支刻意只认 五..十 / 数字：「那一条」这种量词会被 `[一二三四五六七八九十]` 打进来
 #:    （实测假阳：`tests/test_review_chain_endorse.py` 的「收工门（§22）里最贵的那一条是 …」）；
-#: ③ 括号里直接写数：「跑收工门（八格）」—— 后面没有冒号（`tools/conductor_tools.py`）；
+#: ③ 括号里直接写数：「跑收工门（七格）」—— 后面没有冒号（`tools/conductor_tools.py`）；
 #: ④ 所有格：「收工门（`draft/37` §16 P3 的 N 条）」—— 数被「的」隔开（`docs/ROLE-SPECS.md`）。
 #:
-#: ②③④ 都容忍 Markdown 强调符（`**收工门**（…）`、`收工门：**八格**`、`收工门（**八格**）`）：
+#: ②③④ 都容忍 Markdown 强调符（`**收工门**（…）`、`收工门：**七格**`、`收工门（**七格**）`）：
 #: 星号夹在词与词之间是同一种事实陈述的排版变体，判据看不见它才是漏
 #: （`docs/ROLE-SPECS.md` 的工具表就是"强调符夹在词与括号之间"再加"所有格"那个形态）。
 _GATE_HEAD = r"收工门\**\s*"
@@ -91,7 +91,7 @@ _GATE_COUNT_RES = (_GATE_COUNT_RE, _GATE_COUNT_BRACKET_RE, _GATE_COUNT_PAREN_NUM
 def _gate_count_matches(line: str) -> list[tuple[str, str]]:
     """这一行里每一处"收工门 N 条/N 格"⇒ `(数字原文, 命中的整段)`。
 
-    同一条陈述会被多条正则同时命中（`收工门（八格）` 同时落在 ②③ 上），所以按
+    同一条陈述会被多条正则同时命中（`收工门（七格）` 同时落在 ②③ 上），所以按
     "起点 + 数字"去重 —— 不去重的话反真空读数会把一处算成两三处。
     """
     got: dict[tuple[int, str], str] = {}
@@ -319,14 +319,20 @@ def test_every_documented_closing_cell_count_matches_the_live_checks() -> None:
     from agentflow import closing as CL
 
     want = len(CL.DEFAULT_CHECKS)
-    assert want >= 8, f"收工门的格数变了（{want}）：先看这一条判据还要不要这么写"
+    # 2026-11-14：`paper` 退出收工判定（业主裁定）⇒ 格数 8 → 7。门槛跟着真身走；
+    # 判据强度没变（仍然是"每一处现在时的 N 必须等于现算格数"）。
+    assert want >= 7, f"收工门的格数变了（{want}）：先看这一条判据还要不要这么写"
 
     # ---- 反负控先跑：夹具这一层必须先证明"它真的会红、也真的会豁免"，
     # ---- 否则扫描面那一格红的时候，没人知道是文档漂了还是判据坏了。
-    # 反负控①：把一处写成别的数 ⇒ 同一个扫描必须看见
-    sample = _read("docs/USER-TEST.md").replace("收工门：八格全过", "收工门：五条全过")
-    assert sample != _read("docs/USER-TEST.md"), "夹具没改到那一处 ⇒ 这条反负控是空转"
-    assert _gate_count_problems(sample, want, where="USER-TEST.md"), "写错了却没被扫出来"
+    # 反负控①：把一处现在时的真站点写成别的数 ⇒ 同一个扫描必须看见
+    # （USER-TEST.md 那一屏是真机旧记录，2026-11-14 起带"当时"标记 ⇒ 换成 READING-MAP
+    #  里那句现在时的格数：判据要证明的是"扫描面咬得住现在时"，不是咬住历史留痕。）
+    _reading_map = _read("docs/READING-MAP.md")
+    sample = _reading_map.replace("收工门（`draft/37` §16 P3）：**七格**",
+                                  "收工门（`draft/37` §16 P3）：**五格**")
+    assert sample != _reading_map, "夹具没改到那一处 ⇒ 这条反负控是空转"
+    assert _gate_count_problems(sample, want, where="READING-MAP.md"), "写错了却没被扫出来"
     # 反负控②（第二种写法，扩面之后两处真漂点用的就是它）：带括号的「收工门（…）：N 条」
     bracketed = "收工门（`draft/37` §16 P3）：五条各自能造红"
     assert _gate_count_problems(bracketed, want, where="（现在时·括号写法）"), \

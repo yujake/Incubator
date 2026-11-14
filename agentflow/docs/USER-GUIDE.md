@@ -651,11 +651,11 @@ Get-Content projects\<ws>\sessions\<sid>.jsonl -Tail 30
 # ② 台账真的落了东西吗（不是"它说落了"）
 python -c "import json,pathlib;d=pathlib.Path(r'projects\<ws>\data');print({t:len(json.loads((d/f'{t}.json').read_text(encoding='utf-8'))['rows']) for t in ('statements','tasks','documents','experiments')})"
 
-# ③ 收工门（8 格）+ 内容级验收读数
+# ③ 收工门（7 格）+ 内容级验收读数
 python -m agentflow --root projects\<ws> closing
 ```
 
-`closing` 逐格印 `paper / contradictions / load_bearing / report_shape / user_pending / substance / acceptance / artifact_ledger`，
+`closing` 逐格印 `contradictions / load_bearing / report_shape / user_pending / substance / acceptance / artifact_ledger`，另印一行 `paper（读数，不是门）`（出不出论文由 M 判断时机），
 再印非平凡性那一行（`T0..T4` + 未判；T0 = 基础定理或初步结论，平凡不再拒收），以及论文侧缺铺垫与 T4 缺造梯子记录（`[warning]` 行）。
 
 `closing` 头一行现在会写明**你读的是哪一场会话**（2026-11-03，153-U-07）：

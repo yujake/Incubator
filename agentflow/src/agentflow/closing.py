@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
-"""收工门：把"能不能交"从一句判断变成八格各自能造红的读数。
+"""收工门：把"能不能交"从一句判断变成七格各自能造红的读数。
 
-判据：`DEFAULT_CHECKS` 八格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
+判据：`DEFAULT_CHECKS` 七格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
+
+论文那一格（`paper`）不在门里（业主 2026-11-14 裁定：「是否出 paper 退出收工判定，
+由 M 自行判断是否到这个时机」）：它照旧算、照旧落在 `readings["paper"]`，
+但不进 `status`、不进 `machine_pass` —— 判断该不该出论文的人读那一格，
+门不拿它当交付前提。
 三态纪律：`pass` / `fail` / `unknown`，`unknown` 不是通过（"没查成"与"查过了没问题"必须分得开）；
 `machine_pass` 只在每格都 `pass` 时为真。最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件
 事：包是旧的（锚 `drifted`）、有一条依赖还挂着争议、承重的那条结论只有数值支持却写着"已证明"、报告
@@ -9,7 +14,6 @@
 
 | 检查 | 判什么 |
 |---|---|
-| `paper` | 有论文正文（`out/paper/main.tex`）⇒ 必须由「本次」编译出 `main.pdf`（回执里的 `tex_sha256` == 盘上那一份）；没有正文 ⇒ 不适用 |
 | `contradictions` | 没有未裁决的矛盾：`dependencies.status ∈ {disputed, refuted}`、`statements.status = disputed`、稿件 `status = unresolved_review` |
 | `load_bearing` | 承重结论（正文里 `evidence_kind="proof"` 的断言）必须有 T3（形式化）或已降档 |
 | `report_shape` | 报告形状：附件三件套判实（来源 / 依据 / 版本 sha）+ M 声明的体例有没有兑现 |
@@ -54,10 +58,16 @@ from . import proofregistry as _PR
 #: 而前五条全过、`can_close=true`、报告写着「可交付」—— 五格里没有一格问
 #:「这一趟到底产出了什么」。这不是新判据，是把已有的三态纪律补到它该管的地方：
 #: 「没做」不许读成「没问题」。
+#:
+#: 2026-11-14（业主裁定）：`paper` 退出收工判定 —— 「是否出 paper 退出收工判定，
+#: 由 M 自行判断是否到这个时机」。论文正文与 PDF 对不对得上仍是 `readings["paper"]`
+#: （`_check_paper` 保留、照旧算），但它不再是一格：M 读那一格决定该不该出论文，
+#: 门不拿它当交付前提。显式把 `"paper"` 写进 `checks=` 的调用方仍会得到那一格
+#: （既有夹具与论文那一路的负控要它），但缺省七格里没有它。
 DEFAULT_CHECKS: tuple[str, ...] = (
-    "paper", "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
+    "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
     "acceptance",
-    # 第八格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
+    # 第七格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
     # 「进格」是人的裁定（`draft/46-04` §2.10 ③ 原本把它列为独立裁定项）；
     # 但判据强度按三态收窄：`changed` 记 `unknown`（登记之后被正常改写是常态），
     # 只有 `missing`/`unreadable` 判 `fail`。
@@ -366,7 +376,7 @@ LEG_CHECK_KINDS: dict[str, str] = {
                                "`paper` 那一格只盯 PDF 的来路（回执里的 `tex_sha256`），"
                                "而「这份登记过的产物还是不是登记时那一版」在收工门上**没有任何读数**。"
                                "注意三态：`changed` 在真机上是**常见**的（根 B 589 条 ≈18.75%："
-                               "登记之后又被正常改写），所以 `DEFAULT_CHECKS` 的第八格只把 "
+                               "登记之后又被正常改写），所以 `DEFAULT_CHECKS` 的最后一格只把 "
                                "`missing`/`unreadable` 判 `fail`，`changed` 记 `unknown`"
                                "（把正常产物读成坏正是这一格要防的假读数）",
 
@@ -1083,7 +1093,7 @@ RUN_EVIDENCE_NAME = "out/review/RUN-EVIDENCE.json"
 #: `heuristic` 不算：它是"看起来像"的读数，本来就不承担复跑的义务。
 NUMERIC_CONCLUSION_KINDS: tuple[str, ...] = ("proof", "cross_check")
 
-#: 收工门那一条读数的名字（它不是八格之一，与 `quote_evidence` 同一层：落 `readings`，
+#: 收工门那一条读数的名字（它不是格表的一格，与 `quote_evidence` 同一层：落 `readings`，
 #: 必要时出一条 blocker —— `machine_pass` 只看 blocker 与 `status`，所以它会真的拦住）。
 RUN_EVIDENCE_READING = "run_evidence"
 
@@ -3613,7 +3623,7 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
         return SessionIdentity(
             "", "",
             f"拒绝：没有会话 {sid!r}（sessions/{sid}.jsonl 不在盘上）"
-            f" ⇒ 不跑收工门（退出码 2，不出一份「八格全是没查成」的空读数）。{hint}",
+            f" ⇒ 不跑收工门（退出码 2，不出一份「七格全是没查成」的空读数）。{hint}",
             NO_SUCH_SESSION)
     return SessionIdentity(
         sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "", "")
@@ -3625,7 +3635,7 @@ VERDICT_NOTE = (
     "收工与否由 M 判（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」"
     "＋「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令"
     "给自己设计任务列表」）：`m_says_done` = M 在 `m_verdict.met` 里说的那一句（它按自己列的"
-    "`tasks` 判『活做完了没有』）；机器八格（`status` / `machine_pass`）是读数。"
+    "`tasks` 判『活做完了没有』）；机器七格（`status` / `machine_pass`）是读数。"
     "两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名"
     "—— 判据归 M，读数照旧一格不减。M 没提交判据 ⇒ `m_says_done=false`（『没人判过』不是"
     "『判过能交』）。"
@@ -3734,7 +3744,7 @@ class ClosingReport:
 
     `m_verdict`：M 自己的判据 ——
     `{"goal": "我这一趟的目标", "met": True/False, "basis": "依据哪几条读数", "at": …}`。
-    `m_says_done` 由它决定；机器口径是 `can_close`（`bool | None`，`None` = 算不出来，不许读成通过），机器那八格（`status` / `machine_pass`）退成读数。
+    `m_says_done` 由它决定；机器口径是 `can_close`（`bool | None`，`None` = 算不出来，不许读成通过），那七格（`status` / `machine_pass`）退成读数。
     """
 
     status: dict[str, str] = field(default_factory=dict)
@@ -3759,7 +3769,7 @@ class ClosingReport:
 
         形状：`{"code","sid","detail","exit_code"}`。`detail` 就是 CLI 打出来的那一句
         （`closing_session_identity()` 的 `problem`）—— 只写一处，两个出口同文同码。
-        拒绝发生时 `status` 是空的：这不是"八格全是没查成"的空读数，而是"门根本没跑"。
+        拒绝发生时 `status` 是空的：这不是"七格全是没查成"的空读数，而是"门根本没跑"。
         """
         got = self.readings.get("refusal")
         return dict(got) if isinstance(got, Mapping) and got.get("code") else None
@@ -3771,7 +3781,7 @@ class ClosingReport:
 
     @property
     def machine_pass(self) -> bool:
-        """机器读数：八格每条都 `pass` 且没有 blocker（老口径的机械合取）。
+        """机器读数：门里那七格每条都 `pass` 且没有 blocker（老口径的机械合取）。
 
         它只是一个读数（收工不由它定）：
         「是否收工不要用机械判据，由 M 制定的目标是否达成为准」。
@@ -3784,7 +3794,7 @@ class ClosingReport:
 
         - M 提交了 `m_verdict.met=True` ⇒ `True`（哪怕机器某几格是 fail/unknown：
           那些格子照样进读数与 `overrode`，不是静默放行）；
-        - M 提交了 `met=False` ⇒ `False`（哪怕机器八格全 pass —— 那是"机器觉得没问题、
+        - M 提交了 `met=False` ⇒ `False`（哪怕机器七格全 pass —— 那是"机器觉得没问题、
           它自己知道没做到"，也必须由它说了算）；
         - M 没提交 ⇒ `False` + `m_verdict=False` 那一档的读数（"没人判过" ≠ "判过能交"）。
 
@@ -3825,7 +3835,7 @@ class ClosingReport:
         """这一趟到底可不可以交（调用方唯一该问的布尔）。
 
         机器口径给了（`can_close is not None`）就听它；没给（还没接线）就退回
-        "M 说达成 ∧ 机器八格过 + 没有 blocker" —— 与 `tri_state_exit_code` 的 0 同一判据，
+        "M 说达成 ∧ 机器七格过 + 没有 blocker" —— 与 `tri_state_exit_code` 的 0 同一判据，
         于是"能不能交"在接线前后都是同一个意思，不会因为接线而换口径。
         """
         machine = self.can_close
@@ -3865,7 +3875,7 @@ class ClosingReport:
 
         两个方向都记（这就是"不许静默放行"的落点）：
         - M 说达成、而某几格是 `fail`/`unknown` ⇒ 逐格点名；
-        - M 说没达成、而八格全 `pass` ⇒ 记一格 `"*"`（机器觉得没问题，它自己知道没做到）。
+        - M 说没达成、而七格全 `pass` ⇒ 记一格 `"*"`（机器觉得没问题，它自己知道没做到）。
         """
         if not self.m_verdict:
             return []
@@ -3879,7 +3889,7 @@ class ClosingReport:
                     for f in self.blockers if f.check not in seen]
             return bad
         if not bad and self.machine_pass:
-            return [{"check": "*", "state": "pass", "why": "机器八格全 pass，而 M 判没达成"}]
+            return [{"check": "*", "state": "pass", "why": "机器七格全 pass，而 M 判没达成"}]
         return []
 
     @property
@@ -3927,7 +3937,7 @@ class ClosingReport:
     def summon_consumption(self) -> dict[str, Any]:
         """收工门的「子产出处理」那一格（口径见 `summon_consumption_reading`）。
 
-        它不是八格之一，也没有 `status`：这条规矩不 fail 收工，
+        它不是格表的一格，也没有 `status`：这条规矩不 fail 收工，
         但它必须读得到。`checked=False` = "这一格没查成"（不是"处理了"）。
         """
         return dict(self.readings.get("summon_consumption") or {})
@@ -3987,7 +3997,7 @@ class ClosingReport:
 
     def summary(self) -> str:
         """一句话读数（给 CLI 与交付说明用；不许盖过明细）。"""
-        machine = (f"机器八格：pass {sum(1 for v in self.status.values() if v == 'pass')}/"
+        machine = (f"机器七格：pass {sum(1 for v in self.status.values() if v == 'pass')}/"
                    f"{len(self.status)}"
                    + (f"；fail={self.failed}" if self.failed else "")
                    + (f"；unknown={self.unknowns}" if self.unknowns else ""))
@@ -4141,6 +4151,14 @@ def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
 （不交付论文，合法）；有正文、回执在、`tex_sha256` 对得上 ⇒ `pass`；有正文而回执的 tex 哈希对不上
 ⇒ `fail` + `paper_pdf_is_stale`（改完正文没重编）；回执不在 / 读不出来 ⇒ `unknown` +
 `paper_not_checked`（没查成，不是通过）。
+
+## 2026-11-14：这一格不再是门，但判据保留
+
+业主逐字：「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」。于是
+`DEFAULT_CHECKS` 里没有 `paper`；`check_closing` 改为经 :func:`_run_paper_reading`
+把它算成读数（`readings["paper"]` 四档照旧，`status` 不落、finding 降 warning）。
+函数本身一个字不改 —— 显式把 `"paper"` 写进 `checks=` 的调用方（论文那一路的负控、
+D-38 的夹具）仍然得到这一格，判据强度不变。
     """
     if not str(project_dir or "").strip():
         rep.status["paper"] = "unknown"
@@ -4190,6 +4208,52 @@ def _check_paper(rep: ClosingReport, project_dir: str, store: Any) -> None:
         "paper", "paper_not_checked", "warning",
         f"论文那一格没查成：{why} ⇒ 这一格判不了（不是「PDF 不对」，也不是「没有 PDF」）",
     ))
+
+
+#: `paper` 读数里那句"它不是门"的说明（业主 2026-11-14：是否出 paper 由 M 判断时机）。
+PAPER_READING_NOTE = "这一格由 M 判断，不是门（不进 machine_pass）"
+
+
+def _run_paper_reading(rep: ClosingReport, project_dir: str, store: Any) -> None:
+    """把 `paper` 那一格算成读数（不进 `status`、不产生 blocker）。
+
+    ## 为什么还要跑 `_check_paper`
+
+    业主 2026-11-14 的裁定是"这一格退出收工判定"，不是"这一格不用查"：
+    「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」—— M 要判断那个时机，
+    依据就是这一格（`verdict` 四档 `consistent` / `drifted` / `unknown` /
+    `not_applicable`）。所以判据本体一个字不改，改的是它落在哪里。
+
+    ## 为什么不能直接调 `_run_check`
+
+    `_run_check` 会写 `rep.status["paper"]`，而 `status` 的键集就是门的格表
+    （`tests/test_a_crashed_cell_is_unknown_not_a_traceback.py` 钉着"`set(status) ==
+    set(DEFAULT_CHECKS)`"）；它还会把 `paper_pdf_is_stale` 作为 blocker 留在
+    `rep.findings` 里 —— 那会让 `machine_pass` 继续因为论文而假，等于这一格没退出门。
+    所以在一次性报告上跑 `_check_paper`，只搬 `readings`，`status` 不搬，
+    它那几条 finding 降成 `warning`（看得见、不拦门）。
+
+    ## 没查成也留一格读数
+
+    `_check_paper` 在"没给项目根 / 给的是论文包本身"那两档只写 `status` + finding、
+    不写 `readings["paper"]`。这里补一格 `verdict="unknown"` 与那句原话 ——
+    "这一格没查成"不许变成"这一格不存在"。
+    """
+    scratch = ClosingReport()
+    _check_paper(scratch, project_dir, store)
+    reading = dict(scratch.readings.get("paper") or {})
+    if not reading:
+        why = next((str(f.detail or "") for f in scratch.findings
+                    if str(getattr(f, "check", "") or "") == "paper"), "")
+        reading = {"verdict": str(scratch.status.get("paper") or "unknown"),
+                   "root": str(project_dir or ""), "reason": why}
+    reading["gate"] = PAPER_READING_NOTE
+    rep.readings["paper"] = reading
+    for one in scratch.findings:
+        rep.findings.append(Finding(
+            str(getattr(one, "check", "") or "paper"),
+            str(getattr(one, "code", "") or ""), "warning",
+            str(getattr(one, "detail", "") or "")))
 
 
 #: 「有命题、已成稿，而论文包里没有对应表」这一档的理由码（D-38）。
@@ -4557,7 +4621,7 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
     对应表要说清每条定理、引理、命题、例子、实验对应产出物的真实文件与序号 ——
     H 依据它核查，G 依据它写作。
 
-    为什么不把它加成 `DEFAULT_CHECKS` 的第九格：既有的八格各有各的语义
+    为什么不把它加成 `DEFAULT_CHECKS` 的第九格：既有的七格各有各的语义
     （`status` 里每一格都参与 `machine_pass` 与退出码），加一格就会改变"收工门几格"
     这个读数与 `tri_state_exit_code` 的分布。这一格照着 `roster_registration` /
     `nontriviality` 的形状落 `readings`，并且仍然给 `Finding`（表在而对不上时拦门）：
@@ -5080,6 +5144,42 @@ def _human_span(seconds: float | None) -> str:
     return f"{days} 天 {hours} 小时" if hours else f"{days} 天"
 
 
+def _cited_placeholder_reading(row: Mapping[str, Any]) -> dict[str, Any]:
+    """这一行的 V 签位是不是「引文占位」（业主 2026-11-14 的口径）。
+
+    业主逐字：「引文收录阶段的 V 签由引文占位，这是已有口径」。占位签的唯一标记是
+    `bits.evidence.reviewed_source == "citation"`：写侧 `evidencebits.bits_of` 在
+    `origin="external_lit"` + `source_lit_id` + 逐字核过时落这一档，读侧
+    `evidencebits._citation_review_cleared` 把历史行（`reviewed=true` 而凭据是
+    `{"evidence": "lit:…"}`）也降成这一档；真签是 `"v"`（认签口写，
+    `register_statement` / `secretary.record_statement` 两处）。所以"有占位"与
+    "没有真签"是同一件事，不需要第二份判据。
+
+    三态：`bits` 读不出来 ⇒ `checked=False` + `placeholder=False` ——
+    "判不了"不许读成"有占位"（放它过去等于把一条真欠签静默放过）。
+
+    单独成函数是为了让判据能在这一处打桩（`tests/test_cited_placeholder_is_not_unsigned.py`
+    把这一格换成"没有占位" ⇒ 那 4 条必须重新进 `statements_unsigned`）。
+    """
+    out: dict[str, Any] = {"checked": False, "placeholder": False,
+                           "reviewed_source": "", "evidence": "", "why": ""}
+    try:
+        bits = EB.bits_from_row(dict(row))
+    except Exception as exc:  # noqa: BLE001 —— 判不了不许折成"有占位"
+        out["why"] = f"bits 读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
+        return out
+    ev = dict(bits.get("evidence") or {})
+    source = str(ev.get("reviewed_source") or "")
+    by = dict(ev.get("reviewed_by") or {})
+    out.update(checked=True, reviewed_source=source,
+               evidence=str(by.get("evidence") or ""))
+    if source == EB.REVIEWED_SOURCE_CITATION:
+        out["placeholder"] = True
+        out["why"] = (f"V 签位由引文占位（reviewed_source=citation，凭据 "
+                      f"{out['evidence'] or '文献编号'}）⇒ 这一档不欠 V 签")
+    return out
+
+
 def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     """I1 的收工读数：既没有 V 签、也没有被明确放弃的非概念命题（逐条点名）。
 
@@ -5101,7 +5201,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
       不算放弃（它进下面 `abandoned_without_reason` 那一类），否则"标个状态"就能
       绕过整条裁定。
 
-    ## 每一行的 `class`（十二档；这是散文里的受控词，刻意不定义成模块级元组 ——
+    ## 每一行的 `class`（十三档；这是散文里的受控词，刻意不定义成模块级元组 ——
     ## R011 的死取值普查会排除"定义点所在文件"当产出面，而这里的产出点就在本文件）
 
     | class | 意思 |
@@ -5117,7 +5217,8 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     | `signed_pending_filing` | 凭据复算通过、而册里还没收录（等 B；不计欠签） |
     | `judgment_missing` | 判了「成立」而秘书那一问没判成（这一签不发，等判定接上之后重签） |
     | `unreadable` | 台账读不出来（这一条没查成，不是"没签过"） |
-    | `never_submitted` | 一次都没送过 V |
+    | `never_submitted` | 一次都没送过 V（真欠签；`cited_placeholder` 与它是两档，见下） |
+    | `cited_placeholder` | 引文占位（`reviewed_source="citation"`）且没有真签 ⇒ 不欠 V 签（业主 2026-11-14：「引文收录阶段的 V 签由引文占位」；单列，不进 `rows` / `count`） |
 
     一条命题有多份证明时，按上面那张表的次序取最重的一档（`fault_unrepaired`
     排在最前：它有人被要求改，其余几档还在等一个动作）。
@@ -5125,6 +5226,14 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     `signed_pending_filing` 不进 `rows` / `count`（它不是欠签、不阻塞收工门），
     单列在 `pending_filing` / `pending_filing_count`，并在 `reason` 里点名 ——
     那是「V 签在稿上、B 还没收录」的中间态（V 只对手稿负责）。
+
+    `cited_placeholder` 同一条纪律（2026-11-14 业主裁定）：引文收录阶段的 V 签位
+    填的是文献编号，那是占位、不是真签 —— 它不欠 V 签，单列在
+    `cited_placeholder` / `cited_placeholder_count`，不进 `rows` / `count`，
+    也不进 `by_class`（那一列只数真欠签的档）。判据不是"有没有 bits"，而是唯一读口
+    `_cited_placeholder_reading`：`reviewed_source == "citation"` 才算占位；
+    读不出来按"不是占位"处理（宁可欠签，不许静默放过）。没有占位又没真签的行
+    照旧进 `rows`（负控不放宽）。
 
     ## 每一行给的读数
 
@@ -5148,6 +5257,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
                            "checked_from": "statements", "rows": [], "by_class": {},
                            "pending_filing": [], "pending_filing_count": 0,
                            "hard_to_prove": [], "hard_to_prove_count": 0,
+                           "cited_placeholder": [], "cited_placeholder_count": 0,
                            "problems": [], "reason": ""}
     rows, why = _statement_rows(store)
     if rows is None:
@@ -5171,7 +5281,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
             "unbacked": 2, "borrowed": 3, "stale": 4, "unissued": 5,
             "awaiting_report": 6, "awaiting_streak": 7,
             "signed_pending_filing": 8, "judgment_missing": 9, "unreadable": 10,
-            "never_submitted": 11}
+            "never_submitted": 11, "cited_placeholder": 12}
     pending_rows: list[dict[str, Any]] = []
     _unsigned_rows_reading(rows, out=out, root=root, now_dt=now_dt, box=box,
                            rank=rank, pending_rows=pending_rows, store=store)
@@ -5180,6 +5290,8 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
     out["pending_filing"] = pending_rows
     out["pending_filing_count"] = len(pending_rows)
+    cited_rows = list(out.get("cited_placeholder") or [])
+    out["cited_placeholder_count"] = len(cited_rows)
     out["hard_to_prove_count"] = len(out.get("hard_to_prove") or [])
     out["checked"] = True
     out["count"] = len(out["rows"])
@@ -5190,6 +5302,9 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     if pending_rows:
         out["reason"] += (f"；另有 {len(pending_rows)} 条是「稿上已签、册里还没收录」"
                           "（不欠签，等 B 收录）")
+    if cited_rows:
+        out["reason"] += (f"；另有 {len(cited_rows)} 条是「引文占位」"
+                          "（V 签位填的是文献编号，不欠签；单列 `cited_placeholder`）")
     if out["hard_to_prove_count"]:
         out["reason"] += (f"；另有 {out['hard_to_prove_count']} 条优化栏记着「难以自证」"
                           "（不欠签；要不要上报成研究任务由父代理裁）")
@@ -5250,6 +5365,13 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                             "⇒ 说不出凭什么判它错")})
                 out["problems"].append(f"{sid}：错误那一档读不出来（凭什么错读不出来）")
             continue
+        # ---- 引文占位 ≠ 欠签（业主 2026-11-14：「引文收录阶段的 V 签由引文占位」）------
+        #
+        # 判据只在 `_cited_placeholder_reading` 一处（`bits.evidence.reviewed_source
+        # == "citation"`）。这里只拿结论用：占位要把"一次都没送过 V"那一档读成
+        # `cited_placeholder`（单列、不进 count）；真签 / 打回 / 过期那几档照旧 ——
+        # 占位不覆盖任何一次真审（"有占位"不等于"审过了"）。
+        ph = _cited_placeholder_reading(row)
         try:
             ledger_rows, ledger_problems = _VR.list_verifications(
                 root, statement_id=sid, limit=None)
@@ -5321,9 +5443,15 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                     cls = "never_submitted"
             else:
                 cls = "never_submitted"
+            # 占位签只改"一次都没送过 V"这一档；真签 / holding / 打回 / 过期照旧。
+            if cls == "never_submitted" and ph.get("placeholder"):
+                cls = "cited_placeholder"
             rec = by_vid.get(vid) or {}
             owner = str(rec.get("submitter") or rec.get("recipient") or "")
             row_manuscript = str((ev.get("last_row") or {}).get("manuscript") or "")
+            why = (str(st.get("why") or "")[:400]
+                   if cls != "cited_placeholder"
+                   else str(ph.get("why") or "引文占位 ⇒ 这一档不欠 V 签"))
             proofs.append({
                 "proof_no": no, "label": label, "state": state, "class": cls,
                 "verdict": verdict, "verification_id": vid,
@@ -5332,15 +5460,18 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                 "manuscript_signed": state == "signed",
                 "why": ((f"签复算通过、册里还没收录（{st.get('filed_why')}）⇒ 等 B 收录；"
                          "这不是「签丢了」") if cls == "signed_pending_filing"
-                        else str(st.get("why") or "")[:400])})
+                        else why)})
         if not proofs:
             continue
         #: 2026-11-08：全部证明都是"已签未收录" ⇒ 这一条不算欠签，单列进
         #: `pending_filing`（收工门不把它当 blocker；它是一条给 B 的待办）。
         #: 2026-11-13：`hard_to_prove` 同一条纪律 —— 它是"优化过了、证不出来"的
         #: 终态结论，不是欠签；但也要单列（静默丢掉另一句谎）。
+        #: 2026-11-14：`cited_placeholder` 同一条纪律 —— 引文占位不是欠签，
+        #: 单列（`cited_placeholder` / `cited_placeholder_count`），也不与真签混算。
         _blocking = [p for p in proofs
-                     if p["class"] not in ("signed_pending_filing", "hard_to_prove")]
+                     if p["class"] not in ("signed_pending_filing", "hard_to_prove",
+                                           "cited_placeholder")]
         if not _blocking:
             if any(p["class"] == "hard_to_prove" for p in proofs):
                 out.setdefault("hard_to_prove", []).append({
@@ -5349,6 +5480,14 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                     "owner": "", "owner_known": False, "proofs": proofs,
                     "why": ("优化栏记着「难以自证」⇒ 这一份不再等签；"
                             "它要不要变成一条研究任务由父代理裁")})
+                continue
+            if any(p["class"] == "cited_placeholder" for p in proofs):
+                out.setdefault("cited_placeholder", []).append({
+                    "stmt_id": sid, "kind": kind, "class": "cited_placeholder",
+                    "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
+                    "owner": "", "owner_known": False, "proofs": proofs,
+                    "why": (str(ph.get("why") or "引文占位")
+                            + "；这一档不欠 V 签（单列，不进 statements_unsigned）")})
                 continue
             pending_rows.append({
                 "stmt_id": sid, "kind": kind, "class": "signed_pending_filing",
@@ -7328,7 +7467,7 @@ M 判。两个码分开（`attachment_fields_missing` / `declared_sections_missi
 
 
 def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> None:
-    """第八格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
+    """最后一格（EE-05，`draft/52` C4）：产物台账必须与盘上一致。
 
 三态按判据强度收窄（C4 的核心，避免把正常产物读成坏）：
 
@@ -7429,7 +7568,7 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
 def _check_run_evidence(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """G8 的回执有没有台账背书（D-41，2026-10-24 真机 r34d）。
 
-    这一条与 `quote_evidence` 同一层：它不进 `DEFAULT_CHECKS`（八格的名字、语义与退出码
+    这一条与 `quote_evidence` 同一层：它不进 `DEFAULT_CHECKS`（格表的名字、语义与退出码
     一个都不动，`tests/test_doc_code_consistency.py` 与 `tests/test_conductor_tools.py`
     因此不必改），落 `readings[RUN_EVIDENCE_READING]`，必要时出一条 blocker ——
     `machine_pass` 只看 `blocker` 与 `status`，所以它真的拦得住；`acceptance` 那一格
@@ -7651,7 +7790,7 @@ def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> 
     """收工门的「子产出处理」格：这一段会话里各趟运行自报的读数汇总。
 
 它为什么在收工门上（业主裁定：「父代理必须处理子代理的产出」）：这条规矩「不 fail 收工」，但必须可见 ——
-一趟 run 派了子、拿到结果、直接 `final`，其它八格「一格都看不出来」：`tasks` 那几行是 `done`、
+一趟 run 派了子、拿到结果、直接 `final`，其它七格「一格都看不出来」：`tasks` 那几行是 `done`、
 `substance` 非空、报告也在盘上。于是这一格读 `agent_run_end.summon_consumption`（每趟运行自己算的那一份，
 `agent_loop.summon_consumption` 是唯一实现）—— 只汇总，不重算（两处各算一份必然分叉："事件说处理了、门说没有"）。
 
@@ -7710,7 +7849,7 @@ def roster_registration_reading(session_root: Any, *, sid: str | None = None,
 
     名册是"代理之间的通信必须经名册"那条纪律的地址面（父 + 直接子 + 绝对编号），而"这一趟派活
     有没有把子代理写进名册"在收工读数里「一格都没有」：`summon_consumption` 只问"子产出处理了
-    没有"，八格问的都是交付面 —— 名册 0 行与名册都写上了，两种日子长得一样。这一格只回答一个
+    没有"，七格问的都是交付面 —— 名册 0 行与名册都写上了，两种日子长得一样。这一格只回答一个
     数：`with_problem` = `roster_problem`（单个 summon）与 `roster_problems`（批量逐项问题）非空
     的「条数」；`registered` 是成功登记的名字条数（与 `with_problem` 对照）。
 
@@ -7940,15 +8079,15 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
 报告里 `readings["refusal"]` 非空（`{"code","sid","detail","exit_code": 2}`），`status` 为空。
 CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.closing`）问的是
 同一个 :func:`closing_session_identity` ⇒ 同一句话、同一个码；"门根本没跑"与"跑了、
-八格都没查成"因此长得不一样。
+七格都没查成"因此长得不一样。
 
 收工由 M 判：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
-⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是八格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
+⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是那七格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
   `retire` / `programs` 是机器口径的两个喂参：
   `retire` 是 `Conductor.retire_integrity` 的读数（要 `checked` / `complete`），`programs` 是程序读数
   （要 `checked` / `running_count`）。两个都给了才可能算出 `can_close` 的真/假；没给 ⇒ `None`
   （`not_wired`，既不是过也不是不过）。见 :func:`machine_caliber`。
-  `goal` / `basis` 是自述。八格照旧逐格现算作读数（`status` / `machine_pass` / `overrode` 逐格点名不一致，
+  `goal` / `basis` 是自述。七格照旧逐格现算作读数（`status` / `machine_pass` / `overrode` 逐格点名不一致，
   `verdict_conflicts` 再点名自述与任务列表对不上）—— 判据归 M，读数的可见性不减。
     """
     rep = ClosingReport()
@@ -7957,7 +8096,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # ---- 会话身份先过闸：号不在盘上 ⇒ 门不跑、马上受控拒绝。
     #
     # 为什么必须在跑门之前：门自己会把每一格兜成 `unknown`，"号不在盘上"与"查过了、
-    # 八格都没查成"在出口上会长得一模一样；闸放在这个唯一入口上，API 那几个出口
+    # 七格都没查成"在出口上会长得一模一样；闸放在这个唯一入口上，API 那几个出口
     # 于是也拿到同一个拒绝。
     identity = closing_session_identity(root, sid)
     if identity.problem:
@@ -8027,28 +8166,38 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",
                                         f"没有这个检查：{name!r}（判据表与实现在这里分家了）"))
+    # ---- 论文那一格：不在门里了，但读数照旧算（业主 2026-11-14） ----------------
+    #
+    # 显式点名的 `checks`（论文那一路的负控 / D-38 夹具）仍然走上面那一支，
+    # 得到 `status["paper"]`；覆盖整张格表的调用（缺省值就是）把它算成读数。
+    # 调用方把 `checks` 缩到别的格子时不算 —— 与改前"缩面就不多出这一格"同一套纪律。
+    if "paper" in checks:
+        pass
+    elif set(checks) >= set(DEFAULT_CHECKS):
+        _run_paper_reading(rep, project_dir, store)
     # ---- G8 的回执有没有台账背书（D-41，2026-10-24 真机 r34d）：与 `quote_evidence`
-    # 同一层的读数 —— 它不是九格之一（八格的语义与退出码一个都不动），但它是 blocker：
+    # 同一层的读数 —— 它不是第七格之一（格表的语义与退出码一个都不动），但它是 blocker：
     # "文件在"与"本轮真的重跑过"是两件事，而此前的门只数得清前一件。
     # 跟 `acceptance` 那一格同进退（G8 是 M 的那张验收表里的一行）：调用方把这一格
     # 缩掉时，不该多出这一面的读数与 Finding。
     if "acceptance" in checks:
         _run_reading(rep, "run_evidence", _check_run_evidence, rep, store, project_dir)
-    # 上报那一格（业主 2026-10-09 第三句）：它不属于八格，是 M 的判据的伴生读数 ——
+    # 上报那一格（业主 2026-10-09 第三句）：它不属于那七格，是 M 的判据的伴生读数 ——
     # "干不了/没做完的项有没有说出来"。放这里是因为它要读会话，而会话根只在这个入口有。
     if rep.m_verdict:
         rep.readings["verdict_escalation"] = _run_reading(
             rep, "verdict_escalation", _escalation_reading,
             root, sid, list(rep.m_verdict.get("tasks") or []))
     # ---- 论文对应表那一格（业主 2026-10-22）：G 写正文之前先有它，H 依据它逐行核。
-    # 它跟着 `paper` 那一格走：点名的 `checks` 里没有 `paper` 就不算（调用方把这一格
-    # 缩小到别的格子时，不该多出这一面的读数与 Finding）。它不是第九格 ——
-    # 八格的语义（`status` / `machine_pass` / 退出码）一个都不动。
-    if "paper" in checks:
+    # 它跟着"整套门"一起跑（`checks` 覆盖 `DEFAULT_CHECKS` 时；`paper` 现在总是算读数），
+    # 但调用方把 `checks` 缩到别的格子时不算 —— 与改前"跟着 `paper` 走"同一套缩面纪律，
+    # 只是 `paper` 从"一格"换成了"一套门里的读数"。它不是 `DEFAULT_CHECKS` 的一格 ——
+    # 格表的语义（`status` / `machine_pass` / 退出码）一个都不动。
+    if "paper" in checks or set(checks) >= set(DEFAULT_CHECKS):
         _run_reading(rep, "mapping", _check_mapping, rep, project_dir, store)
     # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
-    # 为什么不进 `DEFAULT_CHECKS`（它不是八格之一，是八格之外的读数）、也不进退出码：业主逐字
+    # 为什么不进 `DEFAULT_CHECKS`（它不是七格之一，是格表之外的读数）、也不进退出码：业主逐字
     # 「不一定要 fail，但必须可见」。它是一格读数，落 `readings`（`to_dict()`
     # 与服务端都能读到）+ 一条 `warning`（`summons_unconsumed > 0` 时，它会被
     # `agentflow closing` 逐条打出来）—— `machine_pass` 只看 `blocker`，
@@ -8257,9 +8406,9 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # 或者放弃原命题」⇒ statements_unsigned > 0 进 blocker（machine_pass=false、
     # 退出码 1），不是 warning。
     #
-    # 为什么不新增第九个 status 格：status 里每加一格都会改"八格"契约与冻结快照
-    # （见本文件前面对八格的那些注释）；blocker 是既有机制，machine_pass 只看
-    # "八格全 pass 且没有 blocker"，这一格的强度与"第九格 fail"逐字等价。
+    # 为什么不新增第九个 status 格：status 里每加一格都会改格表契约与冻结快照
+    # （见本文件前面对格表的那些注释）；blocker 是既有机制，machine_pass 只看
+    # "七格全 pass 且没有 blocker"，这一格的强度与"第九格 fail"逐字等价。
     _su = rep.readings["statements_unsigned"]
     if not _su.get("checked"):
         rep.findings.append(Finding(
@@ -8371,7 +8520,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # （`data/verifications.json` 根本不存在，`store.rows("verifications")` 直接抛未知表）。
     # 两处口径从来没有被任何一格对起来过 ⇒ 读的人只会看到"没有签"。这一格把正本
     # （文件）与派生副本（如果盘上真有 `data/verifications.json`）对一次账，
-    # `signed` 就是"已签 N 份"那个数。它只落 `readings`、不改变八格的强度。
+    # `signed` 就是"已签 N 份"那个数。它只落 `readings`、不改变格表的强度。
     from . import verifications as _VR_LEDGER
     rep.readings["verification_ledger"] = _run_reading(
         rep, "verification_ledger", _VR_LEDGER.ledger_reading,
@@ -8559,9 +8708,9 @@ def machine_caliber(*, m_says_done: bool, retire: Any = None,
     - 给了但那个它自己 `checked=False`（台账读不成 / 程序读数没查成）⇒ 同样 `None`，
       reason 点名是哪一格没查成（没查成 ≠ 不通过）。
 
-    两条轴别混（读这一格的人最容易错的地方）：八格那条轴（`status` / `machine_pass`）问的是
+    两条轴别混（读这一格的人最容易错的地方）：格表那条轴（`status` / `machine_pass`）问的是
     "那八条判据过没过"，机器口径这一格问的是"M 说做完了 ∧ 树清干净了 ∧ 程序停了没有"。
-    两者可以同时出现"八格 fail 而机器口径 True"（那个工作区的八格里有一条与这三件事无关）；
+    两者可以同时出现"格表 fail 而机器口径 True"（那个工作区的格表里有一条与这三件事无关）；
     所以看到 `can_close=True` 而 `exit_code==1` 并不矛盾 —— 前者是机器口径，后者还要过
     `machine_pass`（见 :func:`tri_state_exit_code`）。
     """
@@ -8608,7 +8757,7 @@ def tri_state_exit_code(rep: ClosingReport) -> int:
     口径（业主 2026-10-09 的裁定 + 2026-11-03 的裁决 ②）：
     - M 没提交判据 ⇒ 2（"没人判过" = 没查成，不是"被拦住"也不是"可交付"）；
     - 其余情况 0 只在两边都说行时给：M 判了"达成"（`m_says_done`）并且机器读数也
-      说行（`machine_pass`：八格全 pass 且 `blockers` 为空 —— 引文无区间 / 对应表缺失 /
+      说行（`machine_pass`：七格全 pass 且 `blockers` 为空 —— 引文无区间 / 对应表缺失 /
       回执无背书那三条 blocker 都在这里）；
     - 剩下的一律 1（被拦住）。
 

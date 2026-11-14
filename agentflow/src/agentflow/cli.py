@@ -4998,6 +4998,15 @@ def cmd_closing(args) -> int:
         state = rep.status.get(name, "?")
         mark = {"pass": "通过", "fail": "拦住", "unknown": "没查成"}.get(state, state)
         print(tty.bullet(f"{name}：{mark}"))
+    # 论文那一格不再是门（业主 2026-11-14「是否出 paper 退出收工判定，由 M 自行判断是否
+    # 到这个时机」）：但读数必须看得见 —— M 判断该不该出论文，依据就是这一格。
+    _paper = (rep.readings or {}).get("paper") or {}
+    if _paper:
+        _pv = {"consistent": "一致（这份 PDF 是盘上这份正文编的）",
+               "drifted": "正文改过、PDF 没跟上（要出论文就重编一次）",
+               "unknown": "没查成", "not_applicable": "这一趟没有论文正文"}.get(
+                   str(_paper.get("verdict") or ""), str(_paper.get("verdict") or "?"))
+        print(tty.bullet(f"paper（读数，不是门）：{_pv} —— 这一格由 M 判断，不是门"))
     for f in rep.findings:
         print(f"  [{f.level}] {f.code}：{f.detail}")
     # 非平凡性那一格（S3/S4）：读数必须在人看得见的地方露面 —— 只塞进 readings 字典

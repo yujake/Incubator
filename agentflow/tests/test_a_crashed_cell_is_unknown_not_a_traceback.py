@@ -146,6 +146,6 @@ def test_the_cli_exits_two_instead_of_a_traceback(tmp_path: pathlib.Path):
     assert "Traceback" not in out, out[-2000:]
     assert proc.returncode == 2, (proc.returncode, out[-2000:])
     assert "contradictions" in out and "没查成" in out, out[-2000:]
-    # 改前这里是"一行 `[store 错误] …`、一格读数都没有"：机器八格的那句汇总必须出现，
+    # 改前这里是"一行 `[store 错误] …`、一格读数都没有"：机器七格的那句汇总必须出现，
     # 说明门自己跑完了（`_print_review_acceptance` 之后仍可能落到 CLI 兜底，那不是门）。
-    assert "机器八格" in out, out[-2000:]
+    assert "机器七格" in out, out[-2000:]

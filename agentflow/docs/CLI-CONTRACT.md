@@ -61,10 +61,14 @@
 ### 3.2 `inspect stats`
 
 - 用途：四个只读读数（`errors` 错误动作 / `flow` 动作分布 / `cost` 钱与 token /
-  `gates` 收工门八格）与一条合计 `all`。
+  `gates` 收工门七格）与一条合计 `all`。
 - 参数：`stats <errors|flow|cost|gates|all> [--root <工作区>] [--json]`；
   `gates`/`all` 另有 `--project-dir`、`--report`（不给 ⇒ 那几格如实记 unknown）；
   `errors` 另有 `--readout`（给新的五键形状；不给则保持老形态）。
+- 会话身份（2026-11-14）：`gates` 不给运行号 ⇒ 「待答问题」那一格如实记 `unknown`，并在
+  `problems` 里点名 `no_session`（`sessions/<今天>.jsonl` 不是"这一趟"：真机上它 106/107
+  不存在，按它读会把"问了还没答"读成 pass）。这一层没有 `--sid`；要看某一趟用
+  `agentflow closing --sid <号>`，要看工作区整体在等什么用 `agentflow inbox`。
 - `data`：`errors` → `by_role` / `role_total` / `total` / `categories` / `sources`；
   `flow` → `roles` / `totals`；`cost` → `by_role` / `by_scope` / `total`；
   `gates` → `cells` / `counts` / `machine_pass` / `can_close` / `verdict`；

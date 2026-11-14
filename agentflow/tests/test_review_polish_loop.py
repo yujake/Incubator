@@ -93,9 +93,11 @@ def test_the_edit_lands_and_the_pdf_catches_up(tmp_path: pathlib.Path, monkeypat
 
     # 改完不重编 ⇒ 回执说的还是旧那一份正文
     assert PC.receipt_matches_tex(tmp_path)[0] is False, PC.receipt_matches_tex(tmp_path)
-    # 而且收工门那一格自己说得出来（不是只有模块函数知道）：`fail` + `paper_pdf_is_stale`
+    # 而且收工门那一格自己说得出来（不是只有模块函数知道）：读数 `drifted` + `paper_pdf_is_stale`
+    # （2026-11-14 起 paper 不在门里：它是读数，`status` 里没有它）
     rep = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep.status["paper"] == "fail", rep.to_dict()
+    assert "paper" not in rep.status, rep.to_dict()
+    assert rep.readings["paper"]["verdict"] == "drifted", rep.readings["paper"]
     assert [f.code for f in rep.findings if f.check == "paper"] == ["paper_pdf_is_stale"], \
         [f.to_dict() for f in rep.findings]
 
@@ -110,9 +112,10 @@ def test_the_edit_lands_and_the_pdf_catches_up(tmp_path: pathlib.Path, monkeypat
     assert final.replace(AFTER_NEW, AFTER_OLD) == BEFORE, "除那处改动外，正文必须逐字未动"
     assert PC.receipt_matches_tex(tmp_path)[0] is True, PC.receipt_matches_tex(tmp_path)
 
-    # 补一刀：重编之后那一格也回到 pass（"过期"与"对上"是同一格的两种读数）
+    # 补一刀：重编之后那一格也回到 `consistent`（"过期"与"对上"是同一格的两种读数）
     rep2 = CL.check_closing(st, project_dir=".", report_path="")
-    assert rep2.status["paper"] == "pass", rep2.to_dict()
+    assert "paper" not in rep2.status, rep2.to_dict()
+    assert rep2.readings["paper"]["verdict"] == "consistent", rep2.readings["paper"]
 
 
 def test_a_stale_sha_edit_on_the_paper_is_refused(tmp_path: pathlib.Path,

@@ -144,10 +144,10 @@ def test_the_readouts_are_really_non_zero_on_this_fixture(tmp_path: pathlib.Path
     assert cost["data"]["by_role"]["M"]["usd"] == pytest.approx(0.0125, abs=1e-9)
 
     gates = R.gates_readout(ws)
-    assert len(gates["data"]["cells"]) == 8, gates["data"]["cells"]
+    assert len(gates["data"]["cells"]) == 7, gates["data"]["cells"]
     assert {c["name"] for c in gates["data"]["cells"]} == set(
         __import__("agentflow.closing", fromlist=["_"]).DEFAULT_CHECKS)
-    assert sum(gates["data"]["counts"].values()) == 8, gates["data"]["counts"]
+    assert sum(gates["data"]["counts"].values()) == 7, gates["data"]["counts"]
 
 
 # ---------------------------------------------------------------- ② 读不到 ⇒ unknown
@@ -243,7 +243,7 @@ def test_an_empty_workspace_is_all_zero_and_checked(tmp_path: pathlib.Path) -> N
     assert R.flow_readout(ws)["data"]["totals"]["steps"] == 0
     assert R.cost_readout(ws)["data"]["total"]["usd"] == 0.0
     cells = R.gates_readout(ws)["data"]["cells"]
-    assert len(cells) == 8 and all(c["status"] in R.CELL_STATES for c in cells)
+    assert len(cells) == 7 and all(c["status"] in R.CELL_STATES for c in cells)
 
 
 # ---------------------------------------------------------------- 呈现
