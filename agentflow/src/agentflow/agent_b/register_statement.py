@@ -986,10 +986,10 @@ def _sign_filing_reading(store: Any, *, manuscript_path: Any,
 
 def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
                        stmt_id_now: Any = "", matched_by: Any = "",
-                       row_manuscript_id: Any = "") -> bool:
+                       row_manuscript_id: Any = "", row_full: Any = "") -> bool:
     """这一份稿是不是本行自己的（D1 的第二道：命中了也要问所有权）。
 
-    判据只有四句：
+    判据只有五句：
 
     - 按证明正文认出来的（`matched_by == proof_body`）⇒ 是：那一份的 `## 证明`
       与这一笔交的正文逐行相同，不存在"借别人的正文"；
@@ -1003,6 +1003,12 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
       的稿号命名，命题号是 B 收录时现取的 ⇒ 拿命题号去比稿名，会让"这一条自己的稿"
       在收录之后永远读成"别人的稿"。行上没有 `manuscript_id`（老盘）⇒ 仍按上一条
       的命题号口径判（退回，不是放宽）。
+    - 多证明那条路（2026-11-14，TR 收口）：同一命题的第 2 份及以后的证明天然来自
+      另一份稿（另一个稿号），而行上那一格 `manuscript_id` 记的是第一条路径的稿。
+      ⇒ 稿上 `## 命题` 与本行 `statement_full` 归一同字时也认作自己的稿。这是内容
+      证据而不是放宽：别条命题的稿那一节是另一段命题（`test_b_supersedes_a_registered_
+      statement` 的 b2/b3 仍按内容判 foreign），而"这一条的第二条证明"正是靠这一格
+      才能被认出来 —— 只按行上那一个稿号判，第二份证明永远进不了台账。
 
     ## D1 取严格版
 
@@ -1013,6 +1019,7 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     这一格就是 D1 反真空的打桩点：把它打成恒真 ⇒ `stmt:000001` 又会把
     `stmt:000000` 的稿读成自己的（判据 a 立刻红）。
     """
+    from .. import textutil as T
     from .. import vsigns as _VS
 
     if str(matched_by or "") == _DS.MATCH_BY_PROOF_BODY:
@@ -1023,13 +1030,15 @@ def _manuscript_is_own(*, manuscript_text: Any = "", manuscript_path: Any = "",
     # 稿里没有命题号（业主 2026-11-13）⇒ 所有权只由「稿名里的稿号」与「行上那个
     # 稿号」两格回答；改前那条"稿头自己声明了号，只按它判"的分支随稿头那一行删除。
     named = str(_VS.manuscript_id_of(str(manuscript_path or "")) or "").strip()
-    if not named:
-        return False
-    if named == own:
-        return True
-    # 2026-11-10（稿号口径）：本行的稿按行上那个稿号认，不按命题号认。
     row_mid = str(row_manuscript_id or "").strip()
-    return bool(row_mid) and named == row_mid
+    if named and (named == own or (row_mid and named == row_mid)):
+        return True
+    # 多证明那条路：稿名是另一个稿号，但稿上 `## 命题` 就是这一行的命题。
+    if row_full and str(manuscript_text or "").strip():
+        body = _DS.statement_body(str(manuscript_text))
+        if body and T.normalize(body) == T.normalize(str(row_full)):
+            return True
+    return False
 
 
 def _manuscript_usable(probe: Mapping, *, stmt_id_now: Any,
@@ -3905,6 +3914,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         _explicit_manuscript = bool(str(proof_manuscript or "").strip()) or (
             str(manuscript_source or "") in (_DS.SOURCE_PARAM, _DS.SOURCE_CARRIED))
         _row_mid = str((redelivery or {}).get("manuscript_id") or "").strip()
+        #: 本行在册的命题正文：多证明那一路的稿号与本行那个稿号本来就不同，
+        #: 所有权由稿上 `## 命题` 与它归一同字来判（见 `_manuscript_is_own` 第五条）。
+        _row_full = str((redelivery or {}).get("statement_full") or "")
         _skip_owner = bool(_explicit_manuscript and not _row_mid)
         manuscript_foreign = bool(
             manuscript_text.strip() and stmt_id_now and not _skip_owner
@@ -3912,7 +3924,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 manuscript_text=manuscript_text, manuscript_path=manuscript_path,
                 stmt_id_now=stmt_id_now,
                 matched_by=manuscript_probe.get("matched_by"),
-                row_manuscript_id=_row_mid))
+                row_manuscript_id=_row_mid, row_full=_row_full))
         # ---- 寻址来的稿正文落成 `proof_text`（「F侧实际上是D侧，
         #      F的东西都在D的手稿上记了一笔」） ------------------------------------
         #
@@ -3942,7 +3954,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                               # 本行记的稿号也是"本行"的判据之一
                               # （稿号与命题号是两个号段）。
                               row_manuscript_id=str(
-                                  (redelivery or {}).get("manuscript_id") or "")))
+                                  (redelivery or {}).get("manuscript_id") or ""),
+                              row_full=_row_full))
         #: 这份稿的 `## 证明` 三态读数。
         #:
         #: 为什么单独立这一格：`proof_body` 缺节会退到 `## 依赖` 节、再退到整份
