@@ -7382,18 +7382,31 @@ R9（`draft/52` 裁决 1 = C''）之后，报告体例由 M 裁定：门不再�
     return out, ""
 
 
+def _report_file_exists(path: Path) -> bool:
+    """报告在不在盘上（这一格「存在性」判据的唯一落点）。
+
+    单独成函数是为了让判据能在这一处打桩：`tests/test_report_shape_separates_existence_
+    from_form.py` 把它换成恒真 ⇒「给了报告路径而文件不在 ⇒ fail」那一条必须当场变红
+    （判据没有接线时，那一条会静默变绿）。
+    """
+    return path.is_file()
+
+
 def _check_report_shape(rep: ClosingReport, report_path: str, store: Any) -> None:
-    """报告那一格：报告在不在、附件三件套齐不齐、M 声明的体例兑现没有（全是读数）。
+    """报告那一格：报告在不在、附件三件套齐不齐、M 声明的体例兑现没有（存在性 + 读数）。
 
 不再卡"九节"（R9，`draft/52` 裁决 1 = C''）："报告要写九节"是 review 线的交付规格，被当成通用判据用 ⇒ 直接废除
 （`REPORT_SECTIONS` / `SPLIT_MARKERS` 已删）。也不再卡"形式"（业主 2026-10-09：「T1的5不是已经说过工作内容和交付
 形式由M决定了吗？不卡机械判据。但M需要知道一些任务需要的明确的交付格式，如什么叫论文包之类的」）。
 
-⇒ 这一格只做两件事：报告在不在盘上（不在 ⇒ `unknown` + warning；读不成 ⇒ `unknown`）与把缺的件逐条摆出
-来（附件三件套、M 声明的体例，各进一条 warning）。报告在盘上且读得成 ⇒ `pass`。此前它把"缺附件三件套的
-一件"读成 `fail` + `blocker`（T1 `t1v` 与 T2 `t2a` 连续两趟就是被这一格拦下的），而裁定 3 已经定了收工由
-M 判。两个码分开（`attachment_fields_missing` / `declared_sections_missing`）：前者是"来路没写全"，后者是
-"体例没兑现"（`draft/44` J-19 的"并入同一个 code"针对拦门的码表；这一格不拦门，两条读数各自点名更好读）。
+⇒ 2026-11-14（业主拍板）把这一格拆成两件事：
+
+- 存在性 = fail：给了 `report_path` 而盘上没有这份文件 ⇒ `fail` + blocker
+  （`report_not_written`）。改前这里记 `unknown`，于是"没交"与"没查成"同形 ——
+  真机 47 个 unknown 全是这一档。
+- 没给 `report_path` = unknown：那是调用方没给，不是没交（负控不许变成 fail）。
+- 形状 = 读数：附件三件套 / M 声明的体例缺了，仍只进 warning 与 `readings`
+  （业主 2026-10-09：「交付形式由 M 定」——这一条不许改回 fail）。
     """
     if not str(report_path or "").strip():
         rep.status["report_shape"] = "unknown"
@@ -7403,11 +7416,24 @@ M 判。两个码分开（`attachment_fields_missing` / `declared_sections_missi
         ))
         return
     path = Path(resolve_under_workspace(store, report_path))
-    if not path.is_file():
-        rep.status["report_shape"] = "unknown"
+    if not _report_file_exists(path):
+        # 2026-11-14（业主拍板）：给了路径而盘上没有这份文件 ⇒ 交付物缺失，不是"没查成"。
+        # 路径给了、落点也确定了，缺的就是那份报告本身（真机 47 个 unknown 全是这一档）。
+        rep.status["report_shape"] = "fail"
+        rep.readings["report_shape"] = {
+            "path": str(path), "exists": False, "verdict": "missing",
+            "attachment_fields": [], "missing_attachment_fields": [],
+            "style_source": "", "declared_sections": [], "missing_declared_sections": [],
+            "note": ("报告不在盘上 ⇒ 这一格判 fail（存在性），不是 unknown：给了报告路径、"
+                     "落点也指到了，缺的就是那份报告。附件三件套与体例这一档没有对象可判"
+                     "（报告都没有），所以只留一个空读数；「没给报告路径」才记 unknown"
+                     "（那是调用方没给，不是没交）。"),
+        }
         rep.findings.append(Finding(
-            "report_shape", "report_not_written", "warning",
-            f"报告不在盘上：{path} ⇒ 没查成。报告是 M 的产物（落点 out/review/REPORT.md）",
+            "report_shape", "report_not_written", "blocker",
+            f"报告不在盘上：{path} —— 给了报告路径而盘上没有这份文件 ⇒ 交付物缺失"
+            "（不是「没查成」：路径与落点都指到了，缺的就是那份报告本身）。"
+            "报告是 M 的产物（落点 out/review/REPORT.md）",
         ))
         return
     text = path.read_text(encoding="utf-8")
@@ -7430,7 +7456,8 @@ M 判。两个码分开（`attachment_fields_missing` / `declared_sections_missi
                  "没声明就不判体例（读数 `style_source: \"none\"`）。"
                  "附件三件套与体例**都只作读数**（业主 2026-10-09：交付形式由 M 决定，"
                  "不卡机械判据）—— 缺哪几件逐条进 `findings`（warning），"
-                 "报告在盘上这一格就 `pass`；报告不在盘上/读不成才 `unknown`。"),
+                 "报告在盘上这一格就 `pass`；给了报告路径而文件不在才 `fail`"
+                 "（存在性，2026-11-14），没给报告路径记 `unknown`。"),
     }
     if style_why:
         # 体例文件在、读不成 ⇒ 这一格 `unknown`（"没查成"不是"通过"）。

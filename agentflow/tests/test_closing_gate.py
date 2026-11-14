@@ -1147,14 +1147,22 @@ def test_missing_readings_are_unknown_and_unknown_is_not_a_pass(tmp_path: pathli
                      "report_path_missing"], codes
 
 
-def test_a_missing_report_file_is_unknown_not_a_failure(tmp_path: pathlib.Path):
-    """报告还没写与"报告写坏了"是两件事：前者 `unknown`，后者 `fail`。"""
+def test_a_missing_report_file_is_a_failure_not_an_unknown(tmp_path: pathlib.Path):
+    """报告没交与"没查成"是两件事：给了路径而文件不在 ⇒ `fail` + blocker（2026-11-14）。
+
+    改前这一条钉的是"记 `unknown`"：那一版只有 `unknown` / `pass` 两种结局，于是
+    "没交"与"没判"同形（真机 47 个不通过全是 `report_not_written`）。改后存在性判
+    `fail`；"调用方没给路径"仍是 `unknown`（负控见
+    `tests/test_report_shape_separates_existence_from_form.py::test_no_report_path_stays_unknown`）。
+    """
     st, _ = _good(tmp_path)
     gone = tmp_path / "out" / "review" / "NOPE.md"
     rep = _gate(st, gone)
-    assert rep.status["report_shape"] == "unknown", rep.to_dict()
+    assert rep.status["report_shape"] == "fail", rep.to_dict()
+    assert [f.code for f in rep.blockers] == ["report_not_written"], rep.to_dict()
     assert [f.code for f in rep.findings if f.check == "report_shape"] == ["report_not_written"]
-    assert CL.tri_state_exit_code(rep) == 2
+    assert rep.readings["report_shape"]["exists"] is False, rep.readings["report_shape"]
+    assert CL.tri_state_exit_code(rep) == 2, "没人判过 ⇒ 仍是 2（不是「可以交」）"
 
 
 def test_the_wrong_directory_gets_an_actionable_message(tmp_path: pathlib.Path):
