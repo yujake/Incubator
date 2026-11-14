@@ -458,6 +458,10 @@ def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
 
     这一格不新写判据：`sign` 不给就调 `vsigns.sign_reading`（D268 批 2 起
     "有没有签"的唯一判据）。
+
+    返回里多一格 `next_step`（2026-11-14，登记回执要它）：三态各给一句可执行的话
+    （已签 ⇒ 空串；正文在签没到 ⇒ 派 V 三转签；正文空 ⇒ 先落 b-稿；打回 ⇒ 按意见改稿
+    再重签重收录）。它只加键、不新函数，秘书与 B 的三处回执原样带出去。
     """
     from . import proofregistry as _PR
 
@@ -495,18 +499,26 @@ def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
         why = (f"良定义证明已由 V 签在 {source['manuscript'] or '（未记稿路径）'} "
                f"#p{source['proof_no']} 上（凭据 {source['credential'] or '（未记）'}），"
                f"并已收录进这一行（{len(body.strip())} 字）")
+        next_step = ""
     elif state == WELL_DEFINEDNESS_REJECTED:
         why = (f"V 对 {source['manuscript'] or '这一版正文'} #p{source['proof_no']} 的最近结论"
                f"不是「成立」（state={sign_state}）⇒ 良定义证明被打了回来")
+        next_step = (
+            "按 V 的打回意见改 b-稿（`reports/b-proof-<号>.md`）→ 重派 V 三转签 → "
+            "`ingest_manuscript(cells=[\"proof_text\"])` 重收录")
     else:
         why = ("这一行还没有良定义证明正文（`proof_text` 空）⇒ 等 B 落 b-稿、V 签回来、"
                "再按位置与格收录" if not body.strip()
                else f"正文在，但 V 的签没到（state={sign_state or 'unsigned'}）⇒ "
                     "这一行不算有已签的良定义证明")
+        next_step = (
+            "B 落 b-稿（`reports/b-proof-<号>.md`）→ 派 V 三转签 → "
+            "`ingest_manuscript(cells=[\"proof_text\"])`" if not body.strip() else
+            "派 V 三转签（签盖在现在这一版正文上）→ `ingest_manuscript(cells=[\"proof_text\"])`")
     return {"state": state, "body_chars": len(body.strip()),
             "body_sha256": (_PR.proof_sha(body) if body.strip() else ""),
             "source": source, "checked": bool(got.get("checked")),
-            "why": why}
+            "next_step": next_step, "why": why}
 
 
 def concept_statement(*, stmt_id: str, label: str, definition: str = "", aliases: Iterable[str] = (),

@@ -3089,7 +3089,8 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
 
     返回 `{checked, tri, signed, backed, without_sign, used_by, orphan_signs,
     problems, reason}`：
-    - `signed`：命题行现算第 3 位为真的命题号（`evidencebits.bits_from_row`，不看盘上缓存）；
+    - `signed`：命题行现算第 3 位为真的命题号（`evidencebits.bits_from_row`，不看盘上缓存）
+      —— 概念行也在内（它的良定义论证被 V 签过时，同一套第 3 位为真）；
     - `backed`：其中"这一份正文的签文件真的在盘上"的那些；
     - `without_sign`：`signed` 里没有侧文件的那些（「读数，不是红」：历史签 / 直调写的签）；
     - `orphan_signs`：签文件在、而盘上没有任何命题的正文 sha 等于它（「这一档可以红」）。
@@ -3104,8 +3105,13 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
     used_by: dict[str, list[str]] = {}
     for row in rows:
         sid = str(row.get("stmt_id") or row.get("statement_id") or "")
-        if not sid or str(row.get("kind") or "") == "concept":
+        if not sid:
             continue
+        # 概念行不跳过（2026-11-14，业主口径：优化侧是一般性规定、签了要看得到）。
+        # 改前这里是 `if not sid or kind == "concept": continue` —— 概念行的良定义论证
+        # 即使被 V 签了，也不会进 `signed` / `backed` / `orphan_signs`：签在盘上、
+        # 门读数里却一条都看不见。概念的第 3 位由 `conceptrows.concept_bits` 按同一个
+        # 判据（`sign_reading.state == "signed"`）翻真，所以这里读位与别的 kind 同形。
         try:
             bits = _EB.bits_from_row(dict(row))
         except Exception:  # noqa: BLE001 —— 位算不出来是"这一条没查成"，不影响别的行

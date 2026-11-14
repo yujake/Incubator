@@ -349,3 +349,28 @@ def test_f_f_reads_the_signed_well_definedness_from_the_row(tmp_path: pathlib.Pa
     assert verdict.get("verdict") == "成立", verdict
     # 概念仍不在可引池：F 读得到它，但不能引它（另一条裁定，不动）。
     assert sid not in DS.citable_pool([dict(r) for r in st.rows("statements")])
+
+
+# ================================================================ g 回执 next_step
+def test_g_the_registration_receipt_carries_a_next_step(tmp_path: pathlib.Path) -> None:
+    """g：回执那一格 `well_definedness` 带 `next_step`（2026-11-14：只加键、不新函数）。
+
+    两档：还没有良定义论证 ⇒ 指向"落 b-稿 → 派 V 三转签 → 收录"；已签收录 ⇒ 空串。
+    键只加在 `conceptrows.well_definedness_reading` 这一处（唯一实现），秘书与 B 的回执
+    原样带出去 —— 所以这里一处断言就够（含"收据上真的有这一格"）。
+    """
+    st, b = _ws(tmp_path)
+    sid, rel = _concept_pipeline(st, b)
+    unsigned = dict(CR.well_definedness_reading(
+        st.root, _row(st, sid), manuscript_path=rel, store=st))
+    assert unsigned.get("state") == "unsigned", unsigned
+    assert "b-稿" in str(unsigned.get("next_step") or ""), unsigned
+    assert "ingest_manuscript" in str(unsigned.get("next_step") or ""), unsigned
+
+    _sign(st, sid=sid, rel=rel)
+    ing = b.ingest_manuscript(manuscript=rel, target_stmt_id=sid,
+                              cells=["proof_text"], mode="apply")
+    assert ing.get("ok") is True, ing
+    signed = dict(ing.get("well_definedness") or {})
+    assert signed.get("state") == "signed", signed
+    assert signed.get("next_step") == "", signed
