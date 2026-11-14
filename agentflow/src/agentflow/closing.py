@@ -862,7 +862,7 @@ def content_leg_unmet(store: Any, project_root: Path, *,
                 f"（`derived_from` 与 `source_lit_id` 都是空的）—— "
                 "「造」= 我方自己提出并证明的命题（`origin=own_result`），"
                 "而且要说清它由哪几条已登记的命题 / 哪一篇文献推出来；"
-                "把命题与它的来路一起登记（`B.register_statement` / `D.register_conjecture`）")
+                "把命题与它的来路一起登记（`B.register_statement`；猜想的立案与落行归产出侧 —— F 开稿 / E 实验 / B 收录，D 没有登记猜想的动作）")
 
     # ---- ③ C 的分析产物要进交付面（D67）。
     try:
