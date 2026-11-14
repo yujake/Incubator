@@ -10560,8 +10560,14 @@ class AgentLoop:
                     return ""
                 if not still:
                     return ""
-                note = ("收工撤停机开关：历史记下了（`removed=True`）但文件还在盘上"
-                        "（多半被别的进程占着）⇒ 下一趟会被它再停一次")
+                # ---- B4（2026-11-15）：历史不再把"请求删"写成"已删" ----------------
+                #
+                # 这一句改前写"历史记下了（`removed=True`）但文件还在盘上" —— 它描述的
+                # 正是旧实现那笔谎（`removed` 记的是请求值）。现在 `removed=False` 就是
+                # 结局本身，读数按 `record` 如实带出 `remove_problem`。
+                note = ("收工撤停机开关：请求已记（`remove_requested=True`）、但没删掉"
+                        f"（`removed=False`：{record.get('remove_problem') or '原因没记'}）"
+                        "⇒ 下一趟会被它再停一次")
         try:
             SS.append(self.session_root, {"kind": "agent_note", "role": self.role,
                                           "note": note}, sid=self.sid)

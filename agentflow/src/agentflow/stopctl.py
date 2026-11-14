@@ -425,7 +425,25 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
     ## 为什么审计不丢
 
     历史行落在 `runs/stop-history.jsonl`（append-only）：`{…开关负载…, consumed_at,
-    consumed_by_sid, level, removed}`；`agentflow stop --status` 在开关不在时会把它读出来。
+    consumed_by_sid, level, remove_requested, removed}`；`agentflow stop --status`
+    在开关不在时会把它读出来。
+
+    ## `remove_requested` 与 `removed` 为什么要分开（B4，2026-11-15）
+
+    改前这里先写 `record["removed"] = bool(remove)`、再去 `path.unlink()`，而
+    `unlink` 失败被 `except OSError: pass` 吞掉 ⇒ 撤不掉（Windows 上被别的进程
+    `open()` 占着就够）时历史仍写 `removed=true`：审计与盘上事实相反，而开关还在
+    盘上 ⇒ 下一趟被同一把开关再停一次（正是 `draft/37` §140 那个 bug 的反向复发）。
+
+    现在两格分开记：`remove_requested` = 调用方要求撤，`removed` = 撤完之后复查
+    盘上确实没有（不是"unlink 没抛异常"）；成功多记 `removed_at`，失败多记
+    `remove_problem`（原话）。读侧只把 `removed=true` 当删除，老记录（只有请求值、
+    没有 `remove_requested`）读作 `unknown_legacy` —— 见 :func:`consumption_outcome`。
+
+    代价（如实写在这里）：为了让 `removed` 记结局，删除必须排在写历史之前；于是
+    "历史写不进去"从"审计在、开关还在"变成"开关已撤、审计没落"（改前那条 `except
+    OSError: pass` 的方向反过来）。返回值仍带真实结局，且删除胜利是这一笔的主结局
+    —— 三态纪律选择把"盘上事实"放在第一位。
 
     ## `programs`（停机对程序做了什么）
 
@@ -440,9 +458,32 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
         # 调用方据此知道"没有人叫停过"；要区分的那一档是"读了但读不懂"，
         # 那一支不返回 None 而是带 `unreadable` 的负载，照常被消费掉）。
         return {}
+    # ---- 先删、再记结局（B4）：`removed` 记的是"确实已删"，不是"请求删"。
+    #
+    # 顺序是判据的一部分：要在一行里同时给出"请求了什么"与"结局是什么"，只能先做
+    # 再做复查。改前先写 `removed=bool(remove)` 再 unlink、失败还被吞掉 ⇒ 审计说谎。
+    remove_requested = bool(remove)
+    removed = False
+    removed_at = ""
+    remove_problem = ""
+    if remove_requested:
+        try:
+            path.unlink()
+        except OSError as exc:
+            remove_problem = f"{type(exc).__name__}: {exc}"
+        removed = not path.is_file()      # 复查盘上事实，不信"unlink 没抛异常"
+        if removed:
+            removed_at = _now_iso()
+        elif not remove_problem:
+            remove_problem = "unlink 没报错，但文件仍在盘上（被占着 / 只读）"
     record = dict(state)
     record.update({"consumed_at": _now_iso(), "consumed_by_sid": str(sid or ""),
-                   "level": str(level or "stop_file"), "removed": bool(remove)})
+                   "level": str(level or "stop_file"),
+                   "remove_requested": remove_requested, "removed": removed})
+    if removed:
+        record["removed_at"] = removed_at
+    elif remove_problem:
+        record["remove_problem"] = remove_problem
     if isinstance(programs, Mapping) and programs:
         record["programs"] = dict(programs)
     try:
@@ -452,16 +493,48 @@ def consume_stop(root: str | Path, *, sid: str | None = None, level: str = "stop
             fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
     except OSError:
         pass                      # 历史写不下去也不许让"停下"这件事失效
-    if remove:
-        try:
-            path.unlink()
-        except OSError:
-            pass                  # 撤不掉（被别的进程占着）也要把"这一趟已收工"返回去
     return record
 
 
+def consumption_outcome(record: Mapping[str, Any]) -> dict[str, Any]:
+    """一条消费记录里"删了没有"的三态读数（读侧的唯一判据）。
+
+    | `state` | 含义 | 依据 |
+    |---|---|---|
+    | `deleted` | 请求撤、复查盘上确实没有 | `remove_requested=true` 且 `removed=true` |
+    | `requested_not_deleted` | 请求撤、撤不掉 | `remove_requested=true` 且 `removed=false` |
+    | `kept` | 没请求撤（成员只记一笔，开关留给别人） | `remove_requested=false` |
+    | `unknown_legacy` | 老记录：只有 `removed`（请求值），没有 `remove_requested` | 旧实现先写请求值再删，`removed=true` 也可能是"没撤成" |
+    | `unknown` | 记录读不懂（不是对象） | — |
+
+    为什么读侧要单列最后一档：把"老记录说不准"读成"已删"就是给审计再造一次谎；
+    读成"没停过"更错（它明明停过）。
+    """
+    if not isinstance(record, Mapping):
+        return {"state": "unknown", "deleted": False,
+                "why": "这一条记录读不懂（不是对象）⇒ 删除结局没查成"}
+    if "remove_requested" not in record:
+        return {"state": "unknown_legacy", "deleted": False,
+                "why": ("老记录只记了请求值（`removed`），没有删除结局 ⇒ 不许当「已删」"
+                        "（旧实现先写请求值再删，撤不掉也会写 true）")}
+    requested = bool(record.get("remove_requested"))
+    removed = bool(record.get("removed"))
+    if not requested:
+        return {"state": "kept", "deleted": False,
+                "why": "这一笔没有请求撤开关（成员只记一笔，开关留给同一棵树上的别人）"}
+    if removed:
+        return {"state": "deleted", "deleted": True, "why": ""}
+    return {"state": "requested_not_deleted", "deleted": False,
+            "why": str(record.get("remove_problem") or "撤不掉（原因没记，属于缺失读数）")}
+
+
 def stop_history(root: str | Path, *, limit: int = 5) -> list[dict[str, Any]]:
-    """读停机历史（最近 `limit` 条，按时间正序）。坏行如实跳过（读不出来不算"没有"）。"""
+    """读停机历史（最近 `limit` 条，按时间正序）。坏行如实跳过（读不出来不算"没有"）。
+
+    每一条都带三格派生的删除读数（`deletion_state` / `deleted` / `deletion_why`，
+    见 :func:`consumption_outcome`）：读侧不必自己再拿 `removed` 猜"删了没有"——
+    那一格在老记录上只是请求值。派生格只加在读出来的行上，不改盘上的历史文件。
+    """
     path = history_path(root)
     if not path.is_file():
         return []
@@ -474,6 +547,10 @@ def stop_history(root: str | Path, *, limit: int = 5) -> list[dict[str, Any]]:
         except ValueError:
             continue
         if isinstance(obj, dict):
+            verdict = consumption_outcome(obj)
+            obj["deletion_state"] = verdict["state"]
+            obj["deleted"] = bool(verdict["deleted"])
+            obj["deletion_why"] = str(verdict["why"])
             out.append(obj)
     return out[-int(limit):] if limit else out
 
