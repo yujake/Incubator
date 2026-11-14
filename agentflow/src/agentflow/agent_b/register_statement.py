@@ -482,13 +482,13 @@ def _must_start_as_conjecture_refusal(*, kind_now: str, origin: str) -> dict:
         MUST_START_AS_CONJECTURE,
         "这一笔是 origin='own_result'、没有 source_lit_id、quote_verified 也不是 true "
         "⇒ 没有引文 / 自己编的命题必须从「猜想」注册（业主 2026-10-22 裁定 B-2），"
-        f"不能一进门就声明成 {kind_now!r}。两条正路（都不必改这一行的内容）："
-        "① 把 kind 改成 \"conjecture\" 再交一次（升档不用你报：等级由 "
-        "evidencebits.derive_grade 按五元位现算 —— 有证明过程且 V 签过就自己抬）；"
-        "② 走猜想登记那条路：D 的 register_conjecture 动作（工具面 "
-        "`conjecture.register_conjecture`）先把这条立成猜想，再拿证据回来。"
-        "如果你本来就有外部出处：给 source_lit_id + page_range 并按 "
-        "origin='external_lit' 重交。",
+        f"不能一进门就声明成 {kind_now!r}。两条正路（都不必改这一行）："
+        "① 把 kind 改成 \"conjecture\" 再交一次（升档不用报：等级由 "
+        "evidencebits.derive_grade 按五元位现算 —— 有证明且 V 签过就自己抬）；"
+        "② 猜想的立案与落行归产出侧：F 开稿那一刻、E 实验落盘后、B 收录后各落一行 "
+        "conjecture（2026-11-13 裁定；D 只给研究方向，没有登记猜想的动作）"
+        "—— 等它们真产出。如果你本来就有外部出处：给 "
+        "source_lit_id + page_range 并按 origin='external_lit' 重交。",
         statement_kind=kind_now, declared_origin=str(origin))
 
 

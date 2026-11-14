@@ -189,15 +189,17 @@ def test_b1_the_reminder_is_a_prompt_not_a_gate(monkeypatch) -> None:
 def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> None:
     """② B-2：`own_result` + 无 source + quote 不是 true，声明成 lemma ⇒ 拒收。
 
-    拒信要给出两条正路（改 kind / 走猜想登记那条路）—— 一次只点名一条，等于让智能体
-    多跑两趟（`test_b_register_all_missing_hint.py` 的同一个口径）。
+    拒信要给出两条正路（改 kind / 把这一行交给产出侧落）—— 一次只点名一条，等于让
+    智能体多跑两趟（`test_b_register_all_missing_hint.py` 的同一个口径）。
+    第二条正路的落点见 `test_b2_refusal_points_at_the_production_side`：撤除之后它
+    只能指产出侧（F 开稿 / E 实验落盘 / B 收录），不许再指 D。
     """
     got = _ok(_b(store).register_statement(
         **_with_manuscript(store, _own(kind="lemma"), statement_id="000000")))
     assert got.get("ok") is False, got
     assert got.get("kind") == "must_start_as_conjecture", got
     err = str(got.get("error") or "")
-    assert "conjecture" in err and "register_conjecture" in err, err
+    assert "conjecture" in err and "D 只给研究方向" in err, err
     assert not store.rows("statements"), "被拒的一笔不许在盘上留下半行"
 
     # 正控：同一笔内容改成 kind="conjecture" ⇒ 通过（红不是写死的）。
@@ -224,6 +226,83 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
         proof_text="Theorem. Let G be a finite group. Then |G| is finite.",
         quote_verified=False, quote_reason="与原文表述不一致（探针）"))
     assert ext.get("ok") is True, ext
+
+
+#: 撤除之前"第二条正路"的原文（`8e398d74` 之前逐字）：反真空拿它当"必红"的输入，
+#: 不让那条判据退化成"文案里恰好没有某两个字"。
+_OLD_B2_SECOND_PATH = (
+    "② 走猜想登记那条路：D 的 register_conjecture 动作（工具面 "
+    "`conjecture.register_conjecture`）先把这条立成猜想，再拿证据回来。")
+
+#: 活文案里不许出现的两个记号与各自的原因（拒信是模型真会照着做的那一类文本）。
+_RETIRED_B2_POINTERS: tuple[tuple[str, str], ...] = (
+    ("conjecture.register_conjecture",
+     "工具面名字：8e398d74 已把那条工具整体撤除（业主 2026-11-13 裁定甲）"),
+    ("走猜想登记那条路",
+     "指路句：那条路落在 D 身上，而 D 的动作表里没有登记猜想的动作"),
+)
+
+#: `src/agentflow` 里「允许」出现那个工具面名字的文件（逐条给理由）。
+#: 只收历史账：注释 / docstring 记着"它退役前是谁的落地件"，不是给模型看的教法。
+#: 名单之外的文件里出现它 ⇒ 判据红（新写的一段教法、或旧教法回流）。
+_RETIRED_TOOL_NAME_HISTORY: dict[str, str] = {
+    "capabilities.py": "两条历史登记注释逐字记着退役前的不对称（改它属 FC-27）",
+    "conjectureledger.py": "模块 docstring 记着台账搬家前的写点（来路，不是教法）",
+    "agent_prompts.py": "p214 抬版注释记着当年装配面加了哪一件（历史账）",
+    "tools/__init__.py": "同一句历史注释（改它属 FC-27）",
+}
+
+
+def _retired_pointer_problems(text: str) -> list[str]:
+    """活文案里还指着已撤工具的那些记号（空 = 干净）。
+
+    `str(text or "")` 只取一次：调用方给的可能是返回值里的 `error`，也可能是一段
+    拼接后的行 —— 两种都给同一个读数，免得"查了 error 没查 detail"这种半覆盖。
+    """
+    body = str(text or "")
+    return [f"{needle} —— {why}" for needle, why in _RETIRED_B2_POINTERS if needle in body]
+
+
+def _retired_tool_name_hits() -> dict[str, int]:
+    """`src/agentflow/**/*.py` 里出现那个工具面名字、又不在历史名单里的文件与行数。"""
+    root = pathlib.Path(AP.__file__).resolve().parent
+    hits: dict[str, int] = {}
+    for path in sorted(root.rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel in _RETIRED_TOOL_NAME_HISTORY:
+            continue
+        n = path.read_text(encoding="utf-8").count("conjecture.register_conjecture")
+        if n:
+            hits[rel] = n
+    return hits
+
+
+def test_b2_refusal_points_at_the_production_side() -> None:
+    """② 的拒信只许指产出侧：撤除之后它不许再教"D 的猜想登记那条路"。
+
+    `8e398d74` 把 D 的 `register_conjecture` 动作与它的工具面一起撤了（业主
+    2026-11-13 裁定甲）⇒ 拒信里再写那一条就是指着不存在的东西，而真机 B 会照着做：
+    多跑一趟、还拿不到登记。可执行的落法只剩产出侧三个时刻（F 开稿 / E 实验落盘 /
+    B 收录），这一条把"谁来落这条猜想行"逐字钉住。
+
+    反真空两条：同一个谓词喂旧文案必须报出问题（红不是写死的）；`src/` 里的历史
+    名单是显式的、名单之外多一处就得红（否则"全仓 grep 为 0"只是一句没人核的话）。
+    """
+    from agentflow.agent_b import register_statement as RS
+
+    got = RS._must_start_as_conjecture_refusal(kind_now="lemma", origin="own_result")
+    err = str(got.get("error") or "")
+    assert got.get("kind") == "must_start_as_conjecture", got
+    assert _retired_pointer_problems(err) == [], _retired_pointer_problems(err)
+    for needle in ("F 开稿那一刻", "E 实验落盘后", "B 收录后", "D 只给研究方向"):
+        assert needle in err, (needle, err)
+
+    # 反真空 ①：旧那一条塞回去 ⇒ 同一个谓词必红。
+    poisoned = err.replace("② 猜想的立案与落行归产出侧", _OLD_B2_SECOND_PATH)
+    assert _retired_pointer_problems(poisoned), "旧文案回流而判据没红 ⇒ 它什么也没守"
+
+    # 反真空 ②：名单之外的文件里出现那个工具面名字 ⇒ 红（名单本身也在这里被读）。
+    assert _retired_tool_name_hits() == {}, _retired_tool_name_hits()
 
 
 def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
