@@ -3189,6 +3189,30 @@ def _sha(text: str) -> str:
     return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
+def _step_task_id(loop: Any) -> str:
+    """`agent_step` 那一格 `task_id` 的唯一取值点（沿用 `agent_run_start` 的那个号）。
+
+    ## 为什么每一格都要（`temp/analysis/11-ledger-causes.md` ①）
+
+    `agent_step` 真机 **0/564**、run 步 **0/551** 带号，而 `agent_run_start` 是 29/29。
+    于是"哪条 task 被拒了几次"在盘上答不了：B 的 19 条拒落在 t-000017 / t-000050 /
+    t-000058 / t-000076 哪几行只能靠时间窗猜 —— 而本次 F 有两个并发实例
+    （t-000008 / t-000009，同秒起跑），按 `(role, index)` 连两份 run 都分不开。
+    号本来就在循环手上（`self.my_task_id` 就是 `run_role` 为这一趟开出的 `tasks` 行号，
+    子代理那条路是 `row["task_id"]`）—— 缺的是"每一份作业都把这一格插进去"。
+
+    ## 为什么收成一个函数（而不是九处各写一遍 `str(self.my_task_id or "")`）
+
+    判据要能把"注入"单独打桩成不写（反真空：`tests/test_step_events_carry_the_task_id.py`
+    的判据 3）。九处各写一遍的话，那个反真空只能九处一起改 —— 那就不是打桩，是改实现。
+    收成一处之后，打桩点与取值口径是同一个对象。
+
+    空串照落（不造一个假编号）：没拿到台账号的那一趟，读侧要看得见"没拿到" ——
+    与 `agent_run_end` 那一格逐字同一条纪律。
+    """
+    return str(getattr(loop, "my_task_id", "") or "")
+
+
 def _shape_of(data: Mapping[str, Any], *,
               roster: Any = None) -> tuple[str, Mapping[str, Any], str]:
     """把模型的一句输出判成一个形状。判不出来时返回 `("", {}, 原因)`。
@@ -8394,7 +8418,8 @@ class AgentLoop:
         run.steps.append(LoopStep(step, "invalid", {}, bad_result,
                                   problem=call.problem, cache=cache))
         SS.append(self.session_root, {
-            "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+            "kind": "agent_step", "role": self.role, "task_id": _step_task_id(self),
+            "index": step, "shape": "invalid",
             "payload": {}, "result": dict(bad_result),
             "prompt_cache": dict(cache),
         }, sid=self.sid)
@@ -9161,7 +9186,8 @@ class AgentLoop:
                     run.steps.append(LoopStep(step, "invalid", payload, bad_result,
                                               problem=problem, cache=step_cache))
                     SS.append(self.session_root, {
-                        "kind": "agent_step", "role": self.role, "index": step, "shape": "invalid",
+                        "kind": "agent_step", "role": self.role,
+                        "task_id": _step_task_id(self), "index": step, "shape": "invalid",
                         "payload": dict(payload), "result": dict(bad_result),
                         "prompt_cache": dict(step_cache),
                     }, sid=self.sid)
@@ -9204,7 +9230,8 @@ class AgentLoop:
                     run.steps.append(LoopStep(step, "invalid", {}, unknown,
                                               problem=dispatch.problem, cache=step_cache))
                     SS.append(self.session_root, {
-                        "kind": "agent_step", "role": self.role, "index": step,
+                        "kind": "agent_step", "role": self.role,
+                        "task_id": _step_task_id(self), "index": step,
                         "shape": "invalid", "payload": {},
                         "result": dict(unknown), "prompt_cache": dict(step_cache),
                     }, sid=self.sid)
@@ -9273,7 +9300,8 @@ class AgentLoop:
                     run.steps.append(LoopStep(step, shape, payload,
                                               _for_record(refused_result), cache=step_cache))
                     SS.append(self.session_root, {
-                        "kind": "agent_step", "role": self.role, "index": step,
+                        "kind": "agent_step", "role": self.role,
+                        "task_id": _step_task_id(self), "index": step,
                         "shape": shape, "payload": dict(payload),
                         "result": dict(_for_record(refused_result)),
                         "heuristic_tokens": step_node_tokens(step, payload, refused_result),
@@ -9375,7 +9403,8 @@ class AgentLoop:
                     # 事件与消息同时落（S-C 的配对纪律）：只落一边会让续跑重建出来的序列
                     # 与当时那一份不等 —— 那也是"这一步模型到底看见了什么"唯一可复核的地方。
                     SS.append(self.session_root, {
-                        "kind": "agent_step", "role": self.role, "index": step,
+                        "kind": "agent_step", "role": self.role,
+                        "task_id": _step_task_id(self), "index": step,
                         "shape": shape, "payload": dict(payload),
                         "result": dict(_for_record(refusal)),
                         "heuristic_tokens": step_node_tokens(step, payload, refusal),
@@ -9802,7 +9831,9 @@ class AgentLoop:
             # 抄给同一回合的每条会让"它想了什么"在上下文里重复 N 遍。
             thought = _recorded_reasoning(call.reasoning) if item.call_index == 0 else ""
             event: dict[str, Any] = {
-                "kind": "agent_step", "role": self.role, "index": step, "shape": shape,
+                "kind": "agent_step", "role": self.role,
+                # 这一趟的号：与 `agent_run_start` / `agent_run_end` 同一份（见 `_step_task_id`）。
+                "task_id": _step_task_id(self), "index": step, "shape": shape,
                 "payload": dict(payload), "result": dict(step_obj.result),
                 # S-B：这一步作为"节点"的估价（压力门的输入）。它与 `result` 一起落盘，
                 # 于是"当时那一段历史值多少 token"事后可复核（不必重算，也不会因为
@@ -10785,7 +10816,8 @@ class AgentLoop:
                       "raw_reply": _clip(json.dumps(data, ensure_ascii=False, default=str), 600)}
         run.steps.append(LoopStep(step, "invalid", payload, bad_result, problem=help_text))
         SS.append(self.session_root, {
-            "kind": "agent_step", "role": self.role, "index": step,
+            "kind": "agent_step", "role": self.role, "task_id": _step_task_id(self),
+            "index": step,
             "shape": "invalid", "payload": dict(payload), "result": dict(bad_result),
         }, sid=self.sid)
         return _payload_line(step, shape, help_text), run.notify_rejections >= self.max_notify_rejections
@@ -11082,7 +11114,8 @@ class AgentLoop:
                                   problem=str(item.problem or "judge_bad_json"),
                                   cache=dict(step_cache)))
         SS.append(self.session_root, {
-            "kind": "agent_step", "role": self.role, "index": int(item.step_index),
+            "kind": "agent_step", "role": self.role,
+            "task_id": _step_task_id(self), "index": int(item.step_index),
             "shape": "invalid", "payload": dict(item.payload), "result": dict(entry),
             "prompt_cache": dict(step_cache),
         }, sid=self.sid)
@@ -11139,7 +11172,8 @@ class AgentLoop:
             run.steps.append(LoopStep(int(item.step_index), shape, dict(item.payload), entry,
                                       cache={}))
             SS.append(self.session_root, {
-                "kind": "agent_step", "role": self.role, "index": int(item.step_index),
+                "kind": "agent_step", "role": self.role,
+                "task_id": _step_task_id(self), "index": int(item.step_index),
                 "shape": shape, "payload": dict(item.payload), "result": dict(entry),
                 "prompt_cache": {},
             }, sid=self.sid)
@@ -13736,7 +13770,7 @@ class LlmBackend:
                            parent_task_id=str(row.get("parent_task_id") or ""),
                            surface=child_surface,
                            depth=int(row.get("depth") or params.get("_depth") or 1))
-        artifact = self._write_run_artifact(role, run)
+        artifact = self._write_run_artifact(role, run, task_id=own_tid)
         SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,
                                       "path": artifact, "stop_reason": run.stop_reason,
                                       "task_id": run.prompt_audit.get("task_id", "")}, sid=self.sid)
@@ -13900,8 +13934,21 @@ class LlmBackend:
             return self.seam_factory(role)
         raise RuntimeError("LlmBackend 需要 seam_factory（一个按角色造模型缝的调用方）")
 
-    def _write_run_artifact(self, role: str, run: LoopRun) -> str:
+    def _write_run_artifact(self, role: str, run: LoopRun, *, task_id: str = "") -> str:
         """把这次循环的完整记录写成文件，返回路径（失败就返回空串并留 note）。
+
+        ## 为什么这一份文件比 `LoopRun.to_dict()` 多一列 `task_id`
+
+        `runs/*.json` 是**审计载体**，与 `sessions` 的 `agent_step` 同族
+        （`11-ledger-causes.md` ①：真机 `steps[]` 0/551 带号）。补这一列是为了让
+        "哪条 task 的哪几步被拒"在两份载体上都能直接按号过滤 —— 而读侧从来只读
+        会话事件重建（`resume_messages`），这个文件里的多一列不会被任何消费者
+        读成"某一步属于另一趟"。
+
+        为什么不改 `LoopRun.to_dict()`：它的**键集**本身就是判据
+        （`tests/test_summons_and_numbered_addressing.py` 双向核文档与返回值），
+        那里加一格是改公开面；而这里加一格是给这一份记录补一个审计列。两件事
+        不该混在一次改动里。
 
         B11（`draft/41-A` 的 B11）：唯一性靠 `O_EXCL`，不靠"先数后写"。旧实现是
         `n = len(list(d.glob(f"{role}-*.json"))) + 1`，然后按这个名字写 —— 没有锁、也不是 `O_EXCL`：同一角色
@@ -13916,7 +13963,13 @@ class LlmBackend:
         try:
             d = self.session_root / RUNS_DIR_NAME
             d.mkdir(parents=True, exist_ok=True)
-            payload = json.dumps(run.to_dict(), ensure_ascii=False, indent=2, default=str) + "\n"
+            # 号照落（空串也落）：读侧要看得见"这一趟没拿到号"，而不是"这一格不存在"。
+            record = run.to_dict()
+            own = str(task_id or "")
+            record["task_id"] = own
+            record["steps"] = [{**dict(s), "task_id": own}
+                               for s in (record.get("steps") or [])]
+            payload = json.dumps(record, ensure_ascii=False, indent=2, default=str) + "\n"
             stamp = time.strftime("%Y%m%d-%H%M%S")
             n = len(list(d.glob(f"{role}-{stamp}-*.json"))) + 1
             while n <= _RUN_ARTIFACT_MAX_SEQ:
