@@ -80,11 +80,27 @@ class _Scripted:
     def __init__(self, replies: list[Any]) -> None:
         self.replies = list(replies)
         self.prompts: list[str] = []
+        #: 真正按剧本回答的条数（`dispatch_fit` 那一问固定答复，不占剧本位置）。
+        self._scripted_calls = 0
 
     def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
                  **kw: Any) -> Any:
         self.prompts.append(prompt)
-        item = self.replies[min(len(self.prompts) - 1, len(self.replies) - 1)]
+        # 2026-11-13 起 D 的秘书在派活时多问一次 `dispatch_fit`（这一条是不是一个
+        # 研究方向）。它走的是同一个角色缝 ⇒ 会从这份剧本里吃掉一条答复，把父的
+        # 下一步（`fs.read` / 写报告）挤到后一拍去。这一问不是本文件量的东西，
+        # 固定答复它、不消耗剧本（语义判别自己的判据在
+        # `tests/test_secretary_dispatch_fit.py`）。
+        if system and "它是不是**一个研究方向**？" in system:
+            return type("Reply", (), {
+                "ok": True,
+                "text": json.dumps({"decision": "是一个方向", "reason": "夹具：一个方向",
+                                    "basis": ["读完 C 的报告，把主猜想的攻击路线写出来"]},
+                                   ensure_ascii=False),
+                "tokens_in": 10, "tokens_out": 10, "error_detail": "",
+                "error_kind": ""})()
+        item = self.replies[min(self._scripted_calls, len(self.replies) - 1)]
+        self._scripted_calls += 1
         text = item(prompt) if callable(item) else str(item)
         return type("Reply", (), {"ok": True, "text": text, "tokens_in": 10,
                                   "tokens_out": 10, "error_detail": "",
