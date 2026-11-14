@@ -66,7 +66,7 @@ def _replies() -> list[str]:
     """三步：一条正常步、一条解析不了的坏 JSON（步级拒信的同族形态）、收工。
 
     为什么要那一坏步：它的落点与正常步不是同一个写入口（`run()` 里的收尾段 vs
-    `_land_unusable`），只钉正常步会让"另一个写口忘了插号"永远看不见。
+    `_record_invalid_step`），只钉正常步会让"另一个写口忘了插号"永远看不见。
     """
     return [json.dumps({"note": "先记一句进度"}, ensure_ascii=False),
             "这不是 JSON",
