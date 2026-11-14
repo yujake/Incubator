@@ -2660,6 +2660,23 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                             "filled / unchanged / kept / refused / not_applicable + diff 的 "
                             "I1/I2 对拍）—— 不读 store、不读台账、不写盘；"
                             "`own.ingest_manuscript` 的提取与冲突矩阵都走它",
+    # 2026-11-14（业主裁定「将命题类型和等级两组词进行解耦」）：这一轴整块搬出来是为了
+    # 守住体量软基线 —— `manuscriptintake` 当时正压在 800 行线上，而解耦要在那一格里加
+    # 交叉核对；业主口径「体量软基线不许抬」⇒ 只许拆，`manuscriptintake` 留一张转发表
+    # （`plan_cells` 仍调同一个函数，不是第二套实现）。
+    # 为什么必须仍是顶层模块：它是「命题类型」这一轴的唯一权威，六个消费方分属库层不同
+    # 角色 —— `manuscriptintake` 的提取、`proofregistry.parse_entry`、`secretary` 的写侧、
+    # `agent_b/register_statement`、`exhaustionreport` 与
+    # `test_kind_and_grade_axes_are_decoupled`；挪进任何一个角色包都会让另外几侧反向依赖
+    # 那个角色，而拆掉这层耦合正是这次裁定要的。挪进 `manuscriptintake`（745）/
+    # `manuscriptform`（739）/ `proofregistry`（799）也都会把那个文件顶过 800。
+    "manuscriptkind.py": "命题类型那一轴的唯一权威（2026-11-14 从 `manuscriptintake` 拆出）："
+                         "PROPOSITION_KIND_MARK / LEGACY_PROPOSITION_KIND_MARK（读旧名、写新名）/ "
+                         "KIND_RANK / KIND_CROSSCHECK_* 四码 / mark_key / kind_crosscheck（台账 "
+                         "`statements.kind` 为准、稿头为交叉核对，四态各带码，不静默取其一）/ "
+                         "extract_kind / plan_kind —— 写侧与两个读侧共用这一份；模块级只依赖 "
+                         "stdlib（`manuscriptintake` 的 helper 是函数内延迟 import，避开循环依赖），"
+                         "不读 store、不读台账、不写盘。拆出只为把 800 行软基线压回去（不抬基线）",
     "promptstability.py": "系统提示的步间稳定性与 prompt 缓存读数：split_facts（把每步会变的事实键移出 system）、"
                           "step_stability / first_difference（连续两步是否逐字节相同、从第几个字符起不同）、"
                           "dynamic_sections / unregistered_dynamic_sections（动态段白名单）、"
