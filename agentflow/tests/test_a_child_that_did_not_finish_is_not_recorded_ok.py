@@ -82,6 +82,29 @@ class _NoReply:
 
 
 FINISH = json.dumps({"final": "交差"}, ensure_ascii=False)
+#: 一条"正常步"（不是收工）：让循环走到下一步的头，那里才查停机开关。
+NOTE = json.dumps({"note": "先记一句进度"}, ensure_ascii=False)
+
+
+class _ScriptedThatGetsStopped(_Scripted):
+    """第一拍回话时把停机开关落盘 —— 用户是在这一趟跑起来之后才按停的。
+
+    为什么不能沿用"派活前开关就在盘上"那个夹具（2026-11-15 的裁定）：那已经不是
+    "这个子被开关停掉"，而是"根本没派活" —— 受控拒（`status/outcome=cancelled`、
+    `task_id=None`、不落 tasks 行，见 `tests/test_dispatch_refuses_after_the_stop_switch.py`）。
+    本用例的题目是"已启动的孩子被停 ⇒ `done / cancelled` + 一行台账"，所以开关必须
+    落在派活之后；三条断言逐字未动。
+    """
+
+    def __init__(self, replies: list[str], switch: pathlib.Path) -> None:
+        super().__init__(replies)
+        self.switch = switch
+
+    def complete(self, prompt: str, *, scope: str = "", system: str | None = None,
+                 **kw: Any) -> Any:
+        if self.calls == 0:
+            self.switch.write_text('{"reason": "user", "by": "test"}', encoding="utf-8")
+        return super().complete(prompt, scope=scope, system=system, **kw)
 
 
 # ---------------------------------------------------------------- 装配
@@ -200,13 +223,42 @@ def test_a_child_that_lost_the_model_is_failed_with_a_reason(tmp_path: pathlib.P
 
 
 def test_a_child_stopped_by_the_switch_is_cancelled(tmp_path: pathlib.Path):
-    """被用户叫停的子代理 ⇒ `done / cancelled`（不是 ok，也不是 failed）。"""
+    """被用户叫停的子代理 ⇒ `done / cancelled`（不是 ok，也不是 failed）。
+
+    2026-11-15（新裁定，不是放宽）：开关在派活之前就在盘上 ⇒ 那是"拒派"：
+    没有孩子、没有台账行（`status/outcome=cancelled`、`task_id=None`，判据
+    `tests/test_dispatch_refuses_after_the_stop_switch.py`，含反真空）。本用例的
+    对象是"已启动的孩子被停"，所以让开关落在派活之后（第一拍回话时落盘）；
+    下面三条断言与改前逐字相同。
+    """
     ws = _ws(tmp_path)
     switch = ws / ".agentflow-stop"
-    switch.write_text('{"reason": "user", "by": "test"}', encoding="utf-8")
-    st, cond = _conductor(ws, _Scripted([FINISH]), stop_file=str(switch))
+    st, cond = _conductor(ws, _ScriptedThatGetsStopped([NOTE, FINISH], switch),
+                          stop_file=str(switch))
     res = _summon_e(cond)
     assert res.status == "done" and res.outcome == "cancelled", (res.status, res.outcome)
     row = _row(st, res.task_id)
     assert row["status"] == "done" and row["outcome"] == "cancelled", row
     assert str((res.payload or {}).get("stop_reason")) == "stop_file", res.payload
+
+
+def test_a_dispatch_refused_by_the_switch_is_not_a_child_ending(tmp_path: pathlib.Path):
+    """拒派 ≠ 取消在飞：开关在派活之前 ⇒ 没有孩子、没有台账行、`task_id=None`。
+
+    这是上一条的另一面，也是"两种状态"的机器读数：已启动的孩子被停 ⇒ 有
+    `task_id`、有一行 `done/cancelled`；派活被拒 ⇒ 连一行都不落。把两者写成同一个
+    形状（例如拒派也编一个号、或也记 `done/cancelled`）会让父代理去查一条不存在的
+    行、并把"没开始"读成"跑到一半被停"。派活拒绝的受控形状（四入口 + 反真空）由
+    `tests/test_dispatch_refuses_after_the_stop_switch.py` 逐入口钉住。
+    """
+    ws = _ws(tmp_path)
+    switch = ws / ".agentflow-stop"
+    switch.write_text('{"reason": "user", "by": "test"}', encoding="utf-8")
+    st, cond = _conductor(ws, _Scripted([FINISH]), stop_file=str(switch))
+    before = len(st.rows("tasks"))
+    res = _summon_e(cond)
+    assert res.task_id is None, res.task_id
+    assert res.status == "cancelled" and res.outcome == "cancelled", (res.status, res.outcome)
+    assert "停机开关在" in str(res.detail), res.detail
+    assert len(st.rows("tasks")) == before, (
+        "派活被拒不许落台账行：", [r.get("task_id") for r in st.rows("tasks")])
