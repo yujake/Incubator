@@ -1270,6 +1270,62 @@ LEAN_CHOICES: tuple[str, ...] = ("on", "off", "auto")
 START_MODES: tuple[str, ...] = ("auto", "topic", "role", "research",
                                "project", "cold", "warm")
 
+#: `start` 里"只有某一档读它"的旗标 → 它真正生效的那几档（`RunSpec.mode`）。
+#:
+#: 为什么要这张表：`start` 是一个入口收四档路的旗标，而 argparse 不认识"这一档用不上它"。
+#: 收下不接上的后果不是"少一个功能"，而是「静默换落点 / 静默不生效」：2026-11-14 的事故里
+#: `--mode research --project P` 被收下却没接到实现，十角色循环把 15 个被跟踪的 `data/`
+#: 文件写脏了，而屏幕上没有一行说"`--project` 这一趟没生效"。所以这里把"这一档不读它"
+#: 做成拒收（`_start_flags_not_in_this_mode`）：报错、点名旗标、点名它在哪一档有效。
+#:
+#: 只收"除这一档之外没有任何读者"的旗标 —— 每一条都按"改这个值能不能在 `args` 之外
+#: 观察到一个不同"核过（探针 `temp/probe_start_flags.py` 的差分读数），不靠读代码猜。
+START_FLAG_MODES: dict[str, tuple[str, ...]] = {
+    "--role": (MODE_ROLE,),
+    "--out": (MODE_TOPIC,),
+    "--fulltext": (MODE_TOPIC,),
+    "--no-fulltext": (MODE_PROJECT,),
+    "--books": (MODE_PROJECT,),
+    "--books-limit": (MODE_PROJECT,),
+    "--retrieval-limit": (MODE_PROJECT,),
+    "--extract": (MODE_PROJECT,),
+    "--extract-rounds": (MODE_PROJECT,),
+    "--prompt-version": (MODE_TOPIC,),
+    "--max-calls": (MODE_TOPIC, MODE_PROJECT),
+    "--text-store-dir": (MODE_TOPIC, MODE_PROJECT),
+    "--drive": (MODE_ROLE,),
+    "--subagents": (MODE_ROLE,),
+    "--semantic-review": (MODE_ROLE,),
+    "--experiment-reasoning": (MODE_ROLE,),
+    "--provider": (MODE_ROLE,),
+    "--max-steps": (MODE_ROLE,),
+    "--wall-clock-sec": (MODE_ROLE,),
+    "--rounds": (MODE_ROLE,),
+    "--report-every": (MODE_ROLE,),
+    "--resume": (MODE_ROLE,),
+    "--user-wait-sec": (MODE_ROLE,),
+    "--no-ask": (MODE_ROLE,),
+    "--stop-file": (MODE_ROLE,),
+    "--allow-foreign-entries": (MODE_ROLE,),
+    "--sid": (MODE_ROLE, MODE_WEB),
+    "--model": (MODE_TOPIC,),
+    "--budget-usd": (MODE_TOPIC, MODE_ROLE, MODE_PROJECT),
+    "--lean": (MODE_TOPIC, MODE_ROLE, MODE_PROJECT),
+}
+
+#: `MODE_*` 在拒信里的读法（人敲的是 `--mode research`，`RunSpec.mode` 里它是 `role`）。
+MODE_LABEL: dict[str, str] = {
+    MODE_TOPIC: "--mode topic",
+    MODE_ROLE: "--mode research / --mode role",
+    MODE_PROJECT: "--mode project（或 --mode cold / warm）",
+    MODE_WEB: "--watch 不带 --task",
+}
+
+#: 只在"起网页"那一趟有读者的旗标（`--watch` 或只开网页）。
+WEB_ONLY_FLAGS: frozenset[str] = frozenset({
+    "--host", "--port", "--open", "--token", "--allow-writes", "--no-settings-write",
+})
+
 #: `start --dry-run --json` 那一份的键集合。
 #:
 #: 写在这里是为了让它只有一个真身：判据
@@ -1647,32 +1703,46 @@ def _land_budget(spec: RunSpec, root: Path, *, stream=None) -> int:
 def _has_ledger(path: Path) -> tuple[bool, str]:
     """这个项目里有没有跑过的台账（决定 `--mode auto` 该落 research 还是 warm）。
 
-    判据刻意取"`data/tasks.jsonl` 里有几行"而不是"文件夹在不在"：一个刚 `plan` 过、
+    判据刻意取"`data/tasks.json` 里有几行"而不是"文件夹在不在"：一个刚 `plan` 过、
     还没跑过的项目当然没有 DAG，把它当成"有台账"会让 `--mode auto` 一上手就跑研究循环。
+
+    文件名必须是 `tasks.json`（`schema.TABLES` 里那张表的真身；`empty_table()` 的形状是
+    `{"schema_version": N, "rows": []}`）。改前这里读的是 `data/tasks.jsonl` —— 那个文件
+    在任何工作区里都不存在（全仓实测 0 个），于是这一格恒为"没有台账"、`--mode auto`
+    的 research 那一档从来没有被走到过：一个已经有 109 行台账的项目会被当成 warm
+    只跑一趟主题。这是"接了但读错对象"，与落点那一类同族（2026-11-14 一并查出）。
     """
-    tasks = Path(path) / "data" / "tasks.jsonl"
+    tasks = Path(path) / "data" / "tasks.json"
     if not tasks.is_file():
-        return False, "没有 data/tasks.jsonl"
+        return False, "没有 data/tasks.json"
     try:
-        rows = sum(1 for line in tasks.read_text(encoding="utf-8").splitlines()
-                   if line.strip())
+        doc = json.loads(tasks.read_text(encoding="utf-8"))
     except OSError as exc:
-        return False, f"data/tasks.jsonl 读不出来（{type(exc).__name__}）"
-    return rows > 0, f"data/tasks.jsonl {rows} 行"
+        return False, f"data/tasks.json 读不出来（{type(exc).__name__}）"
+    except ValueError as exc:
+        return False, f"data/tasks.json 不是合法 JSON（{type(exc).__name__}）"
+    rows = doc.get("rows") if isinstance(doc, dict) else doc
+    if not isinstance(rows, list):
+        return False, "data/tasks.json 里没有 rows 数组"
+    return bool(rows), f"data/tasks.json {len(rows)} 行"
 
 
 def _target_workspace(spec: RunSpec, args) -> tuple[Path, dict | None]:
-    """这一趟真正的落点：项目模式给项目文件夹，其余给工作区根。
+    """这一趟真正的落点：给了 `--project` 就是那个项目文件夹，否则给工作区根。
 
     "在哪干"这一格只在这里答一次。`web` 那一档也走它，所以 `start --watch --project P`
     开出来的网页读的正是 P 的盘 —— 而不是"用户以为的工作区"（`web` 不含"当前项目"时，
     监督一次还得自己拼 `--root projects/<名字>`）。
 
+    落点不再按 `spec.mode` 分档：2026-11-14 的事故就是这里写成"只有 project/web 两档
+    才看 `spec.project_name`"，于是 `--mode research --project P` 的落点算成了工作区根。
+    `--project` 是"在哪个项目里干"，与"走哪条路"无关。
+
     这里一律按 `start="auto"` 解析：它回答的是"落点在哪"，不回答"要不要新建" ——
     后者归 `project_start`，而试运行那一档要的正是"别替我把新建这一步办了"。
     """
     root = Path(spec.root or DEFAULT_ROOT).resolve()
-    if spec.mode not in (MODE_PROJECT, MODE_WEB) or not spec.project_name:
+    if not spec.project_name:
         return root, None
     from . import projects as P
 
@@ -1736,21 +1806,24 @@ def _print_plan(spec: RunSpec, args) -> int:
     if spec.model:
         model_spec = replace(model_spec, model=spec.model)
     project_note = ""
-    if spec.mode == MODE_PROJECT or (spec.mode == MODE_WEB and spec.project_name):
+    # 项目那一档「没给名字」也要算（`projects.plan` 会取下一个 projectN）——
+    # 否则预检会把落点印成工作区根，而真跑落在 `projects/projectN`。
+    if spec.project_name or spec.mode == MODE_PROJECT:
         base = P.projects_dir(getattr(args, "projects_dir", None))
-        start = "auto" if spec.mode == MODE_WEB else spec.project_start
         try:
             # 名字不给就由 `projects.plan` 取下一个号：预检要回答"会落在哪个文件夹"。
-            plan = P.plan(base, spec.project_name, start=start)
+            plan = P.plan(base, spec.project_name, start=spec.project_start)
         except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
-            # 试运行要说清"你要求的冷/热启动会撞上什么"，而不是替你把文件夹处理掉。
+            # 试运行要说清"你要求的冷/热启动会撞上什么"，而不是替你把文件夹处理掉；
+            # 也不在 except 里再 `plan(start="auto")` 一遍 —— 那一次会抛同一个异常，
+            # 于是 `--dry-run` 以一行 traceback 收场（那不是"没查成"该有的形态）。
             print(tty.paint(f"[start] {exc}", "yellow"), file=sys.stderr)
-            plan = P.plan(base, spec.project_name, start="auto")
-        project = plan["project"]
-        project["will_create"] = plan["will_create"]
-        project["run_index"] = plan["run_index"]
-        project_note = str(plan.get("note") or "")
-        workspace = Path(plan["project"]["path"])
+        else:
+            project = plan["project"]
+            project["will_create"] = plan["will_create"]
+            project["run_index"] = plan["run_index"]
+            project_note = str(plan.get("note") or "")
+            workspace = Path(plan["project"]["path"])
     if project:
         note = project_note
     else:
@@ -1929,7 +2002,7 @@ def _dispatch(spec: RunSpec, args) -> int:
 
 
 def _announce_cache_line(spec: RunSpec, *, write_record: bool = True,
-                         lean: bool | None = None) -> None:
+                         lean: bool | None = None, root: Path | None = None) -> None:
     """起跑前打一行缓存读数（只加读数：读不到 / 不新鲜都不拦跑、不改退出码）。
 
     为什么在这里、而不是在三条执行体各写一遍：`_run_spec` 是五条入口（`start` /
@@ -1942,10 +2015,12 @@ def _announce_cache_line(spec: RunSpec, *, write_record: bool = True,
     `write_record=False` 是试运行那一档：读数照印，但不落 `runs/cache-active-*.json`
     （见 `cachectl.run_reading` 的 `write_record`）。`lean` 给"将来会用的那一档"，
     试运行里就是 `--lean` 的取值 —— 那一趟还没真起跑，不能拿本进程的开关冒充它。
+    `root` 是这一趟的落点：不给时 `cachectl` 只能从进程命令行 `--root` 猜，于是
+    `--project P` 那一趟的运行记录会写进外层工作区的 `runs/`（与数据分家）。
     """
     from . import cachectl as CC
 
-    got = CC.run_reading(write_record=write_record, lean=lean)
+    got = CC.run_reading(write_record=write_record, lean=lean, root=root)
     text = str(got.get("text") or "")
     if not text:
         return
@@ -1987,7 +2062,11 @@ def _run_spec(spec: RunSpec, args) -> int:
               file=(sys.stderr if spec.as_json else sys.stdout))
     with _lean_scope(lean_plan):
         args.lean_enabled = lean_plan.enabled
-        _announce_cache_line(spec)
+        # 运行记录跟着落点走：`--project P` 那一趟写到 P 的 `runs/`，不写外层工作区的。
+        # 只开网页那一档不给落点：它那一趟不初始化工作区，先写一个 `runs/` 会让
+        # `projects.classify` 把一个只有 `runs/` 的目录读成 not_a_project（下一次
+        # `--project P` 就会被守卫拒掉）。那里本来也没有"这一趟起跑"可记。
+        _announce_cache_line(spec, root=None if spec.mode == MODE_WEB else spec.root)
         if spec.watch:
             return _with_watch(spec, args)
         return _dispatch(spec, args)
@@ -2000,8 +2079,34 @@ def _missing_task() -> str:
             "想先看看会发生什么就再加 --dry-run")
 
 
+def _start_kind(args) -> str | None:
+    """`--mode cold|warm` 与 `--start cold|warm` 归一成一个启动方式；两处相反 ⇒ None。
+
+    为什么要归一：这两格表达同一件事（`--help` 逐字写着），而此前 `--mode` 那一支
+    直接 `return`、把 `--start` 静默丢掉了 —— "给了热启动却冷启动出一个新文件夹"
+    与 2026-11-14 的落点事故是同一类：旗标收下了，但不生效。
+    """
+    mode = str(getattr(args, "mode", "auto") or "auto")
+    start = str(getattr(args, "start", "auto") or "auto")
+    if mode not in ("cold", "warm"):
+        return start
+    if start not in ("auto", mode):
+        return None
+    return mode
+
+
 def _spec_of_start(args) -> tuple[RunSpec | None, str]:
-    """把 `start` 的旗标推断成 `RunSpec`；推断不出来就返回一句人话（第二格非空）。"""
+    """把 `start` 的旗标推断成 `RunSpec`；推断不出来就返回一句人话（第二格非空）。
+
+    `--project` 只在这里解析一次，而且与 `--mode` 无关：它回答"这一趟在哪个项目里干"。
+    2026-11-14 的事故就是这条旗标只在 auto/project/web 三档被读到，显式
+    `--mode research|role|topic` 三档收下就丢 ⇒ 十角色循环把数据写进了工作区根
+    `data/`（15 个被跟踪的文件被写脏），而 `--dry-run --json` 的 `project` 格是 `{}`
+    —— 那一格空着就是预兆：旗标收下了，没接上。
+
+    `--start` 同样在这里归一（`_start_kind`）：它此前在 auto 那一支被完全忽略，
+    于是 `--start warm` 会静默走出"下一个 projectN 冷启动"。
+    """
     mode = str(getattr(args, "mode", "auto") or "auto")
     task = str(getattr(args, "task", "") or "").strip()
     role = str(getattr(args, "role", "") or "")
@@ -2012,6 +2117,23 @@ def _spec_of_start(args) -> tuple[RunSpec | None, str]:
         # `--project` 的落点跟着 `--root` 走。老命令 `project run` 这一格保持原样
         # （它从来不看 `--root`）—— C2 要求它的行为逐字不变，所以这条只写在 `start` 里。
         args.projects_dir = str(Path(root_raw).resolve() / "projects")
+    start = _start_kind(args)
+    if start is None:
+        return None, ("[start] 没查成：--mode " + mode + " 与 --start "
+                      + str(getattr(args, "start", "") or "") + " 说的是相反的启动方式。"
+                      "二选一：要么 --mode cold/warm，要么 --start cold/warm"
+                      "（两处给同一档也行）。")
+    # ---- 落点：给了 --project 就解析一次，四档共用（此前只有 project/web 两档读它）
+    from . import projects as P
+
+    ref: P.ProjectRef | None = None
+    if name:
+        base = P.projects_dir(getattr(args, "projects_dir", None))
+        try:
+            ref = P.resolve(base, name, start=start)
+        except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
+            return None, f"[start] 没查成：{exc}"
+        args.root = str(ref.path)
     if mode == "role":
         if not role:
             return None, ("[start] 缺一个要跑的角色：--mode role 要给 --role <角色>"
@@ -2031,19 +2153,15 @@ def _spec_of_start(args) -> tuple[RunSpec | None, str]:
         return _spec_from(args, mode=MODE_PROJECT, origin="start",
                           project_start=mode, task=task), ""
     if mode == "project":
-        return _spec_from(args, mode=MODE_PROJECT, origin="start", task=task), ""
-    # ---- auto：按目录状态推断
-    from . import projects as P
-
+        return _spec_from(args, mode=MODE_PROJECT, origin="start",
+                          project_start=start, task=task), ""
+    # ---- auto：按目录状态推断（`--project` 给出来的话，`ref` 上面已经解析好了）
     base = P.projects_dir(getattr(args, "projects_dir", None))
-    try:
-        ref = P.resolve(base, name, start="auto")
-    except P.ProjectNotAWorkspace as exc:
-        return None, f"[start] 没查成：{exc}"
-    if name:
-        # 项目给出来了 ⇒ 这一趟就在那个项目里干（研究循环也一样）。不这么做的话，
-        # `--mode research --project p` 会把十角色循环跑在工作区根上、产物落在项目外面。
-        args.root = str(ref.path)
+    if ref is None:
+        try:
+            ref = P.resolve(base, None, start=start)
+        except (P.ProjectExists, P.ProjectMissing, P.ProjectNotAWorkspace) as exc:
+            return None, f"[start] 没查成：{exc}"
     if ref.mode == "cold":
         return _spec_from(args, mode=MODE_PROJECT, origin="start",
                           project_start="cold", task=task), ""
@@ -2056,6 +2174,53 @@ def _spec_of_start(args) -> tuple[RunSpec | None, str]:
                       project_start="warm", task=task), ""
 
 
+def _flags_given(argv: list[str]) -> frozenset[str]:
+    """argv 里显式出现的长旗标名（`--x=y` 也算；`--projects-dir` 不会被认成 `--project`）。
+
+    为什么要从 argv 读而不是从 `args` 读：argparse 的 `Namespace` 分不开"用户没给"
+    与"用户给了缺省值"（`--port` 的缺省是 8788、`--max-calls` 是 3 …），而拒收只能针对
+    用户真给了的那一个 —— 否则每一条 `start` 都会被自己的缺省值拒掉。
+    """
+    given = set()
+    for token in argv:
+        text = str(token)
+        if not text.startswith("--"):
+            continue
+        given.add(text.split("=", 1)[0])
+    return frozenset(given)
+
+
+def _start_flags_not_in_this_mode(spec: RunSpec, args) -> str:
+    """这一趟用不上的旗标 ⇒ 一句点名它的拒信（空串 = 都能用）。
+
+    三条判据同源，一条都不许静默：`START_FLAG_MODES`（只对某几档有意义的）、
+    `--projects-dir` / `--start`（要有项目落点才谈得上）、`WEB_ONLY_FLAGS`（只在起网页时用）。
+    """
+    given = getattr(args, "_given_flags", frozenset())
+    if not given:
+        return ""
+    bad: list[tuple[str, str]] = []
+    for flag, allowed in START_FLAG_MODES.items():
+        if flag in given and spec.mode not in allowed:
+            bad.append((flag, " / ".join(MODE_LABEL[m] for m in allowed)))
+    if not spec.project_name and spec.mode != MODE_PROJECT:
+        for flag in ("--projects-dir", "--start"):
+            if flag in given:
+                bad.append((flag, "给了 --project <名字> 或 --mode project 的那几趟"))
+    if not (spec.watch or spec.mode == MODE_WEB):
+        for flag in sorted(WEB_ONLY_FLAGS):
+            if flag in given:
+                bad.append((flag, "带 --watch 或只开网页的那一趟"))
+    if not bad:
+        return ""
+    lines = ["[start] 没查成：这一趟用不上这些旗标 —— 收下不接上是静默忽略，"
+             "而静默忽略正是 2026-11-14 那次写脏被跟踪 data/ 的直接原因，所以这里拒收："]
+    for flag, where in bad:
+        lines.append(f"  · {flag} 只在 {where} 有效（这一趟是 {MODE_LABEL[spec.mode]}）。")
+    lines.append("去掉它们，或换到它们有效的那个入口再跑。")
+    return "\n".join(lines)
+
+
 def cmd_start(args) -> int:
     """统一入口：一个入口讲清"干什么 / 在哪干 / 花多少钱 / 开不开 Lean"。
 
@@ -2064,15 +2229,23 @@ def cmd_start(args) -> int:
     1. 没给 `--task`：给了 `--watch` ⇒ 只开网页（`web` 的别名）；没给 ⇒ 人话报错并点名
        `--task`（C3）；
     2. 项目文件夹不存在或为空 ⇒ cold；
-    3. 项目文件夹已初始化、且 `data/tasks.jsonl` 有行 ⇒ research（十角色循环，角色缺省 M）；
+    3. 项目文件夹已初始化、且 `data/tasks.json` 有行 ⇒ research（十角色循环，角色缺省 M）；
     4. 项目文件夹已初始化、但没有台账 ⇒ warm。
 
-    ## 三条"人话"
+    ## 四条"人话"
 
     - 缺 `--task` 且没 `--watch`：说清"要么给任务、要么只开网页"；
     - `--mode role` 少 `--role`：点名 `--role` 与可选值；
     - `--mode research` 不用给角色：角色缺省 M（位置参数缺失时 argparse 那句原文说不出
-      "该给哪个旗标"）。
+      "该给哪个旗标"）；
+    - 这一档用不上的旗标：拒收并点名（见 `_start_flags_not_in_this_mode`）——
+      静默忽略正是 2026-11-14 那次把 15 个被跟踪的 `data/` 文件写脏的直接原因。
+
+    ## `--project` 与 `--mode` 无关
+
+    给了 `--project <名字>` 就落在 `<projects-dir>/<名字>`（`--root` 给了又没给
+    `--projects-dir` 时是 `<root>/projects/<名字>`）：`--mode research` / `role` / `topic`
+    也一样 —— 它们此前只在 auto/project/web 三档读这一格，另外三档收下就丢。
 
     退出码：0 做成了 / 1 查过了、有问题 / 2 没查成（用法错或前提不满足）。
 
@@ -2084,6 +2257,10 @@ def cmd_start(args) -> int:
         print(tty.paint(problem, "yellow"), file=sys.stderr)
         return 2
     assert spec is not None
+    wrong = _start_flags_not_in_this_mode(spec, args)
+    if wrong:
+        print(tty.paint(wrong, "yellow"), file=sys.stderr)
+        return 2
     return _run_spec(spec, args)
 
 
@@ -4325,7 +4502,9 @@ def cmd_budget(args) -> int:
 
     三种用法（`budget` 模块是唯一实现，这里只做台面）：
     - `agentflow budget` / `--status`：读一格读数 —— 总额度、已花、剩余、追加历史、三态。「已花」不
-      来自寄存器：唯一权威账是 `usage_ledger`（`tokenmeter.spent()`）。
+      来自寄存器：唯一权威账是 `usage_ledger`（`tokenmeter.spent()`）。`--status` 是"只读"那句
+      话的显式形态：与 `--set` / `--add` 连用会被拒（退出码 2），不落一个字节 —— 此前它被
+      解析后没有任何分支读，于是 `budget --status --set 5` 照样把额度写进去了。
     - `agentflow budget --set 5`：设一个总额度（覆盖式；第一次设预算用这个）。
     - `agentflow budget --add 2 --note "让它跑完"`：追加（运行期生效：下一次花钱之前的那个闸门就会
       现读到新上限 —— 不需要重启、不需要重跑）。
@@ -4346,6 +4525,15 @@ def cmd_budget(args) -> int:
     except Exception:  # noqa: BLE001 —— 账本读不出来时"已花"记 unknown（不许折成 0）
         spent = None
     wrote = False
+    if getattr(args, "status", False) and (
+            getattr(args, "set_usd", None) is not None
+            or getattr(args, "add_usd", None) is not None):
+        # `--status` 此前被解析后一个分支都没读：`budget --status --set 5` 照样写盘，
+        # 而用户说的是"只看"。这一档按 fail-closed 拒：宁可让他去掉 --status 再敲。
+        print("[budget] 没查成：--status 是只读（看总额度 / 已花 / 剩余），不和 "
+              "--set / --add 连用 —— 这一趟一个字节都没写。要改额度就去掉 --status。",
+              file=sys.stderr)
+        return 2
     if getattr(args, "set_usd", None) is not None:
         got = B.write_initial(root, float(args.set_usd), by=str(getattr(args, "by", "user") or "user"),
                               note=str(getattr(args, "note", "") or ""))
@@ -5074,6 +5262,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp.add_argument("--text", required=True, help="要说的话（一句话或一小段）")
     sp.add_argument("--subject", default="用户插话", help="抬头（默认「用户插话」）")
+    # `cmd_interject` 一直在读 `args.sid`（`send_interjection(..., sid=...)`），而 parser
+    # 上从来没有这一格 ⇒ `--sid` 是"实现收、声明不收"：跑在自定义会话号上的一趟
+    # （`run-agent --sid Night1`）根本插不进话。与 `answer` / `inbox` 的 `--sid` 同义。
+    sp.add_argument("--sid", default=None,
+                    help="那一趟的会话号（缺省 = 当天的会话；见 `agentflow inbox`）")
     sp.set_defaults(func=cmd_interject)
 
     sp = sub.add_parser("submit", help="提交搜索请求")
@@ -5171,7 +5364,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="统一入口：给一句话就开始干（研究循环 / 端到端主题 / 项目工作区 / 只开网页）",
         description=(
             "统一入口。`--mode` 不写就按目录状态推断：没给 --task 且给了 --watch ⇒ 只开网页；"
-            "项目文件夹不存在或为空 ⇒ cold；已有台账（data/tasks.jsonl 有行）⇒ research；"
+            "项目文件夹不存在或为空 ⇒ cold；已有台账（data/tasks.json 有行）⇒ research；"
             "存在但没有台账 ⇒ warm。`--mode research` 时角色缺省 M，不再要位置参数。\n\n"
             "缺参数时报的是人话并点名该给哪个旗标（不是 argparse 那句 "
             "the following arguments are required）。\n\n"
@@ -5196,7 +5389,8 @@ def build_parser() -> argparse.ArgumentParser:
                        choices=[*S.ROLES, S.CONDUCTOR_ROLE],
                        help="角色（--mode role 必填；--mode research 缺省 M）")
     _what.add_argument("--project", dest="name", default=None,
-                       help="项目名（落在 <projects-dir>/<名字>；不给就自动取下一个 projectN）")
+                       help="项目名（落在 <projects-dir>/<名字>；任何 --mode 都生效，"
+                            "数据与该项目的运行记录都写进它；不给就自动取下一个 projectN）")
     _where = sp.add_argument_group("在哪干")
     # 顶层已经有 `--root`：这里再给一次，`default=SUPPRESS` 是关键 —— 否则子 parser 的
     # 缺省 None 会把用户写在子命令前面的 `--root` 覆盖掉（argparse 的已知形态）。
@@ -5903,6 +6097,10 @@ def main(argv: list[str] | None = None) -> int:
     raw = canonical_argv(raw)
     parser = build_parser()
     args = parser.parse_args(raw)
+    #: 这一趟显式给了哪些长旗标。只给 `start` 用：拒收"这一档用不上的旗标"只能按
+    #: 用户真给的那几个判 —— `Namespace` 里分不开"没给"与"给了缺省值"（`--port` 8788、
+    #: `--max-calls` 3 …）。从 argv 读而不是从 `vars(args)` 读，缺省值一个都不会被误拒。
+    args._given_flags = _flags_given(raw)
     tty.set_style(color=False if (args.no_color or args.plain) else None,
                   charset="ascii" if args.plain else None)
     if getattr(args, "help_legacy", False):

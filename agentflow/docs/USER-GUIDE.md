@@ -52,11 +52,29 @@ python -m agentflow --root projects\my-topic start --watch --port 52060 --open
 |---|---|
 | 没给 `--task` 且给了 `--watch` | 只开网页（`start --help` 说"只开网页"） |
 | 项目文件夹不存在或为空 | cold（项目工作区，会新建） |
-| 已初始化、且 `data/tasks.jsonl` 有行 | research（十角色循环，角色缺省 M） |
+| 已初始化、且 `data/tasks.json` 有行 | research（十角色循环，角色缺省 M） |
 | 已初始化、但没有台账 | warm（项目工作区） |
 
 显式那几档：`--mode role` 必须给 `--role`（可选 `A`–`H` 与 `V`/`L`/`M`）；
 `--mode research` 不用给角色（缺省 M）；`--mode cold` / `--mode warm` 与 `--start cold|warm` 表达同一件事。
+
+### 1.1.1 `--project`：落点与 `--mode` 无关（2026-11-14 修）
+
+`--project <名字>` 落在 `<projects-dir>/<名字>`（给了 `--root X` 又没给 `--projects-dir`
+时是 `X/projects/<名字>`），**任何 `--mode` 都一样**：`research` / `role` / `topic` 也落进
+项目里，数据、预算寄存器与运行记录都写在它下面。不给 `--project` 时按各模式的缺省
+（`auto` / `project` 取下一个 `projectN`；`research` / `role` / `topic` 落在工作区根）。
+
+```powershell
+agentflow start --mode research --task "…" --project octa-rehearsed-r2 --budget-usd 2.35
+# ⇒ <projects-dir>/octa-rehearsed-r2/{data, budget.json, runs, …}；工作区根的 data/ 一个字节不动
+```
+
+**这一档用不上的旗标一律拒收（退出码 2，点名旗标与它有效的那一档）**，不再静默忽略：
+例 `--mode research --out D` ⇒ `--out 只在 --mode topic 有效`。静默忽略正是 2026-11-14
+把 15 个被跟踪的 `data/` 文件写脏的直接原因（`--project` 当时被收下、没接到落点）。
+同一张表还管 `--start`（此前在 `auto` 那一支被完全忽略）、`--projects-dir`（要有
+`--project` / 项目那一档才谈得上）与网页那一组（`--host` / `--port` 等只在 `--watch` 时有效）。
 
 缺参数时报的是人话，会**点名**该给哪个旗标（不是 argparse 那句
 `the following arguments are required`）：
@@ -81,7 +99,7 @@ python -m agentflow --root projects\my-topic start --watch --port 52060 --open
 │ 会召唤              不召唤任何角色（端到端跑主题：检索 / 作答 / 逐字回验都不经角色循环）    │
 │ 会写这些            工作区 <绝对路径>；out/run-N 六件产物                                │
 │ 任务：把这篇论文审一遍                                                                   │
-│ 这一趟的落点还没有台账（没有 data/tasks.jsonl）                                           │
+│ 这一趟的落点还没有台账（没有 data/tasks.json）                                           │
 └────────────────────────────────────────────────────────────────────────────────────────┘
   工作区：            <绝对路径>
   · 不花钱（试运行一次模型都不调）
