@@ -616,7 +616,20 @@ def test_acceptance_page_reads_the_three_package_blocks(
         assert set(pkg["cache"]) == {"hit", "key_sha", "built_at"}, pkg["cache"]
         assert pkg["structure"]["tri"] == "not_applicable", pkg["structure"]
         gates = pkg["closing"]["gates"]
-        assert len(gates["cells"]) == 8, gates["cells"]
+        # 2026-11-14（业主裁定）：`paper` 退出收工判定 ⇒ `closing.DEFAULT_CHECKS` 八格变七格。
+        # 这里仍钉硬数字（不改 `>=`、不删断言）：格数是契约，页面少一格/多一格都要红。
+        assert len(gates["cells"]) == 7, gates["cells"]
+        # 反真空：硬数字 7 只说明"现在是七格"。若有人把 `paper` 塞回
+        # `closing.DEFAULT_CHECKS`（格数又回八格），那一条裁定就被静默推翻了 ——
+        # 这里逐格点名，必须红。`cells` 的顺序与名字都取自 `readouts.gate_cells`
+        # （它遍历 `closing.DEFAULT_CHECKS`），所以这一条量的就是门的格表本身。
+        from agentflow import closing as _CL   # 门的真身：反真空那一条要与它逐格同名
+        names = [cell["name"] for cell in gates["cells"]]
+        assert "paper" not in names, (
+            f"`paper` 又回到了收工门的格表里（2026-11-14 业主裁定它退出收工判定）：{names}")
+        assert set(names) == set(_CL.DEFAULT_CHECKS), (
+            f"页面那七格与 `closing.DEFAULT_CHECKS` 不是同一张表：{names} vs "
+            f"{list(_CL.DEFAULT_CHECKS)}")
         assert set(gates["counts"]) == {"pass", "fail", "unknown", "na"}, gates["counts"]
         for cell in gates["cells"]:
             assert cell["source"]["path"], cell
