@@ -118,9 +118,11 @@ def test_g_a_settled_finding_is_not_superseded(store: Store) -> None:
     _seed(store)
     old = _record(store, target="claim-1", message="已修好的那一条", round_no=1,
                   level="error")
-    # G 用真写口把它标成 fixed（只改 status/resolution_note，内容一个字不改）
+    # G 用真写口把它标成 fixed：新规要求 target=claim-1 真的被同号改到（内容有变化）
+    fixed = _claim()
+    fixed["text"] = "谱落在闭区间内。"
     AgentG(store, config={"docs_subdir": "documents"}).revise(
-        DOC, fixed_findings=[old["finding_id"]], note="已按意见改")
+        DOC, fixed_findings=[old["finding_id"]], new_claims=[fixed], note="已按意见改")
     assert _rows(store)[old["finding_id"]]["status"] == "fixed"
 
     new = _record(store, target="claim-1", message="后来同一处的新判词", round_no=3)

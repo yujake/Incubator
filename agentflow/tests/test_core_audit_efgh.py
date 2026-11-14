@@ -454,8 +454,9 @@ def test_revise_rejects_a_claim_without_any_citations(tmp_path):
                            section="s", claim_id="claim-1")
     doc_id = g.build_document("note", "标题", claims=[good])["doc_id"]
     with pytest.raises(ValueError, match="没有任何 citations"):
+        # 新增一条不给 claim_id（给了本稿没有的号会被 `unknown_claim_id` 先拒）。
         g.revise(doc_id, new_claims=[
-            {"claim_id": "claim-2", "section": "s", "text": "无引用", "evidence_kind": "heuristic",
+            {"section": "s", "text": "无引用", "evidence_kind": "heuristic",
              "citations": []}
         ])
 

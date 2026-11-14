@@ -1,6 +1,7 @@
 """角色 G 的动作 `revise`：按 H 的发现修订稿件。"""
 from __future__ import annotations
 
+from . import revise_gates as RG
 from ._support import Any, DT, DocumentError, Mapping, S, SIG, Sequence
 from .hard_to_prove import report_held_back, settle_claims
 from .revise_gates import checked_claims
@@ -23,12 +24,18 @@ class _Revise:
         note: str = "",
     ) -> dict:
         """按 H 的发现修订稿件。
-        `new_claims` 里代号已存在的断言会替换原断言（修订），新代号则追加。没有这条
-        替换语义，G 就只能"再加一句新话"，永远改不掉那句错话 —— 那 `revise` 就修不好
-        任何一条审校发现。`fixed_findings` 里的 finding 只改 `status` /
-        `resolution_note`，内容一个字不改（那是 H 的判断依据）；发现不属于本稿 ⇒ 抛错：
-        G 不许借"修订"去动别人稿件上的发现。这里标的 `fixed` 不是终局判定：H 的
-        `verify_fixes` 会重跑检查，仍复现就把状态改回 `open`。轮次账不再由改稿推进：
+        `new_claims` 里代号已存在的断言会替换原断言（修订）；只有没给 `claim_id` 的
+        才是追加 —— 给了本稿没有的号 ⇒ 受控拒 `unknown_claim_id`，拒信逐个列出本稿
+        现行号（旧行为把它静默改成另一个号：请求 claim-99、盘上 claim-26）。没有替换
+        语义，G 就只能"再加一句新话"，永远改不掉那句错话 —— 那 `revise` 就修不好任何
+        一条审校发现。回执里的 `replaced_claim_ids` / `appended_claim_ids` 报的是
+        归一化之后的号（`normalize_claims` 按位置重排代号），不是请求里那个号。
+        `fixed_findings` 里的 finding 只改 `status` / `resolution_note`，内容一个字
+        不改（那是 H 的判断依据）；发现不属于本稿 ⇒ 抛错：G 不许借"修订"去动别人稿件
+        上的发现。发现指向本稿某条断言时，这一笔必须同号替换了那条、且内容真有变化，
+        否则拒 `finding_target_not_revised` —— 只标 `fixed`、正文一个字没改，不算
+        修好（真机三次都是这样）。这里标的 `fixed` 不是终局判定：H 的 `verify_fixes`
+        会重跑检查，仍复现就把状态改回 `open`。轮次账不再由改稿推进：
         `documents.review_rounds` 只跟着 H 的复审走，本动作只在"还没进过任何一轮"时把
         它托到第 1 轮。
 
@@ -58,8 +65,15 @@ class _Revise:
                 raise DocumentError(f"稿件 {doc_id} 不存在 ⇒ 不能修订一份不存在的稿件")
 
             merged = [dict(c) for c in (doc.get("claims") or [])]
-            replaced: list[str] = []
-            appended: list[str] = []
+            # 本稿现行号（归一化之前的那一份）：拒信要照它列，finding 的 target 按它认。
+            current_ids = [str(c.get("claim_id") or "") for c in merged]
+            current_ids = [cid for cid in current_ids if cid]
+            # 改前内容指纹：同号交回但一个字没改，不算"改了那条"（② 的判据要用）。
+            before_signature = {
+                i: RG.claim_content_signature(c) for i, c in enumerate(merged)
+            }
+            replaced_pos: list[int] = []
+            appended_pos: list[int] = []
             # 断言代号 → 位置只建一次：改前每条 new_claim 都线性扫一遍 merged
             # （同一份稿上改十条就是十趟）。位置在替换时不变；追加时补登记，
             # 于是"同一批里给了两个同号的新断言"仍然后一个替换前一个。
@@ -74,14 +88,19 @@ class _Revise:
                 c = dict(raw)
                 cid = str(c.get("claim_id") or "").strip()
                 idx = pos_by_cid.get(cid) if cid else None
+                if cid and idx is None:
+                    # ① 未知号不再静默追加（旧行为：请求 claim-99、盘上被编号成 claim-26）。
+                    RG.ensure_known_claim_id(
+                        doc_id=doc_id, claim=c, given=cid, known_ids=current_ids,
+                    )
                 if idx is not None:
                     merged[idx] = c
-                    replaced.append(cid)
+                    replaced_pos.append(idx)
                 else:
                     merged.append(c)
                     if cid:
                         pos_by_cid[cid] = len(merged) - 1
-                    appended.append(cid or f"（自动编号，第 {len(merged)} 条）")
+                    appended_pos.append(len(merged) - 1)
 
             # 三道闸（机械检查 / 引用存在性 / proof 级证据锚）搬进了
             # `agent_g/revise_gates.py`：判断、顺序、异常与消息逐字不变，只是为了让
@@ -91,6 +110,19 @@ class _Revise:
                 kind=str(doc.get("kind") or ""),
                 workspace_root=self.workspace_root,
             )
+            # ③ `normalize_claims` 按位置重排代号 ⇒ 回执报归一化后的号，不报请求号。
+            # 归一化在 `settle_claims` 之前完成，所以这张位置→号表对整批都成立。
+            norm_id = {i: str(c.get("claim_id") or "") for i, c in enumerate(normalized)}
+            replaced = [norm_id[i] for i in replaced_pos]
+            appended = [norm_id[i] for i in appended_pos]
+            revised_ids = {
+                norm_id[i] for i in replaced_pos
+                if RG.claim_content_signature(normalized[i]) != before_signature.get(i, "")
+            }
+            # finding 的 target 是上一版（改前）的号；按位置折到归一化号来判"改了没"。
+            current_to_norm = {
+                cid: norm_id[pos] for cid, pos in pos_by_cid.items() if pos in norm_id
+            }
             # ---- 「难以自证」那一关（业主 2026-11-13 裁定）：改稿与写稿是同一条纪律的
             # 两个入口，所以这里调的是 `build_document` 同一个 `settle_claims`。
             # 只接一边等于给另一边留后门 —— 与 `check_citations` / `check_proofs`
@@ -129,6 +161,14 @@ class _Revise:
                         f"发现 {fid} 属于稿件 {f.get('doc_id')}，不是 {doc_id}："
                         "**G 只能改自己稿件上的发现状态**（跨稿改动是掩盖问题的入口）"
                     )
+                # ② 发现指向本稿某条断言 ⇒ 这一笔必须真的同号改了它（不是只改状态）。
+                finding_target = str(f.get("target") or "")
+                target_cid = RG.finding_target_claim_id(finding_target, current_to_norm)
+                RG.ensure_finding_target_revised(
+                    doc_id=doc_id, finding_id=str(fid), target=finding_target,
+                    claim_id=current_to_norm.get(target_cid, "") if target_cid else "",
+                    replaced_ids=set(replaced), changed_ids=revised_ids,
+                )
                 f["status"] = "fixed"
                 stamp = f"[round {payload['review_rounds']}] G 在 revise 中声明已处理"
                 if note:

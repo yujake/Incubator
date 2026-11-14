@@ -93,7 +93,9 @@ def _agent_g(st: Store):
 
 
 def _revise_claims() -> list[dict]:
-    return [{"claim_id": "c1", "section": "Main", "text": "甲（改后仍引自家命题）",
+    # 新增一条不给 `claim_id`：给了本稿没有的号会被 `unknown_claim_id` 受控拒
+    # （代号由 `normalize_claims` 按位置分配）。
+    return [{"section": "Main", "text": "甲（改后仍引自家命题）",
              "evidence_kind": "heuristic", "citations": ["stmt:0000"]}]
 
 
@@ -124,7 +126,7 @@ def test_a_revision_citing_a_missing_statement_is_refused_by_design(tmp_path: pa
     doc = build_document(store=st, kind="paper", title="引自家命题的稿", claims=_claims(),
                          workspace_root=str(tmp_path), actor="test")
     g = _agent_g(st)
-    bad = [{"claim_id": "c1", "section": "Main", "text": "甲（引不存在的命题）",
+    bad = [{"section": "Main", "text": "甲（引不存在的命题）",
             "evidence_kind": "heuristic", "citations": ["stmt:9999"]}]
     with pytest.raises(Exception) as err:
         g.revise(str(doc["doc_id"]), new_claims=bad)

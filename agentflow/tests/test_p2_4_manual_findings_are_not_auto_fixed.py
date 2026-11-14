@@ -61,6 +61,18 @@ def _claim() -> dict:
     }
 
 
+def _fixed_claim() -> dict:
+    """G 真改过的那一版：正文变了。
+
+    新规（`finding_target_not_revised`）要求：把 target=claim-N 的发现标 fixed 时，
+    这一笔必须同号交回 claim-N 且内容真有变化 —— 本文件只借 `revise` 摆出
+    「G 已声明修好」这个前置状态，所以这里给一条真改过的断言。
+    """
+    row = _claim()
+    row["text"] = "谱落在闭区间内。"
+    return row
+
+
 def _workspace(store: Store) -> Store:
     write_paper(store, "\\documentclass{article}\n\\begin{document}\n谱落在区间内。\n\\end{document}\n")
     add_literature(store, "0000", title="探针文献", processed=True)
@@ -110,7 +122,8 @@ def test_j_manual_findings_stay_open_after_a_verify_fixes_run(store: Store):
                for i in ids), rows
 
     # 真机的形态：G 先用 revise 把它们标成 fixed（"改完了"），然后 H 跑 verify_fixes。
-    AgentG(store).revise("0000", fixed_findings=ids, note="按 H 的发现改了正文")
+    AgentG(store).revise("0000", fixed_findings=ids, new_claims=[_fixed_claim()],
+                         note="按 H 的发现改了正文")
     assert set(_status(store).values()) == {"fixed"}
 
     res = agent.verify_fixes("0000", round_no=2)
@@ -222,7 +235,8 @@ def test_l_removing_the_gate_makes_the_positive_control_red(store: Store, monkey
     _workspace(store)
     agent = AgentH(store, config={"max_review_rounds": 3})
     ids = _record(agent, 7)
-    AgentG(store).revise("0000", fixed_findings=ids, note="按 H 的发现改了正文")
+    AgentG(store).revise("0000", fixed_findings=ids, new_claims=[_fixed_claim()],
+                         note="按 H 的发现改了正文")
     assert set(_status(store).values()) == {"fixed"}
 
     monkeypatch.setattr(RV, "_is_manual_finding", lambda row: False)

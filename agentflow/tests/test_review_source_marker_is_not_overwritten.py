@@ -62,6 +62,18 @@ def _claim(citations: list[str] | None = None) -> dict:
     }
 
 
+def _fixed_claim() -> dict:
+    """G 真改过的那一版：正文变了。
+
+    新规（`finding_target_not_revised`）要求：把 target=claim-N 的发现标 fixed 时，
+    这一笔必须同号交回 claim-N 且内容真有变化 —— 本文件只借 `revise` 摆出
+    「G 已声明修好」这个前置状态，所以这里给一条真改过的断言。
+    """
+    row = _claim()
+    row["text"] = "谱落在闭区间内。"
+    return row
+
+
 def _workspace(store: Store) -> Store:
     write_paper(store, "\\documentclass{article}\n\\begin{document}\n谱落在区间内。\n\\end{document}\n")
     add_literature(store, "0000", title="探针文献", processed=True)
@@ -114,7 +126,8 @@ def test_a_a_manual_finding_reopened_by_verify_fixes_is_still_manual(store: Stor
     assert _row(store, fid)["resolution_note"].startswith(RV.MANUAL_FINDING_NOTE_PREFIX)
 
     # G 修得越对，越会走到这条路上：revise 先把它标成 fixed。
-    AgentG(store).revise("0000", fixed_findings=[fid], note="按 H 的发现改了正文")
+    AgentG(store).revise("0000", fixed_findings=[fid], new_claims=[_fixed_claim()],
+                         note="按 H 的发现改了正文")
     assert _row(store, fid)["status"] == "fixed"
 
     res = agent.verify_fixes("0000", round_no=2)
@@ -187,7 +200,8 @@ def test_c_stubbing_the_origin_reader_back_to_old_behaviour_makes_a_red(store: S
     _workspace(store)
     agent = AgentH(store, config={"max_review_rounds": 5})
     fid = _record_ok(agent, round_no=1)
-    AgentG(store).revise("0000", fixed_findings=[fid], note="按 H 的发现改了正文")
+    AgentG(store).revise("0000", fixed_findings=[fid], new_claims=[_fixed_claim()],
+                         note="按 H 的发现改了正文")
     assert _row(store, fid)["status"] == "fixed"
 
     # 旧行为 = 前缀只在开头才算数，且状态写口整格覆写（两者都由这一个读口驱动）。
@@ -211,7 +225,8 @@ def test_d1_a_prefix_surviving_manual_finding_is_not_closed_by_the_mechanical_cr
     _workspace(store)
     agent = AgentH(store, config={"max_review_rounds": 5})
     fid = _record_ok(agent, round_no=1)
-    AgentG(store).revise("0000", fixed_findings=[fid], note="按 H 的发现改了正文")
+    AgentG(store).revise("0000", fixed_findings=[fid], new_claims=[_fixed_claim()],
+                         note="按 H 的发现改了正文")
     agent.verify_fixes("0000", round_no=2)          # 重开，前缀保住
     assert RV._is_manual_finding(_row(store, fid)) is True
 
