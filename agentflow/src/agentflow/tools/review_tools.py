@@ -1237,7 +1237,10 @@ def _apply_finding_status(
                 continue
             row["status"] = ch["status"]
             if ch.get("resolution_note"):
-                row["resolution_note"] = str(ch["resolution_note"])
+                # 来源标记属于 finding 的身份，不属于状态：手工判词的 `resolution_note`
+                # 只追加、不整格覆写（判据在 `_note_after_status_update` 里，只有一处）。
+                row["resolution_note"] = _note_after_status_update(
+                    row, str(ch["resolution_note"]))
             tx.upsert("review_findings", row)
             done.append({"finding_id": row["finding_id"], "status": row["status"]})
     return done
@@ -1316,9 +1319,11 @@ def _supersede_prior_open(
 # `fixed`，而一条检查都没重跑。那是把「没查」写成「修好了」，与 `R-04-b` 同一族。
 #
 # 本节的判据：「手工判词不许被自动复跑判掉」。
-#   * 来源标记：`record_finding` 落库时把 `MANUAL_FINDING_NOTE_PREFIX` 写进
-#     `resolution_note` 的开头（既有自由文本字段，不进去重键、不是审校内容；`schema` 在
-#     FC-27 禁改区，本批「不加列」）；
+#   * 来源标识属于 finding 的身份，不属于状态：`record_finding` 落库时把
+#     `MANUAL_FINDING_NOTE_PREFIX` 写进 `resolution_note`（既有自由文本字段，不进去重键、
+#     不是审校内容；`schema` 在 FC-27 禁改区，本批「不加列」），而状态写口只许追加
+#     （`_note_after_status_update`）—— 真机上就是 `_apply_finding_status` 的整格覆写
+#     把它吃掉的（`projects/lp-ball` 000000 / 000002）；
 #   * 离场只有一条路：H 自己显式复核 —— 以同一个去重键再登记一次，`evidence` 以
 #     `RECHECK_FIXED_PREFIX` / `RECHECK_WONTFIX_PREFIX` 开头，把结论（fixed / wontfix +
 #     理由）写进同一个 finding_id 的 `resolution_note`。为什么走 `evidence` 而不加参数：
@@ -1343,9 +1348,52 @@ MANUAL_NOT_RECHECKED_NOTE = (
 )
 
 
+def _manual_origin_mark(row: Mapping[str, Any]) -> str:
+    """`resolution_note` 里能证明「这条是 record_finding 落的手工判词」的那句原文（没有 ⇒ 空串）。
+
+    ## 为什么来源标识单独成一个读口，而不是继续读「开头四个字符」
+    来源标识属于 finding 的身份，不属于状态 —— 它一旦被某个写口覆写，这条判词就被
+    永久地误认成机械发现：显式复核会拒它（"只对人工判词开放"），下一轮 verify_fixes
+    又会把它当机械发现"没复现 ⇒ fixed"（不查就关）。两个方向都是错的，而唯一的开关
+    就是这一格原文（真机 `projects/lp-ball` 的 000000 / 000002 就是被覆写之后两侧全错）。
+    所以判定改成"这句话出现过没有"，而不是"它是不是还在开头"。
+
+    ## 两种形态，都只有手工那条路会写
+    1. `MANUAL_FINDING_NOTE_PREFIX`：record_finding 落库时写在头部；修好之后任何写口
+       都不许把它吃掉（写侧判据是 `_note_after_status_update`）；
+    2. `MANUAL_NOT_RECHECKED_NOTE`：verify_fixes 只对手工判词写的那句重开理由 ——
+       2026-11-14 之前 `_apply_finding_status` 整格覆写，真机上 000000 / 000002 的头部
+       前缀就是这样没的，只剩这一句能认出它们的来历。
+    两种形态读的是同一格自由文本、都是本模块的受控常量，机械那一支一个字都不会写它们
+    ⇒ 这不是第二套事实源，只是同一件事在盘上留下的两种残迹；第 2 种是给"修复之前
+    已经落盘的损伤"的兼容读法，不许再往这张单子里加第三种。
+    """
+    note = str(row.get("resolution_note") or "")
+    if MANUAL_FINDING_NOTE_PREFIX in note:
+        return MANUAL_FINDING_NOTE_PREFIX
+    if MANUAL_NOT_RECHECKED_NOTE in note:
+        return MANUAL_NOT_RECHECKED_NOTE
+    return ""
+
+
 def _is_manual_finding(row: Mapping[str, Any]) -> bool:
-    """这条发现是不是 `record_finding` 落的手工判词（来源标记在 `resolution_note` 开头）。"""
-    return str(row.get("resolution_note") or "").startswith(MANUAL_FINDING_NOTE_PREFIX)
+    """这条发现是不是 record_finding 落的手工判词（来源标识出现过，见 `_manual_origin_mark`）。"""
+    return bool(_manual_origin_mark(row))
+
+
+def _note_after_status_update(row: Mapping[str, Any], new_note: str) -> str:
+    """状态更新时 `resolution_note` 的新取值：手工判词的来源标识永不被覆写。
+
+    判据只有一条：这一行有手工来历（`_is_manual_finding`）⇒ 追加，否则照旧替换。
+    为什么是追加而不是"把前缀搬到开头再拼"：搬动会改写"谁在什么时候写了哪一句"的
+    先后，而这一格是台账里唯一的判断理由；追加只做一件事 —— 新理由写在后、旧账一个字
+    不丢。为什么机械行仍然替换：它们的这一格是"本轮为什么这么判"的读数，去重键在
+    `kind/target/message` 三格、旧理由没有身份含义；替换也让这一格不随轮次无限增长。
+    """
+    old = str(row.get("resolution_note") or "").strip()
+    if not old or not _is_manual_finding(row):
+        return new_note
+    return f"{old} {new_note}".strip()
 
 
 def _manual_rechecked(row: Mapping[str, Any]) -> bool:
