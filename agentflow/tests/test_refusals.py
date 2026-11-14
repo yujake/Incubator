@@ -39,14 +39,16 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
 #: 登记表里有一条扫不到的也红（豁免腐烂成"看起来还在挡着什么"）。
 _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
     ("agent_b/register_statement.py", ""):
-        "`_numeric_manuscript_channel` 的「这一笔不是 E 的普通数值手稿 / 读不成」那格读数："
-        "它是内部判读的三态返回值（调用方据此继续走普通登记路），不是一次受控拒；"
-        "真受控拒由收录口按 `refusals.refuse` 报（`numeric_manuscript_refused` 一类）。"
-        "2026-11-10（T1/D1 收口 + 一动作一文件拆包）同一模块另有两处同形的返回骨架："
-        "`_land_rewrite_manuscript` 的 `out` 初值、`_ingest_empty_envelope`（`own.ingest_manuscript`"
-        " 的固定键信封，受控码走 `refused`/`reason`，由动作层按 `refused` 落终态）。"
-        "`land_manuscript` 的 `out` 初值随拆包搬到 `agent_b/land_manuscript.py`（见下面那条）——"
-        "三处都不是动作自己手写的终态拒绝，所以按处数登记，不走 `refusals.refuse`",
+        "盘上五处手写 `ok=False`，全是子结果 / 读数格，不是动作自己手写的终态拒绝："
+        "① `_numeric_manuscript_channel` 的「这一笔不是 E 的普通数值手稿 / 读不成」"
+        "（内部判读的三态返回值，调用方据此继续走普通登记路；真受控拒由收录口按 "
+        "`refusals.refuse` 报 `numeric_manuscript_refused` 一类）；"
+        "② `_ingest_empty_envelope`（`own.ingest_manuscript` 的固定键信封，受控码走 "
+        "`refused`/`reason`）；③ `_land_citation_manuscript` 的 `out` 初值（引文侧开 "
+        "b-稿的骨架）；④ `_land_b_manuscript` 的 `out` 初值（B 改写稿的骨架，`refused` "
+        "由 `land_rewrite` 那一侧写）；⑤ `_note_conjecture_landing` 的 `ledger`"
+        "（猜想台账记账失败时折进 `conjecture_ledger` 的读数，`kind` 取 "
+        "`store_error_kind`）。动作层按 `refused` 落终态，这里不各写一次 `refuse`",
     ("agent_b/land_manuscript.py", ""):
         "`land_manuscript` 的返回骨架 `out` 初值（`ok=False`，受控码写在 `refused` 那一格）："
         "与 `register_statement.py` 里那几个同形骨架是同一件事 —— 不是手写的终态拒绝，"
@@ -167,9 +169,13 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "detail 折进返回值，不走 `refusals.refuse`（走它会给内部读数错贴 `invalid_params`）。"
         "2026-11-11（拿签冻结，业主裁定 ②）：`proof_manuscript()` 的第三处骨架是"
         "`_frozen.frozen` 那一支（`refused=kind=manuscript_frozen`）—— 它同样是子结果"
-        "（由 `_hand_proof` 折成动作层的受控拒），不是手写的终态 payload；处数 3 → 4。",
+        "（由 `_hand_proof` 折成动作层的受控拒），不是手写的终态 payload；处数 3 → 4。"
+        "2026-11-13（业主裁定 B）：`proof_manuscript()` 的第四处骨架是 `_missing`"
+        "（没有 `product.proposition` ⇒ 这一版没有可渲染的 `## 命题`，"
+        "`refused=kind=proposition_missing`）：它由动作层的形态闸折成受控拒，"
+        "这一层只是「一个字节都不写」的兜底读数；处数 4 → 5。",
     ("agent_f/core.py", ""):
-        "子结果（两处）：① 手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给"
+        "子结果（三处）：① 手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给"
         "调用方看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 "
         "payload，只在 detail 里留一句；② 2026-11-11（p286，`attack.step(product=…)` 通道）"
         "新增的 `parse_handed_product()` 的返回骨架 `out` 初值 —— 它是三态解析器的初值"
@@ -177,7 +183,9 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "意思是「还没核完」，不是「这一轮被拒」：真正的受控拒由 `_handed_product_round` "
         "在 `refusal` 里带 `kind=HANDED_PRODUCT_REFUSED` 的那一支产出（受控码 + 逐条点名 + "
         "`next_step`，落 history 的 `refusal` 格），动作终态 payload 里根本没有 `ok` 这一格。"
-        "⇒ 两处都不是动作自己手写的终态拒绝，按处数登记，不走 `refusals.refuse`"
+        "③ 2026-11-14（TR 收口）`_ledger_open_manuscript()` 的 `ledger`：开稿台账读/写失败"
+        "时折进返回值的读数（`kind` 取 `store_error_kind`）—— 执行了、没成功，不是一次拒绝。"
+        "⇒ 三处都不是动作自己手写的终态拒绝，按处数登记，不走 `refusals.refuse`"
         "（走它会给一份正常的解析读数贴上 `refusal_reason=invalid_params`）",
     ("agent_d/write_report.py", ""):
         "读数格：`rec` 是逐行登记的记录（`{\"statement_id\": ..., \"ok\": False, ...}`），"
@@ -187,7 +195,9 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "`{\"path\": \"\", \"bytes\": 0, \"sha256\": \"\", \"ok\": False, ...}` 说的是「这一趟没有落盘物」"
         "（终态 payload 的 `report_path` / `proof_manuscript` 因此读成空串、`problems` 为空），"
         "只是被折进那几格读数的局部值，不是一次拒绝；动作本身的拒绝走 `refuse`（那一族都带 `kind`）"
-        " ⇒ 要表达「这次调用不成立」请走 `refuse`，不要在这里手写 ok=False",
+        " ⇒ 要表达「这次调用不成立」请走 `refuse`，不要在这里手写 ok=False。"
+        "2026-11-14（TR 收口）第三处：实验台账写失败时折进返回值的 `_ledger`"
+        "（`kind` 取 `store_error_kind`）—— 执行了、没成功，同样是读数格",
 }
 
 
@@ -203,8 +213,10 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # 2026-11-10（T1/D1 收口 + 拆包）：`register_statement.py` 的 `ok=False` 返回骨架
     # 是 3 处；`land_manuscript` 的那一处随一动作一文件拆到自己的模块
     # （见 `_FAILURES_NOT_REFUSALS` 里那两条的登记理由：都是 `out` 初值 / 固定键信封，
-    # 受控码走 `refused`，不是手写的终态拒绝）。
-    ("agent_b/register_statement.py", ""): 3,
+    # 受控码走 `refused`，不是手写的终态拒绝）。2026-11-14（TR 收口）盘上 5 处：
+    # 另两处是 `_land_b_manuscript` 的骨架与 `_note_conjecture_landing` 的台账读数
+    # （理由同在那一格：子结果，不是终态拒绝）⇒ 3 → 5。
+    ("agent_b/register_statement.py", ""): 5,
     ("agent_b/land_manuscript.py", ""): 1,
     # L 的形式化入口：十一条"这一条候选不成立"的子结果（`_pick_statement` 五条、
     # `_path_choice` 五条、`_checked_row` 一条），kind 都是空串；2026-11-09 多出第十二处
@@ -213,14 +225,15 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # 2026-11-10（稿号口径）：`proof_manuscript()` 多出两处同形的返回骨架
     # （手稿号不是六位号 / 拼不出规范路径，各一处），加上 `preview_dependencies()` 的
     # 读数一条 ⇒ 1 → 3。2026-11-11（拿签冻结）：`manuscript_frozen` 那一支的返回骨架
-    # 也是同形读数（`ok=False` + `refused/kind`），3 → 4。四处都是子结果，理由见
+    # 也是同形读数（`ok=False` + `refused/kind`），3 → 4。2026-11-13（业主裁定 B）：
+    # `proposition_missing` 那一支的 `_missing` 骨架，4 → 5。五处都是子结果，理由见
     # `_FAILURES_NOT_REFUSALS` 里那一格。
-    ("agent_f/manuscript.py", ""): 4,
+    ("agent_f/manuscript.py", ""): 5,
     # 2026-11-11（p286）：`agent_f/core.py` 的空 kind 处数 1 → 2。新增的那一处是
     # `parse_handed_product()` 的返回骨架 `out` 初值（三态解析器的"还没核完"，不是终态
     # 拒绝；真正的受控拒由 `_handed_product_round` 的 `refusal` 那一支产出）。
-    # 另一处仍是手稿那一支的局部 `manuscript`。两处理由同一条（见登记表那一格）。
-    ("agent_f/core.py", ""): 2,
+    # 2026-11-14（TR 收口）第三处：`_ledger_open_manuscript()` 的台账读数，2 → 3。
+    ("agent_f/core.py", ""): 3,
     # 2026-10-30（业主口径：三次 = V 连判）：`AgentV._review_one_pass` 有三条"没查成"
     # （拿不到合法结论 / 结论不合法 / 台账写不进去），三处逐条都在盘上。
     ("agent_v/core.py", ""): 3,
@@ -230,8 +243,9 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     ("agent_v/core.py", "bad_manuscript_name"): 3,
     # `agent_e/run_experiment.py` 一般数值实验那一支的两处读数格：`report`（报告没落）
     # 与 `manuscript`（`reports/e-proof-<号>.md` 没落，2026-11-03 E 的手稿读数落地时
-    # 成为第二处）。两处 kind 都是空串，所以靠这张表记处数。
-    ("agent_e/run_experiment.py", ""): 2,
+    # 成为第二处）。2026-11-14（TR 收口）第三处：实验台账写失败时的 `_ledger`，2 → 3。
+    # 三处 kind 都是空串，所以靠这张表记处数。
+    ("agent_e/run_experiment.py", ""): 3,
     # 2026-11-04（同上）：`agent_d/write_report.py` 的 `rec` 是逐行记录的读数格，
     # 盘上有两处 —— `statement` 那一张与 `experiment` 那一张；两处 kind 都是空串。
     # 2026-11-07（解耦落地）：第三处 —— F 的登记条目（`mss:` 行）也是同形的读数格
