@@ -13701,15 +13701,41 @@ class LlmBackend:
                          workspace_root=child_surface or self.workspace_root,
                          sid=self.sid, token=token,
                          store=self.store, stop_file=self.stop_file)
-        run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
-                       summoned_by=str(row.get("called_by") or params.get("_summoned_by")
-                                       or S.CONDUCTOR_ROLE),
-                       my_task_id=str(row.get("task_id") or params.get("_task_id") or ""),
-                       # 父的台账号从我这一行读（D89）：它同时是提示词里
-                       # `{{parent_task_id}}` 那一格与终态回报挂项的名字。
-                       parent_task_id=str(row.get("parent_task_id") or ""),
-                       surface=child_surface,
-                       depth=int(row.get("depth") or params.get("_depth") or 1))
+        # ---- 循环本体的身份挂点（② B 组：11 笔无主 `reason` 的修法）
+        #
+        # 为什么必须有它（真机 2026-11-14 lp-ball，`temp/analysis/11-ledger-causes.md` ②B）：
+        # ContextVar 全仓只有两个挂点 —— `conductor.calling_as`（只包 `registry.call`）
+        # 与 `LocalBackend.call`（只包确定性 handler）。而**模型驱动**这条路由本方法
+        # 起一趟循环，循环自己发的模型调用（最典型的是秘书在 `_outbound_hook` 里的
+        # `tool_name` / `dispatch_fit` 判定）不在任何一个挂点里 ⇒ `ambient_task_id()`
+        # 是空串 ⇒ 账本行 `task_id=None`。真机读数把这处分得很干净：同一批
+        # `secretary:` 判定里，从工具 / 确定性 handler 发的 **28/28 有主**，从循环本体发的
+        # **11/11 全空**。差别不在秘书那一层，在"调用它的是哪一段"。
+        #
+        # 为什么是这里而不是给秘书补参数：号本来就在循环手上（`my_task_id` 就是这一趟
+        # 台账行的号），缺的是把它挂进上下文的那一次 `set`。挂在这一层之后，循环里任何
+        # 一处"读 ambient"的写口都自动归位（不止秘书那 11 笔），而工具调用里的
+        # `calling_as` 照旧覆盖成更细的身份（它传的同样是这个号，逐字一致）。
+        #
+        # 与 `_do_tool` 同形（那里也只挂号 / 角色 / 会话身份）：父的两格刻意不在这里挂 ——
+        # 父是 `run()` 开头 `_resolve_parent(...)` 现解析出来的结果，本层手上只有台账行，
+        # 在这里写一份会与那一处成为"两个来源"（传空串 = 这一层不知道，与从前同义）。
+        own_tid = str(row.get("task_id") or params.get("_task_id") or "")
+        # 现取（与 `_do_tool` 同一条）：`calling_as` 不在模块级 import —— conductor 在
+        # import 图里位于本模块之上，模块级 import 会成环。
+        from .conductor import calling_as
+
+        with calling_as(own_tid, role,
+                        session_root=str(self.session_root or ""), sid=str(self.sid or "")):
+            run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
+                           summoned_by=str(row.get("called_by") or params.get("_summoned_by")
+                                           or S.CONDUCTOR_ROLE),
+                           my_task_id=own_tid,
+                           # 父的台账号从我这一行读（D89）：它同时是提示词里
+                           # `{{parent_task_id}}` 那一格与终态回报挂项的名字。
+                           parent_task_id=str(row.get("parent_task_id") or ""),
+                           surface=child_surface,
+                           depth=int(row.get("depth") or params.get("_depth") or 1))
         artifact = self._write_run_artifact(role, run)
         SS.append(self.session_root, {"kind": "agent_run_artifact", "role": role,
                                       "path": artifact, "stop_reason": run.stop_reason,
