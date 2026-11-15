@@ -1,0 +1,495 @@
+{
+  "f_plan_lifecycle": {
+    "rc": 0,
+    "calls": 56,
+    "plans": [
+      {
+        "plan_id": "000000",
+        "key": "pA",
+        "status": "abandoned",
+        "history": [
+          [
+            "proof",
+            null
+          ],
+          [
+            "abandon",
+            "math_error"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000001",
+        "key": "pB",
+        "status": "abandoned",
+        "history": [
+          [
+            "abandon",
+            "不再需要"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000002",
+        "key": "pC",
+        "status": "abandoned",
+        "history": [
+          [
+            "no_change",
+            null
+          ],
+          [
+            "abandon",
+            "difficulty"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000003",
+        "key": "pD",
+        "status": "abandoned",
+        "history": [
+          [
+            "abandon",
+            "不再需要"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000004",
+        "key": "pE",
+        "status": "abandoned",
+        "history": [
+          [
+            "abandon",
+            "math_error"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000005",
+        "key": "pF",
+        "status": "abandoned",
+        "history": [
+          [
+            "abandon",
+            "不再需要"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000006",
+        "key": "pH",
+        "status": "abandoned",
+        "history": [
+          [
+            "abandon",
+            "不再需要"
+          ]
+        ]
+      },
+      {
+        "plan_id": "000007",
+        "key": "pI",
+        "status": "abandoned",
+        "history": [
+          [
+            "abandon",
+            "不再需要"
+          ]
+        ]
+      }
+    ],
+    "tasks": [
+      {
+        "task_id": "t-000001",
+        "role": "M",
+        "status": "done",
+        "outcome": "ok"
+      },
+      {
+        "task_id": "t-000002",
+        "role": "D",
+        "status": "done",
+        "outcome": "ok"
+      },
+      {
+        "task_id": "t-000003",
+        "role": "F",
+        "status": "done",
+        "outcome": "no_result"
+      },
+      {
+        "task_id": "t-000004",
+        "role": "D",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000005",
+        "role": "D",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000006",
+        "role": "F",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000007",
+        "role": "F",
+        "status": "done",
+        "outcome": "no_result"
+      },
+      {
+        "task_id": "t-000008",
+        "role": "D",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000009",
+        "role": "D",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000010",
+        "role": "F",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000011",
+        "role": "F",
+        "status": "done",
+        "outcome": "ok"
+      },
+      {
+        "task_id": "t-000012",
+        "role": "D",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000013",
+        "role": "D",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000014",
+        "role": "M",
+        "status": "pending",
+        "outcome": null
+      },
+      {
+        "task_id": "t-000015",
+        "role": "M",
+        "status": "pending",
+        "outcome": null
+      }
+    ],
+    "form_rows": 1,
+    "fit_rows": 4,
+    "handoffs": [
+      [
+        "D",
+        "计划 000001 不再需要"
+      ],
+      [
+        "D",
+        "计划 000007 不再需要"
+      ],
+      [
+        "M",
+        "派活：D（派活：把这一方向交给 F 走计划生命周期）"
+      ]
+    ],
+    "manuscripts": [
+      "attack-000000.md",
+      "f-proof-000000.md"
+    ],
+    "run_ends": [
+      [
+        "F",
+        "final_refused"
+      ],
+      [
+        "F",
+        "final_refused"
+      ],
+      [
+        "F",
+        "final"
+      ],
+      [
+        "D",
+        "final"
+      ],
+      [
+        "M",
+        "final"
+      ]
+    ]
+  },
+  "c4_revision_loop": {
+    "rc": 0,
+    "calls": 28,
+    "sha_before": "01976abd63d7076a492117862b376a4a5f13ccc8d6eb20f8bd3f97cf32da1db9",
+    "sha_after": "85f84949ffba77626d2f53375a96efd27241d1c4b5d80d999e8f590524bc9c17",
+    "before_body": [
+      "1. 由类方程，非中心共轭类的长度都被 p 整除。（前提）",
+      "2. 于是 |Z(G)| 被 p 整除、非平凡。（前提）",
+      "3. G/Z(G) 循环 ⇒ G 交换。（前提）"
+    ],
+    "after_body": [
+      "1. 由类方程，非中心共轭类的长度都被 p 整除。（前提）",
+      "2. 于是 |Z(G)| 被 p 整除、非平凡（p 是素数 ⇒ |Z(G)| 是 p 的正倍数）。（前提）",
+      "3. G/Z(G) 循环 ⇒ G 交换。（前提）"
+    ],
+    "pending": [
+      {
+        "sha": "01976abd63d7076a492117862b376a4a5f13ccc8d6eb20f8bd3f97cf32da1db9",
+        "defect_step": 2,
+        "axis": "fault",
+        "why": "第 2 步的记号没有定义。"
+      },
+      {
+        "sha": "85f84949ffba77626d2f53375a96efd27241d1c4b5d80d999e8f590524bc9c17",
+        "defect_step": null,
+        "axis": "clean",
+        "why": "试了几种反例构造都失败，未发现问题。"
+      },
+      {
+        "sha": "85f84949ffba77626d2f53375a96efd27241d1c4b5d80d999e8f590524bc9c17",
+        "defect_step": null,
+        "axis": "clean",
+        "why": "试了几种反例构造都失败，未发现问题。"
+      },
+      {
+        "sha": "85f84949ffba77626d2f53375a96efd27241d1c4b5d80d999e8f590524bc9c17",
+        "defect_step": null,
+        "axis": "clean",
+        "why": "试了几种反例构造都失败，未发现问题。"
+      }
+    ],
+    "sign_files": [
+      "85f84949ffba77626d2f53375a96efd27241d1c4b5d80d999e8f590524bc9c17.json",
+      "issued.json"
+    ],
+    "steps": [
+      [
+        "registered",
+        "01976abd63d7076a492117862b376a4a5f13ccc8d6eb20f8bd3f97cf32da1db9"
+      ],
+      [
+        "rewritten",
+        "85f84949ffba77626d2f53375a96efd27241d1c4b5d80d999e8f590524bc9c17"
+      ]
+    ],
+    "v_kinds": [
+      "proof_unregistered_rejected",
+      "proof_unregistered_signed"
+    ],
+    "defect_in_f_prompt": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "d_pointer_only": {
+    "rc": 0,
+    "calls": 22,
+    "carried": {
+      "checked": true,
+      "present": true,
+      "heading_line": 52,
+      "rows": [
+        {
+          "statement_id": "",
+          "experiment_id": "",
+          "manuscript_id": "000000",
+          "key": "mss:000000",
+          "path": "reports/f-proof-000000.md",
+          "sha256": "ab4fefc3c177a0a2ef6ae6f8155c83e90af9fbbc113294a1987679ce9904dad8",
+          "proof_no": 1,
+          "line": 62
+        }
+      ],
+      "problems": [],
+      "refused": "",
+      "reason": ""
+    },
+    "report_has_pointer_section": true,
+    "report_has_receipt": true,
+    "statements": [
+      {
+        "stmt_id": "000000",
+        "kind": "theorem",
+        "evidence_kind": "heuristic",
+        "manuscript_id": "000000",
+        "statement_full": "设 n 是偶数；则 n^2 是 4 的倍数。",
+        "bits": {
+          "proof": true,
+          "reviewed": true
+        }
+      }
+    ],
+    "deps": 0,
+    "b_decisions": 1
+  },
+  "c9_concept_graph": {
+    "rc": 0,
+    "calls": 24,
+    "reports": [
+      [
+        "000000",
+        "gaps"
+      ],
+      [
+        "000001",
+        "gaps"
+      ],
+      [
+        "000002",
+        "paths"
+      ]
+    ],
+    "questions": [
+      {
+        "qid": "000000",
+        "origin": "C:gaps:000001:0002,0003",
+        "status": "researching",
+        "related": [
+          "0002",
+          "0003"
+        ]
+      }
+    ],
+    "merge": {
+      "verdict": "merge",
+      "merged_id": "0001",
+      "survivor_id": "0000",
+      "applied": true,
+      "rewritten": []
+    },
+    "reject": {
+      "verdict": "reject",
+      "applied": false
+    },
+    "tombstones": [
+      {
+        "stmt_id": "0000",
+        "status": "active"
+      },
+      {
+        "stmt_id": "0001",
+        "status": "superseded"
+      },
+      {
+        "stmt_id": "0002",
+        "status": "active"
+      },
+      {
+        "stmt_id": "0003",
+        "status": "active"
+      },
+      {
+        "stmt_id": "0006",
+        "status": "active"
+      },
+      {
+        "stmt_id": "0007",
+        "status": "active"
+      },
+      {
+        "stmt_id": "0008",
+        "status": "active"
+      },
+      {
+        "stmt_id": "0009",
+        "status": "active"
+      }
+    ]
+  },
+  "c13_wake": {
+    "rc": 0,
+    "calls": 8,
+    "owner": {
+      "task_id": "t-000001",
+      "role": "D",
+      "status": "block",
+      "outcome": null
+    },
+    "item": {
+      "task_id": "t-000002",
+      "item_state": "queued",
+      "item_close": "",
+      "inputs": [
+        "wake:t-000007@2026-11-16T00:23:52+08:00|逐条审批唤醒（审计判 resume：owner 静默、未销号、板项 t-000002 未终态、子树无在跑）⇒ 批准后直写并唤醒 t-000001"
+      ]
+    },
+    "wakes": [
+      {
+        "state": "refused",
+        "count": 0,
+        "cells": [
+          {
+            "item_id": "t-000002",
+            "task_id": "t-000001",
+            "verdict": "skip",
+            "started": false,
+            "refusal_code": "not_approved",
+            "mark": "",
+            "why": "没批准：approve 不是 \"yes\" ⇒ 不审也不动（一个字节都没写、一次都没叫）；要看审计结论就带 approve=\"yes\" 再跑一趟预览（dry_run=True）"
+          }
+        ]
+      },
+      {
+        "state": "refused",
+        "count": 0,
+        "cells": [
+          {
+            "item_id": "t-000002",
+            "task_id": "t-000001",
+            "verdict": "resume",
+            "started": false,
+            "refusal_code": "wake_failed",
+            "mark": "wake:t-000007@2026-11-16T00:23:52+08:00|逐条审批唤醒（审计判 resume：owner 静默、未销号、板项 t-000002 未终态、子树无在跑）⇒ 批准后直写并唤醒 t-000001",
+            "why": "直写已经落盘（t-000002 已 queued、落痕在 inputs），但叫不醒它（这一趟没有接执行侧（resume_runner 未接线））⇒ 下一步：再叫一次，或重新派活"
+          }
+        ]
+      },
+      {
+        "state": "refused",
+        "count": 0,
+        "cells": [
+          {
+            "item_id": "t-000002",
+            "task_id": "t-000001",
+            "verdict": "skip",
+            "started": false,
+            "refusal_code": "not_blocked",
+            "mark": "",
+            "why": "t-000002 现在不是 block 板项（item_state='queued'）⇒ 它没被停掉，这一层没有对象"
+          }
+        ]
+      }
+    ],
+    "m_runs": 2,
+    "d_runs": [
+      "t-000004"
+    ],
+    "stdout_tail": [
+      "角色 M 自主跑完 2 轮",
+      "  第 1 轮：final（汇报已发公共频道）",
+      "  第 2 轮：final（汇报已发公共频道）"
+    ]
+  }
+}
