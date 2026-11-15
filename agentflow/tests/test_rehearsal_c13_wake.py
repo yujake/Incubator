@@ -30,14 +30,16 @@
 
 - 三次 `wake_blocked` 的回执：第一次逐条 `skip/not_approved`、`started=False`、`state="refused"`、
   盘上零写入；第二次审计判 `resume`、板项 `item_state` 翻成 `queued`、`inputs` 多一条
-  `wake:` 落痕 —— 执行侧那一步按产品三态读（见下）；第三次该条 `skip/not_blocked`
-  （板项已经不是 block 了）、`wake:` 落痕不翻倍。
+  `wake:` 落痕，执行侧真的按同号把 owner 跑起来（`started=True`、owner 行
+  `done/ok`、被唤醒的 D 有 `agent_run_start` / `agent_run_end`；板项被 D 读到之后
+  推进到 `seen`）；第三次该条 `skip/not_blocked`（板项已经不是 block 了）、
+  `wake:` 落痕不翻倍。
 - 多轮：`--rounds 2` 的两轮都开了（stdout 的「自主跑完 2 轮」＋ 两条 M 的 `agent_run_start`）。
 - 钱账干净、全部 `llm_call` 落在本趟 sid。
 
-## 已报未改的产品缺口：研究跑的唤醒只写不叫（2026-11-15 实测）
+## 2026-11-16 已修：研究跑的唤醒只写不叫（CC4 缺陷 1）
 
-`start --mode research` 装配的是 `host.wired_llm_conductor`，它没有把
+改前：`start --mode research` 装配的是 `host.wired_llm_conductor`，它没有把
 `cond.resume_runner` 接到 `cond.resume_dispatched`（全仓只有 `host.wired_conductor`
 那一处接）。于是研究跑里 M 调 `conductor.wake_blocked`：
 
@@ -46,12 +48,12 @@
 但 started=False、refusal_code="wake_failed"、why="这一趟没有接执行侧（resume_runner 未接线）"
 ```
 
-判断与修法（一处一行的接线，不在这里改产品）：在 `host.wired_llm_conductor` 建好
-`LlmBackend`、把它换到 `conductor.backend` 之后，照 `wired_conductor` 那两行接上
-`cond.resume_runner = cond.resume_dispatched`。本文件按产品今天的实际三态判：
-`started=True` 时要求真起跑（owner 跑完、有它的 `agent_run_start`/`end`）；
-`started=False` 时要求点名 `wake_failed` 且原因逐字是"没有接执行侧"—— 两条都是受控
-读数，折叠成"叫起来了"才是假绿。修好之后这一条会自动走前一支，判据不用改。
+现在 `wired_llm_conductor` 在换完 backend 之后按 `wired_conductor` 同形接上执行侧；
+`Conductor.resume_dispatched` 调 `LlmBackend.call` 时把主控的取消信号 `token` 一并传下去
+（不传 ⇒ 第一次唤醒就落 `TypeError: ... missing 'token'`，owner 行 `failed`）。
+本文件因此是正控：`started=True` 且 owner 真的跑完。执行侧没接线的反真空在
+`tests/test_rehearsal_c13_wake_chain.py::test_without_the_wiring...`（把接线那一格换成
+访问即 AttributeError 的 descriptor，不必在产品里留开关）。
 
 ## 反真空（同一个工作区里造红）
 
@@ -74,6 +76,7 @@ import io
 import json
 import pathlib
 import re
+import time
 from contextlib import redirect_stderr, redirect_stdout
 from typing import Any
 
@@ -206,9 +209,45 @@ def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
             ])
     except SystemExit as exc:
         rc = int(exc.code or 0)
-    return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
+    ws = pathlib.Path(st.root)
+    # 执行侧接上之后，被唤醒的那一条是后台线程在跑：它的终态、`agent_run_start/end`
+    # 与账本行都可能晚于 `cli.main` 返回。若这一趟真的叫起来了（回执 started=True），
+    # 等它落定再交读数；没叫起来（反真空/未接线）就照原样立刻返回。
+    if any(bool(_cell(w, item).get("started")) for w in _wakes(_events(ws))):
+        _wait_terminal(Store(ws), owner, timeout=30.0)
+    return {"rc": int(rc), "ws": ws, "store": Store(ws),
             "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue(),
             "owner": owner, "item": item, "blocked": blocked}
+
+
+def _wait_terminal(store: Store, task_id: str, *, timeout: float) -> dict:
+    """等一条被唤醒的行落终态、并把花销写回（它与主线程并发）。
+
+    只等终态不够：`resume_dispatched` 的顺序是 `_end_from_payload`（写终态）→
+    `_set_usage`（把账本累计值抄回 `tasks`）。在两步之间读，owner 行会短暂地
+    `done` + `tokens=0`，而"一行账 / 两处相等"那一格就可能读到假的不等。
+    `tokenmeter:settled` 是 `_set_usage` 的落痕（`inputs` 里那一格），等到它再交读数；
+    写不回来时不无限等（终态之后最多再等 5 秒，超时按实况交，交给判据报）。
+    """
+    start = time.monotonic()
+    deadline = start + float(timeout)
+    terminal_at = 0.0
+    row = _row(store, task_id)
+
+    def _settled(one: dict) -> bool:
+        return any(str(x) == "tokenmeter:settled" for x in (one.get("inputs") or []))
+
+    while time.monotonic() < deadline:
+        if str(row.get("status") or "") in ("done", "failed", "cancelled"):
+            if _settled(row):
+                return row
+            if not terminal_at:
+                terminal_at = time.monotonic()
+            elif time.monotonic() - terminal_at >= 5.0:
+                return row
+        time.sleep(0.05)
+        row = _row(store, task_id)
+    return row
 
 
 def _events(ws: pathlib.Path) -> list[dict]:
@@ -280,56 +319,53 @@ def _chain_problems(reading: dict[str, Any], item_id: str) -> list[str]:
         problems.append(f"未批准那一趟 started 该是 False：{cell.get('started')!r}")
     if str(first.get("state") or "") == "woken":
         problems.append(f"未批准那一趟竟然 state=woken：{first!r}")
-    # 2. 批准这一趟：审计必须判 resume、直写必须落盘（板项 queued + 一条 wake: 落痕）；
-    #    执行侧那一步按产品自己的三态读：叫起来了，或者如实说"没接执行侧"。
+    # 2. 批准这一趟：审计必须判 resume、直写必须落盘（板项 block→queued + 一条 wake: 落痕）、
+    #    执行侧必须真的叫起来（2026-11-16 WF 修好缺陷 1 之后）。
     #
-    #    2026-11-15 CC4 实测（已报，未改产品）：`start --mode research` 走的是
+    #    改前（2026-11-15 CC4 实测）：`start --mode research` 走的是
     #    `host.wired_llm_conductor`，它没有把 `cond.resume_runner` 接到
     #    `resume_dispatched`（只有 `host.wired_conductor` 那一条会接）⇒ 研究跑里的
     #    `conductor.wake_blocked` 永远 `wake_failed`：板项翻成 queued 了，人没叫起来。
-    #    这一格因此按"要么真叫起来，要么点名 wake_failed 且原因是没接执行侧"判 ——
-    #    两条都是产品的受控读数，折叠成"叫起来了"才是假绿。
+    #    现在这一格是正控：`started=True`、owner 真的按同号跑完（有它的
+    #    `agent_run_start` / `agent_run_end`、结局 ok）。执行侧没接线的反真空在
+    #    `tests/test_rehearsal_c13_wake_chain.py::test_without_the_wiring...` 里造。
     second = dict(wakes[1]["data"])
     cell2 = _cell(wakes[1], item_id)
     if str(cell2.get("verdict") or "") != "resume":
         problems.append(f"批准那一趟的审计该判 resume：{cell2!r}")
     item = dict(reading["item"])
-    if str(item.get("item_state") or "") != "queued":
-        problems.append(f"板项该翻成 queued：{item.get('item_state')!r}")
+    # 板项的状态推进：直写那一刻是 queued；被唤醒的 D 读到它之后是 seen（渲染即收口
+    # 的另一档；它仍留在板上，收口要收件人自己 ack）。两档都不是 block。
+    if str(item.get("item_state") or "") not in ("queued", "seen", "done"):
+        problems.append(f"板项该从 block 推进（queued/seen/done）："
+                        f"{item.get('item_state')!r}")
     marks = [str(x) for x in (item.get("inputs") or []) if str(x).startswith("wake:")]
     if len(marks) != 1:
         problems.append(f"wake: 落痕应恰好一条（不准翻倍）：{marks}")
-    if cell2.get("started") is True:
-        if str(second.get("state") or "") != "woken":
-            problems.append(f"叫起来了就该 state=woken：{second.get('state')!r}")
-        if int(second.get("count") or 0) != 1:
-            problems.append(f"叫起来了 count 该是 1：{second.get('count')!r}")
-        if str(cell2.get("task_id") or "") != str(reading["owner"].get("task_id") or ""):
-            problems.append(f"叫的该是 owner 的台账号：{cell2.get('task_id')!r}")
-        owner_id = str(reading["owner"].get("task_id") or "")
-        if not [e for e in reading["runs"]
-                if str(e.get("task_id") or "") == owner_id
-                and str(e.get("role") or "") == "D"]:
-            problems.append("被唤醒的 D 没有起跑（没有它的 agent_run_start）")
-        if not [e for e in reading["ends"]
-                if str(e.get("task_id") or "") == owner_id
-                and str(e.get("role") or "") == "D"]:
-            problems.append("被唤醒的 D 没有 agent_run_end")
-        if str(reading["owner"].get("outcome") or "") != "ok":
-            problems.append(f"owner 行的结局不是 ok：{reading['owner'].get('outcome')!r}")
-    else:
-        # 执行侧没接（研究跑今天的实况）：必须是受控的 wake_failed，且原因点名"没有接执行侧"，
-        # 而不是"叫不动"或静默的 False。
-        if str(cell2.get("refusal_code") or "") != "wake_failed":
-            problems.append(f"叫不起来时该点名 wake_failed：{cell2.get('refusal_code')!r}")
-        if "没有接执行侧" not in str(cell2.get("why") or ""):
-            problems.append(f"wake_failed 的原因没有点名「没有接执行侧」："
-                            f"{cell2.get('why')!r}")
-        if str(second.get("state") or "") != "refused":
-            problems.append(f"一条都没叫起来时 state 该是 refused：{second.get('state')!r}")
-        if int(second.get("count") or 0) != 0:
-            problems.append(f"一条都没叫起来 count 该是 0：{second.get('count')!r}")
-    # 3. 幂等：再叫一遍 ⇒ 板项已 queued、不是 block ⇒ not_blocked、不重复叫人。
+    if cell2.get("started") is not True:
+        problems.append(f"批准那一趟必须真的叫起来（started 该是 True）：{cell2!r}")
+    if str(second.get("state") or "") != "woken":
+        problems.append(f"叫起来了就该 state=woken：{second.get('state')!r}")
+    if int(second.get("count") or 0) != 1:
+        problems.append(f"叫起来了 count 该是 1：{second.get('count')!r}")
+    if str(cell2.get("refusal_code") or ""):
+        problems.append(f"叫起来了就不该有 refusal_code：{cell2.get('refusal_code')!r}")
+    if str(cell2.get("task_id") or "") != str(reading["owner"].get("task_id") or ""):
+        problems.append(f"叫的该是 owner 的台账号：{cell2.get('task_id')!r}")
+    owner_id = str(reading["owner"].get("task_id") or "")
+    if not [e for e in reading["runs"]
+            if str(e.get("task_id") or "") == owner_id
+            and str(e.get("role") or "") == "D"]:
+        problems.append("被唤醒的 D 没有起跑（没有它的 agent_run_start）")
+    if not [e for e in reading["ends"]
+            if str(e.get("task_id") or "") == owner_id
+            and str(e.get("role") or "") == "D"]:
+        problems.append("被唤醒的 D 没有 agent_run_end")
+    if str(reading["owner"].get("status") or "") != "done":
+        problems.append(f"owner 行没有落终态 done：{reading['owner'].get('status')!r}")
+    if str(reading["owner"].get("outcome") or "") != "ok":
+        problems.append(f"owner 行的结局不是 ok：{reading['owner'].get('outcome')!r}")
+    # 3. 幂等：再叫一遍 ⇒ 板项已不是 block ⇒ not_blocked、不重复叫人。
     cold = _cell(wakes[2], item_id)
     if str(cold.get("refusal_code") or "") != "not_blocked":
         problems.append(f"第二次批准该点名 not_blocked：{cold.get('refusal_code')!r}")

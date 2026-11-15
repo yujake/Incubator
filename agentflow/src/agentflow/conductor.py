@@ -3632,8 +3632,27 @@ class Conductor:
 
         def _run() -> None:
             try:
-                raw = self.backend.call(role, "", {}, task_id=task_id)
-                self._end_from_payload(task_id, raw)
+                # `token` 必须跟着走：`LlmBackend.call` 把它列为必填关键字参数（取消信号
+                # 一路传到子循环与每一次出网）。改前这里只传 `task_id` ⇒ 研究跑那条
+                # LlmBackend 一旦接上执行侧，第一次唤醒就落
+                # `TypeError: LlmBackend.call() missing 1 required keyword-only argument: 'token'`
+                # （2026-11-15 CC4 缺陷 1 的接线实测：`started=True` 但 owner 行 failed）。
+                # 这个 token 就是主控自己的那一个：唤醒是同一条链上的继续，共用一个取消信号。
+                raw = self.backend.call(role, "", {}, token=self.token, task_id=task_id)
+                res = self._end_from_payload(task_id, raw)
+                # ---- 花销写回：唤醒走的是"直接 backend.call + _end_from_payload"这条
+                # 短路，不经过 `summon_run` 的 `_charge_and_settle`。LlmBackend 的每一笔
+                # 真调用已经把行写进了 `usage_ledger`，但 `tasks.tokens/usd` 只在
+                # `_charge_and_settle` 里从账本抄回 ⇒ 不补这一步，研究跑一旦接上执行侧，
+                # `verify` 的 `usage_task_total_mismatch` 立刻红（2026-11-16 实测：
+                # ledger 5.4e-05 / tasks 4.8e-05）。这里只抄账本累计值，不另记一笔
+                # （召唤级结算行已由 LlmSeam 的调用行走过；再 charge 一次就是双记）。
+                try:
+                    self._set_usage(task_id, self.meter.tokens_for(task_id),
+                                    self.meter.usd_for(task_id))
+                except Exception as exc:  # noqa: BLE001 —— 记账写回失败不许把一次跑完的唤醒翻成失败
+                    self._log(f"唤醒后的花销写回失败（{task_id}）：{type(exc).__name__}: {exc}",
+                              task_id=task_id)
             except Exception as exc:  # noqa: BLE001 —— 跑坏了要落终态，不许僵尸 running
                 self._end(task_id, status="failed", outcome="failed",
                           error=f"{type(exc).__name__}: {exc}",

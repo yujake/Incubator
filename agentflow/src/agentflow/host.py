@@ -652,6 +652,18 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         conductor.backend = backend
         conductor.backend_note = ("backend 被换成 LlmBackend（conductor_for 的缓存忽略后传的 "
                                   "backend，不换就会静默跑确定性实现）")
+    # ---- 「叫醒」的执行侧：与 `wired_conductor` 那一段逐字同形（2026-11-15 CC4 缺陷 1）
+    #
+    # 全仓只有 `wired_conductor` 接过 `cond.resume_runner`；研究跑 / `run-agent` 走的是
+    # 这一条（`wired_llm_conductor`），于是 M 工具面上的 `conductor.wake_blocked` 只写不叫：
+    # 板项 block→queued、`wake:` 落痕都写了，`started=False` + `wake_failed`
+    # 「这一趟没有接执行侧（resume_runner 未接线）」。执行侧就是同一个号继续跑
+    # （`resume_dispatched` 后台线程、从不抛），必须在这里接上。
+    if conductor is not None and hasattr(conductor, "resume_dispatched"):
+        try:
+            conductor.resume_runner = conductor.resume_dispatched
+        except Exception:  # noqa: BLE001 —— 接线失败不许带走装配
+            pass
     built = build_registry(store=store, conductor=conductor, role_registry=role_reg,
                            workspace_root=workspace_root, config=config,
                            session_root=root, sid=eff_sid)

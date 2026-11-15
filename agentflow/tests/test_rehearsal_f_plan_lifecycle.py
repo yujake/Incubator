@@ -368,6 +368,11 @@ class _Wire:
 
     def _f(self, prompt: str) -> str:
         task = _my_task(prompt)
+        if not task:
+            # 被一条 message / notice 叫醒的续跑（同一个台账号、没有新派活）：
+            # 它读一下板就收工。它不许消费 F1/F2/F3 剧本的下一拍 —— 那会让
+            # "派活序列"与"唤醒"互相串位（2026-11-16 WF 修好执行侧之后实测）。
+            return _json({"final": "被唤醒的 F 读完了板，收工", "evidence": []})
         stage = ("F1" if TASK_F1 in task else "F2" if TASK_F2 in task else "F3")
         index = self.steps.get(stage, 0)
         self.steps[stage] = index + 1

@@ -65,7 +65,16 @@ REHEARSAL_PREFIX = "test_rehearsal_"
 #: （实测：不排除时它会以「入口不是 CLI / 自造 `_DuckSeam`」被判红 —— 判据自伤）。
 CONTRACT_FILE = Path(__file__).name
 CONTRACT_TEST_FILE = "test_rehearsal_same_path.py"
-_EXCLUDED = frozenset({CONTRACT_FILE, CONTRACT_TEST_FILE})
+#: WF 判据（2026-11-16）：这两份也是"判据"，不是彩排 —— 它们复用
+#: `test_rehearsal_c13_wake.py` / `test_rehearsal_c4_revision_loop.py` 的真入口 `_run`，
+#: 只加正控 / 反真空 / 负控。反真空必须把产品那一格（接线 / 洗稿）摘掉才能证明
+#: 正控不是真空的；那与「打桩只许五类」的静态判据天然冲突，而把判据文件当彩排扫
+#: 只会自伤。真机同路径的证据仍由那两份彩排提供（它们仍在这张名单里、三格照跑）。
+WF_CRITERIA_FILES = (
+    "test_rehearsal_c13_wake_chain.py",
+    "test_rehearsal_c4_revision_chain.py",
+)
+_EXCLUDED = frozenset({CONTRACT_FILE, CONTRACT_TEST_FILE, *WF_CRITERIA_FILES})
 
 # ============================================================ 一 入口表
 
