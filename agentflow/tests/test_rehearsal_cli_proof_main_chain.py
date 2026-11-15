@@ -57,6 +57,12 @@ from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow.store import Store
 
+SID = "rc2-main-chain"
+
+#: 账本里「模型调用级」那一行的机器标记（`llmseam._charge_ledger` 的 `note` 开头）。
+#: 召唤级结算行（`note` 是 `settle-…`）不是一次真调用，判「一行账」时不数它们。
+LLM_ROW_PREFIX = "source=llmseam;"
+
 MANUSCRIPT = "reports/f-proof-000002.md"
 PROPOSITION = ("设 a = 1/√2、O_a = {(x,y,z) : |x|+|y|+|z| ≤ a}；则对任意单位向量 n 与"
                "任意实数 t，截面面积 A_n(t) ≤ 2a²，且等号成立当且仅当 n 平行于某坐标轴"
@@ -262,6 +268,155 @@ def _nontriviality_rows(ws: pathlib.Path) -> list[dict]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
 
 
+# ============================================================ 判据①「每笔一行账」的读数
+
+
+def _session_calls(ws: pathlib.Path) -> list[dict]:
+    """这一趟的每一次 `llm_call` 事件，连同它落在哪个会话文件上。
+
+    为什么把文件名一起带出来：`llm_call` 只落在「缝当时的 `sid`」那个文件里，而
+    账本行不带会话号 —— 「这条调用是不是本趟的」只能从文件这一侧读。缺了这一格，
+    "缝没有 sid ⇒ 落在缺省会话"在读数上与"账本有一行"长得一样（那一笔钱确实记了，
+    只是记在了另一份会话的审计面上）。
+
+    逐格：`session`（文件名去掉 `.jsonl`）、`role`、`task_id`、`reason`（`charged` /
+    `duplicate` / `no_meter` / …）、`usage_id`（入账时指向 `usage_ledger` 那一行）。
+    """
+    out: list[dict] = []
+    for path in sorted((ws / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("kind") != "llm_call":
+                continue
+            ledger = dict(event.get("ledger") or {})
+            out.append({
+                "session": path.stem,
+                "role": str(event.get("role") or ""),
+                "task_id": str(event.get("task_id") or ""),
+                "reason": str(ledger.get("reason") or ""),
+                "usage_id": str(ledger.get("usage_id") or ""),
+            })
+    return out
+
+
+def _ledger_identity(ws: pathlib.Path, store: Store) -> dict[str, Any]:
+    """「每笔真调用有且只有一行账」的逐笔读数（判据①的本体）。
+
+    三个集合必须一一对上：
+
+    - `calls`：`llm_call` 事件（真缝落的那条审计记录）——每一次真调用恰好一条；
+    - `rows`：`usage_ledger` 里 `note` 以 `LLM_ROW_PREFIX` 开头的行（按 `usage_id`
+      去重？不：行本身就带 `usage_id`，重复号是存储层的错，这里按行数）；
+    - `pairs`：事件 → 行的一一映射。配对键同时验两件事：`usage_id` 指到的那一行，
+      以及行上的 `(role, task_id, call_index)` 与事件这一侧的
+      `(role, task_id, 会话)` 逐字一致 —— 后者就是「按 `(sid, role, task, 序号)`
+      对得上」这条要求。
+
+    `duplicates` 是这条判据的承重点：`duplicate` 的语义是"这次真调用被判成
+    「已经记过了」⇒ 静默不记"。账本行数于是小于真调用次数，而三格（有行、无主 0、
+    悬空 0）仍然全绿 —— 那正是"另一条路上复发的无主花销"。
+    """
+    calls = _session_calls(ws)
+    rows = [dict(r) for r in store.rows("usage_ledger")
+            if str(r.get("note") or "").startswith(LLM_ROW_PREFIX)]
+    by_id = {str(r.get("usage_id") or ""): r for r in rows}
+    pairs: list[dict] = []
+    unpaired: list[dict] = []
+    for call in calls:
+        if call["reason"] != "charged":
+            continue
+        row = by_id.get(call["usage_id"])
+        if row is None:
+            unpaired.append(dict(call, why="charged 但账本里没有这一行"))
+            continue
+        note = str(row.get("note") or "")
+        m = re.search(r"call_index=(\d+)", note)
+        pairs.append({
+            "session": call["session"], "role": call["role"],
+            "task_id": call["task_id"],
+            "call_index": int(m.group(1)) if m else -1,
+            "usage_id": call["usage_id"],
+            "row_role": str(row.get("role") or ""),
+            "row_task_id": str(row.get("task_id") or ""),
+        })
+    claimed = {p["usage_id"] for p in pairs}
+    keys = [(p["session"], p["role"], p["task_id"], p["call_index"]) for p in pairs]
+    return {
+        "calls": len(calls),
+        "rows": len(rows),
+        "pairs": pairs,
+        "duplicates": [c for c in calls if c["reason"] != "charged"],
+        "unpaired": unpaired,
+        "unclaimed": sorted(set(by_id) - claimed),
+        "keys": keys,
+        "wrong_owner": [p for p in pairs
+                        if p["row_role"] != p["role"] or p["row_task_id"] != p["task_id"]],
+    }
+
+
+# ============================================================ 判据②「会话归口」的读数
+
+
+def _session_split(ws: pathlib.Path) -> dict[str, Any]:
+    """`llm_call` 事件按会话文件分组，并点名"不在本趟 `sid` 上"的那些。
+
+    为什么它是独立的一条判据：三格按 ambient task 归口（账本 `task_id`），
+    不按会话文件归口 ⇒ 一条没有 `sid` 的缝（`AgentV._seam` 的 env 兜底现造的那条）
+    照样能把账记对、把三格判绿，而它的 `llm_call` 事件全落在缺省会话
+    （`sessions/<当天日期>.jsonl`）上。那一份会话是"这一趟的审计面"吗？不是。
+    """
+    calls = _session_calls(ws)
+    by_session: dict[str, list[dict]] = {}
+    for call in calls:
+        by_session.setdefault(call["session"], []).append(call)
+    elsewhere = [c for c in calls if c["session"] != SID]
+    return {"calls": calls, "by_session": by_session, "elsewhere": elsewhere,
+            "in_run": [c for c in calls if c["session"] == SID]}
+
+
+#: 判据①②的判据本体：返回非空列表 = 红。纯函数（只吃读数，不读盘、不抛异常），
+#: 于是正控与反真空用的是同一个判据 —— 反真空若只说"读数看起来不对"，那两处就会
+#: 各写一份"什么叫不对"，而它们迟早分家（本仓的老毛病）。
+def _one_row_per_call_problems(reading: dict[str, Any]) -> list[str]:
+    """判据①：每笔真调用有且只有一行账（返回问题清单；空 = 绿）。"""
+    problems: list[str] = []
+    if int(reading.get("calls") or 0) <= 0:
+        problems.append("没有对象：这一趟 0 次真调用（不是干净，是没走那条路）")
+    duplicates = list(reading.get("duplicates") or [])
+    if duplicates:
+        problems.append(
+            f"{len(duplicates)} 笔真调用被判 duplicate、静默不记账："
+            f"{[(c.get('session'), c.get('role'), c.get('task_id')) for c in duplicates]}")
+    calls, rows = int(reading.get("calls") or 0), int(reading.get("rows") or 0)
+    if rows != calls:
+        problems.append(f"真调用 {calls} 次，账本只落了 {rows} 行")
+    if reading.get("unpaired") or reading.get("unclaimed"):
+        problems.append(f"事件与账本行没有一一对应：未配对 {reading.get('unpaired')} / "
+                        f"未被认领 {reading.get('unclaimed')}")
+    if reading.get("wrong_owner"):
+        problems.append(f"账本行的归口与事件不一致：{reading.get('wrong_owner')}")
+    keys = list(reading.get("keys") or [])
+    if len(set(keys)) != len(keys):
+        problems.append(f"同一 `(sid, role, task, 序号)` 上出现两次真调用：{keys}")
+    return problems
+
+
+def _session_problems(split: dict[str, Any]) -> list[str]:
+    """判据②：全部 `llm_call` 落在本趟 `sid`（返回问题清单；空 = 绿）。"""
+    problems: list[str] = []
+    if not split.get("calls"):
+        problems.append("没有对象：这一趟 0 条 `llm_call` 事件（不是干净，是没走那条路）")
+    elsewhere = list(split.get("elsewhere") or [])
+    if elsewhere:
+        problems.append(
+            f"{len(elsewhere)} 条 `llm_call` 落在本趟 `sid={SID}` 之外："
+            f"{[(c.get('session'), c.get('role'), c.get('task_id')) for c in elsewhere]}")
+    return problems
+
+
 # ============================================================ 正控：主链走通
 
 
@@ -343,6 +498,82 @@ def test_the_proof_main_chain_runs_from_the_cli_with_only_the_wire_replaced(
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money
+
+
+# ============================================================ 判据①「每笔一行账」
+
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_real_call_has_exactly_one_ledger_row(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行。
+
+    读数是逐笔的，不是汇总的：
+
+    - `llm_call` 事件数 = 出网层真的被调到的次数（`wire.bodies`）；
+    - `usage_ledger` 里模型调用级的行数（`note` 以 `source=llmseam;` 开头）与它相等；
+    - 每一笔 `charged` 的 `usage_id` 指到一行，且行上的 `(role, task_id, call_index)`
+      与事件的 `(role, task_id)`、会话号逐字对上；
+    - `duplicate` 数 = 0（那一档的语义是"这次真调用被判成已经记过了 ⇒ 静默不记"）。
+
+    为什么单独成判据：三格只要求"账本有行、无主 0、悬空 0"，一笔被 `duplicate`
+    吞掉的钱不会让那条绿变红 —— 它只是让账本少一行，而少掉的那一行正好是
+    "这次真调用"的审计面。这条判据把"少"变成红。
+
+    Lean 开/关两档都跑：记账与开关无关，但"两档的读数都干净"必须自己说出来，
+    不能靠"另一档没跑所以没红"。
+    """
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    reading = _ledger_identity(got["ws"], got["store"])
+    print(f"[一行账] lean={lean} 真调用={reading['calls']} 出网={len(got['wire'].bodies)} "
+          f"账本行={reading['rows']} duplicate={len(reading['duplicates'])} "
+          f"未配对={len(reading['unpaired'])} 未认领={len(reading['unclaimed'])}")
+    assert reading["calls"] == len(got["wire"].bodies), (
+        "有真调用没有落 `llm_call` 事件（或反之）："
+        f"事件 {reading['calls']} / 出网 {len(got['wire'].bodies)}")
+    problems = _one_row_per_call_problems(reading)
+    assert problems == [], "判据①红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ 判据②「会话归口」
+
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_llm_call_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。
+
+    三格不红的原因不是它守住了这一格：账本按 ambient task 归口，
+    一条没有 `sid` 的缝（工具路径按 env 现造的第二条）照样记对账、照样让三格绿，
+    而它的审计事件全落在 `sessions/<当天日期>.jsonl` 上。所以会话归口必须
+    单独判，且判据的对象是会话文件，不是账本。
+
+    顺带把装配读数钉住：`llmseam.role_seam("V")` 必须是这一趟装配的那一条
+    （`sid` = 本趟、`budget_of` 与 `meter` 都在），而不是"登记过、没人用"的摆设。
+    """
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    split = _session_split(got["ws"])
+    print(f"[会话归口] lean={lean} 本趟={len(split['in_run'])} "
+          f"别处={len(split['elsewhere'])} "
+          f"会话={sorted(split['by_session'])}")
+    assert split["calls"], "这一趟一次真调用都没有 ⇒ 判据没有对象（不是干净）"
+    problems = _session_problems(split)
+    assert problems == [], "判据②红：\n- " + "\n- ".join(problems)
+    assert len(split["in_run"]) == len(got["wire"].bodies), (
+        f"本趟会话 {len(split['in_run'])} 条 / 出网 {len(got['wire'].bodies)} 次")
+    from agentflow import llmseam as LS
+
+    seam = LS.role_seam("V")
+    assert isinstance(seam, LS.LlmSeam), (
+        "装配期没有给 V 登记按角色缝 ⇒ 工具路径会按 env 现造第二条（无 sid / 无 budget_of）")
+    assert str(seam.sid or "") == SID, (
+        f"登记的 V 缝不是这一趟的会话（sid={seam.sid!r}）：工具路径照样落缺省会话")
+    assert seam.meter is not None, "登记的 V 缝没有接账本 ⇒ 工具路径的调用不会进 usage_ledger"
+    assert callable(seam.budget_of), "登记的 V 缝没有 budget_of ⇒ 预算轴与本体那条缝不是同一个数"
+    assert seam.spend.calls > 0, (
+        "登记的 V 缝一次都没被用过 ⇒ 它只是躺在注册表里，工具路径仍然走别的缝")
 
 
 # ============================================================ 反真空：V 不签
@@ -437,3 +668,32 @@ def test_the_same_chain_runs_with_lean_off_and_no_l_in_the_roster(
     events = _events(ws)
     assert not [e for e in events if str(e.get("role") or "") == "L"], \
         "关档下 L 不该有任何一步"
+
+
+# ============================================================ Lean 开档
+
+
+def test_the_same_chain_runs_with_lean_on(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Lean 开档（`AGENTFLOW_LEAN_ENABLED=1`）同一条链：签、收录、两组新读数都在。
+
+    关档那条（上一条）与这一条合起来才是"两档都跑过"：只跑一档时，另一档的绿
+    没有判据看着。这一条刻意重复正控的盘上读数（签块 / statements 1 行），
+    因为"开档下这条链仍然走到收录"本身就是要钉住的那一格 —— 形式化开着时
+    名册里多一个 L，不能改变主链的终态。
+    """
+    got = _run(tmp_path, monkeypatch, lean="1")
+    ws, st = got["ws"], got["store"]
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    from agentflow import leanscope as LS
+
+    reading = LS.lean_reading()
+    assert reading.verdict == "on", reading.to_dict()
+    assert LS.is_hidden("L") is False, "开档下 L 应当存在"
+    # 链照跑：签 + 收录都在（与关档同一批盘上读数）
+    assert "- V 签：已签=true" in (ws / MANUSCRIPT).read_text(encoding="utf-8")
+    assert len(_rows(st, "statements")) == 1, _rows(st, "statements")
+    # 两组新判据在开档下也干净（判据本体与正控/反真空是同一份）
+    assert _session_problems(_session_split(ws)) == [], _session_split(ws)["elsewhere"]
+    assert _one_row_per_call_problems(_ledger_identity(ws, st)) == [], (
+        _ledger_identity(ws, st))

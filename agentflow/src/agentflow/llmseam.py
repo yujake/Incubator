@@ -291,6 +291,39 @@ def _next_call_index(session_root: Any, sid: Any, role: Any, task_id: Any) -> in
         return idx
 
 
+def _idem_namespace(*, session_root: Any, sid: Any, role: Any, task_id: Any) -> str:
+    """一次真调用的幂等键命名空间 = 「缝实例身份 + 召唤号」。
+
+    ## 为什么不能只有召唤号（2026-11-15，RC2 彩排实测）
+
+    序号 `call_index` 是按 `(工作区, 会话, 角色, 召唤号)` 数的，而键的命名空间
+    改前只有 `task:<召唤号>`：同一个召唤上两条不同的缝（V 的本体那条 + 工具路径
+    那条、秘书那条）都在自己的 `idx=0` 上算出一个键，后到的那一笔被判 `duplicate`
+    —— 静默不记账。现场：16 次真调用只落 10 行账，6 笔被吞（`secretary:V` ×3、
+    `V` ×2、`secretary:B` ×1），而三格照旧全绿（它们只要求"账本有行、无主 0、
+    悬空 0"，不看"少了一行"）。
+
+    ## 四格各回答一件事
+
+    - `session_root`：同一进程里两个工作区各有各的 `t-000001`，不能互相撞；
+    - `sid`：同一天里的两趟运行（缺省会话 / 显式会话）也是两本账；
+    - `role`：同一个召唤上本体与秘书是两条缝（`V` / `secretary:V`）；
+    - `task_id`：同一条缝在不同召唤上的第 i 次调用是两个键。
+
+    前三格合起来就是这条缝的实例身份（`LlmSeam` 的四个构造输入里除去
+    gateway/meter 的那三个）。它们与 `_next_call_index` 的计数键逐字同源 ——
+    序号在哪个键上数、幂等键就必须在哪个键上分，否则"第 i 次"在两处指的不是同一件事。
+
+    ## "同一次真调用只记一次"仍然成立
+
+    命名空间是确定性的（不含随机量/内存计数器）：同一条缝、同一个召唤、同一进程或
+    重跑一遍算出来的第 i 个键逐字相同 ⇒ 真正的重复记账（跨进程重放 / 同一笔重试）
+    仍被判 `duplicate`。改掉的只是"两条不同的真调用互相吞"。
+    """
+    return (f"root:{str(session_root or '')}|sid:{str(sid or '')}"
+            f"|role:{str(role or '')}|task:{str(task_id or '')}")
+
+
 def ambient_task_id() -> str:
     """当前调用上下文里的召唤号（不在任何一次召唤里 ⇒ 空串）。
 
@@ -304,6 +337,26 @@ def ambient_task_id() -> str:
         from .conductor import current_task_id
         return str(current_task_id() or "").strip()
     except Exception:  # noqa: BLE001 —— 取不到就是取不到（空串），不猜一个号
+        return ""
+
+
+def ambient_sid() -> str:
+    """当前调用上下文里的会话号（不在任何一趟里 ⇒ 空串）。
+
+    与 :func:`ambient_task_id` 同族、同一个挂点（`conductor.calling_as` 的
+    `sid=` 那一格）。为什么需要它：不少缝是在工具路径 / 惰性装配里现造的，那些
+    调用点手上没有 host 的 `sid=`（`Secretary.for_role_wired`、`AgentV._seam`
+    的兜底、各工具的秘书），于是它们的 `llm_call` 事件会落进缺省会话
+    （`sessions/<当天日期>.jsonl`）—— 账本按 ambient task 归口看不出来，
+    但"这一笔不在本趟的审计面上"是事实。
+
+    空串 = 这一层不知道（与"缺省会话"是两个结论）：调用方拿去做 `sid=` 的缺省值时，
+    必须自己决定"空串 ⇒ 不传"。
+    """
+    try:
+        from .conductor import current_session
+        return str(current_session()[1] or "").strip()
+    except Exception:  # noqa: BLE001 —— 取不到就是取不到（空串），不猜一个会话号
         return ""
 
 
@@ -722,8 +775,13 @@ class LlmSeam:
         现造的（`host._seam` / `AgentV._seam`），用缝自己的计数器会让第一次
         召唤把 `(sid, role, 0..n)` 全占满，后面每一次召唤的同号调用都被判 `duplicate`
         —— 钱静默不记（现场：V 的 61 笔账只有 27 笔真的落账，其余 34 笔撞键被吞）。
-        所以 `call_index` 取自 `_next_call_index(...)`（模块级、按召唤号索引），
-        键里的命名空间也带上召唤号（`task_id` 为空时退回 `(sid, role)`）。
+        所以 `call_index` 取自 `_next_call_index(...)`（模块级、按召唤号索引）。
+
+        命名空间还必须与那个序号的计数键同源（`_idem_namespace`：工作区 + 会话 +
+        角色 + 召唤号）。改前它只有 `task:<号>` ⇒ 同一个召唤上的两条缝（V 的本体 /
+        工具路径、本体 / 秘书）在各自的 `idx=0` 上撞键，后到的被静默吞掉
+        （RC2 彩排：16 次真调用只落 10 行账）。"同一次真调用只记一次"由命名空间的
+        确定性保证，不靠"少写一个维度"。
         """
         from . import tokenmeter as TM
 
@@ -764,9 +822,10 @@ class LlmSeam:
             tokens_in=tokens_in, tokens_out=tokens_out,
             usd=float(call.usd or 0.0), attempts=1, task_id=tid, note=note,
         )
-        # 键的命名空间：有召唤号就用它（同一召唤的第 i 次调用只与它自己比）；
-        # 没有就退回 `(sid, role)`，并把"第几次"取自模块级序号 —— 两条都不会跨召唤撞键。
-        namespace = f"task:{tid}" if tid else f"{self.sid or ''}:{self.role}"
+        # 键的命名空间：与 `_next_call_index` 的计数键同源（工作区 + 会话 + 角色 +
+        # 召唤号）。只写召唤号会让同一召唤上两条不同的缝撞键 —— 见 `_idem_namespace`。
+        namespace = _idem_namespace(session_root=self.session_root, sid=self.sid,
+                                    role=self.role, task_id=tid or "")
         key = MC.idempotency_key(namespace, idx)
         try:
             logged = self.meter.charge_once(charge, idem_key=key)

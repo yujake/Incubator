@@ -1116,15 +1116,35 @@ class AgentV:
             self.log(message)
 
     def _seam(self) -> Any:
-        """这次审校用哪个模型缝：显式给的最优先，否则按角色现造一个。
+        """这次审校用哪个模型缝：显式注入 > 装配期登记的按角色缝 > 按 env 现造。
 
-        现造的那一个不抛：`LlmSeam.for_role` 在没有 key 时给出 `wired=False` 的缝，
-        而 `ask` 会返回 `problem="judge_not_wired"` —— 三态纪律要的正是这个：
-        "没接线"是一条读数，不是一次异常。
+        三档各自对应一条真实的入口，优先级不是风格：
+
+        1. 显式注入（`llm=`）：单条执行入口（`run-agent V` 经 `specs/v.py` 拿到的
+           那条缝、`verify_tools._agent_v` 传来的 `role_seam("V")`）与判据的剧本缝
+           都走这一档 —— 调用方明确说"用这个"，就不要再猜；
+        2. 按角色缝（`llmseam.role_seam("V")`）：工具路径（M 派 `V.verify_proof`）
+           拿不到 host 的装配上下文，只能读这一张表。host 装配期会把同一条
+           带 `sid` / `meter` / `budget_of` 的缝登记进去（`host.wired_llm_conductor`）；
+        3. env 现造：没有登记时才有的受控兜底（单测 / 离线脚本），与从前逐字同义。
+           它不抛：`LlmSeam.for_role` 在没有 key 时给出 `wired=False` 的缝，而 `ask`
+           会返回 `problem="judge_not_wired"` —— 三态纪律要的正是这个：
+           "没接线"是一条读数，不是一次异常。
+
+        ## 为什么要有第 2 档（RC2 现场，2026-11-15）
+
+        改前这里只有 1 / 3 两档，而全仓没有一个 `set_role_seam("V", …)` ⇒ 工具路径
+        永远落到第 3 档：那条缝没有 `sid`，`llm_call` 事件落进缺省会话（外带的一条
+        审计面无主），也没有 `budget_of`（预算轴与本体那条缝不是同一个数）。
+        真机有 key 时"照样能跑"，所以它只能从会话文件与账本行数读出来。
         """
         if self.llm is not None:
             return self.llm
-        from ..llmseam import LlmSeam
+        from ..llmseam import LlmSeam, role_seam
+
+        registered = role_seam("V")
+        if registered is not None:
+            return registered
         from ..tokenmeter import TokenMeter
 
         return LlmSeam.for_role("V", session_root=self.workspace_root,

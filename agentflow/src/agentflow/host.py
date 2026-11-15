@@ -582,6 +582,22 @@ def wired_llm_conductor(store: Any, *, policy: Any = None,
         notes_d = ("D 的模型精修：未接线（这次运行没有模型 key）⇒ `_llm_refine` 落 `not_wired`，"
                    "分析走确定性那一份（fail-open，不中断研究）")
     notes: list[str] = [notes_attack, notes_experiment, notes_d]
+    # ---- V 的审阅推理：与 F 同一条纪律 —— V 出场就有缝（没有 V 签的证明不算成果）。
+    #
+    # 为什么必须在这里登记（RC2 现场，2026-11-15）：工具路径（M 派 `V.verify_proof`）
+    # 拿不到 host 的装配上下文 —— `tools/verify_tools.py:_agent_v` 只读
+    # `llmseam.role_seam("V")`。改前全仓没有任何 `set_role_seam("V", …)`，于是那条路
+    # 由 `AgentV._seam` 按 env 现造第二条缝：没有 `sid`（`llm_call` 落缺省会话）、
+    # 没有 `budget_of`（预算轴与本体那条缝各算各的）。它与 F/E 是同一件事，
+    # 所以落点也在同一处（单一来源 `llmseam` 的按角色表），不另开第二处注册表。
+    v_llm = _seam("V")
+    _set_role_seam("V", v_llm)
+    notes.append(
+        "V 的审阅推理：接线（角色工厂与工具路径共用装配期登记的那一条缝；"
+        "没配 key 时它自己落 `not_wired` —— 那是「钱没花成」，不是「没接线」）"
+        if getattr(v_llm, "wired", False) else
+        "V 的审阅推理：未接线（这次运行没有模型 key）⇒ `ask` 落 `judge_not_wired`；"
+        "工具路径与角色工厂用的是同一条缝（同一个空结论，不是两条）")
     role_llm: dict[str, Any] = {}
     if h_llm is not None:
         role_llm["H"] = h_llm

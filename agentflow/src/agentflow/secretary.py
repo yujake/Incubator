@@ -15661,6 +15661,26 @@ def for_role(role: str, *, root: str | Path, **kw: Any) -> Secretary:
     return Secretary(str(role), root=Path(str(root)), **kw)
 
 
+def _ambient_session_sid() -> str | None:
+    """这一趟的会话号（`conductor.calling_as` 挂的那一个）；不知道 ⇒ `None`。
+
+    为什么秘书装配要读它：`for_role_wired` 的调用点里有一批拿不到 host 的 `sid=`
+    （`AgentV._secretary`、`AgentB._statement_secretary`、若干工具的秘书）。改前它们
+    一律传 `sid=None` ⇒ 秘书档的 `llm_call` 事件落进缺省会话
+    （`sessions/<当天日期>.jsonl`）：账本按 ambient task 归口，看不出少了一趟；
+    但"这一笔不在本趟的审计面上"是事实（RC2 彩排实测 7 条里 4 条是这么来的）。
+
+    为什么不把"空串"当 `sid` 传下去：`sid=""` 与 `sid=None` 在 `sessions.append`
+    里同义（都落缺省会话），但调用方要能分开"这一层不知道"与"就用缺省会话"。
+    所以这里只在取到会话号时替换 `None`；取不到就保持 `None`，与从前逐字同义。
+    """
+    try:
+        from .llmseam import ambient_sid
+        return ambient_sid() or None
+    except Exception:  # noqa: BLE001 —— 取不到就是不知道，保持旧行为（sid=None）
+        return None
+
+
 def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
                        sid: str | None = None, store: Any = None,
                        meter: Any = None) -> tuple[Any, str]:
@@ -15686,6 +15706,8 @@ def seam_for_secretary(role: str, *, root: str | Path, seam: Any = None,
     不在任何召唤里 ⇒ `task_id=None` + `note` 写明 `unattributed`，由 `reconcile_usage`
     单列一栏点名。三态纪律：发了请求的钱只有"已归口"与"点名说清为什么归不了"两种。
     """
+    if sid is None:
+        sid = _ambient_session_sid()
     if seam is not None:
         return seam, "body（调用方给的缝）"
     try:
@@ -15740,6 +15762,8 @@ def for_role_wired(role: str, *, root: str | Path, seam: Any = None,
     没有缝时它连着为什么 —— `judge()` 的 `checked=False` 那一格会把这句话一并带出来，
     于是"判不了"在返回值与台账上都能见到原因，而不是静默退回机械判据。
     """
+    if sid is None:
+        sid = _ambient_session_sid()
     seam_now, source = seam_for_secretary(str(role), root=root, seam=seam, sid=sid,
                                           store=store)
     sec = Secretary(str(role), root=Path(str(root)), store=store, registry=registry,
