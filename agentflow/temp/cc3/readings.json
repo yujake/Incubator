@@ -1,0 +1,678 @@
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+{
+ "c1_lean0": {
+  "rc": 0,
+  "wire_calls": 11,
+  "search_requests": [
+   [
+    "no_results",
+    "abelian group"
+   ],
+   [
+    "ok",
+    "notes"
+   ]
+  ],
+  "literature": [
+   [
+    "notes.txt",
+    true
+   ]
+  ],
+  "relations": [
+   [
+    "active",
+    "逐字命中（substring_match，窗口 declared:1-1，试过 "
+   ]
+  ],
+  "concepts": [
+   "abelian group",
+   "group"
+  ],
+  "digest": {
+   "processed": 1,
+   "quotes_verified": 1,
+   "quotes_failed": 0,
+   "relations_added": 1,
+   "relations_suspect": 0,
+   "suspect_by_quote": 0,
+   "quotes_unknown": 0,
+   "concepts_created": 2,
+   "skipped_no_extractor": 0,
+   "failed": 0
+  },
+  "tasks": [
+   [
+    "M",
+    "ok"
+   ],
+   [
+    "A",
+    "ok"
+   ],
+   [
+    "B",
+    "ok"
+   ]
+  ],
+  "money": {
+   "ledger_rows": 13,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": []
+ },
+ "c3_lean0": {
+  "rc": 0,
+  "wire_calls": 22,
+  "experiments": [
+   [
+    "000000",
+    "numeric",
+    "supports",
+    "cross_check"
+   ],
+   [
+    "000001",
+    "exhaustive_search",
+    "supports",
+    "proof"
+   ]
+  ],
+  "statements": [
+   [
+    "000000",
+    "conjecture",
+    "cross_check",
+    "verified",
+    [
+     1
+    ]
+   ],
+   [
+    "000001",
+    "theorem",
+    "proof",
+    "pending",
+    [
+     1
+    ]
+   ]
+  ],
+  "reports": [
+   "e-num-000000.md",
+   "e-proof-000000.md"
+  ],
+  "pending_rows": 3,
+  "pending_groups": [
+   1
+  ],
+  "sign_envelope": [
+   "acd8c7ed2169bd9d78549758820497c6760d0fb2d09b8f48cf0ed839835b2859.json",
+   "issued.json"
+  ],
+  "review_passes": [
+   1,
+   2,
+   3
+  ],
+  "review_kind": "proof_unregistered_signed",
+  "e_task_outcome": "no_result",
+  "e_final_refusal": {
+   "complete": false,
+   "problems": [
+    "这一份 e-proof 没有现行的 V 签（ambiguous_path）⇒ 穷举证明档要签：等 V 的签 / 改稿再送；实验行被撤销的话不算欠签"
+   ]
+  },
+  "money": {
+   "ledger_rows": 25,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": []
+ },
+ "c10_lean0": {
+  "rc": 0,
+  "wire_calls": 21,
+  "doc": {
+   "doc_id": "000000",
+   "status": "unresolved_review",
+   "review_rounds": 2,
+   "markdown_path": "documents/000000.md"
+  },
+  "claims": [
+   {
+    "claim_id": "claim-1",
+    "disclaimer": "数值交叉验证，不构成证明"
+   }
+  ],
+  "findings": [
+   [
+    "000000",
+    "dangling_dep",
+    "error",
+    "open",
+    "000000"
+   ]
+  ],
+  "dependencies": [
+   [
+    "000000",
+    "doc:000000",
+    "dangling"
+   ]
+  ],
+  "review_verdict": "rejected",
+  "revise_status": "revised",
+  "verify_verdict": "unresolved_review",
+  "verify_still_open": [
+   [
+    "dangling_dep",
+    "error"
+   ]
+  ],
+  "money": {
+   "ledger_rows": 25,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": []
+ },
+ "c10_no_close_as_lean0": {
+  "rc": 0,
+  "wire_calls": 21,
+  "doc": {
+   "doc_id": "000000",
+   "status": "in_review",
+   "review_rounds": 2,
+   "markdown_path": "documents/000000.md"
+  },
+  "claims": [
+   {
+    "claim_id": "claim-1",
+    "disclaimer": "数值交叉验证，不构成证明"
+   }
+  ],
+  "findings": [
+   [
+    "000000",
+    "dangling_dep",
+    "error",
+    "open",
+    "000000"
+   ]
+  ],
+  "dependencies": [
+   [
+    "000000",
+    "doc:000000",
+    "dangling"
+   ]
+  ],
+  "review_verdict": "rejected",
+  "revise_status": "revised",
+  "verify_verdict": "revise_again",
+  "verify_still_open": [
+   [
+    "dangling_dep",
+    "error"
+   ]
+  ],
+  "money": {
+   "ledger_rows": 25,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": [
+   "H 复审该判 unresolved_review：'revise_again'",
+   "documents.status 该是 unresolved_review：'in_review'"
+  ]
+ },
+ "c12_lean0": {
+  "rc": 0,
+  "wire_calls": 5,
+  "m_says_done": true,
+  "can_close": true,
+  "closable": true,
+  "machine_pass": true,
+  "status": {
+   "acceptance": "pass",
+   "artifact_ledger": "pass",
+   "contradictions": "pass",
+   "load_bearing": "pass",
+   "report_shape": "pass",
+   "substance": "pass",
+   "user_pending": "pass"
+  },
+  "failed": [],
+  "unknowns": [],
+  "verdict_written": {
+   "ok": true,
+   "path": "C:\\Users\\ysc20\\AppData\\Local\\Temp\\cc3-c12-0-j5mq1p_o\\out\\review\\m-verdicts.jsonl",
+   "tried": true,
+   "why": ""
+  },
+  "m_verdict_rows": [
+   {
+    "at": "2026-11-15T22:52:28+08:00",
+    "basis": "七格读数都过、没有 blocker",
+    "counts": {
+     "cannot": 0,
+     "done": 1,
+     "not_done": 0,
+     "total": 1
+    },
+    "goal": "把这一项研究做到可交付",
+    "kind": "m_verdict",
+    "met": true,
+    "seq": 1,
+    "sid": "cc3-c12",
+    "tasks": [
+     {
+      "state": "done",
+      "what": "收工门七格"
+     }
+    ],
+    "who": "M"
+   }
+  ],
+  "money": {
+   "ledger_rows": 6,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  }
+ },
+ "c1_lean1": {
+  "rc": 0,
+  "wire_calls": 11,
+  "search_requests": [
+   [
+    "no_results",
+    "abelian group"
+   ],
+   [
+    "ok",
+    "notes"
+   ]
+  ],
+  "literature": [
+   [
+    "notes.txt",
+    true
+   ]
+  ],
+  "relations": [
+   [
+    "active",
+    "逐字命中（substring_match，窗口 declared:1-1，试过 "
+   ]
+  ],
+  "concepts": [
+   "abelian group",
+   "group"
+  ],
+  "digest": {
+   "processed": 1,
+   "quotes_verified": 1,
+   "quotes_failed": 0,
+   "relations_added": 1,
+   "relations_suspect": 0,
+   "suspect_by_quote": 0,
+   "quotes_unknown": 0,
+   "concepts_created": 2,
+   "skipped_no_extractor": 0,
+   "failed": 0
+  },
+  "tasks": [
+   [
+    "M",
+    "ok"
+   ],
+   [
+    "A",
+    "ok"
+   ],
+   [
+    "B",
+    "ok"
+   ]
+  ],
+  "money": {
+   "ledger_rows": 13,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": []
+ },
+ "c3_lean1": {
+  "rc": 0,
+  "wire_calls": 22,
+  "experiments": [
+   [
+    "000000",
+    "numeric",
+    "supports",
+    "cross_check"
+   ],
+   [
+    "000001",
+    "exhaustive_search",
+    "supports",
+    "proof"
+   ]
+  ],
+  "statements": [
+   [
+    "000000",
+    "conjecture",
+    "cross_check",
+    "verified",
+    [
+     1
+    ]
+   ],
+   [
+    "000001",
+    "theorem",
+    "proof",
+    "pending",
+    [
+     1
+    ]
+   ]
+  ],
+  "reports": [
+   "e-num-000000.md",
+   "e-proof-000000.md"
+  ],
+  "pending_rows": 3,
+  "pending_groups": [
+   1
+  ],
+  "sign_envelope": [
+   "acd8c7ed2169bd9d78549758820497c6760d0fb2d09b8f48cf0ed839835b2859.json",
+   "issued.json"
+  ],
+  "review_passes": [
+   1,
+   2,
+   3
+  ],
+  "review_kind": "proof_unregistered_signed",
+  "e_task_outcome": "no_result",
+  "e_final_refusal": {
+   "complete": false,
+   "problems": [
+    "这一份 e-proof 没有现行的 V 签（ambiguous_path）⇒ 穷举证明档要签：等 V 的签 / 改稿再送；实验行被撤销的话不算欠签"
+   ]
+  },
+  "money": {
+   "ledger_rows": 25,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": []
+ },
+ "c10_lean1": {
+  "rc": 0,
+  "wire_calls": 21,
+  "doc": {
+   "doc_id": "000000",
+   "status": "unresolved_review",
+   "review_rounds": 2,
+   "markdown_path": "documents/000000.md"
+  },
+  "claims": [
+   {
+    "claim_id": "claim-1",
+    "disclaimer": "数值交叉验证，不构成证明"
+   }
+  ],
+  "findings": [
+   [
+    "000000",
+    "dangling_dep",
+    "error",
+    "open",
+    "000000"
+   ]
+  ],
+  "dependencies": [
+   [
+    "000000",
+    "doc:000000",
+    "dangling"
+   ]
+  ],
+  "review_verdict": "rejected",
+  "revise_status": "revised",
+  "verify_verdict": "unresolved_review",
+  "verify_still_open": [
+   [
+    "dangling_dep",
+    "error"
+   ]
+  ],
+  "money": {
+   "ledger_rows": 25,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": []
+ },
+ "c10_no_close_as_lean1": {
+  "rc": 0,
+  "wire_calls": 21,
+  "doc": {
+   "doc_id": "000000",
+   "status": "in_review",
+   "review_rounds": 2,
+   "markdown_path": "documents/000000.md"
+  },
+  "claims": [
+   {
+    "claim_id": "claim-1",
+    "disclaimer": "数值交叉验证，不构成证明"
+   }
+  ],
+  "findings": [
+   [
+    "000000",
+    "dangling_dep",
+    "error",
+    "open",
+    "000000"
+   ]
+  ],
+  "dependencies": [
+   [
+    "000000",
+    "doc:000000",
+    "dangling"
+   ]
+  ],
+  "review_verdict": "rejected",
+  "revise_status": "revised",
+  "verify_verdict": "revise_again",
+  "verify_still_open": [
+   [
+    "dangling_dep",
+    "error"
+   ]
+  ],
+  "money": {
+   "ledger_rows": 25,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  },
+  "chain_problems": [
+   "H 复审该判 unresolved_review：'revise_again'",
+   "documents.status 该是 unresolved_review：'in_review'"
+  ]
+ },
+ "c12_lean1": {
+  "rc": 0,
+  "wire_calls": 5,
+  "m_says_done": true,
+  "can_close": true,
+  "closable": true,
+  "machine_pass": true,
+  "status": {
+   "acceptance": "pass",
+   "artifact_ledger": "pass",
+   "contradictions": "pass",
+   "load_bearing": "pass",
+   "report_shape": "pass",
+   "substance": "pass",
+   "user_pending": "pass"
+  },
+  "failed": [],
+  "unknowns": [],
+  "verdict_written": {
+   "ok": true,
+   "path": "C:\\Users\\ysc20\\AppData\\Local\\Temp\\cc3-c12-1-yxabicle\\out\\review\\m-verdicts.jsonl",
+   "tried": true,
+   "why": ""
+  },
+  "m_verdict_rows": [
+   {
+    "at": "2026-11-15T22:52:44+08:00",
+    "basis": "七格读数都过、没有 blocker",
+    "counts": {
+     "cannot": 0,
+     "done": 1,
+     "not_done": 0,
+     "total": 1
+    },
+    "goal": "把这一项研究做到可交付",
+    "kind": "m_verdict",
+    "met": true,
+    "seq": 1,
+    "sid": "cc3-c12",
+    "tasks": [
+     {
+      "state": "done",
+      "what": "收工门七格"
+     }
+    ],
+    "who": "M"
+   }
+  ],
+  "money": {
+   "ledger_rows": 6,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  }
+ },
+ "c12_pending_question": {
+  "rc": 0,
+  "wire_calls": 5,
+  "m_says_done": true,
+  "can_close": true,
+  "closable": true,
+  "machine_pass": false,
+  "status": {
+   "acceptance": "pass",
+   "artifact_ledger": "pass",
+   "contradictions": "pass",
+   "load_bearing": "pass",
+   "report_shape": "pass",
+   "substance": "pass",
+   "user_pending": "fail"
+  },
+  "failed": [
+   "user_pending"
+  ],
+  "unknowns": [],
+  "verdict_written": {
+   "ok": true,
+   "path": "C:\\Users\\ysc20\\AppData\\Local\\Temp\\cc3-c12-0-e52qq897\\out\\review\\m-verdicts.jsonl",
+   "tried": true,
+   "why": ""
+  },
+  "m_verdict_rows": [
+   {
+    "at": "2026-11-15T22:52:45+08:00",
+    "basis": "七格读数都过、没有 blocker",
+    "counts": {
+     "cannot": 0,
+     "done": 1,
+     "not_done": 0,
+     "total": 1
+    },
+    "goal": "把这一项研究做到可交付",
+    "kind": "m_verdict",
+    "met": true,
+    "seq": 1,
+    "sid": "cc3-c12",
+    "tasks": [
+     {
+      "state": "done",
+      "what": "收工门七格"
+     }
+    ],
+    "who": "M"
+   }
+  ],
+  "money": {
+   "ledger_rows": 6,
+   "unattributed": {
+    "count": 0,
+    "usd": 0.0,
+    "usage_ids": []
+   },
+   "dangling": [],
+   "equal": true
+  }
+ }
+}

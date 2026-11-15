@@ -1,0 +1,91 @@
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_the_literature_chain_runs_from_the_cli_with_only_the_wire_replaced  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_the_literature_chain_runs_from_the_cli_with_only_the_wire_replaced  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_a_quote_that_is_not_verbatim_turns_the_chain_red  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_a_quote_that_is_not_verbatim_turns_the_chain_red  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_an_empty_books_dir_turns_the_chain_red  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_an_empty_books_dir_turns_the_chain_red  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=12 unattributed=0 dangling=0
+[一行账] lean=1 真调用=10 出网=10 （另有一次抽取走 modelclient，不经 LlmSeam） 账本行=10 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_real_call_has_exactly_one_ledger_row[1]  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_real_call_has_exactly_one_ledger_row[1]  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+[一行账] lean=0 真调用=10 出网=10 （另有一次抽取走 modelclient，不经 LlmSeam） 账本行=10 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_real_call_has_exactly_one_ledger_row[0]  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_real_call_has_exactly_one_ledger_row[0]  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+[会话归口] lean=1 本趟=10 别处=0 会话=['cc3-c1']
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_llm_call_lands_in_this_runs_session[1]  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_llm_call_lands_in_this_runs_session[1]  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+[会话归口] lean=0 本趟=10 别处=0 会话=['cc3-c1']
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_llm_call_lands_in_this_runs_session[0]  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_every_llm_call_lands_in_this_runs_session[0]  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_the_switch_reading_matches_and_l_is_isolated_when_off[1-on-False]  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_the_switch_reading_matches_and_l_is_isolated_when_off[1-on-False]  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c1_literature_chain.py::test_the_switch_reading_matches_and_l_is_isolated_when_off[0-off-True]  ask 次数=10  live=10
+[三格] tests/test_rehearsal_c1_literature_chain.py::test_the_switch_reading_matches_and_l_is_isolated_when_off[0-off-True]  ①resolved=10/10  ②caller_role=['A', 'B']  live_meter=10  ③ledger_rows=13 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_the_numeric_chain_runs_from_the_cli_with_only_the_wire_replaced  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_the_numeric_chain_runs_from_the_cli_with_only_the_wire_replaced  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_a_broken_producer_form_gate_turns_the_chain_red  ask 次数=6  live=6
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_a_broken_producer_form_gate_turns_the_chain_red  ①resolved=6/6  ②caller_role=['E']  live_meter=6  ③ledger_rows=7 unattributed=0 dangling=0
+[一行账] lean=1 真调用=22 出网=22 账本行=22 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_real_call_has_exactly_one_ledger_row[1]  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_real_call_has_exactly_one_ledger_row[1]  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+[一行账] lean=0 真调用=22 出网=22 账本行=22 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_real_call_has_exactly_one_ledger_row[0]  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_real_call_has_exactly_one_ledger_row[0]  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+[会话归口] lean=1 本趟=22 别处=0 会话=['cc3-c3']
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_llm_call_lands_in_this_runs_session[1]  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_llm_call_lands_in_this_runs_session[1]  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+[会话归口] lean=0 本趟=22 别处=0 会话=['cc3-c3']
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_llm_call_lands_in_this_runs_session[0]  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_every_llm_call_lands_in_this_runs_session[0]  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_the_chain_runs_in_both_lean_modes[1-on-False]  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_the_chain_runs_in_both_lean_modes[1-on-False]  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c3_numeric_chain.py::test_the_chain_runs_in_both_lean_modes[0-off-True]  ask 次数=22  live=22
+[三格] tests/test_rehearsal_c3_numeric_chain.py::test_the_chain_runs_in_both_lean_modes[0-off-True]  ①resolved=22/22  ②caller_role=['B', 'E', 'V']  live_meter=22  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c10_writing.py::test_the_writing_chain_runs_from_the_cli_and_h_closes_it  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_the_writing_chain_runs_from_the_cli_and_h_closes_it  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c10_writing.py::test_without_close_as_h_does_not_close_the_document  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_without_close_as_h_does_not_close_the_document  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+[一行账] lean=1 真调用=21 出网=21 账本行=21 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c10_writing.py::test_every_real_call_has_exactly_one_ledger_row[1]  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_every_real_call_has_exactly_one_ledger_row[1]  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+[一行账] lean=0 真调用=21 出网=21 账本行=21 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c10_writing.py::test_every_real_call_has_exactly_one_ledger_row[0]  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_every_real_call_has_exactly_one_ledger_row[0]  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+[会话归口] lean=1 本趟=21 别处=0 会话=['cc3-c10']
+.[三格] tests/test_rehearsal_c10_writing.py::test_every_llm_call_lands_in_this_runs_session[1]  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_every_llm_call_lands_in_this_runs_session[1]  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+[会话归口] lean=0 本趟=21 别处=0 会话=['cc3-c10']
+.[三格] tests/test_rehearsal_c10_writing.py::test_every_llm_call_lands_in_this_runs_session[0]  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_every_llm_call_lands_in_this_runs_session[0]  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c10_writing.py::test_the_chain_runs_in_both_lean_modes[1-on-False]  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_the_chain_runs_in_both_lean_modes[1-on-False]  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c10_writing.py::test_the_chain_runs_in_both_lean_modes[0-off-True]  ask 次数=21  live=21
+[三格] tests/test_rehearsal_c10_writing.py::test_the_chain_runs_in_both_lean_modes[0-off-True]  ①resolved=21/21  ②caller_role=['G', 'H']  live_meter=21  ③ledger_rows=25 unattributed=0 dangling=0
+warning: The `fitz` API is deprecated and will be removed in future. Use `import pymupdf` instead.
+.[三格] tests/test_rehearsal_c12_closing.py::test_the_closing_gate_passes_all_seven_cells_from_the_cli  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_the_closing_gate_passes_all_seven_cells_from_the_cli  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c12_closing.py::test_one_red_cell_turns_machine_pass_false_while_m_still_says_done  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_one_red_cell_turns_machine_pass_false_while_m_still_says_done  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+[一行账] lean=1 真调用=5 出网=5 账本行=5 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c12_closing.py::test_every_real_call_has_exactly_one_ledger_row[1]  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_every_real_call_has_exactly_one_ledger_row[1]  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+[一行账] lean=0 真调用=5 出网=5 账本行=5 duplicate=0 未配对=0 未认领=0
+.[三格] tests/test_rehearsal_c12_closing.py::test_every_real_call_has_exactly_one_ledger_row[0]  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_every_real_call_has_exactly_one_ledger_row[0]  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+[会话归口] lean=1 本趟=5 别处=0 会话=['cc3-c12']
+.[三格] tests/test_rehearsal_c12_closing.py::test_every_llm_call_lands_in_this_runs_session[1]  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_every_llm_call_lands_in_this_runs_session[1]  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+[会话归口] lean=0 本趟=5 别处=0 会话=['cc3-c12']
+.[三格] tests/test_rehearsal_c12_closing.py::test_every_llm_call_lands_in_this_runs_session[0]  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_every_llm_call_lands_in_this_runs_session[0]  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c12_closing.py::test_machine_pass_can_be_true_in_both_lean_modes[1-on-False]  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_machine_pass_can_be_true_in_both_lean_modes[1-on-False]  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+.[三格] tests/test_rehearsal_c12_closing.py::test_machine_pass_can_be_true_in_both_lean_modes[0-off-True]  ask 次数=5  live=5
+[三格] tests/test_rehearsal_c12_closing.py::test_machine_pass_can_be_true_in_both_lean_modes[0-off-True]  ①resolved=5/5  ②caller_role=['H']  live_meter=5  ③ledger_rows=6 unattributed=0 dangling=0
+
+============================== warnings summary ===============================
+tests/test_rehearsal_c12_closing.py::test_the_closing_gate_passes_all_seven_cells_from_the_cli
+  C:\Users\ysc20\AppData\Local\Programs\Python\Python311\Lib\site-packages\PyPDF2\__init__.py:21: DeprecationWarning: PyPDF2 is deprecated. Please move to the pypdf library instead.
+    warnings.warn(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+33 passed, 1 warning in 104.78s (0:01:44)
