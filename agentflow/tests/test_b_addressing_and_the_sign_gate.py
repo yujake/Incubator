@@ -21,9 +21,9 @@ B侧需寻址获得F侧证明及V签。
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | B 从 D 的清单收录一条（清单里有 F 稿地址 + 稿上有 9 格签块） | 收下、`v_sign.applied` 真、`seam.calls == []` |
+| a | B 从 D 的清单收录一条（清单里有 F 稿地址 + 稿上有 9 格签块） | 收下、签读数真、寻址那一段前后差值为 0 |
 | b | 同一笔的寻址读数 | `mode=auto`、`source=carried_by_D`、`address` / `list_item` / `list_report` 指得到 |
-| c | 清单点了名、而那个地址读不到（盘上另有一份同名约定路径的稿） | 受控拒绝 `manuscript_address_unreadable`、没有降级去读那份稿、`seam.calls == []` |
+| c | 清单点了名、而那个地址读不到（盘上另有一份同名约定路径的稿） | 受控拒绝 `manuscript_address_unreadable`、没有降级去读那份稿、寻址零模型调用 |
 | d | 反真空：把寻址函数打桩成"清单里没有这一条" | a 的 `v_sign.applied` 必须翻假（证明 a 量的是真寻址） |
 | e | 三档签块拒信 | 每档 `code` 对、`reason` 一句、`suggestion` 点名真工具 / 真字段 |
 """
@@ -221,7 +221,14 @@ def test_c_an_unreadable_address_is_a_refusal_not_a_disk_fallback(
     assert addr.get("mode") == "auto", addr
     assert addr.get("hit") is False, addr
     assert addr.get("address") == "reports/f-proof-gone.md", addr
-    assert seam.calls == [], f"受控拒绝那一路惊动了模型：{seam.calls}"
+    # NT2（2026-11-15，业主裁定「判非平凡度是 B 处理一条录入的第一个动作」）之后，
+    # 收录的第一步是判档（`secretary:statement_aesthetic`），它走同一条模型缝；
+    # 这一笔的拒信（清单地址读不到）要到寻址那一步才查得出来 ⇒ 那一条已经发生了。
+    # 于是这里把"允许的那一条"钉成精确字符串：多出任何一条（尤其带 address /
+    # carried / manuscript 的）照样红 —— 寻址那一段本身仍然零模型调用（`test_a`
+    # 用前后差值逐次量它，这一条不放宽那一条）。
+    assert seam.calls == ["secretary:statement_aesthetic"], (
+        f"受控拒绝那一路的模型调用不止 NT2 判档那一条：{seam.calls}")
     # 兜底读盘没有发生：真去读那份约定路径的稿，签块就会认上。
     assert "v_sign" not in got or not (got.get("v_sign") or {}).get("applied"), got
     rows = list(st.rows("statements"))
@@ -249,7 +256,9 @@ def test_d_stubbing_the_addressing_function_turns_a_red(tmp_path: pathlib.Path,
     assert v_sign.get("found") is not True, v_sign
     # 那一档的真实去路是"自产定理级没有 V 签"⇒ 受控拒绝（不是崩、也不是静默收下）。
     assert got.get("ok") is not True, got
-    assert seam.calls == [], seam.calls
+    # 同上（c 那一条的注释）：拒绝发生在判档之后 ⇒ 允许且只允许 NT2 判档那一条调用；
+    # 寻址被打桩成空，寻址本身一次模型都不许有。
+    assert seam.calls == ["secretary:statement_aesthetic"], seam.calls
 
 
 # ====================================================================== e 三档拒信
