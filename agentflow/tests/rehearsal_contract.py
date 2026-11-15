@@ -180,6 +180,29 @@ _SRC_CACHE: dict[str, Any] = {}
 #: - ``does_not_prove``：它没有证明什么（真机上因此仍然未知的那一段）；
 #: - ``superseded_by``：改用 CLI 入口 + 真 `LlmSeam` 的那份新彩排（没有就空串）。
 CHAIN_ONLY: dict[str, dict[str, str]] = {
+    "test_rehearsal_c3_numeric_chain.py": {
+        "chain": "C3 · 数值链（E → V → B）",
+        "reason": "直调 `AgentE.run_experiment` / `AgentV.verify_proof` / `AgentB.ingest_manuscript`；"
+                  "反真空还替换了私有类 `_NumericProofFormGate._proposition_form_gate`。",
+        "proves": "数值证据的四档与形态闸在方法层的判定。",
+        "does_not_prove": "真机循环里 E 的工具调用、V 的第三次连判与 B 的收录能串成一条链。",
+        "superseded_by": "",
+    },
+    "test_rehearsal_c10_writing.py": {
+        "chain": "C10 · 成文 / 审校回路（G 改 → H 复审 → H close_as）",
+        "reason": "直调 `AgentG.*` / `AgentH.*`；并打桩 `review_tools.scan_document`。没有步循环。",
+        "proves": "G 的改写与 H 的复审判定各自在方法层的行为。",
+        "does_not_prove": "两条角色在真机循环里被派活、工具分发、收工门放行；账本与三格全无对象。",
+        "superseded_by": "",
+    },
+    "test_rehearsal_c12_closing.py": {
+        "chain": "C12 · 收工门七格",
+        "reason": "手工造 `AgentLoop` 之后直调私有 `loop._v_wait_gate_reading()`；打桩 "
+                  "`manuscriptclosing.signed_candidates` 与 `Store.tx`。入口低于 CLI 两层。",
+        "proves": "七格各自的读数与 `machine_pass` 的取值在给定夹具下成立。",
+        "does_not_prove": "这一趟是产品路径跑出来的（门是手工搭的）—— 真机前置证据不成立。",
+        "superseded_by": "",
+    },
     "test_rehearsal_b_intake_exits.py": {
         "chain": "C5 · B 收编的形态闸 / 同一性门出口",
         "reason": "直调 `AgentB.register_statement` / `AgentF.rewrite_manuscript_proposition`，"
@@ -198,36 +221,12 @@ CHAIN_ONLY: dict[str, dict[str, str]] = {
         "does_not_prove": "真机从 CLI 走进来时它仍然成立（判定面被换掉了）。",
         "superseded_by": "",
     },
-    "test_rehearsal_c1_literature_chain.py": {
-        "chain": "C1 · 文献链（A 检索/入库 → B 抽取）",
-        "reason": "入口是 `Conductor.summon`（比 CLI 低一层：没有 `_run_spec` / `LlmBackend` / "
-                  "`AgentLoop.run` / 收工门），并把 `locallib.extract_text`（PDF 解析后端）换掉。"
-                  "缝本身是真的（真 `LlmSeam` + 真 `TokenMeter`），所以是「半条」。",
-        "proves": "真 `Conductor.summon` 下 A 的检索编排、B 的抽取与逐字回验会落对/落不掉。",
-        "does_not_prove": "真机 CLI 那条路能跑通；格②（`current_caller_role()` 全空）。",
-        "superseded_by": "",
-    },
-    "test_rehearsal_c10_writing.py": {
-        "chain": "C10 · 成文 / 审校回路（G 改 → H 复审 → H close_as）",
-        "reason": "直调 `AgentG.*` / `AgentH.*`；并打桩 `review_tools.scan_document`。没有步循环。",
-        "proves": "G 的改写与 H 的复审判定各自在方法层的行为。",
-        "does_not_prove": "两条角色在真机循环里被派活、工具分发、收工门放行；账本与三格全无对象。",
-        "superseded_by": "",
-    },
     "test_rehearsal_c11_formal.py": {
         "chain": "C11 · 形式化链（B → L → C）",
         "reason": "走工具层 `build_registry().call(\"formal.*\")`（比 CLI 低两层）；打桩 "
                   "`verify_tools.check_formal` / `detect_verifier` / `AgentL.check_formal`。",
         "proves": "L 的三件工具面与 Lean 桥接层在开档下的读数口径。",
         "does_not_prove": "真机从 `run-agent L` / `start --mode research` 走进来时的装配与账本。",
-        "superseded_by": "",
-    },
-    "test_rehearsal_c12_closing.py": {
-        "chain": "C12 · 收工门七格",
-        "reason": "手工造 `AgentLoop` 之后直调私有 `loop._v_wait_gate_reading()`；打桩 "
-                  "`manuscriptclosing.signed_candidates` 与 `Store.tx`。入口低于 CLI 两层。",
-        "proves": "七格各自的读数与 `machine_pass` 的取值在给定夹具下成立。",
-        "does_not_prove": "这一趟是产品路径跑出来的（门是手工搭的）—— 真机前置证据不成立。",
         "superseded_by": "",
     },
     "test_rehearsal_c13_wake.py": {
@@ -246,14 +245,6 @@ CHAIN_ONLY: dict[str, dict[str, str]] = {
         "does_not_prove": "真机 CLI → `_exec_role` → `LlmBackend` → `AgentLoop.run` 这条路上，"
                           "三签与收录是否仍按同一顺序发生；三格没有对象。",
         "superseded_by": "test_rehearsal_cli_proof_main_chain.py",
-    },
-    "test_rehearsal_c3_numeric_chain.py": {
-        "chain": "C3 · 数值链（E → V → B）",
-        "reason": "直调 `AgentE.run_experiment` / `AgentV.verify_proof` / `AgentB.ingest_manuscript`；"
-                  "反真空还替换了私有类 `_NumericProofFormGate._proposition_form_gate`。",
-        "proves": "数值证据的四档与形态闸在方法层的判定。",
-        "does_not_prove": "真机循环里 E 的工具调用、V 的第三次连判与 B 的收录能串成一条链。",
-        "superseded_by": "",
     },
     "test_rehearsal_c4_revision_loop.py": {
         "chain": "C4 · 打回修订环（V 点名缺陷 → F 重写 → 再送审）",
@@ -844,3 +835,158 @@ def iter_rehearsal_trees() -> Iterator[tuple[Path, ast.Module]]:
     """把彩排文件逐个交给调用方（判据用；这里不做任何断言）。"""
     for path in rehearsal_files():
         yield path, parse(path)
+
+
+# ============================================================ 九 读数（判据 ①/② 的本体）
+
+#: 账本里「模型调用级」那一行的机器标记（`llmseam._charge_ledger` 的 `note` 开头）。
+#: 召唤级结算行（`note` 是 `settle-…`）不是一次真调用，判「一行账」时不数它们。
+LLM_ROW_PREFIX = "source=llmseam;"
+
+#: 下面几个是「每笔真调用有且只有一行账」与「所有 `llm_call` 落在本趟会话」两条判据的
+#: 本体。RC2 把它们写在 `test_rehearsal_cli_proof_main_chain.py` 里；CC3 的四条链也要用
+#: 同一份，所以搬到契约文件（本文件仍然不 `assert`：这里只给读数，报红在判据文件里）。
+#: 两份实现各写一次「什么叫不对」正是本仓反复踩过的坑（见 RC2 报告 §五）。
+
+
+def session_calls(ws: Path | str) -> list[dict[str, Any]]:
+    """这一趟的每一次 `llm_call` 事件，连同它落在哪个会话文件上。
+
+    为什么把文件名一起带出来：`llm_call` 只落在「缝当时的 `sid`」那个文件里，而账本行
+    不带会话号 —— 「这条调用是不是本趟的」只能从文件这一侧读。缺了这一格，「缝没有
+    sid ⇒ 落在缺省会话」在读数上与「账本有一行」长得一样（那一笔钱确实记了，只是记在
+    了另一份会话的审计面上）。
+
+    逐格：`session`（文件名去掉 `.jsonl`）、`role`、`task_id`、`reason`（`charged` /
+    `duplicate` / `no_meter` / …）、`usage_id`（入账时指向 `usage_ledger` 那一行）。
+    """
+    import json
+
+    out: list[dict[str, Any]] = []
+    for path in sorted((Path(ws) / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("kind") != "llm_call":
+                continue
+            ledger = dict(event.get("ledger") or {})
+            out.append({
+                "session": path.stem,
+                "role": str(event.get("role") or ""),
+                "task_id": str(event.get("task_id") or ""),
+                "reason": str(ledger.get("reason") or ""),
+                "usage_id": str(ledger.get("usage_id") or ""),
+            })
+    return out
+
+
+def ledger_identity(ws: Path | str, store: Any) -> dict[str, Any]:
+    """「每笔真调用有且只有一行账」的逐笔读数（判据①的本体）。
+
+    三个集合必须一一对上：
+
+    - `calls`：`llm_call` 事件（真缝落的那条审计记录）—— 每一次真调用恰好一条；
+    - `rows`：`usage_ledger` 里 `note` 以 :data:`LLM_ROW_PREFIX` 开头的行；
+    - `pairs`：事件 → 行的一一映射。配对键同时验两件事：`usage_id` 指到的那一行，
+      以及行上的 `(role, task_id, call_index)` 与事件这一侧的
+      `(role, task_id, 会话)` 逐字一致。
+
+    `duplicates` 是这条判据的承重点：`duplicate` 的语义是「这次真调用被判成已记过了
+    ⇒ 静默不记」。账本行数于是小于真调用次数，而三格（有行、无主 0、悬空 0）仍然全绿
+    —— 那正是「另一条路上复发的无主花销」。
+    """
+    import re
+
+    calls = session_calls(ws)
+    rows = [dict(r) for r in store.rows("usage_ledger")
+            if str(r.get("note") or "").startswith(LLM_ROW_PREFIX)]
+    by_id = {str(r.get("usage_id") or ""): r for r in rows}
+    pairs: list[dict[str, Any]] = []
+    unpaired: list[dict[str, Any]] = []
+    for call in calls:
+        if call["reason"] != "charged":
+            continue
+        row = by_id.get(call["usage_id"])
+        if row is None:
+            unpaired.append(dict(call, why="charged 但账本里没有这一行"))
+            continue
+        note = str(row.get("note") or "")
+        m = re.search(r"call_index=(\d+)", note)
+        pairs.append({
+            "session": call["session"], "role": call["role"],
+            "task_id": call["task_id"],
+            "call_index": int(m.group(1)) if m else -1,
+            "usage_id": call["usage_id"],
+            "row_role": str(row.get("role") or ""),
+            "row_task_id": str(row.get("task_id") or ""),
+        })
+    claimed = {p["usage_id"] for p in pairs}
+    keys = [(p["session"], p["role"], p["task_id"], p["call_index"]) for p in pairs]
+    return {
+        "calls": len(calls),
+        "rows": len(rows),
+        "pairs": pairs,
+        "duplicates": [c for c in calls if c["reason"] != "charged"],
+        "unpaired": unpaired,
+        "unclaimed": sorted(set(by_id) - claimed),
+        "keys": keys,
+        "wrong_owner": [p for p in pairs
+                        if p["row_role"] != p["role"] or p["row_task_id"] != p["task_id"]],
+    }
+
+
+def one_row_per_call_problems(reading: Mapping[str, Any]) -> list[str]:
+    """判据①：每笔真调用有且只有一行账（返回问题清单；空 = 绿）。纯函数。"""
+    problems: list[str] = []
+    if int(reading.get("calls") or 0) <= 0:
+        problems.append("没有对象：这一趟 0 次真调用（不是干净，是没走那条路）")
+    duplicates = list(reading.get("duplicates") or [])
+    if duplicates:
+        problems.append(
+            f"{len(duplicates)} 笔真调用被判 duplicate、静默不记账："
+            f"{[(c.get('session'), c.get('role'), c.get('task_id')) for c in duplicates]}")
+    calls, rows = int(reading.get("calls") or 0), int(reading.get("rows") or 0)
+    if rows != calls:
+        problems.append(f"真调用 {calls} 次，账本只落了 {rows} 行")
+    if reading.get("unpaired") or reading.get("unclaimed"):
+        problems.append(f"事件与账本行没有一一对应：未配对 {reading.get('unpaired')} / "
+                        f"未被认领 {reading.get('unclaimed')}")
+    if reading.get("wrong_owner"):
+        problems.append(f"账本行的归口与事件不一致：{reading.get('wrong_owner')}")
+    keys = list(reading.get("keys") or [])
+    if len(set(keys)) != len(keys):
+        problems.append(f"同一 `(sid, role, task, 序号)` 上出现两次真调用：{keys}")
+    return problems
+
+
+def session_split(ws: Path | str, sid: str) -> dict[str, Any]:
+    """`llm_call` 事件按会话文件分组，并点名「不在本趟 `sid` 上」的那些。
+
+    为什么它是独立的一条判据：三格按 ambient task 归口（账本 `task_id`），不按会话
+    文件归口 ⇒ 一条没有 `sid` 的缝照样能把账记对、把三格判绿，而它的 `llm_call` 事件
+    全落在缺省会话（`sessions/<当天日期>.jsonl`）上。那一份会话是「这一趟的审计面」吗？
+    不是。
+    """
+    calls = session_calls(ws)
+    by_session: dict[str, list[dict[str, Any]]] = {}
+    for call in calls:
+        by_session.setdefault(call["session"], []).append(call)
+    elsewhere = [c for c in calls if c["session"] != sid]
+    return {"sid": str(sid), "calls": calls, "by_session": by_session,
+            "elsewhere": elsewhere,
+            "in_run": [c for c in calls if c["session"] == sid]}
+
+
+def session_problems(split: Mapping[str, Any]) -> list[str]:
+    """判据②：全部 `llm_call` 落在本趟 `sid`（返回问题清单；空 = 绿）。纯函数。"""
+    problems: list[str] = []
+    if not split.get("calls"):
+        problems.append("没有对象：这一趟 0 条 `llm_call` 事件（不是干净，是没走那条路）")
+    elsewhere = list(split.get("elsewhere") or [])
+    if elsewhere:
+        problems.append(
+            f"{len(elsewhere)} 条 `llm_call` 落在本趟 `sid={split.get('sid')}` 之外："
+            f"{[(c.get('session'), c.get('role'), c.get('task_id')) for c in elsewhere]}")
+    return problems
