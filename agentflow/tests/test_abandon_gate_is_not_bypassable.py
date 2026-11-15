@@ -19,7 +19,8 @@
 | c1 | `defect_ref` 引用另一条命题的「有毛病」行 | `abandon_defect_ref_other_statement` |
 | c2 | `defect_ref` 的判词是对旧稿的（改稿后 stale） | `abandon_defect_ref_stale` |
 | c3 | `salvaged` 里出现被放弃的这条自己 | `abandon_salvaged_self_reference` |
-| c4 | `salvaged` 引理的 `created_at` 晚于放弃时刻（也晚于被放弃的那一条） | `abandon_salvaged_after_the_abandonment`（2026-11-14 起还多一道 `abandon_salvaged_after_the_abandoned_statement`：晚于被放弃的那一条的 `created_at` 同样拒） |
+| c4 | `salvaged` 指的是一条空壳（`kind=lemma` 但正文空 / 无证明 / 无人认领） | `abandon_salvaged_not_reviewable`（理由必须是「不成其为一条在册、可复核的引理」，不是时间戳） |
+| c5 | 正控（2026-11-15 业主语义）：引理登记在被放弃的那一条之后（甚至晚于放弃时刻） | 过 —— 业主原话「以 difficulty 为理由放弃命题，后按照正常流程注册新命题进行攻坚」｜
 | d | 反真空：把「放行面」改宽 / 把 `defect_ref` 绑定判据摘掉 | 对应负控当场变绿（证明那两条判据在承重） |
 | e | 锁死 1：F 登记引理 → V 签 → B 收录 `kind=lemma` → 可被 `salvaged` 引用 | 正控走通 |
 | f | 锁死 2：F 秘书不可用 / 超时 / 坏 JSON | 受控拒 且形态台账各写一行（`judged` 不与「没跑过闸」混） |
@@ -96,11 +97,10 @@ def _put(st: Store, sid: str = SID, *, kind: str = "theorem", label: str = "",
 def _just_after(stamp: str) -> str:
     """比 `stamp` 晚一分钟的时刻（夹具时钟：放弃发生在引理真在册之后）。
 
-    `salvaged` 的判据是「这条引理在这笔放弃之前就在册」且「不晚于被放弃的那一条」
-    （按 `created_at` 判，见 `statementabandon._salvaged_precedes_statement`）。e 这一条
-    里的引理是由「真登记路」写进来的 ⇒ 它的 `created_at` 是墙钟。放弃时刻若写死成一个
-    绝对日期，过了那一天，一条真在册的引理就会被读成"现造"
-    （`abandon_salvaged_after_the_abandonment`）—— 所以这一格必须相对这一行算，不许写死。
+    2026-11-15 起 `salvaged` 的判据不看时间戳（业主语义：放弃之后再按正常流程
+    注册新命题才是主路径），所以这一格不再是"撞不撞某道闸"的关键，只是让夹具的
+    时间顺序像一次真实的放弃。e 这一条里的引理是由「真登记路」写进来的 ⇒ 它的
+    `created_at` 是墙钟；放弃时刻相对它算，读起来才是一个说得通的场景。
     """
     return (datetime.fromisoformat(str(stamp)) + timedelta(minutes=1)).isoformat()
 
@@ -460,17 +460,43 @@ def test_c3_a_salvaged_self_reference_is_refused(tmp_path):
     assert _row(st, LEMMA)["status"] == "active", _row(st, LEMMA)
 
 
-def test_c4_a_lemma_registered_after_the_abandonment_is_refused(tmp_path):
-    """c4：`salvaged` 引理的 `created_at` 晚于放弃时刻 ⇒ 不是「原先证明里」的东西。"""
+def test_c4_a_shell_lemma_is_refused_as_not_a_reviewable_lemma(tmp_path):
+    """c4：`salvaged` 指一条空壳（`kind=lemma` 但无证明 / 无人认领）⇒ 受控拒。
+
+    2026-11-15 业主语义：放弃时可以不指任何引理；要挡的不是"晚"，是"现造一条
+    空壳来交差"。所以这里的拒绝理由必须读成「不成其为一条在册、可复核的引理」，
+    而不是任何时间戳判据。
+    """
     st = _ws(tmp_path)
     _put(st, SID, kind="conjecture", label="lem:cancel")
-    _put(st, LEMMA, kind="lemma", label="现造的引理", created_at=LATE, full=LEMMA_FULL)
+    # 空壳：正文在、`kind=lemma`，但没有证明（`proof_text` 空）⇒ 不可复核。
+    _put(st, LEMMA, kind="lemma", label="现造的引理", full=LEMMA_FULL, proof_text="")
     got = SA.apply_abandonment(
         st, statement_id=SID, reason="理由", at=TS,
         salvaged=[{"label": "现造的引理", "stmt_id": LEMMA}], **DIFF)
     assert got["checked"] is False, got
-    assert got["refused"] == "abandon_salvaged_after_the_abandonment", got
+    assert got["refused"] == SA.ABANDON_SALVAGED_NOT_REVIEWABLE, got
+    assert "不成其为一条在册、可复核的引理" in str(got["why"]), got["why"]
     assert _row(st)["status"] == "active", _row(st)
+
+
+def test_c5_a_lemma_registered_after_the_abandoned_statement_passes(tmp_path):
+    """c5 正控（2026-11-15 业主语义）：引理晚于被放弃的那一条登记 ⇒ 过。
+
+    改前这一条拒（`abandon_salvaged_after_the_abandoned_statement`）。业主原话是
+    「以 difficulty 为理由放弃命题，后按照正常流程注册新命题进行攻坚」——
+    "晚于"不是罪证，时间戳不作判据。
+    """
+    st = _ws(tmp_path)
+    _put(st, SID, kind="conjecture", label="lem:cancel")
+    _put(st, LEMMA, kind="lemma", label="事后拆出的引理", created_at=LATE, full=LEMMA_FULL)
+    got = SA.apply_abandonment(
+        st, statement_id=SID, reason="理由", at=TS,
+        salvaged=[{"label": "事后拆出的引理", "stmt_id": LEMMA}], **DIFF)
+    assert got["checked"] is True, got
+    parsed = SA.parse_abandon_reason(_row(st)["quote_reason"])
+    assert parsed["salvaged"][0]["stmt_id"] == LEMMA, parsed
+    assert _row(st)["status"] == "abandoned", _row(st)
 
 
 # ---------------------------------------------------------------- d 反真空
@@ -566,15 +592,13 @@ def test_e_f_lemma_reaches_salvaged_after_the_v_sign(tmp_path):
     assert lemma["kind"] == "lemma", lemma
     assert lemma["kind"] in SEC.PROPOSITION_KINDS, lemma
     # 正控：把它当 `salvaged`，放弃另一条命题 ⇒ 过闸（改前这里会 `abandon_salvaged_kind_not_lemma`）
-    # 2026-11-14 起 `salvaged` 还要求"不晚于被放弃的那一条"（`created_at` 的基准从
-    # "放弃时刻"改成"被放弃的那一条"）：这一条正控的场景是"先有一条证据齐全的引理，
-    # 再有一道引用它的命题被放弃" ⇒ 目标行按这一笔的真实时刻落，不许写成 11-07 的
-    # 旧日期（那会让它比引理还老，撞上 `abandon_salvaged_after_the_abandoned_statement`）。
+    # 2026-11-15 业主语义：`salvaged` 的判据不看 `created_at`（放弃之后按正常流程注册新
+    # 命题本来就是主路径）。这一条正控仍按"先有一条证据齐全的引理，再有一道引用它的
+    # 命题被放弃"落夹具 —— 那是这个场景的真实时间顺序，不是一道闸。
     _put(st, "000099", kind="conjecture", label="要放弃的命题",
          created_at=str(lemma["created_at"]),
          full="设 g 在 [0,1] 上连续，则 g 有界。")
-    # 放弃时刻 = 这条引理真在册之后（相对它自己的 `created_at` 算；写死绝对日期会
-    # 在第二天把"刚登记的引理"读成"现造"）：
+    # 放弃时刻 = 这条引理真在册之后：
     at = _just_after(str(lemma["created_at"]))
     with _judge_as(GENUINE):
         result = SA.apply_abandonment(

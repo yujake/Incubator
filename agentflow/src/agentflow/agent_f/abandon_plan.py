@@ -112,10 +112,15 @@ class _AbandonPlan:
                     f"拒绝放弃（{SA.ABANDON_DIFFICULTY_REQUIRED}）：reason='difficulty' "
                     "必须给 `difficulty`（一句：卡在哪条引理 / 哪一步 / 哪条假设）")
             salvaged_rows, why = SA.salvaged_items(salvaged)
-            if not salvaged_rows:
+            if why or not salvaged_rows:
+                # 2026-11-15：命题级的 `salvaged` 改成可空（业主语义：放弃之后再注册
+                # 新命题），但 plan 级不变 —— 这一档仍要求把旧证明里可取之处拆成
+                # 引理写清。别把"命题级可选"读成"plan 级也可选"。
                 raise PlanError(
-                    f"拒绝放弃（{SA.ABANDON_SALVAGED_MISSING}）：{why}"
-                    "（业主口径：difficulty 要把旧证明里可取之处拆成引理、留存量写清）")
+                    f"拒绝放弃（{SA.ABANDON_SALVAGED_MISSING}）："
+                    + (why or "没给 salvaged（plan 级的 difficulty 仍要求把旧证明里"
+                              "可取之处拆成引理写清，每条给 label 与 stmt_id）")
+                    + "（业主口径：difficulty 要把旧证明里可取之处拆成引理、留存量写清）")
         rows = [dict(r) for r in self.store.rows("attack_plans")]
         row = next((r for r in rows if str(r.get("plan_id") or "") == pid), None)
         if row is None:

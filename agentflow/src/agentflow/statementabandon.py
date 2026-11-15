@@ -58,6 +58,20 @@ ABANDON_SEP = "@"
 # 对于 ①，需在换号理由中指出错误；对于 ②，需指出困难，并将原先证明中可取之处
 # 拆出落成引理。
 #
+# ## 2026-11-15 业主对 ② 的语义更正（"后拆出"= 放弃之后注册，不是放弃之前）
+#
+# 业主逐字：「我明确一下因证明太困难放弃，后拆出可用引理这条的语义：以 difficulty
+# 为理由放弃命题，后按照正常流程注册新命题进行攻坚，这些新命题可以是对原命题在
+# 加强条件下的证明，或是取出中间部分逻辑链整理成命题，或是陈述负面事实等等。
+# 总之不是机械的」。
+#
+# 于是三步：① difficulty 放弃 T；② 之后按正常流程注册新命题（加强条件版 /
+# 中间逻辑链 / 负面事实 / 其它）；③ 那些新命题各自过自己的闸。由此：
+# - 放弃那一笔可以不指向任何引理（`salvaged` 可空）；
+# - "引理比 T 晚注册"不是罪证 ⇒ 时间戳一律不作判据（两道锚点都撤了）；
+# - 真正挡"现造"的是：在册可复核（正文 / 证明 / 经手人）+ 名字有证据托着 +
+#   不是原命题本身 + 秘书判"是不是从原证明里拆出来的"。
+#
 # `quote_reason` 里那段理由若只是自由文本：写一句"无干净依据"就能过，而"同一 label
 # 再登记一条"这件事在盘上没有任何结构化读数。所以这一节把"理由"从一段散文变成两档
 # 受控形状：每一档都要求指出上面点名的那样东西。
@@ -109,13 +123,27 @@ ABANDON_PARAM_KEYS: tuple[str, ...] = ("abandon_kind", "abandon_basis", "defect_
 #: theorem / lemma / proposition / corollary / conjecture）。其中 `lemma` 就是
 #: 业主说的"引理"，所以这里直接用它、不需要退到"最接近的一档"。
 #:
-#: ## 这一档收什么、不收什么（2026-11-14 补的边界）
-#: 只收「本地证明的残骸」：那一条必须是这笔放弃之前就已经在册的引理，而且它的名字
-#: （`kind`）与正文都不是这一笔现造出来的 —— 名字靠就地 patch 抬成 `lemma` 的、
-#: 正文与被放弃那条逐字相同的，都不算残骸，是同一件事换了个说法。
+#: ## 这一档收什么、不收什么（2026-11-15 业主语义）
+#:
+#: 业主逐字：「我明确一下因证明太困难放弃，后拆出可用引理这条的语义：以 difficulty
+#: 为理由放弃命题，后按照正常流程注册新命题进行攻坚，这些新命题可以是对原命题在
+#: 加强条件下的证明，或是取出中间部分逻辑链整理成命题，或是陈述负面事实等等。
+#: 总之不是机械的」。
+#:
+#: 三步：① 以 difficulty 放弃命题；② 之后按正常流程注册新命题去攻坚
+#: （加强条件版 / 中间逻辑链 / 负面事实 / 其它）；③ 那些新命题各自过自己的闸。
+#: 所以这一格不许拿时间戳当判据 —— "晚于被放弃的那一条"不是罪证，恰恰是业主
+#: 语义里正常的顺序。真正的判据是三条，且都不看时间：
+#:
+#: - 在册、可复核：那一条必须是真登记过的一行，正文与证明都在、说不出经手人
+#:   的空壳不算（:func:`_salvaged_reviewability_problems`）；
+#: - 名字有证据托着：名字靠就地 patch 抬成 `lemma` 的五元位够不到 `pre_theorem`
+#:   / `theorem` 就不算（:func:`_salvaged_kind_from_patch`）；
+#: - 不是原命题本身：正文与被放弃那条逐字相同的不算（:func:`_salvaged_copies_statement`）。
+#:
 #: 文献转述不收（它不是"我们自己的旧证明"里的东西，由秘书那一问
-#: `salvaged_from_proof` 挡），被放弃命题自己的正文也不收（拆出来只是把它
-#: 换个号再登记一次，由本模块的正文比对挡）。
+#: `salvaged_from_proof` 挡）。不要为了交差现造引理：这一格可以整格不给 ——
+#: 放弃动作 + 事后按正常流程注册新命题就是合法路径。
 SALVAGED_KINDS: tuple[str, ...] = ("lemma",)
 
 #: 一条 `defect_ref` 的形状：`verifications/<命题号>.jsonl#<验证号>`（业主给的样例
@@ -127,11 +155,13 @@ ABANDON_DIFFICULTY_NOT_JUDGED = "abandon_difficulty_not_judged"
 ABANDON_DIFFICULTY_NOT_GENUINE = "abandon_difficulty_not_genuine"
 ABANDON_SALVAGED_NOT_FROM_PROOF = "abandon_salvaged_not_from_proof"
 
-#: `salvaged` 那三道"这一条是不是我们自己的旧稿里的残骸"的受控码
-#: （2026-11-14：今天实测能过的三个绕法 —— 就地改 kind / created_at 晚于被放弃的
-#: 那一条 / 抄被放弃命题自己的正文 —— 各一条）。
+#: `salvaged` 那三道"这一条立不立得住"的受控码
+#: （2026-11-14：今天实测能过的绕法 —— 就地改 kind / 抄被放弃命题自己的正文；
+#: 2026-11-15 补"空壳"这一道，并把时间戳那一道撤掉：业主语义是"放弃之后再注册"）。
+#: 前一道的回溯码已撤：`abandon_salvaged_after_the_abandoned_statement` /
+#: `abandon_salvaged_after_the_abandonment` 不再产生（晚于被放弃那一条不是罪证）。
 ABANDON_SALVAGED_KIND_FROM_PATCH = "abandon_salvaged_kind_from_patch"
-ABANDON_SALVAGED_AFTER_THE_STATEMENT = "abandon_salvaged_after_the_abandoned_statement"
+ABANDON_SALVAGED_NOT_REVIEWABLE = "abandon_salvaged_not_reviewable"
 ABANDON_SALVAGED_COPIES_THE_STATEMENT = "abandon_salvaged_copies_the_abandoned_statement"
 
 #: 形状那三道受控码（原先只以字面量散在三处 `out.update(refused=...)` 里）。
@@ -193,10 +223,22 @@ def _step_pattern(step: int) -> re.Pattern[str]:
 
 
 def _salvaged_items(raw: Any) -> tuple[list[dict[str, str]], str]:
-    """把 `salvaged` 归一成 `[{"label":…,"stmt_id":…}]`；形状不对 ⇒ `( [], why )`。"""
+    """把 `salvaged` 归一成 `[{"label":…,"stmt_id":…}]`；形状不对 ⇒ `( [], why )`。
+
+    ## `None` / 空数组 = "放弃时不指向任何引理"，合法（2026-11-15 业主语义）
+
+    业主语义是三步：放弃 → 之后按正常流程注册新命题 → 那些新命题各自过闸。
+    所以"这一笔先不指任何引理"不是缺格，是主路径；"为了交差现造一条"才是要挡的
+    形态（挡它的是 :func:`_salvaged_reviewability_problems` 与秘书那一问，不是这一格
+    的必填）。空数组与不传同义 —— 不拿"传了空数组还是没传"当判据（那正是机械）。
+
+    返回空列表 + 空串 = 没指向引理；非空串 = 形状认不出（受控拒，不猜）。
+    """
     if raw is None:
-        return [], "没给 salvaged（这一档必须列出旧证明里可取之处拆成的引理）"
-    if isinstance(raw, (str, bytes)) or not isinstance(raw, Iterable):
+        return [], ""
+    if isinstance(raw, (str, bytes)):
+        return [], f"salvaged 必须是数组（每条给 label 与 stmt_id），收到 {type(raw).__name__}"
+    if not isinstance(raw, Iterable):
         return [], f"salvaged 必须是数组（每条给 label 与 stmt_id），收到 {type(raw).__name__}"
     out: list[dict[str, str]] = []
     for one in raw:
@@ -218,9 +260,6 @@ def _salvaged_items(raw: Any) -> tuple[list[dict[str, str]], str]:
         if not sid:
             return [], f"salvaged 里有一条没给 stmt_id：{dict(one)!r}"
         out.append({"label": label, "stmt_id": sid})
-    if not out:
-        return [], ("salvaged 是空的 ⇒ 受控拒绝（业主原话：将原先证明中可取之处"
-                    "拆出落成引理 —— 一条都没有，等于没有可取的旧证明）")
     return out, ""
 
 
@@ -231,6 +270,12 @@ def salvaged_items(raw: Any) -> tuple[list[dict[str, str]], str]:
     这条口径（业主 2026-11-13：「plan 级那两个理由沿用命题级那套」），写侧在
     `agent_f/abandon_plan.py`。让那个模块直接调私有名也行，但"跨模块调私有函数"
     会把"这是同一份判据"藏进下划线里；给一个公开名只转发、不另立判据。
+
+    注意：命题级与 plan 级的必填性不同（2026-11-15 业主语义只改命题级）：
+
+    - 命题级：`salvaged` 可以不给（放弃之后再注册新命题是合法路径）；
+    - plan 级：仍要求非空 —— 那一档的调用方（`abandon_plan`）自己判 `not salvaged_rows`，
+      不把"命题级的可选"读成"plan 级也可选"。
     """
     return _salvaged_items(raw)
 
@@ -515,63 +560,41 @@ def _space_reading_of(raw: Any) -> tuple[dict[str, Any], str, str]:
     return {"space": dict(value), "space_where": where}, "", ""
 
 
-def _parse_stamp(value: Any) -> datetime | None:
-    """ISO8601 时间戳（读不出来 ⇒ `None`，不猜）。"""
-    try:
-        return datetime.fromisoformat(str(value or "").strip())
-    except (TypeError, ValueError):
-        return None
+def _salvaged_reviewability_problems(row: Mapping[str, Any]) -> list[str]:
+    """`salvaged` 那一条立不立得住（空壳的三种形态；空列表 = 立得住）。
 
+    ## 为什么撤掉时间戳、换成这一问（2026-11-15 业主语义）
 
-def _not_later_than(created_at: Any, anchor: Any, *, than: str) -> tuple[bool, str]:
-    """`created_at` 是否不晚于 `anchor`（读不出来 / 不可比 ⇒ 不成立，不猜）。
+    改前这里有两道时间戳：`created_at <= 放弃时刻`（对真实在册的行恒真 ⇒ 形同虚设）
+    与 `created_at <= 被放弃那一条的 created_at`（要求引理比被放弃的命题更早注册）。
+    后者恰好否掉业主语义的第 2 步 —— 业主原话是"以 difficulty 为理由放弃命题，后
+    按照正常流程注册新命题进行攻坚"。晚于被放弃的那一条不是罪证，是这个语义里的
+    正常顺序。所以判据不看时间，只看这一条自身立不立得住：
 
-    返回 `(ok, why)`。两个时间戳都读不出来、或一个带时区一个不带而补不齐 ⇒ 不成立
-    （"确认不了它是不是在那之前"不许折成"是"）。
+    - 正文空：`statement_full`（缺省退回 `statement_text`）是空的 —— 没有可读的
+      命题，谈不上"可取之处"；
+    - 无证明：`proof_text` 是空的 —— 一条没有证明的"引理"不可复核（`kind=lemma`
+      是自报的，schema 不校验种类）；
+    - 无人认领：`created_by` 是空的 —— 说不出是谁登记的，也就没有人能对它负责。
+
+    "不在册"不在这一问里：它由调用方按 `statements` 的索引单独判（同一个拒绝口径，
+    码 `abandon_salvaged_not_registered`）。
+
+    ## 反真空
+
+    把这一问打桩成"永远空列表" ⇒ 空壳引理那几条负控当场变绿（它们证明的是"这一问
+    在承重"，不是"时间戳在承重"）。秘书语义判定打成恒真也挡不住它们 —— 空壳在
+    判定之前就被拒（见 `tests/test_salvaged_can_come_after_the_abandonment.py`）。
     """
-    made, ref = _parse_stamp(created_at), _parse_stamp(anchor)
-    if made is None:
-        return False, f"created_at 读不出来（{created_at!r}）"
-    if ref is None:
-        return False, f"{than}读不出来（{anchor!r}）"
-    if (made.tzinfo is None) != (ref.tzinfo is None):
-        tz = ref.tzinfo or made.tzinfo
-        if made.tzinfo is None:
-            made = made.replace(tzinfo=tz)
-        if ref.tzinfo is None:
-            ref = ref.replace(tzinfo=tz)
-    try:
-        if made <= ref:
-            return True, ""
-        return False, f"created_at={str(created_at)!r} 晚于{than} {str(anchor)!r}"
-    except TypeError as exc:  # noqa: BLE001 —— 两个时间戳不可比 ⇒ 没查成
-        return False, f"两个时间戳不可比（{type(exc).__name__}: {exc}）"
-
-
-def _registered_before(created_at: Any, at: Any) -> tuple[bool, str]:
-    """`created_at` 是否不晚于放弃时刻 `at`（README 口径：按 created_at 判，给读数不靠猜）。"""
-    return _not_later_than(created_at, at, than="放弃时刻")
-
-
-def _salvaged_precedes_statement(created_at: Any,
-                                 target_created_at: Any) -> tuple[bool, str]:
-    """`salvaged` 那一条是否不晚于「被放弃的那一条」的 `created_at`。
-
-    ## 判据为什么锚在"被放弃的那一条"身上（2026-11-14 的更正）
-
-    改前这里拿 `at`（这一笔放弃的时刻）当基准。那是这一笔自己盖的时间戳：盘上任何
-    一行都早于它，于是这条判据对真实在册的行恒真 —— 只有"未来时间戳"才会被它
-    拦住，而那恰恰不是威胁（现造的东西不会带着未来的 `created_at`）。这就是"形同
-    虚设"的来由：它读的是"这一行是不是在这一笔放弃之前进的盘"，回答永远是"是"。
-
-    真正要问的是"这一条是不是「旧稿」里的残骸"（`apply_abandonment` 的 docstring：
-    「原先证明中可取之处」必须是旧稿时期的东西，不许现造）。旧稿就是这一笔正在处理
-    的那一条 —— 所以基准取它的 `created_at`：晚于它的，是这一条命题之后才出现的东西，
-    不可能是"原先证明"里的残骸。等号放行（同一秒登记的两行分不出先后，那时靠正文
-    比对与秘书的语义判定）。
-    """
-    return _not_later_than(created_at, target_created_at,
-                           than="被放弃的那一条的 created_at")
+    problems: list[str] = []
+    body = str(row.get("statement_full") or row.get("statement_text") or "").strip()
+    if not body:
+        problems.append("正文是空的")
+    if not str(row.get("proof_text") or "").strip():
+        problems.append("没有证明（`proof_text` 空）")
+    if not str(row.get("created_by") or "").strip():
+        problems.append("没有登记的经手人（`created_by` 空 ⇒ 无人认领）")
+    return problems
 
 
 def _salvaged_kind_from_patch(row: Mapping[str, Any]) -> str:
@@ -648,7 +671,7 @@ def _salvaged_copies_statement(row: Mapping[str, Any],
 def _difficulty_refusal(out: dict[str, Any], *,
                         rows: Mapping[str, dict[str, Any]],
                         target: Mapping[str, Any], target_id: str, basis: str,
-                        difficulty: Any, salvaged: Any, at: Any,
+                        difficulty: Any, salvaged: Any,
                         difficulty_judge: Any, judgment_required: bool,
                         ) -> dict[str, Any]:
     """difficulty 档的判据（从 :func:`check_abandon_reason` 原样搬出）。
@@ -661,13 +684,25 @@ def _difficulty_refusal(out: dict[str, Any], *,
     `(out_patch, done)` 的等价形状在这里是"就地改传进来的 `out` 并返回它"：这一档的
     每条路径都收场（原实现里每条路径也都是 `return out`），所以不需要再往主函数回。
 
-    ## 2026-11-14 补的三道（这一档只收"本地证明的残骸"）
+    ## 2026-11-15：撤掉时间戳两道、`salvaged` 改为可空（业主语义）
 
-    今天实测能过的三个绕法各补一道，顺序按"名字 → 正文 → 时间"：`kind` 是就地
-    patch 抬成 `lemma` 的（:func:`_salvaged_kind_from_patch`）、正文与被放弃那条
-    逐字相同的（:func:`_salvaged_copies_statement`）、`created_at` 晚于被放弃那一条的
-    （:func:`_salvaged_precedes_statement`）。三道都拒在同一个循环里、写盘之前，
-    所以受控拒时一个字节都不写。
+    放弃时不指向任何引理是合法路径（放弃动作 + 事后按正常流程注册新命题），所以
+    `salvaged` 空 ⇒ 不拒、不要求秘书判 `salvaged_from_proof`；只判"这是不是真困难"。
+    给了 `salvaged` 才逐条判，判据不看时间（时间戳不是判据：晚于被放弃那一条恰恰是
+    业主语义里的正常顺序）：
+
+    1. 在册（`abandon_salvaged_not_registered`）；
+    2. 不是被放弃的这条自己（`abandon_salvaged_self_reference`）；
+    3. `status=active`（`abandon_salvaged_not_active`）；
+    4. `kind` 是引理类（`abandon_salvaged_kind_not_lemma`）；
+    5. 名字有证据托着 —— 就地 patch 抬成 `lemma` 而五元位够不到的（
+       :func:`_salvaged_kind_from_patch`）；
+    6. 是一条在册、可复核的引理 —— 正文空 / 无证明 / 无人认领的空壳不算
+       （:func:`_salvaged_reviewability_problems`）；
+    7. 不是原命题本身 —— 正文与被放弃那条逐字相同的不算（
+       :func:`_salvaged_copies_statement`）。
+
+    以上都拒在写盘之前，所以受控拒时一个字节都不写。
     """
     diff = str(difficulty or "").strip()
     if not diff:
@@ -689,8 +724,9 @@ def _difficulty_refusal(out: dict[str, Any], *,
         if row is None:
             out.setdefault("problems", []).append(f"{sid}：不在册")
             out.update(refused="abandon_salvaged_not_registered",
-                       why=(f"salvaged 里的 {sid} 不在 statements 里 ⇒ 引理必须是真的"
-                            "登记过的那一条（受控拒绝，一个字节都不写）"))
+                       why=(f"salvaged 里的 {sid} 不成其为一条在册、可复核的引理：它不在 "
+                            "`statements` 里 ⇒ 引理必须是真的登记过的那一条"
+                            "（受控拒绝，一个字节都不写）"))
             return out
         if sid == target_id:
             out.setdefault("problems", []).append(f"{sid}：指向被放弃的这条自己")
@@ -719,27 +755,23 @@ def _difficulty_refusal(out: dict[str, Any], *,
                             "这个名字没有证据托着，只是一格字面量；要它算引理就重交 "
                             "`own.register_statement` 让 kind 跟着证据走（一个字节都不写）"))
             return out
+        # ---- 空壳：不在册、可复核的引理不算（2026-11-15；判据不看时间戳）-----------
+        shell = _salvaged_reviewability_problems(row)
+        if shell:
+            out.setdefault("problems", []).extend(f"{sid}：{one_why}" for one_why in shell)
+            out.update(refused=ABANDON_SALVAGED_NOT_REVIEWABLE,
+                       why=(f"salvaged 里的 {sid} 不成其为一条在册、可复核的引理："
+                            f"{'；'.join(shell)} ⇒ 拿一条空壳当「旧证明里拆出来的可取之处」"
+                            "不是拆出引理（受控拒绝，一个字节都不写）。注意判据不是时间戳："
+                            "晚于被放弃的那一条不是罪证 —— 放弃之后按正常流程注册的新命题"
+                            "本来就可以记成可取之处"))
+            return out
         # ---- 正文：抄被放弃那条自己的正文不算残骸（2026-11-14）
         if _salvaged_copies_statement(row, target):
             out.update(refused=ABANDON_SALVAGED_COPIES_THE_STATEMENT,
                        why=(f"salvaged 里的 {sid} 的正文与被放弃的 {target_id} 逐字相同 ⇒ "
                             "拆出来的是同一条命题本身，不是旧证明里的另一句话；"
                             "要留就写清它比原命题多了/少了什么（一个字节都不写）"))
-            return out
-        before, age_why = _registered_before(row.get("created_at"), at)
-        if not before:
-            out.update(refused="abandon_salvaged_after_the_abandonment",
-                       why=(f"salvaged 里的 {sid} 不是在这笔放弃之前就在册的引理（{age_why}）"
-                            " ⇒ 「原先证明中可取之处」必须是旧稿时期的东西，不许现造"))
-            return out
-        # ---- 时间的方向：必须早于这一笔正在处理的那一条（2026-11-14 更正）
-        before, age_why = _salvaged_precedes_statement(
-            row.get("created_at"), target.get("created_at"))
-        if not before:
-            out.update(refused=ABANDON_SALVAGED_AFTER_THE_STATEMENT,
-                       why=(f"salvaged 里的 {sid} 不是旧稿里的东西（{age_why}）⇒ "
-                            "它比被放弃的那一条还新，只能是这条命题之后现造的；"
-                            "旧稿的残骸不可能晚于旧稿本身（一个字节都不写）"))
             return out
         kept.append({"label": one["label"] or str(row.get("label") or ""), "stmt_id": sid})
         readings.append({"stmt_id": sid, "kind": kind_now,
@@ -751,8 +783,9 @@ def _difficulty_refusal(out: dict[str, Any], *,
     if difficulty_judge is None:
         if judgment_required:
             out.update(refused=ABANDON_DIFFICULTY_NOT_JUDGED,
-                       why=("difficulty 这一档要一次秘书语义判定（这是不是真困难、难在哪，"
-                            "以及 salvaged 是不是从旧证明里拆出来的），而这一笔没有判定面 ⇒ "
+                       why=("difficulty 这一档要一次秘书语义判定（这是不是真困难、难在哪"
+                            + ("，以及 salvaged 是不是从旧证明里拆出来的" if readings else "")
+                            + "），而这一笔没有判定面 ⇒ "
                             "没判成按受控拒处理（不许折成「有理由」）"))
             return out
     else:
@@ -777,15 +810,22 @@ def _difficulty_refusal(out: dict[str, Any], *,
                             f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
                             " ⇒ 受控拒"))
             return out
-        if not verdict.get("salvaged_from_proof"):
+        # ---- `salvaged` 那一问只在真的指向了引理时才判（2026-11-15 业主语义：
+        # 放弃时可以不指向任何引理 ⇒ 没有"从原证明拆出"可判；不拿空数组逼一次假拒）
+        if readings and not verdict.get("salvaged_from_proof"):
             out.update(refused=ABANDON_SALVAGED_NOT_FROM_PROOF,
                        why=("秘书判定：salvaged 里那几条不是从这条命题的原证明里拆出来的"
                             f"（{verdict.get('reason') or '；'.join(verdict.get('problems') or [])}）"
                             " ⇒ 受控拒"))
             return out
-    out.update(salvaged=kept, checked=True,
-               why=(f"difficulty：指出困难 + 把旧证明可取之处拆成 {len(kept)} 条引理"
-                    f"（{'、'.join(one['stmt_id'] for one in kept)}）"))
+    if kept:
+        out.update(salvaged=kept, checked=True,
+                   why=(f"difficulty：指出困难 + 把旧证明可取之处拆成 {len(kept)} 条引理"
+                        f"（{'、'.join(one['stmt_id'] for one in kept)}）"))
+    else:
+        out.update(salvaged=[], checked=True,
+                   why=("difficulty：指出困难；这一笔不指向任何引理（合法路径：放弃之后"
+                        "按正常流程注册新命题，再在后续动作里把它记成这次放弃的可取之处）"))
     return out
 
 
@@ -806,26 +846,31 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
     | `abandon_kind` | 必须给 | 判据 |
     |---|---|---|
     | `math_error` | `defect_ref` + `abandon_basis` | `defect_ref` 里的命题号必须等于 `statement_id`；那一行必须真的存在、「有毛病」或轴为 `fault`；`proof_sha256` 必须与现行正文一致（陈旧 ⇒ 拒）；`abandon_basis` 必须点名 `defect_step` |
-    | `difficulty` | `difficulty` + `salvaged` + `abandon_basis` | `salvaged` 非空；每条在册、`status=active`、引理类（且那一格不是就地 patch 抬上去的）；不许指被放弃的这条自己；正文不许与被放弃的那条逐字相同；必须在这笔放弃之前就在册、且不晚于被放弃的那一条（按 `created_at`）；最后再过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪，以及那几条引理是不是从旧证明里拆出来的）。口径是「只收本地证明的残骸」：文献转述与被放弃命题自己的正文都不收 |
+    | `difficulty` | `difficulty` + `abandon_basis` | `salvaged` 可以不指（2026-11-15 业主语义：放弃之后按正常流程注册新命题，再在后续动作里记成可取之处，是主路径）；指了才逐条判：每条在册、`status=active`、引理类（那一格不是就地 patch 抬上去的）、是一条有正文有证明有经手人的可复核引理、不许指被放弃的这条自己、正文不许与被放弃的那条逐字相同。判据不看 `created_at`（时间戳不是判据 —— 晚于被放弃的那一条恰恰是业主语义里的顺序）。最后过一次秘书语义判定（:func:`difficulty_judge`：这是不是真困难、难在哪；指向了引理时另判那几条是不是从原证明里拆出来的）。文献转述不收 |
     | `counterexample` | `experiment_id` + `abandon_basis` | `experiment_id` 在 `experiments` 里真有一行；那一行 `result="refutes"` 或带非空 `counterexample` 读数；且它检验的是这一条命题（`claim_key` / `claim` 认，见 :func:`_experiment_claims`）。「发现反例」的证据是那一次实验，不是一句"我找到了反例" |
     | `space_too_large` | `space` + `abandon_basis` | `space` 必须是结构化读数（走 `numericproof._space_reading` 的既有字段），且读得出规模（`[lo, hi]` 区间或枚举例数）；读不到 / 只有文字 ⇒ 受控拒（fail-closed） |
 
     后两档是 E 侧数值证明路线的两条放弃理由，判定口与
     前两档是同一个函数：这里不写第二份"像不像反例 / 空间大不大"的判据。
 
-    ## `statement_id` / `at` 为什么是必填的
+    ## `statement_id` 与 `at`
     `defect_ref` 若没有 target，可以引用另一条命题的「有毛病」行，
     也可以引用一条对旧正文的判词。两件事都要"被放弃的那一条"才判得了，所以
-    target 与放弃时刻都进判据。`statement` 给了就直接用它（写口手里有盘上那一行），
+    target 进判据。`statement` 给了就直接用它（写口手里有盘上那一行），
     不给就按 `statement_id` 从 `statements` 读。
+
+    `at`（放弃时刻）从 2026-11-15 起不参与任何判据：它是标记里的时间那一格，
+    不是"引理必须早于谁"的锚点。保留形参只为写口与调用方逐字兼容（
+    `apply_abandonment` / `Secretary.amend_statement_meta` 都还在传它）。
 
     ## 语义判定
     只查非空时，`difficulty="做不动了"` 也能过。`difficulty_judge` 是一次
     秘书语义判定（`Secretary.judge_abandon_difficulty`，两态 fail-closed，不用字数/
-    关键词阈值）；它同时判「那几条 salvaged 是不是从这条命题的旧证明里拆出来的」。
+    关键词阈值）；指向了 `salvaged` 时它还判「那几条是不是从这条命题的旧证明里拆出来的」。
     - `judgment_required=True` 而没给判定面 ⇒ `abandon_difficulty_not_judged`（fail-closed）；
     - 判了但 `genuine=False` ⇒ `abandon_difficulty_not_genuine`；
-    - 判了但 `salvaged_from_proof=False` ⇒ `abandon_salvaged_not_from_proof`。
+    - 判了、且这一笔真的指向了引理，但 `salvaged_from_proof=False` ⇒
+      `abandon_salvaged_not_from_proof`（不指向引理时不判这一问 —— 没有可判的对象）。
     低层直调（`apply_abandonment` 没有秘书面）不传 `judgment_required`，结构判据照旧 ——
     生产的新放弃只经 `Secretary.amend_statement_meta` 那一口，那里一定传。
     E 侧那两档不看 `difficulty_judge`：它们的证据是"盘上那一行实验 / 那一份空间读数"，
@@ -936,9 +981,12 @@ def check_abandon_reason(store: Any, *, kind: Any, basis: Any, defect_ref: Any =
         return out
     # ---- difficulty 档（整段搬进 `_difficulty_refusal`：判据、拒绝码、判定顺序、
     # 字段名一个字都没改；搬出来只为让本函数回到 200 行以内，见那个函数的 docstring）
+    #
+    # 2026-11-15：`at` 不再往下传 —— 时间戳不是 salvaged 的判据（业主语义：放弃之后
+    # 再按正常流程注册新命题才是主路径）。形参留着只为调用方逐字兼容。
     return _difficulty_refusal(
         out, rows=rows, target=target, target_id=target_id, basis=got_basis,
-        difficulty=difficulty, salvaged=salvaged, at=at,
+        difficulty=difficulty, salvaged=salvaged,
         difficulty_judge=difficulty_judge, judgment_required=judgment_required)
 
 
@@ -1037,8 +1085,11 @@ def parse_abandon_reason(text: Any) -> dict[str, Any]:
     if kind == ABANDON_KIND_MATH_ERROR and not out["defect_ref"]:
         out["why"] = "math_error 这一档缺 defect_ref ⇒ 换号理由不齐"
         return out
-    if kind == ABANDON_KIND_DIFFICULTY and not (out["difficulty"] and out["salvaged"]):
-        out["why"] = "difficulty 这一档缺 difficulty 或 salvaged ⇒ 换号理由不齐"
+    if kind == ABANDON_KIND_DIFFICULTY and not out["difficulty"]:
+        # `salvaged` 不是必填（2026-11-15 业主语义：放弃时可以暂不指向任何引理）；
+        # 这一档必填的是"难在哪"。
+        out["why"] = ("difficulty 这一档缺 difficulty（难在哪）⇒ 换号理由不齐"
+                      "（`salvaged` 可以不指：放弃之后按正常流程注册新命题是合法路径）")
         return out
     if kind == ABANDON_KIND_COUNTEREXAMPLE and not out["experiment_id"]:
         out["why"] = "counterexample 这一档缺 experiment_id ⇒ 换号理由不齐"
@@ -1075,10 +1126,12 @@ def relabel_events(rows: Iterable[Mapping[str, Any]]) -> dict[str, list[dict[str
             "abandon_kind": str(parsed.get("abandon_kind") or ""),
             "structured": bool(parsed.get("structured")),
             "complete": bool(parsed.get("complete")),
+            # difficulty 那一档的证据是"难在哪"这一句（2026-11-15 起 `salvaged`
+            # 可空：放弃之后按正常流程注册新命题是合法路径，不拿"没指认引理"读成没证据）。
             "has_evidence": bool(parsed.get("defect_ref")
                                  or parsed.get("experiment_id")
                                  or parsed.get("space")
-                                 or (parsed.get("difficulty") and parsed.get("salvaged"))),
+                                 or parsed.get("difficulty")),
             "basis": _basis_digest(parsed),
         })
     return out
@@ -1223,10 +1276,19 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
 
     ## 放弃"可判真假的断言类"命题时必须给结构化理由
     换号需给清理由：① 命题有实质数学错误；② 证明过程中遇到难以逾越的困难。
-    对于 ①，需在换号理由中指出错误；对于 ②，需指出困难，并将原先证明中可取之处
-    拆出落成引理。E 侧数值证明路线另有两条：① 发现反例；② 枚举空间过于宏大以致
-    难以在合理成本内实现 ⇒ 同一道闸多两档（`counterexample` / `space_too_large`，
-    判据仍是 :func:`check_abandon_reason` 一处）。
+    对于 ①，需在换号理由中指出错误；对于 ②，需指出困难。E 侧数值证明路线另有两条：
+    ① 发现反例；② 枚举空间过于宏大以致难以在合理成本内实现 ⇒ 同一道闸多两档
+    （`counterexample` / `space_too_large`，判据仍是 :func:`check_abandon_reason` 一处）。
+
+    ## difficulty 那一档：`salvaged` 可以整格不给（2026-11-15 业主语义）
+    业主逐字：「以 difficulty 为理由放弃命题，后按照正常流程注册新命题进行攻坚，
+    这些新命题可以是对原命题在加强条件下的证明，或是取出中间部分逻辑链整理成命题，
+    或是陈述负面事实等等。总之不是机械的」。
+    ⇒ 放弃这一笔可以不指向任何引理；之后按正常流程注册新命题、再在后续动作里
+    把它记成这次放弃的可取之处（对已 abandoned 的行补一份带 `salvaged` 的结构化标记
+    —— 走下面那条"理由变了必须过闸"的路，时刻仍保留原 `at`）。
+    不要为了交差现造引理：现造的空壳由 :func:`_salvaged_reviewability_problems`
+    （在册、可复核）与秘书那一问挡住，而不是靠"比被放弃的那一条早"挡住。
 
     - 明确非命题的两档（`concept` / `definition`，真身
       `secretary.NOT_APPLICABLE_KINDS`）⇒ 不受这道闸管（概念没有"条件 ⇒ 结论"，
@@ -1240,7 +1302,7 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
     `already=True`，不写任何格），否则"先补理由、再关板项"这条路会被闸反锁死。
     但"已 abandoned"不是一张跳过判据的通行证：这一笔要把
     `quote_reason` 改成另一段文字 ⇒ 走与第一次放弃同一道闸；自由文本改写照旧
-    `abandon_reason_missing`。要补理由，给全那五格（或一份完整的结构化标记）。
+    `abandon_reason_missing`。要补理由，给全那几格（或一份完整的结构化标记）。
 
     返回 `{"checked","abandoned","already","stmt_id","at","reason","marker",
     "changes","refused","why","resubmits","row","form"}`。三态：

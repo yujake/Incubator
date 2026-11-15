@@ -356,7 +356,7 @@ def test_e_an_explicit_abandonment_expires_the_duty(tmp_path):
     _verify_v(st, SID)
     one = _register_items(st)[0]
     # 2026-11-07（业主裁定）：放弃一条命题必须给结构化换号理由。
-    # 这一档用 `difficulty`：把旧稿里可取之处拆成一条在册引理（`salvaged` 非空）。
+    # 这一档用 `difficulty`：把旧稿里可取之处拆成一条在册引理（`salvaged`）。
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", {
             "stmt_id": "000009", "origin": "own_result", "kind": "lemma",
@@ -365,7 +365,11 @@ def test_e_an_explicit_abandonment_expires_the_duty(tmp_path):
             # 换个号，不是"拆出引理"）—— 夹具给一条真的另一句话。
             "statement_full": "引理：若序列紧，则它的每个子列都有收敛子列。",
             "statement_text": "引理：若序列紧，则它的每个子列都有收敛子列。",
-            "proof_text": "", "evidence_kind": "heuristic",
+            # 2026-11-15 起：salvaged 那一条必须是「在册、可复核」的引理 —— 空壳
+            # （正文空 / 无证明 / 无人认领）被 `abandon_salvaged_not_reviewable` 拒，
+            # 所以夹具给一份真证明（这一格不参与本条用例的判据，只为让引理立得住）。
+            "proof_text": "证明：取任意子列，由序列紧性取收敛子列，再用对角线法。",
+            "evidence_kind": "heuristic",
             "status": "active", "quote_verified": None, "quote_reason": "夹具：自产命题",
             "created_at": TS, "created_by": "test", "bits": {}})
     got = SA.apply_abandonment(st, statement_id=SID, reason="这一份稿不进册：重新做",

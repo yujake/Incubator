@@ -27,7 +27,7 @@
 |---|---|---|
 | a | 自由文本换号 ⇒ 受控拒（缺 kind/basis），一个字节都不写 | `test_a_*` |
 | b | math_error：真的判「有毛病」+ 点名步号 ⇒ 过；引用不存在 / 判成立的行 ⇒ 拒 | `test_b_*` |
-| c | difficulty：`salvaged` 空 ⇒ 拒；active 引理 ⇒ 过；abandoned 引理 ⇒ 拒 | `test_c_*` |
+| c | difficulty：不指任何引理 ⇒ 过（2026-11-15 业主语义）；active 引理 ⇒ 过；abandoned 引理 ⇒ 拒 | `test_c_*` |
 | d | 同一 label 换号两次 ⇒ `relabeled` 里能看到 2 次 | `test_d_*` |
 | e | 反真空：摘掉 salvaged / defect_ref 校验 ⇒ 对应那条红 | `test_e_*` |
 | f | 概念行不是命题 ⇒ 放弃它不被这道闸拦 | `test_f_*` |
@@ -63,11 +63,12 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 def _put(st: Store, sid: str = SID, *, kind: str = "theorem",
          label: str = "", status: str = "active",
-         quote_reason: str = "夹具：自产命题", full: str = FULL) -> dict:
+         quote_reason: str = "夹具：自产命题", full: str = FULL,
+         proof: str = PROOF) -> dict:
     row = {
         "stmt_id": sid, "origin": "own_result", "kind": kind,
         "label": label or f"探针命题 {sid}", "statement_full": full,
-        "statement_text": full, "proof_text": PROOF,
+        "statement_text": full, "proof_text": proof,
         "evidence_kind": "heuristic", "status": status,
         "quote_verified": None, "quote_reason": quote_reason,
         "created_at": TS, "created_by": "test", "bits": {},
@@ -295,16 +296,25 @@ DIFF = dict(abandon_kind="difficulty",
             difficulty="缺一条 K 在 Re u>=1 的速降假设；试过三条路都绕不过去")
 
 
-def test_c_empty_salvaged_is_refused(tmp_path):
-    """c 负控①：`salvaged` 为空 ⇒ 受控拒（业主原话：将可取之处拆出落成引理）。"""
+def test_c_an_abandonment_without_any_lemma_is_allowed(tmp_path):
+    """c 正控（2026-11-15 业主语义）：difficulty 放弃可以不指向任何引理。
+
+    业主逐字：「以 difficulty 为理由放弃命题，后按照正常流程注册新命题进行攻坚」。
+    所以这一笔 `salvaged` 空着是主路径（放弃 → 之后注册新命题 → 再补记为可取之处），
+    不是缺格：`abandon_salvaged_missing` 不再为"没给"而产生。
+    """
     st = _ws(tmp_path)
     _put(st)
     _put(st, LEMMA, kind="lemma", label="引理 A")
     res = _abandon(st, patch={"status": "abandoned"}, salvaged=[], **DIFF)
-    assert res.ok is False, res
-    got = dict(res.meta or {})
-    assert got.get("kind") == "abandon_salvaged_missing", got
-    assert _row(st)["status"] == "active", _row(st)
+    assert res.ok is True, (res.error, res.data)
+    row = _row(st)
+    assert row["status"] == "abandoned", row
+    structured = SA.parse_abandon_reason(row["quote_reason"])
+    assert structured["complete"] is True, structured
+    assert structured["abandon_kind"] == "difficulty", structured
+    assert structured["difficulty"], structured
+    assert structured["salvaged"] == [], structured
 
 
 def test_c_an_active_lemma_passes(tmp_path):
@@ -422,13 +432,17 @@ def test_d_legacy_rows_report_no_evidence_without_blocking(tmp_path):
 # ---------------------------------------------------------------- e 反真空
 
 def test_e_removing_the_salvaged_check_makes_c_red(tmp_path, monkeypatch):
-    """e-①：把 `salvaged` 校验摘掉 ⇒ c（空 salvaged ⇒ 拒）当场变红。
+    """e-①：把 `salvaged` 那几问摘掉 ⇒ c（空壳引理 ⇒ 拒）当场变红。
 
-    摘掉的方式是"让判据对空数组放行"（不是改测试）：判据一旦不拦，`abandon_salvaged_missing`
+    2026-11-15：c 从"空 salvaged ⇒ 拒"改成"空壳引理 ⇒ 拒"（业主语义：放弃时
+    可以不指引理，但"现造一条"仍要挡）。摘掉的方式是"让判据对 `abandon_salvaged*`
+    的拒绝全放行"（不是改测试）：判据一旦不拦，`abandon_salvaged_not_reviewable`
     这条码就再也产生不出来 —— 那正是反真空要证的那件事。
     """
     st = _ws(tmp_path)
     _put(st)
+    # 空壳：`kind=lemma`、正文在，但没有证明（`proof_text` 空）⇒ 不成其为可复核的引理。
+    _put(st, LEMMA, kind="lemma", label="引理 A", proof="")
     real = SA.check_abandon_reason
 
     def lenient(store, **kw):
@@ -440,23 +454,23 @@ def test_e_removing_the_salvaged_check_makes_c_red(tmp_path, monkeypatch):
                     "abandon_kind": str(kw.get("kind") or "difficulty"),
                     "abandon_basis": str(kw.get("basis") or "x"),
                     "defect_ref": "", "difficulty": str(kw.get("difficulty") or "d"),
-                    "salvaged": [], "detail": {}}
+                    "salvaged": [{"label": "引理 A", "stmt_id": LEMMA}], "detail": {}}
         return got
 
     monkeypatch.setattr(SA, "check_abandon_reason", lenient)
     got = SA.apply_abandonment(st, statement_id=SID, reason="理由", at=TS,
-                               salvaged=[], **DIFF)
+                               salvaged=[{"label": "引理 A", "stmt_id": LEMMA}], **DIFF)
     assert got["checked"] is True, (
         "反真空失效：摘掉 salvaged 校验之后仍然拒 ⇒ 这条用例证明不了校验在起作用")
     monkeypatch.undo()
     again = SA.apply_abandonment(st, statement_id=SID, reason="理由", at=TS,
-                                 salvaged=[], **DIFF)
+                                 salvaged=[{"label": "引理 A", "stmt_id": LEMMA}], **DIFF)
     assert again["checked"] is True and again["already"] is True, (
         "同一份标记原样重放 ⇒ 幂等（不是「改理由」）")
     _put(st, "000004", label="再来一条")
     fresh = SA.apply_abandonment(st, statement_id="000004", reason="理由", at=TS,
-                                 salvaged=[], **DIFF)
-    assert fresh["refused"] == "abandon_salvaged_missing", fresh
+                                 salvaged=[{"label": "引理 A", "stmt_id": LEMMA}], **DIFF)
+    assert fresh["refused"] == SA.ABANDON_SALVAGED_NOT_REVIEWABLE, fresh
 
 
 def test_e_removing_the_defect_ref_check_makes_b_red(tmp_path, monkeypatch):
