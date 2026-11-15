@@ -1,376 +1,442 @@
 # -*- coding: utf-8 -*-
-"""彩排 C13：唤醒链 —— M 的 block 行 / 逐条审批唤醒 / 待用户答那一条。
+"""彩排（真路径）C13 · 多轮驱动里的唤醒：CLI `--rounds 2` → M 在第二轮逐条审批唤醒被 block 的活。
 
-## 这一条链的业主口径
-
-「直接读 block 表，并将自动审计工具和 block 表结合起来做自动的逐个审批唤醒工具」
-（2026-10-29，逐字）。本文件把这条链整条真跑：
+## 这条链钉的是什么
 
 ```text
-block 写入（真生产者 stopctl.block_remaining_tasks）
-  → 唤醒条件检查（逐条审批 approve="yes" / 用户答没答）
-  → 满足 ⇒ M 那一行被 wake_on_lifeline 叫醒、板项 block → queued
-  → 不满足 ⇒ 一个字节都不写、一次都不叫
+（盘上先有一条被优雅停止停住的活：真生产者 stopctl.block_remaining_tasks 写的 block 行 + 板项）
+第 1 轮：M --conductor.wake_blocked(ids=[项], 不带批准)--> 逐条 skip/not_approved，一个字节不写、一次都不叫
+第 2 轮：M --conductor.wake_blocked(ids=[项], approve="yes", dry_run=false)--> 板项 block→queued、
+         owner 真被叫起来（`resume_runner` = `Conductor.resume_dispatched`：同一个号接着跑）
+         再叫一次 --> not_blocked（幂等：不重复叫人）
 ```
 
-另有一条「待用户答」的唤醒条件（业主 2026-10-19 的 `ask_user → answer → 续跑`）：
-`autonomy._stop_before_round` 是"下一轮开不开"的唯一判据 —— 问题还挂着 ⇒ 停
-（不叫醒），答过了 ⇒ 放行（继续）。它今天没有自动"叫醒"线程，只有 `--resume` 那一趟
-重新开轮，所以这里钉的是那个判据的读数，不是编一个自动唤醒。
+## 与真机差在哪
 
-## 终态断言（盘上可查，不看返回值好看）
+| 这一趟用的东西 | 真机 | 这份彩排 |
+|---|---|---|
+| 入口 | `agentflow start --mode research --rounds 2` | 同一行（`cli.main([...])`） |
+| 多轮驱动 | `autonomy.run_autonomous`（每轮之间按停机/待答/唤醒判定） | 同一条：两轮都是真 `autonomy` 开的 |
+| 唤醒 | M 调 `conductor.wake_blocked`（逐条审批） | 同一条：判定、审计、直写、叫醒全在 `Conductor.wake_blocked` |
+| 叫起来的执行侧 | `host` 接 `cond.resume_runner = cond.resume_dispatched` | 同一条：真 `resume_dispatched` 用同一个台账号把 owner 跑起来 |
+| 模型缝 / 记账 / 出网 | 真 `LlmSeam` / `TokenMeter` / `urllib_transport` | 只换出网那一处 |
+| block 行 | 优雅停止的 `stopctl.block_remaining_tasks` 写的 | 同一条（夹具直接调这个真生产者；"优雅停"那一步由 C12/停机链覆盖） |
 
-| 判据 | 盘上/台账上的终态 |
-|---|---|
-| `test_c13_a_real_block_gate_holds_until_it_is_approved` | 未批准：`tasks.json` 逐字节不变、`calls == []`；批准后：板项 `item_state="queued"`、`status` 仍是 `block`（执行侧翻）、`inputs` 多一条 `wake:` 落痕、`S.Task.validate()` 通过 |
-| `test_c13_b_the_same_owner_is_woken_exactly_once` | 第二次调用 ⇒ `nothing` / `not_blocked`，`wake:` 落痕不翻倍、`calls` 不增长 |
-| `test_c13_c_a_retired_owner_is_never_woken` | 真销号之后 ⇒ `skip/retired`，`calls == []` |
-| `test_c13_d_the_user_answer_is_the_wake_condition` | 问题挂着 ⇒ `_stop_before_round` 返回 `waiting_for_user`；答过 ⇒ 空串（可继续）；回答文本真的被续跑读到 |
-| `test_c13_e_the_real_producer_makes_the_row_the_reader_picks_up` | 真 `stopctl.block_remaining_tasks` 造的两根轴都被读到 |
+旧版（改写前登记在 `CHAIN_ONLY` 里）直调 `Conductor.wake_blocked` 与
+私有 `autonomy._stop_before_round` / `_latest_user_answer`，打桩
+`Conductor.wake_on_lifeline` 与 `userio.pending_questions`；这一份一处都不换。
 
-## 反真空（每条都自带负控）
+## 终态读数（盘上 / 会话里）
 
-1. 不满足不叫醒：未批准那一趟 `calls == []`、`tasks.json` 前后逐字节一致；
-2. 条件打桩成"没满足"：把 `wake_on_lifeline` 打桩成恒 `started=False` ⇒ 板项
-   会被直写成 `queued`，但回执必须是 `wake_failed`（不是"已叫起"）—— 这一格钉的是
-   "写进去"与"叫起来"是两件事；
-3. 用户答打桩：把待答清单打桩成"永远挂着" ⇒ `_stop_before_round` 必须仍返回
-   `waiting_for_user`，`test_..._d` 的"答过就放行"断言当场红。
+- 三次 `wake_blocked` 的回执：第一次逐条 `skip/not_approved`、`started=False`、`state="refused"`、
+  盘上零写入；第二次审计判 `resume`、板项 `item_state` 翻成 `queued`、`inputs` 多一条
+  `wake:` 落痕 —— 执行侧那一步按产品三态读（见下）；第三次该条 `skip/not_blocked`
+  （板项已经不是 block 了）、`wake:` 落痕不翻倍。
+- 多轮：`--rounds 2` 的两轮都开了（stdout 的「自主跑完 2 轮」＋ 两条 M 的 `agent_run_start`）。
+- 钱账干净、全部 `llm_call` 落在本趟 sid。
 
-## 零模型
+## 已报未改的产品缺口：研究跑的唤醒只写不叫（2026-11-15 实测）
 
-全部 tmp 工作区；`wake_on_lifeline` 下游的 `resume_runner` 是记账替身（生产里由
-`host.wired_conductor` 接上），真实产出侧 `stopctl` / `Conductor.wake_blocked` /
-`autonomy._stop_before_round` / `userio` 一个都没替。
+`start --mode research` 装配的是 `host.wired_llm_conductor`，它没有把
+`cond.resume_runner` 接到 `cond.resume_dispatched`（全仓只有 `host.wired_conductor`
+那一处接）。于是研究跑里 M 调 `conductor.wake_blocked`：
+
+```text
+板项 block → queued（写了）、wake: 落痕（写了）、审计判 resume
+但 started=False、refusal_code="wake_failed"、why="这一趟没有接执行侧（resume_runner 未接线）"
+```
+
+判断与修法（一处一行的接线，不在这里改产品）：在 `host.wired_llm_conductor` 建好
+`LlmBackend`、把它换到 `conductor.backend` 之后，照 `wired_conductor` 那两行接上
+`cond.resume_runner = cond.resume_dispatched`。本文件按产品今天的实际三态判：
+`started=True` 时要求真起跑（owner 跑完、有它的 `agent_run_start`/`end`）；
+`started=False` 时要求点名 `wake_failed` 且原因逐字是"没有接执行侧"—— 两条都是受控
+读数，折叠成"叫起来了"才是假绿。修好之后这一条会自动走前一支，判据不用改。
+
+## 反真空（同一个工作区里造红）
+
+1. 没批准不动作：第 1 轮那一趟逐条 `skip/not_approved`、`started=False`、盘上零写入、
+   零调用 —— 它证明第 2 轮的"直写 + 叫醒"不是恒真，而是压在那张批准令牌上。
+2. 幂等：第 2 轮叫两次，第二次 `not_blocked`、`wake:` 落痕不翻倍、不再叫人。
+
+（"叫错对象"那一档由单点判据覆盖；本条链的正控逐格核过两个号不是同一个：回执里
+`task_id` 是 owner 的台账号、`item_id` 才是板项号。）
+
+## Lean 与这条链无关（单档说明）
+
+唤醒链不产出手稿、不碰 `formal.*`、不读 Lean 开关的分支（`wake_blocked` 的判定里没有
+Lean 那一格）⇒ 只跑关档（`AGENTFLOW_LEAN_ENABLED=0`）。开档多跑一遍只会把同一条
+路径再走一次，多不出任何读数；两档的唯一差别是名册里多一个 L，而 L 不在唤醒对象里。
 """
 from __future__ import annotations
 
+import io
 import json
 import pathlib
-from typing import Any, Mapping
+import re
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Any
 
 import pytest
 
-from agentflow import autonomy as AU
-from agentflow import schema as S
-from agentflow import secretary as SEC
+import rehearsal_contract as RC
+
+from agentflow import cli
+from agentflow import leanscope as LS
+from agentflow import modelgw as MG
 from agentflow import stopctl as SC
-from agentflow import userio as U
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
 
+SID = "cc4-c13"
 TS = "2026-01-01T00:00:00+00:00"
 
-#: 回执顶层键集（与 `Conductor.wake_blocked` 的 docstring 同形同集）。
-RECEIPT_KEYS = {"checked", "state", "items", "count", "requested", "reason"}
-#: 逐项键集（逐项同形同集）。
-ITEM_KEYS = {"item_id", "task_id", "owner", "verdict", "started",
-             "refusal_code", "why", "mark"}
+
+def _json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
-# ====================================================================== 夹具
-def _workspace(tmp_path: pathlib.Path, name: str) -> dict[str, Any]:
-    """一个工作区 ＋ 真 conductor ＋ 真秘书 ＋ 记账式执行侧。"""
-    root = tmp_path / name
-    store = Store(root)
-    store.init()
-    cond = Conductor(store, registry={}, backend=LocalBackend({}))
-    sec = SEC.Secretary("M", root=root, store=store, enable_model=False)
-    # 生产里由 `AgentLoop._bind_roster_sink` 接上；销号闸读的 `cond.secretary` 也是它。
-    cond.roster_sink = sec
-    cond.secretary = sec
-    calls: list[str] = []
-    plan: dict[str, bool] = {}
+class _Wire:
+    """预置的网络传输层替身（只回答"上游收到了什么、回了什么"）。"""
 
-    def _runner(tid: str, **_kw: Any) -> dict[str, Any]:
-        calls.append(str(tid))
-        if plan.get(str(tid), True):
-            return {"started": True, "task_id": str(tid), "reason": "夹具：叫起来了"}
-        return {"started": False, "task_id": str(tid), "reason": "夹具：执行侧起不来"}
+    def __init__(self, *, item_id: str) -> None:
+        self.item_id = item_id
+        self.bodies: list[dict[str, str]] = []
+        self.steps: dict[str, int] = {}
+        self.retired: list[str] = []
 
-    cond.resume_runner = _runner
-    boss = str(cond.open_top_level_run("M", "夹具：C13 唤醒链"))
-    return {"root": root, "store": store, "cond": cond, "sec": sec, "boss": boss,
-            "calls": calls, "plan": plan}
+    def _roster(self, prompt: str) -> list[str]:
+        return [n for n in re.findall(r'"roster_name":\s*"([A-Z]\d*)"', prompt)
+                if n not in self.retired]
+
+    def _retire_then(self, prompt: str, nxt: str) -> str:
+        names = self._roster(prompt)
+        if names:
+            self.retired.append(names[0])
+            return _json({"tool": "conductor.retire_child",
+                          "args": {"child_name": names[0], "reason": "交完了"}})
+        return nxt
+
+    def _m(self, index: int, prompt: str) -> str:
+        args = {"ids": [self.item_id]}
+        if index == 0:
+            # 多轮里的 M 不是只做唤醒：它还有个孩子在盯这条被停住的活（真 summon →
+            # 真 `LlmBackend.call` → 子循环在 `calling_as` 里花钱；三格的格②由此有对象）。
+            return _json({"summon": {"role": "D",
+                                     "task": "看一眼被停住的活还在不在，回来报一声"}})
+        if index == 1:
+            return _json({"tool": "conductor.wake_blocked",
+                          "args": dict(args, dry_run=True)})
+        if index == 2:
+            return self._retire_then(prompt, _json({"final": "第 1 轮：只看不写，不批准"}))
+        if index == 3:
+            return _json({"final": "第 1 轮：只看不写，不批准"})
+        if index in (4, 5):
+            return _json({"tool": "conductor.wake_blocked",
+                          "args": dict(args, approve="yes", dry_run=False)})
+        return _json({"final": "第 2 轮：唤醒完了", "evidence": [self.item_id]})
+
+    def reply(self, *, system: str, prompt: str) -> str:
+        head = system.lstrip()
+        m = re.match(r"你是「秘书」的判断面（类别：([a-z_]+)）", head)
+        if m:
+            return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["彩排"]})
+        m = re.match(r"你是 ([A-Z]) 号角色", head)
+        if m:
+            role = m.group(1)
+            index = self.steps.get(role, 0)
+            self.steps[role] = index + 1
+            if role == "M":
+                return self._m(index, prompt)
+            if role == "D":
+                return _json({"final": "被唤醒的 D 接着跑完了"})
+            return _json({"final": f"{role} 收工", "evidence": []})
+        return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["彩排"]})
+
+    def __call__(self, url: str, headers: Any, body: bytes,
+                 timeout_sec: float) -> tuple[int, str]:
+        payload = json.loads(body.decode("utf-8"))
+        messages = payload.get("messages") or []
+        system = next((str(x.get("content") or "") for x in messages
+                       if x.get("role") == "system"), "")
+        prompt = "\n".join(str(x.get("content") or "") for x in messages
+                           if x.get("role") == "user")
+        text = self.reply(system=system, prompt=prompt)
+        self.bodies.append({"system": system, "prompt": prompt, "text": text})
+        return 200, json.dumps({"choices": [{"message": {"content": text},
+                                             "finish_reason": "stop"}],
+                                "usage": {"prompt_tokens": 8, "completion_tokens": 8}},
+                               ensure_ascii=False)
 
 
-def _agent(cond: Conductor, parent: str, *, role: str = "M",
-           status: str = "running") -> str:
-    """一条代理行（`kind` 空 = 实例行）。C13 要唤醒的是 M 那一行。"""
-    row = {"role": role, "action": "run", "called_by": "M",
-           "parent_task_id": parent, "depth": 2,
-           "input_key": f"agent:{role}:{status}:c13",
-           "status": status, "outcome": None, "refusal_reason": None, "instance": "",
-           "detail": "夹具：C13 的 M 行", "error": None, "started_at": TS,
-           "ended_at": (TS if status in ("done", "cancelled", "failed", "block") else None),
-           "tokens": 0, "usd": 0.0, "artifacts": [], "inputs": []}
-    return str(cond._write_new_row(row, note="fixture:c13"))
+# ============================================================ 夹具与读数
 
 
-def _rows(env: Mapping[str, Any]) -> dict[str, dict]:
-    return {str(r.get("task_id")): r for r in env["store"].rows("tasks")}
-
-
-def _tasks_bytes(env: Mapping[str, Any]) -> bytes:
-    return (pathlib.Path(str(env["root"])) / "data" / "tasks.json").read_bytes()
-
-
-def _shapes(got: Mapping[str, Any]) -> list[str]:
-    """回执的形状问题；空表 = 形状对（逐项同形同集，一份实现）。"""
-    problems: list[str] = []
-    if set(got) != RECEIPT_KEYS:
-        problems.append(f"回执顶层键集不对：多 {sorted(set(got) - RECEIPT_KEYS)}、"
-                        f"少 {sorted(RECEIPT_KEYS - set(got))}")
-    if got.get("state") not in ("woken", "refused", "nothing", "unknown"):
-        problems.append(f"state 落在四档之外：{got.get('state')!r}")
-    for i, cell in enumerate(got.get("items") or ()):
-        if set(cell) != ITEM_KEYS:
-            problems.append(f"第 {i} 项键集不对：多 {sorted(set(cell) - ITEM_KEYS)}、"
-                            f"少 {sorted(ITEM_KEYS - set(cell))}")
-        if not str(cell.get("why") or "").strip():
-            problems.append(f"第 {i} 项没有 why：{cell}")
-    return problems
-
-
-def _one(got: Mapping[str, Any], item: str) -> dict:
-    return {str(c.get("item_id")): c for c in (got.get("items") or ())}[item]
-
-
-def _block_owner_and_item(env: Mapping[str, Any], *, owner_status: str = "running"
-                          ) -> tuple[str, str]:
-    """真生产者造 block：M 行 ＋ 它名下的板项一起翻成 block（两根轴）。"""
-    cond = env["cond"]
-    owner = _agent(cond, str(env["boss"]), role="M", status=owner_status)
-    item = cond.open_item(kind="delegation", role="D", expects="work",
+def _blocked_workspace(base: pathlib.Path) -> tuple[Store, str, str, str]:
+    """一个工作区 ＋ 一条被真生产者停住的活（owner 行 + 板项）。"""
+    st = Store(base / "ws")
+    st.init()
+    cond = Conductor(st, registry={}, backend=LocalBackend({}))
+    owner = str(cond.open_top_level_run("D", "夹具：被优雅停止停住的活"))
+    item = cond.open_item(kind="delegation", role="F", expects="work",
                           action="write_report", summary="夹具：C13 停下来的活",
                           parent_task_id=owner, depth=3,
                           input_key=f"item:{owner}:c13")
-    got = SC.block_remaining_tasks(env["store"], task_id=owner,
+    got = SC.block_remaining_tasks(st, task_id=owner,
                                    why="夹具：budget 到顶，这活停在这里")
     assert got.get("checked") is True, got
-    rows = _rows(env)
-    assert str((rows.get(owner) or {}).get("status")) == "block", rows.get(owner)
-    assert str((rows.get(item) or {}).get("item_state")) == "block", rows.get(item)
-    return owner, item
+    return st, owner, str(item), got
 
 
-# ====================================================================== a：条件不满足
-def test_c13_a_a_real_block_gate_holds_until_it_is_approved(
-        tmp_path: pathlib.Path) -> None:
-    """block 写入 → 未批准不叫醒 → 批准后 M 被叫醒、板项翻 queued。"""
-    env = _workspace(tmp_path, "c13a")
-    owner, item = _block_owner_and_item(env)
-    before = _tasks_bytes(env)
-
-    preview = env["cond"].wake_blocked(approve="", dry_run=False)
-    problems = _shapes(preview)
-    cell = _one(preview, item)
-    if cell.get("verdict") != "skip" or cell.get("refusal_code") != "not_approved":
-        problems.append(f"未批准该判 skip/not_approved，实际 "
-                        f"{cell.get('verdict')!r}/{cell.get('refusal_code')!r}")
-    if env["calls"]:
-        problems.append(f"未批准也叫了人：calls={env['calls']}")
-    if _tasks_bytes(env) != before:
-        problems.append("未批准动了盘：tasks.json 前后不是逐字节一致")
-    if not problems:
-        # 批准之后：直写板项 + 叫醒 owner（这里 owner 就是 M 那一行）。
-        got = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
-        problems += _shapes(got)
-        cell = _one(got, item)
-        if got.get("state") != "woken" or got.get("count") != 1:
-            problems.append(f"批准后该 state=woken/count=1，实际 "
-                            f"{got.get('state')!r}/{got.get('count')!r}")
-        if cell.get("started") is not True:
-            problems.append(f"批准后该叫起来：started={cell.get('started')!r}")
-        if env["calls"] != [owner]:
-            problems.append(f"叫的该是 owner（M 那一行，不是板项号）：calls={env['calls']}")
-        row = _rows(env).get(item) or {}
-        if str(row.get("item_state")) != "queued":
-            problems.append(f"板项该翻成 queued，实际 {row.get('item_state')!r}")
-        if str(row.get("status")) != "block":
-            problems.append(f"status 该留给执行侧（仍 block），实际 {row.get('status')!r}")
-        marks = [str(x) for x in (row.get("inputs") or [])]
-        if not any(x.startswith("wake:") for x in marks):
-            problems.append(f"inputs 里没有 wake: 落痕：{marks}")
-        try:
-            S.Task(**{k: v for k, v in row.items()
-                      if k in S.Task.__dataclass_fields__}).validate()
-        except ValueError as exc:
-            problems.append(f"直写后的行不合法：{exc}")
-        owner_row = _rows(env).get(owner) or {}
-        if str(owner_row.get("status")) != "block":
-            problems.append(f"owner 那一行的 status 不该被本层改：{owner_row.get('status')!r}")
-    assert problems == [], problems
+def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    base.mkdir(parents=True, exist_ok=True)
+    st, owner, item, blocked = _blocked_workspace(base)
+    wire = _Wire(item_id=item)
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "rehearsal-fake-key-never-used")
+    # 单档：唤醒链与 Lean 无关（docstring 末节说明理由）。
+    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", "0")
+    monkeypatch.setattr(MG, "urllib_transport", wire)
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = cli.main([
+                "start", "--mode", "research", "--root", str(st.root), "--sid", SID,
+                "--subagents", "--task", "逐条审批唤醒被停住的活",
+                "--rounds", "2", "--max-steps", "6",
+            ])
+    except SystemExit as exc:
+        rc = int(exc.code or 0)
+    return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
+            "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue(),
+            "owner": owner, "item": item, "blocked": blocked}
 
 
-# ====================================================================== b：幂等
-def test_c13_b_the_same_owner_is_woken_exactly_once(tmp_path: pathlib.Path) -> None:
-    """叫醒之后再调两趟 ⇒ `nothing` / `not_blocked`，落痕不翻倍、不再叫人。"""
-    env = _workspace(tmp_path, "c13b")
-    owner, item = _block_owner_and_item(env)
-    first = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
-    assert first.get("state") == "woken", first
-    assert env["calls"] == [owner], env["calls"]
-    marks = [str(x) for x in ((_rows(env).get(item) or {}).get("inputs") or [])]
-    before_calls = list(env["calls"])
-
-    again = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
-    problems = _shapes(again)
-    cell = _one(again, item)
-    if cell.get("verdict") != "skip" or cell.get("refusal_code") != "not_blocked":
-        problems.append(f"第二次该判 skip/not_blocked，实际 "
-                        f"{cell.get('verdict')!r}/{cell.get('refusal_code')!r}")
-    sweep = env["cond"].wake_blocked(approve="yes", dry_run=False)
-    problems += _shapes(sweep)
-    if sweep.get("state") != "nothing":
-        problems.append(f"扫全表那一趟该 state=nothing，实际 {sweep.get('state')!r}")
-    if env["calls"] != before_calls:
-        problems.append(f"第二次又叫了人：{env['calls']}")
-    after_marks = [str(x) for x in ((_rows(env).get(item) or {}).get("inputs") or [])]
-    if len(after_marks) != len(marks):
-        problems.append(f"wake: 落痕翻倍了：{marks} → {after_marks}")
-    assert problems == [], problems
+def _events(ws: pathlib.Path) -> list[dict]:
+    got: list[dict] = []
+    for path in sorted((ws / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                got.append(json.loads(line))
+            except ValueError:
+                continue
+    return got
 
 
-# ====================================================================== c：已销号
-def test_c13_c_a_retired_owner_is_never_woken(tmp_path: pathlib.Path) -> None:
-    """真销号之后 ⇒ `skip/retired`，`calls == []`（彻底没有了，叫不醒）。"""
-    env = _workspace(tmp_path, "c13c")
-    owner, item = _block_owner_and_item(env)
-    # 真销号：名册登记 → `Secretary.retire`（销号名单由生产者写）。
-    added = env["sec"].roster_add(owner=str(env["boss"]), role="M",
-                                  task_id=owner, brief="C13 夹具")
-    assert not added.get("problem"), added
-    retired = env["sec"].retire(owner=str(env["boss"]),
-                                name=str(added.get("name") or ""),
-                                reason="夹具：M 这一支收口")
-    assert retired.get("ok") is True and retired.get("action") == "retired", retired
-
-    got = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
-    problems = _shapes(got)
-    cell = _one(got, item)
-    if cell.get("verdict") != "skip" or cell.get("refusal_code") != "retired":
-        problems.append(f"已销号的 owner 该判 skip/retired，实际 "
-                        f"{cell.get('verdict')!r}/{cell.get('refusal_code')!r}"
-                        f"（why={cell.get('why')!r}）")
-    if env["calls"]:
-        problems.append(f"已销号还被叫起来：calls={env['calls']}")
-    assert problems == [], problems
+def _wakes(events: list[dict]) -> list[dict]:
+    out: list[dict] = []
+    for e in events:
+        if e.get("kind") != "agent_step" or e.get("role") != "M":
+            continue
+        if str((e.get("payload") or {}).get("name") or "") != "conductor.wake_blocked":
+            continue
+        got = e.get("result") or {}
+        data = got.get("data")
+        if hasattr(data, "to_dict"):
+            data = dict(data.to_dict())
+        out.append({"ok": bool(got.get("ok")),
+                    "data": data if isinstance(data, dict) else {}})
+    return out
 
 
-# ====================================================================== 反真空
-def test_c13_d_wake_failure_is_reported_as_wake_failed(
-        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空①：把 `wake_on_lifeline` 打桩成恒失败 ⇒ 不许报"已叫起"。
-
-    直写与唤醒是两步：板项会被翻成 `queued`，但回执必须是 `wake_failed` ——
-    这一格钉的是"写进去"与"叫起来"是两件事（改前一处写死 `started=True` 就会绿）。
-    """
-    env = _workspace(tmp_path, "c13d")
-    owner, item = _block_owner_and_item(env)
-    monkeypatch.setattr(type(env["cond"]), "wake_on_lifeline",
-                        lambda self, task_id: {"started": False, "task_id": str(task_id),
-                                               "reason": "打桩：执行侧起不来"})
-    got = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
-    problems = _shapes(got)
-    cell = _one(got, item)
-    if cell.get("started") is not False:
-        problems.append(f"打桩失败后 started 该是 False，实际 {cell.get('started')!r}")
-    if cell.get("refusal_code") != "wake_failed":
-        problems.append(f"打桩失败后该点名 wake_failed，实际 {cell.get('refusal_code')!r}")
-    if got.get("state") != "refused":
-        problems.append(f"一条都没叫起来时 state 该是 refused，实际 {got.get('state')!r}")
-    if str((_rows(env).get(item) or {}).get("item_state")) != "queued":
-        problems.append("直写那一步仍应落盘（queued）：失败的是唤醒，不是写")
-    assert problems == [], problems
+def _row(store: Store, task_id: str) -> dict:
+    return next((dict(r) for r in store.rows("tasks")
+                 if str(r.get("task_id")) == task_id), {})
 
 
-# ====================================================================== e：用户答
-def test_c13_e_the_user_answer_is_the_wake_condition(tmp_path: pathlib.Path) -> None:
-    """「待用户答」那一条：问题挂着 ⇒ 不叫醒；答过 ⇒ 放行、回答真的进续跑。
+def _chain_reading(got: dict[str, Any]) -> dict[str, Any]:
+    events = _events(got["ws"])
+    st = got["store"]
+    return {
+        "store": st, "ws": got["ws"], "events": events,
+        "owner": _row(st, got["owner"]), "item": _row(st, got["item"]),
+        "wakes": _wakes(events),
+        "runs": [e for e in events if e.get("kind") == "agent_run_start"],
+        "ends": [e for e in events if e.get("kind") == "agent_run_end"],
+        "stdout": got["stdout"],
+    }
 
-    真入口：`userio.ask_user` / `userio.answer_question`（CLI 的两个写口）＋
-    `autonomy._stop_before_round`（下一轮开不开的唯一判据）＋
-    `autonomy._latest_user_answer`（--resume 读回答的唯一读口）。
-    """
-    root = tmp_path / "c13e"
-    root.mkdir()
-    asked = U.ask_user(root, role="M", question="「审」还是「研」？", timeout_sec=0.0,
-                       qid="q0001")
+
+def _cell(result: dict, item_id: str) -> dict:
+    data = dict(result.get("data") or {})
+    for one in (data.get("items") or []):
+        if isinstance(one, dict) and str(one.get("item_id")) == item_id:
+            return dict(one)
+    return {}
+
+
+def _chain_problems(reading: dict[str, Any], item_id: str) -> list[str]:
     problems: list[str] = []
-    if asked.qid != "q0001" or asked.problem != "user_no_answer":
-        problems.append(f"问题没落成待答：qid={asked.qid!r} problem={asked.problem!r}")
-    pending = U.pending_questions(root, sid=None)
-    if [q.qid for q in pending] != ["q0001"]:
-        problems.append(f"待答清单该有 q0001，实际 {[q.qid for q in pending]}")
+    wakes = reading["wakes"]
+    if len(wakes) != 3:
+        return [f"M 应恰好调三次 conductor.wake_blocked，实得 {len(wakes)}"]
+    # 1. 没批准：逐条 skip/not_approved、一个字节不写、一次都不叫。
+    first = dict(wakes[0]["data"])
+    cell = _cell(wakes[0], item_id)
+    if str(cell.get("verdict") or "") != "skip":
+        problems.append(f"未批准那一趟该判 skip：{cell!r}")
+    if str(cell.get("refusal_code") or "") != "not_approved":
+        problems.append(f"未批准那一趟该点名 not_approved：{cell.get('refusal_code')!r}")
+    if cell.get("started") is not False:
+        problems.append(f"未批准那一趟 started 该是 False：{cell.get('started')!r}")
+    if str(first.get("state") or "") == "woken":
+        problems.append(f"未批准那一趟竟然 state=woken：{first!r}")
+    # 2. 批准这一趟：审计必须判 resume、直写必须落盘（板项 queued + 一条 wake: 落痕）；
+    #    执行侧那一步按产品自己的三态读：叫起来了，或者如实说"没接执行侧"。
+    #
+    #    2026-11-15 CC4 实测（已报，未改产品）：`start --mode research` 走的是
+    #    `host.wired_llm_conductor`，它没有把 `cond.resume_runner` 接到
+    #    `resume_dispatched`（只有 `host.wired_conductor` 那一条会接）⇒ 研究跑里的
+    #    `conductor.wake_blocked` 永远 `wake_failed`：板项翻成 queued 了，人没叫起来。
+    #    这一格因此按"要么真叫起来，要么点名 wake_failed 且原因是没接执行侧"判 ——
+    #    两条都是产品的受控读数，折叠成"叫起来了"才是假绿。
+    second = dict(wakes[1]["data"])
+    cell2 = _cell(wakes[1], item_id)
+    if str(cell2.get("verdict") or "") != "resume":
+        problems.append(f"批准那一趟的审计该判 resume：{cell2!r}")
+    item = dict(reading["item"])
+    if str(item.get("item_state") or "") != "queued":
+        problems.append(f"板项该翻成 queued：{item.get('item_state')!r}")
+    marks = [str(x) for x in (item.get("inputs") or []) if str(x).startswith("wake:")]
+    if len(marks) != 1:
+        problems.append(f"wake: 落痕应恰好一条（不准翻倍）：{marks}")
+    if cell2.get("started") is True:
+        if str(second.get("state") or "") != "woken":
+            problems.append(f"叫起来了就该 state=woken：{second.get('state')!r}")
+        if int(second.get("count") or 0) != 1:
+            problems.append(f"叫起来了 count 该是 1：{second.get('count')!r}")
+        if str(cell2.get("task_id") or "") != str(reading["owner"].get("task_id") or ""):
+            problems.append(f"叫的该是 owner 的台账号：{cell2.get('task_id')!r}")
+        owner_id = str(reading["owner"].get("task_id") or "")
+        if not [e for e in reading["runs"]
+                if str(e.get("task_id") or "") == owner_id
+                and str(e.get("role") or "") == "D"]:
+            problems.append("被唤醒的 D 没有起跑（没有它的 agent_run_start）")
+        if not [e for e in reading["ends"]
+                if str(e.get("task_id") or "") == owner_id
+                and str(e.get("role") or "") == "D"]:
+            problems.append("被唤醒的 D 没有 agent_run_end")
+        if str(reading["owner"].get("outcome") or "") != "ok":
+            problems.append(f"owner 行的结局不是 ok：{reading['owner'].get('outcome')!r}")
+    else:
+        # 执行侧没接（研究跑今天的实况）：必须是受控的 wake_failed，且原因点名"没有接执行侧"，
+        # 而不是"叫不动"或静默的 False。
+        if str(cell2.get("refusal_code") or "") != "wake_failed":
+            problems.append(f"叫不起来时该点名 wake_failed：{cell2.get('refusal_code')!r}")
+        if "没有接执行侧" not in str(cell2.get("why") or ""):
+            problems.append(f"wake_failed 的原因没有点名「没有接执行侧」："
+                            f"{cell2.get('why')!r}")
+        if str(second.get("state") or "") != "refused":
+            problems.append(f"一条都没叫起来时 state 该是 refused：{second.get('state')!r}")
+        if int(second.get("count") or 0) != 0:
+            problems.append(f"一条都没叫起来 count 该是 0：{second.get('count')!r}")
+    # 3. 幂等：再叫一遍 ⇒ 板项已 queued、不是 block ⇒ not_blocked、不重复叫人。
+    cold = _cell(wakes[2], item_id)
+    if str(cold.get("refusal_code") or "") != "not_blocked":
+        problems.append(f"第二次批准该点名 not_blocked：{cold.get('refusal_code')!r}")
+    if cold.get("started") is not False:
+        problems.append(f"第二次批准不该再叫人：{cold.get('started')!r}")
+    marks_after = [str(x) for x in (dict(reading["item"]).get("inputs") or [])
+                   if str(x).startswith("wake:")]
+    if len(marks_after) != 1:
+        problems.append(f"wake: 落痕翻倍了：{marks_after}")
+    # 5. 多轮：两轮都开了。
+    m_runs = [e for e in reading["runs"] if str(e.get("role") or "") == "M"]
+    if len(m_runs) < 2:
+        problems.append(f"多轮驱动只开了 {len(m_runs)} 轮（`--rounds 2`）")
+    if "自主跑完" not in reading["stdout"]:
+        problems.append("stdout 里没有「自主跑完 N 轮」这一行（走的不是 autonomy 那条路）")
+    return problems
 
-    blocked = AU._stop_before_round(
-        1, rounds=9, spent_usd=0.0, usd_budget=None, stop_path=None,
-        user_answer="", last_stop_reason="waiting_for_user",
-        pending_qids=("q0001",))
-    if blocked != "waiting_for_user":
-        problems.append(f"问题还挂着时下一轮该停（waiting_for_user），实际 {blocked!r}")
-    no_answer, _notes = AU._latest_user_answer(root, "M", sid=None)
-    if no_answer != "":
-        problems.append(f"没答却读出了回答：{no_answer!r}（三态被折平）")
 
-    wrote = U.answer_question(root, qid="q0001", answer="研")
-    if wrote != "":
-        problems.append(f"回答没写成：{wrote!r}")
-    answer, _notes = AU._latest_user_answer(root, "M", sid=None)
-    if answer != "研":
-        problems.append(f"续跑该读到「研」，实际 {answer!r}")
-    allowed = AU._stop_before_round(
-        1, rounds=9, spent_usd=0.0, usd_budget=None, stop_path=None,
-        user_answer=answer, last_stop_reason="waiting_for_user",
-        pending_qids=())
-    if allowed != "":
-        problems.append(f"答过之后下一轮该放行（空串），实际 {allowed!r}")
-    if [q.qid for q in U.pending_questions(root, sid=None)]:
-        problems.append("答过之后待答清单该清空")
+# ============================================================ ① 正控
+
+
+def test_the_wake_happens_inside_the_multi_round_drive(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """正控：两轮驱动 → 未批准不动作 → 批准后审计判 resume、板项翻 queued、执行侧三态如实。"""
+    got = _run(tmp_path, monkeypatch)
+    reading = _chain_reading(got)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
+    assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
+    assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
+        "缝工厂被整体替换了 —— 这份彩排的承诺是「只换网线」")
+    assert [e for e in reading["events"] if e.get("kind") == "llm_call"], (
+        "会话里一条 llm_call 都没有 ⇒ 走的不是真 LlmSeam")
+
+    problems = _chain_problems(reading, got["item"])
     assert problems == [], problems
 
+    # ---- 钱：账本有行、无主为 0、悬空 0、逐分相等
+    from agentflow.modelcost import reconcile_usage
 
-# ====================================================================== 反真空②
-def test_c13_f_a_pending_question_still_blocks_the_next_round(
+    money = reconcile_usage(reading["store"])
+    assert money["ledger_rows"] > 0, money
+    assert money["unattributed"]["count"] == 0, money["unattributed"]
+    assert money["dangling"] == [], money["dangling"]
+    assert money["equal"] is True, money
+
+
+# ============================================================ ② 反真空
+
+
+def test_without_the_token_the_wake_writes_nothing(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空②：把"待答还在不在"打桩成恒挂着 ⇒ "答过就放行"必须红。
+    """反真空：把三轮里的"批准"换成"不批准" ⇒ 盘上一个字节不动、一次都不叫。
 
-    桩只改一个读数（`pending_questions` 恒非空），不改 `_stop_before_round`；
-    若后者不读待答清单、或把"答过"当成默认放行，这一条当场红。
+    它证明正控里"叫起来了"不是恒真：没有那张令牌，连"这一条可以唤醒"的结论都不给。
     """
-    root = tmp_path / "c13f"
-    root.mkdir()
-    U.ask_user(root, role="M", question="要不要换来源？", timeout_sec=0.0, qid="q0002")
-    U.answer_question(root, qid="q0002", answer="换")
-    monkeypatch.setattr(U, "pending_questions",
-                        lambda *a, **kw: [object()])
-    stop = AU._stop_before_round(
-        1, rounds=9, spent_usd=0.0, usd_budget=None, stop_path=None,
-        user_answer="换", last_stop_reason="waiting_for_user",
-        pending_qids=("q0002",))
-    assert stop == "waiting_for_user", (
-        "把待答清单打桩成永远挂着之后，下一轮仍然放行 ⇒ "
-        f"「答过才放行」不来自那个读数：{stop!r}")
+    got = _run(tmp_path, monkeypatch)
+    reading = _chain_reading(got)
+    item_id = got["item"]
+    first = _cell(reading["wakes"][0], item_id)
+    approved = _cell(reading["wakes"][1], item_id)
+    # 1. 未批准：逐条 not_approved、started=False、没有落痕（一条 wake: 都不写）。
+    assert str(first.get("refusal_code") or "") == "not_approved", first
+    assert first.get("started") is False, first
+    assert str(first.get("mark") or "") == "", first
+    assert str(dict(reading["wakes"][0]["data"]).get("state") or "") != "woken", reading["wakes"][0]
+    # 2. 盘上那条唯一的 wake: 落痕来自"批准"那一趟（不是未批准那一趟）。
+    marks = [str(x) for x in (dict(reading["item"]).get("inputs") or [])
+             if str(x).startswith("wake:")]
+    assert len(marks) == 1, marks
+    assert str(approved.get("mark") or "") == marks[0], (approved.get("mark"), marks)
 
 
-# ====================================================================== 终态读数
-def test_c13_g_the_end_state_is_readable_on_disk(tmp_path: pathlib.Path) -> None:
-    """终态读数：盘上的那一行能逐格复读（不是靠返回值好看）。"""
-    env = _workspace(tmp_path, "c13g")
-    owner, item = _block_owner_and_item(env)
-    got = env["cond"].wake_blocked([item], approve="yes", dry_run=False)
-    assert got.get("state") == "woken", got
-    raw = json.loads((pathlib.Path(str(env["root"])) / "data" / "tasks.json")
-                     .read_text(encoding="utf-8"))
-    row = next(r for r in raw["rows"] if str(r.get("task_id")) == item)
-    assert str(row.get("item_state")) == "queued", row
-    assert str(row.get("item_close")) == "", row
-    assert row.get("seen_by") == "" and row.get("seen_step") is None, row
-    assert row.get("ended_at") is None and row.get("outcome") is None, row
-    assert any(str(x).startswith("wake:") for x in (row.get("inputs") or [])), row
-    # 回执与盘上一致：回执里那枚 mark 就是 inputs 里那一行。
-    cell = _one(got, item)
-    assert cell.get("mark") and cell["mark"] in (row.get("inputs") or []), (
-        cell.get("mark"), row.get("inputs"))
-    assert cell.get("task_id") == owner, (cell.get("task_id"), owner)
+# ============================================================ 判据①：一行账
+
+
+def test_every_real_call_has_exactly_one_ledger_row(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行。"""
+    got = _run(tmp_path, monkeypatch)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    reading = RC.ledger_identity(got["ws"], got["store"])
+    print(f"[一行账] c13 真调用={reading['calls']} "
+          f"出网={len(got['wire'].bodies)} 账本行={reading['rows']} "
+          f"duplicate={len(reading['duplicates'])} 未配对={len(reading['unpaired'])} "
+          f"未认领={len(reading['unclaimed'])}")
+    assert reading["calls"] == len(got["wire"].bodies), (
+        f"真调用与出网次数不等：事件 {reading['calls']} / 出网 {len(got['wire'].bodies)}")
+    problems = RC.one_row_per_call_problems(reading)
+    assert problems == [], "判据①红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ 判据②：会话归口
+
+
+def test_every_llm_call_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
+    got = _run(tmp_path, monkeypatch)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    split = RC.session_split(got["ws"], SID)
+    print(f"[会话归口] c13 本趟={len(split['in_run'])} "
+          f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
+    assert split["calls"], "这一趟一次真调用都没有 ⇒ 判据没有对象（不是干净）"
+    problems = RC.session_problems(split)
+    assert problems == [], "判据②红：\n- " + "\n- ".join(problems)
+
+
+if __name__ == "__main__":  # pragma: no cover - 手工复跑用
+    raise SystemExit(pytest.main([__file__, "-q"]))
