@@ -1281,6 +1281,108 @@ class AgentV:
                                 task_id=str(self.cfg.get("task_id") or ""),
                                 label=str(verdict.get("label") or ""))
 
+    def _relay_unregistered_wash(self, *, wash: Mapping[str, Any],
+                                 pending: Mapping[str, Any],
+                                 verdict: Mapping[str, Any]) -> dict[str, Any]:
+        """未在册那一支的"洗稿转达"：把洗过的文本递给送审者（F）。
+
+        ## 为什么不是"写进 pending 行就够了"
+
+        `record_pending_sign` 写的是 V 自己的账（`verifications/pending/<sha>.jsonl`）。
+        F 的下一拍读不到它：F 看到 V 的结论只有两条路 —— 召唤结果里的 `final`
+        （V 模型自己写的那句话）与 conductor 落的那条 notice（正文也是那个 final）。
+        `v_rejections_digest` / `deliver_v_verdicts` 只读在册那一批 `statements` 的台账，
+        pending 行不进去。所以只写 `washed_relay` 那一格，主路上仍然是
+        "F 只拿 V 的 final/notice"，洗稿没有转达。
+
+        ## 用的就是既有通道（不新造机制）
+
+        `conductor.open_item` + `set_item_detail` 是"V 的意见递到 F 的板上"用的同一条
+        通道（`agent_loop.deliver_v_verdicts` 也是这两步）。收件人读
+        `conductor.current_parent()`（召唤这一趟 V 的那个任务），读不到就如实说
+        "送审者读不到"——不拿"谁醒着"当收件人。没有主控（夹具 / 单点判据）⇒ 返回
+        `checked=False` 并写明没转达，绝不为了发一条消息把会话的主控建歪。
+
+        ## 为什么是普通 notice（`expects="ack"`，但 input_key 不带 `v-verdict@`）
+
+        在册那一支的 `v-verdict@` 是"要 F 回执"的正式判决项（收口绑在登记项上；
+        `conductor.ACK_REQUIRED_ITEM_PREFIXES` 只认那几个前缀）。未在册这一支的命题
+        还没在册：F 没有一条登记项可以拿去收口，而板上多一条永远等不到 ack 的项会把
+        "整树销号"的收工门锁死。所以这一条按信息型 notice 投递（`kind="notice"` /
+        `expects="ack"`）—— 它进 F 的下一拍板摘要（`board_digest` 渲染 `detail`），
+        渲染即收口（不在 `ACK_REQUIRED_ITEM_PREFIXES` 里 ⇒ 不要求一次真的 ack）；
+        洗过的文本仍在 `detail` 里，F 读得到，但不必为一条"还没在册"的意见背回执义务。
+
+        `via="secretary_fault"` 的语义照旧：V 自己的结论词可能是「成立」，而秘书判它
+        指出了缺陷；投出去只放洗过的文本（V 的原文不转达）。
+        """
+        out: dict[str, Any] = {"checked": False, "item_id": "", "existing": False,
+                               "problems": [], "reason": ""}
+        text = str((wash or {}).get("text") or "").strip()
+        if not bool((wash or {}).get("washed")) or not text:
+            out["reason"] = "这一趟没有洗出可转达的文本 ⇒ 不转达（不输出 V 的原文）"
+            return out
+        if self.store is None:
+            out["reason"] = "没有 store ⇒ 找不到主控 / 送审者，这一条没转达（不是「已送到」）"
+            return out
+        try:
+            from .. import conductor as _CND
+            from ..tools.conductor_tools import cached_conductor
+
+            conductor = cached_conductor(self.store)
+            if conductor is None:
+                out["reason"] = ("这一趟没有已装配的主控 ⇒ 板项开不了，洗过的转达没有送出"
+                                 "（不是「已经送到」）")
+                return out
+            parent_id, parent_role = _CND.current_parent()
+            if not str(parent_id or ""):
+                out["reason"] = ("这一趟调用不在任何召唤里（`current_parent` 是空）⇒ "
+                                 "读不到送审者；不拿「谁醒着」当收件人")
+                return out
+            row = next((dict(r) for r in self.store.rows("tasks")
+                        if str(r.get("task_id") or "") == str(parent_id)), {})
+            if not row:
+                out["reason"] = (f"送审者 {parent_id} 在台账里没有那一行 ⇒ "
+                                 "洗过的转达没有落点（不猜）")
+                return out
+            sha = str((pending or {}).get("proof_sha256") or "")
+            key = f"v-wash@{sha[:16] or '-'}@{parent_id}"
+            try:
+                board = [dict(r) for r in conductor._board_rows()]
+            except Exception:  # noqa: BLE001 —— 读不成就不去重（宁多一条，不静默丢）
+                board = []
+            have = next((r for r in board if str(r.get("input_key") or "") == key), None)
+            if have is not None:
+                out.update(checked=True, existing=True,
+                           item_id=str(have.get("task_id") or ""),
+                           reason=(f"这一条洗过的转达已经在板上"
+                                   f"（{have.get('task_id') or '（没读到编号）'}）⇒ 不重开"))
+                return out
+            step = (f"第 {verdict.get('defect_step')} 步"
+                    if isinstance((verdict or {}).get("defect_step"), int) else "步号没读到")
+            detail = (f"V 的意见（未在册，秘书洗过的转达；V 的原文不转达）：\n{text}\n"
+                      f"下一步该补的就是{step}；补完把这一份重新送 V"
+                      "（`verify.verify_proof`）重签 —— 不许绕开 V 直接当定理用。\n"
+                      f"这一条判词落在 `verifications/pending/{sha[:12]}….jsonl`"
+                      f"（{pending.get('verification_id') or '（没有编号）'}）。")
+            item_id = conductor.open_item(
+                kind="notice", role=str(parent_role or row.get("role") or "F"),
+                expects="ack", action="notice",
+                summary="V 的意见（未在册；秘书洗过的转达）",
+                called_by=str(self.actor or "V"),
+                parent_task_id=str(parent_id),
+                depth=max(1, int(row.get("depth") or 1) + 1),
+                input_key=key)
+            got, problem = conductor.set_item_detail(item_id, detail)
+            out.update(checked=bool(got), item_id=str(item_id),
+                       problems=[str(problem)] if problem else [],
+                       reason=(str(problem) if problem else
+                               f"洗过的转达已投给 {parent_id} 的板项 {item_id}"))
+        except Exception as exc:  # noqa: BLE001 —— 转达失败不许带走这一签
+            out["reason"] = f"洗过的转达没送成（{type(exc).__name__}: {exc}）"
+        return out
+
+
     def _decide_sign_issuance(self, statement_id: str, proof_text: str, no: int,                              verdict: Mapping[str, Any], *,
                               row: Mapping[str, Any] | None = None,
                               within_call: int | None = None,
@@ -3221,6 +3323,20 @@ class AgentV:
                     " ⇒ 看过、没签（三转读数照给，一个签字节都不落：不落 pending 台账、"
                     "不颁发签文件、稿上不写签块）")
         _producer_hint, _producer_code = self._producer_context()
+        # ---- C 段（未在册）：与在册那一支同一条件才洗 ----------------------------
+        #
+        # 在册那一支（`_review_pass`）在落台账之前洗稿，条件逐字是
+        # `axis == fault 且 fault_kind 不在 (procedural, style)`。未在册这一支此前
+        # 不洗：判词只落 `secretary_judge`，F 拿到的是 V 的原话/notice。
+        # 这里补上同一条件（业主裁定 ⑥：程序性 / 文风不是对证明的缺陷，洗成
+        # "请补哪一步"会把它冒充成一条要 F 改的意见）。
+        # 洗不出来 ⇒ `washed=False`、不写空文本、也不转达（洗稿纪律）。
+        wash: dict[str, Any] = {}
+        _last_judgment = dict(judged[-1].get("judgment") or {}) if judged else {}
+        if (str(_last_judgment.get("axis") or "") == "fault"
+                and str(_last_judgment.get("fault_kind") or "") not in ("procedural", "style")):
+            wash = self._wash_v_reply(reply, last, no)
+        relay: dict[str, Any] = {}
         if stopped == "signed" and rel:
             # ---- 2026-11-05 晚（业主）：没号先签是正统主路 --------------------
             #
@@ -3271,7 +3387,10 @@ class AgentV:
                     verifier=self.actor, object_path=rel,
                     producer_path=rel, producer_code=_producer_code,
                     roster_role=_producer_hint,
-                    secretary_judge=(judged[-1].get("judgment") if judged else None))
+                    secretary_judge=(judged[-1].get("judgment") if judged else None),
+                    # 与 `record_verification` 同形：洗过的那一份随这一行落盘
+                    # （只有真洗出来时才写；"没有这一格" = 没洗过 / 洗不出来）。
+                    washed_relay=wash)
             except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
                 # 同上一支：判词没有落点也是「这一份没查成」，不许把异常抛给调用方。
                 return {"failed": True, "checked": False, "reason": "ledger_unwritable",
@@ -3280,11 +3399,21 @@ class AgentV:
                         "passes": passes, "manuscript": rel,
                         "secretary_judge": (dict(judged[-1].get("judgment") or {})
                                             if judged else {})}
+            # 洗过的转达要递到送审者，不是只写进 V 自己的账（见
+            # `_relay_unregistered_wash` 的 docstring：pending 行 F 读不到）。
+            if wash and pending:
+                relay = self._relay_unregistered_wash(wash=wash, pending=pending,
+                                                      verdict=last)
         reading = dict(block_write.get("reading") or {})
         return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
                 "stopped": stopped, "block_write": block_write,
                 "issued": issued, "landed": landed,
                 "pending": pending,
+                #: C 段（未在册）：洗出来的那一段与"递到送审者没有"的读数。
+                #: `_finish_unregistered` 不把它们放进工具返回值（`verify_tools` 的
+                #: `returns` 没声明它们，多写一个键就是"声明 ⊆ 实跑"那条契约红）；
+                #: 它们只供回路内部与判据读。
+                "washed_relay": wash, "washed_relay_delivery": relay,
                 #: 2026-11-06：轴那一格带到顶层（`_finish_unregistered` 原样搬到返回值）。
                 "secretary_judge": (dict(judged[-1].get("judgment") or {})
                                     if judged else {}),

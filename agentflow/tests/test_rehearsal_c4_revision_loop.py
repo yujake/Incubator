@@ -41,14 +41,21 @@
 它证明主链的"先打回、再重写、再签"不是恒真：把那一格判成 clean，打回与重写
 就一起消失（旧彩排的 `test_..._a` 把这条反真空写成"判成 clean ⇒ 这一条红"）。
 
-## 一处已报但未改的产品缺口（本文件按真机实际行为钉住，不假装有洗稿）
+## 2026-11-16 已修：未在册支的「秘书洗稿 → 转达 F」（CC4 缺陷 2）
 
-`AgentV._wash_v_reply` 只在已在册那一档（`record_verification`）里被调用；
+改前：`AgentV._wash_v_reply` 只在已在册那一档（`record_verification`）里被调用；
 F 的稿在收录前是未在册的，走 `record_pending_sign` —— 那两处调用都不接
 `washed_relay`。于是这条主路上：「秘书洗稿 → 转达给 F」这一步并不发生：
 F 拿到的是 V 自己的结论（本彩排里由 V 的模型写成一句人话，经 notice 投到 F 的
 下一拍），`secretary:V` 的语义判定落在 `pending` 台账的 `secretary_judge` 里。
-判断与修法已按门报告（`temp/cc4/REPORT-CC4.md` §五），本文件没有改产品。
+
+现在未在册那一支与在册那一支同一条件洗稿（fault 且 fault_kind 不是
+procedural/style），`washed_relay` 随 pending 行落盘；洗过的文本还走既有的
+`conductor.open_item` + `set_item_detail` 通道投给送审者（F）的板摘要 ——
+本彩排里 F 的下一拍 prompt 逐字带着「请补第 2 步的记号说明：…」，而 V 自己的
+final（「V 判有毛病：…」）仍在同一条 `框架执行结果` 里：两条一起可见，读的人
+分得清"V 的原话"与"秘书洗过的转达"。已在册那一支一个字节没改
+（`tests/test_rehearsal_c4_revision_chain.py::test_c4_c...` 用既有 e1 判据原样跑）。
 
 ## Lean 两档
 
@@ -205,6 +212,15 @@ class _Wire:
     # ------------------------------------------------------------ 回复分派
     def reply(self, *, system: str, prompt: str) -> str:
         head = system.lstrip()
+        # 洗稿那一趟的稳定头是「你是「秘书」的洗稿面」（`secretary._wash_v_system`），
+        # 与下面判断面的头不同：改前这里只按判断面的头分支 ⇒ 洗稿一问落到兜底
+        # `{"decision": "可派"}`，`wash_v_reply` 拿不到 `text` 就落 `wash_empty_text`
+        # （C4 未在册支的洗稿因此永远洗不出来）。这里补上它自己那一支。
+        if head.startswith("你是「秘书」的洗稿面"):
+            return _json({"text": f"请补第 2 步的记号说明：{DEFECT}。",
+                          "step": 2,
+                          "findings": [{"quote": DEFECT,
+                                        "why": "记号没定义就没法核这一步"}]})
         m = re.match(r"你是「秘书」的判断面（类别：([a-z_]+)）", head)
         if m:
             kind = m.group(1)

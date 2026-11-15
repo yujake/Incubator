@@ -569,7 +569,8 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
                         producer_path: Any = "",
                         producer_code: Any = "",
                         roster_role: Any = "",
-                        secretary_judge: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                        secretary_judge: Mapping[str, Any] | None = None,
+                        washed_relay: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """把"命题还没在册时"的一次审校落进 pending 台账，返回那一行。
 
     为什么要这一格（D-34，r34b 的真机现场）：V 审完判「成立」，而 `statements` 是 0 行 ——
@@ -584,6 +585,14 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     `secretary_judge`（p247）随同一行落盘 —— axis 是这一行唯一的轴来源；不给 ⇒ 这一行
     没有轴，`row_signable` 为假（fail-closed，不会按 `verdict` 字面签）。
     引用核实那一格（`citation_checks`）随同一行落盘，形状与 `record_verification` 逐格相同。
+
+    ## `washed_relay`：洗过的转达文本（2026-11-16，与 `record_verification` 同形）
+
+    在册那一支的"秘书洗稿"落在 `record_verification` 的 `washed_relay` 格；未在册这一支
+    此前没有这一格 ⇒ 主路上（F 的稿几乎总是先未在册）「秘书洗稿 → 转达 F」不发生。
+    修法只在写口补同一格，条件写入与在册那一支逐字相同：只有 `washed=True` 才写，
+    "没有这一格"必须是"没洗过 / 洗不出来"，不许写一份空文本冒充洗过。读侧
+    （`vsigns._defect_text` / `agent_loop._washed_text`）按同一个键读。
     """
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
                                         # 老调用方带的原话照旧带下去（审计用）。
@@ -634,6 +643,18 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     #: 「成立」就能凑满连续次数并签住第 3 位。现在没给就写 :data:`NO_SECRETARY_JUDGE`
     #: （未判成：`checked=False` + 空轴），`row_signable` 为假、连续计数不算票。
     row[SECRETARY_JUDGE_KEY] = secretary_judge_cell(secretary_judge)
+    #: 洗过的那一份转达文本（与 `record_verification` 同形、同一个键）：
+    #: 只在秘书真的洗出来时写（`washed=True`）—— 洗不出来的那一档不写这一格：
+    #: 台账上"没有这一格"必须是"没洗过/洗不出来"，而不许写一份空文本冒充洗过。
+    #: 未在册这一支的读者是 C 段交付面（`vsigns._defect_text` / V 的转达路径）。
+    if isinstance(washed_relay, Mapping) and washed_relay.get("washed"):
+        row["washed_relay"] = {
+            "text": str(washed_relay.get("text") or ""),
+            "findings": [dict(f) for f in (washed_relay.get("findings") or [])
+                         if isinstance(f, Mapping)],
+            "dropped": [dict(f) for f in (washed_relay.get("dropped") or [])
+                        if isinstance(f, Mapping)],
+        }
     #: 同 `record_verification`：I10 硬禁令的机械命中只作读数（条件写入、不参与判定）。
     _pending_banned = banned_markers_in(text)
     if _pending_banned:
