@@ -1,429 +1,358 @@
 # -*- coding: utf-8 -*-
-"""彩排 C12：收工链 —— 三个产出方各自按签拦收工、收工自动提交、钱对账。
+"""彩排（真路径）C12 · 收工链 + 七格门：CLI 入口 → M 调 `conductor.closing` → 收工。
 
-## 这一条链的业主口径
+## 这条链与真机差在哪（逐项）
 
-「如果产出方是 E 和 F，都应该在收工时自动提交名下所有未提交稿并将状态更新」
-（2026-11-11，逐字）；以及 `agent_loop._v_wait_gate_reading` 的「收工门按签拦收工，
-不按计时器拦：F 计划号 / E `e-proof` / B `b-proof` 各自」。
+| 这一趟用的东西 | 真机 | 这份彩排 |
+|---|---|---|
+| 入口 | `agentflow start --mode research` | 同一行：`cli.main(["start", "--mode", "research", …])` |
+| 执行体 | `_run_spec` → `_exec_role` → `host.wired_llm_conductor` → `LlmBackend` → `AgentLoop.run` | 同一条 |
+| 派活 | `Conductor.summon`（本趟派一个 H 读一眼收工读数；它让循环本体在 `calling_as` 里花一次钱，三格②有对象） | 同一条 |
+| 收工门 | `conductor.closing` 工具 → `closing.check_closing`（七格现算） | 同一条：判据本体、格表、`machine_pass` 全是产品原物 |
+| M 的判据 | `goal_met` / `task_list` 由 M 交，落 `out/review/m-verdicts.jsonl` | 同一条：落盘由工具自己那一笔写 |
+| M 的 final | `_final_gate_reading`（整树销号） | 同一条（H 先被销号，M 才 final） |
+| 模型缝 | 真 `LlmSeam`（`_agent_seam_factory` / `for_role` / `for_secretary`） | 同一条：构造点一个都没替换 |
+| 记账 | 真 `TokenMeter` → `usage_ledger` | 同一条 |
+| 出网 | `modelgw.urllib_transport`（HTTP POST） | 只换这一处：回预置的 OpenAI 兼容 JSON |
 
-## 这一条链怎么真跑
+旧 `test_rehearsal_c12_closing.py`（`CHAIN_ONLY` 里那份）手工造 `AgentLoop` 后直调私有
+`loop._v_wait_gate_reading()`，并打桩 `manuscriptclosing.signed_candidates` 与 `Store.tx`；
+这一份三处都不碰：门是 M 在真循环里用真工具调出来的。
+
+## 这条链覆盖什么（业主点名的 C12）
 
 ```text
-未签（或签被打桩成没签）
-  ⇒ AgentLoop._v_wait_gate_reading 受控拒：complete=False、逐条点名缺什么
-  ⇒ 一个计划号 / 一份稿都不许被读成「可 finish」
-
-已签
-  ⇒ agent_f.autosubmit.auto_submit_signed（F）
-  ⇒ agent_e.autosubmit.auto_submit_at_close（E）
-  ⇒ 两枚 mss: 记号落进各自 tasks.artifacts
-  ⇒ 统一读口 manuscriptsubmission.submission_reading（工具面
-     `manuscripts.submission_reading`）把它读成 submitted / via=closing_auto_submit
-  ⇒ B 收录成功时那一枚 mss:（via=ingested_to_ledger）落进 B 那一行
-  ⇒ tokenmeter.TokenMeter.charge 真记两笔账 ⇒ reconcile_usage 逐分相等
+M --summon--> H（读一眼）--> M 销号 H
+M --conductor.closing(goal_met=true, task_list=[…])--> closing.check_closing 现算七格
+        ⇒ status 七格全 pass / machine_pass=True / can_close=True / closable=True
+        ⇒ 判据落 out/review/m-verdicts.jsonl（运行外那一趟读同一份）
+M --final--> _final_gate_reading（整树已销号）
 ```
 
-## 终态断言（盘上/台账上可查）
+判据读盘：`conductor.closing` 的回执里 `status` 恰好七格且全 `pass`、`machine_pass=True`、
+`failed=[]`、`unknowns=[]`、`verdict_written.ok=True`；`m-verdicts.jsonl` 末行 `met=true`
+且 `sid` 是本趟；`tasks` 里 H 行 `outcome="ok"`；钱账干净。
 
-| 判据 | 终态 |
-|---|---|
-| `test_c12_a_unsigned_work_is_refused_with_names` | 三个角色的 `_v_wait_gate_reading`：`complete=False`，F 点名「计划 0001」、E/B 点名各自的稿；`problems` 非空 |
-| `test_c12_b_signed_work_passes_and_is_auto_submitted` | 三道门 `complete=True`；`tasks.artifacts` 里真的有 `mss:` 记号（F/E）；`via=closing_auto_submit` |
-| `test_c12_c_b_ingest_writes_the_b_side_marker` | B 收录成功的 `out` 经 `agent_b.autosubmit.mark_b_ingested` ⇒ B 那一行 `artifacts` 里 `mss:<稿号>`、`via=ingested_to_ledger` |
-| `test_c12_d_money_reconciles` | 真 `TokenMeter.charge` 两笔 ⇒ `reconcile_usage()["equal"] is True`、`diff_usd == 0`、逐行残差空 |
+「每一格单独造红」的形态不在这里重复：那些单点判据在 `tests/test_closing_gate.py`
+（每格一条负控 + 一条反真空）。这份彩排只用一格造红来证明链级的 `machine_pass` 承重
+（见反真空）。
 
-## 反真空（缺一不算走通）
+## 反真空（一个没被回答的问题 ⇒ user_pending 红）
 
-1. 签打桩成"没签"：把 `manuscriptclosing.signed_candidates` 打成恒
-   `signed=False/state=unsigned` ⇒ 已签那一趟必须被拦（`test_..._e`）；
-2. artifacts 写口打桩成失败：`store.tx("tasks")` 在自动提交那一刻抛 ⇒ 读数必须说
-   "没写成 / 没交成"（`checked=False` + `why` 含"没写成"），不许说"没有要交的"
-   （`test_..._f`）。这一格钉的是"没交成"与"没有要交的"是两件事。
+`userio.ask_user(..., sid=本趟)` 在开跑前登记一个没被回答的问题（这就是循环里
+「问了就停」的那条路，产品自己的 API），⇒ 真 `closing.check_closing` 的
+`user_pending` 必须 `fail` ⇒ `machine_pass=False`；而 `m_says_done` / `closable`
+仍是 `True`（收工由 M 判，业主 2026-10-09）—— 两条轴分开正是这一条要钉住的读数。
+它证明「机器七格」不是摆设：M 说做完了，机器那一半照样记红。这条只造一格红，
+其余六格照旧 `pass`。
 
-## 零模型
+## Lean 两档
 
-全部 tmp 工作区；签用 `verifications.record_pending_sign` + `vsigns.issue` 直接造
-（与 `test_e_auto_submits_signed_manuscripts.py` 同一套夹具形状）；不读写 `projects/`。
+`AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍：夹具里有 T3 形态的实验行（`method=formal` +
+检查器原话），所以两档的 `load_bearing` 都算有背书、`machine_pass` 都能为真。
 """
 from __future__ import annotations
 
+import io
+import json
 import pathlib
-from typing import Any, Mapping
+import re
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Any
 
 import pytest
 
-from agentflow import conductor as CND
-from agentflow import depsection as DS
-from agentflow import manuscriptclosing as MC
-from agentflow import manuscriptsubmission as MS
-from agentflow import modelcost as MCost
-from agentflow import proofregistry as PR
-from agentflow import schema as S
-from agentflow import tokenmeter as TM
-from agentflow import verifications as VR
-from agentflow import vsigns as VS
-from agentflow.agent_loop import AgentLoop
-from agentflow.agent_b import autosubmit as BAS
-from agentflow.agent_e import autosubmit as EAS
-from agentflow.agent_f import autosubmit as FAS
+import rehearsal_contract as RC
+
+from agentflow import cli
+from agentflow import closing as CL
+from agentflow import leanscope as LS
+from agentflow import modelgw as MG
 from agentflow.store import Store
-from agentflow.tools import manuscript_tools as MT
 
-TS = "2026-01-01T00:00:00+00:00"
-PLAN = "0001"
-F_MID = "000101"
-E_MID = "000201"
-B_MID = "000301"
-F_CLAIM = "设 G 是有限群；则 G 的阶与它的子群阶之间存在拉格朗日关系。"
-F_BODY = ("1. 取任意子群 H；H 的元素两两落在 G 的同一个左陪集里。\n"
-          "2. 左陪集构成 G 的一个划分，每一块的基数都是 |H| ⇒ |H| 整除 |G|。")
-E_CLAIM = "R(3,4)=9（K_9 的二染色穷举）。"
-E_BODY = ("1. 枚举 K_9 的全部二染色；每一种都命中单色 K_3 或 K_4。\n"
-          "2. K_8 存在反例 ⇒ 界是 9。")
-B_CLAIM = "设 H 是 G 的子群；则 H 的左陪集两两不交且覆盖 G。"
-B_BODY = ("1. 若 xH 与 yH 相交，则 x^{-1}y ∈ H ⇒ 两个左陪集相同。\n"
-          "2. 每个 g 都在 gH 里 ⇒ 全体左陪集覆盖 G。")
+from test_closing_gate import _good
+
+SID = "cc3-c12"
 
 
-# ====================================================================== 夹具
-def _ws(tmp_path: pathlib.Path) -> Store:
-    st = Store(tmp_path / "ws")
-    st.init()
-    return st
+def _json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
-def _text(*, head: str, claim: str, body: str) -> str:
-    return (f"# 证明手稿\n\n{head}\n\n## 命题\n\n{claim}\n\n## 证明\n\n{body}\n\n"
-            + DS.render_dependency_section([]))
+def _roster_names(prompt: str) -> list[str]:
+    return [m.group(1) for m in re.finditer(r'"roster_name":\s*"([A-Z]\d*)"', prompt)]
 
 
-def _f_text() -> str:
-    return _text(head=f"- 计划：{PLAN}",
-                 claim=F_CLAIM, body=F_BODY)
+class _Wire:
+    """预置的网络传输层替身（只回答"上游收到了什么、回了什么"）。"""
+
+    def __init__(self) -> None:
+        self.bodies: list[dict[str, str]] = []
+        self._steps: dict[str, int] = {}
+        self._done: list[str] = []
+
+    def _m_step(self, index: int, prompt: str) -> str:
+        if index == 0:
+            return _json({"summon": {"role": "H", "task": "先读一眼收工读数"}})
+        todo = [n for n in _roster_names(prompt) if n not in self._done]
+        if todo:
+            self._done.append(todo[0])
+            return _json({"tool": "conductor.retire_child",
+                          "args": {"child_name": todo[0], "reason": "知道了"}})
+        if not self._steps.get("M:closing"):
+            self._steps["M:closing"] = 1
+            return _json({"tool": "conductor.closing",
+                          "args": {"project_dir": ".",
+                                   "report_path": "out/review/REPORT.md",
+                                   "goal": "把这一项研究做到可交付",
+                                   "goal_met": True,
+                                   "basis": "七格读数都过、没有 blocker",
+                                   "task_list": [{"what": "收工门七格", "state": "done"}]}})
+        return _json({"final": "M 收工", "evidence": []})
+
+    def _reply(self, system: str, prompt: str) -> str:
+        head = system.lstrip()
+        m = re.match(r"你是「秘书」的判断面（类别：([a-z_]+)）", head)
+        if m:
+            return _json({"decision": "可派", "reason": "彩排", "basis": ["夹具"]})
+        m = re.match(r"你是 ([A-Z]) 号角色", head)
+        if m:
+            role = m.group(1)
+            index = self._steps.get(role, 0)
+            self._steps[role] = index + 1
+            if role == "M":
+                return self._m_step(index, prompt)
+            return _json({"final": f"{role} 看完了", "evidence": []})
+        return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["夹具"]})
+
+    def __call__(self, url: str, headers: Any, body: bytes,
+                 timeout_sec: float) -> tuple[int, str]:
+        payload = json.loads(body.decode("utf-8"))
+        messages = payload.get("messages") or []
+        system = next((str(x.get("content") or "") for x in messages
+                       if x.get("role") == "system"), "")
+        prompt = "\n".join(str(x.get("content") or "") for x in messages
+                           if x.get("role") == "user")
+        text = self._reply(system, prompt)
+        self.bodies.append({"system": system, "prompt": prompt, "text": text})
+        return 200, json.dumps({"choices": [{"message": {"content": text},
+                                             "finish_reason": "stop"}],
+                                "usage": {"prompt_tokens": 8, "completion_tokens": 8}},
+                               ensure_ascii=False)
 
 
-def _e_text() -> str:
-    return _text(head=f"- 实验号：exp:{E_MID}",
-                 claim=E_CLAIM, body=E_BODY)
+def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, *,
+         lean: str = "0", pending_question: bool = False) -> dict[str, Any]:
+    """真工作区（七格全过的底座）→ 从 CLI 入口真跑一趟；只替换出网那一层。"""
+    base.mkdir(parents=True, exist_ok=True)
+    st, _report = _good(base)
+    if pending_question:
+        # 「问了就停」那一档：问题登记在本趟 `sid` 上、没有回答（产品自己的 API）。
+        from agentflow import userio as U
+
+        outcome = U.ask_user(st.root, role="M", question="这一版要不要交人复核？",
+                             timeout_sec=0.0, wait=False, sid=SID)
+        assert outcome.state == "pending", outcome
+    wire = _Wire()
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "rehearsal-fake-key-never-used")
+    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", str(lean))
+    monkeypatch.setattr(MG, "urllib_transport", wire)
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = cli.main([
+                "start", "--mode", "research", "--root", str(st.root), "--sid", SID,
+                "--subagents", "--task", "先读一眼收工读数再收工", "--max-steps", "8",
+            ])
+    except SystemExit as exc:
+        rc = int(exc.code or 0)
+    return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
+            "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue(),
+            "pending_question": pending_question}
 
 
-def _b_text() -> str:
-    return _text(head="", claim=B_CLAIM, body=B_BODY)
+def _events(ws: pathlib.Path) -> list[dict]:
+    got: list[dict] = []
+    for path in sorted((ws / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                got.append(json.loads(line))
+            except ValueError:
+                continue
+    return got
 
 
-def _write(st: Store, rel: str, text: str) -> str:
-    path = pathlib.Path(st.root) / rel
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return rel
+def _closing_result(events: list[dict]) -> dict:
+    for e in events:
+        if (e.get("kind") == "agent_step" and e.get("role") == "M"
+                and e.get("shape") == "tool"
+                and str((e.get("payload") or {}).get("name") or "") == "conductor.closing"):
+            got = e.get("result") or {}
+            data = got.get("data")
+            if hasattr(data, "to_dict"):
+                data = dict(data.to_dict())
+            return {"ok": bool(got.get("ok")), "data": data if isinstance(data, dict) else {},
+                    "meta": dict(got.get("meta") or {})}
+    raise AssertionError("M 没有调过 conductor.closing（会话事件里找不到）")
 
 
-def _sign(st: Store, rel: str, text: str, *, by: str, statement_id: str = "") -> str:
-    """把一份稿签成「成立」：三票台账 ＋ `vsigns.issue` 的真凭据（同 E 那份夹具）。"""
-    body = DS.proof_body(text).strip("\n")
-    rows = [VR.record_pending_sign(
-        st.root, proof_text=body, verdict={"verdict": "成立", "findings": []},
-        verifier="agent-V", object_path=rel,
-        secretary_judge={"checked": True, "axis": "clean", "decision": "没问题",
-                         "reason": "夹具：clean"}) for _i in range(3)]
-    key = str(rows[0].get("object_sha256") or rows[0].get("proof_sha256") or "")
-    passes = [{"verification_id": r["verification_id"], "at": r["at"],
-               "proof_sha256": r["proof_sha256"]} for r in rows]
-    wrote = VS.issue(st.root, artifact_sha=PR.proof_sha(text), streak=3, need=3,
-                     artifact_path=rel, statement_id=statement_id,
-                     ledger=f"verifications/pending/{key}.jsonl"
-                            f"#{rows[-1]['verification_id']}",
-                     passes=passes, by=by)
-    assert wrote.get("written") is True, wrote
-    return str(wrote.get("sign", {}).get("artifact_sha") or PR.proof_sha(text))
+def _rows(store: Store, table: str) -> list[dict]:
+    return [dict(r) for r in store.rows(table)]
 
 
-def _task(st: Store, role: str, *, task_id: str, status: str = "running") -> dict:
-    row = S.Task(task_id=task_id, role=role, action="run", called_by="M", depth=1,
-                 status=status, started_at=TS, input_key=f"c12:{role}")
-    row.validate()
-    with st.tx("tasks", actor="fixture") as tx:
-        tx.upsert("tasks", row.to_dict())
-    return row.to_dict()
+def _verdict_rows(ws: pathlib.Path) -> list[dict]:
+    path = ws / "out" / "review" / "m-verdicts.jsonl"
+    if not path.is_file():
+        return []
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
 
 
-def _plan(st: Store) -> None:
-    row = S.AttackPlan(
-        plan_id=PLAN, problem="拉格朗日定理", problem_key="lagrange",
-        status="open", rounds=1,
-        budget={"max_rounds": 4, "max_parallel_subgoals": 2,
-                "max_persist_attempts": 2, "max_depth": 2},
-        history=[{"round": 1, "sid": "S1", "action": "proof",
-                  "outcome": "ok", "detail": "夹具", "evidence": [],
-                  "at": TS, "manuscript_id": F_MID}],
-        created_at=TS, updated_at=TS)
-    row.validate()
-    with st.tx("attack_plans", actor="fixture") as tx:
-        tx.upsert("attack_plans", row.to_dict())
+# ============================================================ ① 正控：七格全过、machine_pass 真
 
 
-def _experiment(st: Store) -> None:
-    row = S.Experiment(
-        experiment_id=E_MID, claim=E_CLAIM, claim_key="ramsey34",
-        method="symbolic", evidence_kind="cross_check",
-        result="inconclusive", negation_kind="not_proved", created_at=TS)
-    row.validate()
-    with st.tx("experiments", actor="fixture") as tx:
-        tx.upsert("experiments", row.to_dict())
-
-
-def _env(tmp_path: pathlib.Path, *, signed: bool = True) -> dict[str, Any]:
-    """一个带三族稿的工作区：F 计划／E 穷举证明／B 改写稿。"""
-    st = _ws(tmp_path)
-    _plan(st)
-    _experiment(st)
-    f_rel = _write(st, f"reports/f-proof-{F_MID}.md", _f_text())
-    e_rel = _write(st, f"reports/e-proof-{E_MID}.md", _e_text())
-    b_rel = _write(st, f"reports/b-proof-{B_MID}.md", _b_text())
-    _task(st, "F", task_id="t-000001")
-    _task(st, "E", task_id="t-000002")
-    _task(st, "B", task_id="t-000003")
-    if signed:
-        _sign(st, f_rel, _f_text(), by="secretary:F", statement_id="")
-        _sign(st, e_rel, _e_text(), by="secretary:E", statement_id="")
-        _sign(st, b_rel, _b_text(), by="secretary:B", statement_id="")
-    return {"store": st, "root": st.root, "f": f_rel, "e": e_rel, "b": b_rel}
-
-
-def _gate(env: Mapping[str, Any], role: str) -> dict:
-    """真入口：`AgentLoop._v_wait_gate_reading`（`final` 那条路读的就是它）。"""
-    loop = AgentLoop(role=role, session_root=pathlib.Path(str(env["root"])),
-                     registry=None, seam=None, store=env["store"],
-                     workspace_root=str(env["root"]))
-    return loop._v_wait_gate_reading()
-
-
-def _artifacts(st: Store, task_id: str) -> list[str]:
-    row = next(dict(r) for r in st.rows("tasks")
-               if str(r.get("task_id")) == task_id)
-    return [str(x) for x in (row.get("artifacts") or [])]
-
-
-# ====================================================================== a：未签
-def test_c12_a_unsigned_work_is_refused_with_names(tmp_path: pathlib.Path) -> None:
-    """未签时三个产出方各自被收工门受控拒，且逐条点名缺什么。"""
-    env = _env(tmp_path, signed=False)
-    problems: list[str] = []
-    for role in ("F", "E", "B"):
-        gate = _gate(env, role)
-        if gate.get("checked") is not True:
-            problems.append(f"{role}：读数该是 checked=True（台账读得成），实际 "
-                            f"{gate.get('checked')!r} / {gate.get('reason')!r}")
-        if gate.get("applicable") is not True:
-            problems.append(f"{role}：这道门对这一角色该有对象")
-        if gate.get("complete") is not False:
-            problems.append(f"{role}：未签时该判 complete=False，实际 {gate.get('complete')!r}")
-        if not gate.get("problems"):
-            problems.append(f"{role}：未签时 problems 为空 —— 受控拒没点名缺什么")
-        why = str(gate.get("why") or "")
-        if "还没收工" not in why:
-            problems.append(f"{role}：拒信没有『还没收工』：{why!r}")
-    f_gate = _gate(env, "F")
-    if not any("计划 " + PLAN in str(p.get("where") or "")
-               for p in (f_gate.get("problems") or ())):
-        problems.append(f"F：拒信没点名计划 {PLAN}：{f_gate.get('problems')!r}")
-    e_gate = _gate(env, "E")
-    if not any("e-proof" in str(p.get("where") or "")
-               for p in (e_gate.get("problems") or ())):
-        problems.append(f"E：拒信没点名 e-proof 稿：{e_gate.get('problems')!r}")
-    b_gate = _gate(env, "B")
-    if not any("b-proof" in str(p.get("where") or "")
-               for p in (b_gate.get("problems") or ())):
-        problems.append(f"B：拒信没点名 b-proof 稿：{b_gate.get('problems')!r}")
-    assert problems == [], problems
-
-
-# ====================================================================== b：已签
-def test_c12_b_signed_work_passes_and_is_auto_submitted(tmp_path: pathlib.Path) -> None:
-    """已签 ⇒ 三道门放行；收工自动提交把 `mss:` 记号写进 F/E 各自的 artifacts。"""
-    env = _env(tmp_path, signed=True)
-    st = env["store"]
-    problems: list[str] = []
-    for role in ("F", "E", "B"):
-        gate = _gate(env, role)
-        if gate.get("complete") is not True or gate.get("problems"):
-            problems.append(f"{role}：已签却没过门：complete={gate.get('complete')!r}，"
-                            f"problems={gate.get('problems')!r}，why={gate.get('why')!r}")
-
-    with CND.calling_as("t-000001", "F"):
-        f_out = FAS.auto_submit_signed(store=st, root=st.root, plan_id=PLAN, stamp=TS)
-    if f_out.get("auto_submitted_count") != 1:
-        problems.append(f"F 收工自动提交该 1 份，实际 {f_out.get('auto_submitted_count')!r}"
-                        f"（why={f_out.get('why')!r}，still={f_out.get('still_unsubmitted')!r}）")
-    f_tokens = [x for x in _artifacts(st, "t-000001") if x.startswith("mss:")]
-    if not any(x.startswith(f"mss:{F_MID}") for x in f_tokens):
-        problems.append(f"F 那一行 artifacts 里没有 mss:{F_MID}：{_artifacts(st, 't-000001')}")
-
-    e_out = EAS.auto_submit_at_close(store=st, root=st.root, task_id="t-000002", stamp=TS)
-    if e_out.get("auto_submitted_count") != 1:
-        problems.append(f"E 收工自动提交该 1 份，实际 {e_out.get('auto_submitted_count')!r}"
-                        f"（why={e_out.get('why')!r}，still={e_out.get('still_unsubmitted')!r}）")
-    e_tokens = [x for x in _artifacts(st, "t-000002") if x.startswith("mss:")]
-    if not any(x.startswith(f"mss:{E_MID}") for x in e_tokens):
-        problems.append(f"E 那一行 artifacts 里没有 mss:{E_MID}：{_artifacts(st, 't-000002')}")
-
-    # 统一读口（工具面 `manuscripts.submission_reading`）真的读得出「已提交」。
-    for rel, mid, producer in ((env["f"], F_MID, "F"), (env["e"], E_MID, "E")):
-        got = MS.submission_reading(st, st.root, manuscript=rel)
-        if got.get("state") != "submitted":
-            problems.append(f"{rel}：统一读口该是 submitted，实际 {got.get('state')!r}"
-                            f"（{got.get('why')!r}）")
-        if got.get("producer_role") != producer:
-            problems.append(f"{rel}：产出方该是 {producer}，实际 {got.get('producer_role')!r}")
-        if got.get("via") != MS.VIA_CLOSING:
-            problems.append(f"{rel}：via 该是 {MS.VIA_CLOSING}，实际 {got.get('via')!r}")
-    tool_reg = None
-    with CND.calling_as("t-000003", "B"):
-        res = _call_submission_reading_tool(st, env["f"])
-    if res.get("state") != "submitted":
-        problems.append(f"工具 manuscripts.submission_reading 没读出 submitted：{res!r}")
-    assert problems == [], problems
-
-
-def _call_submission_reading_tool(st: Store, rel: str) -> dict:
-    """真工具面：`manuscripts.submission_reading`（只读，全部可召唤角色）。"""
-    from agentflow.tools import manuscript_tools as MT_
-    from agentflow.tools.base import ToolRegistry
-
-    reg = ToolRegistry(name="c12")
-    reg.bound_role = "B"
-    MT_.register(reg, store=st, actor="agent-B")
-    got = reg.call("manuscripts.submission_reading", manuscript=rel, role="B")
-    assert got.ok, (got.error, got.meta)
-    return dict(got.data or {})
-
-
-# ====================================================================== c：B 收编
-def test_c12_c_b_ingest_writes_the_b_side_marker(tmp_path: pathlib.Path) -> None:
-    """B 收录成功那一刻：`mss:` 记号落进 B 自己那一行（`via=ingested_to_ledger`）。"""
-    env = _env(tmp_path, signed=True)
-    st = env["store"]
-    out: dict[str, Any] = {"ok": True,
-                           "manuscript": {"proof_sha256": PR.proof_sha(_b_text())},
-                           "target": {"stmt_id": B_MID},
-                           "path_group": {"path_group": 1}}
-    with CND.calling_as("t-000003", "B"):
-        got = BAS.mark_b_ingested(st, st.root, manuscript=env["b"], out=out)
-    problems: list[str] = []
-    if got.get("b_submission", {}).get("written") is not True:
-        problems.append(f"B 收录成功却没有写提交记号：{got.get('b_submission')!r}")
-    tokens = [x for x in _artifacts(st, "t-000003") if x.startswith("mss:")]
-    if not any(x.startswith(f"mss:{B_MID}") for x in tokens):
-        problems.append(f"B 那一行 artifacts 里没有 mss:{B_MID}：{_artifacts(st, 't-000003')}")
-    reading = MS.submission_reading(st, st.root, manuscript=env["b"])
-    if reading.get("via") != MS.VIA_INGEST:
-        problems.append(f"B 的 via 该是 {MS.VIA_INGEST}，实际 {reading.get('via')!r}")
-    if reading.get("state") != "submitted":
-        problems.append(f"B 的稿该读成 submitted，实际 {reading.get('state')!r}")
-    # 受控拒：`out["ok"] is False` ⇒ 一个字节都不写。
-    refused_out: dict[str, Any] = {"ok": False, "manuscript": {}, "target": {}}
-    before = list(_artifacts(st, "t-000003"))
-    with CND.calling_as("t-000003", "B"):
-        BAS.mark_b_ingested(st, st.root, manuscript=env["b"], out=refused_out)
-    if list(_artifacts(st, "t-000003")) != before:
-        problems.append("受控拒那一档动了 B 的 artifacts（不该写）")
-    assert problems == [], problems
-
-
-# ====================================================================== d：钱
-def test_c12_d_money_reconciles(tmp_path: pathlib.Path) -> None:
-    """真记账两笔 ⇒ `usage_ledger` 与 `tasks.usd` 逐分相等；再打坏一笔必须点名。"""
-    env = _env(tmp_path, signed=True)
-    st = env["store"]
-    meter = TM.TokenMeter(st)
-    meter.charge(TM.Charge(role="F", scope="reason", tokens_in=1000, tokens_out=200,
-                           usd=0.0015, task_id="t-000001", note="C12 F 一轮"), now=TS)
-    meter.charge(TM.Charge(role="E", scope="experiment", tokens_in=2000, tokens_out=400,
-                           usd=0.0030, task_id="t-000002", note="C12 E 一轮"), now=TS)
-    reading = MCost.reconcile_usage(st)
-    problems: list[str] = []
-    if reading.get("equal") is not True:
-        problems.append(f"两本账该逐分相等，实际 {reading!r}")
-    if reading.get("diff_usd") != 0.0:
-        problems.append(f"diff_usd 该是 0，实际 {reading.get('diff_usd')!r}")
-    if reading.get("named_residual") or reading.get("unattributed", {}).get("count"):
-        problems.append(f"逐行残差与无主账都该为空：{reading!r}")
-    if not reading.get("tasks_usd"):
-        problems.append(f"tasks.usd 合计该非零：{reading!r}")
-
-    # 反真空：把 E 那一行的账改小（只改账本、不改 tasks）⇒ 对账必须红并点名。
-    rows = [dict(r) for r in st.rows("usage_ledger")]
-    target = next(r for r in rows if str(r.get("task_id")) == "t-000002")
-    target["usd"] = 0.0
-    target["note"] = "C12 打坏的那一笔"
-    with st.tx("usage_ledger", actor="fixture") as tx:
-        tx.upsert("usage_ledger", target)
-    bad = MCost.reconcile_usage(st)
-    if bad.get("equal") is not False:
-        problems.append(f"打坏一笔之后对账仍 equal：{bad!r}")
-    if not any(str(r.get("task_id")) == "t-000002" for r in (bad.get("named_residual") or ())):
-        problems.append(f"差额没有逐行点名 t-000002：{bad.get('named_residual')!r}")
-    assert problems == [], problems
-
-
-# ====================================================================== e：反真空签
-def test_c12_e_stubbing_the_sign_to_unsigned_blocks_the_close(
+def test_the_closing_gate_passes_all_seven_cells_from_the_cli(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空①：把签打桩成"全都没签" ⇒ 已签那一趟必须被收工门拦住。
+    """正控：M 在真循环里调 `conductor.closing` ⇒ 七格全 pass、`machine_pass=True`。"""
+    got = _run(tmp_path, monkeypatch, lean="0")
+    events = _events(got["ws"])
+    closing = _closing_result(events)
+    data = closing["data"]
 
-    打桩点选 `manuscriptclosing.signed_candidates`（"签算不算签"的唯一口径）：
-    盘上真签不动，只让门读到 unsigned。若门不读它、或"没签"被折成"可以收工"，
-    这一条当场红。
+    # ---- 入口与"只换了网线"
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
+    assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
+    assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
+        "缝工厂被整体替换了 —— 这份彩排的承诺是「只换网线」")
+    assert [e for e in events if e.get("kind") == "llm_call"], (
+        "会话里一条 llm_call 都没有 ⇒ 走的不是真 LlmSeam")
+
+    # ---- 七格：恰好那七格、且全 pass（键集取自产品自己的 DEFAULT_CHECKS）
+    assert closing["ok"] is True, closing
+    status = dict(data.get("status") or {})
+    assert set(status) == set(CL.DEFAULT_CHECKS), sorted(status)
+    assert all(v == "pass" for v in status.values()), status
+    assert data["machine_pass"] is True, data["machine_pass"]
+    assert data["m_says_done"] is True, data.get("m_says_done")
+    assert data["can_close"] is True, data.get("can_close")
+    assert data["closable"] is True, data.get("closable")
+    assert data["failed"] == [] and data["unknowns"] == [], (data["failed"], data["unknowns"])
+    assert closing["meta"].get("blocked") is False, closing["meta"]
+
+    # ---- M 的判据落盘（运行外那一趟读同一份；同一 `sid`）
+    written = dict(data.get("verdict_written") or {})
+    assert written.get("tried") is True and written.get("ok") is True, written
+    rows = _verdict_rows(got["ws"])
+    assert rows, "out/review/m-verdicts.jsonl 没有落盘"
+    last = dict(rows[-1])
+    assert last.get("met") is True, last
+    assert str(last.get("sid") or "") == SID, last
+
+    # ---- 派活那一趟真的跑过（H 行 ok、被销号；三格的调用方身份有对象）
+    h_rows = [t for t in _rows(got["store"], "tasks")
+              if str(t.get("role")) == "H" and not str(t.get("kind") or "")]
+    assert len(h_rows) == 1 and str(h_rows[0].get("outcome")) == "ok", h_rows
+
+    from agentflow.modelcost import reconcile_usage
+
+    money = reconcile_usage(got["store"])
+    assert money["ledger_rows"] > 0, money
+    assert money["unattributed"]["count"] == 0, money["unattributed"]
+    assert money["dangling"] == [], money["dangling"]
+    assert money["equal"] is True, money
+
+
+# ============================================================ ② 反真空：一格造红 ⇒ machine_pass 假
+
+
+def test_one_red_cell_turns_machine_pass_false_while_m_still_says_done(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：一个没被回答的问题 ⇒ `user_pending` 红 ⇒ `machine_pass=False`（M 仍说做完了）。
+
+    这条只造一格红：其余六格照旧 pass。它证明链级的 `machine_pass` 真的压在七格
+    的合取上，而不是"M 说了达成"的另一种写法。逐格各自的造红形态在
+    `tests/test_closing_gate.py`（那里每格一条负控 + 一条反真空）。
     """
-    env = _env(tmp_path, signed=True)
-    real = MC.signed_candidates
-
-    def _unsigned(root: Any, *, families: Any, role: str = "") -> dict:
-        got = dict(real(root, families=families, role=role))
-        got["candidates"] = [{**dict(c), "signed": False, "state": "unsigned",
-                              "why": "打桩：没签"} for c in (got.get("candidates") or ())]
-        return got
-
-    monkeypatch.setattr(MC, "signed_candidates", _unsigned)
-    problems: list[str] = []
-    for role in ("F", "E", "B"):
-        gate = _gate(env, role)
-        if gate.get("complete") is not False:
-            problems.append(f"{role}：签被打桩成没签之后仍然放行 ⇒ 「按签拦」不来自签")
-        if not gate.get("problems"):
-            problems.append(f"{role}：签被打桩成没签之后没有点名缺什么")
-    assert problems == [], problems
+    got = _run(tmp_path, monkeypatch, lean="0", pending_question=True)
+    closing = _closing_result(_events(got["ws"]))
+    data = closing["data"]
+    status = dict(data.get("status") or {})
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert str(status.get("user_pending") or "") == "fail", status
+    # 只该红这一格：其余六格照旧 pass（定位不是"整张门都炸了"）。
+    assert {k for k, v in status.items() if v != "pass"} == {"user_pending"}, status
+    assert data["machine_pass"] is False, data["machine_pass"]
+    assert data["failed"], data.get("failed")
+    # M 的自述没变：机器那一半变假了，而 `closable` 是另一条轴（收工由 M 判，
+    # 业主 2026-10-09）—— 两条轴分开正是这里要钉住的读数。
+    assert data["m_says_done"] is True, data.get("m_says_done")
+    assert data["closable"] is True, data.get("closable")
+    assert "user_pending" in [str(x) for x in (data.get("failed") or [])], data.get("failed")
 
 
-# ====================================================================== f：反真空写口
-def test_c12_f_a_failed_artifacts_write_says_it_was_not_submitted(
-        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空②：artifacts 写口打桩成失败 ⇒ 读数说"没交成"，不许说"没有要交的"。"""
-    env = _env(tmp_path, signed=True)
-    st = env["store"]
-    real_tx = Store.tx
+# ============================================================ 判据①：每笔真调用一行账
 
-    def _tx(self: Store, *tables: str, **kw: Any):
-        note = str(kw.get("note") or "")
-        if "auto_submit" in note:
-            raise OSError("打桩：artifacts 写口坏了")
-        return real_tx(self, *tables, **kw)
 
-    monkeypatch.setattr(Store, "tx", _tx)
-    e_out = EAS.auto_submit_at_close(store=st, root=st.root, task_id="t-000002",
-                                     stamp=TS)
-    problems: list[str] = []
-    if e_out.get("checked") is not False:
-        problems.append(f"写不进去时 checked 该是 False，实际 {e_out.get('checked')!r}")
-    why = str(e_out.get("why") or "")
-    if "没写成" not in why and "没交成" not in why:
-        problems.append(f"读数没说是『没写成/没交成』：{why!r}")
-    if "没有「已拿签、尚未提交」的稿" in why:
-        problems.append(f"写失败被读成了『没有要交的』：{why!r}")
-    states = {str(x.get("state")) for x in (e_out.get("still_unsubmitted") or ())}
-    if "write_failed" not in states:
-        problems.append(f"逐条理由里没有 write_failed：{e_out.get('still_unsubmitted')!r}")
-    if any(x.startswith(f"mss:{E_MID}") for x in _artifacts(st, "t-000002")):
-        problems.append("写口坏了却仍然写进了 artifacts")
-    assert problems == [], problems
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_real_call_has_exactly_one_ledger_row(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行（Lean 开/关各一遍）。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    reading = RC.ledger_identity(got["ws"], got["store"])
+    print(f"[一行账] lean={lean} 真调用={reading['calls']} 出网={len(got['wire'].bodies)} "
+          f"账本行={reading['rows']} duplicate={len(reading['duplicates'])} "
+          f"未配对={len(reading['unpaired'])} 未认领={len(reading['unclaimed'])}")
+    assert reading["calls"] == len(got["wire"].bodies), (
+        "有真缝调用没有落 `llm_call` 事件（或反之）："
+        f"事件 {reading['calls']} / 出网 {len(got['wire'].bodies)}")
+    problems = RC.one_row_per_call_problems(reading)
+    assert problems == [], "判据①红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ 判据②：会话归口
+
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_llm_call_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    split = RC.session_split(got["ws"], SID)
+    print(f"[会话归口] lean={lean} 本趟={len(split['in_run'])} "
+          f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
+    assert split["calls"], "这一趟一次真调用都没有 ⇒ 判据没有对象（不是干净）"
+    problems = RC.session_problems(split)
+    assert problems == [], "判据②红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ Lean 两档
+
+
+@pytest.mark.parametrize("lean,verdict,hidden", [("1", "on", False), ("0", "off", True)])
+def test_machine_pass_can_be_true_in_both_lean_modes(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+        lean: str, verdict: str, hidden: bool) -> None:
+    """Lean 开/关两档：`machine_pass` 都能为真（夹具里有 T3 实验行撑着 load_bearing）。
+
+    这是 `test_load_bearing_without_lean.py` 那条「改前永远真不了」的单点判据在
+    链级上的对应物：两档各跑一遍，才不是"另一档没跑所以没红"。
+    """
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    reading = LS.lean_reading()
+    assert reading.verdict == verdict, reading.to_dict()
+    assert LS.is_hidden("L") is hidden, (lean, reading.to_dict())
+    closing = _closing_result(_events(got["ws"]))["data"]
+    assert closing["machine_pass"] is True, closing.get("status")
+    assert all(v == "pass" for v in (closing.get("status") or {}).values()), closing.get("status")
+    from agentflow import schema as S
+
+    roles = set(LS.visible_roles(S.ROLES))
+    assert ("L" in roles) is (not hidden), sorted(roles)
+
+
+if __name__ == "__main__":  # pragma: no cover - 手工复跑用
+    raise SystemExit(pytest.main([__file__, "-q"]))
+

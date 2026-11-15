@@ -180,14 +180,6 @@ _SRC_CACHE: dict[str, Any] = {}
 #: - ``does_not_prove``：它没有证明什么（真机上因此仍然未知的那一段）；
 #: - ``superseded_by``：改用 CLI 入口 + 真 `LlmSeam` 的那份新彩排（没有就空串）。
 CHAIN_ONLY: dict[str, dict[str, str]] = {
-    "test_rehearsal_c12_closing.py": {
-        "chain": "C12 · 收工门七格",
-        "reason": "手工造 `AgentLoop` 之后直调私有 `loop._v_wait_gate_reading()`；打桩 "
-                  "`manuscriptclosing.signed_candidates` 与 `Store.tx`。入口低于 CLI 两层。",
-        "proves": "七格各自的读数与 `machine_pass` 的取值在给定夹具下成立。",
-        "does_not_prove": "这一趟是产品路径跑出来的（门是手工搭的）—— 真机前置证据不成立。",
-        "superseded_by": "",
-    },
     "test_rehearsal_b_intake_exits.py": {
         "chain": "C5 · B 收编的形态闸 / 同一性门出口",
         "reason": "直调 `AgentB.register_statement` / `AgentF.rewrite_manuscript_proposition`，"
