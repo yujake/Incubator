@@ -1,488 +1,638 @@
 # -*- coding: utf-8 -*-
-"""彩排判据 C4 · 打回修订环：V 点名缺陷 → F 定点重写 → 正文 sha 变 → 再送审 → 签。
+"""彩排（真路径）C4 · 打回修订环：CLI 入口 → M→D→F→V，V 点名缺陷 → F 定点重写 → 再送审 → 签。
 
-## 这条链要走通的那一段
+## 这条链与真机差在哪（逐项）
 
-```text
-AgentF.step                        # v1：reports/f-proof-<稿号>.md（三节稿）
-AgentV.verify_proof                # 第 1 转 clean、第 2 转 fault ⇒ 立刻停（defect_step=2）
-AgentF.step                        # 定点重写：只换第 2 步，正文 sha 变
-AgentV.verify_proof                # 三转 clean ⇒ 新签指向新 sha
-```
-
-## 为什么"旧签仍在、只是与现行正文不等"不是这一条
-
-业主/产品口径（2026-11-11「签是冻结」）：签过的稿只读 —— `AgentF._hand_proof` 对已签稿
-受控拒 `manuscript_frozen`（要改只能开 B 的优化副本）；V 对已签正文短接
-（`proof_manuscript_signed`，`review_passes=[]`）。所以"同一份 F 稿签完再改、旧签变
-stale"在产品里造不出来（只在"违背只读纪律直接改盘"那种异常态出现）。这一份因此按
-真链断三条：
-
-| # | 判据 | 反真空 / 负控 |
+| 这一趟用的东西 | 真机 | 这份彩排 |
 |---|---|---|
-| a | 打回是终局且点名步号：`proof_unregistered_rejected`、`defect_step=2`、洗过的转达落台账；v1 一份签都没有 | 把第 2 转判成 clean ⇒ 这一条红（fault 会被读成"没问题"） |
-| b | F 只改那一步：重写后 sha 变、第 1 / 第 3 步逐字节不动、第 2 步变了；再送审三转 ⇒ 新签指向新 sha | 把重写做成"整份换掉" ⇒ 第 1 / 3 步的逐字断言红 |
-| c | 冻结纪律：已签稿就地改 ⇒ `manuscript_frozen`；已签正文再送审 ⇒ `proof_manuscript_signed` 且零新行 | 放开冻结 / 放开短接 ⇒ 这两条红 |
-| d | 旧 F 签不跟着优化副本走：`open_polish_copy` 复制出的 b 号稿已清签、源稿仍签着 | 复制件带着签 ⇒ 这一条红 |
+| 入口 | `agentflow start --mode research` | 同一行：`cli.main(["start", "--mode", "research", …])` |
+| 执行体 | `_run_spec` → `_exec_role` → `host.wired_llm_conductor` → `LlmBackend` → `AgentLoop.run` | 同一条 |
+| 派活 | `Conductor.summon`（`M→D`、`D→F`、`F→V` 都是 `ALLEGED_EDGES` 里的真边） | 同一条 |
+| F 交稿 | `attack.step` + `product` → `reports/f-proof-<稿号>.md` | 同一条：稿是产品自己落的 |
+| 送审 / 打回 | `verify.verify_proof` → `AgentV.verify_proof`（连判三转）＋ 每转由 `secretary:V` 判 `clean/fault` | 同一条：判词内容预置，判据与写口是产品原物 |
+| 缺陷回到 F 下一步 | V 的结论落 `verifications/pending/<sha>.jsonl`（`defect_step` + `secretary_judge.axis=fault`），V 收工时把意见作为 notice 交给父 F；F 下一步在开场/步内读到它 | 同一条：F 的下一拍 prompt 里逐字带着那句意见（本文件用 wire 记下 prompt 断言） |
+| 重写 | F 再 `attack.step`（`proof_mode=rewritten`、稿号不变） | 同一条 |
+| 再送审 / 签 | 三转 clean ⇒ `secretary:F` 把签块落回稿、`out/vsigns/<新 sha>.json` | 同一条 |
+| 收工门 | `_v_wait_gate_reading`（F 的稿有现行签才放行 final） | 同一条：F 的 final 过了门，M 的 final 过了整树销号门 |
+| 模型缝 / 记账 / 出网 | 真 `LlmSeam` / 真 `TokenMeter` / `modelgw.urllib_transport` | 只换出网那一处 |
 
-读数：打回前后各收一次工（真 `auto_submit_signed`，挂一条 running 的 F 行）——
-未签时进 `still_unsubmitted`（`state="unsigned"`、零提交），签后进 `auto_submitted`
-（`body_sha` 是新 sha）+ 注 `mss:` 记号。
+旧版（改写前登记在 `CHAIN_ONLY` 里）直调
+`AgentF.step` 与私有 `f._hand_proof`、`AgentV.verify_proof`，缝是自造
+`_Seam(ask_json)` + `_Review(ask)`；这一份一处都不换。
 
-零真实模型调用；`tmp_path` 工作区，不碰 `projects/` / `demo/`。
+## 这一条链钉的四段（每段都能单独读盘）
+
+1. v1 被判「有缺陷要指出」：`verifications/pending/<sha1>.jsonl` 一行，
+   `defect_step=2`、`secretary_judge.axis="fault"`、`why` 里留着 V 指出的那句话；
+   v1 一枚签都没有（`out/vsigns/<sha1>.json` 不存在、稿上没有签块）。
+2. 那句意见回到 F 的下一步：wire 记下 F 每一拍的 prompt，重写那一拍里逐字带着
+   V 的意见（`框架执行结果` 那一行 = 上一拍 summon 回来的 V 结论）。
+3. 只改第 2 步：重写后正文 sha 变、行数不变、只有第 2 行不同；
+   `attack.step` 的 `proof_mode="rewritten"`（稿号仍是同一份）。
+4. 再送审三转 clean ⇒ 签：`pending/<sha2>.jsonl` 三行、稿上签块
+   `连续=3/3`、`签名者=secretary:F`、`out/vsigns/<sha2>.json` 在盘上、签里的
+   `artifact_sha` 就是新正文 sha；F 的 final 过门。
+
+## 反真空
+
+`fault=False` 那一趟（同一个 wire、同一份夹具，只把 `secretary:V` 的判定换成
+恒 `clean`）：第一份稿当场三转签住 —— 一次重写都没有（`proof_mode` 只有
+`registered`）、v1 的 sha 上三行 pending、签文件在盘上、final 直接过门。
+它证明主链的"先打回、再重写、再签"不是恒真：把那一格判成 clean，打回与重写
+就一起消失（旧彩排的 `test_..._a` 把这条反真空写成"判成 clean ⇒ 这一条红"）。
+
+## 一处已报但未改的产品缺口（本文件按真机实际行为钉住，不假装有洗稿）
+
+`AgentV._wash_v_reply` 只在已在册那一档（`record_verification`）里被调用；
+F 的稿在收录前是未在册的，走 `record_pending_sign` —— 那两处调用都不接
+`washed_relay`。于是这条主路上：「秘书洗稿 → 转达给 F」这一步并不发生：
+F 拿到的是 V 自己的结论（本彩排里由 V 的模型写成一句人话，经 notice 投到 F 的
+下一拍），`secretary:V` 的语义判定落在 `pending` 台账的 `secretary_judge` 里。
+判断与修法已按门报告（`temp/cc4/REPORT-CC4.md` §五），本文件没有改产品。
+
+## Lean 两档
+
+`AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍：这条链不碰形式化工具面，两档的四段读数
+应当逐字相同；关档下名册里没有 L。
 """
 from __future__ import annotations
 
+import io
 import json
 import pathlib
+import re
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Any
 
 import pytest
 
-from agentflow import conductor as CND
+import rehearsal_contract as RC
+
+from agentflow import cli
 from agentflow import depsection as DS
+from agentflow import leanscope as LS
+from agentflow import modelgw as MG
 from agentflow import proofregistry as PR
-from agentflow import schema as S
-from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
-from agentflow.agent_b import AgentB
-from agentflow.agent_f import AgentF
-from agentflow.agent_f import autosubmit as _AS
-from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
+SID = "cc4-c4"
 PROBLEM = "设 G 是有限群；则 |G| = p^2 时 G 是交换群。"
 STEP1 = "由类方程，非中心共轭类的长度都被 p 整除。"
 STEP2 = "于是 |Z(G)| 被 p 整除、非平凡。"
 STEP2_FIX = "于是 |Z(G)| 被 p 整除、非平凡（p 是素数 ⇒ |Z(G)| 是 p 的正倍数）。"
 STEP3 = "G/Z(G) 循环 ⇒ G 交换。"
-
-#: V 报回来的负判原文（它的结论词仍是「成立」，缺陷由秘书语义判定读出来）。
-FAULT_REPLY = json.dumps({"verdict": "成立", "why": "第 2 步的记号没有定义。",
-                          "findings": []}, ensure_ascii=False)
-CLEAN_REPLY = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失败，未发现问题。",
-                          "findings": []}, ensure_ascii=False)
-#: 秘书洗过的那一份转达（要能引回 V 指出的那句）。
-WASHED = "第 2 步的记号没有定义：请补上记号说明之后再送 V 重签。"
-
-
-# --------------------------------------------------------------------------- 假缝
+BUDGET = {"max_rounds": 3, "max_parallel_subgoals": 2,
+          "max_persist_attempts": 2, "max_depth": 2}
+SUBGOALS = [{"sid": "s1", "text": PROBLEM, "owner": "F", "testable": "写出三步论证"}]
+DEFECT = "第 2 步的记号没有定义"
+#: V 收工时交给父 F 的那句人话（真机由 V 的模型写；这里是它的结论）。
+REJECT_FINAL = f"V 判有毛病：{DEFECT}，请补上后再送"
+SIGNED_FINAL = "V 签在稿上（连续 3/3 成立）"
 
 
-class _Call:
-    ok = True
-    problem = ""
-    detail = ""
-    text = ""
-    model = "fake"
-    prompt_version = "t"
-    prompt_sha256 = "0" * 64
+def _json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
-class _Seam:
-    """秘书那一格的假模型缝（只实现 `Secretary.judge` 用到的 `ask_json`）。"""
-
-    wired = True
-
-    def __init__(self, answers: dict[str, list] | None = None) -> None:
-        self.answers = {k: list(v) for k, v in (answers or {}).items()}
-        self.seen: list[str] = []
-
-    def ask_json(self, prompt, *, system="", task_id="", note=""):
-        self.seen.append(str(note))
-        kind = str(note).split(":", 1)[-1]
-        queue = self.answers.get(kind) or [{}]
-        doc = queue.pop(0) if len(queue) > 1 else queue[0]
-        return dict(doc), _Call()
-
-    def asked(self, kind: str) -> int:
-        return sum(1 for note in self.seen if note.endswith(f":{kind}"))
+def _my_task(prompt: str) -> str:
+    m = re.search(r"这一趟派给你的活是 —— .+", prompt)
+    return m.group(0) if m else ""
 
 
-class _Review:
-    """V 自己的审阅缝：按顺序交回复，并记下问过几次。"""
-
-    wired = True
-
-    def __init__(self, *replies: str) -> None:
-        self.replies = list(replies)
-        self.prompts: list[str] = []
-
-    def ask(self, prompt: str = "", **_kw) -> _Call:
-        self.prompts.append(prompt)
-        call = _Call()
-        call.text = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
-        return call
-
-    def asked(self) -> int:
-        return len(self.prompts)
+def _plan_id(prompt: str) -> str:
+    hits = re.findall(r'"data\.plan_id":\s*"(\d{6})"', prompt)
+    return hits[-1] if hits else ""
 
 
-class _FakeF:
-    """F 那一轮的模型缝（`AgentF.llm.complete`）。"""
-
-    def __init__(self, *replies: str) -> None:
-        self.replies = list(replies)
-        self.prompts: list[str] = []
-
-    def complete(self, prompt: str) -> str:
-        self.prompts.append(prompt)
-        return self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
+def _manuscript(prompt: str) -> str:
+    hits = re.findall(r"reports/f-proof-\d{6}\.md", prompt)
+    return hits[-1] if hits else ""
 
 
-def _axis(answer: str, **extra) -> dict:
-    out = {"checked": True, "decision": answer, "reason": "夹具：照规则判",
-           "basis": ["夹具"]}
-    out.update(extra)
+def _root(prompt: str) -> pathlib.Path:
+    m = re.search(r"工作区根目录：(.+?)。", prompt)
+    return pathlib.Path(m.group(1)) if m else pathlib.Path(".")
+
+
+class _Wire:
+    """预置的网络传输层替身（只回答"上游收到了什么、回了什么"）。"""
+
+    def __init__(self, *, fault: bool = True) -> None:
+        self.fault = bool(fault)
+        self.bodies: list[dict[str, str]] = []
+        self.prompts: list[dict[str, str]] = []
+        self.steps: dict[str, int] = {}
+        self.retired: list[str] = []
+        self.vreview = 0
+        self.vdefect = 0
+        #: 两版稿的盘上全文快照（在"下一次 attack.step 之前"取：那时盘上还是上一版）。
+        self.before_text = ""
+        self.after_text = ""
+
+    def _snap(self, prompt: str) -> str:
+        path = _root(prompt) / "reports" / "f-proof-000000.md"
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return ""
+
+    def _name_of(self, prompt: str, role: str) -> str:
+        names = [n for n in re.findall(r'"roster_name":\s*"([A-Z]\d*)"', prompt)
+                 if n not in self.retired]
+        return names[0] if names else ""
+
+    def _retire_then(self, prompt: str, nxt: str) -> str:
+        name = self._name_of(prompt, "")
+        if name:
+            self.retired.append(name)
+            return _json({"tool": "conductor.retire_child",
+                          "args": {"child_name": name, "reason": "交完了"}})
+        return nxt
+
+    # ------------------------------------------------------------ 剧本
+    def _m(self, index: int, prompt: str) -> str:
+        if index == 0:
+            return _json({"summon": {"role": "D", "task": "派 F 证一条并送 V 审"}})
+        return self._retire_then(prompt, _json({"final": "M 收工", "evidence": []}))
+
+    def _d(self, index: int, prompt: str) -> str:
+        if index == 0:
+            return _json({"summon": {"role": "F", "task": PROBLEM}})
+        return self._retire_then(prompt, _json({"final": "D 收工", "evidence": []}))
+
+    def _f(self, index: int, prompt: str) -> str:
+        pid = _plan_id(prompt)
+        ms = _manuscript(prompt) or "reports/f-proof-000000.md"
+        v1 = {"kind": "proof", "label": "v1", "proposition": PROBLEM,
+              "steps": [{"text": t, "assumption": True} for t in (STEP1, STEP2, STEP3)]}
+        v2 = {"kind": "proof", "label": "v2", "proposition": PROBLEM,
+              "steps": [{"text": t, "assumption": True}
+                        for t in (STEP1, STEP2_FIX, STEP3)]}
+        if index == 0:
+            return _json({"tool": "attack.create_plan",
+                          "args": {"problem": PROBLEM, "problem_key": "p2",
+                                   "budget": BUDGET, "subgoals": SUBGOALS}})
+        if index == 1:
+            return _json({"tool": "attack.step", "args": {"plan_id": pid, "product": v1}})
+        if index == 2:
+            return _json({"summon": {"role": "V", "task": f"审这一份证明稿：{ms}",
+                                     "params": {"proof_manuscript": ms}}})
+        if not self.fault:
+            # 反真空那一趟：V 当场签住 ⇒ F 不需要重写，直接收工。
+            return _json({"final": "F 收工", "evidence": []})
+        if index == 3:
+            # 盘上此刻还是 v1（下一步才写 v2）⇒ 这是 v1 那份稿的读数。
+            self.before_text = self._snap(prompt)
+            return _json({"tool": "attack.step", "args": {"plan_id": pid, "product": v2}})
+        if index == 4:
+            self.after_text = self._snap(prompt)
+            return _json({"summon": {"role": "V",
+                                     "task": f"再审这一份（已按上一轮意见改过）：{ms}",
+                                     "params": {"proof_manuscript": ms}}})
+        return _json({"final": "F 收工", "evidence": []})
+
+    def _v(self, i: int, prompt: str) -> str:
+        ms = _manuscript(prompt) or None
+        if i == 0:
+            return _json({"tool": "verify.verify_proof",
+                          "args": {"proof_manuscript": ms}})
+        if "再审" in _my_task(prompt):
+            return _json({"final": SIGNED_FINAL})
+        return _json({"final": REJECT_FINAL if self.fault else SIGNED_FINAL})
+
+    # ------------------------------------------------------------ 回复分派
+    def reply(self, *, system: str, prompt: str) -> str:
+        head = system.lstrip()
+        m = re.match(r"你是「秘书」的判断面（类别：([a-z_]+)）", head)
+        if m:
+            kind = m.group(1)
+            if kind == "proposition_form":
+                return _json({"checked": True, "well_formed": True,
+                              "conditions": "G 是有限群",
+                              "conclusion": "|G| = p^2 时 G 是交换群",
+                              "problems": [], "decision": "形态合规",
+                              "refused": "", "reason": "彩排：形态合规"})
+            if kind == "v_reply_defect":
+                self.vdefect += 1
+                if self.fault and self.vdefect == 2:
+                    return _json({"checked": True, "decision": "有缺陷要指出",
+                                  "reason": DEFECT + "。", "basis": ["彩排"],
+                                  "defect_step": 2, "defect_kind": "math",
+                                  "report_gap": ""})
+                return _json({"checked": True, "decision": "没问题",
+                              "reason": "没发现问题", "basis": ["彩排"],
+                              "defect_step": None, "defect_kind": "",
+                              "report_gap": ""})
+            if kind == "wash_v_reply":
+                return _json({"text": f"请补第 2 步的记号说明：{DEFECT}。",
+                              "step": 2,
+                              "findings": [{"quote": DEFECT,
+                                            "why": "记号没定义就没法核这一步"}]})
+            if kind == "sign_issuance":
+                return _json({"decision": "签发", "reason": "三转干净",
+                              "basis": ["彩排"]})
+            return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["彩排"]})
+        if "命题形态闸" in head:
+            return _json({"checked": True, "well_formed": True, "decision": "形态合规",
+                          "conditions": "G 是有限群", "conclusion": "|G| = p^2 时交换",
+                          "problems": [], "refused": "", "reason": "彩排：形态合规"})
+        if "你是验证者（V）" in (head + prompt)[:400]:
+            self.vreview += 1
+            if self.fault and self.vreview == 2:
+                return _json({"verdict": "成立", "why": DEFECT + "。", "findings": []})
+            return _json({"verdict": "成立",
+                          "why": "试了几种反例构造都失败，未发现问题。", "findings": []})
+        m = re.match(r"你是 ([A-Z]) 号角色", head)
+        if m:
+            role = m.group(1)
+            index = self.steps.get(role, 0)
+            if role == "V":
+                stage = "V2" if "再审" in _my_task(prompt) else "V1"
+                i = self.steps.get(stage, 0)
+                self.steps[stage] = i + 1
+                return self._v(i, prompt)
+            self.steps[role] = index + 1
+            if role == "M":
+                return self._m(index, prompt)
+            if role == "D":
+                return self._d(index, prompt)
+            return self._f(index, prompt)
+        return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["彩排"]})
+
+    def __call__(self, url: str, headers: Any, body: bytes,
+                 timeout_sec: float) -> tuple[int, str]:
+        payload = json.loads(body.decode("utf-8"))
+        messages = payload.get("messages") or []
+        system = next((str(x.get("content") or "") for x in messages
+                       if x.get("role") == "system"), "")
+        prompt = "\n".join(str(x.get("content") or "") for x in messages
+                           if x.get("role") == "user")
+        _role = re.match(r"你是 ([A-Z]) 号角色", system.lstrip())
+        self.prompts.append({"role": _role.group(1) if _role else "",
+                             "system": system, "prompt": prompt})
+        text = self.reply(system=system, prompt=prompt)
+        self.bodies.append({"system": system, "prompt": prompt, "text": text})
+        return 200, json.dumps({"choices": [{"message": {"content": text},
+                                             "finish_reason": "stop"}],
+                                "usage": {"prompt_tokens": 8, "completion_tokens": 8}},
+                               ensure_ascii=False)
+
+
+# ============================================================ 夹具与读数
+
+
+def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, *,
+         lean: str = "0", fault: bool = True) -> dict[str, Any]:
+    """真工作区 → 从 CLI 入口真跑一趟；只替换出网那一层。"""
+    st = Store(base / "ws")
+    st.init()
+    wire = _Wire(fault=fault)
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "rehearsal-fake-key-never-used")
+    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", str(lean))
+    monkeypatch.setattr(MG, "urllib_transport", wire)
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = cli.main([
+                "start", "--mode", "research", "--root", str(st.root), "--sid", SID,
+                "--subagents", "--task", "派 F 证一条并送 V 审", "--max-steps", "12",
+            ])
+    except SystemExit as exc:
+        rc = int(exc.code or 0)
+    return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
+            "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue()}
+
+
+def _events(ws: pathlib.Path) -> list[dict]:
+    got: list[dict] = []
+    for path in sorted((ws / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                got.append(json.loads(line))
+            except ValueError:
+                continue
+    return got
+
+
+def _pending_rows(ws: pathlib.Path) -> list[dict]:
+    base = VR.pending_dir(ws)
+    if not base.is_dir():
+        return []
+    rows: list[dict] = []
+    for path in sorted(base.glob("*.jsonl")):
+        rows += [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
+    return rows
+
+
+def _body(text: str) -> str:
+    return DS.proof_body(text)
+
+
+def _step_results(events: list[dict], *, role: str, tool: str) -> list[dict]:
+    out: list[dict] = []
+    for e in events:
+        if e.get("kind") != "agent_step" or e.get("role") != role:
+            continue
+        if str((e.get("payload") or {}).get("name") or "") != tool:
+            continue
+        got = e.get("result") or {}
+        data = got.get("data")
+        if hasattr(data, "to_dict"):
+            data = dict(data.to_dict())
+        out.append({"ok": bool(got.get("ok")),
+                    "data": data if isinstance(data, dict) else {}})
     return out
 
 
-FORM_OK = {"checked": True, "well_formed": True, "conditions": "设 G 是有限群",
-           "conclusion": "则 |G| = p^2 时 G 交换", "problems": [],
-           "decision": "形态合规", "refused": "", "reason": "夹具：形态合规"}
-
-
-def _round(step2: str) -> str:
-    """F 的 proof 一轮：三步（全声明成前提——这一份只量"改哪一步"）。"""
-    return json.dumps({
-        "strategy": "套用已知定理", "why_strategy": "中心非平凡则商群循环",
-        "product": "proof", "kind": "theorem", "proposition": PROBLEM,
-        "steps": [{"text": t, "assumption": True} for t in (STEP1, step2, STEP3)],
-    }, ensure_ascii=False)
-
-
-# --------------------------------------------------------------------------- 装配
-
-
-def _workspace(base: pathlib.Path) -> Store:
-    st = Store(base / "ws")
-    st.init()
-    return st
-
-
-def _v(st: Store, *, replies: tuple[str, ...],
-       answers: dict[str, list] | None = None) -> AgentV:
-    seam = _Seam(answers or {})
-    return AgentV(st, workspace_root=st.root, llm=_Review(*replies),
-                  secretary=SEC.Secretary("V", root=st.root, store=st, seam=seam,
-                                          enable_model=True))
-
-
-def _body_of(st: Store, rel: str) -> str:
-    return DS.proof_body((pathlib.Path(st.root) / rel).read_text(encoding="utf-8"))
-
-
-def _sha_of(st: Store, rel: str) -> str:
-    """这一份手稿的正文 sha（与 V 签的是同一把尺：`proof_sha(手稿)`）。"""
-    if not rel:
-        return ""
-    return PR.proof_sha((pathlib.Path(st.root) / rel).read_text(encoding="utf-8"))
-
-
-def _rewrite(f: AgentF, *, rel: str, mid: str, plan_id: str, body: str) -> dict:
-    """F 的定点重写（F.step 内部那一支的写口）：同一稿号、只换 `## 证明`。"""
-    return f._hand_proof(
-        full=PROBLEM, text=PROBLEM, body=body, sid="s1", proposition=PROBLEM,
-        plan={"plan_id": plan_id, "problem_key": "p2"},
-        sg={"sid": "s1", "text": PROBLEM, "kind": "theorem"},
-        manuscript_id=mid, manuscript_text="",
-        manuscript_received={"source": "param", "chars": 0, "section_rows": 0,
-                             "refs_in_proof": 0},
-        cites=[], tier={"kind": "heuristic", "why": "夹具"},
-        dependency_rows=[], existing_row={})
-
-
-def _f_row(st: Store, *, task_id: str = "t-000001") -> None:
-    """一条 running 的 F 台账行（收工自动提交的挂点；不是"提交"本身）。"""
-    with st.tx("tasks", actor="夹具", note="C4 的 F 行") as tx:
-        tx.upsert("tasks", S.Task(
-            task_id=task_id, role="F", action="step", called_by="M",
-            parent_task_id=None, depth=1, input_key="c4", status="running",
-            outcome=None, refusal_reason=None, instance="", detail="在跑",
-            error=None, started_at=S.now_iso(), ended_at=None, tokens=0, usd=0.0,
-            artifacts=[], inputs=[]).to_dict())
-
-
-def _close(st: Store, *, plan_id: str, task_id: str = "t-000001") -> dict:
-    """在 F 那一行的上下文里叫一次收工自动提交（真入口）。"""
-    with CND.calling_as(task_id, "F"):
-        return _AS.auto_submit_signed(store=st, root=st.root, plan_id=plan_id,
-                                      stamp=S.now_iso())
-
-
-def _run_loop(base: pathlib.Path) -> dict:
-    """把 C4 那条环整条跑一遍，返回盘上的读数（反真空拿同一份读数打红）。"""
-    st = _workspace(base)
-    f = AgentF(st, config={"workspace_root": str(st.root)},
-               llm=_FakeF(_round(STEP2), _round(STEP2_FIX)))
-    f.f_secretary = SEC.Secretary("F", root=st.root, store=st,
-                                  seam=_Seam({"proposition_form": [dict(FORM_OK)]}),
-                                  enable_model=True)
-    plan_id = f.create_plan(PROBLEM, "p2", subgoals=[
-        {"sid": "s1", "text": "证明 |G| = p^2 时 G 交换", "owner": "F",
-         "testable": "找到非交换反例或给出论证"}])["plan_id"]
-
-    # ---- v1：F 落稿 -----------------------------------------------------------
-    first = f.step(plan_id)
-    rel = str(first.get("manuscript_path") or "")
-    mid = str(first.get("manuscript_id") or "")
-    body1 = _body_of(st, rel) if rel else ""
-    sha1 = _sha_of(st, rel)
-
-    # ---- V 判 fault（第 1 转 clean、第 2 转 fault ⇒ 立刻停） --------------------
-    faulted = _v(st, replies=(CLEAN_REPLY, FAULT_REPLY), answers={
-        "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN),
-                           _axis(SEC.V_REPLY_FAULT, defect_step=2)],
-        "wash_v_reply": [{"text": WASHED, "step": 2,
-                          "findings": [{"quote": "第 2 步的记号没有定义",
-                                        "why": "记号没定义就没法核这一步"}]}],
-        "sign_issuance": [_axis(SEC.SIGN_ISSUE)],
-    })
-    with CND.calling_as("t-v-000001", "V", parent_task_id="t-f-000001",
-                        parent_role="F"):
-        rejected = faulted.verify_proof(statement_id="", proof_manuscript=rel)
-    pending_after_fault, pending_bad = VR.pending_rows(st.root)
-
-    # 打回之后、重写之前收一次工：这一份应该是"未签 ⇒ 不入提交单"。
-    _f_row(st)
-    before = _close(st, plan_id=plan_id)
-
-    # ---- v2：F 定点重写（只改第 2 步） -----------------------------------------
-    second = f.step(plan_id)
-    body2 = _body_of(st, rel) if rel else ""
-    sha2 = _sha_of(st, rel)
-
-    # ---- 再送审：三转 clean ⇒ 签新 sha ---------------------------------------
-    signed = _v(st, replies=(CLEAN_REPLY,), answers={
-        "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
-        "sign_issuance": [_axis(SEC.SIGN_ISSUE)],
-    })
-    with CND.calling_as("t-v-000002", "V", parent_task_id="t-f-000001",
-                        parent_role="F"):
-        resigned = signed.verify_proof(statement_id="", proof_manuscript=rel)
-    after = _close(st, plan_id=plan_id)
-
-    text2 = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") if rel else ""
+def _chain_reading(got: dict[str, Any]) -> dict[str, Any]:
+    ws, st = got["ws"], got["store"]
+    rel = "reports/f-proof-000000.md"
+    path = ws / rel
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    wire: _Wire = got["wire"]
+    before, after = wire.before_text, wire.after_text
     return {
-        "store": st,
-        "f": f,
-        "plan_id": plan_id,
-        "rel": rel,
-        "mid": mid,
-        "body1": body1,
-        "body2": body2,
-        "sha1": sha1,
-        "sha2": sha2,
-        "first": dict(first),
-        "second": dict(second),
-        "rejected": dict(rejected),
-        "resigned": dict(resigned),
-        "pending": [dict(r) for r in pending_after_fault],
-        "pending_bad": pending_bad,
-        "before": dict(before),
-        "after": dict(after),
-        "text2": text2,
+        "store": st, "ws": ws, "rel": rel, "text": text,
+        "body": DS.proof_body(text) if text else "",
+        "sha": PR.proof_sha(text) if text else "",
+        "before_text": before, "after_text": after,
+        "sha_before": PR.proof_sha(before) if before else "",
+        "sha_after": PR.proof_sha(after) if after else "",
+        "lines_before": _section_lines(before), "lines_after": _section_lines(after),
+        "events": _events(ws), "pending": _pending_rows(ws),
+        "steps": _step_results(_events(ws), role="F", tool="attack.step"),
+        "v_calls": _step_results(_events(ws), role="V", tool="verify.verify_proof"),
+        "plans": [dict(r) for r in st.rows("attack_plans")],
+        "tasks": [dict(r) for r in st.rows("tasks")],
+        "f_prompts": [p["prompt"] for p in wire.prompts if p["role"] == "F"],
     }
 
 
-# --------------------------------------------------------------------------- 判据本体
+def _section_lines(manuscript: str) -> list[str]:
+    """一份手稿的 `## 证明` 正文按行拆（空行剔掉；只用来比"改哪一步"）。"""
+    if not manuscript:
+        return []
+    return [ln.strip() for ln in DS.proof_body(manuscript).splitlines() if ln.strip()]
 
 
-def _rejection_problems(reading: dict) -> list[str]:
-    """a：打回是终局、点名步号、洗过的转达落台账、这一版没有签。"""
+def _sign_files(ws: pathlib.Path) -> list[str]:
+    d = ws / "out" / "vsigns"
+    return sorted(p.name for p in d.glob("*.json")) if d.is_dir() else []
+
+
+def _chain_problems(reading: dict[str, Any]) -> list[str]:
+    """C4 的四段终态读数（空 = 通）。每一条都读盘/读会话，不看回执的 ok。"""
     problems: list[str] = []
-    rej = reading["rejected"]
-    if str(rej.get("kind") or "") != "proof_unregistered_rejected":
-        problems.append(f"V 的负判种类不是 proof_unregistered_rejected：{rej.get('kind')!r}")
-    if int(rej.get("defect_step") or 0) != 2:
-        problems.append(f"负判没有点名 defect_step=2：{rej.get('defect_step')!r}")
-    passes = [dict(p) for p in (rej.get("review_passes") or [])]
-    if [str(p.get("axis") or "") for p in passes] != ["clean", "fault"]:
-        problems.append(f"连判没有在 fault 那一转立刻停：{passes}")
-    elif int(passes[-1].get("defect_step") or 0) != 2:
-        problems.append(f"fault 那一转没指到第 2 步：{passes[-1]}")
-    if passes and str(passes[-1].get("terminal") or "") != "rejected":
-        problems.append(f"fault 那一转不是终局：{passes[-1]}")
-    if reading["pending_bad"]:
-        problems.append(f"pending 台账读不全：{reading['pending_bad']}")
-    # 打回那一行要留下来（负判是"这一版被判过"的证据，不许随后续重写被抹掉）。
-    named = [r for r in reading["pending"]
-             if int(r.get("defect_step") or 0) == 2
-             and str((r.get("secretary_judge") or {}).get("axis") or "") == "fault"]
-    if not named:
-        problems.append(f"pending 台账里没有点名第 2 步的那条负判：{reading['pending']}")
-    elif "第 2 步的记号没有定义" not in str(named[-1].get("why") or ""):
-        problems.append(f"负判那一行没有留下 V 指出的那句：{named[-1].get('why')!r}")
-    if reading["sha1"] and VS.sign_path(reading["store"].root,
-                                        reading["sha1"]).is_file():
-        problems.append("被判「有毛病」的那一版居然有签文件（负判不是签）")
-    return problems
+    ws: pathlib.Path = reading["ws"]
+    steps = reading["steps"]
+    if len(steps) != 2:
+        return [f"F 的 `attack.step` 应恰好两次（v1 + 重写），实得 {len(steps)}"]
+    mode_before = str(steps[0]["data"].get("proof_mode") or "")
+    mode_after = str(steps[1]["data"].get("proof_mode") or "")
+    if mode_before != "registered":
+        problems.append(f"v1 的 proof_mode 不是 registered：{mode_before!r}")
+    if mode_after != "rewritten":
+        problems.append(f"重写那一轮的 proof_mode 不是 rewritten：{mode_after!r}")
+    sha1_old = reading["sha_before"]
+    sha2_new = reading["sha_after"]
+    if not sha1_old or not sha2_new or sha1_old == sha2_new:
+        problems.append(f"重写前后正文 sha 没有变化：{sha1_old!r} → {sha2_new!r}")
+    if sha1_old != str(steps[0]["data"].get("proof_sha256") or ""):
+        problems.append(f"v1 的盘上 sha 与那一轮回执对不上："
+                        f"{sha1_old!r} vs {steps[0]['data'].get('proof_sha256')!r}")
+    if sha2_new != str(steps[1]["data"].get("proof_sha256") or ""):
+        problems.append(f"v2 的盘上 sha 与那一轮回执对不上："
+                        f"{sha2_new!r} vs {steps[1]['data'].get('proof_sha256')!r}")
+    if sha2_new != reading["sha"]:
+        problems.append(f"签完之后盘上正文 sha 变了：{reading['sha']!r} vs {sha2_new!r}")
 
+    # 1. 打回是终局且点名步号：pending 一行、axis=fault、defect_step=2、v1 无签。
+    first = [r for r in reading["pending"]
+             if str(r.get("proof_sha256") or "") == sha1_old]
+    if len(first) != 1:
+        problems.append(f"v1 的 pending 应恰好 1 行，实得 {len(first)}")
+    else:
+        one = dict(first[0])
+        judge = dict(one.get("secretary_judge") or {})
+        if str(judge.get("axis") or "") != "fault":
+            problems.append(f"v1 的秘书轴不是 fault：{judge.get('axis')!r}")
+        if int(one.get("defect_step") or 0) != 2:
+            problems.append(f"v1 的 defect_step 不是 2：{one.get('defect_step')!r}")
+        if DEFECT not in str(one.get("why") or ""):
+            problems.append(f"v1 的判词没留下 V 指出的那句：{one.get('why')!r}")
+        if str(one.get("verdict") or "") != "成立":
+            problems.append(f"v1 那一行不是 V 的结论（应为「成立」+ fault 轴）："
+                            f"{one.get('verdict')!r}")
+    if (ws / "out" / "vsigns" / f"{sha1_old}.json").is_file():
+        problems.append("被判有缺陷的 v1 竟然有签文件（负判不是签）")
+    # v1 的正文只存在于重写之前：这里从第一轮的稿面读数核它没有签块
+    # （第二份稿的签块不会回写到第一份上 —— 同一路径、同一稿号，签块按现行正文算）。
+    v1_sign = steps[0]["data"].get("v_sign")
+    if isinstance(v1_sign, dict) and str(v1_sign.get("state") or "") not in ("", "unsigned"):
+        problems.append(f"v1 的稿面竟然有签读数（state 不是 unsigned）：{v1_sign}")
 
-def _revision_problems(reading: dict) -> list[str]:
-    """b：只改那一步、sha 变了、再送审三转、新签指向新 sha。"""
-    problems: list[str] = []
-    body1 = reading["body1"]
-    body2 = reading["body2"]
-    if not body1 or not body2:
-        return ["v1 / v2 有一版没读到正文（fault 或重写没落稿）"]
-    if reading["sha1"] == reading["sha2"]:
-        problems.append("重写之后正文 sha 没变（这不是一次修订）")
-    one = body1.splitlines()
-    two = body2.splitlines()
-    if len(one) != len(two):
-        problems.append(f"步数变了（{len(one)} → {len(two)}）：只许改那一步")
+    # 2. 那句意见回到 F 的下一步（重写那一拍的 prompt 逐字带着它）。
+    if len(reading["f_prompts"]) < 4:
+        problems.append(f"F 的 prompt 少于 4 拍：{len(reading['f_prompts'])}")
+    else:
+        if DEFECT not in reading["f_prompts"][3]:
+            problems.append(
+                "打回的意见没有回到 F 的下一步：重写那一拍的 prompt 里找不到 "
+                f"「{DEFECT}」")
+
+    # 3. 只改第 2 步：行数不变、只有第 2 行不同。
+    one = list(reading["lines_before"])
+    two = list(reading["lines_after"])
+    if len(one) != 3 or len(two) != 3:
+        problems.append(f"稿的证明步数不是 3：{one!r} / {two!r}")
     else:
         changed = [i for i, (a, b) in enumerate(zip(one, two)) if a != b]
-        if changed != [2]:
-            problems.append(f"改动的步不是恰好第 2 步：{changed}（body={two}）")
-    if str(reading["second"].get("proof_mode") or "") != "rewritten":
-        problems.append(f"第二次不是「重写」那一档：{reading['second'].get('proof_mode')!r}")
-    signed = reading["resigned"]
-    if str(signed.get("kind") or "") != "proof_unregistered_signed":
-        problems.append(f"重写后没有签上：{signed.get('kind')!r} / "
-                        f"{str(signed.get('reason') or '')[:160]}")
-    if len(signed.get("review_passes") or []) != int(VR.SIGN_STREAK_NEED):
-        problems.append(f"重审没有三转：{len(signed.get('review_passes') or [])}")
-    sha2 = reading["sha2"]
-    if sha2:
-        if not VS.sign_path(reading["store"].root, sha2).is_file():
-            problems.append(f"新签文件不在盘上：out/vsigns/{sha2}.json")
-        sign = VS.sign_of(reading["store"].root, sha2)
-        if str(sign.get("artifact_sha") or "") != sha2:
-            problems.append(f"新签指的不是新 sha：{sign.get('artifact_sha')!r} vs {sha2}")
-        standing = VS.manuscript_sign_standing(reading["text2"], proof_sha=sha2)
-        if str(standing.get("state") or "") != "signed":
-            problems.append(f"稿上签块不是 signed：{standing.get('state')!r}")
-    # 读数（真 auto_submit）：未签 ⇒ 不提交；签后 ⇒ 提交新 sha。
-    before = reading["before"]
-    if int(before.get("auto_submitted_count") or 0) != 0:
-        problems.append(f"打回那一版（未签）被提交了：{before.get('auto_submitted')}")
-    still = [dict(x) for x in (before.get("still_unsubmitted") or [])]
-    if not still or str(still[0].get("state") or "") != "unsigned":
-        problems.append(f"未签那一档没进 still_unsubmitted（state=unsigned）：{still}")
-    after = dict(reading["after"])
-    row = next((dict(r) for r in reading["store"].rows("tasks")
-                if str(r.get("task_id") or "") == "t-000001"), {})
-    mss = [str(a) for a in (row.get("artifacts") or []) if str(a).startswith("mss:")]
-    if not mss:
-        problems.append(f"签后没有提交记号：{after} / {row.get('artifacts')}")
-    elif f"body_sha={sha2}" not in mss[0]:
-        problems.append(f"提交记号里的正文 sha 不是新 sha：{mss[0]!r}")
-    elif "via=sign_issued" not in mss[0]:
-        problems.append(f"提交不是签发那一刻置的：{mss[0]!r}")
-    # 签后那一次收工：要么这一趟真写了（auto_submitted），要么签时刻已经写过
-    # （`already_submitted`）—— 两者都算"已提交"，但读数不许是"没提交"。
-    if int(after.get("auto_submitted_count") or 0):
-        one = dict((after.get("auto_submitted") or [])[0])
-        if str(one.get("body_sha") or "") != sha2:
-            problems.append(f"auto_submitted 里的正文 sha 不是新 sha：{one.get('body_sha')!r}")
+        if changed != [1]:
+            problems.append(f"改动的步不是恰好第 2 步：{changed}")
+        if STEP2_FIX not in two[1]:
+            problems.append(f"第 2 步不是按 V 的意见改的那一版：{two[1]!r}")
+
+    # 4. 再送审三转 clean ⇒ 签在新 sha 上。
+    second = [r for r in reading["pending"]
+              if str(r.get("proof_sha256") or "") == sha2_new]
+    if len(second) != int(VR.SIGN_STREAK_NEED):
+        problems.append(f"新 sha 的 pending 应恰好 {VR.SIGN_STREAK_NEED} 行，"
+                        f"实得 {len(second)}")
+    if any(str(dict(r.get("secretary_judge") or {}).get("axis") or "") == "fault"
+           for r in second):
+        problems.append("新 sha 的三转里混进了 fault")
+    if not (ws / "out" / "vsigns" / f"{sha2_new}.json").is_file():
+        problems.append(f"新签文件不在盘上：out/vsigns/{sha2_new}.json")
     else:
-        still_after = [dict(x) for x in (after.get("still_unsubmitted") or [])]
-        state = str(still_after[0].get("state") or "") if still_after else ""
-        if state != "already_submitted":
-            problems.append(f"签后那一份既没提交也没读成 already_submitted：{after}")
+        sign = VS.sign_of(ws, sha2_new)
+        if str(sign.get("artifact_sha") or "") != sha2_new:
+            problems.append(f"签里的 artifact_sha 不是新 sha：{sign.get('artifact_sha')!r}")
+    standing = VS.manuscript_sign_standing(reading["text"], proof_sha=sha2_new)
+    if str(standing.get("state") or "") != "signed":
+        problems.append(f"稿上的签块不是 signed：{standing.get('state')!r} "
+                        f"({standing.get('why') or standing.get('reason') or ''})")
+    signed_calls = [c for c in reading["v_calls"]
+                    if str(c["data"].get("kind") or "") == "proof_unregistered_signed"]
+    if not signed_calls:
+        problems.append(f"V 没有一次签住：{[c['data'].get('kind') for c in reading['v_calls']]}")
+    elif len(signed_calls[-1]["data"].get("review_passes") or []) != int(
+            VR.SIGN_STREAK_NEED):
+        problems.append(f"签住那一趟不是三转："
+                        f"{len(signed_calls[-1]['data'].get('review_passes') or [])}")
+    rejected_calls = [c for c in reading["v_calls"]
+                      if str(c["data"].get("kind") or "") == "proof_unregistered_rejected"]
+    if not rejected_calls:
+        problems.append("V 一次都没有走「打回」那一档")
+    elif int(rejected_calls[0]["data"].get("defect_step") or 0) != 2:
+        problems.append(f"打回那一趟的 defect_step 不是 2："
+                        f"{rejected_calls[0]['data'].get('defect_step')!r}")
+
+    # 5. 收工：F 的 final 过门（稿有现行签）、M 的 final 过整树销号门。
+    ends = [e for e in reading["events"] if e.get("kind") == "agent_run_end"]
+    f_ends = [e for e in ends if str(e.get("role") or "") == "F"]
+    if not [e for e in f_ends if str(e.get("stop_reason") or "") == "final"]:
+        problems.append(f"F 没有以 final 收工：{[e.get('stop_reason') for e in f_ends]}")
+    f_tasks = [t for t in reading["tasks"]
+               if str(t.get("role") or "") == "F" and not str(t.get("action") or "")]
+    if not [t for t in f_tasks if str(t.get("outcome") or "") == "ok"]:
+        problems.append(f"F 的 task 结论不是 ok：{f_tasks}")
     return problems
 
 
-# ============================================================ ①② 正控（a + b）
+def _lines(step: dict) -> list[str]:
+    """某一轮稿的证明步骤（`attack.step` 回执里的 `proof_statements`，逐行文本）。"""
+    return [str(x) for x in (step["data"].get("proof_statements") or [])]
 
 
-def test_the_fault_names_a_step_and_f_rewrites_only_that_step(tmp_path):
-    """正控：V 点名第 2 步 ⇒ F 只改第 2 步 ⇒ sha 变 ⇒ 再送审三转签新 sha。
+# ============================================================ ① 正控
 
-    两条读数一起量：打回那一版「没有签」（负判不是签），重写那一版签上了，
-    而且两次收工自动提交的读数分得开（未签 ⇒ still_unsubmitted；签后 ⇒ auto_submitted）。
-    """
-    reading = _run_loop(tmp_path)
-    problems = _rejection_problems(reading) + _revision_problems(reading)
+
+def test_the_rejection_rewrite_and_resign_run_from_the_cli(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """正控：V 点名第 2 步 → F 的下一步带着那句意见 → 只改第 2 步 → 再送审签住。"""
+    got = _run(tmp_path, monkeypatch, lean="0")
+    reading = _chain_reading(got)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
+    assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
+    assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
+        "缝工厂被整体替换了 —— 这份彩排的承诺是「只换网线」")
+    assert [e for e in reading["events"] if e.get("kind") == "llm_call"], (
+        "会话里一条 llm_call 都没有 ⇒ 走的不是真 LlmSeam")
+
+    problems = _chain_problems(reading)
     assert problems == [], problems
-    # 回执与盘上对得上（回执只作交叉核对）。
-    assert reading["first"].get("proof_mode") == "registered", reading["first"]
-    assert reading["second"].get("manuscript_id") == reading["mid"], reading["second"]
+
+    # ---- V 的两次调用都在真循环里（事件逐条查得到），且第一次是"打回"。
+    assert len(reading["v_calls"]) == 2, reading["v_calls"]
+    assert str(reading["v_calls"][0]["data"].get("kind") or "") == (
+        "proof_unregistered_rejected")
+    assert str(reading["v_calls"][1]["data"].get("kind") or "") == (
+        "proof_unregistered_signed")
+    # 稿上签块的三个读数（连续次数 / 签名者 / 正文 sha）。
+    assert "连续=3/3" in reading["text"], reading["text"][:600]
+    assert "签名者=secretary:F" in reading["text"], reading["text"][:600]
+    assert reading["sha"] in reading["text"], reading["text"][:600]
+
+    # ---- 钱：账本有行、无主为 0、悬空 0、逐分相等
+    from agentflow.modelcost import reconcile_usage
+
+    money = reconcile_usage(reading["store"])
+    assert money["ledger_rows"] > 0, money
+    assert money["unattributed"]["count"] == 0, money["unattributed"]
+    assert money["dangling"] == [], money["dangling"]
+    assert money["equal"] is True, money
 
 
-# ============================================================ ③ 冻结纪律
+# ============================================================ ② 反真空
 
 
-def test_a_signed_manuscript_is_frozen_and_a_signed_review_short_circuits(tmp_path):
-    """冻结纪律：已签稿就地改 ⇒ `manuscript_frozen`；已签正文再送审 ⇒ 短接、零新行。
+def test_a_clean_second_pass_skips_the_rejection_and_the_rewrite(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：把 `secretary:V` 的判定换成恒 clean ⇒ 打回与重写一起消失。
 
-    这两条是产品设计（2026-11-11「签是冻结」），不是缺陷：签跟着正文走，改正文那一签
-    就不算这一版。把它们写成断言，是为了防止以后有人"顺手允许就地改"。
+    同一份 wire、同一份夹具，只改秘书那一格：第一份稿三转干净、当场签住，
+    F 一次都没重写（`proof_mode` 只有 `registered`）。它证明主链的
+    "打回 → 重写 → 再签"不是恒真，而是压在那一条语义判定上。
     """
-    reading = _run_loop(tmp_path)
-    st: Store = reading["store"]
-    rel = reading["rel"]
-    mid = reading["mid"]
-    sha2 = reading["sha2"]
-    assert sha2, reading
-
-    # ① 就地改：受控拒，盘上一个字节不动。
-    frozen = _rewrite(reading["f"], rel=rel, mid=mid, plan_id=reading["plan_id"],
-                      body="\n".join([f"1. {STEP1}", f"2. {STEP2_FIX}", f"3. {STEP3}"]))
-    assert frozen.get("ok") is False, frozen
-    assert str(frozen.get("kind") or "") == "manuscript_frozen", frozen
-    assert "open_polish_copy" in str(frozen.get("error") or ""), frozen.get("error")
-    assert _sha_of(st, rel) == sha2, "冻结那一拒之后正文被改了"
-
-    # ② 已签正文再送审：短接成 proof_manuscript_signed，且 pending 台账不多行。
-    def _pending_for(sha: str) -> int:
-        rows, _bad = VR.pending_rows(st.root)
-        return sum(1 for r in rows
-                   if str(r.get("proof_sha256") or "") == str(sha))
-
-    before_rows = _pending_for(sha2)
-    again = _v(st, replies=(CLEAN_REPLY,), answers={
-        "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
-        "sign_issuance": [_axis(SEC.SIGN_ISSUE)]})
-    with CND.calling_as("t-v-000003", "V", parent_task_id="t-f-000001",
-                        parent_role="F"):
-        short = again.verify_proof(statement_id="", proof_manuscript=rel)
-    # 已签那一档：要么在册那一支的 proof_manuscript_signed，要么未在册那一支的
-    # proof_unregistered_signed —— 两支的共同点是"一次都没重判"。
-    assert str(short.get("kind") or "") in ("proof_manuscript_signed",
-                                           "proof_unregistered_signed"), short
-    assert short.get("review_passes") == [], short
-    assert "不重复审" in str(short.get("reason") or ""), short.get("reason")
-    assert _pending_for(sha2) == before_rows, "已签正文被重新审了一遍（pending 多了行）"
+    got = _run(tmp_path, monkeypatch, lean="0", fault=False)
+    reading = _chain_reading(got)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert len(reading["steps"]) == 1, (
+        f"判定换成 clean 之后 F 还重写了：{[s['data'].get('proof_mode') for s in reading['steps']]}")
+    assert str(reading["steps"][0]["data"].get("proof_mode") or "") == "registered"
+    assert not [r for r in reading["pending"]
+                if str(dict(r.get("secretary_judge") or {}).get("axis") or "") == "fault"], (
+        "判定换成 clean 之后 pending 里还有 fault")
+    sha = str(reading["steps"][0]["data"].get("proof_sha256") or "")
+    assert (reading["ws"] / "out" / "vsigns" / f"{sha}.json").is_file(), _sign_files(reading["ws"])
+    assert len([r for r in reading["pending"]
+                if str(r.get("proof_sha256") or "") == sha]) == int(VR.SIGN_STREAK_NEED)
+    assert str(VS.manuscript_sign_standing(
+        reading["text"], proof_sha=sha).get("state") or "") == "signed"
+    assert [e for e in reading["events"] if e.get("kind") == "agent_run_end"
+            and str(e.get("role") or "") == "F"
+            and str(e.get("stop_reason") or "") == "final"], "F 没有以 final 收工"
 
 
-# ============================================================ ④ 优化副本
+# ============================================================ 判据①：一行账
 
 
-def test_the_old_f_sign_does_not_follow_the_polish_copy(tmp_path):
-    """旧 F 签不跟着优化副本走：副本是新的 b 号稿、签块清掉、源稿仍签着。
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_real_call_has_exactly_one_ledger_row(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行（Lean 开/关各一遍）。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    reading = RC.ledger_identity(got["ws"], got["store"])
+    print(f"[一行账] c4 lean={lean} 真调用={reading['calls']} "
+          f"出网={len(got['wire'].bodies)} 账本行={reading['rows']} "
+          f"duplicate={len(reading['duplicates'])} 未配对={len(reading['unpaired'])} "
+          f"未认领={len(reading['unclaimed'])}")
+    assert reading["calls"] == len(got["wire"].bodies), (
+        f"真调用与出网次数不等：事件 {reading['calls']} / 出网 {len(got['wire'].bodies)}")
+    problems = RC.one_row_per_call_problems(reading)
+    assert problems == [], "判据①红：\n- " + "\n- ".join(problems)
 
-    这条链是产品给"要改已签稿"的唯一出口（`B.open_polish_copy`）—— 它证明"旧签作废"
-    的实现不是"把旧签删掉"，而是"新稿上没有它"：源稿那份签仍在盘上、仍盖着源稿。
-    """
-    reading = _run_loop(tmp_path)
-    st: Store = reading["store"]
-    rel = reading["rel"]
-    sha2 = reading["sha2"]
-    source_text = _body_of(st, rel)
 
-    b = AgentB(st, extractor=None, extract_text=None, config={}, auto_secretary=False)
-    copy = b.open_polish_copy(statement_id="000000", source_manuscript=rel)
-    assert copy.get("ok") is True, copy
-    path = str(copy.get("path") or "")
-    assert path and path != rel, copy
-    assert path.startswith("reports/b-proof-"), copy
-    assert str(copy.get("copy_body_sha") or "") == str(copy.get("source_body_sha") or ""), copy
-    copy_text = (pathlib.Path(st.root) / path).read_text(encoding="utf-8")
-    # 复制件：签块被清掉（新稿未签）。
-    assert "- V 签：" not in copy_text, copy_text[:800]
-    assert copy.get("signed_before") is True and copy.get("signed_after") is False, copy
-    assert int(copy.get("cleared") or 0) >= 1, copy
-    standing_copy = VS.manuscript_sign_standing(copy_text, proof_sha=sha2,
-                                                manuscript_path=path)
-    assert str(standing_copy.get("state") or "") != "signed", standing_copy
-    # 源稿：一个字节没动、签还在、盖的还是它。
-    assert _body_of(st, rel) == source_text, "优化副本把源稿改了"
-    assert VS.sign_path(st.root, sha2).is_file(), "源稿那一签被删了"
-    standing_source = VS.manuscript_sign_standing(reading["text2"], proof_sha=sha2)
-    assert str(standing_source.get("state") or "") == "signed", standing_source
+# ============================================================ 判据②：会话归口
+
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_llm_call_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    split = RC.session_split(got["ws"], SID)
+    print(f"[会话归口] c4 lean={lean} 本趟={len(split['in_run'])} "
+          f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
+    assert split["calls"], "这一趟一次真调用都没有 ⇒ 判据没有对象（不是干净）"
+    problems = RC.session_problems(split)
+    assert problems == [], "判据②红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ Lean 两档
+
+
+@pytest.mark.parametrize("lean,verdict,hidden", [("1", "on", False), ("0", "off", True)])
+def test_the_revision_loop_is_the_same_in_both_lean_modes(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+        lean: str, verdict: str, hidden: bool) -> None:
+    """Lean 开/关两档：同一条链照跑，四段读数不变。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    reading = LS.lean_reading()
+    assert reading.verdict == verdict, reading.to_dict()
+    assert LS.is_hidden("L") is hidden, (lean, reading.to_dict())
+    problems = _chain_problems(_chain_reading(got))
+    assert problems == [], problems
+    from agentflow import schema as S
+
+    roles = set(LS.visible_roles(S.ROLES))
+    assert ("L" in roles) is (not hidden), sorted(roles)
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工复跑用
