@@ -39,11 +39,16 @@ def _still(cand: Mapping[str, Any], state: str, why: str) -> dict[str, Any]:
 
 def signed_candidates(root: Any, *, families: Sequence[str],
                       role: str = "") -> dict[str, Any]:
-    """本工作区里 `families` 各族的稿 × V 的颁发表 ⇒ 每个稿号「该不该提交」。
+    """本工作区里 `families` 各族的稿 × V 的颁发表 ⇒ 每个稿「该不该提交」。
+
+    稿的身份是 `(family, manuscript_id)`，不是单号：E 的两族各走自己的号段
+    （`e-proof` / `e-num` 都从 `000000` 起），F 的 `f-proof-000040` 与 B 的
+    `b-proof-000040` 是同一条命题的两条路径 —— 三类都是不同的稿。
+    只有「同族 + 同号 + 指到多份不同的文件」才是真的 `ambiguous_path`。
 
     纯读（不碰 store、不写盘）。读数形状与 `agent_f.submission.submission_candidates`
     同一套（`{checked, candidates, problems, why}`）—— 那一份只认 F 族，E 的两族
-    要在这里按同一个判据读，不另造一套"签算不算签"的口径。
+    要在这里按同一个判据读，不另造一套"签算不算签"的口径。每个候选带 `family`。
     """
     from . import vsigns as _VS
 
@@ -59,16 +64,20 @@ def signed_candidates(root: Any, *, families: Sequence[str],
             f"`{_VS.SIGNS_DIR}/` 列不出来（{type(exc).__name__}: {exc}）⇒ "
             "拿签稿这一格没查成（不是「一份都没签」）"))
         return out
-    by_mid: dict[str, dict[str, Any]] = {}
-    order: list[str] = []
+    #: 稿的身份 = `(族, 稿号)`，不是单号：E 的 `e-proof` / `e-num` 各有独立号段、
+    #: 都从 `000000` 起；F 的 `f-proof-000040` 与 B 的 `b-proof-000040` 是同一条命题的
+    #: 两条路径。单号分桶会把它们折成「一个号指到多份文件」⇒ 假 ambiguity。
+    by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str]] = []
 
-    def _bucket(mid: str) -> dict[str, Any]:
-        one = by_mid.get(mid)
+    def _bucket(family: str, mid: str) -> dict[str, Any]:
+        key = (family, mid)
+        one = by_key.get(key)
         if one is None:
-            one = {"manuscript_id": mid, "paths": [], "signs": [],
+            one = {"family": family, "manuscript_id": mid, "paths": [], "signs": [],
                    "statement_id": "", "proof_no": 0, "at": ""}
-            by_mid[mid] = one
-            order.append(mid)
+            by_key[key] = one
+            order.append(key)
         return one
 
     for path in files:
@@ -85,7 +94,8 @@ def signed_candidates(root: Any, *, families: Sequence[str],
                 " ⇒ 这一份这次不提交（没查成，不是「没签」）")
         rel = str(doc.get("artifact_path") or "").strip().replace("\\", "/")
         parsed = _MFAM.classify_manuscript(rel)
-        if str(parsed.get("family") or "") not in wanted:
+        family = str(parsed.get("family") or "")
+        if family not in wanted:
             continue
         mid = str(parsed.get("manuscript_id") or "")
         if not mid:
@@ -98,7 +108,7 @@ def signed_candidates(root: Any, *, families: Sequence[str],
         except OSError as exc:  # noqa: BLE001
             out["problems"].append(
                 f"{path.name}：签文件读不出来（{type(exc).__name__}: {exc}）")
-        one = _bucket(mid)
+        one = _bucket(family, mid)
         if rel and rel not in one["paths"]:
             one["paths"].append(rel)
         one["signs"].append({
@@ -127,21 +137,24 @@ def signed_candidates(root: Any, *, families: Sequence[str],
     for path in sorted(set(report_paths)):
         rel = str(path.relative_to(root_p)).replace("\\", "/")
         parsed = _MFAM.classify_manuscript(rel)
-        if str(parsed.get("family") or "") not in wanted:
+        family = str(parsed.get("family") or "")
+        if family not in wanted:
             continue
         mid = str(parsed.get("manuscript_id") or "")
         if not mid:
             continue
-        one = _bucket(mid)
+        one = _bucket(family, mid)
         if rel not in one["paths"]:
             one["paths"].append(rel)
         if not one["proof_no"]:
             one["proof_no"] = int(parsed.get("proof_no") or 1)
-    for mid in order:
-        one = by_mid[mid]
+    for key in order:
+        one = by_key[key]
+        family, mid = key
         paths = [str(x) for x in (one.get("paths") or []) if str(x)]
         signs = [dict(x) for x in (one.get("signs") or [])]
         cand: dict[str, Any] = {
+            "family": family,
             "manuscript_id": mid, "manuscript": paths[0] if paths else "",
             "proof_no": int(one.get("proof_no") or 0) or 1,
             "statement_id": str(one.get("statement_id") or ""),
@@ -151,7 +164,8 @@ def signed_candidates(root: Any, *, families: Sequence[str],
         }
         if len(paths) > 1:
             cand.update(state="ambiguous_path", why=(
-                "同一个稿号指到多份不同的文件（" + "、".join(paths) + "）⇒ "
+                f"{family} 族同一个稿号指到多份不同的文件（"
+                + "、".join(paths) + "）⇒ "
                 "一稿号一文件，这一份不提交 —— 这里不替它挑「哪一版」"))
             out["candidates"].append(cand)
             continue
@@ -200,7 +214,7 @@ def signed_candidates(root: Any, *, families: Sequence[str],
                         why="未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）")
         out["candidates"].append(cand)
     out["why"] = (f"颁发表里 {len(files)} 份签、盘上 {len(set(report_paths))} 份 "
-                  f"{'/'.join(wanted)} 的稿 ⇒ {len(out['candidates'])} 个稿号"
+                  f"{'/'.join(wanted)} 的稿 ⇒ {len(out['candidates'])} 份稿（族+号）"
                   + (f"；{len(out['problems'])} 条读数问题" if out["problems"] else ""))
     return out
 

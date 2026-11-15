@@ -34,18 +34,20 @@ M --summon--> E --verify.run_experiment(numeric)-->  experiments 一行 + report
 两行（数值档 `kind=conjecture` + `bits.numeric=verified`；穷举档 `kind=theorem` +
 `proof_list=[1]`）、钱账逐分相等且无主 0。
 
-## 已知产品缺陷（本路发现，未在本路修；不在 FC-27 清单里，但按门先报）
+## 2026-11-15 EC 修：E 的收工门不再把两族同号读成 ambiguous
 
-E 的收工门（`agent_loop._v_wait_gate_reading` → `manuscriptclosing.signed_candidates`）
-按 `manuscript_id` 单独分桶，而 E 的两族稿各有独立号段（`e-proof` / `e-num` 都从
-`000000` 起）⇒ 同一工作区里同时有 `reports/e-num-000000.md` 与
-`reports/e-proof-000000.md` 时，两份候选共用同一个稿号 ⇒ `state="ambiguous_path"` ⇒
-E 的 final 被受控拒（"这一份 e-proof 没有现行的 V 签（ambiguous_path）"）。
-V 的签与 B 的收编不受影响，但 E 自己收不了工（任务 outcome 落 `no_result`）。
-本文件因此只断言本链的三段腿（实验 / 签 / 收编）都真的走通；E 的 final 那一格不
-伪造成通，缺陷读数见 `temp/cc3/REPORT-CC3.md` §三。修法需要动
-`manuscriptclosing` + `agent_loop` 两处（按 `(family, manuscript_id)` 分桶），本路没有
-单方面改产品。
+C3 彩排此前抓到一条真产品缺陷：E 的收工门（`agent_loop._v_wait_gate_reading` →
+`manuscriptclosing.signed_candidates`）按 `manuscript_id` 单独分桶，而 E 的两族稿各有
+独立号段（`e-proof` / `e-num` 都从 `000000` 起）⇒ 同一工作区里同时有
+`reports/e-num-000000.md` 与 `reports/e-proof-000000.md` 时，两份候选共用同一个稿号
+⇒ `state="ambiguous_path"` ⇒ E 的 final 被受控拒（"这一份 e-proof 没有现行的 V 签
+（ambiguous_path）"），E 的 task outcome 落 `no_result`。
+
+修法：稿的身份改成 `(family, manuscript_id)`（候选带 `family`、分桶/门内索引都按
+这一对键；F/B 同形，不给 E 打特例）。本文件现在把 E 的 final 那一格也钉上：
+E 的 final 必须记成 `stop_reason="final"`、task outcome 必须是 `ok`，且拒信里
+不许再出现 `ambiguous_path`。修复前的读数见 `temp/cc3/REPORT-CC3.md` §三；
+修后的读数见 EC 路交付。
 
 ## 反真空（产出侧形态闸）
 
@@ -536,6 +538,26 @@ def test_the_numeric_chain_runs_from_the_cli_with_only_the_wire_replaced(
         VR.SIGN_STREAK_NEED), reading["reviewed"]["data"].get("review_passes")
     assert str(reading["reviewed"]["data"].get("kind") or "") == "proof_unregistered_signed", (
         reading["reviewed"]["data"].get("kind"))
+
+    # ---- E 的 final 必须过收工门（2026-11-15 EC）：两族同号不再读成 ambiguous。
+    # `e-num-000000` 与 `e-proof-000000` 是两份稿；门若按单号分桶，E 的 final 会以
+    # `final_refused` 收尾、task outcome 落 `no_result`（修前实测，见 CC3 报告 §三）。
+    e_main = [t for t in reading["tasks"]
+              if str(t.get("role")) == "E" and str(t.get("action") or "") == ""
+              and str(t.get("called_by") or "") == "M"]
+    assert len(e_main) == 1, e_main
+    assert str(e_main[0].get("outcome") or "") == "ok", e_main[0]
+    e_ends = [e for e in reading["events"]
+              if e.get("kind") == "agent_run_end" and str(e.get("role")) == "E"]
+    assert e_ends, "会话里没有 E 的 agent_run_end"
+    finals = [e for e in e_ends if str(e.get("stop_reason") or "") == "final"]
+    assert finals, [e.get("stop_reason") for e in e_ends]
+    assert str(finals[-1].get("final") or "") == "E 收工", finals[-1].get("final")
+    notes = " ".join(str(x) for e in e_ends for x in (e.get("notes") or []))
+    assert "ambiguous_path" not in notes, notes[-800:]
+    # E 收工前已经有一枚 `mss:` 记号指到 e-proof（签触发那一条路），不因同号串到 e-num。
+    assert any("mss:000000" in str(a) and "reports/e-proof-000000.md" in str(a)
+               for a in (e_main[0].get("artifacts") or [])), e_main[0].get("artifacts")
 
     # ---- 钱：账本有行、无主为 0、悬空 0、逐分相等
     from agentflow.modelcost import reconcile_usage

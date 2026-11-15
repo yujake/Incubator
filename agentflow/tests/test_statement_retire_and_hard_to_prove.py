@@ -108,7 +108,9 @@ def _fault_row(st: Store, sid: str = SID, *, step: int = 5) -> str:
 
 
 def _cands(rel: str) -> dict:
-    return {"000000": {"manuscript": rel, "signed": False, "state": "unsigned"}}
+    """收工门的候选按 `(族, 稿号)` 索引（2026-11-15 EC：稿的身份不是单号）。"""
+    return {("f-proof", "000000"): {"manuscript": rel, "signed": False,
+                                    "state": "unsigned"}}
 
 
 # ============================================================ a：三件证据都能写成 refuted

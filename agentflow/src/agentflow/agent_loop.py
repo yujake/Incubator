@@ -4611,6 +4611,24 @@ def _sign_gate_entry(root: str, rel: str) -> dict[str, Any]:
         return {}
 
 
+def _sign_gate_family(rel: str) -> str:
+    """稿路径 ⇒ 族名；认不出给空串（不猜一个族出来）。
+
+    收工门的候选按 `(族, 号)` 索引（E 两族各有独立号段、都从 `000000` 起）；
+    老读数里若没带 `family`，就在这里按载体路径现认一次 —— 与
+    `manuscriptclosing.signed_candidates` 用的是同一张族表（`manuscriptfamily`），
+    不另写一条前缀判定。
+    """
+    if not rel:
+        return ""
+    try:
+        from . import manuscriptfamily as _MFAM
+
+        return str(_MFAM.classify_manuscript(rel).get("family") or "")
+    except Exception:  # noqa: BLE001 —— 认不出族 ⇒ 不在这道门的对象里
+        return ""
+
+
 def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                  out: dict[str, Any]) -> None:
     """F：计划号 → 它的稿 → 现行的 V 签；没有签且不是终态 abandoned ⇒ 欠签。
@@ -4626,8 +4644,12 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                    why=(f"还没收工：`attack_plans` 读不出来"
                         f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
         return
+    # F 这一道门只拿 `f-proof`（见 `_v_wait_gate_reading` 的 `families`）：
+    # 别的族的同号稿是另一份稿，不在本门的 `cands` 里 ⇒ 这里按号取候选是安全的。
+    # 候选本身的身份仍是 `(族, 号)`（`signed_candidates` 分桶），不让单号跨族串台。
+    by_mid: dict[str, dict[str, Any]] = {mid: cand for (_family, mid), cand in cands.items()}
     by_plan: dict[str, list[str]] = {}
-    for mid, cand in cands.items():
+    for mid, cand in by_mid.items():
         pid = str(_sign_gate_entry(root, str(cand.get("manuscript") or "")).get(
             "plan_id") or "")
         if pid:
@@ -4642,7 +4664,7 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
             if one:
                 mids.append(one)
         mids = list(dict.fromkeys(mids + by_plan.pop(pid, [])))
-        signed = [m for m in mids if bool(cands.get(m, {}).get("signed"))]
+        signed = [m for m in mids if bool(by_mid.get(m, {}).get("signed"))]
         # ---- 2026-11-13（业主裁定）：计划下那份稿所属命题已退休 ⇒ 不算「缺签」 ----
         #
         # 计划的口径是"继续 / 放弃 / 更改"，而"这条命题被标成错误或明确放弃了"
@@ -4656,7 +4678,7 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
 
             for mid in mids:
                 flow = _MR.flow_reading(
-                    store, rel=str(cands.get(mid, {}).get("manuscript") or ""),
+                    store, rel=str(by_mid.get(mid, {}).get("manuscript") or ""),
                     manuscript_id=mid)
                 if flow.get("retired"):
                     retired_mids.append(mid)
@@ -4680,8 +4702,8 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
             continue
         lack = ("这一条计划一份稿都没有" if not mids else
                 "这些稿都不是现行的签：" + "、".join(
-                    f"{m}（{str(cands.get(m, {}).get('manuscript') or '路径没读到')}，"
-                    f"{str(cands.get(m, {}).get('state') or '稿不在盘上')}）"
+                    f"{m}（{str(by_mid.get(m, {}).get('manuscript') or '路径没读到')}，"
+                    f"{str(by_mid.get(m, {}).get('state') or '稿不在盘上')}）"
                     for m in mids))
         out["problems"].append({
             "where": f"计划 {pid or '（编号没读到）'}",
@@ -4705,7 +4727,7 @@ def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
     "稿属于哪一条命题"只走一个读口（`manuscriptretire.flow_reading`：三源并集反查），
     不在这道门里再写一份扫描 —— B / E 两道门读同一份事实。
     """
-    for mid, cand in cands.items():
+    for (_family, mid), cand in cands.items():
         if bool(cand.get("signed")):
             continue
         rel = str(cand.get("manuscript") or "")
@@ -4780,15 +4802,11 @@ def _sign_gate_e(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                    reason=f"{type(exc).__name__}: {exc}",
                    why=f"还没收工：E 的稿读口没接上（{type(exc).__name__}: {exc}）")
         return
-    for mid, cand in cands.items():
+    for (family, mid), cand in cands.items():
         rel = str(cand.get("manuscript") or "")
-        fam = ""
-        try:
-            from . import manuscriptfamily as _MFAM
-
-            fam = str(_MFAM.classify_manuscript(rel).get("family") or "")
-        except Exception:  # noqa: BLE001 —— 认不出族 ⇒ 不在这道门的对象里
-            fam = ""
+        # 族从候选的键里读（`signed_candidates` 按 `(族, 号)` 分桶）。老读数没带族时
+        # 按载体路径现认一次；认不出 ⇒ 不在这道门的对象里（与改前同一个处置）。
+        fam = str(family or _sign_gate_family(rel))
         if fam != "e-proof" or bool(cand.get("signed")):
             continue
         # ---- 2026-11-13：稿所属命题退休 / 优化栏=难以自证 ⇒ 不再要签 --------------
@@ -8017,6 +8035,12 @@ class AgentLoop:
           `manuscriptfreeze` 也写「e-num 永远 state=unsigned」）。
           实验行被撤销（`schema.experiment_is_voided`）⇒ 不是欠稿。
 
+        稿的身份是 `(族, 稿号)`，不是单号：E 的 `e-proof` / `e-num` 各走自己的
+        号段（两族都从 `000000` 起），F 的 `f-proof-000040` 与 B 的 `b-proof-000040`
+        是同一条命题的两条路径 —— 这三类都是不同的稿，不许读成「一个号指到多份
+        文件」的 ambiguity；只有「同族 + 同号 + 指到多份不同的文件」才是真的
+        `ambiguous_path`（候选分桶见 `manuscriptclosing.signed_candidates`）。
+
         「签算不算签」只有一条口径：`manuscriptclosing.signed_candidates` 的
         `state=="signed"`（签 sha == 现行正文 sha、签文件可复算）。
 
@@ -8061,7 +8085,11 @@ class AgentLoop:
             out.update(applicable=True, checked=False, complete=False, reason=why,
                        why=f"还没收工：拿签稿扫描没查成（{why}）⇒ 按『没查成』挡")
             return out
-        cands: dict[str, dict[str, Any]] = {}
+        # 稿的身份 = `(family, manuscript_id)`：E 的 `e-proof` / `e-num` 各有独立号段、
+        # 都从 `000000` 起。单号索引会让两族共用同一个键（后一份覆盖前一份），
+        # 于是 E 的证明稿在门里读成「没有现行的签」—— 这不是同一份稿的两种读法，
+        # 是两份不同的稿。F / B 同理按 `(族, 号)` 走，不给 E 打特例。
+        cands: dict[tuple[str, str], dict[str, Any]] = {}
         for one in list(scan.get("candidates") or []):
             if not isinstance(one, Mapping):
                 continue
@@ -8069,8 +8097,14 @@ class AgentLoop:
             mid = str(cand.get("manuscript_id") or "")
             if not mid:
                 continue
-            cands[mid] = cand
+            family = str(cand.get("family") or "")
+            if not family:
+                # 老读数兜底：候选没带 family 时按它的载体路径现认一次（不猜族）。
+                cand["family"] = _sign_gate_family(str(cand.get("manuscript") or ""))
+                family = str(cand["family"] or "")
+            cands[(family, mid)] = cand
             out["manuscripts"].append({
+                "family": family,
                 "manuscript_id": mid,
                 "manuscript": str(cand.get("manuscript") or ""),
                 "state": str(cand.get("state") or ""),
