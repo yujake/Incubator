@@ -2544,7 +2544,42 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: M 四格（这四格读得到 M 的工具说明）；其余七格逐字未动。连带：`_FROZEN_PROMPT_DIGESTS`
 #: 与 `_FROZEN_PROMPT_VERSION` = p282（现算，不是手抄）；`tests/fixtures/prompt_cache_warm.json`
 #: 两档重跑待做（真调模型，本批未跑）；两份 golden 按现值重冻待做（已在基线之外）。
-PROMPT_VERSION = "p282"
+#: p282 → p283（2026-11-15，FC-27 人审批；三批改动合并后的唯一一次抬版）：
+#:   本版同时包含三件事（三批各自备好、合并后一次 apply、一次抬版、一次重冻）：
+#:   ① `PAPER_PACK` 第五 / 六节：收工门从「八格」改成「七格」、`paper` 写明落
+#:      `readings.paper`（p282 只改了工具说明，提示词这一面漏了；判据
+#:      `test_the_completion_definition_counts_blockers` 当时把"八格全过"钉着）——
+#:      即「`paper` 退出收工判定，是否出 paper 由 M 自己判断」。
+#:   ② 撤掉审校轮数上限：`specs/h.py` 的 `verify_fixes` 摘要 / 参数面按业主
+#:      2026-11-15 逐字裁定「撤掉这个上限，一切由智能体自行决定，不做读数」重写
+#:      （`max_review_rounds` 随机制撤除，动作面改声明 H 自己的收尾判断 `close_as`；
+#:      `capabilities.py` 删掉 `("H", "verify_fixes")` 的过期登记）。收不收尾由 H
+#:      判断，不由任何计数器触发，也不再提供轮次读数。
+#:   ③ `specs/d.py` 的教法收口（R-06）＋ `specs/m.py`（R-07）＋「`salvaged` 可不指」：
+#:      五处「D 自己立猜想」＋ 一处把 F 的工具 `attack.abandon_plan` 说成 D 的写入口
+#:      （`8e398d74` 记账说"六处"），另按同口径收了两处同段残留（d.py 的「立新猜想」
+#:      循环句、m.py 的「D 立猜想」）—— 改法一律是「你只给研究方向；猜想的立案与落行
+#:      归产出侧（F 开稿 / E 实验落盘 / B 收录）」；`capabilities.py` 删掉过期的
+#:      `("D", "register_conjecture")` 登记（`stale_missing_in_action_entries()` 在删
+#:      之前一直报它过期）；`specs/d.py` / `f.py` / `m.py` 与 `tools/table_tools.py`
+#:      按业主 2026-11-15 语义写明「difficulty 档 `salvaged` 可以不指 —— 放弃之后
+#:      按正常流程注册新命题去攻坚是主路径，事后要记成可取之处再给」。
+#: 另：`99f6a08f` 之后 `agent_skills.py` 已把 H 的复审段改成「收不收尾由你判断（轮数上限已
+#: 撤除）」而版本号没动、十一格也没重算 ⇒ `test_prompt_stability.py` 的账本与
+#: `_FROZEN_PROMPT_DIGESTS` 两条判据一直红；本版把它们一次补齐。
+#: 变化格 = A / B / D / E / F / G / H / L / M 九格（版本行已归一，不算变化）：
+#:   D / F / M 是上面 ③ 的 spec 正文；G / H 读得到 `PAPER_PACK`；H 另读自己的 policy；
+#:   A / B / E / L 自己的段一个字没改，变的是它们伙伴表 / 工具面里 `table.update`
+#:   那一行的说明（③ 的 `salvaged` 可空）。C / V 两格逐字未动。十一格由判据自己的
+#: `_surface_digest` 现算（`temp/_p283_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，
+#: 合并树上一次算全十一格、不跳段）；逐格旧值 → 新值记在
+#: `tests/test_agent_prompts.py` 的 `_FROZEN_PROMPT_DIGESTS` 上方。
+#: 连带：两份 golden 按合并后的代码重冻这一次（`agent_surface_snapshot.json` /
+#: `tool_surface_snapshot.json`；② 自带的 golden hunk 是在没有 ① 的树上冻的，不采用）；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，要预算，本批未跑）；
+#: `_VOLATILE_FACT_SETS` 追加 p282 / p283 两格（facts 键集仍 15 格、count /
+#: keys_sha256 一格未动）。
+PROMPT_VERSION = "p283"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -3595,22 +3630,24 @@ PAPER_PACK = """\
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门八格全过 **且没有 blocker** 才算交付，两者缺一都不许说"完成"）：八格是 `paper` / `contradictions` /
+五、完成定义（收工门七格全过 **且没有 blocker** 才算交付，两者缺一都不许说"完成"）：七格是 `contradictions` /
 `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
-`conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格它会在读数里逐格点名，这里不重抄，
-同样以它的当次读数为准。
-**blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`statements_unsigned` ——
+`conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余两格它会在读数里逐格点名，这里不重抄，
+同样以它的当次读数为准。**`paper` 不在门里**（2026-11-14 业主裁定：是否出 paper 由 M 自己判断时机）：
+它是 `readings["paper"]` 那一格读数，不是判据 —— 但"正文与 PDF 对得上"仍要自己核、如实写进交付说明。
+**blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，七格全绿也照样拦）**：`statements_unsigned` ——
 既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是**改稿之后**重送 V 拿到干净的「成立」，或明确放弃
 （`status=abandoned` + `abandon_kind` + `abandon_basis`，再按四档给 `defect_ref` / `difficulty` + `salvaged` /
 `experiment_id` / `space`；理由不齐 ⇒
 写盘前受控拒，见 D / F 的政策与两份手册）；`mapping_not_written` —— 有命题、已成稿而论文包里
 没有对应表（`closing` 读数 `mapping_written` 那一格）。② **格上 blocker（把那一格判成 `fail`）**：
-`acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 落在 `paper` 那一格（改完正文没重编）。
+`acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 不再是格上 blocker —— 它是 `readings["paper"]` 的读数
+（`verdict` 记 `drifted`，改完正文没重编），由 M 判断要不要在收工时补编。
 只要 `closing` 的读数里 `blockers` 非空，就不算交付。
-1. **正文与 PDF 对得上**（收工门那一格叫 `paper`，判据只有一条）：编译回执里的
+1. **正文与 PDF 对得上**（`readings["paper"]` 那一格，判据只有一条）：编译回执里的
    `tex_sha256` 等于盘上这一份 `out/paper/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
    这份正文编的"。四种读数各有各的名字，不许折平：盘上根本没有 `out/paper/main.tex`
-   ⇒ 记 `not_applicable`（没写正文，不是"写坏了"）；有正文而回执不是它的 ⇒ 那一格记 `fail`、
+   ⇒ 记 `not_applicable`（没写正文，不是"写坏了"）；有正文而回执不是它的 ⇒
    读数里 `verdict="drifted"`（`paper_pdf_is_stale`：PDF 是旧正文编的）；回执读不到或摘要算不出 ⇒ `unknown`
    （没查成，**不是**通过）。
    G 在交付说明里写回执的 `tex_sha256` 与 `pages`；M 跑 `conductor.closing` 自己核这一格
@@ -3623,8 +3660,8 @@ PAPER_PACK = """\
 5. 交付说明里十条判据逐条有读数，**且基线 `source/` 逐字节未改**。
 
 六、收工前的最后一条：**改了正文就要重编**
-- 只要这一轮动过 `out/paper/main.tex`，盘上那份 `main.pdf` 就已经是旧的了 —— 收工门那一格
-  会报 `paper_pdf_is_stale`（"这份 PDF 是从旧正文编的"），第 1 条过不了。
+- 只要这一轮动过 `out/paper/main.tex`，盘上那份 `main.pdf` 就已经是旧的了 —— 收工读数
+  会报 `paper_pdf_is_stale`（"这份 PDF 是从旧正文编的"），第 1 条也就不成立。
 - 收工之前必须再调一次 `doc.paper_compile`，让回执对上盘上这一份正文（这一步**只有 G
   跑得动**，见上面「四」）；做不到就如实写"正文改了、PDF 没跟上"，不许把这件事留在一份
   写着"已完成"的交付说明里。

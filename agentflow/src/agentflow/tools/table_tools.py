@@ -1906,7 +1906,8 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
 @tool(
     "table.update",
     "`statements` 改 status/kind/quote_reason，正文走登记。放弃命题四档：math_error + "
-    "defect_ref、difficulty + salvaged、counterexample + experiment_id、space_too_large + "
+    "defect_ref、difficulty（`salvaged` 可空）、"
+    "counterexample + experiment_id、space_too_large + "
     "space；都另给 abandon_basis，缺即拒。",
     _obj(
         {
@@ -1937,10 +1938,13 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
                                "（没判成或判不是 ⇒ 拒）。"},
             "salvaged": {
                 "type": "array",
-                "description": "difficulty 档必填且非空：从旧证明里拆出的引理。"
-                               "每条给 label 与 stmt_id（须在册、status=active、kind=lemma、"
-                               "不是这条自己、且在这笔放弃之前就在册；秘书同一问判它是不是"
-                               "从原证明拆出来的）。空数组 ⇒ 受控拒绝。",
+                "description": "difficulty 档可选（业主 2026-11-15：放弃时可以"
+                               "不指向任何引理；之后按正常流程注册新命题、再在后续动作"
+                               "里记成可取之处，是合法路径）。给了才逐条判：在册、"
+                               "status=active、kind=lemma、不是这条自己、正文与证明都在、"
+                               "有经手人（空壳 ⇒ abandon_salvaged_not_reviewable）；秘书同一问判它是不是"
+                               "从原证明拆出来的。判据不看 created_at —— 引理比被放弃的"
+                               "那一条晚注册不是问题。",
                 "items": {"type": "object",
                           "properties": {"label": {"type": "string"},
                                          "stmt_id": {"type": "string"}},
@@ -1993,8 +1997,9 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
     `experiment_id` / `space` 不是可写的列：它们是"放弃命题"这件事的理由形状。`statements`
     那一笔在下发路由之前把它们并进载荷，于是 `Secretary.amend_statement_meta` 能在写之前判它们
     （受控拒 = 一个字节都不写）。判据本体只有一份（`statementabandon.check_abandon_reason`），
-    四档各有各的证据：math_error 要 `defect_ref`、difficulty 要 `difficulty` + `salvaged`、
-    counterexample 要 `experiment_id`、space_too_large 要 `space`。
+    四档各有各的证据：math_error 要 `defect_ref`、difficulty 要 `difficulty`（`salvaged`
+    可空：放弃之后按正常流程注册新命题是合法路径）、counterexample 要 `experiment_id`、
+    space_too_large 要 `space`。
     """
     try:
         idf = _spec_of(table)["id_field"]

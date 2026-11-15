@@ -7,14 +7,14 @@
 不落在任何一格上，八格全绿也照样把 `machine_pass` 打成假。
 
 这一份判据钉三件：
-1. M / G / H 三格（`PAPER_PACK` 的注册面）都读到「八格全过且没有 blocker」这句；
+1. M / G / H 三格（`PAPER_PACK` 的注册面）都读到「七格全过且没有 blocker」这句；
 2. 它点名 `statements_unsigned` —— 本轮新加的 blocker 里最该被说清的那一个；
 3. 反真空：`closing` 的真身仍是「门里那七格 ∧ 无 blocker」（判据不靠一句文案自证）。
 
 2026-11-14（业主裁定）：`paper` 退出收工判定 ⇒ `DEFAULT_CHECKS` 从八格变七格。
-PAPER_PACK 那一句（提示词冻结面）仍写着「八格全过」—— 它与 `_FROZEN_PROMPT_DIGESTS` /
-`tests/golden/*` 一起归提示词那一批（改它要重冻，不在本批）；本文件只把反真空那一格
-改成七格，并把上面那条「八格全过」的断言留着钉现行提示词文本。
+2026-11-15（p283）：PAPER_PACK 那一句（提示词冻结面）跟着改成「七格全过」，`paper`
+写明落 `readings.paper`；本文件两条断言一起改成七格 —— 改前它把「八格全过」钉在提示词上，
+于是"门是七格、教法说八格"这个错位在提示词侧没有任何读数会红。
 """
 from __future__ import annotations
 
@@ -41,8 +41,8 @@ def test_paper_pack_completion_definition_includes_blockers() -> None:
             continue
         if "blocker" not in text:
             bad.append(f"{role} 的完成定义没提 blocker")
-        if "八格全过" not in text:
-            bad.append(f"{role} 的完成定义没说「八格全过」")
+        if "七格全过" not in text:
+            bad.append(f"{role} 的完成定义没说「七格全过」")
         if "statements_unsigned" not in text:
             bad.append(f"{role} 的完成定义没点名 statements_unsigned 这类不落在格上的 blocker")
     assert not bad, "完成定义没覆盖 blocker 这一维：\n  " + "\n  ".join(bad)

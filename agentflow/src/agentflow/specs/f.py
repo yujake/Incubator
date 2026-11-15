@@ -235,13 +235,13 @@ SPEC = AgentSpec(
             "`statements_unsigned` 大于 0 —— 那是 **blocker**（`machine_pass` 假、退出码 1，而且它不落在八格里任何一格上，"
             "八格全绿也照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**"
             "（B 走 `table.update`：`status=abandoned`，理由按四档之一给 —— **`math_error`**：指出错在第几步、错的是什么 ＋ "
-            "`defect_ref`（`verifications/<号>.jsonl#v-00000N`）；**`difficulty`**：说清难在哪 ＋ 把旧证明里可取之处拆成引理"
-            "（`salvaged` 每条给 `label` 与 `stmt_id`）；**`counterexample`**：给 `experiment_id`（那条真跑过、"
+            "`defect_ref`（`verifications/<号>.jsonl#v-00000N`）；**`difficulty`**：说清难在哪（`salvaged` 可以先不指："
+            "放弃之后按正常流程注册新命题去攻坚 —— 加强条件版 / 中间逻辑链 / 负面事实 / 其它，不机械；事后要记成可取之处再给 `salvaged`，每条 `label` 与 `stmt_id`、在册且 active/lemma/有正文有证明有经手人）；**`counterexample`**：给 `experiment_id`（那条真跑过、"
             "`result=refutes` 且检验的是这条命题的反例实验）＋ 说清哪一个参数组让它假；**`space_too_large`**："
             "给 `space`（枚举参数与规模）＋ 说清为什么在合理成本内做不到。那一段理由的落盘形状是 "
             "`quote_reason=abandoned@<ISO8601>@<结构化理由>`（标记与时间戳由系统拼，你只给这几档理由那几格）。"
-            "理由空着 / `salvaged` 空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒"
-            "（如 `abandon_reason_missing` / `abandon_salvaged_missing` / `abandon_difficulty_not_genuine`），一个字节不改）。"
+            "理由空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒"
+            "（如 `abandon_reason_missing` / `abandon_difficulty_not_genuine`）；`salvaged` 指的是一条空壳（不在册 / 无证明 / 无经手人）⇒ `abandon_salvaged_not_reviewable`，一个字节不改）。"
             "**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工时变成一格红。",
             # 一个稿号 = 一份文件 = 一份证明；同一命题要第二份证明 ⇒ **另一份稿（另一稿号）**。
             # 台账侧的多证明机制（`proofs` / `used_by="stmt:<号>#pN"` / `path_group` /

@@ -64,16 +64,18 @@ def test_the_paper_section_goes_to_the_roles_that_touch_the_paper(store: Store):
     """正控：M（统筹交付）/ G（写正文并编译）/ H（审校）看得到这一段。
 
     `R6`：这条判据原先钉的是旧字面量 `完成定义（五条全过才算交付`，而那个"五条"是
-    手抄计数（真身 = `closing.DEFAULT_CHECKS` 的 8 格）⇒ 改成钉新口径：
+    手抄计数（真身 = `closing.DEFAULT_CHECKS` 的 7 格）⇒ 改成钉新口径：
     这一段不许写死条数（格数以 `conductor.closing` 的当次读数为准），并把这个
     "不许写死"本身变成判据 —— 比原来那条更难满足（写了旧数量就红）。
+    2026-11-15（p283）：`paper` 退出收工判定（p282）之后这一段仍写着「八格」，
+    这里跟着改成 7 格 —— 判据钉的是 `DEFAULT_CHECKS` 的现读数，不是历史条数。
     """
     for role in AP.PAPER_PACK_ROLES:
         text = _prompt(role, store)
         assert "论文（你参与的那份交付物）" in text, role
         assert "完成定义" in text, role
         assert "五条全过" not in text, f"{role}：完成定义里还写着旧的手抄条数（五条全过）"
-        assert "收工门八格全过" in text, f"{role}：完成定义里没写清真身格数（八格）与「以读数给」的口径"
+        assert "收工门七格全过" in text, f"{role}：完成定义里没写清真身格数（七格）与「以读数给」的口径"
 
 
 def test_the_paper_pack_style_section_speaks_to_the_right_role(store: Store):

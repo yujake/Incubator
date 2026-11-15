@@ -37,8 +37,12 @@ ACTIONS: tuple[ActionSpec, ...] = (
 
     ActionSpec(
         "H", "verify_fixes",
-        "复审：重跑检查判 fixed / 仍 open；到轮数上限则 unresolved_review",
-        _obj({"doc_id": _S, "round_no": _I, "dependencies": _ARR_OBJ}, ("doc_id", "round_no")),
+        # 2026-11-15 业主裁定（逐字）：「撤掉这个上限，一切由智能体自行决定，不做读数」。
+        # 轮数上限不再存在；收不收尾由 H 显式给 `close_as` 决定（该终态保留，不由计数器触发）。
+        "复审：重跑检查判 fixed / 仍 open 并逐条列出仍 open 的；收不收尾由你判断 —— "
+        "给 `close_as=\"unresolved_review\"` 才置该终态交人复核（轮数上限已撤除，不做轮次读数）",
+        _obj({"doc_id": _S, "round_no": _I, "dependencies": _ARR_OBJ,
+              "close_as": _S}, ("doc_id", "round_no")),
         "dict", side_effect="write_local", handler_name="verify_fixes",
     ),
 
@@ -140,7 +144,7 @@ SPEC = AgentSpec(
             "采信 V 的逐行签字，并在 findings 里写一条**环境缺口**（`no_backend` / `tool_crashed`）；"
             "**不许**把它读成「这条断言不成立」，也不许在报告里写「已形式化验证」。",
             "**审什么、在哪，由派活告诉你**：主控派你审论文时会把正文的落点写进派活（通常是 `out/paper/main.tex` 与 `main.pdf`）—— 你用 `fs.read`（读是你的全部手段）打开它；审校报告由 `review_report` 落到**框架定的** `out/review/<doc_id>-review.md`，落点由框架定、你不用挑路径、也不用手写报告文件（那是**验收表**里 `kind=review_files` 那一行的读数：数的是那个文件夹里的审校报告；验收表里没声明这一行 ⇒ 这一档就没有读数）。**你站在这条审校链的中间**：上游是 **B** 的命题台账与逐字出处、以及 **V** 逐行走查签下的「审过」；你判稿子用的就是这两样（采信规则那一条），而不是自己读一遍就说了算。",
-            "你的裁决由机械检查给出四档：有 error ⇒ `rejected`；依赖闭合**没查** ⇒ `unverified`（不许在这个前提下判通过）；只有 warning ⇒ `accepted_with_warnings`；都没有 ⇒ `accepted`。它同时落成稿件状态：`accepted` ⇒ 稿件置 `accepted`，否则置 `in_review`；复审到轮数上限仍不通过 ⇒ `unresolved_review`。判 `accepted` 时框架会**签一条**（签名钉住那一版的内容哈希）—— **验收表**里 `kind=reviewed_current_rows` 那一行数的就是这一档（验收表没声明这一行 ⇒ 这一档没有读数），所以「改完不复核」会让它掉下来。",
+            "你的裁决由机械检查给出四档：有 error ⇒ `rejected`；依赖闭合**没查** ⇒ `unverified`（不许在这个前提下判通过）；只有 warning ⇒ `accepted_with_warnings`；都没有 ⇒ `accepted`。它同时落成稿件状态：`accepted` ⇒ 稿件置 `accepted`，否则置 `in_review`；**复审要不要收尾由你判断** —— 你显式给 `close_as=\"unresolved_review\"` 时稿件才置 `unresolved_review` 交人复核（轮数上限已按 2026-11-15 业主裁定撤除，这一档不再由任何计数器触发，也不再提供轮次读数）。判 `accepted` 时框架会**签一条**（签名钉住那一版的内容哈希）—— **验收表**里 `kind=reviewed_current_rows` 那一行数的就是这一档（验收表没声明这一行 ⇒ 这一档没有读数），所以「改完不复核」会让它掉下来。",
         ),
         # 这一批审稿判据把 H 从"只判说清楚没有"扩到"按体例逐条打勾"：没有它们时
         # G 交出一份台账稿（内部编号铺满、没有定理环境、长度靠清单撑），H 手上没有

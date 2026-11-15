@@ -1324,23 +1324,16 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
         "`graph.neighbors` 有可选上限 `max_neighbors`，动作面只声明了必填。"
         "C 的图上动作今天只走 `neighbors`/`paths` 两个入口，上限是否要暴露给编排层未见裁定。",
     ),
-    # 2026-10-26：`("D", "register_conjecture")` 那一对曾经删过（登记过期）。当时的
-    # 理由是"那条工具不在 `tools._MODULES` 里 ⇒ 反向缺口只对'唯一匹配到工具'的对算，
-    # 留着就是噪音"。2026-10-27 它又回来了（`R-BE4` 的 D1 Phase A，业主批准）：
-    # `conjecture_tools` 进了 `_MODULES` ⇒ 这一对"唯一匹配到工具"了 ⇒
-    # 「`conjecture.register_conjecture` 有 `force_new`，而 `D.register_conjecture`
-    # 的动作面不声明它」这条不对称第一次真的进入反向缺口的射程。
-    # 为什么不补进动作面：`force_new` 是"D13 判重之后仍要新建"这一个调用方的决定，
-    # 动作面（`specs/d.py`）是编排层看得见的那一层 —— 它该不该暴露这个开关是设计判断，
-    # 而 `specs/*` 也是禁改区。按上一条同款处置：先让它可见，再做判断。
-    ("D", "register_conjecture"): (
-        frozenset({"force_new"}),
-        "`conjecture.register_conjecture` 多一格可选的 `force_new`（D13：没给 "
-        "`conjecture_id` 时先按规范化 statement 判重，真要新建才显式给这一格）。"
-        "动作面（`specs/d.py`）不声明它 ⇒ 编排层看不见这个入口。改它要动 `specs/*`"
-        "（禁改区），而「动作面该不该暴露 force_new」是设计判断 —— 先登记让它可见。"
-        "**这一条落在禁改区（本文件），已登记待 2 名 reviewer 批准**。",
-    ),
+    # 2026-11-15（D1·甲 `8e398d74` 的连带）：`("D", "register_conjecture")` 那一对随
+    # D 的猜想登记动作整条退场（业主 2026-11-13 裁定甲）⇒ 它在这张表里的 `force_new`
+    # 登记也失去对象：动作不存在了，那一对不再"唯一匹配到工具"。删它之前
+    # `stale_missing_in_action_entries()` 一直报它过期
+    # （`tests/test_capabilities_reverse_param_gaps.py::test_the_registration_has_no_stale_entries`）。
+    # 动作退役之后"动作面该不该暴露 force_new"这个问题没有对象：台账的唯一写点搬到库层
+    # `conjectureledger.register`（行由产出侧落：F 开稿那一刻 / E 的实验 / B 的收录），
+    # `force_new` 是产出侧调用方的决定，不进编排层。
+    # 沿革留在这一行里而不是留在登记表里：一张留着"缺项也不缺"的登记会烂成噪音，而噪音里
+    # 的真缺口就没人看了。
     # 2026-10-23 晚：`("E", "run_experiment")` 的 `run_name` 与
     # `("E", "check_formal")` 的 `checker_name` 两对已删 —— 前者随工具 schema 一起
     # 退场（那两个参数只服务 formal，而 E 不做形式化），后者随动作整条摘掉。
@@ -1350,10 +1343,10 @@ _KNOWN_TOOL_ONLY_PARAMS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
     # 断言**的那一格（没有 `proof_location` 就过不了 `build_document`）⇒ 不再是刻意，
     # 于是这条登记失去对象。删它之前 `stale_missing_in_action_entries()` 会一直报它过期
     # （`tests/test_capabilities_reverse_param_gaps.py::test_the_registration_has_no_stale_entries`）。
-    ("H", "verify_fixes"): (
-        frozenset({"max_review_rounds"}),
-        "`review.verify_fixes` 有 `max_review_rounds`，动作面没声明。",
-    ),
+    # 2026-11-15：`("H", "verify_fixes")` 那一对已删 —— 业主裁定「撤掉这个上限，一切由
+    # 智能体自行决定，不做读数」：工具层那个 `max_review_rounds` 参数随机制一起撤除，
+    # 动作面改声明 H 自己的收尾判断 `close_as`（两侧同步）⇒ 这一格不再有"工具面有、
+    # 动作面没有"的缺口，登记失去对象（留着一个缺项也不缺的登记会让这条判据烂成噪音）。
 }
 
 

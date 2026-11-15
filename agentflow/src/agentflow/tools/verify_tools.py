@@ -1143,6 +1143,9 @@ _ROLES_V = ("V",)
             # 有稿那一支整格覆盖它 ⇒ 声明它可以走 `test_declared_keys_are_a_subset…`
             # 那条探针（那里走的是"没查成"那一支）。
             "'manuscript_identity',"
+                # 2026-11-15（D）：同 sha 已有正式颁发的签时那一份指针读数；
+                # 键无条件存在（初值 {}，同 review_write 的纪律），不是只在某一支出现。
+                "'issued_sign',"
             "'ledger','reason','detail'}。`verdict` 是两态之一：`成立` / `有毛病`"
             "（`有毛病` 时 `defect_step` 指到第几步）。"
             # 2026-11-05 走查 D13/D14：`kind` / `reason` 两个词表从实现的唯一真身

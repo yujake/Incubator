@@ -1252,6 +1252,42 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
              "放弃理由只认「不再需要」；`dispatch_fit` 轴只提醒不拦）。④ secretary 的"
              "`dispatch_fit` 题面在 R2 已落，本批只核口径。变化格 = B / D / F（其余八格逐字"
              "未动，版本行已归一）。facts 键集仍 15 格、落点没动。"},
+     # p281 → p282（2026-11-14，业主裁定「是否出 paper 退出收工判定，由 M 自行判断是否到
+     # 这个时机」）：facts 键集一格没动（还是 15 格）—— 本批只改 `conductor.closing` 的
+     # 工具说明与 `status` 的键名单（`paper` 落 `readings.paper`），没有哪一格事实换过落点
+     # （system ↔ user），所以 count / keys_sha256 与 p281 同值。这一格补的是当时漏记的账：
+     # `PROMPT_VERSION` 先抬到了 p282，而账本最后一格还停在 p281
+     # （`test_facts_migration_must_leave_a_version_trace` 因此一直红）。
+     {"version": "p282", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p282（2026-11-14，业主裁定「是否出 paper 退出收工判定」）："
+              "`conductor.closing` 的说明从「八格」改成「七格」、`status` 的键名单去掉 "
+              "`paper` 并注明它落 `readings.paper`（由 M 判断，不是门）。变化格 = D / G / "
+              "H / M（这四格读得到 M 的工具说明），其余七格逐字未动。facts 键集仍 15 格、"
+              "落点没动。"},
+     # p282 → p283（2026-11-15，FC-27 人审批；三批改动合并后的唯一一次抬版）：facts 键集
+     # 一格没动（还是 15 格）—— 本批改的是 specs/d.py / f.py / m.py 的 policy 正文、
+     # specs/h.py 的 verify_fixes（撤轮数上限、改 `close_as`）、capabilities 的两条过期
+     # 登记、PAPER_PACK 的第五 / 六节、table_tools 的 `table.update` 说明，以及
+     # agent_prompts 那一格的账注；没有哪一格事实换过落点（system ↔ user），所以
+     # count / keys_sha256 与 p282 同值。另：`99f6a08f` 之后 `agent_skills.py` 的 H 段改动没抬版本（账本最后一格停在 p281），这一格同时补齐那次漏账。
+     {"version": "p283", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p283（2026-11-15，FC-27 人审批；三批改动合并后的唯一一次抬版）。"
+              "这一版同时包含三件事：① PAPER_PACK 第五 / 六节的收工门从「八格」改成"
+              "「七格」、`paper` 写明落 `readings.paper`（`paper` 退出收工判定，是否出 "
+              "paper 由 M 自己判断时机）。② 撤掉审校轮数上限 —— `specs/h.py` 的 "
+              "`verify_fixes` 摘要 / 参数面按业主 2026-11-15 裁定重写（`max_review_rounds` "
+              "随机制撤除，改声明 H 自己的收尾判断 `close_as`；`capabilities.py` 删掉 "
+              "`(\"H\", \"verify_fixes\")` 的过期登记），**收不收尾由 H 判断、不由任何计数器"
+              "触发**，也不再提供轮次读数。③ `specs/d.py` 的教法收口（五处「D 自己立猜想」"
+              "＋ 一处把 F 的工具 `attack.abandon_plan` 说成 D 的写入口）＋ `specs/m.py` 不再"
+              "点名 D 的猜想登记动作、改成产出侧落账 ＋ `capabilities.py` 删掉过期的 "
+              "`(\"D\", \"register_conjecture\")` 登记 ＋「difficulty 档 `salvaged` 可不指」"
+              "（d / f / m 三份 spec 与 `table_tools`：放弃之后按正常流程注册新命题是主路径，"
+              "事后要记成可取之处再给 `salvaged`）。变化格 = A / B / D / E / F / G / H / L / M "
+              "九格（A / B / E / L 是 `table.update` 那一行说明改了，它们自己的段没动）；"
+              "C / V 逐字未动（版本行已归一）。facts 键集仍 15 格、落点没动。"},
 
 )
 
