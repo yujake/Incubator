@@ -180,13 +180,6 @@ _SRC_CACHE: dict[str, Any] = {}
 #: - ``does_not_prove``：它没有证明什么（真机上因此仍然未知的那一段）；
 #: - ``superseded_by``：改用 CLI 入口 + 真 `LlmSeam` 的那份新彩排（没有就空串）。
 CHAIN_ONLY: dict[str, dict[str, str]] = {
-    "test_rehearsal_c10_writing.py": {
-        "chain": "C10 · 成文 / 审校回路（G 改 → H 复审 → H close_as）",
-        "reason": "直调 `AgentG.*` / `AgentH.*`；并打桩 `review_tools.scan_document`。没有步循环。",
-        "proves": "G 的改写与 H 的复审判定各自在方法层的行为。",
-        "does_not_prove": "两条角色在真机循环里被派活、工具分发、收工门放行；账本与三格全无对象。",
-        "superseded_by": "",
-    },
     "test_rehearsal_c12_closing.py": {
         "chain": "C12 · 收工门七格",
         "reason": "手工造 `AgentLoop` 之后直调私有 `loop._v_wait_gate_reading()`；打桩 "

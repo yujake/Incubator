@@ -1,69 +1,81 @@
 # -*- coding: utf-8 -*-
-"""彩排 C10：成文链 —— G 成文 → H 审 → G 修订 → H 复核（`verify_fixes` 三态）。
+"""彩排（真路径）C10 · 成文/审校回路：G 成文 → H 审 → G 修订 → H 复审 + H 自行 close_as。
 
-## 这一条链怎么真跑
+## 这条链与真机差在哪（逐项）
+
+| 这一趟用的东西 | 真机 | 这份彩排 |
+|---|---|---|
+| 入口 | `agentflow start --mode research` | 同一行：`cli.main(["start", "--mode", "research", …])` |
+| 执行体 | `_run_spec` → `_exec_role` → `host.wired_llm_conductor` → `LlmBackend` → `AgentLoop.run` | 同一条 |
+| 派活 | `Conductor.summon`（`M→G`、`M→H`；`G→H` 也是真边，本趟由 M 派两次 G、两次 H） | 同一条 |
+| 成文 | `doc.compose_claim` / `doc.build_document` → `AgentG.*` | 同一条 |
+| 审校 | `review.review_document` → `AgentH.review`（真 `scan_document`） | 同一条 |
+| 修订 | `own.revise` → `AgentG.revise`（真改稿、真重渲染） | 同一条 |
+| 复审 + 收尾 | `review.verify_fixes(close_as=…)` → 真三态判定 | 同一条：`close_as` 是 H 自己给的那一格 |
+| 模型缝 | 真 `LlmSeam`（`_agent_seam_factory` / `for_role` / `for_secretary`） | 同一条：构造点一个都没替换 |
+| 记账 | 真 `TokenMeter` → `usage_ledger` | 同一条 |
+| 出网 | `modelgw.urllib_transport`（HTTP POST） | 只换这一处：回预置的 OpenAI 兼容 JSON |
+
+旧 `test_rehearsal_c10_writing.py`（`CHAIN_ONLY` 里那份）直调 `AgentG.*` / `AgentH.*`，并
+打桩 `review_tools.scan_document`；这一份两处都不换。
+
+## 这条链覆盖什么（业主点名的 C10）
 
 ```text
-G.compose_claim（构造一条合规断言：cross_check + 受控声明）
-  → G.build_document（写 documents 行 + 渲染 markdown 落盘）
-  → G.render（同一份稿的 markdown；逐字出现每条断言）
-  → 夹具把这一行改成「旧盘形态」：cross_check 的受控声明丢了（H 的实测缺陷形态）
-  → H.review（落 review_findings 行；缺声明 = overclaim/error）
-  → H.review_report（G1–G15 报告落盘；own_errors=[] 显式登记「本轮零自身错误」）
-  → G.revise（用一条合规断言替换它 + 把 finding 标为 fixed + 重渲染）
-  → H.verify_fixes（重跑检查：真修好 ⇒ resolved；假修好 ⇒ reopened/still_open）
-  → H.review（唯一签发入口：accepted 且签名钉在当前这一版上）
+M --summon--> G --doc.compose_claim--> 一条合规断言
+                --doc.build_document--> documents 一行 + 渲染稿
+                --doc.register_dependency(dangling)--> 一条拿不到的外部定理（留缺陷）
+M --summon--> H --review.review_document--> review_findings 一行（dangling_dep / error）
+M --summon--> G --own.revise--> 真修订（改的是 claims，不改依赖面）
+M --summon--> H --review.verify_fixes(close_as="unresolved_review")--> H 自己收尾、交人复核
 ```
 
-## 为什么要有「旧盘形态」那一步
+判据读盘：`documents` 一行且 `status="unresolved_review"`、`review_rounds=2`、
+`review_findings` 一行 `kind="dangling_dep"`/`level="error"`/`status="open"`、
+`dependencies` 一行 `status="dangling"`、G 的 `revise` 回执点名 `status="revised"`、
+H 的 `verify_fixes` 回执 `verdict="unresolved_review"` 且逐条列出 `still_open`、钱账干净。
 
-`G.compose_claim` 本身就是一道闸：它拒绝过度声称、拒绝缺字段（判据
-`claimanatomy`），所以经过它构造出来的断言永远「合规」。而 H 要抓的正是那些
-「没经过今天的闸」的历史行。这正是 H 的判据存在的理由（见 `test_agent_h.py`
-模块头：坏样本必须绕过 store 校验直接改盘才能造出来）。所以这一条链把 G 的三步
-真跑一遍，再把它改成旧盘形态交给 H —— 不是替 G 写坏稿，而是造一个 H 真的会
-面对的输入。
+## 为什么 H 收尾而不是 accepted
 
-## 终态断言（盘上/台账上可查）
+这一趟 G 的修订真的跑了，但 H 的发现落在依赖面（引了一条拿不到的外部定理），
+`G.revise` 只改断言、不改依赖 —— 所以 H 复审时那条 error 仍然复现。H 据此自己
+给 `close_as="unresolved_review"` 交人复核。这不是"没修好"的意外：它正是业主
+2026-11-15 裁定「收不收尾由 H 自己判，没有计数器替你收尾」要走的那一格。
 
-| 判据 | 终态 |
-|---|---|
-| `test_c10_a_document_is_built_rendered_and_reviewed` | `documents` 行在；`markdown_path` 文件在盘上且含每条断言；`review_findings` 行是 error/overclaim；`review_report` 的 markdown 文件在盘上 |
-| `test_c10_b_a_real_fix_is_verified_and_signed` | finding 由 `open` → `fixed`；`verify_fixes()` 的 `resolved` 点名它；文档 `status` 停在 `in_review`（R-59）→ 再 `review` 之后 `accepted` 且签名钉住当前版 |
-| `test_c10_c_an_unfixed_statement_is_not_accepted` | 什么都不改 ⇒ `still_open` 点名同一条、`verdict=revise_again`、文档 `in_review` |
-| `test_c10_d_the_three_state_vocabulary_is_real` | `verify_fixes` 的 verdict 只在 `accepted / revise_again / unresolved_review` 三档里 |
+## 反真空（把 close_as 拿掉）
 
-## 反真空（关键一环打桩成坏 ⇒ 该链必红）
+同一条链、同一份盘，只把 H 复审时的 `close_as` 拿掉 ⇒ 判决必须落回 `revise_again`
+（`blocking` 还在）、`documents.status` 停在 `in_review`、不许出现
+`unresolved_review`。它证明"H 自行收尾"这件事真的压在 H 给的那一格上，不是轮数
+到点或别的什么东西顺手带出来的。
 
-1. 假修：G 只把 finding 标成 fixed、正文一个字没改 ⇒ H 的重跑必须把它重开
-   （`test_..._e`）。若 `verify_fixes` 只看 finding.status，这一条会绿 —— 于是
-   "修好了"变成一句自述；
-2. 空审：把 `review_tools.scan_document` 打桩成「永远零发现」⇒
-   "H 的 findings 行"这条断言必须红（`test_..._f`）。若审校发现是恒真空的，
-   上面那些 `resolved` 全都没有对象。
+## Lean 两档
 
-## 零模型
-
-全部 tmp 工作区；H 的语义判据不接线（`semantic_check.checked is False` 如实记
-"没查"）；不读写 `projects/`。
+`AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍：这条链不碰形式化，两档的盘上读数应当一致。
 """
 from __future__ import annotations
 
+import io
 import json
 import pathlib
+import re
+from contextlib import redirect_stderr, redirect_stdout
 from typing import Any
 
 import pytest
 
-from agentflow import schema as S
-from agentflow.agent_g import AgentG
-from agentflow.agent_h import AgentH
+import rehearsal_contract as RC
+
+from agentflow import cli
+from agentflow import leanscope as LS
+from agentflow import modelgw as MG
 from agentflow.store import Store
-from agentflow.tools import review_tools as RV
 
-from conftest import add_concept, add_literature, add_relation, sync_counters, write_paper
+from conftest import (
+    add_concept, add_literature, add_relation, sync_counters, write_paper,
+)
 
-TS = "2026-01-01T00:00:00+00:00"
+SID = "cc3-c10"
 CLAIM_TEXT = "数值抽样支持该结论。"
 PAPER = "\n".join([
     r"\documentclass{article}",
@@ -73,12 +85,148 @@ PAPER = "\n".join([
     r"\end{document}",
     "",
 ])
+DISCLAIMER = "数值交叉验证，不构成证明"
 
 
-# ====================================================================== 夹具
-def _env(tmp_path: pathlib.Path) -> dict[str, Any]:
-    """一个最小可成文的工作区：一条文献 + 一条关系 + 一份论文正文。"""
-    st = Store(tmp_path / "ws")
+def _json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _roster_names(prompt: str) -> list[str]:
+    return [m.group(1) for m in re.finditer(r'"roster_name":\s*"([A-Z]\d*)"', prompt)]
+
+
+def _doc_id_of(prompt: str) -> str:
+    m = re.search(r'"doc_id":\s*"(\d+)"', prompt)
+    return m.group(1) if m else ""
+
+
+class _Wire:
+    """预置的网络传输层替身（只回答"上游收到了什么、回了什么"）。"""
+
+    def __init__(self, *, close_as: bool = True) -> None:
+        self.close_as = bool(close_as)
+        self.bodies: list[dict[str, str]] = []
+        self._steps: dict[Any, int] = {}
+        self._done: list[str] = []
+
+    # ------------------------------------------------------------ 剧本
+    def _m_step(self, prompt: str) -> str:
+        index = self._steps.get("M", 0)
+        self._steps["M"] = index + 1
+        plan = [("G", "写一份稿：把数值证据成文"),
+                ("H", "审这份稿"),
+                ("G", "修订这份稿（按 H 的发现）"),
+                ("H", "复核这份稿并决定收不收尾")]
+        if index < len(plan):
+            role, task = plan[index]
+            return _json({"summon": {"role": role, "task": task}})
+        todo = [n for n in _roster_names(prompt) if n not in self._done]
+        if todo:
+            self._done.append(todo[0])
+            return _json({"tool": "conductor.retire_child",
+                          "args": {"child_name": todo[0], "reason": "交完了"}})
+        return _json({"final": "M 收工", "evidence": []})
+
+    def _step(self, role: str, prompt: str) -> str:
+        doc = _doc_id_of(prompt) or "000000"
+        if role == "M":
+            return self._m_step(prompt)
+        if role == "G":
+            phase = "revise" if "修订" in prompt else "write"
+            index = self._steps.get(("G", phase), 0)
+            self._steps[("G", phase)] = index + 1
+            if phase == "write":
+                seq = [
+                    _json({"tool": "doc.compose_claim",
+                           "args": {"text": CLAIM_TEXT, "citations": ["lit:0000"],
+                                    "evidence_kind": "cross_check", "section": "数值证据",
+                                    "claim_id": "claim-1"}}),
+                    _json({"tool": "doc.build_document",
+                           "args": {"kind": "paper", "title": "C10 彩排稿",
+                                    "claims": [{"text": CLAIM_TEXT,
+                                                "citations": ["lit:0000"],
+                                                "evidence_kind": "cross_check",
+                                                "section": "数值证据",
+                                                "disclaimer": DISCLAIMER,
+                                                "claim_id": "claim-1"}],
+                                    "open_problems": ["非交换环情形尚未处理"]}}),
+                    _json({"tool": "doc.register_dependency",
+                           "args": {"used_by": f"doc:{doc}", "kind": "theorem",
+                                    "label": "外部定理：非交换环情形的定理",
+                                    "status": "dangling",
+                                    "status_reason": "彩排：引了一处我们拿不到的外部定理"}}),
+                    _json({"final": "G 写完了", "evidence": []}),
+                ]
+            else:
+                seq = [
+                    _json({"tool": "own.revise",
+                           "args": {"doc_id": doc, "note": "按 H 的发现修订"}}),
+                    _json({"final": "G 改完了", "evidence": []}),
+                ]
+            return seq[min(index, len(seq) - 1)]
+        if role == "H":
+            phase = "verify" if "复核" in prompt else "review"
+            index = self._steps.get(("H", phase), 0)
+            self._steps[("H", phase)] = index + 1
+            args: dict[str, Any] = {"doc_id": doc}
+            if phase == "verify":
+                args["round_no"] = 2
+                if self.close_as:
+                    args["close_as"] = "unresolved_review"
+            tool = ("review.verify_fixes" if phase == "verify"
+                    else "review.review_document")
+            seq = [
+                _json({"tool": "doc.list_documents", "args": {}}),
+                _json({"tool": tool, "args": args}),
+                _json({"final": "H 判完了", "evidence": []}),
+            ]
+            return seq[min(index, len(seq) - 1)]
+        return _json({"final": f"{role} 收工", "evidence": []})
+
+    def _reply(self, system: str, prompt: str) -> str:
+        head = system.lstrip()
+        m = re.match(r"你是「秘书」的判断面（类别：([a-z_]+)）", head)
+        if m:
+            table = {
+                "dispatch_fit": {"decision": "这一件能做", "reason": "彩排",
+                                 "basis": ["夹具"]},
+                "statement_aesthetic": {"decision": "T2", "reason": "彩排",
+                                        "basis": ["夹具"]},
+            }
+            return _json(table.get(m.group(1), {"decision": "可派", "reason": "彩排",
+                                                "basis": ["夹具"]}))
+        if head.startswith("你是「命题形态闸」"):
+            return _json({"well_formed": True, "conditions": "夹具", "conclusion": "夹具",
+                          "problems": [], "decision": "形态合规", "refused": "",
+                          "reason": "彩排"})
+        m = re.match(r"你是 ([A-Z]) 号角色", head)
+        if m:
+            return self._step(m.group(1), prompt)
+        return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["夹具"]})
+
+    def __call__(self, url: str, headers: Any, body: bytes,
+                 timeout_sec: float) -> tuple[int, str]:
+        payload = json.loads(body.decode("utf-8"))
+        messages = payload.get("messages") or []
+        system = next((str(x.get("content") or "") for x in messages
+                       if x.get("role") == "system"), "")
+        prompt = "\n".join(str(x.get("content") or "") for x in messages
+                           if x.get("role") == "user")
+        text = self._reply(system, prompt)
+        self.bodies.append({"system": system, "prompt": prompt, "text": text})
+        return 200, json.dumps({"choices": [{"message": {"content": text},
+                                             "finish_reason": "stop"}],
+                                "usage": {"prompt_tokens": 8, "completion_tokens": 8}},
+                               ensure_ascii=False)
+
+
+# ============================================================ 夹具
+
+
+def _workspace(base: pathlib.Path) -> Store:
+    """一个最小可成文的工作区：一条文献 + 两条概念 + 一条关系 + 一份论文正文。"""
+    st = Store(base / "ws")
     st.init()
     add_literature(st, "0000", title="夹具文献", processed=True, sync=False)
     add_concept(st, "0000", "谱", definition="d", sync=False)
@@ -88,268 +236,254 @@ def _env(tmp_path: pathlib.Path) -> dict[str, Any]:
                  description="谱落在区间内", quote_verified=True, sync=False)
     sync_counters(st)
     write_paper(st, PAPER)
-    return {"store": st, "root": st.root}
+    return st
 
 
-def _g(env: dict[str, Any]) -> AgentG:
-    return AgentG(env["store"], config={"workspace_root": str(env["root"]),
-                                        "docs_subdir": "documents"})
+def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, *,
+         lean: str = "0", close_as: bool = True) -> dict[str, Any]:
+    st = _workspace(base)
+    wire = _Wire(close_as=close_as)
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "rehearsal-fake-key-never-used")
+    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", str(lean))
+    monkeypatch.setattr(MG, "urllib_transport", wire)
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = cli.main([
+                "start", "--mode", "research", "--root", str(st.root), "--sid", SID,
+                "--subagents", "--task", "把数值证据成文并审校", "--max-steps", "12",
+            ])
+    except SystemExit as exc:
+        rc = int(exc.code or 0)
+    return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
+            "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue(),
+            "close_as": close_as}
 
 
-def _h(env: dict[str, Any]) -> AgentH:
-    return AgentH(env["store"])
+def _events(ws: pathlib.Path) -> list[dict]:
+    got: list[dict] = []
+    for path in sorted((ws / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                got.append(json.loads(line))
+            except ValueError:
+                continue
+    return got
 
 
-def _claim(g: AgentG, text: str = CLAIM_TEXT) -> dict:
-    return g.compose_claim(text, citations=["lit:0000"],
-                           evidence_kind="cross_check", section="数值证据",
-                           claim_id="claim-1")
+def _tool_result(events: list[dict], *, role: str, tool: str, index: int = 0) -> dict:
+    hits = [e for e in events
+            if e.get("kind") == "agent_step" and e.get("role") == role
+            and e.get("shape") == "tool"
+            and str((e.get("payload") or {}).get("name") or "") == tool]
+    assert len(hits) > index, f"{role} 没有第 {index + 1} 次调过工具 {tool}"
+    got = hits[index].get("result") or {}
+    data = got.get("data")
+    if hasattr(data, "to_dict"):
+        data = dict(data.to_dict())
+    return {"ok": bool(got.get("ok")), "data": data if isinstance(data, dict) else {},
+            "error": str(got.get("error") or "")}
 
 
-def _build(env: dict[str, Any]) -> dict[str, Any]:
-    """G 成文的那一段：构造断言 → build_document → render。"""
-    g = _g(env)
-    doc = g.build_document("paper", "C10 彩排稿", claims=[_claim(g)],
-                           open_problems=["非交换环情形尚未处理"])
-    rendered = g.render(doc)
-    return {"g": g, "doc": doc, "rendered": rendered}
+def _rows(store: Store, table: str) -> list[dict]:
+    return [dict(r) for r in store.rows(table)]
 
 
-def _to_old_disk_form(env: dict[str, Any], doc_id: str) -> None:
-    """把那一行改成「旧盘形态」：cross_check 的受控声明丢了（绕过写入期校验）。
-
-    与 `test_agent_h.py::inject_raw_document` 同一手法、同一理由：H 要面对的就是
-    "旧版本写的行 / 手工改坏的文件"，而这类行不可能经 `store.tx` 的校验写进去。
-    """
-    p = pathlib.Path(str(env["root"])) / "data" / "documents.json"
-    raw = json.loads(p.read_text(encoding="utf-8"))
-    for row in raw["rows"]:
-        if str(row.get("doc_id")) != str(doc_id):
-            continue
-        for claim in row.get("claims") or []:
-            claim["disclaimer"] = ""
-    p.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _findings(env: dict[str, Any]) -> list[dict]:
-    return [dict(r) for r in env["store"].rows("review_findings")]
+def _reading(got: dict[str, Any]) -> dict[str, Any]:
+    st, ws = got["store"], got["ws"]
+    events = _events(ws)
+    documents = _rows(st, "documents")
+    doc = dict(documents[0]) if documents else {}
+    return {
+        "store": st, "ws": ws, "events": events,
+        "documents": documents, "doc": doc,
+        "findings": _rows(st, "review_findings"),
+        "dependencies": _rows(st, "dependencies"),
+        "tasks": _rows(st, "tasks"),
+        "reviewed": _tool_result(events, role="H", tool="review.review_document"),
+        "revised": _tool_result(events, role="G", tool="own.revise"),
+        "verified": _tool_result(events, role="H", tool="review.verify_fixes"),
+    }
 
 
-# ====================================================================== a：成文
-def test_c10_a_document_is_built_rendered_and_reviewed(tmp_path: pathlib.Path) -> None:
-    """G 的成文真的落盘；H 的审校真的落 findings 行；审校报告真的落盘。"""
-    env = _env(tmp_path)
-    built = _build(env)
-    doc = built["doc"]
-    md = pathlib.Path(str(env["root"])) / str(doc["markdown_path"])
+def _chain_problems(reading: dict[str, Any]) -> list[str]:
+    """C10 的终态读数（空 = 通）。每个字都读盘，不看回执里的 ok。"""
     problems: list[str] = []
+    st: Store = reading["store"]
 
-    # ---- 1. 文档落盘：documents 行 + markdown 文件（含那条断言的正文与代号）
-    if not md.is_file():
-        problems.append(f"markdown 没落盘：{md}")
-    else:
-        text = md.read_text(encoding="utf-8")
-        if CLAIM_TEXT not in text:
-            problems.append("渲染出的 markdown 里没有那条断言的正文")
-        if "claim-1" not in text:
-            problems.append("渲染出的 markdown 里没有断言代号（无法定位）")
-    rows = [dict(r) for r in env["store"].rows("documents")]
-    if len(rows) != 1 or str(rows[0].get("doc_id")) != str(doc["doc_id"]):
-        problems.append(f"documents 行不对：{rows}")
-    if built["rendered"] != md.read_text(encoding="utf-8"):
-        problems.append("G.render 与 build_document 落盘的 markdown 不是同一份字节")
+    # 1. 成文：documents 一行、断言合规、稿在盘上。
+    documents = reading["documents"]
+    if len(documents) != 1:
+        problems.append(f"documents 应恰好 1 行，实得 {len(documents)} 行")
+    doc = dict(reading["doc"])
+    claims = [dict(c) for c in (doc.get("claims") or [])]
+    if len(claims) != 1 or str(claims[0].get("text") or "") != CLAIM_TEXT:
+        problems.append(f"documents.claims 不是 G 给的那一条：{claims}")
+    elif str(claims[0].get("disclaimer") or "") != DISCLAIMER:
+        problems.append(f"cross_check 的受控声明丢了：{claims[0].get('disclaimer')!r}")
+    rel = str(doc.get("markdown_path") or "")
+    if not rel or not (pathlib.Path(st.root) / rel).is_file():
+        problems.append(f"渲染稿没落盘：{rel!r}")
 
-    # ---- 2. 旧盘形态 → H 审：error 级 overclaim 落在 review_findings
-    _to_old_disk_form(env, str(doc["doc_id"]))
-    h = _h(env)
-    reviewed = h.review(str(doc["doc_id"]), dependencies=[])
-    findings = _findings(env)
-    if reviewed.get("checked") is not True:
-        problems.append(f"H 的审校没查成：{reviewed.get('reason')!r}")
-    if reviewed.get("error_count") != 1 or reviewed.get("verdict") != "rejected":
-        problems.append(f"审校结论该 rejected/1 error，实际 "
-                        f"{reviewed.get('verdict')!r}/{reviewed.get('error_count')!r}")
+    # 2. H 审：dangling_dep / error 落成 findings 一行、仍 open。
+    findings = reading["findings"]
     if len(findings) != 1:
-        problems.append(f"review_findings 该恰好 1 行，实际 {len(findings)} 行：{findings}")
+        problems.append(f"review_findings 应恰好 1 行，实得 {len(findings)} 行：{findings}")
     else:
         f = findings[0]
-        if f.get("kind") != "overclaim" or f.get("level") != "error":
-            problems.append(f"finding 该是 overclaim/error，实际 "
-                            f"{f.get('kind')!r}/{f.get('level')!r}")
-        if "disclaimer" not in str(f.get("evidence") or ""):
-            problems.append(f"finding 的 evidence 没写触发它的实际值：{f.get('evidence')!r}")
+        if str(f.get("kind") or "") != "dangling_dep":
+            problems.append(f"finding 的 kind 不是 dangling_dep：{f.get('kind')!r}")
+        if str(f.get("level") or "") != "error":
+            problems.append(f"finding 的 level 不是 error：{f.get('level')!r}")
+        if str(f.get("status") or "") != "open":
+            problems.append(f"finding 该仍 open：{f.get('status')!r}")
+    if str(reading["reviewed"]["data"].get("verdict") or "") != "rejected":
+        problems.append(f"H 首审该 rejected：{reading['reviewed']['data'].get('verdict')!r}")
 
-    # ---- 3. H 的 G1–G15 报告落盘（own_errors=[] 显式登记「零自身错误」）
-    report = h.review_report(str(doc["doc_id"]), own_errors=[], round_no=1,
-                             dependencies=[])
-    rp = pathlib.Path(str(env["root"])) / str(report.get("report_path") or "")
-    if not report.get("report_path") or not rp.is_file():
-        problems.append(f"审校报告没落盘：{report.get('report_path')!r}")
-    elif "G1" not in rp.read_text(encoding="utf-8"):
-        problems.append("审校报告里没有 G1–G15 的骨架")
-    if report.get("own_errors_registered") is not True:
-        problems.append("own_errors=[] 时报告该登记「本轮零自身错误」")
-    if report.get("verdict") not in ("accepted", "rejected", "unverified",
-                                     "accepted_with_warnings"):
-        problems.append(f"报告 verdict 词表外：{report.get('verdict')!r}")
-    assert problems == [], problems
+    # 3. 依赖面：那一行真的在盘上、状态是 dangling（缺陷是造出来的、不是编的）。
+    deps = reading["dependencies"]
+    if len(deps) != 1 or str(deps[0].get("status") or "") != "dangling":
+        problems.append(f"dependencies 不是一行 dangling：{deps}")
 
+    # 4. G 修订：真跑了、稿件进了下一版。
+    revised = reading["revised"]
+    if not revised["ok"]:
+        problems.append(f"G 的 revise 回执不是 ok：{revised['error']!r}")
+    if str(revised["data"].get("status") or "") not in ("revised", "draft", "in_review"):
+        problems.append(f"G 修订后的 status 不对：{revised['data'].get('status')!r}")
 
-# ====================================================================== b：真修
-def test_c10_b_a_real_fix_is_verified_and_signed(tmp_path: pathlib.Path) -> None:
-    """G 真改正文 ⇒ H 的 `verify_fixes` 判 resolved，再 `review` 才 accepted + 签名。"""
-    env = _env(tmp_path)
-    built = _build(env)
-    doc_id = str(built["doc"]["doc_id"])
-    _to_old_disk_form(env, doc_id)
-    h = _h(env)
-    reviewed = h.review(doc_id, dependencies=[])
-    finding = dict((reviewed.get("new_findings") or [])[0])
-    g = built["g"]
-    fixed = _claim(g)
-    revised = g.revise(doc_id, fixed_findings=[str(finding["finding_id"])],
-                       new_claims=[fixed], note="补回受控声明")
-    problems: list[str] = []
-    rows = _findings(env)
-    if not rows or str(rows[0].get("status")) != "fixed":
-        problems.append(f"G 修订之后 finding 该是 fixed：{rows}")
-    if revised.get("fixed_findings") != [str(finding["finding_id"])]:
-        problems.append(f"修订回执没点名修掉的发现：{revised!r}")
-    if revised.get("replaced_claim_ids") != [str(finding["target"])]:
-        problems.append(f"修订没替换那条断言：{revised!r}")
-
-    res = h.verify_fixes(doc_id, round_no=2, dependencies=[])
-    if res.get("verdict") != "accepted":
-        problems.append(f"真修好之后复审该 accepted，实际 {res.get('verdict')!r}"
-                        f"（still_open={res.get('still_open')!r}）")
-    if [f.get("finding_id") for f in (res.get("resolved") or [])] != [finding["finding_id"]]:
-        problems.append(f"resolved 没点名那条发现：{res.get('resolved')!r}")
-    if res.get("still_open") or res.get("unresolved_findings"):
-        problems.append(f"真修好之后不该还有 open：{res!r}")
-    doc_now = next(dict(r) for r in env["store"].rows("documents")
-                   if str(r.get("doc_id")) == doc_id)
-    if str(doc_now.get("status")) != "in_review":
-        problems.append(f"改稿后旧签名不许沿用 ⇒ 状态该停在 in_review，"
-                        f"实际 {doc_now.get('status')!r}（R-59）")
-
-    # H 的唯一签发入口：再 review 一次 ⇒ accepted 且签名钉在当前这一版上。
-    again = h.review(doc_id, dependencies=[])
-    from agentflow import signatures as SIG
-
-    recs, bad = SIG.read_ledger(SIG.ledger_path(env["root"]))
-    doc_after = next(dict(r) for r in env["store"].rows("documents")
-                     if str(r.get("doc_id")) == doc_id)
-    if bad:
-        problems.append(f"签名台账有坏行：{bad}")
-    if again.get("verdict") != "accepted":
-        problems.append(f"重审该 accepted，实际 {again.get('verdict')!r}")
-    if str(doc_after.get("status")) != "accepted":
-        problems.append(f"重审之后文档该 accepted，实际 {doc_after.get('status')!r}")
-    if SIG.signed_revision(doc_after, recs) is None:
-        problems.append("接受了却没有签名钉在当前这一版上")
-    assert problems == [], problems
+    # 5. H 复审 + 收尾：三态词表里的 unresolved_review，且 still_open 逐条列出。
+    verified = reading["verified"]
+    if not verified["ok"]:
+        problems.append(f"H 的 verify_fixes 回执不是 ok：{verified['error']!r}")
+    data = verified["data"]
+    if str(data.get("verdict") or "") != "unresolved_review":
+        problems.append(f"H 复审该判 unresolved_review：{data.get('verdict')!r}")
+    if not data.get("still_open"):
+        problems.append("H 判了 unresolved_review，却没有逐条列出仍未解决的发现")
+    if str(doc.get("status") or "") != "unresolved_review":
+        problems.append(f"documents.status 该是 unresolved_review：{doc.get('status')!r}")
+    if int(doc.get("review_rounds") or 0) != 2:
+        problems.append(f"documents.review_rounds 该是 2：{doc.get('review_rounds')!r}")
+    return problems
 
 
-# ====================================================================== c：没修
-def test_c10_c_an_unfixed_statement_is_not_accepted(tmp_path: pathlib.Path) -> None:
-    """什么都不改 ⇒ `verify_fixes` 判 `revise_again`、发现仍 open、文档仍 in_review。"""
-    env = _env(tmp_path)
-    built = _build(env)
-    doc_id = str(built["doc"]["doc_id"])
-    _to_old_disk_form(env, doc_id)
-    h = _h(env)
-    h.review(doc_id, dependencies=[])
-    res = h.verify_fixes(doc_id, round_no=2, dependencies=[])
-    problems: list[str] = []
-    if res.get("verdict") != "revise_again":
-        problems.append(f"没修该 revise_again，实际 {res.get('verdict')!r}")
-    if res.get("resolved"):
-        problems.append(f"没修却报了 resolved：{res.get('resolved')!r}")
-    if not res.get("still_open"):
-        problems.append("没修时 still_open 必须点名那条发现")
-    if not res.get("unresolved_findings"):
-        problems.append("没修时 error 级未解决项必须被列出来（不许隐藏）")
-    rows = _findings(env)
-    if not rows or str(rows[0].get("status")) != "open":
-        problems.append(f"没修时发现该仍 open：{rows}")
-    assert problems == [], problems
+# ============================================================ ① 正控：链走通（H 自行收尾）
 
 
-# ====================================================================== d：三态
-def test_c10_d_the_verify_fixes_vocabulary_is_real(tmp_path: pathlib.Path) -> None:
-    """`verify_fixes` 的 verdict 真的有三档（不是把三态折成 accept/reject）。"""
-    env = _env(tmp_path)
-    built = _build(env)
-    doc_id = str(built["doc"]["doc_id"])
-    _to_old_disk_form(env, doc_id)
-    h = _h(env)
-    h.review(doc_id, dependencies=[])
-    again = h.verify_fixes(doc_id, round_no=2, dependencies=[])
-    assert again.get("verdict") in ("accepted", "revise_again", "unresolved_review"), again
-    # 终止性那一档（2026-11-15 业主裁定「撤掉这个上限」）：同一份没修的稿，轮次再大
-    # 也只判 revise_again —— 没有计数器会把它收尾；只有 H 显式给 `close_as` 才落
-    # unresolved_review。这是"旧口径的同一格"，不是把这一格删掉。
-    still = h.verify_fixes(doc_id, round_no=9, dependencies=[])
-    assert still.get("verdict") == "revise_again", still
-    assert still.get("unresolved_findings"), still
-    stopped = h.verify_fixes(doc_id, round_no=10, dependencies=[],
-                             close_as="unresolved_review")
-    assert stopped.get("verdict") == "unresolved_review", stopped
-    assert stopped.get("unresolved_findings"), stopped
-
-
-# ====================================================================== e：反真空假修
-def test_c10_e_a_fake_fix_is_not_accepted(tmp_path: pathlib.Path) -> None:
-    """反真空①：G 只把 finding 标成 fixed、正文不改 ⇒ H 必须重开，不认这笔账。"""
-    env = _env(tmp_path)
-    built = _build(env)
-    doc_id = str(built["doc"]["doc_id"])
-    _to_old_disk_form(env, doc_id)
-    h = _h(env)
-    reviewed = h.review(doc_id, dependencies=[])
-    finding = dict((reviewed.get("new_findings") or [])[0])
-    # 假修：只把 finding 的状态写成 fixed（内容一个字没改）—— 这正是"撒谎的
-    # 修订"在台账上的形态；H 的复审必须重跑检查，而不是信这个状态。
-    with env["store"].tx("review_findings", actor="fixture") as tx:
-        row = dict(tx.find("review_findings", finding_id=str(finding["finding_id"])) or {})
-        row["status"] = "fixed"
-        row["resolution_note"] = "我说修好了"
-        tx.upsert("review_findings", row)
-    res = h.verify_fixes(doc_id, round_no=2, dependencies=[])
-    problems: list[str] = []
-    if res.get("resolved"):
-        problems.append(f"正文没改却算 resolved：{res.get('resolved')!r}")
-    reopened = [f for f in (res.get("still_open") or []) if f.get("reopened")]
-    if not reopened:
-        problems.append(f"谎报的 fixed 没有被重开：{res.get('still_open')!r}")
-    if res.get("verdict") == "accepted":
-        problems.append("假修被读成了 accepted")
-    rows = _findings(env)
-    if not rows or str(rows[0].get("status")) != "open":
-        problems.append(f"谎报的 fixed 必须被改回 open：{rows}")
-    assert problems == [], problems
-
-
-# ====================================================================== f：反真空空审
-def test_c10_f_an_empty_reviewer_makes_the_findings_assertion_red(
+def test_the_writing_chain_runs_from_the_cli_and_h_closes_it(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空②：把 `scan_document` 打桩成「永远零发现」⇒ H 的 findings 行必须为空。
+    """正控：G 成文 → H 审出 dangling_dep → G 修订 → H 复审并自行 close_as（Lean 关）。"""
+    got = _run(tmp_path, monkeypatch, lean="0", close_as=True)
+    reading = _reading(got)
 
-    这一条不跑完整条链，只钉那一格：链上的 `resolved` 若没有对象，它就不算证据。
+    # ---- 入口与"只换了网线"
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
+    assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
+    assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
+        "缝工厂被整体替换了 —— 这份彩排的承诺是「只换网线」")
+    assert [e for e in reading["events"] if e.get("kind") == "llm_call"], (
+        "会话里一条 llm_call 都没有 ⇒ 走的不是真 LlmSeam")
+
+    problems = _chain_problems(reading)
+    assert problems == [], problems
+    # H 的收尾判断落在账上（不是只在回执里）：`close_as` 是 H 自己给的那一格。
+    assert "close_as" in str(reading["verified"]["data"].get("reason") or ""), (
+        reading["verified"]["data"].get("reason"))
+    # 四个角色任务都真的跑过（M + G×2 + H×2）。
+    roles = [str(t.get("role")) for t in reading["tasks"] if not str(t.get("kind") or "")]
+    assert roles.count("G") == 2 and roles.count("H") == 2, roles
+
+    from agentflow.modelcost import reconcile_usage
+
+    money = reconcile_usage(reading["store"])
+    assert money["ledger_rows"] > 0, money
+    assert money["unattributed"]["count"] == 0, money["unattributed"]
+    assert money["dangling"] == [], money["dangling"]
+    assert money["equal"] is True, money
+
+
+# ============================================================ ② 反真空：拿掉 close_as
+
+
+def test_without_close_as_h_does_not_close_the_document(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：同一份稿、同一条链，只把 H 复审时的 `close_as` 拿掉 ⇒ H 不许自行收尾。
+
+    它证明"H 自己收尾"压在那一格上：拿掉它之后判决必须落回 `revise_again`、
+    稿件停在 `in_review`，且盘上不许出现 `unresolved_review`。
     """
-    env = _env(tmp_path)
-    built = _build(env)
-    doc_id = str(built["doc"]["doc_id"])
-    _to_old_disk_form(env, doc_id)
-    real = RV.scan_document
+    got = _run(tmp_path, monkeypatch, lean="0", close_as=False)
+    reading = _reading(got)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    data = reading["verified"]["data"]
+    assert str(data.get("verdict") or "") == "revise_again", data.get("verdict")
+    assert data.get("still_open"), "没修好的发现必须逐条列出（不许隐藏）"
+    assert str(reading["doc"].get("status") or "") == "in_review", reading["doc"].get("status")
+    assert str(reading["doc"].get("status") or "") != "unresolved_review"
+    # 其它腿没有因此退化：H 审出发现、G 修订照跑。
+    assert [f.get("kind") for f in reading["findings"]] == ["dangling_dep"], reading["findings"]
+    assert reading["revised"]["ok"] is True, reading["revised"]
 
-    def _no_findings(*a: Any, **kw: Any) -> dict:
-        got = dict(real(*a, **kw))
-        got.update(findings=[], error_count=0, warning_count=0, info_count=0,
-                   verdict="accepted")
-        return got
 
-    monkeypatch.setattr(RV, "scan_document", _no_findings)
-    res = _h(env).review(doc_id, dependencies=[])
-    assert res.get("new_findings") == [], res
-    assert _findings(env) == [], "空审却落了 findings 行"
+# ============================================================ 判据①：每笔真调用一行账
+
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_real_call_has_exactly_one_ledger_row(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行（Lean 开/关各一遍）。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    reading = RC.ledger_identity(got["ws"], got["store"])
+    print(f"[一行账] lean={lean} 真调用={reading['calls']} 出网={len(got['wire'].bodies)} "
+          f"账本行={reading['rows']} duplicate={len(reading['duplicates'])} "
+          f"未配对={len(reading['unpaired'])} 未认领={len(reading['unclaimed'])}")
+    assert reading["calls"] == len(got["wire"].bodies), (
+        "有真缝调用没有落 `llm_call` 事件（或反之）："
+        f"事件 {reading['calls']} / 出网 {len(got['wire'].bodies)}")
+    problems = RC.one_row_per_call_problems(reading)
+    assert problems == [], "判据①红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ 判据②：会话归口
+
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_llm_call_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    split = RC.session_split(got["ws"], SID)
+    print(f"[会话归口] lean={lean} 本趟={len(split['in_run'])} "
+          f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
+    assert split["calls"], "这一趟一次真调用都没有 ⇒ 判据没有对象（不是干净）"
+    problems = RC.session_problems(split)
+    assert problems == [], "判据②红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ Lean 两档
+
+
+@pytest.mark.parametrize("lean,verdict,hidden", [("1", "on", False), ("0", "off", True)])
+def test_the_chain_runs_in_both_lean_modes(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+        lean: str, verdict: str, hidden: bool) -> None:
+    """Lean 开/关两档：同一条链照跑、H 照样自行收尾；关档下名册里没有 L。"""
+    got = _run(tmp_path, monkeypatch, lean=lean, close_as=True)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    reading = LS.lean_reading()
+    assert reading.verdict == verdict, reading.to_dict()
+    assert LS.is_hidden("L") is hidden, (lean, reading.to_dict())
+    problems = _chain_problems(_reading(got))
+    assert problems == [], problems
+    from agentflow import schema as S
+
+    roles = set(LS.visible_roles(S.ROLES))
+    assert ("L" in roles) is (not hidden), sorted(roles)
+
+
+if __name__ == "__main__":  # pragma: no cover - 手工复跑用
+    raise SystemExit(pytest.main([__file__, "-q"]))
