@@ -16,7 +16,8 @@
 
 ## 四条判据与各自的「改前红」
 
-改前 = 本批之前的 `agent_loop.py`（`_statement_filing_tier` 只转交命题正文、note 说旧两问）。
+改前 = 本批之前的 `agent_loop.py`（那一支只转交命题正文、note 说旧两问；NT2 之后判档归
+`Secretary.judge_statement`、落行归 `Secretary.record_nontriviality`）。
 每条的红都落在判据自己的读取面上（判档材料 / 台账行 / note 原文），不靠记忆：
 
 | 判据 | 它要证明的事 | 改前为什么红 |
@@ -75,7 +76,7 @@ class _StubSecretary:
     用来把 (c) 从 (a) 里分开：note 的文案是被判据钉住的那一格，它红要有它自己的理由
     （旧两问还在），而不是"这一格根本没被走到"。`effort` 给的就是真读数
     （`proof_effort_readings` 在同一个工作区里算出来的那一份），所以这一份替身
-    与真秘书交给 `_statement_filing_tier` 的形状逐格一致。
+    与真秘书 `judge_statement` 回给 `filing_tier_reading` 的形状逐格一致。
     """
 
     def __init__(self, effort: Mapping[str, Any] | None = None,

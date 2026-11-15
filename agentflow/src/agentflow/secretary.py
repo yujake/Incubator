@@ -14725,8 +14725,8 @@ def filing_tier_reading(got: Mapping[str, Any] | None, *,
         level = _tier_from_judge_reply(got)
         reason = str(got.get("reason") or "判档没查成")
     if not checked or level is None:
-        # 没有号的那一笔本来就没有命题行可指 ⇒ 不给"未判"读数（与旧
-        # `_unjudged_filing_tier` 的边界逐字一致：有号才给原因）。
+        # 没有号的那一笔本来就没有命题行可指 ⇒ 不给"未判"读数（与判/落拆段之前
+        # 那一支的边界逐字一致：有号才给原因）。
         if not str(stmt_id or "").strip():
             return None
         return {"tier": "", "label": "", "nontriviality": None,

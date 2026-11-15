@@ -683,8 +683,8 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("ProviderError", "external_unavailable",
      "src/agentflow/providers.py::ProviderError（检索 provider 每一路都失败时抛的那一个）"),
     ("fail_open", "hook_undecided",
-     "src/agentflow/agent_loop.py::AgentLoop._statement_filing_tier"
-     "（hook 没判成时的 `fail_open=True` 读数）"),
+     "src/agentflow/secretary.py::Secretary.note_decision"
+     "（`fail_open` 那一格的唯一写点；hook 没判成 / 收录前判档炸了都经它留痕）"),
     ("判不了", "hook_undecided",
      "src/agentflow/secretary.py::Secretary.note_decision（`decision=判不了` 那一档）"),
     ("contradiction_disputed_source", "closing_blocker",

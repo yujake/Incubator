@@ -504,7 +504,8 @@ DANGLING_ALLOWED: dict[str, str] = {
         "该删，已转持有方（提示词 lane 持有该文件）：两处指路名已经不在树里"
         "（一处现名 `_receipt_for`、一处现名 `FACULTY_LOCAL`）",
     "src/agentflow/secretary.py":
-        "该删，已转持有方（secretary lane 持有该文件）：那一句的旧名已经不在树里，现名 `_statement_filing_tier`",
+        "该删，已转持有方（secretary lane 持有该文件）：那一句的旧名已经不在树里"
+        "（NT2 之后判档归 `Secretary.judge_statement`、落行归 `Secretary.record_nontriviality`）",
     "src/agentflow/specs/h.py": "该删，已转持有方（FC-27 禁改区）",
     "src/agentflow/tools/__init__.py": "该删，已转持有方（FC-27 禁改区）",
     "scripts/lint_rules.py": "该删，已转持有方（FC-27 禁改区）",

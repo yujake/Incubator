@@ -3012,7 +3012,7 @@ class _Core:
         judge_note = ""
         if stmt_id and not reused:
             # 非平凡度：与 B 的循环在 `own.register_statement` 那一笔做的同一步
-            # （`AgentLoop._statement_filing_tier` → `Secretary.judge_statement`）。
+            # （`Secretary.judge_statement`，NT2 判/落拆段）。
             judge_note = self._judge_nontriviality(
                 full=full, text=text, body=body, stmt_id=stmt_id)
         form = dict(got.get("gate") or {})

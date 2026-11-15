@@ -58,7 +58,7 @@ D 的派活建议点名了 pB 与 pI；钱账逐分相等、无主 0、悬空 0�
 它的 `reason` 是枚举（`math_error|difficulty|不再需要`）⇒ 那句话在真机上被
 参数闸挡在动作实现之前。所以这一份断言的是参数闸的受控拒 + 行不变 + 组合操作，
 不是 `plan_abandon_reason_not_allowed` 的原话 —— 后者的单点判据仍在
-`tests/test_agent_f_plan_abandon.py` 那一族（方法层）。
+`tests/test_f_plan_abandon.py` 那一族（方法层）。
 
 ## Lean 两档
 

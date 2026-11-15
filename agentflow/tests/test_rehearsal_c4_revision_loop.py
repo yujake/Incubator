@@ -17,7 +17,7 @@
 | 模型缝 / 记账 / 出网 | 真 `LlmSeam` / 真 `TokenMeter` / `modelgw.urllib_transport` | 只换出网那一处 |
 
 旧版（改写前登记在 `CHAIN_ONLY` 里）直调
-`AgentF.step` 与私有 `f._hand_proof`、`AgentV.verify_proof`，缝是自造
+`AgentF.step` 与私有 `AgentF._hand_proof`、`AgentV.verify_proof`，缝是自造
 `_Seam(ask_json)` + `_Review(ask)`；这一份一处都不换。
 
 ## 这一条链钉的四段（每段都能单独读盘）

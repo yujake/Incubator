@@ -149,8 +149,8 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
     所以这一条先让 F 落稿，再让 B 按那份稿收录 —— 走的仍是 B 的登记正路，
     `bits` / 非平凡度这两格一个字没改。
 
-    非平凡度这一步在 B 的循环里是 `AgentLoop._statement_filing_tier` 调
-    `Secretary.judge_statement`；这里把 `judge` 打成"判过"（零模型），让同一段落账代码跑起来。
+    非平凡度这一步在 B 的收录动作里是 `Secretary.judge_statement`（NT2 判/落拆段：
+    判完拿到号，再由 `Secretary.record_nontriviality` 落档位行）；这里把 `judge` 打成"判过"（零模型），让同一段落账代码跑起来。
     """
     from agentflow import depsection as DS
     from conftest import sign_before_registration
