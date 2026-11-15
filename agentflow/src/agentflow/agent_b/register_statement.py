@@ -3581,13 +3581,60 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            "省掉假设的命题会被下游当成无条件成立；0 字正文连"
                            "非平凡性档位都没法判（四项力气读数一项都取不到）"
                            "（`kind=\"concept\"` 除外：定义抽不到时留空 + 待补标记，见 draft/97 §14.13）")
+        # ---- 概念 + 未签稿：确定性参数闸，排在 NT2 判档之前 ----------------------
+        #
+        # 它与"空正文"同类：纯读、不写任何台账、决定这一笔会不会入账 —— 所以是参数闸，
+        # 不是语义判断。必须在判档（下面那一格）之前，两条硬理由：
+        # ① 拒信自己写着"盘上零新文件"：判档过的那一笔在收尾时会经
+        #    `_finish_filing_nontriviality` → `record_nontriviality` → `note_decision`
+        #    留一条 `unrecorded` 痕迹（"判过要可见"），落成 `out/secretary/<role>.jsonl`
+        #    一行 ⇒ 那句话就假了。`tests/test_a_concept_takes_no_proof_manuscript.py`
+        #    的 a/b 两条量的正是整棵树零新文件（改前红在这一行，不是 statements 行）；
+        # ② 概念行的档位本来就不适用（`record_nontriviality` 只给概念行
+        #    `applicable=false` 的例外）⇒ 为一条注定被拒的概念稿买一次判档流程是白花。
+        # 判据仍只有 `_concept_refuses_manuscript` 一处；下面"稿里 `## 证明` 取不取成
+        # 正文"那一支读同一个函数（`_concept_ms` 也共用，不重读一遍稿）。
+        _concept_ms: dict[str, Any] = {}
+        _concept_refused = False
+        #: `_green["ok"]`（E 的普通数值手稿）那一路会把 `kind_now` 改写成 conjecture
+        #: （下面那一格）⇒ 概念那道闸在它之后本来就不响：这里用同一个条件对齐，
+        #: 免得"绿色通道 + 调用方写了 kind=concept"这一种输入换了一个拒信。
+        if not _green.get("ok"):
+            if kind_now == "concept" and str(proof_manuscript or "").strip():
+                _concept_ms = _concept_manuscript_sign_reading(
+                    self.store, proof_manuscript=proof_manuscript)
+            _concept_refused = _concept_refuses_manuscript(
+                kind=kind_now, proof_manuscript=proof_manuscript,
+                signed=bool(_concept_ms.get("signed")))
+        if _concept_refused:
+            return _refuse(
+                "concept_takes_no_proof_manuscript",
+                "概念行不收未签的证明稿：`proof_manuscript` 是“这份证明在稿上被 V "
+                "逐行读过”的载体（签盖在它的 `## 证明` 正文上），而概念不参与等级链"
+                "（`evidencebits.derive_grade` 对 `kind='concept'` 短路成"
+                " `not_applicable`）—— 递上来的稿还没有 V 的签，一个字都落不进台账。"
+                "改前这一笔会先落一行概念、再整笔回 "
+                "`ok=false / proof_without_v_sign`（半笔：调用方按“没写成”处理，"
+                "盘上却多了一行）。改法两条（都不是把未签的稿塞进本动作）："
+                "① 要登记的是命题的证明 ⇒ 用 `kind=\"conjecture\"`（或 lemma / "
+                "theorem）＋ `proof_manuscript=<稿的工作区相对路径>`，那才是收稿的"
+                "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
+                "② 要登记的是概念的良定义证明（业主 2026-10-09：“proof 里就证"
+                "这个概念为什么是良定义的”）⇒ 先 `own.land_manuscript` 把它落成 "
+                "`reports/b-proof-<号>.md` → 派 V 三转签 → 签回来之后用 "
+                "`own.ingest_manuscript(apply, cells=[\"proof_text\"])` 按位置与格收录"
+                "（2026-11-10 业主裁定 甲：概念与一般手稿同一条链，只是稿由 B 产出）。"
+                "这一笔整笔不写（`statements` 零新行、盘上零新文件）。",
+                proof_manuscript=str(proof_manuscript)[:120])
         # ---- NT2（2026-11-15 业主裁定）：判档是 B 处理一条收录的第一个动作 ----------
         #
-        # 位置在这里的三条理由：
+        # "第一个"指第一个语义判断，不是第一个动作 —— 排在前面的只有确定性参数闸
+        # （空正文 / 概念 + 未签稿）：它们只读、不写台账、决定这笔会不会入账。
+        #
+        # 位置在这里的另外两条理由：
         # ① 在任何台账写之前（`record_statement` / `_attach_proofs` 都在下面）；
         # ② 在任何别的语义判断之前（同一性判定 `adjudicate_proposition` 在
-        #    `record_statement` 里，排在这一格之后）；排在前面的只有确定性参数闸
-        #    （空正文 / origin / 绿色通道）—— 它们不写台账、决定这笔会不会入账；
+        #    `record_statement` 里，排在这一格之后）；
         # ③ 材料取这一笔要落进台账的那份稿：指针支传进来的 `full` 是手稿
         #    `## 命题`、`proof_text` 是 `## 证明`（真机 000040/000041 丢在这）。
         #
@@ -3639,8 +3686,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ① `proof_text`：概念行不许带它 ⇒ 不写，但把"丢了什么"写进返回值（留痕）。
         proof_text_dropped = ""
         proofs_dropped: list = []
-        #: 概念 + 稿这一档的签读数（下面两处"收不收稿"共用；非概念时恒空）。
-        _concept_ms: dict[str, Any] = {}
+        #: `_concept_ms`（概念 + 稿这一档的签读数）在判档之前就算好了 —— 那一格是
+        #: "写盘前拒"与下面"稿里 `## 证明` 取不取成正文"两处共用的同一份读数。
         if kind_now == "concept":
             if origin == "own_result":
                 # ---- 自产概念在动作面没有入口：`self_authored` ----------
@@ -3681,43 +3728,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                         "`origin=\"external_lit\"`（并给 `source_lit_id` + `page_range`）")
             # ---- 2026-11-10（审计 §6-①）：概念 + 手稿 ⇒ 写盘前整笔受控拒 ----------
             #
-            # 改前读数（`temp/_fix_concept_probe_before.json` 的 `1_concept_manuscript`）：
-            # `ok=false / kind=proof_without_v_sign`，而 `statements` 从 0 行变 1 行 ——
-            # 概念行在 `:4417`（改前那一版的行号）那次秘书事务里先落了盘，`## 证明`
-            # 那支才把稿里的正文取走（那一支不看 kind），撞上"没有签不许换 canonical 正文"
-            # 那道闸整笔拒。调用方照 `ok=false` 当"没写成"处理（重试 / 扫盘 / 重交），
-            # 而盘上多了一行 `active` 概念 —— 正是本仓反复点名的"静默半笔"。
-            #
-            # 处置：概念行不收证明稿 ⇒ 在接受这一笔之前就受控拒（零新行、零新文件）。
-            # 刻意不"先写后拒再删"：删与写之间有一个被收工门读到的窗口，而删除本身
-            # 也会失败（占用 / 只读 / 并发）；文件与行都不是可回滚的事务资源。
-            # 判据落在 `_concept_refuses_manuscript` 一处：下面"稿里 `## 证明` 取不取成
-            # 正文"那一支读同一个判据（否则稿从 D 携带单 / 兜底读盘进来时照样取到正文）。
-            if str(proof_manuscript or "").strip():
-                _concept_ms = _concept_manuscript_sign_reading(
-                    self.store, proof_manuscript=proof_manuscript)
-            if _concept_refuses_manuscript(kind=kind_now,
-                                           proof_manuscript=proof_manuscript,
-                                           signed=bool(_concept_ms.get("signed"))):
-                return _refuse(
-                    "concept_takes_no_proof_manuscript",
-                    "概念行不收未签的证明稿：`proof_manuscript` 是“这份证明在稿上被 V "
-                    "逐行读过”的载体（签盖在它的 `## 证明` 正文上），而概念不参与等级链"
-                    "（`evidencebits.derive_grade` 对 `kind='concept'` 短路成"
-                    " `not_applicable`）—— 递上来的稿还没有 V 的签，一个字都落不进台账。"
-                    "改前这一笔会先落一行概念、再整笔回 "
-                    "`ok=false / proof_without_v_sign`（半笔：调用方按“没写成”处理，"
-                    "盘上却多了一行）。改法两条（都不是把未签的稿塞进本动作）："
-                    "① 要登记的是命题的证明 ⇒ 用 `kind=\"conjecture\"`（或 lemma / "
-                    "theorem）＋ `proof_manuscript=<稿的工作区相对路径>`，那才是收稿的"
-                    "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
-                    "② 要登记的是概念的良定义证明（业主 2026-10-09：“proof 里就证"
-                    "这个概念为什么是良定义的”）⇒ 先 `own.land_manuscript` 把它落成 "
-                    "`reports/b-proof-<号>.md` → 派 V 三转签 → 签回来之后用 "
-                    "`own.ingest_manuscript(apply, cells=[\"proof_text\"])` 按位置与格收录"
-                    "（2026-11-10 业主裁定 甲：概念与一般手稿同一条链，只是稿由 B 产出）。"
-                    "这一笔整笔不写（`statements` 零新行、盘上零新文件）。",
-                    proof_manuscript=str(proof_manuscript)[:120])
+            # 判据与拒信在上面"确定性参数闸"那一格（它排在 NT2 判档之前 —— 那条路
+            # 必须在任何模型调用 / 任何台账文件之前把这一笔挡掉，见那一格的注释）。
+            # 这里只剩"丢掉调用方塞进来的 `proof_text` / `proofs`"那半：概念行不参与
+            # 等级链，丢了但留痕。
             if str(proof_text or "").strip():
                 proof_text_dropped = str(proof_text)[:120]
                 proof_text = ""
