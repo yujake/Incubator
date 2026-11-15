@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 import json
+import os
 import re
 import threading
 
@@ -46,6 +47,45 @@ SEAM_SCOPE = "reason"
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+#: 装配期类型闸的开关（默认关）。业主 2026-11-15 的硬要求「彩排路径与真机路径
+#: 用的东西实际上是一致的」在装配面的机器判据：开了之后，任何 duck-type 的
+#: `_Seam` / `_FakeSeam` 都进不了产品对象。
+STRICT_SEAM_ENV = "AGENTFLOW_STRICT_SEAM"
+
+
+def strict_seam() -> bool:
+    """`AGENTFLOW_STRICT_SEAM=1` 时开着（读不懂按关：不认识的取值不许静默放宽）。"""
+    raw = str(os.environ.get(STRICT_SEAM_ENV, "") or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def assert_real_seam(seam: Any, *, where: str) -> None:
+    """装配期类型闸：`AGENTFLOW_STRICT_SEAM=1` 时，缝必须就是 `LlmSeam`。
+
+    为什么用 `type(seam) is not LlmSeam` 而不是 `isinstance`：子类可以覆盖 `ask`
+    而不改类型名 —— 那时预算闸、账本行、`llm_call` 事件、ambient 解析同样可以被换掉，
+    而 `isinstance` 会放行。判据要问的是「这是不是产品造出来的那一个对象」。
+
+    `None` 放行（"没接线"是合法状态，由 `wired` / `judge_not_wired` 如实表达）。
+    默认关：历史调用点上有大量单测用 duck-type 替身，默认开会把它们全部变红；
+    要判「彩排是不是走了真机那条路」时把它打开（`tests/test_rehearsal_same_path.py`
+    的反真空就是这么做）。
+
+    接在哪（这一手能把静态扫描抓不到的「构造期直接替换」判红）：
+    `Secretary.__init__`、`AgentF/AgentV.__init__(llm=…)`、
+    `LlmBackend._seam`（`seam_factory` 的返回处）、`cli._agent_seam_factory` 的返回处。
+    """
+    if seam is None or not strict_seam():
+        return
+    if type(seam) is not LlmSeam:
+        raise TypeError(
+            f"{where} 收到一个 `{type(seam).__name__}` 替身，不是产品那个 `LlmSeam`。"
+            "它没有预算闸 / 没有 usage_ledger 行 / 没有 llm_call 事件 / 读不到 ambient —— "
+            "把它塞进来，这一趟的三格与钱全部测不到。"
+            "改法：用 `LlmSeam(..., gateway=<脚本网关>, meter=TokenMeter(store))`"
+            "（彩排侧的唯一入口是 `tests/rehearsal_contract.py:scripted_seam`）。")
 
 
 @dataclass(frozen=True)

@@ -1084,6 +1084,13 @@ class AgentV:
         root = workspace_root or getattr(store, "root", None) or "."
         self.workspace_root = Path(root).resolve()
         self.llm = llm
+        # ---- 装配期类型闸（`AGENTFLOW_STRICT_SEAM=1` 时生效；默认关）
+        #
+        # `llm=` 既收 `LlmSeam`、也收 client / 可调用对象（见类 docstring），所以这一道
+        # 只在显式开了严格档时才拒 duck-type；默认档历史用法一个字不变。
+        from ..llmseam import assert_real_seam
+
+        assert_real_seam(llm, where="AgentV.__init__(llm=...)")
         self.actor = str(self.cfg.get("actor") or DEFAULT_VERIFIER)
         self.log = log
         #: V 自己的秘书（业主 2026-10-29：发不发签由它持有）。

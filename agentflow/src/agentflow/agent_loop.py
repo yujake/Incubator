@@ -44,7 +44,7 @@ from . import llmseam as LL
 from . import promptstability as PSTAB
 from . import reconnect as RC
 from . import stepdispatch as SD
-from .llmseam import LlmSeam
+from .llmseam import LlmSeam, assert_real_seam
 
 SHAPES = ("tool", "summon", "summon_many", "message", "handoff", "note", "ask_user", "final",
           "retire", "roster", "interrupt")
@@ -13744,7 +13744,13 @@ class LlmBackend:
 
     def _seam(self, role: str) -> LlmSeam:
         if self.seam_factory is not None:
-            return self.seam_factory(role)
+            seam = self.seam_factory(role)
+            # ---- 装配期类型闸（`AGENTFLOW_STRICT_SEAM=1` 时生效；默认关）
+            #
+            # 这是「构造期直接替换」的第五个落点：工厂本身被换掉时，静态扫描只看得到
+            # `monkeypatch.setattr`，看不见它返回了什么。判据本体在 `llmseam`。
+            assert_real_seam(seam, where="LlmBackend.seam_factory")
+            return seam
         raise RuntimeError("LlmBackend 需要 seam_factory（一个按角色造模型缝的调用方）")
 
     def _write_run_artifact(self, role: str, run: LoopRun, *, task_id: str = "") -> str:

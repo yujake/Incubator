@@ -3014,6 +3014,14 @@ class Secretary:
         self.store = store
         self.registry = registry
         self.seam = seam
+        # ---- 装配期类型闸（`AGENTFLOW_STRICT_SEAM=1` 时生效；默认关）
+        #
+        # 为什么在这里也接一道：`Secretary(..., seam=_Seam())` 是彩排最常见的一种
+        # 「构造期直接替换」——静态扫描看不见，三格也没有对象。判据本体只有一处
+        # （`llmseam.assert_real_seam`），这里只报出「是谁收到的」。
+        from .llmseam import assert_real_seam
+
+        assert_real_seam(seam, where="Secretary.__init__(seam=...)")
         self.log = log
         self.deadline_sec = float(deadline_sec)
         #: 同一命题 / 同种证明的两个阈值。可注入的理由：这两条判据的

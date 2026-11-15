@@ -3181,8 +3181,17 @@ def _agent_seam_factory(role: str, *, root: Path, sid: str | None, usd_budget: f
     # 是寄存器缺席时的兜底 —— 两者都在 `budget.limit_usd` 里合一，别在这里再判一次。
     read_limit = (lambda: B.limit_usd(root, fallback=usd_budget))
     meter = TokenMeter(store, budget_usd=usd_budget) if store is not None else None
-    return LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget,
+    seam = LlmSeam.for_role(role, session_root=root, sid=sid, usd_budget=usd_budget,
                             meter=meter, budget_of=read_limit)
+    # ---- 装配期类型闸（`AGENTFLOW_STRICT_SEAM=1` 时生效；默认关）
+    #
+    # 这是产品路径上造缝的唯一入口（`seam_for` → 各角色）。它被整体替换时
+    # （`test_agent_cli.fake_seam_factory` 那一类），返回的是不是产品那个对象只有
+    # 运行期才看得见 —— 所以闸必须接在返回处，而不是调用处。
+    from .llmseam import assert_real_seam
+
+    assert_real_seam(seam, where="cli._agent_seam_factory")
+    return seam
 
 
 def _parse_drive(items) -> tuple[dict, str]:

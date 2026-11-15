@@ -614,6 +614,13 @@ class _Core:
         self.cfg: dict[str, Any] = dict(config or {})
         self.actor = actor
         self.llm = llm
+        # ---- 装配期类型闸（`AGENTFLOW_STRICT_SEAM=1` 时生效；默认关）
+        #
+        # `llm=` 是 F 的判定缝插座（见形参注释）；严格档下它必须是产品那个 `LlmSeam`
+        # —— `_FakeF(complete)` 那一类替身会把「判过」与「判不了」折叠成同一个读数。
+        from ..llmseam import assert_real_seam
+
+        assert_real_seam(llm, where="AgentF.__init__(llm=...)")
         self.budget_reading = budget_reading
         self.log = log
 

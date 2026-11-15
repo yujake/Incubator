@@ -1633,6 +1633,31 @@ def store(tmp_path: Path) -> Store:
     return st
 
 
+# --------------------------------------------------------------------------- 彩排三格
+
+
+@pytest.fixture(autouse=True)
+def _rehearsal_context_triplet(request: pytest.FixtureRequest):
+    """彩排专用的三格上下文探针（autouse，只对 `test_rehearsal_*.py` 生效）。
+
+    为什么挂在 conftest 而不是放在某一份测试文件里：fixture 只对定义它的模块可见，
+    而三格要包住每一份声称走真机同一条路的彩排（运行期，不是静态）。
+    口径全在 `tests/test_rehearsal_same_path.py::triplet_probe`；这里只做两件事：
+    认文件名（`rehearsal_contract.is_rehearsal_module`）与透传。
+    `CHAIN_ONLY` 里的旧彩排不跑它 —— 它们已登记为「不是同一条路」，
+    实测读数走 `temp/rc2/` 的探针，而不是让套件永远红。
+    """
+    import rehearsal_contract as _RC
+
+    if not _RC.is_rehearsal_module(request.node.path):
+        yield
+        return
+    import test_rehearsal_same_path as _SP
+
+    with _SP.triplet_probe(request) as reading:
+        yield reading
+
+
 @pytest.fixture
 def clean_store(tmp_path: Path) -> Store:
     """一份完全自洽的最小数据集：verify 应当零错误零警告。
