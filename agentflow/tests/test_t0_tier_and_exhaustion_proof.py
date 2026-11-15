@@ -119,8 +119,8 @@ def _e(store: Store) -> AgentE:
     return e_form_gate_ok(AgentE(store, config={}, workspace_root=store.root))
 
 
-def _b(store: Store) -> AgentB:
-    return AgentB(store, extractor=None, extract_text=None)
+def _b(store: Store, secretary: Any = None) -> AgentB:
+    return AgentB(store, extractor=None, extract_text=None, secretary=secretary)
 
 
 def _rows(store: Store, table: str) -> list[dict]:
@@ -268,9 +268,10 @@ def _proof_column_of(store: Store) -> str:
 
 def _file_via_b(store: Store, *, proof_text: str, kind: str = "theorem",
                 evidence_kind: str = "proof", statement_full: str = "对任意正整数 n，R(3,4)=9。",
-                label: str = "R(3,4)=9", proof_manuscript: str = "") -> dict:
+                label: str = "R(3,4)=9", proof_manuscript: str = "",
+                secretary: Any = None) -> dict:
     """B 的入库正路（`own.register_statement` 的真身）：自产结果 + 证明栏 + 出处两件式。"""
-    return _b(store).register_statement(
+    return _b(store, secretary=secretary).register_statement(
         origin="own_result", kind=kind, label=label,
         statement_full=statement_full, statement_text=statement_full[:40],
         proof_text=proof_text, evidence_kind=evidence_kind,
@@ -295,8 +296,24 @@ def _canned(payload: dict):
 
 
 def _secretary_b(store: Store, payload: dict) -> SEC.Secretary:
-    return SEC.Secretary("B", root=store.root, store=store,
-                         seam=_canned(payload), enable_model=True)
+    """B 的秘书（判断面打桩）：`statement_aesthetic` 回夹具判词，同一性那一问回"不同"。
+
+    NT2 之后这一次收录的判档与同一性判定共用同一个秘书实例（判档在写之前）——
+    所以替身必须按`kind` 分档：拿判档的 `T0` 去答 `proposition_identity` 会被词表校验
+    拒成"没判成"，整笔受控拒（`same_statement_unjudged`）。
+    """
+    sec = SEC.Secretary("B", root=store.root, store=store,
+                        seam=_canned(payload), enable_model=True)
+
+    def _judge(kind: str, context, *, task_id: str = "", note: str = "") -> dict:
+        if kind == "proposition_identity":
+            return {"checked": True, "decision": "different",
+                    "reason": "夹具：不是同一条命题", "basis": [],
+                    "cost": {"ledger": "", "reason": "夹具"}}
+        return {"checked": True, **payload, "cost": {"ledger": "", "reason": "夹具"}}
+
+    sec.judge = _judge  # type: ignore[assignment]
+    return sec
 
 
 class _VSignSeam:
@@ -330,13 +347,14 @@ def _secretary_v(store: Store) -> SEC.Secretary:
 
 
 def _gate(secretary: Any, name: str = "own.register_statement",
-          statement_full: str = "对任意正整数 n，n^2+n 一定是偶数。") -> dict | None:
-    """入库口那一道闸的真身（B 的入库动作之前、同一个返回面上）。"""
-    import types
-
-    return AgentLoop._statement_filing_tier(
-        types.SimpleNamespace(role="B", secretary=secretary, my_task_id="t-000001"),
-        name, {"statement_full": statement_full})
+          statement_full: str = "对任意正整数 n，n^2+n 一定是偶数。",
+          proof_text: str = "", kind: str = "") -> dict | None:
+    """B 收录动作里那道判档闸的真身（NT2 起在动作层：判 → 整形；判完不落盘）。"""
+    assert name == "own.register_statement", name
+    got = secretary.judge_statement(
+        statement_full=statement_full, proof_text=proof_text, kind=kind,
+        task_id="t-000001")
+    return SEC.filing_tier_reading(got)
 
 
 # ------------------------------------------------------------------ ④ 档位文案
@@ -566,14 +584,21 @@ def _assert_nontrivial_branch_keeps_its_tier(store: Store) -> None:
 
     2026-10-24（业主裁定 B2）之后档位由"证明花的力气"给，所以这一支要带一份真够 T3 的
     证明正文（体量 16 200 字 ⇒ 分数 8 ⇒ T3）：不交证明时档位是「未判」，那一支另有判据。
+
+    NT2（2026-11-15）之后"判"不写盘：这里先判（整形那一步不出来 ⇒ `None`），再按
+    业主口径"拿到命题号与路径号之后一并录入"落一行，然后按号读回来。
     """
     statement = ("设 D 是 III 型因子，则它的某个不变量取整数值。\n\n证明：" + "推导。" * 5400)
     sec = _secretary_b(store, {"decision": "T3", "reason": "L3 那一步要用到它",
                                "basis": ["L3"], "nontriviality": 3,
                                "nontriviality_basis": "用了跨领域工具"})
-    note = _gate(sec, statement_full=statement)
+    judged = sec.judge_statement(statement_full=statement, task_id="t-000001")
+    note = SEC.filing_tier_reading(judged)
     assert note is None, f"非平凡命题被贴了档位读数（那说明'懂平凡'被打桩成恒平凡）：{note}"
-    got = SEC.nontriviality_of(store.root, statement)
+    rec = sec.record_nontriviality(judged, stmt_id="000123", path_group=1,
+                                   statement_full=statement)
+    assert rec["recorded"] is True, rec
+    got = SEC.nontriviality_of(store.root, statement, stmt_id="000123")
     assert (got["tri"], got["level"], got["label"]) == ("computed", 3, "T3"), got
 
 
@@ -609,7 +634,8 @@ def test_criterion3_a_trivial_statement_is_filed_and_lands_on_t0(tmp_path: pathl
     # `kind="conjecture"` 是自产且无出处那一档的唯一入口（B-2），与本判据无关：
     # 这一条要证的是"平凡 ⇒ 照收 + 落 T0"，不是"平凡也能一进门叫定理"。
     filed = _file_via_b(store, proof_text="Proof. n(n+1) 必有一偶。",
-                        statement_full=text, kind="conjecture", evidence_kind="heuristic")
+                        statement_full=text, kind="conjecture", evidence_kind="heuristic",
+                        secretary=sec)
     assert filed.get("ok") is True, filed
     assert len(_rows(store, "statements")) == 1
 

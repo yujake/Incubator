@@ -11576,193 +11576,6 @@ class AgentLoop:
         return {"tool": "conductor.summon_many", "ok": bool(data.get("ok")),
                 "data": data, "error": str(data.get("error") or ""), "meta": {}}
 
-    #: 五项力气读数 → 各自的加分台阶（唯一一处定义在 `secretary.proof_effort_readings`）。
-    #:
-    #: 为什么这张表住在这一层：note 是给模型看的指路牌（"补哪一项能升档"），而档位本身
-    #: 由秘书（模型）按五档定义判 —— 这里一个字都不算档位，
-    #: 只把"这一条哪几项还在 0 分"翻成一句人话。
-    _EFFORT_UPGRADE_STEPS: tuple[tuple[str, str, str], ...] = (
-        ("体量", "chars", "每 2000 字 +1"),
-        ("步骤", "steps", "每 6 步 +1"),
-        ("引理", "lemmas", "每 2 条引理 +1"),
-        ("工具簇跨度", "clusters", "跨到第 2 个工具簇才 +1"),
-        ("绕路", "detour", "记下走过的一段死路 +1"),
-    )
-
-    @classmethod
-    def _filing_tier_note(cls, got: Mapping[str, Any]) -> str:
-        """落 T0 那一格读数里的指路牌：按力气口径说清"还差哪一项、补哪一项能升档"。
-
-        为什么不再是旧那两问（业主 2026-10-24 的裁定原话）：「不一定一条定理后面要用，
-        也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。旧口径那两问留在这句
-        note 里，模型就会去编"谁会用到它"来升档 —— 而档位只由五项力气读数落格，
-        那两问一个字都不参与（B 仍可以把它们写在 `why` 里给秘书看，只是不作判据，
-        也不再是这一格教给模型的升档路径）。
-
-        两档文案：材料里没有证明正文时点名"缺「证明正文」"并指到 `proof_text` /
-        `proofs`；有力气读数时点名还在 0 分的那几项（每一项各 +1）。
-        """
-        head = ("平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23："
-                "秘书不再因「太平凡」拦收录）。档位由秘书按五档定义判（业主 2026-10-29）："
-                "五项读数 = 体量 / 步骤 / 引理 / 工具簇跨度 / 绕路")
-        effort = got.get("effort")
-        effort = dict(effort) if isinstance(effort, Mapping) else {}
-        if not effort or list(effort.get("missing") or []):
-            return (head + "。这一条缺「证明正文」这一项：五项读数一项都取不到 ⇒ 档位落「未判」。"
-                    "补上 proof_text（或 proofs=[{proof_no, text}] 里的正文）再交一次"
-                    "就能判出档位")
-        chars = int(effort.get("chars") or 0)
-        steps = int(effort.get("steps") or 0)
-        lemmas = int(effort.get("lemmas") or 0)
-        clusters = int(effort.get("clusters") or 0)
-        detour = bool(effort.get("detour"))
-        score = int(effort.get("score") or 0)
-        label = str(got.get("label") or "") or "T0"
-        still_zero = {"chars": chars // 2000 == 0, "steps": steps // 6 == 0,
-                      "lemmas": lemmas // 2 == 0, "clusters": clusters < 2,
-                      "detour": not detour}
-        how = "、".join(f"{name}（{hint}）"
-                        for name, key, hint in cls._EFFORT_UPGRADE_STEPS if still_zero[key])
-        return (head + f"。这一条现在读到：体量 {chars} 字、步骤 {steps}、引理 {lemmas} 条、"
-                f"工具簇 {clusters} 个、绕路{'有' if detour else '无'}"
-                f"（力气分数 {score} ⇒ {label}）。"
-                f"还在 0 分的项：{how or '（无，五项都进分了）'} —— 补哪一项就升档；"
-                "证明正文写在 proof_text 里，多份证明写在 proofs=[{proof_no, text}]")
-
-    def _statement_filing_tier(self, name: str, args: Mapping[str, Any], *,
-                               stmt_id: str = "",
-                               statement_full: str = "") -> dict[str, Any] | None:
-        """B 登记成功之后，问它自己的秘书"这条太平凡吗"；判太平凡就落 T0，不再拒收。
-
-        业主 2026-10-23 的裁定（逐字要点）：「B 侧收录命题时被"太平凡"拦截了很多次……
-        可以让秘书不再因"太平凡"拦收录，只是加一个档位叫 T0（和 T1 到 T4 是一个性质），
-        T0 叫基础定理或初步结论」。业主 2026-10-14 裁决第 12 条前半那句「判断一个待入库的
-        命题是否太平凡有没有资格入库」因此换了收场方式：秘书照旧判，判「太平凡」的
-        落 T0（基础定理或初步结论）并如实收下 —— 平凡不是"不许进"，是"进哪一档"。
-
-        三件事分开写在这里：
-        1. 只在三个条件同时成立时才问秘书：本角色是 B、工具是它这一趟被派的那件入库动作
-           （`own.register_statement`）、秘书装配了判断面。三者缺一 ⇒ `None`（什么都不加；
-           拿到号时改回"未判 + 原因"，见 `_unjudged_filing_tier`）。
-        2. 这一问在登记之后跑（2026-10-26，D16）：`stmt_id` 是那一条在 `statements` 里的号，
-           `statement_full` 是落盘行上的正文（逐字，不用调用方入参）。判档失败只落
-           `unknown` + 原因，不回滚登记 —— "没查成"不许决定产出入库。
-        3. 判了且判「太平凡」⇒ 返回一格读数（不是拒绝）：`tier="T0"`、`downgraded=True`、
-           秘书的原话与依据。调用方（`_do_tool`）把它并进这次工具调用的结果，于是
-           "这一条进了 T0"在模型与台账上都看得见。
-
-        为什么不再返回拒绝：拒收的代价在真机上量过（2026-10-14 第五趟：同一份 21 字的命题
-        被提交 6 次、每次都拿到同一个「太平凡」，一次 run 烧掉 20/26 次调用与 $0.226，
-        而 `statements` 仍是 0 行；r34 那一趟 B 的秘书台账里 4 次「太平凡」、收录表 0 行）。
-        挡的是"平凡能进表"，代价却是"整条收录链停摆" —— 而业主这一次裁定把这个交换取消了。
-        """
-        if str(getattr(self, "role", "")) != "B" or str(name) != "own.register_statement":
-            return None
-        sec = getattr(self, "secretary", None)
-        if sec is None or not hasattr(sec, "judge_statement"):
-            return AgentLoop._unjudged_filing_tier(
-                "这一趟没有可用的秘书 ⇒ 档位未判（登记不受影响）", stmt_id=stmt_id)
-        try:
-            got = sec.judge_statement(
-                # 落盘行上的正文优先（逐字同一）；没有那一份才退回调用方入参。
-                statement_full=str(statement_full
-                                   or args.get("statement_full")
-                                   or args.get("statement") or ""),
-                statement=str(args.get("statement") or ""),
-                source=str(args.get("source_lit_id") or args.get("source") or ""),
-                # ---- 证明正文必须转（2026-10-24，业主裁定 B2 的写侧接缝）
-                #
-                # 判档位的唯一判据是"这份证明花了多大力气"，而力气只能从证明正文里数出来
-                # （`_looks_like_a_proof` 只认 40 字以上、带证明字样的那一段）。
-                # 这里不转 `proof_text` / `proofs` 的话，秘书那一趟的材料里就只有命题正文：
-                # 真机 sylow4 的 8 条互不相同的登记里，6 条的命题正文只有 424–516 字、
-                # 不含证明小节 ⇒ 五项读数一项都取不到 ⇒ 全部落「未判（缺证明正文）」，
-                # 而它们各自的证明正文有 5164–7553 字（实算 T2/T3）。新口径就在这一行上白做。
-                #
-                # 形状照 `secretary.judge_statement` 的签名：`proof_text` 是那一段正文
-                # （`specs/b.py` 把它定为证明栏），`proofs` 是多证明清单
-                # `[{proof_no, text}]`（第 2 份及以后的正文可能只在这一栏里）。
-                proof_text=str(args.get("proof_text") or ""),
-                proofs=args.get("proofs"),
-                # 概念行没有证明正文：这一格必须与 `record_statement` 里那条
-                # `not_applicable` 走同一个判据（`judge_statement` 的 kind 早退）。
-                kind=str(args.get("kind") or ""),
-                stmt_id=stmt_id,
-                task_id=str(getattr(self, "my_task_id", "") or ""),
-            )
-        except Exception as exc:  # noqa: BLE001 —— 判断炸了不许把入库这条路堵死
-            # fail-open（与秘书的失败姿态同一条纪律）："没查成"不决定产出入库。
-            # 但也不许静默：往秘书台账补一行，"这一格没查成"必须能从盘上读到。
-            try:
-                sec.note_decision(
-                    duty=0, decision="", fail_open=True,
-                    reason=f"入库后的审美判断炸了：{type(exc).__name__}: {exc}",
-                    target=str(name), after="登记照旧（判档 fail-open）")
-            except Exception:  # noqa: BLE001 —— 连留痕都写不成时不再往上抛（同上）
-                pass
-            return AgentLoop._unjudged_filing_tier(
-                f"判档炸了：{type(exc).__name__}: {exc}", stmt_id=stmt_id)
-        if not got.get("checked"):
-            return AgentLoop._unjudged_filing_tier(
-                str(got.get("reason") or "判档没查成"), stmt_id=stmt_id)
-        from . import secretary as _SEC
-
-        if not _SEC._is_trivial_verdict(got.get("decision")):
-            return None
-        # 档位读数由秘书台账给（`append_nontriviality` 已经写过一行 T0）：
-        # 这里只把它翻成这一步的读数，不另存一份状态。
-        #
-        # 2026-10-24（B2）：`tier` 不再写死 T0 —— 档位是力气读数给的，秘书那一趟已经把
-        # 0–4 档连名字一起带回来（`label` / `nontriviality`），这里照抄。只有"判了太平凡
-        # 而档位名没带回来"这一支（替身秘书 / 旧结果）才退回 T0。
-        level = got.get("nontriviality")
-        label = str(got.get("label") or _SEC.nontriviality_label(level) or "")
-        effort = got.get("effort")
-        effort = dict(effort) if isinstance(effort, Mapping) else {}
-        return {
-            "tier": label or _SEC.nontriviality_label(0),
-            "label": label,
-            "nontriviality": level,
-            "nontriviality_tri": ("computed" if level is not None else "unjudged"),
-            # 只带判档用得上的那几格读数：note 里的指路牌与台账里那一行都是按它们写的，
-            # 模型不必去猜"为什么是这一档"（`cluster_evidence` 那类明细留在秘书台账里）。
-            "effort": {k: effort.get(k) for k in
-                       ("chars", "steps", "lemmas", "clusters", "detour", "score",
-                        "missing", "body_from")},
-            "downgraded": True,
-            "decision": str(got.get("decision") or ""),
-            "reason": str(got.get("reason") or "")[:300],
-            "basis": list(got.get("basis") or []),
-            # 为什么经类名调、不经 `self`：判据与测试把这个方法挂在
-            # `types.SimpleNamespace` 上（只带 role / secretary / my_task_id 三格），
-            # 那一格上没有第二条方法；类名调法让"这一格只吃 got 一个参数"成为事实。
-            "note": AgentLoop._filing_tier_note(got),
-            "judged_by": "secretary",
-            "judge": "statement_aesthetic",
-        }
-
-    @staticmethod
-    def _unjudged_filing_tier(reason: str, *, stmt_id: str = "") -> dict[str, Any] | None:
-        """登记成功而判档没成时的读数：未判 + 原因（2026-10-26，D16）。
-
-        为什么不是 `None`：登记已经落盘，若这一格什么也不给，"这一条没判过"与
-        "判过、只是不需要降档读数"在模型眼前就分不开。只有拿到号时才这么回；
-        旧调用（测试直接调 `_statement_filing_tier`、不给号）仍走 `None` 的老形状。
-
-        这一格不写台账：读侧对"没有这一行"本来就回 `unknown`；这里补的是模型看得见的
-        那一份原因，绝不在登记之后再把行撤掉或改成拒绝。
-
-        为什么是静态方法、且经类名调：判据把这个方法挂在 `types.SimpleNamespace` 上
-        （只带 role / secretary / my_task_id 三格），那一格上没有第二条方法。
-        """
-        if not str(stmt_id or "").strip():
-            return None
-        return {"tier": "", "label": "", "nontriviality": None,
-                "nontriviality_tri": "unjudged", "matched_by": "",
-                "downgraded": False, "decision": "",
-                "reason": str(reason or "")[:300],
-                "judged_by": "secretary", "judge": "statement_aesthetic"}
-
     def _do_tool(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         """执行一步工具调用。
 
@@ -11868,37 +11681,24 @@ class AgentLoop:
                "error": res.error or "", "meta": dict(res.meta or {})}
         if aliased_from:
             out["aliased_from"] = aliased_from
-        # ---- B 的入库口：登记之后再过秘书那一关（2026-10-26，D16）
+        # ---- B 的入库口：档位读数由动作层给，这一层只把它放到模型看得见的那一格 ----
         #
-        # 位置仍在这一层而不是工具层：这一格要本体自己的缝（`self.secretary`）与
-        # `my_task_id`，而工具层两样都没有；"这一条落哪一档"也必须与别的读数同形
-        # （并进这一次工具调用的结果）。
+        # 判档已经搬进 B 的收录动作（`agent_b.register_statement._register_statement_impl`
+        # 在写台账之前判、拿到 `stmt_id` + `path_group` 之后落）——2026-11-15 业主裁定：
+        # 「评价非平凡性需在将手稿录入台账前完成（即 B 秘书处理一条录入任务时，第一个要做的
+        # 是评价非平凡度）」。
         #
-        # 为什么移到 `registry.call` 之后：台账按号与命题行关联，而号是秘书在登记事务
-        # 里现发的（`record_statement` 的 `tx.alloc_id`）—— 登记之前没有号，只能按正文
-        # sha 兜，正文一改档位就读成"未判"（真机 mp3-r3 第 1 行 316 字）。所以先让登记
-        # 落盘，再从返回里取 `stmt_id` 与落盘行的正文来判。
-        #
-        # 判档失败只落 unknown（见 `_unjudged_filing_tier`），不回滚、不改 ok：登记已经
-        # 发生，"没查成"不许决定产出入库（与秘书的 fail-open 同一条纪律）。
-        #
-        # `out.get("ok")` 那一句是必要的：工具被拒 / 名字写错时没有号，也没有对象可判；
-        # 而且秘书这一次判断要花一次模型调用，为一次不会发生的入库去问它等于白扣钱。
+        # 所以这里不再判、也不再写：只把动作层回执里的 `statement_tier` 抬到顶层
+        # （`out["tier"]` 与 `meta.statement_tier`，模型的返回形状逐字不变）。
+        # 改前这一格是"工具返回之后才判、判完顺手落盘"：顺序反了，而且判的材料取的是
+        # 调用方入参 —— 真机 lp-ball 000040/000041（2285/2896 字证明）就是这么判成
+        # "缺证明正文"、一行都没落的。
         if name in known and out.get("ok"):
-            data = out.get("data")
-            landed = dict(data.get("row") or {}) if isinstance(data, Mapping) else {}
-            stmt_id = str((data.get("stmt_id") if isinstance(data, Mapping) else "")
-                          or landed.get("stmt_id") or "")
-            try:
-                filing_tier = self._statement_filing_tier(
-                    name, args, stmt_id=stmt_id,
-                    statement_full=str(landed.get("statement_full") or ""))
-            except Exception as exc:  # noqa: BLE001 —— 判档炸了不许碰已经落盘的登记
-                filing_tier = AgentLoop._unjudged_filing_tier(
-                    f"判档没成（{type(exc).__name__}: {exc}）", stmt_id=stmt_id)
-            if filing_tier:
-                out["tier"] = dict(filing_tier)
-                out["meta"]["statement_tier"] = dict(filing_tier)
+            data = out.get("data") if isinstance(out.get("data"), Mapping) else {}
+            tier = data.get("statement_tier")
+            if isinstance(tier, Mapping) and tier:
+                out["tier"] = dict(tier)
+                out["meta"]["statement_tier"] = dict(tier)
         # `draft/97` §15.4 的载体那一半：工具把"哪几条定义待补"报回来 ⇒ 这一步就地
         # 向直接父发一条报文（父通常就是 A，原文在它手里）。不这样做的话，"定义待补"
         # 只是台账上的一个状态，而 §14.13 的正控要求"A 那边真的有人被找"。

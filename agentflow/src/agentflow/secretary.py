@@ -4252,12 +4252,27 @@ class Secretary:
                         source: str = "", basis_hint: str = "",
                         proof_text: str = "", proofs: list | None = None,
                         task_id: str = "", kind: str = "",
-                        stmt_id: str = "") -> dict[str, Any]:
+                        stmt_id: str = "", record: bool = False) -> dict[str, Any]:
         """B 的秘书专属：这条待入库的命题落在非平凡性的哪一档。
 
-        `stmt_id` 是这条命题在 `statements` 里的号：判档发生在登记之后，调用方把号传下来，
-        台账那一行才能按号对上命题行（按正文 sha 关联会把"改了一个字"读成"没判过"）。
-        缺省空串只服务概念行的幂等补写与测试；生产面两个触发点（B 循环、F 交稿）都必须传。
+        ## 判与落拆成两段（NT2，2026-11-15 业主裁定）
+
+        这个方法只判、不写盘（缺省 `record=False`）。业主口径：B 处理一条录入任务时，
+        第一个动作是判非平凡度；等登记/匹配那一笔拿到 `stmt_id` 与 `path_group` 之后，
+        才由 :meth:`record_nontriviality` 追加台账行。判在这里落行的旧形状有两个毛病：
+
+        - 号还没发下来 ⇒ 真机落了 6 行 `stmt_id` 为空的孤儿读数（其中 4 行正文 sha
+          对不上任何命题行，钱花了、读数读不到任何一条命题）；
+        - 判档挂在"工具返回之后"（`agent_loop._do_tool`）⇒ 台账写发生在判之前，
+          与业主"先判再录"的顺序正好相反。
+
+        `record=True` 只为"没有登记这一笔动作、直调判档"的旧调用面（判据 / 存量补写）
+        留着：它落一行 statement-scope 的行（`path_group=0`）。生产面（B 的收录动作、
+        F 交稿、概念行的幂等补写）一律走 :meth:`record_nontriviality` —— 那条路要求
+        `stmt_id` 与路径号，拿不到就不落（并留 `unrecorded` 痕迹）。
+
+        `stmt_id` 是这条命题在 `statements` 里的号（只在 `record=True` 时被用到）：
+        台账那一行靠它对上命题行（按正文 sha 关联会把"改了一个字"读成"没判过"）。
 
         为什么是"秘书"而不是又一条机器判据：平凡与否不是字符串能判的事（`a+b=b+a` 与一条
         真定理的字面形态可能很像），它属于本仓划给秘书的那一类判断 —— 机器只摆材料，
@@ -4307,7 +4322,7 @@ class Secretary:
         if _is_not_applicable_kind(kind):
             return self.not_applicable_nontriviality(
                 statement_full=statement_full, kind=kind, task_id=task_id,
-                stmt_id=stmt_id)
+                stmt_id=stmt_id, record=record)
         if str(self.role) != "B":
             return {"checked": False, "decision": "", "basis": [],
                     "reason": f"这一问只属于 B 的秘书（本条秘书属于 {self.role!r}）⇒ 这一格没查成",
@@ -4458,19 +4473,144 @@ class Secretary:
                "nontriviality_tri": "computed",
                "effort": readings, "effort_score": int(readings.get("score") or 0),
                "text_truncated": False}
-        root = getattr(self, "root", None)
-        if root is not None:
-            try:
-                append_nontriviality(root, statement_full=body_full,
-                                     level=level, basis=basis_note,
-                                     role=str(self.role or ""), task_id=str(task_id or ""),
-                                     stmt_id=stmt_id,
-                                     effort=readings, text_truncated=False)
-            except Exception as exc:  # noqa: BLE001 - 落盘失败不影响判断本身
-                got["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
+        # ---- 判与落拆开（NT2）：这里只判，正常路径一个字节都不写盘 -------------
+        #
+        # `record=True` 是旧直调面的兼容档（没有"登记这一笔"可依附）：它落一行
+        # statement-scope 的行（`path_group=0`），并与旧行为逐字一致地按正文 sha 关联。
+        # 生产面不许用它 —— B 的收录动作在拿到 `stmt_id` / `path_group` 之后走
+        # `record_nontriviality`（见 `agent_b.register_statement._register_statement_impl`）。
+        if record:
+            judged_sha = _judged_body_sha(body_full, proof_joined)
+            self.record_nontriviality(
+                got, stmt_id=stmt_id, path_group=0, statement_full=body_full,
+                landed_body_sha256=_statement_sha(body_full),
+                judged_body_sha256=judged_sha)
         # 只记判过的结论（没查成不缓存，见 `_statement_verdicts` 的说明）。
         self._statement_verdicts[key] = dict(got)
         return got
+
+    def record_nontriviality(self, reading: Mapping[str, Any], *, stmt_id: str,
+                             path_group: int = 0, statement_full: str = "",
+                             landed_body_sha256: str = "",
+                             judged_body_sha256: str = "") -> dict[str, Any]:
+        """把判过的读数落进旁支台账（"判/落拆段"的落这一半，NT2）。
+
+        ## 落的条件（业主口径的两条，缺一不落）
+
+        | 条件 | 拿不到时的处置 |
+        |---|---|
+        | `stmt_id` 非空 | `tri="unrecorded"` + 原因；决定台账留一行（钱花了，"判过"要可见） |
+        | 路径级读数：`path_group >= 1` | 同上 —— 没有路径号就没法"一个路径一行"，落一行假的比不落更坏 |
+
+        `applicable=false`（概念行）是唯一允许 `path_group=0` 的一档：它不参与命题级
+        min（业主口径 ⑦：概念行的档位是 statement-scope 的"不适用"，不是一条路径）。
+
+        ## 幂等（业主口径 B）
+
+        同一 `(stmt_id, path_group)` 且 `judged_body_sha256` 相同 ⇒ 沿用已有读数、
+        不追加一行（重复提交同一份稿不把 append-only 台账撑大）。正文变了才追加：
+        逐路径"最后一行胜"（允许该路径降档/升档），命题级由读侧再取 min（永不回升）。
+
+        ## 两枚 sha
+
+        - `judged_body_sha256`：判的材料（命题 + 空行 + 证明，见 :func:`_judged_body_sha`）；
+        - `landed_body_sha256`：落盘那一行的 `statement_full`。
+        判的材料与落盘正文分开记，复核的人才能回答"判的是哪一版"。
+        """
+        root = getattr(self, "root", None)
+        if root is None:
+            return {"recorded": False, "tri": "unrecorded", "level": None, "label": "",
+                    "stmt_id": str(stmt_id or ""), "path_group": int(path_group or 0),
+                    "reason": "这一名秘书没有工作区根 ⇒ 判过的档位没落（不是没判）"}
+        got = dict(reading or {})
+        sid = str(stmt_id or "").strip()
+        no = int(path_group or 0)
+        applicable = bool(got.get("applicable", True))
+        level = _nontriviality_level(got.get("nontriviality"))
+        tri_in = str(got.get("nontriviality_tri") or "")
+        if applicable and (level is None or tri_in == "unjudged"):
+            # 判档本身没查成：盘上不该多一条 `nontriviality: null` 的行冒充"判过了"。
+            return {"recorded": False, "tri": "unjudged", "level": None, "label": "",
+                    "stmt_id": sid, "path_group": no,
+                    "reason": str(got.get("reason") or "判档没查成 ⇒ 没有可落的档位行")}
+        if not sid:
+            return self._unrecorded_nontriviality(
+                "这一笔没拿到 stmt_id ⇒ 不落档位行（判过的读数留在决定台账里）",
+                stmt_id="", path_group=no)
+        if applicable and no < 1:
+            return self._unrecorded_nontriviality(
+                "这一笔没拿到 path_group（>=1）⇒ 不落档位行（判过的读数留在决定台账里）",
+                stmt_id=sid, path_group=no)
+        sha = str(judged_body_sha256 or "")
+        if not sha:
+            sha = _judged_body_sha(statement_full, str(got.get("proof_text") or ""))
+        prior = self._last_nontriviality_row(sid, no)
+        if prior is not None and str(prior.get("judged_body_sha256") or "") == sha:
+            return {"recorded": False, "tri": tri_in or "computed",
+                    "level": level, "label": nontriviality_label(level),
+                    "stmt_id": sid, "path_group": no, "reused": True,
+                    "reason": ("同一 (stmt_id, path_group) 且判的是同一份正文 ⇒ "
+                               "沿用已有读数，不追加一行")}
+        try:
+            append_nontriviality(
+                root, statement_full=(statement_full
+                                      or str(got.get("statement_full") or "")),
+                level=level,
+                basis=str(got.get("nontriviality_basis")
+                          or got.get("basis") or "")[:900],
+                role=str(self.role or ""), task_id=str(self.task_id or ""),
+                stmt_id=sid,
+                effort=(got.get("effort") if isinstance(got.get("effort"), Mapping)
+                        else {}),
+                text_truncated=bool(got.get("text_truncated")),
+                applicable=applicable, path_group=no, judged_body_sha256=sha,
+                landed_body_sha256=str(landed_body_sha256 or ""))
+        except Exception as exc:  # noqa: BLE001 - 落盘失败要说出来，不许静默
+            return {"recorded": False, "tri": f"unrecorded:{type(exc).__name__}",
+                    "level": level, "label": nontriviality_label(level),
+                    "stmt_id": sid, "path_group": no,
+                    "reason": f"落盘失败：{type(exc).__name__}: {exc}"}
+        return {"recorded": True,
+                "tri": ("not_applicable" if not applicable else "computed"),
+                "level": level, "label": nontriviality_label(level),
+                "stmt_id": sid, "path_group": no, "reason": ""}
+
+    def _last_nontriviality_row(self, stmt_id: str, path_group: int) -> dict[str, Any] | None:
+        """同一 `(stmt_id, path_group)` 的最后一行（幂等判据读它，不另建索引）。"""
+        root = getattr(self, "root", None)
+        want = str(stmt_id or "").strip()
+        if root is None or not want:
+            return None
+        path = nontriviality_path(root)
+        if not path.is_file():
+            return None
+        by_id, _by_sha, why = _nontriviality_index(path)
+        if why:
+            return None
+        rows = [r for r in (by_id.get(want) or [])
+                if _row_path_group(r) == int(path_group or 0)]
+        return dict(rows[-1]) if rows else None
+
+    def _unrecorded_nontriviality(self, reason: str, *, stmt_id: str = "",
+                                  path_group: int = 0) -> dict[str, Any]:
+        """判过、但这一笔拿不到落行所需的两件号 ⇒ 不落，并在决定台账留一行。
+
+        为什么决定台账也要落：这一趟的模型调用已经花掉了。盘上一条档位行都没有而
+        决定台账也没有，读的人就分不清"没判"与"判了没法落"（真机的 4 条孤儿行正是
+        后者，而它们连一句话都没留下）。`basis=["unrecorded"]` 是这一档的可检索标记。
+        """
+        reason = str(reason)[:900]
+        try:
+            self.note_decision(
+                duty=2, decision="判过未落", reason=reason, basis=["unrecorded"],
+                target={"nontriviality": str(stmt_id or ""),
+                        "path_group": int(path_group or 0)},
+                after="判过的读数不落档位台账（缺号）；决定台账留这一行", fail_open=True)
+        except Exception:  # noqa: BLE001 - 留痕失败不许带走返回值
+            pass
+        return {"recorded": False, "tri": "unrecorded", "level": None, "label": "",
+                "stmt_id": str(stmt_id or ""), "path_group": int(path_group or 0),
+                "reason": reason}
 
     # ------------------------------------------------ V 的三件事（业主 2026-10-29）
     #
@@ -5159,7 +5299,8 @@ class Secretary:
         )
 
     def not_applicable_nontriviality(self, *, statement_full: str, kind: str = "",
-                                     task_id: str = "", stmt_id: str = "") -> dict[str, Any]:
+                                     task_id: str = "", stmt_id: str = "",
+                                     record: bool = True) -> dict[str, Any]:
         """概念 / 定义行的档位读数：`不适用`（`level=None` + 台账里 `applicable=False`）。
 
         ## 号（2026-10-26，D16）
@@ -5191,6 +5332,10 @@ class Secretary:
         （而 `nontriviality_of` 是逐行扫的，长度就是页面一次请求的代价）。
         反过来，这一段正文还没有那一行时照落 —— 存量概念行（改前直写进来的那些）
         因此会在它下一次经秘书那一笔时被补上这一格，不需要一次全库迁移。
+
+        ## 判/落拆段（NT2）：`record`
+        B 的收录动作在写台账之前先判一次（`record=False`，零调用、零写盘）；
+        等号拿到了再由 `write_concept_row` 那一笔调这里（`record=True`），按号幂等落行。
         """
         out: dict[str, Any] = {
             "checked": True, "decision": "", "applicable": False,
@@ -5203,22 +5348,21 @@ class Secretary:
             "effort": {}, "effort_score": 0, "text_truncated": False,
             "cost": {"ledger": "", "reason": "没发调用（概念行没有证明正文 ⇒ 判档不适用）"},
         }
+        if not record:
+            out["recorded"] = False
+            out["record_reason"] = ("判/落拆段：这一趟只判；等 write_concept_row 拿到号"
+                                    "之后才落那一行")
+            return out
         root = getattr(self, "root", None)
         if root is None:
             return out
-        try:
-            prior = nontriviality_of(root, statement_full, stmt_id=stmt_id)
-            if prior.get("tri") == "not_applicable":
-                out["recorded"] = False      # 已经有那一行 ⇒ 不重复追加（读数不变）
-                return out
-            append_nontriviality(root, statement_full=statement_full, level=None,
-                                 basis=NONTRIVIALITY_NOT_APPLICABLE_BASIS,
-                                 role=str(self.role or ""), task_id=str(task_id or ""),
-                                 stmt_id=stmt_id,
-                                 effort={}, text_truncated=False, applicable=False)
-            out["recorded"] = True
-        except Exception as exc:  # noqa: BLE001 - 落盘失败不影响读数本身
-            out["nontriviality_tri"] = f"unrecorded:{type(exc).__name__}"
+        got = self.record_nontriviality(out, stmt_id=stmt_id, path_group=0,
+                                       statement_full=statement_full,
+                                       judged_body_sha256=_judged_body_sha(statement_full))
+        out["recorded"] = bool(got.get("recorded"))
+        out["record_reason"] = str(got.get("reason") or "")
+        if got.get("tri") == "unrecorded":
+            out["nontriviality_tri"] = "unrecorded"
         return out
 
     def last_judge_cost(self, kind: str) -> dict[str, Any]:
@@ -10069,7 +10213,9 @@ class Secretary:
         # "没有记录"与"不需要记录"都印成同一个"未判"。
         # 两支都调（新建与同步）：那一格是幂等的（同一段正文只落一行），于是存量概念行
         # 会在它下一次经秘书那一笔时被补上，不需要一次全库迁移。
-        self.judge_statement(statement_full=full, kind="concept", stmt_id=sid)
+        # 判/落拆段（NT2）：这一笔已经拿到号（`sid`）⇒ 判与落同在这一处、`record=True`。
+        self.judge_statement(statement_full=full, kind="concept", stmt_id=sid,
+                             record=True)
         return data
 
     #: 扫出来的引用前缀 ⇒ `(STEP_SOURCE_KEYS` 里那一步的键名, `kind` 缺省)。
@@ -14049,17 +14195,47 @@ def _level_from_row(row: Mapping[str, Any]) -> int | None:
     return level
 
 
+def _judged_body_sha(statement_full: str, proof_text: str = "") -> str:
+    """判档材料（命题 + 空行 + 证明）的 sha256 —— "判的是哪一版"的唯一算法。
+
+    与 `record_nontriviality` 落进台账的 `judged_body_sha256` 同一个公式（这里是唯一
+    实现）：复核的人拿同一份稿按它重算，就能核对那一行判的到底是哪一版材料。
+    它不参与关联（关联仍按 `stmt_id` / 旧行回退 sha）—— 只回答"这一次判的是哪一版"。
+    """
+    return hashlib.sha256(
+        (str(statement_full or "") + "\n\n" + str(proof_text or "")).encode("utf-8")
+    ).hexdigest()
+
+
 def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
                          basis: str = "", role: str = "", task_id: str = "",
                          stmt_id: str = "",
                          effort: Mapping[str, Any] | None = None,
                          text_truncated: bool = False,
-                         applicable: bool = True) -> None:
+                         applicable: bool = True,
+                         path_group: int = 0,
+                         judged_body_sha256: str = "",
+                         landed_body_sha256: str = "",
+                         scope: str = "") -> None:
     """追加一行档位读数（append-only；显式 LF，Windows 上不留 CRLF）。
 
     `level` 给 `None`（或缺省/坏值）⇒ 这一行记的是"判不了"：`nontriviality: null`
     且 `label` 空。判不了照旧落一行 —— 它也是读数（"没人判过"与"台账里没这一条"
     在盘上应当分得开）。
+
+    ## 一个路径一行（NT2，2026-11-15 业主裁定）
+
+    业主口径：「非平凡度应该是一个路径一个，现在的实现是一个命题一个需要补加」。
+    所以行上多三格：
+
+    | 格 | 含义 |
+    |---|---|
+    | `path_group` | 这是第几条证明路径的读数（`>=1`）；`0` = statement-scope（概念行的"不适用"） |
+    | `scope` | `"path"` / `"statement"`；旧行没有这一格 ⇒ 按旧语义读（无路径维 = 路径 1） |
+    | `judged_body_sha256` | 判的那一刻手里的材料（命题 + 空行 + 证明，见 :func:`_judged_body_sha`） |
+    | `landed_body_sha256` | 落盘那一行的 `statement_full` 的 sha —— 与上一格分开记，才能回答"判的是不是落的那一版" |
+
+    旧行（没有 `path_group`）由读侧视为路径 1（改前判的就是 canonical 那份证明）。
 
     ## 为什么带号（2026-10-26，D16）
     这一行说的是"哪个命题的档位"，而命题行的身份是 `stmt_id`。按正文 sha 关联会把
@@ -14067,9 +14243,10 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
     登记前的入参，落盘行与它不逐字相同，于是那一档从页面上消失。所以新行必须带号；
     旧行没有这一格 ⇒ 读侧那条按 sha 的回退只为读旧行（见 :func:`nontriviality_of`）。
 
-    `stmt_id` 缺省是空串：只有概念行的幂等补写与测试直调会这样落行；生产面两处
-    （:meth:`Secretary.judge_statement` 与 :meth:`Secretary.not_applicable_nontriviality`）
-    都从调用方拿到号再传下来。
+    `stmt_id` 缺省是空串只服务"没有登记这一笔"的旧调用面与测试直调。判/落拆段之后
+    生产面只有一个落点（:meth:`Secretary.record_nontriviality`），它在落之前先要求
+    号与路径号：拿不到就不落（并留 `unrecorded` 痕迹），不许再落出 `stmt_id` 为空的
+    孤儿读数（真机 4 条对不上任何命题行的行就是这么来的）。
 
     ## `applicable` 为什么是第四根轴（2026-10-26，D15'）
     "判不了"与"不需要判"是两件事：前者说该判而没判（缺正文 / 被截断 / 没缝），
@@ -14092,6 +14269,7 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
     path.parent.mkdir(parents=True, exist_ok=True)
     # 不适用的那一档不许同时带档位（两件事折进一行就等于把"不存在这一问"读成"判了"）
     got = _nontriviality_level(level) if applicable else None
+    no = int(path_group or 0)
     row = {"at": _now_iso(), "stmt_id": str(stmt_id or ""),
            "statement_sha256": _statement_sha(statement_full),
            "statement_chars": len(str(statement_full or "")),
@@ -14100,6 +14278,11 @@ def append_nontriviality(root: str | Path, *, statement_full: str, level: Any,
            "nontriviality": got, "label": nontriviality_label(got),
            # 判档这一格对这一行适不适用（见上面那一段）；缺省 True = 与老行同一读法
            "applicable": bool(applicable),
+           # 路径维（见上面那一段）：0 = statement-scope；>=1 = 第几条证明路径
+           "path_group": no,
+           "scope": str(scope or ("path" if no >= 1 else "statement")),
+           "judged_body_sha256": str(judged_body_sha256 or ""),
+           "landed_body_sha256": str(landed_body_sha256 or ""),
            "basis": str(basis or ""),
            "effort": dict(effort or {}), "text_truncated": bool(text_truncated),
            "role": str(role or ""), "task_id": str(task_id or "")}
@@ -14122,6 +14305,21 @@ def _row_matches_stmt_id(row: Mapping[str, Any], stmt_id: str) -> bool:
     return str(row.get("stmt_id") or "").strip() == want
 
 
+#: 路径号的读法（唯一一处）：新行读 `path_group`；旧行没有这一格 ⇒ 视为路径 1
+#: （改前判的就是 canonical 那份证明）。`0` 是 statement-scope（概念行的"不适用"），
+#: 它不参与命题级的 min —— 这一格的语义由调用方（`_fold_nontriviality`）先按
+#: `applicable` 分出去，本函数只回答"这一行属于第几条路径"。
+def _row_path_group(row: Mapping[str, Any]) -> int:
+    raw = row.get("path_group")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return 1
+    try:
+        no = int(raw)
+    except (TypeError, ValueError):
+        return 1
+    return no if no >= 1 else 0
+
+
 #: 档位台账的进程内索引：`路径 -> (键, (按号, 按 sha))`，键 = `(st_mtime_ns, st_size)`。
 #:
 #: 为什么要有它（2026-10-27，R-BE1 的 ⑥-3）：`nontriviality_of` 是逐条命题调的（收工读数与
@@ -14132,18 +14330,26 @@ def _row_matches_stmt_id(row: Mapping[str, Any], stmt_id: str) -> bool:
 #: 调用立刻读到新值（判据 `tests/test_nontriviality_ledger_is_read_once.py` 两个方向都钉着）。
 #: 每个路径只留最新一版（不按"每一版"累积），所以长跑里它不会无限长大。
 #:
+#: 两个索引都存整串行（按 append 顺序）：读侧要按 `(stmt_id, path_group)` 折叠，
+#: "最后一行胜"只是折叠规则的一部分（见 `_fold_nontriviality`），不是索引的语义。
+#:
 #: 已知边界（刻意的）：缓存里放的是解析后的行。`nontriviality_of` 只读它，返回的 dict
 #: 是新造的（`effort` 那一格也复制了），所以调用方就地改返回值不会污染缓存；但谁要是绕过
 #: 本函数直接拿缓存里的行去改（本模块不导出它），改的就是"这个进程眼里的台账"。
-_NT_INDEX_CACHE: dict[str, tuple[tuple[int, int], tuple[dict[str, Any], dict[str, Any]]]] = {}
+_NT_INDEX_CACHE: dict[str, tuple[tuple[int, int],
+                                tuple[dict[str, list[dict[str, Any]]],
+                                      dict[str, list[dict[str, Any]]]]]] = {}
 
 
-def _nontriviality_index(path: Path) -> tuple[dict[str, Any], dict[str, Any], str]:
+def _nontriviality_index(path: Path
+                         ) -> tuple[dict[str, list[dict[str, Any]]],
+                                    dict[str, list[dict[str, Any]]], str]:
     """把台账读成 `(按号, 按 sha, 读不成原因)` —— 同一份文件只解析一次（`mtime_ns+size` 键）。
 
-    两个索引都是"最后一行胜"，与原实现逐行覆盖同义。`by_sha` 建的是全局索引（原实现里它
-    在 `elif` 分支上：按号命中过的行不再记 sha）—— 两者同值，因为 `by_sha` 只在"按号一条
-    都没命中"时才被用到，而那时每一行都走过 `elif`，全局最后一条就是逐行最后一条。
+    两个索引都把每一行按 append 顺序收进列表（改前是"最后一行胜"的标量）。
+    为什么要整串：读侧要按 `(stmt_id, path_group)` 折叠成"路径级最后一行"与
+    "命题级 = 各路径的历史最小值"，只留最后一行就把路径/历史两样信息都丢了
+    （真机错读数：先 T0 后 T3 读回 T3；多路径互相覆盖）。
 
     坏行（不是 JSON / 不是对象）跳过，与原来一致；"文件读不出来"如实返回原因，由调用方
     落成"没有这条命题的读数"（不是"这条命题是 T1"）。
@@ -14156,8 +14362,8 @@ def _nontriviality_index(path: Path) -> tuple[dict[str, Any], dict[str, Any], st
     hit = _NT_INDEX_CACHE.get(str(path))
     if hit is not None and hit[0] == key:
         return hit[1][0], hit[1][1], ""
-    by_id: dict[str, Any] = {}
-    by_sha: dict[str, Any] = {}
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    by_sha: dict[str, list[dict[str, Any]]] = {}
     try:
         text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as exc:
@@ -14174,17 +14380,176 @@ def _nontriviality_index(path: Path) -> tuple[dict[str, Any], dict[str, Any], st
             continue
         sid = str(row.get("stmt_id") or "").strip()
         if sid:
-            by_id[sid] = row
+            by_id.setdefault(sid, []).append(row)
         sha = str(row.get("statement_sha256") or "")
         if sha:
-            by_sha[sha] = row
+            by_sha.setdefault(sha, []).append(row)
     _NT_INDEX_CACHE[str(path)] = (key, (by_id, by_sha))
     return by_id, by_sha, ""
 
 
+def _fold_nontriviality(rows: Sequence[Mapping[str, Any]], *, matched_by: str,
+                        path_group: int | None = None,
+                        path_groups: Sequence[Any] | None = None) -> dict[str, Any]:
+    """把同一命题的台账行折叠成一条读数（唯一实现；读侧三处读点共用）。
+
+    ## 折叠规则（业主 2026-11-15 的五条硬约束落到读侧）
+
+    | 规则 | 实现 |
+    |---|---|
+    | 一个路径一行 | 按 `path_group` 分组；旧行（无这一格）= 路径 1 |
+    | 路径级 = 该路径最后一行 | 同一路径重判允许升降（T4 造出梯子 ⇒ 降到 T2 是正常路径） |
+    | 命题级 = 各路径非平凡度的最小值 | `level = min(min_of)`，`min_of` 是各路径的历史最小值 |
+    | 已有值 ⇒ min(原值, 本次) | 取历史最小值 ⇒ 命题级永不回升（新增路径 / 同路径判得更难都抬不上去） |
+    | 部分路径未判 ⇒ `partial=true` | `paths_unjudged` 点名；不许把"部分没判"折成"全判了" |
+
+    为什么路径级用"最后一行"、命题级用"历史最小值"：业主口径里这两条要同时成立。
+    路径换了一份更难的证明（T1→T3）⇒ 那条路径的当前值该是 T3；而"命题台账已有值取
+    min"⇒ 命题级仍是 T1。两者不矛盾：`paths[].level` 给当前值，`min_of` 给命题级
+    这个 min 从哪几个值来（每个路径的历史最小值），读的人能逐行复算。
+
+    ## 返回
+
+    `{tri, level, label, applicable, matched_by, basis, at, stmt_id, effort,
+    text_truncated}`（旧键逐字不动）+ `paths` / `min_of` / `paths_unjudged` /
+    `partial`。`path_group>=1` 时返回该路径的读数（`level` = 该路径最后一行），
+    并把命题级另放在 `statement_level`。
+    """
+    want_path: int | None = None
+    if path_group not in (None, "", 0):
+        try:
+            want_path = int(path_group)
+        except (TypeError, ValueError):
+            want_path = None
+    expected: list[int] = []
+    for raw in (path_groups or ()):
+        try:
+            no = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if no >= 1 and no not in expected:
+            expected.append(no)
+    concept: list[Mapping[str, Any]] = []
+    by_path: dict[int, list[Mapping[str, Any]]] = {}
+    for row in rows:
+        # 老行没有 `applicable` 这一格 ⇒ 按 True 读（与它们写下来时的语义一致）
+        if not bool(row.get("applicable", True)):
+            concept.append(row)
+            continue
+        no = _row_path_group(row)
+        if no < 1:
+            # `path_group=0` 却标着 applicable：落行方把 statement-scope 用错了。
+            # 读侧按路径 1 处置并留一个可核的读数，不静默丢掉它。
+            no = 1
+        by_path.setdefault(no, []).append(row)
+
+    def _unjudged(reason: str) -> dict[str, Any]:
+        return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "",
+                "applicable": True, "matched_by": matched_by, "stmt_id": "",
+                "at": "", "reason": reason, "effort": {}, "text_truncated": False,
+                "paths": [], "min_of": [],
+                "paths_unjudged": list(expected), "partial": bool(expected),
+                "statement_level": None}
+
+    if want_path is not None:
+        seq = by_path.get(want_path) or []
+        if not seq:
+            got = _unjudged(f"第 {want_path} 条路径还没有档位读数")
+            got["paths_unjudged"] = [want_path]
+            got["partial"] = True
+            return got
+        last = seq[-1]
+        level_here = _level_from_row(last)
+        levels = [x for x in (_level_from_row(r) for r in seq) if x is not None]
+        floor = min(levels) if levels else None
+        floors_all = [min([x for x in (_level_from_row(r) for r in by_path[no])
+                           if x is not None] or [None])
+                      for no in sorted(by_path)]
+        stmt_level = min([x for x in floors_all if x is not None]) if floors_all else None
+        return {"tri": ("computed" if level_here is not None else "unknown"),
+                "level": level_here, "label": nontriviality_label(level_here),
+                "applicable": True, "matched_by": matched_by,
+                "stmt_id": str(last.get("stmt_id") or ""),
+                "basis": str(last.get("basis") or ""),
+                "at": str(last.get("at") or ""),
+                "effort": dict(last.get("effort") or {}),
+                "text_truncated": bool(last.get("text_truncated")),
+                "path_group": want_path,
+                "paths": [{"path_group": want_path, "level": level_here,
+                           "floor": floor,
+                           "label": nontriviality_label(level_here),
+                           "at": str(last.get("at") or ""),
+                           "stmt_id": str(last.get("stmt_id") or ""),
+                           "basis": str(last.get("basis") or ""),
+                           "judged_body_sha256": str(last.get("judged_body_sha256") or ""),
+                           "landed_body_sha256": str(last.get("landed_body_sha256") or ""),
+                           "rows": len(seq)}],
+                "min_of": [floor] if floor is not None else [],
+                "paths_unjudged": ([] if floor is not None else [want_path]),
+                "partial": bool(floor is None), "statement_level": stmt_level}
+
+    if not by_path:
+        if concept:
+            last = concept[-1]
+            return {"tri": "not_applicable", "level": None, "applicable": False,
+                    "label": "", "basis": str(last.get("basis") or ""),
+                    "at": str(last.get("at") or ""), "matched_by": matched_by,
+                    "stmt_id": str(last.get("stmt_id") or ""), "effort": {},
+                    "text_truncated": False, "paths": [], "min_of": [],
+                    "paths_unjudged": [], "partial": False, "statement_level": None}
+        return _unjudged("台账里没有这条命题的档位读数")
+
+    path_floor: dict[int, int | None] = {}
+    detail: list[dict[str, Any]] = []
+    for no in sorted(by_path):
+        seq = by_path[no]
+        last = seq[-1]
+        levels = [x for x in (_level_from_row(r) for r in seq) if x is not None]
+        floor = min(levels) if levels else None
+        path_floor[no] = floor
+        detail.append({
+            "path_group": no, "level": _level_from_row(last), "floor": floor,
+            "label": nontriviality_label(_level_from_row(last)),
+            "at": str(last.get("at") or ""),
+            "stmt_id": str(last.get("stmt_id") or ""),
+            "basis": str(last.get("basis") or ""),
+            "judged_body_sha256": str(last.get("judged_body_sha256") or ""),
+            "landed_body_sha256": str(last.get("landed_body_sha256") or ""),
+            "rows": len(seq)})
+    judged_floors = [path_floor[no] for no in sorted(by_path)
+                     if path_floor[no] is not None]
+    unjudged_paths = [no for no in sorted(by_path) if path_floor[no] is None]
+    unjudged_paths.extend(no for no in expected
+                          if no not in by_path and no not in unjudged_paths)
+    level = min(judged_floors) if judged_floors else None
+    # `min_of` 升序：于是 `level == min(min_of)` 是一条读得出来的恒等式，
+    # 逐行复算的人不必再记得"第几个值才是命题级"。
+    min_of = sorted(judged_floors)
+    # 陈述这一档读数的"来源行"：取历史最小值那一行里最靠后的一条（同档取最近一次）。
+    win: Mapping[str, Any] = by_path[sorted(by_path)[0]][-1]
+    if level is not None:
+        for no in sorted(by_path):
+            for row in by_path[no]:
+                if _level_from_row(row) == level:
+                    win = row
+    return {"tri": ("computed" if level is not None else "unknown"),
+            "level": level, "label": nontriviality_label(level),
+            "applicable": True, "matched_by": matched_by,
+            "stmt_id": str(win.get("stmt_id") or ""),
+            "basis": str(win.get("basis") or ""),
+            "at": str(win.get("at") or ""),
+            "effort": dict(win.get("effort") or {}),
+            "text_truncated": bool(win.get("text_truncated")),
+            "paths": detail, "min_of": min_of,
+            "paths_unjudged": unjudged_paths,
+            "partial": bool(unjudged_paths), "statement_level": level}
+
+
 def nontriviality_of(root: str | Path, statement_full: str, *,
-                     stmt_id: str = "") -> dict[str, Any]:
-    """这条命题当前的非平凡性档位（折叠旁支台账里同一号 / 同一 sha 的最后一行）。
+                     stmt_id: str = "",
+                     path_group: int | None = None,
+                     path_groups: Sequence[Any] | None = None) -> dict[str, Any]:
+    """这条命题当前的非平凡性档位（折叠旁支台账里同一号 / 同一 sha 的全部行）。
 
     ## 三级命中（2026-10-26，D16）
 
@@ -14198,7 +14563,19 @@ def nontriviality_of(root: str | Path, statement_full: str, *,
     第二级只为读旧行（那些行写在带号之前，盘上只有 sha）；它命中时 `matched_by`
     必须说清这是回退 —— 否则"按文本兜底"会重新长成第二处真身。
 
-    三态（`tri` 的三个取值不许折平）：
+    ## 折叠（NT2，2026-11-15）
+
+    命中之后交给 :func:`_fold_nontriviality`：按 `(stmt_id, path_group)` 折叠，
+    命题级 = 当前各路径的最小值（且取历史最小值 ⇒ 永不回升），并返回 `paths` /
+    `min_of` / `paths_unjudged` / `partial` 供逐行复算。旧行（没有 `path_group`）
+    视为路径 1 —— 迁移不读废历史（判据见 `tests/test_nontriviality_is_per_path.py`）。
+
+    `path_group`（可选）：只问某一条路径的读数（`level` 是该路径最后一行，
+    `statement_level` 另给命题级）。`path_groups`（可选）：调用方知道这一条命题
+    应该有几条路径（`statements.manuscripts` 的键）⇒ 没判的那几条进 `paths_unjudged`，
+    `partial=true`，不许折成"全判了"。
+
+    ## 三态（`tri` 的三个取值不许折平）
 
     | 结局 | 返回 |
     |---|---|
@@ -14223,44 +14600,162 @@ def nontriviality_of(root: str | Path, statement_full: str, *,
     if not path.is_file():
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
                 "applicable": True, "matched_by": "", "stmt_id": "",
-                "at": "", "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数"}
+                "at": "", "reason": f"{path} 不在盘上 ⇒ 这条命题还没有档位读数",
+                "paths": [], "min_of": [],
+                "paths_unjudged": [int(x) for x in (path_groups or ())
+                                   if str(x).strip().isdigit()],
+                "partial": bool(path_groups), "statement_level": None}
     by_id, by_sha, why = _nontriviality_index(path)
     if why:
         return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
                 "applicable": True, "matched_by": "", "stmt_id": "",
-                "at": "", "reason": why, "effort": {}, "text_truncated": False}
+                "at": "", "reason": why, "effort": {}, "text_truncated": False,
+                "paths": [], "min_of": [], "paths_unjudged": [], "partial": False,
+                "statement_level": None}
     want = str(stmt_id or "").strip()
-    hit = by_id.get(want) if want else None
+    hit_rows = list(by_id.get(want) or []) if want else []
     # 按号那一支仍过 `_row_matches_stmt_id`：它是"按号关联"的唯一判据，也是反真空判据
     # （`tests/test_nontriviality_is_joined_by_stmt_id.py` 的 e 条）打桩的那一格。索引只是
     # "读盘/解析一次"的缓存，不许把这条判据绕过去。
-    if hit is not None and not _row_matches_stmt_id(hit, stmt_id):
-        hit = None
-    last = hit or by_sha.get(sha)
-    matched_by = "stmt_id" if hit else ("sha256" if last else "")
-    if not last:
-        return {"tri": "unknown", "level": NONTRIVIALITY_UNJUDGED, "label": "", "basis": "",
-                "applicable": True, "matched_by": "", "stmt_id": "",
-                "at": "", "reason": "台账里没有这条命题的档位读数",
-                "effort": {}, "text_truncated": False}
-    # 老行没有这一格 ⇒ 按"适用"读（它们写下来的时候只有"判了/判不了"两种）
-    applicable = bool(last.get("applicable", True))
-    level = _level_from_row(last) if applicable else None
-    if not applicable:
-        tri = "not_applicable"
-    elif level is not None:
-        tri = "computed"
+    if hit_rows and not any(_row_matches_stmt_id(r, stmt_id) for r in hit_rows):
+        hit_rows = []
+    matched_by = "stmt_id" if hit_rows else ""
+    if not hit_rows:
+        cand = list(by_sha.get(sha) or [])
+        if cand:
+            hit_rows, matched_by = cand, "sha256"
+    if not hit_rows:
+        got = _fold_nontriviality([], matched_by="")
+        got["reason"] = "台账里没有这条命题的档位读数"
+        got["paths_unjudged"] = [int(x) for x in (path_groups or ())
+                                 if str(x).strip().isdigit()]
+        got["partial"] = bool(got["paths_unjudged"])
+        return got
+    return _fold_nontriviality(hit_rows, matched_by=matched_by,
+                               path_group=path_group, path_groups=path_groups)
+
+
+#: 五项力气读数 → 各自的加分台阶（唯一一处定义在 `proof_effort_readings`）。
+#:
+#: 为什么这张表住在这一层（NT2 从 `agent_loop` 搬来）：note 是给模型看的指路牌
+#: （"补哪一项能升档"），而档位本身由秘书（模型）按五档定义判 —— 这里一个字都不算档位，
+#: 只把"这一条哪几项还在 0 分"翻成一句人话。判档搬进 B 的收录动作之后，这份读数也
+#: 跟着走：它是"判"的产物，不是"循环"的产物。
+_EFFORT_UPGRADE_STEPS: tuple[tuple[str, str, str], ...] = (
+    ("体量", "chars", "每 2000 字 +1"),
+    ("步骤", "steps", "每 6 步 +1"),
+    ("引理", "lemmas", "每 2 条引理 +1"),
+    ("工具簇跨度", "clusters", "跨到第 2 个工具簇才 +1"),
+    ("绕路", "detour", "记下走过的一段死路 +1"),
+)
+
+
+def filing_tier_note(got: Mapping[str, Any]) -> str:
+    """落 T0 那一格读数里的指路牌：按力气口径说清"还差哪一项、补哪一项能升档"。
+
+    为什么不再是旧的两问（业主 2026-10-24 的裁定原话）：「不一定一条定理后面要用，
+    也不一定存在"已知那条"，看证明花的力气就能判非平凡度」。旧口径的两个问题留在这句
+    note 里，模型就会去编"谁会用到它"来升档 —— 而档位只由五项力气读数落格，
+    那两个问题一个字都不参与（B 仍可以把它们写在 `why` 里给秘书看，只是不作判据，
+    也不再是这一格教给模型的升档路径）。
+
+    两档文案：材料里没有证明正文时点名"缺「证明正文」"并指到 `proof_text` /
+    `proofs`；有力气读数时点名还在 0 分的那几项（每一项各 +1）。
+    """
+    head = ("平凡 ⇒ 落 T0（基础定理或初步结论），照旧收录（业主 2026-10-23："
+            "秘书不再因「太平凡」拦收录）。档位由秘书按五档定义判（业主 2026-10-29）："
+            "五项读数 = 体量 / 步骤 / 引理 / 工具簇跨度 / 绕路")
+    effort = got.get("effort")
+    effort = dict(effort) if isinstance(effort, Mapping) else {}
+    if not effort or list(effort.get("missing") or []):
+        return (head + "。这一条缺「证明正文」这一项：五项读数一项都取不到 ⇒ 档位落「未判」。"
+                "补上 proof_text（或 proofs=[{proof_no, text}] 里的正文）再交一次"
+                "就能判出档位")
+    chars = int(effort.get("chars") or 0)
+    steps = int(effort.get("steps") or 0)
+    lemmas = int(effort.get("lemmas") or 0)
+    clusters = int(effort.get("clusters") or 0)
+    detour = bool(effort.get("detour"))
+    score = int(effort.get("score") or 0)
+    label = str(got.get("label") or "") or "T0"
+    still_zero = {"chars": chars // 2000 == 0, "steps": steps // 6 == 0,
+                  "lemmas": lemmas // 2 == 0, "clusters": clusters < 2,
+                  "detour": not detour}
+    how = "、".join(f"{name}（{hint}）"
+                    for name, key, hint in _EFFORT_UPGRADE_STEPS if still_zero[key])
+    return (head + f"。这一条现在读到：体量 {chars} 字、步骤 {steps}、引理 {lemmas} 条、"
+            f"工具簇 {clusters} 个、绕路{'有' if detour else '无'}"
+            f"（力气分数 {score} ⇒ {label}）。"
+            f"还在 0 分的项：{how or '（无，五项都进分了）'} —— 补哪一项就升档；"
+            "证明正文写在 proof_text 里，多份证明写在 proofs=[{proof_no, text}]")
+
+
+def filing_tier_reading(got: Mapping[str, Any] | None, *,
+                        stmt_id: str = "") -> dict[str, Any] | None:
+    """把一次判档（或一条台账读数）翻成"模型看得见的那一格"；不加档位就返回 `None`。
+
+    业主 2026-10-23 的裁定：平凡不是"不许进"，是"进哪一档"（T0 = 基础定理或初步结论）。
+    所以只在两种情形给读数：判了 T0（`tier` + 指路 note）与"没查成"（未判 + 原因，
+    且拿到号之后才给 —— 没有号的那一笔本来就不会有命题行可指）。
+
+    这里不判档、不写盘：判在 B 的收录动作里（写之前），落由
+    `record_nontriviality`（拿到号之后）。这一格只做整形，所以"档位是谁给的"不会在
+    这一层分叉。台账读数形状（`tri` / `level`）与判词形状（`checked` / `decision`）
+    都收：前者是 `_do_tool` 从刚落的那一行读回来的，后者是 B 动作层手里的原始判词。
+    """
+    if not isinstance(got, Mapping) or not got:
+        return None
+    if "tri" in got or "nontriviality_tri" in got:
+        tri = str(got.get("tri") or got.get("nontriviality_tri") or "")
+        level = _nontriviality_level(got.get("level", got.get("nontriviality")))
+        checked = tri in ("computed", "not_applicable")
+        reason = str(got.get("reason") or "")
     else:
-        tri = "unknown"
-    return {"tri": tri, "level": level, "applicable": applicable,
-            "label": nontriviality_label(level),
-            "basis": str(last.get("basis") or ""), "at": str(last.get("at") or ""),
-            # 命中方式与那一行的号：读的人要能分辨"按号命中"与"读旧行的 sha 回退"。
-            "matched_by": matched_by, "stmt_id": str(last.get("stmt_id") or ""),
-            # 力气读数与截断标记原样带出来（写侧落进台账的那两份）：
-            # 读的人要能自己按同一张边界表复算这一档，而不是只能相信 basis 那句话。
-            "effort": dict(last.get("effort") or {}),
-            "text_truncated": bool(last.get("text_truncated"))}
+        checked = bool(got.get("checked"))
+        # 判词形状：`decision` 是唯一主字段，`nontriviality` 只是旧别名
+        # （与 `judge_statement` 同一个读法：`_tier_from_judge_reply`）。
+        level = _tier_from_judge_reply(got)
+        reason = str(got.get("reason") or "判档没查成")
+    if not checked or level is None:
+        # 没有号的那一笔本来就没有命题行可指 ⇒ 不给"未判"读数（与旧
+        # `_unjudged_filing_tier` 的边界逐字一致：有号才给原因）。
+        if not str(stmt_id or "").strip():
+            return None
+        return {"tier": "", "label": "", "nontriviality": None,
+                "nontriviality_tri": "unjudged", "matched_by": "",
+                "downgraded": False, "decision": "",
+                "reason": reason[:300],
+                "judged_by": "secretary", "judge": "statement_aesthetic"}
+    # 判词形状里 `decision` 是唯一主字段（T0 才是"平凡 ⇒ 落 T0"）；台账读数形状
+    # 没有 `decision`，按 `level == 0` 读。两条都过同一个判据函数
+    # （`_is_trivial_verdict` 是"这一档是不是 T0"的唯一口径，也是判据的打桩点）。
+    decision = str(got.get("decision") or "").strip()
+    if decision:
+        if not _is_trivial_verdict(decision):
+            return None
+    elif level != 0:
+        return None
+    label = str(got.get("label") or "") or nontriviality_label(level)
+    effort = got.get("effort")
+    effort = dict(effort) if isinstance(effort, Mapping) else {}
+    return {
+        "tier": label or nontriviality_label(0),
+        "label": label,
+        "nontriviality": level,
+        "nontriviality_tri": "computed",
+        # 只带判档用得上的那几格读数：note 里的指路牌与台账里那一行都是按它们写的，
+        # 模型不必去猜"为什么是这一档"（`cluster_evidence` 那类明细留在秘书台账里）。
+        "effort": {k: effort.get(k) for k in
+                   ("chars", "steps", "lemmas", "clusters", "detour", "score",
+                    "missing", "body_from")},
+        "downgraded": True,
+        "decision": label,
+        "reason": str(got.get("reason") or "")[:300],
+        "basis": list(got.get("basis") or []),
+        "note": filing_tier_note(got),
+        "judged_by": "secretary",
+        "judge": "statement_aesthetic",
+    }
 
 
 # ---------------------------------------------------------------- 判档位的"力气"读数
@@ -15053,7 +15548,7 @@ def _proposition_form_system() -> str:
         "③ 二者由「若…则…」「设…则…」一类结构连起来，而不是一段流程要求；"
         "④ 描述里没有混进作业/验收规格（「本轮产物必须是 proof」「判据是 "
         "manuscript_published=true」「原样提交 reports/xxx.md」这类不是数学断言）。"
-        "只回一个 JSON 对象，字段：well_formed（**布尔**，只有两态，不许给 "
+        "只回一个 JSON 对象，字段：well_formed（布尔，只有两态，不许给 "
         "true/false 以外的值）、conditions（你读出的前提，字符串）、"
         "conclusion（你读出的结论，字符串）、problems（字符串数组：不合格时逐条说缺什么，"
         "例如「没有写清前提」「结论不是可判真假的断言」「这是流程要求，不是命题」，"

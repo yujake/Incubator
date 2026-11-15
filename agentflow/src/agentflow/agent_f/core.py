@@ -504,7 +504,7 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         "机器可读落点）；② 手稿里写一节固定格式的 `## 依赖`（三列必填），**B 读这一节落依赖"
         "台账** —— 你不写依赖表。",
         "格式逐字：`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |`；一行一条引用。"
-        "**路径号不进稿**（它是第四列，由 B 的秘书在收录事务里分配 —— 第 2 条证明的依赖因此"
+        "路径号不进稿（它是第四列，由 B 的秘书在收录事务里分配 —— 第 2 条证明的依赖因此"
         "落 `stmt:<命题号>#p2` 那一组）。",
         "**引用门槛是 proof_review 级及以上**（业主同一天加码裁定，逐字："
         "「proof_review级及以上才可引用」）：下面列出来的**命题**都是够格的；标着 "
@@ -3257,24 +3257,33 @@ class _Core:
         return self._delivery_reading(row)
 
     def _judge_nontriviality(self, *, full: str, text: str, body: str,
-                             stmt_id: str = "") -> str:
-        """让 B 的秘书判一次非平凡度；返回空串 = 判了（或不需要判），非空 = 没判成的原因。
+                             stmt_id: str = "", path_group: int = 1) -> str:
+        """让 B 的秘书判一次非平凡度并落行；返回空串 = 判了，非空 = 没落成的原因。
 
-        这一步不能省：`out/secretary/nontriviality.jsonl` 的那一行只在
-        `Secretary.judge_statement` 跑过之后才由 `append_nontriviality` 追加。
-        F 把登记交给 B 之后，若不再走这一步，新登记的命题会重新落成"账本里没有"。
+        这一步不能省：`out/secretary/nontriviality.jsonl` 的那一行要由
+        `Secretary.record_nontriviality` 追加 —— 判/落拆段（NT2，2026-11-15）之后
+        `judge_statement` 只判、不写盘，所以这里必须显式落。
 
-        `stmt_id` 是刚登记下来的号（2026-10-26，D16）：台账按号与命题行关联，
-        正文以后改了档位也还读得到。
+        `stmt_id` 是刚登记下来的号（2026-10-26，D16）。`path_group`：F 这条路上
+        `stmt_id and not reused` ⇒ 这是一条刚落的新命题，路径号必然是 1
+        （`_record_statement_tx` 的新建档只可能分到 1；这里不是"猜"，是那一档的定义）。
+        拿不到号的那一笔不落行，并如实回原因（不静默）。
         """
         try:
-            from ..secretary import for_role_wired
+            from ..secretary import for_role_wired, _judged_body_sha
 
             sec = for_role_wired("B", root=self.store.root, store=self.store)
             if sec is None:
                 return "B 的秘书不可达 ⇒ 非平凡度没判（账本里不会有这一行）"
-            sec.judge_statement(statement_full=full, statement=text, proof_text=body,
-                                stmt_id=stmt_id, task_id="")
+            reading = sec.judge_statement(statement_full=full, statement=text,
+                                          proof_text=body, stmt_id=stmt_id, task_id="")
+            rec = sec.record_nontriviality(
+                reading, stmt_id=stmt_id, path_group=int(path_group or 0),
+                statement_full=full, judged_body_sha256=_judged_body_sha(full, body))
+            tri = str(rec.get("tri") or "")
+            if tri.startswith("unrecorded"):
+                return (f"非平凡度判过但没落成（{rec.get('reason') or tri}）"
+                        "—— 档位台账里不会有这一行")
         except Exception as exc:  # noqa: BLE001 - 判不了要说出来，不许静默当作判过了
             return f"非平凡度没判成（{type(exc).__name__}: {exc}）"
         return ""
@@ -4725,7 +4734,7 @@ def selftest() -> int:
     row = f.status(pid)
     s1sg = next(s for s in row["subgoals"] if s["sid"] == "s1")
     check("E 子目标拿到 experiment_id", bool(s1sg["experiment_ids"]))
-    check("数值实验**不许**关闭子目标（FC-22）",
+    check("数值实验不许关闭子目标（FC-22）",
           s1sg["status"] == "supported_not_proved" and s1sg["proof_experiment_ids"] == [])
     check("计划状态随之变成 supported_not_proved（无任何 proof）", row["status"] == "attacking")
 

@@ -159,9 +159,8 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
             "另两处是变更记录",
     },
     "F5_two_nontrivial_questions": {
-        "src/agentflow/agent_loop.py": "该删，已转持有方（热文件，本轮只读）",
         "tests/test_filing_tier_carries_the_proof.py":
-            "判据读它：断言 note 里不再出现旧那两问（负控）",
+            "判据读它：断言 note 里不再出现旧的两问（负控）",
     },
     "F6a_f_lands_statements": {
         "tests/test_f_hands_propositions_to_b.py":

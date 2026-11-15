@@ -5,7 +5,7 @@
 
 `secretary.proof_effort_readings` / `nontriviality_from_effort` 落地之后，档位只由
 「这份证明花了多大力气」给（五项读数：体量 / 步骤 / 引理 / 工具簇跨度 / 绕路）。
-但 `agent_loop._statement_filing_tier` 这一趟只转交 `statement_full` / `statement` /
+但入库口那一趟只转交 `statement_full` / `statement` /
 `source`，不转 `proof_text` / `proofs` ⇒ 证明正文根本没进判档材料 ⇒ 真机上 sylow4
 那 8 条互不相同的登记里有 6 条落「未判（缺证明正文）」，新口径在写侧这一格上白做。
 
@@ -36,7 +36,6 @@ import ast
 import json
 import pathlib
 import sys
-import types
 from typing import Any, Mapping
 
 import pytest
@@ -45,7 +44,6 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from agentflow import agent_loop as LOOP
 from agentflow import secretary as SEC
 
 #: 命题正文（不含证明小节：它自己不像一份证明，所以改前的读数必然是"缺证明正文"）。
@@ -119,10 +117,15 @@ def _secretary(tmp_path: pathlib.Path, judge: Any | None = None) -> tuple[SEC.Se
 
 def _gate(secretary: Any, args: Mapping[str, Any],
           name: str = "own.register_statement") -> dict[str, Any] | None:
-    """入库口那一道闸的真身（B 的入库动作之前、同一个返回面上）。"""
-    return LOOP.AgentLoop._statement_filing_tier(
-        types.SimpleNamespace(role="B", secretary=secretary, my_task_id="t-000001"),
-        name, dict(args))
+    """B 收录动作里那道判档闸的真身（NT2 起在动作层：判 → 整形，判完不落盘）。"""
+    assert name == "own.register_statement", name
+    got = secretary.judge_statement(
+        statement_full=str(args.get("statement_full") or ""),
+        statement=str(args.get("statement") or ""),
+        proof_text=str(args.get("proof_text") or ""),
+        proofs=args.get("proofs"), kind=str(args.get("kind") or ""),
+        task_id="t-000001")
+    return SEC.filing_tier_reading(got)
 
 
 def _ledger_rows(root: pathlib.Path) -> list[dict[str, Any]]:
@@ -228,18 +231,26 @@ def test_d_the_call_site_hands_over_both_keywords() -> None:
 
     行为判据（上面那条）证明"少了这两行会坏"；这一条钉住"它们真的在那一次调用里"，
     否则 `proofs` 可以靠 `statement_full` 里自带证明小节蒙过去，而那一栏明天就可能消失。
+
+    NT2（2026-11-15）之后判档的调用点从 `agent_loop` 那一格（工具返回之后再判）搬到
+    B 的收录动作（`agent_b.register_statement._judge_filing_nontriviality`）—— 判必须
+    在写台账之前，而 `agent_loop` 那一层是"工具返回之后"。判据的对象跟着搬，断言
+    一个字没松：五样材料 + 任务号都必须在那次调用里。
     """
-    src = pathlib.Path(LOOP.__file__).read_text(encoding="utf-8")
+    from agentflow.agent_b import register_statement as RS
+
+    src = pathlib.Path(RS.__file__).read_text(encoding="utf-8")
     tree = ast.parse(src)
     calls: list[list[str]] = []
     for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or node.name != "_statement_filing_tier":
+        if (not isinstance(node, ast.FunctionDef)
+                or node.name != "_judge_filing_nontriviality"):
             continue
         for sub in ast.walk(node):
             if (isinstance(sub, ast.Call) and isinstance(sub.func, ast.Attribute)
                     and sub.func.attr == "judge_statement"):
                 calls.append([str(kw.arg) for kw in sub.keywords])
-    assert calls, "`_statement_filing_tier` 里找不到那次 `judge_statement` 调用"
+    assert calls, "`_judge_filing_nontriviality` 里找不到那次 `judge_statement` 调用"
     keywords = calls[0]
     assert "proof_text" in keywords, keywords
     assert "proofs" in keywords, keywords

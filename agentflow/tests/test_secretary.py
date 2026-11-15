@@ -1413,49 +1413,41 @@ def test_the_statement_judgement_belongs_to_B_only(tmp_path):
 
 
 def test_the_filing_gate_lands_on_t0_instead_of_refusing(tmp_path):
-    """入库口那一道闸：判 T0 ⇒ 落 T0，不再拒收（业主 2026-10-23）。
+    """判档那一格的整形：判 T0 ⇒ 给一格读数（不拒收）；别的档 / 没查成 ⇒ 什么都不加。
 
     改前这一格是"只有『判了 + 判平凡』才拦"，返回 `ok=False` +
     `kind=statement_too_trivial`。业主的裁定把收场方式换了：平凡不是"不许进"，
     是"进哪一档"（T0 = 基础定理或初步结论）。所以这一格现在的返回值是一格读数
     （`tier="T0"` + `downgraded=True`），而不是拒绝。
 
-    六个放行档逐个过一遍：非 T0 档 / 判不了 / 没查成 / 不是 B / 不是入库那件工具 / 没秘书
-    —— 它们一律什么都不加（`None`）。把"加了档位读数"与"拒收"折成同一种结局，
-    是这一格最容易犯的错。
+    NT2（2026-11-15）：判/落拆段之后这一格只是整形（`secretary.filing_tier_reading`）
+    —— 判在 B 的收录动作里（写台账之前）、落在拿到号与路径号之后。所以"不是 B /
+    不是入库那件工具"两档不再是本函数的放行分支，而是结构事实（判档的调用点只在
+    B 的收录动作里，结构判据见 `tests/test_filing_tier_carries_the_proof.py` 的 d 条）。
+    "没秘书"这一档仍要有行为判据：B 的收录动作给它"未判 + 原因"，不拦（fail-open）。
     """
-    import types
+    from agentflow import secretary as sec_mod
+    from agentflow.agent_b import AgentB
+    from agentflow.store import Store
 
-    from agentflow.agent_loop import AgentLoop
-
-    def gate(role, secretary, name="own.register_statement"):
-        return AgentLoop._statement_filing_tier(
-            types.SimpleNamespace(role=role, secretary=secretary, my_task_id="t-000001"),
-            name, {"statement_full": "a+b=b+a"})
-
-    class _Sec:
-        def __init__(self, out):
-            self.out = out
-
-        def judge_statement(self, **kw):
-            return self.out
-
-    note = gate("B", _Sec({"checked": True, "decision": "T0", "reason": "力气小"}))
+    note = sec_mod.filing_tier_reading(
+        {"checked": True, "decision": "T0", "reason": "力气小"})
     assert note is not None and note["tier"] == "T0", note
     assert note["downgraded"] is True and note["decision"] == "T0", note
-    assert "不" not in note.get("error", ""), "这一格不许再返回拒绝"
-    for label, args in (
-        ("非 T0 档", ("B", _Sec({"checked": True, "decision": "T2"}))),
-        ("判不了", ("B", _Sec({"checked": True, "decision": ""}))),
-        ("没查成", ("B", _Sec({"checked": False, "reason": "没有缝"}))),
-        ("不是 B", ("A", _Sec({"checked": True, "decision": "T0"}))),
-        ("不是入库那件工具", ("B", _Sec({"checked": True, "decision": "T0"}))),
-        ("没秘书", ("B", None)),
+    assert "error" not in note, "这一格不许再返回拒绝"
+    for label, got in (
+        ("非 T0 档", {"checked": True, "decision": "T2"}),
+        ("判不了", {"checked": True, "decision": ""}),
+        ("没查成", {"checked": False, "reason": "没有缝"}),
     ):
-        if label == "不是入库那件工具":
-            assert gate(args[0], args[1], name="table.create") is None, label
-        else:
-            assert gate(*args) is None, label
+        assert sec_mod.filing_tier_reading(got) is None, label
+
+    store = Store(tmp_path / "ws")
+    store.init()
+    boss = AgentB(store, extractor=None, extract_text=None, secretary=None,
+                  auto_secretary=False)
+    got = boss._judge_filing_nontriviality(statement_full="a+b=b+a")
+    assert got.get("checked") is False and "秘书" in str(got.get("reason") or ""), got
 
 
 def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
@@ -1464,10 +1456,11 @@ def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
     为什么不是"炸了就拦"：拦下来等于让"没查成"决定产出（三态纪律）；而静默放行又会让
     "秘书这趟根本没工作"永远查不出来。所以走 fail-open + 留痕这一对。
     """
-    import types
+    from agentflow.agent_b import AgentB
+    from agentflow.store import Store
 
-    from agentflow.agent_loop import AgentLoop
-
+    store = Store(tmp_path / "ws")
+    store.init()
     rows: list[dict] = []
 
     class _Boom:
@@ -1478,10 +1471,10 @@ def test_the_filing_gate_is_fail_open_when_the_judgement_explodes(tmp_path):
             rows.append(dict(kw))
             return {}
 
-    got = AgentLoop._statement_filing_tier(
-        types.SimpleNamespace(role="B", secretary=_Boom(), my_task_id="t-000001"),
-        "own.register_statement", {"statement_full": "a+b=b+a"})
-    assert got is None, "判断炸了不该把入库这条路堵死（fail-open）"
+    boss = AgentB(store, extractor=None, extract_text=None, secretary=_Boom(),
+                  auto_secretary=False)
+    got = boss._judge_filing_nontriviality(statement_full="a+b=b+a")
+    assert got.get("checked") is False, "判断炸了不该把入库这条路堵死（fail-open）"
     assert rows, "fail-open 不等于静默：秘书台账里必须有这一格的一行"
     assert "缝炸了" in rows[0]["reason"] and rows[0]["fail_open"] is True, rows[0]
 
@@ -1592,19 +1585,19 @@ def test_the_filing_tier_note_points_at_the_upgrade_path(tmp_path):
     它比收录表里最接近的那一条强在哪」，而是五项力气读数（体量 / 步骤 / 引理 /
     工具簇跨度 / 绕路）里补哪一项能升档（判据见
     `tests/test_filing_tier_carries_the_proof.py` 的 (c)）。
+
+    NT2（2026-11-15）之后这一格只是整形（`secretary.filing_tier_reading`）：判与落
+    分别在 B 的收录动作里 —— 判词从动作层原样递进来。
     """
-    import types
-
-    from agentflow.agent_loop import AgentLoop
-
     class _Sec:
         def judge_statement(self, **kw):
             return {"checked": True, "decision": "T0", "reason": "两条判据都答不上",
                     "basis": [], "reused": True}
 
-    got = AgentLoop._statement_filing_tier(
-        types.SimpleNamespace(role="B", secretary=_Sec(), my_task_id="t-1"),
-        "own.register_statement", {"statement_full": "x"})
+    from agentflow import secretary as SEC
+
+    got = SEC.filing_tier_reading(
+        _Sec().judge_statement(statement_full="x"), stmt_id="000001")
     assert got is not None and got["tier"] == "T0", got
     assert "T0" in got["note"] and "拦收录" in got["note"], got["note"]
     # 2026-10-29 起注记的口径是"读数只作参考、档位由秘书判"，不再教"补哪一项就升档"

@@ -27,7 +27,6 @@ from __future__ import annotations
 import json
 import pathlib
 import sys
-import types
 from typing import Any, Mapping
 
 import pytest
@@ -37,7 +36,6 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import secretary as SEC  # noqa: E402
-from agentflow.agent_loop import AgentLoop  # noqa: E402
 from agentflow.webui import readers as R  # noqa: E402
 
 _SID = "000123"
@@ -83,9 +81,14 @@ def _ledger(root: pathlib.Path) -> list[dict[str, Any]]:
 
 
 def _judge_one(root: pathlib.Path) -> None:
+    """走一遍"判 → 落"两段（NT2 之后 `judge_statement` 只判、不写盘）。"""
     sec = _secretary(root)
-    sec.judge_statement(statement_full=_BODY, proof_text=_PROOF, stmt_id=_SID,
-                        task_id="t-000001")
+    got = sec.judge_statement(statement_full=_BODY, proof_text=_PROOF, stmt_id=_SID,
+                              task_id="t-000001")
+    sec.record_nontriviality(got, stmt_id=_SID, path_group=1,
+                             statement_full=_BODY,
+                             judged_body_sha256=SEC._judged_body_sha(_BODY, _PROOF),
+                             landed_body_sha256=SEC._statement_sha(_BODY))
 
 
 # ---------------------------------------------------------------- a）带号落行
@@ -93,8 +96,9 @@ def _judge_one(root: pathlib.Path) -> None:
 def test_a_a_judgement_with_a_stmt_id_lands_that_id(tmp_path: pathlib.Path) -> None:
     """（a）判一条带号的命题 ⇒ 台账行有 `stmt_id` 且等于传入值。
 
-    改前红：`append_nontriviality` 的签名里没有号，`judge_statement` 也不收它
-    （`TypeError: unexpected keyword argument 'stmt_id'`），这一格根本走不到。
+    改前红（NT2 这一笔之前）：`judge_statement` 把"判"与"落"揉在一起；判/落拆段之后
+    它只判，落行必须走 `record_nontriviality`（并带上路径号）。改前这条判据读的是
+    "判一次就有一行"，现在读的是"判 + 落一次有一行、号逐字相同"。
     """
     root = _root(tmp_path)
     _judge_one(root)
@@ -102,73 +106,70 @@ def test_a_a_judgement_with_a_stmt_id_lands_that_id(tmp_path: pathlib.Path) -> N
     assert rows, "判了却没落台账行"
     assert rows[-1]["stmt_id"] == _SID, rows[-1]
     assert rows[-1]["statement_sha256"] == SEC._statement_sha(_BODY), rows[-1]
+    # 路径维 + 两枚 sha（业主 2026-11-15：一个路径一行、判的材料可复核）
+    assert rows[-1]["path_group"] == 1, rows[-1]
+    assert rows[-1]["judged_body_sha256"] == SEC._judged_body_sha(_BODY, _PROOF), rows[-1]
+    assert rows[-1]["landed_body_sha256"] == SEC._statement_sha(_BODY), rows[-1]
 
 
-# ---------------------------------------------------------------- a1）判落盘那一份
+# ---------------------------------------------------------------- a1）判哪一版 / 落哪一版
 
-class _FakeRegistry:
-    """只回一件 `own.register_statement` 的注册表：登记成功，落盘正文与入参不同。"""
+def test_a1_the_judged_material_and_the_landed_body_are_recorded_separately(
+        tmp_path: pathlib.Path) -> None:
+    """（a1）台账行同时记"判的材料"与"落盘正文"两枚 sha，且靠号 join。
 
-    def __init__(self, data: Mapping[str, Any]) -> None:
-        self.data = dict(data)
-        self.calls = 0
+    NT2（2026-11-15）的形状：判档发生在写台账之前，材料是那一份稿的
+    `## 命题` + `## 证明`；落盘行的正文可能被洗过（与判的材料差几个字）。
+    所以两枚 sha 分开记 —— 复核的人才能回答"判的是哪一版、落的是哪一版"。
 
-    def names(self) -> list[str]:
-        return ["own.register_statement"]
-
-    def call(self, name: str, *, role: str, **args: Any) -> Any:
-        self.calls += 1
-        assert name == "own.register_statement" and role == "B", (name, role)
-        return types.SimpleNamespace(ok=True, data=dict(self.data), error="", meta={})
-
-
-def test_a1_the_judged_text_is_the_landed_row(tmp_path: pathlib.Path) -> None:
-    """（a1）B 登记之后判的正文必须是落盘行上的那一份（sha 相等）。
-
-    改前红：判档在 `registry.call` 之前，用的是调用方入参 `_BODY`；而落盘行是
-    `_BODY + 一句`。台账行的 sha 于是对不上 statements 行 —— 真机第 1 行 316 字
-    就是这么来的。
+    改前红：旧行只有 `statement_sha256` 一枚，判的材料与落盘正文分家时无从核对；
+    而"判的那一版"今天可能根本不在盘上（真机 000040/000041 判的入参里没有证明正文）。
     """
     root = _root(tmp_path)
     sec = _secretary(root)
-    landed_full = _BODY + "（落盘时补的一句）"
-    reg = _FakeRegistry({"ok": True, "stmt_id": "000321",
-                         "row": {"stmt_id": "000321", "statement_full": landed_full}})
-    loop = AgentLoop(role="B", session_root=root, registry=reg, seam=None,
-                     secretary=sec, auto_secretary=False, my_task_id="t-000001")
-    out = loop._do_tool({"name": "own.register_statement",
-                         "args": {"statement_full": _BODY, "proof_text": _PROOF}})
-    assert out["ok"] is True, out
-    assert out["data"]["stmt_id"] == "000321", out
-    rows = _ledger(root)
-    assert rows, "登记成功却没有判档行"
-    assert rows[-1]["stmt_id"] == "000321", rows[-1]
-    assert rows[-1]["statement_sha256"] == SEC._statement_sha(landed_full), rows[-1]
-    assert rows[-1]["statement_sha256"] != SEC._statement_sha(_BODY), rows[-1]
+    judged_material = _BODY
+    landed = _BODY + "（落盘时补的一句）"
+    got = sec.judge_statement(statement_full=judged_material, proof_text=_PROOF,
+                              stmt_id="000321", task_id="t-000001")
+    rec = sec.record_nontriviality(
+        got, stmt_id="000321", path_group=1, statement_full=judged_material,
+        judged_body_sha256=SEC._judged_body_sha(judged_material, _PROOF),
+        landed_body_sha256=SEC._statement_sha(landed))
+    assert rec["recorded"] is True, rec
+    row = _ledger(root)[-1]
+    assert row["stmt_id"] == "000321", row
+    assert row["judged_body_sha256"] == SEC._judged_body_sha(judged_material, _PROOF), row
+    assert row["landed_body_sha256"] == SEC._statement_sha(landed), row
+    assert row["judged_body_sha256"] != row["landed_body_sha256"], row
+    # 读侧靠号 join：正文换成落盘那一版仍读得到同一条读数。
+    by_id = SEC.nontriviality_of(root, landed, stmt_id="000321")
+    assert (by_id["tri"], by_id["level"], by_id["matched_by"]) == (
+        "computed", 0, "stmt_id"), by_id
+    assert by_id["paths"][0]["path_group"] == 1, by_id["paths"]
+    assert by_id["paths"][0]["judged_body_sha256"] == row["judged_body_sha256"], by_id
 
 
-def test_a2_the_b_loop_keeps_a_concept_row_not_applicable(tmp_path: pathlib.Path) -> None:
-    """（a2）B 循环登记概念行之后仍读成"不适用"，不因判档移到登记之后而变成"未判"。
+def test_a2_the_b_action_judges_a_concept_row_as_not_applicable(
+        tmp_path: pathlib.Path) -> None:
+    """（a2）B 的收录动作把概念行判成"不适用"，且落行带 `path_group=0`（不参与 min）。
 
-    概念行没有证明正文：这一格必须把 `kind` 一起传给 `judge_statement`，走它那条
-    `not_applicable` 早退。漏传 `kind` 就会按"缺证明正文"再落一行 unknown，且那一行
-    带号、排在后头 ⇒ 读侧把"不适用"覆盖成"未判"。
+    改前红：判档在工具返回之后，概念行靠 `kind` 早退才落得下（`_do_tool` 那一格不传
+    `statement_full` 的落盘行时整条走不到）；NT2 之后判在动作层、材料取稿。
     """
     root = _root(tmp_path)
     sec = _secretary(root)
     concept = "概念：一个交换环上的有限生成模。"
-    reg = _FakeRegistry({"ok": True, "stmt_id": "000322",
-                         "row": {"stmt_id": "000322", "statement_full": concept}})
-    loop = AgentLoop(role="B", session_root=root, registry=reg, seam=None,
-                     secretary=sec, auto_secretary=False, my_task_id="t-000001")
-    out = loop._do_tool({"name": "own.register_statement",
-                         "args": {"statement_full": concept, "kind": "concept"}})
-    assert out["ok"] is True, out
-    tier = R._statement_tier_reading(
-        root, {"stmt_id": "000322", "statement_full": concept})
+    got = sec.judge_statement(statement_full=concept, kind="concept", stmt_id="000322")
+    assert got["nontriviality_tri"] == "not_applicable", got
+    assert got.get("recorded") is False, "判的那一趟不许写盘（判/落拆段）"
+    rec = sec.record_nontriviality(got, stmt_id="000322", path_group=0,
+                                   statement_full=concept)
+    assert rec["recorded"] is True and rec["tri"] == "not_applicable", rec
+    row = _ledger(root)[-1]
+    assert row["path_group"] == 0 and row["applicable"] is False, row
+    tier = SEC.nontriviality_of(root, concept, stmt_id="000322")
     assert tier["tri"] == "not_applicable", tier
-    assert tier["level"] is None and tier["matched_by"] == "stmt_id", tier
-    assert tier["word"] == R.NONTRIVIALITY_NOT_APPLICABLE_WORD, tier
+    assert tier["paths"] == [] and tier["min_of"] == [], tier
 
 
 # ---------------------------------------------------------------- b）正文改了仍读得到

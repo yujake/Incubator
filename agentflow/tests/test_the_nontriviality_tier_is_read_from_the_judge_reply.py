@@ -53,7 +53,11 @@ PROOF = "证明：先取一个 Sylow p-子群 P，再对任一 Q 用轨道计数
 
 
 def _judge_with(tmp_path, reply: dict):
-    """造一个假秘书：`judge` 直接回 `reply`（不接模型、不花钱）。"""
+    """造一个假秘书：`judge` 直接回 `reply`（不接模型、不花钱），再按新口径落一行。
+
+    NT2（2026-11-15）之后 `judge_statement` 只判、不写盘：要读台账就得显式
+    `record_nontriviality`（带号与路径号）—— 这一句同时钉住"判/落拆段"的落点。
+    """
     boss = SEC.Secretary(role="B", root=tmp_path)
 
     def fake_judge(kind: str, context, *, task_id: str = ""):
@@ -62,6 +66,10 @@ def _judge_with(tmp_path, reply: dict):
 
     boss.judge = fake_judge  # type: ignore[assignment]
     got = boss.judge_statement(statement_full=STATEMENT, proof_text=PROOF, task_id="t-000001")
+    if got.get("nontriviality_tri") in ("computed", "not_applicable"):
+        boss.record_nontriviality(got, stmt_id="000001", path_group=1,
+                                  statement_full=STATEMENT,
+                                  judged_body_sha256=SEC._judged_body_sha(STATEMENT, PROOF))
     return got
 
 

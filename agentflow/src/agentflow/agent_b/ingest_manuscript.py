@@ -74,6 +74,9 @@ class _IngestManuscript:
 
         rel = _norm_manuscript_rel(manuscript)
         out = self._ingest_empty_envelope(rel, mode)
+        #: 判/落拆段的回传槽（NT2）：判在写之前（`_ingest_register` / `_ingest_apply`
+        #: 的第一件事），落在拿到 `stmt_id` + `path_group` 之后；这一层只负责收尾。
+        _nt: dict = {}
 
         # ---- 参数面（先判再读盘：拒绝要能把改法说清）
         if str(mode or "") not in INGEST_MODES:
@@ -203,12 +206,13 @@ class _IngestManuscript:
         if str(mode) == "register":
             got = self._ingest_register(
                 reading=reading, requested=requested, out=out, family=family,
-                path=rel, provenance=provenance)
+                path=rel, provenance=provenance, nontriviality=_nt)
             _pg_reg = got.get("path_group")
             _pg_reg_no = (int((_pg_reg or {}).get("path_group") or 0)
                           if isinstance(_pg_reg, Mapping) else int(_pg_reg or 0))
-            return self._mark_ingested(got, rel=rel, family=family,
-                                       path_group=_pg_reg_no)
+            return self._finish_filing_nontriviality(
+                self._mark_ingested(got, rel=rel, family=family,
+                                    path_group=_pg_reg_no), _nt)
         path_no, _code, _why = 0, "", ""
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
@@ -224,13 +228,14 @@ class _IngestManuscript:
                             "written": False,
                             "sink": "preview：只提取、一个字节都不写"}
             return out
-        got = self._ingest_apply(
+        got = self._ingest_apply_with_nontriviality(
             reading=reading, row=row, plan=plan, out=out, requested=requested,
             family=family, want_no=want_no, target=target, path=rel,
-            path_group=named_path)
+            path_group=named_path, nontriviality=_nt)
         _pg = got.get("path_group")
         _pg_no = int((_pg or {}).get("path_group") or 0) if isinstance(_pg, Mapping) else int(_pg or 0)
-        return self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no)
+        return self._finish_filing_nontriviality(
+            self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no), _nt)
 
     def _ingest_plan(self, row: Mapping | None, got_cells: Mapping, *,
                      conflict: str, family: str, target: str, rel: str,

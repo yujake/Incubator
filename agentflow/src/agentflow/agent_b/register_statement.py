@@ -3385,6 +3385,102 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         kind = str((row or {}).get("evidence_kind") or "").strip()
         return kind or "unknown"
 
+    def _judge_filing_nontriviality(self, *, statement_full: str,
+                                    statement: str = "",
+                                    proof_text: str = "",
+                                    proofs: Sequence[Mapping] | None = None,
+                                    kind: str = "", source: str = "") -> dict:
+        """B 处理一条收录任务的第一个动作：先用这一份稿判一次非平凡度（不写盘）。
+
+        业主 2026-11-15 裁定（逐字要点）：「评价非平凡性需在将手稿录入台账前完成（即 B
+        秘书处理一条录入任务时，第一个要做的是评价非平凡度）」。所以它排在
+        `record_statement` / `_attach_proofs` 之前，也排在同一性判定（`adjudicate_proposition`）
+        之前 —— 位置见 `_register_statement_impl` 与 `_ingest_apply` 的调用点。
+
+        ## 材料取稿，不取调用方入参
+
+        `statement_full` / `proof_text` 由这一笔要落进台账的那份稿给出：指针支
+        （`_register_pointer_manuscript`）传的是 `## 命题` 与 `## 证明` 两节；真机
+        lp-ball 000040/000041（2285/2896 字证明）丢就丢在"判档读调用方入参，而入参里
+        没有正文"这一格。
+
+        ## 判完不落
+
+        号（`stmt_id`）与路径号（`path_group`）是秘书在写事务里现发的 ⇒ 判的时候还没有。
+        落行统一在 `_record_filing_nontriviality`（拿到号之后），拿不到号就 `unrecorded`
+        + 决定台账留痕（钱已经花了，"判过"必须可见）。
+
+        判档炸了 fail-open：收录照旧，但往秘书台账补一行"这一格没查成"（不许静默）。
+        """
+        sec = self._statement_secretary()
+        if sec is None or not hasattr(sec, "judge_statement"):
+            return {"checked": False, "nontriviality": None,
+                    "nontriviality_tri": "unjudged",
+                    "reason": "这一趟没有可用的秘书 ⇒ 档位未判（收录不受影响）"}
+        try:
+            return dict(sec.judge_statement(
+                statement_full=str(statement_full or ""),
+                statement=str(statement or ""),
+                proof_text=str(proof_text or ""),
+                proofs=list(proofs or []) or None,
+                source=str(source or ""), kind=str(kind or ""),
+                task_id=str(getattr(self, "task_id", "") or "")) or {})
+        except Exception as exc:  # noqa: BLE001 —— 判断炸了不许把收录这条路堵死
+            try:
+                sec.note_decision(
+                    duty=0, decision="", fail_open=True,
+                    reason=f"收录前的非平凡度判断炸了：{type(exc).__name__}: {exc}",
+                    target="statement_aesthetic", after="收录照旧（判档 fail-open）")
+            except Exception:  # noqa: BLE001 —— 连留痕都写不成时不再往上抛
+                pass
+            return {"checked": False, "nontriviality": None,
+                    "nontriviality_tri": "unjudged",
+                    "reason": f"判档炸了：{type(exc).__name__}: {exc}"}
+
+    def _record_filing_nontriviality(self, reading: Mapping | None, *, stmt_id: str,
+                                     path_group: int, statement_full: str = "",
+                                     proof_text: str = "",
+                                     landed_body_sha256: str = "") -> dict:
+        """把判过的读数落成台账一行（"落"这一半；要求号与路径号都在手上）。"""
+        if not isinstance(reading, Mapping) or not reading:
+            return {"recorded": False, "tri": "unrecorded",
+                    "reason": "这一笔没有判档读数（没有可落的）"}
+        sec = self._statement_secretary()
+        if sec is None or not hasattr(sec, "record_nontriviality"):
+            return {"recorded": False, "tri": "unrecorded",
+                    "reason": "这一趟没有可用的秘书 ⇒ 判过的档位没落（不是没判）"}
+        from .. import secretary as _SEC
+
+        return dict(sec.record_nontriviality(
+            reading, stmt_id=stmt_id, path_group=int(path_group or 0),
+            statement_full=statement_full,
+            judged_body_sha256=_SEC._judged_body_sha(statement_full, proof_text),
+            landed_body_sha256=landed_body_sha256) or {})
+
+    def _finish_filing_nontriviality(self, out: dict, reading: Mapping | None) -> dict:
+        """收尾这一笔的判档读数：成功已落 / 拒了留 unrecorded；T0 读数放回执给模型。
+
+        "只保留把 T0 读给模型"这一格住在动作层（判档也在这里，两件事不跨层）；
+        `agent_loop._do_tool` 只把 `out["statement_tier"]` 抬到顶层形状。
+        """
+        if not isinstance(out, dict) or not isinstance(reading, Mapping) or not reading:
+            return out
+        got = dict(reading)
+        if not isinstance(got.get("record"), Mapping) and out.get("ok") is not True:
+            # 受控拒 / 半途失败：钱已经花了，号也没拿到 ⇒ 不落档位行，但留痕。
+            got["record"] = self._record_filing_nontriviality(
+                got, stmt_id="", path_group=0,
+                statement_full=str(got.get("statement_full") or ""))
+        from .. import secretary as _SEC
+
+        tier = _SEC.filing_tier_reading(got, stmt_id=str(out.get("stmt_id") or ""))
+        if tier:
+            out["statement_tier"] = dict(tier)
+        rec = got.get("record")
+        if isinstance(rec, Mapping):
+            out.setdefault("nontriviality_record", dict(rec))
+        return out
+
     def _register_statement_impl(
         self,
         *,
@@ -3433,6 +3529,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         #: `manuscriptsubmission.assign_path_group`（实现 `manuscriptpaths`）先分配好的
         #: 「第几条路径」。`0` = 调用方没走指针支（老口径逐字不变）。
         path_group: int = 0,
+        #: 判/落拆段的回传槽（NT2）：调用方给一个空 dict，本方法在写台账之前把判出来
+        #: 的读数填进去（`_judge_filing_nontriviality`），调用方在收尾时用它落
+        #: `unrecorded` 痕迹与"模型可见的 T0"。不给 ⇒ 本方法自己造一个（直调判据用）。
+        nontriviality: dict | None = None,
     ) -> dict:
         """登记一条命题，返回 `{"ok": True, "stmt_id": ..., "row": {...}}`；不合规就零写入。"""
         full = str(statement_full or "").strip()
@@ -3481,6 +3581,22 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                            "省掉假设的命题会被下游当成无条件成立；0 字正文连"
                            "非平凡性档位都没法判（四项力气读数一项都取不到）"
                            "（`kind=\"concept\"` 除外：定义抽不到时留空 + 待补标记，见 draft/97 §14.13）")
+        # ---- NT2（2026-11-15 业主裁定）：判档是 B 处理一条收录的第一个动作 ----------
+        #
+        # 位置在这里的三条理由：
+        # ① 在任何台账写之前（`record_statement` / `_attach_proofs` 都在下面）；
+        # ② 在任何别的语义判断之前（同一性判定 `adjudicate_proposition` 在
+        #    `record_statement` 里，排在这一格之后）；排在前面的只有确定性参数闸
+        #    （空正文 / origin / 绿色通道）—— 它们不写台账、决定这笔会不会入账；
+        # ③ 材料取这一笔要落进台账的那份稿：指针支传进来的 `full` 是手稿
+        #    `## 命题`、`proof_text` 是 `## 证明`（真机 000040/000041 丢在这）。
+        #
+        # 判完不落盘：号与路径号要等 `record_statement` 那一笔才发下来。
+        _nt: dict = nontriviality if nontriviality is not None else {}
+        _nt.update(self._judge_filing_nontriviality(
+            statement_full=full, statement=str(statement_text or ""),
+            proof_text=str(proof_text or ""),
+            proofs=proofs, kind=kind_now))
         origin = str(origin or "external_lit")
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
@@ -5250,6 +5366,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         written = sec.record_statement(payload, role="B",
                                        candidate_id=candidate_stmt_id,
                                        adjudication=_same_adjudication)
+        # ---- 判/落拆段的落点（NT2）：号与路径号拿到了，才把判过的档位追加一行 ----
+        #
+        # 业主口径：「在语义判断拿到（注册或匹配到）准确的命题号及路径号后一并录入」。
+        # 所以这一笔紧跟 `record_statement`（同一笔动作、同一组号），而判在它之前。
+        # 拿不到号 / 路径号 ⇒ `record_nontriviality` 不落行并留 `unrecorded` 痕迹
+        # （钱已经花了，"判过"必须在决定台账里看得见）。
+        from .. import secretary as _SEC
+
+        _nt["record"] = self._record_filing_nontriviality(
+            _nt, stmt_id=str(written.get("stmt_id") or ""),
+            path_group=int(written.get("path_group") or 0),
+            statement_full=full, proof_text=str(proof_text or ""),
+            landed_body_sha256=_SEC._statement_sha(str(
+                (written.get("row") or {}).get("statement_full") or full)))
         # ---- 这一笔的路径号：秘书分完才读得到（B 不再自己算） ----------------------
         #
         # 回执里的 `path_group` 是秘书那一笔事务里分配的号（新行 = 1；同一命题的
@@ -6231,6 +6361,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     manuscript=rel, mode="register", cells=(), conflict="refuse",
                     reason="按手稿路径收录（D 只递指针）", provenance=line_range),
                 statement_full=statement_full, rel=rel)
+        #: 判/落拆段的回传槽（NT2）：`_register_statement_impl` 在写台账之前把判出来的
+        #: 读数填进来；这里收尾时落 `unrecorded` 痕迹并把 T0 读数放回执（给模型看）。
+        _nt: dict = {}
         got = self._register_statement_impl(
             statement_full=statement_full, source_lit_id=source_lit_id,
             proof_text=proof_text, proofs=proofs, proof_manuscript=proof_manuscript,
@@ -6240,15 +6373,17 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             quote_verified=quote_verified, quote_reason=quote_reason,
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
-            doc_id=doc_id, line_range=line_range)
-        return self._note_conjecture_landing(
-            self._mark_b_register(
-                self._apply_declared_manuscript_kind(
-                    got, statement_full=statement_full,
-                    origin=str(origin or "external_lit"),
-                    kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
-                proof_manuscript),
-            statement_full=statement_full, rel=str(proof_manuscript or ""))
+            doc_id=doc_id, line_range=line_range, nontriviality=_nt)
+        return self._finish_filing_nontriviality(
+            self._note_conjecture_landing(
+                self._mark_b_register(
+                    self._apply_declared_manuscript_kind(
+                        got, statement_full=statement_full,
+                        origin=str(origin or "external_lit"),
+                        kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
+                    proof_manuscript),
+                statement_full=statement_full, rel=str(proof_manuscript or "")),
+            _nt)
 
     def _note_conjecture_landing(self, out: dict, *, statement_full: str = "",
                                  rel: str = "") -> dict:
@@ -6335,7 +6470,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             self.store, getattr(self.store, "root", ""), manuscript=rel, out=got)
 
     def _register_pointer_manuscript(self, rel: str, *, provenance: Any = None,
-                                     reading: Mapping | None = None
+                                     reading: Mapping | None = None,
+                                     nontriviality: dict | None = None
                                      ) -> tuple[dict, str, str]:
         """按手稿路径收录：把该登记的那几样全部从稿里读出来（D 只递了指针）。
 
@@ -6522,7 +6658,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             evidence_kind=evidence_kind, quote_verified=None,
             quote_reason=quote_reason,
             derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or ())],
-            doc_id=doc_id, line_range=line_range)
+            doc_id=doc_id, line_range=line_range, nontriviality=nontriviality)
         if isinstance(got, dict):
             got = self._pointer_receipt(
                 got, head_sid=head_sid, rel=rel, proof_text=proof_text,
@@ -7851,7 +7987,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _ingest_register(self, *, reading: Mapping, requested: Sequence[str],
                          out: dict, family: str, path: str,
-                         provenance: Any = None) -> dict:
+                         provenance: Any = None,
+                         nontriviality: dict | None = None) -> dict:
         """`mode=register`：把这份稿登记成新命题（继承 pointer 那条路的全部闸）。"""
         from .. import manuscriptfamily as _MFAM
         from .. import manuscriptintake as _MI
@@ -7873,7 +8010,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 problems=list(_form_refusal["problems"]),
                 proposition_form=dict(_form_refusal["proposition_form"]))
         got, origin, kind = self._register_pointer_manuscript(
-            path, provenance=provenance, reading=reading)
+            path, provenance=provenance, reading=reading,
+            nontriviality=nontriviality)
         if not isinstance(got, dict):
             return self._ingest_fail(out, "registration_refused",
                                      "登记没有返回读数（不假装写成）")
@@ -8381,6 +8519,52 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 }
                 kind_downgraded = dict(new["_kind_upgrade"])
         return new, kind_upgraded, kind_downgraded
+
+    def _ingest_apply_with_nontriviality(self, *, reading: Mapping, row: Mapping,
+                                        plan: Mapping, out: dict,
+                                        requested: Sequence[str], family: str,
+                                        want_no: int, target: str, path: str,
+                                        path_group: int = 0,
+                                        nontriviality: dict | None = None) -> dict:
+        """`_ingest_apply` 外面那两笔非平凡度（NT2，2026-11-15 业主裁定）。
+
+        业主口径：B 处理一条录入任务的第一个动作是判非平凡度，等拿到命题号与路径号
+        之后才一并录入。所以这里先判（不落盘），再让 `_ingest_apply` 写台账；写成了
+        才按它回执里的路径号落一行。拿不到号/路径号的拒绝由调用方（
+        `_finish_filing_nontriviality`）收尾成 `unrecorded` 痕迹。
+
+        为什么判/落不在 `_ingest_apply` 里：那个方法正好在 200 行的软基线边上，再塞
+        两段就会抬 `repo_survey` 的 long_defs 计数（仓库硬门 75/94/2 不许抬）。
+
+        `path_group` 的兜底：这一笔若一个路径的回执都没给（例如只回填了 kind），
+        用 `want_no`（在册命题的 canonical 号，apply 线上就是第 1 条路径）—— 这不是
+        "猜第几条"，是"这一条命题已有的那条路径"。
+        """
+        cells = dict(out.get("cells") or {})
+        _nt: dict = nontriviality if nontriviality is not None else {}
+        _nt.update(self._judge_filing_nontriviality(
+            statement_full=str(row.get("statement_full") or ""),
+            statement=str(row.get("statement_text") or ""),
+            proof_text=str((cells.get("proof_text") or {}).get("value") or ""),
+            kind=str(row.get("kind") or "")))
+        got = self._ingest_apply(
+            reading=reading, row=row, plan=plan, out=out, requested=requested,
+            family=family, want_no=want_no, target=target, path=path,
+            path_group=path_group)
+        if got.get("ok"):
+            from .. import secretary as _SEC
+
+            _pg = got.get("path_group")
+            _pg_no = (int((_pg or {}).get("path_group") or 0)
+                      if isinstance(_pg, Mapping) else int(_pg or 0))
+            _nt["record"] = self._record_filing_nontriviality(
+                _nt, stmt_id=target,
+                path_group=_pg_no or int(want_no or 1),
+                statement_full=str(row.get("statement_full") or ""),
+                proof_text=str((cells.get("proof_text") or {}).get("value") or ""),
+                landed_body_sha256=_SEC._statement_sha(
+                    str(row.get("statement_full") or "")))
+        return got
 
     def _ingest_apply(self, *, reading: Mapping, row: Mapping, plan: Mapping,
                       out: dict, requested: Sequence[str], family: str,

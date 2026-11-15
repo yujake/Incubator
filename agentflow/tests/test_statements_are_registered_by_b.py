@@ -191,20 +191,19 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
                if str(r.get("stmt_id") or "") == str(got["stmt_id"]))
     assert dict(row.get("bits") or {}), row
     assert row["created_by"] == "secretary-B", row["created_by"]
-    # 非平凡度落账：生产路径在 B 的循环里（`AgentLoop._statement_filing_tier` →
-    # `Secretary.judge_statement`）。这里直接调同一件生产方法（零模型：`judge` 已打桩），
-    # 判据仍是"台账里有一行、读侧用同一份正文找得回来"。
-    SEC.Secretary("B", root=st.root, store=st).judge_statement(
-        statement_full=str(row["statement_full"]),
-        statement=str(row.get("statement_text") or ""),
-        proof_text=str(row.get("proof_text") or ""),
-        kind=str(row.get("kind") or ""), stmt_id=str(row["stmt_id"]))
+    # 非平凡度落账：NT2（2026-11-15）之后生产路径就在这一笔注册动作里 ——
+    # 判在写台账之前（材料取这份稿的命题 + 证明），落在秘书发下号与路径号之后。
+    # 这里不再手工调一次判档（那只会证明"手工调得动"）；判据仍是"台账里有一行、
+    # 读侧用同一份正文找得回来"，且这一行带号与路径号。
     path = pathlib.Path(st.root) / "out" / "secretary" / "nontriviality.jsonl"
-    assert path.is_file(), f"盘上没有 {path}"
+    assert path.is_file(), f"盘上没有 {path}（收录动作没有落非平凡度）"
     lines = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x.strip()]
     assert lines, path.read_text(encoding="utf-8")
+    assert lines[-1].get("stmt_id") == str(row["stmt_id"]), lines[-1]
+    assert int(lines[-1].get("path_group") or 0) >= 1, lines[-1]
     # 台账按命题正文的 sha 折叠：读侧能用同一份正文把这一行找回来才算数。
-    reading = SEC.nontriviality_of(st.root, str(row["statement_full"]))
+    reading = SEC.nontriviality_of(st.root, str(row["statement_full"]),
+                                   stmt_id=str(row["stmt_id"]))
     assert reading.get("tri") == "computed", reading
     assert reading.get("level") is not None, reading
 
