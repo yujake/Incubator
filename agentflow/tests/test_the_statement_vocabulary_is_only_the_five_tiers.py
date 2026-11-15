@@ -184,15 +184,29 @@ def test_a_judge_without_a_usable_decision_is_not_a_tier(tmp_path: pathlib.Path)
 
 # ---------------------------------------------------------------- ④ 有档
 def test_a_tier_reaches_both_ledgers(tmp_path: pathlib.Path) -> None:
-    """④ `{"decision":"T2"}` ⇒ checked=True、档位 2、档位台账一行、决定台账 decision="T2"。"""
-    got = _judge(tmp_path, _Seam({"decision": "T2", "reason": "方法平凡但工作量大"}))
+    """④ `{"decision":"T2"}` ⇒ checked=True、档位 2；决定台账 `decision="T2"`、档位台账一行。
+
+    NT2（2026-11-15 业主裁定「判/落拆段」）之后两本账分两步到齐：`judge_statement`
+    只判（写决定台账；那时还没有命题号，写档位行就是孤儿读数），拿到 `stmt_id` /
+    `path_group` 之后由 `record_nontriviality` 落档位行。这一条把两步都钉住。
+    """
+    boss = SEC.Secretary(role="B", root=tmp_path, seam=_Seam(
+        {"decision": "T2", "reason": "方法平凡但工作量大"}), enable_model=True)
+    got = boss.judge_statement(statement_full=STATEMENT, proof_text=PROOF,
+                               task_id="t-000001")
     assert (got["checked"], got["decision"], got["nontriviality"], got["label"]) == \
         (True, "T2", 2, "T2"), got
+    # 判的那一半：决定台账已有；档位台账还没有（判/落拆段的"不落"那一半）
+    assert _decision_rows(tmp_path)[0]["decision"] == "T2"
+    assert _decision_rows(tmp_path)[0]["judge"]["checked"] is True
+    assert _tier_rows(tmp_path) == [], "拿到号之前写了档位行 ⇒ 孤儿读数又回来了"
+    rec = boss.record_nontriviality(
+        got, stmt_id="000001", path_group=1, statement_full=STATEMENT)
+    assert rec.get("recorded") is True, rec
     rows = _tier_rows(tmp_path)
     assert len(rows) == 1, rows
     assert (rows[0]["nontriviality"], rows[0]["label"]) == (2, "T2"), rows[0]
-    assert _decision_rows(tmp_path)[0]["decision"] == "T2"
-    assert _decision_rows(tmp_path)[0]["judge"]["checked"] is True
+    assert (rows[0]["stmt_id"], int(rows[0]["path_group"])) == ("000001", 1), rows[0]
 
 
 # ---------------------------------------------------------------- ⑤ 反真空
@@ -207,14 +221,20 @@ def test_a_retired_vocabulary_put_back_makes_the_vocabulary_check_red(
 
 # ---------------------------------------------------------------- ⑥ 概念行
 def test_a_concept_row_is_not_applicable_not_unchecked(tmp_path: pathlib.Path) -> None:
-    """⑥ 概念行 ⇒ `not_applicable`（结构上不需要判），不是 ③ 的"没查成"。"""
+    """⑥ 概念行 ⇒ `not_applicable`（结构上不需要判），不是 ③ 的"没查成"。
+
+    走的是产品里概念行那一笔的形态（`write_concept_row` 拿到号之后 `record=True`）；
+    NT2 的判/落拆段只在号到手之后落档位行（号不到 ⇒ 只判不落，见 ④）。
+    """
     boss = SEC.Secretary(role="B", root=tmp_path, seam=None, enable_model=True)
-    got = boss.judge_statement(statement_full=CONCEPT, kind="concept")
+    got = boss.judge_statement(statement_full=CONCEPT, kind="concept",
+                               stmt_id="000322", record=True)
     assert got["checked"] is True, got
     assert got["applicable"] is False, got
     assert got["nontriviality"] is None and got["nontriviality_tri"] == "not_applicable", got
     rows = _tier_rows(tmp_path)
     assert len(rows) == 1 and rows[0]["applicable"] is False, rows
+    assert (rows[0]["stmt_id"], int(rows[0]["path_group"])) == ("000322", 0), rows[0]
     assert _decision_rows(tmp_path) == [], "概念行不经过判词，不该写决定台账"
 
 

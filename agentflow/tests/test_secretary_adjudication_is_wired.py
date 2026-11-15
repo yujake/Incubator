@@ -102,8 +102,16 @@ class _CountingSeam:
         self.materials: list[dict] = []
 
     def ask_json(self, prompt, **kw):
-        self.calls.append(str(kw.get("note") or ""))
+        note = str(kw.get("note") or "")
+        self.calls.append(note)
         self.materials.append(_material(prompt))
+        if note.endswith("statement_aesthetic"):
+            # NT2（2026-11-15）之后 B 的收录先判非平凡度、再判命题同一性。这一档回
+            # 一个合法档位（T2），于是它进得了缓存 —— 第二次登记同一段正文时
+            # 不再买一次（d-④ 的"不重复花钱"判据在两条调用上都成立）。
+            return ({"decision": "T2", "label": "T2", "nontriviality": 2,
+                     "reason": "打桩：T2", "basis": ["打桩：T2"]},
+                    _Call())
         return ({"decision": self.verdict, "same_as": self.same_as,
                  "canonical_name": "Sylow I", "route": "",
                  "condition": "打桩：条件未读", "conclusion": "打桩：结论未读",
@@ -321,6 +329,9 @@ def test_the_agent_b_registration_route_wires_the_seam(tmp_path):
     这是真机 sylow5 断掉的那一条：B 的秘书是 `AgentB` 现派生的，改前走
     `for_role("B", root=..., store=...)`（不传 `seam=`、也没开 `enable_model`）
     ⇒ 判词一次都没发生 ⇒ 9 条命题里 `proof_no` 非 None 的 0 条。
+
+    NT2（2026-11-15）之后收录的第一个动作是判非平凡度：缝上先看到
+    `statement_aesthetic`，再看到 `proposition_identity` —— 两条都得在，才是"接了缝"。
     """
     st = _ws(tmp_path)
     seam = _CountingSeam()
@@ -328,7 +339,10 @@ def test_the_agent_b_registration_route_wires_the_seam(tmp_path):
         b = AgentB(st, extractor=None, extract_text=None, config={})
         got = b.register_statement(**_own(FULL), proof_text="证明：由类方程直接得。")
     assert got.get("ok"), got
-    assert seam.calls == [NOTE], f"B 的登记支没有把缝接上：{seam.calls}"
+    # NT2（2026-11-15）之后 B 的收录先判非平凡度（`statement_aesthetic`），
+    # 再判命题同一性 —— 两条都走同一个网关，顺序就是产品里的执行顺序。
+    assert seam.calls == ["secretary:statement_aesthetic", NOTE], (
+        f"B 的登记支没有把缝接上：{seam.calls}")
     # `register_statement` 透出的是 `adjudication`（那一趟的逐字读数）：三态 + 缝从哪来
     adj = dict(got.get("adjudication") or {})
     assert adj.get("checked") is True, adj
@@ -344,8 +358,10 @@ def test_the_agent_b_registration_route_wires_the_seam(tmp_path):
     assert len(rows) == 1, f"同一条正文登记出了 {len(rows)} 行"
     assert (again.get("ok")
             or str(again.get("kind") or "") == "duplicate_statement"), again
-    # 第二次没有为同一段正文再买一次判词（进程内缓存 + 盘上台账一起生效）
-    assert seam.calls == [NOTE], f"同一段正文买了 {len(seam.calls)} 次判词：{seam.calls}"
+    # 第二次没有为同一段正文再买一次判词（进程内缓存 + 盘上台账一起生效）：
+    # 两条调用（先判档、再判命题同一性）都仍停在第一次那一份上。
+    assert seam.calls == ["secretary:statement_aesthetic", NOTE], (
+        f"同一段正文买了 {len(seam.calls)} 次判词：{seam.calls}")
 
 
 # ============================================================ e：反真空

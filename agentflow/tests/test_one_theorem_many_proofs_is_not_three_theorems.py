@@ -366,7 +366,10 @@ def test_a_the_route_leaves_the_label_and_lands_on_the_proof(tmp_path: pathlib.P
     assert adj.get("checked") is True and adj.get("verdict") == "different", adj
     assert adj.get("condition") and adj.get("conclusion"), adj
     assert adj.get("cached") is True and adj.get("reused") is False, adj
-    assert len(seam.calls) == 1 and seam.calls[0] == "secretary:proposition_identity", seam.calls
+    # NT2（2026-11-15）之后 B 的收录第一个动作是判非平凡度（`statement_aesthetic`），
+    # 之后才判命题同一性 —— 两条都走同一个网关，顺序就是产品里的执行顺序。
+    assert seam.calls == ["secretary:statement_aesthetic",
+                          "secretary:proposition_identity"], seam.calls
 
     rows = _rows(st)
     assert len(rows) == 1, rows
