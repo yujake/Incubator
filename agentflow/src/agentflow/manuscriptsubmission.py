@@ -14,6 +14,15 @@
    `manuscriptclosing.auto_submit_for`。两个都复用 `agent_f/submission.py` 的那一套
    `mss:` 记号拼装 / 解析（本模块不新造字符串格式）。
 
+## 稿的身份 = (族, 稿号)（2026-11-16）
+
+四族各有自己的号段、都从 `000000` 起 ⇒ 同一号跨族是常态。`mss:` 记号写
+`mss:<族>-<号>`；读侧按 (族, 稿号) 取，老记号 `mss:<号>` 的族由载体路径 / 调用点
+上下文唯一确定，跨族同号 ⇒ 不猜（:func:`agent_f.submission.resolve_submission` 的三态，
+读数逐字点名「跨族同号」）。为什么必须：改前 `e-proof-000000` 与 `e-num-000000`
+各一枚记号时，`_task_tokens` 按单号建字典只留一枚 ⇒ `submission_reading` 报
+`state=submitted` 却带着另一族那一枚的 path/via。
+
 ## 三态纪律
 
 - `checked=False` = 这一格没查成（目录列不出来 / 台账读不出来），
@@ -79,6 +88,18 @@ def submissions_of(artifacts: Any) -> tuple[dict[str, dict[str, Any]], list[str]
     return _submission().submissions_of(artifacts)
 
 
+def resolve_submission(records: Any, *, family: Any = "", manuscript_id: Any = "",
+                       families: Any = ()) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+    """按 (族, 稿号) 取一枚提交记号 ⇒ `(记号, 读数)`（转发 `agent_f.submission`）。"""
+    return _submission().resolve_submission(
+        records, family=family, manuscript_id=manuscript_id, families=families)
+
+
+def submission_key(family: Any, manuscript_id: Any) -> str:
+    """身份 ⇒ 带族键 `<族>:<稿号>`（转发 `agent_f.submission`）。"""
+    return _submission().submission_key(family, manuscript_id)
+
+
 from .manuscriptproducers import (
     PRODUCER_OF_FAMILY, UNKNOWN, _manuscript_id_of, parents_of, producer_of,
     verification_producer_reading,
@@ -133,17 +154,46 @@ def _read_tasks(store: Any) -> tuple[list[dict[str, Any]], str]:
 def _task_tokens(tasks: Sequence[Mapping[str, Any]]) -> tuple[dict[str, dict[str, Any]],
                                                              dict[str, dict[str, Any]],
                                                              list[str]]:
-    """`tasks.artifacts` ⇒ `({稿号: 记号}, {稿号: 写记号的那一行}, 问题)`。"""
+    """`tasks.artifacts` ⇒ `({身份键: 记号}, {身份键: 写记号的那一行}, 问题)`。
+
+    键由 `submissions_of` 给：一个号只在一族出现 ⇒ 老键 `<稿号>`；同号跨族 ⇒
+    `<族>:<稿号>`（两族的记号各成一条，不再折成一行）。按 (族, 稿号) 取的时候走
+    :func:`resolve_submission`，别直接拿单号来 `in` 这张字典。
+    """
     tokens: dict[str, dict[str, Any]] = {}
     owners: dict[str, dict[str, Any]] = {}
     problems: list[str] = []
     for row in tasks or ():
         got, bad = submissions_of((row or {}).get("artifacts") or ())
         problems.extend(bad)
-        for mid, rec in got.items():
-            tokens.setdefault(str(mid), dict(rec))
-            owners.setdefault(str(mid), dict(row or {}))
+        for key, rec in got.items():
+            tokens.setdefault(str(key), dict(rec))
+            owners.setdefault(str(key), dict(row or {}))
     return tokens, owners, problems
+
+
+def _families_for_mid(root: Any, mid: str) -> list[str]:
+    """盘上这一号出现在哪几族（`reports/<前缀><号>.md`）⇒ 族的清单（纯读、不猜）。
+
+    给 :func:`resolve_submission` 的 `families` 用：老记号没写族时，"这一号在盘上
+    只有一族"才允许按它读；两族以上 ⇒ 不猜（跨族同号）。列不出来 ⇒ 空列表 ——
+    那是"这一格没读到"，不是"没有别的族"（调用方还会拿记号自己的读数兜底）。
+    """
+    if not mid:
+        return []
+    base = Path(str(root)) / _MFAM.MANUSCRIPT_DIR
+    families: list[str] = []
+    for family in _MFAM.FAMILY_ORDER:
+        prefix = _MFAM.prefix_of(family)
+        try:
+            paths = sorted(base.glob(f"{prefix}{mid}*.md")) if base.is_dir() else []
+        except OSError:
+            paths = []
+        for path in paths:
+            if _manuscript_id_of(f"{_MFAM.MANUSCRIPT_DIR}/{path.name}") == mid:
+                families.append(family)
+                break
+    return families
 
 
 def _find_rel_for_mid(root: Any, mid: str) -> str:
@@ -190,11 +240,12 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
 
     只在 `out["ok"] is True` 且路径族是 `b-proof` 时动手；受控拒 / 别的族 ⇒ 原样返回，
     不写一个字节。没有 task 行时把理由写进 `out["b_submission"]`（不静默）。
-    幂等：所有 B 行里已有该稿号的记号 ⇒ 不再写。
+    幂等按 (族, 稿号)：所有 B 行里已有 `b-proof` 这一份的记号 ⇒ 不再写。
     """
     rel = str(manuscript or "").strip().replace("\\", "/")
     result: dict[str, Any] = {"checked": False, "written": False, "already": False,
-                              "manuscript_id": "", "token": "", "via": VIA_INGEST,
+                              "manuscript_id": "", "family": "", "token": "",
+                              "via": VIA_INGEST,
                               "path_group": int((out.get("path_group") or {}).get(
                                   "path_group") or 0),
                               "why": ""}
@@ -218,7 +269,9 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
         result["checked"] = True
         return out
     mid = str(prod.get("manuscript_id") or "")
+    fam = str(prod.get("family") or "")
     result["manuscript_id"] = mid
+    result["family"] = fam
     path = Path(str(root)) / rel
     try:
         text = path.read_text(encoding="utf-8")
@@ -240,13 +293,15 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
         return out
     submitted, _owners, _bad = _task_tokens(
         [r for r in tasks if str(r.get("role") or "") == "B"])
-    if mid in submitted:
+    hit, reading = resolve_submission(submitted, family=fam, manuscript_id=mid,
+                                      families=_families_for_mid(root, mid))
+    if hit is not None:
         result.update(checked=True, already=True, why=(
-            f"`tasks.artifacts` 里已经有稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"))
+            f"`tasks.artifacts` 里已经有 {fam} 稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"))
         return out
     try:
         token = submission_token(
-            manuscript_id=mid, path=rel, body_sha=body_sha,
+            manuscript_id=mid, family=fam, path=rel, body_sha=body_sha,
             sign_sha=str(sign.get("sign_sha") or ""), file_sha=hashlib.sha256(
                 path.read_bytes()).hexdigest(),
             proof_no=int(sign_rec.get("proof_no") or prod.get("proof_no") or 1),
@@ -261,15 +316,19 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
             if cur is None:
                 result["why"] = f"事务里找不到 {task_id!r} 那一行 ⇒ 提交记号没写"
                 return out
-            existing: set[str] = set()
+            existing: dict[str, dict[str, Any]] = {}
             for one in tx.rows("tasks"):
                 if str(one.get("role") or "") != "B":
                     continue
                 got, _bad = submissions_of(one.get("artifacts") or ())
-                existing.update(str(x) for x in got)
-            if mid in existing:
+                for key, rec in got.items():
+                    existing.setdefault(str(key), dict(rec))
+            hit, _reading = resolve_submission(
+                existing, family=fam, manuscript_id=mid,
+                families=_families_for_mid(root, mid))
+            if hit is not None:
                 result.update(checked=True, already=True,
-                              why=f"并发下另一笔已经写了 {mid} 的提交记号")
+                              why=f"并发下另一笔已经写了 {fam} 稿号 {mid} 的提交记号")
                 return out
             cur["artifacts"] = S.sorted_unique(list(cur.get("artifacts") or ()) + [token])
             tx.upsert("tasks", cur, note="b.ingest:auto_submit")
@@ -277,7 +336,7 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
         result["why"] = f"提交记号写不进 `tasks`（{type(exc).__name__}: {exc}）"
         return out
     result.update(checked=True, written=True, token=token,
-                  why=f"收录成功 ⇒ 稿 {mid} 置为已提交（via={VIA_INGEST}）")
+                  why=f"收录成功 ⇒ {fam} 稿号 {mid} 置为已提交（via={VIA_INGEST}）")
     return out
 
 
@@ -325,19 +384,20 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
     提交事件。
 
     复用：记号格式与解析全部来自 `agent_f/submission.py`（本模块只转发），
-    不新造第二套字符串；幂等键与收工那一条相同（都是稿号）。
+    不新造第二套字符串；幂等键与收工那一条相同 —— (族, 稿号)：`e-proof-000000`
+    已提交不意味着 `e-num-000000` 已提交（四族各有号段、同号是常态）。
 
     三态：`checked=False` = 这一格没查成（签读不出 / 台账读不出），不是「没签」；
     `written=False, already=True` = 之前已经有一条记号（签触发 + 收工各一次只剩一条）；
     `written=False, checked=True` + `why` = 查过了，这一份不该提交（族不对 / 签不住 /
     签后正文又变了 / 没有可写的行）。
 
-    返回键：`checked` / `written` / `already` / `manuscript_id` / `producer_role` /
-    `task_id` / `token` / `via` / `why`。
+    返回键：`checked` / `written` / `already` / `manuscript_id` / `family` /
+    `producer_role` / `task_id` / `token` / `via` / `why`。
     """
     out: dict[str, Any] = {
         "checked": False, "written": False, "already": False,
-        "manuscript_id": "", "producer_role": "", "task_id": "",
+        "manuscript_id": "", "family": "", "producer_role": "", "task_id": "",
         "token": "", "via": VIA_SIGN, "why": "",
     }
     sha = str(artifact_sha or "").strip().lower()
@@ -355,7 +415,8 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
     prod = producer_of(rel)
     role = str(prod.get("producer_role") or UNKNOWN)
     mid = str(prod.get("manuscript_id") or "")
-    out.update(producer_role=role, manuscript_id=mid)
+    fam = str(prod.get("family") or "")
+    out.update(producer_role=role, manuscript_id=mid, family=fam)
     if role not in ("F", "E"):
         out["checked"] = True
         out["why"] = (f"`{rel or '（没有稿路径）'}` 的产出方是 {role} ⇒ "
@@ -382,10 +443,12 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
         return out
     submitted, _owners, _bad = _task_tokens(
         [r for r in tasks if str(r.get("role") or "") == role])
-    if mid in submitted:
+    hit, _reading = resolve_submission(submitted, family=fam, manuscript_id=mid,
+                                       families=_families_for_mid(root, mid))
+    if hit is not None:
         out.update(checked=True, already=True, why=(
-            f"`tasks.artifacts` 里已经有稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"
-            f"（原有 via={submitted[mid].get('via') or '（老记号没这一格）'}）"))
+            f"`tasks.artifacts` 里已经有 {fam} 稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"
+            f"（原有 via={hit.get('via') or '（老记号没这一格）'}）"))
         return out
     if not stamp:
         stamp = S.now_iso()
@@ -396,7 +459,7 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
     out["task_id"] = str(row.get("task_id") or "")
     try:
         token = submission_token(
-            manuscript_id=mid, path=rel, body_sha=sha,
+            manuscript_id=mid, family=fam, path=rel, body_sha=sha,
             sign_sha=str(sign.get("sign_sha") or ""),
             file_sha=hashlib.sha256(blob).hexdigest(),
             statement_id=str(doc.get("statement_id") or ""),
@@ -411,15 +474,19 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
                 out["checked"] = True
                 out["why"] = f"事务里找不到 {out['task_id']!r} 那一行 ⇒ 提交记号没写"
                 return out
-            existing: set[str] = set()
+            existing: dict[str, dict[str, Any]] = {}
             for one in tx.rows("tasks"):
                 if str(one.get("role") or "") != role:
                     continue
                 got, _bad = submissions_of(one.get("artifacts") or ())
-                existing.update(str(x) for x in got)
-            if mid in existing:
+                for key, rec in got.items():
+                    existing.setdefault(str(key), dict(rec))
+            hit, _reading = resolve_submission(
+                existing, family=fam, manuscript_id=mid,
+                families=_families_for_mid(root, mid))
+            if hit is not None:
                 out.update(checked=True, already=True,
-                           why=f"并发下另一笔已经写了 {mid} 的提交记号")
+                           why=f"并发下另一笔已经写了 {fam} 稿号 {mid} 的提交记号")
                 return out
             cur["artifacts"] = S.sorted_unique(
                 list(cur.get("artifacts") or ()) + [token])
@@ -428,7 +495,7 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
         out["why"] = f"提交记号写不进 `tasks`（{type(exc).__name__}: {exc}）"
         return out
     out.update(checked=True, written=True, token=token, why=(
-        f"签发成功 ⇒ 稿 {mid} 置为已提交（via={VIA_SIGN}）"))
+        f"签发成功 ⇒ {fam} 稿号 {mid} 置为已提交（via={VIA_SIGN}）"))
     return out
 
 
@@ -444,6 +511,13 @@ def submission_reading(store: Any, root: Any, *, manuscript: Any = "",
     `via`：F / E 的稿 ⇒ `closing_auto_submit`；B 的稿 ⇒ `ingested_to_ledger`。
     没有记号 ⇒ `state="unsubmitted"`、`submitted_at=""`、`via=""`（不是「没查」）。
     老验证行的产出方格由 :func:`verification_producer_reading` 读（缺格 ⇒ unknown）。
+
+    ## (族, 稿号)：`manuscript` 给了就以它的族为准
+
+    `e-proof-000000` 与 `e-num-000000` 是两份稿：给路径 ⇒ 只读那一族的记号；只给稿号
+    而这一号在多族都有 ⇒ 不许猜 —— `checked=False` + `why` 点名「跨族同号、无法
+    唯一定位」（`ambiguous` 那一格带 families/keys），绝不把另一族那一枚的 path/via
+    读成这一份的。
     """
     mid = str(manuscript_id or "").strip()
     rel = str(manuscript or "").strip().replace("\\", "/")
@@ -451,19 +525,28 @@ def submission_reading(store: Any, root: Any, *, manuscript: Any = "",
     tokens, owners, problems = _task_tokens(tasks)
     if not mid:
         mid = _manuscript_id_of(rel) if rel else ""
+    #: 这一号在盘上出现在哪几族（老记号没写族时，"唯一确定"要靠它）。
+    on_disk = _families_for_mid(root, mid) if mid else []
     if not rel and mid:
-        rec = tokens.get(mid)
-        if rec and rec.get("path"):
-            rel = str(rec["path"])
+        # 先看记号自己带的地址（改前语义：记号里的 `path` 优先），再看盘上唯一的那份。
+        probe, _probe_reading = resolve_submission(tokens, manuscript_id=mid,
+                                                   families=on_disk)
+        if probe and probe.get("path"):
+            rel = str(probe["path"])
         else:
             rel = _find_rel_for_mid(root, mid)
     if not mid and rel:
         mid = _manuscript_id_of(rel)
+        on_disk = _families_for_mid(root, mid) if mid else []
+    #: 稿的族：路径认得出就用它（`notes/` 一类历史目录也按名字里的族读）。
+    family = str(_MFAM.classify_manuscript(rel).get("name_family") or "") if rel else ""
+    rec, reading = resolve_submission(tokens, family=family, manuscript_id=mid,
+                                      families=on_disk)
+    rec = dict(rec or {})
+    owner = dict(owners.get(str(reading.get("key") or "")) or {})
     prod = producer_of(rel) if rel else {
         "producer_role": UNKNOWN, "producer_code": "", "family": "", "tier": "",
         "manuscript_id": mid, "checked": False, "why": "没有稿路径 ⇒ 产出方 unknown"}
-    rec = dict(tokens.get(mid) or {})
-    owner = dict(owners.get(mid) or {})
     signed_sha = str(rec.get("body_sha") or "")
     if not signed_sha and rel:
         try:
@@ -482,6 +565,8 @@ def submission_reading(store: Any, root: Any, *, manuscript: Any = "",
     else:
         via, state = "", "unsubmitted"
     out: dict[str, Any] = {
+        # 键集是本函数的公开面（工具声明逐字读它）⇒ 不加新顶层键：族与「跨族同号」
+        # 都写在 `why` / `problems` 里（两个键本来就在声明里）。
         "checked": True, "manuscript": rel, "manuscript_id": mid,
         "producer_role": role,
         "producer_code": str(producer_code or prod.get("producer_code") or ""),
@@ -502,12 +587,20 @@ def submission_reading(store: Any, root: Any, *, manuscript: Any = "",
         out["problems"].append(
             f"写提交记号的是 {owner.get('role')}（{owner.get('task_id')}），"
             f"而路径族说产出方是 {role}")
-    if not rel:
+    if str(reading.get("state") or "") == "ambiguous":
+        # 「查过了、但定不下来是哪一份」：不折成「未提交」，也不折成「已提交」；
+        # 读数逐字点名「跨族同号」（families / keys 一并给在 why 里）。
+        why = str(reading.get("why") or "")
+        out["checked"] = False
+        out["why"] = why
+        out["problems"].append(why)
+    elif not rel:
         out["checked"] = False
         out["why"] = ("没有手稿路径 / 稿号 ⇒ 这一格没查成（不是「没有提交」）")
     elif not rec:
-        out["why"] = (f"`tasks.artifacts` 里没有稿号 {mid or '?'} 的 `mss:` 记号 ⇒ "
-                      "未提交（via 没有来源）")
+        out["why"] = (f"`tasks.artifacts` 里没有 {family or '任何族'} 稿号 "
+                      f"{mid or '?'} 的 `mss:` 记号 ⇒ 未提交（via 没有来源）")
     else:
-        out["why"] = (f"已提交（via={via}，submitted_at={out['submitted_at'] or '未记录'}）")
+        out["why"] = (f"已提交（族={family or '（老记号没写族）'}，via={via}，"
+                      f"submitted_at={out['submitted_at'] or '未记录'}）")
     return out

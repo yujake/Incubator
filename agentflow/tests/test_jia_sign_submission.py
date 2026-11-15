@@ -139,7 +139,7 @@ def test_b_sign_after_close_still_lands_a_token(tmp_path):
     assert "000000" in tokens, _tokens(st)
     rec = dict(tokens["000000"])
     assert rec.get("via") == MS.VIA_SIGN, rec
-    assert str(rec.get("token") or "").startswith("mss:000000"), rec
+    assert str(rec.get("token") or "").startswith("mss:f-proof-000000"), rec
     assert len(str(rec.get("body_sha") or "")) == 64, rec
     assert len(str(rec.get("sign_sha") or "")) == 64, rec
     # 统一读口也读得出来（不只是记号本身）

@@ -10,7 +10,7 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | B 收录一份已签的 `b-proof-*` | B 那一行 `artifacts` 出现一枚 `mss:<稿号>`；`submission_reading` 读 `submitted` / `via=ingested_to_ledger` |
+| a | B 收录一份已签的 `b-proof-*` | B 那一行 `artifacts` 出现一枚 `mss:b-proof-<稿号>`（族在键里）；`submission_reading` 读 `submitted` / `via=ingested_to_ledger` |
 | b | 同一份稿再收录一次 | 幂等：不重复写；`b_submission.already` |
 | c | 收录受控拒（未签） | 不置已提交（artifacts 不变） |
 | d | 反真空：摘掉这一笔 | a 必须红 |
@@ -161,7 +161,7 @@ def test_a_ingest_marks_the_b_manuscript_submitted(tmp_path):
     assert read["via"] == MS.VIA_INGEST, read
     assert read["producer_role"] == "B", read
     assert read["submitted_at"], read
-    assert read["token"].startswith("mss:000001"), read
+    assert read["token"].startswith("mss:b-proof-000001"), read
 
 
 # ============================================================ b：幂等
@@ -415,3 +415,4 @@ def test_j_restoring_the_number_comparison_turns_a_red(tmp_path, monkeypatch):
     problems = _per_path_problems(st)
     assert problems, "把 borrowed 改回按号比之后判据 a 仍然全绿 ⇒ 它没有真的比过"
     assert any("#2" in p for p in problems), problems
+

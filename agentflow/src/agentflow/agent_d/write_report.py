@@ -5,16 +5,32 @@ from ._support import Any, CONFIDENCE_LABELS, C_NO_EVIDENCE, Mapping, Path, S, _
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 
 
-def _carried_key(kind: str, ident: Any) -> str:
-    """携带单的去重键：`stmt:<命题号>` / `exp:<实验号>`（这一个落点是唯一的一处）。
+def _carried_key(kind: str, ident: Any, family: Any = "") -> str:
+    """携带单的去重键：`stmt:<命题号>` / `exp:<实验号>` / `mss:<族>-<号>`（唯一的一处）。
 
     为什么不能拿裸号去重：`statements` 与 `experiments` 的号各自从头编（都从 000000
     起），所以 `stmt:000000` 与 `exp:000000` 同时存在是常态。同一个 `seen` 收裸号
     时，先扫到的那一类会把另一类静默挤掉 —— 而携带单少一行、B 按清单寻址不到 E 的稿，
     与"那条 e-proof 没签"在读数上完全同形（`carried_missing` 还因为单非空而不报）。
+
+    `mss:` 那一档还要带族（2026-11-16）：四族各有自己的号段、都从 `000000` 起 ⇒
+    `f-proof-000000` 与 `e-num-000000` 同号是常态，单号做键会让两族的稿互相覆盖
+    （只改到"不互相覆盖"：D 选哪些稿上单的判据一个字没动）。族认不出 ⇒ 仍是
+    `mss:<号>`（渲染侧会按载体路径补族；补不上才是老形）。
     判据：`tests/test_carried_sheet_keeps_exp_rows_with_matching_numbers.py`。
     """
-    return f"{str(kind or '').strip()}:{str(ident or '').strip()}"
+    text = str(ident or "").strip()
+    fam = str(family or "").strip()
+    if str(kind or "").strip() == "mss" and fam:
+        return f"mss:{fam}-{text}"
+    return f"{str(kind or '').strip()}:{text}"
+
+
+def _entry_family(rel: Any) -> str:
+    """手稿路径 ⇒ 族（`reports/e-num-000000.md` ⇒ `e-num`）；认不出 ⇒ 空串（不猜）。"""
+    from .. import manuscriptfamily as _MFAM
+
+    return str(_MFAM.classify_manuscript(str(rel or "")).get("name_family") or "")
 
 
 class _WriteReport:
@@ -600,7 +616,8 @@ class _WriteReport:
         # 找稿，于是"F 落稿 → D 携带 → B 按 sha 认领"这条唯一交稿链在第一次就断在
         # D 这一侧（携带单 0 行），而那个形态与"这一条证明确实自足"长得一样。
         # 现在：登记条目里 `family=F`、命题号还空（或那一行不在 statements 里）的稿
-        # 也上携带单，键用稿号（`mss:<稿号>`，`depsection.CARRIED_KEYS` 的第三档）。
+        # 也上携带单，键用 (族, 稿号)（`mss:<族>-<号>`，`depsection.CARRIED_KEYS` 的
+        # 第三档；四族各有号段、同号跨族是常态 ⇒ 单号做键会把两族的稿折成一行）。
         # 只带 `checked` 的登记条目（`proofregistry.parse_entry`）—— 手写稿没有登记
         # 元信息，不是"等 B 收录的那一份"。
         from .. import vsigns as _VS
@@ -617,7 +634,7 @@ class _WriteReport:
             msid = str(_VS.manuscript_id_of(rel) or "")
             if not rel or not msid or rel in seen_paths:
                 continue
-            key = _carried_key("mss", msid)
+            key = _carried_key("mss", msid, _entry_family(rel))
             if key in seen:
                 continue
             try:
@@ -631,15 +648,17 @@ class _WriteReport:
         # ---- 2026-11-11（业主裁定 ①③）：F 收工自动提交的拿签稿 -------------------
         #
         # 上面两圈都从「台账行 / 手稿登记条目」找稿；而 F 收工时由框架写下的提交记号
-        # （`tasks.artifacts` 的 `mss:<稿号>`）是第三条、也是唯一一条「F 说它交了」的
-        # 机械记录 —— 一份拿签稿在被 B 收录之前，只有这条记号能把它带到 D。
-        # 「已收录」的那一份由上面两圈按台账行走（同一个文件只上一行由 `seen_paths` 守）。
+        # （`tasks.artifacts` 的 `mss:<族>-<号>`，老盘是 `mss:<号>`）是第三条、也是唯一
+        # 一条「F 说它交了」的机械记录 —— 一份拿签稿在被 B 收录之前，只有这条记号能
+        # 把它带到 D。「已收录」的那一份由上面两圈按台账行走（同一个文件只上一行由
+        # `seen_paths` 守）。去重键也按 (族, 稿号)：四族各有号段、同号跨族是常态。
         auto_rows, auto_note = self._auto_submitted_carried(
             statements, _known_stmt_ids)
         for one in auto_rows:
             msid = str(one.get("manuscript_id") or "")
-            key = _carried_key("mss", msid)
             path = str(one.get("path") or "")
+            key = _carried_key("mss", msid,
+                              str(one.get("family") or "") or _entry_family(path))
             if not msid or key in seen or (path and path in seen_paths):
                 continue
             seen.add(key)
@@ -698,8 +717,9 @@ class _WriteReport:
 
         `_carried_manuscripts` 上面两圈都从「台账行 / 手稿登记条目」找稿：一份稿在
         被 B 收录之前，台账里没有它的行，登记条目也不一定在盘上 ⇒ 未收录的拿签稿
-        到不了 D。F 收工时由框架写进 `tasks.artifacts` 的那条提交记号（`mss:<稿号>`）
-        正是"F 说它交了"的机械记录，这一源就按它收。
+        到不了 D。F 收工时由框架写进 `tasks.artifacts` 的那条提交记号
+        （`mss:<族>-<号>`，老盘是 `mss:<号>`）正是"F 说它交了"的机械记录，这一源就
+        按它收。
 
         ## 判据（三件都要在盘上成立才带）
 
@@ -709,8 +729,13 @@ class _WriteReport:
         3. 尚未收录：`statements` 里没有 `manuscript_id` 是这个稿号的行，
            记号里的 `statement_id` 也不在册 —— 已收录的由上面两圈按台账行走。
 
-        返回的行与 F 那条完全同形：`{statement_id:"", manuscript_id, path, sha256}`，
-        `sha256` 是盘上那份文件的字节 sha256（D→B 的地址判据）。
+        去重按 (族, 稿号)：`latest` 的键带上族，`f-proof-000000` 与
+        `e-num-000000` 同号时不会互相覆盖（四族各有号段、都从 000000 起）。族由记号
+        自己带（新写法），老记号由载体路径补；补不上 ⇒ 键里没有族（`_carried_key`
+        回老形）。
+
+        返回的行与 F 那条完全同形：`{statement_id:"", manuscript_id, family, path,
+        sha256}`，`sha256` 是盘上那份文件的字节 sha256（D→B 的地址判据）。
         """
         import hashlib
 
@@ -731,6 +756,8 @@ class _WriteReport:
             pt = str(one.get("proof_text") or "")
             if pt.strip():
                 registered_bodies.add(_PR.proof_sha(pt))
+        #: 键是 (族, 稿号)：`latest` 按 `_carried_key` 的同一把尺建，谁也不会被同号的
+        #: 另一族挤掉；值带 `_key`（附注里点名用）。
         latest: dict[str, dict] = {}
         for task in self.store.rows("tasks") or ():
             if str(task.get("role") or "") != "F":
@@ -739,16 +766,26 @@ class _WriteReport:
             for why in problems:
                 skipped.append(f"{task.get('task_id')}: {why}")
             for mid, rec in got.items():
-                cur = latest.get(mid)
+                if rec.get("ambiguous"):
+                    skipped.append(
+                        f"mss:{mid}：提交记号不止一条、而族定不下来 ⇒ 不带"
+                        "（跨族同号，不猜是哪一份）")
+                    continue
+                rec_fam = str(rec.get("family") or "") or _entry_family(
+                    rec.get("path"))
+                key = _carried_key("mss", mid, rec_fam)
+                cur = latest.get(key)
                 if (cur is None
                         or str(rec.get("submitted_at") or "")
                         >= str(cur.get("submitted_at") or "")):
-                    latest[mid] = dict(rec)
-        for mid in sorted(latest):
-            rec = latest[mid]
+                    latest[key] = dict(rec)
+        for key in sorted(latest):
+            rec = latest[key]
+            mid = str(rec.get("manuscript_id") or "")
+            family = str(rec.get("family") or "") or _entry_family(rec.get("path"))
             rel = str(rec.get("path") or "").strip().replace("\\", "/")
             if not rel:
-                skipped.append(f"mss:{mid}：提交记号里没有地址 ⇒ 带不了")
+                skipped.append(f"{key}：提交记号里没有地址 ⇒ 带不了")
                 continue
             sid = str(rec.get("statement_id") or "")
             if mid in registered or (sid and sid in known_stmt_ids):
@@ -759,20 +796,20 @@ class _WriteReport:
                 text = blob.decode("utf-8")
             except (OSError, UnicodeDecodeError) as exc:
                 skipped.append(
-                    f"mss:{mid}：`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ 不带")
+                    f"{key}：`{rel}` 读不出来（{type(exc).__name__}: {exc}）⇒ 不带")
                 continue
             file_sha = hashlib.sha256(blob).hexdigest()
             body_sha = _PR.proof_sha(text)
             want_file = str(rec.get("file_sha") or "")
             if want_file and file_sha != want_file:
                 skipped.append(
-                    f"mss:{mid}：`{rel}` 在提交之后字节变了（提交时 {want_file[:12]}…"
+                    f"{key}：`{rel}` 在提交之后字节变了（提交时 {want_file[:12]}…"
                     f" / 现在 {file_sha[:12]}…）⇒ 不按「已提交的那一版」带")
                 continue
             want_body = str(rec.get("body_sha") or "")
             if want_body and body_sha != want_body:
                 skipped.append(
-                    f"mss:{mid}：`{rel}` 的正文 sha 与提交记号不符（记号 "
+                    f"{key}：`{rel}` 的正文 sha 与提交记号不符（记号 "
                     f"{want_body[:12]}… / 现在 {body_sha[:12]}…）⇒ 不带")
                 continue
             if body_sha in registered_bodies:
@@ -781,12 +818,12 @@ class _WriteReport:
             cred = _VS.credential_reading(self.store.root, body_sha)
             if not cred.get("recomputable"):
                 skipped.append(
-                    f"mss:{mid}：`{rel}` 这一份签复算不上"
+                    f"{key}：`{rel}` 这一份签复算不上"
                     f"（{cred.get('problem') or '?'}）⇒ 不带"
                     "（没签的稿不是入库的证明）")
                 continue
-            one = {"statement_id": "", "manuscript_id": mid, "path": rel,
-                   "sha256": file_sha}
+            one = {"statement_id": "", "manuscript_id": mid, "family": family,
+                   "path": rel, "sha256": file_sha}
             # 2026-11-11：呈递侧退役 `proof_no` —— 提交记号里的那一格不再抄进携带行。
             rows.append(one)
         note = ""

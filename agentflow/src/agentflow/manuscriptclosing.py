@@ -18,7 +18,7 @@ from . import manuscriptfamily as _MFAM
 from . import schema as S
 from .manuscriptsubmission import (
     TERMINAL_TASK_STATUSES, VIA_CLOSING, _proof_sha, _read_tasks, _task_tokens,
-    parse_submission, submission_token, submissions_of,
+    parse_submission, resolve_submission, submission_token, submissions_of,
 )
 
 
@@ -220,17 +220,32 @@ def signed_candidates(root: Any, *, families: Sequence[str],
 
 
 def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
+            families_by_mid: Mapping[str, Any],
             row: Mapping[str, Any] | None, row_why: str, stamp: str,
             out: dict[str, Any]) -> list[tuple[dict[str, Any], str]]:
+    """选谁：已签、sha 与现行正文一致、这一族的这一号在 artifacts 里还没有 ⇒ `(候选, 记号)`。
+
+    幂等键是 (族, 稿号)：`e-proof-000000` 已提交不意味着 `e-num-000000` 已提交。
+    老记号（没写族的）只在"这一号唯一地属于这一族"时才算数（`resolve_submission`
+    的三态）；跨族同号却族定不下来 ⇒ 不拿它当已提交，并把「跨族同号、无法唯一定位」
+    写进 `out["problems"]`（不静默地替两族猜一份）。
+    """
     pending: list[tuple[dict[str, Any], str]] = []
     for cand in candidates:
         mid = str(cand.get("manuscript_id") or "")
         if not mid:
             continue
-        if mid in submitted:
+        fam = str(cand.get("family") or "")
+        hit, reading = resolve_submission(submitted, family=fam, manuscript_id=mid,
+                                          families=families_by_mid.get(mid, ()))
+        if str(reading.get("state") or "") == "ambiguous":
+            why = str(reading.get("why") or "")
+            if why and why not in out["problems"]:
+                out["problems"].append(why)
+        if hit is not None:
             out["still_unsubmitted"].append(_still(
                 cand, "already_submitted",
-                f"`tasks.artifacts` 里已经有稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"))
+                f"`tasks.artifacts` 里已经有 {fam} 稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"))
             continue
         if not cand.get("signed"):
             out["still_unsubmitted"].append(_still(
@@ -244,7 +259,8 @@ def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
             continue
         try:
             token = submission_token(
-                manuscript_id=mid, path=str(cand.get("manuscript") or ""),
+                manuscript_id=mid, family=fam,
+                path=str(cand.get("manuscript") or ""),
                 body_sha=str(cand.get("signed_sha") or ""),
                 sign_sha=str(cand.get("sign_sha") or ""),
                 file_sha=str(cand.get("file_sha") or ""),
@@ -266,8 +282,10 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
     """收工自动提交（E 用；F 自己那份在 `agent_f/autosubmit.py`）。
 
     选谁：`families` 里已签（签 sha == 当前正文 sha）、尚未提交的稿；记号写到
-    「`role` 自己那一行 task」的 `artifacts`（同一套 `mss:` 格式）。幂等、未签不提交、
-    签后改正文不提交三条与 F 一致。没有 task 行时逐条落 `no_task_row`，且不静默。
+    「`role` 自己那一行 task」的 `artifacts`（同一套 `mss:` 格式）。幂等按 (族, 稿号)：
+    `e-proof-000000` 已提交不意味着 `e-num-000000` 已提交（E 的两族各走自己的号段，
+    同号是常态）。未签不提交、签后改正文不提交两条与 F 一致；没有 task 行时逐条落
+    `no_task_row`，且不静默。
     """
     out: dict[str, Any] = {
         "checked": False, "auto_submitted": [], "auto_submitted_count": 0,
@@ -284,6 +302,15 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
     out["problems"] = [str(x) for x in (scan.get("problems") or [])]
     candidates = [dict(c) for c in (scan.get("candidates") or [])
                   if isinstance(c, Mapping)]
+    #: 这一趟的候选里，每个号出现在哪几族（老记号没写族时"唯一确定"要靠它）。
+    families_by_mid: dict[str, list[str]] = {}
+    for cand in candidates:
+        cand_mid = str(cand.get("manuscript_id") or "")
+        cand_fam = str(cand.get("family") or "")
+        if cand_mid and cand_fam:
+            families_by_mid.setdefault(cand_mid, [])
+            if cand_fam not in families_by_mid[cand_mid]:
+                families_by_mid[cand_mid].append(cand_fam)
     tasks, tasks_why = _read_tasks(store)
     submitted, _, token_problems = _task_tokens(
         [r for r in tasks if str(r.get("role") or "") == str(role)])
@@ -307,7 +334,9 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
             row = found
     if not tasks and tasks_why:
         out["problems"].append(tasks_why)
-    pending = _select(candidates, submitted=submitted, row=row, row_why=row_why,
+    pending = _select(candidates, submitted=submitted,
+                      families_by_mid=families_by_mid,
+                      row=row, row_why=row_why,
                       stamp=str(stamp or ""), out=out)
     if not pending:
         out["why"] = ("没有「已拿签、尚未提交」的稿 ⇒ 这一趟不写 artifacts"
@@ -328,11 +357,16 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
                         continue
                     got, bad = submissions_of(one.get("artifacts") or ())
                     out["problems"] += bad
-                    for mid, rec in got.items():
-                        existing.setdefault(str(mid), dict(rec))
-                fresh = [token for _cand, token in pending
-                         if str((parse_submission(token) or {}).get("manuscript_id")
-                                or "") not in existing]
+                    for key, rec in got.items():
+                        existing.setdefault(str(key), dict(rec))
+                for cand, token in pending:
+                    cand_mid = str(cand.get("manuscript_id") or "")
+                    cand_fam = str(cand.get("family") or "")
+                    hit, _reading = resolve_submission(
+                        existing, family=cand_fam, manuscript_id=cand_mid,
+                        families=families_by_mid.get(cand_mid, ()))
+                    if hit is None:
+                        fresh.append(token)
                 if fresh:
                     cur["artifacts"] = S.sorted_unique(
                         list(cur.get("artifacts") or ()) + fresh)
@@ -351,6 +385,7 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
         rec = dict(parse_submission(token) or {})
         out["auto_submitted"].append({
             "manuscript_id": str(rec.get("manuscript_id") or ""),
+            "family": str(rec.get("family") or ""),
             "manuscript": str(rec.get("path") or ""),
             "proof_no": int(rec.get("proof_no") or 0) or 1,
             "body_sha": str(rec.get("body_sha") or ""),
@@ -366,7 +401,7 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
             continue
         out["still_unsubmitted"].append(_still(
             cand, "already_submitted",
-            "写这一趟之前，同一稿号的提交记号已经被另一次收工写进 "
+            "写这一趟之前，同一 (族, 稿号) 的提交记号已经被另一次收工写进 "
             "`artifacts`（并发幂等）"))
     out["auto_submitted_count"] = len(out["auto_submitted"])
     out["why"] = (f"这一趟自动提交 {out['auto_submitted_count']} 份拿签稿"

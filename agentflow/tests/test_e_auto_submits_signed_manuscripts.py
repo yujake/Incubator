@@ -8,7 +8,7 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | E 名下 2 份已签、artifacts 里都没有 | 收工后两份的 `mss:<稿号>` 记号都进 E 那一行；`auto_submitted` 逐份点名 |
+| a | E 名下 2 份已签、artifacts 里都没有 | 收工后两份的 `mss:e-proof-<稿号>` 记号都进 E 那一行（族在键里）；`auto_submitted` 逐份点名 |
 | b | 同一趟再收工 | 幂等：一个字节都不重复写；`already_submitted` 说清 |
 | c | 盘上一份没签的 E 稿 | 不提交；`still_unsubmitted` 说「未签」 |
 | d | 反真空：把自动提交摘掉 | a 那组断言必须红 |
@@ -115,7 +115,7 @@ def _assert_a(st: Store, out: dict, mids: list[str]) -> None:
         assert one["manuscript"] == f"reports/e-proof-{mid}.md", one
         assert len(str(one["body_sha"])) == 64, one
         assert len(str(one["sign_sha"])) == 64, one
-        assert str(one.get("token") or "").startswith(f"mss:{mid}"), one
+        assert str(one.get("token") or "").startswith(f"mss:e-proof-{mid}"), one
         assert str(one.get("via") or "") == MS.VIA_CLOSING, one
     assert set(MS.submissions_of(_artifacts(st))[0]) == set(mids)
 
@@ -202,3 +202,4 @@ def test_e_close_reading_carries_the_three_cells(tmp_path):
     assert [str(x.get("manuscript_id")) for x in (got.get("auto_submitted") or [])] == [mid], got
     assert got.get("still_unsubmitted") == [], got
     assert set(MS.submissions_of(_artifacts(st))[0]) == {mid}
+

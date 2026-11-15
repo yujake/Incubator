@@ -41,7 +41,7 @@ def test_f_manuscript_reads_submitted_via_closing_auto_submit(tmp_path):
     assert read["producer_role"] == "F", read
     assert read["submitted_at"], read
     assert read["signed"] is True, read
-    assert read["token"].startswith(f"mss:{mid}"), read
+    assert read["token"].startswith(f"mss:f-proof-{mid}"), read
     # 路径入参也读得出同一份
     by_path = MS.submission_reading(st, st.root,
                                     manuscript=f"reports/f-proof-{mid}.md")

@@ -7,7 +7,7 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | F 名下 2 份已签、artifacts 里都没有 ⇒ 走到收工出口 | 两份的 `mss:<稿号>` 记号都在 F 那一行的 `artifacts` 里；`auto_submitted` 逐份点名（稿号 + 正文 sha + 签 sha + 时刻） |
+| a | F 名下 2 份已签、artifacts 里都没有 ⇒ 走到收工出口 | 两份的 `mss:f-proof-<稿号>` 记号都在 F 那一行的 `artifacts` 里（族在键里）；`auto_submitted` 逐份点名（稿号 + 正文 sha + 签 sha + 时刻） |
 | b | 同一趟再收工一次 | 一个字节都不重复写（幂等）；`auto_submitted` 空、`still_unsubmitted` 说「already_submitted」 |
 | c | 盘上有一份没签的 F 稿 | 不提交；`still_unsubmitted` 逐条说「未签 ⇒ 不入提交单」 |
 | d | 反真空：把自动提交摘掉 | a 那组断言必须红（静默不提交不许通过） |
@@ -153,7 +153,7 @@ def _assert_a(st: Store, out: dict, mids: list[str]) -> None:
         assert one["manuscript"] == f"reports/f-proof-{mid}.md", one
         assert len(str(one["body_sha"])) == 64, one
         assert len(str(one["sign_sha"])) == 64, one
-        assert str(one.get("token") or "").startswith(f"mss:{mid}"), one
+        assert str(one.get("token") or "").startswith(f"mss:f-proof-{mid}"), one
     # 记号也真进了那一行 artifacts（不只是返回值里的读数）
     assert set(FD.submissions_of(_artifacts(st))[0]) == set(mids)
     # 收工说明里也点得到（不只在结构化读数里）
@@ -299,3 +299,4 @@ def test_e2_removing_the_sha_pairing_turns_e_red(tmp_path, monkeypatch):
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(pytest.main([__file__, "-q"]))
+
