@@ -206,14 +206,6 @@ CHAIN_ONLY: dict[str, dict[str, str]] = {
         "does_not_prove": "真机从 `run-agent L` / `start --mode research` 走进来时的装配与账本。",
         "superseded_by": "",
     },
-    "test_rehearsal_c13_wake.py": {
-        "chain": "C13 · 停机 / 唤醒",
-        "reason": "直调 `Conductor.wake_blocked` 与私有 `autonomy._stop_before_round` / "
-                  "`_latest_user_answer`；打桩 `Conductor.wake_on_lifeline` 与 `userio.pending_questions`。",
-        "proves": "唤醒的三态（该叫 / 不该叫 / 叫失败）与用户答题作为唤醒条件。",
-        "does_not_prove": "这些判断在真机 CLI 的多轮驱动里被调用（入口与缝都不是产品那条）。",
-        "superseded_by": "",
-    },
     "test_rehearsal_c2_proof_chain.py": {
         "chain": "C2 · 证明主链（登记 → 送审 → 三签 → 收录 → 依赖）",
         "reason": "三个角色都是直调（`v.verify_proof` / `b.ingest_manuscript`），缝是自造 "
@@ -222,39 +214,6 @@ CHAIN_ONLY: dict[str, dict[str, str]] = {
         "does_not_prove": "真机 CLI → `_exec_role` → `LlmBackend` → `AgentLoop.run` 这条路上，"
                           "三签与收录是否仍按同一顺序发生；三格没有对象。",
         "superseded_by": "test_rehearsal_cli_proof_main_chain.py",
-    },
-    "test_rehearsal_c4_revision_loop.py": {
-        "chain": "C4 · 打回修订环（V 点名缺陷 → F 重写 → 再送审）",
-        "reason": "直调 `AgentF.step` 与私有 `f._hand_proof`、`AgentV.verify_proof`；缝是自造 "
-                  "`_Seam(ask_json)` + `_Review(ask)`。",
-        "proves": "缺陷点名与正文 sha 变化在方法层的因果。",
-        "does_not_prove": "真机的打回消息（走 `calling_as` + 秘书洗稿）会到达 F 的下一步。",
-        "superseded_by": "",
-    },
-    "test_rehearsal_c9_concept_graph.py": {
-        "chain": "C9 · 概念图链（C 读数 → D 立题 → B 结构重复裁决）",
-        "reason": "直调 `AgentC.gaps` / `AgentD.ingest` / `AgentB.decide_structural_duplicate`；"
-                  "反真空还替换 `AgentC.gaps` 本身。",
-        "proves": "概念图的结构重复判定与墓碑语义在方法层成立。",
-        "does_not_prove": "真机里这些方法是模型经工具分发调到的（入口与缝都不是产品那条）。",
-        "superseded_by": "",
-    },
-    "test_rehearsal_d_pointer_only.py": {
-        "chain": "D 线 · 指针式登记 + ingest_manuscript 判档",
-        "reason": "直调 `depsection.read_carried_manuscript` + `AgentB.ingest_manuscript`；"
-                  "缝是自造 `_Seam(ask_json)`，并用 `b_form_gate_ok` 换掉形态判定。",
-        "proves": "「只递指针」的读稿路径与判档落行在方法层成立。",
-        "does_not_prove": "D 在真机循环里递指针、B 的秘书在 `calling_as` 里花钱判档。",
-        "superseded_by": "",
-    },
-    "test_rehearsal_f_plan_lifecycle.py": {
-        "chain": "F 线 · 计划生命周期 + 放弃四档",
-        "reason": "直调 `AgentF.create_plan/step/abandon_plan` 与 `Secretary.handoff_add`；打桩 "
-                  "`Secretary._judge_core` / `AgentF._write_plan` / `PARALLEL_PLANS_LIMIT`，"
-                  "缝是 `_FakeSeam(ask_json)`。",
-        "proves": "计划生命周期与放弃理由的受控拒在方法层成立。",
-        "does_not_prove": "真机 F 的步循环与秘书判断（判定本体被换了）。",
-        "superseded_by": "",
     },
     "test_rehearsal_two_f_independent_proofs.py": {
         "chain": "双 F · 同命题独立第二份证明",
