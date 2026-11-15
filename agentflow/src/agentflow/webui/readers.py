@@ -308,6 +308,13 @@ UNCHECKED_TYPES: dict[str, str] = {
                      "恒为空数组（而真行上它一条证明一行）；形状以 "
                      "`evidencebits.optimized_state` 的读数为准"
                      "（逐键判据在 tests/test_webui_optimized_column.py）",
+    # NT2（2026-11-15）：非平凡度的逐路径行。夹具工作区没有 statements 行（即便有，
+    # 也是一条路径、`nontriviality_paths[]` 为空或只有一行），所以判据 C 的
+    # `_backend_keys` 读不出它的键。形状以 `secretary._fold_nontriviality` 的
+    # `paths[]` 为准，逐键判据在 `tests/test_nontriviality_is_per_path.py` 的 P1/P7。
+    "NontrivialityPath": "契约判据 C 的夹具工作区没有多路径的 statements 行 "
+                         "⇒ `nontriviality_paths[]` 读不出键；形状以 "
+                         "`secretary._fold_nontriviality` 的 `paths[]` 为准",
     "ExperimentSpot": "夹具工作区没有 `out/experiments/<号>/`（实验跑过之后才落盘）"
                       "⇒ `experiment_spots[]` 恒为空数组；形状以 `experiment_spots()`"
                       " 的读数为准（同上那份判据文件）",
@@ -1471,14 +1478,23 @@ def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[st
     label = ""
     tri = "unknown"
     matched_by = ""
+    paths: list[dict[str, Any]] = []
+    min_of: list[int] = []
+    partial = False
+    paths_unjudged: list[int] = []
     try:
         from ..secretary import nontriviality_of
 
-        got = nontriviality_of(root, body, stmt_id=stmt_id)
+        got = nontriviality_of(root, body, stmt_id=stmt_id,
+                               path_groups=_expected_path_groups(row))
         raw = got.get("level")
         level = raw if isinstance(raw, int) and not isinstance(raw, bool) else None
         label = str(got.get("label") or "") if level is not None else ""
         matched_by = str(got.get("matched_by") or "")
+        paths = [dict(p) for p in (got.get("paths") or []) if isinstance(p, Mapping)]
+        min_of = [int(x) for x in (got.get("min_of") or []) if isinstance(x, int)]
+        partial = bool(got.get("partial"))
+        paths_unjudged = [int(x) for x in (got.get("paths_unjudged") or [])]
         if got.get("tri") == TRI_NOT_APPLICABLE:
             # 「不适用」不是「判不了」：`level`/`label` 都是空，只有一个可判的标记
             # （`applicable=False`）能把两者分开 —— 它就是这一格的 `tri`。
@@ -1495,7 +1511,34 @@ def _statement_tier_reading(root: str | Path, row: Mapping[str, Any]) -> dict[st
     else:
         word = NONTRIVIALITY_UNJUDGED_WORD
     return {"level": level, "label": label, "meaning": meaning, "tri": tri, "word": word,
-            "matched_by": matched_by}
+            "matched_by": matched_by,
+            # ---- 逐路径（NT2）：命题级是各路径 min，两条路径各自可核 ------------
+            # `paths` 一条路径一行（`path_group` / 该路径当前档位 / 历史最小 / 判的材料 sha）；
+            # `min_of` 是命题级这个 min 从哪几个值来（逐路径历史最小，按路径号升序）；
+            # `partial` + `paths_unjudged` 说"还有路径没判" —— 不许折成"全判了"。
+            "paths": paths, "min_of": min_of, "partial": partial,
+            "paths_unjudged": paths_unjudged}
+
+
+def _expected_path_groups(row: Mapping[str, Any]) -> list[int]:
+    """这一条命题应该有哪几条路径（`statements.manuscripts` 的键，升序）。
+
+    读侧拿它判"部分路径未判"：台账里只判了第 1 条、而这一行有两条路径的稿 ⇒
+    `partial=true` + `paths_unjudged=[2]`，不许把"只判了一条"折成"命题级已经算全了"。
+    没有 `manuscripts`（老行 / 概念行）⇒ 空清单（读侧只知道台账里那几条）。
+    """
+    books = row.get("manuscripts")
+    out: list[int] = []
+    if not isinstance(books, Mapping):
+        return out
+    for key in books:
+        try:
+            no = int(str(key))
+        except (TypeError, ValueError):
+            continue
+        if no >= 1 and no not in out:
+            out.append(no)
+    return sorted(out)
 
 
 def _bit_word(value: Any) -> str:
@@ -1648,6 +1691,15 @@ def _statement_readings(root: Path, rows: list[dict]) -> list[dict[str, Any]]:
         # 这一档是按号命中的、还是读旧行时按 sha 回退的：
         # 读的人要能分辨"正文改了档位还在"与"按文本碰巧对上"，两件事不许折平。
         got["nontriviality_matched_by"] = tier["matched_by"]
+        # ---- 逐路径（NT2）：一个路径一行 + 命题级 min 可复算 --------------------
+        # `nontriviality_paths` = `[{path_group, level, floor, at, ...}]`（一条路径一行，
+        # 旧行无 `path_group` ⇒ 路径 1）；`nontriviality_min_of` = 命题级 min 的来源值；
+        # `nontriviality_partial` + `nontriviality_paths_unjudged` = "还有路径没判"，
+        # 不许把部分读数折成"命题级已算全"。
+        got["nontriviality_paths"] = list(tier.get("paths") or [])
+        got["nontriviality_min_of"] = list(tier.get("min_of") or [])
+        got["nontriviality_partial"] = bool(tier.get("partial"))
+        got["nontriviality_paths_unjudged"] = list(tier.get("paths_unjudged") or [])
         # 这五位读数与下面派生的等级读的是同一份位数据（`bits_from_row`）：
         # 读一次、两处共用 —— 原来同一行要读两遍，而两次之间没有任何东西会变。
         bits: Mapping[str, Any] | None
@@ -5565,6 +5617,17 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # （`stmt_id` 按号 / `sha256` 旧行回退 / 空串 = 没判过）。它是台账的来历读数，
       # 不是显示词；页面不印它，但"按号命中"与"靠正文 sha 回退"必须分得开。
       ("nontriviality_matched_by", "string"),
+      # ---- 逐路径（NT2，2026-11-15 业主裁定）-------------------------------------
+      # 非平凡度是「一个路径一个」：`nontriviality_paths` 一条路径一行
+      # （`path_group` / 该路径当前档位 `level` / 历史最小 `floor` / `at` / 两枚 sha）；
+      # `nontriviality_min_of` 是命题级 min 的来源值（各路径历史最小，升序）；
+      # `nontriviality_partial` 说"还有路径没判"（不许折成已算全），
+      # `nontriviality_paths_unjudged` 点名是哪几条。四格都是读模型现算的读数，
+      # 不是 `schema.Statement` 的字段。
+      ("nontriviality_paths", "NontrivialityPath[]"),
+      ("nontriviality_min_of", "number[]"),
+      ("nontriviality_partial", "boolean"),
+      ("nontriviality_paths_unjudged", "number[]"),
       ("formal_paths", "FormalPath[]"),
       # 五元位每一位一格：前四格是第 1/2/3/5 位各自的状态词
       # （`evidencebits.BIT_STATES` 那四档），第 4 位不在这里 —— 它是二维的，
@@ -5606,6 +5669,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "reviewed_sha_by_proof / optimized_by_proof 三张表的并集 —— "
      "于是「优化」与签过 / 验过的逐份读数按 proof_no 并排，`#p2` 不借 `#p1` 的光",
      (("proof_no", "number"), ("state", "string"))),
+    ("NontrivialityPath",
+     "secretary._fold_nontriviality() 的一行 —— 非平凡度按证明路径逐条（NT2，"
+     "2026-11-15 业主裁定「一个路径一个」）。`path_group` 是第几条路径（旧行没有这一格"
+     "⇒ 路径 1）；`level` 是该路径最后一行（允许升/降档），`floor` 是该路径历史最小值"
+     "（命题级 min 的来源）；两枚 sha 是「判的材料」与「落盘正文」的指纹",
+     (("path_group", "number"), ("level", "number | null"), ("floor", "number | null"),
+      ("label", "string"), ("at", "string"), ("stmt_id", "string"),
+      ("basis", "string"), ("judged_body_sha256", "string"),
+      ("landed_body_sha256", "string"), ("rows", "number"))),
     ("ReviewFindingRow",
      "store.rows(\"review_findings\")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）",
      (("finding_id", "string"), ("doc_id", "string"), ("kind", "string"),

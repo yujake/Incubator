@@ -9100,7 +9100,8 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
                 # 于是"T3/T4 的框架被搬进附录"这一条静默不报，与页面那一栏分家。
                 # 正文同时改回 D2 的唯一读口（`_SB.body_of`，另两处早就是它）。
                 tier = _SEC.nontriviality_of(
-                    root, _SB.body_of(row), stmt_id=str(row.get("stmt_id") or ""))["level"]
+                    root, _SB.body_of(row), stmt_id=str(row.get("stmt_id") or ""),
+                    path_groups=_path_groups_of(row))["level"]
             except Exception:  # noqa: BLE001 - 读数取不到不影响这条判据
                 tier = None
         in_body = (body + after).strip()
@@ -9110,6 +9111,28 @@ def paper_proof_scaffolding_problems(root: str | Path) -> list[str]:
                 f"{name}: 档位 T{tier} 的框架被整段移进附录（正文只剩 {len(in_body)} 字符的指针）"
                 " —— T3/T4 的框架与动机必须留在正文")
     return problems
+
+def _path_groups_of(row: Mapping[str, Any]) -> list[int]:
+    """这条命题应该有哪几条证明路径（`statements.manuscripts` 的键，升序）。
+
+    NT2（2026-11-15）：非平凡度是"一个路径一行"，读侧要知道"这一条该有几条路径"才能把
+    "部分路径没判"报成 `partial`（而不是折成"命题级已算全"）。`manuscripts` 是 B 收录
+    每条路径时写的那一格（`{路径号: 稿路径}`），所以它就是"应有几条"的权威读数。
+    没有这一格（老行 / 概念行）⇒ 空清单，读侧只知道台账里已判的那几条。
+    """
+    books = row.get("manuscripts")
+    out: list[int] = []
+    if not isinstance(books, Mapping):
+        return out
+    for key in books:
+        try:
+            no = int(str(key))
+        except (TypeError, ValueError):
+            continue
+        if no >= 1 and no not in out:
+            out.append(no)
+    return sorted(out)
+
 
 def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     """收工读数：本篇的非平凡性分布 ＋ T3/T4 清单 ＋ 论文侧的缺铺垫点名。
@@ -9143,6 +9166,8 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     #: 400 条命题的夹具上实测 `nontriviality_of` 被调 800 次 / 2035 ms。读数逐字不变
     #: （同一批行、同一个纯读函数），只是不再算第二遍。
     levels: list[dict[str, Any]] = []
+    paths_total = 0
+    partial_total = 0
     for row in rows:
         # D2：正文只有一个读口（`statementbody.body_of`：真身 `statement_full` 优先，
         # 空则退回历史行的 `statement_text`）。
@@ -9150,12 +9175,23 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         # 2026-10-26（Q20）：按号读 —— 与页面那一栏（`webui.readers._statement_tier_reading`）
         # 同一个读法。改前只传正文，正文改一个字这一格就退化成"未判"：分布里"未判"虚高、
         # T3/T4 清单空，而两栏对同一条命题说两句话。
-        got = _SEC.nontriviality_of(root, text, stmt_id=str(row.get("stmt_id") or ""))
+        # NT2（2026-11-15）：`path_groups` 让读侧知道这一条该有几条路径 ⇒ 部分没判时
+        # `partial=true`（不许折成"命题级已算全"）；`level` 是命题级 min（各路径的最小）。
+        got = _SEC.nontriviality_of(
+            root, text, stmt_id=str(row.get("stmt_id") or ""),
+            path_groups=_path_groups_of(row))
         # 2026-10-23：`level` 是 `None` = 判不了、`0` = T0（真的档位）。
         # 改前这两件事折叠在 0 上，于是"没人判过"与"基础定理"在读数里同形。
         level = got.get("level")
+        paths = [dict(p) for p in (got.get("paths") or []) if isinstance(p, Mapping)]
+        min_of = [int(x) for x in (got.get("min_of") or []) if isinstance(x, int)]
+        paths_total += len(paths)
+        if got.get("partial"):
+            partial_total += 1
         levels.append({"stmt_id": str(row.get("stmt_id") or ""), "text": text,
-                       "level": level})
+                       "level": level, "paths": paths, "min_of": min_of,
+                       "partial": bool(got.get("partial")),
+                       "paths_unjudged": list(got.get("paths_unjudged") or [])})
         counts["unjudged" if level is None else f"T{level}"] += 1
         if level == 0:
             t0_ids.append(str(row.get("stmt_id") or ""))
@@ -9166,7 +9202,11 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
                          # 命中方式（按号 / 读旧行的 sha 回退）：读的人要能与页面那一栏
                          # 逐字核对同一个 `matched_by`（2026-10-26，Q20 判据 b）。
                          "matched_by": str(got.get("matched_by") or ""),
-                         "tri": str(got.get("tri") or "unknown")})
+                         "tri": str(got.get("tri") or "unknown"),
+                         # ---- 逐路径（NT2）：命题级 min 的每个来源都列出来 ----------
+                         "paths": paths, "min_of": min_of,
+                         "partial": bool(got.get("partial")),
+                         "paths_unjudged": list(got.get("paths_unjudged") or [])})
     return {
         "checked": bool(rows),
         "statements_total": len(rows),
@@ -9179,6 +9219,10 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
                             "与 T1–T4 是同一根档位轴上的第一档"),
         "high_tier": high,
         "high_tier_total": len(high),
+        # 逐路径分布（NT2）：`paths_total` 是这一篇所有命题的路径行数之和，
+        # `partial_total` 是"还有路径没判"的命题条数（不许折成已算全）。
+        "paths_total": paths_total,
+        "partial_total": partial_total,
         "paper_scaffolding_problems": paper_proof_scaffolding_problems(root),
         "t4_ladder_problems": t4_ladder_problems(root, levels=levels),
         "sid": str(sid or ""),
@@ -9211,7 +9255,8 @@ def t4_ladder_problems(root: str | Path, *,
             text = _SB.body_of(row)
             items.append({"stmt_id": str(row.get("stmt_id") or ""), "text": text,
                           "level": _SEC.nontriviality_of(
-                              root, text, stmt_id=str(row.get("stmt_id") or "")).get("level")})
+                              root, text, stmt_id=str(row.get("stmt_id") or ""),
+                              path_groups=_path_groups_of(row)).get("level")})
     else:
         items = levels
     questions = _ledger_rows(root, "research_questions")

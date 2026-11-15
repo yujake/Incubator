@@ -642,6 +642,10 @@ export interface StatementRow {
   nontriviality_tri: string;
   nontriviality_word: string;
   nontriviality_matched_by: string;
+  nontriviality_paths: NontrivialityPath[];
+  nontriviality_min_of: number[];
+  nontriviality_partial: boolean;
+  nontriviality_paths_unjudged: number[];
   formal_paths: FormalPath[];
   bit_numeric: string;
   bit_proof: string;
@@ -675,6 +679,20 @@ export interface ReviewedPath {
 export interface OptimizedPath {
   proof_no: number;
   state: string;
+}
+
+/** 出处：secretary._fold_nontriviality() 的一行 —— 非平凡度按证明路径逐条（NT2，2026-11-15 业主裁定「一个路径一个」）。`path_group` 是第几条路径（旧行没有这一格⇒ 路径 1）；`level` 是该路径最后一行（允许升/降档），`floor` 是该路径历史最小值（命题级 min 的来源）；两枚 sha 是「判的材料」与「落盘正文」的指纹。 */
+export interface NontrivialityPath {
+  path_group: number;
+  level: number | null;
+  floor: number | null;
+  label: string;
+  at: string;
+  stmt_id: string;
+  basis: string;
+  judged_body_sha256: string;
+  landed_body_sha256: string;
+  rows: number;
 }
 
 /** 出处：store.rows("review_findings")（无真机样本 ⇒ 权威来源是 `schema.ReviewFinding`）。 */

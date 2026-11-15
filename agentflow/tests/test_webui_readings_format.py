@@ -422,8 +422,9 @@ def test_criterion_2_negative_control_folding_unjudged_into_t0_is_reported(
     before = R.evidence_chain(format_ws)["statements"]
     assert _tier_words(before) == WANTED_TIERS, _tier_words(before)
 
-    def _stub(root: object, statement_full: str, *, stmt_id: str = "") -> dict:
-        del root, statement_full, stmt_id
+    def _stub(root: object, statement_full: str, *, stmt_id: str = "",
+              path_groups: object = None) -> dict:
+        del root, statement_full, stmt_id, path_groups
         return {"tri": "computed", "level": 0, "label": "T0", "basis": "打桩"}
 
     monkeypatch.setattr(SEC, "nontriviality_of", _stub)

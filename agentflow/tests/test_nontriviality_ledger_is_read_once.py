@@ -84,11 +84,16 @@ def test_the_ledger_is_parsed_once_for_many_statements(
 
 def test_an_appended_row_is_visible_on_the_next_call(
         workspace: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """台账追加一条更高档位 ⇒ 下一次调用立刻读到它（缓存不许把长跑冻在第一版）。"""
+    """台账追加一条新读数 ⇒ 下一次调用立刻读到它（缓存不许把长跑冻在第一版）。
+
+    NT2（2026-11-15）之后读侧取"各路径的历史最小值"：同一路径再判出更高档不会把命题级
+    抬上去（业主 ⑤：已有值 ⇒ min(原值, 本次)）。所以"可见"读在两处 —— 这一路径的最后
+    一行（`paths[0].level`，允许升降）与行数（`paths[0].rows`）。
+    """
     path = SEC.nontriviality_path(workspace)
     hits = _count_reads(monkeypatch, path)
     before = SEC.nontriviality_of(workspace, "正文一", stmt_id="000001")
-    assert before["level"] == 1
+    assert before["level"] == 1 and before["paths"][0]["rows"] == 1, before
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(_row("000001", 3, at="2026-10-27T11:00:00+08:00"),
                             ensure_ascii=False) + "\n")
@@ -96,7 +101,9 @@ def test_an_appended_row_is_visible_on_the_next_call(
     now = path.stat()
     os.utime(path, ns=(now.st_atime_ns, now.st_mtime_ns + 10**6))
     after = SEC.nontriviality_of(workspace, "正文一", stmt_id="000001")
-    assert after["level"] == 3, after
+    assert after["paths"][0]["level"] == 3, after      # 追加那一行读到了（缓存换版）
+    assert after["paths"][0]["rows"] == 2, after
+    assert after["level"] == 1, "命题级回升了（业主 ⑤：已有值取 min）"
     assert hits[0] == 2, f"追加之后应当再读一次（实际 {hits[0]} 次）"
 
 

@@ -5020,6 +5020,15 @@ def cmd_closing(args) -> int:
                 + " / ".join(f"T{level} {_counts.get(f'T{level}', 0)}" for level in (1, 2, 3, 4))
                 + f" / 未判 {_counts.get('unjudged', 0)}"
                 + f"（共 {_nt.get('statements_total', 0)} 条命题；T3/T4 {_nt.get('high_tier_total', 0)} 条）"))
+            # 逐路径读数（NT2，2026-11-15 业主裁定「一个路径一个」）：命题级是各路径的
+            # min；还有路径没判时明说（不许折成"已算全"）。
+            _paths = int(_nt.get("paths_total") or 0)
+            _partial = int(_nt.get("partial_total") or 0)
+            print(tty.bullet(
+                f"非平凡性·逐路径：{_paths} 条路径读数"
+                + (f"；{_partial} 条命题还有路径没判（命题级按已判路径取 min，"
+                   "不许当作已算全）" if _partial else "；每条命题的路径都已判")
+                + "（命题级 = 各路径非平凡度的最小值，永不回升）"))
         else:
             print(tty.bullet(f"非平凡性：没读到（{_nt.get('reason') or '台账为空'}）"))
         for _label, _key in (("论文侧缺铺垫", "paper_scaffolding_problems"),
