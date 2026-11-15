@@ -180,14 +180,6 @@ _SRC_CACHE: dict[str, Any] = {}
 #: - ``does_not_prove``：它没有证明什么（真机上因此仍然未知的那一段）；
 #: - ``superseded_by``：改用 CLI 入口 + 真 `LlmSeam` 的那份新彩排（没有就空串）。
 CHAIN_ONLY: dict[str, dict[str, str]] = {
-    "test_rehearsal_c3_numeric_chain.py": {
-        "chain": "C3 · 数值链（E → V → B）",
-        "reason": "直调 `AgentE.run_experiment` / `AgentV.verify_proof` / `AgentB.ingest_manuscript`；"
-                  "反真空还替换了私有类 `_NumericProofFormGate._proposition_form_gate`。",
-        "proves": "数值证据的四档与形态闸在方法层的判定。",
-        "does_not_prove": "真机循环里 E 的工具调用、V 的第三次连判与 B 的收录能串成一条链。",
-        "superseded_by": "",
-    },
     "test_rehearsal_c10_writing.py": {
         "chain": "C10 · 成文 / 审校回路（G 改 → H 复审 → H close_as）",
         "reason": "直调 `AgentG.*` / `AgentH.*`；并打桩 `review_tools.scan_document`。没有步循环。",

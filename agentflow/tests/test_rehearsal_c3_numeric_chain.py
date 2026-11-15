@@ -1,76 +1,87 @@
 # -*- coding: utf-8 -*-
-"""彩排判据 C3 · 数值链：M → D → E（数值 / 穷举两次实验）→ V（签 `## 证明`）→ B（收编）。
+"""彩排（真路径）C3 · 数值链：CLI 入口 → E 数值/穷举两次实验 → V 签 → B 收编。
 
-## 这条链要走通的那一段
+## 这条链与真机差在哪（逐项）
+
+| 这一趟用的东西 | 真机 | 这份彩排 |
+|---|---|---|
+| 入口 | `agentflow start --mode research` | 同一行：`cli.main(["start", "--mode", "research", …])` |
+| 执行体 | `_run_spec` → `_exec_role` → `host.wired_llm_conductor` → `LlmBackend` → `AgentLoop.run` | 同一条 |
+| 派活 | `Conductor.summon`（`M→E`、`E→V`、`E→B` 都是 `ALLOWED_EDGES` 里的真边） | 同一条 |
+| 实验 | `verify.run_experiment` → `AgentE.run_experiment`（真起子进程、真解析 `REPRO_RESULT`） | 同一条：盘上两份真脚本被真跑 |
+| 形态闸 | 产出侧 `secretary.judge_proposition_form`（E 的缝） | 同一条：判定内容是预置回复，闸本体与调用点一个都没换 |
+| 送审 | `verify.verify_proof` → `AgentV.verify_proof`（穷举会审 + 三转） | 同一条 |
+| 收编 | `own.ingest_manuscript(mode="register")` → `AgentB.ingest_manuscript` | 同一条 |
+| 模型缝 | 真 `LlmSeam`（`_agent_seam_factory` / `for_role` / `for_secretary`） | 同一条：构造点一个都没替换 |
+| 记账 | 真 `TokenMeter` → `usage_ledger` | 同一条 |
+| 出网 | `modelgw.urllib_transport`（HTTP POST） | 只换这一处：回预置的 OpenAI 兼容 JSON |
+
+旧 `test_rehearsal_c3_numeric_chain.py`（`CHAIN_ONLY` 里那份）直调三个 Agent 的公开方法，
+并替换私有类 `_NumericProofFormGate._proposition_form_gate`；这一份两处都不换。
+
+## 这条链覆盖什么（业主点名的 C3）
 
 ```text
-AgentE.run_experiment(..., method="numeric")            # 普通数值：reports/e-num-<稿号>.md
-AgentE.run_experiment(..., method="exhaustive_search")  # 穷举证明：reports/e-proof-<稿号>.md（有 ## 证明）
-AgentV.verify_proof(proof_manuscript=<e-proof>)         # 三转 clean ⇒ vsigns + 收方秘书落签块
-AgentB.ingest_manuscript(mode="register", <e-num>)      # 数值通道：放行 + 数值证据位
-AgentB.ingest_manuscript(mode="register", <e-proof>)    # 按稿收编：证明正文 + 第 1 条路径
+M --summon--> E --verify.run_experiment(numeric)-->  experiments 一行 + reports/e-num-*.md
+                --verify.run_experiment(exhaustive)--> experiments 一行 + reports/e-proof-*.md
+                --summon--> V --verify.verify_proof--> 三转 clean ⇒ 签 + 稿上签块
+                --summon--> B --own.ingest_manuscript--> statements 两行（conjecture / theorem）
 ```
 
-真入口：真 `Store` / 真事务 / 真 `AgentE.run_experiment`（真起子进程、真解析
-`REPRO_RESULT`、真落台账与两份手稿）/ 真 `AgentV.verify_proof`（穷举会审 + 三转）/ 真
-`Secretary`（E 的形态闸、B 的切稿与登记）。只有"模型这一轮说什么"是假缝。
+判据读盘：`experiments` 两行（`numeric/cross_check` + `exhaustive_search/proof`）、
+`reports/e-num-*` 有 `## 数值结果` 与 `## 命题`、`reports/e-proof-*` 的 `## 证明` 非空、
+`out/vsigns/<正文 sha>.json` 在盘上、`verifications` 三行 `path_group=1`、`statements`
+两行（数值档 `kind=conjecture` + `bits.numeric=verified`；穷举档 `kind=theorem` +
+`proof_list=[1]`）、钱账逐分相等且无主 0。
 
-## 形态闸归谁（业主 2026-11-13 裁决「甲」，本文件按它写）
+## 已知产品缺陷（本路发现，未在本路修；不在 FC-27 清单里，但按门先报）
 
-「B 侧只对 B 自己登记的命题审注册名，E 和 F 手稿侧录入放行」⇒ 形态闸的持有者是
-产出侧（E 的 `agent_e/proposition_form.py::_proposition_form_gate`，在写 experiments
-行 / e-proof 稿之前判一次）。
+E 的收工门（`agent_loop._v_wait_gate_reading` → `manuscriptclosing.signed_candidates`）
+按 `manuscript_id` 单独分桶，而 E 的两族稿各有独立号段（`e-proof` / `e-num` 都从
+`000000` 起）⇒ 同一工作区里同时有 `reports/e-num-000000.md` 与
+`reports/e-proof-000000.md` 时，两份候选共用同一个稿号 ⇒ `state="ambiguous_path"` ⇒
+E 的 final 被受控拒（"这一份 e-proof 没有现行的 V 签（ambiguous_path）"）。
+V 的签与 B 的收编不受影响，但 E 自己收不了工（任务 outcome 落 `no_result`）。
+本文件因此只断言本链的三段腿（实验 / 签 / 收编）都真的走通；E 的 final 那一格不
+伪造成通，缺陷读数见 `temp/cc3/REPORT-CC3.md` §三。修法需要动
+`manuscriptclosing` + `agent_loop` 两处（按 `(family, manuscript_id)` 分桶），本路没有
+单方面改产品。
 
-这条放行只覆盖「指针收录」（E / F / D 递一份稿、`own.ingest_manuscript(mode=register)`）：
-`e-num` / `e-proof` / `f-proof` 三族在 B 这一路不判、零次模型调用、不写形态台账
-（回执里 `judged=False / released=True / model_calls=0 / ledger_appended=False`），
-也不因此多落一份 b-稿。「引文侧不是这一档」：`origin="external_lit"` + 无稿 + 未在册
-仍要过 B 的形态闸，判过先落 `reports/b-proof-<B稿号>.md` 再登记、判不过受控拒
-（带 `fix` / `next_step`、零字节、号不发）。那一档不在这条数值链上，本文件不测它，
-但也不断言"B 侧不判形态 / 不落稿" —— 只断言本链这两笔指针收录的放行读数。
+## 反真空（产出侧形态闸）
 
-## 这条链的"走通"按盘上读数认（不是看回执里的 ok=True）
-
-| # | 终态读数（盘上 / 台账上） |
-|---|---|
-| 1 | `experiments` 两行：`method` / `result=supports` / `evidence_kind` 分别是 `cross_check` 与 `proof` |
-| 2 | `reports/e-num-<稿号>.md` 在盘上，有 `## 命题` 与 `## 数值结果`、没有 `## 证明` |
-| 3 | `reports/e-proof-<稿号>.md` 在盘上，`## 证明` 那一节非空（V 签的就是它） |
-| 4 | 签：`out/vsigns/<证明正文 sha>.json`、稿上签块 `state="signed"`、`verifications` 三行 `path_group=1` |
-| 5 | 数值通道的 `statements` 一行：`kind="conjecture"`、`bits.numeric="verified"`、`proof_text` 空 |
-| 6 | 穷举那一条的 `statements` 一行：`kind="theorem"`、`evidence_kind="proof"`、`proof_list=[1]`、`path_reading.count=1` |
-
-## 反真空（打坏产出侧的形态闸）
-
-把 E 的 `_proposition_form_gate` 打桩成「形态不合规」⇒ 穷举那一趟在写盘之前受控拒
-（`ExperimentError`，拒信里带 `proposition_form_refused` 与 E 自己的改法句），
-experiments 行 / e-proof 稿 / statements 一个字节都不落 ⇒ 第 1 / 3 / 6 条必须红。
+预置回复把形态判定说成"形态不合规" ⇒ 真 `run_experiment` 的产出侧闸必须受控拒
+（`ExperimentError`）⇒ experiments 行 / e-proof 稿 / statements 一个字节都不落。
 它证明这条链的绿来自"产出侧那道闸真的判过并放行"，不是恒真。
 
-另一条判据钉「甲」的放行面：E 这两族走指针收录时回执 `judged=False / released=True /
-model_calls=0 / ledger_appended=False`，B 的秘书缝一次都没被问过 `proposition_form`，
-形态台账一行没多，而且这一路「没有」多落一份 b-稿（落 b-稿是引文侧的动作，不是
-指针收录的）—— 防止以后有人把闸又搬回 B，或把"放行"读成"B 什么都不写了"。
+## Lean 两档
 
-零真实模型调用；`tmp_path` 工作区，不碰 `projects/` / `demo/`。
+`AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍。关档尤其重要：E 的动作面在关档下不含
+`formal`（`COMPUTATIONAL_METHODS`），两者都不该改变本链的数值/穷举两段。
 """
 from __future__ import annotations
 
+import io
 import json
 import pathlib
+import re
+from contextlib import redirect_stderr, redirect_stdout
+from typing import Any
 
 import pytest
 
+import rehearsal_contract as RC
+
+from agentflow import cli
 from agentflow import depsection as DS
+from agentflow import leanscope as LS
 from agentflow import manuscriptsubmission as MSUB
+from agentflow import modelgw as MG
 from agentflow import proofregistry as PR
-from agentflow import secretary as SEC
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
-from agentflow.agent_b import AgentB
-from agentflow.agent_e import AgentE
-from agentflow.agent_v import AgentV
 from agentflow.store import Store
+
+SID = "cc3-c3"
 
 NUM_CLAIM = "对 n <= 40 的偶数 n，n^2 + 2 都不是 3 的倍数。"
 PROOF_CLAIM = "R(3,4) = 9（K_9 的二染色穷举没有单色 K_3 / K_4）。"
@@ -109,75 +120,181 @@ print("REPRO_RESULT: " + json.dumps({
 }))
 """
 
-
-# --------------------------------------------------------------------------- 假缝
-
-
-class _Call:
-    ok = True
-    problem = ""
-    detail = ""
-    text = ""
-    model = "fake"
-    prompt_version = "t"
-    prompt_sha256 = "0" * 64
-
-
-class _Seam:
-    """秘书那一格的假模型缝：按 `note` 末段回预置 JSON。"""
-
-    wired = True
-
-    def __init__(self, answers: dict[str, list] | None = None) -> None:
-        self.answers = {k: list(v) for k, v in (answers or {}).items()}
-        self.seen: list[str] = []
-
-    def ask_json(self, prompt, *, system="", task_id="", note=""):
-        self.seen.append(str(note))
-        kind = str(note).split(":", 1)[-1]
-        queue = self.answers.get(kind) or [{}]
-        doc = queue.pop(0) if len(queue) > 1 else queue[0]
-        return dict(doc), _Call()
-
-    def asked(self, kind: str) -> int:
-        return sum(1 for note in self.seen if note.endswith(f":{kind}"))
-
-
-class _Review:
-    """V 自己的审阅缝（穷举那一支走机械会审，这一格只给散文支备用）。"""
-
-    wired = True
-
-    def __init__(self, *replies: str) -> None:
-        self.replies = list(replies)
-
-    def ask(self, prompt: str = "", **_kw) -> _Call:
-        call = _Call()
-        call.text = self.replies.pop(0) if len(self.replies) > 1 else self.replies[0]
-        return call
-
-
-def _axis(answer: str) -> dict:
-    return {"checked": True, "decision": answer, "reason": "夹具：照规则判",
-            "basis": ["夹具"]}
-
-
-CLEAN = json.dumps({"verdict": "成立", "why": "试了几种反例构造都失败，未发现问题。",
-                    "findings": []}, ensure_ascii=False)
 FORM_OK = {"checked": True, "well_formed": True, "conditions": "n 为偶数",
            "conclusion": "n^2 + 2 不是 3 的倍数", "problems": [],
-           "decision": "形态合规", "refused": "", "reason": "夹具：形态合规"}
-IDENTITY_DIFFERENT = {"checked": True, "decision": "different",
-                      "canonical_name": "另一条命题", "same_as": "", "route": "",
-                      "condition": "夹具", "conclusion": "夹具",
-                      "reason": "夹具：与在册各条都不同", "basis": ["夹具"]}
+           "decision": "形态合规", "refused": "", "reason": "彩排：形态合规"}
+FORM_BAD = {"checked": True, "well_formed": False, "submittable": False,
+            "refused": "proposition_form_refused",
+            "reason": "彩排：这一条没有写清条件与结论",
+            "problems": ["没有写出「从什么条件导出什么结论」"],
+            "decision": "形态不合规"}
+CLEAN = {"verdict": "成立", "why": "彩排：没发现反例。", "findings": []}
 
 
-def _forms(n: int = 4) -> list[dict]:
-    return [dict(FORM_OK) for _ in range(n)]
+def _json(value: Any) -> str:
+    return json.dumps(value, ensure_ascii=False)
 
 
-# --------------------------------------------------------------------------- 装配
+def _find(prompt: str, pattern: str) -> str:
+    m = re.search(pattern, prompt)
+    return m.group(0) if m else ""
+
+
+def _roster_names(prompt: str) -> list[str]:
+    return [m.group(1) for m in re.finditer(r'"roster_name":\s*"([A-Z]\d*)"', prompt)]
+
+
+class _Wire:
+    """预置的网络传输层替身（只回答"上游收到了什么、回了什么"）。"""
+
+    def __init__(self, *, form_ok: bool = True) -> None:
+        self.form_ok = bool(form_ok)
+        self.bodies: list[dict[str, str]] = []
+        self._steps: dict[str, int] = {}
+        self._stage: dict[str, dict[str, Any]] = {}
+        self._done: dict[str, list[str]] = {}
+
+    # ------------------------------------------------------------ 剧本
+    def _retire_then(self, prompt: str, role: str, nxt: str) -> str:
+        """名册里还有没销号的 → 销一个；都销完了 → 走 `nxt`（由调用方给的下一步）。"""
+        done = self._done.setdefault(role, [])
+        todo = [n for n in _roster_names(prompt) if n not in done]
+        if todo:
+            done.append(todo[0])
+            return _json({"tool": "conductor.retire_child",
+                          "args": {"child_name": todo[0], "reason": "交完了"}})
+        return nxt
+
+    def _step(self, role: str, prompt: str) -> str:
+        index = self._steps.get(role, 0)
+        self._steps[role] = index + 1
+        numeric = _find(prompt, r"reports/e-num-\d+\.md")
+        proof = _find(prompt, r"reports/e-proof-\d+\.md")
+        if role == "M":
+            if index == 0:
+                return _json({"summon": {"role": "E", "task": "做数值与穷举两次实验"}})
+            return self._retire_then(prompt, "M", _json({"final": "M 收工",
+                                                         "evidence": []}))
+        if role == "E":
+            if not self.form_ok:
+                # 反真空：只做穷举那一趟（它要过产出侧形态闸）。
+                if index == 0:
+                    return _json({"tool": "verify.run_experiment",
+                                  "args": {"claim": PROOF_CLAIM, "claim_key": "ramsey34",
+                                           "script_path": "code/enum_ramsey.py",
+                                           "method": "exhaustive_search",
+                                           "exhaustive": True,
+                                           "certificate": {"kind": "enumeration_bound",
+                                                           "detail": "n<=9 全枚举"},
+                                           "search_bound": {"n": 9}}})
+                return _json({"final": "E 收工", "evidence": []})
+            stage = self._stage.setdefault("E", {"at": 0, "done": []})
+            if stage["at"] == 0:
+                stage["at"] = 1
+                return _json({"tool": "verify.run_experiment",
+                              "args": {"claim": NUM_CLAIM, "claim_key": "num-scan",
+                                       "script_path": "code/num_scan.py",
+                                       "method": "numeric"}})
+            if stage["at"] == 1:
+                stage["at"] = 2
+                return _json({"tool": "verify.run_experiment",
+                              "args": {"claim": PROOF_CLAIM, "claim_key": "ramsey34",
+                                       "script_path": "code/enum_ramsey.py",
+                                       "method": "exhaustive_search", "exhaustive": True,
+                                       "certificate": {"kind": "enumeration_bound",
+                                                       "detail": "n<=9 全枚举"},
+                                       "search_bound": {"n": 9}}})
+            if stage["at"] == 2:
+                stage["at"] = 3
+                return _json({"summon": {"role": "V", "task": f"审这份证明 {proof}",
+                                          "params": {"proof_manuscript": proof}}})
+            if stage["at"] == 3:
+                todo = [n for n in _roster_names(prompt) if n not in stage["done"]]
+                if todo:
+                    stage["done"].append(todo[0])
+                    return _json({"tool": "conductor.retire_child",
+                                  "args": {"child_name": todo[0], "reason": "V 签完了"}})
+                stage["at"] = 4
+                stage["summoned_b"] = True
+                return _json({"summon": {"role": "B",
+                                          "task": f"收编两份稿 {numeric} 与 {proof}"}})
+            todo = [n for n in _roster_names(prompt) if n not in stage["done"]]
+            if todo:
+                stage["done"].append(todo[0])
+                return _json({"tool": "conductor.retire_child",
+                              "args": {"child_name": todo[0], "reason": "B 收编完了"}})
+            return _json({"final": "E 收工", "evidence": []})
+        if role == "V":
+            if index == 0:
+                return _json({"tool": "verify.verify_proof",
+                              "args": {"proof_manuscript": proof}})
+            return _json({"final": "V 签完了", "evidence": []})
+        if role == "B":
+            seq = [
+                _json({"tool": "own.ingest_manuscript",
+                       "args": {"manuscript": numeric, "mode": "register"}}),
+                _json({"tool": "own.ingest_manuscript",
+                       "args": {"manuscript": proof, "mode": "register"}}),
+                _json({"final": "B 收编完了", "evidence": []}),
+            ]
+            return seq[min(index, len(seq) - 1)]
+        return _json({"final": f"{role} 收工", "evidence": []})
+
+    def _reply(self, system: str, prompt: str) -> str:
+        head = system.lstrip()
+        m = re.match(r"你是「秘书」的判断面（类别：([a-z_]+)）", head)
+        if m:
+            kind = m.group(1)
+            if kind == "proposition_form":
+                return _json(FORM_OK if self.form_ok else FORM_BAD)
+            table = {
+                "statement_aesthetic": {"decision": "T2", "reason": "彩排", "basis": ["夹具"]},
+                "proposition_identity": {"decision": "different", "reason": "彩排",
+                                         "basis": ["夹具"], "canonical_name": "另一条命题",
+                                         "same_as": "", "route": "", "condition": "夹具",
+                                         "conclusion": "夹具"},
+                "statement_same": {"decision": "different", "reason": "彩排",
+                                   "basis": ["夹具"], "canonical_name": "另一条命题",
+                                   "same_as": "", "route": "", "condition": "夹具",
+                                   "conclusion": "夹具"},
+                "proof_kind": {"decision": "different", "same_path": 0, "reason": "彩排"},
+                "v_reply_defect": {"decision": "没问题", "reason": "彩排", "basis": ["夹具"],
+                                   "defect_step": None, "defect_kind": "",
+                                   "report_gap": ""},
+                "sign_issuance": {"decision": "签发", "reason": "彩排", "basis": ["夹具"]},
+                "dispatch_fit": {"decision": "这一件能做", "reason": "彩排",
+                                 "basis": ["夹具"]},
+            }
+            return _json(table.get(kind, {"decision": "可派", "reason": "彩排",
+                                          "basis": ["夹具"]}))
+        if head.startswith("你是「命题形态闸」"):
+            return _json(FORM_OK if self.form_ok else FORM_BAD)
+        if head.startswith("你是「命题台账检索」"):
+            return _json({"keywords": ["偶数", "倍数"], "why": "彩排：这两个词能捞到同一条"})
+        if "你是验证者（V）" in (head + prompt)[:400]:
+            return _json(CLEAN)
+        m = re.match(r"你是 ([A-Z]) 号角色", head)
+        if m:
+            return self._step(m.group(1), prompt)
+        return _json({"decision": "可派", "reason": "彩排：兜底", "basis": ["夹具"]})
+
+    def __call__(self, url: str, headers: Any, body: bytes,
+                 timeout_sec: float) -> tuple[int, str]:
+        payload = json.loads(body.decode("utf-8"))
+        messages = payload.get("messages") or []
+        system = next((str(x.get("content") or "") for x in messages
+                       if x.get("role") == "system"), "")
+        prompt = "\n".join(str(x.get("content") or "") for x in messages
+                           if x.get("role") == "user")
+        text = self._reply(system, prompt)
+        self.bodies.append({"system": system, "prompt": prompt, "text": text})
+        return 200, json.dumps({"choices": [{"message": {"content": text},
+                                             "finish_reason": "stop"}],
+                                "usage": {"prompt_tokens": 8, "completion_tokens": 8}},
+                               ensure_ascii=False)
+
+
+# ============================================================ 夹具
 
 
 def _workspace(base: pathlib.Path) -> Store:
@@ -191,121 +308,111 @@ def _workspace(base: pathlib.Path) -> Store:
     return st
 
 
-def _run_chain(base: pathlib.Path, *, trace: dict | None = None) -> dict:
-    """把 C3 那条链整条跑一遍，返回盘上的读数（反真空拿同一份读数打红）。
-
-    `trace` 给一个 dict 时，工作区在建好那一刻就挂进去 —— 反真空那一条要在
-    `run_experiment` 抛出来之后仍然读得到盘（"一个字节都没写"是判据）。
-    """
+def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, *,
+         lean: str = "0", form_ok: bool = True) -> dict[str, Any]:
     st = _workspace(base)
-    if trace is not None:
-        trace["store"] = st
-    e_seam = _Seam({"proposition_form": _forms()})
-    e = AgentE(st, config={}, workspace_root=st.root,
-               secretary=SEC.Secretary("E", root=st.root, store=st, seam=e_seam,
-                                       enable_model=True))
-    numeric = e.run_experiment(NUM_CLAIM, "num-scan", "code/num_scan.py",
-                               method="numeric")
-    exhaustive = e.run_experiment(PROOF_CLAIM, "ramsey34", "code/enum_ramsey.py",
-                                  method="exhaustive_search", exhaustive=True,
-                                  certificate={"kind": "enumeration_bound",
-                                               "detail": "n<=9 全枚举"},
-                                  search_bound={"n": 9})
+    wire = _Wire(form_ok=form_ok)
+    monkeypatch.setenv("AGENTFLOW_MODEL_API_KEY", "rehearsal-fake-key-never-used")
+    monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", str(lean))
+    monkeypatch.setattr(MG, "urllib_transport", wire)
+    out, err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = cli.main([
+                "start", "--mode", "research", "--root", str(st.root), "--sid", SID,
+                "--subagents", "--task", "做数值与穷举两次实验并收编", "--max-steps", "10",
+            ])
+    except SystemExit as exc:
+        rc = int(exc.code or 0)
+    return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
+            "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue(),
+            "form_ok": form_ok}
 
-    rel = str(exhaustive.get("proof_manuscript") or "")
-    text = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") if rel else ""
 
-    v = AgentV(st, workspace_root=st.root, llm=_Review(CLEAN),
-               secretary=SEC.Secretary(
-                   "V", root=st.root, store=st,
-                   seam=_Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
-                               "sign_issuance": [_axis(SEC.SIGN_ISSUE)]}),
-                   enable_model=True))
-    # E 派 V：收方秘书 = `secretary:E`（签块落回 E 那一份稿）。
-    from agentflow import conductor as CND
+def _events(ws: pathlib.Path) -> list[dict]:
+    got: list[dict] = []
+    for path in sorted((ws / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                got.append(json.loads(line))
+            except ValueError:
+                continue
+    return got
 
-    with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
-                        parent_role="E"):
-        reviewed = v.verify_proof(statement_id="", proof_manuscript=rel)
 
-    b_seam = _Seam({"proposition_form": _forms(),
-                    "statement_keywords": [{"keywords": ["偶数", "倍数"],
-                                            "why": "夹具：这两个词能把同一条命题捞出来"}],
-                    "statement_same": [dict(IDENTITY_DIFFERENT)],
-                    "proof_kind": [{"checked": True, "decision": "different",
-                                    "same_path": 0, "reason": "夹具：另一条路径"}]})
-    b = AgentB(st, extractor=None, extract_text=None, config={},
-               secretary=SEC.Secretary("B", root=st.root, store=st, seam=b_seam,
-                                       enable_model=True))
-    numeric_ms = str(numeric.get("numeric_manuscript") or "")
-    form_rows_before = [dict(r) for r in SEC.proposition_form_rows(st.root)]
-    filed_numeric = b.ingest_manuscript(manuscript=numeric_ms, mode="register")
-    filed_proof = b.ingest_manuscript(manuscript=rel, mode="register")
-    form_rows_after = [dict(r) for r in SEC.proposition_form_rows(st.root)]
+def _tool_result(events: list[dict], *, role: str, tool: str, index: int = 0) -> dict:
+    hits = [e for e in events
+            if e.get("kind") == "agent_step" and e.get("role") == role
+            and e.get("shape") == "tool"
+            and str((e.get("payload") or {}).get("name") or "") == tool]
+    assert len(hits) > index, f"{role} 没有第 {index + 1} 次调过工具 {tool}"
+    got = hits[index].get("result") or {}
+    data = got.get("data")
+    if hasattr(data, "to_dict"):
+        data = dict(data.to_dict())
+    return {"ok": bool(got.get("ok")), "data": data if isinstance(data, dict) else {},
+            "error": str(got.get("error") or "")}
 
+
+def _rows(store: Store, table: str) -> list[dict]:
+    return [dict(r) for r in store.rows(table)]
+
+
+def _pending_rows(ws: pathlib.Path) -> list[dict]:
+    base = VR.pending_dir(ws)
+    if not base.is_dir():
+        return []
+    rows: list[dict] = []
+    for path in sorted(base.glob("*.jsonl")):
+        rows += [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
+    return rows
+
+
+def _chain_reading(got: dict[str, Any]) -> dict[str, Any]:
+    ws, st = got["ws"], got["store"]
+    events = _events(ws)
+    experiments = _rows(st, "experiments")
+    statements = _rows(st, "statements")
+    reports = ws / "reports"
     return {
-        "store": st,
-        "numeric": dict(numeric),
-        "exhaustive": dict(exhaustive),
-        "reviewed": dict(reviewed),
-        "filed_numeric": dict(filed_numeric),
-        "filed_proof": dict(filed_proof),
-        "b_seam": b_seam,
-        "form_rows_before": form_rows_before,
-        "form_rows_after": form_rows_after,
-        "rel": rel,
-        "text": text,
-        "numeric_rel": numeric_ms,
-        "numeric_text": (pathlib.Path(st.root) / numeric_ms).read_text(encoding="utf-8")
-                        if numeric_ms else "",
-        "experiments": [dict(r) for r in st.rows("experiments")],
-        "statements": [dict(r) for r in st.rows("statements")],
-        "sid_numeric": str((filed_numeric.get("target") or {}).get("stmt_id") or ""),
-        "sid_proof": str((filed_proof.get("target") or {}).get("stmt_id") or ""),
+        "store": st, "ws": ws, "events": events,
+        "experiments": experiments,
+        "statements": statements,
+        "tasks": _rows(st, "tasks"),
+        "numeric": _tool_result(events, role="E", tool="verify.run_experiment", index=0),
+        "exhaustive": _tool_result(events, role="E", tool="verify.run_experiment", index=1),
+        "reviewed": _tool_result(events, role="V", tool="verify.verify_proof"),
+        "filed_numeric": _tool_result(events, role="B", tool="own.ingest_manuscript", index=0),
+        "filed_proof": _tool_result(events, role="B", tool="own.ingest_manuscript", index=1),
+        "reports": sorted(p.name for p in reports.glob("*.md")) if reports.is_dir() else [],
+        "numeric_rel": str((_tool_result(events, role="E", tool="verify.run_experiment",
+                                         index=0).get("data") or {}).get(
+                                             "numeric_manuscript") or ""),
+        "proof_rel": str((_tool_result(events, role="E", tool="verify.run_experiment",
+                                       index=1).get("data") or {}).get(
+                                           "proof_manuscript") or ""),
+        "pending": _pending_rows(ws),
+        "unsigned_review": str((_tool_result(events, role="V", tool="verify.verify_proof")
+                                .get("data") or {}).get("verdict") or ""),
+        "form_rows": [dict(r) for r in _form_rows(ws)],
     }
 
 
-# --------------------------------------------------------------------------- 判据本体
+def _form_rows(ws: pathlib.Path) -> list[dict]:
+    path = ws / "out" / "secretary" / "proposition_form.jsonl"
+    if not path.is_file():
+        return []
+    return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
 
 
-def _banked(reading: dict) -> dict:
-    """盘上/台账上那几条承重读数（正控与反真空共用同一份量法）。
-
-    稿上的字一律「重读盘上那一份」：签块是 V 的签发那一笔落上去的，而 `_run_chain`
-    里那份 `text` 是 E 刚落完稿时的快照（签在那之后才落）。
-    """
-    st: Store = reading["store"]
-    sid_numeric = reading["sid_numeric"]
-    sid_proof = reading["sid_proof"]
-    rel = str(reading["rel"])
-    text = ((pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
-            if rel and (pathlib.Path(st.root) / rel).is_file() else "")
-    numeric_row = next((r for r in reading["statements"]
-                        if str(r.get("stmt_id")) == sid_numeric), {})
-    proof_row = next((r for r in reading["statements"]
-                      if str(r.get("stmt_id")) == sid_proof), {})
-    body = DS.proof_body(text).strip("\n") if text else ""
-    reading = dict(reading)
-    reading.update({
-        "text": text,
-        "numeric_row": numeric_row,
-        "proof_row": proof_row,
-        "proof_body": body,
-        "proof_sha": PR.proof_sha(body) if body else "",
-        "proof_groups": ([int(r.get("path_group") or 0)
-                          for r in VR.list_verifications(st.root, statement_id=sid_proof,
-                                                        limit=None)[0]] if sid_proof else []),
-        "path": (MSUB.path_reading(st, st.root, statement_id=sid_proof)
-                 if sid_proof else {}),
-    })
-    return reading
+# ============================================================ 判据本体
 
 
-def _chain_problems(reading: dict) -> list[str]:
+def _chain_problems(reading: dict[str, Any]) -> list[str]:
     """C3 的六条终态读数（空 = 通）。每条都读盘，不看回执里的 ok。"""
-    reading = _banked(reading)
-    st: Store = reading["store"]
     problems: list[str] = []
+    st: Store = reading["store"]
+    root = pathlib.Path(st.root)
 
     # 1. experiments 两行：方法与档位对得上。
     experiments = reading["experiments"]
@@ -317,190 +424,213 @@ def _chain_problems(reading: dict) -> list[str]:
         want = {("numeric", "supports", "cross_check"),
                 ("exhaustive_search", "supports", "proof")}
         if got != want:
-            problems.append(f"experiments 的两行不是「数值 cross_check + 穷举 proof」：{got}")
+            problems.append(f"experiments 两行不是「数值 cross_check + 穷举 proof」：{got}")
 
-    # 2. 普通数值手稿：有 `## 命题` / `## 数值结果`，没有 `## 证明`。
-    numeric_text = str(reading["numeric_text"])
-    if not reading["numeric_rel"].startswith("reports/e-num-"):
-        problems.append(f"普通数值手稿不在 e-num 族：{reading['numeric_rel']!r}")
+    # 2. 普通数值手稿：数值结果与命题两节都在，且没有 `## 证明`。
+    numeric_rel = str(reading["numeric_rel"])
+    numeric_path = root / numeric_rel if numeric_rel else None
+    numeric_text = (numeric_path.read_text(encoding="utf-8")
+                    if numeric_path is not None and numeric_path.is_file() else "")
+    if not numeric_rel.startswith("reports/e-num-"):
+        problems.append(f"普通数值手稿不在 e-num 族：{numeric_rel!r}")
     if "## 命题" not in numeric_text or "## 数值结果" not in numeric_text:
         problems.append("普通数值手稿缺 `## 命题` 或 `## 数值结果` 那一节")
     if "## 证明" in numeric_text:
-        problems.append("普通数值手稿不该有 `## 证明`（它不过 V，见业主口径）")
+        problems.append("普通数值手稿不该有 `## 证明`（它不过 V）")
 
-    # 3. 穷举手稿：`## 证明` 那一节非空（V 的签就盖在它上面）。
-    if not reading["rel"].startswith("reports/e-proof-"):
-        problems.append(f"穷举手稿不在 e-proof 族：{reading['rel']!r}")
-    if not reading["proof_body"].strip():
+    # 3. 穷举手稿：`## 证明` 非空（V 的签就盖在它上面）。
+    proof_rel = str(reading["proof_rel"])
+    proof_path = root / proof_rel if proof_rel else None
+    proof_text = (proof_path.read_text(encoding="utf-8")
+                  if proof_path is not None and proof_path.is_file() else "")
+    if not proof_rel.startswith("reports/e-proof-"):
+        problems.append(f"穷举手稿不在 e-proof 族：{proof_rel!r}")
+    body = DS.proof_body(proof_text).strip("\n") if proof_text else ""
+    if not body:
         problems.append("穷举手稿的 `## 证明` 是空的（没有可签的正文）")
 
     # 4. 签：信封 + 稿上签块 + 三行台账都是第 1 条路径。
-    sha = str(reading["proof_sha"])
+    sha = PR.proof_sha(body) if body else ""
     if sha:
-        if not VS.sign_path(st.root, sha).is_file():
+        if not VS.sign_path(root, sha).is_file():
             problems.append(f"签信封不在盘上：out/vsigns/{sha}.json")
-        standing = VS.manuscript_sign_standing(reading["text"], proof_sha=sha)
+        standing = VS.manuscript_sign_standing(proof_text, proof_sha=sha)
         if str(standing.get("state") or "") != "signed":
             problems.append(f"稿上的签块不是 signed：{standing.get('state')!r} "
                             f"({standing.get('why') or standing.get('reason') or ''})")
-        groups = [int(x or 0) for x in reading["proof_groups"]]
+        groups = [int(r.get("path_group") or 0) for r in reading["pending"]]
         if len(groups) != int(VR.SIGN_STREAK_NEED):
-            problems.append(f"verifications 应恰好 {VR.SIGN_STREAK_NEED} 行，实得 {len(groups)} 行")
+            problems.append(f"pending 台账应恰好 {VR.SIGN_STREAK_NEED} 行，实得 {len(groups)} 行")
         if set(groups) != {1}:
-            problems.append(f"verifications 的 path_group 不是 [1]：{groups}")
+            problems.append(f"pending 的 path_group 不是 [1]：{groups}")
 
     # 5. 数值通道：conjecture + 数值位 verified + 证明栏空着。
-    numeric_row = dict(reading["numeric_row"])
-    if not numeric_row:
-        problems.append(f"数值通道没有落 statements 行（号 {reading['sid_numeric']!r}）："
-                        f"{reading['filed_numeric'].get('refused')!r} "
-                        f"{str(reading['filed_numeric'].get('reason') or '')[:160]}")
+    statements = reading["statements"]
+    numeric_rows = [r for r in statements if str(r.get("kind") or "") == "conjecture"]
+    proof_rows = [r for r in statements if str(r.get("kind") or "") == "theorem"]
+    if len(numeric_rows) != 1:
+        problems.append(f"数值通道应有 1 行 conjecture，实得 {len(numeric_rows)} 行")
     else:
-        if str(numeric_row.get("kind") or "") != "conjecture":
-            problems.append(f"数值通道的 kind 不是 conjecture：{numeric_row.get('kind')!r}")
-        if str(numeric_row.get("evidence_kind") or "") != "cross_check":
+        row = numeric_rows[0]
+        if str(row.get("evidence_kind") or "") != "cross_check":
             problems.append(f"数值通道的 evidence_kind 不是 cross_check："
-                            f"{numeric_row.get('evidence_kind')!r}")
-        if str(numeric_row.get("proof_text") or "").strip():
+                            f"{row.get('evidence_kind')!r}")
+        if str(row.get("proof_text") or "").strip():
             problems.append("普通数值档的 proof_text 该留空（业主口径），实得非空")
-        if dict(numeric_row.get("bits") or {}).get("numeric") != "verified":
+        if dict(row.get("bits") or {}).get("numeric") != "verified":
             problems.append(f"数值通道的 bits.numeric 不是 verified："
-                            f"{dict(numeric_row.get('bits') or {}).get('numeric')!r}")
+                            f"{dict(row.get('bits') or {}).get('numeric')!r}")
 
     # 6. 穷举那一条：theorem / proof / 第 1 条路径。
-    proof_row = dict(reading["proof_row"])
-    if not proof_row:
-        problems.append(f"按稿收编没有落 statements 行（号 {reading['sid_proof']!r}）："
-                        f"{reading['filed_proof'].get('refused')!r} "
-                        f"{str(reading['filed_proof'].get('reason') or '')[:160]}")
+    if len(proof_rows) != 1:
+        problems.append(f"穷举档应有 1 行 theorem，实得 {len(proof_rows)} 行")
     else:
-        if str(proof_row.get("kind") or "") != "theorem":
-            problems.append(f"穷举那一条的 kind 不是 theorem：{proof_row.get('kind')!r}")
-        if str(proof_row.get("evidence_kind") or "") != "proof":
+        row = proof_rows[0]
+        if str(row.get("evidence_kind") or "") != "proof":
             problems.append(f"穷举那一条的 evidence_kind 不是 proof："
-                            f"{proof_row.get('evidence_kind')!r}")
-        if PR.proof_sha(str(proof_row.get("proof_text") or "")) != reading["proof_sha"]:
+                            f"{row.get('evidence_kind')!r}")
+        if PR.proof_sha(str(row.get("proof_text") or "")) != sha:
             problems.append("命题行上的正文与稿里 `## 证明` 不是同一份")
-        nos = [int(no) for no, _t in VR.proof_list(proof_row)]
+        nos = [int(no) for no, _t in VR.proof_list(row)]
         if nos != [1]:
             problems.append(f"proof_list 不是 [1]：{nos}")
-        path = dict(reading["path"])
+        path = MSUB.path_reading(st, root, statement_id=str(row.get("stmt_id") or ""))
         if path.get("checked") is not True or int(path.get("count") or 0) != 1:
             problems.append(f"路径读数不是 1 条：{path}")
         elif int((path.get("paths") or [{}])[0].get("path_group") or 0) != 1:
             problems.append(f"第 1 条路径的 path_group 不是 1：{path.get('paths')}")
+
+    # 7. 回执也要对得上（交叉核对，不作为主判据）。
+    if not reading["reviewed"].get("ok"):
+        problems.append(f"V 的 verify_proof 回执不是 ok：{reading['reviewed'].get('error')!r}")
     return problems
 
 
 # ============================================================ ① 正控：链走通
 
 
-def test_the_numeric_chain_runs_end_to_end(tmp_path):
-    """正控：E 两次实验 → V 签穷举稿 → B 收编两条，六条终态读数全对。"""
-    reading = _run_chain(tmp_path)
+def test_the_numeric_chain_runs_from_the_cli_with_only_the_wire_replaced(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """正控：E 两次实验 → V 签穷举稿 → B 收编两条，六条终态读数全对（Lean 关）。"""
+    got = _run(tmp_path, monkeypatch, lean="0")
+    reading = _chain_reading(got)
+
+    # ---- 入口与"只换了网线"
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
+    assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
+    assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
+        "缝工厂被整体替换了 —— 这份彩排的承诺是「只换网线」")
+    live = [e for e in reading["events"] if e.get("kind") == "llm_call"]
+    assert live, "会话里一条 llm_call 都没有 ⇒ 走的不是真 LlmSeam"
+
+    # ---- 六条盘上读数
     problems = _chain_problems(reading)
     assert problems == [], problems
+    # 两次实验各落一份稿；E 的形态台账里有产出侧那一笔（真闸判过）。
+    assert "e-num-000000.md" in reading["reports"], reading["reports"]
+    assert "e-proof-000000.md" in reading["reports"], reading["reports"]
+    assert [r for r in reading["form_rows"] if str(r.get("role")) == "E"], reading["form_rows"]
+    # V 三转是一次送审里自己转三次（不是三次独立送审）。
+    assert len(reading["reviewed"]["data"].get("review_passes") or []) == int(
+        VR.SIGN_STREAK_NEED), reading["reviewed"]["data"].get("review_passes")
+    assert str(reading["reviewed"]["data"].get("kind") or "") == "proof_unregistered_signed", (
+        reading["reviewed"]["data"].get("kind"))
 
-    # 回执与盘上对得上（回执只作交叉核对，判据以盘上为准）。
-    assert reading["numeric"]["evidence_kind"] == "cross_check", reading["numeric"]
-    assert reading["exhaustive"]["evidence_kind"] == "proof", reading["exhaustive"]
-    assert reading["filed_numeric"].get("ok") is True, reading["filed_numeric"]
-    assert reading["filed_proof"].get("ok") is True, reading["filed_proof"]
-    # 两次收编各落一行，且不是同一行（数值与证明是两条命题）。
-    assert len({reading["sid_numeric"], reading["sid_proof"]}) == 2, (
-        reading["sid_numeric"], reading["sid_proof"])
-    assert len(reading["statements"]) == 2, reading["statements"]
-    # V 的三转是一次送审里自己转三次。
-    assert len(reading["reviewed"].get("review_passes") or []) == int(VR.SIGN_STREAK_NEED)
-    assert reading["reviewed"].get("kind") == "proof_unregistered_signed", reading["reviewed"]
+    # ---- 钱：账本有行、无主为 0、悬空 0、逐分相等
+    from agentflow.modelcost import reconcile_usage
+
+    money = reconcile_usage(reading["store"])
+    assert money["ledger_rows"] > 0, money
+    assert money["unattributed"]["count"] == 0, money["unattributed"]
+    assert money["dangling"] == [], money["dangling"]
+    assert money["equal"] is True, money
 
 
 # ============================================================ ② 反真空：产出侧形态闸坏
 
 
-def test_a_broken_producer_form_gate_turns_the_chain_red(tmp_path, monkeypatch):
-    """反真空（产出侧形态闸）：E 的 `_proposition_form_gate` 判「形态不合规」⇒ 链必须红。
+def test_a_broken_producer_form_gate_turns_the_chain_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：模型说"形态不合规" ⇒ E 的产出侧闸必须受控拒，链上一个字节都不落。
 
-    2026-11-13 业主裁决之后，形态闸的持有者是产出侧（E 的数值证明路线），B 侧对
-    `e-num` / `e-proof` 放行。所以这一条打的是 E 的那一格：`run_experiment` 在写
-    experiments 行 / e-proof 稿之前受控拒（`ExperimentError`），一个字节都不写。
-    它证明第 3 / 6 条不是"跑过 E 就算数"，而是"产出侧那道闸真的判过并放行"。
+    闸不换：真 `_NumericProofFormGate` 调真秘书，只是它的判定内容是预置回复
+    （这是"模型说了一句什么"那一层）。若这一条不红，第 3/6 条判据就只是"跑过 E
+    就算数"，而不是"产出侧那道闸真的判过并放行"。
     """
-    from agentflow.agent_e import ExperimentError
-    from agentflow.agent_e import proposition_form as EFORM
-
-    def _refuse(self, **_kw):
-        return {"checked": True, "well_formed": False, "submittable": False,
-                "refused": "proposition_form_refused",
-                "reason": "打桩：这一条没有写清条件与结论",
-                "problems": ["没有写出「从什么条件导出什么结论」"],
-                "decision": "形态不合规"}
-
-    monkeypatch.setattr(EFORM._NumericProofFormGate, "_proposition_form_gate", _refuse)
-
-    trace: dict = {}
-    with pytest.raises(ExperimentError) as excinfo:
-        _run_chain(tmp_path, trace=trace)
-    message = str(excinfo.value)
-    # 受控码与 E 自己的改法句都在拒信里（E 侧没有 B 那对 fix / next_step 键）。
-    assert "proposition_form_refused" in message, message
-    assert "设…则…" in message, message
-
-    # 零写入（指被拒的那一趟）：普通数值那一行照旧在（它不过这道闸）；
-    # 穷举那一趟的实验行 / e-proof 稿 / statements 一个都没有（闸在写盘之前）。
-    st: Store = trace["store"]
-    experiments = [dict(r) for r in st.rows("experiments")]
-    assert [str(r.get("method") or "") for r in experiments] == ["numeric"], experiments
-    reports = pathlib.Path(st.root) / "reports"
-    leftovers = ([p.name for p in reports.glob("e-proof-*.md")]
-                 if reports.is_dir() else [])
-    assert leftovers == [], leftovers
-    assert st.rows("statements") == [], st.rows("statements")
+    got = _run(tmp_path, monkeypatch, lean="0", form_ok=False)
+    st, ws = got["store"], got["ws"]
+    assert got["wire"].bodies, "反真空没真的问过模型"
+    assert _rows(st, "experiments") == [], "形态闸判不合规，却落了 experiments 行"
+    reports = ws / "reports"
+    leftovers = sorted(p.name for p in reports.glob("e-proof-*.md")) if reports.is_dir() else []
+    assert leftovers == [], f"形态闸判不合规，却落了 e-proof 稿：{leftovers}"
+    assert _rows(st, "statements") == [], "形态闸判不合规，却收了命题"
+    # 那一笔受控拒要如实回给模型（不是静默失败）：工具回执 ok=False，且拒信里带受控码。
+    tool = _tool_result(_events(ws), role="E", tool="verify.run_experiment")
+    assert tool["ok"] is False, tool
+    assert ("proposition_form" in tool["error"] or "形态" in tool["error"]
+            or "没有落库" in tool["error"]), tool["error"]
+    # 形态台账要记下这一笔（`role=E` 的"没判成/判不过"读数）。
+    assert [r for r in _form_rows(ws) if str(r.get("role")) == "E"], _form_rows(ws)
 
 
-# ============================================================ ③ 新裁决：B 侧放行
+# ============================================================ 判据①：每笔真调用一行账
 
 
-def test_pointer_intake_releases_the_e_families_without_a_second_form_judgement(tmp_path):
-    """裁决「甲」（2026-11-13）：E 的两族走「指针收录」时 B 不判形态、零次模型调用。
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_real_call_has_exactly_one_ledger_row(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行（Lean 开/关各一遍）。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    reading = RC.ledger_identity(got["ws"], got["store"])
+    print(f"[一行账] lean={lean} 真调用={reading['calls']} 出网={len(got['wire'].bodies)} "
+          f"账本行={reading['rows']} duplicate={len(reading['duplicates'])} "
+          f"未配对={len(reading['unpaired'])} 未认领={len(reading['unclaimed'])}")
+    assert reading["calls"] == len(got["wire"].bodies), (
+        "有真缝调用没有落 `llm_call` 事件（或反之）："
+        f"事件 {reading['calls']} / 出网 {len(got['wire'].bodies)}")
+    problems = RC.one_row_per_call_problems(reading)
+    assert problems == [], "判据①红：\n- " + "\n- ".join(problems)
 
-    读数按收编回执里那一格认（`proposition_form`：`judged=False` / `released=True` /
-    `model_calls=0` / `ledger_appended=False`），并核三处旁证：
-    ① B 的秘书缝一次都没被问过 `proposition_form`；
-    ② 形态台账在两次收编前后一行没多；
-    ③ 指针收录这条路「没有」多落一份 b-稿 —— 「甲」里落 b-稿的是引文侧（
-    `origin="external_lit"` + 无稿 + 未在册：判过先落 `reports/b-proof-<B稿号>.md`
-    再登记），不是这一档。这一条「不」断言"B 侧不判形态/不落稿"，只断言本链这两笔
-    指针收录的放行读数与其边界。
-    """
-    reading = _run_chain(tmp_path)
-    assert _chain_problems(reading) == [], _chain_problems(reading)
 
-    # 回执里的放行读数：两族各一条。
-    for got, family in ((reading["filed_numeric"], "e-num"),
-                        (reading["filed_proof"], "e-proof")):
-        form = dict(got.get("proposition_form") or {})
-        assert form.get("released") is True, (family, form)
-        assert form.get("judged") is False, (family, form)
-        assert int(form.get("model_calls") or 0) == 0, (family, form)
-        assert form.get("ledger_appended") is False, (family, form)
-        assert str(form.get("family") or "") == family, (family, form)
-        assert "放行" in str(form.get("reason") or ""), (family, form)
+# ============================================================ 判据②：会话归口
 
-    # 旁证①：B 的秘书缝没被问过形态（问过的只有同一命题检索那一族）。
-    assert reading["b_seam"].asked("proposition_form") == 0, reading["b_seam"].seen
-    # 旁证②：形态台账一行没多（E 那一次仍在；B 一次都没写）。
-    before = {str(r.get("statement_sha256") or "") for r in reading["form_rows_before"]}
-    after = {str(r.get("statement_sha256") or "") for r in reading["form_rows_after"]}
-    assert after == before, (reading["form_rows_before"], reading["form_rows_after"])
-    b_rows = [r for r in reading["form_rows_after"]
-              if str(r.get("role") or "") == "B"]
-    assert b_rows == [], b_rows
-    # 旁证③：指针收录不多落 b-稿（落 b-稿是引文侧那一档的动作）。
-    reports = pathlib.Path(reading["store"].root) / "reports"
-    b_copies = ([p.name for p in reports.glob("b-proof-*.md")]
-                if reports.is_dir() else [])
-    assert b_copies == [], b_copies
+
+@pytest.mark.parametrize("lean", ["1", "0"])
+def test_every_llm_call_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
+    """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    split = RC.session_split(got["ws"], SID)
+    print(f"[会话归口] lean={lean} 本趟={len(split['in_run'])} "
+          f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
+    assert split["calls"], "这一趟一次真调用都没有 ⇒ 判据没有对象（不是干净）"
+    problems = RC.session_problems(split)
+    assert problems == [], "判据②红：\n- " + "\n- ".join(problems)
+
+
+# ============================================================ Lean 两档
+
+
+@pytest.mark.parametrize("lean,verdict,hidden", [("1", "on", False), ("0", "off", True)])
+def test_the_chain_runs_in_both_lean_modes(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch,
+        lean: str, verdict: str, hidden: bool) -> None:
+    """Lean 开/关两档：同一条链照跑，六条盘上读数不变；关档下名册里没有 L。"""
+    got = _run(tmp_path, monkeypatch, lean=lean)
+    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    reading = LS.lean_reading()
+    assert reading.verdict == verdict, reading.to_dict()
+    assert LS.is_hidden("L") is hidden, (lean, reading.to_dict())
+    problems = _chain_problems(_chain_reading(got))
+    assert problems == [], problems
+    from agentflow import schema as S
+
+    roles = set(LS.visible_roles(S.ROLES))
+    assert ("L" in roles) is (not hidden), sorted(roles)
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工复跑用
