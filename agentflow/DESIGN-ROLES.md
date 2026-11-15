@@ -201,7 +201,7 @@ verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
 
 | 交互 | 是什么 | 为什么需要 | 终止条件 | 负控 |
 |---|---|---|---|---|
-| **I8** G↔H 复审闭环 | G 出稿 → H 审 → G 修 → H 复审 | "写"与"审"必须由**结构上不同**的权限面承担 | `max_review_rounds`（默认 2）；error 全 fixed 才能 `accepted`；超限标 `unresolved_review` 且**必须列出未解决项**（不许隐藏） | 注入一条无引用断言 → H 必须报 `unsupported_claim`+`error` |
+| **I8** G↔H 复审闭环 | G 出稿 → H 审 → G 修 → H 复审 | "写"与"审"必须由**结构上不同**的权限面承担 | **轮数上限已按 2026-11-15 业主裁定撤除**（原 `max_review_rounds`（默认 2）不再存在；**不再提供任何轮次读数** —— 没有 `round_budget` / `remaining` / `capped` 这类字段）；error 全 fixed 才能 `accepted`；**收尾与否由 H 判断** —— H 可显式给 `close_as="unresolved_review"` 把稿件交人复核（该终态保留，但**不再由计数器触发**），未解决项**必须列出**（不许隐藏） | 注入一条无引用断言 → H 必须报 `unsupported_claim`+`error` |
 | **I9** F↔E 子目标外包 | F 把可数值判定的子目标派给 E，拿 `experiment_id` 决定子目标状态 | 攻坚循环需要"外部证据"才能推进，而证据必须带等级 | `max_persist_attempts` | 只有 `cross_check` 证据的子目标**不得** `closed` |
 | **I10** D↔F 升级 | D 判定某问题"多轮未收敛且证据相关" → 升级为 F 的攻坚计划；反向 F 发现新缺口 → 生成检索请求（过 I7 闸门） | 问题的**难度分层**：有的缺口一次检索就能补，有的要攻坚 | F 的三维预算；升级本身不设额外轮数 | 证据不相关的问题**不得**被升级（否则 F 被无意义的难题填满） |
 | **I11** E→D 反例回流 | E 得到 `result="refutes"` → 生成 `priority="high"` 的问题给 D（"论断 X 被数值反例否定"），反例本身存为可复现的代码+输出 | 反例是**最强的一种信息**：它直接否定一条已入库的知识 | 一条反例对应一个问题（按 `claim_key` 去重） | `inconclusive` 的实验**不得**触发回流 |

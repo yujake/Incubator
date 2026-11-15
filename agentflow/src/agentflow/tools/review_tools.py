@@ -2137,20 +2137,32 @@ def _is_semantic_finding(item: Mapping[str, Any]) -> bool:
             and str(item.get("evidence") or "").startswith("语义判据（"))
 
 
+#: H 可以显式选择的收尾档（受控词）。
+#:
+#: 2026-11-15 业主裁定逐字：「撤掉这个上限，一切由智能体自行决定，不做读数」。
+#: 于是 `verify_fixes` 不再有"到第几轮就收尾"的计数器；收不收尾由 H 自己判，
+#: 要收尾就把这一档显式传进来。它是判断，不是读数：这里没有轮次、没有余量、
+#: 没有上限 —— 只有一个受控词（`unresolved_review` 仍是 `schema.DOC_STATUSES` 里那一档）。
+CLOSE_AS_VALUES: tuple[str, ...] = ("unresolved_review",)
+
+
 def verify_fixes(
     store: Any,
     doc_id: str,
     *,
     round_no: int,
     dependencies: Any = _UNSPECIFIED,
-    max_review_rounds: int = 2,
+    close_as: str | None = None,
     actor: str = "agent-H",
     semantic_judge: SemanticJudge | None = None,
 ) -> dict:
-    """复审：对上一轮的每条 finding 重跑对应检查，判定 `fixed` / 仍 `open`。
+    """复审：对上一轮的每条 finding 重跑对应检查，判定 `fixed` / 仍 `open` 并逐条列出。
     返回 ``{"doc_id","round","resolved","still_open","unresolved_findings","verdict","reason",...}``。
-    终止性（FC-18 的同族要求）`error` 级发现一直不修、且已经到 `max_review_rounds` ⇒ 文档状态置`unresolved_review`，并且必须把未解决的 finding 明确列出来（`unresolved_findings`
-    非空）。
+    ## 收不收尾由 H 判断（2026-11-15 业主裁定，逐字：「撤掉这个上限，一切由智能体自行决定，不做读数」）
+    轮数上限（`max_review_rounds`）已撤除：本函数不再按轮数把结论判成任何终态，
+    也不再提供轮次读数（没有 `round_budget` / `remaining` / `capped` 这类字段）。
+    本函数只负责"重审 + 逐条列出 still_open"；`unresolved_review` 保留为 H 可以自行选择
+    的终态 —— 判据是调用方显式给的 `close_as`，不是计数器。不给 ⇒ 本趟不收尾。
     判据不是 G 自称修好了，而是"重跑检查还复现吗"：复现 ⇒ `open`（即使 G 已经把它标成 `fixed`，也会被重新打开）；不复现 ⇒ `fixed`。此外当前扫描里新出现的问题会以 
     `source="new_issue"`出现在 `still_open` 里（复审不是"只看旧账"）。
     `R-04`（`draft/44` / `draft/52` D 族）：两半R-04-a（语义判据的注入面）：复审复扫与 `review_document` 走同一个
@@ -2160,6 +2172,13 @@ def verify_fixes(
     或这一轮答不上来 / 判据报错（`claims_unknown` / `checker_errors`）⇒ 留在 `open` 并标`source="not_rechecked"`（返回值取值，不落表）。
     """
     doc_id = str(doc_id)
+    # ---- H 的收尾判断先过词表，再动任何盘上读数：写错一个词不许静默落在"不收尾"上
+    # （那会让 H 以为它已经交人复核了）；而且被拒的调用不许推进轮次账。
+    if close_as is not None:
+        close_as = str(close_as)
+        if close_as not in CLOSE_AS_VALUES:
+            raise ValueError(
+                f"close_as 必须是 {CLOSE_AS_VALUES} 之一（或不给 = 不收尾），收到 {close_as!r}")
     # ---- 甲（2026-11-11 业主裁定）：复审裁决这条路每做一次也推进一格轮次。
     #
     # 与 `review_document` 共用 `_advance_review_round`（轮次账只有一份实现）；
@@ -2169,9 +2188,6 @@ def verify_fixes(
         store, doc_id, explicit=round_no, actor=actor)
     if round_no < 1:
         raise ValueError("round_no 从 1 开始")
-    max_review_rounds = int(max_review_rounds)
-    if max_review_rounds < 1:
-        raise ValueError("max_review_rounds 至少为 1")
 
     doc = {**_doc_of(store, doc_id), "review_rounds": round_no}
     deps, dep_checked = _resolve_deps(store, doc_id, dependencies)
@@ -2355,10 +2371,11 @@ def verify_fixes(
     blocking = [
         f for f in still_open if str(f.get("level")) == "error" and str(f.get("status")) in ("open", "fixed")
     ]
-    if not still_open:
-        verdict = "accepted"
-    elif blocking and round_no >= max_review_rounds:
+    if close_as is not None:
+        # H 自己的判断：它决定这一轮收尾、交人复核。不是计数器到点，也不是本函数的缺省。
         verdict = "unresolved_review"
+    elif not still_open:
+        verdict = "accepted"
     elif blocking:
         verdict = "revise_again"
     elif not_rechecked:
@@ -2403,9 +2420,14 @@ def verify_fixes(
     # ---- 审核轴：与 `review_document` 同一口径（业主 2026-10-30，2026-11-04 施工单）
     #
     #   成立   = 这一轮复审没找到缺陷（且依赖闭合查过）
-    #   有毛病 = 这一轮复审仍有缺陷（`revise_again` 有 error、或到上限 `unresolved_review`）
+    #   有毛病 = 这一轮复审仍有缺陷（`revise_again` 有 error、或 H 显式收尾 `unresolved_review`）
     #   没查成 = 依赖闭合没查 / 只因为语义判据没重跑而被卡在 `revise_again` ⇒ 不写裁决
     if verdict in ("revise_again", "unresolved_review") and blocking:
+        _axis_verdict, _axis_checked, _axis_reason = "有毛病", True, ""
+    elif verdict == "unresolved_review":
+        # H 显式收尾、而当前没有 error 级未解决项：这仍是 H 判的"不通过"。
+        # 不写这一支的话它会掉进下面的"没查成"分支，于是盘上留下一条空理由
+        # （"没查成： ⇒ …"）—— 而 H 明明做了判断。
         _axis_verdict, _axis_checked, _axis_reason = "有毛病", True, ""
     elif verdict == "accepted" and dep_checked:
         _axis_verdict, _axis_checked, _axis_reason = "成立", True, ""
@@ -2432,7 +2454,7 @@ def verify_fixes(
 
     unresolved = [f for f in blocking]
     reason_bits = [
-        f"第 {round_no} 轮复审（上限 max_review_rounds={max_review_rounds}）："
+        f"第 {round_no} 轮复审："
         f"上一轮 {len(prev)} 条发现里 resolved={len(resolved)}、仍复现={len(still_open) - sum(1 for f in still_open if f.get('source') == 'new_issue')}",
         f"error 级未解决 {len(unresolved)} 条",
         # `R-04-b`：没重跑语义判据时，上一轮那几条语义发现留在 open
@@ -2475,7 +2497,9 @@ def verify_fixes(
         )
     if verdict == "unresolved_review":
         reason_bits.append(
-            "已达轮数上限且 error 级发现仍 open ⇒ 停止自动修订，交人复核（**未解决的发现已全部列出**，未隐藏）"
+            "H 显式判 `unresolved_review`（`close_as`）⇒ 停止自动修订、交人复核"
+            "（**未解决的发现已全部列出**，未隐藏）；轮数上限已按 2026-11-15 业主裁定撤除，"
+            "这一档不是计数器触发的"
         )
     if not status_updated:
         reason_bits.append(f"⚠️ 文档状态**未能更新**（{status_error}）")
@@ -3080,7 +3104,7 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
 @tool(
     "review.verify_fixes",
     (
-            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未决项。"
+            "复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open 并逐条列出仍 open 的；收不收尾由你判断 —— 给 `close_as=\"unresolved_review\"` 才把稿件置该终态并交人复核（轮数上限已撤除，没有任何计数器会替你收尾）。"
             ),
     {
            "type": "object",
@@ -3088,7 +3112,14 @@ def _review_review_document_tool(_not_wired, store, actor, semantic_judge, **kw)
             "doc_id": {"type": "string"},
             "round_no": {"type": "integer", "minimum": 1},
             "dependencies": {"type": "array", "items": {"type": "object"}},
-            "max_review_rounds": {"type": "integer", "minimum": 1},
+            "close_as": {
+                "type": "string",
+                "enum": list(CLOSE_AS_VALUES),
+                "description": (
+                    "H 自己决定收尾时才给：目前唯一受控值是 `unresolved_review`。"
+                    "不给 = 本趟只重审并逐条列 still_open、不收尾（没有计数器会替你收尾）"
+                ),
+            },
            },
            "required": ["doc_id", "round_no"],
            "additionalProperties": False,

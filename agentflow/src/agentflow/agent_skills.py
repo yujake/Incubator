@@ -1423,6 +1423,12 @@ def _h_skills() -> tuple[Skill, ...]:
 
 别人说"改了"，用 `H.verify_fixes` 逐条核**改没改对**，而不是重头再审一遍。
 
+**收不收尾由你判断**（2026-11-15 业主裁定：轮数上限已撤除，不做读数）：
+`verify_fixes` 只负责重审并逐条列出 `still_open`，不会自动把稿件收成
+`unresolved_review`。你认为这份稿该停下交人复核时，显式给
+`close_as="unresolved_review"` —— 那是你的判断，不是计数器；不给就继续按
+`still_open` 逐条要 G 修。
+
 ## 论文对应表：逐行核，别只看"有没有"
 
 拿到论文稿先读 `out/paper/MAPPING.json`（人读那份 `out/paper/MAPPING.md` 由它生成），

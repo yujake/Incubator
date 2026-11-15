@@ -37,11 +37,11 @@ class _Core:
         self.logs: list[str] = []
         self.tool_calls: list[dict] = []
 
-        #: 复审轮数上限。必须有上限：没有它，"error 一直不修"会变成一个
-        #: 无限循环（FC-18 的同族要求）。到顶不是继续跑，而是标 unresolved_review 交人。
-        self.max_review_rounds = int(self.cfg.get("max_review_rounds", 2))
-        if self.max_review_rounds < 1:
-            raise ReviewError(f"max_review_rounds 至少为 1，收到 {self.max_review_rounds}")
+        # ---- 复审没有轮数上限（2026-11-15 业主裁定，逐字：「撤掉这个上限，一切由
+        # 智能体自行决定，不做读数」）。这里刻意不留任何轮次读数或上限属性：
+        # 收不收尾由 H 在 `verify_fixes(close_as=...)` 里自己判，不由计数器触发。
+        # 旧形态（`max_review_rounds` 缺省 2 + `>= 1` 装配期校验）连同它的触发点
+        # 一起删掉了 —— 留一个"只是不显示"的隐形上限等于没撤。
 
         self.tools = tools if tools is not None else install_h_tools(self.store)
         # ---- 装配期断言（FC-03 的形态）：拿不到合规的注册表就拒绝启动。
@@ -270,7 +270,7 @@ def _selftest() -> int:
     print(f"[2b] 被审正文：{_paper}（{_paper.stat().st_size} 字节，sha256="
           f"{_PC.file_digest(_paper)[:16]}…）")
 
-    h = AgentH(st, config={"max_review_rounds": 2})
+    h = AgentH(st)
     print(f"[3] H 的自由工具箱（{len(h.tools)} 个，全部应为 none/read）：")
     for t in h.tools.describe():
         print(f"      {t['name']:<28} side_effect={t['side_effect']}")
@@ -310,7 +310,7 @@ def _selftest() -> int:
         return 1
     _ = max_round
 
-    print("[5] 终止性 + 状态落地（schema 合法但把 cross_check 说成证明）")
+    print("[5] 没有计数器终态 + H 显式收尾（schema 合法但把 cross_check 说成证明）")
     b0 = h.review("0002")
     print(f"    review：verdict={b0['verdict']} error={b0['error_count']} status={b0['status']} "
           f"status_updated={b0['status_updated']}")
@@ -318,11 +318,17 @@ def _selftest() -> int:
         print(f"      [{f['level']}] {f['kind']} @{f['target']}：{f['message'][:40]}；evidence={f['evidence'][:70]!r}")
     b1 = h.verify_fixes("0002", round_no=2)
     now_status = next(r["status"] for r in st.rows("documents") if r["doc_id"] == "0002")
-    print(f"    不修 → 复审 verdict={b1['verdict']} 未解决(error)={len(b1['unresolved_findings'])} 库中状态={now_status}")
-    if b1["verdict"] != "unresolved_review" or now_status != "unresolved_review" or not b1["unresolved_findings"]:
-        print("    ❌ 未到 unresolved_review（或状态没落地 / 未解决项被隐藏）")
+    print(f"    不修、也不收尾 → 复审 verdict={b1['verdict']} 未解决(error)={len(b1['unresolved_findings'])} 库中状态={now_status}")
+    if b1["verdict"] != "revise_again" or now_status == "unresolved_review" or not b1["unresolved_findings"]:
+        print("    ❌ 没有计数器时不许自行判 unresolved_review（应 revise_again 并列出未解决项）")
         return 1
-    for f in b1["unresolved_findings"]:
+    b1c = h.verify_fixes("0002", round_no=2, close_as="unresolved_review")
+    now_status = next(r["status"] for r in st.rows("documents") if r["doc_id"] == "0002")
+    print(f"    H 显式收尾 → 复审 verdict={b1c['verdict']} 未解决(error)={len(b1c['unresolved_findings'])} 库中状态={now_status}")
+    if b1c["verdict"] != "unresolved_review" or now_status != "unresolved_review" or not b1c["unresolved_findings"]:
+        print("    ❌ H 显式判 unresolved_review 时必须落地并列出未解决项")
+        return 1
+    for f in b1c["unresolved_findings"]:
         print(f"      未解决：✗ {f['finding_id']} {f['kind']} @{f['target']} level={f['level']}")
     # 改稿是 G 的职责，不是 H 的。
     #
@@ -441,13 +447,21 @@ def _selftest() -> int:
         print("    ❌ 去重失效")
         return 1
 
-    print("[8] 复审：error 一直不修 ⇒ 到轮数上限必须置 unresolved_review 并列出未解决项")
-    v1 = h.verify_fixes("0001", round_no=2)
-    print(f"    verdict={v1['verdict']} resolved={len(v1['resolved'])} still_open={len(v1['still_open'])} "
-          f"未解决(error)={len(v1['unresolved_findings'])} status={v1['status']}"
+    print("[8] 复审：error 一直不修 ⇒ 没有计数器终态；H 显式收尾才置 unresolved_review 并列出未解决项")
+    for _round in (2, 50):
+        v = h.verify_fixes("0001", round_no=_round)
+        print(f"    round={_round} verdict={v['verdict']} resolved={len(v['resolved'])} "
+              f"still_open={len(v['still_open'])} 未解决(error)={len(v['unresolved_findings'])}")
+        if v["verdict"] != "revise_again" or not v["unresolved_findings"]:
+            print("    ❌ 轮次再大也不该由计数器判 unresolved_review（应 revise_again 并列出未解决项）")
+            return 1
+    v1 = h.verify_fixes("0001", round_no=51, close_as="unresolved_review")
+    print(f"    H 显式收尾 → verdict={v1['verdict']} resolved={len(v1['resolved'])} "
+          f"still_open={len(v1['still_open'])} 未解决(error)={len(v1['unresolved_findings'])} "
+          f"status={v1['status']}"
           + ("" if v1["status_updated"] else f"（状态未更新：{str(v1['status_error'])[:70]}）"))
     if v1["verdict"] != "unresolved_review" or not v1["unresolved_findings"]:
-        print("    ❌ 到轮数上限仍未解决时应置 unresolved_review 并**列出**未解决发现")
+        print("    ❌ H 显式收尾时应置 unresolved_review 并**列出**未解决发现")
         return 1
 
     print("[9] 三态：显式 dependencies=None ⇒ 依赖闭合**没查**，不许判 accepted")

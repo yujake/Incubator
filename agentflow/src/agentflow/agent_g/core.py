@@ -351,7 +351,7 @@ def _selftest() -> int:
         line("SELF-CHECK DONE（agent_g；闭环部分未验证）")
         return 0
 
-    h = AgentH(st, config={"max_review_rounds": 2})
+    h = AgentH(st)
     r1 = h.review(doc_id)
     line(f"    H.review：verdict={r1['verdict']} error={r1['error_count']} warning={r1['warning_count']} "
          f"新增发现={len(r1['new_findings'])} 重复跳过={r1['duplicate_skipped']}")

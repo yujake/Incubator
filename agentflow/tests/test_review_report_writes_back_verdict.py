@@ -48,7 +48,7 @@ def _docs_snapshot(st: Store) -> str:
 def test_report_writes_only_the_report_file_and_never_the_tables(h_store: Store):
     """正控：`review.report` 只落一个 md，`documents` 逐字节不变。"""
     seed_document(h_store, "0001", [clean_claim()])
-    h = AgentH(h_store, config={"max_review_rounds": 2})
+    h = AgentH(h_store)
     h.review("0001", dependencies=[])          # 机械全 0 ⇒ accepted/成立
     before = _docs_snapshot(h_store)
 
@@ -73,7 +73,7 @@ def test_the_two_verdicts_are_deliberately_two_things(h_store: Store):
     两者并存不是 bug —— 但必须都能被读到：机械裁决在台账，门裁决在报告。
     """
     seed_document(h_store, "0002", [clean_claim()])
-    h = AgentH(h_store, config={"max_review_rounds": 2})
+    h = AgentH(h_store)
     mech = h.review("0002", dependencies=[])
     assert str(mech.get("verdict")) == "accepted"
 

@@ -258,7 +258,9 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （`review` / `verify_fixes` / `review_report`，理由逐条在 `tools/base.py:226-247`）；
 #: ③ 补上"裁决落成什么"（这是最大的一处空缺）：四档 verdict（`review_tools.py:1035-1043`）、
 #: 状态落点（`:1045`/`:1364`/`:1378`；`accepted` ⇒ 稿件置 `accepted`，否则 `in_review`；
-#: 复审到上限 ⇒ `unresolved_review`）、判 accepted 时框架签一条（`:1047-1055`）与
+#: 复审由 H 显式收尾（`close_as`）⇒ `unresolved_review` —— 2026-11-15 业主裁定撤除轮数
+#: 上限：「撤掉这个上限，一切由智能体自行决定，不做读数」；该终态保留，但不再由计数器触发）、
+#: 判 accepted 时框架签一条（`:1047-1055`）与
 #: 收工门 `reviewed_current_rows` 的口径（`closing.REVIEWED_DOC_STATUSES`）。
 #: H 的 `policy=()` 与 `signature_error=""` 保持为空（待裁项，本批不动）。
 #: 只动 H ⇒ 换值的作用域见批 R12 的读数。

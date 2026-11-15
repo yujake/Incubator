@@ -97,7 +97,7 @@ def _g(env: dict[str, Any]) -> AgentG:
 
 
 def _h(env: dict[str, Any]) -> AgentH:
-    return AgentH(env["store"], config={"max_review_rounds": 3})
+    return AgentH(env["store"])
 
 
 def _claim(g: AgentG, text: str = CLAIM_TEXT) -> dict:
@@ -286,11 +286,16 @@ def test_c10_d_the_verify_fixes_vocabulary_is_real(tmp_path: pathlib.Path) -> No
     h.review(doc_id, dependencies=[])
     again = h.verify_fixes(doc_id, round_no=2, dependencies=[])
     assert again.get("verdict") in ("accepted", "revise_again", "unresolved_review"), again
-    # 终止性那一档：把轮数上限压到 2 ⇒ 同一份没修的稿跑到上限。
-    h2 = AgentH(env["store"], config={"max_review_rounds": 2})
-    capped = h2.verify_fixes(doc_id, round_no=3, dependencies=[])
-    assert capped.get("verdict") == "unresolved_review", capped
-    assert capped.get("unresolved_findings"), capped
+    # 终止性那一档（2026-11-15 业主裁定「撤掉这个上限」）：同一份没修的稿，轮次再大
+    # 也只判 revise_again —— 没有计数器会把它收尾；只有 H 显式给 `close_as` 才落
+    # unresolved_review。这是"旧口径的同一格"，不是把这一格删掉。
+    still = h.verify_fixes(doc_id, round_no=9, dependencies=[])
+    assert still.get("verdict") == "revise_again", still
+    assert still.get("unresolved_findings"), still
+    stopped = h.verify_fixes(doc_id, round_no=10, dependencies=[],
+                             close_as="unresolved_review")
+    assert stopped.get("verdict") == "unresolved_review", stopped
+    assert stopped.get("unresolved_findings"), stopped
 
 
 # ====================================================================== e：反真空假修

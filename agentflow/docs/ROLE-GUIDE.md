@@ -1034,7 +1034,7 @@
 | `review.scan` | 把一份稿件的机械读数一次拿全（七类 kinds 任选）：异常字符 / \cite 对 \bibitem / \input 目标 / \ref 对 \label / theorem 对 proof / 重复声明 / 正文与台账的数。只读、只给读数；七类各自的三态在 detail[]，没查成的在 bad[]。 | `read` | `kinds` |
 | `review.scan_document` | 全量机械审校一份稿件（引用/证据等级/否定分类/依赖闭合），每条发现带 evidence。 | `none` | `doc` |
 | `review.scan_text_integrity` | 扫一批文本里的异常字符（CJK 正文/控制符/零宽/替换符/双向/不换行空格），逐条给 文件:行:列 与码位；读不成如实报 checked=False（不许读成『零命中』），计数不受 limit 影响。目录递归 .tex/.md/.txt/.bib。 | `read` | `paths` |
-| `review.verify_fixes` | 复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open；到 max_review_rounds 仍红则置 unresolved_review 并列出未决项。 | `write_local` | `doc_id`、`round_no` |
+| `review.verify_fixes` | 复审：对上一轮每条 finding 重跑对应检查，判 fixed / 仍 open 并逐条列出仍 open 的；收不收尾由你判断 —— 给 `close_as="unresolved_review"` 才把稿件置该终态并交人复核（轮数上限已撤除，没有任何计数器会替你收尾）。 | `write_local` | `doc_id`、`round_no` |
 | `search.local` | **不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
 | `search.shelf` | **不联网**：列出**全文在盘上**的文献（**本地书架**）—— 离线能引用哪些只看得到它。可按题名/路径筛。 | `read` | （无） |
 | `table.count` | 统计行数（filter 做等值过滤）。 | `read` | `table` |

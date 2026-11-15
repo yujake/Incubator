@@ -4,10 +4,15 @@ from __future__ import annotations
 from ._support import Any, _UNSPECIFIED
 
 class _VerifyFixes:
-    def verify_fixes(self, doc_id: str, *, round_no: int, dependencies: Any = _UNSPECIFIED) -> dict:
-        """复审：重跑检查判 `fixed` / 仍 `open`（转发 `review.verify_fixes`）。
-        `error` 级发现一直不修、且已到 `max_review_rounds` ⇒ 文档置`unresolved_review`，并且返回值里 
-        `unresolved_findings` 明确列出未解决的发现（不许隐藏）。
+    def verify_fixes(self, doc_id: str, *, round_no: int, dependencies: Any = _UNSPECIFIED,
+                     close_as: str | None = None) -> dict:
+        """复审：重跑检查判 `fixed` / 仍 `open`，并把仍 open 的逐条交回（转发 `review.verify_fixes`）。
+        ## 收不收尾由你判断（2026-11-15 业主裁定，逐字：「撤掉这个上限，一切由智能体自行决定，不做读数」）
+        轮数上限（`max_review_rounds`）已撤除：本方法不再带任何轮次读数，也不会因为"到了
+        第几轮"把稿件判成 `unresolved_review`。要收尾就把 `close_as="unresolved_review"`
+        显式传进来 —— 那是你的判断，不是计数器；不给 ⇒ 本趟只重审、逐条列出 `still_open`。
+        `unresolved_review` 仍是 `documents.status` 的一档（`schema.DOC_STATUSES`），
+        只是它的触发从"计数器到点"换成了"H 显式选择"。
         `dependencies` 与 :meth:`review` 同一套三态：不传 = 从库里读该稿件的依赖；显式 `None` = 没查（复审结论不覆盖依赖闭合这一维）；显
         式给行序列 = 按给的清单查。
         ## 为什么这个参数必须能传进来（此前缺口）
@@ -20,8 +25,10 @@ class _VerifyFixes:
         params: dict[str, Any] = {
             "doc_id": str(doc_id),
             "round_no": int(round_no),
-            "max_review_rounds": self.max_review_rounds,
         }
+        if close_as is not None:
+            # 只有 H 真的做了这个判断才传；不传 = 不收尾（转发层不替 H 决定）。
+            params["close_as"] = str(close_as)
         if dependencies is not _UNSPECIFIED:
             params["dependencies"] = None if dependencies is None else [dict(d) for d in dependencies]
         data = self._writer("review.verify_fixes", **params)

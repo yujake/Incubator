@@ -9,8 +9,9 @@
 - H 只读：默认注册面全 `none/read`，运行期知识表逐字节不变、
   `documents.json` 的唯一变化点是 `status`；
 - 去重：同一份稿件再审一次不重复记发现；
-- 复审有终止性：error 一直不修、跑到 `max_review_rounds` ⇒ `unresolved_review`，
-  且必须列出未解决的发现（不许隐藏）。
+- 复审没有计数器终态（2026-11-15 业主裁定：「撤掉这个上限，一切由智能体自行决定，
+  不做读数」）：error 一直不修、轮次再大也只判 `revise_again` 并逐条列出未解决项；
+  `unresolved_review` 保留为 H 显式选择的终态（`close_as`），不由任何计数器触发。
 
 关于坏样本的构造：`store.tx` 提交时会校验整张表，所以"无引用断言""否定型未分类"
 这类行不可能经 store 写入。它们必须绕过校验直接改盘才能造出来 ——
@@ -575,7 +576,7 @@ def test_verify_fixes_marks_a_genuinely_fixed_finding_as_fixed(h_store: Store):
     现在的口径：`verify_fixes` 只在"台账里有签名钉住当前这一版"时才置 accepted；否则置 `in_review` 并在 reason 里点名要重新 review。所以本用例分两步断言：①
     复审判
     accepted、发现置 fixed、状态停在 `in_review`（本用例的主题没变）；② 再走一次 `review`（H 的唯一签发入口）⇒ 状态 accepted 且签名钉在当前这一版上。"""
-    agent = AgentH(h_store, config={"max_review_rounds": 3})
+    agent = AgentH(h_store)
     finding = _seed_overclaim_and_review(agent, h_store)
     g = AgentG(h_store)
     fixed = g.compose_claim(
@@ -612,7 +613,7 @@ def test_verify_fixes_marks_a_genuinely_fixed_finding_as_fixed(h_store: Store):
 
 def test_verify_fixes_keeps_an_unfixed_finding_open(h_store: Store):
     """负控：什么都没改 ⇒ still_open 非空、仍 open、verdict 是 revise_again。"""
-    agent = AgentH(h_store, config={"max_review_rounds": 3})
+    agent = AgentH(h_store)
     finding = _seed_overclaim_and_review(agent, h_store)
 
     res = agent.verify_fixes("0000", round_no=2)
@@ -625,28 +626,81 @@ def test_verify_fixes_keeps_an_unfixed_finding_open(h_store: Store):
     assert h_store.rows("documents")[0]["status"] == "in_review"
 
 
-# ============================================================ [12] 终止性
+# ============================================================ [12] 终止性（没有计数器）
 
 
-def test_verify_fixes_terminates_as_unresolved_review(h_store: Store):
-    """error 一直不修、跑到 max_review_rounds ⇒ unresolved_review，且列出未解决项。"""
-    agent = AgentH(h_store, config={"max_review_rounds": 2})
+def test_verify_fixes_has_no_counter_triggered_terminal_state(h_store: Store):
+    """error 一直不修、轮次再大 ⇒ 也不许由计数器判 `unresolved_review`（改前的行为）。
+
+    2026-11-15 业主裁定逐字：「撤掉这个上限，一切由智能体自行决定，不做读数」。
+    本用例替换旧的 `test_verify_fixes_terminates_as_unresolved_review`：
+    旧断言是"跑到 `max_review_rounds` ⇒ `unresolved_review`"；新断言是这条终态
+    不再由计数器产生 —— 同一份没修的稿，`round_no` 给到 500 也只判
+    `revise_again`，`documents.status` 停在 `in_review`，而未解决项照旧逐条列出
+    （"不受上限"不等于"可以隐藏"）。
+
+    这不是放宽：旧用例里"列出未解决项"、"别隐藏"这两条判据一个字没动，
+    只是把"哪一档终态"从"计数器说了算"改成"H 说了算"（下一条用例守 H 的那一档）。
+    """
+    agent = AgentH(h_store)
     finding = _seed_overclaim_and_review(agent, h_store)
 
-    res = agent.verify_fixes("0000", round_no=2)
+    for round_no in (2, 3, 50, 500):
+        res = agent.verify_fixes("0000", round_no=round_no)
+        assert res["verdict"] == "revise_again", (
+            f"第 {round_no} 轮仍不该有计数器终态：{res['verdict']}")
+        assert res["status"] == "in_review"
+        assert "轮数上限" not in res["reason"], res["reason"]
+        assert len(res["unresolved_findings"]) == 1, "不许隐藏未解决的发现"
+        unresolved = res["unresolved_findings"][0]
+        assert unresolved["finding_id"] == finding["finding_id"]
+        assert unresolved["kind"] == "overclaim" and unresolved["level"] == "error"
+        assert h_store.rows("review_findings")[0]["status"] == "open"
+        assert h_store.rows("documents")[0]["status"] == "in_review"
+
+
+def test_h_can_explicitly_close_a_review_as_unresolved(h_store: Store):
+    """保留能力：H 显式判 `unresolved_review` 时仍能落地，并逐条列出未解决项。
+
+    这一档是"H 的判断"，不是"计数器到点了"：判据在调用方给的 `close_as` 上。
+    删掉上限机制之后如果没有这一条，`unresolved_review` 这个终态在结构上就再也到不了 ——
+    那是缩小了业主明确保留的那一格（「`unresolved_review` 保留为 H 可以自行选择的终态」）。
+    """
+    agent = AgentH(h_store)
+    finding = _seed_overclaim_and_review(agent, h_store)
+
+    res = agent.verify_fixes("0000", round_no=2, close_as="unresolved_review")
     assert res["verdict"] == "unresolved_review"
+    assert "H 显式" in res["reason"] and "未隐藏" in res["reason"], res["reason"]
     assert len(res["unresolved_findings"]) == 1, "不许隐藏未解决的发现"
     unresolved = res["unresolved_findings"][0]
     assert unresolved["finding_id"] == finding["finding_id"]
     assert unresolved["kind"] == "overclaim" and unresolved["level"] == "error"
-    assert "轮数上限" in res["reason"] and "未隐藏" in res["reason"]
     assert h_store.rows("documents")[0]["status"] == "unresolved_review"
     assert res["status"] == "unresolved_review"
 
 
+def test_verify_fixes_rejects_an_unknown_close_decision(h_store: Store):
+    """负控：`close_as` 是受控词 —— 词表外的取值必须当场拒，不许静默当成"不收尾"。
+
+    为什么要有这一条：`close_as` 是 H 的判断入口，写错一个词（或将来加了第二档）
+    却静默落在"不收尾"上，H 会以为它已经交人复核了 —— 那是"没做成"与"做成了"
+    折成同一个读数，正是三态纪律要禁的形态。
+    """
+    agent = AgentH(h_store)
+    _seed_overclaim_and_review(agent, h_store)
+    n_before = h_store.rows("documents")[0]["review_rounds"]
+
+    with pytest.raises(ReviewError, match="close_as"):
+        agent.verify_fixes("0000", round_no=2, close_as="capped")
+    # 拒在写盘之前：轮次账一格都不许推进（否则一次被拒的调用也改变了盘上读数）。
+    assert h_store.rows("documents")[0]["review_rounds"] == n_before
+    assert h_store.rows("documents")[0]["status"] != "unresolved_review"
+
+
 def test_verify_fixes_reopens_a_finding_marked_fixed_without_fixing(h_store: Store):
     """负控（防"用错方式修好"）：G 把发现标成 fixed 但问题仍在 ⇒ 重开，不认这笔账。"""
-    agent = AgentH(h_store, config={"max_review_rounds": 5})
+    agent = AgentH(h_store)
     seed_document(h_store, "0000", [clean_claim()])
     add_dep(
         h_store,
@@ -687,7 +741,7 @@ def test_verify_fixes_rechecks_the_dependency_set_the_caller_hands_it(h_store: S
     ① 不传清单 ⇒ 那个缺口的形态复现（判成 fixed，本轮不算它 open）；
     ② 传了清单 ⇒ 同一份前提仍 open（复审维持"拿不到"这个事实）。
     """
-    agent = AgentH(h_store, config={"max_review_rounds": 5})
+    agent = AgentH(h_store)
     seed_document(h_store, "0000", [clean_claim()])
     add_dep(
         h_store,
@@ -776,7 +830,7 @@ def test_h_output_does_not_break_the_global_verify(h: AgentH, h_store: Store):
 
 def test_verify_does_not_write_findings_of_its_own(h_store: Store):
     """复审不发明新账：发现是 `review` 的产出；状态没变时也不写盘。"""
-    agent = AgentH(h_store, config={"max_review_rounds": 3})
+    agent = AgentH(h_store)
     finding = _seed_overclaim_and_review(agent, h_store)
     n_before = len(h_store.rows("review_findings"))
     res = agent.verify_fixes("0000", round_no=2)

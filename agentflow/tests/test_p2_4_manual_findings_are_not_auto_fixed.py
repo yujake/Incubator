@@ -115,7 +115,7 @@ def _status(store: Store) -> dict[str, str]:
 def test_j_manual_findings_stay_open_after_a_verify_fixes_run(store: Store):
     """7 条手工判词 + 跑一次 `verify_fixes` ⇒ 仍是 open；读数点名它们。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 3})
+    agent = AgentH(store)
     ids = _record(agent, 7)
     rows = {str(r["finding_id"]): r for r in store.rows("review_findings")}
     assert all(str(rows[i]["resolution_note"]).startswith(RV.MANUAL_FINDING_NOTE_PREFIX)
@@ -147,7 +147,7 @@ def test_j_manual_findings_stay_open_after_a_verify_fixes_run(store: Store):
 def test_k_an_explicit_h_recheck_lets_a_manual_finding_leave(store: Store):
     """H 显式复核 ⇒ fixed / wontfix 能离场，读数指到复核那一次。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 5})
+    agent = AgentH(store)
     fid = _record(agent, 1)[0]
 
     # k-1：H 重新判过、这一条已经不再成立 ⇒ fixed
@@ -196,7 +196,7 @@ def test_k_an_explicit_h_recheck_lets_a_manual_finding_leave(store: Store):
 def test_k2_an_explicit_recheck_cannot_be_used_as_a_stamp(store: Store):
     """负控：复核前缀只能用在已登记的手工判词上（不许当盖章工具）。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 3})
+    agent = AgentH(store)
     missing = agent.writers.call(
         "review.record_finding", role="H", doc_id="0000",
         kind="overclaim", target="claim-9", message="不存在的一条",
@@ -233,7 +233,7 @@ def test_k2_an_explicit_recheck_cannot_be_used_as_a_stamp(store: Store):
 def test_l_removing_the_gate_makes_the_positive_control_red(store: Store, monkeypatch):
     """反真空：把「手工判词」这道判据摘掉 ⇒ j 的 7 条会被全部标成 fixed。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 3})
+    agent = AgentH(store)
     ids = _record(agent, 7)
     AgentG(store).revise("0000", fixed_findings=ids, new_claims=[_fixed_claim()],
                          note="按 H 的发现改了正文")

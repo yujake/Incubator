@@ -121,7 +121,7 @@ def _recheck(agent: AgentH, *, evidence: str, message: str = MANUAL_MESSAGE):
 def test_a_a_manual_finding_reopened_by_verify_fixes_is_still_manual(store: Store):
     """手工判词被 G 标 fixed、再被 H 重开 ⇒ 仍是手工判词，显式复核被接受并能关掉。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 5})
+    agent = AgentH(store)
     fid = _record_ok(agent, round_no=1)
     assert _row(store, fid)["resolution_note"].startswith(RV.MANUAL_FINDING_NOTE_PREFIX)
 
@@ -162,7 +162,7 @@ def test_b_a_mechanical_finding_stays_mechanical(store: Store):
     dep.validate()
     with store.tx("dependencies", actor="test", note="fixture") as tx:
         tx.upsert("dependencies", dep.to_dict())
-    agent = AgentH(store, config={"max_review_rounds": 5})
+    agent = AgentH(store)
     reviewed = agent.review("0000")
     mech = [f for f in reviewed["new_findings"] if str(f.get("kind")) == "dangling_dep"]
     assert mech, reviewed["new_findings"]
@@ -198,7 +198,7 @@ def test_b_a_mechanical_finding_stays_mechanical(store: Store):
 def test_c_stubbing_the_origin_reader_back_to_old_behaviour_makes_a_red(store: Store, monkeypatch):
     """反真空：把"认来源标识"那处打桩回旧行为 ⇒ a 的三条主张全不成立。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 5})
+    agent = AgentH(store)
     fid = _record_ok(agent, round_no=1)
     AgentG(store).revise("0000", fixed_findings=[fid], new_claims=[_fixed_claim()],
                          note="按 H 的发现改了正文")
@@ -223,7 +223,7 @@ def test_c_stubbing_the_origin_reader_back_to_old_behaviour_makes_a_red(store: S
 def test_d1_a_prefix_surviving_manual_finding_is_not_closed_by_the_mechanical_criterion(store: Store):
     """前缀在的手工判词：下一轮复审不许拿"没复现"把它关掉（不查就关）。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 5})
+    agent = AgentH(store)
     fid = _record_ok(agent, round_no=1)
     AgentG(store).revise("0000", fixed_findings=[fid], new_claims=[_fixed_claim()],
                          note="按 H 的发现改了正文")
@@ -242,7 +242,7 @@ def test_d1_a_prefix_surviving_manual_finding_is_not_closed_by_the_mechanical_cr
 def test_d2_a_prefix_already_destroyed_on_disk_is_not_read_as_mechanical(store: Store):
     """盘上前缀已被旧写口吃掉的行（真机 000000 / 000002 的形态）也不许被静默关掉。"""
     _workspace(store)
-    agent = AgentH(store, config={"max_review_rounds": 5})
+    agent = AgentH(store)
     fid = _record_ok(agent, round_no=1)
 
     # 复刻旧写口留下的盘上形态：整格覆写之后只剩那句"手工判词不能被自动复跑判掉"，

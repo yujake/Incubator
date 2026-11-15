@@ -63,7 +63,7 @@ def _workspace(store: Store) -> Store:
 
 def _record_every_kind(store: Store) -> list[dict]:
     """受控词表里每个 kind 各落一条 record_finding，返回盘上的行。"""
-    agent = AgentH(store, config={"max_review_rounds": 3})
+    agent = AgentH(store)
     for kind in S.FINDING_KINDS:
         res = agent.writers.call(
             "review.record_finding", role="H", doc_id="0000", kind=kind,

@@ -755,7 +755,7 @@ def test_agent_h_review_changes_only_status_and_never_the_claims(tmp_path):
     before_bytes = {n: (st.data / n).read_bytes() for n in knowledge}
     before_docs = json.loads((st.data / "documents.json").read_text(encoding="utf-8"))
 
-    h = AgentH(st, config={"max_review_rounds": 2})
+    h = AgentH(st)
     h.review(doc_id, dependencies=[])
     h.verify_fixes(doc_id, round_no=2)
 
