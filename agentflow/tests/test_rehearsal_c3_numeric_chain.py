@@ -556,8 +556,13 @@ def test_the_numeric_chain_runs_from_the_cli_with_only_the_wire_replaced(
     notes = " ".join(str(x) for e in e_ends for x in (e.get("notes") or []))
     assert "ambiguous_path" not in notes, notes[-800:]
     # E 收工前已经有一枚 `mss:` 记号指到 e-proof（签触发那一条路），不因同号串到 e-num。
-    assert any("mss:000000" in str(a) and "reports/e-proof-000000.md" in str(a)
-               for a in (e_main[0].get("artifacts") or [])), e_main[0].get("artifacts")
+    # 2026-11-16 EC3 起记号头写的是 `mss:<族>-<号>`（`agent_f/submission.py::submission_token`）：
+    # e-proof / e-num 同号时正是族那一格把两份分开 ⇒ 这里钉「带族头 + 载体路径」。
+    # 老形 `mss:<号>` 只在读侧兼容，不再是新写的形态 —— 判据跟着新形态走，不是放宽。
+    heads = [str(a) for a in (e_main[0].get("artifacts") or [])]
+    assert any(a.startswith("mss:e-proof-000000#")
+               and "path=reports/e-proof-000000.md" in a
+               for a in heads), heads
 
     # ---- 钱：账本有行、无主为 0、悬空 0、逐分相等
     from agentflow.modelcost import reconcile_usage

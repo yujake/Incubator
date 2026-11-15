@@ -27,7 +27,7 @@ F 那一轮「模型说什么」与 V 那一轮「模型说什么」——都用
 | 6 | `statements` 一行：`kind="theorem"`（按稿头那一格落）、正文 sha 与稿上一致 |
 | 7 | 路径号：`verifications` 三行都回填 `path_group=1`、`proof_list` = `[1]`、`path_reading.count=1` |
 | 8 | 签：`out/vsigns/<正文 sha>.json` 在盘上，稿上的签块 `state="signed"` |
-| 9 | `mss:` 记号：F 那一行 `tasks.artifacts` 里有 `mss:<稿号>#…via=sign_issued` |
+| 9 | `mss:` 记号：F 那一行 `tasks.artifacts` 里有 `mss:f-proof-<稿号>#…via=sign_issued`（2026-11-16 EC3 起记号头带族） |
 
 ## 反真空（打坏 V 那一环）
 
@@ -364,6 +364,9 @@ def _chain_problems(reading: dict) -> list[str]:
 
     # 9. mss 记号：F 那一行 artifacts 里有它，且是签发那一刻置的。
     #    读「盘上现在那一行」（召唤回执是派活那一刻的快照，签在那之后才落）。
+    #    2026-11-16 EC3 起记号头是 `mss:<族>-<号>`（`agent_f/submission.py::submission_token`）：
+    #    四族同号是常态，族那一格就是稿的身份 ⇒ 这里同时钉族、稿号、载体路径与 via
+    #    （比老形 `mss:<号>` 那一句更紧，不是放宽）。
     step_task_id = str(reading["step_task"].get("task_id") or "")
     now = next((dict(r) for r in st.rows("tasks")
                 if str(r.get("task_id") or "") == step_task_id), {})
@@ -373,10 +376,16 @@ def _chain_problems(reading: dict) -> list[str]:
         problems.append(f"F 那一行 tasks.artifacts 里没有 mss: 记号：{artifacts}")
     else:
         wanted_mid = str(reading["step"].get("manuscript_id") or "")
-        if not any(x.startswith(f"mss:{wanted_mid}#") for x in mss):
-            problems.append(f"mss: 记号点不到这一份稿（稿号 {wanted_mid!r}）：{mss}")
-        if "via=sign_issued" not in mss[0]:
-            problems.append(f"mss: 记号不是签发那一刻置的：{mss[0]!r}")
+        head = f"mss:f-proof-{wanted_mid}#"
+        hit = [x for x in mss if x.startswith(head)]
+        if not hit:
+            problems.append(f"mss: 记号点不到这一份稿（稿号 {wanted_mid!r}、"
+                            f"带族头应形如 {head}）：{mss}")
+        else:
+            if f"path={rel}" not in hit[0]:
+                problems.append(f"mss: 记号指的不是这一份稿的路径（{rel!r}）：{hit[0]!r}")
+            if "via=sign_issued" not in hit[0]:
+                problems.append(f"mss: 记号不是签发那一刻置的：{hit[0]!r}")
 
     # 10. 已进命题台账（业主 2026-11-13 裁定 ①：只给读数，不写 `promoted`）。
     landing = dict(reading.get("landing") or {})
