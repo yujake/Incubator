@@ -5,7 +5,7 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | F 收工自动提交过一份拿签稿、B 还没收录 ⇒ 跑 `_carried_manuscripts` | 携带单里有一行 `mss:<稿号>`（地址 + 文件字节 sha256）；B 能按正文 sha 寻址到它 |
+| a | F 收工自动提交过一份拿签稿、B 还没收录 ⇒ 跑 `_carried_manuscripts` | 携带单里有一行 `mss:f-proof-<稿号>`（族在键里、地址 + 文件字节 sha256）；B 能按正文 sha 寻址到它 |
 | b | 同一份稿已经收录（`statements` 行上 `manuscript_id` = 该稿号） | 仍然只上原来那一行（`stmt:<命题号>`），不因新增来源重复 |
 | c | 反真空：把新增来源摘掉 | a 必须红（那一行不是恰好从别处来的） |
 
@@ -70,12 +70,13 @@ def test_a_an_unfiled_signed_manuscript_reaches_the_carried_sheet(tmp_path):
 
     blob = (pathlib.Path(st.root) / rel).read_bytes()
     assert one["sha256"] == hashlib.sha256(blob).hexdigest(), one
-    # 渲染出来的携带单读得懂（`mss:` 是第三档键）
+    # 渲染出来的携带单读得懂（`mss:` 是第三档键；键带族 —— 四族同号是常态）
     section = DS.render_carried_section(rows)
-    assert f"| mss:000000 | {rel} |" in section, section
+    assert f"| mss:f-proof-000000 | {rel} |" in section, section
     parsed = DS.carried_manuscripts(section)
     assert parsed["refused"] == "" and parsed["problems"] == [], parsed
     assert [r["manuscript_id"] for r in parsed["rows"]] == ["000000"], parsed
+    assert [r["family"] for r in parsed["rows"]] == ["f-proof"], parsed
 
 
 def test_a_b_can_address_it_by_the_proof_sha(tmp_path):

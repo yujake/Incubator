@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-16，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **314 个 `.py`、289825 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16007 行（`agent_loop.py`，14617 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **314 个 `.py`、289987 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16007 行（`agent_loop.py`，14617 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-16 EC2（携带单 `mss:` 键带族）**：314 个 `.py`、75 个 `>800` 都不变；总行数
+> 289,825 → **289,987**（+162，全在 `src/agentflow/depsection.py`：携带单的 `mss:` 键从单号
+> 改成 `(族, 稿号)`、老键三态兼容读、键与载体族对不上就整节拒 + 两处纯函数拆出；判据
+> `tests/test_carried_sheet_keys_are_family_and_id.py`）。三格（75 / 94 / 2）逐格未抬
+> （上限 75 / 95 / 5）。
 > **2026-11-16 TR3（概念 + 未签稿的拒信排到判档之前）**：314 个 `.py`、75 个 `>800` 都不变；总行数
 > 289,811 → **289,825**（+14，全部在 `agent_b/register_statement.py`：那道确定性闸从概念口径块
 > 搬到 NT2 判档之前）。三格（75 / 94 / 2）逐格未抬（上限 75 / 95 / 5）。

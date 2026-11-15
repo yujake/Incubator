@@ -111,7 +111,7 @@ CARRIED_HEADING = "## 携带的证明手稿"
 #: 交付里若没有这一格，调用方只能靠猜（canonical 空则 #p1 /
 #: 否则最大号 + 1）。老行只有三格 ⇒ 读成 `#p1`（老数据的读数不变）；
 #: 第四格留空同样读成 `#p1` —— "没写"与"写了 1"在稿号上是同一件事。
-CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN / exp:NNNNNN / mss:<稿号>）",
+CARRIED_COLUMNS: tuple[str, ...] = ("命题号（stmt:NNNNNN / exp:NNNNNN / mss:<族>-<号>）",
                                     "手稿路径",
                                     "sha256", "证明号（#pN，可空）")
 
@@ -122,8 +122,23 @@ CARRIED_MIN_COLUMNS = 3
 #:
 #: `mss:` 是第三档：F 的手稿登记条目先落盘、命题号由 B 在
 #: V 签之后才发 ⇒ 那一轮 D 携带的是一份"还没有命题号"的 F 稿。它不能写 `stmt:`
-#: （号不存在），也不能伪装成 `exp:`（那是 E 的实验），所以用稿号（`plan-<计划号>` /
-#: `<命题号>`，`vsigns.manuscript_id_of` 读出来的那个）做键；B 按正文 sha 认领。
+#: （号不存在），也不能伪装成 `exp:`（那是 E 的实验），所以用稿做键；B 按正文 sha 认领。
+#:
+#: ## 稿的键带族（2026-11-16：与 `5ccb2041` 的「稿的身份 = (族, 稿号)」对齐）
+#:
+#: 写侧写 `mss:<族>-<号>`（`mss:f-proof-000000` / `mss:e-num-000000`），族名与
+#: `manuscriptfamily.FAMILY_ORDER` 逐字相同、形状与 `refvocab` 的 `mss:<family>-<id>`
+#: 同一形（携带单第一格与引用词表里写的是同一个东西）。
+#:
+#: 为什么必须带族：四族各有自己的号段、都从 `000000` 起（`manuscriptids` 的四条计数器）
+#: ⇒ 同一号跨族在真机上是常态。单号做键时，`f-proof-000000` 与 `e-num-000000` 会被折成
+#: 一行（`carried_manuscripts` 的 `seen` 把后到的那行当重列丢掉、索引里两族的稿只剩一份）
+#: —— 携带单少一行，B 按清单寻址不到那一份，而读数与"那一份没签"同形。
+#:
+#: 老键 `mss:<号>`（2026-11-16 之前写的）仍读：族由载体路径定（`reports/f-proof-…`
+#: 的族是 `f-proof`）。族认不出、或同一号在单上跨族出现 ⇒ 不猜，按调用点的三态语义
+#: 受控拒/unknown，并在读数里点名「跨族同号、无法唯一定位」。键里的族与载体路径的族
+#: 对不上 ⇒ 那一行读不懂（否则就是把另一族的稿读成这一份）。
 CARRIED_KEYS: tuple[str, ...] = ("stmt:", "exp:", "mss:")
 
 #: 证明正文那一节的段标题（预览时"引用了哪些 `stmt:`"只在这一节里数 —— 手稿开头的
@@ -1417,13 +1432,83 @@ def d_report_paths(root: Any) -> list[str]:
     return out
 
 
+def _mss_key(family: Any, manuscript_id: Any) -> str:
+    """稿 ⇒ 携带键：`mss:<族>-<号>`；族认不出 ⇒ 老形 `mss:<号>`（不带族，读侧按唯一性裁定）。
+
+    族那一格不在这里另写前缀表：`<族>` 直接取 `manuscriptfamily.FAMILY_ORDER` 里的名字
+    （`f-proof` / `b-proof` / `e-proof` / `e-num`），与 `refvocab` 的 `mss:<family>-<id>`
+    同一形 —— 携带单第一格与引用词表里写的是同一个东西，不各造一份写法。
+    """
+    fam = str(family or "").strip()
+    mid = str(manuscript_id or "").strip()
+    return f"mss:{fam}-{mid}" if fam and mid else f"mss:{mid}"
+
+
+def _mss_split(text: Any) -> tuple[str, str]:
+    """`mss:` 那一段 ⇒ `(族, 稿号)`；没写族 ⇒ `("", 原文)`（族留给读侧按唯一性裁定）。
+
+    `f-proof-000000` ⇒ `("f-proof", "000000")`、`f-proof-plan-42` ⇒ `("f-proof", "plan-42")`、
+    `000000` ⇒ `("", "000000")`。前缀逐个从 `manuscriptfamily` 的族表取（唯一真身），
+    四族前缀互不为前缀 ⇒ 拆分无歧义，不需要第二条正则。
+    """
+    raw = str(text or "").strip()
+    for family in _MFAM.FAMILY_ORDER:
+        prefix = _MFAM.prefix_of(family)
+        if prefix and raw.startswith(prefix):
+            return family, raw[len(prefix):].strip()
+    return "", raw
+
+
+def _family_of_carrier(rel: Any) -> str:
+    """载体路径 ⇒ 这一份稿的族（名字里的族前缀）；认不出 ⇒ 空串（不猜）。
+
+    老键 `mss:<号>` 没有族那一格，族只能从它指的那份稿的名字读出来
+    （`reports/e-num-000000.md` ⇒ `e-num`）。名字不是手稿形（`notes/foo.md`）⇒ 空串 ——
+    那时"族唯一确定"不成立，读侧不许替它挑一族。
+    """
+    got = _MFAM.classify_manuscript(str(rel or ""))
+    return str(got.get("name_family") or "")
+
+
+def _mss_lookup(index: Mapping[str, dict[str, Any]],
+                by_bare_mid: Mapping[str, list[dict[str, Any]]],
+                sid: Any) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """携带单 `mss:` 那一档的寻址 ⇒ `(命中行, 歧义读数)`；三态，绝不猜。
+
+    - 带族（`f-proof-000000`）⇒ 只认那一族那一号（索引里就是带族键，唯一）；
+    - 裸号而单上只属一行 ⇒ 用它（族已由载体路径读出来，不猜）；
+    - 裸号而单上跨族出现 ⇒ 回歧义读数（「跨族同号、无法唯一定位」），调用方受控拒。
+    """
+    family, mid = _mss_split(sid)
+    if family:
+        return index.get(_mss_key(family, mid)), None
+    rows = by_bare_mid.get(mid) or []
+    if len(rows) == 1:
+        return rows[0], None
+    if len(rows) > 1:
+        fams = [str(r.get("family") or "") for r in rows]
+        keys = [str(r.get("key") or "") for r in rows]
+        return None, {
+            "manuscript_id": mid,
+            "families": [f for f in fams if f],
+            "keys": keys,
+            "paths": [str(r.get("path") or "") for r in rows],
+            "why": (f"D 的携带单上稿号 `{mid}` 跨族同号、无法唯一定位"
+                    f"（同一号出现在 {'、'.join(f or '族未知' for f in fams)}："
+                    + "、".join(keys)
+                    + "）⇒ 不猜是哪一份稿；要读哪一族，单上要写 `mss:<族>-<号>`"),
+        }
+    return None, None
+
+
 def carried_manuscripts(report_text: Any) -> dict[str, Any]:
     """读 D 研究报告里"携带给 B 的证明手稿"那一节 ⇒ 三态读数。
 
     返回 `{checked, present, heading_line, rows, problems, refused, reason}`：
-    `rows` 是 `[{statement_id, path, sha256, line}]`（按文件顺序，同号先到先得）；
-    `problems` 逐行点名（缺列 / 命题号形状不对 / 路径为空），`refused` 非空时调用方
-    不许把这一节读成"携带单是空的"—— 读不懂与没有是两件事。
+    `rows` 是 `[{statement_id, experiment_id, manuscript_id, family, key, path, sha256,
+    line, proof_no}]`（按文件顺序，同号先到先得 —— `mss:` 的"同号"是 (族, 号)：
+    跨族同号是两份稿、不是重列）；`problems` 逐行点名（缺列 / 命题号形状不对 / 路径为空），
+    `refused` 非空时调用方不许把这一节读成"携带单是空的"—— 读不懂与没有是两件事。
     """
     import re as _re
 
@@ -1480,14 +1565,32 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
                             f"{raw_no!r}）—— 留空才是 #p1")})
                 continue
         sid = raw_id[len(key):].strip()
+        family = ""
         if key == "mss:":
-            # 稿号不是 `stmt:` 那种 6 位十进制：它是 `plan-<计划号>` 或 `<命题号>`
-            # （`vsigns.manuscript_id_of` 读出来的那一个）。只判形状安全，不判在册 —
+            # 稿号不是 `stmt:` 那种 6 位十进制：它是 `plan-<计划号>` 或数字稿号
+            # （`vsigns.manuscript_id_of` 读出来的那一个），新写法前面还带族
+            # （`mss:f-proof-000000` / `mss:e-num-000000`）。只判形状安全，不判在册 —
             # 在不在册由读侧按路径 / sha 核（这一格只是"清单里怎么称呼它"）。
+            family, sid = _mss_split(sid)
             if not _re.fullmatch(r"[A-Za-z0-9_.\-]+", sid or ""):
                 out["problems"].append({
                     "line": line_no,
-                    "why": f"稿号那一格要是 `plan-<计划号>` 或数字稿号（收到 {sid!r}）"})
+                    "why": (f"稿号那一格要是 `mss:<族>-<号>` 或 `mss:<号>`"
+                            f"（收到 {sid!r}）")})
+                continue
+            carrier_family = _family_of_carrier(raw_path)
+            if not family:
+                # 老键（`mss:<号>`，2026-11-16 之前写的）：族只能从载体路径读出来 ——
+                # 名字是 `<族>-<号>.md` 时唯一确定；不是手稿形 ⇒ 留空（读侧按唯一性裁定，
+                # 不在这里替它挑一族）。
+                family = carrier_family
+            elif carrier_family and carrier_family != family:
+                # 键说这一份是甲族、载体却是乙族的稿 ⇒ 读下去就是把乙族的稿当成甲族那一份
+                # （"两族的稿混成一个"）。清单与盘不一致 ⇒ 整节读不懂（受控拒）。
+                out["problems"].append({
+                    "line": line_no,
+                    "why": (f"稿的族对不上：键写的是 `{family}`，而载体路径 {raw_path!r} 是 "
+                            f"`{carrier_family}` 的稿 ⇒ 会把另一族的稿读成这一份")})
                 continue
         elif not S.is_valid_id(sid):
             out["problems"].append({"line": line_no,
@@ -1500,13 +1603,19 @@ def carried_manuscripts(report_text: Any) -> dict[str, Any]:
         # （那条链里命题可能还没进台账，没有命题号可写）；`mss:` ⇒ F 的登记条目
         # （稿在盘上、命题号还没发）。三档落同一个 `rows` 结构，只是三个身份格
         # 各有一格是空的。
-        row_key = f"{key}{sid}"
+        #
+        # `mss:` 的行身份是 (族, 号)，不是单号：四族各有自己的号段、都从 000000 起，
+        # 单号做身份会把 `f-proof-000000` 与 `e-num-000000` 折成"重列"⇒ 后到的那一行被
+        # 静默丢掉（携带单少一行、B 按清单寻址不到它）。族认不出时退回裸号（那时单上
+        # 只有这一条能指到它，读侧会按唯一性裁定）。
+        row_key = f"{key}{family + '-' if (key == 'mss:' and family) else ''}{sid}"
         if row_key in seen:
             continue
         seen.add(row_key)
         out["rows"].append({"statement_id": sid if key == "stmt:" else "",
                             "experiment_id": sid if key == "exp:" else "",
                             "manuscript_id": sid if key == "mss:" else "",
+                            "family": family if key == "mss:" else "",
                             "key": row_key,
                             "path": raw_path,
                             "sha256": raw_sha.lower(),
@@ -1526,15 +1635,19 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
     """把携带行渲染成那一节（D 侧写、B 侧读；渲染与解析共用 `CARRIED_HEADING` 与列名）。
 
     `rows` 的每一行用 `statement_id`（F 的稿，`stmt:`）/ `experiment_id`（E 的稿，
-    `exp:`）/ `manuscript_id`（F 的稿还没拿到命题号时，`mss:<稿号>`）其中之一做键；
+    `exp:`）/ `manuscript_id`（F 的稿还没拿到命题号时，`mss:<族>-<号>`）其中之一做键；
     都给时按 命题号 → 实验号 → 稿号 的次序取（命题已在册时它更精确）。
+
+    稿的族优先读行上的 `family`，没有就从 `path` 的名字读（`reports/e-num-000000.md`
+    ⇒ `e-num`）—— 两条都认不出时才写老形 `mss:<号>`（读侧按唯一性裁定，不猜一族）。
     """
     lines = [CARRIED_HEADING, "",
              "D 交研究手稿给 B 入库时把证明手稿一并带过来（「是通过D传吗」）：",
              "下表每一行是 `命题号 → 手稿路径 → 那份文件字节的 sha256 → 第几份证明`，",
              "B 读稿登记依赖面。第四列留空 ⇒ 第 1 份（老行没有这一列，读数相同）。",
              "E 的穷举证明手稿用 `exp:<实验号>` 做键：那条链里命题可能还没进台账；",
-             "F 的稿还没拿到命题号（登记条目先落、号由 B 在 V 签之后发）⇒ 用 `mss:<稿号>`。",
+             "F 的稿还没拿到命题号（登记条目先落、号由 B 在 V 签之后发）⇒ 用"
+             " `mss:<族>-<号>`（四族各有号段，同号跨族是常态 ⇒ 单号做键会把两族的稿折成一行）。",
              ""]
     lines.append("| " + " | ".join(CARRIED_COLUMNS) + " |")
     lines.append("|" + "|".join("---" for _ in CARRIED_COLUMNS) + "|")
@@ -1548,7 +1661,8 @@ def render_carried_section(rows: Iterable[Mapping[str, Any]],
         elif eid:
             key = f"exp:{eid}"
         elif msid:
-            key = f"mss:{msid}"
+            key = _mss_key(str(row.get("family") or "") or _family_of_carrier(row.get("path")),
+                           msid)
         else:
             continue
         no = str(row.get("proof_no") or "").strip()
@@ -1612,14 +1726,29 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
     """在 D 的报告里找"这一条命题的证明手稿"，找到就把正文读回来（纯读，零模型调用）。
 
     返回 `{checked, source, text, path, sha256, carried_by, tried, why, named, address,
-    item, list_report, list_line, list_sha256, matched_by}`。
+    item, list_report, list_line, list_sha256, matched_by, ambiguous}`。
 
     ## 怎么认这一笔（两条路，都在清单里找，绝不自己到盘上猜）
-    1. 按候选命题号（`statement_ids`）命中清单里的那一行；
+    1. 按候选命题号（`statement_ids`）命中清单里的那一行；命题号没命中时试 `mss:` 那一档
+       （见下节的三态）；
     2. 号对不上时（首次登记还没有号、`proof_manuscript` 也没给），按正文命中：
        逐行按地址去读那份 F 稿，谁的「## 证明」正文 sha 等于 `proof_text` 的 sha 就是它。
        2026-11-02 业主：「B侧需寻址获得F侧证明及V签」—— 号还不知道时，正文是清单里
        唯一能对上的东西；这一步仍是清单内寻址，不是"按约定路径撞见一份稿"。
+
+    ## `mss:` 那一档：键带族，三态（2026-11-16）
+
+    稿的身份是 (族, 稿号)（`5ccb2041`；四族各有号段、都从 `000000` 起），携带单的
+    `mss:` 键因此写 `mss:<族>-<号>`。读侧三态，绝不猜：
+
+    | 单上这一号 | 怎么读 |
+    |---|---|
+    | 带族键（`mss:f-proof-000000`） | 只认那一族那一号 |
+    | 老键 `mss:000000`、单上只此一行 | 用它（族已由载体路径读出来，唯一） |
+    | 老键 / 裸号、单上跨族都出现 | 不猜：`named=True` + `source=none` + `ambiguous` 读数点名「跨族同号、无法唯一定位」 |
+
+    第三档不是"没找到"：调用方必须受控拒绝（`REFUSED_ADDRESS`），不许降级去盘上撞一份
+    —— 两族的稿被折成一份，比读不到更坏。
 
     `source=carried_by_D` 只在"清单里有这一条、文件读得到、sha256 相符（给了就核）"时成立；
     任何一处不成立都落到 `none` 并把原因写进 `tried` / `why` —— 静默用一份对不上的稿
@@ -1638,13 +1767,20 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
                            "sha256": "", "carried_by": "", "tried": [], "why": "",
                            "named": False, "address": "", "item": 0,
                            "list_report": "", "list_line": 0, "list_sha256": "",
-                           "proof_no": 0, "matched_by": "", "manuscript_id": ""}
+                           "proof_no": 0, "matched_by": "", "manuscript_id": "",
+                           #: 跨族同号、无法唯一定位时的读数（空 dict = 没有这一档）。
+                           "ambiguous": {}}
     if not root_text:
         out["why"] = "没有工作区根（`root` 是空的）⇒ 读 D 报告里那张携带单这一趟没查成"
         return out
     base = Path(root_text)
     tried: list[dict[str, Any]] = out["tried"]
+    #: 键 ⇒ 清单里的那一行。三个键空间：命题号（`stmt:`）、`mss:<族>-<号>`（新写法）、
+    #: `mss:<号>`（老写法，族已从载体路径补上时也落成带族键；补不上才落裸键）。
     index: dict[str, dict[str, Any]] = {}
+    #: 裸稿号 ⇒ 单上同号的各行（跨族歧义的唯一判据）：同一号在两张行上出现 ⇒
+    #: 这一号属于两族、读侧不许替调用方挑一族。
+    by_bare_mid: dict[str, list[dict[str, Any]]] = {}
     candidates: list[dict[str, Any]] = []
     for rel in d_report_paths(root_text):
         try:
@@ -1660,8 +1796,10 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
             one = {**row, "report": rel, "item": i}
             candidates.append(one)
             index.setdefault(str(row["statement_id"]), one)
-            if row.get("manuscript_id"):
-                index.setdefault(f"mss:{row['manuscript_id']}", one)
+            mid = str(row.get("manuscript_id") or "")
+            if mid:
+                index.setdefault(_mss_key(str(row.get("family") or ""), mid), one)
+                by_bare_mid.setdefault(mid, []).append(one)
     out["checked"] = True
 
     def _hit(one: Mapping[str, Any], *, matched_by: str) -> dict[str, Any]:
@@ -1677,11 +1815,21 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
                    matched_by=matched_by)
         return out
 
+    ambiguous: dict[str, Any] | None = None
     for raw in statement_ids or ():
         sid = str(raw or "").strip().split("#", 1)[0].split(":", 1)[-1].strip()
         if not sid:
             continue
-        hit = index.get(sid) or index.get(f"mss:{sid}")
+        hit = index.get(sid)
+        if hit is None:
+            # 命题号没命中 ⇒ 试 `mss:` 那一档（带族号 / 老裸号，三态见 `_mss_lookup`）。
+            # 跨族同号的那一笔不在这里挑，记下来继续扫：后面的候选号若唯一命中，
+            # 那是一次确定的对上（不是猜）。
+            hit, amb = _mss_lookup(index, by_bare_mid, sid)
+            if amb is not None:
+                if ambiguous is None:
+                    ambiguous = amb
+                continue
         if hit is None:
             continue
         text, sha = _carried_target(base, hit, tried)
@@ -1723,6 +1871,20 @@ def read_carried_manuscript(root: Any, *, statement_ids: Iterable[Any] = (),
             out["why"] = ("D 的携带单点了名，而清单里的地址一条都读不到："
                           + "；".join(str(t.get("why") or "") for t in tried[-len(unreadable):]))
             return out
+    if ambiguous is not None:
+        # 裸号命中了、但那一号在单上跨族出现 ⇒ 不许猜（也不许折成"单里没有这一笔"让
+        # 调用方降级去盘上撞一份 —— 那正是"清单与盘不一致时猜一份稿"，本函数要防的事）。
+        # 按那个调用点原本的三态语义：这一格算"清单点了名、却定位不到唯一一份"⇒
+        # `named=True` + `source=none`，B 那一侧据此受控拒（`REFUSED_ADDRESS`）。
+        out.update(named=True, ambiguous=dict(ambiguous),
+                   address="", item=0, list_report="", list_line=0, list_sha256="",
+                   manuscript_id=str(ambiguous.get("manuscript_id") or ""), why="")
+        out["why"] = str(ambiguous.get("why") or "")
+        tried.append({"manuscript_id": str(ambiguous.get("manuscript_id") or ""),
+                      "families": list(ambiguous.get("families") or []),
+                      "paths": list(ambiguous.get("paths") or []),
+                      "why": out["why"]})
+        return out
     if not candidates:
         out["why"] = ("D 的报告里没有「携带的证明手稿」那一节（或那一节是空的）"
                       + ("；查过：" + "、".join(str(t.get("report") or "") for t in tried)
