@@ -18,8 +18,9 @@
 ## 甲（本组钉的口径）
 
 负判「不写块」：
-- 在册那一路：只落 `verifications/<命题号>.jsonl` 那一行，并把「未通过」的回执投给
-  送审方（`out/vreceipts/outbox.jsonl`）—— 这两件改前就有，这一组只钉「手稿上不出现块」；
+- 在册那一路：只落 `verifications/<命题号>.jsonl` 那一行，并把「有毛病」的 V 稿作为
+  notice 投给送审方（`vreviews.deliver_review`，板项 `v-review@`）—— 这两件改前就有，
+  这一组只钉「手稿上不出现块」；
 - 未在册那一路：没有命题号可落，判词随 `verify_proof` 的返回值给 F（F 把它落进
   `v_sign.state=未通过` 的 history）；不新造 pending 台账（那会是第二个写口）。
 
@@ -33,7 +34,7 @@
 | # | 造什么 | 期望 |
 |---|---|---|
 | a1 | 未在册手稿 + 第 2 转判「有毛病」 | 手稿逐字未动（没有 `- V 签：`）；仍返回 `kind=proof_unregistered_rejected`、判词/缺陷步/findings |
-| a2 | 在册命题 + V 判「有毛病」（手稿在盘上） | 手稿上没有块；台账恰好 1 行（有毛病）；`signed_bit3=False`；回执 intent 在 outbox |
+| a2 | 在册命题 + V 判「有毛病」（手稿在盘上） | 手稿上没有块；台账恰好 1 行（有毛病）；`signed_bit3=False`；V 稿 notice 在板上（`v-review@`） |
 | b | 反真空：未在册手稿 + 三转全干净 | 签必须颁发（判据不是「永远没有签」）：`kind=proof_unregistered_signed`、`out/vsigns/<sha>.json` 在盘上、pending 三行三票；块由收方秘书落（落块正控在 `test_v_unregistered_manuscript_review.py::test_g`） |
 | c | 84 的旧 8 格块 / 85 形状的 9 格块 / 86 的 `已签=false` 块 | 前两者仍读成 `signed`（84 是 `legacy`）；86 那一档读成 `rejected`（不许读成 signed） |
 
@@ -55,9 +56,10 @@ from agentflow import conductor as CND
 from agentflow import depsection as _DS
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
-from agentflow import vreceipts as VRC
+from agentflow import vreviews as VRV
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
+from agentflow.tools.conductor_tools import conductor_for
 
 from test_v_reviews_three_times_before_signing import (
     CLEAN_REPLY, FULL, PROOF, SID, _put, _ReviewSeam, _ws,
@@ -126,12 +128,10 @@ def _submitted_by_f():
         yield
 
 
-def _outbox(st: Store) -> list[dict]:
-    path = VRC.outbox_path(st.root)
-    if not path.is_file():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
-            if line.strip()]
+def _review_items(st: Store) -> list[dict]:
+    """这一趟判出的 V 稿 notice（板项 `v-review@`；不再有 outbox）。"""
+    return [dict(r) for r in st.rows("tasks")
+            if str(r.get("input_key") or "").startswith(VRV.REVIEW_PREFIX)]
 
 
 # ============================================================ a1 未在册负判
@@ -169,6 +169,7 @@ def test_a1_an_unregistered_rejection_writes_no_block(tmp_path):
 def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
     """在册 + V 判「有毛病」⇒ 台账那一行在、回执在、手稿上仍然没有块。"""
     st = _ws(tmp_path)
+    conductor_for(st)   # V 稿 notice 要投进已经装配的主控（判据不顺手造第二个）
     _put(st)
     rel = f"reports/f-proof-{SID}.md"
     path = _manuscript_file(st, rel=rel, text=MANUSCRIPT)
@@ -177,7 +178,9 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
 
     # 2026-11-04（业主裁定 甲）：在册命题送审必须带手稿 —— 这份稿就是 a2 要判的
     # "负判不写字"的载体（`rel` 上面已经落好，正文与 PROOF 逐字一致）。
-    got = v.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel)
+    # 负判的送达要挂一个真实送审者（`current_parent`）：V 稿 notice 走那条上下文。
+    with _submitted_by_f():
+        got = v.verify_proof(SID, proof_text=PROOF, proof_manuscript=rel)
 
     assert seam.asked() == 1, seam.asked()
     assert got.get("checked") is True, got
@@ -189,10 +192,10 @@ def test_a2_a_registered_rejection_lands_the_ledger_row_but_no_block(tmp_path):
     assert len(rows) == 1, rows
     assert rows[0]["verdict"] == "有毛病", rows[0]
     assert rows[0]["verification_id"] == got.get("verification_id"), (rows[0], got)
-    # 回执意图落盘（送审方读不到时是 undelivered，但"要投"这件事必须有账）。
-    intents = _outbox(st)
-    assert any(str(x.get("verification_id") or "") == str(got.get("verification_id"))
-               for x in intents), intents
+    # V 稿 notice 在板上（判词送达走既有板项 / 信箱唤醒，不再有 outbox）。
+    notices = _review_items(st)
+    assert any(str(x.get("parent_task_id") or "") == "t-f-000001"
+               for x in notices), notices
     # 不签第 3 位；手稿逐字未动、没有块。
     assert got.get("signed_bit3") is False, got
     assert (got.get("sign_issuance") or {}).get("issued") is False, got.get("sign_issuance")

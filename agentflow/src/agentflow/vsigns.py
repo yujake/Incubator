@@ -2916,7 +2916,8 @@ def delivery_of(root: Any, store: Any, *, label: str, verification_id: str,
     key = f"v-verdict@{label}@{verification_id}"
     out: dict[str, Any] = {"state": "not_dispatched", "input_key": key,
                            "delivered_to": "", "delivered_at": "", "read_by": "",
-                           "read_step": None, "item_task_id": "", "problems": []}
+                           "read_step": None, "item_task_id": "",
+                           "parent_task_id": "", "problems": []}
     items, problem = _board_items(store)
     if problem:
         out["problems"].append(problem)
@@ -2932,6 +2933,7 @@ def delivery_of(root: Any, store: Any, *, label: str, verification_id: str,
     if not row:
         return out
     out["item_task_id"] = str(row.get("task_id") or "")
+    out["parent_task_id"] = str(row.get("parent_task_id") or "")
     out["delivered_to"] = str(row.get("role") or "")
     out["read_by"] = str(row.get("seen_by") or "")
     step = row.get("seen_step")
@@ -2992,14 +2994,10 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
     if item_problem:
         out["problems"].append(item_problem + " ⇒ 送达那一半没查成")
     # 167：作者 / 送审者这一格（业主 2026-11-01「谁写证明谁送审」）。
-    # 用惰性 import：`vreceipts` 的读口又会调回本函数，模块级 import 会成环。
-    try:
-        from . import vreceipts as _VRC
+    # 作者读 `proofauthors`（运行期按号读 statements 行）；送审者读判词板项的
+    # `parent_task_id`（`delivery_of` 现算，不落第二份账）。
+    from . import proofauthors as _PA
 
-        box = _VRC.outbox_index(root)
-    except Exception:  # noqa: BLE001 —— 读不成是"作者/送审者这一格没查成"
-        _VRC, box = None, {}
-        out["problems"].append("outbox 读不出来 ⇒ 作者/送审者这一格没查成")
     # 一趟读完三样（缺陷步分布 / 几条命题 / 逐条明细）：改前三样各扫一遍，`defect_steps` 各算一次。
     steps: dict[str, int] = {}
     stmt_ids: set[str] = set()
@@ -3014,10 +3012,11 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
         label = f"{sid}#p{no}"
         vid = str(row.get("verification_id") or "")
         one = delivery_of(root, store, label=label, verification_id=vid, mailbox=mailbox)
-        rec = dict(box.get((label, vid)) or {})
-        author = _VRC.statement_author_of(store, label) if _VRC is not None else {
-            "checked": False, "author": "", "source": "", "reason": "outbox 读不成"}
-        submitter_role = str(rec.get("submitter_role") or one["delivered_to"] or "")
+        author = _PA.statement_author_of(store, label)
+        #: 送审者：判词板项的收件人（`parent_task_id`）与它的角色（`role`）。
+        #: 没有板项 / 板项读不成 ⇒ 两格都空 —— "没投过"与"投了没读到"在下面
+        #: `state` 那一格分开，这一格不猜。
+        submitter_role = str(one["delivered_to"] or "")
         author_role = str(author.get("author") or "")
         if author.get("checked"):
             not_author = bool(author_role and submitter_role
@@ -3032,8 +3031,8 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
             "defect_steps": row_steps, "state": one["state"],
             "delivered_to": one["delivered_to"], "delivered_at": one["delivered_at"],
             "read_by": one["read_by"], "read_step": one["read_step"],
-            # 送审者 / 作者 / 替人送审那一档（可见，不是路由：回执仍投送审者）
-            "submitter": str(rec.get("submitter") or ""),
+            # 送审者 / 作者 / 替人送审那一档（可见，不是路由：判词仍投送审者）
+            "submitter": str(one.get("parent_task_id") or ""),
             "submitter_role": submitter_role,
             "author": author_role,
             "author_source": str(author.get("source") or ""),

@@ -26,8 +26,8 @@
 ## 为什么夹具都走真写口
 
 台账用 `verifications.record_verification`（唯一写口）、命题行用 `store.tx` 的
-`tx.upsert`（与 `tests/test_v_receipt_delivery_does_not_wait_for_the_recipient.py` 同一
-套夹具形状），板项由 `vreceipts.publish_row` 自己开 —— 手写台账 JSONL 会让判据
+`tx.upsert`（与 `tests/test_vreceipts_retired_delivery_still_wakes.py` 同一
+套夹具形状），板项由 `obligations.record_verdict` 自己开 —— 手写台账 JSONL 会让判据
 测到"我抄的那份形状"而不是"生产写出来的那份"。
 """
 from __future__ import annotations
@@ -42,7 +42,7 @@ from agentflow import secretary as SEC
 from agentflow import statementabandon as SA
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
-from agentflow import vreceipts as VRC
+from agentflow import obligations as OBL
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 from agentflow.tools.conductor_tools import conductor_for, reset_cache
@@ -345,7 +345,7 @@ def test_the_abandon_marker_roundtrips_and_rejects_half_forms():
 
 # ------------------------------------------------------------------ ②/④ 重送义务（板项层）
 #
-# 这一节走 V 的真入口（`AgentV.verify_proof`）：回执与义务都由 `vreceipts.publish_row`
+# 这一节走 V 的真入口（`AgentV.verify_proof`）：重送义务由 `obligations.record_verdict`
 # 在判定那一笔里开，判据测的是"生产写出来的那份"，不是手写行。
 
 _SEQ = {"n": 0}
@@ -426,7 +426,7 @@ def _verify_v(st: Store, sid: str, *, parent: str, proof: str = PROOF,
 
 def _resubmit_items(st: Store) -> list[dict]:
     return [dict(r) for r in st.rows("tasks")
-            if str(r.get("input_key") or "").startswith(VRC.RESUBMIT_PREFIX)]
+            if str(r.get("input_key") or "").startswith(OBL.RESUBMIT_PREFIX)]
 
 
 def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
@@ -440,7 +440,7 @@ def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
     items = _resubmit_items(st)
     assert len(items) == 1, [(r.get("input_key"), r.get("item_state")) for r in items]
     one = items[0]
-    assert one["input_key"] == VRC.resubmit_key(f"{SID}#p1", VR.text_sha(PROOF)), one
+    assert one["input_key"] == OBL.resubmit_key(f"{SID}#p1", VR.text_sha(PROOF)), one
     assert one["input_key"].endswith(VR.text_sha(PROOF)), "键尾必须是 sha，不是收件人"
     assert str(one.get("parent_task_id")) == parent, "负责人 = 那一次送审的送审者"
     assert str(one.get("expects")) == "work", "重送是要交付的活，不是'知道了'"
@@ -463,12 +463,13 @@ def test_two_different_bodies_faulted_open_two_items_keyed_by_sha(tmp_path):
     _reproof(st)   # 打回站住之后要再判必须改稿（同 sha 重掷不再重判）
     _verify_v(st, SID, parent=parent, proof=PROOF2)
     assert len(_resubmit_items(st)) == 2, [r.get("input_key") for r in _resubmit_items(st)]
-    VRC.backfill(store=st)
+    OBL.reconcile(store=st)
     assert len(_resubmit_items(st)) == 2, [r.get("input_key") for r in _resubmit_items(st)]
-    # 而回执那一侧是两条（两签两个 vid）—— 义务与回执不是同一条
+    # 回执不再由这一层开：判词由 `vreviews.deliver_review`（判定那一刻）与
+    # `agent_loop.deliver_v_verdicts`（收件人下一次起跑）承担；本文件只量义务。
     receipts = [r for r in st.rows("tasks")
                 if str(r.get("input_key") or "").startswith("v-verdict@")]
-    assert len(receipts) == 2, [r.get("input_key") for r in receipts]
+    assert receipts == [], [r.get("input_key") for r in receipts]
 
 
 def test_a_clean_hold_closes_the_resubmit_item_but_an_ack_does_not(tmp_path):
@@ -518,7 +519,7 @@ def test_abandonment_expires_the_open_resubmit_item(tmp_path):
     _put(st)
     _verify_v(st, SID, parent=parent)
     item = _resubmit_items(st)[0]
-    got = VRC.close_resubmits_for(st, statement_id=SID, why="命题被明确放弃")
+    got = OBL.close_resubmits_for(st, statement_id=SID, why="命题被明确放弃")
     assert got["checked"] is True and got["closed"], got
     closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
     assert str(closed.get("item_state")) == "done", closed
@@ -719,8 +720,8 @@ def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_
 
     ## 2026-11-02 改（①：`apply_abandonment` 没有生产调用点）
 
-    改前这一条把"重送义务什么时候作废"押在收工前那一趟对账上（`vreceipts.
-    reconcile_resubmits`，backfill 里调）—— 也就是说真机上"放弃命题"那一笔写完之后，
+    改前这一条把"重送义务什么时候作废"押在收工前那一趟对账上（`obligations.
+    reconcile_resubmits`，`reconcile` 里调）—— 也就是说真机上"放弃命题"那一笔写完之后，
     板上那条 `v-resubmit@` 还开着，直到有人跑收工对账才关得掉（83 的真实读数：4 条
     abandoned 全走 `table.update`，而那一趟不认识板项）。现在作废就发生在那一笔写口里
     （`table_tools._route_to_secretary` 在就地写成功之后调 `apply_abandonment`），
@@ -750,12 +751,12 @@ def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_
     assert _unsigned(st)["count"] == 0, _unsigned(st)
     assert _abandoned(st)["count"] == 1, _abandoned(st)
 
-    # 写口自己关：不等 backfill。
+    # 写口自己关：不等收工对账。
     closed = [r for r in st.rows("tasks") if str(r.get("task_id")) == item["task_id"]][0]
     assert str(closed.get("item_state")) == "done", closed
     assert str(closed.get("item_close")) == "expired", closed
 
-    got = VRC.backfill(store=st)
+    got = OBL.reconcile(store=st)
     rec = got["resubmit_reconcile"]
     assert rec["checked"] is True, rec
     assert item["task_id"] not in rec["expired"], rec
@@ -774,7 +775,7 @@ def test_the_table_update_route_abandons_a_statement_and_the_closing_reconciles_
 
 def _open_work_for(st: Store, sid: str) -> list[dict]:
     """该命题名下还开着的重送 work 项（`expects=work` 且 `item_state != done`）。"""
-    want = f"{VRC.RESUBMIT_PREFIX}{sid}@"
+    want = f"{OBL.RESUBMIT_PREFIX}{sid}@"
     return [dict(r) for r in st.rows("tasks")
             if str(r.get("input_key") or "").startswith(want)
             and str(r.get("expects") or "") == "work"

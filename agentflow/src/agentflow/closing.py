@@ -5236,9 +5236,9 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
 
     `stmt_id` / `class` / `last_verdict`（最近那一签的结论词，没有就是空串）/
     `fault_at`（最近一次打回的时刻）/ `hung_seconds` + `hung`（已悬多久；时间读不出来
-    就是 `None` + 空串）/ `owner` + `owner_known`（这一条打回投给了谁 —— 取
-    `vreceipts` outbox 里的送审者；取不到就是 `unknown`，不猜）/ `proofs`（逐条证明
-    的同一组读数）/ `why`（一句话说清这一行为什么没有签）。
+    就是 `None` + 空串）/ `owner` + `owner_known`（这一条打回投给了谁 —— 取台账行上
+    记的送审者；取不到就是 `unknown`，不猜）/ `proofs`（逐条证明的同一组读数）/
+    `why`（一句话说清这一行为什么没有签）。
 
     三态：`statements` 读不出来 ⇒ `checked=False` + `reason`（这一格没查成，
     不是"一条都不欠签"）。
@@ -5248,7 +5248,6 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     from . import statementabandon as _SA
     from . import verifications as _VR
     from . import vsigns as _VSP
-    from . import vreceipts as _VRC
 
     out: dict[str, Any] = {"checked": False, "count": 0, "scanned": 0,
                            "checked_from": "statements", "rows": [], "by_class": {},
@@ -5263,12 +5262,6 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         return out
     root = str(getattr(store, "root", "") or "")
     now_dt = now or ""
-    try:
-        box = _VRC.outbox_index(root) if root else {}
-    except Exception as exc:  # noqa: BLE001 —— 读不成是"负责人那一格没查成"
-        box = {}
-        out["problems"].append(f"outbox 读不出来（{type(exc).__name__}: {exc}）"
-                               "⇒ 负责人那一格没查成（记 unknown）")
     #: 一条命题有多份证明时取最重的那一档（表见 docstring）。
     #: `signed_pending_filing` 排在 `stale` 之后 —— 它是"稿上签了、册里还没收录"
     #: 的中间态，不是欠签（不阻塞收工门，单列在 `pending_filing`）。
@@ -5281,7 +5274,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
             "signed_pending_filing": 8, "judgment_missing": 9, "unreadable": 10,
             "never_submitted": 11, "cited_placeholder": 12}
     pending_rows: list[dict[str, Any]] = []
-    _unsigned_rows_reading(rows, out=out, root=root, now_dt=now_dt, box=box,
+    _unsigned_rows_reading(rows, out=out, root=root, now_dt=now_dt,
                            rank=rank, pending_rows=pending_rows, store=store)
     for one in list(out["rows"]) + pending_rows:
         key = str(one["class"])
@@ -5314,7 +5307,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
 
 
 def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
-                           root: str, now_dt: str, box: Mapping[Any, Any],
+                           root: str, now_dt: str,
                            rank: Mapping[str, int],
                            pending_rows: list[dict[str, Any]],
                            store: Any = None) -> None:

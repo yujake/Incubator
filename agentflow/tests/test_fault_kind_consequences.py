@@ -25,7 +25,7 @@ import pytest
 from agentflow import conductor as CND
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
-from agentflow import vreceipts as VRC
+from agentflow import obligations as OBL
 from agentflow.agent_v import AgentV
 from agentflow.agent_v import core as AG
 
@@ -206,12 +206,33 @@ WASHED = {"text": "第 2 步的记号没有定义：请补上记号说明之后�
           "findings": [{"quote": "第 2 步的记号没有定义", "why": "记号没定义就没法核这一步"}]}
 
 
+def _conductor(st: Any) -> Any:
+    """已经装配的主控（与生产同一个取口；判据不自己造第二个）。"""
+    from agentflow.tools.conductor_tools import conductor_for
+
+    return conductor_for(st)
+
+
+def _agent_row(st: Any, *, role: str = "F", parent: str = "t-root",
+               depth: int = 2) -> str:
+    """落一条代理行（`kind` 空）：义务负责人 / 送审者都用它。"""
+    return CND.Conductor._write_new_row(_conductor(st), {
+        "task_id": "", "role": role, "action": "", "called_by": "M",
+        "parent_task_id": parent, "depth": depth,
+        "input_key": f"@t:{role}:{T3.SID}", "status": "done", "outcome": "ok",
+        "refusal_reason": None, "instance": f"{role}#1", "detail": "夹具",
+        "error": None, "started_at": "2026-11-16T21:00:00+08:00",
+        "ended_at": "2026-11-16T21:00:00+08:00", "tokens": 0, "usd": 0.0,
+        "artifacts": [], "inputs": [],
+    }, note="probe:agent")
+
+
 def _run_fault(tmp_path: Path, kind: str, *, st: Any = None,
                parent: str = "") -> dict[str, Any]:
     """同一份夹具、同一条回复，只把秘书给的 `defect_kind` 换掉 —— 三套后果逐格对拍。
 
-    `parent` 给了（一条 `tasks` 里存在的送审者）⇒ 用真实送审挂点，回执有收件人；
-    不给 ⇒ 用 `T3._as_submitter()`（回执只会落 outbox 意图，不开板项）。
+    `parent` 给了（一条 `tasks` 里存在的送审者）⇒ 用真实送审挂点，义务有负责人；
+    不给 ⇒ 用 `T3._as_submitter()`（挂点没有台账行 ⇒ 重送义务记 `unowned`，不开项）。
     """
     st = st or T3._ws(tmp_path)
     T3._put(st)
@@ -443,26 +464,32 @@ def _task_keys(st: Any, prefix: str) -> list[dict[str, Any]]:
             if str(r.get("input_key") or "").startswith(prefix)]
 
 
-def test_a_procedural_fault_publishes_a_resubmit_as_is_receipt(tmp_path: Path) -> None:
-    """程序性：不开 `v-resubmit@…`（改稿义务），改发"本轮无有效判定、可原样再送"回执。"""
-    from test_v_receipt_delivery_does_not_wait_for_the_recipient import (
-        _agent_row, _conductor)
+def test_a_procedural_fault_opens_no_resubmit_obligation(tmp_path: Path) -> None:
+    """程序性：不开 `v-resubmit@…`（改稿义务）；判词仍作为 V 稿 notice 送到送审者。
 
+    2026-11-16「V 回执投递层退场」之后，"可原样再送"那句话不再由这一层拼一条回执
+    正文（回执正文随投递层一起删了）；留下的是两条语义：
+    ① 程序性 / 文风不是打回 ⇒ 没有改稿义务；② 这一签的类别仍可在 `report_fix_list`
+    里读到（`requires_rewrite=False`），所以"不用改稿"这件事没有丢。
+    """
     st = T3._ws(tmp_path)
     _conductor(st)
     recipient = _agent_row(st, role="F")
     got = _run_fault(tmp_path, "procedural", st=st, parent=recipient)
     # 义务：一条都不开（那一档不是打回）。
-    assert _task_keys(st, VRC.RESUBMIT_PREFIX) == [], [
+    assert _task_keys(st, OBL.RESUBMIT_PREFIX) == [], [
         r.get("input_key") for r in st.rows("tasks")]
-    # 回执：开了一条，措辞是"无有效判定 / 不需要改稿 / 可原样再送"。
-    receipts = _task_keys(st, "v-verdict@")
-    assert len(receipts) == 1, [r.get("input_key") for r in st.rows("tasks")]
-    body = str(receipts[0].get("detail") or "")
-    for phrase in ("本轮无有效判定", "不需要改稿", "原样再送", "程序性"):
-        assert phrase in body, (phrase, body)
-    assert "下一步该补的就是" not in body, (
-        "程序性回执用了「要 F 改」的措辞（正文没有被指出缺陷）：" + body)
+    # 送达：V 稿 notice 在送审者名下（判词送到 ≠ 开一条改稿义务）。
+    notices = _task_keys(st, "v-review@")
+    assert len(notices) == 1, [r.get("input_key") for r in st.rows("tasks")]
+    assert str(notices[0].get("parent_task_id") or "") == recipient, notices[0]
+    # "可原样再送"这句话在退场后由这份 notice 承担（原先在回执正文里）。
+    assert "原样再送" in str(notices[0].get("detail") or ""), notices[0].get("detail")
+    # "不用改稿"的类别读数仍在（`report_fix_list` 是它的唯一读口）。
+    fix = VR.report_fix_list(st.root, statement_id=T3.SID)
+    assert fix["checked"] is True, fix
+    assert any(one["requires_rewrite"] is False for one in fix["items"]), fix
+    assert got.get("kind"), got
 
 
 def test_report_fix_list_counts_attempts_without_a_cap(tmp_path: Path) -> None:

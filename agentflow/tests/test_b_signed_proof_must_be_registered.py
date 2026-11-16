@@ -40,7 +40,7 @@ from agentflow import secretary as SEC
 from agentflow import statementabandon as SA
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
-from agentflow import vreceipts as VRC
+from agentflow import obligations as OBL
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 from agentflow.tools.conductor_tools import conductor_for
@@ -197,12 +197,12 @@ def _verify_v(st: Store, sid: str, *, proof: str = PROOF, statement: str = FULL,
 
 def _register_items(st: Store) -> list[dict]:
     return [dict(r) for r in st.rows("tasks")
-            if str(r.get("input_key") or "").startswith(VRC.REGISTER_PREFIX)]
+            if str(r.get("input_key") or "").startswith(OBL.REGISTER_PREFIX)]
 
 
 def _resubmit_items(st: Store) -> list[dict]:
     return [dict(r) for r in st.rows("tasks")
-            if str(r.get("input_key") or "").startswith(VRC.RESUBMIT_PREFIX)]
+            if str(r.get("input_key") or "").startswith(OBL.RESUBMIT_PREFIX)]
 
 
 def _sign_row_of(st: Store, sid: str) -> dict:
@@ -228,7 +228,7 @@ def test_a_a_signed_manuscript_without_a_body_opens_the_duty(tmp_path):
     items = _register_items(st)
     assert len(items) == 1, [r.get("input_key") for r in items]
     one = items[0]
-    assert one["input_key"] == VRC.register_key(f"{SID}#p1", sha), one
+    assert one["input_key"] == OBL.register_key(f"{SID}#p1", sha), one
     assert one["input_key"].endswith(sha), "键尾必须是被签正文的 sha"
     assert str(one.get("role")) == "B", one
     assert str(one.get("expects")) == "work", "收录是要交付的活，不是'知道了'"
@@ -245,7 +245,7 @@ def test_a_a_signed_manuscript_without_a_body_opens_the_duty(tmp_path):
     # statements 那一行确实还没入库（义务不是凭空开的）。
     row = next(dict(r) for r in st.rows("statements") if r["stmt_id"] == SID)
     assert not str(row.get("proof_text") or "").strip(), row
-    gap = VRC.registration_gap(store=st, label=f"{SID}#p1")
+    gap = OBL.registration_gap(store=st, label=f"{SID}#p1")
     assert gap["checked"] is True and gap["gap"] is True, gap
 
 
@@ -278,7 +278,7 @@ def test_b_registration_closes_the_duty_by_evidence_not_by_ack(tmp_path):
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
 
-    got = VRC.backfill(store=st)
+    got = OBL.reconcile(store=st)
     rec = got["registration_reconcile"]
     assert rec["checked"] is True, rec
     # 收口只能由"盘上的事实"给出（回执、扫盘、对账三处都可能发现它已清）——
@@ -301,16 +301,16 @@ def test_c_without_the_generation_step_the_duty_never_appears(tmp_path, monkeypa
         return {"checked": True, "state": "skipped", "key": "",
                 "reason": "反真空：义务生成那一步被摘掉了"}
 
-    monkeypatch.setattr(VRC, "ensure_registration", _no_open)
+    monkeypatch.setattr(OBL, "ensure_registration", _no_open)
     st = _ws(tmp_path)
     _put(st)
     _verify_v(st, SID)
     assert _register_items(st) == [], [r.get("input_key") for r in _register_items(st)]
     assert calls, "连那一步都没被调到 ⇒ 这条反真空测的不是那个写口"
     # 而"这一份还没入库"这个事实仍然在（否则上面那条断言只是"什么都没发生"）。
-    gap = VRC.registration_gap(store=st, label=f"{SID}#p1")
+    gap = OBL.registration_gap(store=st, label=f"{SID}#p1")
     assert gap["checked"] is True and gap["gap"] is True, gap
-    sweep = VRC.sweep_registrations(store=st, root=st.root)
+    sweep = OBL.sweep_registrations(store=st, root=st.root)
     assert sweep["checked"] is True and sweep["opened"] == [], sweep
 
 
@@ -337,15 +337,15 @@ def test_d_the_resubmit_duty_is_untouched(tmp_path):
     assert len(regs) == 1, [r.get("input_key") for r in regs]
     assert len(subs) == 1, [r.get("input_key") for r in subs]
     assert regs[0]["input_key"] != subs[0]["input_key"], (regs, subs)
-    assert str(regs[0]["input_key"]).startswith(VRC.REGISTER_PREFIX), regs[0]
-    assert str(subs[0]["input_key"]).startswith(VRC.RESUBMIT_PREFIX), subs[0]
-    # 重送那一条的读数（`resubmit_digest` 与 `backfill` 的旧键）照旧。
-    digest = VRC.resubmit_digest(st.root, st)
+    assert str(regs[0]["input_key"]).startswith(OBL.REGISTER_PREFIX), regs[0]
+    assert str(subs[0]["input_key"]).startswith(OBL.RESUBMIT_PREFIX), subs[0]
+    # 重送那一条的读数（`resubmit_digest` 与 `reconcile` 的补开）照旧。
+    digest = OBL.resubmit_digest(st.root, st)
     assert digest["checked"] is True and digest["open"] == 1, digest
-    got = VRC.backfill(store=st)
+    got = OBL.reconcile(store=st)
     assert got["resubmit_reconcile"]["checked"] is True, got["resubmit_reconcile"]
-    assert len(_resubmit_items(st)) == 1, "补投把重送义务多开了一条"
-    assert len(_register_items(st)) == 1, "补投把收录义务多开了一条"
+    assert len(_resubmit_items(st)) == 1, "对账把重送义务多开了一条"
+    assert len(_register_items(st)) == 1, "对账把收录义务多开了一条"
 
 
 # ====================================================================== e 明确不收录
@@ -380,14 +380,14 @@ def test_e_an_explicit_abandonment_expires_the_duty(tmp_path):
                                salvaged=[{"label": "引理：旧稿里可取的那一步",
                                           "stmt_id": "000009"}])
     assert got["checked"] is True and got["abandoned"] is True, got
-    rec = VRC.reconcile_registrations(store=st, root=st.root)
+    rec = OBL.reconcile_registrations(store=st, root=st.root)
     assert rec["checked"] is True, rec
     assert str(one["task_id"]) in rec["expired"], rec
     closed = next(dict(r) for r in st.rows("tasks") if r["task_id"] == one["task_id"])
     assert str(closed.get("item_state")) == "done", closed
     assert str(closed.get("item_close")) == "expired", closed
     # 判据那一侧：不再算"欠收录"。
-    gap = VRC.registration_gap(store=st, label=f"{SID}#p1")
+    gap = OBL.registration_gap(store=st, label=f"{SID}#p1")
     assert gap["checked"] is True and gap["gap"] is False, gap
     assert gap["abandoned"] is True, gap
 
@@ -400,14 +400,14 @@ def test_f_the_duty_is_one_row_per_text(tmp_path):
     _verify_v(st, SID)
     first = _register_items(st)
     assert len(first) == 1, first
-    VRC.backfill(store=st)
-    VRC.sweep_registrations(store=st, root=st.root)
+    OBL.reconcile(store=st)
+    OBL.sweep_registrations(store=st, root=st.root)
     again = _verify_v(st, SID)     # 同 sha 再判一次成立（新 v 号，签是 idempotent 的）
     assert again.get("checked") is True, again
     items = _register_items(st)
     assert len(items) == 1, [r.get("input_key") for r in items]
     assert items[0]["task_id"] == first[0]["task_id"], (items, first)
-    digest = VRC.registration_digest(st.root, st)
+    digest = OBL.registration_digest(st.root, st)
     assert digest["checked"] is True and digest["open"] == 1, digest
 
 
@@ -415,7 +415,7 @@ def test_f_the_duty_is_one_row_per_text(tmp_path):
 def test_g_gap_keeps_three_states(tmp_path):
     """三态：没有 store / `statements` 读不出来 ⇒ `checked=False`；命题不在册 ⇒ `gap=True`。"""
     st = _ws(tmp_path)
-    no_store = VRC.registration_gap(store=None, label=f"{SID}#p1")
+    no_store = OBL.registration_gap(store=None, label=f"{SID}#p1")
     assert no_store["checked"] is False and no_store["gap"] is None, no_store
     assert no_store["reason"], no_store
 
@@ -425,17 +425,17 @@ def test_g_gap_keeps_three_states(tmp_path):
         def rows(self, table):
             raise OSError("表读不出来")
 
-    broken = VRC.registration_gap(store=_Broken(), label=f"{SID}#p1")
+    broken = OBL.registration_gap(store=_Broken(), label=f"{SID}#p1")
     assert broken["checked"] is False, broken
     assert "读不出来" in broken["reason"], broken
 
-    missing = VRC.registration_gap(store=st, label=f"{SID}#p1")
+    missing = OBL.registration_gap(store=st, label=f"{SID}#p1")
     assert missing["checked"] is True and missing["gap"] is True, missing
     assert "没有命题" in missing["reason"], missing
 
     # 未 reviewed 与没正文分开读：正文在、reviewed 不是 true ⇒ 仍是欠收录。
     _put(st, proof_text=PROOF)
-    partial = VRC.registration_gap(store=st, label=f"{SID}#p1")
+    partial = OBL.registration_gap(store=st, label=f"{SID}#p1")
     assert partial["checked"] is True and partial["gap"] is True, partial
     assert partial["body"] is True and partial["reviewed"] is False, partial
 
@@ -447,7 +447,7 @@ def test_g_gap_keeps_three_states(tmp_path):
         kind=str(row.get("kind") or ""))
     with st.tx("statements", actor="test") as tx:
         tx.upsert("statements", row)
-    covered_p1 = VRC.registration_gap(store=st, label=f"{SID}#p1")
+    covered_p1 = OBL.registration_gap(store=st, label=f"{SID}#p1")
     assert covered_p1["gap"] is False, covered_p1
-    uncovered_p2 = VRC.registration_gap(store=st, label=f"{SID}#p2")
+    uncovered_p2 = OBL.registration_gap(store=st, label=f"{SID}#p2")
     assert uncovered_p2["checked"] is True and uncovered_p2["gap"] is True, uncovered_p2

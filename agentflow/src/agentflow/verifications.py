@@ -2950,7 +2950,7 @@ def report_fix_list(root: str | Path, *, statement_id: str,
 
     ## 谁读得到
 
-    1. `vreceipts.publish_row` 的回执正文（送审者读到"不用改稿、可原样再送"）；
+    1. `obligations` 的重送项正文（送审者读到"不用改稿、可原样再送"）；
     2. M 的收工读数（"V 的报告连续 N 趟不合格"）；
     3. 召唤者下一次派 V 时写进 `task` 散文 —— 框架不自动塞进 V 的审阅材料
        （否则"3 次独立判定"会变成"看着上一轮的被点名处补作业"）。
@@ -2996,7 +2996,7 @@ def report_fix_list(root: str | Path, *, statement_id: str,
             "at": at,
             "sha": sha,
             #: 待改的是 V 的报告；板项收件人仍然是送审者（V 没有台账号）——
-            #: 这一格是"该谁看"，不是"投给谁"（红线见 `vreceipts._recipient_now`）。
+            #: 这一格是"该谁看"，不是"投给谁"（红线见 `obligations._recipient_now`）。
             "addressee": "V",
             "quote": quote,
             "requires_rewrite": False,
@@ -3118,7 +3118,7 @@ def void_after_rejection(rows: Sequence[Mapping[str, Any]]) -> list[bool]:
 
     判据只有一处实现（:func:`_hold_runs`），本函数是它对外的那一半：读侧有两处必须
     同尺 —— 台账的连续计数（:func:`_hold_run_lengths`）与"重送义务清没清"
-    （:func:`vreceipts.resubmit_cleared`）。两处各判一套的后果很具体：作废行一边不算
+    （:func:`obligations.resubmit_cleared`）。两处各判一套的后果很具体：作废行一边不算
     票、一边却还能把"要你重送"的义务清掉 —— 于是一份被打回、没改稿、重掷签上的正文，
     既不欠票、也不再有人要求它重送（"打回即站住"只站住了一半）。
 
@@ -3725,8 +3725,8 @@ def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any]
     所以这一格落在事务落定之后（`sign_statement` 的返回之前）。
 
     为什么以"块真的落成"为闸：义务的凭据是稿上那一块成立的签。没落成（未在册 / 秘书
-    不在场 / 正文不符那几档）不是"签了没人收录"，那一档由收工扫盘
-    （`vreceipts.sweep_registrations`）按盘上的事实兜底 —— 这里不编一条。
+    不在场 / 正文不符那几档）不是"签了没人收录"，那一档由收工对账
+    （`obligations.sweep_registrations`）按盘上的事实兜底 —— 这里不编一条。
     """
     land = dict(vsign.get("land") or {}) if isinstance(vsign, Mapping) else {}
     if not land.get("landed"):
@@ -3754,8 +3754,8 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
     1 次，还是文献侧的 `t-000027`）。教学里那句话（`specs/d.py`「那一行写进你的报告之后
     派 B 入库」）在，但"教"不是"义务"：签发之后必须有东西把"这一份还没入库"摆到 B 面前。
 
-    判据一个字都不在这里（唯一实现是 `vreceipts.registration_gap` /
-    `vreceipts.ensure_registration` 与它们的幂等键 `b-register@<命题号>@<sha>`）。
+    判据一个字都不在这里（唯一实现是 `obligations.registration_gap` /
+    `obligations.ensure_registration` 与它们的幂等键 `b-register@<命题号>@<sha>`）。
     这一格只做两件事：认出"这一签的载体是不是 `reports/{f,b}-proof-…`"（不是就不开：
     那一档不在这一条义务的射程内），然后把读数带进返回值。失败不许带走这一签。
 
@@ -3771,7 +3771,7 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
     判"已收录"）；生产签后义务在 `land_sign_without_ledger` 里显式传 `skip_gap=True`。
     判据 `test_production_landing_does_not_rely_on_write_defaults` 逐条核这一格。
     """
-    from . import vreceipts as _VRC
+    from . import obligations as _OBL
 
     out: dict[str, Any] = {"checked": False, "state": "skipped", "key": "", "item_id": "",
                            "owner": "", "owner_known": False, "code": "", "reason": ""}
@@ -3780,14 +3780,14 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
         out.update(code="no_manuscript",
                    reason="这一签没有手稿载体 ⇒ 这一条义务不知道要收录哪一份（不是「已收录」）")
         return out
-    if not any(rel.startswith(prefix) for prefix in _VRC.REGISTRATION_CARRIERS):
+    if not any(rel.startswith(prefix) for prefix in _OBL.REGISTRATION_CARRIERS):
         out.update(code="not_a_proof_carrier",
                    reason=(f"`{rel}` 不是 `reports/{{f,b}}-proof-…` 那一类载体 "
-                           f"{list(_VRC.REGISTRATION_CARRIERS)} ⇒ 不在这一条义务的射程内"))
+                           f"{list(_OBL.REGISTRATION_CARRIERS)} ⇒ 不在这一条义务的射程内"))
         return out
     label = f"{str(statement_id or '')}#p{int(proof_no or 1)}"
     try:
-        got = _VRC.ensure_registration(store=store, root=root, label=label,
+        got = _OBL.ensure_registration(store=store, root=root, label=label,
                                        proof_sha=str(sha or ""), manuscript=rel,
                                        called_by="V", at=str(at or ""),
                                        skip_gap=bool(skip_gap))

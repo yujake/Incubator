@@ -73,13 +73,6 @@ _RUNTIME_PRODUCTS = frozenset({
     # `out/vsigns/<artifact_sha>.json` 的 token 含 `<`，按占位写法跳过；这里只登记归档这一个
     # 裸文件名，且仍由 `test_the_runtime_product_exemptions_are_not_stale` 反向核它不在盘上。
     "issued.json",
-    # V 回执的 outbox（`vreceipts.py` 的 `OUTBOX_DIR` / `OUTBOX_NAME`）：落点是
-    # `<工作区>/out/vreceipts/outbox.jsonl`，仓库根这一层永远没有它 —— 与 `issued.json`
-    # 同一条道理。同一个已知切词行为（`_FILENAME_RE` 把 `.jsonl` 切成 `.json`）⇒
-    # 图里那个 token 是带路径的 `out/vreceipts/outbox.json`（判据按 token 全等比，
-    # 登记必须按原样逐字）：不把读图里那个真名改成占位写法，而是登记它，
-    # 并由 `test_the_runtime_product_exemptions_are_not_stale` 反向核它不在盘上。
-    "out/vreceipts/outbox.json",
 })
 
 

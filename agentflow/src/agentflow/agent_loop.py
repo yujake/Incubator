@@ -218,7 +218,7 @@ def _clip(value: Any, limit: int = RESULT_CHARS) -> str:
 #: 板项正文（`tasks.detail`）的上限 —— 写入侧与渲染侧共用这一个数，不许两处各拍一个。
 #:
 #: 关系一句话（交接口径）：写入侧定"存多少"，渲染侧定"念多少"，念的那个不许小于存的。
-#: 两条都在这个常量上收口：`vreceipts._register_body` / `_resubmit_body` 按它截（存多少），
+#: 两条都在这个常量上收口：`obligations._register_body` / `_resubmit_body` 按它截（存多少），
 #: `_clip_board_detail` 也按它截（念多少）；两处调同一个数，就不存在"写者认为完整、
 #: 读者却被再切一刀"的缝。
 #:
@@ -2857,7 +2857,8 @@ def v_rejections_digest(root: str | Path, rows: Sequence[Mapping[str, Any]],
             #
             # 这一档不是对证明的判断（V 说没逐行验证 / 依据落在不归 V 判的面上），
             # 正文没有被指出数学缺陷 ⇒ 不该让 F 去改稿。它走另一条路：送给送审者的
-            # "本轮无有效判定、可原样再送"回执（`vreceipts.publish_row`）+ `report_fix_list`。
+            # "本轮无有效判定、可原样再送"的读数（`obligations.record_verdict` 判类别）
+            # + `report_fix_list`。
             # 只认 `source="row"` 的新行：老行没有类别格，读侧推定只作显示。
             _kind = VR.fault_kind_of(sign)
             if (str(_kind.get("source") or "") == "row"
@@ -3096,8 +3097,8 @@ def deliver_v_verdicts(conductor: Any, *, task_id: str, depth: int, role: str = 
     have = {str(r.get("input_key") or "") for r in board if str(r.get("input_key") or "")}
     for d in details:
         # 幂等键：`v-verdict@<label>@<vid>@<收件人>`。
-        # 为什么带收件人：同一 vid 可能先落 outbox 后被补投；"两者都收"这一档被否，
-        # 所以键要回答"这一条投给这个收件人了没有"。旧盘上的项没有收件人后缀
+        # 为什么带收件人：同一 vid 可能被投给多个收件人（同一趟 V 由不同父召唤时）；
+        # 键要回答"这一条投给这个收件人了没有"。旧盘上的项没有收件人后缀
         # （`v-verdict@<label>@<vid>`）⇒ 只作为读旧盘的兼容键，不许用它写新项。
         key = (f"{V_VERDICT_ITEM_PREFIX}{d['label']}"
                f"@{str(d.get('verification_id') or '')}@{str(task_id or '')}")

@@ -35,7 +35,7 @@ v3–v5 是同一份正文（同一个 sha `82af883c7935…`）重开的一趟�
 | c | 一次送审三转全 clean ⇒ 正常签发（既有行为不许坏） | 绿 |
 | d | 反真空：摘掉"打回站住"那一格 ⇒ a 变回"问 5 次并且签了"；摘掉 fault 的 `break` ⇒ 同一趟会接着问第 3 转 | 那是被修掉的那个形状 |
 | e | 现场那 5 行按新口径复算 ⇒ `[1, 0, 0, 0, 0]`、`streak=0`、`state=rejected`、`signs_bit3=False`；老行（没有 `review_call`）仍按旧口径读 | 红：`[1, 0, 1, 2, 3]`、`state=signed`、连签 3/3 |
-| f | 重送义务：现场那种 sha（1 行 fault + 3 行 clean-after-reject）⇒ `vreceipts.resubmit_cleared` 的 `cleared=False`（作废行不许把义务清掉）；负控：改稿之后拿到干净的「成立」⇒ `cleared=True` | 红：作废行被当成"更干净的成立" ⇒ `cleared=True`、「要你重送」消失 |
+| f | 重送义务：现场那种 sha（1 行 fault + 3 行 clean-after-reject）⇒ `obligations.resubmit_cleared` 的 `cleared=False`（作废行不许把义务清掉）；负控：改稿之后拿到干净的「成立」⇒ `cleared=True` | 红：作废行被当成"更干净的成立" ⇒ `cleared=True`、「要你重送」消失 |
 | g | 不传 `within_call` 的历史兼容门（在册穷举支走的就是它）也站住：`sign_statement` 数出 `streak=0`、不翻位 | 红：`streak=3`、位翻上去 |
 
 ## 这些替身量的是什么
@@ -56,7 +56,7 @@ import pytest
 from agentflow import evidencebits as EB
 from agentflow import secretary as SEC
 from agentflow import verifications as VR
-from agentflow import vreceipts as VRC
+from agentflow import obligations as OBL
 from agentflow.agent_v import AgentV, core as AV_CORE
 
 from _proof_manuscript_fixture import write_proof_manuscript
@@ -390,7 +390,7 @@ def test_f_the_resubmit_obligation_is_not_cleared_by_a_void_row(tmp_path):
     _put(st)
     _seed_field_rows(st)
     sha = VR.text_sha(PROOF)
-    got = VRC.resubmit_cleared(root=st.root, label=f"{SID}#p1", proof_sha=sha)
+    got = OBL.resubmit_cleared(root=st.root, label=f"{SID}#p1", proof_sha=sha)
     assert got["checked"] is True, got
     assert got["cleared"] is False, got
     assert "义务还在" in got["why"], got
@@ -404,7 +404,7 @@ def test_f_the_resubmit_obligation_is_not_cleared_by_a_void_row(tmp_path):
                                             "decision": SEC.V_REPLY_CLEAN,
                                             "reason": "夹具：改稿之后的 clean"},
                            review_pass=1, review_call="c0ffee000001")
-    cleared = VRC.resubmit_cleared(root=st.root, label=f"{SID}#p1", proof_sha=sha)
+    cleared = OBL.resubmit_cleared(root=st.root, label=f"{SID}#p1", proof_sha=sha)
     assert cleared["cleared"] is True, cleared
     assert "义务已清" in cleared["why"], cleared
 
@@ -432,7 +432,7 @@ def test_f_the_resubmit_obligation_is_not_cleared_by_a_void_row(tmp_path):
     _rec(PROOF_B, "fault", "m2", 1)
     _rec(PROOF, "clean", "m3", 1)
     _rec(PROOF_B, "clean", "m4", 2)          # B 打回之后又起转 ⇒ 作废行
-    mixed = VRC.resubmit_cleared(root=st2.root, label=f"{SID}#p1", proof_sha=sha_a)
+    mixed = OBL.resubmit_cleared(root=st2.root, label=f"{SID}#p1", proof_sha=sha_a)
     assert mixed["checked"] is True, mixed
     assert mixed["cleared"] is False, (
         "作废行把另一份正文的「要你重送」义务清掉了：" + str(mixed))

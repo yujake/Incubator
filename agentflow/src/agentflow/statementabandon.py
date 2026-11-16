@@ -1271,7 +1271,7 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
 
     这是「拿不到 V 签就得一直改，或者放弃原命题」里
     "放弃"那一条的落地：它把命题从"还欠一个签"的集合里挪走，同时也把名下开着的
-    重送义务作废（`vreceipts.close_resubmits_for`，`close="expired"`）—— 不一起办，
+    重送义务作废（`obligations.close_resubmits_for`，`close="expired"`）—— 不一起办，
     "放弃"会被"名下还有未消的板项"反锁死（`retire_integrity`）。
 
     ## 放弃"可判真假的断言类"命题时必须给结构化理由
@@ -1448,11 +1448,11 @@ def apply_abandonment(store: Any, *, statement_id: str, reason: str, at: str = "
 
 
 def close_resubmits(store: Any, *, statement_id: str, why: str) -> dict[str, Any]:
-    """把一条命题名下的重送义务作废（`vreceipts` 的同一份实现，惰性引用避开环）。"""
+    """把一条命题名下的重送义务作废（`obligations` 的同一份实现，惰性引用避开环）。"""
     try:
-        from . import vreceipts as _VRC
+        from . import obligations as _OBL
 
-        return _VRC.close_resubmits_for(store, statement_id=str(statement_id), why=str(why))
+        return _OBL.close_resubmits_for(store, statement_id=str(statement_id), why=str(why))
     except Exception as exc:  # noqa: BLE001 —— 作废失败不许带走"放弃"这件事本身
         return {"checked": False, "closed": [], "problems": [f"{type(exc).__name__}: {exc}"],
                 "reason": "重送项作废没跑成（放弃这一笔已经落盘）"}

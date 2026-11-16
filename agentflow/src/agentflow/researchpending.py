@@ -64,7 +64,7 @@ from typing import Any, Mapping
 
 from . import schema as S
 from . import secretary as SEC
-from . import vreceipts as VRC
+from . import obligations as OBL
 
 # 这一档只认"算过、给出了结论"的实验；`inconclusive` 不是候选族。
 # 值与 `closing.CONCLUSIVE_EXPERIMENT_RESULTS` 同源（这里不抄第二份字符串表）：
@@ -248,7 +248,7 @@ def pending_reading(store: Any) -> dict[str, Any]:
     open_questions = [r for r in questions
                       if str(r.get("status") or "") not in _CLOSED_QUESTION_STATUSES]
     register_items = [r for r in tasks
-                      if str(r.get("input_key") or "").startswith(VRC.REGISTER_PREFIX)
+                      if str(r.get("input_key") or "").startswith(OBL.REGISTER_PREFIX)
                       and SEC.row_axis(r) == SEC.ROW_AXIS_ITEM_OPEN]
 
     unsigned: dict[str, Any] = {"checked": True, "count": 0, "rows": [], "reason": ""}

@@ -10,7 +10,8 @@
 ④ 两态：不存在「看不出来」，把这一档删干净
 ⑤ 有毛病 ⇒ 落 V 稿（给被审者的审阅报告）
 ⑥ 落盘 verifications/reviews/v-review-NNNNNN.md + index.jsonl；号源 = 索引 max+1
-⑦ 交付：conductor.open_item notice，不要求 ack
+⑦ 交付：`conductor.open_item` 的 notice（`expects="ack"` 信息型：渲染即收口，不要求
+   模型再显式 ack；它不在 `ACK_REQUIRED_ITEM_PREFIXES` 里）
 ⑧ 三轮累积与互斥：到 3 次发签；任一次有毛病 ⇒ 落 V 稿并停止；同一轮不许既有签又有 V 稿
 ```
 
@@ -214,7 +215,14 @@ def test_auto_sign_on_round_three_without_a_model_nod(tmp_path):
 
 
 def test_signed_manuscript_is_delivered_without_ack(tmp_path, monkeypatch):
-    """②/⑦：签好的稿按 notice 交出去，`expects=""`，不进 ACK_REQUIRED 前缀。"""
+    """②/⑦：签好的稿按 notice 交出去，`expects="ack"` 是信息型的那一档（渲染即收口），
+    且不进 ACK_REQUIRED 前缀 —— 所以它不要求模型再显式 ack。
+
+    为什么不是 `expects=""`：`schema.Task.validate` 只允许撤销后的 `done/expired` 行
+    带空 `expects`；live 的 notice 用空串会被拒（开项直接抛，板项根本不存在）。
+    "不要求 ack" 的正确编码是 `expects="ack"` + 不在 `ACK_REQUIRED_ITEM_PREFIXES`：
+    `mark_item_seen` 在渲染那一拍就把它收成 `done/acked`。
+    """
     st = _ws(tmp_path)
     _put(st)
     board = _BoardDouble()
@@ -229,7 +237,7 @@ def test_signed_manuscript_is_delivered_without_ack(tmp_path, monkeypatch):
     assert len(board.opened) == 1, board.opened
     item = board.opened[0]["kwargs"]
     assert item["kind"] == "notice", item
-    assert item.get("expects", "") == "", item
+    assert item.get("expects") == "ack", item
     assert str(item.get("input_key") or "").startswith(VRV.SIGNED_PREFIX), item
     key = str(item["input_key"])
     assert not any(key.startswith(p) for p in CND.ACK_REQUIRED_ITEM_PREFIXES), key
@@ -299,7 +307,7 @@ def test_a_fault_writes_one_review_and_delivers_it_without_ack(tmp_path, monkeyp
 
     assert len(board.opened) == 1, board.opened
     item = board.opened[0]["kwargs"]
-    assert item["kind"] == "notice" and item.get("expects", "") == "", item
+    assert item["kind"] == "notice" and item.get("expects") == "ack", item
     assert str(item["input_key"]).startswith(VRV.REVIEW_PREFIX), item
     assert not any(str(item["input_key"]).startswith(p)
                    for p in CND.ACK_REQUIRED_ITEM_PREFIXES), item

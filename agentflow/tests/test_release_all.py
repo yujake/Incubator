@@ -2647,7 +2647,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                    "`refvocab.py`",
     # 2026-11-09（T2，设计 `_design_T123.md` §3.2）：手稿族/号/后缀的唯一判定表。
     # 为什么必须是顶层模块：11 处收编（vsigns / manuscriptform / depsection /
-    # exhaustionreport / vreceipts / closing / agent_v / B 的登记口）都从它派生，
+    # exhaustionreport / obligations / closing / agent_v / B 的登记口）都从它派生，
     # 挂在任一角色包里都会让另一边再写一份；它纯函数、零 I/O、不 import 既有模块，
     # 才能在收编的每一侧被安全地当唯一真身引用。
     "manuscriptfamily.py": "手稿族/号/后缀的唯一判定表（T2）：FAMILIES（四族 + legacy 读档）/ "
@@ -2928,31 +2928,31 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                  "`bits_after_sign`（B 认签 ⇒ 第 3 位）",
     # 2026-11-01（167 批，业主裁定「F 写的证明，F 送审，F 拿到 V 签，B 侧收录」）：
     # "谁写的这份证明"的唯一读数。为什么必须落在顶层：写它的是登记口（`secretary` 的
-    # `record_statement`，B 的写入代理），读它的是 V 回执的投递口（`vreceipts._author_of`）
+    # `record_statement`，B 的写入代理），读它的是运行期的作者读数
+    # （`proofauthors.statement_author_of`，`vsigns.receipt_digest` 用它）
     # —— 两个角色、两条路径共用同一份判据；挂进 `agent_b/` 会让 V 侧取不到，挂进
-    # `agent_v/` 会让 B 侧写不进，而两份实现会让"作者未记录"与"作者是 B"分不开
-    # （那正是 81 的 8 条回执只能记 `author_not_recorded` 的形态）。
+    # `agent_v/` 会让 B 侧写不进，而两份实现会让"作者未记录"与"作者是 B"分不开。
     "proofauthors.py": "谁写的这份证明（业主 2026-11-01 裁定）：`author_reading`（三态 "
                        "`checked`/`author`/`source`/`reason` —— 先认调用方显式交的 "
                        "`proof_authors`，再按来源路径 `reports/`⇒F / `out/paper/`⇒G / "
                        "`documents/`⇒B；读不出来就记「作者未记录」，不许默认成 B）与 "
                        "`recorded`（读数 ⇒ 写进 statements 行的 `proof_authors`）—— "
-                       "登记口（`secretary.record_statement`）写、V 回执的投递口"
-                       "（`vreceipts._author_of`）读，两边共用这一份判据",
-    # 2026-11-01（167 批，丙案）：V 回执的投递。为什么必须落在顶层：写它的是 V 判完那一笔
-    # （`agent_v/core.py` 的 `_publish_receipt`），补投它的是收工门（`conductor.closing`
-    # 经 `tools/conductor_tools.py`）—— 两处分属角色面与工具面，谁家都不该是它的家；
-    # 它还要能被判据当纯函数打桩（`tests/test_v_receipt_delivery_does_not_wait_for_the_recipient.py`
-    # 打桩的就是 `_publish_receipt`，"8 条判定 8 条有板项"必须因此变红）。
-    "vreceipts.py": "V 回执的投递（167 丙案：判定即投 + 收工前补投）：`publish_row` 把 "
-                    "① outbox 意图（`out/vreceipts/outbox.jsonl`，append-only）落盘 → "
-                    "② 开板项 → ③ 记 `dispatched`/`undelivered` 整段放进同一把跨进程锁"
-                    "（`tasks.input_key` 没有唯一约束，锁是唯一的并发保证；不许把 "
-                    "`deliver_v_verdicts` 的调用挪到锁外）；收件人 = 送审者"
-                    "（`conductor.current_parent()`），读不到记 `undelivered`、不猜「谁醒着」；"
-                    "`backfill` 是收工前的补投（81 那 8 条按「台账号时间窗唯一」重解析），"
-                    "`outbox_index` / `outbox_digest` 是读口 —— `agent_v/core._publish_receipt` "
-                    "写、`conductor.closing` 补投",
+                       "登记口（`secretary.record_statement`）写、运行期读侧"
+                       "（`proofauthors.statement_author_of`）读，两边共用这一份判据",
+    # 2026-11-16（业主裁定「vreceipts 退场」）：V 回执的投递层整层删除之后，
+    # 义务那一半（重送 / 收录）需要一个顶层模块的家：开项与凭证据收口的逻辑要能被
+    # `agent_v/core`（判定那一笔）、`verifications`（签后收录那一笔）、
+    # `conductor.closing`（收工对账）与判据共同调用；它依赖 ledger / statements 的读口，
+    # 塞进 conductor（底层）会成环，塞进任一角色包会让另一边 import 角色模块。
+    "obligations.py": "两族板项义务的唯一实现（重送 `v-resubmit@<命题>@<sha>` / 收录 "
+                      "`b-register@<命题>@<sha>`）：`record_verdict`（判定那一笔：有毛病 ⇒ "
+                      "开/续义务，干净「成立」⇒ 收口）、`ensure_resubmit` / "
+                      "`settle_resubmitted` / `close_resubmits_for`、`ensure_registration` / "
+                      "`sweep_registrations` / `registration_gap`，以及收工前的 `reconcile`"
+                      "（补开漏的 + 与盘上事实对账）。收口条件是盘上的事实（更新的干净「成立」"
+                      "行 / 正文 + `reviewed=true`），不是 ack。V 判词的投递不在这里："
+                      "它走 `vreviews.deliver_review` 与 `agent_loop.deliver_v_verdicts` "
+                      "两条既有板项路（任何一条落进收件人名下都会经信箱唤醒它）",
     # `draft/39` §4（2026-10-05 用户口径）：M 的状态报告（旁路观测，谁都不停）。
     # 它不是对拍副本：四类读数怎么收集、怎么渲染成四节、怎么与复算对拍只有这一份实现；
     # 名字带 `status_report_`/`statusreport` 前缀是刻意的（R003 会把 `write_report`/

@@ -178,13 +178,13 @@ def test_l_a_degraded_rows_of_is_unreadable_not_absent(
 def test_v_registration_gap_takes_the_statement_by_number_alone(
         tmp_path: pathlib.Path) -> None:
     """只给编号（`label="0001"`）⇒ 取到那一行并如实报「还没入库」。"""
-    from agentflow import vreceipts as VRE
+    from agentflow import obligations as OBL
 
     st = _store(tmp_path)
     seed_statement_row(st, stmt_id="0001", label="A⇒B",
                        statement_full="若 A 成立，则 B 成立。",
                        kind="theorem", proof_text="Proof. 一步。")
-    got = VRE.registration_gap(store=st, label="0001")
+    got = OBL.registration_gap(store=st, label="0001")
     assert got["checked"] is True, got
     assert got["statement_id"] == "0001", got
     assert got["body"] is True, got          # 正文取到了那一行
@@ -194,14 +194,14 @@ def test_v_registration_gap_takes_the_statement_by_number_alone(
 def test_v_a_degraded_id_mode_cannot_see_the_row(
         tmp_path: pathlib.Path, monkeypatch) -> None:
     """反真空：口径一降级 ⇒ 按号读不到那一行的正文（`body` 从 True 掉成 False）。"""
-    from agentflow import vreceipts as VRE
+    from agentflow import obligations as OBL
 
     st = _store(tmp_path)
     seed_statement_row(st, stmt_id="0001", label="A⇒B",
                        statement_full="若 A 成立，则 B 成立。",
                        kind="theorem", proof_text="Proof. 一步。")
     monkeypatch.setattr(SL, "by_id", _degraded_id)
-    got = VRE.registration_gap(store=st, label="0001")
+    got = OBL.registration_gap(store=st, label="0001")
     assert got["body"] is False, got
     assert got["gap"] is True, got
 

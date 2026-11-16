@@ -5346,12 +5346,12 @@ class Conductor:
 
         为什么是这两族（业主 2026-11-05）：「必须收录」与「必须重送」都是 `expects=work`
         的活，它们的收口条件是盘上的事实（正文 + `reviewed=true` / 更新的干净「成立」行），
-        不是收件人的一句话。前缀的定义只有一处（`vreceipts.REGISTER_PREFIX` /
+        不是收件人的一句话。前缀的定义只有一处（`obligations.REGISTER_PREFIX` /
         `RESUBMIT_PREFIX`），这里惰性读过去，不抄第二份字符串。
         """
-        from . import vreceipts as _VRC   # 惰性：conductor 是底层，模块顶层不引它
+        from . import obligations as _OBL   # 惰性：conductor 是底层，模块顶层不引它
 
-        return (str(_VRC.REGISTER_PREFIX), str(_VRC.RESUBMIT_PREFIX))
+        return (str(_OBL.REGISTER_PREFIX), str(_OBL.RESUBMIT_PREFIX))
 
     @staticmethod
     def item_move(cur: str, state: str) -> str:
@@ -5613,7 +5613,7 @@ class Conductor:
             out["reason"] = f"tasks 台账读不成（{type(exc).__name__}: {exc}）⇒ 本次没查成"
             return out
         by_id = {str(r.get("task_id") or ""): r for r in rows}
-        # 两族义务前缀是模块级常量（`vreceipts.REGISTER_PREFIX` / `RESUBMIT_PREFIX`），
+        # 两族义务前缀是模块级常量（`obligations.REGISTER_PREFIX` / `RESUBMIT_PREFIX`），
         # 一次 ack 里不会变 ⇒ 问到第一次就存下来（原先逐条重新去 Import 一遍）。
         # 仍然是"用到才问"：没有一条项走到那一格时，这一次惰性 Import 照旧不发生。
         _obligation_prefixes: tuple[str, ...] | None = None
@@ -5660,7 +5660,7 @@ class Conductor:
             #
             #   「ack 只表示"看到了"」（`expects=ack` 的语义），而
             #   `b-register@` / `v-resubmit@` 是"要交付的活"（`expects=work`）；
-            #   收口只有两条路：① 正文 + `reviewed=true`（框架凭证据收：`vreceipts` 的
+            #   收口只有两条路：① 正文 + `reviewed=true`（框架凭证据收：`obligations` 的
             #   `ensure_registration` / `settle_resubmitted` 调 `close_item_by_evidence`）；
             #   ② 明确放弃 + 理由（`statement.abandon` → 那两条义务带 `expired` 收口）。
             #

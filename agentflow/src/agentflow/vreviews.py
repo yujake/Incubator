@@ -9,7 +9,11 @@
   号源 = 索引 max + 1（不用 `store.alloc_id` / counters）；
   幂等键 = 台账锚点（台账路径, verification_id）—— 因为未在册 pending 行没有
   `review_call`；
-- ⑦ 交付 = `conductor.open_item` 的 notice，不要求 ack（`expects=""`）。
+- ⑦ 交付 = `conductor.open_item` 的 notice；`expects="ack"` 是信息型板项的那一档
+  （`conductor.INFORMATIONAL_ITEM_KINDS`）：渲染进收件人某一步的提示词那一拍就
+  `seen → done`（`close="acked"`），不要求模型再显式 ack —— 它不在
+  `conductor.ACK_REQUIRED_ITEM_PREFIXES` 里。`expects=""` 只有撤销后的
+  `done/expired` 行才合法（`schema.Task.validate`），live 的 notice 用它会被拒。
 
 ## 为什么号源读索引而不是 `store.alloc_id`
 
@@ -347,7 +351,7 @@ def _deliver(store: Any, root: str | Path, *, key: str, summary: str,
         return out
     try:
         item_id = conductor.open_item(
-            kind="notice", role=role, expects="", action="notice",
+            kind="notice", role=role, expects="ack", action="notice",
             summary=summary, called_by=actor, parent_task_id=str(parent_id),
             depth=max(1, int(depth or 1)), input_key=key)
         got, problem = conductor.set_item_detail(item_id, detail)
@@ -373,13 +377,21 @@ def deliver_review(store: Any, *, root: str | Path, review: Mapping[str, Any],
                 "role": "", "parent_task_id": "", "reason": "没有 V 稿编号 ⇒ 不投",
                 "detail_path": "", "existing": False}
     rel = str(got.get("rel") or got.get("path") or "")
+    entry = dict(got.get("entry") or {})
+    # 程序性 / 文风那一档：正文没有被指出数学缺陷 ⇒ 同一份正文可以原样再送。
+    # 这句话原先只活在已退场的回执层（`vreceipts._publish` 的 "report" 措辞）；
+    # 退场之后由这份 notice 承担 —— 它是判定那一刻唯一投到送审者名下的文本。
+    report_only = str(entry.get("fault_kind") or "") in ("procedural", "style")
+    next_step = ("这一条是程序性 / 文风问题：正文没有被指出数学缺陷 ⇒ 同一份正文可以原样再送"
+                 "（不必改稿换 sha）。\n" if report_only else
+                 "V 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n")
     detail = (
         f"V 的审阅报告：`{rel}`\n"
-        f"- 被审稿：`{got.get('entry', {}).get('manuscript') or ''}`\n"
+        f"- 被审稿：`{entry.get('manuscript') or ''}`\n"
         f"- 结论：有毛病（V 的秘书语义判定：fault）\n"
-        f"- 台账锚点：`{got.get('entry', {}).get('ledger') or ''}"
-        f"#{got.get('entry', {}).get('verification_id') or ''}`\n"
-        "V 的原文不转达；这份报告就是给你的审阅意见。改完把同一份稿重新送 V。\n"
+        f"- 台账锚点：`{entry.get('ledger') or ''}"
+        f"#{entry.get('verification_id') or ''}`\n"
+        + next_step
     )
     return _deliver(store, root, key=f"{REVIEW_PREFIX}{review_id}",
                     summary=f"V 的审阅报告（有毛病）：{review_id}",

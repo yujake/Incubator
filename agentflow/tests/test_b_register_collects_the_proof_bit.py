@@ -11,7 +11,7 @@
     reviewed_by_proof = {"1": true} · _grade_recomputed = null
 
 板上 `b-register@000000@58cf…` 那条「必须收录」义务确实被 B 接了、走完了 —— 收口
-读数（`vreceipts.registration_gap`）只要求"正文 + reviewed"，于是"见过签"就够了。
+读数（`obligations.registration_gap`）只要求"正文 + reviewed"，于是"见过签"就够了。
 
 ## 根因（两条路，只有一条写全）
 

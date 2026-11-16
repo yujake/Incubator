@@ -2646,25 +2646,23 @@ class AgentV:
             row=row, manuscript=manuscript, judgment=judgment, verdict=verdict,
             statement_id=sid)
             if axis == "fault" and row.get("checked") is not False else {})
-        # ---- 167/甲（业主 2026-11-01 裁定）：判定那一笔就投，收件人 = 送审者
+        # ---- 2026-11-16（V 回执层退场）：这一笔只维护"重送义务"，不投判词
         #
-        # 为什么必须在这里、而不是等 F 下一次起跑（改前那一版在
-        # `agent_loop.deliver_v_verdicts` 的唯一调用点 = `AgentLoop.run` 的 F 分支）：
-        # 81 的 8 条判定里 4 条落在 F 最后一次起跑之后 ⇒ 连板项都没开，"送到"变成了
-        # "收件人醒着"的副产品。回执是这一次判定的产物，不是下一次起跑的副作用。
+        # 判词送达由两条既有路承担（都不依赖收件人是否醒着）：
+        # ① 上面 `_publish_v_review` 的 V 稿 notice —— 判定那一刻就开在送审者名下；
+        # ② `agent_loop.deliver_v_verdicts` —— 收件人下一次起跑时按台账递送。
+        # 任何一条板项 / 消息落进送审者名下，`agent_loop._deliver_mailbox` 都会唤醒
+        # 它；计时器返回同样是一条消息。"收件人不醒"从来不是判词送不到的原因
+        # （旧 `vreceipts` 的头部诊断错了；真因是 `v-wash@` 那个幂等键）。
         #
-        # 顺序（崩溃不丢）：`vreceipts.publish_row` 先把意图落盘、再开板项、再记
-        # dispatched（见那个模块的 docstring）。这里只用 `_publish_receipt` 一个口，
-        # 判据（`tests/test_v_receipt_delivery_does_not_wait_for_the_recipient.py`）
-        # 打桩的也是它 —— 摘掉它必须让"8 条判定 8 条有板项"变红。
-        #
-        # 收件人读不到（不在任何召唤里 / 台账没有那一行）⇒ 意图记 `undelivered`，
-        # 不拿"谁醒着"当收件人。这一格失败不许带走这一签：`_review_pass` 的
+        # 这里只落义务：有毛病 ⇒ `v-resubmit@` 工作项；干净「成立」⇒ 收口同一份
+        # 证明的重送项。判据打桩的是 `_record_obligations` —— 摘掉它必须让
+        # "有毛病 ⇒ 有重送项"变红。这一格失败不许带走这一签：`_review_pass` 的
         # 返回值一个字都不变（下面的键集合是判据钉住的）。
-        receipt = self._publish_receipt(row)
-        if receipt.get("state"):
-            self._emit(f"verify_proof({sid})：回执 {receipt.get('state')}"
-                       f"（{receipt.get('reason') or '没有读数'}）")
+        obligation = self._record_obligations(row)
+        if obligation.get("state"):
+            self._emit(f"verify_proof({sid})：义务 {obligation.get('state')}"
+                       f"（{obligation.get('reason') or '没有读数'}）")
         signed_delivery: dict[str, Any] = {}
         if bool(judgment.get("checked")) and axis == "clean":
             # 只有"判过了、轴是 clean"这一档才问"这一签发不发"
@@ -2689,32 +2687,31 @@ class AgentV:
                 "v_review": v_review, "signed_delivery": signed_delivery,
                 "verdict": verdict}
 
-    def _publish_receipt(self, row: Mapping[str, Any]) -> dict[str, Any]:
-        """把这一签的回执投给送审者（167/甲；业主 2026-11-01 裁定）。
+    def _record_obligations(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        """把这一签落成义务（重送项的开 / 收口）；投递不在这里（V 回执层已退场）。
 
         ## 为什么单独一个方法
 
-        判据要能把它打桩成空转（反真空：摘掉它 ⇒ "8 条判定 8 条有板项"必须变红），
+        判据要能把它打桩成空转（反真空：摘掉它 ⇒ "有毛病 ⇒ 有重送项"必须变红），
         而 `verify_proof` 的返回值键集合是三条返回路径 / `returns=` 声明钉住的
-        （`tests/test_tools_returns_declaration.py`）—— 投递读数因此不进返回值，
-        只进 outbox（`out/vreceipts/outbox.jsonl`，盘上可读、崩了也在）与一条 `_emit`。
+        （`tests/test_tools_returns_declaration.py`）—— 义务读数因此不进返回值，
+        只进一条 `_emit`。
 
         ## 三态
 
-        - `dispatched`：板项在（新开或已在）；`undelivered`：读不到送审者（不猜）；
-        - `pending`：这一趟没有 conductor / 开项失败 ⇒ 意图已落盘，留给收工前补投；
-        - 不是「有毛病」那一档 ⇒ `skipped`（"成立"的签不打扰任何人）。
-
-        任何异常都折成 `{"state": "error"}` 返回，不许带走这一签 —— 回执投不出去
-        是框架面的失败，不是"这一份证明没毛病"。
+        - `opened` / `existing` / `cleared` / `closed` / `unowned`：`obligations.ensure_resubmit`
+          的读数原样带出；
+        - `settled` / `skipped`：干净「成立」那一档把同一份证明的重送项收口；
+        - `error`：义务没落成（异常已折成读数）—— 不许带走这一签，"义务没落成"
+          不是"这一份证明没毛病"。
         """
         try:
-            from .. import vreceipts as VRC
+            from .. import obligations as OBL
 
-            return VRC.publish_row(self.store, row, at=str(row.get("at") or ""))
-        except Exception as exc:  # noqa: BLE001 —— 投递失败不许带走这一签
+            return OBL.record_verdict(self.store, row, at=str(row.get("at") or ""))
+        except Exception as exc:  # noqa: BLE001 —— 义务失败不许带走这一签
             return {"checked": False, "state": "error",
-                    "reason": f"回执投递没跑成（{type(exc).__name__}: {exc}）"}
+                    "reason": f"义务没落成（{type(exc).__name__}: {exc}）"}
 
     def _v_review_should_be_written(self, judgment: Mapping[str, Any]) -> bool:
         """这一转要不要落 V 稿（判据只有一条：秘书给的轴是 fault）。

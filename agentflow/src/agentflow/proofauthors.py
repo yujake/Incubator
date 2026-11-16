@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
-"""谁写的这份证明：B 登记的那一刻把它记到 statements 行上。
+"""谁写的这份证明：B 登记的那一刻把它记到 statements 行上，运行期也能按号读回来。
 
 ## 为什么需要它
 
-V 回执的收件人 = 送审者（召唤 V 的那个 task）。"送审者该不该是这个人"只能拿
-"作者是谁"来判（业主口径：「F 写的证明，F 送审，F 拿到 V 签，B 侧收录」；不
-存在 F 写证明 B 送审）。statements 行上没有作者，这类回执就只能记
-`author_not_recorded`（见 `vreceipts._author_of`），运行期永远判不出"替人送审"。
+业主口径：「F 写的证明，F 送审，F 拿到 V 签，B 侧收录」；不存在 F 写证明 B 送审。
+statements 行上没有作者，这类判断就只能记 `author_not_recorded`，运行期永远判不出
+"替人送审"。所以本模块有两个读法，各管一个时机：
+
+- :func:`author_reading`：登记那一刻（`secretary.record_statement` 写
+  `proof_authors` 用的）—— 先认调用方显式交的，再按来源路径推；
+- :func:`statement_author_of`：运行期（`vsigns.receipt_digest` 等读侧用）——
+  按命题号从 `statements` 行上读 `proof_authors` / `created_by`。
+
+两个读法的三态口径相同：读不出来就记"作者未记录"，不猜。
 
 ## 只认两种来源（读不出来就记"作者未记录"，不猜）
 
@@ -14,7 +20,9 @@ V 回执的收件人 = 送审者（召唤 V 的那个 task）。"送审者该不
 2. 从登记时读到的来源路径推：`reports/` ⇒ F，`out/paper/` ⇒ G，`documents/` ⇒ B。
 
 `origin="own_result"` 与 `created_by` 都不是作者证据：前者 F 与 B 都会交，
-后者是登记口（恒为 `secretary-<角色>`）。
+后者是登记口（恒为 `secretary-<角色>`）。唯一的例外是运行期读法认
+`created_by="agent-F"`（那不是登记口，是谁创建了这一行）；`created_by="secretary-*"`
+一律不算。
 
 ## 三态
 
@@ -108,3 +116,57 @@ def recorded(reading_result: Mapping[str, Any]) -> list[str]:
     """读数 ⇒ 要写进 statements 行的 `proof_authors`（读不出来 ⇒ 空列表，不写这一格）。"""
     author = str((reading_result or {}).get("author") or "")
     return [author] if author else []
+
+
+def statement_author_of(store: Any, label: str) -> dict[str, Any]:
+    """运行期按命题号读作者（`{checked, author, source, reason}`，三态）。
+
+    只认两种可信来源：
+
+    - `statements.proof_authors`：显式登记的作者（穷举型证据那一档早就在写，
+      普通证明由 :func:`author_reading` + `recorded` 在收录那一刻写）；
+    - `statements.created_by` 且它点名的是角色（`agent-F`）：那是"谁创建了这一行"。
+
+    `created_by="secretary-B"` 不算作者：B 的秘书写这一行 = B 把证明收录进册，
+    那是登记动作，不是写作（「F 写的证明，F 送审……B 侧收录」）。认成作者会让
+    "替人送审"这一档永远看不见。
+
+    读不到作者时 `checked=False` + 原因；调用方记 `author_not_recorded`，
+    不许默认成"作者就是送审者"（那是猜）。
+    """
+    from . import statementledger as SL
+
+    out: dict[str, Any] = {"checked": False, "author": "", "source": "", "reason": ""}
+    sid = str(label or "").split("#", 1)[0]
+    if store is None or not sid:
+        out["reason"] = "没有 store / 没有命题号 ⇒ 作者读不到"
+        return out
+    # 按号定位走查口（口径一）；读不到与不在册在这一层分得开。
+    by_id = SL.by_id(store, stmt_id=sid)
+    if not by_id["checked"]:
+        err = by_id.get("error") or {}
+        out["reason"] = (f"statements 读不出来（{err.get('type', '?')}: "
+                         f"{err.get('message', '?')}）")
+        return out
+    row = by_id["row"]
+    if not row:
+        out["reason"] = f"命题 {sid} 不在册 ⇒ 作者读不到"
+        return out
+    authors = row.get("proof_authors")
+    if isinstance(authors, (list, tuple)):
+        for one in authors:
+            role = _role_of(one)
+            if role:
+                out.update(checked=True, author=role, source="proof_authors",
+                           reason=f"proof_authors 登记为 {role}")
+                return out
+    created = str(row.get("created_by") or "")
+    if not created.lower().startswith(("secretary-", "secretary_")):
+        role = _role_of(created)
+        if role:
+            out.update(checked=True, author=role, source="created_by",
+                       reason=f"created_by={created} 点名了角色 {role}")
+            return out
+    out["reason"] = (f"作者没有登记（created_by={created or '（空）'} 是登记口，不是作者）"
+                     "⇒ 这一格记作者未记录，不猜")
+    return out
