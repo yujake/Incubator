@@ -1,33 +1,35 @@
 # -*- coding: utf-8 -*-
-"""D-41（2026-10-24 真机 r34d）：G8 的回执必须有 `experiments` 台账行背书。
+"""G8 的覆盖判据只认 `experiments` 台账，不再读任何"回执"文件。
 
-## 现场（硬读数）
+## 现场（AH2b，`projects/lp-ball-2`）
 
-`ACCEPTANCE.md` 自己写着"本轮没有把 `code/r34_exhaustive.py`、`code/r34_k8_independent.py`
-用 `verify.run_experiment` 重跑并交出 `run_evidence`"，而盘上有
-`out/review/RUN-EVIDENCE.json`：`{checked: true, generated_by: "E (code/e_g8_recheck.py)"}`。
-那份回执是 E 的旁路脚本自己写的 —— 收工门与验收表此前都只问"那个文件在不在"，
-于是"文件在、内容是自己写的"与"文件在、内容有台账背书"在读数上同形，`machine_pass`
-照样是 true。
+`out/review/RUN-EVIDENCE.json` 被 `closing.run_evidence_reading` 当成证据：
+文件不在 ⇒ `unbacked`（blocker），文件在且 `checked: true` ⇒ 也算证据。可全仓
+没有任何写者：`specs/m.py` 只教「把这四个键凑成 `run_evidence` 交给 H」，
+而 H 在那一趟从未被召唤。那份文件既不是证据也不是产物，是一句可伪造的自述。
 
 ## 这一组钉什么
 
+`closing.numeric_conclusions` 本来就能从「成稿引了哪些 `exp:` 号」现算出分母与
+分子所需的台账行。这一组把覆盖判据整个搬到台账上：
+
 | # | 判据 | 改前为什么是红的 |
 |---|---|---|
-| ① | 回执在盘上而没有台账背书 ⇒ blocker `run_evidence_unbacked`、`machine_pass=False` | 门里没有这一档：没有任何 finding，两格全 pass |
-| ② | 台账背书齐（脚本 + `exit_code` 都对上）⇒ 放行，不误报 | 读数里根本没有 `run_evidence` 这一格 |
-| ③ | 只有 `cross_check` 而没有数值结论 ⇒ `not_applicable`（负控，不许误伤） | 同上（没有这一格 ⇒ 读不出"不适用"） |
-| ④ | 反真空：把"对上台账"的判定打桩恒真 ⇒ ① 必须不再红 | ① 的判据依赖真实的比对 |
+| a | 成稿引 6 条数值结论、台账 6 行齐全（有 `code_hash` 与整数 `exit_code`）⇒ `backed` | 改前要求盘上有 `RUN-EVIDENCE.json`；没有 ⇒ `unbacked` |
+| b | 引到台账里没有的 `exp:` 号 ⇒ `unbacked` | 改前 `numeric_conclusions` 把不存在的号静默跳过，回执也只需覆盖"存在的那些" |
+| c | 台账行缺 `exit_code` ⇒ `unbacked` | 改前只看回执自己写的 `exit_code`，台账那一格漏掉也能过 |
+| d | 台账读不出来 ⇒ `unreadable` | 改前"读不出来"只发生在回执文件上；台账那一半没有这一态 |
+| e | 成稿没引数值/穷举结论 ⇒ `not_applicable` | 改前同（这一条是负控，不许误伤） |
+| f | 反真空：把台账行的 `exit_code` 抹掉 ⇒ a 的 `backed` 必变红 | 改前抹掉台账字段不影响判据（判据读的是回执） |
+| g | M 的验收表 `run_evidence_backed_rows` 也按台账现算 | 改前它经 `run_evidence_reading` 同样依赖那份回执 |
+| h | `RUN-EVIDENCE.json` 这个路径名不再出现在产品代码里；盘上留着它也不影响读数 | 改前常量与读侧都在 |
 
-另加 ⑤–⑩（业主 2026-10-24 裁"做成全形"）：M 的验收表里有了一档可写的受控档
-`run_evidence_backed_rows`（`closing.LEG_CHECK_KINDS` ＋ M 的 brief 清单两处同步），
-语义是"被台账背书、且成稿引用的数值结论覆盖到的结论条数"，缺省阈值 = 本轮成稿引用的
-数值结论条数 —— 0 条而正文引了数值结论 ⇒ 那一行不成立。⑤⑥ 钉现算的验收表读数
-（`readings["acceptance"]["run_evidence_row"]`），⑦⑧ 钉受控档本身，⑨⑩ 钉"无背书 ⇒ fail"
-与它的反真空。改前这些格全都不存在（KeyError / 词表外 `kind`）。
+「不降低强度」那一条：改前要求"至少有一条 `exit_code` 对得上"，新口径把它换成
+"台账行自己必须有整数 `exit_code`" —— 证据来源从回执自述变成台账行本身，判据没有放松。
 """
 from __future__ import annotations
 
+import inspect
 import json
 import pathlib
 
@@ -36,52 +38,44 @@ from agentflow import closing as CL
 from agentflow import schema as S
 from agentflow.store import Store
 
-#: 两个格子的收工门（不跑论文 / 报告那几格：这一组问的是 G8 那一档，
-#: 而 `substance` 在只做这件事的夹具里本来就成立 —— 用它们两格才看得出
-#: `machine_pass` 的翻转是这一档造成的）。
+#: 两个格子的收工门（其余那几格在只做这件事的夹具里本来就成立）。
 CHECKS: tuple[str, ...] = ("acceptance", "substance")
 
-#: 台账里那一次运行：脚本 `code/r34_exhaustive.py`，exit 0。
+#: 台账里那几行的脚本身份（每行一份，故意不同：分母数结论条数，不数脚本个数）。
 SCRIPT = "code/r34_exhaustive.py"
 HASH = "4f6ea689cbfacb7a"
 
 
-def _experiment(store: Store, *, exp_id: str = "000000", exit_code: int = 0,
-                kind: str = "cross_check") -> None:
-    """一行数值实验（`cross_check`：不是 T3，但仍然是"成稿引着的数值结论"）。"""
-    row = S.Experiment(experiment_id=exp_id, claim="R(3,4)=9 的穷举读数",
-                       claim_key="stmt:000007", method="numeric", evidence_kind=kind,
-                       result="supports", negation_kind="not_proved",
-                       code_path=SCRIPT, code_hash=HASH, exit_code=exit_code,
-                       created_at=TS)
-    row.validate()
+def _experiment(store: Store, *, exp_id: str = "000000", exit_code: int | None = 0,
+                kind: str = "cross_check", method: str = "numeric") -> dict:
+    """落一行数值实验。`exit_code=None` 时不写这个键（模拟缺格的历史行）。"""
+    row = S.Experiment(
+        experiment_id=exp_id, claim="R(3,4)=9 的穷举读数", claim_key="stmt:000007",
+        method=method, evidence_kind=kind, result="supports", negation_kind="not_proved",
+        code_path=f"code/r34_{exp_id}.py", code_hash=f"{HASH}{exp_id}",
+        exit_code=exit_code, created_at=TS)
+    payload = row.to_dict()
+    if exit_code is None:
+        payload.pop("exit_code", None)
     with store.tx("experiments", actor="test") as tx:
-        tx.upsert("experiments", row.to_dict())
+        tx.upsert("experiments", payload)
     sync_counters(store)
+    return payload
 
 
-def _paper(store: Store, citations: list[str], *, kind: str = "cross_check") -> None:
+def _paper(store: Store, citations: list[str], *, kind: str = "cross_check",
+           doc_id: str = "0000") -> None:
     """一份引着那些实验的稿件（`cross_check` 必须自带 disclaimer —— schema 强制）。"""
     claim: dict = {"claim_id": "claim-2", "text": "R(3,4) ≥ 9 由穷举复核",
                    "citations": citations, "evidence_kind": kind, "section": "§3"}
     if kind == "cross_check":
         claim["disclaimer"] = "数值交叉验证，不构成证明"
-    doc = S.Document(doc_id="0000", kind="paper", title="t", status="in_review",
+    doc = S.Document(doc_id=doc_id, kind="paper", title="t", status="in_review",
                      claims=[claim], created_at=TS)
     doc.validate()
     with store.tx("documents", actor="test") as tx:
         tx.upsert("documents", doc.to_dict())
     sync_counters(store)
-
-
-def _receipt(root: pathlib.Path, commands: list[dict]) -> pathlib.Path:
-    """写一份 G8 回执（落点与真实工作区同一个：`out/review/RUN-EVIDENCE.json`）。"""
-    p = root / "out" / "review" / "RUN-EVIDENCE.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"checked": True, "generated_by": "E (code/e_g8_recheck.py)",
-               "commands": commands, "problems": []}
-    p.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8", newline="\n")
-    return p
 
 
 def _workspace(tmp_path: pathlib.Path, *, numeric: bool = True) -> tuple[Store, pathlib.Path]:
@@ -92,7 +86,6 @@ def _workspace(tmp_path: pathlib.Path, *, numeric: bool = True) -> tuple[Store, 
         _experiment(st)
         _paper(st, ["exp:000000"])
     else:
-        # 只有 cross_check 那一档的断言、而它没有引任何数值实验 ⇒ 没有"数值结论"
         _paper(st, ["lit:000000"])
     return st, root
 
@@ -101,192 +94,147 @@ def _report(st: Store, root: pathlib.Path) -> CL.ClosingReport:
     return CL.check_closing(st, project_dir=str(root), checks=CHECKS)
 
 
-def _run_evidence_findings(rep: CL.ClosingReport) -> list[CL.Finding]:
+def _findings(rep: CL.ClosingReport) -> list[CL.Finding]:
     return [f for f in rep.findings if f.check == CL.RUN_EVIDENCE_READING]
 
 
-# ============================================================ ① 自述文件没有台账背书
-def test_a_self_written_receipt_without_a_ledger_row_blocks_the_gate(
-        tmp_path: pathlib.Path):
-    """① 回执在盘上，而台账里没有这次运行 ⇒ blocker `run_evidence_unbacked`，不判 pass。
+# ============================================================ a 六条结论 + 台账齐全 ⇒ backed
+def test_six_cited_conclusions_with_a_complete_ledger_are_backed(tmp_path: pathlib.Path):
+    """a：成稿引 6 条 `exp:`，台账 6 行都有 `code_hash` 与整数 `exit_code` ⇒ `backed`。
 
-    这正是 r34d 的形态：文件在、`checked` 也是 true，但把它逐条拿去对台账时，
-    没有任何一条带 `exit_code` 的运行对上它。
+    改前为什么红：这一份工作区盘上没有 `out/review/RUN-EVIDENCE.json`
+    ⇒ 旧读数恒 `unbacked`，判据的分母/分子根本没轮到台账。
     """
     st, root = _workspace(tmp_path)
-    _receipt(root, [{"claim_id": "stmt:000007",
-                     "command": "python code/make_evidence.py",   # 台账里没有这个脚本
-                     "exit_code": 0, "output_tail": "REPRO_RESULT: {}"}])
+    ids = [f"{i:06d}" for i in range(6)]
+    for eid in ids[1:]:
+        _experiment(st, exp_id=eid)
+    _paper(st, [f"exp:{eid}" for eid in ids])
+
     rep = _report(st, root)
-    codes = [f.code for f in _run_evidence_findings(rep)]
-    assert codes == [CL.RUN_EVIDENCE_UNBACKED_CODE], codes
-    assert [f.level for f in _run_evidence_findings(rep)] == ["blocker"]
-    assert rep.status["acceptance"] == "fail", rep.to_dict()
-    assert not rep.machine_pass, rep.to_dict()
-    reading = rep.readings[CL.RUN_EVIDENCE_READING]
-    assert reading["state"] == "unbacked", reading
-    assert reading["covered"] == 0 and reading["missing_scripts"] == [SCRIPT], reading
-
-
-def test_a_receipt_with_the_wrong_exit_code_is_not_backed(tmp_path: pathlib.Path):
-    """①的半条负控：脚本对得上、`exit_code` 对不上 ⇒ 同样没有背书。
-
-    为什么单列：只比路径的话，"跑过而且红了"与"跑过而且绿了"在回执上可以随便写 ——
-    退出码是这两件事唯一的机器读数（`gates.G8_RECEIPT_KEYS` 里它排第三）。
-    """
-    st, root = _workspace(tmp_path)
-    _receipt(root, [{"claim_id": "stmt:000007", "command": "python " + SCRIPT,
-                     "exit_code": 1, "output_tail": "boom"}])
-    rep = _report(st, root)
-    assert [f.code for f in _run_evidence_findings(rep)] == [CL.RUN_EVIDENCE_UNBACKED_CODE]
-    assert rep.status["acceptance"] == "fail", rep.to_dict()
-    assert "exit_code" in rep.readings[CL.RUN_EVIDENCE_READING]["why"]
-
-
-# ============================================================ ② 台账背书齐 ⇒ 放行
-def test_a_receipt_backed_by_the_ledger_does_not_block(tmp_path: pathlib.Path):
-    """② 每条命令都对上了台账行（脚本 + `exit_code`）⇒ 放行，且读数说得出来对上了谁。
-
-    改前为什么红：`readings["run_evidence"]` 这一格根本不存在（门里没有这一档）。
-    """
-    st, root = _workspace(tmp_path)
-    _receipt(root, [{"claim_id": "stmt:000007", "command": "python " + SCRIPT,
-                     "exit_code": 0, "output_tail": "REPRO_RESULT: {}"}])
-    rep = _report(st, root)
-    assert _run_evidence_findings(rep) == [], [f.to_dict() for f in rep.findings]
     reading = rep.readings[CL.RUN_EVIDENCE_READING]
     assert reading["state"] == "backed", reading
-    assert reading["covered"] == reading["required"] == 1, reading
-    assert reading["backed_experiments"] == ["000000"], reading
+    assert reading["required"] == 6 and reading["covered"] == 6, reading
+    assert reading["backed_experiments"] == ids, reading
+    assert reading["missing_conclusions"] == [], reading
+    assert _findings(rep) == [], [f.to_dict() for f in rep.findings]
     assert rep.status["acceptance"] == "pass", rep.to_dict()
     assert rep.machine_pass, rep.to_dict()
 
 
-def test_the_receipt_can_identify_the_run_by_code_hash(tmp_path: pathlib.Path):
-    """②的另一种身份：回执给 `code_hash`（不给脚本路径）也能对上同一行台账。"""
+def test_a_ledger_row_must_carry_a_code_hash(tmp_path: pathlib.Path, monkeypatch):
+    """a 的补半：行上有 `exit_code` 但没有 `code_hash` ⇒ 不是一条可复跑证据。
+
+    这一行只能由读侧构造：写入期 schema 不允许"有 `code_path` 而没有 `code_hash`"，
+    而历史盘上（schema 收紧之前落的）确实可能有这种行 —— 读侧必须把它们判成没背书，
+    而不是"有退出码就算跑过"。
+    """
     st, root = _workspace(tmp_path)
-    _receipt(root, [{"claim_id": "stmt:000007", "command": "python whatever.py",
-                     "code_hash": HASH, "exit_code": 0, "output_tail": "ok"}])
+    rows = [dict(r) for r in st.rows("experiments")]
+    rows[0]["code_hash"] = ""
+    monkeypatch.setattr(CL, "_experiment_rows", lambda _store: rows)
+    reading = CL.run_evidence_reading(st, root)
+    assert reading["state"] == "unbacked", reading
+    assert reading["missing_conclusions"] == ["000000"], reading
+    assert "code_hash" in str(reading.get("why")), reading
+
+
+# ============================================================ b 引到台账没有的号
+def test_a_citation_to_an_experiment_missing_from_the_ledger_is_unbacked(
+        tmp_path: pathlib.Path):
+    """b：成稿引 `exp:000000`（有）与 `exp:999999`（台账没有）⇒ `unbacked`。
+
+    改前为什么红：`numeric_conclusions` 对不存在的号 `continue` 掉，回执只要覆盖
+    000000 就判 `backed` —— 一条指向不存在实验的断言在 G8 上没有读数。
+    """
+    st, root = _workspace(tmp_path)
+    _paper(st, ["exp:000000", "exp:999999"])
     rep = _report(st, root)
     reading = rep.readings[CL.RUN_EVIDENCE_READING]
-    assert reading["state"] == "backed", reading
-    assert reading["backed_experiments"] == ["000000"], reading
+    assert reading["state"] == "unbacked", reading
+    assert reading["missing_conclusions"] == ["999999"], reading
+    assert any("999999" in str(reading.get("why")) for _ in [0]), reading
+    assert [f.code for f in _findings(rep)] == [CL.RUN_EVIDENCE_UNBACKED_CODE]
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
 
 
-# ============================================================ ③ 负控：没有数值结论
-def test_a_cross_check_claim_without_a_numeric_experiment_is_not_applicable(
-        tmp_path: pathlib.Path):
-    """③ 负控：稿件里只有 `cross_check` 那一档的断言、没有引任何数值实验 ⇒ 不适用。
+# ============================================================ c 行缺 exit_code
+def test_a_ledger_row_without_an_integer_exit_code_is_unbacked(tmp_path: pathlib.Path):
+    """c：台账行没有整数 `exit_code` ⇒ `unbacked`（分不出跑过没有、绿还是红）。
 
-    这一条防的是"误伤"：没有数值/穷举结论的交付本来就不欠 G8 的回执，
-    给它记 blocker 等于把"没有这一档"读成"没做这一档"。
+    改前为什么红：旧判据只读回执自己的 `exit_code`；台账那一格漏掉时，
+    回执写 0 就照样 `backed` —— 证据的来源不是台账。
     """
+    st, root = _workspace(tmp_path)
+    _experiment(st, exit_code=None)
+    rep = _report(st, root)
+    reading = rep.readings[CL.RUN_EVIDENCE_READING]
+    assert reading["state"] == "unbacked", reading
+    assert reading["missing_conclusions"] == ["000000"], reading
+    assert "exit_code" in str(reading.get("why")), reading
+    assert [f.code for f in _findings(rep)] == [CL.RUN_EVIDENCE_UNBACKED_CODE]
+
+
+# ============================================================ d 台账读不出来
+def test_an_unreadable_ledger_is_unreadable_not_pass(tmp_path: pathlib.Path, monkeypatch):
+    """d：台账读不出来 ⇒ `unreadable`（没查成，不是"对不上"也不是"通过"）。"""
+    st, root = _workspace(tmp_path)
+
+    def _boom(_store):                     # noqa: ANN001 —— 打桩：台账读不出来
+        raise RuntimeError("ledger is gone")
+
+    monkeypatch.setattr(CL, "_experiment_rows", _boom)
+    reading = CL.run_evidence_reading(st, root)
+    assert reading["state"] == "unreadable", reading
+    assert "ledger is gone" in str(reading.get("why")), reading
+
+
+# ============================================================ e 负控：没有数值结论
+def test_a_manuscript_without_numeric_conclusions_is_not_applicable(
+        tmp_path: pathlib.Path):
+    """e：成稿没有引到 proof / cross_check 的实验 ⇒ `not_applicable`（负控，不许误伤）。"""
     st, root = _workspace(tmp_path, numeric=False)
     rep = _report(st, root)
     reading = rep.readings[CL.RUN_EVIDENCE_READING]
     assert reading["state"] == "not_applicable", reading
-    assert _run_evidence_findings(rep) == [], [f.to_dict() for f in rep.findings]
+    assert _findings(rep) == [], [f.to_dict() for f in rep.findings]
     assert rep.status["acceptance"] == "pass", rep.to_dict()
     assert rep.machine_pass, rep.to_dict()
 
 
-# ============================================================ ④ 反真空
-def test_stubbing_the_ledger_match_makes_the_blocker_disappear(
-        tmp_path: pathlib.Path, monkeypatch):
-    """④ 反真空：把"对上台账"的判定打桩恒真 ⇒ ① 那一条必须不再红。
+# ============================================================ f 反真空
+def test_erasing_the_ledger_exit_code_turns_backed_red_again(tmp_path: pathlib.Path):
+    """f：反真空 —— 同一条结论、同一行台账，抹掉 `exit_code` 之后 `backed` 必须变红。
 
-    这一条钉的是"①的红来自真实的比对，而不是来自一条恒真的判据"。
-    打桩点是唯一的：`closing.match_run_evidence_entry`（读侧只在这一处比对）。
-    """
-    real = CL.match_run_evidence_entry
-
-    def _always(entry, rows):        # noqa: ANN001 —— 打桩：恒真
-        return {"experiment_id": "999999", "code_path": SCRIPT,
-                "code_hash": HASH, "exit_code": 0}, ""
-
-    st, root = _workspace(tmp_path)
-    _receipt(root, [{"claim_id": "stmt:000007",
-                     "command": "python code/make_evidence.py",
-                     "exit_code": 0, "output_tail": "ok"}])
-    monkeypatch.setattr(CL, "match_run_evidence_entry", _always)
-    stubbed = _report(st, root)
-    assert [f.code for f in _run_evidence_findings(stubbed)] == [], \
-        "打桩成恒真之后仍然红 ⇒ 这一档的判据不在比对那一处"
-    assert stubbed.readings[CL.RUN_EVIDENCE_READING]["state"] == "backed"
-    # 反真空的另一半：把真实的比对放回去 ⇒ 同一条命令重新被判成没有背书
-    monkeypatch.setattr(CL, "match_run_evidence_entry", real)
-    restored = _report(st, root)
-    assert [f.code for f in _run_evidence_findings(restored)] == \
-        [CL.RUN_EVIDENCE_UNBACKED_CODE], restored.readings[CL.RUN_EVIDENCE_READING]
-
-
-# ============================================================ ⑤ M 的验收表：G8 那一行
-def _acceptance_row(root: pathlib.Path, row: dict) -> None:
-    p = root / "out" / "paper" / "ACCEPTANCE-CHECKS.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"checks": [row]}, ensure_ascii=False),
-                 encoding="utf-8", newline="\n")
-
-
-def test_the_g8_row_in_ms_acceptance_reading_is_judged_by_the_ledger(
-        tmp_path: pathlib.Path):
-    """⑤ M 的验收表里「G8 那一行」按回执有没有台账背书给结论，不按"文件在不在"。
-
-    这一行由收工门现算（`readings["acceptance"]["run_evidence_row"]`）：受控档位
-    （`LEG_CHECK_KINDS`）加一档要连着改 M 的 brief（提示词正文，跟着 `PROMPT_VERSION`
-    与十一格摘要一起动），那是本趟禁止的面 —— 所以先让它以"验收表读数"的形态机判，
-    形状与表上的行同形（`id` / `kind` / `state` / `got` / `min` / `ok`）。
-
-    两半都要有：回执缺 ⇒ 那一行 `ok=False`、`got=0 < min=1`、整格 `fail`；
-    回执有背书 ⇒ 那一行 `ok=True`、`got == min`、整格回到好读数。
+    两段都做：先证真读数是 `backed`，再把台账那一格抹掉、证它变 `unbacked`，
+    最后补回去、证它回到 `backed`。只做第一段的话，"恒 backed"这一种坏法测不出来。
     """
     st, root = _workspace(tmp_path)
-    _acceptance_row(root, {"id": "P1", "name": "结论正确", "kind": "document_rows",
-                           "min": 1})
-    missing = _report(st, root)
-    acceptance = missing.readings["acceptance"]
-    row = acceptance["run_evidence_row"]
-    assert row["kind"] == CL.RUN_EVIDENCE_READING and row["id"] == "G8", row
-    assert row["state"] == "unbacked" and row["ok"] is False, row
-    assert (row["got"], row["min"]) == (0, 1), row
-    assert row["missing_scripts"] == [SCRIPT], row
-    assert missing.status["acceptance"] == "fail", missing.to_dict()
+    before = _report(st, root).readings[CL.RUN_EVIDENCE_READING]
+    assert before["state"] == "backed", before
 
-    _receipt(root, [{"claim_id": "claim-2", "command": "python " + SCRIPT,
-                     "exit_code": 0, "output_tail": "ok"}])
-    backed = _report(st, root)
-    row = backed.readings["acceptance"]["run_evidence_row"]
-    assert row["state"] == "backed" and row["ok"] is True, row
-    assert (row["got"], row["min"]) == (1, 1), row
-    assert row["backed_experiments"] == ["000000"], row
+    row = dict(st.rows("experiments")[0])
+    row.pop("exit_code", None)
+    with st.tx("experiments", actor="test") as tx:
+        tx.upsert("experiments", row)
+    erased = _report(st, root).readings[CL.RUN_EVIDENCE_READING]
+    assert erased["state"] == "unbacked", erased
+    assert erased["missing_conclusions"] == ["000000"], erased
+
+    row["exit_code"] = 0
+    with st.tx("experiments", actor="test") as tx:
+        tx.upsert("experiments", row)
+    after = _report(st, root).readings[CL.RUN_EVIDENCE_READING]
+    assert after["state"] == "backed", after
 
 
-def test_a_project_without_numeric_conclusions_does_not_get_a_g8_row_object(
-        tmp_path: pathlib.Path):
-    """⑤的负控：没有数值结论时那一行是 `not_applicable` —— 不往表上加一条红。
-
-    "这一档不适用"与"这一档没做"必须分得开：前者 `ok=True`（不误伤），
-    `min=0`（不欠任何东西），`why` 里写清为什么。
-    """
-    st, root = _workspace(tmp_path, numeric=False)
-    _acceptance_row(root, {"id": "P1", "name": "结论正确", "kind": "document_rows",
-                           "min": 1})
-    rep = _report(st, root)
-    row = rep.readings["acceptance"]["run_evidence_row"]
-    assert row["state"] == "not_applicable" and row["ok"] is True, row
-    assert row["min"] == 0 and row["got"] == 0, row
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
-
-
-# ============================================================ ⑨ 全形：受控档（可写）
-def _g8_table(root: pathlib.Path) -> pathlib.Path:
-    """M 的验收表里就写这一行（受控档 `run_evidence_backed_rows`）。"""
+# ============================================================ g M 的验收表那一行
+def _g8_table(root: pathlib.Path) -> None:
     p = root / "out" / "paper" / "ACCEPTANCE-CHECKS.json"
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"checks": [{"id": "P10", "name": "可复跑（G8）",
                                          "kind": CL.RUN_EVIDENCE_LEG_KIND}]},
                             ensure_ascii=False), encoding="utf-8", newline="\n")
-    return p
 
 
 def _leg_row(rep: CL.ClosingReport) -> dict:
@@ -294,79 +242,57 @@ def _leg_row(rep: CL.ClosingReport) -> dict:
     return rows["P10"]
 
 
-def test_the_g8_controlled_kind_passes_with_backing_and_fails_without_it(
-        tmp_path: pathlib.Path):
-    """⑨ 全形：M 在验收表里写 `run_evidence_backed_rows`，这一行按台账背书判。
-
-    两半：
-    - 正文引了数值结论、一条回执都没有 ⇒ 那一行 `got=0 < min=1`、`ok=False`、整格 `fail`，
-      读数逐条点名缺的是哪一条结论（`missing_conclusions`）；
-    - 回执对上台账 ⇒ `got == min == 1`、`ok=True`、整格 pass。
-    """
+def test_the_g8_acceptance_row_is_computed_from_the_ledger(tmp_path: pathlib.Path):
+    """g：`run_evidence_backed_rows` 的 `got/min` 从台账现算；缺格 ⇒ 那一行不成立。"""
     st, root = _workspace(tmp_path)
     _g8_table(root)
+    _experiment(st, exit_code=None)
     missing = _report(st, root)
     row = _leg_row(missing)
-    assert row["kind"] == CL.RUN_EVIDENCE_LEG_KIND, row
-    assert row["state"] == "computed" and row["ok"] is False, row
     assert (row["got"], row["min"]) == (0, 1), row
+    assert row["ok"] is False, row
     assert row["detail"]["missing_conclusions"] == ["000000"], row["detail"]
     assert missing.status["acceptance"] == "fail", missing.to_dict()
-    assert "run_evidence_backed_rows" not in [f.code for f in missing.blockers], \
+    assert CL.RUN_EVIDENCE_LEG_KIND not in [f.code for f in missing.blockers], \
         "这一行红的时候不该冒出 blocker 级：它是 M 的表里一行（读数不是判决）"
 
-    _receipt(root, [{"claim_id": "claim-2", "command": "python " + SCRIPT,
-                     "exit_code": 0, "output_tail": "ok"}])
-    backed = _report(st, root)
-    row = _leg_row(backed)
-    assert row["state"] == "computed" and row["ok"] is True, row
+    _experiment(st, exit_code=0)
+    ok = _report(st, root)
+    row = _leg_row(ok)
     assert (row["got"], row["min"]) == (1, 1), row
-    assert row["detail"]["missing_conclusions"] == [], row["detail"]
-    assert backed.status["acceptance"] == "pass", backed.to_dict()
+    assert row["ok"] is True, row
+    assert ok.status["acceptance"] == "pass", ok.to_dict()
 
 
-def test_the_g8_controlled_kind_counts_every_cited_conclusion(
+def test_the_g8_acceptance_row_is_not_applicable_without_numeric_conclusions(
         tmp_path: pathlib.Path):
-    """⑨的第二半：分母是成稿引用的数值结论条数，不是"回执行数"。
-
-    成稿引两条结论（同一脚本，两条实验行）而回执只覆盖了一条 ⇒ `got=1 < min=2` 不成立。
-    """
-    st, root = _workspace(tmp_path)
-    _experiment(st, exp_id="000001")
-    _paper(st, ["exp:000000", "exp:000001"])
+    """g 的负控：没有数值结论时那一行 `not_applicable`、`min=0`，不往表上加红。"""
+    st, root = _workspace(tmp_path, numeric=False)
     _g8_table(root)
-    _receipt(root, [{"claim_id": "claim-2", "command": "python " + SCRIPT,
-                     "exit_code": 0, "output_tail": "ok"}])
     rep = _report(st, root)
     row = _leg_row(rep)
-    assert (row["got"], row["min"]) == (2, 2), row
-    assert row["detail"]["missing_conclusions"] == [], row["detail"]
-    # 一份回执（一个脚本）覆盖两条结论 ⇒ 两处都算覆盖到：这是"结论条数"口径的关键
-    assert row["ok"] is True, row
+    assert row["state"] == "not_applicable" and row["ok"] is None, row
+    assert rep.status["acceptance"] == "pass", rep.to_dict()
 
 
-# ============================================================ ⑩ 反真空（全形那一档）
-def test_stubbing_the_ledger_match_makes_the_g8_row_pass_anyway(
-        tmp_path: pathlib.Path, monkeypatch):
-    """⑩ 反真空：把"对上台账"的判定打桩恒真 ⇒ ⑨ 的 fail 必须不再出现。
+# ============================================================ h 文件那条路已经没了
+def test_the_receipt_file_path_is_gone_from_the_product_code(tmp_path: pathlib.Path):
+    """h：「回执文件」这条路整体退场 —— 常量、读取、错误文案都不许再提它。
 
-    不这么做，⑨ 的"无背书 ⇒ fail"无法排除"那一档恒红"这一种可能。
+    另一半：盘上就算留着一份 `out/review/RUN-EVIDENCE.json`，读数也必须逐字节不变
+    （它不再是任何判据的输入）。这一半防的是"常量删了、读侧还在某处偷偷读它"。
     """
-    real = CL.match_run_evidence_entry
+    assert not hasattr(CL, "RUN_EVIDENCE_NAME"), "回执文件的常量还在"
+    source = inspect.getsource(CL)
+    assert "RUN-EVIDENCE" not in source, "产品代码里还留着回执文件的路径名"
 
-    def _always(entry, rows):        # noqa: ANN001 —— 打桩：恒真
-        return {"experiment_id": "999999", "code_path": SCRIPT,
-                "code_hash": HASH, "exit_code": 0}, ""
-
-    st, root = _workspace(tmp_path)
-    _g8_table(root)
-    _receipt(root, [{"claim_id": "claim-2", "command": "python code/make_evidence.py",
-                     "exit_code": 0, "output_tail": "ok"}])
-    monkeypatch.setattr(CL, "match_run_evidence_entry", _always)
-    stubbed = _report(st, root)
-    row = _leg_row(stubbed)
-    assert row["ok"] is True and row["got"] == row["min"] == 1, row
-    monkeypatch.setattr(CL, "match_run_evidence_entry", real)
-    restored = _report(st, root)
-    assert _leg_row(restored)["ok"] is False, _leg_row(restored)
-
+    st, root = _workspace(tmp_path, numeric=False)
+    before = CL.run_evidence_reading(st, root)
+    stale = root / "out" / "review" / "RUN-EVIDENCE.json"
+    stale.parent.mkdir(parents=True, exist_ok=True)
+    stale.write_text(json.dumps({"checked": True, "commands": [
+        {"claim_id": "claim-2", "command": "python code/r34_exhaustive.py",
+         "exit_code": 0, "output_tail": "ok"}]}), encoding="utf-8", newline="\n")
+    after = CL.run_evidence_reading(st, root)
+    assert before["state"] == after["state"] == "not_applicable", (before, after)
+    assert before["required"] == after["required"] == 0, (before, after)

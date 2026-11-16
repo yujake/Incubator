@@ -107,13 +107,13 @@ def _ctx(ws: Path, proof_location: str = "code/p1.py:12", **over: object) -> G.G
         "dependencies": [],
         "files": ["code/p1.py"],
         "workspace_root": ws,
-        "run_evidence": {
-            "checked": True,
-            # 回执必须带退出码（业主 2026-10-18：G8 要能分出"跑过且绿"与"跑过且红"）——
-            # 这一格是"合格回执"的正样本，所以四个键都齐。
-            "commands": [{"claim_id": "claim-1", "command": "python code/p1.py",
-                          "exit_code": 0, "output_tail": "ALL CHECKS PASS"}],
-        },
+        # G8 的输入是 `experiments` 台账行（脚本 + `code_hash` + 退出码），不再是回执。
+        "experiments": [{
+            "experiment_id": "000000", "claim": "谱落在区间内", "claim_key": "stmt:000007",
+            "method": "numeric", "evidence_kind": "cross_check", "result": "supports",
+            "code_path": "code/p1.py", "code_hash": "4f6ea689cbfacb7a",
+            "exit_code": 0, "status": "active", "created_at": TS, "created_by": "test",
+        }],
         "findings": [],
         "claim_counts": {"declared_claim_count": 1, "declared_counterexample_count": 0,
                          "declared_script_count": 1},
@@ -519,44 +519,42 @@ def test_gate_g7_rejects_a_proved_status_without_a_ledger_row(ws: Path):
 # ============================================================
 
 
-def test_gate_g8_accepts_when_run_evidence_covers_every_numeric_claim(ws: Path):
-    """正向：本轮实跑记录按 `claim_id` 覆盖了全部数值断言 ⇒ `pass`。"""
+def test_gate_g8_accepts_when_the_ledger_covers_every_numeric_claim(ws: Path):
+    """正向：`experiments` 台账按脚本覆盖了全部数值断言 ⇒ `pass`。"""
     r = G.gate_g8(_ctx(ws))
     assert r.verdict == "pass", (r.verdict, r.reason)
     assert r.counts["需要命令的数值断言数"] == 1 and r.counts["缺命令"] == 0, r.counts
 
 
-def test_gate_g8_returns_unknown_without_run_evidence(ws: Path):
-    """负控（docstring 说这道门是"必须能返回『没做』"的最典型例子）：
-    没给 `run_evidence` ⇒ `unknown`，绝不是 `pass`。
+def test_gate_g8_returns_unknown_without_a_ledger(ws: Path):
+    """负控：台账没接上（`experiments=None`）⇒ `unknown`，绝不是 `pass`。
 
     这条断言直接对应 `draft/17` 的教训："多数脚本不设退出码，于是
     『未报错』被误读为『无问题』"。
     """
     ctx = _ctx(ws)
-    ctx.run_evidence = None
+    ctx.experiments = None
     r = G.gate_g8(ctx)
     assert r.verdict == "unknown", (r.verdict, r.reason)
     assert r.counts["本轮实跑记录"] == "未提供", r.counts
-    assert "无法判定" in r.reason
+    assert "台账" in r.reason
 
 
-def test_gate_g8_returns_unknown_when_caller_declares_it_did_not_run(ws: Path):
-    """负控（第三态）：调用方显式声明 `checked=False` ⇒ `unknown`。
+def test_gate_g8_ignores_a_caller_supplied_run_evidence_receipt(ws: Path):
+    """负控（第三态）：调用方给的回执不再参与判定 —— 有它没它读数一样。
 
-    与上一条是不同的输入、也可能来自不同原因：上一条是"没给"，这条是
-    "给了但说没跑"。两者都必须是 `unknown`，但 reason 必须能分开 ——
-    所以这条额外断言 reason 引出调用方给的原因。
+    改前：`run_evidence={"checked": False, ...}` ⇒ `unknown`。改后：回执不是输入，
+    台账齐就 `pass`、台账不齐就 `fail`；这两条各钉一次。
     """
-    ctx = _ctx(ws, run_evidence={"checked": False, "reason": "本轮只改措辞，没跑脚本"})
-    r = G.gate_g8(ctx)
-    assert r.verdict == "unknown", (r.verdict, r.reason)
-    assert "本轮只改措辞，没跑脚本" in r.reason, r.reason
+    with_receipt = _ctx(ws, run_evidence={"checked": False, "reason": "本轮只改措辞"})
+    assert G.gate_g8(with_receipt).verdict == "pass"
+    empty = _ctx(ws, experiments=[], run_evidence={"checked": True, "commands": []})
+    assert G.gate_g8(empty).verdict == "fail"
 
 
-def test_gate_g8_rejects_a_numeric_claim_missing_from_run_evidence(ws: Path):
-    """负控：数值断言没有对应的本轮实跑命令 ⇒ `fail`（差集非空）。"""
-    ctx = _ctx(ws, run_evidence={"checked": True, "commands": []})
+def test_gate_g8_rejects_a_numeric_claim_missing_from_the_ledger(ws: Path):
+    """负控：数值断言在台账里没有对应的脚本行 ⇒ `fail`（差集非空）。"""
+    ctx = _ctx(ws, experiments=[])
     r = G.gate_g8(ctx)
     assert r.verdict == "fail", (r.verdict, r.reason)
     assert r.counts["缺命令"] == 1, r.counts

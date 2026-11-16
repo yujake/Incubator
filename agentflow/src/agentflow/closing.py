@@ -358,15 +358,14 @@ LEG_CHECK_KINDS: dict[str, str] = {
                        "（`draft/39` §C1，用户 2026-10-05 裁）：旧口径要文件名能被 "
                        "`<编号>-<谁>to<谁>.md` 认出来 ⇒ 改个名就读成 0（读数被文件名的形状绑住），"
                        "而账本是追加写的、撞号与覆盖在结构上不可能发生",
-    # ---- D-41（2026-10-24，业主裁"做成全形"）：G8 的回执有没有台账背书
-    "run_evidence_backed_rows": "可复跑门（G8）的凭据条数（D-41）：`out/review/RUN-EVIDENCE.json` "
-                                "里每条 `command` 都要对上一条 `experiments` 台账行（同一个 "
-                                "`code_path` / `script_path`，或同一个 `code_hash`，且 `exit_code` "
-                                "一致），而 `got` 数的是被这些命令覆盖到的**数值结论条数**；"
-                                "缺省阈值 = 成稿引用的数值结论条数（分母由台账算，不由回执自己给）。"
-                                "正文引了数值结论而一条都没被覆盖 ⇒ 这一行不成立。它答的是「本轮"
-                                "真的重跑过吗」，不是「那个文件在不在」—— 旁路脚本自己写的回执在盘上"
-                                "也是文件，而它与一次登记过的运行是两件事",
+    # ---- D-41（2026-10-24 裁"做成全形"；2026-11-16 AH2b 改成纯台账口径）：
+    "run_evidence_backed_rows": "可复跑门（G8）的凭据条数（D-41）：成稿引到的每个 `exp:` 号"
+                                "都要在 `experiments` 台账里有一行，且那一行带 `code_hash` 与整数 "
+                                "`exit_code`；`got` 数的是被台账背书的**数值结论条数**；"
+                                "缺省阈值 = 成稿引用的结论条数（分母由台账算，不由任何人自述给）。"
+                                "正文引了结论而台账上没有对应行 / 行上缺凭据 ⇒ 这一行不成立。它答的是"
+                                "「本轮真的重跑过吗」，不是「哪份回执在不在」—— 回执可以由任何一方"
+                                "自己写出来，而它与一次登记过的运行是两件事",
     # ---- EE-05（`draft/44` J-24 / `draft/52` C4）：产物台账与盘上一致吗
     "artifact_ledger_bad_rows": "**产物台账对不上盘上**的行数（`ARTIFACTS.jsonl` 里逐条重算 "
                                "sha256：`changed`（内容变了）+ `missing`（盘上没了）+ "
@@ -1075,19 +1074,17 @@ def _review_locator(bits: Mapping[str, Any]) -> str:
     return ""
 
 
-# ------------------------------------------------------------------ G8 的回执有没有台账背书
+# ------------------------------------------------------------------ G8 的覆盖只看台账
 #
-# D-41 的读数：`out/review/RUN-EVIDENCE.json` 自己在盘上、`checked` 也是 true，
-# 也仍然可能是一句自述 —— E 可以用旁路脚本（`code/e_g8_recheck.py` 这一类）自己写出
-# 这份文件。只要没有任何判据拿它逐条去对 `experiments` 台账行，"本轮实跑过"这件事就
-# 没有载体。这一组读数的口径只有一条：回执里的每条 `command` 都要对上一条台账行 ——
-# 同一个脚本（`code_path` / `script_path`，或 `code_hash`）且 `exit_code` 一致。
-# 对不上 ⇒ 收工门拦（`run_evidence_unbacked`）；回执读不懂 ⇒ 记没查成（不判 pass）；
-# 成稿里根本没有数值/穷举结论 ⇒ 这一档不适用（不误报）。
-
-#: 可复跑门的回执落在哪（项目根相对）。写的人可以是 E 的旁路脚本 —— 所以判据只读它、
-#: 不改它：来路要靠台账核对，而不是靠文件里那句 `generated_by`。
-RUN_EVIDENCE_NAME = "out/review/RUN-EVIDENCE.json"
+# 证据只有一种载体：`experiments` 台账行。成稿引了哪些 `exp:` 号由
+# :func:`numeric_conclusions` 现算；每一条被引到的结论，它那一行必须带 `code_hash`
+# 与整数 `exit_code`，否则那条结论没有可复跑的证据（"跑过没有 / 绿还是红"只有这一处
+# 机器读数）。
+#
+# 2026-11-16（AH2b，`projects/lp-ball-2`）：一份"可复跑回执"文件的读侧整体退场。
+# 它没有任何写者（只有消费侧；`specs/m.py` 只教"凑成 dict 交给 H"，而 H 那一趟
+# 从未被召唤），所以文件在不在、`checked` 写什么，都只是一句可伪造的自述。覆盖的
+# 分母与分子本来就能从台账现算 —— 回执只多一句 `checked: true` ⇒ 不是证据，是声明。
 
 #: 成稿引到的实验里，哪些 `evidence_kind` 算「数值/穷举结论」（G8 的触发条件）。
 #:
@@ -1098,17 +1095,17 @@ NUMERIC_CONCLUSION_KINDS: tuple[str, ...] = ("proof", "cross_check")
 #: 必要时出一条 blocker —— `machine_pass` 只看 blocker 与 `status`，所以它会真的拦住）。
 RUN_EVIDENCE_READING = "run_evidence"
 
-#: 回执没有台账背书时的理由码。
+#: 台账没有为成稿引到的结论背书时的理由码。
 RUN_EVIDENCE_UNBACKED_CODE = "run_evidence_unbacked"
 
-#: 回执在盘上但读不懂时的理由码（没查成 = 不判 pass，但它不是"对不上"）。
+#: 台账读不出来时的理由码（没查成 = 不判 pass，但它不是"对不上"）。
 RUN_EVIDENCE_UNREADABLE_CODE = "run_evidence_unreadable"
 
 #: M 的验收表里「G8 那一行」的受控档名（做成全形）。
 #:
 #: 语义：被台账背书、且成稿引用的数值结论覆盖到的结论条数；缺省阈值 =
 #: 本轮成稿引用的数值结论条数。0 条而正文引了数值结论 ⇒ 这一行不成立。它答的是
-#: 「本轮真的重跑过吗」，不是「那个文件在不在」。
+#: 「本轮真的重跑过吗」，不是「那份回执在不在」。
 #:
 #: 加一档要两处同步（这就是为什么它是受控档而不是自由表达式）：`LEG_CHECK_KINDS` 这一处
 #: 实现，加上 M 的 brief 里那份逐字清单（`specs/m.py`；`tests/test_agent_prompts.py` 双向对拍）。
@@ -1119,8 +1116,7 @@ def _script_key(value: Any) -> str:
     """把命令串或台账里的脚本路径归一到同一种写法（比对用）。
 
     只做归一，不做推断：反斜杠换成正斜杠、去掉 `./` 前缀与重复分隔符、大小写折叠
-    （同一个文件在 Windows 上两种写法都指它）。绝对路径不裁：调用方用
-    :func:`_same_script` 的后缀比对处理"一个给绝对、一个给相对"。
+    （同一个文件在 Windows 上两种写法都指它）。
     """
     text = str(value or "").strip().strip("'\"")
     if not text:
@@ -1132,49 +1128,6 @@ def _script_key(value: Any) -> str:
     return text.lower()
 
 
-def _same_script(left: str, right: str) -> bool:
-    """两个归一后的脚本路径是不是同一个文件（相等，或一个是另一个的后缀）。"""
-    a, b = _script_key(left), _script_key(right)
-    if not a or not b:
-        return False
-    if a == b:
-        return True
-    return a.endswith("/" + b) or b.endswith("/" + a)
-
-
-def _hash_prefixed(given: str, ledger: str) -> bool:
-    """回执给的 `code_hash` 与台账那一行的哈希是不是同一份（一方是另一方的前缀）。"""
-    a, b = str(given or "").strip().lower(), str(ledger or "").strip().lower()
-    if not a or not b:
-        return False
-    return a.startswith(b) or b.startswith(a)
-
-
-def _script_from_command(command: Any) -> str:
-    """从一句精确命令里取出脚本（`python code/a.py --x` ⇒ `code/a.py`）。
-
-    取的是最后一个以 `.py` 结尾的 token：它是解释器的位置参数，不是它的开关。
-    """
-    for token in reversed(re.split(r"[\s'\"]+", str(command or ""))):
-        if token.lower().endswith(".py"):
-            return _script_key(token)
-    return ""
-
-
-def _receipt_script_field(entry: Mapping[str, Any]) -> str:
-    """回执里显式写的脚本路径（没有显式字段就是空串；命令串那一句另算）。"""
-    for key in ("script_path", "code_path", "script"):
-        got = _script_key(entry.get(key))
-        if got:
-            return got
-    return ""
-
-
-def _receipt_script(entry: Mapping[str, Any]) -> str:
-    """回执里那一条指向的脚本（先看显式字段，再从句子里取）。"""
-    return _receipt_script_field(entry) or _script_from_command(entry.get("command"))
-
-
 def _row_script(row: Mapping[str, Any]) -> str:
     """台账一行的脚本身份（路径优先；没有路径时退到 `code_hash`）。"""
     got = _script_key(row.get("code_path") or row.get("script_path"))
@@ -1184,72 +1137,68 @@ def _row_script(row: Mapping[str, Any]) -> str:
     return f"sha256:{digest}" if digest else ""
 
 
-def match_run_evidence_entry(entry: Mapping[str, Any],
-                             rows: Sequence[Mapping[str, Any]],
-                             ) -> tuple[dict[str, Any] | None, str]:
-    """回执里的一条命令对得上哪一行 `experiments` —— 唯一实现。
+def numeric_citation_reading(documents: Sequence[Mapping[str, Any]],
+                             experiment_rows: Sequence[Mapping[str, Any]],
+                             ) -> dict[str, Any]:
+    """成稿里的 `exp:` 引文 × `experiments` 台账行 —— G8 覆盖判据的唯一出处（纯函数）。
 
-    返回 `(那一行, "")`；对不上时返回 `(None, 为什么)`。判据只有两条：
-    同一个脚本（路径或 `code_hash`）＋ `exit_code` 一致。两条都成立才算"这一条命令是
-    台账里某一次真实运行的复述" —— 只对上路径而对不上退出码，说明回执声称的那次运行
-    在台账上不存在（或结论正相反）。
+    返回值：
 
-    对上多行时（同一脚本被跑过好几次）取"最像这一次"的那一行：先比 `code_hash`
-    （给了哈希的回执与哈希一致的行优先），再取最新（号最大的）那一行 —— "本轮实跑过"
-    问的是最近那一次，而读数里给出哪一号，读的人才对得回那条日志。
+    - `claims`：成稿里的每一条 `exp:` 引文（含台账里没有的号）；
+    - `numeric_claims`：其中真正算「数值/穷举结论」的那些（`evidence_kind` 是
+      :data:`NUMERIC_CONCLUSION_KINDS`、且不是形式化那一支）；
+    - `numeric_ids`：这些结论的 `experiment_id`（排序去重）；
+    - `missing_ids`：成稿引到、台账里却没有的号（排序去重）；
+    - `by_id` / `rows`：本次对照用的台账行（调用方给的那一份，不再去读盘）。
+
+    单独成函数是因为它要被两处共用：收工门的 `run_evidence_reading` 与 G8 门
+    （`gates.gate_g8`）判的是同一件事 —— "成稿引到的每条结论，台账上有没有一行"。
+    两处各写一套，等于给同一个问题两个答案。
+
+    注意 `missing_ids` 与 `numeric_claims` 是两条独立的判据：一条指向台账里不存在的
+    `exp:` 号的断言，不能因为"它不是一条可分类的数值结论"就从分母里消失 —— 那正是
+    旧口径下静默放过的形态（`numeric_conclusions` 对不存在的号 `continue` 掉）。
     """
-    explicit = _receipt_script_field(entry)
-    script = explicit or _script_from_command(entry.get("command"))
-    digest = str(entry.get("code_hash") or entry.get("code_sha256") or "").strip().lower()
-    want_exit = entry.get("exit_code")
-    if not script and not digest:
-        return None, ("既没有脚本路径也没有 `code_hash` ⇒ 这一条命令对不上任何台账行"
-                      "（回执要能指到「跑了哪一份脚本」）")
-    same_script: list[str] = []
-    wrong_exit: list[str] = []
-    wrong_hash: list[str] = []
-    hits: list[tuple[bool, dict[str, Any]]] = []
-    for row in rows:
-        row_script = _row_script(row)
-        row_hash = str(row.get("code_hash") or "").strip().lower()
-        path_ok = bool(script and row_script and _same_script(script, row_script))
-        hash_ok = bool(digest and row_hash and _hash_prefixed(digest, row_hash))
-        # 身份两条腿（同一个 script_path，或 code_hash）：显式给了路径就按路径认
-        # （同时给了 `code_hash` 就两条都要成立）；只给了 `code_hash` 就按哈希认 —— 那时
-        # 命令串里的那份路径只是给人读的，不拿它当身份。
-        if explicit:
-            if not path_ok:
+    by_id: dict[str, dict[str, Any]] = {}
+    for row in experiment_rows:
+        if isinstance(row, Mapping):
+            by_id[str(row.get("experiment_id") or "")] = dict(row)
+    claims: list[dict[str, Any]] = []
+    numeric: list[dict[str, Any]] = []
+    missing: list[str] = []
+    for doc in documents:
+        if not isinstance(doc, Mapping):
+            continue
+        for claim in (doc.get("claims") or []):
+            if not isinstance(claim, Mapping):
                 continue
-        elif digest:
-            if not hash_ok:
-                continue
-        elif not path_ok:
-            continue
-        eid = str(row.get("experiment_id") or "")
-        if digest and row_hash and not hash_ok:
-            wrong_hash.append(eid)
-            continue
-        same_script.append(eid)
-        row_exit = row.get("exit_code")
-        if isinstance(row_exit, bool) or not isinstance(row_exit, int) or row_exit != want_exit:
-            wrong_exit.append(f"{eid}(exit_code={row_exit!r})")
-            continue
-        hits.append((bool(digest and hash_ok), dict(row)))
-    if hits:
-        hits.sort(key=lambda item: (item[0], str(item[1].get("experiment_id") or "")),
-                  reverse=True)
-        return hits[0][1], ""
-    if wrong_exit:
-        return None, (f"台账里 {wrong_exit} 的脚本对得上（{script}），但 `exit_code` 与回执给的 "
-                      f"{want_exit!r} 不一致 ⇒ 回执声称的那次运行在台账上不是这么记的")
-    if wrong_hash:
-        return None, (f"台账里 {wrong_hash} 的脚本路径对得上，但 `code_hash` 与回执给的不一致 "
-                      f"⇒ 那一行跑的不是这一份文件")
-    if same_script:
-        return None, (f"台账里 {same_script} 与回执的 `exit_code` 对不上 ⇒ 没找到同时对上"
-                      "脚本与退出码的那一行")
-    return None, (f"experiments 台账里没有脚本 {script or ('code_hash=' + digest)} 的行 ⇒ "
-                  "这条命令本轮没有落过台账（回执是旁路脚本自己写的，不是一次登记的运行）")
+            for cite in (claim.get("citations") or []):
+                cid = str(cite or "").strip()
+                if not cid.startswith("exp:"):
+                    continue
+                eid = cid[4:].split("#", 1)[0]
+                row = by_id.get(eid)
+                rec = {"doc_id": str(doc.get("doc_id") or ""),
+                       "claim_id": str(claim.get("claim_id") or ""),
+                       "citation": cid, "experiment_id": eid,
+                       "in_ledger": row is not None,
+                       "evidence_kind": str((row or {}).get("evidence_kind") or ""),
+                       "method": str((row or {}).get("method") or "")}
+                claims.append(rec)
+                if row is None:
+                    if eid not in missing:
+                        missing.append(eid)
+                    continue
+                if rec["evidence_kind"] not in NUMERIC_CONCLUSION_KINDS:
+                    continue
+                if rec["method"] == "formal":
+                    continue
+                numeric.append(rec)
+    numeric_ids = sorted({str(r["experiment_id"]) for r in numeric})
+    return {"checked": True, "claims": claims, "numeric_claims": numeric,
+            "numeric_ids": numeric_ids, "missing_ids": sorted(missing),
+            "by_id": by_id, "rows": [dict(r) for r in experiment_rows
+                                     if isinstance(r, Mapping)]}
 
 
 def _experiment_rows(store: Any) -> list[dict[str, Any]]:
@@ -1277,8 +1226,10 @@ def numeric_conclusions(store: Any, rows: Sequence[Mapping[str, Any]] | None = N
     （`method="formal"` 的凭据是检查器原话，不是"再把脚本跑一遍"）。
 
     返回 `checked` / `why` / `claims` / `experiment_ids` / `scripts`：
-    `scripts` 是这些实验背后的脚本身份（去重、已归一），它同时是"回执至少要覆盖到哪几个
-    脚本"的分母 —— 分母由台账算出来，不由回执自己给。
+    `scripts` 是这些实验背后的脚本身份（去重、已归一），它同时是"台账至少要覆盖到哪几个
+    脚本"的分母 —— 分母由台账算出来，不由任何自述给。
+
+    对照本体在 :func:`numeric_citation_reading`（纯函数）：G8 门读同一份口径。
     """
     out: dict[str, Any] = {"checked": False, "why": "", "claims": [],
                            "experiment_ids": [], "scripts": []}
@@ -1288,189 +1239,116 @@ def numeric_conclusions(store: Any, rows: Sequence[Mapping[str, Any]] | None = N
     except Exception as exc:  # noqa: BLE001 —— 读不到就不许说"没有数值结论"
         out["why"] = f"documents / experiments 读不出来（{type(exc).__name__}: {exc}）"
         return out
-    by_id = {str(r.get("experiment_id") or ""): r for r in ledger}
-    claims: list[dict[str, str]] = []
-    used: dict[str, dict[str, Any]] = {}
-    for doc in docs:
-        for claim in (doc.get("claims") or []):
-            if not isinstance(claim, Mapping):
-                continue
-            for cite in (claim.get("citations") or []):
-                cid = str(cite or "").strip()
-                if not cid.startswith("exp:"):
-                    continue
-                eid = cid[4:].split("#", 1)[0]
-                row = by_id.get(eid)
-                if row is None:
-                    continue
-                if str(row.get("evidence_kind") or "") not in NUMERIC_CONCLUSION_KINDS:
-                    continue
-                if str(row.get("method") or "") == "formal":
-                    continue
-                used[eid] = row
-                claims.append({"doc_id": str(doc.get("doc_id") or ""),
-                               "claim_id": str(claim.get("claim_id") or ""),
-                               "citation": cid,
-                               "experiment_id": eid,
-                               "evidence_kind": str(row.get("evidence_kind") or "")})
-    scripts = sorted({_row_script(r) for r in used.values()} - {""})
-    out.update(checked=True, claims=claims, experiment_ids=sorted(used), scripts=scripts)
+    reading = numeric_citation_reading(docs, ledger)
+    used = [reading["by_id"][eid] for eid in reading["numeric_ids"]]
+    scripts = sorted({_row_script(r) for r in used} - {""})
+    out.update(checked=True, claims=list(reading["numeric_claims"]),
+               experiment_ids=list(reading["numeric_ids"]), scripts=scripts)
     return out
 
 
-def run_evidence_reading(store: Any, project_root: Path | str) -> dict[str, Any]:
-    """G8 的回执有没有台账背书 ⇒ 四态读数（唯一实现）。
+def run_evidence_reading(store: Any, project_root: Path | str = "") -> dict[str, Any]:
+    """G8 的覆盖判据：成稿引到的每条数值结论，台账上有没有一行"可复跑"的凭据。
 
     四态（与收工门的其它读数同一套纪律）：
 
-    - `not_applicable`：成稿里没有引到数值/穷举结论 ⇒ 这一档没有对象（不误报）；
-    - `backed`：回执在盘上、读得懂，每条 `command` 都对上了台账行，且成稿引到的脚本
-      全被覆盖；
-    - `unbacked`：文件不在 / 空回执 / 有命令对不上 / 有脚本没被覆盖 ⇒ 收工门拦；
-    - `unreadable`：文件在但解析坏（不是 JSON、`commands` 不是数组、某条没有整数
-      `exit_code`）⇒ 没查成，不判 pass。
+    - `not_applicable`：成稿没有引到数值/穷举结论、也没有引任何 `exp:` 号 ⇒ 这一档
+      没有对象（不误报）；
+    - `backed`：成稿引到的每个 `exp:` 号都在台账里，且那一行有 `code_hash` 与
+      整数 `exit_code`；
+    - `unbacked`：引到台账里没有的 `exp:` 号 / 某一行缺 `code_hash` 或整数
+      `exit_code` ⇒ 这一条结论没有可复跑的证据；
+    - `unreadable`：`documents` 或 `experiments` 读不出来 ⇒ 没查成，不判 pass。
 
-    返回里带 `entries`（逐条：脚本、退出码、对上哪一行、为什么对不上）、
-    `required`（成稿引用的数值结论条数）、`covered`（被对上台账的命令覆盖到的结论
-    条数）、`missing_conclusions` / `missing_scripts`。读数全部是现算的：不读回执里的
-    `generated_by` 那句话。
+    返回里带 `entries`（逐条：台账行、退出码、有没有背书、为什么没有）、
+    `required`（成稿引用的结论条数，含指向不存在实验的那些）、`covered`（被台账
+    背书的条数）、`missing_conclusions` / `missing_scripts`。读数全部现算：它不读
+    盘上任何"回执"文件，也不读任何人写下的 `checked`。
 
     为什么分母数"结论条数"而不是"脚本个数"：成稿可能引两条结论而它们出自同一个脚本
     （一次运行支持两句话）—— 那时数脚本会把一条覆盖率算成 1，把两条结论读成没覆盖；
-    分母也是「min = 本轮成稿引用的数值结论条数」。
+    分母也是「min = 本轮成稿引用的结论条数」。
+
+    `project_root` 已不再被读取（这一档的输入只有台账）；保留它是因为两个调用点
+    （:func:`_check_run_evidence` / :func:`_leg_reading`）共用同一个签名。
     """
-    root = Path(project_root)
-    path = root / RUN_EVIDENCE_NAME
+    out: dict[str, Any] = {
+        "state": "not_applicable", "why": "",
+        "claims": [], "experiment_ids": [],
+        "required_scripts": [], "required_conclusions": [],
+        "required": 0, "entries": [], "covered": 0,
+        "missing_scripts": [], "missing_conclusions": [], "backed_experiments": [],
+    }
     try:
+        docs = [dict(r) for r in store.rows("documents")]
         rows = _experiment_rows(store)
     except Exception as exc:  # noqa: BLE001 —— 台账读不到 ⇒ 没查成
-        return {"state": "unreadable", "path": str(path), "why":
-                f"experiments 台账读不出来（{type(exc).__name__}: {exc}）⇒ 回执有没有背书判不了",
-                "entries": [], "required": 0, "covered": 0, "required_conclusions": [],
-                "required_scripts": [], "missing_scripts": [], "missing_conclusions": [],
-                "claims": []}
-    concl = numeric_conclusions(store, rows)
-    out: dict[str, Any] = {
-        "path": str(path), "state": "not_applicable", "why": "",
-        "claims": concl["claims"], "experiment_ids": concl["experiment_ids"],
-        "required_scripts": concl["scripts"], "required_conclusions": concl["experiment_ids"],
-        "required": len(concl["experiment_ids"]),
-        "commands": 0, "entries": [], "covered": 0, "missing_scripts": [],
-        "missing_conclusions": [], "backed_experiments": [],
-    }
-    if not concl["checked"]:
         out.update(state="unreadable",
-                   why=f"{concl['why']} ⇒ 成稿里有没有数值结论判不了（没查成）")
+                   why=(f"documents / experiments 台账读不出来"
+                        f"（{type(exc).__name__}: {exc}）⇒ 成稿引到的结论有没有台账背书判不了"))
         return out
-    if not concl["experiment_ids"]:
+    reading = numeric_citation_reading(docs, rows)
+    required_ids = sorted(set(reading["numeric_ids"]) | set(reading["missing_ids"]))
+    required_rows = {eid: reading["by_id"].get(eid) for eid in required_ids}
+    required_scripts = sorted({
+        _row_script(row) for row in required_rows.values() if row is not None} - {""})
+    out.update(claims=list(reading["numeric_claims"]),
+               experiment_ids=list(reading["numeric_ids"]),
+               required_scripts=required_scripts, required_conclusions=required_ids,
+               required=len(required_ids))
+    if not required_ids:
         out["why"] = ("成稿没有引到 proof / cross_check 的数值或穷举实验 ⇒ 可复跑门这一档"
                       "不适用（不是通过，也不是没做）")
         return out
-    pretty = "、".join(concl["experiment_ids"][:4])
-    if not path.is_file():
-        out.update(state="unbacked", missing_scripts=list(concl["scripts"]),
-                   missing_conclusions=list(concl["experiment_ids"]),
-                   why=(f"成稿引用了 {len(concl['experiment_ids'])} 条数值/穷举结论（exp:{pretty}），"
-                        f"而盘上没有 {RUN_EVIDENCE_NAME} ⇒ 本轮实跑过的命令一条都没交"))
-        return out
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:  # noqa: BLE001 —— 读不懂就说读不懂
-        out.update(state="unreadable",
-                   why=(f"{RUN_EVIDENCE_NAME} 读不出来（{type(exc).__name__}: {exc}）"
-                        "⇒ 回执有没有背书判不了（不是「对不上」，也不是「通过」）"))
-        return out
-    if not isinstance(raw, Mapping):
-        out.update(state="unreadable",
-                   why=f"{RUN_EVIDENCE_NAME} 的顶层是 {type(raw).__name__}，不是对象 ⇒ 读不懂")
-        return out
-    commands = raw.get("commands")
-    if not isinstance(commands, (list, tuple)):
-        out.update(state="unreadable",
-                   why=(f"{RUN_EVIDENCE_NAME} 的 `commands` 是 {type(commands).__name__}，"
-                        "不是数组 ⇒ 这份回执读不成逐条记录"))
-        return out
-    if raw.get("checked") is not True:
-        out.update(state="unbacked", missing_scripts=list(concl["scripts"]),
-                   missing_conclusions=list(concl["experiment_ids"]),
-                   why=(f"{RUN_EVIDENCE_NAME} 自己写着 checked={raw.get('checked')!r} ⇒ "
-                        "这一轮没有实跑记录（回执不声称跑过，就不背书任何结论）"))
-        return out
+    # ---- 逐条结论：台账行在不在、那一行有没有可复跑的凭据。
     entries: list[dict[str, Any]] = []
-    matched_rows: list[dict[str, Any]] = []
-    for i, item in enumerate(commands):
-        if not isinstance(item, Mapping):
-            out.update(state="unreadable",
-                       why=(f"{RUN_EVIDENCE_NAME} 的第 {i + 1} 条不是对象"
-                            f"（{type(item).__name__}）⇒ 这一份回执读不懂"))
-            return out
-        if isinstance(item.get("exit_code"), bool) or not isinstance(item.get("exit_code"), int):
-            out.update(state="unreadable",
-                       why=(f"{RUN_EVIDENCE_NAME} 的第 {i + 1} 条没有整数 `exit_code`"
-                            f"（收到 {item.get('exit_code')!r}）⇒ 分不出跑过没有、绿还是红"))
-            return out
-        row, why = match_run_evidence_entry(item, rows)
-        entries.append({"claim_id": str(item.get("claim_id") or ""),
-                        "command": str(item.get("command") or ""),
-                        "script": _receipt_script(item),
-                        "exit_code": item.get("exit_code"),
-                        "matched": str(row.get("experiment_id") or "") if row else "",
-                        "why": why})
-        if row is not None:
-            matched_rows.append(row)
-    matched_scripts = {_row_script(r) for r in matched_rows} - {""}
-    missing = [s for s in concl["scripts"]
-               if not any(_same_script(s, got) for got in matched_scripts)]
-    # 结论那一层（分母）：成稿引用的每条数值结论，它背后的脚本有没有被
-    # 对上台账的命令覆盖到。一条结论一条账 —— 同一脚本上的两条结论算两条。
-    cited_scripts = _cited_scripts(concl, rows)
-    missing_concl = [eid for eid, script in cited_scripts.items()
-                     if not any(_same_script(script, got) for got in matched_scripts)]
-    unbacked = [e for e in entries if not e["matched"]]
-    unbacked.sort(key=lambda e: e["claim_id"])
-    # 「来路」那一格（读数，不拦门）：回执的 `claim_id` 若不是成稿里引着这些实验的那条
-    # 断言，就说一声。G8 的回执按 `documents.claims[].claim_id` 对断面（`gates.gate_g8`
-    # 就是那么比的），而旁路脚本自己写的回执可能给一个对上台账、却不是任何断言编号的值。
-    # 这件事要看得见，但它不再多判一条 fail：对账那一半（脚本 + 退出码）已经在上面判过了。
-    manuscript_claims = {str(c.get("claim_id") or "") for c in concl["claims"]} - {""}
-    foreign_claims = sorted({e["claim_id"] for e in entries
-                             if e["claim_id"] and e["claim_id"] not in manuscript_claims})
-    out.update(commands=len(commands), entries=entries,
-               covered=len(cited_scripts) - len(missing_concl),
-               missing_scripts=missing, missing_conclusions=missing_concl,
-               claim_ids_not_in_manuscript=foreign_claims,
-               backed_experiments=sorted({e["matched"] for e in entries if e["matched"]}))
-    if unbacked or missing:
+    backed: list[str] = []
+    unbacked: list[str] = []
+    for eid in required_ids:
+        row = required_rows.get(eid)
+        if row is None:
+            why = (f"成稿引用了 `exp:{eid}`，而 experiments 台账里没有这一行 ⇒ "
+                   "这条结论没有落过账（引用指不到任何一次登记过的运行）")
+            entries.append({"experiment_id": eid, "in_ledger": False, "backed": False,
+                            "code_path": "", "code_hash": "", "exit_code": None,
+                            "why": why})
+            unbacked.append(eid)
+            continue
+        code_path = str(row.get("code_path") or row.get("script_path") or "")
+        code_hash = str(row.get("code_hash") or "").strip()
+        exit_code = row.get("exit_code")
+        has_exit = isinstance(exit_code, int) and not isinstance(exit_code, bool)
+        problems: list[str] = []
+        if not code_hash:
+            problems.append("行上没有 `code_hash`（分不出跑的是不是这份脚本）")
+        if not has_exit:
+            problems.append(f"行上没有整数 `exit_code`（收到 {exit_code!r}：分不出跑过没有、绿还是红）")
+        why = "；".join(problems)
+        entries.append({"experiment_id": eid, "in_ledger": True, "backed": not problems,
+                        "code_path": code_path, "code_hash": code_hash,
+                        "exit_code": exit_code if has_exit else None, "why": why})
+        (backed if not problems else unbacked).append(eid)
+    missing_scripts = sorted({_row_script(required_rows[eid]) for eid in unbacked
+                              if required_rows.get(eid) is not None} - {""})
+    out.update(entries=entries, covered=len(backed),
+               missing_conclusions=unbacked, missing_scripts=missing_scripts,
+               backed_experiments=backed)
+    if unbacked:
         bits: list[str] = []
-        if unbacked:
-            bits.append(f"{len(unbacked)} 条命令对不上台账（"
-                        + "；".join(f"{e['command'] or '（无命令）'}：{e['why']}"
-                                    for e in unbacked[:3]) + "）")
-        if missing:
-            bits.append(f"成稿引用的数值结论里有 {len(missing_concl)} 条没被覆盖"
-                        f"（exp:{'、exp:'.join(missing_concl[:4])}；"
-                        f"这些脚本没有任何一条回执命令对上：{missing}）")
+        gone = [eid for eid in unbacked if required_rows.get(eid) is None]
+        if gone:
+            bits.append(f"成稿引到的 {len(gone)} 个实验号台账里没有（exp:"
+                        + "、exp:".join(gone[:4]) + "）")
+        weak = [e for e in entries if e["in_ledger"] and not e["backed"]]
+        if weak:
+            bits.append(f"{len(weak)} 条结论的台账行缺可复跑凭据（"
+                        + "；".join(f"exp:{e['experiment_id']}：{e['why']}" for e in weak[:3])
+                        + "）")
         out.update(state="unbacked", why="；".join(bits))
         return out
     out.update(state="backed",
-               why=(f"{len(commands)} 条回执命令逐条对上了 experiments 台账行（脚本与 "
-                    f"exit_code 都一致），覆盖成稿引用的 {len(cited_scripts)} 条数值结论"))
-    return out
-
-
-def _cited_scripts(concl: Mapping[str, Any],
-                   rows: Sequence[Mapping[str, Any]]) -> dict[str, str]:
-    """成稿引用的每条数值结论 → 它背后那一行台账的脚本身份（空串 = 该行没有脚本身份）。
-
-    单独成函数是因为它要被两处共用（读数里的覆盖率与验收表那一档），而"一条结论配哪个
-    脚本"只该有一份口径：结论的身份是 `experiments.experiment_id`，脚本的身份是
-    :func:`_row_script`。
-    """
-    by_id = {str(r.get("experiment_id") or ""): r for r in rows}
-    out: dict[str, str] = {}
-    for eid in (concl.get("experiment_ids") or []):
-        row = by_id.get(str(eid))
-        out[str(eid)] = _row_script(row) if row is not None else ""
+               why=(f"成稿引用的 {len(required_ids)} 条数值/穷举结论逐条对上了 experiments "
+                    "台账行（行上有 `code_hash` 与整数 `exit_code`）"))
     return out
 
 
@@ -1529,24 +1407,23 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
     if kind == "artifact_ledger_bad_rows":
         return artifact_ledger_reading(project_root)
     if kind == RUN_EVIDENCE_LEG_KIND:
-        # G8 那一行按回执有没有台账背书判，不按"那个文件在不在"判（"做成全形"就是这个
-        # 意思）。分母是成稿引用的数值结论条数（由台账算），分子是被
-        # 对上台账的命令覆盖到的结论条数 —— 于是"正文引了结论、一条回执都没有"是
-        # 0 < min，而不是"文件在 ⇒ 成立"。
+        # G8 那一行按台账有没有背书判（"做成全形"就是这个意思）。分母是成稿引用的
+        # 结论条数（由台账算），分子是被台账背书的条数 —— 于是"正文引了结论、
+        # 台账上没有对应行/行上缺凭据"是 0 < min，而不是"哪份文件在 ⇒ 成立"。
         # 三态由这一档自己给：没有数值结论 ⇒ 这一行 not_applicable（不误伤那些本来就不
-        # 跑脚本的交付）；回执读不懂 ⇒ 抛出去 ⇒ 这一行 unreadable、整格 unknown。
+        # 跑脚本的交付）；台账读不出来 ⇒ 抛出去 ⇒ 这一行 unreadable、整格 unknown。
         reading = run_evidence_reading(store, project_root)
         state = str(reading.get("state") or "")
         if state == "not_applicable":
             raise LegNotApplicable(
                 kind, str(reading.get("why") or "成稿里没有引到数值/穷举实验"))
         if state == "unreadable":
-            raise RuntimeError(str(reading.get("why") or "回执读不懂"))
+            raise RuntimeError(str(reading.get("why") or "台账读不出来"))
         required = int(reading.get("required") or 0)
         covered = int(reading.get("covered") or 0)
-        unbacked = [e for e in (reading.get("entries") or []) if not e.get("matched")]
+        unbacked = [e for e in (reading.get("entries") or []) if not e.get("backed")]
         return covered, {
-            "path": reading.get("path"), "state": state,
+            "state": state,
             "required": required, "covered": covered,
             "required_scripts": list(reading.get("required_scripts") or []),
             "covered_conclusions": list(reading.get("required_conclusions") or []),
@@ -1554,14 +1431,14 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
             "missing_conclusions": list(reading.get("missing_conclusions") or []),
             "backed_experiments": list(reading.get("backed_experiments") or []),
             "unbacked": unbacked,
-            # 分母 = 成稿引用的数值结论条数（由台账算出来的），不是回执自己给的条数。
+            # 分母 = 成稿引用的结论条数（由台账算出来的），不是任何人自述的条数。
             "implicit_min": required,
-            "note": ("这一档问的是「本轮真的重跑过吗」，不是「那个文件在不在」："
-                     + RUN_EVIDENCE_NAME + " 里的每条 `command` 都要对上一条 "
-                     "`experiments` 台账行（脚本与 `exit_code` 一致）。`got` 数的是被这些命令"
-                     "覆盖到的数值结论条数，缺省阈值 = 成稿引用的数值结论条数 ⇒ 正文引了"
-                     "结论而一条回执都没有这一行不成立。旁路脚本自己写的回执在盘上也是文件 ——"
-                     "只有台账能说它是不是一次登记过的运行"),
+            "note": ("这一档问的是「本轮真的重跑过吗」，不是「哪份回执在不在」：成稿引到的"
+                     "每个 `exp:` 号都要在 `experiments` 台账里有一行，且那一行带 "
+                     "`code_hash` 与整数 `exit_code`。`got` 数的是被台账背书的结论条数，"
+                     "缺省阈值 = 成稿引用的结论条数 ⇒ 正文引了结论而台账上没有对应行/行上"
+                     "缺凭据这一行不成立。回执文件不是证据：它可以由任何一方自己写出来，"
+                     "只有台账行能说它是不是一次登记过的运行"),
         }
     if kind == "quote_verified_rows":
         st = store.rows("statements")
@@ -7762,12 +7639,11 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
     acceptance["run_evidence_row"] = {
         "id": "G8",
         "kind": RUN_EVIDENCE_READING,
-        "source": "收工门现算（G8 的回执对台账），不读 ACCEPTANCE-CHECKS.json",
+        "source": "收工门现算（成稿引文 × experiments 台账），不读 ACCEPTANCE-CHECKS.json",
         "state": state,
         "got": covered,
         "min": required,
         "ok": state in ("backed", "not_applicable"),
-        "path": reading.get("path"),
         "missing_scripts": list(reading.get("missing_scripts") or []),
         "backed_experiments": list(reading.get("backed_experiments") or []),
         "why": reading.get("why"),
@@ -7775,7 +7651,7 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
 
 
 def _check_run_evidence(rep: ClosingReport, store: Any, project_dir: str) -> None:
-    """G8 的回执有没有台账背书（D-41，2026-10-24 真机 r34d）。
+    """G8 的覆盖：成稿引到的每条数值结论有没有台账行背书（D-41 / AH2b）。
 
     这一条与 `quote_evidence` 同一层：它不进 `DEFAULT_CHECKS`（格表的名字、语义与退出码
     一个都不动，`tests/test_doc_code_consistency.py` 与 `tests/test_conductor_tools.py`
@@ -7784,16 +7660,16 @@ def _check_run_evidence(rep: ClosingReport, store: Any, project_dir: str) -> Non
     跟着它落 `fail` / `unknown`（G8 本来就是 M 那张验收表的一行，见
     :func:`_mirror_run_evidence_row`）。
 
-    为什么必须有它（r34d 的现场读数）：`ACCEPTANCE.md` 自己写着"本轮没有用
-    `verify.run_experiment` 重跑"，而盘上有 `out/review/RUN-EVIDENCE.json`、`checked` 还是
-    true —— 它是 E 的旁路脚本（`code/e_g8_recheck.py`）写出来的。收工门与验收表此前
-    都只问"那个文件在不在"，于是"文件在、内容是自己写的"与"文件在、内容有台账背书"
-    在读数上同形，`machine_pass` 照样是 true。
+    证据的来源只有一个：`experiments` 台账行。2026-11-16（AH2b，`projects/lp-ball-2`）
+    之前这一档读的是一份"可复跑回执"文件；那份文件全仓没有写者，`checked: true`
+    只是一句自述 —— 于是"文件在、内容自己写的"与"文件在、内容有台账背书"在读数上同形，
+    `machine_pass` 照样是 true。
 
     四态（判据本体在 :func:`run_evidence_reading`，这里只落格与出 finding）：
 
     - `not_applicable`：成稿没有引到数值/穷举结论 ⇒ 这一档没有对象（不误报，不改任何格）；
-    - `backed`：回执逐条对上了台账行、成稿引到的脚本也被覆盖 ⇒ 只留读数；
+    - `backed`：成稿引到的每个实验号都在台账里、行上有 `code_hash` 与整数 `exit_code`
+      ⇒ 只留读数；
     - `unbacked`：拦（blocker `run_evidence_unbacked`，`acceptance` 记 `fail`）；
     - `unreadable`：没查成（`acceptance` 记 `unknown`，绝不 `pass`）。
     """
@@ -7803,8 +7679,7 @@ def _check_run_evidence(rep: ClosingReport, store: Any, project_dir: str) -> Non
         # 读数仍留下（"这一档问过、问不出来"与"没问"分得开）。
         rep.readings[RUN_EVIDENCE_READING] = {
             "state": "unreadable", "entries": [], "required": 0, "covered": 0,
-            "why": (f"没给项目根 ⇒ 找不到 <项目根>/{RUN_EVIDENCE_NAME}"
-                    "（这一档没查成，不是「没有这一条」）"),
+            "why": ("没给项目根 ⇒ 这一档没查成（不是「没有这一条」）"),
         }
         return
     root = Path(resolve_under_workspace(store, project_dir))
@@ -7816,21 +7691,20 @@ def _check_run_evidence(rep: ClosingReport, store: Any, project_dir: str) -> Non
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(
             RUN_EVIDENCE_READING, RUN_EVIDENCE_UNBACKED_CODE, "blocker",
-            f"可复跑门（G8）的回执没有台账背书：{reading.get('why')}。"
-            f"判据是逐条对账：{RUN_EVIDENCE_NAME} 里每条 `command` 都要在 `experiments` 里"
-            "对得上同一份脚本（`code_path` / `script_path`，或 `code_hash`）与同一个 "
-            "`exit_code` —— 盘上有那份回执不等于本轮跑过（旁路脚本自己写的也是文件，"
-            "而它没有一条登记过的运行背书）。补法：派 E 用 "
-            "`verify.run_experiment(script_path=…)` 把成稿引到的那些脚本重跑一遍，让每一步"
-            "都落一行 `experiments`，再按落下来的编号写回执；一条都没跑就按 "
-            "`checked=false` 写清为什么没跑（三态：没跑要写理由，不许留成自述的 true）"))
+            f"可复跑门（G8）的结论没有台账背书：{reading.get('why')}。"
+            "判据是逐条对账：成稿里每个 `exp:` 引用都要在 `experiments` 里有一行，"
+            "且那一行带 `code_hash` 与整数 `exit_code`（少了退出码就分不出跑过没有、"
+            "绿还是红）。补法：派 E 用 `verify.run_experiment(script_path=…)` 把成稿引到的"
+            "那些脚本**重跑一遍**，让每一步都落一行 `experiments`（同一份脚本 + `code_hash` "
+            "+ `exit_code`）；一条都没跑就派 E 把缺的那几行补起来，"
+            "而不是另写一份自述文件 —— 门不再读任何回执"))
         return
     if state == "unreadable":
         if rep.status.get("acceptance") != "fail":
             rep.status["acceptance"] = "unknown"
         rep.findings.append(Finding(
             RUN_EVIDENCE_READING, RUN_EVIDENCE_UNREADABLE_CODE, "warning",
-            f"可复跑门（G8）的回执读不懂：{reading.get('why')} ⇒ 这一档没查成"
+            f"可复跑门（G8）的台账读不出来：{reading.get('why')} ⇒ 这一档没查成"
             "（既不是「对上了台账」，也不是「对不上」）"))
         return
 

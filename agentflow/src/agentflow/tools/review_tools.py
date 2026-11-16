@@ -2650,6 +2650,9 @@ def review_report(
         dependencies=deps if deps_checked else None,
         files=None,
         workspace_root=root,
+        # G8 的唯一证据来源：台账行（2026-11-16 AH2b）。`run_evidence` 只是旧调用面，
+        # 传进来也不参与判定 —— 回执可以由任何一方自己写，台账行才是登记过的运行。
+        experiments=[dict(r) for r in store.rows("experiments")] if store is not None else None,
         run_evidence=run_evidence,
         findings=list(store.rows("review_findings")) if store is not None else None,
         claim_counts=claim_counts,
@@ -3168,10 +3171,10 @@ def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **k
             "run_evidence": {
                 "type": "object",
                 "description": (
-                    "本轮的实跑记录（G8 可复跑门）："
-                    "{'checked':true,'commands':[{'claim_id','command','output_tail'}]}。"
-                    "**不传 ⇒ G8 判 unknown**（『本轮实跑过』无法判定），"
-                    "绝不判 pass —— 把『没报错』读成『没问题』正是参考体例记录的教训"
+                    "**已弃用（2026-11-16 AH2b）**：G8 不再读任何回执，证据只来自 "
+                    "`experiments` 台账行（脚本 + `code_hash` + `exit_code`）。"
+                    "这个参数保留只为旧调用方不炸；传什么都不会改变 G8 的读数 —— "
+                    "回执可以由任何一方自己写出来，不是证据"
                 ),
             },
             "claim_counts": {

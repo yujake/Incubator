@@ -94,12 +94,13 @@ def full_ctx(ws, **over):
         "dependencies": [],
         "files": ["code/p1.py"],
         "workspace_root": ws,
-        "run_evidence": {
-            "checked": True,
-            # 回执带退出码（业主 2026-10-18：G8 要分出"跑过且绿"与"跑过且红"）
-            "commands": [{"claim_id": "claim-1", "command": "python code/p1.py", "exit_code": 0,
-                          "output_tail": "ALL CHECKS PASS"}],
-        },
+        # G8 的输入是 `experiments` 台账行（脚本 + 退出码），不再是调用方给的"回执"。
+        "experiments": [{
+            "experiment_id": "000000", "claim": "谱落在区间内", "claim_key": "stmt:000007",
+            "method": "numeric", "evidence_kind": "cross_check", "result": "supports",
+            "code_path": "code/p1.py", "code_hash": "4f6ea689cbfacb7a",
+            "exit_code": 0, "status": "active", "created_at": TS, "created_by": "test",
+        }],
         "findings": [
             {
                 "finding_id": "0000", "kind": "overclaim", "level": "error", "target": "claim-1",
@@ -250,30 +251,29 @@ def test_findings_without_evidence_cannot_be_constructed():
 # ============================================================ 3. 三态：缺输入 = unknown
 
 
-def test_g8_reports_unknown_when_there_is_no_run_evidence(ws):
-    """G8 的标本用例："本轮实跑过"这件事门自己查不出来 ⇒ 必须 unknown。
+def test_g8_reports_unknown_when_the_ledger_is_not_wired(ws):
+    """G8 的标本用例："本轮实跑过"这件事只能由 `experiments` 台账回答。
 
-    库里没有实跑输出时判 `pass`，就是把"没报错"读成了"没问题"——
-    参考体例逐字记录了那个坑（`draft/17-…md:675-676`）。
+    台账没接上（`experiments=None`）⇒ `unknown`：把"没报错"读成"没问题"正是
+    `draft/17-…md:675-676` 记录的那个坑。台账齐（脚本 + `code_hash` + `exit_code`）
+    ⇒ 才可能 `pass`。
     """
-    ctx = G.GateContext.build(doc(), workspace_root=ws, dependencies=[])
+    ctx = G.GateContext.build(doc(), workspace_root=ws, dependencies=[], experiments=None)
     r = G.run_gate("G8", ctx)
     assert r.verdict == "unknown"
-    assert "无法判定" in r.reason
-    assert "未提供" in r.counts["本轮实跑记录"] or r.counts["本轮实跑记录"] == "未提供"
-    # 显式声明"本轮没跑"也必须是 unknown（不是 fail：没做 ≠ 做失败）
-    ctx2 = full_ctx(ws, run_evidence={"checked": False, "reason": "本轮只审格式，没跑数值"})
-    r2 = G.run_gate("G8", ctx2)
-    assert r2.verdict == "unknown"
-    assert "没查" in r2.reason
+    assert "台账" in r.reason
+    assert r.counts["本轮实跑记录"] == "未提供"
+    # 台账里没有这条断言的脚本 ⇒ fail（旧口径下这一条是"回执没覆盖"）
+    r2 = G.run_gate("G8", full_ctx(ws, experiments=[]))
+    assert r2.verdict == "fail"
     # 真跑了且覆盖了 ⇒ 才可能 pass
     r3 = G.run_gate("G8", full_ctx(ws))
     assert r3.verdict == "pass"
 
 
-def test_g8_fails_when_a_numeric_claim_has_no_command(ws):
-    """负控：有数值断言但本轮实跑记录没覆盖它 ⇒ error（阻断）。"""
-    ctx = full_ctx(ws, run_evidence={"checked": True, "commands": []})
+def test_g8_fails_when_a_numeric_claim_has_no_ledger_row(ws):
+    """负控：有数值断言而台账里没有对应的脚本行 ⇒ error（阻断）。"""
+    ctx = full_ctx(ws, experiments=[])
     r = G.run_gate("G8", ctx)
     assert r.verdict == "fail"
     assert r.findings and r.findings[0]["target"] == "claim-1"
