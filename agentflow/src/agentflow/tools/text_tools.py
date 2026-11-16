@@ -115,9 +115,19 @@ def _mark_literature_tier(ctx: _Ctx, lit_id: str, tier: str, *, note: str = "") 
         return ""
 
 
-def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
-               pages: Sequence[int] | None = None, max_pages: int = 200) -> ToolResult:
-    """``text.extract`` 的工具体：抽取 → 写 `out/texts/<名>.txt`。"""
+def _extract_impl(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
+                  pages: Sequence[int] | None = None, max_pages: int = 200,
+                  name_hint: str = "") -> ToolResult:
+    """``text.extract`` 的实现主体：抽取 → 写 `out/texts`（或 `out_dir`）下的 `.txt`。
+
+    这一层不认识"候选槽位"：`lit_id` 只当 literature 行的编号用（`cand:` 前缀由
+    :func:`_h_extract` 剥掉，理由见那里）。拆开是为了让"候选期抽读"的记账只写在
+    包装层一处 —— 抽读回执的写点不许散进每一条 return 分支。
+
+    `name_hint` 只影响写下的 `.txt` 的文件名：候选期两篇下载件同名时，若都按源文件名
+    落盘会互相覆盖，而那会把"两条候选"变成"同一份正文"（`check_read` 的版本核对
+    只能看见"后来那一份"，前一条会落 `text_changed`）。候选期传槽位号即可。
+    """
     rel, bad = _target_path(_OcrCtx(workspace=ctx.workspace, store=ctx.store), path, lit_id)
     if bad is not None:
         return fail(str(bad.get("error") or "没有可抽的目标"),
@@ -149,7 +159,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
                         quality=q0, availability="extract_failed", landed_on=landed or None)
         target_dir0 = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
         target_dir0.mkdir(parents=True, exist_ok=True)
-        name0 = f"{_safe_stem(lit_id, p.stem)}.txt"
+        name0 = f"{_safe_stem(name_hint or lit_id, p.stem)}.txt"
         out0 = target_dir0 / name0
         out0.write_text(plain, encoding="utf-8")
         _mark_literature_tier(ctx, lit_id, "ok", note="text.extract: 纯文本原样入库")
@@ -213,7 +223,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
 
     target_dir = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
     target_dir.mkdir(parents=True, exist_ok=True)
-    name = f"{_safe_stem(lit_id, p.stem)}.txt"
+    name = f"{_safe_stem(name_hint or lit_id, p.stem)}.txt"
     out_path = target_dir / name
     out_path.write_text(body, encoding="utf-8")
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -232,6 +242,121 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
                  "（下游可拿它核「读到的是不是同一份」）"),
     })
 
+
+
+#: 候选期抽读的编号前缀：`cand:000012` / `slot:000012` / `candidate:000012`。
+#:
+#: ## 为什么用前缀，而不是给 `text.extract` 加一个 `slot` 参数
+#:
+#: `text.extract` 的参数面是冻结面（`tests/golden/tool_surface_snapshot.json`，FC-27）：
+#: 加一格参数要人重冻快照。而"这一条候选"的绑定本来就可以由调用方说出来 ——
+#: `lit_id` 这一格收的就是"给哪个编号抽"，候选期给候选的槽位号是同一个问题。
+#: 所以这里只认前缀，不改声明：`lit_id="cand:000012"` ⇒ 抽读记在槽位 `000012` 上，
+#: 并写一条 `data/lit_reads.jsonl` 回执（`litavail.record_read`）。
+#:
+#: 前缀剥掉之后 `lit_id` 不传给实现主体：候选还没进 literature，任何
+#: `_mark_literature_tier` 的落点都不该被碰（传一个不存在的 lit_id 只会静默不写，
+#: 而"静默不写"正是这一格要看出来的事）。
+_CANDIDATE_PREFIXES: tuple[str, ...] = ("cand:", "candidate:", "slot:")
+
+
+def _candidate_slot(lit_id: str) -> str:
+    """`lit_id` 如果是"候选槽位"的写法，返回裸槽位号；否则空串。"""
+    text = str(lit_id or "").strip()
+    low = text.lower()
+    for prefix in _CANDIDATE_PREFIXES:
+        if low.startswith(prefix):
+            return text[len(prefix):].strip()
+    return ""
+
+
+def _candidate_row(ctx: _Ctx, slot: str) -> tuple[dict | None, ToolResult | None]:
+    """按槽位取候选行；取不到 ⇒ `unknown_slot`（不许把回执写到一个不存在的候选上）。"""
+    if ctx.store is None:
+        return None, fail("未配置 store：认不出候选槽位（不是「这一条没抽过」）",
+                          kind="no_store")
+    try:
+        rows = list(ctx.store.rows("lit_candidates"))
+    except Exception as exc:  # noqa: BLE001 - 表读不出来是"判不了"，不是"没有这一条"
+        return None, fail(f"候选表读不出来（{type(exc).__name__}: {exc}）⇒ 抽读这一格判不了",
+                          kind="store_error")
+    row = next((r for r in rows if str(r.get("slot") or "") == str(slot)), None)
+    if row is None:
+        known = [str(r.get("slot") or "") for r in rows][:8]
+        return None, fail(
+            f"待新增列表里没有槽位 {slot!r}（序号不复用；候选期抽读要指向一条真的候选）",
+            kind="unknown_slot", slot=str(slot), known=known)
+    return dict(row), None
+
+
+def _record_candidate_read(ctx: _Ctx, slot: str, request_id: str, source: str,
+                           res: ToolResult) -> None:
+    """把这一次抽读记进回执台账（成功/抽过但失败两档；文件没找到不算抽过）。
+
+    为什么这里只认三个失败档（`garbled_text` / `no_text_layer` / `extract_error`）：
+    `file_missing` / `not_a_file` / `no_target` 是"这一份根本没抽" —— 把它们记成
+    `extract_failed` 会让"我连文件都没找到"冒充"抽过但正文坏了"，两者下一步相反
+    （前者换路径/换源，后者按 quality 判拒）。
+    """
+    from .. import litavail as _LAV
+    from .. import fs_observation as _OBS
+
+    if ctx.store is None:
+        return
+    root = ctx.store.root
+    base = {
+        "source": str(source or "").strip(),
+        "actor": ctx.actor,
+    }
+    if res.ok:
+        data = dict(res.data or {})
+        text_abs = str(data.get("abs_path") or "")
+        version = _OBS.version_of_path(Path(text_abs)) if text_abs else ""
+        _LAV.record_read(
+            root, request_id, slot, _LR.FULLTEXT_OK,
+            text=str(data.get("path") or ""), text_abs=text_abs,
+            text_version=version, chars=int(data.get("chars") or 0),
+            sha256=str(data.get("sha256") or ""), quality=data.get("quality") or {},
+            note="text.extract", **base)
+        return
+    kind = str((res.meta or {}).get("kind") or "")
+    if kind not in ("garbled_text", "no_text_layer", "extract_error"):
+        return
+    _LAV.record_read(
+        root, request_id, slot, _LR.FULLTEXT_EXTRACT_FAILED,
+        note=f"text.extract.{kind}", quality=(res.meta or {}).get("quality") or {},
+        **base)
+
+
+def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
+               pages: Sequence[int] | None = None, max_pages: int = 200) -> ToolResult:
+    """``text.extract`` 的工具体：两种编号、两条落点。
+
+    - 普通 `lit_id`（已登记的文献）⇒ 原样走 :func:`_extract_impl`，`.txt` 落 `library/`；
+    - 候选期 `lit_id="cand:<槽位>"` ⇒ 抽读 `.txt` 落 `out/texts/`（候选还没入库，
+      不该往 `library/` 写正文），并写一条抽读回执 —— 提交闸读的就是它。
+      句柄从"候选行"取，取不到当场受控拒（不记回执）。
+    """
+    slot = _candidate_slot(lit_id)
+    if not slot:
+        return _extract_impl(ctx, path=path, lit_id=lit_id, out_dir=out_dir,
+                             pages=pages, max_pages=max_pages)
+    row, bad = _candidate_row(ctx, slot)
+    if bad is not None:
+        return bad
+    if not str(path or "").strip():
+        return fail(
+            "候选期抽读要给 `path`：候选行上没有本地路径，先 `search.download` 拿到 "
+            "`rel_path`（或直接给盘上那份文件的路径），再 `text.extract(path=…, "
+            f"lit_id=\"cand:{slot}\")`",
+            kind="no_target", slot=slot)
+    res = _extract_impl(ctx, path=path, lit_id="", out_dir=(out_dir or "out/texts"),
+                        pages=pages, max_pages=max_pages, name_hint=f"cand-{slot}")
+    _record_candidate_read(ctx, slot, str(row.get("request_id") or ""), str(path), res)
+    if res.ok and isinstance(res.data, dict):
+        # 把"这一抽是给哪一条候选的"带回去（键 `lit_id` 本来就在声明里，不新增键）。
+        res.data["lit_id"] = f"cand:{slot}"
+    return res
 
 
 #: 判定"疑似乱码"的阈值（业主 2026-10-17 口径：「A 要保证转出来的纯文字稿不是乱码」）。

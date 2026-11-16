@@ -346,6 +346,9 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     monkeypatch.setattr(L, "readback_receipt",
                         lambda store, rid: {"request_id": rid,
                                             "slots": [r["slot"] for r in mine]})
+    # 同一句话对 2026-11-16（裁定 3）新加的"读过"闸也成立：这一条只测 `undecided`，
+    # 不把那道闸打掉的话，测出来的会是"被另一道闸拒"。
+    monkeypatch.setattr(L, "_read_evidence_gate", lambda *a, **k: None)
     after = reg.call("lit.admit_all", request_id="r-000001")
     assert after.ok, ("打桩成恒空之后仍然被拒 ⇒ 那一道闸不是长在 `litstage.undecided` 上"
                       f"（{after.error}）")

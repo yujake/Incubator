@@ -42,6 +42,11 @@ reviewer 逐行走查）。而"这一条当时可不可读"是候选期的事实
 只有 A 的判定入口（`lit.admit` 的 `items[].availability` / `lit.stage_reject` 的
 `availability`，落在 `tools/search_tools.py` 的 handler 里）写 `kind="availability"`。
 机器侧另有一档 `tier_of_literature`（只读，给探针与报告用），它不从台账取数。
+
+抽读回执（`data/lit_reads.jsonl`）是另一份事实、另一个写点：只有真正做抽读的
+`text.extract` 写 `kind="read"`（`record_read`）。它记的是"这一份正文被抽出来过"，
+不是"谁说他读了"；`check_read` 再把它与 `fs.read` 的观察台账对起来，回答
+"这一条到底读没读"。两份台账分成两个文件，是为了不让"它说可读"与"它抽过"混成一行。
 """
 
 from __future__ import annotations
@@ -59,14 +64,20 @@ __all__ = [
     "LEDGER_NAME",
     "METADATA_ONLY",
     "READABLE",
+    "READ_LEDGER_NAME",
     "TIER_LABELS",
     "UNKNOWN",
+    "check_read",
     "describe_tier",
     "is_admissible",
     "availability_ledger_path",
     "locator_of",
+    "read_ledger_path",
+    "read_receipts",
+    "receipts_by_slot",
     "read_records",
     "record_availability",
+    "record_read",
     "tier_of_literature",
     "tiers_by_slot",
 ]
@@ -95,6 +106,13 @@ ADMITTABLE_TIERS: tuple[str, ...] = (READABLE, METADATA_ONLY)
 
 #: 台账落在工作区的哪个相对路径（零 schema：它是文件，不是表）。
 LEDGER_NAME = "lit_availability.jsonl"
+
+#: 「抽读回执」台账的落点：一次真的抽读（`text.extract`）在这里留一行。
+#:
+#: 为什么它与可读性判定分成两个文件：可读性那一行是 A 的判断（`tier` 是它报的），
+#: 抽读这一行是机器的事实（这一份文件被哪个角色、在什么时候、抽出了多少字、指纹是什么）。
+#: 两份事实混在一个文件里，读的人就分不清"它说可读"与"它抽过"—— 而后者才是判据。
+READ_LEDGER_NAME = "lit_reads.jsonl"
 
 #: 台账所在的目录（与 `data/` 下其它 JSON 台账同层）。
 _LEDGER_DIR = "data"
@@ -147,11 +165,17 @@ def tiers_by_slot(root: Path | str) -> dict[str, str]:
 
 
 def record_availability(root: Path | str, request_id: str, slot: str, tier: str, *,
-                        note: str = "", actor: str = "agent-A") -> dict:
+                        note: str = "", actor: str = "agent-A",
+                        relevance: str = "", read: Mapping[str, Any] | None = None) -> dict:
     """写一条可读性判定（追加；`tier` 必须是四档之一）。
 
     这是"这一条审过"的唯一写点。写成别的取值当场抛 `ValueError`：自造档在写侧就炸，
     而不是在报告里变成一行读不懂的字（模型自拼的 `pdf_no_text` 就是这样进不来的）。
+
+    `relevance` 与 `read` 是这一条判断的读数（业主裁定 3：逐条要落成
+    "质量如何、相关度如何、入不入库、为什么"）：前者的真身是候选行的 `relevance`
+    （回读时抄一份到这里，report / 闸不必再回表拼），后者是抽读回执的摘要
+    （字数 / 指纹 / 抽读件路径 / 它读的是哪一版）。两格都只是读数，不参与"档位合不合法"。
     """
     tier_text = str(tier or "").strip()
     if tier_text not in AVAILABILITY_TIERS:
@@ -165,6 +189,8 @@ def record_availability(root: Path | str, request_id: str, slot: str, tier: str,
         "slot": str(slot or "").strip(),
         "tier": tier_text,
         "note": str(note or "").strip()[:400],
+        "relevance": str(relevance or "").strip()[:400],
+        "read": _read_digest(read),
         "at": _now(),
         "actor": str(actor or ""),
     }
@@ -173,6 +199,139 @@ def record_availability(root: Path | str, request_id: str, slot: str, tier: str,
     with path.open("a", encoding="utf-8", newline="") as fh:
         fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
     return rec
+
+
+def _read_digest(rec: Mapping[str, Any] | None) -> dict | None:
+    """抽读回执里进"判断读数"的那几格（没有回执 ⇒ `None`，不是空字典）。"""
+    if not rec:
+        return None
+    keys = ("tier", "chars", "sha256", "text", "text_abs", "text_version", "source", "at")
+    return {k: rec.get(k) for k in keys}
+
+
+# --------------------------------------------------------------------------- 抽读回执
+
+
+def read_ledger_path(root: Path | str) -> Path:
+    """这一次工作区的抽读回执台账路径。"""
+    return Path(root) / _LEDGER_DIR / READ_LEDGER_NAME
+
+
+def read_receipts(root: Path | str) -> list[dict]:
+    """把抽读回执读成一列（坏行跳过：它不构成"这一条读过"的证据）。"""
+    path = read_ledger_path(root)
+    if not path.is_file():
+        return []
+    out: list[dict] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            got = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(got, dict) and str(got.get("kind") or "") == "read":
+            out.append(got)
+    return out
+
+
+def receipts_by_slot(root: Path | str) -> dict[str, dict]:
+    """`slot -> 最后一次抽读回执`（后写的覆盖先写的；槽位号全局唯一）。"""
+    out: dict[str, dict] = {}
+    for rec in read_receipts(root):
+        slot = str(rec.get("slot") or "").strip()
+        if slot:
+            out[slot] = rec
+    return out
+
+
+def record_read(root: Path | str, request_id: str, slot: str, tier: str, *,
+                source: str = "", text: str = "", text_abs: str = "",
+                text_version: str = "", chars: int = 0, sha256: str = "",
+                quality: Mapping[str, Any] | None = None, note: str = "",
+                actor: str = "agent-A") -> dict:
+    """写一条抽读回执（追加）。`tier` 只认 `ok` / `extract_failed` 两档。
+
+    ## 为什么写点只在 `text.extract` 的 handler 里
+
+    这一行回答的是"这一份正文真的被抽出来过吗"，不是"谁说他读了"。所以它必须由
+    做抽读的那件工具写：模型可以自报 `availability=readable`，但它没法凭空造出
+    一条带 `sha256` / `chars` / 抽读件版本的回执 —— 抽读没发生，就没有那份文件，
+    也就没有版本可写。判据（`check_read`）随后核的是"回执在 + 抽读件还是那一版 +
+    `fs.read` 观察台账里有它"。
+
+    过期抽读件（同一槽位再抽一次）由后写的覆盖先写的：`receipts_by_slot` 取最后一条，
+    于是"上次抽成功、这次抽失败"会如实变成 `extract_failed`，不会被旧成功掩盖。
+    """
+    tier_text = str(tier or "").strip()
+    if tier_text not in (litread.FULLTEXT_OK, litread.FULLTEXT_EXTRACT_FAILED):
+        raise ValueError(
+            f"抽读回执的 tier 只能是 {litread.FULLTEXT_OK!r} / "
+            f"{litread.FULLTEXT_EXTRACT_FAILED!r}，收到 {tier!r}"
+        )
+    rec = {
+        "kind": "read",
+        "request_id": str(request_id or "").strip(),
+        "slot": str(slot or "").strip(),
+        "tier": tier_text,
+        "source": str(source or "").strip(),
+        "text": str(text or "").strip(),
+        "text_abs": str(text_abs or "").strip(),
+        "text_version": str(text_version or "").strip(),
+        "chars": int(chars or 0),
+        "sha256": str(sha256 or "").strip(),
+        "quality": dict(quality or {}),
+        "note": str(note or "").strip()[:400],
+        "at": _now(),
+        "actor": str(actor or ""),
+    }
+    path = read_ledger_path(root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+    return rec
+
+
+def check_read(root: Path | str, slot: str,
+               receipt: Mapping[str, Any] | None = None) -> tuple[str, str]:
+    """这一条到底读没读：返回 `(state, why)`；`state == "ok"` 才算读过。
+
+    判据分三步，缺一不可（三态：没抽 / 抽了没读 / 读了）：
+
+    1. 抽读回执在，且那一档是 `ok`（`extract_failed` 是"抽过但失败"，不是读过）；
+    2. 抽读件还在盘上、且还是回执写下的那一版（版本令牌取 `fs_observation.version_of`，
+       与 `fs.read` 登记的是同一把尺子）—— 抽完又被改写/删掉，读的就不是现在这一份；
+    3. `fs.read` 的观察台账里有这一份同一版本的读（owner 是当前 `(角色, 委托)`）——
+       抽读是机器做的，读是 A 做的；少了这一步，"抽了"会被当成"读了"。
+
+    `receipt` 可以显式给（闸一次读出全部槽位的回执，避免每槽重读文件）；不给就现查。
+    返回的 `why` 是拒信里逐条点名用的那句话（不是"没读"三个字）。
+    """
+    r = dict(receipt) if receipt is not None else receipts_by_slot(root).get(str(slot or ""))
+    if not r:
+        return ("no_extract", "没有抽读记录（这一条没抽过正文）")
+    if str(r.get("tier") or "") == litread.FULLTEXT_EXTRACT_FAILED:
+        return ("extract_failed",
+                f"抽过但失败（{r.get('note') or '抽出来的不是可读文本'}）")
+    if str(r.get("tier") or "") != litread.FULLTEXT_OK:
+        return ("no_extract", f"抽读回执的档位不成立（{r.get('tier')!r}）")
+    if int(r.get("chars") or 0) <= 0:
+        return ("empty_text", "抽读回执说 0 字（没有抽到正文）")
+    text_abs = str(r.get("text_abs") or "").strip()
+    version = str(r.get("text_version") or "").strip()
+    if not text_abs or not version:
+        return ("no_text", "抽读回执里没有抽读件的路径/版本（这一条判不了）")
+    from . import fs_observation as OBS
+
+    if OBS.version_of_path(Path(text_abs)) != version:
+        return ("text_changed", "抽读件在抽完之后被改过/删掉了（读的不是现在这一份）")
+    obs = OBS.observed_gate().get(OBS.current_owner(), text_abs)
+    if obs is None or obs.kind != OBS.OBS_PRESENT:
+        return ("not_read", "抽过但没读（没有用 `fs.read` 读过那份 .txt）")
+    if obs.version != version:
+        return ("read_stale", "`fs.read` 读到的是另一版正文（抽读件后来变过）")
+    return ("ok", "")
 
 
 def _now() -> str:

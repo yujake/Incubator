@@ -279,6 +279,17 @@ def test_f_negative_control_stubbing_availability_lets_extract_failed_in(
     before = _admit(reg, [{"slot": slots[0]}])
     assert not before.ok and before.meta["kind"] == "availability_not_admissible", before.meta
 
+    # 2026-11-16（裁定 3）之后 `readable` 还多一道"真的抽读 + fs.read"的闸；
+    # 这一条负控只测"可读性判定那一格"，所以先给它一条真的抽读，别让新闸当替罪羊。
+    downloads = store.root / "downloads"
+    downloads.mkdir(parents=True, exist_ok=True)
+    (downloads / "stub-target.txt").write_text(
+        "A readable body that is long enough to be judged. " * 8, encoding="utf-8")
+    ext = reg.call("text.extract", path="downloads/stub-target.txt",
+                   lit_id=f"cand:{slots[0]}")
+    assert ext.ok, ext.error
+    assert reg.call("fs.read", path=ext.unwrap()["path"]).ok
+
     monkeypatch.setattr(AV, "tiers_by_slot", lambda root: {slots[0]: AV.READABLE})
     after = _admit(reg, [{"slot": slots[0]}])
     assert after.ok, (f"打桩成恒 readable 之后仍然被拒 ⇒ 那道闸不是长在 "

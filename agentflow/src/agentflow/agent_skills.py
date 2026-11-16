@@ -2633,6 +2633,8 @@ def _a_skills() -> tuple[Skill, ...]:
             actions=("A.search_literature", "A.shelf_search", "A.run_once", "A.walk_citations"),
             tools=("search.literature", "search.shelf", "search.local", "search.providers",
                    "search.register", "search.dedup_check", "search.walk_citations",
+                   "search.download", "text.extract", "lit.stage_add", "lit.stage_list",
+                   "lit.admit", "lit.stage_reject",
                    "table.get", "table.search", "fs.read", "manuscripts.read"),
             body="""# 查不到就换招法
 
@@ -2750,15 +2752,23 @@ def _a_skills() -> tuple[Skill, ...]:
 
 ## 八、判"这条文献符不符合需求"：**这是你的判断，且必须留痕**
 
-框架**不会**替你判相关性（它只给题名/摘要/年份/来源类型这些**材料**）。
-所以每条都要落到一个判词上，并写清凭什么：
+框架**不会**替你判相关性，也不会替你读正文。待新增列表里的每一条，你都要落一个判词；
+**要把一条判成 `readable`（可读全文）之前，必须真的抽到正文并读过**：
 
-- **纳入** ⇒ `search.register` 时把"凭什么相关"写进 `summary`（**不要只抄题名**：
-  写清"它回答的是哪一个子问题、命中在哪一句"）；
-- **排除** ⇒ 留痕（第二节末那三类：自称证明大定理而非同行评议、落地页/登录墙、没有可取全文地址），
-  并在交回时给"排除了几条、按哪条理由"；
-- **判不了** ⇒ 也写出来（"题名相关但看不到摘要"≠"不相关"）——
-  **三态：没查／查过不相关／查过相关**，不许折成一句"没有相关文献"。
+1. **取字节**：`search.download` 拿全文的 `rel_path`（没有可取的全文 ⇒ 走第 4 条）；
+2. **抽正文**：`text.extract(path=<rel_path>, lit_id="cand:<槽位>")` —— `cand:` 前缀是
+   "这一条候选"的写法。它把 `.txt` 落在 `out/texts/`，并留下一条**抽读回执**
+   （字数 / 指纹 / 乱码判定）。没有抽读回执的 `readable` 会被 `lit.admit` 整批拒
+   （`no_read_evidence`，逐槽点名）；
+3. **读它**：`fs.read` 那份 `.txt`。**抽了不读也算没读**：闸核的是你读的与抽读件同一版；
+4. **判**：`lit.admit` 的 items 里逐条给 `availability` 与那一句 `relevance`
+   （质量如何、相关度如何、凭什么 —— 从正文里看出来的，不是抄题名）。不入的用
+   `lit.stage_reject`（受控理由码 + 一句为什么）。
+
+没有字节 / 抽过失败的**不许报 `readable`**：前者报 `metadata_only`（必须指得出处
+DOI/URL），后者报 `extract_failed` 并按 `rejected_low_quality` 判拒；`unknown` 不入库。
+**"我觉得读过"不是证据**：抽读回执 + 那次 `fs.read` 才是 —— 十条候选一次写死 relevance
+的批量账，会在这道闸上被逐槽点名。
 
 ## 九、交回时的一句话摘要（给主控读的）
 

@@ -2158,13 +2158,30 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     `closing.py` 用前者判"这一篇是不是检索来的"，两份报告直接打印后者，
     两处读数因此都缺一格。候选行上本来就有这个号（`litstage` 造行时写死的），
     所以这不是"多要一个参数"，是把它手上已有的那份事实传下去。
+
+    ## 2026-11-16（裁定 3）：把"读过"的字节带进库
+
+    候选期抽读（`text.extract(lit_id="cand:<槽位>")`）的源文件在 `downloads/`，
+    而登记路径原来一律 `path=None` ⇒ 一条判成 `readable` 的候选进库之后仍然
+    `path=null`，B 只能写 `no_local_file`，"读过"这件事在库里一个字都不剩。
+    所以：这一条真的读过（`litavail.check_read == "ok"`）时，把抽读回执里的
+    源文件交给登记路径收编（`_adopt_file` 会搬进 `library/<lit_id>/`），回执的档位
+    写进 `download.fulltext=ok`。没读过的照旧 `path=None`：行上不会凭空多出一份
+    没人读过的文件。
     """
+    slot = str(row.get("slot") or "")
+    receipt = None
+    state = "no_extract"
+    if ctx.store is not None:
+        receipt = LAV.receipts_by_slot(ctx.store.root).get(slot)
+        state, _why = LAV.check_read(ctx.store.root, slot, receipt)
+    source = str((receipt or {}).get("source") or "") if state == "ok" else ""
     res = _h_register(
         ctx,
         title=str(row.get("title") or ""),
         type_code=str(row.get("type_code") or "Z"),
         summary=str(row.get("summary") or ""),
-        path=None,
+        path=(source or None),
         doi=row.get("doi"),
         year=row.get("year"),
         request_id=str(row.get("request_id") or "") or None,
@@ -2172,8 +2189,40 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     if not res.ok:
         return {"lit_id": None, "reason": res.error}
     data = dict(res.data or {})
-    _mark_candidate_locator(ctx, str(data.get("lit_id") or ""), row)
+    lit_id = str(data.get("lit_id") or "")
+    _mark_candidate_locator(ctx, lit_id, row)
+    if receipt is not None and state == "ok" and data.get("created"):
+        _mark_read_fulltext(ctx, lit_id, receipt)
     return data
+
+
+def _mark_read_fulltext(ctx: _Ctx, lit_id: str, receipt: Mapping[str, Any]) -> bool:
+    """把"候选期已抽读"这一档写进 `download.fulltext`（与 `litread.with_fulltext` 同一处）。
+
+    为什么这一格值得单独写：`_mark_candidate_locator` 在"有字节、但这一处没抽过"
+    时只清旧标签（它不猜档位）。候选期确实抽过、也读过了，那份事实在抽读回执里；
+    不落进 literature 行，B 与后续审计看到的仍是"有字节但没抽过"（`unknown`）。
+    """
+    if ctx.store is None or not lit_id:
+        return False
+    try:
+        with ctx.store.tx("literature", actor=ctx.actor,
+                          note="search.register.read") as tx:
+            row = tx.find("literature", lit_id=lit_id)
+            if row is None:
+                return False
+            payload = dict(row)
+            dl = dict(payload.get("download") or {})
+            dl = LR.with_fulltext(dl, LR.FULLTEXT_OK)
+            dl["note"] = (f"候选期已抽读：{int(receipt.get('chars') or 0)} 字"
+                          f"（指纹 {str(receipt.get('sha256') or '')[:12]}）")
+            payload["download"] = dl
+            S.Literature(**{k: payload[k] for k in payload
+                            if k in S.Literature.__dataclass_fields__}).validate()
+            tx.upsert("literature", payload, note="search.register.read")
+        return True
+    except Exception:  # noqa: BLE001 - 落点失败不许把登记本身带坏（读数仍在回执里）
+        return False
 
 
 def _h_lit_overlap_check(ctx: _Ctx, title: str, doi: str | None = None) -> Any:
@@ -2416,10 +2465,24 @@ def _h_lit_admit(
         from ..litstage import current_request_id as _current_rid
 
         rid_for_ledger = str(request_id or "").strip() or _current_rid(ctx.store)
+        # 逐条判断的读数（业主裁定 3）：把这一条候选的 relevance 与它的抽读指纹
+        # 一并写进判定行 —— 报告/闸不必再回表拼，人查时一行就能看出
+        # "它凭什么被放行、读过多少字"。读不到表就不抄（档位照旧写，fail-closed）。
+        rel_by_slot: dict[str, str] = {}
+        try:
+            for row in ctx.store.rows("lit_candidates"):
+                slot = str(row.get("slot") or "")
+                if slot in avail:
+                    rel_by_slot[slot] = str(row.get("relevance") or "")
+        except Exception:  # noqa: BLE001 - 读者格失败不许把判定本身带坏
+            rel_by_slot = {}
+        read_by_slot = LAV.receipts_by_slot(ctx.store.root)
         try:
             for slot, tier in avail.items():
                 LAV.record_availability(ctx.store.root, rid_for_ledger, slot, tier,
-                                        note="lit.admit", actor=ctx.actor)
+                                        note="lit.admit", actor=ctx.actor,
+                                        relevance=rel_by_slot.get(slot, ""),
+                                        read=read_by_slot.get(slot))
         except (ValueError, OSError) as exc:
             return fail(f"可读性判定没写进台账：{exc}", kind="availability_ledger")
 
@@ -2464,7 +2527,8 @@ def _h_lit_admit(
                     refused=got.get("refused"), undecided=got.get("undecided"),
                     missing_readback=got.get("missing_readback"),
                     missing_availability=got.get("missing_availability"),
-                    availability_bad=got.get("availability_bad"))
+                    availability_bad=got.get("availability_bad"),
+                    read_problems=got.get("read_problems"))
     return ok({
         "ok": got["ok"],
         "kind": got["kind"],
