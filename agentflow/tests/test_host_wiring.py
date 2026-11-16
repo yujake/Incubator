@@ -498,7 +498,8 @@ def test_wired_tool_registry_keeps_m_surface_orchestration_only(tmp_path: Path):
         f"声明 {sorted(declared_for_m)}")
     # 编排面那几件必须点得出名字（历史上每一件都对应一次业主裁定）
     assert "conductor.board" in m_tools, m_tools
-    assert "conductor.broadcast" in m_tools, m_tools
+    # 2026-11-16：`conductor.broadcast` 已整件退场（业主逐字「广播工具…全面退场」）。
+    assert "conductor.broadcast" not in m_tools, m_tools
     assert "conductor.summon_many" in m_tools, m_tools
     assert "conductor.closing" in m_tools, m_tools
     # ④ 文件面白名单六件（§38 + §57 两次裁定）
@@ -573,6 +574,11 @@ def _judge_and_admit(store, request_id: str, slot: str,
     assert topped.ok, topped.error
     assert [u["slot"] for u in topped.unwrap()["updated"]] == [str(slot)], (
         f"补 relevance 必须落在原槽（G9），实得 {topped.unwrap()}")
+    # 2026-11-16 裁定 ①②：回读 + 可读性判定（这一档测的是接线，不是自审）。
+    readback = reg.call("lit.stage_list", request_id=request_id)
+    assert readback.ok, readback.error
+    from agentflow import litavail as AV
+    AV.record_availability(store.root, request_id, str(slot), AV.METADATA_ONLY)
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
     return got.unwrap()

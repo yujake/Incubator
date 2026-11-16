@@ -140,6 +140,13 @@ def test_the_admit_path_goes_through_the_check(store: Store) -> None:
     `admit`，断言它被调过、且带了这一笔的 `request_id`。
     """
     slots = _seed(store, slots=1)
+    # 2026-11-16 裁定 ①②：`admit` 现在还要回读回执与可读性判定。这一条测的是
+    # "结算之后真的会核对一次"，所以把另两格按最小合法值满足掉。
+    LS.note_readback(store, "r-000001", [{"slot": s} for s in slots])
+    from agentflow import litavail as AV
+
+    for s in slots:
+        AV.record_availability(store.root, "r-000001", s, AV.METADATA_ONLY)
     calls: list[dict[str, Any]] = []
     real = LS.settlement_mismatch
 

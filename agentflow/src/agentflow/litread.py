@@ -13,9 +13,11 @@
    归一化属 FC-27、人审）：本模块只负责让存量行读得回来 —— 历史行仍然带着那个前缀
    躺在盘上，读侧不认它就会把那篇文献判成 `file_missing`，而"文件真的不在"与
    "在另一个基准下"在读数上同形。
-2. `download.fulltext` 的三个档只有写点、没有清除点：全仓只有
+2. `download.fulltext` 的四个档只有写点、没有清除点：全仓只有
    `search_tools._mark_candidate_locator` 写过一个 `no_fulltext_this_time`，
-   而 `status=ok` 的行照样一直挂着它。
+   而 `status=ok` 的行照样一直挂着它。（2026-11-16 裁定 16 后第三档之外多了
+   `extract_failed`：「抽过但失败」从此有落点；`garbled_text` 是乱码的唯一判据，
+   `fulltext_tier` 与 `text.extract` 两边互认。）
 
 两边各写一份判据，迟早会出现第三种口径。所以这里只收两件事的实现：
 
@@ -35,21 +37,69 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
 from .schema import LIT_PATH_PREFIX
 
-#: `download.fulltext` 的三档：有可抽文本 / 有字节但没有文本层 / 真的没有字节。
+#: `download.fulltext` 的四档：有可抽文本 / 有字节但没有文本层 / 真的没有字节 /
+#: 有字节但抽出来的不是可读文本（抽过但失败）。
+#:
+#: 第四档是业主 2026-11-16 裁定 16（「A」加 `extract_failed` 一档：抽过但失败要有落点）
+#: 的落点。它替代的不是别的档，而是现场那个模型自拼的值：AH6 实测 07:44:26，
+#: A 把 `download.fulltext` 写成 `pdf_no_text`、顺带把 `status` 写成 `downloaded`
+#: ⇒ 写入被 `schema.DOWNLOAD_STATUSES` 整笔拒绝，随后被洗成 `status=ok/error=""`
+#: —— 两次抽取都乱码这件事在盘上没有留下任何痕迹。所以这一档必须是受控取值：
+#: 加在这一处（`FULLTEXT_TIERS` 是它的词表真身），不许模型现拼。
 FULLTEXT_OK = "ok"
 FULLTEXT_NO_TEXT_LAYER = "no_text_layer"
 FULLTEXT_NO_FULLTEXT = "no_fulltext"
+FULLTEXT_EXTRACT_FAILED = "extract_failed"
 FULLTEXT_TIERS: tuple[str, ...] = (
     FULLTEXT_OK,
     FULLTEXT_NO_TEXT_LAYER,
     FULLTEXT_NO_FULLTEXT,
+    FULLTEXT_EXTRACT_FAILED,
 )
+
+#: 判定"疑似乱码"的阈值（与 `tools/text_tools.py` 的 `_quality` 是同一份判据；
+#: `text_tools` 现在从这里取，两处不再各写一份）。
+#:
+#: 三条独立信号，「任何一条」命中就算（宁可说"这份转不出干净文本"，也不把乱码当正文）：
+#:   · NUL 字符：PDF 文字层正常「不含」 NUL；出现即错位解码；
+#:   · 替换字符 U+FFFD：解码器自己都认不出那个字节 ⇒ 乱码；
+#:   · 控制字符占比：正常正文里控制字符几乎为 0（换行/制表除外）。
+GARBLED_REPLACEMENT_MAX = 0
+GARBLED_CONTROL_RATIO_MAX = 0.02
+
+#: 控制字符（`ord < 32` 且不是换行/回车/制表）：交给正则的 C 层扫描。
+_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+
+
+def garbled_text(text: str) -> tuple[bool, dict]:
+    """核一遍"这段文本能不能读"。返回 `(是否疑似乱码, 读数)`。
+
+    这是"乱码"这件事的唯一判据：`text.extract` 拒写乱码读它，`fulltext_tier`
+    判 `extract_failed` 也读它 —— 两边互认的落点就是这里（改前 `text_tools._quality`
+    与 `litread.fulltext_tier` 互不相认：前者说"乱码"，后者照样记 `ok`）。
+    """
+    body = str(text or "")
+    total = max(1, len(body))
+    nuls = body.count("\x00")
+    replacement = body.count("\ufffd")
+    control = len(_CONTROL_CHARS.findall(body))
+    ratio = control / total
+    garbled = (nuls > 0 or replacement > GARBLED_REPLACEMENT_MAX
+               or ratio > GARBLED_CONTROL_RATIO_MAX)
+    return garbled, {
+        "chars": len(body),
+        "nul_bytes": nuls,
+        "replacement_chars": replacement,
+        "control_chars": control,
+        "control_ratio": round(ratio, 5),
+    }
 
 #: `path_base` 的两个取值：这一条 `literature.path` 是按哪个基准解析出来的。
 BASE_LIBRARY = "library"
@@ -178,24 +228,34 @@ def bytes_on_disk(path: Path | str | None) -> int:
 
 
 def fulltext_tier(*, bytes_on_disk: int | None,
-                  pages: Sequence[str] | None) -> str | None:
-    """`download.fulltext` 的三档现算；`None` = 有字节但这一处还没抽过文本。
+                  pages: Sequence[str] | None,
+                  text: str | None = None,
+                  garbled: bool | None = None) -> str | None:
+    """`download.fulltext` 的四档现算；`None` = 有字节但这一处还没抽过文本。
 
-    判据只有三条（顺序即优先级）：
+    判据（顺序即优先级）：
 
     1. 没有字节（`bytes_on_disk` 为假值 / <= 0）⇒ `no_fulltext`；
-    2. 有字节、且给了逐页文本，其中有任何一页去空白后非空 ⇒ `ok`；
-    3. 有字节、给了逐页文本但一页可抽文本都没有（扫描件等）⇒ `no_text_layer`。
+    2. 抽出来的文本被判成乱码（`garbled=True`，或给了 `text` 现判）⇒ `extract_failed`
+       —— 这是裁定 16 的第四档：抽过、但抽出来的不是可读文本；
+    3. 有字节、给了逐页文本/整段文本，其中有任何一页去空白后非空 ⇒ `ok`；
+    4. 有字节、给了文本但一页可抽文本都没有（扫描件等）⇒ `no_text_layer`。
 
-    `pages is None`（这一处没抽过）返回 `None`，不是上面三档里的任何一个：
-    这是三态纪律的"没查成"，调用方必须用 :func:`with_fulltext` 清掉旧标签，
+    `pages is None and text is None`（这一处没抽过）返回 `None`，不是上面四档里的任何
+    一个：这是三态纪律的"没查成"，调用方必须用 :func:`with_fulltext` 清掉旧标签，
     而不是把一个猜测的档位落盘。
     """
     if not bytes_on_disk or int(bytes_on_disk) <= 0:
         return FULLTEXT_NO_FULLTEXT
-    if pages is None:
+    if garbled is None and text is not None:
+        garbled = garbled_text(text)[0]
+    if garbled:
+        return FULLTEXT_EXTRACT_FAILED
+    if pages is None and text is None:
         return None
-    for page in pages:
+    if text is not None and str(text).strip():
+        return FULLTEXT_OK
+    for page in pages or ():
         if str(page or "").strip():
             return FULLTEXT_OK
     return FULLTEXT_NO_TEXT_LAYER

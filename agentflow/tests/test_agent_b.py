@@ -206,7 +206,9 @@ def test_literature_without_local_file_is_marked_processed(store):
 
     rows = {r["lit_id"]: r for r in store.rows("literature")}
     assert rows["0000"]["processed"] is True
-    assert rows["0000"]["last_mine_error"] == "no_local_file"
+    # 2026-11-16（裁定 ⑦）：这一档现在点名 `metadata_only`（仅题录早退），
+    # 原来的 `no_local_file` 逐字保留在后半段。
+    assert rows["0000"]["last_mine_error"] == "availability=metadata_only; no_local_file"
     assert rows["0001"]["processed"] is True
     assert "file_missing" in (rows["0001"]["last_mine_error"] or "")
     assert rows["0000"]["claimed_by"] is None

@@ -4,9 +4,21 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-16，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **314 个 `.py`、290662 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16007 行（`agent_loop.py`，14874 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **317 个 `.py`、292378 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14876 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-16 AQ1（A 的逐条自审做实：回读回执 + 可读性四档 + 报告「可得性」栏）**：新增
+> `src/agentflow/litavail.py`（候选期旁路台账，零 schema；四档词表与机器侧档位判定，约 265 行）
+> 与 `tests/test_lit_audit_is_per_item.py`；`litstage.py` / `litread.py` / `tools/text_tools.py` /
+> `agent_b/run_once.py` 在同一批里补齐（回读闸、可读性闸、第四档 `extract_failed`、报告那一栏）。
+> 当次盘上读数（含并行 lane 未提交的部分）：**317 个 `.py` / 292378 行 / 75 个 `>800`**。
+> 三格（75 / 94 / 2）逐格未抬（上限 75 / 95 / 5）。
+> **2026-11-16 FC1（FC-27 三份补丁 apply + `conductor.broadcast` 工具退场 + 声明基线追账）**：
+> 314 个 `.py`、75 个 `>800` 都不变；总行数 290662 → **290668**（+6：`agent_prompts.py` 的
+> p286 版本账 +35、`conductor.py` 的退场注释 +2、`agent_loop.py` +2、`specs/m.py` +1，与
+> `tools/conductor_tools.py` 删掉广播工具体 -34 相抵）。§3 表 `agent_loop.py` 14617 → **14876**；
+> 同表 `gates.py` 2944 → **2923**（`d30f5c49` 的收工门改写在本表里一直没追平，本批按盘上一起追）。
+> 三格（75 / 93 / 2）逐格未抬（上限 75 / 95 / 5）。
 > **2026-11-16 CL1 / 18A+22B（研究型/有门项目未跑收工门就 final 受控拒；收工门在 M 面上的判据回归）**：
 > 314 个 `.py`、75 个 `>800` 都不变；总行数 290502 → **290662**（+160，全在 `agent_loop.py`：
 > `_closing_gate_readings` 的逐次记录、`closing_gate_consulted` / `no_gate_declaration` /
@@ -779,12 +791,12 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d/core.py` | 1748 | D 的全部动作（15 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1707 行）；`agent_d/_support.py` 是模块级 helper 与常量，867 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 14617 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_loop.py` | 14876 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1137 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3368 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0；2026-11-09 T1 加 B 的两条动作之后两层对账读数更新为 66 = 25 + 41 + 0；2026-11-11 `open_polish_copy` 进 unmatched 之后现算 67 = 25 + 42 + 0，只动注释、+2 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `agent_skills.py` | 4644 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
 | `providers.py` | 3356 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
-| `gates.py` | 2944 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
+| `gates.py` | 2923 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
 | `schema.py` | 4046 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
 | `runflow.py` | 1733 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层。批 R113：单价改成按**这一趟自己的时间戳**取（`price_of(cfg, at=stamp)`），不再读结账时的墙钟 |
 | `evidence.py` | 1909 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |

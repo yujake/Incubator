@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
 from ..extract import extract_text
+from .. import litread as _LR
 from ..store import Store
 from . import ToolResult, ToolSpec, fail, ok, tool
 # 复用 OCR 那件「第一猜」归一器（`path` 或「文献编号」都收，三态齐全）
@@ -80,6 +81,40 @@ def _text_of(doc: Any) -> str:
     return ""
 
 
+def _mark_literature_tier(ctx: _Ctx, lit_id: str, tier: str, *, note: str = "") -> str:
+    """把这一档写进 `literature` 行的 `download.fulltext`（给了 `lit_id` 才有落点）。
+
+    为什么要这一步（业主 2026-11-16 裁定 16：抽过但失败要有落点）：AH6 实测里
+    `text.extract` 对两份 PDF 都判了 `garbled_text`，但那句话只活在一次工具返回里 ——
+    盘上的行仍写着 `status=ok`，随后被洗成 `download.error=""`。于是"抽过但失败"在
+    文献库里没有任何痕迹，B 下一轮还会再抽一遍、再烧一次调用。
+
+    写点只有 `litread.with_fulltext`（与 B 那一侧同一处）：三档之外新增的第四档
+    `extract_failed` 由它落盘，别处不许自己 `dl["fulltext"] = ...`。
+    三态：没有 store / 没给 lit_id / 行上找不到 ⇒ 不写（如实说"没落点"），不是写一个猜的档。
+    """
+    lid = str(lit_id or "").split(":")[-1].strip()
+    if ctx.store is None or not lid:
+        return ""
+    from .. import litread as _LR
+
+    try:
+        with ctx.store.tx("literature", actor=ctx.actor,
+                          note=f"text.extract.{tier}") as tx:
+            row = tx.find("literature", lit_id=lid)
+            if row is None:
+                return ""
+            payload = dict(row)
+            payload["download"] = _LR.with_fulltext(
+                dict(payload.get("download") or {}), tier)
+            if note:
+                payload["download"] = {**payload["download"], "note": note}
+            tx.upsert("literature", payload, note=f"text.extract.{tier}")
+        return lid
+    except Exception:  # noqa: BLE001 - 落点失败不许把抽取结论带坏（读数仍返回给调用方）
+        return ""
+
+
 def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
                pages: Sequence[int] | None = None, max_pages: int = 200) -> ToolResult:
     """``text.extract`` 的工具体：抽取 → 写 `out/texts/<名>.txt`。"""
@@ -106,13 +141,18 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
                         kind="extract_error", path=str(p))
         garbled0, q0 = _quality(plain)
         if garbled0:
-            return fail("这一份本身就是乱码（NUL/替换字符/控制字符超标）⇒ 不写盘",
-                        kind="garbled_text", path=str(p), lit_id=str(lit_id or ""), quality=q0)
+            landed = _mark_literature_tier(ctx, lit_id, "extract_failed",
+                                           note="text.extract: 这一份本身就是乱码")
+            return fail("这一份本身就是乱码（NUL/替换字符/控制字符超标）⇒ 不写盘"
+                        + (f"；可读性已记成 `extract_failed`（lit:{landed}）" if landed else ""),
+                        kind="garbled_text", path=str(p), lit_id=str(lit_id or ""),
+                        quality=q0, availability="extract_failed", landed_on=landed or None)
         target_dir0 = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
         target_dir0.mkdir(parents=True, exist_ok=True)
         name0 = f"{_safe_stem(lit_id, p.stem)}.txt"
         out0 = target_dir0 / name0
         out0.write_text(plain, encoding="utf-8")
+        _mark_literature_tier(ctx, lit_id, "ok", note="text.extract: 纯文本原样入库")
         return ok({
             "path": str(out0.relative_to(ctx.workspace)).replace("\\", "/"),
             "abs_path": str(out0),
@@ -149,20 +189,27 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
             blocks.append(str(t or "").rstrip("\n"))
         body = "\n".join(blocks).strip("\n") + "\n"
     if not body.strip():
+        landed = _mark_literature_tier(ctx, lit_id, "extract_failed",
+                                       note="text.extract: 有字节但没有文本层")
         return fail(
             "这一份**抽不出文字**（没有文本层）⇒ 不是「文件读不了」，是「它要 OCR」："
-            "先确认它是不是扫描件（你面上有 OCR 工具就用它；没有就把这一份交 B 转文本 —— 本机无 OCR 后端时那一侧也会如实说）",
-            kind="no_text_layer", path=str(p), lit_id=str(lit_id or ""))
+            "先确认它是不是扫描件（你面上有 OCR 工具就用它；没有就把这一份交 B 转文本 —— 本机无 OCR 后端时那一侧也会如实说）"
+            + (f"；可读性已记成 `extract_failed`（lit:{landed}），B 不会再来空抽一次" if landed else ""),
+            kind="no_text_layer", path=str(p), lit_id=str(lit_id or ""),
+            availability="extract_failed", landed_on=landed or None)
 
     # 口径「转成纯文字稿入库」⇒ 直接落在 `library/`（与那份 PDF 同层）：下游 `fs.read
     # library/<名>.txt` 就能读，不必再碰二进制的 PDF。
     garbled, q = _quality(body)
     if garbled:
+        landed = _mark_literature_tier(ctx, lit_id, "extract_failed",
+                                       note=f"text.extract: 乱码（{q}）")
         return fail(
             "这一份转出来的文本**疑似乱码**（NUL/替换字符/控制字符占比超标）⇒ "
             "**不写盘**：往 library/ 里放一份乱码比不放更坏（下游会把它当正文读）。"
             "出路：换一份有文字层的原件，或按扫描件走 OCR（你面上有 OCR 工具就用它；没有就交 B 转文本）。",
-            kind="garbled_text", path=str(p), lit_id=str(lit_id or ""), quality=q)
+            kind="garbled_text", path=str(p), lit_id=str(lit_id or ""), quality=q,
+            availability="extract_failed", landed_on=landed or None)
 
     target_dir = (ctx.workspace / out_dir) if out_dir else (ctx.workspace / "library")
     target_dir.mkdir(parents=True, exist_ok=True)
@@ -170,6 +217,7 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
     out_path = target_dir / name
     out_path.write_text(body, encoding="utf-8")
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    _mark_literature_tier(ctx, lit_id, "ok", note="text.extract: 抽出的文本可读")
     return ok({
         "path": str(out_path.relative_to(ctx.workspace)).replace("\\", "/"),
         "abs_path": str(out_path),
@@ -187,35 +235,23 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
 
 
 #: 判定"疑似乱码"的阈值（业主 2026-10-17 口径：「A 要保证转出来的纯文字稿不是乱码」）。
-#: 三条独立信号，「任何一条」命中就拒（宁可说"这份转不出干净文本"，也不把乱码写进 library/）：
-#:   · NUL 字节：PDF 文字层正常「不含」 NUL；出现即错位解码；
+#: 2026-11-16 起只有一份实现：`litread.garbled_text`。改前这里是 `_quality` 自己一份、
+#: `litread.fulltext_tier` 另一份，两边互不相认 —— 于是 `text.extract` 判"乱码"、
+#: 而文献行照样写着 `fulltext` 没有这一档（现场那两份 PDF 就是这样无声消失的）。
+#: 三条独立信号、「任何一条」命中就拒（宁可说"这份转不出干净文本"，也不把乱码写进 library/）：
+#:   · NUL 字符：PDF 文字层正常「不含」 NUL；出现即错位解码；
 #:   · 替换字符 U+FFFD：解码器自己都认不出那个字节 ⇒ 乱码；
 #:   · 控制字符占比：正常正文里控制字符几乎为 0（换行/制表除外）。
-GARBLED_REPLACEMENT_MAX = 0
-GARBLED_CONTROL_RATIO_MAX = 0.02
-
-#: 控制字符（`ord < 32` 且不是换行/回车/制表）：交给正则的 C 层扫描，
-#: 不再对整份正文跑一遍 Python 逐字符生成器（同一读数、同一字符集）。
-_CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+GARBLED_REPLACEMENT_MAX = _LR.GARBLED_REPLACEMENT_MAX
+GARBLED_CONTROL_RATIO_MAX = _LR.GARBLED_CONTROL_RATIO_MAX
 
 
 def _quality(text: str) -> tuple[bool, dict[str, Any]]:
-    """核一遍"这段文本能不能读"。返回 `(是否疑似乱码, 读数)`。"""
-    body = str(text or "")
-    total = max(1, len(body))
-    nuls = body.count("\x00")
-    replacement = body.count("\ufffd")
-    control = len(_CONTROL_CHARS.findall(body))
-    ratio = control / total
-    garbled = (nuls > 0 or replacement > GARBLED_REPLACEMENT_MAX
-               or ratio > GARBLED_CONTROL_RATIO_MAX)
-    return garbled, {
-        "chars": len(body),
-        "nul_bytes": nuls,
-        "replacement_chars": replacement,
-        "control_chars": control,
-        "control_ratio": round(ratio, 5),
-    }
+    """核一遍"这段文本能不能读"。返回 `(是否疑似乱码, 读数)`。
+
+    实现只有一处（`litread.garbled_text`）：这是"乱码"与 `extract_failed` 互认的落点。
+    """
+    return _LR.garbled_text(text)
 
 @tool(
     "text.extract",

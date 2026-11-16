@@ -116,6 +116,11 @@ def _judge_and_admit(store, request_id: str, slot: str,
     assert topped.ok, topped.error
     assert [u["slot"] for u in topped.unwrap()["updated"]] == [str(slot)], (
         f"补 relevance 必须落在原槽（G9），实得 {topped.unwrap()}")
+    # 2026-11-16 裁定 ①②：回读 + 可读性判定（这一档测的是交接，不是自审）。
+    readback = reg.call("lit.stage_list", request_id=request_id)
+    assert readback.ok, readback.error
+    from agentflow import litavail as AV
+    AV.record_availability(store.root, request_id, str(slot), AV.METADATA_ONLY)
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
     assert got.unwrap()["registered"] == 1, got.unwrap()

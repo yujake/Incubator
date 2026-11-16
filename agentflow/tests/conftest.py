@@ -1703,3 +1703,30 @@ def clean_store(tmp_path: Path) -> Store:
     )
     sync_counters(st)
     return st
+
+
+# --------------------------------------------------------------------------- 文献自审
+
+
+def lit_readback(reg, request_id: str):
+    """回读回执（业主 2026-11-16 裁定 ①）：提交之前必须 `lit.stage_list` 一次。
+
+    2026-11-16 起 `lit.admit` / `lit.admit_all` 的提交闸验这一份回执；下面那些测的是
+    别的闸（配额 / 重叠 / 报告）的用例，用它把"回读"这一格先满足掉，而不是让
+    每个用例都被同一条前置条件挡在门外。
+    """
+    res = reg.call("lit.stage_list", request_id=request_id)
+    assert res.ok, res.error
+    return res
+
+
+def lit_availability(store, request_id: str, slots, tier: str = "metadata_only") -> None:
+    """把可读性判定写进旁路台账（`data/lit_availability.jsonl`）。
+
+    同上：这是测"别的闸"的用例的接缝 —— 逐条自审本身由
+    `tests/test_lit_audit_is_per_item.py` 单独守着。
+    """
+    from agentflow import litavail as AV
+
+    for slot in slots:
+        AV.record_availability(store.root, request_id, str(slot), tier)

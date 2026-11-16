@@ -43,6 +43,7 @@ from typing import Any, Callable, Iterable, Mapping
 from .base import ToolError, ToolRegistry, ToolSpec, fail, ok, tool
 from .. import dedup as D
 from .. import fetch as F
+from .. import litavail as LAV
 from .. import litread as LR
 from .. import providers as P
 from .. import schema as S
@@ -2267,12 +2268,16 @@ def _h_lit_stage_list(
     `reason_code=withdrawn_by_reviewer`：序号不复用、题名与理由都留着 ——
     于是"第 3 号被撤了哪一篇、为什么"查得出来（"撤掉 ≠ 删掉"）。
     """
-    from ..litstage import list_candidates
+    from ..litstage import list_candidates, note_readback
 
     try:
         got = list_candidates(ctx.store, request_id=request_id, batch=batch, status=status)
     except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
         return _stage_fail(exc)
+    # 回读回执（业主裁定 ①）：这一次「A 回读了自己刚写的清单」由工具面记账，
+    # 提交闸（`lit.admit` / `lit.admit_all`）验它覆盖了要提交的每一个槽位。
+    # 只认具体委托（`request_id="*"` 的全查不记账：它不回答"这一批回读过没有"）。
+    note_readback(ctx.store, got["request_id"], got["rows"])
     return ok({
         "request_id": got["request_id"],
         "current_request_id": got["current_request_id"],
@@ -2318,6 +2323,10 @@ def _h_lit_stage_reject(ctx: _Ctx, slot: str, reason_code: str, note: str = "") 
 
     `reason_code` 用 `rejected_off_topic` / `rejected_low_quality` /
     `overlap_without_new_content` / `duplicate_doi` 这几档（见 `schema.CANDIDATE_REASON_CODES`）。
+
+    可读性判定不在这里收（这一件是拒收，不是入库）：判拒时若已经有判定（例如先试过
+    `lit.admit` 带 `availability=extract_failed` 被闸挡下），台账里那一条会原样留着，
+    报告照常逐条列；没有就显示 `未查`。要补可读性判定走 `lit.stage_list` 看回读后的那一格。
     """
     from ..litstage import reject
 
@@ -2369,6 +2378,9 @@ def _h_lit_admit(
 
     wanted: list[str] | None
     payload: dict[str, dict] = {}
+    #: 这一次调用带的可读性判定（`slot -> tier`）：逐条自审的第二个问题（业主裁定 ②）。
+    #: 落进旁路台账 `data/lit_availability.jsonl`（零 schema），闸从那里取证据。
+    avail: dict[str, str] = {}
     if items is not None:
         wanted = []
         for raw in items:
@@ -2381,6 +2393,14 @@ def _h_lit_admit(
                 "new_content": str((raw or {}).get("new_content") or "").strip(),
                 "overlap_ok": (raw or {}).get("overlap_ok"),
             }
+            tier = str((raw or {}).get("availability") or "").strip()
+            if tier:
+                if tier not in LAV.AVAILABILITY_TIERS:
+                    return fail(
+                        f"可读性判定必须是 {list(LAV.AVAILABILITY_TIERS)} 之一，收到 {tier!r}"
+                        "（自己拼一档，例如 pdf_no_text，不算审过）",
+                        kind="bad_availability", slot=slot)
+                avail[slot] = tier
     else:
         wanted = [str(s).strip() for s in (slots or []) if str(s or "").strip()] or None
         if wanted:
@@ -2389,6 +2409,19 @@ def _h_lit_admit(
                                  "overlap_ok": overlap_ok}
     if wanted is None and batch is None:
         return fail("admit 要么给 slots / items，要么给 batch", kind="no_target")
+
+    # 判定先落台账（闸从台账取证据，所以必须在 `_admit` 之前写）：写在后面的话，
+    # 这一次提交读到的仍是旧判定 —— "刚判的这条"与"闸看到的这条"会差一拍。
+    if avail:
+        from ..litstage import current_request_id as _current_rid
+
+        rid_for_ledger = str(request_id or "").strip() or _current_rid(ctx.store)
+        try:
+            for slot, tier in avail.items():
+                LAV.record_availability(ctx.store.root, rid_for_ledger, slot, tier,
+                                        note="lit.admit", actor=ctx.actor)
+        except (ValueError, OSError) as exc:
+            return fail(f"可读性判定没写进台账：{exc}", kind="availability_ledger")
 
     # 每条自带的 `new_content` / `overlap_ok` 先落回候选行：这样它们在 `lit.stage_list`
     # 里查得到（"这一篇凭什么被放行"要留在盘上，而不是只活在某一次工具调用的返回里）。
@@ -2428,7 +2461,10 @@ def _h_lit_admit(
                     call_size=got.get("call_size"), call_limit=got.get("call_limit"),
                     delegation_admitted=got.get("delegation_admitted"),
                     delegation_limit=got.get("delegation_limit"),
-                    refused=got.get("refused"), undecided=got.get("undecided"))
+                    refused=got.get("refused"), undecided=got.get("undecided"),
+                    missing_readback=got.get("missing_readback"),
+                    missing_availability=got.get("missing_availability"),
+                    availability_bad=got.get("availability_bad"))
     return ok({
         "ok": got["ok"],
         "kind": got["kind"],
@@ -2488,7 +2524,10 @@ def _h_lit_admit_all(
     if not got.get("ok"):
         return fail(got.get("reason") or "整批提交被拒", kind=got.get("kind") or "over_cap",
                     request_id=got.get("request_id"), refused=got.get("refused"),
-                    undecided=got.get("undecided"))
+                    undecided=got.get("undecided"),
+                    missing_readback=got.get("missing_readback"),
+                    missing_availability=got.get("missing_availability"),
+                    availability_bad=got.get("availability_bad"))
     return ok({
         "ok": got["ok"],
         "kind": got["kind"],
@@ -2518,6 +2557,11 @@ _LIT_PARAMS_ADMIT_ITEM = {
                         "description": "本次检索要的新内容（重叠度高时必须有）"},
         "overlap_ok": {"type": "boolean",
                        "description": "调用方对「重叠也可以收」的表态；不替代 new_content"},
+        "availability": {"type": "string", "enum": list(LAV.AVAILABILITY_TIERS),
+                         "description": "这一条的可读性判定（逐条自审的第二个问题）："
+                                        "readable 可读全文 / metadata_only 仅题录 / "
+                                        "extract_failed 抽过但失败 / unknown 未查。"
+                                        "不给 ⇒ 这一条不许入库"},
     },
     "required": ["slot"],
     "additionalProperties": False,
@@ -2636,7 +2680,8 @@ def _lit_stage_add(ctx, request_id, entries, batch=None):
         "rows[] 每项是 {'slot','batch','status','title','request_id','doi','provider','year',"
         "'type_code','summary','url','added_at','relevance','lit_id','admitted_at',"
         "'reason_code','withdrawn_reason','reject_reason','cleared_at','clear_reason',"
-        "'new_content','overlap_score','overlap_kind','overlap_with','overlap_ok'}；"
+        "'new_content','overlap_score','overlap_kind','overlap_with','overlap_ok',"
+        "'availability'}（最后一格是四档可读性判定；空串 = 还没审）；"
         "失败：ok=False + kind(no_store/bad_status/no_delegation/store_error)"
     ),
     tags=("lit", "stage", "list"),
@@ -2714,7 +2759,8 @@ def _lit_stage_reject(ctx, slot, reason_code, note=""):
                       "minItems": 1, "maxItems": 200},
             "items": {"type": "array", "minItems": 1, "maxItems": 200,
                       "items": _LIT_PARAMS_ADMIT_ITEM,
-                      "description": "逐条带 new_content / overlap_ok（优先于调用级参数）"},
+                      "description": "逐条带 availability（可读性判定，必给）与 "
+                                     "new_content / overlap_ok（优先于调用级参数）"},
             "request_id": {"type": "string", "maxLength": 40,
                            "description": "哪一次委托（不给 = 当前委托）"},
             "batch": {"type": "integer", "minimum": 1, "maximum": 100000},
@@ -2736,7 +2782,8 @@ def _lit_stage_reject(ctx, slot, reason_code, note=""):
         "（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；"
         "report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；"
         "失败：ok=False + kind(no_store/over_cap_call/over_cap_delegation/unknown_slot/"
-        "no_target/mixed...) + 三个上限读数"
+        "no_target/no_readback/missing_availability/availability_not_admissible/"
+        "bad_availability/availability_ledger) + 读数"
     ),
     tags=("lit", "admit"),
 )

@@ -31,7 +31,7 @@ from agentflow.locallib import ingest_directory
 from agentflow.providers import Candidate
 from agentflow.tools import build_for_role
 
-from conftest import add_literature, add_request
+from conftest import add_literature, add_request, lit_availability, lit_readback
 
 RID = "r-000001"
 
@@ -159,6 +159,9 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
     assert staged.ok, staged.error
     slot = staged.unwrap()["staged"][0]["slot"]
 
+    # 回读 + 可读性判定（2026-11-16 裁定 ①②）：提交前的前置两格。
+    lit_readback(reg, RID)
+    lit_availability(store, RID, [slot])
     got = reg.call("lit.admit", slots=[slot], request_id=RID)
     assert got.ok, got.error
     lit_id = got.unwrap()["admitted"][0]["lit_id"]
@@ -183,7 +186,9 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
     res = b.run_once()
     assert res.processed == 1 and res.unreadable == 1, res.to_dict()
     reason = str(res.details[0].get("skipped") or "")
-    assert reason == f"no_fulltext_this_time: {url}", reason
+    # 2026-11-16（裁定 ⑦）：这一档现在点名 `metadata_only`（仅题录早退），
+    # 原来的 `no_fulltext_this_time: <定位符>` 逐字保留在后半段。
+    assert reason == f"availability=metadata_only; no_fulltext_this_time: {url}", reason
     assert "unreadable" not in reason
     assert str(next(r for r in store.rows("literature")
                     if r["lit_id"] == lit_id)["last_mine_error"]) == reason
@@ -278,6 +283,8 @@ def test_an_all_empty_relevance_is_recorded_as_a_reading_and_does_not_block(stor
 
     # 逐条也不许进（同一件事，另一个入口）
     slots = [item["slot"] for item in staged.unwrap()["staged"]]
+    lit_readback(reg, RID)
+    lit_availability(store, RID, slots)
     one = reg.call("lit.admit", slots=[slots[0]], request_id=RID)
     assert one.ok and one.unwrap()["refused"][0]["code"] == "missing_relevance", one.unwrap()
 

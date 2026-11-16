@@ -51,6 +51,8 @@ from agentflow.store import Store
 from agentflow.tools import build_for_role
 from agentflow.webui import readers as R
 
+from conftest import lit_availability, lit_readback
+
 #: 交付包根（`agentflow/`）。
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -183,6 +185,12 @@ def test_b_a_fully_judged_delegation_submits_ok(tmp_path: pathlib.Path) -> None:
          "reject_reason": "与本次检索的方向无关", "added_at": TS},
     ])
     reg = _reg(store)
+    # 回读 + 可读性判定（2026-11-16 裁定 ①②③ 之后的提交前置）：这一条测的是
+    # "全判完之后能收口"，所以把另一条前置条件先满足掉（逐条自审本身由
+    # `tests/test_lit_audit_is_per_item.py` 守着）。
+    lit_readback(reg, RID)
+    lit_availability(store, RID, [r["slot"] for r in store.rows("lit_candidates")
+                                  if r["status"] == "admitted"])
     res = reg.call("lit.admit_all", request_id=RID)
     assert res.ok, res.error
     data = res.unwrap()
@@ -216,6 +224,8 @@ def test_c_staging_registers_pending_and_a_row_without_relevance_cannot_be_admit
     assert all(r["status"] == "pending" for r in listing["rows"]), listing["rows"]
 
     # 没有 relevance ⇒ 逐条入库被拒，且行保持 pending（可补证据、可判拒）
+    lit_readback(reg, RID)
+    lit_availability(store, RID, slots)
     got = reg.call("lit.admit", slots=slots, request_id=RID)
     assert got.ok, got.error
     assert not got.unwrap()["admitted"], got.unwrap()
@@ -251,6 +261,8 @@ def test_c_staging_registers_pending_and_a_row_without_relevance_cannot_be_admit
     assert again.unwrap()["updated"][0]["fields"] == ["relevance"], again.unwrap()
     assert len([r for r in store.rows("lit_candidates")
                 if r["request_id"] == RID]) == 2, "同一篇被登记成了两个槽"
+    # 补 relevance 会改清单内容 ⇒ 回执作废（提交前必须再读一眼），这里补上
+    lit_readback(reg, RID)
     done = reg.call("lit.admit", slots=[slots[1]], request_id=RID)
     assert done.ok, done.error
     assert len(done.unwrap()["admitted"]) == 1, done.unwrap()
@@ -291,6 +303,7 @@ def test_d_over_cap_is_folded_into_rejected_and_legacy_rows_read_that_way(
          "year": 2000 + i, "relevance": f"与本次检索相关（第 {i} 条）"}
         for i in range(12)])
     assert staged.ok, staged.error
+    lit_availability(store2, RID, [item["slot"] for item in staged.unwrap()["staged"]])
     plan = L.admission_plan(store2, request_id=RID, batch=1, on_over_cap="truncate")
     assert plan["ok"] and len(plan["cleared"]) == 2, plan
     with store2.tx("lit_candidates", actor="t", note="over cap settle") as tx:
@@ -323,7 +336,16 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     ok_before = reg.call("lit.admit_all", request_id="r-000001")
     assert not ok_before.ok, "打桩之前它就该被拒"
 
+    # 这一条的反真空只打 `undecided` 一处：回读与可读性判定是 2026-11-16 新加的
+    # 另两道闸，打桩时不关掉它们，测出来的就会是"被另一道闸拒"，而不是"undecided
+    # 这道闸真的在起作用"。
+    mine = [r for r in store.rows("lit_candidates")
+            if str(r.get("request_id")) == "r-000001"]
+    lit_availability(store, "r-000001", [r["slot"] for r in mine], tier="readable")
     monkeypatch.setattr(L, "undecided", lambda scoped: [])
+    monkeypatch.setattr(L, "readback_receipt",
+                        lambda store, rid: {"request_id": rid,
+                                            "slots": [r["slot"] for r in mine]})
     after = reg.call("lit.admit_all", request_id="r-000001")
     assert after.ok, ("打桩成恒空之后仍然被拒 ⇒ 那一道闸不是长在 `litstage.undecided` 上"
                       f"（{after.error}）")

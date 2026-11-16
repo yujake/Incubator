@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import dedup as D
+from . import litavail as LAV
 from . import schema as S
 from . import textutil as T
 from .store import Store
@@ -64,6 +65,9 @@ __all__ = [
     "candidate_identity",
     "fold_legacy",
     "judged_state",
+    "note_readback",
+    "readback_receipt",
+    "reset_readbacks",
     "undecided",
     "undecided_reason",
     "title_terms",
@@ -269,6 +273,136 @@ class LitStageError(RuntimeError):
         super().__init__(message)
         self.kind = kind
         self.detail = dict(detail or {})
+
+
+# --------------------------------------------------------------------------- 回读回执
+
+
+#: 「A 回读过自己刚写的清单」的回执（进程内账，按 `(工作区根, 委托号)` 分开）。
+#:
+#: ## 为什么要有这一格（业主 2026-11-16 裁定 9 / 15）
+#:
+#: 业主原话「是 A 侧原来就有的待录入文献列表的逐个自审没做好」。AH6 实测：A1 整趟
+#: 0 次 `lit.stage_list` —— 它从未回读自己刚写进列表的那 46 条，却在 07:31:29
+#: 一次性批量写下 12 条 relevance、07:32:41 一次 `lit.admit` 10 条通过。提交闸"跑了"，
+#: 但它审的证据（relevance）本身就是批量造的，于是闸挡不住"没逐条看过"。
+#:
+#: 所以回读从"建议"变成"提交前的前置条件"：`lit.stage_list` 记回执，`admission_plan`
+#: 的提交路径（`require_readback=True`）验回执覆盖了要提交的每一个槽位；没有就受控拒
+#: （`no_readback`，逐条点名缺哪几个槽），而不是留一条没人读的读数。
+#:
+#: 为什么选"受控拒"而不是"读数点名"：读数不挡路。现场已经证明"闸跑了"这句话可以与
+#: "A 根本没读"同时成立 —— 再留一条能被忽略的读数，等于把同一个失败再演一遍。
+#:
+#: 为什么存在进程内而不是盘上：`lit.stage_list` 的副作用声明是 `read`（只读工具）。
+#: 让它写一条盘上回执会把它变成写工具（改副作用面＝改权限面，FC-27）。而回执的用途
+#: 只是"这一次提交之前读过没读过"，进程内足够；进程重启 ⇒ 回执丢失 ⇒ 再读一次即可
+#: （fail-closed：丢回执的代价是多重读一次，不是多放一条进去）。
+_READBACKS: dict[tuple[str, str], dict] = {}
+#: 回执最多留几份（进程内账，无上限就是无界增长；按 LRU 丢最旧的）。
+_READBACKS_MAX: int = 64
+
+
+def _root_key(store: Store | None) -> str:
+    """回执的键里那一段工作区标识（不同工作区的同名委托号不许互相作证）。"""
+    if store is None:
+        return ""
+    return str(Path(store.root).resolve())
+
+
+def note_readback(store: Store | None, request_id: str,
+                  rows: Sequence[Mapping[str, Any]]) -> dict:
+    """记一条回执：A 刚刚用 `lit.stage_list` 读过这一次委托的清单。
+
+    只认具体委托（`request_id=""` / `"*"` 不记）：全查那一次的视图不回答"这一批
+    回读过没有"。回执记的是槽位集合，不是状态 —— 判完之后状态会变，槽位集合
+    不变；所以"回读 → 逐条判 → 提交"这条正路的回执一直有效，而中途再 `stage_add`
+    会把它作废（见 :func:`stage_entries`）。
+    """
+    rid = str(request_id or "").strip()
+    if store is None or not rid or rid == "*":
+        return {}
+    slots = sorted({str(r.get("slot") or "") for r in rows if str(r.get("slot") or "")})
+    rec = {"request_id": rid, "slots": slots, "count": len(slots), "at": S.now_iso()}
+    key = (_root_key(store), rid)
+    _READBACKS[key] = rec
+    while len(_READBACKS) > _READBACKS_MAX:
+        _READBACKS.pop(next(iter(_READBACKS)))
+    return dict(rec)
+
+
+def readback_receipt(store: Store | None, request_id: str) -> dict | None:
+    """这一次委托的回执（没有 ⇒ `None`；`None` 不是"读过了"）。"""
+    rid = str(request_id or "").strip()
+    if store is None or not rid:
+        return None
+    got = _READBACKS.get((_root_key(store), rid))
+    return dict(got) if got else None
+
+
+def reset_readbacks() -> None:
+    """清空回执（判据之间的隔离点；也是"进程重启"的替身）。"""
+    _READBACKS.clear()
+
+
+def _drop_readback(store: Store | None, request_id: str) -> None:
+    """清单变了 ⇒ 旧回执作废（下一次提交前必须重读）。"""
+    if store is None:
+        return
+    _READBACKS.pop((_root_key(store), str(request_id or "").strip()), None)
+
+
+def _readback_reason(request_id: str, missing: Sequence[str], *,
+                     has_receipt: bool) -> str:
+    """回读闸的拒信：点名缺哪几个槽 + 给做法（不是一句"请先回读"）。"""
+    scope = f"本次委托（{request_id}）" if request_id else "本委托"
+    if not has_receipt:
+        head = (f"{scope}没有回读记录：提交之前，A 必须用 `lit.stage_list` 把**自己刚写进"
+                "列表的那一份清单**读回来、逐条过一遍。")
+    else:
+        head = (f"{scope}回读之后清单又变了（新槽位没被读过）：提交之前要再 "
+                "`lit.stage_list` 读一次。")
+    slots = "、".join(str(s) for s in missing) or "（全部槽位）"
+    return (
+        f"{head}这次要提交的槽位里缺回读：{slots} ⇒ **整批不许提交入库**。"
+        "做法：`lit.stage_list`（`request_id` 给本次委托）→ 对着返回的每一行做两件事："
+        "① 给这一条的可读性判定（readable / metadata_only / extract_failed / unknown，"
+        "判收时写进 `lit.admit` 的 items[].availability、判拒时写进 `lit.stage_reject` 的 "
+        "availability）；② 判收带 relevance、判拒带受控理由码。回读之后再提交。"
+    )
+
+
+def _availability_reason(request_id: str, bad: Sequence[tuple[str, str]],
+                         *, missing: Sequence[str] = ()) -> str:
+    """可读性闸的拒信：逐条点名"哪一槽是哪一档、为什么不能入"。
+
+    三档不同的处置必须说清（否则 A 只能整批撤掉重来）：
+    - 没有判定 / `unknown`：这一条还没审过可读性 —— 去审（能读到就写 readable /
+      metadata_only；抽过但失败写 extract_failed），不要拿"没查"当"可读"；
+    - `extract_failed`：抽过但失败 —— 不入库，按受控理由码判拒（`rejected_low_quality`），
+      候选行留着、原因写在行上；
+    - `metadata_only` 且没有定位符：仅题录可以入，但它必须指得出处（DOI 或 URL）。
+    """
+    scope = f"本次委托（{request_id}）" if request_id else "本委托"
+    parts: list[str] = []
+    if missing:
+        parts.append("还没有可读性判定：" + "、".join(str(s) for s in missing))
+    for slot, tier in bad:
+        if tier == LAV.EXTRACT_FAILED:
+            parts.append(f"{slot} 是 extract_failed（抽过但失败）⇒ 不入库")
+        elif tier == LAV.UNKNOWN:
+            parts.append(f"{slot} 是 unknown（没查过可读性）⇒ 不入库")
+        elif tier == LAV.METADATA_ONLY:
+            parts.append(f"{slot} 是 metadata_only 但没有定位符（DOI/URL）⇒ 不入库")
+        else:
+            parts.append(f"{slot} 的可读性判定 {tier!r} 不成立")
+    return (
+        f"{scope}的可读性判定过不了入库闸：{'；'.join(parts)} ⇒ **整批不许提交入库**。"
+        "口径（业主裁定 ③）：`extract_failed` 与 `unknown` 不许入库；仅题录可以入，"
+        "但必须指得出处。做法：抽过但失败的用 `lit.stage_reject`（`reason_code="
+        "`rejected_low_quality`，`availability=extract_failed`，note 写清是乱码/无文本层）；"
+        "没查的去查（`text.extract` / `search.download`），不要用 unknown 交差。"
+    )
 
 
 # --------------------------------------------------------------------------- 重叠口径
@@ -667,6 +801,9 @@ def stage_entries(
             # 同身份的 entry 并成一个槽，那个 zip 就整体错位一格，下载与登记会配上
             # 另一篇的元数据（静默、且看起来成功）。跨调用的重复才是真机要治的形态
             # （r-000001：自动链路一批、A 补 relevance 另一批）。
+    # 清单变了 ⇒ 上一份回读回执作废：这一次新加进来的槽位还没人读过，提交前必须重读
+    # （否则"回读过"这句话会覆盖一份它没见过的清单 —— 那正是 AH6 里 12 条 relevance 的形态）。
+    _drop_readback(store, rid)
     return {"request_id": rid, "batch": the_batch, "count": len(staged),
             "staged": staged, "updated": updated}
 
@@ -762,6 +899,11 @@ def list_candidates(
     dup_groups = sorted(
         ({"key": k, "slots": sorted(v)} for k, v in groups.items() if len(v) > 1),
         key=lambda g: g["slots"][0])
+    # 可读性判定跟着行一起读出来（台账按槽位号查，槽位号全局唯一）：回读的那一眼于是
+    # 同时看得见"这一条判过没有"与"这一条的可读性审过没有"—— 两件都是提交前要收的口径。
+    tiers = LAV.tiers_by_slot(store.root)
+    for r in rows:
+        r["availability"] = tiers.get(str(r.get("slot") or ""), "")
     return {
         "request_id": rid,
         "duplicate_rows": sum(len(g["slots"]) for g in dup_groups),
@@ -893,6 +1035,99 @@ def _refusal(slot: str, title: Any, why: str, code: str,
             "overlap": dict(overlap) if overlap else None}
 
 
+def _readback_gate(store: Store, rid: str, wanted: Sequence[str],
+                   base: Mapping[str, Any]) -> dict | None:
+    """回读闸（业主裁定 9 / 15）：要提交的每个槽位都得被这次委托的回执覆盖。
+
+    抽成函数是为了让 `admission_plan` 留在 200 行线内（体量三格是软基线，只许降）。
+    返回 `None` = 这一闸放行；否则是一整笔受控拒（逐条点名缺哪几个槽）。
+    """
+    receipt = readback_receipt(store, rid)
+    covered = set(receipt.get("slots") or []) if receipt else set()
+    uncovered = [s for s in wanted if s not in covered]
+    if not uncovered:
+        return None
+    return {**base, "ok": False, "kind": "no_readback", "whole_call_refused": True,
+            "reason": _readback_reason(rid, uncovered, has_receipt=bool(receipt)),
+            "missing_readback": uncovered, "call_size": 0, "admitted": []}
+
+
+def _availability_gate(rid: str, wanted: Sequence[str],
+                       by_slot: Mapping[str, Mapping[str, Any]],
+                       tiers: Mapping[str, str],
+                       scoped: Sequence[Mapping[str, Any]],
+                       base: Mapping[str, Any]) -> dict | None:
+    """可读性覆盖闸（业主裁定 ②③）：要提交的每个槽位都要有判定，且那一档能入库。
+
+    `extract_failed` / `unknown` / 没有定位符的仅题录一律不许进 —— 整批拒、逐条点名。
+    返回 `None` = 放行。判据只有 `litavail` 一处（四档词表与 `ADMITTABLE_TIERS`）。
+    """
+    unaudited = LAV.missing_tiers([by_slot[s] for s in wanted], tiers)
+    bad_tiers: list[tuple[str, str]] = []
+    for s in wanted:
+        t = str(tiers.get(s) or "")
+        if s not in tiers:
+            continue
+        # 仅题录：可以入，但必须指得出处（`litavail.locator_of` 非空）。
+        if t == LAV.METADATA_ONLY and not LAV.locator_of(by_slot[s]):
+            bad_tiers.append((s, t))
+            continue
+        if not LAV.is_admissible(t):
+            bad_tiers.append((s, t))
+    if not (unaudited or bad_tiers):
+        return None
+    return {**base, "ok": False,
+            "kind": "availability_not_admissible" if bad_tiers else "missing_availability",
+            "whole_call_refused": True,
+            "reason": _availability_reason(rid, bad_tiers, missing=unaudited),
+            "missing_availability": unaudited,
+            "availability_bad": [{"slot": s, "tier": t} for s, t in bad_tiers],
+            "counts": _decision_counts(scoped),
+            "call_size": 0, "admitted": []}
+
+
+def _judged_gate(scoped: Sequence[Mapping[str, Any]], rid: str,
+                 base: Mapping[str, Any]) -> dict | None:
+    """提交闸（Q16 第 ③ 条）：整批提交的那两条路，本委托只要还有一条没判就整批拒。
+
+    判据只有 `undecided` 那一处（打桩成恒空 ⇒ 本闸失效，见
+    tests/test_pending_list_is_three_state.py 的反真空那一条）。
+    """
+    waiting = undecided(scoped)
+    if not waiting:
+        return None
+    return {**base, "ok": False, "kind": "undecided_items", "whole_call_refused": True,
+            "reason": undecided_reason(waiting, rid),
+            "undecided": waiting, "counts": _decision_counts(scoped),
+            "call_size": 0, "admitted": []}
+
+
+def _over_cap_gate(call_size: int, limit: int, already: int,
+                   base: Mapping[str, Any]) -> dict | None:
+    """`refuse_all` 那一档的调用形状：单次超限 / 委托累计超限 ⇒ 整笔拒。
+
+    先判形状再判证据：一次要入 11 条是"这次调用根本不成立"，与证据齐不齐是两件事
+    （先报后者会让 A 去补一堆证据、回来仍然超限）。
+    """
+    if call_size > limit:
+        return {**base, "ok": False, "kind": "over_cap_call", "whole_call_refused": True,
+                "reason": (
+                    f"本次调用要入库 {call_size} 条，超过单次上限 {limit} 条 ⇒ 整笔拒绝"
+                    f"（一条都没入：分批突破上限不算合法）。请精选到 ≤{limit} 条，"
+                    f"或分成多次调用（同一委托累计入库仍受 {MAX_ADMIT_PER_DELEGATION} 条限制）"),
+                "call_size": call_size, "admitted": []}
+    if already + call_size > MAX_ADMIT_PER_DELEGATION:
+        return {**base, "ok": False, "kind": "over_cap_delegation",
+                "whole_call_refused": True,
+                "reason": (
+                    f"这次委托已经入库 {already} 条，这次还要入 {call_size} 条 ⇒ "
+                    f"累计 {already + call_size} 条，超过该委托上限 "
+                    f"{MAX_ADMIT_PER_DELEGATION} 条 ⇒ 整笔拒绝（一条都没入）。"
+                    "一次文献检索正式入库至多 10 篇，必须精选"),
+                "call_size": call_size, "admitted": []}
+    return None
+
+
 def admission_plan(
     store: Store | None,
     *,
@@ -904,6 +1139,7 @@ def admission_plan(
     on_over_cap: str = "refuse_all",
     duplicate_branch_ok: bool = False,
     require_judged: bool = False,
+    require_readback: bool = False,
 ) -> dict:
     """入库前的那一笔判断：提交闸 + 条数上限 + 重叠检查 + 逐条该不该进（一行都不写）。
 
@@ -993,6 +1229,9 @@ def admission_plan(
     items: list[dict] = []
     refused: list[dict] = []
     over_cap: list[dict] = []
+    # 可读性判定（A 的逐条自审）按槽位读一次：台账是旁路文件（零 schema），
+    # 槽位号全局唯一，所以这里不需要按委托再过滤一遍。
+    tiers = LAV.tiers_by_slot(store.root)
     # 索引建一次、逐槽复用：`overlap_check` 自己也会建，但那是"每条候选一遍全表"。
     lit_index = literature_index(store)
     for slot in wanted:
@@ -1054,33 +1293,22 @@ def admission_plan(
         "refused": refused,
         "cleared": over_cap,
     }
-    if require_judged:
-        # 提交闸（Q16 第 ③ 条）：整批提交的那两条路，本委托只要还有一条没判，
-        # 一条都不许入库。判据只有 `undecided` 那一处（打桩成恒空 ⇒ 本闸失效，
-        # 见 tests/test_pending_list_is_three_state.py 的反真空那一条）。
-        waiting = undecided(scoped)
-        if waiting:
-            return {**base, "ok": False, "kind": "undecided_items",
-                    "whole_call_refused": True,
-                    "reason": undecided_reason(waiting, rid),
-                    "undecided": waiting, "counts": _decision_counts(scoped),
-                    "call_size": 0, "admitted": []}
     if on_over_cap == "refuse_all":
-        if call_size > limit:
-            return {**base, "ok": False, "kind": "over_cap_call", "whole_call_refused": True,
-                    "reason": (
-                        f"本次调用要入库 {call_size} 条，超过单次上限 {limit} 条 ⇒ **整笔拒绝**"
-                        f"（一条都没入：分批突破上限不算合法）。请精选到 ≤{limit} 条，"
-                        f"或分成多次调用（同一委托累计入库仍受 {MAX_ADMIT_PER_DELEGATION} 条限制）"),
-                    "call_size": call_size, "admitted": []}
-        if already + call_size > MAX_ADMIT_PER_DELEGATION:
-            return {**base, "ok": False, "kind": "over_cap_delegation", "whole_call_refused": True,
-                    "reason": (
-                        f"这次委托（{rid}）已经入库 {already} 条，这次还要入 {call_size} 条 ⇒ "
-                        f"累计 {already + call_size} 条，超过该委托上限 "
-                        f"{MAX_ADMIT_PER_DELEGATION} 条 ⇒ **整笔拒绝**（一条都没入）。"
-                        "一次文献检索正式入库至多 10 篇，必须精选"),
-                    "call_size": call_size, "admitted": []}
+        refused_gate = _over_cap_gate(call_size, limit, already, base)
+        if refused_gate is not None:
+            return refused_gate
+    if require_judged:
+        refused_gate = _judged_gate(scoped, rid, base)
+        if refused_gate is not None:
+            return refused_gate
+    if require_readback:
+        refused_gate = _readback_gate(store, rid, wanted, base)
+        if refused_gate is not None:
+            return refused_gate
+    refused_gate = _availability_gate(rid, wanted, by_slot, tiers, scoped, base)
+    if refused_gate is not None:
+        return refused_gate
+    if on_over_cap == "refuse_all":
         return {**base, "ok": True, "call_size": call_size, "admitted": items}
 
     # ---- truncate：按槽位顺序放到配额为止，其余进 cleared(over_cap)
@@ -1189,8 +1417,12 @@ def settlement_mismatch(store: Store | None, decisions: Iterable[Mapping[str, An
                                     + "，而候选行上是 " + (got_lit or "（空）"))})
     for item in bad:
         _note_settlement_mismatch(**item)
-    return {"checked": True, "count": len(bad), "rows": bad,
-            "reason": "" if not bad else f"{len(bad)} 条结算决定与盘上的行对不上"}
+    return {
+        "checked": True,
+        "count": len(bad),
+        "rows": bad,
+        "reason": "" if not bad else f"{len(bad)} 条结算决定与盘上的行对不上",
+    }
 
 
 def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[dict]:
@@ -1259,13 +1491,32 @@ def apply_settlement(tx: Any, decisions: Iterable[Mapping[str, Any]]) -> list[di
     return written
 
 
+#: 「不落终态」的拒因（`_decisions_from` 直接筛掉）：这几档都是"这一条还没判完"，
+#: 把它写进终态等于替 A 做了决定，而且行上会缺受控理由码（`schema` 的 validate 会先炸）。
+#:
+#: - `already_terminal`：早就判过；
+#: - `missing_relevance`：还没写"为什么相关"；
+#: - `missing_availability`：还没给可读性判定；
+#: - `availability_unknown`：给了判定，但那一档是"没查" —— 要 A 去查，不是判拒；
+#: - `metadata_only_without_locator`：仅题录但指不出处 —— 补一个 DOI/URL 就能重交。
+_NOT_TERMINAL_CODES: tuple[str, ...] = (
+    "already_terminal",
+    "missing_relevance",
+    "missing_availability",
+    "availability_unknown",
+    "metadata_only_without_locator",
+)
+
+
 def _decisions_from(plan: Mapping[str, Any], lit_ids: Mapping[str, str],
                     failures: Mapping[str, str]) -> list[dict]:
     """把 `admission_plan` 的结论 + 登记结果翻成 `apply_settlement` 要的决定。
 
     两个"不落终态"的码必须在这里筛掉，否则会把一次可重试的拒绝写成终态：
     `already_terminal`（这一条早就判过）与 `missing_relevance`（这一条还没写
-    "为什么相关" —— 它得留在 pending，等补上证据或判拒）。
+    "为什么相关" —— 它得留在 pending，等补上证据或判拒）；2026-11-16 起同一张表
+    还收 `missing_availability` / `availability_unknown` / `metadata_only_without_locator`
+    （理由见 :data:`_NOT_TERMINAL_CODES`）。
     """
     out: list[dict] = []
     for item in plan.get("admitted") or []:
@@ -1284,7 +1535,7 @@ def _decisions_from(plan: Mapping[str, Any], lit_ids: Mapping[str, str],
             out.append({"slot": slot, "status": "rejected", "reason_code": "registration_failed",
                         "note": failures.get(slot) or "登记路径没有给出 lit_id"})
     for r in plan.get("refused") or []:
-        if str(r.get("code")) in ("already_terminal", "missing_relevance"):
+        if str(r.get("code")) in _NOT_TERMINAL_CODES:
             continue
         out.append({"slot": str(r["slot"]), "status": "rejected",
                     "reason_code": str(r.get("code") or ""), "note": str(r.get("why") or "")})
@@ -1354,7 +1605,8 @@ def admit(
     只要这个委托动过库，报告就得在盘上。
     """
     plan = admission_plan(store, request_id=request_id, slots=slots, batch=batch,
-                          new_content=new_content, cap=cap, on_over_cap="refuse_all")
+                          new_content=new_content, cap=cap, on_over_cap="refuse_all",
+                          require_readback=True)
     if not plan.get("ok"):
         return {**plan, "admitted": [], "registered": 0, "report": None, "report_path": None}
     lit_ids, failures, got_all = _register(plan, registrar)
@@ -1450,7 +1702,8 @@ def admit_all(
     # 与"还没判完但一行 pending 都不剩（入库了却没有 relevance）"在盘上同形，
     # 而后者正是存量那 33 条的形状。
     plan = admission_plan(store, request_id=rid, slots=pending_slots, new_content=new_content,
-                          cap=cap, on_over_cap="truncate", require_judged=True)
+                          cap=cap, on_over_cap="truncate", require_judged=True,
+                          require_readback=True)
     if not plan.get("ok"):
         return {**plan, "admitted": [], "registered": 0, "report": None, "report_path": None}
     if not pending_slots:
@@ -1533,25 +1786,28 @@ def report_path(store: Store, request_id: str) -> Path:
 
 
 def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
-                    *, generated_at: str = "") -> str:
-    """委托报告正文：三块都必须有。
+                    *, generated_at: str = "",
+                    availability: Mapping[str, str] | None = None) -> str:
+    """委托报告正文：三块都必须有，且每一块逐条列「可得性」。
 
     - `## 已入库`：每篇的 `lit_id` / 标题 / 年份 / DOI（或 provider）+ 一句"为什么与本次
-      检索相关"（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）；
+      检索相关"（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）+
+      `可得性：<档>（<tier>）`；
     - `## 未入库`：每篇的槽位 / 标题 / 受控理由码（`schema.CANDIDATE_REASON_CODES`）
-      + 一行散文（拒收 / 重叠度高无新内容 / 超配额 …）。历史档（`cleared` /
+      + 一行散文（拒收 / 重叠度高无新内容 / 超配额 …）+ `可得性：…`。历史档（`cleared` /
       `withdrawn`）在这里按折算后的 `rejected` 出现；
-    - `## 待裁`：还没判的每一条（`undecided`）—— 这一块是要害：没有它，
+    - `## 待裁`：还没判的每一条（`undecided`）+ `可得性：…` —— 这一块是要害：没有它，
       "A 还没读的那几条"在报告上与"根本没检索到"同形，而它们下一步的动作完全不同。
+
+    可得性这一栏（业主裁定 ⑥）的来源是 `litavail` 的旁路台账（`availability` 参数：
+    `slot -> tier`）；没给 / 没记录 ⇒ `未查（unknown）`。不许把缺省写成 `可读全文`：
+    那正是"没查"与"查了可读"被折平的老毛病（AH6 的 12 条 relevance 就是这么来的）。
 
     三块即使没有行也各留一行 `（无）`：否则"这一块是空的"与"这一块被忘了写"在
     报告上同形，而判据要问的正是"三块都在不在"。
-
-    一条"入库了却没写 relevance"的历史行会同时出现在前两块之外的第二块（待裁）与
-    第一块（已入库）里：已入库说它在库里，待裁说它没有判过的证据 —— 那不是重复
-    计数，是两个不同的问题（Q16 的提交闸读的正是后者）。
     """
     stamp = generated_at or S.now_iso()
+    tiers = dict(availability or {})
     folded = [fold_legacy(r) for r in rows]
     admitted = [r for r in folded if str(r.get("status")) == "admitted"]
     other = [r for r in folded if str(r.get("status")) == "rejected"]
@@ -1571,6 +1827,9 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         "- 盘点：" + "、".join(f"{s}={counts[s]}" for s in CANDIDATE_DECISIONS)
         + "（三态；历史的 cleared 折进 rejected+over_cap、withdrawn 折进 "
           "rejected+withdrawn_by_reviewer）",
+        # 可得性（可读性判定）四档的图例：三块里每一条都会带这一栏，读者不必回头猜档名。
+        "- 可得性（可读性判定四档）：" + " / ".join(
+            f"{tier} {LAV.TIER_LABELS[tier]}" for tier in LAV.AVAILABILITY_TIERS),
         "",
         f"## 已入库（{len(admitted_ids)} 篇）",
         "",
@@ -1593,6 +1852,7 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
             lines.append(f"  相关性：未写（缺的是 `lit:{lit_id}` 这一条的 "
                          "relevance / new_content）")
             missing_relevance.append(lit_id)
+        lines.append(f"  可得性：{LAV.describe_tier(tiers.get(str(r.get('slot') or ''), ''))}")
     if missing_relevance:
         # 一行点名缺哪几条（同时是 `report_violations` 的机器读数入口：
         # 已入库的行全缺相关性说明时它记一条 violation，同时 `## 待裁` 块会把
@@ -1620,14 +1880,17 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         tail = (f"（同一篇已在 `lit:{twin}` —— 这是它的另一个槽位，属重复登记；条数不因此改）"
                 if twin else "")
         lines.append(f"- 槽位 {r.get('slot')} 《{r.get('title')}》 — 理由：{code}"
-                     f"（{code_text}）" + (f"；{detail}" if detail else "") + tail)
+                     f"（{code_text}）" + (f"；{detail}" if detail else "") + tail
+                     + f"；可得性：{LAV.describe_tier(tiers.get(str(r.get('slot') or ''), ''))}")
     lines += ["", f"## 待裁（{len(waiting)} 条）", ""]
     if not waiting:
         lines.append("（无）")
     for item in waiting:
+        slot = str(item.get("slot") or "")
         lines.append(f"- 槽位 {item['slot']} "
                      f"《{T.clip(str(item.get('title') or ''), UNDECIDED_TITLE_CHARS)}》"
-                     f" — {item['why']}")
+                     f" — {item['why']}"
+                     f"；可得性：{LAV.describe_tier(tiers.get(slot, ''))}")
     lines.append("")
     return "\n".join(lines)
 
@@ -1642,7 +1905,9 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
     body_rows = list(rows) if rows is not None else [
         r for r in _rows(store) if str(r.get("request_id") or "") == rid]
     body_rows.sort(key=lambda r: str(r.get("slot") or ""))
-    text = report_markdown(rid, body_rows, generated_at=generated_at)
+    # 可读性那一栏从旁路台账现读（报告是交付物：它必须与闸审的是同一份判定）。
+    text = report_markdown(rid, body_rows, generated_at=generated_at,
+                           availability=LAV.tiers_by_slot(store.root))
     path = report_path(store, rid)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8", newline="")
@@ -1707,7 +1972,64 @@ def report_violations(text: str) -> list[str]:
         if line.strip().startswith("- ") and "`lit:" not in line:
             bad.append(f"已入库的这一条没有 lit_id：{line.strip()[:60]}")
     bad.extend(_relevance_violations(admitted_text))
+    bad.extend(_availability_violations(admitted_text))
     return bad
+
+
+#: 报告里一行「可得性」的档位记号：`可得性：仅题录（metadata_only）`。
+_REPORT_AVAILABILITY = re.compile(r"可得性：[^（\n]*（(" + "|".join(LAV.AVAILABILITY_TIERS)
+                                  + r")）")
+
+
+def _availability_violations(admitted_text: str) -> list[str]:
+    """「已入库」这一块逐条要有可得性栏，且那一档必须允许入库（业主裁定 ⑥ / ③）。
+
+    为什么这条要进 `report_violations` 而不是只写在正文里：`## 已入库` 一块是
+    "文献库里多了哪几篇"的唯一交付物。这一栏缺了，或者写着 `extract_failed` /
+    `unknown`，"入库的文献质量有保证"这句话就没有可核对的读数了 —— 而那正是
+    业主裁定 9 / 15 要的那一层。
+    """
+    bad: list[str] = []
+    entries = _report_blocks(admitted_text)
+    for lit_id, body in entries:
+        hit = _REPORT_AVAILABILITY.search(body)
+        if hit is None:
+            bad.append(f"已入库的 `lit:{lit_id}` 没有「可得性」一栏（三块都要逐条列，业主裁定 ⑥）")
+            continue
+        tier = hit.group(1)
+        if not LAV.is_admissible(tier):
+            bad.append(f"已入库的 `lit:{lit_id}` 可读性是 `{tier}` —— 这一档不许入库"
+                       "（业主裁定 ③：extract_failed / unknown 不许进文献库）")
+    return bad
+
+
+def _report_blocks(text: str) -> list[tuple[str, str]]:
+    """把「已入库」一块切成 `(lit_id, 这一条的正文含后续缩进行)`。
+
+    报告的一条规定是：条目行以 ``- `lit:…` 《题名》`` 开头，紧跟的行（`相关性：` /
+    `可得性：`）以两个空格缩进。这一函数只认这个形状，不猜别的写法。
+    """
+    out: list[tuple[str, str]] = []
+    current = ""
+    buf: list[str] = []
+    for raw in str(text or "").splitlines():
+        line = raw.rstrip()
+        hit = _REPORT_ADMITTED_ROW.match(line.strip())
+        if hit:
+            if current:
+                out.append((current, "\n".join(buf)))
+            current = hit.group(1)
+            buf = [line]
+            continue
+        if current and (line.startswith("  ") or not line.strip()):
+            buf.append(line)
+        elif current:
+            out.append((current, "\n".join(buf)))
+            current = ""
+            buf = []
+    if current:
+        out.append((current, "\n".join(buf)))
+    return out
 
 
 #: 报告「已入库」一块里一条条目的开头形态：`- `lit:000000` 《题名》…`。

@@ -30,8 +30,22 @@ from agentflow.providers import Candidate
 from agentflow.store import Store
 from agentflow.tools import build_for_role
 
+from conftest import lit_availability, lit_readback
+
 RID = "r-000001"
 RID2 = "r-000002"
+
+
+def _audited(reg, store, slots, *, request_id: str = RID) -> None:
+    """先把"回读 + 可读性判定"两格满足掉（本文件测的是别的闸）。
+
+    2026-11-16 业主裁定 ①②③ 之后，提交前必须先 `lit.stage_list` 回读、且每条要有
+    可读性判定；本文件每一条判据（配额 / 重叠 / 报告 / 结算）都以"那两格已经满足"
+    为前提，所以把它收成一个显式的接缝 —— 逐条自审本身由
+    `tests/test_lit_audit_is_per_item.py` 单独守着。
+    """
+    lit_readback(reg, request_id)
+    lit_availability(store, request_id, slots)
 
 
 # ---------------------------------------------------------------- 夹具
@@ -112,10 +126,12 @@ def test_at_most_ten_per_call_is_refused_as_a_whole(reg, store):
 def test_at_most_ten_per_delegation_refuses_the_eleventh(reg, store):
     """① 入到第 10 条之后再 admit 第 11 条 ⇒ 整笔拒绝（累计也是 10）。"""
     slots = _stage(reg, DISTINCT[:11])
+    _audited(reg, store, slots[:10])
     res = reg.call("lit.admit", slots=slots[:10], request_id=RID)
     assert res.ok, res.error
     assert len(res.unwrap()["admitted"]) == 10, res.unwrap()
     before = len(store.rows("literature"))
+    _audited(reg, store, [slots[10]])
     res = reg.call("lit.admit", slots=[slots[10]], request_id=RID)
     assert not res.ok, "第 11 条居然入库了"
     assert res.meta["kind"] == "over_cap_delegation", res.meta
@@ -126,6 +142,7 @@ def test_at_most_ten_per_delegation_refuses_the_eleventh(reg, store):
 def test_negative_control_raising_the_cap_lets_eleven_through(reg, store, monkeypatch):
     """① 的负控：把上限放开 ⇒ 同一个调用必须能入库 11 条（判据读的是那个常量）。"""
     slots = _stage(reg, [f"Cap probe topic {i}" for i in range(11)])
+    _audited(reg, store, slots)
     monkeypatch.setattr(L, "MAX_ADMIT_PER_CALL", 99)
     monkeypatch.setattr(L, "MAX_ADMIT_PER_DELEGATION", 99)
     res = reg.call("lit.admit", slots=slots, request_id=RID)
@@ -196,6 +213,7 @@ def test_doi_exact_duplicate_is_refused(reg, store):
         row = [r for r in tx.rows("lit_candidates") if r["slot"] == slots[0]][0]
         row["doi"] = "10.5/local.dup"
         tx.upsert("lit_candidates", row, note="fixture")
+    _audited(reg, store, slots)
     res = reg.call("lit.admit", items=[{"slot": slots[0],
                                        "new_content": "就算给了新内容也不许"}], request_id=RID)
     assert res.ok, res.error
@@ -211,6 +229,7 @@ def test_high_title_overlap_requires_new_content(reg, store):
     _add_local(store, title="Spectral gaps of K(m) operators", doi="10.5/local.one")
     slots = _stage(reg, ["Spectral gaps of K(m) operators revisited",
                          "Spectral gaps of K(m) operators extended"], doi_prefix="10.8")
+    _audited(reg, store, [slots[0]])
     res = reg.call("lit.admit", slots=[slots[0]], request_id=RID)
     assert res.ok, res.error
     assert not res.unwrap()["admitted"], "高重叠且无 new_content 居然入库了"
@@ -234,6 +253,7 @@ def test_negative_control_disabling_overlap_check_admits_the_high_overlap_paper(
     """
     _add_local(store, title="Spectral gaps of K(m) operators", doi="10.5/local.one")
     slots = _stage(reg, ["Spectral gaps of K(m) operators revisited"], doi_prefix="10.9")
+    _audited(reg, store, [slots[0]])
     # 正控：不关判据 ⇒ 拒收，库里仍然只有本地那一行
     res = reg.call("lit.admit", slots=[slots[0]], request_id=RID)
     assert res.ok, res.error
@@ -400,6 +420,7 @@ def test_the_whole_list_is_refused_until_every_item_is_judged(reg, store):
     assert [u["slot"] for u in (refused.meta.get("undecided") or [])] == slots[:2], refused.meta
     assert len(store.rows("literature")) == 0, "整批被拒却写进了 literature"
 
+    _audited(reg, store, slots[:2])
     for slot in slots[:2]:
         got = reg.call("lit.admit", slots=[slot], request_id=RID)
         assert got.ok, got.error
@@ -438,6 +459,7 @@ def test_over_cap_is_folded_into_rejected_over_cap_and_leaves_no_fourth_state(re
     `decisions_from_plan` + `apply_settlement` 落盘，与工具面是同一条实现。
     """
     slots = _stage(reg, [f"Over cap topic {i}" for i in range(12)])
+    lit_availability(store, RID, slots)
     plan = L.admission_plan(store, request_id=RID, batch=1, on_over_cap="truncate")
     assert plan["ok"], plan
     assert len(plan["admitted"]) == 10, plan["call_size"]
@@ -466,7 +488,7 @@ def test_negative_control_a_report_without_the_not_admitted_block_is_red(store):
                        title="Withdrawn one", reason_code="withdrawn_by_reviewer",
                        withdrawn_reason="内容不好", added_at=S.now_iso()).to_dict(),
     ]
-    good = L.report_markdown(RID, rows)
+    good = L.report_markdown(RID, rows, availability={"000000": "metadata_only"})
     assert L.report_violations(good) == []
     broken = good.split("## 未入库")[0]
     viol = L.report_violations(broken)
@@ -601,6 +623,7 @@ def test_the_same_paper_is_topped_up_instead_of_staged_twice(reg, store):
     assert rows[0]["relevance"] == "带证据补进原槽", rows[0]
 
     # 补进去之后逐条入库这条路就通了（改前必须先撤掉再重进才对得上 relevance）
+    _audited(reg, store, [slot])
     done = reg.call("lit.admit", slots=[slot], request_id=RID)
     assert done.ok and done.unwrap()["admitted"], done.unwrap()
 
@@ -636,6 +659,7 @@ def test_a_twin_slot_is_a_reading_and_the_report_annotates_instead_of_hiding_it(
          "relevance": "第一次判收的理由"}])
     assert staged.ok, staged.error
     first_slot = staged.unwrap()["staged"][0]["slot"]
+    _audited(reg, store, [first_slot])
     admitted = reg.call("lit.admit", slots=[first_slot], request_id=RID)
     assert admitted.ok and admitted.unwrap()["admitted"], admitted.unwrap()
     lit_id = admitted.unwrap()["admitted"][0]["lit_id"]
@@ -654,7 +678,8 @@ def test_a_twin_slot_is_a_reading_and_the_report_annotates_instead_of_hiding_it(
     assert listing["duplicate_rows"] == 2, listing
     assert listing["duplicate_groups"][0]["slots"] == [first_slot, twin_slot], listing
 
-    text = L.report_markdown(RID, listing["rows"])
+    text = L.report_markdown(RID, listing["rows"],
+                             availability={first_slot: "metadata_only"})
     assert "## 已入库（1 篇）" in text and "## 未入库（1 篇）" in text, text
     assert "属重复登记" in text and f"`lit:{lit_id}`" in text, text
     assert L.report_violations(text) == [], L.report_violations(text)

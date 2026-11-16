@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from ._support import BRunResult, D, I, Iterable, NO_EXTRACTOR_ERROR, QUOTE_OUT_OF_DECLARED_RANGE, S, T, check_quote, make_lease
 from .. import conceptrows as _CR   # 并表过渡层：老表写完同步一份新标准（两处同号）
-from .. import litread as _LR       # M2/M3：`path` 两基准解析 + `download.fulltext` 三档的唯一实现
+from .. import litread as _LR       # M2/M3/裁决 16：`path` 两基准解析 + `download.fulltext` 四档的唯一实现
 from .. import quoteevidence as _QE   # D1：三态判决 ⇒ 可复核的区间/理由/调用指纹
 from ..extract import DocumentText as _DT
 from pathlib import Path as _Path
@@ -117,6 +117,28 @@ class _RunOnce:
         # 堵在队首（每次 run 都重新领取同一行）。注意 content_mismatch 单独列出来：
         # 文件其实存在（是证据），只是它按内容类型判定不是论文 —— 实测碰到过
         # 12.4 MB 的 HTML 被当成 PDF 存下来，若照常抽取会把网页导航文字当概念。
+        # ---- 裁定 ⑦（2026-11-16）：`extract_failed` 早退 —— 抽过但失败是确定性事实
+        # （乱码 / 有字节但没有文本层），再抽一遍只会再烧一次抽取调用。改前这一档在行上
+        # 没有落点（`download.fulltext` 只有三档，模型自拼的 `pdf_no_text` 写不进去），
+        # 于是 B 对同一份乱码 PDF 每轮都重抽一次。
+        dl_row = dict(lit.get("download") or {}) if isinstance(lit.get("download"), dict) else {}
+        if str(dl_row.get("fulltext") or "") == _LR.FULLTEXT_EXTRACT_FAILED:
+            with self.store.tx("literature", actor=self.actor,
+                               note="skipped_extract_failed") as tx:
+                row = tx.find("literature", lit_id=lit_id) or lit
+                row["processed"] = True
+                row["claimed_by"] = None
+                row["lease_until"] = None
+                row["last_mine_error"] = (
+                    "availability=extract_failed: 抽过但失败（乱码/无文本层）⇒ 不再自动重抽；"
+                    "要重试请先用 `text.extract` 重判这一条的可读性")
+                tx.upsert("literature", row, note="skipped_extract_failed")
+            res.unreadable += 1
+            res.processed = 1
+            res.details.append({"lit_id": lit_id, "stage": "acquire",
+                                "skipped": "availability=extract_failed"})
+            return res
+
         unreadable_reason = None
         if dl_status == "content_mismatch":
             unreadable_reason = f"content_type_mismatch: {path.name if path else '?'}"
@@ -126,10 +148,14 @@ class _RunOnce:
             # 那种情形的原因必须点到定位符：一句说不出位置的原因，在读数上与
             # "这一篇从哪来都不知道"同形 —— 而两者的处置相反（前者可以按 url
             # 重取，后者要人去补来源）。
-            dl_row = dict(lit.get("download") or {})
+            #
+            # 裁定 ⑦：这一档就是 `metadata_only`（仅题录）—— 早退的读数里点名它，
+            # 免得"没有本地文件"被读成"这一篇下载坏了"（两种处置相反：前者要按
+            # 定位符去取，后者要换源重下）。
             locator = str(dl_row.get("url") or "").strip()
-            unreadable_reason = (f"no_fulltext_this_time: {locator}" if locator
-                                 else "no_local_file")
+            unreadable_reason = (f"availability=metadata_only; no_fulltext_this_time: {locator}"
+                                 if locator
+                                 else "availability=metadata_only; no_local_file")
         elif path is None:
             # 两个基准都不存在 ⇒ 原因里必须写出「两个」候选绝对路径（只写一个会让
             # "另一个基准下其实有文件"这件事在读数上消失，`file_missing` 也就说不出

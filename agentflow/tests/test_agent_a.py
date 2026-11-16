@@ -16,7 +16,7 @@ from agentflow.agent_a import AgentA
 from agentflow.fetch import FetchResult
 from agentflow.providers import Candidate
 
-from conftest import add_request, set_request_done
+from conftest import add_request, lit_availability, set_request_done
 
 
 # --------------------------------------------------------------------------- 替身
@@ -136,6 +136,11 @@ def _judge_and_admit(store, request_id: str, slot: str,
     assert topped.ok, topped.error
     assert [u["slot"] for u in topped.unwrap()["updated"]] == [str(slot)], (
         f"补 relevance 必须落在原槽（G9：「补进原槽，不发新号」），实得 {topped.unwrap()}")
+    # 2026-11-16 裁定 ①②：补完 relevance 之后必须先回读、再给可读性判定，才谈得上提交。
+    # 这一档测的是"逐条判收之后那一行真的会落地"，所以把这两格按最小合法值满足掉。
+    readback = reg.call("lit.stage_list", request_id=request_id)
+    assert readback.ok, readback.error
+    lit_availability(store, request_id, [str(slot)])
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
     return got.unwrap()
@@ -405,6 +410,8 @@ def test_search_literature_does_not_pretend_someone_elses_request_is_its_own(sto
                       entries=[{"title": str(row["title"]), "doi": str(row["doi"]),
                                 "relevance": "与本次检索直接相关"}])
     assert topped.ok, topped.error
+    reg.call("lit.stage_list", request_id=out["request_id"])
+    lit_availability(store, out["request_id"], [by_slot[out["request_id"]]])
     second = reg.call("lit.admit", request_id=out["request_id"],
                       slots=[by_slot[out["request_id"]]])
     assert second.ok, second.error

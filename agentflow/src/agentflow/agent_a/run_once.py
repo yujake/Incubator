@@ -204,6 +204,9 @@ class _RunOnce:
                     # 的效果，不是回退：入库只能逐条判过（A 的模型动作），自动链路只
                     # 负责把它们暂存进列表。
                     require_judged=True,
+                    # 回读闸（业主裁定 ①）：自动链路也不许"没回读就提交"。它与上面
+                    # 那条闸不重复：一条管"判过没有"，一条管"A 看过此刻的清单没有"。
+                    require_readback=True,
                 )
             admit_slots = [str(it["slot"]) for it in (plan or {}).get("admitted") or []]
 
