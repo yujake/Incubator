@@ -343,7 +343,7 @@ SPEC = AgentSpec(
         # test_core_faculties_..._denied_ones_are_written_as_forbidden 要求「denied 的官能
         # 必须写明理由，并落在『结构上不许』那一列」。
         # 结构性判据：tests/test_a_cannot_invent_concepts.py。
-        '敢创新': '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想由 D 立案、D 才写 `conjectures`。',
+        '敢创新': '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想（**待登记命题**）由产出侧写：E / F / B 在产出那一刻落 `conjectures` 一行（唯一写点是 `conjectureledger` 的 `register`），D **不写**这一张表。你发现了可检验的猜想就把它写进检索结论，交给产出侧去落行。',
     },
     read_only=False,
     summonable=True,

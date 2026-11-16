@@ -319,9 +319,10 @@ SPEC = AgentSpec(
             "或带它的 sha256），否则 `fs.write` / `fs.edit` 受控拒绝（`reserved_framework_artifact`）。",
             # 未签闭环在 D 这一侧的落点 —— D 是研究侧的主导，打回的证明由它派 F 重送、
             # 放弃也由它派 B 去办。
-            "**命题不能悬着：每条登记的命题最终要么有 V 签、要么被明确放弃**。收工门的读数 `statements_unsigned` 数的是"
-            "「既没有 V 签、也没有被明确放弃」的非概念命题，它大于 0 就是 **blocker**（`machine_pass` 假、退出码 1，"
-            "**不落在八格里任何一格上**）。所以看到被 V 打回的证明，两条路选一条：① 派 F 把那一条补齐之后**重新送 V 审**，"
+            "**命题不能悬着：每条登记的命题最终要么有 V 签、要么被明确放弃**。收工读数 `statements_unsigned` 数的是"
+            "「既没有 V 签、也没有被明确放弃」的非概念命题，并逐份列「有稿无签」清单（`unsigned_manuscripts`）；"
+            "**它是读数不是 blocker**（2026-11-16 裁定 3 + 追加裁定 B：`machine_pass` 不因它变假、门不因它拦；"
+            "台账读不出来 ⇒ `checked=false` + warning，不是「0 条」）。所以看到被 V 打回的证明，两条路选一条：① 派 F 把那一条补齐之后**重新送 V 审**，"
             "拿到干净的「成立」；② 这条命题确实做不动了 ⇒ **明确放弃**：派 B 走 `table.update` 把 `status` 改成 "
             "`abandoned`，并把理由按四档之一说清（`abandon_kind` ＋ `abandon_basis`）—— **`math_error`**：指出错在第几步、"
             "错的是什么，并给 `defect_ref`（形如 `verifications/<号>.jsonl#v-00000N`，指着这条命题自己那一行判词「有毛病」）；"

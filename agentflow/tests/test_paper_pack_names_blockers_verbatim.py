@@ -7,9 +7,16 @@
 |---|---|---|
 | 1 | `closing.MAPPING_NOT_WRITTEN_CODE = "mapping_not_written"`（`closing.py`） | `MAPPING_NOT_WRITTEN`（大写常量名当读数名） |
 | 2 | `_check_paper`：回执不匹配 ⇒ `readings["paper"]["verdict"]="drifted"` + `status["paper"]="fail"` + `paper_pdf_is_stale` | 「回执不是它的 ⇒ `failed`」 |
-| 3 | `statements_unsigned` / `mapping_not_written` 不落在七格里；`acceptance_unmet` 落 `acceptance` 格、`paper_pdf_is_stale` 只是 `readings.paper` 的读数（`paper` 已退出收工判定） | 「同类 blocker 还有 ……」把两类混成一类；`paper_pdf_is_stale` 落 `paper` 格 |
+| 3 | `mapping_not_written` 不落在任何一格上；`acceptance_unmet` 落 `acceptance` 格、`paper_pdf_is_stale` 只是 `readings.paper` 的读数（`paper` 已退出收工判定）；`statements_unsigned` 是读数（2026-11-16 裁定 3 + 追加裁定 B），不是 blocker | 「同类 blocker 还有 ……」把两类混成一类；`paper_pdf_is_stale` 落 `paper` 格；`statements_unsigned` 被列成格外 blocker |
 
 判据：a 三处逐字一致；b 反真空逐处回灌旧句 ⇒ 红；c 只动这三处（由提交 diff 证明，本文件只钉 a/b）。
+
+## 2026-11-17 口径变更（不是放宽）
+
+`STALE` 里原先钉着「收工门八格」—— 那是 2026-11-14 之后 `paper` 退出、门暂时七格时的读数；
+2026-11-16 Q1 加回第八格 `literature_pending`，`DEFAULT_CHECKS` 又是 8 格，PAPER_PACK 也跟着
+改回「八格全过」。所以这一笔把「收工门八格」从 `STALE` 删掉、把「收工门七格」加进去（反向真空
+仍然在：谁把七格写回来，这一条就红）。
 """
 from __future__ import annotations
 
@@ -40,6 +47,7 @@ REQUIRED: tuple[str, ...] = (
     "`paper_pdf_is_stale` 不再是格上 blocker",
     "`readings[\"paper\"]`",
     'verdict="drifted"',
+    "`statements_unsigned` 不是 blocker，是读数",
 )
 
 #: 改前那几句（回灌任何一句都必须让读法报出来）。
@@ -48,7 +56,7 @@ STALE: tuple[str, ...] = (
     "同类 blocker",
     "回执不是它的 ⇒ `failed`",
     "`paper_pdf_is_stale` 落在 `paper` 那一格",
-    "收工门八格",
+    "收工门七格",
 )
 
 

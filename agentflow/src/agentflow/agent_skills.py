@@ -162,7 +162,7 @@ def _m_skills() -> tuple[Skill, ...]:
 2. **三件活**（缺哪件补哪件，不是每趟都要三件）：
    - **要外部事实** ⇒ 派 `A.search_literature`（它落 `search_requests` → 回文献行）；
    - **要内部结论** ⇒ 派 `D.propose_question` / `D.research`（它落 `research_questions` /
-     `conjectures`），D 会自己往下派 E/F；
+     待登记命题（表 `conjectures`）），D 会自己往下派 E/F；
    - **要可复现的数** ⇒ 派 `E.run_experiment`（它落 `experiments`，证明/数值都在那一张表）。
 3. **每件活都写 `notify`**（`summary` + `body`）：这是交接留痕，也是被派人拿到的全部背景。
    没写 = 这一趟没有手稿，接手的人只能去翻会话记录。
@@ -400,7 +400,7 @@ def _m_skills() -> tuple[Skill, ...]:
 ## 出不出 paper 由你判断时机，它不是门（`readings["paper"]`）
 
 2026-11-14 业主裁定：「是否出 paper 退出收工判定，由 M 自行判断是否到这个时机」。
-于是收工门那七格里**没有**论文那一格：要不要走到"写论文"这一步、什么时候走，由你判断。
+于是收工门那八格里**没有**论文那一格：要不要走到"写论文"这一步、什么时候走，由你判断。
 它仍然算，落在这趟收工读数的 `readings["paper"]` 里 —— 判断依据就是那一格的 `verdict`：
 
 - `consistent`：盘上有正文，编译回执里的 `tex_sha256` 与它逐字对得上（这份 PDF 是它编的）；
@@ -438,11 +438,13 @@ def _m_skills() -> tuple[Skill, ...]:
 摆在那里不读，等于这一次收尾少查了一格 —— 而"少查一格"与"查过了没问题"在报告里
 必须长得不一样。
 
-## 收工前必须清的那一格：命题都得签收或放弃
+## 收工前要读的那一格：命题的签收与放弃（清单，不是门）
 
-收工读数里的 `statements_unsigned` 数的是「没有 V 签、也没有被明确放弃」的那批非概念命题。
-**只要它不是 0，`machine_pass` 就是假**（退出码 1）—— 而且它**不落在八格里任何一格上**，
-所以八格全绿也照样拦。
+收工读数里的 `statements_unsigned` 数的是「没有 V 签、也没有被明确放弃」的那批非概念命题，另把
+「有稿无签」逐份列在 `unsigned_manuscripts`（族 / 号 / sha / `class` / 为什么没签）。
+**它是读数，不是 blocker**（2026-11-16 裁定 3 + 追加裁定 B）：`machine_pass` 不因它变假、收工门不因它拦；
+台账读不出来时是 `checked=false` + warning（不是「0 条」）。
+但「不拦」不等于「不用管」—— 这一格红着交出去的每一份稿，都是下一次委托要重做的活。
 
 两条出路，没有第三条：
 
@@ -742,7 +744,7 @@ A → B → C → D → F → V；再 D → B(收录证明)
 | **A** 检索 | 问题已翻译成该方向的规范术语（题面式说法不算入口：查不到不等于没有） | 待新增文献列表（每委托重置，可增/删/查），审完**一键迁移 ≤10 篇**进 `literature` | 入库 ≤10 且报告里"已入库（含一句摘要）/未入库（含筛除理由）"两块都在 | 拿不到就写 `unresolved`，不许拿"没搜到"当"不存在" |
 | **B** 概念与关系 | 已有入库文献 | `statements` 一行一条（`kind=concept`）＋ `relations`（`kind` / `quote` / `quote_verified` 三格） | 关系能回答"这两个概念什么关系、凭哪一句原文"；**空边不许产出** | 抽不完就报"未抽取 K 篇"，不许假装抽完 |
 | **C** 关系分析 | 图上已有概念与关系 | `analysis_reports` 一条：**候选的更短路径** ＋ **关键那一步是什么** ＋ 为什么因此更短 | 能说清"删掉/替换掉哪一步" | 图太空就如实写"数据未抽取，算不出"（回头要 B 补抽），不许硬编候选 |
-| **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | `conjectures` 一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
+| **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | **待登记命题**（`conjectures`）一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
 | **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`）；**普通数值那一档例外**：`reports/e-num-*`（`## 命题` + `## 数值结果`）**不过 V**，`proof_text` 留空、等级最多 `strong_conjecture` | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；普通数值 ⇒ `strong_conjecture`；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进（`e-num` 那一档为空）、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
@@ -871,7 +873,7 @@ F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_
 
 把整条链当成"派七个活"：每一跳都派出去了，却没有一处读盘上的产物。
 表现是账面上十几次调用、每一跳都"交回了"，而 `literature` / `relations` /
-`analysis_reports` / `conjectures` / `attack_plans` / `verifications` / `statements`
+`analysis_reports` / **待登记命题**（`conjectures`） / `attack_plans` / `verifications` / `statements`
 挨个看过去全都没长 —— 链的语义在**产物之间**，不在派活次数里。
 """,
         ),
@@ -2365,12 +2367,14 @@ sha**，换一份正文就是另一条义务），`expects=work` —— 业主 2
 ## 悬着的命题：签收或放弃，没有第三种收尾
 
 业主 2026-11-01 逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，或者
-放弃原命题」。既没有 V 签、也没有被明确放弃的命题会让收工门的 `statements_unsigned` 大于 0 ——
-那是 **blocker**（`machine_pass` 假、退出码 1，而且它**不落在八格里任何一格上**，八格全绿也
-照样拦）。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 B 把它
+放弃原命题」。2026-11-16 裁定 3 + 追加裁定 B 把这一条的**门**改成了**读数**：收工门不再读签拦收工，
+只把「有稿无签」逐份列进 `readings["statements_unsigned"]` 的 `unsigned_manuscripts`
+（族 / 号 / sha / `class` / 为什么没签），`machine_pass` 不因它变假。
+所以它是**清单**不是**门**：清单上每多一份，就是下一次委托要重做的活。
+两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 B 把它
 **明确放弃**（B 走 `table.update`：`status=abandoned`，理由按下面四档给；
-状态、时间、理由缺一不可，只写状态的行仍按未签计）。**别让一条证明长期悬着** —— 悬着不会自己消失，
-它只会在收工时变成一格红。
+状态、时间、理由缺一不可，只写状态的行仍按未签计）。**别让一条证明长期悬着** ——
+悬着不会自己消失，它只会一直挂在「有稿无签」那张单子上。
 
 ### 换号（放弃原命题、另立一条）时把理由给清：四档
 
@@ -3205,7 +3209,7 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 
 ## 有界与归因
 
-- 每一轮的产出要落台账（`research_questions` / `conjectures` / `experiments`）；
+- 每一轮的产出要落台账（`research_questions` / **待登记命题**（`conjectures`） / `experiments`）；
 - 一轮里被**跳过**的条目要留原因（`D.ingest_detailed` 会给逐条明细）——
   "没做"与"做了没成"是两件事，报告里必须长得不一样。
 """,
@@ -3313,7 +3317,7 @@ D 的收获（数值实验结果、理论攻坚成果）→ 立新猜想 → 再
 ## 与台账的分工
 
 工作稿（`reports/<qid>-research.md`）是**这一趟这一份问题的报告**；跨趟的记忆在
-**台账行**里（`research_questions` / `conjectures` / `experiments` / `statements`）——
+**台账行**里（`research_questions` / **待登记命题**（`conjectures`） / `experiments` / `statements`）——
 下一趟的人先读台账，再按需读那一份工作稿。别指望 30 份工作稿替记忆干活。
 
 ## D 的动作**返回形状是杂的**（2026-10-16 亲测逐个读出来的）
@@ -3330,12 +3334,13 @@ D 的动作**多数**回一个带 `ok`/`kind`（或各类读数）的字典，�
 ⇒ 别对这四个动作的返回取 `.get(...)`（会炸）。**要判"成不成"，看它给的东西是不是真的
 落了地**：编号能不能在 `search_requests` 里找到、路径上有没有那个文件。
 
-## 命题不能悬着：签收或放弃
+## 命题不能悬着：签收或放弃（清单，不是门）
 
 业主 2026-11-01 逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，
-或者放弃原命题」。收工门的读数 `statements_unsigned` 数的是**既没有 V 签、也没有被明确
-放弃**的非概念命题；它大于 0 就是 **blocker**（`machine_pass` 假、退出码 1，而且它
-**不落在八格里任何一格上**，八格全绿也照样拦）。
+或者放弃原命题」。2026-11-16 裁定 3 + 追加裁定 B 之后，收工门的读数 `statements_unsigned` 数的是
+**既没有 V 签、也没有被明确放弃**的非概念命题，另把「有稿无签」逐份列在 `unsigned_manuscripts`
+（族 / 号 / sha / `class` / 为什么没签）。**它是读数不是 blocker**：`machine_pass` 不因它变假，
+收工门不因它拦；台账读不出来时是 `checked=false` + warning（不是「0 条」）。
 
 你是研究侧的主导，打回的证明由你处置，两条路：
 

@@ -3495,7 +3495,7 @@ FACULTY_LOCAL: dict[tuple[str, str], str] = {
     ("A", "脑子"): "把'我要找的是哪一类东西'想清楚，再决定查什么、怎么判相关、什么时候收手。",
     # 2026-10-21 与 specs/a.py 逐字同步：从「劝告」改成「陈述结构」（这一行删不掉，
     # 判据要求 denied 官能必须写明理由并落在「结构上不许」那一列）。
-    ("A", "敢创新"): '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想由 D 立案、D 才写 `conjectures`。',
+    ("A", "敢创新"): '不造概念：`table.create` 写 `statements` 会被当场拒绝（结构禁止）；提猜想更不该做 —— 猜想（**待登记命题**）由产出侧写：E / F / B 在产出那一刻落 `conjectures` 一行（唯一写点是 `conjectureledger` 的 `register`），D **不写**这一张表。你发现了可检验的猜想就把它写进检索结论，交给产出侧去落行。',
     ("B", "眼睛"): "读正文要读到逐字那一句：你的产出全部挂在可回验的引文上。",
     ("B", "高观点"): "概念行（`statements` 里 `kind=\"concept\"`）的结构比条数重要：别名归位、上下位分清、同一概念两种说法要合并。",
     ("B", "能思辨"): "原文自身论证有漏洞时，记下来并公开说出去，不要悄悄按你的理解补全。",
@@ -3710,19 +3710,24 @@ PAPER_PACK = """\
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门七格全过 **且没有 blocker** 才算交付，两者缺一都不许说"完成"）：七格是 `contradictions` /
-`load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger`；逐格判据以
-`conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余两格它会在读数里逐格点名，这里不重抄，
-同样以它的当次读数为准。**`paper` 不在门里**（2026-11-14 业主裁定：是否出 paper 由 M 自己判断时机）：
+五、完成定义（收工门八格全过 **且没有 blocker** 才算交付，两者缺一都不许说"完成"）：八格是 `contradictions` /
+`load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger` / `literature_pending`
+（待入库文献表：全表还有 `pending` ⇒ `fail`；当前委托提交之后没清表 —— 行上没有 `cleared_at` ⇒ `fail`；表读不到 ⇒
+`unknown`，**不是**"没有待裁"）；逐格判据以 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格
+它会在读数里逐格点名，这里不重抄，同样以它的当次读数为准。**`paper` 不在门里**（2026-11-14 业主裁定：是否出 paper 由 M 自己判断时机）：
 它是 `readings["paper"]` 那一格读数，不是判据 —— 但"正文与 PDF 对得上"仍要自己核、如实写进交付说明。
-**blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，七格全绿也照样拦）**：`statements_unsigned` ——
-既没有 V 签、也没有被明确放弃的命题（业主 2026-11-01 的裁定），两条出路是**改稿之后**重送 V 拿到干净的「成立」，或明确放弃
-（`status=abandoned` + `abandon_kind` + `abandon_basis`，再按四档给 `defect_ref` / `difficulty` + `salvaged` /
-`experiment_id` / `space`；理由不齐 ⇒
-写盘前受控拒，见 D / F 的政策与两份手册）；`mapping_not_written` —— 有命题、已成稿而论文包里
-没有对应表（`closing` 读数 `mapping_written` 那一格）。② **格上 blocker（把那一格判成 `fail`）**：
+**blocker 有两类，读法不同**：① **格外 blocker（不落在任何一格上，八格全绿也照样拦）**：`mapping_not_written` ——
+有命题、交付的是**论文包**（盘上有 `out/paper/main.tex` / `main.pdf`，或 `documents` 里有 `kind=paper` 的行）而
+论文包里没有对应表（`closing` 读数 `mapping_written` 那一格）；交付**研究手稿**（`documents` 只有 `kind=note/survey`）
+**不需要**对应表 —— 那一档 `applicable=false`、不欠表，也不许为了凑它去写一份空表。② **格上 blocker（把那一格判成 `fail`）**：
 `acceptance_unmet` 落在 `acceptance` 那一格；`paper_pdf_is_stale` 不再是格上 blocker —— 它是 `readings["paper"]` 的读数
 （`verdict` 记 `drifted`，改完正文没重编），由 M 判断要不要在收工时补编。
+**`statements_unsigned` 不是 blocker，是读数**（2026-11-16 裁定 3 + 追加裁定 B）：它落在
+`readings["statements_unsigned"]`，逐份列出「有稿无签」清单（`unsigned_manuscripts`：族 / 号 / sha / `class` / 为什么没签），
+`machine_pass` 不因它变假、**不挡收工**；台账读不出来 ⇒ `checked=false` + warning（不是「0 条」）。
+看见清单就逐份处置 —— 改稿之后重送 V 拿到干净的「成立」，或明确放弃（`status=abandoned` + `abandon_kind` + `abandon_basis`，
+再按四档给 `defect_ref` / `difficulty` + `salvaged` / `experiment_id` / `space`；理由不齐 ⇒ 写盘前受控拒，见 D / F 的政策与两份手册）
+—— 但那是**义务**，不是门的开关；别把清单读成「门没开」。
 只要 `closing` 的读数里 `blockers` 非空，就不算交付。
 1. **正文与 PDF 对得上**（`readings["paper"]` 那一格，判据只有一条）：编译回执里的
    `tex_sha256` 等于盘上这一份 `out/paper/main.tex` 的摘要 —— 那才叫"这份 PDF 是从盘上
