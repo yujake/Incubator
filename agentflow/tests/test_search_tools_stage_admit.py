@@ -439,8 +439,8 @@ def test_the_whole_list_is_refused_until_every_item_is_judged(reg, store):
     assert "## 已入库（2 篇）" in text and "## 未入库（1 篇）" in text, text
     assert "## 待裁（0 条）" in text, text
     assert "理由：rejected_low_quality" in text, text
-    # 已入库那一块必须带"它为什么与本次检索相关"
-    assert "相关性：" in text
+    # 已入库那一块必须带"它为什么与本次检索相关"（AR1：判定后的那一句理由）
+    assert "理由（相关性）：" in text
 
 
 def test_over_cap_is_folded_into_rejected_over_cap_and_leaves_no_fourth_state(reg, store):

@@ -290,13 +290,17 @@ def _candidate_row(ctx: _Ctx, slot: str) -> tuple[dict | None, ToolResult | None
 
 
 def _record_candidate_read(ctx: _Ctx, slot: str, request_id: str, source: str,
-                           res: ToolResult) -> None:
+                           res: ToolResult, row: dict | None = None) -> None:
     """把这一次抽读记进回执台账（成功/抽过但失败两档；文件没找到不算抽过）。
 
     为什么这里只认三个失败档（`garbled_text` / `no_text_layer` / `extract_error`）：
     `file_missing` / `not_a_file` / `no_target` 是"这一份根本没抽" —— 把它们记成
     `extract_failed` 会让"我连文件都没找到"冒充"抽过但正文坏了"，两者下一步相反
-    （前者换路径/换源，后者按 quality 判拒）。
+    （前者换路径/换源，后者按 quality 判拒）。这同时挡住了"随便给一个不存在的路径，
+    就凑出一条'尝试过'的回执"那条假路。
+
+    `row` 是这一条候选行：回执要把它的身份三格一起记下（`litavail.candidate_digest`），
+    于是 `readable` 的闸能核"读的是不是这一条候选"（业主裁定 3 的 P1-4）。
     """
     from .. import litavail as _LAV
     from .. import fs_observation as _OBS
@@ -307,6 +311,7 @@ def _record_candidate_read(ctx: _Ctx, slot: str, request_id: str, source: str,
     base = {
         "source": str(source or "").strip(),
         "actor": ctx.actor,
+        "candidate": row,
     }
     if res.ok:
         data = dict(res.data or {})
@@ -352,7 +357,8 @@ def _h_extract(ctx: _Ctx, path: str = "", lit_id: str = "", out_dir: str = "",
             kind="no_target", slot=slot)
     res = _extract_impl(ctx, path=path, lit_id="", out_dir=(out_dir or "out/texts"),
                         pages=pages, max_pages=max_pages, name_hint=f"cand-{slot}")
-    _record_candidate_read(ctx, slot, str(row.get("request_id") or ""), str(path), res)
+    _record_candidate_read(ctx, slot, str(row.get("request_id") or ""), str(path), res,
+                           row=row)
     if res.ok and isinstance(res.data, dict):
         # 把"这一抽是给哪一条候选的"带回去（键 `lit_id` 本来就在声明里，不新增键）。
         res.data["lit_id"] = f"cand:{slot}"

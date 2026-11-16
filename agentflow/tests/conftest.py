@@ -1725,8 +1725,19 @@ def lit_availability(store, request_id: str, slots, tier: str = "metadata_only")
 
     同上：这是测"别的闸"的用例的接缝 —— 逐条自审本身由
     `tests/test_lit_audit_is_per_item.py` 单独守着。
+
+    2026-11-16（AR1）：`metadata_only` 不再是零读可入，它要一条"试过、拿不到可读
+    文本"的 `extract_failed` 回执。所以这个夹具在写 `metadata_only` 时顺手补一条
+    同形的尝试回执（真机那一条由 `text.extract(cand:<槽>)` 失败时写）—— 否则
+    每个测"别的闸"的用例都会先被 `no_read_evidence` 挡在门外，测出来的不是它要
+    测的那件事。
     """
     from agentflow import litavail as AV
+    from agentflow import litread as LR
 
     for slot in slots:
         AV.record_availability(store.root, request_id, str(slot), tier)
+        if tier == AV.METADATA_ONLY:
+            AV.record_read(store.root, request_id, str(slot),
+                           LR.FULLTEXT_EXTRACT_FAILED,
+                           source="fixture:no-bytes", note="text.extract.no_text_layer")

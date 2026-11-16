@@ -20,7 +20,7 @@
 | a `test_a_submit_without_readback_is_refused_by_name` | 提交前必须 `lit.stage_list` 回读；没回执 / 回执没覆盖要提交的槽位 ⇒ 受控拒 `no_readback`，逐条点名 | AH6 整趟 0 次回读，10 条照样入库 |
 | b `test_b_every_candidate_needs_a_readability_verdict` | 每个要入库的候选必须有四档之一的可读性判定；没有 ⇒ `missing_availability`，一条都不入 | 闸只问 relevance，不问"拿到了什么" |
 | c `test_c_extract_failed_and_unknown_never_enter_the_library` | `extract_failed` / `unknown` 不许入库（留在候选记录、写明原因）；`metadata_only` 必须指得出处 | 那 2 条乱码的照样入库（`status=ok/error=""`） |
-| d `test_d_metadata_only_with_a_locator_is_admitted` | ④ 的判断：仅题录可入库，但必须带 DOI/URL | ——（这是本次做出的取舍，见交付说明） |
+| d `test_d_metadata_only_with_a_locator_is_admitted` | ④ 的判断：仅题录可入库，但必须带 DOI/URL；AR1 起还要一条 `extract_failed` 尝试回执（零读不再可入） | ——（这是本次做出的取舍，见交付说明） |
 | e `test_e_report_lists_availability_in_all_three_blocks` | 报告三块逐条列可读性；`report_violations` 对"已入库却没有可读性栏 / 档位不许入"报违规 | 报告三块没有这一栏 |
 | f `test_f_negative_control_stubbing_availability_lets_extract_failed_in` | 反真空：把可读性判定打桩成恒 `readable` ⇒ c 的判据必红 | —— |
 | g `test_g_negative_control_stubbing_the_receipt_lets_a_non_readback_submit_through` | 反真空：把回执打桩成"全覆盖" ⇒ a 必红 | —— |
@@ -106,6 +106,16 @@ def _lit_titles(store: Store) -> list[str]:
     return [str(r.get("title") or "") for r in store.rows("literature")]
 
 
+def _attempt(store: Store, slot: str, *, rid: str = RID) -> dict:
+    """给一条"仅题录"候选补一条读取尝试回执（AR1：零读取尝试不再可入）。
+
+    真机那一条由 `text.extract(cand:<槽>)` 失败时写（`extract_failed`）；夹具直接
+    `record_read` 是为了让本文件继续只测它自己那一道闸。
+    """
+    return AV.record_read(store.root, rid, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
+                          source="fixture:no-bytes", note="text.extract.no_text_layer")
+
+
 # ====================================================================== a 回读闸
 
 
@@ -127,6 +137,8 @@ def test_a_submit_without_readback_is_refused_by_name(store: Store, reg) -> None
 
     # 回读之后（对着同一份清单）同一笔就过
     _readback(reg)
+    for slot in slots:
+        _attempt(store, slot)
     ok = _admit(reg, items)
     assert ok.ok, ok.error
     assert len(ok.unwrap()["admitted"]) == 2, ok.unwrap()
@@ -201,6 +213,7 @@ def test_d_metadata_only_with_a_locator_is_admitted(store: Store, reg) -> None:
     """
     slots = _stage(reg, ["Locator paper"])          # 夹具给了 DOI
     _readback(reg)
+    _attempt(store, slots[0])
     ok = _admit(reg, [{"slot": slots[0], "availability": AV.METADATA_ONLY}])
     assert ok.ok and len(ok.unwrap()["admitted"]) == 1, ok.unwrap()
     assert AV.tiers_by_slot(store.root)[slots[0]] == AV.METADATA_ONLY
@@ -304,6 +317,8 @@ def test_g_negative_control_stubbing_the_receipt_lets_a_non_readback_submit_thro
     items = [{"slot": s, "availability": AV.METADATA_ONLY} for s in slots]
     assert not _admit(reg, items).ok
 
+    for slot in slots:
+        _attempt(store, slot)
     monkeypatch.setattr(L, "readback_receipt",
                         lambda store, rid: {"request_id": rid, "slots": list(slots)})
     after = _admit(reg, items)

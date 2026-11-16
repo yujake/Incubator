@@ -387,7 +387,9 @@ def _availability_reason(request_id: str, bad: Sequence[tuple[str, str]],
       metadata_only；抽过但失败写 extract_failed），不要拿"没查"当"可读"；
     - `extract_failed`：抽过但失败 —— 不入库，按受控理由码判拒（`rejected_low_quality`），
       候选行留着、原因写在行上；
-    - `metadata_only` 且没有定位符：仅题录可以入，但它必须指得出处（DOI 或 URL）。
+    - `metadata_only` 且没有定位符：仅题录可以入，但它必须指得出处（DOI 或 URL）；
+      2026-11-16（AR1）起它还必须有一条"试过、拿不到可读文本"的 `extract_failed`
+      尝试回执 —— 零读取尝试的仅题录由后面的 `_read_evidence_gate` 按同一档拒。
     """
     scope = f"本次委托（{request_id}）" if request_id else "本委托"
     parts: list[str] = []
@@ -914,7 +916,7 @@ def list_candidates(
     # 列表上就能看见"这一条有字节但抽不出可读文本"，而不是空白一个"未查"。
     # 成功那一侧不替 A 报 readable —— 抽出来可读 ≠ A 读过（读过要 fs.read）。
     for slot, receipt in LAV.receipts_by_slot(store.root).items():
-        if _tier_of_receipt(receipt):
+        if slot not in tiers and _tier_of_receipt(receipt):
             tiers[slot] = _tier_of_receipt(receipt)
     for r in rows:
         r["availability"] = tiers.get(str(r.get("slot") or ""), "")
@@ -1072,17 +1074,20 @@ def _readback_gate(store: Store, rid: str, wanted: Sequence[str],
 
 def _read_evidence_gate(store: Store, rid: str, wanted: Sequence[str],
                         tiers: Mapping[str, str],
+                        by_slot: Mapping[str, Mapping[str, Any]],
                         base: Mapping[str, Any]) -> dict | None:
-    """读证据闸（业主裁定 3）：`readable` 要有"抽过 + 读过"的事实，不是 A 的一句话。
+    """读证据闸（业主裁定 3 / AR1）：有回执才准判准入，不是 A 的一句话。
 
-    两件事一起判（判据真身在 `litavail.check_read`）：
+    两档一起判（判据真身在 `litavail.check_read`）：
 
-    - `readable`：这一条必须 `check_read == "ok"` —— 抽读回执在、抽读件还是那一版、
-      A 用 `fs.read` 读过同一版。只抽不读 ⇒ `not_read`；抽过但失败 ⇒ `extract_failed`；
-      没抽过 ⇒ `no_extract`。三种都逐槽点名，而不是一句"请先读"。
-    - `metadata_only`：这一条不许有抽读回执 —— 有回执就说明盘上已经有字节/正文，
-      "仅题录"是假话。正确的档位是 `readable`（读了）或 `extract_failed`（抽过失败，
-      按受控理由码判拒）；`unknown` 不入库。
+    - `readable`：这一条必须 `check_read == "ok"` —— 抽读回执在、回执绑的是这一条
+      候选（身份三格 + `cand-<槽>.txt`）、抽读件还是那一版、A 用 `fs.read` 读过同一版。
+      只抽不读 ⇒ `not_read`；抽过但失败 ⇒ `extract_failed`；没抽过 ⇒ `no_extract`。
+      三种都逐槽点名，而不是一句"请先读"。
+    - `metadata_only`：不是零读可入（AR1 / VC1 P0-1）。它必须有"试过、但拿不到
+      可读文本"的那条 `extract_failed` 回执；没有回执（`no_extract`）⇒ 拒；有字节且
+      抽出了正文（`ok` / `not_read` / `text_changed` …）⇒ 也拒（盘上有字节，仅题录是假话）。
+      `metadata_only` 不核候选身份：它证明的是"试过一次"，不是"读过"。
 
     返回 `None` = 放行；否则整笔受控拒（`no_read_evidence`，逐条给 `read_problems`）。
     """
@@ -1093,20 +1098,27 @@ def _read_evidence_gate(store: Store, rid: str, wanted: Sequence[str],
         if tier == LAV.EXTRACT_FAILED:
             # 这一档由 `_availability_gate` 拦（它先跑）：这里不重复报同一个原因。
             continue
-        state, why = LAV.check_read(store.root, slot, receipts.get(slot))
+        receipt = receipts.get(slot)
+        # 只有 readable 要核"读的是这一条候选"（P1-4）；metadata_only 只核"试过没有"。
+        expected = (LAV.candidate_digest(by_slot.get(slot) or {})
+                    if tier == LAV.READABLE else None)
+        state, why = LAV.check_read(store.root, slot, receipt, expected=expected)
         if tier == LAV.READABLE:
             if state != "ok":
                 problems.append({"slot": slot, "state": state, "why": why})
-        elif tier == LAV.METADATA_ONLY and receipts.get(slot) is not None:
-            if state == "ok":
-                detail = (f"这一条抽读过并 `fs.read` 过（{int(receipts[slot].get('chars') or 0)} 字），"
-                          "不是仅题录")
+        elif tier == LAV.METADATA_ONLY:
+            if state == "extract_failed":
+                continue
+            if state == "no_extract":
+                why = ("零读取尝试：`data/lit_reads.jsonl` 里没有这一条。仅题录也要先试一次"
+                       "抽取 —— 拿不到可读文本（`extract_failed` 回执）才允许按仅题录入库")
+                state = "no_attempt"
+            elif state == "ok":
+                why = (f"这一条抽出了可读正文（{int((receipt or {}).get('chars') or 0)} 字），"
+                       "盘上有字节就不能报仅题录：读了报 readable，否则按受控理由码判拒")
             else:
-                detail = why
-            problems.append({
-                "slot": slot, "state": state,
-                "why": f"这一条有抽读记录（盘上有字节），不能报 metadata_only —— {detail}",
-            })
+                why = f"仅题录要求一条'试过、拿不到可读文本'的回执；这一条停在 {state}：{why}"
+            problems.append({"slot": slot, "state": state, "why": why})
     if not problems:
         return None
     return {**base, "ok": False, "kind": "no_read_evidence", "whole_call_refused": True,
@@ -1119,6 +1131,8 @@ def _read_evidence_reason(rid: str, problems: Sequence[Mapping[str, Any]]) -> st
 
     为什么不写成"请先读再判"：A 需要知道的是这一槽停在"没抽""抽了没读"还是
     "抽过失败"—— 三种的下一步不同（下载/抽、fs.read、判拒）。
+    2026-11-16（AR1）起 `metadata_only` 也在这道闸里：它不是"没查"的写法，是
+    "试过、拿不到可读文本"的写法 —— 连一次抽读回执都没有的仅题录，按同一档拒。
     """
     scope = f"本次委托（{rid}）" if rid else "本委托"
     parts = [f"{p.get('slot')}：{p.get('why')}" for p in problems]
@@ -1127,12 +1141,14 @@ def _read_evidence_reason(rid: str, problems: Sequence[Mapping[str, Any]]) -> st
         "口径：`readable` 不是自报。判收成 readable 的每一条都要先抽读、再读：\n"
         "① `search.download` 拿到全文的 `rel_path`（或盘上那份文件的路径）；\n"
         "② `text.extract(path=<路径>, lit_id=\"cand:<槽位>\")` —— 抽出的 `.txt` 与一条"
-        "抽读回执会一起落盘；\n"
+        "抽读回执会一起落盘（回执记着这一条候选的身份与抽读件版本）；\n"
         "③ `fs.read` 那份 `.txt`（闸核的是你读的与抽读件是同一版）；\n"
         "④ 然后再 `lit.admit`（`items[].availability=\"readable\"` + 那条候选自己的 "
         "`relevance`）。\n"
-        "没有字节 / 真读不了的：`metadata_only` 只给**盘上没有字节**的条目（必须指得出处 "
-        "DOI/URL）；抽过但失败（乱码/无文本层）的按 `extract_failed` 判 "
+        "只想录题录（`metadata_only`）的那一条：也要先走 ② 试一次抽读。抽不出来"
+        "（`no_text_layer` / 乱码 / 抽取报错）会留下一条 `extract_failed` 回执，"
+        "拿着它再报 `metadata_only` + DOI/URL 才能入库；**一次都没试过的仅题录会被"
+        "这一道闸按零读取尝试拒掉**。抽过但正文可读却不想读的，按 `extract_failed` 判 "
         "`lit.stage_reject`（`reason_code=\"rejected_low_quality\"`）。"
     )
 
@@ -1395,7 +1411,7 @@ def admission_plan(
     refused_gate = _availability_gate(rid, wanted, by_slot, tiers, scoped, base)
     if refused_gate is not None:
         return refused_gate
-    refused_gate = _read_evidence_gate(store, rid, wanted, tiers, base)
+    refused_gate = _read_evidence_gate(store, rid, wanted, tiers, by_slot, base)
     if refused_gate is not None:
         return refused_gate
     if on_over_cap == "refuse_all":
@@ -1881,44 +1897,75 @@ def _tier_of_receipt(receipt: Mapping[str, Any] | None) -> str:
     为什么只补这一档：抽读失败是机器判得出的事实（抽出来的不是可读文本），
     不需要等 A 的一句话；而"抽出来可读"不等于" A 读过" —— 那一档要抽读 + `fs.read`
     两道证据（`check_read`），不能由回执替 A 声明。
+
+    调用点只把它当缺省填写：A 已经报过的档位不覆盖（2026-11-16 AR1 之后
+    `metadata_only` 允许带一条 `extract_failed` 尝试回执，覆盖会让报告写出一档
+    与准入判定相反的读数）。
     """
     if receipt and str(receipt.get("tier") or "") == LR.FULLTEXT_EXTRACT_FAILED:
         return LAV.EXTRACT_FAILED
     return ""
 
 
-def _read_suffix(receipt: Mapping[str, Any] | None) -> str:
-    """报告里那一格"读过什么"（没有抽读回执就不写 —— 缺省不是"读过"）。
+def _receipt_summary(receipt: Mapping[str, Any] | None) -> str:
+    """报告那一行「回执」：`data/lit_reads.jsonl` 里这一条那一行的摘要。
 
-    这是"逐条判断可查"的读数面：读者看得到这一条抽出了多少字，而不是只看 A 报的
-    一个档位。抽读失败也如实写；"未写"与"没读"在报告上不许同形。
+    为什么必须以回执为源、而不是报告自己另拼一句：业主 2026-11-16 裁定（AR1）
+    "抽读回执落进 A 稿，作为批准入库或拒绝入库的理由栏" —— 报告里的字数 / 指纹 /
+    抽读件路径 / 时间必须与台账逐字对得上，读者（D/H/人）不必回头猜报告是不是
+    另写了一份。所以 `write_report` 现读 `litavail.receipts_by_slot`，这里只做排版。
+
+    没有回执 ⇒ 写"无 + 零读取尝试"：缺省不是"读过"，也不是空白。
     """
     if not receipt:
-        return ""
+        return "无（`data/lit_reads.jsonl` 里没有这一条 —— 零读取尝试）"
     tier = str(receipt.get("tier") or "")
+    at = str(receipt.get("at") or "")
+    source = str(receipt.get("source") or "")
     if tier == LR.FULLTEXT_OK:
+        parts = [f"抽读档位 {tier}", f"读过 {int(receipt.get('chars') or 0)} 字"]
         sha = str(receipt.get("sha256") or "")
-        return (f"；读过 {int(receipt.get('chars') or 0)} 字"
-                + (f"（抽读件指纹 {sha[:12]}）" if sha else ""))
+        if sha:
+            parts.append(f"指纹 sha256:{sha[:12]}")
+        text = str(receipt.get("text") or receipt.get("text_abs") or "")
+        if text:
+            parts.append(f"抽读件 {text}")
+        if source:
+            parts.append(f"来源 {source}")
+        if at:
+            parts.append(f"时间 {at}")
+        return "；".join(parts)
     if tier == LR.FULLTEXT_EXTRACT_FAILED:
-        return "；抽读失败（extract_failed）"
-    return ""
+        parts = ["抽读档位 extract_failed（没拿到可读字节）",
+                 f"尝试过 {source or '（未记来源）'}（{receipt.get('note') or 'text.extract 失败'}）"]
+        if at:
+            parts.append(f"时间 {at}")
+        return "；".join(parts)
+    return f"抽读档位 {tier or '（空）'}（不是 ok / extract_failed 的受控取值）"
 
 
 def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
                     *, generated_at: str = "",
                     availability: Mapping[str, str] | None = None,
                     reads: Mapping[str, Mapping[str, Any]] | None = None) -> str:
-    """委托报告正文：三块都必须有，且每一块逐条列「可得性」。
+    """委托报告正文：三块都必须有，且每一块逐条列「可得性」「判定」「回执」。
 
-    - `## 已入库`：每篇的 `lit_id` / 标题 / 年份 / DOI（或 provider）+ 一句"为什么与本次
-      检索相关"（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）+
+    - `## 已入库`：每篇的 `lit_id` / 标题 / 年份 / DOI（或 provider）+ `判定：批准入库`
+      + `回执：…`（`data/lit_reads.jsonl` 的摘要：档位 / 字数 / sha 指纹 / 抽读件路径 /
+      时间；没字节的写"取不到可读字节 + 尝试过什么"）+ A 自己写的
+      `理由（相关性）：…`（`relevance`，没写就退回 `new_content`，再没有就写明"未写"）+
       `可得性：<档>（<tier>）`；
     - `## 未入库`：每篇的槽位 / 标题 / 受控理由码（`schema.CANDIDATE_REASON_CODES`）
-      + 一行散文（拒收 / 重叠度高无新内容 / 超配额 …）+ `可得性：…`。历史档（`cleared` /
-      `withdrawn`）在这里按折算后的 `rejected` 出现；
-    - `## 待裁`：还没判的每一条（`undecided`）+ `可得性：…` —— 这一块是要害：没有它，
-      "A 还没读的那几条"在报告上与"根本没检索到"同形，而它们下一步的动作完全不同。
+      + 一行散文（拒收 / 重叠度高无新内容 / 超配额 …）+ `判定：拒绝入库` + `回执：…`
+      + `可得性：…`。历史档（`cleared` / `withdrawn`）在这里按折算后的 `rejected` 出现；
+    - `## 待裁`：还没判的每一条（`undecided`）+ `判定：待裁` + `回执：…` +
+      `可得性：…` —— 这一块是要害：没有它，"A 还没读的那几条"在报告上与"根本没检索到"
+      同形，而它们下一步的动作完全不同。
+
+    判定 / 回执 / 理由三件（AR1）：判定是 A 的判词，回执是机器的事实，理由是 A 自己
+    写的"质量如何、相关度如何、为什么这个判定"。三者同源可核：回执那一行来自
+    `reads`（`write_report` 现读 `lit_reads.jsonl`），理由那一行来自候选行的
+    `relevance` / `reject_reason`，报告不另造一份。
 
     可得性这一栏（业主裁定 ⑥）的来源是 `litavail` 的旁路台账（`availability` 参数：
     `slot -> tier`）；没给 / 没记录 ⇒ `未查（unknown）`。不许把缺省写成 `可读全文`：
@@ -1964,22 +2011,24 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         lines.append("（无）")
     missing_relevance: list[str] = []
     for r in admitted:
+        slot = str(r.get("slot") or "")
         doi = r.get("doi") or f"provider={r.get('provider') or '?'}"
         lit_id = str(r.get("lit_id") or "?")
         lines.append(f"- `lit:{r.get('lit_id')}` 《{r.get('title')}》"
                      f"（{r.get('year') if r.get('year') is not None else '年份不详'}）"
                      f" {doi}")
+        lines.append("  判定：批准入库")
+        lines.append(f"  回执：{_receipt_summary(read_by_slot.get(slot))}")
         why = str(r.get("relevance") or r.get("new_content") or "").strip()
         if why:
-            lines.append(f"  相关性：{why}")
+            lines.append(f"  理由（相关性）：{why}")
         else:
             # 兜底不许是一句"谁都对得上"的话：
             # 那样读者看不出缺的是哪几条，也没法回头去要那一句。
-            lines.append(f"  相关性：未写（缺的是 `lit:{lit_id}` 这一条的 "
+            lines.append(f"  理由（相关性）：未写（缺的是 `lit:{lit_id}` 这一条的 "
                          "relevance / new_content）")
             missing_relevance.append(lit_id)
-        lines.append(f"  可得性：{LAV.describe_tier(tiers.get(str(r.get('slot') or ''), ''))}"
-                     f"{_read_suffix(read_by_slot.get(str(r.get('slot') or '')))}")
+        lines.append(f"  可得性：{LAV.describe_tier(tiers.get(slot, ''))}")
     if missing_relevance:
         # 一行点名缺哪几条（同时是 `report_violations` 的机器读数入口：
         # 已入库的行全缺相关性说明时它记一条 violation，同时 `## 待裁` 块会把
@@ -1998,6 +2047,7 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
             candidate_identity(r.get("title"), r.get("doi")),
             str(r.get("lit_id") or ""))
     for r in other:
+        slot = str(r.get("slot") or "")
         code = str(r.get("reason_code") or "(未登记理由码)")
         detail = (str(r.get("reject_reason") or "").strip()
                   or str(r.get("withdrawn_reason") or "").strip()
@@ -2008,8 +2058,9 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
                 if twin else "")
         lines.append(f"- 槽位 {r.get('slot')} 《{r.get('title')}》 — 理由：{code}"
                      f"（{code_text}）" + (f"；{detail}" if detail else "") + tail
-                     + f"；可得性：{LAV.describe_tier(tiers.get(str(r.get('slot') or ''), ''))}"
-                     + f"{_read_suffix(read_by_slot.get(str(r.get('slot') or '')))}")
+                     + f"；可得性：{LAV.describe_tier(tiers.get(slot, ''))}")
+        lines.append("  判定：拒绝入库")
+        lines.append(f"  回执：{_receipt_summary(read_by_slot.get(slot))}")
     lines += ["", f"## 待裁（{len(waiting)} 条）", ""]
     if not waiting:
         lines.append("（无）")
@@ -2018,8 +2069,9 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         lines.append(f"- 槽位 {item['slot']} "
                      f"《{T.clip(str(item.get('title') or ''), UNDECIDED_TITLE_CHARS)}》"
                      f" — {item['why']}"
-                     f"；可得性：{LAV.describe_tier(tiers.get(slot, ''))}"
-                     f"{_read_suffix(read_by_slot.get(slot))}")
+                     f"；可得性：{LAV.describe_tier(tiers.get(slot, ''))}")
+        lines.append("  判定：待裁（还没判）")
+        lines.append(f"  回执：{_receipt_summary(read_by_slot.get(slot))}")
     lines.append("")
     return "\n".join(lines)
 
@@ -2038,7 +2090,9 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
     tiers = LAV.tiers_by_slot(store.root)
     reads = LAV.receipts_by_slot(store.root)
     for slot, receipt in reads.items():
-        if _tier_of_receipt(receipt):
+        # 只补 A 没报过的那一格：A 报 `metadata_only` 时允许带一条 `extract_failed`
+        # 尝试回执（AR1），覆盖会让报告写出一档与准入判定相反的可得性。
+        if slot not in tiers and _tier_of_receipt(receipt):
             tiers[slot] = _tier_of_receipt(receipt)
     text = report_markdown(rid, body_rows, generated_at=generated_at,
                            availability=tiers, reads=reads)
@@ -2177,8 +2231,9 @@ _REPORT_ADMITTED_ROW = re.compile(r"^-\s*`lit:([^`]+)`\s*《")
 def _relevance_violations(admitted_text: str) -> list[str]:
     """已入库的条目 relevance 全空 ⇒ 一条违规读数（只记读数，不拦门）。
 
-    为什么要这一档：`relevance` 是"它为什么与本次检索
-    相关"的那一句，报告「已入库」一块要用它；而 A 的自动链路暂存候选时一次
+    为什么要这一档：`relevance` 是"它为什么与本次检索相关"的那一句，报告「已入库」
+    一块要用它（AR1 之后它的行名是 `理由（相关性）：` —— 判定之后紧跟的那一句就是
+    A 自己写的理由）；而 A 的自动链路暂存候选时一次
     都没带过 relevance，于是这一格永远空着 —— 报告照常写出，没有任何一处会
     因此变红，那一句就永远缺着。
 
@@ -2196,7 +2251,7 @@ def _relevance_violations(admitted_text: str) -> list[str]:
             current = hit.group(1)
             entries.append(current)
             continue
-        if current and line.startswith("相关性：") and "未写" in line:
+        if current and line.startswith("理由（相关性）：") and "未写" in line:
             missing.append(current)
     if entries and len(missing) == len(entries):
         return [

@@ -2174,7 +2174,8 @@ def _registrar_from_candidate(ctx: _Ctx, row: Mapping[str, Any]) -> dict:
     state = "no_extract"
     if ctx.store is not None:
         receipt = LAV.receipts_by_slot(ctx.store.root).get(slot)
-        state, _why = LAV.check_read(ctx.store.root, slot, receipt)
+        state, _why = LAV.check_read(ctx.store.root, slot, receipt,
+                                     expected=LAV.candidate_digest(row))
     source = str((receipt or {}).get("source") or "") if state == "ok" else ""
     res = _h_register(
         ctx,

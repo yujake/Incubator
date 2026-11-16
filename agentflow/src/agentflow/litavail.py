@@ -15,9 +15,14 @@
 四档（裁定 16 的 `extract_failed` 是新增的第四档，不是模型自拼的 `pdf_no_text`）：
 
     readable       可读全文（有字节、且抽得出可读文本）
-    metadata_only  仅题录（只有书目元数据，没有本地字节）
+    metadata_only  仅题录（试过一次抽取也没拿到可读文本，只剩书目元数据）
     extract_failed 有字节但抽取失败（抽过、抽出来的不是可读文本 —— 含乱码与无文本层）
     unknown        未查（这一条还没审过可读性；"没查"不许折成"可读"）
+
+    2026-11-16 业主裁定（AR1）把 `metadata_only` 从"零读可入"改为"必须有一次读取尝试的
+    回执"：它不再是"我没查"，而是"我试过，拿不到可读字节"。判据在
+    `litstage._read_evidence_gate`：没有 `extract_failed` 那条回执就按 `no_read_evidence`
+    整批拒并逐槽点名 —— 档位本身保留（VC1 的 P0-1 靠这条收紧解决，而不是删档）。
 
 ## 为什么不加一列（零 schema，FC-27）
 
@@ -67,6 +72,7 @@ __all__ = [
     "READ_LEDGER_NAME",
     "TIER_LABELS",
     "UNKNOWN",
+    "candidate_digest",
     "check_read",
     "describe_tier",
     "is_admissible",
@@ -246,10 +252,28 @@ def receipts_by_slot(root: Path | str) -> dict[str, dict]:
     return out
 
 
+def candidate_digest(row: Mapping[str, Any] | None) -> dict | None:
+    """抽读回执里"这一条候选是谁"的三格（读写两侧共用同一把尺子）。
+
+    为什么要它：`slot` 只证明"这一次抽读记在哪个槽上"，不证明"抽的是这一条候选"。
+    写侧从候选行抄这三格进回执，读侧（`check_read` 的 `expected`）拿候选行再核一遍，
+    于是"拿另一条候选的回执来冒充"会在闸上被逐槽点名（`other_candidate`），
+    而不是因为槽位号碰巧对上就放行。
+    """
+    if not row:
+        return None
+    return {
+        "request_id": str(row.get("request_id") or ""),
+        "title": str(row.get("title") or ""),
+        "doi": str(row.get("doi") or ""),
+    }
+
+
 def record_read(root: Path | str, request_id: str, slot: str, tier: str, *,
                 source: str = "", text: str = "", text_abs: str = "",
                 text_version: str = "", chars: int = 0, sha256: str = "",
                 quality: Mapping[str, Any] | None = None, note: str = "",
+                candidate: Mapping[str, Any] | None = None,
                 actor: str = "agent-A") -> dict:
     """写一条抽读回执（追加）。`tier` 只认 `ok` / `extract_failed` 两档。
 
@@ -258,8 +282,11 @@ def record_read(root: Path | str, request_id: str, slot: str, tier: str, *,
     这一行回答的是"这一份正文真的被抽出来过吗"，不是"谁说他读了"。所以它必须由
     做抽读的那件工具写：模型可以自报 `availability=readable`，但它没法凭空造出
     一条带 `sha256` / `chars` / 抽读件版本的回执 —— 抽读没发生，就没有那份文件，
-    也就没有版本可写。判据（`check_read`）随后核的是"回执在 + 抽读件还是那一版 +
-    `fs.read` 观察台账里有它"。
+    也就没有版本可写。判据（`check_read`）随后核的是"回执在 + 回执绑的是这一条候选 +
+    抽读件还是那一版 + `fs.read` 观察台账里有它"。
+
+    `candidate` 是候选行的身份三格（`candidate_digest`）：候选期抽读
+    （`lit_id="cand:<槽位>"`）必须带上，`readable` 那一档的闸要按它核"读的是不是这一条"。
 
     过期抽读件（同一槽位再抽一次）由后写的覆盖先写的：`receipts_by_slot` 取最后一条，
     于是"上次抽成功、这次抽失败"会如实变成 `extract_failed`，不会被旧成功掩盖。
@@ -283,6 +310,7 @@ def record_read(root: Path | str, request_id: str, slot: str, tier: str, *,
         "sha256": str(sha256 or "").strip(),
         "quality": dict(quality or {}),
         "note": str(note or "").strip()[:400],
+        "candidate": candidate_digest(candidate),
         "at": _now(),
         "actor": str(actor or ""),
     }
@@ -293,19 +321,52 @@ def record_read(root: Path | str, request_id: str, slot: str, tier: str, *,
     return rec
 
 
+def _binding_problem(slot: str, receipt: Mapping[str, Any],
+                     expected: Mapping[str, Any] | None) -> tuple[str, str]:
+    """回执绑的是不是这一条候选的抽读件；返回 `("", "")` = 绑得上。
+
+    两步（业主 2026-11-16 裁定 3 的 P1-4：`readable` 读的必须是这一份候选的抽读件）：
+
+    1. 回执里记的候选身份三格（委托 / 题名 / DOI）必须与候选行逐格相同 ——
+       没记（旧版回执 / 手工伪造）按"绑不上"处理，不是按"默认这一条"；
+    2. 抽读件必须是候选期给这个槽写的那一份（`cand-<槽位>.txt`）——
+       "另一条候选的 `.txt`"即使内容可读，也不是这一条读过的证据。
+    """
+    if expected is None:
+        return ("", "")
+    got = receipt.get("candidate")
+    if not isinstance(got, Mapping):
+        return ("unbound", "抽读回执没记候选身份（这一版回执不绑候选，不能证明读的是这一条）")
+    for key, label in (("request_id", "委托"), ("title", "题名"), ("doi", "DOI")):
+        if str(got.get(key) or "") != str(expected.get(key) or ""):
+            return ("other_candidate",
+                    f"抽读回执不是给这一条候选的（{label} 对不上：回执 "
+                    f"{got.get(key)!r} / 候选 {expected.get(key)!r}）")
+    name = Path(str(receipt.get("text") or receipt.get("text_abs") or "")).stem
+    if name != f"cand-{slot}":
+        return ("other_text",
+                f"抽读件 {name!r} 不是这一条候选的抽读件（候选期该落 cand-{slot}.txt）")
+    return ("", "")
+
+
 def check_read(root: Path | str, slot: str,
-               receipt: Mapping[str, Any] | None = None) -> tuple[str, str]:
+               receipt: Mapping[str, Any] | None = None, *,
+               expected: Mapping[str, Any] | None = None) -> tuple[str, str]:
     """这一条到底读没读：返回 `(state, why)`；`state == "ok"` 才算读过。
 
-    判据分三步，缺一不可（三态：没抽 / 抽了没读 / 读了）：
+    判据分四步，缺一不可（三态：没抽 / 抽了没读 / 读了）：
 
     1. 抽读回执在，且那一档是 `ok`（`extract_failed` 是"抽过但失败"，不是读过）；
-    2. 抽读件还在盘上、且还是回执写下的那一版（版本令牌取 `fs_observation.version_of`，
+    2. 回执绑的是这一条候选（`expected` 给了才核：身份三格 + `cand-<槽>.txt`）——
+       同一份回执换个槽位号、或读的是另一条候选的抽读件，都不算；
+    3. 抽读件还在盘上、且还是回执写下的那一版（版本令牌取 `fs_observation.version_of`，
        与 `fs.read` 登记的是同一把尺子）—— 抽完又被改写/删掉，读的就不是现在这一份；
-    3. `fs.read` 的观察台账里有这一份同一版本的读（owner 是当前 `(角色, 委托)`）——
+    4. `fs.read` 的观察台账里有这一份同一版本的读（owner 是当前 `(角色, 委托)`）——
        抽读是机器做的，读是 A 做的；少了这一步，"抽了"会被当成"读了"。
 
     `receipt` 可以显式给（闸一次读出全部槽位的回执，避免每槽重读文件）；不给就现查。
+    `expected` 是候选行的身份三格（`candidate_digest`）：`readable` 那一档必须给，
+    `metadata_only` 那一档不核身份（它证明的是"试过一次、拿不到可读文本"，不是"读过"）。
     返回的 `why` 是拒信里逐条点名用的那句话（不是"没读"三个字）。
     """
     r = dict(receipt) if receipt is not None else receipts_by_slot(root).get(str(slot or ""))
@@ -322,6 +383,9 @@ def check_read(root: Path | str, slot: str,
     version = str(r.get("text_version") or "").strip()
     if not text_abs or not version:
         return ("no_text", "抽读回执里没有抽读件的路径/版本（这一条判不了）")
+    bound, why = _binding_problem(str(slot or ""), r, expected)
+    if bound:
+        return (bound, why)
     from . import fs_observation as OBS
 
     if OBS.version_of_path(Path(text_abs)) != version:

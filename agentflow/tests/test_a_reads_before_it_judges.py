@@ -5,9 +5,9 @@
 
 | 读数 | 值 |
 |---|---|
-| A1 的 43 步里 `text.extract` | **0 次** |
-| A1 对候选的 `fs.read` | **0 次** |
-| A1 整趟 `lit.stage_list` | **0 次** |
+| A1 的 43 步里 `text.extract` | 0 次 |
+| A1 对候选的 `fs.read` | 0 次 |
+| A1 整趟 `lit.stage_list` | 0 次 |
 | 07:31:29 | 一次 `lit.stage_add` 把 12 条候选连同 12 条 `relevance` 写进列表 |
 | 07:32:41 | 一次 `lit.admit` 10 条通过 |
 | 结果 | 12 条入库里 10 条只有题录、2 条有字节但抽取两次乱码 |
@@ -21,7 +21,7 @@
 |---|---|---|
 | a | 标 `readable` 但没有任何抽读记录 ⇒ 受控拒 `no_read_evidence`，逐条点名 | 07:32:41 那 10 条就是这样进来的 |
 | b | 抽过但没读（没有 `fs.read` 那份 `.txt`）也算没读 ⇒ 仍拒；读了才放行 | "抽了"被当成"读了" |
-| c | 有字节（抽过）却报 `metadata_only` ⇒ 拒（仅题录只给"盘上没有字节"的） | 2 条乱码 PDF 被折成仅题录 |
+| c | 有字节（抽过）却报 `metadata_only` ⇒ 拒；零读取尝试的仅题录也拒（AR1：仅题录 = 试过一次、拿不到可读文本）—— 只有带 `extract_failed` 尝试回执的那一条可入 | 2 条乱码 PDF 被折成仅题录；零读可入 |
 | d | 逐条判断落读数：可读性台账里带 `relevance` 与抽读指纹（字数/哈希），报告逐条写"读过 N 字" | 台账只有档位、报告没有"读过什么" |
 | e | AH6 的批量形状（12 条 relevance 一次写死、零抽读）⇒ 拒信点名那几条；把闸打桩关掉 ⇒ 同一笔能进（反真空） | 批量写死没有任何东西挡 |
 
@@ -166,7 +166,8 @@ def test_b_extracted_but_not_read_is_still_not_read(store: Store, reg) -> None:
 
 
 def test_c_metadata_only_is_only_for_candidates_without_bytes(store: Store, reg) -> None:
-    """c. 有字节（抽过）却报 `metadata_only` ⇒ 拒；真的没有字节的那一条可以仅题录入库。"""
+    """c. `metadata_only` 不是零读可入（AR1）：没试过 ⇒ 拒；有字节却报仅题录 ⇒ 拒；
+    试过、拿不到可读文本（`extract_failed` 回执）⇒ 可以仅题录入库。"""
     slots = _stage(reg, ["Has bytes", "No bytes"])
     _readback(reg)
     ext = _extract(store, reg, slots[0])
@@ -176,12 +177,21 @@ def test_c_metadata_only_is_only_for_candidates_without_bytes(store: Store, reg)
         {"slot": slots[0], "availability": AV.METADATA_ONLY},
         {"slot": slots[1], "availability": AV.METADATA_ONLY},
     ])
-    assert not res.ok, "抽读过的一条被报成仅题录，居然入库了"
+    assert not res.ok, "一条抽读过、一条零尝试，居然都能按仅题录入库"
     assert res.meta["kind"] == "no_read_evidence", res.meta
-    assert [p["slot"] for p in res.meta["read_problems"]] == [slots[0]], res.meta
+    states = {p["slot"]: p["state"] for p in res.meta["read_problems"]}
+    assert states == {slots[0]: "ok", slots[1]: "no_attempt"}, res.meta
+    assert "零读取尝试" in str(res.error), res.error
     assert _lit_titles(store) == []
 
-    # 只交真的没有字节的那一条（有 DOI 定位符）⇒ 仅题录可以入
+    # 第二条真的试过一次抽取（乱码 ⇒ extract_failed 回执）⇒ 它在"拿不到可读文本"
+    # 这一档上留下证据，才允许按仅题录入库（有 DOI 定位符）。
+    p = _write_source(store, slots[1], "ok \x00\x00 broken")
+    failed = reg.call("text.extract", path=str(p.relative_to(store.root).as_posix()),
+                      lit_id=f"cand:{slots[1]}")
+    assert not failed.ok and failed.meta["kind"] == "garbled_text", failed.meta
+    assert AV.receipts_by_slot(store.root)[slots[1]]["tier"] == LR.FULLTEXT_EXTRACT_FAILED
+
     ok = _admit(reg, [{"slot": slots[1], "availability": AV.METADATA_ONLY}])
     assert ok.ok, ok.error
     assert _lit_titles(store) == ["No bytes"]
@@ -276,7 +286,8 @@ def test_f_negative_control_stubbing_the_read_state_lets_a_non_read_enter(
     items = [{"slot": slots[0], "availability": AV.READABLE}]
     assert not _admit(reg, items).ok
 
-    monkeypatch.setattr(AV, "check_read", lambda root, slot, receipt=None: ("ok", ""))
+    monkeypatch.setattr(AV, "check_read",
+                        lambda root, slot, receipt=None, **kw: ("ok", ""))
     after = _admit(reg, items)
     assert after.ok, (f"打桩成恒 ok 之后仍被拒 ⇒ 闸不是长在 `litavail.check_read` 上"
                       f"（{after.error}）")
