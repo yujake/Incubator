@@ -1304,6 +1304,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "（那本来就是 F 的动作，D 只被告知「由 F 动手」）。这一版只改了这一处，"
               "变化格 = D 一格，其余十格与 p283 逐字相同（版本行已归一）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p284 → p285（2026-11-16，CL2 / 12A）：facts 键集一格没动（还是 15 格）—— 本批只改
+     # 了 `conductor.void_items` 的摘要措辞（两处别家工具写明施事），没有哪一格事实换过
+     # 落点（system ↔ user），所以 count / keys_sha256 与 p284 同值。
+     {"version": "p285", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p285（2026-11-16，CL2 / 12A，审计 AU1 表一 A1）："
+              "`conductor.void_items` 的摘要里两处别家工具名写明施事 —— "
+              "「**主控**用 `conductor.board` 看它们」/「仍是**主控**的 "
+              "`conductor.wake_blocked`」。`conductor.board` 的 roles 只有 M，"
+              "而 void_items 发给 6 个父角色 ⇒ 原句在教 6 个拿不到它的角色去调。"
+              "变化格 = A / B / D / E / F / G / L / M（这八格读得到 void_items 那一行）；"
+              "C / H / V 是只读角色、面上没有它，逐字未动。facts 键集仍 15 格、落点没动。"},
 
 )
 

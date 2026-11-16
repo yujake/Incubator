@@ -2542,7 +2542,19 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 段变 D 一格；其余十格与 p283 逐字相同（版本行已归一）。逐格旧值 → 新值：
 #   D 77a8ae8b… → ce9d76c23513bdb05f7cc67fb805f8e002839c3fa8f013373501bb285fc5aa74
 # 现算（`temp/_p284_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）。
-_FROZEN_PROMPT_VERSION = "p284"
+# p285（2026-11-16，CL2 / 12A，审计 AU1 表一 A1）：`conductor.void_items` 的摘要里两处
+# 别家工具名写明施事（「主控用 `conductor.board` 看它们」/「仍是主控的
+# `conductor.wake_blocked`」）—— `conductor.board` 的 roles 只有 M，而 void_items 发给
+# 6 个父角色 ⇒ 原句在教 6 个拿不到它的角色去调。判据的施事豁免同时从整行收紧到分句
+# （`tests/test_tool_summaries_only_name_tools_the_role_has.py`）。
+# 段变 A / B / D / E / F / G / L / M 八格（这八格读得到 void_items 那一行）；
+# C / H / V 是只读角色、面上没有它，逐字未动。逐格旧值 → 新值：
+#   A 4d174ff3… → 56c62604… / B 2068491d… → f6a59960… / D ce9d76c2… → bf9576d7… /
+#   E 26c4de78… → 7d678aaf… / F f25ab207… → f44810a5… / G b31a79a1… → f8ffecd5… /
+#   L da33b9cd… → 5bcfa1cf… / M a5f870d5… → e0cb961a…；C 5edce177… / H bdf02c4d… /
+#   V 983eefc0… 与 p284 同值（逐字未动）。
+# 现算（`temp/cl2/recompute_digests.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格）。
+_FROZEN_PROMPT_VERSION = "p285"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2792,16 +2804,16 @@ _FROZEN_PROMPT_VERSION = "p284"
 #:   M 4d85c06c→47d3b555；A/B/C/D/E/L/V 不变（G/H/M 动的是共用段 `PAPER_PACK`
 #:   那一道"F 的稿叫什么"的字面，B 的收录面一个字没改）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "4d174ff34f4cbb951deb99af59fd675194976375287bfc65f438138adc23d64c",
-    "B": "2068491d78c4b5a5285eef35880e52d418a21b62d3f27fe407958417e75193ac",
+    "A": "56c626042282883cdf808ba97ea003e1a168627e1e92b04b2ba5d132e3657de5",
+    "B": "f6a59960ca877522217ad98f2501b45292c83a8e662900708e0f59b07cfbcd3f",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
-    "D": "ce9d76c23513bdb05f7cc67fb805f8e002839c3fa8f013373501bb285fc5aa74",
-    "E": "26c4de785ecf1887274c3b0b4c2405ea456909a58f35c95a2f300c9d57a1c0ab",
-    "F": "f25ab207f4282ce1d054c871bd3aea695b86baa874201e0ea0e2a36b804738a9",
-    "G": "b31a79a1326e10ebce8a56e99c27b621a6c40ce70aadef712a656b7c92b29c4c",
+    "D": "bf9576d7c63d837268f35b0475f58cd9ede6398e31b009a719592e5352e7b89e",
+    "E": "7d678aaf88380f18d7d0c8b1b11b9e9b1a6312106d2012ebcde5b6bed1ce2721",
+    "F": "f44810a59d5cd0e9b41c8d2ce023a89072dd4ecfd82a6303a0b0e9feeb6303ea",
+    "G": "f8ffecd56bcf9dfcaf98cd4ee8dabb0d79d87d2832a1ff7cf47460e85ceadaad",
     "H": "bdf02c4d482251a410a2dc28ab960c71d9ba2fdb2e29f858d0e85adf75fb61d0",
-    "L": "da33b9cd1d9e1c5cbdfb1773ce4e58b31ffd4caf66773936e1cda8ddb53f2668",
-    "M": "a5f870d5d6eec30bed350fbf2a177105f519f820eff007271dea3ebb185a7fb4",
+    "L": "5bcfa1cf24153340cf28fd43cad9713680af7dc420e58a4da6ccae5c7ad547f5",
+    "M": "e0cb961a1dd93cdf64665c09d2c3a4bcbfbd8be6aa57439f5ebc74086b8550bc",
     "V": "983eefc06c583904e4d2a10d864b0fb7f382cde30503610f6f4e7c9d9dc42384",
 }
 

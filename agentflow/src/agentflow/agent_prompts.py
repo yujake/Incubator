@@ -2594,7 +2594,23 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （facts 键集仍 15 格、count / keys_sha256 与 p283 同值）；`agent_surface_snapshot.json`
 #: 按现值重冻（tool 面一个字没动）；ROLE-GUIDE 等系统文档重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p284"
+#: p284 → p285（2026-11-16，CL2 / 12A，审计 AU1 表一 A1；`tools/conductor_tools.py`
+#:   不在 FC-27）：`conductor.void_items` 的摘要把两处「别家工具」写明施事 ——
+#:   ① 「板面四个读数（读板用 `conductor.board`：…）各少一」改成「（主控用
+#:   `conductor.board` 看它们：…）」：`conductor.board` 的 `roles=("M",)`，而
+#:   `void_items` 发给 6 个父角色（A/B/D/E/F/G）⇒ 原句在教 6 个拿不到它的角色去调；
+#:   ② 「block 板项的出路仍是 `conductor.wake_blocked`」改成「仍是主控的
+#:   `conductor.wake_blocked`」（同一个摘要里的同族跨角色陈述）。
+#:   判据：`tests/test_tool_summaries_only_name_tools_the_role_has.py` 的施事豁免从
+#:   「整行」收紧到「同一分句」—— 旧口径下这句前半句的「主控 M」把后半句一起豁免了。
+#:   变化格 = A / B / D / E / F / G / L / M 八格（这八格读得到 `void_items` 那一行；
+#:   C / H / V 是只读角色，面上没有它，逐字未动）。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p285）+ `_VOLATILE_FACT_SETS` 末尾追加
+#: 一格（facts 键集仍 15 格、count / keys_sha256 与 p284 同值）；两份 golden
+#: （`agent_surface_snapshot.json` / `tool_surface_snapshot.json`）按现值重冻；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，本批未跑，读数因此
+#: stale —— 与 p283 / p284 那两格同一条待办）。
+PROMPT_VERSION = "p285"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

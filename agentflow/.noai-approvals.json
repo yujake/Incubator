@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-15T05:06:27+08:00",
+  "generated_at": "2026-11-16T18:08:49+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,10 +505,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "956592c082d59f0a84d9bbde179f4955e23d663424a286f5cd4785ce3ab22278",
+      "sha256": "e30a3536e0887c6da3625d017337c33d4e932e657bc83dccab5febac07b100be",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p282 追账重冻（FR 路）：D1·甲/DC·甲/DC·丁/K1 四笔在基线之外的声明面变化 —— agent 面 D 动作 15→14、conjectures 写集搬家、G 枚举、G/H/M prompt、11 格版本行 p281→p282；tool 面 128→127、conductor.closing 七格、doc 三个枚举、run_experiment returns +conjecture_ledger。逐格 diff 见本轮交付；登记≠批准，reviewers 仍 0。",
+      "change_note": "CL2/12A：conductor.void_items 摘要两处别家工具名写明施事（主控用 conductor.board / 主控的 conductor.wake_blocked）；p284→p285，两份 golden 按现值重冻（agent 面 = 11 格 prompt 的版本行与 8 格内嵌的工具摘要；tool 面 = conductor.void_items.summary 一行）。登记而非批准：reviewers 仍为空，需 2 名 reviewer 逐格看过。连带：warm 两档未重跑（真调模型，本批不跑）。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],
@@ -531,10 +531,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "88390def6c05345ba839084068d265a8263d83a7a0c8e2d7fd4f3fc58b7c98d9",
+      "sha256": "63e6cdb3a19b12e27b38e6da92531adbfedabe51822e79a7c5e401fe8717c95d",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "p282 追账重冻（FR 路）：D1·甲/DC·甲/DC·丁/K1 四笔在基线之外的声明面变化 —— agent 面 D 动作 15→14、conjectures 写集搬家、G 枚举、G/H/M prompt、11 格版本行 p281→p282；tool 面 128→127、conductor.closing 七格、doc 三个枚举、run_experiment returns +conjecture_ledger。逐格 diff 见本轮交付；登记≠批准，reviewers 仍 0。",
+      "change_note": "CL2/12A：conductor.void_items 摘要两处别家工具名写明施事（主控用 conductor.board / 主控的 conductor.wake_blocked）；p284→p285，两份 golden 按现值重冻（agent 面 = 11 格 prompt 的版本行与 8 格内嵌的工具摘要；tool 面 = conductor.void_items.summary 一行）。登记而非批准：reviewers 仍为空，需 2 名 reviewer 逐格看过。连带：warm 两档未重跑（真调模型，本批不跑）。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],

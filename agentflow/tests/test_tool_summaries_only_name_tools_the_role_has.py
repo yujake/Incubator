@@ -5,9 +5,16 @@
 `role_denied`（别人面上的工具）——而这两类写法在提示词里看起来与真工具一模一样。
 
 判据一（跨面）：把每一格的 `tools_lines()` 逐行扫一遍，凡行内出现真工具名、而该角色
-面上没有它 ⇒ 那一行必须写明这是别人的工具（同一行里有「主控」或「父」这类转述词）；
-否则红。改前实测 31 对，其中硬缺口 2 类：`program.list` 叫人「先 program.stop」（C/H/V
-没有它）、`text.extract` 叫人「走 ocr.run」（A 的 ocr.* 为 0 件）。
+面上没有它 ⇒ 那一句必须写明这是别人的工具（与提及同一个分句里有「主控」或「父」
+这类转述词）；否则红。改前实测 31 对，其中硬缺口 2 类：`program.list` 叫人「先
+program.stop」（C/H/V 没有它）、`text.extract` 叫人「走 ocr.run」（A 的 ocr.* 为 0 件）。
+
+2026-11-16（CL2 / 12A，审计 AU1 表一 A1）：豁免口径从「整行」收紧到「同一分句」。
+旧口径的漏网形态逐字是 `conductor.void_items` 的摘要 —— 它前半句讲权限时写了
+「主控 M」（另一个分句），后半句「板面四个读数（读板用 `conductor.board`：…）各少一」
+就整行沾光过了，而 `conductor.board` 的 `roles=("M",)`、`void_items` 发给 6 个父角色
+⇒ 那 6 个角色被教着调一件拿不到的工具（`conductor.board` 与 `conductor.wake_blocked`
+两处，共 12 对）。转述词只对它所在的那个分句负责，这是改这条判据的原因。
 
 判据二（幻名）：`STRUCTURE_NOT_PROMPT` 那段是「框架用结构保证的事」，里面 4 条被写成
 工具形（`policy.check` / `quoteverify.check_quote` / `userio.ask_user` /
@@ -32,6 +39,8 @@ from agentflow.tools import ROLES, TOOL_ROLES, build_registry          # noqa: E
 _TOOL_NAME = re.compile(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*")
 #: 转述词：出现这些词就说明"这不是你自己的工具"（审计 174 把这一类判成"软"）。
 _TRANSCRIBED = ("主控", "你的父", "父代理", "召唤者")
+#: 分句边界（句号 / 分号 / 问叹 / 换行）：转述词只豁免它所在的那个分句里的提及。
+_CLAUSE_END = re.compile(r"(?<=[。；;！？\n])")
 
 #: 工具形幻名（`agent_prompts.py` 的 STRUCTURE_NOT_PROMPT + summon_many 摘要）。
 PHANTOMS = (
@@ -47,14 +56,28 @@ def _reg():
     return build_registry().registry
 
 
+def _clause_of(line: str, token: str) -> str:
+    """`token` 在 `line` 里所在的那一个分句（找不到 ⇒ 空串）。"""
+    for clause in _CLAUSE_END.split(line):
+        if token in clause:
+            return clause
+    return ""
+
+
 def _bad_mentions(lines: list[str], names: set[str], have: set[str]) -> list[str]:
-    """行内点名的真工具、而该角色没有 ⇒ 返回 `owner -> token` 清单（纯函数）。"""
+    """行内点名的真工具、而该角色没有 ⇒ 返回 `owner -> token` 清单（纯函数）。
+
+    豁免依据是"同一分句里写了施事"（2026-11-16 收紧；旧口径看整行，于是
+    `conductor.void_items` 摘要里隔着一个分句的「主控 M」把 `conductor.board`
+    也一起豁免掉了 —— 那正是 12A 要抓的形态）。
+    """
     out: list[str] = []
     for line in lines:
         owner = line.split("：", 1)[0].lstrip("- ").strip()
         for tok in sorted(set(_TOOL_NAME.findall(line))):
             if tok in names and tok not in have:
-                if any(word in line for word in _TRANSCRIBED):
+                clause = _clause_of(line, tok)
+                if any(word in clause for word in _TRANSCRIBED):
                     continue
                 out.append(f"{owner} -> {tok}")
     return out
@@ -87,6 +110,25 @@ def test_the_cross_mention_scanner_catches_a_synthetic_one() -> None:
     # 转述不算：同一句里点名"主控"就放行
     assert _bad_mentions(["- program.list：列出程序（由主控 program.stop 停掉）"],
                          names, {"program.list"}) == []
+
+
+def test_the_old_void_items_sentence_turns_the_clause_scan_red() -> None:
+    """反真空（12A）：把改前的原句塞回去 ⇒ 分句级扫描必须点名 `conductor.board`。
+
+    这一条是"豁免从整行收紧到分句"的分辨力证明：旧口径下那句里的「主控 M」在
+    另一个分句，正好把 `conductor.board` 也豁免掉；收紧之后它必须红。第二段是
+    反负控 —— 把施事挪进同一个分句（改后的写法）就必须不红，否则判据会退化成
+    "凡摘要提别家工具都红"。
+    """
+    names = {"conductor.board", "conductor.void_items"}
+    old = ("- conductor.void_items：收件人的**直接父代理**、或**主控 M** 有权撤；"
+           "板面四个读数（读板用 `conductor.board`：`board_open_items` / "
+           "`board_open_count`）各少一。")
+    got = _bad_mentions([old], names, {"conductor.void_items"})
+    assert got == ["conductor.void_items -> conductor.board"], got
+    # 反负控：施事与提及同分句 ⇒ 这是"主控用它"，不是教本角色
+    fixed = old.replace("读板用 `conductor.board`", "主控用 `conductor.board` 看它们")
+    assert _bad_mentions([fixed], names, {"conductor.void_items"}) == []
 
 
 def test_the_prompt_never_names_a_module_function_as_a_tool() -> None:
