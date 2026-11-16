@@ -2574,7 +2574,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #     `MAX_RATIO` 未动。逐格：H 36979cac… → 25aff142…（① 的 H 段 + ③ 的摘要）。
 # 十一格不是手抄：`temp/FC1/recompute_digests.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
-_FROZEN_PROMPT_VERSION = "p286"
+# p287（2026-11-17，业主 2026-11-17 逐字「先apply」授权）：Q1 的 `6176a035` 改了
+# `conductor.closing` 的摘要 —— 收工门从「七格」写成「八格」，并加一句
+# 「`literature_pending` 要待入库表清空」（第八格就是 Q1 新增的 `literature_pending`）。
+# 那条摘要会进 M 的提示词（`tools_lines` 渲染每个角色自己面上的工具名 + 摘要 + 必填参数
+# + 副作用），而 `conductor.closing` 只发给 M ⇒ M 段变了。只此一格；其余十格与 p286
+# 逐字相同（版本行已归一）。
+# 逐格旧值 → 新值：
+#   M 2b7f8eac9d4b9686ed755bb88a84f2e8376b21d5c7dfe649db0412ee056f5e18 →
+#     fefd7f961fac595aa8f9bc2cbc33d360b20a0d130f29bb46c6ac09a912e61084；
+#   A 63c38fa6… / B d21f8265… / C 5edce177… / D 721eea57… / E 36668798… / F 99a9972c… /
+#   G 931406c4… / H 25aff142… / L f1bca10c… / V 983eefc0… 与 p286 同值。
+# 十一格不是手抄：`temp/p287/recompute_digests.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+_FROZEN_PROMPT_VERSION = "p287"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2833,7 +2846,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "931406c43e586cf7651851d2a1ed8732ec50756ed8fbd3379cab1d1cc9170bf7",
     "H": "25aff142c3e0aba2efdc4ffdc366d6e4f130e398f2a85f8785b3ecf220a263f8",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
-    "M": "2b7f8eac9d4b9686ed755bb88a84f2e8376b21d5c7dfe649db0412ee056f5e18",
+    "M": "fefd7f961fac595aa8f9bc2cbc33d360b20a0d130f29bb46c6ac09a912e61084",
     "V": "983eefc06c583904e4d2a10d864b0fb7f382cde30503610f6f4e7c9d9dc42384",
 }
 

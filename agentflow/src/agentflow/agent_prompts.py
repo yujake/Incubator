@@ -2645,7 +2645,21 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 系统文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
 #: 判据：`tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（题面面）与
 #: `tests/test_the_lean_off_render_is_scanned.py`（`_PENDING_FC27` 清空后转守卫已修形态）。
-PROMPT_VERSION = "p286"
+#: p286 → p287（2026-11-17，业主 2026-11-17 逐字「先apply」授权）：
+#:   Q1 的 `6176a035` 改了 `conductor.closing` 的摘要 —— 收工门从「七格」写成「八格」，
+#:   并加一句「`literature_pending` 要待入库表清空」（第八格就是 Q1 新增的
+#:   `literature_pending`）。那条摘要会进 M 的提示词（`tools_lines` 渲染每个角色
+#:   自己面上的工具名 + 摘要 + 必填参数 + 副作用），而 `conductor.closing` 只发给 M
+#:   ⇒ M 段变了。只此一格；其余十格与 p286 逐字相同（版本行已归一）。
+#:   逐格旧值 → 新值：M 2b7f8eac… → fefd7f96…；A / B / C / D / E / F / G / H / L / V
+#:   十格与 p286 同值。十一格不是手抄：`temp/p287/recompute_digests.py`（导入判据自己的
+#:   `_surface_digest`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p287）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p286 同值 —— 这一批只换段文本，没有哪一格
+#: 事实换过落点）；`agent_surface_snapshot.json` 按现值重冻（11 格 prompt 只差版本行，
+#: 把版本行归一后内容变化的只有 M 一处叶子）；系统文档重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p287"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

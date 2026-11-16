@@ -5959,15 +5959,21 @@
         "lit.stage_list"
       ],
       "key": "params",
-      "reason": "待新增列表的 status 列举多两档历史档 cleared / withdrawn（读成 rejected）：参数说明跟上，否则读声明的人会以为这两个值不合法。",
+      "reason": "待新增列表的 status 列举多两档历史档 cleared / withdrawn（读成 rejected）：参数说明跟上，否则读声明的人会以为这两个值不合法。2026-11-16（Q1，业主口径「判收不注册、提交时才注册」）再演进一格（并进这一条，按现值重记）：status 的 enum 追加 `qualified`（判收、有入库资格、尚未注册；它由 FC-27 补丁加进 `schema.CANDIDATE_STATUSES`，因此这一格只在补丁 apply 之后才出现）。enum 只追加、原有五个值一个未删；其余参数形状一格未动。",
       "date": "2026-10-26",
       "edits": [
         {
           "op": "add_key",
           "path": "params/properties/status/description",
           "value": "`cleared` / `withdrawn` 是历史档（读成 `rejected`），留着只为查历史"
+        },
+        {
+          "op": "append_item",
+          "path": "params/properties/status/enum",
+          "item": "qualified"
         }
-      ]
+      ],
+      "date_amended": "2026-11-16"
     },
     {
       "tools": [

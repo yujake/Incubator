@@ -1333,6 +1333,19 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "角色面；`Conductor.broadcast` 方法保留。变化格 = A / B / D / E / F / G / H / "
               "L / M 九格（① 换 B / H / M；② 再换 A / B / D / E / F / G / L / M），"
               "C / V 与 p285 逐字相同。facts 键集仍 15 格、落点没动。"},
+     # p286 → p287（2026-11-17，业主 2026-11-17 逐字「先apply」授权）：facts 键集一格没动
+     # （还是 15 格）—— 本批只换了 `conductor.closing` 的摘要（收工门「七格」→「八格」，
+     # 加 `literature_pending` 那一格），那条摘要进 M 的 `tools_lines` ⇒ 只有 M 那一格的
+     # 段变了；没有哪一格事实换过落点（system ↔ user），所以 count / keys_sha256 与 p286
+     # 同值。
+     {"version": "p287", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p287（2026-11-17，业主 2026-11-17 逐字「先apply」授权）："
+              "Q1 的 `6176a035` 改了 `conductor.closing` 的摘要 —— 收工门从「七格」写成"
+              "「八格」，并加「`literature_pending` 要待入库表清空」（第八格就是 Q1 新增的"
+              " `literature_pending`）。该摘要经 `tools_lines` 进 M 的提示词，而 "
+              "`conductor.closing` 只发给 M ⇒ 变化格 = M 一格，其余十格与 p286 逐字相同。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

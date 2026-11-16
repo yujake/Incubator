@@ -1377,6 +1377,7 @@ def _seed(store: Store, root: Path) -> None:
     # 题名刻意互不相同、也不与本地那篇（`Commutativity in abelian groups`）重叠到
     # 阈值以上：否则"高重叠要 new_content"那条判据会在这里先开火，探针就落到另一条分支
     # —— 而声明的键集合写的是成功支（同 `attack.create_plan` 那条注释的道理）。
+    staged_rows: dict[str, S.LitCandidate] = {}
     with store.tx("lit_candidates", actor="test", note="fixture") as tx:
         for slot, title, doi in (
             ("000000", "Staged preprint on modular forms", "10.9000/staged.one"),
@@ -1394,6 +1395,23 @@ def _seed(store: Store, root: Path) -> None:
             )
             row.validate()
             tx.upsert("lit_candidates", row.to_dict(), note="fixture")
+            staged_rows[slot] = row
+    # 抽读回执（2026-11-17，P287）：`lit.admit` 的探针报 `metadata_only`，而业主
+    # 2026-11-16 裁定（AR1）起「仅题录」不是零读可入：它必须有一条「试过、但拿不到
+    # 可读文本」的 `extract_failed` 回执（闸在 `litstage::_read_evidence_gate`）。
+    # 夹具从前一份回执都没铺 ⇒ 探针落在 `no_read_evidence` 那条受控拒上，被判据记成
+    # 「没跑起来」（`skipped`），于是 `lit.admit` 声明的键集合一个都没被验到。
+    # 这里补的是探针的前置数据（与 `text.extract` 抽失败时写下的那一行同形），
+    # 不是放宽判据：声明面一个字没动，闸的口径也没动。
+    from agentflow import litavail as LAV
+    from agentflow import litread as LR
+
+    for slot in ("000000", "000004"):
+        LAV.record_read(
+            root, "r-000001", slot, LR.FULLTEXT_EXTRACT_FAILED,
+            source="fixturestub", note="夹具：抽过但拿不到可读文本（仅题录探针的前提）",
+            candidate=staged_rows[slot].to_dict(),
+        )
     # 第 2 个委托 `r-000002`：铺的时候就已经判完（零条待裁），是 `lit.admit_all` 探针
     # 唯一能走到 ok 分支的形状（Q16 的提交闸：本委托只要还有一条没判，整批都不许入库）。
     # 两行刻意一条 admitted、一条 rejected：报告的两个块（已入库 / 未入库）都有真行可数，
