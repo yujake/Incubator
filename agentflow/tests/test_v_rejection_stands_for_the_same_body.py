@@ -458,5 +458,11 @@ def test_g_the_historical_gate_holds_the_same_line(tmp_path):
     assert got["append_state"] == "appended_by_caller", got
     assert got["streak"] == 0 and got["streak_ok"] is False, got
     assert got["written"] is False, got
-    assert "还差" in str(got["reason"]), got
+    # 这一句在 `3892242d`（PA4，业主 2026-11-04 口径）由「还差次数 …（连续 3 次没问题
+    # 才发签）」改成「门槛还没到 …（门槛由框架按这一趟送审自己数；跨趟不累计）」
+    # —— 旧措辞正是在教模型 V 内部有几轮，按裁定清零。判据跟着换面，不是放宽：
+    # 仍旧逐字咬住"这一签没成、第 3 位不翻"这两件事，另加"跨趟不累计"这一句。
+    assert "门槛还没到" in str(got["reason"]), got
+    assert "第 3 位不翻" in str(got["reason"]), got
+    assert "跨趟不累计" in str(got["reason"]), got
     assert _stmt_row(st)["bits"]["reviewed"] is False, _stmt_row(st)["bits"]
