@@ -94,6 +94,13 @@ def _admit(reg, items: list[dict], *, rid: str = RID):
     return reg.call("lit.admit", items=items, request_id=rid)
 
 
+def _submit(reg, *, rid: str = RID):
+    """提交那一刻：批量注册 + 回填 + 清表（2026-11-16 Q1：判收不发号）。"""
+    got = reg.call("lit.admit_all", request_id=rid)
+    assert got.ok, got.error
+    return got
+
+
 def _write_source(store: Store, slot: str, body: str = BODY) -> pathlib.Path:
     p = store.root / "downloads" / f"candidate-{slot}.txt"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -159,6 +166,8 @@ def test_b_extracted_but_not_read_is_still_not_read(store: Store, reg) -> None:
     _fs_read(reg, ext)
     ok = _admit(reg, [{"slot": slots[0], "availability": AV.READABLE}])
     assert ok.ok, ok.error
+    # Q1：判收之后要提交才进库（判收只发"有入库资格"，不发号）
+    _submit(reg)
     assert _lit_titles(store) == ["Extracted only"]
 
 
@@ -194,6 +203,11 @@ def test_c_metadata_only_is_only_for_candidates_without_bytes(store: Store, reg)
 
     ok = _admit(reg, [{"slot": slots[1], "availability": AV.METADATA_ONLY}])
     assert ok.ok, ok.error
+    # 第一条（有字节却报仅题录）还在 pending：提交闸会因为它整批拒 ⇒ 先判拒。
+    assert reg.call("lit.stage_reject", slot=slots[0],
+                    reason_code="rejected_low_quality",
+                    note="有字节却报仅题录，按闸的读数判拒").ok
+    _submit(reg)
     assert _lit_titles(store) == ["No bytes"]
 
 
@@ -227,10 +241,10 @@ def test_d_every_admitted_item_leaves_its_own_reading_and_reason(store: Store, r
         read = rec.get("read") or {}
         assert int(read.get("chars") or 0) > 0, rec
         assert str(read.get("sha256") or ""), rec
-    # 报告：已入库两条各带"读过 N 字"，未入库那条带理由码与那句为什么
-    # （`stage_reject` 不重写报告 —— 交差口径是 `lit.admit_all` 收口那一次；这里直接
-    # 调 `write_report` 现读一次盘上的行与台账）
-    L.write_report(store, RID)
+    # 报告：已入库两条各带"读过 N 字"，未入库那条带理由码与那句为什么。
+    # 2026-11-16（Q1）：报告由提交那一刻落（批量注册 → 回填 → 清表），
+    # 所以这里先 `lit.admit_all` 再读定稿（`stage_reject` 自己也会刷新进度报告）。
+    _submit(reg)
     report = pathlib.Path(L.report_path(store, RID))
     text = report.read_text(encoding="utf-8")
     assert "读过" in text, text
@@ -270,7 +284,10 @@ def test_e_the_ah6_batch_shape_is_caught_and_named(store: Store, reg) -> None:
         LS._read_evidence_gate = lambda *a, **k: None
         after = _admit(reg, [{"slot": s, "availability": AV.READABLE} for s in wanted])
         assert after.ok, f"打桩关掉之后仍然被拒 ⇒ 不是这道闸挡的（{after.error}）"
-        assert len(_lit_titles(store)) == 10
+        # Q1：判收不发号（12 条里另有 2 条还没判，提交闸会整批拒 —— 它们也还停在
+        # pending）。这里量的是"打桩之后这 10 条判得动"，不是"它们进库了"。
+        assert len(after.unwrap()["admitted"]) == 10, after.unwrap()
+        assert _lit_titles(store) == []
     finally:
         LS._read_evidence_gate = original
 
@@ -291,6 +308,7 @@ def test_f_negative_control_stubbing_the_read_state_lets_a_non_read_enter(
     after = _admit(reg, items)
     assert after.ok, (f"打桩成恒 ok 之后仍被拒 ⇒ 闸不是长在 `litavail.check_read` 上"
                       f"（{after.error}）")
+    _submit(reg)
     assert _lit_titles(store) == ["Stub me"]
 
 

@@ -1300,7 +1300,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（七格）；名单见论文段。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空。`can_close` 是机器口径（`bool | None`，None 不算通过）；`closable` 给调用方。另回 `review_acceptance` 与 `cap_usd`。",
+    "只读：跑收工门（八格）。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空；`literature_pending` 要待入库表清空。`can_close` 是机器口径；`closable` 给调用方。另回 `review_acceptance` 与 `cap_usd`。",
     {
         "type": "object",
         "properties": {
@@ -1663,8 +1663,8 @@ def conductor_escalate(_conductor: Any, need: str, kind: str,
     if not got.get("ok"):
         # 受控拒绝这一档的「理由码」放在 `meta.kind`（工具层统一的读法），
         # 而"哪一类需求"那一格改名成 `escalate_kind` 一并带回去。
-        # 为什么不直接把 `got` 整个塞进 `fail(**got)`：`got` 里已经有 `error` 这个键，
-        # `fail(error, **meta)` 会当场 TypeError（"got multiple values for argument"），
+        # 为什么不直接把 `got` 整个塞进 `fail(got)`：`got` 里已经有 `error` 这个键，
+        # `fail(error, meta)` 会当场 TypeError（"got multiple values for argument"），
         # 于是拒绝变成 `kind="unexpected"` 的框架级失败 —— 理由码就此消失。
         meta = {k: v for k, v in got.items() if k not in ("error", "kind")}
         meta["kind"] = str(got.get("reason") or "escalate_refused")

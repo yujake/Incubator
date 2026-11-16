@@ -120,11 +120,19 @@ def _judge_and_admit(store, request_id: str, slot: str,
     readback = reg.call("lit.stage_list", request_id=request_id)
     assert readback.ok, readback.error
     from agentflow import litavail as AV
+    from agentflow import litread as LR
     AV.record_availability(store.root, request_id, str(slot), AV.METADATA_ONLY)
+    # 仅题录也要有"试过、拿不到可读文本"的回执（AR1）：夹具直接落一条 extract_failed，
+    # 否则入库闸会按零读取尝试拒掉（这不是本文件要测的那件事）。
+    AV.record_read(store.root, request_id, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
+                   source="fixture:no-bytes", note="text.extract.no_text_layer")
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
-    assert got.unwrap()["registered"] == 1, got.unwrap()
-    return got.unwrap()
+    # 2026-11-16（Q1）：判收不发号 ⇒ 注册与回填在提交那一刻。
+    done = reg.call("lit.admit_all", request_id=request_id)
+    assert done.ok, done.error
+    assert done.unwrap()["registered"] == 1, done.unwrap()
+    return done.unwrap()
 
 
 # --------------------------------------------------------------------------- A 侧

@@ -164,11 +164,13 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
     lit_availability(store, RID, [slot])
     got = reg.call("lit.admit", slots=[slot], request_id=RID)
     assert got.ok, got.error
-    lit_id = got.unwrap()["admitted"][0]["lit_id"]
-    # 判完之后 `admit_all` 只收口（Q16 的提交闸就是这条边界）
+    # 2026-11-16（Q1）：判收不发号；号与 literature 行都在提交那一刻才出现。
+    assert got.unwrap()["admitted"][0]["lit_id"] == "", got.unwrap()
     settled = reg.call("lit.admit_all", request_id=RID)
     assert settled.ok, settled.error
-    assert settled.unwrap()["registered"] == 0, settled.unwrap()
+    assert settled.unwrap()["registered"] == 1, settled.unwrap()
+    lit_id = settled.unwrap()["admitted"][0]["lit_id"]
+    assert lit_id, settled.unwrap()
 
     row = next(r for r in store.rows("literature") if r["lit_id"] == lit_id)
     dl = dict(row.get("download") or {})
@@ -288,16 +290,20 @@ def test_an_all_empty_relevance_is_recorded_as_a_reading_and_does_not_block(stor
     one = reg.call("lit.admit", slots=[slots[0]], request_id=RID)
     assert one.ok and one.unwrap()["refused"][0]["code"] == "missing_relevance", one.unwrap()
 
-    # 报告（由 `write_report` 现算，判据读它的三块）
-    written = L.write_report(store, RID)
+    # 报告（由 `write_report` 现算，判据读它的四块）
+    written = L.write_report(store, RID, phase="draft")
     text = Path(written["path"]).read_text(encoding="utf-8")
     assert "## 待裁（2 条）" in text, text
     # 点名缺哪几条，而不是一句谁都对得上的兜底
     assert "A 未写相关性说明" not in text
     tail = text.split("## 待裁", 1)
     assert len(tail) == 2, text
-    for slot in slots:
-        assert f"槽位 {slot}" in tail[1], (slot, text)
+    # 2026-11-16（Q1）：报告不印临时号（业主逐字「写报告时不用临时文献号」）——
+    # 待裁块靠题名点名，槽位号只活在 `lit.stage_list` 里。
+    for line in tail[1].splitlines():
+        assert "槽位 " not in line, (line, text)
+    for title in ("No relevance one", "No relevance two"):
+        assert title in tail[1], (title, text)
     assert written["not_admitted"] == 0 and written["undecided"] == 2, written
 
 

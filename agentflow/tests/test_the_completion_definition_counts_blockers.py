@@ -55,4 +55,4 @@ def test_machine_pass_is_seven_cells_and_no_blocker() -> None:
     src = pathlib.Path(closing.__file__).read_text(encoding="utf-8")
     assert "not self.blockers" in src, (
         "`closing.machine_pass` 不再看 blockers ⇒ 完成定义那句「且没有 blocker」就成了假话")
-    assert len(closing.DEFAULT_CHECKS) == 7, len(closing.DEFAULT_CHECKS)
+    assert len(closing.DEFAULT_CHECKS) == 8, len(closing.DEFAULT_CHECKS)

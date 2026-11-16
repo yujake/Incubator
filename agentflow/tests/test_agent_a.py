@@ -143,7 +143,11 @@ def _judge_and_admit(store, request_id: str, slot: str,
     lit_availability(store, request_id, [str(slot)])
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
-    return got.unwrap()
+    # 2026-11-16（Q1）：判收不发号 ⇒ 提交那一刻才批量注册、回填、清表。这一条也是
+    # 判据要读的那一步（`registered` / `admitted[].lit_id` 都来自 `lit.admit_all`）。
+    submitted = reg.call("lit.admit_all", request_id=request_id)
+    assert submitted.ok, submitted.error
+    return submitted.unwrap()
 
 
 def _mark_processed(store, lit_id: str, value: bool) -> None:

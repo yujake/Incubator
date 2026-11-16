@@ -467,9 +467,14 @@ class _RunOnce:
             # 放在事务之后：报告写的是"这一轮结束时盘上的样子"，而盘上的样子由事务定。
             # 写失败不许吞掉整轮结果（文献已经落库了）—— 但它必须可见：
             # `ARunResult.note` 里有它，`reports/lit-<request_id>.md` 不在盘上也能查出来。
+            #
+            # 2026-11-16（Q1）：这一份是进度报告（`phase="draft"`，报告头逐字标
+            # "未定稿"）。自动链路只负责把候选暂存进列表，判收与提交是 A 的模型动作：
+            # 交报告那一刻的无号原件（`.submitted.md`）与注册回填之后的定稿都由
+            # `lit.admit_all` 落。这里写"定稿"会是一句谎（行还停在 pending/qualified）。
             if prepared:
                 try:
-                    rep = L.write_report(self.store, req["request_id"])
+                    rep = L.write_report(self.store, req["request_id"], phase="draft")
                     result.report_path = str(rep.get("path") or "")
                     result.report_admitted = int(rep.get("admitted") or 0)
                     result.report_not_admitted = int(rep.get("not_admitted") or 0)

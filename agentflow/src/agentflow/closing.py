@@ -21,6 +21,7 @@
 | `substance` | 实质产出：`documents` / `relations` / `experiments` / `review_findings` / `statements` 至少一张非空（全 0 ⇒ 不许报「可交付」；`tasks`/`usage_ledger` 不算） |
 | `acceptance` | 验收表的机器可判行（`out/paper/ACCEPTANCE-CHECKS.json`）：逐行现算，任一不满足 ⇒ `fail`；行读不懂 ⇒ 那一行 `unreadable`、整格 `unknown`（绝不 `pass`） |
 | `artifact_ledger` | 产物台账（`ARTIFACTS.jsonl`）与盘上一致：`missing`/`unreadable` ⇒ `fail`（真缺陷）；只有 `changed` ⇒ `pass` + 一条 warning（按路径取最后一条登记之后又被改写是常态；把它读成没查成会让任何有派活的跑批都收不了工） |
+| `literature_pending` | 待入库文献表（`lit_candidates`）：全表还有 `pending` ⇒ `fail` + blocker；当前委托提交后没清表（行上没有 `cleared_at`）⇒ `fail` + blocker；表读不到 ⇒ `unknown`（不是"没有待裁"）。业主口径：「清空待入库文献表及文献 → 真正收工」 |
 
 维护规则：上面这张表必须与 :data:`DEFAULT_CHECKS` 逐条对应（一格一行、顺序相同）。
 判据 `tests/test_the_gate_table_lists_every_cell.py` 从本 docstring 里现扫表行、与
@@ -73,6 +74,13 @@ DEFAULT_CHECKS: tuple[str, ...] = (
     # 但判据强度按三态收窄：`changed` 记 `unknown`（登记之后被正常改写是常态），
     # 只有 `missing`/`unreadable` 判 `fail`。
     "artifact_ledger",
+    # 第八格（Q1，2026-11-16 业主口径）：待入库文献表非空 ⇒ 不许收工。
+    # 业主逐字：「清空待入库文献表及文献 → 真正收工」。所以这一格问两件：
+    # ① 全表还有没有 `pending`（跨委托：旧委托的残留也不许带走）；
+    # ② 当前委托清没清表（提交 + 归档之后每一行都该带 `cleared_at`）。
+    # 它是 blocker 而不是读数：`readings` 不参与 `machine_pass`，
+    # 只加读数拦不住 final（VC1 P0-2 的读数逐字如此）。
+    "literature_pending",
 )
 
 #: 「实质产出」那一格认的表：至少一张非空 ⇒ 这一趟真的产出了东西。
@@ -7779,6 +7787,104 @@ def _mirror_run_evidence_row(rep: ClosingReport, reading: Mapping[str, Any]) -> 
     }
 
 
+def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
+    """待入库文献表那一格（Q1）：表非空 ⇒ 不许收工；当前委托没清表 ⇒ 也不许收工。
+
+    业主逐字的收工流程：「A给每个文献裁定好 → 交报告（自动生成，入库的在一起、
+    拒掉的在一起）→ 系统做批量注册入库并得到映射关系回填报告的文献号 →
+    清空待入库文献表及文献 → 真正收工。」这一格盯的就是最后那一步。
+
+    三态（缺一不可）：
+
+    - 读不到 `lit_candidates`（表坏 / 非 UTF-8 / schema 版本不符）⇒ `unknown`：
+      "问不出来" ≠ "没有待裁"。这一格绝不把读失败折成 pass；
+    - 全表存在 `judged_state(row) == "pending"`（跨委托，不只当前那一份）⇒
+      `fail` + blocker，逐条点名 `request_id / 槽位 / 题名`（上限 5 条 + "另有 N 条"）；
+    - 当前委托（槽位号最大那一行所属）的行非空但没清表（行上没有 `cleared_at`）⇒
+      `fail` + blocker："报告已写 / 注册已做，但没收口：先 `lit.admit_all` 清表"；
+    - 两者都空 ⇒ `pass`，读数里写 `closed_delegations`（归档里有几份）。
+
+    为什么是 blocker 而不是纯读数（VC1 P0-2 的读数逐字）：「只加 readings 不改
+    `can_close` 不会拦 final」。`machine_pass` 只看 `blockers`，所以这一格必须落
+    `Finding(..., "blocker", ...)` 才真的拦得住 `conductor.final`。
+
+    为什么 A 侧不用另加闸：`lit.admit_all` 的提交闸（0 pending）已经是 A 侧的硬闸，
+    而它拒的时候 A 必须继续判；A 的 `done=True` 只表示"这一条检索请求跑完了"
+    （真机 r-000008 就是带着 15 条 pending 收了 done=true）。收工是这一道。
+    """
+    from . import litstage as L
+
+    def _unreadable(reason: str) -> None:
+        rep.status["literature_pending"] = "unknown"
+        rep.findings.append(Finding(
+            "literature_pending", "table_unreadable", "warning",
+            f"待入库文献表没读成（{reason}）⇒ 这一格记 unknown，不记 pass："
+            "「问不出来」与「没有待裁」是两件事；收工前请先让表读得动"))
+        rep.readings["literature_pending"] = {
+            "checked": False, "pending": None, "reason": reason,
+            "closed_delegations": None}
+
+    if store is None:
+        _unreadable("没有 store")
+        return
+    try:
+        rows = [dict(r) for r in store.rows("lit_candidates")]
+        archives = L.archived_request_ids(store.root)
+    except Exception as exc:  # noqa: BLE001 - 这一格读不到 ⇒ unknown（见 docstring 三态）
+        _unreadable(f"{type(exc).__name__}: {exc}")
+        return
+    try:
+        waiting = [r for r in rows if L.judged_state(r) == "pending"]
+        rid = L.current_request_id_of(rows)
+        mine = [r for r in rows if str(r.get("request_id") or "") == rid]
+        cleared = L.cleared_of(mine)
+    except Exception as exc:  # noqa: BLE001 - 同上：折算坏掉也是"没查成"
+        _unreadable(f"折算待入库行时出错：{type(exc).__name__}: {exc}")
+        return
+    names = [
+        {"request_id": str(r.get("request_id") or ""), "slot": str(r.get("slot") or ""),
+         "title": T.clip(str(r.get("title") or ""), 60)}
+        for r in waiting
+    ]
+    reading = {
+        "checked": True,
+        "pending": len(waiting),
+        "rows": names[:5],
+        "more": max(0, len(waiting) - 5),
+        "request_id": rid,
+        "delegation_rows": len(mine),
+        "cleared": cleared,
+        "closed_delegations": len(archives),
+        "reason": "",
+    }
+    if waiting:
+        rep.status["literature_pending"] = "fail"
+        named = "、".join(f"{n['request_id']}/{n['slot']}《{n['title']}》" for n in names[:5])
+        if len(names) > 5:
+            named += f"（另有 {len(names) - 5} 条）"
+        reading["reason"] = f"全表还有 {len(waiting)} 条待裁：{named}"
+        rep.findings.append(Finding(
+            "literature_pending", "undecided_candidates", "blocker",
+            f"待入库文献表非空：还有 {len(waiting)} 条 `pending`（跨委托，不只当前那一份）"
+            f"——{named}。业主口径「清空待入库文献表及文献 ⇒ 真正收工」："
+            "A 要逐条裁定（收：`lit.admit` 判收；拒：`lit.stage_reject`），"
+            "再 `lit.admit_all` 提交（批量注册 + 回填 + 清表）之后才许收工"))
+    elif mine and not cleared:
+        rep.status["literature_pending"] = "fail"
+        reading["reason"] = (
+            f"委托 {rid} 的 {len(mine)} 行还没清表（没有 cleared_at）")
+        rep.findings.append(Finding(
+            "literature_pending", "delegation_not_cleared", "blocker",
+            f"委托 {rid} 的 {len(mine)} 行候选还没清表（`cleared_at` 空）⇒ 收工被拦："
+            "报告与注册都做过之后，最后一步是 `lit.admit_all` 提交（清表 + 归档）；"
+            "没有这一步，'这一次委托收工了'没有任何留痕"))
+    else:
+        rep.status["literature_pending"] = "pass"
+        reading["reason"] = (
+            f"没有待裁的行；归档里有 {len(archives)} 份收过工的委托")
+    rep.readings["literature_pending"] = reading
+
+
 def _check_run_evidence(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """G8 的覆盖：成稿引到的每条数值结论有没有台账行背书（D-41 / AH2b）。
 
@@ -8383,6 +8489,10 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             _run_check(rep, name, _check_acceptance, store, project_dir)
         elif name == "artifact_ledger":
             _run_check(rep, name, _check_artifact_ledger, store, project_dir)
+        elif name == "literature_pending":
+            # Q1（业主口径：清空待入库文献表及文献 ⇒ 真正收工）：这一格自己读
+            # `lit_candidates`，不靠任何调用方喂读数 —— 喂进来的一格可以不被喂。
+            _run_check(rep, name, _check_literature_pending, store)
         else:
             rep.status[name] = "unknown"
             rep.findings.append(Finding(name, "unknown_check", "warning",

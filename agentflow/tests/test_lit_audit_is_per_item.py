@@ -260,19 +260,23 @@ def test_e_report_lists_availability_in_all_three_blocks(store: Store, reg) -> N
     assert "可得性：仅题录（metadata_only）" in text, text
     assert "可得性：有字节但抽取失败（extract_failed）" in text, text
     assert "可得性：未查（unknown）" in text, text
-    admitted_block = text.split("## 已入库", 1)[1].split("## 未入库", 1)[0]
+    admitted_block = text.split("## 已入库", 1)[1].split("## 待注册", 1)[0]
     assert "可得性：" in admitted_block
-    assert L.report_violations(text) == [], L.report_violations(text)
+    # 这一份是进度报告（带着 1 条待裁）：`phase="draft"` 才允许非空待裁块。
+    assert L.report_violations(text, phase="draft") == [], \
+        L.report_violations(text, phase="draft")
 
     # 反方向 ①：已入库的那一条没有可得性栏 ⇒ 违规
     no_col = text.replace("  可得性：仅题录（metadata_only）\n", "")
-    assert any("可得性" in v for v in L.report_violations(no_col)), L.report_violations(no_col)
+    assert any("可得性" in v for v in L.report_violations(no_col, phase="draft")), \
+        L.report_violations(no_col, phase="draft")
     # 反方向 ②：已入库的那一条被标成 extract_failed ⇒ 违规（③ 的判据在报告侧也成立）
     wrong = L.report_markdown(RID, _report_rows(), generated_at=TS,
                               availability={"000000": AV.EXTRACT_FAILED,
                                             "000001": AV.EXTRACT_FAILED,
                                             "000002": ""})
-    assert any("不许入库" in v for v in L.report_violations(wrong)), L.report_violations(wrong)
+    assert any("不许入库" in v for v in L.report_violations(wrong, phase="draft")), \
+        L.report_violations(wrong, phase="draft")
 
 
 # ====================================================================== f/g 反真空
@@ -307,6 +311,10 @@ def test_f_negative_control_stubbing_availability_lets_extract_failed_in(
     after = _admit(reg, [{"slot": slots[0]}])
     assert after.ok, (f"打桩成恒 readable 之后仍然被拒 ⇒ 那道闸不是长在 "
                       f"`litavail.tiers_by_slot` 上（{after.error}）")
+    # 2026-11-16（Q1）：判收不发号 ⇒ 进库要等提交那一刻（`lit.admit_all`）。
+    assert after.unwrap()["registered"] == 0, after.unwrap()
+    submitted = reg.call("lit.admit_all", request_id=RID)
+    assert submitted.ok, submitted.error
     assert _lit_titles(store) == ["Stub target paper"]
 
 

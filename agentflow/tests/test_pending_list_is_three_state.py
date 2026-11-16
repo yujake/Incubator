@@ -266,6 +266,10 @@ def test_c_staging_registers_pending_and_a_row_without_relevance_cannot_be_admit
     done = reg.call("lit.admit", slots=[slots[1]], request_id=RID)
     assert done.ok, done.error
     assert len(done.unwrap()["admitted"]) == 1, done.unwrap()
+    # 2026-11-16（Q1）：判收不发号、不建 literature 行 —— 注册发生在提交那一刻。
+    assert len(store.rows("literature")) == 0, "判收竟然直接写进了 literature"
+    submitted = reg.call("lit.admit_all", request_id=RID)
+    assert submitted.ok, submitted.error
     assert len(store.rows("literature")) == 1
 
 
@@ -339,6 +343,11 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     # 这一条的反真空只打 `undecided` 一处：回读与可读性判定是 2026-11-16 新加的
     # 另两道闸，打桩时不关掉它们，测出来的就会是"被另一道闸拒"，而不是"undecided
     # 这道闸真的在起作用"。
+    #
+    # 2026-11-16（Q1）：打桩之后 `undecided_items` 不再是唯一的出口 —— 报告的待裁块
+    # 按 `judged_state` 自己数（那份读数是交付物的一部分，不借闸的读数），所以这一笔
+    # 会被 `report_violations` 拦在更后面。反真空仍然成立：它证明"打桩真的让那道闸失效了"
+    # （拒因从 `undecided_items` 变成了 `report_violations`，而不是还是 `undecided_items`）。
     mine = [r for r in store.rows("lit_candidates")
             if str(r.get("request_id")) == "r-000001"]
     lit_availability(store, "r-000001", [r["slot"] for r in mine], tier="readable")
@@ -350,8 +359,11 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     # 不把那道闸打掉的话，测出来的会是"被另一道闸拒"。
     monkeypatch.setattr(L, "_read_evidence_gate", lambda *a, **k: None)
     after = reg.call("lit.admit_all", request_id="r-000001")
-    assert after.ok, ("打桩成恒空之后仍然被拒 ⇒ 那一道闸不是长在 `litstage.undecided` 上"
-                      f"（{after.error}）")
+    assert after.meta.get("kind") != "undecided_items", (
+        "打桩成恒空之后仍然报 `undecided_items` ⇒ 那道闸不是长在 `litstage.undecided` 上"
+        f"（{after.error}）")
+    assert not after.ok, "还有待裁的行，提交居然整笔通过了（报告判据必须拦住）"
+    assert after.meta.get("kind") == "report_violations", after.meta
 
 
 # ====================================================================== f 信息格

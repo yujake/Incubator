@@ -1277,7 +1277,7 @@ def _h_retry_pending(ctx: _Ctx, limit: int = RETRY_PENDING_DEFAULT_LIMIT, lit_id
                     item.update(outcome="got", path=rel_path, bytes=size, sha256=sha,
                                 note="字节已进 library/、path 已写回 ⇒ 现在可离线引用。")
                     dl_old = dict(row.get("download") or {})
-                    # M3（2026-11-05）：`**dl_old` 会把旧的 `fulltext` 标签原样带下去 ——
+                    # M3（2026-11-05）：`dl_old` 会把旧的 `fulltext` 标签原样带下去 ——
                     # 这一处只知道"现在有字节了"，有没有可抽文本要等 B 抽取时现算。
                     # 所以按三档口径算出来的是 `None`（有字节、这一处没抽过）⇒ 交给
                     # `with_fulltext` 把旧标签清掉，而不是让 `status=ok` 的行继续写着
@@ -2253,7 +2253,7 @@ def _h_lit_overlap_check(ctx: _Ctx, title: str, doi: str | None = None) -> Any:
         return fail(f"本地库读不出来 ⇒ 重叠**没查成**（不是「没有重叠」）：{exc}",
                     kind="store_error", checked=False)
     # 字面量键表（`tests/test_tools_branch_key_sets.py` 的"看不清的成功支"那一档）：
-    # 键集合必须静态可见，所以这里逐键搬，不用 `**got`。
+    # 键集合必须静态可见，所以这里逐键搬，不用 `got`。
     return ok({
         "title": title,
         "doi": D.normalize_doi(doi),

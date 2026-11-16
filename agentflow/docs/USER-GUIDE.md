@@ -651,7 +651,7 @@ Get-Content projects\<ws>\sessions\<sid>.jsonl -Tail 30
 # ② 台账真的落了东西吗（不是"它说落了"）
 python -c "import json,pathlib;d=pathlib.Path(r'projects\<ws>\data');print({t:len(json.loads((d/f'{t}.json').read_text(encoding='utf-8'))['rows']) for t in ('statements','tasks','documents','experiments')})"
 
-# ③ 收工门（7 格）+ 内容级验收读数
+# ③ 收工门（8 格）+ 内容级验收读数
 python -m agentflow --root projects\<ws> closing
 ```
 

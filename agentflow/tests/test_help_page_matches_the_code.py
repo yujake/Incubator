@@ -471,13 +471,14 @@ CLAIMS: tuple[Claim, ...] = (
           _ledger_pair),
     # 2026-11-01（块 5）：验收页改成三块（A 证明 / B 结构 / C 收工）。数字各认领一处：
     # 三块 = `package_face()` 的三个子对象；六态 = `verifications.REVIEW_STATES`；
-    # 六类 = 字符扫描的六档；七格 = 收工门 `DEFAULT_CHECKS`（2026-11-14：`paper` 退出收工判定）。
+    # 六类 = 字符扫描的六档；八格 = 收工门 `DEFAULT_CHECKS`（2026-11-14：`paper` 退出收工判定；
+    # 2026-11-16 Q1：加第八格 `literature_pending`）。
     Claim("论文包三块", "package_face 的三个子对象（proofs / structure / closing）",
           lambda _raw: 3, expected=3),
     Claim("review 六态", "verifications.REVIEW_STATES 的档数",
           lambda _raw: len(VR.REVIEW_STATES), pin="六态"),
-    Claim("七格四态", "closing.DEFAULT_CHECKS 的格数",
-          lambda _raw: len(CL.DEFAULT_CHECKS), pin="七格"),
+    Claim("八格四态", "closing.DEFAULT_CHECKS 的格数",
+          lambda _raw: len(CL.DEFAULT_CHECKS), pin="八格"),
     Claim("五条判据 + 五种辅助读数", "reviewaccept.CRITERIA 的条数", _criteria, pin="五条"),
     Claim("五条判据 + 五种辅助读数", "reviewaccept.AUXILIARY_SIGNALS 的条数", _auxiliary,
           pin="五种"),

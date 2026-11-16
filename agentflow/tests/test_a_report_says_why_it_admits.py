@@ -111,6 +111,13 @@ def _fs_read(reg, extract_res):
     return got
 
 
+def _submit(reg, rid: str = RID):
+    """提交那一刻（2026-11-16 Q1）：批量注册 → 回填 → 清表。"""
+    got = reg.call("lit.admit_all", request_id=rid)
+    assert got.ok, got.error
+    return got
+
+
 def _report_text(store: Store, rid: str = RID) -> str:
     written = L.write_report(store, rid)
     return pathlib.Path(written["path"]).read_text(encoding="utf-8")
@@ -130,10 +137,12 @@ def test_a_an_approved_row_carries_receipt_verdict_and_reason(store: Store, reg)
     _fs_read(reg, ext)
     ok = _admit(reg, [{"slot": slot, "availability": AV.READABLE}])
     assert ok.ok, ok.error
+    # Q1：判收只是"有入库资格"，报告的「批准入库」出现在提交回填之后。
+    _submit(reg)
 
     receipt = AV.receipts_by_slot(store.root)[slot]
     assert receipt["tier"] == LR.FULLTEXT_OK and receipt["chars"] > 0, receipt
-    text = _report_text(store)
+    text = pathlib.Path(L.report_path(store, RID)).read_text(encoding="utf-8")
     assert "判定：批准入库" in text, text
     assert f"读过 {receipt['chars']} 字" in text, text
     assert receipt["sha256"][:12] in text, text
@@ -209,10 +218,12 @@ def test_c_no_attempt_means_no_admission_and_metadata_only_is_not_a_loophole(
     try:
         AV.check_read = lambda root, slot, receipt=None, **kw: ("extract_failed", "")
         after = _admit(reg, items)
+        assert after.ok, (f"打桩成'试过'之后仍被拒 ⇒ 闸不是长在 `litavail.check_read` 上"
+                          f"（{after.error}）")
+        # Q1：判收不发号 —— 进库要等提交那一刻（打桩仍然要开着，提交时同一道闸再核一次）。
+        _submit(reg)
     finally:
         AV.check_read = original
-    assert after.ok, (f"打桩成'试过'之后仍被拒 ⇒ 闸不是长在 `litavail.check_read` 上"
-                      f"（{after.error}）")
     assert len(store.rows("literature")) == 2
 
 
@@ -277,8 +288,9 @@ def test_f_a_metadata_only_approval_shows_what_was_attempted(store: Store, reg) 
     assert not failed.ok, failed.meta
     ok = _admit(reg, [{"slot": slot, "availability": AV.METADATA_ONLY}])
     assert ok.ok, ok.error
+    _submit(reg)
 
-    text = _report_text(store)
+    text = pathlib.Path(L.report_path(store, RID)).read_text(encoding="utf-8")
     assert "判定：批准入库" in text, text
     assert "抽读档位 extract_failed（没拿到可读字节）" in text, text
     assert "尝试过" in text and "text.extract.garbled_text" in text, text
@@ -298,15 +310,27 @@ def test_e_the_receipt_in_the_report_is_the_ledger_row(store: Store, reg) -> Non
     ext = _extract(store, reg, slot)
     _fs_read(reg, ext)
     assert _admit(reg, [{"slot": slot, "availability": AV.READABLE}]).ok
+    # Q1：交报告 + 批量注册 + 回填发生在提交那一刻；定稿落盘之后不再重渲染
+    # （受控拒 `already_settled`，见第 ⑨ 条）。所以"报告与台账同源"用重渲染
+    # 验：`report_markdown` 是纯函数，回执换了、它渲染出来的摘要就换。
+    _submit(reg)
 
     ledger = (store.root / "data" / AV.READ_LEDGER_NAME)
     line = next(json_line for json_line in ledger.read_text(encoding="utf-8").splitlines()
                 if f'"{slot}"' in json_line)
     assert str(AV.receipts_by_slot(store.root)[slot]["chars"]) in line, line
-    first = _report_text(store)
+
+    def _render() -> str:
+        rows = [r for r in store.rows("lit_candidates") if r["request_id"] == RID]
+        return L.report_markdown(RID, rows, availability=AV.tiers_by_slot(store.root),
+                                 reads=AV.receipts_by_slot(store.root), phase="final")
+
+    final_text = pathlib.Path(L.report_path(store, RID)).read_text(encoding="utf-8")
+    assert f"读过 {AV.receipts_by_slot(store.root)[slot]['chars']} 字" in final_text, final_text
+    first = _render()
     assert f"读过 {AV.receipts_by_slot(store.root)[slot]['chars']} 字" in first, first
 
-    # 同槽位再落一条更新的回执（真机是"过期抽读件由后写的覆盖先写的"）⇒ 报告必须
+    # 同槽位再落一条更新的回执（真机是"过期抽读件由后写的覆盖先写的"）⇒ 重渲染必须
     # 跟着来源换，而不是继续打印写报告那一刻缓存下来的旧摘要。
     latest = AV.receipts_by_slot(store.root)[slot]
     AV.record_read(store.root, RID, slot, LR.FULLTEXT_OK,
@@ -314,7 +338,7 @@ def test_e_the_receipt_in_the_report_is_the_ledger_row(store: Store, reg) -> Non
                    text_abs=latest["text_abs"], text_version=latest["text_version"],
                    chars=4242, sha256="a" * 64, note="第二次抽读",
                    candidate=latest.get("candidate"))
-    second = _report_text(store)
+    second = _render()
     assert "读过 4242 字" in second, second
     assert "a" * 12 in second, second
     assert f"读过 {latest['chars']} 字" not in second, second

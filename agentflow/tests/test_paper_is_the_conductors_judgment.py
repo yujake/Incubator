@@ -65,7 +65,7 @@ def test_a_paper_is_not_one_of_the_gate_cells() -> None:
         f"说明书与实现分家了：docstring 表里是 {documented}，"
         f"`DEFAULT_CHECKS` 是 {list(CL.DEFAULT_CHECKS)}")
     assert "paper" not in CL.DEFAULT_CHECKS, CL.DEFAULT_CHECKS
-    assert len(CL.DEFAULT_CHECKS) == 7, CL.DEFAULT_CHECKS
+    assert len(CL.DEFAULT_CHECKS) == 8, CL.DEFAULT_CHECKS
 
 
 # ------------------------------------------------------------------ b 读数照旧

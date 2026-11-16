@@ -148,6 +148,12 @@ def test_negative_control_raising_the_cap_lets_eleven_through(reg, store, monkey
     res = reg.call("lit.admit", slots=slots, request_id=RID)
     assert res.ok, f"放开上限之后仍然被拒：{res.error}"
     assert len(res.unwrap()["admitted"]) == 11, res.unwrap()
+    # 2026-11-16（Q1）：`lit.admit` 判收不发号，注册发生在提交那一刻 ⇒
+    # `literature` 的行数要等 `lit.admit_all` 之后才涨（改前这一笔就涨了）。
+    assert len(store.rows("literature")) == 0, "判收竟然直接写进了 literature"
+    submitted = reg.call("lit.admit_all", request_id=RID)
+    assert submitted.ok, submitted.error
+    assert submitted.unwrap()["registered"] == 11, submitted.unwrap()
     assert len(store.rows("literature")) == 11
 
 
@@ -268,7 +274,12 @@ def test_negative_control_disabling_overlap_check_admits_the_high_overlap_paper(
     res = reg.call("lit.admit", slots=[slots[0]], request_id=RID)
     assert res.ok, res.error
     admitted = res.unwrap()["admitted"]
-    assert admitted and admitted[0]["created"] is True, "关掉判据之后仍然没入库 —— 负控没打在真判据上"
+    assert admitted and admitted[0]["lit_id"] == "", "判收不该发号（Q1）"
+    # 注册发生在提交那一刻：`created` 与 `lit_id` 都是 `lit.admit_all` 的读数。
+    submitted = reg.call("lit.admit_all", request_id=RID)
+    assert submitted.ok, submitted.error
+    done = submitted.unwrap()["admitted"]
+    assert done and done[0]["created"] is True, "关掉判据之后仍然没入库 —— 负控没打在真判据上"
     assert len(store.rows("literature")) == 2, "关掉判据后应该多出一行"
 
 
@@ -406,8 +417,9 @@ def test_the_whole_list_is_refused_until_every_item_is_judged(reg, store):
     改前读数：三条一起 stage、一条判拒，`lit.admit_all` 一次就把另两条搬进 literature
     （`registered == 2`）—— 那正是 Q16 要挡的"整批搬库"，而它当时是放行的。
     改后读数：同一次调用被拒（`kind=undecided_items`，拒信点名 000000 / 000001），
-    literature 一行都没多；逐条 `lit.admit` 之后 `admit_all` 以 `registered == 0` 收口
-    （该入的在逐条那一步已经入了），报告三块都在。
+    literature 一行都没多；逐条 `lit.admit` 之后 `admit_all` 以 `registered == 2` 收口。
+    2026-11-16（Q1）再改读数：逐条 `lit.admit` 只是判收（没有号、不进 literature），
+    `admit_all` 提交那一刻才批量注册 ⇒ `registered == 2`、`counts.admitted == 2`。
     """
     slots = _stage(reg, ["Migration one", "Migration two", "Migration three"])
     L.reject(store, slots[2], "rejected_low_quality", "只有一行摘要")
@@ -425,11 +437,12 @@ def test_the_whole_list_is_refused_until_every_item_is_judged(reg, store):
         got = reg.call("lit.admit", slots=[slot], request_id=RID)
         assert got.ok, got.error
         assert len(got.unwrap()["admitted"]) == 1, got.unwrap()
+        assert got.unwrap()["registered"] == 0, "判收不该注册（Q1）"
 
     res = reg.call("lit.admit_all", request_id=RID)
     assert res.ok, res.error
     data = res.unwrap()
-    assert data["registered"] == 0, data
+    assert data["registered"] == 2, data
     assert data["report_path"], data
     listing = L.list_candidates(store, request_id=RID)
     assert listing["counts"]["pending"] == 0, listing["counts"]
@@ -564,7 +577,10 @@ def test_run_once_stages_and_no_longer_bulk_admits(store):
     text = Path(res.report_path).read_text(encoding="utf-8")
     assert "## 已入库（0 篇）" in text and "## 未入库（0 篇）" in text, text
     assert "## 待裁（2 条）" in text, text
-    assert L.report_violations(text) == [], L.report_violations(text)
+    # 自动链路写的是进度报告（`phase="draft"`）：它带着 2 条待裁，而"交报告/定稿"
+    # 那一档（`final`/`submitted`）才要求 0 条待裁（Q1 的两个渲染时刻）。
+    assert L.report_violations(text, phase="draft") == [], \
+        L.report_violations(text, phase="draft")
 
 
 def test_run_once_cannot_bulk_admit_past_the_delegation_cap(store):
@@ -662,19 +678,29 @@ def test_a_twin_slot_is_a_reading_and_the_report_annotates_instead_of_hiding_it(
     _audited(reg, store, [first_slot])
     admitted = reg.call("lit.admit", slots=[first_slot], request_id=RID)
     assert admitted.ok and admitted.unwrap()["admitted"], admitted.unwrap()
-    lit_id = admitted.unwrap()["admitted"][0]["lit_id"]
+    # Q1：判收不发号 ⇒ 号要等提交那一刻才有（`lit.admit_all` 的 `admitted[]` 是映射）。
+    assert admitted.unwrap()["admitted"][0]["lit_id"] == "", admitted.unwrap()
+    assert admitted.unwrap()["registered"] == 0, admitted.unwrap()
 
-    # 同一篇再登记一次：它已经是 admitted 槽，不并（历史不能抹），于是长出新槽
+    # 同一篇再登记一次：它已经是 qualified 槽，不并（历史不能抹），于是长出新槽
     twin = reg.call("lit.stage_add", request_id=RID, entries=[
         {"title": "Twin paper", "doi": "10.73/twin", "provider": "stub", "year": 2021}])
     assert twin.ok, twin.error
     twin_slot = twin.unwrap()["staged"][0]["slot"]
     assert reg.call("lit.stage_reject", slot=twin_slot,
                     reason_code="duplicate_doi", note="同一篇已经在库").ok
+    # 又 stage_add 过一次 ⇒ 上一份回读回执作废（提交闸会以 no_readback 拒）：再读一遍。
+    assert reg.call("lit.stage_list", request_id=RID).ok
+
+    submitted = reg.call("lit.admit_all", request_id=RID)
+    assert submitted.ok, submitted.error
+    _mapping = {x["slot"]: x["lit_id"] for x in submitted.unwrap()["admitted"]}
+    assert _mapping.get(first_slot), submitted.unwrap()
+    lit_id = _mapping[first_slot]
 
     listing = L.list_candidates(store, request_id=RID)
     assert listing["counts"] == {"pending": 0, "withdrawn": 0, "rejected": 1,
-                                 "admitted": 1, "cleared": 0}, listing["counts"]
+                                 "qualified": 0, "admitted": 1, "cleared": 0}, listing["counts"]
     assert listing["duplicate_rows"] == 2, listing
     assert listing["duplicate_groups"][0]["slots"] == [first_slot, twin_slot], listing
 

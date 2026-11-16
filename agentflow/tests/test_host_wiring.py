@@ -29,11 +29,11 @@ class _FakeLLM:
     def __init__(self) -> None:
         self.calls = 0
 
-    def __call__(self, *a, **kw):  # pragma: no cover - 只在被误用时走到
+    def __call__(self, *a, kw):  # pragma: no cover - 只在被误用时走到
         self.calls += 1
         raise AssertionError("构建期不许调用 LLM")
 
-    def complete(self, *a, **kw):  # pragma: no cover
+    def complete(self, *a, kw):  # pragma: no cover
         self.calls += 1
         raise AssertionError("构建期不许调用 LLM")
 
@@ -578,10 +578,17 @@ def _judge_and_admit(store, request_id: str, slot: str,
     readback = reg.call("lit.stage_list", request_id=request_id)
     assert readback.ok, readback.error
     from agentflow import litavail as AV
+    from agentflow import litread as LR
     AV.record_availability(store.root, request_id, str(slot), AV.METADATA_ONLY)
+    # 仅题录同样要有一条"试过、拿不到可读文本"的回执（AR1）。
+    AV.record_read(store.root, request_id, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
+                   source="fixture:no-bytes", note="text.extract.no_text_layer")
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
-    return got.unwrap()
+    # 2026-11-16（Q1）：判收不发号 —— `lit_id` 只从提交那一刻的批量注册出来。
+    done = reg.call("lit.admit_all", request_id=request_id)
+    assert done.ok, done.error
+    return done.unwrap()
 
 
 def test_the_sources_a_returns_can_be_registered_as_a_closed_dependency(tmp_path: Path):
@@ -730,7 +737,7 @@ class _SeamLike:
     def __init__(self) -> None:
         self.calls = 0
 
-    def ask(self, *a, **kw):  # pragma: no cover - 只在被误用时走到
+    def ask(self, *a, kw):  # pragma: no cover - 只在被误用时走到
         self.calls += 1
         raise AssertionError("构建期不许调用模型")
 

@@ -2850,6 +2850,8 @@ def _gate_source(name: str, root_p: Path) -> dict[str, Any]:
         "substance": _src("data/statements.json", label="实质产出"),
         "acceptance": _src("out/paper/ACCEPTANCE-CHECKS.json", label="验收表 C1–C16"),
         "artifact_ledger": _src("ARTIFACTS.jsonl", label="产物台账"),
+        # 2026-11-16（Q1）：第八格读的是待入库文献表本身（以及它的归档目录）。
+        "literature_pending": _src("data/lit_candidates.json", label="待入库文献表"),
     }
     return table.get(name, _src(""))
 
@@ -3227,7 +3229,7 @@ def _settings_reading() -> tuple[dict[str, Any], str, str]:
 
     返回 `(读数, tri, reason)`。key 永远不出现在这里：`model.api_key` 只写
     "配没配"（`configured`）与掩码后的 `redacted()`（`modelgw.ModelSpec.redacted`
-    在 key 非空时给 `***`）。判据 `tests/test_webui_readers.py` 有一条逐字符断言
+    在 key 非空时给 `*`）。判据 `tests/test_webui_readers.py` 有一条逐字符断言
     真 key 不在读数里。
     """
     from ..modelgw import ModelSpec, key_source, spec_for

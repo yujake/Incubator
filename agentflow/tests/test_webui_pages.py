@@ -616,11 +616,13 @@ def test_acceptance_page_reads_the_three_package_blocks(
         assert set(pkg["cache"]) == {"hit", "key_sha", "built_at"}, pkg["cache"]
         assert pkg["structure"]["tri"] == "not_applicable", pkg["structure"]
         gates = pkg["closing"]["gates"]
-        # 2026-11-14（业主裁定）：`paper` 退出收工判定 ⇒ `closing.DEFAULT_CHECKS` 八格变七格。
-        # 这里仍钉硬数字（不改 `>=`、不删断言）：格数是契约，页面少一格/多一格都要红。
-        assert len(gates["cells"]) == 7, gates["cells"]
-        # 反真空：硬数字 7 只说明"现在是七格"。若有人把 `paper` 塞回
-        # `closing.DEFAULT_CHECKS`（格数又回八格），那一条裁定就被静默推翻了 ——
+        # 2026-11-14（业主裁定）：`paper` 退出收工判定 ⇒ 格表 8 → 7。
+        # 2026-11-16（Q1，业主口径「清空待入库文献表及文献 ⇒ 真正收工」）：加第八格
+        # `literature_pending` ⇒ 7 → 8。这里仍钉硬数字（不改 `>=`、不删断言）：
+        # 格数是契约，页面少一格/多一格都要红。
+        assert len(gates["cells"]) == 8, gates["cells"]
+        # 反真空：硬数字只说明"现在是几格"。若有人把 `paper` 塞回
+        # `closing.DEFAULT_CHECKS`，那一条裁定就被静默推翻了 ——
         # 这里逐格点名，必须红。`cells` 的顺序与名字都取自 `readouts.gate_cells`
         # （它遍历 `closing.DEFAULT_CHECKS`），所以这一条量的就是门的格表本身。
         from agentflow import closing as _CL   # 门的真身：反真空那一条要与它逐格同名
@@ -628,7 +630,7 @@ def test_acceptance_page_reads_the_three_package_blocks(
         assert "paper" not in names, (
             f"`paper` 又回到了收工门的格表里（2026-11-14 业主裁定它退出收工判定）：{names}")
         assert set(names) == set(_CL.DEFAULT_CHECKS), (
-            f"页面那七格与 `closing.DEFAULT_CHECKS` 不是同一张表：{names} vs "
+            f"页面那八格与 `closing.DEFAULT_CHECKS` 不是同一张表：{names} vs "
             f"{list(_CL.DEFAULT_CHECKS)}")
         assert set(gates["counts"]) == {"pass", "fail", "unknown", "na"}, gates["counts"]
         for cell in gates["cells"]:
@@ -808,10 +810,10 @@ def _markdown_marker_problems(label: str, text: str) -> list[str]:
 
 
 def test_no_page_prints_markdown_markers_to_the_screen() -> None:
-    """十页与各组件的渲染正文里不许有 markdown 记号（`**粗**` 会被原样印出来）。
+    """十页与各组件的渲染正文里不许有 markdown 记号（`粗` 会被原样印出来）。
 
     为什么单列一条：这一批实测漏过两处 —— Help 页的「验收」、预算页重设按钮的
-    `impact`（`会把总额**覆盖**成 $…`）。两处都不是 JSX 能消化的语法，用户看到的是
+    `impact`（`会把总额覆盖成 $…`）。两处都不是 JSX 能消化的语法，用户看到的是
     多出来的星号。注释里的记号不算（注释不上屏），所以先剥注释再扫。
 
     负控：同一段正文里塞一个记号必须报出来；只写在注释里必须不报。
@@ -1107,7 +1109,7 @@ def test_the_settings_panel_prefills_from_the_reading() -> None:
 
     两向都钉：
     - 正向：`value` 用 `presetOf(settings, …)`（读数为底）、存在 `currentOf` 取现值；
-    - 反向：`model.api_key` 不许回填（读数恒为 `***`，回填等于把 `***` 写回文件）。
+    - 反向：`model.api_key` 不许回填（读数恒为 `*`，回填等于把 `*` 写回文件）。
 
     2026-10-13（R88）再加一条：key 那一格必须是 `type=password`（输入时不上屏）。这是同一条"key 只写不读"纪律的另一半 —— 不回填不等于不上屏。
     """
