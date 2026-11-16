@@ -5337,8 +5337,8 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
         # ---- 2026-11-13（业主裁定）：退休的命题不是「欠签」 ----------------------
         #
         # `abandoned` 与错误那一档都是终态：前者"明确放弃"，后者"标记为错误"。
-        # 两个都要从这里摘掉，否则收工门会对一条已经判死的命题永远要签
-        # （blocker `statements_unsigned_without_v_or_abandon` 会一直红）。
+        # 两个都要从这里摘掉，否则读数会一直把一条已经判死的命题列成「有稿无签」
+        # （`statements_unsigned_without_v_or_abandon`，2026-11-16 起是 warning 读数）。
         # `abandoned` 那一支仍要求"拿得出理由与时间"：自称放弃却写不出标记的行照旧
         # 计成一档（`abandoned_without_reason`）—— 标个状态不能绕过整条裁定。
         # 错误那一档同一条纪律：判它错的凭据由唯一读口判（`errorstate.statement_refuted`），
