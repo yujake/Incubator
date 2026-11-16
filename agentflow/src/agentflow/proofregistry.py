@@ -45,17 +45,16 @@
 3. 没有新表、没有新列：`schema.py` 零改动（判据 `tests/test_proof_registration_is_decoupled.py`
    的 f 那一格）。
 
-## 什么算「新命题」（这是"过不过闸"的唯一判据）
+## 什么算「新命题」／「改命题表述」（"过不过闸"的唯一判据）
 
 - 手稿登记里没有同 label 的条目 ⇒ 新命题 ⇒ 过 F 秘书形态闸（`gate` 回调，一次）；
 - 有同 label 的条目、且 `## 命题` 的规范化指纹相同 ⇒ 重写证明 ⇒ 不过闸、不登记；
-- 有同 label 的条目、而命题指纹不同 ⇒ 受控拒 `proposition_text_changed`
-  （"这是新命题／或走放弃+换号，不要用挂证明改命题正文"）。
+- 指纹不同 ⇒ 走 `statementamend`：V 对盘上这一份正文判过「有毛病」（finding）+ 新表述
+  过同一道闸 ⇒ 沿用原稿号原位改写 `## 命题`（业主 2026-11-16 裁定 6）；缺一 ⇒ 受控拒
+  `proposition_text_changed`（新命题走登记，或「放弃 + 换号」；不要用挂证明改命题正文）。
 
-为什么"同 label + 命题指纹"两条都看：label 是作者给的粗键（同一子目标的第 N 轮），
-指纹是内容键。只看 label 会把"同一个子目标换了命题"读成重写（静默改命题，正是这次要
-消灭的形态）；只看指纹则同一命题的标点级改写会变成"新命题"（多登记一次）。
-所以：label 定"这是不是同一个登记槽"，指纹定"这个槽里是不是同一条命题"。
+为什么两条都看：label 是作者给的粗键（同一子目标的第 N 轮），指纹是内容键。只看 label
+会把"换了命题"读成重写（静默改命题）；只看指纹则标点级改写会变成"新命题"（多登记一次）。
 
 ## 手稿由框架写
 
@@ -81,7 +80,8 @@ from . import manuscriptkind as _MK  # 命题类型那一轴（标签 / 交叉�
 from . import verifications as _VR
 from .proofoutcomes import (  # 登记这一步的三段结局读数
     REFUSED_GATE, REFUSED_PATH, REFUSED_READ, REFUSED_SHAPE, REFUSED_TEXT_CHANGED,
-    REFUSED_WRITE, form_gate_reading, manuscript_artifact, preserved_reading,
+    REFUSED_WRITE, amend_statement, form_gate_reading, manuscript_artifact,
+    preserved_reading,
 )
 from .proofrevisions import (  # 收工读数那一半
     entries_on_disk, proof_revisions, registration_note,
@@ -402,8 +402,7 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     missing = [mark for mark in [*order, VERSION_MARK]
                if mark in values and str(values[mark]) != "" and mark not in touched]
     if missing:
-        # 头部最后一行之前（贴近稿头，不污染分节）。新稿已经没有 `- 证明号：` 那一行
-        # 可以当锚点，所以与"老稿本来就没有证明号"那一档走同一条插入规则。
+        # 头部最后一行之前（贴近稿头，不污染分节）：新稿没有 `- 证明号：` 可当锚点，与老稿同一规则。
         at = len(out)
         while at > 0 and not out[at - 1].strip():
             at -= 1
@@ -671,27 +670,29 @@ def register_or_rewrite(
     old_fp = str(entry.get("fingerprint") or "")
     migrated = False
     if same_slot and not old_fp:
-        # 旧稿（解耦之前落的那一批）没有指纹行：这一笔是"给旧稿补上登记元信息"，
-        # 不是"改命题"。补的时候不拿旧稿的 `## 命题` 去拒新正文 —— 权威判定在调用方
-        # （F 已经按 statements 那一行核过命题正文），这里只如实标 `migrated=True`。
+        # 旧稿（解耦之前落的那一批）没有指纹行：这一笔是"给旧稿补上登记元信息"，不是"改命题"。
+        # 补的时候不拿旧稿的 `## 命题` 去拒新正文 —— 权威判定在调用方（F 已按 statements 核过）。
         _head, sections = split_sections(old_text)
         old_prop = next((body for name, body in sections if name == "命题"), "")
         entry["fingerprint"] = proposition_fingerprint(old_prop) if old_prop.strip() else ""
         migrated = True
+    # ---- 同槽换了命题正文：只有「V 的 finding 触发 + 新表述过闸」才放行（裁定 6） ----
+    # 业主 2026-11-16：「要根据finding改命题表述，……需要再过命题表述闸且不申请新稿号而是
+    # 沿用稿号和稿并自动修改稿中命题描述为过闸的描述」。判据在 `statementamend`；放行时它
+    # 带回改写好的整份稿（就是这一笔的基稿），否则照旧受控拒（受控码与文案不变）。
     if same_slot and old_fp and old_fp != new_fp:
-        out.update(refused=REFUSED_TEXT_CHANGED,
-                   why=("命题正文与登记条目里那一条不一致（指纹 "
-                        f"{old_fp[:12]}… → {new_fp[:12]}…）⇒ 受控拒。"
-                        "这是另一条新命题（走登记），或者要走「放弃 + 换号」；"
-                        "不要用挂证明改命题正文 —— 重写只能改 `## 证明` 那一节"),
-                   entry=entry, problems=["proposition_text_changed"])
-        return out
+        amend = amend_statement(root, out=out, entry=entry, rel=rel, old_text=old_text,
+                                proposition=proposition, gate=gate, kind=kind,
+                                label=label, proof_text=proof_text)
+        if not amend.get("ok"):
+            out.update(dict(amend.get("refusal") or {}))
+            return out
+        old_text = str(amend.get("text") or old_text)
     mode = MODE_REWRITTEN if same_slot else MODE_REGISTERED
     # ---- 幂等：同一份正文再挂一次 ⇒ 一个字节都不动（版本号也不涨） ------------------
     #
     # D 的交付动作每写一份报告都会把同一批稿再递一遍（`write_report` 每次都跑），
-    # 而"同一份正文"不该被记成第 N+1 版 —— 否则 `proof_no` 会被无意义的重复递交顶高，
-    # V 台账也会被同一 sha 灌满。
+    # 而"同一份正文"不该被记成第 N+1 版 —— 否则 `proof_no` 会被重复递交顶高、台账被灌满。
     preserved = preserved_reading(
         entry, mode=mode, rewritten=(mode == MODE_REWRITTEN), new_fp=new_fp,
         proof_text=proof_text, old_text=old_text, dependency_rows=dependency_rows)
@@ -715,9 +716,8 @@ def register_or_rewrite(
     #   「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
     #     应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
     #
-    # ⇒ 重写不涨版本号：这一条稿的 `proof_no` 恒 1；改正文就是就地改那一节。
-    # 老盘按 `-pN`（N≥2）命名的那几份是历史：命中它们时不改身份，沿用文件名里那个 N
-    # ——否则一次重写等于把老稿改了名（那才是真正的坏账）。新写的路径不会再产生 `-pN`。
+    # ⇒ 重写不涨版本号（`proof_no` 恒 1，改正文就是就地改那一节）。老盘 `-pN`（N≥2）那几份
+    # 是历史：命中它们时沿用文件名里那个 N（否则一次重写等于给老稿改名）。新写路径不再产生。
     if mode == MODE_REWRITTEN:
         proof_no = _legacy_proof_no_of(rel, entry)
     else:

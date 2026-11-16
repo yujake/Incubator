@@ -129,3 +129,22 @@ def preserved_reading(
         "written": False, "preserved": True, "entry": dict(entry),
         "section_hashes": _PR.section_hashes(old_text), "why": "",
     }
+
+
+def amend_statement(
+    root: Any, *, out: dict[str, Any], entry: Mapping[str, Any], rel: Any,
+    old_text: Any, proposition: Any, gate: Callable[..., Mapping[str, Any]] | None,
+    kind: Any = "", label: Any = "", proof_text: Any = "",
+) -> dict[str, Any]:
+    """同槽换了命题正文那一档的结局读数 —— 纯转发 `statementamend.amend_reading`。
+
+    为什么是一个转发而不是第二份实现：判据（触发读 V 的两本台账 / 过闸 / 自动改写 `## 命题`）
+    只有一处实现；这里存在只为 `proofregistry` 不必顶层 import 第二个模块 ——
+    它与 :func:`form_gate_reading` 是同一件事的两半（"这一笔放不放行"），
+    所以住在同一个模块里，被同一个 import 带进 `register_or_rewrite`。
+    """
+    from . import statementamend as _SA  # 惰性：依赖方向 statementamend → 本模块
+
+    return _SA.amend_reading(root, out=out, entry=entry, rel=rel, old_text=old_text,
+                             proposition=proposition, gate=gate, kind=kind,
+                             label=label, proof_text=proof_text)
