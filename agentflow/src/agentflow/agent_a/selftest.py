@@ -211,6 +211,16 @@ def _selftest() -> int:
                     if str(row.get("slot") or "") == slot:
                         row["relevance"] = "自检替身：逐条读过的记录 —— 这一条与本次检索同族"
                         tx.upsert("lit_candidates", row, note="selftest_relevance")
+            # AR1（2026-11-16）之后提交闸还读两格证据：可读性判定 + 一次读取尝试的回执。
+            # 这一条候选没有本地全文（自动链路不下载），所以按"仅题录"的诚实形态补：
+            # `metadata_only` + 一条 `extract_failed` 回执（"试过、拿不到可读文本"）。
+            from .. import litavail as LAV
+            from .. import litread as LR
+
+            LAV.record_availability(st.root, "r-0002", slot, LAV.METADATA_ONLY,
+                                    note="selftest：仅题录（无本地全文）")
+            LAV.record_read(st.root, "r-0002", slot, LR.FULLTEXT_EXTRACT_FAILED,
+                            note="自检替身：试过一次抽取，拿不到可读文本")
             gate_green = LS.admission_plan(st, request_id="r-0002", slots=[slot])
             check("提交闸：补上 relevance 之后逐条判决那条路放行（闸不是永远关着的）",
                   gate_green.get("ok") is True

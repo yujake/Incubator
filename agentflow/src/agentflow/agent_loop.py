@@ -4631,7 +4631,7 @@ def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
     """
     total = int(reading.get("summons_total") or 0)
     bad = int(reading.get("summons_unconsumed") or 0)
-    unsure = int(reading.get("summons_unknown") or 0)
+    undecided = int(reading.get("summons_unknown") or 0)
     if total == 0:
         status = "n/a"
         why = ("这一趟没有派过子代理（summons_total=0）⇒ 判据没有对象：不红，"
@@ -4641,9 +4641,9 @@ def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
         why = (f"派了 {total} 条子任务，其中 {bad} 条拿到了结果却没有处理"
                "（它之后没有任何一步留下指到它的效应，也没有其它可指涉证据、"
                "也没有写受控的 not_consumed）")
-    elif unsure:
+    elif undecided:
         status = "unknown"
-        why = (f"派了 {total} 条子任务，其中 {unsure} 条判不了（后续有其它可指涉证据："
+        why = (f"派了 {total} 条子任务，其中 {undecided} 条判不了（后续有其它可指涉证据："
                "板项收口 / 稿名 / 判词正文 / 留言 / 再派活，但拿不到那条子产出的字面量）"
                " —— 这一档不是『没处理』，也不是『处理了』")
     else:
@@ -4652,9 +4652,9 @@ def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
                f"（consumed={int(reading.get('summons_consumed') or 0)}，"
                f"waived={int(reading.get('summons_waived') or 0)}）")
     return {"status": status, "why": why, "summons_total": total,
-            "summons_unconsumed": bad, "summons_unknown": unsure,
+            "summons_unconsumed": bad, "summons_unknown": undecided,
             "line": (f"[父必须处理子产出] {status.upper()} "
-                     f"summons_total={total} unconsumed={bad} unknown={unsure}：{why}")}
+                     f"summons_total={total} unconsumed={bad} unknown={undecided}：{why}")}
 
 
 #: 步数上报的节奏（D11，2026-11-09）：`0`（含负数）=「不上报」。

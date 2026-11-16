@@ -56,8 +56,13 @@ def _legs(**over: object) -> list[dict]:
 
 
 def _seed_legs(s: Store) -> None:
-    """三条腿各一条凭据（与 `test_closing_gate` 的正控同一形态）。"""
-    _t3_experiment(s, "0002", method="formal", evidence_kind="proof")
+    """三条腿各一条凭据（与 `test_closing_gate` 的正控同一形态）。
+
+    实验号必须是 `0001`：`_paper_with_claim` 那条断言引的是 `exp:0001`，而 G8
+    可复跑门从 2026-11-16 起按台账逐条对账（成稿里每个 `exp:` 都要在 `experiments`
+    有一行）。这一档此前写 `0002` 时没人发现 —— 那时 G8 读的是回执文件，不是台账。
+    """
+    _t3_experiment(s, "0001", method="formal", evidence_kind="proof")
     _paper_with_claim(s, doc_id="0002")
     with s.tx("documents", actor="test") as tx:
         row = dict(tx.rows("documents")[0])

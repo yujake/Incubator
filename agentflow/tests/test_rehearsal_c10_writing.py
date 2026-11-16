@@ -109,6 +109,8 @@ class _Wire:
         self.bodies: list[dict[str, str]] = []
         self._steps: dict[Any, int] = {}
         self._done: list[str] = []
+        #: M 已经跑过收工门没有（22B：有论文包的项目在 final 前必须先问一次门）。
+        self._closed = False
 
     # ------------------------------------------------------------ 剧本
     def _m_step(self, prompt: str) -> str:
@@ -126,6 +128,16 @@ class _Wire:
             self._done.append(todo[0])
             return _json({"tool": "conductor.retire_child",
                           "args": {"child_name": todo[0], "reason": "交完了"}})
+        # 22B（2026-11-16）：这一趟盘上有论文包（`out/paper/main.tex`）⇒ 属"有门的
+        # 项目"，M 在 final 之前必须先跑一次收工门。彩排照真机形态补这一拍。
+        if not self._closed:
+            self._closed = True
+            return _json({"tool": "conductor.closing", "args": {
+                "goal": "C10 成文 / 审校回路跑通（H 自行 close_as）",
+                "goal_met": True,
+                "basis": "documents 一行 unresolved_review、review_findings 一行 dangling_dep、"
+                         "dependencies 一行 dangling、H 的 verify_fixes 已逐条列 still_open",
+            }})
         return _json({"final": "M 收工", "evidence": []})
 
     def _step(self, role: str, prompt: str) -> str:

@@ -158,6 +158,8 @@ class _Wire:
         self.bodies: list[dict[str, str]] = []
         self.steps: dict[str, int] = {}
         self.retired: list[str] = []
+        #: M 已经跑过收工门没有（22B：研究型 / 有门的项目在 final 前必须先问一次门）。
+        self.closed = False
         #: 从 C 的回执里读到的候选（C 登记时写进报告 payload 的那一份）。
         self.candidates: list[dict] = []
         self.gaps_payload: dict = {}
@@ -186,7 +188,21 @@ class _Wire:
         if index == 2:
             return _json({"summon": {"role": "B",
                                      "task": "读 C 登记的那份结构重复报告，逐条裁决并执行"}})
-        return self._retire_then(prompt, _json({"final": "M 收工", "evidence": []}))
+        # 22B（2026-11-16）：研究型 / 有门的项目里，M 在 final 之前必须真的问过一次
+        # 收工门（`conductor.closing`）。这一趟立起了 research_questions ⇒ 门对它有对象；
+        # 彩排照真机形态补这一拍，而不是靠把门关掉让 final 过。
+        nxt = self._retire_then(prompt, "")
+        if nxt:
+            return nxt
+        if not self.closed:
+            self.closed = True
+            return _json({"tool": "conductor.closing", "args": {
+                "goal": "C9 概念图链跑通（读图 → 立题 → 结构重复裁决）",
+                "goal_met": True,
+                "basis": "analysis_reports 三行（gaps×2 + paths×1）、research_questions 一行、"
+                         "merge 墓碑与 reject 不落盘都在盘上",
+            }})
+        return _json({"final": "M 收工", "evidence": []})
 
     def _c(self, index: int, prompt: str) -> str:
         result = _last_result(prompt)

@@ -130,6 +130,7 @@ def test_e_every_role_renders_under_lean_off(monkeypatch: pytest.MonkeyPatch) ->
         assert sum(len(t) for t in texts.values()) > 200000
         names = {str(n) for n in reg.names()}
         assert not [n for n in names if n.startswith("formal.")], sorted(names)
+    restore_lean_baseline(monkeypatch)
 
 
 def test_f_the_lean_off_scan_is_the_same_criterion(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -154,6 +155,7 @@ def test_f_the_lean_off_scan_is_the_same_criterion(monkeypatch: pytest.MonkeyPat
         for (role, token), count in pending.items():
             assert any(token in one for one in problems), (role, token, problems)
             assert count == 1, (role, token, count)
+    restore_lean_baseline(monkeypatch)
 
 
 def test_f_the_unfixed_13a_sentence_is_lean_off_only(
@@ -183,6 +185,7 @@ def test_f_the_unfixed_13a_sentence_is_lean_off_only(
         on_text = _render("B", root, reg)
         assert "verify.verify_proof" not in on_text, "开档也出现工具名了（不是关档专属）"
         assert "`V.verify_proof`" in on_text, "开档那一版应当写的是动作名 V.verify_proof"
+    restore_lean_baseline(monkeypatch)
 
 
 def test_action_names_in_the_lean_off_prompts_exist(
@@ -195,6 +198,7 @@ def test_action_names_in_the_lean_off_prompts_exist(
         assert bad == {}, f"关档提示词里点名了能力表里没有的动作：{bad}"
         # 反真空：扫描器抓得住改前那个名字（`F.attack.step` 是工具名，不是动作）
         assert unknown_f_actions("派 `F.attack.step` 去做") == ["attack.step"]
+    restore_lean_baseline(monkeypatch)
 
 
 def test_param_shapes_in_the_lean_off_prompts_match_the_declarations(
@@ -212,6 +216,7 @@ def test_param_shapes_in_the_lean_off_prompts_match_the_declarations(
             "\n用 `conductor.void_items(item_ids=[\"t-0001\"], frobnicate=1)` 撤掉。\n")
         got = _param_problems(poisoned, reg, "B")
         assert any("frobnicate" in one for one in got), got
+    restore_lean_baseline(monkeypatch)
 
 
 def test_secretary_prompts_render_and_scan_under_lean_off(
@@ -243,6 +248,7 @@ def test_l_is_hidden_only_by_the_shared_gate(monkeypatch: pytest.MonkeyPatch) ->
         monkeypatch.setattr(LS, "is_hidden", lambda role: False)
         text = _render("L", root, reg)
         assert text.strip(), "把 is_hidden 改成恒 False 之后 L 的提示词仍然是空的"
+    restore_lean_baseline(monkeypatch)
 
 
 def _registry_names() -> list[str]:

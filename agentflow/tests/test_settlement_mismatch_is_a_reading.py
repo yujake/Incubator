@@ -134,19 +134,30 @@ def test_no_store_is_not_the_same_as_consistent() -> None:
 
 
 def test_the_admit_path_goes_through_the_check(store: Store) -> None:
-    """接线：`lit.admit` 真的会在结算之后调一次核对（不是只有测试直接调它）。
+    """接线：结算发生在「提交」那一步，提交之后真的调一次核对（不是只有测试直接调它）。
+
+    口径变更（Q1，2026-11-16「判收不注册、提交才注册」）：`lit.admit` 现在只把行
+    判成 `qualified`（不注册、不发号），所以它自己不再结算、也就没有可核对的对象；
+    结算搬到 `lit.admit_all`（批量注册 + 回填）之后。这一条因此改成跑
+    `admit` → `admit_all` 那条真路径，断言的仍是同一件事：结算之后有一次回读核对。
 
     做法：把 `settlement_mismatch` 打桩成一个记录调用次数的替身，跑一次真的
-    `admit`，断言它被调过、且带了这一笔的 `request_id`。
+    `admit_all`，断言它被调过、且带了这一笔的 `request_id`。
     """
     slots = _seed(store, slots=1)
-    # 2026-11-16 裁定 ①②：`admit` 现在还要回读回执与可读性判定。这一条测的是
+    # 2026-11-16 裁定 ①②：提交路径还要回读回执与可读性判定。这一条测的是
     # "结算之后真的会核对一次"，所以把另两格按最小合法值满足掉。
+    # 2026-11-16 AR1 又把 `metadata_only` 收紧成"必须有一次读取尝试"：只写
+    # `metadata_only` 不再够，要补一条"抽过、但拿不到可读文本"的 `extract_failed`
+    # 回执（这正是不带全文的仅题录那一档的诚实读法）。
     LS.note_readback(store, "r-000001", [{"slot": s} for s in slots])
     from agentflow import litavail as AV
+    from agentflow import litread as LR
 
     for s in slots:
         AV.record_availability(store.root, "r-000001", s, AV.METADATA_ONLY)
+        AV.record_read(store.root, "r-000001", s, LR.FULLTEXT_EXTRACT_FAILED,
+                       note="判据：试过一次抽取，拿不到可读文本")
     calls: list[dict[str, Any]] = []
     real = LS.settlement_mismatch
 
@@ -157,10 +168,13 @@ def test_the_admit_path_goes_through_the_check(store: Store) -> None:
 
     LS.settlement_mismatch = spy
     try:
-        got = LS.admit(store, registrar=lambda row: {"lit_id": "000000"},
-                       request_id="r-000001", slots=slots, write_report_file=False)
+        qualified = LS.admit(store, registrar=lambda row: {"lit_id": "000000"},
+                             request_id="r-000001", slots=slots, write_report_file=False)
+        assert qualified.get("ok") is True, qualified
+        got = LS.admit_all(store, registrar=lambda row: {"lit_id": "000000"},
+                           request_id="r-000001", write_report_file=False)
     finally:
         LS.settlement_mismatch = real
     assert got.get("ok") is True, got
-    assert calls, "admit 结算之后没有回读核对（读数等于没人写）"
+    assert calls, "admit_all 结算之后没有回读核对（读数等于没人写）"
     assert calls[0]["slots"] == slots and calls[0]["request_id"] == "r-000001", calls
