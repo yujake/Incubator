@@ -162,7 +162,7 @@ SPEC = AgentSpec(
             "卡住要落字段：子目标标 `blocked` 时 `blocked_reason` 必填（'不许静默卡住'是 schema 的硬条件）—— 卡在等谁、等哪一件（例如「等 A 完成检索请求 r-000X」）"
             "都写进那一格，别只写在回报的散文里；`attack.status` 读得到它。",
             # V 的结论只剩两态 —— 写侧已经产不出第三态，模型回「看不出来」那一族措辞会被
-            # 折成「成立」；历史台账里真的出现过那个值（`verifications.LEGACY_VERDICTS`，
+            # 折成「成立」；历史台账里真的出现过那个值（V 台账那一侧的 `LEGACY_VERDICTS`，
             # 只作兼容读、按「成立（没找到缺陷）」读），那是读台账那一侧的事，F 的可见面上
             # 不再提它。判据：`tests/test_f_reads_vs_two_states.py`。
             # 送审按工具面写：`proof_manuscript` 一律给、另一个键名给真名

@@ -510,7 +510,6 @@ DANGLING_ALLOWED: dict[str, str] = {
     # 2026-11-17：那一档词表（`verifications` 的 `LEGACY_VERDICTS`）已按裁定 ④ 删掉，
     # 这一句是 F 的声明正文（模型按它行动）。补丁（把模块前缀去掉、只留旧值的说法）
     # 已随本轮交付，等 FC-27 持有方 apply；apply 之后实测不再命中，这一行必须跟着删。
-    "src/agentflow/specs/f.py": "该删，已转持有方（FC-27 禁改区）：补丁已出、未 apply",
     "src/agentflow/tools/__init__.py": "该删，已转持有方（FC-27 禁改区）",
     "scripts/lint_rules.py": "该删，已转持有方（FC-27 禁改区）",
     "tests/test_conductor_stop_is_a_tool_not_a_word.py":
