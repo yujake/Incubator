@@ -1288,6 +1288,22 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "事后要记成可取之处再给 `salvaged`）。变化格 = A / B / D / E / F / G / H / L / M "
               "九格（A / B / E / L 是 `table.update` 那一行说明改了，它们自己的段没动）；"
               "C / V 逐字未动（版本行已归一）。facts 键集仍 15 格、落点没动。"},
+     # p283 → p284（2026-11-16，业主逐字「改」授权的唯一一处；FC-27 区 `specs/d.py`）：
+     # facts 键集一格没动（还是 15 格）—— 本批只把 D 的 policy 里 F 的工具名
+     # `attack.abandon_plan` 降成动作名 `abandon_plan`（纯词法判据
+     # `test_policy_never_names_a_tool_the_role_lacks` 要求 policy 里出现的注册工具名
+     # 必须在该角色自己的工具面上），没有哪一格事实换过落点（system ↔ user），所以
+     # count / keys_sha256 与 p283 同值。
+     {"version": "p284", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p284（2026-11-16，业主逐字「改」授权的唯一一处；FC-27 区 "
+              "`specs/d.py`）：D 的 policy 把 F 的工具名降成动作名（"
+              "`attack.abandon_plan` → 裸动作名 `abandon_plan`，同段已有 "
+              "`F.create_plan` / `F.step` 同形），为的是过 "
+              "`test_policy_never_names_a_tool_the_role_lacks` 的纯词法判据；语义未变"
+              "（那本来就是 F 的动作，D 只被告知「由 F 动手」）。这一版只改了这一处，"
+              "变化格 = D 一格，其余十格与 p283 逐字相同（版本行已归一）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

@@ -2534,7 +2534,15 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # 现算（`temp/_p283_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）。
 # 另补：`99f6a08f` 之后 `agent_skills.py` 的 H 段改动没抬版本、十一格也没重算（两条判据一直
 # 红），本版一次补齐 —— 那一版的 H 段文字与 `close_as` 收尾口径是同一件事。
-_FROZEN_PROMPT_VERSION = "p283"
+# p284（2026-11-16，业主逐字「改」授权的唯一一处；FC-27 区 `specs/d.py`）：D 的 policy 把
+# F 的工具名降成动作名 —— 「写入口是 F 自己的 `attack.abandon_plan`（…）」改成「写入口是
+# F 的 `abandon_plan` 动作（…）」。根因：`test_policy_never_names_a_tool_the_role_lacks`
+# 是纯词法扫描，注册工具名出现在 D 的 policy 里而 D 的工具面上没有它 ⇒ 红；降成裸动作名
+# （同段已有 `F.create_plan` / `F.step` 同形）语义未变。这一版只改了这一处。
+# 段变 D 一格；其余十格与 p283 逐字相同（版本行已归一）。逐格旧值 → 新值：
+#   D 77a8ae8b… → ce9d76c23513bdb05f7cc67fb805f8e002839c3fa8f013373501bb285fc5aa74
+# 现算（`temp/_p284_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）。
+_FROZEN_PROMPT_VERSION = "p284"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2787,7 +2795,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "4d174ff34f4cbb951deb99af59fd675194976375287bfc65f438138adc23d64c",
     "B": "2068491d78c4b5a5285eef35880e52d418a21b62d3f27fe407958417e75193ac",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
-    "D": "77a8ae8bb9a0496bbd0ab79e38ff52747640230103cba990e0dcc4ddcd407293",
+    "D": "ce9d76c23513bdb05f7cc67fb805f8e002839c3fa8f013373501bb285fc5aa74",
     "E": "26c4de785ecf1887274c3b0b4c2405ea456909a58f35c95a2f300c9d57a1c0ab",
     "F": "f25ab207f4282ce1d054c871bd3aea695b86baa874201e0ea0e2a36b804738a9",
     "G": "b31a79a1326e10ebce8a56e99c27b621a6c40ce70aadef712a656b7c92b29c4c",

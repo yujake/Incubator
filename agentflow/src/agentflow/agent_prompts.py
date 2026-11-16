@@ -2579,7 +2579,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，要预算，本批未跑）；
 #: `_VOLATILE_FACT_SETS` 追加 p282 / p283 两格（facts 键集仍 15 格、count /
 #: keys_sha256 一格未动）。
-PROMPT_VERSION = "p283"
+#: p283 → p284（2026-11-16，业主逐字「改」授权的唯一一处；FC-27 区 `specs/d.py`）：
+#:   D 的 policy 把 F 的工具名降成动作名 —— 原文「写入口是 F 自己的
+#:   `attack.abandon_plan`（…）」改成「写入口是 F 的 `abandon_plan` 动作（…）」。
+#:   根因：`test_policy_never_names_a_tool_the_role_lacks` 是纯词法扫描 —— 注册工具名
+#:   `attack.abandon_plan` 出现在 D 的 policy 里而 D 的工具面上没有它 ⇒ 红；降成裸动作名
+#:   （同段已有 `F.create_plan` / `F.step` 同形）不改变语义（那本来就是 F 的动作，D 只被
+#:   告知「由 F 动手」）。这一版只改了这一处。
+#: 变化格 = D 一格（版本行已归一，不算变化）：
+#:   D 77a8ae8b… → ce9d76c23513bdb05f7cc67fb805f8e002839c3fa8f013373501bb285fc5aa74
+#: 其余十格与 p283 逐字相同。十一格由判据自己的 `_surface_digest` 现算
+#: （`temp/_p284_recompute.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`）。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p284）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p283 同值）；`agent_surface_snapshot.json`
+#: 按现值重冻（tool 面一个字没动）；ROLE-GUIDE 等系统文档重生成；
+#: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p284"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
