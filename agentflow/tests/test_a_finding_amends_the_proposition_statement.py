@@ -404,6 +404,30 @@ def test_d2_stubbing_the_trigger_to_always_fault_makes_c_red(tmp_path, monkeypat
     assert dict(got.get("proposition_amend") or {}).get("triggered") is True, got
 
 
+def test_d3_stubbing_the_trigger_off_brings_the_old_blanket_refusal_back(tmp_path, monkeypatch):
+    """d③：把触发判据打桩成"永远没有 finding"＝改前那一刀 ⇒ a1 / a2 当场红。
+
+    这一条就是"改前红"的机器证据：AH5 现场（a2）在改前正是被这一刀整笔拒掉的，
+    所以把触发打桩成关闭，a2 的 `ok is True` 必须不成立、盘上一个字节不动。
+    """
+    monkeypatch.setattr(SA, "trigger_reading",
+                        lambda *_a, **_kw: {"checked": True, "triggered": False,
+                                            "axis": "", "rows": 0, "verification_id": "",
+                                            "defect_step": None, "at": "", "findings": [],
+                                            "problems": [],
+                                            "why": "打桩：改前那一刀（不看 finding）"})
+    st = _ws(tmp_path)
+    _register(st)
+    _fault(st)
+    before = _text(st)
+    got = _rewrite(st, proof_text=BODY_FIXED)
+    assert got["ok"] is False, got
+    assert got["refused"] == "proposition_text_changed", got
+    assert _text(st) == before, "整笔拒的语义必须是不写盘（这正是 AH5 的现场）"
+    with pytest.raises(AssertionError):
+        assert got["ok"] is True, "改前那一刀在这一格上必红 —— 这就是 AH5 现场"
+
+
 # ------------------------------------------------------------------ e：稿号逐字相同
 
 def test_e_the_manuscript_number_is_byte_identical_before_and_after(tmp_path):
