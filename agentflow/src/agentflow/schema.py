@@ -106,14 +106,18 @@ SEARCH_OUTCOMES = ("ok", "no_results", "search_failed", "gave_up")
 #:   skipped           —— 未尝试下载（无 pdf_url / 关闭下载 / 达到单请求上限）
 DOWNLOAD_STATUSES = ("ok", "content_mismatch", "failed", "skipped")
 
-#: 「待新增文献列表」(`lit_candidates`) 的槽位状态词表：五态，不是"在/不在"两态。
+#: 「待新增文献列表」(`lit_candidates`) 的槽位状态词表：六态，不是"在/不在"两态。
 #: 折成一个布尔会让四种处置在盘上同形，而它们的下一步动作相反。
 #:   pending    —— 在列表里等着被审（唯一可被 stage_withdraw / stage_reject / admit 的态）
 #:   withdrawn  —— 被撤掉：槽位仍在列表里（序号不复用），`withdrawn_reason` 必须非空
 #:   rejected   —— 审内容后拒收：`reject_reason` 必须非空（重叠检查没通过也走这一档）
+#:   qualified  —— 判收（有入库资格）但**尚未注册**：`relevance` 必须非空、`lit_id` 必须为空
+#:                 （2026-11-16 Q1，业主口径「判收不注册、提交时才注册」：号是提交那一刻
+#:                 由系统批量发出来的，判定期只有临时号 `cand:<槽位>`）
 #:   admitted   —— 已正式入库：`lit_id` 必须非空（就是 literature 里那一行）
 #:   cleared    —— 迁移结算时被清空的残留（超配额/未审完）：`cleared_at` 与 `clear_reason` 必须非空
-CANDIDATE_STATUSES: tuple[str, ...] = ("pending", "withdrawn", "rejected", "admitted", "cleared")
+CANDIDATE_STATUSES: tuple[str, ...] = ("pending", "withdrawn", "rejected", "qualified",
+                                       "admitted", "cleared")
 
 #: 「待新增文献列表」的筛选理由受控词表（理由用受控取值，不许自由发挥）。
 #: 为什么要受控：这些理由会进委托报告的"未入库"一块，而报告交给下一次委托的 D/H 读 —— 自由
@@ -513,6 +517,8 @@ class LitCandidate:
     ## 三处不变量（`validate()` 守的正是这几条）：`status == "withdrawn"` ⇒ `withdrawn_reason` 非空；
     `status == "rejected"` ⇒ `reject_reason` 非空；`status == "admitted"` ⇒ `lit_id` 非空；`status == "cleared"`
     ⇒ `cleared_at` 与 `clear_reason` 都非空（"清空"是一次有时间的收尾动作，不是"这一行从来没被处理过"）。
+    2026-11-16（Q1）多一条：`status == "qualified"`（判收、尚未注册）⇒ `relevance` 非空且 `lit_id` 为空
+    —— "有资格"与"有号"是两件事，判定期一个号都没有（临时号是 `cand:<槽位>`，由 `slot` 派生，不落字段）。
     这些不变量都写成"状态 ⇒ 证据非空"，而不是"有理由 ⇒ 改状态"：后者允许"先撤、后补理由"的两段式，而两段式
     在崩溃点上会留下一行撤了但说不出为什么的记录。
     ## 字段口径：`slot` 主键，列表内序号，由 `store.alloc_id("candidate")` 发（六位、只增不复用），批次之间
@@ -599,6 +605,21 @@ class LitCandidate:
                 f"槽位 {self.slot} 标了 status='rejected' 却没有 reject_reason —— "
                 "拒收必须写清为什么（业主口径：拒收要写理由）"
             )
+        if self.status == "qualified":
+            # 2026-11-16（Q1）：判收但**还没注册**。两条一起守：
+            #   `relevance` 非空 —— 判过的证据就是那一句（与 `judged_state` 同一口径）；
+            #   `lit_id` 空 —— 有资格 ≠ 有号；带号就说明注册已经发生了，
+            #   那一行必须是 `admitted`。两个字段都留空会让"判收"与"没判"在盘上同形。
+            if not str(self.relevance or "").strip():
+                raise ValueError(
+                    f"槽位 {self.slot} 标了 status='qualified' 却没有 relevance —— "
+                    "判收必须写得出「为什么与本次检索相关」（否则与「没判过」同形）"
+                )
+            if str(self.lit_id or "").strip():
+                raise ValueError(
+                    f"槽位 {self.slot} 标了 status='qualified' 却带着 lit_id —— "
+                    "判收不注册：号是提交那一刻才发的，带号的行必须是 status='admitted'"
+                )
         if self.status == "admitted" and not str(self.lit_id or "").strip():
             raise ValueError(
                 f"槽位 {self.slot} 标了 status='admitted' 却没有 lit_id —— "
