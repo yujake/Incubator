@@ -21,6 +21,7 @@ from pathlib import Path
 
 from . import conceptrows as _CR
 from . import dedup as D
+from . import litavail as _AV
 from . import litstage as L
 from . import schema as S
 from .agent_a import AgentA
@@ -213,6 +214,33 @@ class FixtureDownloader:
 # ---------------------------------------------------------------- 逐条判决（演示替身）
 
 
+def _read_evidence_tier(registry, root: Path, slot: str, dl: dict) -> str:
+    """替 A 走一遍「抽 → 读」，返回这一条的可读性档（判不出来 ⇒ 空串）。
+
+    为什么不能直接报 `readable`：入库闸要的是盘上的证据（AV1 / AR1）——
+    `data/lit_reads.jsonl` 里一条绑着这一条候选的抽读回执，加一条 `fs.read` 读同一版。
+    演示里没有模型，所以这一步由脚本替；但它走的是与产品同一条工具面
+    （`text.extract` 的候选期分支 + `fs.read`），不是自己往台账里写一行 ——
+    否则演示就证明了「证据可以绕过」，而那条闸正是本轮新增的。
+
+    三档都如实报，不折平：抽出了正文且读了 ⇒ `readable`；抽过但失败（盘上有
+    `extract_failed` 回执）⇒ 那一档；没有字节 / 回执都没落下 ⇒ 空串（判不出来，
+    调用方按「没有可读证据」判拒，不拿它冒充 `metadata_only`）。
+    """
+    staged = str((dl or {}).get("_staged_path") or "")
+    if not staged:
+        return ""
+    ext = registry.call("text.extract", path=staged, lit_id=f"cand:{slot}")
+    if not ext.ok:
+        # 回执才是「抽过」的事实：`file_missing` 一类连回执都不落，不能记成抽过失败。
+        return _AV.EXTRACT_FAILED if _AV.receipts_by_slot(root).get(slot) else ""
+    txt = str((ext.unwrap() or {}).get("path") or "")
+    if not txt:
+        return ""
+    read = registry.call("fs.read", path=txt)
+    return _AV.READABLE if read.ok else ""
+
+
 def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
                               candidates: dict[str, Any] | None = None) -> dict:
     """演示替身：替 A 把「待新增列表」里的每一条逐条判过（入库的唯一定路）。
@@ -222,10 +250,12 @@ def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
     而没有逐条判完之前整批提交会被拒（`lit.admit_all` 的提交闸）；反例是整批在同一秒
     入库、`relevance` 一条都没写。
 
-    演示里没有模型，所以"读"这个动作由演示脚本替：先把这一条的 PDF 取下来（
+    演示里没有模型，所以"读"这个动作由演示脚本替：先把这一条的字节取下来（
     `AgentA._stage_download`，与产品里同一条下载路径），再代写那一句 relevance，
-    然后逐条判 —— 判收的走 `lit.admit`（并把取到的字节搬进 `library/<lit_id>/`），
-    判拒的用受控理由码（同一篇的重复副本），行留着、不物理删。
+    回读一遍清单（`lit.stage_list` 的回读回执是提交前的硬回执），然后逐条判 ——
+    判收的走 `lit.admit`（它只给"入库资格"：注册与「把读过的源文件收编进
+    `library/<lit_id>/`」都在判完之后的 `lit.admit_all` 那一步），判拒的用受控理由码
+    （同一篇的重复副本），行留着、不物理删。
 
     返回 `{request_id: {admitted, rejected}}`（读数，交给演示日志）。
     """
@@ -257,6 +287,9 @@ def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
                         "演示替身：逐条读过的记录 —— 这一条的题名与本次检索的主题同族"
                         "（产品里这一句由 A 写过再入库）")
                     tx.upsert("lit_candidates", row, note="demo.judge")
+            # 回读清单（`lit.stage_list`）是提交前的硬回执（Q16 的 `no_readback`）：
+            # 判与提交都必须建立在「A 看过这一批待裁的行」这个事实上，而不是它记得。
+            registry.call("lit.stage_list", request_id=rid)
             counts = {"admitted": 0, "rejected": 0}
             admitted_ids: list[str] = []
             for row in waiting:
@@ -273,20 +306,31 @@ def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
                                      summary=str(row.get("summary") or ""),
                                      pdf_url=str(row.get("url") or "") or None,
                                      provider=str(row.get("provider") or ""))
-                dl = agent._stage_download(cand, staging)
-                res = registry.call("lit.admit", slots=[slot], request_id=rid)
+                # 每条一个暂存子目录：`_stage_download` 的文件名只按题名 slug，而演示里
+                # 有三条候选的题名同族（去重/重印那两族）—— 同一个目录会让后一条的字节
+                # 覆盖先一条，提交时"收编读过的源文件"就只收得走一份（另一行落
+                # `no_local_path`，B 只能写 `no_local_file`）。
+                dl = agent._stage_download(cand, staging / slot)
+                # 判「可读」之前先拿出证据：抽读这一条的字节、再用 `fs.read` 读同一版。
+                # 少了这一步，`lit.admit` 会被 `no_read_evidence` 整批拒 —— 那一档不是
+                # 演示能绕开的（绕开就等于把本轮新增的那条闸演示成可绕过）。
+                tier = _read_evidence_tier(registry, store.root, slot, dl)
+                if tier != _AV.READABLE:
+                    registry.call("lit.stage_reject", slot=slot,
+                                  reason_code="rejected_low_quality",
+                                  note=(f"演示替身：这一条拿不到可读证据（{tier or '没抽成'}）"
+                                        "⇒ 不入库"))
+                    counts["rejected"] += 1
+                    continue
+                res = registry.call("lit.admit",
+                                    items=[{"slot": slot, "availability": tier}],
+                                    request_id=rid)
                 if res.ok and (res.unwrap().get("admitted") or []):
-                    lit_id = str(res.unwrap()["admitted"][0]["lit_id"])
-                    rel_path, dl_clean = agent._attach_staged(lit_id, dict(dl))
-                    if rel_path:
-                        with store.tx("literature", actor="demo", note="demo.judge") as tx:
-                            got = tx.find("literature", lit_id=lit_id)
-                            if got is not None:
-                                got["path"] = rel_path
-                                got["download"] = dl_clean
-                                tx.upsert("literature", got, note="demo.judge")
+                    # 判收（Q1）：这一步只给"入库资格"，一个号都不发 —— 号、literature
+                    # 行与"把读过的源文件收编进 library/"都在下面的 `lit.admit_all`。
+                    # 所以这里不搬字节：搬了的话提交那一步收编不到它，行上只剩
+                    # `no_local_path`（B 就会写 `no_local_file`，"读过"一个字都不剩）。
                     counts["admitted"] += 1
-                    admitted_ids.append(lit_id)
                     continue
                 code = ""
                 if res.ok:
@@ -312,8 +356,13 @@ def _judge_pending_candidates(store: Store, log, *, agent: AgentA,
                                 src.add(rid)
                                 got_dup["source_request_ids"] = sorted(src)
                                 tx.upsert("literature", got_dup, note="demo.judge")
-            # 判完之后收口（提交闸在这一步才放行；它同时写委托报告）。
-            registry.call("lit.admit_all", request_id=rid)
+            # 判完之后收口（提交闸在这一步才放行；它同时注册发号、收编读过的源文件、
+            # 写委托报告）。`admitted[].lit_id` 是这一步的产物 —— 判收那一步是空串。
+            submitted = registry.call("lit.admit_all", request_id=rid)
+            if submitted.ok:
+                admitted_ids.extend(str(item.get("lit_id") or "")
+                                    for item in (submitted.unwrap().get("admitted") or []))
+                admitted_ids = [i for i in admitted_ids if i]
             # 这一问最终入库了哪几篇要写回请求行：入库不在 `run_once` 里发生，
             # 于是 `result_lit_ids` 也得在这里补上（否则请求行永远说"一篇都没找到"）。
             if admitted_ids:
