@@ -5008,6 +5008,105 @@ def _summon_batch_counts(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
             "running_count": running_count}
 
 
+#: 研究型 / 有门的项目，在 M 发 final 之前从未跑过收工门时的受控拒理由码（22B）。
+CLOSING_NOT_RUN_CODE = "closing_not_run_before_final"
+
+#: 「这一趟不设门」的显式声明落点（项目根相对）。它必须带理由 ——
+#: 一个可以由模型随手写、又不写理由的豁免，等于没有这道闸。
+NO_GATE_DECLARATION_NAME = "out/review/NO-GATE.json"
+
+
+def closing_gate_consulted(loop: "AgentLoop") -> dict[str, Any]:
+    """这一趟跑过 `conductor.closing` 没有（唯一判据；反真空用例只打这一处桩）。
+
+    读的是循环自己记下的成功调用（`AgentLoop._closing_gate_readings`），
+    不是盘上的判据文件：`out/review/m-verdicts.jsonl` 只在 M 给了 `goal_met` 时才写，
+    而"跑了门、看了读数、判了不交"同样是跑过 —— 这一格问的是有没有把门问过。
+    """
+    calls = [dict(x) for x in (getattr(loop, "_closing_gate_readings", None) or [])]
+    return {"consulted": bool(calls), "calls": len(calls),
+            "last": calls[-1] if calls else {}}
+
+
+def no_gate_declaration(project_root: Any) -> dict[str, Any]:
+    """这一趟有没有显式声明"不设门"（`out/review/NO-GATE.json`）。
+
+    三态：文件不在 ⇒ `declared=False`（不豁免）；读不懂 / 没写理由 / `no_gate` 不是
+    `true` ⇒ 同样 `declared=False`，但理由写清"为什么不认这份声明"（静默豁免是本仓
+    最忌的形态）。只有 `{"no_gate": true, "reason": "…非空…"}` 才算数。
+    """
+    path = Path(str(project_root)) / NO_GATE_DECLARATION_NAME
+    out: dict[str, Any] = {"declared": False, "path": str(path), "reason": ""}
+    if not path.is_file():
+        return out
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 —— 读不懂 = 不豁免
+        out["reason"] = f"读了 {path} 但读不懂（{type(exc).__name__}: {exc}）⇒ 不豁免"
+        return out
+    if not isinstance(raw, Mapping) or raw.get("no_gate") is not True:
+        out["reason"] = ("写了 NO-GATE 声明，但 `no_gate` 不是 `true` ⇒ 不豁免"
+                         "（要显式写 `{\"no_gate\": true, \"reason\": \"…\"}`）")
+        return out
+    why = str(raw.get("reason") or "").strip()
+    if not why:
+        out["reason"] = "写了 `no_gate: true` 却没写理由 ⇒ 不豁免（豁免必须说得出来）"
+        return out
+    out.update(declared=True, reason=why)
+    return out
+
+
+def closing_gate_requirement(loop: "AgentLoop") -> dict[str, Any]:
+    """这一趟的项目要不要过收工门（研究型 / 有门的项目才要）。
+
+    判据（三态）：
+
+    - 有 `research_questions` 行 ⇒ 研究型；
+    - 盘上有 `out/paper/ACCEPTANCE-CHECKS.json`（验收表）或 `out/paper/main.tex` /
+      `main.pdf`（论文包）⇒ 有门的项目；
+    - 两者都不是 ⇒ `required=False`（非研究型；这一道闸对它没有对象）；
+    - 读不出来 / 没有工作区根 ⇒ `checked=False`：这一格没查成。它是软闸，
+      不据此拦收工（硬的那一道是销号完整性；"判不了"不许折成"干净"这件事在这里
+      表现为 `why` 与 `checked` 都留在读数上，而不是再叠一条 fail-closed 的拒）。
+    """
+    root = str(getattr(getattr(loop, "store", None), "root", "")
+               or getattr(loop, "workspace_root", "") or "")
+    out: dict[str, Any] = {"checked": True, "required": False, "root": root,
+                           "researched": False, "acceptance_checks": False,
+                           "paper_package": False, "why": ""}
+    if not root:
+        out.update(checked=False, required=False,
+                   why="没有工作区根 ⇒ 判不了这一趟的项目有没有门（不据此拦）")
+        return out
+    base = Path(root)
+    out["acceptance_checks"] = (base / "out" / "paper" / "ACCEPTANCE-CHECKS.json").is_file()
+    out["paper_package"] = any((base / "out" / "paper" / name).is_file()
+                               for name in ("main.tex", "main.pdf"))
+    store = getattr(loop, "store", None)
+    if store is None:
+        out.update(checked=False,
+                   why="没有台账 ⇒ 判不了它是不是研究型项目（不据此拦）")
+        return out
+    try:
+        out["researched"] = len(list(store.rows("research_questions"))) > 0
+    except Exception as exc:  # noqa: BLE001 —— 读不到 ⇒ 这一格没查成（不据此拦）
+        out.update(checked=False,
+                   why=(f"`research_questions` 读不出来（{type(exc).__name__}: {exc}）"
+                        "⇒ 判不了这一趟是不是研究型项目（不据此拦）"))
+        return out
+    out["required"] = bool(out["researched"] or out["acceptance_checks"]
+                           or out["paper_package"])
+    out["why"] = ("研究型 / 有门的项目（"
+                  + "、".join(name for name, on in (
+                      ("有研究问题", out["researched"]),
+                      ("有验收表", out["acceptance_checks"]),
+                      ("有论文包", out["paper_package"])) if on)
+                  + "）⇒ final 前要先跑 `conductor.closing`"
+                  if out["required"] else
+                  "非研究型、也没有门（没有研究问题 / 验收表 / 论文包）⇒ 不要求跑收工门")
+    return out
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -5179,6 +5278,12 @@ class AgentLoop:
     #: 最近一次摘要调用的读数（S-B：`{"note": "compaction"}` 那一族）。
     #: 判据与 `compaction_summary` 事件都读它 —— 于是"这一笔钱是压缩花的"可归口。
     _last_summary_note: dict[str, Any] = field(default_factory=dict)
+    #: 这一趟成功跑过 `conductor.closing` 的次数与逐次读数（22B，2026-11-16）。
+    #:
+    #: 为什么由循环记而不是让 final 那一刻去盘上找：收工门的读数文件（`m-verdicts.jsonl`）
+    #: 只在 M 给了 `goal_met` 时才写，而"跑过门、看了读数、判了不交"也是跑过 ——
+    #: 这一格数的是"这一趟有没有把门问过"，不是"门过没过"（过没过由 M 判，见工具）。
+    _closing_gate_readings: list[dict[str, Any]] = field(default_factory=list)
     #: 「收工时由我撤」的那把全工作区开关（业主裁定：删是整棵树的事，不是第一个读者的）。
     #: 空 = 这一趟没有读到过该由我收尾撤的开关（或已经撤过）。由 `_stop_applies` 的
     #: `consume_at_end` 决定、由 `_arm_stop_teardown` 记下、由
@@ -8315,6 +8420,50 @@ class AgentLoop:
         if str(self.role) != S.CONDUCTOR_ROLE:
             reading["reason"] = "不是主控那一趟 ⇒ 名下没有整棵树可销（这道闸对它没有对象）"
             return reading
+        # ---- 22B（2026-11-16，业主裁定）：研究型 / 有门的项目，final 之前要跑过收工门。
+        #
+        # 真机形态（`projects/lp-ball-2`，AH2b）：M 在 final 里把"收工前跑 conductor.closing
+        # 并逐条对 P1–P11"列成待办，然后交了 final；全表 `conductor.closing` 0 次调用，
+        # 于是 `machine_pass=False` 只能在运行外复算时才被看见。工具在 M 的面上，缺的
+        # 是"不跑就会被拦住"这一道闸。
+        #
+        # 软硬的分界（"软硬合适"）：
+        #   - 只有"确实知道它是研究型 / 有门的项目"才拦（`required`）—— 非研究型直接放行；
+        #   - 显式声明 `out/review/NO-GATE.json`（`no_gate: true` + 非空理由）⇒ 放行；
+        #   - 判不了（`checked=False`）⇒ 不拦，但读数与理由留在 `closing_gate` 里
+        #     （"判不了"不许读成"干净"，也不叠一条 fail-closed 的拒——硬闸是销号完整性）；
+        #   - 跑过门之后，"门说了什么"不影响这道闸：过没过由 M 判（工具里 `can_close`
+        #     与 `machine_pass` 都退成读数），这一道只问"有没有把门问过"。
+        gate_req = closing_gate_requirement(self)
+        consulted = closing_gate_consulted(self)
+        exemption = (no_gate_declaration(gate_req.get("root"))
+                     if gate_req.get("root")
+                     else {"declared": False, "path": "", "reason": ""})
+        reading["closing_gate"] = {**gate_req, **consulted, "exempt": exemption}
+        if gate_req.get("required") and not consulted.get("consulted") \
+                and not exemption.get("declared"):
+            reading.update(applicable=True, checked=True, complete=False,
+                           code=CLOSING_NOT_RUN_CODE)
+            why = (
+                f"还没收工：这是个研究型 / 有门的项目（{gate_req.get('why')}），"
+                "而这一趟**从未成功调用过** `conductor.closing` ⇒ "
+                "「收工门跑没跑、机器那七格说了什么」在盘上没有任何读数。"
+                "M 在 final 里把「跑收工门」列成待办然后交 final，正是真机 "
+                "`projects/lp-ball-2` 的形态（AH2b：全表 0 次调用）。"
+                "处置：现在调 `conductor.closing`（给 `goal_met` 与 `basis`，"
+                "让判据落到 `out/review/m-verdicts.jsonl`），按它回的 `failed` / "
+                "`unknowns` 逐条处置（或明确说清为什么不认），然后再发 final。"
+                "若这一趟应当明确不设门：写 `out/review/NO-GATE.json`"
+                "（`{\"no_gate\": true, \"reason\": \"…为什么这一趟不需要收工门…\"}`）"
+                "再发 final —— 非研究型项目本来就不会被这一道拦")
+            reading["why"] = why
+            if run is not None:
+                run.notes.append(why)
+            return reading
+        if exemption.get("declared") and run is not None:
+            run.notes.append(f"收工门这一道按 no_gate 声明放行：{exemption.get('reason')}")
+        elif not gate_req.get("checked") and run is not None:
+            run.notes.append(f"收工门这一道没查成（不据此拦）：{gate_req.get('why')}")
         # ---- 任何 final 都要清仓，没有例外 ----
         #
         # "监控/被唤醒的回合不判"那条例外会是绕闸的口子 —— M 只要在一次被唤醒的回合里
@@ -11830,6 +11979,17 @@ class AgentLoop:
             if isinstance(tier, Mapping) and tier:
                 out["tier"] = dict(tier)
                 out["meta"]["statement_tier"] = dict(tier)
+        # ---- 22B（2026-11-16）：这一趟跑过收工门没有 —— 记在循环自己的账上。
+        #
+        # 只记"门真的跑成了一次"（`ok`）：被会话身份受控拒（`refused=True`）那一次
+        # 没有产出收工读数，不能算跑过。这里记的是"问过没有"，不是"过没过"。
+        if name == "conductor.closing" and out.get("ok"):
+            data = out.get("data") if isinstance(out.get("data"), Mapping) else {}
+            self._closing_gate_readings.append({
+                "can_close": data.get("can_close"),
+                "machine_pass": data.get("machine_pass"),
+                "closable": data.get("closable"),
+            })
         # `draft/97` §15.4 的载体那一半：工具把"哪几条定义待补"报回来 ⇒ 这一步就地
         # 向直接父发一条报文（父通常就是 A，原文在它手里）。不这样做的话，"定义待补"
         # 只是台账上的一个状态，而 §14.13 的正控要求"A 那边真的有人被找"。
