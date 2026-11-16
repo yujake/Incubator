@@ -295,7 +295,9 @@ SPEC = AgentSpec(
             "**先读 `payload_preview`，不够再读 `artifacts[0]`，不要用反复试探代替看。**",
             "**从零研究那一类任务：两份验收表都要落盘**（`draft/37` §137）：`out/paper/ACCEPTANCE.md`（写给人读：每行「名称 / "
             "结论 / 读数」）与 `out/paper/ACCEPTANCE-CHECKS.json`（写给收工门算：`{\"checks\": [{\"id\", \"name\", \"kind\", "
-            "\"min\", \"note\"}]}`；多数档是「越多越好」用 `min`，需要「上限」的档写 `max`）。`kind` 只能从下面那串受控档里挑，而"
+            "\"min\", \"note\"}]}`；多数档是「越多越好」用 `min`，需要「上限」的档写 `max`）。**`min` 的三态别写错**："
+            "`min: 0` 是一个**合法阈值**（=「允许 0」，这一行只要存在就算成立）；**「未声明阈值」只能用\"缺 `min` 键\"或 `min: null` 表达**"
+            "（那一档改用它自己的缺省阈值）—— 不许拿 `min: 0` 去顶\"未声明\"，也不许拿\"不写\"去表达\"允许 0\"。`kind` 只能从下面那串受控档里挑，而"
             "**研究链的八个环节每个至少要有一行、且那一行要真的成立**：①立题（`research_question_rows`）；②**检索（真的取回）**："
             "`retrieval_ok_rows`（`outcome=ok` 的检索条数；缺省阈值 = 立起来的问题条数）；③**算或造**（算：`numeric_experiment_rows` / "
             "`search_frontier_rows` / `enumeration_optimization_rows`；造：`reviewed_proof_rows` 或 `counterexample_or_proof_rows`）"
@@ -310,7 +312,7 @@ SPEC = AgentSpec(
             "`document_claim_rows`，或必须在稿件里才成立的档（`document_literature_citations` / `supported_claims` / "
             "`claims_supported_by_their_evidence`）；⑧**闭（请求闭环）**：`unfinished_request_rows`（**上限 0**）。读数不够时"
             "**不许把那一行删掉**：删掉 ⇒ 收工门判 `fail` 并点名缺哪个环节；如实写 0 ⇒ 那一行自己不成立（也红，但红得精确）。",
-            "**验收表里必须有一行「论文对应表」**（D-38，2026-10-24）：论文包里有 `out/paper/MAPPING.json` 且那一行三格齐（`file` ＋ 数值实验定理的 `numeric_evidence` / `exhaustion_note`，或有 Lean 产出时的 `lean_file` / `lean_target`）⇒ 记「成立」；论文已经成稿而论文包里没有 `MAPPING.json` ⇒ 那一行记「**未完成**」（不是 `na`、也不许把这一行省掉）。缺对应表 ⇒ 论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环没有落点），而这一项此前只数两份 ACCEPTANCE，所以两趟真机都没把它当成交付的一部分。",
+            "**交付论文包时，验收表里必须有一行「论文对应表」**（D-38，2026-10-24；2026-11-16 20A 收窄到「论文包」）：论文包里有 `out/paper/MAPPING.json` 且那一行三格齐（`file` ＋ 数值实验定理的 `numeric_evidence` / `exhaustion_note`，或有 Lean 产出时的 `lean_file` / `lean_target`）⇒ 记「成立」；交付的是论文包而包里没有 `MAPPING.json` ⇒ 那一行记「**未完成**」（不是 `na`、也不许把这一行省掉）。**交付研究手稿（`documents` 只有 `kind=note/survey`、盘上没有 `out/paper/main.tex`）时不需要对应表**：那一档不写这一行、也不许为了凑它去造一份空表。缺对应表 ⇒ 论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环没有落点），而这一项此前只数两份 ACCEPTANCE，所以两趟真机都没把它当成交付的一部分。",
             "**G8（可复跑门）的证据只有台账，不交任何回执**（2026-11-16 AH2b）：收工门自己从 `experiments` 台账现算 —— "
             "正文/验收表引到的每个 `exp:` 号都要在台账里有一行，且那一行带 `code_hash` 与整数 `exit_code`"
             "（`verify.run_experiment` 落账时就带这两格）。做法：派 E 用 `verify.run_experiment(script_path=…)` 把正文里点名的"
