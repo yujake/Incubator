@@ -2710,6 +2710,19 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                   "`download.fulltext` 的三档现算（ok / no_text_layer / no_fulltext；"
                   "有字节但这一处没抽过 ⇒ None，由同一处的 `with_fulltext` 清掉旧标签 —— "
                   "写点与清除点成对）",
+    # 2026-11-16（业主裁定 9/15/16 + AR1）：A 的逐条自审从"一句 relevance"扩成
+    # "这一条到底拿到了什么"。为什么必须是顶层模块：写侧与读侧分属两个角色面 ——
+    # 写的是 A 的 `lit.admit` / `text.extract` 两件工具，读的是 `litstage` 的入库闸
+    # 与委托报告、以及 B 的"不可读早退"。挂进 `agent_a/` 会让 B 与报告 import 角色模块，
+    # 挂进 `agent_b/` 会让 A 的写点够不到；两份实现则会出现"报告说可读、闸说没证据"。
+    "litavail.py": "「待录入文献列表」的可读性判定与它的一份旁路台账（零 schema，不动 "
+                   "`schema.py`）：四档受控词表（`readable` / `metadata_only` / "
+                   "`extract_failed` / `unknown`）+ `ADMITTABLE_TIERS` / `TIER_LABELS` / "
+                   "`is_admissible`，判定落在 `data/lit_availability.jsonl`"
+                   "（`record_availability` / `tiers_by_slot`）；抽读回执是另一份事实、"
+                   "另一个写点：`data/lit_reads.jsonl`（`record_read` 只由 `text.extract` 写）"
+                   "＋ `check_read`（回执绑候选身份 / 抽读件版本 / `fs.read` 同一版）—— "
+                   "`litstage` 的 `_availability_gate` 与 `_read_evidence_gate` 都读这一份判据",
     # 2026-11-06（M 挂机 · 真机 `projects/R-mk-infinite-93`）：把"研究还没做完"从
     # "感觉没活"换成台账上数得出来的判据，并给出一条确定的下一动作。为什么必须是顶层
     # 模块：读它的两处是 `agent_loop._pending_work`（"不许挂机"那一条）与状态读数，
@@ -2813,6 +2826,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "`abandon_marker`（写侧拼装，理由/时间缺一即拒）与 `parse_abandon`"
                           "（读侧三态：可解析 / 不是标记 / 自称放弃而读不出理由）与 pply_abandonment（写：改状态 + 落理由与时间 + 作废重送义务）—— 三者同处一模块，schema 的校验与 closing 的两格读数都从这里取；不新增列、"
                           "不新增表，照 `pending_definition` 那套受控标记的纪律",
+    # 2026-11-16（MST1，业主裁定 6「根据 finding 改命题表述」）：改表述与改证明是两根轴，
+    # 用同一把"整笔拒"的刀去挡会把改对的那一步也退掉。为什么必须是顶层模块：写口
+    # （`proofregistry.register_or_rewrite`）在 F 的登记路上，闸本体在
+    # `secretary.judge_proposition_form`，两侧都不该 import 对方的角色包；而"由 finding
+    # 触发"的判据要同时读在册与 pending 两本台账，只有这一层能不带角色地读。
+    "statementamend.py": "由 V 的 finding 触发的「命题表述改动」（MST1；受控写口）："
+                         "`trigger_reading`（读 `verifications` / `verifications/pending` 两本"
+                         "台账，按 `(at, 来源, 追加序)` 取最新一行、只认秘书轴 `fault` —— "
+                         "不认调用方自称 `from_finding=True`）与 `apply_amendment`（新表述先过"
+                         "`proofoutcomes.form_gate_reading` 那道命题表述闸，再用调用方逐字沿用的"
+                         "稿号改 `## 命题`，不申请新稿号、不新落文件）；三种不放行都是受控拒"
+                         "（`proposition_text_changed` / `proposition_form_refused` / 台账读不出来）",
     # 接线批 C1（`draft/103` §4.1b）：预设组装 → 角色提示词的接线层。
     # 它不发明机制：发现/优先级/挂载/创作在 `presets.py`（DSH 端口批 3），
     # `composition.py` 只回答"组装文件里那一行名字落到哪个注册函数上"。
@@ -2953,6 +2978,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                       "行 / 正文 + `reviewed=true`），不是 ack。V 判词的投递不在这里："
                       "它走 `vreviews.deliver_review` 与 `agent_loop.deliver_v_verdicts` "
                       "两条既有板项路（任何一条落进收件人名下都会经信箱唤醒它）",
+    # 2026-11-16（业主裁定 ⑤⑥⑦「有毛病 ⇒ 落 V 稿」）：V 判「有毛病」之后，被审者
+    # （F / E / B）要拿到一份说清"审的是哪份稿、毛病在哪一步"的报告。为什么必须是顶层
+    # 模块：写侧在 `agent_v/core._publish_v_review`（V 的判定那一笔），读侧是任意收件人，
+    # 而"号源、幂等键、板项前缀"三件事必须只有一份实现 —— 两份实现会让同一行判定
+    # 落出两份稿、或让重投的 notice 找不到旧那一份。
+    "vreviews.py": "V 稿（V 的秘书判出「有毛病」时给被审者 F/E/B 的审阅报告）："
+                   "`record_review`（正文 `verifications/reviews/v-review-NNNNNN.md` + "
+                   "`index.jsonl`；号源 = 索引 max 与盘上已用号两边取大 + 1，到 `MAX_ID` 受控抛"
+                   " `ReviewIdExhausted` 不折回 000001；进程内一把 + `<索引>.lock` 一把两层锁；"
+                   "幂等键 = 台账锚点 `(台账路径, verification_id)`）与 `deliver_review`"
+                   "（notice 型板项 `v-review@`，`expects=\"ack\"` 但渲染即收口）",
     # `draft/39` §4（2026-10-05 用户口径）：M 的状态报告（旁路观测，谁都不停）。
     # 它不是对拍副本：四类读数怎么收集、怎么渲染成四节、怎么与复算对拍只有这一份实现；
     # 名字带 `status_report_`/`statusreport` 前缀是刻意的（R003 会把 `write_report`/
