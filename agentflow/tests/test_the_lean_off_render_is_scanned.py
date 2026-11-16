@@ -160,13 +160,20 @@ def test_f_the_unfixed_13a_sentence_is_lean_off_only(
     """f 的反真空：13A 那句逐字还在、且只在关档；把它塞进别的角色 ⇒ 同一扫描红。"""
     from agentflow.specs import b as B_SPEC
 
-    # 静态：左边（开档）没有它，右边（关档）逐字有它
-    assert "verify.verify_proof" in B_SPEC.PROOF_CHANNEL_NO_LEAN
+    # 静态：这一句的工具名形态只在关档那一份里（开档那份写的是动作名）。
+    # 修/未修必须与 `_PENDING_FC27` 同步：补丁 apply 之后把登记清空，这条判据
+    # 自动从"守卫未修形态"转成"守卫已修形态"，不需要再改这段代码。
     assert "verify.verify_proof" not in B_SPEC.PROOF_CHANNEL
+    assert ("verify.verify_proof" in B_SPEC.PROOF_CHANNEL_NO_LEAN) == bool(_PENDING_FC27), (
+        "13A 的修/未修状态与 `_PENDING_FC27` 对不上：补丁 apply 之后请把登记清空")
 
     with _lean(monkeypatch, False) as (root, reg):
         texts = _render_all(root, reg)
-        assert "再请 V 用 `verify.verify_proof` 逐行走查" in texts["B"]
+        if _PENDING_FC27:
+            assert "再请 V 用 `verify.verify_proof` 逐行走查" in texts["B"]
+        else:
+            assert "verify.verify_proof" not in texts["B"]
+            assert "`V.verify_proof`" in texts["B"]
         poisoned = texts["A"] + "\n再请 V 用 `verify.verify_proof` 逐行走查。\n"
         assert any("verify.verify_proof" in one
                    for one in PS.scan("A", poisoned, reg, mode="off"))
