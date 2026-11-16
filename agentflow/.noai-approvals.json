@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-16T18:08:49+08:00",
+  "generated_at": "2026-11-17T00:38:01+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,11 +505,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "e30a3536e0887c6da3625d017337c33d4e932e657bc83dccab5febac07b100be",
+      "sha256": "8125802225cc4a7977bf8c8e5a0fd361b1cae40096cd359553a3a56c518c706c",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "CL2/12A：conductor.void_items 摘要两处别家工具名写明施事（主控用 conductor.board / 主控的 conductor.wake_blocked）；p284→p285，两份 golden 按现值重冻（agent 面 = 11 格 prompt 的版本行与 8 格内嵌的工具摘要；tool 面 = conductor.void_items.summary 一行）。登记而非批准：reviewers 仍为空，需 2 名 reviewer 逐格看过。连带：warm 两档未重跑（真调模型，本批不跑）。",
-      "changed_this_session": true,
+      "change_note": "SF1 补登记：p286（ad400402）与 p287（8fd5e24d）两次重冻一直没进台账（两份 golden 的 sha 停在 p285）。本笔只用 --baseline 把当前盘上 sha 登记进去：agent 8125802225cc / tool 2439b03d47d5；只登记 sha，reviewers=[] 保持（登记≠批准；业主已定真机过了才签），没有伪造任何 reviewer。run_topic_snapshot.json 的 sha 另有一条更早的 stale（04d96875 vs 盘上 8db0a45c，自 2026-11-06 2e68a9db 起），不在本笔范围。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -531,11 +531,11 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "63e6cdb3a19b12e27b38e6da92531adbfedabe51822e79a7c5e401fe8717c95d",
+      "sha256": "2439b03d47d5ffe946e1ebff3484deeb2165897e634fe4f74c7088ecc950ef1a",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "CL2/12A：conductor.void_items 摘要两处别家工具名写明施事（主控用 conductor.board / 主控的 conductor.wake_blocked）；p284→p285，两份 golden 按现值重冻（agent 面 = 11 格 prompt 的版本行与 8 格内嵌的工具摘要；tool 面 = conductor.void_items.summary 一行）。登记而非批准：reviewers 仍为空，需 2 名 reviewer 逐格看过。连带：warm 两档未重跑（真调模型，本批不跑）。",
-      "changed_this_session": true,
+      "change_note": "SF1 补登记：p286（ad400402）与 p287（8fd5e24d）两次重冻一直没进台账（两份 golden 的 sha 停在 p285）。本笔只用 --baseline 把当前盘上 sha 登记进去：agent 8125802225cc / tool 2439b03d47d5；只登记 sha，reviewers=[] 保持（登记≠批准；业主已定真机过了才签），没有伪造任何 reviewer。run_topic_snapshot.json 的 sha 另有一条更早的 stale（04d96875 vs 盘上 8db0a45c，自 2026-11-06 2e68a9db 起），不在本笔范围。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
