@@ -2767,6 +2767,19 @@ def acceptance_kinds_with_state(rows: Iterable[Mapping[str, Any]],
     return {str(r.get("kind") or "") for r in rows if acceptance_row_state(r) == state}
 
 
+def _declared_min(raw: Mapping[str, Any]) -> int | None:
+    """验收行里声明的 `min`（`None` = 未声明；0 是合法阈值）。
+
+    唯一的分水岭（2026-11-16，21A）：旧口径 `int(row.get("min") or 0)` 把 `min: 0`
+    折成"没声明"，再落回缺省阈值 1 ⇒ 写明"这一档不要求条数"的行被判成 0 < 1。
+    未声明只有两种写法：缺 `min` 键、或 `min: null`（`_acceptance_row_problem` 已经把
+    非整数挡在门外，所以这里拿到的一定是整数或 `None`）。
+    """
+    if "min" not in raw or raw.get("min") is None:
+        return None
+    return int(raw["min"])
+
+
 def _acceptance_row_problem(cid: str, raw: Mapping[str, Any],
                             seen_ids: set[str]) -> str:
     """这一行读不读得懂 ⇒ 不读得懂时返回理由（空串 = 读得懂）。
@@ -3039,15 +3052,21 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         # 用 1 —— 等于写表的人可以合法地把门槛压低（`draft/43-C` C-05）。
         # 现在 `effective = max(declared, kind_min)`，并把三个数并列进读数
         # （`min_overridden`），让"表里的声明值"与"真正生效的值"分得开。
-        declared_min = int(row.get("min") or 0)
+        # ---- min:0 是合法阈值（2026-11-16，21A） ------------------------------
+        #
+        # `declared_min` 三态：`None` = 没声明、整数（含 0）= 声明值。旧口径把 0 折成
+        # "没声明"⇒ 写明"这一档不要求条数"的行落回缺省 1。未声明的表达只有缺键或 null。
+        declared_min = _declared_min(row)
         kind_min = detail.get("implicit_min")
         if kind_min is None:
             # 这一档没有自算下限：只声明了上限的档（`unfinished_request_rows`）
             # 达标线是 `<= max`，下限是 0；其余档缺省 1。
-            want_min = declared_min or (0 if detail.get("implicit_max") is not None else 1)
+            want_min = (declared_min if declared_min is not None
+                        else (0 if detail.get("implicit_max") is not None else 1))
         else:
-            want_min = max(declared_min, int(kind_min))
-        min_overridden = {"declared": declared_min, "kind_min": kind_min, "effective": want_min}
+            want_min = max(declared_min if declared_min is not None else 0, int(kind_min))
+        min_overridden = {"declared": declared_min, "kind_min": kind_min,
+                          "effective": want_min}
         if want_max is None and detail.get("implicit_max") is not None:
             want_max = int(detail["implicit_max"])
         ok_row = got >= want_min and (want_max is None or got <= want_max)
