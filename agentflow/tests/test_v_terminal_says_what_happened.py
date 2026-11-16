@@ -183,12 +183,20 @@ def outcomes(tmp_path_factory) -> dict[str, dict]:
             "sign_issuance": [_axis(SEC.SIGN_WITHHOLD)]},
         patch=mock.patch.object(VR, "record_verification", _lost))
 
-    # 8) 连判跑完两头都没有（门槛病态：这里把门槛压到 1，秘书仍不发签）
+    # 8) 连判跑完两头都没有（装配病态：门槛 1、秘书这一转却给出"不发签"的读数）。
+    #
+    # 2026-11-16 裁定 ②③ 之后，真实的秘书在"地板过了"时一定自动发签 —— 所以这一档
+    # 只能由一个病态的装配（夹具）造出来。保留它是因为 `terminal=""` 仍是一条必须
+    # 被如实报出的内部不一致，不是"再判几次就好"。
+    def _no_issue(self, *args, **kwargs):
+        return {"checked": True, "issue": False, "issued": False,
+                "decision": SEC.SIGN_WITHHOLD, "streak": 1, "projected": 1,
+                "need": 1, "streak_ok": True, "writeback": {}, "landed": False,
+                "reason": "夹具：地板过了却不发签（模拟装配病态）"}
     out["no_terminal"] = _run(
         base / "s8", replies=[CLEAN], answers={
-            "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)],
-            "sign_issuance": [_axis(SEC.SIGN_WITHHOLD)]},
-        patch=mock.patch.object(VR, "SIGN_STREAK_NEED", 1))
+            "v_reply_defect": [_axis(SEC.V_REPLY_CLEAN)]},
+        patch=mock.patch.object(AgentV, "_decide_sign_issuance", _no_issue))
 
     # 9) D3 批 2：秘书判 fault 而类别是 procedural ⇒ 这一趟无有效判定、不是打回
     #    （terminal="report"、不洗稿、不签发；同一份正文可原样再送）。

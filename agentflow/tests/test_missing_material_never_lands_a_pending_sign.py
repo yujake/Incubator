@@ -5,9 +5,10 @@
 
 命题还没在册时，V 对穷举型证据走的是 `AgentV._review_without_statement`
 （`agent_v/core.py`）：会审（`exhaustionreport.review`）跑完、结论原样交给
-`verifications.record_pending_sign`。缺材料时会审给的是 `VERDICT_UNKNOWN`
-（`看不出来`），而 `record_pending_sign` 内部过 `parse_verdict` —— 它把这一族措辞
-折成 `verdict="成立"` ⇒ 一行「成立」写进 `verifications/pending/<sha>.jsonl`。
+`verifications.record_pending_sign`。缺材料时会审给的是 `checked=False` + 空结论
+（2026-11-16 裁定 ④ 之前它是 `VERDICT_UNKNOWN` / `看不出来`），而
+`record_pending_sign` 内部过 `parse_verdict` —— 旧那一族措辞被折成
+`verdict="成立"` ⇒ 一行「成立」写进 `verifications/pending/<sha>.jsonl`。
 
 这是产假证据：盘上留下"V 判过成立"的正本行，而 V 实际上什么都没查成。
 V 的冷启动逐字禁止这么做（`verifications.py:974-976`：缺材料 ⇒ 没查成、台账里不留行），
@@ -22,7 +23,7 @@ V 的冷启动逐字禁止这么做（`verifications.py:974-976`：缺材料 ⇒
 | ② | 同一次调用返回 `checked=False`、`reason="missing_material"`，且 detail 点名缺哪一块 | 返回 `checked=True`、`verdict="成立"`、`signed_bit3=False` |
 | ③ | 反真空：材料齐 + 判成立 ⇒ 照旧落 pending 行（`kind="numeric_evidence_unregistered"`） | —（这一条改前改后都绿；它挡的是"把这一档整个关掉"这种修法） |
 
-①② 的护栏必须与在册那一支同一判据、同一文案：判据取 `ER.VERDICT_UNKNOWN`，
+①② 的护栏必须与在册那一支同一判据、同一文案：判据取 `reviewed["checked"] is False`，
 文案取同一条 detail 常量（`agent_v/core.py::_missing_material_detail`）。
 
 全部用例在 `tmp_path` 里自建工作区，一个模型调用都不发（会审是机械七项）。
@@ -109,7 +110,9 @@ def test_1_missing_material_lands_no_pending_row_and_says_so(tmp_path: pathlib.P
     # 会审的七项读数仍在（那是机械读数的正本；detail 里承诺了它在 exhaustion_review 里）
     reviewed = dict(got.get("exhaustion_review") or {})
     assert reviewed.get("missing"), reviewed
-    assert str(reviewed.get("verdict") or "") == "看不出来", reviewed
+    # 2026-11-16 裁定 ④：缺材料不再是「看不出来」那一档，而是 checked=False + 空结论。
+    assert reviewed.get("checked") is False, reviewed
+    assert str(reviewed.get("verdict") or "") == "", reviewed
 
 
 # ------------------------------------------------------------------ ③ 反真空

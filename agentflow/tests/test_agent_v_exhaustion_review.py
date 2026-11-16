@@ -306,9 +306,9 @@ def test_4d_a_missing_report_is_not_checked_and_never_holds(tmp_path: pathlib.Pa
                    for r in ledger), ledger
 
 
-def test_4e_a_proof_column_without_any_experiment_is_unknown(tmp_path: pathlib.Path) -> None:
+def test_4e_a_proof_column_without_any_experiment_is_unchecked(tmp_path: pathlib.Path) -> None:
     """③-5 只有一份证明栏（③ 在、程序路径钉不到实验）、台账里没有对应的实验
-    ⇒ `看不出来`（缺 ②③ 与程序）。"""
+    ⇒ 没查成（缺 ②③ 与程序）；2026-11-16 裁定 ④：不再产出「看不出来」那一档。"""
     store = _store(tmp_path)
     add_literature(store, S.format_id(0))
     _write(store, SCRIPT_REL, EXHAUSTIVE_PROBE)
@@ -319,11 +319,14 @@ def test_4e_a_proof_column_without_any_experiment_is_unknown(tmp_path: pathlib.P
             enumeration="枚举全部 2^36 个染色，无一遗漏"),
     }
     reviewed = ER.review(workspace_root=store.root, statement=statement, experiments=[])
-    assert reviewed["verdict"] == ER.VERDICT_UNKNOWN, reviewed
+    assert reviewed["checked"] is False, reviewed
+    assert reviewed["verdict"] == "", reviewed
+    assert not hasattr(ER, "VERDICT_UNKNOWN"), "「看不出来」那一档的词表常数还在"
     assert reviewed["missing"], reviewed
     assert any("实验" in str(m) for m in reviewed["missing"]), reviewed["missing"]
     # 缺材料时不许出现"成立"：这是这一档最容易糊过去的地方
     assert ER.verdict_of(reviewed)["verdict"] != ER.VERDICT_OK
+    assert ER.verdict_of(reviewed)["checked"] is False
 
 
 # ------------------------------------------------------------------ ④ E -> V 的边

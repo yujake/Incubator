@@ -2783,7 +2783,10 @@ _LEDGER_CELL_TEXT: dict[str, Any] = {
         "not_passed": "not passed",
         "unreviewed": "unreviewed",
         "signed": "signed (verdict: {verdict})",
-        "verdicts": {"成立": "holds", "有毛病": "defective", "看不出来": "inconclusive"},
+        #: 2026-11-16 裁定 ④：「看不出来」那一档已从判定词表里删除 ⇒ 英文附录也不再
+        #: 替它留一个译名。老数据里若真出现那四个字，按"这一格翻不出来"印 `(unread)`
+        #: （不是把它印成通过，也不是给它一个 inconclusive 的第三态）。
+        "verdicts": {"成立": "holds", "有毛病": "defective"},
     },
     PAPER_LANGUAGE_ZH: {
         "unread": LEDGER_CELL_UNREADABLE,

@@ -39,7 +39,7 @@
 
 "检查器自己没跑成"（模型输出不是合法 JSON、缺 `verdict` 字段、findings 形状坏）不是轴 ——
 `record()` 在没有可解析的陈述时抛 `VerificationError`，绝不写一行"没查成"来冒充"审过了"。
-历史值「看不出来」（:data:`LEGACY_VERDICTS`，旧行）仍读得出，
+历史值「看不出来」（旧行）仍读得出，
 但它不折成任何一态、不算票、也不签。
 
 ### p247：连"历史值按成立读并计票"也取消了
@@ -121,17 +121,12 @@ VERIFICATIONS_DIR = "verifications"
 #: 与秘书那一条是同一条口径：秘书读 V 的回复后语义判定 `clean` / `fault`，
 #: 连续次数与签发只看那个轴，不看 V 自己写的那两个字。
 VERDICTS: tuple[str, ...] = ("有毛病", "成立")
-#: 已经取消的那一档的历史值（业主 2026-11-02 追加裁定：「这一档连历史兼容读也不留」）。
-#:
-#: 业主 2026-11-01 裁定逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有
-#: 『看不出来对』」。于是这一档不再是 V 的一种结论。p247 起它连"读侧折成成立"也不做：
-#: :func:`read_verdict` 原样返回台账上的陈述，轴由秘书给。这个常量现在只剩两个用处：
-#: - 对拍点：`schema.REVIEW_VERDICTS`（另一根轴，FC-27 禁改区）与
-#:   `exhaustionreport.VERDICT_UNKNOWN`（会审的机械读数）里还写着同一个词，读侧要对得上
-#:   （`tests/test_the_four_verdict_word_lists_agree.py`）；
-#: - 给老台账一个可读的陈述值（读得出、不崩），但它不产生任何轴、不算票、不签。
+#: 已经取消的那一档的历史值不再立一张词表（2026-11-16 裁定 ④：「把看不出来这档
+#: 删干净」）。业主 2026-11-01 裁定逐字：「不应该有『看不出来』，『看不出来错』就是
+#: 没毛病，没有『看不出来对』」。p247 起读侧连"折成成立"也不做：
+#: :func:`read_verdict` 原样返回台账上的陈述，轴由秘书给。老台账里若还残留那四个字，
+#: 它只是一句历史陈述（读得出、不崩），不产生任何轴、不算票、不签；写侧再也产不出它。
 #: 台账不改写（追加式文件，迁移要重写历史行 ⇒ 不做）。
-LEGACY_VERDICTS: tuple[str, ...] = ("看不出来",)
 #: 业主 2026-11-01 逐字要求写进 V 可见面的那两句：两态的定义，与"看不出错就是成立"。
 #:
 #: 为什么它们是常量而不是散在提示词里的字面量：`verifications.cold_start_prompt` 是 V
@@ -2372,7 +2367,7 @@ def bit3_payload(row: Mapping[str, Any], *, streak: Any = None) -> dict[str, Any
 
     签不了（`有毛病` / 有未解决 error / 引用核实挡签 / 连续次数不够）⇒ 返回 `{}`
     （第 3 位保持空）—— 这不是"忘了写"，是"没签"。`streak` 与 :func:`signs_bit3` 同义。
-    老行上的 `看不出来`（:data:`LEGACY_VERDICTS`）不在这张"签不了"的清单里：它按
+    老行上的 `看不出来` 不在这张"签不了"的清单里：它按
     :func:`read_verdict` 读成 `成立` ⇒ 只要连续次数够，它签得住（2026-11-02 追加裁定）。
 
     凭据里带 `proof_no` 与 `proof_sha256`（2026-10-22）：读侧要拿它们回答"位上说审过的
@@ -3148,9 +3143,8 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
     这就是「连续 3 次没问题」那个计数：从 `verifications/<命题号>.jsonl` 的尾部按台账
     行序往回数，同一 `proof_sha256`、连续判「成立」的行数；任何一行判「有毛病」、或者
     sha 换了、或者秘书判了 `fault` ⇒ 从那里断开（尾行自己就断 ⇒ 0 次）。
-    秘书没查成的那一行不清零也不计入；老行上的 `看不出来`（:data:`LEGACY_VERDICTS`）
-    按成立读、并且算一票（2026-11-02：那一档连历史兼容读也不留，见
-    :func:`_hold_run_lengths` 与本模块 :func:`read_verdict`）。
+    秘书没查成的那一行不清零也不计入；老行上的 `看不出来`
+    没有秘书轴 ⇒ 同样不计票（2026-11-16 裁定 ④：那一档不是一个结论）。
 
     ## 三态（"没查成"不是"0 次"）
     | 结局 | `checked` | `streak` |
@@ -6352,15 +6346,15 @@ def selftest() -> int:
     checks.append(("没查成抛错（不冒充审过了）", unparsable))
     # 2026-11-02（业主：这一档连历史兼容读也不留）：老行上的那一格按 `成立` 读、能签、
     # 而且算一票。三条一起判 —— 只判"读成成立"会漏掉"它在连续计数里仍被跳过"。
-    legacy = {"verdict": LEGACY_VERDICTS[0], "unresolved_errors": 0, "citation_checks": []}
-    checks.append(("老行上的已取消档：按成立读、且能签第 3 位",
-                   read_verdict(legacy) == "成立" and row_signable(legacy)))
-    checks.append(("连续计数：成立, 已取消档, 成立 是 3 票（改前是 2）",
+    legacy = {"verdict": "看不出来", "unresolved_errors": 0, "citation_checks": []}
+    checks.append(("老行上的已取消档：原样读、且不算票",
+                   read_verdict(legacy) == "看不出来" and not row_signable(legacy)))
+    checks.append(("连续计数：成立, 已取消档, 成立 = [1,1,2]（那一档不投也不清零）",
                    _hold_run_lengths([
                        {"verdict": "成立", "proof_sha256": "x", "unresolved_errors": 0},
                        dict(legacy, proof_sha256="x"),
                        {"verdict": "成立", "proof_sha256": "x", "unresolved_errors": 0},
-                   ]) == [1, 2, 3]))
+                   ]) == [1, 1, 2]))
     for name, good_ in checks:
         print(f"  [{'PASS' if good_ else 'FAIL'}] {name}")
     return 0 if all(g for _, g in checks) else 1

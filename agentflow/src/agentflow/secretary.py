@@ -401,16 +401,13 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
     return out
 
 
-#: V 的秘书「发不发这一签」。
+#: V 的秘书「发不发这一签」（2026-11-16 裁定 ③：不再问模型，只留两个读数词）。
 #:
-#: 两档：`签发` / `不签发`。第三个词「判不了」不是一种
-#: 决定：读数不全 / 没答上来 ⇒ `checked=False` + 理由（"没查成"由那两格说，不由
-#: `decision` 冒充成第三档）。
+#: 地板（同一趟送审内连续 clean 达到门槛）过了即发；没过就是 `不签发`。
+#: 这两个词现在只是读数标签，不是一张要模型逐字取自的词表 ——
+#: `SIGN_ISSUANCE_VERDICTS` 与 `_judge_system` 的 `sign_issuance` 那一问都已删除。
 SIGN_ISSUE = "签发"
 SIGN_WITHHOLD = "不签发"
-
-#: `sign_issuance` 那一类的词表（两档）。
-SIGN_ISSUANCE_VERDICTS: tuple[str, ...] = (SIGN_ISSUE, SIGN_WITHHOLD)
 
 #: 判定"没查成"时，台账那一行的 `decision` 该写什么。
 #:
@@ -456,8 +453,8 @@ JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
     "proposition_identity": PROPOSITION_VERDICTS,
     # V 的回复有没有指出缺陷。独立一张表，不复用审美轴。
     "v_reply_defect": V_REPLY_VERDICTS,
-    # 这一签发不发（发签决定权在 V 的秘书）。
-    "sign_issuance": SIGN_ISSUANCE_VERDICTS,
+    # 2026-11-16 裁定 ③：这里没有 `sign_issuance` —— 发签不再是一问，
+    # 地板过了即由秘书自动发（见 `decide_sign_issuance`）。
     # 这一份证明与在册各路径是不是同一套证法（二态、语义：对比证明方法，不做任何机械闸）。
     # 不加第三档：判不了走 `checked=False`（fail-closed，调用方不收录）。
     "proof_kind": PROOF_KIND_VERDICTS,
@@ -501,7 +498,7 @@ DISPATCH_FIT_QUESTION: str = (
 #: （`没查成`，不是任何一档结论），其余类别原样保留旧缺省：改它们的词会改历史读数。
 #: 每一类都得在表里：漏一类，它在没查成时写的就是派活轴的"建议重排"（错轴）。
 _JUDGE_UNDECIDED: dict[str, str] = {
-    "v_reply_defect": JUDGE_UNCHECKED, "sign_issuance": JUDGE_UNCHECKED,
+    "v_reply_defect": JUDGE_UNCHECKED,
     "statement_aesthetic": JUDGE_UNCHECKED, "proof_kind": JUDGE_UNCHECKED,
     "dispatch_fit": JUDGE_UNCHECKED,
 }
@@ -4755,31 +4752,24 @@ class Secretary:
                              within_call: int | None = None,
                              review_call: str = ""
                              ) -> dict[str, Any]:
-        """这一签发不发（发签决定权在 V 的秘书）。
+        """这一签发不发（发签决定权在 V 的秘书；2026-11-16 裁定 ①②③）。
 
-        ## 判据分两层，且只有一层能否决
-        1. 台账那一层（机械、唯一真身）：`:func:`verifications.review_standing`` 现算的
-           连续读数 —— 这一签落下去之后尾部连续「成立」几次（`streak + 1`，且必须盖着
-           同一份正文）。次数不够 ⇒ `不签发`，不问模型（省一次调用，也不给它推翻门槛的机会）。
-        2. 秘书那一层（语义）：次数够了，才问模型「签发 / 不签发」。
-           它只能在这个前提下再否决，不能把"次数不够"判成"签发"。
-        ⇒ 两层是"与"，不是"或"：门槛是地板，秘书的决定是天花板。
+        ## 判据只有一层：同一趟送审内的连续 clean 达到门槛
+        `verifications.review_standing` 现算的读数只作历史回放；真正的地板是
+        `within_call`（这一趟送审内的第几轮）。`within_call >= need` 且这一签的轴是
+        clean ⇒ 由秘书直接发签，不再问模型（裁定 ③ 删掉了那次"模型点头"）。
+        次数不够 ⇒ `不签发`，同样不问模型（省一次调用，也不给它推翻门槛的机会）。
 
-        ## `within_call`：单次送审内部的轮数
-        「不允许跨两次送审累计成功数」。`AgentV` 的连判循环每转都把
-        "这一趟的第几轮"作为 `within_call` 递进来；一旦给了它，第 1 层的地板就只看
-        这个数，台账尾部历史连续数一个字节都不再参与"发不发签"的判断（连"缺口补齐"
-        式的二次确认也不许：那正是后门从别处长回来的形态）。台账仍被读一次，但只作
-        `reading` / `ledger_streak` 这份历史读数；`checked=False` 的台账读不成
-        也不再挡住这一趟（历史读不成不是这一趟没判）。
-        不给 `within_call`（旧直调路径 / 夹具）⇒ 保持原行为：地板读台账。那是历史
-        兼容门，不是送审路径。
+        不给 `within_call`（旧直调路径 / 夹具）⇒ 保持历史台账地板；那一档仍要求
+        秘书有判断面（"没有秘书就不发签"的装配纪律），但那条纪律不是模型判定，
+        也不改变本方法"地板过了即发"的规则。
 
-        ## 三态（"没查成"绝不被读成"没问题"）
+        ## 两态（"没查成"绝不被读成"没问题"）
         | 结局 | 返回 |
         |---|---|
-        | 判了 | `checked=True` + `issue`（真/假）+ `decision`（中文两档） |
-        | 没缝 / 开关关着 / 超时 / 台账读不成 / 坏 JSON / 词表外 | `checked=False` + `issue=False` + 理由 |
+        | 地板过了 | `checked=True` + `issue=True` + `decision=签发` |
+        | 地板没过 | `checked=True` + `issue=False` + `decision=不签发` |
+        | 没缝 / 开关关着（仅旧直调）/ 台账读不成 / 坏 JSON | `checked=False` + `issue=False` + 理由 |
 
         `checked=False` ⇒ 不发签（装配没接上时秘书判定必须报
         `checked=False`，且不放签）。返回键：`checked` / `issue` / `decision` / `streak` /
@@ -4788,8 +4778,7 @@ class Secretary:
 
         ## 落痕
         走 `note_decision`（那本账：`before` = 台账读数、`after` = 决定、`judge` = 这一趟判词）。
-        判词那一行由 `judge()` 自己落（`_record_judge`），所以一次决定会留两行：
-        一行"判断"、一行"决定"——它们是两件事（判了什么 / 据此发不发）。
+        2026-11-16 之后这一趟只有"决定"一行 —— 不再有模型判定那一行（没有模型调用了）。
         """
         from . import verifications as _VR   # 惰性：与 `merge_into_*` 那条同一处依赖
 
@@ -4939,20 +4928,20 @@ class Secretary:
                 "reading_why": str(reading.get("why") or reading_problem)[:400],
             }
         out["material"] = dict(material)
-        # ---- 没有判断面 ⇒ checked=False（业主 2026-10-29：「装配没接上时秘书判定必须报
-        # checked=False 且不放签」）。这一格必须排在"地板没过"之前：那一支会报
-        # `checked=True`＋"连续次数不够"，而装配缺失时票数根本不再增长（没判成的行既
-        # 不算票也不清零）—— 于是"没有秘书"会被读成"再签几次就有了"。
-        # 地板读数先算完再返回：调用方仍能看到 streak/need/streak_ok（那是事实），
-        # 而"这一趟没有人判"由 checked=False 说。
-        if self.seam is None or not self.enable_model:
+        # ---- 没有判断面：只对旧直调（没给 `within_call`）保留装配纪律 -------------
+        #
+        # 2026-11-16 裁定 ③ 之后，发签不再问模型；`within_call` 给了就说明这是 V 的
+        # 连判循环（那一转的 clean 已经由 `judge_v_reply` 判过），本方法只按地板发签。
+        # 不给 `within_call` 的旧直调没有上面那道语义判定，于是仍要求这一名秘书有
+        # 判断面 —— 否则"没有秘书"会被读成"再签几次就有了"。
+        if within is None and (self.seam is None or not self.enable_model):
             out["reason"] = ("这一名秘书没有判断面（没有缝 / 开关关着）⇒ 判定没查成："
                              "不放签（checked=False 不是「可以签」，也不是「次数不够」）")
             self._note_sign_issuance(out, task_id=task_id)
             return out
         if not out["streak_ok"]:
-            # 地板没过 ⇒ 不问模型（也不给它把门槛判过去的机会）。这一句只是"这一转还
-            # 不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给（签 / 打回）。
+            # 地板没过 ⇒ 这一签不发（也不问模型：没有"模型点头"这一层了）。这一句只是
+            # "这一转还不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
                        reason=(f"连续 clean（秘书轴）{out['projected']}/{out['need']} 次"
                                f"（{'这一趟送审内' if within is not None else '台账历史读数'}"
@@ -4962,32 +4951,18 @@ class Secretary:
                        basis=list(out["basis"]))
             self._note_sign_issuance(out, task_id=task_id)
             return out
-        got = self.judge("sign_issuance", material, task_id=task_id)
-        out["cost"] = dict(got.get("cost") or {})
-        if not got.get("checked"):
-            out["reason"] = (f"发签决定没查成（{str(got.get('reason') or '')[:200]}）⇒ 不放签"
-                             "（checked=False 不是「可以签」，也不是「不签发」这一档）")
-            self._note_sign_issuance(out, task_id=task_id)
-            return out
-        decision = str(got.get("decision") or "").strip()
-        if decision not in SIGN_ISSUANCE_VERDICTS:
-            # 词表外（含历史那一格「判不了」）⇒ 不采信：判成"没查成"，不是"不签发"。
-            out["reason"] = (f"结论 {decision!r} 不在 {list(SIGN_ISSUANCE_VERDICTS)} 里 ⇒ "
-                             "不采信：这一格按「没查成」读（不放签）")
-            self._note_sign_issuance(out, task_id=task_id)
-            return out
-        out.update(checked=True, decision=decision, issue=(decision == SIGN_ISSUE),
-                   reason=str(got.get("reason") or ""),
-                   basis=list(got.get("basis") or []))
-        if out["issue"]:
-            # ---- 落地那一步也在秘书这一侧（业主 2026-10-29 追加口径）----
-            #
-            # 原话：「由 V 的秘书判定并落盘（… 满足"连续 3 次 clean"才调
-            # `verifications.sign_statement` 翻 `bits.evidence`）」。
-            # `append_ledger=False`：台账那一行是 `AgentV` 先落的（正本先落），
-            # 本方法只翻位 —— 同一个 verification_id 在台账上绝不出现两次。
-            self._land_sign_issuance(out, proof_text=str(proof_text or ""),
-                                     proof_no=proof_no, row=row)
+        # ---- 2026-11-16 裁定 ①②③：地板过了 ⇒ 系统自动发签 ----------------------
+        #
+        # 第三轮秘书判 clean（`within_call == need`）就是发签的唯一条件。原先这里还有
+        # 一次"问模型签发 / 不签发"（`SIGN_ISSUANCE_VERDICTS` 的消费处），已按裁定 ③
+        # 删除：发签不由模型点头，签名由秘书直接落进稿里。
+        out.update(checked=True, issue=True, decision=SIGN_ISSUE,
+                   reason=(f"连续 clean（秘书轴）{out['projected']}/{out['need']} 次"
+                           f"（{'这一趟送审内' if within is not None else '台账历史读数'}）"
+                           f"⇒ 地板已过：由 V 的秘书自动发签（不问模型）"),
+                   basis=list(out["basis"]) + ["auto_issue:floor_passed"])
+        self._land_sign_issuance(out, proof_text=str(proof_text or ""),
+                                 proof_no=proof_no, row=row)
         self._note_sign_issuance(out, task_id=task_id)
         return out
 
@@ -15489,27 +15464,6 @@ def _judge_system(kind: str) -> str:
             "③ report_gap（decision=「没问题」时的一格报告质量读数，可空）：只记"
             "「V 的报告缺了什么记录」（例：没写反例尝试的位置、没写逐关核对），"
             "它不影响判定、不挡签。"
-        )
-    elif kind == "sign_issuance":
-        # 业主 2026-10-29（V 签门槛的 A 段）：发不发签由 V 的秘书说了算。
-        # 材料里只有台账读数（连续次数 / 门槛 / 正文 sha / 这一签的结论），没有证明正文
-        # （V 的秘书不读 F 的叙述，`may_read_narrative` 对 role="V" 恒 False）。
-        # 2026-10-30 第三次裁定：这里的词表也只有两格 —— "读数不全"不是第三档答案，
-        # 那是"没查成"（框架按 checked=False 记，见 `decide_sign_issuance`）。
-        ask = (
-            "问题：验证者（V）刚对一个命题的某一份证明给出了结论，现在要决定"
-            "这一签发不发（发签 = 把命题行的第 3 位翻成「审过」）。"
-            "材料是台账现算的读数，不是证明正文。判据只有一条："
-            "业主定的门槛是「同一份正文连续 3 次都判「成立」」——`streak`（尾部连续 clean 的次数）"
-            "必须达到 `need`（门槛），且这几次盖的是同一份正文（那一格读数须为真）。\n"
-            "p247：这里的 `candidate_axis` 是上一问（`v_reply_defect`）给出的轴 ——"
-            "它是唯一判据；`candidate_verdict` 只是 V 写下的陈述，不要按它的字面改判轴。\n"
-            "- 次数够了、同一份正文、这一签的 `candidate_axis` 是 clean ⇒ 判「签发」；\n"
-            "- 次数不够 / 不是同一份正文 / 这一签的 `candidate_axis` 不是 clean ⇒ 判「不签发」，"
-            "并在 basis 里点名差在哪一项；\n"
-            "某一格读数读不出来时不要拿一个结论去凑：那是「没查成」，框架按 checked=False 记。\n"
-            "decision 取「签发」/「不签发」之一；reason 一句话；"
-            "basis 写明你依据的是哪几格读数。"
         )
     else:
         ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"

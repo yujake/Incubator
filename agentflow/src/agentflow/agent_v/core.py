@@ -274,8 +274,9 @@ REVIEW_PASS_NOTE = (
 
 #: 穷举会审「缺材料」那一档的判据与文案，两支（在册 / 未在册）共用这一处。
 #:
-#: 判据只有一条：会审自己的结论是 `exhaustionreport.VERDICT_UNKNOWN`（缺材料时
-#: `review()` 就这么判，`missing` 里点名缺哪一块）。为什么不是一个新常量：`review()` 是
+#: 判据只有一条：会审自己的读数 `checked=False`（缺材料时
+#: `review()` 就这么判，`missing` 里点名缺哪一块；2026-11-16 裁定 ④：
+#: 不再有「看不出来」那一档，没查成就是 checked=False）。为什么不是一个新常量：`review()` 是
 #: 那一档的唯一产出方，在这里另立一份字面量等于给同一件事造第二个真身。
 #:
 #: 文案为什么必须共用：两支落的东西不同（在册支进 `verifications/<号>.jsonl` 之前就 return，
@@ -290,12 +291,11 @@ def missing_material_detail(verdict: Mapping[str, Any],
                             missing: list[str]) -> str:
     """「缺材料 ⇒ 没查成」那一句（在册 / 未在册两支逐字同一句）。
 
-    返回空串 = 这一档不是缺材料（判据在调用方那一侧：`verdict_of(reviewed)["verdict"]`
-    等不等于 `VERDICT_UNKNOWN`）—— 这样调用方只需要判一次，文案不会出现第二份。
+    返回空串 = 这一档不是缺材料（判据在调用方那一侧：`verdict_of(reviewed)["checked"]`
+    为假）—— 这样调用方只需要判一次，文案不会出现第二份。2026-11-16 裁定 ④ 之后
+    会审不再产出「看不出来」那一档：缺材料就是 `checked=False`。
     """
-    from .. import exhaustionreport as _ER
-
-    if str(verdict.get("verdict") or "") != _ER.VERDICT_UNKNOWN:
+    if verdict.get("checked") is not False:
         return ""
     return (
         f"穷举型证据会审缺材料（{'; '.join(missing) or '没点名'}）⇒ 这一格"
@@ -1798,7 +1798,7 @@ class AgentV:
             # 把它的三格读数翻成一次审校（落台账、`成立` 才签第 3 位）。
             #
             # 三格里最要紧的一档是「缺材料」（会审自己的读数是
-            # `exhaustionreport.VERDICT_UNKNOWN`）：报告没落地（E 的 ②③ 没落成盘上那份读数）
+            # `checked=False`）：报告没落地（E 的 ②③ 没落成盘上那份读数）
             # 时不许判成立 —— 而业主 2026-11-01 的裁定把那一档整个取消了（V 不产出它），
             # 所以缺材料落的是没查成（`checked=False` + `reason="missing_material"`）：
             # 台账里不留行，缺哪一块逐条进 `detail`。它既不是"找到了缺陷"（不许打回 F），
@@ -1929,6 +1929,17 @@ class AgentV:
                         sid, no, text=_text_for_ledger, row=_row,
                         judgment=_n_judge, verdict=_n_verdict)
                 out["sign_issuance"] = dict(_n_issuance)
+                # ---- 2026-11-16（SG1 ⑤⑥⑦）：穷举这一支也落 V 稿 / 交签好的稿 ----
+                _n_v_review: dict[str, Any] = {}
+                _n_signed: dict[str, Any] = {}
+                if _n_axis == "fault" and _row.get("checked") is not False:
+                    _n_v_review = self._publish_v_review(
+                        row=_row, manuscript=manuscript_rel, judgment=_n_judge,
+                        verdict=_n_verdict, statement_id=sid)
+                elif _n_issuance.get("issued"):
+                    _n_signed = self._deliver_signed_manuscript(
+                        issuance=_n_issuance, row=_row,
+                        manuscript=manuscript_rel, statement_id=sid)
                 if _n_word == "成立" and not _n_judged and not bool(_n_judge.get("unwired")):
                     # 秘书问不出来（这一问失败）⇒ 框架失败（业主 2026-10-30 第三次裁定
                     # 第 3 条）：终止 + checked=False + 明确 reason；不许当成 fault 打回，
@@ -1947,7 +1958,9 @@ class AgentV:
                                f"（{str(_n_judge.get('reason') or '没有给理由')[:120]}）")
                     return out
                 return self._finish_numeric(out, statement_id=sid, no=no, row=_row,
-                                            reviewed=_reviewed)
+                                            reviewed=_reviewed,
+                                            v_review=_n_v_review,
+                                            signed_delivery=_n_signed)
             # 走到这里：在册的散文证明。`text` 在更早处已经按载体归一（给了稿就是
             # 稿里 `## 证明` 那一节，`manuscript_rel` 非空；只有反真空判据 d 把
             # `_manuscript_gate` 摘掉时才是内联正文）。正文与稿的对 sha 也在那里做过，
@@ -2453,8 +2466,13 @@ class AgentV:
             "signed_bit3": False,
             "reviewed_by": {},
             "bits": bits,
-            "review_write": dict(writeback, manuscript_signed=_manuscript_signed,
-                                 filed="not_read_by_v"),
+            "review_write": dict(
+                writeback, manuscript_signed=_manuscript_signed,
+                filed="not_read_by_v",
+                #: 2026-11-16（SG1）：这一趟的 V 稿与交稿读数进这一格（不新增顶层键 ——
+                #: `verify.verify_proof` 的 `returns=` 在 FC-27 禁改区里）。
+                v_review=dict(last.get("v_review") or {}),
+                signed_delivery=dict(last.get("signed_delivery") or {})),
             "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
             # 台账那一行是这一档的正本：返回的 citation_checks 从盘上那一行读回来
             # （它已经过 `parse_verdict` 的同一套校验、只剩那几格）。
@@ -2619,6 +2637,15 @@ class AgentV:
                     "emit": "", "judgment": judgment, "wash": wash,
                     "gate": gate, "checks": checks}
         axis = str(judgment.get("axis") or "")
+        # ---- 2026-11-16（SG1 ⑤⑥⑦）：判出「有毛病」⇒ 落 V 稿并交给被审者 ----------
+        #
+        # 判据只有一条：秘书给的轴是 fault（warning 也算有毛病；程序性 / 文风 fault
+        # 同样落）。这一转同时是终局（下面 `_terminal_issuance` 给 issue=False），
+        # 所以"同一轮里既有签又有 V 稿"在结构上不可能发生。
+        v_review = (self._publish_v_review(
+            row=row, manuscript=manuscript, judgment=judgment, verdict=verdict,
+            statement_id=sid)
+            if axis == "fault" and row.get("checked") is not False else {})
         # ---- 167/甲（业主 2026-11-01 裁定）：判定那一笔就投，收件人 = 送审者
         #
         # 为什么必须在这里、而不是等 F 下一次起跑（改前那一版在
@@ -2638,6 +2665,7 @@ class AgentV:
         if receipt.get("state"):
             self._emit(f"verify_proof({sid})：回执 {receipt.get('state')}"
                        f"（{receipt.get('reason') or '没有读数'}）")
+        signed_delivery: dict[str, Any] = {}
         if bool(judgment.get("checked")) and axis == "clean":
             # 只有"判过了、轴是 clean"这一档才问"这一签发不发"
             # （其余几档都是终局或没查成，见 `_terminal_issuance`）。
@@ -2647,11 +2675,18 @@ class AgentV:
             issuance = self._decide_sign_issuance(sid, text, no, verdict, row=row,
                                                   within_call=pass_no,
                                                   review_call=review_call)
+            # ---- 2026-11-16（SG1 ②/⑦）：第三轮签上了 ⇒ 把签好的稿交出去 -------
+            if issuance.get("issued"):
+                signed_delivery = self._deliver_signed_manuscript(
+                    issuance=issuance, row=row,
+                    manuscript=manuscript or str(row.get("manuscript") or ""),
+                    statement_id=sid)
         else:
             issuance = self._terminal_issuance(sid, no, text=text, row=row,
                                                judgment=judgment, verdict=verdict)
         return {"ok": True, "row": row, "judgment": judgment, "wash": wash,
                 "issuance": issuance, "gate": gate, "checks": checks,
+                "v_review": v_review, "signed_delivery": signed_delivery,
                 "verdict": verdict}
 
     def _publish_receipt(self, row: Mapping[str, Any]) -> dict[str, Any]:
@@ -2680,6 +2715,132 @@ class AgentV:
         except Exception as exc:  # noqa: BLE001 —— 投递失败不许带走这一签
             return {"checked": False, "state": "error",
                     "reason": f"回执投递没跑成（{type(exc).__name__}: {exc}）"}
+
+    def _v_review_should_be_written(self, judgment: Mapping[str, Any]) -> bool:
+        """这一转要不要落 V 稿（判据只有一条：秘书给的轴是 fault）。
+
+        单独一个方法是为了反真空：把它打桩成恒假 ⇒ 「有毛病 ⇒ 落 V 稿」那条判据
+        必须变红（`tests/test_sg1_v_review_and_auto_sign.py` 的 anti-vacuum）。
+        """
+        return str((judgment or {}).get("axis") or "") == "fault"
+
+    def _v_review_ledger(self, row: Mapping[str, Any], statement_id: str) -> str:
+        """这一签的台账锚点路径（在册 `verifications/<号>.jsonl`；未在册 pending）。"""
+        vid = str(row.get("verification_id") or "")
+        if vid.startswith(VR.PENDING_PREFIX):
+            sha = str(row.get("proof_sha256") or "")
+            return f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{sha}.jsonl"
+        return f"{VR.VERIFICATIONS_DIR}/{statement_id}.jsonl"
+
+    def _publish_v_review(self, *, row: Mapping[str, Any], manuscript: str,
+                          judgment: Mapping[str, Any], verdict: Mapping[str, Any],
+                          statement_id: str = "") -> dict[str, Any]:
+        """判出「有毛病」⇒ 落一份 V 稿给被审者，并把它作为 notice 交出去。
+
+        内容（业主裁定 ⑤）：审的是哪份稿（族 + 号 + sha）/ 有毛病 / findings 与理由
+        （含 warning 与程序性 fault）。不要求 ack；幂等键 = 台账锚点（裁定 ⑥）。
+
+        这一格失败不许带走判定本身：返回读数里如实报 `checked=False` + 理由，
+        判定与 V 稿是两件事（稿没落成不等于没判出毛病）。
+        """
+        if not self._v_review_should_be_written(judgment):
+            return {}
+        try:
+            from .. import manuscriptfamily as _MFAM
+            from .. import vreviews as _VRV
+
+            rel = str(manuscript or row.get("manuscript")
+                      or row.get("producer_path") or "").replace("\\", "/")
+            info = _MFAM.classify_manuscript(rel) if rel else {}
+            family = (str(info.get("name_family") or info.get("family") or "")
+                      if info else "")
+            mid = (str(info.get("manuscript_id") or info.get("id") or "")
+                   if info else "")
+            findings = [dict(f) for f in (row.get("findings")
+                                          or verdict.get("findings") or [])
+                        if isinstance(f, Mapping)]
+            reading = VR.fault_kind_of(row)
+            why = str(verdict.get("why") or "").strip()
+            reason = str(judgment.get("reason") or "").strip()
+            if why and why not in reason:
+                reason = f"{reason}；{why}".strip("；")
+            basis = [str(x) for x in (judgment.get("basis") or []) if str(x).strip()]
+            if basis:
+                reason = (reason + "（依据：" + "；".join(basis[:4]) + "）").strip()
+            review = _VRV.record_review(
+                self.workspace_root,
+                statement_id=str(statement_id or row.get("statement_id") or ""),
+                manuscript=rel, manuscript_family=family, manuscript_id=mid,
+                proof_sha256=str(row.get("proof_sha256") or ""),
+                verdict=str(row.get("verdict") or verdict.get("verdict") or ""),
+                defect_step=row.get("defect_step", verdict.get("defect_step")),
+                findings=findings, reason=reason,
+                fault_kind=str(reading.get("kind") or ""),
+                fault_cause=str(reading.get("cause") or ""),
+                ledger=self._v_review_ledger(row, str(statement_id or "")),
+                verification_id=str(row.get("verification_id") or ""),
+                review_call=str(row.get("review_call") or ""),
+                at=str(row.get("at") or ""), actor=str(self.actor or "agent-V"))
+            delivery = _VRV.deliver_review(
+                self.store, root=self.workspace_root, review=review,
+                statement_id=str(statement_id or ""),
+                actor=str(self.actor or "agent-V"))
+            out = {
+                "checked": bool(review.get("checked")), "review_id":
+                str(review.get("review_id") or ""),
+                "written": bool(review.get("written")),
+                "idempotent": bool(review.get("idempotent")),
+                "path": str(review.get("rel") or ""),
+                "delivery": dict(delivery or {}),
+                "reason": str(review.get("reason") or ""),
+            }
+            self._emit(f"verify_proof({statement_id or '未在册'})：V 稿 "
+                       f"{out['review_id'] or '（没落成）'} {out['path']}；"
+                       f"交付 {delivery.get('state') or '（没投）'}")
+            return out
+        except Exception as exc:  # noqa: BLE001 —— 稿没落成不许带走这一签
+            return {"checked": False, "review_id": "", "written": False,
+                    "idempotent": False, "path": "", "delivery": {},
+                    "reason": f"V 稿没落成（{type(exc).__name__}: {exc}）"}
+
+    def _deliver_signed_manuscript(self, *, issuance: Mapping[str, Any],
+                                   row: Mapping[str, Any], manuscript: str,
+                                   statement_id: str = "") -> dict[str, Any]:
+        """签已经落进稿里 ⇒ 把签好的稿按 notice 交给送审者（裁定 ②/⑦，不要求 ack）。
+
+        只在两件事都成立时才投：`issuance.issued`（签文件颁发了）与
+        `manuscript_write.written|idempotent`（块真的在稿上）。决定与落地是两件事 ——
+        只颁发没落块时，交出去的不能叫"签好的稿"。
+        """
+        wb = dict(issuance.get("writeback") or {})
+        mw = dict(wb.get("manuscript_write") or {})
+        if not (issuance.get("issued")
+                and (mw.get("written") or mw.get("idempotent"))):
+            return {}
+        try:
+            from .. import vreviews as _VRV
+
+            sign = dict(wb.get("vsign") or {})
+            land = dict(wb.get("land") or {})
+            got = _VRV.deliver_signed(
+                self.store, root=self.workspace_root,
+                manuscript=str(manuscript or row.get("manuscript") or ""),
+                proof_sha256=str(row.get("proof_sha256") or ""),
+                sign_rel=str(sign.get("path") or ""),
+                ledger=self._v_review_ledger(row, str(statement_id or "")),
+                verification_id=str(row.get("verification_id") or ""),
+                streak=int(issuance.get("streak") or 0),
+                need=int(issuance.get("need") or VR.SIGN_STREAK_NEED),
+                by=str(land.get("by") or sign.get("by") or ""),
+                review_call=str(issuance.get("review_call")
+                                or row.get("review_call") or ""),
+                actor=str(self.actor or "agent-V"))
+            self._emit(f"verify_proof({statement_id or '未在册'})：签好的稿交付 "
+                       f"{got.get('state') or '（没投）'}（{got.get('reason') or ''}）")
+            return dict(got)
+        except Exception as exc:  # noqa: BLE001 —— 投递失败不许带走这一签
+            return {"checked": False, "state": "error", "item_id": "",
+                    "reason": f"签好的稿没投出去（{type(exc).__name__}: {exc}）"}
 
     def _terminal_issuance(self, statement_id: str, proof_no: int, *, text: str,
                            row: Mapping[str, Any], judgment: Mapping[str, Any],
@@ -3404,6 +3565,17 @@ class AgentV:
             if wash and pending:
                 relay = self._relay_unregistered_wash(wash=wash, pending=pending,
                                                       verdict=last)
+        # ---- 2026-11-16（SG1 ⑤⑥⑦）：未在册这一支的 V 稿 ------------------------
+        #
+        # 判据与在册那一支同一处（`_v_review_should_be_written`）：轴是 fault 就落。
+        # 幂等键走 pending 台账锚点（`verifications/pending/<sha>.jsonl` +
+        # verification_id）—— 未在册的行没有 `review_call`，不能拿它当键。
+        v_review: dict[str, Any] = {}
+        if (pending and pending.get("checked") is not False
+                and str(_last_judgment.get("axis") or "") == "fault"):
+            v_review = self._publish_v_review(
+                row=pending, manuscript=rel, judgment=_last_judgment,
+                verdict=last, statement_id="")
         reading = dict(block_write.get("reading") or {})
         return {"block": reading, "passes": passes, "manuscript": rel, "sha": sha,
                 "stopped": stopped, "block_write": block_write,
@@ -3420,6 +3592,8 @@ class AgentV:
                 "verdict": verdict_word, "findings": list(last.get("findings") or []),
                 "defect_step": last.get("defect_step"),
                 "unresolved_errors": int(last.get("unresolved_errors") or 0),
+                #: 2026-11-16（SG1）：有毛病那一转落的 V 稿（未在册支）。
+                "v_review": dict(v_review or {}),
                 "reason": (("（未在册）" + (str(block_write.get("why") or "")
                                             or ("看过、没签：没有手稿（`proof_manuscript`）"
                                                 "⇒ 这一签没有载体，签只能落在稿上")))
@@ -3972,6 +4146,21 @@ class AgentV:
                       "负判不是签）。判词已落 "
                       f"`{pending_ledger or '（pending 台账）'}`，F 的读数是「未通过」；"
                       "按缺陷改稿后再送，不签第 3 位、也不写重复块。")
+        # ---- 2026-11-16（SG1 ②/⑦）：未在册签上了 ⇒ 把签好的稿交出去 -------------
+        _signed_delivery: dict[str, Any] = {}
+        if (stopped == "signed" and manuscript_write.get("written")
+                and (issued.get("written") or issued.get("idempotent"))):
+            _signed_delivery = self._deliver_signed_manuscript(
+                issuance={
+                    "issued": True,
+                    "writeback": {"manuscript_write": manuscript_write,
+                                  "vsign": issued, "land": landed},
+                    "streak": int(block.get("streak") or 0),
+                    "need": int(block.get("need") or VR.SIGN_STREAK_NEED),
+                    "review_call": str(pending.get("review_call") or ""),
+                },
+                row=pending, manuscript=str(got.get("manuscript") or ""),
+                statement_id="")
         out.update({
             "checked": True,
             "kind": ("proof_reviewed_not_signed"
@@ -3991,9 +4180,14 @@ class AgentV:
             "ledger": pending_ledger or str(got.get("manuscript") or ""),
             # 2026-11-10：与在册那一支同形的"签落在稿上没有"读数。块落了就是
             # `manuscript_signed=True` + 行号；没落就必须有一句为什么（不静默）。
-            "review_write": _unregistered_writeback(
-                manuscript_write,
-                sign_issued=bool(issued.get("written") or issued.get("idempotent"))),
+            "review_write": dict(
+                _unregistered_writeback(
+                    manuscript_write,
+                    sign_issued=bool(issued.get("written") or issued.get("idempotent"))),
+                #: 2026-11-16（SG1）：有毛病那一转落的 V 稿与交稿读数进这一格
+                #: （不新增顶层键：`verify_proof` 的 `returns=` 在 FC-27 禁改区里）。
+                v_review=dict(got.get("v_review") or {}),
+                signed_delivery=_signed_delivery),
             "reason": str(got.get("reason") or ""),
             "detail": record,
         })
@@ -4118,7 +4312,9 @@ class AgentV:
         return out
 
     def _finish_numeric(self, out: dict[str, Any], *, statement_id: str, no: int,
-                        row: Mapping[str, Any], reviewed: Mapping[str, Any]) -> dict[str, Any]:
+                        row: Mapping[str, Any], reviewed: Mapping[str, Any],
+                        v_review: Mapping[str, Any] | None = None,
+                        signed_delivery: Mapping[str, Any] | None = None) -> dict[str, Any]:
         """穷举型证据会审的收尾：台账那一行落地没有、五元位、返回值。
 
         这一段与 `verify_proof` 的普通收尾是同一套纪律（只认 `row` 上的 `checked`）：
@@ -4174,7 +4370,10 @@ class AgentV:
             "reviewed_by": {},
             "bits": bits,
             "review_write": dict(writeback, manuscript_signed=_manuscript_signed,
-                                 filed="not_read_by_v"),
+                                 filed="not_read_by_v",
+                                 #: 2026-11-16（SG1）：V 稿与交稿读数（不新增顶层键）。
+                                 v_review=dict(v_review or {}),
+                                 signed_delivery=dict(signed_delivery or {})),
             "ledger": f"verifications/{sid}.jsonl#{row['verification_id']}",
             "reason": f"{row['verification_id']}：{row['verdict']}"
                       + ("（签在稿上；命题行由 B 收录时认领）"

@@ -23,7 +23,7 @@ B 登记时指它、G 在正文里引它、V 审它，四处说的是同一份�
 - E 写侧：报告没落成 / 三块不齐 ⇒ 那条证据降档（`numericproof.sign_experiment` 的
   档位由 `exhaustion_problems` 单点决定 ⇒ 落成 cross_check，不是 proof）；
 - B 的入库闸：证明栏（只有 ③）齐、落盘核查不过 ⇒ 受控拒绝（`numericproof.filing_problems`）；
-- V 的会审：缺材料 ⇒ `看不出来` 并点名缺哪一块，不许判 `成立`。
+- V 的会审：缺材料 ⇒ `checked=False` 并点名缺哪一块，不许判 `成立`。
 
 ## "要不要"与"齐不齐"是两件事
 
@@ -1455,10 +1455,10 @@ def disk_problems(root: str | Path | None, experiment_row: Mapping[str, Any] | N
 # ---------------------------------------------------------------- V 的会审（穷举型证据）
 
 
-#: 三态（与 `verifications.VERDICTS` 同一套词，不另造词）。
+#: 两态（与 `verifications.VERDICTS` 同一套词，不另造词；2026-11-16 裁定 ④：
+#: 「看不出来」那一档已从判定轴与词表里删除，缺材料由 `checked=False` 说）。
 VERDICT_OK = "成立"
 VERDICT_BAD = "有毛病"
-VERDICT_UNKNOWN = "看不出来"
 
 #: 检查项的名字（读数里逐条给；`有毛病` 的 findings 用同一个名字点名）。
 CHECK_PROGRAM = "程序地址存在且可读"
@@ -1575,7 +1575,7 @@ def is_exhaustion_column(statement: Mapping[str, Any],
     """这条命题的证明栏是不是"穷举型证据"（2026-11-08：证明栏里有 ③ 穷举论证那段）。
 
     为什么不要求"台账里已经有一条 E 签的穷举证明"：那正是本判据要判的东西 ——
-    报告没落地时台账里根本没有那条签名，而 V 仍然必须去看、并且报「看不出来（缺材料）」。
+    报告没落地时台账里根本没有那条签名，而 V 仍然必须去看、并且报「缺材料、没查成」。
     程序路径不在证明栏里了（住 `experiments.code_path`），所以这里不再按"第 ① 段是
     `.lean`"排除形式化：F 的散文证明没有「穷举论证」那一段，`parse_proof_column` 的
     `numeric` 就是 False。
@@ -1600,7 +1600,8 @@ def verdict_of(reviewed: Mapping[str, Any] | None) -> dict[str, Any]:
     """
     rev = _as_mapping(reviewed)
     return {
-        "verdict": str(rev.get("verdict") or VERDICT_UNKNOWN),
+        "verdict": str(rev.get("verdict") or ""),
+        "checked": bool(rev.get("checked", True)),
         "defect_step": rev.get("defect_step"),
         "quote": str(rev.get("quote") or ""),
         "why": str(rev.get("why") or ""),
@@ -1612,7 +1613,7 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
            experiments: Sequence[Mapping[str, Any]] = (),
            experiment_row: Mapping[str, Any] | None = None,
            experiment_id: Any = "") -> dict[str, Any]:
-    """V 的穷举型证据会审：三态结论 + 逐项检查 + 点名的 findings。
+    """V 的穷举型证据会审：两态结论 + 逐项检查 + 点名的 findings。
 
     检查项（业主 2026-10-23 晚点名的那几条，一条一项，逐条给读数）：
 
@@ -1626,8 +1627,9 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
     7. 形式化那一格填的是不是对的东西（数值定理 ⇒ 数值程序；理论定理 ⇒ .lean；
        判据在 `numericproof.formal_slot`）。
 
-    三态的口径：
-    - 材料缺（没有对应的实验行 / 报告没落地）⇒ `看不出来`，findings 点名缺哪一块；
+    两态的口径（2026-11-16 裁定 ④：不存在「看不出来」这一档）：
+    - 材料缺（没有对应的实验行 / 报告没落地）⇒ `checked=False` + `missing` 点名缺哪一块，
+      结论不给（`verdict=""`）—— 没查成不是一种结论；
     - 材料在但自相矛盾（数字对不上 / 剪枝没解释 / 抽样 / 边界没写 / 形式化格填错）
       ⇒ `有毛病`，`defect_step` 指到失败的那一项；
     - 全部通过 ⇒ `成立`（V 签；②③ 的作者仍是 E）。
@@ -1642,7 +1644,8 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
     out: dict[str, Any] = {
         "kind": "exhaustion",
         "checked": True,
-        "verdict": VERDICT_UNKNOWN,
+        #: 0 态：还没走到结论那一格；缺材料时由 `checked=False` 说"没查成"。
+        "verdict": "",
         "defect_step": None,
         "quote": "",
         "why": "",
@@ -1760,8 +1763,8 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
         probs = list(landing_problems(row)) + list(disk_problems(root, row))
         if probs:
             # 读数读不到（不在盘上 / 空文件 / 读不出来）时，缺的就是那两块本身：
-            # 业主的口径是「报告缺失 ⇒ V 必须报看不出来（缺穷举论证 / 缺程序设计）」，
-            # 所以这一档的 missing 直接点名那两块，而不是只说一句"报告不在"。
+            # 业主的口径是「报告缺失 ⇒ V 必须报缺材料（缺穷举论证 / 缺程序设计）」，
+            # 这一档在返回值里是 checked=False，不是一种结论（2026-11-16 裁定 ④）。            # 所以这一档的 missing 直接点名那两块，而不是只说一句"报告不在"。
             if got is not None and not got.get("ok"):
                 for label in (BLOCK_DESIGN, BLOCK_EXHAUSTION):
                     if label not in out["missing"]:
@@ -1778,7 +1781,7 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
             checks.append({"name": CHECK_REPORT, "ok": True,
                            "detail": f"报告 {out['report_path']} 在盘上、sha256 与行上一致、三块齐"})
 
-    # ---- 缺材料 ⇒ 看不出来（不是"有毛病"：还没东西可判）
+    # ---- 缺材料 ⇒ 没查成（不是"有毛病"：还没东西可判）
     if not out["missing"] and row is not None:
         report_text = report_text or str(_read_text(root, out["report_path"]) or "")
 
@@ -1900,14 +1903,17 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
                        "detail": f"形式化那一格应当是 {slot.get('kind') or '（不适用）'}"
                                  f"，填的是 {script or '（没填）'}"})
 
-    # ---- 三态
+    # ---- 两态（缺材料是"没查成"，不是第三态）
     real_findings = [f for f in findings[before:] if str(f.get("level")) == "error"]
     out["problems"] = [str(f.get("detail") or "") for f in real_findings]
     if out["missing"]:
-        out["verdict"] = VERDICT_UNKNOWN
+        # 2026-11-16 裁定 ④：没有「看不出来」这一档。缺材料 ⇒ checked=False，
+        # 结论留空；缺哪一块逐条进 `missing`（读的人照它补，不照一个结论词猜）。
+        out["checked"] = False
+        out["verdict"] = ""
         out["defect_step"] = None
         out["why"] = ("缺材料：" + "、".join(out["missing"]) +
-                      " ⇒ 判不了成立（缺材料的诚实结论是看不出来，不是成立）")
+                      " ⇒ 这一格没查成（不判成立、也不判有毛病；材料补齐后重送）")
         out["quote"] = ""
         out["findings"] = [f for f in findings if str(f.get("level")) == "error"]
         return out
