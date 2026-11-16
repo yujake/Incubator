@@ -420,7 +420,7 @@ def test_old_data_without_proof_no_reads_exactly_as_before(tmp_path: pathlib.Pat
                                         "evidence_kind": "proof_review"})
     assert gap["ok"] is False and gap["state"] == "holding", gap
     assert gap["sha_matches"] is True, gap
-    assert "连续次数只到 1/3" in gap["why"], gap["why"]
+    assert "门槛还没到" in gap["why"], gap["why"]
     # 补够三次之后同一个口判 ok（否则上面那一条可能只是"这个口永远不放行"）
     for _i in range(VR.SIGN_STREAK_NEED - 1):
         VR.record_verification(st.root, statement_id=SID, proof_text=PROOF1,

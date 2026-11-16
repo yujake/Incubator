@@ -1975,7 +1975,7 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             out.update(code=STATEMENT_ID_MISSING, reason=(
                 "没有可签的对象：既没有命题号、也没有台账落点 ⇒ 这一签不颁发"
                 "（一个字节都不写）。没有号不是拒签理由：没号就先让 V 把这一签落进 "
-                "`verifications/pending/<正文sha>.jsonl`（三转各一行），签块照旧盖在 "
+                "`verifications/pending/<正文sha>.jsonl`（这一趟的判定各一行），签块照旧盖在 "
                 "`reports/(f|b|e)-proof-<数字>.md` 上，B 收录时按正文 sha 从稿上拿签。"
                 "这里拒的是「连 pending 台账都没有」——那一签没有任何背书。"))
             return out
@@ -1991,7 +1991,7 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
             f"`ledger={text!r}` 不是 V 自己那本台账（要 "
             "`verifications/<命题号>.jsonl#v-<号>` 或 "
             "`verifications/pending/<正文sha>.jsonl#u-<号>`）⇒ 这一签不颁发"
-            "（一个字节都不写）。稿头上自己写的「已签 3/3」（`reports/<稿>#V签`）"
+            "（一个字节都不写）。稿头上自己写的「已签」（`reports/<稿>#V签`）"
             "不是证据：它只是这份稿的一句话，拿它当台账等于自己给自己作证 —— "
             "真机 `b-proof-000016` / `f-proof-plan-000011` 上的那两块就是这种假签。"))
         return out
@@ -2034,8 +2034,8 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
     want = max(1, int(need or 1))
     if len(entries) < want:
         out.update(code=PASSES_INCOMPLETE, reason=(
-            f"`passes` 只有 {len(entries)} 条，而门槛是连续 {want} 次「成立」⇒ 不算 "
-            f"{want}/{want}（一个字节都不写）：每一转都要有自己的读数，"
+            f"`passes` 只有 {len(entries)} 条，而门槛由框架按这一趟送审自己数 ⇒ 不算 "
+            "「连续成立」（一个字节都不写）：每一条都要有自己的读数，"
             "没有读数的「成立」不是票"))
         return out
     for i, one in enumerate(entries, 1):
@@ -2043,14 +2043,14 @@ def sign_object_gate(*, artifact_sha: Any, statement_id: Any, ledger: Any,
                    if not str(one.get(k) or "").strip()]
         if missing:
             out.update(code=PASSES_INCOMPLETE, reason=(
-                f"第 {i} 转的 `passes` 缺 {missing} ⇒ 三格全空的占位不算「成立」："
-                "每一转都要点名台账行（`verification_id`）、时间、被签正文的 sha，"
-                "否则「连续 3/3」只是三个空对象（这一签不颁发，一个字节都不写）"))
+                f"第 {i} 条的 `passes` 缺 {missing} ⇒ 三格全空的占位不算「成立」："
+                "每一条都要点名台账行（`verification_id`）、时间、被签正文的 sha，"
+                "否则「门槛够了」只是空对象（这一签不颁发，一个字节都不写）"))
             return out
         if str(one.get("proof_sha256") or "").strip().lower() != sha:
             out.update(code=PASSES_INCOMPLETE, reason=(
-                f"第 {i} 转的 `proof_sha256` 不是被签正文的 sha（{sha[:12]}…）⇒ "
-                "这三转不是同一份正文的票，不算连续「成立」（这一签不颁发）"))
+                f"第 {i} 条的 `proof_sha256` 不是被签正文的 sha（{sha[:12]}…）⇒ "
+                "这几份不是同一份正文的票，不算连续「成立」（这一签不颁发）"))
             return out
     vid = str(entries[-1].get("verification_id") or "").strip()
     if vid != str((pend or anchor).group("vid")):
@@ -2238,8 +2238,8 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         return out
     if int(streak) < int(need):
         out.update(refused_below_need=True,
-                   reason=(f"连续「成立」{int(streak)}/{int(need)} 次 ⇒ 一个字节都不写："
-                           "未达门槛就没有签（业主：只有连续三次审核通过这才叫 V 签）"))
+                   reason=(f"这一趟的「成立」只到 {int(streak)}/{int(need)} ⇒ 一个字节都不写："
+                           "门槛还没到就没有签（门槛由框架按这一趟送审自己数）"))
         return out
     # ---- 2026-11-05：签的对象与证据（三道必填闸，零字节）----------------------
     #
@@ -3948,7 +3948,7 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
     passes = [dict(p) for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
     if not passes:
         out.update(code="passes_empty", why=(
-            "签文件没带转次（`passes` 空）⇒ 「连续 3/3」只是一句话，复算不上"))
+            "签文件没带判定读数（`passes` 空）⇒ 「门槛够了」只是一句话，复算不上"))
         return out
     from . import verifications as _VR
 
@@ -3958,8 +3958,8 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
         out["tier"] = "call"
         if len(passes) < need:
             out.update(code=f"only_{len(passes)}_of_{need}", why=(
-                f"`passes` 只有 {len(passes)} 条，而门槛是连续 {need}/{need} "
-                "⇒ 这三转不是同一份正文的票"))
+                f"`passes` 只有 {len(passes)} 条，还没到门槛（门槛由框架按这一趟送审"
+                "自己数）⇒ 这几份不是同一份正文的票"))
             return out
         try:
             numbers = sorted(int(p.get("review_pass") or 0) for p in passes)
@@ -3967,8 +3967,8 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
             numbers = []
         if numbers != list(range(1, need + 1)):
             out.update(code="pass_not_consecutive", why=(
-                f"`passes` 的 review_pass 是 {numbers}，而门槛要 {list(range(1, need + 1))}"
-                "（不重不漏、同一趟）⇒ 复算不上"))
+                f"`passes` 的 review_pass 是 {numbers}，而门槛要的趟内序号必须不重不漏、"
+                "同一趟 ⇒ 复算不上"))
             return out
         for want, one in enumerate(sorted(passes, key=lambda p: int(p.get("review_pass")
                                                                    or 0)), 1):
@@ -3976,8 +3976,8 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
             row = by_vid.get(vid)
             if row is None:
                 out.update(code=f"row_missing:{vid or '（空）'}", why=(
-                    f"`passes` 第 {want} 转点的是 `{vid or '（空）'}`，而锚点那本台账里"
-                    "没有这一行 ⇒ 这一转没有证据，复算不上"))
+                    f"`passes` 第 {want} 条点的是 `{vid or '（空）'}`，而锚点那本台账里"
+                    "没有这一行 ⇒ 这一条没有证据，复算不上"))
                 return out
             if str(row.get("review_call") or "") != str(one.get("review_call") or ""):
                 out.update(code=f"call_mismatch:{vid}", why=(
@@ -3986,8 +3986,8 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
                 return out
             if int(row.get("review_pass") or 0) != int(one.get("review_pass") or 0):
                 out.update(code=f"pass_mismatch:{vid}", why=(
-                    f"`{vid}` 在台账上是第 {row.get('review_pass')} 转，签文件写的是第 "
-                    f"{one.get('review_pass')} 转 ⇒ 票与行对不上"))
+                    f"`{vid}` 在台账上的趟内序号是 {row.get('review_pass')}，签文件写的是 "
+                    f"{one.get('review_pass')} ⇒ 票与行对不上"))
                 return out
             if str(row.get("proof_sha256") or "") != sha:
                 out.update(code=f"sha_mismatch:{vid}", why=(
@@ -3998,8 +3998,8 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
             if str(one.get("proof_sha256") or "").strip() and str(
                     one.get("proof_sha256")).strip().lower() != sha:
                 out.update(code=f"sha_mismatch:{vid}", why=(
-                    f"`passes` 第 {want} 转的 proof_sha256 不是被签正文的 sha ⇒ "
-                    "这三转不是同一份正文的票"))
+                    f"`passes` 第 {want} 条的 proof_sha256 不是被签正文的 sha ⇒ "
+                    "这几份不是同一份正文的票"))
                 return out
             if not _VR.row_signable(row):
                 out.update(code=f"row_not_signable:{vid}", why=(
@@ -4010,9 +4010,9 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
             out["got"] += 1
         if out["got"] < need:
             out.update(code=f"only_{out['got']}_of_{need}", why=(
-                f"只点出 {out['got']}/{need} 行 ⇒ 「连续 {need}/{need}」是假的"))
+                f"只点出 {out['got']}/{need} 行 ⇒ 「门槛够了」是假的"))
             return out
-        out.update(ok=True, why=(f"{out['got']}/{need} 转同源、每行签得住"
+        out.update(ok=True, why=(f"{out['got']}/{need} 份同源、每行签得住"
                                  f"（call={sorted(calls)[0]}）"))
         return out
     # ---- legacy 形态：passes 不带号（2026-11-02 之前）----
@@ -4032,7 +4032,7 @@ def _recomputable(root: Any, sign: Mapping[str, Any]) -> dict[str, Any]:
     cut = next((i for i, r in enumerate(mine) if r is row), -1)
     if cut < 0 or cut >= len(runs) or runs[cut] < need:
         out.update(code="anchor_run_below_need", why=(
-            f"锚点那一行当年只算 {runs[cut] if 0 <= cut < len(runs) else 0}/{need} 转"
+            f"锚点那一行当年只算 {runs[cut] if 0 <= cut < len(runs) else 0}/{need} 份"
             "（老行没有秘书轴 / 只 1 票）⇒ 复算不上"))
         return out
     for i in range(cut - need + 1, cut + 1):

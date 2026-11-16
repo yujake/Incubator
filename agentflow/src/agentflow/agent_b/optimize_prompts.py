@@ -36,8 +36,8 @@ PROMPT_CLASSES: tuple[str, ...] = ("theorem", "exhaustive", "well_defined")
 #: `done_when` 里反复出现的那一句（三档共用）：优化不是「B 说改好了」。
 _DONE_COMMON = (
     "判「优化好了」只看三件可复核的事：① 正文真的改了（与源稿的 `## 证明` 正文 sha "
-    "不同）；② V 的三转签盖在**新**正文的 sha 上（`vsigns.sign_reading` 的 "
-    "`state == \"signed\"`）；③ 收录那一笔走优化线（`ingest_manuscript` 的 "
+    "不同）；② V 的签盖在**新**正文的 sha 上（`vsigns.sign_reading` 的 "
+    "`state == \"signed\"`，签到位才算）；③ 收录那一笔走优化线（`ingest_manuscript` 的 "
     "`path_group >= 1`）并把这一份记成 `optimized=true`（`evidencebits."
     "optimized_signature`）。缺任何一件都不算优化好了 —— 没有签的「改好了」只是草稿。")
 
@@ -63,7 +63,7 @@ PROMPTS: dict[str, dict[str, Any]] = {
             "硬边界：命题（`## 命题`）一个字节不动；不新增没有理由的步骤；"
             "不把「显然 / 易得」当理由；不删依赖（`## 依赖` 只增不删，删之前先确认那一"
             "步真的不用了）。\n"
-            "改完把新正文送去 V 三转签；V 退回就按退回的那一步补，不要整篇重写。\n"
+            "改完把新正文送去 V 拿签；V 退回就按退回的那一步补，不要整篇重写。\n"
             + _DONE_COMMON),
     },
     "exhaustive": {

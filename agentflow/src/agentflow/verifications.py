@@ -927,8 +927,8 @@ def _cold_start_proof_strength(*, lean_on: bool) -> str:
         "- 缺材料（报告没落地、实验行没有、②③ 缺一块）⇒ 这一格没查成：点名缺哪一块，"
         "既不判 `成立`、也不判 `有毛病`，台账里也不留那一行（留一行会把「没查成」"
         "冒充成「审过了」）；材料补齐之后重新送审。\n"
-        "- 七项全过才判 `成立`；会不会发签分两档：在册档由你的秘书按连续次数判，未在册档按机械"
-        "会审的连续次数判（`source=exhaustion_report`，不经秘书）—— 这一签是「对数值证据的背书」，"
+        "- 七项全过才判 `成立`；会不会发签分两档：在册档由你的秘书按这一趟送审的门槛判，未在册档按机械"
+        "会审的门槛判（`source=exhaustion_report`，不经秘书）—— 这一签是「对数值证据的背书」，"
         "不是「你逐行读过一份自然语言证明」。\n"
     )
 
@@ -4234,10 +4234,10 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
                                  "⇒ 只落了台账那一行，第 3 位不翻")
                 return out
             if not signs_bit3(row, streak=holds):
-                out["reason"] = (f"连续「成立」{out['streak']}/{out['need']} 次"
+                out["reason"] = (f"「成立」{out['streak']}/{out['need']}"
                                  f"（同一份正文 sha {str(row.get('proof_sha256') or '')[:12]}…）"
-                                 "⇒ 还差次数：只落了台账那一行，第 3 位不翻"
-                                 "（连续 3 次没问题才发签）")
+                                 "⇒ 门槛还没到：只落了台账那一行，第 3 位不翻"
+                                 "（门槛由框架按这一趟送审自己数；跨趟不累计）")
                 return out
             # ---- 2026-11-03（件二）：翻位前必须核"这一份正文存在，且就是签覆盖的那一份" ----
             #
@@ -4899,9 +4899,10 @@ def _statement_reading_why(*, sid: str, state: str, reviewed: bool,
         unjudged = [str(e.get("label") or "") for e in entries
                     if str(e.get("state") or "") == "holding"
                     and e.get("secretary_unjudged")]
-        return (f"{sid} 的证明签过、也判了「成立」，但连续次数还没到 "
-                f"{SIGN_STREAK_NEED} 次（holding：{'、'.join(holding)}）"
-                "⇒ 第 3 位不发签：再送 V 审够次数（第 1、2 次只落台账、不翻位）"
+        return (f"{sid} 的证明签过、也判了「成立」，但门槛还没到"
+                f"（holding：{'、'.join(holding)}）"
+                "⇒ 第 3 位不发签：再送 V 走这一趟送审（门槛由框架按这一趟送审自己数；"
+                "跨趟不累计）"
                 + (f"；其中 {'、'.join(unjudged)} 是这一转秘书没判成（checked=False："
                    "没查成，不是有毛病）—— 那一档不发签，等判定接上之后重签"
                    if unjudged else ""))
@@ -5181,9 +5182,9 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
 def _bit3_blockers(row: Mapping[str, Any], *, streak: Any = None) -> str:
     """`signs_bit3` 为假时，逐条说清是哪一条挡住（拒信与读数的唯一措辞处）。
 
-    `streak` 与 :func:`signs_bit3` 同义：行局部都过了、只有连续次数不够时，这一格
+    `streak` 与 :func:`signs_bit3` 同义：行局部都过了、只有门槛还没到时，这一格
     必须把那句话写出来 —— 否则拒信会落进 `"判据判不了（读数不全）"` 那条兜底，
-    读的人以为"有一格没读出来"，而实际只是"还差两次审阅"。
+    读的人以为"有一格没读出来"，而实际只是"门槛还没到"。
     """
     why: list[str] = []
     if int(row.get("unresolved_errors") or 0) != 0:
@@ -5197,10 +5198,9 @@ def _bit3_blockers(row: Mapping[str, Any], *, streak: Any = None) -> str:
             f"{e['stmt_id'] or '（没有号）'} 判 {e['verdict']}" for e in blocked))
     if row_signable(row) and not streak_ok(streak):
         got = _streak_number(streak)
-        why.append(("连续「成立」的次数没读出来（这一格没查成 ⇒ 不发签）"
+        why.append(("门槛没读出来（这一格没查成 ⇒ 不发签）"
                     if got is None else
-                    f"连续「成立」{got}/{SIGN_STREAK_NEED} 次（还差 "
-                    f"{SIGN_STREAK_NEED - got} 次）"))
+                    "门槛还没到（门槛由框架按这一趟送审自己数；跨趟不累计）"))
     return "；".join(why) or "判据判不了（读数不全）"
 
 
@@ -5620,20 +5620,21 @@ def proof_review_gap(root: str | Path, row: Mapping[str, Any],
                       "审现行正文（签还没到位：这一版正文上还没有签块）")
         return out
     if state == "holding":
-        # 签过、判成立、签的也是现行这一版 —— 就是连续次数没到（业主 2026-10-29）。
-        # 它与 `unsigned`（一次都没签）必须分开说：前者的下一步是"再送 V 两次"，
+        # 签过、判成立、签的也是现行这一版 —— 就是门槛还没到（业主 2026-10-29）。
+        # 它与 `unsigned`（一次都没签）必须分开说：前者的下一步是"再送 V 走这一趟送审"，
         # 后者是"送 V 一次"。折成同一个读数会让"已经在路上"看起来像"还没出发"。
         entry = next((p for p in entries
                       if as_proof_no(p.get("proof_no")) == chosen_no), {})
         got = int(entry.get("streak") or 0)
         need = int(entry.get("need") or SIGN_STREAK_NEED)
-        checks[1]["detail"] = (f"{proof_label(sid, chosen_no)} 已连续 {got}/{need} 次「成立」"
+        checks[1]["detail"] = (f"{proof_label(sid, chosen_no)} 的「成立」读数 {got}/{need}"
                                f"（最近一签 {out['verification_id']}）")
-        checks[2]["detail"] = "签的就是现行这一版（不是过期），只是连续次数还没到"
+        checks[2]["detail"] = "签的就是现行这一版（不是过期），只是门槛还没到"
         out["checked"] = checked
-        out["why"] = (f"命题 {sid} 的证明签过、也判了「成立」，但连续次数只到 {got}/{need}"
+        out["why"] = (f"命题 {sid} 的证明签过、也判了「成立」，但门槛还没到"
                       "⇒ 签还没到位（V 判过「成立」，但这一版正文上还没有签块），"
-                      "不能当「审过」。建议：再送 V 审，直到签到位；"
+                      "不能当「审过」。建议：再送 V 走这一趟送审（门槛由框架按这一趟"
+                      "送审自己数；跨趟不累计），直到签到位；"
                       "不许把这几票当成一次签")
         return out
     if state == "unsigned":

@@ -5748,13 +5748,13 @@ def _optimization_next_step(*, sid: str, kind: str, origin: str, draft: Mapping[
                  if draft.get("source") != "statement_proof_text"
                  else "行上的证明正文")
         return (f"开优化稿：`B.open_polish_copy(statement_id={sid})` 从{which}复制一份 "
-                "B 号稿（清 V 签）→ 按对应档的优化提示词改正文 → 重派 V 三转签 → "
+                "B 号稿（清 V 签）→ 按对应档的优化提示词改正文 → 重派 V 拿签 → "
                 "用优化线收录（`ingest_manuscript` 的 path_group≥1）")
     if kind == "concept":
         if origin == "external_lit":
             return ("文献术语：补 `quote_span` / `page_range`（或改成 own_result 再落 "
                     "b-稿）—— 两样都没有，这一条就是「没有可复制的原稿」")
-        return ("B 落 b-稿（`reports/b-proof-<号>.md`）→ 派 V 三转签 → "
+        return ("B 落 b-稿（`reports/b-proof-<号>.md`）→ 派 V 拿签 → "
                 "`ingest_manuscript(cells=[\"proof_text\"])` —— 良定义论证先有，才有得优化")
     return ("无原稿：先让产出方落稿（定理走 F 的 `f-proof`、穷举走 E 的 `e-proof`）并拿 V 签"
             " → B 收录，再开优化稿")

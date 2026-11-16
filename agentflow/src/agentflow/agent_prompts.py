@@ -2675,7 +2675,19 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p287 同值 —— 本批只换段文本与教法，
 #:   没有哪一格事实换过落点）；`agent_surface_snapshot.json` 按现值重冻；系统文档重生成；
 #:   `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p288"
+#: p288 → p289（2026-11-17，PA4·提示词对齐扫尾；业主 2026-11-04 逐字
+#:   「就说拿到 V 签，不需要知道 V 内部会连续三次审」）：
+#:   `specs/f.py` 里 `signs_bit3` 那一句教法从「同一趟送审里连续 3 转 clean」改成
+#:   「同一趟送审里由框架数满门槛」—— 旧句把 V 内部的轮数写进了 F 的提示词（`f507b528`
+#:   把「三转」改写成「3 转」，词表没扫到，但推断还在）；新句只留「门槛由框架按这一趟数」。
+#:   `specs/b.py` 的 holding 那句从「连续次数没到门槛」改成「门槛还没到」。
+#:   变化格 = B / F 两格：其余九格逐字未动，`temp/pa4/recompute_digests.py` 现算
+#:   changed = ['B', 'F']；B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…。
+#:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p289）+
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格、count / keys_sha256 与 p288
+#:   同值 —— 这一批只换段文本）；`agent_surface_snapshot.json` 按现值重冻；系统文档重生成；
+#:   `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p289"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

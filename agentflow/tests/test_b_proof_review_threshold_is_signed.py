@@ -105,14 +105,13 @@ def test_s3_holding_is_not_enough_and_the_gate_says_so(tmp_path: pathlib.Path) -
     """
     ws = Store(tmp_path / "ws")
     ws.init()
-    _sign(ws, "000000", times=1)               # holding：签过、判成立、连续次数没到
+    _sign(ws, "000000", times=1)               # holding：签过、判成立、门槛没到
 
     holding = VR.proof_review_gap(ws.root, _row())
     assert holding["checked"] is True, holding          # 查过了（不是"没查成"）
     assert holding["ok"] is False, holding
     assert holding["state"] == "holding", holding
-    assert "连续" in str(holding.get("why") or "") or "次数" in str(
-        holding.get("why") or ""), holding
+    assert "门槛" in str(holding.get("why") or ""), holding
 
     gaps = VR.proof_review_gaps(ws.root, [_row()])
     assert [g["state"] for g in gaps] == ["holding"], gaps
@@ -122,7 +121,7 @@ def test_s3_holding_is_not_enough_and_the_gate_says_so(tmp_path: pathlib.Path) -
     assert "proof_review_without_evidence" in str(exc.value), str(exc.value)
     assert ws.rows("statements") == [], "gate 说拒收，却还是写了一行"
 
-    # 反真空：补齐到连续 3 次 ⇒ 同一行收得进去（"拒"只能来自连续次数，不是别的原因）
+    # 反真空：补齐到门槛 ⇒ 同一行收得进去（"拒"只能来自门槛，不是别的原因）
     _sign(ws, "000000", times=VR.SIGN_STREAK_NEED - 1)
     signed = VR.proof_review_gap(ws.root, _row())
     assert signed["ok"] is True and signed["state"] == "signed", signed

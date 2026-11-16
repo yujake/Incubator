@@ -3621,7 +3621,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "那一档（自产还要 `quote_reason` / `line_range` / `doc_id`）；"
                 "② 要登记的是概念的良定义证明（业主 2026-10-09：“proof 里就证"
                 "这个概念为什么是良定义的”）⇒ 先 `own.land_manuscript` 把它落成 "
-                "`reports/b-proof-<号>.md` → 派 V 三转签 → 签回来之后用 "
+                "`reports/b-proof-<号>.md` → 派 V 拿签 → 签回来之后用 "
                 "`own.ingest_manuscript(apply, cells=[\"proof_text\"])` 按位置与格收录"
                 "（2026-11-10 业主裁定 甲：概念与一般手稿同一条链，只是稿由 B 产出）。"
                 "这一笔整笔不写（`statements` 零新行、盘上零新文件）。",

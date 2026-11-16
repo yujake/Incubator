@@ -1075,7 +1075,7 @@ _ROLES_V = ("V",)
                                  "`reports/f-proof-<命题号>.md`；`notes/…` 等别的相对路径也收，"
                                  "只要是文件且有一节非空的 `## 证明`）。给稿时正文以稿为准，"
                                  "`proof_text` 只作对 sha 的核对。命题还没在册时也用它："
-                                 "给了它就可以不给 `statement_id`，三转成立后签块由收方秘书"
+                                 "给了它就可以不给 `statement_id`，签到位后签块由收方秘书"
                                  "落回这一份稿（E 的 `reports/e-proof-<实验号>.md`、B 的 "
                                  "`reports/b-proof-<命题号>.md` 同一个入口）。没给稿的在册送审"
                                  "一律受控拒绝（`proof_text_needs_a_manuscript`）"},

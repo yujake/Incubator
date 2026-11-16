@@ -4,9 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-17，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **317 个 `.py`、293662 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14877 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **317 个 `.py`、293675 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14877 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-17 PA4（提示词对齐扫尾：p288 → p289；业主 2026-11-04 逐字「就说拿到 V 签，
+> 不需要知道 V 内部会连续三次审」）**：317 个 `.py`、75 个 `>800` 都不变；总行数
+> 293662 → **293675**（+13：`agent_prompts.py` +12（p289 版本账写明 B / F 两格）、
+> `verifications.py` +1（holding 那句 why / bit3 措辞多一行）；`specs/b.py` /
+> `secretary.py` / `agent_skills.py` 只换字符串不增行）。§3 表不动（三个文件都不在那张表里）。
+> 三格（75 / 95 / 2）逐格未抬（上限 75 / 95 / 5；本笔只换字符串与注释，没有新增
+> `>200` 行函数）。
 > **2026-11-17 PA3（提示词对齐收尾两处；不抬提示词版本 —— `cold_start_prompt` 不进十一格
 > 摘要，`lit.stage_list` 的 note 是运行时返回）**：317 个 `.py`、75 个 `>800` 都不变；总行数
 > 293622 → **293662**（+40：`verifications.py` 6364 → **6388**（+24：V 的真实入口补「送审门槛

@@ -347,7 +347,7 @@ SPEC = AgentSpec(
             "**V 签过之后这一行的等级就该是 `pre_theorem`，不许一直停在 `conjecture`**（2026-10-19 晚，按 `projects/mp2` 的 "
             "`stmt:000003` 修）：B 收录 `statements` 那一行时，等级由 `verifications/<命题号>.jsonl` 里的签名**现算**"
             "（`_proof_outlet` 会自己看）—— `proof_text` 非空 ＋ 那一签**签得住**（`signs_bit3`："
-            "同一趟送审里连续 3 转 clean、这一转的轴是 `clean`）且 `proof_sha256` 与现行正文相符 ⇒ "
+            "同一趟送审里由框架数满门槛、这一转的轴是 `clean`）且 `proof_sha256` 与现行正文相符 ⇒ "
             "`pre_theorem`（穷举证书或 Lean 核查也到位 ⇒ `theorem`，两者同级）；"
             "**只有真没有那一签时才停在 `conjecture`**（有普通数值实验支撑则是 `strong_conjecture`）。"
             "这是定义（`evidencebits` 的 `derive_grade` 现算，`evidence_kind` 只是由等级反算的历史列），不是自报：那一签只有 "

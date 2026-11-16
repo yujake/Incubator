@@ -6194,7 +6194,7 @@
     "additionalProperties": false,
     "properties": {
      "proof_manuscript": {
-      "description": "**证明手稿**（工作区相对路径、盘上那一份文件）。命题已登记时必须给：签块（`- V 签：`）盖回这一份稿、依赖面从它的 `## 依赖` 段读、稿按号寻址（约定命名 `reports/f-proof-<命题号>.md`；`notes/…` 等别的相对路径也收，只要是文件且有一节非空的 `## 证明`）。给稿时正文以稿为准，`proof_text` 只作对 sha 的核对。命题还没在册时也用它：给了它就可以不给 `statement_id`，三转成立后签块由收方秘书落回这一份稿（E 的 `reports/e-proof-<实验号>.md`、B 的 `reports/b-proof-<命题号>.md` 同一个入口）。没给稿的在册送审一律受控拒绝（`proof_text_needs_a_manuscript`）",
+      "description": "**证明手稿**（工作区相对路径、盘上那一份文件）。命题已登记时必须给：签块（`- V 签：`）盖回这一份稿、依赖面从它的 `## 依赖` 段读、稿按号寻址（约定命名 `reports/f-proof-<命题号>.md`；`notes/…` 等别的相对路径也收，只要是文件且有一节非空的 `## 证明`）。给稿时正文以稿为准，`proof_text` 只作对 sha 的核对。命题还没在册时也用它：给了它就可以不给 `statement_id`，签到位后签块由收方秘书落回这一份稿（E 的 `reports/e-proof-<实验号>.md`、B 的 `reports/b-proof-<命题号>.md` 同一个入口）。没给稿的在册送审一律受控拒绝（`proof_text_needs_a_manuscript`）",
       "type": "string"
      },
      "proof_no": {

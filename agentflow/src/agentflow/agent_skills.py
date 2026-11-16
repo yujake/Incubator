@@ -819,7 +819,7 @@ F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_
 `proof_no`**）。判词有落点：
 
 - 判「有毛病」⇒ 判词落 `verifications/pending/<正文 sha>.jsonl` 一行（`defect_step` 有值）；
-- 判「成立」⇒ **签落在稿上**：pending 三行 + `out/vsigns/<正文 sha>.json` 一份 + 稿上的签块。
+- 判「成立」⇒ **签落在稿上**：pending 台账（这一趟的判定各一行）+ `out/vsigns/<正文 sha>.json` 一份 + 稿上的签块。
 
 ### ④ 收录：B 现取命题号，不改稿名
 
@@ -832,7 +832,7 @@ F 自己向框架要稿号（跑一轮时返回 `manuscript_id` 与 `manuscript_
 | 这一轮到哪 | 判词/签落在哪 | 读数长什么样 |
 |---|---|---|
 | F 的稿 + 判「有毛病」 | `verifications/pending/<正文 sha>.jsonl` 一行 | `kind=proof_unregistered_rejected`、`defect_step` 有值、签文件 0 份 |
-| F 的稿 + 判「成立」 | `verifications/pending/<正文 sha>.jsonl` 三行 + `out/vsigns/<正文 sha>.json` + 稿上签块 | `kind=proof_unregistered_signed`（3/3） |
+| F 的稿 + 判「成立」 | `verifications/pending/<正文 sha>.jsonl`（这一趟的判定各一行）+ `out/vsigns/<正文 sha>.json` + 稿上签块 | `kind=proof_unregistered_signed` |
 | B 收录 | 建 `statements` 一行（现取命题号）；**稿名不变** | `statements` 多一行、行上 `manuscript_id` + `proof_no`、认签按 sha |
 
 所以"签 0 个"在还没送审时不是故障，而是**这一轮还没到收录那一步**；反过来，把
@@ -1924,7 +1924,7 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
 **签到位才算过** —— 与 F 的证明同一个门槛。返回值这样读：
 
 - `checked=True` + `kind="proof_unregistered_signed"` ⇒ 签块已由收方那一侧（落签者写作 `secretary:E`）
-  落进 `reports/e-proof-<实验号>.md`；稿上那一行 `- V 签：已签=true；连续=3/3；正文sha=…`
+  落进 `reports/e-proof-<实验号>.md`；稿上那一行 `- V 签：已签=true；连续=<门槛>/<门槛>；正文sha=…`
   就是 B 之后认的那一签。V 自己一个字都不写块（它只发信封）。
 - `checked=True` + `kind="proof_unregistered_rejected"` ⇒ 判「有毛病」：按 `defect_step`
   指到的那一项补材料（缺剪枝说明就补剪枝、抽样就改穷举），补完**再派 V 重审**。
@@ -1935,7 +1935,7 @@ V 对穷举证据走七项机械会审（程序在不在 / 报告三块齐不齐
 ### 稿上那一行签块怎么读（九格，`vsigns.SIGN_BLOCK_KEYS`）
 
 ```
-- V 签：已签=true；判词=成立；连续=3/3；正文sha=<sha>；时间=<iso>；
+- V 签：已签=true；判词=成立；连续=<门槛>/<门槛>；正文sha=<sha>；时间=<iso>；
   签名者=secretary:E；台账=verifications/pending/<sha>.jsonl#v-0001；
   命题号=（未在册）；手稿号=000000
 ```

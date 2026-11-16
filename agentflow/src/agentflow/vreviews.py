@@ -533,7 +533,7 @@ def deliver_signed(store: Any, *, root: str | Path, manuscript: str,
         f"V 已经把签签进稿里：`{manuscript}`\n"
         f"- 正文 sha256：`{proof_sha256}`\n"
         f"- 签文件：`{sign_rel or '（没读到）'}`\n"
-        f"- 连续 clean：{int(streak)}/{int(need)}\n"
+        f"- 门槛：由框架按这一趟送审自己数（这一签已到位）\n"
         f"- 落签者：{by or '（没读到）'}\n"
         f"- 台账：`{ledger}#{verification_id}`\n"
         "这一份稿已经签好，可以直接交给 B 收录（按正文 sha 认领）。\n"

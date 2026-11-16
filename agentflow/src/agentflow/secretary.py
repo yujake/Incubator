@@ -4912,7 +4912,7 @@ class Secretary:
                 "candidate_verdict": str(v.get("verdict") or ""),
                 "candidate_axis": candidate_axis,
                 "candidate_defect_step": v.get("defect_step"),
-                "reading_why": ("这一签的轮数由 V 的连判循环给出（同一趟送审内第几轮）；"
+                "reading_why": ("这一签的门槛由框架按这一趟送审自己数（跨趟不累计）；"
                                 "台账历史行不参与这一趟的发签判定"),
             }
         else:
@@ -4943,9 +4943,9 @@ class Secretary:
             # 地板没过 ⇒ 这一签不发（也不问模型：没有"模型点头"这一层了）。这一句只是
             # "这一转还不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
-                       reason=(f"连续 clean（秘书轴）{out['projected']}/{out['need']} 次"
+                       reason=(f"这一趟送审的 clean 读数 {out['projected']}/{out['need']}"
                                f"（{'这一趟送审内' if within is not None else '台账历史读数'}"
-                               f"）⇒ 这一签不发；门槛是 {int(out['need'])} 次连续的「没问题」"
+                               f"）⇒ 这一签不发；门槛还没到（门槛由框架按这一趟送审自己数）"
                                + ("；台账历史行不参与这一趟的判定"
                                   if within is not None else "")),
                        basis=list(out["basis"]))
@@ -4957,7 +4957,7 @@ class Secretary:
         # 一次"问模型签发 / 不签发"（`SIGN_ISSUANCE_VERDICTS` 的消费处），已按裁定 ③
         # 删除：发签不由模型点头，签名由秘书直接落进稿里。
         out.update(checked=True, issue=True, decision=SIGN_ISSUE,
-                   reason=(f"连续 clean（秘书轴）{out['projected']}/{out['need']} 次"
+                   reason=(f"这一趟送审的 clean 读数 {out['projected']}/{out['need']}"
                            f"（{'这一趟送审内' if within is not None else '台账历史读数'}）"
                            f"⇒ 地板已过：由 V 的秘书自动发签（不问模型）"),
                    basis=list(out["basis"]) + ["auto_issue:floor_passed"])

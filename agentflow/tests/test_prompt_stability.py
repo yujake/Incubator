@@ -1357,6 +1357,19 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "变化格 = A / D / F / G / H / M / V 七格，B / C / E / L 逐字不动"
               "（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p288 → p289（2026-11-17，PA4 提示词对齐扫尾）：换 B / F 两格（`specs/f.py` 的
+     # `signs_bit3` 教法从「连续 3 转 clean」改成「由框架数满门槛」；`specs/b.py` 的
+     # holding 那句从「连续次数没到门槛」改成「门槛还没到」），facts 键集与落点
+     # 一格没动 ⇒ count / keys_sha256 与 p288 同值。
+     {"version": "p289", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p289（2026-11-17，PA4 扫尾；业主 2026-11-04 逐字「就说拿到 V 签，"
+              "不需要知道 V 内部会连续三次审」）：`specs/f.py` 里 `signs_bit3` 那句从"
+              "「同一趟送审里连续 3 转 clean」改成「同一趟送审里由框架数满门槛」；"
+              "`specs/b.py` 的 holding 那句从「连续次数没到门槛」改成「门槛还没到」。"
+              "变化格 = B / F，其余九格与 p288 逐字相同（逐格读数见 "
+              "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

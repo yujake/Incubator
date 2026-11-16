@@ -458,7 +458,7 @@ SPEC = AgentSpec(
             "② 那一签盖的是**现行这一份正文**（`proof_sha256` 与现在这一版的 sha256 相符）；"
             "③ 同一份正文上**框架判满它的门槛**（`SIGN_STREAK_NEED`）干净「成立」：引用核实全是 `consistent` / `weaker`，"
             "且 findings 里没有未解决的 error。"
-            "**只有 `signed` 才够 `pre_theorem`**：`holding`（轴是 clean、盖的也是现行这一版，但连续次数没到门槛）"
+            "**只有 `signed` 才够 `pre_theorem`**：`holding`（轴是 clean、盖的也是现行这一版，但门槛还没到）"
             "与**单次「成立」**都不够，照它报会被写入期闸按 `proof_review_without_evidence` 整笔拒收"
             "（拒收码是历史名：闸读的是**凭据**，不是那一格历史值）。"
             "**只有真没有那一签时**才退到 `conjecture` / `strong_conjecture` —— 退档不是错，但它是安全方向的偷懒：一条够格的强结果"

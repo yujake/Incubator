@@ -2587,7 +2587,16 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   G 931406c4… / H 25aff142… / L f1bca10c… / V 983eefc0… 与 p286 同值。
 # 十一格不是手抄：`temp/p287/recompute_digests.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
-_FROZEN_PROMPT_VERSION = "p288"
+# p289（2026-11-17，PA4·提示词对齐扫尾；业主 2026-11-04 逐字「就说拿到 V 签，不需要
+# 知道 V 内部会连续三次审」）：`specs/f.py` 里 `signs_bit3` 那句从「同一趟送审里连续
+# 3 转 clean」改成「同一趟送审里由框架数满门槛」；`specs/b.py` 的 holding 那句从
+# 「连续次数没到门槛」改成「门槛还没到」。旧句是 `f507b528` 把「三转」改写成
+# 「3 转」之后的残留，词表没扫到，但推断还在。变化格 = B / F；A / C / D / E / G / H /
+# L / M / V 与 p288 逐字相同（版本行已归一）。逐格旧值 → 新值：
+# B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…。
+# 十一格不是手抄：`temp/pa4/recompute_digests.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['B', 'F']。
+_FROZEN_PROMPT_VERSION = "p289"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2847,13 +2856,21 @@ _FROZEN_PROMPT_VERSION = "p288"
 #:   H 25aff142… → c6600f65…（只经 PAPER_PACK：R01/R02）
 #:   M fefd7f96… → 4231a37b…（PAPER_PACK + R09/R19/R20/R22f）
 #:   V 983eefc0… → b310667d…（R13 送审门槛 policy）
+#: p288 → p289（2026-11-17，PA4 扫尾；业主 2026-11-04 逐字「就说拿到 V 签，不需要
+#:   知道 V 内部会连续三次审」）：换 B / F 两格 —— `specs/f.py` 的 `signs_bit3` 教法从
+#:   「连续 3 转 clean」改成「由框架数满门槛」（`f507b528` 把「三转」改写成「3 转」的
+#:   残留）；`specs/b.py` 的 holding 那句话从「连续次数没到门槛」改成「门槛还没到」。
+#:   十一格是 `temp/pa4/recompute_digests.py`（导入本文件的 `_surface_digest`，
+#:   先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算，changed = ['B', 'F']：
+#:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
+#:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "13a913b0e5d642d1f9cb5f69642d73b6945a39d8fb02457caede966fe82815e1",
-    "B": "d21f8265e9303630d23ee7b81b56ccc20c9f261113eadbc508d2e38002cd9b50",
+    "B": "4a8152635eb3148b37a5fa3c53d25675c55c1933620afe3a281af14a26cddcf8",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
     "E": "36668798000e529b8c10ad7f506f88e6c7c3773554746b7d8e3b5234a59662a1",
-    "F": "9e449b3edc4ea4cb7211593ddeac4cd4e68a8dbc26335ba76907a989ddcf3675",
+    "F": "b6c803c1af5842ce375601157a37cff98f21ed77934f5c52f87485d4384513e2",
     "G": "5b6575458d78cecf17b30ee8186f30f343713825bf1eed1fed8af4cfe3876f16",
     "H": "c6600f650caeea13db8e6d03fd2d4b8f05d0f4a23c130b8f8d5f555b733fc412",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",

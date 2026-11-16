@@ -201,7 +201,7 @@ def test_r3_below_the_bound_no_sign_file_is_written(tmp_path):
     # 2026-11-02 起写口分成 `issue` / `land` 两步，这里量的是"颁发"那一半。
     refused = VSP.issue(st.root, artifact_sha=VR.text_sha(PROOF), streak=2, need=3,
                         by="secretary:F")
-    assert not refused["written"] and "未达门槛" in refused["reason"], refused
+    assert not refused["written"] and "门槛还没到" in refused["reason"], refused
     assert _signs(st) == []
 
 
