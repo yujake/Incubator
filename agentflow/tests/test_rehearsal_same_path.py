@@ -192,6 +192,37 @@ def test_the_contract_applies_to_files_that_claim_same_path() -> None:
     assert not RC.is_rehearsal_module(RC.TESTS_DIR / SELF), "判据本体不许把自己当彩排"
 
 
+# ============================================================ 二·五 正面登记
+
+
+@pytest.mark.parametrize("name", sorted(RC.SAME_PATH_EVIDENCE), ids=lambda n: n)
+def test_registered_same_path_evidence_is_really_same_path(name: str) -> None:
+    """⑥ 正面登记：真机前置证据必须不是 CHAIN_ONLY，且四条静态判据全过。
+
+    这是 `CHAIN_ONLY` 的补集里被显式点过名的那一批：谁把它塞进 `CHAIN_ONLY`
+    （"改不成 CLI 入口"的黑名单），这一条先红；谁把它的入口/缝换掉，四条静态判据红。
+    它同时要求 `is_rehearsal_module` 认它 —— 那是三格探针生效的唯一开关
+    （不认识它 = 三格没有对象，等于把运行期那一格静默摘掉）。
+    """
+    path = RC.TESTS_DIR / name
+    assert path.is_file(), f"登记为真机前置证据的文件不见了：{path}"
+    assert name not in RC.CHAIN_ONLY, (
+        f"{name} 同时出现在 CHAIN_ONLY 里 —— 一份彩排不能既是「不是同一条路」"
+        "又是「真机前置证据」")
+    assert RC.is_rehearsal_module(path), (
+        f"{name} 没被 `is_rehearsal_module` 认 ⇒ 三格探针不会对它生效"
+        "（那等于把它最要紧的那一格静默摘掉了）")
+    tree = RC.parse(path)
+    assert RC.cli_entry_calls(tree, path), f"{name}：登记为证据，却没有 CLI 入口"
+    bad = [t for t in RC.classify_stubs(tree, path) if not t.category]
+    assert not bad, f"{name}：打桩落在白名单外：{[(t.where.line, t.attr) for t in bad]}"
+    classes = RC.stub_classes(tree, path)
+    assert not any(c.seam_surface for c in classes), f"{name}：自造了缝替身"
+    assert not RC.seam_kwarg_uses(tree, path, [c.name for c in classes]), (
+        f"{name}：把模型替身塞进了 `seam=` / `llm=` 的位置")
+    assert not RC.private_product_calls(tree, path), f"{name}：直调了产品私有方法"
+
+
 # ============================================================ 三 类型闸（反真空）
 
 

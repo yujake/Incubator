@@ -74,7 +74,33 @@ WF_CRITERIA_FILES = (
     "test_rehearsal_c13_wake_chain.py",
     "test_rehearsal_c4_revision_chain.py",
 )
-_EXCLUDED = frozenset({CONTRACT_FILE, CONTRACT_TEST_FILE, *WF_CRITERIA_FILES})
+
+#: A 侧文献全流程的判据文件（2026-11-16 RA1）：与上面两份 WF 判据同形。
+#:
+#: 它复用 `test_rehearsal_a_literature_flow.py` 的真入口 `_run`（CLI + 真 `LlmSeam`），
+#: 只在旁边加反真空 / 负控 / 产品就绪判据。反真空必须打桩「产品那一格」
+#: （`litstage._decisions_from` 回填空 / `_rejected_entry` 去号 / `_numbered_entry` 定稿的号 /
+#: `judged_state` 收工门那一格的读数）—— 这与「打桩只许五类」的静态判据天然冲突，
+#: 而把判据文件当彩排扫只会自伤。真机同路径的证据仍由那份彩排提供（它仍在这张
+#: 名单里、三格照跑）；本文件不提供同路径证据，只回答"那几条闸承不承重"。
+FLOW_CRITERIA_FILES = (
+    "test_rehearsal_a_literature_flow_criteria.py",
+)
+
+#: 「真机前置证据」的正面登记：这些彩排走的是 CLI 入口 + 真 `LlmSeam` + 真账本 + 三格探针。
+#:
+#: 为什么要有它：`CHAIN_ONLY` 是一张「不是同一条路」的黑名单，单靠它回答不了
+#: 「那到底哪几条算证据」。本表逐条登记正面证据，并由判据钉住三件事：它不在
+#: `CHAIN_ONLY` 里、`is_rehearsal_module` 认它（三格照跑）、它确实从 CLI 入口进。
+#:
+#: 本表只登记 2026-11-16 之后新增的那几条；更早的彩排各自另有判据（它们没登记在这里
+#: 不等于它们不是证据，也不等于本表是全集）。
+SAME_PATH_EVIDENCE: tuple[str, ...] = (
+    "test_rehearsal_a_literature_flow.py",
+)
+
+_EXCLUDED = frozenset({CONTRACT_FILE, CONTRACT_TEST_FILE,
+                       *WF_CRITERIA_FILES, *FLOW_CRITERIA_FILES})
 
 # ============================================================ 一 入口表
 

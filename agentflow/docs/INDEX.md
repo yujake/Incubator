@@ -41,6 +41,7 @@
 | [`AUDIT-VSIGN-CHANNELS-AND-PROMPTS-2026-11-04.md`](AUDIT-VSIGN-CHANNELS-AND-PROMPTS-2026-11-04.md) | 2026-11-04 的**提示词↔工具面一致性审查 + 两条凭据通道 + 委托入库 + 依赖面**交接：8 条口径（附业主原话 / draft 出处）、按面分组的 commit 与一句话、4 条已知缝隙、p234–p238 的 warm 账与冻结账、FC-27 待批 16 条清单（当次读数、带日期；判据本体散在 `tests/test_mapping_three_known_gaps.py` / `tests/test_e_gets_its_v_sign_like_f.py` / `tests/test_no_model_means_no_merge.py` 一族） |
 | [`RUN-2026-11-04-PAPER-REWRITE-BIG.md`](RUN-2026-11-04-PAPER-REWRITE-BIG.md) | 2026-11-04 大真机（`projects/paper-rewrite-big`）的**收工总账**：逐格读数 / 八条巡查裁决 / 两条 V 判词 / `stmt:000000` 的内联正文断点 / 可续跑位置 / 诚实清单（当次读数、带日期；不构成判据） |
 | [`D-COLLAB-AND-MANUSCRIPT-UNIFICATION-2026-11-05.md`](D-COLLAB-AND-MANUSCRIPT-UNIFICATION-2026-11-05.md) | 2026-11-04 夜 → 11-05 晨的**D 侧协作 + F/B 落稿统一**交接：三条业主裁定（逐字）/ 唯一实现 `manuscriptform.py` 与两个转发壳 / D 的可给与不可给（fs 三档拒、唯一收口）/ 81 vs 87 真机对照（F 29、V 12、dependencies 3、RESEARCH.md 8,255 B 七节）/ 七类缺陷与四条施工教训 / 仍缺的 B 回读（当次读数、带日期；判据本体在 `tests/test_f_and_b_manuscripts_are_one_implementation.py` 与 `tests/test_d_does_not_land_the_proof.py`） |
+| [`REHEARSAL-A-LITERATURE-FLOW.md`](REHEARSAL-A-LITERATURE-FLOW.md) | 2026-11-16 的 **A 侧文献全流程彩排**（RA1）：CLI 入口 + 真 `LlmSeam` + 真账本 + 三格探针，覆盖 Q1 的九段严格时序（判收不注册 / 无号原件 / 提交才注册回填 / 带号定稿 / 清表 / 收工门第八格 / 两个渲染时刻 / 报告过期）与 Lean 两档；含**当次读数与卡点**（HEAD 上卡在 schema 缺 `qualified`，产品侧 Q1 的 FC-27 补丁未 apply；打补丁的一次性副本上 71 passed）。判据本体在 `tests/test_rehearsal_a_literature_flow.py` 与 `…_criteria.py`，后者登记为判据文件（`FLOW_CRITERIA_FILES`）；这条彩排登记在 `SAME_PATH_EVIDENCE` 里、**不在** `CHAIN_ONLY` |
 
 ## 3. 历史证据（**不构成判据**，但被代码注释与其它文档大量引用，故保留）
 
