@@ -5113,6 +5113,70 @@ def _cited_placeholder_reading(row: Mapping[str, Any]) -> dict[str, Any]:
     return out
 
 
+def manuscript_identity(*, rel: Any = "", row: Mapping[str, Any] | None = None,
+                        proof_text: Any = "", sha256: Any = "") -> dict[str, Any]:
+    """这一份稿的族 / 号 / sha（「有稿无签」清单要的那三格；纯读，不猜）。
+
+    - 族与号：从稿路径读（唯一一份族表 `manuscriptfamily.classify_manuscript`）；
+    - 路径缺了才退到命题行上的 `manuscript_id`（只有号、没有族 —— 族留空，不猜）；
+    - 两样都没有 ⇒ `manuscript_known=False`（"不知道是哪一份稿"不许折成"没有稿"）；
+    - `sha256` 是这一份证明正文的 sha（签盖的是它，`proofregistry.proof_sha` 唯一把尺）；
+      调用方手里已经有签读数给的 sha 就用它，没有才现算。
+    """
+    from . import manuscriptfamily as _MFAM
+
+    got = _MFAM.classify_manuscript(str(rel or "")) if str(rel or "").strip() else {}
+    #: 族取族表自己给的那个值（规范名 ⇒ `f-proof` 一类；历史目录 ⇒ `legacy`；
+    #: 认不出 ⇒ 空串）。不再按 tier 过滤：把 `legacy` 读成"没有族"是第二份口径。
+    family = str(got.get("family") or "")
+    mid = str(got.get("manuscript_id") or "")
+    source = "path" if mid else ""
+    if not mid:
+        maybe = str((row or {}).get("manuscript_id") or "").strip()
+        if maybe:
+            mid, source = maybe, "row"
+    sha = str(sha256 or "")
+    if not sha and str(proof_text or "").strip():
+        sha = _PR.proof_sha(proof_text)
+    return {"family": family, "manuscript_id": mid, "manuscript_known": bool(mid),
+            "manuscript_id_source": source, "sha256": sha}
+
+
+def unsigned_manuscripts_from(rows: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """把「真欠签」那几行摊成逐份稿的清单：族 / 号 / sha / 为什么没签。
+
+    一条命题可能有多份证明（`proofs`），这一格按稿摊平（一份证明一条）。次序按
+    `(stmt_id, proof_no)` —— 稳定，读的人两次跑到的是同一个清单。
+
+    为什么单独一格：收工门不再读签拦收工（业主 2026-11-16 裁定 3 + 追加裁定 B），
+    "哪几份稿还没签、欠的是哪一种"必须仍然点得出名 —— 这一格就是那条读数的落点。
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows or []:
+        sid = str(row.get("stmt_id") or "")
+        for one in (row.get("proofs") or []):
+            if not isinstance(one, Mapping):
+                continue
+            out.append({
+                "stmt_id": sid, "proof_no": int(one.get("proof_no") or 0),
+                "label": str(one.get("label") or ""),
+                "family": str(one.get("family") or ""),
+                "manuscript_id": str(one.get("manuscript_id") or ""),
+                "manuscript": str(one.get("manuscript") or ""),
+                "manuscript_known": bool(one.get("manuscript_known")),
+                "sha256": str(one.get("sha256") or ""),
+                "class": str(one.get("class") or ""),
+                "why": str(one.get("why") or "")[:400],
+                #: 这两格是给读的人排处置次序用的（谁在等、等了多久），不是判据。
+                "hung": str(row.get("hung") or ""),
+                "owner": str(one.get("owner") or row.get("owner") or ""),
+                "owner_known": bool(one.get("owner_known") or row.get("owner_known")),
+                "last_verdict": str(row.get("last_verdict") or ""),
+                "fault_at": str(one.get("fault_at") or ""),
+            })
+    return out
+
+
 def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
     """I1 的收工读数：既没有 V 签、也没有被明确放弃的非概念命题（逐条点名）。
 
@@ -5191,6 +5255,7 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
                            "pending_filing": [], "pending_filing_count": 0,
                            "hard_to_prove": [], "hard_to_prove_count": 0,
                            "cited_placeholder": [], "cited_placeholder_count": 0,
+                           "unsigned_manuscripts": [], "unsigned_manuscripts_count": 0,
                            "problems": [], "reason": ""}
     rows, why = _statement_rows(store)
     if rows is None:
@@ -5223,6 +5288,10 @@ def statements_unsigned_reading(store: Any, *, now: str = "") -> dict[str, Any]:
         out["by_class"][key] = int(out["by_class"].get(key) or 0) + 1
     out["pending_filing"] = pending_rows
     out["pending_filing_count"] = len(pending_rows)
+    #: 「有稿无签」清单（业主 2026-11-16 裁定 3 + 追加裁定 B 的读数落点）：
+    #: 收工门不再读签拦收工，但这几份稿仍然要逐份点得出名（族 / 号 / sha / 为什么没签）。
+    out["unsigned_manuscripts"] = unsigned_manuscripts_from(out["rows"])
+    out["unsigned_manuscripts_count"] = len(out["unsigned_manuscripts"])
     cited_rows = list(out.get("cited_placeholder") or [])
     out["cited_placeholder_count"] = len(cited_rows)
     out["hard_to_prove_count"] = len(out.get("hard_to_prove") or [])
@@ -5391,9 +5460,21 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
                 "fault_at": fault_at, "owner": owner, "owner_known": bool(owner),
                 "manuscript": row_manuscript,
                 "manuscript_signed": state == "signed",
+                "sha256": str(st.get("sha") or ""),
                 "why": ((f"签复算通过、册里还没收录（{st.get('filed_why')}）⇒ 等 B 收录；"
                          "这不是「签丢了」") if cls == "signed_pending_filing"
                         else why)})
+        # ---- 逐份稿的身份（族 / 号 / sha）：裁定 3 + B 之后收工门只剩读数 ----------
+        #
+        # 位置在这一条命题的 proofs 收齐之后：多份证明各按自己那一份正文算 sha，
+        # 族与号从稿路径读（路径缺了才退到行上的 `manuscript_id`）。判据只有一处
+        # （`manuscript_identity`），门与读数用的是同一份结果。
+        texts = dict(_VR.proof_list(row))
+        for one in proofs:
+            one.update(manuscript_identity(
+                rel=one.get("manuscript") or "", row=row,
+                proof_text=texts.get(int(one.get("proof_no") or 0), ""),
+                sha256=one.get("sha256") or ""))
         if not proofs:
             continue
         #: 2026-11-08：全部证明都是"已签未收录" ⇒ 这一条不算欠签，单列进
@@ -8545,17 +8626,14 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             "dependency_face", "dependency_face_unreadable", "warning",
             f"依赖面那一格没查成（{_df.get('reason') or '没给原因'}）⇒ "
             "「present / 自足 / 缺节 / 未读」四个数数不出来（没查成不是全 0）"))
-    # ---- 门：悬着的命题拦门（业主 2026-11-01 裁定）
+    # ---- 读数：「有稿无签」清单（业主 2026-11-16 裁定 3 + 追加裁定 B） --------------
     #
-    # 这是收工门强度变更（不是读数变化）：改前"打回之后没人重送"只活在台账里，
-    # 门照样全绿（82 真机：20:50 之后 0 次 verify_proof，3 条被拒的证明悬着）。
-    # 业主逐字：「每个命题和证明的产出最终必须以V签收尾，拿不到V签就得一直改，
-    # 或者放弃原命题」⇒ statements_unsigned > 0 进 blocker（machine_pass=false、
-    # 退出码 1），不是 warning。
-    #
-    # 为什么不新增第九个 status 格：status 里每加一格都会改格表契约与冻结快照
-    # （见本文件前面对格表的那些注释）；blocker 是既有机制，machine_pass 只看
-    # "七格全 pass 且没有 blocker"，这一格的强度与"第九格 fail"逐字等价。
+    # 改前（业主 2026-11-01 的旧裁定「每个命题和证明的产出最终必须以V签收尾」）：
+    # `statements_unsigned > 0` 进 blocker（`machine_pass=false`、退出码 1）。
+    # 2026-11-16 业主裁定 3「取消（但要保证没签的都是放弃的）」+ 追加裁定「B」：
+    # 收工门不再读签拦收工，只列"无签"读数清单，不拦（也不判 fail）。
+    # 所以这一格从 blocker 降成 warning：清单仍然逐份给族 + 号 + sha + 为什么没签
+    # （`readings.statements_unsigned.unsigned_manuscripts`），只是不再把整趟收工判死。
     _su = rep.readings["statements_unsigned"]
     if not _su.get("checked"):
         rep.findings.append(Finding(
@@ -8563,31 +8641,32 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
             f"命题的签收尾那一格没查成（{_su.get('reason') or '没给原因'}）⇒ "
             "「既无 V 签也未放弃」这一笔数不出来（没查成不是通过，也不是零）"))
     elif int(_su.get("count") or 0) > 0:
-        _rows = list(_su.get("rows") or [])
+        _ms = list(_su.get("unsigned_manuscripts") or [])
         _named: list[str] = []
-        for one in _rows[:6]:
-            piece = str(one.get("stmt_id") or "") + f"（{one.get('class')}"
-            if one.get("last_verdict"):
-                piece += f"，最后 verdict={one['last_verdict']}"
-            if one.get("fault_at"):
-                piece += f"，{one['fault_at']} 打回"
+        for one in _ms[:6]:
+            piece = (f"{one.get('stmt_id') or '?'} → "
+                     f"{one.get('family') or '族未知'}·{one.get('manuscript_id') or '号未知'}"
+                     f"（sha {str(one.get('sha256') or '')[:12] or '未知'}，"
+                     f"{one.get('class') or '?'}："
+                     f"{str(one.get('why') or '没给原因')[:80]}")
             if one.get("hung"):
-                piece += f"，已悬 {one['hung']}"
+                piece += f"；已悬 {one['hung']}"
             if one.get("owner"):
                 piece += f"，负责人 {one['owner']}"
             elif not one.get("owner_known"):
                 piece += "，负责人 unknown"
             _named.append(piece + "）")
         rep.findings.append(Finding(
-            "statements_unsigned", "statements_unsigned_without_v_or_abandon", "blocker",
-            f"{_su['count']} 条命题既没有 V 签、也没有被明确放弃"
-            f"（按类：{_su.get('by_class') or {}}）；被点到的是 "
-            f"{'、'.join(_named)}{'…' if len(_rows) > len(_named) else ''} ⇒ "
-            "业主 2026-11-01 的裁定：「每个命题和证明的产出最终必须以V签收尾，"
-            "拿不到V签就得一直改，或者放弃原命题」。两条出路：① 补齐之后把这一份"
-            "重新送 V（`verify.verify_proof`）并拿到干净的「成立」；② 明确放弃"
-            "（B 侧 `table.update` 该命题 status=abandoned + 放弃标记，理由与时间"
-            "缺一不可）。逐条读数见 readings.statements_unsigned.rows"))
+            "statements_unsigned", "statements_unsigned_without_v_or_abandon", "warning",
+            f"{_su['count']} 条命题既没有 V 签、也没有被明确放弃（按类："
+            f"{_su.get('by_class') or {}}）；「有稿无签」逐份清单 "
+            f"{_su.get('unsigned_manuscripts_count')} 份：{'、'.join(_named)}"
+            f"{'…' if len(_ms) > len(_named) else ''} ⇒ 业主 2026-11-16 裁定 3 + 追加裁定 B："
+            "收工门不再读签拦收工，只列这一张读数清单（本格是 warning，不是 blocker、"
+            "不判 fail）。两条出路照旧在：① 补齐之后重新送 V（`verify.verify_proof`）"
+            "拿干净的「成立」；② 明确放弃（B 侧 `table.update` status=abandoned + 放弃"
+            "标记，理由与时间缺一不可）—— 裁定 3 要的「没签的都是放弃的」由 ② 兑现。"
+            "逐条读数见 readings.statements_unsigned.unsigned_manuscripts"))
     #: 2026-11-08（V 只对手稿负责）：稿上已签、册里还没收录的那几条不是欠签 ——
     #: 它们是给 B 的待办。单列一条 warning（不阻塞），点名到 stmt_id / 稿路径。
     _pf = list(_su.get("pending_filing") or [])

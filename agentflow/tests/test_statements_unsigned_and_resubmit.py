@@ -11,11 +11,17 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| ① | 打回之后不重送 | `statements_unsigned` 非 0、逐条点名、门红（`machine_pass=false`、退出码 1） |
+| ① | 打回之后不重送 | `statements_unsigned` 非 0、逐条点名（**读数**：收工门不再因为"还没签"拦门） |
 | ② | 重送并拿到干净「成立」 | 归 0（连续次数未满 3 也算"有签"：发签门槛不是"没签过"） |
 | ③ | 明确放弃 | 进 `statements_abandoned`、不出现在 `statements_unsigned` |
 | ④ | 同一份证明打回两次 | 板项只 1 条（幂等键 `v-resubmit@<命题>@<proof_sha>`，不带收件人后缀） |
-| ⑤ | 收工时还悬着 | `machine_pass=false`、退出码 1（这是门的强度变更，不是读数变化） |
+| ⑤ | 收工时还悬着 | `machine_pass=true`、退出码 0，读数里逐份列出「有稿无签」（裁定 3 + B） |
+
+## 2026-11-16 的口径变更（⑤ 那一节跟着改）
+
+业主裁定 3「取消（但要保证没签的都是放弃的）」+ 追加裁定「B」：**收工门不再读签拦收工，
+只列"无签"读数清单，不拦**。所以 ⑤ 从"blocker + 退出码 1"改成"warning + 退出码 0 +
+逐份清单"；①②③④ 一个字没动（它们是签/放弃/重送那几条读数本身）。
 
 ## 为什么夹具都走真写口
 
@@ -521,38 +527,55 @@ def test_abandonment_expires_the_open_resubmit_item(tmp_path):
         str(r.get("item_state")) == "done" for r in _resubmit_items(st)), _resubmit_items(st)
 
 
-# ------------------------------------------------------------------ ⑤ 收工门（强度变更）
+# ------------------------------------------------------------------ ⑤ 收工门（读数，不拦）
 
 def _closing(st: Store):
     """只跑读数那一层（`checks=()`）：这一笔要测的是门对"悬着"的反应。"""
     return CL.check_closing(st, checks=(), goal="测门", goal_met=True, basis="夹具")
 
 
-def test_the_gate_blocks_while_a_statement_is_unsigned(tmp_path):
-    """⑤ 收工时还悬着 ⇒ blocker + machine_pass=false + 退出码 1（门强度变更）。"""
+def test_the_gate_lists_unsigned_without_blocking(tmp_path):
+    """⑤ 收工时还悬着 ⇒ 门**不**判死；读数里逐份列出「有稿无签」（裁定 3 + B）。
+
+    改前（业主 2026-11-01 的旧裁定）：`statements_unsigned > 0` 进 blocker、
+    `machine_pass=false`、退出码 1。2026-11-16 裁定 3 + 追加裁定 B 把它降成读数：
+    `machine_pass` 仍为真、退出码 0，清单仍然逐份给族 / 号 / sha / 为什么没签。
+    """
     st = _ws(tmp_path)
     _put(st)
     _verify(st)
     rep = _closing(st)
-    assert rep.machine_pass is False, rep.to_dict()
-    assert CL.tri_state_exit_code(rep) == 1, rep.to_dict()
-    blockers = [f for f in rep.blockers if f.check == "statements_unsigned"]
-    assert len(blockers) == 1, [f.to_dict() for f in rep.findings]
-    assert blockers[0].code == "statements_unsigned_without_v_or_abandon"
-    assert SID in blockers[0].detail, blockers[0].detail
-    assert "已悬" in blockers[0].detail and "负责人" in blockers[0].detail, blockers[0].detail
-    assert "业主 2026-11-01" in blockers[0].detail, "拦门读数要点名裁定"
+    assert rep.machine_pass is True, rep.to_dict()
+    assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()
+    assert [f for f in rep.blockers if f.check == "statements_unsigned"] == []
+    reading = rep.readings["statements_unsigned"]
+    items = list(reading.get("unsigned_manuscripts") or [])
+    assert [x["stmt_id"] for x in items] == [SID], items
+    assert items[0]["class"] == "fault_unrepaired", items
+    assert items[0]["why"], items
+    warned = [f for f in rep.findings
+              if f.check == "statements_unsigned" and f.level == "warning"]
+    named = [f for f in warned
+             if f.code == "statements_unsigned_without_v_or_abandon"]
+    assert len(named) == 1, [f.to_dict() for f in warned]
+    detail = named[0].detail
+    assert SID in detail and str(items[0]["sha256"])[:12] in detail, detail
+    assert "已悬" in detail and "负责人" in detail, detail
+    assert "业主 2026-11-16" in detail, "读数要点名新裁定"
+    assert "不再是 blocker" in detail or "不是 blocker" in detail, detail
 
 
 def test_the_gate_names_at_most_six_and_counts_the_rest(tmp_path):
-    """⑤ 逐条点名只到前 6 条，其余折成「共 N 条」（不许把 detail 塞爆）。"""
+    """⑤ 逐份点名只到前 6 份，其余折成「共 N 条」（不许把 detail 塞爆）。"""
     st = _ws(tmp_path)
     for i in range(8):
         _put(st, f"{i + 1:06d}")
     rep = _closing(st)
-    detail = [f.detail for f in rep.blockers if f.check == "statements_unsigned"][0]
+    detail = [f.detail for f in rep.findings
+              if f.check == "statements_unsigned"
+              and f.code == "statements_unsigned_without_v_or_abandon"][0]
     assert "8 条命题" in detail, detail
-    assert detail.count("，已悬") == 6, detail
+    assert detail.count("族未知·号未知") == 6, detail
     assert "…" in detail, detail
 
 
