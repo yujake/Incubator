@@ -6,7 +6,8 @@
 - ⑤ 有毛病 ⇒ 落 V 稿：审的是哪份稿（族 + 号 + sha）/ 有毛病 / findings 与理由
   （含 warning 与程序性 fault）；
 - ⑥ 落盘 `verifications/reviews/v-review-NNNNNN.md` + `index.jsonl`；
-  号源 = 索引 max + 1（不用 `store.alloc_id` / counters）；
+  号源 = 索引 max 与盘上已用号两边取大 + 1，到上界受控抛错
+  （不用 `store.alloc_id` / counters）；
   幂等键 = 台账锚点（台账路径, verification_id）—— 因为未在册 pending 行没有
   `review_call`；
 - ⑦ 交付 = `conductor.open_item` 的 notice；`expects="ack"` 是信息型板项的那一档
@@ -21,6 +22,26 @@ V 稿不是 `tasks` / `statements` 那种 store 表里的行：它住在 `verifi
 这一层文件里，索引就是它的台账。拿 `store.alloc_id` 会造出一个与索引无关的号源，
 两份号一旦漂开，"v-review-000007" 就可能对应两份不同的报告。索引是唯一真身，
 号源也只能从它现读。
+
+## 号源为什么要"两边取大"（索引 max 与盘上文件名）
+
+索引是追加式的，而正文先落、索引行后追加（`record_review` 的顺序就是这样）。
+两次写之间失败 —— 或者进程正好在那一拍被杀 —— 就会留下"盘上有
+`v-review-000007.md`、索引里没有它"的一份稿子。这时若只按索引 max + 1 发号，
+下一个号正好是 000007：新稿覆盖旧稿，而索引里会出现两条同号记录
+（`_read_index` 照样读得进来，没有任何地方会报错）。所以号源把盘上的
+`v-review-NNNNNN.md` 也算进去（`_on_disk_ids`），两边取大再 + 1；号到上界
+（`MAX_ID`）时受控抛 `ReviewIdExhausted`，不折回 `000001`。
+
+## 为什么是两层锁（进程内 + 跨进程）
+
+`record_review` 会被两个进程同时调用（并行路各记一份、`agent_loop` 的补落、
+真机上两个 V 实例）。进程内那把 `threading.Lock` 只在同一个解释器里有意义 ——
+两个进程各自有一份 `_LOCKS`，跨进程等于没有锁，会各发一个号、各写一份索引
+（同一个号两份正文）。所以照 `manuscripts.py` 的「取号在 `FileLock` 内」与
+`secretary._append_locked` 的"两层都要"形态：进程内一把 + `<索引>.lock` 一把，
+罩住"读索引 → 发号 → 落正文 → 追加索引"一整段。`filelock` 的对象在同进程里
+不保证线程安全（`secretary._append_lock` 的注释），所以外层必须还有线程锁。
 
 ## 幂等键为什么是（台账路径, verification_id）
 
@@ -37,13 +58,19 @@ V 稿不是 `tasks` / `statements` 那种 store 表里的行：它住在 `verifi
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
 import threading
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
+
+from filelock import FileLock, Timeout
+
+from .schema import format_id
+from .store import MAX_ID as _STORE_MAX_ID
 
 #: V 稿目录（工作区根相对；索引也在这里）。
 REVIEWS_DIR = "verifications/reviews"
@@ -55,10 +82,36 @@ PREFIX = "v-review-"
 REVIEW_PREFIX = "v-review@"
 #: 板项 `input_key` 前缀：签好的稿（同一份稿的一次送审一条）。
 SIGNED_PREFIX = "v-signed@"
+#: 跨进程锁的文件名后缀（与索引同目录，`filelock` 的 `<目标>.lock` 形态）。
+LOCK_SUFFIX = ".lock"
+#: 跨进程锁的等待上限（秒）。超时是受控失败（`checked=False` + 理由），
+#: 不折成"没锁"—— 拿不到锁还去发号，正是会撞号的那条路。
+LOCK_TIMEOUT = 30.0
+#: 号的上界：真身是 `store.MAX_ID`（= `schema.ID_DIGITS` 位十进制的最大值）。
+#: 这里只引用、不另抄一个 999999 —— 上限一旦有两个字面量就会漂移，而漂移的表现
+#: 是"一处 fail-closed、另一处照样发越界号"。
+MAX_ID = _STORE_MAX_ID
 
 _ID_RE = re.compile(r"^v-review-(\d{6,})$")
 _LOCKS: dict[str, Any] = {}
 _LOCKS_GUARD = threading.Lock()
+
+
+class ReviewIdExhausted(ValueError):
+    """V 稿号空间用尽（`v-review-999999` 已经是最后一个号）。
+
+    ## 为什么是一个具名异常，而不是回绕到 `000001`
+
+    回绕（或顺手发一个 7 位号）会让两件事同时发生：覆盖盘上已有的那一份正文，
+    且索引里出现同号两行 —— 而索引既是 `_read_index` 的输入、也是 `find_review`
+    的返回值，它不会报错，它只会返回"000001 指向两份报告"。这正是本模块要挡的
+    那种静默损坏，所以到顶时受控抛错，让人来处理 `verifications/reviews/`。
+
+    它继承 `ValueError`：非工具层的调用方（把 `ValueError` 当受控失败的那些）
+    行为不变。`record_review` 会把它折进自己的三态（`checked=False` + 理由）——
+    判定与 V 稿是两件事，号用尽不该带走判定本身（`agent_v/core.py` 的
+    `_write_v_review` 已按这条兜住）。
+    """
 
 
 def reviews_dir(root: str | Path) -> Path:
@@ -77,6 +130,7 @@ def review_path(root: str | Path, review_id: str) -> Path:
 
 
 def _lock_for(path: Path):
+    """同一路径的进程内锁（`filelock` 在同进程里不保证线程安全，两层都要）。"""
     key = str(path.resolve())
     with _LOCKS_GUARD:
         lock = _LOCKS.get(key)
@@ -84,6 +138,29 @@ def _lock_for(path: Path):
             lock = threading.Lock()
             _LOCKS[key] = lock
         return lock
+
+
+def _cross_process_lock(path: Path):
+    """同一路径的跨进程锁（`<目标>.lock`；等锁超时会抛 `Timeout`）。"""
+    return FileLock(str(path) + LOCK_SUFFIX, timeout=LOCK_TIMEOUT)
+
+
+@contextlib.contextmanager
+def _review_write_lock(root: str | Path):
+    """`record_review` 的写临界区：进程内一把 + 跨进程一把（两层都要）。
+
+    罩的是"读索引 → 发号 → 落正文 → 追加索引"这一整段，不是单独某一次写。
+    只罩写文件不够：两个进程都能读到同一份旧索引，于是各自发号、各自写一份正文
+    （取号点必须在锁内 —— `manuscripts.py:489-490` 的同一形态）。
+
+    目录先建出来：索引、正文与 `<索引>.lock` 都落在这一层（`filelock` 不会替我们建
+    父目录 —— 真机上第一次落 V 稿时 `verifications/reviews/` 还不存在）。
+    """
+    gate = reviews_dir(root)
+    gate.mkdir(parents=True, exist_ok=True)
+    with _lock_for(gate):
+        with _cross_process_lock(reviews_index_path(root)):
+            yield
 
 
 def _read_index(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
@@ -112,14 +189,47 @@ def _read_index(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
     return rows, problems
 
 
-def next_review_id(rows: list[Mapping[str, Any]]) -> str:
-    """索引的 max + 1（宽度 6；解析不出的行不参与发号，但不许把它们当 0）。"""
+def _on_disk_ids(root: str | Path) -> frozenset[int]:
+    """盘上已经用掉的号（`verifications/reviews/v-review-NNNNNN.md` 的文件名）。
+
+    为什么要单独读盘、而不只看索引：正文先落、索引行后追加，两次写之间失败就会留下
+    "盘上有正文、索引里没有"的一份稿。索引不是唯一真身 —— 盘上的文件也是事实，
+    而且覆盖它的代价不可逆。临时文件（`.<名>.md.tmp-…`）不算号：它的 stem 带前导点，
+    过不了 `_ID_RE`。
+    """
+    gate = reviews_dir(root)
+    try:
+        names = [p for p in gate.iterdir()]
+    except FileNotFoundError:  # 目录还不存在 ⇒ 盘上还没有号（"列不出来"只在这一档等于"没有"）
+        return frozenset()
+    used: set[int] = set()
+    for path in names:
+        got = _ID_RE.match(path.stem) if path.suffix == ".md" else None
+        if got:
+            used.add(int(got.group(1)))
+    return frozenset(used)
+
+
+def next_review_id(rows: list[Mapping[str, Any]], taken: Iterable[int]) -> str:
+    """索引 max 与盘上已用号两边取大 + 1；到上界受控抛 `ReviewIdExhausted`。
+
+    `taken` 是盘上已用号（`_on_disk_ids`）—— 它是必填的，不给默认值：只看索引的
+    发号正是"复用号、覆盖正文"那条路，而默认参数会把那条路留给下一个调用方。
+    解析不出的索引行不参与发号，但不许把它们当 0（旧行为保留）。
+    """
     top = 0
     for row in rows:
         got = _ID_RE.match(str(row.get("review_id") or ""))
         if got:
             top = max(top, int(got.group(1)))
-    return f"{PREFIX}{top + 1:06d}"
+    for n in taken:
+        top = max(top, int(n))
+    if top >= MAX_ID:
+        raise ReviewIdExhausted(
+            f"V 稿号已到上界 {PREFIX}{format_id(MAX_ID)}（索引 max 与盘上已用号取大 "
+            f"= {top}）⇒ 不发新号：不折回 {PREFIX}{format_id(1)}（那会覆盖盘上已有的"
+            f"一份正文），也不越界写更宽的号；`{REVIEWS_DIR}/` 需要人工处理")
+    return f"{PREFIX}{format_id(top + 1)}"
 
 
 def _anchor(row: Mapping[str, Any]) -> tuple[str, str]:
@@ -219,13 +329,16 @@ def record_review(root: str | Path, *, statement_id: str, manuscript: str,
                   ledger: str, verification_id: str, fault_kind: str = "",
                   fault_cause: str = "", review_call: str = "", at: str = "",
                   actor: str = "agent-V") -> dict[str, Any]:
-    """落一份 V 稿（幂等；号源 = 索引 max + 1）。
+    """落一份 V 稿（幂等；号源 = 索引 max 与盘上已用号两边取大 + 1）。
 
     返回 `checked` / `written` / `idempotent` / `review_id` / `path` / `rel` /
     `index_path` / `sha256` / `at` / `reason` / `entry`。
+
+    三态见模块 docstring。两种已知的受控失败也走同一形态（`checked=False` +
+    理由，不抛出去）：号用尽（`ReviewIdExhausted`）与等号锁超时（`filelock.Timeout`）。
+    它们是"这一份没落成"，不是"又写了一份"，也不许带走调用方的判定。
     """
     at = str(at or "").strip()
-    gate = reviews_dir(root)
     out: dict[str, Any] = {
         "checked": False, "written": False, "idempotent": False,
         "review_id": "", "path": "", "rel": "", "index_path": str(reviews_index_path(root)),
@@ -237,69 +350,80 @@ def record_review(root: str | Path, *, statement_id: str, manuscript: str,
         out["reason"] = ("没有台账锚点（台账路径 / verification_id）⇒ 这一份 V 稿"
                          "没有幂等键，不落盘（不许靠猜一个编号写第二份）")
         return out
-    lock = _lock_for(gate)
-    with lock:
-        rows, problems = _read_index(root)
-        if problems:
-            out["reason"] = ("V 稿索引读不出来 ⇒ 不发新号、不落盘："
-                             + "；".join(problems[:3]))
+    try:
+        with _review_write_lock(root):
+            rows, problems = _read_index(root)
+            if problems:
+                out["reason"] = ("V 稿索引读不出来 ⇒ 不发新号、不落盘："
+                                 + "；".join(problems[:3]))
+                return out
+            existing = next((dict(r) for r in rows
+                             if _anchor(r) == (str(ledger), str(verification_id))), None)
+            if existing is not None:
+                out.update(checked=True, idempotent=True, written=False,
+                           review_id=str(existing.get("review_id") or ""),
+                           path=str(review_path(root, str(existing.get("review_id") or ""))),
+                           rel=str(existing.get("path") or ""),
+                           sha256=str(existing.get("sha256") or ""),
+                           at=str(existing.get("at") or at),
+                           reason="同一台账锚点已经落过一份 V 稿 ⇒ 回旧的，不写第二份",
+                           entry=existing)
+                return out
+            try:
+                review_id = next_review_id(rows, _on_disk_ids(root))
+            except ReviewIdExhausted as exc:
+                out["reason"] = str(exc)
+                return out
+            path = review_path(root, review_id)
+            rel = _rel(root, path)
+            items = [dict(f) for f in (findings or []) if isinstance(f, Mapping)]
+            text = _render(
+                review_id=review_id, at=at, statement_id=str(statement_id or ""),
+                manuscript=str(manuscript or ""),
+                manuscript_family=str(manuscript_family or ""),
+                manuscript_id=str(manuscript_id or ""),
+                proof_sha256=str(proof_sha256 or ""), verdict=str(verdict or ""),
+                defect_step=defect_step, findings=items, reason=str(reason or ""),
+                fault_kind=str(fault_kind or ""), fault_cause=str(fault_cause or ""),
+                ledger=str(ledger), verification_id=str(verification_id))
+            try:
+                _atomic_write(path, text)
+            except OSError as exc:
+                out["reason"] = f"V 稿写不进去（{type(exc).__name__}: {exc}）"
+                return out
+            entry = {
+                "review_id": review_id, "at": at, "path": rel,
+                "statement_id": str(statement_id or ""),
+                "manuscript": str(manuscript or ""),
+                "manuscript_family": str(manuscript_family or ""),
+                "manuscript_id": str(manuscript_id or ""),
+                "proof_sha256": str(proof_sha256 or ""),
+                "verdict": str(verdict or ""), "axis": "fault",
+                "defect_step": defect_step, "fault_kind": str(fault_kind or ""),
+                "fault_cause": str(fault_cause or ""),
+                "findings": len(items), "ledger": str(ledger),
+                "verification_id": str(verification_id),
+                "review_call": str(review_call or ""),
+                "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "actor": str(actor or ""),
+            }
+            try:
+                _append_index(reviews_index_path(root), entry)
+            except OSError as exc:
+                out["reason"] = (f"V 稿索引写不进去（{type(exc).__name__}: {exc}）"
+                                 f"；正文已落 `{rel}`，但索引缺这一行，必须重落")
+                return out
+            out.update(checked=True, written=True, review_id=review_id,
+                       path=str(path), rel=rel, entry=entry,
+                       sha256=entry["sha256"],
+                       reason=f"V 稿已落盘：{rel}")
             return out
-        existing = next((dict(r) for r in rows
-                         if _anchor(r) == (str(ledger), str(verification_id))), None)
-        if existing is not None:
-            out.update(checked=True, idempotent=True, written=False,
-                       review_id=str(existing.get("review_id") or ""),
-                       path=str(review_path(root, str(existing.get("review_id") or ""))),
-                       rel=str(existing.get("path") or ""),
-                       sha256=str(existing.get("sha256") or ""),
-                       at=str(existing.get("at") or at),
-                       reason="同一台账锚点已经落过一份 V 稿 ⇒ 回旧的，不写第二份",
-                       entry=existing)
-            return out
-        review_id = next_review_id(rows)
-        path = review_path(root, review_id)
-        rel = _rel(root, path)
-        items = [dict(f) for f in (findings or []) if isinstance(f, Mapping)]
-        text = _render(
-            review_id=review_id, at=at, statement_id=str(statement_id or ""),
-            manuscript=str(manuscript or ""),
-            manuscript_family=str(manuscript_family or ""),
-            manuscript_id=str(manuscript_id or ""),
-            proof_sha256=str(proof_sha256 or ""), verdict=str(verdict or ""),
-            defect_step=defect_step, findings=items, reason=str(reason or ""),
-            fault_kind=str(fault_kind or ""), fault_cause=str(fault_cause or ""),
-            ledger=str(ledger), verification_id=str(verification_id))
-        try:
-            _atomic_write(path, text)
-        except OSError as exc:
-            out["reason"] = f"V 稿写不进去（{type(exc).__name__}: {exc}）"
-            return out
-        entry = {
-            "review_id": review_id, "at": at, "path": rel,
-            "statement_id": str(statement_id or ""),
-            "manuscript": str(manuscript or ""),
-            "manuscript_family": str(manuscript_family or ""),
-            "manuscript_id": str(manuscript_id or ""),
-            "proof_sha256": str(proof_sha256 or ""),
-            "verdict": str(verdict or ""), "axis": "fault",
-            "defect_step": defect_step, "fault_kind": str(fault_kind or ""),
-            "fault_cause": str(fault_cause or ""),
-            "findings": len(items), "ledger": str(ledger),
-            "verification_id": str(verification_id),
-            "review_call": str(review_call or ""),
-            "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-            "actor": str(actor or ""),
-        }
-        try:
-            _append_index(reviews_index_path(root), entry)
-        except OSError as exc:
-            out["reason"] = (f"V 稿索引写不进去（{type(exc).__name__}: {exc}）"
-                             f"；正文已落 `{rel}`，但索引缺这一行，必须重落")
-            return out
-        out.update(checked=True, written=True, review_id=review_id,
-                   path=str(path), rel=rel, entry=entry,
-                   sha256=entry["sha256"],
-                   reason=f"V 稿已落盘：{rel}")
+    except Timeout as exc:
+        out["reason"] = (f"取 V 稿号锁超时（{LOCK_TIMEOUT:g}s；另一个写者卡住了）⇒ "
+                         f"不发新号、不落盘，稍后重试（{exc}）")
+        return out
+    except OSError as exc:  # 目录 / 锁文件建不出来：受控失败，不带走判定
+        out["reason"] = f"V 稿落盘失败（{type(exc).__name__}: {exc}）"
         return out
 
 

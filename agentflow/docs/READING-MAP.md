@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-16，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **317 个 `.py`、292406 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14877 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **317 个 `.py`、292656 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14877 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-16 VX1（V 稿的锁与号源；`vreviews.py` +124 行，判据
+> `tests/test_v_review_ids_are_not_reused.py`）**：当次盘上读数 **317 个 `.py` / 292656 行 /
+> 75 个 `>800`**，三格 75 / 94 / 2 一格未抬。这一格读数含同日 AR1（`9846c8d9`）已提交的
+> +126 字节 —— 本笔只认领 `vreviews.py` 的 +124（合计与现算逐字相等，判据
+> `tests/test_reading_map_counts.py`）。
 > **2026-11-16 VR1（`vreceipts` 退场：只退投递那一半，义务留下）**：V 回执的投递层
 > （原 2040 行：outbox 意图 / 投递 / 补投 / 读口）整层删除；义务那一半（重送 `v-resubmit@` +
 > 收录 `b-register@`）搬到 `src/agentflow/obligations.py`（1511 行，判词投递不在这里）。
@@ -667,7 +672,7 @@
 | `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句）。板项行的"状态"投影不在本文件里（见下一行） |
 | `boardrows.py` | **板项行的状态投影**（D12，2026-11-09 从 `statusreport.py` 整段搬出来）：`tasks` 表里 `kind` 非空那一行的 `status` 恒为 `pending`（类型标记，不是"还没收口"），真正的收口状态在 `item_state` / `item_close` ⇒ `tasks_row_reading` 按三档投影（板项已收口 / 板项还开着 / 代理行照旧 `<status>/<outcome>`），三个 `BOARD_ITEM_*` 常量是那三档的措辞。两个调用方（`statusreport._hint_of` 与 `webui.readers` 的 `TaskRow.status_reading`）必须是同一处口径 —— `statusreport.tasks_row_reading` 按名字回引本模块 |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据。D3 批 1（2026-11-09，只读、零行为翻转）新增缺陷类别读数：`fault_kind_of()`（`kind` ∈ `math` / `procedural` / `style` / `contract`；`report_gap` 不是 kind，落在 `cause` 上；老行按 `legacy_math_evidence` / `legacy_shape` / `legacy_default` 推定；新老行按 `secretary_judge` 里有没有 `fault_kind` 这个键区分）、`is_a_vote()`（D268 的 `sign_reading.votes` 唯一允许数的行局部谓词，只看 `kind==""`，带 report_gap 的 clean 行照常算票）、`vote_reading()`（人读的 why）；配套只读 CLI `scripts/verify_audit.py`（票数 / report_gap / legacy_* / clean→fault 四张表，不写盘） |
-| `vreviews.py` | **V 稿**（SG1，2026-11-16）：秘书判「有毛病」时给被审者（F / E / B）的审阅报告 —— 审的是哪份稿（族 + 号 + sha）/ 有毛病 / findings 与理由；落 `verifications/reviews/` 目录（一份审阅报告 + 一份追加式索引；号源 = 索引 max + 1，幂等键 = 台账锚点），交付 = `conductor.open_item` 的 notice（不要求 ack）。判据 `tests/test_sg1_v_review_and_auto_sign.py` |
+| `vreviews.py` | **V 稿**（SG1，2026-11-16；VX1 同日补两道真缺陷）：秘书判「有毛病」时给被审者（F / E / B）的审阅报告 —— 审的是哪份稿（族 + 号 + sha）/ 有毛病 / findings 与理由；落 `verifications/reviews/` 目录（一份审阅报告 + 一份追加式索引；号源 = 索引 max 与盘上 `v-review-NNNNNN.md` **两边取大** + 1，到 `MAX_ID` 受控抛 `ReviewIdExhausted`，幂等键 = 台账锚点；写临界区 = 进程内 `threading.Lock` + `<索引>.lock` 一把 `FileLock`，取号在锁内），交付 = `conductor.open_item` 的 notice（不要求 ack）。判据 `tests/test_sg1_v_review_and_auto_sign.py`、`tests/test_v_review_ids_are_not_reused.py` |
 | `proofreport.py` | **形式化困难的受控汇报形态**（业主 2026-10-22 晚的协作面裁定）：L→B 的汇报与 B→D 的升级，两边落点都是既有的 `agent_message` 收件箱（`agent_loop.send_message` 写 / `read_messages` 读），本模块只把"这一条汇报说的是什么"压成受控形态 —— `FAILURE_TYPES`（失败类型词表）/ `SEVERITIES`（`normal` 与 `research` 两档：B 改证明就够 / 路线可能不成立 ⇒ B 通知 D 开展研究）/ `SUGGESTIONS`（失败类型 → B 该补什么）/ `payload` / `violations` / `deliver`。自由文本没法被下游按类分派，而"漏了一步"与"命题本身不对"该做的事完全不同 |
 | `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_revise`/`handoff_query`）+ **命题写入代理**（`wash_statement`/`record_statement`，业主 2026-10-09：B 交内容、秘书落盘——洗格式 / 拿编号 / 查重 / 改表四件，写集只有 `statements` 与 `dependencies`）+ **名册**（S1k，业主 2026-10-19/20：「名册 = 父 + 子 + 绝对编号」）：落点 `out/roster/<父编号>.jsonl`（append-only，`_fold_roster` 折叠 `add`/`bind`/`retire`/`keep_alive`，另有 `<父编号>-index.jsonl` 对照表与 `<父编号>-retired.jsonl` 销号名单），`roster_view` / `parent_of` 答"我的父是谁、我的子是谁"（行里带绝对编号 `task_id` 与名册名 `name`），`brief_source` 记简介是父给的原话（`parent`）还是秘书代写（`secretary`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态**（"委托秘书洗一遍格式"是**两段式**：`wash_proposed` 请示 ⇒ 父用 `accept_proposal`/`reject_proposal` 定） |
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。另加**位 ⇒ 台账的映射**（`BIT_LEDGERS`：哪一位去哪张表查；`bit_evidence_gaps`：位上说有、表里要查得到）——业主 2026-10-09 点名的那一条。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
