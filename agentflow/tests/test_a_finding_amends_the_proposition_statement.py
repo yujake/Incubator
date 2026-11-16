@@ -266,7 +266,7 @@ def test_a3_the_production_path_keeps_editing_after_the_amendment(tmp_path):
     rel = f"reports/f-proof-{mid}.md"
     body_on_disk = VS.manuscript_proof_body(
         (pathlib.Path(st.root) / rel).read_text(encoding="utf-8"))
-    #: V 判过「有毛病」—— 行落在**盘上这一段正文**上（AH5 现场的那一行）。
+    #: V 判过「有毛病」—— 行落在盘上这一段正文上（AH5 现场的那一行）。
     VR.record_pending_sign(
         str(st.root), proof_text=body_on_disk, object_path=rel,
         verdict={"verdict": "有毛病", "defect_step": 1,
