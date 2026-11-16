@@ -17,9 +17,9 @@
 
 业主逐字：「不应该有『看不出来』，『看不出来错』就是没毛病，没有『看不出来对』」。
 2026-11-16 的裁定 ④ 进一步要求「把看不出来这档删干净」：于是
-`exhaustionreport.VERDICT_UNKNOWN` 与 `verifications.LEGACY_VERDICTS` 这两个历史值
-词表都删掉了 —— 会审缺材料改由 `checked=False` 说，老台账行里的那四个字只是一句
-历史陈述（读得出、不产生轴、不算票、不签）。这不是放宽：删掉的是"一种结论"，
+`exhaustionreport` 的 `VERDICT_UNKNOWN` 与 `verifications` 的 `LEGACY_VERDICTS`
+这两个历史值词表都删掉了 —— 会审缺材料改由 `checked=False` 说，老台账行里的那四个字
+只是一句历史陈述（读得出、不产生轴、不算票、不签）。这不是放宽：删掉的是"一种结论"，
 没查成仍然是一个可见的、与两态分开的读数。
 
 `schema.REVIEW_VERDICTS` 是 H 的文档审校轴（另一根轴、另一份台账），它的旧值仍按

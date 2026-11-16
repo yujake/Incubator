@@ -25,7 +25,7 @@ V 判「有毛病」之后，除了"这一条判词要送到送审者"，还有�
   `tests/test_mailbox_delivers_mid_run_and_wakes_the_parent.py` /
   `tests/test_a_silent_agent_is_wakeable_unless_retired.py`。
 - AH5 里"70% 判词没送到"的真因是 `v-wash@<sha[:16]>@<parent>` 这个幂等键
-  （`agent_v/core.py` 的 `_relay_washed_verdict`）：同一份正文对同一收件人只送第一次，
+  （`agent_v/core.py` 的 `_relay_unregistered_wash`）：同一份正文对同一收件人只送第一次，
   不是收件人没醒。
 
 于是投递只剩既有的那几条路（都不在本模块）：

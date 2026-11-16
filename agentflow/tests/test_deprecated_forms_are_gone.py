@@ -507,6 +507,10 @@ DANGLING_ALLOWED: dict[str, str] = {
         "该删，已转持有方（secretary lane 持有该文件）：那一句的旧名已经不在树里"
         "（NT2 之后判档归 `Secretary.judge_statement`、落行归 `Secretary.record_nontriviality`）",
     "src/agentflow/specs/h.py": "该删，已转持有方（FC-27 禁改区）",
+    # 2026-11-17：那一档词表（`verifications` 的 `LEGACY_VERDICTS`）已按裁定 ④ 删掉，
+    # 这一句是 F 的声明正文（模型按它行动）。补丁（把模块前缀去掉、只留旧值的说法）
+    # 已随本轮交付，等 FC-27 持有方 apply；apply 之后实测不再命中，这一行必须跟着删。
+    "src/agentflow/specs/f.py": "该删，已转持有方（FC-27 禁改区）：补丁已出、未 apply",
     "src/agentflow/tools/__init__.py": "该删，已转持有方（FC-27 禁改区）",
     "scripts/lint_rules.py": "该删，已转持有方（FC-27 禁改区）",
     "tests/test_conductor_stop_is_a_tool_not_a_word.py":

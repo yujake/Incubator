@@ -1408,7 +1408,8 @@ def code_consistency(row: Mapping[str, Any], now: Any) -> str:
     写侧记的哈希只有前 16 位（`verify_tools.code_hash` 的定义就是「前 16 位」），
     所以「同一份脚本」在这里必须是前缀关系而不是逐字相等 —— 直接逐字比会把每一行都
     判成 `mismatch`（真机 `projects/sylow3` 的两行就是这样，而 `exp 000001` 明明一致）。
-    前缀比较的口径与 `closing._hash_prefixed` 同一句话：一方是另一方的前缀即是同一份。
+    前缀比较的口径就只有这一句：一方是另一方的前缀即是同一份（`sha_consistency` 只比值、
+    不截断；这里只把短的那一边对齐，不另写第二套「同一份」的判据）。
     比值本身仍然只走 :func:`sha_consistency`（一处口径）：这一层只把短的那一边对齐，
     并多加一档状态。
     """

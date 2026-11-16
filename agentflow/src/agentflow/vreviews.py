@@ -110,7 +110,7 @@ class ReviewIdExhausted(ValueError):
     它继承 `ValueError`：非工具层的调用方（把 `ValueError` 当受控失败的那些）
     行为不变。`record_review` 会把它折进自己的三态（`checked=False` + 理由）——
     判定与 V 稿是两件事，号用尽不该带走判定本身（`agent_v/core.py` 的
-    `_write_v_review` 已按这条兜住）。
+    `_publish_v_review` 已按这条兜住）。
     """
 
 
