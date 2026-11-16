@@ -137,6 +137,7 @@ def _run_pair(base: Path, *, no_cross_lock: bool = False,
     results = base / f"results{tag}"
     results.mkdir(parents=True, exist_ok=True)
     barrier = base / f"barrier{tag}"
+    readbar = base / f"readbar{tag}"
 
     procs: list[subprocess.Popen] = []
     for i in range(2):
@@ -152,6 +153,11 @@ def _run_pair(base: Path, *, no_cross_lock: bool = False,
         ]
         if no_cross_lock:
             cmd.append("--no-cross-lock")
+            # 反真空那一档没有跨进程锁：靠"--hold-after-read 的墙钟"只保证读者自己
+            # 读完到写盘之间有一段，挡不住"另一个进程抢先读完并写完"（那会让窗口
+            # 没被拉开，读数变成"没撞号"）。这里加一道读后文件屏障：两个读者都读完
+            # 号源才放行 —— 撞号由装置保证，不靠调度运气。
+            cmd += ["--read-barrier-dir", str(readbar)]
         if i == 0:
             cmd += ["--hold-after-read", str(HOLD)]
         log = (results / f"r{i}.log").open("wb")
@@ -248,8 +254,14 @@ def test_d_anti_vacuum_cross_process_lock_is_load_bearing(tmp_path: Path):
     """把跨进程锁换回 `threading.Lock` ⇒ a 的读数必红（两个进程同号）。
 
     这一条同时是装置自证：同一份正文被覆盖只可能在"取号窗口真的被拉开"时发生。
+
+    装置故障（工作进程崩了 / 屏障超时）与"撞号"必须分开：前者不许当成红
+    —— 崩掉的进程发不出号，`_a_problems` 也会非空，读起来和反真空成立一模一样。
+    所以先断言两个进程都真的写成了，再断言撞号。
     """
     ws, payloads = _run_pair(tmp_path, no_cross_lock=True, tag="-nolock")
+    assert all(p.get("ok") and p.get("written") for p in payloads), (
+        "工作进程没写成（装置故障 ≠ 反真空成立）：" + str(payloads))
     problems = _a_problems(ws, payloads)
     assert problems != [], (
         "把跨进程锁换回 threading.Lock 之后 a 的读数仍然绿 ⇒ a 量的不是那把锁")
