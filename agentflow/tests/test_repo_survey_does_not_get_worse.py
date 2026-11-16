@@ -60,6 +60,19 @@ SURVEY_PATH = REPO / "tools" / "repo_survey.py"
 #: `dup_docstring_segments` 4 → 5 那一条是 D-53 的业主原话在 `clock.py` 与
 #: `tools/clock_tools.py` 两处逐字引用（引文必须逐字，不许改写 —— 与 L 协作面那条同形）。
 #: 判据本身的语义一个字没动：它仍然是"不许比基线更差"，抬完仍然只许降、不许再涨。
+#:
+#: 2026-11-17 复测并下调 dup 那一格 5 → 2（这一格的语义一直是"只许降"，下调不需要
+#: 理由，但变化必须能点名）：2026-10-27 那 5 段里有 3 段后来各自收敛成一处 ——
+#:   · 132 字符的「拆出来的判据：一动作一文件…」曾逐字出现在 21 个 `agent_c/*` /
+#:     `agent_d/*` 的模块头，被「清扫（B 路）」那批逐文件删掉（`4fd98095` … `06951022`，
+#:     共 21 笔），现盘 src 里一个字都不剩；
+#:   · D-53 业主原话（137 字符）曾同时在 `clock.py` 与 `tools/clock_tools.py`，`7e217bda`
+#:     （清扫 D5 路·clock）去掉了 `clock.py` 那份；
+#:   · L 协作面那段引文（126 字符）曾在 `proofreport.py` 与 `specs/l.py`，`a7d512c1`
+#:     （清扫 E4 路·specs/l.py）去掉了 `specs/l.py` 那份。
+#: 现盘只剩 2 段：`tools/fs_tools.py` 与 `tools/table_tools.py` 的 161 / 99 字符两段
+#: （各自在模块头与 `_effective_roles` 里出现，跨文件逐字相同）。两文件都在 FC-27
+#: `auth-audit` 里 ⇒ 去掉重复文案要人逐行走查，本轮不动。下调后这一格仍是"只许降、不许再涨"。
 BASELINE: dict[str, int] = {
     # 2026-10-28：69 → 70。理由：这一批在 `conductor.py` 里补了 pid 复用判定
     # （`_process_image_name` + `programs_reading` 的那一段），那份文件本就超过 800 行；
@@ -211,7 +224,10 @@ BASELINE: dict[str, int] = {
     # 四块都是整段搬移（缩进不变、块内逐字相同），返回值 sha256 前后相同（12 组，见
     # `temp/_equiv_probe.py`）。拆完这一格仍是 95。判据语义一个字没动：只许降、不许再涨。
     "src_functions_gt200_lines": 95,
-    "dup_docstring_segments": 5,
+    # 2026-11-17 下调 5 → 2：`python tools/repo_survey.py --json` 现盘复测就是 2 段。
+    # 常量停在 5 等于留 3 段余量 —— 抬到顶格一样是消耗余量，所以按现盘收紧。
+    # 逐段点名与那三处收敛的出处见文件头 2026-11-17 那条注。
+    "dup_docstring_segments": 2,
 }
 
 #: 基线观测时刻（写在这里，是为了让"这组常量有多旧"这件事一眼可见）。
@@ -249,9 +265,11 @@ BASELINE: dict[str, int] = {
 #: 2026-11-10（不抬，改搬）：p268 曾把文件那一格 75 → 76（`specs/b.py` 800 → 824），
 #: 业主口径是「这一格不许抬」⇒ 撤回那一抬，改成把 B 的 policy 里「收录与识稿」九条逐字
 #: 搬进 `specs/b_ingest_policy.py`、`specs/b.py` 用 `*INGEST_POLICY` 摊回原位（提示词一个字
-#: 没变），`specs/b.py` 824 → 773 行 ⇒ 这一格回到 75。函数那一格仍是 95、dup 仍是 5
-#: （今天现量过）。判据语义一个字没动：只许降、不许再涨。
-BASELINE_OBSERVED = "2026-11-10"
+#: 没变），`specs/b.py` 824 → 773 行 ⇒ 这一格回到 75。函数那一格仍是 95、dup 当时是 5
+#: （2026-11-10 现量过）。判据语义一个字没动：只许降、不许再涨。
+#: 2026-11-17：三格复测 75 / 95 / 2，dup 那一格按现盘 5 → 2 收紧（逐段点名见文件头
+#: 那条 2026-11-17 注）；另外两格一格未动。
+BASELINE_OBSERVED = "2026-11-17"
 
 
 def _load_survey():
