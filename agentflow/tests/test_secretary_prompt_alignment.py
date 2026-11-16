@@ -285,6 +285,26 @@ DUTIES: dict[str, dict[str, object]] = {
                "判 fault 而 V 没给 defect_step 时由秘书定出那一步 —— V 必须知道"
                "「我写哪两个字」不决定轴，否则它会把判词当成判据",
     },
+    # 2026-11-17（p288，PA2 批次3）：`specs/f.py` 与 `specs/v.py` 的 policy 各新增一句对秘书的
+    # 承诺 —— 判出「有毛病」的那一刻，秘书把这一份落成 V 稿并投给被审者（信息型、不用 ack）。
+    # 真身 `vreviews.record_review`（落稿 + 号源）与 `vreviews.deliver_review`（notice 投递），
+    # 生产调用点 `agent_v/core.py` 的 `AgentV._publish_v_review`。
+    # 可见性 `conditional ("F","V")`：F 是收件人（读到即收讫、别去找 ack），V 是产出侧
+    # （它要知道那一转 fault 的终局会落一份稿）。E / B 同族今天还没有各自的教法落点 ⇒
+    # 不登记（多登记一个会让方向一的等额断言红：多一个也要人来裁）。
+    "v_review_notice": {
+        "code": "record_review",
+        "where": "vreviews.py",
+        "call": ("agent_v/core.py 的 AgentV._publish_v_review（判「有毛病」那一刻）",
+                 "vreviews.deliver_review（notice 投给送审者）"),
+        "visibility": "conditional",
+        "roles": ("F", "V"),
+        "probe": ("被打回时你会收到一份 V 稿", "秘书把这一份"),
+        "why": "判出「有毛病」⇒ 落一份 V 稿（审的是哪份稿（族 + 号 + sha）/ 有毛病 / findings 与理由，"
+               "含 warning 与程序性 fault）并作为 notice 投给被审者，不要求 ack。F 必须知道打回时"
+               "会收到什么（否则会去找 ack、或以为没人管），V 必须知道那一转 fault 的终局会落一份稿"
+               "（否则它会把「判完了」读成「没后续」）",
+    },
     # 2026-11-04（业主裁定 A 甲）：「B 的改写要有可签的载体：给 B 手稿签块（与 F/E 同形）」。
     # 这条走法在 B 的 policy 里是一句完整承诺（交正文 → 框架落稿 → 派 V → 签到位 → 再入库），
     # 而它有两个真身、各管一半，所以拆成两条登记（探针也各认那一半）：

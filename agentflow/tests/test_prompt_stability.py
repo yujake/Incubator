@@ -1346,6 +1346,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               " `literature_pending`）。该摘要经 `tools_lines` 进 M 的提示词，而 "
               "`conductor.closing` 只发给 M ⇒ 变化格 = M 一格，其余十格与 p286 逐字相同。"
               "facts 键集仍 15 格、落点没动。"},
+     # p287 → p288（2026-11-17，PA2 四类提示词对齐）：facts 键集一格没动（还是 15 格）——
+     # 本批只换四类面的段文本与教法（收工门八格 / 未签读数 / 待登记命题 / 判收提交清表 /
+     # 送审门槛 / 命题表述 / 对应表 / min 三态 / 死引用），没有哪一格事实换过落点
+     # （system ↔ user），所以 count / keys_sha256 与 p287 同值。
+     {"version": "p288", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p288（2026-11-17，PA2 四类提示词对齐；业主 2026-11-17 逐字「先apply」"
+              "授权）：按 `temp/pa1/PA1-四类提示词对齐表.md` 的 23 行改动一次对齐。"
+              "变化格 = A / D / F / G / H / M / V 七格，B / C / E / L 逐字不动"
+              "（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

@@ -2659,7 +2659,23 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: 事实换过落点）；`agent_surface_snapshot.json` 按现值重冻（11 格 prompt 只差版本行，
 #: 把版本行归一后内容变化的只有 M 一处叶子）；系统文档重生成；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p287"
+#: p287 → p288（2026-11-17，PA2·四类提示词对齐；业主 2026-11-17 逐字「先apply」授权）：
+#:   四类提示词面（`specs/*.py` 的 policy / `agent_prompts.py` / `agent_skills.py` 手册 /
+#:   `secretary.py` 判断面）按 `temp/pa1/PA1-四类提示词对齐表.md` 的 23 行改动一次对齐：
+#:   收工门改「八格」且 `statements_unsigned` 降为读数；`conjectures` 归属改产出侧
+#:   （散文称「待登记命题」）；A 的判收 → 提交 → 注册回填 → 清表；送审门槛按这一趟算、
+#:   跨趟不累计、任一转 fault 即终局并落 V 稿；改命题表述过闸、沿用原稿号；验收表
+#:   「论文对应表」收窄到论文包；`min: 0` 三态；`vreceipts.py` 死引用改指 `obligations.py`。
+#:   十一格用判据自己的 `_surface_digest` 现算（`temp/pa2/recompute_digests.py`，先钉
+#:   `AGENTFLOW_LEAN_ENABLED=1`）：只 7 格变（A / D / F / G / H / M / V），
+#:   B / C / E / L 逐字不动。逐格旧值 → 新值：A 63c38fa6… → 13a913b0…；
+#:   D 721eea57… → 5c862083…；F 99a9972c… → 9e449b3e…；G 931406c4… → 5b657545…；
+#:   H 25aff142… → c6600f65…；M fefd7f96… → 4231a37b…；V 983eefc0… → b310667d…。
+#:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p288）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p287 同值 —— 本批只换段文本与教法，
+#:   没有哪一格事实换过落点）；`agent_surface_snapshot.json` 按现值重冻；系统文档重生成；
+#:   `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p288"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
