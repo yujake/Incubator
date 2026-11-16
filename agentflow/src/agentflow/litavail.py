@@ -203,7 +203,7 @@ def record_availability(root: Path | str, request_id: str, slot: str, tier: str,
     path = availability_ledger_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="") as fh:
-        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     return rec
 
 
@@ -317,7 +317,7 @@ def record_read(root: Path | str, request_id: str, slot: str, tier: str, *,
     path = read_ledger_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8", newline="") as fh:
-        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+        fh.write(json.dumps(rec, ensure_ascii=False, sort_keys=True, default=str) + "\n")
     return rec
 
 

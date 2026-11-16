@@ -799,7 +799,7 @@ def _archive_rows(store: Store, request_id: str,
     """把本委托的整份行落归档（返回 `{path, rel_path, count}`）。"""
     rid = str(request_id or "").strip()
     ordered = sorted((dict(r) for r in rows), key=lambda r: str(r.get("slot") or ""))
-    body = "".join(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n"
+    body = "".join(json.dumps(r, ensure_ascii=False, sort_keys=True, default=str) + "\n"
                    for r in ordered)
     path = archive_path(store, rid)
     _atomic_write(path, body)
