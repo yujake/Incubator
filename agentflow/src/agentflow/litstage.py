@@ -1204,24 +1204,40 @@ def list_candidates(
         "gaps": gaps,
         "rows": rows,
         "total_all_delegations": len(all_rows),
-        "note": (
-            "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；"
-            "查历史请显式给 request_id（`*` = 全部）。状态四档："
-            "`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册"
-            "（带 lit_id） / `rejected` 拒收；"
-            "历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 "
-            "rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。"
-            f"本委托还有 {len(waiting)} 条没判：只要还大于 0，`lit.admit_all` "
-            "就整批拒绝（`lit.admit` 逐条判收不受它拦）。"
-            "判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻"
-            "批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 "
-            "data/lit_candidates/archive-<request_id>.jsonl）。"
-            "标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` "
-            "抽出正文、再用 `fs.read` 读那份 `.txt` —— 没有这两步的事实，"
-            "`lit.admit` 会以 `no_read_evidence` 整批拒并逐槽点名；"
-            "盘上没有字节的才报 `metadata_only`（要指得出处）。"
-        ),
+        "note": _stage_list_note(len(waiting)),
     }
+
+
+def _stage_list_note(waiting_count: int) -> str:
+    """`list_candidates` 返回的那一条 `note`（A 在真机上读到的教法）。
+
+    单独成函数只为让「口径写反」这件事有一个可被负控替代的落点：判据把这一格
+    打桩成旧口径 ⇒ 必须红（`tests/test_lit_stage_note_says_metadata_only_needs_an_attempt.py`）。
+
+    2026-11-17（PA3）：`metadata_only` 那一句此前写反了 ——「盘上没有字节的才报」
+    是旧口径（业主 2026-11-16 裁定 AR1 之前的"零读可入"）。真口径在
+    `litavail` 与 `_read_evidence_gate`：仅题录也必须先试过一次抽取（留下
+    `extract_failed` 回执），零回执的仅题录按 `no_read_evidence` 整批拒、逐槽点名。
+    """
+    return (
+        "默认只返回当前委托的行（`request_id` = 最近一次暂存的那次委托）；"
+        "查历史请显式给 request_id（`*` = 全部）。状态四档："
+        "`pending` 待裁 / `qualified` 判收未注册（无号） / `admitted` 已注册"
+        "（带 lit_id） / `rejected` 拒收；"
+        "历史的 `cleared` 读成 rejected+over_cap、`withdrawn` 读成 "
+        "rejected+withdrawn_by_reviewer（撤掉的槽位仍在，序号不复用）。"
+        f"本委托还有 {waiting_count} 条没判：只要还大于 0，`lit.admit_all` "
+        "就整批拒绝（`lit.admit` 逐条判收不受它拦）。"
+        "判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻"
+        "批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 "
+        "data/lit_candidates/archive-<request_id>.jsonl）。"
+        "标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` "
+        "抽出正文、再用 `fs.read` 读那份 `.txt` —— 没有这两步的事实，"
+        "`lit.admit` 会以 `no_read_evidence` 整批拒并逐槽点名；"
+        "报 `metadata_only` 也一样：**必须先试一次抽取**（留下 `extract_failed` 回执）"
+        "才允许按仅题录入库，零回执的仅题录会被同一道闸按零读取尝试整批拒掉"
+        "（要指得出处）。"
+    )
 
 
 def _one(store: Store, slot: str) -> dict:

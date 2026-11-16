@@ -933,6 +933,30 @@ def _cold_start_proof_strength(*, lean_on: bool) -> str:
     )
 
 
+def _cold_start_submission_gate() -> str:
+    """`cold_start_prompt` 的「一次送审的门槛按这一趟算」那一节。
+
+    为什么必须在这里再说一遍：`specs/v.py` 的 policy 渲染进 `system_prompt("V")`，
+    而 V 的真机审阅不走 system prompt —— `agent_v/core.py::verify_proof` 用
+    `cold_start_prompt` 拼好问题直接问一次（全仓没有任何生产路径渲染
+    `system_prompt("V")`）。只在 policy 里写，真机上的 V 一个字都读不到。
+
+    业主 2026-11-04 逐字：「就说拿到 V 签，不需要知道 V 内部会连续三次审」⇒
+    这里不写轮数、不写「三转 / 连判」这类教程式说法，只说框架按这一趟送审自己数门槛。
+    判据 `tests/test_v_internal_streak_is_not_taught.py` 的 e/f（复用同一份 FORBIDDEN）。
+    """
+    return (
+        "\n## 一次送审的门槛按这一趟算\n"
+        "- 轮数与门槛由框架按这一趟送审自己数（你不需要推断它，也别在回复里写"
+        "「再来一轮就到了」）；**跨趟不累计**：上一次送审判过的，这一次不算"
+        "（同一份正文改过之后也是一趟新的）。\n"
+        "- **任一转判 `fault` ⇒ 立刻终止**：那一转就是终局，不接着判后面的轮次。"
+        "秘书把这一份**有毛病**落成 V 稿 `verifications/reviews/v-review-NNNNNN.md`"
+        "（审的是哪份稿 / 有毛病 / findings 与理由），并投给**被审者**（F / E / B）——"
+        "那是信息型板项，读到你就算收讫，**不要求你或他再 ack 一次**。\n"
+    )
+
+
 def cold_start_prompt(statement_full: str, proof_text: str,
                       *, readonly_facts: str = "",
                       citations: Sequence[Mapping[str, Any]] = (),
@@ -991,9 +1015,8 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- 签落在稿上（`- V 签：` 那一行签块）；侧文件在 `out/vsigns/<被审正文的 sha>.json`"
         "（一稿一签：正文改一个字，那一签就作废），落块由收方秘书做。"
         "在册档发不发签由你的秘书判定并落盘；未在册档由你颁发签信封、由收方秘书落块。"
-        "你写「成立」不等于签上了：到位没有看稿上的签块与那一个侧文件，不是你的判词；"
-        "轮数与门槛由框架按这一趟送审自己数，你不需要推断它。所以别在回复里写「我已经签过了」"
-        "「这一条签住了」。\n"
+        "你写「成立」不等于签上了：到位没有看稿上的签块与那一个侧文件，不是你的判词。"
+        "所以别在回复里写「我已经签过了」「这一条签住了」。\n"
         # ---- 2026-11-08（业主「V 只对手稿负责」）：签落在稿上，命题位 / 等级 / 路径号归 B ----
         #
         # 改前这一格写着「看签文件与五元位第 3 位」、并把台账那一行叫「签的正本」——
@@ -1004,8 +1027,9 @@ def cold_start_prompt(statement_full: str, proof_text: str,
         "- 命题位（第 3 位）、等级、以及这份稿算哪条证明路径（`path_group`），都由 B 收录这份稿时"
         "决定，不在你这一侧；**签的身份是正文 sha + 稿路径**（`proof_manuscript`，"
         "sha 就是那份稿 `## 证明` 现在的 sha）：你只负责这一份手稿站不站得住。\n"
+        + _cold_start_submission_gate()
         # ---- 2026-11-08（业主「V 只对手稿负责」）：签完之后那两格读数要读得懂 ----
-        "\n## 你这一签之后：两格读数与六档\n"
+        + "\n## 你这一签之后：两格读数与六档\n"
         "- 稿上已签、已入台账是两格分开的读数：稿上已签看稿里的 `- V 签：` 签块"
         "（`已签` / `连续` / `正文sha`），已入台账看 `statements` 里这一份正文的 sha 与第 3 位。\n"
         "- `signed_pending_filing`：稿上已签、册里还没有证明行（或第 3 位没翻）⇒ 等 B 收录；"

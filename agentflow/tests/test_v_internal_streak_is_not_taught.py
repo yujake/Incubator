@@ -38,6 +38,15 @@ V 内部一次 `verify_proof` 会自己连判 `SIGN_STREAK_NEED` 轮 —— 那�
 | b | 反真空：往任一面塞回一句教程式说法 ⇒ 校验函数必须红 | 证明 a 的绿来自"这些词不在"，不是来自别的字 |
 | c | 「签到位才算审过」这个判断本身还在（V「签到位才叫签上了」、E「签到位才算过」、B 拒信「拿 V 签」/「签到位后签块由收方秘书落回稿」/「签到位后带这份稿重交 `own.register_statement`」） | —— |
 | d | 反真空（c）：把任一句判断删掉 ⇒ 校验函数必须红 | 证明 c 不是"有个「签」字就算过" |
+| e | V 的真实入口（`verifications.cold_start_prompt`）含四件口径：按这一趟算 / 跨趟不累计 / 任一转 fault 即终局 / V 稿投给被审者且不用 ack；且不含 `FORBIDDEN` 里任何一个词 | 改前真入口只写了「轮数与门槛由框架按这一趟送审自己数」，后三件一个字都没有 |
+| f | 反真空（e）：把那一节删掉 ⇒ e 红；把「三转」塞回去 ⇒ e 红 | 证明 e 的绿来自那一节本身，不是来自别的字 |
+
+## 2026-11-17（PA3）：V 的真实入口也归这一条管
+
+`specs/v.py` 的 policy 只渲染进 `system_prompt("V")`，而 `agent_v/core.py::verify_proof`
+拼的是 `verifications.cold_start_prompt`（全仓没有生产路径渲染 `system_prompt("V")`）——
+只在 policy 里写，真机上的 V 一个字都读不到。所以 e/f 量的是那个入口，词表复用下面
+同一份 `FORBIDDEN`（不另抄一份）。
 
 ## 2026-11-10（D1，`4273a273`）：B 拒信那一句换了口径，判据跟着换
 
@@ -58,7 +67,10 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
+
 from agentflow import agent_skills as AS
+from agentflow import verifications as VR
 from agentflow.agent_b import register_statement as RS
 
 PROJECT = pathlib.Path(__file__).resolve().parents[1]
@@ -189,3 +201,63 @@ def test_c_deleting_the_sign_judgment_turns_it_red() -> None:
         assert broken_src != src, f"三道闸：盘上没有 {needle!r} ⇒ 反真空打不中"
         assert _gate_problems(broken_src) != [], (
             f"三道闸：删掉 {needle!r} 之后校验仍然绿 —— c 量的不是那句话")
+
+
+# ============================================================ e + f V 的真实入口
+
+#: V 的真实入口（`verifications.cold_start_prompt`）必须含的四件口径
+#: （业主 2026-11-04 的同一裁定）：门槛按这一趟算 / 跨趟不累计 / 任一转 fault 即终局 /
+#: V 稿投给被审者且不用 ack。数字与轮次只由框架数 —— 所以这里只钉语义，不钉任何转数。
+COLD_NEEDLES: tuple[str, ...] = (
+    "按这一趟算",
+    "跨趟不累计",
+    "判 `fault` ⇒ 立刻终止",
+    "那一转就是终局",
+    "v-review-NNNNNN.md",
+    "不要求你或他再 ack",
+)
+
+
+def _cold_start_text() -> str:
+    """V 的真实入口这一次渲染出来的文字（`agent_v/core.py::verify_proof` 用的就是它）。"""
+    return VR.cold_start_prompt("对任意正整数 n，R(3,4)=9。",
+                                "1. 由定义直接得到。", readonly_facts="- 夹具")
+
+
+def _cold_problems(text: str) -> list[str]:
+    """这一份真入口离「只说拿到签、不说内部几转」还差什么（空列表 = 合格）。"""
+    out = [f"仍在教 V 的内部机制：{w!r}" for w in FORBIDDEN if w in text]
+    out += [f"V 的真实入口漏了送审门槛的一件口径：缺 {n!r}" for n in COLD_NEEDLES
+            if n not in text]
+    return out
+
+
+def test_e_the_real_entry_says_the_gate_is_per_submission() -> None:
+    """e（a+b）：真入口含四件口径，且不含 `FORBIDDEN` 里任何一个词。"""
+    problems = _cold_problems(_cold_start_text())
+    assert problems == [], "V 的真实入口：\n  - " + "\n  - ".join(problems)
+
+
+def test_f_deleting_the_gate_section_or_putting_the_streak_back_turns_it_red(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """f（c）：删掉那一节 ⇒ e 红；塞回「三转」⇒ e 红（两条都走真渲染路径）。"""
+    gate = VR._cold_start_submission_gate()
+    text = _cold_start_text()
+    assert gate and gate in text, "盘上找不到送审门槛那一节 ⇒ 反真空打不中"
+    assert _cold_problems(text) == []
+
+    # 反真空 ①：把这一节删掉（打桩成空串 ⇒ 真渲染出来的文字里它就不在了）
+    monkeypatch.setattr(VR, "_cold_start_submission_gate", lambda: "")
+    removed = _cold_start_text()
+    assert "按这一趟算" not in removed, (
+        "删掉那一节之后真入口仍留着「按这一趟算」⇒ 反真空打不中（别处也写了这句）")
+    assert _cold_problems(removed) != [], (
+        "删掉送审门槛那一节之后校验仍然绿 —— e 量的不是那一节")
+    monkeypatch.undo()
+
+    # 反真空 ②：把改前的教程式说法塞回这一节
+    monkeypatch.setattr(VR, "_cold_start_submission_gate",
+                        lambda: gate + "\n（改前口径）V 连判三转「成立」之后才发签。")
+    poisoned = _cold_start_text()
+    assert _cold_problems(poisoned) != [], (
+        "塞回「三转」之后校验仍然绿 —— e 量的不是 FORBIDDEN 那份词表")

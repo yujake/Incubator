@@ -4,9 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-17，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **317 个 `.py`、293622 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14877 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **317 个 `.py`、293662 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15961 行（`agent_loop.py`，14877 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-17 PA3（提示词对齐收尾两处；不抬提示词版本 —— `cold_start_prompt` 不进十一格
+> 摘要，`lit.stage_list` 的 note 是运行时返回）**：317 个 `.py`、75 个 `>800` 都不变；总行数
+> 293622 → **293662**（+40：`verifications.py` 6364 → **6388**（+24：V 的真实入口补「送审门槛
+> 按这一趟算」一节）、`litstage.py` 2911 → **2927**（+16：`lit.stage_list` 的 note 抽成
+> `_stage_list_note`，并把 `metadata_only` 改回真口径「必须先试一次抽取」））。§3 表不动
+> （两个文件都不在那张表里）。三格（75 / 95 / 2）逐格未抬（上限 75 / 95 / 5；本笔只加注释
+> 与字符串行，没有新增 `>200` 行函数）。
 > **2026-11-17 P288（PA2·四类提示词对齐：p287 → p288；业主 2026-11-17 逐字「先apply」）**：
 > 317 个 `.py`、75 个 `>800` 都不变；总行数 **293622**（本笔 src 增量 +104：`agent_prompts.py`
 > +21（p288 版本账）、`agent_skills.py` 4654 → **4708**（+54：A / V / F 三本手册与 M 指派表）、
