@@ -3887,6 +3887,10 @@ class ClosingReport:
         if got.get("checked") and int(got.get("summons_unconsumed") or 0) > 0:
             sum_note = (f"；**子产出没处理** {got['summons_unconsumed']}/"
                         f"{got.get('summons_total')} 条（读数，不拦门）")
+        if got.get("checked") and int(got.get("summons_unknown") or 0) > 0:
+            sum_note += (f"；子产出判不了 {got['summons_unknown']}/"
+                         f"{got.get('summons_total')} 条（有其它可指涉证据，但拿不到字面量；"
+                         "不是没处理，读数不拦门）")
         # 名册登记那一格（"名册写没写"）：只在真的有问题时加半句话 ——
         # 它是读数不是判据（不拦门），所以寻常日子不给收工那一行加噪声。
         ros = self.readings.get("roster_registration") or {}
@@ -4153,6 +4157,28 @@ def _mapping_json_exists(path: Any) -> bool:
     return Path(str(path)).is_file()
 
 
+def _paper_delivery_reading(project: Path, documents: Sequence[Mapping[str, Any]],
+                            ) -> dict[str, Any]:
+    """这一份交付是不是"论文包"（研究手稿与论文包的分水岭，唯一判据）。
+
+    两个信号任一成立即算论文包：
+
+    - 盘上有 `out/paper/main.tex` 或 `main.pdf`（`doc.paper_compile` 的产物）；
+    - `documents` 里有 `kind == "paper"` 的行（`doc.build_document` 的论文档）。
+
+    `kind` 是 `note` / `survey` 的那些是研究手稿 —— `specs/m.py` 明说研究手稿
+    不需要 `MAPPING.json`，所以这一档对它 `not_applicable`，而不是"缺表"。
+    反真空用例只打这一处桩（判据的分水岭只有这一个谓词）。
+    """
+    package = Path(project) / "out" / "paper"
+    package_files = [name for name in (PC.TEX_NAME, PC.PDF_NAME)
+                     if (package / name).is_file()]
+    paper_docs = [str(d.get("doc_id") or "") for d in documents
+                  if str(d.get("kind") or "") == "paper"]
+    return {"paper": bool(package_files or paper_docs),
+            "package_files": package_files, "paper_documents": paper_docs}
+
+
 def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     """有命题、已成稿，而论文包里没有对应表 —— 这是"没产出"，不是"没查成"。
 
@@ -4160,17 +4186,23 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     `doc.write_mapping` 两次都是 0，`out/paper` 里只有两份验收表。那一趟的对应表那一格
     是 unknown（"没有 `main.tex` ⇒ 不适用"）⇒ "论文欠一张对应表"在收工门上没有任何读数。
 
-    三态（`checked` / `missing` 两格）：
+    四态（`checked` / `applicable` / `missing` 三格）：
+
     - `statements` 或 `documents` 读不出来 ⇒ `checked=False`、`missing=False`
       （没查成不许读成"没问题"，也不许读成"缺"）；
-    - 有 statements、有 documents，而 `<项目根>/out/paper/MAPPING.json` 不在盘上
-      ⇒ `checked=True`、`missing=True`；
+    - 有 statements、交付是论文包（`out/paper/main.tex`/`main.pdf` 或
+      `documents kind=paper`），而 `out/paper/MAPPING.json` 不在盘上
+      ⇒ `checked=True`、`applicable=True`、`missing=True`；
+    - 有 statements、交付只是研究手稿（`documents kind=note/survey`、盘上没有论文包）
+      ⇒ `checked=True`、`applicable=False`、`missing=False`，理由写明"这是研究手稿，
+      不需要对应表"（2026-11-16，20A：旧口径把 `documents` 有行读成"论文已成稿"，
+      而 `documents` 在本仓就是研究手稿 ⇒ 按教法交研究手稿的跑必然吃 blocker）；
     - 其余（还没有命题 / 还没有稿件 / 表在盘上）⇒ `checked=True`、`missing=False`。
 
-    为什么"已成稿"看 `documents` 有没有行：`doc.build_document` 是 `documents` 表唯一的
-    建行入口（`G.revise` / `H.review` 只改已有行），所以"有一行"就是"成稿那一步真的
-    成功过"。这一档只判"表产出了没有"，表与正文对不对得上仍归
-    `papermapping.mapping_reading`。
+    为什么"已成稿"不再只看 `documents` 有没有行：`doc.build_document` 是 `documents`
+    唯一的建行入口，但它建的是研究手稿那一档（`kind=note/survey`）与论文档
+    （`kind=paper`）两种；把两者混成"论文已成稿"，会让"按教法交研究手稿"的跑
+    结构上必然缺表。分水岭收在 :func:`_paper_delivery_reading` 一处。
 
     纯读：不写盘、不读会话。
     """
@@ -4181,10 +4213,12 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
     out: dict[str, Any] = {
         "checked": False, "statements": 0, "documents": 0, "by_status": {},
         "mapping_json": str(json_path), "exists": None, "missing": False,
+        #: 交付形态：`paper`（论文包）/ `research_manuscript`（研究手稿）/ `none`。
+        "delivery": "none", "applicable": False,
         #: 论文包在不在盘上（`out/paper/main.tex` 或 `main.pdf`）。2026-11-04 真机
         #: （`projects/paper-rewrite-big`）：PDF 编出来了、`documents` 0 行 ⇒ 改前这一档
         #: 判"还没有成稿 ⇒ 不适用"，于是"有 PDF 却没有对应表"在收工门上没有任何读数。
-        "paper_package": False,
+        "paper_package": False, "package_files": [], "paper_documents": [],
         "reason": "",
     }
     if store is None:
@@ -4209,36 +4243,38 @@ def mapping_absence_reading(store: Any, project_root: Any) -> dict[str, Any]:
         key = str(row.get("status") or "")
         by_status[key] = by_status.get(key, 0) + 1
     exists = _mapping_json_exists(json_path)
-    # ---- "已成稿"不许只看 `documents`（2026-11-04 真机读数） ----------------------
-    #
-    # 论文的交付面是 `out/paper/main.tex` + `main.pdf` + `MAPPING.json` + 验收表；
-    # `documents` 是研究手稿那一档（ROLE-GUIDE 的交付物第 ①/② 两类是两件事）。
-    # 真机 `projects/paper-rewrite-big`：PDF 17 页、`documents` 0 行 ⇒ 改前这一档走
-    # "还没有成稿 ⇒ 不适用"，D-38 的 blocker 永远不会触发。"盘上有论文包"本身就是
-    # "成稿了"（`doc.paper_compile` 的门只要 `main.tex` 在），所以这一格把论文包也算进来：
-    # 它不改变 `paper_compile` 的合法性（编译不要求先建 `documents` 行），只改变收工门
-    # 怎么读那份 PDF —— 有 PDF 而没有对应表，不许读成"论文已入库 / 不适用"。
-    package = project / "out" / "paper"
-    paper_package = bool((package / PC.TEX_NAME).is_file()
-                         or (package / PC.PDF_NAME).is_file())
+    delivery = _paper_delivery_reading(project, documents)
+    kinds = sorted({str(d.get("kind") or "") for d in documents} - {""})
     out.update(checked=True, statements=int(statements), documents=len(documents),
                by_status=by_status, exists=bool(exists),
-               paper_package=paper_package)
-    if not exists and statements >= 1 and (documents or paper_package):
+               paper_package=bool(delivery["package_files"]),
+               package_files=list(delivery["package_files"]),
+               paper_documents=list(delivery["paper_documents"]),
+               applicable=bool(delivery["paper"]),
+               delivery="paper" if delivery["paper"] else (
+                   "research_manuscript" if documents else "none"))
+    if not exists and statements >= 1 and delivery["paper"]:
         out["missing"] = True
-        if documents:
+        if delivery["package_files"]:
             out["reason"] = (
-                f"有 {statements} 条命题、{len(documents)} 份已成稿的稿件（`documents` 有行 = "
-                f"`doc.build_document` 成功过），论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
-                "论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
+                f"有 {statements} 条命题、论文包已经在盘上（"
+                f"{' / '.join(str(Path('out/paper') / n) for n in delivery['package_files'])}），"
+                f"论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
+                "这份论文追溯不回台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
         else:
             out["reason"] = (
-                f"有 {statements} 条命题、论文包已经在盘上（{package / PC.TEX_NAME} 或 "
-                f"{package / PC.PDF_NAME}），`documents` 却是 0 行 —— 那不是「还没成稿」，"
-                f"是「论文没入库」；而论文包里也没有 {json_path} ⇒ 缺对应表 ⇒ "
-                "这份 PDF 追溯不回台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
+                f"有 {statements} 条命题、{len(delivery['paper_documents'])} 份论文成稿"
+                f"（`documents` 里 `kind=paper` 的行 = `doc.build_document` 的论文档），"
+                f"论文包里却没有 {json_path} ⇒ 缺对应表 ⇒ "
+                "论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环在盘上没有落点）")
     elif exists:
         out["reason"] = f"对应表在盘上（{json_path}）；表与正文对不对得上归 mapping 那几格"
+    elif documents and not delivery["paper"]:
+        out["reason"] = (
+            f"这是研究手稿（`documents` 里 {len(documents)} 份，kind={kinds}），"
+            "不是论文包 ⇒ 不需要 `MAPPING.json` ⇒ 这一档不适用"
+            "（它只判「论文已经写出来」那一阶段；研究手稿的交付按 `specs/m.py` 的"
+            "「一行 documents + markdown + REPORT.md」算）")
     else:
         out["reason"] = ("还没有命题或还没有成稿 ⇒ 这一档不适用（它是给"
                          "「论文已经写出来」那一阶段的判据，不是给早期阶段的）")
@@ -7879,13 +7915,16 @@ def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> 
 
 三态（`checked=False` 绝不是"处理了"）：没有会话根 / 读不成 / 有坏行 ⇒ `checked=False` + 理由；会话读得成
 但「没有任何一趟」带这一格（老会话）⇒ `checked=False` + "这一段会话里没有任何一趟报过这个读数"，不许折成 0。
+`summons_unknown` 是 2026-11-16 新加的第三档（软判据）：有其它可指涉证据、但拿不到字面量 ⇒ 判不了，
+既不计进 `unconsumed`、也不折成处理，逐条留在 `not_judged` 里。
 
 反真空（业主 ⑤）：`summons_total == 0`（会话里没有一趟派过子）⇒ 这一格「不红」（判据没有对象），但照样报 `summons_total=0`，于是"没派过"与"派了没处理"分得开。
     """
     out: dict[str, Any] = {"checked": True, "runs": 0, "reported_runs": 0,
                            "summons_total": 0, "summons_consumed": 0,
                            "summons_continued": 0, "summons_waived": 0,
-                           "summons_unconsumed": 0, "unconsumed": [], "reason": ""}
+                           "summons_unknown": 0, "summons_unconsumed": 0,
+                           "unconsumed": [], "not_judged": [], "reason": ""}
     if session_root is None:
         out.update(checked=False, reason="没有会话记录根 ⇒ 子产出处理这一格没查成")
         return out
@@ -7909,16 +7948,22 @@ def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> 
             continue
         out["reported_runs"] += 1
         for key in ("summons_total", "summons_consumed", "summons_continued",
-                    "summons_waived", "summons_unconsumed"):
+                    "summons_waived", "summons_unknown", "summons_unconsumed"):
             out[key] += int(got.get(key) or 0)
         for p in (got.get("productions") or []):
             if not isinstance(p, Mapping):
                 continue
-            if str(p.get("disposition") or "") != "unconsumed":
-                continue
-            out["unconsumed"].append({"role": str(e.get("role") or ""),
-                                      "task_id": str(p.get("task_id") or ""),
-                                      "step": p.get("step")})
+            disposition = str(p.get("disposition") or "")
+            if disposition == "unconsumed":
+                out["unconsumed"].append({"role": str(e.get("role") or ""),
+                                          "task_id": str(p.get("task_id") or ""),
+                                          "step": p.get("step")})
+            elif disposition == "unknown":
+                # 判不了的那一档（2026-11-16 软判据）：可见、但不计进"没处理"。
+                out["not_judged"].append({"role": str(e.get("role") or ""),
+                                          "task_id": str(p.get("task_id") or ""),
+                                          "step": p.get("step"),
+                                          "weak": dict(p.get("weak_evidence") or {})})
     if out["reported_runs"] == 0:
         out.update(checked=False,
                    reason=("这一段会话里没有任何一趟带 `summon_consumption` 读数"

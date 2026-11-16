@@ -76,10 +76,14 @@ def _statement_row(stmt_id: str = "000000") -> dict:
     }
 
 
-def _document_row(doc_id: str = "000000") -> dict:
-    """一份已成稿的稿件（build_document 成功过就会留下这样一行）。"""
+def _document_row(doc_id: str = "000000", *, kind: str = "paper") -> dict:
+    """一份已成稿的稿件（build_document 成功过就会留下这样一行）。
+
+    `kind` 是这一档的分水岭（2026-11-16，20A）：`paper` = 论文包的一部分 ⇒ 要对应表；
+    `note` / `survey` = 研究手稿 ⇒ 不需要对应表（这一档对它不适用）。
+    """
     return {
-        "doc_id": doc_id, "kind": "note",
+        "doc_id": doc_id, "kind": kind,
         "title": "立方和公式的证明与形式化验证",
         "markdown_path": f"documents/{doc_id}.md",
         "sections": [{"heading": "结论", "body": "命题对一切 n >= 0 成立。"}],
@@ -92,7 +96,8 @@ def _document_row(doc_id: str = "000000") -> dict:
     }
 
 
-def _ws(root: pathlib.Path, *, statements: int = 1, documents: int = 1) -> pathlib.Path:
+def _ws(root: pathlib.Path, *, statements: int = 1, documents: int = 1,
+        document_kind: str = "paper") -> pathlib.Path:
     """造一个工作区：只有台账（没有 out/paper，也没有论文包里的任何东西）。"""
     root = pathlib.Path(root)
     store = Store(root)
@@ -102,7 +107,8 @@ def _ws(root: pathlib.Path, *, statements: int = 1, documents: int = 1) -> pathl
            "rows": [_statement_row(S.format_id(i)) for i in range(statements)]})
     _dump(root / "data" / str(S.TABLES["documents"]["file"]),
           {"schema_version": 2,
-           "rows": [_document_row(S.format_id(i)) for i in range(documents)]})
+           "rows": [_document_row(S.format_id(i), kind=document_kind)
+                    for i in range(documents)]})
     return root
 
 
@@ -375,6 +381,61 @@ def test_5_stubbing_the_existence_check_true_makes_the_blocker_disappear(
     assert written["exists"] is True, written
     assert _codes(after) == [], (
         "把存在性检查打桩成恒真之后 blocker 还在 ⇒ 这一条不是靠那个检查在红：" + _one_detail(after))
+
+
+# ============================================================ ⑦ 研究手稿：这一档不适用
+
+def test_7_a_research_manuscript_does_not_need_a_mapping(tmp_path: pathlib.Path) -> None:
+    """⑦ 只有研究手稿（`documents kind=note/survey`、盘上没有论文包）⇒ 不适用。
+
+    这一条钉的是一处口径假阳性（2026-11-16，20A）：`documents` 在本仓就是研究手稿
+    （`doc.build_document` 建出来的那一档），而 `specs/m.py` 明说研究手稿不需要
+    `MAPPING.json`。旧口径把"有 `documents` 行"读成"论文已成稿"⇒ 一趟按教法交研究
+    手稿的跑必然吃 `mapping_not_written`。
+    """
+    for kind in ("note", "survey"):
+        root = _ws(tmp_path / kind, statements=1, documents=1, document_kind=kind)
+        rep = _gate(root)
+        assert _codes(rep) == [], (kind, _codes(rep))
+        written = rep.readings["mapping"]["mapping_written"]
+        assert written["missing"] is False, written
+        assert written["applicable"] is False, written
+        assert written["delivery"] == "research_manuscript", written
+        assert "研究手稿" in str(written["reason"]), written
+        assert "不需要" in str(written["reason"]), written
+
+
+def test_7b_a_paper_package_on_disk_still_needs_a_mapping(tmp_path: pathlib.Path) -> None:
+    """⑦-b 盘上有论文包（`out/paper/main.tex`）而 `documents` 0 行 ⇒ blocker 仍在。"""
+    root = _ws(tmp_path / "ws", statements=1, documents=0)
+    package = root / "out" / "paper"
+    package.mkdir(parents=True)
+    (package / PC.TEX_NAME).write_text("\\date{2026-01-01}\nbody\n", encoding="utf-8")
+    rep = _gate(root)
+    # 这一形态由 `papermapping` 那一档先报（`mapping_package_missing`）：同一个"表不在"
+    # 不重复报两条（D-38 的补位规则）。两条都是 blocker，"blocker 仍在"这一条成立。
+    assert _codes(rep) == ["mapping_package_missing"], _codes(rep)
+    assert [f.level for f in _mapping_findings(rep)] == ["blocker"], _mapping_findings(rep)
+    written = rep.readings["mapping"]["mapping_written"]
+    assert written["missing"] is True and written["applicable"] is True, written
+    assert written["delivery"] == "paper", written
+
+
+def test_7c_stubbing_the_paper_delivery_predicate_true_turns_the_manuscript_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """⑦-c 反真空：把"这是不是论文包"的判据打桩成恒真 ⇒ ⑦ 必须变红。
+
+    打桩点是唯一的（`closing._paper_delivery_reading`）：这一档的分水岭只有那一个
+    谓词。没有这一段，⑦ 的绿可能只是"这一档压根不看交付形态"。
+    """
+    root = _ws(tmp_path / "ws", statements=1, documents=1, document_kind="note")
+    monkeypatch.setattr(CL, "_paper_delivery_reading", lambda project, documents: {
+        "paper": True, "package_files": [], "paper_documents": ["000000"],
+    })
+    rep = _gate(root)
+    assert _codes(rep) == [CODE], _codes(rep)
+    written = rep.readings["mapping"]["mapping_written"]
+    assert written["missing"] is True and written["delivery"] == "paper", written
 
 
 # ============================================================ ⑥ B：G 的成稿流程
