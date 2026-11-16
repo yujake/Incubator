@@ -363,7 +363,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 
 ---
 
-## R0. 全局工具总表（127 个，逐条；Lean 关着时 124 个 —— 三件 `formal.*` 不装配）
+## R0. 全局工具总表（126 个，逐条；Lean 关着时 123 个 —— 三件 `formal.*` 不装配）
 
 > **本表是 §R0 的权威落点**，`tests/test_role_specs_complete.py` 逐行对账三列
 > （`side_effect` / 审批 / `roles`）与实时注册表是否一致；工具名集合也必须**不重不漏**。
@@ -568,7 +568,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 决定研究问题该不该问 | A 只消费 `search_requests`；"该不该问"是研究判断 | **D**（`research.submit_gap` / `AgentD.submit_gaps`） |
 | 发起第二次检索（"我再多找几篇"） | A 的 `run_once` / `run` 只**消费**队列（`capabilities.CAPABILITIES`）；`search_literature` 也只在**被召唤方点名主题**时才查一次 —— "该不该再找、找什么"这个决定不在 A 手里 | **D**（`D → A`）/ **F**（`F → A`），或任何有到 A 的边的角色直接 `summon(A.search_literature, topic=…)` |
 
-### A.4 工具面（55 个，实测）
+### A.4 工具面（54 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role A`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §A.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -694,7 +694,7 @@ A 的"没有结果"逐个列：
 | 发检索请求（"这里缺证据，帮我再找"） | B 的动作里没有"提交请求"；它只能**接受** `reprocess_requests` | **D**（`submit_gaps`）/ **C**（`gaps(submit_requests=True)`，由编排层调） |
 | 审校自己的抽取质量 | 自己审自己无法区分"发现"与"掩盖" | **H**（只读） |
 
-### B.4 工具面（40 个，实测）
+### B.4 工具面（39 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role B`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §B.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -938,7 +938,7 @@ C 的产出有两类，状态语义完全不同。
 > 本批核实的结果是它**什么都不改**。这一处与 `draft/108` §四 CS-14 同族：
 > 文档里的旧结论比代码慢了一步，而没有任何判据看着它。
 
-### D.4 工具面（59 个，实测）
+### D.4 工具面（58 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role D`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §D.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1056,7 +1056,7 @@ C 的产出有两类，状态语义完全不同。
 | 改关系/概念 | E 的写集只有 `{experiments}` | **B** |
 | 判断"这条实验的结论值不值得写进报告" | 价值判断在 G/H | **G** / **H** |
 
-### E.4 工具面（41 个，实测）
+### E.4 工具面（40 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role E`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §E.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1168,7 +1168,7 @@ C 的产出有两类，状态语义完全不同。
 > `blocked` + `blocked_reason` 并继续（FC-21 部分落地）。**无
 > `run_best_effort` / `run_all_or_nothing` 两种显式 API**（实测 0 命中）。
 
-### F.4 工具面（54 个，实测）
+### F.4 工具面（53 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role F`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §F.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1305,7 +1305,7 @@ C 的产出有两类，状态语义完全不同。
 | 检索/实验 | 网络副作用归 A；子进程归 E | **A** / **E** |
 | 决定依赖"够不够闭" | G 只能**登记**，闭合检查在 `verify` 与 H | `verify.dangling_dep` / **H** |
 
-### G.4 工具面（56 个，实测）
+### G.4 工具面（55 个，实测）
 
 **现读**：`python -m agentflow.cli tools --role G`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单、拿不到什么都见附录 §G.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1702,7 +1702,7 @@ C 的产出有两类，状态语义完全不同。
 | 替调用方编一个"这个证明号是谁选的" | `path_source` 只收 `B` / `C` / `L` 三值，空 = 没交代；"谁选的路径"与"谁验的"必须分开 | **B / C / L**（三选一，但必须写明） |
 | 决定"验的是哪一份证明"却不给号 | 一个定理有多条证明路径时，不给号就一个字节都不写（`proof_path_unspecified`） | 调用方（`proof_no`） |
 
-### L.4 工具面（Lean 开时 40 个 / 关时 0 个，实测）
+### L.4 工具面（Lean 开时 39 个 / 关时 0 个，实测）
 
 **现读**（`AGENTFLOW_LEAN_ENABLED=1`）：`python -m agentflow.cli tools --role L`；五格（总数 / `side_effect` / `external` / 需审批）与逐件清单见附录 §L.4 —— 那里逐格现算，本节不抄会变的分份数。
 
@@ -1900,7 +1900,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 | 被召唤 | `NON_SUMMONABLE = {"M"}`："**没人能召唤主控**"（没有"召唤 M"这件事） | — |
 | 自动重试被取消的任务 | FC-20 第 4 条："取消后不自动重试，并把结果记成**unknown outcome**" | — |
 
-### M.4 工具面（42 个，实测）= 编排面 25 个 + 通用时钟 9 个 + 文件面白名单 6 个
+### M.4 工具面（41 个，实测）= 编排面 24 个 + 通用时钟 9 个 + 文件面白名单 6 个
 
 **现读**（`build_registry(...).for_role("M")`：`cli tools --role` 的 choices 里没有 M）⇒ 五格与逐件清单见附录 §M.4 —— 那里逐格现算，本节不抄会变的分份数。
 

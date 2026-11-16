@@ -323,7 +323,7 @@
 > **2026-11-09 拆函数（未在册穷举那一支）再改一次**：269,417 → **269,460**（文件数 280 与
 > `>800 行` 75 都不变：`agent_v/core.py::_review_unregistered_exhaustion` 206 行拆成
 > 编排层 + `_read_unregistered_exhaustion_ctx`（107）+ `_finish_unregistered_exhaustion`（80），
-> 三段都 ≤200 —— 同一条软判据的函数那一格；行为逐字不变，读数见 `temp/_probe_v_exhaustion.py`）。
+> 三段都 ≤200 —— 同一条软判据的函数那一格；行为逐字不变，读数见当时那支 scratch 探针（已随 scratch 清理））。
 > 2026-11-09 再改一次：266,332 → **266,484**（两把尺统一：`textutil.py` 抽出唯一的关键词
 > 命中判据、`tools/table_tools.py` 的 statements 搜索分支改调它（+128）；同日的声明面收口
 > （`table.search` 的 summary 与 `query` / `fields` 说明改真口径、`PROMPT_VERSION` 抬到 p263）
@@ -343,7 +343,7 @@
 > 再原先写"77 个文件、77,391 行、38 个文件超过 800 行"，都过期了 ——
 > 批 R27 按现算改正并把复跑命令写进这一行；**批 R46 又改了一次行数**：
 > 123,924 → **123,931**（动的是 `agent_prompts.py` 的 `p95` 变更，净 +7 行 ——
-> 这个数会被 `temp/_probe_doc_vs_code.py` 的 ③ 抓住，见 `draft/108` §三 的常驻探针那一段）；
+> 这个数当时由一支不在 `tests/` 里的 scratch 探针的 ③ 抓住（那支探针已清理，现由 `tests/test_reading_map_counts.py` 现算钉住；见 `draft/108` §三 的常驻探针那一段）；
 > **批 R47 再改一次**：123,931 → **123,991**（`llmseam.py` 补 `framework_handoff` /
 > `framework_interrupt` 两个广告面与 `framework_final.blocked` 的透传，净 +60 行）；
 > **批 R48 再改一次**：123,991 → **124,026**（`llmseam.py` 补派活那一栏的
@@ -369,7 +369,7 @@
 > `depsection.py` / `errorstats.py` / `propositionkey.py` / `readouts.py` /
 > `statementfission.py` / `stepdispatch.py` 与 `tools/clock_tools.py` 已在下面的分层表里各有一行）。
 > **2026-11-03 再改一次**：209,413 → **223,941**（文件数 255 → **257**，`>800 行` 69 → **70**；
-> `agent_loop.py` 12,063 → **12,760** 行）。同批把"谁抓这三个数"从 `temp/_probe_doc_vs_code.py`
+> `agent_loop.py` 12,063 → **12,760** 行）。同批把"谁抓这三个数"从一支不在 `tests/` 里的 scratch 探针
 > 的 ③（**不在 `tests/` 里、CI 不跑**）搬成判据 `tests/test_reading_map_counts.py`：那三个数
 > 上一次更新是 2026-10-26，之后漂了 8 天而没有任何东西会红 —— 探针抓得到、但没人跑它。
 > 复算命令就是上面那一条）。
@@ -410,7 +410,7 @@
 > · 本批清账**自己**又 +14 行（`webui/readers.py` +5 = `CheckpointView` 类型声明三格、
 >   `stop_reasons.py` +5 = `crashed` 登记、`agent_loop.py` +4 = `crashed` 的任务结局
 >   补账）—— 所以这三格是按写完之后的盘上再抓一次的，不是抄前一次的数。
-> 这一次不靠 `temp/_probe_doc_vs_code.py` 的 ③（那个探针不在 `tests/` 里、CI 不跑）：
+> 这一次不靠那支 scratch 探针的 ③（它不在 `tests/` 里、CI 不跑）：
 > `tests/test_reading_map_counts.py` 现算钉住这三格 + 最大文件那一格。
 > **2026-11-02 再改一次（裁定「甲」的收尾重抓）：235,885 → 236,722**（文件数
 > 263 → 264；`>800 行` 73 与 `agent_loop.py` 13,198 行都不变）。本批自己的增行是
@@ -487,7 +487,7 @@
   **接线的落点**：`agent_b/core.py` 的 `_load_doc_for` ⇒ `_ocr_retry`（经**工具面**调 `ocr.backends` /
   `ocr.detect_text_layer` / `ocr.run`）—— 无文本层 ⇒ 先试 OCR ⇒ 重新抽取 ⇒ 仍空才回原来那句原因，
   且原因要能区分"没试 OCR"与"试了 OCR 还是没有"。
-  **接线后的真机读数**（`temp/_r2b_ocr_probe_after.txt`，2026-10-07）：真机扫描件
+  **接线后的真机读数**（2026-10-07 的 scratch 记录，原文件已清理）：真机扫描件
   `projects/project5/library/扫描件.pdf`（6.5 MB）上 `_load_doc_for` 返回的不可用原因是
   「文献 0000 无文本层，**且本机没有可用的 OCR 后端（unavailable）**⇒ 无从逐字定位」——
   本机 `ocr.backends` 报 `available: []`（easyocr 因 torch/numpy 不兼容不可用、pytesseract 缺 tesseract
@@ -651,6 +651,7 @@
 | `agents` 的公共零件：`claimanatomy.py` | 断言解剖学 —— `documents.claims` 每个元素的唯一判据来源 |
 | `claims.py` | 原子断言拆分（把一段答复切成可逐条回验的断言） |
 | `statementledger.py` | **命题台账的查口**（只读、零模型、不写盘、不开事务）：两种口径分开 —— `by_id`（按编号：主键逐字相等、不过滤 status/kind；0 命中 = 确定性事实）与 `by_keywords`（按内容：`label`/`statement_full` 经 `textutil.normalize` 后包含任一关键词；0 命中 ≠ 不在册）；底座 `rows_of`/`pool`/`index_by_id`/`duplicate_hits` 各一份，池与常量由调用方传（命题池与概念行池过滤条件不同，不焊死在查里）。2026-11-09 把全仓 62 处"自己扫全表拿一行/建索引"收成这 5 个入口（判据 `tests/test_the_statement_ledger_has_two_ways_to_be_asked.py`）；同日晚第 4 步把 C/L/V 的三个库模块/B/D/F 的台账读点也接到这组入口（角色侧 `rows("statements")` 27 → 0，判据 `tests/test_each_role_queries_the_statement_ledger.py` 的「只给一种输入 + 反真空」）；`table.get` 仍是通用按号取行；`table.search` 在 `statements` 上已与这里**同一把尺**（2026-11-09 起：只搜 `label` / `statement_full`，判据是同一份 `textutil.matched_keywords`），其它表仍是通用列文本搜（`casefold`、全部标量字符串字段）—— 判据 `tests/test_the_two_rulers_agree_on_the_ledger.py`。**2026-11-10 加被引面读数 `cited_by`**（业主：「在命题台账加被引面读数…把命题号打进各依赖面的被引面，是自动维护」）：它不是第三种"在 `statements` 里找行"的口径，而是 `dependencies` 的反向投影 —— `source_stmt_id == 这一条` 的那些行，逐条给 `used_by` / `citer_stmt_id` / `proof_no` / `kind` / `label` / `status` / `created_at` / `path_group`，外加 `by_status`（依赖行状态计数）与 `citers`（`used_by` 去重集合）；`found` 是三态（int / 0 / `None`，读不到 ≠ 没人引）。`rows_of` 加 `table=`（默认 `statements`）让依赖账走同一份取数口；写侧一个字没动（B 登记先拿号、再按那个号写 `used_by`）。判据 `tests/test_the_cited_face_is_read_from_the_dependency_ledger.py`（正控 / 多引用 / 三态 / 两条反真空 / concept 负控） |
+| `statementamend.py` | **由 V 的 finding 触发的命题表述改动**（MST1，2026-11-16 裁定 6，受控写口）：只放行 finding 触发的表述改动、必须再过命题表述闸、沿用原稿号与稿并自动改稿中 `## 命题`；命题本身有大问题走 `math_error` 放弃。判据 `tests/test_a_finding_amends_the_proposition_statement.py` |
 | `propositionkey.py` | **命题同一性与同种证明的判据**（纯函数、确定性、零模型调用；2026-10-24 业主改口径：「不用机械判据，让秘书洗定理名，让秘书判」+ 准绳「定理描述一致（什么条件推出什么结论），就是一个定理」）：本模块只在终判的上游做两件事 —— `judgeable`（够不够格当一条命题）与 `proposition_key` / `prose_similarity`（同一性的候选读数）；终判在 `secretary.Secretary.adjudicate_proposition`（一次模型调用，二档 same / different，判不了 = 没判成，按正文 sha256 缓存） |
 | `propositionrewrite.py` | **未入册命题的 `## 命题` 原位重写的唯一写口**（W2·甲，2026-11-13，业主问 2 选 a）：`rewrite_proposition` 三条边界缺一不许 —— ① 只在"这份稿还没被收进 statements"时允许（按稿号 / 逐路径记录 / 命题指纹三处判，任一命中即拒 `proposition_already_registered`）；② 改后必须过语义同一性判定（复用 `proposition_identity` 轴，判不了 ⇒ `proposition_identity_unjudged`，没有文字相似度兜底）；③ 受控写口不开冻结面的洞：只换 `## 命题` 与稿头命题指纹，`## 证明` 的正文 sha 落盘前先核一次（变了整笔不写），三句声明进读数。判据 `tests/test_f_proposition_rewrite_port.py`（a–f） |
 | `jobobject.py` | 进程树治理（`draft/39` §3.21 五 I13，D03 的根因修法）：Windows **作业对象**（`KILL_ON_JOB_CLOSE`）—— `create_job`/`assign`/`assign_tree`（根 + 现有后代；作业归属**不向前追溯**）/ `grace_then_kill`（先宽限再 `TerminateJobObject`）/ `reap`/`close`；后代枚举走 Toolhelp 快照。`stopctl` 的强制停止优先走它（`via="job"`），`taskkill` 只作退路 |
@@ -658,6 +659,7 @@
 | `statusreport.py` | M 的**状态报告**（`draft/39` §4）：`collect()` **只读**四类读数（台账增量 / 交接链 / 在飞与卡点 / 拒绝与超时），`render_status_markdown()` 渲染成人读四节，`write_status_report()` 落 `out/review/STATUS-<ts>.{md,json}` —— 用户侧入口是 `agentflow status-report`（零模型调用、不打断任何循环；不是去问 M 一句）。板项行的"状态"投影不在本文件里（见下一行） |
 | `boardrows.py` | **板项行的状态投影**（D12，2026-11-09 从 `statusreport.py` 整段搬出来）：`tasks` 表里 `kind` 非空那一行的 `status` 恒为 `pending`（类型标记，不是"还没收口"），真正的收口状态在 `item_state` / `item_close` ⇒ `tasks_row_reading` 按三档投影（板项已收口 / 板项还开着 / 代理行照旧 `<status>/<outcome>`），三个 `BOARD_ITEM_*` 常量是那三档的措辞。两个调用方（`statusreport._hint_of` 与 `webui.readers` 的 `TaskRow.status_reading`）必须是同一处口径 —— `statusreport.tasks_row_reading` 按名字回引本模块 |
 | `verifications.py` | 验证者 **V** 的证明级审校台账（`draft/39` §3.21）：`verifications/<命题号>.jsonl` 追加式一行一次审校（三态结论 `成立/有毛病/看不出来`、`defect_step`、逐条 findings 带步号、输入证明 sha）；`cold_start_prompt()` 是纯函数（签名里没有 store/conductor/registry ⇒ 冷启动是结构性质）；`signs_bit3()`/`bit3_payload()` 决定并产出五元位第 3 位的凭据。D3 批 1（2026-11-09，只读、零行为翻转）新增缺陷类别读数：`fault_kind_of()`（`kind` ∈ `math` / `procedural` / `style` / `contract`；`report_gap` 不是 kind，落在 `cause` 上；老行按 `legacy_math_evidence` / `legacy_shape` / `legacy_default` 推定；新老行按 `secretary_judge` 里有没有 `fault_kind` 这个键区分）、`is_a_vote()`（D268 的 `sign_reading.votes` 唯一允许数的行局部谓词，只看 `kind==""`，带 report_gap 的 clean 行照常算票）、`vote_reading()`（人读的 why）；配套只读 CLI `scripts/verify_audit.py`（票数 / report_gap / legacy_* / clean→fault 四张表，不写盘） |
+| `vreviews.py` | **V 稿**（SG1，2026-11-16）：秘书判「有毛病」时给被审者（F / E / B）的审阅报告 —— 审的是哪份稿（族 + 号 + sha）/ 有毛病 / findings 与理由；落 `verifications/reviews/` 目录（一份审阅报告 + 一份追加式索引；号源 = 索引 max + 1，幂等键 = 台账锚点），交付 = `conductor.open_item` 的 notice（不要求 ack）。判据 `tests/test_sg1_v_review_and_auto_sign.py` |
 | `proofreport.py` | **形式化困难的受控汇报形态**（业主 2026-10-22 晚的协作面裁定）：L→B 的汇报与 B→D 的升级，两边落点都是既有的 `agent_message` 收件箱（`agent_loop.send_message` 写 / `read_messages` 读），本模块只把"这一条汇报说的是什么"压成受控形态 —— `FAILURE_TYPES`（失败类型词表）/ `SEVERITIES`（`normal` 与 `research` 两档：B 改证明就够 / 路线可能不成立 ⇒ B 通知 D 开展研究）/ `SUGGESTIONS`（失败类型 → B 该补什么）/ `payload` / `violations` / `deliver`。自由文本没法被下游按类分派，而"漏了一步"与"命题本身不对"该做的事完全不同 |
 | `secretary.py` | **「秘书」**：每个智能体自带的随员（`draft/53` v3 定位 · `draft/55` 接口规范 · `draft/54 §2`）。它**不是一个同级角色**：不占 `schema.ROLES`、不加注册工具、不改权限面声明 ⇒ 一个计数都不变。四条职责（格式与内容优化 / 委派评估 / 委托加工 / 闭环提醒）+ 手稿通道的增改查（`handoff_add`/`handoff_revise`/`handoff_query`）+ **命题写入代理**（`wash_statement`/`record_statement`，业主 2026-10-09：B 交内容、秘书落盘——洗格式 / 拿编号 / 查重 / 改表四件，写集只有 `statements` 与 `dependencies`）+ **名册**（S1k，业主 2026-10-19/20：「名册 = 父 + 子 + 绝对编号」）：落点 `out/roster/<父编号>.jsonl`（append-only，`_fold_roster` 折叠 `add`/`bind`/`retire`/`keep_alive`，另有 `<父编号>-index.jsonl` 对照表与 `<父编号>-retired.jsonl` 销号名单），`roster_view` / `parent_of` 答"我的父是谁、我的子是谁"（行里带绝对编号 `task_id` 与名册名 `name`），`brief_source` 记简介是父给的原话（`parent`）还是秘书代写（`secretary`）；两条实质红线（格式补不全、或加工后发现实质缺陷）走 `negotiate()`（≤2 轮）+ 台账留痕 —— **它从不替本体表态**（"委托秘书洗一遍格式"是**两段式**：`wash_proposed` 请示 ⇒ 父用 `accept_proposal`/`reject_proposal` 定） |
 | `evidencebits.py` | 命题的**五元证据位**与派生等级（`draft/39` §3.14）：哪位角色欠哪一位（数值验证/有证明/审过/形式化通过/正式审查）、`na` 与"还没做"分得开的四态、等级**机械派生**（数值封顶在"强猜想"）、引用命题凭文献代号进第 2+3 位、作废四条缺一不可。另加**位 ⇒ 台账的映射**（`BIT_LEDGERS`：哪一位去哪张表查；`bit_evidence_gaps`：位上说有、表里要查得到）——业主 2026-10-09 点名的那一条。纯函数层：不读盘、不写盘，读入口是 `bits_from_row()`（收工门的 `reviewed_proof_rows` 与状态报告都走它） |
@@ -804,7 +806,7 @@
 | `claimanatomy.py` | 1893 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
 | `agent_b/core.py` | 1381 | B 的 9 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员（含 core 自身共 1377 行）；`agent_b/_support.py` 是模块级 helper 与常量，273 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 / 显式落稿 / 按位置与格收录 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 2141 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
-| `tools/text_tools.py` | 284 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
+| `tools/text_tools.py` | 320 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
 
 ---
 
