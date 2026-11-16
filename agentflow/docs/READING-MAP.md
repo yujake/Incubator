@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-16，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **314 个 `.py`、290485 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16007 行（`agent_loop.py`，14617 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **314 个 `.py`、290502 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16007 行（`agent_loop.py`，14714 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-16 CL2 / 5（`summon_consumption` 加软判据 `unknown`）**：314 个 `.py`、75 个 `>800`
+> 都不变；总行数（按本笔开工时的当前树）290405 → **290502**（+97，全在 `agent_loop.py`：
+> 受控词表 `SUMMON_WEAK_EVIDENCE` + 判决那一段 + 三处读数；`closing.py` 的汇总格随它一起进，
+> 但那两处已被并行提交 `0e6b0e4c` 带走、不在本笔的行数里）。全仓最大
+> `agent_loop.py` 14617 → **14714**。三格（75 / 93 / 2）逐格未抬（上限 75 / 95 / 5）。
 > **2026-11-16 CL2 / 12A（`conductor.void_items` 摘要里两处别家工具名写明施事）**：314 个 `.py`、75 个 `>800`
 > 都不变；总行数 290469 → **290485**（+16，全在 `agent_prompts.py` 的 p285 版本账；
 > `tools/conductor_tools.py` 一行换一行、净 0）。§3 表不动（这一批没动表里那几行）。

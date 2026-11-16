@@ -497,3 +497,117 @@ def test_the_closing_gate_says_unknown_for_an_old_session(tmp_path: pathlib.Path
     assert got["checked"] is False, got
     assert "没有任何一趟" in got["reason"], got["reason"]
     assert got["summons_total"] == 0, got
+
+
+# ============================================ ⑧ 软判据：其它可指涉证据 ⇒ unknown（任务 5）
+
+#: 业主 2026-11-16「将机械判据改成软的或卸掉让它自己写」——本批选"改软"：命中字面量
+#: = consumed；有其它可指涉证据（板项 close / 稿名 / 判词正文 / 信箱 / 再派活）=
+#: unknown；都没有 = unconsumed。下面 ⑧ 的 g/h/i 三组守的就是这条取舍。
+_SENTENCE = json.dumps({"final": "收工", "evidence": []}, ensure_ascii=False)
+
+
+def _run_with(tmp_path: pathlib.Path, step: Any) -> Any:
+    st, cond, registry, gateways = _world(tmp_path, [_parent_summon(), step, _SENTENCE])
+    return _parent_run(st, cond, registry, gateways)
+
+
+def test_g_a_board_close_is_unknown_not_unconsumed(tmp_path: pathlib.Path) -> None:
+    """g：父用板项收口消费子产出（板项号 ≠ 子任务字面量）⇒ unknown，不判"没处理"。"""
+    step = json.dumps({"tool": "conductor.ack", "args": {"item_ids": ["t-000099"]},
+                       "why": "把子代理交上来那条板项收口"}, ensure_ascii=False)
+    run = _run_with(tmp_path, step)
+
+    prod = run.summon_consumption["productions"][0]
+    assert prod["disposition"] == "unknown", run.summon_consumption
+    assert prod["weak_evidence"]["kind"] == "board_close", prod
+    assert run.summons_unknown == 1 and run.summons_unconsumed == 0, run.summon_consumption
+    verdict = AL.summon_consumption_verdict(run.summon_consumption)
+    assert verdict["status"] == "unknown", verdict
+    assert "unknown=1" in verdict["line"], verdict["line"]
+
+
+@pytest.mark.parametrize("content,kind", [
+    ("据 f-proof-3 的结论把命题收了。", "manuscript"),
+    ("V 判成立，据此收工。", "verdict"),
+])
+def test_g_a_manuscript_or_verdict_reference_is_unknown(tmp_path: pathlib.Path,
+                                                        content: str, kind: str) -> None:
+    """g：父用稿名 / 判词正文消费 ⇒ unknown（这两类不带那条子任务的字面量）。"""
+    step = json.dumps({"tool": "fs.write",
+                       "args": {"path": "reports/verdict.md", "content": content},
+                       "why": "把判读落进报告"}, ensure_ascii=False)
+    run = _run_with(tmp_path, step)
+
+    prod = run.summon_consumption["productions"][0]
+    assert prod["disposition"] == "unknown", (kind, run.summon_consumption)
+    assert prod["weak_evidence"]["kind"] == kind, (kind, prod)
+    assert run.summons_unconsumed == 0, run.summon_consumption
+
+
+def test_the_weak_evidence_vocabulary_is_controlled() -> None:
+    """g 的受控词表：五种证据各有一个产出点，且都登记了"为什么拿不到字面量"。"""
+    assert set(AL.SUMMON_WEAK_EVIDENCE) == set(AL.SUMMON_WEAK_EVIDENCE_WHY)
+    assert AL.weak_consumption_evidence("summon", {}, "{}") == "dispatch"
+    assert AL.weak_consumption_evidence("message", {}, "{}") == "mailbox"
+    assert AL.weak_consumption_evidence(
+        "tool", {"name": "conductor.retire_child"}, "{}") == "board_close"
+    assert AL.weak_consumption_evidence(
+        "tool", {"name": "fs.write"}, '{"content": "b-proof-12"}') == "manuscript"
+    assert AL.weak_consumption_evidence(
+        "tool", {"name": "fs.write"}, '{"content": "判不成立"}') == "verdict"
+    # 反真空：什么证据都没有的效应步不许被算成 unknown
+    assert AL.weak_consumption_evidence(
+        "tool", {"name": "fs.write"}, '{"content": "随便写点"}') == ""
+
+
+def test_h_a_run_with_no_reference_at_all_is_still_unconsumed(
+        tmp_path: pathlib.Path) -> None:
+    """h：真没处理（没有任何指涉）⇒ 仍报 unconsumed（软判据没有把这一档吃掉）。"""
+    st, cond, registry, gateways = _world(tmp_path, [
+        _parent_summon(),
+        json.dumps({"final": "F 已经把攻击路线交上来了，收工。", "evidence": []},
+                   ensure_ascii=False),
+    ])
+    run = _parent_run(st, cond, registry, gateways)
+
+    prod = run.summon_consumption["productions"][0]
+    assert prod["disposition"] == "unconsumed", run.summon_consumption
+    assert run.summons_unconsumed == 1 and run.summons_unknown == 0, run.summon_consumption
+    assert AL.summon_consumption_verdict(run.summon_consumption)["status"] == "red"
+
+
+def test_i_stubbing_other_evidence_true_turns_h_red(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """i（反真空）：把"其它证据"判据打桩成恒真 ⇒ h 那一趟不再报 unconsumed（h 必红）。
+
+    这是"h 的读数确实来自那个谓词"的证明：桩一换，同一趟 run 的读数从
+    `unconsumed=1` 变成 `unknown=1`，h 的 `unconsumed == 1` 断言当场失败。
+    """
+    monkeypatch.setattr(AL, "weak_consumption_evidence",
+                        lambda shape, payload, text: "mailbox", raising=True)
+    st, cond, registry, gateways = _world(tmp_path, [
+        _parent_summon(),
+        json.dumps({"final": "F 已经把攻击路线交上来了，收工。", "evidence": []},
+                   ensure_ascii=False),
+    ])
+    run = _parent_run(st, cond, registry, gateways)
+
+    assert run.summons_unknown == 1 and run.summons_unconsumed == 0, run.summon_consumption
+    print("\n[反真空] 桩恒真之后同一趟 run 的读数：",
+          AL.summon_consumption_verdict(run.summon_consumption)["line"])
+
+
+def test_the_closing_reading_counts_unknown_without_folding_it_into_unconsumed(
+        tmp_path: pathlib.Path) -> None:
+    """收工门那一格也看得见 unknown：它进 `summons_unknown` / `not_judged`，不进 `unconsumed`。"""
+    step = json.dumps({"tool": "conductor.ack", "args": {"item_ids": ["t-000099"]},
+                       "why": "把子代理交上来那条板项收口"}, ensure_ascii=False)
+    st, cond, registry, gateways = _world(tmp_path, [_parent_summon(), step, _SENTENCE])
+    _parent_run(st, cond, registry, gateways)
+
+    got = CL.summon_consumption_reading(st.root, sid=SID)
+    assert got["checked"], got
+    assert got["summons_unknown"] == 1 and got["summons_unconsumed"] == 0, got
+    assert [x["task_id"] for x in got["not_judged"]], got["not_judged"]
+    assert got["not_judged"][0]["weak"]["kind"] == "board_close", got["not_judged"]

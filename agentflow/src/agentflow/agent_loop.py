@@ -1523,7 +1523,9 @@ class LoopRun:
     #: 子产出的处理读数（业主裁定：父必须处理子产出）。口径见 `summon_consumption`：
     #: `summons_total`（有产出的子任务数）、`summons_consumed`（留下了指到它的效应）、
     #: `summons_waived`（写了受控的 `not_consumed`）、
-    #: `summons_unconsumed`（既没效应也没声明 —— 判据要抓的那一格）。
+    #: `summons_unknown`（留下了其它可指涉证据、但拿不到能归到这一条的字面量 ——
+    #: 判不了，不是没处理；2026-11-16 软判据加的那一档）、
+    #: `summons_unconsumed`（既没效应、也没有其它可指涉证据、也没声明 —— 判据要抓的那一格）。
     #: `summons_continued` 是 `summons_consumed` 的细分（其中"再派活"的有几条），
     #: 是读数不是判据。
     #:
@@ -1534,6 +1536,7 @@ class LoopRun:
     summons_consumed: int = 0
     summons_continued: int = 0
     summons_waived: int = 0
+    summons_unknown: int = 0
     summons_unconsumed: int = 0
     #: 那份明细（`summon_consumption()` 的完整返回：逐条处置 + 不成立的拒绝说明）。
     summon_consumption: dict[str, Any] = field(default_factory=dict)
@@ -1684,7 +1687,7 @@ class LoopRun:
         `notify_rejections` / `final_refused_beats` / `handoffs` / `summons` / `summons_refused` /
         `messages_sent` / `messages_refused` / `productions` / `summons_total` /
         `summons_consumed` / `summons_continued` / `summons_waived` /
-        `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
+        `summons_unknown` / `summons_unconsumed` / `summon_consumption` / `prompt_audit` / `spend` /
         `prompt_cache` / `elapsed_sec` / `end_ts` / `notes` / `final_payload`。
 
         （判据 `tests/test_summons_and_numbered_addressing.py::test_to_dict_documents_every_key_it_returns`
@@ -1767,6 +1770,7 @@ class LoopRun:
             "summons_consumed": self.summons_consumed,
             "summons_continued": self.summons_continued,
             "summons_waived": self.summons_waived,
+            "summons_unknown": self.summons_unknown,
             "summons_unconsumed": self.summons_unconsumed,
             "summon_consumption": dict(self.summon_consumption),
             "prompt_audit": dict(self.prompt_audit), "spend": dict(self.spend),
@@ -4220,17 +4224,18 @@ def _summon_key(action: str, params: Mapping[str, Any]) -> str:
 # 业主裁定（真机证据已核实）：父代理必须处理子代理的产出 —— 现场 `projects/mp4/data/tasks.json` 里 F 的任务
 # 都是 `called_by=D`，而 D 派完 F、拿到结果就 `final` 了，F 的产出只留给 M 下一轮读，推进责任被真空地转给最上层。
 # 判读三样（唯一实现 `summon_consumption`）：`_call_productions` → `LoopRun.productions`（落点
-# `agent_step.productions`）、处置 `consumed` / `waived` / `unconsumed`、汇总读数 `LoopRun.summons_total` 等（落进
+# `agent_step.productions`）、处置 `consumed` / `waived` / `unknown` / `unconsumed`、汇总读数 `LoopRun.summons_total` 等（落进
 # `agent_run_end`）。判据口径（业主 2026-10 修正）：「处理」不是白名单（那三条只是举例，正表会误杀没列举到的
 # 合法形态），而是效应证据 —— 这次 summon 之后父在任何一步留下可查的效应、且指到那条子产出（`task_id` /
 # 产物路径 / 台账 id）即算处理；"可查"用负表判（`_is_effect_evidence` 只排除只读侦察与无效步）⇒「列举」只在文档里。
 
 #: 一条子产出的处置（受控词表）。`unconsumed` 就是这条规矩要抓的那一格。
 #:
-#: 顺序即文档顺序：处理了（效应证据）/ 如实声明不处理 / 没处理。
+#: 顺序即文档顺序：处理了（效应证据）/ 如实声明不处理 / 拿不到能把这件事归到这一条的
+#: 字面量（`unknown`，2026-11-16 加 —— 业主「将机械判据改成软的」）/ 没处理。
 #: 注意这里没有"属于哪一类处理"的取值 —— 那不是判据（见上面的口径说明）；
 #: 每一类处理的形状记在那条产出的 `evidence.effect` 里，只作说明、不参与判定。
-SUMMON_DISPOSITIONS: tuple[str, ...] = ("consumed", "waived", "unconsumed")
+SUMMON_DISPOSITIONS: tuple[str, ...] = ("consumed", "waived", "unknown", "unconsumed")
 
 #: `not_consumed` 的受控理由码。自造码 / 空串都不算 waive（负控 ④）：
 #: 一张随便写的"我不处理它"等于把这条规矩降成一句自我声明。
@@ -4424,6 +4429,67 @@ def _effect_label(shape: str, payload: Mapping[str, Any]) -> str:
     return f"形状 {shape}"
 
 
+#: 「其它可指涉证据」的受控词表（2026-11-16，业主「将机械判据改成软的或卸掉让它
+#: 自己写」；本批选"改软"）。
+#:
+#: 命中它们 ⇒ `disposition="unknown"`（不是 consumed，也不是 unconsumed）：父确实拿
+#: 这条子产出做了某件事，但机器读数拿不到能把这件事归到这一条上的字面量。
+#: 真机 12/45 假红就是这些形态（板项号 / 稿名 / 判词正文），而原来它们全被读成
+#: "没处理"。为什么不是"卸掉机械判据"：卸掉之后 `unconsumed` 只剩模型自述，
+#: "真没处理"（h）就再没有任何独立读数；而"改软"保留它、只把判不了的那一档折成
+#: 三态里的 `unknown`（本仓反复强调的"没查成 ≠ 没问题"）。
+SUMMON_WEAK_EVIDENCE: tuple[str, ...] = (
+    "board_close",   # 板项收口（conductor.ack / void_items / retire_child）
+    "manuscript",    # 稿名（f-proof-N / b-proof-N / reports/*proof-N）
+    "verdict",       # 判词正文（成立 / 不成立 / 打回 / signed / refuted …）
+    "mailbox",       # 对外留言（message 形状）
+    "dispatch",      # 又派了活（summon / summon_many）
+)
+
+#: 每一档"为什么拿不到字面量"（读数是给人看的，不参与判定）。
+SUMMON_WEAK_EVIDENCE_WHY: dict[str, str] = {
+    "board_close": "收口了一个板项：板项号不一定是这条子任务的 task_id"
+                   "（`conductor.post_task` 会另开一行）",
+    "manuscript": "句子里有稿名：稿名不是那条 summon 的 outputs 字面量",
+    "verdict": "句子里有判词正文：判词是散文，不带台账 id",
+    "mailbox": "对外留言：留言里有没有用到这条子产出，机器读不出来",
+    "dispatch": "又派了活：新任务的参数里没有上一批子任务的字面量",
+}
+
+#: 稿名的形态（`reports/` 那一半与裸名都收；不带扩展名也算 —— 真机上父常只写
+#: "f-proof-3"）。
+_WEAK_MANUSCRIPT = re.compile(
+    r"(?<![A-Za-z0-9_-])(?:reports/)?[a-z0-9][a-z0-9_-]*-proof-\d+")
+
+#: 判词正文里的受控词（三个中文档 + 两个英文档；只作"这一句像判词"的读数）。
+_WEAK_VERDICT_WORDS: tuple[str, ...] = (
+    "成立", "不成立", "存疑", "打回", "signed", "refuted")
+
+
+def weak_consumption_evidence(shape: str, payload: Mapping[str, Any],
+                              text: str) -> str:
+    """除"字面量指到子产出"之外，这一步留下了哪一类可指涉证据（空串 = 没有）。
+
+    判据不是白名单：每一档都是"能指涉、但不能归到这一条"的形态，返回的只是词表里
+    的名字（`SUMMON_WEAK_EVIDENCE`），具体哪一步由调用方记进 `weak_evidence`。
+
+    只被 `summon_consumption` 调用（效应判定已经由 `_is_effect_evidence` 做完 ——
+    这个函数不重复判"算不算效应"）。
+    """
+    name = str(payload.get("name") or "")
+    if name in ("conductor.ack", "conductor.void_items", "conductor.retire_child"):
+        return "board_close"
+    if shape in ("summon", "summon_many"):
+        return "dispatch"
+    if shape == "message":
+        return "mailbox"
+    if _WEAK_MANUSCRIPT.search(text):
+        return "manuscript"
+    if any(word in text for word in _WEAK_VERDICT_WORDS):
+        return "verdict"
+    return ""
+
+
 def summon_consumption(run: "LoopRun") -> dict[str, Any]:
     """父代理处理了它派出去的子产出没有 —— 一趟运行结束时的现算读数。
 
@@ -4434,7 +4500,10 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
     与 `invalid` 步）。
     两端：如实声明不处理（`disposition="waived"`）—— 显式写一条 `not_consumed`（
     `{"task_id": …, "code": <受控理由码>, "why": "<一句话理由>"}`），理由码必须在 `NOT_CONSUMED_CODES` 里、理由不许是
-    空串（自造码 / 空码 / 空理由都不算，负控 ④）；没处理（`disposition="unconsumed"`）—— 既没留下指到它的效应也没声明。
+    空串（自造码 / 空码 / 空理由都不算，负控 ④）；判不了（`disposition="unknown"`）—— 后续某一步留下了
+    「其它可指涉证据」（`SUMMON_WEAK_EVIDENCE`：板项收口 / 稿名 / 判词正文 / 留言 / 再派活），但拿不到能把这件事
+    归到这一条子产出上的字面量 —— 假红（真机 12/45）落在这一档，它不是"没处理"；没处理（`disposition="unconsumed"`）
+    —— 既没留下指到它的效应、也没有其它可指涉证据、也没声明。
     三态与反真空：`summons_total == 0` ⇒ 判据没有对象（不红，但仍报 0）；被拒的调用（`outcome="refused"`）不进
     `summons_total`；只读侦察指到了产物（`recon_only`）既不算处理也不静默，逐条留在明细里。
     """
@@ -4450,6 +4519,7 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
             continue
         hit: dict[str, Any] | None = None
         recon: dict[str, Any] | None = None
+        weak: dict[str, Any] | None = None
         for s in run.steps:
             if int(s.index) <= int(p["step"]):
                 continue
@@ -4460,11 +4530,19 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
             # "拒绝并说明"那条通路就当场失去意义（负控 ④ 当场抓出过这个形态）。
             scan = {k: v for k, v in step_payload.items() if k != "not_consumed"}
             text = json.dumps(scan, ensure_ascii=False, default=str)
+            effect = _is_effect_evidence(s.shape, step_payload)
             refs = [str(t) for t in (p.get("outputs") or [])
                     if str(t) and str(t) in text]
             if not refs:
+                # 软判据那一半（2026-11-16）：拿不到字面量时，先看这一步有没有
+                # "其它可指涉证据"。只记第一处（诊断用），判定在循环之后。
+                if weak is None and effect:
+                    kind = weak_consumption_evidence(s.shape, step_payload, text)
+                    if kind:
+                        weak = {"step": int(s.index), "shape": s.shape, "kind": kind,
+                                "why": SUMMON_WEAK_EVIDENCE_WHY.get(kind, "")}
                 continue
-            if not _is_effect_evidence(s.shape, step_payload):
+            if not effect:
                 recon = recon or {"step": int(s.index), "shape": s.shape,
                                   "effect": _effect_label(s.shape, step_payload),
                                   "refs": refs}
@@ -4475,17 +4553,20 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
         if hit is not None:
             p["disposition"] = "consumed"
             p["evidence"] = hit
+        elif weak is not None:
+            p["disposition"] = "unknown"
+            p["weak_evidence"] = weak
         else:
             p["disposition"] = "unconsumed"
             if recon is not None:
                 p["recon_only"] = recon
-    # 三个计数的唯一取值来源是那张受控词表（`SUMMON_DISPOSITIONS`）：
+    # 计数的唯一取值来源是那张受控词表（`SUMMON_DISPOSITIONS`）：
     # 于是"有哪几种处置"只在定义处回答一次，这里不另抄一份取值清单
     # （抄两份的形态是"词表加了取值、计数悄悄不认它"）。
     counts = {d: sum(1 for p in counted if str(p.get("disposition") or "") == d)
               for d in SUMMON_DISPOSITIONS}
-    consumed, waived, unconsumed = (counts["consumed"], counts["waived"],
-                                    counts["unconsumed"])
+    consumed, waived, unknown, unconsumed = (counts["consumed"], counts["waived"],
+                                             counts["unknown"], counts["unconsumed"])
     # "继续派"只是 consumed 的一个细分（读数，不是判据）：它回答的是
     # "这些处理里有多少是把它接着派出去了"，而"算不算处理"由效应证据判。
     continued = sum(1 for p in counted if p["disposition"] == "consumed"
@@ -4496,6 +4577,7 @@ def summon_consumption(run: "LoopRun") -> dict[str, Any]:
         "summons_consumed": consumed,
         "summons_continued": continued,
         "summons_waived": waived,
+        "summons_unknown": unknown,
         "summons_unconsumed": unconsumed,
         "productions": productions,
         "waiver_problems": problems,
@@ -4513,12 +4595,18 @@ def summon_consumption_sentence(reading: Mapping[str, Any]) -> str:
     if total == 0:
         return ("子产出处理读数：summons_total=0（这一趟没派过子代理 ⇒ 没有要处理的"
                 "子产出；判据没有对象，不红）")
+    unknown = int(reading.get("summons_unknown") or 0)
     line = (f"子产出处理读数：summons_total={total}，"
             f"consumed={int(reading.get('summons_consumed') or 0)}，"
             f"waived={int(reading.get('summons_waived') or 0)}，"
+            f"unknown={unknown}，"
             f"unconsumed={int(reading.get('summons_unconsumed') or 0)}")
     if int(reading.get("summons_continued") or 0):
         line += f"（consumed 里有 {int(reading['summons_continued'])} 条是『继续派』）"
+    if unknown:
+        line += (f"；{unknown} 条**判不了**（后续有其它可指涉证据：板项收口 / 稿名 / "
+                 "判词正文 / 留言 / 再派活，但拿不到那条子产出的字面量）—— "
+                 "这一档不是『没处理』，也不是『处理了』")
     bad = [str(p.get("task_id") or "") for p in (reading.get("productions") or [])
            if isinstance(p, Mapping) and str(p.get("disposition") or "") == "unconsumed"]
     if bad:
@@ -4534,13 +4622,15 @@ def summon_consumption_sentence(reading: Mapping[str, Any]) -> str:
 def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
     """这条判据的红/绿两行可演示形态：一行状态、一行为什么。
 
-    - `green`：`summons_total > 0` 且 `summons_unconsumed == 0`；
-    - `red`：`summons_unconsumed > 0`（拿到了结果却没留下指到它的效应）；
+    - `green`：`summons_total > 0` 且 `summons_unconsumed == 0` 且 `summons_unknown == 0`；
+    - `red`：`summons_unconsumed > 0`（拿到了结果却没留下指到它的效应、也没有其它可指涉证据）；
+    - `unknown`：没有 `unconsumed`、但有 `summons_unknown > 0` —— 判不了，不是通过；
     - `n/a`：`summons_total == 0` —— 判据没有对象。它既不是红、也不是通过：
       把"没派过子"折成通过，等于给一条什么都没管的 run 发绿灯（反真空，业主 ⑤）。
     """
     total = int(reading.get("summons_total") or 0)
     bad = int(reading.get("summons_unconsumed") or 0)
+    unsure = int(reading.get("summons_unknown") or 0)
     if total == 0:
         status = "n/a"
         why = ("这一趟没有派过子代理（summons_total=0）⇒ 判据没有对象：不红，"
@@ -4548,16 +4638,22 @@ def summon_consumption_verdict(reading: Mapping[str, Any]) -> dict[str, Any]:
     elif bad:
         status = "red"
         why = (f"派了 {total} 条子任务，其中 {bad} 条拿到了结果却没有处理"
-               "（它之后没有任何一步留下指到它的效应，也没有写受控的 not_consumed）")
+               "（它之后没有任何一步留下指到它的效应，也没有其它可指涉证据、"
+               "也没有写受控的 not_consumed）")
+    elif unsure:
+        status = "unknown"
+        why = (f"派了 {total} 条子任务，其中 {unsure} 条判不了（后续有其它可指涉证据："
+               "板项收口 / 稿名 / 判词正文 / 留言 / 再派活，但拿不到那条子产出的字面量）"
+               " —— 这一档不是『没处理』，也不是『处理了』")
     else:
         status = "green"
         why = (f"派了 {total} 条子任务，全部处理过"
                f"（consumed={int(reading.get('summons_consumed') or 0)}，"
                f"waived={int(reading.get('summons_waived') or 0)}）")
     return {"status": status, "why": why, "summons_total": total,
-            "summons_unconsumed": bad,
+            "summons_unconsumed": bad, "summons_unknown": unsure,
             "line": (f"[父必须处理子产出] {status.upper()} "
-                     f"summons_total={total} unconsumed={bad}：{why}")}
+                     f"summons_total={total} unconsumed={bad} unknown={unsure}：{why}")}
 
 
 #: 步数上报的节奏（D11，2026-11-09）：`0`（含负数）=「不上报」。
@@ -10033,6 +10129,7 @@ class AgentLoop:
         run.summons_consumed = int(run.summon_consumption["summons_consumed"])
         run.summons_continued = int(run.summon_consumption["summons_continued"])
         run.summons_waived = int(run.summon_consumption["summons_waived"])
+        run.summons_unknown = int(run.summon_consumption["summons_unknown"])
         run.summons_unconsumed = int(run.summon_consumption["summons_unconsumed"])
         run.notes.append(summon_consumption_sentence(run.summon_consumption))
         run.elapsed_sec = time.monotonic() - t0
