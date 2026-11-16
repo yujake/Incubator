@@ -22,7 +22,6 @@
 | `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
 | `conductor.closing` | read | 跑收工门七格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` = M 自己交的判据 `goal_met`，七格退成读数 `status` / `machine_pass`；`paper` 不是门，落 `readings.paper` 由 M 判断） |
 | `conductor.board` | read | 板上还挂着什么（工作项 + 走到哪一档 + 谁读的） |
-| `conductor.broadcast` | write_local | 给我名下的直接子代理广播一条通告（每人一条 ack 板项） |
 
 写侧工具改的是编排状态（台账行、取消信号、工作区目录、停止回执）：
 `CAPABILITIES["M"] = ()`（零动作）与 `WRITE_SETS["M"] = {}`（不写领域表）一个字都没动 ——
@@ -1603,37 +1602,6 @@ def conductor_board(_conductor, limit: int = 20) -> ToolResult:
     return ok(view, **view)
 
 
-@tool(
-    "conductor.broadcast",
-    "给我名下**直接子代理**广播一条通告（每人一条 ack 板项）。级联由收件人做、框架不代转；没有子代理时如实报『**没有收件人**』。",
-    {"type": "object",
-     "properties": {"subject": {"type": "string", "description": "一句话标题"},
-                    "body": {"type": "string", "description": "正文（进板项的 detail）"}},
-     "required": ["subject"], "additionalProperties": False},
-    side_effect="write_local",
-    # 所有角色 + 主控：T21 逐字「这个子代理广播对 M 也是完全一样的做法」
-    # （`S.ROLES` 不含主控 ⇒ 单独并上它）。
-    # 只读角色（C/H/V）不声明 —— 比"声明了再让 `for_role` 剥掉"更干净：
-    # 后者会被 `cli tools` 报成"声明错误"（`role_filter_notes` 非空），
-    # 而那份说明里逐字写着"行为上已被拦下，但声明本身应改"。
-    roles=tuple(r for r in S.ROLES if r not in READ_ONLY_ROLES) + (S.CONDUCTOR_ROLE,),
-    returns="{'checked','ok','broadcast','recipients','items','cascade','readings','note'}",
-)
-def conductor_broadcast(_conductor: Any, subject: str, body: str = "") -> ToolResult:
-    """工具体：转发 `Conductor.broadcast`。
-
-    "我是谁"从调用上下文里读（`current_task_id()` / `current_caller_role()`）——
-    工具的形状里没有这一格，而只有循环知道它（`AgentLoop._do_tool` 用 `calling_as` 挂上）。
-    挂不上 ⇒ `broadcast` 自己会受控拒绝（三态：不许猜一个父号），这里不替它猜。
-    """
-    got = _conductor().broadcast(subject=subject, body=body,
-                                 by=current_caller_role() or S.CONDUCTOR_ROLE,
-                                 parent_task_id=current_task_id())
-    if got.get("ok") is False:
-        raise ToolError(str(got.get("error") or "广播没成"))
-    return ok(got, **got)
-
-
 #: 上行成功那一支里不属于载荷的两格（`data` 里不给，`meta` 里照旧给全）：
 #: - `addressing`：`_escalation_roster_check` 的原样读数（`checked` / `how` / `kind` /
 #:   `error` / `candidates` …）—— 它回答「这个编号是怎么被认成父的」；
@@ -3079,11 +3047,9 @@ _TOOL_FUNCTIONS: tuple[tuple[Callable[..., Any], tuple[str, ...]], ...] = (
     # A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）——
     # M 不进 `manuscripts.*` 的面是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`）。
     (conductor_board, ('_conductor',)),
-    # 广播（S6-b，业主 T20/T21）：一件能力、所有角色同一个做法（没有 tree 特权档）。
-    # 收件人是"我名下的直接子代理"，而"我是谁"从调用上下文读（`AgentLoop._do_tool`
-    # 用 `calling_as` 挂上）—— 拿不到就不广播（受控拒绝，不猜父号）。
-    # 只读角色（C/H/V）由 `write_local` 在 `for_role` 里结构性剥离。
-    (conductor_broadcast, ('_conductor',)),
+    # 2026-11-16：`conductor.broadcast` 整件退场（业主逐字「广播工具现在已经被精细的
+    # 父对子监控替代，目前几乎已无用，全面退场」）。`Conductor.broadcast` 这个内部方法
+    # 保留（它是工具那一层下面的管道，退场的是工具面），但不再有任何工具接它。
     # 上行（业主 2026-10-19「父子天然双向」）：孩子的需求写进父的收件箱，本趟以
     # `stop_reason="escalated"` 收工。收件人是运行期解析出的召唤者，「不」在 `edges` 里登记。
     (conductor_escalate, ('_conductor',)),

@@ -400,7 +400,7 @@ PROOF_CHANNEL = (
 PROOF_CHANNEL_NO_LEAN = (
     "**形式化那一档本会话产不出来（系统做不了）**：证明的判读走逐行审阅 —— 证明过程逐字进 "
     "`statements` 的 `proof_text`（含假设、每一步的依据、你接不上的那一步），再请 V 用 "
-    "`verify.verify_proof` 逐行走查，结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）"
+    "`V.verify_proof` 逐行走查，结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）"
     "（签发看的是这一签的秘书轴：`secretary_judge.axis=clean` 且 `checked=true`；V 写「成立」只是陈述）。"
     "用户指定「这一条需要形式化验证」时，如实回「本会话形式化已关闭」这一读数，"
     "并把这条要求连同缺的那几样记进交付。"
@@ -445,7 +445,7 @@ SPEC = AgentSpec(
             "**V 签过一份稿之后，板上会多一条 `b-register@<命题号>@<被签正文的 sha>` 的「必须收录」义务项**"
             "（`expects=work`，不是回执）：收口只有一条 —— 那个号在 `statements` 里出现正文且 `reviewed=true`"
             "（逐份口径，`#p2` 不借 `#p1` 的光）；`ack` 不会让它消失。明确不收录就按放弃那条办"
-            "（`status=abandoned` ＋ 可解析的 `quote_reason`），它会作废。这条项挂在 B 名下、会挡销号与收工；"
+            "（`table.update` 的 `patch` 里给 `status=abandoned` 与可解析的 `quote_reason`；这两格是 `patch` 里的列，不是调用参数），它会作废。这条项挂在 B 名下、会挡销号与收工；"
             "**但被派你的那一方撤销之后就不再挡**（`item_close=expired`、`expects` 已清空），别让它一直开着。",
             "把命题交给 D 之前先自己定位页与逐字摘录：你摘的那一段就是「原文长什么样」的唯一可比对文本 —— D 的初步审阅与 H 的采信"
             "都靠它。",
@@ -472,7 +472,8 @@ SPEC = AgentSpec(
             "改命题的正文：把同一份内容**再交一次** `own.register_statement`。"
             "通用写口可改 `statements` 的**非正文三格**（含 `status` / `kind` / `quote_reason`），"
             "且改 `status=abandoned` 时**会触发作废**（`v-resubmit` 项随之 `done` + `expired`）；"
-            "正文仍需走证明入口。",
+            "正文仍需走证明入口。"
+            "这三格是 `table.update` 的 `patch` 里的列，不是调用参数 —— 顶层必填是 `table` / `id` / `patch`。",
             # V 的签字有三个入口（F 产出时签、B 入库文献侧内容时签、E 跑出穷举证据时签）；
             # B 只管文献那一侧：F 那一档不在你的入口里。
             # "F 的证明天生带签"与"改一字签就作废"不矛盾：签跟着正文走（一稿一签），

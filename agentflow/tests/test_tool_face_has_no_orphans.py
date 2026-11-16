@@ -4,7 +4,7 @@
 | 跨域工具 | 出现在谁的面 | 为什么不是噪音 |
 |---|---|---|
 | `conductor.escalate` | 十个角色全部 | 通用上行通道：任何角色都要能向父代理上报（业主 2026-10-19 裁定） |
-| `conductor.broadcast` | 只有有子代理的角色（A/B/D/E/F/G） | 广播是"向我的子代理"——没有子代理的人拿到它才是噪音 |
+| `conductor.broadcast` | 2026-11-16 起已整件退场（业主逐字「广播工具…全面退场」）| 它曾被当成"广播是向我的子代理"的证据；退场后这一格改由 ② 反向钉住「任何角色面上都没有它」 |
 | `attack.check_budget` / `list_plans` / `pick_next_subgoal` / `status` | D / G / H | 读别的角色的计划是统筹与审稿需要的（D 派 F、H 评 F
 的产出） |
 | `doc.compose_claim` / `list_documents` / `scan_claim` | D / F / H | 同上：读稿件面 |
@@ -12,7 +12,7 @@
 ——按前缀当"域"会误报 |
 ⇒ 结论：没有"看得见却调不动"或明显多余的项。这一条把它钉住，免得以后有人凭"看着不像他的"删掉一件别人真需要的工具。
 ## 判据（含负控）
-① `conductor.escalate` 在十个角色面上都有（通用上行，少一个就有人上不了报）；② `conductor.broadcast` 只出现在有子代理的角色面上（A/B/D/E/F/G）；③ M 的面是纯编排面：
+① `conductor.escalate` 在十个角色面上都有（通用上行，少一个就有人上不了报）；② `conductor.broadcast` 已整件退场（2026-11-16，业主逐字「广播工具…全面退场」）—— 任何角色面上都不许再有它，替代它的逐层监控面（`conductor.watch` / `review_child` / `patrol`）仍在 M 面上；③ M 的面是纯编排面：
 不许出现 `attack.*` / `doc.*` / `verify.*` / `lit.*` / `analysis.*`（M 的活是统筹与搭桥，研究侧的执行归 D）；④ 反真空：十个角色面都非空、并集 = 全库减去
 "只挂给普查角色集之外的那些角色的工具"
 ——否则"没有多余项"可能是"面是空的"。
@@ -37,7 +37,6 @@ from typing import Any
 
 import pytest
 
-from agentflow import capabilities as CAP
 from agentflow import host
 from agentflow import store as S
 
@@ -78,18 +77,22 @@ def test_every_role_can_escalate_upward(faces: dict[str, list[str]]) -> None:
     assert not missing, f"这些角色拿不到 `conductor.escalate`（上不了报）：{missing}"
 
 
-def test_broadcast_is_only_for_roles_with_children(faces: dict[str, list[str]]) -> None:
-    """② 广播只给有子代理的人：`conductor.broadcast` 出现在谁的面 ⇒ 那个角色必须有出边。"""
+def test_broadcast_is_retired_everywhere(faces: dict[str, list[str]]) -> None:
+    """② 广播工具已整件退场：任何角色面上都不许再有 `conductor.broadcast`。
+
+    2026-11-16 业主逐字「广播工具现在已经被精细的父对子监控替代，目前几乎已无用，
+    全面退场」⇒ 这一条从「只给有子代理的人」翻成「谁都不给」，判据强度没有变松：
+    它仍然逐角色扫面，只是期望值从"子集"变成"空集"。
+    """
     with_broadcast = [r for r in ROLES if "conductor.broadcast" in faces[r]]
-    assert with_broadcast, "没有任何角色拿得到 `conductor.broadcast` ⇒ 这一条判据没有对象"
-    no_children = [r for r in with_broadcast if not CAP.ALLOWED_EDGES.get(r)]
-    assert not no_children, (
-        f"这些角色没有可以唤起的伙伴，却拿到了 `conductor.broadcast`（噪音）：{no_children}")
-    # 反真空：没有出边的角色不该拿到它（否则"只给有子的"这句是空话）
-    for role in ROLES:
-        if not CAP.ALLOWED_EDGES.get(role):
-            assert "conductor.broadcast" not in faces[role], (
-                f"{role} 没有出边却拿到了 broadcast")
+    assert not with_broadcast, (
+        f"这些角色的面上仍有已退场的 `conductor.broadcast`：{with_broadcast}")
+    # 反真空：替代它的那一半必须还在（"退场"不是"把监控一起删了"）——
+    # 逐层监控三件仍在 M 的编排面上，否则这一条会退化成"面上什么都没有"。
+    monitoring = {"conductor.watch", "conductor.review_child", "conductor.patrol"}
+    missing = sorted(monitoring - set(faces["M"]))
+    assert not missing, (
+        f"广播退场了，但替代它的逐层监控从 M 的面上也消失了：{missing}")
 
 
 def test_the_conductor_face_stays_orchestration_only(faces: dict[str, list[str]]) -> None:

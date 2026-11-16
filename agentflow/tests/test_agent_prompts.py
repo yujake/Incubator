@@ -778,6 +778,11 @@ _NON_TOOL_DOTTED_TOKENS: dict[str, str] = {
     # （局部树的依赖面由代码侧给，不再教 C 去比 `derived_from`）。豁免表腐烂会红，所以删掉。
     "observations.e_signature": "台账字段（experiments 行的 observations 里那一格：结构标记），不是工具",
     "v_signature.sha256": "对应表那一行的 v_signature 里的 sha256 键，不是工具",
+    # 2026-11-16（p286，FC-27 的 H 补丁）：H 不再判 G8 回执那一句写的是
+    # 「收工门从台账现算（`conductor.closing` 的 `readings.run_evidence`）」——
+    # `readings.run_evidence` 是 `conductor.closing` 返回 dict 里的字段路径，
+    # 不是工具（模型照着念读数不会拿到 `unknown_action`）。
+    "readings.run_evidence": "读数字段路径（`conductor.closing` 返回的 `readings` 里那一格），不是工具",
     # 2026-11-01（审计 171 D-08 的修法）：D 的跨趟记忆落点。它与 `research.set_status` 同型 ——
     # 真工具，但只在带 store 的注册表里（`research_tools.ALL_TOOLS`、`roles=('D',)`），
     # 本文件的夹具不带 store ⇒ 那一组按契约跳过。它替换掉的是被 fs 保留表拒的
@@ -2554,7 +2559,22 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   L da33b9cd… → 5bcfa1cf… / M a5f870d5… → e0cb961a…；C 5edce177… / H bdf02c4d… /
 #   V 983eefc0… 与 p284 同值（逐字未动）。
 # 现算（`temp/cl2/recompute_digests.py`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格）。
-_FROZEN_PROMPT_VERSION = "p285"
+# p286（2026-11-16，业主逐字「其余按建议」授权；本版含两笔，合并后一次抬版）：
+#   ① FC-27 三份补丁（CL1 / CL2）：M 的 G8 改成「证据只有 `experiments` 台账、不交回执」、
+#     H 不再判回执、B 三处口径收口（`verify.verify_proof` → 动作名 `V.verify_proof`；
+#     `table.update` 的列名写明在 `patch` 里）。只改教法与口径，语义未变 ⇒ 只换 B / H / M。
+#     现算：B f6a59960… → 1a2ae03c… / H bdf02c4d… → 36979cac… / M e0cb961a… → 32e1a93f…；
+#     其余八格逐字相同（版本行已归一）。
+#   ② `conductor.broadcast` 全面退场（业主同批逐字「广播工具…全面退场」）：工具从
+#     `conductor_tools._TOOL_FUNCTIONS` 移除，不再进任何角色面 ⇒ A / B / D / E / F / G / L / M
+#     这八格的工具清单少一行（C / H / V 是只读角色，本来就没有它）。最终变化格 =
+#     A / B / D / E / F / G / H / L / M 九格；C / V 两格与 p285 逐字相同。
+#   ③ 连带（压缩批次比例）：退场后压缩批次 84 件、现量 75.11% > 75% ⇒
+#     `review.report` 说明删掉「（markdown）」（-10 字符，只 H 那一格）压回 74.97%；
+#     `MAX_RATIO` 未动。逐格：H 36979cac… → 25aff142…（① 的 H 段 + ③ 的摘要）。
+# 十一格不是手抄：`temp/FC1/recompute_digests.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+_FROZEN_PROMPT_VERSION = "p286"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2804,16 +2824,16 @@ _FROZEN_PROMPT_VERSION = "p285"
 #:   M 4d85c06c→47d3b555；A/B/C/D/E/L/V 不变（G/H/M 动的是共用段 `PAPER_PACK`
 #:   那一道"F 的稿叫什么"的字面，B 的收录面一个字没改）。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "56c626042282883cdf808ba97ea003e1a168627e1e92b04b2ba5d132e3657de5",
-    "B": "f6a59960ca877522217ad98f2501b45292c83a8e662900708e0f59b07cfbcd3f",
+    "A": "63c38fa6967475d2da8fcab4078404aa1c14d00d7edeb41c59477373be157d71",
+    "B": "d21f8265e9303630d23ee7b81b56ccc20c9f261113eadbc508d2e38002cd9b50",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
-    "D": "bf9576d7c63d837268f35b0475f58cd9ede6398e31b009a719592e5352e7b89e",
-    "E": "7d678aaf88380f18d7d0c8b1b11b9e9b1a6312106d2012ebcde5b6bed1ce2721",
-    "F": "f44810a59d5cd0e9b41c8d2ce023a89072dd4ecfd82a6303a0b0e9feeb6303ea",
-    "G": "f8ffecd56bcf9dfcaf98cd4ee8dabb0d79d87d2832a1ff7cf47460e85ceadaad",
-    "H": "bdf02c4d482251a410a2dc28ab960c71d9ba2fdb2e29f858d0e85adf75fb61d0",
-    "L": "5bcfa1cf24153340cf28fd43cad9713680af7dc420e58a4da6ccae5c7ad547f5",
-    "M": "e0cb961a1dd93cdf64665c09d2c3a4bcbfbd8be6aa57439f5ebc74086b8550bc",
+    "D": "721eea576054098fbcb21ede3b30c6421cf05fea6b6b15acccd14a49b652c82a",
+    "E": "36668798000e529b8c10ad7f506f88e6c7c3773554746b7d8e3b5234a59662a1",
+    "F": "99a9972c639865261faf680d96f9768f1fcfbcb96d500cbaa2677a1606ef6150",
+    "G": "931406c43e586cf7651851d2a1ed8732ec50756ed8fbd3379cab1d1cc9170bf7",
+    "H": "25aff142c3e0aba2efdc4ffdc366d6e4f130e398f2a85f8785b3ecf220a263f8",
+    "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
+    "M": "2b7f8eac9d4b9686ed755bb88a84f2e8376b21d5c7dfe649db0412ee056f5e18",
     "V": "983eefc06c583904e4d2a10d864b0fb7f382cde30503610f6f4e7c9d9dc42384",
 }
 

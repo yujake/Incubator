@@ -244,7 +244,9 @@ PLACEHOLDER_SNIPPETS: tuple[tuple[str, str], ...] = (
     ("ROLE_POLICY", "绝对编号链（`t-NNNNNN->t-NNNNNN->t-NNNNNN`）"),
     ("ROLE_POLICY", "只写链尾（`D1` 或 `t-NNNNNN`，由秘书按台账现算从你到它的那一条链）"),
     ("ROLE_POLICY", "绝对编号（形如 `t-NNNNNN`）"),
-    ("TOOL_17", "写整条链（绝对编号 `t-NNNNNN->t-NNNNNN->t-NNNNNN`，或名册名"),
+    # 2026-11-16：`conductor.broadcast` 退场 ⇒ M 的工具面少一行，`conductor.guide`
+    # 从 TOOL_17 前移成 TOOL_16（工具段名按面的顺序现算，这张表跟着现读走）。
+    ("TOOL_16", "写整条链（绝对编号 `t-NNNNNN->t-NNNNNN->t-NNNNNN`，或名册名"),
 )
 
 

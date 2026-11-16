@@ -110,7 +110,9 @@ INVISIBLE_OK_SITES: dict[str, int] = {
     # （`conductor.wake_blocked` 的三种结局各写一次 `ok(...)`，实参都是运行时拼的
     # dict：键由 `Conductor.wake_blocked` 的返回决定），与上面那五件同族 ——
     # 补的是登记，不是口径。数字来自盘上实测（同一套 `(行, 列)` 去重）。
-    "conductor_tools.py": 40,
+    # 2026-11-16：40 → 39。`conductor.broadcast` 整件退场（业主逐字「广播工具…全面退场」）
+    # ⇒ 它那一处 `ok(got, **got)` 跟着消失；不是把某处改成看得见，是那一件工具没有了。
+    "conductor_tools.py": 39,
     # T3-P7（2026-09-29）：猜想台账的产出面。那一栏随业主 2026-11-13 的裁定甲退场：
     # `tools/conjecture_tools.py` 整份删除，写点搬到库层 `agentflow.conjectureledger`
     # （它不是工具、没有 `ok(...)` 的键面）⇒ 这一格不再有对象，登记一并删掉。

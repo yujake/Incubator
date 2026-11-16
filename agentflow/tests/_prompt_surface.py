@@ -89,6 +89,10 @@ class Exemption:
 
 #: 逐条登记。键 `(角色, token)`；出现次数是"当前这一版提示词"的读数，不是规格。
 #: 生成方式：`temp/cl2/build_table.py --emit`（两档各起一次进程，见那个脚本的 docstring）。
+#: 2026-11-16（p286，FC-27 三份补丁）：H 的 G8 段多点名一次 `conductor.closing`（收工门的
+#: `readings.run_evidence`）、M 的 G8 段多点名一次 `verify.run_experiment`（台账行带
+#: `code_hash` / `exit_code`）⇒ 两条 owner_annotation 的次数各 +1；锚点未动，类目未动
+#: （仍是同一类"写明施事是别人"的转述）。
 EXEMPT: dict[tuple[str, str], Exemption] = {
     ("A", "conductor.board"): Exemption("owner_annotation", "**主控**用 `conductor.board` 看它们", 1, 1),
     ("A", "conductor.closing"): Exemption("owner_annotation", "主控收工前调 `conductor.closing`", 1, 1),
@@ -129,7 +133,7 @@ EXEMPT: dict[tuple[str, str], Exemption] = {
     ("G", "search.register"): Exemption("owner_annotation", "登记走 A（`literature`", 1, 1),
     ("G", "verify.verify_proof"): Exemption("owner_annotation", "由 V 的 `verify.verify_proof`", 1, 1),
     ("H", "conductor.acceptance"): Exemption("owner_annotation", "主控用 `conductor.acceptance` 读它", 1, 1),
-    ("H", "conductor.closing"): Exemption("owner_annotation", "主控收工前调 `conductor.closing`", 5, 5),
+    ("H", "conductor.closing"): Exemption("owner_annotation", "主控收工前调 `conductor.closing`", 6, 6),
     ("H", "conductor.retire_child"): Exemption("namespace_note", "销号两个入口同一落点", 3, 3),
     ("H", "conductor.summon"): Exemption("namespace_note", "被拒的派活与没登记的条目不许写成已登记", 1, 1),
     ("H", "conductor.wake_blocked"): Exemption("owner_annotation", "要等主控 `conductor.wake_blocked`", 1, 1),
@@ -159,7 +163,7 @@ EXEMPT: dict[tuple[str, str], Exemption] = {
     ("M", "review.verify_fixes"): Exemption("partner_quote", "", 1, 1),
     ("M", "search.ingest_local"): Exemption("owner_annotation", "登记走 A（`literature`", 1, 1),
     ("M", "search.register"): Exemption("owner_annotation", "登记走 A（`literature`", 1, 1),
-    ("M", "verify.run_experiment"): Exemption("owner_annotation", "派 E 用 `verify.run_experiment", 1, 1),
+    ("M", "verify.run_experiment"): Exemption("owner_annotation", "派 E 用 `verify.run_experiment", 2, 2),
     ("M", "verify.verify_proof"): Exemption("owner_annotation", "由 V 的 `verify.verify_proof`", 1, 1),
 }
 

@@ -2610,7 +2610,42 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #: （`agent_surface_snapshot.json` / `tool_surface_snapshot.json`）按现值重冻；
 #: `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，本批未跑，读数因此
 #: stale —— 与 p283 / p284 那两格同一条待办）。
-PROMPT_VERSION = "p285"
+#: p285 → p286（2026-11-16，业主逐字「其余按建议」授权；本版含两笔，合并后一次抬版）：
+#:   ① FC-27 三份补丁（CL1 / CL2，`specs/m.py` / `specs/h.py` / `specs/b.py`）：
+#:      M 的 G8（可复跑门）改成「证据只有 `experiments` 台账、不交任何回执」——收工门
+#:      自己从台账现算：正文/验收表引到的每个 `exp:` 号都要有一行，且那一行带
+#:      `code_hash` 与整数 `exit_code`；台账里没有那一行 / 行上缺格 ⇒ `unbacked`，
+#:      台账读不出来 ⇒ `unreadable`（`conductor.closing` 的 `readings.run_evidence`）。
+#:      H 不再判回执（同一口径：证据只有台账行，H 只读、只对缺号落 finding）。
+#:      B 三处口径收口 —— `PROOF_CHANNEL_NO_LEAN` 里 `verify.verify_proof`（工具名）
+#:      降成动作名 `V.verify_proof`（B 该派的是动作）；`table.update` 的两处把列名
+#:      写清（`status` / `quote_reason` 在 `patch` 里，不是顶层参数；顶层必填是
+#:      `table` / `id` / `patch`）。只改教法与口径，语义未变。
+#:   ② `conductor.broadcast` 全面退场（业主 2026-11-16 逐字「广播工具现在已经被精细的
+#:      父对子监控替代，目前几乎已无用，全面退场」）：工具从
+#:      `conductor_tools._TOOL_FUNCTIONS` 移除，不再进任何角色面；`Conductor.broadcast`
+#:      内部方法保留（它只是工具那一层下面的管道，退场的是工具面）。相关判据改成钉
+#:      「已退场」：任何角色面上都没有它。
+#:   ③ 连带（压缩批次比例）：广播退场后压缩批次只剩 84 件，现量 6400/8523 = 75.11%
+#:      > 75%（退掉的那一件比平均压得更狠）⇒ 把 `review.report` 说明里的「（markdown）」
+#:      删掉（-10 字符，只 H 那一格），比例回到 6390/8523 = 74.97%；`MAX_RATIO` 与
+#:      `max_ratio` 一个字未动（这是压回，不是放宽）。同一条比例判据的负控照旧。
+#: 变化格（最终）= A / B / D / E / F / G / H / L / M 九格：
+#:   ① 只换 B / H / M（现算：其余八格逐字相同）；
+#:   ② 再换 A / B / D / E / F / G / L / M 八格（这八格的工具清单少了
+#:      `conductor.broadcast` 那一行；C / H / V 是只读角色，本来就没有它）。
+#:   H 另因 ③ 再换一次（`review.report` 那 10 字符）；C / V 两格与 p285 逐字相同
+#:   （版本行已归一）。
+#: 十一格不是手抄：`temp/FC1/recompute_digests.py`（导入判据自己的 `_surface_digest`，
+#: 先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算。
+#: 连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p286）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#: （facts 键集仍 15 格、count / keys_sha256 与 p285 同值）；两份 golden 按现值重冻
+#: （`agent_surface_snapshot.json` / `tool_surface_snapshot.json` —— 后者同时补上
+#: `d30f5c49` 改了 `review.report.run_evidence` 的 description 却漏掉的那次重冻）；
+#: 系统文档重生成；`tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
+#: 判据：`tests/test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS`（题面面）与
+#: `tests/test_the_lean_off_render_is_scanned.py`（`_PENDING_FC27` 清空后转守卫已修形态）。
+PROMPT_VERSION = "p286"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

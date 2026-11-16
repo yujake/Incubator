@@ -43,9 +43,8 @@ M_TOOL_FACE = {
     # 工作项板（业主 2026-10-08 裁 A1=甲）：M 的编排面看"还挂着什么"。
     # A–H 的那一半是 `manuscripts.items` / `manuscripts.ack`（领域动作面），不在这里。
     "conductor.board",
-    # 广播（S6-b，业主 T20/T21）：一件能力、所有角色同一个做法；M 也一样
-    # （「M 要广播全树就逐层向下调用即可」）。只读角色不在它的 `roles` 里。
-    "conductor.broadcast",
+    # 2026-11-16：`conductor.broadcast` 已整件退场（业主逐字「广播工具…全面退场」），
+    # 不再出现在任何角色的面上；M_TOOL_FACE 这一格因此逐名对不上它（见下面那条判据）。
     # 上行（2026-10-19 业主裁定「父子天然双向」）：M 也拿得到这一件 —— 判据要的是
     # 顶层调用会被受控拒绝（`not_caller`），而不是"顶层看不见这个工具"
     # （"看不见"与"不许"是两件事：前者模型会以为能力不存在而绕路）。
@@ -812,8 +811,8 @@ def test_conductor_hand_line_lists_its_real_write_tools(tmp_path: Path):
                  "fs.delete", "fs.move"):
         assert name not in hand_line, (name, hand_line)
     assert name not in writes, (name, writes)
-    # S6-b：广播是写工具（开板项）⇒ 它也进"手"那一档的清单。
-    assert "conductor.broadcast" in hand_line, hand_line
+    # 2026-11-16：广播工具退场 ⇒ 它不在写工具集合里（那条"手"的清单不再有它）。
+    assert "conductor.broadcast" not in writes, writes
     # 2026-10-26：`conductor.guide` 同样是写工具（链尾一条板项 + 每一跳一行转发台账）。
     assert "conductor.guide" in hand_line, hand_line
     # 2026-10-26（D-59）：`conductor.retire_child` 也是写工具（落名册三份台账 + 一条消边）。

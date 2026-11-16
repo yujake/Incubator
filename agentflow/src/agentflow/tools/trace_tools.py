@@ -556,7 +556,7 @@ def trace_children(store, root, *, task_id: str = "", depth: int = 1,
     """"我直接下级"的读数入口（判据在 `agenttrace.children_with_facts`）。
 
     身份从调用上下文读（`AgentLoop._do_tool` 用 `calling_as` 挂上），与
-    `conductor.broadcast` 同一处挂点：工具的形状里没有"我是谁"这一格。非 M 角色只许看
+    `conductor.guide` / `conductor.escalate` 同一处挂点：工具的形状里没有"我是谁"这一格。非 M 角色只许看
     自己的下级 —— 传别人的台账号会被受控拒绝，否则"一层"这条约束只要换一个 task_id 就
     绕过去了。能看几层由调用方身份决定（`role` 与 `mine` 分开读，原样交给
     `children_with_facts`）：脚本里就算传了 M 的 task_id，没有 M 的身份也只拿一层。

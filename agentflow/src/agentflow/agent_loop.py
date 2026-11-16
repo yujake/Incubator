@@ -4457,7 +4457,7 @@ SUMMON_WEAK_EVIDENCE_WHY: dict[str, str] = {
 }
 
 #: 稿名的形态（`reports/` 那一半与裸名都收；不带扩展名也算 —— 真机上父常只写
-#: "f-proof-3"）。
+#: 例如 f-proof-3 那一族）。
 _WEAK_MANUSCRIPT = re.compile(
     r"(?<![A-Za-z0-9_-])(?:reports/)?[a-z0-9][a-z0-9_-]*-proof-\d+")
 
@@ -11917,8 +11917,9 @@ class AgentLoop:
             return out
         tscope: Any = None
         try:
-            # S6-b：工具调用也带上"我是谁"（`conductor.broadcast` 的收件人是
-            # "我名下的直接子代理"，而工具的形状里没有这一格）。用 `calling_as`
+            # S6-b：工具调用也带上"我是谁"（`conductor.guide` / `conductor.escalate` /
+            # `trace.children` 的收件人/身份都靠这一格；2026-11-16 起广播工具已退场，
+            # 但同一条挂点还在用）。用 `calling_as`
             # 而不是给 conductor 塞属性：同一角色的两个并发实例共享对象。
             from .conductor import calling_as
 
@@ -12754,7 +12755,8 @@ class AgentLoop:
         `to="ALL"` 今天只有一种含义（公共频道），所以它不再是一支"内部直调的广播"
         —— 改前那条 `broadcast_only` 拒信是"两种写法"的产物：解码层把 `ALL` 归一成
         另一种写法，于是直调里的 `ALL` 就只剩内部调用。只剩一种写法之后，`ALL` 一律走
-        公共频道（`_message_by_channel`），逐项开板项的广播语义仍然只归 `conductor.broadcast`。
+        公共频道（`_message_by_channel`），逐项开板项的广播语义曾只归 `conductor.broadcast`
+        （该工具 2026-11-16 已全面退场；`to="ALL"` 今天只剩公共频道一种含义）。
         """
         if to and not _is_all_recipient(to) and to not in (*S.ROLES, S.CONDUCTOR_ROLE,
                                                            "user", "用户"):
@@ -12892,8 +12894,8 @@ class AgentLoop:
         `_do_message` 不走这里（判据在 `roster_addresses`）；它只有两个调用点：
         `_message_legacy`（判据拿来逐字对照旧行为的那条路）与判据文件对这条实现本身的
         直接调用（`tests/test_the_name_face_is_wired.py`）。`to="ALL"` 不进这里：它只有
-        一种含义（公共频道，见 `_message_by_channel`），逐项开板项的广播语义归
-        `conductor.broadcast`。
+        一种含义（公共频道，见 `_message_by_channel`）；逐项开板项的广播语义曾归
+        `conductor.broadcast`（该工具 2026-11-16 已全面退场）。
         """
         if self.secretary is None or self.conductor is None:
             return {"message": "未发出", "to": name, "ok": False, "receipt": "unknown",

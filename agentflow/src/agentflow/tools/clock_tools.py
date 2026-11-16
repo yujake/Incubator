@@ -124,7 +124,7 @@ from .base import ToolRegistry, ToolResult, fail, ok, tool
 #: 九件工具挂给全部角色 + 主控。业主口径是"通用工具"，不是某一角色的专有能力。
 _ROLES_ALL: tuple[str, ...] = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
 
-#: 写工具能挂的角色面：只读角色（C/H/V）不声明 —— 与 `conductor_tools.conductor_broadcast`
+#: 写工具能挂的角色面：只读角色（C/H/V）不声明 —— 与 `conductor_tools.conductor_retire_child`
 #: 同一个口径。声明了再让 `for_role` 剥掉会被 `cli tools` 报成"声明错误"
 #: （`role_filter_notes` 非空），而那份说明里逐字写着"行为上已被拦下，但声明本身应改"。
 #: 只读角色本来也起不了程序（它们没有写工具），所以"停程序"对它们无处可用。

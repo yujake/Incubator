@@ -2508,7 +2508,9 @@ def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
                sid: str = "") -> Iterator[None]:
     """这一小段代码以某个实例的身份跑（工具调用用）。
 
-    为什么工具调用也要带身份（S6-b）：`conductor.broadcast` 的收件人是"我名下的直接子代理"，而工具的形状里没有
+    为什么工具调用也要带身份（S6-b；2026-11-16 起广播工具 `conductor.broadcast` 已退场，
+    同一处挂点仍服务 `conductor.guide` / `conductor.escalate` / `trace.children` 这些要"我是谁"的工具）：
+    广播的收件人是"我名下的直接子代理"，而工具的形状里没有
     "我是谁"这一格 —— 只有循环知道（`self.my_task_id` 与 `self.role`）。挂点与 `summon` 那一处同一个
     （`ContextVar`，不是实例属性：同一角色的两个并发实例共享对象，挂在实例上会互相盖掉，见 `_CURRENT_TASK_ID`
     的理由）。`parent_task_id` / `parent_role` / `session_root` / `sid`（2026-10-19）：`conductor.escalate` 要的

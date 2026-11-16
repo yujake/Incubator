@@ -1316,6 +1316,23 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "而 void_items 发给 6 个父角色 ⇒ 原句在教 6 个拿不到它的角色去调。"
               "变化格 = A / B / D / E / F / G / L / M（这八格读得到 void_items 那一行）；"
               "C / H / V 是只读角色、面上没有它，逐字未动。facts 键集仍 15 格、落点没动。"},
+     # p285 → p286（2026-11-16，业主逐字「其余按建议」授权；本版含两笔，合并后一次抬版）：
+     # facts 键集一格没动（还是 15 格）—— ① FC-27 三份补丁只改教法与口径（M 的 G8 台账现算 /
+     # H 不判回执 / B 的工具名→动作名与 `patch` 列口径）；② `conductor.broadcast` 工具退场只改
+     # 工具面（8 个角色的工具清单少一行），没有哪一格事实换过落点（system ↔ user），所以
+     # count / keys_sha256 与 p285 同值。
+     {"version": "p286", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p286（2026-11-16，业主逐字「其余按建议」授权；本版含两笔）："
+              "① FC-27 三份补丁（CL1 / CL2）—— M 的 G8 改成证据只有 `experiments` 台账、"
+              "不交任何回执（门从台账现算 `unbacked` / `unreadable`）；H 不再判回执；"
+              "B 的 `PROOF_CHANNEL_NO_LEAN` 把工具名 `verify.verify_proof` 降成动作名 "
+              "`V.verify_proof`，`table.update` 两处写明列名在 `patch` 里（不是顶层参数）。"
+              "只改教法与口径，语义未变。② `conductor.broadcast` 工具全面退场（业主同批"
+              "逐字「广播工具…全面退场」）—— 工具从 `_TOOL_FUNCTIONS` 移除，不再进任何"
+              "角色面；`Conductor.broadcast` 方法保留。变化格 = A / B / D / E / F / G / H / "
+              "L / M 九格（① 换 B / H / M；② 再换 A / B / D / E / F / G / L / M），"
+              "C / V 与 p285 逐字相同。facts 键集仍 15 格、落点没动。"},
 
 )
 

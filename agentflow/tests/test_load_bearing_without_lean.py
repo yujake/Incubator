@@ -26,7 +26,7 @@
 | f | 负控：Lean 开着时"V 签"不算背书（那一档只给 Lean 关） | 同一份 V 签命题，开关打开 |
 
 夹具与 `tests/test_closing_gate.py` 同一份（`_project` / `_paper_with_claim` /
-`_numeric_experiment` / `_run_evidence`）；`_credential_fixture.issue_credential` 是
+`_numeric_experiment` / `_t3_experiment` / `_write_report`）；`_credential_fixture.issue_credential` 是
 仓库里"造一份可复算的 V 签"的唯一写法（只写三行台账不够：`statements_unsigned` 会把
 "够票却没有签文件"读成 `unissued`，`machine_pass` 因此永远真不了）。
 """
@@ -42,8 +42,7 @@ from agentflow.store import Store
 
 from _credential_fixture import issue_credential
 from test_closing_gate import (
-    _numeric_experiment, _paper_with_claim, _project, _run_evidence, _t3_experiment,
-    _write_report,
+    _numeric_experiment, _paper_with_claim, _project, _t3_experiment, _write_report,
 )
 
 #: 一条有证明过程、可以送 V 审的命题正文（与 `tests/test_lean_switch.py` 同形）。
@@ -83,7 +82,9 @@ def test_a_load_bearing_claim_without_any_backing_fails_and_is_named(
     st = _project(tmp_path)
     _numeric_experiment(st)                 # 只有数值支持，不是 T3
     _paper_with_claim(st)                   # proof 档断言，引到那条数值实验
-    _run_evidence(tmp_path)                 # 让 G8 那一档不跟着响
+    # 2026-11-16：`d30f5c49` 起 G8 直接从 `experiments` 台账现算（回执那条路已删）⇒
+    # 上面那条 `_numeric_experiment`（带 `code_hash` + `exit_code`）已经让 G8 有落点，
+    # 原先那句 `_run_evidence(tmp_path)`（写 RUN-EVIDENCE 回执）不再需要、也不再存在。
     rep = _gate(st)
 
     assert rep.status["load_bearing"] == "fail", rep.to_dict()

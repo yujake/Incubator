@@ -4,7 +4,7 @@
 ## 为什么要有这一条（审计 AU1 表一 A3）
 
 `tests/conftest.py:179` 把 `AGENTFLOW_LEAN_ENABLED` 钉成 `"1"`（套件基线 = Lean 开），
-而产品缺省是关（`leanscope.DEFAULT_LEAN_ENABLED`）。于是凡"只在关档渲染"的文案，CI
+而产品缺省是关（`settings.DEFAULT_LEAN_ENABLED`）。于是凡"只在关档渲染"的文案，CI
 里永远看不见 —— 13A 那一句就是：`specs/b.py` 的 `PROOF_CHANNEL_NO_LEAN` 把
 "再请 V 用 `verify.verify_proof` 逐行走查"（工具名）换进 B 的提示词，而 B 该派的是
 动作 `V.verify_proof`（同文件另一处写对了）。`tests/test_l_is_isolated_when_lean_is_off.py`
@@ -58,8 +58,9 @@ import _prompt_surface as PS
 ALL_ROLES: tuple[str, ...] = tuple(S.ROLES) + (S.CONDUCTOR_ROLE,)
 
 #: 13A 的待办登记：`specs/b.py` 的 `PROOF_CHANNEL_NO_LEAN` 里那句工具名。
-#: 补丁 apply 之后这里应当是空 dict；今天它是关档扫描唯一的红。
-_PENDING_FC27: dict[tuple[str, str], int] = {("B", "verify.verify_proof"): 1}
+#: 2026-11-16：补丁 `temp/CL2-fc27-b-policy.patch` 已 apply（`V.verify_proof` 动作名），
+#: 关档扫描不再有这一对 ⇒ 登记清空，下面那条判据随之转成"守卫已修形态"。
+_PENDING_FC27: dict[tuple[str, str], int] = {}
 
 #: `工具(kw=…)` 的调用形（只认小写点分工具名；`F.status` 这类动作不在射程）。
 _CALL = re.compile(

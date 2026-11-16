@@ -3153,7 +3153,7 @@ def _review_verify_fixes_tool(_not_wired, store, actor, semantic_judge=None, **k
 @tool(
     "review.report",
     (
-            "产出完整审校报告（markdown）：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。"
+            "产出完整审校报告：报告头钉住**被审版本 hash**、每道门带零发现自证数字、必含『**我这一轮犯的错**』一节；只写报告文件。"
             ),
     {
            "type": "object",

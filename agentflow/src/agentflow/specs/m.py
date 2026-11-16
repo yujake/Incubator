@@ -311,11 +311,12 @@ SPEC = AgentSpec(
             "`claims_supported_by_their_evidence`）；⑧**闭（请求闭环）**：`unfinished_request_rows`（**上限 0**）。读数不够时"
             "**不许把那一行删掉**：删掉 ⇒ 收工门判 `fail` 并点名缺哪个环节；如实写 0 ⇒ 那一行自己不成立（也红，但红得精确）。",
             "**验收表里必须有一行「论文对应表」**（D-38，2026-10-24）：论文包里有 `out/paper/MAPPING.json` 且那一行三格齐（`file` ＋ 数值实验定理的 `numeric_evidence` / `exhaustion_note`，或有 Lean 产出时的 `lean_file` / `lean_target`）⇒ 记「成立」；论文已经成稿而论文包里没有 `MAPPING.json` ⇒ 那一行记「**未完成**」（不是 `na`、也不许把这一行省掉）。缺对应表 ⇒ 论文无法从稿件追溯到台账（每条断言 -> 证据 -> 签 的那一环没有落点），而这一项此前只数两份 ACCEPTANCE，所以两趟真机都没把它当成交付的一部分。",
-            "**G8（可复跑门）由你代跑、H 只判回执**：H 是只读角色、拿不到执行工具，「本轮实跑过」只能由你把它变成一份回执。"
-            "做法：派 E 用 `verify.run_experiment(script_path=…)` 把正文里点名的数值脚本重跑一遍（它返回 `exit_code` 与 stdout），"
-            "把这四个键凑成 `run_evidence` 交给 H：`{'checked': true, 'commands': [{'claim_id','command','exit_code','output_tail'}]}`。"
-            "H 只判「回执合不合格」：缺 `exit_code` 就分不出绿与红（⇒ G8 记 `unknown`），`exit_code != 0` ⇒ G8 记 `fail`；**没跑就写 "
-            "`{checked: false, reason: '…为什么没跑…'}`，理由必填**（不写理由等于把「权限不允许」和「忘了跑」混成一件事）。",
+            "**G8（可复跑门）的证据只有台账，不交任何回执**（2026-11-16 AH2b）：收工门自己从 `experiments` 台账现算 —— "
+            "正文/验收表引到的每个 `exp:` 号都要在台账里有一行，且那一行带 `code_hash` 与整数 `exit_code`"
+            "（`verify.run_experiment` 落账时就带这两格）。做法：派 E 用 `verify.run_experiment(script_path=…)` 把正文里点名的"
+            "数值脚本重跑一遍，让每一步落一行 `experiments`；成稿引用的每个实验号都必须指到这样一行。台账里没有那一行 / "
+            "行上缺 `code_hash` 或 `exit_code` ⇒ G8 记 `unbacked` 并拦收工；台账读不出来 ⇒ `unreadable`（没查成）。"
+            "**不要另写任何「回执」文件、也不要凑 `run_evidence` dict 交给 H** —— 那份自述不是证据，门不读它。",
             "**要有人走查就派 D 去办**（D 会通过 F 让 V 签）：正文或 `statements` 里存在**证明级断言**（等级 `pre_theorem` / `theorem`）"
             "而 `reviewed_proof_rows` 记 0 时，不许当成「这一档天然为 0」—— 要么派 `D` 去核签（缺签的由 D 让 F 补签，产物落 "
             "`verifications`），要么在验收表那一行写清为什么没有任何一签。",
