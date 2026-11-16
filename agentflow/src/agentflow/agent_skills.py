@@ -741,7 +741,7 @@ A → B → C → D → F → V；再 D → B(收录证明)
 
 | 跳 | 入口条件 | 产物（落到哪张表/哪一格） | 出口判据（什么算这一步做完了） | 卡住时怎么办 |
 |---|---|---|---|---|
-| **A** 检索 | 问题已翻译成该方向的规范术语（题面式说法不算入口：查不到不等于没有） | 待新增文献列表（每委托重置，可增/删/查），审完**一键迁移 ≤10 篇**进 `literature` | 入库 ≤10 且报告里"已入库（含一句摘要）/未入库（含筛除理由）"两块都在 | 拿不到就写 `unresolved`，不许拿"没搜到"当"不存在" |
+| **A** 检索 | 问题已翻译成该方向的规范术语（题面式说法不算入口：查不到不等于没有） | 待新增文献列表（每委托重置，可增/删/查）；逐条判收 = `qualified`（**不注册、还没有号**），再由**提交**那一步批量注册 ≤10 篇并回填号、落带号定稿报告、清表 | 入库 ≤10 且报告里"已入库（含一句摘要）/未入库（含筛除理由）"两块都在；**提交才注册**（判收之后没有号是正常的） | 拿不到就写 `unresolved`，不许拿"没搜到"当"不存在"；待裁没判完 ⇒ 整批提交会被拒 |
 | **B** 概念与关系 | 已有入库文献 | `statements` 一行一条（`kind=concept`）＋ `relations`（`kind` / `quote` / `quote_verified` 三格） | 关系能回答"这两个概念什么关系、凭哪一句原文"；**空边不许产出** | 抽不完就报"未抽取 K 篇"，不许假装抽完 |
 | **C** 关系分析 | 图上已有概念与关系 | `analysis_reports` 一条：**候选的更短路径** ＋ **关键那一步是什么** ＋ 为什么因此更短 | 能说清"删掉/替换掉哪一步" | 图太空就如实写"数据未抽取，算不出"（回头要 B 补抽），不许硬编候选 |
 | **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | **待登记命题**（`conjectures`）一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
@@ -2638,7 +2638,7 @@ def _a_skills() -> tuple[Skill, ...]:
             tools=("search.literature", "search.shelf", "search.local", "search.providers",
                    "search.register", "search.dedup_check", "search.walk_citations",
                    "search.download", "text.extract", "lit.stage_add", "lit.stage_list",
-                   "lit.admit", "lit.stage_reject",
+                   "lit.admit", "lit.admit_all", "lit.stage_reject",
                    "table.get", "table.search", "fs.read", "manuscripts.read"),
             body="""# 查不到就换招法
 
@@ -2756,25 +2756,42 @@ def _a_skills() -> tuple[Skill, ...]:
 
 ## 八、判"这条文献符不符合需求"：**这是你的判断，且必须留痕**
 
-框架**不会**替你判相关性，也不会替你读正文。待新增列表里的每一条，你都要落一个判词；
-**要把一条判成 `readable`（可读全文）之前，必须真的抽到正文并读过**：
+框架**不会**替你判相关性，也不会替你读正文。待新增列表里的每一条，你都要落一个判词（三态：**待裁 / 通过 / 拒**）。
+判之前有一条硬闸：**每一条候选都必须先抽读一次**——没有抽读回执的判定会被 `lit.admit` 整批拒
+（`no_read_evidence`，逐槽点名）。
 
-1. **取字节**：`search.download` 拿全文的 `rel_path`（没有可取的全文 ⇒ 走第 4 条）；
-2. **抽正文**：`text.extract(path=<rel_path>, lit_id="cand:<槽位>")` —— `cand:` 前缀是
-   "这一条候选"的写法。它把 `.txt` 落在 `out/texts/`，并留下一条**抽读回执**
-   （字数 / 指纹 / 乱码判定）。没有抽读回执的 `readable` 会被 `lit.admit` 整批拒
-   （`no_read_evidence`，逐槽点名）；
+1. **取字节**：`search.download` 拿全文的 `rel_path`；
+2. **抽正文（必做，没有"跳过"这一档）**：`text.extract(path=<rel_path>, lit_id="cand:<槽位>")` —— `cand:` 前缀是
+   "这一条候选"的写法。它把 `.txt` 落在 `out/texts/`，并在 `data/lit_reads.jsonl` 留一条**抽读回执**
+   （字数 / 指纹 / 乱码判定）；那份账只有 `text.extract` 能写，你别手写；
 3. **读它**：`fs.read` 那份 `.txt`。**抽了不读也算没读**：闸核的是你读的与抽读件同一版；
 4. **判**：`lit.admit` 的 items 里逐条给 `availability` 与那一句 `relevance`
    （质量如何、相关度如何、凭什么 —— 从正文里看出来的，不是抄题名）。不入的用
    `lit.stage_reject`（受控理由码 + 一句为什么）。
 
-没有字节 / 抽过失败的**不许报 `readable`**：前者报 `metadata_only`（必须指得出处
-DOI/URL），后者报 `extract_failed` 并按 `rejected_low_quality` 判拒；`unknown` 不入库。
-**"我觉得读过"不是证据**：抽读回执 + 那次 `fs.read` 才是 —— 十条候选一次写死 relevance
+可读性四档（受控词，别自拼同义词）：`readable`（有字节、且抽得出可读文本）/
+`metadata_only`（**试过一次抽取也没拿到可读文本**，只剩书目元数据 —— 必须指得出处 DOI/URL）/
+`extract_failed`（有字节但抽出来的不是可读文本：乱码 / 无文本层 ⇒ 按 `rejected_low_quality` 判拒）/
+`unknown`（没判过 ⇒ 不入库）。**前两档才准入**；`metadata_only` 不是"零读可入"的口子。
+
+## 九、提交才注册：`lit.admit` 判收、`lit.admit_all` 收口（2026-11-16 Q1）
+
+判收 ≠ 注册。`lit.admit` 只把这一条判成 `qualified`（有入库资格、**还没有号**），
+真正发文献号的是**提交**那一刻的 `lit.admit_all`。所以一条委托的收尾是这几步，顺序不许换：
+
+1. 逐条判：`lit.admit`（每条带 `relevance` 与 `availability`）或 `lit.stage_reject`（拒）；
+   **还有待裁的条目时整批提交会被拒**，所以先把每一条判完；
+2. **提交**：`lit.admit_all` —— 先落**无号快照** `reports/lit-<请求号>.submitted.md`（号还没发，报告里也没有号），
+   再批量注册、把 `lit_id` 回填到同一行，最后重渲染**带号定稿** `reports/lit-<请求号>.md`；
+   回填不是字符串替换，是同一份纯函数渲染两次 —— 所以"回填前后的报告除号之外逐字相同"这一点由框架保证；
+3. **清表**：提交顺带给本委托每一行打 `cleared_at` + `clear_reason`（不物理删）。
+   表没清完 ⇒ 收工门第八格 `literature_pending` 报 `fail`（待入库表还有 `pending`、或当前委托没清表都会拦），
+   而"清表之后"才叫真正收工。
+
+**"我觉得读过"不是证据**：`data/lit_reads.jsonl` 的回执 + 那次 `fs.read` 才是 —— 十条候选一次写死 relevance
 的批量账，会在这道闸上被逐槽点名。
 
-## 九、交回时的一句话摘要（给主控读的）
+## 十、交回时的一句话摘要（给主控读的）
 
 除三档缺口（第四节）之外，多加一行**这一趟的经验**：哪条路通了、哪条路不通、下一步该换哪条招法。
 主控不需要知道你查了几次，它需要知道**"这个方向还能不能往下走、往哪走"**。
