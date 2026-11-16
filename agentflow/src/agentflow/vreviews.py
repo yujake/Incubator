@@ -330,6 +330,11 @@ def _deliver(store: Any, root: str | Path, *, key: str, summary: str,
         return out
     role = str(parent_role or role_hint or "")
     out.update(role=role, parent_task_id=str(parent_id))
+    if not role:
+        out.update(state="undelivered",
+                   reason="读不到被审者的角色（`current_parent` 只给了编号）⇒ "
+                          "不拿一个默认角色去猜收件人")
+        return out
     try:
         board = [dict(r) for r in conductor._board_rows()]
     except Exception:  # noqa: BLE001 —— 读不成就不去重（宁多一条，不静默丢）
@@ -342,7 +347,7 @@ def _deliver(store: Any, root: str | Path, *, key: str, summary: str,
         return out
     try:
         item_id = conductor.open_item(
-            kind="notice", role=role or "F", expects="", action="notice",
+            kind="notice", role=role, expects="", action="notice",
             summary=summary, called_by=actor, parent_task_id=str(parent_id),
             depth=max(1, int(depth or 1)), input_key=key)
         got, problem = conductor.set_item_detail(item_id, detail)
