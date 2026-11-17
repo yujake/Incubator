@@ -21,8 +21,10 @@ V 21:37 才签                                   ⇒ 稿至今「已签、未提
 | # | 造什么 | 期望 |
 |---|---|---|
 | b | 先收工（无签）→ 之后 V 才签 | 稿最终有 `mss:` 记号，`via=sign_issued` |
-| c | 签触发 + 收工各一次 | 只有一条记号（幂等） |
+| c | 签触发 + 收工各一次 | 只有一条记号（幂等）；重复签发那一趟的 `submission` 读成 `already=True`（FIX11/R2 的那一格：幂等早退此前把「签触发提交」整个跳过） |
 | d | 反真空：把签触发摘掉 | b 的断言红 |
+| e | 反真空（R2）：幂等那一支不再补「签触发提交」 | c 的 `already` 断言红（否则那一笔不承重） |
+| f | 给了 `store` 而这一笔没走到「签落成」 | 读数说的是真话（不许再写"调用方没给 store"） |
 
 收工门那一半（「未签未放弃才拦、签只是可 finish」）按业主 2026-11-11 的新裁定重写，
 判据在 `tests/test_yi_unsigned_plan_blocks_closing.py`（a/a2/a3/a4/a5）—— 本文件不再
@@ -190,3 +192,58 @@ def test_d_without_the_sign_trigger_b_goes_red(tmp_path, monkeypatch):
     tokens, _bad = FD.submissions_of(_tokens(st))
     with pytest.raises(AssertionError):
         assert "000000" in tokens
+
+
+def test_e_without_the_mark_on_the_idempotent_path_c_goes_red(tmp_path, monkeypatch):
+    """反真空（e）：幂等那一支不再补「签触发提交」⇒ c 的 `already` 断言必红。
+
+    改前形态（`adc44a8a` 的早退）逐字就是这一档：签文件已在盘上 ⇒ `vsigns.issue`
+    直接 return，`submission` 停在初值（`checked=False / already=False`）。这里把补的
+    那一笔打桩成"改前那一档的读数"，c 的那一条断言就必须红 —— 否则"改后绿"证明不了
+    那一笔在承重。同时钉住那一笔真的落在幂等分支上（`reached` 恰好一次）。
+    """
+    st = _ws(tmp_path)
+    _task(st)
+    rel = _manuscript(st, "000000")
+    first = _sign(st, rel)
+    assert first.get("written") is True, first
+
+    reached: list[str] = []
+
+    def _pre_fix_reading(root, *, store, key, doc):   # 改前那一档：这一格没查
+        reached.append(str(key))
+        return {"checked": False, "written": False, "already": False, "via": "",
+                "why": "反真空：幂等那一支的「签触发提交」被摘掉了"}
+
+    monkeypatch.setattr(VS, "_sign_submission", _pre_fix_reading)
+    again = _sign(st, rel)
+    assert again.get("idempotent") is True, again
+    sub = dict(again.get("submission") or {})
+    assert sub.get("already") is not True, ("幂等那一支的补丁被打掉了，`already` 还是 "
+                                            f"True ⇒ c 的断言不承重：{sub}")
+    assert sub.get("checked") is False, sub
+    assert len(reached) == 1, ("幂等那一支根本没有走到「签触发提交」那一笔 ⇒ 改后 c 的绿"
+                               f"不是它给的（实际调到 {len(reached)} 次）")
+
+
+def test_f_the_default_reading_does_not_blame_the_caller(tmp_path):
+    """f：给了 `store` 而这一笔没走到「签落成」时，读数说的是真话。
+
+    改前那句初值 why 逐字是"调用方没给 store ⇒ 签触发提交这一格没查"——而走到这一档的
+    调用方往往给了 `store`（`issue` 在门槛 / 形状 / 背书任一闸上早退都留着这句），
+    于是"没查"的原因被写成了一句与事实相反的话（`adc44a8a` 的早退让它变成常态）。
+    真话只有一句：这一笔没有走到「签落成」那一步。
+    """
+    st = _ws(tmp_path)
+    got = VS.issue(st.root, artifact_sha="0" * 64, streak=1, need=3,
+                   by="secretary:F", store=st)
+    assert got.get("written") is False and got.get("refused_below_need") is True, got
+    sub = dict(got.get("submission") or {})
+    assert sub.get("checked") is False and sub.get("already") is False, sub
+    why = str(sub.get("why") or "")
+    assert "没有走到" in why, ("初值那一格又不说自己为什么没查了（三态少了原因）："
+                               f"{why!r}")
+    assert "调用方没给 store" not in why, (
+        f"初值那句假话又回来了：调用方明明给了 store，读数却说没给（{why!r}）")
+
+

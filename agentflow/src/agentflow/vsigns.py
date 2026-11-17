@@ -2177,12 +2177,22 @@ def sign_ledger_backing(root: Any, ledger: Any, *, proof_sha256: Any) -> dict[st
     return out
 
 
-def _existing_sign_update(root: Any, key: str) -> tuple[dict[str, Any], bool]:
+def _existing_sign_update(root: Any, key: str,
+                          store: Any = None) -> tuple[dict[str, Any], bool]:
     """同一份正文的签已经在盘上 ⇒ 这一笔只回读数（一个字节都不写）。
 
     2026-11-17：位置在"票数 / 形状 / 背书 / 系统计数"四道闸之前 —— 那几道闸管的是
     "不许写出一个没有依据的签"，而这一档根本不写。盘上那份签是先前某一趟发出来的，
     后来改稿 / 打回 / 重送都不改写它。返回 `(要并进返回值的格, 是否到此为止)`。
+
+    ## 幂等这一档也要走「签触发提交」（FIX11，R2）
+
+    业主 2026-11-11 甲的口径是「签文件写成（或本来就在）之后调
+    `manuscriptsubmission.mark_sign_submitted`」——`issue` 的 docstring 逐字有这一句，
+    实现此前只覆盖"写成"那一半：这一支早退时整个跳过"签触发提交"⇒ 重复签发读不出
+    `already=True`（回执停在初值，还说"调用方没给 store"）。父版本（`adc44a8a^`）
+    同一支不早退、能落到那一笔上；早退是拆函数时顺手带进来的。
+    所以这一格把那一笔的结果并进返回值（`store` 不可用时是 `checked=False` + 真原因）。
     """
     path = sign_path(root, key)
     if not path.is_file():
@@ -2204,6 +2214,8 @@ def _existing_sign_update(root: Any, key: str) -> tuple[dict[str, Any], bool]:
         out["archive_error"] = str(got.get("error") or "归档没写成")
         out["reason"] = (f"{out['reason']}；但归档没更新：{out['archive_error']}"
                          "（签文件是证据，已在盘上；归档可由 rebuild 补）")
+    # 位置在归档之后、与 `issue` 那一处同一条纪律：记号写不成只落读数，不许把这一签带走。
+    out["submission"] = _sign_submission(root, store=store, key=key, doc=doc)
     return out, True
 
 
@@ -2311,10 +2323,11 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     out: dict[str, Any] = {"written": False, "idempotent": False, "conflict": False,
                            "path": "", "archive_error": "", "archive_count": 0,
                            "reason": "", "sign": {}, "envelope": {}, "code": "",
-                           #: 签触发提交那一笔的读数（三态；`store=None` 时是没查成）。
+                           #: 签触发提交那一笔的读数（三态；这一笔没走到那一步时就是没查成）。
                            "submission": {"checked": False, "written": False,
                                           "already": False, "via": "",
-                                          "why": "调用方没给 store ⇒ 签触发提交这一格没查"},
+                                          "why": ("签触发提交这一格没查（这一笔没有走到"
+                                                  "「签落成」那一步：前置闸拒了 / 提前返回）")},
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
                            "refused_below_need": False,
@@ -2339,7 +2352,7 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
                            "门槛还没到就没有签（门槛由框架按这一趟送审自己数）"))
         return out
     # ---- 一稿一签：同一份正文的签已经在盘上 ⇒ 这一笔不写任何字节（见 helper）----
-    _existing, _stop = _existing_sign_update(root, key)
+    _existing, _stop = _existing_sign_update(root, key, store=store)
     out.update(_existing)
     if _stop:
         return out
@@ -2442,20 +2455,24 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
                          "（签文件是证据，已在盘上；归档可由 rebuild 补）")
     # ---- 签触发提交（2026-11-11 甲）：签文件已经在盘上 ⇒ 让产出方那一行知道 ----
     # 位置在归档之后：签是既成事实；提交记号写不成只落读数，不许把这一签带走。
-    _submission = _sign_submission(root, store=store, key=key, doc=doc)
-    if _submission is not None:
-        out["submission"] = _submission
+    out["submission"] = _sign_submission(root, store=store, key=key, doc=doc)
     return out
 
 
 def _sign_submission(root: Any, *, store: Any, key: str,
-                     doc: Mapping[str, Any]) -> dict[str, Any] | None:
-    """签触发提交那一笔的读数（`store=None` ⇒ `None`：这一格没查成，保持初值）。
+                     doc: Mapping[str, Any]) -> dict[str, Any]:
+    """签触发提交那一笔的读数（`store` 不可用也给真话：三态不许少"为什么没查"）。
 
-    「签了但没提交」与「没签」必须分得开 ⇒ 这一笔抛什么都不许把签带走，只如实报。
+    两种签法（新写 / 本来就在）都要走到这一笔 —— 「签了但没提交」与「没签」必须分得开，
+    ⇒ 这一笔抛什么都不许把签带走，只如实报。`store` 没给 / 给的不能用时返回的是
+    `checked=False` + 真原因，不是 `None`：改前 `None` 会让调用方保留初值，而初值
+    那句 why 写的是"调用方没给 store"—— 调用方明明给了的时候那就是假话
+    （`tests/test_jia_sign_submission.py::test_e` 钉这一格）。
     """
     if store is None or not hasattr(store, "rows") or not hasattr(store, "tx"):
-        return None
+        return {"checked": False, "written": False, "already": False, "via": "",
+                "why": ("调用方没给可写的 `store`（要 `rows` + `tx`）⇒ "
+                        "签触发提交这一格没查（不是「没签」，也不是「已提交」）")}
     try:
         from . import manuscriptsubmission as _MS
 
