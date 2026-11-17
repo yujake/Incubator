@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T00:38:01+08:00",
+  "generated_at": "2026-11-17T09:18:05+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -19,10 +19,10 @@
       "path": ".noai-paths",
       "glob": ".noai-paths",
       "category": "auth-audit",
-      "sha256": "0e38fd0faf77bf571bb931cea2cd6f7f7772ae3b08b2ba5450d8eac3071ba315",
+      "sha256": "839e5f21d723704ba41ef4abcc208f95f31e8b9c554f207f24ade1f61e348b92",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 144bbee3c0b1 变为 0e38fd0faf77，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "AU2b·② 写集定位：AGENTS.md 与 .noai-paths 的 L 理由同步改成真拦点（direct_write_refusal + not_statement_writer），不再把「L 绕不过 V 签」归因到 write_set。登记=写当前 sha，reviewers 仍为空（登记≠批准）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
@@ -32,10 +32,10 @@
       "path": "AGENTS.md",
       "glob": "AGENTS.md",
       "category": "auth-audit",
-      "sha256": "5e3af6f7355d6ee7676e051c32a0dffbde02a6c5e0c4673bb6981decc466dcb8",
+      "sha256": "019ddb9fdd9e11f1f86ee805879d32dc1ad0cd085ba122e31bd54ff8ae2af392",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 c020979a83b9 变为 5e3af6f7355d，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "AU2b·② 写集定位：AGENTS.md 与 .noai-paths 的 L 理由同步改成真拦点（direct_write_refusal + not_statement_writer），不再把「L 绕不过 V 签」归因到 write_set。登记=写当前 sha，reviewers 仍为空（登记≠批准）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],

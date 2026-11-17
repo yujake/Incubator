@@ -60,3 +60,48 @@ def test_secretary_is_documented_as_a_channel_and_ledger_proxy() -> None:
     assert "not_statement_writer" in specs
     design = _text(DESIGN_ROLES)
     assert "秘书不是角色" in design and "判定通道 + 落库代理" in design
+
+
+# ====================================================================== ② 写集的定位
+def _manifest_reason_for(path_tail: str) -> str:
+    """从 `.noai-paths` 取某一条路径的理由串（清单里的理由是权威口径，不另抄一份）。"""
+    manifest = (REPO / ".noai-paths").read_text(encoding="utf-8")
+    for line in manifest.splitlines():
+        if line.strip().startswith(path_tail):
+            return line
+    raise AssertionError(f".noai-paths 里找不到 {path_tail}")
+
+
+def test_write_sets_are_documented_as_a_concurrency_axis_not_permission() -> None:
+    """写集是并发轴（谁能同时写同一张表），不是权限轴；「L 绕不过 V 签」的真拦点是另两条。"""
+    from agentflow import capabilities as C
+    from agentflow import secretary as SEC
+    from agentflow import store as ST
+    from scripts import noai_gate as G
+
+    specs = _text(ROLE_SPECS)
+    assert "并发轴，不是权限轴" in specs
+    assert "通用设计，不必精确到单个角色" in specs
+    assert "direct_write_refusal" in specs and "not_statement_writer" in specs
+    # 旧归因那句话必须已经不在权威正文里
+    assert "刻意**不含** `statements` ⇒ \"L 绕过 V 的签给命题升档\"在结构上不可能" not in specs
+
+    # 两处清单逐条一致（FC-27 的机器判据），且 L 那条理由说的是真拦点
+    assert G.check_manifest_consistency(
+        manifest_path=REPO / ".noai-paths", agents_md=REPO / "AGENTS.md") == []
+    agents_reason = ""
+    agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
+    for line in agents.splitlines():
+        if line.strip().startswith("src/agentflow/specs/l.py"):
+            agents_reason = line
+            break
+    assert agents_reason, "AGENTS.md 清单里找不到 specs/l.py 那一条"
+    assert agents_reason == _manifest_reason_for("src/agentflow/specs/l.py")
+    assert "direct_write_refusal" in agents_reason and "not_statement_writer" in agents_reason
+    assert "刻意不含 statements" not in agents_reason
+
+    # 代码面：那两条真拦点真的在
+    assert SEC.STATEMENT_WRITER_ROLES == ("B",)
+    for table in ("statements", "dependencies"):
+        assert ST.direct_write_refusal(table)
+    assert C.WRITE_SETS["L"] == frozenset({"experiments"})

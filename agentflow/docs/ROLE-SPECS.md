@@ -286,22 +286,28 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 
 **没有任何角色能召唤 `M`**（`capabilities.NON_SUMMONABLE = {"M"}`，`capabilities.NON_SUMMONABLE`）。
 
-### 0.6 写集（`capabilities.WRITE_SETS`）
+### 0.6 写集（`capabilities.WRITE_SETS`）—— 并发轴，不是权限轴
 
-两张写集相交 ⇒ 两个任务**串行**（`policy.estimate_write_conflict` / `capabilities.write_sets_intersect`）。
+**写集只回答一件事：两个任务会不会同时写同一张表。** 两张写集相交 ⇒ 两个任务**串行**（`policy.estimate_write_conflict` / `capabilities.write_sets_intersect`；`conductor.summon_many` 按它分波）。它**不是权限轴**：
+
+- 谁能改哪张表，由**工具面**（`tools/base.py::for_role` 的结构性过滤）与**调用期角色判据**决定；
+- 命题 / 依赖这两张表另有一道更硬的闸：`store.direct_write_refusal`（通用写口一律拒）＋ 秘书的 `not_statement_writer`（只有 B 能经那一格落）；
+- 「L 绕过 V 签给命题升档」的真拦点是上面这两条，**不是** `WRITE_SETS["L"]` 里没有 `statements`。
+
+**通用设计，不必精确到单个角色。** 写集是一张**粗粒度**的并发声明：按「角色的 Python 实现可能写哪些表」登记，允许条件性写，也允许比实际多一格或少一格（多登记一格只让并发变保守；少登记一格只影响分波，不影响任何人真的写不写得进去）。下面这张表是**读数**，不是「每个角色能写什么」的规格 —— 读到 B / E / F 的 `conjectures` 或 D 不含 `attack_plans` 这类差异时，不要据此判权限错；判权限去看工具面与上面那两条真拦点。
 
 | 角色 | 写集（表级） |
 |---|---|
 | `A` | `search_requests`, `literature` |
-| `B` | `literature`, `statements`, `relations`, `reprocess_requests`（S1r 并表后：概念行住 `statements` 的 `kind="concept"` 那一档，`concepts` 已退役） |
+| `B` | `conjectures`, `literature`, `statements`, `relations`, `reprocess_requests`（`conjectures` 是 2026-11-13「猜想台账唯一写点搬到产出侧」之后加的：B 收录成功之后把「这条命题已进命题台账」记进猜想台账；`concepts` 已退役，概念行住 `statements` 的 `kind="concept"`） |
 | `C` | `analysis_reports`, `search_requests`（**两格都是只读角色的显式登记例外**：`analysis_reports` 是 `handle` 的产出登记口，`search_requests` 是 I3 直连那条通道；真身 `specs/c.py` 的 `write_set`，两条理由见 §C 的那张表与 `agent_c/core.py` 的注释） |
-| `D` | `research_questions`, `search_requests`（**不含** `relations`：D 对关系是**读** —— `specs/d.py` 的 `write_set` 是它的真身，`capabilities.py` 的注释逐字写着"D 的 `relations` 是读"；改关系状态的是 B） |
-| `E` | `experiments` |
-| `F` | `attack_plans`, `search_requests`, `reprocess_requests`（**没有 `statements`，也没有 `dependencies`**：2026-10-26 收口批把 `statements` 从 F 的写集里拿掉 —— 命题只经秘书 / B 登记（`secretary.STATEMENT_WRITER_ROLES = ("B",)`）；依赖边由 B 读 F 的证明手稿登记（`used_by="stmt:<命题号>#pN"` + `path_group`）。F 的活是把证明与手稿里那一节 `## 依赖` 四列表写清楚（`reports/f-proof-<命题号>.md`），登记由收方读稿产生；`evidence_kind` 由 V 在 `verifications/<命题号>.jsonl` 里的签名现算；真身 `specs/f.py` 的 `write_set`） |
+| `D` | `research_questions`, `search_requests`（**不含** `relations`，也**不含** `conjectures` / `attack_plans`：D 对关系与猜想台账都是**读**；`attack_plans` 由 F 的 `attack.*` 落。真身 `specs/d.py` 的 `write_set`） |
+| `E` | `conjectures`, `experiments`（`conjectures`：`run_experiment` 落实验行的**同一个事务**里把这条命题记进猜想台账，`conjectureledger.register`；真身 `specs/e.py`） |
+| `F` | `attack_plans`, `conjectures`, `search_requests`, `reprocess_requests`（**没有 `statements`，也没有 `dependencies`**：命题只经秘书 / B 登记（`secretary.STATEMENT_WRITER_ROLES = ("B",)`）；依赖边由 B 读 F 的证明手稿登记（`used_by="stmt:<命题号>#pN"` + `path_group`）。F 的活是把证明与手稿里那一节 `## 依赖` **三列表**写清楚（`reports/f-proof-<命题号>.md`；2026-11-13 起三列，老盘四列仍读得回），登记由收方读稿产生；`conjectures` 是 F 落稿那一刻记「我提出过这条」；`evidence_kind` 由 V 在 `verifications/<命题号>.jsonl` 里的签名现算；真身 `specs/f.py` 的 `write_set`） |
 | `G` | `documents`, `dependencies`, `review_findings` |
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
 | `V` | （空 ⇒ 不写任何**数据表**：它写的是自己维护的凭据台账 `verifications/<命题号>.jsonl`（工作区文件）与签的侧文件；`READ_ONLY_ROLES` 里的 `"V"` 与 `READONLY_CALL_EXCEPTIONS["V"]` 一起守它） |
-| `L` | `experiments`（**只有这一格**：`record` 落一行 `method="formal"` 的机器核验行 —— `experiments` 的口径是「机器核验与实验台账」，E 写 `numeric` / `symbolic` / `exhaustive_search`，L 写 `formal`（Lean 核验），形式化行落这里不是数值实验；刻意**不含** `statements` ⇒ "L 绕过 V 的签给命题升档"在结构上不可能。真身 `specs/l.py` 的 `write_set`） |
+| `L` | `experiments`（**只有这一格**：`record` 落一行 `method="formal"` 的机器核验行 —— `experiments` 的口径是「机器核验与实验台账」，E 写 `numeric` / `symbolic` / `exhaustive_search`，L 写 `formal`（Lean 核验），形式化行落这里不是数值实验。**「L 绕不过 V 签」不靠这一格**：真拦点是 `store.direct_write_refusal("statements")` ＋ 秘书的 `not_statement_writer`；写集只是并发读数。真身 `specs/l.py` 的 `write_set`） |
 | `M` | （空 ⇒ 并发判据上按"整张表"处理，与任何人串行） |
 | 编排器自有 | `CONDUCTOR_WRITE_SET = {tasks}` |
 
@@ -312,7 +318,8 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 > 这一段此前写的是"为什么不在上面任何一行的写集里…到今天为止没有任何角色的实现写这张表…
 > 等 P2 的提示词落地、`specs/b.py` 的写集必须同步加上 `statements`" ——
 > **那句话与它上面三行之内的表格自相矛盾**（`B` 那一行已经写着它了），按代码为准改正。
-> 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入）。
+> 写集登记的口径不变：它是"**角色的 Python 实现**会 `store.tx()` 哪些表"（并发判据的输入），
+> **不是**权限闸；权限错请按本节开头那两条真拦点判。
 
 ### 0.7 动作表（`capabilities.CAPABILITIES`，67 个动作）
 
@@ -1709,7 +1716,7 @@ C 的产出有两类，状态语义完全不同。
 | 不做什么 | 为什么不由 L 做 | 该由谁做 |
 |---|---|---|
 | **改写命题的任何一处**（假设、量词、定义、命题的名字） | `specs/l.py` 的 `boundary` 逐字："被改写过的定理即使机器核过，也不是原文那条" —— 加强假设是最容易混过去的一种走偏 | **B**（`statements` 的唯一登记方） |
-| 给命题**升档**（改 `statements` 的 `evidence_kind`） | 写集里只有 `experiments`，刻意不含 `statements`；**形式化 ≠ 审过**，"L 绕过 V 的签"在结构上不可能（不是靠纪律） | **V**（签第 3 位）+ **F / B**（登记） |
+| 给命题**升档**（改 `statements` 的 `evidence_kind`） | 形式化 ≠ 审过；真拦点是 `store.direct_write_refusal("statements")`（通用写口一律拒）＋ 秘书的 `not_statement_writer`（只有 B 能经那一格落），不是写集 —— 写集只是并发读数 | **V**（签第 3 位）+ **F / B**（登记） |
 | 判"这条命题值不值得做、下一步往哪儿走" | 那是**方向判断**，不是形式化判断；L 的官能表里 `敢创新` 是 `minor` | **D** |
 | 稿件级正式审查（体例 / 引用 / 依赖闭合） | 那是**五元位第 5 位**，owner 是 H；L 只看这条命题写对了没有、机器核过没有 | **H** |
 | 用 `sorry` / `admit` 把接不上的那一步堵住 | 含 `sorry` 的文件会**正常编译通过**，那不是证明；`uses_sorry` 是"查了没通过"，漏一步则连"通过"都没有对象 | —（结构性禁止：漏一步或有 sorry ⇒ `unknown`） |
@@ -1818,7 +1825,7 @@ C 的产出有两类，状态语义完全不同。
 
 `record` 只写 `experiments` 一行，**不动 `statements`**。命题的 `evidence_kind` 升到 `proof` 需要两件事同时成立：
 L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT_OWNERS["reviewed"] == "V"`，第 3 位）。
-写集里没有 `statements` ⇒ "L 自己把命题写成熟定理"在结构上不可能（不是靠纪律）。
+「L 自己把命题写成熟定理」在结构上不成立，但**不是靠写集**：真拦点是 `store.direct_write_refusal("statements")`（通用写口一律拒）与秘书的 `not_statement_writer`（只有 B 能经那一格落）；写集只是并发读数。
 **已知不一致（如实记在这里，不靠改文档掩盖）**：`evidencebits.py:109` 的 `BIT_OWNERS["formal"]` 今天**仍写着 `E`**，而实际写者是 L（`record` 落的那一行）；
 这一格是"第 4 位归谁"的声明，它与 `specs/l.py` / `formal_tools._ROLES_L` 的真身不一致 —— 该由人裁定改哪一处，本文只报读数。
 
@@ -1827,7 +1834,7 @@ L 的形式化（第 4 位）**与** V 的逐行走查签字（`evidencebits.BIT
 - **L 只在 Lean 开关打开时存在**：关着时角色表里没有它、`formal.*` 不装配、按名取它受控拒绝。
 - **入边只有 `B→L`**；**出边只有 `L→C`**；除 B 之外没有任何角色的出边里有 L。
 - **「用户指定单条执行」是入口不是边**：`run-agent L` 不经过 `ALLOWED_EDGES`，边表里永远不会有它。
-- **写集只有 `experiments`**；`statements` 一格都没有 ⇒ 形式化升不了档。
+- **写集只有 `experiments`**（并发轴的读数）；「形式化升不了档」的真拦点是 `store.direct_write_refusal` 与秘书的 `not_statement_writer`，不是写集。
 - **三态不许折叠**：`unknown` 永远带原因，永远不许写成 `verified` 或 `failed`。
 - **检查器原话 + 真实退出码**是形式化证据的唯一凭据（没跑成时 `exit_code` 是 `None`，绝不用 0 冒充"跑过"）。
 - **`sorry` 即不通过**：含 `sorry` 的文件会编译通过，但那不是证明。
