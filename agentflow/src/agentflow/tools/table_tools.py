@@ -896,7 +896,8 @@ _TASKS_VISIBLE_CHILD_DEPTH = 1
 # ---------------------------------------------------------------- `tasks` 的写侧判据
 #
 # 堵的是"通用写口能伪造任务台账"这个权限面缺口（D12，2026-10-27 实测）：
-# `store.direct_write_refusal` 只拒 `statements` 与 `lit_candidates`（store.py:251），
+# `store.direct_write_refusal` 只拒那几张"有唯一写点"的表（`statements` /
+# `dependencies` / `lit_candidates` / `conjectures` / `documents`），
 # `tasks` 不在其中 —— 于是 `table.create(table="tasks")` 对任何角色都敞开。
 #
 # 这不是"参数校验"而是权限面：一条伪造的板项会让销号门的"板项没清"读数失真
@@ -1210,10 +1211,20 @@ def _direct_write_disposal(ctx: TableContext, *, table: str, op: str,
     if not _store_mod.direct_write_refusal(name):
         return None          # 不是禁区表：一个字节都不干预
     if str(op or "") == "delete" and name != "lit_candidates":
-        # 删除不制造证据：`statements` / `dependencies` 的行删掉不算"直写"（判据同 `Store.tx`
-        # 提交块那一段：只有 delete 的那一笔放行）。`lit_candidates` 是唯一的例外 ——
-        # 它的"删掉"必须表现为"撤掉"，所以走下面的兜底。
+        # 删除不制造证据：`statements` / `dependencies` / `documents` 的行删掉不算"直写"
+        # （判据同 `Store.tx` 提交块那一段：只有 delete 的那一笔放行）。`lit_candidates`
+        # 是唯一的例外 —— 它的"删掉"必须表现为"撤掉"，所以走下面的兜底。
         return None
+    if name in _store_mod.DOCUMENT_WRITE_TABLES:
+        # 稿件台账只有一个写点：`doc.build_document`（成文门 + 引用核对 + proof 证据锚）。
+        # 这里给模型可读的那一份拒信（判据本体仍是 `store.direct_write_refusal`，
+        # 不抄第二遍）；位置在路由解析之前：这张表没有"兜底方"可转交 —— 正路是一条
+        # **动作**（`doc.build_document` / `doc.write_mapping`），不是"换个写法的行"。
+        # 2026-11-17 DOCGATE2：真机探针 `temp/docgate1/PROOF-third-path.txt` ③ 里
+        # `table.create(table="documents", …)` 零签、零地基、引用不存在的 `stmt:000000`
+        # 都 `ok=True`，而它写下的 `markdown_path` 在盘上根本不存在。
+        return fail(_store_mod.direct_write_refusal(name), table=name,
+                    kind=_store_mod.DIRECT_WRITE_REFUSED, actor_role=_caller_role())
     if name == "statements" and not _statements_are_registered_by_b(_caller_role()):
         # F 与其余非 B 角色对这张表的直写一律受控拒绝：它们没有"五元位 / 依赖面 /
         # 非平凡度 / 洗名"那四件活，路由到秘书也只会被秘书的角色判据拒一次。

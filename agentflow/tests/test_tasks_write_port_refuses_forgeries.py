@@ -3,8 +3,9 @@
 
 ## 这一份钉住的是权限面，不是参数校验
 
-`store.direct_write_refusal` 只拒 `statements` 与 `lit_candidates`（`store.py:251`），
-`tasks` 不在其中 —— 于是 `table.create(table="tasks")` 对任何角色都是敞开的。
+`store.direct_write_refusal` 只拒那几张"有唯一写点"的表（`statements` / `dependencies` /
+`lit_candidates` / `conjectures` / `documents`），`tasks` 不在其中 —— 于是
+`table.create(table="tasks")` 对任何角色都是敞开的。
 改前实测（`agentflow/temp/_d12_probe_write_width.py`，一个 D 角色，四档全部 ok=True）：
 ```
 [1_给自己一条 work]   id=t-000004

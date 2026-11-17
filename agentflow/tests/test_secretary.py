@@ -1630,7 +1630,13 @@ def test_the_two_tables_are_named_the_same_in_both_places():
 
 
 def test_the_direct_write_refusal_speaks_for_exactly_those_two_tables():
-    """`store.direct_write_refusal` 只拒那两张表，且拒信逐字指路（含"删除不受限"）。"""
+    """`store.direct_write_refusal` 对那两张表逐字指路（含"删除不受限"）。
+
+    2026-11-17（DOCGATE2 ①）：拒信面另外还收进了 `conjectures` 与 `documents`
+    （各自有唯一写点，见 `store.DOCUMENT_WRITE_TABLES`）—— 那两张表不属于"秘书的写集"，
+    所以本条只判这两行，`documents` 的拒信由
+    `tests/test_docgate2_two_side_doors_are_closed.py` 钉。
+    """
     from agentflow import store as store_mod
 
     for table in ("statements", "dependencies"):

@@ -60,6 +60,7 @@ from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import fs_tools as FT
+from conftest import seed_writing_material
 
 #: 逐字要求的那句拒信（前半句）。
 MESSAGE = "这一份是框架渲染的产物（证明手稿 / 研究手稿），不许手写"
@@ -133,8 +134,13 @@ def test_c_other_paths_are_not_touched(tmp_path: pathlib.Path) -> None:
     那是缺口本身（G 不该能手写 F 的证明稿族），已按甲类收窄 —— 现在 G 写它受控拒，
     正控换成 G 自己的排版产物（`out/paper/main.tex`），判据见
     `tests/test_fs_other_roles_cannot_hand_write_manuscripts.py`。
+
+    2026-11-17（DOCGATE2 ②）：`out/paper/**` 这一格现在要过成文门（零签且零地基 ⇒ 拒），
+    所以正控先补一份签（`seed_writing_material`，只落 `out/vsigns/`、台账一行不加）——
+    本文件判的是保留表，不是成文门；补料之后这两条判据逐字不变。
     """
     root, reg = _ws(tmp_path)
+    seed_writing_material(Store(root))          # 成文门的前置料（不是本判据的被测对象）
     res = _call(reg, "F", "fs.write", path="notes/x.md", content="自由笔记")
     assert res.ok is True, res
     assert (root / "notes" / "x.md").is_file()

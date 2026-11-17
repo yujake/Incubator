@@ -277,6 +277,16 @@ DIRECT_WRITE_REFUSED = "direct_write_refused"
 #: 所以"撤销"与"唯一写点"是同一笔事。
 CONJECTURE_WRITE_TABLES: tuple[str, ...] = ("conjectures",)
 
+#: 稿件台账：唯一写点是 `doc.build_document`（成文门 + 引用存在性 + proof 证据锚 + 覆盖守卫，
+#: 四闸都过才落库；ID 与渲染稿同一次生成）。通用写口一律不许碰。
+#:
+#: 为什么它必须在这里（2026-11-17 DOCGATE2，`temp/docgate1/PROOF-third-path.txt` ③）：
+#: 改前 `documents` 不在拒信表里 ⇒ `table.create(table="documents", …)` 零签、零有效地基、
+#: 引用一条**不存在**的 `stmt:000000`，照样 `ok=True` 落一行，而 `markdown_path` 指向的
+#: 文件盘上根本不存在。DOCGATE1 把成文门装在了 `doc.build_document` 与 `doc.write_mapping`
+#: 上，这条通用写口是同一个工作区的第二条门 —— 门装在动作上、表却仍敞着，等于没装。
+DOCUMENT_WRITE_TABLES: tuple[str, ...] = ("documents",)
+
 
 def direct_write_refusal(table: str) -> str:
     """要直写 `table` 时返回拒信；空串 = 放行。这条口径只有这一处。
@@ -303,6 +313,11 @@ def direct_write_refusal(table: str) -> str:
     的四支 `lit.*` 工具），它们的 `tx` 记号都不是 `tool:*`。与秘书那两张表唯一的差别是拒信指向的路不同（不是
     `Secretary.record_statement`，而是 `lit.stage_add` / `lit.stage_withdraw` / `lit.stage_reject` / `lit.admit`），
     所以两支各写一句指路，而不是共用一句错的。
+    ## 第三个用户：`documents`（2026-11-17 DOCGATE2）拒的是同一件事 —— 通用写口直接造一行
+    "稿件登记"，而那一行本该连着一份过成文门、过了引用核对与 proof 证据锚的正文；
+    合法写者只有 `doc.build_document`（新稿件）、`doc.write_mapping`（论文对应表）、
+    H 的 `review.review_document` / `review.verify_fixes`（审校状态）与框架自己的账本类
+    写入（`doc.register_markdown_artifact` / 迁移 / 夹具），它们的 `tx` 记号都不是 `tool:*`。
     """
     name = str(table or "")
     if name == "lit_candidates":
@@ -339,6 +354,28 @@ def direct_write_refusal(table: str) -> str:
             "要立题就把命题写进你自己的产出（E 的实验 `claim` / F 的 `product.proposition` / "
             "B 收录的那份稿），由那条路落台账；手写这一行会绕开判重与跨对象存在性检查，"
             "而盘上那一行看起来完全合法。"
+        )
+    if name in DOCUMENT_WRITE_TABLES:
+        # 稿件台账（2026-11-17 DOCGATE2）：与 `statements` / `conjectures` 同形 ——
+        # 这张表的每一行都该连着一条**真的** markdown 落点与一份过了成文门的正文，
+        # 而通用写口只搬 JSON：它既不知道稿在哪、也没问过签与地基。
+        return (
+            f"{DIRECT_WRITE_REFUSED}：`{name}` 不由通用写口直写（`table.create` / `table.update` "
+            "以及任何带 `tool:` 记号的裸事务）—— 它不是一张「内容表」，是一份稿件的**登记行**："
+            "一出生就该连着一条真实存在的 markdown 落点、一份过成文门的正文，"
+            "以及引用存在性与 proof 证据锚两项核对。手写这一行会让 `markdown_path` 指向一份"
+            "盘上根本不存在的文件，而成文门与那两项核对一件都没跑，盘上那一行看起来却完全合法"
+            "（`documents` 1 行而 `out/vsigns/` 0 份、`proof_text` 非空 0 行 —— 真机 "
+            "`projects/lp-ball-6` 的形态，见 `temp/docgate1/PROOF-third-path.txt`）。"
+            "正路按你要做的那件事选：\n"
+            "  · 一份新稿件（连同它的 markdown）⇒ `doc.build_document`"
+            "（成文门 → 逐条 `scan_claim` → 引用存在性 → proof 证据锚，四闸都过才落库，"
+            "ID 与渲染稿同一次生成）；\n"
+            "  · 论文对应表（`MAPPING.json` / `MAPPING.md` / 正文附录）⇒ `doc.write_mapping`"
+            "（三份由同一批行渲染，别手写）；\n"
+            "  · 审校状态（`status` / `review_rounds` / `review_verdict`）⇒ H 的 "
+            "`review.review_document` / `review.verify_fixes`，不在这里改。\n"
+            "`table.delete` 不受这条限制（删除不制造证据），但仍受引用保护。"
         )
     if name not in STATEMENT_WRITE_TABLES:
         return ""
@@ -392,11 +429,16 @@ def direct_write_refusal(table: str) -> str:
 #: `literal` = 由那条正路的实现本身接管（没有第三层，就是工具层调的那一个函数）。
 #:
 #: ## 不进这张表（而且这几张表上并没有拒信）
+#: - `documents`（2026-11-17 DOCGATE2）：它在拒信表里（`DOCUMENT_WRITE_TABLES`），但**没有
+#:   可路由的兜底方** —— 正路是一条**动作**（`doc.build_document` / `doc.write_mapping`），
+#:   不是"把这一行换个写法落下来"。行载荷里没有"稿在哪、签在哪、地基够不够"这些格，
+#:   所以路由在这里只会把伪造洗成"系统代劳"；工具层直接回拒信（`_direct_write_disposal`）。
 #: - 迁移 / 账本类表：`counters`（发号器，不在 `schema.TABLES` 里）、`tasks`（召唤台账）、
 #:   `usage_ledger`、`eval_results` —— 它们的写者是框架自己的收口路径，所以这里不给它们
 #:   兜底方（"路由"只对"有正路可走"的写有意义）。
-#:   注意这一句不是"通用写口会被拒"：`direct_write_refusal` 只拒 `lit_candidates` 与
-#:   `statements`，这几张表在通用写口上本来没有拒信。`table.create(table="tasks")`
+#:   注意这一句不是"通用写口会被拒"：`direct_write_refusal` 只拒 `lit_candidates` /
+#:   `statements` / `dependencies` / `conjectures` / `documents`，这几张表在通用写口上本来
+#:   没有拒信。`table.create(table="tasks")`
 #:   直接放行并落行，且能写 `item_state="done"` 伪造收口、
 #:   能把板项种到别人名下 —— 那是一条权限面缺口，不是"有拒信只是没路由"。
 #:   `tasks` 那一侧的判据今天在工具层：`tools/table_tools.py::_tasks_write_refusal`

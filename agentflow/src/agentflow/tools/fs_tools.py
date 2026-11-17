@@ -150,10 +150,16 @@ _BINARY_SUFFIXES = frozenset(
 
 @dataclass(frozen=True)
 class FsContext:
-    """沙箱根 + 审计 actor。注册时绑定，handler 保持无状态。"""
+    """沙箱根 + 审计 actor + 这一趟的台账（成文门要读它）。注册时绑定，handler 保持无状态。"""
 
     root: Path
     actor: str = "tool"
+    #: 这一趟的台账（2026-11-17 DOCGATE2 ②）：`out/paper/**` 的写口要问一次
+    #: `researchbase.writing_gate`（成文门的唯一实现），而那道门读的是 `statements`
+    #: 台账与 `out/vsigns/`。装配期注入（`tools/__init__.py` 的 deps 里本来就有
+    #: `store`）；只绑 root 装配的旧入口（脚本 / 单测）拿到 `None`，那时本模块没有
+    #: 台账可问 —— 见 `_paper_writing_refusal` 里那一段"为什么这一档不拒"。
+    store: Any = None
 
     def __post_init__(self) -> None:
         # 冻结 dataclass 里要规范化字段只能用 object.__setattr__。
@@ -273,6 +279,25 @@ _ARTIFACT_PATH_ROLE = "@"
 #: 命中判据是"名字过 `manuscriptfamily.classify_name` 且 tier ∈ {family, legacy}"，
 #: 见 :func:`_manuscript_name_matches`。表里的行与匹配器共用这一个字面量。
 MANUSCRIPT_RULE_KIND = "manuscript"
+
+#: 「形状级、全角色、只有框架能写」那一档的角色标记（2026-11-17 DOCGATE2 ③）：
+#: 与 `*` / `@` 都分开 —— `*` 是框架账本区（路径级、拒信不给去处），`@` 是路径级的
+#: 框架渲染产物（拒信指向唯一写口且判在 B 那格窄豁免之前），这一档是**文件名形状**
+#: 级的证明稿落点：判据对任何角色（含没挂角色上下文）都成立，拒信指向产出侧的渲染动作，
+#: 而顺序在 `_reserved_artifact_rule` 里排在所有按角色分行的规则之后（见那张表末尾）。
+MANUSCRIPT_ONLY_ROLE = "+"
+
+#: 证明稿形状那一档的规则头（2026-11-17 DOCGATE2 ③）：规则串是 `proofshape:reports`，
+#: 命中判据是"目录恰好是 `reports/` 且文件名是 `<谁>-proof-<号>[-vN].md`"，
+#: 见 :func:`_proof_shape_matches`。表里的行与匹配器共用这一个字面量。
+PROOF_SHAPE_RULE_KIND = "proofshape"
+
+#: 证明稿名字的形状：`<谁>-proof-<号>`。号形与 `manuscriptfamily` 同一档
+#: （4–6 位十进制；`f-proof` 另有 `plan-<数字>`）；历史后缀 `-vN` 也算 —— 它同样是
+#: "像证明稿的名字"（写下去也收不进台账，只会把同一个坑留给下一轮）。
+_PROOF_SHAPE_RE = re.compile(r"^[a-z0-9]+-proof-(?:\d{4,6}|plan-\d+)(?:-v\d+)?\.md$",
+                             re.IGNORECASE)
+
 
 #: 论文对应表三份的拒信（2026-11-04）：说清"这三份是同一份表的三个投影、唯一写口在哪"。
 RESERVED_MAPPING_MESSAGE = (
@@ -445,6 +470,23 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("M", "suffix:-proof.md"),
     ("M", "contains:RESEARCH"),
     ("M", "suffix:-research.md"),
+    # 2026-11-17（DOCGATE2 ③）：`reports/<谁>-proof-<号>.md` 的新建档**只有框架能写**。
+    #
+    # 这张表是按角色分行的，于是"角色表没登记到"的那几格一直敞着（真机口径的探针
+    # `temp/docgate1/PROOF-third-path.txt` 实测）：
+    #   · F / M 写 `reports/{b,e}-proof-*`：它们的规则只认 `f-proof-` 与 `*-proof.md`；
+    #   · 谁都不是的族（`reports/x-proof-000001.md`）：没有任何角色的规则认它；
+    #   · **没挂角色上下文**（脚本 / 探针 / 模块自检）：按角色分行的表一行都不匹配
+    #     —— `fs.write 'reports/f-proof-000000.md'` 因此 `ok=True` 真落盘。
+    # 而 2026-11-07 那一刀写下的判据原话是「`reports/f-proof-*` 这一类落点只有框架能写」：
+    # 危害不是"多一份文件"，是 B 的收录按 sha 认领会把一份手写稿当成真稿（号段、洗稿
+    # 元信息与 V 的那份签都挂在渲染那一步上）。所以补的是**形状级**的一行：对任何角色
+    # （含没挂角色）成立，顺序排在按角色分行的那些行之后（已有拒信逐字不变）。
+    #
+    # 为什么只收 `reports/` 与 `-proof-` 形状：`notes/` 是 A/B 与产出侧的正常产出面
+    # （2026-11-07 收窄的负控：`notes/f-proof-x.md` 这类号解析不出的普通笔记仍放行），
+    # 而 `e-num` 不是证明稿族（2026-11-08 业主裁定，不顺手扩到没点名的格）。
+    (MANUSCRIPT_ONLY_ROLE, f"{PROOF_SHAPE_RULE_KIND}:{_RESERVED_DIR}"),
 )
 
 #: 受控码：这一笔写的是框架渲染的产物（不是自由手稿）。
@@ -469,6 +511,19 @@ MANUSCRIPT_NAME_MESSAGE = (
     "改法：B 走 `AgentB.land_manuscript`（`own.land_manuscript`）；F 走 "
     "`promote_manuscript`；同一命题的第二份证明用规范后缀 `-p<N>`，"
     "不许自己起 `-v2` 这类新名。"
+)
+
+#: `proofshape:` 那一档的拒信（2026-11-17 DOCGATE2 ③）：这一档说的不是"你不是这一族"，
+#: 而是"这一类落点只有框架能写" —— 2026-11-07 那一刀的判据原话，此前只在按角色分行的
+#: 那几行上部分实现（F/M 的 b/e-proof、没登记的族、没挂角色上下文都敞着）。
+#: 危害句与 `test_fs_other_roles_cannot_hand_write_manuscripts` 同一句：B 的收录按 sha
+#: 认领，一份手写稿会被当成真稿。
+PROOF_MANUSCRIPT_ONLY_MESSAGE = (
+    "拒绝 {path}：`reports/<谁>-proof-<号>.md` 这一类落点**只有框架能写** —— "
+    "号段、洗稿元信息（`## 依赖` 节 / 五元位）与 V 的那份签都挂在产出侧渲染那一步上"
+    "（F 的 proof 动作、B 的 `own.land_manuscript`、E 的 `exhaustionreport`）。"
+    "手写一份会让 B 的收录按 sha 认领把它当成真稿：盘上那份文件看起来完全合法，"
+    "而台账里没有任何一条产出记录。要落稿就派产出方，别自己起一个号。"
 )
 
 #: D 的证明稿路径拒信（2026-11-04）：指路必须具体到"派 F"，而不是"走你的渲染动作"——
@@ -633,10 +688,35 @@ def _manuscript_name_matches(rel: str) -> bool:
     return str(reading.get("tier") or "") in (TIER_FAMILY, TIER_LEGACY)
 
 
+def _proof_shape_matches(rel: str, directory: str) -> bool:
+    """`proofshape:<目录>` 那一行是否命中 `rel`（2026-11-17 DOCGATE2 ③）。
+
+    判据两件，缺一不可：
+
+    - **目录**：`rel` 的目录部分逐字等于规则里的那个（`reports`；大小写不敏感）。
+      目录是身份的一部分，与 `manuscriptfamily` 同口径：`notes/` 是产出侧的正常面，
+      那里一份号解析不出的普通笔记不该被这道闸误伤（2026-11-07 收窄的负控）；
+    - **名字**：末段过 :data:`_PROOF_SHAPE_RE`（`<谁>-proof-<4–6 位号 | plan-号>[-vN].md`）。
+
+    为什么单独一条判断而不是复用 `manuscript:`：`manuscriptfamily` 只认四个**已登记**的
+    族，而这条闸要管的正是"像证明稿、却不是任何一族的规范名"（`x-proof-000001.md`）
+    与"号形对、族是别人的"（F 写 `b-proof-*`）—— 前者在 `classify_name` 里是
+    `unrecognized`，后者是 `family`，两者都要拒。
+    """
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if len(parts) < 2:
+        return False
+    got_dir = "/".join(parts[:-1])
+    if got_dir.casefold() != str(directory or "").replace("\\", "/").casefold():
+        return False
+    return bool(_PROOF_SHAPE_RE.match(parts[-1]))
+
+
 def _artifact_rule_matches(rule: str, rel: str) -> bool:
     """手稿那一半的一条规则是否命中 `rel`（工作区相对路径，`/` 分隔）。
 
-    三档：`manuscript:` 那档按名字过表；其余两档只看规则串里有没有 `/`：
+    三档：`manuscript:` 那档按名字过表；`proofshape:` 那档按"目录 + 名字形状"判；
+    其余两档只看规则串里有没有 `/`：
 
     - **带 `/`**：按整条相对路径判（`_path_rule_matches`）—— 这一档是"规范落点"
       （2026-11-07：A / B 的手稿写权限只收在 `reports/` 这一族上；`notes/` 是它们的
@@ -650,6 +730,8 @@ def _artifact_rule_matches(rule: str, rel: str) -> bool:
     kind, _sep, needle = text.partition(":")
     if kind == MANUSCRIPT_RULE_KIND:
         return _manuscript_name_matches(rel)
+    if kind == PROOF_SHAPE_RULE_KIND:
+        return _proof_shape_matches(rel, needle)
     if "/" in needle:
         return _path_rule_matches(text, rel)
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
@@ -666,10 +748,16 @@ def _reserved_artifact_rule(rel: str, role: str) -> str | None:
     （真机唯一调用点是 `_reserved_refusal` 里这一句），已删；别再长出第二个名字。
 
     命中的判法见 :func:`_artifact_rule_matches`：`manuscript:` 那档按名字过表；
-    规则里带 `/` 的按整条路径判（规范落点），不带的按文件名判（D6）。
+    `proofshape:` 那档按目录 + 名字形状判；规则里带 `/` 的按整条路径判（规范落点），
+    不带的按文件名判（D6）。
+
+    角色为 :data:`MANUSCRIPT_ONLY_ROLE` 的行（`+`）对**任何**角色都读（含 `role=""`：
+    没挂角色上下文不等于"谁都可以写"）—— 它们在表里排在最后，所以按角色分行的规则
+    命中时拒信与口径逐字不变（2026-11-17 DOCGATE2 ③）。
     """
     owner = str(role or "")
-    rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE if who == owner]
+    rules = [rule for who, rule in RESERVED_ARTIFACT_TABLE
+             if who == owner or who == MANUSCRIPT_ONLY_ROLE]
     if not rules:
         return None
     parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
@@ -951,11 +1039,97 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
             # F 的 promote）并点名 `-v2` 这条禁令；与"框架渲染的产物"那句分开。
             return fail(MANUSCRIPT_NAME_MESSAGE.format(path=rel), path=rel,
                         kind=RESERVED_ARTIFACT_KIND, role=str(role or ""))
+        if rule.partition(":")[0] == PROOF_SHAPE_RULE_KIND:
+            # 2026-11-17（DOCGATE2 ③）：这一类落点只有框架能写（对任何角色、含没挂角色）。
+            return fail(PROOF_MANUSCRIPT_ONLY_MESSAGE.format(path=rel), path=rel,
+                        kind=RESERVED_ARTIFACT_KIND, role=str(role or ""))
         return fail(
             RESERVED_ARTIFACT_MESSAGE,
             path=rel, kind=RESERVED_ARTIFACT_KIND, role=str(role or ""),
         )
     return _d_proof_body_refusal(rel, role, content, root)
+
+
+# ---------------------------------------------------------------- 成文门（`out/paper/**`）
+#
+# 2026-11-17 DOCGATE2 ②：DOCGATE1 把成文门装到了两个 `doc.*` 动作上（`researchbase.
+# writing_gate`），但 `fs.write` 仍是同一条链上开着的侧门 —— 真机口径的探针
+# （`temp/docgate1/PROOF-third-path.txt` ②）里 G 用 `fs.write('out/paper/main.tex')`
+# 零签直接落盘，而"论文正文"这一层根本没有判据。所以成文产物这一层问**同一道门**
+# （同一份实现、同一句拒信、同一个受控码），不是另立一套"论文稿能不能写"。
+
+#: 成文产物所在的两级目录名（任意深度：工作区根与 `projects/<p>/` 下都算）。
+PAPER_DIR_PARTS: tuple[str, str] = ("out", "paper")
+
+#: `out/paper/` 下由 M / 框架写的机器可判产物：它们不是"正文"，不进成文门。
+#:
+#: 为什么要豁免这两份（业主 2026-11-17：`budget.PAPERWORK_FIRST_RULE` 逐字是
+#: 「预算余量低于阈值时，先把收工必需物落盘（`out/paper/ACCEPTANCE-CHECKS.json` 与
+#: `out/review/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表」）：
+#: 把收工必需物挡在成文门后面，会让"这一步没写成论文"长成"整趟交不出验收表" ——
+#: 那是比"零签成文"更坏的一档，而且它恰好发生在预算见底的那种趟里。验收表与编译回执
+#: 说的是"这一趟的读数"，不是"这份稿的正文"；正文那一侧仍由这道门全管
+#: （`main.tex` / `*.md` / `*.bib` 一个都不是豁免）。
+PAPER_MACHINE_ARTIFACTS: tuple[str, ...] = ("acceptance-checks.json", "compile-receipt.json")
+
+
+def _is_paper_artifact(rel: str) -> bool:
+    """`rel` 是否落在成文产物层（`out/paper/` 下的文件；大小写不敏感）。
+
+    只看已解析的相对路径（`_rel(ctx, target)` 给的就是它）：`..` / 反斜杠 /
+    大小写三种换写在这里都已经被抹平，所以 `notes/../out/paper/x` 与 `OUT/PAPER/x`
+    都是同一份成文产物。任意深度都算：真机工作区里项目根可能是工作区根本身，也可能
+    是 `projects/<p>/`，两种都在这一层下面。
+
+    :data:`PAPER_MACHINE_ARTIFACTS` 那两份是唯一的例外（M 的验收表与框架的编译回执）：
+    它们是读数，不是正文 —— 理由见那个常量的注释。
+    """
+    parts = [p for p in str(rel or "").replace("\\", "/").split("/") if p not in ("", ".")]
+    if not parts:
+        return False
+    low = [p.casefold() for p in parts]
+    if low[-1] in PAPER_MACHINE_ARTIFACTS:
+        return False
+    want = [p.casefold() for p in PAPER_DIR_PARTS]
+    return any(low[i:i + 2] == want for i in range(len(low) - 1))
+
+
+def _paper_writing_refusal(ctx: FsContext, rel: str) -> ToolResult | None:
+    """成文产物层的写口：问一次 `researchbase.writing_gate`；None = 放行。
+
+    三态（与 `doc.build_document` / `doc.write_mapping` 同一口径）：`refuse=True` 时把
+    `kind`、拒信原文与 `details` 原样交回（`no_evidence_chain` / `ledger_unreadable`），
+    **在任何写入之前**（调用点都在 `_atomic_write_bytes` / `shutil.move` 之前）。
+
+    放行条件就是那道门的放行条件（业主 2026-11-17，两条任一）：≥1 条有效地基
+    （`proof_text` 非空或 `quote_verified=true`），或 ≥1 份 V 签（`out/vsigns/`）。
+    这不是"禁止写论文"，是"零签且零地基时不许凭空成文"。
+
+    ## 为什么"没挂 store"这一档不拒
+
+    `fs_tools.register` 允许只绑 root 装配（脚本 / 单测的旧入口，`test_tools_fs_edit`
+    就是那样装的）：那时本模块根本没有台账可问 —— 与 `table_tools` 在 `store=None` 时
+    整组不装同一条纪律（没有表口就没有表口的判据）。生产装配
+    （`build_registry(store=…)`，`host.py` / `cli.py` 全走它）一定带 store，所以这一档
+    不会成为"零签也能交论文"的路。**这一句是这一格的边界，不是豁免**：要判"没有 store
+    的装配能不能写论文正文"，得先回答"那一趟有没有台账"，而答案是它没有。
+    """
+    if not _is_paper_artifact(rel):
+        return None
+    store = getattr(ctx, "store", None)
+    if store is None:
+        return None
+    from .. import researchbase as RB   # 惰性：`researchbase` 不反向依赖工具层
+
+    gate = RB.writing_gate(store)
+    if not gate.get("refuse"):
+        return None
+    kind = str(gate.get("kind") or "no_evidence_chain")
+    return fail(str(gate.get("reason") or "研究成果不足以成文"),
+                path=rel, kind=kind, role=_caller_role(), written=False,
+                research_base=dict(gate.get("base") or {}),
+                signing=dict(gate.get("signing") or {}),
+                next_steps=list((gate.get("details") or {}).get("next_steps") or []))
 
 
 def _rel(ctx: FsContext, path: Path) -> str:
@@ -1442,6 +1616,12 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
     denied = _reserved_refusal(_rel(ctx, target), _caller_role(), content=content, root=ctx.root)
     if denied is not None:
         return denied
+    # ---- 成文门（2026-11-17 DOCGATE2 ②）：`out/paper/**` 是成文产物层，`fs.write` 不许再是
+    # 绕过 `researchbase.writing_gate` 的那条侧门。位置在保留表之后（`MAPPING.*` 三份仍回
+    # 它们自己那句拒信）、在任何写入之前（零字节落盘）。
+    writing = _paper_writing_refusal(ctx, _rel(ctx, target))
+    if writing is not None:
+        return writing
     if target.exists() and target.is_dir():
         raise ToolError(f"{_rel(ctx, target)} 是目录，不能当文件写"
                         "；建议：写文件请带文件名（`fs.write(path=\"…/文件名\")`），"
@@ -1753,6 +1933,12 @@ def fs_move(ctx: FsContext, *, src: str, dst: str) -> ToolResult:
         denied = _reserved_refusal(_rel(ctx, target), _caller_role(), root=ctx.root)
         if denied is not None:
             return denied
+    # ---- 成文门（2026-11-17 DOCGATE2 ②）：只判**目标**。把一个文件搬进 `out/paper/` 等于
+    # 在那里造一份正文（先写到 `notes/`、再搬一次，正是绕过 `fs.write` 那道门的写法）；
+    # 搬出去不是"成文"，不判。
+    writing = _paper_writing_refusal(ctx, _rel(ctx, d))
+    if writing is not None:
+        return writing
     if not s.exists() and not s.is_symlink():
         return fail(f"源不存在：{_rel(ctx, s)}", src=_rel(ctx, s), kind="not_found")
     if s == d:
@@ -1982,12 +2168,19 @@ def register(
     root: str | os.PathLike[str],
     roles: Iterable[str] = TOOL_ROLES,
     actor: str = "tool",
+    store: Any = None,
 ) -> list[ToolSpec]:
     """注册 7 个文件工具，并把沙箱根绑定进 handler。
 
     root 在 `FsContext.__post_init__` 里就 resolve 成绝对路径 —— 这样每个 handler
     都不必再关心"root 是不是相对的"（相对 root 会随进程 cwd 漂移，
     表现为"同一个调用在不同工作目录下写到不同地方"，是最难复现的一类 bug）。
+
+    `store`（2026-11-17 DOCGATE2 ②）：这一趟的台账。`out/paper/**` 的写口要问
+    `researchbase.writing_gate`（成文门），而那道门读 `statements` 与 `out/vsigns/`。
+    装配期由 `tools/__init__.py` 的 deps 注入（`build_registry(store=…)` 一定带它）；
+    只绑 root 的旧入口（脚本 / 单测）拿到 `None`，那一档没有台账可问
+    （边界与理由见 `_paper_writing_refusal`）。
 
     `root=None` 时显式报错而不是让它变成 `Path(None)` 的 TypeError：
     `tools/__init__.py` 会把 register() 抛出的异常记进 `skipped`，
@@ -1999,7 +2192,7 @@ def register(
     # 为什么在这里清：观察表不持久化，而"恢复的会话必须重读目标"是照搬的语义；
     # 进程内多次装配（换工作区、换注册表）时不清就会把上一趟的账带过来。
     OBS.clear()
-    ctx = FsContext(root=Path(root), actor=actor)
+    ctx = FsContext(root=Path(root), actor=actor, store=store)
     out: list[ToolSpec] = []
     for fn in _TOOL_FUNCTIONS:
         base_spec: ToolSpec = fn.__tool_spec__  # type: ignore[attr-defined]

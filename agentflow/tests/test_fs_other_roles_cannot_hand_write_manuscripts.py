@@ -51,6 +51,7 @@ from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import fs_tools as FT
+from conftest import seed_writing_material
 
 #: 受控码（与保留表同一档）。
 KIND = "reserved_framework_artifact"
@@ -86,13 +87,43 @@ def _call(reg, role: str, tool: str, **params):
 
 
 def _dropped(role: str, monkeypatch) -> None:
-    """反真空打桩：把该角色本笔新增的那几行摘掉（其余行一个字节不动）。"""
+    """反真空打桩：把该角色本笔新增的那几行摘掉（其余行一个字节不动）。
+
+    2026-11-17（DOCGATE2 ③）：`reports/<谁>-proof-<号>.md` 现在还有一行形状级
+    （`("+", "proofshape:reports")`，对任何角色都成立）也在拒同一批落点。反真空要
+    证明的是"被拒来自这张表"，所以那一行也得一起摘 —— 只摘角色行的话，同一批写入仍会
+    被形状行拒（那不是"打桩没生效"，是同一件判据的第二个落点）。只摘角色行时"仍然被拒"
+    这一条由 `test_dropping_only_the_role_rows_keeps_them_refused` 单独钉住。
+    """
+    gone = set(ROLE_RULES[role])
+    kept = tuple(row for row in FT.RESERVED_ARTIFACT_TABLE
+                 if not (row[0] == role and row[1] in gone)
+                 and not (row[0] == FT.MANUSCRIPT_ONLY_ROLE
+                          and row[1].startswith(FT.PROOF_SHAPE_RULE_KIND + ":")))
+    assert len(kept) == len(FT.RESERVED_ARTIFACT_TABLE) - len(gone) - 1, (
+        f"{role} 那几行没找齐 ⇒ 这条反真空在核一个空集")
+    monkeypatch.setattr(FT, "RESERVED_ARTIFACT_TABLE", kept)
+
+
+def test_dropping_only_the_role_rows_keeps_them_refused(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """③ 的落点：只摘掉某个角色的那几行 ⇒ 同一批写入仍然被拒（形状行在管）。
+
+    这不是"反真空失效"，而是补全后的分层读数：角色行给的是各自的拒信/角色归属，
+    形状行给的是"这一类落点只有框架能写"。两层都在 ⇒ 摘一层不会开门。
+    """
+    role = "G"
     gone = set(ROLE_RULES[role])
     kept = tuple(row for row in FT.RESERVED_ARTIFACT_TABLE
                  if not (row[0] == role and row[1] in gone))
-    assert len(kept) == len(FT.RESERVED_ARTIFACT_TABLE) - len(gone), (
-        f"{role} 那几行没找齐 ⇒ 这条反真空在核一个空集")
+    assert len(kept) == len(FT.RESERVED_ARTIFACT_TABLE) - len(gone)
     monkeypatch.setattr(FT, "RESERVED_ARTIFACT_TABLE", kept)
+    root, reg = _ws(tmp_path)
+    for rel in PATHS:
+        res = _call(reg, role, "fs.write", path=rel, content="摘掉角色行之后写的")
+        assert res.ok is False, (rel, "摘掉角色行就开门了 ⇒ 形状行不在管这一批落点", res.meta)
+        assert res.meta.get("kind") == KIND, (rel, res.meta)
+        assert not (root / rel).exists(), (role, rel)
 
 
 # ---------------------------------------------------------------- E
@@ -132,8 +163,13 @@ def test_g_cannot_write_other_roles_proof_families(tmp_path: pathlib.Path) -> No
 
 
 def test_g_may_still_write_its_own_typeset_output(tmp_path: pathlib.Path) -> None:
-    """G 正向：`out/paper/main.tex`（G 的论文正文）仍然写得进去。"""
+    """G 正向：`out/paper/main.tex`（G 的论文正文）仍然写得进去。
+
+    2026-11-17（DOCGATE2 ②）：这一格现在要过成文门（零签且零地基 ⇒ 拒），所以先补一份
+    签（`seed_writing_material`）。本判据测的是保留表那一侧，补料之后断言一个字没改。
+    """
     root, reg = _ws(tmp_path)
+    seed_writing_material(Store(root))          # 成文门的前置料（不是本判据的被测对象）
     rel = "out/paper/main.tex"
     res = _call(reg, "G", "fs.write", path=rel, content="\\documentclass{article}\n")
     assert res.ok is True, ("G 的论文正文被误伤了", res)

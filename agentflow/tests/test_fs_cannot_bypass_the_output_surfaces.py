@@ -34,6 +34,7 @@ from agentflow import papermapping as PM
 from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from conftest import seed_writing_material
 
 KIND = "reserved_framework_artifact"
 
@@ -76,8 +77,13 @@ def test_b_g_cannot_hand_write_the_mapping_files(tmp_path):
 
 # ============================================================ c 正控
 def test_c_the_gate_does_not_block_normal_outputs(tmp_path):
-    """c（正控）：F 的自由笔记、G 的论文正文都不在保留表上。"""
+    """c（正控）：F 的自由笔记、G 的论文正文都不在保留表上。
+
+    2026-11-17（DOCGATE2 ②）：`out/paper/**` 这一格现在要过成文门（零签且零地基 ⇒ 拒），
+    所以先补一份签（`seed_writing_material`）—— 本文件判的是保留表，补料之后断言不变。
+    """
     root, reg = _ws(tmp_path)
+    seed_writing_material(Store(root))          # 成文门的前置料（不是本判据的被测对象）
     res = _call(reg, "F", "fs.write", path="notes/x.md", content="自由笔记")
     assert res.ok is True, res
     assert (root / "notes" / "x.md").is_file()
