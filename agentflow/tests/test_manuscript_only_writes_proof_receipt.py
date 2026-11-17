@@ -96,7 +96,8 @@ def test_b_manuscript_only_also_writes_the_receipt(tmp_path) -> None:
     env = _workspace(tmp_path)
     got = env["b"].register_statement(
         statement_full=PROPOSITION, proof_manuscript=MANUSCRIPT,
-        kind="conjecture", origin="own_result", evidence_kind="heuristic",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        kind="conjecture", origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         line_range={"label": MANUSCRIPT},
         quote_verified=False, quote_reason="own_result：F 的证明稿")
     assert got.get("ok") is True, got
@@ -126,7 +127,7 @@ def test_c_a_plain_numeric_row_has_no_proof_number(tmp_path) -> None:
     seed_proposition_form_ok(st.root, CLAIM, kind="conjecture", role="B")
     b = AgentB(st, extractor=None, extract_text=None, config={})
     got = b.register_statement(
-        origin="own_result", kind="conjecture", label="scan",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="scan",
         statement_full="", statement_text="", proof_text="",
         evidence_kind="cross_check", proof_manuscript=out["numeric_manuscript"],
         quote_verified=False, quote_reason="own_result：E 的实验读数")

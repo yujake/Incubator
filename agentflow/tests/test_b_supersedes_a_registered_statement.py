@@ -119,7 +119,8 @@ def _own(st: Store, *, statement_full: str = STATEMENT, proof_text: str = TRUNCA
     行上这一格认。b2/b3 量的是"点名递来的稿不是行上那一份 ⇒ 别人的稿"。
     """
     row = {
-        "stmt_id": stmt_id, "origin": "own_result", "kind": kind,
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        "stmt_id": stmt_id, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
         "label": "U(g) 左右诺特蕴含 dim_k g<∞", "statement_full": statement_full,
         "statement_text": statement_full, "proof_text": proof_text,
         "evidence_kind": "heuristic", "status": "active",
@@ -226,7 +227,7 @@ def test_a_a_superseding_proof_text_is_written_with_history(tmp_path: pathlib.Pa
     _sign_three(st, proof_text=FULL, stmt_id=sid)
 
     out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
         # 2026-11-05：要写正文的这一笔必须带 `proof_manuscript`（正文必须由一份稿承载）。
         # 盘上那一份是别条命题的稿 —— 正文照写、它的依赖面一条不落（b3 量这一半）。
@@ -350,7 +351,7 @@ def test_b1_stubbing_the_write_predicate_out_turns_a_red(
     _own(st)
     _foreign_manuscript_on_disk(st)
     out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
         line_range={"start": None, "end": None,
                     "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},
@@ -377,7 +378,7 @@ def test_b2_a_manuscript_of_another_statement_is_refused_by_name(
     sid = _own(st, manuscript_id=SID)
     _foreign_manuscript_on_disk(st)
     out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞",
         line_range={"start": None, "end": None,
                     "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},
@@ -410,7 +411,7 @@ def test_b3_a_foreign_manuscript_never_feeds_the_dependency_face(
     # 准入闸（2026-11-02 strict）：这一笔要在册正文换成 FULL ⇒ 先有新正文的签。
     _sign_three(st, proof_text=FULL, stmt_id=sid)
     out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
         line_range={"start": None, "end": None,
                     "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},
@@ -439,7 +440,7 @@ def test_c_only_b_can_write_the_statement(tmp_path: pathlib.Path) -> None:
     st = _ws(tmp_path)
     sec = Secretary("F", root=st.root, store=st)
     out = sec.record_statement({"statement_full": STATEMENT, "kind": "conjecture",
-                                "proof_text": FULL, "origin": "own_result"},
+                                "proof_text": FULL, "origin": "own_result", "derived_from": ["999999"]},
                                role="F")
     assert out["checked"] is False, out
     assert out["refused"] == "not_statement_writer", out
@@ -484,7 +485,7 @@ def test_d2_the_conflict_message_says_one_authority(tmp_path: pathlib.Path) -> N
     st = _ws(tmp_path)
     _own(st)
     out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
         line_range={"start": None, "end": None,
                     "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},
@@ -504,7 +505,7 @@ def test_the_readings_are_json_safe(tmp_path: pathlib.Path) -> None:
     _own(st)
     _foreign_manuscript_on_disk(st)
     out = _agent(st).register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="U(g) 左右诺特蕴含 dim_k g<∞", proof_text=FULL,
         line_range={"start": None, "end": None,
                     "label": "notes/f-proof-S1-stmt000008.md（B 逐字读过并核过 sha256）"},

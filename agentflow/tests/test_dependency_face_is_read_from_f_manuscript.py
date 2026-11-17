@@ -253,7 +253,8 @@ def _register(store: Store, manuscript: str, *, proof_text: str = "1. 由在册�
     return _b(store).register_statement(
         statement_full=statement_full,
         statement_text="由两条在册定理推出目标结论",
-        origin="own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"],
         kind="conjecture",
         doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）：没有外部引文要比对",

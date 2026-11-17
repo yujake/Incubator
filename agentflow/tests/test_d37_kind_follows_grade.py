@@ -118,7 +118,8 @@ def _own(**kw) -> dict:
     """一条 `origin="own_result"` 的登记参数（只含动作面声明过的键，且按猜想进门）。"""
     base = {
         "statement_full": FULL, "statement_text": LABEL, "label": LABEL,
-        "origin": "own_result", "kind": "conjecture", "doc_id": S.format_id(0),
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "doc_id": S.format_id(0),
         "line_range": {"start": 1},
         "quote_verified": False,
         "quote_reason": "own_result：我方推导，没有第二份文本可比对",
@@ -556,7 +557,7 @@ def test_criterion6_a_pending_sign_alone_does_not_lift_a_new_row(
                                         statement_full=FULL)
     filed = _b_with_a_secretary(store).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
-        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",
         proof_text=PROOF, proof_manuscript=manuscript)

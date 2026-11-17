@@ -176,7 +176,8 @@ def test_p2_the_judgement_happens_before_the_first_ledger_write_and_only_once(
 
     sec = SEC.Secretary("B", root=store.root, store=store)
     got = AgentB(store, extractor=None, extract_text=None, secretary=sec).register_statement(
-        statement_full=text, statement_text=text, origin="own_result", kind="conjecture",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        statement_full=text, statement_text=text, origin="own_result", derived_from=["999999"], kind="conjecture",
         label="S 的子集个数", proof_text=proof, evidence_kind="heuristic",
         proof_manuscript=rel, doc_id=S.format_id(0), line_range={"label": rel},
         quote_verified=False, quote_reason="own_result：我方推导，没有第二份文本可比对")

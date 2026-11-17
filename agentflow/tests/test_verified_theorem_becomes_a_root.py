@@ -121,7 +121,8 @@ def _audited_statement(st: Store) -> str:
     assert block.get("state") == "signed", block
 
     b = AgentB(st, extractor=None, extract_text=None)
-    got = b.register_statement(origin="own_result", statement_full=FULL,
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    got = b.register_statement(origin="own_result", derived_from=["999999"], statement_full=FULL,
                                statement_text=FULL, kind="conjecture",
                                proof_text=PROOF,
                                proof_manuscript=path.read_text(encoding="utf-8"),

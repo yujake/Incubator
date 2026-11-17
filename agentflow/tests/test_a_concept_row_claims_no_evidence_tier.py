@@ -190,7 +190,8 @@ def test_d_proposition_rows_keep_the_tier_the_caller_gave(store: Store) -> None:
     """
     _prepared(store)
     theorem = {
-        "kind": "conjecture", "label": "红色互连集的存在性", "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        "kind": "conjecture", "label": "红色互连集的存在性", "origin": "own_result", "derived_from": ["999999"],
         "statement_full": "设完全图的边被红蓝二染色；则存在一个二元红色互连集。",
         "evidence_kind": "cross_check",
         # 自产那一档必须写清"没回验 / 为什么"，以及正文与出处的那几格。

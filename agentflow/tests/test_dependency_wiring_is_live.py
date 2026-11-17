@@ -143,7 +143,7 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "") -> dict:
     bits = EB.bits_of(origin="own_result", proof=True, proof_process=body,
                       kind="theorem")
     row = S.Statement(
-        stmt_id=stmt_id, origin="own_result", kind="theorem",
+        stmt_id=stmt_id, origin="own_result", derived_from=["999999"], kind="theorem",
         label=label or f"在册命题 {stmt_id}",
         statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文（含假设）。",

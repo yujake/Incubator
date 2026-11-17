@@ -80,7 +80,8 @@ def _row(st: Store, sid: str) -> dict[str, Any]:
 def _empty_conjecture(st: Store) -> str:
     sec = Secretary("B", root=st.root, store=st)
     got = sec.record_statement(
-        {"origin": "own_result", "kind": "conjecture", "label": "X",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        {"origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "label": "X",
          "statement_full": STATEMENT, "proof_text": "",
          "line_range": {"start": 1, "end": 3}, "quote_verified": None,
          "quote_reason": "我方自证"}, role="B")
@@ -114,7 +115,7 @@ def _create(reg: ToolRegistry, row: dict[str, Any]) -> Any:
 def test_a_table_create_with_inline_proof_text_is_refused(tmp_path):
     st = _ws(tmp_path)
     reg = _reg(st)
-    res = _create(reg, {"origin": "own_result", "kind": "theorem", "label": "直写",
+    res = _create(reg, {"origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "直写",
                         "statement_full": STATEMENT, "proof_text": PROOF,
                         "line_range": {"start": 1, "end": 3},
                         "quote_verified": None, "quote_reason": "我方自证",
@@ -132,7 +133,7 @@ def test_a_table_create_with_inline_proof_text_is_refused(tmp_path):
                                              "ok": True, "refused": "", "reason": "",
                                              "statement_id": "", "proof_no": 1,
                                              "sha256": "", "covering": []})
-        res2 = _create(reg, {"origin": "own_result", "kind": "theorem", "label": "直写",
+        res2 = _create(reg, {"origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "直写",
                              "statement_full": STATEMENT, "proof_text": PROOF,
                              "line_range": {"start": 1, "end": 3},
                              "quote_verified": None, "quote_reason": "我方自证",
@@ -186,7 +187,7 @@ def test_c_b_register_accepts_only_a_manuscript_sign(tmp_path):
     _sign(st, sid, PROOF, manuscript="")          # 今晚 14:22 那一档：内联签
     b = AgentB(st, extractor=None, extract_text=None)
     inline = b.register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         proof_text=PROOF, line_range={"start": 1, "end": 3},
         quote_verified=None, quote_reason="我方自证")
     assert inline.get("ok") is False, inline
@@ -205,7 +206,7 @@ def test_c_b_register_accepts_only_a_manuscript_sign(tmp_path):
         + "\n\n## 证明\n\n" + PROOF + "\n\n" + DS.render_dependency_section([]))
     b2 = AgentB(st2, extractor=None, extract_text=None)
     ok = b2.register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         proof_text=PROOF, line_range={"label": f"stmt:{sid2}"},
         quote_verified=None, quote_reason="我方自证", proof_manuscript=manuscript)
     assert ok.get("ok") is True, ok
@@ -217,7 +218,7 @@ def test_c_b_register_accepts_only_a_manuscript_sign(tmp_path):
 def _proof_review_lemma(st: Store, sec: Secretary, *, full: str, label: str) -> str:
     """落一条 `proof_review` 级的引理（依赖段要求被引命题到这个档）。"""
     got = sec.record_statement(
-        {"origin": "own_result", "kind": "lemma", "label": label,
+        {"origin": "own_result", "derived_from": ["999999"], "kind": "lemma", "label": label,
          "statement_full": full, "proof_text": "",
          "line_range": {"start": 1, "end": 1}, "quote_verified": None,
          "quote_reason": "我方自证"}, role="B")
@@ -227,12 +228,12 @@ def _proof_review_lemma(st: Store, sec: Secretary, *, full: str, label: str) -> 
     _sign(st, sid, text, manuscript=f"reports/f-proof-{sid}.md")
     b = AgentB(st, extractor=None, extract_text=None)
     wrote = b.register_statement(
-        statement_full=full, origin="own_result", kind="conjecture",
+        statement_full=full, origin="own_result", derived_from=["999999"], kind="conjecture",
         proof_text=text, line_range={"start": 1, "end": 1},
         quote_verified=None, quote_reason="我方自证")
     assert wrote.get("ok") is True, wrote
     up = sec.record_statement(
-        {"origin": "own_result", "kind": "conjecture", "label": label,
+        {"origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "label": label,
          "statement_full": full, "proof_text": text,
          "line_range": {"start": 1, "end": 1}, "quote_verified": None,
          "quote_reason": "我方自证", "evidence_kind": "proof_review"}, role="B")
@@ -259,7 +260,7 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
             "step": "第 1 步", "path_group": 1}]))
     b = AgentB(st, extractor=None, extract_text=None)
     first = b.register_statement(
-        statement_full=STATEMENT, origin="own_result", kind="conjecture",
+        statement_full=STATEMENT, origin="own_result", derived_from=["999999"], kind="conjecture",
         proof_text=PROOF, line_range={"label": f"stmt:{sid}"},
         quote_verified=None, quote_reason="我方自证", proof_manuscript=manuscript)
     assert first.get("ok") is True, first
@@ -275,7 +276,7 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
         "proposition_adjudication": {"checked": True, "attempted": True,
                                      "reason": "fixture", "seam_source": "fixture"}}
     merged = sec.record_statement(
-        {"origin": "own_result", "kind": "theorem", "label": "X",
+        {"origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "X",
          "statement_full": NEAR, "proof_text": MERGED,
          "line_range": {"start": 1, "end": 3}, "quote_verified": None,
          "quote_reason": "我方自证", "merge": True, "proof_no": 1,
@@ -299,7 +300,7 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
         # 再合并一次（换一份正文，绕开同 sha 早退）
         _sign(st, sid, MERGED + "\n（订正）", manuscript="reports/b-proof-000000.md")
         merged2 = sec.record_statement(
-            {"origin": "own_result", "kind": "theorem", "label": "X",
+            {"origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "X",
              "statement_full": NEAR, "proof_text": MERGED + "\n（订正）",
              "line_range": {"start": 1, "end": 3}, "quote_verified": None,
              "quote_reason": "我方自证", "merge": True, "proof_no": 1,

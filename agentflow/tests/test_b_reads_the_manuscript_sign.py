@@ -107,7 +107,8 @@ def _register(st: Store, manuscript_text: str) -> dict:
     return b.register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
         proof_manuscript=manuscript_text, kind="theorem", label="探针命题",
-        origin="own_result", evidence_kind="heuristic",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": REL})

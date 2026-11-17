@@ -134,7 +134,8 @@ def test_a3_without_the_d_check_the_content_is_accepted(
             proof_text=PROOF,
             kind="conjecture",
             evidence_kind="heuristic",
-            origin="own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+            origin="own_result", derived_from=["999999"],
             quote_reason="夹具：我方自产命题，引文面不适用",
             line_range={"label": MANUSCRIPT},
         )

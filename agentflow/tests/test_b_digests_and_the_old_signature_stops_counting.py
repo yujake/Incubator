@@ -87,7 +87,7 @@ def _own() -> dict:
     """自产命题的两件式：`kind="conjecture"` 是这一批的入口档（B-2 的猜想放行），
     它让这一份判据只测"消化 + 签"，不测"自产定理级要不要 V 的签"那道闸。"""
     return dict(statement_full=STATEMENT, statement_text=STATEMENT_TEXT,
-                origin="own_result", kind="conjecture",
+                origin="own_result", derived_from=["999999"], kind="conjecture",
                 line_range={"label": "reports/attack-000000.md"},
                 quote_verified=None,
                 quote_reason="自产证明，没有第二份文本可比对",
@@ -116,7 +116,7 @@ def _seed_row(st: Store) -> str:
     """
     seeded = seed_statement_row(
         st, proof_text=SRC, statement_full=STATEMENT, statement_text=STATEMENT_TEXT,
-        kind="conjecture", label=STATEMENT_TEXT, origin="own_result",
+        kind="conjecture", label=STATEMENT_TEXT, origin="own_result", derived_from=["999999"],
         doc_id=S.format_id(0), line_range={"label": "reports/attack-000000.md"},
         quote_verified=None, quote_reason="自产证明，没有第二份文本可比对",
         evidence_kind="heuristic",

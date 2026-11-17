@@ -72,7 +72,8 @@ def test_a_verbatim_hit_leaves_a_span_and_a_readable_reason(tmp_path: pathlib.Pa
     sec = Secretary("B", root=st.root, store=st)
     got = sec.record_statement(
         carry_proof_manuscript(st.root, {
-            "statement_full": "设 G 是有限群；则 G 的阶有限。", "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+            "statement_full": "设 G 是有限群；则 G 的阶有限。", "origin": "own_result", "derived_from": ["999999"],
             "kind": "theorem", "doc_id": "000000", "proof_text": "证明：由定义直接得到。",
             "quote_verified": out["quote_verified"], "quote_mode": out["quote_mode"],
             "quote_span": out["quote_span"], "quote_call_sha256": out["quote_call_sha256"],
@@ -179,7 +180,7 @@ def test_the_write_side_does_not_land_a_verified_without_any_evidence(tmp_path: 
     st.init()
     b = AgentB(st, extractor=None, extract_text=None, config={})
     out = b.register_statement(
-        statement_full="设 G 是有限群；则 G 的阶有限。", origin="own_result",
+        statement_full="设 G 是有限群；则 G 的阶有限。", origin="own_result", derived_from=["999999"],
         kind="conjecture", doc_id="000000", proof_text="证明：由定义直接得到。",
         quote_verified=True)
     assert out.get("ok") is True, out
@@ -205,7 +206,7 @@ def test_full_without_a_text_is_red_and_the_read_side_falls_back_to_full(tmp_pat
     full = "设 G 是有限群；则 G 的阶整除 |G|。"
     got = sec.record_statement(
         carry_proof_manuscript(st.root, {
-            "statement_full": full, "origin": "own_result", "kind": "theorem",
+            "statement_full": full, "origin": "own_result", "derived_from": ["999999"], "kind": "theorem",
             "doc_id": "000000", "proof_text": "证明：拉格朗日。", "quote_verified": None,
             "quote_reason": "这一条还没做逐字比对（没有第二份文本可比）"}),
         role="B")

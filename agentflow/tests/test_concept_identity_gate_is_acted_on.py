@@ -362,7 +362,8 @@ def test_d2_only_the_two_documented_callers_may_switch_the_judgment_off() -> Non
 def _pending(sec: SEC.Secretary, label: str, **kw) -> dict:
     """交一条"定义还没抽到"的概念（D12 甲：走 `_record_pending_concept`）。"""
     payload = {"label": label, "statement_full": "", "kind": "concept",
-               "origin": "own_result", "self_authored": True}
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+               "origin": "own_result", "derived_from": ["999999"], "self_authored": True}
     payload.update(kw)
     return sec.record_statement(payload, role="B")
 
@@ -488,7 +489,7 @@ def _own(full: str) -> dict:
     from agentflow import schema as S
 
     return {"statement_full": full, "statement_text": full[:24],
-            "origin": "own_result", "kind": "conjecture",
+            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
@@ -503,7 +504,7 @@ def test_the_concept_refusal_teaches_what_to_write_next(
     st = _ws(tmp_path)
     got = _secretary(st).record_statement(
         {"statement_full": "设 X 是一个集合；则 X 是空的当且仅当它没有元素。",
-         "label": "空集", "kind": "concept", "origin": "own_result",
+         "label": "空集", "kind": "concept", "origin": "own_result", "derived_from": ["999999"],
          "self_authored": True}, role="B")
     assert got.get("checked") is False, got
     assert got.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, got
@@ -654,14 +655,14 @@ def _theorem_with_concepts(concepts: list[dict]) -> dict:
     from agentflow import schema as S
 
     return {"statement_full": "定理：对任意群 G，命题 ph 成立。",
-            "statement_text": "命题 ph 成立", "origin": "own_result",
+            "statement_text": "命题 ph 成立", "origin": "own_result", "derived_from": ["999999"],
             "kind": "theorem", "doc_id": S.format_id(0),
             "quote_reason": "我方自产命题，没有外部引文要比对",
             "concepts": list(concepts)}
 
 
 def _own_concept(name: str, definition: str) -> dict:
-    return {"name": name, "definition": definition, "origin": "own_result",
+    return {"name": name, "definition": definition, "origin": "own_result", "derived_from": ["999999"],
             "self_authored": True}
 
 

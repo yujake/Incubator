@@ -65,7 +65,8 @@ def _b(st: Store) -> AgentB:
 
 
 def _own(**kw) -> dict:
-    base = {"origin": "own_result", "statement_full": FULL, "statement_text": TEXT,
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    base = {"origin": "own_result", "derived_from": ["999999"], "statement_full": FULL, "statement_text": TEXT,
             "label": TEXT, "doc_id": S.format_id(0),
             "line_range": {"start": 1}, "quote_verified": False,
             "quote_reason": "own_result：判据夹具"}

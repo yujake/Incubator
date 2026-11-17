@@ -55,7 +55,8 @@ def _proposition_form_answers_ok(monkeypatch):
 
 #: 一次 F 会交上来的命题（`own_result` 的出处用 `line_range` 的 label，不编页码）。
 ROW: dict[str, Any] = {
-    "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    "origin": "own_result", "derived_from": ["999999"],
     "kind": "conjecture",
     "label": "椭圆无等弦点",
     "statement_text": "椭圆不存在等弦点",
@@ -129,7 +130,7 @@ def test_every_non_b_role_is_refused_and_b_still_registers(tmp_path):
     got = b.register_statement(
         statement_full=ROW["statement_full"], statement_text=ROW["statement_text"],
         proof_text=ROW["proof_text"], kind="conjecture", label=ROW["label"],
-        origin="own_result", evidence_kind="heuristic", quote_verified=None,
+        origin="own_result", derived_from=["999999"], evidence_kind="heuristic", quote_verified=None,
         quote_reason=ROW["quote_reason"], line_range=dict(ROW["line_range"]))
     assert got.get("ok") is True, got
     rows = st.rows("statements")
@@ -181,7 +182,7 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
     sign_before_registration(st.root, proof_text=body)
     got = AgentB(st, extractor=None, extract_text=None).register_statement(
         statement_full=str(sg["text"]), statement_text=str(sg["text"]),
-        origin="own_result", kind="conjecture",
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         label=f"F 攻坚 000000 子目标 s1",
         proof_text=body, proof_manuscript=text,
         line_range={"label": rel},

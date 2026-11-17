@@ -162,7 +162,8 @@ class _for_secretary_stub:
 def _own(full: str, label: str = LABEL) -> dict:
     """自产命题的必填件（`doc_id` + `quote_reason`；首登按猜想）。"""
     return {"statement_full": full, "statement_text": full[:24], "label": label,
-            "origin": "own_result", "kind": "conjecture",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 

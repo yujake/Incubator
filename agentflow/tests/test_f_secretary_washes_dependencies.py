@@ -255,7 +255,8 @@ def test_a_manuscript_without_citations_and_without_the_section_gets_an_empty_on
     reg = _b(store).register_statement(
         statement_full="定理：自足的证明（洗稿夹具）。",
         statement_text="自足的证明", proof_text="1. 由定义直接得到。",
-        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）", proof_manuscript=got["text"])
     assert reg.get("ok") is True, reg
     reading = reg.get("deps_missing") or {}

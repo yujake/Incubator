@@ -230,7 +230,8 @@ def _file(store: Store, *, column: str, kind: str = "theorem",
           evidence_kind: str = "proof", body: str = BODY,
           manuscript: str = "") -> dict:
     return _b(store).register_statement(
-        origin="own_result", kind=kind, label="R(3,4)=9", statement_full=body,
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind=kind, label="R(3,4)=9", statement_full=body,
         statement_text=body[:40], proof_text=column, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
         proof_manuscript=manuscript,

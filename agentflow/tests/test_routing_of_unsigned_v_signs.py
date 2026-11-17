@@ -75,7 +75,8 @@ def _register(st: Store) -> dict:
     b = AgentB(st, extractor=None, extract_text=None)
     return b.register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
-        kind="theorem", label="探针命题", origin="own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        kind="theorem", label="探针命题", origin="own_result", derived_from=["999999"],
         evidence_kind="heuristic", quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": REL})

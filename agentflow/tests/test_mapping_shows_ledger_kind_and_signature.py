@@ -113,22 +113,23 @@ def _signed_bits(*, proof_no: int = 1, verdict: str = "成立") -> dict:
 #: - `000004`：`kind="lemma"`、`bits` 里根本没有逐份签名表、审校台账不在 ⇒ 「未审」；
 #: - `000005`：`kind="lemma"`、审校台账在但有坏行 ⇒ 「未读到」。
 LEDGER_STATEMENTS: list[dict] = [
-    {"stmt_id": "000001", "kind": "conjecture", "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    {"stmt_id": "000001", "kind": "conjecture", "origin": "own_result", "derived_from": ["999999"],
      "statement_text": "第一条引理", "proof_text": PROOF, "bits": _signed_bits()},
-    {"stmt_id": "000002", "kind": "lemma", "origin": "own_result",
+    {"stmt_id": "000002", "kind": "lemma", "origin": "own_result", "derived_from": ["999999"],
      "statement_text": "第二条定理", "proof_text": PROOF, "bits": _signed_bits()},
-    {"stmt_id": "000003", "kind": "conjecture", "origin": "own_result",
+    {"stmt_id": "000003", "kind": "conjecture", "origin": "own_result", "derived_from": ["999999"],
      "statement_text": "第三条引理", "proof_text": PROOF,
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
               "evidence": {"proof_process": PROOF, "proof_source": "own",
                            "reviewed_by_proof": {"1": False}}}},
-    {"stmt_id": "000004", "kind": "lemma", "origin": "own_result",
+    {"stmt_id": "000004", "kind": "lemma", "origin": "own_result", "derived_from": ["999999"],
      "statement_text": "第四条定理", "proof_text": PROOF,
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
               "evidence": {"proof_process": PROOF, "proof_source": "own"}}},
-    {"stmt_id": "000005", "kind": "lemma", "origin": "own_result",
+    {"stmt_id": "000005", "kind": "lemma", "origin": "own_result", "derived_from": ["999999"],
      "statement_text": "第五条定理", "proof_text": PROOF,
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
@@ -418,7 +419,7 @@ FULL = "对任意整数 n≥0：1^3 + 2^3 + … + n^3 = (n(n+1)/2)^2。"
 
 def _own(**kw) -> dict:
     base = {"statement_full": FULL, "statement_text": "sum-of-cubes", "label": "sum-of-cubes",
-            "origin": "own_result", "kind": "conjecture", "doc_id": S.format_id(0),
+            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "doc_id": S.format_id(0),
             "line_range": {"start": 1}, "quote_verified": False,
             "quote_reason": "own_result：我方推导，没有第二份文本可比对",
             "proof_text": PROOF}

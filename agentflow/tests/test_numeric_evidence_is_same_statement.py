@@ -134,7 +134,8 @@ def _agent(store: Store, seam=None, *, enable: bool = True) -> AgentB:
 def _register(store: Store, seam, manuscript: str, *, kind: str = "conjecture",
               statement_full: str = "") -> dict:
     return _agent(store, seam).register_statement(
-        origin="own_result", kind=kind, label="scan",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind=kind, label="scan",
         statement_full=statement_full, statement_text="", proof_text="",
         evidence_kind="cross_check", proof_manuscript=manuscript,
         quote_verified=False, quote_reason="own_result：E 的实验读数")
@@ -142,7 +143,7 @@ def _register(store: Store, seam, manuscript: str, *, kind: str = "conjecture",
 
 def _register_proof(store: Store, seam, statement: str, manuscript: str) -> dict:
     return _agent(store, seam).register_statement(
-        origin="own_result", kind="conjecture", label="弦长函数",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="弦长函数",
         statement_full=statement, statement_text="", proof_text="",
         proof_manuscript=manuscript, evidence_kind="heuristic",
         line_range={"label": manuscript},
@@ -250,7 +251,7 @@ def test_c_a_verbatim_candidate_is_found_without_any_model_call(tmp_path):
     out, sid = _first_numeric(store)
     no_seam = _agent(store, None, enable=False)
     got = no_seam.register_statement(
-        origin="own_result", kind="conjecture", label="scan",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="scan",
         statement_full="", statement_text="", proof_text="",
         evidence_kind="cross_check",
         proof_manuscript=out["numeric_manuscript"],

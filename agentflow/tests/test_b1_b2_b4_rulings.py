@@ -105,7 +105,8 @@ def _own(**kw) -> dict:
     """一条 `origin="own_result"` 的登记参数（只含动作面声明过的键）。"""
     base = {
         "statement_full": "设 n≥3，则 n^2+n 是偶数。",
-        "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        "origin": "own_result", "derived_from": ["999999"],
         "doc_id": "000000",
         "proof_text": "证明：n^2+n = n(n+1)，相邻整数必有一偶。",
         "quote_verified": False,
@@ -356,7 +357,7 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
 
 # ------------------------------------------------------------------ ③ B-2 读侧
 def _put_stmt(st: Store, stmt_id: str, *, kind: str, **kw) -> None:
-    row = {"stmt_id": stmt_id, "origin": "own_result", "kind": kind,
+    row = {"stmt_id": stmt_id, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
            "statement_full": f"探针命题 {stmt_id}。", "status": "active",
            "quote_reason": "探针：这一行没有外部引文可核（三态里的那一句为什么）",
            "created_at": TS, "created_by": "test"}

@@ -70,7 +70,8 @@ def _register(st: Store, *, proof: str = PROOF, full: str = FULL) -> dict:
     return b.register_statement(
         statement_full=full, statement_text=full, proof_text=proof,
         proof_manuscript=_manuscript(full, proof),
-        kind="conjecture", label="探针命题", origin="own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        kind="conjecture", label="探针命题", origin="own_result", derived_from=["999999"],
         evidence_kind="heuristic", quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": "reports/probe.md"})

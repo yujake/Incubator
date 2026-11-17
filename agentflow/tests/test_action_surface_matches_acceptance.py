@@ -178,7 +178,7 @@ def _b_instance(tmp_path: pathlib.Path):
 _OWN = dict(
     statement_full="本文的引理：对周期图 K(m)，稳定范数取整数值",
     statement_text="稳定范数取整数值",
-    origin="own_result", kind="conjecture", evidence_kind="heuristic",
+    origin="own_result", derived_from=["999999"], kind="conjecture", evidence_kind="heuristic",
     quote_reason="本轮还没做逐字比对（引文那一栏待核）",
 )
 _OWN_SOURCE = dict(doc_id="0000", proof_text="证明：由定义直接得到。")

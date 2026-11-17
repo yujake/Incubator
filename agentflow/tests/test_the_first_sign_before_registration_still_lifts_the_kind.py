@@ -166,7 +166,8 @@ def _register_first_signed(tmp_path: pathlib.Path, *, votes: int | None = None) 
     signed = _pending_sign(st, rel=rel, votes=votes)
     filed = _b(st).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
-        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",
         proof_text=PROOF, proof_manuscript=rel)
@@ -361,7 +362,7 @@ def _register_three_votes_not_one_body(tmp_path: pathlib.Path) -> dict:
     _pending_sign(st, rel=rel, votes=1, proof_text=OTHER_PROOF, object_sha256=carrier)
     filed = _b(st).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
-        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",
         proof_text=PROOF, proof_manuscript=rel)

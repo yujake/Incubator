@@ -55,7 +55,7 @@ def _add_theorem(store: Store, stmt_id: str) -> None:
 
     proof = f"命题 {stmt_id} 的证明正文（判据夹具）。"
     row = S.Statement(
-        stmt_id=stmt_id, origin="own_result", kind="theorem",
+        stmt_id=stmt_id, origin="own_result", derived_from=["999999"], kind="theorem",
         label=f"在册命题 {stmt_id}", statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文。",
         proof_text=proof,
@@ -121,7 +121,8 @@ def test_a_refusal_has_no_dependency_receipt(tmp_path):
     store = _store(tmp_path)
     got = AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
         statement_full="引理 D：没有稿的一条。", statement_text="引理 D",
-        origin="own_result", kind="conjecture", doc_id=S.format_id(0),
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）：没有外部引文要比对",
         proof_text="证明正文（判据夹具）。",
     )

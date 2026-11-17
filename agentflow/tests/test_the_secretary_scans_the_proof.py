@@ -48,7 +48,8 @@ def _two_things(store, **extra) -> dict:
     那一份稿（pending 台账），再把稿的路径与本笔的五元位补上；定理内容与证明过程
     仍然是调用方在 `extra` 里给的那两样，断言一个字没动。
     """
-    payload = {"kind": "theorem", "label": "T1", "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    payload = {"kind": "theorem", "label": "T1", "origin": "own_result", "derived_from": ["999999"],
                "statement_full": "定理：对任意群 G，命题 ph 成立。"}
     payload.update(extra)
     return carry_proof_manuscript(store.root, payload)
@@ -273,7 +274,7 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     add_literature(store, "0003", title="群论引理", processed=True)
     b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     out = b.register_statement(
-        origin="own_result", kind="conjecture", label="T1",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="T1",
         statement_full="定理：对任意群 G，命题 ph 成立。",
         proof_text="证明：由 lit:0003 的引理推出。",
         quote_reason="自产：没有第二份文本可比（证明过程见 proof_text）",
@@ -285,7 +286,7 @@ def test_b_surfaces_the_pending_definition_and_the_scanned_deps(store):
     # `own_result` 也要给 `quote_reason`（三态纪律不按 origin 放宽：本轮试过，被
     # `test_action_surface_matches_acceptance` 的"每一级缺失都被拒"判红）⇒ 给一个理由就落得下
     out1b = b.register_statement(
-        origin="own_result", kind="conjecture", label="T2",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="T2",
         statement_full="定理：另一条自产命题。", proof_text="证明：由定义直接得到。",
         quote_reason="自产：没有第二份文本可比，所以这一格是'还没核'",
         line_range={"start": 12, "end": 20})
@@ -318,7 +319,7 @@ def test_b_refuses_a_proof_that_cites_an_unregistered_statement(store):
     add_literature(store, "0003", title="群论引理", processed=True)
     b = b_form_gate_ok(AgentB(store, extractor=None, extract_text=None))
     out = b.register_statement(
-        origin="own_result", kind="conjecture", label="T1",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="T1",
         statement_full="定理：证明里点了一个不在册的号。",
         proof_text="证明：由 stmt:0777 直接推出。",
         quote_reason="自产：没有第二份文本可比（证明过程见 proof_text）",

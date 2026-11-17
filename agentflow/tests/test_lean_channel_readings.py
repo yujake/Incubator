@@ -73,7 +73,8 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 def _own(full: str = FULL, label: str = LABEL) -> dict:
     """自产命题的必填件（`origin="own_result"`：`doc_id` + `quote_reason` + 猜想入口）。"""
-    return {"statement_full": full, "statement_text": label, "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    return {"statement_full": full, "statement_text": label, "origin": "own_result", "derived_from": ["999999"],
             "kind": "conjecture", "doc_id": S.format_id(0),
             "quote_reason": "我方自产命题，没有外部引文要比对", "label": label}
 
@@ -92,7 +93,7 @@ def _seed(store: Store, *, full: str = FULL, label: str = LABEL,
     with store.tx("statements", actor="agent-B") as tx:
         sid = str(tx.alloc_id(S.TABLES["statements"]["id_kind"]))
         tx.upsert("statements", {
-            "stmt_id": sid, "origin": "own_result", "kind": "conjecture",
+            "stmt_id": sid, "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
             "label": label, "statement_text": label, "statement_full": full,
             "proof_text": proof_text, "status": "active",
             "created_at": S.now_iso(), "created_by": "agent-B",

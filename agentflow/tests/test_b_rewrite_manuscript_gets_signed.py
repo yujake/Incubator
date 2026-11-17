@@ -89,7 +89,8 @@ def _register(st: Store, *, kind: str, full: str, proof_text: str = "",
               manuscript: str = "", label: str = "R(3,4)=9",
               evidence_kind: str = "proof_review") -> dict:
     return _b(st).register_statement(
-        origin="own_result", kind=kind, label=label, statement_full=full,
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind=kind, label=label, statement_full=full,
         statement_text="R(3,4)=9", proof_text=proof_text,
         proof_manuscript=manuscript, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,

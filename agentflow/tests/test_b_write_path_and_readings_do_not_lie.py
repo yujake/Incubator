@@ -92,7 +92,8 @@ _BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据"
 OWN = {
     "statement_full": STATEMENT,
     "statement_text": STATEMENT_TEXT,
-    "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    "origin": "own_result", "derived_from": ["999999"],
     "kind": "conjecture",
     "doc_id": S.format_id(0),
     "quote_reason": "我方自产命题，没有外部引文要比对",
@@ -123,7 +124,7 @@ def _put(store: Store, *, bits: dict | None = None, proof_text: str = P1,
          kind: str = "theorem") -> dict:
     """落一条命题行（走真正的 `store.tx`，它必须成功）。"""
     row = {
-        "stmt_id": SID, "origin": "own_result", "kind": kind,
+        "stmt_id": SID, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
         "label": "弦长函数非常值", "statement_full": STATEMENT,
         "statement_text": STATEMENT_TEXT, "proof_text": proof_text,
         "evidence_kind": "heuristic", "status": "active",

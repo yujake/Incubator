@@ -59,7 +59,8 @@ def _own(**kw) -> dict:
     （`must_start_as_conjecture` 是这条路上的另一道预检，与本判据无关 ——
     本判据要的是"同一份正文交第二次"这件事）。
     """
-    base = {"statement_full": FULL, "origin": "own_result", "doc_id": "000000",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    base = {"statement_full": FULL, "origin": "own_result", "derived_from": ["999999"], "doc_id": "000000",
             "kind": "conjecture",
             "proof_text": PROOF, "quote_verified": False,
             "quote_reason": "自产命题：没有第二份文本可比对"}

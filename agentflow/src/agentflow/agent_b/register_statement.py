@@ -73,6 +73,15 @@ docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
 - 上面那两道 V 闸的例外：证明栏是程序、且 E 已按穷举签过 ⇒ 这一条不需要 V 的签
   （V 对数值证据直接拒签）。不改这一处的后果是一条真的穷举证明永远进不了定理证明库：
   它既过不了 B-3，也拿不到 V 那一签。
+
+第十三件：`origin="own_result"` 的命题必须写清来路（业主 2026-11-17 裁定，真机
+`projects/lp-ball-3` 缺陷 ②）。判据：`derived_from` 与 `source_lit_id` 至少一个非空，
+否则受控拒 `missing_own_result_basis`、整笔不写；拒信逐条点名缺哪一格，并给两条可执行的
+正路（`derived_from` 填 `stmt_id` 列表 / `source_lit_id` 填 `lit_id`）。判据本体只有一处
+（`statementledger.own_result_basis_missing`），收工门的「造」那一环读同一份。两个例外各有
+它自己的来路：概念行（来路就是它自己的定义）与普通数值绿通（来路是那一条实验行）。
+为什么必须在登记那一刻拦：真机那 3 条命题已经进了台账、收工门才红，而"它由什么推出来"
+只有当时的 B 知道 —— 事后补不回来。
 """
 from __future__ import annotations
 
@@ -4708,6 +4717,29 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "`doc_id`（我方稿件那一行的 id）或 `line_range`"
                                "（start / label 至少一个）—— 自有结果的出处不是"
                                "「文献第几页」，那一栏要它等于让它编一个数字" + _all_missing)
+            # ---- 来路闸（业主 2026-11-17 真机缺陷 ②）-------------------------
+            #
+            # 现场（`projects/lp-ball-3`，2026-11-17，exit 1）：33 行命题里 3 行
+            # `origin=own_result`，`derived_from` 与 `source_lit_id` 全空。登记那一侧
+            # 一个字都没拦，收工门「造」那一环（`blocker=acceptance_unmet`）才红 ——
+            # 而那时三条命题已经躺在台账里，"来路"再也补不回原样（谁推的、推自哪几条，
+            # 只有当时的 B 知道）。所以判据必须在登记那一刻说话。
+            #
+            # 判据只有一处（`statementledger.own_result_basis_missing`）：收工门读同一份，
+            # 于是"进得来"与"收得了工"不再各说各的（`closing._check_acceptance` 的「造」）。
+            #
+            # 两个例外，各有它自己的来路，不在这里要这两格：
+            # - 概念行（`kind="concept"`）：来路就是它自己的定义（`conceptrows` 的口径）；
+            # - 普通数值绿通（`_green.ok`）：来路是那一条实验行（`exp:<号>`，见上面那一支
+            #   "出处按实验行记"），既不是"已登记的命题"也不是"一篇文献"。
+            _basis_missing = ([] if _green.get("ok")
+                              else SL.own_result_basis_missing(
+                                  origin=origin, derived_from=derived_from,
+                                  source_lit_id=lit_id, kind=kind_now))
+            if _basis_missing:
+                return _refuse("missing_own_result_basis",
+                               SL.own_result_basis_refusal(_basis_missing),
+                               missing=list(_basis_missing))
             # 第五级：自产命题的证明。
             #
             # 这一格不再 `_refuse`：`_refuse` 会让"证明还没做完"这一档永远进不了库，

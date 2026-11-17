@@ -101,7 +101,8 @@ def test_b_b_registration_with_a_notes_path_promotes_at_the_same_time(tmp_path):
     b = AgentB(st, extractor=None, extract_text=None)
     first = b.register_statement(
         statement_full=FULL, statement_text=FULL, kind="conjecture",
-        label="探针命题", origin="own_result", evidence_kind="heuristic",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        label="探针命题", origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         quote_verified=None, quote_reason="夹具：自产命题，先拿号",
         line_range={"label": NOTES_REL})
     assert first.get("ok") is True, first
@@ -118,7 +119,7 @@ def test_b_b_registration_with_a_notes_path_promotes_at_the_same_time(tmp_path):
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
         # 与真机同一格：F 的召唤参数里写的是 `proof_manuscript=notes/…`（路径，不是正文）。
         proof_manuscript=NOTES_REL, kind="conjecture", label="探针命题",
-        origin="own_result", evidence_kind="heuristic",
+        origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         quote_verified=None, quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": NOTES_REL})
 

@@ -121,7 +121,8 @@ def _workspace(tmp_path: pathlib.Path, *, steps: int = LINKS + 1) -> tuple[objec
             "proof_text": proof,
             "evidence_kind": "heuristic",
             "status": "active",
-            "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+            "origin": "own_result", "derived_from": ["999999"],
             "quote_reason": "自产命题（这一组判据不涉及外部原文）",
         }, note="probe:statement")
     return st, ws, proof
@@ -504,7 +505,7 @@ def _own_statement() -> dict:
     return {
         "statement_full": CLAIM,
         "statement_text": CLAIM,
-        "origin": "own_result",
+        "origin": "own_result", "derived_from": ["999999"],
         "doc_id": S.format_id(0),
         "quote_reason": "我方自产命题，没有外部引文要比对",
         "kind": "conjecture",

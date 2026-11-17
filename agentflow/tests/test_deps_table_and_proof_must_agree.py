@@ -122,7 +122,8 @@ def _register_target(store: Store, *, proof_text: str = "") -> dict:
     return b.register_statement(
         statement_full="引理：由在册定理推出结论（判据夹具）。",
         statement_text="由在册定理推出结论", proof_text=proof_text,
-        origin="own_result", kind="conjecture",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         quote_reason="判据夹具：自产命题", doc_id=SID)
 
 
@@ -160,7 +161,7 @@ def _registered_conjecture(store: Store) -> str:
 def _register_again(store: Store):
     return AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
         statement_full="引理：由在册定理推出结论（判据夹具）。",
-        statement_text="由在册定理推出结论", proof_text="", origin="own_result",
+        statement_text="由在册定理推出结论", proof_text="", origin="own_result", derived_from=["999999"],
         kind="conjecture", quote_reason="判据夹具：自产命题", doc_id=SID)
 
 

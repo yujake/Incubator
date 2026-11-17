@@ -144,7 +144,8 @@ def _seed_target(store: Store) -> str:
     """
     got = _agent(store).register_statement(
         statement_full=TARGET_FULL, statement_text=TARGET_TEXT,
-        proof_text="", origin="own_result", kind="conjecture",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        proof_text="", origin="own_result", derived_from=["999999"], kind="conjecture",
         quote_reason="我方自产命题（判据夹具）", doc_id=THEOREM_A)
     assert got.get("ok") is True, got
     return str(got["stmt_id"])

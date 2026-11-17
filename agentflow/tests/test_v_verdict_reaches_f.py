@@ -65,7 +65,8 @@ def _statement_row(st: Store, sid: str, *, proof: str) -> None:
     """落一条"有证明、还没被签"的命题行（`statements` 是真表，走真事务）。"""
     with st.tx("statements", actor="test", note="b3 fixture") as tx:
         tx.upsert("statements", {
-            "stmt_id": sid, "origin": "own_result", "kind": "lemma",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+            "stmt_id": sid, "origin": "own_result", "derived_from": ["999999"], "kind": "lemma",
             "label": f"探针命题 {sid}", "statement_text": f"探针 {sid}",
             "statement_full": f"探针命题 {sid}：若 n≥3 则无解。",
             "proof_text": proof, "evidence_kind": "heuristic", "status": "active",
@@ -205,7 +206,7 @@ PROOF = "1. n^2+n = n(n+1)。\n2. 相邻整数必有一偶，故积为偶。"
 
 
 def _own(**kw) -> dict:
-    base = {"statement_full": FULL, "origin": "own_result", "doc_id": "000000",
+    base = {"statement_full": FULL, "origin": "own_result", "derived_from": ["999999"], "doc_id": "000000",
             "proof_text": PROOF, "quote_verified": False,
             "quote_reason": "自产命题：没有第二份文本可比对"}
     base.update(kw)

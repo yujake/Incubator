@@ -101,7 +101,8 @@ def own(full: str, **kw) -> dict:
     payload = {
         "statement_full": full,
         "statement_text": full[:20],
-        "origin": "own_result",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+        "origin": "own_result", "derived_from": ["999999"],
         # 自产、无出处、quote_verified 不是 True ⇒ 按硬规则从"猜想"进门
         # （升档由证据位现算，不在这里硬写 theorem）。
         "kind": "conjecture",

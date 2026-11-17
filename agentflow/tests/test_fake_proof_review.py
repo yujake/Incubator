@@ -116,7 +116,8 @@ def _row(stmt_id: str = "000000", **kw) -> dict:
     `Statement.validate` 用同一个 kind）。
     """
     kind = str(kw.get("kind") or "lemma")
-    row = {"stmt_id": stmt_id, "origin": "own_result", "kind": kind,
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    row = {"stmt_id": stmt_id, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
            "statement_full": "设 G 是 3-正则图；则 c(G) ≤ 1。",
            "statement_text": "c(G) ≤ 1", "proof_text": _PROOF,
            "quote_reason": "我方自产命题，没有外部引文要比对",
@@ -529,7 +530,7 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     second = AgentB(ws, extractor=None, extract_text=None).register_statement(
         statement_full=str(row["statement_full"]),
         statement_text=str(row.get("statement_text") or ""),
-        origin="own_result", kind="conjecture",
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         # 档位按 V 的账本现算（`_proof_tier` → `proof_review`）：B 收到这个档之后
         # 仍会按盘上那一签复核，不是自报。
         evidence_kind="proof_review",

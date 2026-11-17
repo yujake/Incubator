@@ -47,7 +47,8 @@ STATEMENT = "设 a≠b 为半轴，椭圆 x²/a²+y²/b²=1 不存在等弦点�
 #: `line_range` 是 `origin="own_result"` 的出处那一栏（动作在写库前要它，否则
 #: `missing_own_source` —— 真机 `mp2` 那一条也是这么写的：`notes/…md:17-83`）。
 _PAYLOAD: dict[str, Any] = {
-    "origin": "own_result", "kind": "theorem", "label": "椭圆无等弦点",
+# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
+    "origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "椭圆无等弦点",
     "statement_full": STATEMENT, "proof_text": PROOF,
     "line_range": {"start": 17, "end": 83},
     "quote_verified": None,
@@ -308,7 +309,7 @@ def test_the_store_commit_gate_is_the_second_lock(tmp_path, monkeypatch):
     st.init()
     with pytest.raises(ValueError) as exc:
         with st.tx("statements", actor="tool", note="tool:table.create:statements") as tx:
-            tx.upsert("statements", {"stmt_id": S.format_id(0), "origin": "own_result",
+            tx.upsert("statements", {"stmt_id": S.format_id(0), "origin": "own_result", "derived_from": ["999999"],
                                      "kind": "theorem", "statement_full": "手写的",
                                      "quote_reason": "尚未逐字校验"})
     assert "direct_write_refused" in str(exc.value), str(exc.value)
