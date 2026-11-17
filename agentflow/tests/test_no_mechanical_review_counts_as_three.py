@@ -26,14 +26,19 @@
 """
 from __future__ import annotations
 
+import ast
+import inspect
 import json
 import pathlib
+import textwrap
 
 import pytest
 
+from agentflow import exhaustionreport as ER
 from agentflow import sign_counting as SC
 from agentflow import verifications as VR
 from agentflow import vsigns as VS
+from agentflow.agent_v import core as V_CORE
 
 #: a / c / d 的现场（E 跑一趟真穷举 ⇒ e-proof 手稿；V 这一支不问模型）。
 from test_e_gets_its_v_sign_like_f import _env, _manuscript, _submitted_by_e
@@ -186,18 +191,41 @@ def test_b_f_and_b_still_need_three_consecutive_passes(tmp_path):
 # ============================================================ c：一次调用只跑一轮
 
 
-def test_c_duplicated_judgments_and_cross_call_rows_never_add_up(tmp_path):
+def test_c_duplicated_judgments_and_cross_call_rows_never_add_up(tmp_path, monkeypatch):
     """c：一次调用里不重跑 `need` 遍；复制判词 / 跨送审累计都不许凑轮。
 
-    三半：
-    ① 现场：E 这一趟的盘上只有一轮（`review_pass=[1]`，第 2/3 轮不存在）；
-    ② 同一份机械判词复制三份 ⇒ `count=1`（need=3 不够、need=1 恰好够）；
-    ③ 跨送审：另一条 `review_call` 的三行不进这一组（两条各 1 轮，谁都不够 3）。
+    四半：
+    ① 代码形态：`_review_exhaustion_rounds` 里没有 `For` / `While` —— 「复制判词」
+       那一族写法的形状就是"循环 `need` 遍、每遍 append 一份同样的判词"；
+    ② 运行期：一次送审里机械核对只被调用 1 次；
+    ③ 盘上：E 这一趟只有一轮（`review_pass=[1]`，第 2/3 轮不存在）；
+    ④ 计数层：同一份机械判词复制三份 ⇒ `count=1`（need=3 不够、need=1 恰好够）；
+       跨送审的三行各属一条 `review_call` ⇒ 哪一组都不够 3。
     """
+    # ① 代码形态：不留「重跑 need 遍」的循环。
+    src = textwrap.dedent(inspect.getsource(V_CORE.AgentV._review_exhaustion_rounds))
+    loops = [n for n in ast.walk(ast.parse(src)) if isinstance(n, (ast.For, ast.While))]
+    assert loops == [], (
+        "这一支里还有循环 —— 「一次判词复制 need 份」就是它的形状",
+        [type(n).__name__ for n in loops])
+
+    # ② 运行期：一次送审只买一次机械核对。
+    real_review = ER.review
+    calls: list[int] = []
+
+    def _counting_review(*args, **kwargs):
+        calls.append(1)
+        return real_review(*args, **kwargs)
+
+    monkeypatch.setattr(ER, "review", _counting_review)
     env = _env(tmp_path)
     rel, _text = _manuscript(env)
     with _submitted_by_e():
         env["v"].verify_proof(proof_manuscript=rel)
+    assert len(calls) == 1, (
+        f"一次调用里机械核对跑了 {len(calls)} 遍（need=1 只该跑一轮）", len(calls))
+
+    # ③ 盘上只有一轮。
     rows = _pending_rows(pathlib.Path(env["store"].root))
     assert [int(r.get("review_pass") or 0) for r in rows] == [1], (
         "一次调用里出现了第 2 / 3 轮 ⇒ 还是「重跑 need 遍」的形状", rows)
@@ -218,7 +246,7 @@ def test_c_duplicated_judgments_and_cross_call_rows_never_add_up(tmp_path):
     assert counted1.get("ok") is True, (
         "need=1 下一次机械过审还不够 ⇒ 计数层没有按新 need 校准", counted1)
 
-    # ③ 跨送审不累计：三行都在，但各属一条 `review_call` ⇒ 没有一组能数到门槛。
+    # ④b 跨送审不累计：三行都在，但各属一条 `review_call` ⇒ 没有一组能数到门槛。
     spread = [_real_pass(sha, pass_no=n, call=f"call-submit-{n}") for n in (1, 2, 3)]
     for n in (1, 2, 3):
         got = SC.count_rows(spread, review_call=f"call-submit-{n}",
