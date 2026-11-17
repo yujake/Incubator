@@ -1085,8 +1085,10 @@ def _record_download_attempt(ctx: _Ctx, slot: str, row: Mapping[str, Any], *,
     入库闸四处 —— 而闸的口径一个字都不该变（仍要"有尝试回执"才准 `metadata_only`）。
     所以档位不动，来源记在 `source` / `note` 里：审计读得出这次是下载死的还是抽死的。
 
-    只在失败时写：下载成功意味着盘上有字节，`metadata_only` 那时是假话
-    （`_read_evidence_gate` 会按"盘上有字节却报仅题录"拒），所以成功下载不写回执。
+    只在「拿不到可读全文」时写：干净的成功下载意味着盘上有可读字节，`metadata_only`
+    那时是假话（`_read_evidence_gate` 会按"盘上有字节却报仅题录"拒），所以干净成功
+    不写回执。落地页例外（`ok=True` + `content_type_mismatch`）：字节落盘了，但那
+    是一张 HTML 落地页、不是全文 —— 它同样回答"试过一次、拿不到可读文本"，所以也写。
     """
     if ctx.store is None:
         return None
@@ -1102,9 +1104,10 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
     """``search.download``：把 URL 下到工作区 downloads/ 下的临时位置。
 
     `cand`（2026-11-17 AL2·#5）：候选绑定。给了它，这一趟下载就绑在那条候选上 ——
-    失败时写一条 `extract_failed` 回执（档位与理由见 :func:`_record_download_attempt`），
-    于是"下载就失败、连文件都没有"的候选也能按仅题录入库（业主口径：`metadata_only`
-    是"试过一次、拿不到可读文本"，下载尝试也算一次尝试）。不给 `cand` ⇒ 行为逐字不变。
+    拿不到可读全文时写一条 `extract_failed` 回执（档位与理由见
+    :func:`_record_download_attempt`），于是"下载就失败、连文件都没有"或"下到的是
+    10MB 落地页 HTML"的候选也能按仅题录入库（业主口径：`metadata_only` 是"试过一次、
+    拿不到可读文本"，下载尝试也算一次尝试）。不给 `cand` ⇒ 行为逐字不变。
     """
     slot = _download_slot(cand)
     row: dict | None = None
@@ -1147,6 +1150,16 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         )
 
     path = Path(res.path) if res.path else None
+    # 软警告（`ok=True`）里的 `content_type_mismatch` 也是「一次尝试」：拿到的是一张
+    # 落地页 HTML，不是可读全文 —— 候选行上要留一条 `extract_failed` 回执，否则
+    # A 只能判拒（真机 `projects/lp-ball-4` 的 Ball 1986 就是这个形状：10,149,864 字节
+    # 落地页，`ok=True`、`content_warning=content_type_mismatch`，而候选行上没有任何
+    # 「试过」的证据 ⇒ 105 条一条都不敢按仅题录判）。与 `res.ok=False` 那一支共用
+    # 同一个写点（`_record_download_attempt`），档位与理由见它的 docstring。
+    receipt = None
+    if slot and row is not None and str(res.kind or "") == "content_type_mismatch":
+        receipt = _record_download_attempt(ctx, slot, row, url=url,
+                                           fetch_kind=str(res.kind or ""))
     data: dict[str, Any] = {
         "ok": True,
         "url": url,
@@ -1165,12 +1178,19 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         # 内容却是 text/html）。文件已完整落盘，但绝不能默认当论文抽取 ——
         # 这正是 agent_a 里那条"12.4MB HTML 被当成论文"的教训，必须显式传下去。
         "content_warning": res.error,
+        "cand": slot,
+        "read_receipt": receipt,
         "warnings": [],
     }
     if res.error:
         data["warnings"].append(
             f"内容类型可疑：{res.error}。文件已完整落盘（可作证据），"
             "但**不要**直接当作论文交给 B 抽取；登记时应在 summary/download 里保留这个警告。"
+        )
+    if receipt:
+        data["warnings"].append(
+            "这一条候选已记下一条「试过、拿不到可读文本」的回执（档位 extract_failed）"
+            "⇒ 可以按仅题录（metadata_only）判收；落地页 HTML 不要当全文抽取。"
         )
     if effective != int(max_bytes):
         data["warnings"].append(
@@ -1939,7 +1959,7 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` 时这一趟绑在那条候选上：失败也会留一条“试过、拿不到可读文本”的回执（档位 `extract_failed`）⇒ 这一条可以按仅题录判收；不给 `cand` 行为不变。",
+    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` 时这一趟绑在那条候选上：失败（超时 / 404 / DNS 等）**与拿到落地页**（`ok=True` + `content_type_mismatch`）都会留一条“试过、拿不到可读文本”的回执（档位 `extract_failed`，note 写 `search.download.<失败形态>`）⇒ 这一条可以按仅题录判收；不给 `cand` 行为不变。",
     {
            "type": "object",
            "properties": {
@@ -1959,12 +1979,14 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
     returns=(
             "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256',"
             "'http_status','max_bytes_requested','max_bytes_effective','elapsed_s',"
-            "'content_warning','warnings'}；"
+            "'content_warning','cand','read_receipt','warnings'}；"
             "失败：ok=False + kind(download_failed/download_error/unknown_slot/no_store/store_error) + "
             "fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/"
             "network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）"
             "+ cand（给了 cand 才有：归一后的槽位）+ read_receipt（这次失败落下的那条 "
             "extract_failed 回执；没给 cand ⇒ null）"
+            "成功但 `content_warning=content_type_mismatch`（落地页 HTML）：ok=True 照旧给路径/字节，"
+            "同时 read_receipt 非空（note=search.download.content_type_mismatch）"
             ),
     tags=("search", "download"),
     external="egress",
