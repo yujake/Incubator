@@ -3222,6 +3222,19 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                              "statements 时允许，按稿号 / 逐路径记录 / 命题指纹三处判；改后"
                              "必须过语义同一性判定，判不了即受控拒；只换 `## 命题` 与稿头"
                              "命题指纹，`## 证明` 正文 sha 变了整笔不写）—— 受控写口",
+    # 2026-11-17（业主裁定「是系统计数落签」）：发签之前那一个「连续几次过审」的计数层。
+    # 为什么必须是顶层模块而不是角色包 / 工具：`vsigns.issue` 的放行门槛、秘书的
+    # `decide_sign_issuance` 与 `verifications.record_verification` 的读侧要现数同一本
+    # 台账（同一 `review_call` 组内 `review_pass=1..need`），而这三处分属两个角色包与
+    # 库层 —— 挂进任一角色都会让另一侧反向依赖；它纯读、不注册工具、不写盘，
+    # 判据能直接拿一本 jsonl 台账核三态（`tests/test_system_counts_the_sign.py` /
+    # `tests/test_sign_integrity_gates.py`）。
+    "sign_counting.py": "系统计数落签的计数层（2026-11-17）：count_rows / legacy_tail / "
+                        "count_ledger_file / count_registered / read_rows / row_call / "
+                        "row_pass —— 同一份正文、同一 `review_call` 内 `review_pass=1..need` "
+                        "连续 clean 的现数；`vsigns.issue` 只认它的 ok，调用方递进来的数"
+                        "（within_call / len(judged) / 台账尾数）只是读数；老行显式 "
+                        "`legacy:*`、单轮会审显式 single_round —— 纯读、零写盘、零工具注册",
 }
 
 
