@@ -228,20 +228,34 @@ def _merged_derived_from(*groups: Any) -> list[str]:
 
 
 def _caller_is_d() -> bool:
-    """这一笔的发起方是不是 D（B 的直调上下文里 `current_caller_role()`；被 D 召唤时是父角色）。
+    """这一笔的发起方是不是 D —— 只读"真调用方"（`current_caller_role()`），不看父角色。
 
-    两个都要读：D 的代码（`write_report`）直接调 B 的方法时，挂点是"我是 D"；
-    而 D 用 `summon` 派 B 时，B 自己的任务上下文里 `_caller_role()` 才是 D。
+    ## 2026-11-17（INV2 钉死的根因；证据 `temp/inv2/REPORT.md` §2.2）
+
+    改前这里读两个来源：`current_caller_role()`（我是谁）与 `_caller_role()`（父角色），
+    只要有一个是 D 就算"D 在交稿"。真机 `projects/lp-ball-6` 上后果是：
+    B1 那一趟（`t-000064`）的父是 `t-000009`（`role=D`）⇒ B 在自己那一趟里登记
+    自己的成果（`own.register_statement(proof_manuscript=…, label=…, origin=…)`）也被
+    判成「D 交稿」，6 次正面拒 `d_gives_manuscript_pointers_only`，`statements` 一行
+    没落，`t-000079` 一直 `pending/seen`。
+
+    为什么只认"真调用方"：这一格管的是"谁在交稿"，而 `calling_as(role=…)` 挂的正是
+    这一趟干活的 agent（`AgentLoop._do_tool` 与 `_run_role_body` 两处挂点）；父是谁只
+    说明"这一趟由谁派来"。D 把 B 叫醒之后动手的是 B，"B 从 D/E/F 的稿里读正文"恰好
+    就是这道闸要求的形态 —— 拿父角色判，等于把"D 派来的 B"读成"D 在递正文"。
+
+    负控（真 D 交稿）一个字没松：D 的代码直调 `B.register_statement(...)`
+    （`agent_d/write_report.py`）跑在 D 自己的 run 里，`current_caller_role()` 就是
+    `"D"` ⇒ 判据照旧为真（`tests/test_d_gives_pointers_not_content.py` 的 a2 / a5 钉着它）。
     """
-    roles: set[str] = set()
     try:
         from ..conductor import current_caller_role
-
-        roles.add(str(current_caller_role() or ""))
     except Exception:  # noqa: BLE001 —— 读不到挂点 = 没有挂点（不是"D 在调"）
-        pass
-    roles.add(str(_caller_role() or ""))
-    return "D" in roles
+        return False
+    try:
+        return str(current_caller_role() or "") == "D"
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _pointer_manuscript_rel(value: Any) -> str:
