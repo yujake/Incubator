@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T20:18:43+08:00",
+  "generated_at": "2026-11-17T21:11:58+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,10 +505,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "275c39df493d359cbfe13ee72117e1f2187c5f146d83be8819ccbff3026dc00c",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "BUD1（p293）：specs/m.py 的 M policy 新增一条硬口径（预算余量低于阈值时先把收工必需物落盘，正文取自 budget.PAPERWORK_FIRST_RULE）＋阈值说明；agent_surface_snapshot 因十一格提示词里的版本行 p292→p293 按现值重冻（逐格 diff 只有 roles[*].prompt 一处，见 scripts/golden_diff.py）。登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过。",
+      "sha256": "e39a9d7a13d4583712c12fdc6a0dd7187db4593bc8f5245508ca933d46c17350",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "ORIGIN1：PTR1 回退删掉 ingest_manuscript 的两个可选入参（来路语义纠正）⇒ 面快照按现签名重冻；reviewers=[] 保持（登记≠批准）",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
