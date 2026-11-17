@@ -131,3 +131,111 @@ def test_l_tool_face_is_wider_than_its_collab_face() -> None:
     assert "协作面只有 `B → L → C`" in section
     assert "conductor.retire_child" in section and "conductor.void_items" in section
     assert "conductor.broadcast` /" not in section, "L 的工具清单里还挂着已退场的 broadcast"
+
+
+# ====================================================================== ⑥ 旧文档 8 条
+def _edge_table_rows(text: str) -> dict[str, str]:
+    """从 ROLE-SPECS §0.5 的边表取「角色 -> 出边那一格原文」。"""
+    body = text.split("### 0.5", 1)[1].split("### 0.6", 1)[0]
+    rows: dict[str, str] = {}
+    for line in body.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        role = re.fullmatch(r"`([A-Z])`(?:（.*）)?", cells[0])
+        if role:
+            rows[role.group(1)] = cells[1]
+    return rows
+
+
+def _letter_set(cell: str) -> frozenset[str]:
+    """出边那一格里第一个「大写字母 + 空格」的代码跨度；没有 ⇒ 空集。
+
+    只看破折号之前那一截：`（无出边）—— 入边 `F` / `E` / `B`…` 里的入边不能当成出边。
+    """
+    for span in re.findall(r"`([^`]+)`", cell.split("——", 1)[0]):
+        if re.fullmatch(r"[A-Z](?: [A-Z])*", span):
+            return frozenset(span.split())
+    return frozenset()
+
+
+def test_role_specs_edge_table_matches_capabilities() -> None:
+    """§0.5 的出边表逐行等于 ALLOWED_EDGES（F 的 A C D E V 不再写回 A B C E V）。"""
+    from agentflow import capabilities as C
+
+    text = _text(ROLE_SPECS)
+    rows = _edge_table_rows(text)
+    assert set(rows) == {"A", "B", "C", "D", "E", "F", "G", "H", "V", "L", "M"}, set(rows)
+    for role, cell in rows.items():
+        assert _letter_set(cell) == frozenset(C.ALLOWED_EDGES.get(role) or ()), (role, cell)
+    assert "`A C D E V`" in rows["F"]
+    assert "`A B C E V`" not in rows["F"]
+
+    # 各 X.9 的入边清单：只钉被 AU2b 点过名的那几处，且用现算的入边集合作反真空
+    inbound = {r: {frm for frm, tos in C.ALLOWED_EDGES.items() if r in tos}
+               for r in "ABCDEFGHVL"}
+    e9 = text.split("### E.9", 1)[1].split("### E.10", 1)[0]
+    first = e9.split("**不是", 1)[0]
+    assert frozenset(re.findall(r"`([A-Z])`", first)) == frozenset(inbound["E"]), first
+    assert "不是 `G`" in e9
+    f9 = text.split("### F.9", 1)[1].split("### F.10", 1)[0]
+    assert frozenset(re.findall(r"`([A-Z])`", f9.split("入边只有", 1)[1].split("。", 1)[0])) == \
+        frozenset(inbound["F"]), f9[:200]
+
+
+def test_closing_gate_is_documented_as_eight_cells() -> None:
+    """收工门现在是 8 格（含 literature_pending）；paper 不在门里 —— 三份文档同一口径。"""
+    from agentflow import closing
+
+    checks = tuple(closing.DEFAULT_CHECKS)
+    assert len(checks) == 8, checks
+    assert "literature_pending" in checks and "paper" not in checks
+
+    specs = _text(ROLE_SPECS)
+    row = [ln for ln in specs.splitlines() if ln.startswith("| 81 | `conductor.closing`")]
+    assert len(row) == 1, row
+    for key in checks:
+        assert f"`{key}`" in row[0], key
+    assert "`paper` 不在门里" in row[0]
+
+    guide = _text(DOCS / "USER-GUIDE.md")
+    assert "八格" not in guide
+    assert "literature_pending" in guide
+    components = _text(DOCS / "SYSTEM-COMPONENTS.md")
+    assert "收工门八格" in components and "DEFAULT_CHECKS 八格" in components
+
+
+def test_lean_modes_puts_the_formal_obligation_on_l() -> None:
+    """LEAN-MODES 的形式化义务归 L（M 派 B 安排），E 那一档是受控拒绝。"""
+    text = _text(DOCS / "LEAN-MODES.md")
+    assert "E 的形式化义务" not in text
+    assert "L 的形式化义务" in text
+    assert "formal_not_in_e" in text
+    assert "派 B（`M→B`）由 B 逐条安排 L" in text
+    assert "verify.check_formal" not in text
+
+
+def test_role_guide_conjecture_rows_follow_the_one_write_point() -> None:
+    """猜想台账的唯一写点是产出侧（E/F/B）；D 只读、没有 register_conjecture。"""
+    import sys
+
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from tools import write_system_docs as W
+
+    def rows(role: str) -> list[tuple[str, str, str]]:
+        return list(W.ARTIFACTS[role])
+
+    def conjecture_rw(role: str) -> list[str]:
+        return [rw for path, rw, _detail in rows(role)
+                if "conjectures.json" in path]
+
+    assert conjecture_rw("D") == ["只读"]
+    assert conjecture_rw("E") == ["写"]
+    assert conjecture_rw("F") == ["写"]
+    assert conjecture_rw("B") == ["写"]
+    joined = "\n".join(detail for role in ("A", "B", "C", "D", "E", "F", "G", "H", "V", "L", "M")
+                       for _p, _rw, detail in rows(role))
+    assert "register_conjecture（D" not in joined
+    guide = _text(DOCS / "ROLE-GUIDE.md")
+    assert "register_conjecture（D 的主力动作" not in guide

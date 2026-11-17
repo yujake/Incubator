@@ -272,8 +272,9 @@
 
 | 路径或落点 | 读还是写 | 细节 |
 |---|---|---|
-| `data/statements.json` | 写 | 登记命题（含 kind / grade / 判档位那一格） |
-| `data/concepts.json` / `relations.json` / `dependencies.json` | 写 | 概念、关系、依赖面 |
+| `data/statements.json` | 写 | 登记命题（含 kind / grade；概念行也住这张表的 `kind="concept"` 那一档） |
+| `data/relations.json` / `dependencies.json` | 写 | 关系与依赖面 |
+| `data/conjectures.json` | 写 | 收录成功之后把「这条命题已进命题台账」记进猜想台账（既有行不动 / 没有就落一行） |
 | `data/literature.json` | 写 | 给文献补概念与摘要 |
 | `data/tasks.json` | 只读 | 看派给它的活与回执 |
 
@@ -537,8 +538,8 @@
 | 路径或落点 | 读还是写 | 细节 |
 |---|---|---|
 | `data/research_questions.json` | 写 | 立问题、追进度、记失败原因 |
-| `data/conjectures.json` | 写 | register_conjecture（D 的主力动作，判重命中即返回既有行） |
-| `data/attack_plans.json` 与 `attack_rounds.json` | 写 | 攻坚计划与每轮进展 |
+| `data/conjectures.json` | 只读 | 读产出侧记进来的命题；D 不立项临时命题，也没有 `register_conjecture` 这个动作（2026-11-13 裁定） |
+| `data/attack_plans.json` 与 `attack_rounds.json` | 写 | 攻坚计划与每轮进展（经 `attack.*` 工具） |
 | `out/proofs/*.md` | 写 | 攻坚过程记录：`## 思路` / `## 依赖面参考`；带 `## 证明` 节 ⇒ 受控拒（`reserved_framework_artifact`），要落稿就派 F |
 | `out/review/*.md` | 写 | 研究报告 |
 
@@ -649,8 +650,9 @@
 | 路径或落点 | 读还是写 | 细节 |
 |---|---|---|
 | `data/experiments.json` | 写 | 数值实验行：脚本、参数、读数、退出码、复现命令 |
+| `data/conjectures.json` | 写 | `run_experiment` 落实验行的同一个事务里把这条命题记进猜想台账（`conjectureledger.register`） |
 | `out/exp/*` | 写 | 实验产物（脚本与输出） |
-| `data/conjectures.json` 与 `statements.json` | 只读 | 读被判定的东西；改判档不由 E 做 |
+| `data/statements.json` | 只读 | 读被判定的东西；改判档不由 E 做 |
 
 ---
 
@@ -795,8 +797,9 @@
 | 路径或落点 | 读还是写 | 细节 |
 |---|---|---|
 | `reports/f-proof-*.md` | 写 | 证明正文（框架渲染：`## 命题` / `## 证明` / `## 依赖`；由 `F.step` 的 proof 动作落） |
+| `data/conjectures.json` | 写 | 落稿那一刻把「我提出过这条」记进猜想台账（`attack.step` / `conjectureledger.register`） |
 | `data/statements.json` | 只读 | 确认要证的是哪一条 |
-| `data/dependencies.json` | 写 | 依赖面表格（depsection 解析，V 会核引用） |
+| `data/dependencies.json` | 不写 | 依赖边由 B 读你手稿里的 `## 依赖` 三列表登记（`used_by="stmt:<命题号>#pN"`）；你不直接写这张表 |
 
 ---
 

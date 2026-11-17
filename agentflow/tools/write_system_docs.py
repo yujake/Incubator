@@ -47,8 +47,9 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
         ("`data/concepts.json` 与 `data/relations.json`", "不写", "抽概念、建关系是 B 的活"),
     ),
     "B": (
-        ("`data/statements.json`", "写", "登记命题（含 kind / grade / 判档位那一格）"),
-        ("`data/concepts.json` / `relations.json` / `dependencies.json`", "写", "概念、关系、依赖面"),
+        ("`data/statements.json`", "写", "登记命题（含 kind / grade；概念行也住这张表的 `kind=\"concept\"` 那一档）"),
+        ("`data/relations.json` / `dependencies.json`", "写", "关系与依赖面"),
+        ("`data/conjectures.json`", "写", "收录成功之后把「这条命题已进命题台账」记进猜想台账（既有行不动 / 没有就落一行）"),
         ("`data/literature.json`", "写", "给文献补概念与摘要"),
         ("`data/tasks.json`", "只读", "看派给它的活与回执"),
     ),
@@ -59,8 +60,8 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
     ),
     "D": (
         ("`data/research_questions.json`", "写", "立问题、追进度、记失败原因"),
-        ("`data/conjectures.json`", "写", "register_conjecture（D 的主力动作，判重命中即返回既有行）"),
-        ("`data/attack_plans.json` 与 `attack_rounds.json`", "写", "攻坚计划与每轮进展"),
+        ("`data/conjectures.json`", "只读", "读产出侧记进来的命题；D 不立项临时命题，也没有 `register_conjecture` 这个动作（2026-11-13 裁定）"),
+        ("`data/attack_plans.json` 与 `attack_rounds.json`", "写", "攻坚计划与每轮进展（经 `attack.*` 工具）"),
         # D 只提供想法，证明的落稿与拿签归 F：`out/proofs/` 是 D 的
         # 攻坚过程记录，不是证明稿的落点 —— 这一格与新口径逐字一致（判据
         # `tests/test_system_docs_are_generated.py::test_the_attack_record_permission_...`）。
@@ -71,14 +72,16 @@ ARTIFACTS: dict[str, tuple[tuple[str, str, str], ...]] = {
     ),
     "E": (
         ("`data/experiments.json`", "写", "数值实验行：脚本、参数、读数、退出码、复现命令"),
+        ("`data/conjectures.json`", "写", "`run_experiment` 落实验行的同一个事务里把这条命题记进猜想台账（`conjectureledger.register`）"),
         ("`out/exp/*`", "写", "实验产物（脚本与输出）"),
-        ("`data/conjectures.json` 与 `statements.json`", "只读", "读被判定的东西；改判档不由 E 做"),
+        ("`data/statements.json`", "只读", "读被判定的东西；改判档不由 E 做"),
     ),
     "F": (
         ("`reports/f-proof-*.md`", "写",
          "证明正文（框架渲染：`## 命题` / `## 证明` / `## 依赖`；由 `F.step` 的 proof 动作落）"),
+        ("`data/conjectures.json`", "写", "落稿那一刻把「我提出过这条」记进猜想台账（`attack.step` / `conjectureledger.register`）"),
         ("`data/statements.json`", "只读", "确认要证的是哪一条"),
-        ("`data/dependencies.json`", "写", "依赖面表格（depsection 解析，V 会核引用）"),
+        ("`data/dependencies.json`", "不写", "依赖边由 B 读你手稿里的 `## 依赖` 三列表登记（`used_by=\"stmt:<命题号>#pN\"`）；你不直接写这张表"),
     ),
     "G": (
         ("`out/paper/*.tex` 与 `*.md`", "写", "论文与报告正文"),
@@ -252,10 +255,11 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
     (
         "收工门",
         "src/agentflow/closing.py",
-        "一次运行能不能说完成：七格逐格三态加内容级验收读数（论文那一格已退出收工判定，由 M 判断时机）。",
-        "check_closing 跑 DEFAULT_CHECKS 七格（每格兜异常，抛了记 unknown 加原因）；"
+        "一次运行能不能说完成：八格逐格三态加内容级验收读数（论文那一格不在门里，由 M 判断时机；"
+        "2026-11-16 Q1 加的第 8 格是 literature_pending）。",
+        "check_closing 跑 DEFAULT_CHECKS 八格（每格兜异常，抛了记 unknown 加原因）；"
         "ClosingReport（`m_says_done` = M 在 `m_verdict.met` 里说的那一句；`can_close` 是"
-        "机器口径 `bool | None`，`None` = 没接线、不许读成通过；七格 `status` 与 "
+        "机器口径 `bool | None`，`None` = 没接线、不许读成通过；八格 `status` 与 "
         "`machine_pass` 是读数 —— 业主 2026-10-09 与 2026-11-03 的裁定）；"
         "tri_state_exit_code（0 要 M 说达成且机器读数也过，否则 1 或 2）。",
         "读 data 与 out/paper；CLI closing",

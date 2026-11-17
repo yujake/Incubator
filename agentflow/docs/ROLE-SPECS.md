@@ -202,7 +202,7 @@ print('调用点',n,'字面量',sum(c.values()),'去重',len(c))"
 | `C` | **（无出边）** —— 2026-10-19 曾按「C 要能把"候选的更短路径"交给 D」加过一条 `C→D`，**2026-10-20 业主裁定撤回**（逐字：「把协作改成『D 唤起 C、C 向 D 汇报』，并保留 C 无出边的原始设定」）⇒ 今天 `ALLOWED_EDGES["C"] == frozenset()`；C 的"汇报"就是它的返回值。`read_only` / `write_set` 一个字没动 |
 | `D` | `A B C E F` —— **不含 G**（2026-11-11 业主：「D 不能指向 G，G 是 D 的父，是向上汇报完成任务」） |
 | `E` | `B D V` |
-| `F` | `A B C E V`（2026-11-05 业主裁定「让 F 作为 D 的严格下级，取消出边 F→D」⇒ 没有 `D`；`D→F` 与回执/通信不受影响） |
+| `F` | **`A C D E V`**（2026-11-07 业主逐字：「为了落实口径，裁去F到B的直接出边，防止向下交稿，F只能向上通过D向B交稿。」＋「向上的意思是F向父代理D交稿」⇒ 删 `F→B`、加 `F→D`；2026-11-05 那句「取消出边 F→D」已被 11-07 这一笔取代。`D→F` 与回执/通信不受影响） |
 | `G` | `C D H`（2026-11-11 业主裁定逐字：「更改 G 的出边集为 C,D,H，H 为 G 的下级不召唤 G」＋「G 想补内容都走 D」⇒ 去掉 `A`/`E`/`F`，补内容一律经 D） |
 | `H` | `A E`（2026-11-11 去掉 `G`：H 是 G 的下级，不许召唤 G） |
 | `V` | **（无出边）** —— 2026-11-05 业主裁定「V 不应该有出边」；入边 `F` / `E` / `B` 一条未动，退回是回执里的步号 |
@@ -275,6 +275,9 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
   F 的向上汇报走 `conductor.escalate`（收件人 = 召唤者 D），要人干活仍可派 A / B / C / E / V。
 - `V→F`：V 不再能唤起任何人（`ALLOWED_EDGES["V"] == frozenset()`）；入边 `F` / `E` / `B`
   一条没少 —— 退回是在回执里点名第几步，由发件人自己按那一条改。
+**2026-11-07 追加裁定推翻上面 `F→D` 那一半**：删 `F→B`、加回 `F→D`（一减一加，边总数仍是 32）
+—— 今天 F 的出边是 **`A C D E V`**（见 §0.5 的 F 行）；上面那句「F 不再能唤起 D」只描述
+11-05 到 11-07 之间，不是现口径。
 复跑：同一命令 ⇒ `32`（2026-11-11 的边集收缩之后）。判据：`tests/test_agent_spec_reconciliation.py`
 （`test_f_does_not_summon_d_and_v_summons_nobody`：声明层与派生层都读、V 的入边正控、
 把 `D` / `F` 加回能力面 ⇒ 红）。
@@ -488,7 +491,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 78 | `conductor.state` | 只读状态视图：各表计数 + 猜想按状态计数（有这张表时）+ 台账规模 | `read` | 否 | M | （无） | `{root,tables,conjectures,tasks}` | `tests/test_conductor_tools.py` | 表读不了记 -1，不编 0 |
 | 79 | `conductor.role_spec` | 某角色的动作与各自参数、以及它今天有哪些工具（派活前确认「这个角色能不能做这件事」；与 `capabilities` 同源） | `read` | 否 | M | role_name | `{role,actions,tools,summonable,duty,boundary,policy,signature_error,deliverable,stance}` | `tests/test_conductor_tools.py` | 无 |
 | 80 | `conductor.summon_many` | 一次派**一批**活并真的并发：按写集分波（`policy.waves_of`），同波用线程池跑（上限 `max_concurrency`；缺省 `None` = 不设限）。同角色要多实例时给每个 target 一个不同的 `instance`（同角色不同实例允许同波并发）；返回里带 `waves` / `concurrent_peak` —— "到底并发了没有"看这两个数 | `write_local` | **是** | M | **targets**,why | `{count,ok_count,refused_count,failed_count,waves,max_wave,concurrent_peak,elapsed_sec,why,results}`（`results[]` 每项 `{role,action,instance,task_id,status,outcome,refusal_reason,detail,error,tokens,usd,elapsed_sec,checked,children}`） | `tests/test_conductor_tools.py` | **本轮新增**（`draft/28` §198）：并发引擎 `run_plan`/`run_waves` 早就有，但生产路径上零调用 ⇒ 主控只能一次派一个、同角色多实例被角色级写集排成 N 波串行 |
-| 81 | `conductor.closing` | 只读：跑**收工门**（`draft/37` §16 P3 的八格）—— 论文那一格（回执里的 `tex_sha256` 与盘上那份 `main.tex` 的摘要对得上；没有 `main.tex` ⇒ 不适用，回执读不到 ⇒ 没查成）/ 无未裁决矛盾 / 承重结论有 T3 或已降档 / 报告九节齐全 / 没有还在等用户回答的问题。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在八格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是八格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
+| 81 | `conductor.closing` | 只读：跑**收工门**（`closing.DEFAULT_CHECKS` 的 **8 格**：`contradictions` / `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger` / `literature_pending`）。**`paper` 不在门里**：出不出论文由 M 判断时机（2026-11-14 裁定），它只落 `readings.paper`（不进 `status`）；`literature_pending` 是 2026-11-16 Q1 加的第 8 格（待入库列表还有 `pending`、或当前委托提交后没清表 ⇒ 拦）。**每条各自一个三态读数，`unknown` 不是通过**；`can_close` 只在 8 格全过时为真 | `read` | 否 | M | project_dir,report_path | `{can_close,status,failed,unknowns,findings,readings,summary}`；`status` 的键是 8 格检查、值是三态之一；`findings[]` 每项 `{check,code,level,detail}` | `tests/test_closing_gate.py` | **本轮新增**（`draft/37` §16 P3）：判据本体在 `agentflow/closing.py`，工具与 CLI（`agentflow closing`）都调**同一个**函数；不给 `project_dir`/`report_path` 时那两格是"没查成"而不是"通过" |
 | 82 | `text.extract` | **A 负责把一篇 PDF 转成纯文字稿入库**（业主口径）：读 PDF 自带的文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**原 PDF 原样保留**；写盘前核质量（NUL/替换字符/控制字符占比超标 ⇒ kind=garbled_text，**不写盘**）；纯文本文件直通入库（幂等） | `write_local` | **是** | A | lit_id 或 path | out_dir, pages, max_pages |
 | 83 | `conductor.status_report` | 读现状并落盘：收**项目状态报告**（`draft/39` §4）——四类读数（逐表计数与最近几条 / 交接账本（含模型填 vs 框架派生）/ 在飞与卡点 / 拒绝与插话）并落 `out/review/STATUS-<ts>.{md,json}`。**旁路观测**：零模型调用、不停任何人的循环（用户侧入口是 `agentflow status-report`；入口②就是本工具） | `write_local` | 是 | M | since,out_dir | `{ok,md,json,tables,manuscripts,in_flight,attack_rounds,interjections,next_steps,note}` | `tests/test_status_report.py` | **本轮新增**（`draft/39` §4）：实现在 `agentflow/statusreport.py`，两个入口共用同一份 `collect()`；它存在的理由是「问 M 一句」会让 M 停下来等人（与「不打断协作」相反）。2026-11-10：`side_effect` 由 `read` 改 `write_local`（它落两份报告文件，与 `review.report` 同类） |
 | 84 | `conductor.board` | 只读：板上还挂着什么（工作项 + 它走到哪一档 + 谁读的）。一行 = 一个工作项（`tasks` 里 `kind` 非空的行）；`expects=ack` 的项只要收件人确认读过就算完，`expects=work` 的项要交付才算完。不含建议，也不替你决定要不要重派 | `read` | 否 | M | limit | `{checked,open_items,open_count,readings}`（**读不成 ⇒ 报错**，不回一个空板：`checked=False` 是"没查成"、`open_count==0` 才是"板上没事"，折平就是本仓最忌的形态） | `tests/test_board_items.py`、`tests/test_conductor_tools.py` | **本轮新增**（业主 2026-10-08 裁 A1=甲、T16）：A–H 的那一半在 `manuscript_tools`（`manuscripts.items` / `manuscripts.ack`）—— M 不进 `manuscripts.*` 是既有判据钉着的（`test_m_tool_surface_is_orchestration_only`） |
@@ -667,8 +670,9 @@ A 的"没有结果"逐个列：
 
 ### A.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、`G`（§G.9）、
-  `H`（§H.9）—— `G→A` 是 2026-10-13 加的「写稿时缺证据 ⇒ 直接再检索一轮」，`H→A` 是「向 A 核引文」。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、
+  `H`（§H.9）—— `H→A` 是「向 A 核引文」。**`G` 不能召唤 A**（2026-11-11 裁定把 G 的出边收成
+  `C D H`；旧文多写一个 `G` 是丁类过时）。
   **A 能被 B/C/E 召唤吗？不能** —— 边表里没有这些来源。
 - **A 能召唤谁**：只有 `B`（`capabilities.ALLOWED_EDGES`）。
 - **入参从哪来**：`search_requests` 表的待办行（由 CLI `submit`、D 的
@@ -781,8 +785,8 @@ B 的"没有结果"逐个列：
 ### B.9 接口
 
 - **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`A`（§A.9）、`D`（§D.9）、
-  `E`（§E.9）、`F`（§F.9）。
-- **B 能召唤谁**：`C H V`（`capabilities.ALLOWED_EDGES`）—— "整理完请 C 看图的形状"；`H` 是 2026-10-14 加的（语义档引文回验由 H 判），`V` 是 2026-10-13 加的（采信链第一环把收录进台账的证明直接交给 V 逐行走查）。
+  `E`（§E.9）。**`F` 不能召唤 B**（2026-11-07 裁定删 `F→B`；旧文多写一个 `F` 是丁类过时）。
+- **B 能召唤谁**：`C D H L V`（`capabilities.ALLOWED_EDGES`）—— "整理完请 C 看图的形状"；`H` 是 2026-10-14 加的（语义档引文回验由 H 判），`V` 是 2026-10-13 加的（采信链第一环把收录进台账的证明直接交给 V 逐行走查），`D` / `L` 是 2026-10-22 加的（`B→D`：形式化暴露的缺陷严重时 B 通知 D 开展研究；`B→L`：L 的唯一入口）。
 - **入参从哪来**：
   - `literature` 的 `processed=false` 行（A 写入）
   - `reprocess_requests` 的 `pending` 行（C 的 `structural_duplicates` → D/E/F 提交；
@@ -901,7 +905,7 @@ C 的产出有两类，状态语义完全不同。
 ### C.9 接口
 
 - **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`B`（§B.9）、`D`（§D.9）、
-  `F`（§F.9）。**C 也能被 `A`/`E`/`G`/`H` 召唤吗？不能。**
+  `F`（§F.9）、`G`（§G.9）、`L`（§L.9，形式化的缺陷梳理那条边）。**C 也能被 `A`/`E`/`H` 召唤吗？不能。**
 - **C 能召唤谁**：**没有人**（`ALLOWED_EDGES["C"] = frozenset()`，2026-10-20 业主裁定：
   改回 C 无出边、由 D 唤起 C —— 候选更短路径由 D 自己派 C 来要，C 的汇报就是它的返回值；
   **写面一个字没动**，只读身份不变）。2026-10-19 那一版曾写着"只有 `D`"，已撤回。
@@ -1032,8 +1036,8 @@ C 的产出有两类，状态语义完全不同。
 
 ### D.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`F`（§F.9）、`G`（§G.9，**"写稿时发现缺证据 → 回去要"**）。
-  `D` 也能被 `E` 召唤（`E → D`，反例回流，§E.9）。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`B`（§B.9）、`F`（§F.9）、`G`（§G.9，**"写稿时发现缺证据 → 回去要"**）。
+  `D` 也能被 `E` 召唤（`E → D`，反例回流，§E.9）。入边是 `M` / `B` / `E` / `F` / `G` 五条。
 - **D 能召唤谁**：`A B C E F`（`capabilities.ALLOWED_EDGES`）。**不能召唤 G/H。**
 - **入参从哪来**：
   - `analysis_reports`（C 的产出）
@@ -1137,8 +1141,9 @@ C 的产出有两类，状态语义完全不同。
 
 ### E.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、`G`（§G.9）、
-  `H`（§H.9：请求核实；形式化归 L，H 没有到 L 的边）。
+- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9）、`F`（§F.9）、
+  `H`（§H.9：请求核实；形式化归 L，H 没有到 L 的边）。**不是 `G`** —— G 的出边是 `C D H`，
+  没有 `E`（2026-11-11 裁定；旧文多写一个 `G` 是丁类过时）。
 - **E 能召唤谁**：`B`（"引文不可核实 → 请 B 重抽取"）、`D`（"发现反例 → 回 D"）与 **`V`**
   （穷举证据交 V 会审：V 对 E 的报告真签，`object_sha256`）—— 三条边都在
   `capabilities.ALLOWED_EDGES`。
@@ -1269,11 +1274,11 @@ C 的产出有两类，状态语义完全不同。
 
 ### F.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、`D`（§D.9，I10 升级）、`G`（§G.9）。
-- **F 能召唤谁**：`A B C E V`（`capabilities.ALLOWED_EDGES`）—— "攻坚需要一切"；`V` 那一格是
-  **F 交出证明时由 V 签字**（2026-10-06 加的 `F→V`；2026-10-20 裁定撤 `M→V` 之后 V 是 F 与 B 两个入口，2026-10-23 又加了 `E→V` ⇒ 今天三个入口：`F` / `B` / `E`）。
-  **2026-11-05 业主裁定撤掉 `F→D`**（逐字：「让 F 作为 D 的严格下级，取消出边 F→D」）⇒
-  这里没有 `D`：F 不再能唤起 D（`D→F` 与回执/通信都在，向上汇报走 `conductor.escalate`）。
+- **能被谁召唤**：`D`（§D.9，I10 升级）—— `M` 不直连 F（走 `M→D→F`），`G` 也到不了它；入边只有 `D`。
+- **F 能召唤谁**：**`A C D E V`**（`capabilities.ALLOWED_EDGES`）—— "攻坚需要一切"；`V` 那一格是
+  **F 交出证明时由 V 签字**（2026-10-06 加的 `F→V`；2026-10-23 加 `E→V` ⇒ 今天 V 的入口是 `F` / `B` / `E` 三个）。
+  **2026-11-07 业主裁定**（逐字：「裁去F到B的直接出边，防止向下交稿，F只能向上通过D向B交稿」＋
+  「向上的意思是F向父代理D交稿」）⇒ 删 `F→B`、加 `F→D`；2026-11-05 那句「取消出边 F→D」已被这一笔取代。
   **不能召唤 G/H。**
 - **入参从哪来**：`attack_plans` 行（F 自己写）+ `capabilities.CAPABILITIES` 的 4 个动作 schema。
 - **产出被谁消费**：
@@ -1409,9 +1414,10 @@ C 的产出有两类，状态语义完全不同。
 
 ### G.9 接口
 
-- **能被谁召唤**：`M`（`capabilities.ALLOWED_EDGES`）、**`H`**（§H.9，"审校发现问题 → 请 G 修订"）。
-  **G 不能被 A/B/C/D/E/F 召唤。**
-- **G 能召唤谁**：`A D E F`（`capabilities.ALLOWED_EDGES`）—— "写稿时发现缺证据 → 回去要"（`A` 是 2026-10-13 加的：缺证据时要能直接再检索一轮）。
+- **能被谁召唤**：只有 `M`（`capabilities.ALLOWED_EDGES`）。**`H` 不能召唤 G**（2026-11-11 裁定把
+  H 的出边收成 `A E`；旧文多写一个 `H` 是丁类过时）。G 不能被 A/B/C/D/E/F 召唤。
+- **G 能召唤谁**：`C D H`（`capabilities.ALLOWED_EDGES`，2026-11-11 业主逐字：「更改 G 的出边集为
+  C,D,H，H 为 G 的下级不召唤 G」＋「G 想补内容都走 D」）—— 旧文写 `A D E F` 是 11-11 之前的读数。
 - **入参从哪来**：`relations` / `experiments` / `analysis_reports`（别人的产出）；
   `capabilities.CAPABILITIES` 的 7 个动作 schema。
 - **产出被谁消费**：
@@ -1528,13 +1534,15 @@ C 的产出有两类，状态语义完全不同。
 
 ### H.9 接口
 
-- **能被谁召唤**：`M` 与 `B`（`capabilities.ALLOWED_EDGES`）。`D`/`E`/`F`/`G` 都不能召唤 H
-  —— **"产出者不能指挥审校者"这条一般规则不变**；`B→H`（2026-10-14 业主裁定）是它唯一登记的例外：
+- **能被谁召唤**：`M`、`B` 与 `G`（`capabilities.ALLOWED_EDGES`；`G→H` 是 2026-11-11 裁定的
+  `C D H` 之一）。`D`/`E`/`F` 都不能召唤 H
+  —— **"产出者不能指挥审校者"这条一般规则不变**；`B→H`（2026-10-14 业主裁定）是它最早登记的例外
+  （`G→H` 是 2026-11-11 的父子边，不是产出者指挥审校者）：
   「回验不应该是十分呆板的逐字验证，而是保持语义相同即可」⇒ **逐字那一档 B 自己走**
   （`quoteverify.check_quote`，不花模型钱，先走它），**逐字不中而语义相同**的由 **H 判**
   （`judge_quote_semantics`），B 拿判定回填 `quote_verified` + `quote_mode="semantic"`
   —— H 仍只读，落库代理仍钉死在 `review_findings` / `documents.status` 上（"判"与"落"分居两处）。
-- **H 能召唤谁**：`A E G`（`capabilities.ALLOWED_EDGES`）。
+- **H 能召唤谁**：`A E`（`capabilities.ALLOWED_EDGES`；2026-11-11 去掉 `G`，H 是 G 的下级，不许召唤 G）。
 - **入参从哪来**：`documents` 行 + `dependencies`（**必须由调用方显式提供**，
   不提供就 `checked=False`）；`capabilities.CAPABILITIES` 的 5 个动作 schema。
 - **产出被谁消费**：

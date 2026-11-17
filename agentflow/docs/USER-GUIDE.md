@@ -402,7 +402,7 @@ agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … �
 | `errors` | 每种角色犯了几次"错误动作"，各属哪一类 | `events.jsonl` 的 `tasks` 行 + `sessions/*.jsonl` | `by_role` / `role_total` / `total` / `categories` |
 | `flow` | 每种角色走了几步、各是什么形状、被拦下多少、转投多少 | 同一批会话记录（`agent_step` 的 `shape` 与 `result`） | `roles[角色].steps/shapes/blocked/relayed`、`totals` |
 | `cost` | 钱与 token 按角色、按阶段怎么分布 | `data/usage_ledger.json` | `by_role` / `by_scope` / `total`（`usd` / `tokens_*` / `attempts` / `rows`） |
-| `gates` | 收工门八格各是什么状态（三态一张表） | 现跑 `closing.check_closing`（不读缓存） | `cells` / `counts` / `machine_pass` / `can_close` / `verdict` |
+| `gates` | 收工门的 8 格各是什么状态（三态一张表；`DEFAULT_CHECKS`，含 2026-11-16 Q1 加的 `literature_pending`；`paper` 是读数不是门） | 现跑 `closing.check_closing`（不读缓存） | `cells` / `counts` / `machine_pass` / `can_close` / `verdict` |
 
 三态在这里是硬口径：
 
@@ -651,11 +651,11 @@ Get-Content projects\<ws>\sessions\<sid>.jsonl -Tail 30
 # ② 台账真的落了东西吗（不是"它说落了"）
 python -c "import json,pathlib;d=pathlib.Path(r'projects\<ws>\data');print({t:len(json.loads((d/f'{t}.json').read_text(encoding='utf-8'))['rows']) for t in ('statements','tasks','documents','experiments')})"
 
-# ③ 收工门（8 格）+ 内容级验收读数
+# ③ 收工门（8 格，含 literature_pending）+ 内容级验收读数
 python -m agentflow --root projects\<ws> closing
 ```
 
-`closing` 逐格印 `contradictions / load_bearing / report_shape / user_pending / substance / acceptance / artifact_ledger`，另印一行 `paper（读数，不是门）`（出不出论文由 M 判断时机），
+`closing` 逐格印 `contradictions / load_bearing / report_shape / user_pending / substance / acceptance / artifact_ledger / literature_pending`，另印一行 `paper（读数，不是门）`（出不出论文由 M 判断时机），
 再印非平凡性那一行（`T0..T4` + 未判；T0 = 基础定理或初步结论，平凡不再拒收），以及论文侧缺铺垫与 T4 缺造梯子记录（`[warning]` 行）。
 
 `closing` 头一行现在会写明**你读的是哪一场会话**（2026-11-03，153-U-07）：
@@ -671,7 +671,7 @@ python -m agentflow --root projects\<ws> closing --sid <这一趟的会话号>
   这一格不是 pass ⇒ 退出码不可能是 0。
 - `--sid <号>` 且盘上有 `sessions/<号>.jsonl` ⇒ 读那一段，那一行点名这个号。
 - `--sid <号>` 而盘上没有那一段 ⇒ **受控拒绝**：退出码 2、门不跑，
-  印一句"没有会话 <号>"并列出盘上有的号 —— 不给一份"八格全是没查成"的空读数。
+  印一句"没有会话 <号>"并列出盘上有的号 —— 不给一份"收工门各格全是没查成"的空读数。
 
 另有一条零模型调用的进度读数：`python -m agentflow --root <ws> status-report`
 （落 `out/review/STATUS-<时间>.md|json`，其中"在飞"只数实例行，见 §5）。

@@ -36,8 +36,8 @@
 | `TOOLCHAIN_FORMAL` 段 | **整段不载入** | 载入 |
 | `_apply_no_lean_variant` 改写 | 按表替换/删行/删块 | **逐字返回原文** |
 | V 的强度声明 | `成立` 是逐行结论、**永远不是 `proof`** | **同一句**（强度声明不随开关变） |
-| E 的形式化义务 | 不适用 | **必须至少试一次 `method=formal`**（"一次都不试"不算完成） |
-| M 的派活义务 | 不适用 | 任务要求形式化时**必须**派 `check_formal` ＋ `run_experiment(formal)` |
+| L 的形式化义务 | 不适用 | **必须至少真的试一次**（`formal.formalize`；"一次都不试"不算完成 —— 这一条写在 L 的技能手册里） |
+| M 的派活义务 | 不适用 | 任务要求形式化时**必须**派 B（`M→B`）由 B 逐条安排 L；`M` 不直连 L，也不下 `run_experiment(formal)` 这道指令 |
 | H 的采信 | 采信 V 的逐行签字 | 要 `evidence_kind=proof`；**"开着但无检查器"⇒ 按"没查"** ＋ findings 写环境缺口 |
 
 ### 1b. 另外四处也被同一开关改写的面（S6 收口，2026-10-17 补齐）
@@ -53,10 +53,11 @@
 
 | 动作 | 无 Lean | 有 Lean |
 |---|---|---|
-| `verify.check_formal` | 直拒：`ok` 但 `verified=None`、`reason="lean_disabled"`（**不是**工具失败） | 真起检查器（默认超时 **600 s**）；`read`+`exec` ⇒ 沙箱不可用时**每次都要签字** |
-| `E.run_experiment(method="formal")` | 跑脚本前 `raise ExperimentError` | 三条硬前置：`.lean` 后缀、唯一声明名、`verified` 才给 `proof` |
+| `formal.check_formal`（L） | `formal.*` 不装配（L 这一格不存在） | 真起检查器（默认超时 **600 s**）；`read`+`exec` ⇒ 沙箱不可用时**每次都要签字** |
+| `E.run_experiment(method="formal")` | 第一句受控拒绝 `formal_not_in_e`（一行都不落、不起检查器） | 同左 —— 形式化不在 E 这一岗；要走就走 `formal.formalize` / `formal.record`（L） |
+| `formal.formalize` / `formal.record`（L） | 不装配 | 三条硬前置：`.lean` 后缀、唯一声明名、`verified` 才给 `proof` |
 | `verify.detect_verifier` | 报环境事实 ＋ `lean_enabled=False`、`can_do_formal=False` ＋ note（"那是**许可**问题，不是环境问题"） | 同上，`can_do_formal = 装了 且 开着` |
-| `E` 的 `code/lean/<名字>.lean` | 该条政策被**整行删**（不要求） | 要求落盘（裁决与落库之间只差这一步） |
+| `L` 的 `code/formal/<声明名>.lean` | 该条政策被**整行删**（不要求） | 要求落盘（裁决与落库之间只差这一步） |
 | Mathlib 编译探针（180 s） | 免做，读数"没查" | 真跑（只在开时） |
 
 ## 3. 证据上限（词表口径）
@@ -112,4 +113,4 @@
 ## 7. 一句话总结
 
 - **无 Lean 模式**：一切照旧，但**证据上限是 `proof_review`/`cross_check`**，`proof` 档产不出来；V 的「成立」是逐行结论。`load_bearing` **照旧判**（2026-11-14）：背书认"它引用的命题现行版有 V 签"，零承重断言记 `pass` ＋ 读数 `not_applicable`（不再是 `na`）。
-- **有 Lean 模式**：E/M **有形式化义务**、H 要 `proof`、`load_bearing` 按 T3 判（V 签那一条替代入口不生效）；但**受环境约束**（`no_backend`/`tool_crashed`/`import_unavailable`），且"开着但没检查器"这一档 **H 必须按"没查"处置**。
+- **有 Lean 模式**：L / M **有形式化义务**（L 做形式化、M 派 B 安排）、H 要 `proof`、`load_bearing` 按 T3 判（V 签那一条替代入口不生效）；但**受环境约束**（`no_backend`/`tool_crashed`/`import_unavailable`），且"开着但没检查器"这一档 **H 必须按"没查"处置**。
