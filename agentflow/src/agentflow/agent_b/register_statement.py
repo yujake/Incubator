@@ -218,7 +218,7 @@ def _caller_is_d() -> bool:
     没落，`t-000079` 一直 `pending/seen`。
 
     为什么只认"真调用方"：这一格管的是"谁在交稿"，而 `calling_as(role=…)` 挂的正是
-    这一趟干活的 agent（`AgentLoop._do_tool` 与 `_run_role_body` 两处挂点）；父是谁只
+    这一趟干活的 agent（`AgentLoop._do_tool` 与 `agent_loop.run_role` 两处挂点）；父是谁只
     说明"这一趟由谁派来"。D 把 B 叫醒之后动手的是 B，"B 从 D/E/F 的稿里读正文"恰好
     就是这道闸要求的形态 —— 拿父角色判，等于把"D 派来的 B"读成"D 在递正文"。
 
