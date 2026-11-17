@@ -14,17 +14,20 @@
 `agent_loop.run_role` —— 它在 `14587` 已经拿到了 `top_tid`，可 `loop.run(...)` 那
 两处都没有 `calling_as` 包住 ⇒ 循环体里的秘书判定读到的 ambient 是空串。
 
-## 这一组钉三件事
+## 这一组钉四件事
 
 1. 正控：真跑一趟 M 顶趟（离线替身模型、0 元），触发一次 `secretary:tool_name`
    判定 ⇒ 那条 `llm_call` 事件的 `task_id` 等于顶趟台账行的号，账本里它那一行
    也归到同一个号；
 2. 账目：`reconcile_usage(store)["unattributed"]["count"] == 0`（这条路径上没有
    无主花销）；
-3. 反真空：把 `calling_as` 打桩成"不挂"（`nullcontext`）⇒ 第 1 条必须红
-   （判定那一行的 `task_id` 回到空串，无主计数 ≥ 1）。
+3. 收行：顶趟自己那一行 `task_end` 也落本趟会话（真机 48 条里就有它；收行发生在
+   `loop.run` 返回之后，只有把 `_close_top` 一起包住才落得对）；
+4. 反真空：把 `calling_as` 打桩成"不挂"（`nullcontext`）⇒ 第 1、3 条必须红
+   （判定那一行的 `task_id` 回到空串，无主计数 ≥ 1，顶趟 `task_end` 回到缺省会话）。
 
-改前红：第 1、2 条（顶趟循环体里的每一次模型调用读到的 ambient 都是空串）。
+改前红：第 1、2、3 条（顶趟循环体里的每一次模型调用读到的 ambient 都是空串，
+顶趟收行也没有会话身份）。
 """
 from __future__ import annotations
 
@@ -50,6 +53,8 @@ from agentflow.tools import build_registry
 #: 替身模型的花销口径：0 元（这一组判据不许花钱）。
 FREE = (0.0, 0.0)
 SID = "top-ambient"
+#: 缺省会话的固定名（`AGENTFLOW_SESSION`）：真机两文件形态里的那份"缺省文件"。
+FALLBACK_SID = "top-fallback"
 ROLE = "M"
 TASK = "夹具：M 顶趟派一件活（判据：循环体里的秘书判定带号）"
 JUDGE_NOTE = "secretary:tool_name"
@@ -137,6 +142,15 @@ def _usage_row(st: Store, usage_id: str) -> dict:
     return rows[0]
 
 
+def _task_ends(ws: pathlib.Path, sid: str) -> list[dict]:
+    """读某一份会话里的 `task_end`（文件不存在 = 一条都没有，不是错误）。"""
+    if not SS.session_path(ws, sid).is_file():
+        return []
+    events, problems = SS.read_session(ws, sid=sid)
+    assert not problems, problems
+    return [e for e in events if str(e.get("kind") or "") == "task_end"]
+
+
 # ============================================================ 1 正控：判定带号
 def test_the_top_runs_secretary_judgement_carries_the_task_id(
         tmp_path: pathlib.Path) -> None:
@@ -177,14 +191,38 @@ def test_no_unattributed_usage_on_the_top_run_path(tmp_path: pathlib.Path) -> No
         f"这条路径上仍有无主花销：{unattributed}")
 
 
-# ============================================================ 3 反真空
+# ============================================================ 3 顶趟的 task_end
+def test_the_top_rows_task_end_lands_in_this_runs_session(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """判据 3：顶趟自己那一行 `task_end` 也落本趟会话（真机 48 条里就有它）。
+
+    为什么这一条必须在：`finish_top_level_run` 发生在 `loop.run` 返回之后/异常兜底
+    里，调用方的上下文已经不在了。只在 `loop.run` 外面包 `calling_as` 而不包收行
+    那一处，M 自己那一行仍会落进缺省会话（真机 `lp-ball-2` 的 48 条 `task_end`
+    里恰好有一条 `role=M`）。
+    """
+    monkeypatch.setenv(SS.ENV_SESSION, FALLBACK_SID)
+    ws, st, _gw = _one_run(tmp_path)
+    top = _top_tid(st)
+    real = _task_ends(ws, SID)
+    mine = [e for e in real if str(e.get("task_id") or "") == top]
+    assert len(mine) == 1, (
+        f"顶趟自己的 task_end 没落本趟会话：{[(e.get('task_id'), e.get('role')) for e in real]}")
+    assert "sid_problem" not in mine[0], mine[0]
+    assert _task_ends(ws, FALLBACK_SID) == [], (
+        "顶趟的 task_end 仍落进了缺省会话（AH4 的真机形态）")
+
+
+# ============================================================ 4 反真空
 def test_stubbing_the_ambient_hook_puts_the_orphans_back(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """判据 3（反真空）：把 `calling_as` 打桩成"不挂" ⇒ 判据 1 必红。
+    """判据 4（反真空）：把 `calling_as` 打桩成"不挂" ⇒ 判据 1 必红。
 
     打桩的是 `run_role` 现取的那个挂点（`from .conductor import calling_as`），
     不是把 `_one_run` 换掉 —— 换掉实现证明不了"判据会在真实现上红"。
+    同一次打桩也把顶趟的 `task_end` 打回缺省会话（判据 3 的另一半）。
     """
+    monkeypatch.setenv(SS.ENV_SESSION, FALLBACK_SID)
     monkeypatch.setattr(CO, "calling_as",
                         lambda *a, **k: contextlib.nullcontext(), raising=True)
     ws, st, gw = _one_run(tmp_path)
@@ -205,4 +243,12 @@ def test_stubbing_the_ambient_hook_puts_the_orphans_back(
     assert int((reading.get("unattributed") or {}).get("count") or 0) >= 1, reading
     assert gw.ambients and set(gw.ambients) == {""}, (
         f"挂点被打桩之后还读得到号 ⇒ 这一条没在测挂点：{sorted(set(gw.ambients))!r}")
+    # 判据 3 的另一半：收行那一处也被同一个桩打回缺省（并在行上说明 why）。
+    fallback = _task_ends(ws, FALLBACK_SID)
+    mine = [e for e in fallback if str(e.get("task_id") or "") == top]
+    assert len(mine) == 1, fallback
+    assert str(mine[0].get("sid_problem") or ""), mine[0]
+    assert not [e for e in _task_ends(ws, SID)
+                if str(e.get("task_id") or "") == top], (
+        "挂点被打桩成不挂之后顶趟的 task_end 还在本趟会话里")
     assert top, "顶趟号是空的 ⇒ 判据失去对照"
