@@ -59,15 +59,19 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 19 / info 45`（观测 2026-11-17，
+**linter 的当次三栏（日常档）**：`error 0 / warning 21 / info 45`（观测 2026-11-17，
 复跑 `python -B scripts/lint_rules.py`；2026-11-17 的 R003 登记 —— `session_ids_with_questions`
 在 `sessions.py` / `userio.py` 各一份属刻意分层，登记进 `SAME_NAME_ALLOWED` ⇒ 那一对不再报
-`warning`（21→19），同一登记让 R003 多出一条 info（44→45）。`error` 那一格写的是发布门
+`warning`（21→19），同一登记让 R003 多出一条 info（44→45）。此后同一天的 SYSCT1（`adc44a8a`）
+新增 `sign_counting.py`，它的 `read_rows`（读任意一本 jsonl 台账、坏行照报）与
+`manuscripts.read_rows`（读 handoffs 那一本、带 mtime 缓存）同名 ⇒ R003 各报一条，
+`warning` 回到 21；这一对**不在** `SAME_NAME_ALLOWED` 里（两份读的是不同台账、
+不同口径），所以它以两条 warning 挂在当次读数里，不折平、也不静默豁免。`error` 那一格写的是发布门
 第 5 项的**要求值**、不是读数 —— 它按「必须为 0」强制，而并行施工期间同一棵树上的实测在
 0–6 之间跳（那些 R009 的落点全在并行路的文件里，不在本批改动里；本批引入的唯一一条
 R009 已在收尾时清掉）。`warning` / `info` 是当次读数，判据逐行拿它们对账。
 **严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**
-（2026-11-17 复跑是 `86 / 44`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+（2026-11-17 复跑是 `89 / 44`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
 ```powershell
 cd D:\Incubator\agentflow
@@ -82,9 +86,9 @@ LIVE-READINGS:BEGIN
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 19   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-17 复跑：R003 登记 `session_ids_with_questions` 为刻意分层 ⇒ 21→19）
+lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-17 复跑：R003 登记 `session_ids_with_questions` 为刻意分层 ⇒ 21→19；同日 SYSCT1 新增 `sign_counting.read_rows` 与 `manuscripts.read_rows` 同名一条 R003 ⇒ 19→21，该对未登记为刻意分层）
 lint_rules_info         = 45   # 同一档的 info 栏（2026-11-17 复跑：同一登记多出一条 R003 info ⇒ 44→45）
-lint_rules_strict_warning = 86 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-17 复跑 86；日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_warning = 89 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-17 复跑 89；日常档那条 R007 info 在这一档拆成逐模块 warning，另加 R003 `read_rows` 那一对）
 lint_rules_strict_info  = 44   # 同一档的 info 栏（2026-11-17 复跑 44）
 noai_paths_glob         = 49   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 46   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
