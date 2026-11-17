@@ -2617,7 +2617,17 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   67d6c4771149de33b01251627fd42e850727143cd828d92ee65008d5f3555d23。
 # 十一格不是手抄：`temp/fx3_recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['A']。
-_FROZEN_PROMPT_VERSION = "p291"
+# p291 → p292（2026-11-17，CMP1：清压缩批次回涨的累积债）：压缩批次（84 件）的说明
+# 总量 6671 = 基线的 78.27%（要求 ≤ 75%）⇒ `fs.write` 的逐角色 × 逐族保留面搬进 `path`
+# 的 description、`search.download` 的失败档处置改成「见 A 手册 §六」、`fs.edit` 去掉与
+# `fs.write` 重复的括号 ⇒ 6359 = 74.61%。本表用的注册表不带 workspace ⇒ `fs` 两件不在
+# 面上，只有 `search.download` 那一行进 A 的 `tools_lines` ⇒ 变化格 = A；其余十格逐字
+# 相同（版本行已归一）。逐格旧值 → 新值：
+# A 67d6c4771149de33b01251627fd42e850727143cd828d92ee65008d5f3555d23 →
+#   13e23d0b525887e72ad2482dbb392ca56a3185bb3479a9ddf43e21ea8a5e692b。
+# 十一格不是手抄：`temp/cmp1_recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['A']。
+_FROZEN_PROMPT_VERSION = "p292"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2886,7 +2896,7 @@ _FROZEN_PROMPT_VERSION = "p291"
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "67d6c4771149de33b01251627fd42e850727143cd828d92ee65008d5f3555d23",
+    "A": "13e23d0b525887e72ad2482dbb392ca56a3185bb3479a9ddf43e21ea8a5e692b",
     "B": "4a8152635eb3148b37a5fa3c53d25675c55c1933620afe3a281af14a26cddcf8",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",

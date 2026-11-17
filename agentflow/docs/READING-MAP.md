@@ -4,9 +4,13 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-17，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **317 个 `.py`、294791 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15997 行（`agent_loop.py`，14909 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **317 个 `.py`、294826 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，15997 行（`agent_loop.py`，14909 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-17 CMP1（清压缩批次说明回涨的累积债；p291 → p292）**：
+> 317 个 `.py`、75 个 `>800` 都不变；总行数 294791 → **294826**（本笔 src 增量 +35：
+> `tools/fs_tools.py` +17（`RESERVED_PATH_HINT` 与那段"矩阵为什么搬走"的注释）、
+> `agent_prompts.py` +14（p292 版本账）、`tools/search_tools.py` +4（summary 拆行）；
 > **2026-11-17 FX3（甲：`lit.admit_all` 按批提交 + 乙：落地页下载也算一次尝试；p290 → p291）**：
 > 317 个 `.py`、75 个 `>800` 都不变；总行数 294012 → **294791**（本笔 src 增量 +139：
 > `litstage.py` +89（批次作用域 `submission_slots` / 批内全判闸 / 分段清表 / `is_settled`

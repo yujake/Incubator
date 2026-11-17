@@ -2711,7 +2711,21 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   p290 同值）；两份 golden 按现值重冻（`agent_surface_snapshot` 另含 PTR1 那一笔
 #:   未重冻的 `B.ingest_manuscript` 签名：`source_lit_id` / `derived_from` 两个可选参数，
 #:   本笔按现值一并冻入并在此留痕）；ROLE-GUIDE 重生成；读图行数；warm 两档重跑。
-PROMPT_VERSION = "p291"
+#: p291 → p292（2026-11-17，CMP1：清压缩批次回涨的累积债）：
+#:   判据 `tests/test_tool_descriptions_are_compressed.py` 的 ② 红着 —— 压缩批次（84 件）
+#:   的说明总量 6671 字符 = 基线的 78.27%，要求 ≤ 75%。回涨的三笔都在这一版压回去：
+#:   `fs.write` 的逐角色 × 逐族保留面矩阵搬进 `path` 的 description（summary 只留一句
+#:   指针，判据 `test_fs_summary_matches_reserved_table` 点名的那几格全留在 summary）、
+#:   `search.download` 的失败档处置改成「见 A 手册 §六」的指路（档位名本来就在 returns）、
+#:   `fs.edit` 去掉与 `fs.write` 重复的括号。压缩后 6359 字符 = 74.61%。
+#:   变化格 = A：本表用的注册表不带 workspace ⇒ `fs.write` / `fs.edit` 不在面上，只有
+#:   `search.download` 那一行进 A 的 `tools_lines`；`fs.write` 摘要那半只进工具面快照
+#:   与 agent 面（`fs` 工具出现在 A–H/L/M 的实际工具面上）。其余十格逐字未动。
+#:   连带：`_FROZEN_PROMPT_VERSION`（p292）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p291 同值）；两份 golden 按现值重冻
+#:   （agent 面另含此前未冻的那两格，本笔按现值一并冻入）；ROLE-GUIDE 重生成；
+#:   读图行数；warm 两档重跑。
+PROMPT_VERSION = "p292"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

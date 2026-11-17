@@ -1382,16 +1382,32 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
 #: `tests/test_fs_summary_matches_reserved_table.py`（表里没有 D 的 `RESEARCH` 行 ⇒ 这两句
 #: 必须说 D 可写；表里 F/D/M 的证明稿形状 ⇒ 这两句必须说拒；任何路径上自写 `## 证明`
 #: 那一档由内容闸管，拒信的指路是"要落稿就派 F"）。
+#:
+#: 2026-11-17（CMP1，清压缩批次回涨的累积债）：逐角色 × 逐族那张矩阵从 summary 搬进
+#: `path` 参数的 description（`RESERVED_PATH_HINT`）。summary 是「一眼看干什么」那一格
+#: —— 它量的是"工具摘要要短"，而"这个路径能不能写"本来就是 `path` 那格该说的；
+#: 矩阵留在 summary 里换来的是 400 字符的说明（cohort 比例被顶到 78.27%）。
+#: 一个字节的信息没丢：表仍是唯一判据，summary 留一句指针指到 `path`。
+#: `tests/test_fs_summary_matches_reserved_table.py` 读的仍是"表 ↔ summary"同一处口径，
+#: 它点名的那几格（证明稿形状 / `*-research.md` / `RESEARCH.md` / 内容闸 / 派 F）全留在 summary。
+RESERVED_PATH_HINT = (
+    "相对工作区根的路径。保留面（`reserved_framework_artifact`）：`reports/` 下 A/B 拒 "
+    "`f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 拒前三族"
+    "（`e-num-` 只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`。"
+)
+
+
 @tool(
     "fs.write",
-    "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；"
-    "A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），"
-    "E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），"
-    "D 另拒 `b-proof-`/`e-proof-`/`e-num-`，"
-    "`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
+    "写文本文件（原子落盘）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；"
+    "`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`，D 可写 `RESEARCH.md`；"
+    + D_PROOF_BODY_RULE + " —— 要落稿就派 F。各族另拒面见 `path` 说明。",
     _obj(
         {
-            "path": {"type": "string", "description": "相对工作区根的路径"},
+            # 逐角色 × 逐族的保留面从 summary 搬到这里（2026-11-17 CMP1）：summary 是
+            # 「一眼看干什么」那一格，`path` 那格才是「这个路径能不能写」的教法面。
+            # 两处同源：内容仍然只是 `RESERVED_ARTIFACT_TABLE` 的人话翻译，判据仍只读那张表。
+            "path": {"type": "string", "description": RESERVED_PATH_HINT},
             "content": {"type": "string", "description": "文件内容（UTF-8）"},
             "overwrite": {"type": "boolean", "default": False, "description": "为 true 才允许覆盖已有文件"},
         },
@@ -1491,7 +1507,8 @@ def fs_write(ctx: FsContext, *, path: str, content: str, overwrite: bool = False
 
 @tool(
     "fs.edit",
-    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；拒写口径同 fs.write（名字级 + 内容级，含自写 `## 证明` 的例外）；D 可写 `RESEARCH.md`；"
+    "定点替换文本（old_string → new_string）：默认唯一匹配，可选 sha256 校验；"
+    "拒写口径同 fs.write（含 `## 证明` 那档）；D 可写 `RESEARCH.md`；"
     "B 仅对自己未签的 `reports/b-proof-<六位号>.md` 有一格（write/delete/move 仍拒）。",
     _obj(
         {

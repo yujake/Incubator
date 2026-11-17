@@ -1399,6 +1399,21 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "`extract_failed` 回执。变化格 = A（三件都在 A 的工具面上；逐格读数见 "
               "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p291 → p292（2026-11-17，CMP1）：压缩批次说明回涨的累积债清回上限内 ——
+     # `fs.write` 的保留面矩阵搬进 `path` 的 description、`search.download` 的失败档
+     # 处置改成指路 A 手册 §六、`fs.edit` 去掉与 `fs.write` 重复的括号。只减压、
+     # 不动段结构：facts 键集与落点一格没动 ⇒ count / keys_sha256 与 p291 同值。
+     {"version": "p292", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p292（2026-11-17，CMP1 清压缩批次回涨）：判据 "
+              "`test_tool_descriptions_are_compressed` 的 ② 红着（压缩批次 84 件的"
+              "说明总量 6671 字符 = 基线 78.27%，要求 ≤ 75%）⇒ `fs.write` 的逐角色 × "
+              "逐族保留面从 summary 搬进 `path` 的 description（summary 留一句指针）、"
+              "`search.download` 的失败档处置改成「见 A 手册 §六」（档位名本来就在 "
+              "returns）、`fs.edit` 去掉与 `fs.write` 重复的括号 —— 压后 6359 = 74.61%。"
+              "变化格 = A（本表用的注册表不带 workspace ⇒ fs 两件不在面上；逐格读数见 "
+              "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

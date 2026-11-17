@@ -1959,7 +1959,11 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` 时这一趟绑在那条候选上：失败（超时 / 404 / DNS 等）**与拿到落地页**（`ok=True` + `content_type_mismatch`）都会留一条“试过、拿不到可读文本”的回执（档位 `extract_failed`，note 写 `search.download.<失败形态>`）⇒ 这一条可以按仅题录判收；不给 `cand` 行为不变。",
+    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**"
+    "（各档处置见 A 手册 §六：换源 > 重试，`all_sources_failed` 走完）。"
+    "`content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` ⇒ 这一趟绑那条候选："
+    "失败**与拿到落地页**（`ok=True`+`content_type_mismatch`）都留一条 `extract_failed` 回执"
+    " ⇒ 可按仅题录判收；不给 `cand` 不变。",
     {
            "type": "object",
            "properties": {

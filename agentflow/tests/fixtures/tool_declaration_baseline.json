@@ -5940,22 +5940,6 @@
     },
     {
       "tools": [
-        "lit.admit_all"
-      ],
-      "key": "returns",
-      "reason": "同一批：cleared[] 是读数格不是状态名；并补一句「整批提交」口径下 admitted[] / refused[] / cleared[] 恒空（登记支不可达，理由在工具声明上方那段注释），所以元素形状只在这里用散文说 —— 它们与 lit.admit 同形，机器判据在那一件身上（探针真跑：收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）。",
-      "date": "2026-10-26",
-      "edits": [
-        {
-          "op": "set_scalar",
-          "path": "returns",
-          "from": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)",
-          "to": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、overlap_with、new_content 八格；refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；以上三个数组在「整批提交」口径下恒空（登记支不可达，理由见本工具声明上方那段注释），所以元素形状只在这里用散文说：它们与 `lit.admit` 同形，由那一条的声明照旧带引号声明、并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)"
-        }
-      ]
-    },
-    {
-      "tools": [
         "lit.stage_list"
       ],
       "key": "params",
@@ -7146,6 +7130,97 @@
           "path": "params/properties/run_evidence/description",
           "from": "本轮的实跑记录（G8 可复跑门）：{'checked':true,'commands':[{'claim_id','command','output_tail'}]}。**不传 ⇒ G8 判 unknown**（『本轮实跑过』无法判定），绝不判 pass —— 把『没报错』读成『没问题』正是参考体例记录的教训",
           "to": "**已弃用（2026-11-16 AH2b）**：G8 不再读任何回执，证据只来自 `experiments` 台账行（脚本 + `code_hash` + `exit_code`）。这个参数保留只为旧调用方不炸；传什么都不会改变 G8 的读数 —— 回执可以由任何一方自己写出来，不是证据"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "fs.write"
+      ],
+      "key": "params",
+      "reason": "2026-11-17 CMP1（清压缩批次回涨的累积债）：`fs.write` 的逐角色 × 逐族保留面从 summary 搬进 `path` 的 description —— 那几行名单（A/B 四族、E/G/L 前三族、D 的 b/e/e-num）是 2026-11-17 的 AL2·#4 / AU2b 甲类补进 summary 的，说明由 310 涨到 400 字符、压缩批次比例被顶到 78.27%（要求 ≤ 75%）。契约只改了 `path` 这一格说明文字：`path` 的名字 / 类型 / required、其余 properties、returns、side_effect、roles、tags、handler_name 一格未动。信息一个字节没丢 —— `RESERVED_ARTIFACT_TABLE` 仍是唯一判据（`RESERVED_PATH_HINT` 只是它的人话翻译），summary 里留一句「各族另拒面见 `path` 说明」的指针，`tests/test_fs_summary_matches_reserved_table.py` 点名的那几格（证明稿形状 / `*-research.md` / `RESEARCH.md` 两向 / `## 证明` 内容闸 / 派 F）全留在 summary。",
+      "date": "2026-11-17",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "params/properties/path/description",
+          "from": "相对工作区根的路径",
+          "to": "相对工作区根的路径。保留面（`reserved_framework_artifact`）：`reports/` 下 A/B 拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 拒前三族（`e-num-` 只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`。"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "lit.admit_all"
+      ],
+      "key": "params",
+      "reason": "2026-11-17 补记账（`72183750` FX3·甲 改了契约却没记 amendment）：`lit.admit_all` 的提交粒度从整委托改成批次 —— 加一格可选参数 `slots`（点名这一批覆盖哪些槽；不给 = 本委托已判定的全部）。契约只加这一格：`required` 仍是 `[]`、其余 properties 与顶层键集合一格未动；`lit.stage_add` / `lit.admit` 的调用形状不变。判据 `tests/test_lit_submit_is_per_batch.py`（含反真空：把 `submission_slots` 改回整委托 ⇒ 红）。",
+      "date": "2026-11-17",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/slots",
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "这一次提交覆盖哪些槽（默认=本委托已判定的全部）；批内必须每一条都判过"
+          }
+        }
+      ]
+    },
+    {
+      "tools": [
+        "lit.admit_all"
+      ],
+      "key": "returns",
+      "reason": "2026-11-17 补记账（`72183750` FX3·甲）：返回值补这一批的读数 —— `submitted[]`（这一次覆盖的槽位号）、`pending_total` / `pending_by_delegation` / `pending_scope_note`（这一批之后的全表待裁读数，批外未判的槽仍在里面）。其余键（admitted / refused / cleared / registered / report / report_path）与失败档的词表一个字节没动，只把「八格 / 五格」的写法改成点名式。 **本条的前身**：2026-10-26 曾为这一格记过一条 amendment（`from` 同样是基线值、`to` 是10-26 那一版）。2026-11-17（`72183750` FX3·甲）返回值又补了这一批的读数 —— `submitted[]`（这一次覆盖的槽位号）、`pending_total` / `pending_by_delegation` / `pending_scope_note`（这一批之后的全表待裁读数，批外未判的槽仍在里面）—— 于是 10-26 那条退不回现值（正控要求每条 amendment 都能把现值退回它自己），历史并入本条，`edits` 归一成「基线值 → 现值」一处分量。admitted / refused / cleared / registered / report / report_path 六个键一个字节没动。",
+      "date": "2026-11-17",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit','delegation_admitted','delegation_limit','admitted','refused','cleared','registered','report','report_path'}；admitted[] 每项是 {'slot','title','lit_id','created','overlap_score','overlap_kind','overlap_with','new_content'}；refused[] / cleared[] 每项是 {'slot','title','why','code','overlap'}；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)",
+          "to": "{'ok','kind','whole_call_refused','reason','request_id','submitted','call_size','call_limit','delegation_admitted','delegation_limit','pending_total','pending_by_delegation','pending_scope_note','admitted','refused','cleared','registered','report','report_path'}；submitted[] 是这一次提交覆盖的槽位号；admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、overlap_with、new_content 八格（与 lit.admit 同形）；refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；pending_total / pending_by_delegation / pending_scope_note 是这一批之后的全表待裁读数（没点名的未判槽仍在里面，A 照它进下一批）；report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error/unknown_slot/undecided_items/nothing_to_submit/no_readback/missing_availability/availability_not_admissible/report_violations)"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "search.download"
+      ],
+      "key": "params",
+      "reason": "2026-11-17 补记账（`abbc7756` FX3·乙 改了契约却没记 amendment）：`search.download` 加一格可选参数 `cand`（`cand:<槽>` / `<槽>`；`_download_slot` 归一）—— 给了它，这一趟下载尝试绑在那条候选上，失败与拿到落地页都落一条 `extract_failed` 回执。契约只加这一格：`required` 仍是 `['url']`，`url` / `hint` / `max_bytes` 三格一字未动。判据 `tests/test_search_download_failure_leaves_a_read_receipt.py`。",
+      "date": "2026-11-17",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/cand",
+          "value": {
+            "type": "string",
+            "maxLength": 40,
+            "description": "候选槽位（`cand:<槽>` / `<槽>`）：给了它，这一趟的尝试绑在这条候选上"
+          }
+        }
+      ]
+    },
+    {
+      "tools": [
+        "search.download"
+      ],
+      "key": "returns",
+      "reason": "2026-11-17 补记账（`abbc7756` FX3·乙）：返回值补 `cand` 与 `read_receipt` 两格，失败档的 `kind` 词表补上 `unknown_slot` / `no_store` / `store_error` 三个真会产出的受控码，并写明「成功但拿到落地页（`content_type_mismatch`）时 `read_receipt` 非空」。成功键集合只多这两格，不给 `cand` 时两格是空的（行为逐字不变）。",
+      "date": "2026-11-17",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256','http_status','max_bytes_requested','max_bytes_effective','elapsed_s','content_warning','warnings'}；失败：ok=False + kind(download_failed/download_error) + fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）",
+          "to": "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256','http_status','max_bytes_requested','max_bytes_effective','elapsed_s','content_warning','cand','read_receipt','warnings'}；失败：ok=False + kind(download_failed/download_error/unknown_slot/no_store/store_error) + fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）+ cand（给了 cand 才有：归一后的槽位）+ read_receipt（这次失败落下的那条 extract_failed 回执；没给 cand ⇒ null）成功但 `content_warning=content_type_mismatch`（落地页 HTML）：ok=True 照旧给路径/字节，同时 read_receipt 非空（note=search.download.content_type_mismatch）"
         }
       ]
     }
