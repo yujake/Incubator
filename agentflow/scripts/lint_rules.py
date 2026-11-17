@@ -239,6 +239,7 @@ SAME_NAME_ALLOWED: dict[str, str] = {
     "selftest": "每个模块各有自己的自检是这个项目的约定（`python -m agentflow.agent_x`）——它们检查的东西不同，同名是自然的",
     "tool_specs": "每个工具模块各自导出『未绑定 store 的清单』（审计/文档生成用）——同名同义，实现各自列自己的函数",
     "install": "与 `register` 同族的装配入口别名（`_call_register` 支持它）",
+    "session_ids_with_questions": "刻意的两个方向：`userio` 是会话读写的上游，`sessions.py` 是它的下游（所以 sessions 不能 import userio）—— 同一读一遍的口径在两处各落一次是有意为之，两处实现必须一起改（判据 test_sessions 与 userio 自检各钉一侧）",
 }
 
 
