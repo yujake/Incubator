@@ -4,9 +4,18 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-17，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **318 个 `.py`、296,709 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16222 行（`agent_loop.py`，14909 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **318 个 `.py`、297,050 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16222 行（`agent_loop.py`，14909 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-17 FIX11（R1：`b-register@` 义务的写侧键与读侧查找对齐两个号段；R2：`vsigns.issue` 幂等那一档也走「签触发提交」）**：
+> 318 个 `.py`、75 个 `>800` 两格不变；总行数 296,709 → **297,050**（本批 +244：
+> `obligations.py` +174（`settle_registration` / `_manuscript_owner_row`，以及
+> `registration_gap` 的号段对账）、`agent_b/ingest_manuscript.py` +44（消账写点）、
+> `vsigns.py` +17（幂等那一档补「签触发提交」）、`agent_b/register_statement.py` +2、
+> `manuscriptretire.py` +7（反查的 `sign_rows` 收窄）；另 +97 是上一批没追平的欠账，
+> 本笔一并追平）。95 个 `>200` 行函数与 2 段重复 docstring 两格不变：新落的两个函数
+> 85 / 34 行，`vsigns.issue`（197）与 `agent_b/ingest_manuscript.ingest_manuscript`（198）
+> 仍在 200 行线内。三格（75 / 95 / 2）逐格未抬。
 > **2026-11-17 SYSCT1（系统计数落签：新增 `sign_counting.py`；业主 2026-11-17「是系统计数落签」）**：
 > 317 个 `.py` → **318**（+`sign_counting.py`，纯读的计数层）、总行数 295397 → **296341**；
 > 75 个 `>800` 与 95 个 `>200` 行函数两格不变（`vsigns.issue` 283 → 196 行：新增的两道
