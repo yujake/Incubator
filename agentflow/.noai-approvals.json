@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T09:42:47+08:00",
+  "generated_at": "2026-11-17T11:59:26+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,11 +505,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "32a97a480ce76fc29ad4ece096e18e4acbab83b9d866f8c22dfaa59dc46da32c",
-      "authored": "unknown",
+      "sha256": "acea25f7986add495e0d49fe06f6ec6e1bd269e9ab027251e4468e9d481295dd",
+      "authored": "ai-agent",
       "authored_basis": "inferred",
-      "change_note": "AL2·#5 重冻：search.download 加 cand（参数面 + returns 两格）与 fs.write 摘要（#4 保留表补全的模型可见那一半）⇒ 两份快照按现值重冻；登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过",
-      "changed_this_session": null,
+      "change_note": "登记（FX1）：A.run_once 多一个关键字参数 request_ids（真机 lp-ball-3 的 30 条 pending 要能跨委托认领）⇒ 冻结快照的 roles.A.handler_signatures.run_once 一格换值，其余逐格未变（只改了那一行，没有重新生成整份快照）。它不是新动作、新工具、新边、新写集；登记≠批准，reviewers=[] 保持，仍需人逐格看过。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []

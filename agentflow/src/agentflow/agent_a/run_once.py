@@ -96,8 +96,74 @@ def _source_failure_reading(errors: Sequence[str], sources: Sequence[dict]) -> s
     return ""
 
 
+def _wanted_request_ids(request_ids: Sequence[str] | None) -> list[str]:
+    """调用方点名的那些委托号（去空、去重、保序）。"""
+    out: list[str] = []
+    for raw in request_ids or ():
+        rid = str(raw or "").strip()
+        if rid and rid not in out:
+            out.append(rid)
+    return out
+
+
+def _pending_scope(store: Any) -> dict:
+    """全表待裁的按委托读数（唯一实现是 `litstage.pending_all_delegations`）。
+
+    这一格是"旧委托的 pending 对 A 隐身"那条缺陷的出口：A 的每一轮都读全表，
+    而不是只读"槽位号最大那一行所属的委托"。
+    """
+    return L.pending_all_delegations(store.rows("lit_candidates"))
+
+
+def _fill_pending(store: Any, result: ARunResult) -> None:
+    """把全表待裁读数落进这一轮的结果（每一轮都填；读不到就让它抛，不折成 0）。"""
+    scope = _pending_scope(store)
+    result.pending_total = int(scope.get("total") or 0)
+    result.pending_by_delegation = [dict(g) for g in scope.get("by_delegation") or []]
+
+
+def _claim_pending(store: Any, actor: str, wanted: Sequence[str],
+                   result: ARunResult) -> list[str]:
+    """认领"还有待裁行的委托"（写 `lit.claim_pending` 事件）并填 `claim_note`。
+
+    `wanted` 空 ⇒ 认领全部还有 pending 的委托（真机那段"队列全 done、30 条没人判"
+    就靠这一档被看见）；非空 ⇒ 只认领点名的那些。点名了却没有待裁行的，如实写进
+    `claim_note`（"已判完或已清表"），不冒充成"清过了"。
+
+    为什么认领落事件、不改行：候选行的每一格都在 FC-27 的 schema 契约里，没有
+    "claimed_by" 这一列；`search_requests.claimed_by` 是队列领取的语义，给一条
+    `done=true` 的请求写它会造出"做完了还被人领着"的假读数。事件日志是这里已有的
+    审计面（`lit.close` 也走它），而"这一轮认领了哪几个委托"是可回放的。
+    """
+    scope = _pending_scope(store)
+    by = {str(g.get("request_id") or ""): g for g in scope.get("by_delegation") or []}
+    targets = list(wanted) or list(by)
+    claimed = [rid for rid in targets if rid in by]
+    clean = [rid for rid in targets if rid not in by]
+    if claimed:
+        with store.tx("lit_candidates", actor=actor,
+                      note="a.run_once.claim_pending") as tx:
+            for rid in claimed:
+                group = by[rid]
+                tx.info("lit.claim_pending", request_id=rid,
+                        pending=int(group.get("pending") or 0),
+                        slots=list(group.get("slots") or []))
+    result.claimed_delegations = claimed
+    note = ""
+    if claimed:
+        note = ("已认领 " + str(len(claimed)) + " 个还有待裁行的委托："
+                + "、".join(f"{rid}={int(by[rid].get('pending') or 0)}" for rid in claimed)
+                + "。这些行不在这一次自动链路里判：逐条 `lit.admit` 判收 / "
+                "`lit.stage_reject` 判拒，再逐委托 `lit.admit_all` 提交（清表）。")
+    if clean:
+        note += (" " if note else "") + (
+            "点名但没有待裁行（已判完或已清表）：" + "、".join(clean) + "。")
+    result.claim_note = note
+    return claimed
+
+
 class _RunOnce:
-    def run_once(self) -> ARunResult:
+    def run_once(self, *, request_ids: Sequence[str] | None = None) -> ARunResult:
         """处理至多一条待办请求，返回本轮的完整审计结果。
 
         三态纪律的落点：取不到请求时不返回"看起来正常的空结果"，而是把"没做"的原因原样带出来
@@ -108,8 +174,32 @@ class _RunOnce:
         ③ `litstage.apply_settlement` / `write_report` 结算并写报告。
         `duplicate_branch_ok=True` 的理由："重叠"里有一档是同一篇（DOI 相同），正确处置是走现有判重分支
         —— 只把 `source_request_ids` 追加到既有行、不新建行（`dedup.literature_keys` 的口径）。
+
+        ## 2026-11-17（FX1）：跨委托的待裁行也要能认领
+
+        真机 `projects/lp-ball-3` 的收工门 blocker「30 条 pending」：队列里的检索请求全是
+        `done=true`，`_claim()` 只能报 `no_pending_request`，于是 A 被派来"结清"却什么都没做；
+        而候选表里两个委托各有 15 条停在 `pending`。所以本方法多了两件事：
+
+        - 每一轮都把全表待裁的按委托读数落进结果（`pending_total` /
+          `pending_by_delegation`）—— A 因此不再只看"当前委托"；
+        - 队列里没有可领的检索请求时，最后一档是认领全部还有 pending 的委托
+          （`claimed_delegations` + `lit.claim_pending` 事件 + `claim_note`）；
+          `request_ids` 给了就只认领点名的那些（留给编排层/判据点名用）。
+
+        两格读数不互相代替：`skipped_reason` 说的是检索队列那一档
+        （队列空仍是 `no_pending_request`，它不是"什么都没做"），
+        `claimed_delegations` / `claim_note` 说的才是这一轮认领了哪些待裁委托。
         """
         result = ARunResult()
+        wanted = _wanted_request_ids(request_ids)
+        if wanted:
+            # 点名档：只认领点名的委托。不给就跳过队列领取 —— 调用方问的是
+            # "这几个委托清完了没有"，不是"队列还有没有活"。
+            if not _claim_pending(self.store, self.actor, wanted, result):
+                result.skipped_reason = "no_pending_delegation"
+            _fill_pending(self.store, result)
+            return result
         claim = self._claim()
         # 取任务侧的审计信息先落进结果，再决定要不要早退 —— 否则
         # "有 high 在队里但全被租约占着 / 全在退避中"这类信息会随着 skipped_reason
@@ -121,6 +211,14 @@ class _RunOnce:
         req = claim.request
         if req is None:
             result.skipped_reason = claim.skipped_reason
+            # 队列真的空了（不是"全被别人占着 / 全在退避"）时，最后一个出口是
+            # 把"还有待裁行的委托"认领下来：不这么做，这一轮只会带回
+            # `no_pending_request` —— 而候选表里那几十条既没人看见、也没人判
+            # （真机 lp-ball-3 正是这个形态）。队列有活但领不到时不认领：
+            # 那一档的读数（leased / backoff / gave_up）本身就是要报给运维的原因。
+            if claim.pending == 0:
+                _claim_pending(self.store, self.actor, [], result)
+            _fill_pending(self.store, result)
             return result
         # I7：把"本轮取了哪条、它是什么优先级"暴露出来 —— 这是从外部唯一能
         # 观察到优先级真的生效的地方（文献表里看不出来）。
@@ -485,4 +583,7 @@ class _RunOnce:
             # staging 目录里的残留下载一并清掉（成功搬走的已经不在里面了）
             shutil.rmtree(staging, ignore_errors=True)
 
+        # 收工时再把全表待裁读一遍（跨委托）：这一轮的暂存会让本委托多出 pending，
+        # 而旧委托的那几条也在同一份读数里 —— A 的下一步因此有完整的对象清单。
+        _fill_pending(self.store, result)
         return result

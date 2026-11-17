@@ -245,7 +245,7 @@
    "handler_signatures": {
     "ingest_local": "(self, *, books_dir: 'str', pattern: 'str' = '*.pdf', limit: 'int | None' = None, max_bytes: 'int' = 25165824, dry_run: 'bool' = False) -> 'dict'",
     "run": "(self, max_requests: 'int | None' = None) -> 'dict'",
-    "run_once": "(self) -> 'ARunResult'",
+    "run_once": "(self, *, request_ids: 'Sequence[str] | None' = None) -> 'ARunResult'",
     "search_literature": "(self, *, topic: 'str', mode: 'str' = 'precise', description: 'str' = '', providers: 'Iterable[str] | None' = None) -> 'dict'",
     "shelf_search": "(self, *, query: 'str' = '', limit: 'int' = 20, lit_id: 'str' = '', local_limit: 'int' = 5, max_chars: 'int' = 1200) -> 'dict'",
     "walk_citations": "(self, *, lit_id: 'str', direction: 'str' = 'backward', limit: 'int' = 20) -> 'dict'"

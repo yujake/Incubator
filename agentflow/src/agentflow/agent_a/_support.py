@@ -91,6 +91,22 @@ class ARunResult:
     #: 报告写失败的原因（空串 = 没失败）。文献已经落库，报告失败不该把它判成失败。
     report_error: str = ""
 
+    # ---- 全表待裁的按委托读数（2026-11-17 FX1：真机 lp-ball-3 的 30 条 blocker）
+    #
+    # 为什么每一轮都要填、而且按委托分组：A 的自动链路与提交闸原先只看"当前委托"
+    # （`current_request_id` = 槽位号最大那一行所属的委托），于是新委托一开始，旧委托
+    # 的 pending 对 A 就隐身了；而收工闸数的是全表 ⇒ 那 30 条既没人看见、也没人判。
+    # 读数只有一份实现（`litstage.pending_all_delegations`），这里只负责搬运。
+    #: 全表还有几条没判（跨委托；`judged_state == "pending"` 的总数）。
+    pending_total: int = 0
+    #: 按委托分组：`[{request_id, pending, slots, titles, current}]`（按委托号升序）。
+    pending_by_delegation: list[dict] = field(default_factory=list)
+    #: 这一轮认领下来的、还有待裁行的委托号（只在"队列里没有可领的检索请求"时填；
+    #: 认领动作本身落 `lit.claim_pending` 事件，见 `run_once._claim_pending`）。
+    claimed_delegations: list[str] = field(default_factory=list)
+    #: 认领之后给调用方看的那一句：认领了谁、下一步怎么清（空 = 这一轮没认领）。
+    claim_note: str = ""
+
     def to_dict(self) -> dict:
         return {
             "processed": self.processed,
@@ -117,6 +133,10 @@ class ARunResult:
             "report_admitted": self.report_admitted,
             "report_not_admitted": self.report_not_admitted,
             "report_error": self.report_error,
+            "pending_total": self.pending_total,
+            "pending_by_delegation": [dict(g) for g in self.pending_by_delegation],
+            "claimed_delegations": list(self.claimed_delegations),
+            "claim_note": self.claim_note,
         }
 @dataclass
 class ClaimOutcome:

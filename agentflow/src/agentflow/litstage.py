@@ -764,6 +764,78 @@ def _resolve_request(store: Store | None, request_id: str | None) -> str:
     return rid
 
 
+def pending_all_delegations(rows: Sequence[Mapping[str, Any]]) -> dict:
+    """全表待裁行的按委托分组读数（作用域写死成全表，没有"只看当前委托"这一档）。
+
+    ## 为什么它必须是一个独立函数、而且不带委托过滤参数
+
+    VC1 P1-6 的现场（2026-11-17 真机 `projects/lp-ball-3`）：`lit.stage_list` 的默认
+    视图与提交闸（`admission_plan` 的 `_judged_gate`）都只取"当前委托"的行 ——
+    `current_request_id` 是槽位号最大那一行所属的委托。于是新委托一开始，旧委托的
+    `pending` 对这两处就隐身了；而收工闸 `literature_pending` 看的是全表 ⇒ 一个
+    "谁也看不见、谁也清不掉"的 blocker（30 条跨两个委托，收口时 A 只被问起当前那份）。
+
+    修法不是给每个调用点各写一遍"取全表"，而是把"全表 + 按委托分组"做成唯一实现：
+    调用方拿不到过滤参数，就不存在"某一处悄悄退回当前委托"这条路。要只看当前委托的
+    调用方（`lit.stage_list` 的默认视图）先自己 `_scoped_rows` 再 `undecided`，
+    作用域在调用点显式可见 —— 这正是本函数不提供过滤参数的理由。
+
+    返回 `{"total": n, "current_request_id": rid, "by_delegation": [...]}`，
+    `by_delegation[]` 每项 `{request_id, pending, slots, titles, current}`（按委托号升序）。
+    `total == 0` 是"查过了、没有待裁"，不是"没查成"（读表失败由调用方折 unknown）。
+    """
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        if judged_state(row) != "pending":
+            continue
+        groups.setdefault(str(row.get("request_id") or ""), []).append(dict(row))
+    current = current_request_id_of(rows)
+    by: list[dict] = []
+    for rid in sorted(groups):
+        items = sorted(groups[rid], key=lambda r: str(r.get("slot") or ""))
+        by.append({
+            "request_id": rid,
+            "pending": len(items),
+            "slots": [str(r.get("slot") or "") for r in items],
+            "titles": [T.clip(str(r.get("title") or ""), UNDECIDED_TITLE_CHARS)
+                       for r in items],
+            "current": rid == current,
+        })
+    return {"total": sum(int(g["pending"]) for g in by),
+            "current_request_id": current, "by_delegation": by}
+
+
+def pending_scope_note(reading: Mapping[str, Any], *, exclude: str = "") -> str:
+    """把"全表待裁按委托分组"写成一句人能照着做的事（提交闸 / 收工闸 / A 都用这一句）。
+
+    `exclude` 用来剔掉"本委托"：提交闸那一处，本委托那几条另有 `undecided_reason`
+    逐条点名，这里只补"别的委托上还有多少、谁来清"。剔完为空 ⇒ 返回空串（不硬凑一句）。
+
+    "谁清"必须点到具体入口，否则这句话只是把数字重复一遍：A 的 `run_once`
+    （`request_ids` 空 = 认领全部有 pending 的委托）+ 逐条 `lit.admit` /
+    `lit.stage_reject` + 逐委托 `lit.admit_all` 提交（批量注册 + 回填 + 清表）。
+    """
+    groups = [g for g in reading.get("by_delegation") or []
+              if str(g.get("request_id") or "") != str(exclude or "")]
+    total = sum(int(g.get("pending") or 0) for g in groups)
+    if not groups:
+        return ""
+    parts = "、".join(
+        f"{g.get('request_id') or '（无委托号）'} 还剩 {int(g.get('pending') or 0)} 条"
+        for g in groups)
+    head = (f"全表还有 {total} 条待裁，分布在 {len(groups)} 个委托上"
+            f"（跨委托，不只当前那一份）：{parts}。")
+    if exclude:
+        head = (f"另有 {len(groups)} 个委托上还有 {total} 条待裁：{parts}"
+                "（它们不拦这一次提交，但收工闸看全表、会拦）。")
+    return head + (
+        "谁能清：A 的 `run_once`（`request_ids` 给空就认领全部有 pending 的委托，"
+        "也可以逐个点名）→ 逐条 `lit.admit` 判收 / `lit.stage_reject` 判拒 → "
+        "再**逐委托** `lit.admit_all` 提交（批量注册 + 回填 + 清表）。"
+        "只清当前委托不够：收工闸数的是全表。"
+    )
+
+
 # --------------------------------------------------------------------------- 清表 / 归档
 
 
@@ -1178,6 +1250,12 @@ def list_candidates(
         have = {int(s) for s in slots}
         gaps = [S.format_id(n) for n in range(min(have), max(have) + 1) if n not in have]
     waiting = undecided(scoped)
+    # 全表（跨委托）那一条读数：默认视图只返回当前委托的行，但"这一趟清完了没有"
+    # 看的是全表 —— 不把这两句话同时写进 note，旧委托的 pending 就只在收工闸那里
+    # 才第一次露面（VC1 P1-6 的现场）。作用域由 `pending_all_delegations` 写死。
+    scope = pending_all_delegations(all_rows)
+    scope_line = pending_scope_note(scope) or (
+        f"全表（跨委托）没有待裁的行（{len(all_rows)} 行候选里 0 条 pending）。")
     dup_groups = sorted(
         ({"key": k, "slots": sorted(v)} for k, v in groups.items() if len(v) > 1),
         key=lambda g: g["slots"][0])
@@ -1204,7 +1282,7 @@ def list_candidates(
         "gaps": gaps,
         "rows": rows,
         "total_all_delegations": len(all_rows),
-        "note": _stage_list_note(len(waiting)),
+        "note": _stage_list_note(len(waiting)) + scope_line,
     }
 
 
@@ -1503,12 +1581,18 @@ def _judged_gate(scoped: Sequence[Mapping[str, Any]], rid: str,
 
     判据只有 `undecided` 那一处（打桩成恒空 ⇒ 本闸失效，见
     tests/test_pending_list_is_three_state.py 的反真空那一条）。
+
+    作用域不扩到别的委托：让新委托被旧账卡住是另一个缺陷（VC1 P1-6 的
+    「最小补法」逐字反对这条路）。跨委托那一半是读数：`base` 里的
+    `pending_by_delegation` 与 `pending_scope_note` 会把"别的委托还剩几条、谁能清"
+    写进拒信 —— 看得见，但不拦这一次提交；拦它的是收工闸（全表口径）。
     """
     waiting = undecided(scoped)
     if not waiting:
         return None
+    others = str(base.get("pending_scope_note") or "")
     return {**base, "ok": False, "kind": "undecided_items", "whole_call_refused": True,
-            "reason": undecided_reason(waiting, rid),
+            "reason": undecided_reason(waiting, rid) + (f" {others}" if others else ""),
             "undecided": waiting, "counts": _decision_counts(scoped),
             "call_size": 0, "admitted": []}
 
@@ -1609,6 +1693,11 @@ def admission_plan(
     limit = _cap_of(cap)
     rid = _resolve_request(store, request_id)
     rows = _rows(store)
+    # 全表待裁（跨委托）的那一条读数：本闸按本委托判"能不能提交"，但"这一趟清完了
+    # 没有"要看全表 —— 两个读数都放进 base，于是每一条返回（放行与受控拒）
+    # 都带着"别的委托还剩几条、谁能清"。作用域由 `pending_all_delegations` 写死。
+    scope = pending_all_delegations(rows)
+    scope_note = pending_scope_note(scope, exclude=rid)
     scoped = [fold_legacy(r) for r in rows
               if str(r.get("request_id") or "") == rid]
     if slots is None:
@@ -1715,6 +1804,9 @@ def admission_plan(
         "call_limit": limit,
         "delegation_admitted": already,
         "delegation_limit": MAX_ADMIT_PER_DELEGATION,
+        "pending_total": scope["total"],
+        "pending_by_delegation": scope["by_delegation"],
+        "pending_scope_note": scope_note,
         "refused": refused,
         "cleared": over_cap,
     }
@@ -2275,6 +2367,9 @@ def admit_all(
         "call_limit": plan["call_limit"],
         "delegation_admitted": plan["delegation_admitted"] + len(done),
         "delegation_limit": plan["delegation_limit"],
+        "pending_total": plan["pending_total"],
+        "pending_by_delegation": plan["pending_by_delegation"],
+        "pending_scope_note": plan["pending_scope_note"],
         "admitted": done,
         "refused": refused,
         "cleared": list(plan.get("cleared") or []),

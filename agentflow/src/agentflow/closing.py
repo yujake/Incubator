@@ -7799,7 +7799,10 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
     - 读不到 `lit_candidates`（表坏 / 非 UTF-8 / schema 版本不符）⇒ `unknown`：
       "问不出来" ≠ "没有待裁"。这一格绝不把读失败折成 pass；
     - 全表存在 `judged_state(row) == "pending"`（跨委托，不只当前那一份）⇒
-      `fail` + blocker，逐条点名 `request_id / 槽位 / 题名`（上限 5 条 + "另有 N 条"）；
+      `fail` + blocker：按委托分组给读数（`readings["literature_pending"]["by_delegation"]`
+      是哪一委托还剩几条），逐条点名上限 5 条 + "另有 N 条"，并写清"谁能清"
+      （A 的 `run_once` 认领 → 逐条判 → 逐委托 `lit.admit_all`）。分组与"谁清"都取自
+      `litstage.pending_all_delegations` / `pending_scope_note`（提交闸与 A 读同一份）；
     - 当前委托（槽位号最大那一行所属）的行非空但没清表（行上没有 `cleared_at`）⇒
       `fail` + blocker："报告已写 / 注册已做，但没收口：先 `lit.admit_all` 清表"；
     - 两者都空 ⇒ `pass`，读数里写 `closed_delegations`（归档里有几份）。
@@ -7835,6 +7838,9 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         return
     try:
         waiting = [r for r in rows if L.judged_state(r) == "pending"]
+        # 唯一的"全表 + 按委托分组"读数（提交闸与 A 的 `run_once` 读的也是它）：
+        # 这一格的拒信要按委托分组、并说清"谁能清"，都从这一份派生，不另数一遍。
+        scope = L.pending_all_delegations(rows)
         rid = L.current_request_id_of(rows)
         mine = [r for r in rows if str(r.get("request_id") or "") == rid]
         cleared = L.cleared_of(mine)
@@ -7846,15 +7852,22 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
          "title": T.clip(str(r.get("title") or ""), 60)}
         for r in waiting
     ]
+    scope_note = L.pending_scope_note(scope)
     reading = {
         "checked": True,
         "pending": len(waiting),
         "rows": names[:5],
         "more": max(0, len(waiting) - 5),
         "request_id": rid,
+        "by_delegation": scope["by_delegation"],
+        "pending_delegations": len(scope["by_delegation"]),
         "delegation_rows": len(mine),
         "cleared": cleared,
         "closed_delegations": len(archives),
+        "who_can_clear": (
+            "A：`run_once`（不给 request_ids 就认领全部有 pending 的委托）→ 逐条 "
+            "`lit.admit` 判收 / `lit.stage_reject` 判拒 → 逐委托 `lit.admit_all` "
+            "提交（批量注册 + 回填 + 清表）"),
         "reason": "",
     }
     if waiting:
@@ -7862,13 +7875,12 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         named = "、".join(f"{n['request_id']}/{n['slot']}《{n['title']}》" for n in names[:5])
         if len(names) > 5:
             named += f"（另有 {len(names) - 5} 条）"
-        reading["reason"] = f"全表还有 {len(waiting)} 条待裁：{named}"
+        reading["reason"] = (f"全表还有 {len(waiting)} 条待裁（跨 "
+                             f"{len(scope['by_delegation'])} 个委托）：{named}")
         rep.findings.append(Finding(
             "literature_pending", "undecided_candidates", "blocker",
             f"待入库文献表非空：还有 {len(waiting)} 条 `pending`（跨委托，不只当前那一份）"
-            f"——{named}。业主口径「清空待入库文献表及文献 ⇒ 真正收工」："
-            "A 要逐条裁定（收：`lit.admit` 判收；拒：`lit.stage_reject`），"
-            "再 `lit.admit_all` 提交（批量注册 + 回填 + 清表）之后才许收工"))
+            f"——前几条：{named}。{scope_note}"))
     elif mine and not cleared:
         rep.status["literature_pending"] = "fail"
         reading["reason"] = (
@@ -7877,7 +7889,8 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
             "literature_pending", "delegation_not_cleared", "blocker",
             f"委托 {rid} 的 {len(mine)} 行候选还没清表（`cleared_at` 空）⇒ 收工被拦："
             "报告与注册都做过之后，最后一步是 `lit.admit_all` 提交（清表 + 归档）；"
-            "没有这一步，'这一次委托收工了'没有任何留痕"))
+            "没有这一步，'这一次委托收工了'没有任何留痕。"
+            "谁能清：A 对本委托调一次 `lit.admit_all(request_id=<委托>)`"))
     else:
         rep.status["literature_pending"] = "pass"
         reading["reason"] = (
