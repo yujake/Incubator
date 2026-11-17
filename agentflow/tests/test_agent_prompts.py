@@ -2606,7 +2606,18 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   28b53e8eee664775d01fe290cfe02ab4822267ed73010cc72b7c9d5a873c7e44。
 # 十一格不是手抄：`temp/al2/recompute.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['A']。
-_FROZEN_PROMPT_VERSION = "p290"
+# p290 → p291（2026-11-17，FX3·甲/乙；业主 2026-11-17 逐字「先apply」授权）：
+# 甲把 `lit.admit_all` 的提交粒度从整委托改成批次（新增 `slots` 参数，summary /
+# returns 随之改）、`lit.stage_add` 的收口语改成「判完一批就提交」；乙让
+# `search.download` 的落地页分支（`ok=True` + `content_type_mismatch`）也留一条
+# `extract_failed` 回执（summary 补一句、成功分支多 `cand` / `read_receipt` 两格）。
+# 三件都只在 A 的工具面上 ⇒ 变化格 = A；其余十格逐字相同（版本行已归一）。
+# 逐格旧值 → 新值：
+# A 28b53e8eee664775d01fe290cfe02ab4822267ed73010cc72b7c9d5a873c7e44 →
+#   67d6c4771149de33b01251627fd42e850727143cd828d92ee65008d5f3555d23。
+# 十一格不是手抄：`temp/fx3_recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['A']。
+_FROZEN_PROMPT_VERSION = "p291"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2875,7 +2886,7 @@ _FROZEN_PROMPT_VERSION = "p290"
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "28b53e8eee664775d01fe290cfe02ab4822267ed73010cc72b7c9d5a873c7e44",
+    "A": "67d6c4771149de33b01251627fd42e850727143cd828d92ee65008d5f3555d23",
     "B": "4a8152635eb3148b37a5fa3c53d25675c55c1933620afe3a281af14a26cddcf8",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",

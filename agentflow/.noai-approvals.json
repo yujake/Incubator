@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T11:59:26+08:00",
+  "generated_at": "2026-11-17T15:17:34+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,10 +505,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "acea25f7986add495e0d49fe06f6ec6e1bd269e9ab027251e4468e9d481295dd",
+      "sha256": "26ab17436ccf2ab49d42a85eed73840839c43db929f112efb06cc1fb7e9ab810",
       "authored": "ai-agent",
       "authored_basis": "inferred",
-      "change_note": "登记（FX1）：A.run_once 多一个关键字参数 request_ids（真机 lp-ball-3 的 30 条 pending 要能跨委托认领）⇒ 冻结快照的 roles.A.handler_signatures.run_once 一格换值，其余逐格未变（只改了那一行，没有重新生成整份快照）。它不是新动作、新工具、新边、新写集；登记≠批准，reviewers=[] 保持，仍需人逐格看过。",
+      "change_note": "FX3 重冻（p291）：lit.admit_all 加 slots（批次作用域）并改 summary/returns；lit.stage_add 与 search.download 的 summary 跟着改（落地页也算一次尝试）。diff 只有这三件工具的四格 + A 的提示词版本行；agent 面另含 PTR1 未重冻的 B.ingest_manuscript 两个可选参数（source_lit_id / derived_from），本笔按现值一并冻入。登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],
@@ -531,11 +531,11 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "83064a3b17fba16e0f4228c8fd73dd938181c5081065b2aaffbcd0aacbda85bd",
-      "authored": "unknown",
+      "sha256": "13d24c3e39b10a6fd702de166a5d2f49fc62152c79a5abee707314ffd2bb331e",
+      "authored": "ai-agent",
       "authored_basis": "inferred",
-      "change_note": "AL2·#5 重冻：search.download 加 cand（参数面 + returns 两格）与 fs.write 摘要（#4 保留表补全的模型可见那一半）⇒ 两份快照按现值重冻；登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过",
-      "changed_this_session": null,
+      "change_note": "FX3 重冻（p291）：lit.admit_all 加 slots（批次作用域）并改 summary/returns；lit.stage_add 与 search.download 的 summary 跟着改（落地页也算一次尝试）。diff 只有这三件工具的四格 + A 的提示词版本行；agent 面另含 PTR1 未重冻的 B.ingest_manuscript 两个可选参数（source_lit_id / derived_from），本笔按现值一并冻入。登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []

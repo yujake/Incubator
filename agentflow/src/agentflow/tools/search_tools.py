@@ -38,7 +38,7 @@ import urllib.parse
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .base import ToolError, ToolRegistry, ToolSpec, fail, ok, tool
 from .. import dedup as D
@@ -2666,21 +2666,25 @@ def _h_lit_admit_all(
     ctx: _Ctx,
     request_id: str | None = None,
     new_content: str = "",
+    slots: Sequence[str] | None = None,
 ) -> Any:
-    """``lit.admit_all``：「提交整批」 —— 本委托判完之后收口的一次入库 + 报告，然后清空。
+    """``lit.admit_all``：「提交一批」 —— 判完的这一批入库 + 报告，然后清这一批的行。
 
-    2026-10-26（Q16）起它前面多了一道提交闸：本委托只要还有一条没判，整批一条都不许
+    2026-10-26（Q16）起它前面有一道提交闸：这一批只要还有一条没判，整批一条都不许
     入库，拒信逐条点名（`槽位 + 题名前 40 字`）并给做法。所以"一键把没读过的都塞进去"
     这条路没有了 —— 逐条判（`lit.admit` 的条目带 relevance / `lit.stage_reject` 判拒）
     是唯一的入库方式，本工具是"判完收口"。
 
+    2026-11-17（FX3·甲）起提交粒度是批次不是整委托：`slots` 点名这一次覆盖哪些槽
+    （默认 = 本委托已判定的全部）。15 槽判完 5 槽 ⇒ 可以只交这 5 槽，其余 10 槽保持
+    `pending` 进下一批；批外未判的槽不拦这一笔（收工闸仍看全表）。批内全判是硬要求：
+    点名点到没判的槽 ⇒ `undecided_items` 整批拒，一格没放宽。
+
     业主 2026-10-20 第 2 条那四件事仍在，顺序固定（实现见 `litstage.admit_all`）：
-    
-    1. 取本委托还没判的行，逐条过「重叠检查」（DOI 重复 / 高重叠无 `new_content` ⇒ 拒收；超配额 ⇒ 这一条不入库）； 2. 通过的走
-    「现有登记路径」（与 `search.register` 同一条）； 3. 「结算本委托」：成功落 `admitted`、被拒落 `rejected(理由码)`、其余落
-    `rejected(over_cap / not_screened)` ⇒ 结算后本委托没有 `pending` 残留，下一次委托看不到本委托的
-    行（`request_id` 已经换了）。「不物理删」； 4. 写「委托报告」 `reports/lit-<request_id>.md`：已入库 / 未入库 / 待裁三块。
-    
+    1. 取这一批判收未注册的行，逐条过「重叠检查」；2. 通过的走「现有登记路径」；
+    3. 「结算这一批」：成功落 `admitted`、被拒落 `rejected(理由码)`；4. 写报告
+    （无号原件 + 带号定稿）并清这一批的行。「不物理删」。
+
     它仍守"一次委托至多入库 10 篇"与"重叠高需 `new_content`"两条。
     """
     from ..litstage import admit_all as _admit_all
@@ -2690,18 +2694,18 @@ def _h_lit_admit_all(
 
     def _registrar(row: Mapping[str, Any]) -> dict:
         # 判据只有一份：与 `lit.admit_all` 共用 `_registrar_from_candidate`
-        # （那里也补写定位栏，于是"逐条入库"与"提交整批"落出来的行同形）。
+        # （那里也补写定位栏，于是"逐条入库"与"提交一批"落出来的行同形）。
         return _registrar_from_candidate(ctx, row)
 
     try:
         got = _admit_all(ctx.store, registrar=_registrar, request_id=request_id,
-                         new_content=new_content, actor=ctx.actor)
+                         slots=slots, new_content=new_content, actor=ctx.actor)
     except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
         return _stage_fail(exc)
     if not got.get("ok"):
-        return fail(got.get("reason") or "整批提交被拒", kind=got.get("kind") or "over_cap",
-                    request_id=got.get("request_id"), refused=got.get("refused"),
-                    undecided=got.get("undecided"),
+        return fail(got.get("reason") or "这一批提交被拒", kind=got.get("kind") or "over_cap",
+                    request_id=got.get("request_id"), submitted=got.get("submitted"),
+                    refused=got.get("refused"), undecided=got.get("undecided"),
                     missing_readback=got.get("missing_readback"),
                     missing_availability=got.get("missing_availability"),
                     availability_bad=got.get("availability_bad"))
@@ -2711,10 +2715,14 @@ def _h_lit_admit_all(
         "whole_call_refused": got["whole_call_refused"],
         "reason": got["reason"],
         "request_id": got["request_id"],
+        "submitted": got["submitted"],
         "call_size": got["call_size"],
         "call_limit": got["call_limit"],
         "delegation_admitted": got["delegation_admitted"],
         "delegation_limit": got["delegation_limit"],
+        "pending_total": got["pending_total"],
+        "pending_by_delegation": got["pending_by_delegation"],
+        "pending_scope_note": got["pending_scope_note"],
         "admitted": got["admitted"],
         "refused": got["refused"],
         "cleared": got["cleared"],
@@ -2794,7 +2802,8 @@ def _lit_overlap_check(ctx, title, doi=None):
     "把广搜结果追加进本次委托的待新增列表（一次任意条，超过 10 条也允许）："
     "同一委托内同一篇只占一个槽 —— 命中未判的那一槽就把 relevance/摘要补进去"
     "（updated[]），不发新号；槽位号只增不复用、注册即待裁。逐条入库是 lit.admit"
-    "（每条要带 relevance）；全部判完之后由 lit.admit_all 提交整批收口。",
+    "（每条要带 relevance）；判完一批就由 lit.admit_all 点名那一批的槽提交，"
+    "剩下的未判槽保持 pending 进下一批。",
     {
         "type": "object",
         "properties": {
@@ -2972,15 +2981,21 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
 
 @tool(
     "lit.admit_all",
-    "提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、"
-    "结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md"
-    "（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库："
-    "拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。",
+    "提交一批（一个委托可有多批）：`slots` 点名这一次覆盖哪些槽（默认=本委托已判定的全部）。"
+    "**这一批内**每条都必须判过（三态落定），没判完就整批一条都不许入库、拒信逐条点名并给做法"
+    "（逐条判收走 lit.admit、判拒走 lit.stage_reject）；批外未判的槽保持 pending（待裁）进下一批。"
+    "本批通过的判收行在这一刻批量注册、回填正式号（≤10 条/委托）、写这一批的双阶段报告"
+    "（reports/lit-<request_id>.md，已入库 / 未入库 / 待裁三块），并清掉本批的行（不物理删）。"
+    "没点名的未判槽不受影响。",
     {
         "type": "object",
         "properties": {
             "request_id": {"type": "string", "maxLength": 40,
                            "description": "哪一次委托（不给 = 当前委托）"},
+            "slots": {"type": "array", "items": {"type": "string", "maxLength": 40},
+                      "minItems": 1, "maxItems": 200,
+                      "description": "这一次提交覆盖哪些槽（默认=本委托已判定的全部）；"
+                                     "批内必须每一条都判过"},
             "new_content": {"type": "string", "maxLength": 2000,
                             "description": "本委托统一的「要的新内容」（逐条优先）"},
         },
@@ -2989,31 +3004,32 @@ def _lit_admit(ctx, slots=None, items=None, request_id=None, batch=None, new_con
     },
     side_effect="write_local",
     roles=("A",),
-    # 2026-10-26（G12）：`admitted[]` / `refused[]` / `cleared[]` 三个数组的元素形状改成散文
-    # （不再带引号），顶层 15 键与 `report` 的 6 键照旧带引号。为什么：Q16 的提交闸只在"一条
-    # 未判都没有"时放行，而那一刻已经没有要入的行 ⇒ 本工具在"整批提交"口径下不再逐条登记
-    # （登记支不可达），三个数组恒空；键列表里留着它们的元素键，等于让"声明 ⊆ 实跑"在一个
-    # 永不出现的形状上恒红。这不是放宽判据：同一套元素形状由 `lit.admit` 的声明带引号声明并
-    # 由它的探针真跑验着（`tests/test_search_tools_stage_admit.py` 也断言这条支不可达）。
+    # 2026-11-17（FX3·甲）：提交粒度从整委托改成批次 ⇒ `admitted[]` 不再恒空，元素形状
+    # 要在这里说清（与 `lit.admit` 同形）；新增 `submitted` / `pending_total` /
+    # `pending_by_delegation` / `pending_scope_note` 四格，供 A 读"这一批交了哪些、还剩
+    # 哪些 pending 要进下一批"。
     returns=(
-        "{'ok','kind','whole_call_refused','reason','request_id','call_size','call_limit',"
-        "'delegation_admitted','delegation_limit','admitted','refused','cleared','registered',"
-        "'report','report_path'}；"
+        "{'ok','kind','whole_call_refused','reason','request_id','submitted','call_size',"
+        "'call_limit','delegation_admitted','delegation_limit','pending_total',"
+        "'pending_by_delegation','pending_scope_note','admitted','refused','cleared',"
+        "'registered','report','report_path'}；"
+        "submitted[] 是这一次提交覆盖的槽位号；"
         "admitted[] 每项是槽位、题名、lit_id、created、overlap_score、overlap_kind、"
-        "overlap_with、new_content 八格；"
+        "overlap_with、new_content 八格（与 lit.admit 同形）；"
         "refused[] 与 cleared[] 每项是槽位、题名、why、code、overlap 五格"
         "（`cleared[]` 是「没进去的那几条」这个读数格，不是状态名）；"
-        "以上三个数组在「整批提交」口径下恒空（登记支不可达，理由见本工具声明上方那段注释），"
-        "所以元素形状只在这里用散文说：它们与 `lit.admit` 同形，由那一条的声明照旧带引号声明、"
-        "并由它的探针真跑验着（收进一条 + 撞 DOI 落 refused 一条，两个数组都非空）；"
+        "pending_total / pending_by_delegation / pending_scope_note 是这一批之后的全表"
+        "待裁读数（没点名的未判槽仍在里面，A 照它进下一批）；"
         "report 是 {'path','rel_path','chars','admitted','not_admitted','request_id'}；"
-        "失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error)"
+        "失败：ok=False + kind(no_store/no_delegation/bad_delegation/store_error/"
+        "unknown_slot/undecided_items/nothing_to_submit/no_readback/"
+        "missing_availability/availability_not_admissible/report_violations)"
     ),
     tags=("lit", "admit", "report"),
 )
-def _lit_admit_all(ctx, request_id=None, new_content=""):
+def _lit_admit_all(ctx, request_id=None, new_content="", slots=None):
     """lit.admit_all 的工具体。"""
-    return _h_lit_admit_all(ctx, request_id, new_content)
+    return _h_lit_admit_all(ctx, request_id, new_content, slots)
 
 
 #: 装配清单（`T-8`）：`(工具体函数, 需要从装配期注入的名字)`。

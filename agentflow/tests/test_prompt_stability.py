@@ -1383,6 +1383,22 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "`fs.write` 摘要都在 A 的工具面上；逐格读数见 "
               "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p290 → p291（2026-11-17，FX3·甲/乙）：甲把 `lit.admit_all` 的提交粒度从
+     # 整委托改成批次（新增 `slots` 参数，summary / returns 随之改）、`lit.stage_add`
+     # 的收口语改成「判完一批就提交」；乙让 `search.download` 的落地页分支
+     # （`ok=True` + `content_type_mismatch`）也留一条 `extract_failed` 回执。
+     # 三件都只进 A 的工具面，facts 键集与落点一格没动 ⇒ count / keys_sha256 与
+     # p290 同值。
+     {"version": "p291", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p291（2026-11-17，FX3·甲/乙；业主 2026-11-17 逐字「先apply」"
+              "授权）：甲——`lit.admit_all` 的提交粒度从整委托改成批次（`slots` 点名"
+              "这一批覆盖哪些槽，默认=已判定的全部；都没判的批外槽保持 pending 进下一批），"
+              "`lit.stage_add` 的收口语改成「判完一批就提交」；乙——`search.download`"
+              "拿到落地页（`ok=True` + `content_type_mismatch`）也算一次尝试、落一条"
+              "`extract_failed` 回执。变化格 = A（三件都在 A 的工具面上；逐格读数见 "
+              "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

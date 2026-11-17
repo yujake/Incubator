@@ -90,8 +90,11 @@ def _judge(reg, store: Store, slots: list[str], *, rid: str = RID):
     return res
 
 
-def _submit(reg, rid: str = RID):
-    return reg.call("lit.admit_all", request_id=rid)
+def _submit(reg, rid: str = RID, slots: list[str] | None = None):
+    """提交一批（`slots` 不给 = 本委托已判定的全部；FX3·甲 的批次粒度）。"""
+    if slots is None:
+        return reg.call("lit.admit_all", request_id=rid)
+    return reg.call("lit.admit_all", request_id=rid, slots=slots)
 
 
 def _snapshot_text(store: Store, rid: str = RID) -> str:
@@ -163,13 +166,15 @@ def test_a2_after_submit_the_pending_block_is_empty(store: Store, reg) -> None:
     slots2 = _stage(reg, ["Unjudged one"], rid="r-000002")
     _readback(reg, "r-000002")
     _attempt(store, slots2[0], rid="r-000002")
-    refused_before = _submit(reg, "r-000002")
+    # 批内全判是硬要求：点名点到未判的槽 ⇒ 整批拒（不给 slots 的默认批 = 已判定的
+    # 全部，这里还没有判定的行，所以必须显式点名才撞得到这道闸）。
+    refused_before = _submit(reg, "r-000002", slots=slots2)
     assert not refused_before.ok, "还有一条没判，提交居然通过了"
     assert refused_before.meta["kind"] == "undecided_items", refused_before.meta
     original = L.undecided
     try:
         L.undecided = lambda rows: []
-        after = _submit(reg, "r-000002")
+        after = _submit(reg, "r-000002", slots=slots2)
         # 闸看不见待裁之后，报告判据必须照样拦住（"判完之后才写"这一条不是全靠闸）
         assert not after.ok, after.unwrap()
         assert after.meta["kind"] in ("report_violations", "not_registered"), after.meta

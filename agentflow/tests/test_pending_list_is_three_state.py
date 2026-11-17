@@ -139,7 +139,11 @@ def test_a_the_real_48_rows_are_refused_by_the_submit_gate(tmp_path: pathlib.Pat
         mine = _delegation(rows, rid)
         bare_admitted = [r for r in mine if str(r.get("status")) == "admitted"
                          and not str(r.get("relevance") or "").strip()]
-        res = reg.call("lit.admit_all", request_id=rid)
+        # 2026-11-17（FX3·甲）：提交粒度改成批次 —— 不点名时默认只交"已判定的全部"，
+        # 这 48 行里没判的那些不在默认批里。要证明"没判的槽被提交就整批拒"，
+        # 必须显式点名整份委托的槽（批内全判仍然是硬要求，一格没放宽）。
+        res = reg.call("lit.admit_all", request_id=rid,
+                       slots=[str(r["slot"]) for r in mine])
         assert not res.ok, f"{rid}：还有 {len(bare_admitted)} 条没判，整批居然通过了"
         assert res.meta["kind"] == "undecided_items", res.meta
         message = str(res.error or "")
@@ -337,7 +341,12 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     _put(store, rows)
     reg = _reg(store)
 
-    ok_before = reg.call("lit.admit_all", request_id="r-000001")
+    # FX3·甲：不点名时默认只交已判定的行，这 48 行里没判的不在默认批里 ⇒ 要把
+    # 整份委托的槽都点进这一批，才撞得到"批内全判"那道闸（反真空打在它上面）。
+    mine = [r for r in store.rows("lit_candidates")
+            if str(r.get("request_id")) == "r-000001"]
+    ok_before = reg.call("lit.admit_all", request_id="r-000001",
+                         slots=[r["slot"] for r in mine])
     assert not ok_before.ok, "打桩之前它就该被拒"
 
     # 这一条的反真空只打 `undecided` 一处：回读与可读性判定是 2026-11-16 新加的
@@ -348,8 +357,6 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     # 按 `judged_state` 自己数（那份读数是交付物的一部分，不借闸的读数），所以这一笔
     # 会被 `report_violations` 拦在更后面。反真空仍然成立：它证明"打桩真的让那道闸失效了"
     # （拒因从 `undecided_items` 变成了 `report_violations`，而不是还是 `undecided_items`）。
-    mine = [r for r in store.rows("lit_candidates")
-            if str(r.get("request_id")) == "r-000001"]
     lit_availability(store, "r-000001", [r["slot"] for r in mine], tier="readable")
     monkeypatch.setattr(L, "undecided", lambda scoped: [])
     monkeypatch.setattr(L, "readback_receipt",
@@ -358,7 +365,8 @@ def test_e_negative_control_stubbing_the_pending_check_lets_the_real_rows_throug
     # 同一句话对 2026-11-16（裁定 3）新加的"读过"闸也成立：这一条只测 `undecided`，
     # 不把那道闸打掉的话，测出来的会是"被另一道闸拒"。
     monkeypatch.setattr(L, "_read_evidence_gate", lambda *a, **k: None)
-    after = reg.call("lit.admit_all", request_id="r-000001")
+    after = reg.call("lit.admit_all", request_id="r-000001",
+                     slots=[r["slot"] for r in mine])
     assert after.meta.get("kind") != "undecided_items", (
         "打桩成恒空之后仍然报 `undecided_items` ⇒ 那道闸不是长在 `litstage.undecided` 上"
         f"（{after.error}）")

@@ -2699,7 +2699,19 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p289 同值）；工具面快照与
 #:   `agent_surface_snapshot.json` 按现值重冻（本笔改的是声明，不是权限矩阵）；
 #:   系统文档重生成（ROLE-GUIDE 与读图行数）。
-PROMPT_VERSION = "p290"
+#: p290 → p291（2026-11-17，FX3·甲/乙；业主 2026-11-17 逐字「先apply」授权）：
+#:   甲：`lit.admit_all` 的提交粒度从整委托改成批次（新增 `slots`：点名这一批覆盖
+#:   哪些槽，默认=已判定的全部；summary / returns 随之改），`lit.stage_add` 的收口语
+#:   改成「判完一批就由 lit.admit_all 点名那一批提交」；乙：`search.download` 拿到落地页
+#:   （`ok=True` + `content_type_mismatch`）也算一次尝试、落一条 `extract_failed` 回执
+#:   （summary 补一句，成功分支多 `cand` / `read_receipt` 两格）。
+#:   三件都只出现在 A 的工具面上 ⇒ 变化格 = A：28b53e8e… → 67d6c477…；其余十格逐字
+#:   未动（版本行已归一）。连带：`_FROZEN_PROMPT_VERSION`（p291）+
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格、count / keys_sha256 与
+#:   p290 同值）；两份 golden 按现值重冻（`agent_surface_snapshot` 另含 PTR1 那一笔
+#:   未重冻的 `B.ingest_manuscript` 签名：`source_lit_id` / `derived_from` 两个可选参数，
+#:   本笔按现值一并冻入并在此留痕）；ROLE-GUIDE 重生成；读图行数；warm 两档重跑。
+PROMPT_VERSION = "p291"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

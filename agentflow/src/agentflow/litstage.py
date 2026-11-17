@@ -93,6 +93,7 @@ __all__ = [
     "reset_readbacks",
     "undecided",
     "undecided_reason",
+    "submission_slots",
     "title_terms",
     "title_jaccard",
     "overlap_check",
@@ -342,6 +343,30 @@ def _decision_counts(rows: Sequence[Mapping[str, Any]]) -> dict:
     for row in rows:
         counts[judged_state(row)] += 1
     return counts
+
+
+def submission_slots(scoped: Sequence[Mapping[str, Any]],
+                     slots: Sequence[str] | None = None) -> list[str]:
+    """这一次提交覆盖哪些槽（按批提交的唯一作用域实现）：点名就看点名的，不点名 = 已判定的全部。
+
+    为什么"不点名"的默认必须是「已判定的全部」、而不是「整委托」：15 槽里判完 5 槽时，
+    A 必须能只提交这 5 槽（其余 10 槽保持 pending、进下一批）。要求整委托 15 槽全判
+    才能交，等于把"判完"的粒度绑死在委托上 —— 真机 `projects/lp-ball-4` 的 7 个委托
+    105 槽因此一条都交不了（A 的 final 逐字：「对 105 个槽逐条花调用的预算」不够）。
+
+    点名时允许点到未判的槽：这一层不做判断，闸（`_judged_gate`）会逐条点名拒
+    （`undecided_items`）—— "这一批内全判"是硬要求，不由调用方口头保证。
+    """
+    if slots is not None:
+        wanted: list[str] = []
+        for raw in slots:
+            s = str(raw or "").strip()
+            if s and s not in wanted:
+                wanted.append(s)
+        return wanted
+    return [str(r.get("slot") or "") for r in
+            sorted(scoped, key=lambda r: str(r.get("slot") or ""))
+            if judged_state(r) != "pending"]
 
 
 def undecided_reason(waiting: Sequence[Mapping[str, Any]],
@@ -920,17 +945,24 @@ def archived_request_ids(root: Any) -> list[str]:
 
 
 def is_settled(store: Store, request_id: str) -> bool:
-    """这一次委托是不是已经"定稿 + 清表"（归档在盘上 ⇒ 是）。
+    """这一次委托是不是已经"整份定稿 + 清表"：本委托的每一行都有 `cleared_at`。
 
-    "已收工"不能靠"表里没有行"判：本实现不物理删，行永远在。归档文件的存在
-    才是那一次收工动作的留痕（它与 `cleared_at` 是同一笔事务的两半，见
-    `clear_delegation`）。三态：归档目录读不到 ⇒ 这里返回 False（读不到 ≠ 已收工），
-    调用方若要分辨三态请自己判目录。
+    "已收工"不能靠"表里没有行"判：本实现不物理删，行永远在。FX3·甲 起也不能只看
+    "归档在盘上"：一个委托现在可以分多批提交，第一批就会写归档，而那时还有 pending
+    的槽（归档是整份委托的快照，本来就含未判行）。所以判据改成"每一行都清过表"——
+    这正是 `cleared_of` 的口径，也是收工闸读的那一格（两处同一个事实，不另数一遍）。
+
+    三态：行读不到 ⇒ 这里返回 False（读不到 ≠ 已收工），调用方若要分辨三态请自己读表。
     """
     rid = str(request_id or "").strip()
     if not rid:
         return False
-    return archive_path(store, rid).is_file()
+    try:
+        rows = [dict(r) for r in store.rows("lit_candidates")
+                if str(r.get("request_id") or "") == rid]
+    except Exception:  # noqa: BLE001 - 读不到 ≠ 已收工（三态由调用方另判）
+        return False
+    return cleared_of(rows)
 
 
 def cleared_of(rows: Sequence[Mapping[str, Any]]) -> bool:
@@ -947,11 +979,17 @@ def cleared_of(rows: Sequence[Mapping[str, Any]]) -> bool:
 
 def clear_delegation(store: Store, request_id: str, *, actor: str = "agent-A",
                      mapping: Sequence[Mapping[str, Any]] = (),
-                     reason: str = "") -> dict:
-    """清表：给本委托的每一行打 `cleared_at` + `clear_reason`（不物理删）。
+                     reason: str = "",
+                     only_slots: Sequence[str] | None = None) -> dict:
+    """清表：给本委托的行打 `cleared_at` + `clear_reason`（不物理删）。
+
+    `only_slots`（FX3·甲）：只清这一批提交过的行；不给 ⇒ 清本委托全部行（老调用点）。
+    未提交的 pending 行不打 `cleared_at` —— 它们要能被下一批继续提交，而收工闸的
+    `delegation_not_cleared` 也正是靠"还有行没有 cleared_at"如实红。
 
     三件一起落（顺序不能换）：
-    1. 事务内先把整份行写进归档 JSONL（幂等整份覆盖）；
+    1. 事务内先把整份行（含未判的 pending）写进归档 JSONL（幂等整份覆盖）——
+       归档回答的是"这次委托的每一条候选最后长什么样"，所以它按委托整份写，不按批；
     2. 逐行打标记 + `tx.info("lit.close", …, mapping=[{slot, lit_id}])` ——
        映射关系进事件日志（改行/删行的唯一可重放证据，`store.Tx.delete` 同理）；
     3. 不写 `status`：`admitted` 的行必须在库里继续是 `admitted`
@@ -969,27 +1007,33 @@ def clear_delegation(store: Store, request_id: str, *, actor: str = "agent-A",
         rows = [dict(r) for r in tx.rows("lit_candidates")
                 if str(r.get("request_id") or "") == rid]
         at = S.now_iso()
+        scope = (None if only_slots is None
+                 else {str(s or "") for s in only_slots})
         # 先在内存里打好标记，再归档：归档里那一份要看得见"这一次清表是什么时候、
         # 为什么"（清表本身就是审计对象，不是归档之后才发生的事）。
         for row in rows:
+            if scope is not None and str(row.get("slot") or "") not in scope:
+                continue
             if not str(row.get("cleared_at") or "").strip():
                 row["cleared_at"] = at
                 row["clear_reason"] = str(reason or CLEAR_REASON)
         archived = _archive_rows(store, rid, rows)
         pairs: list[dict] = []
         for row in rows:
+            if scope is not None and str(row.get("slot") or "") not in scope:
+                continue
             tx.upsert("lit_candidates", row, note="lit.close.clear")
             pairs.append({"slot": str(row.get("slot") or ""),
                           "lit_id": str(row.get("lit_id") or ""),
                           "status": str(row.get("status") or ""),
                           "cleared_at": str(row.get("cleared_at") or "")})
-        tx.info("lit.close", request_id=rid, cleared=len(rows),
+        tx.info("lit.close", request_id=rid, cleared=len(pairs),
                 archive=archived["rel_path"],
                 mapping=[{"slot": p["slot"], "lit_id": p["lit_id"]}
                          for p in pairs if p["lit_id"]],
                 statuses={s: sum(1 for p in pairs if p["status"] == s)
                           for s in CANDIDATE_RECORDS})
-    return {"request_id": rid, "cleared": len(rows), "archived": archived,
+    return {"request_id": rid, "cleared": len(pairs), "archived": archived,
             "mapping": [p for p in pairs if p["lit_id"]], "rows": pairs, "at": at,
             "given_mapping": [dict(m) for m in mapping]}
 
@@ -1575,9 +1619,18 @@ def _availability_gate(rid: str, wanted: Sequence[str],
             "call_size": 0, "admitted": []}
 
 
-def _judged_gate(scoped: Sequence[Mapping[str, Any]], rid: str,
+def _judged_gate(wanted: Sequence[str], by_slot: Mapping[str, Mapping[str, Any]],
+                 scoped: Sequence[Mapping[str, Any]], rid: str,
                  base: Mapping[str, Any]) -> dict | None:
-    """提交闸（Q16 第 ③ 条）：整批提交的那两条路，本委托只要还有一条没判就整批拒。
+    """提交闸（Q16 第 ③ 条 / FX3·甲）：这一批内每一条都必须判过，否则整批拒。
+
+    作用域 = 这一次提交覆盖的槽（`wanted`），不是整委托：15 槽判完 5 槽 ⇒ 提交那 5 槽
+    放行，其余 10 槽保持 pending 进下一批。点名点到未判的槽 ⇒ 逐条点名拒
+    （`undecided_items`），"批内全判"仍是硬要求，一个字没放宽。
+
+    点名是空表（`slots=[]`）⇒ 这一笔没有覆盖任何槽：有 pending 就按"还有 N 条没判"拒
+    （旧调用点 `admission_plan(slots=[], require_judged=True)` 读的就是这一档），
+    一条 pending 都没有才落 `nothing_to_submit`（不是成功 —— 空提交没有对象）。
 
     判据只有 `undecided` 那一处（打桩成恒空 ⇒ 本闸失效，见
     tests/test_pending_list_is_three_state.py 的反真空那一条）。
@@ -1587,7 +1640,17 @@ def _judged_gate(scoped: Sequence[Mapping[str, Any]], rid: str,
     `pending_by_delegation` 与 `pending_scope_note` 会把"别的委托还剩几条、谁能清"
     写进拒信 —— 看得见，但不拦这一次提交；拦它的是收工闸（全表口径）。
     """
-    waiting = undecided(scoped)
+    if wanted:
+        waiting = undecided([by_slot[s] for s in wanted])
+    else:
+        waiting = undecided(scoped)
+        if not waiting:
+            return {**base, "ok": False, "kind": "nothing_to_submit",
+                    "whole_call_refused": True,
+                    "reason": (f"本次提交没有覆盖任何槽位（委托 {rid} 已经没有可提交的"
+                               "判定了）：要么先 `lit.stage_add` 进候选，要么点名 "
+                               "`slots` 指定这一批要交哪几个槽"),
+                    "counts": _decision_counts(scoped), "call_size": 0, "admitted": []}
     if not waiting:
         return None
     others = str(base.get("pending_scope_note") or "")
@@ -1636,6 +1699,7 @@ def admission_plan(
     require_judged: bool = False,
     require_readback: bool = False,
     from_qualified: bool = False,
+    judged_scope: Sequence[str] | None = None,
 ) -> dict:
     """入库前的那一笔判断：提交闸 + 条数上限 + 重叠检查 + 逐条该不该进（一行都不写）。
 
@@ -1646,7 +1710,9 @@ def admission_plan(
     ## 提交闸
 
     `require_judged=True` 的那两条路（`lit.admit_all` 与 A 的自动链路）是"整批提交"：
-    本委托只要还有一条没判，整批一条都不许入库，拒信逐条点名（`undecided_reason`）。
+    这一批（`judged_scope`；不给 ⇒ 要入库的 `slots`）里只要还有一条没判，整批一条
+    都不许入库，拒信逐条点名（`undecided_reason`）。批外未判的槽不拦这一笔（FX3·甲：
+    15 槽判完 5 槽可只交 5 槽，其余进下一批；收工闸仍看全表）。
     "判过"的定义只此一处：`judged_state`（`pending` 与"入库了却写不出 relevance"都算没判）。
     它管"决定过没有"；"读过没有"是紧接着的 `_read_evidence_gate`（`no_read_evidence`），
     两道闸管两件事，谁也不替谁作证。
@@ -1702,22 +1768,23 @@ def admission_plan(
               if str(r.get("request_id") or "") == rid]
     if slots is None:
         if batch is None:
-            raise LitStageError(
-                "admit 要么给 slots（要入库的那几个槽位），要么给 batch（这一批全部待审的）",
-                kind="no_target",
-            )
-        wanted = [str(r.get("slot")) for r in sorted(scoped, key=lambda r: str(r.get("slot") or ""))
-                  if int(r.get("batch") or 0) == int(batch) and judged_state(r) == "pending"]
+            # FX3·甲：不点名 = 本委托「已判定的全部」（按批提交的默认作用域）。
+            # 旧调用点（`lit.admit` 的 batch 档与 A 的自动链路）仍然显式给 slots/batch。
+            wanted = submission_slots(scoped)
+        else:
+            wanted = [str(r.get("slot")) for r in sorted(scoped, key=lambda r: str(r.get("slot") or ""))
+                      if int(r.get("batch") or 0) == int(batch) and judged_state(r) == "pending"]
     else:
-        wanted = []
-        for raw in slots:
-            s = str(raw or "").strip()
-            if s and s not in wanted:
-                wanted.append(s)
+        wanted = submission_slots(scoped, slots)
         if not wanted and not require_judged:
             raise LitStageError("slots 是空的：没有要入库的东西", kind="no_target")
     by_slot = {str(r.get("slot") or ""): r for r in scoped}
+    if judged_scope is None:
+        gate_slots = wanted
+    else:
+        gate_slots = submission_slots(scoped, judged_scope)
     unknown = [s for s in wanted if s not in by_slot]
+    unknown += [s for s in gate_slots if s not in by_slot and s not in unknown]
     if unknown:
         outside = [s for s in unknown if s in {str(r.get("slot")) for r in rows}]
         raise LitStageError(
@@ -1815,7 +1882,7 @@ def admission_plan(
         if refused_gate is not None:
             return refused_gate
     if require_judged:
-        refused_gate = _judged_gate(scoped, rid, base)
+        refused_gate = _judged_gate(gate_slots, by_slot, scoped, rid, base)
         if refused_gate is not None:
             return refused_gate
     if require_readback:
@@ -2229,46 +2296,56 @@ def admit_all(
     *,
     registrar: Callable[[Mapping[str, Any]], dict],
     request_id: str | None = None,
+    slots: Sequence[str] | None = None,
     new_content: str = "",
     cap: int | None = None,
     actor: str = "agent-A",
     write_report_file: bool = True,
 ) -> dict:
-    """提交整批：判完之后的一次批量注册 + 回填 + 双阶段报告 + 清表。
+    """提交一批：判完之后的一次批量注册 + 回填 + 双阶段报告 + 清这一批的行。
 
     业主口径（Q1，2026-11-16）：「提交时系统自动为有入库资格的文献注册文献号后自动
     回填报告中入库文献的正式文献号 …… 系统做批量注册入库并得到映射关系回填报告的
     文献号 → 清空待入库文献表及文献 → 真正收工。」
 
-    ## 提交闸先跑（Q16）：本委托还有一条没判 ⇒ 整批一条都不许注册
+    ## 提交粒度 = 批次，不是整委托（2026-11-17 FX3·甲）
 
-    `require_judged=True` 的那一笔判据在 `admission_plan` 里，拒信逐条点名
+    `slots` 点名"这一次提交覆盖哪些槽"；不给 = 本委托已判定的全部。一个委托可以
+    有多批：15 槽判完 5 槽 ⇒ 交这 5 槽（带号定稿只含这 5 条），其余 10 槽保持
+    `pending` 进下一批。批外未判的槽不拦这一笔；收工闸仍看全表，所以最后一笔要么
+    把剩下的判完交掉、要么如实红。
+
+    ## 提交闸：这一批内全判（Q16 的逐条判据一格没放宽）
+
+    `require_judged=True` 的那一笔判据在 `admission_plan` 里，作用域是 `judged_scope`
+    （= 这一批覆盖的槽，含已判拒的槽）。批内只要还有一条没判 ⇒ 整批拒，拒信逐条点名
     （`槽位 + 题名前 40 字`）并给做法。判过 = `judged_state != "pending"`
-    （判收的 `qualified` 也算判过）。
+    （判收的 `qualified` 也算判过）。要入库的每一条仍要过可读性 / 抽读回执闸。
 
     ## 闸过了之后的六步，顺序不能换
 
-    1. 取本委托判收未注册的行（`status == "qualified"`），过
+    1. 取这一批判收未注册的行（`status == "qualified"`），过
        `admission_plan(on_over_cap="truncate", from_qualified=True)`：
        DOI 重复 / 高重叠无 `new_content` / 不可读 的逐条拒收；
        超配额的落 `rejected(over_cap)`；
-    2. 交报告：渲染无号快照 `reports/lit-<rid>.submitted.md`（入库组不带号）。
+    2. 交报告：渲染这一批的无号快照 `reports/lit-<rid>.submitted.md`（入库组不带号）。
        已存在就不覆盖（重跑幂等：注册前崩掉时那份原件不该被"注册后的行"洗掉）；
     3. 过 `report_violations(snapshot, phase="submitted")` —— 报告判据是提交动作的
-       一部分（今天生产代码 0 调用者，这是补上的那一半）；
+       一部分；
     4. 批量注册：`_register(plan, registrar)` 一次性把这一批送进现有登记路径，
        拿回 `{slot: lit_id}`；再在同一个事务里 `apply_settlement` 把
        `qualified → admitted` 与 `lit_id` 回填到同一行（映射就在行上，
        不需要单独映射表）；
-    5. 重渲染带号定稿 `reports/lit-<rid>.md`（入库组带 `lit:NNNNNN`、
-       拒掉组无号有理由），再过一次 `report_violations(…, phase="final")`；
-    6. 清表：归档 `data/lit_candidates/archive-<rid>.jsonl` + 逐行打
-       `cleared_at` / `clear_reason`（不物理删，审计要留）。
+    5. 重渲染带号定稿 `reports/lit-<rid>.md`：只收"已提交过的行"（这一批 + 更早已清的
+       批次），未判的 pending 不进定稿 —— 定稿不允许有待裁块（那是交付物，不是进度）；
+    6. 清这一批：归档 `data/lit_candidates/archive-<rid>.jsonl`（整份委托，含未判行）+
+       只给这一批的行打 `cleared_at` / `clear_reason`（不物理删，审计要留）。
+       没提交的 pending 行不落 `cleared_at` ⇒ 收工闸的 `delegation_not_cleared` 仍红。
 
     "不许物理删"是结构性的：本函数一次 `delete` 都没有，清表只打标记。
 
-    幂等：清过表（归档在盘上）的委托再受控拒 `already_settled`；崩溃在 3 与 6 之间
-    重跑时，快照不重写、只注册还停在 `qualified` 的那些行。
+    幂等：整份委托都清过表（每一行都有 `cleared_at`）再受控拒 `already_settled`；
+    崩溃在 4 与 6 之间重跑时，快照不重写、只注册还停在 `qualified` 的那些行。
     """
     if store is None:
         raise LitStageError("未配置 store：入不了库（不是「都重复了」）", kind="no_store")
@@ -2281,18 +2358,31 @@ def admit_all(
             kind="already_settled", detail={"request_id": rid})
     rows = [fold_legacy(r) for r in _rows(store)
             if str(r.get("request_id") or "") == rid]
-    qualified_slots = [str(r.get("slot")) for r in sorted(rows, key=lambda r: str(r.get("slot") or ""))
-                       if str(r.get("status") or "") == QUALIFIED]
+    by_slot = {str(r.get("slot") or ""): r for r in rows}
+    target = submission_slots(rows, slots)
+    unknown = [s for s in target if s not in by_slot]
+    if unknown:
+        outside = [s for s in unknown if s in {str(r.get("slot")) for r in _rows(store)}]
+        raise LitStageError(
+            f"这些槽位不在**本次委托**（{rid}）的待新增列表里：{unknown}"
+            + (f"；其中 {outside} 属于别的委托（列表按委托重置，旧委托的行不参与本次筛选）"
+               if outside else "（序号不复用，请用 lit.stage_list 查一遍）"),
+            kind="unknown_slot", detail={"slots": unknown, "request_id": rid},
+        )
+    qualified_slots = [s for s in target
+                       if str(by_slot[s].get("status") or "") == QUALIFIED]
     # 提交闸跑在这两处之前：即使一条 pending 都没有也要跑 —— 否则"已经判完"
     # 与"还没判完但一行 pending 都不剩（判收了却没有 relevance）"在盘上同形，
     # 而后者正是存量那 33 条的形状。
-    plan = admission_plan(store, request_id=rid, slots=qualified_slots, new_content=new_content,
+    plan = admission_plan(store, request_id=rid, slots=qualified_slots,
+                          judged_scope=target, new_content=new_content,
                           cap=cap, on_over_cap="truncate", require_judged=True,
                           require_readback=True, from_qualified=True)
     if not plan.get("ok"):
         return {**plan, "admitted": [], "registered": 0, "report": None, "report_path": None}
+    batch_rows = [by_slot[s] for s in target]
     # ---- ② 交报告（无号原件）+ ③ 报告判据 --------------------------------
-    snapshot = _write_report_snapshot(store, rid, rows)
+    snapshot = _write_report_snapshot(store, rid, batch_rows)
     bad = report_violations(snapshot["text"], phase="submitted")
     if bad:
         raise LitStageError(
@@ -2304,24 +2394,20 @@ def admit_all(
     decisions = _decisions_from(plan, lit_ids, failures)
     with store.tx("lit_candidates", actor=actor, note="lit.admit_all") as tx:
         apply_settlement(tx, decisions)
-        # 结算之后再扫一遍：任何还停在本委托 pending 上的行都落 rejected +
-        # `not_screened`（不再是第四态 `cleared`），这样"提交后本委托没有 pending"
-        # 是一条结构性事实，而不是"我们相信它没有"。
-        leftover = [dict(r) for r in tx.rows("lit_candidates")
-                    if str(r.get("request_id") or "") == rid
-                    and judged_state(r) == "pending"]
-        if leftover:
-            apply_settlement(tx, [
-                {"slot": str(r["slot"]), "status": "rejected", "reason_code": "not_screened",
-                 "note": "提交时仍未判完，随本次委托一并判拒（行保留、可追）"}
-                for r in leftover
-            ])
+        # FX3·甲：结算之后不再把批外的 pending 折成 rejected(not_screened) ——
+        # 它们保持 pending 进下一批（收工闸按全表看，所以"没清完"仍会拦）。
         settled = [dict(r) for r in tx.rows("lit_candidates")
                    if str(r.get("request_id") or "") == rid]
     settlement_mismatch(store, decisions, request_id=rid)
     settled.sort(key=lambda r: str(r.get("slot") or ""))
     # ---- ⑤ 重渲染带号定稿 + 报告判据 --------------------------------------
-    rep = write_report(store, rid, rows=settled, phase="final") if write_report_file else None
+    # 定稿只收"已提交过的行"：这一批 + 更早已清的批次；批外未判的 pending 不进定稿
+    # （报告判据要求待裁 0 条），否则一份没判完的委托会写出"0 篇待裁"的假定稿。
+    submitted = set(target)
+    reported = [r for r in settled
+                if str(r.get("slot") or "") in submitted
+                or str(r.get("cleared_at") or "").strip()]
+    rep = write_report(store, rid, rows=reported, phase="final") if write_report_file else None
     if write_report_file:
         final_text = report_path(store, rid).read_text(encoding="utf-8")
         # 拦门只拦"这一次提交注册的那些行"（按 `lit:<号>` 认）：更早已入库的行若
@@ -2339,7 +2425,7 @@ def admit_all(
                 + "；".join(bad_final),
                 kind="report_violations",
                 detail={"violations": bad_final, "path": (rep or {}).get("path")})
-    # ---- ⑥ 归档 + 清表 ----------------------------------------------------
+    # ---- ⑥ 归档 + 清这一批 ------------------------------------------------
     done = []
     for item in plan.get("admitted") or []:
         slot = str(item["slot"])
@@ -2351,25 +2437,28 @@ def admit_all(
                          "overlap_kind": ov.get("overlap_kind"),
                          "overlap_with": ov.get("overlap_with"),
                          "new_content": item.get("new_content")})
-    closed = clear_delegation(store, rid, actor=actor, mapping=done)
+    closed = clear_delegation(store, rid, actor=actor, mapping=done, only_slots=target)
     refused = list(plan.get("refused") or [])
     for slot, why in failures.items():
         refused.append(_refusal(slot, next((i["row"].get("title") for i in plan["admitted"]
                                            if str(i["slot"]) == slot), ""),
                                 why, "registration_failed"))
+    # 这一批之后的全表待裁读数（按委托分组）：没交的槽仍 pending，A 照它进下一批。
+    left = pending_all_delegations(_rows(store))
     return {
         "ok": True,
         "kind": "",
         "whole_call_refused": False,
         "reason": "",
         "request_id": rid,
+        "submitted": list(target),
         "call_size": plan["call_size"],
         "call_limit": plan["call_limit"],
         "delegation_admitted": plan["delegation_admitted"] + len(done),
         "delegation_limit": plan["delegation_limit"],
-        "pending_total": plan["pending_total"],
-        "pending_by_delegation": plan["pending_by_delegation"],
-        "pending_scope_note": plan["pending_scope_note"],
+        "pending_total": left["total"],
+        "pending_by_delegation": left["by_delegation"],
+        "pending_scope_note": pending_scope_note(left, exclude=rid),
         "admitted": done,
         "refused": refused,
         "cleared": list(plan.get("cleared") or []),

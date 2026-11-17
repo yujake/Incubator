@@ -420,11 +420,15 @@ def test_the_whole_list_is_refused_until_every_item_is_judged(reg, store):
     literature 一行都没多；逐条 `lit.admit` 之后 `admit_all` 以 `registered == 2` 收口。
     2026-11-16（Q1）再改读数：逐条 `lit.admit` 只是判收（没有号、不进 literature），
     `admit_all` 提交那一刻才批量注册 ⇒ `registered == 2`、`counts.admitted == 2`。
+    2026-11-17（FX3·甲）再改口径：提交粒度是批次 —— 不点名时默认只交已判定的行，
+    所以拒的那一笔显式点名三条槽（批内全判仍是硬要求；批外 pending 进下一批）。
     """
     slots = _stage(reg, ["Migration one", "Migration two", "Migration three"])
     L.reject(store, slots[2], "rejected_low_quality", "只有一行摘要")
 
-    refused = reg.call("lit.admit_all", request_id=RID)
+    # FX3·甲：不点名时默认批 = 已判定的全部（这里只有那条判拒的），批外的 pending
+    # 不拦默认提交。要证明"批内全判"仍是硬要求，就把三条槽都点进这一批。
+    refused = reg.call("lit.admit_all", request_id=RID, slots=slots)
     assert not refused.ok, "还有 2 条没判，整批居然通过了"
     assert refused.meta["kind"] == "undecided_items", refused.meta
     assert "还有 2 条没判" in str(refused.error), refused.error
