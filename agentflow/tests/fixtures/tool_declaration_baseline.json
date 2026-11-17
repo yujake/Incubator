@@ -6845,16 +6845,17 @@
         "doc.build_document"
       ],
       "key": "returns",
-      "reason": "2026-11-10 业主裁定 ③：`eval:` 是合法 citation 前缀（`schema.CITATION_PREFIXES` 早已认它、指向 `eval_results` 表），而 `meta.citation_coverage` 的 own/available 只数五类 ⇒ 一条合法的 `eval:` 引用在读数里是隐形的（审计 L2-2）。改法是把 `eval:` 数进 `citation_coverage`（own 加 `eval`、available 加 `eval_results`），并把这条 returns 声明的前缀清单补上 `eval:`。行为变化只有读数多两格；不拦任何写入，其余返回键一字未动。",
+      "reason": "2026-11-10 业主裁定 ③：`eval:` 是合法 citation 前缀（`schema.CITATION_PREFIXES` 早已认它、指向 `eval_results` 表），而 `meta.citation_coverage` 的 own/available 只数五类 ⇒ 一条合法的 `eval:` 引用在读数里是隐形的（审计 L2-2）。改法是把 `eval:` 数进 `citation_coverage`（own 加 `eval`、available 加 `eval_results`），并把这条 returns 声明的前缀清单补上 `eval:`。行为变化只有读数多两格；不拦任何写入，其余返回键一字未动。 ｜ 2026-11-17 按「现值」重记（DOCGATE1 `adc44a8a` ④）：`returns` 说明再补两档成文门拒 —— `no_evidence_chain`（零签且零有效地基 ⇒ 一个字节都不写，另带 research_base 三态逐格计数 / signing 签数 / 待签稿 / next_steps 四项读数）与 `ledger_unreadable`（台账读不到 ⇒ 没查成）。`from` 仍是基线里那一版（不含 `eval:`、不含这两档）；两次演进合并成这一条可逐项退回基线的 `set_scalar`，本条只按现值重记台账，不重冻 declarations。",
       "date": "2026-11-10",
       "edits": [
         {
           "op": "set_scalar",
           "path": "returns",
           "from": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False",
-          "to": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
+          "to": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False；成文门拒：kind=no_evidence_chain（零签且零有效地基 ⇒ **一个字节都不写**；另带 research_base（三态 + 逐格计数）/ signing（签数 / 待签稿）/ next_steps 四项读数与「先拿签/先补地基，再来成文」）/ ledger_unreadable（台账读不到 ⇒ 没查成）"
         }
-      ]
+      ],
+      "date_amended": "2026-11-17"
     },
     {
       "tools": [

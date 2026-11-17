@@ -18,7 +18,8 @@
 `added_after_compression`；26 件老工具的 46 处契约演进各补一条带 `reason` 的 `contract_amendments`。
 `MAX_RATIO` 一个字没动 —— 台账只记「改了什么、为什么」，不负责把门槛调松。
 每条负控打在同一条判据函数上：改参数名 / 删 `returns` 键 ⇒ ① 红（`test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red`）；偷改 `table.create` 枚举 ⇒
-① 红（`test_negative_control_a_silent_table_enum_edit_goes_red`）；塞回 200 字论述 ⇒ ② 红（`test_negative_control_putting_a_long_essay_back_goes_red`）；
+① 红（`test_negative_control_a_silent_table_enum_edit_goes_red`）；删掉 `doc.build_document` 那条 `returns` amendment ⇒ ① 红
+（`test_negative_control_dropping_the_returns_amendment_goes_red`）；塞回 200 字论述 ⇒ ② 红（`test_negative_control_putting_a_long_essay_back_goes_red`）；
 删掉 `lit.admit` 那一行 ⇒ ③ 红（`test_negative_control_an_unregistered_new_tool_goes_red`）；删一条 needle ⇒ ④
 红（`test_negative_control_deleting_a_needle_goes_red`）。
 """
@@ -742,7 +743,7 @@ def test_the_manuscript_rule_survives_the_compression(current: dict[str, dict]) 
     assert "proof_text_needs_a_manuscript" in detail_cell, detail_cell
 
 
-# ---------------------------------------------------------------- 负控（五条）
+# ---------------------------------------------------------------- 负控（六条）
 
 
 def test_negative_control_a_renamed_param_or_a_dropped_returns_key_goes_red(
@@ -806,6 +807,30 @@ def test_negative_control_a_silent_table_enum_edit_goes_red(
         assert contract_diffs(frozen["declarations"], reverted, unreasoned), (
             "reason 是空串的 amendment 居然也放行了 ⇒ 「记 reason」这句话没被检查"
         )
+
+
+def test_negative_control_dropping_the_returns_amendment_goes_red(
+        current: dict[str, dict], frozen: dict) -> None:
+    """负控⑦：删掉 `doc.build_document` 那条 `returns` amendment ⇒ ① 必红。
+
+    2026-11-17（DOCGATE1 `adc44a8a` ④）：`returns` 是一整格字符串，它的演进必然
+    记成一条 `set_scalar`，放行它的唯一凭据就是台账里那条 amendment。删掉而 ① 仍绿，
+    等于「记了 reason 才放行」这句话没有对手方 —— 尤其要防「amendment 写成通配」
+    把这一格变成空白支票（同族反负控见上面那条枚举负控）。
+    """
+    amendments = frozen.get("contract_amendments") or ()
+    target = [a for a in amendments
+              if a["tools"] == ["doc.build_document"] and a["key"] == "returns"]
+    assert target, "夹具前提：基线里真的记了 doc.build_document 的 returns 演进"
+
+    without = [a for a in amendments if a is not target[0]]
+    diffs = contract_diffs(frozen["declarations"], current, without)
+    assert diffs, "删掉那条 amendment 而契约判据没红 ⇒ 「记账才放行」不是判据"
+    assert any("doc.build_document" in d and "returns" in d for d in diffs), (
+        f"报的不是 doc.build_document 的 returns 演进：{diffs}")
+
+    # 反负控：原样那一份不许被误判（否则这条负控只是「凡删都红」）
+    assert contract_diffs(frozen["declarations"], current, amendments) == []
 
 
 def test_negative_control_putting_a_long_essay_back_goes_red(
