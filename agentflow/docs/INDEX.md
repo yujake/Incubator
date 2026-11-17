@@ -21,6 +21,7 @@
 | 文件 | 管什么 |
 |---|---|
 | [`ROLE-SPECS.md`](ROLE-SPECS.md) | 十个角色的职责面 / 动作表 / 边 / 写集 —— **只放规格（判据）** |
+| [`DESIGN-BASELINE.md`](DESIGN-BASELINE.md) | **现行设计基线**：51 条（B01–B51）＋六层权威序（§1）＋判级规则（甲乙丙丁）；判据 `tests/test_design_baseline_is_present.py`（文件在 / 51 条在 / 顶部指针 / INDEX 登记） |
 | [`ROLE-GUIDE.md`](ROLE-GUIDE.md) | **角色指南（生成物）**：十个角色 + 主控逐一介绍 —— 角色设定 / 具体职责 / 协作面 / 工具面 / 主要读写（由 `tools/write_system_docs.py` 现算，判据 `tests/test_system_docs_are_generated.py`） |
 | [`SYSTEM-COMPONENTS.md`](SYSTEM-COMPONENTS.md) | **组件总览（生成物）**：协作系统各主要组件逐一介绍 —— 功能 / 实现细节 / 落点 / 守着它的判据 |
 | [`ROLE-SPECS-APPENDIX.md`](ROLE-SPECS-APPENDIX.md) | `ROLE-SPECS.md` 的**实测附录**：工具面明细 / 自检实测 / R0.1–R0.3 / M.4.2–M.4.3 / S1–S3（**读数带日期、不构成判据**） |
@@ -119,4 +120,4 @@ python scripts/noai_gate.py --git
 
 | 文件 | 为什么不入册 |
 |---|---|
-| （今天没有这一档） | 41 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |
+| （今天没有这一档） | 42 份 `docs/*.md` 全部在 §1–§3 里出现过；将来真有临时件再往这里加一行 |
