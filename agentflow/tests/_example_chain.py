@@ -23,7 +23,7 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from conftest import sign_before_registration  # noqa: E402
+from conftest import sign_before_registration, ensure_basis_lit  # noqa: E402
 from agentflow import conductor as CND  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import exhaustionreport as ER  # noqa: E402
@@ -171,7 +171,12 @@ def run_f_example(st: Store) -> dict:
     block = VS.manuscript_sign_reading(signed_text, manuscript_path=rel)
 
     filed = agent_b.register_statement(
+        # 2026-11-17（GATE2 尾巴，业主「不许假来路」）：这一笔是 `origin=own_result`
+        # 的 B 登记路，必须写清来路。这一份量的是"example 与普通命题同一条链"
+        # （手稿 / 形态闸 / V 签 / 等级），不是来路；真 literature 行
+        # （`ensure_basis_lit`）不进 statements ⇒ 行数 / 命题号 / 那一行读数都不变。
         statement_full=FULL, statement_text=FULL, origin="own_result",
+        source_lit_id=ensure_basis_lit(st),
         kind="conjecture", label=f"F 攻坚 {PLAN} 子目标 {SID_SLOT}",
         proof_text=body, proof_manuscript=signed_text,
         line_range={"label": rel}, quote_verified=False,
@@ -209,6 +214,9 @@ def run_e_example(st: Store) -> dict:
     # B 按手稿头那一行落 kind：`example`（与普通命题同一条路，不是新开一档）
     filed = b(st).register_statement(
         origin="own_result", kind="example", label="R(3,4)=9",
+        # 2026-11-17（GATE2 尾巴）：同 `run_f_example` —— 真 literature 行当来路，
+        # 不进 statements；E 侧那一串读数（实验行 / 签 / 等级）一个字不变。
+        source_lit_id=ensure_basis_lit(st),
         statement_full=CLAIM, statement_text=CLAIM, proof_text=column,
         proof_manuscript=text, evidence_kind="cross_check",
         doc_id=S.format_id(0), line_range={"start": 1},

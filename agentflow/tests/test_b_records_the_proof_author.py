@@ -26,7 +26,9 @@
 """
 from __future__ import annotations
 
-from conftest import TS
+import pytest
+
+from conftest import BASIS_LIT_ID, TS
 
 from agentflow import conductor as CND
 from agentflow import evidencebits as EB
@@ -34,6 +36,12 @@ from agentflow import secretary as SEC
 from agentflow import obligations as OBL
 from agentflow import proofauthors as PA
 from agentflow.tools.conductor_tools import conductor_for, reset_cache
+
+#: 2026-11-17（GATE2 尾巴，业主「不许假来路」）：`_payload` 是模块级常量，不给 store；
+#: 于是让这份模块里新建的每个 `Store` 都带一条真 literature 行（`BASIS_LIT_ID`），
+#: 载荷用 `source_lit_id` 指它。这一份量的是"谁写的证明"（`proof_authors` / 作者读数），
+#: 文献行不进 statements ⇒ 那一组读数一个字都不变。
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 
 def _sec(store) -> SEC.Secretary:
@@ -48,6 +56,7 @@ def _payload(**kw) -> dict:
         proof_text="1. 取 G = C_n：它是 2-正则、围长为 n。\n2. 由第 1 步直接得到结论。",
         evidence_kind="heuristic",
         quote_verified=None, quote_reason="自产命题：没有第二份文本可比对",
+        source_lit_id=BASIS_LIT_ID,
         # 生产里这一格由 B 的 `register_statement` 算好交来；直接调秘书的夹具带一份
         # 合法的 bits，正文闸才按"B 已经判过"那一档让路（`defer_without_sign`）。
         bits=EB.bits_of(origin="own_result", proof=True,

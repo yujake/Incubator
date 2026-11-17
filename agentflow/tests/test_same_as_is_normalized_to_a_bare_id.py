@@ -37,6 +37,8 @@ from agentflow import schema as S
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 
+from conftest import BASIS_LIT_ID, ensure_basis_lit
+
 #: 同一条命题的两种写法（措辞不同、条件与结论相同）。
 FULL_A = "设 G 是 3-正则群；则弦长函数不是常值。"
 FULL_A_ALT = "假设 G 为 3-正则群，于是弦长函数不是常值。"
@@ -104,13 +106,20 @@ class _Seam:
 def _ws(base: pathlib.Path) -> Store:
     st = Store(base / "ws")
     st.init()
+    ensure_basis_lit(st)
     return st
 
 
 def _body(full: str) -> dict:
-    """自产命题的必填件（`doc_id` + `quote_reason`；首登按猜想）。"""
+    """自产命题的必填件（`doc_id` + `quote_reason`；首登按猜想）。
+
+    2026-11-17（GATE2 尾巴）：own_result 必须写清来路。这一份量的是 `same_as` 的
+    归一化（判词 / 合并 / 行数），不是来路；真 literature 行当来路，它不进 statements
+    ⇒ "行数仍 1"与 `_rows(st)[0]` 那两个读数一个字都不变。
+    """
     return {"statement_full": full, "statement_text": full[:24],
             "origin": "own_result", "kind": "conjecture",
+            "source_lit_id": BASIS_LIT_ID,
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
