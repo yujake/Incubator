@@ -30,13 +30,12 @@ import pathlib
 import re
 
 import pytest
-from conftest import seed_statement_row, ensure_basis_stmt
+from conftest import seed_statement_row
 from _credential_fixture import issue_credential
 from agentflow import proofregistry as R
 from agentflow import vsigns as VS
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
-from conftest import ensure_basis_lit
 
 PLAN = "0000"
 SID = "s1"
@@ -364,8 +363,8 @@ def test_g_an_f_caller_cannot_register_through_b(tmp_path, monkeypatch):
     monkeypatch.setattr(RS, "_caller_role", lambda: "F")
     got = b.register_statement(
         statement_full=FULL, statement_text=TEXT, kind="conjecture",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(st), evidence_kind="heuristic",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         quote_reason="夹具：F 直接派 B 登记")
     assert got.get("ok") is False, got
     assert got.get("kind") == RS._RegisterStatement.F_CALLER_REFUSED, got
@@ -414,7 +413,7 @@ def test_h_a_lemma_lands_as_lemma_in_the_manuscript_and_b_can_read_it(tmp_path):
     sign_before_registration(st.root, proof_text=body)
     b = AgentB(st, extractor=None, extract_text=None)
     first = b.register_statement(
-        statement_full=TEXT, statement_text=TEXT, origin="own_result", source_lit_id=ensure_basis_lit(st),
+        statement_full=TEXT, statement_text=TEXT, origin="own_result", derived_from=["999999"],
         kind="conjecture", label=f"F 攻坚 {PLAN} 子目标 {SID}",
         proof_text=body, proof_manuscript=text,
         line_range={"label": str(got["manuscript_path"])},
@@ -498,7 +497,7 @@ def test_b_rewrite_lands_the_same_manuscript_and_never_adds_a_row(tmp_path):
                          manuscript=rel, proof_no=1)
         manuscript = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
         got = b.register_statement(
-            statement_full=FULL, statement_text=TEXT, origin="own_result", source_lit_id=ensure_basis_lit(st),
+            statement_full=FULL, statement_text=TEXT, origin="own_result", derived_from=["999999"],
             kind="conjecture", label="B 优化 000041", proof_text=body,
             proof_manuscript=manuscript,
             evidence_kind="heuristic", line_range={"label": "reports/attack-0000.md"},

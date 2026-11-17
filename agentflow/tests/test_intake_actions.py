@@ -29,8 +29,7 @@ from agentflow.conductor import Conductor
 from agentflow.store import Store
 from agentflow.tools import ROLES, build_registry
 
-from conftest import write_paper, ensure_basis_stmt
-from conftest import ensure_basis_lit
+from conftest import write_paper
 
 PAPER_MD = """# 外部论文（他人写的）
 
@@ -277,9 +276,8 @@ def test_b_register_statement_refuses_a_hollow_page_range(tmp_path: Path):
     own_stmt = {**STATEMENT, "statement_full": STATEMENT["statement_full"] + "（我们自己证的版本）"}
     # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：这一条量的是
     # 出处那一栏（doc_id / line_range），与 kind 无关 ⇒ 按猜想注册。
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    own = b.register_statement(**{**own_stmt, "origin": "own_result",
-                                  "derived_from": [labeled["stmt_id"]],
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    own = b.register_statement(**{**own_stmt, "origin": "own_result", "derived_from": ["999999"], "source_lit_id": "",
                                   "page_range": None, "doc_id": "0000",
                                   "kind": "conjecture"})
     assert own["ok"] is True, own
@@ -336,8 +334,7 @@ def test_b_register_statement_normalizes_string_page_numbers(tmp_path: Path):
     own_stmt = {**STATEMENT, "statement_full": STATEMENT["statement_full"] + "（行号归一那一条）"}
     # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：这一条量的是
     # 出处那一栏（doc_id / line_range），与 kind 无关 ⇒ 按猜想注册。
-    own = b.register_statement(**{**own_stmt, "origin": "own_result",
-                                  "derived_from": [ok["stmt_id"]],
+    own = b.register_statement(**{**own_stmt, "origin": "own_result", "derived_from": ["999999"], "source_lit_id": "",
                                   "page_range": None, "doc_id": "0000",
                                   "kind": "conjecture",
                                   "line_range": {"start": "120", "end": "148"}})
@@ -365,8 +362,7 @@ def test_own_result_and_external_lit_want_different_source_fields(tmp_path: Path
     # 正控：自有结果给 doc_id ⇒ 通过（页空缺不扣分）
         # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：这一条量的是
     # 出处那一栏（doc_id / line_range），与 kind 无关 ⇒ 按猜想注册。
-    b.register_statement(**{**STATEMENT, "origin": "own_result",
-                            "derived_from": [ensure_basis_stmt(st)],
+    b.register_statement(**{**STATEMENT, "origin": "own_result", "derived_from": ["999999"], "source_lit_id": "",
                             "page_range": None, "doc_id": "0000",
                             "kind": "conjecture"})
     assert _crit() == "pass", st.rows("statements")
@@ -505,7 +501,7 @@ def test_a_proofless_register_statement_is_recorded_and_marked_not_refused(tmp_p
 
     # 2026-10-22 起自产命题必须先 V 签才能叫定理级（业主 B-3）：没有证明的这一档
     # 本来就是猜想（F-05：落库 + 挂待办）⇒ 按猜想注册。
-    own = {**STATEMENT, "origin": "own_result", "source_lit_id": ensure_basis_lit(st),
+    own = {**STATEMENT, "origin": "own_result", "derived_from": ["999999"], "source_lit_id": "",
            "page_range": None, "doc_id": "0000", "kind": "conjecture",
            "quote_verified": None, "quote_reason": "证明还没做完（推到第 3 步卡住）"}
     own.pop("proof_text")  # 自产命题、证明还没做完 ⇒ 登记 + 标记（不再拒绝）

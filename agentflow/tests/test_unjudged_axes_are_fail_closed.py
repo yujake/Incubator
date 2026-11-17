@@ -37,7 +37,6 @@ import pytest
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import propositionkey as PK
 from agentflow import schema as S
@@ -46,7 +45,6 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.secretary import Secretary
 from agentflow.store import Store
-from conftest import BASIS_LIT_ID
 
 #: 一条长命题（键与下面那条不同、但判据判得出来）。
 FULL_A = "设 G 是 3-正则群；则弦长函数不是常值。"
@@ -81,8 +79,8 @@ def _agent(st: Store) -> AgentB:
 
 def _own(full: str) -> dict:
     return {"statement_full": full, "statement_text": full[:24],
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-            "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
@@ -166,7 +164,7 @@ def test_d_concept_identity_unjudged_refuses_a_second_row(tmp_path: pathlib.Path
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
     payload = {"statement_full": BLANK_DEF, "label": BLANK_LABEL, "statement_text": BLANK_LABEL,
-               "kind": "concept", "origin": "own_result", "self_authored": True,
+               "kind": "concept", "origin": "own_result", "derived_from": ["999999"], "self_authored": True,
                "doc_id": S.format_id(0)}
     first = sec.record_statement(payload, role="B", force_new=True)
     assert first.get("created") is True, first
@@ -225,4 +223,4 @@ def test_f_judged_verdicts_still_work(tmp_path: pathlib.Path) -> None:
     assert tiny["checked"] is False, tiny
 
 
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

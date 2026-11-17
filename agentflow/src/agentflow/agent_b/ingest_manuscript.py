@@ -43,8 +43,7 @@ class _IngestManuscript:
                           mode: str = "apply", proof_no: Any = None,
                           path_group: int = 0,
                           if_match_proof_sha256: str = "", reason: str = "",
-                          provenance: Any = None, source_lit_id: str = "",
-                          derived_from: Sequence[str] | None = None) -> dict:
+                          provenance: Any = None) -> dict:
         """按「位置 + 格」从手稿里提取并回填（T1 的唯一入口）。
 
         参数（设计 §2.3.1；工具面的 ActionSpec 是这一份的广告）：`manuscript` 是工作区
@@ -207,8 +206,7 @@ class _IngestManuscript:
         if str(mode) == "register":
             got = self._ingest_register(
                 reading=reading, requested=requested, out=out, family=family,
-                path=rel, provenance=provenance, nontriviality=_nt,
-                source_lit_id=source_lit_id, derived_from=derived_from)
+                path=rel, provenance=provenance, nontriviality=_nt)
             _pg_reg = got.get("path_group")
             _pg_reg_no = (int((_pg_reg or {}).get("path_group") or 0)
                           if isinstance(_pg_reg, Mapping) else int(_pg_reg or 0))

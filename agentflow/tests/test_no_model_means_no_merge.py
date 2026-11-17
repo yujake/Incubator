@@ -42,7 +42,6 @@ from agentflow.secretary import MERGED_BY_ADJUDICATION, Secretary
 from agentflow.store import Store
 
 from _proof_manuscript_fixture import carry_proof_manuscript
-from conftest import BASIS_LIT_ID, ensure_basis_lit
 
 #: 件1 判据 a 的那一对：条件有强弱关系（素数 / 奇素数）⇒ 语义不一致 ⇒ 两条。
 #: 改前的读数：`state=same`、`similarity=0.8889`、`basis="prose_similarity"`。
@@ -63,20 +62,14 @@ PROOF_3 = "证明：对 p 的素因子分解作归纳，再取最小素因子（
 
 def _own(full: str) -> dict:
     """自产命题的必填件（`doc_id` + `quote_reason`；与既有夹具同一个形状）。"""
-    # 2026-11-17（GATE2 尾巴，业主「不许假来路」）：own_result 必须写清来路。
-    # 这一份量的是"命题同一性判不判得成"（行数 / 合并 / proof_no），不是承重链；
-    # 用一条真 literature 行当来路（`ensure_basis_lit`），它不进 statements 表，
-    # 于是本文件量的行数与路径号读数一个字都不变。
     return {"statement_full": full, "statement_text": full[:24],
             "origin": "own_result", "kind": "conjecture",
-            "source_lit_id": BASIS_LIT_ID,
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
 def _ws(path: pathlib.Path) -> Store:
     st = Store(path / "ws")
     st.init()
-    ensure_basis_lit(st)
     return st
 
 

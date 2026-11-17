@@ -70,7 +70,6 @@ from agentflow.store import Store  # noqa: E402
 
 from _same_statement_stub import SameStatementStub  # noqa: E402
 from conftest import seed_statement_row  # noqa: E402
-from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
 
 FULL = "对任意整数 n≥0：1^3 + 2^3 + … + n^3 = (n(n+1)/2)^2。"
 LABEL = "sum-of-cubes-closed-form"
@@ -167,8 +166,8 @@ def _register_first_signed(tmp_path: pathlib.Path, *, votes: int | None = None) 
     signed = _pending_sign(st, rel=rel, votes=votes)
     filed = _b(st).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture", doc_id=S.format_id(0),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",
         proof_text=PROOF, proof_manuscript=rel)
@@ -363,7 +362,7 @@ def _register_three_votes_not_one_body(tmp_path: pathlib.Path) -> dict:
     _pending_sign(st, rel=rel, votes=1, proof_text=OTHER_PROOF, object_sha256=carrier)
     filed = _b(st).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture", doc_id=S.format_id(0),
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",
         proof_text=PROOF, proof_manuscript=rel)

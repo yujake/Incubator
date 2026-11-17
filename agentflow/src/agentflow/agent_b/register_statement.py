@@ -74,14 +74,14 @@ docstring 里 companion book [6, Thm. 6.5] 那个例子用的既有词表。
   （V 对数值证据直接拒签）。不改这一处的后果是一条真的穷举证明永远进不了定理证明库：
   它既过不了 B-3，也拿不到 V 那一签。
 
-第十三件：`origin="own_result"` 的命题必须写清来路（业主 2026-11-17 裁定，真机
-`projects/lp-ball-3` 缺陷 ②）。判据：`derived_from` 与 `source_lit_id` 至少一个非空，
-否则受控拒 `missing_own_result_basis`、整笔不写；拒信逐条点名缺哪一格，并给两条可执行的
-正路（`derived_from` 填 `stmt_id` 列表 / `source_lit_id` 填 `lit_id`）。判据本体只有一处
-（`statementledger.own_result_basis_missing`），收工门的「造」那一环读同一份。两个例外各有
-它自己的来路：概念行（来路就是它自己的定义）与普通数值绿通（来路是那一条实验行）。
-为什么必须在登记那一刻拦：真机那 3 条命题已经进了台账、收工门才红，而"它由什么推出来"
-只有当时的 B 知道 —— 事后补不回来。
+第十三件：`origin` 只是状态：自产（`own_result`）/ 引用（`external_lit`）（业主
+2026-11-17 逐字：「own_result 还有什么来路？"来路"这种陈述是过时的，以前设计这种语义
+就是为了指到证明手稿，现在已经在台账里体现了。所以只是一个状态：自产/引用」）。
+所以不存在"必须写清来路"这回事：`derived_from` / `source_lit_id` 是可选信息（有就记，
+没有不算错）—— 它们当初是"指到那份证明手稿"的手段，而手稿关联现在由台账体现
+（`verifications/`、`out/vsigns/`、`reports/*-proof-*.md` 的签块、`documents`）。
+"自产"这件事的证据是「有一份签过的稿」（收工门「造」那一环判的就是这个），
+不是调用方在载荷里写了一个 `derived_from`。
 """
 from __future__ import annotations
 
@@ -203,28 +203,6 @@ def _pointer_body_present(name: str, value: Any) -> bool:
     if name == "quote_verified":
         return value is not None
     return bool(str(value or "").strip())
-
-
-def _merged_derived_from(*groups: Any) -> list[str]:
-    """把几段 `derived_from`（调用方显式给的 + 稿里抽出来的）合成一条确定性序列。
-
-    2026-11-17（PTR1）：按手稿路径收录那一支改前只把稿里 `## 证明` 的 `stmt:` 引用
-    当承重链，调用方显式给的 `derived_from`（以及 `source_lit_id`）在这一层被丢掉
-    —— 于是"自足、不引用任何在册命题"的 F 稿没有任何诚实来路可写，来路闸
-    （`statementledger.own_result_basis_missing`）必然拒。合并口径：先按调用方给的
-    次序，再接稿里出现的次序；同一个号只留第一次出现（`None` / 非序列 ⇒ 当作没给）。
-    落库前还会经 `schema.sorted_unique` 升序，所以这里的次序只影响"先去重哪一条"，
-    不改变落盘的确定性。
-    """
-    out: list[str] = []
-    for group in groups:
-        if not isinstance(group, (list, tuple)):
-            continue
-        for one in group:
-            sid = str(one or "").strip()
-            if sid and sid not in out:
-                out.append(sid)
-    return out
 
 
 def _caller_is_d() -> bool:
@@ -4753,29 +4731,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                "`doc_id`（我方稿件那一行的 id）或 `line_range`"
                                "（start / label 至少一个）—— 自有结果的出处不是"
                                "「文献第几页」，那一栏要它等于让它编一个数字" + _all_missing)
-            # ---- 来路闸（业主 2026-11-17 真机缺陷 ②）-------------------------
+            # ---- 来路不是闸（业主 2026-11-17 语义纠正）-----------------------
             #
-            # 现场（`projects/lp-ball-3`，2026-11-17，exit 1）：33 行命题里 3 行
-            # `origin=own_result`，`derived_from` 与 `source_lit_id` 全空。登记那一侧
-            # 一个字都没拦，收工门「造」那一环（`blocker=acceptance_unmet`）才红 ——
-            # 而那时三条命题已经躺在台账里，"来路"再也补不回原样（谁推的、推自哪几条，
-            # 只有当时的 B 知道）。所以判据必须在登记那一刻说话。
-            #
-            # 判据只有一处（`statementledger.own_result_basis_missing`）：收工门读同一份，
-            # 于是"进得来"与"收得了工"不再各说各的（`closing._check_acceptance` 的「造」）。
-            #
-            # 两个例外，各有它自己的来路，不在这里要这两格：
-            # - 概念行（`kind="concept"`）：来路就是它自己的定义（`conceptrows` 的口径）；
-            # - 普通数值绿通（`_green.ok`）：来路是那一条实验行（`exp:<号>`，见上面那一支
-            #   "出处按实验行记"），既不是"已登记的命题"也不是"一篇文献"。
-            _basis_missing = ([] if _green.get("ok")
-                              else SL.own_result_basis_missing(
-                                  origin=origin, derived_from=derived_from,
-                                  source_lit_id=lit_id, kind=kind_now))
-            if _basis_missing:
-                return _refuse("missing_own_result_basis",
-                               SL.own_result_basis_refusal(_basis_missing),
-                               missing=list(_basis_missing))
+            # `derived_from` / `source_lit_id` 是可选的补充信息：有就记，没有不算错。
+            # 它们当初是"指到那份证明手稿"的手段，而手稿关联现在由台账体现
+            # （`verifications/` / `out/vsigns/` / 稿上的签块）；"自产"的证据是一份签过的稿，
+            # 不是载荷里的一个 `derived_from`。所以这里一个字都不拦 —— 收工门「造」那一环
+            # 改读台账（`closing.own_result_manuscript_links`）。
             # 第五级：自产命题的证明。
             #
             # 这一格不再 `_refuse`：`_refuse` 会让"证明还没做完"这一档永远进不了库，
@@ -6441,11 +6403,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return self._note_conjecture_landing(
                 self.ingest_manuscript(
                     manuscript=rel, mode="register", cells=(), conflict="refuse",
-                    reason="按手稿路径收录（D 只递指针）", provenance=line_range,
-                    # 2026-11-17（PTR1）：调用方给的来路不许在这一格丢掉 —— 稿里不
-                    # 引用在册命题时，它是这一笔唯一的诚实来路（合并与透传在
-                    # `_register_pointer_manuscript` 一处做）。
-                    source_lit_id=source_lit_id, derived_from=derived_from),
+                    reason="按手稿路径收录（D 只递指针）", provenance=line_range),
                 statement_full=statement_full, rel=rel)
         #: 判/落拆段的回传槽（NT2）：`_register_statement_impl` 在写台账之前把判出来的
         #: 读数填进来；这里收尾时落 `unrecorded` 痕迹并把 T0 读数放回执（给模型看）。
@@ -6557,8 +6515,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _register_pointer_manuscript(self, rel: str, *, provenance: Any = None,
                                      reading: Mapping | None = None,
-                                     nontriviality: dict | None = None,
-                                     source_lit_id: str = "", derived_from: Sequence[str] | None = None
+                                     nontriviality: dict | None = None
                                      ) -> tuple[dict, str, str]:
         """按手稿路径收录：把该登记的那几样全部从稿里读出来（D 只递了指针）。
 
@@ -6581,11 +6538,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         | `kind` | 稿头 `- 命题类型：<kind>`（老盘旧名 `- 证据种类：` 照读；认不出 / 词表外 ⇒ 按族取缺省：`e-proof` ⇒ theorem、其余 ⇒ conjecture） |
         | `evidence_kind` | 按族定：`e-proof` ⇒ `proof`（穷举证明，要 V 签）、`e-num` ⇒ `cross_check`（有数值实验支持）、F 的文字证明 ⇒ `heuristic` |
         | 出处 `line_range` | `e-*` ⇒ `exp:<实验号>`（稿头 / 路径名 / 调用方给的出处，三者同一处）；F ⇒ 稿的路径本身 |
-        | 承重链 / 来源文献 | 稿里 `## 证明` 的 `stmt:` 引用 ＋ 调用方显式给的 `derived_from` / `source_lit_id`（`_merged_derived_from` 合并去重，两处都不丢） |
+        | 承重链 `derived_from` | 证明正文里的 `stmt:` 引用（与 `depsection.stmt_refs` 同一口径） |
         | `label` | F 的稿头 `- 标签：`；E 的取命题首行前 80 字 |
-
-        来路两格必须在这里透传（2026-11-17，PTR1）：自足稿抽不出 `derived_from`，调用方
-        给的 `source_lit_id` / `derived_from` 就是唯一的诚实来路（丢掉必被来路闸拒）。
 
         返回 `(B 的登记结果, origin, kind)`；受控拒时 origin / kind 是空串。
         """
@@ -6747,8 +6701,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             kind=kind, label=label, origin=origin_now,
             evidence_kind=evidence_kind, quote_verified=None,
             quote_reason=quote_reason,
-            source_lit_id=str(source_lit_id or ""),
-            derived_from=_merged_derived_from(derived_from, _DS.stmt_refs(proof_text)),
+            derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or ())],
             doc_id=doc_id, line_range=line_range, nontriviality=nontriviality)
         if isinstance(got, dict):
             got = self._pointer_receipt(
@@ -8079,9 +8032,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_register(self, *, reading: Mapping, requested: Sequence[str],
                          out: dict, family: str, path: str,
                          provenance: Any = None,
-                         nontriviality: dict | None = None,
-                         source_lit_id: str = "",
-                         derived_from: Sequence[str] | None = None) -> dict:
+                         nontriviality: dict | None = None) -> dict:
         """`mode=register`：把这份稿登记成新命题（继承 pointer 那条路的全部闸）。"""
         from .. import manuscriptfamily as _MFAM
         from .. import manuscriptintake as _MI
@@ -8104,8 +8055,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 proposition_form=dict(_form_refusal["proposition_form"]))
         got, origin, kind = self._register_pointer_manuscript(
             path, provenance=provenance, reading=reading,
-            nontriviality=nontriviality,
-            source_lit_id=source_lit_id, derived_from=derived_from)
+            nontriviality=nontriviality)
         if not isinstance(got, dict):
             return self._ingest_fail(out, "registration_refused",
                                      "登记没有返回读数（不假装写成）")

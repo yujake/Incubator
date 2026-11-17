@@ -76,7 +76,6 @@ V 的签（第 3 位）与形式化通过（第 4 位）是两条并列的独立
 事（`kind_following_grade` 是纯读函数，一个字节都不写），不在这里读真机工作区。
 """
 from __future__ import annotations
-import pytest
 
 import hashlib
 import json
@@ -97,10 +96,6 @@ from agentflow.store import Store  # noqa: E402
 from _same_statement_stub import SameStatementStub  # noqa: E402
 from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
 from conftest import seed_statement_row, sign_before_registration  # noqa: E402
-from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 #: 一条干净的自产命题（cube 那条的形体：立方和闭式）。
 FULL = "对任意整数 n≥0：1^3 + 2^3 + … + n^3 = (n(n+1)/2)^2。"
@@ -123,8 +118,8 @@ def _own(**kw) -> dict:
     """一条 `origin="own_result"` 的登记参数（只含动作面声明过的键，且按猜想进门）。"""
     base = {
         "statement_full": FULL, "statement_text": LABEL, "label": LABEL,
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture", "doc_id": S.format_id(0),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "doc_id": S.format_id(0),
         "line_range": {"start": 1},
         "quote_verified": False,
         "quote_reason": "own_result：我方推导，没有第二份文本可比对",
@@ -562,7 +557,7 @@ def test_criterion6_a_pending_sign_alone_does_not_lift_a_new_row(
                                         statement_full=FULL)
     filed = _b_with_a_secretary(store).register_statement(
         statement_full=FULL, statement_text=LABEL, label=LABEL,
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", doc_id=S.format_id(0),
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",
         proof_text=PROOF, proof_manuscript=manuscript)

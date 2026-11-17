@@ -58,11 +58,6 @@ for _path in (_SRC, _TESTS):
         sys.path.insert(0, str(_path))
 
 import conftest  # noqa: E402
-from conftest import BASIS_LIT_ID  # noqa: E402
-
-# 业主 2026-11-17「不许假来路」：F 稿自己不引用在册命题时，来路由调用方给的
-# `source_lit_id`（真 literature 行，`every_store_has_basis_lit` 在建库时落下）承担。
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import proofregistry as PR  # noqa: E402
@@ -231,8 +226,7 @@ def test_a_an_f_manuscript_with_a_revision_note_is_allowed(tmp_path: pathlib.Pat
     _write(st)
     conftest.sign_before_registration(st.root, proof_text=PROOF)
     seam = _Seam(well_formed=False, identity="different")  # 若 B 真问了，它会判「不是命题」
-    got = _b(st, seam).ingest_manuscript(manuscript=REL, mode="register",
-                                         source_lit_id=BASIS_LIT_ID)
+    got = _b(st, seam).ingest_manuscript(manuscript=REL, mode="register")
 
     assert got.get("ok") is True, (
         "F 手稿仍被 B 侧的形态闸拦（产品待改：register_statement.py:1384 / :1414 / :7187）："
@@ -325,7 +319,7 @@ def test_d1_an_unregistered_same_proposition_is_rewritten_and_b_ingests(
 
     # 同一份稿重交 B：签按同一正文 sha 认领，入册的是新陈述，路径号由秘书分配。
     ing = _b(st, _Seam(well_formed=True, identity="different")).ingest_manuscript(
-        manuscript=REL, mode="register", source_lit_id=BASIS_LIT_ID)
+        manuscript=REL, mode="register")
     assert ing.get("ok") is True, ing
     sid = str((ing.get("target") or {}).get("stmt_id") or "")
     row = _row(st, sid)

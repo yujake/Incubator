@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import ast
 import contextlib
+import hashlib
 import json
 import pathlib
 
@@ -152,9 +153,27 @@ def _pending_rows(st: Store) -> list[dict]:
             for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
 
 
-def _pending_file(st: Store) -> pathlib.Path:
+def _pending_key(rows: list[dict]) -> str:
+    """pending 台账的文件名键（2026-11-17 起：对象内容的 sha）。
+
+    `record_pending_sign` 一直是"按对象内容的 sha 分文件"（`object_sha256 or proof_sha256`）；
+    散文那一支改前不传 `object_sha256` ⇒ 文件名退成正文 sha。2026-11-17 起散文支也传了
+    （稿的字节 sha），所以文件名跟着对象格走 —— 这里按行上的那一格拼，不再硬编码成
+    正文 sha（硬编码测的是旧缺口，不是口径）。
+    """
+    key = str(rows[0].get("object_sha256") or rows[0].get("proof_sha256") or "")
+    assert len(key) == 64, rows[0]
+    return key
+
+
+def _pending_file(st: Store, rows: list[dict]) -> pathlib.Path:
     return (pathlib.Path(st.root) / "verifications" / "pending"
-            / f"{VR.text_sha(PROOF)}.jsonl")
+            / f"{_pending_key(rows)}.jsonl")
+
+
+def _manuscript_bytes_sha(st: Store, rel: str) -> str:
+    """那份稿的字节 sha256（不是「## 证明」正文的 sha）。"""
+    return hashlib.sha256((pathlib.Path(st.root) / rel).read_bytes()).hexdigest()
 
 
 def _sign_files(st: Store) -> list[pathlib.Path]:
@@ -178,20 +197,41 @@ def test_a_three_clean_rounds_sign_the_manuscript_and_back_it_with_pending(tmp_p
     assert got.get("verdict") == "成立", got
     assert got.get("signed_bit3") is False, got   # 没有命题行可翻，这一格是诚实的
 
-    # ---- pending 台账：三转三行，每行三票齐全 ----
+    # ---- pending 台账：三转三行，每行三票齐全 + 每行自己的身份（2026-11-17）----
     rows = _pending_rows(st)
     assert len(rows) == 3, rows
     assert {str(r["verification_id"]) for r in rows} == {"u-000001", "u-000002", "u-000003"}
+    manuscript_sha = _manuscript_bytes_sha(st, REL)
+    object_cells = {str(r.get("object_sha256") or "") for r in rows}
+    assert len(object_cells) == 1 and len(next(iter(object_cells))) == 64, rows
     for row in rows:
         for key in ("verification_id", "at", "proof_sha256"):
             assert str(row.get(key) or "").strip(), (key, row)
         assert row["proof_sha256"] == VR.text_sha(PROOF), row
         assert row["verdict"] == "成立", row
         assert row["object_path"] == REL, row
-    assert _pending_file(st).is_file(), "pending 台账没按正文 sha 落文件"
+        #: 2026-11-17（业主：「是系统计数落签」）：一行一笔身份 —— 哪一趟、第几轮、
+        #: 哪一份稿的字节 sha。改前三格全缺（`at` 还是三行一起写下的那一个时刻）。
+        assert str(row.get("review_call") or ""), row
+        assert str(row.get("object_sha256") or ""), row
+    assert [r.get("review_pass") for r in rows] == [1, 2, 3], rows
+    assert len({str(r.get("review_call") or "") for r in rows}) == 1, rows
+    #: 三行 `at` 必须是各自那一轮记下的时刻（不是三行一起写下的那一刻）。
+    #: 这一档用假缝、模型瞬间返回 ⇒ 秒级时刻可以相同（三行同一秒并不违反"逐轮取时刻"）；
+    #: "不是写行时刻"那一半由 `tests/test_system_counts_the_sign.py`
+    #: 用打桩时钟钉住（把写行时刻打到 2099、把判词时刻打成三个不同的值）。
+    ats = [str(r.get("at") or "") for r in rows]
+    assert all(ats) and ats == sorted(ats), ats
+    pending_key = _pending_key(rows)
+    #: 对象格记的是审阅那一刻稿的字节 sha（签块落稿之后文件 bytes 会变，所以这里
+    #: 拿"落签之后"的现算值只对"没有块"的那一档成立 —— 这一条只钉"它是稿字节 sha"）。
+    assert pending_key == next(iter(object_cells)), rows
+    assert pending_key != manuscript_sha, (
+        "签块落稿之后稿的 bytes 变了；对象格若仍等于现算值，说明它没在审阅那一刻取")
+    assert _pending_file(st, rows).is_file(), "pending 台账没按对象内容的 sha 落文件"
     assert got.get("verification_id") == "u-000003", got
     assert str(got.get("ledger") or "").endswith(
-        f"verifications/pending/{VR.text_sha(PROOF)}.jsonl#u-000003"), got
+        f"verifications/pending/{pending_key}.jsonl#u-000003"), got
 
     # ---- 稿上的签块：已签、连续 3/3、命题号=未在册、台账指 pending ----
     block = VS.manuscript_sign_reading(_manuscript_text(st), manuscript_path=REL)
@@ -200,7 +240,7 @@ def test_a_three_clean_rounds_sign_the_manuscript_and_back_it_with_pending(tmp_p
     assert block["statement_id"] == "", block          # 命题号=未在册 是合法形态
     assert block["manuscript_id"] == "000000", block
     assert block["identity_state"] == "resolved", block
-    assert block["ledger"] == (f"verifications/pending/{VR.text_sha(PROOF)}.jsonl"
+    assert block["ledger"] == (f"verifications/pending/{pending_key}.jsonl"
                                "#u-000003"), block
 
     # ---- 签文件：passes 就是那三张真票 ----
@@ -429,18 +469,22 @@ def test_g_a_plan_manuscript_is_a_sign_carrier_now(tmp_path):
     assert block["statement_id"] == "", block          # 第 8 格：未在册
     assert block["manuscript_id"] == "plan-0000", block
     assert block["identity_state"] == "resolved", block
-    assert block["ledger"] == (f"verifications/pending/{VR.text_sha(PROOF)}.jsonl"
-                               "#u-000003"), block
 
     # ---- pending 三行三票：载体就是这份计划名（老盘只读兼容）----
     rows = _pending_rows(st)
     assert len(rows) == int(VR.SIGN_STREAK_NEED), rows
     assert {str(r["verification_id"]) for r in rows} == {"u-000001", "u-000002", "u-000003"}
+    plan_key = _pending_key(rows)
+    assert plan_key == str(rows[0].get("object_sha256") or ""), rows
     for row in rows:
         for key in ("verification_id", "at", "proof_sha256"):
             assert str(row.get(key) or "").strip(), (key, row)
         assert row["proof_sha256"] == VR.text_sha(PROOF), row
         assert row["object_path"] == plan_rel, row
+        assert row.get("object_sha256") == plan_key, row
+    assert [r.get("review_pass") for r in rows] == [1, 2, 3], rows
+    assert block["ledger"] == (f"verifications/pending/{plan_key}.jsonl"
+                               "#u-000003"), block
 
     # ---- 签文件：passes 就是那三张真票，台账指 pending（不是稿自己）----
     files = _sign_files(st)

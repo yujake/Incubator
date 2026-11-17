@@ -174,6 +174,22 @@ STATEMENT_ID_MISSING = "statement_id_missing"
 LEDGER_NOT_VERIFICATION = "ledger_not_verification"
 PASSES_INCOMPLETE = "passes_incomplete"
 
+#: 2026-11-17（业主：「是系统计数落签」）：发签门槛不从调用方拿，由框架从台账现数。
+#:
+#: 改前 `issue` 只比一个整数（`streak < need`）—— 那个数由 V 那一趟递进来
+#: （`pass_no` / `len(judged)`）或由台账尾部凑出来，框架一个字都不核。现在 `issue`
+#: 自己调 `sign_counting.count_ledger_file`：同一趟 `review_call` 内
+#: `review_pass=1..need` 连续 clean 才算数。三档分开（三态纪律，不许折平）：
+#:
+#: | 码 | 什么被拒 | 判据 |
+#: |---|---|---|
+#: | `sign_count_short` | 数出来了、不够 | 组内连续 clean < need（少一轮 / 中途 fault / 同号重放不够） |
+#: | `sign_count_unreadable` | 没查成 | 台账读不出来 / 锚点那一行不在 ⇒ 不放签（不是「0 次」） |
+#: | `sign_count_anchor_not_last` | 锚点不是这一组的最后一轮 | 拿第 1 轮的锚点去签三票（"先签后补票"的形状） |
+SIGN_COUNT_SHORT = "sign_count_short"
+SIGN_COUNT_UNREADABLE = "sign_count_unreadable"
+SIGN_COUNT_ANCHOR_NOT_LAST = "sign_count_anchor_not_last"
+
 #: 认签时「这一签没有独立台账背书」的那几个码（业主 2026-11-05 晚：真假只看背书）。
 #:
 #: 现场（真机 `projects/R-mk-infinite-90/reports`）：
@@ -2161,6 +2177,79 @@ def sign_ledger_backing(root: Any, ledger: Any, *, proof_sha256: Any) -> dict[st
     return out
 
 
+def _existing_sign_update(root: Any, key: str) -> tuple[dict[str, Any], bool]:
+    """同一份正文的签已经在盘上 ⇒ 这一笔只回读数（一个字节都不写）。
+
+    2026-11-17：位置在"票数 / 形状 / 背书 / 系统计数"四道闸之前 —— 那几道闸管的是
+    "不许写出一个没有依据的签"，而这一档根本不写。盘上那份签是先前某一趟发出来的，
+    后来改稿 / 打回 / 重送都不改写它。返回 `(要并进返回值的格, 是否到此为止)`。
+    """
+    path = sign_path(root, key)
+    if not path.is_file():
+        return {}, False
+    old, _problem = _read_json(path)
+    if old is None or str(old.get("artifact_sha") or "").strip().lower() != key:
+        return {}, False
+    doc = dict(old)
+    out: dict[str, Any] = {
+        "path": rel(path, root), "sign": doc,
+        "envelope": dict(doc.get("envelope") or {}), "idempotent": True,
+        "counted_by": str(doc.get("counted_by") or ""),
+        "count": int(doc.get("count") or 0), "legacy": bool(doc.get("legacy")),
+        "reason": (f"`{rel(path, root)}` 已经在盘上（签于 "
+                   f"{str(doc.get('at') or '（没有 at）')}）⇒ 不重写：一稿一签")}
+    got = archive(root, doc)
+    out["archive_count"] = int(got.get("count") or 0)
+    if not got.get("ok"):
+        out["archive_error"] = str(got.get("error") or "归档没写成")
+        out["reason"] = (f"{out['reason']}；但归档没更新：{out['archive_error']}"
+                         "（签文件是证据，已在盘上；归档可由 rebuild 补）")
+    return out, True
+
+
+def _system_count_update(root: Any, *, backing: Mapping[str, Any], key: str,
+                         need: int) -> tuple[dict[str, Any], bool]:
+    """框架从台账现数这一签够不够（2026-11-17 业主「系统计数落签」）。
+
+    数只有一个来源：`sign_counting.count_ledger_file` —— 同一份正文、同一个
+    `review_call` 内 `review_pass=1..need` 连续 clean（跨送审不累计、同号重放不增加）。
+    返回 `(要并进返回值的格, 能不能写签)`。三种拒绝都发生在建目录 / 写文件之前：
+    读不出来 ⇒ `sign_count_unreadable`（没查成，不是 0 次）；数出来不够 ⇒
+    `sign_count_short`；锚点不是这一组的第 need 轮 ⇒ `sign_count_anchor_not_last`。
+    """
+    from . import sign_counting as _SC
+
+    counting = _SC.count_ledger_file(
+        Path(str(root or "")) / str(backing.get("path") or ""),
+        anchor_vid=backing.get("verification_id"), proof_sha256=key, need=need)
+    out: dict[str, Any] = {
+        "counting": dict(counting), "counted_by": str(counting.get("counted_by") or ""),
+        "count": int(counting.get("count") or 0), "legacy": bool(counting.get("legacy")),
+        "counted_passes": [dict(p) for p in (counting.get("passes") or [])],
+    }
+    if not counting.get("checked"):
+        out.update(code=SIGN_COUNT_UNREADABLE, reason=(
+            "系统计数没查成（" + (str(counting.get("why") or "没有任何读数")) + "）"
+            " ⇒ 这一签不颁发（一个字节都不写）：没查成不是「0 次」，更不是「够」"))
+        return out, False
+    if not counting.get("ok"):
+        out.update(refused_below_need=True, code=SIGN_COUNT_SHORT, reason=(
+            f"系统计数只到 {int(counting.get('count') or 0)}/{int(need)}"
+            f"（{str(counting.get('why') or '')}）⇒ 一个字节都不写：门槛由框架按这一趟"
+            "送审自己数（跨趟不累计、同号重放不增加），不是由调用方说的那个整数决定"))
+        return out, False
+    if not counting.get("legacy") and (
+            int(counting.get("anchor_pass") or 0) != int(need)
+            or str(counting.get("anchor_call") or "")
+            != str(counting.get("review_call") or "")):
+        out.update(code=SIGN_COUNT_ANCHOR_NOT_LAST, reason=(
+            f"`ledger` 锚在第 {int(counting.get('anchor_pass') or 0)} 轮"
+            f"（`{str(counting.get('anchor_call') or '')}`），而这一组要签的是第 "
+            f"{int(need)} 轮 ⇒ 这一签不颁发：先签后补票的形状"))
+        return out, False
+    return out, True
+
+
 def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
           artifact_path: str = "", ledger: str = "", statement_id: str = "",
           proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
@@ -2187,6 +2276,12 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     `streak < need` ⇒ 「一个字节都不写」（`written=False` + 理由）。理由：本函数是
     "写签"的唯一入口，若它只看调用方说的 `written=True`，那 `sign_statement` 那一侧的
     连续闸一旦泄漏，盘上就会出现"一次成立也有一份签"——而那正是这一笔要堵的形态。
+
+    ## 2026-11-17 业主裁定：「是系统计数落签」—— 门槛不只比一个数
+    上面那个 `streak` 只是"调用方自称的数"的廉价 fail-closed；真正决定发不发签的是
+    `_system_count_update`（框架按同一 `review_call` 现数 `review_pass=1..need`，跨送审
+    不累计、同号重放不增加）。三种拒绝都发生在写任何字节之前，签文件另写 `counted_by` /
+    `count` / `legacy` 三格：这一签的 3 是数出来的还是老形态复算的，读的人一眼看得到。
 
     ## `proof_no` 在写侧退役
 
@@ -2222,7 +2317,9 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
                                           "why": "调用方没给 store ⇒ 签触发提交这一格没查"},
                            #: 这一笔被"未达门槛"拒掉（与"文件写不成"分开：前者是两道守卫
                            #: 不一致时的读数，后者是整笔失败）。
-                           "refused_below_need": False}
+                           "refused_below_need": False,
+                           #: 2026-11-17（系统计数）：门槛是框架从台账现数的读数（键无条件存在）。
+                           "counting": {}, "counted_by": "", "count": 0, "legacy": False}
     # ---- 收方秘书这一格先验（零字节）：拒绝要发生在建目录之前 ----
     who = str(by or "").strip()
     if who and who not in SECRETARY_OF:
@@ -2240,6 +2337,11 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out.update(refused_below_need=True,
                    reason=(f"这一趟的「成立」只到 {int(streak)}/{int(need)} ⇒ 一个字节都不写："
                            "门槛还没到就没有签（门槛由框架按这一趟送审自己数）"))
+        return out
+    # ---- 一稿一签：同一份正文的签已经在盘上 ⇒ 这一笔不写任何字节（见 helper）----
+    _existing, _stop = _existing_sign_update(root, key)
+    out.update(_existing)
+    if _stop:
         return out
     # ---- 2026-11-05：签的对象与证据（三道必填闸，零字节）----------------------
     #
@@ -2264,6 +2366,12 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
                    reason=(str(backing.get("why") or "") + " ⇒ 这一签不颁发"
                            "（一个字节都不写）：签没有独立台账背书，就只是一句话"))
         return out
+    # ---- 2026-11-17（业主：「是系统计数落签」）：门槛由框架从台账现数（见 helper）----
+    _gate, _count_ok = _system_count_update(
+        root, backing=backing, key=key, need=int(need))
+    out.update(_gate)
+    if not _count_ok:
+        return out
     envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
                 "issued_by": "V"}
     doc: dict[str, Any] = {
@@ -2280,8 +2388,19 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         # `credential_reading` / `_any_credential` 都按缺省 1 兼容）。
         "verdict": "成立",
         "streak": int(streak), "need": int(need),
+        #: 2026-11-17（业主：「是系统计数落签」）：`streak` 那个数是从哪来的，逐字写清。
+        #: `counted_by="sign_counting"` = 框架按同一 `review_call` 内 `review_pass=1..need`
+        #: 现数；`legacy:*` = 老形态（没有 `review_call` 的历史行 / 登记在册的单轮会审）
+        #: 按台账尾部复算 —— 老数据不许静默等价成新签。
+        "counted_by": str(_gate.get("counted_by") or ""),
+        "count": int(_gate.get("count") or 0),
+        "legacy": bool(_gate.get("legacy")),
         # 逐转读数（「不是全文」：全文在台账，见 source_note）。
-        "passes": [dict(p) for p in (passes or ())],
+        # 2026-11-17：新形态的票由框架从数过的那几行取（不是调用方递进来的那份清单）——
+        # 于是签文件自己带着 `review_call` / `review_pass` / `object_sha256` 三格身份。
+        "passes": ([dict(p) for p in (_gate.get("counted_passes") or [])]
+                   if not _gate.get("legacy")
+                   else [dict(p) for p in (passes or ())]),
         "objections": [dict(o) for o in (objections or ())],
         "source_note": PASSES_SOURCE_NOTE,
         "at": str(at or ""),
@@ -2299,36 +2418,22 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     out["path"] = rel(path, root)
     out["sign"] = doc
     if path.is_file():
-        old, problem = _read_json(path)
-        old_key = str((old or {}).get("artifact_sha") or "").strip().lower()
-        if old is not None and old_key == key:
-            # 同一份正文只有一个签（一稿一签）：已经在了就是 `idempotent`，「不重写」。
-            #
-            # 为什么不比内容、也不覆盖：签是"第 need 次成立那一刻"的档，第 need+1 次
-            # 成立不改它（那几转只进台账）；而内容逐字比较会因为 `at`/`passes` 随下一次
-            # 复查而变，把一次正常的复查读成"冲突"（实测：第 4 转会把这一笔变成整笔回滚）。
-            # 冲突只留给"这一份文件不是这一份正文的签"（坏 JSON / 里面写着别的 sha）——
-            # 那一档绝不覆盖：可疑的文件要人看，不许工具悄悄修好它。
-            doc = old
-            out["sign"] = doc
-            out["envelope"] = dict(doc.get("envelope") or {})
-            out.update(idempotent=True,
-                       reason=(f"`{out['path']}` 已经在盘上（签于 "
-                               f"{str(doc.get('at') or '（没有 at）')}）⇒ 不重写：一稿一签"))
-        else:
-            out.update(conflict=True,
-                       reason=(f"`{out['path']}` 已经在盘上，但它不是这一份正文的签"
-                               f"（{problem or '文件里的 artifact_sha 与文件名不同'}）⇒ "
-                               "不覆盖：可疑的签要人看，不许工具悄悄修好它"))
-            return out
-    else:
-        try:
-            _write_atomic(path, doc)
-        except OSError as exc:
-            out["reason"] = (f"签文件没写成（{type(exc).__name__}: {exc}）⇒ 这一签没落地"
-                             "（归档一个字都不动）")
-            return out
-        out.update(written=True, reason="签已落盘")
+        #: 走到这里 = 盘上那份签不是这一份正文的（同一 sha 的那一档已在
+        #: `_existing_sign_update` 里收工）⇒ 不覆盖：可疑的文件要人看，不许工具悄悄
+        #: 修好它（冲突只留给"这份文件不是这份正文的签"：坏 JSON / 里面写着别的 sha）。
+        _old, _problem = _read_json(path)
+        out.update(conflict=True, reason=(
+            f"`{out['path']}` 已经在盘上，但它不是这一份正文的签"
+            f"（{_problem or '文件里的 artifact_sha 与文件名不同'}）⇒ "
+            "不覆盖：可疑的签要人看，不许工具悄悄修好它"))
+        return out
+    try:
+        _write_atomic(path, doc)
+    except OSError as exc:
+        out["reason"] = (f"签文件没写成（{type(exc).__name__}: {exc}）⇒ 这一签没落地"
+                         "（归档一个字都不动）")
+        return out
+    out.update(written=True, reason="签已落盘")
     got = archive(root, doc)
     out["archive_count"] = int(got.get("count") or 0)
     if not got.get("ok"):
@@ -2336,23 +2441,32 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
         out["reason"] = (f"{out['reason']}；但归档没更新：{out['archive_error']}"
                          "（签文件是证据，已在盘上；归档可由 rebuild 补）")
     # ---- 签触发提交（2026-11-11 甲）：签文件已经在盘上 ⇒ 让产出方那一行知道 ----
-    #
-    # 位置在归档之后：签是既成事实；提交记号写不成只落读数，不许把这一签带走
-    # （「签了但没提交」与「没签」必须分得开）。
-    if store is not None and hasattr(store, "rows") and hasattr(store, "tx"):
-        try:
-            from . import manuscriptsubmission as _MS
-
-            out["submission"] = _MS.mark_sign_submitted(
-                store=store, root=root, artifact_sha=key,
-                artifact_path=str(doc.get("artifact_path") or ""),
-                stamp=str(doc.get("at") or ""))
-        except Exception as exc:  # noqa: BLE001 —— 提交读数坏了不许把签带走
-            out["submission"] = {
-                "checked": False, "written": False, "already": False,
-                "via": "", "why": (f"签触发提交没跑成（{type(exc).__name__}: {exc}）"
-                                   " ⇒ 这一份这次没置为已提交（不是「没签」）")}
+    # 位置在归档之后：签是既成事实；提交记号写不成只落读数，不许把这一签带走。
+    _submission = _sign_submission(root, store=store, key=key, doc=doc)
+    if _submission is not None:
+        out["submission"] = _submission
     return out
+
+
+def _sign_submission(root: Any, *, store: Any, key: str,
+                     doc: Mapping[str, Any]) -> dict[str, Any] | None:
+    """签触发提交那一笔的读数（`store=None` ⇒ `None`：这一格没查成，保持初值）。
+
+    「签了但没提交」与「没签」必须分得开 ⇒ 这一笔抛什么都不许把签带走，只如实报。
+    """
+    if store is None or not hasattr(store, "rows") or not hasattr(store, "tx"):
+        return None
+    try:
+        from . import manuscriptsubmission as _MS
+
+        return _MS.mark_sign_submitted(
+            store=store, root=root, artifact_sha=key,
+            artifact_path=str(doc.get("artifact_path") or ""),
+            stamp=str(doc.get("at") or ""))
+    except Exception as exc:  # noqa: BLE001 —— 提交读数坏了不许把签带走
+        return {"checked": False, "written": False, "already": False, "via": "",
+                "why": (f"签触发提交没跑成（{type(exc).__name__}: {exc}）"
+                        " ⇒ 这一份这次没置为已提交（不是「没签」）")}
 
 
 def sign_envelope(doc: Mapping[str, Any] | None) -> dict[str, Any]:

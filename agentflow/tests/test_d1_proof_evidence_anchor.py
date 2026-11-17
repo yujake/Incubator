@@ -29,7 +29,7 @@ from agentflow.agent_g import AgentG, DocumentError
 from agentflow.store import Store
 from agentflow.tools import doc_tools as DT
 
-from conftest import add_literature
+from conftest import add_literature, seed_writing_material
 
 TS = "2026-01-01T00:00:00+00:00"
 PROOF_REL = "proofs/real.lean"
@@ -69,6 +69,7 @@ def ws(tmp_path: Path) -> Store:
     _add_experiment(st, "0000", method="formal", kind="proof",
                     verifier_output="'key-0000' does not depend on any axioms")
     _add_experiment(st, "0001", method="numeric", kind="cross_check")
+    seed_writing_material(st)
     proof_file = st.root / PROOF_REL
     proof_file.parent.mkdir(parents=True, exist_ok=True)
     proof_file.write_text("theorem real : True := trivial\n", encoding="utf-8")

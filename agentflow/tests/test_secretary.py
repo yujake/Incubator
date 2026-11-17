@@ -31,7 +31,6 @@ from agentflow import schema as S
 from agentflow import sessions as SESS
 from agentflow import stopctl as SC
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 
 # ---------------------------------------------------------------- 工具
@@ -893,8 +892,8 @@ def test_register_statement_marks_a_missing_proof_instead_of_refusing(tmp_path: 
     out = b.register_statement(
         statement_full="设 G 是有限连通图，则 X_n 的极限是正态", kind="conjecture",
         label="Conjecture 1.1", statement_text="X_n 的极限是正态",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(st), doc_id="0000", proof_text="",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], doc_id="0000", proof_text="",
         quote_verified=None, quote_reason="证明还没做完（推到第 3 步卡住）",
     )
     assert out.get("ok") is True, out

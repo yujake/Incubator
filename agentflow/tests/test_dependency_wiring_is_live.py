@@ -65,8 +65,7 @@ from agentflow.agent_f import AgentF
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
-from conftest import seed_statement_row, sign_before_registration, ensure_basis_stmt
-from conftest import ensure_basis_lit
+from conftest import seed_statement_row, sign_before_registration
 
 
 # ---------------------------------------------------------------- 命题形态闸的夹具答案
@@ -144,7 +143,7 @@ def _add_statement(store: Store, stmt_id: str, *, label: str = "") -> dict:
     bits = EB.bits_of(origin="own_result", proof=True, proof_process=body,
                       kind="theorem")
     row = S.Statement(
-        stmt_id=stmt_id, origin="own_result", source_lit_id=ensure_basis_lit(store), kind="theorem",
+        stmt_id=stmt_id, origin="own_result", derived_from=["999999"], kind="theorem",
         label=label or f"在册命题 {stmt_id}",
         statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文（含假设）。",
@@ -304,17 +303,12 @@ def _b(store: Store) -> AgentB:
 def _register(store: Store, *, statement_full: str, proof_text: str,
               derived_from: list[str] | None = None,
               proof_manuscript: str = "") -> dict:
-    # 业主 2026-11-17「不许假来路」：`derived_from` 为空的那些夹具用一条真的
-    # 文献来路（`ensure_basis_lit` 落一行真 literature；不往 statements 表塞脚手架，
-    # 于是本文件量的 `_deps` / 行数读数一个字都不变）。
-    chain = list(derived_from or [])
     return _b(store).register_statement(
         statement_full=statement_full,
         statement_text=statement_full[:20],
         origin="own_result", kind="conjecture", doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）：没有外部引文要比对",
-        proof_text=proof_text, derived_from=chain,
-        source_lit_id="" if chain else ensure_basis_lit(store),
+        proof_text=proof_text, derived_from=list(derived_from or []),
         proof_manuscript=proof_manuscript,
     )
 

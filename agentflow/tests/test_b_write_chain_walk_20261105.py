@@ -49,9 +49,6 @@ from agentflow import vsigns as VS  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.secretary import Secretary  # noqa: E402
 from agentflow.store import Store  # noqa: E402
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 FULL_A = "命题 A：1+1=2。"
 BODY_A = "1. 按自然数的后继定义，1+1 就是 s(1)，而 s(1)=2。\n2. 因此 1+1=2。"
@@ -77,8 +74,8 @@ def _agent(st: Store) -> AgentB:
 
 def _own(full: str, **kw) -> dict:
     payload = {
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "statement_full": full, "statement_text": full[:20], "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        "statement_full": full, "statement_text": full[:20], "origin": "own_result", "derived_from": ["999999"],
         "kind": "conjecture", "doc_id": S.format_id(0),
         "quote_reason": "我方自产命题，没有外部引文要比对",
     }

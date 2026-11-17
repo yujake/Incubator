@@ -39,7 +39,6 @@ from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.store import Store  # noqa: E402
-from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
 
 MANUSCRIPT = "reports/f-proof-000000.md"
 PROPOSITION = "对任意有限群 G，若 |G| = p^a·m 且 p∤m，则 G 有 p 阶元。"
@@ -76,8 +75,7 @@ def test_a_pointer_only_writes_the_proof_receipt_on_disk(tmp_path) -> None:
     """a：只给手稿 ⇒ 顶层 `proof_no` / `proof_sha256` 与真实正文一致。"""
     env = _workspace(tmp_path)
     got = env["b"].register_statement(statement_full="",
-                                      proof_manuscript=MANUSCRIPT,
-                                      source_lit_id=ensure_basis_lit(env))
+                                      proof_manuscript=MANUSCRIPT)
     assert got.get("ok") is True, got
     rows = _rows(env)
     assert len(rows) == 1, rows
@@ -98,8 +96,8 @@ def test_b_manuscript_only_also_writes_the_receipt(tmp_path) -> None:
     env = _workspace(tmp_path)
     got = env["b"].register_statement(
         statement_full=PROPOSITION, proof_manuscript=MANUSCRIPT,
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        kind="conjecture", origin="own_result", source_lit_id=ensure_basis_lit(env), evidence_kind="heuristic",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        kind="conjecture", origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         line_range={"label": MANUSCRIPT},
         quote_verified=False, quote_reason="own_result：F 的证明稿")
     assert got.get("ok") is True, got
@@ -129,7 +127,7 @@ def test_c_a_plain_numeric_row_has_no_proof_number(tmp_path) -> None:
     seed_proposition_form_ok(st.root, CLAIM, kind="conjecture", role="B")
     b = AgentB(st, extractor=None, extract_text=None, config={})
     got = b.register_statement(
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture", label="scan",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="scan",
         statement_full="", statement_text="", proof_text="",
         evidence_kind="cross_check", proof_manuscript=out["numeric_manuscript"],
         quote_verified=False, quote_reason="own_result：E 的实验读数")
@@ -173,8 +171,7 @@ def test_d_without_the_receipt_write_the_pointer_row_has_no_proof_number(
     monkeypatch.setattr(SEC.Secretary, "land_statement", _strip)
     env = _workspace(tmp_path)
     got = env["b"].register_statement(statement_full="",
-                                      proof_manuscript=MANUSCRIPT,
-                                      source_lit_id=ensure_basis_lit(env))
+                                      proof_manuscript=MANUSCRIPT)
     assert got.get("ok") is True, got
     row = _rows(env)[0]
     assert not row.get("proof_no"), (

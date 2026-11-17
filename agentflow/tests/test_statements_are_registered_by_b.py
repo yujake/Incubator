@@ -34,8 +34,6 @@ from agentflow.agent_f import AgentF
 from agentflow.conductor import calling_as
 from agentflow.store import Store
 from agentflow.tools import table_tools as TT
-from conftest import ensure_basis_lit, ensure_basis_stmt
-from conftest import BASIS_LIT_ID
 # ---------------------------------------------------------------- 命题形态闸的夹具答案
 #
 # 2026-11-07（业主裁定）：F 交稿之前多了一道"命题形态闸"
@@ -57,8 +55,8 @@ def _proposition_form_answers_ok(monkeypatch):
 
 #: 一次 F 会交上来的命题（`own_result` 的出处用 `line_range` 的 label，不编页码）。
 ROW: dict[str, Any] = {
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    "origin": "own_result", "derived_from": ["999999"],
     "kind": "conjecture",
     "label": "椭圆无等弦点",
     "statement_text": "椭圆不存在等弦点",
@@ -132,7 +130,7 @@ def test_every_non_b_role_is_refused_and_b_still_registers(tmp_path):
     got = b.register_statement(
         statement_full=ROW["statement_full"], statement_text=ROW["statement_text"],
         proof_text=ROW["proof_text"], kind="conjecture", label=ROW["label"],
-        origin="own_result", source_lit_id=ensure_basis_lit(st), evidence_kind="heuristic", quote_verified=None,
+        origin="own_result", derived_from=["999999"], evidence_kind="heuristic", quote_verified=None,
         quote_reason=ROW["quote_reason"], line_range=dict(ROW["line_range"]))
     assert got.get("ok") is True, got
     rows = st.rows("statements")
@@ -184,7 +182,7 @@ def test_the_registered_row_has_bits_and_a_nontriviality_line(tmp_path, monkeypa
     sign_before_registration(st.root, proof_text=body)
     got = AgentB(st, extractor=None, extract_text=None).register_statement(
         statement_full=str(sg["text"]), statement_text=str(sg["text"]),
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture",
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         label=f"F 攻坚 000000 子目标 s1",
         proof_text=body, proof_manuscript=text,
         line_range={"label": rel},
@@ -250,4 +248,4 @@ def test_stubbing_the_criterion_reopens_the_wild_road(tmp_path, monkeypatch):
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

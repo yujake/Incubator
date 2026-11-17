@@ -41,8 +41,6 @@ from agentflow.secretary import STATEMENT_BITS_KEYS, Secretary
 from agentflow.store import Store
 from agentflow.tools import build_registry
 
-from conftest import BASIS_LIT_ID, ensure_basis_lit
-
 #: 000019 那一行的形状（逐字取 `events.jsonl:3671` 的载荷：B 用 `table.create` 交的那一份）。
 #: 刻意不带 `bits` —— 这就是现场。
 _ROW_000019: dict[str, Any] = {
@@ -70,23 +68,9 @@ def _world(tmp_path: pathlib.Path) -> tuple[Store, Any]:
     """一个工作区 + 一张真工具面（`table.create` 那条路就是现场那条路）。"""
     st = Store(tmp_path / "ws")
     st.init()
-    # 2026-11-17（GATE2 尾巴）：own_result 必须写清来路。这一份量的是"bits 补全没补全"
-    # （10 键齐 / 无 None / 事件行同一份），不是来路；真 literature 行只在 literature 表，
-    # 不进 statements ⇒ "statements 一行"与那 10 键读数一个字都不变。
-    ensure_basis_lit(st)
     cond = Conductor(st, policy=None, backend=LocalBackend({}))
     built = build_registry(store=st, conductor=cond, workspace_root=str(st.root))
     return st, built.registry
-
-
-def _row_with_basis() -> dict[str, Any]:
-    """现场那一行（`_ROW_000019` 逐字保留）+ 一条真来路。
-
-    GATE2 尾巴（2026-11-17）：载荷本身必须写清来路才落得进秘书写口；`_ROW_000019`
-    是"从 events.jsonl 逐字取"的现场，改它就不再是现场 ⇒ 这里只加来路那一格
-    （真 literature 行 `BASIS_LIT_ID`），现场那个关键形状（刻意不带 `bits`）不变。
-    """
-    return {**_ROW_000019, "source_lit_id": BASIS_LIT_ID}
 
 
 def _create_via_table_tool(registry: Any, row: dict[str, Any]) -> Any:
@@ -128,7 +112,7 @@ def test_the_000019_write_path_lands_a_complete_bits_block(tmp_path: pathlib.Pat
     `bits={}`，于是 000019 的档位与等级同时"读不出来"。
     """
     st, registry = _world(tmp_path)
-    res = _create_via_table_tool(registry, _row_with_basis())
+    res = _create_via_table_tool(registry, _ROW_000019)
     assert res.ok is True, (res.error, res.meta)
     assert "record_statement" in json.dumps(res.meta, ensure_ascii=False), res.meta
 
@@ -159,14 +143,12 @@ def test_a_proofed_statement_keeps_its_own_bits(tmp_path: pathlib.Path):
     """
     st = Store(tmp_path / "ws")
     st.init()
-    ensure_basis_lit(st)
     sec = Secretary("B", root=st.root, store=st)
     proof = "第 1 步：由定义直接得到。"
     supplied = EB.bits_of(proof=True, proof_process=proof, origin="own_result")
     out = sec.record_statement({"statement_full": "若 H 是 d-正则无三角连通图，则 H[K_2] 是 (2d+1)-正则图。",
                                 "kind": "proposition", "origin": "own_result",
                                 "proof_text": proof, "bits": supplied,
-                                "source_lit_id": BASIS_LIT_ID,
                                 "quote_verified": None,
                                 "quote_reason": "自产结果"}, role="B")
     assert out.get("checked") and out.get("created"), out
@@ -196,7 +178,7 @@ def test_negative_control_without_the_completion_step_refuses_the_write(
         lambda body, *, kind, origin: dict(body.get("bits") or {}),
         raising=True)
     st, registry = _world(tmp_path)
-    res = _create_via_table_tool(registry, _row_with_basis())
+    res = _create_via_table_tool(registry, _ROW_000019)
     assert res.ok is False, (res.error, res.meta)
     meta = json.dumps(res.meta, ensure_ascii=False)
     assert "bits" in meta and "10 键" in meta, meta
@@ -221,7 +203,7 @@ def test_negative_control_a_none_in_one_bit_is_refused(tmp_path: pathlib.Path,
 
     monkeypatch.setattr(SEC, "_complete_statement_bits", _with_a_none, raising=True)
     st, registry = _world(tmp_path)
-    res = _create_via_table_tool(registry, _row_with_basis())
+    res = _create_via_table_tool(registry, _ROW_000019)
     assert res.ok is False, (res.error, res.meta)
     assert "grade" in json.dumps(res.meta, ensure_ascii=False), res.meta
     assert _statement_rows(st) == []

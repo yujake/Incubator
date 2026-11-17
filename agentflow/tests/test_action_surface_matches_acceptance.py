@@ -37,9 +37,6 @@ from agentflow.agent_e import AgentE
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
 from agentflow.tools import build_registry
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 #: 一个最小的"穷举类"脚本：打印约定的结构化结论行。
 _SEARCH_SCRIPT = (
@@ -181,14 +178,10 @@ def _b_instance(tmp_path: pathlib.Path):
 _OWN = dict(
     statement_full="本文的引理：对周期图 K(m)，稳定范数取整数值",
     statement_text="稳定范数取整数值",
-    origin="own_result", kind="conjecture", evidence_kind="heuristic",
+    origin="own_result", derived_from=["999999"], kind="conjecture", evidence_kind="heuristic",
     quote_reason="本轮还没做逐字比对（引文那一栏待核）",
 )
 _OWN_SOURCE = dict(doc_id="0000", proof_text="证明：由定义直接得到。")
-#: `own_result` 的真来路（业主 2026-11-17「不许假来路」）：一条真文献行。
-#: 只给自产命题；`external_lit` 的负控（①-c）必须不带它，否则它就不是
-#: 「缺 source_lit_id」那条判据的输入了。
-_OWN_BASIS = dict(source_lit_id=BASIS_LIT_ID)
 
 
 def test_the_conditional_ladder_of_register_statement_is_advertised():
@@ -233,7 +226,6 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     # 正控：四级都齐 ⇒ 落一行
     good = dict(_OWN)
     good.update(_OWN_SOURCE)
-    good.update(_OWN_BASIS)
     # 2026-11-04（业主裁定甲）：正文的载体是手稿。这一笔要写正文 ⇒ 先落稿、再登记；
     # 稿的 `## 证明` 与这一笔送审的正文逐字一致（签按正文 sha 认）。
     good["proof_manuscript"] = write_proof_manuscript(
@@ -247,8 +239,7 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     assert len(st.rows("statements")) == 1, st.rows("statements")
 
     def _bump(n: str) -> dict:
-        return {**_OWN, **_OWN_BASIS,
-                "statement_full": _OWN["statement_full"] + f"（{n}）"}
+        return {**_OWN, "statement_full": _OWN["statement_full"] + f"（{n}）"}
 
     # 负控逐级：四级都要以 `ok=False` + 具名 `kind` 拒绝，不许从事务里抛异常。
     # 为什么这条也是判据：T1 里 8 次"被拒"与 6 次"失败"在模型看来是两种东西 ——
@@ -290,7 +281,6 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
     # 不许蔓延成"出处也可以不给" —— `external_lit` 缺 `source_lit_id` 仍然必须拒，
     # 且 `kind` 具名。实测（`register_statement.py:103-106`）它走的是 `missing_source`。
     r1c = b.register_statement(**{**_bump("①c"), "origin": "external_lit",
-                                  "source_lit_id": "",
                                   "page_range": {"label": "全文未分页"}})
     assert r1c.get("ok") is False and r1c.get("kind") == "missing_source", r1c
 
@@ -314,11 +304,8 @@ def test_a_complete_own_result_statement_lands_and_each_missing_rung_is_refused(
             statement_full=_bump("④")["statement_full"]))  # ID 形态
     assert r4.get("ok") is False and r4.get("kind") == "bad_id", r4
     # 同一级的另一半：`source_lit_id` 走的是同一个谓词（两条路都要具名，不能只保一条）
-    r5 = b.register_statement(
-        **{k: v for k, v in _bump("⑤").items()
-           if k not in ("source_lit_id", "origin")},
-        origin="external_lit", source_lit_id="lit-1",
-        page_range={"label": "全文未分页"})
+    r5 = b.register_statement(**{**_bump("⑤"), "origin": "external_lit"},
+                              source_lit_id="lit-1", page_range={"label": "全文未分页"})
     assert r5.get("ok") is False and r5.get("kind") == "bad_id", r5
 
     # 台账里只该有"齐了的那一条"与"①/①b 那两条挂待办的"，被拒的四条一条都不许落。

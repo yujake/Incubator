@@ -44,8 +44,6 @@ from agentflow import statementabandon as SA
 from agentflow import verifications as VR
 from agentflow.store import Store
 
-from conftest import BASIS_LIT_ID, ensure_basis_lit
-
 TS = "2026-11-07T09:00:00+08:00"
 SID = "000001"
 LEMMA = "000002"
@@ -60,10 +58,6 @@ DEFECT = "verifications/000001.jsonl#v-000001"
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
-    # 2026-11-17（GATE2 尾巴）：下面两条直调秘书的换号夹具要给 own_result 真来路；
-    # 真 literature 行（`BASIS_LIT_ID`）只在 literature 表，不进 statements，
-    # 于是本文件量的"换号 / 结构化理由 / 行数"读数一个字都不变。
-    ensure_basis_lit(st)
     return st
 
 
@@ -548,7 +542,6 @@ def test_supersedes_is_reported_but_never_blocks(tmp_path):
         "statement_text": "设 g 在 [0,1] 上可微，则 g 一致连续。",
         "evidence_kind": "heuristic",
         "quote_verified": None, "quote_reason": "夹具：自产命题",
-        "source_lit_id": BASIS_LIT_ID,
     }, role="B")
     assert got.get("created") is True, got
     supersedes = got.get("supersedes") or []
@@ -573,7 +566,6 @@ def test_a_legacy_prior_is_reported_as_superseded_without_reason_and_not_blocked
         "statement_text": "设 h 在 [0,1] 上可微，则 h 有界变差。",
         "evidence_kind": "heuristic",
         "quote_verified": None, "quote_reason": "夹具：自产命题",
-        "source_lit_id": BASIS_LIT_ID,
     }, role="B")
     assert got.get("created") is True, got
     assert got.get("supersedes") in (None, []), got

@@ -43,7 +43,6 @@ from agentflow.secretary import Secretary
 from agentflow.store import Store
 
 from conftest import seed_statement_row
-from conftest import BASIS_LIT_ID, ensure_basis_lit
 
 #: 在册的那一条：与待收命题「措辞不同」、但共享数学关键词（Sylow / p-子群）。
 IN_LEDGER = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在。"
@@ -114,7 +113,6 @@ class _Seam:
 def _ws(base: pathlib.Path) -> Store:
     st = Store(base / "ws")
     st.init()
-    ensure_basis_lit(st)
     return st
 
 
@@ -127,12 +125,8 @@ def _seed_ledger(st: Store) -> str:
 
 
 def _body(full: str) -> dict:
-    # 2026-11-17（GATE2 尾巴）：own_result 必须写清来路。这一份量的是"秘书自己检索 /
-    # 判词 / 不新建行"（候选、hits、行数），不是来路；真 literature 行当来路，
-    # 它不进 statements ⇒ "仍 2 行"与命中那条的号一个字都不变。
     return {"statement_full": full, "statement_text": full[:24],
             "origin": "own_result", "kind": "conjecture",
-            "source_lit_id": BASIS_LIT_ID,
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 

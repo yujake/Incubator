@@ -28,7 +28,6 @@ from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 SID = "000001"
 SID2 = "000002"
@@ -84,8 +83,8 @@ def _register(store: Store, *, rel: str, statement: str, proof_text: str,
         "why": "夹具：判过、不是同一条"}
     return agent.register_statement(
         statement_full=statement, statement_text=statement[:30],
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", label=label or statement[:30],
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture", label=label or statement[:30],
         proof_text=body, proof_manuscript=rel, evidence_kind="heuristic",
         line_range={"label": rel}, quote_reason="夹具：F 的稿由 B 收录")
 

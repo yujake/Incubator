@@ -45,7 +45,6 @@ from agentflow.tools import table_tools
 from agentflow.tools.base import ToolRegistry
 
 from _proof_manuscript_fixture import carry_proof_manuscript
-from conftest import BASIS_LIT_ID, ensure_basis_lit
 
 #: 命题正文（判定与登记都要它）；路线由打桩的缝给，判据不依赖真实模型。
 FULL = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在且两两共轭。"
@@ -60,7 +59,6 @@ ROUTE = "路线二：由类方程直接数，不经过群作用"
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
-    ensure_basis_lit(st)
     return st
 
 
@@ -86,12 +84,8 @@ class _RouteSeam:
 
 
 def _own() -> dict[str, Any]:
-    # 2026-11-17（GATE2 尾巴）：own_result 必须写清来路。这一份量的是"路子"从写侧
-    # 到读侧那两格（`route` / `proof_routes`），不是来路；用真 literature 行当来路，
-    # 它不进 statements ⇒ 读侧的行数与那两格读数一个字都不变。
     return {"statement_full": FULL, "statement_text": FULL[:24], "label": LABEL,
             "origin": "own_result", "kind": "conjecture", "proof_text": PROOF,
-            "source_lit_id": BASIS_LIT_ID,
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 

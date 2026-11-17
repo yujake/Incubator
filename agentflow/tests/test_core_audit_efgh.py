@@ -21,7 +21,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import add_concept, add_literature, add_relation
+from conftest import add_concept, add_literature, add_relation, seed_writing_material
 
 from agentflow import schema as S
 from agentflow.agent_e import AgentE, ExperimentError, build_experiment, install_e_tools
@@ -394,6 +394,7 @@ def _g_store(tmp_path: Path) -> tuple[Store, AgentG]:
     st = Store(tmp_path / "ws")
     st.init()
     add_literature(st, "0000", title="T")
+    seed_writing_material(st)
     return st, AgentG(st)
 
 

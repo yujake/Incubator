@@ -41,7 +41,7 @@ from agentflow.tools import trace_tools as TR
 from agentflow.tools import verify_tools as VT
 from agentflow.tools.base import ToolError, ToolRegistry
 
-from conftest import add_literature, add_request, write_library_file, write_paper
+from conftest import add_literature, add_request, write_library_file, write_paper, seed_writing_material
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -355,6 +355,7 @@ def test_build_document_refuses_dangling_citation_and_writes_nothing(store: Stor
 
     修之前 `scan_claim` 只查"citations 非空"，假引用照样写库 + 渲染。
     """
+    seed_writing_material(store)
     reg = registry_for(DT, store, workspace_root=store.root)
     before = (store.data / "documents.json").read_bytes()
 
@@ -389,6 +390,7 @@ def test_build_document_refuses_dangling_citation_and_writes_nothing(store: Stor
 )
 def test_build_document_checks_every_citation_kind(store: Store, citation: str, table_word: str):
     """四张表都要核（"代号不存在"这一档 fail-closed）。"""
+    seed_writing_material(store)
     reg = registry_for(DT, store, workspace_root=store.root)
     claims = [DT.compose_claim("x", citations=[citation], evidence_kind="heuristic", section="s")]
     res = _build(reg, claims)
@@ -431,6 +433,7 @@ def test_a_bare_number_citation_is_refused_at_construction_time(store: Store):
 
 def test_build_document_accepts_real_citations_and_writes(store: Store):
     """负控：引用真的存在 ⇒ 正常落库 + 渲染（闸门不能把好数据一起拦掉）。"""
+    seed_writing_material(store)
     add_literature(store, S.format_id(0), title="真实文献", processed=True)
     reg = registry_for(DT, store, workspace_root=store.root)
 
@@ -1129,6 +1132,7 @@ def _assert_not_unexpected(res: object, expected_kind: str) -> None:
 
 def test_no_unexpected_escape_doc_and_review_store_failure(store: Store):
     """`doc.*` / `review.*`：`StoreError`（RuntimeError）不再逃逸成 `unexpected`。"""
+    seed_writing_material(store)
     doc_reg = registry_for(DT, store, workspace_root=store.root)
     rev_reg = registry_for(RV, store)
     assert doc_reg.call("doc.list_documents").ok is True

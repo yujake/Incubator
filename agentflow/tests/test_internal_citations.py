@@ -23,6 +23,7 @@ from agentflow import signatures as SIG
 from agentflow import verify as V
 from agentflow.store import Store
 from agentflow.tools import doc_tools as DT
+from conftest import seed_writing_material
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -31,6 +32,7 @@ def _store(tmp_path: Path) -> Store:
     """初始化过的临时工作区。"""
     st = Store(tmp_path)
     st.init()
+    seed_writing_material(st)
     return st
 
 

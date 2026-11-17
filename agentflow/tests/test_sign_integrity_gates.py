@@ -310,6 +310,11 @@ def _unplug_sign_gate(monkeypatch) -> None:
     2026-11-05 晚这一批是两道：形状闸（`sign_object_gate`：对象 / 台账形状 / 三票）
     与背书闸（`sign_ledger_backing`：那一行在不在盘上、是不是这一份正文、签不签得住）。
     反真空要摘的是"这一签凭什么成立"的全部判据，所以两道一起摘。
+
+    2026-11-17 起还有第三道：系统计数闸（`sign_counting.count_ledger_file`：同一趟
+    `review_call` 内 `review_pass=1..need` 连续 clean）。它同样属于"这一签凭什么成立"
+    ⇒ 一并摘掉；不摘的话，下面几条 f-* 量的就不再是"a/b/c 那几条形状闸有没有牙"，
+    而是被第三道闸替它们挡住了（判据瞄错了对象）。
     """
     monkeypatch.setattr(VS, "sign_object_gate",
                         lambda **_kw: {"ok": True, "code": "", "reason": "",
@@ -318,6 +323,16 @@ def _unplug_sign_gate(monkeypatch) -> None:
                         lambda root, ledger, *, proof_sha256: {
                             "checked": True, "ok": True, "code": "", "row": {},
                             "path": "", "verification_id": "", "why": "夹具：摘掉背书闸"})
+    from agentflow import sign_counting as SC
+
+    monkeypatch.setattr(SC, "count_ledger_file",
+                        lambda path, *, anchor_vid, proof_sha256, need: {
+                            "checked": True, "ok": True, "count": int(need),
+                            "need": int(need), "passes": [], "legacy": True,
+                            "counted_by": "fixture:unplugged", "review_call": "",
+                            "proof_sha256": str(proof_sha256 or ""),
+                            "legacy_rows": 0, "replayed": 0, "terminated": "",
+                            "why": "夹具：摘掉系统计数闸"})
 
 
 def test_f_a_without_the_gate_an_empty_ledger_anchor_writes_a_sign(

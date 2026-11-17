@@ -53,7 +53,6 @@ from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 #: 判据 f 的被扫文件（与 e / h 是同一族的签载体判据）。
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow" / "vsigns.py"
@@ -135,8 +134,8 @@ def _register(st: Store) -> dict:
     return AgentB(st, extractor=None, extract_text=None).register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
         proof_manuscript=_manuscript_text(),
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        kind="conjecture", label="探针命题", origin="own_result", source_lit_id=ensure_basis_lit(st),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        kind="conjecture", label="探针命题", origin="own_result", derived_from=["999999"],
         evidence_kind="heuristic", quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": "reports/probe.md"})

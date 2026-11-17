@@ -32,7 +32,6 @@ from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 MANUSCRIPT_DIR = "reports"
 MID = "000123"
@@ -103,8 +102,8 @@ def test_a2_f_registration_lands_an_entry_and_b_does_not_rename_it(store: Store)
     body = DS.proof_body(_read(store, rel)).strip("\n")
     sign_before_registration(store.root, proof_text=body)
     out = AgentB(store, extractor=None, extract_text=None).register_statement(
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        statement_full=STATEMENT, statement_text=STATEMENT[:20], origin="own_result", source_lit_id=ensure_basis_lit(store),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        statement_full=STATEMENT, statement_text=STATEMENT[:20], origin="own_result", derived_from=["999999"],
         kind="conjecture", label="夹具", proof_text=body, proof_manuscript=rel,
         evidence_kind="heuristic", line_range={"label": rel},
         quote_reason="夹具：稿号是稿号")
@@ -129,7 +128,7 @@ def test_b_the_sign_still_matches_after_collection(store: Store) -> None:
     body = DS.proof_body(_read(store, rel)).strip("\n")
     sign_before_registration(store.root, proof_text=body)
     out = AgentB(store, extractor=None, extract_text=None).register_statement(
-        statement_full=STATEMENT, statement_text=STATEMENT[:20], origin="own_result", source_lit_id=ensure_basis_lit(store),
+        statement_full=STATEMENT, statement_text=STATEMENT[:20], origin="own_result", derived_from=["999999"],
         kind="conjecture", label="夹具", proof_text=body, proof_manuscript=rel,
         evidence_kind="heuristic", line_range={"label": rel},
         quote_reason="夹具：签按 sha")

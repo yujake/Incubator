@@ -46,11 +46,7 @@ from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
 #: 本机那一版真 Lean —— 取值点只有一处（`tests/conftest.py` 的 `lean_path()`）。
-from conftest import lean_path, ensure_basis_stmt
-from conftest import ensure_basis_lit
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
+from conftest import lean_path
 
 LEAN = lean_path()
 HAVE_LEAN = LEAN.is_file()
@@ -77,8 +73,8 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 
 def _own(full: str = FULL, label: str = LABEL) -> dict:
     """自产命题的必填件（`origin="own_result"`：`doc_id` + `quote_reason` + 猜想入口）。"""
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    return {"statement_full": full, "statement_text": label, "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    return {"statement_full": full, "statement_text": label, "origin": "own_result", "derived_from": ["999999"],
             "kind": "conjecture", "doc_id": S.format_id(0),
             "quote_reason": "我方自产命题，没有外部引文要比对", "label": label}
 
@@ -94,13 +90,10 @@ def _seed(store: Store, *, full: str = FULL, label: str = LABEL,
     bits = EB.with_optimized_defaults(
         EB.bits_of(origin="own_result", proof=True, proof_process=proof_text,
                    kind="conjecture"), [1])
-    # 来路行先落：`ensure_basis_lit` 自己开一笔 literature 事务，放进下面的 statements
-    # 事务里会撞 counters 锁（真机上表现为 30s 超时，不是判据红）。
-    basis_lit = ensure_basis_lit(store)
     with store.tx("statements", actor="agent-B") as tx:
         sid = str(tx.alloc_id(S.TABLES["statements"]["id_kind"]))
         tx.upsert("statements", {
-            "stmt_id": sid, "origin": "own_result", "source_lit_id": basis_lit, "kind": "conjecture",
+            "stmt_id": sid, "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
             "label": label, "statement_text": label, "statement_full": full,
             "proof_text": proof_text, "status": "active",
             "created_at": S.now_iso(), "created_by": "agent-B",

@@ -138,9 +138,16 @@ def test_a_unregistered_manuscript_lands_a_pending_ledger_with_three_tickets(tmp
         for key in ("verification_id", "at", "proof_sha256"):
             assert str(row.get(key) or "").strip(), (key, row)
         assert row["proof_sha256"] == SHA, row
-    # 文件按正文 sha 命名（`verifications.pending_ledger_path` 的口径）。
+        #: 2026-11-17（系统计数）：一行一笔身份（哪一趟 / 第几轮 / 稿的字节 sha）。
+        assert str(row.get("review_call") or ""), row
+        assert len(str(row.get("object_sha256") or "")) == 64, row
+    assert [r.get("review_pass") for r in rows] == [1, 2, 3], rows
+    # 文件按对象内容的 sha 命名（`verifications.pending_ledger_path` 的口径：
+    # `object_sha256 or proof_sha256`）。2026-11-17 起散文支也传了对象格 ⇒ 文件名是
+    # 稿的字节 sha，而不是退化成正文 sha（改前的缺口就是"三行 object_sha256 全空"）。
+    key = str(rows[0].get("object_sha256") or rows[0].get("proof_sha256") or "")
     pending_file = (pathlib.Path(st.root) / "verifications" / "pending"
-                    / f"{SHA}.jsonl")
+                    / f"{key}.jsonl")
     assert pending_file.is_file(), sorted(
         p.name for p in (pathlib.Path(st.root) / "verifications" / "pending").glob("*.jsonl"))
 

@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-17，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **317 个 `.py`、295397 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16222 行（`agent_loop.py`，14909 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **318 个 `.py`、296341 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16222 行（`agent_loop.py`，14909 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-17 SYSCT1（系统计数落签：新增 `sign_counting.py`；业主 2026-11-17「是系统计数落签」）**：
+> 317 个 `.py` → **318**（+`sign_counting.py`，纯读的计数层）、总行数 295397 → **296341**；
+> 75 个 `>800` 与 95 个 `>200` 行函数两格不变（`vsigns.issue` 283 → 196 行：新增的两道
+> 前置搬成 `_existing_sign_update` / `_system_count_update`，写签尾搬成 `_sign_submission`；
+> 三格 75 / 95 / 2 逐格未抬）。
 > **2026-11-17 BUD1（预算见底之前先把收工必需物落盘；p292 → p293）**：
 > 317 个 `.py`、75 个 `>800` 都不变；总行数 294826 → **295397**（本笔 src 增量 +171：
 > `budget.py` +71（`PAPERWORK_FIRST_RULE` / `PAPERWORK_RESERVE_USD` 与

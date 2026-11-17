@@ -47,6 +47,7 @@ from agentflow.store import Store
 
 from test_p1a_revise_records_body_sha import _workspace
 from test_scheduler import FakeG, FakeH, _Recorder, _conductor, _mk_store
+from conftest import seed_writing_material
 
 
 # ============================================================ a/d 边集
@@ -343,6 +344,7 @@ def test_k_chain_from_c_is_really_used_by_the_document(tmp_path: pathlib.Path):
     from conftest import add_literature
 
     add_literature(store, "0000", title="根文献", processed=True)
+    seed_writing_material(store)
     g = AgentG(store, workspace_root=store.root)
     claims = [
         {"claim_id": "c-root", "section": "主要结果", "text": "根命题。",

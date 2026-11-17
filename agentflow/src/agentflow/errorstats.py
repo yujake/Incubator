@@ -555,12 +555,6 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
      "src/agentflow/tools/table_tools.py::_hand_typed_id_refusal（kind；判据 `_hand_typed_id_refusal`）"),
     ("missing_source", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     ("missing_own_source", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
-    # 2026-11-17（业主裁定 ②，真机 lp-ball-3）：`own_result` 的来路（`derived_from` /
-    # `source_lit_id`）两格都空 ⇒ 受控拒。判据本体在 `statementledger.own_result_basis_missing`
-    # （写入口与收工门读同一份），产出点是 B 的登记动作。
-    ("missing_own_result_basis", "param_invalid",
-     "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"
-     "（判据 src/agentflow/statementledger.py::own_result_basis_missing）"),
     ("missing_quote_reason", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     ("missing_page_range", "param_invalid", "src/agentflow/agent_b/register_statement.py::_RegisterStatement.register_statement"),
     ("duplicate_doi", "duplicate_conflict",

@@ -35,7 +35,7 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from conftest import add_literature, ensure_basis_stmt
+from conftest import add_literature
 
 #: 真机里逐字命中的那一句（与 `tests/test_quote_verification_leaves_evidence.py` 同一句）。
 QUOTE = "The distance is the number of walls crossed."
@@ -98,12 +98,8 @@ def test_a_self_reported_pass_without_a_span_does_not_land_as_true(tmp_path: pat
 
     # 前半：没有 source_lit_id ⇒ 没有可比对的全文 ⇒ 一次比对都没发生 ⇒ unknown。
     _root, store = _paper(tmp_path)
-    # 这一条测的是"没有可比对全文 ⇒ 一次比对都没发生"，与来路无关；给一条真在册的
-    # 前置命题当承重链（业主 2026-11-17「不许假来路」），`source_lit_id` 保持空 ——
-    # 那正是这条判据要的输入（没有文献全文可核）。
     out = _register(store, quote=QUOTE, label="自报通过", source_lit_id="",
-                    origin="own_result", kind="conjecture", doc_id="000000",
-                    derived_from=[ensure_basis_stmt(store)])
+                    origin="own_result", kind="conjecture", doc_id="000000")
     assert out.get("ok") is True, out
     row = _row(store, out["stmt_id"])
     assert row.get("quote_verified") is not True, (

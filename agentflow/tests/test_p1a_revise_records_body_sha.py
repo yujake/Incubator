@@ -42,7 +42,7 @@ from agentflow.store import Store
 from agentflow.tools import doc_tools as DT
 from agentflow.tools import build_registry as build_tools
 
-from conftest import add_literature
+from conftest import add_literature, seed_writing_material
 
 
 def _claim() -> dict:
@@ -60,6 +60,7 @@ def _claim() -> dict:
 def _workspace(store: Store) -> tuple[AgentG, str, str]:
     """建一份 paper 稿件 + 盘上的 `out/paper/main.tex`（正文），返回 `(G, doc_id, tex 相对路径)`。"""
     add_literature(store, "0000", title="探针文献", processed=True)
+    seed_writing_material(store)
     tex_rel = DT.BODY_TEX_REL
     tex = store.root / tex_rel
     tex.parent.mkdir(parents=True, exist_ok=True)

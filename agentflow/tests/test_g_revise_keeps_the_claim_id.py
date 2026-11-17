@@ -30,7 +30,7 @@ from agentflow.agent_g._support import DocumentError
 from agentflow.store import Store
 from agentflow.tools import review_tools as RV
 
-from conftest import add_literature, write_paper
+from conftest import add_literature, write_paper, seed_writing_material
 
 
 def _claim(text: str, claim_id: str | None = None) -> dict:
@@ -51,6 +51,7 @@ def _workspace(store: Store, *, n: int = 11) -> tuple[AgentG, str, dict]:
     """建一份 n 条断言的稿件（claim-1..claim-n），返回 `(G, doc_id, build 回执)`。"""
     write_paper(store, "\\documentclass{article}\n\\begin{document}\n探针正文。\n\\end{document}\n")
     add_literature(store, "0000", title="探针文献", processed=True)
+    seed_writing_material(store)
     g = AgentG(store, config={"docs_subdir": "documents"})
     doc = g.build_document(
         "note", "G 的 revise 探针稿",

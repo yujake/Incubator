@@ -30,8 +30,6 @@ import pathlib
 from agentflow import depsection as _DS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
-from conftest import BASIS_STMT_ID
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 PKG = REPO / "src" / "agentflow"
@@ -70,9 +68,6 @@ def _ws(tmp_path: pathlib.Path) -> Store:
     rows = [{"statement_id": SID, "path": REL, "sha256": sha}]
     (root / REPORT).write_text("# D 的研究手稿\n\n" + _DS.render_carried_section(rows),
                                encoding="utf-8")
-    # 业主 2026-11-17「不许假来路」：own_result 的 `derived_from` 要指一条真在册命题。
-    # 这条前置命题落在工作区里（来路也真：文献行 → 前置命题），下面被退回的那一笔指它。
-    ensure_basis_stmt(st)
     return st
 
 
@@ -80,8 +75,8 @@ def _register(st: Store) -> dict:
     b = AgentB(st, extractor=None, extract_text=None)
     return b.register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=PROOF,
-        kind="theorem", label="探针命题", origin="own_result",
-        derived_from=[BASIS_STMT_ID],
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        kind="theorem", label="探针命题", origin="own_result", derived_from=["999999"],
         evidence_kind="heuristic", quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": REL})
@@ -100,10 +95,7 @@ def test_a_b_returns_fs_unsigned_proof_and_names_the_next_step(
     assert "F 侧" in text or "F 产出的" in text, text
     assert "请 F 先拿 V 签" in text, text
     assert "verify.verify_proof" in text and "vsigns.land" in text, text
-    # 被退回的那一笔不许落行；盘上只该有夹具自己那条真在册的前置命题
-    # （业主 2026-11-17「不许假来路」：它的号就是下面 `derived_from` 指的那一条）。
-    assert [r["stmt_id"] for r in st.rows("statements")] == [BASIS_STMT_ID], (
-        "被退回的那一笔写进了 statements")
+    assert list(st.rows("statements")) == [], "被退回的那一笔写进了 statements"
 
 
 # ====================================================================== b

@@ -27,6 +27,7 @@ import pytest
 from agentflow import schema as S
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from conftest import seed_writing_material
 
 TS = "2026-10-10T00:00:00+08:00"
 
@@ -74,6 +75,7 @@ def _seed_library(root: Path, *, processed: bool = True) -> Store:
                                   "method": "numeric", "evidence_kind": "cross_check",
                                   "result": "supports", "negation_kind": "not_proved",
                                   "created_at": TS}, note="seed")
+    seed_writing_material(store)
     return store
 
 

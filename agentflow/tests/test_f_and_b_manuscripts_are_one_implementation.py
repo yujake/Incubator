@@ -30,7 +30,6 @@ import pytest
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import bmanuscript as BM  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
@@ -110,8 +109,8 @@ def _seed(st: Store, stmt_id: str, *, kind: str = "theorem",
         bits = _EB.bits_of(proof=True, proof_process="夹具证明正文", reviewed=True,
                            reviewed_by={"verification_id": "v-000001"}, kind=kind)
     row = {
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "stmt_id": stmt_id, "origin": "own_result", "source_lit_id": ensure_basis_lit(st), "kind": kind,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        "stmt_id": stmt_id, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
         "label": f"夹具命题 {stmt_id}", "statement_full": f"夹具命题 {stmt_id}。",
         "statement_text": f"夹具命题 {stmt_id}。", "proof_text": "夹具证明正文。",
         "evidence_kind": "heuristic", "status": "active",
@@ -694,7 +693,7 @@ def _real_entries_run(st: Store) -> tuple[str, str, str]:
 
     out = AgentB(st, extractor=None, extract_text=None).register_statement(
         statement_full=proposition, statement_text=proposition,
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture", label=proposition,
+        origin="own_result", derived_from=["999999"], kind="conjecture", label=proposition,
         proof_text=body, proof_manuscript=rel_f, evidence_kind="heuristic",
         doc_id="000000", line_range={"start": 1}, quote_verified=False,
         quote_reason="判据夹具：自产命题")

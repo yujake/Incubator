@@ -808,6 +808,193 @@ def c_products_in_delivery(store: Any, project_root: Path) -> dict[str, Any]:
     }
 
 
+#: 「造」那一环认的那几处台账（任一命中即算"这一条自产命题有一份签过的稿"）。
+#:
+#: 业主 2026-11-17 逐字：「own_result 还有什么来路？"来路"这种陈述是过时的，以前设计
+#: 这种语义就是为了指到证明手稿，现在已经在台账里体现了。所以只是一个状态：自产/引用」
+#: —— 所以「造」这一环判的是「台账里那份签过的稿」，不是载荷里写的 `derived_from` /
+#: `source_lit_id`（那两格退成可选信息）。三处都是台账（盘上的证据），不是行上的自报：
+#:
+#:   - `vsign`：`out/vsigns/<正文 sha>.json`（逐份签）；
+#:   - `v-review`：`verifications/<命题号>.jsonl`（含收录前已认领的 pending 行）；
+#:   - `sign-block`：`reports/*-proof-*.md` 里那行签块（签块是签回稿后的视图）。
+OWN_RESULT_LINK_SOURCES: tuple[tuple[str, str], ...] = (
+    ("vsign", "out/vsigns/<正文 sha>.json 的签台账"),
+    ("v-review", "verifications/<命题号>.jsonl 的 v-review"),
+    ("sign-block", "证明稿上的签块"),
+)
+
+#: 读数里"这条命题的稿"的候选（工作区相对）。只按已记录的指针取，不扫盘猜：
+#: 行上 `line_range` 记过的那份稿（E 的 `reports/e-proof-<号>.md` 那一族），加上按号
+#: 约定的 F 稿（`reports/f-proof-<号>.md`）。找不到就是"没有这一份"，不是"没查成"。
+_MANUSCRIPT_REF_IN_LABEL = re.compile(r"reports/[\w./-]+\.md")
+
+
+def _manuscript_paths_for(statement_id: str, row: Mapping[str, Any] | None = None) -> list[str]:
+    """这条命题可能的那几份稿（工作区相对，按优先次序、去重；只按已记录的指针取）。
+
+    为什么不 glob 整个 `reports/`：`reports/` 里有别人的稿（同号跨族是常态，见
+    `agent_skills` 里"稿号与命题号是两套号"那一段），扫盘猜一份等于把别人的稿算到
+    这一条头上。行上记过的那一份最准（E 的稿写的就是它），按号约定的 F 稿是既有的
+    兜底（`depsection.manuscript_relpath` 与 F 的写口同一处名字口径）。
+    """
+    out: list[str] = []
+    label = str((row or {}).get("line_range") or "")
+    if isinstance((row or {}).get("line_range"), Mapping):
+        label = str(((row or {}).get("line_range") or {}).get("label") or "")
+    for hit in _MANUSCRIPT_REF_IN_LABEL.findall(label):
+        rel = str(hit).replace("\\", "/")
+        if rel not in out:
+            out.append(rel)
+    try:
+        from . import depsection as _DS
+
+        rel = _DS.manuscript_relpath(statement_id=str(statement_id or ""))
+    except Exception:  # noqa: BLE001 —— 路径口径算不出来时只是少一条候选（下面还会查台账）
+        rel = ""
+    if rel and rel not in out:
+        out.append(rel)
+    return out
+
+
+def own_result_manuscript_link(root: Any, *, statement_id: Any,
+                               row: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """这一条自产命题在台账里有没有与它关联的稿/签。
+
+    返回 `{checked, linked, basis, where, why}` 三态：
+
+    - `checked=False` ⇒ 有一处台账读不出来（"没查成"，不是"没有稿"）；
+    - `linked=True` ⇒ 命中一处，`basis` 是 :data:`OWN_RESULT_LINK_SOURCES` 的键、
+      `where` 是那一处台账的可复核指针（`out/vsigns/<sha>.json` / `verifications/<号>.jsonl#v-…`
+      / `<稿>` 的签块）；
+    - `linked=False` + `checked=True` ⇒ 三处都查过，确实没有。
+
+    三处按 `OWN_RESULT_LINK_SOURCES` 的次序问，任一命中即返回（够用就停：签台账最便宜、
+    也最直接）。三态纪律：任何一处抛异常都记进 `why` 并把 `checked` 打假 —— 只有
+    "三处都查过、都没有"才是"没有稿关联"（读不出来不许折成没有）。
+    """
+    out: dict[str, Any] = {"checked": True, "linked": False, "basis": "", "where": "",
+                           "why": ""}
+    sid = str(statement_id or "").strip()
+    if not sid:
+        out["why"] = "没有命题号 ⇒ 台账里没有可关联的稿/签（这一条不是自产命题的行）"
+        return out
+    problems: list[str] = []
+
+    # ---- ① 签台账：`out/vsigns/<正文 sha>.json`（这条命题签过的稿）
+    try:
+        from . import vsigns as _VS
+
+        sign = _VS.signed_manuscripts(str(root), statement_id=sid)
+        if not sign.get("checked"):
+            problems.append(f"签台账没查成（{sign.get('why') or '（没有理由）'}）")
+        elif sign.get("found"):
+            latest = dict(sign.get("latest") or {})
+            out.update(linked=True, basis="vsign",
+                       where=(f"out/vsigns/{str(latest.get('artifact_sha') or '')}.json"
+                              f"（{str(latest.get('ledger') or '签台账')}）"))
+            return out
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        problems.append(f"签台账读不出来（{type(exc).__name__}: {exc}）")
+
+    # ---- ② v-review 台账：`verifications/<命题号>.jsonl`（签住第 3 位的那几行）
+    try:
+        from . import verifications as _VR
+
+        rows, bad = _VR.list_verifications(str(root), statement_id=sid, limit=None)
+        problems.extend(str(one) for one in (bad or []))
+        signed = _VR.signed_rows(rows)
+        if signed:
+            last = dict(signed[-1])
+            out.update(linked=True, basis="v-review",
+                       where=(f"verifications/{sid}.jsonl"
+                              f"#{str(last.get('verification_id') or '')}"))
+            return out
+    except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+        problems.append(f"v-review 台账读不出来（{type(exc).__name__}: {exc}）")
+
+    # ---- ③ 稿上的签块（签回稿后的视图；旧盘只有块、没有签文件时靠这一条）
+    root_p = Path(str(root or ""))
+    from . import vsigns as _VS_BLOCK
+
+    for rel in _manuscript_paths_for(sid, row):
+        path = root_p / rel
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+            block = _VS_BLOCK.manuscript_sign_reading(text, manuscript_path=rel)
+        except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
+            problems.append(f"{rel} 的签块读不出来（{type(exc).__name__}: {exc}）")
+            continue
+        if block.get("found") and block.get("signed"):
+            out.update(linked=True, basis="sign-block", where=f"{rel} 的签块")
+            return out
+
+    if problems:
+        out.update(checked=False,
+                   why=("；".join(problems[:3])
+                        + ("…" if len(problems) > 3 else "")
+                        + " ⇒ 这一格没查成（没查成不算「没有」）"))
+    else:
+        out["why"] = ("台账三处都查过（out/vsigns 的签 / verifications 的 v-review / "
+                      "稿上的签块）⇒ 这一条没有与它关联的稿/签")
+    return out
+
+
+def own_result_manuscript_links(store: Any, root: Any,
+                                rows: Iterable[Mapping[str, Any]] | None = None
+                                ) -> dict[str, Any]:
+    """全部自产命题的稿/签关联读数：「自产命题 N 条，其中有签稿关联 M 条」。
+
+    这是收工门「造」那一环的判据口（`content_leg_unmet` 的 ②）。`rows` 可显式传入
+    （调用方已经读了一份快照），不给则读 `statements`。返回：
+
+    - `checked`：三态 —— 没有任何一处的 `checked` 被读坏才为真；
+    - `own_result` / `with_signed_manuscript`：N / M（读数点名用）；
+    - `linked`：命中了的那些（`stmt_id` / `basis` / `where`，截前 8 条）；
+    - `unlinked_ids`：三处都查过、确实没有稿关联的那些（读数点名用）；
+    - `unreadable`：台账读不出来的那些（`stmt_id` / `why`）—— 与"没有"分开；
+    - `why`：一句话说清这一格是怎么得出的（或为什么没查成）。
+
+    判据只问"至少有一条"（与改前的 `with_basis` 同强度）：一条自产命题都没有时，
+    这是另一档（`own_result == 0`），由调用方说"没有自产命题"。
+    """
+    stmts = [dict(r) for r in (rows if rows is not None
+                               else store.rows("statements"))]
+    own = [s for s in stmts if str(s.get("origin") or "") == "own_result"]
+    out: dict[str, Any] = {"checked": True, "own_result": len(own),
+                           "with_signed_manuscript": 0, "linked": [],
+                           "unlinked_ids": [], "unreadable": [], "why": ""}
+    for stmt in own:
+        sid = str(stmt.get("stmt_id") or "")
+        got = own_result_manuscript_link(root, statement_id=sid, row=stmt)
+        if not got.get("checked"):
+            out["unreadable"].append({"stmt_id": sid, "why": str(got.get("why") or "")})
+        elif got.get("linked"):
+            out["with_signed_manuscript"] += 1
+            if len(out["linked"]) < 8:
+                out["linked"].append({"stmt_id": sid, "basis": str(got.get("basis") or ""),
+                                      "where": str(got.get("where") or "")})
+        else:
+            out["unlinked_ids"].append(sid)
+    bad = list(out["unreadable"])
+    if not own:
+        out["why"] = "`statements` 里一条 `origin=own_result` 的行都没有"
+    elif bad and not out["linked"]:
+        out["checked"] = False
+        out["why"] = (f"{len(bad)} 条自产命题的台账读不出来"
+                      f"（{'、'.join(str(x['stmt_id']) for x in bad[:6])}）⇒ 这一格没查成")
+    elif bad:
+        out["why"] = (f"{len(bad)} 条自产命题的台账读不出来"
+                      f"（{'、'.join(str(x['stmt_id']) for x in bad[:6])}）⇒ 那几条按「没查成」"
+                      "记，不按「没有」记")
+    else:
+        out["why"] = (f"{len(own)} 条自产命题里 {out['with_signed_manuscript']} 条在台账里"
+                      "有与它关联的稿/签")
+    return out
+
+
 def content_leg_unmet(store: Any, project_root: Path, *,
                       researched: bool,
                       computed_kinds: Iterable[str]) -> tuple[list[str], dict[str, Any]]:
@@ -852,24 +1039,51 @@ def content_leg_unmet(store: Any, project_root: Path, *,
             "（给出 `search_bound` / `certificate`，形式化那一支给出 `verifier_output`），"
             "或者如实把结论写成「这一族在界 B 内无反例（证书 …）」")
 
-    # ---- ② 「造」那一环要我方派生的命题（D66 造半边）。
+    # ---- ② 「造」那一环要我方自产的命题，而且台账里得有一份与它关联的稿/签。
+    #
+    # 业主 2026-11-17（语义纠正）：「own_result 还有什么来路？"来路"这种陈述是过时的，
+    # 以前设计这种语义就是为了指到证明手稿，现在已经在台账里体现了。所以只是一个
+    # 状态：自产/引用」⇒ 判据换成「台账里有没有与这条命题关联的稿/签」：签台账
+    # （`out/vsigns/`）、v-review（`verifications/`）、稿上的签块，任一命中即算。
+    # 「自产」的证据是「有一份签过的稿」，不是载荷里写了一个 `derived_from`。
     if kinds & {"reviewed_proof_rows", "counterexample_or_proof_rows"}:
         stmts = [dict(r) for r in store.rows("statements")]
-        own = [s for s in stmts if str(s.get("origin") or "") == "own_result"]
-        basis = [s for s in own if list(s.get("derived_from") or [])
-                 or str(s.get("source_lit_id") or "").strip()]
+        links = own_result_manuscript_links(store, project_root, stmts)
         readings["construct_leg"] = {
-            "statements": len(stmts), "own_result": len(own), "with_basis": len(basis),
-            "own_ids": [str(s.get("stmt_id") or "") for s in own[:8]],
+            "statements": len(stmts),
+            "own_result": int(links.get("own_result") or 0),
+            "with_signed_manuscript": int(links.get("with_signed_manuscript") or 0),
+            "own_ids": [str(s.get("stmt_id") or "") for s in stmts
+                        if str(s.get("origin") or "") == "own_result"][:8],
+            "linked": list(links.get("linked") or []),
+            "unlinked_ids": list(links.get("unlinked_ids") or [])[:8],
+            "unreadable": list(links.get("unreadable") or [])[:8],
+            "checked": bool(links.get("checked")),
+            "why": str(links.get("why") or ""),
         }
-        if not basis:
+        if not links.get("checked"):
             unmet.append(
-                f"「造」那一环没有我方派生的命题：`statements` {len(stmts)} 行里 "
-                f"`origin=own_result` 的 {len(own)} 行，其中**没有任何一行写清它派生于什么**"
-                f"（`derived_from` 与 `source_lit_id` 都是空的）—— "
-                "「造」= 我方自己提出并证明的命题（`origin=own_result`），"
-                "而且要说清它由哪几条已登记的命题 / 哪一篇文献推出来；"
-                "把命题与它的来路一起登记（`B.register_statement`；猜想的立案与落行归产出侧 —— F 开稿 / E 实验 / B 收录，D 没有登记猜想的动作）")
+                f"「造」那一环的台账没查成：{links.get('why') or '（没有理由）'} —— "
+                "没查成不算通过：把 `verifications/<命题号>.jsonl` / `out/vsigns/` 读到能读"
+                "（或修好那一份坏行）再收工")
+        elif not int(links.get("own_result") or 0):
+            unmet.append(
+                f"「造」那一环没有我方自产的命题：`statements` {len(stmts)} 行里 "
+                "`origin=own_result` 的 0 行 —— 「造」= 我方自己提出并证明的命题；"
+                "把命题与它的证明稿一起登记（`B.register_statement`；猜想的立案与落行归"
+                "产出侧 —— F 开稿 / E 实验 / B 收录，D 没有登记猜想的动作）")
+        elif not int(links.get("with_signed_manuscript") or 0):
+            own_ids = "、".join(f"`stmt:{x}`" for x in (links.get("unlinked_ids") or [])[:6])
+            unmet.append(
+                f"「造」那一环没有一份签过的稿：`statements` {len(stmts)} 行里 "
+                f"`origin=own_result` 的 {int(links.get('own_result') or 0)} 行"
+                f"（{own_ids}），台账里**没有任何一行有与它关联的稿/签**"
+                "（`verifications/` 的 v-review、`out/vsigns/` 的签、稿上的签块，三处都查过）—— "
+                "「造」= 我方自己提出并证明的命题；而「自产」这件事的证据是**有一份签过的稿**"
+                "（不是写一个 `derived_from`）：派 V 用 `verify.verify_proof` 带 "
+                "`proof_manuscript` 审那一份稿，签落回稿后再交上来登记"
+                "（`B.register_statement`）")
+
 
     # ---- ③ C 的分析产物要进交付面（D67）。
     try:

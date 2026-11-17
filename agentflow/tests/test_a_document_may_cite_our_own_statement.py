@@ -28,6 +28,7 @@ import pytest
 from agentflow import schema as S
 from agentflow.store import Store
 from agentflow.tools.doc_tools import build_document
+from conftest import seed_writing_material
 
 TS = "2026-10-09T00:00:00+08:00"
 
@@ -35,6 +36,7 @@ TS = "2026-10-09T00:00:00+08:00"
 def _store(tmp_path: pathlib.Path, *, with_statement: bool) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
+    seed_writing_material(st)
     if with_statement:
         lit = S.Literature(lit_id="0000", title="一篇外部论文", type="J",
                            summary="外部文献的一句话摘要", path=None, added_at=TS)

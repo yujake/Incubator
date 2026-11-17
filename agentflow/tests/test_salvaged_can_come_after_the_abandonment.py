@@ -31,7 +31,7 @@ from __future__ import annotations
 import pathlib
 
 import pytest
-from conftest import sign_before_registration, ensure_basis_stmt
+from conftest import sign_before_registration
 
 from agentflow import conductor as CND
 from agentflow import depsection as DS
@@ -40,7 +40,6 @@ from agentflow import statementabandon as SA
 from agentflow.agent_b import AgentB
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
-from conftest import ensure_basis_lit
 
 T_AT = "2026-11-15T09:00:00+08:00"       # 放弃 T 的时刻（早于所有新命题）
 LATER_AT = "2026-11-15T10:00:00+08:00"   # 事后补记"可取之处"的时刻
@@ -81,8 +80,8 @@ def _put(st: Store, sid: str = SID, *, kind: str = "conjecture",
          body: str = BODY_TARGET, created: str = "2026-11-15T08:00:00+08:00",
          proof: str = "证明：夹具正文。") -> dict:
     """把 T（或空壳）直接写进盘（不经登记路 —— 空壳那条负控要的正是这个）。"""
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    row = {"stmt_id": sid, "origin": "own_result", "source_lit_id": ensure_basis_lit(st), "kind": kind,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    row = {"stmt_id": sid, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
            "label": f"探针 {sid}", "statement_full": body, "statement_text": body,
            "proof_text": proof, "status": "active", "created_at": created,
            "created_by": "test", "bits": {}, "quote_verified": None,
@@ -148,7 +147,7 @@ def _register_new_proposition(st: Store, *, sid: str, full: str, proof: str,
     sign_before_registration(st.root, proof_text=body)
     b = AgentB(st, extractor=None, extract_text=None)
     first = b.register_statement(
-        statement_full=full, statement_text=full, origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture",
+        statement_full=full, statement_text=full, origin="own_result", derived_from=["999999"], kind="conjecture",
         label=label, proof_text=body, proof_manuscript=manuscript,
         line_range={"label": str(got["manuscript_path"])},
         quote_reason="夹具：V 的 pending 签在盘上")
@@ -263,10 +262,9 @@ def test_c_a_shell_with_no_owner_is_refused(tmp_path):
     """c 负控（无人认领）：正文与证明都在、但 `created_by` 空 ⇒ 没人能对它负责 ⇒ 拒。"""
     st = _ws(tmp_path)
     _put(st, SID)
-    basis_lit = ensure_basis_lit(st)     # 先落来路行：放进下面的事务里会撞锁
     with st.tx("statements", actor="") as tx:      # actor 空 ⇒ created_by 保持空
         tx.upsert("statements", {
-            "stmt_id": "000002", "origin": "own_result", "source_lit_id": basis_lit, "kind": "lemma",
+            "stmt_id": "000002", "origin": "own_result", "derived_from": ["999999"], "kind": "lemma",
             "label": "无主引理", "statement_full": BODY_CHAIN,
             "statement_text": BODY_CHAIN, "proof_text": "证明：夹具正文。",
             "status": "active", "created_at": "2026-11-15T07:00:00+08:00",

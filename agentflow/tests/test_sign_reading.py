@@ -328,7 +328,14 @@ def test_anti_vacuum_a_one_pass_file_is_not_a_sign(tmp_path: pathlib.Path) -> No
 
 def test_anti_vacuum_a_fault_pass_inside_the_three_is_not_a_sign(
         tmp_path: pathlib.Path) -> None:
-    """反真空 2：`passes` 3 条、而台账 pass 2 是 fault ⇒ 不许读成签。"""
+    """反真空 2：`passes` 3 条、而台账 pass 2 是 fault ⇒ 不许读成签。
+
+    2026-11-17（业主：「是系统计数落签」）：这一条原来给"写前闸只看最后一转"
+    留了一个正控（`_issue` 能把这份"三票"写出来，再由读侧拒它）。现在写口自己按
+    同一 `review_call` 数 1..need 连续 clean ⇒ 它当场拒（`sign_count_short`）。
+    读侧那一半照旧要量：手写一份同形的签（绕过写口、老盘就有这种文件），
+    读侧必须仍读成 `unbacked` / `row_not_signable`。
+    """
     _write_ws(tmp_path, ["000001"])
     rel, _text, sha = _manuscript(tmp_path, "000001")
     rows = [_row("000001", sha, pass_no=1, manuscript=rel),
@@ -336,8 +343,24 @@ def test_anti_vacuum_a_fault_pass_inside_the_three_is_not_a_sign(
                  verdict="有毛病", defect_step=3, manuscript=rel),
             _row("000001", sha, pass_no=3, manuscript=rel)]
     _write_ledger(tmp_path, "000001", rows)
-    # 写前闸只看最后一转的背书 ⇒ 这一份"三票"能被 `issue` 写出来（真机同族）。
-    _issue(tmp_path, "000001", sha, rows)
+    # 写前闸：系统计数在 pass 2 就停了 ⇒ 不颁发（一个字节都不写）。
+    refused = VS.issue(
+        tmp_path, artifact_sha=sha, streak=3, need=3,
+        ledger=f"verifications/000001.jsonl#{rows[-1]['verification_id']}",
+        statement_id="000001", proof_no=1,
+        passes=[{"verification_id": str(r["verification_id"]), "at": str(r["at"]),
+                 "proof_sha256": sha, "review_call": str(r["review_call"]),
+                 "review_pass": int(r["review_pass"])} for r in rows],
+        at=TS, by="secretary:B")
+    assert refused["written"] is False, refused
+    assert refused["code"] == VS.SIGN_COUNT_SHORT, refused
+    assert not VS.sign_path(tmp_path, sha).exists(), "被拒的签写下了签文件"
+    # 读侧：手写一份同形的签（老盘绕过写口的形态）⇒ 仍不许读成签。
+    _handwritten_sign(tmp_path, sha, ledger=(
+        f"verifications/000001.jsonl#{rows[-1]['verification_id']}"),
+        passes=[{"verification_id": str(r["verification_id"]), "at": str(r["at"]),
+                 "proof_sha256": sha, "review_call": str(r["review_call"]),
+                 "review_pass": int(r["review_pass"])} for r in rows])
     got = VS.sign_reading(tmp_path, statement_id="000001", manuscript_path=rel)
     assert got["state"] == "unbacked", got
     assert got["credential"]["problem"].startswith("row_not_signable")

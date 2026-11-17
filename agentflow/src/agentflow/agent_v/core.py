@@ -724,6 +724,24 @@ def _ledger_row_for_sha(root: Any, statement_id: str, sha: str) -> dict[str, Any
     return dict(hit[-1]) if hit else {}
 
 
+def _manuscript_bytes_sha(root: Any, rel: str) -> str:
+    """那一份稿的字节 sha256（`rel` 读不出来 ⇒ 空串，不抛）。
+
+    2026-11-17（业主：「是系统计数落签」）：pending 台账的行上要记"被审的是哪一份稿"
+    的字节 sha（`object_sha256`）。为什么不是 `## 证明` 正文的 sha：正文那一格已经是
+    `proof_sha256`；`object_sha256` 回答的是"盘上那一份文件"，签文件 / B 认领按它找。
+    改前散文支调用点只给 `object_path`、不给这个 sha ⇒ 三行全空、文件名退成正文 sha。
+    """
+    text = str(rel or "").strip().replace("\\", "/")
+    if not text:
+        return ""
+    try:
+        data = (Path(str(root or "")) / text).read_bytes()
+    except OSError:
+        return ""
+    return hashlib.sha256(data).hexdigest()
+
+
 def _pending_ledger_ref(row: Mapping[str, Any]) -> str:
     """pending 台账行 ⇒ 锚点 `verifications/pending/<key>.jsonl#<verification_id>`。
 
@@ -755,6 +773,13 @@ def _passes_with_tickets(passes: list[dict[str, Any]],
         ticket["verification_id"] = str(row.get("verification_id") or "")
         ticket["at"] = str(row.get("at") or "")
         ticket["proof_sha256"] = str(row.get("proof_sha256") or "")
+        # 2026-11-17（系统计数）：票上带这一轮自己的身份 —— 签文件据此能回答"这三票
+        # 是不是同一趟、第几轮、签的是哪一份稿的字节"（改前三格都不存在，签文件只能
+        # 回台账旁证）。
+        ticket["review_call"] = str(row.get("review_call") or "")
+        ticket["review_pass"] = row.get("review_pass")
+        ticket["object_sha256"] = str(row.get("object_sha256") or "")
+        ticket["object_path"] = str(row.get("object_path") or "")
         out.append(ticket)
     return out
 
@@ -1901,6 +1926,10 @@ class AgentV:
                         # 穷举型证据是机械七项核对（不走上文的三轮连判）：这一格按
                         # "这一趟的第 1 轮"如实记；签发仍走历史台账门（见 review_call 注释）。
                         review_pass=1, review_call=review_call,
+                        #: 2026-11-17（系统计数）：这一趟只有一轮 —— 显式登记，读侧
+                        #: （`sign_counting`）据此把这一签标成 `legacy:single_round_review`，
+                        #: 不许把它静默读成"三轮"（那是本批要挡的那种谎）。
+                        review_scope="single_round",
                         # 业主 2026-10-29 追加口径：V 只落台账，翻位交给秘书。
                         flip=False)
                 except Exception as exc:  # noqa: BLE001 —— 台账写口的任何异常都落成红读数
@@ -2725,7 +2754,9 @@ class AgentV:
         """这一签的台账锚点路径（在册 `verifications/<号>.jsonl`；未在册 pending）。"""
         vid = str(row.get("verification_id") or "")
         if vid.startswith(VR.PENDING_PREFIX):
-            sha = str(row.get("proof_sha256") or "")
+            #: 文件名与 `_pending_ledger_ref` 同一把尺：对象 sha 优先（`record_pending_sign`
+            #: 就是按"对象内容的 sha"分文件的），没有对象格才退到正文 sha —— 老行兼容。
+            sha = str(row.get("object_sha256") or row.get("proof_sha256") or "")
             return f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{sha}.jsonl"
         return f"{VR.VERIFICATIONS_DIR}/{statement_id}.jsonl"
 
@@ -3357,6 +3388,12 @@ class AgentV:
         prompt = VR.cold_start_prompt(
             UNREGISTERED_STATEMENT_PAGE, body, readonly_facts=_facts)
         need = review_pass_bound()
+        #: 2026-11-17（业主：「是系统计数落签」）：这一趟送审的调用 id。这一趟落下的
+        #: 每一行 pending 台账都带它 + `review_pass`（第几轮）—— 于是"三次独立审阅"与
+        #: "一次审阅、三行重述"在盘上分得开，签发那一步（`vsigns.issue`）只按这一组数。
+        review_call = uuid.uuid4().hex[:12]
+        #: 被审那一份稿的字节 sha（不是「## 证明」正文的 sha）：认领 / 签文件按它找。
+        object_sha = _manuscript_bytes_sha(self.workspace_root, rel) if rel else ""
         judged: list[dict[str, Any]] = []
         passes: list[dict[str, Any]] = []
         stopped = ""
@@ -3394,7 +3431,9 @@ class AgentV:
             axis = str(judgment.get("axis") or "")
             word = VR.read_verdict(verdict)
             unresolved = int(verdict.get("unresolved_errors") or 0)
-            judged.append({"pass": n, "verdict": verdict, "judgment": judgment})
+            judged.append({"pass": n, "verdict": verdict, "judgment": judgment,
+                           #: 这一轮判词落下的时刻（不是三行一起写下的时刻）。
+                           "at": _now_iso()})
             passes.append({"pass": n, "axis": axis, "verdict": word,
                            "fault_kind": str(judgment.get("fault_kind") or ""),
                            "fault_cause": str(judgment.get("fault_cause") or ""),
@@ -3509,10 +3548,16 @@ class AgentV:
             try:
                 pending_rows = [VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=judged[i]["verdict"],
-                    verifier=self.actor, object_path=rel,
+                    verifier=self.actor, object_path=rel, object_sha256=object_sha,
                     producer_path=rel, producer_code=_producer_code,
                     roster_role=_producer_hint,
-                    secretary_judge=judged[i].get("judgment"))
+                    secretary_judge=judged[i].get("judgment"),
+                    #: 2026-11-17（系统计数）：一轮一行、行行带自己的身份 ——
+                    #: `review_call`（这一趟）/ `review_pass`（第几轮）/ `at`（这一轮判词
+                    #: 的时刻）/ `object_sha256`（稿的字节 sha）。改前四格全缺（`at` 还是
+                    #: 三行一起写下的那一个时刻），盘上分不出"三次独立审阅"与"一次三行"。
+                    review_call=review_call, review_pass=int(judged[i]["pass"]),
+                    at=judged[i].get("at"))
                     for i in range(len(judged))]
             except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
                 # 2026-11-05（D4）：改前只收 `VerificationError` / `OSError`，写口抛别的
@@ -3542,10 +3587,15 @@ class AgentV:
             try:
                 pending = VR.record_pending_sign(
                     self.workspace_root, proof_text=body, verdict=last,
-                    verifier=self.actor, object_path=rel,
+                    verifier=self.actor, object_path=rel, object_sha256=object_sha,
                     producer_path=rel, producer_code=_producer_code,
                     roster_role=_producer_hint,
                     secretary_judge=(judged[-1].get("judgment") if judged else None),
+                    #: 2026-11-17（系统计数）：负判那一行同样带这一趟的身份 —— 它让"这一
+                    #: 组到此终止"成为盘上可读的事实（下一组从 1 重新数，不借这一组的票）。
+                    review_call=review_call,
+                    review_pass=(int(judged[-1]["pass"]) if judged else None),
+                    at=(judged[-1].get("at") if judged else ""),
                     # 与 `record_verification` 同形：洗过的那一份随这一行落盘
                     # （只有真洗出来时才写；"没有这一格" = 没洗过 / 洗不出来）。
                     washed_relay=wash)
@@ -3806,6 +3856,9 @@ class AgentV:
         # 这三行取；负判只落判词那一行（负判不是签）。改前正判也只落一行、`passes` 三格
         # 是空的 ⇒ `sign_object_gate` 的 `passes_incomplete` 会拒它。
         _producer_hint, _producer_code = self._producer_context()
+        #: 2026-11-17（系统计数）：穷举这一支同样是"一次送审 = 一趟 review_call"，
+        #: 一轮一行、行行带号（与散文那一支同一把尺）。
+        review_call = uuid.uuid4().hex[:12]
         try:
             if stopped == "signed":
                 pending_rows = [VR.record_pending_sign(
@@ -3815,7 +3868,9 @@ class AgentV:
                     object_path=(str(reviewed.get("report_path") or "") or rel),
                     producer_path=rel, producer_code=_producer_code,
                     roster_role=_producer_hint,
-                    secretary_judge=judged[i].get("judgment"))
+                    secretary_judge=judged[i].get("judgment"),
+                    review_call=review_call, review_pass=int(judged[i]["pass"]),
+                    at=judged[i].get("at"))
                     for i in range(len(judged))]
                 pending = pending_rows[-1] if pending_rows else {}
                 passes = _passes_with_tickets(passes, pending_rows)
@@ -3827,7 +3882,10 @@ class AgentV:
                     object_path=(str(reviewed.get("report_path") or "") or rel),
                     producer_path=rel, producer_code=_producer_code,
                     roster_role=_producer_hint,
-                    secretary_judge=(judged[-1].get("judgment") if judged else None))
+                    secretary_judge=(judged[-1].get("judgment") if judged else None),
+                    review_call=review_call,
+                    review_pass=(int(judged[-1]["pass"]) if judged else None),
+                    at=(judged[-1].get("at") if judged else ""))
         except Exception as exc:  # noqa: BLE001 —— D4：写口抛什么都要落成红读数
             # 穷举那一支的 pending 写口同理：改前只收 VerificationError / OSError。
             return {"failed": True, "checked": False, "reason": "ledger_unwritable",
@@ -3913,7 +3971,9 @@ class AgentV:
                 "source": "exhaustion_report",
                 "defect_step": verdict.get("defect_step"),
             }
-            judged.append({"pass": n, "verdict": verdict, "judgment": judgment})
+            judged.append({"pass": n, "verdict": verdict, "judgment": judgment,
+                           #: 这一轮判词落下的时刻（不是三行一起写下的时刻）。
+                           "at": _now_iso()})
             passes.append({"pass": n, "axis": _axis, "verdict": word,
                            "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
                            "defect_step": verdict.get("defect_step"),

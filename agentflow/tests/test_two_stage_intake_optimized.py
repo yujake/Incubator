@@ -29,7 +29,6 @@
 全部 tmp 工作区、零模型调用，不读写 projects/。
 """
 from __future__ import annotations
-import pytest
 
 import pathlib
 import sys
@@ -47,17 +46,14 @@ from agentflow import papermapping as PM  # noqa: E402
 from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 STATEMENT = "设 G 是 3-正则群；则弦长函数不是常值。"
 P1 = "1. 由定义直接得到。\n2. 由 1 与假设 n ≥ 3 得结论。"
 OWN = {
     "statement_full": STATEMENT,
     "statement_text": "弦长函数不是常值",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    "origin": "own_result", "derived_from": ["999999"],
     "kind": "conjecture",
     "doc_id": S.format_id(0),
     "quote_reason": "我方自产命题，没有外部引文要比对",

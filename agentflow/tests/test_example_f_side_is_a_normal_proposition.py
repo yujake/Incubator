@@ -29,7 +29,6 @@ from _example_chain import (
     F_MID, PLAN, SID_SLOT, FULL, manuscript_text, pending_rows, row_of,
     run_f_example, well_formed_seam, ws,
 )
-from conftest import ensure_basis_lit
 
 
 def test_a_f_registers_an_example_and_its_grade_is_by_the_textual_proof(tmp_path):
@@ -101,10 +100,6 @@ def test_a2_the_proof_product_can_declare_example_and_the_registry_lands_it(tmp_
         "statement_full": FULL, "statement_text": FULL,
         "evidence_kind": "heuristic", "quote_verified": None,
         "quote_reason": "夹具：先立猜想（等待证明）",
-        # 2026-11-17（GATE2 尾巴）：own_result 必须写清来路。这一份量的是 F 侧
-        # `kind=example` 走的还是普通命题同一条链，不是来路；真 literature 行
-        # （`ensure_basis_lit`）不进 statements ⇒ `sid` / 手稿名 / 等级读数都不变。
-        "source_lit_id": ensure_basis_lit(st),
     }, role="B")
     assert first.get("created") is True, first
     sid = str([r for r in st.rows("statements")][0]["stmt_id"])

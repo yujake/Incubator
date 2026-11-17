@@ -44,9 +44,7 @@ from agentflow import verifications as VR
 from agentflow import verify as VY
 from agentflow.store import Store
 
-from conftest import seed_statement_row, ensure_basis_stmt
-from conftest import ensure_basis_lit
-from conftest import BASIS_LIT_ID
+from conftest import seed_statement_row
 
 
 # ---------------------------------------------------------------- 命题形态闸的夹具答案
@@ -118,8 +116,8 @@ def _row(stmt_id: str = "000000", **kw) -> dict:
     `Statement.validate` 用同一个 kind）。
     """
     kind = str(kw.get("kind") or "lemma")
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    row = {"stmt_id": stmt_id, "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": kind,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    row = {"stmt_id": stmt_id, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
            "statement_full": "设 G 是 3-正则图；则 c(G) ≤ 1。",
            "statement_text": "c(G) ≤ 1", "proof_text": _PROOF,
            "quote_reason": "我方自产命题，没有外部引文要比对",
@@ -532,7 +530,7 @@ def test_fs_outlet_promotes_a_row_once_v_has_signed(ws: Store):
     second = AgentB(ws, extractor=None, extract_text=None).register_statement(
         statement_full=str(row["statement_full"]),
         statement_text=str(row.get("statement_text") or ""),
-        origin="own_result", source_lit_id=ensure_basis_lit(ws), kind="conjecture",
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         # 档位按 V 的账本现算（`_proof_tier` → `proof_review`）：B 收到这个档之后
         # 仍会按盘上那一签复核，不是自报。
         evidence_kind="proof_review",
@@ -593,4 +591,4 @@ def test_fs_outlet_does_not_promote_without_a_signature(ws: Store):
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

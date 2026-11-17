@@ -51,10 +51,6 @@ from agentflow.agent_b import register_statement as RS  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
 from _proof_manuscript_fixture import write_proof_manuscript  # noqa: E402
-import pytest
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -70,8 +66,8 @@ P_OPT = ("1. 由定义直接得到。\n2. 取最短路径、按弦长分层归�
 OWN = {
     "statement_full": STATEMENT,
     "statement_text": "弦长函数不是常值",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+    "origin": "own_result", "derived_from": ["999999"],
     "kind": "conjecture",
     "doc_id": S.format_id(0),
     "quote_reason": "我方自产命题，没有外部引文要比对",

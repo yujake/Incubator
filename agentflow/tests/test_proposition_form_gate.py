@@ -57,8 +57,6 @@ from agentflow import verifications as VR
 from agentflow.agent_f.core import AgentF
 from agentflow.store import Store
 
-from conftest import BASIS_LIT_ID, ensure_basis_lit
-
 TS = "2026-11-07T10:00:00+08:00"
 SID = "000001"
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
@@ -144,10 +142,6 @@ class _Seam:
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
-    # 2026-11-17（GATE2 尾巴）：本文件直调秘书的夹具要给 own_result 真来路；
-    # 真 literature 行（`BASIS_LIT_ID`）只在 literature 表，不进 statements，
-    # 于是本文件量的"statements 一行都不多 / 形态台账几行"读数一个字都不变。
-    ensure_basis_lit(st)
     return st
 
 
@@ -368,7 +362,6 @@ def test_c_b_collects_a_literature_theorem_without_this_gate(tmp_path):
         "statement_text": "若 |G|=p^2，则 G 交换。",
         "evidence_kind": "heuristic", "quote_verified": None,
         "quote_reason": "夹具：自产命题",
-        "source_lit_id": BASIS_LIT_ID,
     }, role="B")
     assert got.get("created") is True, got
     row = next(dict(r) for r in st.rows("statements"))

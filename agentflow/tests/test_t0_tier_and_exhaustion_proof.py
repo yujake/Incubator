@@ -56,7 +56,6 @@ from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_loop import AgentLoop  # noqa: E402
 from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-10-23T00:00:00+08:00"
 
@@ -195,8 +194,8 @@ def _file_as_conjecture(store: Store, *, proof_text: str,
                         statement_full: str = "对任意正整数 n，R(3,4)=9。") -> dict:
     """先按猜想把这条命题落库（V 只审在册的命题 ⇒ 会审之前它必须是"在册的猜想"）。"""
     return _b(store).register_statement(
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", label="R(3,4)=9（先立成猜想）",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="R(3,4)=9（先立成猜想）",
         statement_full=statement_full, statement_text=statement_full[:40],
         proof_text=proof_text, evidence_kind="cross_check",
         doc_id=S.format_id(0), line_range={"start": 1},
@@ -274,7 +273,7 @@ def _file_via_b(store: Store, *, proof_text: str, kind: str = "theorem",
                 secretary: Any = None) -> dict:
     """B 的入库正路（`own.register_statement` 的真身）：自产结果 + 证明栏 + 出处两件式。"""
     return _b(store, secretary=secretary).register_statement(
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind=kind, label=label,
+        origin="own_result", derived_from=["999999"], kind=kind, label=label,
         statement_full=statement_full, statement_text=statement_full[:40],
         proof_text=proof_text, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1},

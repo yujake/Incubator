@@ -37,7 +37,6 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.secretary import Secretary
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
 
 DEP_SID = "000002"
 #: 第一份新形式稿的稿号由秘书发（候选号来自稿头），夹具不写死。
@@ -123,8 +122,8 @@ def _register_proposition(st: Store, b: AgentB) -> str:
     """先立命题、后补证明（新形式下证明由另一份稿承载）。"""
     made = b.register_statement(
         statement_full=PROPOSITION, statement_text="p 阶元", label="p 阶元",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture", doc_id=S.format_id(0),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         quote_reason="自产命题，没有外部引文要比对")
     assert made.get("ok") is True, made
     sid = str(made["stmt_id"])
@@ -145,7 +144,7 @@ def _deliver(st: Store, b: AgentB, sid: str, rel: str, proof: str, *,
                                store=st, manuscript=rel)
     return b.register_statement(
         statement_full=PROPOSITION, statement_text="p 阶元", label="p 阶元",
-        origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture", doc_id=S.format_id(0),
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         quote_reason="自产命题，没有外部引文要比对",
         proof_manuscript=rel, line_range={"label": f"stmt:{sid}"})
 

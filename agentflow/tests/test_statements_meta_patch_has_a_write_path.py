@@ -47,7 +47,6 @@ from agentflow.agent_b import AgentB
 from agentflow.store import Store
 from agentflow.tools import table_tools
 from agentflow.tools.base import ToolRegistry
-from conftest import BASIS_LIT_ID
 
 FULL = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在。"
 PROOF = ("证明：对 |G| 作归纳。取阶最大的 p-幂子群 P，用共轭作用数轨道，"
@@ -57,8 +56,8 @@ OWNER_TASK = S.format_id(0)
 
 def _body() -> dict:
     return {"statement_full": FULL, "statement_text": FULL[:24],
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-            "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
             "doc_id": S.format_id(0),
             "quote_reason": "我方自产命题，没有外部引文要比对"}
 
@@ -178,4 +177,4 @@ def test_the_amend_leaves_the_secretary_audit_trail(tmp_path):
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs")

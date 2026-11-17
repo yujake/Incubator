@@ -29,7 +29,6 @@ from agentflow import llmseam
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
 from agentflow.tools import attack_tools as AT
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 
 # ---------------------------------------------------------------- 命题形态闸的夹具答案
@@ -287,8 +286,8 @@ def test_a_proof_round_lands_a_registration_entry_not_a_statement(store: Store):
     b = AgentB(store, extractor=None, extract_text=None)
     got = b.register_statement(
         statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         label=str(out.get("proof_label") or ""), proof_text=body,
         # 给路径（而不是正文）：B 据此知道这份稿落在哪。
         proof_manuscript=rel, evidence_kind="heuristic",
@@ -381,7 +380,7 @@ def test_the_same_proof_twice_does_not_grow_the_manuscript_or_the_rows(store: St
     b = AgentB(store, extractor=None, extract_text=None)
     got = b.register_statement(
         statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", label="同一条命题",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="同一条命题",
         proof_text=body, proof_manuscript=rel, evidence_kind="heuristic",
         line_range={"label": rel}, quote_reason="夹具：同一份证明认领两次")
     assert got.get("ok") is True, got
@@ -392,7 +391,7 @@ def test_the_same_proof_twice_does_not_grow_the_manuscript_or_the_rows(store: St
     assert _stmt_named not in _ms or _stmt_named == Path(rel).name, _ms
     got = b.register_statement(
         statement_full="难题：判定这个族的存在性", statement_text="判定这个族的存在性",
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", label="同一条命题",
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="同一条命题",
         proof_text=body, proof_manuscript=rel, evidence_kind="heuristic",
         line_range={"label": rel}, quote_reason="夹具：同一份证明认领两次")
     assert got.get("ok") is True, got

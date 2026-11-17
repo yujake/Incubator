@@ -39,13 +39,12 @@ if str(_SRC) not in sys.path:
 
 import pytest
 
-from conftest import sign_for_the_gate, ensure_basis_stmt
+from conftest import sign_for_the_gate
 from agentflow import depsection as DS
 from agentflow import manuscriptform as MF
 from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
-from conftest import ensure_basis_lit
 
 SID = S.format_id(13)
 HEAD = ("| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | "
@@ -123,8 +122,8 @@ def _register_target(store: Store, *, proof_text: str = "") -> dict:
     return b.register_statement(
         statement_full="引理：由在册定理推出结论（判据夹具）。",
         statement_text="由在册定理推出结论", proof_text=proof_text,
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture",
         quote_reason="判据夹具：自产命题", doc_id=SID)
 
 
@@ -162,7 +161,7 @@ def _registered_conjecture(store: Store) -> str:
 def _register_again(store: Store):
     return AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
         statement_full="引理：由在册定理推出结论（判据夹具）。",
-        statement_text="由在册定理推出结论", proof_text="", origin="own_result", source_lit_id=ensure_basis_lit(store),
+        statement_text="由在册定理推出结论", proof_text="", origin="own_result", derived_from=["999999"],
         kind="conjecture", quote_reason="判据夹具：自产命题", doc_id=SID)
 
 

@@ -179,10 +179,6 @@ def test_b3_updating_the_numeric_evidence_bit_lands_through_the_secretary(store)
         dict(origin="own_result", kind="conjecture", label="椭圆无等弦点",
              statement_full=STATEMENT, statement_text="椭圆不存在等弦点", proof_text="",
              quote_verified=None, quote_reason="普通数值档还没有证明（夹具）",
-             # 2026-11-17（GATE2 尾巴）：own_result 要给真来路。这一份量的是"数值证据位
-             # 更新是否经秘书落盘"（actor / 五元位），不是来路；真 literature 行由下面
-             # 的 `add_literature(store, format_id(0))` 落下，不进 statements ⇒ 读数不变。
-             source_lit_id=S.format_id(0),
              doc_id=S.format_id(0), evidence_kind="heuristic"), role="B")
     assert seeded.get("created") is True, seeded
     sid = str(seeded["stmt_id"])
@@ -217,10 +213,8 @@ def test_c_without_the_secretarys_landing_nothing_is_written(store, monkeypatch)
     seeded = sec.record_statement(
         dict(origin="own_result", kind="conjecture", label="椭圆无等弦点",
              statement_full=STATEMENT, statement_text="椭圆不存在等弦点", proof_text="",
-             quote_verified=None, quote_reason="证明还没做完（夹具）",
-             # 2026-11-17（GATE2 尾巴）：同上 —— 真文献行由 `add_literature` 落下。
-             source_lit_id=S.format_id(0),
-             doc_id=S.format_id(0), evidence_kind="heuristic"), role="B")
+             quote_verified=None, quote_reason="证明还没做完（夹具）", doc_id=S.format_id(0),
+             evidence_kind="heuristic"), role="B")
     assert seeded.get("created") is True, seeded
     sid = str(seeded["stmt_id"])
     sign_for_the_gate(store.root, statement_id=sid, proof_text=PROOF, store=store)

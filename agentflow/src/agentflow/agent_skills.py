@@ -1004,9 +1004,10 @@ def _b_skills() -> tuple[Skill, ...]:
    `proof_text` 只是它收进台账后的那一列 —— F 的手稿是来源，不是要照抄的正文
    （三条口径见下面「消化」那一节）；
 3. **出处**：`external_lit` 要 `source_lit_id` + `page_range`；`own_result` 要
-   `doc_id` 或 `line_range`，**还要写清来路** —— `derived_from`（它由哪几条已登记命题
-   推出，填 `stmt_id` 列表）与 `source_lit_id`（它从哪篇文献的结论推出）**至少一个非空**；
-   两格都空 ⇒ 受控拒 `missing_own_result_basis`、整笔不写（自产不等于无源）。
+   `doc_id` 或 `line_range`。`derived_from`（它由哪几条已登记命题推出）与
+   `source_lit_id`（它从哪篇文献的结论推出）**是可选信息**：有就记，没有不算错 ——
+   "自产"的证据是**台账里那份签过的稿**（V 的 v-review / `out/vsigns/` 的签 /
+   稿上的签块），不是载荷里写了一个 `derived_from`。
    **出处不在库整笔不写**。
 
 ## 自产命题那一档：稿在 F 手上，行在你手上

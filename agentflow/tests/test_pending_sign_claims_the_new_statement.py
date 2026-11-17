@@ -33,7 +33,6 @@ from agentflow import verifications as VR
 from agentflow import vsigns as VS
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-11-02T09:00:00+08:00"
 FULL = "设 f 在 [0,1] 上连续，则 f 一致连续。"
@@ -71,8 +70,8 @@ def _register(st: Store, *, proof: str = PROOF, full: str = FULL) -> dict:
     return b.register_statement(
         statement_full=full, statement_text=full, proof_text=proof,
         proof_manuscript=_manuscript(full, proof),
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        kind="conjecture", label="探针命题", origin="own_result", source_lit_id=ensure_basis_lit(st),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        kind="conjecture", label="探针命题", origin="own_result", derived_from=["999999"],
         evidence_kind="heuristic", quote_verified=None,
         quote_reason="夹具：自产证明，没有第二份文本可比对",
         line_range={"label": "reports/probe.md"})

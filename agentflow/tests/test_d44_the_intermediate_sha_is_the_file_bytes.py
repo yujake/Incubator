@@ -46,7 +46,7 @@ from agentflow.store import Store
 from agentflow.tools import doc_tools as DT
 from agentflow.verify import verify_all
 
-from conftest import add_literature
+from conftest import add_literature, seed_writing_material
 
 CLAIM = {
     "claim_id": "claim-1",
@@ -63,6 +63,7 @@ CLAIM = {
 def _build(store: Store) -> dict:
     """经真实的写侧落一份稿件（这一条判据打的正是那个写入点）。"""
     add_literature(store, "0000", title="探针文献", processed=True)
+    seed_writing_material(store)
     return DT.build_document(
         store,
         kind="paper",

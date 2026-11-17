@@ -565,7 +565,10 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
                         producer_code: Any = "",
                         roster_role: Any = "",
                         secretary_judge: Mapping[str, Any] | None = None,
-                        washed_relay: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                        washed_relay: Mapping[str, Any] | None = None,
+                        review_call: Any = "", review_pass: Any = None,
+                        review_scope: str = "",
+                        at: Any = "") -> dict[str, Any]:
     """把"命题还没在册时"的一次审校落进 pending 台账，返回那一行。
 
     为什么要这一格（D-34，r34b 的真机现场）：V 审完判「成立」，而 `statements` 是 0 行 ——
@@ -588,6 +591,21 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     修法只在写口补同一格，条件写入与在册那一支逐字相同：只有 `washed=True` 才写，
     "没有这一格"必须是"没洗过 / 洗不出来"，不许写一份空文本冒充洗过。读侧
     （`vsigns._defect_text` / `agent_loop._washed_text`）按同一个键读。
+
+    ## `review_call` / `review_pass` / `at`：一行一笔身份（2026-11-17，业主裁定）
+
+    业主逐字：「三次连续过审才能签…不存在 V 秘书判一次审过后直接落签…（是系统计数
+    落签）」。要让"系统计数"数得出来，每一行必须自己说清"我是哪一趟送审的第几轮"：
+
+    - `review_call` —— 这一趟送审的调用 id（同一趟的几行逐字相同）；
+    - `review_pass` —— 这一趟的第几轮（1..need）；
+    - `object_sha256` —— 被审那一份稿的字节 sha（认领 / 签文件按它找）；
+    - `at` —— 这一轮判词落下的时刻（调用方把判词时刻递进来；不给才取写行时刻）。
+      改前三行是一次批量写的、`at` 取写行时刻 ⇒ 三行必然同秒，盘上分不出
+      "三次独立审阅"与"一次审阅、三行重述"。
+
+    不给这三格（老调用点 / 夹具）⇒ `review_call=""`、`review_pass=None`、`at=写行时刻`
+    —— 读侧按历史形态（`legacy`）读，不许静默当成新形态的一份。
     """
     checked = parse_verdict(json.dumps({"verdict": verdict.get("verdict"),
                                         # 老调用方带的原话照旧带下去（审计用）。
@@ -623,7 +641,15 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
         #: 对象（盘上那一份报告 / 证明文件）的字节 sha256 与相对路径：认领时按它。
         "object_sha256": obj, "object_path": str(object_path or "").strip().replace("\\", "/"),
         "round": len(rows) + 1, "used_faces": [], "submission_id": "",
-        "landed": "pending", "at": _now_iso(),
+        #: 2026-11-17（系统计数）：这一行是哪一趟送审的第几轮（键无条件存在 ——
+        #: "没有这一格"与"这一格是空的"必须分得开；老调用点不传 ⇒ 空串 / None，
+        #: 读侧按 legacy 读，见 `sign_counting`）。
+        "review_call": str(review_call or "").strip(),
+        "review_pass": (int(review_pass) if isinstance(review_pass, int)
+                        and not isinstance(review_pass, bool) else None),
+        #: 这一轮判词的时刻（调用方给）：不给才取写行时刻（老行为）。
+        "at": str(at or "").strip() or _now_iso(),
+        "landed": "pending",
     }
     # ---- 产出方格（甲）：新行无条件写 `producer_role`，老行读侧记 unknown ----------
     row.update(_producer_cells(str(producer_path or object_path or ""),
@@ -1542,6 +1568,7 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
            sign_issuance: Mapping[str, Any] | None = None,
            washed_relay: Mapping[str, Any] | None = None,
            review_pass: int | None = None, review_call: str = "",
+           review_scope: str = "",
            flip: bool = True) -> dict[str, Any]:
     """把一次审校写进这个命题的台账（追加一行），返回那一行。
 
@@ -1674,6 +1701,13 @@ def record_verification(root: str | Path, *, statement_id: str, proof_text: str,
     row.update(_producer_cells(
         str(manuscript or producer_path or object_path or ""),
         producer_code=producer_code, roster_role=roster_role))
+    if str(review_scope or "").strip():
+        #: 2026-11-17（系统计数）：这一趟的「审了几轮」是不是只有一轮。只在一处写
+        #: （在册穷举型证据那一档：机械七项会审一次落一行，不是三轮）；条件写入 ⇒
+        #: 所有别的行逐字节不变。读侧（`sign_counting.count_registered`）见到它就把
+        #: 这一签标成 `legacy:single_round_review` —— 那是登记在册的例外，不是静默
+        #: 等价（签文件里也写 `legacy=true` + 同一个 `counted_by`）。
+        row["review_scope"] = str(review_scope).strip()
     if no != DEFAULT_PROOF_NO:
         # 2026-11-11 业主裁定：`proof_no` 在 V 签侧退役 —— canonical（#p1）新行不再写。
         # 显式 `proof_no>1` 是旧多证明写口（一稿一份之后生产路径不再产生它）：旧读侧
@@ -3198,6 +3232,10 @@ def consecutive_holds(root: str | Path, statement_id: str, proof_no: Any = 1,
         "proof_no": 0, "need": int(SIGN_STREAK_NEED) if need is None else int(need),
         "streak": 0, "streak_ok": False,
         "sha": "", "rows": 0, "legacy_rows": 0, "ledger": "", "reason": "",
+        #: 这个连续数是哪一档数出来的（2026-11-17，业主「系统计数落签」）：本函数
+        #: 数的是台账尾部连续数，也就是历史形态那一路 —— 显式标 legacy，不许
+        #: 让读的人把它当成新签的 `review_call` 组内计数（那个在 `sign_counting`）。
+        "counted_by": "legacy:ledger_tail",
     }
     no = _read_proof_no(proof_no)
     if no < 1:
@@ -3990,6 +4028,51 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
     return out
 
 
+def _framework_holds(root: str | Path, row: Mapping[str, Any], *, need: Any,
+                     review_call: str = "") -> dict[str, Any]:
+    """这一签的「连续几次过审」读数：框架从台账现数（`sign_counting`），不吃调用方的数。
+
+    业主 2026-11-17 逐字：「…（是系统计数落签）」。改前这一格由调用方递进来的
+    `within_call`（V 那一趟的 `pass_no`）或台账尾部连续数（`consecutive_holds`）决定；
+    现在只有一个来源：:func:`sign_counting.count_registered` —— 同一份正文、同一个
+    `review_call` 内 `review_pass=1..need` 连续 clean 的轮数。老行（没有 `review_call`）
+    走 legacy 复算，读数里带 `legacy=True` + `counted_by="legacy:ledger_tail"`。
+
+    返回 `holds` 的键与 `consecutive_holds` 同形（`checked` / `streak` / `need` /
+    `streak_ok` / `sha` / `legacy_rows`），另加 `counted_by` / `legacy` / `why`。
+    """
+    from . import sign_counting as _SC
+
+    sid = str(row.get("stmt_id") or row.get("statement_id") or "")
+    try:
+        no = proof_no_of(row)
+    except VerificationError:
+        no = DEFAULT_PROOF_NO
+    counted = _SC.count_registered(
+        root, statement_id=sid, proof_no=no,
+        proof_sha256=row.get("proof_sha256"),
+        review_call=str(review_call or row.get("review_call") or ""), need=need)
+    return {
+        "checked": bool(counted.get("checked")),
+        "streak": int(counted.get("count") or 0),
+        "need": int(counted.get("need") or int(need or SIGN_STREAK_NEED)),
+        "streak_ok": bool(counted.get("ok")),
+        "sha": str(row.get("proof_sha256") or ""),
+        #: legacy 那两档（没有 `review_call` 的历史行 / 登记在册的单轮会审）不给
+        #: `review_call`：签的 `passes` 那一格要按台账尾部回捞（`_vsign_payload` 的
+        #: 历史支），而不是按"这一趟"取——单轮会审的每一行本来就各属于一个
+        #: `review_call`，按趟取只会取到 1 条，签就会 `passes_incomplete`。
+        "review_call": ("" if counted.get("legacy")
+                        else str(counted.get("review_call") or "")),
+        "legacy_rows": int(counted.get("legacy_rows") or 0),
+        #: 这个数是哪一档数出来的（`sign_counting` / `legacy:*`）：签文件与读数都写它，
+        #: 老数据不许静默等价成新签。
+        "counted_by": str(counted.get("counted_by") or ""),
+        "legacy": bool(counted.get("legacy")),
+        "why": str(counted.get("why") or ""),
+    }
+
+
 def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
                              within_call: int | None = None,
                              need: Any = None, review_call: str = "",
@@ -4039,16 +4122,17 @@ def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
         no = DEFAULT_PROOF_NO
     out["proof_no"] = int(no)
     n = int(need or SIGN_STREAK_NEED)
+    # ---- 2026-11-17（业主：「是系统计数落签」）：门槛由框架从台账现数 --------------
+    #
+    # 改前这里吃 `within_call`（V 那一趟的 `pass_no`）：给了它，`streak` 就是调用方
+    # 说的那个整数，框架一个字都不核（`verifications.py:4264-4265` 的原文）。
+    # 现在数只有一个来源：`sign_counting.count_registered` —— 同一份正文、同一个
+    # `review_call` 内 `review_pass=1..need` 连续 clean。`within_call` 只作读数
+    # （`within_call_claim`），它多了/少了一轮都不改变这里数出来的数。
+    holds: dict[str, Any] = _framework_holds(
+        root, row, need=n, review_call=review_call)
     if within_call is not None:
-        holds: dict[str, Any] = {
-            "checked": True, "streak": max(0, int(within_call)), "need": n,
-            "streak_ok": bool(int(within_call) >= n),
-            "sha": str(row.get("proof_sha256") or ""),
-            "review_call": str(review_call or row.get("review_call") or ""),
-            "legacy_rows": 0,
-        }
-    else:
-        holds = consecutive_holds(root, sid, proof_no=no)
+        holds["within_call_claim"] = max(0, int(within_call))
     out["streak"] = int(holds.get("streak") or 0)
     out["need"] = int(holds.get("need") or n)
     out["streak_ok"] = bool(holds.get("streak_ok"))
@@ -4563,6 +4647,9 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         #: 历史形态的行数（2026-11-02）：没有 `review_call` / `review_pass` 的行。
         #: 它们只作历史台账读数，不参与新签判断；见 :func:`_is_legacy_row`。
         "legacy_rows": 0,
+        #: 这个连续数是哪一档数出来的（2026-11-17）：本格数的是台账尾部连续数
+        #: ⇒ 显式 legacy（新签的组内计数在 `sign_counting`，不是这里）。
+        "counted_by": "legacy:ledger_tail",
         "ledger": "", "why": "",
     }
     if no < 1:

@@ -72,7 +72,8 @@ from agentflow import modelgw as MG
 from agentflow.store import Store
 
 from conftest import (
-    add_concept, add_literature, add_relation, sync_counters, write_paper,
+    add_concept, add_literature, add_relation, seed_writing_material,
+    sync_counters, write_paper,
 )
 
 SID = "cc3-c10"
@@ -248,6 +249,7 @@ def _workspace(base: pathlib.Path) -> Store:
                  description="谱落在区间内", quote_verified=True, sync=False)
     sync_counters(st)
     write_paper(st, PAPER)
+    seed_writing_material(st)
     return st
 
 

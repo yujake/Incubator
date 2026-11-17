@@ -34,7 +34,6 @@ import pytest
 SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import manuscriptids as _MID  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -50,8 +49,8 @@ F_MID = "000901"
 def _register_first_statement(env: dict) -> str:
     """在册一条 F 的命题（先立猜想、证明后补）—— 它的号与 E 的实验号同宽同序。"""
     first = env["b"].register_statement(
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="conjecture", label="R(3,4)=9",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9", proof_text="",
         evidence_kind="cross_check", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,

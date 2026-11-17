@@ -54,7 +54,6 @@ from agentflow.secretary import Secretary
 from agentflow.store import Store
 
 from _proof_manuscript_fixture import carry_proof_manuscript
-from conftest import BASIS_LIT_ID, ensure_basis_lit
 
 #: 错并那一对：条件有强弱关系（素数 / 奇素数）⇒ 语义不一致 ⇒ 本来不许并。
 PAIR_WEAK = "设 p 是素数；则 p 是奇数。"
@@ -98,20 +97,14 @@ def _proof_kind_default(monkeypatch):
 
 
 def _own(full: str, *, label: str = "") -> dict:
-    # 2026-11-17（GATE2 尾巴，业主「不许假来路」）：own_result 必须写清来路。
-    # 这一份量的是"并进两段正文之后后验判据说什么"（行数 / `_proposition_matches`），
-    # 不是来路本身；用真 literature 行（`ensure_basis_lit`）当来路，它不进 statements，
-    # 于是"错并之后在册 1 行"这类读数一个字都不变。
     return {"statement_full": full, "statement_text": full[:24], "label": label,
             "origin": "own_result", "kind": "conjecture",
-            "source_lit_id": BASIS_LIT_ID,
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
 def _ws(path: pathlib.Path) -> Store:
     st = Store(path / "ws")
     st.init()
-    ensure_basis_lit(st)
     return st
 
 

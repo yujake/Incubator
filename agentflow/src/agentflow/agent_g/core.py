@@ -218,6 +218,21 @@ def _selftest() -> int:
         )
     line("[1] 造数据：文献 2 篇、实验 2 条（1 条 formal/proof、1 条 numeric/cross_check）")
 
+    # [1c] 成文门的料（2026-11-17 DOCGATE1）：`doc.build_document` 现在要求"至少一条
+    # 可依赖的成果"（`proof_text` 非空或 `quote_verified`，或 `out/vsigns/` 里 ≥1 份签）。
+    # 自检要跑到第 [4] 步写稿，就得先把"料"造出来 —— 否则它会在自己的新判据上以退出码 1
+    # 收场（这正是那个判据该有的行为：零签且零地基时不许成文）。
+    with st.tx("statements", actor="seed", note="fixture") as tx:
+        tx.upsert("statements", S.Statement(
+            stmt_id="0000", origin="own_result", kind="theorem",
+            label="Spec K(m) = [−m, m]", statement_text="谱落在区间内",
+            statement_full="Spec K(m) = [−m, m]",
+            proof_text="Proof. 由形式化检查器核验（`proofs/selftest.lean`）。",
+            quote_verified=None, quote_reason="自检夹具：这一条没有可比的全文",
+            evidence_kind="cross_check", status="active", created_at=S.now_iso(),
+        ).to_dict())
+    line("[1c] 成文门的料：`statements` 一条带证明正文的命题（`proof_text` 非空）")
+
     # [1b] 夹具自己必须过审计：这条 formal/proof 行的 `verifier_output` 要能读出
     # 被检查的声明名，否则它是一个"自报的 proof"（`selfreported_proof`，`R2b-agentg-1`）。
     # 从前没有人跑这一步 —— `_selftest` 不调 `verify_all`、也没有任何测试调 `_selftest`，

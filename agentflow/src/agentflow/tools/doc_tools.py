@@ -15,7 +15,7 @@
 |---|---|---|
 | `scan_claim` | 一条断言的机械检查（纯函数） | 唯一判据；G 与 H 共用同一份 |
 | `compose_claim` | 构造一条合规断言 | `cross_check` 自动补 disclaimer；否定型未分类、无引用、过度声称 ⇒ 构造时抛 |
-| `build_document` | 落库 + 渲染 markdown | 先逐条 `scan_claim`、再核 citations 指向的对象真的存在（两张闸都过才写库） |
+| `build_document` | 落库 + 渲染 markdown | 先过成文门（签/地基，与 `doc.write_mapping` 同一处判据 `researchbase.writing_gate`）、再逐条 `scan_claim`、再核 citations 与 proof 证据锚（四闸都过才写库） |
 | `register_dependency` | 登记外部依赖（FC-23 第一道闸） | `closed` 必须用真实数据核到已入库来源 |
 | `render_markdown` | 人可读渲染（FC-10 / FC-22 / FC-23 / FC-25 的呈现层） | 三分档计数、否定分类、依赖表都必须出现 |
 | `list_documents` / `write_mapping` | 只读列举 / 论文对应表三份写口 | `write_mapping` 只调 `papermapping.write_package`，手抄就与渲染器逐字对不上 |
@@ -1859,6 +1859,15 @@ def build_document(
         raise ValueError(f"kind 必须是 {S.DOC_KINDS} 之一，收到 {kind!r}")
     if not str(title or "").strip():
         raise ValueError("title 不能为空")
+    root = Path(workspace_root).resolve() if workspace_root else Path(store.root).resolve()
+    # ---- 成文门（业主 2026-11-17 DOCGATE1；判据 `tests/test_build_document_needs_sign_or_base.py`）
+    # 与 `doc.write_mapping` 是同一处实现（`researchbase.writing_gate`，不复制一份判据）：
+    # 签与地基两样都没有 ⇒ 受控拒 + 四项读数，一个字节都不写。真机现场见
+    # `temp/inv1/REPORT-inv1.md` §2：G 在零签时成文，比全趟第一份签早 67 秒。
+    from .. import researchbase as RB
+    gate = RB.writing_gate(store)
+    if gate["refuse"]:
+        raise DocToolError(gate["reason"], kind=gate["kind"], details=gate["details"])
     norm = normalize_claims(claims)
     secs: list[dict] = []
     for i, s in enumerate(sections or [], 1):
@@ -1867,7 +1876,6 @@ def build_document(
         secs.append({"heading": str(s.get("heading")), "body": str(s.get("body") or "")})
     probs = [str(x) for x in (open_problems or [])]
 
-    root = Path(workspace_root).resolve() if workspace_root else Path(store.root).resolve()
     # 引用核对要读 literature/relations/experiments/eval_results ⇒ 一并纳入锁集合。
     # `Store.tx` 按 LOCK_ORDER 固定顺序加锁（store.py:318），所以多声明几张表
     # 不会引入加锁顺序问题；而放在同一笔事务里，"核引用"与"写 documents"
@@ -2464,7 +2472,10 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
             "**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` "
             "+ 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；"
             "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "
-            "missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False"
+            "missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False；"
+            "成文门拒：kind=no_evidence_chain（零签且零有效地基 ⇒ **一个字节都不写**；"
+            "另带 research_base（三态 + 逐格计数）/ signing（签数 / 待签稿）/ next_steps "
+            "四项读数与「先拿签/先补地基，再来成文」）/ ledger_unreadable（台账读不到 ⇒ 没查成）"
             ),
     tags=("document", "write"),
 )

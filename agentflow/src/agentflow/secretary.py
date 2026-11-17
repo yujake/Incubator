@@ -1870,72 +1870,6 @@ def _semantic_quote_evidence_refusal(body: Mapping[str, Any]) -> dict[str, str]:
                        "为什么（三态纪律：没查不许折成查过了没问题）")}
 
 
-# ---------------------------------------------------------------- own_result 的来路闸
-#
-# 2026-11-17（业主裁定 ② 的尾巴）：B 的登记路（`register_statement`）在写库之前已经
-# 按 `statementledger.own_result_basis_missing` 受控拒过；而秘书这条写口此前一个字都
-# 没拦 —— `table.create("statements")` 被 `store.direct_write_refusal` 转给秘书
-# （`tools/table_tools.py::_route_to_secretary`）之后，同一份"没有来路"的 own_result
-# 载荷仍能落进台账。真机 `projects/lp-ball-3`：33 条命题里 3 条 `origin=own_result`、
-# `derived_from` 与 `source_lit_id` 全空，收工门因此红。
-#
-# 判据只有一处（`statementledger.own_result_basis_missing`），措辞只有一处
-# （`statementledger.own_result_basis_refusal`）：两条写路（B 的登记 / 秘书的写口）
-# 读同一份、说同一句，码也逐字相同（`register_statement` 的
-# `_refuse("missing_own_result_basis", …)`）。
-
-#: 这一档的受控码。与 `agent_b/register_statement.py` 的 `missing_own_result_basis`
-#: 逐字相同；为什么不从那边 import：`agent_b` 依赖本模块，反向 import 会成环。
-#: 判据（`tests/test_table_create_cannot_register_an_own_result_without_basis.py`
-#: 的 b 条）断言两处吐出的码与拒信逐字相等 —— 漂了会红。
-MISSING_OWN_RESULT_BASIS = "missing_own_result_basis"
-
-
-def _numeric_experiment_basis(body: Mapping[str, Any]) -> bool:
-    """这一笔 own_result 的来路是不是一条 E 的数值实验行（普通数值绿通的来路）。
-
-    为什么秘书这一侧要认这一格：B 的登记路对普通数值绿通（`_green.ok`）放行，
-    理由是"它的来路是那一条实验行（`exp:<号>`），既不是已登记的命题、也不是一篇
-    文献"。判据要逐字同源，写口的例外就必须同源 —— `_green` 是 B 的私有读数、
-    不会出现在载荷里；它落进载荷的那一格是五元位第 1 位（`numeric="verified"`）
-    加上凭据里的实验指针（`experiments` / `experiment_id` / `script`）。
-
-    `bits` 不在 `table.create` 的可路由键里（`tools/table_tools._NOT_ROUTABLE_KEYS`）
-    ⇒ 这一格只可能由产出侧现算交来，通用写口伪造不了它。
-    """
-    bits = body.get("bits")
-    if not isinstance(bits, Mapping):
-        return False
-    if str(bits.get("numeric") or "").strip().lower() != "verified":
-        return False
-    evidence = bits.get("evidence")
-    num = dict(evidence.get("numeric") or {}) if isinstance(evidence, Mapping) else {}
-    if not num:
-        return False
-    return bool(str(num.get("experiment_id") or "").strip()
-                or [x for x in (num.get("experiments") or []) if str(x).strip()]
-                or str(num.get("script") or "").strip())
-
-
-def _own_result_basis_refusal(body: Mapping[str, Any]) -> dict[str, Any]:
-    """`origin="own_result"` 而两格来路都空 ⇒ 受控拒；不适用 / 齐了 ⇒ `{}`（空字典）。
-
-    判据与拒信都从 `statementledger` 那唯一一处取：`own_result_basis_missing`
-    （缺哪几格）+ `own_result_basis_refusal`（逐条点名、给两条正路）。两个例外按
-    同一份口径放行：
-    - 概念行：判据自己按 `kind` 短路（`OWN_RESULT_BASIS_EXEMPT_KINDS`），不在这里判；
-    - 普通数值绿通：来路是实验行，见 `_numeric_experiment_basis`。
-    """
-    missing = SL.own_result_basis_missing(
-        origin=body.get("origin"), derived_from=body.get("derived_from"),
-        source_lit_id=body.get("source_lit_id"), kind=body.get("kind"))
-    if not missing or _numeric_experiment_basis(body):
-        return {}
-    return {"refused": MISSING_OWN_RESULT_BASIS,
-            "reason": SL.own_result_basis_refusal(missing),
-            "missing": list(missing)}
-
-
 def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
                               manuscript_path: Any = "", proof_text: Any = "",
                               bits: Mapping[str, Any] | None = None
@@ -4870,6 +4804,9 @@ class Secretary:
             #: 那一趟的调用 id / 台账尾部的历史连续数（只作读数，不参与判定）。
             "within_call": None, "review_call": str(review_call or ""),
             "ledger_streak": 0,
+            #: 2026-11-17（系统计数）：这一签的门槛是框架从台账现数的那几格。
+            #: 键无条件存在（两条分支都写；不给的旧直调那一支是空串 = 没数过）。
+            "counted_by": "", "sign_count": {},
             "basis": [], "reading": {}, "cost": {}, "material": {},
             "statement_id": str(statement_id or ""),
             # 2026-11-11：`proof_no` 在 V 签侧退役 —— 这一格不再写（顶层读数同口径）。
@@ -4939,15 +4876,41 @@ class Secretary:
             candidate_axis = _VR.historical_axis(v)
         candidate_ok = (candidate_axis == "clean"
                         and int(v.get("unresolved_errors") or 0) == 0)
-        if within is not None:
-            # ---- 2026-11-02 定稿：地板只看这一趟送审内部的轮数。
-            # 台账尾部的历史连续数（`ledger_streak`）只作读数；`same_sha` 也只作读数，
-            # 不参与这一支的判定 —— 否则旧台账又能凑出一次签（要求 ④）。
-            out["streak"] = within
-            out["projected"] = within if candidate_ok else 0
-            out["streak_ok"] = bool(out["projected"] >= int(out["need"]))
-            out["basis"] = [f"within_call={within}", f"need={out['need']}",
-                            f"ledger_streak={out['ledger_streak']}（历史读数，不参与判定）"]
+        #: 这一签的送审身份：行上带 `review_call`（V 这一趟的三轮）⇒ 新形态。
+        _row_call = str((row or {}).get("review_call") or "").strip() \
+            if isinstance(row, Mapping) else ""
+        counted: dict[str, Any] = {}
+        if within is not None or _row_call:
+            # ---- 2026-11-17（业主：「是系统计数落签」）----------------------
+            #
+            # 门槛只有一个来源：框架从台账现数（同一 `review_call` 内
+            # `review_pass=1..need` 连续 clean，跨送审不累计、同号重放不增加）。
+            # `within_call`（V 那一趟的 `pass_no`）只作读数：它多一轮 / 少一轮都不
+            # 改变发不发签 —— 这正是"决定权在框架"那一条的可测形态。
+            from . import sign_counting as _SC
+
+            counted = _SC.count_registered(
+                root, statement_id=str(statement_id or ""), proof_no=proof_number,
+                proof_sha256=str((row or {}).get("proof_sha256") or sha),
+                review_call=_row_call or str(review_call or ""), need=out["need"])
+            out["sign_count"] = dict(counted)
+            out["counted_by"] = str(counted.get("counted_by") or "")
+            out["streak"] = int(counted.get("count") or 0)
+            out["projected"] = out["streak"] if candidate_ok else 0
+            out["streak_ok"] = bool(counted.get("ok")) and candidate_ok
+            out["basis"] = [
+                f"system_count={out['streak']}", f"need={out['need']}",
+                (f"within_call={within}（调用方自称，只作读数）" if within is not None
+                 else f"review_call={_row_call or '（空）'}"),
+                f"counted_by={out['counted_by'] or '（没读到）'}",
+            ]
+            if not counted.get("checked"):
+                out.update(checked=False, issue=False, decision=JUDGE_UNCHECKED,
+                           reason=("系统计数没查成（"
+                                   + str(counted.get("why") or "没有任何读数")
+                                   + "）⇒ 不放签（不是「没问题」，也不是「次数不够」）"))
+                self._note_sign_issuance(out, task_id=task_id)
+                return out
         else:
             if landed:
                 out["projected"] = out["streak"] if candidate_ok else 0
@@ -4968,18 +4931,22 @@ class Secretary:
         # 材料里「不放」任何台账派生的格子（`state` / `ledger_streak_history` /
         # 台账算出来的 `same_sha`）。同一趟送审的三轮由 V 的循环保证是同一份正文，
         # 所以这里给 `same_sha=True` 是"这一趟的事实"，不是台账读数。
-        if within is not None:
+        if within is not None or counted:
             material = {
                 "statement_id": str(statement_id or ""), "proof_no": proof_number,
                 "within_call": within,
+                #: 2026-11-17：材料里放的是框架现数的那几格（`within_call` 只作
+                #: 调用方自称的读数，不参与判定）。
+                "counted_by": out.get("counted_by") or "",
+                "count": int(out.get("streak") or 0),
                 "streak": out["projected"], "need": out["need"],
                 "projected": out["projected"], "streak_ok": out["streak_ok"],
                 "same_sha": True,
                 "candidate_verdict": str(v.get("verdict") or ""),
                 "candidate_axis": candidate_axis,
                 "candidate_defect_step": v.get("defect_step"),
-                "reading_why": ("这一签的门槛由框架按这一趟送审自己数（跨趟不累计）；"
-                                "台账历史行不参与这一趟的发签判定"),
+                "reading_why": ("这一签的门槛由框架按这一趟送审自己数（跨趟不累计、"
+                                "同号重放不增加）；调用方递进来的轮数只作读数"),
             }
         else:
             material = {
@@ -5009,11 +4976,11 @@ class Secretary:
             # 地板没过 ⇒ 这一签不发（也不问模型：没有"模型点头"这一层了）。这一句只是
             # "这一转还不算一票"的读数，不是终局：终局由 `agent_v.core` 的循环给。
             out.update(checked=True, issue=False, decision=SIGN_WITHHOLD,
-                       reason=(f"这一趟送审的 clean 读数 {out['projected']}/{out['need']}"
-                               f"（{'这一趟送审内' if within is not None else '台账历史读数'}"
-                               f"）⇒ 这一签不发；门槛还没到（门槛由框架按这一趟送审自己数）"
-                               + ("；台账历史行不参与这一趟的判定"
-                                  if within is not None else "")),
+                       reason=(f"系统计数 {out['projected']}/{out['need']}"
+                               f"（{out['counted_by'] or 'legacy:ledger_tail'}）"
+                               "⇒ 这一签不发；门槛还没到（由框架从台账现数，"
+                               "不是调用方递进来的那个数）"
+                               + ("" if within is None else "；调用方的轮数只作读数")),
                        basis=list(out["basis"]))
             self._note_sign_issuance(out, task_id=task_id)
             return out
@@ -5023,8 +4990,8 @@ class Secretary:
         # 一次"问模型签发 / 不签发"（`SIGN_ISSUANCE_VERDICTS` 的消费处），已按裁定 ③
         # 删除：发签不由模型点头，签名由秘书直接落进稿里。
         out.update(checked=True, issue=True, decision=SIGN_ISSUE,
-                   reason=(f"这一趟送审的 clean 读数 {out['projected']}/{out['need']}"
-                           f"（{'这一趟送审内' if within is not None else '台账历史读数'}）"
+                   reason=(f"系统计数 {out['projected']}/{out['need']}"
+                           f"（{out['counted_by'] or 'legacy:ledger_tail'}）"
                            f"⇒ 地板已过：由 V 的秘书自动发签（不问模型）"),
                    basis=list(out["basis"]) + ["auto_issue:floor_passed"])
         self._land_sign_issuance(out, proof_text=str(proof_text or ""),
@@ -9478,8 +9445,7 @@ class Secretary:
 
         理由码：`secretary_unavailable` / `not_statement_writer` / `wash_failed` /
         `unresolved_dependency`（依赖指着一个不在册的 id）/ `unknown_lit_id` /
-        `empty_statement`（缺 `statement_full` —— 只有短版不算数）/ `missing_own_result_basis`
-        （`origin="own_result"` 而两格来路都空 —— 与 B 的登记路同码同措辞，整笔不写）。
+        `empty_statement`（缺 `statement_full` —— 只有短版不算数）。
         概念的定义空着不是拒绝：它落成 `pending_definition` + 待补标记。
 
         ## 同一命题 / 同种证明
@@ -9586,13 +9552,11 @@ class Secretary:
                        reason=(f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，"
                                f"收到 {_origin_now!r}"))
             return out
-        # ---- own_result 的来路闸（与 B 的登记路同一个判据 / 同一个码 / 同一句拒信）----
-        # 位置在正文闸之前：来路是"这一笔该不该存在"的问题，不是"这一份正文合不合规"。
-        _basis_refusal = _own_result_basis_refusal(body)
-        if _basis_refusal:
-            out.update(checked=False, created=False, duplicate=False, upgraded=False,
-                       merged=False, **_basis_refusal)
-            return out
+        # ---- 来路不是闸（业主 2026-11-17 语义纠正）-----------------------
+        #
+        # `derived_from` / `source_lit_id` 是可选的补充信息：有就记，没有不算错。
+        # "自产"的证据是台账里那份签过的稿（收工门「造」那一环现读
+        # `closing.own_result_manuscript_links`），不是载荷里的一个 `derived_from`。
         # ---- 正文必须由手稿承载：`proof_text` 的唯一收口闸 ----
         #
         # 位置在"判同一性"之前：这一笔如果连正文都不该写，就不该先花一次模型调用去

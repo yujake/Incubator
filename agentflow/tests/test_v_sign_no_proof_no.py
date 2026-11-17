@@ -46,7 +46,6 @@ from agentflow.store import Store
 from _proof_manuscript_fixture import write_proof_manuscript
 from test_v_reviews_three_times_before_signing import CLEAN_REPLY, _ReviewSeam
 from test_unregistered_sign_is_the_main_path import _clean_secretary
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-11-11T00:00:00+08:00"
 SID = "000081"
@@ -66,8 +65,8 @@ def _ws(tmp_path: pathlib.Path) -> Store:
 def _put(st: Store) -> dict:
     """落一条在册命题（只造这一行；正文/五元位从真实现算）。"""
     row = {
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "stmt_id": SID, "origin": "own_result", "source_lit_id": ensure_basis_lit(st), "kind": "theorem",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        "stmt_id": SID, "origin": "own_result", "derived_from": ["999999"], "kind": "theorem",
         "label": "弦长函数非常值", "statement_full": FULL,
         "statement_text": "弦长函数不是常值", "proof_text": PROOF,
         "evidence_kind": "heuristic", "status": "active",
@@ -321,7 +320,7 @@ def test_c_b_catches_an_unregistered_sign_without_proof_no(tmp_path):
     got = b.register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=body,
         proof_manuscript=rel, kind="theorem",
-        label="探针命题", origin="own_result", source_lit_id=ensure_basis_lit(st), evidence_kind="heuristic",
+        label="探针命题", origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         quote_verified=None,
         quote_reason="判据：自产证明，没有第二份文本可比对",
         line_range={"label": rel})

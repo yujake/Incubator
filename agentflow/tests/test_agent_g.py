@@ -28,7 +28,7 @@ from agentflow.store import Store
 from agentflow.tools import build_registry
 from agentflow.tools import doc_tools as DT
 
-from conftest import add_literature, write_paper
+from conftest import add_literature, write_paper, seed_writing_material
 
 TS = "2026-01-01T00:00:00+00:00"
 
@@ -139,6 +139,7 @@ def g_store(store: Store) -> Store:
     add_experiment(store, "0000", method="formal", evidence_kind="proof",
                    verifier_output="Lean4: 'claim-key-0000' does not depend on any axioms")
     add_experiment(store, "0001")
+    seed_writing_material(store)
     # proof 级断言要有一个可复核的落点（`D-1`）：在工作区里放一份能被打开的文件。
     proof_file = Path(store.root) / PROOF_REL
     proof_file.parent.mkdir(parents=True, exist_ok=True)

@@ -23,9 +23,8 @@ from agentflow import schema as S
 from agentflow.agent_b import AgentB
 from agentflow.extract import extract_text
 
-from conftest import (add_literature, b_form_gate_ok, ensure_basis_stmt,
-                      seed_statement_row, write_library_file)
-from conftest import ensure_basis_lit
+from conftest import (add_literature, b_form_gate_ok, seed_statement_row,
+                      write_library_file)
 
 CREATED = "2026-01-01T00:00:00+08:00"
 
@@ -148,8 +147,8 @@ def test_own_result_without_proof_is_an_honest_conjecture_with_bits(store):
     _lit(store)
     b = _agent(store)
     res = b.register_statement(statement_full="我们猜：对每个素数 p 都有 …。",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-                               origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", doc_id="0000",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+                               origin="own_result", derived_from=["999999"], kind="conjecture", doc_id="0000",
                                quote_reason="证明还没做完 / 未核到")
 
     assert res["ok"] is True, res

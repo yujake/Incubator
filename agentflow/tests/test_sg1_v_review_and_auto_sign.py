@@ -338,7 +338,12 @@ def test_review_ids_come_from_index_max_plus_one_and_are_idempotent(tmp_path):
 
 
 def test_unregistered_fault_uses_the_pending_ledger_anchor(tmp_path, monkeypatch):
-    """⑧/⑥：未在册（没有 review_call）也认台账锚点：pending 路径 + verification_id。"""
+    """⑧/⑥：未在册也认台账锚点：pending 路径 + verification_id。
+
+    2026-11-17（系统计数）：未在册的 pending 行现在也带 `review_call` / `review_pass`
+    （一行一笔身份）。幂等键不跟着变：未在册那一支仍按 pending 台账锚点 +
+    `verification_id` 认，`review_call` 只是读数 —— 所以这里钉"有号"而不是"是空"。
+    """
     st = _ws(tmp_path)
     _put(st)  # 手稿在盘上；但这一次送审不带命题号 ⇒ 走未在册支
     review = _ReviewSeam([CLEAN_REPLY, FAULT_REPLY])
@@ -353,7 +358,8 @@ def test_unregistered_fault_uses_the_pending_ledger_anchor(tmp_path, monkeypatch
     assert len(index) == 1, index
     assert index[0]["ledger"].startswith("verifications/pending/"), index
     assert index[0]["verification_id"].startswith("u-"), index
-    assert index[0]["review_call"] == "", index
+    #: 一行一笔身份：这一趟的 review_call 是有的（它不是幂等键，只是读数）。
+    assert str(index[0].get("review_call") or "").strip(), index
     assert got.get("review_write", {}).get("v_review", {}).get("review_id") \
         == index[0]["review_id"], got.get("review_write")
 

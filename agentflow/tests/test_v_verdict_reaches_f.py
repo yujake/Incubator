@@ -38,7 +38,7 @@ import pathlib
 
 import pytest
 
-from conftest import seed_statement_row, sign_before_registration, ensure_basis_stmt
+from conftest import seed_statement_row, sign_before_registration
 
 from _proof_manuscript_fixture import write_proof_manuscript
 
@@ -52,10 +52,6 @@ from agentflow.llmseam import LlmSeam
 from agentflow.store import Store
 
 from test_agent_loop import _wired
-from conftest import ensure_basis_lit
-from conftest import BASIS_LIT_ID
-
-pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 TS = "2026-10-22T00:00:00+08:00"
 
@@ -67,10 +63,10 @@ REJECTED: tuple[tuple[str, int], ...] = (("000000", 2), ("000001", 1), ("000002"
 
 def _statement_row(st: Store, sid: str, *, proof: str) -> None:
     """落一条"有证明、还没被签"的命题行（`statements` 是真表，走真事务）。"""
-    basis_lit = ensure_basis_lit(st)     # 先落来路行：放进下面的事务里会撞锁
     with st.tx("statements", actor="test", note="b3 fixture") as tx:
         tx.upsert("statements", {
-            "stmt_id": sid, "origin": "own_result", "source_lit_id": basis_lit, "kind": "lemma",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+            "stmt_id": sid, "origin": "own_result", "derived_from": ["999999"], "kind": "lemma",
             "label": f"探针命题 {sid}", "statement_text": f"探针 {sid}",
             "statement_full": f"探针命题 {sid}：若 n≥3 则无解。",
             "proof_text": proof, "evidence_kind": "heuristic", "status": "active",
@@ -210,7 +206,7 @@ PROOF = "1. n^2+n = n(n+1)。\n2. 相邻整数必有一偶，故积为偶。"
 
 
 def _own(**kw) -> dict:
-    base = {"statement_full": FULL, "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "doc_id": "000000",
+    base = {"statement_full": FULL, "origin": "own_result", "derived_from": ["999999"], "doc_id": "000000",
             "proof_text": PROOF, "quote_verified": False,
             "quote_reason": "自产命题：没有第二份文本可比对"}
     base.update(kw)

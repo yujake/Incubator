@@ -42,7 +42,7 @@ _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
-from conftest import sign_before_registration, ensure_basis_stmt
+from conftest import sign_before_registration
 
 from agentflow import depsection as DS
 from agentflow import evidencebits as EB
@@ -52,7 +52,6 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
-from conftest import ensure_basis_lit
 
 
 @pytest.fixture(autouse=True)
@@ -256,8 +255,8 @@ def test_a_manuscript_without_citations_and_without_the_section_gets_an_empty_on
     reg = _b(store).register_statement(
         statement_full="定理：自足的证明（洗稿夹具）。",
         statement_text="自足的证明", proof_text="1. 由定义直接得到。",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", doc_id=S.format_id(0),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）", proof_manuscript=got["text"])
     assert reg.get("ok") is True, reg
     reading = reg.get("deps_missing") or {}

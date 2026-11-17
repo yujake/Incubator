@@ -32,33 +32,25 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from conftest import b_form_gate_ok, sign_before_registration  # noqa: E402
+# a1 / a4 / a5 / a6 会接一次"同一命题"那一问的离线替身（否则 fail-closed 会顶在
+# 这道闸前面）：这一行是那四条的依赖，本路（INV2①）保留它。
+from _same_statement_stub import wire_for_secretary  # noqa: E402
 from agentflow import conductor as CND  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.store import Store  # noqa: E402
-from _same_statement_stub import wire_for_secretary  # noqa: E402
-from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
-from conftest import BASIS_STMT_ID, ensure_citable_basis_stmt  # noqa: E402
 
 MANUSCRIPT = "reports/f-proof-000000.md"
 PROPOSITION = "对任意有限群 G，若 |G| = p^a·m 且 p∤m，则 G 有 p 阶元。"
-#: 业主 2026-11-17「不许假来路」：这份 F 稿的证明真的引用一条在册前置命题
-#: （`_workspace` 用 `ensure_citable_basis_stmt` 把它签到可引门槛），
-#: 指针收录那一支从 `stmt:` 引用里读出 `derived_from` —— 不是占位号。
-PROOF = ("1. 由在册前置命题直接得到第一步（依据：stmt:000888）。\n"
-         "2. 取 G 的一个 Sylow p-子群 P（二阶 Sylow 定理）。\n"
-         "3. |P| = p^a > 1 ⇒ 取 1 ≠ x ∈ P，由拉格朗日定理 ord(x) 是 p 的幂。\n"
-         "4. 结论：x 的某个幂就是 p 阶元。")
-BASIS_PROOF = "1. 由前置文献的结论直接得到这条前置命题。"
+PROOF = ("1. 取 G 的一个 Sylow p-子群 P（二阶 Sylow 定理）。\n"
+         "2. |P| = p^a > 1 ⇒ 取 1 ≠ x ∈ P，由拉格朗日定理 ord(x) 是 p 的幂。\n"
+         "3. 结论：x 的某个幂就是 p 阶元。")
 
 
 def _workspace(tmp_path: pathlib.Path) -> dict:
     st = Store(tmp_path / "ws")
     st.init()
-    # 真在册、真签、够可引门槛的前置命题；手稿的证明与依赖表都引用它。
-    ensure_citable_basis_stmt(st, proof_text=BASIS_PROOF)
-    deps = DS.render_dependency_section(
-        [{"quote": "由前置命题，第一步成立", "stmt_id": BASIS_STMT_ID, "step": "1"}])
+    deps = DS.render_dependency_section([])
     text = (
         "# F 的证明手稿：p 阶元\n\n"
         "- 依赖面洗稿：已洗=true；执行者=secretary:F\n\n"
@@ -90,9 +82,10 @@ def _as_b_summoned_by_d():
 def _own_result_kwargs(env: dict) -> dict:
     """B 登记"我自己从稿里读到的成果"这一笔的参数（形状逐字取 a3 那一笔）。
 
-    刻意带着 `proof_manuscript` 与内容 / 来路格（`statement_full` / `proof_text` /
-    `kind` / `origin` / `source_lit_id`）：真机上被误拒的就是这一形（闸 A 的
-    `_POINTER_ONLY_BODY_FIELDS` 全在里面）。
+    刻意带着 `proof_manuscript` 与内容格（`statement_full` / `proof_text` /
+    `kind` / `origin`）：真机上被误拒的就是这一形（闸 A 的
+    `_POINTER_ONLY_BODY_FIELDS` 全在里面）。`derived_from` / `source_lit_id` 是可选
+    信息（业主 2026-11-17：`origin` 只是状态），这一笔不测来路，所以不给。
     """
     return {"proof_manuscript": MANUSCRIPT,
             "statement_full": PROPOSITION,
@@ -100,7 +93,6 @@ def _own_result_kwargs(env: dict) -> dict:
             "kind": "conjecture",
             "evidence_kind": "heuristic",
             "origin": "own_result",
-            "source_lit_id": ensure_basis_lit(env),
             "quote_reason": "夹具：我方自产命题，引文面不适用",
             "line_range": {"label": MANUSCRIPT}}
 
@@ -123,19 +115,14 @@ def _rows(env: dict) -> list[dict]:
 
 # ============================================================ a1 只递指针 ⇒ 收成一行
 def test_a1_d_hands_only_a_pointer_and_b_reads_the_manuscript(
-        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        tmp_path: pathlib.Path) -> None:
     """a1：D 只给路径 ⇒ B 从稿里读命题 / 证明；落盘那一行与稿逐字相同。"""
-    # 台账里有一条真前置命题（被稿引用）⇒ 同一性那一问会真的跑；接一条只答
-    # 「挑词 + 判 different」的离线替身（与 `test_action_surface_matches_acceptance`
-    # 同一口径），否则 fail-closed 会顶在"指针收录"这条判据前面。
-    wire_for_secretary(monkeypatch)
     env = _workspace(tmp_path)
     with _as_d():
-        # D 只递指针（一个正文/来路参数都不许带）；来路由 B 从稿里的 `stmt:` 引用读出。
         got = env["b"].register_statement(proof_manuscript=MANUSCRIPT)
     assert got.get("ok") is True, got
-    rows = [r for r in _rows(env) if str(r.get("stmt_id")) != BASIS_STMT_ID]
-    assert len(rows) == 1, f"应当只落一行（夹具的前置命题不算），读到 {len(rows)}：{rows}"
+    rows = _rows(env)
+    assert len(rows) == 1, f"应当只落一行，读到 {len(rows)}：{rows}"
     row = rows[0]
     assert row["statement_full"] == PROPOSITION, (
         "B 落盘的 statement_full 与手稿 `## 命题` 不是逐字相同：\n"
@@ -183,7 +170,6 @@ def test_a3_without_the_d_check_the_content_is_accepted(
     """
     import agentflow.agent_b.register_statement as RS
 
-    wire_for_secretary(monkeypatch)   # 台账里有一条真前置命题 ⇒ 同一性那一问会真的跑
     env = _workspace(tmp_path)
     monkeypatch.setattr(RS, "_caller_is_d", lambda: False)
     with _as_d():
@@ -193,8 +179,8 @@ def test_a3_without_the_d_check_the_content_is_accepted(
             proof_text=PROOF,
             kind="conjecture",
             evidence_kind="heuristic",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-            origin="own_result", source_lit_id=ensure_basis_lit(env),
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+            origin="own_result", derived_from=["999999"],
             quote_reason="夹具：我方自产命题，引文面不适用",
             line_range={"label": MANUSCRIPT},
         )
@@ -218,7 +204,7 @@ def test_a4_a_b_summoned_by_d_may_register_its_own_result(
         got = env["b"].register_statement(**_own_result_kwargs(env))
     assert got.get("ok") is True, got
     assert got.get("kind") != "d_gives_manuscript_pointers_only", got
-    rows = [r for r in _rows(env) if str(r.get("stmt_id")) != BASIS_STMT_ID]
+    rows = _rows(env)
     assert len(rows) == 1, f"这一笔应当真落一行，读到 {len(rows)}：{rows}"
 
 

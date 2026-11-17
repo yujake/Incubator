@@ -53,7 +53,6 @@ from agentflow.store import Store
 from test_one_manuscript_id_is_one_file import _agent, _plan, _submit
 from test_v_reviews_three_times_before_signing import CLEAN_REPLY, _ReviewSeam
 from test_unregistered_sign_is_the_main_path import _clean_secretary
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-11-11T00:00:00+08:00"
 SID = "000042"
@@ -211,8 +210,8 @@ def test_c_b_catches_the_new_manuscript_without_any_proof_no(tmp_path: pathlib.P
     got = b.register_statement(
         statement_full=FULL, statement_text=FULL, proof_text=body,
         proof_manuscript=rel, kind="theorem",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        label="彩排命题", origin="own_result", source_lit_id=ensure_basis_lit(st), evidence_kind="heuristic",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        label="彩排命题", origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
         quote_verified=None,
         quote_reason="判据：自产证明，没有第二份文本可比对",
         line_range={"label": rel})

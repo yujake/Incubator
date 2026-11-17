@@ -39,8 +39,6 @@ from agentflow import sessions as SS
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 
-from conftest import BASIS_LIT_ID, ensure_basis_lit
-
 FULL = "设 G 是 3-正则群；则弦长函数不是常值。"
 CODE = "proposition_judgment_never_ran"
 
@@ -63,17 +61,12 @@ class _Seam:
 def _ws(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
-    ensure_basis_lit(st)
     return st
 
 
 def _own(full: str = FULL) -> dict:
-    # 2026-11-17（GATE2 尾巴）：own_result 必须写清来路。这一份量的是"判定到底跑没跑"
-    # （判定台账行数 / seam_source / 收工读数），不是来路；真 literature 行当来路，
-    # 它不进 statements ⇒ `rows[0]` 与判定行数读数一个字都不变。
     return {"statement_full": full, "statement_text": full[:24],
             "origin": "own_result", "kind": "conjecture", "doc_id": "0000",
-            "source_lit_id": BASIS_LIT_ID,
             "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 

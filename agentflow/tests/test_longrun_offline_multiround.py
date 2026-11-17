@@ -31,8 +31,7 @@ from agentflow.agent_h import AgentH
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
-from conftest import CleanVerdictSecretary, ensure_basis_stmt
-from conftest import ensure_basis_lit
+from conftest import CleanVerdictSecretary
 
 PROOF = "Proof. n^2+n=n(n+1)，相邻两数必有一偶。"
 BUDGET = {"max_rounds": 3, "max_parallel_subgoals": 2,
@@ -176,7 +175,7 @@ def test_the_whole_pipeline_runs_without_literature_and_the_chain_closes(tmp_pat
     assert block.get("found") is True and block.get("signed") is True, block
     assert str(block.get("signer") or "").startswith("secretary:"), block
 
-    req = dict(origin="own_result", source_lit_id=ensure_basis_lit(st), statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
+    req = dict(origin="own_result", derived_from=["999999"], statement_full="若 n≥3 则 n^2+n 是偶数（自证）。",
                kind="conjecture", proof_text=PROOF, line_range={"start": 1},
                doc_id="000000", quote_verified=False, quote_reason="自证：无外部引文",
                proof_manuscript=man_path.read_text(encoding="utf-8"))

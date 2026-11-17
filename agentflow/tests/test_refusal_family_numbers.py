@@ -25,6 +25,7 @@ from agentflow.store import Store
 from agentflow.tools.doc_tools import (
     CROSS_CHECK_DISCLAIMER, build_document, compose_claim,
 )
+from conftest import seed_writing_material
 
 
 def _refusal_from_compose(**kw) -> str:
@@ -42,6 +43,7 @@ def _refusal_from_build(tmp_path, claim: dict) -> str:
     (ws / "data").mkdir(parents=True, exist_ok=True)
     st = Store(ws)
     st.init()
+    seed_writing_material(st)
     with pytest.raises(ValueError) as exc:
         build_document(st, "paper", "标题", claims=[claim], workspace_root=str(ws))
     return str(exc.value)

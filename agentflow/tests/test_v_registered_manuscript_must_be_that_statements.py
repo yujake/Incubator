@@ -322,25 +322,10 @@ def test_e_rewriting_the_proof_and_resigning_in_register_lands_the_new_sign(
     assert old_block["signed"] is True, old_block
 
     # ---- ③ B 按稿号收录：行上记 F 的稿号，命题号由 B 现取 ----------------------
-    # 来路（2026-11-17 业主「不许假来路」）：按稿收录这一路落的行是
-    # `origin="own_result"`（F 自己的成果），而登记口从 2026-11-17（FX2）起要求
-    # `derived_from` / `source_lit_id` 至少一个非空。这里选 MIG1/MIG2 那条
-    # 「文献来路」：`ensure_basis_lit` 落一条真的 `literature` 行（`000888`，能按号
-    # 查得到，不是占位号），收录时把它的号当 `source_lit_id` 交上去。
-    #
-    # 为什么是这一条而不是「承重链」（`ensure_basis_stmt` + `derived_from`）：这一条
-    # 用例量的是「改稿重签之后新签落回同一份稿」——它读的是 `statements` 的这一行
-    # （`next(...)`）、`reports/f-proof-*.md` 的文件清单与签块的 sha。前置命题那一路
-    # 会往 `statements` 再塞一行、还会给 `ensure_citable_basis_stmt` 落一份
-    # `reports/f-proof-000888.md`（`sign_for_the_gate` 的载体）⇒ 文件清单那一格当场
-    # 被这条脚手架改写，量的读数就变了。文献行只进 `literature` 表：行数、命题号、
-    # 路径号、稿名清单与 sha 一个读数都不动，而 `source_lit_id` 指的那一行真的在盘上。
-    conftest.ensure_basis_lit(st)
     b = conftest.b_form_gate_ok(
         AgentB(st, extractor=None, extract_text=None, config={}))
     ing = b.ingest_manuscript(manuscript=rel, mode="register",
-                              cells=["statement_full", "proof_text", "dependencies"],
-                              source_lit_id=conftest.BASIS_LIT_ID)
+                              cells=["statement_full", "proof_text", "dependencies"])
     assert ing.get("ok") is True, ing
     row = next(dict(r) for r in st.rows("statements"))
     sid = str(row.get("stmt_id") or "")

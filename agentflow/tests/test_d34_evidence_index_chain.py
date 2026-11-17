@@ -32,7 +32,8 @@ import pathlib
 
 import pytest
 
-from conftest import add_literature, e_form_gate_ok, sync_counters  # noqa: E402
+from conftest import (add_literature, e_form_gate_ok, seed_writing_material,
+                       sync_counters)  # noqa: E402
 
 from agentflow import evidencebits as EB
 from agentflow import exhaustionreport as ER
@@ -44,7 +45,6 @@ from agentflow.agent_b import AgentB
 from agentflow.agent_e import AgentE
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-10-23T00:00:00+08:00"
 SCRIPT_REL = "code/enum_ramsey34.py"
@@ -87,6 +87,7 @@ F_PROOF_REL = "proofs/000009-p1.md"
 def _store(tmp_path: pathlib.Path) -> Store:
     st = Store(tmp_path / "ws")
     st.init()
+    seed_writing_material(st)
     return st
 
 
@@ -181,8 +182,8 @@ def _file(store: Store, *, column: str, kind: str = "theorem",
           evidence_kind: str = "proof", body: str = BODY,
           manuscript: str = "") -> dict:
     return _b(store).register_statement(
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", source_lit_id=ensure_basis_lit(store), kind=kind, label="R(3,4)=9", statement_full=body,
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        origin="own_result", derived_from=["999999"], kind=kind, label="R(3,4)=9", statement_full=body,
         statement_text=body[:40], proof_text=column, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对",

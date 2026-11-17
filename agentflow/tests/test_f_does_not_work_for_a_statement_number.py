@@ -51,7 +51,6 @@ import pytest
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import depsection as _DS          # noqa: E402
 from agentflow import manuscriptids as MI        # noqa: E402
@@ -665,8 +664,8 @@ def test_d_the_whole_chain_reads_five_ways(tmp_path: pathlib.Path) -> None:
 
     # ---- ④ 收录：B 现取命题号（与稿号无关），行上记 manuscript_id
     out = AgentB(st, extractor=None, extract_text=None).register_statement(
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        statement_full=PROPOSITION, origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+        statement_full=PROPOSITION, origin="own_result", derived_from=["999999"], kind="conjecture",
         proof_manuscript=rel, label="DCT", line_range={"start": "1", "label": rel},
         quote_reason="判据：F 只认稿号")
     assert out.get("ok") is True, out
@@ -720,7 +719,7 @@ def test_e_the_two_number_spaces_are_allowed_to_coincide(tmp_path: pathlib.Path)
     pend = sign_before_registration(st.root, proof_text=body)
     assert pend.get("proof_sha256") == sha or pend.get("sha") == sha, pend
     out = AgentB(st, extractor=None, extract_text=None).register_statement(
-        statement_full=PROPOSITION, origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture",
+        statement_full=PROPOSITION, origin="own_result", derived_from=["999999"], kind="conjecture",
         proof_manuscript=rel, label="DCT", line_range={"start": "1", "label": rel},
         quote_reason="判据：两号数值重合也允许")
     assert out.get("ok") is True, out

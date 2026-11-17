@@ -18,7 +18,6 @@ import sys
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
-from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import schema as S                 # noqa: E402
 from agentflow.agent_b import AgentB               # noqa: E402
@@ -38,8 +37,8 @@ def _ws(path: pathlib.Path):
     reg = build_registry(store=st, workspace_root=root).registry
     b = AgentB(st, extractor=None, extract_text=None, config={})
     got = b.register_statement(statement_full=FULL, statement_text=TEXT,
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-                               origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture",
+# 2026-11-17（语义纠正）：`derived_from` / `source_lit_id` 是可选信息（`origin` 只是状态：自产/引用）；这一份夹具不测来路。
+                               origin="own_result", derived_from=["999999"], kind="conjecture",
                                doc_id=S.format_id(0),
                                quote_reason="我方自产命题，没有外部引文要比对",
                                proof_text=P1)

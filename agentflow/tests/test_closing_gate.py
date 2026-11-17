@@ -28,7 +28,7 @@ import json
 import pathlib
 
 import paperfixture as FX
-from conftest import TS, sync_counters
+from conftest import TS, sync_counters, seed_writing_material
 from agentflow import closing as CL
 from agentflow import papercompile as PC
 from agentflow import papermapping as PM
@@ -188,6 +188,7 @@ def _good(tmp_path: pathlib.Path):
         _paper_with_claim(st)
 
     st = _project(tmp_path, seed=seed)
+    seed_writing_material(st)
     report = _write_report(tmp_path)
     return st, report
 
@@ -1448,19 +1449,20 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
     第二环节从「算并留下界」扩成「算或造」—— 这一档就是"造"那条腿的读数。
 
     声明了这一档（`reviewed_proof_rows`）之后，`draft/39` §6.49 八 第二条（D66 造半边）
-    也跟着生效：`origin="own_result"` 的行要说清派生于什么（`derived_from` /
-    `source_lit_id` 至少一个非空），否则门会报「「造」那一环没有我方派生的命题」——
-    而那会把这一条要测的读数（`counted == 1`）盖掉。所以夹具里被计入的那条
-    （`0001`）要 `derived_from=["0000"]`：`0000` 是同夹具里已登记的命题号，
-    `Statement.validate` 只要求它是合法四位号、去重、不含自身。
+    也跟着生效：「造」那一环要有一条台账里有稿/签关联的自产命题（业主 2026-11-17 语义
+    纠正 —— 不再是 `derived_from` / `source_lit_id` 非空，见
+    `test_the_construct_stage_needs_a_signed_manuscript_in_the_ledger`）。所以夹具里被
+    计入的那条（`0001`）要在台账里真签一份（`issue_credential`：三行 v-review + 一份签
+    文件），否则门会报「「造」那一环没有一份签过的稿」—— 那会把这一条要测的读数
+    （`counted == 1`）盖掉。
     """
     def seed(s: Store) -> None:
         # ① 只有证明过程、没审过 ⇒ 还是"猜想"（第 2 位真、第 3 位空）
         _statement(s, "0000", proof_text="（逐步论证）",
                    bits={"proof": True, "evidence": {"proof_source": "own",
                                                      "proof_process": "（逐步论证）"}})
-        # ② 有证明过程 + 审过 ⇒ 预备定理级 ⇒ 算一档；`derived_from` 指回①
-        _statement(s, "0001", derived_from=["0000"],
+        # ② 有证明过程 + 审过 ⇒ 预备定理级 ⇒ 算一档（签在下面的台账里真写一份）
+        _statement(s, "0001",
                    bits={"proof": True, "reviewed": True,
                          "evidence": {"proof_source": "own",
                                       "proof_process": "（逐步论证）",
@@ -1477,6 +1479,10 @@ def test_the_reviewed_proof_leg_counts_our_own_proved_and_reviewed_statements(
         _statement(s, "0003", evidence_kind="proof")
 
     st = _project(tmp_path, seed=seed)
+    # 「造」那一环的证据：`0001` 在台账里有一份签过的稿（真写口，不是行上自报）。
+    from _credential_fixture import issue_credential
+
+    issue_credential(tmp_path, proof_text="（逐步论证）", statement_id="0001")
     report = _write_report(tmp_path)
     _acceptance_checks(tmp_path, [{"id": "B2", "name": "造判决性证据",
                                    "kind": "reviewed_proof_rows", "min": 1}], st=st)
@@ -3143,44 +3149,102 @@ def test_the_calculate_stage_reports_when_no_experiment_concludes(tmp_path: path
     assert leg2["conclusive"] == 2 and leg2["inconclusive"] == 0, leg2
 
 
-def test_the_construct_stage_needs_an_own_derived_statement(tmp_path: pathlib.Path):
-    """D66 造半边（`draft/39` §6.49 八 第二条）：声明了「造」那一环的项目要有我方派生产物。
-
-    只在 `computed_kinds` 含 `reviewed_proof_rows` / `counterexample_or_proof_rows` 时判（只走数值
-    那一腿的项目不受这一条约束）：`statements` 里 `origin="own_result"` 的行，至少要有一行写清它
-    派生于什么（`derived_from` 或 `source_lit_id` 非空）——「造」= 我方自己提出并证明的命题，
-    而且来路要能被复核。
-
-    两侧：红：我方命题 `0003`（有证明过程 + 审过）没有 `derived_from` ⇒ blocker 含「「造」那一环
-    没有我方派生的命题」，读数 `construct_leg.with_basis == 0`；而 R3（`reviewed_proof_rows`）照样
-    成立 ⇒ 红的是内容判据这一条，不是那一行的读数；绿：给它 `derived_from=["0000"]`（`0000` 是同
-    夹具里已登记的命题号）⇒ 那句话消失、`with_basis == 1`，整格 `pass`。"""
+def _construct_cover() -> list[dict]:
+    """把 R3 换成 `reviewed_proof_rows`（「造」那一环真的被声明了）。"""
     cover = [dict(r) for r in _RESEARCH_COVER]
     cover[2] = {"id": "R3", "name": "造（我方判决性证据）", "kind": "reviewed_proof_rows",
                 "min": 1, "note": "我方命题走到了预备定理级"}
-    st, report, ws = _research_ready(tmp_path, cover=cover)
-    bits = {"proof": True, "reviewed": True,
-            "evidence": {"proof_source": "own", "proof_process": "（逐步论证）",
-                         "reviewed_by": {"verification_id": "v-000001", "round": "V-0001", "verdict": "no_defect"}}}
-    _valid_statement(st, "0003", bits=bits)
-    _seal(ws, st)
-    red = _gate(st, report)
+    return cover
 
-    detail = _acc_detail(red)
-    assert red.status["acceptance"] == "fail", red.to_dict()
-    assert "「造」那一环没有我方派生的命题" in detail, detail
-    assert _acc_row(red, "R3")["got"] == 1, _acc_row(red, "R3")
-    leg = red.readings["acceptance"]["content_branches"]["construct_leg"]
-    assert leg["own_result"] == 2 and leg["with_basis"] == 0, leg
 
-    # 绿：把"派生于什么"写上去（`0000` 已登记）
-    _valid_statement(st, "0003", bits=bits, derived_from=["0000"])
+#: `0003` 的五元位（有证明过程 + 审过 ⇒ 等级现算是 `pre_theorem`，R3 数得到它）。
+_CONSTRUCT_BITS: dict = {
+    "proof": True, "reviewed": True,
+    "evidence": {"proof_source": "own", "proof_process": "（逐步论证）",
+                 "reviewed_by": {"verification_id": "v-000001", "round": "V-0001",
+                                 "verdict": "no_defect"}}}
+
+
+def _construct_ready(tmp_path: pathlib.Path):
+    """「造」那一环的底座 + 一条没有稿/签关联的自产命题 `0003`。"""
+    st, report, ws = _research_ready(tmp_path, cover=_construct_cover())
+    _valid_statement(st, "0003", bits=dict(_CONSTRUCT_BITS))
     _seal(ws, st)
+    return st, report, ws
+
+
+def _assert_construct_leg_red(rep) -> None:
+    """「造」那一环的 fail 档（两侧共用：正控用它断言红，反真空用它断言"打桩后必须红"）。"""
+    detail = _acc_detail(rep)
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    assert "「造」那一环没有一份签过的稿" in detail, detail
+    leg = rep.readings["acceptance"]["content_branches"]["construct_leg"]
+    assert leg["checked"] is True, leg
+    assert leg["own_result"] == 2 and leg["with_signed_manuscript"] == 0, leg
+    assert sorted(leg["unlinked_ids"]) == ["0000", "0003"], leg
+
+
+def test_the_construct_stage_needs_a_signed_manuscript_in_the_ledger(tmp_path: pathlib.Path):
+    """D66 造半边（业主 2026-11-17 语义纠正）：这一环看台账里那份签过的稿，不看 `derived_from`。
+
+    业主逐字：「own_result 还有什么来路？"来路"这种陈述是过时的，以前设计这种语义就是为了
+    指到证明手稿，现在已经在台账里体现了。所以只是一个状态：自产/引用」。
+
+    所以「造」= 我方自己提出并证明的命题（`origin="own_result"`），而"自产"这件事的证据是
+    「台账里有一份与它关联的稿/签」（`verifications/<号>.jsonl` 的 v-review、
+    `out/vsigns/<正文 sha>.json` 的签、稿上的签块）—— 不是调用方在载荷里写了一个
+    `derived_from`。只在 `computed_kinds` 含 `reviewed_proof_rows` /
+    `counterexample_or_proof_rows` 时判（只走数值那一腿的项目不受这一条约束）。
+
+    两侧：
+    - 红：两条自产命题（`0000` / `0003`）在台账里都没有稿/签关联 ⇒ blocker 含「「造」那一环
+      没有一份签过的稿」，读数 `own_result == 2` / `with_signed_manuscript == 0`、
+      `unlinked_ids` 逐条点名；而 R3（`reviewed_proof_rows`）照样成立 ⇒ 红的是内容判据这一条，
+      不是那一行的读数；
+    - 绿：给 `0003` 在台账里真签一份（`issue_credential`：三行 v-review + 一份签文件）
+      ⇒ 那句话消失、`with_signed_manuscript == 1`、`linked` 点名 `0003`，整格 `pass`。
+    """
+    st, report, ws = _construct_ready(tmp_path)
+    _assert_construct_leg_red(_gate(st, report))
+    assert _acc_row(_gate(st, report), "R3")["got"] == 1, _acc_row(_gate(st, report), "R3")
+
+    # 绿：给 `0003` 一份签过的稿（真写口：三票同源的 v-review + `out/vsigns/` 那份签）。
+    from _credential_fixture import issue_credential
+
+    issue_credential(ws, proof_text="（逐步论证）", statement_id="0003")
     green = _gate(st, report)
     assert green.status["acceptance"] == "pass", green.to_dict()
-    assert "「造」那一环没有我方派生的命题" not in _acc_detail(green), _acc_detail(green)
+    assert "「造」那一环没有一份签过的稿" not in _acc_detail(green), _acc_detail(green)
     leg2 = green.readings["acceptance"]["content_branches"]["construct_leg"]
-    assert leg2["own_result"] == 2 and leg2["with_basis"] == 1, leg2
+    assert leg2["own_result"] == 2 and leg2["with_signed_manuscript"] == 1, leg2
+    assert [e["stmt_id"] for e in leg2["linked"]] == ["0003"], leg2
+    assert leg2["unlinked_ids"] == ["0000"], leg2
+
+
+def test_c_stubbing_the_manuscript_link_probe_turns_the_fail_case_green(
+        tmp_path: pathlib.Path, monkeypatch) -> None:
+    """反真空：把"查台账稿关联"打桩成恒真 ⇒ 「造」那一环的 fail 档必红。
+
+    守的是"这一格的绿不是真空"：如果判据其实是恒真的（或者被换成一个不读台账的东西），
+    那么 `_assert_construct_leg_red` 在打桩之后仍然成立 —— 那条断言一红，就说明
+    "有没有签过的稿"这件事根本没有参与判定。打桩只换这一处读数口
+    （`closing.own_result_manuscript_links`），不碰台账、不碰别的格。
+    """
+    st, report, _ws = _construct_ready(tmp_path)
+    monkeypatch.setattr(
+        CL, "own_result_manuscript_links",
+        lambda *a, **k: {"checked": True, "own_result": 2,
+                         "with_signed_manuscript": 2, "linked": [],
+                         "unlinked_ids": [], "why": ""})
+    stubbed = _gate(st, report)
+    try:
+        _assert_construct_leg_red(stubbed)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError(
+            "把「查台账稿关联」打桩成恒真之后，fail 档竟然还成立 —— "
+            "那一档不是这个判据在判（反真空失败）")
 
 
 def test_a_rel_ref_carries_c_analysis_into_the_delivery(tmp_path: pathlib.Path):
