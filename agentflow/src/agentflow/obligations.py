@@ -609,6 +609,42 @@ def _proof_reviewed(row: Mapping[str, Any], proof_no: int) -> bool:
     return bool(bits.get("reviewed"))
 
 
+def _manuscript_owner_row(*, store: Any, rel: str = "",
+                          manuscript_id: str = "") -> dict[str, Any]:
+    """按稿认这一份签该收到哪一行（「两个号段」里稿那一半的唯一落点）。
+
+    为什么义务必须有这一半：SGN1（`a30844ef`）给"未在册的签"开的义务键是
+    `b-register@<稿号>@<sha>` —— 写下的是稿号；而 2026-11-13 的裁定让稿号与命题号
+    分家（`reports/f-proof-000002.md` ⇒ 稿号 000002，B 收录出来的行是 `stmt_id=000000`）。
+    读侧若只按命题号 `by_id(stmt_id=稿号)` 找，那一行永远不存在 ⇒ 义务永远收不了口
+    （RED11 §1③：同一行同一 sha，`000002#p1` 读成"没入库"、`000000#p1` 读成"已入库"）。
+
+    判据只认收录记录那两处（`statements.manuscript_id` 与 `statements.manuscripts`），
+    不走签行那一源（见 `manuscriptretire.statement_of_manuscript` 的 `sign_rows`）：
+    这里问的是"这一份稿收进了哪一行"，而签行回答的是"谁签过它"。
+
+    返回 `{"checked","found","stmt_id","why"}`；反查的唯一实现在
+    `manuscriptretire.statement_of_manuscript`，本函数只收窄它的源、不另写一份扫描。
+    """
+    text = str(rel or "").strip().replace("\\", "/")
+    mid = str(manuscript_id or "").strip()
+    out: dict[str, Any] = {"checked": True, "found": False, "stmt_id": "", "why": ""}
+    if not text and not mid:
+        out["why"] = "没有稿路径 / 稿号 ⇒ 按稿认不了（不是「没有这一行」）"
+        return out
+    try:
+        from . import manuscriptretire as _MR
+
+        got = _MR.statement_of_manuscript(store, rel=text, manuscript_id=mid,
+                                          sign_rows=False)
+    except Exception as exc:  # noqa: BLE001 —— 读不出来是"没查成"，不折成"没有这一行"
+        out.update(checked=False, why=f"按稿反查抛了（{type(exc).__name__}: {exc}）")
+        return out
+    out.update(checked=bool(got.get("checked")), found=bool(got.get("found")),
+               stmt_id=str(got.get("stmt_id") or ""), why=str(got.get("why") or ""))
+    return out
+
+
 def registration_gap(*, store: Any, label: str, proof_sha: str = "",
                      manuscript: str = "") -> dict[str, Any]:
     """这一份签过的正文入库了没有（收口判据的唯一实现；纯读、不写任何东西）。
@@ -616,6 +652,20 @@ def registration_gap(*, store: Any, label: str, proof_sha: str = "",
     判据（缺一不可）：`statements` 那一行拿得出这一份证明的正文，且那一份被
     `reviewed=true`（`bits.evidence.reviewed_by_proof` 的逐份表优先）。两条都齐 ⇒
     `gap=False`（义务已清）；否则 `gap=True`（义务还在）。
+
+    ## 两个号段（2026-11-13 裁定之后必须分开对）
+
+    `label` 里那个号可能是命题号（在册那两条签路开的键），也可能是稿号
+    （未在册那一支与收工扫盘开的键：号从稿名读）。两个号段在真机上是分家的
+    （稿 000002 ⇒ 命题 000000）⇒ 只按命题号找永远找不到那一行。这一格按三档对：
+
+    ① 给了稿路径 ⇒ 按稿认（`_manuscript_owner_row`，收录记录那两源，最确定）；
+    ② 没给路径 ⇒ 先按命题号 `by_id`（口径一），miss 再按稿号认稿；
+    ③ 两档都命中而指向不同的行 ⇒ `matched_by="ambiguous"` + `gap=True`：
+       判不了就不猜（拿别人的行判成"已收录"会把一条没办完的义务静默关掉）。
+
+    读数里 `matched_by`（`statement_id` / `manuscript_id` / `ambiguous`）与
+    `resolved_statement_id` 让"这一问走的是哪个号段"看得见。
 
     「明确不收录并给理由」那一档：`status="abandoned"` 且 `quote_reason` 是一条可解析的
     放弃标记（理由与时间都在）⇒ `abandoned=True, gap=False`（义务作废，不是"收录了"）。
@@ -626,14 +676,17 @@ def registration_gap(*, store: Any, label: str, proof_sha: str = "",
     它说的是"这一格没查成"，不许折成"已经收录了"。
 
     返回键：`checked` / `gap` / `abandoned` / `body` / `reviewed` / `status` /
-    `statement_id` / `proof_no` / `manuscript` / `reviewed_why` / `reason`。
+    `statement_id` / `resolved_statement_id` / `matched_by` / `proof_no` /
+    `manuscript` / `reviewed_why` / `reason`。
     """
     from . import statementabandon as _SA
 
     sid, no = _label_parts(label)
     out: dict[str, Any] = {"checked": False, "gap": None, "abandoned": False,
                            "body": False, "reviewed": False, "status": "",
-                           "statement_id": sid, "proof_no": no,
+                           "statement_id": sid, "resolved_statement_id": sid,
+                           "matched_by": "",
+                           "proof_no": no,
                            "manuscript": str(manuscript or ""),
                            "reviewed_why": "", "reason": ""}
     if store is None:
@@ -649,35 +702,69 @@ def registration_gap(*, store: Any, label: str, proof_sha: str = "",
         out["reason"] = (f"`statements` 读不出来（{err.get('type', '?')}: "
                          f"{err.get('message', '?')}）⇒ 这一格没查成")
         return out
-    row = by_id["row"] if by_id["found"] else None
-    out["checked"] = True
-    if row is None:
-        out.update(gap=True,
-                   reason=(f"`statements` 里没有命题 {sid} 那一行 ⇒ 这一份签还没有被收录"
-                           "（先要 B 把它登记进册）"))
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    claim = _manuscript_owner_row(store=store, rel=rel,
+                                  manuscript_id="" if rel else sid)
+    if not claim.get("checked"):
+        out["reason"] = f"{claim.get('why') or '按稿认领没查成'} ⇒ 这一格没查成"
         return out
+    row = by_id["row"] if by_id["found"] else {}
+    matched = "statement_id" if by_id["found"] else ""
+    if claim.get("found"):
+        claimed = str(claim.get("stmt_id") or "")
+        # 只有"只给了一个裸号"时才存在二义：号既可能是命题号、也可能是稿号。给了稿路径
+        # 就没有二义（稿属于哪一行由收录记录回答，1:1）；那一档按稿认，不拿号去猜。
+        if by_id["found"] and claimed and claimed != sid and not rel:
+            out.update(checked=True, gap=True, matched_by="ambiguous",
+                       resolved_statement_id="",
+                       reason=(f"两个号段都命中：命题 {sid} 在册有一行，而"
+                               f"{(f'稿 {rel}' if rel else f'稿号 {sid}')} 归命题 {claimed}"
+                               " ⇒ 这一条义务该去哪一行收口判不了（不猜）：把义务键改成"
+                               "命题号，或让这一份稿只归一条命题"))
+            return out
+        if claimed and claimed != sid:
+            got = SL.by_id(store, stmt_id=claimed)
+            if not got["checked"]:
+                err = got.get("error") or {}
+                out["reason"] = (f"`statements` 读不出来（{err.get('type', '?')}: "
+                                 f"{err.get('message', '?')}）⇒ 这一格没查成")
+                return out
+            row = got["row"] if got["found"] else {}
+        matched = "manuscript_id"
+    elif not by_id["found"]:
+        out.update(checked=True, gap=True, matched_by="", resolved_statement_id="",
+                   reason=(f"`statements` 里没有命题 {sid} 那一行（按命题号查），"
+                           f"{(f'稿 {rel}' if rel else f'稿号 {sid}')} 也没有收进任何一行"
+                           " ⇒ 这一份签还没有被收录（先要 B 把它登记进册）"))
+        return out
+    out["checked"] = True
+    out["matched_by"] = matched
+    resolved = str(row.get("stmt_id") or "") or sid
+    out["resolved_statement_id"] = resolved
     out["status"] = str(row.get("status") or "")
     if out["status"] == "abandoned":
         parsed = _SA.parse_abandon(row.get("quote_reason"))
         if parsed.get("checked"):
             out.update(gap=False, abandoned=True,
-                       reason=(f"命题 {sid} 已被明确放弃（{parsed.get('at')}："
+                       reason=(f"命题 {resolved} 已被明确放弃（{parsed.get('at')}："
                                f"{parsed.get('reason')}）⇒ 明确不收录，义务作废"))
             return out
         out.update(gap=True,
-                   reason=(f"命题 {sid} 写着 status=abandoned，而放弃标记读不出来"
+                   reason=(f"命题 {resolved} 写着 status=abandoned，而放弃标记读不出来"
                            f"（{parsed.get('why')}）⇒ 不算明确不收录（义务仍在）"))
         return out
     out["body"] = _proof_body_present(row, no)
     out["reviewed"] = _proof_reviewed(row, no)
     if out["body"] and out["reviewed"]:
         out.update(gap=False,
-                   reason=(f"{sid}#p{no} 已经入库（有正文、reviewed=true）⇒ 义务已清"))
+                   reason=(f"{resolved}#p{no} 已经入库（有正文、reviewed=true）⇒ 义务已清"
+                           + (f"（按稿 {out['manuscript']} 认的）" if matched == "manuscript_id"
+                              else "")))
         return out
     out["gap"] = True
     out["reviewed_why"] = ("正文在" if out["body"] else "正文是空的")
     out["reviewed_why"] += ("、reviewed=true" if out["reviewed"] else "、reviewed 不是 true")
-    out["reason"] = (f"{sid}#p{no} 还没入库（{out['reviewed_why']}）"
+    out["reason"] = (f"{resolved}#p{no} 还没入库（{out['reviewed_why']}）"
                      f"⇒ 这一份稿的签没有任何人登记过")
     return out
 
@@ -1204,6 +1291,93 @@ def sweep_registrations(*, store: Any, root: str | Path, limit: int = 50,
                      f"新开 {len(out['opened'])} 条、已在板上 {len(out['existing'])} 条、"
                      f"顺手收口 {len(out['closed']) + len(out['cleared'])} 条、"
                      f"作废 {len(out['expired'])} 条、跳过 {len(out['skipped'])} 条"
+                     + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
+    return out
+
+
+def settle_registration(*, store: Any, root: str | Path, stmt_id: str,
+                        manuscript: str = "", at: str = "") -> dict[str, Any]:
+    """B 收录落成那一刻把「必须收录」义务消账（永不抛；键从稿号认到命题号）。
+
+    ## 为什么需要这一格：`ensure_registration` 的 docstring 许了半句没实现的承诺
+
+    那一段逐字写着「满足了没有」由 B 收录时消账、收工时 `sweep_registrations` 收口。
+    后半句有落点，前半句此前没有：`close_item_by_evidence` 只在 `obligations` 内被调
+    （`ensure_registration` / `reconcile_registrations` / `reconcile_resubmits`），
+    而 `reconcile` 的唯一调用点是 `conductor.closing` 那一个工具。RED11 的彩排里 M 的脚本
+    是「派 B → 销 B1 → final」，没有收工对账那一笔 ⇒ 义务停在 `seen` ⇒ `retire_child`
+    受控拒（"名下还有 1 条未消的板项"）⇒ final 连拒 3 拍（`final_refused`）⇒ CLI rc=5、
+    多打 3 次真调用（16 → 19）。收口必须发生在收录那一刻，不能等谁想起来做对账。
+
+    ## 键的迁移落在读数上（不是改写板项的身份列）
+
+    未在册那一支的键带稿号；收录之后这一行有了命题号。这一格按"这一份稿归哪一行"
+    （`_manuscript_owner_row` / `by_id`）认出那条义务、收口成 `completed`，并把
+    `b-register@<稿号>@<sha>` → `b-register@<命题号>@<sha>` 逐字写进收口读数
+    （`adopted_key`）与事件 note。板项的 `input_key` 不就地改写：它是"这一条义务被谁、
+    在什么时候开出来的"的证据，而写侧每次重放都会按稿名重算同一个键 —— 改了它，
+    「同键不重开」就破了（下一次签发会为同一份稿再开一条）。读侧
+    （`registration_gap`）两个号段认出的是同一条义务，所以下游读哪一边都是同一个结论。
+
+    ## 只认这一份稿 / 这一条命题的义务（不拿"板上任何一条"去试）
+
+    一行的键是 `<号>@<sha>`，那个号可能是命题号（在册那两路）也可能是稿号（未在册 / 扫盘）。
+    这一格只碰两种：`号 == 这一笔拿到的命题号`，或 `号 == 这一份稿的稿号`。别的义务
+    （别的稿 / 别的命题）原样留在板上 —— 那是 `left` 之外的事，不在这里判。
+
+    三态：`checked=False` 只在"没有 conductor / 没给命题号"时出现（不是"没有要收口的"）。
+    """
+    out: dict[str, Any] = {"checked": False, "settled": [], "left": [],
+                           "problems": [], "reason": ""}
+    conductor = _conductor(store)
+    if conductor is None:
+        out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有要收口的义务」）"
+        return out
+    sid = str(stmt_id or "").strip()
+    if not sid:
+        out["reason"] = "这一笔没有命题号 ⇒ 收不了口（不是「没有义务」）"
+        return out
+    out["checked"] = True
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    mid = ""
+    if rel:
+        from . import vsigns as _VS
+
+        mid = str(_VS.manuscript_id_of(rel) or "")
+    for row in _register_items(conductor):
+        key = str(row.get("input_key") or "")
+        if str(row.get("item_state") or "") == "done":
+            continue
+        num = key[len(REGISTER_PREFIX):].partition("@")[0]
+        sha = register_sha_of(key)
+        if num == sid:
+            gap = registration_gap(store=store, label=f"{sid}#p1", proof_sha=sha)
+        elif mid and num == mid:
+            gap = registration_gap(store=store, label=f"{mid}#p1", proof_sha=sha,
+                                   manuscript=rel)
+        else:
+            continue  # 不是这一份稿 / 这一条命题的义务：原样留在板上
+        if not gap.get("checked") or gap.get("gap") or \
+                str(gap.get("resolved_statement_id") or "") != sid:
+            out["left"].append({"key": key, "item_id": str(row.get("task_id") or ""),
+                                "why": str(gap.get("reason") or "义务还在")})
+            continue
+        close = "expired" if gap.get("abandoned") else "completed"
+        adopted = register_key(f"{sid}#p1", sha)
+        _state, problem = conductor.close_item_by_evidence(
+            str(row.get("task_id") or ""), close=close,
+            why=(f"收录落成：{gap.get('reason')}"
+                 + (f"；键 {key} → {adopted}（迁到收录后的命题号）"
+                    if key != adopted else "")))
+        if problem:
+            out["problems"].append(f"{row.get('task_id')}：{problem}")
+            continue
+        out["settled"].append({"item_id": str(row.get("task_id") or ""), "key": key,
+                               "adopted_key": adopted, "close": close,
+                               "matched_by": str(gap.get("matched_by") or ""),
+                               "why": str(gap.get("reason") or "")})
+    out["reason"] = (f"收录落成：收口 {len(out['settled'])} 条"
+                     + (f"、仍开着 {len(out['left'])} 条" if out["left"] else "")
                      + (f"；{len(out['problems'])} 条没办成" if out["problems"] else ""))
     return out
 

@@ -164,13 +164,20 @@ def manuscripts_of_statement(store: Any, statement_id: Any) -> dict[str, Any]:
 
 
 def statement_of_manuscript(store: Any, *, rel: Any = "",
-                            manuscript_id: Any = "") -> dict[str, Any]:
+                            manuscript_id: Any = "",
+                            sign_rows: bool = True) -> dict[str, Any]:
     """反查：这一份稿属于哪一条命题（唯一实现；反查的三源与正查同一个并集）。
 
     返回 `{checked, found, stmt_id, status, retired, rel, why}`。
     三态：`checked=False` ⇒ 台账读不出来（没查成）；`found=False` ⇒ 查过了、三源都不指向
     任何一行（未在册的稿，例如 F 交上来还没被 B 收录的那一份）—— 那一档不是"没问题"，
     只是本判据对它不说话（plan 级那边另有门）。
+
+    `sign_rows=False` 收窄到收录记录那两源（`statements.manuscript_id` 与
+    `statements.manuscripts`），不读签行那一源。为什么有人要收窄：问"这一份稿收进了
+    哪一行"（`obligations.registration_gap` 的「必须收录」义务）时，签行回答的是
+    "谁签过它"—— 一份稿可以先被签在 A 上、后来收进 B，拿签行认领会把义务引到错的行。
+    默认 `True` 让既有调用方（退休判据那三源）一个字节都不变。
     """
     text = str(rel or "").strip().replace("\\", "/")
     mid = str(manuscript_id or "").strip()
@@ -195,7 +202,7 @@ def statement_of_manuscript(store: Any, *, rel: Any = "",
         if text and isinstance(per, Mapping) and text in {
                 str(v or "").strip().replace("\\", "/") for v in per.values()}:
             hits.append(sid)
-    if not hits and text:
+    if not hits and text and sign_rows:
         # 第三源（签行）单独查：它按命题逐条读，成本高，只在前面两源都没命中时走。
         for sid, _row in sorted(rows.items()):
             verified, _vwhy = _verified_manuscripts(store, sid)

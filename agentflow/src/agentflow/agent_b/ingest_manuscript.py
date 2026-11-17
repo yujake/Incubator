@@ -284,6 +284,46 @@ class _IngestManuscript:
                 stmt_id=target, row=row, manuscript_path=rel, proof_text=value)
         return not bool(reading.get("same_proof"))
 
+    def _settle_registration_duty(self, out: dict, *, rel: str) -> dict:
+        """收录落成之后：把板上那条「必须收录」义务按证据收口（写点，不是等收工对账）。
+
+        为什么写在这里而不是收工那一侧：B 收录完==义务满足了，而"收工对账"这一笔
+        在本链里根本没跑（M 的脚本是「派 B → 销 B1 → final」，收工门没有调
+        `obligations.reconcile`）⇒ 义务停在 `seen`、`retire_child` 受控拒、final 连拒
+        三拍。RED11 的读数：`calls` 16 → 19（多出来的 3 拍全是收工补救）。
+
+        判据与收口本体只有一处：`obligations.settle_registration`（它按"这一份稿归哪一行"
+        认出义务，两个号段都对得上）。本函数只做两件事：认出这一笔拿到的命题号、
+        把读数带回 `registration_settled` 那一格（失败不许带走这一笔收录）。
+        """
+        from .. import obligations as _OBL
+
+        if not isinstance(out, dict):
+            return out
+        stmt_id = ""
+        for one in (out.get("register"), out.get("target")):
+            if isinstance(one, Mapping):
+                stmt_id = str(one.get("stmt_id") or "").strip()
+                if stmt_id:
+                    break
+        if not stmt_id:
+            stmt_id = str(out.get("stmt_id") or "").strip()
+        if not bool(out.get("ok")) or not stmt_id:
+            out["registration_settled"] = {
+                "checked": False, "settled": [], "left": [], "problems": [],
+                "reason": ("这一笔没落成 / 没有拿到命题号 ⇒ 收不了口"
+                           "（不是「没有义务」，也不是「义务还在」）")}
+            return out
+        try:
+            got = _OBL.settle_registration(
+                store=self.store, root=getattr(self.store, "root", ""),
+                stmt_id=stmt_id, manuscript=rel)
+        except Exception as exc:  # noqa: BLE001 —— 收口那一笔抛了不许带走这一笔收录
+            got = {"checked": False, "settled": [], "left": [], "problems": [],
+                   "reason": f"收口那一笔抛了（{type(exc).__name__}: {exc}）"}
+        out["registration_settled"] = dict(got)
+        return out
+
     def _mark_ingested(self, out: dict, *, rel: str, family: str,
                        path_group: int = 0) -> dict:
         """收录成功之后：B 自己的 `b-proof` 稿在 B 那一行 task 上置「已提交」。
@@ -294,6 +334,9 @@ class _IngestManuscript:
 
         同一笔里把秘书分配的路径号回写到覆盖这份正文的 `verifications` 行：
         两件事都在"收录成功"这一刻发生，不另查一遍台账（号从回执里来，不在这里算）。
+
+        「必须收录」义务的消账也挂在入口这里（`_settle_registration_duty`）：两个出口
+        （`mode=register` 与按格回填）都从这里过，所以义务不会因为走了哪条分支而漏收口。
         """
         from . import autosubmit as _BAS
 
@@ -324,5 +367,6 @@ class _IngestManuscript:
             if not text:
                 target = got.get("target") if isinstance(got.get("target"), dict) else {}
                 text = str(target.get("statement_full") or "")
-            return self._note_conjecture_landing(got, statement_full=text, rel=rel)
+            return self._settle_registration_duty(
+                self._note_conjecture_landing(got, statement_full=text, rel=rel), rel=rel)
         return got

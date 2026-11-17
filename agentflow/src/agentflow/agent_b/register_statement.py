@@ -6418,16 +6418,18 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             quote_mode=quote_mode, quote_span=quote_span,
             quote_call_sha256=quote_call_sha256, derived_from=derived_from,
             doc_id=doc_id, line_range=line_range, nontriviality=_nt)
-        return self._finish_filing_nontriviality(
-            self._note_conjecture_landing(
-                self._mark_b_register(
-                    self._apply_declared_manuscript_kind(
-                        got, statement_full=statement_full,
-                        origin=str(origin or "external_lit"),
-                        kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
-                    proof_manuscript),
-                statement_full=statement_full, rel=str(proof_manuscript or "")),
-            _nt)
+        return self._settle_registration_duty(
+            self._finish_filing_nontriviality(
+                self._note_conjecture_landing(
+                    self._mark_b_register(
+                        self._apply_declared_manuscript_kind(
+                            got, statement_full=statement_full,
+                            origin=str(origin or "external_lit"),
+                            kind=str(kind or "theorem"), proof_manuscript=proof_manuscript),
+                        proof_manuscript),
+                    statement_full=statement_full, rel=str(proof_manuscript or "")),
+                _nt),
+            rel=str(proof_manuscript or ""))
 
     def _note_conjecture_landing(self, out: dict, *, statement_full: str = "",
                                  rel: str = "") -> dict:
