@@ -1028,7 +1028,7 @@ python -m agentflow.agent_a   # 以及 agent_b … agent_h、agent_v、pipeline�
 | `agent_d` | `SELF-CHECK DONE（agent_d）` | **0** | 56 |
 | `agent_e` | `SELF-CHECK DONE（agent_e）：22 项通过 / 0 项失败` | **0** | 35 |
 | `agent_f` | `SELF-CHECK DONE（agent_f）：失败 0 项` | **0** | 40 |
-| `agent_g` | `SELF-CHECK DONE（agent_g）` | **0** | 45 |
+| `agent_g` | `SELF-CHECK DONE（agent_g）` | **0** | 46 |
 | `agent_h` | `SELF-CHECK DONE（agent_h）` | **0** | 89 |
 | `agent_v` | `SELF-CHECK DONE（agent_v）：18 项通过 / 0 项失败` | **0** | 19 |
 | `pipeline` | `SELF-CHECK DONE（pipeline）` | **0** | 46 |
