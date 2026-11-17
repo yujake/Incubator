@@ -54,7 +54,7 @@ from agentflow import secretary as SEC  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
-from conftest import seed_statement_row  # noqa: E402
+from conftest import ensure_basis_lit, ensure_basis_stmt, seed_statement_row  # noqa: E402
 from test_e_gets_its_v_sign_like_f import (  # noqa: E402
     FULL, _column, _env, _manuscript, _register, _submitted_by_e,
 )
@@ -70,7 +70,7 @@ def _register_conjecture(env: dict) -> str:
     """先在册一条"证明还空着"的同一条命题（缺口读数里那个 `stmt 000000` 的现场）。"""
     first = env["b"].register_statement(
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"], kind="conjecture", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="conjecture", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9", proof_text="",
         evidence_kind="cross_check", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
@@ -153,7 +153,7 @@ def test_f_an_unsigned_delivery_never_upgrades(tmp_path: pathlib.Path) -> None:
     rel, _before = _manuscript(env)
     unsigned = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     filed = env["b"].register_statement(
-        origin="own_result", derived_from=["999999"], kind="theorem", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="theorem", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9", proof_text=_column(env),
         proof_manuscript=unsigned, evidence_kind="proof", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,

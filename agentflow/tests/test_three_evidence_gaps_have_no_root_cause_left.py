@@ -53,6 +53,9 @@ from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
 from conftest import seed_statement_row
+from conftest import BASIS_LIT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 #: 真机夹具（只读）。用例在这一棵树不存在时 skip，不去凭空造一份"像 sylow3"的东西。
 SYLOW3 = pathlib.Path(__file__).resolve().parents[1] / "projects" / "sylow3"
@@ -102,7 +105,7 @@ def own(full: str, **kw) -> dict:
         "statement_full": full,
         "statement_text": full[:20],
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "origin": "own_result", "derived_from": ["999999"],
+        "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
         # 自产、无出处、quote_verified 不是 True ⇒ 按硬规则从"猜想"进门
         # （升档由证据位现算，不在这里硬写 theorem）。
         "kind": "conjecture",

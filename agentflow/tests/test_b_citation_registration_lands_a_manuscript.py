@@ -44,6 +44,10 @@ for _path in (_SRC, _TESTS):
         sys.path.insert(0, str(_path))
 
 import conftest  # noqa: E402
+from conftest import BASIS_LIT_ID  # noqa: E402
+
+# 业主 2026-11-17「不许假来路」：F 稿自己不引用在册命题时，来路由真 literature 行承担。
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import manuscriptids as MID  # noqa: E402
@@ -242,7 +246,8 @@ def test_c_a_signed_f_manuscript_with_a_revision_note_is_released(
         + DS.render_dependency_section([]) + "\n", encoding="utf-8")
     conftest.sign_before_registration(st.root, proof_text=PROOF)
     seam = _Seam(well_formed=False)   # 若 B 真问了，它会判"不是命题"
-    got = _b(st, seam).ingest_manuscript(manuscript=F_REL, mode="register")
+    got = _b(st, seam).ingest_manuscript(manuscript=F_REL, mode="register",
+                                         source_lit_id=BASIS_LIT_ID)
 
     assert got.get("ok") is True, got
     assert seam.form_calls == [], (

@@ -57,6 +57,7 @@ from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
+from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
 from test_agent_v_exhaustion_review import (  # noqa: E402
     EXHAUSTIVE_PROBE, SCRIPT_REL, _v_secretary,
 )
@@ -104,7 +105,7 @@ def _column(env: dict) -> str:
 def _register(env: dict, *, text: str, column: str, reason: str = "我方推导") -> dict:
     return env["b"].register_statement(
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"], kind="theorem", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="theorem", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9", proof_text=column,
         proof_manuscript=text, evidence_kind="proof", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False, quote_reason=reason)

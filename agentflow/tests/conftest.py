@@ -643,6 +643,160 @@ def seed_statement_row(store, *, proof_text: str = "", statement_full: str = "",
     return row
 
 
+#: 夹具里的两条"真来路"号（六位；全仓未占用）。
+#:
+#: 业主 2026-11-17 逐字：「不许假来路」。给 `derived_from` 填一个并不在册的占位号
+#: （旧夹具里那个 999999 的写法）形状合法，但 999999
+#: 不是任何工作区里真的在册命题 —— 它只是把 `missing_own_result_basis` 那道闸哄过去，
+#: 读的人拿它复核不到任何东西。所以夹具要造"自产命题"时，先用下面两个 helper 落一条
+#: 真行，再指它的号：`ensure_basis_stmt` 落一条在册命题（它自己的来路是真的文献行），
+#: `ensure_basis_lit` 只落文献行（给"这一条由某篇文献推出、不碰 statements 表"的夹具）。
+BASIS_LIT_ID = "000888"
+BASIS_STMT_ID = "000888"
+
+
+def _basis_store(target):
+    """把 helper 收到的各种"工作区把手"归一成一个 `Store`（不新开、不读另一份盘）。
+
+    夹具里的把手有四种形状：`Store` 本身、`tmp_path`/`ws` 路径、`env` 字典
+    （`{"store": …}`）、以及 agent（`self.store`）。这里只认已经建好的那一份 ——
+    绝不按路径 `Store(target)` 新开一份，否则写进内存的行与用例读的那一份是两个世界。
+    """
+    from agentflow.store import Store
+
+    if isinstance(target, Store):
+        return target
+    if isinstance(target, dict):
+        for key in ("store", "st", "ws"):
+            if isinstance(target.get(key), Store):
+                return target[key]
+    for attr in ("store", "_store"):
+        got = getattr(target, attr, None)
+        if isinstance(got, Store):
+            return got
+    raise TypeError(
+        "ensure_basis_*：需要一个已建好的 Store（或含它的 env 字典 / agent），"
+        f"收到 {type(target).__name__}")
+
+
+def ensure_basis_lit(target) -> str:
+    """落（或确认）一条真 `literature` 行，返回它的 `lit_id`；幂等。
+
+    这一行是夹具里"own_result 的文献来路"那一支的落点：`source_lit_id` 指它，
+    于是 `lit_id` 真的能在 `literature` 表里查到，不是占位号。
+    """
+    store = _basis_store(target)
+    if any(str(row.get("lit_id") or "") == BASIS_LIT_ID
+           for row in store.rows("literature")):
+        return BASIS_LIT_ID
+    add_literature(store, BASIS_LIT_ID,
+                   title="前置文献（夹具：own_result 的真来路）", year=2026)
+    return BASIS_LIT_ID
+
+
+def ensure_basis_stmt(target, *, literature: bool = True) -> str:
+    """落（或确认）一条真在册的前置命题，返回它的 `stmt_id`；幂等。
+
+    业主 2026-11-17「不许假来路」：own_result 的 `derived_from` 要指一条真在册命题。
+    这一条就是那条前置命题：`seed_statement_row` 直接落一行（与真机历史行同形），
+    而且它自己也有来路 —— `origin="external_lit"` + `source_lit_id` 指向
+    :func:`ensure_basis_lit` 落的那条真文献行。链子是 文献 → 前置命题 → 被测命题。
+
+    `literature=False`：只给"这一份夹具明说不许碰 literature"的用例（例如
+    `test_longrun_offline_multiround` 的零文献现场）。此时不塞文献行，前置命题按
+    历史形态直接落一条在册行当脚手架 —— 被测命题的来路仍然真的指得到一行，
+    只是脚手架自己不再声称文献来路（它没有）。用别的写法就是在那个现场造假。
+    """
+    store = _basis_store(target)
+    if any(str(row.get("stmt_id") or "") == BASIS_STMT_ID
+           for row in store.rows("statements")):
+        return BASIS_STMT_ID
+    if literature:
+        ensure_basis_lit(store)
+        origin, lit_id = "external_lit", BASIS_LIT_ID
+        reason = "夹具：这条前置命题的来路是那条真 literature 行"
+    else:
+        origin, lit_id = "own_result", ""
+        reason = "夹具：历史形态的在册命题（这一份夹具明说不许碰 literature）"
+    seed_statement_row(
+        store, stmt_id=BASIS_STMT_ID, origin=origin, source_lit_id=lit_id,
+        kind="lemma", label="前置命题（夹具：真在册）",
+        statement_text="前置命题：由已有结果直接得到",
+        statement_full="前置命题：由已有结果直接得到（夹具脚手架，真在册的一行）。",
+        page_range={"label": "全文未分页"},
+        quote_reason=reason)
+    return BASIS_STMT_ID
+
+
+@pytest.fixture
+def every_store_has_basis_lit(monkeypatch):
+    """给这一份模块里新建的每个 `Store` 都带一条真 `literature` 行（`BASIS_LIT_ID`）。
+
+    为什么是 fixture 而不是每处 `ensure_basis_lit(store)`：这一批夹具的载荷是模块级
+    常量 / 不带 store 的小 helper（`OWN` / `_own()` / `_body()`），它们在被展开进
+    `register_statement` 的那一刻才碰到工作区。把"真来路那一行"落在 `Store.init`
+    这一处，语义仍然是"盘上真有一行文献"（`ensure_basis_lit` 走的是真写入口），
+    只是落点提前到工作区建好那一刻；夹具的读数（statements 行数、依赖边）一个字不变。
+
+    只由需要它的测试模块以 `pytestmark = pytest.mark.usefixtures(...)` 显式拉进来：
+    没有这一行的模块照旧是"零文献"现场（例如 `test_longrun_offline_multiround`）。
+    """
+    from agentflow.store import Store
+
+    real_init = Store.init
+
+    def _init(self, *args, **kwargs):
+        out = real_init(self, *args, **kwargs)
+        ensure_basis_lit(self)
+        return out
+
+    monkeypatch.setattr(Store, "init", _init)
+
+
+def ensure_citable_basis_stmt(target, *, proof_text: str) -> str:
+    """落/确认一条够可引门槛（`pre_theorem`）的前置命题，返回它的 `stmt_id`。
+
+    它比 `ensure_basis_stmt` 多两件真东西：一份非空的 `proof_text`，以及 V 的三次
+    「成立」—— 走的是 `sign_for_the_gate` 的真写口（真台账 + 真签）。
+    为什么需要：手稿的 `## 依赖` 表 / 证明正文引用在册命题时，B 侧要查可引门槛
+    （`citation_below_proof_review`）；夹具要造"真引用"就必须把前置命题签到那一档，
+    不能靠直接写一个假等级（那正是"假来路"的近亲）。
+    """
+    from agentflow import evidencebits as EB
+
+    store = _basis_store(target)
+    row = next((dict(r) for r in store.rows("statements")
+                if str(r.get("stmt_id") or "") == BASIS_STMT_ID), None)
+    if row is None or str(row.get("proof_text") or "") != str(proof_text):
+        if row is not None:
+            with store.tx("statements", actor="test") as tx:
+                row["proof_text"] = str(proof_text)
+                row["bits"] = EB.bits_of(origin=str(row.get("origin") or "external_lit"),
+                                         proof=True, proof_process=str(proof_text),
+                                         kind=str(row.get("kind") or "lemma"))
+                row["evidence_kind"] = EB.kind_from_bits(row["bits"],
+                                                         kind=str(row.get("kind") or "lemma"))
+                tx.upsert("statements", row)
+        else:
+            ensure_basis_lit(store)
+            bits = EB.bits_of(origin="external_lit", proof=True,
+                              proof_process=str(proof_text), kind="lemma")
+            seed_statement_row(
+                store, stmt_id=BASIS_STMT_ID, origin="external_lit",
+                source_lit_id=BASIS_LIT_ID, kind="lemma",
+                label="前置命题（夹具：可引）",
+                statement_text="前置命题：由文献结论直接得到",
+                statement_full="前置命题：由文献结论直接得到（夹具：真在册、真签）。",
+                proof_text=str(proof_text), bits=bits,
+                evidence_kind=EB.kind_from_bits(bits, kind="lemma"),
+                page_range={"label": "全文未分页"},
+                quote_reason="夹具：这条前置命题的来路是那条真 literature 行")
+    sign_for_the_gate(store.root, statement_id=BASIS_STMT_ID,
+                      proof_text=str(proof_text), store=store,
+                      manuscript=f"reports/f-proof-{BASIS_STMT_ID}.md")
+    return BASIS_STMT_ID
+
+
 def reset_bit3_cache(store, statement_id: str, *, proof_no: int = 1) -> dict:
     """把某一号证明的"第 3 位已签"「缓存」退回假（夹具用：让 V 的现场连判跑得动）。
 

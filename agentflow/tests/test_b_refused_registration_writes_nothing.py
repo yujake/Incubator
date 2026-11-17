@@ -21,6 +21,7 @@
 零模型调用：不派 V、不调秘书模型；签走 `conftest.sign_for_the_gate` 的真台账写口。
 """
 from __future__ import annotations
+import pytest
 
 import ast
 import contextlib
@@ -44,6 +45,9 @@ from agentflow.store import Store              # noqa: E402
 from test_agent_v_exhaustion_review import _v_secretary  # noqa: E402
 from test_v_reviews_three_times_before_signing import (  # noqa: E402
     CLEAN_REPLY, _ReviewSeam)
+from conftest import BASIS_LIT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 FULL = "设 G 是 3-正则群；则弦长函数不是常值（D1 判据）。"
 TEXT = "弦长函数不是常值（D1 判据）"
@@ -66,7 +70,7 @@ def _b(st: Store) -> AgentB:
 
 def _own(**kw) -> dict:
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    base = {"origin": "own_result", "derived_from": ["999999"], "statement_full": FULL, "statement_text": TEXT,
+    base = {"origin": "own_result", "source_lit_id": BASIS_LIT_ID, "statement_full": FULL, "statement_text": TEXT,
             "label": TEXT, "doc_id": S.format_id(0),
             "line_range": {"start": 1}, "quote_verified": False,
             "quote_reason": "own_result：判据夹具"}

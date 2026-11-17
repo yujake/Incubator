@@ -47,13 +47,17 @@ from agentflow import schema as S  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.store import Store  # noqa: E402
+from conftest import BASIS_LIT_ID
+import pytest
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 #: 被引的那条在册命题（要够可引档：`pre_theorem` 及以上）。
 DEP_SID = "000000"
 PROPOSITION = "对任意有限群 G，若 p 整除 |G|，则 G 有 p 阶元。"
 OWN = {"statement_full": PROPOSITION, "statement_text": "p 阶元",
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-       "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "doc_id": S.format_id(0),
+       "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture", "doc_id": S.format_id(0),
        "quote_reason": "我方自产命题，没有外部引文要比对"}
 P1 = f"1. 由 stmt:{DEP_SID} 直接推出。"
 P2 = f"另一条路线：由 stmt:{DEP_SID} 与双陪集计数推出。"

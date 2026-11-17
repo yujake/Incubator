@@ -38,7 +38,8 @@ from agentflow.agent_c import AgentC
 from agentflow.agent_v import AgentV
 from agentflow.store import Store
 
-from conftest import CleanVerdictSecretary, seed_statement_row
+from conftest import CleanVerdictSecretary, seed_statement_row, ensure_basis_stmt
+from conftest import ensure_basis_lit
 
 PROOF = "Proof. n^2+n=n(n+1)，相邻两数必有一偶。"
 FULL = "若 n≥3 则 n^2+n 是偶数（自证）。"
@@ -122,7 +123,7 @@ def _audited_statement(st: Store) -> str:
 
     b = AgentB(st, extractor=None, extract_text=None)
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    got = b.register_statement(origin="own_result", derived_from=["999999"], statement_full=FULL,
+    got = b.register_statement(origin="own_result", source_lit_id=ensure_basis_lit(st), statement_full=FULL,
                                statement_text=FULL, kind="conjecture",
                                proof_text=PROOF,
                                proof_manuscript=path.read_text(encoding="utf-8"),

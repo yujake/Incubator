@@ -60,6 +60,7 @@ from agentflow.secretary import Secretary, for_role_wired
 from agentflow.store import Store
 from agentflow.tools import conductor_tools, table_tools
 from agentflow.tools.base import ToolRegistry
+from conftest import BASIS_LIT_ID
 
 #: 命题正文（三态判定的样本）；判词由打桩的缝给，判据不依赖真实模型。
 FULL = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在且两两共轭。"
@@ -163,7 +164,7 @@ def _own(full: str, label: str = LABEL) -> dict:
     """自产命题的必填件（`doc_id` + `quote_reason`；首登按猜想）。"""
     return {"statement_full": full, "statement_text": full[:24], "label": label,
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
+            "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
@@ -574,4 +575,4 @@ def test_no_construction_site_forgets_the_seam_again():
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")

@@ -51,6 +51,7 @@ from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
 from test_agent_v_exhaustion_review import EXHAUSTIVE_PROBE, SCRIPT_REL, _v_secretary  # noqa: E402
+from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
 
 FULL = "对任意正整数 n，R(3,4)=9。"
 CLAIM = "R(3,4)=9（K_9 的二染色穷举）"
@@ -92,7 +93,7 @@ def _file(env: dict) -> dict:
     """B 收录：只给命题与证明栏，不给 `proof_manuscript` —— 稿得靠携带单寻址。"""
     return env["b"].register_statement(
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"], kind="theorem", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="theorem", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9",
         proof_text=env["column"], evidence_kind="proof",
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
@@ -194,7 +195,7 @@ def test_e_a_delivery_for_a_registered_statement_lands_on_that_row(
     """e：命题已在册（先落成猜想、没有证明正文）⇒ 这一笔落回那一行，不新增。"""
     env = _env(tmp_path)
     first = env["b"].register_statement(
-        origin="own_result", derived_from=["999999"], kind="conjecture", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="conjecture", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9", proof_text="",
         evidence_kind="cross_check", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,
@@ -263,7 +264,7 @@ def test_f_removing_the_ownership_judgement_registers_a_second_row(
 
     env = _env(tmp_path)
     first = env["b"].register_statement(
-        origin="own_result", derived_from=["999999"], kind="conjecture", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="conjecture", label="R(3,4)=9",
         statement_full=FULL, statement_text="R(3,4)=9", proof_text="",
         evidence_kind="cross_check", doc_id=S.format_id(0),
         line_range={"start": 1}, quote_verified=False,

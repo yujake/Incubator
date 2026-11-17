@@ -50,6 +50,7 @@ from agentflow import schema as S
 from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.store import Store
+from conftest import BASIS_LIT_ID
 
 #: 中文正文（"中文论文"那一档：附录按论文语言出中文，于是三份文件的两格逐字可比）。
 #: 五条环境与五条台账行一一对上（lemma 两条、theorem 两条、experiment 一条）。
@@ -114,22 +115,22 @@ def _signed_bits(*, proof_no: int = 1, verdict: str = "成立") -> dict:
 #: - `000005`：`kind="lemma"`、审校台账在但有坏行 ⇒ 「未读到」。
 LEDGER_STATEMENTS: list[dict] = [
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    {"stmt_id": "000001", "kind": "conjecture", "origin": "own_result", "derived_from": ["999999"],
+    {"stmt_id": "000001", "kind": "conjecture", "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
      "statement_text": "第一条引理", "proof_text": PROOF, "bits": _signed_bits()},
-    {"stmt_id": "000002", "kind": "lemma", "origin": "own_result", "derived_from": ["999999"],
+    {"stmt_id": "000002", "kind": "lemma", "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
      "statement_text": "第二条定理", "proof_text": PROOF, "bits": _signed_bits()},
-    {"stmt_id": "000003", "kind": "conjecture", "origin": "own_result", "derived_from": ["999999"],
+    {"stmt_id": "000003", "kind": "conjecture", "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
      "statement_text": "第三条引理", "proof_text": PROOF,
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
               "evidence": {"proof_process": PROOF, "proof_source": "own",
                            "reviewed_by_proof": {"1": False}}}},
-    {"stmt_id": "000004", "kind": "lemma", "origin": "own_result", "derived_from": ["999999"],
+    {"stmt_id": "000004", "kind": "lemma", "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
      "statement_text": "第四条定理", "proof_text": PROOF,
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
               "evidence": {"proof_process": PROOF, "proof_source": "own"}}},
-    {"stmt_id": "000005", "kind": "lemma", "origin": "own_result", "derived_from": ["999999"],
+    {"stmt_id": "000005", "kind": "lemma", "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
      "statement_text": "第五条定理", "proof_text": PROOF,
      "bits": {"numeric": "na", "proof": True, "reviewed": False, "formal": "na",
               "audited": False, "origin": "own_result",
@@ -419,7 +420,7 @@ FULL = "对任意整数 n≥0：1^3 + 2^3 + … + n^3 = (n(n+1)/2)^2。"
 
 def _own(**kw) -> dict:
     base = {"statement_full": FULL, "statement_text": "sum-of-cubes", "label": "sum-of-cubes",
-            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture", "doc_id": S.format_id(0),
+            "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture", "doc_id": S.format_id(0),
             "line_range": {"start": 1}, "quote_verified": False,
             "quote_reason": "own_result：我方推导，没有第二份文本可比对",
             "proof_text": PROOF}
@@ -597,4 +598,4 @@ def test_f4_the_marker_sentence_survives(tmp_path: pathlib.Path) -> None:
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")

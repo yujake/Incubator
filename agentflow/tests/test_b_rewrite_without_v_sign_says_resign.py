@@ -19,6 +19,7 @@
 同一套替身），一次真模型都不发。
 """
 from __future__ import annotations
+import pytest
 
 import json
 import pathlib
@@ -39,6 +40,9 @@ from agentflow import vsigns as VSP                # noqa: E402
 from agentflow.agent_b import AgentB               # noqa: E402
 from agentflow.agent_v import AgentV               # noqa: E402
 from agentflow.store import Store                  # noqa: E402
+from conftest import BASIS_LIT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 
 def _judge_for(verdict: dict) -> dict:
@@ -64,7 +68,7 @@ TEXT = "弦长函数不是常值（重签判据）"
 P1 = "1. 由定义直接得到。\n2. 由 1 与假设 n >= 3 得结论。"
 P2 = P1 + "\n3. 补一步（改稿）。"
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-OWN = {"statement_full": FULL, "statement_text": TEXT, "origin": "own_result", "derived_from": ["999999"],
+OWN = {"statement_full": FULL, "statement_text": TEXT, "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
        "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 OK = {"verdict": "成立", "findings": []}
 BAD = {"verdict": "有毛病", "defect_step": 2, "why": "第 2 步没有依据",

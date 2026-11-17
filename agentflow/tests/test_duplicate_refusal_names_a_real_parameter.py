@@ -34,6 +34,7 @@ from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
 from conftest import add_literature
+from conftest import BASIS_LIT_ID
 
 #: 一条自产命题（形状照 `tests/test_v_verdict_reaches_f.py` 那一份：`doc_id` 与
 #: `quote_reason` 是写库前的硬要求）。
@@ -60,7 +61,7 @@ def _own(**kw) -> dict:
     本判据要的是"同一份正文交第二次"这件事）。
     """
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    base = {"statement_full": FULL, "origin": "own_result", "derived_from": ["999999"], "doc_id": "000000",
+    base = {"statement_full": FULL, "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "doc_id": "000000",
             "kind": "conjecture",
             "proof_text": PROOF, "quote_verified": False,
             "quote_reason": "自产命题：没有第二份文本可比对"}
@@ -134,4 +135,4 @@ def test_the_secretary_duplicate_reading_does_not_name_force_new(
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")

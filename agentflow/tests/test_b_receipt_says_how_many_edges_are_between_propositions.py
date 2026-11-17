@@ -22,6 +22,7 @@ import sys
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import depsection as DS
 from agentflow import schema as S
@@ -55,7 +56,7 @@ def _add_theorem(store: Store, stmt_id: str) -> None:
 
     proof = f"命题 {stmt_id} 的证明正文（判据夹具）。"
     row = S.Statement(
-        stmt_id=stmt_id, origin="own_result", derived_from=["999999"], kind="theorem",
+        stmt_id=stmt_id, origin="own_result", source_lit_id=ensure_basis_lit(store), kind="theorem",
         label=f"在册命题 {stmt_id}", statement_text=f"命题 {stmt_id} 的短版",
         statement_full=f"命题 {stmt_id} 的完整正文。",
         proof_text=proof,
@@ -70,18 +71,26 @@ def _add_theorem(store: Store, stmt_id: str) -> None:
 
 
 def _register(store: Store, *, statement_full: str, body: str,
-              dep_rows: str = "", derived_from: list[str] | None = None) -> dict:
-    """登记一条命题（先按正文 sha 落一份 pending 签 —— 2026-11-02 起的准入闸要它）。"""
+              dep_rows: str = "", derived_from: list[str] | None = None,
+              source_lit_id: str = "") -> dict:
+    """登记一条命题（先按正文 sha 落一份 pending 签 —— 2026-11-02 起的准入闸要它）。
+
+    来路两选一（业主 2026-11-17「不许假来路」）：点名承重链的用例给 `derived_from`
+    （必须是真在册命题）；量"零依赖边"的用例给 `source_lit_id`（真 literature 行，
+    且它不会给依赖面添边 —— 这正是本文件量 N/M 时不想要的干扰）。
+    """
     from conftest import sign_before_registration
 
     sign_before_registration(store.root, proof_text=body)
+    chain = list(derived_from or [])
     return AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
         statement_full=statement_full, statement_text=statement_full[:20],
         origin="own_result", kind="conjecture", doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）：没有外部引文要比对",
         proof_text=body,
         proof_manuscript=_manuscript(body, dep_rows),
-        derived_from=list(derived_from or []),
+        derived_from=chain,
+        source_lit_id=(source_lit_id or ("" if chain else ensure_basis_lit(store))),
     )
 
 
@@ -103,7 +112,8 @@ def test_a_statement_to_statement_edge_is_counted_separately(tmp_path):
     _add_theorem(store, S.format_id(0))
     got = _register(
         store, statement_full="引理 C：由在册命题推出。", body="1. 由在册命题直接推出。",
-        dep_rows=f"| 由引理甲 | stmt:{S.format_id(0)} | 第 1 步 | 1 |\n")
+        dep_rows=f"| 由引理甲 | stmt:{S.format_id(0)} | 第 1 步 | 1 |\n",
+        derived_from=[S.format_id(0)])
     assert got.get("ok") is True, got
     total = int(got.get("deps_written") or 0)
     from_stmt = int(got.get("deps_stmt_edges") or 0)
@@ -122,7 +132,7 @@ def test_a_refusal_has_no_dependency_receipt(tmp_path):
     got = AgentB(store, extractor=None, extract_text=None, config={}).register_statement(
         statement_full="引理 D：没有稿的一条。", statement_text="引理 D",
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"], kind="conjecture", doc_id=S.format_id(0),
+        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）：没有外部引文要比对",
         proof_text="证明正文（判据夹具）。",
     )

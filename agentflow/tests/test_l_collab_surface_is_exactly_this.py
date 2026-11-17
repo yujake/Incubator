@@ -51,7 +51,11 @@ SID = "t"
 #: 本机那一版真 Lean（绝对路径；PATH 上的 lean 可能是另一个东西）。
 #: 真 Lean 的落点：`AGENTFLOW_LEAN_BIN` 优先、没设才退回本机那一版 —— 取值点只有一处
 #: （`tests/conftest.py` 的 `lean_path()`；本文件不再写第二份绝对路径）。
-from conftest import lean_path, restore_lean_baseline
+from conftest import lean_path, restore_lean_baseline, ensure_basis_stmt
+from conftest import ensure_basis_lit
+from conftest import BASIS_LIT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 LEAN = lean_path()
 
@@ -112,6 +116,9 @@ def _workspace(tmp_path: pathlib.Path, *, steps: int = LINKS + 1) -> tuple[objec
     st = Store(ws)
     st.init()
     proof = _proof_text(steps)
+    # 来路行先落（`ensure_basis_lit` 自己开一笔 literature 事务；放进下面的
+    # statements 事务里会撞 counters 锁 —— 夹具在真机上表现为 30s 超时）。
+    basis_lit = ensure_basis_lit(st)
     with st.tx("statements", actor="agent-B") as tx:
         tx.upsert("statements", {
             "stmt_id": STMT_ID,
@@ -121,8 +128,7 @@ def _workspace(tmp_path: pathlib.Path, *, steps: int = LINKS + 1) -> tuple[objec
             "proof_text": proof,
             "evidence_kind": "heuristic",
             "status": "active",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-            "origin": "own_result", "derived_from": ["999999"],
+            "origin": "own_result", "source_lit_id": basis_lit,
             "quote_reason": "自产命题（这一组判据不涉及外部原文）",
         }, note="probe:statement")
     return st, ws, proof
@@ -505,7 +511,7 @@ def _own_statement() -> dict:
     return {
         "statement_full": CLAIM,
         "statement_text": CLAIM,
-        "origin": "own_result", "derived_from": ["999999"],
+        "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
         "doc_id": S.format_id(0),
         "quote_reason": "我方自产命题，没有外部引文要比对",
         "kind": "conjecture",

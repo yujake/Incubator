@@ -52,6 +52,7 @@ from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
+from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-10-23T00:00:00+08:00"
 SCRIPT_REL = "code/enum_ramsey34.py"
@@ -231,7 +232,7 @@ def _file(store: Store, *, column: str, kind: str = "theorem",
           manuscript: str = "") -> dict:
     return _b(store).register_statement(
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"], kind=kind, label="R(3,4)=9", statement_full=body,
+        origin="own_result", source_lit_id=ensure_basis_lit(store), kind=kind, label="R(3,4)=9", statement_full=body,
         statement_text=body[:40], proof_text=column, evidence_kind=evidence_kind,
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
         proof_manuscript=manuscript,

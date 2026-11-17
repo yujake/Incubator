@@ -26,7 +26,7 @@ from typing import Any
 
 import pytest
 
-from conftest import TS, add_literature
+from conftest import TS, add_literature, ensure_basis_stmt
 from agentflow import schema as S
 from agentflow import store as store_mod
 from agentflow.agent_b import AgentB
@@ -36,6 +36,8 @@ from agentflow.llmseam import LlmSeam
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from conftest import ensure_basis_lit
+from conftest import BASIS_LIT_ID
 
 PROOF = ("证明（逐行走查的对象）：\n"
          "1. 由引理 1，弦长闭式 L²/4 = N/A²；\n"
@@ -48,7 +50,7 @@ STATEMENT = "设 a≠b 为半轴，椭圆 x²/a²+y²/b²=1 不存在等弦点�
 #: `missing_own_source` —— 真机 `mp2` 那一条也是这么写的：`notes/…md:17-83`）。
 _PAYLOAD: dict[str, Any] = {
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    "origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "椭圆无等弦点",
+    "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "theorem", "label": "椭圆无等弦点",
     "statement_full": STATEMENT, "proof_text": PROOF,
     "line_range": {"start": 17, "end": 83},
     "quote_verified": None,
@@ -309,7 +311,9 @@ def test_the_store_commit_gate_is_the_second_lock(tmp_path, monkeypatch):
     st.init()
     with pytest.raises(ValueError) as exc:
         with st.tx("statements", actor="tool", note="tool:table.create:statements") as tx:
-            tx.upsert("statements", {"stmt_id": S.format_id(0), "origin": "own_result", "derived_from": ["999999"],
+            # 这一笔注定在提交期被拒（一行都不落）⇒ 它不是一次登记，也就没有"来路"
+            # 要写：这里量的是提交闸，不是命题台账。
+            tx.upsert("statements", {"stmt_id": S.format_id(0), "origin": "own_result",
                                      "kind": "theorem", "statement_full": "手写的",
                                      "quote_reason": "尚未逐字校验"})
     assert "direct_write_refused" in str(exc.value), str(exc.value)
@@ -319,7 +323,9 @@ def test_the_store_commit_gate_is_the_second_lock(tmp_path, monkeypatch):
     with st.tx("literature", actor="tool", note="tool:table.delete:literature") as tx:
         tx.upsert("literature", S.Literature(lit_id=S.format_id(0), title="T", type="J",
                                              summary="s", path=None, added_at=TS).to_dict())
-    assert len(st.rows("literature")) == 1
+    # 夹具的真来路那一行（`BASIS_LIT_ID`）不算；这一笔自己写的那一行才要在这里被看见。
+    assert len([r for r in st.rows("literature")
+                if str(r.get("lit_id")) != BASIS_LIT_ID]) == 1
 
 
 # ==================================================== ③ 负控（两处 + 一处附带）
@@ -441,4 +447,4 @@ def test_negative_control_without_the_secretarys_write_the_positive_reading_goes
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")

@@ -70,7 +70,7 @@ from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 from agentflow.tools.conductor_tools import conductor_for  # noqa: E402
 
-from conftest import seed_statement_row  # noqa: E402
+from conftest import ensure_basis_lit, ensure_basis_stmt, seed_statement_row  # noqa: E402
 from test_b_signed_proof_must_be_registered import (  # noqa: E402
     CLEAN_REPLY, _ReviewSeam, _Seam, _axis,
 )
@@ -140,7 +140,7 @@ def _env(tmp_path: pathlib.Path) -> dict:
     st.init()
     conductor_for(st)
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-    row = {"stmt_id": SID, "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
+    row = {"stmt_id": SID, "origin": "own_result", "source_lit_id": ensure_basis_lit(st), "kind": "conjecture",
            "label": "一致连续", "statement_full": FULL_ROW, "statement_text": FULL,
            "proof_text": "", "evidence_kind": "heuristic", "status": "active",
            "quote_verified": None, "quote_reason": "这一条还没有命题号 ⇒ 按最弱一档登记",
@@ -194,7 +194,7 @@ def _register(env: dict) -> dict:
     读签（签是 D268 批 2 的可复算凭据，见 `_sign`）。
     """
     return env["b"].register_statement(
-        origin="own_result", derived_from=["999999"], kind="theorem", label="一致连续",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="theorem", label="一致连续",
         statement_full=FULL, statement_text="一致连续", proof_text=PROOF,
         proof_manuscript=env["rel"], evidence_kind="cross_check",
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
@@ -342,7 +342,7 @@ def test_d_an_exhaustive_proof_collected_later_is_still_a_theorem(
                                        store=env["store"],
                                        seam=_IdentitySeam(), enable_model=True))
     filed = b.register_statement(
-        origin="own_result", derived_from=["999999"], kind="theorem", label="R(3,4)=9",
+        origin="own_result", source_lit_id=ensure_basis_lit(env), kind="theorem", label="R(3,4)=9",
         statement_full=E.FULL, statement_text="R(3,4)=9", proof_text=column,
         proof_manuscript=text, evidence_kind="cross_check",
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,

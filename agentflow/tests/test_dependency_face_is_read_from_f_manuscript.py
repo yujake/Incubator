@@ -62,6 +62,7 @@ import sys
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+from conftest import ensure_basis_lit, ensure_basis_stmt
 
 from agentflow import evidencebits as EB
 from agentflow import schema as S
@@ -254,7 +255,7 @@ def _register(store: Store, manuscript: str, *, proof_text: str = "1. 由在册�
         statement_full=statement_full,
         statement_text="由两条在册定理推出目标结论",
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"],
+        origin="own_result", source_lit_id=ensure_basis_lit(store),
         kind="conjecture",
         doc_id=S.format_id(0),
         quote_reason="我方自产命题（判据夹具）：没有外部引文要比对",

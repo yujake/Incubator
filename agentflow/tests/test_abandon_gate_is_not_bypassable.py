@@ -35,7 +35,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 import pytest
-from conftest import seed_statement_row, sign_before_registration
+from conftest import seed_statement_row, sign_before_registration, ensure_basis_stmt
 
 from agentflow import closing as CL
 from agentflow import conductor as CND
@@ -46,6 +46,7 @@ from agentflow import verifications as VR
 from agentflow.agent_b import AgentB
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
+from conftest import ensure_basis_lit
 
 TS = "2026-11-07T09:00:00+08:00"
 LATE = "2026-11-07T23:00:00+08:00"
@@ -83,7 +84,7 @@ def _put(st: Store, sid: str = SID, *, kind: str = "theorem", label: str = "",
          full: str = FULL) -> dict:
     row = {
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "stmt_id": sid, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
+        "stmt_id": sid, "origin": "own_result", "source_lit_id": ensure_basis_lit(st), "kind": kind,
         "label": label or f"探针命题 {sid}", "statement_full": full,
         "statement_text": full, "proof_text": proof_text,
         "evidence_kind": "heuristic", "status": status,
@@ -583,7 +584,7 @@ def test_e_f_lemma_reaches_salvaged_after_the_v_sign(tmp_path):
     sign_before_registration(st.root, proof_text=body)
     b = AgentB(st, extractor=None, extract_text=None)
     first = b.register_statement(
-        statement_full=FULL, statement_text=FULL, origin="own_result", derived_from=["999999"], kind="conjecture",
+        statement_full=FULL, statement_text=FULL, origin="own_result", source_lit_id=ensure_basis_lit(st), kind="conjecture",
         label="F 攻坚 0000 子目标 s1", proof_text=body, proof_manuscript=manuscript,
         line_range={"label": str(got["manuscript_path"])},
         quote_reason="夹具：V 的 pending 签在盘上")
@@ -654,7 +655,7 @@ def test_g_an_f_caller_still_cannot_register_through_b(tmp_path, monkeypatch):
     monkeypatch.setattr(RS, "_caller_role", lambda: "F")
     got = b.register_statement(
         statement_full=FULL, statement_text=FULL, kind="conjecture",
-        origin="own_result", derived_from=["999999"], evidence_kind="heuristic",
+        origin="own_result", source_lit_id=ensure_basis_lit(st), evidence_kind="heuristic",
         quote_reason="夹具：F 直接派 B 登记")
     assert got.get("ok") is False, got
     assert got.get("kind") == RS._RegisterStatement.F_CALLER_REFUSED, got

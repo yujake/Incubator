@@ -52,6 +52,10 @@ from agentflow.agent_b.register_statement import (  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
 from conftest import seed_statement_row  # noqa: E402
+from conftest import ensure_basis_lit, ensure_basis_stmt  # noqa: E402
+from conftest import BASIS_LIT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 #: 一条自产命题（B 从 F 的手稿登记进来的那一种）。
 STATEMENT = "设 L 是椭圆上的弦长函数；则 L 不是常值函数。"
@@ -87,7 +91,7 @@ def _own() -> dict:
     """自产命题的两件式：`kind="conjecture"` 是这一批的入口档（B-2 的猜想放行），
     它让这一份判据只测"消化 + 签"，不测"自产定理级要不要 V 的签"那道闸。"""
     return dict(statement_full=STATEMENT, statement_text=STATEMENT_TEXT,
-                origin="own_result", derived_from=["999999"], kind="conjecture",
+                origin="own_result", source_lit_id=BASIS_LIT_ID, kind="conjecture",
                 line_range={"label": "reports/attack-000000.md"},
                 quote_verified=None,
                 quote_reason="自产证明，没有第二份文本可比对",
@@ -116,7 +120,7 @@ def _seed_row(st: Store) -> str:
     """
     seeded = seed_statement_row(
         st, proof_text=SRC, statement_full=STATEMENT, statement_text=STATEMENT_TEXT,
-        kind="conjecture", label=STATEMENT_TEXT, origin="own_result", derived_from=["999999"],
+        kind="conjecture", label=STATEMENT_TEXT, origin="own_result", source_lit_id=ensure_basis_lit(st),
         doc_id=S.format_id(0), line_range={"label": "reports/attack-000000.md"},
         quote_verified=None, quote_reason="自产证明，没有第二份文本可比对",
         evidence_kind="heuristic",

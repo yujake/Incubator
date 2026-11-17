@@ -45,12 +45,16 @@ import sys
 _SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+from conftest import ensure_basis_lit, ensure_basis_stmt
 
 import pytest
 
 from agentflow import conceptrows as CR
 from agentflow import secretary as SEC
 from agentflow.store import Store
+from conftest import BASIS_LIT_ID, BASIS_STMT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -362,8 +366,7 @@ def test_d2_only_the_two_documented_callers_may_switch_the_judgment_off() -> Non
 def _pending(sec: SEC.Secretary, label: str, **kw) -> dict:
     """交一条"定义还没抽到"的概念（D12 甲：走 `_record_pending_concept`）。"""
     payload = {"label": label, "statement_full": "", "kind": "concept",
-# 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-               "origin": "own_result", "derived_from": ["999999"], "self_authored": True}
+               "origin": "own_result", "self_authored": True}
     payload.update(kw)
     return sec.record_statement(payload, role="B")
 
@@ -489,7 +492,7 @@ def _own(full: str) -> dict:
     from agentflow import schema as S
 
     return {"statement_full": full, "statement_text": full[:24],
-            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
+            "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
@@ -504,7 +507,7 @@ def test_the_concept_refusal_teaches_what_to_write_next(
     st = _ws(tmp_path)
     got = _secretary(st).record_statement(
         {"statement_full": "设 X 是一个集合；则 X 是空的当且仅当它没有元素。",
-         "label": "空集", "kind": "concept", "origin": "own_result", "derived_from": ["999999"],
+         "label": "空集", "kind": "concept", "origin": "own_result",
          "self_authored": True}, role="B")
     assert got.get("checked") is False, got
     assert got.get("refused") == SEC.CONCEPT_IDENTITY_UNJUDGED, got
@@ -654,15 +657,20 @@ def test_c4_run_once_still_creates_a_different_concept(tmp_path: pathlib.Path) -
 def _theorem_with_concepts(concepts: list[dict]) -> dict:
     from agentflow import schema as S
 
+    # 这一段载荷里的那条"定理"本身也要过 B 的来路闸。它测的不是来路，所以给它一条
+    # 真在册的前置命题（`ensure_basis_stmt` 落的 `BASIS_STMT_ID`，调用方先落）：
+    # 承重链来路，且不会把 `source_lit_id` 传染给概念草稿（那会撞 self_authored 的口径）。
     return {"statement_full": "定理：对任意群 G，命题 ph 成立。",
-            "statement_text": "命题 ph 成立", "origin": "own_result", "derived_from": ["999999"],
+            "statement_text": "命题 ph 成立", "origin": "own_result",
             "kind": "theorem", "doc_id": S.format_id(0),
+            "derived_from": [BASIS_STMT_ID],
             "quote_reason": "我方自产命题，没有外部引文要比对",
             "concepts": list(concepts)}
 
 
 def _own_concept(name: str, definition: str) -> dict:
-    return {"name": name, "definition": definition, "origin": "own_result", "derived_from": ["999999"],
+    # 概念行的来路就是它自己的定义（`conceptrows` 的口径）⇒ 不写 derived_from/source_lit_id。
+    return {"name": name, "definition": definition, "origin": "own_result",
             "self_authored": True}
 
 
@@ -678,13 +686,15 @@ def test_a5_concepts_in_a_statement_payload_are_merged_without_a_burned_id(
     再进 write_concept_row 才发现是 same ⇒ 行没建、号已经发出去了（counters 多 1）。
     """
     st = _ws(tmp_path)
+    ensure_basis_stmt(st)          # 命题载荷的真来路（`derived_from` 指它）
     first = CR.upsert(st, label=REAL_LABEL, definition=REAL_DEF_1)
     sid = str(first.get("stmt_id") or "")
     got = _secretary(st).record_statement(
         _theorem_with_concepts([_own_concept(ALT_LABEL, REAL_DEF_2)]), role="B")
     assert got.get("checked") is True and got.get("created") is True, got
     assert len(_concept_rows(st)) == 1, [r.get("label") for r in _concept_rows(st)]
-    assert [r.get("stmt_id") for r in _stmts(st)] == ["000000", "000001"], _stmts(st)
+    assert [r.get("stmt_id") for r in _stmts(st)
+            if r.get("stmt_id") != BASIS_STMT_ID] == ["000000", "000001"], _stmts(st)
     assert _counter(st) == 2, _counter(st)
     actions = list(got.get("concepts_identity") or [])
     assert actions and actions[0].get("concept_action") == "merged", actions
@@ -697,13 +707,15 @@ def test_b5_unjudged_concept_in_a_statement_payload_is_refused_without_a_burned_
         tmp_path: pathlib.Path) -> None:
     """b（入口 5）：判不了 ⇒ 那一条概念受控拒、0 新行、counters 不动（不烧号）。"""
     st = _ws(tmp_path)
+    ensure_basis_stmt(st)          # 命题载荷的真来路
     CR.upsert(st, label="群", definition="概念（群）：带运算的集合。")
     got = _secretary(st).record_statement(
         _theorem_with_concepts([_own_concept(UNJUDGEABLE_LABEL,
                                              "设 Y 是一个拓扑空间。")]), role="B")
     assert got.get("checked") is True and got.get("created") is True, got  # 命题照落
     assert len(_concept_rows(st)) == 1, [r.get("label") for r in _concept_rows(st)]
-    assert [r.get("stmt_id") for r in _stmts(st)] == ["000000", "000001"], _stmts(st)
+    assert [r.get("stmt_id") for r in _stmts(st)
+            if r.get("stmt_id") != BASIS_STMT_ID] == ["000000", "000001"], _stmts(st)
     assert _counter(st) == 2, _counter(st)
     refused = list(got.get("concepts_refused") or [])
     assert refused and refused[0].get("name") == UNJUDGEABLE_LABEL, refused
@@ -716,6 +728,7 @@ def test_c5_a_different_concept_in_a_statement_payload_is_created(
         tmp_path: pathlib.Path) -> None:
     """c（正控，入口 5）：真不同 ⇒ 照常发号建那一行。"""
     st = _ws(tmp_path)
+    ensure_basis_stmt(st)          # 命题载荷的真来路
     got = _secretary(st).record_statement(
         _theorem_with_concepts([_own_concept(REAL_LABEL, REAL_DEF_1)]), role="B")
     assert got.get("checked") is True and got.get("created") is True, got

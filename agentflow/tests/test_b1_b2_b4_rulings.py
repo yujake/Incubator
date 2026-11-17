@@ -38,7 +38,7 @@ import pathlib
 
 import pytest
 
-from conftest import b_form_gate_ok, sign_before_registration
+from conftest import b_form_gate_ok, sign_before_registration, ensure_basis_stmt
 from _proof_manuscript_fixture import write_proof_manuscript
 from _same_statement_stub import SameStatementStub
 
@@ -49,6 +49,10 @@ from agentflow.agent_b import AgentB
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 from agentflow.tools import build_registry
+from conftest import ensure_basis_lit
+from conftest import BASIS_LIT_ID, BASIS_STMT_ID
+
+pytestmark = pytest.mark.usefixtures("every_store_has_basis_lit")
 
 #: 裁定给的那一句的实质（两段都要在场：说的是"不能干什么"与"只能干什么"）。
 B1_MUST_SAY = "不可当引文入库"
@@ -106,7 +110,7 @@ def _own(**kw) -> dict:
     base = {
         "statement_full": "设 n≥3，则 n^2+n 是偶数。",
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        "origin": "own_result", "derived_from": ["999999"],
+        "origin": "own_result", "source_lit_id": BASIS_LIT_ID,
         "doc_id": "000000",
         "proof_text": "证明：n^2+n = n(n+1)，相邻整数必有一偶。",
         "quote_verified": False,
@@ -195,23 +199,33 @@ def test_b2_an_uncited_own_result_must_start_as_a_conjecture(store: Store) -> No
     第二条正路的落点见 `test_b2_refusal_points_at_the_production_side`：撤除之后它
     只能指产出侧（F 开稿 / E 实验落盘 / B 收录），不许再指 D。
     """
+    # 业主 2026-11-17「不许假来路」：B-2 判的是"没有 source_lit_id 的自产命题"，
+    # 所以来路只能走承重链——先在台账里真落一条前置命题（`ensure_basis_stmt` 自己
+    # 也有真文献来路），再让被测的每一笔指它的号。B-2 的口径一个字没改。
+    ensure_basis_stmt(store)
+
+    def _b2_own(**kw) -> dict:
+        return {**_own(**kw), "source_lit_id": "", "derived_from": [BASIS_STMT_ID]}
+
     got = _ok(_b(store).register_statement(
-        **_with_manuscript(store, _own(kind="lemma"), statement_id="000000")))
+        **_with_manuscript(store, _b2_own(kind="lemma"), statement_id="000000")))
     assert got.get("ok") is False, got
     assert got.get("kind") == "must_start_as_conjecture", got
     err = str(got.get("error") or "")
     assert "conjecture" in err and "D 只给研究方向" in err, err
-    assert not store.rows("statements"), "被拒的一笔不许在盘上留下半行"
+    assert [r["stmt_id"] for r in store.rows("statements")] == [BASIS_STMT_ID], (
+        "被拒的一笔不许在盘上留下半行（盘上只该有夹具那条真在册的前置命题）")
 
     # 正控：同一笔内容改成 kind="conjecture" ⇒ 通过（红不是写死的）。
     # 准入闸（2026-11-02 默认 strict）：这一笔要写进台账的证明正文先要有 V 签；
     # 命题还没在册 ⇒ 先落 pending 那一签（V 在册前审的），登记时按正文 sha 认领。
     sign_before_registration(store.root, proof_text=_own()["proof_text"])
     good = _ok(_b(store).register_statement(
-        **_with_manuscript(store, _own(kind="conjecture"), statement_id="000000")))
+        **_with_manuscript(store, _b2_own(kind="conjecture"), statement_id="000000")))
     assert good.get("ok") is True, good
-    rows = store.rows("statements")
-    assert len(rows) == 1 and str(rows[0].get("kind")) == "conjecture", rows
+    landed = [r for r in store.rows("statements")
+              if str(r.get("stmt_id")) != BASIS_STMT_ID]
+    assert len(landed) == 1 and str(landed[0].get("kind")) == "conjecture", landed
 
     # 负控（不许过度拦截）：有外部出处的那一笔照旧能声明成 lemma。
     with store.tx("literature", actor="test") as tx:
@@ -320,6 +334,12 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
     """
     from agentflow.agent_b import register_statement as RS
 
+    # 来路同上：B-2 要的是"没有 source_lit_id"，所以给一条真在册前置命题的承重链。
+    ensure_basis_stmt(store)
+
+    def _b2_own(**kw) -> dict:
+        return {**_own(**kw), "source_lit_id": "", "derived_from": [BASIS_STMT_ID]}
+
     seen: list[str] = []
     real = RS._RegisterStatement._self_authored_gate
     holder = type(_b(store))
@@ -338,18 +358,20 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
         # `conftest.sign_before_registration`）。
         sign_before_registration(store.root, proof_text=_own()["proof_text"])
         out = _ok(_b(store).register_statement(
-            **_with_manuscript(store, _own(kind="  conjecture  "),
+            **_with_manuscript(store, _b2_own(kind="  conjecture  "),
                                statement_id="000000")))
     finally:
         monkeypatch.setattr(holder, "_self_authored_gate", real)
 
     assert out.get("ok") is True, out
     assert seen == ["conjecture"], f"闸收到的 kind 没归一（{seen}）"
-    assert store.rows("statements")[0]["kind"] == "conjecture", store.rows("statements")[0]
+    landed_kind = [r for r in store.rows("statements")
+                   if str(r.get("stmt_id")) != BASIS_STMT_ID]
+    assert landed_kind[0]["kind"] == "conjecture", landed_kind[0]
 
     # 拒收路径上标的也是同一个值（不是原始入参那个带空白的串）。
     # 这是另一条命题（也是另一份稿）：稿号用 000001，别覆盖上面那一行已登记的稿。
-    bad = _ok(_b(store).register_statement(**_with_manuscript(store, _own(
+    bad = _ok(_b(store).register_statement(**_with_manuscript(store, _b2_own(
         kind="  lemma  ", statement_full="另一条探针命题。"), statement_id="000001")))
     assert bad.get("kind") == "must_start_as_conjecture", bad
     assert bad.get("statement_kind") == "lemma", bad
@@ -357,7 +379,7 @@ def test_b2_kind_is_derived_exactly_once(store: Store, monkeypatch) -> None:
 
 # ------------------------------------------------------------------ ③ B-2 读侧
 def _put_stmt(st: Store, stmt_id: str, *, kind: str, **kw) -> None:
-    row = {"stmt_id": stmt_id, "origin": "own_result", "derived_from": ["999999"], "kind": kind,
+    row = {"stmt_id": stmt_id, "origin": "own_result", "source_lit_id": ensure_basis_lit(st), "kind": kind,
            "statement_full": f"探针命题 {stmt_id}。", "status": "active",
            "quote_reason": "探针：这一行没有外部引文可核（三态里的那一句为什么）",
            "created_at": TS, "created_by": "test"}

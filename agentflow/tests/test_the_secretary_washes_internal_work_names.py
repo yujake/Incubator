@@ -49,6 +49,7 @@ from agentflow import secretary as SEC
 from agentflow.agent_b import AgentB
 from agentflow.secretary import Secretary
 from agentflow.store import Store
+from conftest import BASIS_LIT_ID
 
 #: 真机那两行的 label 逐字（`000000` 与 `000001` 是同一个字符串）。
 REAL_LABEL = "F 攻坚 000000 子目标 S2"
@@ -87,7 +88,7 @@ def _own(full: str, label: str) -> dict:
     """自产命题的必填件（与 `test_one_theorem_many_proofs…` 同一套；首登按猜想）。"""
     return {"statement_full": full, "statement_text": full[:24], "label": label,
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-            "origin": "own_result", "derived_from": ["999999"], "kind": "conjecture",
+            "origin": "own_result", "source_lit_id": BASIS_LIT_ID, "kind": "conjecture",
             "doc_id": S.format_id(0), "quote_reason": "我方自产命题，没有外部引文要比对"}
 
 
@@ -271,4 +272,4 @@ def test_before_this_feature_exists_the_work_name_lands_verbatim(
 
 #: 2026-11-02 准入闸默认 strict 之后，本文件的夹具一律先给"B 即将写进台账的那一份
 #: 证明正文"补一签（真签：在册走台账、未在册走 pending）。见 conftest 的同名 fixture。
-pytestmark = pytest.mark.usefixtures("signed_v_handoffs")
+pytestmark = pytest.mark.usefixtures("signed_v_handoffs", "every_store_has_basis_lit")

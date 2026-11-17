@@ -55,6 +55,7 @@ from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
+from conftest import ensure_basis_lit, ensure_basis_stmt
 
 TS = "2026-11-03T00:00:00+08:00"
 SCRIPT_REL = "code/enum_ramsey34.py"
@@ -162,7 +163,7 @@ def _file_conjecture(store: Store, column: str) -> dict:
     """先按猜想落库（V 只审在册的命题；升定理级是签完之后的事）。"""
     return AgentB(store, extractor=None, extract_text=None).register_statement(
 # 2026-11-17（业主裁定 ②）：own_result 必须写清来路；这一份夹具不测承重链，用形状合法的占位号。
-        origin="own_result", derived_from=["999999"], kind="conjecture", label="R(3,4)=9", statement_full=BODY,
+        origin="own_result", source_lit_id=ensure_basis_lit(store), kind="conjecture", label="R(3,4)=9", statement_full=BODY,
         statement_text=BODY[:40], proof_text=column, evidence_kind="cross_check",
         doc_id=S.format_id(0), line_range={"start": 1}, quote_verified=False,
         quote_reason="own_result：我方推导，没有第二份文本可比对")
