@@ -3740,7 +3740,8 @@ def _vsign_payload(*, root: Any, ledger: Path, statement_id: str, proof_no: int,
 
 def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any],
                               statement_id: str, proof_no: int,
-                              sha: str, skip_gap: bool = False) -> dict[str, Any]:
+                              sha: str, skip_gap: bool = False,
+                              wake: bool = True) -> dict[str, Any]:
     """`sign_statement` 那一笔事务之外：签块落成了就给 B 开一条「必须收录」义务。
 
     为什么必须在事务之外（2026-11-05 实测）：`_vsigns_write_after_flip` 跑在
@@ -3751,6 +3752,10 @@ def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any]
     为什么以"块真的落成"为闸：义务的凭据是稿上那一块成立的签。没落成（未在册 / 秘书
     不在场 / 正文不符那几档）不是"签了没人收录"，那一档由收工对账
     （`obligations.sweep_registrations`）按盘上的事实兜底 —— 这里不编一条。
+
+    `wake=True`（SGN1，2026-11-17）：签落地就是"必须真把 B 叫醒"的那一刻 —— 义务项
+    只在"没有 B 台账号"时开成无主的，无主的项不进任何人的收件箱（真机 lp-ball-5：
+    3 枚签、0 条义务、B 一次没被召唤）。呼唤的读数落在返回值的 `wake` 格里。
     """
     land = dict(vsign.get("land") or {}) if isinstance(vsign, Mapping) else {}
     if not land.get("landed"):
@@ -3764,12 +3769,13 @@ def _registration_after_vsign(*, store: Any, root: Any, vsign: Mapping[str, Any]
                                     statement_id=str(statement_id or ""),
                                     proof_no=int(proof_no or 1), sha=str(sha or ""),
                                     manuscript=rel, at=str(sign.get("at") or ""),
-                                    skip_gap=skip_gap)
+                                    skip_gap=skip_gap, wake=wake)
 
 
 def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_no: int,
                              sha: str, manuscript: str, at: str = "",
-                             skip_gap: bool = False) -> dict[str, Any]:
+                             skip_gap: bool = False,
+                             wake: bool = False) -> dict[str, Any]:
     """签发（签块落成）之后：给 B 开一条「必须收录」义务（缺陷 B；永不抛）。
 
     为什么在这里（业主 2026-11-05）：87 的现场是"签了但没人收录"——
@@ -3794,11 +3800,17 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
     默认 `False` 只服务历史直调（`sign_statement` 末尾那一支：兼容门，仍按 `statements`
     判"已收录"）；生产签后义务在 `land_sign_without_ledger` 里显式传 `skip_gap=True`。
     判据 `test_production_landing_does_not_rely_on_write_defaults` 逐条核这一格。
+
+    `wake`（SGN1，2026-11-17）：签落地那一刻必须真把 B 叫醒（见
+    :func:`_registration_after_vsign`）；生产两处（`land_sign_without_ledger` /
+    `sign_statement`）与未在册那一支（:func:`registration_after_unregistered_sign`）
+    都传 `True`。
     """
     from . import obligations as _OBL
 
     out: dict[str, Any] = {"checked": False, "state": "skipped", "key": "", "item_id": "",
-                           "owner": "", "owner_known": False, "code": "", "reason": ""}
+                           "owner": "", "owner_known": False, "code": "", "reason": "",
+                           "wake": {}}
     rel = str(manuscript or "").strip().replace("\\", "/")
     if not rel:
         out.update(code="no_manuscript",
@@ -3814,7 +3826,7 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
         got = _OBL.ensure_registration(store=store, root=root, label=label,
                                        proof_sha=str(sha or ""), manuscript=rel,
                                        called_by="V", at=str(at or ""),
-                                       skip_gap=bool(skip_gap))
+                                       skip_gap=bool(skip_gap), wake=bool(wake))
     except Exception as exc:  # noqa: BLE001 —— 开义务失败不许带走这一签
         out.update(code="registration_raised",
                    reason=(f"开「必须收录」义务那一笔抛了（{type(exc).__name__}: {exc}）"
@@ -3822,6 +3834,60 @@ def _registration_after_sign(*, store: Any, root: Any, statement_id: str, proof_
         return out
     out.update(dict(got))
     return out
+
+
+def registration_after_unregistered_sign(*, store: Any, root: Any, manuscript: str,
+                                         sha: str, at: str = "") -> dict[str, Any]:
+    """未在册的签落地之后：把「这一份必须收录」摆到 B 面前（SGN1，永不抛）。
+
+    ## 真机现场（`projects/lp-ball-5`，2026-11-17 17:11 只读读数）
+
+    `statements` 0 行、`role="B"` 的台账号 0 趟、`b-register@` 板项 0 条，而
+    `reports/f-proof-000002/3.md` 上各有一块成立的 V 签（签文件都在 `out/vsigns/`）。
+    为什么一条义务都没有：V 签 `reports/*-proof-*.md` 时命题还没在册（业主
+    2026-11-05「V 不假定有号，全签在稿上」）⇒ 走 `_issue_and_land_unregistered`
+    那一支 ⇒ 那一支从来没有接过 `_registration_after_*`（改前只有"在册"那两条支路
+    有），于是签落了、义务没人开、B 没人叫。
+
+    ## 为什么号从稿名读
+
+    未在册那一支的 `vsign.statement_id` 是空串（没有行可写），但载体名里带着裸稿号
+    （`reports/f-proof-000002.md` ⇒ `000002`）—— 这与收工扫盘
+    （`obligations.sweep_registrations`）同一把尺、同一组守卫（载体族 / 裸稿号 /
+    `tier=family`）。这里不另立一套判据，只把"签发那一刻"接上同一条义务。
+    """
+    from . import manuscriptfamily as _MF
+    from . import obligations as _OBL
+    from . import vsigns as _VS
+
+    out: dict[str, Any] = {"checked": False, "state": "skipped", "key": "", "item_id": "",
+                           "owner": "", "owner_known": False, "code": "", "reason": "",
+                           "wake": {}}
+    rel = str(manuscript or "").strip().replace("\\", "/")
+    if not rel:
+        out.update(code="no_manuscript",
+                   reason=("这一签没有手稿载体 ⇒ 这一条义务不知道要收录哪一份"
+                           "（不是「已收录」）"))
+        return out
+    if not any(rel.startswith(prefix) for prefix in _OBL.REGISTRATION_CARRIERS):
+        out.update(code="not_a_proof_carrier",
+                   reason=(f"`{rel}` 不是 `reports/{{f,b}}-proof-…` 那一类载体 "
+                           f"{list(_OBL.REGISTRATION_CARRIERS)} ⇒ 不在这一条义务的射程内"))
+        return out
+    sid = _VS.manuscript_id_of(rel)
+    if not sid:
+        out.update(code="no_statement_id",
+                   reason=f"稿名认不出裸稿号（`{rel}`）⇒ 不猜命题号，也不开义务")
+        return out
+    if _MF.classify_manuscript(rel).get("tier") != _MF.TIER_FAMILY:
+        out.update(code="not_a_family_carrier",
+                   reason=f"`{rel}` 是历史档（tier≠family）⇒ 不可收录")
+        return out
+    no = as_proof_no(_VS.manuscript_proof_no_of(rel)) or 1
+    return _registration_after_sign(store=store, root=root, statement_id=sid,
+                                    proof_no=int(no), sha=str(sha or ""),
+                                    manuscript=rel, at=str(at or ""),
+                                    skip_gap=True, wake=True)
 
 
 def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path,
@@ -4011,7 +4077,9 @@ def land_sign_without_ledger(store: Any, *, row: Mapping[str, Any],
                          f"{str(vsign.get('reason') or '没有理由')}")
     out["registration"] = _registration_after_vsign(
         store=store, root=root, vsign=dict(vsign), statement_id=sid,
-        proof_no=int(no), sha=str(row.get("proof_sha256") or ""), skip_gap=True)
+        proof_no=int(no), sha=str(row.get("proof_sha256") or ""), skip_gap=True,
+        # SGN1：签落地 = 必须真把 B 叫醒的那一刻（不是"板上多一条无主项"）。
+        wake=True)
     return out
 
 
@@ -4394,7 +4462,7 @@ def sign_statement(store: Any, *, row: Mapping[str, Any], proof_text: str,
     out["registration"] = _registration_after_vsign(
         store=store, root=getattr(store, "root", ""), vsign=dict(out.get("vsign") or {}),
         statement_id=sid, proof_no=int(no),
-        sha=str(row.get("proof_sha256") or ""))
+        sha=str(row.get("proof_sha256") or ""), wake=True)
     return out
 
 

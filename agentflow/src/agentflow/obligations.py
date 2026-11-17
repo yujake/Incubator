@@ -515,6 +515,21 @@ def register_sha_of(key: str) -> str:
     return sha if sep else ""
 
 
+#: 「签落地 ⇒ 招呼 B」那一次召唤的幂等键前缀（SGN1，2026-11-17 真机 lp-ball-5）。
+#:
+#: 为什么要与板项的键分开（`b-register@` 只能有一个含义）：那条键回答"这一份签有没有
+#: 一条待收编的义务"，这一条回答"为这一份签叫过谁"。两个问题分开之后，
+#: 重放/重复投递落在召唤这一侧是"同键已有一行 ⇒ 不再召"（`_wake_registrar` 的第一档），
+#: 而板项那一侧照旧"同键不重开"——两条幂等各自成立，不互相冒充。
+REGISTER_WAKE_PREFIX = "b-awake@"
+
+
+def register_wake_key(label: str, proof_sha: str) -> str:
+    """召唤的幂等键：`b-awake@<命题号>@<被签正文的 sha>`（`<命题号>` 可带 `#pN` 时只取号）。"""
+    sid = str(label or "").split("#", 1)[0]
+    return f"{REGISTER_WAKE_PREFIX}{sid}@{str(proof_sha or '').strip()}"
+
+
 def _register_items(conductor: Any) -> list[dict[str, Any]]:
     """板上所有「必须收录」义务（读不成 ⇒ 空列表，由调用方的话说清）。
 
@@ -732,19 +747,258 @@ def _live_role_task(store: Any, role: str) -> dict[str, Any]:
     return out
 
 
+def _registrar_now(store: Any, role: str = REGISTER_ROLE) -> dict[str, Any]:
+    """这一刻这条义务该送到哪一趟台账号（"送信地址"，不是"负责人归属"）。
+
+    与 :func:`_live_role_task` 的差别只有一条，而那条就是 SGN1 的真机现场：
+    0 趟在飞时它还要往前找一步 —— 找那一趟终态但未销号的该角色台账号（"静默"）。
+    真机 `projects/lp-ball-5` 的读数（2026-11-17 17:11）：157 行 tasks、
+    `role="B"` 的台账号 0 趟、`b-register@` 板项 0 条、`statements` 0 行，
+    而 `reports/f-proof-000002/3.md` 上两枚签已经落地 —— 义务既没开、也没人去干。
+
+    为什么"静默"这一档必须找：`conductor.open_item` 的唤醒判定（`_ensure_consumer`）
+    对"终态且未销号"的收件人正是同号继续（业主 2026-10-29「静默的唤醒就是接到
+    消息被唤醒」）。改前这一格只认"在飞"⇒ 静默的 B 被读成"没有负责人"⇒ 板项开成
+    无主的（`parent_task_id=None`）⇒ 唯一叫得醒的那一趟反而没被叫
+    （"只写台账、不叫醒"的同族）。
+
+    ≥2 趟在飞时取最近开始的那一趟，而不是像 `_live_role_task` 那样判"不可判"：
+    那一条判的是归属（写进回执给人看的"谁接的"），宁可 unknown；这一格判的是
+    送信地址（一条 notice 落进谁名下）—— 落进哪一趟都不改变义务的内容与收口
+    条件，而"不挑"的代价是这条义务永远没人叫醒。
+
+    返回 `{"checked","task_id","candidates","running","why"}`；`task_id=""` = 这一刻
+    确实没有一个可接的 B（由调用方决定要不要新召一趟）。
+    """
+    out: dict[str, Any] = {"checked": False, "task_id": "", "candidates": [],
+                           "running": False, "why": ""}
+    if store is None:
+        out["why"] = "没有 store ⇒ 读不到台账号"
+        return out
+    try:
+        from .conductor import UNFINISHED_STATUSES
+
+        rows = [dict(r) for r in store.rows("tasks")]
+    except Exception as exc:  # noqa: BLE001 —— 读不成不折成"没有人可叫"
+        out["why"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["checked"] = True
+    mine = [r for r in rows
+            if str(r.get("role") or "") == str(role) and not str(r.get("kind") or "")]
+    alive = [r for r in mine if str(r.get("status") or "") in UNFINISHED_STATUSES]
+    quiet = [r for r in mine if str(r.get("status") or "") not in UNFINISHED_STATUSES]
+    out["candidates"] = [str(r.get("task_id") or "") for r in mine]
+    cond = _conductor(store)
+    if cond is None:
+        out["why"] = "这一趟没有接主控（`cached_conductor` 是空）⇒ 叫不了人"
+        return out
+    for running, pool in ((True, alive), (False, quiet)):
+        # 从最近开始的那一趟往前找：销号名单读不全 / 已销号 ⇒ 不拿它当收件人
+        # （fail-closed：`_ensure_consumer` 对这两种也会拒绝唤醒，先在这里筛掉，
+        # 免得板项挂到一个叫不醒的号上）。
+        for row in sorted(pool, key=lambda r: str(r.get("started_at") or ""), reverse=True):
+            tid = str(row.get("task_id") or "")
+            try:
+                verdict = cond.retired_verdict(tid, parent=str(row.get("parent_task_id") or ""))
+            except Exception:  # noqa: BLE001 —— 读不出来就不认它（fail-closed）
+                verdict = "unknown"
+            if verdict != "live":
+                out["why"] = (f"{tid} 的销号名单读的是 {verdict} ⇒ 不拿它当收件人"
+                              "（已销号彻底没有了；读不全就交人看）")
+                continue
+            out.update(task_id=tid, running=running,
+                       why=(f"那一刻有 {len(alive)} 趟 {role} 在飞 ⇒ 送最近开始的那一趟"
+                            f"（{tid}）" if running else
+                            f"没有 {role} 在飞，但有 {len(quiet)} 趟静默未销号 ⇒ "
+                            f"送最近开始的那一趟（{tid}，同号继续）"))
+            return out
+    out["why"] = (f"那一刻有 {len(alive)} 趟 {role} 在飞、{len(quiet)} 趟静默，"
+                  "但一个都不可叫（已销号 / 销号名单读不全）" if mine else
+                  f"那一刻没有 {role} 的台账号（一趟都没起过）⇒ 只能新召一趟")
+    return out
+
+
+def _wake_row(store: Any, key: str) -> dict[str, Any]:
+    """板上有没有这个键的召唤行（纯读；读不成 ⇒ 空字典，由调用方说"没读到"）。"""
+    if store is None:  # 空输入得空输出：这一格是"有没有那一行"的纯读口，没有 store 就是
+        # "读不到台账"；调用方（`_wake_registrar` / `registration_digest`）把那一档记成
+        # `skipped` 或 `problems` + 原因，不在这里冒充"没有这一行"这个结论。
+        return {}
+    try:
+        for row in store.rows("tasks"):
+            if str(row.get("input_key") or "") == str(key or ""):
+                return dict(row)
+    except Exception:  # noqa: BLE001 —— 读不成不是"没有那一行"
+        return {}
+    return {}
+
+
+def _executor_can_run(conductor: Any, role: str) -> tuple[bool, str]:
+    """这一趟的执行侧跑得了"只派活"（空动作）的召唤吗。
+
+    判据是一条既有事实，不是猜测：空动作的召唤走模型驱动那一层
+    （`agent_loop.LlmBackend.call`：`loops` 里没登记 `(角色, "")` 也会现造一个循环，
+    见它的 docstring「空动作为什么走循环」）；而确定性后端（`LocalBackend`）按
+    `(角色, 动作)` 找 handler，空动作没有 handler ⇒ 它连跑都跑不起来。
+
+    为什么要这一格：召了也跑不起来的角色，唯一的下场是台账里多一行 `failed`
+    —— 那正是"看起来做了"的假动作。这一档如实记 `skipped` + 原因，板项照旧开在板上。
+    """
+    backend = getattr(conductor, "backend", None)
+    if backend is None:
+        return False, "这一趟没有执行侧（`conductor.backend` 是空）"
+    if getattr(backend, "loops", None) is not None:
+        return True, ""
+    return False, ("这一趟的执行侧按 (角色,动作) 分派（`LocalBackend`），空动作没有 handler "
+                   "⇒ 召唤跑不起来")
+
+
+def _registrar_task_text(*, key: str, label: str, manuscript: str, sha: str,
+                         at: str = "") -> str:
+    """召唤 B 时那句话（派活不点动作 ⇒ 这句就是它这一趟知道的一切）。"""
+    sid = str(label or "").split("#", 1)[0]
+    return (
+        f"收编这一签（义务 {REGISTER_PREFIX}{sid}@{sha}）：`{manuscript or '（没读到稿路径）'}` "
+        f"上已经有成立的 V 签（{label}，正文 sha {sha[:12]}…，签于 {at or '（时刻没读到）'}），"
+        f"而 `statements` 里 {sid} 那一行还没有正文 / 未 reviewed。"
+        "请把它收进 `statements`（B 的 `own.register_statement`；稿名里的号就是命题号），"
+        "并按正文 sha 认领 V 签（逐份口径，`#p2` 不借 `#p1` 的光）；"
+        "收口条件是那一行出现正文且 reviewed=true —— 届时板项自动收口，不需要 ack。"
+    )
+
+
+def _wake_registrar(*, store: Any, conductor: Any, key: str, label: str,
+                    manuscript: str = "", sha: str = "", at: str = "",
+                    opened_under: str = "") -> dict[str, Any]:
+    """「签落地 ⇒ 招呼 B」这一步落成盘上的事实（幂等，永不抛）。
+
+    业主 2026-11-17（SGN1，真机 `projects/lp-ball-5`）：签落地那一刻必须有一条
+    真能把 B 叫醒的动作。改前只有一条板项，而板项在"没有 B 台账号"时是无主的
+    （`parent_task_id=None`）—— 无主的项不落进任何人的收件箱，`_ensure_consumer`
+    的判定是"没有收件人（公共频道/广播）⇒ 没有要跑的人" ⇒ 义务写在板上，B 一次也没醒。
+    真机读数：3 枚签落地、`b-register@` 0 条、B 台账号 0 趟。
+
+    四档（每档都是读数，不折平）：
+
+    - `already`：这个键已经有召唤行 ⇒ 不重复召唤（重放 / 重复投递落在这一档）；
+    - `running`：那一刻 B 在飞 ⇒ 板项落进它名下，它下一拍自己读到（不新召）；
+    - `woken` / `attached`：那一刻 B 静默未销号 ⇒ 同号继续（`wake_on_lifeline`：
+      那是既有唯一带"已销号 / 在飞"双闸的唤醒口）；没接执行侧时停在 `attached`；
+    - `summoned`：一个 B 都没有 ⇒ 新召一趟（`summon_begin` + `start_summon`：
+      与 `tools/conductor_tools.py::conductor_summon` 同一形态，`by="M"` 是那一条
+      边（`ALLOWED_EDGES["M"]` 含 B），父为空（这是框架为主控补的一趟，不挂在哪个
+      在飞的父上）；`task_id` 与 `at` 就是报告里那句"已召唤 B（任务 id 与时刻）"；
+    - `skipped` / `refused` / `error`：叫不动，逐档说清为什么（板项仍在板上）。
+    """
+    out: dict[str, Any] = {"checked": False, "state": "", "task_id": "", "at": "",
+                           "key": str(key or ""), "reason": ""}
+    if conductor is None:
+        out.update(state="skipped",
+                   reason="这一趟没有 conductor ⇒ 叫不了人（板项照旧开在板上）")
+        return out
+    out["checked"] = True
+    # ---- ① 这个键已经叫过一次 ⇒ 不重复召唤（幂等的落点） -------------------
+    seen = _wake_row(store, key)
+    if seen:
+        out.update(state="already", task_id=str(seen.get("task_id") or ""),
+                   at=str(seen.get("started_at") or ""),
+                   reason=(f"同键（{key}）的召唤行已在台账上（{seen.get('task_id')}，"
+                           f"{seen.get('started_at')}）⇒ 不重复召唤"))
+        return out
+    # ---- ② 有可接的 B ⇒ 不新召（在飞 / 静默同号继续） -----------------------
+    who = _registrar_now(store, REGISTER_ROLE)
+    tid = str(who.get("task_id") or "")
+    if tid:
+        if tid == str(opened_under or ""):
+            # 板项刚刚就开在它名下 ⇒ `open_item` 的 `_ensure_consumer` 已经走过一遍
+            # 唤醒判定（信先在收件箱里、再叫它 —— 顺序反了它会读不到这一条）。
+            # 这里只把那一句原话接上；"叫没叫"与"叫得成不成"必须分得开。
+            consumer = dict(getattr(conductor, "last_consumer_reading", {}) or {})
+            started = bool(consumer.get("started"))
+            out.update(state=("woken" if started
+                              else ("running" if who.get("running") else "attached")),
+                       task_id=tid, at=str(at or ""),
+                       reason=(f"板项开在 {tid} 名下（{who.get('why')}）；"
+                               f"唤醒判定：{consumer.get('reason') or '（没有读数）'}"))
+            return out
+        woke: dict[str, Any] = {}
+        if not who.get("running"):
+            try:
+                woke = dict(conductor.wake_on_lifeline(tid) or {})
+            except Exception as exc:  # noqa: BLE001 —— 叫醒失败要如实回
+                woke = {"started": False,
+                        "reason": f"叫醒那一笔抛了（{type(exc).__name__}: {exc}）"}
+        out.update(state=("woken" if woke.get("started")
+                          else ("running" if who.get("running") else "attached")),
+                   task_id=tid, at=str(at or ""),
+                   reason=(str(woke.get("reason") or "")
+                           or str(who.get("why") or "")))
+        return out
+    # ---- ③ 一个 B 都没有 ⇒ 新召一趟（这一条就是"SGN1 的修法"） -------------
+    can, why_not = _executor_can_run(conductor, REGISTER_ROLE)
+    if not can:
+        out.update(state="skipped",
+                   reason=(f"{why_not} ⇒ 这一键没有召唤（板项仍在板上，由主控/收工读数看见）；"
+                           f"现场：{who.get('why')}"))
+        return out
+    text = _registrar_task_text(key=key, label=label, manuscript=manuscript,
+                                sha=sha, at=at)
+    try:
+        from . import schema as _S
+
+        started = conductor.summon_begin(
+            REGISTER_ROLE, "", {"task": text}, by=_S.CONDUCTOR_ROLE,
+            # 父为空：这一趟不挂在任何在飞的父上（`capabilities.audit_task_ledger`
+            # 要求无父行 depth=1，`_depth_of(None)` 给的正是 1）。
+            parent_task_id=None, input_key=str(key), roster={"task": text})
+    except Exception as exc:  # noqa: BLE001 —— 召唤抛了不许带走这一签
+        out.update(state="error",
+                   reason=f"召唤那一笔抛了（{type(exc).__name__}: {exc}）")
+        return out
+    refusal = getattr(started, "refusal", None)
+    if refusal is not None:
+        out.update(state="refused", task_id="",
+                   reason=(f"召唤被拒（{getattr(refusal, 'status', '')}/"
+                           f"{getattr(refusal, 'refusal_reason', '')}）："
+                           f"{getattr(refusal, 'detail', '') or '没有理由'}"))
+        return out
+    try:
+        conductor.start_summon(started)      # 非阻塞：不占 V 这一拍
+    except Exception as exc:  # noqa: BLE001 —— 前半已经在台账上了，照实报
+        out.update(state="summoned", task_id=str(getattr(started, "task_id", "") or ""),
+                   at=str(_wake_row(store, key).get("started_at") or ""),
+                   reason=(f"台账那一行已经派出去了（{getattr(started, 'task_id', '')}），"
+                           f"但执行侧没起来（{type(exc).__name__}: {exc}）"))
+        return out
+    row = _wake_row(store, key)
+    out.update(state="summoned", task_id=str(getattr(started, "task_id", "") or ""),
+               at=str(row.get("started_at") or ""),
+               reason=(f"已召唤 B {getattr(started, 'task_id', '')}"
+                       f"（{row.get('started_at') or '时刻没读到'}；键 {key}）"))
+    return out
+
+
 def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: str,
                         manuscript: str = "", owner: str = "", called_by: str = "V",
-                        depth: int = 1, at: str = "", skip_gap: bool = False) -> dict[str, Any]:
+                        depth: int = 1, at: str = "", skip_gap: bool = False,
+                        wake: bool = False) -> dict[str, Any]:
     """开一条「必须收录」义务项（幂等；已清掉的不开，已收口的收口）。
 
-    返回 `{"checked","state","key","item_id","owner","owner_known","reason","problems"}`，
-    `state` 取：`opened` / `existing` / `closed`（板上那条已经 done）/ `cleared`（盘上
-    已经入库 ⇒ 义务本来就没了，顺手把板上那条按证据收口）/ `expired`（命题已被明确放弃）/
-    `skipped`（没有 conductor / 查不成 / 做不出幂等键）/ `error`（开项抛了）。
+    返回 `{"checked","state","key","item_id","owner","owner_known","reason","problems",
+    "wake"}`，`state` 取：`opened` / `existing` / `closed`（板上那条已经 done）/ `cleared`
+    （盘上已经入库 ⇒ 义务本来就没了，顺手把板上那条按证据收口）/ `expired`（命题已被明确
+    放弃）/ `skipped`（没有 conductor / 查不成 / 做不出幂等键）/ `error`（开项抛了）。
 
-    `owner`：给了就用；没给就认那一刻唯一的 B 台账号；一个都认不出 ⇒ `owner=""` 而
-    照样开项（`owner_known=False`，由 `registration_digest` 的 `unowned` 数出来，
+    `owner`：给了就用；没给就认那一刻的 B 台账号；一个都认不出 ⇒ `owner=""` 而照样开项
+    （`owner_known=False`，由 `registration_digest` 的 `unowned` 数出来，
     `board_view` 把这一条亮给主控去派）。
+
+    `wake=True`（签落地那一刻，SGN1）：除了开项，还要有一条真能把 B 叫醒的动作
+    （`:func:`_wake_registrar` 的四档读数落在 `out["wake"]`）。为什么必须：改前只有一个
+    板项，而"没有 B 台账号"时它是无主的 —— 无主的项不进任何人的收件箱，
+    `_ensure_consumer` 判"没有收件人 ⇒ 没有要跑的人"，于是 3 枚签落地、B 一次没醒
+    （真机 `projects/lp-ball-5`，2026-11-17）。这一档在"一个 B 都没有"时新召一趟
+    （`summon_begin` + `start_summon`），并把召唤任务 id 与时刻记进读数。
 
     `skip_gap=True`（V 的签后义务）：不读 `statements` 判断"是不是已经收录"。
     义务的存在与它是否已满足是两件事：V 只对手稿负责 ⇒ 签落成后无条件开；"满足了没有"
@@ -752,7 +1006,7 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
     """
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
                            "owner": str(owner or ""), "owner_known": False,
-                           "owner_why": "", "reason": "", "problems": []}
+                           "owner_why": "", "reason": "", "problems": [], "wake": {}}
     sid = _label_parts(label)[0]
     sha = str(proof_sha or "").strip()
     if not sid or not sha:
@@ -801,6 +1055,12 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
                    state=("closed" if state == "done" else "existing"),
                    reason=(f"同键的板项已存在（{row.get('task_id')}，item_state={state}）"
                            "⇒ 不重开"))
+        if wake:
+            # 重放 / 重复投递落在这里：板项不重开；召唤那一侧按 `b-awake@` 键判
+            # （`_wake_registrar` 的第一档：同键已有召唤行 ⇒ 不再召）。
+            out["wake"] = _wake_registrar(
+                store=store, conductor=conductor, key=register_wake_key(label, sha),
+                label=label, manuscript=str(manuscript or ""), sha=sha, at=at)
         return out
     if conductor is None:
         out.update(state="skipped",
@@ -808,7 +1068,9 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
                            "不是「已经收录了」）"))
         return out
     if not str(out["owner"] or "").strip():
-        who = _live_role_task(store, REGISTER_ROLE)
+        # 两把尺：`wake=True` 用"送信地址"那一把（在飞 → 最近一趟；否则静默那一趟），
+        # 否则用原来那一条（唯一在飞才认）。见 `_registrar_now` 与 `_live_role_task`。
+        who = _registrar_now(store, REGISTER_ROLE) if wake else _live_role_task(store, REGISTER_ROLE)
         out["owner"] = str(who.get("task_id") or "")
         out["owner_known"] = bool(out["owner"])
         # 「负责人记 unknown」是读数、不是失败：它不进 `problems`（那会让收工读数把
@@ -817,6 +1079,18 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
     else:
         out["owner_known"] = True
         out["owner_why"] = "调用方点名了负责人"
+    if wake and not str(out["owner"] or "").strip():
+        # 一个可接的 B 都没有 ⇒ 新召一趟（这一趟的 `task_id` 就是它的负责人）。
+        # 有 B 可接时不在这里叫：顺序必须是"信先进收件箱、再叫它" —— 板项落进
+        # 它名下那一刻由 `open_item` 的 `_ensure_consumer` 叫（静默 ⇒ 同号继续）。
+        wake_now = _wake_registrar(
+            store=store, conductor=conductor, key=register_wake_key(label, sha),
+            label=label, manuscript=str(manuscript or ""), sha=sha, at=at)
+        out["wake"] = wake_now
+        if wake_now.get("state") == "summoned" and wake_now.get("task_id"):
+            out["owner"] = str(wake_now["task_id"])
+            out["owner_known"] = True
+            out["owner_why"] = "为这一签新召了一趟 B（`b-awake@` 那一行）"
     # 深度：有负责人 ⇒ 它那一行 depth + 1（`capabilities.audit_task_ledger` 的
     # `task_depth_discontinuous` 按这条链核）；没有负责人 ⇒ 无父的项必须是 1。
     if out["owner"]:
@@ -844,6 +1118,13 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
                reason=(f"新开「必须收录」义务 {item_id}"
                        + (f"（负责人 {out['owner']}）" if out["owner"]
                           else "（负责人记 unknown，由主控派人）")))
+    if wake and not out["wake"]:
+        # 板项刚刚开在有一趟 B 的名下 ⇒ 那一下就是既有唤醒口
+        # （`open_item` → `_ensure_consumer`：静默 ⇒ 同号继续；在跑 ⇒ 下一拍自己读）。
+        out["wake"] = _wake_registrar(
+            store=store, conductor=conductor, key=register_wake_key(label, sha),
+            label=label, manuscript=str(manuscript or ""), sha=sha, at=at,
+            opened_under=str(out["owner"] or ""))
     return out
 
 
@@ -979,30 +1260,52 @@ def reconcile_registrations(*, store: Any, root: str | Path) -> dict[str, Any]:
 
 
 def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
-    """「必须收录」义务的一眼读数：开着的 / 认不出负责人的 / 逐条明细。"""
-    out: dict[str, Any] = {"checked": False, "open": 0, "unowned": 0, "rows": [],
-                           "problems": [], "reason": ""}
+    """「必须收录」义务的一眼读数：开着的 / 认不出负责人的 / 已召唤 B 的 / 逐条明细。
+
+    `summoned` 与每行的 `wake` 是 SGN1（2026-11-17）加的：义务"开在板上"与
+    "有人被叫醒"是两件事，读数必须分得开 —— 改前这一格只数开项，于是
+    "3 枚签 / 0 条义务 / B 一次没醒"在收工读数里长得像"没有欠收录"。
+    """
+    out: dict[str, Any] = {"checked": False, "open": 0, "unowned": 0, "summoned": 0,
+                           "rows": [], "problems": [], "reason": ""}
     conductor = _conductor(store)
     if conductor is None:
         out["reason"] = "没有 conductor ⇒ 板项读不出来（不是「没有收录义务」）"
         return out
     out["checked"] = True
+    wakes: dict[str, dict[str, Any]] = {}
+    try:
+        for row in (store.rows("tasks") if store is not None else ()):
+            key = str(row.get("input_key") or "")
+            if key.startswith(REGISTER_WAKE_PREFIX):
+                wakes[key] = dict(row)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没读到"，不折成"没召过"
+        out["problems"].append(f"召唤行读不出来（{type(exc).__name__}: {exc}）")
     for row in _register_items(conductor):
         if str(row.get("item_state") or "") == "done":
             continue
         owner = str(row.get("parent_task_id") or "")
+        key = str(row.get("input_key") or "")
+        sid = key[len(REGISTER_PREFIX):].partition("@")[0]
+        sha = register_sha_of(key)
+        wake = wakes.get(register_wake_key(f"{sid}#p1", sha)) or {}
         out["open"] += 1
         if not owner:
             out["unowned"] += 1
+        if wake.get("task_id"):
+            out["summoned"] += 1
         out["rows"].append({"task_id": str(row.get("task_id") or ""),
-                            "key": str(row.get("input_key") or ""),
+                            "key": key,
                             "owner": owner or "unknown",
                             "item_state": str(row.get("item_state") or ""),
                             "role": str(row.get("role") or ""),
+                            "wake": str(wake.get("task_id") or ""),
+                            "wake_at": str(wake.get("started_at") or ""),
                             "detail": str(row.get("detail") or "")[:200]})
     out["reason"] = (f"板上开着 {out['open']} 条收录义务"
                      + (f"（其中 {out['unowned']} 条负责人 unknown，等主控派人）"
-                        if out["unowned"] else ""))
+                        if out["unowned"] else "")
+                     + (f"；其中 {out['summoned']} 条已经召唤过 B" if out["summoned"] else ""))
     return out
 
 

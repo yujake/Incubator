@@ -4102,6 +4102,24 @@ class AgentV:
         #: 负判的判词仍在 pending；正判那一档的 pending 三行就是这一签的票（没有手稿
         #: 的那一档不落签，见 `_finish_unsigned_review`）。
         pending_ledger = _pending_ledger_ref(pending) if pending else ""
+        # ---- SGN1（2026-11-17 真机 lp-ball-5）：未在册的签落地 ⇒ 义务 + 真叫醒 B ----
+        #
+        # 改前这一支（未在册正判）从来不接 `_registration_after_*`：在册那两条支路
+        # （`land_sign_without_ledger` / `sign_statement`）都有，而"没号也能签"这一条
+        # 主路没有。真机读数：`statements` 0 行、`b-register@` 0 条、`role=B` 台账号
+        # 0 趟，而 `reports/f-proof-000002/3.md` 上的签已经落了 —— 签一枚枚落地，
+        # 没有一条命题被收编，`acceptance` 必红。
+        #
+        # 位置与在册那两处一致：签块真的落成之后、同一个返回之前（事务之外 ——
+        # 开板项 / 召唤都要拿 `tasks` 的锁，见 `_registration_after_vsign`）。
+        _registration: dict[str, Any] = {}
+        if (stopped == "signed" and manuscript_write.get("written")
+                and (issued.get("written") or issued.get("idempotent"))):
+            _registration = VR.registration_after_unregistered_sign(
+                store=self.store, root=self.workspace_root,
+                manuscript=str(got.get("manuscript") or ""),
+                sha=str(got.get("sha") or ""),
+                at=str(pending.get("at") or block.get("at") or ""))
         if stopped == "signed":
             if manuscript_write.get("written"):
                 record = (f"签块由收方秘书落进了 `{got.get('manuscript')}`（"
@@ -4143,6 +4161,15 @@ class AgentV:
                       "负判不是签）。判词已落 "
                       f"`{pending_ledger or '（pending 台账）'}`，F 的读数是「未通过」；"
                       "按缺陷改稿后再送，不签第 3 位、也不写重复块。")
+        # SGN1：签落地那一刻"义务开没开、B 叫没叫醒"写进同一句 detail（报告里可读）。
+        _wake = dict(_registration.get("wake") or {})
+        if _registration:
+            record += (f" 收编义务：{_registration.get('state') or '（没读到）'}"
+                       f"（{_registration.get('reason') or '没有理由'}）")
+        if _wake:
+            record += (f"；已召唤/叫醒 B：{_wake.get('state') or '（没读到）'}"
+                       f" {_wake.get('task_id') or ''}"
+                       f"（{_wake.get('at') or '时刻没读到'}）。{_wake.get('reason') or ''}")
         # ---- 2026-11-16（SG1 ②/⑦）：未在册签上了 ⇒ 把签好的稿交出去 -------------
         _signed_delivery: dict[str, Any] = {}
         if (stopped == "signed" and manuscript_write.get("written")
@@ -4184,6 +4211,8 @@ class AgentV:
                 #: 2026-11-16（SG1）：有毛病那一转落的 V 稿与交稿读数进这一格
                 #: （不新增顶层键：`verify_proof` 的 `returns=` 在 FC-27 禁改区里）。
                 v_review=dict(got.get("v_review") or {}),
+                #: 2026-11-17（SGN1）：未在册的签落地 ⇒ 收编义务 + 召唤 B 的读数。
+                registration=dict(_registration),
                 signed_delivery=_signed_delivery),
             "reason": str(got.get("reason") or ""),
             "detail": record,
