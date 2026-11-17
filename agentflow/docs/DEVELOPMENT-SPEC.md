@@ -59,14 +59,15 @@
 与它的负控 `test_the_documented_readings_criterion_is_not_vacuous`（把一块读数打回过期值，
 判据必须红 —— 这是"判据本身不是橡皮图章"的证明）。
 
-**linter 的当次三栏（日常档）**：`error 0 / warning 21 / info 44`（观测 2026-11-13，
-复跑 `python -B scripts/lint_rules.py`；本批是「清死代码」——R011 删掉三个死取值与
-一条过期登记、词表收窄，`info` 因此 49→44；`warning` 未变。`error` 那一格写的是发布门
+**linter 的当次三栏（日常档）**：`error 0 / warning 19 / info 45`（观测 2026-11-17，
+复跑 `python -B scripts/lint_rules.py`；2026-11-17 的 R003 登记 —— `session_ids_with_questions`
+在 `sessions.py` / `userio.py` 各一份属刻意分层，登记进 `SAME_NAME_ALLOWED` ⇒ 那一对不再报
+`warning`（21→19），同一登记让 R003 多出一条 info（44→45）。`error` 那一格写的是发布门
 第 5 项的**要求值**、不是读数 —— 它按「必须为 0」强制，而并行施工期间同一棵树上的实测在
 0–6 之间跳（那些 R009 的落点全在并行路的文件里，不在本批改动里；本批引入的唯一一条
 R009 已在收尾时清掉）。`warning` / `info` 是当次读数，判据逐行拿它们对账。
 **严格档的两个数只写进块里的 `lint_rules_strict_*` 两行**
-（2026-11-13 复跑是 `88 / 43`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
+（2026-11-17 复跑是 `86 / 44`），正文不另抄一份三元组，因为判据是逐行拿日常档的 warning/info 对账的）。
 
 ```powershell
 cd D:\Incubator\agentflow
@@ -81,10 +82,10 @@ LIVE-READINGS:BEGIN
 # 量法说明：前 11 个键与 `tests/test_release_all.py::measured_readings()` 逐键同名同量法。
 # 判据不认的键（拼错）与判据要的键缺失，都会被同一处报出来 —— 所以加键要同时改判据。
 lint_rules_rules        = 12   # `len(RULES)`；复跑 `python -B scripts/lint_rules.py` 摘要行的"规则 N 条"。其中 R004/R006 已退休、编号保留，`RETIRED_RULES` 里逐条给了去向
-lint_rules_warning      = 21   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏
-lint_rules_info         = 44   # 同一档的 info 栏（2026-11-13：R011 撤掉过期死取值登记 ⇒ 49→44）
-lint_rules_strict_warning = 88 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（日常档那条 R007 info 在这一档拆成逐模块 warning）
-lint_rules_strict_info  = 43   # 同一档的 info 栏（2026-11-13：R011 清死代码 ⇒ 48→43）
+lint_rules_warning      = 19   # `python -B scripts/lint_rules.py`（日常档）末行 warning 栏（2026-11-17 复跑：R003 登记 `session_ids_with_questions` 为刻意分层 ⇒ 21→19）
+lint_rules_info         = 45   # 同一档的 info 栏（2026-11-17 复跑：同一登记多出一条 R003 info ⇒ 44→45）
+lint_rules_strict_warning = 86 # `python -B scripts/lint_rules.py --strict` 的 warning 栏（2026-11-17 复跑 86；日常档那条 R007 info 在这一档拆成逐模块 warning）
+lint_rules_strict_info  = 44   # 同一档的 info 栏（2026-11-17 复跑 44）
 noai_paths_glob         = 49   # `(Select-String -Path .noai-paths -Pattern '^\S+\s+\[category:').Count`
 noai_paths_unique       = 46   # 上述条目行按第一栏去重：`(... | ForEach-Object { ($_.Line -split '\s+')[0] } | Select-Object -Unique).Count`
 noai_paths_categories   = 7    # `.noai-paths` 里 `[category: …]` 的分组数

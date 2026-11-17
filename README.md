@@ -565,8 +565,8 @@ agentflow/.noai-paths            禁改区清单（**49** 条 glob / **46** 条�
 agentflow/src/agentflow/tools/   **19** 个 `*_tools.py`（工具层按角色装配，见 `python -m agentflow.cli tools`）
 ```
 
-两个工具面读数，口径不同、不许互换：**95** 是 Lean 关着时各角色面的并集（`python -m agentflow.cli tools` 那一档，
-`formal.*` 三件与 L 不在面里）；**98** 是全库声明的工具件数（Lean 开着，判据 `tests/test_tools_returns_declaration.py`
+两个工具面读数，口径不同、不许互换：**123** 是 Lean 关着时各角色面的并集（`python -m agentflow.cli tools` 那一档，
+`formal.*` 三件与 L 不在面里）；**126** 是全库声明的工具件数（Lean 开着，判据 `tests/test_tools_returns_declaration.py`
 的 `TOOL_COUNT` 钉的是这一格）。
 
 三个带 `--json` 出口的脚本（`scripts/lint_rules.py`、`tools/release_all.py`、`tools/run_each_test_file.py`）
