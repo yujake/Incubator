@@ -215,13 +215,12 @@ def run_e_example(st: Store) -> dict:
         quote_verified=False, quote_reason="夹具：E 的穷举证明、V 的 pending 签按 sha 认领")
     assert filed.get("ok") is True, filed
     sid = str(filed.get("stmt_id") or "")
-    # V 在册那一支三转：穷举通道由机械会审给，签完把第 1 位（numeric）翻真
+    # V 在册那一支：2026-11-17 业主裁定 E 的门槛是 1（实验侧报告不承重、承重的是
+    # 程序）⇒ 一次机械会审就发签；与 F 同构的只是"系统计数落签"这个形状。
     v = AgentV(st, workspace_root=st.root, secretary=_v_secretary(st))
-    passes = []
     with submitted_by_e():
-        for _i in range(VR.SIGN_STREAK_NEED):
-            passes.append(v.verify_proof(sid, proof_text=column,
-                                         proof_manuscript=rel))
+        got = v.verify_proof(sid, proof_text=column, proof_manuscript=rel)
+    passes = [got]
     return {"store": st, "sid": sid, "rel": rel, "text": text,
             "signed_text": manuscript_text(st, rel),
             "seam": seam, "out": out, "column": column,

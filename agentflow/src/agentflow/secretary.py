@@ -4895,6 +4895,9 @@ class Secretary:
                 review_call=_row_call or str(review_call or ""), need=out["need"])
             out["sign_count"] = dict(counted)
             out["counted_by"] = str(counted.get("counted_by") or "")
+            #: 2026-11-17（业主）：门槛随这一档走 —— E 的单轮会审是 1（实验侧报告不承重），
+            #: F / B 仍是 3。计数层给了它用的数，读数就报那个数（不许"数用 1、报 3"）。
+            out["need"] = int(counted.get("need") or out["need"])
             out["streak"] = int(counted.get("count") or 0)
             out["projected"] = out["streak"] if candidate_ok else 0
             out["streak_ok"] = bool(counted.get("ok")) and candidate_ok

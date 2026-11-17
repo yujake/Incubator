@@ -54,13 +54,14 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
     assert len(form) == 1, form
     assert form[0]["role"] == "E" and form[0]["kind"] == "example", form[0]
     assert form[0]["checked"] is True and form[0]["well_formed"] is True, form[0]
-    # V 签（按正文 sha，一份一签）：未在册那一支先落 pending，在册三转后落 verifications
+    # V 签（按正文 sha，一份一签）：未在册那一支先落 pending；在册这一档按 E 的门槛
+    # （2026-11-17 业主：need=1，实验侧报告不承重、承重的是程序）一次机械会审落一行。
     pending = pending_rows(st)
     assert pending, pending
     assert all(str(r.get("proof_sha256") or "") == VR.text_sha(env["column"])
                for r in pending), pending
     ledger = verification_rows(st, env["sid"])
-    assert len(ledger) == VR.SIGN_STREAK_NEED, ledger
+    assert len(ledger) == 1, ledger
     assert all(str(r.get("proof_sha256") or "") == VR.text_sha(env["column"])
                for r in ledger), ledger
     # 2026-11-08（业主：「V 现在只对手稿负责」）：V 不再翻命题行的第 3 位
@@ -75,8 +76,7 @@ def test_b_e_registers_an_example_through_the_existing_e_proof_route(tmp_path):
     assert dict(last.get("review_write") or {}).get("manuscript_signed") is True, last
     block = VS.manuscript_sign_reading(env["signed_text"], manuscript_path=env["rel"])
     assert block.get("signed") is True, block
-    assert (block.get("streak"), block.get("need")) == (VR.SIGN_STREAK_NEED,
-                                                        VR.SIGN_STREAK_NEED), block
+    assert (block.get("streak"), block.get("need")) == (1, 1), block
     # 等级：按穷举算（numeric verified + proof ⇒ theorem）
     row = row_of(st, env["sid"])
     assert row["kind"] == "example", row
@@ -138,7 +138,8 @@ def test_c_the_same_example_passes_the_identical_chain(tmp_path):
                  == VR.text_sha(f_env["body"])]
     assert len(f_pending) == VR.SIGN_STREAK_NEED, f_pending
     assert dict(f_row["bits"] or {}).get("reviewed") is True, f_row["bits"]
-    assert len(verification_rows(st, e_env["sid"])) == VR.SIGN_STREAK_NEED
+    #: E 这一档的门槛是 1（2026-11-17 业主）；F 那一档仍是 3（上一行）—— 两个数不混。
+    assert len(verification_rows(st, e_env["sid"])) == 1
 
     # ③ 等级：现算，且换掉标签不改等级（example 与 theorem 对同一份 bits 同值）
     f_bits, e_bits = dict(f_row["bits"]), dict(e_row["bits"])

@@ -179,13 +179,12 @@ def _v(store: Store) -> AgentV:
 
 
 def _review_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
-    """同一份正文连审到发签门槛，返回那几次的返回（最后一条才是签发的那一次）。
+    """一次送审、一次机械会审 ⇒ 返回那一次调用的读数（E 的门槛是 1）。
 
-    改前这条端到端判据审一次就断言 `signed_bit3=True`（旧口径：一次成立就签）。
-    2026-10-29 的新口径要求同一份正文连续 `SIGN_STREAK_NEED` 次「成立」且秘书判定通过
-    才落签 ⇒ 夹具按同一份正文连审，并在这里钉住"前几次不签"这条正控。
+    2026-11-17（业主）：E 这条路的过审门槛从三次降成一次（实验侧报告不承重，承重的是
+    程序）⇒ 一次机械会审就落签。与 F 同构的只是"系统计数落签"这个形状，次数由 `need`
+    决定（E=1、F/B=3）。
     """
-    outs: list[dict] = []
     # 2026-11-04（甲）：在册命题的 V 审也要手稿；穷举这一档的载体是 e-proof 稿。
     # 夹具把这一份证明栏写成一份稿的「## 证明」，V 从稿里取正文、签块也落回稿。
     rel = f"reports/e-proof-{sid}.md"
@@ -198,23 +197,15 @@ def _review_until_signed(agent: AgentV, sid: str, text: str) -> list[dict]:
         "## 依赖\n\n| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 | 路径号（第几条证明） |\n"
         "|---|---|---|---|\n\n（这一份证明没有引用任何在册命题 —— 空表就是声明。）\n",
         encoding="utf-8")
-    for i in range(1, int(VR.SIGN_STREAK_NEED) + 1):
-        with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
-                            parent_role="E"):
-            got = agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
-        outs.append(got)
-        assert got.get("checked") is True, got
-        assert got.get("verdict") == "成立", got
-        # 2026-11-08：签只落在稿上（第 1、2 次尚未落块；第 3 次落块），
-        # 命题行的第 3 位归 B 收录时认领 —— `signed_bit3` 恒 False。
-        assert got.get("signed_bit3") is False, (
-            f"第 {i} 次落签后 signed_bit3={got.get('signed_bit3')!r} ⇒ "
-            "V 又在写 statements 了", got)
-        assert bool(dict(got.get("review_write") or {}).get("manuscript_signed")) is (
-            i == int(VR.SIGN_STREAK_NEED)), (
-            f"第 {i} 次落块读数不对：{got.get('review_write')}；"
-            f"读到的发签决定：{got.get('sign_issuance')}")
-    return outs
+    with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
+                        parent_role="E"):
+        got = agent.verify_proof(sid, proof_text=text, proof_manuscript=rel)
+    assert got.get("checked") is True, got
+    assert got.get("verdict") == "成立", got
+    # 2026-11-08：签只落在稿上，命题行的第 3 位归 B 收录时认领 —— `signed_bit3` 恒 False。
+    assert got.get("signed_bit3") is False, got
+    assert bool(dict(got.get("review_write") or {}).get("manuscript_signed")) is True, got
+    return [got]
 
 
 def _manuscript(column: str, body: str = BODY) -> str:
@@ -400,7 +391,7 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
     assert filed.get("ok") is True, filed
     sid = str(filed["stmt_id"])
 
-    # V 真会审：同一份正文连审到发签门槛（2026-10-29：连续 3 次「成立」+ 秘书判定才签）
+    # V 真会审：一次送审、一次机械会审即达 E 的门槛（2026-11-17 业主：need=1）
     reviewed = _review_until_signed(_v(store), sid, column)
     signed = reviewed[-1]
     assert signed.get("checked") is True and signed.get("verdict") == "成立", signed
@@ -410,9 +401,9 @@ def test_4_a_real_v_review_unlocks_proof_end_to_end(tmp_path: pathlib.Path) -> N
         signed["review_write"])
     ledger = pathlib.Path(store.root) / VR.VERIFICATIONS_DIR / f"{sid}.jsonl"
     assert ledger.is_file()
-    # 前三签都留在台账里（第 1、2 次只落台账，不许因为"没发签"就不落行）
+    # 那一转就落一行台账（E 的门槛是 1；与 F 同构的是"系统计数落签"这个形状）。
     rows, bad = VR.list_verifications(store.root, statement_id=sid, limit=None)
-    assert bad == [] and len(rows) == int(VR.SIGN_STREAK_NEED), (bad, rows)
+    assert bad == [] and len(rows) == 1, (bad, rows)
 
     # 签完之后同一份内容再交一次 ⇒ 允许 proof
     gate = NP.filing_problems(origin="own_result", evidence_kind="proof", proof_text=column,

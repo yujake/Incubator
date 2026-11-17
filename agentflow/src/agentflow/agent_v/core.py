@@ -1923,12 +1923,14 @@ class AgentV:
                         producer_path=str(manuscript_rel or ""),
                         producer_code=_producer_code, roster_role=_producer_hint,
                         secretary_judge=_n_judge,
-                        # 穷举型证据是机械七项核对（不走上文的三轮连判）：这一格按
-                        # "这一趟的第 1 轮"如实记；签发仍走历史台账门（见 review_call 注释）。
+                        # 穷举型证据是机械七项核对（不走上文的散文连判）：这一格按
+                        # "这一趟的第 1 轮"如实记；签发由系统计数现数（E 的 need=1）。
                         review_pass=1, review_call=review_call,
-                        #: 2026-11-17（系统计数）：这一趟只有一轮 —— 显式登记，读侧
-                        #: （`sign_counting`）据此把这一签标成 `legacy:single_round_review`，
-                        #: 不许把它静默读成"三轮"（那是本批要挡的那种谎）。
+                        #: 2026-11-17（业主）：E 这一档的过审门槛是 1（实验侧报告不承重，
+                        #: 承重的是程序），这一趟只判一轮是合法形态。显式登记
+                        #: `review_scope=single_round`，读侧（`sign_counting`）据此按
+                        #: E 的 need=1 数、并把机械行整组只算 1 轮 —— 它不会被读成
+                        #: "三轮"，也不会被 legacy 尾数拼成三轮。
                         review_scope="single_round",
                         # 业主 2026-10-29 追加口径：V 只落台账，翻位交给秘书。
                         flip=False)
@@ -3669,13 +3671,23 @@ class AgentV:
         3. 签是自报的：`experiments.observations.e_signature.signed_by="V"` 是 E 在
            `build_experiment` 里自己写的（`numericproof.suspect_self_signed` 报的就是它）。
 
-        改后这一支与 F 那条路同一套：同一份 `reports/*.md` 手稿形状、同一个三轮门槛
-        （`review_pass_bound()` == `verifications.SIGN_STREAK_NEED`）、同一次
+        改后这一支与 F 那条路同一套：同一份 `reports/*.md` 手稿形状、同一次
         `vsigns.issue()` 出信封、同一个收方秘书的落签方法（`land_unregistered_sign`，
-        块的 9 格、`手稿号`、`正文sha` 全由 `vsigns` 那一侧判）。
-        唯一的差别是「判词从哪来」：散文那一支问模型（冷启动逐行读），这一支走七项机械会审
-        （`exhaustionreport.review`，2026-10-23 的既定口径：穷举证据不按逐行读证明文本审）。
-        三轮都过才发签 —— 与 F 一样，"一次成立"不算签。
+        块的 9 格、`手稿号`、`正文sha` 全由 `vsigns` 那一侧判）、同一个系统计数落签
+        （`sign_counting`：V 只裁不定不落，一次判定不发签，够不够由台账现数）。
+
+        ## 与 F 的差别只有两点（都是业主裁定，不是残留）
+
+        1. 判词从哪来：散文那一支问模型（冷启动逐行读），这一支走七项机械会审
+           （`exhaustionreport.review`，2026-10-23 的既定口径：机械可核的事实不该让
+           模型判）；
+        2. 门槛是几次：E 这一档的 `need` 是 1（业主 2026-11-17：实验侧报告不承重、
+           承重的是程序；从三次降成一次），F / B 仍是 `SIGN_STREAK_NEED`（3）。
+
+        改前这一支把同一份确定性判词在一次调用里重跑 `need` 遍，再把结果当成"连续
+        `need` 次过审"去发签 —— 那不是多次独立判定，是「一次判词复制多份」。现在
+        `_review_exhaustion_rounds` 一次调用只跑一轮，够不够由计数层现数
+        （机械行整组只算 1 轮；E 的 need=1 下够，F/B 的 need=3 下永远不够）。
 
         ## 为什么正判也要落一行 pending
 
@@ -3692,11 +3704,11 @@ class AgentV:
             text=text, manuscript=manuscript)
         if ctx is None:
             return early
-        # ---- 三轮：每一轮都重读盘上那一份报告（机械会审，不问模型） ----
-        need = review_pass_bound()
+        # ---- 一次机械会审；够不够由系统计数判（E 的 need=1，见业主 2026-11-17） ----
+        need = int(VR.EXHAUSTION_SIGN_STREAK_NEED)
         failure, judged, passes, stopped, reviewed = self._review_exhaustion_rounds(
             body=ctx["body"], exp_rows=ctx["exp_rows"], row=ctx["row"],
-            rel=ctx["rel"], need=need)
+            rel=ctx["rel"])
         if failure is not None:
             # 缺材料 ⇒ 没查成的那份读数原样返回（不是负判：这一份没审下来）；
             # 已判过的几转照旧带出去（轴读数不许丢），空表 = 一转都没判到。
@@ -3918,76 +3930,72 @@ class AgentV:
 
     def _review_exhaustion_rounds(
         self, *, body: str, exp_rows: list, row: dict[str, Any] | None, rel: str,
-        need: int,
     ) -> tuple[dict[str, Any] | None,
                list[dict[str, Any]], list[dict[str, Any]], str, dict[str, Any]]:
-        """未在册穷举证明的机械会审：三轮都过才发签，返回 `(缺材料读数, judged, passes, stopped, reviewed)`。
+        """未在册穷举证明的机械会审：一次核对，够不够由系统计数判。
 
-        ## 为什么是七项机械会审而不是逐行读
-        穷举证据的既定口径（`exhaustionreport.review`，2026-10-23）：它不按散文证明那样
-        逐行问模型，而是每一轮都重读盘上那一份报告（`out/experiments/<实验号>/exhaustion.md`
-        的 ②③ 读数）。门槛与 F 那条路同一个 `need`（`review_pass_bound()` ==
-        `verifications.SIGN_STREAK_NEED`）：一轮成立不算签，三轮都成立才算。
+        ## 判词从哪来（2026-10-23 业主裁定仍然有效）
+        穷举证据不按散文证明那样逐行问模型，而是重读盘上那一份报告
+        （`out/experiments/<实验号>/exhaustion.md` 的 ②③ 读数）：程序在不在、
+        搜索空间的数与代码对不对得上、剪枝/对称性有没有解释、边界写没写、结论是不是
+        穷尽。它是确定性核对 —— 同一份输入跑几遍都是同一份判词，所以
+
+        ## 2026-11-17（业主裁定）：这一支只判一轮
+        E 这条路的过审门槛是 1（`verifications.EXHAUSTION_SIGN_STREAK_NEED`）：
+        实验侧报告不承重（承重的是程序），不需要像 F / B 那样连判三次。
+        改前这里 `for n in range(1, need + 1)` 把同一份判词重跑 `need` 遍、再当
+        "三轮连续过审"去发签 —— 那不是三次独立判定，是「一次判词复制 need 份」。
+        现在一次调用只跑一轮：`need` 只交给计数层（`sign_counting`）当门槛，
+        不再决定这里跑几遍。
 
         ## 三态（第一个返回值）
         `None` = 这一趟审下来了，`stopped` 是 `"signed"` / `"rejected"`；
-        非 `None` = 某一轮缺材料 ⇒ 调用方原样返回它，那是「没查成」
+        非 `None` = 缺材料 ⇒ 调用方原样返回它，那是「没查成」
         （`reason=MISSING_MATERIAL_REASON`），不是负判 —— 负判是审了、结论不是成立。
 
-        ## `passes` 里的 `terminal`
-        只有最后一转带 `terminal`（签的那一转 / 判负的那一转）；中间那几转是空串。
-        `judged` 与 `passes` 一一对位（`judged[i]["verdict"]` 是第 i 转的判词整份读数）。
+        `judged` / `passes` 各一项（这一轮），`terminal` 只标在那一项上。
         """
         from .. import exhaustionreport as _ER
 
         judged: list[dict[str, Any]] = []
         passes: list[dict[str, Any]] = []
         stopped = ""
-        reviewed: dict[str, Any] = {}
-        for n in range(1, int(need) + 1):
-            reviewed = _ER.review(workspace_root=self.workspace_root,
-                                  statement={"proof_text": body}, experiments=exp_rows,
-                                  # 钉到这份稿自己那条实验（`experiment_row` 优先于按程序反查）
-                                  experiment_row=row)
-            verdict = _ER.verdict_of(reviewed)
-            word = str(verdict.get("verdict") or "")
-            missing = [str(m) for m in (reviewed.get("missing") or [])]
-            missing_detail = missing_material_detail(verdict, missing)
-            if missing_detail:
-                self._emit(f"verify_proof(未在册·穷举)：第 {n} 转缺材料 —— 没查成（{missing}）")
-                return ({"failed": True, "reason": MISSING_MATERIAL_REASON,
-                         "detail": missing_detail, "passes": passes, "manuscript": rel},
-                        judged, passes, stopped, reviewed)
-            #: p247：穷举这一档没有 V 的散文回复 —— 轴由机械会审自己的两态读数给
-            #: （`_ER.VERDICT_OK` ⇒ clean / `_ER.VERDICT_BAD` ⇒ fault），并写成与
-            #: 秘书判定同形的 `secretary_judge`（`source=exhaustion_report`）。这不是
-            #: 按 V 的 `verdict` 字面定轴：这一格的 `verdict` 就是会审的机械结论本身。
-            _axis = ("clean" if word == str(_ER.VERDICT_OK)
-                     else ("fault" if word == str(_ER.VERDICT_BAD) else ""))
-            judgment = {
-                "checked": bool(_axis), "axis": _axis, "decision": word,
-                "reason": str(reviewed.get("why") or reviewed.get("reason") or ""),
-                "basis": [f"exhaustion_report={word}"],
-                "source": "exhaustion_report",
-                "defect_step": verdict.get("defect_step"),
-            }
-            judged.append({"pass": n, "verdict": verdict, "judgment": judgment,
-                           #: 这一轮判词落下的时刻（不是三行一起写下的时刻）。
-                           "at": _now_iso()})
-            passes.append({"pass": n, "axis": _axis, "verdict": word,
-                           "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
-                           "defect_step": verdict.get("defect_step"),
-                           "terminal": ""})
-            self._emit(f"verify_proof(未在册·穷举)：第 {n} 转 {word}"
-                       f"（{len(reviewed.get('checks') or [])} 项检查）")
-            if _axis != "clean":
-                stopped = "rejected"
-                passes[-1]["terminal"] = stopped
-                break
-        else:
-            stopped = "signed"
-            if passes:
-                passes[-1]["terminal"] = stopped
+        reviewed = _ER.review(workspace_root=self.workspace_root,
+                              statement={"proof_text": body}, experiments=exp_rows,
+                              # 钉到这份稿自己那条实验（`experiment_row` 优先于按程序反查）
+                              experiment_row=row)
+        verdict = _ER.verdict_of(reviewed)
+        word = str(verdict.get("verdict") or "")
+        missing = [str(m) for m in (reviewed.get("missing") or [])]
+        missing_detail = missing_material_detail(verdict, missing)
+        if missing_detail:
+            self._emit(f"verify_proof(未在册·穷举)：缺材料 —— 没查成（{missing}）")
+            return ({"failed": True, "reason": MISSING_MATERIAL_REASON,
+                     "detail": missing_detail, "passes": passes, "manuscript": rel},
+                    judged, passes, stopped, reviewed)
+        #: p247：穷举这一档没有 V 的散文回复 —— 轴由机械会审自己的两态读数给
+        #: （`_ER.VERDICT_OK` ⇒ clean / `_ER.VERDICT_BAD` ⇒ fault），并写成与
+        #: 秘书判定同形的 `secretary_judge`（`source=exhaustion_report`）。这不是
+        #: 按 V 的 `verdict` 字面定轴：这一格的 `verdict` 就是会审的机械结论本身。
+        _axis = ("clean" if word == str(_ER.VERDICT_OK)
+                 else ("fault" if word == str(_ER.VERDICT_BAD) else ""))
+        judgment = {
+            "checked": bool(_axis), "axis": _axis, "decision": word,
+            "reason": str(reviewed.get("why") or reviewed.get("reason") or ""),
+            "basis": [f"exhaustion_report={word}"],
+            "source": "exhaustion_report",
+            "defect_step": verdict.get("defect_step"),
+        }
+        judged.append({"pass": 1, "verdict": verdict, "judgment": judgment,
+                       "at": _now_iso()})
+        passes.append({"pass": 1, "axis": _axis, "verdict": word,
+                       "unresolved_errors": int(verdict.get("unresolved_errors") or 0),
+                       "defect_step": verdict.get("defect_step"),
+                       "terminal": ""})
+        self._emit(f"verify_proof(未在册·穷举)：{word}"
+                   f"（{len(reviewed.get('checks') or [])} 项检查）")
+        stopped = "signed" if _axis == "clean" else "rejected"
+        passes[-1]["terminal"] = stopped
         return None, judged, passes, stopped, reviewed
 
     def _issue_and_land_unregistered(self, *, rel: str, sha: str, streak: int,

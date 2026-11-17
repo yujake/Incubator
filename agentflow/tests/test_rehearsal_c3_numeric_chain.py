@@ -10,7 +10,7 @@
 | 派活 | `Conductor.summon`（`M→E`、`E→V`、`E→B` 都是 `ALLOWED_EDGES` 里的真边） | 同一条 |
 | 实验 | `verify.run_experiment` → `AgentE.run_experiment`（真起子进程、真解析 `REPRO_RESULT`） | 同一条：盘上两份真脚本被真跑 |
 | 形态闸 | 产出侧 `secretary.judge_proposition_form`（E 的缝） | 同一条：判定内容是预置回复，闸本体与调用点一个都没换 |
-| 送审 | `verify.verify_proof` → `AgentV.verify_proof`（穷举会审 + 三转） | 同一条 |
+| 送审 | `verify.verify_proof` → `AgentV.verify_proof`（穷举会审；E 的过审门槛是 1） | 同一条 |
 | 收编 | `own.ingest_manuscript(mode="register")` → `AgentB.ingest_manuscript` | 同一条 |
 | 模型缝 | 真 `LlmSeam`（`_agent_seam_factory` / `for_role` / `for_secretary`） | 同一条：构造点一个都没替换 |
 | 记账 | 真 `TokenMeter` → `usage_ledger` | 同一条 |
@@ -24,13 +24,13 @@
 ```text
 M --summon--> E --verify.run_experiment(numeric)-->  experiments 一行 + reports/e-num-*.md
                 --verify.run_experiment(exhaustive)--> experiments 一行 + reports/e-proof-*.md
-                --summon--> V --verify.verify_proof--> 三转 clean ⇒ 签 + 稿上签块
+                --summon--> V --verify.verify_proof--> 一次机械过审 clean（E 的 need=1）⇒ 签 + 稿上签块
                 --summon--> B --own.ingest_manuscript--> statements 两行（conjecture / theorem）
 ```
 
 判据读盘：`experiments` 两行（`numeric/cross_check` + `exhaustive_search/proof`）、
 `reports/e-num-*` 有 `## 数值结果` 与 `## 命题`、`reports/e-proof-*` 的 `## 证明` 非空、
-`out/vsigns/<正文 sha>.json` 在盘上、`verifications` 三行 `path_group=1`、`statements`
+`out/vsigns/<正文 sha>.json` 在盘上、`verifications` 一行 `path_group=1`、`statements`
 两行（数值档 `kind=conjecture` + `bits.numeric=verified`；穷举档 `kind=theorem` +
 `proof_list=[1]`）、钱账逐分相等且无主 0。
 
@@ -451,7 +451,7 @@ def _chain_problems(reading: dict[str, Any]) -> list[str]:
     if not body:
         problems.append("穷举手稿的 `## 证明` 是空的（没有可签的正文）")
 
-    # 4. 签：信封 + 稿上签块 + 三行台账都是第 1 条路径。
+    # 4. 签：信封 + 稿上签块 + 一行台账都是第 1 条路径（E 的过审门槛是 1）。
     sha = PR.proof_sha(body) if body else ""
     if sha:
         if not VS.sign_path(root, sha).is_file():
@@ -461,8 +461,10 @@ def _chain_problems(reading: dict[str, Any]) -> list[str]:
             problems.append(f"稿上的签块不是 signed：{standing.get('state')!r} "
                             f"({standing.get('why') or standing.get('reason') or ''})")
         groups = [int(r.get("path_group") or 0) for r in reading["pending"]]
-        if len(groups) != int(VR.SIGN_STREAK_NEED):
-            problems.append(f"pending 台账应恰好 {VR.SIGN_STREAK_NEED} 行，实得 {len(groups)} 行")
+        if len(groups) != int(VR.EXHAUSTION_SIGN_STREAK_NEED):
+            problems.append(
+                f"pending 台账应恰好 {VR.EXHAUSTION_SIGN_STREAK_NEED} 行"
+                f"（E 的过审门槛是 1，业主 2026-11-17），实得 {len(groups)} 行")
         if set(groups) != {1}:
             problems.append(f"pending 的 path_group 不是 [1]：{groups}")
 
@@ -533,9 +535,10 @@ def test_the_numeric_chain_runs_from_the_cli_with_only_the_wire_replaced(
     assert "e-num-000000.md" in reading["reports"], reading["reports"]
     assert "e-proof-000000.md" in reading["reports"], reading["reports"]
     assert [r for r in reading["form_rows"] if str(r.get("role")) == "E"], reading["form_rows"]
-    # V 三转是一次送审里自己转三次（不是三次独立送审）。
+    # E 的过审门槛是 1（业主 2026-11-17：实验侧报告不承重，承重的是程序）：
+    # 一次机械过审就发签 —— 这一次送审里不该出现第 2、3 轮，也不是三次独立送审。
     assert len(reading["reviewed"]["data"].get("review_passes") or []) == int(
-        VR.SIGN_STREAK_NEED), reading["reviewed"]["data"].get("review_passes")
+        VR.EXHAUSTION_SIGN_STREAK_NEED), reading["reviewed"]["data"].get("review_passes")
     assert str(reading["reviewed"]["data"].get("kind") or "") == "proof_unregistered_signed", (
         reading["reviewed"]["data"].get("kind"))
 

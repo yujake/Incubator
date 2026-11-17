@@ -119,13 +119,14 @@ def test_1_missing_material_lands_no_pending_row_and_says_so(tmp_path: pathlib.P
 
 def test_2_complete_material_is_reviewed_and_signed_without_a_statement_id(
         tmp_path: pathlib.Path) -> None:
-    """③ 反真空：材料齐 + 判成立 ⇒ 会审照跑、三转三行 pending、签落稿上（没号也签）。
+    """③ 反真空：材料齐 + 判成立 ⇒ 会审照跑、一轮一行 pending、签落稿上（没号也签）。
 
     2026-11-05 晚（业主）：「V 就不能假定有号，全签在稿上」—— `命题号=未在册` 是合法
-    形态（真机 `f-proof-000019.md`）。这一条防两头：
-    ① 护栏别把这一档整个关掉 —— 会审七项照跑、`verdict=成立`、pending 三行照落；
-    ② 别把"审过"冒充成"三票齐全的签" —— 每一行都要有 `verification_id` / `at` /
-       `proof_sha256`，签文件的 `passes` 就是那三行。
+    形态（真机 `f-proof-000019.md`）。2026-11-17 业主追加裁定：E 这条路的过审门槛是 1
+    （实验侧报告不承重，承重的是程序）⇒ 一次机械过审就够。这一条防两头：
+    ① 护栏别把这一档整个关掉 —— 会审七项照跑、`verdict=成立`、pending 一行照落；
+    ② 别把"审过"冒充成"有票的签" —— 那一行要有 `verification_id` / `at` /
+       `proof_sha256`，签文件的 `passes` 就是那一行。
     """
     store = _store(tmp_path / "ws")
     add_literature(store, S.format_id(0))
@@ -142,21 +143,23 @@ def test_2_complete_material_is_reviewed_and_signed_without_a_statement_id(
     assert got["kind"] == "proof_unregistered_signed", got
     assert got["verdict"] == "成立", got
     assert got["signed_bit3"] is False, got   # 没有命题行可翻
-    # 会审的记录仍在（那是"审过"的证据）：pending 台账按对象 sha 落行，一转一行。
+    # 会审的记录仍在（那是"审过"的证据）：pending 台账按对象 sha 落行，一轮一行。
     landed = _pending_files(store)
     assert landed, "材料齐、会审判成立，却连会审记录都没有（护栏把这一档整个关掉了）"
     rows = [json.loads(ln) for ln in
             landed[0].read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len(rows) == int(VR.SIGN_STREAK_NEED), rows
+    assert len(rows) == 1, rows
+    assert int(rows[0].get("review_pass") or 0) == 1, rows
     for row in rows:
         assert row["verdict"] == "成立", row
         assert len(str(row.get("object_sha256") or "")) == 64, row
         for key in ("verification_id", "at", "proof_sha256"):
             assert str(row.get(key) or "").strip(), (key, row)
-    # 签文件的三票就是那三行（不是三个空对象）。
+    # 签文件的那一票就是那一行（不是一个空对象）；门槛读数 1/1。
     sign = json.loads(
         (pathlib.Path(store.root) / "out" / "vsigns" / f"{got['proof_sha256']}.json")
         .read_text(encoding="utf-8"))
     assert [p["verification_id"] for p in sign["passes"]] == [
         r["verification_id"] for r in rows], sign["passes"]
     assert sign["ledger"].startswith("verifications/pending/"), sign["ledger"]
+    assert (int(sign.get("streak") or 0), int(sign.get("need") or 0)) == (1, 1), sign

@@ -138,13 +138,15 @@ def test_a_e_writes_a_proof_manuscript_in_the_f_shape(tmp_path):
         assert heading in text, heading
 
 
-# ============================================================ ② E 三轮 ⇒ 签落稿上
-def test_b_three_rounds_sign_the_manuscript_with_pending_backing(tmp_path):
-    """② E 派 V（未在册）⇒ 三轮都成立 ⇒ 签落 e-proof 稿上、背书落 pending（2026-11-05 晚）。
+# ============================================================ ② E 一次机械过审 ⇒ 签落稿上
+def test_b_one_mechanical_round_signs_the_manuscript_with_pending_backing(tmp_path):
+    """② E 派 V（未在册）⇒ 一次机械过审 ⇒ 签落 e-proof 稿上、背书落 pending。
 
-    业主原话：「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签。这是已有口径」——
-    E 这一条与 F 完全同形：`命题号=未在册` 合法，三票（`verification_id` / `at` /
-    `proof_sha256`）在 pending 台账里一转一行。
+    业主原话：「V 就不能假定有号，全签在稿上，B 侧录入时从稿拿签。这是已有口径」。
+    2026-11-17 业主追加裁定：「因为实验侧报告不承重（承重的是程序），E 这条路的过审
+    门槛从三次降成一次（need=1）」⇒ 这一趟只判一轮（机械七项），系统计数够 1/1 就发签。
+    与 F 同构的只是形状：V 只裁不定不落、一次判定不发签、同一份判词复制多份不算、
+    跨送审不累计；次数由 `need` 决定（E=1、F/B=3）。
     """
     env = _env(tmp_path)
     rel, text = _manuscript(env)
@@ -156,37 +158,39 @@ def test_b_three_rounds_sign_the_manuscript_with_pending_backing(tmp_path):
     assert got.get("verdict") == "成立", got
     assert got.get("signed_bit3") is False, got     # 没有命题行可翻
     passes = list(got.get("review_passes") or [])
-    assert [p["pass"] for p in passes] == [1, 2, 3], passes
-    assert [p["verdict"] for p in passes] == ["成立"] * VR.SIGN_STREAK_NEED, passes
+    assert [p["pass"] for p in passes] == [1], (
+        "E 这一档的过审门槛是 1（need=1），不该再出现第 2、3 轮", passes)
+    assert [p["verdict"] for p in passes] == ["成立"], passes
     for one in passes:
         for key in ("verification_id", "at", "proof_sha256"):
             assert str(one.get(key) or "").strip(), (key, one)
 
-    # 稿上有签块：命题号=未在册、台账指 pending 那一行。
+    # 稿上有签块：命题号=未在册、台账指 pending 那一行；连续 1/1（E 的门槛）。
     now = (pathlib.Path(env["store"].root) / rel).read_text(encoding="utf-8")
     block = VS.manuscript_sign_reading(now, manuscript_path=rel)
     assert block["found"] is True and block["signed"] is True, block
     assert block["statement_id"] == "", block
-    assert block["streak"] == 3 and block["need"] == 3, block
+    assert block["streak"] == 1 and block["need"] == 1, block
     assert block["ledger"].startswith("verifications/pending/"), block
 
-    # pending 台账：三行，行行三票齐全（按 E 那份报告的字节 sha 分文件）。
+    # pending 台账：一行，三票齐全（按 E 那份报告的字节 sha 分文件）。
     pend = pathlib.Path(env["store"].root) / "verifications" / "pending"
     rows = [json.loads(ln) for p in sorted(pend.glob("*.jsonl"))
             for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()]
-    assert len(rows) == VR.SIGN_STREAK_NEED, rows
-    assert any(str(r.get("object_sha256") or "") == env["out"]["report_sha256"]
-               and str(r.get("verdict")) == "成立" for r in rows), rows
-    for row in rows:
-        for key in ("verification_id", "at", "proof_sha256"):
-            assert str(row.get(key) or "").strip(), (key, row)
+    assert len(rows) == 1, rows
+    assert int(rows[0].get("review_pass") or 0) == 1, rows
+    assert str(rows[0].get("object_sha256") or "") == env["out"]["report_sha256"], rows
+    assert str(rows[0].get("verdict")) == "成立", rows
+    for key in ("verification_id", "at", "proof_sha256"):
+        assert str(rows[0].get(key) or "").strip(), (key, rows[0])
 
-    # 签文件在盘上（正文 sha 命名），passes 就是那三行。
+    # 签文件在盘上（正文 sha 命名），passes 就是那一行；门槛读数 1/1。
     sign_path = VS.sign_path(env["store"].root, VR.text_sha(_column(env)))
-    assert sign_path.is_file(), "三轮成立却没有签文件"
+    assert sign_path.is_file(), "一次机械过审却没有签文件"
     doc = json.loads(sign_path.read_text(encoding="utf-8"))
     assert [p["verification_id"] for p in doc["passes"]] == [
         r["verification_id"] for r in rows], doc["passes"]
+    assert (int(doc.get("streak") or 0), int(doc.get("need") or 0)) == (1, 1), doc
 
 
 # ============================================================ ③ B 收录：从稿上拿签
@@ -298,14 +302,14 @@ def test_d_the_second_stage_gets_a_fresh_sign_and_flips_optimized(tmp_path):
     new_column = ER.proof_body_of(new_text)
     assert new_column != first_column, "第二阶段那一版与第一版逐字相同 ⇒ 这一条判据量不到替换"
 
-    # 在册那一路：必须带 e-proof 手稿（2026-11-04 甲：在册命题也要手稿），
-    # 同一份正文连判三转（门槛与 F 那一份同源）。命题行上的 canonical 还是第一版，
-    # 这一签盖的是稿里的新版 ⇒ 第 3 位不翻（`signed_bit3=False` 是诚实的：
-    # `body_gate=sha_mismatch`），签文件照旧颁发；B 收录新正文时按 sha 认领。
-    got: dict = {}
+    # 在册那一路：必须带 e-proof 手稿（2026-11-04 甲：在册命题也要手稿）。
+    # 2026-11-17 起 E 的过审门槛是 1（need=1）⇒ 一次机械过审就发签（与 F 同构的是
+    # "系统计数落签"这个形状，次数由 need 决定）。命题行上的 canonical 还是第一版，
+    # 这一签盖的是稿里的新版 ⇒ 第 3 位不翻（`signed_bit3=False` 是诚实的），签文件
+    # 照旧在盘上；B 收录新正文时按 sha 认领。
     with _submitted_by_e():
-        for _i in range(VR.SIGN_STREAK_NEED):
-            got = env["v"].verify_proof(sid, proof_manuscript=new_rel)
+        got = env["v"].verify_proof(sid, proof_manuscript=new_rel)
+    assert got.get("checked") is True, got
     assert got.get("signed_bit3") is False, got
     assert VS.sign_path(env["store"].root, VR.text_sha(new_column)).is_file(), (
         "在册这一档带稿送审之后签没有颁发")

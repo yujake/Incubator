@@ -175,26 +175,27 @@ def _v_secretary(store: Store):
 
 
 def _three(agent: AgentV, sid: str, column: str, *, manuscript: str = "") -> dict:
-    """连审 `SIGN_STREAK_NEED` 次、返回最后一次的返回值（第 3 次才落签块）。
+    """一次送审、一次机械会审 ⇒ 返回那一次调用的读数（E 的门槛是 1）。
+
+    2026-11-17（业主）：E 这条路的过审门槛从三次降成一次（实验侧报告不承重，承重的是
+    程序）⇒ 一次机械会审就够，签在那一转落下。与 F 同构的只是"系统计数落签"这个形状，
+    次数由 `need` 决定（E=1、F/B=3）。
 
     2026-11-08：签只落在稿上，落块要收方秘书 ⇒ 造真实送审的挂点（parent=E）。
     """
-    got: dict = {}
     with CND.calling_as("t-v-000001", "V", parent_task_id="t-e-000001",
                         parent_role="E"):
-        for _i in range(VR.SIGN_STREAK_NEED):
-            got = agent.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
-    return got
+        return agent.verify_proof(sid, proof_text=column, proof_manuscript=manuscript)
 
 
 # ------------------------------------------------------------------ ③ 三态
 
 
 def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.Path) -> None:
-    """③-1 成立：七项检查全过 ⇒ `成立`、签第 3 位、台账落一行；②③ 的作者仍是 E。
+    """③-1 成立：七项检查全过 ⇒ `成立`、签落稿上、台账落一行；②③ 的作者仍是 E。
 
-    2026-10-29 之后"签第 3 位"要连续 `SIGN_STREAK_NEED` 次「成立」、且翻位由 V 的秘书做
-    ⇒ 三次会审之后取最后一次（`_three`），台账因此有三行（改前一行）。
+    2026-11-17（业主）：E 的过审门槛是 1（实验侧报告不承重、承重的是程序）⇒ 一次机械
+    会审就发签，台账因此一行（与 F 同构的是"系统计数落签"这个形状，次数由 need 决定）。
     """
     env = _chain(tmp_path)
     got = _three(env["v"], env["statement"]["stmt_id"], env["column"],
@@ -211,24 +212,24 @@ def test_4a_an_exhaustive_evidence_that_holds_is_signed_by_v(tmp_path: pathlib.P
     assert got["report_path"] == ER.report_relpath(env["out"]["experiment_id"])
     assert got["proof_authors"] == ["E"], got
     ledger = env["v"].list_verifications(env["statement"]["stmt_id"])["items"]
-    # 三次会审各落一行（连续 3 次「成立」才发签）—— 改前一次就够。
+    # 一次会审落一行（E 的 need=1）；那一行的送审身份也要在：`review_pass=1`、
+    # 秘书那一格是机械会审的来路（`source=exhaustion_report`）。
     #
     # 2026-11-10（读侧并入，`verifications._claimed_pending_rows` / 2527e727）：这条
     # 命题的台账现在还会带上「命题还没在册时 V 审的那一签」—— 就是本文件 `_chain`
     # 里 `sign_before_registration` 落的那一份（`u-` 前缀、同一份正文的 sha）。
-    # 它既不是这三次会审中的任何一次、也不顶一张会审票（`_gap_from_pending` 的理由），
+    # 它既不是这一次会审、也不顶一张会审票（`_gap_from_pending` 的理由），
     # 所以会审行（`v-`）与前提签（`u-`）必须分开数，不能混成一个"行数"。
-    # 改前这里断言台账恰好 `SIGN_STREAK_NEED` 行；改后拆成"`v-` 恰好三行" +
-    # "`u-` 恰好一行（且是这一份正文）" + "两者之和 == 台账全长"，强度没有降：
-    # 少一次会审、多一条前提签、或把前提签借来顶一次会审，都在下面三行里立刻红。
     reviews = [r for r in ledger
                if not str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
     premises = [r for r in ledger
                 if str(r.get("verification_id") or "").startswith(VR.PENDING_PREFIX)]
-    assert [r["verdict"] for r in reviews] == [ER.VERDICT_OK] * VR.SIGN_STREAK_NEED, ledger
+    assert [r["verdict"] for r in reviews] == [ER.VERDICT_OK], ledger
+    assert [int(r.get("review_pass") or 0) for r in reviews] == [1], reviews
+    assert all(str(r.get("review_call") or "").strip() for r in reviews), reviews
     assert len(premises) == 1 and premises[0]["verdict"] == ER.VERDICT_OK, ledger
     assert str(premises[0].get("proof_sha256") or "") == VR.text_sha(env["column"]), premises
-    assert len(ledger) == len(reviews) + len(premises) == VR.SIGN_STREAK_NEED + 1, ledger
+    assert len(ledger) == len(reviews) + len(premises) == 2, ledger
 
 
 def test_4b_a_broken_exhaustive_note_is_faulty_and_named(tmp_path: pathlib.Path) -> None:
@@ -384,19 +385,20 @@ def test_4f_the_edge_from_e_to_v_is_real_and_the_others_are_unchanged(
         "工具路径上没有 V 的秘书，却把第 3 位翻了 ⇒ 发签逃过了秘书那一关：" + str(payload))
     issuance = dict(payload.get("sign_issuance") or {})
     assert issuance.get("issue") is False and issuance.get("issued") is False, issuance
-    # 这一趟挡在两道闸上：
-    # ① p247（2026-11-06）把穷举这一档的轴改由机械会审自己给
-    #    （`source=exhaustion_report`：七项全过 ⇒ clean），所以台账那一行算一票 ——
-    #    改前这一格问的是"没有秘书 ⇒ 没人判 ⇒ 没轴 ⇒ 0 票"，那是旧口径。现在
-    #    `projected=1` / `streak=1`（need=3，仍不够），不算签；
+    # 这一趟的读数分两块：
+    # ① 门槛：2026-11-17 业主裁定 E 这一档 need=1（实验侧报告不承重、承重的是程序）⇒
+    #    一次机械会审就够 —— `projected=1` / `streak=1` / `need=1` / `streak_ok=True`；
     # ② 发签仍要秘书：工具路径（`tools/verify_tools.py:_agent_v`）造不出 V 的秘书，
-    #    这一名自动装配的秘书没有判断面 ⇒ `checked=False`，第 3 位不翻。
+    #    这一名自动装配的秘书没有判断面 ⇒ `checked=False`、`issue=False`、第 3 位不翻。
     # 装配缺口那一档不算框架失败：V 的会审确实做完了（`checked` 仍为真、`verdict`
     # 与台账都在），缺的只是"谁能发这一签"。
     assert issuance.get("projected") == 1, issuance
     assert issuance.get("streak") == 1, issuance
-    assert issuance.get("streak_ok") is False, issuance
-    assert issuance.get("need") == VR.SIGN_STREAK_NEED, issuance
+    assert issuance.get("need") == 1, issuance
+    assert issuance.get("streak_ok") is True, issuance
+    assert issuance.get("checked") is False, issuance
+    assert issuance.get("basis") and any("system_count=1" in one
+                                       for one in issuance.get("basis") or []), issuance
     judge = dict(payload.get("secretary_judge") or {})
     assert judge.get("axis") == "clean", judge
     assert judge.get("checked") is True, judge

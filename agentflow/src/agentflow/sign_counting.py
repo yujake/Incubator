@@ -39,6 +39,21 @@
 （`review_pass=1`，机械七项会审）。那一档的行带 `review_scope="single_round"`，
 读侧按 `legacy:single_round_review` 显式标出来 —— 它仍然是"一次会审"，不是三轮；
 把它读成"三轮"才是本模块要挡的那种谎。
+
+## 机械会审整组只算 1 轮（2026-11-17 业主裁定）
+
+业主逐字：「因为实验侧报告不承重（承重的是程序），E 这条路的过审门槛从三次降成一次
+（need=1）」；同一份确定性判词（`exhaustionreport.review`：同一份输入跑几遍都是同一份
+判词）复制成多行不构成多轮。所以本模块收一道判据 :func:`real_judgment`：
+
+- 同一组里出现机械会审的行（`review_scope="single_round"` / 判词来路
+  `exhaustion_report`）⇒ 整组只算 1 轮（`terminated="not_real_judgment"` 作读数）；
+- 那一轮算不算够，仍由 `need` 决定：E 这一档 `need=1` ⇒ 一次机械过审即达门槛；
+  F / B 的 `need` 仍是 3 ⇒ 机械行永远不够（负控）；
+- legacy 尾部复算同样只给机械行 1 轮 —— 「一次机械审 × 三次送审」凑不出三轮。
+
+那一格是显式的、可打桩的：反真空判据把它打桩成恒真，"同一份判词复制三份"立刻
+被数成 3 轮（`tests/test_no_mechanical_review_counts_as_three.py` 的 d）。
 """
 
 from __future__ import annotations
@@ -55,6 +70,10 @@ LEGACY_TAIL = "legacy:ledger_tail"
 LEGACY_SINGLE_ROUND = "legacy:single_round_review"
 #: 单轮会审的写侧标记（`verifications.record_verification(review_scope=...)`）。
 SINGLE_ROUND = "single_round"
+#: 机械会审的判词来路（`secretary_judge.source`）：七项确定性核对，不是模型判定。
+MECHANICAL_SOURCE = "exhaustion_report"
+#: 这一组停在"只有机械会审"（读数用；E 档 need=1 时它照样够）。
+NOT_REAL_JUDGMENT = "not_real_judgment"
 
 
 def _text(row: Mapping[str, Any], key: str) -> str:
@@ -94,6 +113,36 @@ def _signable(row: Mapping[str, Any]) -> bool:
     return bool(_VR.row_signable(row))
 
 
+def mechanical_judgment(row: Mapping[str, Any]) -> bool:
+    """这一行的判词是不是「确定性机械会审」（不是模型判定）。
+
+    两个标记都是写侧本来就落的读数，不新增字段：
+
+    - `review_scope == "single_round"`：登记在册的机械会审（一次送审只判一轮）；
+    - `secretary_judge.source == "exhaustion_report"`：七项机械会审给的轴。
+
+    两格都读不出（老行 / 散文支 / 夹具）⇒ `False`：那些行不是机械会审。
+    """
+    judge = row.get("secretary_judge")
+    source = ""
+    if isinstance(judge, Mapping):
+        source = str(judge.get("source") or "")
+    return (source == MECHANICAL_SOURCE
+            or _text(row, "review_scope") == SINGLE_ROUND)
+
+
+def real_judgment(row: Mapping[str, Any]) -> bool:
+    """这一行是不是一次「真实判定」（模型真判过的那一轮）。
+
+    「机械会审整组只算 1 轮」的唯一判据：同一份确定性判词复制成多行不构成多轮。
+    注意它不是"机械行永远不算"—— E 这一档的 `need=1` 是业主 2026-11-17 的裁定
+    （实验侧报告不承重、承重的是程序），一次机械过审就够；F / B 的 `need=3` 不受影响。
+
+    反真空判据把它打桩成恒真，"同一份判词复制三份"必须立刻被数成 3 轮。
+    """
+    return not mechanical_judgment(row)
+
+
 def ticket(row: Mapping[str, Any]) -> dict[str, Any]:
     """把一行台账翻成签文件 `passes` 里的一张票（`verification_id` / `at` / sha 三格必填）。
 
@@ -124,10 +173,12 @@ def _out(*, review_call: str, proof_sha256: str, need: int) -> dict[str, Any]:
         "ok": False, "count": 0, "need": max(1, int(need or 1)),
         "review_call": str(review_call or ""), "proof_sha256": str(proof_sha256 or ""),
         "passes": [], "legacy": False, "counted_by": "", "legacy_rows": 0,
+        #: 同一份正文里「机械会审」的行数（整组只算 1 轮，多出来的只作读数）。
+        "mechanical_rows": 0,
         #: 同号重放的条数（不增加计数，只作读数）。
         "replayed": 0,
         #: 这一组停在哪（空串 = 没停，1..need 齐了）：`fault` / `not_signable` /
-        #: `missing_pass` / `no_call` / `single_round`。
+        #: `missing_pass` / `no_call` / `single_round` / `not_real_judgment`。
         "terminated": "",
         "why": "",
     }
@@ -144,6 +195,9 @@ def count_rows(rows: Sequence[Mapping[str, Any]], *, review_call: Any,
     - 同号重放（同一个 `review_pass` 有多行）不增加计数（`replayed` 记条数）；
     - 轴是 `fault` ⇒ 这一组当场终止（`count` 停在 fault 之前那几轮）；
     - 轴不是 clean（没查成 / 读不出来）或那一行自己签不住 ⇒ 同样终止；
+    - 机械会审的行（:func:`real_judgment` 为假）⇒ 整组只算 1 轮（`:func:`real_judgment`
+      的同一份判词复制成多行不算多轮）；够不够仍看 `need`（E 档 need=1 ⇒ 够；
+      F / B 的 need=3 ⇒ 永远不够）；
     - 只有 `count >= need` 且 1..need 全齐才 `ok=True`。
 
     `legacy_rows` 是同一份正文里没有 `review_call` 的行数（只作读数：它们不进这里
@@ -183,6 +237,21 @@ def count_rows(rows: Sequence[Mapping[str, Any]], *, review_call: Any,
         if axis != "clean" or not _signable(row):
             out["terminated"] = "not_signable"
             break
+        #: 机械会审整组只算 1 轮：同一份确定性判词复制成多行不构成多轮。够不够仍看
+        #: `need` —— E 这一档 need=1（业主 2026-11-17：实验侧报告不承重，承重的是程序），
+        #: F / B 的 need=3 因此永远数不满（负控）。
+        if not real_judgment(row):
+            out["count"] = max(count, 1)
+            out["passes"] = [ticket(row)]
+            out["counted_by"] = COUNTED_BY
+            out["terminated"] = NOT_REAL_JUDGMENT
+            out["mechanical_rows"] = len(got)
+            out["ok"] = bool(out["count"] >= out["need"])
+            out["why"] = (
+                f"系统计数：`{call}` 这一趟的判词来自机械会审（确定性核对，同一份输入"
+                f"跑几遍都是同一份判词）⇒ 整组只算 1 轮；{out['count']}/{out['need']}"
+                + ("，已达门槛" if out["ok"] else "，不够发签"))
+            return out
         count += 1
         out["passes"].append(ticket(row))
     out["count"] = count
@@ -209,6 +278,10 @@ def legacy_tail(rows: Sequence[Mapping[str, Any]], *, proof_sha256: Any,
     `include_calls=True` 是给登记在册的单轮会审那一档用的（`review_scope=
     single_round`）：那几行本来就带 `review_call`（每一趟一个），而那一档的门槛一直是
     "同一份正文尾部连续几行 clean"—— 它按定义不是"同一趟内的 1..need 轮"。
+
+    2026-11-17（业主：E 的过审门槛从三次降成一次）：机械会审的行在尾部复算里
+    整组只算 1 轮（多出来的只进 `mechanical_rows` 读数），所以「一次机械审 ×
+    三次送审」不会凑成 3 行；那一档的 `need=1` 由单轮会审的两个入口传进来。
     """
     sha = str(proof_sha256 or "").strip().lower()
     out = _out(review_call="", proof_sha256=sha, need=need)
@@ -218,7 +291,16 @@ def legacy_tail(rows: Sequence[Mapping[str, Any]], *, proof_sha256: Any,
     out["legacy_rows"] = sum(1 for r in same_sha if not row_call(r))
     run = 0
     counted: list[dict[str, Any]] = []
+    mech_counted = False
     for row in same_sha:
+        #: 机械会审的行整组只算 1 轮（放在轴分支之前：机械行的轴往往是 clean）。
+        if not real_judgment(row):
+            out["mechanical_rows"] = int(out.get("mechanical_rows") or 0) + 1
+            if not mech_counted:
+                run += 1
+                counted.append(row)
+                mech_counted = True
+            continue
         axis = _axis(row)
         if axis == "fault":
             run, counted = 0, []
@@ -235,7 +317,10 @@ def legacy_tail(rows: Sequence[Mapping[str, Any]], *, proof_sha256: Any,
     out["ok"] = bool(run >= out["need"])
     out["why"] = (why or (
         f"legacy 复算（台账尾部）：同一份正文连续 {run}/{out['need']} 行 clean，"
-        f"老行 {out['legacy_rows']} 条没有 `review_call` ⇒ 这是历史形态，不是这一趟的轮号"))
+        f"老行 {out['legacy_rows']} 条没有 `review_call`"
+        + (f"、机械会审 {out['mechanical_rows']} 条只算 1 轮"
+           if out["mechanical_rows"] else "")
+        + " ⇒ 这是历史形态，不是这一趟的轮号"))
     return out
 
 
@@ -305,10 +390,16 @@ def count_ledger_file(path: Any, *, anchor_vid: Any, proof_sha256: Any,
     out["anchor_pass"] = row_pass(anchor)
     out["anchor_call"] = row_call(anchor)
     if _is_single_round(anchor):
-        got = legacy_tail(rows, proof_sha256=sha, need=need, include_calls=True, why=(
+        #: 2026-11-17（业主）：E 这一档的过审门槛是 1（实验侧报告不承重，承重的是
+        #: 程序）—— 单轮会审按 `EXHAUSTION_SIGN_STREAK_NEED` 数，不拿 F/B 的 3 去卡它。
+        from . import verifications as _VR
+
+        got = legacy_tail(rows, proof_sha256=sha,
+                          need=int(_VR.EXHAUSTION_SIGN_STREAK_NEED),
+                          include_calls=True, why=(
             f"legacy 复算（登记在册的单轮会审）：`{vid}` 那一趟只有一行"
-            f"（`review_scope={SINGLE_ROUND}`）⇒ 这是「一次会审」，不是三轮；"
-            "签文件照实记 legacy"))
+            f"（`review_scope={SINGLE_ROUND}`）⇒ 这是「一次会审」；E 的过审门槛是 1"
+            "（业主 2026-11-17：实验侧报告不承重，承重的是程序）"))
         got["counted_by"] = LEGACY_SINGLE_ROUND
         got["terminated"] = "single_round"
         got["review_call"] = out["review_call"]
@@ -354,17 +445,23 @@ def count_registered(root: Any, *, statement_id: Any, proof_no: Any,
         call = row_call(mine[-1])
     if not call:
         if mine and _is_single_round(mine[-1]):
-            got = legacy_tail(mine, proof_sha256=sha, need=need, include_calls=True, why=(
+            got = legacy_tail(mine, proof_sha256=sha,
+                              need=int(_VR.EXHAUSTION_SIGN_STREAK_NEED),
+                              include_calls=True, why=(
                 f"legacy 复算（登记在册的单轮会审）：`{sid}#p{no}` 只有一行"
-                f"（`review_scope={SINGLE_ROUND}`）⇒ 一次会审，不是三轮"))
+                f"（`review_scope={SINGLE_ROUND}`）⇒ 一次会审；E 的过审门槛是 1"
+                "（业主 2026-11-17：实验侧报告不承重，承重的是程序）"))
             got["counted_by"] = LEGACY_SINGLE_ROUND
             got["terminated"] = "single_round"
             return got
         return legacy_tail(mine, proof_sha256=sha, need=need)
     if mine and _is_single_round(mine[-1]):
-        got = legacy_tail(mine, proof_sha256=sha, need=need, include_calls=True, why=(
+        got = legacy_tail(mine, proof_sha256=sha,
+                          need=int(_VR.EXHAUSTION_SIGN_STREAK_NEED),
+                          include_calls=True, why=(
             f"legacy 复算（登记在册的单轮会审）：`{sid}#p{no}` 那一趟只有一行"
-            f"（`review_scope={SINGLE_ROUND}`）⇒ 一次会审，不是三轮"))
+            f"（`review_scope={SINGLE_ROUND}`）⇒ 一次会审；E 的过审门槛是 1"
+            "（业主 2026-11-17：实验侧报告不承重，承重的是程序）"))
         got["counted_by"] = LEGACY_SINGLE_ROUND
         got["terminated"] = "single_round"
         got["review_call"] = call
