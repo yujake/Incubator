@@ -12601,6 +12601,90 @@ class Secretary:
         """下行译码：我名下名册里的名字 → 当前调用行。"""
         return self._resolve(owner, name)
 
+    def resolve_roster_item(self, *, owner: str, name: str) -> tuple[str, str]:
+        """销号口径的下行译码：名册名 → 这个名册项自己的那个号（不是"它最近在跑哪一件活"）。
+
+        两格分工（2026-11-17 真机 `projects/lp-ball-3` 缺陷 ③ 之后定死）：
+
+        - :meth:`resolve_down` 答"这个名字此刻在跑哪一件活"：消息投递要它，取最新那条
+          `bind` 的号；
+        - 这一格答"这个名册项是哪个号"：销号要它，取名册项创建时那个号
+          （`first_task_id` —— `out/roster/<父>.jsonl` 的 `add` 行 / 第一条 `bind`）。
+
+        为什么不能拿 `resolve_down` 去销号：名字可以被复用（同一个子代理再接一件活，
+        `_roster_add` 的 `reuse` 支），于是同一个名字绑着 N 个号。`resolve_down` 给的是
+        最新那个，销号就只销最新那一趟；而 `Conductor.retire_integrity` 数的是台账里
+        每一个代理行（按父行 `inputs` 里的 `edge-released:` 落痕算），早先那个号不在
+        落痕里 ⇒ 整棵树永远"还有人在册"。真机现场：`D1` 绑过 `t-000008`（名册项）与
+        `t-000110`（复用那一趟），按名销号销的是 `t-000110`，`t-000008` 留在册 ⇒
+        `final` 被结构完整性闸拒、M 三次试销号都读到"名册与台账对不上"。
+
+        读法与 `_fold_roster` 同一份折叠（`first_task_id`）；折叠里没有它时退回
+        `_roster_bindings` 的第一条命中（H7 的"半份登记"），再没有才回空 + 一句为什么。
+        三态：名册正文 / 对照表读不出来 ⇒ 空号 + 理由（不猜一个号，那会把别人的行销掉）。
+        """
+        try:
+            rows, bad = self.roster_rows(owner)
+        except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没读成"
+            return "", f"名册读不成（{type(exc).__name__}: {exc}）"
+        if bad:
+            return "", f"名册正文有 {len(bad)} 行读不出来 ⇒ 名字换不成编号（没读成）"
+        for r in rows:
+            if str(r.get("name") or "") != str(name):
+                continue
+            tid = str(r.get("first_task_id") or r.get("task_id") or "")
+            if tid:
+                return tid, ""
+            break
+        # 名册正文缺行（H7 / D-66：名字只活在对照表的调用记录里）⇒ 退回全历史。
+        # 第一条命中就是"这一项是拿哪个号建的"（`add` 行在前、`bind` 行在后）。
+        binds, bad_binds = self._roster_bindings(owner)
+        if bad_binds:
+            return "", f"对照表有 {len(bad_binds)} 行读不出来 ⇒ 名字换不成编号（没读成）"
+        for tid, who in binds:
+            if who == str(name):
+                return tid, ""
+        return "", f"对照表里没有 {name!r}（未登记或已退役）"
+
+    def _bound_agent_ids(self, *, owner: str, name: str, item_id: str) -> tuple[list[str], str]:
+        """这个名字绑过的、本父名下的每一个代理行：`([号...], 为什么一个都不销)`。
+
+        销号销的是"一个名册项"（= 一个子代理的身份），而这个身份可能绑过 N 个号
+        （复用是合法的一等功能）。`retire_integrity` 数的是台账行 ⇒ 只销一个号会把
+        其余的号留在"在册"。所以这里把"这一项绑过的号"一次收齐（名册项自己那个号排最前）。
+
+        两条 fail-closed（销一半比不销更坏，销到别人头上更坏）：
+        - 名册 / 对照表读不出来 ⇒ 整笔不销（不知道还漏着哪个号）；
+        - 某个号不是本父名下的代理行 ⇒ 整笔不销（一个号只属于一个父，销错不可逆）。
+        台账里根本没有这一行 / 它是板项 ⇒ 跳过（没有可落终态的对象，那不是"别人的号"）。
+        """
+        out: list[str] = [str(item_id)] if str(item_id) else []
+        binds, bad = self._roster_bindings(owner)
+        if bad:
+            return out, (f"名册/对照表有 {len(bad)} 行读不出来 ⇒ 不知道 {name} 还绑过哪些号"
+                         "（销一半比不销更坏，整笔不销）")
+        cond = self._conductor()
+        if cond is None:
+            return out, "没有 store ⇒ 读不到台账（销号没有对象）"
+        for tid, who in binds:
+            if who != str(name) or tid in out:
+                continue
+            try:
+                row = cond._task(tid) or {}
+            except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                return out, (f"{tid}（{name} 绑过的另一个号）读不成"
+                             f"（{type(exc).__name__}: {exc}）⇒ 整笔不销")
+            if not row:
+                continue
+            if cond._is_board_item(row):
+                continue
+            if str(row.get("parent_task_id") or "") != str(owner):
+                return out, (f"{tid}（{name} 绑过的另一个号）不是你的子代理"
+                             f"（它的父是 {row.get('parent_task_id') or '（顶层）'}）⇒ "
+                             "整笔不销：销号只许销本父名下的号")
+            out.append(tid)
+        return out, ""
+
     def resolve_up(self, *, my_task_id: str, name: str) -> tuple[str, str]:
         """上行译码：我父名册里的名字 → 当前调用行（父的代号从我那一行读）。"""
         cond = self._conductor()
@@ -12626,13 +12710,23 @@ class Secretary:
         而这里改前 `return` 第一个命中 —— `surface_of` 就会按第一个名字的槽位去切
         读写面，两个人的面重叠等于跨代理写同一份文件。三态纪律：多匹配不是"查到了
         一个"，它是"这一格判不了"，回空名 + 一句点名（读者退回用编号）。
+
+        ## 读全历史，不读折叠视图（2026-11-17，真机 `projects/lp-ball-3` 缺陷 ③）
+        改前这里读 `roster_index` 的折叠结果，而 `_fold_index` 对每个名字只留最新
+        那条 `bind` 的 `task_id`。于是"同一个名字接过两件活"时，早先那个号在这里
+        读成"未登记"：真机 `D1` 绑过 `t-000008`（名册项自己的号）与 `t-000110`
+        （复用那一趟），折叠后只剩 `t-000110` ⇒
+        `name_of(owner="t-000001", task_id="t-000008")` 回 `""`，
+        而 `retire_child(child_name="D1")` 走的是 `t-000110` —— 两个入口给出两种答案：
+        按名销掉的是复用那一趟、按号那一侧被读成"名册里没有它"，那个号在
+        `retire_integrity` 里永远"还在册"（`_released_pairs` 没被写到它名下）。
+        判据 `tests/test_retire_by_name_and_by_task_id_agree.py` 的 a 钉着这件事。
         """
-        index, bad = self.roster_index(owner)
+        rows, bad = self._roster_bindings(owner)
         if bad:
-            return "", f"对照表有 {len(bad)} 行读不出来"
-        names = sorted({str(r.get("name") or "") for r in index
-                        if str(r.get("name") or "")
-                        and str(r.get("task_id") or "") == str(task_id)})
+            return "", f"名册/对照表有 {len(bad)} 行读不出来"
+        names = sorted({who for tid, who in rows
+                        if who and str(tid) == str(task_id)})
         if len(names) > 1:
             return "", (f"对照表里 {task_id} 对应 {len(names)} 个名字（{'、'.join(names)}）"
                         "⇒ 不猜（同一个号两个名字；按号寻址的同一档是 "
@@ -13507,7 +13601,7 @@ class Secretary:
                     "（跑过之后补的新名字；被拒的那个不复用）")
             else:
                 named_notes.append(f"补名：{x.get('task_id')} 补成 {x.get('name')}")
-        tid, problem = self.resolve_down(owner=owner, name=str(name))
+        tid, problem = self.resolve_roster_item(owner=owner, name=str(name))
         if problem:
             if self._is_retired(owner, str(name)):
                 return {"ok": False, "action": "refused", "report": {},
@@ -13516,6 +13610,32 @@ class Secretary:
         if self._is_retired(owner, str(name)):
             return {"ok": False, "action": "refused", "report": {},
                     "why": [f"{name} 已经销号过（业主 B1）"]}
+        # ---- 这一项绑过的全部号（复用是合法的一等功能，2026-11-17 缺陷 ③）-------
+        #
+        # 一个子代理可以接 N 件活 ⇒ 一个名字绑着 N 个号。销号销的是"这一项"，
+        # 而 `retire_integrity` 数的是台账行：只落定名册项自己那个号，其余几次调用
+        # 会永远"还在册"（真机 lp-ball-3：D1 的复用行 t-000110 就是这么留下的）。
+        # 判据与两条 fail-closed 在 `_bound_agent_ids` 里（读不成 / 撞到别人名下的号 ⇒ 整笔不销）。
+        bound, bound_problem = self._bound_agent_ids(
+            owner=str(owner), name=str(name), item_id=tid)
+        if bound_problem:
+            return {"ok": False, "action": "refused", "report": {},
+                    "why": [bound_problem], "task_ids": list(bound)}
+        # 其余绑过的号也必须是静默的（静默前置对每一个会被落定终态的号都成立）：
+        # 还在跑的那一个号不许因为"它兄弟已经交差"被顺手销掉。
+        for one in bound[1:]:
+            row_one = cond._task(one) or {}
+            if not row_one:
+                continue
+            if str(row_one.get("status") or "") in LIVE_TASK_STATUSES:
+                return {
+                    "ok": False, "action": "refused", "report": {},
+                    "why": [(f"{name} 绑过的另一个号 {one} 还在跑"
+                             f"（status={row_one.get('status') or 'unknown'}）⇒ 整笔不销："
+                             "销号 = 这一项退场，而它名下的号必须都先停下来")],
+                    "refusal_code": "target_not_silent",
+                    "task_ids": list(bound),
+                }
         # ---- 程序闸（G2，业主 2026-10-26 第 ① 条：「注销前检测的能力」）
         #
         # 这一闸挡的是"名字销了、程序还在跑"：昨晚盘上有十五个野 python 进程，谁起的、
@@ -13719,6 +13839,21 @@ class Secretary:
         if not ok and "已经记过" not in why:
             return {"ok": False, "action": "refused", "report": {}, "why": [why],
                     "reading": reading}
+        # ---- 同一个名字绑过的其余号：边也要认掉（2026-11-17 缺陷 ③）------------
+        #
+        # `Conductor.retire_integrity` 读的是父行 `inputs` 里的 `edge-released:` 落痕
+        # ⇒ 只认名册项自己那一笔，早先那几次调用会永远"还在册"（真机 lp-ball-3 的
+        # `t-000008` 就是这样被 M 看见的）。这些号已在上面核过：都是本父名下的代理行、
+        # 且都不在跑（所以只认边，不改它们的历史状态行）。
+        released_extra: list[str] = []
+        for one in bound[1:]:
+            ok_one, why_one = cond.note_edge_release(owner, child_task_id=one, attempt=1)
+            if not ok_one and "已经记过" not in why_one:
+                return {"ok": False, "action": "refused", "report": {},
+                        "why": [(f"{name}（{one}）的边没认掉（{why_one}）⇒ 整笔销号不作数："
+                                 f"已经认下的是 {[tid, *released_extra]}，名册三份还没写")],
+                        "reading": reading, "task_ids": list(bound)}
+            released_extra.append(one)
         at = _now_iso()
         # ⑤（业主 2026-11-02）：销号要标死这个名字绑过的全部号，不只当前号。
         # "读 bind 历史 + 写销号三笔"必须在同一个 per-owner 临界区：临界区外新来的
@@ -13781,7 +13916,12 @@ class Secretary:
                        + named_notes,
                 "surface": slot, "reading": reading,
                 "slot_freed": bool(settled.get("was_occupying")),
-                "settle": dict(settled)}
+                "settle": dict(settled),
+                # 这一项退场时一起落定/认边的那几个号（名册项自己那个排最前）。
+                # 读它的人不用再翻名册历史就知道"这一笔到底让哪几个号不在册了"；
+                # 只给一个号正是 2026-11-17 真机那处"名册与台账对不上"的来源。
+                "task_ids": list(bound),
+                "released_extra": list(released_extra)}
 
     # ------------------------------------------------------------ 链式转发（业主 2026-10-26 裁定）
     #

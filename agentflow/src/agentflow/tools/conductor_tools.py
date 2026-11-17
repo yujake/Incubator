@@ -2056,10 +2056,23 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
         if hit_name is None:
             return _out("refused", f"名册里没有 {want} 这个名字（查过了、确实没有）",
                         missing=[f"{want} 不在名册里"])
-        tid = str(hit_name.get("task_id") or "")
+        # ---- 名字 → 号：走秘书那一格（与 `Secretary.retire` 同一个解析）----------
+        #
+        # 2026-11-17 真机 `projects/lp-ball-3` 缺陷 ③ 的根：这里改前取的是
+        # `index` 折叠项里的 `task_id`（每个名字只留最新那条 bind），于是
+        # `child_name="D1"` 解析到复用那一趟 `t-000110`，而按 `task_id="t-000008"`
+        # 走另一条路（`name_of` 在折叠视图里查不到它）⇒ 两个入口给出两种答案。
+        # 现在两处都读 `Secretary.resolve_roster_item`（名册项自己那个号），
+        # 判据：`tests/test_retire_by_name_and_by_task_id_agree.py` 的 a。
+        try:
+            tid, why_name = sec.resolve_roster_item(owner=mine, name=want)
+        except Exception as exc:  # noqa: BLE001 —— 读侧自己炸了也是"没查成"
+            return _out("unknown",
+                        f"{want} 的名字换编号时读不成（{type(exc).__name__}: {exc}）",
+                        checked=False, missing=["名册名对应的编号"])
         if not tid:
             return _out("unknown",
-                        f"{want} 在名册上、但对照表里没有它的绝对编号（没查成）",
+                        f"{want} 在名册上、但换不出它的号（{why_name or '没查成'}）",
                         checked=False, missing=["名册名对应的编号"])
         data["task_id"] = tid
     elif tid:
@@ -2336,6 +2349,11 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
 
     plans: list[dict[str, Any]] = []
     blocked: list[str] = []
+    #: 这一笔里已经排过的名册名。一个名字 = 一个名册项（身份），它可以绑多个号
+    #: （复用是合法的一等功能）—— 所以"同一项的两个号"只许排一次，第二个记 `already`。
+    #: 不这么做的话：第一笔把名字销掉、第二笔拿到"已经销号过"⇒ 整笔报 refused，
+    #: 而那一刻树上其实已经干净了（2026-11-17 缺陷 ③ 的同族形态）。
+    planned_names: set[str] = set()
     for node in order:
         pid = str(parent_of.get(node) or "")
         plan: dict[str, Any] = {
@@ -2357,6 +2375,8 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
                 # 目标自己没有名册名：它那一项换成认边落痕（子代已按 order 先销完）。
                 plan["state"] = "unrostered"
                 plan["why"] = ("它自己没有名册名 ⇒ 只认边收口（子代按从深到浅先销）")
+            else:
+                planned_names.add(name)
             continue
         if node not in layer["branch_of"]:
             # 已经销过号的（或不在这个父名下）不在可销清单里 ⇒ 跳过，不算失败。
@@ -2388,6 +2408,14 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
             data["unrostered"].append({"task_id": node, "parent": pid,
                                        "why": plan["why"]})
             continue
+        if kid_name in planned_names:
+            # 同一个名册项的另一个号（复用那一趟）：这一笔已经按那一项销过了。
+            plan["state"] = "already"
+            plan["why"] = (f"{kid_name} 这一项在本笔里已经按它的另一个号销过了"
+                           "（一个名字只有一个名册项，不重复销）")
+            settled_ids.add(node)
+            continue
+        planned_names.add(kid_name)
         plan["name"] = kid_name
     # 逐节点的名册名收集完（`_kept` 的点名用；`already` / `unrostered` 那几档没有名字，
     # 它们的 `why` 已经在 `plan["why"]` 里说清）
