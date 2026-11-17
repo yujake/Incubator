@@ -1139,6 +1139,11 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     #   · `temp/grade_audit.py`：等级只读审计探针，读数已写进 `docs/TWO-AXES-GRADE-AND-KIND.md` §5.3，按"跑完即清"删掉本体。
     "temp/161_replica_81",
     "temp/grade_audit.py",
+    # 2026-11-18（Y1RED）：CMP1 那一批（p291 → p292）的十一格重算探针，按 R2「探针只放
+    # temp/、跑完即清」删掉了本体；出处是 tests/test_agent_prompts.py 的 p292 段说明
+    # （「十一格不是手抄」那一句，changed = ['A']）。它是历史读数出处、不是新写的引用，
+    # 按本表口径逐条登记（与上面 fx3 那一支同形：fx3 仍在仓根的 temp 下，这条已被清）。
+    "temp/cmp1_recompute_digests.py",
 )
 
 
