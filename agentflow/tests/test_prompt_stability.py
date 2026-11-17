@@ -1414,6 +1414,21 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "变化格 = A（本表用的注册表不带 workspace ⇒ fs 两件不在面上；逐格读数见 "
               "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p292 → p293（2026-11-17，BUD1）：`specs/m.py` 的 policy 新增一条硬口径
+     # （预算余量低于阈值时先把收工必需物落盘，正文取自 `budget.PAPERWORK_FIRST_RULE`）
+     # ＋一条阈值说明。只进 M 那一格，facts 键集与落点一格没动 ⇒ count / keys_sha256
+     # 与 p292 同值。
+     {"version": "p293", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p293（2026-11-17，BUD1 预算见底前先交收工必需物）：真机 "
+              "`projects/lp-ball-5` 花满 $5 时 `out/paper/ACCEPTANCE-CHECKS.json` 还没写 "
+              "⇒ 收工门 acceptance 只能红（`acceptance_missing_for_research`）。改法："
+              "`specs/m.py` 的 policy 新增 `budget.PAPERWORK_FIRST_RULE`（余量低于阈值时"
+              "先把 `out/paper/ACCEPTANCE-CHECKS.json` 与 `out/review/REPORT.md` 落盘，"
+              "再回去攻证明；宁可少证一条，不许交不出验收表）＋阈值说明"
+              "（`budget.PAPERWORK_RESERVE_USD` = $1.00）。变化格 = M，其余十格与 p292 "
+              "逐字相同（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` "
+              "上方那一段）。facts 键集仍 15 格、落点没动。"},
 
 )
 

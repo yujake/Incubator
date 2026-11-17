@@ -2725,7 +2725,23 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p291 同值）；两份 golden 按现值重冻
 #:   （agent 面另含此前未冻的那两格，本笔按现值一并冻入）；ROLE-GUIDE 重生成；
 #:   读图行数；warm 两档重跑。
-PROMPT_VERSION = "p292"
+#: p292 → p293（2026-11-17，BUD1：预算见底之前先把收工必需物落盘）：
+#:   真机 `projects/lp-ball-5`（2026-11-17）：花满 $5（F 77 趟 / V 18 次）时
+#:   `out/paper/ACCEPTANCE-CHECKS.json` 还没写 ⇒ 收工门 acceptance 只能红
+#:   （`acceptance_missing_for_research`），而预算已经花光、补不回来。这不是"证明没
+#:   证出来"，是"预算花在证明上、交付物排在它后面"。
+#:   改法两处进提示词（都在 `specs/m.py` 的 policy）：①新增硬口径
+#:   `budget.PAPERWORK_FIRST_RULE`（正文只有一份，手册 `agent_skills.py` 引同一段）；
+#:   ②阈值说明 `budget.PAPERWORK_RESERVE_USD`（$1.00）与"拒信里带预算读数"那句。
+#:   变化格 = M：4231a37b… → 8cc0359d…；其余十格逐字未动（版本行已归一）。
+#:   连带：`_FROZEN_PROMPT_VERSION`（p293）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p292 同值）；两份 golden 按现值重冻；
+#:   ROLE-GUIDE 重生成；读图行数；warm 两档重跑。
+#:   同一笔还改了两处不进摘要的读数面（所以不抬第二次版本）：收工门
+#:   `_check_acceptance` 的"验收表缺失"那一档拒信里带预算读数
+#:   （`budget.paperwork_first_reading`），以及 M 的手册正文（`agent_skills.py` 的
+#:   收工那条 skill——索引只渲染 summary，正文不进提示词）。
+PROMPT_VERSION = "p293"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

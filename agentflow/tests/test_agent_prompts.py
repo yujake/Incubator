@@ -2627,7 +2627,16 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   13e23d0b525887e72ad2482dbb392ca56a3185bb3479a9ddf43e21ea8a5e692b。
 # 十一格不是手抄：`temp/cmp1_recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['A']。
-_FROZEN_PROMPT_VERSION = "p292"
+# p292 → p293（2026-11-17，BUD1：预算见底之前先把收工必需物落盘）：`specs/m.py` 的
+# policy 新增一条硬口径（`budget.PAPERWORK_FIRST_RULE`：余量低于阈值时先落
+# `out/paper/ACCEPTANCE-CHECKS.json` 与 `out/review/REPORT.md`，再回去攻证明）＋
+# 一条阈值说明（`budget.PAPERWORK_RESERVE_USD`）。policy 只进 M 那一格 ⇒
+# 变化格 = M；其余十格逐字相同（版本行已归一）。逐格旧值 → 新值：
+# M 4231a37b50b6d15ff818302898d769325c6bce1ee51d3ebe8d1fc1e7020915d3 →
+#   8cc0359d25130420dfb333db7fb21cf8488cbdb7ceb08671e19b99ff162c0094。
+# 十一格不是手抄：`temp/fd4/recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['M']。
+_FROZEN_PROMPT_VERSION = "p293"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2905,7 +2914,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "G": "5b6575458d78cecf17b30ee8186f30f343713825bf1eed1fed8af4cfe3876f16",
     "H": "c6600f650caeea13db8e6d03fd2d4b8f05d0f4a23c130b8f8d5f555b733fc412",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
-    "M": "4231a37b50b6d15ff818302898d769325c6bce1ee51d3ebe8d1fc1e7020915d3",
+    "M": "8cc0359d25130420dfb333db7fb21cf8488cbdb7ceb08671e19b99ff162c0094",
     "V": "b310667d411639045a9db2f3064715864e28d9ece3e8b3b1a606913a0f47d2a2",
 }
 

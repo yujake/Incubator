@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+from .. import budget as _BUDGET
 from .. import schema as S
 from ..agentspec import (
     _ARR_I,
@@ -275,6 +276,18 @@ SPEC = AgentSpec(
             "用 conductor.resume_brief / conductor.state / conductor.ledger。"
             "收工看 `conductor.ledger(view=\"stats\")` 的 `stats.closure_reminders`：谁提交了没人接手、谁接了手没终态"
             " —— 有名单就逐条处置或写明为什么不处置。",
+            # 2026-11-17（业主口径，真机 `projects/lp-ball-5` 缺陷）：那一趟花满 $5
+            # （F 77 趟 / V 18 次）时 `out/paper/ACCEPTANCE-CHECKS.json` 还没写 ⇒ 收工门
+            # acceptance 只能红（`acceptance_missing_for_research`），而预算已经花光、
+            # 再也补不回来。这不是"证明没证出来"，是"预算花在了证明上、交付物排在它后面"。
+            # 所以次序写成硬口径：收工必需物优先于继续攻证明。
+            # 正文只有一份（`budget.PAPERWORK_FIRST_RULE`），手册（`agent_skills.py`）引同一份。
+            # 判据 `tests/test_m_lands_the_paperwork_before_the_budget_runs_out.py`。
+            _BUDGET.PAPERWORK_FIRST_RULE,
+            "那条的阈值是 `budget.PAPERWORK_RESERVE_USD`（今天 $1.00）：余量掉到它以下、"
+            "或收工门已经报过 `acceptance_missing_for_research`，就先落盘再攻证明。"
+            "收工门那一格的拒信里带着预算读数（已花 / 上限 / 还剩）—— 照着读就知道是"
+            "「没写」还是「写得不对」，别把「没交」读成「没过」。",
             "**你写的那份核验脚本要会说结论**（`REPRO_RESULT:` 协议）：数值脚本必须在 stdout 打印**单独一行**、行首就是 "
             "`REPRO_RESULT: {\"result\": \"supports\"|\"refutes\"|\"inconclusive\", ...}`；`refutes` 必须同时给非空 "
             "`counterexample`（否则框架按「证否不可复核」拒收）。脚本里把判据与结论一起打印出来，再交给 E。",

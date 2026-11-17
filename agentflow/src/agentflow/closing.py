@@ -2812,6 +2812,40 @@ def _acceptance_row_problem(cid: str, raw: Mapping[str, Any],
     return ""
 
 
+def _acceptance_budget_reading(store: Any) -> dict[str, Any]:
+    """这一趟还剩多少预算（收工门 `acceptance` 拒信里那一格读数；三态）。
+
+    为什么口径不在这里另写一份：
+
+    - "已花"的唯一权威账是 `tokenmeter.TokenMeter.spent()`（`usage_ledger` 现读，不缓存
+      —— 与 `budget` 模块 docstring 里那条"两份账必然分叉"是同一条纪律）；
+    - "上限 / 追加历史 / 剩余"的唯一读口是 `budget.paperwork_first_reading()`，它同时
+      给出储备线判定与那句能直接贴进拒信的人话。
+
+    本函数只做一件本文件该做的事：读不成也要让它读不成得看得见。`usage_ledger` 读不出来
+    ⇒ `spent_usd=None`（不是 0：把读不到的账折成"还没花钱"会让"还剩多少"变成一句假话），
+    并把理由写进 `problem`；`budget` 那一侧自己的 `problem` 原样带回来。
+    """
+    from . import budget as _BUDGET
+
+    root = str(getattr(store, "root", "") or "")
+    spent: float | None = None
+    problem = ""
+    try:
+        from .tokenmeter import TokenMeter as _TokenMeter
+
+        spent = float(_TokenMeter(store).spent().get("usd") or 0.0)
+    except Exception as exc:  # noqa: BLE001 —— 账读不成要说出来，不许折成 0
+        problem = (f"已花读不出来（{type(exc).__name__}: {exc}）⇒ 剩余算不出来"
+                   "（不是「还剩很多」）")
+    got = _BUDGET.paperwork_first_reading(root, spent_usd=spent)
+    if problem:
+        got["problem"] = "；".join(x for x in (str(got.get("problem") or ""), problem) if x)
+        got["note"] = (f"预算读数（不是硬闸）：{problem} —— 这一档更该先把验收表与报告落盘："
+                       "交付物是这一趟唯一不会随预算消失的东西。")
+    return got
+
+
 def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     """验收表的机器可判行：逐行现算，任一不满足 ⇒ `fail`。
 
@@ -2849,13 +2883,26 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                                       "research_chain": chain}
         if chain["researched"]:
             rep.status["acceptance"] = "fail"
+            # ---- 2026-11-17（业主口径，真机 `projects/lp-ball-5`）：拒信与预算读数写在一起
+            #
+            # 现场：那一趟花满 $5（F 77 趟 / V 18 次）时 `out/paper/ACCEPTANCE-CHECKS.json`
+            # 还没写 ⇒ 这一格只能红。而当时读这行拒信的人分不清两件事：没写（预算花在
+            # 别处了）与写得不对（表在、行不成立）—— 前者要补文件，后者要改行，处置
+            # 完全不同。所以这一档把"这一趟还剩多少预算"贴在拒信里。
+            #
+            # 它是读数，不是硬闸（口径见 `budget.paperwork_first_reading`）：`status` 与
+            # `machine_pass` 一个字都不因它变 —— 余额充足时这一格照样红（没写就是没写），
+            # 余额透支时也不额外加一条 blocker。加它只为让"没交"与"没过"在读数上分得开。
+            _budget = _acceptance_budget_reading(store)
+            rep.readings["acceptance"]["budget"] = _budget
             rep.findings.append(Finding(
                 "acceptance", "acceptance_missing_for_research", "blocker",
                 f"这是个研究型项目（`research_questions` 有行），却没有 "
                 f"{ACCEPTANCE_CHECKS_NAME} ⇒ 这一趟没有可复算的验收口径。"
                 f"研究链四个环节每个至少一行：{'；'.join(m for m in chain['missing'])}。"
                 "读数不够就把那一行如实写出来（写着 0 ⇒ 那一行自己不成立，但读数留下了）；"
-                "缺的是那一行，不是那个数"))
+                "缺的是那一行，不是那个数。"
+                + str(_budget.get("note") or "")))
         else:
             rep.status["acceptance"] = "pass"
             rep.readings["acceptance"]["note"] = f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}"

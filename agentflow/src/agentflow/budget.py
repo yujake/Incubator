@@ -44,9 +44,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 __all__ = [
+    "PAPERWORK_FIRST_RULE",
+    "PAPERWORK_RESERVE_USD",
     "REGISTER_NAME",
     "add_usd",
     "limit_usd",
+    "paperwork_first_reading",
     "read_register",
     "reading",
     "register_path",
@@ -55,6 +58,29 @@ __all__ = [
 
 #: 寄存器的落点（工作区根相对）。
 REGISTER_NAME = "budget.json"
+
+#: 收工必需物的预算储备线（美元）：余量掉到它以下时，M 必须先把收工必需物落盘，
+#: 再回去继续攻证明。
+#:
+#: 为什么是一个绝对数而不是比例：真机 `projects/lp-ball-5`（2026-11-17）的现场是
+#: 硬上限 $5 —— 预算不是"还剩 20%"，而是"下一个模型调用就可能扣到零"。比例线在
+#: 小预算趟里永远触发得太晚（$0.4 的 20% 是 $0.08，一次重证就没了）；而这一档要买的
+#: 是"写两份文件"这点工夫，它有一个与趟大小无关的下限。$1 是保守取值：两份文件
+#: （`out/paper/ACCEPTANCE-CHECKS.json` + `out/review/REPORT.md`）不需要模型写满一页，
+#: 但"从容写完、还能自检一遍"要留出不止一次调用的余量。
+PAPERWORK_RESERVE_USD = 1.0
+
+#: 「预算见底之前先交收工必需物」这条硬口径的逐字正文。
+#:
+#: 为什么单独成一个常量（而不是在 `specs/m.py` 的政策与 `agent_skills.py` 的手册里
+#: 各写一遍）：这是同一句话的两处落点，两处各写一遍必然漂 —— 而它一旦漂了，模型按
+#: 其中一处行动、判据按另一处判，两边都"有理"。所以正文只有这一份，两处都引用它；
+#: 判据 `tests/test_m_lands_the_paperwork_before_the_budget_runs_out.py` 逐字钉住
+#: 两次渲染里都出现了它，并用"删掉这一句 ⇒ 同一判据必红"做反真空。
+PAPERWORK_FIRST_RULE = (
+    "预算余量低于阈值时，先把收工必需物落盘（`out/paper/ACCEPTANCE-CHECKS.json` 与 "
+    "`out/review/REPORT.md`），再回去继续攻证明；宁可少证一条，不许交不出验收表"
+)
 
 
 def register_path(root: str | Path) -> Path:
@@ -231,3 +257,48 @@ def reading(root: str | Path, *, spent_usd: float | None,
         "added": reg["added"],
         "problem": reg["problem"],
     }
+
+
+def paperwork_first_reading(root: str | Path, *, spent_usd: float | None,
+                            fallback: float | None = None) -> dict[str, Any]:
+    """「验收表该不该先落盘」这一格读数：余量、储备线、以及一句能直接贴进拒信的人话。
+
+    它是一格读数，不是硬闸：收工门的判定（`acceptance` 那一格的 pass/fail）一个字
+    都不因它变 —— 这一格里"还剩多少"没有权力改门，它只回答"这一趟为什么连收工必需物
+    都没交出来"。为什么必须做成读数而不是闸：预算是用户随时可追加的寄存器
+    （`add_usd`），拿它去挡交付物会让"钱不够"长成"活没干"；而这一档要的恰恰相反 ——
+    钱不够时更要把交付物交出来。
+
+    三态照 `reading()` 那一份：`remaining_usd` 为 `None` 是"算不出来"（没设过预算、
+    或账本读不成），不是"还剩很多"；`below_reserve` 为 `None` 只可能是同一档。
+    `note` 把"还剩多少预算"与"收工必需物"写在同一句里，收工拒信直接用它。
+    """
+    reg = reading(root, spent_usd=spent_usd, fallback=fallback)
+    remaining = reg["remaining_usd"]
+    below = None if remaining is None else bool(float(remaining) < PAPERWORK_RESERVE_USD)
+    head = "预算读数（不是硬闸，只用来分辨「没写」与「写得不对」）：这一趟"
+    if remaining is None:
+        note = (head
+                + (f"已花 ${float(spent_usd):.6f}" if spent_usd is not None
+                   else "已花多少也读不出来")
+                + "，而盘上没有预算寄存器、调用方也没给上限 ⇒ 剩余算不出来"
+                "（「算不出来」不等于「还剩很多」）。这一档更该先把验收表与报告落盘："
+                "交付物是这一趟唯一不会随预算消失的东西。")
+        return dict(reg, reserve_usd=PAPERWORK_RESERVE_USD, below_reserve=below,
+                    note=note, paperwork_first_rule=PAPERWORK_FIRST_RULE)
+    total = reg["total_usd"]
+    note = (head
+            + f"已花 ${float(spent_usd or 0.0):.6f} / 上限 "
+            + (f"${float(total):.6f}" if total is not None else "（未设）")
+            + f" / 还剩 ${float(remaining):.6f} ⇒ ")
+    if float(remaining) < 0:
+        note += ("余量已经透支（预算被扣穿）：这一趟再也买不回一次补写的调用 —— "
+                 "收工必需物本该在预算见底之前就落盘（先落收工必需物，再回去攻证明）。")
+    elif below:
+        note += (f"余量已低于收工储备线 ${PAPERWORK_RESERVE_USD:.2f}：验收表与报告"
+                 "本该在预算见底之前就落盘（先落收工必需物，再回去攻证明）。")
+    else:
+        note += (f"余量还在收工储备线 ${PAPERWORK_RESERVE_USD:.2f} 之上 —— "
+                 "这一格缺的是「没写」，不是「写不起」。")
+    return dict(reg, reserve_usd=PAPERWORK_RESERVE_USD, below_reserve=below,
+                note=note, paperwork_first_rule=PAPERWORK_FIRST_RULE)
