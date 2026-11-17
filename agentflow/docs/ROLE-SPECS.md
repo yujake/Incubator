@@ -11,6 +11,24 @@
 
 ## 0. 公共约定（所有角色共用，逐节不再重复）
 
+### 0.0 秘书不是角色 —— 它是「判定通道 + 落库代理」
+
+**秘书（`src/agentflow/secretary.py`）不是角色。** 判「是不是角色」只看四件事，秘书四件都不是：
+
+- **不在 `schema.ROLES`**：`ROLES == ("A","B","C","D","E","F","G","H","V","L")`，没有它；
+- **无可召唤**：`capabilities.NON_SUMMONABLE == {"M"}`；`ALLOWED_EDGES` 的键与值里都没有它，`conductor.summon` 也没有它这个目标；
+- **不在边表**：它不占一条召唤边 —— 每个智能体自带一份秘书，那是**随员**，不是同级代理；
+- **没有动作表 / 工具面**：`capabilities.CAPABILITIES` 里没有它，注册表里也没有它的工具。
+
+它做两件事，两件都是**框架代写** —— 读的人必须知道「这一笔的施事是框架，不是某个角色」：
+
+1. **判定通道**：B 收录命题时由秘书判 T0–T4（`Secretary.judge_statement` / `record_nontriviality`）；V 的签发由收方秘书判过再落（`decide_sign_issuance` / `land_unregistered_sign`）；命题形态、同题认定、难度理由也都走它（`judge_proposition_form` / `judge_same_proposition` / `judge_abandon_difficulty`）。
+2. **落库代理**：`statements` 与 `dependencies` 的受控写入口在它（`record_statement` / `record_proof_deps` / `land_statement`）；V 的签由它落成 `out/vsigns/` 与稿上的签块。
+
+它自己的写集是 ∅：不写任何数据表，只写 `out/secretary/<role>.jsonl`、手稿通道与上述受控代理落点。
+
+**「框架代写」不等于「框架有权改权限面」**：秘书的写入只在两条受控路径上成立 —— `store.direct_write_refusal` 把 `statements` / `dependencies` 从通用写口关掉；`secretary.STATEMENT_WRITER_ROLES == ("B",)` 把「谁的内容能经这一格落」钉在 B 上（其余角色拿到 `not_statement_writer`）。所以秘书不是「隐藏的第十一个角色」，也不是绕过权限的后门：它是**同一套权限面的执行通道**。判据：`tests/test_secretary.py`、`tests/test_statement_write_is_the_secretarys_only.py`、`tests/test_au2b_docs_are_aligned.py::test_secretary_is_documented_as_a_channel_and_ledger_proxy`。
+
 ### 0.1 三态的四个位置
 
 每个"查询/判定"类动作的返回都必须能回答三个问题，且**不许折叠**：

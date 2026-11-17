@@ -40,6 +40,21 @@ A/B/C/D 覆盖了"文献 → 知识 → 分析 → 问题"这条链，但**数�
 
 ---
 
+## 0.5 秘书不是角色 —— 它是「判定通道 + 落库代理」（2026-11-17 对齐）
+
+**秘书（`src/agentflow/secretary.py`）不是第十一个角色。** `schema.ROLES` 里没有它，`ALLOWED_EDGES` 的键与值里没有它，`capabilities.CAPABILITIES` 里没有它，工具面里也没有它 —— 它没有「可被召唤」这件事，因为它根本不在代理之间那张图上。
+
+**为什么不做成角色**：若它是角色，它就要有动作表、工具面与边，而它做的两件事恰好都是「替别人落笔」：
+
+1. **判定通道**：B 收录命题时判 T0–T4（`Secretary.judge_statement` / `record_nontriviality`），V 的签发由收方秘书判过再落（`decide_sign_issuance` / `land_unregistered_sign`）；命题形态、同题认定、难度理由也走它。
+2. **落库代理**：`statements` 与 `dependencies` 的受控写入口在它，V 的签由它落成 `out/vsigns/` 与稿上的签块。
+
+这两件都是**框架代写**：施事是框架（同一份权限面里的执行通道），不是某个角色自己越权。把它升格成角色，等于给「判定」与「落库」各发一张代理证；而它今天能写，靠的是两条**受控路径**而不是角色身份 —— `store.direct_write_refusal` 把 `statements` / `dependencies` 从通用写口关掉，`secretary.STATEMENT_WRITER_ROLES == ("B",)` 把「谁的内容能经这一格落」钉在 B 上（其余角色拿到 `not_statement_writer`）。
+
+**所以：不要给它加角色名、加边、加动作表或加工具面。** 权威正文见 [`docs/ROLE-SPECS.md`](docs/ROLE-SPECS.md) §0.0；判据 `tests/test_au2b_docs_are_aligned.py::test_secretary_is_documented_as_a_channel_and_ledger_proxy`。
+
+---
+
 ## 1. 三条把"过度声称"变成写入期错误的硬约束
 
 这三条都不是文档里的告诫，而是 `schema.py` 里的 `validate()`，
