@@ -2502,6 +2502,34 @@ def current_session() -> tuple[str, str]:
     return _CURRENT_SESSION_ROOT.get(), _CURRENT_SID.get()
 
 
+def _session_for_task_end() -> tuple[str, str]:
+    """`task_end` 该落哪个会话：`(sid, 为什么取不到)`（sid 空 = 退缺省，理由非空）。
+
+    ## 为什么 `task_end` 也要读这里（2026-11-17，AH4）
+
+    真机 `projects/lp-ball-2` 的 `sessions/` 里有两个文件：`2026-11-16.jsonl`
+    （9.6 MB，真跑）与 `20261116.jsonl`（48 行，全是 `task_end`）。两个文件的
+    `task_id` 交集 47、双向差集空、时刻逐条相等 —— 同一批收口，一份写进了真会话，
+    一份写进了缺省日期名。根因不在谁传错了：`Conductor` 没有 `sid` 字段，而
+    `finish` / `_refuse` 这两处写会话时一个 `sid=` 都没给 ⇒ `sessions.append` 落到
+    `sessions.session_id()`（`%Y%m%d`）。
+
+    号本来就在上下文里（`calling_as` 的 `sid=` 那一格：工具调用与 `run_role`
+    的循环体都挂着它）—— 缺的只是"写 `task_end` 的那一笔现取一次"。所以这里不新增
+    一整条传递链（`Conductor` 也不加字段），只在唯一的两个写点各读一次。
+
+    取不到时不静默：退缺省会话可以（那是既有的合法落点），但落下的那一行
+    必须自带 `sid_problem` 说明"为什么它在缺省文件里，而这一趟的真会话在别处"。
+    """
+    sid = str(current_session()[1] or "")
+    if sid:
+        return sid, ""
+    return "", ("取不到这一趟的 sid（`calling_as` 的 `sid=` 那一格是空的）⇒ 这一条"
+                "按缺省会话写（`sessions.session_id()`：环境变量 `AGENTFLOW_SESSION` "
+                "或当天日期）。要落进本趟会话，收这一笔的那一段必须包在 "
+                "`calling_as(..., sid=...)` 里")
+
+
 @contextlib.contextmanager
 def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
                parent_role: str = "", session_root: str = "",
@@ -8358,11 +8386,16 @@ class Conductor:
         # 写失败绝不改终态（与 `finish` 同一条纪律），原因进日志。
         from . import sessions as _SESS
 
+        sid, sid_why = _session_for_task_end()
         _path, _problem = _SESS.append(getattr(self.store, "root", "."), {
             "kind": "task_end", "task_id": tid, "by": by, "role": row["role"],
             "action": action or "unknown", "status": "done", "outcome": "refused",
             "refusal_reason": reason, "detail": detail[:200], "artifacts": [],
-        })
+            # 取不到 sid 时这一行落在缺省会话里 —— 为什么，写在行上（不许静默）。
+            **({"sid_problem": sid_why} if sid_why else {}),
+        }, sid=(sid or None))
+        if sid_why:
+            self._log(f"会话记录落在缺省会话（拒绝那一行 {tid}）：{sid_why}", task_id=tid)
         if _problem:
             self._log(f"会话记录没写成（拒绝那一行）：{_problem}", task_id=tid)
         return SummonResult(
@@ -9632,6 +9665,7 @@ class Conductor:
         # 写失败不改变终态：叙事不是判据本身，原因进日志。
         from . import sessions as _SESS
 
+        sid, sid_why = _session_for_task_end()
         _path, _problem = _SESS.append(getattr(self.store, "root", "."), {
             "kind": "task_end",
             "task_id": task_id,
@@ -9643,7 +9677,12 @@ class Conductor:
             "refusal_reason": row.get("refusal_reason"),
             "detail": detail[:200],
             "artifacts": list(row.get("artifacts") or []),
-        })
+            # 取不到 sid 时这一行落在缺省会话里 —— 为什么，写在行上（不许静默）。
+            **({"sid_problem": sid_why} if sid_why else {}),
+        }, sid=(sid or None))
+        if sid_why:
+            self._log(f"会话记录落在缺省会话（task_end {task_id}）：{sid_why}",
+                      task_id=task_id)
         if _problem:
             self._log(f"会话记录没写成：{_problem}", task_id=task_id)
         # ---- 产物归属登记（`R-52` 余；`draft/28` §153 的 A3/A4）。
