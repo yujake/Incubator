@@ -7,7 +7,7 @@
 `8db0a45c952f`，`noai_gate --check-approvals` 一直判 `stale` —— 而 stale 与
 `unregistered` 在读数上必须分得开（前者是「登记过、版本漂了」，后者是「从没登记」）。
 本判据只钉「台账钉的那一版就是盘上这一版」；`reviewers` 仍为空是刻意的
-（`--baseline` 登记 ≠ 批准，走查记录只能由人 `--approve` 追加），所以这里**不**断言它为空。
+（`--baseline` 登记 ≠ 批准，走查记录只能由人 `--approve` 追加），所以这里不断言它为空。
 """
 from __future__ import annotations
 
