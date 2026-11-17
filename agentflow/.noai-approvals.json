@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T09:18:05+08:00",
+  "generated_at": "2026-11-17T09:24:58+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -518,10 +518,10 @@
       "path": "tests/golden/run_topic_snapshot.json",
       "glob": "tests/golden/run_topic_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "04d96875fbc866240322c17ab73de03ba020688a3898d7f9abbc5b180028103a",
+      "sha256": "8db0a45c952fd3aa054178a5111c994ed40fd6f316abeeee5a4145be02f98046",
       "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "（未提供变更说明：内容 hash 从 9ce096aceec3 变为 04d96875fbc8，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
+      "change_note": "2026-11-17 AL1 补登记：台账自 2026-11-06 起 stale（台账 04d96875fbc8 / 盘上 8db0a45c952f 的差异未见登记）。本笔只登记当前版本的 sha256，reviewers 仍为空（登记≠批准）：冻结快照仍需人逐格看过",
       "changed_this_session": null,
       "reviewers": [],
       "audits": [],
