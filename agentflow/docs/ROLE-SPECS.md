@@ -599,9 +599,9 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 > A 拿不到的组：`research.*`（D 的决策）、`ocr.*`（B 的解析）、`graph.*` 全部与
 > `trace.*` 里 C/D 的检索那三件（`trace.relation` / `trace.concept` / `trace.literature`）、
 > `verify.*`（E/F/G/H/V）、`doc.*`/`review.*`、`attack.*`、`conductor.*` 的编排面。
-> A 手里有的那几件不在这些组里：`conductor.broadcast`（它能召唤 B）、`conductor.escalate`、
-> 通用能力的 `conductor.ack` 与那批 `clock.*`、以及 `trace.children`（看自己的一层下级，
-> 十个可召唤角色全体都有，见 §R0 第 102 行）。
+> A 手里有的那几件不在这些组里：`conductor.escalate`、通用能力的 `conductor.ack` /
+> `conductor.post_task` / `conductor.retire_child` / `conductor.void_items` 与那批 `clock.*`、
+> 以及 `trace.children`（看自己的一层下级，十个可召唤角色全体都有，见 §R0 第 102 行）。
 
 ### A.5 状态机（**只留主转移表**；状态/约束/反例表与其余状态机见附录 §A.5）
 
@@ -1734,16 +1734,15 @@ C 的产出有两类，状态语义完全不同。
 
 - **3 件 `formal.*`**：`formal.formalize`（`write_local`）/ `formal.check_formal`（`read`）/ `formal.record`（`write_local`）—— 三件都带 `external="exec"`，`roles=("L",)` 只挂给 L；
 - **A–H 共有面那一批**（与附录 §R0.1 的"八角色共有"那一行逐件相同）：通用时钟与 `conductor.ack`/`conductor.escalate`、只读族 `fs.*` / `table.*` / `manuscripts.*` 与 `trace.children` —— 逐件清单只在附录 §R0.1 有一份。
-- **共用写工具那一批**：`fs.delete` / `fs.edit` / `fs.move` / `fs.write` / `table.create` / `table.delete` / `table.update` / `conductor.broadcast` / `conductor.retire_child` / `conductor.post_task`（逐件见附录 §L.4）。
+- **共用写工具那一批**：`fs.delete` / `fs.edit` / `fs.move` / `fs.write` / `table.create` / `table.delete` / `table.update` / `conductor.retire_child` / `conductor.void_items` / `conductor.post_task`（逐件见附录 §L.4）。
+
+**工具面比协作面宽，这是事实、不是权限泄漏。** L 名下可以有 `fs.*` / `table.*` / `conductor.retire_child` / `conductor.void_items` 这些通用件（它们与「谁能召唤 L」分处两根轴）；但它的**协作面只有 `B → L → C`**：入边只有 `B`，出边只有 `C`，`M` / `F` / `E` / `D` 都到不了它。`conductor.broadcast` 已于 2026-11-16 全面退场（不再进任何角色面）；`retire_child` / `void_items` 仍在 L 的面里（父子通用工具，不构成新的边）。**不要为了「看起来干净」删这些工具** —— 删工具是改权限面，不是改文档。
 
 **Lean 关着时是 0 件**：`AGENTFLOW_LEAN_ENABLED=0` 下同一个命令给出 `for_role("L") == []` —— 不是"能拿到 0 个工具"，而是"L 不存在"（`leanscope.is_hidden`）。
 复跑：`python -m agentflow.cli tools --role L`（Lean 开档；Lean 关档 L 这一格不存在，不是 0）。
 
-> ⚠️ **写集与工具面是两根轴，不许互相冒充**：`write_set == {"experiments"}` 是**并发判据**的输入，
-> 也是"L 不碰 `statements`"的声明；`for_role` 的结构性拦截**只针对只读角色**（C / H / V），
-> 所以 L 真的拿得到写工具：`fs.*` 4 + `table.*` 3 + `conductor.broadcast` / `conductor.retire_child` / `conductor.post_task` + `formal.*` 2，另加通用能力的 `clock.*`、`conductor.ack` 与 `conductor.escalate`（逐件见附录 §L.4，那里现算）。
-> "L 只写 `experiments`"这件事由**动作面**（`record` 是它唯一的落表动作）+ 写集声明承担，
-> **不由工具层承担** —— E 今天就是同一个口径，把它写成"L 拿不到写工具"是一句假话。
+> ⚠️ **写集与工具面是两根轴，不许互相冒充**：`write_set == {"experiments"}` 是**并发判据**的输入，不是权限闸 —— 「L 不碰 `statements`」的真拦点是 `store.direct_write_refusal` ＋ 秘书的 `not_statement_writer`（见 §0.6）。`for_role` 的结构性拦截**只针对只读角色**（C / H / V），所以 L 真的拿得到写工具：`fs.*` 4 + `table.*` 3 + 父子通用的 `conductor.post_task` / `conductor.retire_child` / `conductor.void_items` + `formal.*` 2，另加通用能力的 `clock.*`、`conductor.ack` 与 `conductor.escalate`（逐件见附录 §L.4，那里现算）。
+> 「L 只写 `experiments`」这件事由**动作面**（`record` 是它唯一的落表动作）与写集读数一起说明，**不由工具层承担** —— E 今天就是同一个口径，把它写成"L 拿不到写工具"是一句假话。
 
 **L 拿不到**：`verify.*` 一件都拿不到（L 不在任何 `verify.*` 的 `roles` 声明里；桥接层那个工具入口
 `verify.check_formal` 更是不在册 —— 它已整条删除，只剩同名的纯函数，见 §R0 那条注）、

@@ -105,3 +105,29 @@ def test_write_sets_are_documented_as_a_concurrency_axis_not_permission() -> Non
     for table in ("statements", "dependencies"):
         assert ST.direct_write_refusal(table)
     assert C.WRITE_SETS["L"] == frozenset({"experiments"})
+
+
+# ====================================================================== ③ L 的工具面 vs 协作面
+def test_l_tool_face_is_wider_than_its_collab_face() -> None:
+    """L 名下可有通用工具（retire_child / void_items），但协作面只有 B -> L -> C；broadcast 已退场。"""
+    from agentflow import capabilities as C
+    from agentflow.tools import conductor_tools as CT
+    from agentflow.tools import formal_tools as FT
+
+    assert C.ALLOWED_EDGES["L"] == frozenset({"C"}), C.ALLOWED_EDGES["L"]
+    inbound = {role for role, tos in C.ALLOWED_EDGES.items() if "L" in tos}
+    assert inbound == {"B"}, inbound
+
+    names = [func.__name__ for func, _deps in CT._TOOL_FUNCTIONS]
+    assert "conductor_retire_child" in names and "conductor_void_items" in names
+    assert "conductor_broadcast" not in names, "broadcast 已于 2026-11-16 全面退场"
+    assert not hasattr(CT, "conductor_broadcast")
+    assert "L" in CT._PARENT_ROLES
+    assert FT._ROLES_L == ("L",)
+
+    specs = _text(ROLE_SPECS)
+    section = specs.split("### L.4", 1)[1].split("### L.5", 1)[0]
+    assert "工具面比协作面宽" in section
+    assert "协作面只有 `B → L → C`" in section
+    assert "conductor.retire_child" in section and "conductor.void_items" in section
+    assert "conductor.broadcast` /" not in section, "L 的工具清单里还挂着已退场的 broadcast"
