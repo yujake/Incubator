@@ -3778,6 +3778,18 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
     读"，而 D3 的现场正是这样漏的（第一笔之后三行仍全空，第二笔又认了同一签）。
     整份文件一起绑，`already_claimed` 才是在"这一份正文"的粒度上判的。
 
+    ## 2026-11-17（PASSROWS1）：同一份正文的几叠一起绑
+
+    上面那句"整份文件一起绑"在 2026-11-17 之前等于"这一份正文一起绑"，因为一份正文
+    只有一叠（`record_pending_sign` 的键改前一律是正文 sha）。`adc44a8a` 起 V 落的行
+    改按载体（稿的字节 sha）分文件 ⇒ 同一份正文有两个载体时它住在两叠里：锚点只落在
+    其中一叠，另一叠的行永远没有 `statement_id`，而读侧（`verifications.list_verifications`
+    的并入口只并已认领的）于是只读到"按 sha 字典序被挑出来的那一叠" —— 实测同一份盘上
+    读成 1 行或 3 行（真值是 4 行：V 的三转 + 准入门那一份前提签）。所以这一格改成：
+    锚点那一叠整份绑，其余叠里带着同一份 `proof_sha256` 的行也绑。判据没放宽 ——
+    `bound_elsewhere` 的检查相应扩到这些行（同一份正文只认领一次，跨叠同样成立），
+    "一份都没绑成"仍报 `checked=False`；哪几份写成了见 `bound_files`。
+
     任何一行已经绑了别的号 ⇒ 一个字节都不写，返回 `bound_elsewhere`（不覆盖前一笔的认领）；
     每一行都早就绑给同一个号 ⇒ `already=True`（幂等，一个字节都不写）。
 
@@ -3790,7 +3802,7 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
     """
     out: dict[str, Any] = {"checked": False, "bound": False, "already": False,
                            "statement_id": str(statement_id or ""), "ledger": "",
-                           "why": ""}
+                           "bound_files": [], "why": ""}
     sid = str(statement_id or "").strip()
     ledger = str((claim or {}).get("ledger") or "")
     out["ledger"] = ledger
@@ -3803,33 +3815,77 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
     rel = ledger.split("#", 1)[0].replace("\\", "/")
     vid = str((claim or {}).get("verification_id") or "").split("#")[-1]
     path = Path(str(root or "")) / rel
+    anchor_key = os.path.normcase(os.path.abspath(str(path)))
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as exc:
         out["why"] = f"pending 台账读不出来（{type(exc).__name__}: {exc}）⇒ 没写成"
         return out
-    lines = raw.splitlines(keepends=True)
+    # ---- 候选：(文件, 行文本) ------------------------------------------------
+    #
+    # 锚点那一份整份一起绑（同一份文件 = 同一份签的几转）；别的叠里只绑带着
+    # 同一份正文（`proof_sha256`）的行 —— 2026-11-17（PASSROWS1）：pending 台账
+    # 按载体分文件，同一份正文可以有两个载体 ⇒ 它的几行住在两叠里。只绑锚点那一叠
+    # ⇒ 另一叠永远没有 `statement_id` ⇒ `list_verifications`（并入口
+    # `verifications._claimed_pending_rows` 只并已认领的）读出来就是这条命题审阅记录
+    # 的一个「按 sha 字典序」挑出来的子集（实测同一盘：1 行 / 3 行两种）。
+    from . import verifications as _VR
+
+    want_sha = str((claim or {}).get("proof_sha256") or "").strip().lower()
+    files: list[tuple[Path, list[str]]] = [(path, raw.splitlines(keepends=True))]
+    if want_sha:
+        try:
+            stacks, problems = _VR.pending_stacks(root)
+        except Exception as exc:  # noqa: BLE001 —— 读不动 ⇒ 没写成，不是"已经绑了"
+            out["why"] = f"pending 台账读不出来（{type(exc).__name__}: {exc}）⇒ 没写成"
+            return out
+        if problems:
+            out["why"] = f"pending 台账有读不出来的行（{problems[:3]}）⇒ 没写成"
+            return out
+        for file, rows in stacks:
+            file_path = Path(str(file))
+            if os.path.normcase(os.path.abspath(str(file_path))) == anchor_key:
+                continue
+            if not any(str(r.get("proof_sha256") or "").strip().lower() == want_sha
+                       for r in rows):
+                continue
+            try:
+                files.append((file_path,
+                              file_path.read_text(encoding="utf-8").splitlines(
+                                  keepends=True)))
+            except OSError as exc:
+                out["why"] = (f"`{file_path.name}` 读不出来（{type(exc).__name__}: {exc}）"
+                              "⇒ 没写成")
+                return out
     hit = -1
     bound_elsewhere = ""
-    targets: list[tuple[int, dict[str, Any]]] = []
-    for i, line in enumerate(lines):
-        if not line.strip():
-            continue
-        try:
-            row = json.loads(line)
-        except (ValueError, TypeError):
-            continue
-        if not isinstance(row, dict):
-            continue
-        if str(row.get("verification_id") or "") == vid:
-            hit = i
-        current = str(row.get("stmt_id") or row.get("statement_id") or "")
-        if current and current != sid:
-            bound_elsewhere = current
+    plan: list[tuple[Path, list[str], list[tuple[int, dict[str, Any]]]]] = []
+    for file_path, lines in files:
+        is_anchor = os.path.normcase(os.path.abspath(str(file_path))) == anchor_key
+        targets: list[tuple[int, dict[str, Any]]] = []
+        for i, line in enumerate(lines):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except (ValueError, TypeError):
+                continue
+            if not isinstance(row, dict):
+                continue
+            if is_anchor and str(row.get("verification_id") or "") == vid:
+                hit = i
+            if not is_anchor and str(row.get("proof_sha256") or "").strip().lower() != want_sha:
+                continue
+            current = str(row.get("stmt_id") or row.get("statement_id") or "")
+            if current and current != sid:
+                bound_elsewhere = current
+                break
+            if current == sid:
+                continue                      # 已绑给同一号：一个字不动
+            targets.append((i, row))
+        if bound_elsewhere:
             break
-        if current == sid:
-            continue                      # 已绑给同一号：一个字不动
-        targets.append((i, row))
+        plan.append((file_path, lines, targets))
     if bound_elsewhere:
         out.update(checked=True, bound_elsewhere=bound_elsewhere,
                    why=(f"这一签已经认给 stmt:{bound_elsewhere} ⇒ 不覆盖"
@@ -3839,31 +3895,39 @@ def bind_pending_claim(root: Any, *, claim: Mapping[str, Any],
         out["why"] = (f"`{rel}` 里没有 {vid or '（没有号）'} 那一行 ⇒ 没写成"
                       "（不是「已经绑了」）")
         return out
-    if not targets:
+    if not any(targets for _fp, _lines, targets in plan):
         out.update(checked=True, already=True, bound=True,
                    why=f"这一签早就认给 stmt:{sid}（幂等：一个字节都没写）")
         return out
-    for i, row in targets:
-        row["statement_id"] = sid
-        row["stmt_id"] = sid
-        row["claimed_at"] = _now_iso()
-        lines[i] = json.dumps(row, ensure_ascii=False, default=str) + "\n"
-    tmp = path.with_name(path.name + ".claim.tmp")
-    try:
-        tmp.write_text("".join(lines), encoding="utf-8")
-        tmp.replace(path)
-    except OSError as exc:
-        out["why"] = f"回写 pending 台账没成（{type(exc).__name__}: {exc}）⇒ 没绑上"
-        return out
-    finally:
+    written: list[str] = []
+    for file_path, lines, targets in plan:
+        if not targets:
+            continue
+        for i, row in targets:
+            row["statement_id"] = sid
+            row["stmt_id"] = sid
+            row["claimed_at"] = _now_iso()
+            lines[i] = json.dumps(row, ensure_ascii=False, default=str) + "\n"
+        tmp = file_path.with_name(file_path.name + ".claim.tmp")
         try:
-            if tmp.exists():
-                tmp.unlink()
-        except OSError:
-            pass  # 清临时文件失败不许带走"已经写成了"这件事（残留的 .claim.tmp 只是多一个文件）
-    out.update(checked=True, bound=True,
+            tmp.write_text("".join(lines), encoding="utf-8")
+            tmp.replace(file_path)
+        except OSError as exc:
+            out.update(bound_files=list(written),
+                       why=(f"回写 pending 台账没成（{type(exc).__name__}: {exc}）⇒ "
+                            "没绑全（已回写的那几份见 `bound_files`；这一格是幂等的，"
+                            "重跑一次就会把剩下的补上）"))
+            return out
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass  # 清临时文件失败不许带走"已经写成了"这件事（残留的 .claim.tmp 只是多一个文件）
+        written.append(file_path.name)
+    out.update(checked=True, bound=True, bound_files=written,
                why=(f"这一签认给 stmt:{sid}：pending 台账行回写了 statement_id"
-                    "（同一份正文只认领一次）"))
+                    "（同一份正文只认领一次；同一份正文的几叠一起绑）"))
     return out
 
 

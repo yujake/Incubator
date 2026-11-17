@@ -707,6 +707,20 @@ def _pending_ledgers(
     return ledgers, problems
 
 
+def pending_stacks(
+    root: str | Path,
+) -> tuple[list[tuple[Path, list[dict[str, Any]]]], list[str]]:
+    """`verifications/pending/` 的逐份台账（公开读口，实现在 :func:`_pending_ledgers`）。
+
+    为什么需要它（2026-11-17，PASSROWS1 的现场）：pending 台账按"载体"分文件
+    （`record_pending_sign` 的键是 `object_sha256 or proof_sha256`），而同一份正文
+    可以有两个载体 ⇒ 它的几行会住在两叠台账里。回写认领（`vsigns.bind_pending_claim`）
+    必须知道"哪一行住在哪一份文件里"才写得回去；摊平之后的 `pending_rows` 只剩行，
+    写回去就无从定位。这里只是把那个私有读口公开，判据与行序一个字没动。
+    """
+    return _pending_ledgers(root)
+
+
 def pending_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
     """pending 台账的全部行（按落盘顺序；坏行照实报出，不静默跳过）。"""
     ledgers, problems = _pending_ledgers(root)
@@ -731,6 +745,14 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
     为什么要交出去：票数与"三票同一份正文"只能在同一份 pending 台账里数
     （见 :func:`_pending_ledgers`）；只交最后那一行，调用方就只数得出"有一票"，
     于是"一票也抬档"（`_gap_from_pending` 的 p284 注释）。
+
+    ## 2026-11-17（PASSROWS1）：同一份正文有几叠时，认「票数最多的那一叠」
+
+    改前这里"最后扫到的那一行说了算"，而扫描序是文件名（sha）的字典序 ⇒ 同一份正文
+    一旦住在两叠里，认到哪一叠全凭 sha 撞成什么：实测同一条链连跑，台账读成 1 行 /
+    3 行两种，登记出来的 kind 随之在 `conjecture` / `theorem` 之间跳（真值 4 行 =
+    V 的三转 + 准入门那一份前提签，`theorem`）。所以改成按"这一份正文在该叠里有几行"
+    取最大，同票数仍按文件名序；`hit_rows` 仍是那一叠（`passes` 的射程不动）。
     """
     out: dict[str, Any] = {"found": False, "verdict": "", "proof_sha256": "",
                            "object_sha256": "", "ledger": "", "row": {},
@@ -742,7 +764,10 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
         raise VerificationError("；".join(problems[:3]))
     hit: dict[str, Any] | None = None
     hit_rows: list[dict[str, Any]] = []
+    hit_votes = 0
     for _file, rows in ledgers:
+        matched = 0
+        last: dict[str, Any] | None = None
         for row in rows:
             got_obj = str(row.get("object_sha256") or "").strip().lower()
             got_proof = str(row.get("proof_sha256") or "").strip().lower()
@@ -754,8 +779,16 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
                     continue
             else:
                 continue
-            hit = row
+            matched += 1
+            last = row
+        #: 同一份正文住在两叠里时（`record_pending_sign` 按载体分文件），认「票数最多
+        #: 的那一叠」：一叠只有一行的准入门前提签不可能是一份三转签的凭据，而票数与载体
+        #: 稿号（第 9 格）都只在"那一签自己那一叠"里对得上。同票数仍按文件名序
+        #: （与改前的 tie-break 一致），所以这一格仍然确定 —— 只是不再由"谁名字大"决定。
+        if last is not None and matched >= hit_votes:
+            hit = last
             hit_rows = rows
+            hit_votes = matched
     if hit is None:
         where = (f"对象 sha256 {obj[:12]}…" if obj else f"证明正文 sha {sorted(wants)[:1]}")
         out["why"] = (f"`{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/` 里没有盖住这一份"
