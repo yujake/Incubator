@@ -9350,6 +9350,42 @@ class Secretary:
                          candidate_id: str = "",
                          adjudication: Mapping[str, Any] | None = None
                          ) -> dict[str, Any]:
+        """B 交内容 ⇒ 秘书落盘；受控拒的那一档同时在盘上留一份原文。
+
+        ## 为什么这一层要留痕（2026-11-17 AL2·#3）
+
+        这一条路是"秘书缝的落库代理"：调用方（B 自己的 `register_statement`、
+        `table.create/update` 的 routed 分支、以及任何按 `store.direct_write_refusal`
+        被指到这条正路上的角色）交内容，判定与写口都在秘书这一侧 —— 于是受控拒不
+        产生任何 `agent_step_call`（被拒的那一笔根本没进工具执行器）。真机现场
+        （AH1）：A 这一趟有 5 次收录被拒，而 B 的 `agent_step_call` 里 0 条、run 文件
+        也还没写到那一刻 ⇒ 审计时"为什么拒"只能猜。
+
+        判据（`tests/test_secretary_controlled_refusals_leave_the_original_text.py`）：
+        受控拒 ⇒ `out/secretary/refusals.jsonl` 多一行原文（kind / why / at / role /
+        task_id / where）；把写点打桩关掉 ⇒ 那一行必消失（反真空）。
+
+        返回值与改前逐字相同（正文那一段在 `_record_statement_impl`）—— 这一层只加
+        留痕，不改任何判定。
+        """
+        out = self._record_statement_impl(
+            payload, role=role, force_new=force_new, candidate_id=candidate_id,
+            adjudication=adjudication)
+        refused = str((out or {}).get("refused") or "")
+        if refused:
+            # 留痕不许改变处置：写不进去时 `record_refusal` 自己返回 None（不抛）。
+            R.record_refusal(
+                self.root, kind=refused,
+                why=str((out or {}).get("reason") or ""),
+                role=str(role or ""), task_id=str(getattr(self, "task_id", "") or ""),
+                where="secretary.record_statement")
+        return out
+
+    def _record_statement_impl(self, payload: Mapping[str, Any], *, role: str = "B",
+                               force_new: bool = False,
+                               candidate_id: str = "",
+                               adjudication: Mapping[str, Any] | None = None
+                               ) -> dict[str, Any]:
         """B 交内容 ⇒ 秘书落盘（洗格式 / 拿编号 / 查重 / 改表四件一次做完）。
 
         这是一笔事务（`statements` + `dependencies`），B 那一侧只交内容、不调工具。
