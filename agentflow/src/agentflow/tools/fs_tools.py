@@ -1386,6 +1386,8 @@ def _atomic_write_bytes(target: Path, payload: bytes) -> None:
     "fs.write",
     "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；"
     "A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），"
+    "E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），"
+    "D 另拒 `b-proof-`/`e-proof-`/`e-num-`，"
     "`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；" + D_PROOF_BODY_RULE + " —— 要落稿就派 F。",
     _obj(
         {

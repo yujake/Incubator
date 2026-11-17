@@ -1370,6 +1370,19 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "变化格 = B / F，其余九格与 p288 逐字相同（逐格读数见 "
               "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p289 → p290（2026-11-17，AL2·#4/#5 合并版）：#4 补保留表（E/G/L 拒三族、D 只许
+     # 自己那一族）+ #5 给 `search.download` 加 `cand`（下载失败也落 `extract_failed`
+     # 回执）。进提示词的是 `search.download` 的参数/返回那一行（A 的工具面），
+     # facts 键集与落点一格没动 ⇒ count / keys_sha256 与 p289 同值。
+     {"version": "p290", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p290（2026-11-17，AL2·#4/#5 合并版；一版只抬一次）：#4 把"
+              "`RESERVED_ARTIFACT_TABLE` 补全（E/G/L 拒 `reports/{f,b,e}-proof-*`；"
+              "D 只许自己那一族），#5 给 `search.download` 加候选绑定 `cand`（下载失败"
+              "也落一条 `extract_failed` 回执）。变化格 = A（`search.download` 与"
+              "`fs.write` 摘要都在 A 的工具面上；逐格读数见 "
+              "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

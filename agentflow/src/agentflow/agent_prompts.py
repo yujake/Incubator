@@ -2687,7 +2687,19 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格、count / keys_sha256 与 p288
 #:   同值 —— 这一批只换段文本）；`agent_surface_snapshot.json` 按现值重冻；系统文档重生成；
 #:   `tests/fixtures/prompt_cache_warm.json` 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p289"
+#: p289 → p290（2026-11-17，AL2·#4/#5 合并版；一版只抬一次）：
+#:   两笔改动共用一个版本号 —— #4 把保留表补全（E/G/L 拒 `reports/{f,b,e}-proof-*`；
+#:   D 只许自己那一族），#5 给 `search.download` 加候选绑定 `cand`（下载失败也落一条
+#:   `extract_failed` 回执）。`fs.write` 的 summary 是保留表的模型可见那一半，跟着两处
+#:   一起改（A 面上的那一行）；`search.download` 的参数面多一格 `cand`、returns 多两格
+#:   （`cand` / `read_receipt`），A 的 `tools_lines` 那一行随之变。
+#:   变化格 = A / D（`search.download` 与 `fs.write` 出现在这两个角色的工具面上；
+#:   逐格旧值 → 新值见十一格表上方那一段）。其余各格逐字未动。
+#:   连带：`_FROZEN_PROMPT_VERSION`（p290）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p289 同值）；工具面快照与
+#:   `agent_surface_snapshot.json` 按现值重冻（本笔改的是声明，不是权限矩阵）；
+#:   系统文档重生成（ROLE-GUIDE 与读图行数）。
+PROMPT_VERSION = "p290"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

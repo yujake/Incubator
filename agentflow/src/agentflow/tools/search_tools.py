@@ -1033,14 +1033,94 @@ def _downloader_for(ctx: _Ctx, max_bytes: int) -> tuple[Any, int]:
     return ctx.downloaders[max_bytes], int(max_bytes)
 
 
-def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES) -> Any:
-    """``search.download``：把 URL 下到工作区 downloads/ 下的临时位置。"""
+#: `search.download(cand=…)` 认的候选前缀（与 `text.extract` 的 `lit_id` 同一套写法：
+#: `cand:000012` / `slot:000012`，也给裸槽位号）。为什么另开一格参数、不借 `hint`：
+#: `hint` 是给人看的下载说明，把它当编号用等于让"这一条候选"靠字符串约定表达 ——
+#: 而这里要的是"这次尝试记在哪条候选上"这件结构事实。
+_DOWNLOAD_CAND_PREFIXES: tuple[str, ...] = ("cand:", "candidate:", "slot:")
+
+
+def _download_slot(cand: str) -> str:
+    """把 `cand` 归一成裸槽位号（不是候选写法 ⇒ 原样当槽位号）。"""
+    text = str(cand or "").strip()
+    low = text.lower()
+    for prefix in _DOWNLOAD_CAND_PREFIXES:
+        if low.startswith(prefix):
+            return text[len(prefix):].strip()
+    return text
+
+
+def _download_candidate(ctx: _Ctx, slot: str) -> tuple[dict | None, Any]:
+    """按槽位取候选行；取不到 ⇒ `(None, fail(...))`（受控拒，不写回执）。
+
+    不写回执的理由与 `text.extract` 的候选期同一条：回执是"这一条候选试过"的证据，
+    写到一条不存在的候选上就是把"随便给个号"记成"试过了一次"。
+    """
+    if ctx.store is None:
+        return None, fail("未配置 store：认不出候选槽位（不是「这一条没试过」）",
+                          kind="no_store")
+    try:
+        rows = list(ctx.store.rows("lit_candidates"))
+    except Exception as exc:  # noqa: BLE001 - 表读不出来是"判不了"，不是"没有这一条"
+        return None, fail(f"候选表读不出来（{type(exc).__name__}: {exc}）⇒ 这一格判不了",
+                          kind="store_error")
+    row = next((r for r in rows if str(r.get("slot") or "") == str(slot)), None)
+    if row is None:
+        known = [str(r.get("slot") or "") for r in rows][:8]
+        return None, fail(
+            f"待新增列表里没有槽位 {slot!r}（序号不复用；下载尝试要指向一条真的候选）",
+            kind="unknown_slot", slot=str(slot), known=known)
+    return dict(row), None
+
+
+def _record_download_attempt(ctx: _Ctx, slot: str, row: Mapping[str, Any], *,
+                             url: str, fetch_kind: str) -> dict | None:
+    """把一次失败的下载记成一条"试过、拿不到可读文本"的回执（`extract_failed`）。
+
+    ## 档位为什么复用 `extract_failed`，不新造"下载失败"一档
+
+    回执回答的是"这一条到底试没试过"。下载失败与抽取失败对下游是同一件事：试过、
+    拿不到可读文本（差别只在"有没有字节"，那是 `note` / `fetch_kind` 的读数）。
+    新造一档要同时改 `litread` 的受控词表、`litavail` 的收执两档、`check_read` 与
+    入库闸四处 —— 而闸的口径一个字都不该变（仍要"有尝试回执"才准 `metadata_only`）。
+    所以档位不动，来源记在 `source` / `note` 里：审计读得出这次是下载死的还是抽死的。
+
+    只在失败时写：下载成功意味着盘上有字节，`metadata_only` 那时是假话
+    （`_read_evidence_gate` 会按"盘上有字节却报仅题录"拒），所以成功下载不写回执。
+    """
+    if ctx.store is None:
+        return None
+    return LAV.record_read(
+        ctx.store.root, str(row.get("request_id") or ""), str(slot),
+        LR.FULLTEXT_EXTRACT_FAILED, source=str(url or ""),
+        note=f"search.download.{fetch_kind or 'failed'}",
+        candidate=row, actor=ctx.actor)
+
+
+def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAULT_MAX_DOWNLOAD_BYTES,
+                cand: str = "") -> Any:
+    """``search.download``：把 URL 下到工作区 downloads/ 下的临时位置。
+
+    `cand`（2026-11-17 AL2·#5）：候选绑定。给了它，这一趟下载就绑在那条候选上 ——
+    失败时写一条 `extract_failed` 回执（档位与理由见 :func:`_record_download_attempt`），
+    于是"下载就失败、连文件都没有"的候选也能按仅题录入库（业主口径：`metadata_only`
+    是"试过一次、拿不到可读文本"，下载尝试也算一次尝试）。不给 `cand` ⇒ 行为逐字不变。
+    """
+    slot = _download_slot(cand)
+    row: dict | None = None
+    if slot:
+        row, bad = _download_candidate(ctx, slot)
+        if bad is not None:
+            return bad
     dest = ctx.downloads_dir
     downloader, effective = _downloader_for(ctx, int(max_bytes))
     try:
         res, elapsed = _timed(downloader.download, url, dest, hint or "paper")
     except Exception as exc:  # noqa: BLE001 - 下载器理论上不抛，但注入的实现可能抛
-        return fail(f"下载异常：{type(exc).__name__}: {exc}", kind="download_error", url=url)
+        receipt = (_record_download_attempt(ctx, slot, row, url=url, fetch_kind="download_error")
+                   if slot and row is not None else None)
+        return fail(f"下载异常：{type(exc).__name__}: {exc}", kind="download_error", url=url,
+                    cand=slot, read_receipt=receipt)
 
     if not res.ok:
         # 「2026-10-16（把 A 做成会应变的智能体）」：这里要把「下载层那一档」
@@ -1050,14 +1130,20 @@ def _h_download(ctx: _Ctx, url: str, hint: str = "paper", max_bytes: int = DEFAU
         # 现场读数（我亲自下的那一轮）：`tls_cert` 类同一个 URL 每次要 122 秒才判死
         # （本机证书/吊销检查），而 `http_403` 是明确不给脚本 ⇒ 两者的正确处置相反
         # （前者换源/改客户端开关，后者直接换源），不看类别就只能在原地耗时间。
+        receipt = (_record_download_attempt(ctx, slot, row, url=url, fetch_kind=str(res.kind or ""))
+                   if slot and row is not None else None)
         return fail(
-            f"下载失败：{res.error}",
+            f"下载失败：{res.error}"
+            + ("；这一条候选已记下一条'试过、拿不到可读文本'的回执（档位 extract_failed）"
+               "⇒ 可以按仅题录（metadata_only）判收" if receipt else ""),
             kind="download_failed",
             fetch_kind=res.kind,
             url=url,
             http_status=res.http_status,
             bytes=res.bytes,
             elapsed_s=elapsed,
+            cand=slot,
+            read_receipt=receipt,
         )
 
     path = Path(res.path) if res.path else None
@@ -1853,13 +1939,15 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
 
 @tool(
     "search.download",
-    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
+    "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` 时这一趟绑在那条候选上：失败也会留一条“试过、拿不到可读文本”的回执（档位 `extract_failed`）⇒ 这一条可以按仅题录判收；不给 `cand` 行为不变。",
     {
            "type": "object",
            "properties": {
             "url": {"type": "string", "minLength": 8, "maxLength": 2000},
             "hint": {"type": "string", "maxLength": 200},
             "max_bytes": {"type": "integer", "minimum": 1024, "maximum": 2_000_000_000},
+            "cand": {"type": "string", "maxLength": 40,
+                     "description": "候选槽位（`cand:<槽>` / `<槽>`）：给了它，这一趟的尝试绑在这条候选上"},
            },
            "required": ["url"],
            "additionalProperties": False,
@@ -1872,14 +1960,16 @@ def _search_local(ctx, query, limit=5, max_chars=1200, lit_id="", max_books=None
             "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256',"
             "'http_status','max_bytes_requested','max_bytes_effective','elapsed_s',"
             "'content_warning','warnings'}；"
-            "失败：ok=False + kind(download_failed/download_error) + "
+            "失败：ok=False + kind(download_failed/download_error/unknown_slot/no_store/store_error) + "
             "fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/"
             "network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）"
+            "+ cand（给了 cand 才有：归一后的槽位）+ read_receipt（这次失败落下的那条 "
+            "extract_failed 回执；没给 cand ⇒ null）"
             ),
     tags=("search", "download"),
     external="egress",
 )
-def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTES):
+def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTES, cand=""):
     """search.download 的工具体（`T-8`：从 `register` 里搬出来，判据一条没改）。
 
     注入值（ctx）由装配期用 `partial` 绑定，
@@ -1887,7 +1977,7 @@ def _search_download(ctx, url, hint="paper", max_bytes=DEFAULT_MAX_DOWNLOAD_BYTE
     """
     return (
     _h_download(
-               ctx, url, hint, max_bytes
+               ctx, url, hint, max_bytes, cand
                )
     )
 

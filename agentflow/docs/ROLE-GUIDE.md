@@ -90,7 +90,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `lit.admit` | 正式入库（逐条）：第一道判据是这一条要有 relevance（没写就拒，missing_relevance），然后才是条数上限（单次 ≤10、单委托累计 ≤10）与重叠检查；超限整笔拒绝。不清空列表（结算属于 lit.admit_all）。 | `write_local` | （无） |
 | `lit.admit_all` | 提交整批：本委托全部判完（三态落定）之后，把通过检查的行一次收进 literature（≤10 条）、结算本委托（全终态、不物理删）、写委托报告 reports/lit-<request_id>.md（已入库 / 未入库 / 待裁三块）。只要还有一条没判，整批一条都不许入库：拒信逐条点名槽位与题名并给做法（逐条判收走 lit.admit、判拒走 lit.stage_reject）。 | `write_local` | （无） |
 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。 | `read` | `title` |
@@ -104,7 +104,7 @@
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 | `search.dedup_check` | **不联网**：按三级硬键（DOI → 标题+年 → 仅标题带年容差）说明『会不会被判成已有的某篇』，并给出会命中的键。 | `read` | `title` |
-| `search.download` | 把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。 | `write_local` | `url` |
+| `search.download` | 把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` 时这一趟绑在那条候选上：失败也会留一条“试过、拿不到可读文本”的回执（档位 `extract_failed`）⇒ 这一条可以按仅题录判收；不给 `cand` 行为不变。 | `write_local` | `url` |
 | `search.ingest_local` | **不联网**：把本地 PDF 登记进书架（按内容 sha256 幂等；dry_run 只算不写）。provenance 如实写「由 A 登记」，不借「人直接提供」。 | `write_local` | `books_dir` |
 | `search.literature` | 按 topic/mode 检索文献候选，每条带 dedup_key 与 is_new（不必再判重）。mode=precise 时必须给 description。 | `read` | `topic` |
 | `search.local` | **不联网**：在本地书架全文里按主题取最相关的一页与**逐字摘录**（带 lit_id 与页码，引文回验用得上）。 | `read` | `query` |
@@ -247,7 +247,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
@@ -500,7 +500,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `graph.build` | 从 store 三张表构建概念图索引，返回规模与完整性读数。 | `read` | （无） |
 | `graph.neighbors` | 返回邻居概念代号（升序）与度数。邻居列表**有界**（默认 max_neighbors=200）：超限时 truncated=True 并说明只给前几个，绝不静默截断。 | `read` | `concept_id` |
 | `graph.relations_between` | 返回同时含两个概念的全部关系（按引文校验/状态/信息量确定性排序）。 | `read` | `a`、`b` |
@@ -623,7 +623,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
@@ -767,7 +767,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
@@ -906,7 +906,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
@@ -1240,7 +1240,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |
 | `manuscripts.submission_reading` | 读一份证明稿的提交状态（产出方 / 已签 / 已提交 / 时刻 / via：E/F 走收工自动提交、B 走收录）；「未提交」与「没查成」分开报。 | `read` | （无） |
@@ -1404,7 +1404,7 @@
 | `fs.read` | 读文本文件；二进制拒绝，超限截断并标注。分段读：`start_line`（1 起）＋ `max_lines`，`meta.next_line` 是下一段起点（EOF 为 null）。 | `read` | `path` |
 | `fs.search` | 在工作区文本文件里按 ripgrep 风格正则搜内容，返回「文件:行号: 行内容」。 | `read` | `pattern` |
 | `fs.stat` | 查看路径的大小/类型/修改时间；文件另给 sha256。 | `read` | `path` |
-| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
+| `fs.write` | 写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。 | `write_local` | `path`、`content` |
 | `program.list` | 列出我这一趟起的程序（缺省只列还在跑的）：program / pid / argv 摘要 / 起于何时 / 已跑多久 / 它那条计时器 id / 那条表的目的，外加 alive（pid 现在还在不在）。空归属的旧账单列在 unowned 里 —— 它们不归任何人，既不算我的、也不会被我停掉。这是交差/销号之前的自查口：retire_ready=false 就说明还有程序在跑 —— 先叫停（面上有那件就用它，没有就把「要停谁」给父/主控）。所有角色都能用。 | `read` | （无） |
 | `program.stop` | 停掉我这一趟起的程序：先给它一个宽限窗口让它自己收尾，过了窗口才真杀；然后把那条程序计时器按 outcome="killed" 收口，并唤醒正在等它的人。只许碰自己起的：别人的与账上没有归属的旧行一律受控拒绝（not_mine，一个进程都不碰）。已经结束的返回 already_exited（幂等，那一行一个字都不改）；杀不动的返回 timeout 并点名还在跑的 pid（账上那条保持 pending）；编号不存在返回 not_found。都不抛异常。给 timer_id 停一条，给 all_programs=true 停我名下全部。只发给能起程序的角色（只读角色 C/H/V 不在面上：它们本来也起不了程序）。 | `write_local` | （无） |
 

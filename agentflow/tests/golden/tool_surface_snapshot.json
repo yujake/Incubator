@@ -3086,7 +3086,7 @@
    ],
    "sandbox_required": false,
    "side_effect": "write_local",
-   "summary": "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。",
+   "summary": "写文本文件（原子落盘；默认不覆盖已有文件）。`f-proof-*`/`*-proof.md` 对 F/D/M 拒写；A/B 在 `reports/` 下另拒 `f-proof-`/`b-proof-`/`e-proof-`/`e-num-` 四族（`notes/` 不算），E/G/L 在 `reports/` 下拒前三族（`e-num-` 是 E 自己的族，只对 D 拒），D 另拒 `b-proof-`/`e-proof-`/`e-num-`，`*-research.md` 对 D/M 拒写，M 另拒 `RESEARCH.md`；D 可写 `RESEARCH.md`；D 在任何路径写带 `## 证明` 的正文都照拒（`out/proofs/*.md` 同）；例外只有 `RESEARCH.md` 引 `reports/f-proof-<号>.md` 或其 sha256 —— 要落稿就派 F。",
    "tags": [
     "fs",
     "write"
@@ -4693,6 +4693,11 @@
    "params": {
     "additionalProperties": false,
     "properties": {
+     "cand": {
+      "description": "候选槽位（`cand:<槽>` / `<槽>`）：给了它，这一趟的尝试绑在这条候选上",
+      "maxLength": 40,
+      "type": "string"
+     },
      "hint": {
       "maxLength": 200,
       "type": "string"
@@ -4713,13 +4718,13 @@
     ],
     "type": "object"
    },
-   "returns": "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256','http_status','max_bytes_requested','max_bytes_effective','elapsed_s','content_warning','warnings'}；失败：ok=False + kind(download_failed/download_error) + fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）",
+   "returns": "{'ok','url','hint','path','rel_path','dest_dir','filename','bytes','sha256','http_status','max_bytes_requested','max_bytes_effective','elapsed_s','content_warning','warnings'}；失败：ok=False + kind(download_failed/download_error/unknown_slot/no_store/store_error) + fetch_kind（下载层那一档：tls_cert/tls_timeout/http_403/http_401/network_error/timeout/all_sources_failed …，见 fetch.ERROR_KINDS）+ cand（给了 cand 才有：归一后的槽位）+ read_receipt（这次失败落下的那条 extract_failed 回执；没给 cand ⇒ null）",
    "roles": [
     "A"
    ],
    "sandbox_required": true,
    "side_effect": "write_local",
-   "summary": "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。",
+   "summary": "把候选的 `pdf_url` 下到 downloads/（同名不覆盖；给 sha256）。**失败先读 `fetch_kind`**：`tls_cert`/`http_403` ⇒ 换源；`tls_timeout` ⇒ 再试一次；`network_error` ⇒ 可重试；`all_sources_failed` ⇒ 走完。`content_warning=content_type_mismatch` ⇒ 落地页，别当全文。给 `cand=<槽位>` 时这一趟绑在那条候选上：失败也会留一条“试过、拿不到可读文本”的回执（档位 `extract_failed`）⇒ 这一条可以按仅题录判收；不给 `cand` 行为不变。",
    "tags": [
     "search",
     "download"
@@ -7419,7 +7424,7 @@
   "review.scan_text_integrity": "(paths, limit=None)",
   "review.verify_fixes": "(**kw)",
   "search.dedup_check": "(title, year=None, doi=None)",
-  "search.download": "(url, hint='paper', max_bytes=52428800)",
+  "search.download": "(url, hint='paper', max_bytes=52428800, cand='')",
   "search.ingest_local": "(books_dir, pattern='*.pdf', limit=None, max_bytes=25165824, dry_run=False)",
   "search.literature": "(topic, mode='topical', description='', limit=10, provider='openalex', providers=None)",
   "search.local": "(query, limit=5, max_chars=1200, lit_id='', max_books=None)",

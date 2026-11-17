@@ -2596,7 +2596,17 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…。
 # 十一格不是手抄：`temp/pa4/recompute_digests.py`（导入本文件的 `_surface_digest`，先钉
 # `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['B', 'F']。
-_FROZEN_PROMPT_VERSION = "p289"
+# p290（2026-11-17，AL2·#4/#5 合并版；一版只抬一次）：#4 把保留表补全（E/G/L 拒
+# `reports/{f,b,e}-proof-*`；D 只许自己那一族）—— 它的模型可见那一半是 `fs.write` 的
+# summary；#5 给 `search.download` 加候选绑定 `cand`（下载失败也落一条 `extract_failed`
+# 回执）—— 参数面多一格、returns 多两格。两者都只出现在 A 的工具面上（本表用的注册表
+# 不带 workspace ⇒ fs 工具不在面上，故 `fs.write` 摘要那半只进工具面快照与 agent 面），
+# 因此变化格 = A：其余十格逐字相同（版本行已归一）。逐格旧值 → 新值：
+# A 13a913b0e5d642d1f9cb5f69642d73b6945a39d8fb02457caede966fe82815e1 →
+#   28b53e8eee664775d01fe290cfe02ab4822267ed73010cc72b7c9d5a873c7e44。
+# 十一格不是手抄：`temp/al2/recompute.py`（导入本文件的 `_surface_digest`，先钉
+# `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['A']。
+_FROZEN_PROMPT_VERSION = "p290"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2865,7 +2875,7 @@ _FROZEN_PROMPT_VERSION = "p289"
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "13a913b0e5d642d1f9cb5f69642d73b6945a39d8fb02457caede966fe82815e1",
+    "A": "28b53e8eee664775d01fe290cfe02ab4822267ed73010cc72b7c9d5a873c7e44",
     "B": "4a8152635eb3148b37a5fa3c53d25675c55c1933620afe3a281af14a26cddcf8",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
