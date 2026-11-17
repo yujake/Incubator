@@ -18,9 +18,9 @@
 | a2 | 签后改过正文（签 sha ≠ 稿当前正文 sha）⇒ 同一句拒 + 把"签后改过正文"如实报出来 | 违规态不许静默 |
 | a3 | `attack.step(product=…)` 重交同一稿号 ⇒ 受控拒，稿一个字节没动 | 写口 3 |
 | a4 | `promote`（老盘搬家）不许动已签的稿 | 写口 4 |
-| b | 未签 ⇒ 三种写口照旧能写 | 冻结只拦已签的 |
+| b | 未签 ⇒ 冻结闸放行：拒 `fs.write` / `fs.edit` 的是保留表那一档（`kind` 不是 `manuscript_frozen`）；e-num / `promote` / B 自己那份未签 b 稿照旧能写 | 冻结只拦已签的 |
 | c | 「暂无引用权」：未收录 ⇒ 已有的可引门（`refvocab` 的 `stmt:` 那一档）已经挡，本批不新加门 | 只确认 |
-| d | 反真空：摘掉冻结 ⇒ a 红 | a 的绿来自冻结那一步 |
+| d | 反真空：摘掉冻结 ⇒ 那一格 `manuscript_frozen` 读数整个消失 | a 的绿来自冻结那一步 |
 
 ## 为什么 `e-num` 不在射程内
 
@@ -42,7 +42,12 @@ from agentflow import refvocab as RV
 from agentflow import vsigns as VS
 from agentflow.agent_f import AgentF
 from agentflow.store import Store
-from agentflow.tools.fs_tools import FsContext, fs_edit, fs_write
+from agentflow.tools.fs_tools import (
+    RESERVED_ARTIFACT_KIND,
+    FsContext,
+    fs_edit,
+    fs_write,
+)
 
 import _credential_fixture as CF
 import conftest
@@ -93,8 +98,11 @@ def _ws(tmp_path: pathlib.Path, *, seed: bool = True) -> Store:
 
 
 def _ctx(st: Store) -> FsContext:
-    """工具上下文。刻意不挂调用角色：空角色 = 表外调用，保留表不生效 ⇒
-    `fs.write` 对一份手稿本来就能写（这样 b 的"照旧能写"才是真读数）。"""
+    """工具上下文。刻意不挂调用角色：空角色 = 表外调用 ⇒ 按角色分行的保留表不生效。
+
+    2026-11-17（DOCGATE2 ③）起，`reports/<谁>-proof-<号>.md` 那条形状级保留对任何角色
+    （含空角色）都成立 —— b 的 ① 就是读这一格：未签的稿被拒时 `kind` 是保留表
+    那一个，不是冻结那一个。"""
     return FsContext(root=pathlib.Path(st.root), actor="probe")
 
 
@@ -257,28 +265,59 @@ def test_a4_promote_cannot_move_a_signed_manuscript(tmp_path) -> None:
 # ------------------------------------------------------------------ b 未签照旧
 
 def test_b_unsigned_manuscripts_are_still_writable(tmp_path) -> None:
-    """b：未签 ⇒ 三种写口照旧能写（冻结只拦已签的，不误伤）。"""
+    """b：未签 ⇒ 冻结闸放行，仍开放的写口照旧能写（冻结只拦已签的，不误伤）。
+
+    2026-11-17（DOCGATE2 ③）：`reports/<谁>-proof-<号>.md` 这一族落点成了形状级保留
+    （对任何角色、含没挂角色上下文；判据
+    `test_docgate2_two_side_doors_are_closed.py::test_f_a_write_without_a_role_context_is_refused_too`）。
+    于是 `fs.write` / `fs.edit` 对未签的 f 稿也由保留表拒 —— 拒它的是那一档，
+    不是冻结。本用例因此读两件事：
+    ① 拒那两笔的是保留表（`kind` 是保留表那一个、不是 `manuscript_frozen`，拒信里没有
+       「已经拿签」）⇒ 冻结没有误伤未签的稿；
+    ② 未签的稿在仍开放的三个口上照旧能写：e-num（绿色通道）、`promote`、以及 B 自己
+       号段上那份未签 b 稿的 `fs.edit`（甲类窄豁免那一格）。
+    """
+    from agentflow import manuscriptids as MID
+    from agentflow.conductor import calling_as
     from agentflow.tools import fs_tools as FT
 
     st = _ws(tmp_path)
     rel = _write_manuscript(st, BODY_1)
 
-    # `fs.write` 对已有文件要求"先读过一次"（既有纪律），所以先读再写。
+    # ① 未签：`freeze_reading` 查过了、没签；拒 `fs.write` / `fs.edit` 的是保留表那一档。
+    assert FZ.freeze_reading(st.root, rel)["state"] == "unsigned"
     assert FT.fs_read(_ctx(st), path=rel).ok is True
     got = fs_write(_ctx(st), path=rel, content=TEXT.format(body=BODY_2), overwrite=True)
-    assert got.ok is True, (got.meta, got.error)
-    assert FT.fs_read(_ctx(st), path=rel).ok is True
-    got2 = fs_edit(_ctx(st), path=rel, old_string=BODY_2, new_string=BODY_1)
-    assert got2.ok is True, (got2.meta, got2.error)
+    assert got.ok is False, (got.meta, got.error)
+    assert got.meta.get("kind") == RESERVED_ARTIFACT_KIND, got.meta
+    assert got.meta.get("kind") != FZ.MANUSCRIPT_FROZEN, (
+        "未签的稿落进了冻结那一档 ⇒ 冻结误伤了未签的稿", got.meta)
+    assert "已经拿签" not in str(got.error), got.error
+    got2 = fs_edit(_ctx(st), path=rel, old_string=BODY_1, new_string=BODY_2)
+    assert got2.ok is False, (got2.meta, got2.error)
+    assert got2.meta.get("kind") == RESERVED_ARTIFACT_KIND, got2.meta
+    assert got2.meta.get("kind") != FZ.MANUSCRIPT_FROZEN, got2.meta
+    assert (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") == TEXT.format(body=BODY_1)
 
-    # e-num（绿色通道，不拿签）照旧能写
+    # ② e-num（绿色通道，不拿签）照旧能写
     num = "reports/e-num-000000.md"
     (pathlib.Path(st.root) / num).write_text("## 命题\n\nP\n", encoding="utf-8")
     assert FT.fs_read(_ctx(st), path=num).ok is True
     assert fs_write(_ctx(st), path=num, content="## 命题\n\nP2\n",
                     overwrite=True).ok is True
 
-    # promote：未签的稿照旧能转正
+    # ③ B 自己号段上未签的 b 稿：`fs.edit` 照旧能写（甲类窄豁免；那一格的形状由
+    # `test_b_may_edit_its_own_unsigned_proof.py` 单独钉着）
+    mid = MID.next_manuscript_id(st, family="b-proof")
+    rel_b = f"reports/b-proof-{mid}.md"
+    (pathlib.Path(st.root) / rel_b).write_text(TEXT.format(body=BODY_1), encoding="utf-8")
+    with calling_as("t-frozen-b", "B"):
+        assert FT.fs_read(_ctx(st), path=rel_b).ok is True
+        edited = fs_edit(_ctx(st), path=rel_b, old_string=BODY_1, new_string=BODY_2)
+    assert edited.ok is True, (edited.meta, edited.error)
+    assert BODY_2 in (pathlib.Path(st.root) / rel_b).read_text(encoding="utf-8")
+
+    # ④ promote：未签的稿照旧能转正
     promoted = MF.promote_formal(st.root, family=MF.FAMILY_F, statement_id=SID,
                                  manuscript_id="000900", source=rel,
                                  text=TEXT.format(body=BODY_1))
@@ -306,15 +345,35 @@ def test_c_an_unregistered_signed_manuscript_is_not_citable(tmp_path) -> None:
 
 # ------------------------------------------------------------------ d 反真空
 
-def test_d_without_the_freeze_the_signed_manuscript_is_writable_again(
+def test_d_without_the_freeze_the_freeze_refusal_disappears(
         tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """d 反真空：摘掉冻结 ⇒ a 的写口立刻变红（稿又被写进去了）。"""
+    """d 反真空：摘掉冻结 ⇒ 那一格 `manuscript_frozen` 读数整个消失。
+
+    改前这一条断的是「摘掉冻结 ⇒ 这份稿又能写进去」。2026-11-17（DOCGATE2 ③）之后
+    那一步不可达：`reports/<谁>-proof-<号>.md` 的形状级保留对任何角色都成立，
+    冻结摘掉之后接着拒的是保留表（`reserved_framework_artifact`）—— 换了拒信，但没有
+    放行。所以这一格钉「可区分的那一格读数」：`kind=manuscript_frozen` 与「已经拿签」
+    那句，都只在冻结闸装着的时候出现；a 的绿就来自这一步（而不是来自保留表）。
+    """
     st = _ws(tmp_path)
     rel = _signed(st)
     from agentflow.tools import fs_tools as FT
 
+    before = (pathlib.Path(st.root) / rel).read_text(encoding="utf-8")
+    refused = fs_write(_ctx(st), path=rel, content=TEXT.format(body=BODY_2), overwrite=True)
+    assert refused.ok is False, refused
+    assert refused.meta.get("kind") == FZ.MANUSCRIPT_FROZEN, refused.meta
+    assert "已经拿签" in str(refused.error), refused.error
+
     monkeypatch.setattr(FT, "_manuscript_frozen", lambda *a, **k: None)
+    # 读不拦（冻结管的是写）；这一格也顺带确认 `fs_read` 没被保留表误伤。
     assert FT.fs_read(_ctx(st), path=rel).ok is True
     got = fs_write(_ctx(st), path=rel, content=TEXT.format(body=BODY_2), overwrite=True)
-    assert got.ok is True, ("冻结被摘掉之后仍拒？d 没打到这一格", got.meta, got.error)
-    assert (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") == TEXT.format(body=BODY_2)
+    assert got.ok is False, (
+        "冻结被摘掉之后这一笔落盘了 ⇒ 盘上那一份被改了", got.meta, got.error)
+    assert got.meta.get("kind") == RESERVED_ARTIFACT_KIND, (
+        "摘掉冻结之后拒信不是保留表那一档 ⇒ d 没打到冻结那一格", got.meta)
+    assert got.meta.get("kind") != FZ.MANUSCRIPT_FROZEN, (
+        "冻结被摘掉之后仍然是冻结那一档 ⇒ d 没打到这一格", got.meta)
+    assert "已经拿签" not in str(got.error), got.error
+    assert (pathlib.Path(st.root) / rel).read_text(encoding="utf-8") == before
