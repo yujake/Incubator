@@ -1870,6 +1870,72 @@ def _semantic_quote_evidence_refusal(body: Mapping[str, Any]) -> dict[str, str]:
                        "为什么（三态纪律：没查不许折成查过了没问题）")}
 
 
+# ---------------------------------------------------------------- own_result 的来路闸
+#
+# 2026-11-17（业主裁定 ② 的尾巴）：B 的登记路（`register_statement`）在写库之前已经
+# 按 `statementledger.own_result_basis_missing` 受控拒过；而秘书这条写口此前一个字都
+# 没拦 —— `table.create("statements")` 被 `store.direct_write_refusal` 转给秘书
+# （`tools/table_tools.py::_route_to_secretary`）之后，同一份"没有来路"的 own_result
+# 载荷仍能落进台账。真机 `projects/lp-ball-3`：33 条命题里 3 条 `origin=own_result`、
+# `derived_from` 与 `source_lit_id` 全空，收工门因此红。
+#
+# 判据只有一处（`statementledger.own_result_basis_missing`），措辞只有一处
+# （`statementledger.own_result_basis_refusal`）：两条写路（B 的登记 / 秘书的写口）
+# 读同一份、说同一句，码也逐字相同（`register_statement` 的
+# `_refuse("missing_own_result_basis", …)`）。
+
+#: 这一档的受控码。与 `agent_b/register_statement.py` 的 `missing_own_result_basis`
+#: 逐字相同；为什么不从那边 import：`agent_b` 依赖本模块，反向 import 会成环。
+#: 判据（`tests/test_table_create_cannot_register_an_own_result_without_basis.py`
+#: 的 b 条）断言两处吐出的码与拒信逐字相等 —— 漂了会红。
+MISSING_OWN_RESULT_BASIS = "missing_own_result_basis"
+
+
+def _numeric_experiment_basis(body: Mapping[str, Any]) -> bool:
+    """这一笔 own_result 的来路是不是一条 E 的数值实验行（普通数值绿通的来路）。
+
+    为什么秘书这一侧要认这一格：B 的登记路对普通数值绿通（`_green.ok`）放行，
+    理由是"它的来路是那一条实验行（`exp:<号>`），既不是已登记的命题、也不是一篇
+    文献"。判据要逐字同源，写口的例外就必须同源 —— `_green` 是 B 的私有读数、
+    不会出现在载荷里；它落进载荷的那一格是五元位第 1 位（`numeric="verified"`）
+    加上凭据里的实验指针（`experiments` / `experiment_id` / `script`）。
+
+    `bits` 不在 `table.create` 的可路由键里（`tools/table_tools._NOT_ROUTABLE_KEYS`）
+    ⇒ 这一格只可能由产出侧现算交来，通用写口伪造不了它。
+    """
+    bits = body.get("bits")
+    if not isinstance(bits, Mapping):
+        return False
+    if str(bits.get("numeric") or "").strip().lower() != "verified":
+        return False
+    evidence = bits.get("evidence")
+    num = dict(evidence.get("numeric") or {}) if isinstance(evidence, Mapping) else {}
+    if not num:
+        return False
+    return bool(str(num.get("experiment_id") or "").strip()
+                or [x for x in (num.get("experiments") or []) if str(x).strip()]
+                or str(num.get("script") or "").strip())
+
+
+def _own_result_basis_refusal(body: Mapping[str, Any]) -> dict[str, Any]:
+    """`origin="own_result"` 而两格来路都空 ⇒ 受控拒；不适用 / 齐了 ⇒ `{}`（空字典）。
+
+    判据与拒信都从 `statementledger` 那唯一一处取：`own_result_basis_missing`
+    （缺哪几格）+ `own_result_basis_refusal`（逐条点名、给两条正路）。两个例外按
+    同一份口径放行：
+    - 概念行：判据自己按 `kind` 短路（`OWN_RESULT_BASIS_EXEMPT_KINDS`），不在这里判；
+    - 普通数值绿通：来路是实验行，见 `_numeric_experiment_basis`。
+    """
+    missing = SL.own_result_basis_missing(
+        origin=body.get("origin"), derived_from=body.get("derived_from"),
+        source_lit_id=body.get("source_lit_id"), kind=body.get("kind"))
+    if not missing or _numeric_experiment_basis(body):
+        return {}
+    return {"refused": MISSING_OWN_RESULT_BASIS,
+            "reason": SL.own_result_basis_refusal(missing),
+            "missing": list(missing)}
+
+
 def _manuscript_upgrade_basis(*, root: Any, manuscript_text: Any = "",
                               manuscript_path: Any = "", proof_text: Any = "",
                               bits: Mapping[str, Any] | None = None
@@ -9374,10 +9440,21 @@ class Secretary:
         refused = str((out or {}).get("refused") or "")
         if refused:
             # 留痕不许改变处置：写不进去时 `record_refusal` 自己返回 None（不抛）。
+            #
+            # `task_id` 优先用秘书自己绑的那个；没绑（`for_role_wired` 造出来的那一档
+            # 不绑，`table.create` 路由过来的就是这一档）⇒ 读这一趟召唤的号 ——
+            # 否则台账上"哪一单被拒"这一格是空的，而审计要的正是它。
+            _task_id = str(getattr(self, "task_id", "") or "")
+            if not _task_id:
+                try:
+                    from .conductor import current_task_id as _current_task_id
+                    _task_id = str(_current_task_id() or "")
+                except Exception:  # noqa: BLE001 —— 读不到挂点不妨碍留痕，也不许改变处置
+                    _task_id = ""
             R.record_refusal(
                 self.root, kind=refused,
                 why=str((out or {}).get("reason") or ""),
-                role=str(role or ""), task_id=str(getattr(self, "task_id", "") or ""),
+                role=str(role or ""), task_id=_task_id,
                 where="secretary.record_statement")
         return out
 
@@ -9401,7 +9478,8 @@ class Secretary:
 
         理由码：`secretary_unavailable` / `not_statement_writer` / `wash_failed` /
         `unresolved_dependency`（依赖指着一个不在册的 id）/ `unknown_lit_id` /
-        `empty_statement`（缺 `statement_full` —— 只有短版不算数）。
+        `empty_statement`（缺 `statement_full` —— 只有短版不算数）/ `missing_own_result_basis`
+        （`origin="own_result"` 而两格来路都空 —— 与 B 的登记路同码同措辞，整笔不写）。
         概念的定义空着不是拒绝：它落成 `pending_definition` + 待补标记。
 
         ## 同一命题 / 同种证明
@@ -9507,6 +9585,13 @@ class Secretary:
                        merged=False, refused="bad_origin",
                        reason=(f"origin 必须是 {S.STATEMENT_ORIGINS} 之一，"
                                f"收到 {_origin_now!r}"))
+            return out
+        # ---- own_result 的来路闸（与 B 的登记路同一个判据 / 同一个码 / 同一句拒信）----
+        # 位置在正文闸之前：来路是"这一笔该不该存在"的问题，不是"这一份正文合不合规"。
+        _basis_refusal = _own_result_basis_refusal(body)
+        if _basis_refusal:
+            out.update(checked=False, created=False, duplicate=False, upgraded=False,
+                       merged=False, **_basis_refusal)
             return out
         # ---- 正文必须由手稿承载：`proof_text` 的唯一收口闸 ----
         #
