@@ -2,8 +2,12 @@
 
 > 依据：三份只读审计 `temp/probes/_lean_audit_switchpath.md`、`_lean_audit_prompts.md`、`_lean_audit_gate.md`
 > （2026-10-17，每条都带 `file:line`）。本文把"两种模式下各角色该做什么 / 哪些动作可用或被拒 /
-> 证据上限 / 收工门各格判什么"写成一张可核对的表。**它是判据的规格**：
-> `tests/test_lean_modes_matrix.py` 逐行断言这里的每一条。
+> 证据上限 / 收工门各格判什么"写成一张可核对的表。**可执行的那部分**由
+> `tests/test_lean_modes_matrix.py` 逐面断言（第一行 / V 的强度 / `check_formal` 直拒 /
+> `detect_verifier` / M 与 L 的义务句 / 画像改写 / 技能索引 / H 的措辞）；**整份矩阵的每一行**
+> 由 `tests/test_lean_modes_lines_are_pinned.py` 钉住（逐行 sha256：改一行就红，改的人必须回答
+> "这一条还成立吗、对应哪条判据"）。旧版这里写的「`test_lean_modes_matrix.py` 逐行断言这里的
+> 每一条」不成立 —— 那份判据只覆盖可执行差异，逐行的是下面这条钉住判据。
 
 ## 0. 先分清两个开关（最容易搞错的一条）
 
