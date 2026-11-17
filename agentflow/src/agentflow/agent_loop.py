@@ -14622,6 +14622,35 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
     top_closed: dict[str, bool] = {"done": False}
     top_problems: list[str] = []
 
+    def _this_run_as() -> Any:
+        """以这一趟顶层的身份跑一小段（号 + 会话身份都挂在 `calling_as` 上）。
+
+        ## 为什么这一层必须有挂点（2026-11-17，AH3）
+
+        真机 `projects/lp-ball-2` 的 `usage_ledger` 里 3 行 `task_id=""`、`role=M`，
+        note 是「调用方没给 task_id，且不在任何 ambient 里」（$0.000458）。它们不是
+        本体循环的调用（那些由循环显式传 `task_id=self.my_task_id`，全部有主），而是
+        循环体里发出去的秘书判定（`secretary:tool_name`）：`Secretary.judge` 不传
+        `task_id`，归口只能靠 `ambient_task_id()` —— 而 `run_role` 这条顶层路此前
+        一个 `calling_as` 都没有。号就在手上（`top_tid`），缺的是把它挂进上下文的
+        那一次 `set`。
+
+        ## 为什么也包 `_close_top`
+
+        顶趟自己那一行 `task_end` 走 `finish_top_level_run` → `Conductor.finish`，
+        而 `finish` 的会话落点读 `current_session()[1]`（AH4）。收行发生在本方法
+        返回之后/异常兜底里，调用方的上下文已经不在了 ⇒ 不挂这一下，顶趟那一行
+        仍会落进缺省会话（真机 48 条 `task_end` 里就有它）。三条收行出口（正常 /
+        续跑被拒 / 崩溃）都走同一个闭包，所以只挂在这一处就够。
+
+        形态与 `_do_tool` / `LlmBackend.call` 的两处既有挂点逐字同源：号、角色、
+        会话根、sid 四个都传（父的两格刻意不传 —— 顶层没有父，与既有挂点同义）。
+        """
+        from .conductor import calling_as
+
+        return calling_as(str(top_tid or ""), role,
+                          session_root=str(root or ""), sid=str(sid or ""))
+
     def _close_top(stop_reason: str, detail: str = "",
                    cut_off: Sequence[str] = ()) -> None:
         """把顶趟那一行收成终态（幂等：只写一次；没有台账号 ⇒ 什么都不做）。"""
@@ -14629,11 +14658,12 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
             return
         top_closed["done"] = True
         try:
-            conductor.finish_top_level_run(
-                top_tid, stop_reason=str(stop_reason or ""), detail=str(detail or ""),
-                # D22：只传原料（编号列表）；"掐断了 N 个…"那句措辞与计数在
-                # `finish_top_level_run` 一处组装（父行只有那一个组装点）。
-                cut_off_children=list(cut_off or ()))
+            with _this_run_as():
+                conductor.finish_top_level_run(
+                    top_tid, stop_reason=str(stop_reason or ""), detail=str(detail or ""),
+                    # D22：只传原料（编号列表）；"掐断了 N 个…"那句措辞与计数在
+                    # `finish_top_level_run` 一处组装（父行只有那一个组装点）。
+                    cut_off_children=list(cut_off or ()))
         except Exception as exc:  # noqa: BLE001 - 收行失败不许带走这一趟的产出
             log = getattr(conductor, "_log", None)
             if callable(log):
@@ -14769,13 +14799,15 @@ def run_role(role: str, task: str, *, store: Any, registry: Any,
                            "（同角色 + 同任务原文的 `agent_step` 一条都没有）"
                            "⇒ 没查成：不许从第 1 步重跑。")))
             ran = True
-            run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid,
-                           depth=start_depth, resumed=(rebuilt, step0),
-                           waiting_for=str(cp.get("waiting_for") or ""))
+            with _this_run_as():
+                run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid,
+                               depth=start_depth, resumed=(rebuilt, step0),
+                               waiting_for=str(cp.get("waiting_for") or ""))
         else:
             ran = True
-            run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid,
-                           depth=start_depth)
+            with _this_run_as():
+                run = loop.run(task, summoned_by=summoned_by, my_task_id=top_tid,
+                               depth=start_depth)
         # ---- F1：顶趟也要收行（开了不收 = 台账上永远一条 `running`）
         _close_top(run.stop_reason, run.final, run.cut_off_children)
     finally:
