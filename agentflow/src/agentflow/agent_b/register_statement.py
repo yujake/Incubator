@@ -205,6 +205,28 @@ def _pointer_body_present(name: str, value: Any) -> bool:
     return bool(str(value or "").strip())
 
 
+def _merged_derived_from(*groups: Any) -> list[str]:
+    """把几段 `derived_from`（调用方显式给的 + 稿里抽出来的）合成一条确定性序列。
+
+    2026-11-17（PTR1）：按手稿路径收录那一支改前只把稿里 `## 证明` 的 `stmt:` 引用
+    当承重链，调用方显式给的 `derived_from`（以及 `source_lit_id`）在这一层被丢掉
+    —— 于是"自足、不引用任何在册命题"的 F 稿没有任何诚实来路可写，来路闸
+    （`statementledger.own_result_basis_missing`）必然拒。合并口径：先按调用方给的
+    次序，再接稿里出现的次序；同一个号只留第一次出现（`None` / 非序列 ⇒ 当作没给）。
+    落库前还会经 `schema.sorted_unique` 升序，所以这里的次序只影响"先去重哪一条"，
+    不改变落盘的确定性。
+    """
+    out: list[str] = []
+    for group in groups:
+        if not isinstance(group, (list, tuple)):
+            continue
+        for one in group:
+            sid = str(one or "").strip()
+            if sid and sid not in out:
+                out.append(sid)
+    return out
+
+
 def _caller_is_d() -> bool:
     """这一笔的发起方是不是 D（B 的直调上下文里 `current_caller_role()`；被 D 召唤时是父角色）。
 
@@ -6405,7 +6427,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             return self._note_conjecture_landing(
                 self.ingest_manuscript(
                     manuscript=rel, mode="register", cells=(), conflict="refuse",
-                    reason="按手稿路径收录（D 只递指针）", provenance=line_range),
+                    reason="按手稿路径收录（D 只递指针）", provenance=line_range,
+                    # 2026-11-17（PTR1）：调用方给的来路不许在这一格丢掉 —— 稿里不
+                    # 引用在册命题时，它是这一笔唯一的诚实来路（合并与透传在
+                    # `_register_pointer_manuscript` 一处做）。
+                    source_lit_id=source_lit_id, derived_from=derived_from),
                 statement_full=statement_full, rel=rel)
         #: 判/落拆段的回传槽（NT2）：`_register_statement_impl` 在写台账之前把判出来的
         #: 读数填进来；这里收尾时落 `unrecorded` 痕迹并把 T0 读数放回执（给模型看）。
@@ -6517,7 +6543,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
     def _register_pointer_manuscript(self, rel: str, *, provenance: Any = None,
                                      reading: Mapping | None = None,
-                                     nontriviality: dict | None = None
+                                     nontriviality: dict | None = None,
+                                     source_lit_id: str = "", derived_from: Sequence[str] | None = None
                                      ) -> tuple[dict, str, str]:
         """按手稿路径收录：把该登记的那几样全部从稿里读出来（D 只递了指针）。
 
@@ -6540,8 +6567,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         | `kind` | 稿头 `- 命题类型：<kind>`（老盘旧名 `- 证据种类：` 照读；认不出 / 词表外 ⇒ 按族取缺省：`e-proof` ⇒ theorem、其余 ⇒ conjecture） |
         | `evidence_kind` | 按族定：`e-proof` ⇒ `proof`（穷举证明，要 V 签）、`e-num` ⇒ `cross_check`（有数值实验支持）、F 的文字证明 ⇒ `heuristic` |
         | 出处 `line_range` | `e-*` ⇒ `exp:<实验号>`（稿头 / 路径名 / 调用方给的出处，三者同一处）；F ⇒ 稿的路径本身 |
-        | 承重链 `derived_from` | 证明正文里的 `stmt:` 引用（与 `depsection.stmt_refs` 同一口径） |
+        | 承重链 / 来源文献 | 稿里 `## 证明` 的 `stmt:` 引用 ＋ 调用方显式给的 `derived_from` / `source_lit_id`（`_merged_derived_from` 合并去重，两处都不丢） |
         | `label` | F 的稿头 `- 标签：`；E 的取命题首行前 80 字 |
+
+        来路两格必须在这里透传（2026-11-17，PTR1）：自足稿抽不出 `derived_from`，调用方
+        给的 `source_lit_id` / `derived_from` 就是唯一的诚实来路（丢掉必被来路闸拒）。
 
         返回 `(B 的登记结果, origin, kind)`；受控拒时 origin / kind 是空串。
         """
@@ -6703,7 +6733,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             kind=kind, label=label, origin=origin_now,
             evidence_kind=evidence_kind, quote_verified=None,
             quote_reason=quote_reason,
-            derived_from=[str(x) for x in (_DS.stmt_refs(proof_text) or ())],
+            source_lit_id=str(source_lit_id or ""),
+            derived_from=_merged_derived_from(derived_from, _DS.stmt_refs(proof_text)),
             doc_id=doc_id, line_range=line_range, nontriviality=nontriviality)
         if isinstance(got, dict):
             got = self._pointer_receipt(
@@ -8034,7 +8065,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     def _ingest_register(self, *, reading: Mapping, requested: Sequence[str],
                          out: dict, family: str, path: str,
                          provenance: Any = None,
-                         nontriviality: dict | None = None) -> dict:
+                         nontriviality: dict | None = None,
+                         source_lit_id: str = "",
+                         derived_from: Sequence[str] | None = None) -> dict:
         """`mode=register`：把这份稿登记成新命题（继承 pointer 那条路的全部闸）。"""
         from .. import manuscriptfamily as _MFAM
         from .. import manuscriptintake as _MI
@@ -8057,7 +8090,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 proposition_form=dict(_form_refusal["proposition_form"]))
         got, origin, kind = self._register_pointer_manuscript(
             path, provenance=provenance, reading=reading,
-            nontriviality=nontriviality)
+            nontriviality=nontriviality,
+            source_lit_id=source_lit_id, derived_from=derived_from)
         if not isinstance(got, dict):
             return self._ingest_fail(out, "registration_refused",
                                      "登记没有返回读数（不假装写成）")
