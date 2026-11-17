@@ -990,21 +990,53 @@ def _tasks_write_refusal(*, table: str, row: Mapping[str, Any],
     return None
 
 
+def _is_board_item_for_me(row: Mapping[str, Any], *, me: str, role: str) -> bool:
+    """这一行板项（`kind` 非空）是不是"开给我这一趟的"（`tasks` 读侧的 owner 档）。
+
+    ## 2026-11-17（INV2 钉死的第二处；证据 `temp/inv2/REPORT.md` §2.3）
+
+    改前 `_visible_tasks` 只认"`kind == ""` 的直接下级"，板项行一律排除在可见面外。
+    后果不是"少看一条"，而是"义务的收件人看不见自己的义务正文"：真机
+    `projects/lp-ball-6` 上 B 的 `table.get(tasks, "t-000079")` 回 `found=false`
+    （`table.list(tasks)` 只回 2 行），它只能去 `fs.search` 翻 `events.jsonl` 的原文。
+
+    为什么"owner" = `parent_task_id == 我`：板项行那一格的口径就是"收件人的台账号"
+    （D89），同一条判据在 `Conductor.open_items_by_parent`（按 `parent_task_id` 归到
+    收件人）、`Conductor._item_authority`（`owner = row["parent_task_id"]`）与
+    `open_item(..., parent_task_id=…)` 的每个调用点上（`clock` 的收件人、`guide` 的
+    链尾、`post_task` 的自己、`obligations` 选出的 owner）。
+
+    `role` 再核一次（行上的 `role` 是"收件角色"）：号撞上而角色不同只可能是写错行 /
+    号复用，这两种都不该因为"号相同"就把别人的活交给我。行上 `role` 为空（历史行）
+    ⇒ 不拦：那一格当时没写，不是"写给了别人"。
+    """
+    if not str(row.get("kind") or ""):
+        return False
+    if str(row.get("parent_task_id") or "") != str(me or ""):
+        return False
+    row_role = str(row.get("role") or "")
+    return not row_role or not role or row_role == role
+
+
 def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
                    task_id: str) -> list[dict[str, Any]]:
     """`tasks` 的读侧过滤（业主 2026-10-24 裁定的执行点）。
 
-    三条口径：
+    四条口径：
     - 主控 M：全表（它能想追几层追几层；全树的正路是 `conductor.watch`）；
     - 非 M 且有台账号：自己那一行 + 直接下级（`parent_task_id` 等于我、且
-      `kind == ""` 的实例行）+ 自己的父那一行；
+      `kind == ""` 的实例行）+ 自己的父那一行 + 开给我的板项
+      （`_is_board_item_for_me`）；
     - 非 M 且没有台账号：受控拒绝。不许"没挂身份就按全表读"——那正是这次要关的
       那条路（`table.get` / `table.list` / `table.search` / `table.count` 都经
       `_rows`，所以关在这一处就够）。
 
-    为什么要排除板项行：`tasks` 里板项（`kind` 非空）的 `parent_task_id` 口径是
-    "收件人的编号"（D89），把它们当子代理会让"我的直接下级"多出一批通报项
-    （与 `Conductor._children_of` 同一条出身过滤）。
+    为什么板项不算"直接下级"、却要单独给 owner 一档：`tasks` 里板项（`kind` 非空）的
+    `parent_task_id` 口径是"收件人的编号"（D89），把它们当子代理会让"我的直接下级"
+    多出一批通报项（与 `Conductor._children_of` 同一条出身过滤）。但"不算下级"不等于
+    "收件人也不该看见"——反过来，那一行正是它这一趟要处置的活。所以两件事分开：
+    实例轴只给 `kind == ""`（可见面一个字没放宽），板项轴只给 `parent_task_id == 我`
+    的那几行（别人的板项照旧看不见）。
     """
     if str(role or "") == S.CONDUCTOR_ROLE:
         return [dict(r) for r in rows]
@@ -1029,7 +1061,8 @@ def _visible_tasks(rows: Iterable[Mapping[str, Any]], *, role: str,
         keep.add(parent)
     return [dict(r) for r in rows
             if str(r.get("task_id") or "") in keep
-            or (str(r.get("parent_task_id") or "") == me and not str(r.get("kind") or ""))]
+            or (str(r.get("parent_task_id") or "") == me and not str(r.get("kind") or ""))
+            or _is_board_item_for_me(r, me=me, role=role)]
 
 
 

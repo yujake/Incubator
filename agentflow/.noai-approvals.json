@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T18:01:30+08:00",
+  "generated_at": "2026-11-17T20:18:43+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -466,11 +466,11 @@
       "path": "src/agentflow/tools/table_tools.py",
       "glob": "src/agentflow/tools/table_tools.py",
       "category": "auth-audit",
-      "sha256": "474e5193a73c9bbdd5b3d1b1e4573a533c03ae12ef29fbddd213f1f1d4b5ac6a",
+      "sha256": "a40632ec30e631e064baf48e7333f8218bcddd59bf05917c9d66946d3fb0fcf9",
       "authored": "ai-agent",
-      "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 ae5051053f51 变为 474e5193a73c，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
-      "changed_this_session": null,
+      "authored_basis": "inferred",
+      "change_note": "INV2②：tasks 读侧新增板项 owner 一档（_is_board_item_for_me）—— 板项的 parent_task_id（D89 收件人）等于我这一趟的台账号时可见；实例轴 kind=='' 的直接下级口径一个字未动，别人的板项照旧看不见。真机 projects/lp-ball-6 的 t-000079：B 读自己名下那条义务项 found=false -> found=true（证据 temp/inv2/REPORT.md §2.3）。登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐行走查。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []
