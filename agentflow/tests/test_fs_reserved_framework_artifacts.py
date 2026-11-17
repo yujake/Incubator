@@ -126,7 +126,13 @@ def test_c_other_paths_are_not_touched(tmp_path: pathlib.Path) -> None:
     """c 判据（正控）：保留表不许扩成"谁都不许写文件"。
 
     三件事一起钉：F 写 `notes/x.md` 放行；D 写别处的报告放行；
-    G/L（排版产物）写 `reports/` 下同样名字的文件也放行 —— 表只对表上那三行角色负责。
+    L 写 `reports/RESEARCH.md`（不是任何人的手稿族名）也放行 —— 表只对表上那些
+    "角色 × 族"负责。
+
+    2026-11-17（AU2b 甲类）：改前这里还有一条 `G` 写 `reports/f-proof-g.md` 放行。
+    那是缺口本身（G 不该能手写 F 的证明稿族），已按甲类收窄 —— 现在 G 写它受控拒，
+    正控换成 G 自己的排版产物（`out/paper/main.tex`），判据见
+    `tests/test_fs_other_roles_cannot_hand_write_manuscripts.py`。
     """
     root, reg = _ws(tmp_path)
     res = _call(reg, "F", "fs.write", path="notes/x.md", content="自由笔记")
@@ -136,11 +142,12 @@ def test_c_other_paths_are_not_touched(tmp_path: pathlib.Path) -> None:
     res = _call(reg, "D", "fs.write", path="notes/d-scratch.md", content="草稿")
     assert res.ok is True, res
 
-    res = _call(reg, "G", "fs.write", path="reports/f-proof-g.md", content="G 的排版产物")
+    res = _call(reg, "G", "fs.write", path="out/paper/main.tex", content="G 的论文正文")
     assert res.ok is True, ("G 的排版产物被误伤了", res)
 
     res = _call(reg, "L", "fs.write", path="reports/RESEARCH.md", content="L 的排版产物")
     assert res.ok is True, ("L 的排版产物被误伤了", res)
+
 
 
 def test_m_a_m_cannot_hand_write_the_proof_manuscript(tmp_path: pathlib.Path) -> None:

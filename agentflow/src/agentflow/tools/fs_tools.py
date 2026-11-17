@@ -297,6 +297,13 @@ _RESERVED_DIR = "reports"
 #: 换个目录仍然是 F 的框架产物。
 D_PROOF_PATH_RULES: tuple[str, ...] = ("prefix:f-proof-", "suffix:-proof.md")
 
+#: 别的角色的证明族规范落点（2026-11-17 AU2b 甲类）：D 对它们与对自己那两行
+#: 是同一句话（证明的落稿与拿签不属于 D ⇒ 派 F），所以规则单列一处、拒信共读它。
+D_OTHER_PROOF_PREFIXES: tuple[str, ...] = (
+    f"prefix:{_RESERVED_DIR}/b-proof-",
+    f"prefix:{_RESERVED_DIR}/e-proof-",
+)
+
 #: D 的攻坚过程记录目录（2026-11-04 裁定）：可以写 `## 思路` / `## 依赖面参考`，
 #: 不能带 `## 证明` 节 —— 那不是"过程记录"，那是一份可提交的证明稿。
 D_ATTACK_RECORD_DIR = "out/proofs/"
@@ -383,6 +390,31 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     ("B", f"prefix:{_RESERVED_DIR}/e-proof-"),
     ("B", f"prefix:{_RESERVED_DIR}/e-num-"),
     ("B", f"{MANUSCRIPT_RULE_KIND}:*"),
+    # 2026-11-17（AU2b 甲类：保留表名单不全 —— 真权限缺口）：A3 那一批只登记了 A / B。
+    # 真机实测 E / G / L 用 `fs.write` 写 `reports/f-proof-000001.md` 全部 `ok=True`；
+    # 而 2026-11-07 那一刀写下的判据原话是「`reports/f-proof-*` 这一类落点**只有框架
+    # 能写**」—— 别的角色写进去，B 的收录按 sha 认领会把一份手写稿当成真稿。
+    #
+    # 为什么这三族（f-proof / b-proof / e-proof）对 E / G / L 一律拒：
+    #   · f-proof：F 的证明稿，框架渲染（`F.step`）；E/G/L 与它无关；
+    #   · b-proof：B 的证明稿，唯一写口 `own.land_manuscript`；
+    #   · e-proof：E 自己的穷举证明稿，但**也是框架渲染**（`exhaustionreport.
+    #     compose_manuscript`，还要 V 的签）—— E 手写它等于绕过 V 签，所以它同样
+    #     进拒写面（A / B 那四行早就这么写了）。
+    # `e-num` 不在这三族里：它是 E 自己的普通数值族（2026-11-08 业主裁定），
+    # 本笔只补甲类点名的三族，不顺手扩到没点名的格。
+    #
+    # 判据（`tests/test_fs_other_roles_cannot_hand_write_manuscripts.py`）：逐角色
+    # 正向 + 反向各一条（E / G / L / D 各一组），外加"删掉这一行 ⇒ 反向必红"。
+    ("E", f"prefix:{_RESERVED_DIR}/f-proof-"),
+    ("E", f"prefix:{_RESERVED_DIR}/b-proof-"),
+    ("E", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    ("G", f"prefix:{_RESERVED_DIR}/f-proof-"),
+    ("G", f"prefix:{_RESERVED_DIR}/b-proof-"),
+    ("G", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    ("L", f"prefix:{_RESERVED_DIR}/f-proof-"),
+    ("L", f"prefix:{_RESERVED_DIR}/b-proof-"),
+    ("L", f"prefix:{_RESERVED_DIR}/e-proof-"),
     # 2026-11-04 业主裁定（逐字：「D 侧提示词里明确 D 可提供证明思路，甚至提供依赖面参考，
     # 最终的证明落稿拿签必须派给 F 完成，D 只是提供想法并收获数值实验和理论攻坚的成果，
     # 然后再提出新的想法」）：D 的两类框架产物分开 ——
@@ -395,6 +427,17 @@ RESERVED_ARTIFACT_TABLE: tuple[tuple[str, str], ...] = (
     #   没有渲染器、别手写"）；2026-11-04 的补充裁定把它翻了回来：D 的研究手稿就是既有
     #   指定形式（收录 F/E 侧成果），所以"名字里带 RESEARCH"不再等于"不许 D 写"。
     *[("D", rule) for rule in D_PROOF_PATH_RULES],
+    # 2026-11-17（AU2b 甲类）：D 只能写它自己那一族（研究手稿 `RESEARCH.md`，见
+    # `D_PROOF_PATH_RULES` 上面那一段与 `test_b_*`），**别的角色的手稿族一律不许**。
+    # 真机实测 D 写 `reports/{b-proof,e-proof,e-num}-*` 全部 `ok=True`：
+    #   · b-proof 是 B 的唯一写口（`own.land_manuscript`）；
+    #   · e-proof / e-num 是 E 的两族（`exhaustionreport.land_manuscript` /
+    #     `land_numeric_manuscript`，两族各自过开稿口）；
+    # 手写任何一族都等于把"框架渲染 + 号段 + 签"三件事跳过去，而工具层只会说"成功"。
+    # 规则带 `/`（规范落点 `reports/`）：D 在 `notes/` 下写普通草稿仍是它的正常面。
+    ("D", f"prefix:{_RESERVED_DIR}/b-proof-"),
+    ("D", f"prefix:{_RESERVED_DIR}/e-proof-"),
+    ("D", f"prefix:{_RESERVED_DIR}/e-num-"),
     # 每问题工作稿仍由 `D.write_report` 渲染（携带单在同一处生成）：手写 `*-research.md`
     # 等于把携带单跳过，B 那一侧就会读到"没有可携带的稿"（与"自足"同形）。
     ("D", "suffix:-research.md"),
@@ -899,7 +942,8 @@ def _reserved_refusal(rel: str, role: str, content: Any = None,
         )
     rule = _reserved_artifact_rule(rel, role)
     if rule is not None:
-        if str(role or "") == "D" and rule in D_PROOF_PATH_RULES:
+        if str(role or "") == "D" and (rule in D_PROOF_PATH_RULES
+                                       or rule in D_OTHER_PROOF_PREFIXES):
             return fail(D_PROOF_LANDING_MESSAGE.format(path=rel), path=rel,
                         kind=RESERVED_ARTIFACT_KIND, role="D")
         if rule.partition(":")[0] == MANUSCRIPT_RULE_KIND:
