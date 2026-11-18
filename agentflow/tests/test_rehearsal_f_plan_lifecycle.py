@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""彩排（真路径）F 线 · 计划生命周期：CLI 入口 → M→D→F（三步实例）→ F 的步循环 + 真秘书。
+"""彩排（真路径）F 线 · 计划生命周期：CLI 入口 → M→D→F（同一 F 名册实例接三件活）→ F 的步循环 + 真秘书。
 
 ## 这条链与真机差在哪（逐项）
 
@@ -25,25 +25,34 @@
 ```text
 M --summon--> D --summon--> F1: create pA → step pA（交稿过形态闸）→ create pB → final（被收工门拒：两条计划未签未放弃）
 D: attack.list_plans / attack.status 读计划 → 把建议写进下一次派活（真 summon 的 dispatch handoff 落 hands 台账）
-D --summon--> F2: abandon pB「不再需要」（按 D 的建议）→ abandon pA「math_error」
+D --summon--> 同一个 F1（reuse）: abandon pB「不再需要」（按 D 的建议）→ abandon pA「math_error」
                    → difficulty 那条（difficulty + salvaged）→ 两条在推时第三条被拒（业主原话）
                    → 「需要调整」在工具面被参数闸拒（行一个字节不改）→ 放弃 + 新开一条（组合操作）
                    → create pI（又一条在推）→ final（被真门拒：pI 未签未放弃）
 D: attack.list_plans 读到 pI 仍 open → 建议写进第三次派活
-D --summon--> F3: abandon pI「不再需要」→ final（过门）
-D 销号三个 F → final；M 销号 D → final（整树销号）
+D --summon--> 同一个 F1（reuse）: abandon pI「不再需要」→ final（过门）
+D 销号那几个 F 名 → final；M 销号 D → final（整树销号）
 ```
 
+### 为什么三件活复用同一个 F 名字（K3 起）
+
+计划归实例（`attack_plans.created_by` = `agent-F-<名册名>`）：非属主 `step` /
+`abandon_plan` 是受控拒（`plan_not_yours`）。所以「D 把建议发给下一个 F、下一个 F 照做」
+这条链只有在「建议送到属主本人」时才走得通 —— 彩排因此用 `reuse=<名册名>` 派三件活
+（三个台账号、同一个 F 实例），与真机里"同一个 F 跨趟接着攻"是同一条路。
+"另一个实例想动这条计划会被拒"由 `tests/test_the_plan_belongs_to_one_instance.py` 的
+a / b 两条单独钉（那里造的就是非属主）。
+
 判据读盘（不是回执）：`attack_plans` 八行全部 `abandoned`；每行 `history` 的动作序列与
-`abandon_kind` / `difficulty` / `salvaged` 逐条对得上；F1 / F2 的 `agent_run_end` 是
+`abandon_kind` / `difficulty` / `salvaged` 逐条对得上；前两趟 F 的 `agent_run_end` 是
 `final_refused` 且拒信点名未收口的那条计划；`out/secretary/proposition_form.jsonl` 有
 `role=F` 一笔、`dispatch_fit.jsonl` 有 D 那一笔建议；`manuscripts/handoffs.jsonl` 里
 D 的派活建议点名了 pB 与 pI；钱账逐分相等、无主 0、悬空 0。
 
 ## 反真空（同一个工作区里造红，不是另一份夹具）
 
-- 收工门真的读台账：F1 与 F2 发 final 时盘上各有一条「未签未放弃」的计划 ⇒
-  final 被拒（`final_refused`、task `outcome=no_result`）。它证明正控里 F3 的
+- 收工门真的读台账：前两趟 F 发 final 时盘上各有一条「未签未放弃」的计划 ⇒
+  final 被拒（`final_refused`、task `outcome=no_result`）。它证明正控里最后一趟的
   `final` 绿不是"final 恒放行"，而是"计划都收口了"。
 - 并发上限真的来自那一格：第三条计划被拒时拒信逐字含业主那句提醒，且
   `attack_plans` 一行不多；随后把它前面的两条放弃之后，新的一条就建成了
@@ -161,6 +170,8 @@ class _Wire:
         self.items: list[str] = []
         #: 刚发出去的那一条 `create_plan` 属于哪个 `problem_key`（下一拍从回执取号）。
         self.pending_key = ""
+        #: 名册里那个 F 的名字（K3 起三件活复用同一个实例：`reuse` 它）。
+        self.fname = ""
 
     def _note_ids(self, prompt: str) -> None:
         self.ids.update(_all_plans(prompt))
@@ -182,6 +193,20 @@ class _Wire:
             return names[skip]
         except IndexError:
             return ""
+
+    def _fname(self, prompt: str) -> str:
+        """名册里那个 F 的名字：K3 起计划归实例，非属主放弃会被受控拒 ⇒ 三件活必须复用
+        同一个 F 名字（`reuse`），否则 D 的建议送到的是另一个实例、它动不了那条计划。
+
+        名字从召唤回执的 `roster_name` 读（`_roster_names` 那一条正则就是读它）；
+        读不到就返回空串 —— 那会让下一次召唤变成"新建一个实例"，本文件当场红（这是想要的：
+        静默换一个实例等于把"归属"这件事从彩排里拿掉）。
+        """
+        names = [n for n in _roster_names(prompt) if n.startswith("F")
+                 and n not in self.retired]
+        if names:
+            self.fname = names[-1]
+        return self.fname
 
     # ------------------------------------------------------------ 剧本：M / D
     def _retire_then(self, prompt: str, role: str, nxt: str) -> str:
@@ -212,7 +237,8 @@ class _Wire:
                           "args": {"plan_id": self.ids.get("pB") or ""}})
         if index == 3:
             # 反真空（真机上会踩到）：把计划号写进派活文本 ⇒ `dispatchpolicy` 受控拒。
-            return _json({"summon": {"role": "F", "instance": "2",
+            # K3 起同一个 F 名册实例接着干（`reuse`）：计划归实例，三件活必须是同一个实例。
+            return _json({"summon": {"role": "F", "reuse": self._fname(prompt),
                                      "task": f"{TASK_F2}：{self._advice()}"}})
         if index == 4:
             # 建议走 handoff（不是派活文本）：计划号写在正文里不触发那条闸。
@@ -222,7 +248,8 @@ class _Wire:
                 "body": self._advice(),
                 "refs": [f"plan:{self.ids.get('pB')}"]}})
         if index == 5:
-            return _json({"summon": {"role": "F", "instance": "2", "task": TASK_F2}})
+            return _json({"summon": {"role": "F", "reuse": self._fname(prompt),
+                                     "task": TASK_F2}})
         if index == 6:
             return _json({"tool": "conductor.void_items",
                           "args": {"item_ids": self.items[:1],
@@ -238,7 +265,8 @@ class _Wire:
                 "body": advice,
                 "refs": [f"plan:{self.ids.get('pI')}"]}})
         if index == 9:
-            return _json({"summon": {"role": "F", "instance": "3", "task": TASK_F3}})
+            return _json({"summon": {"role": "F", "reuse": self._fname(prompt),
+                                     "task": TASK_F3}})
         if index == 10:
             return _json({"tool": "conductor.void_items",
                           "args": {"item_ids": self.items[-1:],

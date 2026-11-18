@@ -7,6 +7,11 @@ from .. import lifecycle as L
 class _ListPlans:
     def list_plans(self, *, problem_key: str | None = None, include_terminal: bool | None = True) -> dict:
         """列出攻坚计划。`include_terminal=False` 只给"还活着的"计划。
+
+        ## 归属（K3）：只列自己名下
+        F 的实例调用只列 `created_by` 是自己（或没有归属读数）的那些；D/G/H 的读口与
+        "没有实例身份"的直调不收窄（`specs/d.py:254-267`）。每条都显式带 `created_by`，
+        `reason` 里写明"过滤前有几条" —— 收窄了哪一档不许只体现在条数上。
         
         ## 为什么参数收 `None`，以及为什么 `None` 必须等于 `True`
         
@@ -22,6 +27,17 @@ class _ListPlans:
             include_terminal = True
         rows = [r for r in self.store.rows("attack_plans") if problem_key is None or r.get("problem_key") == problem_key]
         rows.sort(key=lambda r: str(r.get("plan_id") or ""))
+        # ---- 归属（K3）：「只列自己名下」。
+        #
+        # 改前列的是全表（`total` = 盘上所有计划），于是两个 F 各读一次会看到同一份
+        # 清单，"这条计划是谁的"只能靠 `created_by` 自己去猜 —— 而它连这一格都不给。
+        # 过滤判据只有一份（`_plan_scope` + `_plan_owner_of`）：
+        #   · F 的实例调用 ⇒ 只留 `created_by` 是我（或没有归属读数）的那些；
+        #   · D/G/H 那个读口与"没有实例身份"的直调 ⇒ 不收窄（`specs/d.py:254-267`）。
+        scope = self._plan_scope()
+        all_total = len(rows)
+        if scope.get("scoped"):
+            rows = [r for r in rows if self._plan_owner_of(r)["owned"]]
         if not include_terminal:
             # 「还活着」只有一份判据：`lifecycle` 的活跃集（完工 / 放弃都不在内）。
             rows = [r for r in rows if L.plan_is_active(r)]
@@ -37,8 +53,13 @@ class _ListPlans:
                     "max_rounds": (r.get("budget") or {}).get("max_rounds"),
                     "subgoals": len(r.get("subgoals") or []),
                     "depth": r.get("depth"),
+                    # 归属（K3）：每一条都显式带 `created_by` —— 读者不必再猜"这是谁的"。
+                    "created_by": r.get("created_by"),
                 }
                 for r in rows
             ],
-            "reason": f"共 {len(rows)} 个计划（include_terminal={include_terminal}）",
+            "reason": (f"共 {len(rows)} 个计划（include_terminal={include_terminal}；"
+                       + ("只列你名下" if scope.get("scoped")
+                          else "不按归属过滤")
+                       + f"，过滤前 {all_total} 条）"),
         }

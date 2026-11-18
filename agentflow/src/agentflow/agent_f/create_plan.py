@@ -66,7 +66,7 @@ class _CreatePlan:
         
         1. 预算必须完整（`check_budget`），不完整就拒绝创建 ——`budget=None` 表示"没给"，此时用本次运行的默认预算（`DEFAULT_BUDGET`，
         可用构造 config 按维度覆盖，见 `_default_budget`）；显式给了一个缺键的 dict 则是"给了但不完整"，拒绝（返回 `created=False`，
-        不写库）。这两种情况必须分开，否则"我们忘了配预算"会被默认值掩盖。 2. 同一 `problem_key` 已有未终结的计划 ⇒ 不新建，返回已存在的`plan_id`。
+        不写库）。这两种情况必须分开，否则"我们忘了配预算"会被默认值掩盖。 2. 同一 `problem_key` 在你名下已有未终结的计划 ⇒ 不新建，返回已存在的`plan_id`（判重按 `(created_by, problem_key)`，K3）。
         理由：攻坚是多轮的，而"再立一个项"这个动作看起来无害，实际会让同一个难题被并行地攻两遍，两边的 history 各自长，谁也看不到对方已经证否的路径。 3. 子目标必须能
         被 `AttackPlan.validate` 接受 —— 所以在事务外先建行并`validate()`，非法就当场抛，绝不把非法行交给事务。
         """
@@ -101,9 +101,20 @@ class _CreatePlan:
         if not str(problem_key).strip():
             raise PlanError("problem_key 不能为空（没有它就无法判重）")
 
+        # 归属键（K3）：判重、并发上限、计划行三处共用同一个键，顺序放在判重之前 ——
+        # 判重的分桶与上限的分桶必须是同一件事（改前判重看全表、上限看 `created_by`，
+        # 于是"同一个 problem_key 别人已经立过"会把这条判重读成"你不许再立"）。
+        owner = self._plan_owner()
+
         existing = None
         for r in self.store.rows("attack_plans"):
-            if str(r.get("problem_key")) == str(problem_key) and L.plan_is_active(r):
+            # 判重按 `(owner, problem_key)`（K3）：一条计划归立它的那个 F 实例。
+            # 别人为同一个 problem_key 立的计划不再挡这一条 —— 两个实例各自的
+            # rounds / history / 子目标状态互不相干，混成一条才是 K3 的病因
+            # （AUDIT-F：六轮里属主只拿 3 轮，另 3 轮由两个别的实例写进来）。
+            if (str(r.get("problem_key")) == str(problem_key)
+                    and str(r.get("created_by") or "") == str(owner)
+                    and L.plan_is_active(r)):
                 existing = r
                 break
         if existing is not None:
@@ -126,8 +137,8 @@ class _CreatePlan:
                 "error": "",
                 "refusal_reason": "",
                 "reason": (
-                    f"problem_key={problem_key!r} 已有未终结的计划 {existing.get('plan_id')}"
-                    f"（status={existing.get('status')}）⇒ 不新建。"
+                    f"problem_key={problem_key!r} 你名下已有未终结的计划 {existing.get('plan_id')}"
+                    f"（status={existing.get('status')}，created_by={owner!r}）⇒ 不新建。"
                     "重复立项会让同一个难题被并行攻两遍，两边的 history 互相看不见"
                 ),
             }
@@ -142,10 +153,14 @@ class _CreatePlan:
         # "一个 F 开了多 plan"，按全体计数会把"按研究方向开多个 F"（同一批裁定的 R1）
         # 误拦成超限。归因读不到时退回未归因桶，读数里看得出来（`created_by` 逐字可比）。
         #
+        # K3 之后这个桶与"我在推的"是同一个集合：`step` / `abandon_plan` 已经拒推/拒放弃
+        # 别人的计划（`_require_own_plan`）⇒ 我不可能再推着一条不在自己桶里的活跃计划。
+        # 改前不是这样：t-000015 被拒"名下 2 条"时实际在推 3 条（第 3 条是别人的），
+        # t-000049 新开 000003 时桶内 0 条 —— 分桶读的是"我注册的"，不是"我在推的"。
+        #
         # 「在推的计划」只有一份判据：`lifecycle.active_plans`（三态里的活跃集）。
         # 改前这里是 `status not in PLAN_CAP_TERMINAL_STATUSES` —— 与判重那一份名单
         # 逐字相同的第二份副本；K3/K4 也会问同一个问题，所以只留这一处。
-        owner = self._plan_owner()
         live_reading = L.active_plans(self.store, owner=owner)
         if not live_reading.get("checked"):
             raise PlanError(

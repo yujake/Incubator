@@ -112,7 +112,7 @@ def test_e_anti_vacuum_without_the_real_writer_the_plan_stays_open(
     f = _f(store)
     pid = f.create_plan("方向三", "PK-STUB", budget=dict(BUDGET))["plan_id"]
     monkeypatch.setattr(AF.AgentF, "_write_plan",
-                        lambda self, row, *, note: None)   # 夹具：写盘整格打桩
+                        lambda self, row, *, note, base=None: None)   # 夹具：写盘整格打桩
     out = f.abandon_plan(pid, reason=REASON)
     assert out.get("ok") is True, out
     row = next(dict(r) for r in store.rows("attack_plans")

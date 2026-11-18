@@ -1,7 +1,10 @@
 """角色 F 的动作 `step`。"""
 from __future__ import annotations
 
-from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, _budget_left, _step_outcome
+import copy
+
+from ._support import (AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, _budget_left,
+                       _history_round, _step_outcome)
 from .. import lifecycle as L
 
 #: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
@@ -128,8 +131,27 @@ class _Step:
         注释里。写入前会过一次:func:`_step_outcome` 的收口，词表外的取值当场炸。
         流程（每一步的理由都写在旁边的注释里）：
         1. 读计划 → 终结状态不再推进（不自动重入）；轮数用尽 ⇒ `stalled` + `best_partial`； 2. `pick_next_subgoal` 选目标
-        （复用工具层的排序，不另写一套）； 3. 按 owner 分派（见模块 docstring 的表格）； 4. 追加一条 history，`rounds += 1`； 5. 
+        （复用工具层的排序，不另写一套）； 3. 按 owner 分派（见模块 docstring 的表格）； 4. 追加一条 history，`rounds += 1`； 5.
         判定计划状态； 6. 一个事务写回。
+
+        ## 归属（K3）：推进别人的计划是受控拒
+        `created_by` 是这条计划归属的唯一读数：不是自己名下的计划 ⇒ `PlanError`，细码
+        `plan_not_yours` 逐字在拒信里（`kind` 仍是工具层的 `plan_error`，见
+        `_support.PLAN_NOT_YOURS`）。改前 `step` 从不读归属 ⇒ 任何一个 F 实例都能推进别人
+        立的那条计划：真机 `plan 000001` 六轮里属主只拿 3 轮（r1/r2/r4），r3 由另一个实例推、
+        r5/r6 与那次 `stalled` 由第三个实例推（AUDIT-F，seq 4150）。D/G/H 的只读视图不受影响
+        （`specs/d.py:254-267`），`_plan_scope` 是这条判据的唯一分桶读数。
+
+        ## 写回（K4）：事务内重读 + 只并增量
+        改前是"事务外读到整行 → 改 → 事务里整行 upsert"：两个实例并发各推一轮时，后提交的
+        把先提交的 history 整段覆盖掉。现在 `_write_plan(base=…)` 在 `store.tx` 里重读那一行、
+        只把这一轮的增量并上去（`core._merged_plan_round`）—— 锁一直有效，错的是在锁外读。
+
+        ## 预算读数（K3④）：没有注入就读盘
+        每一轮的返回都带 `budget_known` / `budget_reading`。改前只有"调用方注入"一条路（工具
+        路径上零注入点 ⇒ 22/22 趟 `unknown`）；现在 `budget_of_round` 退到盘上的两个真源
+        （`usage_ledger` 的已花 + `budget.json` 的总额），模型在 `attack.step` 的回执里读到的
+        就是这一份。
         """
         row = self._plan_row(plan_id)
         if row is None:
@@ -155,6 +177,17 @@ class _Step:
             raise PlanError(
                 f"攻坚计划 {plan_id!r} 不存在，而且台账里一条攻坚计划都没有 ⇒ "
                 "先派 F.create_plan（它返回 plan_id）再回来推进，别对着空表反复试号")
+
+        # ---- 归属（K3）：推进别人的计划是受控拒，不是"帮忙推一下"
+        #
+        # 改前的形态：`step` 从不读 `created_by` ⇒ 任何一个 F 实例都能推进别人立的那条计划，
+        # 于是 rounds / history / 子目标状态被两个实例各写一半（AUDIT-F：plan 000001 属
+        # t-000026，六轮里属主只拿 r1/r2/r4，r3 由 t-000015、r5/r6 由 t-000049 推，
+        # 20:19:22 由 t-000049 推到 stalled，seq 4150）。判据只有一份
+        # （`_require_own_plan` → `_plan_owner_of` + `_plan_scope`），四个入口共用。
+        self._require_own_plan(row, action="推进")
+        # 这一轮开工时读到的那一份（K4）：写回时按"增量"合并，别把别人这一轮写的行盖掉。
+        base_row = copy.deepcopy(row)
 
         status = str(row.get("status") or "open")
         budget = dict(row.get("budget") or {})
@@ -249,7 +282,8 @@ class _Step:
                         + self._compose_best_partial(subgoals, rounds)
                     )
                     row["updated_at"] = self._stamp()
-                    self._write_plan(row, note=f"f.step:stall_after_{stall_after}_no_progress")
+                    self._write_plan(row, base=base_row,
+                                     note=f"f.step:stall_after_{stall_after}_no_progress")
                     self._log(f"plan {row.get('plan_id')} stalled after {stall_after} no-progress rounds")
                     out = self._close_reading({
                         "plan_id": row.get("plan_id"),
@@ -297,7 +331,7 @@ class _Step:
                 row["best_partial"] = f"[停止] {detail}\n{row['best_partial']}"
                 row["history"] = history
                 row["updated_at"] = self._stamp()
-                self._write_plan(row, note="f.step:stalled")
+                self._write_plan(row, base=base_row, note="f.step:stalled")
                 self._log(f"plan {row.get('plan_id')} stalled")
                 out = self._close_reading({
                     "plan_id": row.get("plan_id"),
@@ -363,7 +397,11 @@ class _Step:
             # 只剩稿没签"的那一拍的如实读数（不是静默成功）。
             gate = self._finish_gate(row)
             hist_cap = rounds_cap * max(1, len(subgoals) or 1) + 1
-            new_round = rounds if over_budget else rounds + 1
+            new_round = _history_round(rounds if over_budget else rounds + 1, history)
+            # 这一行属于哪一轮（`new_round`）与"花掉了几轮预算"（`rounds`）是两件事：
+            # 超预算修补轮不涨 `rounds`（schema 的 `rounds <= max_rounds` 是硬约束），
+            # 但它的 history 行仍要排在停止那一行之后（见 `_history_round`）。
+            rounds_after = rounds if over_budget else new_round
             room = len(history) + 1 <= hist_cap
             if room:
                 history.append(
@@ -379,11 +417,11 @@ class _Step:
                 )
             row["subgoals"] = subgoals
             row["history"] = history
-            row["rounds"] = new_round
+            row["rounds"] = rounds_after
             row["status"] = self._derive_status(subgoals, row, finish_gate=gate)
             row["updated_at"] = self._stamp()
-            row["best_partial"] = self._compose_best_partial(subgoals, new_round)
-            self._write_plan(row, note="f.step:no_pickable")
+            row["best_partial"] = self._compose_best_partial(subgoals, rounds_after)
+            self._write_plan(row, base=base_row, note="f.step:no_pickable")
             reason = picked["reason"]
             if not gate.get("finished"):
                 reason = (str(reason).rstrip()
@@ -400,7 +438,7 @@ class _Step:
                 "action": "stop",
                 "outcome": "no_change",
                 "status": row["status"],
-                "budget_left": _budget_left(budget, new_round),
+                "budget_left": _budget_left(budget, rounds_after),
                 "budget_known": reading["status"] == "known",
                 "budget_reading": reading,
                 "reason": reason,
@@ -500,7 +538,12 @@ class _Step:
 
         # 2026-11-18：轮数用尽而稿未签的那一拍是"超预算修补轮"——`rounds` 不涨
         # （schema 的 `rounds <= max_rounds` 是硬约束），history 仍如实记这一轮。
-        new_round = rounds if over_budget else rounds + 1
+        # `round` 取「不比已落的任何一行小」：停止那一行写的是 `rounds + 1`，直接写
+        # `rounds` 会违反 schema 的单调不减、整笔写回被拒（见 `_history_round`）。
+        new_round = _history_round(rounds if over_budget else rounds + 1, history)
+        # 这一行属于哪一轮（`new_round`）与"花掉了几轮预算"（`rounds_after`）是两件事：
+        # 超预算修补轮不涨 `rounds`（schema 硬上限），但它的 history 行仍要排在停止那一行之后。
+        rounds_after = rounds if over_budget else new_round
         history_row = {
             "round": new_round,
             "sid": sid,
@@ -613,16 +656,16 @@ class _Step:
         history.append(history_row)
         row["subgoals"] = subgoals
         row["history"] = history
-        row["rounds"] = new_round
+        row["rounds"] = rounds_after
         # 「稿完工了没有」这一格在 history 写回之后现算：这一轮刚落的那一份稿
         # 也必须在读数里（否则"这一轮刚产出第一份稿"会被当成"没有要签的稿"）。
         gate = self._finish_gate(row)
         row["status"] = self._derive_status(subgoals, row, finish_gate=gate)
         row["updated_at"] = self._stamp()
-        row["best_partial"] = self._compose_best_partial(subgoals, new_round)
+        row["best_partial"] = self._compose_best_partial(subgoals, rounds_after)
         if row["status"] == "stalled" and not str(row["best_partial"]).strip():
             row["best_partial"] = NO_PROGRESS_NOTE
-        self._write_plan(row, note=f"f.step:{deploy['action']}")
+        self._write_plan(row, base=base_row, note=f"f.step:{deploy['action']}")
 
         out = {
             "plan_id": row.get("plan_id"),

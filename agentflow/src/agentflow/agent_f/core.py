@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
+from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, PLAN_NOT_YOURS, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
 from .. import identity as _IDENTITY
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import vsigns as _VS_NAME    # 稿名 ⇒ 稿号（只读解析；`_resolve_manuscript_id` 用）
@@ -620,6 +620,62 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------- K4：写回的增量合并
+#
+# 为什么需要这一格：`step` / `abandon_plan` 的读-改-写改前是「事务外读到整行 → 改 → 事务里
+# 整行 upsert」。两个实例并发各推一轮时，后提交的那一笔把先提交的那一行整段覆盖掉 ——
+# rounds 少一轮、history 少一行、子目标状态回退。锁本身（`store.tx`）早就跨进程有效，错的是
+# 「在锁外读、在锁内整行盖」。所以写回改成：事务里重读那一行，只把我这一轮的增量并上去。
+
+
+def _merged_plan_round(fresh: Mapping[str, Any], base: Mapping[str, Any],
+                       mine: Mapping[str, Any]) -> dict[str, Any]:
+    """把「我这一轮的改动」并到事务内重读到的那一行上（K4 的唯一合并点）。
+
+    `base` 是我开工时读到的快照，`mine` 是我改完的那一行，`fresh` 是事务内刚重读的
+    那一行（别的实例可能已经提交过一轮）。三格按「增量」合并：
+
+    - `history`：只追加「我新落的那几行」（`mine` 比 `base` 多出来的尾巴）；重读那一行
+      已有的行一行不动 —— 整行 upsert 丢的正是别人的这一截。
+    - `rounds`：只加「我这一轮加的增量」（`mine - base`），不是把我的绝对值写上去。
+    - `subgoals`：按 `sid` 合并 —— 我改过的那几条用我的，我没动过的用重读到的（别人这一轮
+      推进的子目标状态不许被我覆盖），我新增的（`sid` 不在 `base` 里）追加在后面。
+
+    `status` / `best_partial` / `updated_at` 仍是计划级的单格（K4 剩下的那一半）：取我这一轮
+    算出来的值 —— 它们回答的是「这条计划现在怎么样」，不是「哪一轮发生了什么」。
+    `history` 里两轮同号是合法的（并发两轮各记自己那一轮）：`rounds` 才是权威计数，
+    schema 对 `history[*].round` 的要求是单调不减，同号满足。
+    """
+    merged: dict[str, Any] = {**dict(fresh), **dict(mine)}
+    base_h = [dict(h) for h in (base.get("history") or [])]
+    mine_h = [dict(h) for h in (mine.get("history") or [])]
+    fresh_h = [dict(h) for h in (fresh.get("history") or [])]
+    if mine_h[: len(base_h)] == base_h:
+        merged["history"] = fresh_h + mine_h[len(base_h):]
+    else:
+        # 不是「在工时那份 history 上追加」的形态（老调用点 / 整行重写）：按我这份写。
+        merged["history"] = mine_h
+    delta = int(mine.get("rounds") or 0) - int(base.get("rounds") or 0)
+    merged["rounds"] = int(fresh.get("rounds") or 0) + max(0, delta)
+    base_sg = {str(s.get("sid") or ""): dict(s) for s in (base.get("subgoals") or [])}
+    mine_sg = {str(s.get("sid") or ""): dict(s) for s in (mine.get("subgoals") or [])}
+    out_sg: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for raw in (fresh.get("subgoals") or []):
+        got = dict(raw)
+        sid = str(got.get("sid") or "")
+        seen.add(sid)
+        if sid in mine_sg and (sid not in base_sg or mine_sg[sid] != base_sg[sid]):
+            out_sg.append(dict(mine_sg[sid]))
+        else:
+            out_sg.append(got)
+    for sid, got in mine_sg.items():
+        if sid not in seen:
+            out_sg.append(dict(got))
+    merged["subgoals"] = out_sg
+    return merged
+
+
 class _Core:
     def __init__(
         self,
@@ -732,7 +788,12 @@ class _Core:
 
         raw = self.budget_reading
         if raw is None:
-            return self._unreadable_budget("调用方没有注入预算读数")
+            # K3 的 ④：改前这里只有"注入"一条路，而工具路径上没有任何注入点
+            # （`grep budget_reading=` 全仓零命中）⇒ 每一轮 step 都是 `unknown`
+            # （清单：22/22 趟 `budget_known=False`）。现在退到盘上的两个真源现读：
+            # 已花（`usage_ledger`，经 `modelcost.reconcile_usage` 唯一那份求和）与
+            # 总额（`budget.json`，经 `budget.limit_usd` 唯一那个取值口）。
+            return self._ledger_budget()
         if not isinstance(raw, Mapping) or str(raw.get("status") or "") not in ("known", "unknown"):
             shape = (dict(raw) if isinstance(raw, Mapping) else repr(raw))
             return self._unreadable_budget(
@@ -770,6 +831,49 @@ class _Core:
             "source": "无（读不到）",
             "why": (f"{why} ⇒ {AR.BUDGET_UNREADABLE_NOTE}。"
                     f"{AR.BUDGET_GUARD_NOTE}。{AR.BUDGET_GAP_NOTE}。"),
+        }
+
+    def _ledger_budget(self) -> dict[str, Any]:
+        """没有注入读数时，现读盘上的两个真源：已花（`usage_ledger`）与总额（`budget.json`）。
+
+        K3 的 ④（真机清单：22/22 趟 `step` 的 `budget_known=False`）：改前这一格只有
+        "调用方注入"一条路，而工具路径上没有任何注入点 ⇒ 花钱之前的闸门（I9）与模型看到的
+        读数永远是"读不到"。这一档把它接回既有的两个单一来源，不新造账：
+
+        - 已花 = `modelcost.reconcile_usage(store)["ledger_usd"]` —— 权威账那一份求和
+          （`usage_ledger`；不在这里再写一份 `sum(row["usd"])`）；
+        - 总额 = `budget.limit_usd(root)` —— 预算寄存器那个唯一取值口（没设过 ⇒ `None`）。
+
+        三态纪律：两格都读得到才 `known`；任一读不到 ⇒ `unknown` 并写清缺哪一格
+        （「读不到」不是「还剩 0」，也不是「还剩很多」）。
+        """
+        root = str(getattr(self.store, "root", "") or self.cfg.get("workspace_root") or "")
+        try:
+            from .. import modelcost as _MC
+
+            spent = float(_MC.reconcile_usage(self.store)["ledger_usd"])
+        except Exception as exc:  # noqa: BLE001 —— 账本读不出来 = 没查成
+            return self._unreadable_budget(
+                f"已花多少读不出来（`usage_ledger` / `tasks`：{type(exc).__name__}: {exc}）")
+        if not root:
+            return self._unreadable_budget("没有工作区根 ⇒ 预算寄存器读不到")
+        try:
+            from .. import budget as _B
+
+            total = _B.limit_usd(root)
+        except Exception as exc:  # noqa: BLE001 —— 寄存器读不出来 = 没查成
+            return self._unreadable_budget(
+                f"预算寄存器读不出来（{type(exc).__name__}: {exc}）")
+        if total is None:
+            return self._unreadable_budget(
+                f"盘上没有预算寄存器、调用方也没给上限 ⇒ 剩余算不出来"
+                f"（已花 ${spent:.6f} 读得到）")
+        return {
+            "status": "known",
+            "left_usd": round(float(total) - spent, 6),
+            "spent_usd": spent,
+            "source": "budget.json（总额）+ usage_ledger（已花）",
+            "why": "",
         }
 
     @staticmethod
@@ -826,6 +930,102 @@ class _Core:
         折成 `agent-F` 而不留话。
         """
         return str(self._refresh_identity().get("actor") or self.actor or "")
+
+    # ---- 计划归属（K3）：谁能推 / 谁在看 / 上限按谁算
+    #
+    # 改前的形态：`created_by` 只在 `create_plan` 的分桶里被读；`step` / `abandon_plan` /
+    # `status` / `list_plans` / 判重全不看它 —— 于是"这条计划属于哪个 F"在盘上有读数、
+    # 在判据上没有消费者（AUDIT-F：plan 000001 属 t-000026，六轮里属主只拿 3 轮，
+    # 20:19:22 由 t-000049 推到 stalled，seq 4150）。下面这三个方法是它的唯一判据：
+    # `_plan_scope`（这一笔要不要按归属过滤）、`_plan_owner_of`（这一行归谁）、
+    # `_require_own_plan`（不是我的就受控拒）。四个入口都只调这三个，不各写一份。
+
+    #: 「别的角色在读」的那几个（`attack_tools._READ_ROLES` 去掉 F）：D/G/H 按
+    #: `specs/d.py:254-267` 的裁定可以查 F 的 plan（「你可以查 F 的 plan，也可以就 plan
+    #: 提建议」）⇒ 归属过滤只落在 F 自己的调用上，读口不替他们收窄。
+    PLAN_READER_ROLES: tuple[str, ...] = ("D", "G", "H")
+
+    def _plan_scope(self) -> dict[str, Any]:
+        """这一笔调用要不要按归属过滤（K3 的唯一分桶读数）。
+
+        返回 `{scoped, mine, role, attributed, why}`：
+
+        - 调用方是别的只读角色（D/G/H）⇒ 不过滤：他们要看的是"有哪些计划"，
+          不是"我的计划"（`specs/d.py` 逐字授权）；`role` 从 `conductor.calling_as`
+          那条挂点读（工具路径上每一笔都在那个上下文里）；
+        - 这一笔没有实例身份（直调 / 脚本 / 单测）⇒ 不过滤，`why` 写明为什么 ——
+          与 `identity` 的三态同一口径：读不到实例时不许假装自己是某一个；
+        - 其余（F 的实例调用）⇒ 按 `mine` 过滤：推进 / 放弃 / 查看别人的计划一律受控拒。
+        """
+        role = ""
+        try:
+            from .. import conductor as _C
+
+            role = str(_C.current_role() or "")
+        except Exception:  # noqa: BLE001 —— 读不到调用方角色 ⇒ 按"没有角色挂点"处理
+            role = ""
+        attributed = bool(self.identity.get("attributed"))
+        mine = str(self.actor or self.identity.get("actor") or "")
+        if role and role in self.PLAN_READER_ROLES:
+            return {"scoped": False, "mine": mine, "role": role, "attributed": attributed,
+                    "why": (f"调用方是 {role}：只读角色可以查 F 的 plan"
+                            "（`specs/d.py:254-267`），归属过滤不落在读口上")}
+        if not attributed:
+            return {"scoped": False, "mine": mine, "role": role, "attributed": False,
+                    "why": ("这一笔没有实例身份（直调 / 脚本 / 单测）⇒ 不按归属过滤；"
+                            "写口仍受判据，归属读数在 `identity.conflict` 里")}
+        return {"scoped": True, "mine": mine, "role": role, "attributed": True,
+                "why": f"按实例归属过滤：mine={mine!r}"}
+
+    def _plan_owner_of(self, row: Any) -> dict[str, Any]:
+        """这一行计划归谁：`{checked, mine, owner, owned, foreign, unowned, why}`。
+
+        判据只有一条：`created_by` 是 F 的实例键（`agent-F-<规范标签>`，由
+        :func:`identity.split_actor` 判，不在这里另写格式）时，它是"这条计划属于哪个
+        F 实例"的唯一读数；与我的归因名不同 ⇒ 别人的。
+
+        角色桶（`created_by="agent-F"`，`role_level=True`）不算归属：它是"这一笔没有
+        实例身份"的兼容值（见 `identity` 的三态），不能声称属于某一个实例 —— 把它读成
+        "别人的"会让 K1/K2 之前落的每一行计划都推不动，而它不是任何一个实例的计划。
+        同理，`created_by` 为空、或不是 F 的键（老行 / 夹具 / 别的角色）也按 `unowned`
+        处理：把"没有归属读数"折成"属于别人"与把"属于别人"折成"没有归属"两侧都不许折。
+        """
+        owner = str((dict(row) if isinstance(row, Mapping) else {}).get("created_by") or "").strip()
+        mine = str(self.actor or self.identity.get("actor") or "")
+        got = _IDENTITY.split_actor("F", owner)
+        instance_key = bool(got.get("matched")) and not bool(got.get("role_level"))
+        foreign = bool(instance_key and owner != mine)
+        if not instance_key:
+            why = (f"created_by={owner!r} 不是 F 的实例键（角色桶 / 老行 / 夹具 / 别的角色）"
+                   "⇒ 不改判据")
+        elif foreign:
+            why = f"created_by={owner!r}，我={mine!r} ⇒ 别人的计划"
+        else:
+            why = f"created_by={owner!r} 就是我的归因名"
+        return {"checked": True, "mine": mine, "owner": owner, "owned": not foreign,
+                "foreign": foreign, "unowned": not instance_key, "why": why}
+
+    def _require_own_plan(self, row: Any, *, action: str) -> dict[str, Any]:
+        """推进 / 放弃 / 查看一条计划之前：不是自己的就受控拒（K3）。
+
+        `kind` 落在既有那一档（工具层是 `plan_error`），细码 `PLAN_NOT_YOURS` 逐字在正文里
+        —— 与 `abandon_plan` 那五条拒信同一处置（`_guard` 的契约只认 `plan_error` /
+        `validation_error`，见 `_support.PLAN_NOT_YOURS`）。
+
+        返回值是这一行的归属读数（加上 `scope` 那一格），供调用方把"为什么放行"也写进读数。
+        """
+        got = self._plan_owner_of(row)
+        scope = self._plan_scope()
+        if scope["scoped"] and got["foreign"]:
+            pid = str((dict(row) if isinstance(row, Mapping) else {}).get("plan_id") or "")
+            raise PlanError(
+                f"拒绝{action}（{PLAN_NOT_YOURS}）：计划 {pid!r} 不属于你 —— "
+                f"created_by={got['owner']!r}，你是 {scope['mine']!r}。"
+                "计划归立它的那个 F 实例：非属主推一轮会让它的 rounds / history / 子目标"
+                "状态与属主的读数打架（K3）；请推进自己的计划，或把建议交回属主 / 父 D"
+            )
+        got["scope"] = scope
+        return got
 
     @property
     def e(self) -> Any:
@@ -4853,24 +5053,48 @@ class _Core:
         parts += [f"- {brief(s)}" for s in ranked]
         parts.append("**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。")
         return "\n".join(parts)
-    def _write_plan(self, row: Mapping[str, Any], *, note: str) -> None:
-        """写回计划（一个事务）。校验在写入前完成，非法即炸（不吞异常）。
+    @staticmethod
+    def _validated_plan(row: Mapping[str, Any]) -> Any:
+        """把一行待写回的计划过一遍 schema（非法即炸，不吞异常）。
 
-        `schema` 抛的 `ValueError` 在这里被换成语义正确的 `PlanError`
-        （`ToolError` 子类）—— 见 `PlanError` 的 docstring：这不是"吞掉"，
-        是让工具层拿到 `kind="tool_error"` 与具体原因，而不是无声的
-        `kind="unexpected"`。异常照旧冒泡，写入照旧不发生。
+        `schema` 抛的 `ValueError` 在这里被换成语义正确的 `PlanError`（`ToolError` 子类）
+        —— 见 `PlanError` 的 docstring：这不是"吞掉"，是让工具层拿到 `kind="plan_error"`
+        与具体原因，而不是无声的 `kind="unexpected"`。异常照旧冒泡，写入照旧不发生。
         """
         try:
             obj = S.row_from_dict("attack_plans", dict(row))
             if obj.status == "stalled" and not str(obj.best_partial).strip():
                 obj.best_partial = NO_PROGRESS_NOTE
             obj.validate()
+            return obj
         except ValueError as e:
             raise PlanError(
                 f"计划 {row.get('plan_id')!r} 的写回内容不合 schema 硬约束 ⇒ **未写回**：{e}"
             ) from e
+
+    def _write_plan(self, row: Mapping[str, Any], *, note: str,
+                    base: Mapping[str, Any] | None = None) -> None:
+        """写回计划（一个事务）。
+
+        `base` 给了 ⇒ 读-改-写都在同一个 `store.tx` 里（K4）：事务里重读那一行，把我
+        这一轮的增量并上去（:func:`_merged_plan_round`）。改前是「事务外读到整行 → 改 →
+        事务里整行 upsert」—— 两个实例并发各推一轮时，后提交的把那一段整行覆盖掉
+        （rounds 少一轮、history 少一行）。锁本身一直有效，错的是在锁外读。
+
+        `base` 不给 ⇒ 整行写回（老调用点；`create_plan` 走自己的事务，不经过这里）。
+        `base` 给了但那一行在事务外被删掉（不该发生）⇒ 按整行写回，让 schema 兜住形状。
+        """
+        if base is None:
+            obj = self._validated_plan(row)
+            with self.store.tx("attack_plans", actor=self.actor, note=note) as tx:
+                tx.upsert("attack_plans", obj.to_dict(), note=note)
+            return
         with self.store.tx("attack_plans", actor=self.actor, note=note) as tx:
+            fresh = next((dict(r) for r in tx.rows("attack_plans")
+                          if str(r.get("plan_id")) == str(row.get("plan_id"))), None)
+            target = (dict(row) if fresh is None
+                      else _merged_plan_round(fresh, dict(base), dict(row)))
+            obj = self._validated_plan(target)
             tx.upsert("attack_plans", obj.to_dict(), note=note)
 
 

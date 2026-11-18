@@ -2,11 +2,22 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，BATCH2 K3/K4）：
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、299,158 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **321 个 `.py`、300,202 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15071 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-18 BATCH2 K3/K4（计划归属按实例 + 写回锁内合并 + 预算读数）**：
+> 321 个 `.py`、**300,202** 行（HEAD `b7e9548c` 现算 299,839 ⇒ 本笔 src 净增 +363：
+> `agent_f/core.py` +224（`_plan_scope` / `_plan_owner_of` / `_require_own_plan` /
+> `_merged_plan_round` / `_write_plan(base=)` / `_ledger_budget`）、`agent_f/step.py` +43
+> （归属闸 + 事务内增量合并 + `_history_round`）、`agent_f/_support.py` +27、
+> `agent_f/list_plans.py` +20（每条带 `created_by`）、`agent_f/abandon_plan.py` +17
+> （归属闸 + 放弃行的 `round`）、`agent_f/status.py` +16、`agent_f/create_plan.py` +15
+> （判重按 `(created_by, problem_key)`））。文件数那一格 319 → 321 与 `agent_loop.py`
+> 15,057 → 15,071 都是 BATCH1 落的 `identity.py` / `lifecycle.py` 与那几笔没追平的读数
+> —— 这两格在 HEAD 上就是红的（`tests/test_reading_map_counts.py`），本笔按现算追平。
+> 三格 75 / 95 / 2 逐格未抬（本笔没有新增 `>200` 行函数）。
 > **2026-11-18 PLANLIFE②（`specs/f.py` 的计划生命周期教法改成与实现一致；p295 → p296）**：
 > 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 299,134 → **299,158**（本笔 src 增量 +24：
 > `agent_prompts.py` +15（p296 版本账）、`specs/f.py` +9（`abandon_plan` 摘要 / policy 的

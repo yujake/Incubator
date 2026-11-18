@@ -1,7 +1,9 @@
 """角色 F 的动作 `abandon_plan`：明确放弃一条计划（理由三档，见 `planabandon`）。"""
 from __future__ import annotations
 
-from ._support import Any, Mapping, PlanError, Sequence
+import copy
+
+from ._support import Any, Mapping, PlanError, Sequence, _history_round
 from .. import lifecycle as L
 from .. import statementabandon as SA
 from ..planabandon import (PLAN_ABANDON_EVIDENCE_REASONS, PLAN_ABANDON_NOT_NEEDED,
@@ -53,6 +55,10 @@ class _AbandonPlan:
 
         1. 只有 F 自己有权：这是 F 的动作（`specs/f.py` 的动作表），工具侧也只登记给
            `_WRITE_ROLES = ("F",)`；别的角色的动作表里没有它、写集里也没有 `attack_plans`。
+           而且只有「立这条计划的那个 F 实例」有权（K3）：不是 `created_by` 的那个人
+           ⇒ 受控拒，细码 `plan_not_yours`（见 `_support.PLAN_NOT_YOURS`）。改前从不读
+           归属 ⇒ 非属主能把别人的计划关掉（AUDIT-F：`plan 000000` 的 stalled 由非属主
+           t-000030 在 19:44:39 触发，seq 2600）。
         2. 理由只认三档：`reason` 必须逐字是 :data:`PLAN_ABANDON_REASONS` 之一。
            词表外的值受控拒 —— 不拿自由文本兜底（那等于给"理由"开一条无判据的后门）。
         3. 已终态的不许再放弃：`resolved` / `abandoned` / `stalled` /
@@ -128,6 +134,14 @@ class _AbandonPlan:
             raise PlanError(
                 f"拒绝放弃（{PLAN_ABANDON_NOT_FOUND}）：计划 {pid} 不在台账里"
                 "（没有可放弃的对象）")
+        # ---- 归属（K3）：放弃别人的计划是受控拒，不是"替它收场"
+        #
+        # 改前这一支从不读 `created_by`：任何一个 F 实例都能把别人立的那条计划关掉
+        # （AUDIT-F：plan 000000 的 stalled 由非属主 t-000030 在 19:44:39 触发，seq 2600）。
+        # 判据只有一份（`_require_own_plan`），与 `step` / `status` 共用。
+        self._require_own_plan(row, action="放弃")
+        # 写回按增量合并（K4）：这一轮开工时读到的那一份留作 base。
+        base_row = copy.deepcopy(row)
         status = str(row.get("status") or "")
         plan_state = L.state_of_plan(row)
         if plan_state.get("checked") and plan_state.get("state") != L.ACTIVE:
@@ -139,7 +153,10 @@ class _AbandonPlan:
         row["status"] = "abandoned"
         row["updated_at"] = at
         entry: dict[str, Any] = {
-            "round": int(row.get("rounds") or 0),
+            # 放弃不是一轮推进 ⇒ `rounds` 不涨；这一行的 `round` 取「不比已落的任何一行
+            # 小」（K4）：停止那一行写的是 `rounds + 1`，直接写 `rounds` 会违反 schema 的
+            # 单调不减、整笔写回被拒（真机 lp-ball-8 的 plan 000001 就是这一档）。
+            "round": _history_round(int(row.get("rounds") or 0), row.get("history") or []),
             "sid": "",
             "action": "abandon",
             # 档位进 history：读的人不必回推"这四个字是哪一档"（与命题级的
@@ -159,7 +176,7 @@ class _AbandonPlan:
         if salvaged_rows:
             entry["salvaged"] = salvaged_rows
         row["history"] = list(row.get("history") or []) + [entry]
-        self._write_plan(row, note="f.abandon_plan")
+        self._write_plan(row, base=base_row, note="f.abandon_plan")
         self._log(f"plan {pid} abandoned", reason=got)
         return {"ok": True, "kind": "", "error": "", "refusal_reason": "",
                 "plan_id": pid, "status": "abandoned", "reason": got,

@@ -5,7 +5,14 @@ from ._support import S, _budget_left, re
 
 class _Status:
     def status(self, plan_id: str) -> dict:
-        """一个计划的完整可读视图：子目标状态计数、预算余量、history 尾部。"""
+        """一个计划的完整可读视图：子目标状态计数、预算余量、history 尾部。
+
+        ## 归属（K3）
+        F 的实例只查看自己名下的计划：不是自己的 ⇒ 受控拒（细码 `plan_not_yours`）。
+        归属读数写进 `reason`（`created_by` + 那一句 why），不新增顶层键 —— 那要动工具
+        声明 `returns=` 与两份冻结快照（提示词版本面），不在本批的范围里。D/G/H 的只读
+        视图不受影响（`specs/d.py:254-267`）。
+        """
         row = self._plan_row(plan_id)
         if row is None:
             return {
@@ -13,6 +20,13 @@ class _Status:
                 "plan_id": plan_id,
                 "reason": f"计划 {plan_id} 不存在 ⇒ **没查**（不是'查了、没有内容'）",
             }
+        # ---- 归属（K3）：F 的实例只查看自己名下的计划（D/G/H 那个读口不受影响）
+        #
+        # 受控拒走 `_require_own_plan` 的同一份判据；`kind` 落在 `plan_error`，细码
+        # `plan_not_yours` 在正文里。读口的返回值键集合因此一个字都没变 —— 归属读数
+        # 写进 `reason`（见下面那一句），不新增顶层键（那要动工具声明与冻结快照）。
+        owner = self._require_own_plan(row, action="查看")
+        created_by = str(row.get("created_by") or "")
         subgoals = [dict(s) for s in (row.get("subgoals") or [])]
         counts: dict[str, int] = {}
         for s in subgoals:
@@ -98,5 +112,7 @@ class _Status:
             "history_tail": list(row.get("history") or [])[-max(0, tail_n) :],
             "created_at": row.get("created_at"),
             "updated_at": row.get("updated_at"),
-            "reason": f"计划 {row.get('plan_id')} 当前 status={row.get('status')}，已 {rounds} 轮",
+            "reason": (f"计划 {row.get('plan_id')} 当前 status={row.get('status')}，已 {rounds} 轮"
+                       f"（归属 created_by={created_by or '（无归属读数）'}；"
+                       f"{owner.get('why') or ''}）"),
         }

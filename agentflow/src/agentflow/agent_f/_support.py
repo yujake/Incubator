@@ -29,6 +29,14 @@ class PlanError(ToolError):
     永远不再命中、退化成一条泛泛的错误。两者的处置不同是有意的。）
     """
 TERMINAL_STATUSES = AT.TERMINAL_STATUSES
+#: 「这条计划不是你的」的受控细码（K3）：推进 / 放弃 / 查看别人的计划时逐字出现在拒信正文里。
+#:
+#: 为什么它只是正文里的一个词、不是 `refuse()` 的 `kind`：`attack.*` 的动作走 `_guard`，
+#: 那条契约（`tests/test_tools_attack_graph_fixes.py`）把工具层的 `kind` 收成
+#: `plan_error` / `validation_error` 两档 —— 把细码塞进 `PlanError.kind` 会给出契约之外的
+#: 第三档。所以细码留在拒信正文里（与 `abandon_plan` 那五条拒信同一处置：
+#: `plan_abandon_missing_id` / `plan_not_found` / … 也都不进 `kind`）。
+PLAN_NOT_YOURS = "plan_not_yours"
 #: 子目标的 owner 里"框架没有可自动调用的推理入口"的那几个（`_deploy` 据它落
 #: `dead_end(缺工具)`）。F 不在这里（业主 2026-10-26 晚的裁定：「没有默认开，
 #: 这个就是F的工作方式，没有开关的说法」）—— F 出场就有推理缝，所以"F 可能未接线"
@@ -114,6 +122,25 @@ def _budget_left(budget: Mapping[str, Any], rounds: int) -> dict:
     out["max_persist_attempts"] = budget.get("max_persist_attempts")
     out["max_depth"] = budget.get("max_depth")
     return out
+def _history_round(rounds: Any, history: Sequence[Mapping[str, Any]] | None) -> int:
+    """追加一行「不占轮次」的 history 时该写的 `round`：不比已落的任何一行小。
+
+    `AttackPlan.validate` 要求 `history[*].round` 单调不减（schema 硬约束）。停止那一行
+    写的是 `rounds + 1`（`step` 的 `budget_out` 分支），而「超预算修补轮」与「放弃」都不再
+    涨 `rounds` ⇒ 直接写 `rounds` 会落在那一行之前，整笔写回被 schema 拒掉。
+    真机现场（只读复算，2026-11-18）：`projects/lp-ball-8` 的 plan 000001 是 rounds=6、
+    history 已到 round 7 ⇒ 属主既推不动（修补轮 6 < 7）也放弃不了（同一处）。
+    判据：`tests/test_the_plan_belongs_to_one_instance.py` 的 i 条。
+    """
+    top = int(rounds or 0)
+    for item in history or ():
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            top = max(top, int(item.get("round") or 0))
+        except (TypeError, ValueError):
+            continue
+    return top
 def install_f_tools(store: Store, *, registry: ToolRegistry | None = None) -> ToolRegistry:
     """装配 F 的工具栏（`attack.*`）。写入逻辑只有一份（见 `attack_tools` 的 docstring）。"""
     reg = registry if registry is not None else ToolRegistry(name="agent-F")
