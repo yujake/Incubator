@@ -71,6 +71,12 @@ class _CreatePlan:
         被 `AttackPlan.validate` 接受 —— 所以在事务外先建行并`validate()`，非法就当场抛，绝不把非法行交给事务。
         """
         default_budget = self._default_budget()
+        # 归属键（K3）：判重、并发上限、计划行三处共用同一个键，顺序放在判重之前 ——
+        # 判重的分桶与上限的分桶必须是同一件事（改前判重看全表、上限看 `created_by`，
+        # 于是"同一个 problem_key 别人已经立过"会把这条判重读成"你不许再立"）。
+        # 2026-11-18（FP-08/FP-04）：它也在所有回执里交出去（成功 / 判重 / 被拒四支
+        # 键集合逐字相同），占位放在预算闸之前 —— 预算不完整那一支同样要说清"这是谁的"。
+        owner = self._plan_owner()
         chk = AT.check_budget(dict(budget) if budget is not None else dict(default_budget))
         if not chk["complete"]:
             # 走「统一的拒绝形态」（`refusals.refuse`）：这一支是拒绝，而它此前只给
@@ -93,7 +99,7 @@ class _CreatePlan:
                 # （`""` / `0` / `[]`），而不是缺键 —— 「这一格没有读数」与「这一格是空」
                 # 由键的存在区分开（与 `verify.verify_proof` 三条返回路径同一条纪律）。
                 status="", subgoals=0, subgoal_id="",
-                missing=chk["missing"], budget=dict(budget or {}),
+                missing=chk["missing"], budget=dict(budget or {}), created_by=owner,
             )
 
         if not str(problem).strip():
@@ -101,10 +107,7 @@ class _CreatePlan:
         if not str(problem_key).strip():
             raise PlanError("problem_key 不能为空（没有它就无法判重）")
 
-        # 归属键（K3）：判重、并发上限、计划行三处共用同一个键，顺序放在判重之前 ——
-        # 判重的分桶与上限的分桶必须是同一件事（改前判重看全表、上限看 `created_by`，
-        # 于是"同一个 problem_key 别人已经立过"会把这条判重读成"你不许再立"）。
-        owner = self._plan_owner()
+        # 归属键已在函数开头解析（预算被拒那一支也要带上它）—— 这里不再读第二次。
 
         existing = None
         for r in self.store.rows("attack_plans"):
@@ -128,6 +131,9 @@ class _CreatePlan:
                 "plan_id": str(existing.get("plan_id")),
                 "duplicate": True,
                 "status": existing.get("status"),
+                # 归属读数（FP-08/FP-04）：判重回执与成功回执都带上 created_by ——
+                # "这一条是谁的"在两步上必须是同一格（否则调用方只能从 reason 里抄）。
+                "created_by": str(existing.get("created_by") or owner),
                 # 判重命中也把"那个已有计划长什么样"一并给读数（键集合与成功支逐字相同）。
                 "budget": dict(existing.get("budget") or {}),
                 "subgoals": len(list(existing.get("subgoals") or [])),
@@ -180,7 +186,7 @@ class _CreatePlan:
                 reason=msg,
                 created=False, plan_id=None, duplicate=False,
                 status="", subgoal_id="", subgoals=len(list(subgoals or ())),
-                missing=[], budget=dict(budget or {}),
+                missing=[], budget=dict(budget or {}), created_by=owner,
             )
 
         goal_rows = [self._normalize_subgoal(s, i) for i, s in enumerate(subgoals or [])]
@@ -226,7 +232,7 @@ class _CreatePlan:
                 reason=msg,
                 created=False, plan_id=None, duplicate=False,
                 status="", subgoal_id=sid, subgoals=len(goal_rows),
-                missing=[], budget=dict(budget or {}),
+                missing=[], budget=dict(budget or {}), created_by=owner,
             )
 
         # ---- 可检验形式是立项的硬条件（2026-10-27，真机 `PLAN 000000 round1 action=dead_end`） --
@@ -259,7 +265,7 @@ class _CreatePlan:
                 reason=msg,
                 created=False, plan_id=None, duplicate=False,
                 status="", subgoal_id=sid, subgoals=len(goal_rows),
-                missing=[], budget=dict(budget or {}),
+                missing=[], budget=dict(budget or {}), created_by=owner,
             )
 
         with self.store.tx("attack_plans", actor=self.actor, note="f.create_plan") as tx:
@@ -304,6 +310,7 @@ class _CreatePlan:
             "plan_id": pid,
             "duplicate": False,
             "status": row.status,
+            "created_by": owner,
             "budget": dict(row.budget),
             "subgoals": len(row.subgoals),
             # 四条分支键集合逐字相同（见预算被拒那一支的注释）：没有拒绝的那几格给空读数。

@@ -2670,7 +2670,10 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   逐格旧值 → 新值：F e2e4d6a1… → 8cc88743…。
 # 十一格不是手抄：`temp/planlife/recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['F']。
-_FROZEN_PROMPT_VERSION = "p296"
+# p296 → p297（2026-11-18，BATCH3）：`attack.step` 的 returns 补 `plan_state`、
+#   `attack.create_plan` 的 returns 补 `created_by`；`returns=` 不进任何角色段 ⇒
+#   changed = []（十一格与 p296 逐字同值）。
+_FROZEN_PROMPT_VERSION = "p297"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了

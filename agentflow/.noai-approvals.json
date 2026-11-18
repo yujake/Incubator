@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-18T21:26:41+08:00",
+  "generated_at": "2026-11-18T23:05:18+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,11 +505,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "54c432052114a72a22356db10aa53e2676195ef888b8c23c51d6ba50e96068f3",
+      "sha256": "da5e5dea770c88eca2ed3d7b25b21ccbddd4b24aaafe4b669a83ee99be9cefef",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "PLANLIFE②（p295 → p296）：业主 2026-11-18 逐字「逻辑反了。稿没完工，计划本身就关不掉」——specs/f.py 的教法改成与实现一致（abandon_plan 摘要：计划关不关由稿决定 / 未完工的计划不关、改完拿到签才结束；attack.step returns 补 finish_gate / plan_status_reopened；policy 的「落 stalled」改掉）。agent_surface_snapshot 按现值重冻（逐格 diff：只有 F 的 prompt 与 F 的 attack.step.returns / abandon_plan.summary 三处）。业主已授权「先apply」，登记≠批准，reviewers=[] 保持、不伪造批准。",
-      "changed_this_session": null,
+      "change_note": "BATCH3（p297）：agent golden 按 p297 版本行与 F init_signature 现值重冻；tool golden 只有 attack.step / attack.create_plan 两处 returns。业主已授权先apply；登记≠批准，reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐格看过。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -531,10 +531,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "302c1a1adc63f7524193849c7dfa4aea408ba87bd90671c29f6c13c2f58562b2",
+      "sha256": "db4f89d42bdd7beb8828eb506b8e515ec4de73afaad3f261330c65a44382aad1",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "Z3FIX1（p295）：agent 面按现值重冻（11 个角色的 prompt 行：仅版本行 p294→p295，G/H/M 三格另有 PAPER_PACK 的『B 可以直接派 B』→『B 可以直接派 V』主语修正）；tool 面只有 attack.step 的 returns 一格新增 proof_output_count。重冻前逐格 diff 只有这两处，登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过。",
+      "change_note": "BATCH3（p297）：agent golden 按 p297 版本行与 F init_signature 现值重冻；tool golden 只有 attack.step / attack.create_plan 两处 returns。业主已授权先apply；登记≠批准，reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐格看过。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],

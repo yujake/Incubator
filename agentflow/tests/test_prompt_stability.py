@@ -1481,6 +1481,15 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "policy 的「把计划落 stalled」那句改掉。变化格 = F，其余十格与 p295 逐字相同"
               "（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p296 → p297（2026-11-18，BATCH3）：只有工具 `returns=` 两处（attack.step 的
+     # `plan_state`、attack.create_plan 的 `created_by`）；它们不进任何角色段，
+     # facts 键集与落点一格没动 ⇒ count / keys_sha256 与 p296 同值。
+     {"version": "p297", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p297（2026-11-18，BATCH3）：`attack.step` 的 returns 补 `plan_state`、"
+              "`attack.create_plan` 的 returns 补 `created_by`；`returns=` 不进角色段 ⇒"
+              "十一格与 p296 逐字相同（逐格读数见 `test_agent_prompts.py` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

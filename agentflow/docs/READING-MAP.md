@@ -2,9 +2,9 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，BATCH2 K3/K4）：
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，BATCH3 K5/K6/K7）：
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **321 个 `.py`、300,202 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15071 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **321 个 `.py`、300,606 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16214 行（`agent_loop.py`，15106 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-18 BATCH2 K3/K4（计划归属按实例 + 写回锁内合并 + 预算读数）**：
@@ -18,6 +18,20 @@
 > 15,057 → 15,071 都是 BATCH1 落的 `identity.py` / `lifecycle.py` 与那几笔没追平的读数
 > —— 这两格在 HEAD 上就是红的（`tests/test_reading_map_counts.py`），本笔按现算追平。
 > 三格 75 / 95 / 2 逐格未抬（本笔没有新增 `>200` 行函数）。
+> **2026-11-18 BATCH3 K5/K6/K7（claim 带实例 + 重写支核占用 / 判词版本绑定 + statements 稿身份 (族,号) / 计票按 review_call）**：
+> 321 个 `.py` 与 75 个 `>800` 两格不变；总行数 300,202 → **300,606**（本笔 src 净增 +404：
+> `verifications.py` +73（K7 计票委托 `sign_counting` + pending vid 跨文件唯一 + 版本码）、
+> `proofoutcomes.py` +68（`claim_guard` + 头部改写搬入，控 `proofregistry` 体量）、
+> `manuscriptids.py` +64（claim 跨进程锁 + `identity_key` / `claim_refusal`）、
+> `exhaustionreport.py` +63（E 落稿两处 claim）、`agent_loop.py` +35（FX-13 按实例收窄）、
+> `statementledger.py` +35（`statement_manuscript_identity`）、`register_statement.py` +22、
+> `agent_v/core.py` +21（`proof_changed_since_dispatch`）、`run_experiment.py` +14、
+> `secretary.py` +10（`manuscript_family`）、`agent_prompts.py` +8（p297 版本账）、
+> `create_plan.py` +7（回执带 `created_by`）、`agent_f/core.py` +5、`artifacts.py` +4、
+> `attack_tools.py` +1；`proofregistry.py` -14 与 `manuscript.py` -12 是把实现搬到
+> `proofoutcomes` / `manuscriptids`（两文件原在 800 行顶格，搬完仍 ≤800）。
+> 95 个 `>200` 行函数与 2 段重复 docstring 两格不变（`register_or_rewrite` 197 行；
+> 三格现盘复测 75 / 95 / 2）。§3 表不动（本笔没动那几行）。
 > **2026-11-18 PLANLIFE②（`specs/f.py` 的计划生命周期教法改成与实现一致；p295 → p296）**：
 > 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 299,134 → **299,158**（本笔 src 增量 +24：
 > `agent_prompts.py` +15（p296 版本账）、`specs/f.py` +9（`abandon_plan` 摘要 / policy 的

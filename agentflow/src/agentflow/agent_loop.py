@@ -4726,12 +4726,39 @@ def _sign_gate_family(rel: str) -> str:
         return ""
 
 
+def _sign_gate_plan_in_scope(row: Mapping[str, Any], owner: str) -> bool:
+    """这一条计划在不在「本实例」的收工门里（FX-13）。
+
+    口径与 `AgentF._plan_owner_of` 逐字同源：`created_by` 是 F 的实例键
+    （`agent-F-<标签>`）时，它必须等于本实例的归因名；角色桶（`agent-F`）/ 空串 /
+    不是 F 的键（老行 / 夹具 / 别的角色）都按「没有实例归属读数」处理 —— 不把
+    「没有归属」折成「属于别人」（那会让 K1/K2 之前落的计划在门里静默消失）。
+    `owner` 为空（这一趟没有实例身份）⇒ 不过滤（与 K3 的三态同一条纪律）。
+    """
+    if not owner:
+        return True
+    cb = str(row.get("created_by") or "").strip()
+    from . import identity as _IDENTITY
+
+    got = _IDENTITY.split_actor("F", cb)
+    if not got.get("matched") or got.get("role_level"):
+        return True
+    return cb == str(owner)
+
+
 def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
-                 out: dict[str, Any]) -> None:
+                 out: dict[str, Any], *, owner: str = "") -> None:
     """F：计划号 → 它的稿 → 现行的 V 签；没有签且不是终态 abandoned ⇒ 欠签。
 
     稿的两种痕迹都读：`history[].manuscript_id`（真机每一轮 proof 都记）与稿头
     `- 计划：`（那一份稿自己写着属于谁）；两处取并集，少读一处就有计划号会静默放行。
+
+    ## FX-13（2026-11-18）：只遍历本实例的计划
+
+    改前这里 `store.rows("attack_plans")` 读全表 ⇒ 一个 F 的收工门会拿别人的
+    计划判自己欠不欠签（别人的稿没签，我收不了工）。现在 `owner` 给出本实例的归因
+    名，`_sign_gate_plan_in_scope` 只留下本实例的与没有实例归属的老行；`owner`
+    为空（直调 / 没有实例身份）才退回全表 —— 读不到实例时不许假装自己是某一个。
     """
     try:
         plans = [dict(r) for r in store.rows("attack_plans")]
@@ -4741,6 +4768,7 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                    why=(f"还没收工：`attack_plans` 读不出来"
                         f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
         return
+    plans = [row for row in plans if _sign_gate_plan_in_scope(row, owner)]
     # F 这一道门只拿 `f-proof`（见 `_v_wait_gate_reading` 的 `families`）：
     # 别的族的同号稿是另一份稿，不在本门的 `cands` 里 ⇒ 这里按号取候选是安全的。
     # 候选本身的身份仍是 `(族, 号)`（`signed_candidates` 分桶），不让单号跨族串台。
@@ -8468,7 +8496,14 @@ class AgentLoop:
             })
         try:
             if role == "F":
-                _sign_gate_f(store, root, cands, out)
+                # FX-13：门只遍历本实例的计划。`owner` 是这一趟的归因名（实例键）；
+                # 读不到实例身份时给空串 ⇒ 门退回全表（三态：不假装自己是某一个）。
+                from . import identity as _IDENTITY
+
+                _me = _IDENTITY.resolve_identity(
+                    store, role, instance=str(getattr(self, "instance", "") or ""))
+                _owner = str(_me.get("actor") or "") if _me.get("attributed") else ""
+                _sign_gate_f(store, root, cands, out, owner=_owner)
             elif role == "B":
                 _sign_gate_b(store, root, cands, out)
             else:

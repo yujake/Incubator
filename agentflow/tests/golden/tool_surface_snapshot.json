@@ -218,7 +218,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'ok','created','plan_id','duplicate','status','budget','subgoals','reason','missing','kind','error','refusal_reason','subgoal_id'}（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，而 status / subgoals 是空读数）",
+   "returns": "{'ok','created','plan_id','duplicate','status','created_by','budget','subgoals','reason','missing','kind','error','refusal_reason','subgoal_id'}（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，而 status / subgoals 是空读数）",
    "roles": [
     "F"
    ],
@@ -443,7 +443,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'plan_id','round','sid','action','outcome','status','budget_left','reason','budget_known','budget_reading','delivery','delivered','v_sign','delivery_state','delivery_label','total','signed_count','pending_count','unsigned_count','proof_count','proof_output_count','proof_statements','draft_count','abandoned_count','abandoned_statements','unfinished','unfinished_count','trail','trail_required','legal_exits','exits_note','legal_stop','is_failure','close_problems','coverage','coverage_reading','coverage_ratio','coverage_why','auto_submit','auto_submitted','auto_submitted_count','still_unsubmitted','delivery_state_plan','delivery_label_plan','self_assessment'}",
+   "returns": "{'plan_id','round','sid','action','outcome','status','plan_state','budget_left','reason','budget_known','budget_reading','delivery','delivered','v_sign','delivery_state','delivery_label','total','signed_count','pending_count','unsigned_count','proof_count','proof_output_count','proof_statements','draft_count','abandoned_count','abandoned_statements','unfinished','unfinished_count','trail','trail_required','legal_exits','exits_note','legal_stop','is_failure','close_problems','coverage','coverage_reading','coverage_ratio','coverage_why','auto_submit','auto_submitted','auto_submitted_count','still_unsubmitted','delivery_state_plan','delivery_label_plan','self_assessment'}",
    "roles": [
     "F"
    ],

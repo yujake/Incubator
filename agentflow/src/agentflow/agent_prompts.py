@@ -2794,7 +2794,15 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p296）+ `_VOLATILE_FACT_SETS` 末尾追加一格
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p295 同值）；两份 golden 按现值重冻；
 #:   ROLE-GUIDE 重生成；读图行数；warm 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p296"
+#: p296 → p297（2026-11-18，BATCH3：K5/K6/K7 与三处已知红）：
+#:   ① `attack.step` 的 returns 补 `plan_state`（BATCH1 让终态分支真返回了它，声明漏了）；
+#:   ② `attack.create_plan` 的 returns 补 `created_by`（成功 / 判重 / 四条被拒回执同值）；
+#:   ③ K6① 的版本绑定、K5 的 claim 判据、K7 的计票都只改实现与拒绝码，不改段文本。
+#:   变化格 = 无（`returns=` 只进声明快照、不进任何角色段；见 `tools/base.py` 的
+#:   `ToolFace.description` 那一节）；十一格与 p296 逐字同值，`_FROZEN_PROMPT_DIGESTS`
+#:   只换 `_FROZEN_PROMPT_VERSION` 那一格。两份 golden 仍按现值重冻（tool 面两处 returns
+#:   变了）；ROLE-GUIDE 重生成；读图行数；warm 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p297"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

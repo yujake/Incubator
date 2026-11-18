@@ -469,7 +469,8 @@ def _attack_pick_next_subgoal(subgoals):
     # 预算被拒 / 缺 testable）的键集合逐字相同 —— 两套键之间必然有一格"声明了却永远不
     # 出现"或"出现了却没声明"。拒绝那两支配 `missing` / `kind` / `error` /
     # `refusal_reason` / `subgoal_id`；`ok` 三态都有（`False` = 这一笔被拒，不是"执行完成"）。
-    returns=("{'ok','created','plan_id','duplicate','status','budget','subgoals','reason',"
+    returns=("{'ok','created','plan_id','duplicate','status','created_by','budget',"
+             "'subgoals','reason',"
              "'missing','kind','error','refusal_reason','subgoal_id'}"
              "（四条分支键集合相同；被拒那一支配 missing / kind / error / refusal_reason，"
              "而 status / subgoals 是空读数）"),
@@ -566,7 +567,7 @@ def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
     # 提交读数。声明漏一格，模型（读的就是这段 `returns`）就不知道那一格存在 —— 缺一格
     # 就是撒谎。`delivery_state_plan` / `delivery_label_plan` 是整份任务的读数
     # （`delivery_summary` 的 `state`），与"这一轮这一份"那三格是两件事。
-    returns=("{'plan_id','round','sid','action','outcome','status','budget_left',"
+    returns=("{'plan_id','round','sid','action','outcome','status','plan_state','budget_left',"
              "'reason','budget_known','budget_reading',"
              "'delivery','delivered',"
              "'v_sign','delivery_state','delivery_label',"
