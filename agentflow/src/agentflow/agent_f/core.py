@@ -3532,6 +3532,12 @@ class _Core:
         #: 这一轮的证明手稿（只有 `proof` 那一支有内容）：见 `_Manuscript.proof_manuscript`。
         #: 依赖台账不在这里写 —— 业主 2026-10-24 最终形态是"作者只写内容，B 读稿登记"。
         manuscript: dict[str, Any] = {}
+        #: 这一轮是否真把稿登记 / 重写进了台账（只有 `proof` 那一支会把它置真）。
+        #: 必须先钉成 False 再进四档分发：下面交差读数那一格（`_current` 的
+        #: `elif (_landed and ...)`）在外面，而 reduction / counterexample_request /
+        #: dead_end 三档根本不进 proof 分支 —— 不先钉就会 `UnboundLocalError`
+        #: （Z3 全量实测：这一处把 F 的 12 条判据全打成红）。
+        _landed = False
         #: 登记那一刻手上的稿（`_proof_outlet` 的读数；其它三档没有这一格）。
         received: dict[str, Any] = {}
         #: 秘书洗稿那一遍的读数（只有 `proof` 那一支有内容；打回那一档提前 return）。
