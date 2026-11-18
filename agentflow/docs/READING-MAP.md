@@ -4,7 +4,7 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、297,466 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16189 行（`agent_loop.py`，14973 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、297,633 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16189 行（`agent_loop.py`，14973 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-17 FIX11（R1：`b-register@` 义务的写侧键与读侧查找对齐两个号段；R2：`vsigns.issue` 幂等那一档也走「签触发提交」）**：
@@ -809,7 +809,7 @@
 | 文件 | 是什么 |
 |---|---|
 | `evidence.py` | 证据层：先检索、再逐字回验 —— 每条结论都落在某段真实原文上 |
-| `researchpending.py` | 344 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`，动作对象是 B 不是 C：概念行只由 B 经 `Secretary.write_concept_row` 写，C 的动作面只产 `AnalysisReport`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签 / 已签未收录 / 开着的题 / 无稿 —— 六档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题。这张清单是那一步的判据来源 |
+| `researchpending.py` | 499 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`，动作对象是 B 不是 C：概念行只由 B 经 `Secretary.write_concept_row` 写，C 的动作面只产 `AnalysisReport`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签（`statements_unsigned`）/ 已登记未送审的稿（`manuscript_unsigned`，INV7 第 ⑤ 条：复用 `agent_f.pending` 的同一份扫描，逐份点名稿路径 + sha + 等待时长；与 `statements_unsigned` 分开量 —— 那量命题台账行，这量盘上的稿）/ 已签未收录 / 开着的题 / 无稿 —— 七档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题；INV7 里还多一格：F 的稿已登记、V 签没到，而 M 的读数只有 `statements_unsigned=0`。这张清单是那一步的判据来源 |
 | `artifacts.py` | 产物登记：谁在哪个路径产出了什么 |
 | `depsection.py` | **F 手稿依赖段的唯一解析点 + 引用档位的唯一判据**（业主 2026-10-24：「作者只写内容，登记由收方读稿产生」）：`SECTION_HEADING` 那一节按三列表格（路径号不进稿，第四列只在老盘材料里读回）读成 `dependencies`（`used_by="stmt:<命题号>#pN"` + `path_group` + `source_stmt_id`），`citation_levels` / `citation_level_allowed` 是引用档位本身，`read_manuscript` 按命题号找 F 的手稿。`## 证明` 那一格是**三态**（2026-11-09，D4）：`proof_body` 严格（缺节 ⇒ 空串，不再退到 `## 依赖` / 整份全文）、`proof_body_reading` 给 `present` / `absent`、`read_proof_body` 多一个文件侧的 `unreadable`；只有"入参本来就是一段无标题证明正文"的两处（`read_manuscript` 按正文认稿的指纹、`proofregistry.proof_sha`）才走显式命名的 `proof_body_or_whole`（返回值带 `fell_back=True`）。2026-11-10 切节口径（真机 DCT 彩排）：`SECTION_TITLES`（手稿"节"的标题闭集）/ `heading_level`（行首 `#` 的个数）/ `is_section_heading`（这一行是不是一节）三格是唯一来源 —— `## 证明` 到下一个同级且是手稿一节的标题（或更高级标题）为止，`## 记号与约定` 这类同级自由小标题与 `###` 小标题留作正文；`manuscriptintake` 与 `proofregistry` 的切节都从这三格取同一份口径（判据 `tests/test_proof_body_is_three_state.py`）。F 自己不写依赖台账、也没有写台账的工具；`secretary`、B 的入库、D 的汇报、F 的手稿四处都读这一份（与 V 读 F 的手稿再签字同构） |
 | `papercompile.py` | 把智能体写好的 `out/paper/main.tex` 编成 `main.pdf`，并写框架自己的编译回执：判"这份 PDF 是不是盘上这份 tex 编的"（`receipt_matches_tex`） |

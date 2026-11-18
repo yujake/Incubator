@@ -2166,7 +2166,7 @@ python -m agentflow.cli tools
 **以后怎么做**：
 
 1. 挂机前读 `researchpending.pending_reading(store)`；`pending` 为真就派 `next_action` 指向的角色，不 park。
-2. 只有 `concept_missing` / `candidate_unfiled` / `statements_unsigned` / `signed_unregistered` / `open_questions` / `manuscript_missing` 全空，才允许 park；"没有研究对象"的空工作区也不产生 gap（不许把 M 变成永动机）。
+2. 只有 `concept_missing` / `candidate_unfiled` / `statements_unsigned` / `manuscript_unsigned` / `signed_unregistered` / `open_questions` / `manuscript_missing` 全空，才允许 park；"没有研究对象"的空工作区也不产生 gap（不许把 M 变成永动机）。`manuscript_unsigned`（INV7 第 ⑤ 条，2026-11-18）量的是**盘上已登记、V 签还没到的 F 稿**，与 `statements_unsigned`（命题台账行）分开取、分开列 —— 一份稿在 B 收录之前没有 `statements` 行，所以那一刻前者是 0；处置建议按 M 的边表写「转 D（由 D 派 F 把稿送 V）」，不写 M 直连 F / V。
 3. 读数坏掉（`checked=False`）也按"未尽"挡（fail-closed），但连续挡到 `RESEARCH_STALL_LIMIT` 要报受控告警并放开，不许无限空转。
 
 **判据**：`tests/test_m_must_not_park_with_research_unfinished.py::test_branch_a_no_concept_face_dispatches_b`、`::test_branch_b_verified_conclusions_are_propositionalized`、`::test_the_same_reading_only_blocks_for_a_bounded_number_of_beats`、`::test_an_unreadable_reading_is_bounded_too`、`::test_finished_research_still_parks`；`tests/test_park_is_a_real_stop.py::test_a_parked_parent_takes_no_model_calls_and_no_steps`。

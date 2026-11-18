@@ -848,14 +848,26 @@ def _research_anomaly_line(reading: Mapping[str, Any]) -> str:
 
     为什么不塞结构体：`anomalies` 是给 M 轮查时念的清单，一句一条；结构化读数在
     `agent_loop._park_gate` 的 `run.park["research"]` 与提示词那一段里（同一份实现）。
+
+    为什么 `manuscript_unsigned` 那一档要把 `ids` 念出来：这一格的全部用途就是
+    「该催哪一份稿」。只念 `manuscript_unsigned×1` 的话，M 还得再查一次才知道是哪一份
+    （而真机 INV7 里 M 连"有这一格"都看不到）。其余档的措辞一个字不动 —— 它们的
+    计数在 `values` 里、对象在各自的 `why` 里，改它们不是这一批的主题。
     """
     if not reading.get("pending"):
         return ""
     counts = dict(reading.get("counts") or {})
     gaps = [g for g in (reading.get("gaps") or ()) if isinstance(g, Mapping)]
     action = dict(reading.get("next_action") or {})
-    gap_text = "；".join(f"{g.get('code')}×{g.get('count')}"
-                        for g in gaps) or "读数没查成"
+
+    def _gap_text(g: Mapping[str, Any]) -> str:
+        text = f"{g.get('code')}×{g.get('count')}"
+        if str(g.get("code") or "") != "manuscript_unsigned":
+            return text
+        named = [str(x) for x in (g.get("ids") or ())[:5] if str(x)]
+        return f"{text}（{'、'.join(named)}）" if named else text
+
+    gap_text = "；".join(_gap_text(g) for g in gaps) or "读数没查成"
     values = "，".join(f"{k}={v}" for k, v in counts.items()) or "读数没查成"
     return (f"未尽研究：{gap_text}（读数 {values}）⇒ 不许挂机干等；"
             f"下一动作：{str(action.get('summary') or '先查盘上研究读数')}")

@@ -2729,10 +2729,13 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 二者都不属于任何角色；挂进 `agent_loop` 会让"哪一档算未尽"出现第二份口径，
     # 而那一份的口径错只会表现为"M 又挂机了"，没有任何一条判据会红。
     "researchpending.py": "「研究还没做完」的唯一判据（M 挂机，2026-11-06）："
-                          "pending_reading（台账读数 → 六档 gap：concept_missing / "
-                          "candidate_unfiled / statements_unsigned / signed_unregistered / "
-                          "open_questions / manuscript_missing）+ _GAP_ACTIONS（每档一条"
-                          "确定的下一动作，按 `specs/m.py` 的边表）；纯读、零模型调用、不写盘",
+                          "pending_reading（台账读数 → 七档 gap：concept_missing / "
+                          "candidate_unfiled / statements_unsigned / manuscript_unsigned / "
+                          "signed_unregistered / open_questions / manuscript_missing）+ _GAP_ACTIONS"
+                          "（每档一条确定的下一动作，按 `specs/m.py` 的边表）；"
+                          "`manuscript_unsigned` 复用 `agent_f.pending` 的同一份扫描"
+                          "（不另写一份「已登记」判据），与 `statements_unsigned` 分开量"
+                          "（命题台账行 vs 盘上的稿）；纯读、零模型调用、不写盘",
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件
