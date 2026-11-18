@@ -127,25 +127,27 @@ def test_b2_the_ledger_row_verifier_is_what_the_sign_names(
 
 
 # ------------------------------------------------------------------ c E 的报告写者
-def test_c_the_e_report_producer_is_the_instance(tmp_path: pathlib.Path) -> None:
-    """c：`land_report` 的 `producer` 与实验行同一把尺（实例级 actor）。"""
+def test_c_the_e_report_carries_the_instance(tmp_path: pathlib.Path) -> None:
+    """c：`land_report` 落的 `ARTIFACTS` 行同时有 producer（角色）与 instance（哪一支笔）。"""
     st = _store(tmp_path)
     got = ER.land_report(str(st.root), experiment_id="000000", claim=PROPOSITION,
                          claim_key="k", script_path="code/x.py",
                          design="全枚举 n≤20", enumeration="逐 n 枚举",
-                         owner="agent-E-e1", instance="e1", task_id="t-000123")
+                         instance="e1", task_id="t-000123")
     assert got.get("ok") is True, got
-    producer = {row["path"]: row["producer"] for row in _artifacts(st)
-                if str(row.get("kind") or "") == "experiment-report"}
     rel = str(got["path"])
-    assert producer.get(rel) == "agent-E-e1", producer
-    # 反真空：不给 owner ⇒ 改前的角色名（老调用点 / 夹具的行为一个字不变）。
+    rows = {row["path"]: row for row in _artifacts(st)
+            if str(row.get("kind") or "") == "experiment-report"}
+    assert rows[rel]["producer"] == "E", rows[rel]
+    assert rows[rel]["instance"] == "e1", rows[rel]
+    assert rows[rel]["task_id"] == "t-000123", rows[rel]
+    # 反真空：不给身份 ⇒ 与改前逐字相同的两格（producer=E、instance 空）。
     got2 = ER.land_report(str(st.root), experiment_id="000001", claim=PROPOSITION,
                           claim_key="k2", script_path="code/y.py",
                           design="d", enumeration="e")
     rel2 = str(got2["path"])
-    assert {row["producer"] for row in _artifacts(st)
-            if str(row.get("path") or "") == rel2} == {"E"}, _artifacts(st)
+    row2 = {row["path"]: row for row in _artifacts(st)}[rel2]
+    assert (row2["producer"], row2["instance"]) == ("E", ""), row2
 
 
 # ------------------------------------------------------------------ d A 的工具面

@@ -579,8 +579,8 @@ class _RunExperiment:
                                                         runtime_sec=run["runtime_sec"]),
                     result=derived.get("result"),
                     evidence_kind=derived.get("evidence_kind"),
-                    # EM-09：这一份报告的写者与实验行同一把尺（实例级 actor）。
-                    owner=str(_writer_ident.get("actor") or ""),
+                    # EM-09：这一份报告的实例格与实验行同一把尺（`ARTIFACTS` 的
+                    # producer = 角色、instance = 哪一支笔）。
                     instance=str(_writer_ident.get("instance") or ""),
                     task_id=str(_writer_ident.get("task_id") or ""),
                     identity_conflict=str(_writer_ident.get("conflict") or ""))

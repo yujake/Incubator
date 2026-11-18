@@ -531,6 +531,19 @@ def duplicate_hits(rows: Iterable[Mapping[str, Any]], *, text: Any) -> dict[str,
 
     命中按台账物理顺序返回（不排序）：调用方自己判「0 条 = 不在册」「1 条 = 就是它」
     「N 条 = 认不出是哪一条」（`term` 那一档的三种处置各不相同，本模块不替它选）。
+
+    ## BR-01（2026-11-19）：判重键按「命题正文」，归属按「稿 + 写者」
+
+    业主口径「每个 F 自己管自己的计划与稿，名册名就是实例身份」落在两个不同的东西上，
+    这里显式写清是哪一半：
+
+    - 命题是知识实体：同一条正文只该有一行（`statements` 是全仓共享的知识台账），
+      所以判重键就是规范化正文，不加实例 —— 加了会造出"同一句话两条命题"，
+      那正好是 `draft/39` §3.9 要治的病（5 条成功登记里 3 条正文 sha 相同）；
+    - 稿是实例的：命中行自己带着 `manuscript_id` / `manuscript_family` /
+      `created_by`，B 收编一份稿时另落一条占用登记（`manuscriptids.claim_intake`，
+      K17）。于是「这一笔是谁的稿」由 (稿路径, owner/instance) 回答，不由判重键回答。
+      三处分工互不替代，改其中一处都要同时看另外两处。
     """
     out: dict[str, Any] = {
         "checked": True, "mode": "text", "hits": [], "hits_total": 0, "scanned": 0,
