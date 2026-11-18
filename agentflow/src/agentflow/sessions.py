@@ -175,9 +175,16 @@ def append(root: Any, event: Mapping[str, Any], *, sid: str | None = None) -> tu
     `is not None` 判断。
     """
     path = session_path(root, sid)
+    row = dict(event)
+    # K1/SH-24：事件带「哪一个实例」（显式优先；读不到挂点 ⇒ 不写这个键，不写空串）。
+    if "instance" not in row:
+        from .identity import current_instance as _inst_now
+
+        _inst = str(_inst_now() or "").strip()
+        if _inst:
+            row["instance"] = _inst
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        row = dict(event)
         row.setdefault("ts", datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"))
         line = json.dumps(row, ensure_ascii=False, sort_keys=True, default=str) + "\n"
         with _append_lock(path):

@@ -481,9 +481,16 @@ class _RunExperiment:
             # 历史上的那一档 `conjecture`。`example` 在这一格里不特殊。
             if kind_now:
                 derived["observations"]["statement_kind"] = kind_now
+            # SH-04（K1，2026-11-19）：形态台账那一行的 `task_id` 由调用方给，而 E 的
+            # 调用点此前从不给 ⇒ 行上 `task_id=''`（role='E' + 空台账号）。本趟的
+            # 台账号现成可读（`conductor.current_task_id()`，与 `identity` 同一挂点），
+            # 就递进去 —— 台账那一行于是答得出「这是哪一趟的形态判定」。
+            from ..conductor import current_task_id as _current_task_id
+
             _form = self._proposition_form_gate(
                 full=str(claim or ""), kind=kind_now or "conjecture",
-                label=str(claim_key or ""))
+                label=str(claim_key or ""),
+                task_id=str(_current_task_id() or ""))
             if not _form.get("submittable"):
                 _why = str(_form.get("reason") or "").strip()
                 _problems = [str(x) for x in (_form.get("problems") or []) if str(x).strip()]

@@ -774,19 +774,28 @@ def pid_dir(root: str | Path) -> Path:
     return Path(root) / PID_DIR_NAME
 
 
-def pid_path(root: str | Path, role: str, sid: str | None = None, pid: int | None = None) -> Path:
-    """一个进程的登记文件：`runs/<role>-<sid>.pid`（同一 (角色, 会话) 只登记一条）。"""
+def pid_path(root: str | Path, role: str, sid: str | None = None, pid: int | None = None,
+             instance: str = "") -> Path:
+    """一个进程的登记文件：`runs/<role>-<sid>.pid`（同一 (角色, 会话) 只登记一条）。
+
+    K1 / SH-03（2026-11-19）：文件名多一维实例 —— 改前两个 E 实例算出来的路径逐字
+    相同（实测探针 p8 ⑥），而 `register_pid` 是 `write_text` 覆盖写，于是同一个会话里
+    第二个实例会把第一个的登记盖掉，「强制停止」就只找得到一个进程。
+    实例标签读不到（直调 / 单实例）⇒ 文件名与改前逐字相同（默认行为不变）。
+    """
     tag = str(sid or "nosid")
-    return pid_dir(root) / f"{role}-{tag}.pid"
+    label = f"{role}-{instance}" if str(instance or "").strip() else str(role)
+    return pid_dir(root) / f"{label}-{tag}.pid"
 
 
 def register_pid(root: str | Path, role: str, sid: str | None = None,
-                 pid: int | None = None) -> Path:
+                 pid: int | None = None, instance: str = "") -> Path:
     """登记"这一趟起的进程"（父进程自己）。返回登记文件路径。"""
     me = int(pid if pid is not None else os.getpid())
-    path = pid_path(root, role, sid)
+    path = pid_path(root, role, sid, instance=instance)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"pid": me, "role": str(role), "sid": str(sid or ""),
+                                "instance": str(instance or ""),
                                 "started_at": _now_iso(),
                                 "ppid": int(os.getppid())},
                                ensure_ascii=False, indent=2, default=str) + "\n",
@@ -794,9 +803,10 @@ def register_pid(root: str | Path, role: str, sid: str | None = None,
     return path
 
 
-def unregister_pid(root: str | Path, role: str, sid: str | None = None) -> bool:
+def unregister_pid(root: str | Path, role: str, sid: str | None = None,
+                   instance: str = "") -> bool:
     """注销登记（正常收工时调用；进程被杀时它自然留在盘上，`live_pids` 会把它判成死的）。"""
-    path = pid_path(root, role, sid)
+    path = pid_path(root, role, sid, instance=instance)
     if not path.is_file():
         return False
     path.unlink()

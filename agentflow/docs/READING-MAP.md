@@ -2,11 +2,22 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19，BATCH6 收两处既有红）：**
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19 CLOSE1 K1 收尾①）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,758 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,185 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,816 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 CLOSE1 K1 收尾①（会话事件 / 草稿本 / 进程登记 / 形态台账带实例）：**
+> 322 个 `.py` 与 75 个 `>800` 两格不变（本笔没有新增模块；`sessions.py` 792→800 未过线）；
+> **302,816** 行（上一格 302,758 是 BATCH6 的读数；本笔 src 净增 +58：
+> `agent_loop.py` +34（`note_path` / `write_note` / `notebook_digest` 收实例标签，
+> 草稿本按 `(角色, 实例)` 分文件、`ARTIFACTS.producer` 实例级；两个 `notebook_digest`
+> 调用点与 `_do_note` 传 `self.instance`；pid 登记 / 注销同）、
+> `stopctl.py` +10（`pid_path` / `register_pid` / `unregister_pid` 的 `instance=`，
+> 文件名 `runs/<角色>-<实例>-<会话>.pid`、登记体带 `instance`）、
+> `sessions.py` +8（`append` 从 `identity.current_instance()` 补 `instance`；读不到不写键）、
+> `agent_e/run_experiment.py` +6（形态闸调用点递 `task_id=conductor.current_task_id()`））。
+> 函数体量三格现盘复测 75 / 95 / 2 逐格未抬（新增代码都在既有函数里，没有新函数）。
 > **2026-11-19 BATCH6 收两处既有红（webui 的 ArtifactRow 面 + H 的 selftest）：**
 > 322 个 `.py` 与 75 个 `>800` 两格不变（本笔没有新增模块、也没有文件新过线）；
 > **302,758** 行（上一格 302,735 是 BATCH6 K17 的读数；本笔 src 净增 +23：

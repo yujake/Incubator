@@ -2066,15 +2066,36 @@ def mark_delivered(session_root: Path, role: str, ids: Sequence[str], *,
     return problem
 
 
-def note_path(session_root: Path, role: str) -> Path:
-    """这个角色的草稿本路径：`<项目根>/notes/<角色>.md`。"""
-    return session_root / NOTES_DIR_NAME / f"{role}.md"
+def note_path(session_root: Path, role: str, instance: str = "") -> Path:
+    """这一支笔的草稿本路径：`<项目根>/notes/<角色>.md` 或 `notes/<角色>-<实例>.md`。
+
+    K1 / SH-01（2026-11-19）：改前只拼角色，两个 E 实例写的是同一份 `notes/E.md` ——
+    实测（探针 p8 ⑥）两实例算出来的路径逐字相同。业主口径是「每个实例自己管自己的
+    计划与稿」，草稿本同族。实例标签读不到（直调 / 单实例）⇒ 文件名与改前逐字相同，
+    不因为拿不到身份而换一个名字。
+    """
+    label = f"{role}-{instance}" if str(instance or "").strip() else str(role)
+    return session_root / NOTES_DIR_NAME / f"{label}.md"
+
+
+def _identity_label(role: str, instance: str = "") -> str:
+    """写盘面用的实例标签：显式给的优先，否则读 `identity.current_instance()`。"""
+    got = str(instance or "").strip()
+    if got:
+        return got
+    try:
+        from .identity import current_instance
+
+        return str(current_instance() or "").strip()
+    except Exception:  # noqa: BLE001 —— 读不到身份不挡这一笔（落角色桶，不编名字）
+        return ""
 
 
 def write_note(session_root: Path, role: str, text: str, *,
-               sid: str | None = None) -> tuple[str, str]:
+               sid: str | None = None, instance: str = "") -> tuple[str, str]:
     """往草稿本追加一行。返回 `(路径, 问题)`；问题非空表示没写成。"""
-    path = note_path(session_root, role)
+    label = _identity_label(role, instance)
+    path = note_path(session_root, role, label)
     stamp = time.strftime("%Y-%m-%d %H:%M:%S")
     line = f"- [{stamp}] {text.strip()}\n"
     try:
@@ -2088,22 +2109,30 @@ def write_note(session_root: Path, role: str, text: str, *,
     # 登记失败不折成"便签没写成"（那一行已经在盘上），但必须回到 `problem` 里点名：
     # `_do_note` 把它读成 `ok=False` —— 于是"有便签、无归属"不会静默过去。
     # `sha256` 由 `artifacts.record` 从盘上现算（整份文件，不是刚追加那一行）。
+    #
+    # K1 / SH-01：`producer` 也按同一把尺 —— 有实例就是 `agent-<角色>-<实例>`，
+    # 否则退回改前的角色名（读侧老值照认）。
     from . import artifacts as A
+    from .identity import actor_for
 
+    producer = actor_for(role, label) if label else str(role or "")
     _entry, _reg_problem = A.record_or_problem(
-        session_root, path=f"{NOTES_DIR_NAME}/{role}.md", producer=str(role or ""),
+        session_root, path=f"{NOTES_DIR_NAME}/{path.name}",
+        producer=producer,
         kind="note", note="草稿本追加一行（agent_loop.write_note）")
     _p, problem = SS.append(session_root, {"kind": "agent_note", "role": role,
-                                           "text": text.strip(), "path": str(path)}, sid=sid)
+                                           "text": text.strip(), "path": str(path)},
+                            sid=sid)
     if _reg_problem:
         problem = (_reg_problem + "；便签本身已追加到盘上"
                    + (f"；{problem}" if problem else ""))
     return str(path), problem
 
 
-def notebook_digest(session_root: Path, role: str, limit: int = 6) -> str:
+def notebook_digest(session_root: Path, role: str, limit: int = 6,
+                    instance: str = "") -> str:
     """草稿本最近几条（进提示词，让"我上一步想过什么"不必靠记忆）。"""
-    path = note_path(session_root, role)
+    path = note_path(session_root, role, _identity_label(role, instance))
     if not path.is_file():
         return "（草稿本还是空的）"
     try:
@@ -5629,7 +5658,8 @@ class AgentLoop:
         # 2026-10-21 补的"跨 run 也会变"那十格不在这条尾部：它们一趟内不变，念在开场那条 user 消息里就够
         # （`_opening_transcript`）。不把 system 里那份冻在开局：那会让 system 说假话（余额是旧的），
         # 而循环协议里逐字写着"预算耗尽时必须收工"。
-        notebook = notebook_digest(self.session_root, self.role)
+        notebook = notebook_digest(self.session_root, self.role,
+                                   instance=str(getattr(self, "instance", "") or ""))
         # 缺目的那一句问询（业主 2026-10-26：「purpose自动填充没做好，且问询没落地」）。
         # 它只进"每步这一条 user 消息"，不碰 system prompt —— 后者要逐字节稳定
         # （`_system_at_step` 守着前缀缓存），而这一句每拍都可能变。
@@ -9147,7 +9177,8 @@ class AgentLoop:
         # 板项（业主 A3=甲 "渲染即 seen"）：与我名下的未消项同一处现读；
         # `board_ids` 会在第一次成功的模型调用之后标成 `seen`（下面与投递标记同址）。
         board, board_ids, board_problems = board_digest(self.conductor, my_task_id=my_task_id)
-        notebook = notebook_digest(self.session_root, self.role)
+        notebook = notebook_digest(self.session_root, self.role,
+                                   instance=str(getattr(self, "instance", "") or ""))
         replies = AP.user_replies_digest(U.read_replies(self.session_root, role=self.role,
                                                        sid=self.sid))
         run = LoopRun(role=self.role, task=task)
@@ -9165,7 +9196,8 @@ class AgentLoop:
         try:
             from . import stopctl
 
-            stopctl.register_pid(self.session_root, self.role, self.sid)
+            stopctl.register_pid(self.session_root, self.role, self.sid,
+                                 instance=str(getattr(self, "instance", "") or ""))
         except Exception as exc:  # noqa: BLE001 —— 登记不上不影响这一趟，但必须留痕
             SS.append(self.session_root, {
                 "kind": "agent_note", "role": self.role,
@@ -10603,7 +10635,8 @@ class AgentLoop:
         try:
             from . import stopctl as _sc
 
-            _sc.unregister_pid(self.session_root, self.role, self.sid)
+            _sc.unregister_pid(self.session_root, self.role, self.sid,
+                               instance=str(getattr(self, "instance", "") or ""))
         except Exception:  # noqa: BLE001 —— 注销失败不影响这一趟的产出
             pass
         # 秘书随这一趟一起收（S1m："与它同生同死"的第二半）：注销存活标记，读数进 notes。
@@ -13919,7 +13952,8 @@ class AgentLoop:
 
     def _do_note(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         path, problem = write_note(self.session_root, self.role,
-                                   str(payload.get("text") or ""), sid=self.sid)
+                                   str(payload.get("text") or ""), sid=self.sid,
+                                   instance=str(getattr(self, "instance", "") or ""))
         if problem:
             return {"note": "没写成", "ok": False, "error": problem}
         return {"note_written": path, "ok": True}
