@@ -1762,8 +1762,9 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
     # 所以兜底挑到的可能就是另一条实验：会审的结论会盖在别人的程序与报告上，而 V 的
     # 判词是签的依据。现在只有两条认法：调用方给的那一行（`experiment_row`），或它点名的号
     # （`experiment_id`）。认不到 ⇒ 缺材料（`checked=False`），不许猜（判据见
-    # `tests/test_k11_k12_row_ownership.py` 的 d）。程序路径仍然进读数（第 1 项检查要读它），
-    # 但它不再用来认行。
+    # `tests/test_agent_v_exhaustion_review.py` 的 `4e`：
+    # `test_4e_a_proof_column_without_any_experiment_is_unchecked`）。程序路径仍然进读数
+    # （第 1 项检查要读它），但它不再用来认行。
     if row is not None:
         script = script or str(row.get("code_path") or "").strip().replace("\\", "/")
     if script:

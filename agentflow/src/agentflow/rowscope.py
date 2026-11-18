@@ -136,6 +136,12 @@ def owned(table: str) -> bool:
 
 
 def producers(table: str) -> frozenset[str]:
+    """这张表的产出角色（`OWNED_TABLES` 的唯一读口；不是归属表 ⇒ 空集）。
+
+    与 :func:`owned` 同一张登记表：`owned` 回答"有没有行级归属"，本函数回答
+    "那这张表归哪几个角色造"。两问分开是因为写侧要按角色判"你是不是这张表的产出方"
+    （`create_refusal` 的 `ROW_OWNER_NOT_PRODUCER`），而只读表两个答案都该是空的。
+    """
     return OWNED_TABLES.get(str(table or ""), frozenset())
 
 

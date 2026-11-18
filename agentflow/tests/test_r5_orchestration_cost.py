@@ -1144,6 +1144,11 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     # （「十一格不是手抄」那一句，changed = ['A']）。它是历史读数出处、不是新写的引用，
     # 按本表口径逐条登记（与上面 fx3 那一支同形：fx3 仍在仓根的 temp 下，这条已被清）。
     "temp/cmp1_recompute_digests.py",
+    # 2026-11-19（K8/K9 收件人审计）：`temp/AUDIT-VD` 是那一轮义务投递审计的报告
+    # （`obligations.recipient_reading` 与 tests/test_k8…/test_k9… 的开头都在引它）。
+    # 它是历史读数出处、按 R2「探针与证据只放 temp/、跑完即清」删掉了本体；
+    # 引用留着是为了让人能复核"当时钉的是哪几条缺口"，不是"照着找能得到东西"。
+    "temp/AUDIT-VD",
 )
 
 
@@ -1345,6 +1350,11 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_resolve_manuscript_id",      # 已改名/搬走的稿号解析实现：`agent_f/core.py` 的 import 注释与 `_hand_proof` 的 docstring 用旧名讲"改证明不换稿"这条口径（今天由 `manuscriptids` / `proofregistry` 那一侧承担）
     "_no_ledger",                  # 行内字符串键（不是符号）：`Secretary._judge_core` 在"没缝 / 开关关着"那一档返回 `{"_no_ledger": True}`，`secretary.py` 的注释在解释它为什么不落角色台账
     "_manuscript_belongs_to_a_cited_statement",  # 改名前的判据名：`tests/test_dependency_wiring_is_live.py` 的注释在讲"这份稿是不是某条被引命题的稿"那条判定（今天走 `_manuscript_is_own` / 逐路径记录）
+    # —— 2026-11-19（K9 收件人改成显式实例地址）：两条「被删实现的旧名」——
+    # `recipient_reading` 的 docstring 与 `tests/test_k9_obligation_recipient_is_an_instance.py`
+    # 的开头都在讲「改前靠这两条挑一趟」这个缺陷史实，按纪律必须点名被删的东西。
+    "_registrar_now",              # 已删的旧挑法（≥2 趟 B 时取"最近开始的那一趟"）：K9 把它整段删了，地址改成显式实例
+    "_live_role_task",             # 已删的旧挑法（"唯一在飞才认"）：同上，K9 之后没有"按角色挑一趟"这一档
 )
 _TICKED_PRIVATE = re.compile(r"`(_[A-Za-z][A-Za-z0-9_]*)`")
 _TICKED_TEMP_PATH = re.compile(r"`(temp/[A-Za-z0-9_.\-]+)`")

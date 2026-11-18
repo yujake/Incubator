@@ -38,9 +38,15 @@ from agentflow.store import Store  # noqa: E402
 from conftest import seed_statement_row  # noqa: E402
 
 FULL = "设 G 是 3-正则简单图，且每条边至少落在两个三角形里；则 G ≅ K4。"
+#: 这一份正文是「`## 证明` 那一节的正文」（`vsigns.manuscript_proof_body` 的形态：
+#: 去掉了小节自带的首尾空行）—— 末尾不能再多一个换行。2026-11-19 改夹具：签的对拍尺是
+#: `proofregistry.proof_sha`，它对手稿取小节时会剥首尾空行、对「一段正文」则逐字节
+#: 照算；夹具原先的 `PROOF` 末尾多一个 `\n`，于是台账 sha（…d8f542）与手稿小节 sha
+#: （…c77833）差一个换行，第 3 转签发被「稿在 V 读到之后又改过」受控拒 —— 那是正确的
+#: fail-closed，不是产品坏：`_manuscript` 写出来的 `## 证明` 节去空行后就是下面这一串。
 PROOF = ("1. 取边 uv，它落在两个三角形 uvw 与 uvx 里。\n"
          "2. 由 3-正则，w 与 x 都只能再连一个点 ⇒ w~x。\n"
-         "3. 四点两两相邻 ⇒ K4；K4 每点度数 3，不能再向外连边。\n")
+         "3. 四点两两相邻 ⇒ K4；K4 每点度数 3，不能再向外连边。")
 SID = "000013"
 OK = {"verdict": "成立", "findings": []}
 CLEAN_JUDGE = {"checked": True, "axis": "clean", "decision": "没问题"}

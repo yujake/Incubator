@@ -264,7 +264,7 @@ class _IngestManuscript:
         上一笔的 holder 带回来）。
 
         身份从 `identity.resolve_identity(self.store, "B", actor=self.actor)` 取 ——
-        与 B 的写稿支（`_register_manuscript`）同一处，不另拼一份。
+        与 B 的写稿支（`_land_b_manuscript`）同一处，不另拼一份。
         """
         from .. import identity as _IDENT
         from .. import manuscriptids as _MID

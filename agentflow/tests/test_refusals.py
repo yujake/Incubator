@@ -179,7 +179,11 @@ _FAILURES_NOT_REFUSALS: dict[tuple[str, str], str] = {
         "('other','unknown')`）时返回 `{\"ok\": False, ..., \"refused\": _code, "
         "\"kind\": _code}`（`manuscript_path_taken` / `manuscript_owner_unchecked`）。"
         "它同样是子结果：`_hand_proof` 把它折成动作层的受控拒（`refused` + `why`），"
-        "这一层只是「这一份稿不落盘」的读数，不另写一次 `refusals.refuse`；处数 5 → 6。",
+        "这一层只是「这一份稿不落盘」的读数，不另写一次 `refusals.refuse`；处数 5 → 6。"
+        "2026-11-19（K5）：第 7 处骨架是改写支（`_write_manuscript` 的 frozen 之后）"
+        "另一次 `_refusal` 判定 —— 同一路径归另一写者时同样返回 `{\"ok\": False, ..., "
+        "\"refused\": _code}`（`manuscript_path_taken` / `manuscript_owner_unchecked`）。"
+        "与第 6 处同一条理由：它是落盘前的占用读数，受控拒由动作层折出；处数 6 → 7。",
     ("agent_f/core.py", ""):
         "子结果（三处）：① 手稿那一支的局部 `manuscript = {\"ok\": False, ...}`（没写成时给"
         "调用方看的读数）。与同文件里那四条带 `kind` 的真失败不同，它没有名字、不进终态 "
@@ -237,7 +241,7 @@ _REPEAT_COUNTS: dict[tuple[str, str], int] = {
     # （`refused=manuscript_path_taken` / `manuscript_owner_unchecked`），5 → 6。
     # 六处都是子结果（由 `_hand_proof` 折成动作层的受控拒），理由见
     # `_FAILURES_NOT_REFUSALS` 里那一格。
-    ("agent_f/manuscript.py", ""): 6,
+    ("agent_f/manuscript.py", ""): 7,
     # 2026-11-11（p286）：`agent_f/core.py` 的空 kind 处数 1 → 2。新增的那一处是
     # `parse_handed_product()` 的返回骨架 `out` 初值（三态解析器的"还没核完"，不是终态
     # 拒绝；真正的受控拒由 `_handed_product_round` 的 `refusal` 那一支产出）。

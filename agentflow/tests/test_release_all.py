@@ -2736,6 +2736,27 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                           "`manuscript_unsigned` 复用 `agent_f.pending` 的同一份扫描"
                           "（不另写一份「已登记」判据），与 `statements_unsigned` 分开量"
                           "（命题台账行 vs 盘上的稿）；纯读、零模型调用、不写盘",
+    # 2026-11-19（K1/K2 实例身份）：身份三格（role / task_id / instance）的唯一解析点。
+    # 为什么必须是顶层模块：写侧盖归属、读侧收可见面、事件 actor 与工具体路径的
+    # `actor` 都问它 —— 挂进任何角色包都会让别的角色 import 一个角色模块（正是
+    # 「四套键各写一份」要拆掉的耦合）。
+    "identity.py": "实例身份的唯一解析点（K1/K2）：resolve_identity / owner_for / "
+                   "split_actor / current_instance —— 工具路径的 actor、行级归属两格、"
+                   "事件 actor 与手稿 ``agent-<角色>-<实例>`` 标签都从这一处派生",
+    # 2026-11-19（K1/K2 三态）：稿与计划的「活跃 / 完工 / 放弃」收在一处。
+    # 为什么必须是顶层模块：判重、上限、`list_plans` / `step` / `abandon` 与收工门
+    # 共用同一份活跃集；放进任一侧都会让另一侧另算一份"还算不算在飞"。
+    "lifecycle.py": "稿与计划的活跃/完工/放弃三态（K1/K2）：state_of_manuscript / "
+                    "active_plans / 活跃集判据 —— 判重、并发上限、收工门共用这一份，"
+                    "不各自再数一遍「还算不算在飞」",
+    # 2026-11-19（K11）：行级归属（一张表的每一行归谁）的唯一判据。
+    # 为什么必须是顶层模块：读（`scope_rows`）/ 造（`create_refusal`）/ 改删
+    # （`write_refusal`）/ 撤销（`same_writer`）四问同一处，通用写口与 E/G 两条正路
+    # 都调它；`policy` 的并发豁免也只读这里的 `ROW_MUTEX_ACTIONS`（第二份登记表
+    # 就是 SH-05 要删的那条「同角色就豁免」）。
+    "rowscope.py": "行级归属的唯一判据（K11）：scope_rows / same_writer / write_refusal / "
+                   "create_refusal / ROW_MUTEX_ACTIONS —— 读造改删四问同一处，"
+                   "`experiments` / `documents` 的归属与调度面的并发豁免共用这一份",
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件

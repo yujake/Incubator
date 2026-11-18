@@ -434,9 +434,10 @@ _ALLOWED_READ_ONLY: frozenset[tuple[str, str]] = frozenset({
     # 所以这里不需要缝。它与 `statusreport.py` 那一处同形（只读口径），登记的是
     # 「确实只读」，不是「先放过」。
     ("webui\\readers.py", "child_counts"),
-    # `agent_f/core.py`：`_plan_owner` 拿父任务的台账号反查名册里的名字（只拼一个显示名，
-    # 不判命题、不写台账）—— 与上面同形。
-    ("agent_f\\core.py", "name_of"),
+    # 2026-11-19（K1/K2）：`name_of` 的唯一实现搬到 `identity.py`（`Secretary.name_of`
+    # 只转发）。这一档仍然是"只拼一个显示名、不判命题、不写台账"的同一条只读口径，
+    # 只是构造点换了一个文件 —— 改前这里登记的是 `agent_f\core.py`。
+    ("identity.py", "name_of"),
     # `dispatchpolicy.py`：`_d_roster` 读 D 各趟的名册（`roster_rows` 只折叠 jsonl，
     # 纯读）；构造点把方法先绑到局部名上再逐个 owner 读，所以尾巴里抓到的是属性名。
     ("dispatchpolicy.py", "roster_rows"),
