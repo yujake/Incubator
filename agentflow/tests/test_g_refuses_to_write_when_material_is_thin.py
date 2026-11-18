@@ -78,7 +78,10 @@ def test_g_refuses_to_write_when_material_is_thin(tmp_path: pathlib.Path) -> Non
     assert "交给 D" in boundary, boundary[:200]
 
     # ⑤ 料到位之后同一道门放行（不是永远拒）：同一条命题补上 proof_text
-    _statement(st, "000001", proof="Proof. 由定义直接得到。")
+    # 2026-11-19 改夹具（K10 口径）：凭据面按这张对应表自己点到的命题读 ——
+    # `_rows()` 的 `ledger_id` 是 `stmt:000000`，所以要补的是 000000 那一行；
+    # 改前这里补的是 000001，全局读数是 ready、而这道门按引用面读到 000000 仍无正文。
+    _statement(st, "000000", proof="Proof. 由定义直接得到。")
     assert RB.research_base(st)["state"] == "ready"
     after = _write_mapping(st)
     assert after.meta.get("kind") != "no_evidence_chain", after.meta

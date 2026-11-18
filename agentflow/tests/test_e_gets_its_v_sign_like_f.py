@@ -373,20 +373,28 @@ def test_f_without_the_e_secretary_the_sign_is_issued_but_not_landed(tmp_path, m
 
 # ============================================================ ⑦ 反真空：手稿是签的载体
 def test_g_without_the_manuscript_the_sign_has_no_carrier(tmp_path):
-    """⑦ 反真空：不点名手稿（只给证明栏）⇒ 看过、没签；稿上没有块、也不落 pending 签行。
+    """⑦ 反真空：不点名手稿（只给证明栏）⇒ 没查成；稿上没有块、也不落 pending 签行。
 
     这一条量的是"块不是凭空出现的"：V 认得出手稿的入口，才落得下块。同一份稿就在盘上、
     只是这一次送审没点名它 —— 块仍然不会出现（V 不替送审方去盘上猜一份稿）。
     没有稿就不签发，连"按对象 sha 可认领"的 pending 签行也不落（那一行会被 B 当成
     第三方签）。迟到的那一份稿再点名送审 ⇒ 走正统路（签落稿上）。
+
+    2026-11-19 改断言（K12 / EX-04 的口径变了）：穷举会审不再按正文 / 程序路径在整张
+    `experiments` 表里兜底挑一条实验 —— 它只认这份稿自己点名的实验号
+    （`exhaustionreport.experiment_id_from_text` / 稿名）。不点名稿 ⇒ 认不出实验号 ⇒
+    `checked=False` + `reason="missing_material"`（没查成，不是"看过、没签"）。
+    改前这一格钉的是 `kind="numeric_evidence_reviewed_not_signed"`，那是 K12 之前
+    「按证明栏里的程序路径反查实验行」那一档。
     """
     env = _env(tmp_path)
     rel, _before = _manuscript(env)
     with _submitted_by_e():
         got = env["v"].verify_proof(proof_text=_column(env))
-    assert got.get("checked") is True, got
-    # 没有点名稿 ⇒ 看过、没签（不落签、不落 pending、不落块）
-    assert got.get("kind") == "numeric_evidence_reviewed_not_signed", got
+    assert got.get("checked") is False, got
+    # 没有点名稿 ⇒ 认不出这条穷举实验 ⇒ 没查成（既不判成立、也不判有毛病）。
+    assert got.get("reason") == "missing_material", got
+    assert got.get("kind") != "numeric_evidence_reviewed_not_signed", got
     assert got.get("signed_bit3") is False, got
     pend = pathlib.Path(env["store"].root) / "verifications" / "pending"
     assert not (pend.is_dir() and list(pend.glob("*.jsonl"))), (

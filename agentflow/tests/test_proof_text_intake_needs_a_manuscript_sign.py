@@ -99,6 +99,22 @@ def _sign(st: Store, sid: str, text: str, *, manuscript: str = "") -> None:
             proof_no=1, store=st, manuscript=manuscript)
 
 
+def _write_b_manuscript(st: Store, sid: str, proof_text: str) -> str:
+    """把「合并稿」真的落成一份 B 稿（签要盖在它上面，对拍的是这份稿的 `## 证明` 节）。
+
+    为什么夹具必须落这一份：签发那一笔要求「签文件写到的正文 sha == 盘上这份稿的
+    `## 证明` 节 sha」（`_vsigns_write_after_flip` 的受控拒）。改前夹具只把合并正文交给
+    `record_verification`、盘上仍是上一版的稿 ⇒ 第 3 转被拒（fail-closed 是对的：
+    签的是稿上那一版，不是调用方内存里那一版）。
+    """
+    rel = f"reports/b-proof-{sid}.md"
+    path = pathlib.Path(st.root) / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# F 的证明手稿\n\n## 命题\n\n" + STATEMENT
+                    + "\n\n## 证明\n\n" + proof_text + "\n", encoding="utf-8")
+    return rel
+
+
 def _reg(st: Store) -> ToolRegistry:
     reg = ToolRegistry(name="intake-gate")
     TT.register(reg, store=st)
@@ -249,7 +265,10 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
     lemma2 = {"stmt_id": _proof_review_lemma(
         st, sec, full="引理 B：合并稿新依赖。", label="引理 B")}
     sid = _empty_conjecture(st)
-    _sign(st, sid, PROOF, manuscript="reports/f-proof-000000.md")
+    # 2026-11-19 改夹具（一命题一稿号）：稿名里的号必须是这条命题的号。
+    # 改前这里（以及下面三处）钉着 `-000000.md`，而夹具先建了两条引理 ⇒ 本条是 000002；
+    # 签块落点与台账 sha 对不上，第 3 转签发被受控拒（"稿在 V 读到之后又改过"）。
+    _sign(st, sid, PROOF, manuscript=f"reports/f-proof-{sid}.md")
     from agentflow import depsection as DS
 
     manuscript = (
@@ -266,8 +285,8 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
     assert first.get("ok") is True, first
     assert len(st.rows("dependencies")) == 1, st.rows("dependencies")
 
-    # 合并稿自己也要有手稿签（与"正文必须由手稿承载"同一条规则）。
-    _sign(st, sid, MERGED, manuscript="reports/b-proof-000000.md")
+    # 合并稿自己也要有手稿签（与"正文必须由手稿承载"同一条规则）—— 先把它落成一份稿。
+    _sign(st, sid, MERGED, manuscript=_write_b_manuscript(st, sid, MERGED))
     sec.adjudicate_proposition = lambda payload: {  # type: ignore[method-assign]
         "checked": True, "attempted": True, "verdict": "same",
         "canonical_name": "X", "same_as": sid, "basis": "夹具：判 same",
@@ -298,7 +317,8 @@ def test_d_merge_writes_the_merged_texts_dependencies_in_the_same_transaction(tm
         monkeypatch.setattr(SEC.Secretary, "_write_dep_steps",
                             lambda self, tx, steps, *, stmt_id, body: 0)
         # 再合并一次（换一份正文，绕开同 sha 早退）
-        _sign(st, sid, MERGED + "\n（订正）", manuscript="reports/b-proof-000000.md")
+        _sign(st, sid, MERGED + "\n（订正）",
+              manuscript=_write_b_manuscript(st, sid, MERGED + "\n（订正）"))
         merged2 = sec.record_statement(
             {"origin": "own_result", "derived_from": ["999999"], "kind": "theorem", "label": "X",
              "statement_full": NEAR, "proof_text": MERGED + "\n（订正）",

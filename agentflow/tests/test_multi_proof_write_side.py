@@ -225,8 +225,11 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     # 2026-11-13（业主：一命题一稿号）：落稿那一刻把「命题号 → 这份稿」记在行上
     # （`manuscript_id`；路径分了的档记 `manuscripts`）—— 这两格与收录回执同族，
     # 也不是 `schema.Statement` 的字段。
+    # 2026-11-18（K6④ 稿族）：`manuscript_family` 与 `manuscript_id` 同一笔写
+    # （`secretary._NON_SCHEMA_KEYS` 登记在册，读侧合成 `(族, 稿号)`）—— 同一族，
+    # 从"只差内部留痕"的集合里排除，不新增 schema 字段。
     allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY, "proof_no", "proof_sha256",
-               "manuscript_id", "manuscripts"}
+               "manuscript_id", "manuscripts", "manuscript_family"}
     assert set(row_old) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_old)
     assert set(row_new) - allowed == set(S.Statement.__dataclass_fields__), sorted(row_new)
     for row, store in ((row_old, st_old), (row_new, st_new)):
