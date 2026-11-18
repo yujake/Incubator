@@ -1454,6 +1454,20 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "变化格 = B / F / G / H / M，其余六格与 p293 逐字相同（逐格读数见 "
               "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p294 → p295（2026-11-18，Z3FIX1）：PAPER_PACK ① 的主语笔误 —— TEACH1 把它写成
+     # 「B 可以直接派 B 去处理它自己那一族」，第二个 `B` 是 `V` 的笔误（`ALLOWED_EDGES["B"]`
+     # 是 C/D/H/L/V，B→B 这条边不存在，而上下文正是「派 V 是产出方自己的动作」）。
+     # 只改这一个字；变化格 = G / H / M，其余八格逐字相同。facts 键集与落点一格没动
+     # ⇒ count / keys_sha256 与 p294 同值。
+     {"version": "p295", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p295（2026-11-18，Z3FIX1 主语笔误）：`PAPER_PACK` 里"
+              "「B 可以直接派 B 去处理它自己那一族」的第二个 `B` 改成 `V` —— "
+              "`capabilities.ALLOWED_EDGES[\"B\"]` 只有 C/D/H/L/V，B→B 这条边不存在；"
+              "这一句的上下文就是「派 V 是产出方（F / E / B）自己的动作」。"
+              "变化格 = G / H / M（PAPER_PACK 的读者），其余八格与 p294 逐字相同"
+              "（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

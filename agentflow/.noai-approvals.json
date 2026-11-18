@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-18T13:19:37+08:00",
+  "generated_at": "2026-11-18T15:01:10+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,11 +505,11 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "e6caea9f64b56acf3176999a02d743b4631efca2048d5770d4ab5a11544d96b4",
+      "sha256": "89eae2ede43fa5ffa65c469c92a24c11f5e252e6590fe39e58c092db8fca780c",
       "authored": "ai-agent",
-      "authored_basis": "inferred",
-      "change_note": "TEACH1（p294）：按 GUIDE1 报告 §3/§4 修教法缺口（PAPER_PACK 派 V 加主语 / F 两格证明读数 / 成果身份 stmt:mss: / M 认 manuscript_unsigned / F 两道门分别命名 / L4 补送审 / park 的 why 进模型一拍 / B 引用侧第一遍例外 / E 返回带 v_sign+next_action）。业主已授权「先apply」；reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐行走查。",
-      "changed_this_session": null,
+      "authored_basis": "attested",
+      "change_note": "Z3FIX1（p295）：agent 面按现值重冻（11 个角色的 prompt 行：仅版本行 p294→p295，G/H/M 三格另有 PAPER_PACK 的『B 可以直接派 B』→『B 可以直接派 V』主语修正）；tool 面只有 attack.step 的 returns 一格新增 proof_output_count。重冻前逐格 diff 只有这两处，登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []
@@ -531,11 +531,11 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "ca9ae2bcaf3a4c336b3155a4771566b2780a8a042306c8bd6e23c2662da2264f",
-      "authored": "unknown",
-      "authored_basis": "inferred",
-      "change_note": "MPATROL1：conductor.patrol 的 returns 增 doing.last_rejection 与 item.unconsumed 两格（实现只读既有步骤记录与 agent_children.settled，不新造台账）；tool_surface_snapshot 按现值重冻（逐格 diff 只有 conductor.patrol 的 declarations 一条，见 scripts/golden_diff.py；agent 面一个字节没动）。登记≠批准，reviewers=[] 保持。",
-      "changed_this_session": null,
+      "sha256": "302c1a1adc63f7524193849c7dfa4aea408ba87bd90671c29f6c13c2f58562b2",
+      "authored": "ai-agent",
+      "authored_basis": "attested",
+      "change_note": "Z3FIX1（p295）：agent 面按现值重冻（11 个角色的 prompt 行：仅版本行 p294→p295，G/H/M 三格另有 PAPER_PACK 的『B 可以直接派 B』→『B 可以直接派 V』主语修正）；tool 面只有 attack.step 的 returns 一格新增 proof_output_count。重冻前逐格 diff 只有这两处，登记≠批准，reviewers=[] 保持，需 2 名 reviewer 逐格看过。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []

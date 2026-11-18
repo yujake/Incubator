@@ -4,9 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、298,816 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、298,835 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-18 Z3FIX1（全量第一遍 Z3 的 15 条红：F 的 `_landed` 未初始化、B 的重复登记读音、G 的 PAPER_PACK 主语笔误、attack.step 的 `proof_output_count` 声明）**：
+> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,816 → **298,835**（本笔 src 增量 +19：
+> `agent_prompts.py` +13（p295 版本账；正文只把 `B 可以直接派 B` 的第二个 `B` 改成 `V`）、
+> `agent_f/core.py` +6（`_apply_round` 在四档分发之前把 `_landed` 钉成 `False`）；
+> `tools/attack_tools.py` 0（声明补 `'proof_output_count'` 是同行改写）。
+> 95 个 `>200` 行函数与 2 段重复 docstring 两格不变（`_apply_round` 仍 1 个函数、没有新增 >200 行函数；
+> 三格现盘复测 75 / 95 / 2）。§3 表不动（本笔没动那两行）。
 > **2026-11-18 TEACH1（把 GUIDE1 报告 §3/§4 的「写着但与实现相反」逐条钉回实现：PAPER_PACK 的派 V 有主语、F 两格证明读数、成果身份 `stmt:`/`mss:`、M 认 `manuscript_unsigned`、F 两道门分别命名、L4 补送审、park 的 why 进模型一拍、B 的引用侧第一遍例外、E 的返回带 `v_sign`/`next_action`）**：
 > 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,336 → **298,816**（本笔 src 增量 +155：
 > `agent_loop.py` +43（`_manuscript_block` 与 `_park_gate` 的缓存/注入）、

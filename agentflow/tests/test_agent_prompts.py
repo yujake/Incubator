@@ -2649,7 +2649,18 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   H c6600f65… → ac6dce6d…；M 8cc0359d… → 76f7caa3…。
 # 十一格不是手抄：`temp/teach1/recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['B','F','G','H','M']。
-_FROZEN_PROMPT_VERSION = "p294"
+# p294 → p295（2026-11-18，Z3FIX1：PAPER_PACK ① 里的主语写错了一个字）：
+#   TEACH1 ① 把「派 V 改成有主语」时写成「B 可以直接派 B 去处理它自己那一族」——
+#   第二个 B 是 `V` 的笔误（`ALLOWED_EDGES["B"]` 是 `['C','D','H','L','V']`，B→B 这条边
+#   不存在；而这一句的上下文正是「派 V 是产出方自己的动作」）。它同时把
+#   `test_g_asks_d_not_b_for_registration::test_2` 打红（G 的提示词里出现了「派 B」
+#   这个直接指向）。只改这一句：`B 可以直接派 B` → `B 可以直接派 V`。
+#   变化格 = G / H / M（PAPER_PACK 的读者就是这三格）；其余八格逐字相同。
+#   逐格旧值 → 新值：G 1acaf7dc… → 88294e2d…；H ac6dce6d… → ba8c5a25…；
+#   M 76f7caa3… → 2ce5f492…。
+# 十一格不是手抄：`temp/teach1/recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['G','H','M']。
+_FROZEN_PROMPT_VERSION = "p295"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2924,10 +2935,10 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
     "E": "36668798000e529b8c10ad7f506f88e6c7c3773554746b7d8e3b5234a59662a1",
     "F": "e2e4d6a15a6636fd2908988a88b5108f65ffc26e46f4db1ce931cb441301ac07",
-    "G": "1acaf7dc58b9339afa8cfc1308ea84b8edd41364d2ad429518dffd8d44497877",
-    "H": "ac6dce6d09c64979f314b4ebd747844ef54b986391ef8e4edb3388ab39d9937b",
+    "G": "88294e2d33ad2b74dc2f8751f26dd75bb2244d2e721ab41dac46e7ae3cf68ab4",
+    "H": "ba8c5a25eff0f8d8a3eda962d352c2886361beb82bda38b864fafcef13747f48",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
-    "M": "76f7caa32e7752a70a28415d33d1fbcc55470e5080856172fdc1bc173ac10268",
+    "M": "2ce5f4920c379a68c850d845d3d48b7508431834223ef131592e817214349eca",
     "V": "b310667d411639045a9db2f3064715864e28d9ece3e8b3b1a606913a0f47d2a2",
 }
 

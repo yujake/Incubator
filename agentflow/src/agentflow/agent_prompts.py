@@ -2766,7 +2766,20 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p293 同值 —— 这一批只换段文本与教法，
 #:   没有哪一格事实换过落点）；两份 golden 按现值重冻；ROLE-GUIDE 重生成；读图行数；
 #:   warm 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p294"
+#: p294 → p295（2026-11-18，Z3FIX1：PAPER_PACK ① 的主语笔误）：
+#:   ① `PAPER_PACK` 那段里「B 可以直接派 B 去处理它自己那一族」的第二个 `B` 是 `V` 的笔误
+#:     —— `ALLOWED_EDGES["B"]` 是 `['C','D','H','L','V']`，B→B 这条边不存在；而这一句的
+#:     上下文正是「派 V 是产出方自己的动作」。它同时把 G 的提示词里扫出「派 B」这个
+#:     直接指向（`test_g_asks_d_not_b_for_registration::test_2`）。只改这一个字。
+#:   变化格 = G / H / M（PAPER_PACK 的读者就是这三格）；其余八格逐字未动（版本行已归一）。
+#:   逐格旧值 → 新值：G 1acaf7dc… → 88294e2d…；H ac6dce6d… → ba8c5a25…；
+#:   M 76f7caa3… → 2ce5f492…。
+#:   十一格是 `temp/teach1/recompute_digests.py`（导入判据自己的 `_surface_digest`，
+#:   先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+#:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p295）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p294 同值）；两份 golden 按现值重冻；
+#:   ROLE-GUIDE 重生成；读图行数；warm 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p295"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -3882,7 +3895,7 @@ PAPER_PACK = """\
   2. **派 V 是产出方（F / E / B）自己的动作，不是你的** —— 你（M / G / H）的伙伴表里
      没有到 V 的边（能不能直呼谁，逐格以伙伴表为准；它由 `capabilities.ALLOWED_EDGES`
      现算），照字面派 V 会拿 `forbidden_edge`。你的动作是**转达 / 追这一份的签**：M 走
-     `M→D→F`（D 派 F / E 自己送审；B 可以直接派 B 去处理它自己那一族），G 转给 D，
+     `M→D→F`（D 派 F / E 自己送审；B 可以直接派 V 去处理它自己那一族），G 转给 D，
      H 把「这一份还没签」写进 review 报告。产出方派 V 时用 `verify_proof`
      （**`proof_manuscript` 给那一份稿 —— 在册也给**；命题号 + 第几条证明 `proof_no`
      （缺省 1））逐行走查，结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）——
