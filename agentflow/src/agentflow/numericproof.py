@@ -925,20 +925,27 @@ def norm_rel(path: Any) -> str:
 
 def find_signed_exhaustion(experiments: Sequence[Mapping[str, Any]],
                            script_path: Any) -> dict[str, Any] | None:
-    """按程序路径找那一条 E 签的穷举证明（找不到 ⇒ `None`，不是"随便找一条"）。
+    """按程序路径找那一条 E 签的穷举证明（认不到 / 认出不止一条 ⇒ `None`）。
 
     认法两条（2026-11-08 之后 `code_path` 是程序路径的唯一居所，旧行才看证明栏）：
     ① `experiments.code_path` 与它相同；② 旧形态的证明栏里 `程序：` 那一段与它相同。
+
+    ## 为什么"不止一条"也是 `None`（K12 / EX-02，2026-11-19）
+
+    改前逐行返回第一条命中的 —— 而「同一脚本多条实验」是真机常态
+    （`projects/lp-ball-8` 有 4 组共用 `code_path`；lp-ball-6 / -7 同样有 4 条一组）。
+    「谁先落谁代表这条证据」不是判据，是一次静默的挑行：调用方（会审 / 论文对应表 /
+    形式化槽位）会拿别人的程序与报告给这一份稿作证。号才是唯一不歧义的格子
+    （`experiment_id`）；只给程序路径时，只有当它恰好指向一条时才认，否则如实说
+    「认不到」—— 由调用方去拿号，而不是在这里挑一条看起来像的。
     """
     want = norm_rel(script_path)
     if not want:
         return None
-    for row in signed_exhaustion_experiments(experiments):
-        if norm_rel(row.get("code_path")) == want:
-            return row
-        if norm_rel(proof_column_script(proof_column(row))) == want:
-            return row
-    return None
+    hits = [row for row in signed_exhaustion_experiments(experiments)
+            if norm_rel(row.get("code_path")) == want
+            or norm_rel(proof_column_script(proof_column(row))) == want]
+    return hits[0] if len(hits) == 1 else None
 
 
 def find_signed_exhaustion_for_column(experiments: Sequence[Mapping[str, Any]],
@@ -968,23 +975,28 @@ def find_signed_exhaustion_for_column(experiments: Sequence[Mapping[str, Any]],
     if not (want_text or want_script or want_id):
         return None
     rows = signed_exhaustion_experiments(experiments)
-    # 逐优先级扫整张表（不是逐行比全部条件）：两条实验共用同一份程序时，
-    # "先撞到哪条"不能决定答案 —— 先按实验号 / 正文认，最后才退到 code_path。
+    # 逐优先级核（不是逐行比全部条件）：两条实验共用同一份程序 / 同一段正文时，
+    # "先撞到哪条"不能决定答案 —— 每一档都要求唯一命中（K12，2026-11-19）。
+    # 改前每一档都 return 第一条命中：与 `find_signed_exhaustion` 同一个病（静默挑行）。
+    def _unique(candidates: Sequence[Mapping[str, Any]]) -> dict[str, Any] | None:
+        hits = list(candidates)
+        return dict(hits[0]) if len(hits) == 1 else None
+
     if want_id:
-        for row in rows:
-            if str(row.get("experiment_id") or row.get("id") or "") == want_id:
-                return row
+        by_id = _unique([row for row in rows
+                         if str(row.get("experiment_id") or row.get("id") or "") == want_id])
+        if by_id is not None:
+            return by_id
     if want_text:
-        for row in rows:
-            if norm_text(enumeration_of(row)) == want_text:
-                return row
-        for row in rows:
-            if norm_text(proof_column(row)) == want_text:
-                return row
+        by_enumeration = _unique([row for row in rows
+                                  if norm_text(enumeration_of(row)) == want_text])
+        if by_enumeration is not None:
+            return by_enumeration
+        by_column = _unique([row for row in rows
+                             if norm_text(proof_column(row)) == want_text])
+        if by_column is not None:
+            return by_column
     if want_script:
-        for row in rows:
-            if norm_rel(row.get("code_path")) == want_script:
-                return row
         return find_signed_exhaustion(experiments, want_script)
     return None
 

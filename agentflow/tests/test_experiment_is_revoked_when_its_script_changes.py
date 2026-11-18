@@ -347,8 +347,10 @@ def test_7_an_unreadable_ledger_is_reported_instead_of_silently_treated_as_empty
     first = _run(store)
     _write(store, SCRIPT_REL, PROBE_V2)
 
+    # K12（2026-11-19）：这个注入点多了写者身份的三个关键字（撤销只读本写者名下的行），
+    # 打桩只换"读的结果"，不换那条读数。
     monkeypatch.setattr(RX, "_existing_experiment_rows",
-                        lambda tx: (None, "StoreError: experiments 表读不出来"))
+                        lambda *a, **k: (None, "StoreError: experiments 表读不出来"))
     second = _run(store)
     # 不撤（判不了就不许动手）
     assert _rows(store)[str(first["experiment_id"])]["status"] == "active"

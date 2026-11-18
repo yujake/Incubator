@@ -1728,6 +1728,19 @@ class Experiment:
     #: 撤销时那个脚本的新 sha256（整串）。老那一份就是本行的 `code_hash` ⇒ 两格合起来
     #: 是「脚本 旧 → 新」这句人话的可核依据（`void_reason` 只印两边的前 16 位）。
     voided_code_to: str = ""
+    #: ——— 行级归属（K11，2026-11-19）———
+    #:
+    #: 这一行是**哪一趟、哪个实例**写下的：`owner_task` = 写这一行那一趟的台账号，
+    #: `owner_instance` = 那一趟的实例标签（名册名 / 召唤标签，读法唯一在
+    #: `identity.resolve_identity`）。两格与 `created_by` 不是一件事：
+    #: `created_by` 是 actor（可能只剩角色桶 `agent-E`），而这两格是「谁那一支笔」。
+    #: 读写面共用一处判据（`rowscope`）：
+    #:   - 读：同角色的另一个实例看不到这一行；别的角色照旧读得到（证据要能流到 V/B/G）；
+    #:   - 写（改 / 删）：只有这一行的归属实例能改；`table.create` 由调用者身份现盖这两格。
+    #: 两格都空 = 加这两列之前的老行。老行不判给任何实例：读侧按 `created_by` 的
+    #: 角色级归属处理，写侧仍按角色级判 —— 「判不了」不许折成「判给了某个人」。
+    owner_task: str = ""
+    owner_instance: str = ""
     created_at: str = ""
     created_by: str = "agent-E"
 
@@ -2121,6 +2134,13 @@ class Document:
     #: 为什么必须有：审批与引用都是对某一版的 —— 没有它，"审批过的版本"与
     #: "被引用的版本"会静默变成两版。
     content_sha256: str = ""
+    #: ——— 行级归属（K11，2026-11-19）——— 与 `Experiment` 同形、同一条判据
+    #: （`rowscope`）：`owner_task` / `owner_instance` 是「哪一趟、哪个实例」写下的这一行。
+    #: 稿件台账的写点仍然只有 `doc.build_document` / `doc.write_mapping` / H 的审校那几条
+    #: 正路（DOCGATE2 不改）；这两格让**删除**与**读侧**也认得出归属：别人的稿不归我删，
+    #: 同角色的另一个 G 实例不该把别人的稿当成自己那一支的。
+    owner_task: str = ""
+    owner_instance: str = ""
     created_by: str = "agent-G"
 
     def validate(self) -> None:
@@ -3651,6 +3671,102 @@ ID_COUNTERS = {
     # "序号不复用"必须由发号器保证（见 `TABLES["lit_candidates"]` 的注释）。
     "candidate": "slot",
 }
+
+
+# ---------------------------------------------------------------- 号段：一种角色一套号
+#
+# 业主口径（2026-11-19）：号**由系统统一发**（顾客排队拿号，取号是系统一个逻辑），
+# 要私有的是「号之外的账」；而号本身按**角色**分格：一种角色一套号。
+#
+# 今天绝大多数实体类恰好只服务一个角色（plan 只由 F 发、doc 只由 G 发，
+# stmt / lit / relation … 各自的写者也只有一支），「一类一格」与「一角色一格」
+# 在它们身上说的是同一件事 ⇒ 不需要登记。唯一不合口径的是 `experiment`：
+# E 写 numeric / symbolic / exhaustive，L 写 formal，两种角色共用一条号段
+# （改前 `store.alloc_id("experiment")` 是一格，E 发 000000、L 接着发 000001）。
+#
+# 所以这里只登记「同一类实体确实由多个角色发号」的那几类，给每个角色一段**互不穿插**
+# 的号段（号段 = 这个角色独占的那半段号；6 位空间对半分，各 50 万号，两个角色谁先
+# 发都不影响对方，谁都不可能拿到别人的号）。类别没有登记 ⇒ 就是旧形态（一格、从 0 起），
+# 一个字节都不变。
+#
+# 为什么不是「两格计数器、都从 000000 起」（手稿族那样的形状）：`experiments` 的主键
+# 只有一列 `experiment_id`，两族都从 0 起会当场撞主键，而 `upsert` 按主键替换 ⇒
+# 静默覆盖别人的行。手稿那边能用「都从 000000 起」是因为身份是 `(族, 号)` 两列；
+# 实验行的身份只有号这一列 ⇒ 号段是对半分，不是各从 0 起。
+#
+# `store.alloc_id(kind, segment=…)` 是唯一的发号口（计数器的键 = `kind` 或
+# `kind:<角色>`；`counter_key()` 是这层编码的唯一来源）。`verify` 的连续性 / 计数器
+# 两项按号段各查一遍（见 `counter_bands()`）。
+ID_SEGMENTS: dict[str, dict[str, int]] = {
+    # 实验号：E 拿前半段（numeric / symbolic / exhaustive），L 拿后半段（formal）。
+    # E 那一段的标签是空串 —— 它与改前的「一格、从 0 起」逐字同形，于是存量工作区的
+    # `counters.experiment` 原地继续给 E 用（不需要迁移、也不会从头重发号）。
+    "experiment": {"": 0, "L": 500_000},
+}
+
+#: 角色 → 号段标签（只有登记过号段的类别需要这一张）。
+#:
+#: 为什么不从角色名直接拼段标签：段标签是 `counters.json` 里的键的一部分（`counter_key`），
+#: 它必须与 `ID_SEGMENTS` 的标签逐字一致才读得到那一段；把「E 用空串」这件事写在
+#: 角色映射里，是为了让 E 的计数器键保持改前的 `experiment`（存量兼容），同时 L 拿到
+#: 自己那一格。没登记这句角色的类别 / 角色 ⇒ 空串 = 唯一那一段。
+ROLE_SEGMENTS: dict[str, dict[str, str]] = {
+    "experiment": {"E": "", "L": "L"},
+}
+
+
+def counter_bands(kind: str) -> dict[str, tuple[int, int]]:
+    """这个 ID 类别的号段表：`{角色标签: (起, 止)}`（闭区间）。
+
+    没登记号段的类别 ⇒ `{"": (0, 10**ID_DIGITS - 1)}`：一格、从 0 起，与改前逐字相同。
+    登记过的类别按起点排序，每段到下一段的起点前一位为止、最后一段到编号上限。
+    """
+    top = 10 ** ID_DIGITS - 1
+    starts = ID_SEGMENTS.get(str(kind or ""))
+    if not starts:
+        return {"": (0, top)}
+    ordered = sorted((int(base), str(label)) for label, base in starts.items())
+    out: dict[str, tuple[int, int]] = {}
+    for index, (base, label) in enumerate(ordered):
+        end = ordered[index + 1][0] - 1 if index + 1 < len(ordered) else top
+        out[label] = (base, end)
+    return out
+
+
+def id_counter_key(kind: str, segment: str = "") -> str:
+    """计数器在 `counters.json` 里的键：一格类别是 `kind`，分号段的类别是 `kind:<角色>`。
+
+    这是这层编码的**唯一来源**：`store.alloc_id` / `Store.set_counters` / `verify` /
+    `rebuild` 都读它，谁也不自己拼字符串（拼错了会造出一个没人读的数字）。
+    """
+    name = str(kind or "")
+    seg = str(segment or "")
+    return f"{name}:{seg}" if seg else name
+
+
+def segment_for_role(kind: str, role: Any) -> str:
+    """这个角色发这一类号时用哪一段（没在这张表里登记 ⇒ 空串 = 唯一那一段）。"""
+    mapping = ROLE_SEGMENTS.get(str(kind or ""), {})
+    return str(mapping.get(str(role or "").strip(), "") or "")
+
+
+def segment_of_id(kind: str, value: Any) -> str:
+    """这个号落在哪一段（读不出来 / 认不出 ⇒ 空串）。
+
+    号段只有登记过才有「认不认」这回事：没登记的类别一律空串。登记过的类别里，
+    一个号必须在某一段的闭区间内 —— 落在段外（手工改过号 / 从旧库恢复）⇒ 空串，
+    由 `verify` 的计数器那一段点名，而不是在这里猜一个段。
+    """
+    if not ID_SEGMENTS.get(str(kind or "")):
+        return ""
+    text = str(value or "").strip()
+    if not text.isdigit():
+        return ""
+    number = int(text)
+    for label, (base, end) in counter_bands(kind).items():
+        if base <= number <= end:
+            return label
+    return ""
 
 
 # ---------------------------------------------------------------- 过程记录 ID

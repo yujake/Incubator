@@ -28,13 +28,18 @@ import pytest
 from agentflow import schema as S
 
 #: c 的基线：`Experiment` 的字段元组（2026-11-04 改口径之前实测，逐字）。
+#: 2026-11-19（BATCH5 K11）：加两格行级归属 `owner_task` / `owner_instance`（在
+#: `created_at` 之前）。两格都有默认值（空串 = 加列之前的老行）⇒ 老行逐字读得进来，
+#: `SCHEMA_VERSION` 不抬（与 `Literature.pages` 同一先例）。方法词表与本条要守的
+#: 「结构未变」那一半（除这两格）逐字未动。
 _BASELINE_EXPERIMENT_FIELDS = (
     "experiment_id", "claim", "claim_key", "method", "evidence_kind", "result",
     "negation_kind", "code_path", "code_hash", "params", "observations",
     "exit_code", "runtime_sec", "artifact_paths", "counterexample",
     "verifier_output", "verifier_subject_key", "certificate", "search_bound",
     "for_question_id", "notes", "status", "voided_by", "voided_at",
-    "void_reason", "void_reason_code", "voided_code_to", "created_at",
+    "void_reason", "void_reason_code", "voided_code_to",
+    "owner_task", "owner_instance", "created_at",
     "created_by",
 )
 

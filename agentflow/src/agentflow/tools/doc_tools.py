@@ -1830,6 +1830,19 @@ def normalize_claims(claims: Sequence[Mapping[str, Any]]) -> list[dict]:
     return out
 
 
+def _document_owner(store: Any, actor: Any) -> dict:
+    """稿件行的归属读数（K11，2026-11-19）：写这一行的是哪一趟、哪个 G 实例。
+
+    `identity.resolve_identity` 是实例身份的唯一来源（名册名 > 召唤标签 >
+    `tasks.instance` > 台账号）；`owner_task` / `owner_instance` 与 `created_by`
+    分开：`created_by` 是 actor（可能只剩角色桶 `agent-G`），那两格是「这一支笔」——
+    读侧与删除都按它判，判据在 `rowscope`。
+    """
+    from .. import identity as _IDENT
+
+    return _IDENT.resolve_identity(store, "G", actor=str(actor or ""))
+
+
 def build_document(
     store: Any,
     kind: str,
@@ -1965,6 +1978,7 @@ def build_document(
                 details={"created": False, "out_path": rel, "bytes": size,
                          "is_registered_markdown": False},
             )
+        _owner_ident = _document_owner(store, actor)
         row = S.Document(
             doc_id=doc_id,
             kind=kind,
@@ -1980,6 +1994,8 @@ def build_document(
             updated_at=S.now_iso(),
             created_by=actor,
         )
+        row.owner_task = str(_owner_ident.get("task_id") or "")
+        row.owner_instance = str(_owner_ident.get("instance") or "")
         # 内容哈希由写侧算一次（`draft/30` §T4-A）：没有它，审批与内部引用都
         # 钉不住"审/引的是哪一版"。算法只有一份实现（`signatures`），读侧会重算比对。
         from .. import signatures as SIG

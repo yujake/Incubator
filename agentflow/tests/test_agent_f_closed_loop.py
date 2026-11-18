@@ -485,7 +485,8 @@ def test_testable_is_turned_into_a_script_spec_by_f_then_e_runs_it(store: Store)
     assert out["outcome"] == "progress", out
     sg = store.rows("attack_plans")[0]["subgoals"][0]
     assert sg["script_spec"]["criterion"] == "k-圈数 >= 2", sg
-    assert sg["script_path"] == "code/attack_s1.py", sg
+    # K12（EE-06，2026-11-19）：落点名带上这份计划的号（子目标号只在计划内唯一）。
+    assert sg["script_path"] == f"code/attack_{pid}_s1.py", sg
     assert store.rows("experiments"), "判据有了、脚本有了，却没跑出实验行"
 
 

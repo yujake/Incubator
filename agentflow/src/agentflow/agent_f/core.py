@@ -4636,7 +4636,10 @@ class _Core:
         # 现在补它的就是 E 自己（`author_script`：缝只用于生成，判读一个字不改）。
         authored: dict[str, Any] = {}
         if not script_path:
-            authored = agent_e.author_script(spec, sid=sid)
+            # K12（EE-06）：落点绑这份计划 —— 子目标号只在计划内唯一，两份计划的 s1
+            # 不能共用 `code/attack_s1.py`（否则后写的那份会改掉前一份的实验脚本）。
+            authored = agent_e.author_script(
+                spec, sid=sid, plan_id=str(plan.get("plan_id") or ""))
             if not authored.get("ok"):
                 code = str(authored.get("reason") or "")
                 # 人读的那句话两种形状都要接：走 `refusals.refuse` 的档给的是 `error`

@@ -562,6 +562,10 @@ def evidence_for(
             "best_evidence_kind": None,
             # 三态：「没查」 ⇒ None（不是 False）。`checked=False` 与它一起表达同一件事。
             "proved": None,
+            # 查询面（K11 / EE-09）：本函数是**显式的全库查询**（「这条命题有没有证据」
+            # 问的是工作区事实，不是「我这一支笔试过没有」）—— 把这句话写进读数，
+            # 而不是让读的人以为它按实例收窄过（对照 `list_experiments` 的默认收窄）。
+            "scope": "workspace",
             "reason": (
                 "既没有 claim_key 也没有 for_question_id ⇒ **没查**"
                 "（`proved` 为 None：不是'没有证据'，而是'没去查'）"
@@ -602,6 +606,7 @@ def evidence_for(
             "negation_counts": {k: 0 for k in S.NEGATION_KINDS},
             "best_evidence_kind": None,
             "proved": False,
+            "scope": "workspace",
             "reason": (
                 f"已查（{' 且 '.join(scope)}）：**没有**任何登记在案的实验证据。"
                 "这是'查了、没有'，不是'没查'" + revoked_note
@@ -631,6 +636,7 @@ def evidence_for(
         "negation_counts": negation_counts,
         "best_evidence_kind": best,
         "proved": proved,
+        "scope": "workspace",
         "reason": (
             f"已查：{len(hits)} 条实验（{result_counts}），最强证据等级为 {best!r}"
             + ("（有 proof 级证据）" if proved else "（**没有** proof 级证据 ⇒ 未被证明）")
@@ -639,23 +645,42 @@ def evidence_for(
     }
 
 
-def list_experiments(store: Any, *, claim_key: str | None = None, limit: int | None = None) -> dict:
+def list_experiments(store: Any, *, claim_key: str | None = None, limit: int | None = None,
+                     all_instances: bool = False) -> dict:
     """按登记顺序列出实验记录（只读）。
 
     与 `evidence_for` 的分工：`evidence_for` 回答"这条命题被证明了吗"，
-    本函数回答"E 到底做过哪些实验"。「少了后者，"没做过"就无法自证」。
+    本函数回答"**我这一支笔**做过哪些实验"。「少了后者，"没做过"就无法自证」。
+
+    ## 默认按实例收窄（K11 / EE-08，2026-11-19）
+
+    改前读整张 `experiments` 表：两个 E 实例问「我做过哪些实验」拿到的答案是同一份
+    （双实例实测：E-2 的 `list_experiments()` 返回 `total=2`，`['000000','000001']`，
+    000000 是 E-1 那条且已被 E-2 撤掉）。行级归属的判据只有一处（`rowscope`）——
+    这里调用它，不另写一份。跨实例读仍是**可能的**，但必须显式点名（`all_instances=True`），
+    而不是默认把别人的账算自己头上。
     """
     lim = None if limit is None else max(0, int(limit))
+    from .. import rowscope as _RS
+
     rows = [r for r in store.rows("experiments") if claim_key is None or r.get("claim_key") == claim_key]
+    who = _RS.caller()
+    if not all_instances:
+        rows = _RS.scope_rows("experiments", rows, role=who["role"],
+                              task_id=who["task_id"], instance=who["instance"])
     rows.sort(key=lambda r: (str(r.get("created_at") or ""), str(r.get("experiment_id") or "")))
     total = len(rows)
     if lim is not None:
         rows = rows[:lim]
+    scope = ("workspace（all_instances=True：显式要全库读数，不是「我名下」）"
+             if all_instances else
+             f"own-instance（{who['instance'] or who['task_id'] or '（没有身份 ⇒ 只看角色级老行）'}）")
     return {
         "checked": True,
         "total": total,
         "returned": len(rows),
         "truncated": bool(lim is not None and total > lim),
+        "scope": scope,
         "experiments": [
             {
                 "experiment_id": r.get("experiment_id"),
@@ -682,10 +707,24 @@ def _resolve_root(root: str | Path | None) -> Path:
 
 
 def _agent_for(store: Any, root: str | Path | None):
-    """构造一个 AgentE。「惰性导入」：本模块被 agent_e 反向引用，模块级导入会成环。"""
+    """构造一个 AgentE。「惰性导入」：本模块被 agent_e 反向引用，模块级导入会成环。
+
+    ## 为什么要带 actor（K11，2026-11-19）
+
+    改前这里只传 `store` ⇒ `AgentE.actor` 落在默认值 `"agent-E"`，于是经工具面落下的
+    实验行 `created_by` 永远是光秃秃的角色名（双实例实测：类路径写得出 `agent-E-1`，
+    工具面那条只剩 `agent-E`）—— 行级归属在这一条路上就丢了。现在按当前调用的身份
+    现算 actor（`identity.resolve_identity` 是唯一来源），工具面与类路径写出来的归属同形。
+    """
+    from .. import identity as _IDENT
+    from .. import rowscope as _RS
     from ..agent_e import AgentE  # 惰性：避免 tools ↔ agent 的循环导入
 
-    return AgentE(store, workspace_root=_resolve_root(root))
+    who = _RS.caller()
+    ident = _IDENT.resolve_identity(store, "E", task_id=who["task_id"] or None,
+                                    instance=who["instance"] or None)
+    actor = str(ident.get("actor") or "") or None
+    return AgentE(store, workspace_root=_resolve_root(root), **({"actor": actor} if actor else {}))
 
 
 @tool(

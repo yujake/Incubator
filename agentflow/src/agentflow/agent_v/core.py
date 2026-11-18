@@ -4362,8 +4362,13 @@ class AgentV:
             exp_rows = []
         if not _ER.is_exhaustion_column({"proof_text": text}, exp_rows):
             return None
+        # 认行（K12 / EX-04，2026-11-19）：把这份稿自己点名的实验号交下去 ——
+        # `review` 从本批起不再按正文 / 程序路径在整张表里兜底挑一条。稿头上
+        # `- 实验号：exp:<号>` 是写侧与读侧的同一个约定（`experiment_id_from_text`
+        # 是这层读法的唯一实现）；读不出号就不传，让 `review` 如实报缺材料。
         reviewed = _ER.review(workspace_root=self.workspace_root,
-                              statement={"proof_text": text}, experiments=exp_rows)
+                              statement={"proof_text": text}, experiments=exp_rows,
+                              experiment_id=_ER.experiment_id_from_text(text))
         _verdict = _ER.verdict_of(reviewed)
         _missing = [str(m) for m in (reviewed.get("missing") or [])]
         _missing_detail = missing_material_detail(_verdict, _missing)

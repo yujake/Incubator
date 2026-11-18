@@ -254,7 +254,8 @@ def test_positive_control_e_writes_the_toy_script_runs_it_and_the_row_is_readabl
     _assert_toy_chain(st)
     # 子目标把脚本落点与实验号写回去了（下一轮复核时知道跑的是哪一份）
     sg = next(s for s in st.rows("attack_plans")[0]["subgoals"] if s["sid"] == "s1")
-    assert sg["script_path"] == "code/attack_s1.py", sg
+    # K12（EE-06，2026-11-19）：落点名带上这份计划的号（子目标号只在计划内唯一）。
+    assert sg["script_path"] == f"code/attack_{pid}_s1.py", sg
     assert sg["experiment_ids"], sg
     assert sg["status"] == "supported_not_proved", sg  # 数值支持不许关子目标（FC-22）
 

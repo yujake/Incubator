@@ -9,6 +9,7 @@ from .. import conjectureledger as CL
 from .. import exhaustionreport as _ER
 from .. import identity as _IDENTITY
 from .. import numericproof as _NP
+from .. import rowscope as _RS
 from .. import verifications as VR
 
 #: 「玩具例子」在台账上的落点：`experiments.observations[TOY_EXAMPLE_KEY]`。
@@ -66,17 +67,26 @@ TOY_EXAMPLE_RESULT_SOURCES: tuple[str, ...] = ("line", "json_key", "multiple")
 VOID_REASON_CODE_CHANGED = S.VOID_REASON_CODE_CHANGED
 
 
-def _existing_experiment_rows(tx: Any) -> tuple[list[dict] | None, str]:
-    """把「既有登记」读出来：`(行, "")` 或 `(None, 读不出来的原因)`。
+def _existing_experiment_rows(tx: Any, *, role: str = "E", task_id: str = "",
+                              instance: str = "") -> tuple[list[dict] | None, str]:
+    """把「本写者名下的既有登记」读出来：`(行, "")` 或 `(None, 读不出来的原因)`。
 
-    为什么单独抽成一个函数（而不是内联 `tx.rows`）：这是自动处置的第三态
-    （读不到既有行 ⇒ 不撤，但返回值里必须说「没能核既有登记」）的注入点。
+    ## 键从「整张 experiments 表」改成「本写者名下」（K12，2026-11-19）
+
+    改前这里读的是整张表，调用方再按 `code_path` 撤 —— 于是「改脚本即撤销」撤的是
+    任何人名下挂在同一份脚本上的行：E-2 把同一份 `code/probe.py` 改一行再跑，
+    E-1 的 `exp 000000` 当场变成 `voided / voided_by='agent-E-2'`（双实例实测）。
+    撤销 = 让别人的证据不再算数，所以这里先按行级归属收窄（判据只有一处：`rowscope`），
+    撤销与「同 claim 历史 / 同一份证据」那两条 note 都只看得见自己这一支笔的行。
+
     读不出来的原因原样带回调用方 —— 「没查成」不许被读成「没有旧登记」。
     """
     try:
-        return [dict(row) for row in tx.rows("experiments")], ""
+        rows = [dict(row) for row in tx.rows("experiments")]
     except Exception as exc:  # noqa: BLE001 - 读不到不是本次实验的错，不许静默
         return None, f"{type(exc).__name__}: {exc}"
+    return _RS.scope_rows("experiments", rows, role=role, task_id=task_id,
+                          instance=instance), ""
 
 
 def _same_code_path(row: Mapping[str, Any], code_path: str) -> bool:
@@ -92,7 +102,9 @@ def _same_code_path(row: Mapping[str, Any], code_path: str) -> bool:
 
 
 def _void_superseded_rows(rows: Sequence[dict], *, code_path: str, code_hash: str,
-                          actor: str, at: str) -> tuple[list[dict], list[dict]]:
+                          actor: str, at: str,
+                          writer: Mapping[str, Any] | None = None
+                          ) -> tuple[list[dict], list[dict]]:
     """把「同一脚本的既有有效行、且 `code_hash` 与本次不同」逐条撤销。
 
     返回 `(被撤销的那些行, 判不了的那些行)`；被撤销的行是就地改过的 dict
@@ -107,14 +119,27 @@ def _void_superseded_rows(rows: Sequence[dict], *, code_path: str, code_hash: st
     （状态 / 谁 / 何时 / 换成哪一份）必须与其余字段一并在同一次 `upsert` 里落盘，
     否则「撤了一半」的行会写进台账（`schema.Experiment.validate` 会拒，但那时已经
     花了脚本的钱）。
+
+    ## 撤销只对「我这一支笔」的行（K12，2026-11-19）
+    改前这里是「同一 `code_path` + 不同 hash ⇒ 撤」—— 撤的对象不分实例：E-2 改一行
+    同一份脚本再跑，E-1 的 `exp 000000` 当场被撤（双实例实测）。现在每一条先过
+    `rowscope.same_writer`：不是本写者那一支笔的行（含没有归属两格的角色级老行）
+    一律不撤，进第二张表由调用方点名 —— 「判不了是不是你的」不许读成「可以撤」。
     """
     voided: list[dict] = []
     unclear: list[dict] = []
     want_hash = str(code_hash or "").strip()
+    who = dict(writer or {})
     for row in rows:
         if S.experiment_is_voided(row):
             continue
         if not _same_code_path(row, code_path):
+            continue
+        if who and not _RS.same_writer(row, role=str(who.get("role") or ""),
+                                       task_id=str(who.get("task_id") or ""),
+                                       instance=str(who.get("instance") or ""),
+                                       actor=str(actor or "")):
+            unclear.append(row)
             continue
         old_hash = str(row.get("code_hash") or "").strip()
         if not old_hash:
@@ -154,6 +179,33 @@ def is_toy_example(reading: object) -> bool:
 
 
 class _RunExperiment:
+    def _writer(self) -> dict[str, str]:
+        """这一趟 E 的写者身份：`{role, task_id, instance}`（一次读全，本趟共用）。
+
+        K12（2026-11-19）：撤销 / 复用 / progress 三条台账读法都改成本写者名下的行，
+        而「本写者是谁」只有这一处回答 —— 三处各拼一份身份，迟早会拼出三种口径
+        （`identity.resolve_identity` 是唯一来源；读不到 ⇒ 空串，`rowscope` 据此 fail-closed）。
+        """
+        cached = getattr(self, "_writer_reading", None)
+        if cached is None:
+            got = _IDENTITY.resolve_identity(self.store, "E", actor=str(self.actor or ""))
+            cached = {"role": "E", "task_id": str(got.get("task_id") or ""),
+                      "instance": str(got.get("instance") or "")}
+            self._writer_reading = cached
+        return cached
+
+    def _own_experiment_rows(self) -> list[dict]:
+        """本写者名下的实验行（行级归属的唯一读法：`rowscope.scope_rows`）。
+
+        老行（加归属两格之前写的）按 `created_by` 的角色级归属处理 —— 角色级老行对
+        这个角色的每个实例都可读（历史数据不许因为加列而消失），但撤销/比对永远不会
+        把它们判给某一个实例（那条判据在 `rowscope.owner_of`）。
+        """
+        who = self._writer()
+        return _RS.scope_rows("experiments", self.store.rows("experiments"),
+                              role=who["role"], task_id=who["task_id"],
+                              instance=who["instance"])
+
     def run_experiment(
         self,
         claim: str,
@@ -448,9 +500,12 @@ class _RunExperiment:
         #
         # `alloc_id` 必须在持锁事务内进行，否则两个 E 实例会拿到同一个
         # experiment_id，而按主键 upsert 会静默互相覆盖（ID 发号与建行必须同锁）。
+        # 号段（K13）：E 拿自己的那一段（`schema.ID_SEGMENTS` 的 "E"），不跨到 L 那半。
+        _writer_ident = self._writer()
         with self.store.tx("experiments", "conjectures", actor=self.actor,
                            note="e.run_experiment") as tx:
-            eid = tx.alloc_id("experiment")
+            eid = tx.alloc_id("experiment",
+                              segment=S.segment_for_role("experiment", "E"))
             # 原始输出落成产物文件（`draft/30` §T0-12）：上面那条"支持类不贴
             # stdout 摘要"是刻意的（噪声），但 P4/P5 要求"每条带 code_hash + 退出码 +
             # 原始输出，且能重跑得到同一读数"。摘要不进 notes，原始输出落文件；
@@ -542,7 +597,9 @@ class _RunExperiment:
             #
             # 两条顺序要求：① 必须在写新行之前读既有行（否则本次这一行会被自己那条
             # 判据看见）；② 撤销与建行在同一个事务里 —— 要么一起落盘，要么一起不落。
-            _existing, _read_error = _existing_experiment_rows(tx)
+            _existing, _read_error = _existing_experiment_rows(
+                tx, role=_writer_ident["role"], task_id=_writer_ident["task_id"],
+                instance=_writer_ident["instance"])
             if _read_error:
                 # 第三态：读不到既有行 ⇒ 不撤，但必须说出口（不许静默当没有）。
                 notes.append(
@@ -551,7 +608,8 @@ class _RunExperiment:
             else:
                 _replaced, _unclear = _void_superseded_rows(
                     _existing, code_path=_relpath(path, self.workspace_root),
-                    code_hash=chash, actor=self.actor, at=S.now_iso())
+                    code_hash=chash, actor=self.actor, at=S.now_iso(),
+                    writer=_writer_ident)
                 for _old in _replaced:
                     tx.upsert(
                         "experiments", _old,
@@ -561,10 +619,18 @@ class _RunExperiment:
                         f"{str(_old.get('code_hash') or '')[:16]} → {chash[:16]}）"
                         " —— 它不再算作该结论的证据")
                 for _old in _unclear:
+                    _old_owner = _RS.owner_of(_old)
+                    if not str(_old.get("code_hash") or "").strip():
+                        _why = "它没有 code_hash ⇒ 判不了脚本是不是被改过"
+                    elif not _old_owner["instance"] and not _old_owner["task"]:
+                        _why = ("它没有归属两格、`created_by` 也不是你这一趟的 actor ⇒ "
+                                "判不了它是不是你那一支笔的行（老行）")
+                    else:
+                        _why = "它归另一支笔（实例 / 台账号都不是你这一趟的）"
                     notes.append(
                         f"[void] exp:{_old.get('experiment_id')} 与本次同一个脚本"
-                        f"（{_relpath(path, self.workspace_root)}）但没有 code_hash ⇒ "
-                        "判不了它是不是被改过，没有撤销（判不了不等于没改）")
+                        f"（{_relpath(path, self.workspace_root)}），但{_why} ⇒ "
+                        "没有撤销（判不了 / 不是你的，都不动手）")
             row = build_experiment(
                 eid,
                 claim,
@@ -584,6 +650,11 @@ class _RunExperiment:
                 search_bound=bound_arg,
                 created_by=self.actor,
             )
+            # ---- 行级归属（K11）：这一行是哪一趟、哪个 E 实例写下的。
+            # 与 `created_by` 分开：`created_by` 是 actor（可能只剩角色桶 `agent-E`），
+            # 这两格是「这一支笔」—— 撤销 / 复用 / progress / 读侧都按它判。
+            row.owner_task = str(_writer_ident["task_id"])
+            row.owner_instance = str(_writer_ident["instance"])
             # ---- [5a3] E 的证明手稿（2026-11-03 业主：E 拿 V 签的流程与 F 一样） ----
             #
             # ②③ 的读数（上面 [5a]）回答的是「这份穷举证据可不可核」；「手稿」回答的是
@@ -798,9 +869,12 @@ class _RunExperiment:
         #
         # 只留最后一条与条数：`store.rows` 交出来的每一行已经是新 dict（`Store.read`
         # 逐行 `dict(r)`，见那里的 docstring），这里只读不写 ⇒ 不必再整表拷一遍。
+        #
+        # K12（2026-11-19）：比对面从「整张 experiments 表」改成「本写者名下的行」——
+        # 「上次搜到哪儿」是写给这一支笔看的一句话；跨实例读会把别人的读数当自己的进度。
         prev: Mapping[str, Any] | None = None
         count = 0
-        for row in self.store.rows("experiments"):
+        for row in self._own_experiment_rows():
             if str(row.get("claim_key")) == str(claim_key):
                 count += 1
                 prev = row
@@ -857,7 +931,10 @@ class _RunExperiment:
         now_data = dict((derived.get("observations") or {}).get("data") or {})
         if not now_data:
             return ""
-        for row in self.store.rows("experiments"):
+        # K12（2026-11-19）：两圈都只看本写者名下的行 —— 跨实例时这条 note 会指错对象，
+        # 也会漏报「我没用过但别人用过」（后者不是这一支笔的账）。
+        _mine = self._own_experiment_rows()
+        for row in _mine:
             if str(row.get("claim_key") or "") == str(claim_key):
                 # 这条断言已经有自己的证据行 ⇒ 这一次是复现（正当），不是"另一条断言拿了同一份证据"。
                 return ""
@@ -866,7 +943,7 @@ class _RunExperiment:
         # "E 在 notes 里点了名"与"审计会报"不会给出两套答案（FC-03）。
         ident = VR.evidence_identity({"code_hash": code_hash,
                                       "observations": {"data": now_data}})
-        for row in self.store.rows("experiments"):
+        for row in _mine:
             if VR.evidence_identity(row) != ident:
                 continue
             return (f"[同一份证据] 这个脚本（sha256 前 16 位 {str(code_hash)[:16]}）"

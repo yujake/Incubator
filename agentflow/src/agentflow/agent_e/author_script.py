@@ -76,12 +76,23 @@ def _source_problem(source: str) -> str:
 
 class _AuthorScript:
     def author_script(self, spec: Mapping[str, Any], *, rel_dir: str = "code",
-                      name: str = "", sid: str = "") -> dict[str, Any]:
+                      name: str = "", sid: str = "", plan_id: str = "") -> dict[str, Any]:
         """按判据写一份核验脚本，落进工作区并返回它的相对路径。
-        
+
         参数----spec : `{"criterion", "params", "expected_bound"}`（F 那一侧`counterexample_request`
         交下来的那三样）。 rel_dir : 落点目录，默认 `code/`。 name : 文件名，默认按 `sid` 生成（`attack_<sid>.py`）。
-        
+        plan_id : 这条子目标属于哪份计划（K12，2026-11-19）。
+
+        ## 为什么落点要带 `plan_id`（EE-06）
+
+        子目标号（`s1` / `s2`）只在同一份计划里唯一（`agent_f/core.py::_next_sid` 的去重面
+        就是这一份计划的 `subgoals`）。两份 F 的计划各自都有 `s1` ⇒ 默认落点
+        `code/attack_s1.py` 会撞：F#2 的实验脚本一写，F#1 那条实验的 `code_path` 所指的
+        文件就换了内容（而「改脚本即撤销」按 `code_path` + `code_hash` 判）⇒ F#1 的实验
+        当场被撤。落点改成 `code/attack_<plan_id>_<sid>.py`：不同计划的同样子目标号各占
+        一个路径，`code_path` 作为证据身份才是稳的。没给 `plan_id` 时保持旧形态（兼容
+        既有调用与夹具），但那就等于「这一份脚本不绑计划」—— 调用方知道自己在做什么。
+
         为什么必须落进工作区（这一条踩过）：`check_formal(source=...)` 把源码放在临时目录里跑，那份文件既不是 `proof_location`、也交不了
         `run_experiment(script_path=...)`：裁决与落库之间只差"把源码写进工作区"。
         """
@@ -130,7 +141,12 @@ class _AuthorScript:
             return {"ok": False, "kind": "bad_source", "reason": "bad_source",
                     "script_path": "", "sha256": "",
                     "note": f"模型写的脚本不合格：{bad}（它自己的 why：{why[:120]}）"}
-        leaf = name or ("attack_" + (str(sid or "").strip() or "s") + ".py")
+        _sid = str(sid or "").strip() or "s"
+        _plan = str(plan_id or "").strip()
+        # 计划内的号只有计划内唯一 ⇒ 文件名带上计划号（理由见本方法的 docstring）。
+        # 保持平铺在 `code/` 下（不另开子目录）：落点目录是调用方给的契约，这里只改
+        # 文件名那一格 —— 「同一目录、一族脚本、名字里带身份」是既有读法（`code/*.py`）。
+        leaf = name or (f"attack_{_plan}_{_sid}.py" if _plan else f"attack_{_sid}.py")
         rel = f"{str(rel_dir).strip('/')}/{leaf}"
         try:
             full: Path = self._resolve(rel)

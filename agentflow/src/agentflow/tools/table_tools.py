@@ -33,6 +33,7 @@ from functools import partial
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from .. import dedup as _dedup
+from .. import rowscope as _RS
 from .. import schema as S
 from .. import statementabandon as _SA
 from .. import store as _store_mod
@@ -96,12 +97,34 @@ def _rows(ctx: TableContext, table: str) -> list[dict]:
     M能想追几层追几层」）：通用读口不许把全表交给非主控角色，否则
     `table.list("tasks")` 就是那条"想追几层追几层"的绕过路径。过滤口径见
     `_visible_tasks`（本文件），全树那一半在 `conductor.watch`（只有 M 拿得到）。
+
+    ## 行级归属（K11，2026-11-19）
+    从本批起，**有归属的表**（`rowscope.OWNED_TABLES`：`experiments` / `documents`）
+    也按调用者收窄：同一角色的另一个实例读不到我这一行（口径与理由见 `rowscope`
+    的模块 docstring —— 判据本体在那里，这里只调用，不另写一份）。别的角色照旧
+    整表读得到：证据要能从 E 流到 V / B / G，那不是「泄露」，是这条流水线的设计。
     """
     _spec_of(table)  # 提前校验表名，给出比 KeyError 更清楚的错误
     rows = ctx.store.rows(table)
     if table == "tasks":
         return _visible_tasks(rows, role=_caller_role(), task_id=_caller_task_id())
+    if _RS.owned(table):
+        who = _RS.caller()
+        return _RS.scope_rows(table, rows, role=who["role"], task_id=who["task_id"],
+                              instance=who["instance"])
     return rows
+
+
+def _row_scope_reading(table: str) -> str:
+    """读侧收窄的读数（进 `meta.row_scope`）：有归属的表才写，别的表返回空串。"""
+    if not _RS.owned(table):
+        return ""
+    who = _RS.caller()
+    mine = who["role"] in _RS.producers(table)
+    if not mine:
+        return "workspace（别的角色读这张表的全部行：证据是公共的；写权仍按归属判）"
+    who_label = who["instance"] or who["task_id"] or "（没有身份 ⇒ 只看得到角色级老行）"
+    return f"own-instance（{who_label} 这一支笔的行 + 角色级老行）"
 
 
 def _build_row(table: str, raw: Mapping[str, Any]) -> tuple[Any, dict]:
@@ -380,7 +403,9 @@ def _allocate_id(tx: Tx, table: str) -> str:
     spec = _spec_of(table)
     kind = spec["id_kind"]
     if kind in S.ID_COUNTERS:
-        return tx.alloc_id(kind)
+        # 分号段的类别（K13）：号段按角色分，发号点必须点名那一段 —— 由调用者角色现读，
+        # 不在这里猜（`schema.segment_for_role` 没登记这句角色 ⇒ 空串 = 唯一那一段）。
+        return tx.alloc_id(kind, segment=S.segment_for_role(kind, _caller_role()))
     return _next_process_id(tx.rows(table), id_field=spec["id_field"],
                             prefix=S.PROCESS_ID_PREFIXES[kind], table=table)
 
@@ -1799,6 +1824,8 @@ def table_list(
         offset=offset,
         limit=limit,
         **({"fields": list(fields)} if fields is not None else {}),
+        # 行级归属（K11）：收窄过就说一声（「这一页为什么少了几行」不该靠猜）。
+        **({"row_scope": _row_scope_reading(table)} if _RS.owned(table) else {}),
     )
 
 
@@ -1828,10 +1855,23 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
         idf = _spec_of(table)["id_field"]
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
-    for row in _rows(ctx, table):
-        if row.get(idf) == id:
-            return ok(_with_proof_routes(table, row), table=table, id=id, id_field=idf,
-                      found=True)
+    # 行级归属（K11）：按主键点名取一行时，「不是你的行」与「没有这一行」必须分开说 ——
+    # 折成 `found=False` 会让调用方把「别人的实验」读成「没做过这个实验」。
+    who = _RS.caller()
+    for row in ctx.store.rows(table):
+        if row.get(idf) != id:
+            continue
+        if _RS.owned(table) and not _RS.visible(table, row, role=who["role"],
+                                                task_id=who["task_id"],
+                                                instance=who["instance"]):
+            return fail(
+                (f"{_RS.ROW_NOT_VISIBLE}：`{table}` 里确实有主键 {id}，但它归另一支笔"
+                 "（同一角色的另一个实例）⇒ 这次调用读不到它。"
+                 "这不是「没有这一行」：要全表读数请用别的角色/框架侧的审计口，"
+                 "要自己那一行请在写它的那一趟里读。"),
+                table=table, id=id, id_field=idf, found=True, kind=_RS.ROW_NOT_VISIBLE)
+        return ok(_with_proof_routes(table, row), table=table, id=id, id_field=idf,
+                  found=True, row_scope=_row_scope_reading(table))
     return ok(None, table=table, id=id, id_field=idf, found=False)
 
 
@@ -1888,6 +1928,16 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
     tasks_refused = _tasks_write_refusal(table=table, row=dict(row or {}), op="create")
     if tasks_refused is not None:
         return tasks_refused
+    # ---- 行级归属（K11）：造行的人和这一行的归属必须是同一支笔。
+    # 判据本体在 `rowscope.create_refusal`（唯一一处）；这里只做「拒就拒、过就盖两格」。
+    # 位置在兜底路由之前：`documents` 那条正路（`doc.build_document`）自己盖归属，
+    # 通用写口这一笔无论兜不兜底，都得先回答「你是谁、这一行归谁」。
+    who = _RS.caller()
+    owner_refused = _RS.create_refusal(table, dict(row or {}), role=who["role"],
+                                       task_id=who["task_id"], instance=who["instance"])
+    if owner_refused is not None:
+        kind_code, message = owner_refused
+        return fail(message, table=table, kind=kind_code)
     # ---- 直写兜底（2026-10-24 业主裁定）：这两张表不由通用写口直写 —— 请求转交正路执行。
     # 判据只有一处（见 `_direct_write_disposal`）：能兜底的由兜底方办、兜不了的才拒。
     refused = _direct_write_disposal(ctx, table=table, op="create",
@@ -1896,6 +1946,9 @@ def table_create(ctx: TableContext, *, table: str, row: Mapping[str, Any]) -> To
         return refused
 
     data: dict[str, Any] = dict(row or {})
+    # 归属两格由调用者身份现盖（载荷里自带的已在校验里核过一致）。
+    _RS.stamp(table, data, role=who["role"], task_id=who["task_id"],
+              instance=who["instance"])
     # ---- `literature.path` 写入前归一化（M4，2026-11-05）：剥掉多余的 `library/` 前缀。
     # 位置与集合字段归一同一处（预演校验之前）⇒ 预演看到的就是要落盘的那一份；
     # 只剥一层、其余形状不猜的边界见 `_normalize_literature_path`。
@@ -2098,6 +2151,19 @@ def table_update(ctx: TableContext, *, table: str, id: str, patch: Mapping[str, 
                 )
             merged_raw = dict(current)  # 整行起步 = 未在 patch 里出现的字段自动保留
             merged_raw.update(patch)
+            # ---- 行级归属（K11）：改别人那一行 ⇒ 受控拒（判据本体在 `rowscope`）。
+            # 位置在事务内、拿到 `current` 之后：归属是**行上的事实**，不在载荷里。
+            _who = _RS.caller()
+            _forged = _RS.forged_owner_fields(patch, role=_who["role"],
+                                              task_id=_who["task_id"],
+                                              instance=_who["instance"])
+            if _forged is not None:
+                return fail(_forged[1], table=table, id=id, kind=_forged[0])
+            _owner_refused = _RS.write_refusal(table, current, op="update",
+                                               role=_who["role"], task_id=_who["task_id"],
+                                               instance=_who["instance"])
+            if _owner_refused is not None:
+                return fail(_owner_refused[1], table=table, id=id, kind=_owner_refused[0])
             # ---- `literature.path` 写入前归一化（M4）：只在"这一笔真的写 path"时做
             # （patch 里没有 path ⇒ 盘上那一份原样保留）。存量坏行由业主另行处置，工具不
             # 替它悄悄改（"不擅自改存量"）；它若挡住这一笔，会由形状闸以可读的拒信点名。
@@ -2165,6 +2231,14 @@ def table_delete(ctx: TableContext, *, table: str, id: str) -> ToolResult:
             row = tx.find(table, **{idf: id})
             if row is None:
                 return ok(False, table=table, id=id, found=False, deleted=False)
+            # ---- 行级归属（K11）：删别人那一行 ⇒ 受控拒（与 update 同一处判据）。
+            _who = _RS.caller()
+            _owner_refused = _RS.write_refusal(table, row, op="delete",
+                                               role=_who["role"], task_id=_who["task_id"],
+                                               instance=_who["instance"])
+            if _owner_refused is not None:
+                return fail(_owner_refused[1], table=table, id=id,
+                            found=True, deleted=False, kind=_owner_refused[0])
             refs = _find_references(tx, table, id)
             if refs and table in _BLOCKING_TARGETS:
                 return fail(
@@ -2224,7 +2298,8 @@ def table_count(ctx: TableContext, *, table: str, filter: Mapping[str, Any] | No
     except ToolError as e:
         return fail(str(e), table=table, kind="unknown_table")
     n = len(_match_filter(_rows(ctx, table), filter))
-    return ok(n, table=table, total=n, filtered=bool(filter))
+    return ok(n, table=table, total=n, filtered=bool(filter),
+              **({"row_scope": _row_scope_reading(table)} if _RS.owned(table) else {}))
 
 
 @tool(
@@ -2462,6 +2537,7 @@ def table_search(
         matched_fields=matched,
         truncated=len(hits) > len(page),
         **({"select": list(select)} if select is not None else {}),
+        **({"row_scope": _row_scope_reading(table)} if _RS.owned(table) else {}),
     )
 
 

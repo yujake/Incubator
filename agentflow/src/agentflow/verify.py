@@ -121,6 +121,19 @@ class VerifyReport:
         }
 
 
+def _band_contiguity(rows: list[dict], id_field: str, lo: int) -> tuple[bool, list[str]]:
+    """一段号（闭区间起点 `lo`）里的连续性：本段的号该是 `lo, lo+1, …`。
+
+    分号段的类别（`schema.ID_SEGMENTS`，今天只有 `experiment` 的 E / L 两段）不能拿
+    「从 0 起连续」去判：L 那一段从 500000 起，按全局判会造出 50 万个假缺口。
+    逐段判的口径与 `_id_contiguity` 相同，只是起点换成这一段的起点。
+    """
+    ids = sorted(int(str(r[id_field])) for r in rows
+                 if str(r.get(id_field) or "").isdigit())
+    missing = [S.format_id(n) for n, got in zip(range(lo, lo + len(ids)), ids) if got != n]
+    return (not missing), missing
+
+
 def _id_contiguity(rows: list[dict], id_field: str) -> tuple[bool, list[str], int]:
     """检查 4 位 ID 是否从 0000 起连续无空洞。
 
@@ -229,6 +242,24 @@ def _check_1(rep, store):
             rep.issues.append(Issue("error", table, d, "duplicate_id", f"{idf}={d} 重复出现"))
         if idf not in counter_fields:
             continue  # 非 4 位编号空间（`r-NNNN` / `p-NNNN` 这类过程记录）
+        bands = S.counter_bands(spec["id_kind"])
+        if len(bands) > 1:
+            # 分号段的类别：逐段判连续（理由见 `_band_contiguity`）。每一段各报一条，
+            # 读数里带段名 —— 「哪一段有缺口」与「整表有缺口」是两件不同的事。
+            for label, (lo, hi) in sorted(bands.items(), key=lambda kv: kv[1][0]):
+                band_rows = [r for r in rows
+                             if str(r.get(idf) or "").isdigit()
+                             and lo <= int(str(r.get(idf))) <= hi]
+                if not band_rows:
+                    continue
+                contiguous, missing = _band_contiguity(band_rows, idf, lo)
+                if not contiguous:
+                    rep.issues.append(
+                        Issue("warning", table, None, "id_gap",
+                              f"{idf} 在 {spec['id_kind']}:{label} 这一段不连续，"
+                              f"缺 {missing[:8]}{'…' if len(missing) > 8 else ''}；"
+                              "通常是某次事务分配了 ID 但未建成行（无害，但值得查）"))
+            continue
         contiguous, missing, maxid = _id_contiguity(rows, idf)
         if not contiguous:
             rep.issues.append(
@@ -278,23 +309,34 @@ def _check_1(rep, store):
         # "库里有一行 ID 不成形态"变成一次 `ValueError` 崩溃 —— 而 `verify_all`
         # 是审计器，它该把这件事报出来（`_id_contiguity` 已经会报），
         # 不该自己炸。非数字 ID 在这里被跳过（已经由上面那条 `id_gap` 记账）。
-        used = [int(r[field]) for r in store.rows(table)
-                if field in r and str(r[field]).isdigit()]
-        want = (max(used) + 1) if used else 0
-        got = _safe_int(counters.get(kind, 0))
-        if got < want:
-            rep.issues.append(
-                Issue(
-                    "error",
-                    "counters",
-                    kind,
-                    "counter_behind",
-                    f"{kind} 计数器为 {got}，但表里已用到 {want - 1}；继续分配会**撞号**。"
-                    "处理：把 counters.json 的该值改为 max(已用)+1，或 `agentflow rebuild`。",
+        #
+        # 分号段的类别（`schema.ID_SEGMENTS`）逐段核：每一段有自己的计数器与自己的起点 ——
+        # 拿整表的最大号去核 E 的计数器，会把 L 发过的 500000 读成「E 落后了 50 万」，
+        # 而那是假红（两个角色本来就不共号）。
+        for label, (lo, hi) in sorted(S.counter_bands(kind).items(),
+                                      key=lambda kv: kv[1][0]):
+            key = S.id_counter_key(kind, label)
+            used = [int(r[field]) for r in store.rows(table)
+                    if field in r and str(r[field]).isdigit()
+                    and lo <= int(str(r[field])) <= hi]
+            want = (max(used) + 1) if used else lo
+            got = _safe_int(counters.get(key, lo))
+            if got < want:
+                rep.issues.append(
+                    Issue(
+                        "error",
+                        "counters",
+                        key,
+                        "counter_behind",
+                        f"{key} 计数器为 {got}，但表里已用到 {want - 1}；继续分配会**撞号**。"
+                        "处理：把 counters.json 的该值改为 max(已用)+1，或 `agentflow rebuild`。",
+                    )
                 )
-            )
-        if got > MAX_ID + 1:
-            rep.issues.append(Issue("error", "counters", kind, "counter_overflow", f"{kind} 计数器 {got} 超出 4 位空间"))
+            if got > hi + 1:
+                rep.issues.append(Issue(
+                    "error", "counters", key, "counter_overflow",
+                    f"{key} 计数器 {got} 超出这一段的号段（{S.format_id(lo)}–"
+                    f"{S.format_id(hi)}）"))
 
     return con_by_id, concepts, lit_by_id, literature, rel_by_id, relations, requests
 

@@ -63,6 +63,8 @@ from ..agent_e._support import (
 )
 from .. import statementbody as SB
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
+from .. import identity as _IDENT     # 实例身份的单一来源（K11：行级归属两格）
+from .. import schema as S            # 号段表 / 归属字段名的唯一来源
 from .. import verifications as _VR   # 正文 sha 与证明清单的口径各只有一处
 from .. import proofregistry as _PR
 from ._support import (
@@ -339,7 +341,11 @@ class _Record:
                            int(data["exit_code"]) if isinstance(data.get("exit_code"), int)
                            else None)
         with self.store.tx("experiments", actor=self.actor, note="l.record") as tx:
-            eid = tx.alloc_id("experiment")
+            # 号段（K13，2026-11-19）：L 拿 `experiment` 这一类号的后半段，
+            # 不再与 E 共用一格（口径与理由见 `schema.ID_SEGMENTS`）。发号点显式
+            # 点名段 —— 发号器不替调用方猜「我是谁」。
+            eid = tx.alloc_id("experiment",
+                              segment=S.segment_for_role("experiment", "L"))
             built = build_experiment(
                 eid, claim, claim_key,
                 method="formal",
@@ -360,6 +366,12 @@ class _Record:
                 verifier_subject_key=claim_key if output else "",
                 created_by=self.actor,
             )
+            # 行级归属（K11）：这一行是哪一趟、哪个 L 实例写下的。两格与 `created_by`
+            # 分开：`created_by` 是 actor（可能只剩角色桶），这两格是「这一支笔」。
+            _l_ident = _IDENT.resolve_identity(
+                self.store, "L", actor=str(self.actor or ""))
+            built.owner_task = str(_l_ident.get("task_id") or "")
+            built.owner_instance = str(_l_ident.get("instance") or "")
             tx.upsert("experiments", built.to_dict(), note=f"formal:{claim_key}")
         after_row, _ = self._statement_row(sid)
         after = str((after_row or {}).get("evidence_kind") or "")

@@ -1747,15 +1747,16 @@ def review(*, workspace_root: str | Path | None, statement: Mapping[str, Any],
     if not script and _NP.is_script_path(proof_text):
         script = str(proof_text).strip().replace("\\", "/")
     parsed = _NP.parse_proof_column(proof_text, code_path=script)
-    if row is None:
-        # 程序路径不在证明栏里了（2026-11-08）⇒ 钉不到实验时按 ③ 的正文认那一条。
-        row = _NP.find_signed_exhaustion_for_column(experiments, proof_text)
-    if row is None and script:
-        row = _NP.find_signed_exhaustion(experiments, script)
-    if row is None and script:
-        row = next((dict(r) for r in (experiments or ())
-                    if isinstance(r, Mapping)
-                    and _NP.norm_rel(r.get("code_path")) == _NP.norm_rel(script)), None)
+    # ---- 认行：只认调用方点名的身份（K12 / EX-01，2026-11-19）
+    #
+    # 改前这里有一条三级兜底：钉不到实验时按 ③ 正文认（`find_signed_exhaustion_for_column`）、
+    # 再按程序路径认、再按 `code_path` 逐字比 —— 三条都在整张 experiments 表上挑一条。
+    # 「同一脚本多条实验」是真机常态（`projects/lp-ball-8` 有 4 组共用 `code_path`），
+    # 所以兜底挑到的可能就是另一条实验：会审的结论会盖在别人的程序与报告上，而 V 的
+    # 判词是签的依据。现在只有两条认法：调用方给的那一行（`experiment_row`），或它点名的号
+    # （`experiment_id`）。认不到 ⇒ 缺材料（`checked=False`），不许猜（判据见
+    # `tests/test_k11_k12_row_ownership.py` 的 d）。程序路径仍然进读数（第 1 项检查要读它），
+    # 但它不再用来认行。
     if row is not None:
         script = script or str(row.get("code_path") or "").strip().replace("\\", "/")
     if script:

@@ -646,7 +646,7 @@ class Tx:
         self._dirty.add(table)
 
     # ---- ID 分配（锁内进行，与建行同事务）
-    def alloc_id(self, kind: str) -> str:
+    def alloc_id(self, kind: str, *, segment: str = "") -> str:
         """分配一个 4 位 ID。
         `counters.json` 是缓存、真源是各张表里已用掉的号；漂移（手工建行 / 从台账恢复 / 旧版
         `rebuild`）时分配器会发出已被占用的号，而 `upsert` 按主键替换 ⇒ 新行静默覆盖旧行（实测：
@@ -658,9 +658,30 @@ class Tx:
         `F-2`：查占用不许被静默跳过 —— `alloc_id(kind)` 要求事务声明了那张表，否则抛
         :class:`StoreError`（"要分配 X 的号就得同时声明表 Y"）。`R6-AN-1`：`counters.json` 整份写回，
         提交时直接用本事务缓存覆盖会吞掉窗口里 `set_counters` 写的值 ⇒ 只改 `self._alloc_kinds` 里
-        那些类别（见 `Store._merge_counters_for_commit`）。"""
-        if kind not in S.ID_COUNTERS:
-            raise StoreError(f"未知 ID 类别：{kind}")
+        那些类别（见 `Store._merge_counters_for_commit`）。
+
+        ## `segment`：一种角色一套号（K13，2026-11-19）
+        号仍由系统统一发（顾客排队拿号，取号是系统一个逻辑）；但号按角色分格 ——
+        业主口径「一种角色一套号」。分号段的类别由 `schema.ID_SEGMENTS` 声明（今天只有
+        `experiment`：E 与 L 两种角色共发这一类号，改前是一格、E 发 000000 之后 L 接着发
+        000001）。`segment` 给空串 ⇒ 用这个类别唯一那一段（没登记号段的类别逐字等于改前）。
+
+        两格实现：计数器的键是 `schema.id_counter_key(kind, segment)`（`experiment` 与
+        `experiment:L`），号段本身是闭区间 `schema.counter_bands(kind)`。于是两个角色的
+        计数器互不影响，谁也不会拿到别人的号；越出自己那一段 ⇒ `IdExhausted`，不静默跨段。
+        """
+        name = str(kind or "")
+        if name not in S.ID_COUNTERS:
+            raise StoreError(f"未知 ID 类别：{name}")
+        bands = S.counter_bands(name)
+        seg = str(segment or "")
+        if seg not in bands:
+            raise StoreError(
+                f"{name} 的号段是按角色分的：{sorted(bands)}（收到 segment={seg!r}）—— "
+                "发号器不猜一个段，请由发号点显式点名"
+            )
+        key = S.id_counter_key(name, seg)
+        base, ceiling = bands[seg]
         if "counters" not in self.tables:
             raise StoreError("分配 ID 的事务必须声明 counters 表")
         #  必须优先用本事务内已改过的 counters，而不是重新从磁盘读。
@@ -675,24 +696,28 @@ class Tx:
         counters = c.setdefault("counters", {})
         # counters 是可被手改的 JSON；`"lit": "abc"` 会让裸
         # `int()` 抛 ValueError，把一次取号变成 traceback。坏值当 0（并在下面照常报冲突）。
-        _raw_next = counters.get(kind, 0)
+        # 分号段的类别从自己那一段的起点起算：`experiment:L` 没记过 ⇒ 起点是 500000。
+        _raw_next = counters.get(key, base)
         try:
             nxt = int(_raw_next)
         except (TypeError, ValueError):
-            nxt = 0
+            nxt = base
+        if nxt < base:
+            # 段外 / 旧值（例如手工把 `experiment:L` 写成 3）⇒ 从本段起点起。
+            nxt = base
         # `R7-AN-1`：记下"本事务读到的那一版"。提交时用它（而不是缓存值 c+1）去判断
         # "窗口里有没有别的写者"：`cache - base` 正是本事务自己的那次推进，
         # 拿缓存值当基准会把每一次普通取号都读成"盘上被别的写者拨低了"。
-        if kind not in self._alloc_base:
-            self._alloc_base[kind] = nxt
+        if key not in self._alloc_base:
+            self._alloc_base[key] = nxt
 
         # ---- [1] 跳过已被占用的号（`F-2`：目标表必须已声明，否则拒绝发号）
-        field = S.ID_COUNTERS[kind]
+        field = S.ID_COUNTERS[name]
         table = next((t for t, spec in S.TABLES.items() if spec["id_field"] == field), None)
         jumped = 0
         if table is not None and table not in self.tables:
             raise StoreError(
-                f"分配 {kind} 的号必须同时声明表 {table}（当前事务声明的是 "
+                f"分配 {name} 的号必须同时声明表 {table}（当前事务声明的是 "
                 f"{sorted(self.tables)}）。"
                 "占用检查只能在目标表被读到的前提下做；跳过它会让发号器发出一个"
                 "已被占用的号，而 `upsert` 按主键替换 ⇒ **静默覆盖旧行**（`F-2`）。"
@@ -703,26 +728,30 @@ class Tx:
             while S.format_id(nxt) in used:
                 nxt += 1
                 jumped += 1
-                if nxt > MAX_ID:
+                if nxt > ceiling:
                     raise IdExhausted(
-                        f"{kind} 的 {S.ID_DIGITS} 位编号空间已用尽（上限 {MAX_ID}）。"
-                        "请勿静默升位宽 —— 那会破坏所有历史 ID 的解析（DESIGN.md §0.1 C4/§9.7）。"
+                        f"{name}{(':' + seg) if seg else ''} 的号段已用尽"
+                        f"（本段 {S.format_id(base)}–{S.format_id(ceiling)}）。"
+                        "请勿静默跨段 —— 跨段会与另一个角色的号段撞号"
+                        "（DESIGN.md §0.1 C4/§9.7）。"
                     )
 
-        if nxt > MAX_ID:
+        if nxt > ceiling:
             raise IdExhausted(
-                f"{kind} 的 {S.ID_DIGITS} 位编号空间已用尽（上限 {MAX_ID}）。"
-                "请勿静默升位宽 —— 那会破坏所有历史 ID 的解析（DESIGN.md §0.1 C4/§9.7）。"
+                f"{name}{(':' + seg) if seg else ''} 的号段已用尽"
+                f"（本段 {S.format_id(base)}–{S.format_id(ceiling)}）。"
+                "请勿静默跨段 —— 跨段会与另一个角色的号段撞号"
+                "（DESIGN.md §0.1 C4/§9.7）。"
             )
-        counters[kind] = nxt + 1
+        counters[key] = nxt + 1
         self._dirty.add("counters")
-        self._alloc_kinds.add(kind)
-        self._record("counters", {"kind": kind, "allocated": S.format_id(nxt)}, note="alloc_id")
+        self._alloc_kinds.add(key)
+        self._record("counters", {"kind": key, "allocated": S.format_id(nxt)}, note="alloc_id")
         if jumped:
             # 跳过号这件事必须可见：它是"计数器和表已经漂移"的直接证据。
             self.info(
                 "alloc_id_skipped_occupied",
-                kind=kind,
+                kind=key,
                 table=table,
                 jumped=jumped,
                 allocated=S.format_id(nxt),
@@ -754,25 +783,30 @@ class Tx:
             raise StoreError(f"未知 ID 类别：{kind}")
         if "counters" not in self.tables:
             raise StoreError("抬计数器的事务必须声明 counters 表")
+        # 分号段的类别（`schema.ID_SEGMENTS`）：一个号落在哪一段由 `segment_of_id` 现算，
+        # 抬的是那一段的计数器 —— 抬错格会让另一个角色的发号器也往前跳。
+        seg = S.segment_of_id(kind, used_id)
+        key = S.id_counter_key(kind, seg)
         c = self._store._dirty_counters
         if c is None:
-            # 同 `alloc_id`：这份 doc 会被就地改（`counters[kind] = target`）⇒ 要私有副本。
+            # 同 `alloc_id`：这份 doc 会被就地改（`counters[key] = target`）⇒ 要私有副本。
             c = self._store._load_for_write("counters")
             self._store._dirty_counters = c
         counters = c.setdefault("counters", {})
         text = str(used_id or "")
-        current = int(counters.get(kind, 0))
+        base = S.counter_bands(kind)[seg][0]
+        current = int(counters.get(key, base))
         if not text.isdigit():
             return current
         target = int(text) + 1
         if target <= current:
             return current
-        counters[kind] = target
+        counters[key] = target
         self._dirty.add("counters")
         # 与 `alloc_id` 同一口径地记一笔：提交时这一类要写回（`_alloc_kinds`），
         # 事件行也让 `rebuild` 能把计数器折回来（见 `rebuild` 对 `counters` 的折叠）。
-        self._alloc_kinds.add(kind)
-        self._record("counters", {"kind": kind, "allocated": S.format_id(target - 1)},
+        self._alloc_kinds.add(key)
+        self._record("counters", {"kind": key, "allocated": S.format_id(target - 1)},
                      note="raise_counter_to")
         return target
 
@@ -950,10 +984,14 @@ class Store:
         返回值是写进去的文档。刻意不校验"计数器不得小于表里最大号"：本方法的用途之一正是故意造出
         落后状态去复现缺陷，该判据属于 `verify_all`（`counter_behind`）。"""
         kind_map = S.ID_COUNTERS
-        unknown = sorted(set(values) - set(kind_map))
+        # 合法键 = 一格的 `kind`，加上每个分号段类别的 `kind:<角色>`
+        # （`schema.id_counter_key` 是这层编码的唯一来源）。
+        legal = {S.id_counter_key(kind, seg)
+                 for kind in kind_map for seg in S.counter_bands(kind)}
+        unknown = sorted(set(values) - legal)
         if unknown:
             raise StoreError(
-                f"set_counters 收到未知的计数器类别 {unknown}（合法：{sorted(kind_map)}）—— "
+                f"set_counters 收到未知的计数器类别 {unknown}（合法：{sorted(legal)}）—— "
                 "写进去的键必须能被 alloc_id 读懂，否则它只是盘上一个没人读的数字"
             )
         for k, v in values.items():

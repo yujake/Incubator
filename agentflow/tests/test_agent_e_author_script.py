@@ -202,7 +202,9 @@ def test_deploy_e_authors_the_script_from_the_spec_then_runs_it(store: Store):
     assert len(rows) == 1, rows
     assert rows[0]["result"] == "supports", rows[0]
     sg = next(s for s in store.rows("attack_plans")[0]["subgoals"] if s["sid"] == "s1")
-    assert sg["script_path"] == "code/attack_s1.py", sg
+    # K12（EE-06，2026-11-19）：落点名带上这份计划的号 —— 子目标号只在计划内唯一，
+    # 两份计划的 `s1` 不能共用 `code/attack_s1.py`（后写的那份会改掉前一份的实验脚本）。
+    assert sg["script_path"] == f"code/attack_{pid}_s1.py", sg
     assert sg.get("experiment_ids"), sg
 
 
