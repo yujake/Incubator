@@ -2636,7 +2636,20 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   8cc0359d25130420dfb333db7fb21cf8488cbdb7ceb08671e19b99ff162c0094。
 # 十一格不是手抄：`temp/fd4/recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['M']。
-_FROZEN_PROMPT_VERSION = "p293"
+# p293 → p294（2026-11-18，TEACH1：把 GUIDE1 报告 §3/§4 的「写着但与实现相反」逐条钉回实现）：
+#   ① PAPER_PACK 的「派 V」改成有主语（产出方 F/E/B 自己派；M/G/H 到不了 V，只转达/追签）；
+#   ② F 手册改两格口径（`proof_count` 只数已签 / `proof_output_count` 含待签）＋ `specs/f.py`
+#      的返回广告补这一格；③ M 手册的「没登记就是不存在」改成 `stmt:` / `mss:` 两种身份
+#      （`specs/m.py` 同一句一并改）；④ M 的 policy 认 `manuscript_unsigned`（处置仍转 D）；
+#   ⑤ `specs/f.py` 两道门分别命名，删掉「收工门不因它拦」；⑥ `_attack_prompt` 新增 §2.2
+#      （出了稿下一轮开头派 V）；⑦ `_manuscript_block` 把 park 的 why 念进模型一拍；
+#   ⑧ B 的「先拿签再入库」补引用侧第一遍摘录例外（`quote_carrier=first`）。
+#   变化格 = B / F / G / H / M；其余六格逐字相同（版本行已归一）。逐格旧值 → 新值：
+#   B 4a815263… → 46ff85a4…；F b6c803c1… → e2e4d6a1…；G 5b657545… → 1acaf7dc…；
+#   H c6600f65… → ac6dce6d…；M 8cc0359d… → 76f7caa3…。
+# 十一格不是手抄：`temp/teach1/recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['B','F','G','H','M']。
+_FROZEN_PROMPT_VERSION = "p294"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2906,15 +2919,15 @@ _FROZEN_PROMPT_VERSION = "p293"
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "13e23d0b525887e72ad2482dbb392ca56a3185bb3479a9ddf43e21ea8a5e692b",
-    "B": "4a8152635eb3148b37a5fa3c53d25675c55c1933620afe3a281af14a26cddcf8",
+    "B": "46ff85a47a26cbc6ccb8a8156d94523363e9f07f0077dd9c6aa963fb3571ff8f",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
     "E": "36668798000e529b8c10ad7f506f88e6c7c3773554746b7d8e3b5234a59662a1",
-    "F": "b6c803c1af5842ce375601157a37cff98f21ed77934f5c52f87485d4384513e2",
-    "G": "5b6575458d78cecf17b30ee8186f30f343713825bf1eed1fed8af4cfe3876f16",
-    "H": "c6600f650caeea13db8e6d03fd2d4b8f05d0f4a23c130b8f8d5f555b733fc412",
+    "F": "e2e4d6a15a6636fd2908988a88b5108f65ffc26e46f4db1ce931cb441301ac07",
+    "G": "1acaf7dc58b9339afa8cfc1308ea84b8edd41364d2ad429518dffd8d44497877",
+    "H": "ac6dce6d09c64979f314b4ebd747844ef54b986391ef8e4edb3388ab39d9937b",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
-    "M": "8cc0359d25130420dfb333db7fb21cf8488cbdb7ceb08671e19b99ff162c0094",
+    "M": "76f7caa32e7752a70a28415d33d1fbcc55470e5080856172fdc1bc173ac10268",
     "V": "b310667d411639045a9db2f3064715864e28d9ece3e8b3b1a606913a0f47d2a2",
 }
 

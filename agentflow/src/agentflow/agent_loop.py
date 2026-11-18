@@ -5555,12 +5555,16 @@ class AgentLoop:
         # 定义那一处、数不到这次调用 ⇒ 一个活着的符号会被读成悬空引用。先调用、
         # 再插值：行为逐字不变（同一个方法、同一个时点、同一段文本）。
         research_block = self._research_block()
+        # 「你名下还没送 V 的稿」那一段（产出者专用；与 `_pending_work` 第 4 条同一份读数）：
+        # 也先落局部名再插值（理由同上：f-string 里的调用不会被真符号计数看见）。
+        manuscript_block = self._manuscript_block()
         return (f"{transcript}\n\n---\n现在是第 {step + 1} 步（步数没有硬上限；"
                 f"{_step_report_wording(self.max_steps)}）。{tail}\n"
                 f"剩余花销预算：{self._budget_text()}\n"
                 f"你的草稿本（最近几条，每一步现读）：\n{notebook}\n"
                 f"{ask}"
                 f"{research_block}"
+                f"{manuscript_block}"
                 f"{face_note}"
                 f"{JSON_TAIL}")
 
@@ -7290,6 +7294,42 @@ class AgentLoop:
                 "problems": [str(x) for x in (got.get("problems") or [])],
                 "producer": role}
 
+    def _manuscript_block(self) -> str:
+        """提示词里那段「你名下已登记、还没送 V 的稿」（产出者专用；没有 ⇒ 空串）。
+
+        为什么要有这一段（业主 2026-11-18「谁写稿，谁就对稿负责」）：`_pending_work`
+        第 4 条会因为它挡下挂机，可那段 why 只落在 `run.park` / `run.notes` 里 ——
+        模型拿到的"多给的一拍"上下文里没有一句话说它为什么被留下、下一步该派谁。
+        这一格把同一份读数（`_manuscript_cache`，`_park_gate` 里与 `_pending_work`
+        同一拍现读）念进 `_prompt`：逐份给「稿路径 + 正文 sha 前 12 + 等了多久」，
+        再给 `agent_f.pending.summon_action` 的 `task`（谁派、派谁、点哪一份稿）。
+
+        三态：读数没查成 ⇒ 明写「没查成」，不折成「没有待签的稿」；不是产出者 /
+        0 份 ⇒ 空串（不往 M / G / H 的上下文里塞与它无关的噪音）。
+        """
+        reading = getattr(self, "_manuscript_cache", None)
+        if not isinstance(reading, Mapping):
+            return ""
+        items = [dict(x) for x in (reading.get("items") or ()) if isinstance(x, Mapping)]
+        if not reading.get("checked", True):
+            return ("【送审读数没查成】" + str(reading.get("why") or "没查成")
+                    + "\n- 这一拍不把它读成「没有待签的稿」（没查成 ≠ 没有）："
+                    "先查工作区里的稿与签，再决定派不派 V。\n")
+        if not items:
+            return ""
+        from .agent_f import pending as _FP
+
+        lines = ["【你名下已登记、V 签还没到的稿（这一拍不许当无事可做）】"]
+        for one in items[:6]:
+            lines.append("- " + _FP.manuscript_cell_text(one))
+            task = str(dict(one.get("next_action") or {}).get("task") or "")
+            if task:
+                lines.append("  下一步：" + task)
+        if len(items) > 6:
+            lines.append(f"- 另有 {len(items) - 6} 份见 `F.step` 的 `delivery.unfinished`。")
+        lines.append("派 V 是产出者自己的动作（谁写稿谁负责）：这一拍就派，别等下一轮。")
+        return "\n".join(lines) + "\n"
+
     def _pending_work(self, mailbox: Mapping[str, Any]) -> dict[str, Any]:
         """本趟"手上有活吗"的读数（`_park_gate` 第三个判据的输入）。
 
@@ -7552,6 +7592,9 @@ class AgentLoop:
         parked = self._park_reading()
         want = self._wait_any_reading()
         work = self._pending_work(mailbox)
+        # 这一拍「已登记、还没送 V」的读数：与 `_pending_work` 第 4 条同一份，
+        # 供 `_prompt` 念给模型（改前它只进 `run.park` / `run.notes` ⇒ 见 `_manuscript_block`）。
+        self._manuscript_cache = dict(work.get("manuscripts") or {})
         back = self._return_reading(parked=parked, work=work, wakes=wakes, run=run)
         # ---- 「研究未尽」这一档：挂机的前提是"无事可做"，
         # 而"无事可做"的三条判据（新投递 / 未消板项 / 待消费子产出）都只问

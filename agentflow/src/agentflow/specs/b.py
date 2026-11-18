@@ -482,6 +482,10 @@ SPEC = AgentSpec(
             "**入库的是文献侧引入的定理/证明（不是 F 产的）⇒ 先把它交一次 `own.register_statement`"
             "（框架落成 `reports/b-proof-<命题号>.md`），再派 V 审核签字（`V.verify_proof`："
             "`statement_id` + `proof_manuscript=<这份稿>`）、签了才够 `pre_theorem`**；"
+            "**例外：引用侧第一遍摘录可以先落**（`origin=\"external_lit\"` + `source_lit_id` 的逐字摘录）——"
+            "写侧在这一笔记 `quote_carrier=first`，V 签位填文献编号（占位签），`closing` 记 "
+            "`cited_placeholder`、**不欠真签**；第二遍优化改写（`quote_carrier=second`）才按上面那条"
+            "「先拿签，再入库」走。"
             "**F 产的证明天生带 V 签字**（那是 F 送审时拿到的、盖在**F 那一版正文**上的签）—— 原样入库时"
             "认这份签，不要重复要求签（你若改写正文，见下一条：改写之后原签不算数、要再派 V 签一次 —— "
             "那不是「撤销」，是**对不上**这一版）。",

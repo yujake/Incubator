@@ -604,13 +604,18 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
     trail_required = unfinished_count > 0
     close_problems: list[str] = []
     reopened = signed + abandoned_count
+    #: 「证明稿份数」（含待签）：与 `proof_count` 是两个问题（INV7）。只算一次，
+    #: `why` 与返回值读同一份 —— 两处各算一遍就会漂。
+    proof_outputs = sum(1 for x in items
+                        if str(x.get("claim") or "") in
+                        (CLAIM_PROOF, CLAIM_PROOF_UNSIGNED))
     if total > 0 and signed >= total:
         state = STATE_SIGNED_ALL
         why = f"{total}/{total} 条成果全部已签 ⇒ 交差完成"
     elif total > 0 and reopened >= total:
         state = STATE_OUTPUTS_SETTLED
         why = (f"有 {total} 条成果：已签 {signed} 条、明确放弃 {abandoned_count} 条 ⇒ "
-               "每一条都有结局（放弃的不算未签，但也不计入产出的证明数）")
+               "每一条都有结局（放弃的不算未签，但也不算「证明」—— `proof_count` 只数已签的）")
     elif total > 0:
         state = STATE_OUTPUTS_UNSIGNED
         named = "、".join(
@@ -619,7 +624,9 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
             + f"[{o.get('claim_label')}]" for o in unfinished[:8])
         why = (f"有 {total} 条成果、其中 {signed} 条已签：待签 {pending} 条、未签 "
                f"{unsigned} 条 ⇒ 还没到收工的时候；"
-               f"能叫「证明」的只有已签的那 {signed} 条（未签的不计入产出的证明数）；"
+               f"能叫「证明」的只有已签的那 {signed} 条（`proof_count`）；"
+               f"产出的证明稿有 {proof_outputs} 份（`proof_output_count`，含待签）——"
+               "有稿未签不是「没产出」；"
                f"还没签的 {unfinished_count} 条：" + (named or "（读不到命题号 / 稿号）"))
         close_problems.append(
             f"还有 {unfinished_count} 条成果没签、也没被明确放弃 ⇒ 不许静默收工")
@@ -662,9 +669,7 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
         # `proof_count` 回答"有几条能叫证明"（INV7：两个问题不许再混成一格）。
         "proof_count": len(proof_output_ids),
         "proof_statements": proof_statements,
-        "proof_output_count": sum(1 for x in items
-                                  if str(x.get("claim") or "") in
-                                  (CLAIM_PROOF, CLAIM_PROOF_UNSIGNED)),
+        "proof_output_count": proof_outputs,
         "draft_count": total - len(proof_output_ids),
         # ---- 交差时点名未签成果 + 出路（举例，不替它选）+ 留痕
         "abandoned_count": abandoned_count,

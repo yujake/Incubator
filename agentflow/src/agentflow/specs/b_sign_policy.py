@@ -19,7 +19,9 @@ SIGN_SUBMIT_POLICY: tuple[str, ...] = (
     # 2026-11-10（T1 收口）：落稿不再是登记的副作用 —— 显式一步 `own.land_manuscript`。
     # 这一段此前教的是「把正文交一次 register_statement，框架会把它落成 b-proof」，
     # D1 之后那句话已经不成立（被拒的登记不再留下稿）。
-    "**改写之后先拿签，再入库**：用 `own.land_manuscript` 把这一版正文落成"
+    "**改写之后先拿签，再入库**（**只指第二遍改写**：引用侧第一遍逐字摘录可以先落，"
+    "见 B 的 policy 正文里那条引用侧例外，写侧记 `quote_carrier=first`、V 签位填文献编号）："
+    "用 `own.land_manuscript` 把这一版正文落成"
     "`reports/b-proof-<命题号>.md`（与 F/E 同形：`## 命题` / `## 证明` / `## 依赖` 三节；"
     "只写文件、幂等 —— 同一份正文重放一个字节不动），然后派 V 审这一份手稿"
     "（`framework_summon` 的 `V.verify_proof`，带 `statement_id` + `proof_manuscript`），"

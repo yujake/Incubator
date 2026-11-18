@@ -726,6 +726,40 @@ class _RunExperiment:
             # 这条命题的台账行（`conjectureledger` 的返回；`ok=False` = 记账失败、实验照旧成立）
             "conjecture_ledger": dict(_ledger),
         }
+        # ---- 这一份 e-proof 的 V 签读数与下一步（2026-11-18 TEACH1 ⑨）-------------
+        #
+        # 改前 `agent_e/` 全目录对 `v_sign` / `next_action` 零命中：E 跑完穷举实验后，
+        # 返回里没有一句「下一步派 V」—— 它只能靠 L1 policy 或收工门想起来。
+        # 这里与 F 对齐，且不另写第二份判据：四档读口只有
+        # `agent_f.vsign.delivery_reading`，下一步那句话只有 `next_step_hint`，
+        # 动作形状只有 `agent_f.pending.summon_action`。
+        # 只对真落了 `e-proof` 的那一趟给这一格；普通数值实验（`e-num`）不欠签。
+        _rel = str(manuscript.get("path") or "")
+        if _rel:
+            from ..agent_f import pending as _FP
+            from ..agent_f import vsign as _FVS
+
+            _read: dict = {}
+            try:
+                _read = dict(_ER.read_proof_manuscript(self.workspace_root, _rel) or {})
+                _vs = dict(_FVS.delivery_reading(
+                    self.workspace_root,
+                    proof_text=str(_read.get("proof_body") or ""),
+                    manuscript_paths=(_rel,)) or {})
+            except Exception as exc:  # noqa: BLE001 —— 读不成是读数，不是实验失败
+                _vs = {"checked": False, "state": "unknown", "label": "没查成",
+                       "delivered": False, "why": (
+                           f"签读数没跑成（{type(exc).__name__}: {exc}）"
+                           " ⇒ 这一格没查成，不是「待签」")}
+            out["v_sign"] = dict(_vs)
+            out["v_sign_hint"] = _FVS.next_step_hint(_vs, manuscript_paths=(_rel,))
+            out["next_action"] = ({} if bool(_vs.get("delivered")) else
+                                  dict(_FP.summon_action({
+                                      "manuscript": _rel,
+                                      "manuscript_id": str(manuscript.get("manuscript_id") or ""),
+                                      "sha": str(_read.get("proof_sha256")
+                                                 or manuscript.get("proof_sha256") or ""),
+                                      "producer_role": "E"}) or {}))
         self.last_run = out
         self._log(f"experiment {eid} recorded", **{k: out[k] for k in ("result", "evidence_kind", "exit_code")})
         return out

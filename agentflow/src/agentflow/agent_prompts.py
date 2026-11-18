@@ -2741,7 +2741,32 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   `_check_acceptance` 的"验收表缺失"那一档拒信里带预算读数
 #:   （`budget.paperwork_first_reading`），以及 M 的手册正文（`agent_skills.py` 的
 #:   收工那条 skill——索引只渲染 summary，正文不进提示词）。
-PROMPT_VERSION = "p293"
+#: p293 → p294（2026-11-18，TEACH1：把 GUIDE1 报告 §3/§4 的「写着但与实现相反」逐条钉回实现）：
+#:   ① `PAPER_PACK` 的「派 V」改成有主语（产出方 F/E/B 自己派；M/G/H 到不了 V，只转达/追签）——
+#:     GUIDE1 §3-② 的读者是 M/G/H，而三者的 `ALLOWED_EDGES` 里都没有 V；
+#:   ② `agent_skills.py` 的 F 手册把「没签的不计入产出的证明数」改成两格口径
+#:     （`proof_count` 只数已签 / `proof_output_count` 含待签），`specs/f.py` 的返回广告补这一格；
+#:   ③ M 手册的「没登记就是不存在」改成 `stmt:<号>` / `mss:<稿号>` 两种成果身份
+#:     （`specs/m.py` 的同一句假话一并改）；
+#:   ④ M 的 policy 认 `manuscript_unsigned` 这一格（2e9142ac 新增）—— 处置仍是转 D；
+#:   ⑤ `specs/f.py` 里两道门分别命名（你发 `final` 时的 final 门 / 全趟收工报告
+#:     （`closing` 那一侧）的 `statements_unsigned` 读数），删掉「收工门不因它拦」那句自相矛盾；
+#:   ⑥ `agent_f/core.py::_attack_prompt` 新增 §2.2（这一轮落了 `manuscript_path` ⇒ 下一轮开头派 V）；
+#:   ⑦ `agent_loop._manuscript_block` 把 park 挡下时那段 why（稿路径 + sha 前 12 + 等待时长 +
+#:     `next_action.task`）念进模型可见的每一拍；
+#:   ⑧ `specs/b.py` / `b_sign_policy.py` 的「先拿签再入库」补上引用侧第一遍摘录例外
+#:     （`quote_carrier=first` 的占位签，`cited_placeholder` 不欠真签）。
+#:   变化格 = B / F / G / H / M（① 经 PAPER_PACK 打到三格；②⑤在 F；④在 M；⑧在 B）；
+#:   A / C / D / E / L / V 六格逐字未动（版本行已归一）。逐格旧值 → 新值：
+#:   B 4a815263… → 46ff85a4…；F b6c803c1… → e2e4d6a1…；G 5b657545… → 1acaf7dc…；
+#:   H c6600f65… → ac6dce6d…；M 8cc0359d… → 76f7caa3…。
+#:   十一格是 `temp/teach1/recompute_digests.py`（导入判据自己的 `_surface_digest`，
+#:   先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+#:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p294）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p293 同值 —— 这一批只换段文本与教法，
+#:   没有哪一格事实换过落点）；两份 golden 按现值重冻；ROLE-GUIDE 重生成；读图行数；
+#:   warm 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p294"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -3854,9 +3879,13 @@ PAPER_PACK = """\
   1. 证明过程逐字由框架落成一份手稿（F 的 `reports/f-proof-<稿号>.md` / E 的
      `reports/e-proof-<实验号>.md` / B 的 `reports/b-proof-<命题号>.md`；含假设、每一步依据、
      你接不上的那一步）；
-  2. 派 V 的 `verify_proof`（**`proof_manuscript` 给那一份稿 —— 在册也给**；命题号 +
-     第几条证明 `proof_no`（缺省 1））逐行走查，
-     结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）——
+  2. **派 V 是产出方（F / E / B）自己的动作，不是你的** —— 你（M / G / H）的伙伴表里
+     没有到 V 的边（能不能直呼谁，逐格以伙伴表为准；它由 `capabilities.ALLOWED_EDGES`
+     现算），照字面派 V 会拿 `forbidden_edge`。你的动作是**转达 / 追这一份的签**：M 走
+     `M→D→F`（D 派 F / E 自己送审；B 可以直接派 B 去处理它自己那一族），G 转给 D，
+     H 把「这一份还没签」写进 review 报告。产出方派 V 时用 `verify_proof`
+     （**`proof_manuscript` 给那一份稿 —— 在册也给**；命题号 + 第几条证明 `proof_no`
+     （缺省 1））逐行走查，结论落 `verifications/<命题号>.jsonl`（文件账本，不是表）——
      这是本会话**唯一**的"审过"凭据（收工门与 H 的采信都改看它）；
   3. 审阅报告里逐条写清：哪几步站得住、哪几步是缺口、缺口缺的是哪一类依据。
   这一档下模型面上没有任何检查器入口（「形式化已关闭」时，形式化那一族只落在形式化那一岗的

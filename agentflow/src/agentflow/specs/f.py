@@ -62,7 +62,8 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "时刻）/ auto_submitted_count / still_unsubmitted（没提交的逐条带 state / why；推进轮次这三格"
         "为空 = 这一趟没读，不是「没有可提交的」）；"
         "逐条交差读数：delivery / delivered / total / signed_count / pending_count / "
-        "unsigned_count / proof_count / proof_statements / draft_count / abandoned_count / "
+        "unsigned_count / proof_count / proof_output_count / proof_statements / draft_count / "
+        "abandoned_count / "
         "abandoned_statements / unfinished / unfinished_count / trail / trail_required / "
         "legal_exits / exits_note / legal_stop / is_failure / close_problems / coverage / "
         "coverage_reading / coverage_ratio / coverage_why / delivery_state_plan / "
@@ -194,8 +195,9 @@ SPEC = AgentSpec(
             "改稿/补步骤，读到 `成立` 就是这一格被审过、不再重交；证明要被 V 签过 `成立`，五元位第 3 位才算数。"
             # 收工门 `agent_loop._v_wait_gate_reading` **按签拦收工、不按计时器拦**：拦的是
             # 「计划号没有 V 签稿、且没有被放弃」。签成立那一刻签触发提交，复用 `mss:` 记号。
-            "**送审之后这一趟还不能收工**：收工门按签拦 —— 计划号名下没有一份现行的 V 签稿、"
-            "且这个计划号没被放弃 ⇒ 收工受控拒，点名计划号与缺的那份稿；"
+            "**送审之后这一趟还不能收工**：你发 `final` 时，**你自己的 final 门**"
+            "（`agent_loop._v_wait_gate_reading`）按签拦 —— 计划号名下没有一份现行的 V 签稿、"
+            "且这个计划号没被放弃 ⇒ final 受控拒，点名计划号与缺的那份稿；"
             "**V 判「成立」的那一刻这份稿就已经置为已提交**"
             "（框架在签发时写 `mss:` 记号、`via=sign_issued`；收工那一趟还会再扫一次，幂等不重复），"
             "**不需要你再手动提交一次**；判「有毛病」就按缺陷改稿重送。要等就挂 "
@@ -242,8 +244,10 @@ SPEC = AgentSpec(
             "命题（登记 / 换号）或「放弃 + 换号」。命题有实质数学错误 ⇒ 走 `abandon_kind=\"math_error\"`，别用改表述绕过去。",
             # 未签闭环在 F 这一侧的落点 —— 它产的证明是「命题」这一类欠签的主要来源。
             "**你的证明最终要有 V 签，或者那条命题被明确放弃**：既没有签、也没有被放弃的命题会进收工读数的 "
-            "`statements_unsigned`（读数，**不是 blocker**：`machine_pass` 不因它变假、收工门不因它拦；2026-11-16 裁定 3 + "
-            "追加裁定 B）。它逐份列「有稿无签」清单（`unsigned_manuscripts`：族 / 号 / sha / 为什么没签）——"
+            "`statements_unsigned`（**全趟的收工报告（`closing` 那一侧）的读数，不是 blocker**：`machine_pass` 不因它变假、"
+            "**那道门**不因它拦；2026-11-16 裁定 3 + 追加裁定 B —— 注意这与你发 `final` 时那道"
+            "「final 门」是**两道门**：那道门按签拦，见上面「送审之后这一趟还不能收工」）。"
+            "它逐份列「有稿无签」清单（`unsigned_manuscripts`：族 / 号 / sha / 为什么没签）——"
             "清单不是门，但清单上每一份都是下一次委托要重做的活。两条出路：① 重送 V 拿到干净的「成立」；② 这条命题确实攻不动 ⇒ 派 **B** 把它**明确放弃**"
             "（B 走 `table.update`：`status=abandoned`，理由按四档之一给 —— **`math_error`**：指出错在第几步、错的是什么 ＋ "
             "`defect_ref`（`verifications/<号>.jsonl#v-00000N`）；**`difficulty`**：说清难在哪（`salvaged` 可以先不指："
@@ -253,7 +257,7 @@ SPEC = AgentSpec(
             "`quote_reason=abandoned@<ISO8601>@<结构化理由>`（标记与时间戳由系统拼，你只给这几档理由那几格）。"
             "理由空着 / `difficulty` 不是真困难 ⇒ 写盘前受控拒"
             "（如 `abandon_reason_missing` / `abandon_difficulty_not_genuine`）；`salvaged` 指的是一条空壳（不在册 / 无证明 / 无经手人）⇒ `abandon_salvaged_not_reviewable`，一个字节不改）。"
-            "**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工时变成一格红。",
+            "**别让一条证明长期悬着** —— 悬着不会自己消失，它只会在收工读数里变成一格红。",
             # 一个稿号 = 一份文件 = 一份证明；同一命题要第二份证明 ⇒ **另一份稿（另一稿号）**。
             # 台账侧的多证明机制（`proofs` / `used_by="stmt:<号>#pN"` / `path_group` /
             # `reviewed_by_proof` / 对应表的 `proof_no`）一个字没变：B 收录时按正文 sha

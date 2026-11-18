@@ -1429,6 +1429,31 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "（`budget.PAPERWORK_RESERVE_USD` = $1.00）。变化格 = M，其余十格与 p292 "
               "逐字相同（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` "
               "上方那一段）。facts 键集仍 15 格、落点没动。"},
+     # p293 → p294（2026-11-18，TEACH1）：把 GUIDE1 报告 §3/§4 的「写着但与实现相反」
+     # 逐条钉回实现 —— ① PAPER_PACK 的「派 V」改成有主语（产出方 F/E/B 自己派；M/G/H
+     # 到不了 V）；② F 手册两格口径（`proof_count` / `proof_output_count`）；③ 成果身份
+     # `stmt:` / `mss:`；④ M 认 `manuscript_unsigned`；⑤ F 的两道门分别命名；⑥ `_attack_prompt`
+     # 新增 §2.2；⑦ `_manuscript_block` 把 park 的 why 念进模型一拍；⑧ B 的引用侧第一遍例外。
+     # 变化格 = B / F / G / H / M；只换段文本与教法，facts 键集与落点一格没动 ⇒
+     # count / keys_sha256 与 p293 同值。
+     {"version": "p294", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p294（2026-11-18，TEACH1 教法缺口）：① PAPER_PACK 的「派 V」"
+              "改成「产出方（F / E / B）自己的动作」，并写清 M / G / H 的伙伴表里没有 V"
+              "（照字面派会拿 `forbidden_edge`，动作是转达 / 追签）；② F 手册改两格口径"
+              "（`proof_count` 只数已签、`proof_output_count` 含待签）＋ `specs/f.py` 的"
+              "返回广告补这一格；③ M 手册与 `specs/m.py` 的「没登记就是不存在」改成 "
+              "`stmt:<号>` / `mss:<稿号>` 两种成果身份；④ M 的 policy 认 `manuscript_unsigned`"
+              "（2e9142ac 新增的那一格，处置仍转 D）；⑤ `specs/f.py` 的两道门分别命名"
+              "（final 门 / `conductor.closing` 的 `statements_unsigned` 读数），删掉"
+              "「收工门不因它拦」；⑥ `agent_f/core.py::_attack_prompt` 新增 §2.2"
+              "（这一轮落了 `manuscript_path` ⇒ 下一轮开头派 V）；⑦ `_manuscript_block` 把 "
+              "park 挡下时那段 why（稿路径 + sha 前 12 + 等待时长 + `next_action`）念进"
+              "模型可见的每一拍；⑧ `specs/b.py` / `b_sign_policy.py` 的「先拿签再入库」"
+              "补引用侧第一遍摘录例外（`quote_carrier=first` / `cited_placeholder`）。"
+              "变化格 = B / F / G / H / M，其余六格与 p293 逐字相同（逐格读数见 "
+              "`test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

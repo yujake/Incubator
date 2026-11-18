@@ -155,6 +155,27 @@ FORMAL_EDGE_MISSING_REASON = "formal_edge_missing"
 #: 判据：`tests/test_f_has_no_formal_entry.py`。
 E_METHODS = tuple(str(m) for m in S.EXPERIMENT_METHODS if str(m) != "formal")
 
+#: 「出了稿就要送审」那一段（L4 每轮提示词的 §2.2）。
+#:
+#: 为什么抽成模块级常量：`_attack_prompt` 已经在 200 行线内，这一段直接写进函数体
+#: 会把它推过线（repo survey 的 `fn200=95` 顶格、不许新增 >200 行函数）。文本本身
+#: 只有一份，函数里用 `*PROOF_DISPATCH_SECTION` 摊回原位 —— 渲染出来的字一个不变。
+#: 2026-11-18 业主「谁写稿，谁就对稿负责」：送审此前只写在 L1 policy 与 L3 手册里，
+#: 而 L4（本函数拼的这份提示词）是 F 每一轮都必读的那一份 ⇒ 出稿动作与送审动作
+#: 在它眼前不连着，F 就会把「稿落了」当成交差。
+PROOF_DISPATCH_SECTION: tuple[str, ...] = (
+    "",
+    "## 2.2 这一轮落了 `manuscript_path` ⇒ 下一轮开头先派 V 审它",
+    "`F.step` 返回 `manuscript_path` / `manuscript_id` 的那一刻，这一份稿就已经在等 V 的签"
+    "—— **送审是你自己的动作，`F.step` 不替你送**（`F → V` 是直接边）：下一轮开头用 "
+    "`framework_summon` 唤起 `role=\"V\"`，`task` 写「审这一份证明稿 <manuscript_path>」；"
+    "V 用 `verify_proof`，**`proof_manuscript` 就点这一份稿**（在册也给稿，不给命题号）。"
+    "返回里的 `still_unsubmitted[].next_action` 就是这一句的机器形状；`v_sign` 读成"
+    "「待签」或 `delivery.unfinished` 里还有它 ⇒ 这一拍就派，别等下一轮、"
+    "也别改去写第二份稿。",
+    "",
+)
+
 
 def _is_formal_subgoal(sg: Mapping[str, Any]) -> bool:
     """这条子目标是不是形式化那一档（判据只有这一处）。
@@ -486,7 +507,7 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         "反过来：还缺一条中间引理 / 需要一个新的反例族 / 需要一个新的数值界 ⇒ 交 "
         "`reduction` 或 `counterexample_request` 或 `dead_end`，不要硬把半截论证写成 `proof`"
         "（`steps` 里那一步会当场被 `assumption` / 缝的判据拦下）。",
-        "",
+        *PROOF_DISPATCH_SECTION,
         # ---- 第 3 段：上下文（事实，不是形状 —— 所以排在词表之后）
         "## 3. 这一轮的上下文（已知事实，不是提示）",
         f"难题：{plan.get('problem')}",

@@ -10,7 +10,7 @@ from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, TERMINAL
 #: 「有稿、签还没到」的逐条（INV7：等签的稿不许被读成「没有可提交的」）。
 _CLOSE_KEYS: tuple[str, ...] = (
     "total", "signed_count", "pending_count", "unsigned_count",
-    "proof_count", "proof_statements", "draft_count",
+    "proof_count", "proof_output_count", "proof_statements", "draft_count",
     "abandoned_count", "abandoned_statements",
     "unfinished", "unfinished_count", "trail", "trail_required",
     "legal_exits", "exits_note", "legal_stop", "is_failure", "close_problems",
