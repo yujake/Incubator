@@ -1126,7 +1126,7 @@ def _registrar_task_text(*, key: str, label: str, manuscript: str, sha: str,
 def _wake_registrar(*, store: Any, conductor: Any, key: str, label: str,
                     manuscript: str = "", sha: str = "", at: str = "",
                     owner: str = "", owner_instance: str = "",
-                    opened_under: str = "") -> dict[str, Any]:
+                    opened_under: str = "", item_id: str = "") -> dict[str, Any]:
     """「签落地 ⇒ 把义务投给它的收件实例」这一步落成盘上的事实（幂等，永不抛）。
 
     改前这一格按角色找工作地址：`_registrar_now` 在 ≥2 趟 B 在飞时取"最近开始的那一趟"，
@@ -1237,17 +1237,43 @@ def _wake_registrar(*, store: Any, conductor: Any, key: str, label: str,
     try:
         conductor.start_summon(started)      # 非阻塞：不占 V 这一拍
     except Exception as exc:  # noqa: BLE001 —— 前半已经在台账上了，照实报
-        out.update(state="summoned", task_id=str(getattr(started, "task_id", "") or ""),
+        new_id = str(getattr(started, "task_id", "") or "")
+        _re_address_wake_item(conductor, item_id=item_id, task_id=new_id, out=out)
+        out.update(state="summoned", task_id=new_id,
                    at=str(_wake_row(store, key).get("started_at") or ""),
-                   reason=(f"台账那一行已经派出去了（{getattr(started, 'task_id', '')}），"
+                   reason=(f"台账那一行已经派出去了（{new_id}），"
                            f"但执行侧没起来（{type(exc).__name__}: {exc}）"))
         return out
     row = _wake_row(store, key)
-    out.update(state="summoned", task_id=str(getattr(started, "task_id", "") or ""),
+    new_id = str(getattr(started, "task_id", "") or "")
+    _re_address_wake_item(conductor, item_id=item_id, task_id=new_id, out=out)
+    out.update(state="summoned", task_id=new_id,
                at=str(row.get("started_at") or ""),
-               reason=(f"已召唤 B {getattr(started, 'task_id', '')}"
+               reason=(f"已召唤 B {new_id}"
                        f"（{row.get('started_at') or '时刻没读到'}；键 {key}）"))
     return out
+
+
+def _re_address_wake_item(conductor: Any, *, item_id: Any, task_id: Any,
+                          out: dict[str, Any]) -> None:
+    """新召来的那一趟 ⇒ 把板项改投到它名下（SGN1 的「板项开在它名下」那一格）。
+
+    为什么这一步在召唤之后：未在册那一支先开板项是刻意的（信先落、再叫它 ——
+    顺序反了，被叫醒的 B 读不到自己为什么起来），而"召到哪个台账号"只有
+    `summon_begin` 之后才知道。不补这一格，召来的 B 名下什么都没有。
+    永不抛：改投失败只落读数（板项仍在板上，按角色地址由该角色任一实例领）。
+    """
+    tid, item = str(task_id or ""), str(item_id or "")
+    if not tid or not item:
+        return
+    try:
+        said, why = conductor.re_address_item(item, parent_task_id=tid)
+    except Exception as exc:  # noqa: BLE001 —— 改投失败不许带走这一签
+        out["re_addressed_to"] = ""
+        out["re_address_why"] = f"板项改投抛了（{type(exc).__name__}: {exc}）"
+        return
+    out["re_addressed_to"] = "" if why else tid
+    out["re_address_why"] = why or said
 
 
 def _task_running(store: Any, task_id: str) -> bool:
@@ -1407,7 +1433,7 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
             label=label, manuscript=str(manuscript or ""), sha=sha, at=at,
             owner=str(out["owner"] or ""),
             owner_instance=str(out["owner_instance"] or ""),
-            opened_under=str(out["owner"] or ""))
+            opened_under=str(out["owner"] or ""), item_id=str(item_id))
     return out
 
 

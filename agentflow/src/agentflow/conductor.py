@@ -5600,6 +5600,49 @@ class Conductor:
             tx.upsert("tasks", task.to_dict(), note="item:detail")
         return text, ""
 
+    def re_address_item(self, task_id: str, *, parent_task_id: str,
+                        recipient_instance: str = "") -> tuple[str, str]:
+        """把一条未收口的板项改投给另一个收件人。返回 `(落成的说明, 问题)`。
+
+        现场（SGN1 的「签落地 ⇒ 真把 B 叫醒」）：未在册那一支要先开板项（信先落在板上，
+        B 一起来就读得到），再看有没有 B 的台账号可投；一个都没有时真召一趟 ——
+        那一趟的 `task_id` 是这一步才有的，于是板项要补上「收件人的台账号」
+        （`parent_task_id` 那一格的口径，见 `_item_authority` / `open_items_of`）。
+        不补这一格，板项就开成无主：召来的 B 看不到自己为什么被叫起来（lp-ball 的
+        `b-register@` 两条至今 `parent_task_id=None` 就是这一档）。
+
+        只动板项行的地址：`kind` 空的行是台账号，它的父子关系是派活时定的，不改；
+        深度按新父那一行 +1 重算（`capabilities.audit_task_ledger` 按这条链核）。
+        """
+        tid = str(task_id or "")
+        parent = str(parent_task_id or "")
+        if not tid:
+            return "", "没有板项号 ⇒ 什么都不改"
+        if not parent:
+            return "", "没有收件人的台账号 ⇒ 不把板项改成无主"
+        self._refuse_write_in_snapshot("改板项收件人（re_address_item）")
+        with self.store.tx("tasks", actor="conductor") as tx:
+            rows = list(tx.rows("tasks"))
+            row = next((r for r in rows if str(r.get("task_id")) == tid), None)
+            if row is None:
+                return "", f"没有这一项（task_id={tid!r}）"
+            if not str(row.get("kind") or ""):
+                return "", "这一行不是板项 ⇒ 不改它的父（台账号的父子关系是派活时定的）"
+            if str(row.get("item_state") or "") == "done":
+                return "", "这一项已经收口 ⇒ 不改收件人"
+            prow = next((r for r in rows if str(r.get("task_id")) == parent), None)
+            if prow is None:
+                return "", f"收件人 {parent!r} 在台账里没有那一行 ⇒ 不改"
+            row["parent_task_id"] = parent
+            row["instance"] = str(recipient_instance or "")
+            row["depth"] = max(1, int(prow.get("depth") or 1)) + 1
+            task = S.Task(**{k: v for k, v in row.items()
+                             if k in S.Task.__dataclass_fields__})
+            task.validate()
+            tx.upsert("tasks", task.to_dict(), note="item:re-address")
+        return (f"板项 {tid} 改投到 {parent} 名下"
+                + (f"（实例 {recipient_instance}）" if str(recipient_instance or "") else "")), ""
+
     def close_item(self, task_id: str, *, close: str, by_task_id: str = "") -> tuple[str, str]:
         """`→ done`（行为完成）：`close="acked"`（知道了）或 `"completed"`（做完了）。
 

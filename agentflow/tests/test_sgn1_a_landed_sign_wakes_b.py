@@ -271,32 +271,50 @@ def test_c_without_the_summon_step_a_is_red(tmp_path, monkeypatch):
     assert gap["checked"] is True and gap["gap"] is True, gap
 
 
-# ============================================================ d B 在飞 ⇒ 不重复召唤
-def test_d_a_running_b_gets_the_item_but_no_extra_summon(tmp_path):
-    """d：那一刻 B 在飞 ⇒ 板项落进它名下（它下一拍自己读到），不新召一趟。"""
+# ============================================================ d B 在飞 ⇒ 不挑一趟
+def test_d_a_running_b_is_not_picked_as_the_address(tmp_path):
+    """d（K9 口径，2026-11-19 改断言）：有 B 在飞 ⇒ 不新召、也不按「唯一在飞」挑它。
+
+    改前这条钉的是 SGN1 的旧地址口径「只有一趟 B 在飞就投给它」（`_registrar_now`）。
+    K9（d22f9a45）把那条挑法整段删了：地址只从「调用方点名 / 命题的登记实例」来，
+    读不出实例就按角色地址落在板上（该角色任一实例都能领）。这一格没有登记实例
+    （未在册那一支没有 statements 行）⇒ 板项是角色地址、父为空。
+    """
     st = _ws(tmp_path)
     cond = conductor_for(st)
     cond.backend = _LoopBackend()
     running = _agent_row(st, status="running")
+    assert running
     _put(st, REL, MANUSCRIPT)
 
     got = _sign_unregistered(st)
     one = _register_items(st)[0]
-    assert str(one.get("parent_task_id")) == running, one
+    assert str(one.get("parent_task_id") or "") == "", one
+    assert str(one.get("instance") or "") == "", one
     assert _wake_rows(st) == [], "B 已经在跑 ⇒ 不许再召一趟（幂等）"
+    # 角色地址仍然读得到：在飞的那一趟按 K9 的收件面领得到它。
+    mine = [str(r.get("task_id") or "") for r in cond.open_items_for("B", "B#1")]
+    assert str(one.get("task_id") or "") in mine, (mine, one)
     reg = dict((got.get("review_write") or {}).get("registration") or {})
     wake = dict(reg.get("wake") or {})
-    assert wake.get("state") == "running", wake
-    assert str(wake.get("task_id")) == running, wake
+    assert wake.get("state") == "role_addressed", wake
+    assert str(wake.get("task_id") or "") == "", wake
 
 
-# ============================================================ e 静默 B ⇒ 同号继续
-def test_e_a_silent_b_is_woken_by_the_notice_under_its_own_id(tmp_path):
-    """e：那一刻 B 静默未销号 ⇒ `notice` 落进它名下就叫醒它（同号继续，不新召）。"""
+# ============================================================ e 静默 B ⇒ 角色地址
+def test_e_a_silent_b_is_not_named_by_a_single_row(tmp_path):
+    """e（K9 口径，2026-11-19 改断言）：只一趟静默 B ⇒ 不按「唯一一趟」点名它。
+
+    改前这条钉的是「静默的 B 用同号继续叫醒（`notice` 落进它名下）」——那也是
+    `_registrar_now` 的挑法。K9 之后「叫醒」只对显式实例地址生效（`owner_instance`
+    已知），这一格没有登记实例 ⇒ 角色地址、不叫醒任何一趟；义务留在板上，
+    该角色任一实例下一次起跑时由 `open_items_for` 领到。
+    """
     st = _ws(tmp_path)
     cond = conductor_for(st)
     cond.backend = _LoopBackend()
     silent = _agent_row(st, status="done")
+    assert silent
     woke: list[dict] = []
 
     def _resume(task_id, *, role="", item_id="", kind="", previous_status=""):
@@ -309,14 +327,16 @@ def test_e_a_silent_b_is_woken_by_the_notice_under_its_own_id(tmp_path):
 
     got = _sign_unregistered(st)
     one = _register_items(st)[0]
-    assert str(one.get("parent_task_id")) == silent, one
-    assert _wake_rows(st) == [], "静默的 B 用同号继续叫醒，不新召"
-    assert woke and woke[0]["task_id"] == silent, woke
-    assert str(woke[0]["kind"]) == "notice", woke
+    assert str(one.get("parent_task_id") or "") == "", one
+    assert str(one.get("instance") or "") == "", one
+    assert str(one.get("item_state") or "") != "done", one
+    assert _wake_rows(st) == [], "只在册一趟 B 也不新召（幂等）"
+    assert woke == [], ("K9 之后不按「唯一一趟」点名，静默那趟不该被叫醒：", woke)
+    mine = [str(r.get("task_id") or "") for r in cond.open_items_for("B", "B#1")]
+    assert str(one.get("task_id") or "") in mine, (mine, one)
     reg = dict((got.get("review_write") or {}).get("registration") or {})
     wake = dict(reg.get("wake") or {})
-    assert wake.get("state") == "woken", wake
-    assert str(wake.get("task_id")) == silent, wake
+    assert wake.get("state") == "role_addressed", wake
 
 
 # ============================================================ f 三态：叫不醒 ≠ 没义务

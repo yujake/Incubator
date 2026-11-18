@@ -209,10 +209,19 @@ def test_c_the_resubmit_duty_survives_and_closes_on_a_clean_sign(tmp_path):
     items = _items(st, OBL.RESUBMIT_PREFIX)
     assert len(items) == 1, [r.get("input_key") for r in items]
     item = items[0]
-    assert str(item.get("parent_task_id") or "") == submitter, item
+    # K9（2026-11-19 改断言）：地址不再钉在「送审的那一趟台账号」上。
+    # 这一格认不出这份稿的产出实例（夹具没落 products 台账），送审者又已终态
+    # ⇒ 按角色地址落在板上（`instance=""`、父为空），F 的任一实例都领得到；
+    # 绝不挂回已 done 的送审者（那是 K9 记的病）。
+    assert str(item.get("parent_task_id") or "") == "", item
+    assert str(item.get("parent_task_id") or "") != submitter, item
+    assert str(item.get("instance") or "") == "", item
     assert str(item.get("expects") or "") == "work", item
-    # 送审者的下一步读得到它（与 b 同一条读法；义务本身也是唤醒源）。
-    assert "必须重送" in _board_text(st, submitter)
+    # 送审者的下一步读得到它（与 b 同一条读法）：K9 的收件面按角色地址读。
+    mine = [dict(r) for r in conductor_for(st).open_items_for("F", "F#1")]
+    duty = [r for r in mine if str(r.get("task_id") or "") == str(item.get("task_id") or "")]
+    assert duty, mine
+    assert "必须重送" in str(duty[0].get("detail") or ""), duty[0].get("detail")
 
     # 改稿 + 干净成立 ⇒ 义务按证据收口（不是 ack）。
     with st.tx("statements", actor="test") as tx:
@@ -313,7 +322,13 @@ def test_f_reconcile_opens_a_missing_resubmit_for_a_historical_fault(tmp_path):
     assert first["checked"] is True, first
     items = _items(st, OBL.RESUBMIT_PREFIX)
     assert len(items) == 1, (first, [r.get("input_key") for r in st.rows("tasks")])
-    assert str(items[0].get("parent_task_id") or "") == submitter, items[0]
+    # K9（2026-11-19 改断言）：补开的那一条也不钉在送审者身上 —— 送审者已终态、
+    # 这份稿的产出实例又认不出来 ⇒ 按角色地址（父为空、`instance` 为空）。
+    assert str(items[0].get("parent_task_id") or "") == "", items[0]
+    assert str(items[0].get("parent_task_id") or "") != submitter, items[0]
+    assert str(items[0].get("instance") or "") == "", items[0]
+    mine = [str(r.get("task_id") or "") for r in conductor_for(st).open_items_for("F", "F#1")]
+    assert str(items[0].get("task_id") or "") in mine, (mine, items[0])
     # 幂等：再对一次账不会长出第二条，也不会把已开的换负责人。
     again = OBL.reconcile(store=st, root=st.root)
     assert again["checked"] is True, again
