@@ -2386,12 +2386,8 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     out.update(_gate)
     if not _count_ok:
         return out
-    # ---- 谁颁发（VJ-07，2026-11-19）----
-    #
-    # 改前 `issued_by` 恒是角色名 `"V"`：两个 V 实例判的签在盘上不可区分，「这一签是
-    # 哪一个 V 判的」答不出来。`issuer` 由调用方给（在册档 = 台账行的 `verifier`，
-    # 未在册档 = `AgentV.actor`，两处都是实例级 actor）；不给 ⇒ 保留历史值 `"V"`
-    # （老签文件与直调 / 夹具逐字不变，读侧不需要多一条分支）。
+    # VJ-07：`issued_by` 是签发的那一个 V 实例（调用方给：在册档取台账行的 `verifier`，
+    # 未在册档取 `AgentV.actor`）；不给 ⇒ 历史值 "V"（老签文件与直调逐字不变）。
     envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
                 "issued_by": str(issuer or "").strip() or "V"}
     doc: dict[str, Any] = {

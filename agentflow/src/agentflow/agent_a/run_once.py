@@ -124,30 +124,35 @@ def _fill_pending(store: Any, result: ARunResult) -> None:
 
 def _claim_pending(store: Any, actor: str, wanted: Sequence[str],
                    result: ARunResult) -> list[str]:
-    """认领"还有待裁行的委托"（写 `lit.claim_pending` 事件）并填 `claim_note`。
+    """认领"还有待裁行的委托"（行上落认领 + `lit.claim_pending` 事件）并填 `claim_note`。
 
     `wanted` 空 ⇒ 认领全部还有 pending 的委托（真机那段"队列全 done、30 条没人判"
     就靠这一档被看见）；非空 ⇒ 只认领点名的那些。点名了却没有待裁行的，如实写进
     `claim_note`（"已判完或已清表"），不冒充成"清过了"。
 
-    为什么认领落事件、不改行：候选行的每一格都在 FC-27 的 schema 契约里，没有
-    "claimed_by" 这一列；`search_requests.claimed_by` 是队列领取的语义，给一条
-    `done=true` 的请求写它会造出"做完了还被人领着"的假读数。事件日志是这里已有的
-    审计面（`lit.close` 也走它），而"这一轮认领了哪几个委托"是可回放的。
+    ## AL-11（2026-11-19）：认领要落在行上，不只落事件
+
+    改前这里只 `tx.info("lit.claim_pending", …)`：事件是 append-only 的审计面，它答不了
+    "这一批现在归谁"（不是"现在"）。两个 A 实例同时进来（队列空、还有 pending 行）时二者
+    都"认领"同一批委托，盘上没有一处互斥 —— 而这正是审计要的那条读数。现在每一笔认领都过
+    `litstage.claim_delegation`：租约还在别人手上 ⇒ 不写一个字节（`state="other"`），
+    行上的 `claimed_by` / `lease_until` / `claimed_at` 就是"这一批归谁"的那一处。
+    事件照旧写（可回放的那一半不丢），但它不再是唯一落点。
     """
     scope = _pending_scope(store)
     by = {str(g.get("request_id") or ""): g for g in scope.get("by_delegation") or []}
     targets = list(wanted) or list(by)
-    claimed = [rid for rid in targets if rid in by]
+    claimed: list[str] = []
+    denied: list[str] = []
+    for rid in targets:
+        if rid not in by:
+            continue
+        got = L.claim_delegation(store, rid, actor=actor)
+        if got.get("claimed"):
+            claimed.append(rid)
+        else:
+            denied.append(rid)
     clean = [rid for rid in targets if rid not in by]
-    if claimed:
-        with store.tx("lit_candidates", actor=actor,
-                      note="a.run_once.claim_pending") as tx:
-            for rid in claimed:
-                group = by[rid]
-                tx.info("lit.claim_pending", request_id=rid,
-                        pending=int(group.get("pending") or 0),
-                        slots=list(group.get("slots") or []))
     result.claimed_delegations = claimed
     note = ""
     if claimed:
@@ -155,6 +160,10 @@ def _claim_pending(store: Any, actor: str, wanted: Sequence[str],
                 + "、".join(f"{rid}={int(by[rid].get('pending') or 0)}" for rid in claimed)
                 + "。这些行不在这一次自动链路里判：逐条 `lit.admit` 判收 / "
                 "`lit.stage_reject` 判拒，再逐委托 `lit.admit_all` 提交（清表）。")
+    if denied:
+        note += (" " if note else "") + (
+            "另一个 A 实例还持着这些委托（行上的租约未到期），这一轮不认领："
+            + "、".join(denied) + "。")
     if clean:
         note += (" " if note else "") + (
             "点名但没有待裁行（已判完或已清表）：" + "、".join(clean) + "。")

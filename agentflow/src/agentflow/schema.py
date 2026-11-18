@@ -571,6 +571,17 @@ class LitCandidate:
     #: 调用方对"重叠也可以收"的显式声明（`None` = 没表态）。它不替代 `new_content`：
     #: 真正的放行判据在 `litstage.admit`，这里的值只如实记下"谁来电话说过可以收"。
     overlap_ok: bool | None = None
+    #: ——— 委托认领（AL-11，2026-11-19）———
+    #:
+    #: 一次委托的待裁行由哪一个 A 实例认领着：`claimed_by` = actor（实例级，
+    #: `agent-A-<名册名>`），`lease_until` = 租约到期时刻（与 `search_requests` 同一套
+    #: `store.make_lease` / `store.lease_expired` 语义）。三个都空 = 没人认领
+    #: （老行 / 还没认领过）—— 与 `search_requests` 的领取同形，不另造一套互斥。
+    #: 为什么落在候选行上：委托级认领必须有一个**行上的**落点（只写事件的话，两个 A
+    #: 同时进来时盘上没有任何互斥，二者都「认领」同一批委托）。
+    claimed_by: str = ""
+    lease_until: str | None = None
+    claimed_at: str = ""
 
     def validate(self) -> None:
         require_id(self.slot, "slot")
@@ -1174,6 +1185,13 @@ class Conjecture:
     created_at: str = ""
     updated_at: str = ""
     created_by: str = "agent-D"
+    #: 最后一个把这一行写成现在这个样子的人（SH-10，2026-11-19）。
+    #:
+    #: 知识实体按规范化正文归并是对的（同一条命题只有一行），但"谁把它推到 refuted"
+    #: 必须答得出来：`experiment_ids` 只说得出是哪几条实验，说不出是哪一支笔。
+    #: `created_by` 是创建者（会被并进来的第二笔覆盖掉才叫错），这一格每次写都更新；
+    #: 空串 = 加这一格之前的老行（读侧按"没记"处理，不折成创建者）。
+    updated_by: str = ""
 
     def validate(self) -> None:
         """单行内可判的拒收条件（跨对象判据在 `verify.verify_all`）。

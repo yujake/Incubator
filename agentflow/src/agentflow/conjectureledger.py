@@ -266,6 +266,8 @@ def _upsert(tx: Any, *, statement: str, origin: str, conjecture_id: str | None,
         created_at=str(prev.get("created_at") or S.now_iso()),
         updated_at=S.now_iso(),
         created_by=str(prev.get("created_by") or actor),
+        # SH-10：这一次写的人（并进来的第二笔会改它，`created_by` 不动）。
+        updated_by=str(actor or ""),
     )
     # 单行内判据只有这一处：schema 说不行就是不行（§7.5 状态机的每一句都在这里）
     row_obj.validate()

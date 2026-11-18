@@ -4,9 +4,19 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19 CLOSE1 K1 收尾①）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,900 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,981 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 CLOSE1 K12/K16（台账行自己说得出「这一笔是谁的」）：**
+> 322 个 `.py` 与 75 个 `>800` 两格不变；**302,981** 行（上一格 302,900；本笔 src 净增 +81：
+> `litstage.py` +73（`claim_delegation`：委托认领落在候选行的 `claimed_by` /
+> `lease_until` / `claimed_at` 上，租约语义与 `search_requests` 同一套）、
+> `agent_a/run_once.py` +6（`_claim_pending` 逐委托过认领，认领不到的不写并写清谁持着）、
+> `conjectureledger.py` +2（`updated_by` 每次写都更新）、`schema.py` +2（`Conjecture.updated_by`
+> 与 `LitCandidate` 的三格认领列，都带默认值 ⇒ 老行照读，`SCHEMA_VERSION` 不动））。
+> 十一格现算仍 `changed = []`。函数体量三格现盘复测 75 / 95 / 2 逐格未抬
+> （`vsigns.issue` 与 `doc_tools.build_document` 各压回 200 行线内 —— 新注释写进同一处的
+> docstring，不占函数体）。
 > **2026-11-19 CLOSE1 既有红（test_a2：登记元信息清单手抄一份，K6④ 加两行时没跟上）：**
 > 322 个 `.py` 与 75 个 `>800` 两格不变；**302,900** 行（上一格 302,893；本笔 src 净增 +7：
 > `proofregistry.py` 把 `_rewrite_head` 里那份内联顺序提成 `HEAD_META_ORDER`，并作为

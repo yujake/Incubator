@@ -67,7 +67,7 @@ from . import litavail as LAV
 from . import litread as LR
 from . import schema as S
 from . import textutil as T
-from .store import Store
+from .store import Store, lease_expired, make_lease
 
 __all__ = [
     "CANDIDATE_DECISIONS",
@@ -1111,6 +1111,61 @@ def cleared_of(rows: Sequence[Mapping[str, Any]]) -> bool:
     if not items:
         return False
     return all(str(r.get("cleared_at") or "").strip() for r in items)
+
+
+def claim_delegation(store: Store, request_id: str, *, actor: str,
+                     lease_seconds: int = 900) -> dict:
+    """认领一次委托的待裁行：行上写 `claimed_by` / `lease_until` / `claimed_at`（AL-11）。
+
+    返回 `{request_id, state, holder, lease_until, slots, why}`：
+
+    - `state="mine"`：这一笔真的在行上落了认领（`claimed=True`）；
+    - `state="other"`：另一个实例的租约还没到期 ⇒ 不写一个字节（`claimed=False`）；
+    - `state="mine_again"`：同一个 actor 的租约还在 ⇒ 续写（幂等，不抢别人的）；
+    - `state="unknown"`：本委托一行都没有 / 表读坏了 ⇒ 不认领（判不了 ≠ 可以写）。
+
+    为什么要有这一格（K16 / AL-11 的现场）：改前 `_claim_pending` 只写一条
+    `lit.claim_pending` 事件 —— 两个 A 实例同时进来时，二者都"认领"同一批委托，
+    盘上没有任何互斥。事件是 append-only 的审计面，它答不了"这一批现在归谁"。
+    判据只有这一处；租约语义与 `search_requests` 的领取同一套
+    （`store.make_lease` / `store.lease_expired`），不另造一份。
+    """
+    rid = str(request_id or "").strip()
+    who = str(actor or "").strip()
+    out: dict[str, Any] = {"request_id": rid, "state": "unknown", "holder": "",
+                           "lease_until": "", "slots": [], "claimed": False,
+                           "why": ""}
+    if not rid or not who:
+        out["why"] = "没有委托号或没有写者身份 ⇒ 认领无从谈起（不写）"
+        return out
+    with store.tx("lit_candidates", actor=who, note="a.claim_pending") as tx:
+        rows = [dict(r) for r in tx.rows("lit_candidates")
+                if str(r.get("request_id") or "") == rid
+                and not str(r.get("cleared_at") or "").strip()]
+        out["slots"] = [str(r.get("slot") or "") for r in rows]
+        if not rows:
+            out["why"] = "这一次委托没有待裁行（已判完或已清表）⇒ 没有可认领的东西"
+            return out
+        holders = {str(r.get("claimed_by") or "").strip() for r in rows}
+        live = {str(r.get("lease_until") or "") for r in rows
+                if not lease_expired(r.get("lease_until"))}
+        if live and holders - {"", who}:
+            out.update(state="other", holder="、".join(sorted(holders - {""})),
+                       lease_until=sorted(live)[-1],
+                       why="另一个实例还持着这一次委托（租约未到期）⇒ 不写")
+            return out
+        at = S.now_iso()
+        lease = make_lease(int(lease_seconds))
+        for row in rows:
+            row["claimed_by"] = who
+            row["lease_until"] = lease
+            row["claimed_at"] = at
+            tx.upsert("lit_candidates", row, note="a.claim_pending")
+        out.update(state=("mine_again" if live else "mine"), holder=who,
+                   lease_until=lease, claimed=True)
+        tx.info("lit.claim_pending", request_id=rid, actor=who,
+                slots=out["slots"], lease_until=lease)
+    return out
 
 
 def clear_delegation(store: Store, request_id: str, *, actor: str = "agent-A",
