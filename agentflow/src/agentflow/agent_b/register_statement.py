@@ -8212,6 +8212,13 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 next_step=str(_form_refusal["next_step"]),
                 problems=list(_form_refusal["problems"]),
                 proposition_form=dict(_form_refusal["proposition_form"]))
+        # K17：写库之前登记这一笔收编（回执/落点要回答"这一笔是谁的稿"）。
+        # `target` 在登记支还不存在（新命题号是这一笔的产出），holder 的稿身份仍是
+        # 完整的（路径 + 正文 sha + 族）；命题号由回执里的 `register.stmt_id` 给。
+        _claim_refused = self._ingest_intake_register(
+            out, rel=path, family=family, target="", reading=reading)
+        if _claim_refused:
+            return _claim_refused
         got, origin, kind = self._register_pointer_manuscript(
             path, provenance=provenance, reading=reading,
             nontriviality=nontriviality)
@@ -8756,6 +8763,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         用 `want_no`（在册命题的 canonical 号，apply 线上就是第 1 条路径）—— 这不是
         "猜第几条"，是"这一条命题已有的那条路径"。
         """
+        # K17：写库之前登记这一笔收编（回执/落点要回答"这一笔是谁的稿"）。
+        _claim_refused = self._ingest_intake_register(
+            out, rel=path, family=family, target=target, reading=reading)
+        if _claim_refused:
+            return _claim_refused
         cells = dict(out.get("cells") or {})
         _nt: dict = nontriviality if nontriviality is not None else {}
         _nt.update(self._judge_filing_nontriviality(

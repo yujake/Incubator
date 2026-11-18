@@ -79,11 +79,16 @@ MAX_ID = 10 ** ID_DIGITS - 1
 #: 计数器文件（工作区相对）。
 COUNTERS_REL = "data/counters.json"
 
-#: 稿件占用登记（工作区相对）：`{rel: {owner, role, task_id, at}}`。
+#: 稿件占用登记（工作区相对）：`{键: {owner, role, task_id, at, ...}}`。
 #:
 #: 为什么要它（E，2026-11-15）：真机两个并行的 F（`F#1` / `F#2`）把稿落到同一个
 #: `reports/f-proof-000001.md` 上（一个起草、一个改稿+转送）—— 两个写者共用一个
 #: 文件名。号源只回答"这个号在盘上被占了没有"，回答不了"这一份稿归谁写"。
+#:
+#: 两种键（K17，2026-11-19）：写者登记的键是裸 `rel`；收编登记（B 读一份 F/E 稿、
+#: 把它登成命题）的键是 `intake:<rel>` —— 同一份稿的"谁写"与"谁收编"是两个问题，
+#: 不互相覆盖。两种 holder 都带 `owner` / `instance`，收编那一档另带稿身份
+#: `sha256` / `family` / `target`。
 CLAIMS_REL = "runs/manuscript-claims.json"
 
 #: 同一进程内串行取号（跨进程不在承诺里，见模块 docstring）。
@@ -290,7 +295,9 @@ def _write_claims(root: Any, claims: dict[str, dict[str, Any]]) -> None:
 
 def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
                     task_id: Any = "", instance: Any = "",
-                    identity: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                    identity: Mapping[str, Any] | None = None,
+                    purpose: Any = "", sha256: Any = "", family: Any = "",
+                    target: Any = "", takeover: bool = False) -> dict[str, Any]:
     """落稿前登记/核对"这一份稿归谁写"（E；落稿入口的唯一占用判据）。
 
     `owner` 是写者身份（F 那一侧传 `self.actor`：host 造的是 `agent-F-<实例>`，
@@ -303,13 +310,27 @@ def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
     |---|---|---|
     | `free` | 没人占 / 文件不在盘上，这一笔把它登记给我 | 照常写 |
     | `mine` | 原来就是我（同一写者续写同一份稿） | 照常写 |
-    | `other` | 被另一个写者占着 | 受控拒（不许两个写者共用一个文件名） |
+    | `other` | 被另一个写者占着 | 受控拒（不许两个写者共用一个文件名；`takeover=True` 时见下） |
     | `unknown` | 占用判据没查成（登记读不出/写不进/没有写者身份） | 受控拒（判不了 ≠ 可以写） |
+
+    ## `purpose` / `sha256` / `family` / `target` / `takeover`（K17，2026-11-19）
+
+    收编（B 读一份 F/E 稿、把它登成命题）也要回答"这一笔是谁的稿"，但它与"谁写这份稿"
+    是两件事：F 早已按 `rel` 登记成写者，B 若走同一个键会被自己的写者判成 `other`。
+    所以 `purpose` 给登记键加一段命名空间（`intake:<rel>`），同一份稿的写者登记与收编
+    登记互不覆盖；`sha256` / `family` / `target` 是这一笔收编的稿身份（哪一版、哪一族、
+    落到哪一条命题），原样落在 holder 里 —— 回执凭它回答"这一笔是谁的稿"。
+
+    `takeover=True` 只给收编那一档：同一份稿被另一个实例收编过之后，后来的那一笔
+    仍要能登记（收编是事件，不是永久所有权）—— 覆盖并把 `previous`（上一笔的 holder）
+    带回来；写者登记（`takeover=False`）仍然是"一个名字一个写者"的互斥。
 
     反真空：把本函数打成恒 `{"state": "free"}` ⇒ 同一路径的第二个写者会照写覆盖
     （判据 `test_two_fs_never_share_one_manuscript_path.py` 的 a 条必红）。
     """
     rel_txt = str(rel or "").strip().replace("\\", "/")
+    purpose_txt = str(purpose or "").strip()
+    key = f"{purpose_txt}:{rel_txt}" if purpose_txt and rel_txt else rel_txt
     out: dict[str, Any] = {"checked": True, "state": "free", "rel": rel_txt,
                            "holder": {}, "why": "",
                            "identity": dict(identity or {})}
@@ -355,9 +376,9 @@ def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
                            why=(f"`{CLAIMS_REL}` 读不出来 ⇒ 占用判据没查成"
                                 "（不是「没人占」）"))
                 return out
-            holder = dict(claims.get(rel_txt) or {})
+            holder = dict(claims.get(key) or {})
             held = str(holder.get("owner") or "")
-            if held and held != who:
+            if held and held != who and not takeover:
                 out.update(state="other", holder=holder,
                            why=(f"`{rel_txt}` 已经由 {held} 占着"
                                 f"（task={holder.get('task_id') or '未记'}，"
@@ -371,20 +392,64 @@ def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
                      "instance": str(instance or dict(identity or {}).get("instance") or ""),
                      "attributed": bool(dict(identity or {}).get("attributed", False)),
                      "identity_conflict": str(dict(identity or {}).get("conflict") or ""),
+                     #: 稿身份三格（K17）：这一笔登记的是哪一版 / 哪一族 / 落到哪条命题。
+                     #: 写者登记不传它们（空串），收编那一档由 B 交进来。
+                     "purpose": purpose_txt,
+                     "sha256": str(sha256 or "").strip().lower(),
+                     "family": str(family or "").strip(),
+                     "target": str(target or "").strip(),
+                     #: 这一笔覆盖了谁那一笔（`takeover` 才可能非空）。
+                     "previous": holder if (held and held != who) else {},
                      "at": _now_iso()}
-            claims[rel_txt] = fresh
+            claims[key] = fresh
             try:
                 _write_claims(root, claims)
             except ManuscriptIdError as exc:
                 out.update(checked=False, state="unknown", why=str(exc))
                 return out
-            out.update(state=("mine" if held == who else "free"), holder=fresh, why="")
+            state = "free" if not held else ("replaced" if held != who else "mine")
+            out.update(state=state, holder=fresh, why="")
             return out
         finally:
             try:
                 _gate.release()
             except Exception:  # noqa: BLE001 —— 释放失败不改变本笔已落盘的结论
                 pass
+
+
+#: 收编占用的命名空间（K17：B 读一份 F/E 稿、把它登成命题时登记的那一笔）。
+INTAKE_PURPOSE = "intake"
+
+
+def claim_intake(root: Any, rel: Any, *, owner: Any = "", role: Any = "B",
+                 task_id: Any = "", instance: Any = "",
+                 identity: Mapping[str, Any] | None = None,
+                 sha256: Any = "", family: Any = "", target: Any = "") -> dict[str, Any]:
+    """登记"这一笔收编是我做的"（K17；键 = `intake:<rel>`，不挡写者登记）。
+
+    判据本体只有 :func:`claim_for_write` 一处；本函数只固定收编那一档的三个参数：
+    命名空间、`takeover=True`（收编是事件，后来的那一笔能覆盖并带回 `previous`）、
+    以及稿身份三格。回执凭 holder 里的 `owner` / `instance` / `sha256` / `family`
+    回答"这一笔是谁的稿"。
+
+    反真空：把 `claim_intake` 打桩成返回 `{}` ⇒ 收编回执里没有 `intake_claim`
+    （`tests/test_k17_b_intake_registers_its_occupancy.py` 的 e 条必红）。
+    """
+    return claim_for_write(
+        root, rel, owner=owner, role=role, task_id=task_id, instance=instance,
+        identity=identity, purpose=INTAKE_PURPOSE, sha256=sha256,
+        family=family, target=target, takeover=True)
+
+
+def intake_claim(root: Any, rel: Any) -> dict[str, Any]:
+    """读回"这一份稿最近一笔收编"（没登记过 ⇒ `{}`；读不出来也 `{}` —— 读侧不抛）。"""
+    rel_txt = str(rel or "").strip().replace("\\", "/")
+    if not rel_txt:
+        return {}
+    claims, ok = _read_claims(root)
+    if not ok:
+        return {}
+    return dict(claims.get(f"{INTAKE_PURPOSE}:{rel_txt}") or {})
 
 
 def claim_refusal(claim: Mapping[str, Any], rel: Any, *, path_taken: str,

@@ -237,6 +237,63 @@ class _IngestManuscript:
         return self._finish_filing_nontriviality(
             self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no), _nt)
 
+    def _ingest_intake_register(self, out: dict, *, rel: str, family: str,
+                                target: str, reading: Mapping) -> dict | None:
+        """登记"这一笔收编是我做的"（K17）；判据没查成 ⇒ 受控拒（判不了 ≠ 可以写）。
+
+        两个会写库的出口（`_ingest_register` 与 `_ingest_apply_with_nontriviality`）
+        各自在写之前调一次 —— `ingest_manuscript` 本体已经贴着 200 行的体量线，
+        再塞一段进去会抬 `repo_survey` 的 long_defs 计数（仓库硬门 95 不许抬）。
+        `preview` 零写、不登记；`legacy` 只预览，在调用点之前早退。
+
+        ## 为什么收编也要登记（`MASTER-INVENTORY` K17 / BR-06）
+
+        改前 B 收编一份 F/E 稿时，盘上只多出 `statements` 行里的 `manuscripts`
+        （`{path_group: rel}`）与 `verifications` 行上的路径号 —— 回答不了
+        "这一份稿是谁收的、收的是哪一版"。两个 B 实例各收一份稿时，回执与落点
+        都只剩一个路径字符串。现在每写库一笔就落一条收编占用：键 `intake:<rel>`、
+        holder 带 `owner` / `instance` / `sha256` / `family` / `target`，回执原样带回
+        工具返回（`out["intake_claim"]`）。
+
+        ## 为什么它不挡 F/E 的写者登记
+
+        占用判据只有 `manuscriptids.claim_for_write` 一处，但"谁写这份稿"与"谁收编
+        这份稿"是两个问题、两个命名空间（`purpose`）。F 早就在 `rel` 上登记成写者，
+        B 若用同一个键会被判成 `other`；收编那一档因此走 `claim_intake`
+        （`purpose="intake"` + `takeover=True`：收编是事件，后来的那一笔覆盖并把
+        上一笔的 holder 带回来）。
+
+        身份从 `identity.resolve_identity(self.store, "B", actor=self.actor)` 取 ——
+        与 B 的写稿支（`_register_manuscript`）同一处，不另拼一份。
+        """
+        from .. import identity as _IDENT
+        from .. import manuscriptids as _MID
+
+        actor = str(getattr(self, "actor", "") or "")
+        ident: Mapping = {}
+        try:
+            ident = _IDENT.resolve_identity(self.store, "B", actor=actor)
+        except Exception as exc:  # noqa: BLE001 —— 身份读不成只让 claim 以 actor 顶上
+            ident = {"actor": actor, "attributed": False,
+                     "conflict": f"{type(exc).__name__}: {exc}"}
+        owner = str(ident.get("actor") or actor or "").strip()
+        claim = _MID.claim_intake(
+            getattr(self.store, "root", ""), rel,
+            owner=owner, role="B",
+            task_id=str(ident.get("task_id") or ""),
+            instance=str(ident.get("instance") or ""),
+            identity=ident,
+            sha256=str((reading or {}).get("sha256") or ""),
+            family=str(family or ""), target=str(target or ""))
+        out["intake_claim"] = dict(claim)
+        if not claim.get("checked"):
+            return self._ingest_fail(
+                out, "intake_claim_unchecked",
+                "这一笔的收编占用没登记成（"
+                + str(claim.get("why") or "没有原因")
+                + "）⇒ 这一笔不写库：判不了这一份稿归谁，就不落库")
+        return None
+
     def _ingest_plan(self, row: Mapping | None, got_cells: Mapping, *,
                      conflict: str, family: str, target: str, rel: str,
                      requested: Sequence[str], out: dict, named_path: int,

@@ -2,11 +2,20 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19，BATCH6 K16）：**
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19，BATCH6 K17）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,601 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,185 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,735 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,185 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 BATCH6 K17（B 收编一份稿登记占用：owner/instance + 稿身份）：**
+> 322 个 `.py` 与 75 个 `>800` 两格不变（本笔没有新增模块、也没有文件新过线）；
+> **302,735** 行（上一格 302,601 是 BATCH6 K16 的读数；本笔 src 净增 +134：
+> `manuscriptids.py` +65（`claim_for_write` 的 `purpose` / `sha256` / `family` /
+> `target` / `takeover` 五格 + `claim_intake` / `intake_claim` 两个收编口）、
+> `agent_b/ingest_manuscript.py` +57（`_ingest_intake_register`：占用登记 + 回执
+> `intake_claim`）、`agent_b/register_statement.py` +12（两个会写库的出口各调一次 ——
+> `ingest_manuscript` 本体贴着 200 行线，不能把这段塞进它里面）。
+> 函数体量三格现盘复测 75 / 95 / 2 逐格未抬（新增函数都在 200 行线内）。
 > **2026-11-19 BATCH6 K16（A 的当前委托按实例 / 回读回执落盘带实例 / 报告写者按实例）：**
 > 322 个 `.py` 与 75 个 `>800` 两格不变（本笔没有新增模块、也没有文件新过线）；
 > **302,601** 行（上一格 302,415 是 BATCH6 K14 的读数；本笔 src 净增 +186，全在
