@@ -552,3 +552,38 @@ def duplicate_hits(rows: Iterable[Mapping[str, Any]], *, text: Any) -> dict[str,
     out["hits_total"] = len(out["hits"])
     out["why"] = (f"查过：{len(got)} 行里正文规范化后逐字相同的 {out['hits_total']} 条")
     return out
+
+
+def statement_manuscript_identity(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """这一行 `statements` 的稿身份：`(族, 稿号)`，不是裸号（K6②）。
+
+    返回 `{family, manuscript_id, key, why}`。`family` 优先读行上的
+    `manuscript_family`（2026-11-18 起与 `manuscript_id` 同一笔写）；老行没有这一格
+    ⇒ 从逐路径记录（`manuscripts` 的任一稿路径）现认一次；都认不出 ⇒ 空串（不猜）。
+    `key` 是跨族可比的身份串（`<族>:<稿号>`）；没有稿号 ⇒ 空串。
+
+    为什么单独一格：裸 `manuscript_id` 在两个族里可以同时是 `000000`（盘上实测
+    stmt 000032 的 000000 是 b-proof、stmt 000040 的 000000 是 f-proof）——
+    "同号不同族"必须可区分，"同族同号"仍要幂等。
+    """
+    out: dict[str, Any] = {"family": "", "manuscript_id": "", "key": "", "why": ""}
+    data = dict(row or {}) if isinstance(row, Mapping) else {}
+    mid = str(data.get("manuscript_id") or "").strip()
+    if not mid:
+        out["why"] = "这一行没有 `manuscript_id` ⇒ 没有稿身份可读"
+        return out
+    fam = str(data.get("manuscript_family") or "").strip()
+    if not fam:
+        from . import manuscriptids as _MID
+
+        for rel in (data.get("manuscripts") or {}).values():
+            fam = _MID.family_of_rel(rel)
+            if fam:
+                out["why"] = f"行上没有 `manuscript_family` ⇒ 从逐路径稿 `{rel}` 现认"
+                break
+    if not fam:
+        out["why"] = ("行上没有 `manuscript_family`、逐路径记录也认不出族 ⇒ "
+                      "只有裸号（跨族不可区分，不猜一个族出来）")
+    out.update(family=fam, manuscript_id=mid,
+               key=(f"{fam}:{mid}" if fam else ""))
+    return out

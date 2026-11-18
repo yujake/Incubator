@@ -189,6 +189,7 @@ def record(
     at: str | None = None,
     instance: str = "",
     identity_conflict: str = "",
+    family: str = "",
 ) -> dict:
     """登记一条产物；返回写进去的那条记录。
 
@@ -229,6 +230,9 @@ def record(
         # `identity_conflict` 非空 = 这一笔没归因成功（写的人要在读数里看见它）。
         "instance": str(instance or ""),
         "identity_conflict": str(identity_conflict or ""),
+        #: K6④（2026-11-18）：稿的族（`f-proof` / `b-proof` / `e-proof` / `e-num`）。
+        #: 台账按族筛产物时不必再从路径现拼；非稿产物的这一格是空串。
+        "family": str(family or ""),
     }
     p = ledger_path(root)
     try:

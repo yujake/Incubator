@@ -542,6 +542,13 @@ PENDING_DIR_NAME = "pending"
 #: pending 台账里那一行的编号前缀（`u-NNNNNN`：u = 未登记）。
 PENDING_PREFIX = "u-"
 
+#: K6①（2026-11-18，业主 2026-11-18 裁定）：「判词挂 V 读到的那一版」。
+#:
+#: V 读 v1 →（F 在 V 判完/签发之前改稿）盘上已是 v2 时，签发这一步必须受控拒：
+#: 判词 / V 稿 / 台账行都只挂读到的那一版（`proof_sha256`），不许把 v2 的正文
+#: 按 v1 的判词签出去。改前 lp-ball-8 的现场是「判 c023、记 a1741」。
+PROOF_CHANGED_SINCE_DISPATCH = "proof_changed_since_dispatch"
+
 
 def pending_dir(root: str | Path) -> Path:
     """pending 台账的目录（只算路径，不建目录）。"""
@@ -556,6 +563,33 @@ def pending_ledger_path(root: str | Path, key: str) -> Path:
             "pending 台账的文件名必须是 64 位十六进制的 sha256（按对象内容分文件），"
             f"收到 {key!r}")
     return pending_dir(root) / f"{text}.jsonl"
+
+
+def _next_pending_verification_id(root: str | Path) -> str:
+    """pending 台账的下一号：跨所有文件取 `u-<号>` 的最大值 + 1（K6③）。
+
+    改前每一份台账各发各的（`u-{len(rows)+1}`）⇒ 两份台账的第一行都叫
+    `u-000001`，"哪一签"在跨文件的读数面上撞号（锚点 `台账路径#u-号` 才唯一，
+    单看 `u-号` 不唯一）。现在号源扫 `verifications/pending/*.jsonl` 的全部行取最大
+    +1：新号跨文件唯一；老行原样读（不重编号、不迁移）。读不出来的文件跳过 ——
+    它由调用方在读行时按既有三态报出，不在这里静默把它当成"没有号"。
+    """
+    top = 0
+    base = pending_dir(root)
+    try:
+        files = sorted(base.glob("*.jsonl"))
+    except OSError:
+        return f"{PENDING_PREFIX}{S.format_id(1)}"
+    for file in files:
+        rows, _problems = JF.read_jsonl(file)
+        for row in rows:
+            text = str((row or {}).get("verification_id") or "")
+            if not text.startswith(PENDING_PREFIX):
+                continue
+            rest = text[len(PENDING_PREFIX):]
+            if rest.isdigit():
+                top = max(top, int(rest))
+    return f"{PENDING_PREFIX}{S.format_id(top + 1)}"
 
 
 def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[str, Any],
@@ -626,7 +660,8 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     if problems:
         raise VerificationError(f"pending 台账有读不出来的行：{problems[:3]}")
     row = {
-        "verification_id": f"{PENDING_PREFIX}{S.format_id(len(rows) + 1)}",
+        # 跨文件唯一（K6③）：`u-<号>` 不再按"这一份台账第几行"发，而是全目录取最大 +1。
+        "verification_id": _next_pending_verification_id(root),
         # 没有命题号是这一档的定义（命题还没在册）：两个键都留空串而不是缺键 ——
         # 读的人要能分辨"这一行不属于任何命题"与"这一行是旧格式、没有这个键"。
         "statement_id": "", "stmt_id": "",
@@ -4004,6 +4039,25 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
     root = getattr(store, "root", "")
     if isinstance(store, (str, Path)):
         root = str(store)
+    # ---- K6①：签发之前核「我读到的还是不是盘上那一版」 ---------------------------
+    #
+    # `sha` 是这一签的判词挂的那一版（台账行 / V 稿的 `proof_sha256`）。若盘上那份
+    # 稿在 V 读完之后被改过，签 v2 就等于把 v1 的判词盖到 v2 上（lp-ball-8 的
+    # 「判 c023、记 a1741」）。受控拒，一个字节都不签。
+    _mc = str(manuscript or "").strip().replace("\\", "/")
+    if _mc and str(sha or "").strip():
+        try:
+            _raw_now = (Path(root) / _mc).read_text(encoding="utf-8")
+            _cur_sha = _sign_sha(str(_DS.proof_body(_raw_now)).strip("\n"))
+        except (OSError, UnicodeDecodeError):
+            _cur_sha = ""
+        if _cur_sha and _cur_sha != str(sha or "").strip().lower():
+            out.update(checked=True, code=PROOF_CHANGED_SINCE_DISPATCH,
+                       reason=(f"`{_mc}` 在 V 读到的那一版之后又改过"
+                               f"（读到 {str(sha)[:12]}…，盘上 {_cur_sha[:12]}…）⇒ "
+                               "不签发：判词 / V 稿 / 台账行只挂读到的那一版；"
+                               "请把这一份重新送审"))
+            return out
     need = int(holds.get("need") or SIGN_STREAK_NEED)
     # ---- 收方秘书是谁：调用方给了就用；没给就按这一趟的父角色现读（权威来源）----
     #
@@ -5212,15 +5266,34 @@ def _pending_claim_streak(passes: Sequence[Mapping[str, Any]],
     坏行在读 `pending` 台账时已经由调用方抛成"没查成"。
     """
     rows = [dict(r) for r in (passes or ()) if isinstance(r, Mapping)]
-    runs = _hold_run_lengths(rows)
-    votes = int(runs[-1]) if runs else 0
-    tail_sha = str(rows[-1].get("proof_sha256") or "").strip().lower() if rows else ""
     want_sha = str(proof_sha256 or "").strip().lower()
+    tail_sha = str(rows[-1].get("proof_sha256") or "").strip().lower() if rows else ""
     same_sha = bool(tail_sha) and bool(want_sha) and tail_sha == want_sha
     need = int(SIGN_STREAK_NEED)
+    # ---- K7（2026-11-18）：与服务端签发同一把尺 ---------------------------------
+    #
+    # 改前这里 `_hold_run_lengths(rows)` 数的是"同一份正文的全部历史行"—— 跨多少趟
+    # 送审都攒在一起。而签发那条路（`vsigns.issue` → `sign_counting.count_ledger_file`）
+    # 只认同一个 `review_call` 内 `review_pass=1..need` 的那几行（老行才退回
+    # `legacy_tail`）。两把尺的后果很具体：lp-ball-8 的 pending 台账里 a1741 那份
+    # 正文有 7 行 clean，分别来自 7 趟送审、每趟 `review_pass=1` —— 旧尺数成 7/3、
+    # 直接抬档，签发那一路数成 1/3、根本不发。现在这里也委托同一份实现：
+    # 有 `review_call` ⇒ `sign_counting.count_rows`；没有 ⇒ `legacy_tail`（历史形态，
+    # 与签发那条路的兼容门逐字同义）。
+    from . import sign_counting as _SC
+
+    tail_call = str(rows[-1].get("review_call") or "").strip() if rows else ""
+    if tail_call:
+        counted = _SC.count_rows(rows, review_call=tail_call,
+                                 proof_sha256=want_sha, need=need)
+    else:
+        counted = _SC.legacy_tail(rows, proof_sha256=want_sha, need=need)
+    votes = int(counted.get("count") or 0)
     return {
         "checked": True, "votes": votes, "need": need, "tail_sha": tail_sha,
-        "same_sha": bool(same_sha), "ok": bool(same_sha and votes >= need),
+        "same_sha": bool(same_sha), "ok": bool(same_sha and counted.get("ok")),
+        "review_call": tail_call, "counted_by": str(counted.get("counted_by") or ""),
+        "terminated": str(counted.get("terminated") or ""),
     }
 
 

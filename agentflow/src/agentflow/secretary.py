@@ -2132,6 +2132,10 @@ STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
         "proof_no",             # 收录回执（这一行现在是第几份证明）
         "proof_sha256",         # 收录回执（这一份正文的指纹）
         "manuscript_id",        # 收录回执（这份稿的 F 稿号；稿名不再与命题号绑定）
+        #: K6②（2026-11-18）：稿身份 = `(族, 稿号)`。`manuscript_id` 是裸号，跨族会撞
+        #: （盘上实测 stmt 000032 的 000000 是 b-proof、stmt 000040 的 000000 是
+        #: f-proof）；`manuscript_family` 与它同一笔写，读侧合成 `(族, 稿号)`。
+        "manuscript_family",
         # 逐路径的稿（2026-11-13，V1-A）：`{路径号: 稿路径}`。收录回执写 `manuscript_id`
         # 时同一笔写这一格 —— 它是"这一条命题的每条路径各是哪份稿"的落点，`manuscript_id`
         # 只有一格、会被第 2 条路径覆写。只由 `agent_b/proof_receipt.write_proof_receipt`
@@ -8816,6 +8820,12 @@ class Secretary:
             mid = str(_VS.manuscript_id_of(rel) or "")
             if mid:
                 new_row["manuscript_id"] = mid
+                #: K6②：身份是 `(族, 稿号)`；裸号跨族会撞。
+                from . import manuscriptids as _MID_FAM
+
+                _fam_now = _MID_FAM.family_of_rel(rel)
+                if _fam_now:
+                    new_row["manuscript_family"] = _fam_now
         # ---- ⑥ 依赖面：这一条路径的旧行整批换掉（同一把锁里）--------------------
         dropped = 0
         for dep in list(tx.rows("dependencies")):

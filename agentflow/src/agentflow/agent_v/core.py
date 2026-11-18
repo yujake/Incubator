@@ -4052,6 +4052,27 @@ class AgentV:
         """
         from .. import vsigns as _VS
 
+        # ---- K6①：签发之前核版本（业主 2026-11-18：判词挂「V 读到的那一版」）----
+        #
+        # `sha` 是这一趟读到的正文 sha（台账行 / V 稿用的同一格）。V 读 v1 之后、
+        # 签发之前盘上被改成 v2 ⇒ 不许把 v1 的判词签成 v2 的签；受控拒
+        # `proof_changed_since_dispatch`，台帐行 / V 稿仍只挂 v1。
+        try:
+            from .. import depsection as _DS_VER
+
+            _raw_now = (Path(str(self.workspace_root)) / str(rel)).read_text(
+                encoding="utf-8")
+            _cur_sha = VR.text_sha(str(_DS_VER.proof_body(_raw_now)).strip("\n"))
+        except (OSError, UnicodeDecodeError):
+            _cur_sha = ""
+        if _cur_sha and str(sha or "").strip() and _cur_sha != str(sha).strip().lower():
+            block_write.update(
+                written=False, idempotent=False, missing=False, state="refused",
+                path=str(rel), code=VR.PROOF_CHANGED_SINCE_DISPATCH,
+                why=(f"`{rel}` 在 V 读到的那一版之后又改过"
+                     f"（读到 {str(sha)[:12]}…，盘上 {_cur_sha[:12]}…）⇒ 不签发："
+                     "判词 / V 稿 / 台账行只挂读到的那一版；请把这一份重新送审"))
+            return block_write, {}, {}
         sec = self._secretary()
         who = ""
         if sec is not None:
