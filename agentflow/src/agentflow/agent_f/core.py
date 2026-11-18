@@ -358,6 +358,16 @@ def parse_handed_product(product: Any) -> dict[str, Any]:
             "`manuscript_id` 必须是六位稿号（`manuscriptids` 发的那一个号），"
             f"收到 {mid!r}")
 
+    # ---- INV7：F 自己的留痕（三条自判 + next_move / why）也走这个入口 ----------
+    # 真机 step 5 的现场：F 想写「下一轮派 V 审 reports/f-proof-000000.md」，被封闭
+    # 参数表拒掉 ⇒ 送审计划没有落进任何台账。这一格不再吞掉；形状由
+    # `delivery.normalize_self_assessment` 读（写坏了如实标 `unreadable`，不猜）。
+    raw_assessment = product.get("self_assessment")
+    if raw_assessment is not None and not isinstance(raw_assessment, Mapping):
+        problems.append(
+            "`self_assessment` 必须是对象（三条自判各一档 + next_move / why），"
+            f"收到 {type(raw_assessment).__name__}")
+
     clean: dict[str, Any] = {"product": kind, "label": label}
     if strategy:
         clean["strategy"] = strategy
@@ -365,6 +375,8 @@ def parse_handed_product(product: Any) -> dict[str, Any]:
         clean["why_strategy"] = why_strategy
     if mid:
         clean["manuscript_id"] = mid
+    if isinstance(raw_assessment, Mapping):
+        clean["self_assessment"] = dict(raw_assessment)
     if kind == "proof":
         # 2026-11-13（B）：`## 命题` 只从这一格渲染（`proposition_text`）。
         clean["proposition"] = proposition
@@ -3186,6 +3198,96 @@ class _Core:
                 "statement": row,
                 "why": str(got.get("why") or "")}
 
+    def _manuscript_outputs(self, plan: Mapping[str, Any], *,
+                            current: Mapping[str, Any] | None = None) -> list[dict]:
+        """计划里「已登记、还没有 statements 行」的 F 稿 ⇒ 一份份成果（INV7）。
+
+        ## 为什么必须在这里补这一刀
+
+        `delivery.outputs_of` 只认 history 行的 `statement_id`；而 B 的收录在 V 签
+        之后（真机 10:02:18 的稿到 10:13 仍没有 statements 行）⇒ 一份「已登记、
+        等签」的稿在交差读数里根本不存在，于是 `total=0` / `still_unsubmitted=[]`
+        / `state=researched_no_output`，挂机判据读到"无事可做"。
+
+        口径：「已登记稿本身就是一份成果」（它是稿号 + 正文 sha 的落点，不是
+        没做成的草稿）。它有没有签只决定 `claim`（`proof` / `proof_unsigned` /
+        `draft`），不决定"有没有产出"。
+
+        ## 只认计划自己的稿
+
+        来源是本计划 history 里那些「没有 statement_id」、但带 `manuscript_path` /
+        `manuscript_id` 的行，外加这一轮 `current` 里刚登记的那一份。盘上别处的稿
+        不混进这个计划的读数；扫盘那一步（`pending.scan_registered`）只用来确认
+        "这一份是登记条目"（草稿没有登记元信息 ⇒ 不在这里冒充成果），不是拿它去
+        发现新稿。
+        """
+        from . import delivery as _DL
+        from . import pending as _FP
+
+        row = dict(plan or {})
+        history = [dict(h) for h in (row.get("history") or ())
+                   if isinstance(h, Mapping)]
+        wanted: list[dict[str, Any]] = []
+        for h in history:
+            if str(h.get("statement_id") or "").strip():
+                continue          # 有命题号 ⇒ 已经由 `outputs_of` 那一支读
+            rel = str(h.get("manuscript_path") or "").strip()
+            mid = str(h.get("manuscript_id") or "").strip()
+            if not rel and not mid:
+                continue
+            wanted.append({"manuscript_path": rel, "manuscript_id": mid,
+                           "round": h.get("round"), "subgoal": h.get("sid")})
+        cur = dict(current or {})
+        cur_rel = str(cur.get("manuscript") or "").strip()
+        cur_mid = str(cur.get("manuscript_id") or "").strip()
+        if (cur_rel or cur_mid) and not str(cur.get("statement_id") or "").strip():
+            wanted.append({"manuscript_path": cur_rel, "manuscript_id": cur_mid,
+                           "round": cur.get("round"), "subgoal": cur.get("subgoal"),
+                           "reading": cur.get("reading")})
+        if not wanted:
+            return []
+        root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        try:
+            scan = dict(_FP.scan_registered(root))
+        except Exception:  # noqa: BLE001 —— 扫不成 ⇒ 这一支没有读数（below 仍按旧口径跑）
+            return []
+        by_path = {str(r.get("manuscript") or ""): r for r in (scan.get("rows") or [])}
+        by_mid = {str(r.get("manuscript_id") or ""): r for r in (scan.get("rows") or [])}
+        out: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for item in wanted:
+            rel = str(item.get("manuscript_path") or "")
+            mid = str(item.get("manuscript_id") or "")
+            hit = by_path.get(rel) or by_mid.get(mid)
+            if hit is None:
+                continue          # 盘上不是登记条目（草稿）⇒ 不算「等签的成果」
+            key = str(hit.get("manuscript") or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            got = _FP.manuscript_reading(root, hit, reading=item.get("reading"))
+            abandoned = _DL.abandoned_of({})
+            out.append({
+                "statement_id": "", "manuscript_id": str(got.get("manuscript_id") or ""),
+                "output_id": (f"mss:{got.get('manuscript_id')!s}"
+                              if got.get("manuscript_id")
+                              else str(got.get("manuscript") or "")),
+                "manuscript": str(got.get("manuscript") or ""),
+                "manuscript_id_source": "history",
+                "round": item.get("round"), "subgoal": str(item.get("subgoal") or ""),
+                "action": "proof", "submissions": 1,
+                "statement": {}, "abandoned": abandoned,
+                "abandoned_at": "", "abandoned_why": "",
+                "abandoned_problems": [],
+                "state": str(got.get("state") or ""),
+                "label": str(got.get("state_label") or got.get("label") or ""),
+                "signed": bool(got.get("signed")),
+                "channel": "", "sha": str(got.get("sha") or ""),
+                "why": str(got.get("why") or ""),
+                "next_action": dict(got.get("next_action") or {}),
+            })
+        return out
+
     def _delivery_reading(self, plan: Mapping[str, Any], *, current: Mapping[str, Any] | None = None,
                           assessment: Any = None) -> dict:
         """逐条交差读数（读盘：每一条成果各自读一次签，再交给 `delivery.delivery_summary` 汇总）。
@@ -3193,6 +3295,9 @@ class _Core:
         `current` 是"这一轮刚产出的那一条"（`_apply_round` 在 `step` 把它追加进 history
         之前就要读数）：`{statement_id, reading, proof_text, manuscript, round, subgoal}`。
         同一号在 history 里已有旧读数时，以 `current` 这一份为准（它是最新的签）。
+
+        「成果」不只认 `statement_id`：history 里没有命题号、但稿已登记的那一份由
+        :meth:`_manuscript_outputs` 补进来（INV7：B 的收录在 V 签之后）。
         """
         from . import delivery as _DL
 
@@ -3208,6 +3313,7 @@ class _Core:
                           "subgoal": str(cur.get("subgoal") or ""),
                           "action": str(cur.get("action") or ""), "submissions": 1})
         outputs: list[dict[str, Any]] = []
+        represented: set[str] = set()
         for out in found:
             sid = str(out.get("statement_id") or "")
             if cur_sid and sid == cur_sid and cur.get("reading") is not None:
@@ -3235,6 +3341,13 @@ class _Core:
                             "channel": str(reading.get("channel") or ""),
                             "sha": str(reading.get("sha") or ""),
                             "why": str(reading.get("why") or "")})
+            if manuscript:
+                represented.add(str(manuscript))
+        # ---- INV7：已登记、还没有命题号的稿也是一份成果（同一份稿不许数两遍）。
+        for one in self._manuscript_outputs(plan, current=cur):
+            if str(one.get("manuscript") or "") in represented:
+                continue
+            outputs.append(one)
         if assessment is None:
             # 没有新的一轮时（`F.status` / 收工门读它）：取最近一轮 F 自己写的自评。
             for h in reversed(history):
@@ -3865,6 +3978,19 @@ class _Core:
                         "reading": dict(v_sign.get("reading") or {}),
                         "proof_text": str(outlet.get("proof_text") or ""),
                         "manuscript": str(manuscript.get("path") or ""),
+                        "manuscript_id": str(manuscript.get("manuscript_id")
+                                             or manuscript_id),
+                        "round": round_no, "subgoal": sid}
+        elif (_landed and str(manuscript.get("path") or "").strip()):
+            # ---- INV7：这一轮登记了稿、但还没有命题号（B 的收录在 V 签之后）------
+            # 把它作为 `current` 递给交差读数：否则「刚写出的那一份」要等下一拍
+            # 从 history 里读，而`_apply_round` 的这一次返回就是 F 当下看到的读数。
+            _current = {"statement_id": "",
+                        "reading": dict(v_sign.get("reading") or {}),
+                        "proof_text": str(outlet.get("proof_text") or ""),
+                        "manuscript": str(manuscript.get("path") or ""),
+                        "manuscript_id": str(manuscript.get("manuscript_id")
+                                             or manuscript_id),
                         "round": round_no, "subgoal": sid}
         delivery = self._delivery_reading(
             plan, current=_current,
@@ -3881,7 +4007,7 @@ class _Core:
         if _open:
             detail += ("；还没签的成果（逐条）："
                        + "、".join(
-                           f"stmt:{o.get('statement_id')}"
+                           str(o.get("output_id") or f"stmt:{o.get('statement_id')}")
                            + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
                            + f"[{o.get('claim_label')}]" for o in _open[:8])
                        + f" 共 {len(_open)} 条；怎么办由你定（举例："

@@ -6,8 +6,8 @@ from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, TERMINAL
 #: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
 #:
 #: 最后三格是 2026-11-11（业主裁定 ①「F侧报告收工时自动提交其名下未提交的V签稿」）：
-#: 它们只在收工那一趟有读数（`_close_reading` 现读写进 `tasks.artifacts`），推进轮次
-#: 里 `None` / `[]` —— 那一趟不读这一格，不许读成「没有可提交的」。
+#: 收工那一趟由 `_close_reading` 现读写进 `tasks.artifacts`；推进轮次里它们读的是
+#: 「有稿、签还没到」的逐条（INV7：等签的稿不许被读成「没有可提交的」）。
 _CLOSE_KEYS: tuple[str, ...] = (
     "total", "signed_count", "pending_count", "unsigned_count",
     "proof_count", "proof_statements", "draft_count",
@@ -87,7 +87,7 @@ class _Step:
             out["reason"] = (str(out.get("reason") or "").rstrip()
                              + "；未签成果（逐条）："
                              + "、".join(
-                                 f"stmt:{o.get('statement_id')}"
+                                 str(o.get("output_id") or f"stmt:{o.get('statement_id')}")
                                  + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
                                  + f"[{o.get('claim_label')}]" for o in open_rows[:8])
                              + f" 共 {len(open_rows)} 条")

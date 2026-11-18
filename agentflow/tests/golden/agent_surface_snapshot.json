@@ -2030,6 +2030,10 @@
           "description": "`kind=reduction` 时：为什么这样归约（可选，但强烈建议写）",
           "type": "string"
          },
+         "self_assessment": {
+          "description": "这一轮的留痕（不是收工开关）：三条自判 `comprehensive` / `enough_output` / `partial_output` 各一档，外加 `next_move`（还没签的那些你打算怎么办）与 `why`（为什么这么选）。不写 ⇒ 交差读数按盘上证据推，并标明「不是自评」。",
+          "type": "object"
+         },
          "steps": {
           "description": "`kind=proof` 的逐步论证（非空）。每一步要么引到本轮可引的在册 id（`cites`），要么显式声明成前提（`assumption: true`）；「易证 / 显然 / trivial」那类缝会被打回。",
           "items": {

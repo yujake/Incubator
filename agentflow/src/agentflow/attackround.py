@@ -123,7 +123,6 @@ PRODUCT_MENU: str = " / ".join(f"`{name}`" for name in PRODUCT_SPECS)
 HANDED_PRODUCT_KINDS: tuple[str, ...] = ("proof", "reduction")
 
 
-
 #: `attack.step(product=…)` 的参数面（工具层与 `specs/f.py` 的动作表共用这一处）。
 #:
 #: 为什么这里必须是模块级字面量而不是函数：两层参数对账
@@ -217,6 +216,7 @@ HANDED_PRODUCT_SCHEMA: dict[str, Any] = {
                     "改同一份稿时给回上一轮的稿号（六位）；不给 ⇒ 沿用这个子目标已有的"
                     "稿号，没有就向 F 自己的号源新取一个。"),
             },
+            "self_assessment": {"type": "object", "description": "这一轮的留痕（不是收工开关）：三条自判 `comprehensive` / `enough_output` / `partial_output` 各一档，外加 `next_move`（还没签的那些你打算怎么办）与 `why`（为什么这么选）。不写 ⇒ 交差读数按盘上证据推，并标明「不是自评」。"},
         },
         "required": ["kind"],
         "additionalProperties": False,

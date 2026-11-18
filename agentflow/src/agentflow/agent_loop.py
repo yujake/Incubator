@@ -7224,6 +7224,47 @@ class AgentLoop:
                                or "先查 `conductor.state` 的 research 读数"))
         return "\n".join(lines) + "\n"
 
+    def _manuscript_pending(self) -> dict[str, Any]:
+        """F 名下「已登记、V 签还没到」的稿（本拍有没有待办的第 4 条）。
+
+        ## 为什么只在 F 身上读
+
+        `reports/f-proof-<稿号>.md` 是 F 的稿族（B 的 `b-proof-*` 走它自己的收录
+        路径）；挂机判据的前三条（新投递 / 未消项 / 待消费子产出）都只问"有没有人
+        找我"，不问"我手上那一份稿送审了没有"。真机 `projects/lp-ball-7` 的两拍
+        `agent_park`（`pending_work=false`）就是这一条缺失：稿在盘上、`v_sign` 说
+        `unsigned`，而挂机判据认为没有活，于是 F 永远拿不到「派 V」的那一拍。
+
+        非 F 返回"查过了、没有这一条"（`checked=True, count=0`）：这一档不改变
+        其它角色的挂机语义。
+
+        ## 三态
+
+        没有工作区根 / 扫描读不成 ⇒ `checked=False`：调用方按 fail-closed 挡挂机
+        （"不知道有没有等签的稿"不许折成"没有"）。
+        """
+        empty: dict[str, Any] = {"checked": True, "count": 0, "items": [],
+                                 "why": "", "problems": []}
+        if str(self.role) != "F":
+            return {**empty, "why": "非 F：这一档不读"}
+        root = str(self.workspace_root
+                   or getattr(self.store, "root", "") or "")
+        if not root:
+            return {**empty, "checked": False,
+                    "why": "没有工作区根 ⇒ 已登记稿这一格没查成（不是「没有稿」）"}
+        try:
+            from .agent_f import pending as _FP
+
+            got = dict(_FP.unsubmitted_reading(root))
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
+            return {**empty, "checked": False,
+                    "why": (f"已登记稿读数没查成（{type(exc).__name__}: {exc}）"
+                            " ⇒ 这一拍不按「无事可做」处置")}
+        return {"checked": bool(got.get("checked")), "count": int(got.get("count") or 0),
+                "items": [dict(x) for x in (got.get("items") or [])],
+                "why": str(got.get("why") or ""),
+                "problems": [str(x) for x in (got.get("problems") or [])]}
+
     def _pending_work(self, mailbox: Mapping[str, Any]) -> dict[str, Any]:
         """本趟"手上有活吗"的读数（`_park_gate` 第三个判据的输入）。
 
@@ -7233,14 +7274,18 @@ class AgentLoop:
         1. 这一拍有新投递（板项 / 留言 / 唤醒被消费 / 「最近被撤销的项」）：那几段话
            就在这一步的上下文里，模型得读它；
         2. 我名下有未消的板项（`conductor.open_items_of`）：那是等着我处置的事；
-        3. 有子代理刚刚落定、它的产出一句都没被消费（`mailbox["children"]["settled"]`）。
+        3. 有子代理刚刚落定、它的产出一句都没被消费（`mailbox["children"]["settled"]`）；
+        4. （只对 F）名下有「已登记、V 签还没到」的稿（`_manuscript_pending`）：
+           那是等着 F 自己派 V 的活 —— 真机 INV7 的两次 park 正是漏了这一条。
 
         三条都不成立才叫"本趟确实无事可做"。刻意不把"有计时器"算成"有活"
         （那正是改前的错），也不把"名下有在飞的子代理"算成"有活"（子代理都在等 ⇒
         无事可做，见 ③ 的第二条）。
         """
         out: dict[str, Any] = {"checked": True, "busy": False, "why": [],
-                               "items": [], "delivered": 0}
+                               "items": [], "delivered": 0,
+                               "manuscripts": {"checked": True, "count": 0, "items": [],
+                                               "why": "", "problems": []}}
         delivered = len(mailbox.get("item_ids") or ()) + len(mailbox.get("msg_ids") or ())
         delivered += len(mailbox.get("wake_ids") or ())
         # 「最近被撤销」也是这一拍的新投递：那一段话已经在上下文里，模型得读它。
@@ -7269,6 +7314,22 @@ class AgentLoop:
         if settled:
             out["busy"] = True
             out["why"].append(f"有 {len(settled)} 条子产出刚落定、还没被用")
+        # ---- 第 4 条（INV7）：已登记、还没送 V 的稿 ----------------------------
+        manuscripts = self._manuscript_pending()
+        out["manuscripts"] = dict(manuscripts)
+        if not manuscripts.get("checked", True):
+            out["checked"] = False
+            out["busy"] = True
+            out["why"].append("已登记稿读数没查成（"
+                              + str(manuscripts.get("why") or "没查成")
+                              + "）⇒ 这一拍不按「无事可做」处置")
+        elif int(manuscripts.get("count") or 0) > 0:
+            named = "、".join(str(x.get("manuscript") or "") for x in
+                              (manuscripts.get("items") or [])[:6])
+            out["busy"] = True
+            out["why"].append(
+                f"名下还有 {int(manuscripts.get('count') or 0)} 份已登记、还没送 V 的稿："
+                f"{named}（派 V 才算交差；这一拍不许挂机）")
         out["why_text"] = "；".join(out["why"]) or "这一拍没有新投递、没有未消项、没有待消费的子产出"
         return out
 
@@ -7493,6 +7554,7 @@ class AgentLoop:
                                "timers": pending_timers,
                                "pending_work": bool(work.get("busy")),
                                "work_reason": str(work.get("why_text") or ""),
+                               "manuscripts": dict(work.get("manuscripts") or {}),
                                "research": {"checked": bool(research.get("checked")),
                                             "pending": bool(research.get("pending")),
                                             "fingerprint": str(research.get("fingerprint") or ""),
@@ -7711,6 +7773,7 @@ class AgentLoop:
             for w in parked["waiters"]]
         run.park["checked"] = bool(out["checked"])
         run.park["timers"] = pending_timers
+        run.park["manuscripts"] = dict(out.get("manuscripts") or {})
         if out["skip_model"]:
             SS.append(self.session_root, {
                 "kind": PARK_EVENT, "role": self.role,
@@ -7720,6 +7783,7 @@ class AgentLoop:
                 "parked": int(out["parked"]), "waiters": list(out["waiters"]),
                 "wait_any": bool(out["wait_any"]), "timers": list(pending_timers),
                 "pending_work": bool(out["pending_work"]),
+                "manuscripts": dict(out.get("manuscripts") or {}),
                 "research": dict(out["research"]),
                 "tree": dict(out["tree"]),
                 "tree_busy": bool(out["tree_busy"]),

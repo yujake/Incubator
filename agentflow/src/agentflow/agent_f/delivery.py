@@ -20,7 +20,9 @@
 | `state` | `signed_all` / `outputs_settled` / `outputs_unsigned` / `researched_no_output` / `not_started` |
 | `delivered` | 「有成果、且每一条成果都已签」（不是「有一条签了」；0 条不算交差完成） |
 | `proof_count` | 能叫「证明」的条数（`claim=proof`，只有已签的算） |
-| `unfinished` | 还没签、也没被明确放弃的成果（逐条：命题号 + 手稿 + 签的档位） |
+| `proof_output_count` | 证明稿份数（`claim=proof` 或 `proof_unsigned`）—— 「有稿、还没签」也是成果；它与 `proof_count` 是两个问题（INV7） |
+| `still_unsubmitted` | 有稿、这一趟还没提交的逐条（`state=unsigned` / `rejected` / `unknown`），每行带 `next_action`（summon 形状：`role="V"`） |
+| `unfinished` | 还没签、也没被明确放弃的成果（逐条：命题号 / 稿号 + 手稿 + 签的档位） |
 | `legal_stop` | 现在收工合不合口径（未签成果没处置 ⇒ 假；「研究过、没成果」⇒ 真） |
 | `self_assessment` | 三条自评判据各一档（见下），外加 F 自己写的 `next_move` / `why` 留痕 |
 
@@ -229,6 +231,7 @@ def empty_reading(why: str, *, state: str = "") -> dict[str, Any]:
         "checked": False, "outputs": [],
         "total": None, "signed_count": None, "pending_count": None,
         "unsigned_count": None, "proof_count": None, "proof_statements": [],
+        "proof_output_count": None,
         "draft_count": None, "abandoned_count": None, "abandoned_statements": [],
         "unfinished": [], "unfinished_count": None,
         "trail": {"checked": False, "choice": "", "why": "", "problems": []},
@@ -511,13 +514,22 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
     signed = pending = unsigned = 0
     abandoned_count = 0
     proof_statements: list[str] = []
+    proof_output_ids: list[str] = []
     abandoned_statements: list[str] = []
     unfinished: list[dict[str, Any]] = []
+    still_unsubmitted: list[dict[str, Any]] = []
     for one in outputs or ():
         got = dict(one or {})
         state = str(got.get("state") or "")
         # 这一项的命题号只取一次：下面"叫不叫证明"那一格与"放弃/未签"那一支读的是同一个。
         sid = str(got.get("statement_id") or "")
+        mid = str(got.get("manuscript_id") or "")
+        manuscript = str(got.get("manuscript") or "")
+        #: 这一条成果的身份：在册命题是 `stmt:<号>`；已登记稿是 `mss:<稿号>`
+        #: （INV7：B 的收录在 V 签之后，所以「等签的稿」在 statements 里还没有号）。
+        output_id = (f"stmt:{sid}" if sid else
+                     (f"mss:{mid}" if mid else manuscript))
+        got["output_id"] = output_id
         if state == "signed" or got.get("signed") is True:
             kind, signed = "signed", signed + 1
         elif state == "waiting":
@@ -530,7 +542,9 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
         got["claim"] = claim
         got["claim_label"] = CLAIM_LABELS.get(claim, "")
         if claim == CLAIM_PROOF:
-            proof_statements.append(sid)
+            if sid:
+                proof_statements.append(sid)
+            proof_output_ids.append(output_id)
         # ---- 明确放弃的成果：不再算「未签」（也不再计入证明数）。
         aband = dict(got.get("abandoned") or {}) if isinstance(got.get("abandoned"), Mapping) else {}
         if bool(aband.get("abandoned")):
@@ -542,13 +556,34 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
             if got["unfinished"]:
                 unfinished.append({
                     "statement_id": sid,
-                    "manuscript": str(got.get("manuscript") or ""),
+                    "manuscript_id": mid,
+                    "output_id": output_id,
+                    "manuscript": manuscript,
                     "state": state,
                     "label": str(got.get("label") or ""),
                     "claim": claim,
                     "claim_label": got["claim_label"],
                     "abandoned_problems": list(aband.get("problems") or []),
                     "why": str(got.get("why") or ""),
+                })
+            # ---- 「有稿、还没提交」的逐条（INV7）：签还没到的那一份稿也是待办。
+            # 这一格与收工自动提交的 `still_unsubmitted` 同名同义（那边是「已拿签、还没
+            # 写进 tasks.artifacts」；这边是「连签都还没到」）—— 两处都点同一个稿号。
+            if (mid or manuscript) and not bool(aband.get("abandoned")):
+                still_state = "unsigned" if state in ("waiting", "") else state
+                still_unsubmitted.append({
+                    "manuscript_id": mid,
+                    "manuscript": manuscript,
+                    "signed": False,
+                    "signed_sha": str(got.get("signed_sha") or ""),
+                    "current_sha": str(got.get("sha") or got.get("current_sha") or ""),
+                    "sha_matches": bool(got.get("signed_sha")
+                                        and str(got.get("signed_sha"))
+                                        == str(got.get("sha") or "")),
+                    "state": still_state,
+                    "why": str(got.get("why") or "") or "未签 ⇒ 不入提交单",
+                    "output_id": output_id,
+                    "next_action": dict(got.get("next_action") or {}),
                 })
         items.append(got)
     total = len(items)
@@ -579,13 +614,13 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
     elif total > 0:
         state = STATE_OUTPUTS_UNSIGNED
         named = "、".join(
-            f"stmt:{o.get('statement_id')}"
+            str(o.get("output_id") or f"stmt:{o.get('statement_id')}")
             + (f"（手稿 {o.get('manuscript')}）" if o.get("manuscript") else "")
             + f"[{o.get('claim_label')}]" for o in unfinished[:8])
         why = (f"有 {total} 条成果、其中 {signed} 条已签：待签 {pending} 条、未签 "
                f"{unsigned} 条 ⇒ 还没到收工的时候；"
                f"能叫「证明」的只有已签的那 {signed} 条（未签的不计入产出的证明数）；"
-               f"还没签的 {unfinished_count} 条：" + (named or "（读不到命题号）"))
+               f"还没签的 {unfinished_count} 条：" + (named or "（读不到命题号 / 稿号）"))
         close_problems.append(
             f"还有 {unfinished_count} 条成果没签、也没被明确放弃 ⇒ 不许静默收工")
     elif researched.get("researched"):
@@ -613,18 +648,24 @@ def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
         "checked": True,
         "outputs": items,
         "total": total,
-        # ---- 收工自动提交（业主 2026-11-11 裁定 ①）：只在收工那一趟由
-        # `agent_f.step._close_reading` 填；推进轮次里这三格没有读数（None/[]），
-        # 不许被读成「没有可提交的」—— 那一趟根本不读这一格。
+        # ---- 收工自动提交（业主 2026-11-11 裁定 ①）：收工那一趟由
+        # `agent_f.step._close_reading` 用「已拿签、还没写进 artifacts」的那一版覆盖；
+        # 推进轮次里这一格是「有稿、签还没到」的逐条（INV7：不许把等签的稿读成
+        # 没有可提交的）。两处同名同义：都点稿号 + 逐条 `state` / `why`。
         "auto_submitted": [], "auto_submitted_count": None,
-        "still_unsubmitted": [],
+        "still_unsubmitted": still_unsubmitted,
         "signed_count": signed,
         "pending_count": pending,
         "unsigned_count": unsigned,
-        # ---- 产出统计：`proof_count` 只数 claim=="proof" 的那些（业主：无 V 签不许叫证明）
-        "proof_count": len(proof_statements),
+        # ---- 产出统计：`proof_count` 只数 claim=="proof" 的那些（业主：无 V 签不许叫证明）。
+        # `proof_output_count` 是「证明稿份数」（含待签）—— 它回答"有没有产出"，
+        # `proof_count` 回答"有几条能叫证明"（INV7：两个问题不许再混成一格）。
+        "proof_count": len(proof_output_ids),
         "proof_statements": proof_statements,
-        "draft_count": total - len(proof_statements),
+        "proof_output_count": sum(1 for x in items
+                                  if str(x.get("claim") or "") in
+                                  (CLAIM_PROOF, CLAIM_PROOF_UNSIGNED)),
+        "draft_count": total - len(proof_output_ids),
         # ---- 交差时点名未签成果 + 出路（举例，不替它选）+ 留痕
         "abandoned_count": abandoned_count,
         "abandoned_statements": abandoned_statements,
