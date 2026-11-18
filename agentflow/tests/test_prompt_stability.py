@@ -1468,6 +1468,19 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "变化格 = G / H / M（PAPER_PACK 的读者），其余八格与 p294 逐字相同"
               "（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p295 → p296（2026-11-18，PLANLIFE②）：`specs/f.py` 的计划生命周期教法改成与实现一致
+     # —— 业主逐字「稿没完工，计划本身就关不掉」。三处都在 F 自己的段上（`abandon_plan`
+     # 的摘要、`attack.step` 的 returns、policy 的「落 stalled」那句）；facts 键集与落点
+     # 一格没动 ⇒ count / keys_sha256 与 p295 同值。
+     {"version": "p296", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p296（2026-11-18，PLANLIFE②）：`specs/f.py` 的 `abandon_plan` 摘要补上"
+              "「计划关不关由稿决定」（`stalled` / `resolved` / `supported_not_proved` 只在"
+              "稿已拿到 V 签或没有要签的稿时出现；未完工的计划不关，改完拿到签才结束），"
+              "`attack.step` 的 returns 补 `finish_gate` / `plan_status_reopened` 两格真返回，"
+              "policy 的「把计划落 stalled」那句改掉。变化格 = F，其余十格与 p295 逐字相同"
+              "（逐格读数见 `test_agent_prompts.py::_FROZEN_PROMPT_DIGESTS` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

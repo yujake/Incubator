@@ -4,9 +4,17 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、299,134 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、299,158 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-18 PLANLIFE②（`specs/f.py` 的计划生命周期教法改成与实现一致；p295 → p296）**：
+> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 299,134 → **299,158**（本笔 src 增量 +24：
+> `agent_prompts.py` +15（p296 版本账）、`specs/f.py` +9（`abandon_plan` 摘要 / policy 的
+> 「计划关不关由稿决定」+ `attack.step` returns 的 `finish_gate` / `plan_status_reopened`））。
+> 95 个 `>200` 行函数与 2 段重复 docstring 两格不变（只改字符串字面量；三格现盘复测 75 / 95 / 2）。
+> 连带：十一格 F 一格换值（e2e4d6a1→8cc88743）、`_FROZEN_PROMPT_VERSION` p296、
+> `_VOLATILE_FACT_SETS` 追加 p296 一格、agent golden 重冻、ROLE-GUIDE 重生成、
+> warm 两档重跑（0.028279 + 0.027157 美元）。§3 表不动（本笔没动那几行）。
 > **2026-11-18 PLANLIFE①（计划生命周期：稿没完工，计划本身就关不掉）**：
 > 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,881（HEAD `cd072285` 现算）→ **299,134**
 > （本笔 src 增量 +253：`agent_f/step.py` +104（四条进终态的路各过 `_finish_gate`）、

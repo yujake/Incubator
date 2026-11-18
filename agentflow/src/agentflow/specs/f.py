@@ -67,7 +67,10 @@ ACTIONS: tuple[ActionSpec, ...] = (
         "abandoned_statements / unfinished / unfinished_count / trail / trail_required / "
         "legal_exits / exits_note / legal_stop / is_failure / close_problems / coverage / "
         "coverage_reading / coverage_ratio / coverage_why / delivery_state_plan / "
-        "delivery_label_plan / self_assessment；**product 那一支被受控拒 manuscript_frozen 时**，"
+        "delivery_label_plan / self_assessment；**计划生命周期读数**：`finish_gate`"
+        "（checked / finished / unfinished_count / items / why）—— `finished=false` ⇒ 这条计划的稿还没拿到"
+        " V 签、不许进终态，下一拍是派 V 或按 findings 改稿；`plan_status_reopened`（原先的终态不成立、"
+        "这一轮按推进态继续时给原状态）；**product 那一支被受控拒 manuscript_frozen 时**，"
         "refusal.next_step 说清下一步：这一份已经拿签、只读 —— 别就地改它；要写第二份证明就另开"
         "一份稿（新稿号），要润色已签正文则走 B 的 open_polish_copy（复制成 B 号稿））",
         side_effect="write_local", handler_name="step",
@@ -97,7 +100,11 @@ ACTIONS: tuple[ActionSpec, ...] = (
          "把旧证明可取之处拆成引理写清）/ `不再需要`（plan 没毛病、但已不是推进目标所必需）。"
          "**「需要调整」不是理由**：它是「用不再需要放弃原 plan ＋ 另设一条新 plan」的组合操作。"
          "写成 `status=abandoned` ＋ `history` 一行；**已终态的不许再放弃**"
-         "（finish / 已放弃 / stalled / 有支持未证 都算不再推进）—— 想重新攻就另立一条计划。"),
+         "（finish / 已放弃 / stalled / 有支持未证 都算不再推进）—— 想重新攻就另立一条计划。"
+         "**计划关不关由稿决定**（业主 2026-11-18）：`stalled` / `resolved` / "
+         "`supported_not_proved` 只在**这条计划的稿已拿到 V 签**（或它没有要签的稿）时才会出现 ——"
+         "**未完工的计划不关**：连续无进展、轮数用尽都不关它，`attack.step(product=…)` 的写口也不因计划状态"
+         "被关；改完拿到签才结束。要提前收场只能走这一件（放弃），不能靠把计划判成 `stalled` / `resolved`。"),
         _obj({"plan_id": _S, "reason": _S, "basis": _S, "difficulty": _S,
               "salvaged": {"type": "array", "items": {"type": "object",
                      "description": "旧证明里可取之处拆成的引理：{label, stmt_id}"}}},
@@ -158,7 +165,9 @@ SPEC = AgentSpec(
             "`attack.pick_next_subgoal` 的确定性次序取）—— 立项之后**同一轮里**就推进一步，再决定要不要继续。",
             "每一轮推进之后把**成果或困难**回报给发起人（`message` 给 D）：这一轮证了什么 / 否了什么 / 卡在哪 / 下一步换哪个子目标 —— "
             "D 用它决定继续攻坚还是改猜想。",
-            "连续两轮没有实质进展就换子目标，或者把计划落 `stalled` 并把卡点写进回报（`attack.status` 读得到它）。不许用'再建一份"
+            "连续两轮没有实质进展就换子目标；卡点写进回报（`attack.status` 读得到它）。**计划什么时候关由稿决定**"
+            "（业主 2026-11-18）：稿没拿到 V 签就一直推进 —— 连续无进展、轮数用尽都不关它；"
+            "要提前收场只能 `attack.abandon_plan`。不许用'再建一份"
             "计划'代替推进：同一个 `problem_key` 的重复 `create_plan` 会命中既有计划并把它原样返回 —— 那不是进展（draft/37 §136 的活性判据会把它读出来）。",
             "卡住要落字段：子目标标 `blocked` 时 `blocked_reason` 必填（'不许静默卡住'是 schema 的硬条件）—— 卡在等谁、等哪一件（例如「等 A 完成检索请求 r-000X」）"
             "都写进那一格，别只写在回报的散文里；`attack.status` 读得到它。",

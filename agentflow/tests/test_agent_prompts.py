@@ -2660,7 +2660,17 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   M 76f7caa3… → 2ce5f492…。
 # 十一格不是手抄：`temp/teach1/recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['G','H','M']。
-_FROZEN_PROMPT_VERSION = "p295"
+# p295 → p296（2026-11-18，PLANLIFE②：`specs/f.py` 的计划生命周期教法改成与实现一致）：
+#   业主 2026-11-18 逐字「逻辑反了。稿没完工，计划本身就关不掉」。改的三处都在 F 自己的段上：
+#   ① `attack.abandon_plan` 的摘要补上「计划关不关由稿决定」（`stalled` / `resolved` /
+#     `supported_not_proved` 只在稿已拿到 V 签或没有要签的稿时出现；未完工的计划不关，
+#     改完拿到签才结束）；② `attack.step` 的 returns 补 `finish_gate` /
+#     `plan_status_reopened` 两格真返回；③ policy 里「把计划落 stalled」那句改掉。
+#   变化格 = F 一格；A / B / C / D / E / G / H / L / M / V 十格逐字未动（版本行已归一）。
+#   逐格旧值 → 新值：F e2e4d6a1… → 8cc88743…。
+# 十一格不是手抄：`temp/planlife/recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['F']。
+_FROZEN_PROMPT_VERSION = "p296"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2934,7 +2944,7 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
     "E": "36668798000e529b8c10ad7f506f88e6c7c3773554746b7d8e3b5234a59662a1",
-    "F": "e2e4d6a15a6636fd2908988a88b5108f65ffc26e46f4db1ce931cb441301ac07",
+    "F": "8cc8874360d832eb143caadd89663e8ea34b2081f90aae637a13aff9b59258c4",
     "G": "88294e2d33ad2b74dc2f8751f26dd75bb2244d2e721ab41dac46e7ae3cf68ab4",
     "H": "ba8c5a25eff0f8d8a3eda962d352c2886361beb82bda38b864fafcef13747f48",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",

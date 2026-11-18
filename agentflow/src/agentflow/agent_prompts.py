@@ -2779,7 +2779,22 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p295）+ `_VOLATILE_FACT_SETS` 末尾追加一格
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p294 同值）；两份 golden 按现值重冻；
 #:   ROLE-GUIDE 重生成；读图行数；warm 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p295"
+#: p295 → p296（2026-11-18，PLANLIFE②：`specs/f.py` 的计划生命周期教法改成与实现一致）：
+#:   ① `attack.abandon_plan` 的摘要补上业主 2026-11-18 的口径 ——「计划关不关由稿决定」：
+#:     `stalled` / `resolved` / `supported_not_proved` 只在「这条计划的稿已拿到 V 签」
+#:     （或它没有要签的稿）时才会出现；未完工的计划不关（连续无进展、轮数用尽都不关它，
+#:     `attack.step(product=…)` 的写口也不因计划状态被关）；改完拿到签才结束；
+#:   ② `attack.step` 的 returns 补两格真返回：`finish_gate`（checked / finished /
+#:     unfinished_count / items / why）与 `plan_status_reopened`；
+#:   ③ F 的 policy 里「把计划落 stalled」那句改掉 —— 同一口径。
+#:   变化格 = F 一格（这三处都只落在 F 自己的段上）；A / B / C / D / E / G / H / L / M / V
+#:   十格逐字未动（版本行已归一）。逐格旧值 → 新值：F e2e4d6a1… → 8cc88743…。
+#:   十一格是 `temp/planlife/recompute_digests.py`（导入判据自己的 `_surface_digest`，
+#:   先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+#:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p296）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p295 同值）；两份 golden 按现值重冻；
+#:   ROLE-GUIDE 重生成；读图行数；warm 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p296"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
