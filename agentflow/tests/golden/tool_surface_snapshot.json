@@ -1979,7 +1979,7 @@
     ],
     "type": "object"
    },
-   "returns": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False；成文门拒：kind=no_evidence_chain（零签且零有效地基 ⇒ **一个字节都不写**；另带 research_base（三态 + 逐格计数）/ signing（签数 / 待签稿）/ next_steps 四项读数与「先拿签/先补地基，再来成文」）/ ledger_unreadable（台账读不到 ⇒ 没查成）",
+   "returns": "{'doc_id','kind','title','markdown_path','claims','sections','open_problems','status','review_rounds','created_at','updated_at','created_by','content_sha256','revision','review_verdict','reviewed_at','reviewed_by','owner_task','owner_instance'}（落库后的 documents 行）；**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` + 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + missing[]（逐条坏引用：claim_id/citation/kind/ref/why）+ created=False；成文门拒：kind=no_evidence_chain（零签且零有效地基 ⇒ **一个字节都不写**；另带 research_base（三态 + 逐格计数）/ signing（签数 / 待签稿）/ next_steps 四项读数与「先拿签/先补地基，再来成文」）/ ledger_unreadable（台账读不到 ⇒ 没查成）",
    "roles": [
     "G"
    ],
@@ -6009,7 +6009,7 @@
     },
     "type": "object"
    },
-   "returns": "{'checked','experiments','count','result_counts','negation_counts','best_evidence_kind','proved','reason'}（FC-10：必须分档计数，不许只给一个布尔；三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）",
+   "returns": "{'checked','experiments','count','result_counts','negation_counts','best_evidence_kind','proved','scope','reason'}（FC-10：必须分档计数，不许只给一个布尔；三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）",
    "roles": [
     "E",
     "F",
@@ -6042,7 +6042,7 @@
     },
     "type": "object"
    },
-   "returns": "{'checked','total','returned','truncated','experiments','reason'}",
+   "returns": "{'checked','total','returned','truncated','experiments','scope','reason'}",
    "roles": [
     "E",
     "F",
