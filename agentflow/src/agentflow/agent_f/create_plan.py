@@ -20,12 +20,12 @@ FORMAL_IS_NOT_F_TODO = "formal_is_not_f_todo"
 #: > 「若一个F开了多plan且未finish的同时推进的大于2个（已finish或放弃的不计入该数），
 #: >   系统需拦截并给出提醒」
 #:
-#: 计数口径（2026-11-18 核准，随「稿没完工，计划本身就关不掉」）：**四个退场态
-#: 都不计入**（`resolved` / `abandoned` / `stalled` / `supported_not_proved`）——
+#: 计数口径（2026-11-18 核准，随「稿没完工，计划本身就关不掉」）：四个退场态
+#: 都不计入（`resolved` / `abandoned` / `stalled` / `supported_not_proved`）——
 #: 也就是与判重口径共用同一份 `TERMINAL_STATUSES`。理由三条，缺一条都会打架：
 #:
-#: ① 新口径下 `stalled` / `supported_not_proved` **只可能在稿已拿到 V 签（或这条
-#:    计划没有要签的稿）时出现** —— 它们不再表示"还有一份没签的稿被锁在里面"，而是
+#: ① 新口径下 `stalled` / `supported_not_proved` 只可能在稿已拿到 V 签（或这条
+#:    计划没有要签的稿）时出现 —— 它们不再表示"还有一份没签的稿被锁在里面"，而是
 #:    "预算/子目标这条轴走完了"；那已经不是"同时在推"的计划。
 #: ② 旧口径说"要腾位就先把它放弃成「不再需要」"，而 `attack.abandon_plan` 对
 #:    `TERMINAL_STATUSES` 里的状态是受控拒（已终态不许再放弃）⇒ 那句指引走不通。
