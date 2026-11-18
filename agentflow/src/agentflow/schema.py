@@ -305,11 +305,6 @@ class SearchRequest:
     done: bool = False
     # --- 扩展
     submitted_by: str = "unknown"
-    #: 提交方那一个实例（FX-14，2026-11-19）：`submitted_by` 是冻结契约键（I7 的优先级
-    #: 查表按它认「提交方是谁」；把运行标签混进去会让默认优先级静默掉到 low），所以实例
-    #: 标签另存一格 —— 「这一条请求是哪一个 F 交的」答得出来，契约键不动。空串 = 老行 /
-    #: 直调（读侧按「没记」处理，不编一个实例出来）。
-    submitted_instance: str = ""
     claimed_by: str | None = None
     lease_until: str | None = None
     attempts: int = 0
@@ -333,6 +328,17 @@ class SearchRequest:
     #: 加调用方注入的实例，抄进 schema 就是造出第二个要同步的地方。认识的判据在动作层
     #: （`AgentA.search_literature` 入队前逐个核名），本字段只做形状校验（非空字符串、元素是字符串）。
     providers: list[str] = field(default_factory=list)
+    #: 提交方那一个实例（FX-14，2026-11-19）：`submitted_by` 是冻结契约键（I7 的优先级
+    #: 查表按它认「提交方是谁」；把运行标签混进去会让默认优先级静默掉到 low），所以实例
+    #: 标签另存一格 —— 「这一条请求是哪一个 F 交的」答得出来，契约键不动。空串 = 老行 /
+    #: 直调（读侧按「没记」处理，不编一个实例出来）。
+    #:
+    #: 必须追加在**尾部**（不是插在 `submitted_by` 后面）：字段顺序既是位置参数构造的顺序，
+    #: 也是 `to_dict()` 落盘的键序 —— 插队会改掉既有字段的位置，判据
+    #: `tests/test_agent_a_search_providers.py::test_the_dataclass_fields_are_appended_so_positional_construction_still_works`
+    #: 钉的就是这一条（改前 FX-14 把它插在第 8 格，老的位置参数构造会把 `claimed_by` 的值
+    #: 喂给实例标签，而 `asdict` 的键序也与盘上老行不一致）。
+    submitted_instance: str = ""
 
     def validate(self) -> None:
         if not self.request_id:

@@ -585,7 +585,10 @@ def test_the_dataclass_fields_are_appended_so_positional_construction_still_work
     也是 `to_dict()` 的输出次序 —— 插队会让"同一行前后两次序列化不同形"。
     """
     names = [f.name for f in dataclasses.fields(S.SearchRequest)]
-    assert names[-1] == "providers", names[-5:]
+    # FX-14（2026-11-19）把 `submitted_instance` 追加在尾部；改前它插在第 8 格
+    # （`submitted_by` 与 `claimed_by` 之间），第一段断言因此红。尾巴从上一条
+    # `providers` 变成它，但"老字段一个都没挪"这条口径不变。
+    assert names[-2:] == ["providers", "submitted_instance"], names[-5:]
     assert names[:14] == [
         "request_id", "timestamp", "topic", "mode", "content_description", "done",
         "submitted_by", "claimed_by", "lease_until", "attempts", "result_lit_ids",
