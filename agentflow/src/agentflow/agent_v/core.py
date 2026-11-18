@@ -1963,7 +1963,8 @@ class AgentV:
                 # ---- 2026-11-16（SG1 ⑤⑥⑦）：穷举这一支也落 V 稿 / 交签好的稿 ----
                 _n_v_review: dict[str, Any] = {}
                 _n_signed: dict[str, Any] = {}
-                if _n_axis == "fault" and _row.get("checked") is not False:
+                if (self._v_review_should_be_written(_n_judge, _row)
+                        and _row.get("checked") is not False):
                     _n_v_review = self._publish_v_review(
                         row=_row, manuscript=manuscript_rel, judgment=_n_judge,
                         verdict=_n_verdict, statement_id=sid)
@@ -2670,13 +2671,16 @@ class AgentV:
         axis = str(judgment.get("axis") or "")
         # ---- 2026-11-16（SG1 ⑤⑥⑦）：判出「有毛病」⇒ 落 V 稿并交给被审者 ----------
         #
-        # 判据只有一条：秘书给的轴是 fault（warning 也算有毛病；程序性 / 文风 fault
-        # 同样落）。这一转同时是终局（下面 `_terminal_issuance` 给 issue=False），
+        # 判据只有一处（`_v_review_should_be_written`）："这一行是对稿的否定判定"——
+        # 秘书轴 fault，或台账行 verdict=有毛病（依赖面审计 / 引用闸把 clean 折出来的）。
+        # 改前只认轴 ⇒ 真机 u-000001 / u-000005 两条「有毛病」零送达（STALLFIX ②）。
+        # 这一转同时是终局（下面 `_terminal_issuance` 给 issue=False），
         # 所以"同一轮里既有签又有 V 稿"在结构上不可能发生。
         v_review = (self._publish_v_review(
             row=row, manuscript=manuscript, judgment=judgment, verdict=verdict,
             statement_id=sid)
-            if axis == "fault" and row.get("checked") is not False else {})
+            if self._v_review_should_be_written(judgment, row)
+            and row.get("checked") is not False else {})
         # ---- 2026-11-16（V 回执层退场）：这一笔只维护"重送义务"，不投判词
         #
         # 判词送达由两条既有路承担（都不依赖收件人是否醒着）：
@@ -2744,13 +2748,29 @@ class AgentV:
             return {"checked": False, "state": "error",
                     "reason": f"义务没落成（{type(exc).__name__}: {exc}）"}
 
-    def _v_review_should_be_written(self, judgment: Mapping[str, Any]) -> bool:
-        """这一转要不要落 V 稿（判据只有一条：秘书给的轴是 fault）。
+    def _v_review_should_be_written(self, judgment: Mapping[str, Any],
+                                    row: Mapping[str, Any] | None = None) -> bool:
+        """这一转要不要落 V 稿（判据："这一行是不是对稿的否定判定"）。
 
-        单独一个方法是为了反真空：把它打桩成恒假 ⇒ 「有毛病 ⇒ 落 V 稿」那条判据
-        必须变红（`tests/test_sg1_v_review_and_auto_sign.py` 的 anti-vacuum）。
+        两条都算否定判定，缺一就会出现真机的"零送达"：
+
+        1. 秘书给的轴是 `fault`（V 的报告被读出缺陷）；
+        2. 台账行上的 `verdict` 是「有毛病」—— 依赖面审计
+           （`merge_dependency_audit`，本文件 :2586 / :3419）与引用闸
+           （`apply_citation_gate`）都会把秘书轴仍是 `clean` 的结论折成「有毛病」，
+           而"台账上的结论才是对稿的判词"。真机 `projects/lp-ball-8` 的
+           `46857051…#u-000001`（19:39:24）与 `…u-000005`（19:53:30）正是这一档：
+           行上 verdict=有毛病、轴=clean ⇒ 改前一份 V 稿都没落、F 什么也没收到。
+
+        `row` 缺省是刻意的（旧调用点只问秘书轴那一半）：两条件里的第二条只在拿得到
+        台账行时判 —— 拿不到行时按第 1 条 fail-closed，不因为"没给 row"就放行。
+
+        单独一个方法是为了反真空：把它打桩成恒假（或打回"只认 axis"）⇒
+        `tests/test_stallfix_v_review_delivery.py` 的 e 必须变红（零份 V 稿）。
         """
-        return str((judgment or {}).get("axis") or "") == "fault"
+        if str((judgment or {}).get("axis") or "") == "fault":
+            return True
+        return str((row or {}).get("verdict") or "") == "有毛病"
 
     def _v_review_ledger(self, row: Mapping[str, Any], statement_id: str) -> str:
         """这一签的台账锚点路径（在册 `verifications/<号>.jsonl`；未在册 pending）。"""
@@ -2773,7 +2793,7 @@ class AgentV:
         这一格失败不许带走判定本身：返回读数里如实报 `checked=False` + 理由，
         判定与 V 稿是两件事（稿没落成不等于没判出毛病）。
         """
-        if not self._v_review_should_be_written(judgment):
+        if not self._v_review_should_be_written(judgment, row):
             return {}
         try:
             from .. import manuscriptfamily as _MFAM
@@ -3616,12 +3636,14 @@ class AgentV:
                                                       verdict=last)
         # ---- 2026-11-16（SG1 ⑤⑥⑦）：未在册这一支的 V 稿 ------------------------
         #
-        # 判据与在册那一支同一处（`_v_review_should_be_written`）：轴是 fault 就落。
+        # 判据与在册那一支同一处（`_v_review_should_be_written`）：这一行是对稿的
+        # 否定判定就落（秘书轴 fault，或 pending 行 verdict=有毛病 —— 依赖面审计
+        # 折出来的那一档，STALLFIX ②）。
         # 幂等键走 pending 台账锚点（`verifications/pending/<sha>.jsonl` +
         # verification_id）—— 未在册的行没有 `review_call`，不能拿它当键。
         v_review: dict[str, Any] = {}
         if (pending and pending.get("checked") is not False
-                and str(_last_judgment.get("axis") or "") == "fault"):
+                and self._v_review_should_be_written(_last_judgment, pending)):
             v_review = self._publish_v_review(
                 row=pending, manuscript=rel, judgment=_last_judgment,
                 verdict=last, statement_id="")

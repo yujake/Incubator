@@ -374,7 +374,7 @@ def test_z_anti_vacuum_fault_hook_is_load_bearing(tmp_path, monkeypatch):
     seam = _Seam({"v_reply_defect": [_axis(SEC.V_REPLY_CLEAN),
                                      _axis(SEC.V_REPLY_FAULT)]})
     monkeypatch.setattr(AgentV, "_v_review_should_be_written",
-                        lambda self, judgment: False)
+                        lambda self, judgment, row=None: False)
     with _submit():
         got = _agent(st, review, seam).verify_proof(
             SID, proof_text=PROOF, proof_manuscript=REL)
