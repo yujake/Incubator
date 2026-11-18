@@ -24,7 +24,7 @@
 被锁在里面"，而是"预算/子目标这条轴走完了"。旧口径要求"腾位就先把它放弃成不再需要"，
 而 `attack.abandon_plan` 对终态是受控拒（已终态不许再放弃）⇒ 那句话走不通；判重那边
 又一直把 `stalled` 当退场（同 `problem_key` 可以另立）。两处口径现在共用同一份
-`TERMINAL_STATUSES`（`create_plan.PLAN_CAP_TERMINAL_STATUSES`）。
+`TERMINAL_STATUSES`（2026-11-18 K1/K2 起改由 `lifecycle` 的三态单一来源给出）。
 
 不改 schema、不改 `tools/base.py`：归因只用 `host._actor_for` 已有的格式
 （`agent-<role>-<instance>`）＋ conductor 已经挂在 ContextVar 上的台账号。
@@ -42,6 +42,7 @@ if str(_SRC) not in sys.path:
 
 from agentflow import agent_f as AF
 from agentflow import conductor as CON
+from agentflow import lifecycle as L
 from agentflow import schema as S
 from agentflow import secretary as SEC
 from agentflow.agent_f import create_plan as CP
@@ -164,12 +165,18 @@ def test_c_stubbing_the_exclusions_out_turns_b_red(tmp_path: pathlib.Path,
     证明 b 的绿来自"这几档真的被排除"，而不是来自"上限没生效"。这两条刻意一条
     `resolved`、一条 `stalled` —— 后者是 2026-11-18 新纳进来的那一档：若实现把
     名单写死回旧的两档，打桩就不再改变结果，这一笔会被建成（当场红）。
+
+    2026-11-18 K1/K2：名单的单一来源搬进了 `lifecycle`（三态），所以打桩点也跟着
+    搬到 `lifecycle.PLAN_STATE_OF`（把四个退场态都映射回 `active`）。打桩的语义
+    与改前逐字相同：让"不算在推"的那几档重新算在推 ⇒ 上限必须当场拦住。
     """
     store = _ws(tmp_path)
     f = _f(store)
     _seed_plan(store, key="PK-R1", status="resolved")
     _seed_plan(store, key="PK-S1", status="stalled")
-    monkeypatch.setattr(CP, "PLAN_CAP_TERMINAL_STATUSES", (), raising=False)
+    monkeypatch.setattr(
+        L, "PLAN_STATE_OF",
+        {s: L.ACTIVE for s in S.ATTACK_STATUSES})
     out = f.create_plan("新方向一", "PK-N1", budget=dict(BUDGET))
     assert out.get("kind") == "parallel_plans_limit", (
         "把「不计入」打桩成空之后仍然建成了 ⇒ b 那条判据是真空的", out)
@@ -223,3 +230,4 @@ def test_e_the_default_actor_is_named_from_the_roster(tmp_path: pathlib.Path) ->
 
 if __name__ == "__main__":          # pragma: no cover - 手工跑这一份时用
     raise SystemExit(pytest.main([__file__, "-q"]))
+

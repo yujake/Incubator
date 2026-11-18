@@ -1,7 +1,8 @@
 """角色 F 的动作 `list_plans`。"""
 from __future__ import annotations
 
-from ._support import TERMINAL_STATUSES
+from .. import lifecycle as L
+
 
 class _ListPlans:
     def list_plans(self, *, problem_key: str | None = None, include_terminal: bool | None = True) -> dict:
@@ -22,7 +23,8 @@ class _ListPlans:
         rows = [r for r in self.store.rows("attack_plans") if problem_key is None or r.get("problem_key") == problem_key]
         rows.sort(key=lambda r: str(r.get("plan_id") or ""))
         if not include_terminal:
-            rows = [r for r in rows if str(r.get("status")) not in TERMINAL_STATUSES]
+            # 「还活着」只有一份判据：`lifecycle` 的活跃集（完工 / 放弃都不在内）。
+            rows = [r for r in rows if L.plan_is_active(r)]
         return {
             "checked": True,
             "total": len(rows),

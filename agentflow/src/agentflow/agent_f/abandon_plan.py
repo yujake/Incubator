@@ -1,7 +1,8 @@
 """角色 F 的动作 `abandon_plan`：明确放弃一条计划（理由三档，见 `planabandon`）。"""
 from __future__ import annotations
 
-from ._support import Any, Mapping, PlanError, Sequence, TERMINAL_STATUSES
+from ._support import Any, Mapping, PlanError, Sequence
+from .. import lifecycle as L
 from .. import statementabandon as SA
 from ..planabandon import (PLAN_ABANDON_EVIDENCE_REASONS, PLAN_ABANDON_NOT_NEEDED,
                            PLAN_ABANDON_REASONS)
@@ -128,11 +129,12 @@ class _AbandonPlan:
                 f"拒绝放弃（{PLAN_ABANDON_NOT_FOUND}）：计划 {pid} 不在台账里"
                 "（没有可放弃的对象）")
         status = str(row.get("status") or "")
-        if status in TERMINAL_STATUSES:
+        plan_state = L.state_of_plan(row)
+        if plan_state.get("checked") and plan_state.get("state") != L.ACTIVE:
             raise PlanError(
                 f"拒绝放弃（{PLAN_ABANDON_ALREADY_TERMINAL}）：计划 {pid} 已经是终态 "
-                f"{status!r}（{list(TERMINAL_STATUSES)} 都算「不再推进」）⇒ 再放弃一次是"
-                "改写历史。要重新攻就另立一条计划")
+                f"{status!r}（三态={plan_state.get('state')}；完工与放弃都算「不再推进」）"
+                "⇒ 再放弃一次是改写历史。要重新攻就另立一条计划")
         at = self._stamp()
         row["status"] = "abandoned"
         row["updated_at"] = at

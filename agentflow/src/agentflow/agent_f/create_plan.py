@@ -1,7 +1,8 @@
 """角色 F 的动作 `create_plan`。"""
 from __future__ import annotations
 
-from ._support import AT, Any, Mapping, PlanError, S, Sequence, TERMINAL_STATUSES
+from ._support import AT, Any, Mapping, PlanError, S, Sequence
+from .. import lifecycle as L
 from ..refusals import refuse
 
 #: 形式化那一档在 F 这一侧不许立项的受控码（`refuse` 的 `kind`）。
@@ -22,20 +23,17 @@ FORMAL_IS_NOT_F_TODO = "formal_is_not_f_todo"
 #:
 #: 计数口径（2026-11-18 核准，随「稿没完工，计划本身就关不掉」）：四个退场态
 #: 都不计入（`resolved` / `abandoned` / `stalled` / `supported_not_proved`）——
-#: 也就是与判重口径共用同一份 `TERMINAL_STATUSES`。理由三条，缺一条都会打架：
+#: 判重与名额共用同一份活跃集：`lifecycle.active_plans`（`lifecycle.PLAN_STATE_OF`
+#: 把四个退场态折成「完工 / 放弃」，两者都不在活跃集）。理由三条，缺一条都会打架：
 #:
 #: ① 新口径下 `stalled` / `supported_not_proved` 只可能在稿已拿到 V 签（或这条
 #:    计划没有要签的稿）时出现 —— 它们不再表示"还有一份没签的稿被锁在里面"，而是
 #:    "预算/子目标这条轴走完了"；那已经不是"同时在推"的计划。
 #: ② 旧口径说"要腾位就先把它放弃成「不再需要」"，而 `attack.abandon_plan` 对
-#:    `TERMINAL_STATUSES` 里的状态是受控拒（已终态不许再放弃）⇒ 那句指引走不通。
-#: ③ 判重（本文件下面那条 `status not in TERMINAL_STATUSES`）一直把 `stalled` 当
-#:    退场：同一个 `problem_key` 可以另立新计划。若名额这边仍把它计入，就会出现
+#:    终态是受控拒（已终态不许再放弃）⇒ 那句指引走不通。
+#: ③ 判重（本文件下面那条 `lifecycle.plan_is_active`）一直把 `stalled` 当退场：
+#:    同一个 `problem_key` 可以另立新计划。若名额这边仍把它计入，就会出现
 #:    "允许另立、但先把名额占满"——正是业主点名不许打架的那一处。
-#:
-#: 与旧注释的差别只在 `stalled` / `supported_not_proved` 两档；`resolved` / `abandoned`
-#: 的排除一个字没变（业主 2026-11-13 的原话）。
-PLAN_CAP_TERMINAL_STATUSES: tuple[str, ...] = TERMINAL_STATUSES
 PARALLEL_PLANS_LIMIT = 2
 
 #: 拦下来时逐字给模型的提醒（业主原话；末句按业主补完「让父派其它F攻坚」）。
@@ -105,7 +103,7 @@ class _CreatePlan:
 
         existing = None
         for r in self.store.rows("attack_plans"):
-            if str(r.get("problem_key")) == str(problem_key) and str(r.get("status")) not in TERMINAL_STATUSES:
+            if str(r.get("problem_key")) == str(problem_key) and L.plan_is_active(r):
                 existing = r
                 break
         if existing is not None:
@@ -143,10 +141,17 @@ class _CreatePlan:
         # 分桶键是 `created_by`（= 这个 F 的归因名，见 `AgentF._plan_owner`）：业主的口径是
         # "一个 F 开了多 plan"，按全体计数会把"按研究方向开多个 F"（同一批裁定的 R1）
         # 误拦成超限。归因读不到时退回未归因桶，读数里看得出来（`created_by` 逐字可比）。
+        #
+        # 「在推的计划」只有一份判据：`lifecycle.active_plans`（三态里的活跃集）。
+        # 改前这里是 `status not in PLAN_CAP_TERMINAL_STATUSES` —— 与判重那一份名单
+        # 逐字相同的第二份副本；K3/K4 也会问同一个问题，所以只留这一处。
         owner = self._plan_owner()
-        live = [dict(r) for r in self.store.rows("attack_plans")
-                if str(r.get("created_by") or "") == owner
-                and str(r.get("status") or "") not in PLAN_CAP_TERMINAL_STATUSES]
+        live_reading = L.active_plans(self.store, owner=owner)
+        if not live_reading.get("checked"):
+            raise PlanError(
+                "判不了你名下在推的计划 ⇒ 不立项（判不了 ≠ 没有上限）："
+                + str(live_reading.get("why") or ""))
+        live = list(live_reading.get("rows") or [])
         if len(live) >= PARALLEL_PLANS_LIMIT:
             ids = "、".join(str(r.get("plan_id") or "") for r in live)
             msg = (f"拒绝创建：{PARALLEL_PLANS_LIMIT_TEXT}"

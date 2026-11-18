@@ -1,7 +1,8 @@
 """角色 F 的动作 `step`。"""
 from __future__ import annotations
 
-from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, TERMINAL_STATUSES, _budget_left, _step_outcome
+from ._support import AT, Any, Mapping, NO_PROGRESS_NOTE, PlanError, S, _budget_left, _step_outcome
+from .. import lifecycle as L
 
 #: 收工读数里要原样带出去的那几格（键名与 `agent_f/delivery.py` 的 `summary` 同一份）。
 #:
@@ -173,10 +174,17 @@ class _Step:
         # （真机 lp-ball-8：19:44:39 plan 000000 被判 stalled，19:47:39 的 v3 就在这一
         # 步被挡住，而同一份返回里已经写着 `delivery.state=outputs_unsigned`）。
         # `abandoned` 不在此列：那是 F 自己的决定，不是程序关计划。
+        #
+        # 三态（K1/K2）：这一格改前是 `if status in TERMINAL_STATUSES: if status !=
+        # "abandoned":` —— 同一句排除在一处又写了一遍。现在只问 `lifecycle.state_of_plan`
+        # 一档：`completed` 走「稿已完工」那道闸，`abandoned` 直接停，`active` 照常推进。
+        # 状态判不了（`checked=False`）时按推进态继续 —— 与改前「不在 TERMINAL 里就推进」
+        # 逐字同义，但读数里那句 `why` 会随 `finish_gate`/`state` 一起出去。
+        plan_state = L.state_of_plan(row)
         reopened_from = ""
         gate: dict | None = None
-        if status in TERMINAL_STATUSES:
-            if status != "abandoned":
+        if plan_state.get("checked") and plan_state.get("state") != L.ACTIVE:
+            if plan_state.get("state") == L.COMPLETED:
                 gate = self._finish_gate(row)
                 if not gate.get("finished"):
                     reopened_from = status
@@ -188,11 +196,12 @@ class _Step:
                     "action": "stop",
                     "outcome": "no_change",
                     "status": status,
+                    "plan_state": str(plan_state.get("state") or ""),
                     "budget_left": budget_left,
                     "budget_known": reading["status"] == "known",
                     "budget_reading": reading,
                     "reason": (
-                        f"计划已是终结状态 {status!r} ⇒ 不再推进。"
+                        f"计划已是终结状态 {status!r}（三态：{plan_state.get('state')}）⇒ 不再推进。"
                         "「不再推进」不是「推进了但没有进展」：终态先到先得，"
                         "自动重入会把它当活计划重新拾起，于是终止条件形同虚设"
                         + (f"。稿这一侧：{gate.get('why')}" if gate is not None else "")
