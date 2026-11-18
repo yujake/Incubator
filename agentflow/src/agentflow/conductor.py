@@ -5626,7 +5626,7 @@ class Conductor:
             row = next((r for r in rows if str(r.get("task_id")) == tid), None)
             if row is None:
                 return "", f"没有这一项（task_id={tid!r}）"
-            if not str(row.get("kind") or ""):
+            if not Conductor._is_board_item(row):
                 return "", "这一行不是板项 ⇒ 不改它的父（台账号的父子关系是派活时定的）"
             if str(row.get("item_state") or "") == "done":
                 return "", "这一项已经收口 ⇒ 不改收件人"

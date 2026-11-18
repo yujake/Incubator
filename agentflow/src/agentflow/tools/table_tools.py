@@ -1869,7 +1869,10 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
         # 那条受控码是给有行级归属的表用的）。
         if table == "tasks" and not _visible_tasks(
                 [row], role=_caller_role(), task_id=_caller_task_id()):
-            return ok(None, table=table, id=id, id_field=idf, found=False)
+            # 落到函数末尾那一个 `ok(None, found=False)` 出口（不另写一处 ok 站）：
+            # 判据 `test_invisible_ok_sites_do_not_grow_silently` 按"隐形的 ok(...) 站
+            # 数"守这一栏，多一个出口就要多登记一条 —— 这两档本来就是同一句话。
+            break
         if _RS.owned(table) and not _RS.visible(table, row, role=who["role"],
                                                 task_id=who["task_id"],
                                                 instance=who["instance"]):
