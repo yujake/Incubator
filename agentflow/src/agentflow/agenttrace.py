@@ -50,6 +50,7 @@ __all__ = [
     "watch_rows",
     "node_facts",
     "artifact_readings",
+    "step_events",
 ]
 
 #: 非 M 角色一次能看下去的层数。业主口径：「普通代理能追一层，M能想追几层追几层」。
@@ -198,17 +199,14 @@ def _session_records(root: str | Path) -> tuple[list[dict[str, Any]], dict[str, 
     return ES._read_sessions(Path(str(root or ".")))
 
 
-def _steps_for_task(
-    records: Sequence[Mapping[str, Any]], task_id: str, role: str
-) -> dict[str, Any]:
-    """某个台账号那一趟的 `agent_step` 序列。
+def _window_steps(records: Sequence[Mapping[str, Any]], task_id: str,
+                  role: str) -> dict[str, Any]:
+    """`agent_run_start` 窗口那一半：这一趟的 `agent_step` 原始事件。
 
     窗口口径与 `agent_loop.resume_messages` 同一条：起点是最后一条
-    `agent_run_start`（`task_id` 对得上、`role` 也对得上），终点是同角色的
-    下一条 `agent_run_start`（任何任务）。`agent_step` 记录里没有任务号，
-    窗口是唯一能把两趟分开的东西（本文件不发明第二种归属方式）。
-
-    找不到起点不是错误：老工作区 / 这一趟还没跑过，如实返回 `found=False`。
+    `agent_run_start`（`task_id` 对得上、`role` 也对得上），终点是同角色的下一条
+    `agent_run_start`（任何任务）。它是老会话（`agent_step` 还没有任务号）唯一
+    能把两趟分开的东西（本文件不发明第二种归属方式）。
     """
     wanted = str(task_id or "")
     role_name = str(role or "")
@@ -219,7 +217,7 @@ def _steps_for_task(
         and (not role_name or str(e.get("role") or "") == role_name)
     ]
     if not starts:
-        return {"checked": True, "found": False, "count": 0, "steps": [],
+        return {"checked": True, "found": False, "count": 0, "events": [],
                 "reason": f"会话记录里没有台账号 {wanted} 的起趟事件（不是『它一步都没做』）"}
     begin = starts[-1]
     end = next(
@@ -230,7 +228,55 @@ def _steps_for_task(
     )
     steps = [e for e in records[begin + 1: end] if str(e.get("kind") or "") == "agent_step"]
     return {"checked": True, "found": True, "count": len(steps),
-            "steps": [_step_line(e) for e in steps], "reason": ""}
+            "events": steps, "reason": ""}
+
+
+def step_events(
+    records: Sequence[Mapping[str, Any]], task_id: str, role: str
+) -> dict[str, Any]:
+    """某个台账号的 `agent_step` 原始事件（给需要 `payload` / `result` 的读侧）。
+
+    为什么要有它，而不是让调用方再写一遍过滤：`_steps_for_task` 只给 `_step_line`
+    的投影（step / shape / what / ok / error / line），`what` 在工具步上甚至是空的
+    —— 而"M 的巡查要看最近一次被拒的工具名与拒因原文"必须读原始 `payload.name`
+    与 `result.error` / `result.data`。两个入口共用同一份成员判据，只有一个窗口实现：
+
+    - `agent_step` 从 2026-11-15 起带 `task_id` ⇒ 直接按任务号取（并发跑的同角色
+      多趟不会串在一起 —— 老窗口是按角色的，同角色并发时会互相截断）；
+    - 没有任务号的老记录 ⇒ 退回 `_window_steps`（同一个 `agent_run_start` 窗口）。
+
+    返回 `{"checked", "found", "count", "events", "reason"}`，`events` 保持会话里的
+    出现次序（JSONL 追加序 = 时间序）。
+    """
+    wanted = str(task_id or "")
+    role_name = str(role or "")
+    by_task = [
+        e for e in records
+        if str(e.get("kind") or "") == "agent_step"
+        and str(e.get("task_id") or "") == wanted
+        and (not role_name or str(e.get("role") or "") == role_name)
+    ]
+    if by_task:
+        return {"checked": True, "found": True, "count": len(by_task),
+                "events": by_task, "reason": ""}
+    return _window_steps(records, wanted, role_name)
+
+
+def _steps_for_task(
+    records: Sequence[Mapping[str, Any]], task_id: str, role: str
+) -> dict[str, Any]:
+    """某个台账号那一趟的 `agent_step` 序列（`watch` 的"最近 N 步"读数）。
+
+    成员判据只有 `step_events` 一份（任务号优先、老记录退回起趟窗口）；这里只把
+    原始事件投影成 `_step_line`，返回形状与拆出 `step_events` 之前逐字相同。
+
+    找不到起点不是错误：老工作区 / 这一趟还没跑过，如实返回 `found=False`。
+    """
+    got = step_events(records, task_id, role)
+    events = list(got.get("events") or ())
+    return {"checked": bool(got.get("checked")), "found": bool(got.get("found")),
+            "count": len(events), "steps": [_step_line(e) for e in events],
+            "reason": str(got.get("reason") or "")}
 
 
 def _step_line(event: Mapping[str, Any]) -> dict[str, Any]:

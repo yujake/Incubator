@@ -3524,8 +3524,14 @@ def _roster_names(cond: Any, rows: Any) -> tuple[dict[str, str], str]:
 # ---------------------------------------------------------------- 逐格读数
 
 
-def _doing_cell(row: Any, clock: Any) -> dict[str, Any]:
-    """它现在在执行的任务：任务原文摘要 + 动作 + 最近一步（有落痕才给步号）。"""
+def _doing_cell(row: Any, clock: Any, rejection: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """它现在在执行的任务：任务原文摘要 + 动作 + 最近一步（有落痕才给步号）。
+
+    `last_rejection`（MPATROL1 ①）是"最近一次失败 / 受控拒"那一格：数据与判据全在
+    `_last_rejection_cell`（唯一实现），本函数只把它摆进格子 —— 没有它，M 看到的是
+    「待机、step=7、stalled_sec=105」这种"它在动"的读数，读不到"它卡在哪、为什么卡"
+    （真机 `projects/lp-ball-7` 09:59:41 那一拍：F step 4/5/6 连着被拒）。
+    """
     code = str((row or {}).get("task_id") or "")
     stall = dict((clock.get("stall_by_task") or {}).get(code) or {})
     step = stall.get("step")
@@ -3535,8 +3541,371 @@ def _doing_cell(row: Any, clock: Any) -> dict[str, Any]:
         "step": int(step) if isinstance(step, int) else None,
         "step_at": str(stall.get("at") or ""),
         "stalled_sec": stall.get("sec"),
+        "last_rejection": dict(rejection or {}),
         "source": "tasks.detail（`summon` 建那一行时写的就是任务原文，200 字截断）",
     }
+
+
+# ---------------------------------------------------------------- 两格：被拒 / 未消费
+#
+# MPATROL1（2026-11-18）：MSEE1 扫出来的两个巡查读数缺口，对应 lp-ball-7 现场
+# （`agentflow/temp/inv7/INV7-REPORT.md` §5.4 / `projects/lp-ball-7` 09:59:41 那一拍）：
+#
+# ① `doing` 那格只有 task/action/step/step_at/stalled_sec/source ⇒ 没有"最近一次被拒
+#    的原因"。现场：F 在 step 4/5/6 连续被拒（dependency_row_unverified / 参数错 /
+#    缺 cites），而 09:59:41 的 patrol 只看到「待机、step=7、stalled_sec=105」——
+#    M 看不到它卡在哪、为什么卡。
+# ② 「子代理已落定、产出没被消费」在 patrol 里没有格；挂机判据读的是
+#    `mailbox["children"]["settled"]`（`agent_loop.py:7313-7316`）⇒ 两处不同源。
+#    现场：D 名下 B1（t-000021）09:48:17 落定，D 到 09:59:41 还没在任一步里指到
+#    它落的那行（B1 的产物 10:00:31 才被 `table.get` 读到）。
+#
+# 两格的读法（都不新造台账，逐项指到已有的写点）：
+#
+# ① 步骤记录 = `sessions/<sid>.jsonl` 的 `agent_step`（成员判据 `agenttrace.step_events`，
+#    与 `conductor.watch` 的"最近 N 步"同一个窗口实现）。拒因判据 = `agent_loop._refusal_key`
+#    （框架唯一的"谁在拒"判据：`refused` / `refusal_reason` / `ok=False` + `meta.kind`），
+#    再补结果里已经写着的受控拒字段（工具把拒因写在 `data` 里、`ok` 仍是 True 的那一档）：
+#      `data.refused` / `data.refusal_code` / `data.state=="refused"` /
+#      `data.refusal.kind` / `data.deps_refused`（`agent_f/core.py:1630-1646` 与
+#      `agent_f/step.py:495-501` 的落点）；
+#    以及工具自己的「拒收」文案族（`agent_f/core.py:1616/1625/1665` 三处逐字，
+#    同 `errorstats._TOOL_REFUSAL_FAMILIES` 的文案族判法：它们把拒因写在正文里）。
+#
+# ② 落定 = `agent_children.settled`（`AgentLoop._children_round_trip` 投递时写下的那一格，
+#    `agent_loop.py:6372-6385`；它与 `mailbox["children"]["settled"]` 是同一份
+#    `children` 读数 —— 同一处的返回值在 `agent_loop.py:6431-6434`，挂机判据读的就是它）。
+#    本格不另判"落定"（不拿 tasks.status 反推）：只读这条事件。
+#    消费 = 父代理在那之后的 `agent_step` 里指到了这条子产出的字面量
+#    （子任务号 / 子代理 `agent_run_end.evidence` / 任务行 `artifacts`；按 `table` + `id`
+#    点名那条台账行也算）。判据与 `agent_loop.summon_consumption` 的字面量那一半同族
+#    （`agent_loop.py:4532-4553`）—— 只认"指到了"，不猜语义：宁可少报，不替模型判断
+#    "它大概用过了"。
+
+#: 子产出字面量的匹配口径（只认逐字出现）：`agent_loop.summon_consumption` 的
+#: `refs = [t for t in outputs if t in text]` 是同一句。刻意不把 `stmt:000012` 拆成
+#: `000012` 去认裸号：`manuscripts.read(id="000003")` 与 `lit:000003` 会撞成同一个
+#: 数字串（真机 lp-ball-7 09:54:57 就撞了）—— 那会把"没消费"静默读成"消费了"。
+#: 裸号的代价（父只写 `{"table": "statements", "id": "000012"}`）由
+#: `_TABLE_ID_PREFIXES` 那一档补：它点名了 table 与 id，只在那种结构里才认。
+
+
+#: 台账表 → id 前缀（"按 `table` 点名的那一行"这一档；见 `_consumed_evidence`）。
+_TABLE_ID_PREFIXES: dict[str, str] = {"statements": "stmt", "experiments": "exp",
+                                      "documents": "doc"}
+
+
+def _step_tool(event: Mapping[str, Any]) -> str:
+    """这一步调的是谁：工具步给工具名，其它形状给收件人 / 形状名（不编名字）。"""
+    payload = event.get("payload")
+    payload = dict(payload) if isinstance(payload, Mapping) else {}
+    name = str(payload.get("name") or "")
+    if name:
+        return name
+    return str(payload.get("role") or payload.get("to") or event.get("shape") or "")
+
+
+def _step_is_effect(event: Mapping[str, Any]) -> bool:
+    """这一步有没有留下"可查的效应"（只读侦察 / 坏步不算）。
+
+    判据不在这里新定：`agent_loop._is_effect_evidence` 的同一张负表
+    （`RECON_ONLY_TOOLS` + `shape == "invalid"`），只是它收的是 `(shape, payload)`、
+    这里收的是会话记录里的事件。
+    """
+    try:
+        from ..agent_loop import RECON_ONLY_TOOLS
+    except Exception:  # noqa: BLE001 —— 读不到负表时按"没有效应"保守处理
+        return False
+    shape = str(event.get("shape") or "")
+    if shape == "invalid":
+        return False
+    if shape != "tool":
+        return True
+    payload = event.get("payload")
+    payload = dict(payload) if isinstance(payload, Mapping) else {}
+    return str(payload.get("name") or "") not in RECON_ONLY_TOOLS
+
+
+def _rejection_of_step(event: Mapping[str, Any]) -> dict[str, Any] | None:
+    """这一步是不是"失败 / 受控拒"：是 ⇒ `{at, step, tool, kind, why}`，不是 ⇒ None。
+
+    `kind` 的四个来源按优先级（与 `agent_loop._refusal_key` 的注释同一套次序）：
+    ① 框架的拒因键（`refused` / `refusal_reason` / `ok=False` + `meta.kind`）；
+    ② 工具写在结果 `data` 里的受控拒字段（`refused` / `refusal_code` /
+       `state == "refused"` / `refusal.kind` / `deps_refused`）；
+    ③ 工具的「拒收」文案族（三处逐字，见本节头注）；
+    ④ 都没有 ⇒ 不是拒（坏 JSON / 没回复 / 超时各走自己那一档，不在这里冒充拒因）。
+    """
+    result = event.get("result")
+    if not isinstance(result, Mapping):
+        return None
+    try:
+        from ..agent_loop import _refusal_key
+    except Exception:  # noqa: BLE001 —— 拿不到判据时只看结构化字段（never 编一个码）
+        _refusal_key = None
+    key = str(_refusal_key(result) or "") if callable(_refusal_key) else ""
+    kind = key.split("|", 1)[0] if key else ""
+    data = result.get("data")
+    data = dict(data) if isinstance(data, Mapping) else {}
+    why = str(result.get("error") or data.get("reason") or data.get("detail") or "")
+    if not kind:
+        for field in ("refusal_code", "deps_refused", "refused"):
+            value = data.get(field)
+            if isinstance(value, str) and value.strip():
+                kind = value.strip()
+                break
+    if not kind and str(data.get("state") or "") == "refused":
+        kind = str(data.get("refusal_code") or "refused")
+    if not kind:
+        refusal = data.get("refusal")
+        if isinstance(refusal, Mapping):
+            kind = str(refusal.get("kind") or "")
+    if not kind and "**拒收**" in why:
+        kind = "handed_product_refused"
+    if not kind:
+        return None
+    return {"at": str(event.get("ts") or ""), "step": event.get("index"),
+            "tool": _step_tool(event), "kind": kind, "why": _clip(why)}
+
+
+def _agent_cells(records: Any, by_id: Mapping[str, Mapping[str, Any]], *,
+                 code: str, role: str, records_ok: bool,
+                 records_reason: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """一个代理行的两格（① 最近一次被拒 / ② 未消费的子产出）。
+
+    拆出来只为把 `_patrol_reading` 压在 200 行线内（体量软基线：函数那一格不许抬）；
+    两格的实现仍各只有一处（`_last_rejection_cell` / `_unconsumed_cell`）。
+    """
+    try:
+        step_reading = _task_step_events(records, code, role)
+        step_events = list(step_reading.get("events") or ())
+        step_ok = bool(records_ok and step_reading.get("checked", True))
+        step_reason = (records_reason if not records_ok
+                       else str(step_reading.get("reason") or ""))
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        step_events, step_ok = [], False
+        step_reason = f"步骤记录读不成（{type(exc).__name__}: {exc}）"
+    rejection = _last_rejection_cell(step_events, checked=bool(step_ok),
+                                     reason=step_reason)
+    unconsumed = _unconsumed_cell(records, by_id, code=code, role=role,
+                                  checked=bool(records_ok), reason=records_reason)
+    return rejection, unconsumed
+
+
+def _cell_anomalies(items: Any) -> list[str]:
+    """两格（MPATROL1）的巡查句：让 M 一眼看见"卡在哪 / 谁落定了没被消费"。
+
+    只念"最近一步仍被拒"的那一串（`streak > 0`）与"逐条未消费"的那几条；历史里断掉的
+    那一段仍留在 `doing.last_rejection` 里，不在这里念，免得每一拍都在念旧账。
+    """
+    out: list[str] = []
+    for item in items or ():
+        rejection = dict((item.get("doing") or {}).get("last_rejection") or {})
+        streak = int(rejection.get("streak") or 0)
+        if streak > 0:
+            out.append(
+                f"{item['code']}（{item.get('role') or '?'}）连着被拒 {streak} 次："
+                f"最近一次第 {rejection.get('step')} 步 {rejection.get('tool') or '?'} —— "
+                f"拒码 `{rejection.get('kind')}`：{rejection.get('why') or '（没留下原话）'}")
+        unconsumed = dict(item.get("unconsumed") or {})
+        if int(unconsumed.get("count") or 0) > 0:
+            rows = [r for r in (unconsumed.get("items") or ()) if isinstance(r, Mapping)]
+            named = "；".join(
+                f"{r.get('task_id')}（{r.get('role') or '?'}）"
+                f"{(r.get('output') or r.get('kind') or '（没留产出路径）')}"
+                f"，落定 {r.get('settled_at') or '?'}，等了 {r.get('waited_sec')}s"
+                for r in rows[:3])
+            tail = f"（还有 {len(rows) - 3} 条）" if len(rows) > 3 else ""
+            out.append(
+                f"{item['code']}（{item.get('role') or '?'}）有 {len(rows)} 条子产出已落定、"
+                f"父代理还没在后续步骤里指到它：{named}{tail} ⇒ 读它 / 折进结论 / 如实声明不处理")
+    return out
+
+
+def _task_step_events(records: Any, code: str, role: str) -> dict[str, Any]:
+    """① 的接线：这个台账号的 `agent_step` 原始事件（`agenttrace.step_events` 的调用点）。
+
+    单独成一处（而不是在巡查主循环里内联 import）：判据要把这条接线打桩成空来证明
+    "① 的格子真的是从这里来的"（打桩 ⇒ 判据 a 必红）；内联的话那条反真空只能去改源码。
+    """
+    from .. import agenttrace as AT
+
+    return AT.step_events(records, code, role)
+
+
+def _settled_events(records: Any, code: str, role: str) -> list[dict[str, Any]]:
+    """② 的接线：这个台账号的 `agent_children` 事件（`mailbox["children"]["settled"]` 的盘上落点）。
+
+    为什么单独成一处：与 `_task_step_events` 同一条理由 —— 判据把这里打桩成空
+    （= 假装"这一支从来没有子代理落定"）⇒ 判据 c 必红；这条反真空证明 ② 的格子
+    读的就是 `agent_children.settled`，不是拿 `tasks.status` 另推一份。
+    """
+    want = str(code or "")
+    return [e for e in (records or ())
+            if str(e.get("kind") or "") == "agent_children"
+            and str(e.get("task_id") or "") == want
+            and (not role or str(e.get("role") or "") == role)]
+
+
+def _last_rejection_cell(events: Any, *, checked: bool = True,
+                         reason: str = "") -> dict[str, Any]:
+    """① 最近一次失败 / 受控拒 + `streak`（连续被拒次数，数到最近一步为止）。
+
+    `streak` 量的是"末尾连着几步被拒"：最近一步不是拒 ⇒ 0（同时 `found` 仍可为真：
+    那一段历史还在，只是这一串断了）。不按拒因分组：现场 F 的 step 4/5/6 是三个
+    不同的拒因（dependency_row_unverified / param_error / 缺 cites），而业主数的是
+    "连续被拒三次"（`agent_loop._refusal_beat` 的"同一拒因"是另一条判据，别混）。
+    """
+    empty: dict[str, Any] = {"checked": bool(checked), "found": False, "count": 0,
+                             "streak": 0, "at": "", "step": None, "tool": "",
+                             "kind": "", "why": "", "reason": str(reason or "")}
+    if not checked:
+        empty["reason"] = reason or "步骤记录读不成 ⇒ 最近一次被拒判不了（不是『没有拒绝』）"
+        return empty
+    rows = [(e, _rejection_of_step(e)) for e in (events or ())]
+    rejected = [(e, r) for e, r in rows if r is not None]
+    if not rejected:
+        return {**empty, "reason": "最近没有失败/受控拒的步骤"}
+    streak = 0
+    for _event, got in reversed(rows):
+        if got is None:
+            break
+        streak += 1
+    last_event, last = rejected[-1]
+    return {"checked": True, "found": True, "count": len(rejected), "streak": streak,
+            "at": str(last.get("at") or ""), "step": last.get("step"),
+            "tool": str(last.get("tool") or ""), "kind": str(last.get("kind") or ""),
+            "why": str(last.get("why") or ""), "reason": ""}
+
+
+def _output_literals(records: Any, task_id: str, row: Mapping[str, Any]) -> list[str]:
+    """一条子产出"可以被父指到的字面量"：任务号 / 任务行 artifacts / 子代理自报的 evidence。
+
+    全部是盘上已有的写法，不新造 id 形态：`agent_run_end.evidence` 是子代理收工时自己
+    报的那一列（`agent_loop` 的收工读数），`artifacts` 是秘书落进任务行的那一列。
+    """
+    out: list[str] = [str(task_id or "")]
+    out.extend(str(a) for a in (row.get("artifacts") or ()) if str(a))
+    for event in records or ():
+        if str(event.get("kind") or "") != "agent_run_end":
+            continue
+        if str(event.get("task_id") or "") != str(task_id or ""):
+            continue
+        out.extend(str(x) for x in (event.get("evidence") or ()) if str(x))
+    seen: list[str] = []
+    for token in out:
+        if token and token not in seen:
+            seen.append(token)
+    return seen
+
+
+def _consumed_evidence(steps: Any, *, since_step: Any, since_at: str,
+                       literals: Any) -> dict[str, Any] | None:
+    """父代理在落定之后有没有留下"指到这条子产出"的效应步：有 ⇒ 那一步的读数。
+
+    次序判据：事件里有步号就按步号（`index > since_step`），没有才退回时刻
+    （`ts > since_at`）。"指到"= 这一步的 `payload` 里逐字出现某个字面量，
+    或者按 `table` + `id` 点名了那条台账行（`{"table": "statements", "id": "000012"}`，
+    前缀由 `_TABLE_ID_PREFIXES` 映射）；"效应"= `_step_is_effect` 的负表。两半合起来
+    才叫消费（与 `summon_consumption` 的 `refs` × `_is_effect_evidence` 同一套）。
+    """
+    tokens = [str(t) for t in (literals or ()) if str(t)]
+    if not tokens:
+        return None
+    for event in steps or ():
+        index = event.get("index")
+        if isinstance(since_step, int) and isinstance(index, int):
+            if index <= since_step:
+                continue
+        elif since_at and str(event.get("ts") or "") <= since_at:
+            continue
+        if not _step_is_effect(event):
+            continue
+        payload = event.get("payload")
+        payload = dict(payload) if isinstance(payload, Mapping) else {}
+        args = payload.get("args")
+        args = dict(args) if isinstance(args, Mapping) else {}
+        table = str(args.get("table") or payload.get("table") or "")
+        row_id = str(args.get("id") or payload.get("id") or "")
+        typed = f"{_TABLE_ID_PREFIXES[table]}:{row_id}" if table in _TABLE_ID_PREFIXES else ""
+        text = json.dumps(payload, ensure_ascii=False, default=str)
+        if (typed and typed in tokens) or any(token in text for token in tokens):
+            return {"step": index, "tool": _step_tool(event),
+                    "at": str(event.get("ts") or "")}
+    return None
+
+
+def _unconsumed_cell(records: Any, by_id: Mapping[str, Mapping[str, Any]], *,
+                     code: str, role: str, checked: bool = True,
+                     reason: str = "") -> dict[str, Any]:
+    """② 「子代理已落定、产出没被消费」逐条（与挂机判据同源的那一格）。
+
+    落定只读 `agent_children.settled`（`agent_loop.py:6372-6385` 写的那一格 ——
+    `mailbox["children"]["settled"]` 的盘上落点；本格不拿 `tasks.status` 反推）。
+    消费只认"父在那之后指到了它"的字面量（`_consumed_evidence`）。
+    每条给：task_id / role / output（第一条 artifacts；没有就给 kind）/ kind（status/outcome）/
+    settled_at（子任务行 `ended_at`，没有才用事件时刻）/ waited_sec（等到现在多久）。
+    """
+    want = str(code or "")
+    empty: dict[str, Any] = {"checked": bool(checked), "count": 0, "items": [],
+                             "reason": str(reason or "")}
+    if not checked:
+        empty["reason"] = reason or "会话记录读不成 ⇒ 未消费的子产出判不了（不是『没有』）"
+        return empty
+    events = _settled_events(records, want, role)
+    steps = [e for e in (records or ())
+             if str(e.get("kind") or "") == "agent_step"
+             and str(e.get("task_id") or "") == want
+             and (not role or str(e.get("role") or "") == role)]
+    settled: dict[str, dict[str, Any]] = {}
+    for event in events:
+        outcomes = [str(x) for x in (event.get("settled_outcomes") or ())]
+        for pos, tid in enumerate(str(x) for x in (event.get("settled") or ())):
+            if not tid or tid in settled:
+                continue
+            settled[tid] = {"event_at": str(event.get("ts") or ""),
+                            "outcome": outcomes[pos] if pos < len(outcomes) else "",
+                            "step": event.get("step")}
+    items: list[dict[str, Any]] = []
+    for tid in sorted(settled):
+        info = settled[tid]
+        row = dict(by_id.get(tid) or {})
+        literals = _output_literals(records, tid, row)
+        hit = _consumed_evidence(steps, since_step=info.get("step"),
+                                 since_at=str(info.get("event_at") or ""),
+                                 literals=literals)
+        if hit is not None:
+            continue
+        settled_at = str(row.get("ended_at") or info.get("event_at") or "")
+        waited = _age_seconds(settled_at) if settled_at else None
+        artifacts = [str(a) for a in (row.get("artifacts") or ()) if str(a)]
+        status = str(row.get("status") or "")
+        outcome = str(row.get("outcome") or info.get("outcome") or "")
+        items.append({
+            "task_id": tid,
+            "role": str(row.get("role") or ""),
+            "output": artifacts[0] if artifacts else "",
+            "kind": f"{status}/{outcome}".strip("/"),
+            "settled_at": settled_at,
+            "waited_sec": waited,
+        })
+    return {"checked": True, "count": len(items), "items": items, "reason": ""}
+
+
+def _session_patrol_reading(cond: Any) -> tuple[list[dict[str, Any]], bool, str]:
+    """一次巡查只读一遍会话记录（两格共用同一份；三态：读不成 ⇒ `checked=False`）。"""
+    from .. import agenttrace as AT
+
+    root = str(getattr(getattr(cond, "store", None), "root", "") or "")
+    if not root:
+        return [], False, "没有工作区根 ⇒ 会话记录读不成（这两格不是『没有拒绝 / 没有未消费』）"
+    try:
+        records, reading = AT._session_records(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        return [], False, f"会话记录读不成（{type(exc).__name__}: {exc}）"
+    if not reading.get("checked"):
+        return [], False, str(reading.get("reason") or "会话记录读不成")
+    return [dict(e) for e in records], True, ""
 
 
 def _in_progress_of(rows: Any) -> tuple[str, str]:
@@ -3836,6 +4205,13 @@ def _patrol_reading(cond: Any, *, here: str = "") -> dict[str, Any]:
         unwaited.update(str(x) for x in (got.get("unwaited") or ()))
         invariant_problems.extend(str(x) for x in (got.get("problems") or ()))
     live = [c for c in order_all if SEC.is_live_agent(by_code.get(c) or {})]
+    # 两格（MPATROL1）共用这一份会话读数：一次巡查只读一遍盘；读不成时两格都是
+    # `checked=False`（"没查成"不是"没有拒绝 / 没有未消费"）。
+    records, records_ok, records_reason = _session_patrol_reading(cond)
+    try:
+        by_id = {str(k): dict(v) for k, v in (cond._tasks_by_id() or {}).items()}
+    except Exception:  # noqa: BLE001 —— 台账读不成时两格各自报"没查成"
+        by_id = {}
     items: list[dict[str, Any]] = []
     for code in live:
         row = by_code.get(code) or {}
@@ -3844,6 +4220,10 @@ def _patrol_reading(cond: Any, *, here: str = "") -> dict[str, Any]:
         board = _board_cell(cond, code, by_task_id=str(here or ""))
         timers = _timers_cell(clock, code, timer_index, reading, timer_problem)
         guidance = _last_guidance(relay_rows, code)
+        # ① 最近一次被拒 / ② 已落定、产出没被消费（两格读同一份 `records`）。
+        rejection, unconsumed = _agent_cells(
+            records, by_id, code=code, role=str(row.get("role") or ""),
+            records_ok=records_ok, records_reason=records_reason)
         if relay_problem:
             guidance["checked"] = False
             guidance["reason"] = relay_problem
@@ -3877,6 +4257,11 @@ def _patrol_reading(cond: Any, *, here: str = "") -> dict[str, Any]:
             notes.append("疑似停滞：" + str(cell.get("stalled_reason") or ""))
         if not board.get("checked"):
             notes.append("板读不成 ⇒ 它名下还有没有没做完的项判不了")
+        if not rejection.get("checked"):
+            notes.append("最近一次被拒判不了（" + str(rejection.get("reason") or "步骤读不成") + "）")
+        if not unconsumed.get("checked"):
+            notes.append("它名下有没有未消费的子产出判不了（"
+                         + str(unconsumed.get("reason") or "会话读不成") + "）")
         chain = list(cond.chain_of(code, rows=rows))
         items.append({
             "code": code,
@@ -3888,10 +4273,11 @@ def _patrol_reading(cond: Any, *, here: str = "") -> dict[str, Any]:
             "state_label": str(cell.get("state_label") or ""),
             "state_reason": str(cell.get("reason") or ""),
             "status": str(row.get("status") or ""),
-            "doing": _doing_cell(row, clock),
+            "doing": _doing_cell(row, clock, rejection),
             "board": board,
             "timers": timers,
             "last_guidance": guidance,
+            "unconsumed": unconsumed,
             "notes": notes,
             "legal": True,
         })
@@ -3919,6 +4305,8 @@ def _patrol_reading(cond: Any, *, here: str = "") -> dict[str, Any]:
     if silent:
         anomalies.append(f"{len(silent)} 个活跃子代理已经静默（交完差）却还占着台账那一行："
                          + "、".join(silent[:5]) + " ⇒ 该销号就销")
+    # 两格（MPATROL1）的巡查句（实现 `_cell_anomalies`）：读数是格，句子是让 M 一眼看见。
+    anomalies.extend(_cell_anomalies(items))
     out.update(checked=bool(clock.get("checked")), root=root, items=items, order=order,
                count=len(items), legal_codes=list(order), legal_total=len(items),
                by_state=state_counts(i["state"] for i in items),
@@ -4028,14 +4416,17 @@ _guide_handler = conductor_guide
     roles=("M",),
     returns=("{'checked','root','count','order','by_state','items','anomalies','clock','reason'}"
              "；items 里每一项是 {code, chain, chain_text, name, role, state, state_label,"
-             " state_reason, status, doing, board, timers, last_guidance, notes}；"
-             "doing 是 {task, action, step, step_at, stalled_sec, source}；board 是 {checked,"
+             " state_reason, status, doing, board, timers, last_guidance, unconsumed, notes}；"
+             "doing 是 {task, action, step, step_at, stalled_sec, last_rejection, source}；"
+             "last_rejection 是 {checked, found, count, streak, at, step, tool, kind, why,"
+             " reason}（最近一次失败/受控拒；`streak` = 末尾连着被拒几步）；board 是 {checked,"
              " in_progress_id, in_progress_reason, child_open_count, items}（`child_open_count`"
              " 量的是这一个子代理名下未完成的真板项件数）；timers 是 {checked,"
              " count, rows, reason}，rows 每项 {timer_id, kind, purpose, purpose_missing,"
              " waiting_on_text, wait_for, waited_sec, due_in_sec, state, park_state, to}；"
              "last_guidance 是 {checked, relay_id, at, text, hops, delivered_to, item_id,"
-             " reason}"),
+             " reason}；unconsumed 是 {checked, count, items, reason}，items 每项 "
+             "{task_id, role, output, kind, settled_at, waited_sec}"),
 )
 def conductor_patrol(_conductor: Any) -> ToolResult:
     """工具体：全部活跃子代理一次拿全（实现只有 `_patrol_reading` 一份）。"""

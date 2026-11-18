@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-17T21:43:57+08:00",
+  "generated_at": "2026-11-18T12:14:31+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -531,11 +531,11 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "32ba5c938055a0245a6727c714a0b4f03de5ab20b4a976b95af482bc948d2448",
-      "authored": "ai-agent",
+      "sha256": "ca9ae2bcaf3a4c336b3155a4771566b2780a8a042306c8bd6e23c2662da2264f",
+      "authored": "unknown",
       "authored_basis": "inferred",
-      "change_note": "DOCGATE1：doc.build_document 的 returns 补 no_evidence_chain/ledger_unreadable 两档（工具面声明，冻结快照重冻；业主 2026-11-17 已授权先apply）",
-      "changed_this_session": true,
+      "change_note": "MPATROL1：conductor.patrol 的 returns 增 doing.last_rejection 与 item.unconsumed 两格（实现只读既有步骤记录与 agent_children.settled，不新造台账）；tool_surface_snapshot 按现值重冻（逐格 diff 只有 conductor.patrol 的 declarations 一条，见 scripts/golden_diff.py；agent 面一个字节没动）。登记≠批准，reviewers=[] 保持。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
