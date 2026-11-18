@@ -1275,6 +1275,15 @@ def _annotate_ledger_row(column: str, row: Mapping[str, Any],
     地方（三态纪律在"角色"这一轴上的落点）。
     """
     got = dict(row)
+    if str(column) == "ledger":
+        # 2026-11-19（K1/K2 之后）：`artifacts.FIELDS` 多了 `instance` /
+        # `identity_conflict` / `family` 三格，而台账是追加式 JSONL —— 老行上没有它们。
+        # 读模型按 `FIELDS` 补齐（缺 = 空串）：生成物 `ui/src/types.ts` 的 `ArtifactRow`
+        # 声明的是"后端真读得到的键"，老行漏三格就等于声明与实际不符（契约 C 是双向的）。
+        from ..artifacts import FIELDS as _ARTIFACT_FIELDS
+
+        for key in _ARTIFACT_FIELDS:
+            got.setdefault(key, "")
     role, role_source = _ledger_role(row)
     got["by_role"] = role
     got["by_role_source"] = role_source
@@ -2296,8 +2305,9 @@ def artifacts_face(root: str | Path, store: Any = None, *,
                    project_dir: str = "") -> dict[str, Any]:
     """`GET /api/artifacts` 的读模型：台账 + 交接 + 验收行 + 体例 + 秘书 + 六件产物 + 任务。
 
-    - `ledger`：`artifacts.read_ledger`（行键 9 个：`at/path/sha256/bytes/producer/`
-      `kind/task_id/exit_code/note`）；另给 `ledger_verify`（`artifacts.verify_entries`，
+    - `ledger`：`artifacts.read_ledger`（行键 = `artifacts.FIELDS`：`at/path/sha256/bytes/`
+      `producer/kind/task_id/exit_code/note/instance/identity_conflict/family`，老行缺的
+      三格在这里补空串）；另给 `ledger_verify`（`artifacts.verify_entries`，
       逐行"盘上现在的 sha 与台账里记的一样吗"）；
     - `handoffs`：`manuscripts.read_rows`（行键见 `tests/conftest.py` 的夹具），另补
       `sender_label` / `to_label` 两个给人看的格子（`A（t-000002）` 那种形态，见

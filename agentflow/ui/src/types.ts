@@ -777,7 +777,7 @@ export interface VerificationRow {
   by_task_id_tri: string;
 }
 
-/** 出处：artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）。 */
+/** 出处：artifacts.read_ledger() 的行（`artifacts.FIELDS` 的键，真机 ARTIFACTS.jsonl 同形）。 */
 export interface ArtifactRow {
   at: string;
   path: string;
@@ -789,6 +789,9 @@ export interface ArtifactRow {
   exit_code: number | null;
   note: string;
   sha_consistency: string;
+  instance: string;
+  identity_conflict: string;
+  family: string;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
