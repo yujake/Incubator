@@ -1708,9 +1708,19 @@ def proof_text_manuscript_sign_gate(store: Any, *, proof_text: Any,
     # 概念行的良定义证明不认文献占位签（2026-11-10 业主裁定 甲）：那一份正文必须
     # 由 V 对 b-稿真签过；占位签只给"命题正文摘录自文献"那一档（与
     # `_unsigned_proof_gate` 同一条分界）。
-    is_concept = str((row or {}).get("kind") or "") == "concept"
-    if origin_now == "external_lit" and lit_now and not is_concept:
-        out["reason"] = ("文献侧：V 签位填文献编号（占位签）⇒ 允许入台账"
+    #
+    # 2026-11-18（VPLACE1 缺口 b）：免签只开给"这一份正文就是引文第一遍摘录"那一份，
+    # 不再按行级 `origin+lit` 一刀切（否则第二遍改写稿也在这条豁免里）。判据只有一处
+    # （`evidencebits.quote_carrier_reading`，读行上的落盘标记 `quote_carrier`）。
+    from . import evidencebits as _EB_CARRIER
+
+    _carrier = _EB_CARRIER.quote_carrier_reading(
+        row, origin=origin_now, source_lit_id=lit_now,
+        kind=str((row or {}).get("kind") or ""), proof_text=text)
+    out["quote_carrier"] = dict(_carrier)
+    if bool(_carrier.get("first_pass")):
+        out["reason"] = ("文献侧：这一份正文就是引文第一遍摘录（落盘标记 "
+                         f"`{_EB_CARRIER.QUOTE_CARRIER_KEY}=first`）⇒ 允许入台账"
                          "（与 `register_statement` 的文献档同一条口径）")
         return out
     if row is None:
@@ -2127,6 +2137,11 @@ STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
         # 只有一格、会被第 2 条路径覆写。只由 `agent_b/proof_receipt.write_proof_receipt`
         # 写，读口是 `manuscriptpaths.path_reading`。
         "manuscripts",
+        # 「引文第几遍载体」的落盘标记（2026-11-18，VPLACE1）：形状由
+        # `evidencebits.quote_carrier_mark` 定义、读口只有一个
+        # （`evidencebits.quote_carrier_reading`）。只由 B 登记那一笔写：
+        # `first` = 引文录入的逐字摘录（免 V 签），`second` = 改写 / 优化那一版。
+        "quote_carrier",
         "_grade_recomputed",    # 按签重算等级的读数（`verifications.GRADE_RECOMPUTED_KEY`）
     ),
     "numeric_evidence": ("bits",),

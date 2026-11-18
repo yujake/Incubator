@@ -4873,11 +4873,20 @@ def _sign_gate_b(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
             out.setdefault("hard_to_prove", []).append(str(mid))
             continue
         # 2026-11-13（甲）：引文侧登记现在会落一份 b-稿（命题 + 出处 + 逐字引文），
-        # 那份稿的"证据"是引文本身（逐字回验那条线），不是 V 读一遍论证 ——
-        # 与 `_unsigned_proof_gate` 的「文献侧占位签」同一条豁免：`external_lit` +
-        # `source_lit_id` 的行的载体不要求 V 签，也不挡收工。
-        if (srow and str(srow.get("origin") or "") == "external_lit"
-                and str(srow.get("source_lit_id") or "").strip()):
+        # 那份稿的"证据"是引文本身（逐字回验那条线），不是 V 读一遍论证。
+        #
+        # 2026-11-18（VPLACE1 缺口 b）：豁免原先只看 `origin=external_lit` +
+        # `source_lit_id`（行级），既不 `quote_verified`、也不分第几遍 ⇒ 同一
+        # 引文命题的第二遍改写 b-稿也在豁免里。现在判据只有一处
+        # （`evidencebits.quote_carrier_reading`，读行上的落盘标记
+        # `quote_carrier`）：只有"这一份稿就是第一遍载体"才免签；第二遍 / 判不了的
+        # 存量行一律按欠签处理（宁可欠签，不静默放过）。
+        _carrier = _EB.quote_carrier_reading(
+            srow, manuscript_id=str(mid), manuscript=rel)
+        if bool(_carrier.get("first_pass")):
+            out.setdefault("quote_first_pass", []).append({
+                "manuscript_id": str(mid), "manuscript": rel,
+                "why": str(_carrier.get("why") or "")})
             continue
         out["problems"].append({
             "where": f"稿 {mid}（{rel or '路径没读到'}）",

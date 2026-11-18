@@ -571,6 +571,166 @@ def bits_from_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return _stale_formal_cleared(bits, row, kind=kind)
 
 
+# ---------------------------------------------------------------- 引文第几遍载体
+#: 「引文第几遍载体」的落盘标记（`statements` 行上的扩展键 —— 不是 schema 字段）。
+#:
+#: ## 为什么必须落盘（2026-11-18，VPLACE1 缺口 a/b）
+#:
+#: 「第一遍摘录 / 第二遍改写」原先只有写侧现算（`_is_quote_second_pass`：在册 +
+#: 行上有 `quote_verified` + 正文换了），读侧拿不到同一个结论：
+#:
+#: - 写闸（`register_statement._unsigned_proof_gate`）与收工门（`agent_loop._sign_gate_b`）
+#:   只看 `origin="external_lit"` + `source_lit_id` ⇒ 第一遍与第二遍都放行；
+#: - `closing` 只看 `reviewed_source=="citation"` ⇒ 引文没核成（`quote_verified`
+#:   被降成 `None`）的第一遍被记成 `never_submitted`，而第二遍改写（沿用第一遍的
+#:   `quote_verified=True`）被记成 `cited_placeholder`。
+#:
+#: 于是同一条行在三处读成相反结论。这一格把"这一份载体是第几遍"在写的那一刻
+#: 记到行上，三处只读它（唯一判据 `quote_carrier_reading`）。
+#:
+#: ## 形状（写侧唯一出处 `quote_carrier_mark`）
+#:
+#: `{"pass": "first"|"second", "manuscript_id": "...", "manuscript": "...",
+#:   "body_sha256": "...", "at": "..."}`。`body_sha256` 是这一遍载体的正文指纹
+#: （与签同一把尺 `_sign_sha`），所以读侧能按"正文"或"稿号"两种口径核对。
+QUOTE_CARRIER_KEY = "quote_carrier"
+#: 第一遍：引文录入那一份（`## 证明` 就是逐字摘录）。免 V 签的只有这一档。
+QUOTE_PASS_FIRST = "first"
+#: 第二遍：改写 / 优化表述那一份（`specs/b_sign_policy`：「改写之后先拿签，再入库」）。
+QUOTE_PASS_SECOND = "second"
+#: 两档的受控词表（产出点 / 消费点都在本模块这一节）。
+QUOTE_PASSES: tuple[str, ...] = (QUOTE_PASS_FIRST, QUOTE_PASS_SECOND)
+
+
+def quote_carrier_mark(*, pass_: Any = "", manuscript_id: Any = "",
+                       manuscript: Any = "", body: Any = "",
+                       at: Any = "") -> dict[str, Any]:
+    """造一条「引文第几遍载体」的落盘标记（写侧唯一的形状定义）。
+
+    读侧不另拼字典：形状只在这里出现一次，改形状不会漏掉某一处消费点。
+    `pass_` 只认 `QUOTE_PASSES` 两档（词表外的值当场抛，不落一个读不懂的标记）。
+    """
+    p = str(pass_ or "")
+    if p not in QUOTE_PASSES:
+        raise ValueError(
+            f"quote_carrier_mark 的 pass 必须是 {QUOTE_PASSES} 之一，收到 {p!r} —— "
+            "这一格决定'这份载体免不免 V 签'，写一个读不懂的值等于让判据静默失效")
+    text = str(body or "")
+    return {"pass": p, "manuscript_id": str(manuscript_id or ""),
+            "manuscript": str(manuscript or ""),
+            "body_sha256": (_sign_sha(text) if text.strip() else ""),
+            "at": str(at or "")}
+
+
+def quote_carrier_reading(row: Mapping[str, Any] | None, *, origin: Any = "",
+                          source_lit_id: Any = "", kind: Any = "",
+                          proof_text: Any = "", manuscript_id: Any = "",
+                          manuscript: Any = "") -> dict[str, Any]:
+    """这一行 / 这一份正文 / 这一份稿是不是「引文第一遍载体」（三处共用的唯一判据）。
+
+    ## 三态（不折平）
+
+    - `first_pass=True`：确认是第一遍摘录 ⇒ 写闸放行、收工门不报 problem、
+      `closing` 记 `cited_placeholder`（不欠 V 签）；
+    - `first_pass=False` + `why` 说得清：确认不是第一遍（第二遍载体 / 不是引文侧 /
+      稿不对）⇒ 三处一致地欠签；
+    - 存量行既没有落盘标记、也没有旧代码落的那一格凭据 ⇒ 也是 `False`：
+      判不了就按欠签处理（宁可欠签，不许静默放过），`why` 逐字说清"判不了"与
+      "缺哪条读数"。
+
+    ## 三种问法（同一份落盘标记）
+
+    - `manuscript_id` / `manuscript`：问"这一份稿是不是第一遍载体"（收工门用）；
+    - `proof_text`：问"这一份正文是不是第一遍那一段"（写闸 / 逐份读数用）；
+    - 都不给：问"这一行当前 carrier 是不是第一遍"（`closing` 的稿级读数用）。
+
+    ## 存量行（本次改造之前落的）
+
+    没有新标记。唯一还能认的第一遍凭据是旧代码已经落盘的那一格
+    `bits.evidence.reviewed_source == "citation"`（= 第一遍逐字核过）。引文没核成的
+    存量第一遍没有任何落盘凭据 ⇒ 判不了 ⇒ 三处一致地欠签（不是把它静默放过）。
+
+    反真空：把本函数打桩成恒 `first_pass=False` ⇒
+    `tests/test_citation_first_pass_has_a_landed_marker.py::test_e_*` 必红。
+    """
+    out: dict[str, Any] = {"checked": True, "marked": False, "first_pass": False,
+                           "pass": "", "manuscript_id": "", "manuscript": "",
+                           "body_sha256": "", "why": ""}
+    r = dict(row or {})
+    origin_now = str(r.get("origin") or origin or "")
+    lit_now = str(r.get("source_lit_id") or source_lit_id or "").strip()
+    kind_now = str(r.get("kind") or kind or "")
+    if not (origin_now == "external_lit" and lit_now and kind_now != "concept"):
+        out["why"] = ("不是引文侧的非概念命题（origin=external_lit / source_lit_id 非空 / "
+                      "kind!=concept 三条不齐）⇒ 没有「第一遍摘录」这一档")
+        return out
+    raw = r.get(QUOTE_CARRIER_KEY)
+    if isinstance(raw, Mapping) and str(raw.get("pass") or "") in QUOTE_PASSES:
+        out.update(marked=True, **{"pass": str(raw.get("pass") or "")},
+                   manuscript_id=str(raw.get("manuscript_id") or ""),
+                   manuscript=str(raw.get("manuscript") or ""),
+                   body_sha256=str(raw.get("body_sha256") or ""))
+        first = str(out["pass"]) == QUOTE_PASS_FIRST
+        mid_q = str(manuscript_id or "").strip()
+        rel_q = str(manuscript or "").strip()
+        text = str(proof_text or "")
+        if first and (mid_q or rel_q) and not (
+                (mid_q and out["manuscript_id"] and mid_q == out["manuscript_id"])
+                or (rel_q and out["manuscript"] and rel_q == out["manuscript"])):
+            first = False
+            out["why"] = (f"落盘标记的载体是稿 {out['manuscript_id'] or out['manuscript'] or '?'}"
+                          f"，不是问的这一份（{mid_q or rel_q}）⇒ 这一份不是第一遍载体")
+        elif first and text.strip() and (not out["body_sha256"]
+                                         or out["body_sha256"] != _sign_sha(text)):
+            first = False
+            out["why"] = "这一份正文不是落盘标记记的那一段第一遍摘录 ⇒ 不是第一遍载体"
+        elif first and r.get("proof_history"):
+            # 标记与 `proof_history` 必须同向：正文被覆盖过却记着 first ⇒ 以"改写过"为准
+            # （fail-closed：不许拿一条自相矛盾的标记去免签）。
+            first = False
+            out["why"] = ("落盘标记说 first，而行上 `proof_history` 非空（正文被覆盖过）"
+                          "⇒ 不是第一遍载体")
+        elif first:
+            out["why"] = ("落盘标记 first，且问的就是那一段正文 / 那一份稿 / 这一行当前 "
+                          "carrier ⇒ 第一遍摘录")
+        elif str(out["pass"]) == QUOTE_PASS_SECOND:
+            out["why"] = "落盘标记 second ⇒ 这一行已经改写过（第二遍载体要 V 签）"
+        out["first_pass"] = bool(first)
+        return out
+    if not r:
+        out["first_pass"] = True
+        out["why"] = ("这一行还没有载体（新命题）⇒ 这一笔就是引文第一遍摘录；"
+                      "登记成功时写侧落 `quote_carrier=first`")
+        return out
+    rewritten = bool(r.get("proof_history")) or bool(
+        str(proof_text or "").strip()
+        and str(proof_text) != str(r.get("proof_text") or ""))
+    carrier_mid = str(r.get("manuscript_id") or "").strip()
+    carrier_rel = str(r.get("manuscript") or "").strip()
+    mid_q = str(manuscript_id or "").strip()
+    rel_q = str(manuscript or "").strip()
+    other_carrier = bool((mid_q and carrier_mid and mid_q != carrier_mid)
+                         or (rel_q and carrier_rel and rel_q != carrier_rel))
+    try:
+        source = str(dict(dict(bits_from_row(r)).get("evidence") or {})
+                     .get("reviewed_source") or "")
+    except Exception:  # noqa: BLE001 —— 读不出来按"判不了"（不是第一遍）
+        source = ""
+    if rewritten:
+        out["why"] = ("存量行：正文与在册不同 / `proof_history` 非空 ⇒ 这是一次改写"
+                      "（第二遍），不是第一遍摘录")
+    elif other_carrier:
+        out["why"] = ("存量行：问的这一份稿不是行上记的主载体 ⇒ 不是第一遍载体")
+    elif source == REVIEWED_SOURCE_CITATION:
+        out["first_pass"] = True
+        out["why"] = ("存量行：没有新落盘标记，但旧代码落的第一遍凭据仍在"
+                      "（`reviewed_source=citation`）⇒ 按第一遍摘录读")
+    else:
+        out["why"] = ("存量行：没有新落盘标记，也没有 `reviewed_source=citation`"
+                      "⇒ 判不了（三处一致按欠签处理；要豁免需重登记写入标记）")
+    return out
+
+
 def _stale_formal_cleared(bits: dict[str, Any], row: Mapping[str, Any], *,
                           kind: str = "") -> dict[str, Any]:
     """第 4 位记的「验的是哪一份证明」与现行正文不是同一份 ⇒ 那条路径读成 stale。

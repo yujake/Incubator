@@ -986,6 +986,37 @@ def _optimized_reading(attach: Mapping) -> dict:
             "optimized_blocked": str(got.get("optimized_blocked") or "")}
 
 
+def _quote_carrier_write(row: dict, out: dict, *, quote_pass: Any, body: Any,
+                         manuscript_id: Any = "", manuscript: Any = "") -> dict:
+    """把「引文第几遍载体」写进这一行（`_attach_proofs` 的内层，单列以控函数体量）。
+
+    `quote_pass` 只在 `QUOTE_PASSES` 两档里才写；`body` 空（合并支：正文已由秘书写进
+    在册行，这一笔只带 `canonical=""`）⇒ 按行上现在那份 `proof_text` 写。两者都空
+    ⇒ 不写。返回写进去的那条标记（空 dict = 这一笔不涉及引文两遍）。
+    """
+    if str(quote_pass or "") not in _EB.QUOTE_PASSES:
+        return {}
+    text = str(body or "")
+    if not text.strip():
+        text = str(row.get("proof_text") or "")
+    if not text.strip():
+        return {}
+    mid = str(manuscript_id or "")
+    rel = str(manuscript or "")
+    if not mid and rel:
+        # 稿号只在稿名里（业主 2026-11-13：稿里没有命题号，号在路径上）；
+        # 这一格给出稿号，收工门才能按号把"这一份稿"对回落盘标记。
+        from .. import vsigns as _VS_MID
+
+        mid = str(_VS_MID.manuscript_id_of(rel) or "")
+    mark = _EB.quote_carrier_mark(
+        pass_=str(quote_pass), manuscript_id=mid,
+        manuscript=rel, body=text, at=S.now_iso())
+    row[_EB.QUOTE_CARRIER_KEY] = mark
+    out["quote_carrier"] = dict(mark)
+    return dict(mark)
+
+
 def _sign_filing_reading(store: Any, *, manuscript_path: Any,
                          manuscript_text: Any = "", statement_id: Any = "") -> dict:
     """收录回执的两格读数：稿上已签 / 已入台账。
@@ -2354,7 +2385,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                        canonical: str = "", bits: Mapping | None = None,
                        proof_no: Any = 1, manuscript_id: str = "",
                        manuscript: str = "",
-                       replace_existing: bool = False) -> dict:
+                       replace_existing: bool = False,
+                       quote_pass: str = "", quote_manuscript_id: str = "",
+                       quote_manuscript: str = "") -> dict:
         """把证明清单与 canonical 正文写回既有那一行（同一把 `statements` 锁）。
 
         为什么不能交给秘书：秘书的白名单（`Secretary._statement_from`）只认 `Statement` 的
@@ -2442,7 +2475,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      "bits_synced": False,
                      #: 顶层收录回执：`{proof_no, proof_sha256}`（这一行现在这一份证明是
                      #: 哪一号、正文指纹是什么）。只在真写进去时出现。
-                     "proof_receipt": {}}
+                     "proof_receipt": {},
+                     #: 这一笔落的「引文第几遍载体」标记（`evidencebits.QUOTE_CARRIER_KEY`）：
+                     #: 只在调用方给了 `quote_pass` 且这一笔有 canonical 正文时出现。
+                     #: 空字典 = 这一笔不涉及引文两遍（老调用面逐字不变）。
+                     "quote_carrier": {}}
         want = str(canonical or "").strip()
         #: 这一笔交来的东西（证明清单 `entries` / canonical 正文 `want`）两样都没有。
         #:
@@ -2541,6 +2578,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 out["canonical_pending"] = bool(want)
                 return {"write": False, "result": out}
             row = dict(found_row)
+            # ---- 2026-11-18（VPLACE1）：把「引文第几遍载体」记到行上 ------------------
+            #
+            # 标记与正文同一笔落盘：`pass=first` = 引文录入那一段逐字摘录（免 V 签），
+            # `pass=second` = 改写 / 优化那一版（「改写之后先拿签，再入库」）。读侧
+            # （写闸 / 收工门 / `closing`）只读这一格，不再每次现算"是不是第二遍"。
+            _quote_carrier_write(
+                row, out, quote_pass=quote_pass, body=raw_want,
+                manuscript_id=str(quote_manuscript_id or manuscript_id or ""),
+                manuscript=str(quote_manuscript or manuscript or ""))
             have_raw = str(row.get("proof_text") or "")
             have_canon = have_raw.strip()
             # 逐字比，不按去空白比：只改了首尾空白的稿也是一次改稿，静默不写会让
@@ -2709,7 +2755,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     and not out["formal_synced"]
                     and not out["grade_recomputed"] and not out["proof_collected"]
                     and not out["kind_upgraded"] and not out["kind_trace_refreshed"]
-                    and not out["bits_synced"] and not out["proof_receipt"]):
+                    and not out["bits_synced"] and not out["proof_receipt"]
+                    and not out["quote_carrier"]):
                 return {"write": False, "result": out}
             if out["attached"] or out["replaced"]:
                 row[_VR.PROOFS_KEY] = listed
@@ -3154,12 +3201,32 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                      "⇒ 这一格不适用")
             return out
         out["applicable"] = True
-        # 概念行的良定义证明不认文献占位签（2026-11-10 业主裁定 甲）：它必须是 V 对
-        # 这一份 b-稿真签过的那一签；占位签只给"命题的正文摘录自文献"那一档。
-        if (str(origin or "") == "external_lit" and str(lit_id or "").strip()
-                and str(now.get("kind") or "") != "concept"):
-            out["reading"]["why"] = ("文献侧：V 签位填文献编号（占位签）⇒ 允许入台账，"
-                                     "第二阶段再逐个优化重写拿真签")
+        # 2026-11-18（VPLACE1 缺口 a/b）：免签判据 = "这一份正文就是引文第一遍摘录
+        # 那一份"，不再按行级 `origin+lit` 一刀切。改前那条行级豁免同时放行了第二遍
+        # 改写稿（同一命题、正文换了、别的一模一样）⇒ 与收工门/读数分家。
+        #
+        # 判据只有一处：`evidencebits.quote_carrier_reading`（读行上的落盘标记
+        # `quote_carrier`）。逐份判，因为一条行可能有多份正文（#p1 第一遍 / #p2 改写）。
+        # 概念行照旧不认这档（2026-11-10 业主裁定 甲：良定义证明必须真签）。
+        carriers: dict[int, dict] = {}
+        first_pass_nos: set[int] = set()
+        for no, text in pending:
+            _carrier = _EB.quote_carrier_reading(
+                now, origin=str(origin or ""), source_lit_id=str(lit_id or ""),
+                kind=str(now.get("kind") or ""), proof_text=text)
+            carriers[int(no)] = dict(_carrier)
+            if bool(_carrier.get("first_pass")):
+                first_pass_nos.add(int(no))
+        out["reading"]["quote_carrier"] = [
+            {"proof_no": int(no), "pass": str(carriers[int(no)].get("pass") or ""),
+             "first_pass": int(no) in first_pass_nos,
+             "why": str(carriers[int(no)].get("why") or "")}
+            for no, _ in pending]
+        if first_pass_nos and len(first_pass_nos) == len(pending):
+            out["reading"]["why"] = (
+                "文献侧：这一份正文就是引文第一遍摘录（落盘标记 "
+                f"`{_EB.QUOTE_CARRIER_KEY}=first`）⇒ 免 V 签、允许入台账，"
+                "第二阶段再逐个优化重写拿真签")
             for one in out["reading"]["proofs"]:
                 one["signed"] = True
                 one["sign"] = "placeholder_lit"
@@ -3169,6 +3236,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             # 手稿签块认下来的一签：它盖的就是这一笔交来的那一份正文（`bits_after_sign`
             # 按同一个证明号记账），所以免签只开给那一个号。
             signed[want_no] = "manuscript_sign_block"
+        for no in sorted(first_pass_nos):
+            signed[no] = "placeholder_lit"
         for no, text in pending:
             if no in signed:
                 continue
@@ -3195,8 +3264,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             "三条出路：① F 先拿签（F 用 `summon` V 的 `verify.verify_proof`，"
             "带 `proof_manuscript`；签到位后签落回稿，再交来入库）；"
             "② B 自己把这一份送 V（`V.verify_proof` 带 `statement_id` + `proof_no`），"
-            "拿到「成立」再交；③ 这一条是文献来的 ⇒ 按 `origin=\"external_lit\"` + "
-            "`source_lit_id` 登记（V 签位填文献编号 = 占位签，允许入台账）。"
+            "拿到「成立」再交；③ 这一条是文献来的第一遍摘录 ⇒ 按 "
+            "`origin=\"external_lit\"` + `source_lit_id` 登记（写侧会落盘标记 "
+            f"`{_EB.QUOTE_CARRIER_KEY}=first`，免 V 签）；第二遍改写按口径「先拿签，再入库」，"
+            "不在这一档。"
             "读数见 `proof_gate`（哪几份缺签、每份的出路）。")
         out["reading"]["why"] = out["reason"]
         out["reading"]["missing"] = missing
@@ -4651,6 +4722,20 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "quote_verified": quote_verified, "quote_mode": quote_mode,
                 "quote_span": quote_span,
                 "quote_call_sha256": quote_call_sha256}
+        # ---- 2026-11-18（VPLACE1 ①）：这一笔落的是引文第几遍载体 -----------------
+        #
+        # 写侧只在这里判一次（`_is_quote_second_pass` 是既有唯一判据），判完就落成行上
+        # 的标记；读侧（写闸 / 收工门 / `closing`）只读那一格，不再各自现算。
+        # 只在引文侧写：`own_result` 没有"引文两遍"这回事（负控逐字不变）。
+        # 稿号 / 稿路径在两条落盘支里各自补齐（新建支用落成的那份稿，合并支用行上那份）。
+        _quote_pass = ""
+        if str(origin) == "external_lit":
+            _quote_pass = (_EB.QUOTE_PASS_SECOND
+                           if (_quote_second_pass
+                               or bool((redelivery or {}).get("proof_history")))
+                           else _EB.QUOTE_PASS_FIRST)
+        _quote_mid = ""
+        _quote_rel = str(manuscript_path or "")
         # ---- 「把缺的出处字段一次说齐」 --------------
         # 这一格原本是"一次只点名一条"（实测要走 bad_origin → missing_quote_reason →
         # missing_page_range 「三轮」才凑齐）。业主口径："真实智能体也会在这里困惑并
@@ -5389,7 +5474,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                             canonical=attach_canonical,
                                             bits=bits,
                                             proof_no=int(proof_no_placement),
-                                            manuscript=manuscript_path)
+                                            manuscript=manuscript_path,
+                                            quote_pass=_quote_pass,
+                                            quote_manuscript_id=_quote_mid,
+                                            quote_manuscript=_quote_rel)
             # 正文写不进去 ⇒ 升档这一笔也不用问了（闸只会拒）：照实回这一笔的拒码。
             if pre_write.get("refused"):
                 return _refuse(str(pre_write.get("refused") or "proof_text_not_written"),
@@ -5586,7 +5674,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if proof_no >= 1 and not written.get("merged_same_kind"):
                 collect = self._attach_proofs(
                     stmt_now, [], canonical="", bits=bits, proof_no=int(proof_no),
-                    manuscript=manuscript_path)
+                    manuscript=manuscript_path,
+                    # 合并支：正文已由秘书写进在册行（`canonical=""`），标记按行上
+                    # 那份正文写 —— 第二遍改写走的就是这一支，不补标记它会被读成第一遍。
+                    quote_pass=_quote_pass, quote_manuscript_id=_quote_mid,
+                    quote_manuscript=_quote_rel)
                 if collect.get("refused"):
                     out["bits_not_written"] = {
                         "refused": str(collect.get("refused") or ""),
@@ -5667,7 +5759,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                                       canonical=attach_canonical,
                                                       bits=bits,
                                                       proof_no=int(proof_no_placement),
-                                                      manuscript=manuscript_path)
+                                                      manuscript=manuscript_path,
+                                                      quote_pass=_quote_pass,
+                                                      quote_manuscript_id=_quote_mid,
+                                                      quote_manuscript=_quote_rel)
             # ---- 2026-11-08：已在终态档也要把"这一笔认到的签"落到行上 ----------
             #
             # V 只对手稿负责之后，签不再由 V 写 statements；B 的 at_tier 出口（同一条
@@ -5814,7 +5909,11 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             attach = pre_write or self._attach_proofs(stmt_dup, attach_entries,
                                                       canonical=attach_canonical,
                                                       bits=bits,
-                                                      proof_no=int(proof_no_placement))
+                                                      proof_no=int(proof_no_placement),
+                                                      manuscript=manuscript_path,
+                                                      quote_pass=_quote_pass,
+                                                      quote_manuscript_id=_quote_mid,
+                                                      quote_manuscript=_quote_rel)
             if attach.get("written"):
                 _dup_got = SL.by_id(self.store, stmt_id=stmt_dup)
                 if not _dup_got["checked"]:
@@ -5999,12 +6098,24 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         from .. import vsigns as _VS_MID
 
         _manuscript_id_now = _VS_MID.manuscript_id_of(str(manuscript_path or ""))
+        # 这一笔落成的稿就是标记指的载体（新建支：引文侧落的那份；改写支：改写稿）。
+        _quote_mid = str(_manuscript_id_now or "") or _quote_mid
+        _quote_rel = str(manuscript_path or "") or _quote_rel
+        if _rewrite_body:
+            _quote_mid = str(b_manuscript.get("manuscript_id") or _quote_mid)
+            _quote_rel = str(b_manuscript.get("path") or _quote_rel)
+        elif _citation_landing:
+            _quote_mid = str(_citation_reading.get("manuscript_id") or _quote_mid)
+            _quote_rel = str(_citation_reading.get("path") or _quote_rel)
         attach = self._attach_proofs(stmt_id, attach_entries,
                                      canonical=attach_canonical,
                                      bits=bits,
                                      proof_no=int(proof_no_placement),
                                      manuscript_id=_manuscript_id_now,
-                                     manuscript=manuscript_path)
+                                     manuscript=manuscript_path,
+                                     quote_pass=_quote_pass,
+                                     quote_manuscript_id=_quote_mid,
+                                     quote_manuscript=_quote_rel)
         if attach.get("refused"):
             # 换正文那一笔被拒（`optimized_blocked`：没有签 / 签的不是这一份）⇒ 不许当
             # 成功返回：盘上那一份 `proof_text` 一个字都没动，读数在 `_optimized_reading`。
@@ -8179,13 +8290,26 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             attach_bits = _VS.bits_with_review(
                 dict(row.get("bits") or {}), proof_no=no,
                 proof_sha256=_PR.proof_sha(text), kind=str(row.get("kind") or ""))
+        #: 2026-11-18（VPLACE1）：收录这一支也可能换掉 canonical 正文（优化线）。
+        #: 只在 #p1（canonical）上判"第几遍"；#p2 及以后不动这一行的载体标记。
+        _quote_pass = ""
+        if (no == 1 and str(row.get("origin") or "") == "external_lit"
+                and str(text or "").strip()):
+            _quote_pass = (_EB.QUOTE_PASS_SECOND
+                           if (self._is_quote_second_pass(
+                               row=dict(row), proof_text=text)
+                               or bool(row.get("proof_history")))
+                           else _EB.QUOTE_PASS_FIRST)
         attach = self._attach_proofs(
             target,
             entries=([{"proof_no": no, "text": text}] if no >= 2 else []),
             canonical=(text if no == 1 else ""), bits=attach_bits, proof_no=no,
             manuscript_id=str(manuscript_id or ""),
             manuscript=manuscript,
-            replace_existing=bool(replace_existing))
+            replace_existing=bool(replace_existing),
+            quote_pass=_quote_pass,
+            quote_manuscript_id=str(manuscript_id or ""),
+            quote_manuscript=str(manuscript or ""))
         if attach.get("refused"):
             return {"written": False, "code": str(attach["refused"]),
                     "why": str(attach.get("reason") or "")}

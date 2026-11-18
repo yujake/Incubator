@@ -5346,16 +5346,21 @@ def _human_span(seconds: float | None) -> str:
     return f"{days} 天 {hours} 小时" if hours else f"{days} 天"
 
 
-def _cited_placeholder_reading(row: Mapping[str, Any]) -> dict[str, Any]:
-    """这一行的 V 签位是不是「引文占位」（业主 2026-11-14 的口径）。
+def _cited_placeholder_reading(row: Mapping[str, Any], *, proof_text: Any = "",
+                               manuscript_id: Any = "",
+                               manuscript: Any = "") -> dict[str, Any]:
+    """这一行 / 这一份证明的 V 签位是不是「引文占位」（第一遍摘录载体）。
 
-    业主逐字：「引文收录阶段的 V 签由引文占位，这是已有口径」。占位签的唯一标记是
-    `bits.evidence.reviewed_source == "citation"`：写侧 `evidencebits.bits_of` 在
-    `origin="external_lit"` + `source_lit_id` + 逐字核过时落这一档，读侧
-    `evidencebits._citation_review_cleared` 把历史行（`reviewed=true` 而凭据是
-    `{"evidence": "lit:…"}`）也降成这一档；真签是 `"v"`（认签口写，
-    `register_statement` / `secretary.record_statement` 两处）。所以"有占位"与
-    "没有真签"是同一件事，不需要第二份判据。
+    业主 2026-11-14：「引文收录阶段的 V 签由引文占位，这是已有口径」。2026-11-18
+    （VPLACE1 缺口 a/b）之后，判据不再是 `bits.evidence.reviewed_source=="citation"`
+    那一格（它只在 `quote_verified is True` 时出现，会把"引文没核成"的第一遍漏成
+    欠签；而且它是 `statements` 行字段，稿级读不到），而是行上的落盘标记
+    `quote_carrier` 的唯一读口 `evidencebits.quote_carrier_reading`：
+
+    - `first` ⇔ 这一份是引文第一遍摘录 ⇒ `placeholder=True`（不欠 V 签）；
+    - `second` ⇔ 改写 / 优化那一版 ⇒ `placeholder=False`（进 `statements_unsigned`）；
+    - 存量行（没有新标记）：`reviewed_source=="citation"`（旧代码落的第一遍凭据）
+      仍按第一遍读；其余"判不了"按不是占位处理（宁可欠签，不许静默放过）。
 
     三态：`bits` 读不出来 ⇒ `checked=False` + `placeholder=False` ——
     "判不了"不许读成"有占位"（放它过去等于把一条真欠签静默放过）。
@@ -5364,21 +5369,28 @@ def _cited_placeholder_reading(row: Mapping[str, Any]) -> dict[str, Any]:
     把这一格换成"没有占位" ⇒ 那 4 条必须重新进 `statements_unsigned`）。
     """
     out: dict[str, Any] = {"checked": False, "placeholder": False,
-                           "reviewed_source": "", "evidence": "", "why": ""}
+                           "reviewed_source": "", "evidence": "",
+                           "carrier": {}, "why": ""}
     try:
         bits = EB.bits_from_row(dict(row))
     except Exception as exc:  # noqa: BLE001 —— 判不了不许折成"有占位"
         out["why"] = f"bits 读不出来（{type(exc).__name__}: {exc}）⇒ 这一格没查成"
         return out
     ev = dict(bits.get("evidence") or {})
-    source = str(ev.get("reviewed_source") or "")
     by = dict(ev.get("reviewed_by") or {})
-    out.update(checked=True, reviewed_source=source,
-               evidence=str(by.get("evidence") or ""))
-    if source == EB.REVIEWED_SOURCE_CITATION:
-        out["placeholder"] = True
-        out["why"] = (f"V 签位由引文占位（reviewed_source=citation，凭据 "
-                      f"{out['evidence'] or '文献编号'}）⇒ 这一档不欠 V 签")
+    carrier = EB.quote_carrier_reading(
+        row, proof_text=proof_text, manuscript_id=manuscript_id,
+        manuscript=manuscript)
+    out.update(checked=True, reviewed_source=str(ev.get("reviewed_source") or ""),
+               evidence=str(by.get("evidence") or ""),
+               carrier=dict(carrier),
+               placeholder=bool(carrier.get("first_pass")))
+    if out["placeholder"]:
+        out["why"] = (f"V 签位由引文占位（引文第一遍摘录载体，"
+                      f"{carrier.get('why') or '落盘标记 first'}）⇒ 这一档不欠 V 签")
+    else:
+        out["why"] = (str(carrier.get("why") or "")
+                      or "不是引文第一遍摘录载体 ⇒ 这一档不算引文占位")
     return out
 
 
@@ -5631,10 +5643,14 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
             continue
         # ---- 引文占位 ≠ 欠签（业主 2026-11-14：「引文收录阶段的 V 签由引文占位」）------
         #
-        # 判据只在 `_cited_placeholder_reading` 一处（`bits.evidence.reviewed_source
-        # == "citation"`）。这里只拿结论用：占位要把"一次都没送过 V"那一档读成
-        # `cited_placeholder`（单列、不进 count）；真签 / 打回 / 过期那几档照旧 ——
-        # 占位不覆盖任何一次真审（"有占位"不等于"审过了"）。
+        # 判据只在 `_cited_placeholder_reading` 一处（它读行上的落盘标记
+        # `quote_carrier`：第一遍摘录 ⇒ 占位）。这里只拿结论用：占位要把"一次都没送过 V"
+        # 那一档读成 `cited_placeholder`（单列、不进 count）；真签 / 打回 / 过期那几档
+        # 照旧 —— 占位不覆盖任何一次真审（"有占位"不等于"审过了"）。
+        #
+        # 逐份判（2026-11-18）：一条行可能有多份正文（#p1 第一遍摘录 / #p2 改写），
+        # 只有正文与落盘标记记的那一份对得上时才记 `cited_placeholder`；同一行的
+        # 第二遍改写那一份必须照常进 count。
         ph = _cited_placeholder_reading(row)
         try:
             ledger_rows, ledger_problems = _VR.list_verifications(
@@ -5647,6 +5663,7 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
         proofs: list[dict[str, Any]] = []
         for no, text in _VR.proof_list(row):
             label = _VR.proof_label(sid, no)
+            ph_now = _cited_placeholder_reading(row, proof_text=text)
             # ---- 优化栏 = 难以自证 ⇒ 这一份不欠签（2026-11-13 业主裁定） ----------
             #
             # 位置在 `sign_reading` 之前：这一档的结论不需要再看签（它本来就没有真签），
@@ -5708,14 +5725,14 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
             else:
                 cls = "never_submitted"
             # 占位签只改"一次都没送过 V"这一档；真签 / holding / 打回 / 过期照旧。
-            if cls == "never_submitted" and ph.get("placeholder"):
+            if cls == "never_submitted" and ph_now.get("placeholder"):
                 cls = "cited_placeholder"
             rec = by_vid.get(vid) or {}
             owner = str(rec.get("submitter") or rec.get("recipient") or "")
             row_manuscript = str((ev.get("last_row") or {}).get("manuscript") or "")
             why = (str(st.get("why") or "")[:400]
                    if cls != "cited_placeholder"
-                   else str(ph.get("why") or "引文占位 ⇒ 这一档不欠 V 签"))
+                   else str(ph_now.get("why") or "引文占位 ⇒ 这一档不欠 V 签"))
             proofs.append({
                 "proof_no": no, "label": label, "state": state, "class": cls,
                 "verdict": verdict, "verification_id": vid,
