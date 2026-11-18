@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from . import dedup as D
+from . import identity as IDENT
 from . import litavail as LAV
 from . import litread as LR
 from . import schema as S
@@ -411,7 +412,7 @@ class LitStageError(RuntimeError):
 # --------------------------------------------------------------------------- 回读回执
 
 
-#: 「A 回读过自己刚写的清单」的回执（进程内账，按 `(工作区根, 委托号)` 分开）。
+#: 「A 回读过自己刚写的清单」的回执（落盘，按 `(实例, 委托号)` 分开；K16 / AL-06）。
 #:
 #: ## 为什么要有这一格（业主 2026-11-16 裁定 9 / 15）
 #:
@@ -427,25 +428,69 @@ class LitStageError(RuntimeError):
 #: 为什么选"受控拒"而不是"读数点名"：读数不挡路。现场已经证明"闸跑了"这句话可以与
 #: "A 根本没读"同时成立 —— 再留一条能被忽略的读数，等于把同一个失败再演一遍。
 #:
-#: 为什么存在进程内而不是盘上：`lit.stage_list` 的副作用声明是 `read`（只读工具）。
-#: 让它写一条盘上回执会把它变成写工具（改副作用面＝改权限面，FC-27）。而回执的用途
-#: 只是"这一次提交之前读过没读过"，进程内足够；进程重启 ⇒ 回执丢失 ⇒ 再读一次即可
-#: （fail-closed：丢回执的代价是多重读一次，不是多放一条进去）。
-_READBACKS: dict[tuple[str, str], dict] = {}
-#: 回执最多留几份（进程内账，无上限就是无界增长；按 LRU 丢最旧的）。
-_READBACKS_MAX: int = 64
+#: ## 为什么从进程内改成落盘（K16，2026-11-19）
+#:
+#: 改前是 `_READBACKS[(root, request_id)]` 一个进程内字典：重启就没了（fail-closed 只
+#: 多读一次，可接受），但它还少一根轴 —— `request_id` 是委托号，不是实例号：
+#: 两个 A 实例对同一委托交错 stage / submit 时，A1 的回执会被 A2 的 `stage_add` 删掉，
+#: A1 提交时被拒 `no_readback`，而那是别人造成的拒（AL-06 缺的读数就是这个交错的形态）。
+#: 现在回执落在 `<工作区>/data/lit_readbacks.jsonl`（零 schema：它是文件，不是表），
+#: 一行一条 `{request_id, instance, actor, slots, count, at}`，键是 `(instance, request_id)`：
+#: 另一个进程 / 重启之后都读得到（AL-06 的 d 条），而另一个实例的 stage 改动只作废
+#: 它自己的回执。
+#:
+#: 为什么 `lit.stage_list` 的副作用声明仍是 `read` 而这里要写盘：回执不是"列表被改了"
+#: 这件事的副作用，它是"这一趟读过"的凭据；写的是旁路台账（与 `data/lit_availability.jsonl`
+#: / `data/lit_reads.jsonl` 同一层），不动任何受 schema 管的表。改前"进程内足够"的
+#: 前提是"回执只服务同一进程里的下一次提交"，而 AL-06 的现场正是这个前提不成立。
+READBACK_LEDGER_NAME = "lit_readbacks.jsonl"
 
 
-def _root_key(store: Store | None) -> str:
-    """回执的键里那一段工作区标识（不同工作区的同名委托号不许互相作证）。"""
-    if store is None:
-        return ""
-    return str(Path(store.root).resolve())
+def readback_ledger_path(root: str | Path) -> Path:
+    """回执台账的落点：`<工作区>/data/lit_readbacks.jsonl`（只算路径）。"""
+    return Path(str(root)) / "data" / READBACK_LEDGER_NAME
+
+
+def _readback_actor() -> tuple[str, str]:
+    """这一次回读是谁：`(实例标签, actor 名)`（实例读不到 ⇒ 空串，不编一个）。"""
+    instance = str(IDENT.current_instance() or "").strip()
+    return instance, IDENT.actor_for("A", instance)
+
+
+def _append_readback(store: Store, rec: Mapping[str, Any]) -> None:
+    """追加一行回执（写不进去就受控抛：'没记上'不许读成'读过了'）。"""
+    path = readback_ledger_path(store.root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps(dict(rec), ensure_ascii=False, sort_keys=True, default=str) + "\n"
+    with path.open("a", encoding="utf-8", newline="") as fh:
+        fh.write(line)
+
+
+def _readback_lines(store: Store | None) -> list[dict[str, Any]]:
+    """回执台账的全部行（坏行跳过：它不构成"这一条读过"的证据）。"""
+    path = readback_ledger_path(store.root) if store is not None else None
+    if path is None or not path.is_file():
+        return []
+    out: list[dict[str, Any]] = []
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return []
+    for raw in text.splitlines():
+        if not raw.strip():
+            continue
+        try:
+            got = json.loads(raw)
+        except ValueError:
+            continue                    # 坏行不算回执（读不出来 ≠ 读过了）
+        if isinstance(got, dict):
+            out.append(got)
+    return out
 
 
 def note_readback(store: Store | None, request_id: str,
                   rows: Sequence[Mapping[str, Any]]) -> dict:
-    """记一条回执：A 刚刚用 `lit.stage_list` 读过这一次委托的清单。
+    """记一条回执：这个实例刚刚用 `lit.stage_list` 读过这一次委托的清单。
 
     只认具体委托（`request_id=""` / `"*"` 不记）：全查那一次的视图不回答"这一批
     回读过没有"。回执记的是槽位集合，不是状态 —— 判完之后状态会变，槽位集合
@@ -455,34 +500,66 @@ def note_readback(store: Store | None, request_id: str,
     rid = str(request_id or "").strip()
     if store is None or not rid or rid == "*":
         return {}
+    instance, actor = _readback_actor()
     slots = sorted({str(r.get("slot") or "") for r in rows if str(r.get("slot") or "")})
-    rec = {"request_id": rid, "slots": slots, "count": len(slots), "at": S.now_iso()}
-    key = (_root_key(store), rid)
-    _READBACKS[key] = rec
-    while len(_READBACKS) > _READBACKS_MAX:
-        _READBACKS.pop(next(iter(_READBACKS)))
+    rec = {"request_id": rid, "instance": instance, "actor": actor,
+           "slots": slots, "count": len(slots), "at": S.now_iso()}
+    try:
+        _append_readback(store, rec)
+    except OSError:
+        # 写不进台账 ⇒ 这一次回读没有凭据；不许在内存里假装记上了（那样另一个进程
+        # 看不到、而这个进程的提交闸会放行）。返回空字典 = 这一格没记成。
+        return {}
     return dict(rec)
 
 
 def readback_receipt(store: Store | None, request_id: str) -> dict | None:
-    """这一次委托的回执（没有 ⇒ `None`；`None` 不是"读过了"）。"""
+    """这个实例对这一次委托的回执（没有 ⇒ `None`；`None` 不是"读过了"）。
+
+    取台账里同一 `(instance, request_id)` 的最后一行：`stage_add` 写的作废
+    记录是同一形状的空槽位行（见 :func:`_drop_readback`），读到它就返回 `None`，
+    于是"没有回读过"与"回读之后清单又变了"在拒信里仍是两句话。
+    """
     rid = str(request_id or "").strip()
     if store is None or not rid:
         return None
-    got = _READBACKS.get((_root_key(store), rid))
-    return dict(got) if got else None
+    instance, _actor = _readback_actor()
+    found: dict | None = None
+    for rec in _readback_lines(store):
+        if str(rec.get("request_id") or "") != rid:
+            continue
+        if str(rec.get("instance") or "") != instance:
+            continue
+        found = rec
+    if not found or bool(found.get("invalidated")):
+        return None
+    return dict(found)
 
 
 def reset_readbacks() -> None:
-    """清空回执（判据之间的隔离点；也是"进程重启"的替身）。"""
-    _READBACKS.clear()
+    """回执的隔离点（判据的旧入口；今天回执落盘，进程内没有可清的缓存）。
+
+    保留这个名字是因为调用方（判据夹具 / 旧脚本）用它表达"从零开始"：每个判据
+    自己一份 `tmp_path` 工作区，落盘回执天然按工作区隔离，所以这里无事可做 ——
+    它是"没有进程内账"这件事的读数，而不是一个静默的空操作。
+    """
 
 
 def _drop_readback(store: Store | None, request_id: str) -> None:
-    """清单变了 ⇒ 旧回执作废（下一次提交前必须重读）。"""
-    if store is None:
+    """清单变了 ⇒ 这个实例的旧回执作废（下一次提交前必须重读）。"""
+    rid = str(request_id or "").strip()
+    if store is None or not rid:
         return
-    _READBACKS.pop((_root_key(store), str(request_id or "").strip()), None)
+    instance, actor = _readback_actor()
+    try:
+        _append_readback(store, {"request_id": rid, "instance": instance,
+                                 "actor": actor, "slots": [], "count": 0,
+                                 "invalidated": True, "at": S.now_iso()})
+    except OSError:
+        # 作废记不上 ⇒ 旧回执仍然有效（fail-open 到"多信一次旧读数"）。这条退路
+        # 只在磁盘写不进去时出现；下一次 `readback_receipt` 仍会给旧槽位集合，
+        # 而提交闸按槽位差集判 —— 新增的槽位一定缺回读，所以不会放走没读过的行。
+        return
 
 
 def _readback_reason(request_id: str, missing: Sequence[str], *,
@@ -747,12 +824,12 @@ def _check_code(code: str) -> str:
 
 
 def current_request_id_of(rows: Sequence[Mapping[str, Any]]) -> str:
-    """当前委托的"已经拿到行"版：同一个判据，不再把表读一遍（见 `current_request_id`）。
+    """一组行里"最近一次暂存"的委托号：槽位号最大那一行的 `request_id`。
 
-    为什么要这一格：`list_candidates` 一拍里要用它两次（解析默认视图 + 回填
-    `current_request_id` 那一格），而 `current_request_id(store)` 每次都
-    `store.rows("lit_candidates")` 重读一遍全表 ⇒ 一拍读 2~3 次同一张表。
-    判据只有一份：`current_request_id` 现在也走这里。
+    这是"号只增不复用"那个事实的读法，不是"当前委托是谁"的完整答案 —— 后者
+    还要问"谁正在做哪一个委托"（见 :func:`_instance_request_ids` 与
+    :func:`current_request_id`）。保留这个只吃行的版本，是为了让 `pending_all_delegations`
+    这类"手里已经有行、不想再读一遍表"的调用方有一条不重读的实现（判据仍是同一处）。
     """
     if not rows:
         return ""
@@ -760,36 +837,89 @@ def current_request_id_of(rows: Sequence[Mapping[str, Any]]) -> str:
     return str(newest.get("request_id") or "")
 
 
-def current_request_id(store: Store | None) -> str:
-    """当前委托 = 槽位号最大那一行所属的 `request_id`（没有行 ⇒ 空串）。
+def _instance_request_ids(store: Store | None, instance: str) -> set[str]:
+    """这个 A 实例正在做（或在队列里点名做过）的委托号集合（K16 / AL-02）。
 
-    为什么这样定"当前"：槽位号只增不复用（`store.alloc_id("candidate")`），
-    于是"最后一个开始暂存的委托"就是号最大的那一行的委托 —— 不需要另一处
-    "当前委托是谁"的状态（那种状态必然与盘上的行漂，而漂了不会报错）。
+    判据只有一处来源：`search_requests` 行上的 `claimed_by` / `submitted_by`
+    —— AL-10 已经认定"按实例的领取"是本框架里唯一按实例的 claim（`claimed_by` +
+    `lease_until`）。用 `identity.split_actor("A", actor)` 把 actor 拆成实例标签，
+    所以 `agent-A-A2` 与 `agent-A-lit` 分得开；`agent-A`（角色级）不归任何实例。
 
-    2026-11-16（Q1）加一条回落：表里一行都没有时读归档
-    （`data/lit_candidates/archive-<rid>.jsonl` 里最新的一份）。为什么要它：
-    "清表"若真的把行删掉，槽位最大那一行消失 ⇒ 当前委托会静默退回到上一份委托
-    （真机清掉 r-000009 就退回 r-000008）。本实现选择"打标记、不物理删"，所以
-    那是条更远的路；但"表空"与"这次委托已收工"必须分得开，回落是那一格的读数。
+    读不出来 ⇒ 返回空集（不是"所有委托"）：判不了就不回落，交给
+    `_resolve_request` 的 `no_delegation` 受控拒 —— 「不知道」不许读成「大家都行」。
+    """
+    if store is None or not instance:
+        return set()
+    try:
+        rows = store.rows("search_requests")
+    except Exception:  # noqa: BLE001 —— 读不出来 = 判不了（空集，不回落）
+        return set()
+    mine: set[str] = set()
+    for row in rows:
+        rid = str(row.get("request_id") or "").strip()
+        if not rid:
+            continue
+        for field_name in ("claimed_by", "submitted_by"):
+            actor = str(row.get(field_name) or "").strip()
+            if not actor:
+                continue
+            got = IDENT.split_actor("A", actor)
+            if str(got.get("instance") or "") == instance:
+                mine.add(rid)
+                break
+    return mine
+
+
+def _current_request_id(store: Store | None, rows: Sequence[Mapping[str, Any]],
+                        *, instance: str | None = None) -> str:
+    """当前委托（唯一实现）：有实例标签 ⇒ 只认这个实例的委托；没有 ⇒ 旧口径。
+
+    - 实例标签为空（直调 / 夹具 / 没接身份的那一层）：槽位最大那一行的委托，表空
+      再回落归档 —— 改动前逐字同义。
+    - 实例标签非空：先问 `search_requests` 这一行归不归它（`_instance_request_ids`），
+      再在属于它的那些委托的行里取槽位最大那一行。它没有委托 ⇒ 返回空串，
+      不回落到全表最大槽位（那正是 K16 的 c 条：第二个 A 实例读到了第一个的委托）。
     """
     if store is None:
         return ""
-    return current_request_id_of(_rows(store)) or latest_archived_request(store.root)
+    inst = str(IDENT.current_instance() if instance is None else instance or "").strip()
+    if not inst:
+        return current_request_id_of(rows) or latest_archived_request(store.root)
+    mine = _instance_request_ids(store, inst)
+    if not mine:
+        return ""
+    return current_request_id_of(
+        [r for r in rows if str(r.get("request_id") or "") in mine])
+
+
+def current_request_id(store: Store | None) -> str:
+    """当前委托（按实例；K16 / AL-02；判据见 :func:`_current_request_id`）。
+
+    改前这里是"槽位号最大那一行所属的 request_id，全表"：两个 A 实例同时跑时，
+    第二个实例拿到的永远是第一个实例的委托（谁最后暂存谁说了算）。现在实例标签
+    从 `identity.current_instance()` 读（工具调用由 `conductor.calling_as` 挂上），
+    委托集合从 `search_requests` 的 `claimed_by` / `submitted_by` 取。
+
+    2026-11-16（Q1）那条回落仍在（实例为空时）：表里一行都没有时读归档里最新的一份，
+    让"表空"与"这次委托已收工"分得开。
+    """
+    return _current_request_id(store, _rows(store) if store is not None else [])
 
 
 def _resolve_request(store: Store | None, request_id: str | None) -> str:
     rid = str(request_id or "").strip() or current_request_id(store)
     if not rid:
         raise LitStageError(
-            "说不清这是哪一次委托（待新增列表里还没有任何行，调用方也没给 request_id）⇒ "
-            "没有委托就没有「本次」筛选，不许拿一个空集冒充",
+            "说不清这是哪一次委托（这个实例名下没有正在做的委托，调用方也没给 "
+            "request_id）⇒ 没有委托就没有「本次」筛选，不许拿一个空集冒充，"
+            "也不许借用别的实例的委托（把 request_id 明确写出来）",
             kind="no_delegation",
         )
     return rid
 
 
-def pending_all_delegations(rows: Sequence[Mapping[str, Any]]) -> dict:
+def pending_all_delegations(rows: Sequence[Mapping[str, Any]], *,
+                            current: str | None = None) -> dict:
     """全表待裁行的按委托分组读数（作用域写死成全表，没有"只看当前委托"这一档）。
 
     ## 为什么它必须是一个独立函数、而且不带委托过滤参数
@@ -805,16 +935,22 @@ def pending_all_delegations(rows: Sequence[Mapping[str, Any]]) -> dict:
     调用方（`lit.stage_list` 的默认视图）先自己 `_scoped_rows` 再 `undecided`，
     作用域在调用点显式可见 —— 这正是本函数不提供过滤参数的理由。
 
-    返回 `{"total": n, "current_request_id": rid, "by_delegation": [...]}`，
-    `by_delegation[]` 每项 `{request_id, pending, slots, titles, current}`（按委托号升序）。
-    `total == 0` 是"查过了、没有待裁"，不是"没查成"（读表失败由调用方折 unknown）。
+    ## `current`（K16 / AL-02）
+
+    输出里那个 `current` 标志要回答"这一组是不是我这一趟的委托"。改前它在函数内
+    用 `current_request_id_of(rows)` 现算（= 全表最大槽位）⇒ 第二个 A 实例的读数会把
+    第一个实例的委托标成"当前"。现在按实例算好的那个值由调用点传进来（判据只有
+    `_current_request_id` 一处）；不传（旧调用 / 夹具）才退回旧口径。
     """
     groups: dict[str, list[dict]] = {}
     for row in rows:
         if judged_state(row) != "pending":
             continue
         groups.setdefault(str(row.get("request_id") or ""), []).append(dict(row))
-    current = current_request_id_of(rows)
+    if current is None:
+        current = current_request_id_of(rows)
+    else:
+        current = str(current or "")
     by: list[dict] = []
     for rid in sorted(groups):
         items = sorted(groups[rid], key=lambda r: str(r.get("slot") or ""))
@@ -1256,9 +1392,9 @@ def list_candidates(
             kind="bad_status",
         )
     all_rows = _rows(store)
-    # 「当前委托」算一次、两处用（默认视图与回填那一格）：它原来是两/三次
-    # `current_request_id(store)`，每次都把同一张表重读一遍。
-    current = current_request_id_of(all_rows)
+    # 「当前委托」算一次、两处用（默认视图与回填那一格）：按实例算（K16 / AL-02），
+    # 判据在 `_current_request_id` 一处；这里只是不把同一张表再读一遍。
+    current = _current_request_id(store, all_rows)
     rid = str(request_id or "").strip() or current
     scoped = _scoped_rows(all_rows, rid)
     if batch is not None:
@@ -1297,7 +1433,7 @@ def list_candidates(
     # 全表（跨委托）那一条读数：默认视图只返回当前委托的行，但"这一趟清完了没有"
     # 看的是全表 —— 不把这两句话同时写进 note，旧委托的 pending 就只在收工闸那里
     # 才第一次露面（VC1 P1-6 的现场）。作用域由 `pending_all_delegations` 写死。
-    scope = pending_all_delegations(all_rows)
+    scope = pending_all_delegations(all_rows, current=current)
     scope_line = pending_scope_note(scope) or (
         f"全表（跨委托）没有待裁的行（{len(all_rows)} 行候选里 0 条 pending）。")
     dup_groups = sorted(
@@ -1762,6 +1898,8 @@ def admission_plan(
     # 全表待裁（跨委托）的那一条读数：本闸按本委托判"能不能提交"，但"这一趟清完了
     # 没有"要看全表 —— 两个读数都放进 base，于是每一条返回（放行与受控拒）
     # 都带着"别的委托还剩几条、谁能清"。作用域由 `pending_all_delegations` 写死。
+    # `current` 标志在闸这里不参与判定（`exclude=rid` 已经点名了本委托），所以不传 ——
+    # 保持这个调用点在判据夹具里的形状（它们把 `pending_all_delegations` 换成单参 lambda）。
     scope = pending_all_delegations(rows)
     scope_note = pending_scope_note(scope, exclude=rid)
     scoped = [fold_legacy(r) for r in rows
@@ -2444,7 +2582,7 @@ def admit_all(
                                            if str(i["slot"]) == slot), ""),
                                 why, "registration_failed"))
     # 这一批之后的全表待裁读数（按委托分组）：没交的槽仍 pending，A 照它进下一批。
-    left = pending_all_delegations(_rows(store))
+    left = pending_all_delegations(_rows(store), current=rid)
     return {
         "ok": True,
         "kind": "",
@@ -2517,8 +2655,10 @@ def _write_report_snapshot(store: Store, request_id: str,
         text = path.read_text(encoding="utf-8")
     else:
         tiers, reads = _report_context(store)
+        _instance, writer = _readback_actor()
         text = report_markdown(rid, rows, availability=tiers, reads=reads,
-                               phase="submitted")
+                               phase="submitted", writer=writer,
+                               writer_instance=_instance)
         _write_report_text(store, path, text)
     return {"path": path.as_posix(), "rel_path": f"{REPORT_DIR}/{path.name}",
             "chars": len(text), "text": text, "request_id": rid}
@@ -2678,8 +2818,14 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
                     *, generated_at: str = "",
                     availability: Mapping[str, str] | None = None,
                     reads: Mapping[str, Mapping[str, Any]] | None = None,
-                    phase: str = "draft") -> str:
+                    phase: str = "draft", writer: str = "",
+                    writer_instance: str = "") -> str:
     """委托报告正文（四个块；`phase` 决定"入库组"是带号还是无号）。
+
+    `writer`（K16 / AL-07 / AL-08）是这一版报告的写者（`agent-A-<实例>`；没有身份
+    的那一档是空串 —— 报告头如实写"未记"，不编一个人）。报告是交付物，读者要能回答
+    "这一版是谁渲染的、是不是我这一版"：改前报告头只有委托号 / 状态 / 时间，于是
+    "该不该刷新"落成"谁最后判谁说了算"（AL-08）。
 
     ## 两个渲染时刻（业主 Q1 口径）
 
@@ -2733,6 +2879,13 @@ def report_markdown(request_id: str, rows: Sequence[Mapping[str, Any]],
         f"- 委托：`{request_id}`",
         f"- 报告状态：{_PHASE_LABELS[phase]}",
         f"- 生成时间：{stamp}",
+        # 这一版的写者（K16 / AL-08）：报告是交付物，"谁渲染的"必须留在报告上 ——
+        # 否则两个 A 实例共读一份报告时，"过期不过期"落成"谁最后判谁说了算"。
+        # 没有身份的那一档（直调 / 夹具）如实写"未记"，不编一个 actor 出来。
+        f"- 写者：{writer or '（未记：这次渲染没有调用方身份）'}",
+        # 实例轴单独一行：角色级 actor（`agent-A`）回答不了"是哪一个实例渲染的"，
+        # 而 AL-08 要的正是这一格（`writer` 里带了实例，这里再单列一格供机器读）。
+        f"- 写者实例：{writer_instance or '（未记）'}",
         # 盘点数四档（盘上的行状态）：历史的 cleared / withdrawn 已经折进 rejected。
         "- 盘点：" + "、".join(f"{s}={record_counts[s]}" for s in CANDIDATE_RECORDS)
         + "（按行上的 status 数；历史的 cleared 折进 rejected+over_cap、withdrawn 折进 "
@@ -2808,6 +2961,28 @@ _PHASE_LABELS: dict[str, str] = {
              "未入库组只留文献信息与理由（无号）",
 }
 
+#: 报告头那一行「写者」的读法（写者名的唯一解析点：`_report_writer_of` 用它）。
+_REPORT_WRITER_LINE = re.compile(r"^-\s*写者：(.+)$", re.M)
+
+
+def _report_writer_of(store: Store, request_id: str) -> str:
+    """盘上那一版报告头写的写者（没有报告 / 读不出来 ⇒ 空串，不编一个）。
+
+    只读不写：它是 `write_report` 返回的 `previous_writer` 的来源，让"这一版覆盖了
+    谁那一版"在回执里看得见（K16 / AL-08）。读不出来不抛 —— 覆盖报告这件事不该因为
+    *旧*那一份读不动而失败。
+    """
+    for path in (report_path(store, request_id), report_snapshot_path(store, request_id)):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        hit = _REPORT_WRITER_LINE.search(text)
+        if hit:
+            return str(hit.group(1)).strip()
+    return ""
+
+
 def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, Any]] | None = None,
                  generated_at: str = "", phase: str = "draft") -> dict:
     """把委托报告写到 `reports/lit-<request_id>.md`（`phase="submitted"` 写无号原件）。
@@ -2847,8 +3022,13 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
             kind="not_registered", detail={"request_id": rid})
     # 可读性那一栏从旁路台账现读（报告是交付物：它必须与闸审的是同一份判定）。
     tiers, reads = _report_context(store)
+    # 这一版的写者（K16 / AL-07 / AL-08）：谁渲染谁负责。实例从工具调用的身份挂点读，
+    # 与回执、候选行、签同一根轴；没有身份的那一档是空串（报告头写"未记"）。
+    instance, writer = _readback_actor()
+    previous = _report_writer_of(store, rid)
     text = report_markdown(rid, body_rows, generated_at=generated_at,
-                           availability=tiers, reads=reads, phase=phase)
+                           availability=tiers, reads=reads, phase=phase,
+                           writer=writer, writer_instance=instance)
     path = report_snapshot_path(store, rid) if phase == "submitted" else report_path(store, rid)
     _write_report_text(store, path, text)
     # 与报告标题同一口径：去重后的 lit_id（两条候选命中同一行时只算一篇）。
@@ -2867,6 +3047,12 @@ def write_report(store: Store, request_id: str, *, rows: Sequence[Mapping[str, A
         "not_admitted": record["rejected"],
         "undecided": record["pending"],
         "request_id": rid,
+        #: 这一版是谁渲染的（K16 / AL-07 / AL-08）：`writer` 是 actor 名
+        #: （`agent-A-<实例>`；没有身份 ⇒ 空串）、`instance` 是那一根实例轴、
+        #: `previous_writer` 是覆盖之前盘上那一版报告头的写者（没有旧报告 ⇒ 空串）。
+        "writer": writer,
+        "writer_instance": instance,
+        "previous_writer": previous if previous != writer else "",
     }
 
 
