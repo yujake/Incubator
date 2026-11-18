@@ -226,7 +226,7 @@ def test_a_proof_text_only_call_needs_a_manuscript_sign(tmp_path):
     # （`manuscript_id`；路径分了的档记 `manuscripts`）—— 这两格与收录回执同族，
     # 也不是 `schema.Statement` 的字段。
     # 2026-11-18（K6④ 稿族）：`manuscript_family` 与 `manuscript_id` 同一笔写
-    # （`secretary._NON_SCHEMA_KEYS` 登记在册，读侧合成 `(族, 稿号)`）—— 同一族，
+    # （`secretary.STATEMENT_LAND_OPS["attach_proofs"]` 在册，读侧合成 `(族, 稿号)`）—— 同一族，
     # 从"只差内部留痕"的集合里排除，不新增 schema 字段。
     allowed = {"_kind_upgrade", VR.GRADE_RECOMPUTED_KEY, "proof_no", "proof_sha256",
                "manuscript_id", "manuscripts", "manuscript_family"}
