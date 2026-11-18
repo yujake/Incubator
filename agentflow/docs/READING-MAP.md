@@ -4,9 +4,14 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19 CLOSE1 K1 收尾①）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,993 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、303,016 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,242 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 CLOSE1 K1 收尾③（SH-02：循环配置表有实例轴）：**
+> 322 个 `.py` 与 75 个 `>800` 两格不变；**303,016** 行（上一格 302,993；本笔 src 净增 +23：
+> `agent_loop.py` 的 `LlmBackend._loop_cfg` 成为"这一趟的循环配置"的唯一入口 ——
+> `(角色, 动作)` 那一格之后叠 `by_instance[<实例>]`；`call` 只调它一处）。
+> 十一格现算仍 `changed = []`。函数体量三格现盘复测 75 / 95 / 2 逐格未抬。
 > **2026-11-19 CLOSE1 口径两处（EM-09 的 ARTIFACTS 两格分工 + BR-01 的判重键）：**
 > 322 个 `.py` 与 75 个 `>800` 两格不变；**302,993** 行（上一格 302,981；本笔 src 净增 +12：
 > `exhaustionreport.py` 的 `land_report` 改成落 `instance` / `task_id` /

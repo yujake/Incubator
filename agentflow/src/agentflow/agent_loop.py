@@ -14070,6 +14070,29 @@ class LlmBackend:
         """本后端不提供实例（它按动作决定走哪条路），把问题交给内层。"""
         return self.inner.resolve(role)
 
+    def _loop_cfg(self, role: str, action: str, instance: str) -> dict[str, Any] | None:
+        """这一趟的循环配置：先取 (角色, 动作) 那一格，再叠 (角色, 实例) 的覆盖。
+
+        SH-02（K1，2026-11-19）：改前这张表只按 `(role, action)` 建键，实例轴在这一层
+        被丢掉 —— 同一角色两个实例只能共用一组 `max_steps` / 预算。现在每一格可以带
+        `by_instance: {<实例标签>: {...}}`，按这一趟的 `instance` 叠上去（实例标签读不到
+        ⇒ 不叠，老表逐字不变）。键仍是 `(role, action)`：不给表加第三维，因为
+        `loops=` 是构造入参（CLI `--drive` 也照它写），改键型会让所有调用方一起改。
+        """
+        base = self.loops.get((role, action if str(action) else ""))
+        if str(action) and base is None:
+            return None
+        cfg: dict[str, Any] = dict(base or {})
+        if not str(action):
+            cfg.setdefault("max_steps", self.max_steps)
+        label = str(instance or "").strip()
+        overlay = cfg.pop("by_instance", None) if isinstance(cfg, dict) else None
+        if label and isinstance(overlay, Mapping):
+            got = overlay.get(label)
+            if isinstance(got, Mapping):
+                cfg.update(dict(got))
+        return cfg
+
     def call(self, role: str, action: str, params: Mapping[str, Any], *, token: Any,
              instance: str = "", task_id: str = "") -> Any:
         """登记过的 `(角色, 动作)` 走 LLM 循环；空动作也走循环；其余交给内层后端。
@@ -14081,13 +14104,13 @@ class LlmBackend:
         由它按自己的手册、工具面与政策选动作。它当然要跑自己的循环才选得了 ——
         交给内层处理器反而是"替它选了那个不存在的动作"。
         给了动作的那条路逐字不变（向后兼容：`pipeline` / `scheduler` / `deliver` 照旧）。
+
+        ## 实例轴（SH-02，2026-11-19）
+
+        配置按 `_loop_cfg(role, action, instance)` 取：`(角色, 动作)` 那一格之后叠
+        `by_instance[<实例>]`，于是"同一动作、两个实例各一组步数/预算"表达得出来。
         """
-        if not str(action):
-            # 角色级那一格（`--drive D` 这种写法）留了口子；没登记就用默认档。
-            cfg: Mapping[str, Any] | None = dict(self.loops.get((role, "")) or {})
-            cfg.setdefault("max_steps", self.max_steps)
-        else:
-            cfg = self.loops.get((role, action))
+        cfg = self._loop_cfg(role, action, instance)
         if cfg is None:
             return self.inner.call(role, action, params, token=token, instance=instance,
                                    task_id=task_id)
