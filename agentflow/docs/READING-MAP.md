@@ -4,12 +4,12 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、298,335 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16189 行（`agent_loop.py`，15005 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、298,336 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16189 行（`agent_loop.py`，15005 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-18 MPATROL1（巡查读数补两格：`doing.last_rejection` 与 item `unconsumed`）**：
-> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 297,898 → **298,335**（本笔 +437：
-> `tools/conductor_tools.py` +391（两格读数 `_last_rejection_cell` / `_unconsumed_cell`、
+> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 297,898 → **298,336**（本笔 +438：
+> `tools/conductor_tools.py` +392（两格读数 `_last_rejection_cell` / `_unconsumed_cell`、
 > 成员判据 `_task_step_events` / `_settled_events`、消费判据 `_consumed_evidence`、巡查句
 > `_cell_anomalies`，以及 `_doing_cell` / `_patrol_reading` 的接线）、`agenttrace.py` +46
 > （`step_events` 原始事件入口；起趟窗口拆成 `_window_steps`，`_steps_for_task` 仍只投影））。

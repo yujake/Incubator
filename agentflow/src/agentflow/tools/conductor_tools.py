@@ -3556,7 +3556,7 @@ def _doing_cell(row: Any, clock: Any, rejection: Mapping[str, Any] | None = None
 #    缺 cites），而 09:59:41 的 patrol 只看到「待机、step=7、stalled_sec=105」——
 #    M 看不到它卡在哪、为什么卡。
 # ② 「子代理已落定、产出没被消费」在 patrol 里没有格；挂机判据读的是
-#    `mailbox["children"]["settled"]`（`agent_loop.py:7313-7316`）⇒ 两处不同源。
+#    `mailbox["children"]["settled"]`（`agent_loop._pending_work` 读它）⇒ 两处不同源。
 #    现场：D 名下 B1（t-000021）09:48:17 落定，D 到 09:59:41 还没在任一步里指到
 #    它落的那行（B1 的产物 10:00:31 才被 `table.get` 读到）。
 #
@@ -3567,19 +3567,20 @@ def _doing_cell(row: Any, clock: Any, rejection: Mapping[str, Any] | None = None
 #    （框架唯一的"谁在拒"判据：`refused` / `refusal_reason` / `ok=False` + `meta.kind`），
 #    再补结果里已经写着的受控拒字段（工具把拒因写在 `data` 里、`ok` 仍是 True 的那一档）：
 #      `data.refused` / `data.refusal_code` / `data.state=="refused"` /
-#      `data.refusal.kind` / `data.deps_refused`（`agent_f/core.py:1630-1646` 与
-#      `agent_f/step.py:495-501` 的落点）；
-#    以及工具自己的「拒收」文案族（`agent_f/core.py:1616/1625/1665` 三处逐字，
+#      `data.refusal.kind` / `data.deps_refused`（`agent_f/core.py` 的
+#      `_handed_product_round` 与 `agent_f/step.py` 的 `history_row` 是落点）；
+#    以及工具自己的「拒收」文案族（`agent_f/core.py` 的 `_handed_product_round` 三处逐字，
 #    同 `errorstats._TOOL_REFUSAL_FAMILIES` 的文案族判法：它们把拒因写在正文里）。
 #
 # ② 落定 = `agent_children.settled`（`AgentLoop._children_round_trip` 投递时写下的那一格，
-#    `agent_loop.py:6372-6385`；它与 `mailbox["children"]["settled"]` 是同一份
-#    `children` 读数 —— 同一处的返回值在 `agent_loop.py:6431-6434`，挂机判据读的就是它）。
+#    `agent_loop._deliver_mailbox` 写的那条 `agent_children` 事件；它与
+#    `mailbox["children"]["settled"]` 是同一份 `children` 读数 —— 同一处的返回值里
+#    也带着它（`AgentLoop._deliver_mailbox` 的返回键 `children`），挂机判据读的就是它）。
 #    本格不另判"落定"（不拿 tasks.status 反推）：只读这条事件。
 #    消费 = 父代理在那之后的 `agent_step` 里指到了这条子产出的字面量
 #    （子任务号 / 子代理 `agent_run_end.evidence` / 任务行 `artifacts`；按 `table` + `id`
 #    点名那条台账行也算）。判据与 `agent_loop.summon_consumption` 的字面量那一半同族
-#    （`agent_loop.py:4532-4553`）—— 只认"指到了"，不猜语义：宁可少报，不替模型判断
+#    （`agent_loop.summon_consumption` 的 `refs` 那一半）—— 只认"指到了"，不猜语义：宁可少报，不替模型判断
 #    "它大概用过了"。
 
 #: 子产出字面量的匹配口径（只认逐字出现）：`agent_loop.summon_consumption` 的
@@ -3840,7 +3841,7 @@ def _unconsumed_cell(records: Any, by_id: Mapping[str, Mapping[str, Any]], *,
                      reason: str = "") -> dict[str, Any]:
     """② 「子代理已落定、产出没被消费」逐条（与挂机判据同源的那一格）。
 
-    落定只读 `agent_children.settled`（`agent_loop.py:6372-6385` 写的那一格 ——
+    落定只读 `agent_children.settled`（`AgentLoop._deliver_mailbox` 写的那一格 ——
     `mailbox["children"]["settled"]` 的盘上落点；本格不拿 `tasks.status` 反推）。
     消费只认"父在那之后指到了它"的字面量（`_consumed_evidence`）。
     每条给：task_id / role / output（第一条 artifacts；没有就给 kind）/ kind（status/outcome）/
