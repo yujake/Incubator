@@ -19,7 +19,7 @@
 | `concept_missing` | 研究型项目（有实验/开着的问题/文献/稿子）里，`statements` 的 concept 行 = 0 | 派 B 从已读文献/文档里登记概念行（概念行只由 B 经 `Secretary.write_concept_row` 写；C 的动作面只产 `AnalysisReport`，写不出概念行） |
 | `candidate_unfiled` | 有结论的 `experiments`（`result ∈ supports/refutes` 且 `evidence_kind ∈ proof/cross_check`）> 0，而非概念 `statements` = 0 | 立命题并派 F 落稿：派 D 立项，由 D 派 F 写命题与证明（M 不直连 F） |
 | `statements_unsigned` | `closing.statements_unsigned_reading` 的 `count` > 0（既没有 V 签、也没有被明确放弃的命题） | 派 D 让 F 补签（谁产出谁送 V）；命题已在册的缺签由 B 处置；拿不到签就明确放弃 |
-| `manuscript_unsigned` | `agent_f.pending.unsubmitted_reading` 的 `count` > 0：盘上「已登记」（`proofregistry.parse_entry` 的 `checked`）、V 签还没到的 F 稿。与 `statements_unsigned` 分开量：那量命题台账行，这一格量盘上的稿 —— 稿在 B 收录之前没有 `statements` 行，所以那一刻它读 0 | 转 D（由 D 派 F 把稿送 V）：M 的边表只到 D，不直连 F / V |
+| `manuscript_unsigned` | `agent_f.pending.unsubmitted_reading` 的 `count` > 0：盘上「已登记」（稿头元信息 `proofregistry.parse_entry` 的 `checked` 或产物台账那一行）、V 签还没到的稿（产出者 F / E / B 三族都算，业主 2026-11-18「谁写稿，谁就对稿负责」）。与 `statements_unsigned` 分开量：那量命题台账行，这一格量盘上的稿 —— 稿在 B 收录之前没有 `statements` 行，所以那一刻它读 0 | 转 D（由 D 派产出者把稿送 V）：M 的边表只到 D，不直连 F / E / V |
 | `signed_unregistered` | 板上开着的 `b-register@` 义务 > 0（稿上已有成立的 V 签、`statements` 里还没入库） | 派 B 收录 |
 | `open_questions` | `research_questions` 里还有 `open` / `needs_evidence` / `researching` | 派 A 补检索 / 派 D 继续攻 |
 | `manuscript_missing` | 非概念 `statements` > 0 而 `documents` = 0（研究已落成命题，稿子还没有一行） | 派 G 成文（或派 D 先出手稿） |
@@ -45,9 +45,11 @@ B 那一侧（`conceptrows` → `Secretary.write_concept_row`，契约第 4 条�
 `statements` 里没有这一行、`statements_unsigned` 读 0。M 的巡查读数于是只有
 `statements=1 / statements_unsigned=0 / documents=0`，没有任何一格提醒它「该催签」。
 这一格补的就是「盘上有稿、签还没到」，逐份点名（稿路径 + 正文 sha + 等待时长）；
-它的扫描复用 `agent_f.pending`（F 那一侧的同一个 `scan_registered` / `unsubmitted_reading`），
-不另写一份「已登记」判据 —— 两份口径会让「F 看到的稿」与「M 看到的稿」静默分家。
-处置建议按 M 的边表只写「转 D（由 D 派 F 把稿送 V）」：M 没有直连 F / V 的边
+它的扫描复用 `agent_f.pending`（同一个 `scan_registered` / `unsubmitted_reading`），
+不另写一份「已登记」判据 —— 两份口径会让「产出者看到的稿」与「M 看到的稿」静默分家。
+2026-11-18 业主裁定「谁写稿，谁就对稿负责」之后这一格覆盖 F / E / B 三族的稿
+（产出者从台账 `producer` 字段读、缺台账行才退回稿族），处置建议按这份稿的
+产出者现读：「转 D（由 D 派 F / E / B 把稿送 V）」—— M 没有直连 F / E / V 的边
 （`capabilities._INDIRECT_FROM_M = {F, V}`），写「M 派 F / M 派 V」是越界指令。
 
 `pending = bool(gaps)`：任何一条非空都算"研究未尽"。"一件事都没开始"不算：
@@ -120,9 +122,11 @@ _GAP_ACTIONS: dict[str, dict[str, str]] = {
     "manuscript_unsigned": {
         "target": "D",
         # 逐字口径（INV7 业主指令）：M 的边表只到 D ⇒ 首跳必须是"转 D"；
-        # 「派 F / 派 V」只出现在「（由 D …）」那一句里，那是 D 的动作，不是 M 的指令。
-        "summary": ("转 D（由 D 派 F 把稿送 V）：盘上已有登记、V 签还没到的稿 —— "
-                    "M 的边表只到 D，不直连 F / V；送审与拿签都由 D 那一支走完"),
+        # 「派 <产出者> / 派 V」只出现在「（由 D …）」那一句里，那是 D 的动作，不是
+        # M 的指令。这一句的主角按这一格逐份点名的产出者现读
+        # （`_manuscript_action_text`）：只有 F 时逐字仍是「由 D 派 F …」。
+        "summary": ("转 D（由 D 派产出者把稿送 V）：盘上已有登记、V 签还没到的稿 —— "
+                    "M 的边表只到 D，不直连 F / E / V；送审与拿签都由 D 那一支走完"),
     },
     "signed_unregistered": {
         "target": "B",
@@ -216,64 +220,48 @@ def _gap_candidate_unfiled(counts: Mapping[str, Any],
     }
 
 
-def _now_wall() -> Any:
-    """当前墙钟（唯一取时口 `clock.now()`；读不到 ⇒ None，不折成"零等待"）。"""
-    try:
-        from . import clock as CLK
-
-        return CLK.now().wall
-    except Exception:  # noqa: BLE001 —— 时钟读不到是"时长读不出来"，不是 0
-        return None
-
-
-def _age_seconds(registered_at: Any, now: Any) -> int | None:
-    """登记到现在过了多久（秒；登记时刻读不出来 / 时钟读不到 ⇒ None）。
-
-    为什么不自己调 `datetime.now()`：全仓只有一个取时口（`clock.now()`，假时钟也走它）；
-    这里自己取时会让判据里的等待时长跟着真实时间漂，读数也就不再可复算。
-    """
-    if now is None or not str(registered_at or "").strip():
-        return None
-    try:
-        from . import clock as CLK
-
-        at = CLK.parse_iso(str(registered_at))
-        return max(0, int((now - at).total_seconds()))
-    except Exception:  # noqa: BLE001 —— 读不出来是"时长读不出来"，不是 0
-        return None
-
-
 def _manuscript_cell_text(row: Mapping[str, Any]) -> str:
-    """一份稿的人话读数（稿路径 + 正文 sha 前 12 + 等待时长 + 签那一档）。"""
-    sha = str(row.get("sha") or "")
-    sha_text = (sha[:12] + "…") if sha else "sha 读不出来"
-    wait = str(row.get("waiting_text") or "") or "等待时长读不出来"
-    state = str(row.get("state_label") or row.get("state") or "")
-    return (f"{row.get('manuscript') or '?'}"
-            f"（{sha_text}，等了 {wait}{('，' + state) if state else ''}）")
+    """一份稿的人话读数（唯一实现：`agent_f.pending.manuscript_cell_text`）。"""
+    from .agent_f import pending as FP
+
+    return FP.manuscript_cell_text(row)
+
+
+def _manuscript_action_text(rows: Any) -> str:
+    """这一格下一动作的那句话：主角是这份稿的产出者（不写死 F）。
+
+    只有 F 时逐字仍是「转 D（由 D 派 F 把稿送 V）」（INV7 的判据 b/c 就断言这一句）；
+    产出者是 E / B 时换成它们；判不出产出者才退回「产出者」这个词（不猜一个角色）。
+    """
+    roles = sorted({str(r.get("producer_role") or "") for r in (rows or ())
+                    if isinstance(r, Mapping) and str(r.get("producer_role") or "")})
+    who = "/".join(roles) if roles else "产出者"
+    return (f"转 D（由 D 派 {who} 把稿送 V）：盘上已有登记、V 签还没到的稿 —— "
+            "M 的边表只到 D，不直连 F / E / V；送审与拿签都由 D 那一支走完")
 
 
 def _manuscripts_unsigned(store: Any) -> dict[str, Any]:
-    """已登记、V 签还没到的 F 稿（M 的读数；INV7 第 ⑤ 条）。
+    """已登记、V 签还没到的稿（M 的读数；INV7 第 ⑤ 条 / 业主 2026-11-18）。
 
     ## 为什么复用 `agent_f.pending` 而不是自己扫 `reports/`
 
-    F 那一侧（`delivery` / 挂机判据 / 收工门）已经有一份「已登记、V 签还没到」的唯一
-    扫描（`agent_f.pending.scan_registered` → `unsubmitted_reading`）。M 这一格若另写
-    一份 glob + `parse_entry`，两份口径就会在"什么算已登记 / 什么算未签"上静默分家，
-    而分家不会有任何一处报错 —— 所以这里直接消费同一份扫描（判据
+    产出者那一侧（`delivery` / 挂机判据 / 收工门）已经有一份「已登记、V 签还没到」
+    的唯一扫描（`agent_f.pending.scan_registered` → `unsubmitted_reading`）。M 这一格
+    若另写一份 glob + `parse_entry`，两份口径就会在"什么算已登记 / 什么算未签"上
+    静默分家，而分家不会有任何一处报错 —— 所以这里直接消费同一份扫描（判据
     `tests/test_m_reads_the_unsigned_manuscript_gap.py` 的 d：把共享扫描打桩成空 ⇒
     M 这一格必红；若抄了一份，打桩就不会影响它）。
 
-    这一格只补三件扫描不做的事：从登记元信息取 `registered_at`、算等待时长、把
-    sha / 等待时长逐份摆进读数（M 要照着它说"哪一份稿、等多久"）。
+    等待时长 / 登记时刻 / 稿路径 + sha 的读数也由那一份扫描给（`waiting_sec` /
+    `waiting_text` / `registered_at`），这一格不再自己取时 —— 两个取时口会让同一份稿
+    在 M 与产出者两侧读到两个"等了多久"。
 
     ## 返回
 
     `{checked, count, rows, problems, why}`；`rows` 每项
-    `{manuscript, manuscript_id, sha, registered_at, waiting_sec, waiting_text,
-    state, state_label, why}`。三态：列不出来 / 读不成 ⇒ `checked=False`（调用方
-    fail-closed），不折成"没有等签的稿"。
+    `{manuscript, manuscript_id, sha, producer_role, registered_at, waiting_sec,
+    waiting_text, state, state_label, why}`。三态：列不出来 / 读不成 ⇒ `checked=False`
+    （调用方 fail-closed），不折成"没有等签的稿"。
     """
     out: dict[str, Any] = {"checked": True, "count": 0, "rows": [],
                            "problems": [], "why": ""}
@@ -290,25 +278,18 @@ def _manuscripts_unsigned(store: Any) -> dict[str, Any]:
         out.update(checked=False,
                    why=str(got.get("why") or "已登记稿这一格没查成（不是「没有稿」）"))
         return out
-    from . import clock as CLK
-
-    entries = {str(r.get("manuscript") or ""): dict(r.get("entry") or {})
-               for r in (got.get("rows") or ()) if isinstance(r, Mapping)}
-    now = _now_wall()
     rows: list[dict[str, Any]] = []
     for item in got.get("items") or ():
         if not isinstance(item, Mapping):
             continue
-        rel = str(item.get("manuscript") or "")
-        entry = entries.get(rel, {})
-        secs = _age_seconds(entry.get("registered_at"), now)
         rows.append({
-            "manuscript": rel,
+            "manuscript": str(item.get("manuscript") or ""),
             "manuscript_id": str(item.get("manuscript_id") or ""),
             "sha": str(item.get("sha") or ""),
-            "registered_at": str(entry.get("registered_at") or ""),
-            "waiting_sec": secs,
-            "waiting_text": (CLK.human_sec(secs) if secs is not None else ""),
+            "producer_role": str(item.get("producer_role") or ""),
+            "registered_at": str(item.get("registered_at") or ""),
+            "waiting_sec": item.get("waiting_sec"),
+            "waiting_text": str(item.get("waiting_text") or ""),
             "state": str(item.get("state") or ""),
             "state_label": str(item.get("state_label") or ""),
             "why": str(item.get("why") or ""),
@@ -451,7 +432,12 @@ def pending_reading(store: Any) -> dict[str, Any]:
             "count": counts["manuscript_unsigned"],
             "ids": _ids(rows, "manuscript"),
             "manuscripts": rows,
-            "why": (f"{counts['manuscript_unsigned']} 份 F 稿已登记、V 签还没到 —— "
+            "why": (f"{counts['manuscript_unsigned']} 份稿已登记、V 签还没到"
+                    + ("（产出者：" + "、".join(sorted(
+                        {str(r.get("producer_role") or "") for r in rows
+                         if str(r.get("producer_role") or "")})) + "）"
+                       if any(str(r.get("producer_role") or "") for r in rows) else "")
+                    + " —— "
                     + "；".join(_manuscript_cell_text(r) for r in rows[:6])
                     + "（与 statements_unsigned 分开量：那量命题台账行，这一格量盘上的稿）"),
         })
@@ -491,6 +477,9 @@ def pending_reading(store: Any) -> dict[str, Any]:
     if gaps:
         first = gaps[0]
         action = dict(_GAP_ACTIONS.get(str(first["code"])) or {})
+        if action and str(first["code"]) == "manuscript_unsigned":
+            # 主角按这一格逐份点名的产出者现读（只有 F 时逐字仍是「由 D 派 F …」）。
+            action["summary"] = _manuscript_action_text(first.get("manuscripts") or ())
         if action:
             out["next_action"] = {"code": str(first["code"]), **action}
     key = json.dumps([[g["code"], g["count"], g["ids"]] for g in gaps],

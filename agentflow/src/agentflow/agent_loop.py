@@ -7225,45 +7225,61 @@ class AgentLoop:
         return "\n".join(lines) + "\n"
 
     def _manuscript_pending(self) -> dict[str, Any]:
-        """F 名下「已登记、V 签还没到」的稿（本拍有没有待办的第 4 条）。
+        """产出者名下「已登记、V 签还没到」的稿（本拍有没有待办的第 4 条）。
 
-        ## 为什么只在 F 身上读
+        ## 业主 2026-11-18：「谁写稿，谁就对稿负责」
 
-        `reports/f-proof-<稿号>.md` 是 F 的稿族（B 的 `b-proof-*` 走它自己的收录
-        路径）；挂机判据的前三条（新投递 / 未消项 / 待消费子产出）都只问"有没有人
-        找我"，不问"我手上那一份稿送审了没有"。真机 `projects/lp-ball-7` 的两拍
-        `agent_park`（`pending_work=false`）就是这一条缺失：稿在盘上、`v_sign` 说
-        `unsigned`，而挂机判据认为没有活，于是 F 永远拿不到「派 V」的那一拍。
+        改前这一格写死 `role == "F"`（`reports/f-proof-*` 是 F 的稿族），于是 E 的
+        `reports/e-proof-*.md` 与 B 写的 `reports/b-proof-*.md` 若已登记未送审，
+        它们的产出者照样可以挂机 —— 挂机判据的前三条（新投递 / 未消项 / 待消费的
+        子产出）都只问"有没有人找我"，不问"我手上那一份稿送审了没有"。
 
-        非 F 返回"查过了、没有这一条"（`checked=True, count=0`）：这一档不改变
-        其它角色的挂机语义。
+        现在的判定依据是"这份稿是谁写的"，两处现读、没有角色字面量：
+
+        - 哪些角色是产出者：`manuscriptopen.ROLE_FAMILIES`（手稿写口的角色面，
+          唯一一张角色-族表）⇒ 今天就是 F / E / B；不在表里的角色返回"查过了、
+          这一条与它无关"（`checked=True, count=0`），不因这一条被拦；
+        - 这一份稿的产出者是谁：`agent_f.pending.unsubmitted_reading(producer=…)`
+          → `manuscript_producer`（台账 `producer` 字段优先、稿族兜底，见那一处
+          的 docstring）。
 
         ## 三态
 
-        没有工作区根 / 扫描读不成 ⇒ `checked=False`：调用方按 fail-closed 挡挂机
-        （"不知道有没有等签的稿"不许折成"没有"）。
+        没有工作区根 / 扫描读不成 / 产出者表读不成 ⇒ `checked=False`：调用方按
+        fail-closed 挡挂机（"不知道有没有等签的稿"不许折成"没有"）。
         """
         empty: dict[str, Any] = {"checked": True, "count": 0, "items": [],
-                                 "why": "", "problems": []}
-        if str(self.role) != "F":
-            return {**empty, "why": "非 F：这一档不读"}
-        root = str(self.workspace_root
-                   or getattr(self.store, "root", "") or "")
-        if not root:
-            return {**empty, "checked": False,
-                    "why": "没有工作区根 ⇒ 已登记稿这一格没查成（不是「没有稿」）"}
+                                 "why": "", "problems": [], "producer": ""}
+        role = str(self.role)
         try:
             from .agent_f import pending as _FP
 
-            got = dict(_FP.unsubmitted_reading(root))
+            families = tuple(_FP.producer_families(role))
+            producers = tuple(_FP.producer_roles())
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
             return {**empty, "checked": False,
+                    "why": (f"手稿产出者表读不出来（{type(exc).__name__}: {exc}）"
+                            " ⇒ 这一拍不按「无事可做」处置")}
+        if not families:
+            return {**empty, "producer": role,
+                    "why": (f"{role} 不是手稿产出者（产出者有 "
+                            f"{'、'.join(producers)}）：这一条与它无关")}
+        root = str(self.workspace_root
+                   or getattr(self.store, "root", "") or "")
+        if not root:
+            return {**empty, "checked": False, "producer": role,
+                    "why": "没有工作区根 ⇒ 已登记稿这一格没查成（不是「没有稿」）"}
+        try:
+            got = dict(_FP.unsubmitted_reading(root, producer=role))
+        except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
+            return {**empty, "checked": False, "producer": role,
                     "why": (f"已登记稿读数没查成（{type(exc).__name__}: {exc}）"
                             " ⇒ 这一拍不按「无事可做」处置")}
         return {"checked": bool(got.get("checked")), "count": int(got.get("count") or 0),
                 "items": [dict(x) for x in (got.get("items") or [])],
                 "why": str(got.get("why") or ""),
-                "problems": [str(x) for x in (got.get("problems") or [])]}
+                "problems": [str(x) for x in (got.get("problems") or [])],
+                "producer": role}
 
     def _pending_work(self, mailbox: Mapping[str, Any]) -> dict[str, Any]:
         """本趟"手上有活吗"的读数（`_park_gate` 第三个判据的输入）。
@@ -7275,8 +7291,9 @@ class AgentLoop:
            就在这一步的上下文里，模型得读它；
         2. 我名下有未消的板项（`conductor.open_items_of`）：那是等着我处置的事；
         3. 有子代理刚刚落定、它的产出一句都没被消费（`mailbox["children"]["settled"]`）；
-        4. （只对 F）名下有「已登记、V 签还没到」的稿（`_manuscript_pending`）：
-           那是等着 F 自己派 V 的活 —— 真机 INV7 的两次 park 正是漏了这一条。
+        4. 名下有「已登记、V 签还没到」的稿（`_manuscript_pending`）：那是等着产出者
+           自己派 V 的活 —— 真机 INV7 的两次 park 正是漏了这一条。这一条按「谁写稿」
+           判（F / E / B 三族的产出者都算），不再只对 F 生效（业主 2026-11-18）。
 
         三条都不成立才叫"本趟确实无事可做"。刻意不把"有计时器"算成"有活"
         （那正是改前的错），也不把"名下有在飞的子代理"算成"有活"（子代理都在等 ⇒
@@ -7285,7 +7302,7 @@ class AgentLoop:
         out: dict[str, Any] = {"checked": True, "busy": False, "why": [],
                                "items": [], "delivered": 0,
                                "manuscripts": {"checked": True, "count": 0, "items": [],
-                                               "why": "", "problems": []}}
+                                               "why": "", "problems": [], "producer": ""}}
         delivered = len(mailbox.get("item_ids") or ()) + len(mailbox.get("msg_ids") or ())
         delivered += len(mailbox.get("wake_ids") or ())
         # 「最近被撤销」也是这一拍的新投递：那一段话已经在上下文里，模型得读它。
@@ -7314,7 +7331,7 @@ class AgentLoop:
         if settled:
             out["busy"] = True
             out["why"].append(f"有 {len(settled)} 条子产出刚落定、还没被用")
-        # ---- 第 4 条（INV7）：已登记、还没送 V 的稿 ----------------------------
+        # ---- 第 4 条（INV7 / 业主 2026-11-18）：产出者名下已登记、还没送 V 的稿 ----
         manuscripts = self._manuscript_pending()
         out["manuscripts"] = dict(manuscripts)
         if not manuscripts.get("checked", True):
@@ -7324,12 +7341,10 @@ class AgentLoop:
                               + str(manuscripts.get("why") or "没查成")
                               + "）⇒ 这一拍不按「无事可做」处置")
         elif int(manuscripts.get("count") or 0) > 0:
-            named = "、".join(str(x.get("manuscript") or "") for x in
-                              (manuscripts.get("items") or [])[:6])
             out["busy"] = True
             out["why"].append(
-                f"名下还有 {int(manuscripts.get('count') or 0)} 份已登记、还没送 V 的稿："
-                f"{named}（派 V 才算交差；这一拍不许挂机）")
+                str(manuscripts.get("why") or "名下有已登记、还没送 V 的稿")
+                + "（派 V 才算交差；这一拍不许挂机）")
         out["why_text"] = "；".join(out["why"]) or "这一拍没有新投递、没有未消项、没有待消费的子产出"
         return out
 
@@ -8323,8 +8338,26 @@ class AgentLoop:
             "experiments": [], "problems": [], "why": "", "reason": "",
         }
         role = str(self.role)
-        if role not in ("F", "E", "B"):
-            out["reason"] = "这一角色不产出手稿 ⇒ 送审等签这一格没有对象"
+        # 产出者 ⇒ 它自己那几族：`manuscriptopen.ROLE_FAMILIES` 是手稿写口的角色面
+        # （唯一一张角色-族表），这里从它派生出"哪些角色有稿这一格"，不再写死
+        # `role not in ("F", "E", "B")` 与那张内联的 families 表（业主 2026-11-18
+        # 「谁写稿，谁就对稿负责」：判定依据是产出者，不是角色字面量）。
+        try:
+            from . import manuscriptopen as _MO
+
+            producer_families = {
+                str(who): tuple(str(f) for f in fams)
+                for who, fams in (_MO.ROLE_FAMILIES or {}).items()}
+        except Exception as exc:  # noqa: BLE001 —— 读不成按「没查成」挡
+            out.update(applicable=True, checked=False, complete=False,
+                       reason=f"{type(exc).__name__}: {exc}",
+                       why=(f"还没收工：产出者表（`manuscriptopen.ROLE_FAMILIES`）读不出来"
+                            f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
+            return out
+        if role not in producer_families:
+            out["reason"] = ("这一角色不产出手稿（产出者有 "
+                             + "、".join(sorted(producer_families))
+                             + "）⇒ 送审等签这一格没有对象")
             return out
         store = self.store
         root = str(getattr(store, "root", "") or self.workspace_root or "")
@@ -8334,8 +8367,7 @@ class AgentLoop:
                        why=(f"还没收工：送审等签这一格读不成 —— 这一趟{missing} ⇒ "
                             "不知道有没有未签的计划/稿 ⇒ 按『没查成』挡（不是『都签了』）"))
             return out
-        families = {"F": ("f-proof",), "B": ("b-proof",),
-                    "E": ("e-proof", "e-num")}[role]
+        families = producer_families[role]
         try:
             from .manuscriptclosing import signed_candidates
 

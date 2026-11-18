@@ -3248,7 +3248,10 @@ class _Core:
             return []
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
         try:
-            scan = dict(_FP.scan_registered(root))
+            # 只扫 F 自己那一族：`scan_registered` 的缺省面是三族（F / E / B），而这一支
+            # 要回答的是"这一条计划写的稿登记了没有"—— 别的族的稿由各自的产出者自己
+            # 负责（业主 2026-11-18「谁写稿，谁就对稿负责」）。
+            scan = dict(_FP.scan_registered(root, family="f-proof"))
         except Exception:  # noqa: BLE001 —— 扫不成 ⇒ 这一支没有读数（below 仍按旧口径跑）
             return []
         by_path = {str(r.get("manuscript") or ""): r for r in (scan.get("rows") or [])}

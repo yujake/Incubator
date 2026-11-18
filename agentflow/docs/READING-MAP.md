@@ -4,9 +4,18 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、297,633 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16189 行（`agent_loop.py`，14973 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、297,898 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16189 行（`agent_loop.py`，15005 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-18 OWNER1（业主裁定「谁写稿，谁就对稿负责」：送审责任从角色 F 泛化到产出者）**：
+> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 297,633 → **297,898**（本笔 +265：
+> `agent_f/pending.py` +241（`manuscript_producer` 读台账 `producer` 字段、一次读全
+> 台账、三族 `scan_registered`）、`agent_loop.py` +32（`_manuscript_pending` 按产出者
+> 读、收工门的 families 从 `manuscriptopen.ROLE_FAMILIES` 派生）、
+> `agent_f/core.py` +3、`researchpending.py` −11（等待时长改由 `agent_f.pending` 给，
+> 删掉第二份取时口与扫描后的重算））。95 个 `>200` 行函数与 2 段重复 docstring 两格
+> 不变（新落的 `manuscript_producer` 70 行；fn200 仍 95 顶格）。三格（75 / 95 / 2）
+> 逐格未抬。
 > **2026-11-17 FIX11（R1：`b-register@` 义务的写侧键与读侧查找对齐两个号段；R2：`vsigns.issue` 幂等那一档也走「签触发提交」）**：
 > 318 个 `.py`、75 个 `>800` 两格不变；总行数 296,709 → **297,050**（本批 +244：
 > `obligations.py` +174（`settle_registration` / `_manuscript_owner_row`，以及
@@ -809,7 +818,7 @@
 | 文件 | 是什么 |
 |---|---|
 | `evidence.py` | 证据层：先检索、再逐字回验 —— 每条结论都落在某段真实原文上 |
-| `researchpending.py` | 499 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`，动作对象是 B 不是 C：概念行只由 B 经 `Secretary.write_concept_row` 写，C 的动作面只产 `AnalysisReport`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签（`statements_unsigned`）/ 已登记未送审的稿（`manuscript_unsigned`，INV7 第 ⑤ 条：复用 `agent_f.pending` 的同一份扫描，逐份点名稿路径 + sha + 等待时长；与 `statements_unsigned` 分开量 —— 那量命题台账行，这量盘上的稿）/ 已签未收录 / 开着的题 / 无稿 —— 七档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题；INV7 里还多一格：F 的稿已登记、V 签没到，而 M 的读数只有 `statements_unsigned=0`。这张清单是那一步的判据来源 |
+| `researchpending.py` | 488 | 把「研究还没做完」读成一份可判的清单（批 M96，2026-11-06）：概念面缺（`concept_missing`，动作对象是 B 不是 C：概念行只由 B 经 `Secretary.write_concept_row` 写，C 的动作面只产 `AnalysisReport`）/ 有确定性结论却没命题（`candidate_unfiled`）/ 命题未签（`statements_unsigned`）/ 已登记未送审的稿（`manuscript_unsigned`，INV7 第 ⑤ 条：复用 `agent_f.pending` 的同一份扫描，逐份点名稿路径 + sha + 等待时长；2026-11-18 起覆盖 F / E / B 三族的产出者，产出者从台账 `producer` 字段读、缺台账行才退回稿族；与 `statements_unsigned` 分开量 —— 那量命题台账行，这量盘上的稿）/ 已签未收录 / 开着的题 / 无稿 —— 七档里每档都只读既有台账（零模型），`conductor.patrol` 的异常清单与 M 的挂机判据共用同一份 | M 原来「板上没活就挂机等 20 分钟」会把研究停在这里：D 交出可核验结论后没人立命题；INV7 里还多一格：F 的稿已登记、V 签没到，而 M 的读数只有 `statements_unsigned=0`（E / B 的稿同理）。这张清单是那一步的判据来源 |
 | `artifacts.py` | 产物登记：谁在哪个路径产出了什么 |
 | `depsection.py` | **F 手稿依赖段的唯一解析点 + 引用档位的唯一判据**（业主 2026-10-24：「作者只写内容，登记由收方读稿产生」）：`SECTION_HEADING` 那一节按三列表格（路径号不进稿，第四列只在老盘材料里读回）读成 `dependencies`（`used_by="stmt:<命题号>#pN"` + `path_group` + `source_stmt_id`），`citation_levels` / `citation_level_allowed` 是引用档位本身，`read_manuscript` 按命题号找 F 的手稿。`## 证明` 那一格是**三态**（2026-11-09，D4）：`proof_body` 严格（缺节 ⇒ 空串，不再退到 `## 依赖` / 整份全文）、`proof_body_reading` 给 `present` / `absent`、`read_proof_body` 多一个文件侧的 `unreadable`；只有"入参本来就是一段无标题证明正文"的两处（`read_manuscript` 按正文认稿的指纹、`proofregistry.proof_sha`）才走显式命名的 `proof_body_or_whole`（返回值带 `fell_back=True`）。2026-11-10 切节口径（真机 DCT 彩排）：`SECTION_TITLES`（手稿"节"的标题闭集）/ `heading_level`（行首 `#` 的个数）/ `is_section_heading`（这一行是不是一节）三格是唯一来源 —— `## 证明` 到下一个同级且是手稿一节的标题（或更高级标题）为止，`## 记号与约定` 这类同级自由小标题与 `###` 小标题留作正文；`manuscriptintake` 与 `proofregistry` 的切节都从这三格取同一份口径（判据 `tests/test_proof_body_is_three_state.py`）。F 自己不写依赖台账、也没有写台账的工具；`secretary`、B 的入库、D 的汇报、F 的手稿四处都读这一份（与 V 读 F 的手稿再签字同构） |
 | `papercompile.py` | 把智能体写好的 `out/paper/main.tex` 编成 `main.pdf`，并写框架自己的编译回执：判"这份 PDF 是不是盘上这份 tex 编的"（`receipt_matches_tex`） |
@@ -875,7 +884,7 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d/core.py` | 1748 | D 的全部动作（14 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1707 行）；`agent_d/_support.py` 是模块级 helper 与常量，867 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 14973 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_loop.py` | 15005 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1137 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3368 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0；2026-11-09 T1 加 B 的两条动作之后两层对账读数更新为 66 = 25 + 41 + 0；2026-11-11 `open_polish_copy` 进 unmatched 之后现算 67 = 25 + 42 + 0，只动注释、+2 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `agent_skills.py` | 4736 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
