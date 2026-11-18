@@ -115,24 +115,35 @@ class _Core:
             raise ReviewError(f"{name} 调用失败：{res.error}")
         return res.data
     def selftest(self) -> int:
-        """对当前 store 做一次最小自检：工具面是否只读、发现是否可写。
+        """对当前 store 做一次最小自检：工具面是否只读、落库代理的写工具面是否干净。
 
         返回 0（成功）/ 1（失败）。
+
+        ## 为什么不再拿 `documents` 的第一行来审（K10）
+
+        改前这一格取 `rows[0]` 去跑一次真复审来证明"发现可写"——而那一行是别人的
+        稿（工作区里第一份 documents 行，与这一趟 H 毫无关系）：自检一次就在别人的稿上
+        落发现、改 status。审校输入只能是被点名的那一份（`review(doc_id)` 的调用方给），
+        自检没有这个输入，就不该凭空挑一份。所以这里只做结构性判据：自由工具箱只读 +
+        落库代理只含 `_H_WRITABLE_TOOLS`（两处都已在 `__init__` 里各自断言过一次，
+        这里是"装配完之后再核一遍"的读数）。
         """
         try:
             surface = self.tools.describe()
             ok_surface = bool(surface) and all(
                 h_free_toolbox_accepts(t["name"], t["side_effect"]) for t in surface
             )
-            rows = self.store.rows("documents")
-            ok_write = True
-            if rows:
-                data = self.review(str(rows[0].get("doc_id")), dependencies=None)
-                ok_write = data.get("checked") is True and data.get("dep_check", {}).get("checked") is False
+            # 落库代理：只允许那几件（`_H_WRITABLE_TOOLS`），其余一律不算干净。
+            writer_names = [str(t["name"]) for t in self.writers.describe()]
+            bad_writers = [name for name in writer_names
+                           if name not in _H_WRITABLE_TOOLS]
+            ok_write = bool(writer_names) and not bad_writers
             ok = ok_surface and ok_write
             self._emit(
                 f"selftest：{'通过' if ok else '失败'}（自由工具箱 {len(surface)} 个工具：只读 + 通用能力；"
-                f"拒绝的写工具 {len(getattr(self.tools, 'refused_write_tools', []))} 个）"
+                f"拒绝的写工具 {len(getattr(self.tools, 'refused_write_tools', []))} 个；"
+                f"落库代理 {writer_names}"
+                + (f"；不该有的写工具 {bad_writers}" if bad_writers else "") + "）"
             )
             return 0 if ok else 1
         except Exception as e:  # noqa: BLE001 - 自检要给出结论，而不是把异常抛给调用方

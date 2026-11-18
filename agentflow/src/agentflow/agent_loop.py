@@ -7382,7 +7382,8 @@ class AgentLoop:
         instance = str(me.get("instance") or "")
         try:
             got = dict(_FP.unsubmitted_reading(
-                root, owner=instance or None, producer=role))
+                root, owner=instance or None, producer=role,
+                store=getattr(self, "store", None)))
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
             return {**empty, "checked": False, "producer": role,
                     "why": (f"已登记稿读数没查成（{type(exc).__name__}: {exc}）"

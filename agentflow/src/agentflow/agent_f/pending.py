@@ -397,8 +397,14 @@ def summon_action(row: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def manuscript_reading(root: Any, row: Mapping[str, Any], *,
-                       reading: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """一份已登记稿的 V 签读数（四档；`reading` 给了就复用，不重复读盘）。"""
+                       reading: Mapping[str, Any] | None = None,
+                       store: Any = None) -> dict[str, Any]:
+    """一份已登记稿的 V 签读数（四档；`reading` 给了就复用，不重复读盘）。
+
+    `store` 给了就同时读一格生命周期（`lifecycle.state_of_manuscript`，K10 的单一判据）：
+    `completed`（已拿签）/ `abandoned`（命题退休）都不在活跃集里；`unsubmitted_reading`
+    只把活跃的那些算成"待办"，`checked=False` 的那一档照旧进待办（没查成不等于没事）。
+    """
     from .. import proofregistry as _PR
     from . import vsign as _VS
 
@@ -440,12 +446,26 @@ def manuscript_reading(root: Any, row: Mapping[str, Any], *,
     }
     out.update(waiting_reading(out["registered_at"]))
     out["next_action"] = summon_action(out)
+    # ---- 生命周期（K10）：活跃集是「还在不在推」的唯一判据 ---------------------
+    life: dict[str, Any] = {"checked": False, "state": "", "raw": "",
+                            "why": "没有 store ⇒ 生命周期读不到（这一份按签表读）"}
+    if store is not None and rel:
+        try:
+            from .. import lifecycle as _LC
+
+            life = dict(_LC.state_of_manuscript(store, rel))
+        except Exception as exc:  # noqa: BLE001 —— 判不了就如实说（不折成已完工）
+            life = {"checked": False, "state": "", "raw": "",
+                    "why": f"生命周期没查成（{type(exc).__name__}: {exc}）"}
+    out["lifecycle_state"] = str(life.get("state") or "")
+    out["lifecycle_checked"] = bool(life.get("checked"))
+    out["lifecycle_why"] = str(life.get("why") or "")
     return out
 
 
 def unsubmitted_reading(root: Any, *, producer: Any = None, owner: Any = None,
-                        family: Any = None,
-                        families: Any = None) -> dict[str, Any]:
+                        family: Any = None, families: Any = None,
+                        store: Any = None) -> dict[str, Any]:
     """已登记、V 签还没到的稿（`count` > 0 ⇒ 这一拍有活）。
 
     ## 谁问「我名下」：`owner`（K8，业主 2026-11-18）
@@ -485,14 +505,22 @@ def unsubmitted_reading(root: Any, *, producer: Any = None, owner: Any = None,
     out = {"checked": bool(scan.get("checked")), "count": 0, "items": [],
            "rows": rows, "problems": list(scan.get("problems") or []),
            "why": "", "producer": who, "owner": mine,
-           "unattributed": unattributed}
+           "unattributed": unattributed, "inactive": []}
     items: list[dict[str, Any]] = []
+    inactive: list[dict[str, Any]] = []
     for row in rows:
-        got = manuscript_reading(root, row)
+        got = manuscript_reading(root, row, store=store)
+        # 活跃集判据（K10）：`lifecycle.state_of_manuscript` 说 completed / abandoned
+        # 就不算待办；没查成的那一档照旧进待办（签字表那一路在这里只当兜底）。
+        if got.get("lifecycle_checked") and str(got.get("lifecycle_state") or "") not in (
+                "active",):
+            inactive.append(got)
+            continue
         if got.get("signed"):
             continue
         items.append(got)
     out["items"] = items
+    out["inactive"] = inactive
     out["count"] = len(items)
     if not out["checked"]:
         out["why"] = str(scan.get("why") or "已登记稿这一格没查成（不是「没有稿」）")

@@ -1865,7 +1865,9 @@ def build_document(
     # 签与地基两样都没有 ⇒ 受控拒 + 四项读数，一个字节都不写。真机现场见
     # `temp/inv1/REPORT-inv1.md` §2：G 在零签时成文，比全趟第一份签早 67 秒。
     from .. import researchbase as RB
-    gate = RB.writing_gate(store)
+    # K10：成文门的凭据面按这份稿自己引的链读（`claims[].citations` 的 `stmt:`），
+    # 不再读工作区全局读数 —— 别人的稿有签不许算我有签，别人的稿没送审也不许拦我。
+    gate = RB.writing_gate(store, claims=claims)
     if gate["refuse"]:
         raise DocToolError(gate["reason"], kind=gate["kind"], details=gate["details"])
     norm = normalize_claims(claims)
@@ -3029,7 +3031,21 @@ def _doc_write_mapping(workspace: Path | None, project: str,
     # ---- 成文门：先问"有没有可依赖的研究成果"，再谈表。
     from .. import researchbase as RB
 
-    base = RB.research_base(store)
+    # K10：凭据面按这张表自己点到的命题读（`rows[].ledger_id` 的 `stmt:`），
+    # 不再读工作区全局读数（别人的签不替我背书，别人的稿也不拦我）。
+    _scope: list[str] = []
+    _scoped = False
+    for _row in (rows or ()):
+        if not isinstance(_row, Mapping):
+            continue
+        _text = str(_row.get("ledger_id") or "").strip()
+        if not _text.startswith("stmt:"):
+            continue
+        _scoped = True
+        _sid = _text[len("stmt:"):].split("#", 1)[0].strip()
+        if _sid and _sid not in _scope:
+            _scope.append(_sid)
+    base = RB.research_base(store, statements=(_scope if _scoped else None))
     state = str(base.get("state") or "")
     if state != "ready":
         if state == "unreadable":

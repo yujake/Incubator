@@ -97,27 +97,78 @@ def _rows(store: Any, table: str) -> tuple[list[Mapping[str, Any]] | None, str]:
         return None, f"读 {table} 台账失败：{type(exc).__name__}: {exc}"
 
 
-def signs_reading(store: Any, *, root: Any = None) -> dict[str, Any]:
+def claim_statement_scope(claims: Any) -> list[str]:
+    """这份成文所引的命题号（`claims[].citations` 里 `stmt:` 开头的那几个）。
+
+    为什么范围只能从这里来：成文门要回答的是"我凭什么写这一段"，而"凭什么"写在
+    claims 的 citations 上（`doc.build_document` 的机械检查要求每条 claim 至少一条
+    引用）。取不到的（没有引用 / 引用的是文献或关系）不进这一格 —— 那几类不是
+    "自己的命题有签"这一半的凭据。
+
+    返回按出现序去重的命题号列表（空列表 = 这份成文没有引用任何命题）。
+    """
+    out: list[str] = []
+    for one in (claims or ()):
+        if not isinstance(one, Mapping):
+            continue
+        for raw in (one.get("citations") or ()):
+            text = str(raw or "").strip()
+            if not text.startswith("stmt:"):
+                continue
+            sid = text[len("stmt:"):].split("#", 1)[0].strip()
+            if sid and sid not in out:
+                out.append(sid)
+    return out
+
+
+def _sign_in_scope(entry: Mapping[str, Any], scope: Sequence[str]) -> bool:
+    """这一份签是不是盖在我引的那条链上（命题号或稿号落在范围内）。"""
+    from . import vsigns as _VS
+
+    want = {str(x) for x in scope if str(x)}
+    if not want:
+        return True
+    if str(entry.get("statement_id") or "") in want:
+        return True
+    rel = str(entry.get("artifact_path") or "").replace("\\", "/")
+    return bool(rel) and str(_VS.manuscript_id_of(rel) or "") in want
+
+
+def signs_reading(store: Any, *, root: Any = None,
+                  statements: Sequence[str] | None = None) -> dict[str, Any]:
     """V 的签与"还在等签的稿"的读数（成文门的第二半，纯读）。
 
     为什么成文门要读这一格：真机 `projects/lp-ball-6` 里第一份签落在 19:43:40，而 G 在
     19:42:33 就把 `doc:000000` 写进了 `documents` —— 成文比签早 67 秒，当时 `statements`
     那一边一行有效的都没有。所以"签"是那一趟唯一能证明"研究产出已经过 V 复核"的凭据。
 
+    ## `statements`：只读我这条链上的签（K10，业主 2026-11-18）
+
+    改前这一格读工作区全局：别人的稿有签，我就能成文；别人没送审，我也不能成文
+    （真机 G1 被成文门拒时的拒信逐字引用全局读数「签 0 份、待签稿 2 份」）。现在给了
+    `statements` 就只留"签盖在我引的命题 / 稿上"的那几份，待签清单也只列我这条链上的
+    稿；`signs_total` / `pending_total` 记录全局那一份（读数不藏，但不当凭据）。
+
+    ## 「还在等签」用活跃集判（`lifecycle.state_of_manuscript`）
+
+    一份稿算不算"等签"由生命周期说话：`completed`（已拿签）与 `abandoned`（命题退休）
+    都不在活跃集里；只有 `active` 进待签清单。没给 `store` 时退回签目录那一份判据
+    （root-only 的调用方读不到命题台账），并在 `why` 里说明这一格是按签表读的。
+
     三态（与 `research_base` 同一条纪律）：
 
         checked=False  —— 签目录列不出来 ⇒ 这一格没查成（不是「一份签都没有」）
-        signs          —— `out/vsigns/` 里逐份签文件的份数（口径 `vsigns.signed_table`：
-                          权威是逐份签文件，`issued.json` 只用来对账）
-        pending        —— `reports/` 里是签载体（`vsigns.is_sign_carrier`）而一份签都
-                          没有指到它的稿数；`pending_manuscripts` 逐份列路径
+        signs          —— 范围内的签份数（口径 `vsigns.signed_table`：权威是逐份签文件）
+        pending        —— 范围内是签载体、活跃、而一份签都没有指到它的稿数
 
-    返回 `{checked, signs, pending, signed_manuscripts, pending_manuscripts, problems, why}`。
+    返回 `{checked, signs, pending, signed_manuscripts, pending_manuscripts, problems,
+    why, scope, signs_total, pending_total}`。
     """
     out: dict[str, Any] = {
         "checked": False, "signs": None, "pending": None,
         "signed_manuscripts": [], "pending_manuscripts": [],
-        "problems": [], "why": "",
+        "problems": [], "why": "", "scope": [str(x) for x in (statements or ())],
+        "signs_total": None, "pending_total": None,
     }
     base_root = root if root is not None else getattr(store, "root", None)
     if base_root is None:
@@ -130,16 +181,23 @@ def signs_reading(store: Any, *, root: Any = None) -> dict[str, Any]:
     if not table.get("checked"):
         out["why"] = f"签目录列不出来（{table.get('why') or '没有理由'}）⇒ 这一格没查成"
         return out
+    scope = [str(x) for x in (statements or ()) if str(x)]
+    all_entries = [dict(e) for e in (table.get("entries") or ()) if isinstance(e, Mapping)]
+    entries = ([e for e in all_entries if _sign_in_scope(e, scope)]
+               if scope else all_entries)
     signed_paths: set[str] = set()
     signed_ids: set[str] = set()
-    for entry in table.get("entries") or []:
+    for entry in entries:
         rel = str(entry.get("artifact_path") or "").replace("\\", "/")
         if rel:
             signed_paths.add(rel)
         mid = str(entry.get("manuscript_id") or "")
+        if not mid and rel:
+            mid = str(_VS.manuscript_id_of(rel) or "")
         if mid:
             signed_ids.add(mid)
     pending: list[str] = []
+    pending_total: list[str] = []
     carriers = 0
     reports = Path(str(base_root)) / _MANUSCRIPT_DIR
     if reports.is_dir():
@@ -148,15 +206,37 @@ def signs_reading(store: Any, *, root: Any = None) -> dict[str, Any]:
             if not _VS.is_sign_carrier(rel):
                 continue
             carriers += 1
-            if rel in signed_paths or _VS.manuscript_id_of(rel) in signed_ids:
+            mid = str(_VS.manuscript_id_of(rel) or "")
+            in_scope = (not scope) or (mid in {str(x) for x in scope})
+            if not in_scope:
                 continue
+            if rel in signed_paths or mid in signed_ids:
+                continue
+            # 活跃集判据（K10）：已完工/已放弃的稿不是"等签"。
+            if store is not None:
+                from . import lifecycle as _LC
+                try:
+                    life = dict(_LC.state_of_manuscript(store, rel))
+                except Exception as exc:  # noqa: BLE001 —— 判不了就按"没查成"记账
+                    out["problems"].append(
+                        f"`{rel}` 的生命周期读不出来（{type(exc).__name__}: {exc}）"
+                        " ⇒ 这一份仍按待签读（不折成「已完工」）")
+                    life = {"checked": False}
+                if life.get("checked") and str(life.get("state") or "") != _LC.ACTIVE:
+                    continue
             pending.append(rel)
+            pending_total.append(rel)
     out.update(
-        checked=True, signs=len(table.get("entries") or []), pending=len(pending),
+        checked=True, signs=len(entries), pending=len(pending),
         signed_manuscripts=sorted(signed_paths), pending_manuscripts=pending,
         problems=list(table.get("problems") or []),
-        why=(f"`{_SIGNS_DIR}/` 里签 {len(table.get('entries') or [])} 份；"
-             f"`{_MANUSCRIPT_DIR}/` 里签载体 {carriers} 份，其中 {len(pending)} 份还没有签"),
+        signs_total=len(all_entries),
+        pending_total=None if not carriers else len(pending_total),
+        why=(f"`{_SIGNS_DIR}/` 里签 {len(entries)} 份"
+             + (f"（全工作区 {len(all_entries)} 份，只算我引的 {len(scope)} 条命题）"
+                if scope else "")
+             + f"；`{_MANUSCRIPT_DIR}/` 里签载体 {carriers} 份，其中 {len(pending)} 份"
+             "还没有签"),
     )
     return out
 
@@ -178,7 +258,8 @@ def _gate_readings(base: Mapping[str, Any], signing: Mapping[str, Any]) -> dict[
     }
 
 
-def writing_gate(store: Any, *, root: Any = None) -> dict[str, Any]:
+def writing_gate(store: Any, *, root: Any = None,
+                 claims: Any = None) -> dict[str, Any]:
     """成文门的唯一实现：`doc.build_document` 与 `doc.write_mapping` 共用这一份判据。
 
     真机事故（2026-11-17，`projects/lp-ball-6`）：唯一的硬闸只装在 `doc.write_mapping` 上，
@@ -196,9 +277,52 @@ def writing_gate(store: Any, *, root: Any = None) -> dict[str, Any]:
     放行条件（业主 2026-11-17，两条任一）：≥1 条有效地基（`proof_text` 非空或
     `quote_verified=true`），或 ≥1 份 V 签（`out/vsigns/`）。这不是"一刀切禁止成文"。
     """
-    base = research_base(store, root=root)
+    scope = claim_statement_scope(claims)
+    if claims is not None and not scope:
+        # 这份成文一条命题都没引（只引文献 / 关系）：凭据门对它没有对象 —— 它没有
+        # "我们自己的成果"可以拿来当凭据，也就无从"拿别人的签当自己的"。这一档退到
+        # 成文门原来的下限：工作区里至少要有可依赖的研究产出（旧 DOCGATE1 的口径），
+        # 明细里逐字记下这是 `credential_scope="none"` 的下限读数，不是"我的凭据"。
+        base = research_base(store, root=root)
+        signing = dict(base.get("signing") or {})
+        state = str(base.get("state") or "")
+        if state == "ready":
+            return {"checked": True, "refuse": False, "kind": "", "reason": "",
+                    "details": {"credential_scope": "none"},
+                    "base": base, "signing": signing, "scope": []}
+        if state == "unreadable":
+            return {"checked": False, "refuse": True, "kind": "ledger_unreadable",
+                    "reason": (f"{base.get('reason')} ⇒ 成文没查成（不是「研究成果够用」，"
+                               "也不是「没有成果」）：修好台账再来，一个字节都没写"),
+                    "details": {"created": False, "written": False, "research_base": base,
+                                "signing": signing, "credential_scope": "none"},
+                    "base": base, "signing": signing, "scope": []}
+        got = _gate_readings(base, signing)
+        return {
+            "checked": True, "refuse": True, "kind": "no_evidence_chain",
+            "reason": (f"研究成果不足以成文：{got['signs']}、{got['pending']}、"
+                       f"{got['base']}。缺的是：{got['missing']}。⇒ 先拿签/先补地基，"
+                       "再来成文。这一趟一个字节都没写"),
+            "details": {"created": False, "written": False, "research_base": base,
+                        "signing": signing, "scope": [],
+                        "next_steps": [*_GATE_NEXT_STEPS, *(base.get("next_steps") or [])],
+                        "credential_scope": "none"},
+            "base": base, "signing": signing, "scope": [],
+        }
+    base = research_base(store, root=root,
+                         statements=(scope if claims is not None else None))
     signing = dict(base.get("signing") or {})
     state = str(base.get("state") or "")
+    if (claims is not None and scope and state != "unreadable"
+            and int(base.get("statements") or 0) == 0):
+        # 引用面先说话（K10）：这份成文引的命题一条都不在册 ⇒ 这一格不是"没有凭据"，
+        # 是"引用的对象不存在"。凭据门对它没有对象，放行让引用核对
+        # （`doc_tools.check_citations` 的 `dangling_citation`）给出逐条原话。
+        return {"checked": True, "refuse": False, "kind": "", "reason": "",
+                "details": {"credential_scope_missing": True,
+                            "research_base": base, "signing": signing,
+                            "scope": list(scope)},
+                "base": base, "signing": signing, "scope": list(scope)}
     if state == "ready":
         return {"checked": True, "refuse": False, "kind": "", "reason": "",
                 "details": {}, "base": base, "signing": signing}
@@ -229,7 +353,8 @@ def writing_gate(store: Any, *, root: Any = None) -> dict[str, Any]:
     }
 
 
-def research_base(store: Any, *, root: Any = None) -> dict[str, Any]:
+def research_base(store: Any, *, root: Any = None,
+                  statements: Sequence[str] | None = None) -> dict[str, Any]:
     """读一次台账，回答"G 手上有没有可依赖的研究成果"（三态 + 逐格读数）。
 
     返回的键集合是固定的（调用方与判据都按它读）：
@@ -251,13 +376,19 @@ def research_base(store: Any, *, root: Any = None) -> dict[str, Any]:
     两条都没有 ⇒ `insufficient`；`statements` 读不到 ⇒ `unreadable`（不许折成"没有成果"）。
     """
     rows, problem = _rows(store, "statements")
-    signing = signs_reading(store, root=root)
+    scope = [str(x) for x in (statements or ()) if str(x)]
+    if rows is not None and statements is not None:
+        want = set(scope)
+        rows = [r for r in rows if str(dict(r).get("stmt_id") or "") in want]
+    signing = signs_reading(store, root=root,
+                            statements=(scope if statements is not None else None))
     if rows is None:
         return {
             "checked": False, "state": "unreadable",
             "statements": None, "with_proof": None, "verified_quotes": None, "effective": None,
             "signing": signing, "cited_literature": [], "cited_documents": [],
-            "missing": [problem], "next_steps": list(_INSUFFICIENT_NEXT_STEPS),
+            "scope": list(scope), "missing": [problem],
+            "next_steps": list(_INSUFFICIENT_NEXT_STEPS),
             "reason": f"{problem} ⇒ 成文门**没查成**（不是「研究成果够用」）",
         }
 
@@ -313,6 +444,7 @@ def research_base(store: Any, *, root: Any = None) -> dict[str, Any]:
                   f"手稿 {len(cited_doc_sorted)} 份" + sign_note)
     base: dict[str, Any] = {
         "checked": True,
+        "scope": list(scope),
         "state": state,
         "statements": len(rows),
         "with_proof": with_proof,

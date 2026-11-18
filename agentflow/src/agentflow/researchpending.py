@@ -275,7 +275,7 @@ def _manuscripts_unsigned(store: Any, *, role: str = "", instance: str = "") -> 
         from .agent_f import pending as FP
 
         got = dict(FP.unsubmitted_reading(
-            getattr(store, "root", ""),
+            getattr(store, "root", ""), store=store,
             producer=(str(role or "").strip() or None),
             owner=(str(instance or "").strip() or None)))
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
