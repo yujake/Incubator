@@ -444,6 +444,23 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
         "manuscript_id": "", "family": "", "producer_role": "", "task_id": "",
         "token": "", "via": VIA_SIGN, "why": "",
     }
+    # 「先按召唤链找」那一档的入口（`_producer_row` 的第一条策略）：调用方不给
+    # `task_id` 时取这一趟送审的送审者（`conductor.current_parent()`）—— 签那一刻
+    # 跑着的是 V，稿是它的父（F/E/B）产的，父那一行就是产出方（找不到再退回当前
+    # 这一趟的台账号，让 `_producer_row` 沿 `parent_task_id` 继续上行）。
+    # 2026-11-19 修：改前两个调用点（`vsigns._sign_submission` /
+    # `verifications.sign_statement`）都不传，第一条策略永远不生效，退路只剩
+    # 「这份稿的产出实例」；而产出实例在没给实例标签时记的是台账号本身
+    # （`identity.resolve_identity` 的 task_id 兜底），`_row_instance` 又不认它
+    # ⇒ `C2 证明链` 的 F 行拿不到 `mss:` 记号（`written=False` + "没有可写的行"）。
+    if not str(task_id or "").strip():
+        try:
+            from . import conductor as _CND
+
+            _parent_id, _parent_role = _CND.current_parent()
+            task_id = str(_parent_id or "") or str(_CND.current_task_id() or "")
+        except Exception:  # noqa: BLE001 —— 没有挂点 = 直调 / 单测，照旧走后面那两条
+            task_id = ""
     sha = str(artifact_sha or "").strip().lower()
     sign = _sign_reading(root, sha)
     if not sign.get("checked"):
