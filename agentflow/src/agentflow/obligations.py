@@ -282,21 +282,27 @@ def _manuscript_of_proof(store: Any, root: Any, sid: str, sha: str) -> dict[str,
     return out
 
 
-def _manuscript_owner(store: Any, root: Any, sid: str, sha: str) -> dict[str, Any]:
+def _manuscript_owner(store: Any, root: Any, sid: str, sha: str,
+                      manuscript: str = "") -> dict[str, Any]:
     """这份稿的产出实例（K9 的收件人来源：产物台账说谁写的，就是谁）。
 
+    稿路径优先取调用方给的那一份（判词行自己记着"我审的是哪份稿"，见
+    `_verdict_detail`）；没给才按"命题号 + 正文 sha"从路径面反查。
     实现只有一处：`agent_f.pending.manuscript_producer`（台账 `producer`/`instance`
-    > 实例级 actor）。本函数只把"命题号 + 正文 sha"翻成稿路径再问它。
+    > 实例级 actor）。
     返回 `{checked, manuscript, role, instance, why}`；认不出实例 ⇒ `instance=""`
     （调用方按角色地址处置，不挑一趟）。
     """
-    out: dict[str, Any] = {"checked": False, "manuscript": "", "role": "",
-                           "instance": "", "why": ""}
-    got = _manuscript_of_proof(store, root, sid, sha)
-    out["manuscript"] = str(got.get("manuscript") or "")
-    if not out["manuscript"]:
-        out.update(checked=bool(got.get("checked")), why=str(got.get("why") or ""))
-        return out
+    out: dict[str, Any] = {"checked": False, "manuscript": str(manuscript or ""),
+                           "role": "", "instance": "", "why": ""}
+    if out["manuscript"]:
+        out.update(checked=True, why="稿路径来自判词行")
+    else:
+        got = _manuscript_of_proof(store, root, sid, sha)
+        out["manuscript"] = str(got.get("manuscript") or "")
+        if not out["manuscript"]:
+            out.update(checked=bool(got.get("checked")), why=str(got.get("why") or ""))
+            return out
     try:
         from .agent_f import pending as _FP
 
@@ -382,7 +388,8 @@ def ensure_resubmit(*, store: Any, root: str | Path, label: str,
                    reason=str(cleared.get("why") or "义务已清"))
         return out
     # ---- 收件实例：这份稿的产出实例（K9） ---------------------------------
-    owner = _manuscript_owner(store, root, sid, sha)
+    owner = _manuscript_owner(store, root, sid, sha,
+                              manuscript=str(detail.get("manuscript") or ""))
     target_role = str(owner.get("role") or role or "")
     target_instance = str(owner.get("instance") or "")
     live: dict[str, Any] = {}
@@ -1889,8 +1896,10 @@ def _verdict_detail(store: Any, root: str, label: str,
                     verification_id: str) -> dict[str, Any] | None:
     """从台账把一条判定读成重送项要的明细（收工对账补开历史行时走这一支）。
 
-    只取开义务真正要用的四格：`verification_id` / `proof_sha256` / `defect_step` /
-    `requires_rewrite`。正文里的措辞由 :func:`_resubmit_body` 现拼，不从别处抄一份。
+    取开义务要用的格：`verification_id` / `proof_sha256` / `defect_step` /
+    `requires_rewrite`，以及这一签盖在哪份稿上（`manuscript`，K9：收件人 = 该稿的
+    产出实例，而这一格就是那个事实的第一手来源 —— 判词行记着它审的是哪份稿）。
+    正文里的措辞由 :func:`_resubmit_body` 现拼，不从别处抄一份。
     读不出来 ⇒ `None`（调用方记"跳过"，不拿空明细开一条没有 sha 的项）。
     """
     from . import verifications as VR
@@ -1908,10 +1917,12 @@ def _verdict_detail(store: Any, root: str, label: str,
     report = (str(kind.get("source") or "") == "row"
               and str(kind.get("kind") or "") in ("procedural", "style"))
     step = sign.get("defect_step")
+    manuscript = str(sign.get("manuscript") or sign.get("object_path") or "").strip()
     return {"verification_id": str(verification_id or ""),
             "proof_sha256": str(sign.get("proof_sha256") or ""),
             "defect_step": step if isinstance(step, int) else None,
-            "requires_rewrite": not report}
+            "requires_rewrite": not report,
+            "manuscript": manuscript.replace("\\", "/")}
 
 
 def record_verdict(store: Any, row: Mapping[str, Any], *, at: str = "",
