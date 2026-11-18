@@ -555,7 +555,7 @@ def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
              "'delivery','delivered',"
              "'v_sign','delivery_state','delivery_label',"
              "'total','signed_count','pending_count','unsigned_count',"
-             "'proof_count','proof_statements','draft_count',"
+             "'proof_count','proof_output_count','proof_statements','draft_count',"
              "'abandoned_count','abandoned_statements',"
              "'unfinished','unfinished_count','trail','trail_required',"
              "'legal_exits','exits_note','legal_stop','is_failure','close_problems',"

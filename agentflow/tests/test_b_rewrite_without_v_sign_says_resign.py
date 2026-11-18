@@ -255,7 +255,14 @@ def test_b_the_advice_is_walkable_end_to_end(tmp_path: pathlib.Path) -> None:
             verifier="agent-V", store=st, secretary_judge={"checked": True, "axis": "clean", "decision": "没问题", "reason": "夹具：秘书判 clean"})
     rewrite = _b(st).register_statement(
         **{**OWN, "kind": "conjecture"}, proof_text=signed_body,
-        proof_manuscript=man_text)
+        # 2026-11-18（Z3FIX1）：交稿路径也交稿（`proof_manuscript` 给相对路径，
+        # 不是正文）。为什么不是正文：V1（2026-11-13）起，收录回执要把"这一行是哪一份稿"
+        # 落成 `manuscript_id` / `manuscripts`；夹具体只交正文时这一行始终没有稿的链接，
+        # 于是下面第 ③ 笔"再交一次同一份正文"会先补写这一格（一次真实的收执写入）
+        # 而被判成"又写了一笔"（`ok=True`），不再是「已在册」的重复读数。
+        # 现实里 B 收录的就是那一份盘上的稿（前一断言刚给它签过），路径是它的真实身份；
+        # 判据一个字没动，动的只是夹具把前置造成产品现在的形状。
+        proof_manuscript=man_rel)
     assert rewrite["ok"] is True, rewrite
     assert rewrite.get("canonical_written") is True, rewrite
     assert _row(st)["proof_text"].strip("\n") == P2, _row(st)["proof_text"]
