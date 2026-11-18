@@ -2489,7 +2489,11 @@ def _doc_list_documents(_not_wired, store, status=None, kind=None):
     returns=(
             "{'doc_id','kind','title','markdown_path','claims','sections','open_problems',"
             "'status','review_rounds','created_at','updated_at','created_by',"
-            "'content_sha256','revision','review_verdict','reviewed_at','reviewed_by'}（落库后的 documents 行）；"
+            "'content_sha256','revision','review_verdict','reviewed_at','reviewed_by',"
+            # 2026-11-19（K11 行级归属）：`documents` 是两张有归属的表之一，落库行自带
+            # 这两格（`rowscope.stamp` 按调用者身份现盖）—— 声明漏了它们，模型就不知道
+            # 这两格存在，也就没法据它判"这一行是谁的"。
+            "'owner_task','owner_instance'}（落库后的 documents 行）；"
             "**meta.citation_coverage** = 这份稿子引了几条 `lit:`/`rel:`/`exp:`/`stmt:`/`doc:`/`eval:` "
             "+ 库里有多少可引的（含 `gaps` 与 `suggest_lit`/`suggest_rel` 样例，只报数不拦）；"
             "失败：ok=False + kind(dangling_citation/validation_error/store_error/io_error) + "

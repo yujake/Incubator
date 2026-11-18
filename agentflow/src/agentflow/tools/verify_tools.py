@@ -996,7 +996,7 @@ def _verify_run_experiment(_need_store, _run_experiment_tool, claim, claim_key, 
     roles=_ROLES,
     returns=(
             "{'checked','experiments','count','result_counts','negation_counts',"
-            "'best_evidence_kind','proved','reason'}（FC-10：必须分档计数，不许只给一个布尔；"
+            "'best_evidence_kind','proved','scope','reason'}（FC-10：必须分档计数，不许只给一个布尔；"
             "三条返回路径的键集合**完全相同**，由 tests/test_tools_audit_fixes.py 逐字核对）"
             ),
     tags=("experiment", "evidence"),
@@ -1027,7 +1027,7 @@ def _verify_evidence_for(_need_store, _read_rows, store, claim_key=None, for_que
            },
     side_effect="read",
     roles=_ROLES,
-    returns="{'checked','total','returned','truncated','experiments','reason'}",
+    returns="{'checked','total','returned','truncated','experiments','scope','reason'}",
     tags=("experiment",),
 )
 def _verify_list_experiments(_need_store, _read_rows, store, claim_key=None, limit=None):
