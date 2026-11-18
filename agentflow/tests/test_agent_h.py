@@ -795,6 +795,25 @@ def test_agent_h_selftest_passes(h_store: Store):
     assert any("selftest" in line for line in agent.logs)
 
 
+def test_h_selftest_turns_red_on_an_unexpected_write_tool(h_store: Store):
+    """反真空：往落库代理里塞一件不在 `_H_WRITABLE_TOOLS` 里的写工具 ⇒ 自检必红。
+
+    为什么要有这一条：`selftest` 改前把注册表里每个名字都当成"写工具"去对表，
+    于是只读入口（`review.list_findings` / `review.scan*`，由同一个
+    `include_writers=True` 装进来）把它顶成恒 1。修法只是"先按 side_effect 筛"——
+    如果筛过头（把写工具也筛掉），这条负控会绿着放过一件不该有的写入口。
+    所以这里塞一件真的 `write_local`，断言它必须被点名。
+    """
+    seed_document(h_store, "0000", [clean_claim()])
+    agent = AgentH(h_store)
+    agent.writers.register(ToolSpec(
+        name="x.rogue_write", summary="s",
+        params={"type": "object", "properties": {}},
+        handler=lambda: None, side_effect="write_local", roles=("H",)))
+    assert agent.selftest() == 1
+    assert any("x.rogue_write" in line for line in agent.logs), agent.logs[-3:]
+
+
 def test_review_rejects_an_unknown_document(store: Store):
     """负控：既没有论文正文、也没有那份台账行 ⇒ 审校必须报错（不是"没有发现 ⇒ accepted"）。
 

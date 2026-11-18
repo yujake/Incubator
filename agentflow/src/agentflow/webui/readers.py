@@ -5760,13 +5760,19 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("secretary_judge", "Record<string, unknown>"),
       ("by_task_id_tri", "string"))),
     ("ArtifactRow",
-     "artifacts.read_ledger() 的行（`artifacts.FIELDS` 九个键，真机 ARTIFACTS.jsonl 同形）",
+     "artifacts.read_ledger() 的行（`artifacts.FIELDS` 的键，真机 ARTIFACTS.jsonl 同形）",
      (("at", "string"), ("path", "string"), ("sha256", "string"), ("bytes", "number"),
       ("producer", "string"), ("kind", "string"), ("task_id", "string"),
       ("exit_code", "number | null"), ("note", "string"),
       # sha 原文不显示：这一格取同一路径的核对行读数
       # （match / mismatch / unknown），页面只印它。
       ("sha_consistency", "string"),
+      # 归属三格（K1/K2/K6）：`producer` 之外再记实例标签与未归因原因，`family` 是
+      # 稿的族（非稿产物是空串）。它们由 `artifacts.record` 无条件写、不是读模型的
+      # join 补出来的 —— 后端真读得出（`tests/test_webui_readers.py` 的 C 条逐键比
+      # 拿夹具那一行对着这张声明表核），所以这里必须声明；漏声明时 `ArtifactRow`
+      # 面会对盘上真实存在的三格报"读模型多给了键"。
+      ("instance", "string"), ("identity_conflict", "string"), ("family", "string"),
       # 台账行没有 `created_by`（`artifacts.FIELDS` 里没有那一栏）⇒ `by_role` 是空串。
       # `by_task_id` 按 `path` 反查（`agent_run_artifact` 事件同时带 path 与编号）。
       ("by_role", "string"), ("by_role_source", "string"),

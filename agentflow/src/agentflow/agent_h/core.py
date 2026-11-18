@@ -125,8 +125,18 @@ class _Core:
         稿（工作区里第一份 documents 行，与这一趟 H 毫无关系）：自检一次就在别人的稿上
         落发现、改 status。审校输入只能是被点名的那一份（`review(doc_id)` 的调用方给），
         自检没有这个输入，就不该凭空挑一份。所以这里只做结构性判据：自由工具箱只读 +
-        落库代理只含 `_H_WRITABLE_TOOLS`（两处都已在 `__init__` 里各自断言过一次，
+        落库代理的写工具面只含 `_H_WRITABLE_TOOLS`（两处都已在 `__init__` 里各自断言过，
         这里是"装配完之后再核一遍"的读数）。
+
+        ## 为什么写工具面要先按 `side_effect` 筛（2026-11-19，既有红）
+
+        改前这里把 `writers.describe()` 的每一个名字都当成"写工具"去对
+        `_H_WRITABLE_TOOLS`，而 `RV.register(include_writers=True)` 会把只读工具也装进
+        同一个注册表 —— 于是 `review.list_findings` / `review.scan*` 这几个只读入口被
+        读成"不该有的写工具"，自检恒返 1（`tests/test_agent_h.py::test_agent_h_selftest_passes`
+        在 20ec9b51 上就是红的）。判据与 `__init__` 那一处对齐：只有
+        `side_effect in SIDE_EFFECTS_WRITE` 的名字才进这一张对表；同时要求
+        `_H_WRITABLE_TOOLS` 一个不少（少装一件也是"落库代理不完整"，不是通过）。
         """
         try:
             surface = self.tools.describe()
@@ -134,16 +144,23 @@ class _Core:
                 h_free_toolbox_accepts(t["name"], t["side_effect"]) for t in surface
             )
             # 落库代理：只允许那几件（`_H_WRITABLE_TOOLS`），其余一律不算干净。
+            # 只读入口（`review.list_findings` / `review.scan*`）由同一个
+            # `include_writers=True` 装进来，它们不是"写工具"，不进这张对表。
             writer_names = [str(t["name"]) for t in self.writers.describe()]
-            bad_writers = [name for name in writer_names
+            write_names = [str(t["name"]) for t in self.writers.describe()
+                           if str(t.get("side_effect") or "") in SIDE_EFFECTS_WRITE]
+            bad_writers = [name for name in write_names
                            if name not in _H_WRITABLE_TOOLS]
-            ok_write = bool(writer_names) and not bad_writers
+            missing_writers = [name for name in _H_WRITABLE_TOOLS
+                               if name not in write_names]
+            ok_write = bool(write_names) and not bad_writers and not missing_writers
             ok = ok_surface and ok_write
             self._emit(
                 f"selftest：{'通过' if ok else '失败'}（自由工具箱 {len(surface)} 个工具：只读 + 通用能力；"
                 f"拒绝的写工具 {len(getattr(self.tools, 'refused_write_tools', []))} 个；"
-                f"落库代理 {writer_names}"
-                + (f"；不该有的写工具 {bad_writers}" if bad_writers else "") + "）"
+                f"落库代理 {len(writer_names)} 件（其中写工具 {write_names}）"
+                + (f"；不该有的写工具 {bad_writers}" if bad_writers else "")
+                + (f"；缺了该有的写工具 {missing_writers}" if missing_writers else "") + "）"
             )
             return 0 if ok else 1
         except Exception as e:  # noqa: BLE001 - 自检要给出结论，而不是把异常抛给调用方

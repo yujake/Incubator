@@ -63,7 +63,7 @@ LEDGER_NAME = "ARTIFACTS.jsonl"
 #: 「两个人同一角色各产了一件」在台账上按 `instance` 分得开，而不是只剩 `producer=角色`。
 FIELDS: tuple[str, ...] = (
     "at", "path", "sha256", "bytes", "producer", "kind", "task_id", "exit_code", "note",
-    "instance", "identity_conflict",
+    "instance", "identity_conflict", "family",
 )
 
 #: `verify_entries` 的四种状态。刻意不是布尔：`missing`（不在了）与 `unreadable`
