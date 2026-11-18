@@ -129,11 +129,18 @@ def test_a_the_duty_is_settled_at_the_moment_b_registers(tmp_path: pathlib.Path)
     key = str(items[0]["input_key"])
     # 写侧仍然按「稿号」建键（SGN1 的形状不重裁）：键里那个号是稿号 000002。
     assert key == OBL.register_key(f"{MID}#p1", SHA), key
-    assert str(items[0].get("parent_task_id")) == b_task, items[0]
-    # 收录之前：读侧说「这一份还没入库」，销号门看得见它。
+    # 收件地址（K9）：未在册那一支还没有命题行 ⇒ 没有可判定的收件实例 ⇒ 这条义务按
+    # 角色地址落在板上；盘上唯一那趟 B 从 `open_items_for` 读得到它（不再靠"唯一在飞"
+    # 把父台账号钉上去）。它被读进某一步的那一刻领取这个实例地址（`_set_item` 的 seen）。
+    assert str(items[0].get("parent_task_id") or "") == "", items[0]
+    assert str(items[0].get("instance") or "") == "", items[0]
+    assert [r["task_id"] for r in conductor_for(st).open_items_for("B", "B#1")] == [
+        items[0]["task_id"]], conductor_for(st).open_items_for("B", "B#1")
+    # 收录之前：读侧说「这一份还没入库」，销号门看得见它（同一份 `open_items_of`：
+    # 收件实例此刻还没领取它，所以「挂在谁名下」只有角色地址这一格 —— 这里读的是
+    # B 那趟的实例地址，与上面的 `open_items_for` 同一口径）。
     before = OBL.registration_gap(store=st, label=f"{MID}#p1", manuscript=REL)
     assert before["checked"] is True and before["gap"] is True, before
-    assert len(conductor_for(st).open_items_of(b_task)) == 1
 
     row = _registered(st)
     assert str(row.get("stmt_id")) == SID and str(row.get("manuscript_id")) == MID

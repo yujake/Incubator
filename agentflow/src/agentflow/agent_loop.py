@@ -2424,7 +2424,8 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                    my_task_id: str, sid: str | None = None,
                    parent_task_id: str = "", parent_role: str = "",
                    limit: int = MAILBOX_LIMIT,
-                   rendered: Sequence[str] = ()) -> dict[str, Any]:
+                   rendered: Sequence[str] = (),
+                   instance: str = "") -> dict[str, Any]:
     """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
     backlog, reason, items, revoked_recent, revoked_ids}`。
 
@@ -2500,6 +2501,21 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                 got["reason"] = f"工作项板没读成：{why}"
                 got["problems"].append(f"信箱读不到板项：{why}")
             else:
+                # K9：除了「挂在我名下」的项，还要读「地址是投给我的」那一格 ——
+                # 一个实例不在飞时落下的义务挂在它的实例地址上（行上 `instance`），
+                # 不挂在任何台账号名下；只按 `open_items_of` 读会让它永远没人收。
+                look_for = getattr(conductor, "open_items_for", None)
+                if callable(look_for) and str(instance or ""):
+                    try:
+                        extra = [dict(r) for r in look_for(role, str(instance))]
+                    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+                        got["checked"] = False
+                        got["problems"].append(
+                            f"信箱读不到「投给我的项」：{type(exc).__name__}: {exc}")
+                        extra = []
+                    have = {str(r.get("task_id") or "") for r in rows}
+                    rows.extend(r for r in extra
+                                if str(r.get("task_id") or "") not in have)
                 queued = [dict(r) for r in rows
                           if str(r.get("item_state") or "") == "queued"
                           and str(r.get("task_id") or "") not in already]
@@ -6476,7 +6492,8 @@ class AgentLoop:
             self.conductor, self.session_root, self.role,
             my_task_id=str(self.my_task_id or ""), sid=self.sid,
             parent_task_id=self.parent_task_id, parent_role=self.parent_role,
-            rendered=sorted(self._mailbox_rendered))
+            rendered=sorted(self._mailbox_rendered),
+            instance=str(loop_instance(self).get("instance") or ""))
         # 问题清单与 checked 一并取一次：这两格在「空投递那一支」与「最终返回」都读。
         problems = list(got.get("problems") or ())
         for p in problems:
@@ -7451,7 +7468,13 @@ class AgentLoop:
         if self.conductor is not None and str(self.my_task_id or ""):
             try:
                 open_items = self.conductor.open_items_of(str(self.my_task_id))
+                # K9：加「地址投给我这个实例」的那一格（实例不在飞时落下的义务）。
+                look_for = getattr(self.conductor, "open_items_for", None)
+                my_instance = str(loop_instance(self).get("instance") or "")
+                if callable(look_for) and my_instance:
+                    open_items = list(open_items) + list(look_for(self.role, my_instance))
                 items = [str(r.get("task_id") or "") for r in open_items if r.get("task_id")]
+                items = list(dict.fromkeys(items))
             except Exception as exc:  # noqa: BLE001 - 读不成是"没查成"，按有活处置
                 out["checked"] = False
                 out["busy"] = True

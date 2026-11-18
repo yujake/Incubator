@@ -250,28 +250,109 @@ def _resubmit_body(*, label: str, detail: Mapping[str, Any], at: str) -> tuple[s
     return summary, body[:int(BOARD_DETAIL_CHARS)]
 
 
+def _manuscript_of_proof(store: Any, root: Any, sid: str, sha: str) -> dict[str, Any]:
+    """这份被签正文属于哪一份稿（`manuscriptpaths.path_reading` 是唯一读口）。
+
+    返回 `{checked, manuscript, why}`。认不出（台账里没有那个 sha / 没有稿）⇒
+    空稿路径 —— 调用方退回"送审者"那一条旧地址，不猜一个稿。
+    """
+    out: dict[str, Any] = {"checked": False, "manuscript": "", "why": ""}
+    if store is None or not str(sid or "") or not str(sha or ""):
+        out["why"] = "没有 store / 命题号 / 正文 sha ⇒ 认不出稿"
+        return out
+    try:
+        from . import manuscriptpaths as _MP
+
+        got = dict(_MP.path_reading(store, root, statement_id=str(sid)))
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        out["why"] = f"路径面读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out["checked"] = bool(got.get("checked"))
+    want = str(sha or "").strip().lower()
+    for one in got.get("paths") or ():
+        if str(one.get("body_sha") or "").strip().lower() != want:
+            continue
+        rel = str(one.get("manuscript") or "").strip().replace("\\", "/")
+        if rel:
+            out.update(manuscript=rel,
+                       why=f"正文 sha {want[:12]}… 属于 `{rel}`")
+            return out
+    out["why"] = (f"`{sid}` 的路径面里没有 sha={want[:12]}… 那一份稿"
+                  "（认不出是哪一份 ⇒ 不猜）")
+    return out
+
+
+def _manuscript_owner(store: Any, root: Any, sid: str, sha: str) -> dict[str, Any]:
+    """这份稿的产出实例（K9 的收件人来源：产物台账说谁写的，就是谁）。
+
+    实现只有一处：`agent_f.pending.manuscript_producer`（台账 `producer`/`instance`
+    > 实例级 actor）。本函数只把"命题号 + 正文 sha"翻成稿路径再问它。
+    返回 `{checked, manuscript, role, instance, why}`；认不出实例 ⇒ `instance=""`
+    （调用方按角色地址处置，不挑一趟）。
+    """
+    out: dict[str, Any] = {"checked": False, "manuscript": "", "role": "",
+                           "instance": "", "why": ""}
+    got = _manuscript_of_proof(store, root, sid, sha)
+    out["manuscript"] = str(got.get("manuscript") or "")
+    if not out["manuscript"]:
+        out.update(checked=bool(got.get("checked")), why=str(got.get("why") or ""))
+        return out
+    try:
+        from .agent_f import pending as _FP
+
+        prod = dict(_FP.manuscript_producer(str(root or ""), out["manuscript"]))
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        out["why"] = f"产物归属读不出来（{type(exc).__name__}: {exc}）"
+        return out
+    out.update(checked=True, role=str(prod.get("producer_role") or ""),
+               instance=str(prod.get("producer_instance") or ""),
+               why=(f"`{out['manuscript']}` 的产出实例是 "
+                    + (str(prod.get("producer_instance")) if prod.get("producer_instance")
+                       else "（没有实例归属）")))
+    return out
+
+
+def _addressed_task(store: Any, role: str, instance: str) -> dict[str, Any]:
+    """那个实例此刻在飞的台账号；不在飞 ⇒ 空（不拿终态行当地址）。"""
+    if not str(instance or ""):
+        return {}
+    return _live_task_of(store, str(role or ""), str(instance))
+
+
 def ensure_resubmit(*, store: Any, root: str | Path, label: str,
                     verification_id: str, detail: Mapping[str, Any], recipient: str,
                     role: str, depth: int, at: str = "") -> dict[str, Any]:
     """开一条「待重送」板项（幂等；已清掉的不开）。
 
-    返回 `{"checked","state","key","item_id","owner","reason","problems"}`，`state ∈
-    {opened, existing, cleared, closed, unowned, skipped, error}`：
+    返回 `{"checked","state","key","item_id","owner","owner_instance","owner_known",
+    "owner_why","reason","problems"}`，`state ∈ {opened, existing, cleared, closed,
+    unowned, skipped, error}`：
 
     - `opened`：新开了一条；
     - `existing`：同键的项已经在板上（不重开 —— 这是幂等的落点）；
     - `cleared`：这次打回之后已经有一条更新的干净「成立」⇒ 义务本来就没了，不开
       （历史补投会走到这一支：旧判决不该在收工时凭空长出一条待办）；
     - `closed`：板上那条已经 done（不重开，读数说"已经收口"）；
-    - `unowned`：读不到送审者 ⇒ 不猜负责人、不开项，负责人记 `unknown`（收工读数里
-      `statements_unsigned.rows[].owner_known=False` 会把它说清楚）；
+    - `unowned`：既读不到送审者、又认不出这份稿的产出实例 ⇒ 不猜负责人、不开项；
     - `skipped`：这一行没有 sha / 没有命题号 ⇒ 做不出幂等键（不猜）；
     - `error`：开项抛了（`problems` 里带原话），不带走这一签。
+
+    ## 收件人 = 该稿的产出实例（K9 / SH-40）
+
+    改前收件人是"送审者"（`conductor.current_parent()`，即发起那一趟的台账号）。
+    那一趟一结束，板项就挂在一个 `done` 的号上：`open_items_of` 只看自己名下的行，
+    新起的同角色台账号看不见它（真机 lp-ball-8 的 `v-resubmit@` 挂在已 done 的
+    t-000049 上）。现在收件人是这份稿的产出实例（产物台账的 `producer`/`instance`），
+    地址写进板项行（`Task.instance`），父只在该实例此刻在飞时填 —— 终态行不再是地址，
+    义务等那个实例下一次起跑时由 `Conductor.open_items_for` 交给它。
     """
+
     from . import vsigns as VSP
 
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
-                           "owner": str(recipient or ""), "reason": "", "problems": []}
+                           "owner": str(recipient or ""), "owner_instance": "",
+                           "owner_known": False, "owner_why": "",
+                           "reason": "", "problems": []}
     sid = str(label or "").split("#", 1)[0]
     sha = str(detail.get("proof_sha256") or "")
     if not sid or not sha:
@@ -300,16 +381,41 @@ def ensure_resubmit(*, store: Any, root: str | Path, label: str,
         out.update(checked=True, state="cleared", item_id=str(row.get("task_id") or ""),
                    reason=str(cleared.get("why") or "义务已清"))
         return out
-    if not str(recipient or ""):
-        out.update(state="unowned", owner="unknown",
-                   reason=("读不到送审者 ⇒ 不猜负责人、不开项；负责人记 unknown，"
-                           "由收工读数 statements_unsigned 的 owner_known 说清楚"))
-        return out
+    # ---- 收件实例：这份稿的产出实例（K9） ---------------------------------
+    owner = _manuscript_owner(store, root, sid, sha)
+    target_role = str(owner.get("role") or role or "")
+    target_instance = str(owner.get("instance") or "")
+    live: dict[str, Any] = {}
+    if target_instance:
+        live = _addressed_task(store, target_role, target_instance)
+        out["owner_instance"] = target_instance
+        out["owner_known"] = True
+        out["owner"] = str(live.get("task_id") or "")
+        out["owner_why"] = (f"这份稿的产出实例是 {target_instance}"
+                            + (f"，此刻在飞 {live.get('task_id')}" if live else
+                               "，此刻没有在飞的台账号 ⇒ 义务按实例地址等它下一次起跑"))
+    else:
+        # 认不出产出实例：退回送审者那一条旧地址 —— 但绝不挂在已终态的号上。
+        caller = str(recipient or "")
+        if caller and _task_running(store, caller):
+            out["owner"] = caller
+        out["owner_known"] = bool(out["owner"])
+        out["owner_why"] = (str(owner.get("why") or "认不出产出实例")
+                            + ("；送审者那一刻在飞，按它投递" if out["owner"]
+                               else "；送审者不在飞 ⇒ 按角色地址落在板上"))
+        if not out["owner"] and not target_instance and not caller:
+            out.update(state="unowned", owner="unknown",
+                       reason=("读不到送审者、也认不出这份稿的产出实例 ⇒ 不猜负责人、"
+                               "不开项；owner_known=False 会出现在收工读数里"))
+            return out
     row = _resubmit_item_by_key(conductor, key)
     if row:
         task_id = str(row.get("task_id") or "")
         state = str(row.get("item_state") or "")
         out.update(checked=True, item_id=task_id,
+                   owner=str(row.get("parent_task_id") or ""),
+                   owner_instance=str(row.get("instance") or out["owner_instance"]),
+                   owner_known=bool(row.get("instance") or row.get("parent_task_id")),
                    state=("closed" if state == "done" else "existing"),
                    reason=(f"同键的板项已存在（{task_id}，item_state={state}）⇒ 不重开"))
         return out
@@ -318,11 +424,17 @@ def ensure_resubmit(*, store: Any, root: str | Path, label: str,
                    reason="这一趟没有 conductor ⇒ 板项开不了（不拿意图当交付）")
         return out
     summary, body = _resubmit_body(label=label, detail=detail, at=at)
+    parent = str(out["owner"] or "")
+    if parent:
+        item_depth = max(1, int(_task_row(store, parent).get("depth") or 1)) + 1
+    else:
+        item_depth = 1
     try:
         item_id = conductor.open_item(
-            kind="notice", role=str(role or ""), expects="work", action="notice",
-            summary=summary, called_by="V", parent_task_id=str(recipient),
-            depth=int(depth or 1) + 1, input_key=key)
+            kind="notice", role=target_role, expects="work", action="notice",
+            summary=summary, called_by="V", parent_task_id=(parent or None),
+            depth=item_depth, input_key=key,
+            recipient_instance=str(out["owner_instance"] or ""))
         conductor.set_item_detail(item_id, body)
     except Exception as exc:  # noqa: BLE001 —— 一条开不成不许带走这一签
         out.update(state="error",
@@ -330,7 +442,11 @@ def ensure_resubmit(*, store: Any, root: str | Path, label: str,
         out["problems"].append(out["reason"])
         return out
     out.update(checked=True, state="opened", item_id=item_id,
-               reason=f"新开重送项 {item_id}（负责人 {recipient}）")
+               reason=(f"新开重送项 {item_id}"
+                       + (f"（收件实例 {out['owner_instance']}"
+                          + (f"，在飞台账号 {out['owner']}" if out["owner"] else "，此刻不在飞")
+                          + "）" if out["owner_instance"]
+                          else "（按角色地址，由该角色的实例领取）")))
     return out
 
 
@@ -443,11 +559,15 @@ def resubmit_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
         if state == "done":
             continue
         owner = str(row.get("parent_task_id") or "")
+        instance = str(row.get("instance") or "")
         out["open"] += 1
-        if not owner:
+        # 收件地址两格（K9）：实例地址在行上，台账号只在那个实例此刻在飞时才有。
+        # 两格都空才是「没有收件人」；只有台账号空、实例地址在 ⇒ 义务等它下一次起跑。
+        if not owner and not instance:
             out["unowned"] += 1
         out["rows"].append({"task_id": str(row.get("task_id") or ""), "key": key,
-                            "owner": owner or "unknown", "item_state": state,
+                            "owner": owner or "unknown", "owner_instance": instance,
+                            "item_state": state,
                             "role": str(row.get("role") or ""),
                             "detail": str(row.get("detail") or "")[:200]})
     out["reason"] = f"板上开着 {out['open']} 条重送义务"
@@ -800,108 +920,149 @@ def _register_body(*, label: str, detail: Mapping[str, Any], manuscript: str,
     return summary, body[:int(BOARD_DETAIL_CHARS)]
 
 
-def _live_role_task(store: Any, role: str) -> dict[str, Any]:
-    """那一刻唯一在飞的该角色台账号（0 或 ≥2 ⇒ 不认，不猜）。
-
-    与 `resolve_recipient` 的"唯一才认"同一条纪律：这里问的是"现在有没有一个确定的 B
-    可以接这条义务"，两趟以上在飞时"哪一趟接"不可判 —— 那时宁可记 `owner=""`，也不拿
-    "谁醒着"当负责人。
-    """
-    out: dict[str, Any] = {"checked": False, "task_id": "", "candidates": [], "why": ""}
+def _role_rows(store: Any, role: str) -> tuple[list[dict[str, Any]], str]:
+    """该角色的台账号行（实例行；`kind` 非空的行不算）。读不成 ⇒ `([], 理由)`。"""
     if store is None:
-        out["why"] = "没有 store ⇒ 读不到台账号"
+        return [], "没有 store ⇒ 读不到台账号"
+    try:
+        rows = [dict(r) for r in store.rows("tasks")]
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有人"
+        return [], f"`tasks` 读不出来（{type(exc).__name__}: {exc}）"
+    return [r for r in rows
+            if str(r.get("role") or "") == str(role)
+            and not str(r.get("kind") or "")], ""
+
+
+def _row_instance(store: Any, role: str, task_id: str) -> str:
+    """一个台账号那一趟的实例标签（`identity.resolve_identity` 是唯一来源）。
+
+    台账号兜底（`source == "task_id"`）不算实例标签：那是"这一笔没有实例身份"的
+    兼容读数，拿它当地址会让同一个实例换个号就收不到自己的义务。
+    """
+    if store is None or not str(task_id or ""):
+        return ""
+    try:
+        from . import identity as _ID
+
+        got = dict(_ID.resolve_identity(store, role, task_id=str(task_id)))
+    except Exception:  # noqa: BLE001 —— 读不成 ⇒ 这一行没有实例标签
+        return ""
+    if str(got.get("source") or "") == "task_id":
+        return ""
+    return str(got.get("instance") or "")
+
+
+def _live_task_of(store: Any, role: str, instance: str) -> dict[str, Any]:
+    """那个实例此刻在飞的台账号行（没有 ⇒ 空字典）。
+
+    只在飞的行当收件地址的父：一条终态行已经没有人读了，把义务挂上去就是
+    "永远没人收"（`SH-40` 的现场）。实例地址本身仍留在板项行上，所以这一刻不在飞
+    不等于这条义务丢了 —— 它等这个实例下一次起跑。
+    """
+    from .conductor import UNFINISHED_STATUSES
+
+    if not str(instance or ""):
+        return {}
+    rows, _why = _role_rows(store, role)
+    alive = [r for r in rows
+             if str(r.get("status") or "") in UNFINISHED_STATUSES
+             and _row_instance(store, role, str(r.get("task_id") or "")) == instance]
+    if not alive:
+        return {}
+    alive.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+    return dict(alive[-1])
+
+
+def _statement_registrar(store: Any, statement_id: str) -> dict[str, Any]:
+    """这条命题是谁登记的：`statements.created_by` 上的实例标签。
+
+    「谁登记了这条命题，谁把它收录完整」是一个可复算的事实（`created_by` 是 B 的
+    写口落的），不是"谁醒着"那种推断。读不到实例标签（老行写的是 `secretary-B`
+    这种角色级值）⇒ 空串，由调用方退回角色地址。
+    """
+    out: dict[str, Any] = {"checked": False, "instance": "", "created_by": "", "why": ""}
+    sid = str(statement_id or "").strip()
+    if store is None or not sid:
+        out["why"] = "没有 store / 没有命题号 ⇒ 读不到登记实例"
         return out
     try:
-        from .conductor import UNFINISHED_STATUSES
-
-        rows = [dict(r) for r in store.rows("tasks")]
-    except Exception as exc:  # noqa: BLE001
-        out["why"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）"
+        rows, problem, error = SL.rows_of(store)
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        out["why"] = f"`statements` 读不出来（{type(exc).__name__}: {exc}）"
         return out
-    alive = [r for r in rows
-             if str(r.get("role") or "") == str(role)
-             and not str(r.get("kind") or "")
-             and str(r.get("status") or "") in UNFINISHED_STATUSES]
+    if problem:
+        out["why"] = (str(problem) + "（" + str((error or {}).get("type") or "?") + "）")
+        return out
+    row = dict(SL.index_by_id(rows).get(sid) or {})
     out["checked"] = True
-    out["candidates"] = [str(r.get("task_id") or "") for r in alive]
-    if len(alive) == 1:
-        out["task_id"] = str(alive[0].get("task_id") or "")
-        out["why"] = f"那一刻只有一趟 {role} 在飞（{out['task_id']}）"
+    created_by = str(row.get("created_by") or "").strip()
+    out["created_by"] = created_by
+    if not created_by:
+        out["why"] = f"命题 {sid} 的 `created_by` 是空的 ⇒ 登记实例读不到"
         return out
-    out["why"] = (f"那一刻有 {len(alive)} 趟 {role} 在飞（{out['candidates']}）"
-                  "⇒ 负责人不可判（不猜）" if alive else
-                  f"那一刻没有 {role} 在飞 ⇒ 负责人不可判（不猜）")
+    from . import identity as _ID
+
+    got = _ID.split_actor(REGISTER_ROLE, created_by)
+    if not got.get("instance"):
+        out["why"] = (f"命题 {sid} 的登记者是 {created_by!r}（角色级）⇒ 没有实例标签"
+                      "（不拿角色桶当收件实例）")
+        return out
+    out["instance"] = str(got["instance"])
+    out["why"] = f"命题 {sid} 由 {created_by} 登记 ⇒ 收件实例 {out['instance']}"
     return out
 
 
-def _registrar_now(store: Any, role: str = REGISTER_ROLE) -> dict[str, Any]:
-    """这一刻这条义务该送到哪一趟台账号（"送信地址"，不是"负责人归属"）。
+def recipient_reading(store: Any, role: str, *, statement_id: str = "",
+                      owner: str = "", owner_instance: str = "") -> dict[str, Any]:
+    """这条义务的收件实例与它的在飞台账号（K9 的唯一判据；不挑）。
 
-    与 :func:`_live_role_task` 的差别只有一条，而那条就是 SGN1 的真机现场：
-    0 趟在飞时它还要往前找一步 —— 找那一趟终态但未销号的该角色台账号（"静默"）。
-    真机 `projects/lp-ball-5` 的读数（2026-11-17 17:11）：157 行 tasks、
-    `role="B"` 的台账号 0 趟、`b-register@` 板项 0 条、`statements` 0 行，
-    而 `reports/f-proof-000002/3.md` 上两枚签已经落地 —— 义务既没开、也没人去干。
+    地址只从三处读，按优先级：
 
-    为什么"静默"这一档必须找：`conductor.open_item` 的唤醒判定（`_ensure_consumer`）
-    对"终态且未销号"的收件人正是同号继续（业主 2026-10-29「静默的唤醒就是接到
-    消息被唤醒」）。改前这一格只认"在飞"⇒ 静默的 B 被读成"没有负责人"⇒ 板项开成
-    无主的（`parent_task_id=None`）⇒ 唯一叫得醒的那一趟反而没被叫
-    （"只写台账、不叫醒"的同族）。
+    1. 调用方点名的 `owner_instance` / `owner`（`owner` 的实例标签按 `identity` 读）；
+    2. 收录义务：这条命题的登记实例（`statements.created_by`，见
+       :func:`_statement_registrar`）—— "谁登记，谁收录完整"；
+    3. 都没有 ⇒ 空串 = 角色地址（该角色的任一实例都能领，见
+       `Conductor.open_items_for`）。
 
-    ≥2 趟在飞时取最近开始的那一趟，而不是像 `_live_role_task` 那样判"不可判"：
-    那一条判的是归属（写进回执给人看的"谁接的"），宁可 unknown；这一格判的是
-    送信地址（一条 notice 落进谁名下）—— 落进哪一趟都不改变义务的内容与收口
-    条件，而"不挑"的代价是这条义务永远没人叫醒。
+    改前这里的两段（`_live_role_task` 的"唯一才认"、`_registrar_now` 的"≥2 取最近
+    开始"）都是在猜"哪一趟"，现在整段删除：查不出收件实例就记角色地址，由板项行
+    自己带着这个事实（`Task.instance`）等它该等的人。
 
-    返回 `{"checked","task_id","candidates","running","why"}`；`task_id=""` = 这一刻
-    确实没有一个可接的 B（由调用方决定要不要新召一趟）。
+    返回 `{checked, role, instance, task_id, source, why}`；`task_id` 只在那个实例
+    此刻在飞时非空（终态行不当地址）。
     """
-    out: dict[str, Any] = {"checked": False, "task_id": "", "candidates": [],
-                           "running": False, "why": ""}
-    if store is None:
-        out["why"] = "没有 store ⇒ 读不到台账号"
-        return out
-    try:
-        from .conductor import UNFINISHED_STATUSES
-
-        rows = [dict(r) for r in store.rows("tasks")]
-    except Exception as exc:  # noqa: BLE001 —— 读不成不折成"没有人可叫"
-        out["why"] = f"`tasks` 读不出来（{type(exc).__name__}: {exc}）"
-        return out
+    out: dict[str, Any] = {"checked": False, "role": str(role or ""), "instance": "",
+                           "task_id": "", "source": "", "why": ""}
+    instance = str(owner_instance or "").strip()
+    source = "caller_instance" if instance else ""
+    tid = str(owner or "").strip()
+    if not instance and tid:
+        instance = _row_instance(store, str(role or ""), tid)
+        if instance:
+            source = "caller_task"
+        else:
+            out["why"] = (f"调用方给的负责人 {tid} 读不出实例标签"
+                          "（台账号不是实例地址；不拿它当收件实例）")
+    if not instance and str(role or "") == REGISTER_ROLE and str(statement_id or ""):
+        got = _statement_registrar(store, str(statement_id))
+        if not got.get("checked"):
+            out["why"] = str(got.get("why") or "登记实例没查成")
+        instance = str(got.get("instance") or "")
+        if instance:
+            source = "statements.created_by"
     out["checked"] = True
-    mine = [r for r in rows
-            if str(r.get("role") or "") == str(role) and not str(r.get("kind") or "")]
-    alive = [r for r in mine if str(r.get("status") or "") in UNFINISHED_STATUSES]
-    quiet = [r for r in mine if str(r.get("status") or "") not in UNFINISHED_STATUSES]
-    out["candidates"] = [str(r.get("task_id") or "") for r in mine]
-    cond = _conductor(store)
-    if cond is None:
-        out["why"] = "这一趟没有接主控（`cached_conductor` 是空）⇒ 叫不了人"
+    if not instance:
+        out["source"] = "role"
+        out["why"] = (out["why"] + "；" if out["why"] else "") + (
+            "没有可判定的收件实例 ⇒ 这一条按角色地址落在板上"
+            "（不按「唯一在飞 / 最近开始」挑一趟）")
         return out
-    for running, pool in ((True, alive), (False, quiet)):
-        # 从最近开始的那一趟往前找：销号名单读不全 / 已销号 ⇒ 不拿它当收件人
-        # （fail-closed：`_ensure_consumer` 对这两种也会拒绝唤醒，先在这里筛掉，
-        # 免得板项挂到一个叫不醒的号上）。
-        for row in sorted(pool, key=lambda r: str(r.get("started_at") or ""), reverse=True):
-            tid = str(row.get("task_id") or "")
-            try:
-                verdict = cond.retired_verdict(tid, parent=str(row.get("parent_task_id") or ""))
-            except Exception:  # noqa: BLE001 —— 读不出来就不认它（fail-closed）
-                verdict = "unknown"
-            if verdict != "live":
-                out["why"] = (f"{tid} 的销号名单读的是 {verdict} ⇒ 不拿它当收件人"
-                              "（已销号彻底没有了；读不全就交人看）")
-                continue
-            out.update(task_id=tid, running=running,
-                       why=(f"那一刻有 {len(alive)} 趟 {role} 在飞 ⇒ 送最近开始的那一趟"
-                            f"（{tid}）" if running else
-                            f"没有 {role} 在飞，但有 {len(quiet)} 趟静默未销号 ⇒ "
-                            f"送最近开始的那一趟（{tid}，同号继续）"))
-            return out
-    out["why"] = (f"那一刻有 {len(alive)} 趟 {role} 在飞、{len(quiet)} 趟静默，"
-                  "但一个都不可叫（已销号 / 销号名单读不全）" if mine else
-                  f"那一刻没有 {role} 的台账号（一趟都没起过）⇒ 只能新召一趟")
+    live = _live_task_of(store, str(role or ""), instance)
+    out.update(instance=instance, task_id=str(live.get("task_id") or ""),
+               source=source or "explicit",
+               why=(f"收件实例 {instance}（来源 {source or 'explicit'}）"
+                    + (f"，此刻在飞 {live.get('task_id')}" if live else
+                       "，此刻没有在飞的台账号（义务等它下一次起跑）")))
     return out
 
 
@@ -956,29 +1117,33 @@ def _registrar_task_text(*, key: str, label: str, manuscript: str, sha: str,
 
 def _wake_registrar(*, store: Any, conductor: Any, key: str, label: str,
                     manuscript: str = "", sha: str = "", at: str = "",
+                    owner: str = "", owner_instance: str = "",
                     opened_under: str = "") -> dict[str, Any]:
-    """「签落地 ⇒ 招呼 B」这一步落成盘上的事实（幂等，永不抛）。
+    """「签落地 ⇒ 把义务投给它的收件实例」这一步落成盘上的事实（幂等，永不抛）。
 
-    业主 2026-11-17（SGN1，真机 `projects/lp-ball-5`）：签落地那一刻必须有一条
-    真能把 B 叫醒的动作。改前只有一条板项，而板项在"没有 B 台账号"时是无主的
-    （`parent_task_id=None`）—— 无主的项不落进任何人的收件箱，`_ensure_consumer`
-    的判定是"没有收件人（公共频道/广播）⇒ 没有要跑的人" ⇒ 义务写在板上，B 一次也没醒。
-    真机读数：3 枚签落地、`b-register@` 0 条、B 台账号 0 趟。
+    改前这一格按角色找工作地址：`_registrar_now` 在 ≥2 趟 B 在飞时取"最近开始的那一趟"，
+    0 趟时找"终态未销号"的那一趟。两处都是在猜"哪一趟"，也正是 K9 记的病：
+    两条 `b-register@` 至今 `parent_task_id=None` 没人收 / lp-ball-4 两趟 B 同秒起跑
+    只有最近开始的那个能收到。现在地址是显式的：`owner_instance` 由调用方
+    （`recipient_reading`）给出，这一格只做投递，不做选择。
 
-    四档（每档都是读数，不折平）：
+    六档（每档都是读数，不折平）：
 
     - `already`：这个键已经有召唤行 ⇒ 不重复召唤（重放 / 重复投递落在这一档）；
-    - `running`：那一刻 B 在飞 ⇒ 板项落进它名下，它下一拍自己读到（不新召）；
-    - `woken` / `attached`：那一刻 B 静默未销号 ⇒ 同号继续（`wake_on_lifeline`：
-      那是既有唯一带"已销号 / 在飞"双闸的唤醒口）；没接执行侧时停在 `attached`；
-    - `summoned`：一个 B 都没有 ⇒ 新召一趟（`summon_begin` + `start_summon`：
-      与 `tools/conductor_tools.py::conductor_summon` 同一形态，`by="M"` 是那一条
-      边（`ALLOWED_EDGES["M"]` 含 B），父为空（这是框架为主控补的一趟，不挂在哪个
-      在飞的父上）；`task_id` 与 `at` 就是报告里那句"已召唤 B（任务 id 与时刻）"；
+    - `running`：收件实例那一刻在飞 ⇒ 板项落在它名下，它下一拍自己读到；
+    - `woken` / `attached`：收件实例静默未销号 ⇒ 同号继续（`wake_on_lifeline`：
+      既有唯一带"已销号 / 在飞"双闸的唤醒口）；没接执行侧时停在 `attached`；
+    - `addressed`：实例地址已知、而它这一刻没有在飞的台账号 ⇒ 不新召、也不拿别的
+      B 顶；义务按实例地址留在板上，等它下一次起跑（`Conductor.open_items_for` 读得到）；
+    - `role_addressed`：地址只到角色（没有任何可判定的收件实例）⇒ 有 B 的台账号时
+      不挑一趟：板项按角色地址留在板上，该角色任一实例都能领；
+    - `summoned`：一个 B 都没有过 ⇒ 新召一趟（`summon_begin` + `start_summon`，
+      `by="M"` 是那一条边、父为空）；`task_id` 与 `at` 就是报告里那句"已召唤 B"；
     - `skipped` / `refused` / `error`：叫不动，逐档说清为什么（板项仍在板上）。
     """
     out: dict[str, Any] = {"checked": False, "state": "", "task_id": "", "at": "",
-                           "key": str(key or ""), "reason": ""}
+                           "key": str(key or ""), "instance": str(owner_instance or ""),
+                           "reason": ""}
     if conductor is None:
         out.update(state="skipped",
                    reason="这一趟没有 conductor ⇒ 叫不了人（板项照旧开在板上）")
@@ -992,41 +1157,53 @@ def _wake_registrar(*, store: Any, conductor: Any, key: str, label: str,
                    reason=(f"同键（{key}）的召唤行已在台账上（{seen.get('task_id')}，"
                            f"{seen.get('started_at')}）⇒ 不重复召唤"))
         return out
-    # ---- ② 有可接的 B ⇒ 不新召（在飞 / 静默同号继续） -----------------------
-    who = _registrar_now(store, REGISTER_ROLE)
-    tid = str(who.get("task_id") or "")
-    if tid:
+    # ---- ② 地址是实例 ⇒ 定向投递（不查别的实例） ---------------------------
+    if str(owner_instance or ""):
+        tid = str(owner or "").strip() or str(
+            _live_task_of(store, REGISTER_ROLE, str(owner_instance)).get("task_id") or "")
+        if not tid:
+            out.update(state="addressed",
+                       reason=(f"收件实例 {owner_instance} 此刻没有在飞的台账号 ⇒ 不新召、"
+                               "也不拿别的 B 顶：义务按实例地址留在板上，它下一次起跑时收到"))
+            return out
         if tid == str(opened_under or ""):
             # 板项刚刚就开在它名下 ⇒ `open_item` 的 `_ensure_consumer` 已经走过一遍
             # 唤醒判定（信先在收件箱里、再叫它 —— 顺序反了它会读不到这一条）。
-            # 这里只把那一句原话接上；"叫没叫"与"叫得成不成"必须分得开。
             consumer = dict(getattr(conductor, "last_consumer_reading", {}) or {})
             started = bool(consumer.get("started"))
-            out.update(state=("woken" if started
-                              else ("running" if who.get("running") else "attached")),
+            out.update(state=("woken" if started else "running"),
                        task_id=tid, at=str(at or ""),
-                       reason=(f"板项开在 {tid} 名下（{who.get('why')}）；"
+                       reason=(f"板项开在 {tid} 名下（收件实例 {owner_instance}）；"
                                f"唤醒判定：{consumer.get('reason') or '（没有读数）'}"))
             return out
+        running = _task_running(store, tid)
         woke: dict[str, Any] = {}
-        if not who.get("running"):
+        if not running:
             try:
                 woke = dict(conductor.wake_on_lifeline(tid) or {})
             except Exception as exc:  # noqa: BLE001 —— 叫醒失败要如实回
                 woke = {"started": False,
                         "reason": f"叫醒那一笔抛了（{type(exc).__name__}: {exc}）"}
         out.update(state=("woken" if woke.get("started")
-                          else ("running" if who.get("running") else "attached")),
+                          else ("running" if running else "attached")),
                    task_id=tid, at=str(at or ""),
                    reason=(str(woke.get("reason") or "")
-                           or str(who.get("why") or "")))
+                           or f"收件实例 {owner_instance} 的台账号 {tid}"))
         return out
-    # ---- ③ 一个 B 都没有 ⇒ 新召一趟（这一条就是"SGN1 的修法"） -------------
+    # ---- ③ 地址只到角色：有 B 的台账号就不挑一趟 ---------------------------
+    rows, why = _role_rows(store, REGISTER_ROLE)
+    if rows:
+        out.update(state="role_addressed",
+                   reason=(f"这一条按角色地址落在板上（{key}）：盘上有 {len(rows)} 趟 B 的"
+                           "台账号，而没有点名收件实例 ⇒ 不按「唯一在飞 / 最近开始」挑一趟"
+                           "（该角色任一实例都能领，见 `Conductor.open_items_for`）"))
+        return out
+    # ---- ④ 一个 B 都没有 ⇒ 新召一趟（这一条就是"SGN1 的修法"） -------------
     can, why_not = _executor_can_run(conductor, REGISTER_ROLE)
     if not can:
         out.update(state="skipped",
                    reason=(f"{why_not} ⇒ 这一键没有召唤（板项仍在板上，由主控/收工读数看见）；"
-                           f"现场：{who.get('why')}"))
+                           f"现场：{why or '没有 B 的台账号'}"))
         return out
     text = _registrar_task_text(key=key, label=label, manuscript=manuscript,
                                 sha=sha, at=at)
@@ -1065,8 +1242,17 @@ def _wake_registrar(*, store: Any, conductor: Any, key: str, label: str,
     return out
 
 
+def _task_running(store: Any, task_id: str) -> bool:
+    """这个台账号那一刻还在跑吗（读不到 ⇒ 按不在跑处置，唤醒判定会再判一次）。"""
+    from .conductor import UNFINISHED_STATUSES
+
+    row = _task_row(store, task_id)
+    return str(row.get("status") or "") in UNFINISHED_STATUSES
+
+
 def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: str,
-                        manuscript: str = "", owner: str = "", called_by: str = "V",
+                        manuscript: str = "", owner: str = "",
+                        owner_instance: str = "", called_by: str = "V",
                         depth: int = 1, at: str = "", skip_gap: bool = False,
                         wake: bool = False) -> dict[str, Any]:
     """开一条「必须收录」义务项（幂等；已清掉的不开，已收口的收口）。
@@ -1092,7 +1278,8 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
     由 B 收录时消账、收工时 `sweep_registrations` 收口。
     """
     out: dict[str, Any] = {"checked": False, "state": "", "key": "", "item_id": "",
-                           "owner": str(owner or ""), "owner_known": False,
+                           "owner": str(owner or ""), "owner_instance": str(owner_instance or ""),
+                           "owner_known": False, "owner_source": "",
                            "owner_why": "", "reason": "", "problems": [], "wake": {}}
     sid = _label_parts(label)[0]
     sha = str(proof_sha or "").strip()
@@ -1138,7 +1325,9 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
         state = str(row.get("item_state") or "")
         out.update(checked=True, item_id=str(row.get("task_id") or ""),
                    owner=str(row.get("parent_task_id") or ""),
-                   owner_known=bool(row.get("parent_task_id")),
+                   owner_instance=str(row.get("instance") or ""),
+                   owner_known=bool(row.get("instance")),
+                   owner_source="board_row",
                    state=("closed" if state == "done" else "existing"),
                    reason=(f"同键的板项已存在（{row.get('task_id')}，item_state={state}）"
                            "⇒ 不重开"))
@@ -1147,37 +1336,31 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
             # （`_wake_registrar` 的第一档：同键已有召唤行 ⇒ 不再召）。
             out["wake"] = _wake_registrar(
                 store=store, conductor=conductor, key=register_wake_key(label, sha),
-                label=label, manuscript=str(manuscript or ""), sha=sha, at=at)
+                label=label, manuscript=str(manuscript or ""), sha=sha, at=at,
+                owner=str(out["owner"] or ""),
+                owner_instance=str(out["owner_instance"] or ""))
         return out
     if conductor is None:
         out.update(state="skipped",
                    reason=("这一趟没有 conductor ⇒ 板项开不了（义务不落盘 = 没人会看到；"
                            "不是「已经收录了」）"))
         return out
-    if not str(out["owner"] or "").strip():
-        # 两把尺：`wake=True` 用"送信地址"那一把（在飞 → 最近一趟；否则静默那一趟），
-        # 否则用原来那一条（唯一在飞才认）。见 `_registrar_now` 与 `_live_role_task`。
-        who = _registrar_now(store, REGISTER_ROLE) if wake else _live_role_task(store, REGISTER_ROLE)
-        out["owner"] = str(who.get("task_id") or "")
-        out["owner_known"] = bool(out["owner"])
-        # 「负责人记 unknown」是读数、不是失败：它不进 `problems`（那会让收工读数把
-        # "没人在飞"报成"这一条没办成"），由 `registration_digest` 的 `unowned` 数出来。
-        out["owner_why"] = str(who.get("why") or "")
-    else:
-        out["owner_known"] = True
-        out["owner_why"] = "调用方点名了负责人"
-    if wake and not str(out["owner"] or "").strip():
-        # 一个可接的 B 都没有 ⇒ 新召一趟（这一趟的 `task_id` 就是它的负责人）。
-        # 有 B 可接时不在这里叫：顺序必须是"信先进收件箱、再叫它" —— 板项落进
-        # 它名下那一刻由 `open_item` 的 `_ensure_consumer` 叫（静默 ⇒ 同号继续）。
-        wake_now = _wake_registrar(
-            store=store, conductor=conductor, key=register_wake_key(label, sha),
-            label=label, manuscript=str(manuscript or ""), sha=sha, at=at)
-        out["wake"] = wake_now
-        if wake_now.get("state") == "summoned" and wake_now.get("task_id"):
-            out["owner"] = str(wake_now["task_id"])
-            out["owner_known"] = True
-            out["owner_why"] = "为这一签新召了一趟 B（`b-awake@` 那一行）"
+    # ---- 收件实例（K9）：显式地址，不挑 -------------------------------------
+    #
+    # 地址来源见 `recipient_reading`：调用方点名 > 这条命题的登记实例
+    # （`statements.created_by`）> 角色地址。改前那两段（"唯一在飞才认" /
+    # "≥2 取最近开始"）整段删除 —— 查不出收件实例就按角色地址落在板上，
+    # 由该角色的实例领取，不在多趟里挑一个。
+    rec = recipient_reading(store, REGISTER_ROLE, statement_id=sid,
+                            owner=str(out["owner"] or ""),
+                            owner_instance=owner_instance)
+    out["owner"] = str(rec.get("task_id") or "")
+    out["owner_instance"] = str(rec.get("instance") or "")
+    out["owner_known"] = bool(out["owner_instance"])
+    out["owner_source"] = str(rec.get("source") or "")
+    # 「负责人记 unknown」是读数、不是失败：它不进 `problems`（那会让收工读数把
+    # "没有收件实例"报成"这一条没办成"），由 `registration_digest` 的 `unowned` 数出来。
+    out["owner_why"] = str(rec.get("why") or "")
     # 深度：有负责人 ⇒ 它那一行 depth + 1（`capabilities.audit_task_ledger` 的
     # `task_depth_discontinuous` 按这条链核）；没有负责人 ⇒ 无父的项必须是 1。
     if out["owner"]:
@@ -1195,7 +1378,8 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
             kind="notice", role=REGISTER_ROLE, expects="work", action="notice",
             summary=summary, called_by=str(called_by or "V"),
             parent_task_id=(str(out["owner"]) or None),
-            depth=item_depth, input_key=key)
+            depth=item_depth, input_key=key,
+            recipient_instance=str(out["owner_instance"] or ""))
         conductor.set_item_detail(item_id, body)
     except Exception as exc:  # noqa: BLE001 —— 一条开不成不许带走这一签
         out.update(state="error", reason=f"板项没开成（{type(exc).__name__}: {exc}）")
@@ -1203,14 +1387,18 @@ def ensure_registration(*, store: Any, root: str | Path, label: str, proof_sha: 
         return out
     out.update(checked=True, state="opened", item_id=item_id,
                reason=(f"新开「必须收录」义务 {item_id}"
-                       + (f"（负责人 {out['owner']}）" if out["owner"]
-                          else "（负责人记 unknown，由主控派人）")))
+                       + (f"（收件实例 {out['owner_instance']}"
+                          + (f"，在飞台账号 {out['owner']}" if out["owner"] else "，此刻不在飞")
+                          + "）" if out["owner_instance"]
+                          else "（没有可判定的收件实例 ⇒ 按角色地址，由该角色的实例领取）")))
     if wake and not out["wake"]:
         # 板项刚刚开在有一趟 B 的名下 ⇒ 那一下就是既有唤醒口
         # （`open_item` → `_ensure_consumer`：静默 ⇒ 同号继续；在跑 ⇒ 下一拍自己读）。
         out["wake"] = _wake_registrar(
             store=store, conductor=conductor, key=register_wake_key(label, sha),
             label=label, manuscript=str(manuscript or ""), sha=sha, at=at,
+            owner=str(out["owner"] or ""),
+            owner_instance=str(out["owner_instance"] or ""),
             opened_under=str(out["owner"] or ""))
     return out
 
@@ -1459,18 +1647,20 @@ def registration_digest(root: str | Path, store: Any = None) -> dict[str, Any]:
         if str(row.get("item_state") or "") == "done":
             continue
         owner = str(row.get("parent_task_id") or "")
+        instance = str(row.get("instance") or "")
         key = str(row.get("input_key") or "")
         sid = key[len(REGISTER_PREFIX):].partition("@")[0]
         sha = register_sha_of(key)
         wake = wakes.get(register_wake_key(f"{sid}#p1", sha)) or {}
         out["open"] += 1
-        if not owner:
+        if not owner and not instance:
             out["unowned"] += 1
         if wake.get("task_id"):
             out["summoned"] += 1
         out["rows"].append({"task_id": str(row.get("task_id") or ""),
                             "key": key,
                             "owner": owner or "unknown",
+                            "owner_instance": instance,
                             "item_state": str(row.get("item_state") or ""),
                             "role": str(row.get("role") or ""),
                             "wake": str(wake.get("task_id") or ""),
@@ -1953,9 +2143,9 @@ def reconcile(*, store: Any, root: str | Path = "", caller: str = "conductor.clo
                 depth = int(who["depth"])
                 why = str(who.get("reason") or "")
             else:
-                out["left"].append({"label": label, "verification_id": vid,
-                                    "why": str(who.get("reason") or "送审者不可判")})
-                continue
+                # 送审者不可判不再等于「这条义务开不了」：收件人首先是这份稿的产出
+                # 实例（`ensure_resubmit` 自己会读）。这里只把那一格记成读数。
+                why = str(who.get("reason") or "送审者不可判")
         rs = ensure_resubmit(store=store, root=root, label=label, verification_id=vid,
                              detail=detail, recipient=recipient, role=role,
                              depth=depth, at=at)
@@ -1963,6 +2153,9 @@ def reconcile(*, store: Any, root: str | Path = "", caller: str = "conductor.clo
         out["problems"].extend(str(x) for x in (rs.get("problems") or []))
         if rs.get("state") == "opened":
             out["opened"].append(str(rs.get("item_id") or ""))
+        elif rs.get("state") in ("unowned", "skipped", "error"):
+            out["left"].append({"label": label, "verification_id": vid,
+                                "why": str(rs.get("reason") or "这一条没开成")})
     try:
         out["resubmit_reconcile"] = reconcile_resubmits(store=store, root=root)
     except Exception as exc:  # noqa: BLE001 —— 对账没跑成不许带走收工读数

@@ -251,6 +251,33 @@ AGENT_STATE_RANK: dict[str, int] = {AGENT_STATE_FLYING: 3, AGENT_STATE_STANDBY: 
                                     AGENT_STATE_UNKNOWN: 1, AGENT_STATE_SILENT: 0}
 
 
+def _instance_of_task(conductor: Any, task_id: str) -> str:
+    """这个台账号那一趟的实例标签（K9：板项收件地址的读法，`identity` 是唯一来源）。
+
+    台账号兜底（`source == "task_id"`）不算实例标签 —— 那一条是"这一笔没有实例身份"
+    的兼容读数，拿它当地址会让同一个实例换个号就收不到自己的项。
+    """
+    store = getattr(conductor, "store", None)
+    role = ""
+    try:
+        row = next((dict(r) for r in store.rows("tasks")
+                    if str(r.get("task_id") or "") == str(task_id or "")), None) if store else None
+        role = str((row or {}).get("role") or "")
+    except Exception:  # noqa: BLE001 —— 读不成 ⇒ 没有实例标签
+        return ""
+    if not role or not str(task_id or ""):
+        return ""
+    try:
+        from . import identity as _ID
+
+        got = dict(_ID.resolve_identity(store, role, task_id=str(task_id)))
+    except Exception:  # noqa: BLE001
+        return ""
+    if str(got.get("source") or "") == "task_id":
+        return ""
+    return str(got.get("instance") or "")
+
+
 def state_counts(states: Iterable[str]) -> dict[str, int]:
     """四档各几个 + `active`（= 在飞 + 待机）+ `total`。词表外的取值一律记进 `unknown`。
 
@@ -3514,7 +3541,8 @@ class Conductor:
 
     def open_item(self, *, kind: str, role: str, expects: str, action: str = "",
                   summary: str = "", called_by: str = "", parent_task_id: str | None = None,
-                  depth: int = 1, keep_alive: bool = False, input_key: str = "") -> str:
+                  depth: int = 1, keep_alive: bool = False, input_key: str = "",
+                  recipient_instance: str = "") -> str:
         """开一行工作项（`item_state="queued"`）并返回 `task_id`（它就是 `item_id`）。
 
         为什么开项也走 `_write_new_row`：那一处是"取号 + 建行"的唯一临界区（并发下
@@ -3524,6 +3552,13 @@ class Conductor:
         `action` 的约定：`kind="delegation"` 给真正的动作名；其余三种
         （message / report / notice）没有"动作"这回事 ⇒ 用 kind 本身当哨兵值
         （`Task.validate` 要求 `action` 非空，而空串会让这一行读起来像"一次没有动作的召唤"）。
+
+        ## `recipient_instance`：这一项投给哪个实例（K9）
+
+        「义务属于谁」在改前只有角色地址（`role`），于是"哪一趟接"只能靠
+        "唯一在飞 / 最近开始"去挑。现在板项行自己带收件实例（`Task.instance` 那一格：
+        对板项而言它的含义就是收件地址），投递按它定向；空串 = 角色地址（该角色
+        任一实例都能领，`open_items_for` 读得到）。地址是本行的一部分，不再从键里猜。
         """
         # 幂等键（D-07）：`clock:<timer_id>` 只该有一行。真机证据是两条 notice 的
         # input_key 完全相同、相隔 1 秒（到点投递被两个线程各投一次）。进程内那一半由
@@ -3538,7 +3573,8 @@ class Conductor:
         row = self._item_row(kind=kind, role=role, expects=expects, action=action,
                              summary=summary, called_by=called_by,
                              parent_task_id=parent_task_id, depth=depth,
-                             keep_alive=keep_alive, input_key=input_key)
+                             keep_alive=keep_alive, input_key=input_key,
+                             recipient_instance=recipient_instance)
         item_id = self._write_new_row(row, note=f"item:{kind}")
         # ---- 「接到消息就是叫醒」（业主 2026-10-29）
         #
@@ -4605,19 +4641,23 @@ class Conductor:
     def _item_row(*, kind: str, role: str, expects: str, action: str = "",
                   summary: str = "", called_by: str = "",
                   parent_task_id: str | None = None, depth: int = 1,
-                  keep_alive: bool = False, input_key: str = "") -> dict:
+                  keep_alive: bool = False, input_key: str = "",
+                  recipient_instance: str = "") -> dict:
         """一条板项行的形状（`open_item` 与 `open_items_many` 共用的唯一一处）。
 
         为什么共用：`open_item` 的手写行 dict 是"甲形态那七格"的唯一落点，而批量建行
         必须写出逐字节相同的行（判据 `tests/test_board_batch_write.py` 比
         `tasks.json` 的 sha256）。两处各写一份的代价不是重复代码，而是"批量那一路
         少了 `item_close` 一格"——那种偏差不会让任何判据从绿变红。
+
+        `instance` 对板项的含义是收件实例（K9）：空串 = 角色地址。实例行 (
+        `kind == ""`) 的 `instance` 仍是"这一趟是谁"，两轴同名不同义，靠 `kind` 分。
         """
         return {
             "role": role, "action": action or kind, "called_by": called_by or S.CONDUCTOR_ROLE,
             "parent_task_id": parent_task_id, "depth": max(1, int(depth)),
             "input_key": input_key, "status": "pending", "outcome": None,
-            "refusal_reason": None, "instance": "",
+            "refusal_reason": None, "instance": str(recipient_instance or ""),
             "detail": summary or f"工作项（{kind}）", "error": None,
             "started_at": "", "ended_at": None, "tokens": 0, "usd": 0.0,
             "artifacts": [], "inputs": [],
@@ -5466,6 +5506,13 @@ class Conductor:
                     row["seen_by"], row["seen_step"] = "", None
                 else:
                     row["seen_by"], row["seen_step"] = str(by_task_id), int(step)
+                # K9：角色地址的项在被读进某一步的那一刻领取——把收件实例写上行。
+                # 这不是"挑一个"：读它的人就是它现在的收件人；此后 `open_items_of`
+                # 按实例那一格认它，销号闸也看得见（不再有无主的项永远悬着）。
+                if not str(row.get("instance") or ""):
+                    claimed = _instance_of_task(self, str(by_task_id or ""))
+                    if claimed:
+                        row["instance"] = claimed
             if state == "done":
                 row["item_close"] = str(close)
             task = S.Task(**{k: v for k, v in row.items() if k in S.Task.__dataclass_fields__})
@@ -5670,12 +5717,18 @@ class Conductor:
                 continue
             owner_of = str(row.get("parent_task_id") or "")
             if owner_of != me:
-                out["not_yours"].append(tid)
-                out["refused"].append({
-                    "item_id": tid, "code": "not_yours",
-                    "reason": (f"{tid} 的收件人是 {owner_of or '（顶层）'}，不是你 ⇒ "
-                               "只有收件人自己能确认（替别人 ack 会让'它还没看'消失）")})
-                continue
+                # 收件地址也可以只写在行上（K9）：`instance` == 我这个实例 ⇒ 这一项
+                # 就是投给我的（父台账号可能为空：那一趟不在飞，地址仍然成立）。
+                mine_instance = _instance_of_task(self, me)
+                addressed = str(row.get("instance") or "")
+                if not (addressed and mine_instance and addressed == mine_instance):
+                    out["not_yours"].append(tid)
+                    out["refused"].append({
+                        "item_id": tid, "code": "not_yours",
+                        "reason": (f"{tid} 的收件人是 {owner_of or '（顶层）'}"
+                                   f"{('/实例 ' + addressed) if addressed else ''}，不是你 ⇒ "
+                                   "只有收件人自己能确认（替别人 ack 会让'它还没看'消失）")})
+                    continue
             before = str(row.get("item_state") or "queued")
             # 2026-10-29：收口方式与 expects 的配对必须在动盘之前校验。
             # 改前 `close="acked"` 给一条 `expects="work"` 的项：seen 那笔已经落盘，
@@ -5783,8 +5836,57 @@ class Conductor:
         终态的读数当判据 ⇒ 判据永不成立）。所以名字改成"未消项"，语义降成纯读数，不参与任何判定；业主 T22 的退役
         算法（`draft/90` §1.9）也不引用它 —— "还有几条项没消"只作为 `roster_view` 回报里的一格（`items_open`）。
         判据：`tests/test_board_does_not_eat_the_fanout_quota.py` 里那一条负控。
+
+        ## 两格地址（K9）：父台账号 + 收件实例
+
+        「挂在我名下」有两种：`parent_task_id == 我`（按父投递），或板项行的
+        `instance` == 我的实例标签（按实例投递 —— 那个实例领下的、或一开就点名投给它
+        的）。只按父读会让"父为空但地址是我"的项永远没人收（lp-ball 两条
+        `b-register@` 至今 `parent_task_id=None`）。两格合成一份，去重按 `task_id`。
         """
-        return list(self.open_items_by_parent().get(str(task_id or ""), ()))
+        tid = str(task_id or "")
+        base = list(self.open_items_by_parent().get(tid, ()))
+        if not tid:
+            return base
+        instance = _instance_of_task(self, tid)
+        if not instance:
+            return base
+        have = {str(r.get("task_id") or "") for r in base}
+        try:
+            extra = [r for r in self._board_rows()
+                     if str(r.get("item_state") or "") != "done"
+                     and str(r.get("instance") or "") == instance]
+        except Exception:  # noqa: BLE001 —— 读不成不改变已经读到的这一部分
+            return base
+        return base + [r for r in extra if str(r.get("task_id") or "") not in have]
+
+    def open_items_for(self, role: str, instance: str) -> list[dict]:
+        """「投给这个实例 / 这个角色」的未消板项（K9 的收件面；纯读）。
+
+        与 :meth:`open_items_of` 的分工：那一格按父台账号取（"挂在我名下"），
+        这一格按收件地址取（板项行 `instance` 那一格，见 `_item_row`）：
+
+        - 行上 `instance == instance` ⇒ 投给这个实例（定向投递的落点）；
+        - 行上 `instance == ""` 且 `role == role` ⇒ 角色地址（该角色的任一实例都能领）。
+
+        为什么需要它：一条义务的收件人若只能是"父台账号"，那一趟一结束这条项就再也
+        没有读者（lp-ball 的两条 `b-register@` 至今 `parent_task_id=None`）；若只能按
+        角色广播，两个实例又会都当自己的活。地址写在行上，两种投递才分得开。
+        """
+        want_role = str(role or "")
+        want = str(instance or "")
+        out: list[dict] = []
+        for row in self._board_rows():
+            if str(row.get("item_state") or "") == "done":
+                continue
+            row_role = str(row.get("role") or "")
+            row_inst = str(row.get("instance") or "")
+            if want and row_inst == want:
+                out.append(row)
+                continue
+            if not row_inst and row_role == want_role:
+                out.append(row)
+        return out
 
     def open_items_by_parent(self,
                              rows: Sequence[Mapping[str, Any]] | None = None

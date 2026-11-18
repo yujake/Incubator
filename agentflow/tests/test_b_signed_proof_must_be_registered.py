@@ -254,10 +254,15 @@ def test_b_registration_closes_the_duty_by_evidence_not_by_ack(tmp_path):
     """收录完（正文 + reviewed=true）⇒ 义务自动收口 `completed`；ack 关不掉它。"""
     st = _ws(tmp_path)
     _put(st)
-    owner = _agent_row(st, role="B")            # 那一刻唯一的 B ⇒ 它接这条义务
+    owner = _agent_row(st, role="B")            # 那一刻唯一的 B：角色地址的项它读得到
     _verify_v(st, SID)
     one = _register_items(st)[0]
-    assert str(one.get("parent_task_id")) == owner, one
+    # K9：这条命题的 `created_by` 是角色级（`secretary-B`）⇒ 没有可判定的收件实例 ⇒
+    # 义务按角色地址落在板上（父为空），B 那趟从 `open_items_for` 读得到它。
+    assert str(one.get("parent_task_id") or "") == "", one
+    assert str(one.get("instance") or "") == "", one
+    assert [r["task_id"] for r in conductor_for(st).open_items_for("B", "B#1")] == [
+        one["task_id"]], conductor_for(st).open_items_for("B", "B#1")
 
     cond = conductor_for(st)
     acked = cond.ack_items([str(one["task_id"])], by_task_id=owner)

@@ -2200,9 +2200,18 @@ def conductor_retire_child(_conductor: Any, store: Any, child_name: str = "",
     data["blocking"] = list(probe.get("blocking") or [])
     data["readings"]["target_state"] = data["target_state"]
     # ---- 板项闸（既有闸，排在最具体的那一档）：queued / seen 都算没清
-    open_rows = [r for r in children_by_parent.get(tid, ())
-                 if str(r.get("kind") or "")
-                 and str(r.get("item_state") or "") != "done"]
+    #
+    # 判据只有一处：`Conductor.open_items_of`（父台账号 + 收件实例两格地址，K9）。
+    # 改前这一格按 `children_by_parent` 的快照按父取，于是"地址写在这个实例上、父为空"
+    # 的项在销号闸里读不到 —— 还有一条义务开着也能销号。
+    try:
+        open_rows = [dict(r) for r in c.open_items_of(tid)
+                     if str(r.get("kind") or "")
+                     and str(r.get("item_state") or "") != "done"]
+    except Exception:  # noqa: BLE001 —— 读不成按"还有项"挡（fail-closed）
+        open_rows = []
+        data["blocking"] = list(data.get("blocking") or []) + [
+            {"code": "board_unreadable", "why": "板项读不成 ⇒ 判不了它名下还有没有未消的项"}]
     items_open = int(((hit.get("reading") or {}).get("items_open")) or 0)
     if items_open > 0 or open_rows:
         listed = [{"task_id": str(r.get("task_id") or ""), "kind": str(r.get("kind") or ""),
@@ -3942,7 +3951,10 @@ def _board_cell(cond: Any, code: str, *, by_task_id: str = "") -> dict[str, Any]
     """
     try:
         snapshot = [dict(r) for r in cond._tasks()]
-        rows = [dict(r) for r in cond.open_items_by_parent(snapshot).get(code, ())]
+        # 判据只有一处：`open_items_of`（父台账号 + 收件实例两格地址）。改前这里直接按
+        # `open_items_by_parent` 取，于是"地址写在我这个实例上、父为空"的项在这一格
+        # 读不到 —— 销号闸就会在还有一条义务开着时放行（K9 的同一处判据）。
+        rows = [dict(r) for r in cond.open_items_of(code)]
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
         return {"checked": False, "in_progress_id": "", "in_progress_reason": "",
                 "child_open_count": 0, "items": [],
