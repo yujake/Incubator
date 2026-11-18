@@ -264,7 +264,8 @@ def open_manuscript(root: Any, *, role: str, family: str, proposition: str,
                     form_reading: Mapping[str, Any] | None = None,
                     kind: str = "conjecture", label: str = "", task_id: str = "",
                     title: str = "", header_lines: Sequence[Any] = (),
-                    manuscript_id: str = "", fix: str = "", next_step: str = "") -> dict:
+                    manuscript_id: str = "", fix: str = "", next_step: str = "",
+                    producer: str = "", instance: str = "") -> dict:
     """开一份稿：先过形态闸，再过号源，最后只落骨架。
 
     返回固定键集（成功与受控拒同形）：
@@ -428,8 +429,9 @@ def open_manuscript(root: Any, *, role: str, family: str, proposition: str,
     from . import artifacts as A
 
     _reg_entry, _reg_problem = A.record_or_problem(
-        root, path=rel, producer=who, kind=f"{fam}-manuscript",
-        task_id=str(task_id or ""),
+        root, path=rel, producer=(str(producer or "").strip() or who),
+        kind=f"{fam}-manuscript",
+        task_id=str(task_id or ""), instance=str(instance or ""),
         note=f"手稿骨架 `{rel}`（manuscriptopen.open_manuscript）")
     if _reg_problem:
         return _refusal(

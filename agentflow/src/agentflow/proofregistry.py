@@ -783,7 +783,7 @@ def register_or_rewrite(
             (Path(str(root or "")) / relocated_from).unlink(missing_ok=True)
         except OSError:  # noqa: BLE001 —— 旧名删不掉只多一份稿，不改这一笔的结论
             out["relocated_kept"] = relocated_from
-    if not manuscript_artifact(out, root, rel=rel, family=family, mode=mode): return out
+    if not manuscript_artifact(out, root, rel=rel, family=family, mode=mode, author=author): return out
     out.update(ok=True, checked=True, mode=mode, proof_no=proof_no, sha256=new_sha,
                deps_rows=rows, written=True, migrated=migrated,
                #: 这一笔之后的登记条目（按盘上那一份读回来）：新写的稿没有

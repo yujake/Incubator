@@ -5126,6 +5126,11 @@ class AgentLoop:
     registry: Any
     seam: LlmSeam
     conductor: Any = None
+    #: 这一趟的实例标签（`conductor.summon(instance=…)` 那一路传进来的名字；空串 =
+    #: 没点名）。它只做一件事：挂进 `calling_as(instance=…)`，于是循环里的工具调用
+    #: 与写盘面（`attack_tools._agent_for` → claims / ARTIFACTS / 事件）读得到
+    #: 「这一趟是哪一个实例」。审计面（`agent_run_start` / `agent_run_end`）同源。
+    instance: str = ""
     #: 最近一拍的「研究未尽」与「整棵树有没有人在干活」读数（`_park_gate` 写、提示词那段读）。
     #:
     #: 类级默认 `None`：`_park_gate` 之外的路径（直接拼提示词的夹具、或第一拍之前的读）拿到的
@@ -9160,6 +9165,10 @@ class AgentLoop:
         SS.append(self.session_root, {
             "kind": "agent_run_start", "role": self.role, "task": task,
             "summoned_by": summoned_by, "task_id": my_task_id, "depth": depth,
+            # 实例身份（K1/SH-24）：这一趟是哪一个实例。`task_id` 只回答「哪一趟活」，
+            # 同一角色两个并发实例各自有号、却看不出「谁是谁」—— 这一格补的就是它。
+            # 空串 = 这一层没有实例标签（与 `host.get` 的「空串 = 单例」同一语义）。
+            "instance": str(self.instance or ""),
             "prompt_version": run.prompt_audit.get("prompt_version"),
             "prompt_sha256": run.prompt_audit.get("prompt_sha256"),
             # 续跑那两栏：从第几步接着跑、上一趟停在等谁。两者都是"这一趟不是全新的"
@@ -10530,6 +10539,8 @@ class AgentLoop:
         SS.append(self.session_root, {
             "kind": "agent_run_end", "role": self.role,
             "task_id": str(self.my_task_id or ""),
+            # 与 `agent_run_start` 同一格（K1/SH-24）：收工那条也回答「是哪个实例」。
+            "instance": str(self.instance or ""),
             "stop_reason": run.stop_reason, "steps": len(run.steps), "summons": run.summons,
             "messages": run.messages_sent,
             "blocked_remaining": dict(run.blocked_remaining),
@@ -12087,6 +12098,7 @@ class AgentLoop:
                 # （不是工具自己猜的、也不要求在 `edges` 里登记）。
                 # 会话身份同样必须现挂：按缺省会话写会把上报丢进一个父不会读的文件。
                 with calling_as(str(self.my_task_id or ""), self.role,
+                                instance=str(self.instance or ""),
                                 parent_task_id=str(self.parent_task_id or ""),
                                 parent_role=str(self.parent_role or ""),
                                 session_root=str(self.session_root or ""),
@@ -13984,6 +13996,7 @@ class LlmBackend:
         loop = AgentLoop(role=role, session_root=self.session_root,
                          registry=child_registry,
                          seam=seam, conductor=self.conductor, max_steps=int(cfg.get("max_steps", self.max_steps)),
+                         instance=str(instance or ""),
                          # S1n-c：注册表按面造时，`workspace_root` 也跟着面走 ——
                          # 否则 `_surface_refusal` 会拿工作区当基准，把面内的裸相对路径判成越界
                          # （实测：子代理写 `笔记.md` 被拒，而它本该落在自己的面里）。
@@ -14015,6 +14028,7 @@ class LlmBackend:
         from .conductor import calling_as
 
         with calling_as(own_tid, role,
+                        instance=str(instance or ""),
                         session_root=str(self.session_root or ""), sid=str(self.sid or "")):
             run = loop.run(str(cfg.get("task_from_params") or "") or _task_text(params, role, action),
                            summoned_by=str(row.get("called_by") or params.get("_summoned_by")

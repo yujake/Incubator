@@ -30,7 +30,7 @@ REFUSED_SHAPE = "manuscript_shape_refused"
 
 
 def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any,
-                        mode: Any) -> bool:
+                        mode: Any, author: str = "") -> bool:
     """把刚落盘的手稿登进 `<工作区>/ARTIFACTS.jsonl`；返回"登记成了吗"。
 
     失败时把该写进调用方读数的那几格直接更新到 `out` 上（`ok=False` /
@@ -52,9 +52,25 @@ def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any
 
     name = {"F": "f-proof", "B": "b-proof"}.get(str(family or ""), str(family or ""))
     role = {"f-proof": "F", "b-proof": "B", "e-proof": "E", "e-num": "E"}.get(name, "") or "M"
+    # 实例身份（K1/K2）：`author` 是 F/B 写口传下来的 actor（`agent-F-<实例>`）。
+    # 这一格不再加形参：`register_or_rewrite` 的 `author=` 本来就在签名里、此前没人用。
+    who = str(author or "").strip()
+    inst = ""
+    tid = ""
+    if who:
+        from .identity import split_actor
+
+        inst = str(split_actor(role, who).get("instance") or "")
+        try:
+            from .conductor import current_task_id
+
+            tid = str(current_task_id() or "")
+        except Exception:  # noqa: BLE001 —— 读不到上下文 ⇒ 这一格留空（不是「没有这一趟」）
+            tid = ""
     _entry, problem = A.record_or_problem(
-        root, path=rel, producer=role,
+        root, path=rel, producer=(who or role),
         kind=f"{name}-manuscript" if name else "manuscript",
+        task_id=tid, instance=inst,
         note=f"手稿 `{rel}`（proofregistry.register_or_rewrite，mode={mode}）")
     if not problem:
         return True

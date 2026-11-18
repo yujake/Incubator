@@ -36,6 +36,7 @@ from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
 from . import capabilities as C
 from . import cancellation as CX
 from . import clock as CLK
+from . import identity as IDENT
 from . import policy as P
 from . import schema as S
 from .cancellation import CANCEL_CODES, CancelRequested, CancelToken, detail_of
@@ -2150,6 +2151,9 @@ class LocalBackend:
         # 有了以 `task_id` 为键的挂点（P-09 的粒度是召唤级）。
         id_var = _CURRENT_TASK_ID
         id_reset = id_var.set(str(task_id or ""))
+        # 实例轴与台账号同一个临界区（K1/K2）：确定性 handler 里的工具调用
+        # （`attack.*` 一类）从 `identity.current_instance()` 读这一格。
+        inst_reset = IDENT.set_current_instance(instance)
         try:
             # 显式声明了 `token` / `cancel_token` 形参的 handler 直接收到它 ——
             # 这让"这个 handler 支持取消"在签名上可见（AST 扫得出来），
@@ -2162,6 +2166,7 @@ class LocalBackend:
         finally:
             var.reset(reset)
             id_var.reset(id_reset)          # 异常路径也要复位（与 token 同一处）
+            IDENT.reset_current_instance(inst_reset)
 
 
 class SubagentBackend:
@@ -2533,7 +2538,7 @@ def _session_for_task_end() -> tuple[str, str]:
 @contextlib.contextmanager
 def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
                parent_role: str = "", session_root: str = "",
-               sid: str = "") -> Iterator[None]:
+               sid: str = "", instance: str = "") -> Iterator[None]:
     """这一小段代码以某个实例的身份跑（工具调用用）。
 
     为什么工具调用也要带身份（S6-b；2026-11-16 起广播工具 `conductor.broadcast` 已退场，
@@ -2551,6 +2556,11 @@ def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
     reset_prole = _CURRENT_PARENT_ROLE.set(str(parent_role or ""))
     reset_root = _CURRENT_SESSION_ROOT.set(str(session_root or ""))
     reset_sid = _CURRENT_SID.set(str(sid or ""))
+    # `instance`（K1/K2）：这一笔属于哪个实例。挂点与上面五格同一个临界区 ——
+    # 工具层（`attack_tools._agent_for`）与写盘面（claims / ARTIFACTS / 事件）
+    # 从 `identity.current_instance()` 读它，于是「装配期拿得到 instance、落盘只剩角色」
+    # 那条断链在这一层接上。空串 = 这一层没拿到（不是「实例是空」）。
+    reset_inst = IDENT.set_current_instance(instance)
     try:
         yield
     finally:
@@ -2560,6 +2570,7 @@ def calling_as(task_id: str, role: str = "", *, parent_task_id: str = "",
         _CURRENT_PARENT_ROLE.reset(reset_prole)
         _CURRENT_SESSION_ROOT.reset(reset_root)
         _CURRENT_SID.reset(reset_sid)
+        IDENT.reset_current_instance(reset_inst)
 
 
 def _business_refusal_code(exc: BaseException) -> str | None:

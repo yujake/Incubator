@@ -57,8 +57,13 @@ from .jsonlfile import read_jsonl
 LEDGER_NAME = "ARTIFACTS.jsonl"
 
 #: 一条记录的字段全集（写侧逐字用；读侧容忍缺字段但会在 `verify_entries` 里如实报）。
+#:
+#: `instance` / `identity_conflict`（K1/K2）：`producer` 之外再记一格「实例标签」与
+#: 「未归因的原因」。老行没有这两格照旧读（读侧容忍缺字段）；新行有它，于是
+#: 「两个人同一角色各产了一件」在台账上按 `instance` 分得开，而不是只剩 `producer=角色`。
 FIELDS: tuple[str, ...] = (
     "at", "path", "sha256", "bytes", "producer", "kind", "task_id", "exit_code", "note",
+    "instance", "identity_conflict",
 )
 
 #: `verify_entries` 的四种状态。刻意不是布尔：`missing`（不在了）与 `unreadable`
@@ -148,10 +153,11 @@ def producer_problem(producer: str) -> str:
 
 
 def producer_is_known(producer: str) -> bool:
-    """这个名字是不是已知的生产者（角色 / 主控 / `tool:<名>` / 已登记的外部生产者）。
+    """这个名字是不是已知的生产者（角色 / 实例级 actor / 主控 / `tool:<名>` / 外部生产者）。
 
-    它是读数不是闸门：调用方据此在自己的返回里标注"这个名字没登记过"
-    （`summarize()["unregistered"]` 就是它的一份消费）。
+    「实例级 actor」（`agent-<角色>` / `agent-<角色>-<实例>`）算已知：它是
+    `identity.actor_for` 的形态（K1/K2），不是没登记的外部名字。判据与
+    `identity.split_actor` 同一张角色表（`schema.ROLES`），不另写一份角色名单。
     """
     from . import schema as S
 
@@ -162,6 +168,12 @@ def producer_is_known(producer: str) -> bool:
         return True
     if name in REGISTERED_EXTERNAL_PRODUCERS:
         return True
+    if name.startswith("agent-"):
+        # `agent-F`（角色级）或 `agent-F-<实例>`：拆出来看角色那一段在不在表里。
+        rest = name[len("agent-"):]
+        role = rest.split("-", 1)[0]
+        if role in set(S.ROLES) or role == S.CONDUCTOR_ROLE:
+            return True
     return name.startswith(("tool:", "agentflow."))
 
 
@@ -175,6 +187,8 @@ def record(
     exit_code: int | None = None,
     note: str = "",
     at: str | None = None,
+    instance: str = "",
+    identity_conflict: str = "",
 ) -> dict:
     """登记一条产物；返回写进去的那条记录。
 
@@ -211,6 +225,10 @@ def record(
         # 不静默吞坏值。
         "exit_code": exit_code if exit_code is None else _exit_code_of(exit_code),
         "note": str(note or ""),
+        # 实例身份（K1/K2）：`producer` 已经是实例级 actor 时，这一格是拆出来的标签；
+        # `identity_conflict` 非空 = 这一笔没归因成功（写的人要在读数里看见它）。
+        "instance": str(instance or ""),
+        "identity_conflict": str(identity_conflict or ""),
     }
     p = ledger_path(root)
     try:

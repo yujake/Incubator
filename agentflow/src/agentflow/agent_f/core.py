@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from ._support import AT, Any, IX, Mapping, NO_PROGRESS_NOTE, Path, PlanError, S, Sequence, Store, ToolRegistry, UNWIRED_OWNERS, _short, _subgoal, install_f_tools
+from .. import identity as _IDENTITY
 from .. import statementledger as SL   # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from .. import vsigns as _VS_NAME    # 稿名 ⇒ 稿号（只读解析；`_resolve_manuscript_id` 用）
 from .abandon_plan import _AbandonPlan
@@ -629,6 +630,11 @@ class _Core:
         e: Any | None = None,
         tools: ToolRegistry | None = None,
         actor: str = "agent-F",
+        #: 这一趟的实例身份读数（`identity.resolve_identity` 的形状）。工具路径
+        #: （`attack_tools._agent_for`）把解析好的那一份传进来；装配期只给 actor 的
+        #: 调用点留空 ⇒ 由 `identity.from_actor` / `identity.resolve_identity` 现场补一份。
+        #: 它只回答「这一笔是谁写的」，不改变任何动作的判据。
+        identity: Mapping[str, Any] | None = None,
         # LLM 判定缝（`draft/30` §T0-8）：默认 None = 不接线 ⇒ 本角色一个 LLM 调用都不发。
         # 判定必须走 `judge.judge_json`（唯一缝协议），失败落 `judge_*` 词表，
         # 绝不许折成"没找到"。本批只插插座，接线在各条目的伪代码下进行。
@@ -645,6 +651,17 @@ class _Core:
     ) -> None:
         self.store = store
         self.cfg: dict[str, Any] = dict(config or {})
+        # ---- 实例身份（K1/K2）：一个对象一份读数，claims / ARTIFACTS / 事件 / created_by
+        # 全从它取。`_agent_for` 传进来的是完整解析结果；直调用点没传 ⇒ 现场解析
+        # （有台账号就退到 task_id，连台账号都没有才留角色桶 + `conflict`）。
+        self.identity: dict[str, Any] = (
+            dict(identity) if identity is not None
+            else _IDENTITY.resolve_identity(store, "F", actor=actor))
+        # 构造期只给了角色级 actor、而身份解析读到了实例 ⇒ 把 actor 一并折成实例级的那个：
+        # 否则「装配时叫 agent-F、落盘时叫 agent-F-F1」又成了两份身份。解析不到时
+        # 原样保留 actor（单实例直调的兼容值），冲突读数在 `self.identity` 里。
+        if self.identity.get("attributed") and str(self.identity.get("actor") or ""):
+            actor = str(self.identity["actor"])
         self.actor = actor
         self.llm = llm
         # ---- 装配期类型闸（`AGENTFLOW_STRICT_SEAM=1` 时生效；默认关）
@@ -772,6 +789,25 @@ class _Core:
     #: 只在 `self.actor` 恰好是它时才去补全 —— 否则装配期已经折进来的实例标签优先。
     DEFAULT_ACTOR: str = "agent-F"
 
+    def _refresh_identity(self) -> dict[str, Any]:
+        """写盘前把实例身份补一次（已归因的读数原样返回，不做第二次解析）。
+
+        为什么需要「补一次」：`AgentF` 可能在 `calling_as(...)` 之外构造（直调、
+        夹具），构造期读不到台账号/名册；而真正写盘发生在上下文里。此时按构造期的
+        角色级 actor 落盘，就是 K1 的病因（盘上只剩 `agent-F`）。所以每个写口在动手
+        之前问一次；读不到就保留角色桶，并把 `conflict` 留在 `self.identity` 里。
+
+        读数是对象级的一份：一旦解析到实例名，`self.actor` 也跟着折成实例级，
+        于是 claims / ARTIFACTS / 事件 / `created_by` 用的是同一个字符串。
+        """
+        if self.identity.get("attributed"):
+            return dict(self.identity)
+        got = _IDENTITY.owner_for(self.store, "F", actor=str(self.actor or ""))
+        self.identity = dict(got)
+        if got.get("attributed") and str(got.get("actor") or ""):
+            self.actor = str(got["actor"])
+        return dict(got)
+
     def _plan_owner(self) -> str:
         """这一笔计划该记在哪个 F 名下（`attack_plans.created_by`，也是并发上限的分桶键）。
 
@@ -784,40 +820,12 @@ class _Core:
         开多个 F"判成超限 —— 与业主同一批裁定的 R1 直接打架）。
 
         ## 补全只做一件事：拿当前召唤号问名册名（读不到就不编）
-        两条执行路径都把台账号挂在 ContextVar 上：conductor 调角色动作
-        （`LocalBackend.call` 的 `_CURRENT_TASK_ID`）与循环里的工具调用
-        （`AgentLoop._do_tool` 的 `calling_as`）。名册名是"这个 F 是谁"的唯一权威
-        读法（`Secretary.name_of` —— `conductor._roster_name_of` 也转交给它，
-        不另写一份）。读到就拼成 `agent-F-<名>`（与 `host._actor_for` 逐字同形），
-        读不到（名册没写成 / 脚本直调 / 单测）⇒ 原样 `self.actor`，绝不编一个名字。
+        判据与冲突读数现在只有一份：:func:`identity.owner_for`（本方法只转发）。
+        它按「名册名 > 召唤标签 > tasks.instance > 台账号」取规范标签，四套键不一致
+        时把 `conflict` 写进 `self.identity` —— 不再像改前那样把「读不到」悄悄
+        折成 `agent-F` 而不留话。
         """
-        actor = str(self.actor or "")
-        if actor != self.DEFAULT_ACTOR:
-            return actor
-        try:
-            from .. import conductor as _C
-
-            tid = str(_C.current_task_id() or "")
-        except Exception:  # noqa: BLE001 —— 读不到上下文 ⇒ 保持未归因（不编名字）
-            return actor
-        if not tid:
-            return actor
-        row: dict | None = None
-        try:
-            row = next((dict(r) for r in self.store.rows("tasks")
-                        if str(r.get("task_id") or "") == tid), None)
-        except Exception:  # noqa: BLE001 —— 台账读不出来 ⇒ 同上
-            return actor
-        parent = str((row or {}).get("parent_task_id") or "")
-        try:
-            from .. import secretary as _SEC
-
-            name, _why = _SEC.Secretary("F", root=self.store.root).name_of(
-                owner=parent, task_id=tid)
-        except Exception:  # noqa: BLE001 —— 同上
-            return actor
-        name = str(name or "").strip()
-        return f"agent-F-{name}" if name else actor
+        return str(self._refresh_identity().get("actor") or self.actor or "")
 
     @property
     def e(self) -> Any:
@@ -2599,6 +2607,9 @@ class _Core:
         plan_id = str(plan.get("plan_id") or "")
         sid = str(sg.get("sid") or "")
         label = f"F 攻坚 {plan_id} 子目标 {sid}"
+        # 实例身份（K1/K2）：骨架那一条 `ARTIFACTS.jsonl` 的 producer 也按实例落，
+        # 与正文那一笔（`commit_manuscript`）同一个 actor / instance / task_id。
+        ident = self._refresh_identity()
         header: list[str] = []
         if plan_id or sid:
             header.append(f"- 计划：{plan_id} · 子目标：{sid}")
@@ -2610,7 +2621,10 @@ class _Core:
             kind=(product_kind(product) or str(sg.get("kind") or "").strip()
                   or "conjecture"),
             label=label, title=str(sg.get("text") or ""),
-            header_lines=tuple(header), manuscript_id=str(mid or ""))
+            header_lines=tuple(header), manuscript_id=str(mid or ""),
+            task_id=str(ident.get("task_id") or ""),
+            producer=str(self.actor or ""),
+            instance=str(ident.get("instance") or ""))
         return self._ledger_open_manuscript(got, product=product, plan=plan, sid=sid)
 
     def _ledger_open_manuscript(self, got: Mapping[str, Any], *,
@@ -2876,6 +2890,8 @@ class _Core:
         kind_now = str(subgoal.get("kind") or row_now.get("kind") or "conjecture") or "conjecture"
         stmt_id = str(row_now.get("stmt_id") or "")
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        # 写盘前把实例身份补一次（这条路的 ARTIFACTS 行由 `author=self.actor` 落）。
+        self._refresh_identity()
 
         # ---- 空稿号必须在这里补上（2026-11-10 第三刀，判据 a/b）---------------------
         #
@@ -3019,7 +3035,10 @@ class _Core:
             proof_text=proof_now, dependency_rows=list(dependency_rows or []),
             plan_id=plan_id, sid=sid, title=text,
             manuscript_id=mid,
-            kind=kind_now, template=template_now, gate=_gate)
+            kind=kind_now, template=template_now, gate=_gate,
+            # `author` 是既有形参（此前无人用）：`register_or_rewrite` 拿它当
+            # `ARTIFACTS.jsonl` 的 producer（K1/K2），不再新增形参、不抬体量基线。
+            author=str(self.actor or ""))
         refused_kind = str(got.get("refused") or "")
         if not got.get("ok"):
             why = str(got.get("why") or "手稿登记没成")
@@ -5051,4 +5070,5 @@ def selftest() -> int:
     print("=" * 72)
     print(f"SELF-CHECK {'DONE' if failures == 0 else 'FAILED'}（agent_f）：失败 {failures} 项")
     return failures
+
 

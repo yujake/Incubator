@@ -46,7 +46,7 @@ import os
 import threading
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, Mapping
 
 from . import manuscriptfamily as _MFAM
 from . import schema as _S
@@ -276,7 +276,8 @@ def _write_claims(root: Any, claims: dict[str, dict[str, Any]]) -> None:
 
 
 def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
-                    task_id: Any = "") -> dict[str, Any]:
+                    task_id: Any = "", instance: Any = "",
+                    identity: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """落稿前登记/核对"这一份稿归谁写"（E；落稿入口的唯一占用判据）。
 
     `owner` 是写者身份（F 那一侧传 `self.actor`：host 造的是 `agent-F-<实例>`，
@@ -297,7 +298,8 @@ def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
     """
     rel_txt = str(rel or "").strip().replace("\\", "/")
     out: dict[str, Any] = {"checked": True, "state": "free", "rel": rel_txt,
-                           "holder": {}, "why": ""}
+                           "holder": {}, "why": "",
+                           "identity": dict(identity or {})}
     if not rel_txt:
         out.update(checked=False, state="unknown", why="没有目标稿件路径 ⇒ 判不了")
         return out
@@ -325,7 +327,14 @@ def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
                             f"at={holder.get('at') or '未记'}）⇒ 不许两个写者共用同一个文件名"))
             return out
         fresh = {"owner": who, "role": str(role or ""),
-                 "task_id": str(task_id or ""), "at": _now_iso()}
+                 "task_id": str(task_id or ""),
+                 # 实例身份三格（K1/K2）：`instance` 是规范标签、`attributed` 是
+                 # 「真的归因了吗」、`identity_conflict` 是未归因的原因（空串 = 没有
+                 # 冲突）。老行没有这三格时读侧按「未记」处理（新键不改旧键）。
+                 "instance": str(instance or dict(identity or {}).get("instance") or ""),
+                 "attributed": bool(dict(identity or {}).get("attributed", False)),
+                 "identity_conflict": str(dict(identity or {}).get("conflict") or ""),
+                 "at": _now_iso()}
         claims[rel_txt] = fresh
         try:
             _write_claims(root, claims)
@@ -363,7 +372,8 @@ def reserved_manuscript_id(root: Any, manuscript_id: Any, *,
 
 
 def next_manuscript_id(root: Any, *, family: Any = FAMILY_F, owner: Any = "",
-                       role: Any = "") -> str:
+                       role: Any = "", task_id: Any = "",
+                       identity: Mapping[str, Any] | None = None) -> str:
     """发一个这一族自己的手稿号：`counters.<族键>` + 1，占用就继续往前推。
 
     返回六位号（如 `000003`）；发完把这一族的计数器推到 `号 + 1`。号段用尽 ⇒
@@ -401,7 +411,8 @@ def next_manuscript_id(root: Any, *, family: Any = FAMILY_F, owner: Any = "",
         _write_doc(root, doc)
         if str(owner or "").strip():
             claim_for_write(root, canonical_rel(allocated, family=family),
-                            owner=owner, role=role)
+                            owner=owner, role=role, task_id=task_id,
+                            identity=identity)
         return allocated
 
 

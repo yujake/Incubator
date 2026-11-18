@@ -502,6 +502,10 @@ def commit_manuscript(
     old_rel: Any = "", retitle: str = "ensure",
     require_washed: bool = False, delete_old: bool = False,
     write_dependencies: Callable[[Sequence[Mapping[str, Any]]], Mapping[str, Any]] | None = None,
+    #: 产物归属（K1/K2）：谁写的这一份。空串 ⇒ 按族给角色名（`F` / `B`）—— 老调用点
+    #: 逐字不变；F 的写口传实例级的 `self.actor`（`agent-F-<实例>`）与 `instance` /
+    #: `task_id`，于是 `ARTIFACTS.jsonl` 那一行不再只剩一个角色字面量。
+    producer: str = "", instance: str = "", task_id: str = "",
 ) -> dict[str, Any]:
     """写一份证明手稿（三节 + 洗稿行），并把依赖边一起落盘。
 
@@ -650,8 +654,9 @@ def commit_manuscript(
         _reg_role = {"f-proof": "F", "b-proof": "B",
                      "e-proof": "E", "e-num": "E"}.get(_reg_family, "") or "M"
         _reg_entry, _reg_problem = A.record_or_problem(
-            root, path=new_rel, producer=_reg_role,
+            root, path=new_rel, producer=(str(producer or "").strip() or _reg_role),
             kind=f"{_reg_family}-manuscript" if _reg_family else "manuscript",
+            task_id=str(task_id or ""), instance=str(instance or ""),
             note=f"手稿 `{new_rel}`（manuscriptform.commit_manuscript）")
         if _reg_problem:
             return _refusal(out, "write_failed",

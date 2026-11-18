@@ -420,12 +420,14 @@ class _Manuscript:
         sid = str(sg.get("sid") or "")
         plan_id = str(plan.get("plan_id") or "")
         root = self.cfg.get("workspace_root") or getattr(self.store, "root", "") or "."
+        ident = self._refresh_identity()          # K1/K2：写稿前补一次实例身份
         mid = str(manuscript_id or "").strip()
         if not mid:
             # 没有给号 ⇒ 这是另一份稿（新稿）：向号源要一个，不猜、不借别人的号。
             # `owner=self.actor`：顺手把发出去的号登记给我，同一路径被别的写者占着时
             # 号源会跳过它（"自动分号"那一半，E）。
-            mid = _MID.next_manuscript_id(root, owner=str(self.actor or ""), role="F")
+            mid = _MID.next_manuscript_id(root, owner=str(self.actor or ""), role="F",
+                                          task_id=str(ident.get("task_id") or ""), identity=ident)
         elif not _MID.is_manuscript_id(mid):
             return {"ok": False, "path": "", "text": "", "rows": [], "preview": {},
                     "named_by": "manuscript", "preserved": False, "manuscript_id": mid,
@@ -514,7 +516,8 @@ class _Manuscript:
             # 下一个号会把它后面的读数（`manuscript_path(mid)` / 送审 / 收录）指到
             # 另一份稿上。自动分号只发生在"还没有号"的分配那一支（`next_manuscript_id`
             # 跳过别人占着的号）。拒绝信指名持有人与下一步（另开一份稿）。
-            _claim = _MID.claim_for_write(root, rel, owner=str(self.actor or ""), role="F")
+            _claim = _MID.claim_for_write(root, rel, owner=str(self.actor or ""), role="F",
+                                          task_id=str(ident.get("task_id") or ""), identity=ident)
             if _claim.get("state") in ("other", "unknown"):
                 _code = (MANUSCRIPT_PATH_TAKEN if _claim.get("state") == "other"
                          else MANUSCRIPT_OWNER_UNCHECKED)
@@ -535,7 +538,10 @@ class _Manuscript:
                         "claim": dict(_claim), "why": _why}
             got = _MF.commit_manuscript(
                 root, family=_MF.FAMILY_F, text=text, manuscript_id=mid,
-                retitle="none", dependency_rows=rows)
+                retitle="none", dependency_rows=rows,
+                producer=str(self.actor or ""),
+                instance=str(ident.get("instance") or ""),
+                task_id=str(ident.get("task_id") or ""))
         out = {"ok": bool(got.get("ok")), "path": rel, "text": text, "rows": rows,
                "preview": preview, "named_by": "manuscript",
                "manuscript_id": mid,

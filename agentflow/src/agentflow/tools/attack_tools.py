@@ -270,9 +270,22 @@ def _root_for(root: Any, store: Any) -> Any:
 
 def _agent_for(store: Any):
     """构造一个 AgentF。惰性导入：agent_f 反向引用本模块，模块级导入会成环。
-    
+
+    ## 实例身份（K1/K2）：这一条断链的接点
+
+    改前这里只传 `store`，`AgentF.actor` 恒为默认的 `"agent-F"` ⇒ 走工具路径的
+    每一笔写盘（`claims.owner` / `events.actor` / `attack_plans.created_by` /
+    `ARTIFACTS.producer`）都只剩角色字面量，两个 F 实例在盘上分不开
+    （AUDIT-F 的最硬证据：`tools/attack_tools.py:271-290` + `agent_f/core.py:631`）。
+
+    现在身份由唯一来源 `identity.resolve_identity` 给：台账号 / 实例标签从
+    `conductor.calling_as` 的挂点读（`AgentLoop._do_tool` 与 `LlmBackend.call`
+    都把 `instance` 挂上），名册名与 `tasks.instance` 作为对账来源；解析到就按
+    `agent-F-<规范标签>` 落，解析不到也不静默 —— `identity` 读数里的
+    `attributed=False` + `conflict` 会随 `AgentF.identity` 带到写盘面。
+
     ## 两条装配期登记（`draft/44` J-07：工具路径拿不到 host 的装配上下文）
-    
+
     1. 缝从 `agent_f.default_llm()` 取（`draft/39` §6.33 的 D42c）：真机里 M 派`F.step` 走的就是这一条工具路径，而
     host 那一侧接好的缝到不了这里 —— 于是 T2 第 14 趟（当时那个装配开关开着，它已于
     2026-10-26 删除）`F.step` 仍然连续 5 次
@@ -284,10 +297,13 @@ def _agent_for(store: Any):
     负控测试的打桩里）。
     """
     from ..agent_f import AgentF, default_llm  # 惰性：避免 tools ↔ agent 的循环导入
+    from ..identity import resolve_identity
     from ..llmseam import role_config
 
     root = str(getattr(store, "root", "") or "")
-    return AgentF(store, llm=default_llm(), config=role_config("F", root))
+    ident = resolve_identity(store, "F")
+    return AgentF(store, llm=default_llm(), config=role_config("F", root),
+                  actor=str(ident.get("actor") or ""), identity=ident)
 
 
 #: `PlanError` 在工具层映射出的 `kind`。
@@ -683,6 +699,7 @@ def register(
     for _fn, _deps in _TOOL_FUNCTIONS:
         registry.register(replace(_fn.__tool_spec__,
                                   handler=partial(_fn, *[_bound[k] for k in _deps])))
+
 
 
 

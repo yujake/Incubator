@@ -143,8 +143,15 @@ class _Builder:
     _ACTOR_IN_CONFIG: frozenset[str] = frozenset({"G", "H"})
 
     def _actor_for(self, role: str, instance: str) -> str:
-        """实例标签 → actor 名（空标签就是默认的那个 actor）。"""
-        return f"agent-{role}-{instance}" if instance else f"agent-{role}"
+        """实例标签 → actor 名（空标签就是默认的那个 actor）。
+
+        格式的唯一来源是 `identity.actor_for`（K1/K2）：装配期与写盘面（工具路径、
+        claims / ARTIFACTS / 事件）必须用同一个拼法，否则「装配时叫 agent-F-F1、
+        落盘时叫 agent-F」就是同一件事的两个字符串。
+        """
+        from .identity import actor_for
+
+        return actor_for(role, instance)
 
     def agent_a(self, store: Any, instance: str = "") -> Any:
         """A（构造在 `specs/a.py::build`：要 providers 与下载器）。"""
