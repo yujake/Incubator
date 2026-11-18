@@ -202,6 +202,9 @@ def test_f_h_selftest_never_reviews_a_foreign_document(tmp_path):
     h = AgentH(st)
     rc = h.selftest()
     assert rc in (0, 1), rc
+    # 自检连"读过一份稿"都不该发生：落库代理一次都没被调用（改前这里会 review
+    # documents[0]，tool_calls 里留下 review.review_document）。
+    assert [str(x.get("tool")) for x in (h.tool_calls or ())] == [], h.tool_calls
     after_docs = [dict(r) for r in st.rows("documents")]
     after_findings = [dict(r) for r in st.rows("review_findings")]
     assert [(r["doc_id"], r.get("status"), r.get("review_rounds")) for r in after_docs] == \

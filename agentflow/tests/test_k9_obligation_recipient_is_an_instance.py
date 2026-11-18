@@ -209,6 +209,39 @@ def test_c_resubmit_uses_the_live_task_of_that_instance_when_it_is_running(tmp_p
     assert str(item.get("parent_task_id") or "") != submitter, item
 
 
+def test_c_resubmit_uses_the_manuscript_named_by_the_verdict_row(tmp_path):
+    """c3 判词行给的稿路径优先（历史打回行的 sha 早不是现行正文了）。"""
+    st = _ws(tmp_path)
+    _statement(st, manuscripts={"1": REL})
+    _ledger(st, instance="F1")
+    submitter = _task(st, role="F", instance="F1",
+                      started="2026-11-18T09:30:00+08:00", status="done")
+    got = OBL.ensure_resubmit(
+        store=st, root=st.root, label=f"{SID}#p1", verification_id="v-000009",
+        detail={"proof_sha256": SHA, "manuscript": REL},
+        recipient=submitter, role="F", depth=2, at=TS)
+    item = _resubmit_items(st)[0]
+    assert str(item.get("instance") or "") == "F1", item
+    assert str(item.get("parent_task_id") or "") == "", item   # 那一趟已 done
+    assert got.get("owner_instance") == "F1", got
+
+
+def test_c_resubmit_never_pins_a_terminal_submitter_even_without_an_instance(tmp_path):
+    """c4 认不出产出实例、送审者又已终态 ⇒ 父为空（改前红：父 = 已 done 的那一趟）。"""
+    st = _ws(tmp_path)
+    _statement(st)                        # 没有 manuscripts 映射 ⇒ 认不出稿
+    submitter = _task(st, role="F", instance="F1",
+                      started="2026-11-18T09:30:00+08:00", status="done")
+    got = OBL.ensure_resubmit(
+        store=st, root=st.root, label=f"{SID}#p1", verification_id="v-000010",
+        detail={"proof_sha256": SHA}, recipient=submitter, role="F", depth=2, at=TS)
+    item = _resubmit_items(st)[0]
+    assert str(item.get("parent_task_id") or "") == "", item
+    assert str(item.get("instance") or "") == "", item
+    assert got.get("owner_known") is False, got
+    assert "不在飞" in str(got.get("owner_why") or ""), got
+
+
 # ============================================================ g：反真空
 def test_g_dropping_the_instance_reading_turns_b_and_c_red(tmp_path, monkeypatch):
     """g 把收件实例读数打桩成"永远没有实例" ⇒ b 的定向与 c 的产出实例都红。"""

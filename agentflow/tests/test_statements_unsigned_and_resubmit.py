@@ -442,7 +442,11 @@ def test_a_fault_opens_one_resubmit_item_keyed_without_recipient(tmp_path):
     one = items[0]
     assert one["input_key"] == OBL.resubmit_key(f"{SID}#p1", VR.text_sha(PROOF)), one
     assert one["input_key"].endswith(VR.text_sha(PROOF)), "键尾必须是 sha，不是收件人"
-    assert str(one.get("parent_task_id")) == parent, "负责人 = 那一次送审的送审者"
+    # K9（SH-40）：收件人不再是"那一次送审的送审者"。这个夹具的送审者那一行已经是
+    # `done`，而这份稿在产物台账里没有实例归属 ⇒ 义务按角色地址落在板上（父为空），
+    # 不把一项活挂在一个已经终态的号上（真机 lp-ball-8 的 3 条就是这样烂在 t-000049）。
+    assert str(one.get("parent_task_id") or "") == "", one
+    assert str(one.get("instance") or "") == "", one
     assert str(one.get("expects")) == "work", "重送是要交付的活，不是'知道了'"
     assert str(one.get("kind")) == "notice"
     assert str(one.get("item_state")) == "queued", one

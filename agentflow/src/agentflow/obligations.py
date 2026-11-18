@@ -404,8 +404,9 @@ def ensure_resubmit(*, store: Any, root: str | Path, label: str,
     else:
         # 认不出产出实例：退回送审者那一条旧地址 —— 但绝不挂在已终态的号上。
         caller = str(recipient or "")
-        if caller and _task_running(store, caller):
-            out["owner"] = caller
+        # 显式置空再判：`out["owner"]` 的初值是调用方给的那一趟，而"它已终态"
+        # 这一档必须真的把这个地址清掉（不是留着继续说"挂在它名下"）。
+        out["owner"] = caller if (caller and _task_running(store, caller)) else ""
         out["owner_known"] = bool(out["owner"])
         out["owner_why"] = (str(owner.get("why") or "认不出产出实例")
                             + ("；送审者那一刻在飞，按它投递" if out["owner"]
