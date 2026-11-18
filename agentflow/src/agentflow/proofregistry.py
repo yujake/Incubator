@@ -104,21 +104,14 @@ VERSION_MARK = "- 版本："
 #: 手抄一份清单在这里会漂 —— 2026-11-19 那条判据就漏掉了 K6④ 新加的
 #: `- 稿族：` / `- 产出者：` 两行，于是「两族骨架相同」读成了假红。
 #:
-#: 为什么是函数 + 模块级 `__getattr__` 而不是一个常量元组：清单的最后一格
-#: `- 标签：` 由 `manuscriptform` 定义，而 `manuscriptform` 自己又回引本模块
-#: （`proof_sha` 等）—— 在 import 期取那一格，两个模块谁先被 import 谁就半初始化，
-#: 现场是 `AttributeError: partially initialized module 'agentflow.manuscriptform'
-#: has no attribute 'LABEL_MARK'`（`agent_b` 走 `open_polish_copy → manuscriptform`
-#: 那条线时必现）。改成第一次读时才取，清单仍是同一份、同一个顺序，公开名不变。
-def _head_meta_order() -> tuple[str, ...]:
-    return (FAMILY_MARK, OWNER_MARK, SHA_MARK, FINGERPRINT_MARK, KIND_MARK,
-            REGISTERED_AT_MARK, _MF.LABEL_MARK)
-
-
-def __getattr__(name: str) -> Any:
-    if name == "HEAD_META_ORDER":
-        return _head_meta_order()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+#: 它是一个真元组（不是惰性代理）：清单的最后一格 `- 标签：` 由 `manuscriptform`
+#: 定义，而 `manuscriptform` 与本模块互相 import —— 所以那四个字面量在
+#: `manuscriptform` 的 import 之前定义（见那边的注释），于是这里的 import 期
+#: 取值在两个 import 顺序下都拿得到。不要为了"解开循环"把它改成惰性对象：
+#: `test_deprecated_forms_are_gone` 要求注释点名的 `proofregistry.HEAD_META_ORDER`
+#: 在符号面上真实存在。
+HEAD_META_ORDER = (FAMILY_MARK, OWNER_MARK, SHA_MARK, FINGERPRINT_MARK, KIND_MARK,
+                   REGISTERED_AT_MARK, _MF.LABEL_MARK)
 
 #: 受控码（写读两侧共用，不另起第二套词）：定义点在 `proofoutcomes.py`
 #: （与「跑闸 / 解释拒收」和「幂等保留」两段读数同一处）。这里从它回引同样的名字，
@@ -411,7 +404,7 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     读侧（`parse_entry` / `depsection.manuscript_proof_no`）照旧读得出那个号。
     """
     lines = head.split("\n")
-    order = list(_head_meta_order())
+    order = list(HEAD_META_ORDER)
     touched: set[str] = set()
     out: list[str] = []
     for line in lines:

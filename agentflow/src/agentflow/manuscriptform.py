@@ -34,6 +34,20 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
+# ---- 稿头元信息前缀（渲染与读侧共用） -----------------------------------------
+#
+# 为什么这四个常量写在 import 之前：`proofregistry.HEAD_META_ORDER` 在 import 期
+# 就要读 `LABEL_MARK`（它是「哪些行属于登记元信息」的唯一来源），而 `proofregistry`
+# 与本模块互相 import。放在 import 之后，`import manuscriptform` 那一刻
+# `proofregistry` 读到的是半初始化的模块 —— 现场是
+# `AttributeError: partially initialized module 'agentflow.manuscriptform' has no
+# attribute 'LABEL_MARK'`（`agent_b → open_polish_copy → manuscriptform` 那条线必现）。
+# 常量先定义，两个 import 顺序都成立；渲染与解析仍然只认这一处字面量。
+STATEMENT_MARK = "- 命题号："
+PLAN_MARK = "- 计划："
+PROOF_NO_MARK = "- 证明号："
+LABEL_MARK = "- 标签："
+
 from . import depsection as _DS
 from . import manuscriptfamily as _MFAM  # 手稿族/号/后缀的唯一判定表（T2）
 from . import manuscriptids as _MID  # F 自己的稿号
@@ -73,11 +87,7 @@ PREFIX = {FAMILY_F: _MFAM.prefix_of("f-proof"), FAMILY_B: _MFAM.prefix_of("b-pro
 #: 计划名前缀（只有 F 立项那一轮用；`plan-` 是 f-proof 号形的一部分）。
 PLAN_PREFIX = {FAMILY_F: f"{PREFIX[FAMILY_F]}plan-"}
 
-#: 稿头里那几行元信息的前缀（渲染与读侧共用）。
-STATEMENT_MARK = "- 命题号："
-PLAN_MARK = "- 计划："
-PROOF_NO_MARK = "- 证明号："
-LABEL_MARK = "- 标签："
+#: 稿头里那几行元信息的前缀定义在文件顶部 import 之前（理由见那里）。
 
 #: 转正只收工作区相对路径里的这两种根（`notes/` 草稿本、`reports/` 正式落点）。
 PROMOTE_SOURCE_ROOTS: tuple[str, ...] = ("notes", "reports")
