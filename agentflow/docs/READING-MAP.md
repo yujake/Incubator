@@ -4,13 +4,13 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19，BATCH5 K11/K12/K13）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,236 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,185 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,257 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,185 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
 > **2026-11-19 BATCH5 K11/K12/K13（行级归属 + E 台账按实例认行 + 实验号按角色分号段）：**
 > 322 个 `.py`（BATCH3 那格 321 → 322：新增 `rowscope.py`，行级归属的唯一判据）、
-> **302,236** 行（上一格 300,606 是 BATCH3 的读数；其后 K9 收尾两笔与本笔一起把总行数推到
-> 现算值——本笔 src 净增 +811：`rowscope.py` +332、`schema.py` +116（归属两格 +
+> **302,257** 行（上一格 300,606 是 BATCH3 的读数；其后 K9 收尾两笔与本笔一起把总行数推到
+> 现算值——本笔 src 净增 +832：`rowscope.py` +332、`schema.py` +116（归属两格 +
 > `ID_SEGMENTS` / `counter_key` / `counter_bands` / `segment_of_id` / `segment_for_role`）、
 > `table_tools.py` +76（读侧收窄 / 三处写闸 / `meta.row_scope`）、`run_experiment.py` +77
 > （写者身份 + 三处台账读法收窄 + 归属两格）、`verify.py` +42（分号段的连续性与计数器）、

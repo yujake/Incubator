@@ -6,6 +6,9 @@ from ._support import Any, DT, DocumentError, Mapping, S, SIG, Sequence
 from .hard_to_prove import report_held_back, settle_claims
 from .revise_gates import checked_claims
 
+from .. import identity as _IDENT
+from .. import rowscope as _RS
+
 #: `revise` 回来时必须点名的下一步（丙，2026-11-11）。措辞照 `specs/m.py` 那句
 #: 「改完之后要再复核（D57）」—— 同一个意思只有一份说法，不自造新词。
 #: 2026-11-11 业主裁定之后 `G → H` 是真边（`G` 的出边 = `C/D/H`），所以 G 自己就能派。
@@ -63,6 +66,24 @@ class _Revise:
             doc = tx.find("documents", doc_id=doc_id)
             if doc is None:
                 raise DocumentError(f"稿件 {doc_id} 不存在 ⇒ 不能修订一份不存在的稿件")
+            # ---- 行级归属（K11 / GD-02，2026-11-19）：别人的稿不归我改。
+            #
+            # 判据只问一件事：这一行指名到了另一个实例吗？指名了、而我这一趟也带
+            # 实例标签（`agent-G-G2` / 调用上下文里的 instance）⇒ 受控拒。
+            # 两档刻意放行（不是遗漏）：① 我是角色级 actor（`agent-G`，直调 / 单测那一档）
+            # —— 没有实例可判，按角色族的既有语义走；② 这一行没有归属两格（老行）——
+            # 「判不了是谁的」在这里不升级成「拒」，而是按角色级既有行为处理
+            # （读写面那条更严的 fail-closed 判据在 `table.update` / `table.delete` 上）。
+            _who = _RS.caller()
+            _my_instance = (_who["instance"]
+                            or str(_IDENT.split_actor("G", str(self.actor or "")).get("instance") or ""))
+            _owner = _RS.owner_of(doc)
+            if _my_instance and _owner["instance"] and _owner["instance"] != _my_instance:
+                raise DocumentError(
+                    f"{_RS.ROW_NOT_YOURS}：这份稿（doc:{doc_id}）归 {_owner['instance']!r} 那一支笔，"
+                    f"你这一趟是 {_my_instance!r} ⇒ 不能改。"
+                    "改稿会推进 review_rounds、重写 claims / sections —— 那是替别人收工；"
+                    "要找它的作者改，或由作者本人重跑这一动作。")
 
             merged = [dict(c) for c in (doc.get("claims") or [])]
             # 本稿现行号（归一化之前的那一份）：拒信要照它列，finding 的 target 按它认。

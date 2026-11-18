@@ -225,6 +225,30 @@ def test_e2_a_document_cannot_be_created_through_the_generic_port(tmp_path):
     assert st.rows("documents") == []
 
 
+def test_e3_a_non_owner_cannot_revise_someone_elses_document(tmp_path):
+    """e³（GD-02）：G-2 改不动 G-1 的稿（`revise` 也是「改」），G-1 自己改得动。"""
+    from agentflow.agent_g import AgentG
+
+    st, reg = _ws(tmp_path)
+    _statement(st)
+    built = _build_doc(reg, task="t-k11-g1", instance="G1")
+    assert built.ok is True, (built.error, built.meta)
+    doc_id = str(built.data["doc_id"])
+    before = dict(st.rows("documents")[0])
+
+    intruder = AgentG(st, workspace_root=tmp_path / "ws",
+                      config={"actor": "agent-G-G2"})
+    with pytest.raises(Exception) as caught:
+        intruder.revise(doc_id, note="探针：别人的稿")
+    assert RS.ROW_NOT_YOURS in str(caught.value), caught.value
+    assert dict(st.rows("documents")[0]) == before, ("被拒了却还是改了盘", st.rows("documents"))
+
+    owner = AgentG(st, workspace_root=tmp_path / "ws", config={"actor": "agent-G-G1"})
+    out = owner.revise(doc_id, note="属主自己重画一次")
+    assert out.get("status") == "revised", out
+    assert dict(st.rows("documents")[0]) != before, ("属主改了却没落盘", out)
+
+
 # ============================================================ h：反真空
 
 
