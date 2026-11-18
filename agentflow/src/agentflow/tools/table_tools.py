@@ -1861,6 +1861,15 @@ def table_get(ctx: TableContext, *, table: str, id: str) -> ToolResult:
     for row in ctx.store.rows(table):
         if row.get(idf) != id:
             continue
+        # `tasks` 的可见面必须与 `table.list` 同一条判据（`_rows` → `_visible_tasks`）：
+        # K11 把这里从 `_rows(ctx, table)` 换成直读 `store.rows` 之后，按主键点名
+        # 绕过了 `_visible_tasks` —— `table.get(tasks, 别人那一行的号)` 会答 `found=true`，
+        # 而 `table.list` 里并没有它（「非主控只能看一层」这条门在 get 上是漏的）。
+        # 这一档与 list 一致：看不见 = 「没有这一行」（不是 `row_not_visible`，
+        # 那条受控码是给有行级归属的表用的）。
+        if table == "tasks" and not _visible_tasks(
+                [row], role=_caller_role(), task_id=_caller_task_id()):
+            return ok(None, table=table, id=id, id_field=idf, found=False)
         if _RS.owned(table) and not _RS.visible(table, row, role=who["role"],
                                                 task_id=who["task_id"],
                                                 instance=who["instance"]):
