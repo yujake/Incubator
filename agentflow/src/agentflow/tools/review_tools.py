@@ -1063,23 +1063,41 @@ def _advance_review_round(
 
     返回 `(这一轮的轮次, 写库失败原因或 None)`。`documents` 行不存在时（论文是真身、
     台账行缺失那一路）返回算出来的轮次且不写库 —— 那一缺由调用方在 reason 里如实报。
+
+    ## 读-改-写必须在同一个事务里（K14 / HR-01，2026-11-19）
+
+    改前 `current` 在事务外读、`new_round = current + 1` 也在事务外算，事务里只写：
+    两个 H 进程同时复审同一份稿时都读到 `n`、都写 `n+1` ⇒ 丢一轮，而盘上没有任何
+    地方会报。现在 `current` 与 `new_round` 都在 `store.tx` 的同一把跨进程锁里算
+    （[1] 读、[2] 写是同一个临界区），第二个进程在锁上等、醒来读到的就是 `n+1`。
     """
     row = next(
         (r for r in store.rows("documents") if str(r.get("doc_id")) == str(doc_id)), None)
-    current = int(dict(row).get("review_rounds") or 0) if row is not None else 0
-    new_round = current + 1
-    if explicit is not None:
-        new_round = max(new_round, int(explicit))
-    if new_round < 1:
-        new_round = 1
     if row is None:
-        return new_round, f"documents 里没有稿件 {doc_id} ⇒ 轮次账没写回（只带读数）"
+        current = 0
+        fallback = max(1, current + 1, int(explicit) if explicit is not None else 0)
+        return fallback, f"documents 里没有稿件 {doc_id} ⇒ 轮次账没写回（只带读数）"
+    #: 事务进不去（等锁超时）时 `except` 要把"本来该写几"报出去 —— 先从盘上那一版
+    #: 算一个读数；真正落盘的那个 `new_round` 在事务里由事务内的 `current` 重算。
+    current = int(dict(row).get("review_rounds") or 0)
+    new_round = max(1, current + 1, int(explicit) if explicit is not None else 0)
     try:
         with store.tx("documents", actor=actor,
-                      note=f"review round {current}->{new_round}") as tx:
+                      note=f"review round doc:{doc_id}") as tx:
             live = tx.find("documents", doc_id=str(doc_id))
             if live is None:
-                return new_round, f"稿件 {doc_id} 在事务内不存在 ⇒ 轮次账没写回"
+                current = int(dict(row).get("review_rounds") or 0)
+                fallback = max(1, current + 1,
+                               int(explicit) if explicit is not None else 0)
+                return fallback, f"稿件 {doc_id} 在事务内不存在 ⇒ 轮次账没写回"
+            #: [1] 读：事务内读的是前一个提交者刚写下的那一版（同一把锁）。
+            current = int(dict(live).get("review_rounds") or 0)
+            #: [2] 写：`new` 只由[1]的读数派生，所以不存在"两边都读到 n"那个窗口。
+            new_round = current + 1
+            if explicit is not None:
+                new_round = max(new_round, int(explicit))
+            if new_round < 1:
+                new_round = 1
             live["review_rounds"] = new_round
             tx.upsert("documents", live)
     except Exception as exc:  # noqa: BLE001 - 轮次账坏掉要如实报，不许静默
@@ -1536,8 +1554,27 @@ def record_finding(
                 "finding_id": str(dup.get("finding_id") or ""), "doc_id": doc_id,
                 "kind": kind_s, "level": str(dup.get("level") or level_s),
                 "round": int(dup.get("round") or 1), "status": str(dup.get("status") or "")}
-    with store.tx("review_findings", actor=actor,
-                  note=f"record_finding doc:{doc_id} round {round_val}") as tx:
+    with store.tx("review_findings", "documents", actor=actor,
+                  note=f"record_finding doc:{doc_id}") as tx:
+        # ---- K14 / HR-01：判重与轮次都在事务里重算 -----------------------------
+        #
+        # 改前这里只把事务外读到的那一份 `existing` / `round_val` 用下去：两个 H 进程
+        # 同时复审同一份稿时都读到"没有这条 key"、都读到 `review_rounds=n`，于是各落
+        # 一行同键发现、两行都 open（`alloc_id` 保证号不同，所以行不会互相覆盖 ——
+        # 这正是它不报错的原因）。现在[1] 读、[2] 判重、[3] 写是同一个临界区：
+        # 后到者在锁上等，醒来看到的是前一个提交者刚写下的行。
+        fresh = [dict(r) for r in tx.rows("review_findings")
+                 if str(r.get("doc_id")) == doc_id]
+        same = next((r for r in fresh if _dedup_key(r) == key), None)
+        if same is not None:
+            return {"checked": True, "created": False, "duplicate_skipped": 1,
+                    "finding_id": str(same.get("finding_id") or ""), "doc_id": doc_id,
+                    "kind": kind_s, "level": str(same.get("level") or level_s),
+                    "round": int(same.get("round") or 1),
+                    "status": str(same.get("status") or "")}
+        if round_no is None:
+            live_doc = tx.find("documents", doc_id=str(doc_id))
+            round_val = max(1, int((live_doc or {}).get("review_rounds") or 0))
         row = S.ReviewFinding(
             finding_id="", doc_id=doc_id, kind=kind_s, level=level_s, target=target_s,
             evidence=evidence_s, message=message_s, round=round_val,
@@ -1560,7 +1597,7 @@ def record_finding(
         # 乙（2026-11-11）：同一 (kind,target) 的更早 open 判词被这一条覆盖 ——
         # 与"写新判词"同一笔事务（见 `_supersede_prior_open` 的语义边界）。
         _supersede_prior_open(
-            tx, existing, kind=kind_s, target=target_s,
+            tx, fresh, kind=kind_s, target=target_s,
             new_round=round_val, new_id=str(payload["finding_id"]))
     return {"checked": True, "created": True, "duplicate_skipped": 0,
             "finding_id": payload["finding_id"], "doc_id": doc_id, "kind": kind_s,

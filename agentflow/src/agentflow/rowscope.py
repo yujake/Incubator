@@ -75,6 +75,40 @@ ROW_OWNER_NOT_PRODUCER = "row_owner_not_producer"
 ROW_NOT_VISIBLE = "row_not_visible"
 
 
+# ---------------------------------------------------------------- 并发豁免的条件
+#
+#: 哪些 `(角色, 动作)` 的写入面确实有行级互斥（K14 / SH-05：并发豁免的唯一条件）。
+#:
+#: 登记一条 = 「这个动作写同一行 / 同一份稿时，数据面对第二个写者会受控拒」。
+#: 调度面的实例豁免（`policy._same_role_other_instance`）只对这一张表里的动作生效：
+#: 表外的动作即使两边都带实例、写集又相交，也必须分波 —— 因为"同角色不同实例"这个
+#: 事实本身不证明两张表不会被同时改（SH-05 的原话：「豁免要以行级互斥确实存在为条件」）。
+#:
+#: 每条登记的证据（都是本模块或它点名的写口）：
+#:
+#: - `E.run_experiment` / `E.run_script_experiment` / `L.record`：`experiments` 的
+#:   两格归属由调用者身份现盖，改 / 删别人的行受控拒（`write_refusal`）；
+#: - `G.build_document` / `G.revise` / `G.refresh_markdown`：`documents` 同一套两格
+#:   归属，改别人的稿受控拒（BATCH5 的 K11）；
+#: - `B.register_statement` / `B.ingest_manuscript` / `B.land_manuscript`：稿的占用
+#:   按路径登记（`manuscriptids.claim_for_write`；B 的收编占用是 K17 补的那一格），
+#:   同一命题的正文判重在秘书的事务锁内重判（BR-02）。
+#:
+#: 不在表里的动作一律按冲突处理（保守方向：多花时间，不改坏数据）。所以新增动作
+#: 想拿实例并发，得先让它真的过一遍行级判据，再把 `(角色, 动作)` 登记到这里 ——
+#: 两条纪律的顺序不许反过来。
+ROW_MUTEX_ACTIONS: frozenset[tuple[str, str]] = frozenset({
+    ("E", "run_experiment"), ("E", "run_script_experiment"), ("L", "record"),
+    ("G", "build_document"), ("G", "revise"), ("G", "refresh_markdown"),
+    ("B", "register_statement"), ("B", "ingest_manuscript"), ("B", "land_manuscript"),
+})
+
+
+def row_isolated(role: Any, action: Any) -> bool:
+    """这个 `(角色, 动作)` 的写入面有没有行级互斥（`ROW_MUTEX_ACTIONS` 的唯一读口）。"""
+    return (str(role or ""), str(action or "")) in ROW_MUTEX_ACTIONS
+
+
 # ---------------------------------------------------------------- 调用者身份
 
 

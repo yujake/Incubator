@@ -1172,18 +1172,21 @@ def estimate_write_conflict(a: Any, b: Any) -> bool:
     的 I-6）。保守方向的代价是多花时间；激进方向的代价是数据被改坏，
     而后者不会报错。
 
-    实例轴：`TaskCall` 可以带一个 `instance` 标签
-    （同一角色的第 N 个并发实例）。两个同一角色、不同实例的调用不算冲突 ——
-    否则"N 个 B 一起读一批文献"会被结构性地排成 N 波串行（3 个 B 会被排成
-    `[[0],[1],[2]]`，真并发峰值 1，再多 B 也没用）。
+    ## 实例轴（K14 / SH-05，2026-11-19 收紧）
 
-    为什么这条放宽是安全的、以及它的边界：角色级写集回答的是"这个角色会碰哪些表"，
-    而行级互斥另有机制 —— B/A 的领取走 `claimed_by` + 租约
-    （`agent_b._claim`），C/H 是只读，写者各自 `store.tx` 在同一把 filelock 下串行提交。
-    所以"两个 B 并发"在数据面早就成立（既有判据
-    `tests/test_agent_b_gates.py::test_i6_two_agents_write_concurrently_without_deadlock`
-    守着）。同一实例（或没给实例）的两个调用仍然算冲突 ——
-    默认行为逐字不变，并发多实例必须由调用方显式要（见 `waves_of` 的说明）。
+    `TaskCall` / `ActionSpec` 可以带一个 `instance` 标签（同一角色的第 N 个并发实例）。
+    改前这里对"同角色、不同实例"无条件豁免写集冲突 —— 判据只看 role / instance
+    两格，不看那个角色的写面有没有行级互斥。于是两个 H 实例会同时改同一份稿的
+    `review_findings`（那张表没有行级归属），撞了也不报错。
+
+    现在的豁免要同时满足三件事：
+    1. 两边都显式给了实例、且不同（空串不豁免：没给实例 = 那个单例）；
+    2. 角色相同（跨角色不豁免 —— 那回答的是"两个角色会不会同时改同一张表"）；
+    3. 两个动作都登记在 `rowscope.ROW_MUTEX_ACTIONS` 里（行级互斥确实存在）。
+
+    第 3 条是唯一的条件判据，真身在 `rowscope`（与"哪张表有行级归属"同一处）。
+    为什么不是"按角色一张白名单"：同一个角色的不同动作写面不同（B 的 `register_statement`
+    有锁内判重与按路径占用，`run` 没有）—— 按角色给豁免就会把后者一起放过去。
     """
     if _same_role_other_instance(a, b):
         return False
@@ -1195,18 +1198,30 @@ def _instance_of(x: Any) -> str:
     return str(getattr(x, "instance", "") or "")
 
 
-def _same_role_other_instance(a: Any, b: Any) -> bool:
-    """两个调用是不是"同一角色、各自显式给了不同的实例"。
+def _action_of(x: Any) -> str:
+    """执行单元的动作名（`ActionSpec` / `TaskCall` 两处同形；给的是角色名 ⇒ 空串）。"""
+    if isinstance(x, C.ActionSpec):
+        return str(getattr(x, "action", "") or "")
+    return str(getattr(x, "action", "") or "")
 
-    只有这一种情形才豁免写集冲突：两边都必须显式给实例（空串不豁免），
-    否则"没给实例"会与"给了实例"被判成不同实例 —— 那就等于默认打开并发，
-    而默认打开会让既有的"同角色串行"判据静默失效。
+
+def _same_role_other_instance(a: Any, b: Any) -> bool:
+    """这一对调用够不够格拿"同角色不同实例"的并发豁免（判据见 `estimate_write_conflict`）。
+
+    四个条件缺一不可：两边都显式给实例、实例不同、角色相同、两个动作都有行级互斥。
+    最后一条经 `rowscope.row_isolated`（`ROW_MUTEX_ACTIONS` 的唯一读口）——
+    写成"同角色就豁免"正是 K14 要删掉的那一条（SH-05）。
     """
     ia, ib = _instance_of(a), _instance_of(b)
     if not ia or not ib or ia == ib:
         return False
     ra, rb = _role_of(a), _role_of(b)
-    return isinstance(ra, str) and ra == rb
+    if not (isinstance(ra, str) and ra == rb):
+        return False
+    from . import rowscope as _RS
+
+    return (_RS.row_isolated(ra, _action_of(a))
+            and _RS.row_isolated(rb, _action_of(b)))
 
 
 def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int]]:
