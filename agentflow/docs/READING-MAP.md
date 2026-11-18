@@ -4,9 +4,24 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19 CLOSE1 K1 收尾①）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,816 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,893 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 CLOSE1 K1 收尾②（V / G / A / E / F 的写者身份收到实例级）：**
+> 322 个 `.py` 与 75 个 `>800` 两格不变；**302,893** 行（上一格 302,816 是收尾①的读数；
+> 本笔 src 净增 +77：`tools/verify_tools.py` +17（`_agent_v` 按 `identity` 现算 actor，
+> 与 `_agent_for` 同一把尺）、`tools/search_tools.py` +22（`_Ctx.actor` 从 dataclass 默认值
+> 改成按 `identity` 现算的属性 + `bound_actor`，`register(actor="")`）、
+> `tools/doc_tools.py` +5（`documents.created_by` 与 `owner_*` 同源）、
+> `agent_a/shelf_search.py` +3、`exhaustionreport.py` +12（`land_report` 的
+> `owner` / `instance` / `task_id` / `identity_conflict` 四格）、
+> `verifications.py` +3（`issuer` 取判词行的 `verifier`）、`vsigns.py` +8（`issue(issuer=)`）、
+> `agent_v/core.py` +2、`agent_f/core.py` +4（`submitted_instance`）、
+> `schema.py` +5（`SearchRequest.submitted_instance`，带默认值 ⇒ 老行照读，
+> `SCHEMA_VERSION` 不动）、`host.py` +2（`_ACTOR_IN_CONFIG` 收 V））。
+> 十一格现算 `changed = []`（`temp/batch5/recompute_digests.py`）⇒ 提示词一格未动，
+> 所以不抬 `PROMPT_VERSION`、不重冻 golden、不重跑 warm（动的是写盘面，不是提示词）。
+> 函数体量三格现盘复测 75 / 95 / 2 逐格未抬。
 > **2026-11-19 CLOSE1 K1 收尾①（会话事件 / 草稿本 / 进程登记 / 形态台账带实例）：**
 > 322 个 `.py` 与 75 个 `>800` 两格不变（本笔没有新增模块；`sessions.py` 792→800 未过线）；
 > **302,816** 行（上一格 302,758 是 BATCH6 的读数；本笔 src 净增 +58：

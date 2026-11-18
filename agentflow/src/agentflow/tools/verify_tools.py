@@ -1461,10 +1461,22 @@ def register(
         但还有一条 V 特有的：`agent_v` 的声明在 `specs/v.py`，而 `specs` 是
         `capabilities` 的输入 —— 模块级导入会把"读一张声明表"拖成"import 全项目"。
         模型缝取 `agent_v.default_llm()`（默认 None = 没接线 ⇒ 如实报 judge_not_wired）。
+
+        VJ-03（2026-11-19）：与 `_agent_for` 同一把尺 —— 这一笔的实例身份现算，
+        经 config 的 `actor` 键交给 `AgentV`（它读的就是 `cfg["actor"]`）。改前这里
+        不传任何身份 ⇒ 待签行 / 签文件 / V 稿索引上的 `verifier` 全是角色名 `agent-V`，
+        两个 V 实例的判词在台账上不可区分。
         """
+        from .. import identity as _IDENT
+        from .. import rowscope as _RS
         from ..agent_v import AgentV, default_llm
 
-        return AgentV(store, workspace_root=base, llm=default_llm())
+        _who = _RS.caller()
+        _ident = _IDENT.resolve_identity(store, "V", task_id=_who["task_id"] or None,
+                                         instance=_who["instance"] or None)
+        _actor = str(_ident.get("actor") or "")
+        return AgentV(store, workspace_root=base, llm=default_llm(),
+                      config=({"actor": _actor} if _actor else {}))
 
     _bound: dict[str, Any] = {}
     _bound['_hash_of'] = _hash_of

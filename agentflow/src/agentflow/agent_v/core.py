@@ -4088,6 +4088,8 @@ class AgentV:
                 artifact_path=rel, ledger=ledger, statement_id="",
                 # `proof_no` 在写侧退役（业主 2026-11-11）：不再往签文件里传这一格。
                 passes=passes, at=at, by=who,
+                # VJ-07：签发者是这一个 V 实例（不是角色名 "V"）。
+                issuer=self.actor,
                 # 签成功那一刻顺手把稿置为已提交（甲，2026-11-11）：V 手里有 store 就接线。
                 store=self.store)
         except Exception as exc:  # noqa: BLE001 —— 颁发抛了也要如实报

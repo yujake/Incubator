@@ -306,7 +306,9 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
                  script_path: Any, design: Any, enumeration: Any,
                  script_sha256: Any = "", search_space: Any = None,
                  environment: Any = "", result: Any = "",
-                 evidence_kind: Any = "") -> dict[str, Any]:
+                 evidence_kind: Any = "", owner: Any = "",
+                 instance: Any = "", task_id: Any = "",
+                 identity_conflict: Any = "") -> dict[str, Any]:
     """把 ②③ 落成 `out/experiments/<实验号>/exhaustion.md`，并读回来记下事实。
 
     返回的 `exhaustion_report` 事实（写进 `observations[REPORT_KEY]`）::
@@ -385,8 +387,14 @@ def land_report(root: str | Path, *, experiment_id: Any, claim: Any, claim_key: 
     # ---- 产物归属：报告已经落盘并读回来了，这里补"这个路径归 E 产"。
     # 登记失败不折成"报告没写成"（ok 仍是真的），但必须进读数：`problems` 非空
     # 会让调用方把这一条降档/记 note，而不会让"有产物、无归属"悄悄过去。
+    #
+    # EM-09（K1，2026-11-19）：改前这里写死 `producer="E"` —— 与同文件另两个写口
+    # （手稿 898 / e-num 1194 `producer=facts["owner"]`）不同形：同一族产物在台账上
+    # 一条是实例级、两条是角色级。现在三个写口同一个口径：调用方把这一趟的 actor 递
+    # 进来（`owner`），读不到才退回角色名（老调用点 / 夹具逐字不变）。
     _reg_problem = _record_product(
-        root, rel=rel, kind="experiment-report", producer="E",
+        root, rel=rel, kind="experiment-report", producer=str(owner or "E"),
+        instance=instance, task_id=task_id, identity_conflict=identity_conflict,
         note=f"exp:{facts['experiment_id']} 的 ②③ 读数（exhaustionreport.land_report）")
     if _reg_problem:
         problems.append(f"{_reg_problem}；报告本身已落盘（{rel}）")

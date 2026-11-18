@@ -107,7 +107,32 @@ class _Ctx:
     downloader: Any | None = None
     config: dict = field(default_factory=dict)
     provider_config: dict = field(default_factory=dict)
-    actor: str = "agent-A"
+    #: 装配期显式绑定的写者（空串 = 每次调用按 `identity` 现算，见 :meth:`actor`）。
+    bound_actor: str = ""
+
+    @property
+    def actor(self) -> str:
+        """这一次调用的写者名：实例级（K1 / AL-12，2026-11-19）。
+
+        改前这里是 dataclass 的默认值 `"agent-A"` —— 装配期一次定死，于是走工具面落下的
+        每一笔（`lit_availability` / `lit_reads` 的 actor 等）全是光秃秃的角色名，而同一张
+        表上走实例内部链路的那几笔是 `agent-A-<名册名>`：同一件事两种粒度（lp-ball-8 实测
+        98 条 vs 77 条）。现在与类路径同一个来源：`identity.resolve_identity`（唯一实现），
+        每次调用现算 —— 调用点落在 `conductor.calling_as` 的临界区里，名册名 / 召唤标签
+        都读得到。显式绑定且带实例标签的那一档优先（装配期折进来的身份）；读不到身份
+        ⇒ 退回角色名（直调 / 单测逐字不变）。
+        """
+        from ..identity import actor_for, resolve_identity, split_actor
+
+        bound = str(self.bound_actor or "").strip()
+        if split_actor("A", bound).get("instance"):
+            return bound
+        got = resolve_identity(self.store, "A")
+        resolved = str(got.get("actor") or "").strip()
+        if got.get("attributed") and resolved:
+            return resolved
+        return bound or resolved or actor_for("A", "")
+
     #: 名字 → provider 实例。注入的与惰性构造的都缓存在这里（限速状态是进程级全局的，
     #: 复用一个实例不会破坏礼貌访问；反复新建反而会重复付初始化的代价）。
     providers: dict[str, Any] = field(default_factory=dict)
@@ -3158,7 +3183,7 @@ def register(
     root: str | Path | None = None,
     config: Mapping[str, Any] | None = None,
     provider_config: Mapping[str, Any] | None = None,
-    actor: str = "agent-A",
+    actor: str = "",
 ) -> list[ToolSpec]:
     """把 A 的检索工具注册进 ``registry``，返回注册的 ``ToolSpec`` 列表。
     
@@ -3179,7 +3204,7 @@ def register(
         downloader=downloader,
         config=dict(config or {}),
         provider_config=dict(provider_config or {}),
-        actor=actor,
+        bound_actor=actor,
     )
     for prov in providers or []:
         name = (getattr(prov, "name", None) or type(prov).__name__).lower()

@@ -4851,6 +4851,10 @@ class _Core:
                 content_description=text,
                 done=False,
                 submitted_by=self.submitter,
+                # FX-14（2026-11-19）：`submitted_by` 是 I7 的契约键（优先级查表按它认），
+                # 实例标签另存一格 —— 两个 F 实例交的请求在台账上分得开。
+                submitted_instance=str(
+                    self._refresh_identity().get("instance") or ""),
                 priority=gate["priority"],
                 for_question_id=plan.get("for_question_id"),
                 submit_note=f"agent-F 攻坚计划 {plan.get('plan_id')} 子目标 {sid}：{text}",

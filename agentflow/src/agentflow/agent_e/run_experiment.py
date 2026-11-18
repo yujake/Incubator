@@ -578,7 +578,12 @@ class _RunExperiment:
                     environment=_ER.environment_reading(exit_code=run["exit_code"],
                                                         runtime_sec=run["runtime_sec"]),
                     result=derived.get("result"),
-                    evidence_kind=derived.get("evidence_kind"))
+                    evidence_kind=derived.get("evidence_kind"),
+                    # EM-09：这一份报告的写者与实验行同一把尺（实例级 actor）。
+                    owner=str(_writer_ident.get("actor") or ""),
+                    instance=str(_writer_ident.get("instance") or ""),
+                    task_id=str(_writer_ident.get("task_id") or ""),
+                    identity_conflict=str(_writer_ident.get("conflict") or ""))
                 if report.get("problems"):
                     notes.append("[report] ②③ 的读数没有落成："
                                  + "；".join(str(p) for p in report.get("problems") or [])

@@ -34,7 +34,10 @@ def _tool_ctx(store: Store, actor: str) -> Any:
     from ..tools.search_tools import _Ctx
 
     root = Path(getattr(store, "root", ".")).resolve()
-    return _Ctx(workspace=root, store=store, actor=str(actor or "agent-A"))
+    # AL-12（2026-11-19）：`_Ctx.actor` 现在是「绑定值带实例标签才优先，否则按
+    # `identity` 现算」—— 所以这里原样把 A 的 actor 交过去：带实例标签的照用，
+    # 只有角色名的不挡路（工具面与实例内部链路于是同一个粒度）。
+    return _Ctx(workspace=root, store=store, bound_actor=str(actor or ""))
 
 
 class _ShelfSearch:

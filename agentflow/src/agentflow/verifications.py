@@ -4164,6 +4164,9 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
             objections=list(payload.get("objections") or []),
             at=str(payload.get("at") or ""),
             by=who,
+            # VJ-07：签发者取这一签的判词行自己记的 `verifier`（实例级 actor，
+            # `AgentV` 写行时就带上了）—— 不在签发处另猜一个。
+            issuer=str(row.get("verifier") or ""),
             # 签成功那一刻顺手把稿置为已提交（2026-11-11 甲，复用 `mss:` 那条路）：
             # 只在真的有 store 时接线；直调 / 夹具传的是根路径 ⇒ 这一格如实报没查。
             # `submit=False` 是"调用方自己在事务外补这一笔"那一档（见 `sign_statement`）：

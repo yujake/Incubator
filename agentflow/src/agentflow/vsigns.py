@@ -2266,7 +2266,8 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
           artifact_path: str = "", ledger: str = "", statement_id: str = "",
           proof_no: int = 1, passes: Sequence[Mapping[str, Any]] = (),
           objections: Sequence[Mapping[str, Any]] = (), at: str = "",
-          by: str = "", store: Any = None) -> dict[str, Any]:
+          by: str = "", store: Any = None,
+          issuer: str = "") -> dict[str, Any]:
     """颁发一份签：`out/vsigns/<artifact_sha>.json` + `issued.json` + 信封（纯写这一半）。
 
     ## 2026-11-02：颁发与落签拆开（业主口径）
@@ -2385,8 +2386,14 @@ def issue(root: Any, *, artifact_sha: Any, streak: int, need: int,
     out.update(_gate)
     if not _count_ok:
         return out
+    # ---- 谁颁发（VJ-07，2026-11-19）----
+    #
+    # 改前 `issued_by` 恒是角色名 `"V"`：两个 V 实例判的签在盘上不可区分，「这一签是
+    # 哪一个 V 判的」答不出来。`issuer` 由调用方给（在册档 = 台账行的 `verifier`，
+    # 未在册档 = `AgentV.actor`，两处都是实例级 actor）；不给 ⇒ 保留历史值 `"V"`
+    # （老签文件与直调 / 夹具逐字不变，读侧不需要多一条分支）。
     envelope = {"kind": ENVELOPE_KIND, "to": who, "at": str(at or ""),
-                "issued_by": "V"}
+                "issued_by": str(issuer or "").strip() or "V"}
     doc: dict[str, Any] = {
         "schema": SIGN_SCHEMA,
         "artifact_sha": key,

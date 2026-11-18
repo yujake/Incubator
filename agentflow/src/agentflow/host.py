@@ -137,10 +137,11 @@ class _Builder:
         return dict(seg) if isinstance(seg, Mapping) else {}
 
     #: 角色 → 它的构造签名收不收 `actor=`。
-    #: A/D/E/F 有显式 `actor=` 形参；G/H 从 config 的 `actor` 键取；
+    #: A/D/E/F 有显式 `actor=` 形参；G/H/V 从 config 的 `actor` 键取（V 的
+    #: `AgentV.__init__` 读 `cfg["actor"]`，2026-11-19 VJ-03 起装配期把实例标签写进去）；
     #: B/C 没有 actor 概念（B 的写入走 `claimed_by` 领取，C 只读）。
     _ACTOR_KWARG: frozenset[str] = frozenset({"A", "D", "E", "F"})
-    _ACTOR_IN_CONFIG: frozenset[str] = frozenset({"G", "H"})
+    _ACTOR_IN_CONFIG: frozenset[str] = frozenset({"G", "H", "V"})
 
     def _actor_for(self, role: str, instance: str) -> str:
         """实例标签 → actor 名（空标签就是默认的那个 actor）。

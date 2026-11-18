@@ -1992,7 +1992,9 @@ def build_document(
             revision=1,
             created_at=S.now_iso(),
             updated_at=S.now_iso(),
-            created_by=actor,
+            # GD-01（2026-11-19）：`created_by` 与那两格同一个来源 —— 有实例身份就是
+            # 实例级 actor（`agent-G-<名册名>`），读不到才退回角色名（直调 / 夹具逐字不变）。
+            created_by=str(_owner_ident.get("actor") or actor or "agent-G"),
         )
         row.owner_task = str(_owner_ident.get("task_id") or "")
         row.owner_instance = str(_owner_ident.get("instance") or "")
