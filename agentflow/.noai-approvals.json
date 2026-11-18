@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-19T00:41:13+08:00",
+  "generated_at": "2026-11-19T02:52:23+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -200,11 +200,11 @@
       "path": "src/agentflow/schema.py",
       "glob": "src/agentflow/schema.py",
       "category": "schema-migration",
-      "sha256": "26c98b5646a9fac8c2cdd559fd3f5da42c2c4cb27e3eb5f14af8a6d1d0461789",
+      "sha256": "e87b5639bcb365cfc511ad9a63f8bab882cc1bcd863f70d395d770cac5ed561c",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "BATCH5（p298）：K11 行级归属（Experiment/Document 的 owner_task/owner_instance；rowscope 一处判据；table.* 读侧收窄与 create/update/delete 三处写闸）、K12 E 台账按实例认行（撤销/复用/progress/会审）、K13 实验号按角色分号段（schema.ID_SEGMENTS + alloc_id(segment=) + verify 逐段核）。业主 2026-11-19 授权动禁改区；登记≠批准，reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐行走查。",
-      "changed_this_session": true,
+      "change_note": "CLOSE1（业主 2026-11-19 授权先 apply）：K1 收尾 —— schema 三处带默认值的新列（SearchRequest.submitted_instance / Conjecture.updated_by / LitCandidate 的 claimed_by/lease_until/claimed_at，SCHEMA_VERSION 不动、老行照读）+ tools/verify_tools.py 的 _agent_v 按 identity 现算 actor。登记≠批准：reviewers=[] 保持，需 2 名 reviewer 逐行走查。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": [
@@ -479,11 +479,11 @@
       "path": "src/agentflow/tools/verify_tools.py",
       "glob": "src/agentflow/tools/verify_tools.py",
       "category": "prover-bridge",
-      "sha256": "2f3517389cef5d0edeaf36e82d30e1745a04b4b0ecdc6dde6e455725155fe35a",
+      "sha256": "81d67ad39e8feac009071be39d8f2747af06388b118cca58e83a5c024eec8d8c",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "BATCH5（p298）：K11 行级归属（Experiment/Document 的 owner_task/owner_instance；rowscope 一处判据；table.* 读侧收窄与 create/update/delete 三处写闸）、K12 E 台账按实例认行（撤销/复用/progress/会审）、K13 实验号按角色分号段（schema.ID_SEGMENTS + alloc_id(segment=) + verify 逐段核）。业主 2026-11-19 授权动禁改区；登记≠批准，reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐行走查。",
-      "changed_this_session": true,
+      "change_note": "CLOSE1（业主 2026-11-19 授权先 apply）：K1 收尾 —— schema 三处带默认值的新列（SearchRequest.submitted_instance / Conjecture.updated_by / LitCandidate 的 claimed_by/lease_until/claimed_at，SCHEMA_VERSION 不动、老行照读）+ tools/verify_tools.py 的 _agent_v 按 identity 现算 actor。登记≠批准：reviewers=[] 保持，需 2 名 reviewer 逐行走查。",
+      "changed_this_session": null,
       "reviewers": [],
       "audits": [],
       "also_hits": []
