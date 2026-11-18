@@ -2673,7 +2673,14 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 # p296 → p297（2026-11-18，BATCH3）：`attack.step` 的 returns 补 `plan_state`、
 #   `attack.create_plan` 的 returns 补 `created_by`；`returns=` 不进任何角色段 ⇒
 #   changed = []（十一格与 p296 逐字同值）。
-_FROZEN_PROMPT_VERSION = "p297"
+# p297 → p298（2026-11-19，BATCH5：K11 / K12 / K13）：`specs/e.py` 的 policy 加一条
+#   「实验台账按你自己那一支笔记」（`owner_task` / `owner_instance`；读侧默认只回自己
+#   这一趟、改删别人的行受控拒）、`specs/g.py` 的 policy 加一条「稿件行归写它的那一支笔」
+#   （同一组归属两格；删别人的稿受控拒）。变化格 = E / G 两格；其余九格逐字未动
+#   （版本行已归一）。逐格旧值 → 新值：E 36668798… → f1dbf365…；G 88294e2d… → 46333999…。
+# 十一格不是手抄：`temp/batch5/recompute_digests.py`（导入本文件的 `_surface_digest`，
+# 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['E','G']。
+_FROZEN_PROMPT_VERSION = "p298"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2946,9 +2953,9 @@ _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "B": "46ff85a47a26cbc6ccb8a8156d94523363e9f07f0077dd9c6aa963fb3571ff8f",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
-    "E": "36668798000e529b8c10ad7f506f88e6c7c3773554746b7d8e3b5234a59662a1",
+    "E": "f1dbf3651733508c11a9e1f932ef30cdec5242028da40760f6103175e26f9274",
     "F": "8cc8874360d832eb143caadd89663e8ea34b2081f90aae637a13aff9b59258c4",
-    "G": "88294e2d33ad2b74dc2f8751f26dd75bb2244d2e721ab41dac46e7ae3cf68ab4",
+    "G": "46333999e030602bd2264e6d3007f1359aefc1f8dcd8d1868e830855344f701a",
     "H": "ba8c5a25eff0f8d8a3eda962d352c2886361beb82bda38b864fafcef13747f48",
     "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
     "M": "2ce5f4920c379a68c850d845d3d48b7508431834223ef131592e817214349eca",

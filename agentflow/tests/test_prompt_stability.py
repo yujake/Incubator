@@ -1490,6 +1490,17 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "`attack.create_plan` 的 returns 补 `created_by`；`returns=` 不进角色段 ⇒"
               "十一格与 p296 逐字相同（逐格读数见 `test_agent_prompts.py` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p297 → p298（2026-11-19，BATCH5：K11 / K12 / K13）：`specs/e.py` / `specs/g.py`
+     # 各加一条「行级归谁」的教法（实验台账按实例 / 稿件行归写它的那一支笔），
+     # facts 键集与落点一格没动 ⇒ count / keys_sha256 与 p297 同值。
+     {"version": "p298", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p298（2026-11-19，BATCH5）：`specs/e.py` 的 policy 加一条「实验台账按"
+              "你自己那一支笔记」（`owner_task` / `owner_instance`；读侧默认只回自己这一趟、"
+              "改删别人的行受控拒 `row_not_yours`），`specs/g.py` 的 policy 加一条「稿件行归"
+              "写它的那一支笔」（同一组归属两格；删别人的稿受控拒）。变化格 = E / G，"
+              "其余九格与 p297 逐字相同（逐格读数见 `test_agent_prompts.py` 上方那一段）。"
+              "facts 键集仍 15 格、落点没动。"},
 
 )
 

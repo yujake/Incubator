@@ -2,11 +2,28 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，BATCH3 K5/K6/K7）：
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19，BATCH5 K11/K12/K13）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **321 个 `.py`、300,606 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16214 行（`agent_loop.py`，15106 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,236 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,185 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 BATCH5 K11/K12/K13（行级归属 + E 台账按实例认行 + 实验号按角色分号段）：**
+> 322 个 `.py`（BATCH3 那格 321 → 322：新增 `rowscope.py`，行级归属的唯一判据）、
+> **302,236** 行（上一格 300,606 是 BATCH3 的读数；其后 K9 收尾两笔与本笔一起把总行数推到
+> 现算值——本笔 src 净增 +811：`rowscope.py` +332、`schema.py` +116（归属两格 +
+> `ID_SEGMENTS` / `counter_key` / `counter_bands` / `segment_of_id` / `segment_for_role`）、
+> `table_tools.py` +76（读侧收窄 / 三处写闸 / `meta.row_scope`）、`run_experiment.py` +77
+> （写者身份 + 三处台账读法收窄 + 归属两格）、`verify.py` +42（分号段的连续性与计数器）、
+> `verify_tools.py` +39（`list_experiments` 按实例 / `evidence_for` 显式全库 / `_agent_for` 带 actor）、
+> `store.py` +39（`alloc_id(segment=)` + `raise_counter_to` + `set_counters` 的合法键）、
+> `agent_prompts.py` +17（p298 版本账）、`specs/e.py` +6、`specs/g.py` +6（各一条行级归属的教法）、
+> `author_script.py` +16（落点名带计划号）、`numericproof.py` +12（认行要唯一）、
+> `agent_l/record.py` +12（L 的号段 + 归属两格）、`doc_tools.py` +9（`doc.build_document` 盖归属两格）、
+> `agent_v/core.py` +5（会审带上稿自己的实验号）、`agent_f/core.py` +3、`exhaustionreport.py` +1）。
+> 95 个 `>200` 行函数与 2 段重复 docstring 两格不变（新增函数都在 200 行线内；三格现盘复测 75 / 95 / 2）。
+> 连带：十一格 E / G 两格换值（36668798→f1dbf365、88294e2d→46333999）、`_FROZEN_PROMPT_VERSION`
+> p298、`_VOLATILE_FACT_SETS` 追加 p298 一格、两份 golden 按现值重冻（tool 面契约未变）、
+> ROLE-GUIDE 重生成（234,316 字符）、warm 两档重跑。§3 表不动（本笔没动那几行）。
 > **2026-11-18 BATCH2 K3/K4（计划归属按实例 + 写回锁内合并 + 预算读数）**：
 > 321 个 `.py`、**300,202** 行（HEAD `b7e9548c` 现算 299,839 ⇒ 本笔 src 净增 +363：
 > `agent_f/core.py` +224（`_plan_scope` / `_plan_owner_of` / `_require_own_plan` /

@@ -2802,7 +2802,24 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   `ToolFace.description` 那一节）；十一格与 p296 逐字同值，`_FROZEN_PROMPT_DIGESTS`
 #:   只换 `_FROZEN_PROMPT_VERSION` 那一格。两份 golden 仍按现值重冻（tool 面两处 returns
 #:   变了）；ROLE-GUIDE 重生成；读图行数；warm 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p297"
+#: p297 → p298（2026-11-19，BATCH5：K11 / K12 / K13 + 声明表重冻）：
+#:   ① `specs/e.py` 的 policy 加一条「实验台账按你自己那一支笔记」：`experiments` 行带
+#:     `owner_task` / `owner_instance`；`list_experiments` 与 `table.list("experiments")`
+#:     默认只回自己这一趟的行；`table.update` / `table.delete` 改别人的行受控拒
+#:     （`row_not_yours`）；「改脚本即撤销」只撤自己名下的旧行；
+#:   ② `specs/g.py` 的 policy 加一条「稿件行归写它的那一支笔」：`documents` 行带同一组
+#:     归属两格，删除别人的稿受控拒，通用写口造 / 改稿一律拒（正路仍是 `doc.build_document`）；
+#:   ③ K13 只改发号器与 `schema.ID_SEGMENTS`（E 拿 `experiment` 前半段、L 拿后半段），
+#:     不进任何角色段（号是系统发的，模型不选号）；K11/K12 的其余改动都是实现与拒信。
+#:   变化格 = E / G 两格（①②）；其余九格与 p297 逐字相同（版本行已归一）。
+#:   逐格旧值 → 新值：E 36668798… → 见下方 `_FROZEN_PROMPT_DIGESTS`；G 88294e2d… → 同表。
+#:   十一格是 `temp/batch5/recompute_digests.py`（导入判据自己的 `_surface_digest`，
+#:   先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算。
+#:   连带：十一格表 + `_FROZEN_PROMPT_VERSION`（p298）+ `_VOLATILE_FACT_SETS` 末尾追加一格
+#:   （facts 键集仍 15 格、count / keys_sha256 与 p297 同值 —— 本批只换段文本，没有哪一格
+#:   事实换过落点）；两份 golden 按现值重冻；ROLE-GUIDE 重生成；读图行数；
+#:   warm 两档重跑（真调模型，cap 0.10）。
+PROMPT_VERSION = "p298"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
