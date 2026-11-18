@@ -38,13 +38,20 @@ def _still(cand: Mapping[str, Any], state: str, why: str) -> dict[str, Any]:
 
 
 def signed_candidates(root: Any, *, families: Sequence[str],
-                      role: str = "") -> dict[str, Any]:
+                      role: str = "", owner: str = "") -> dict[str, Any]:
     """本工作区里 `families` 各族的稿 × V 的颁发表 ⇒ 每个稿「该不该提交」。
 
     稿的身份是 `(family, manuscript_id)`，不是单号：E 的两族各走自己的号段
     （`e-proof` / `e-num` 都从 `000000` 起），F 的 `f-proof-000040` 与 B 的
     `b-proof-000040` 是同一条命题的两条路径 —— 三类都是不同的稿。
     只有「同族 + 同号 + 指到多份不同的文件」才是真的 `ambiguous_path`。
+
+    ## `owner`：只扫「我名下」的稿（K8，业主 2026-11-18）
+
+    不给 ⇒ 工作区级（老口径）。给了实例标签 ⇒ 只留这个实例产出的稿；同族里没有
+    实例归属的稿进 `out["unattributed"]`（不算给任何实例：两个 E 实例各有一份
+    稿时，改前每一趟都扫到两族所有稿，谁收工谁就可能提交别人的那一份）。
+    归属来自 `agent_f.pending.manuscript_producer`（产物台账 `producer`/`instance`）。
 
     纯读（不碰 store、不写盘）。读数形状与 `agent_f.submission.submission_candidates`
     同一套（`{checked, candidates, problems, why}`）—— 那一份只认 F 族，E 的两族
@@ -53,7 +60,8 @@ def signed_candidates(root: Any, *, families: Sequence[str],
     from . import vsigns as _VS
 
     wanted = tuple(str(f) for f in families if str(f))
-    out: dict[str, Any] = {"checked": True, "candidates": [], "problems": [], "why": ""}
+    out: dict[str, Any] = {"checked": True, "candidates": [], "problems": [], "why": "",
+                           "unattributed": []}
     root_p = Path(str(root or "."))
     d = _VS.signs_dir(root)
     try:
@@ -213,10 +221,46 @@ def signed_candidates(root: Any, *, families: Sequence[str],
             cand.update(state="unsigned",
                         why="未签 ⇒ 不入提交单（V 的颁发表里没有这一份现行的签）")
         out["candidates"].append(cand)
+    mine = str(owner or "").strip()
+    if mine:
+        kept, unattributed = _mine_only(str(root or ""), out["candidates"], mine)
+        out["candidates"] = kept
+        out["unattributed"] = unattributed
     out["why"] = (f"颁发表里 {len(files)} 份签、盘上 {len(set(report_paths))} 份 "
                   f"{'/'.join(wanted)} 的稿 ⇒ {len(out['candidates'])} 份稿（族+号）"
+                  + (f"（其中 {len(out.get('unattributed') or ())} 份没有实例归属、"
+                     "不算给任何实例）" if mine else "")
                   + (f"；{len(out['problems'])} 条读数问题" if out["problems"] else ""))
     return out
+
+
+def _mine_only(root: str, candidates: list[dict[str, Any]], mine: str
+               ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """只留 `mine` 这个实例产出的稿（K8）；没有实例归属的进第二个返回值。
+
+    归属只有一条来源：`agent_f.pending.manuscript_producer`（产物台账的
+    `producer` / `instance`）。族兜底不算归属 —— 稿族只能说明"哪个角色"，
+    说明不了"哪一趟"，把它算给某个实例就是 K8 记的那个错。
+    """
+    from .agent_f import pending as _FP
+
+    kept: list[dict[str, Any]] = []
+    unattributed: list[dict[str, Any]] = []
+    for cand in candidates:
+        rel = str(cand.get("manuscript") or "")
+        instance = ""
+        if rel:
+            try:
+                got = dict(_FP.manuscript_producer(root, rel))
+            except Exception:  # noqa: BLE001 —— 读不成按无归属处置（不猜一个实例）
+                got = {}
+            instance = str(got.get("producer_instance") or "")
+        if not instance:
+            unattributed.append(cand)
+            continue
+        if instance == mine:
+            kept.append(cand)
+    return kept, unattributed
 
 
 def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
@@ -278,28 +322,40 @@ def _select(candidates: list[dict[str, Any]], *, submitted: Mapping[str, Any],
 
 def auto_submit_for(*, store: Any, root: Any, role: str,
                     families: Sequence[str], task_id: str = "",
-                    stamp: str = "") -> dict[str, Any]:
+                    instance: str = "", stamp: str = "") -> dict[str, Any]:
     """收工自动提交（E 用；F 自己那份在 `agent_f/autosubmit.py`）。
 
-    选谁：`families` 里已签（签 sha == 当前正文 sha）、尚未提交的稿；记号写到
-    「`role` 自己那一行 task」的 `artifacts`（同一套 `mss:` 格式）。幂等按 (族, 稿号)：
-    `e-proof-000000` 已提交不意味着 `e-num-000000` 已提交（E 的两族各走自己的号段，
-    同号是常态）。未签不提交、签后改正文不提交两条与 F 一致；没有 task 行时逐条落
-    `no_task_row`，且不静默。
+    选谁：`families` 里已签（签 sha == 当前正文 sha）、尚未提交、且归这个实例
+    （`instance`，K8）的稿；记号写到「`role` 自己那一行 task」的 `artifacts`
+    （同一套 `mss:` 格式）。幂等按 (族, 稿号)：`e-proof-000000` 已提交不意味着
+    `e-num-000000` 已提交（E 的两族各走自己的号段，同号是常态）。未签不提交、
+    签后改正文不提交两条与 F 一致；没有 task 行时逐条落 `no_task_row`，且不静默。
+
+    ## 「已提交」的幂等面也按实例读（EM-06/EM-08）
+
+    改前这一格读 `role=="E"` 的所有 task 行：另一个 E 实例提交过同一稿号，
+    这一趟就跳过 —— 跨实例共享一份提交记号。给了 `task_id` 就只读我这一行
+    的 `artifacts`（记号本来就写在那一行上）；没有可用行时退回角色级读数并在
+    `problems` 里说清这一格是按角色读的。
     """
     out: dict[str, Any] = {
         "checked": False, "auto_submitted": [], "auto_submitted_count": 0,
         "still_unsubmitted": [], "problems": [], "task_id": str(task_id or ""),
-        "role": str(role or ""), "families": list(families), "why": "",
+        "role": str(role or ""), "families": list(families),
+        "instance": str(instance or ""), "why": "",
+        "unattributed": [],
     }
+    who_mine = str(instance or "").strip()
     try:
-        scan = signed_candidates(root, families=families, role=role)
+        scan = signed_candidates(root, families=families, role=role, owner=who_mine)
     except Exception as exc:  # noqa: BLE001 —— 收工读数坏了不能把「停」带走
         out["why"] = (f"拿签稿扫描没跑成（{type(exc).__name__}: {exc}）"
                       " ⇒ 这一趟没有自动提交（不是「没有要提交的」）")
         return out
     out["checked"] = bool(scan.get("checked"))
     out["problems"] = [str(x) for x in (scan.get("problems") or [])]
+    out["unattributed"] = [dict(x) for x in (scan.get("unattributed") or ())
+                           if isinstance(x, Mapping)]
     candidates = [dict(c) for c in (scan.get("candidates") or [])
                   if isinstance(c, Mapping)]
     #: 这一趟的候选里，每个号出现在哪几族（老记号没写族时"唯一确定"要靠它）。
@@ -312,8 +368,15 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
             if cand_fam not in families_by_mid[cand_mid]:
                 families_by_mid[cand_mid].append(cand_fam)
     tasks, tasks_why = _read_tasks(store)
-    submitted, _, token_problems = _task_tokens(
-        [r for r in tasks if str(r.get("role") or "") == str(role)])
+    #: 「已提交」的幂等面（EM-06/EM-08）：有我这一行就只读这一行 —— 记号本来就写在
+    #: 那一行的 `artifacts` 上，跨实例合并会把别人交过的稿读成"我交过了"。
+    token_rows = [r for r in tasks if str(r.get("task_id") or "") == str(task_id or "")]
+    if not token_rows:
+        token_rows = [r for r in tasks if str(r.get("role") or "") == str(role)]
+        if token_rows:
+            out["problems"].append(
+                "没有可写的自己那一行 ⇒ 「已提交」这一格按角色级读（跨实例共享的旧口径）")
+    submitted, _, token_problems = _task_tokens(token_rows)
     out["problems"] += token_problems
     row: dict[str, Any] | None = None
     row_why = ""
@@ -352,8 +415,10 @@ def auto_submit_for(*, store: Any, root: Any, role: str,
                 write_error = f"事务里找不到 {tid!r} 那一行"
             else:
                 existing: dict[str, dict[str, Any]] = {}
+                # 锁内重算「已提交」：同样只读我这一行（EM-06：跨实例共用一份记号
+                # 会让别人交过的稿在我这里读成"交过了"）。
                 for one in tx.rows("tasks"):
-                    if str(one.get("role") or "") != str(role):
+                    if str(one.get("task_id") or "") != str(tid):
                         continue
                     got, bad = submissions_of(one.get("artifacts") or ())
                     out["problems"] += bad

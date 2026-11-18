@@ -340,9 +340,9 @@ def mark_ingested(*, store: Any, root: Any, manuscript: Any, out: dict[str, Any]
     return out
 
 
-def _producer_row(*, store: Any, role: str, task_id: str = "") -> tuple[dict[str, Any] | None,
-                                                                      str]:
-    """签触发提交要写的那一行：先按召唤链找，再退到该角色最近的一行。
+def _producer_row(*, store: Any, role: str, task_id: str = "",
+                  manuscript: str = "") -> tuple[dict[str, Any] | None, str]:
+    """签触发提交要写的那一行：先按召唤链找，再退到这份稿的产出实例那一行。
 
     与 :func:`_task_row_for` 的两点不同（都是这一条路必须的）：
 
@@ -351,6 +351,14 @@ def _producer_row(*, store: Any, role: str, task_id: str = "") -> tuple[dict[str
     2. 允许写到终态行：签可能晚于收工 —— 这一条路存在的理由就是补上那个次序，所以
        终态不是拒绝理由。`tasks.artifacts` 是 append-only，晚到的提交记号不改变那一行
        已有的任何一格。
+
+    ## 退路改成「这份稿的产出实例」（K8 / EM-07）
+
+    改前退到 `mine[-1]`（该角色最近结束的一行）：签晚于收工时，记号会写进另一个
+    同角色实例的那一行 —— 那一行不是这份稿的主人。现在退路只认一个事实：这份稿在
+    产物台账里的产出实例（`manuscript_producer` 的 `producer_instance`），再在 `tasks`
+    里找那个实例的行（实例标签按 `identity.resolve_identity` 逐行读，名册名优先）。
+    找不到就受控失败（`row=None` + 理由），不拿"最近的一行"凑。
     """
     tasks, why = _read_tasks(store)
     if why:
@@ -366,12 +374,48 @@ def _producer_row(*, store: Any, role: str, task_id: str = "") -> tuple[dict[str
         if str(row.get("role") or "") == str(role):
             return dict(row), ""
         cur = str(row.get("parent_task_id") or "")
+    instance = ""
+    if str(manuscript or "").strip():
+        instance = _manuscript_instance(store, str(manuscript))
     mine = [dict(r) for r in tasks if str(r.get("role") or "") == str(role)]
     if not mine:
         return None, f"`tasks` 里没有 {role} 的行 ⇒ 签触发提交没有可写的台账行"
-    mine.sort(key=lambda r: (str(r.get("ended_at") or ""),
-                             str(r.get("started_at") or "")))
-    return mine[-1], ""
+    if not instance:
+        if len(mine) == 1:
+            # 唯一才认：这个角色只有一行 ⇒ 「哪一行」不是选择，是事实。
+            return mine[0], ""
+        return None, (f"沿召唤链找不到产出方那一行，而这份稿在产物台账里没有实例归属、"
+                      f"这个角色又有 {len(mine)} 行 ⇒ 不猜是哪一行（不拿「最近的一行」当它）")
+    same = [r for r in mine if _row_instance(store, role, str(r.get("task_id") or "")) == instance]
+    if not same:
+        return None, (f"产出实例 {instance} 在 `tasks` 里没有台账号行 ⇒ 签触发提交没有"
+                      "可写的行（不猜一个同角色的行）")
+    same.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+    return same[-1], ""
+
+
+def _manuscript_instance(store: Any, manuscript: str) -> str:
+    """这份稿的产出实例标签（读不出来 / 没有归属 ⇒ 空串，不猜）。"""
+    try:
+        from .agent_f import pending as _FP
+
+        got = dict(_FP.manuscript_producer(str(getattr(store, "root", "") or ""), manuscript))
+    except Exception:  # noqa: BLE001 —— 读不成按「没有归属」处置
+        return ""
+    return str(got.get("producer_instance") or "")
+
+
+def _row_instance(store: Any, role: str, task_id: str) -> str:
+    """一个台账号那一趟的实例标签（`identity.resolve_identity`；台账号兜底不算）。"""
+    try:
+        from . import identity as _ID
+
+        got = dict(_ID.resolve_identity(store, role, task_id=task_id))
+    except Exception:  # noqa: BLE001 —— 读不成 ⇒ 不认这一行
+        return ""
+    if str(got.get("source") or "") == "task_id":
+        return ""
+    return str(got.get("instance") or "")
 
 
 def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
@@ -441,8 +485,17 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
     if tasks_why:
         out["why"] = tasks_why
         return out
-    submitted, _owners, _bad = _task_tokens(
-        [r for r in tasks if str(r.get("role") or "") == role])
+    if not stamp:
+        stamp = S.now_iso()
+    row, row_why = _producer_row(store=store, role=role, task_id=task_id,
+                                 manuscript=rel)
+    if row is None:
+        out.update(checked=True, why=f"没有可写的 task 行：{row_why}")
+        return out
+    out["task_id"] = str(row.get("task_id") or "")
+    # 幂等面只读这一行（EM-08）：记号本来就写在这一行上；跨实例合并会把另一个
+    # 实例交过的同一稿号读成"这一趟已经交过了"。
+    submitted, _owners, _bad = _task_tokens([row])
     hit, _reading = resolve_submission(submitted, family=fam, manuscript_id=mid,
                                        families=_families_for_mid(root, mid))
     if hit is not None:
@@ -450,13 +503,6 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
             f"`tasks.artifacts` 里已经有 {fam} 稿号 {mid} 的提交记号 ⇒ 幂等：不重复写"
             f"（原有 via={hit.get('via') or '（老记号没这一格）'}）"))
         return out
-    if not stamp:
-        stamp = S.now_iso()
-    row, row_why = _producer_row(store=store, role=role, task_id=task_id)
-    if row is None:
-        out.update(checked=True, why=f"没有可写的 task 行：{row_why}")
-        return out
-    out["task_id"] = str(row.get("task_id") or "")
     try:
         token = submission_token(
             manuscript_id=mid, family=fam, path=rel, body_sha=sha,
@@ -475,12 +521,8 @@ def mark_sign_submitted(*, store: Any, root: Any, artifact_sha: Any,
                 out["why"] = f"事务里找不到 {out['task_id']!r} 那一行 ⇒ 提交记号没写"
                 return out
             existing: dict[str, dict[str, Any]] = {}
-            for one in tx.rows("tasks"):
-                if str(one.get("role") or "") != role:
-                    continue
-                got, _bad = submissions_of(one.get("artifacts") or ())
-                for key, rec in got.items():
-                    existing.setdefault(str(key), dict(rec))
+            got, _bad = submissions_of(cur.get("artifacts") or ())
+            existing.update({str(k): dict(v) for k, v in got.items()})
             hit, _reading = resolve_submission(
                 existing, family=fam, manuscript_id=mid,
                 families=_families_for_mid(root, mid))

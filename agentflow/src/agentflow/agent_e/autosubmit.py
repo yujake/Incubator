@@ -22,7 +22,22 @@ FAMILIES_E: tuple[str, ...] = ("e-proof", "e-num")
 
 def auto_submit_at_close(*, store: Any, root: Any, task_id: str = "",
                          stamp: str = "") -> dict[str, Any]:
-    """收工那一趟：把 E 名下已签、尚未提交的稿写进 E 自己那一行的 `artifacts`。"""
+    """收工那一趟：把 E 这个实例名下已签、尚未提交的稿写进 E 自己那一行的 `artifacts`。
+
+    实例标签从 `identity.resolve_identity` 现读（名册名 > 召唤标签 > `tasks.instance`；
+    台账号不算实例标签 —— 那是 K9 记的病）。读不到实例标签时按角色级读，与改前同一
+    口径（并在读数里留 `instance=""`，不是静默）。
+    """
+    identity: dict[str, Any] = {}
+    try:
+        from .. import identity as _ID
+
+        identity = dict(_ID.resolve_identity(store, "E", task_id=str(task_id or "")))
+    except Exception:  # noqa: BLE001 —— 读不成按角色级读（下面 instance=""）
+        identity = {}
+    instance = "" if str(identity.get("source") or "") == "task_id" else str(
+        identity.get("instance") or "")
     return _MC.auto_submit_for(
         store=store, root=root, role="E", families=FAMILIES_E,
-        task_id=str(task_id or ""), stamp=str(stamp or ""))
+        task_id=str(task_id or ""), instance=instance,
+        stamp=str(stamp or ""))

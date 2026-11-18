@@ -123,9 +123,23 @@ def manuscript_producer(root: Any, rel: Any, *, entry: Mapping[str, Any] | None 
     没给就现读 `artifacts.owners_of`。返回：
 
     `checked` / `producer_role` / `producer_source`（`artifacts` | `manuscript_family` |
-    `""`）/ `ledger_producer` / `family` / `family_role` / `producer_conflict` /
+    `""`）/ `producer_instance` / `producer_actor` / `instance_source` / `ledger_producer` /
+    `family` / `family_role` / `producer_conflict` /
     `registered` / `registered_source`（`manuscript_head` | `artifacts` | `""`）/
     `registered_at` / `why`。
+
+    ## 实例归属（K8，业主 2026-11-18）
+
+    「谁写稿，谁就对稿负责」里的「谁」是实例，不是角色：同族两份稿各由不同的 F
+    实例产出时，每一趟只该管自己那一份。实例从产物台账那一行读，两路事实：
+
+    - `instance` 字段（K1/K2 起 `artifacts.record(instance=…)` 会写；写稿口
+      `manuscriptform.commit_manuscript` 已经传它）；
+    - `producer` 是实例级 actor（`agent-F-F1`）时由 `identity.split_actor` 拆出标签
+      （老台账 / 别的写口只写 actor 的那一档）。
+
+    两路都没有 ⇒ `producer_instance=""`（已登记但没有实例归属）：它不进任何实例的
+    「我名下」，读侧另给 `unattributed` 记账，不静默算给谁。
 
     三态：台账读不出来 ⇒ `checked=False`（这一份的归属没查成，不折成「没有登记」）。
     """
@@ -136,6 +150,7 @@ def manuscript_producer(root: Any, rel: Any, *, entry: Mapping[str, Any] | None 
     head = dict(entry or {})
     out: dict[str, Any] = {
         "checked": True, "producer_role": "", "producer_source": "",
+        "producer_instance": "", "producer_actor": "", "instance_source": "",
         "ledger_producer": "", "family": "", "family_role": "",
         "producer_conflict": False, "registered": False, "registered_source": "",
         "registered_at": "", "why": "",
@@ -157,15 +172,50 @@ def manuscript_producer(root: Any, rel: Any, *, entry: Mapping[str, Any] | None 
     records = [dict(r) for r in (owners or ()) if isinstance(r, Mapping)]
     last = records[-1] if records else {}
     ledger_producer = str(last.get("producer") or "").strip()
+    ledger_instance = str(last.get("instance") or "").strip()
     producer_set = set(str(x) for x in _MP.PRODUCER_OF_FAMILY.values())
+    actor_role, actor_instance = "", ""
+    if ledger_producer:
+        from .. import identity as _ID
+
+        for one in sorted(producer_set):
+            got = _ID.split_actor(one, ledger_producer)
+            if got.get("matched"):
+                actor_role = one
+                actor_instance = str(got.get("instance") or "")
+                break
     if ledger_producer in producer_set:
         out.update(ledger_producer=ledger_producer, producer_role=ledger_producer,
+                   producer_source="artifacts")
+    elif actor_role:
+        # K1/K2 之后写的是实例级 actor（`agent-F-F1`）：角色从 actor 前缀读，
+        # 归因到「那个实例」而不是折回角色桶。
+        out.update(ledger_producer=ledger_producer, producer_role=actor_role,
                    producer_source="artifacts")
     elif out["family_role"]:
         # 台账写了一个不产出手稿的角色（或外部生产者）：手稿只能由 `ROLE_FAMILIES`
         # 那几个角色写出来，自报不改写事实（与 `manuscriptproducers` 同一条纪律）。
         out.update(producer_role=out["family_role"],
                    producer_source="manuscript_family")
+    # ---- 实例归属只在「台账说是谁写的」那一档才认（K8） ----------------------
+    if out["producer_source"] == "artifacts" and out["producer_role"]:
+        from .. import identity as _ID
+
+        if ledger_instance:
+            out.update(producer_instance=ledger_instance,
+                       producer_actor=_ID.actor_for(out["producer_role"], ledger_instance),
+                       instance_source="artifacts.instance")
+        elif actor_instance:
+            out.update(producer_instance=actor_instance, producer_actor=ledger_producer,
+                       instance_source="artifacts.producer")
+        else:
+            # 台账只写了角色桶（`producer="F"`、无 instance）：这一份没有实例归属。
+            out.update(producer_actor=ledger_producer, instance_source="")
+    elif out["producer_source"] == "manuscript_family":
+        from .. import identity as _ID
+
+        out.update(producer_actor=_ID.actor_for(out["producer_role"], ""),
+                   instance_source="")
     if (ledger_producer and out["family_role"]
             and ledger_producer != out["family_role"]):
         out["producer_conflict"] = True
@@ -307,6 +357,9 @@ def scan_registered(root: Any, *, family: Any = None,
                      "family": fam,
                      "producer_role": str(got.get("producer_role") or ""),
                      "producer_source": str(got.get("producer_source") or ""),
+                     "producer_instance": str(got.get("producer_instance") or ""),
+                     "producer_actor": str(got.get("producer_actor") or ""),
+                     "instance_source": str(got.get("instance_source") or ""),
                      "producer_checked": bool(got.get("checked")),
                      "registered_at": str(got.get("registered_at") or ""),
                      "why": str(got.get("why") or "")})
@@ -375,6 +428,8 @@ def manuscript_reading(root: Any, row: Mapping[str, Any], *,
         "family": str(row.get("family") or ""),
         "producer_role": str(row.get("producer_role") or ""),
         "producer_source": str(row.get("producer_source") or ""),
+        "producer_instance": str(row.get("producer_instance") or ""),
+        "producer_actor": str(row.get("producer_actor") or ""),
         "registered_at": str(row.get("registered_at") or ""),
         "sha": sha,
         "state": state,
@@ -388,23 +443,49 @@ def manuscript_reading(root: Any, row: Mapping[str, Any], *,
     return out
 
 
-def unsubmitted_reading(root: Any, *, producer: Any = None, family: Any = None,
+def unsubmitted_reading(root: Any, *, producer: Any = None, owner: Any = None,
+                        family: Any = None,
                         families: Any = None) -> dict[str, Any]:
     """已登记、V 签还没到的稿（`count` > 0 ⇒ 这一拍有活）。
 
-    `producer` 给了就只留这个产出者的稿（挂机判据按角色问自己名下那几份）；
-    不给 ⇒ 全部产出者（M 的读数要逐份看见）。返回
-    `{checked, count, items, rows, problems, why, producer}`；`items` 每项是
-    :func:`manuscript_reading` 的那一格（带 `next_action` / `waiting_sec`）。
+    ## 谁问「我名下」：`owner`（K8，业主 2026-11-18）
+
+    改前这一格只认 `producer`（角色）：「哪些稿要送审」被实现成「哪个角色的每一趟
+    都对同族所有稿负责」—— 两个 F 实例各有一份待签稿时，每一趟都读到 2 份
+    （`temp/AUDIT-VD`：M 的挂机第 4 条按角色筛待签稿 ⇒ 任何 F 实例都读到 count=2）。
+
+    现在两条并立、各有各的读者：
+
+    - `owner` 给了（实例标签，或实例级 actor）⇒ 只留这个实例产出的稿；
+      同族里没有实例归属的那些进 `unattributed`（不静默算给谁，也不静默丢掉）；
+    - `producer` 给了（角色）⇒ 只留这个角色产出的稿（M 的全局读数 / 角色级直调）；
+    - 两个都不给 ⇒ 全部（M 要逐份看见）。
+
+    返回 `{checked, count, items, rows, problems, why, producer, owner, unattributed}`；
+    `items` 每项是 :func:`manuscript_reading` 的那一格（带 `next_action` /
+    `waiting_sec`）。
     """
     scan = scan_registered(root, family=family, families=families)
     rows = [dict(r) for r in (scan.get("rows") or []) if isinstance(r, Mapping)]
     who = str(producer or "").strip()
     if who:
         rows = [r for r in rows if str(r.get("producer_role") or "") == who]
+    mine = str(owner or "").strip()
+    unattributed: list[dict[str, Any]] = []
+    if mine:
+        kept: list[dict[str, Any]] = []
+        for row in rows:
+            instance = str(row.get("producer_instance") or "")
+            actor = str(row.get("producer_actor") or "")
+            if instance == mine or (actor and actor == mine):
+                kept.append(row)
+            elif not instance:
+                unattributed.append(row)
+        rows = kept
     out = {"checked": bool(scan.get("checked")), "count": 0, "items": [],
            "rows": rows, "problems": list(scan.get("problems") or []),
-           "why": "", "producer": who}
+           "why": "", "producer": who, "owner": mine,
+           "unattributed": unattributed}
     items: list[dict[str, Any]] = []
     for row in rows:
         got = manuscript_reading(root, row)
@@ -418,6 +499,13 @@ def unsubmitted_reading(root: Any, *, producer: Any = None, family: Any = None,
     elif items:
         out["why"] = (f"名下 {len(items)} 份已登记、V 签还没到的稿："
                       + "、".join(manuscript_cell_text(x) for x in items[:6]))
+    elif mine:
+        out["why"] = (f"名下没有「已登记、V 签还没到」的稿"
+                      f"（{scan.get('why') or '查过了'}）")
+        if unattributed:
+            out["why"] += (f"；另有 {len(unattributed)} 份已登记稿没有实例归属"
+                           "（不计入任何实例）："
+                           + "、".join(str(r.get("manuscript") or "") for r in unattributed[:3]))
     elif who:
         out["why"] = (f"名下没有「已登记、V 签还没到」的稿"
                       f"（{scan.get('why') or '查过了'}）")

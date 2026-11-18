@@ -240,8 +240,13 @@ def _manuscript_action_text(rows: Any) -> str:
             "M 的边表只到 D，不直连 F / E / V；送审与拿签都由 D 那一支走完")
 
 
-def _manuscripts_unsigned(store: Any) -> dict[str, Any]:
+def _manuscripts_unsigned(store: Any, *, role: str = "", instance: str = "") -> dict[str, Any]:
     """已登记、V 签还没到的稿（M 的读数；INV7 第 ⑤ 条 / 业主 2026-11-18）。
+
+    `role` / `instance` 给了就只数这个实例名下的稿（K8）：M 的巡查默认不给
+    （工作区级读数 —— M 是主控，全局就是它的"我名下"，见 K10 的 MP-01/02）；
+    产出者实例自查时给实例标签，同族里没有实例归属的稿进 `unattributed`，
+    不算给谁、也不静默丢掉。
 
     ## 为什么复用 `agent_f.pending` 而不是自己扫 `reports/`
 
@@ -264,15 +269,24 @@ def _manuscripts_unsigned(store: Any) -> dict[str, Any]:
     （调用方 fail-closed），不折成"没有等签的稿"。
     """
     out: dict[str, Any] = {"checked": True, "count": 0, "rows": [],
-                           "problems": [], "why": ""}
+                           "problems": [], "why": "", "owner_instance": "",
+                           "unattributed": []}
     try:
         from .agent_f import pending as FP
 
-        got = dict(FP.unsubmitted_reading(getattr(store, "root", "")))
+        got = dict(FP.unsubmitted_reading(
+            getattr(store, "root", ""),
+            producer=(str(role or "").strip() or None),
+            owner=(str(instance or "").strip() or None)))
     except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
         out.update(checked=False,
                    why=f"已登记稿读数没查成（{type(exc).__name__}: {exc}）")
         return out
+    out["owner_instance"] = str(instance or "").strip()
+    out["unattributed"] = [{"manuscript": str(r.get("manuscript") or ""),
+                            "producer_role": str(r.get("producer_role") or "")}
+                           for r in (got.get("unattributed") or ())
+                           if isinstance(r, Mapping)]
     out["problems"] = [str(x) for x in (got.get("problems") or ())]
     if not bool(got.get("checked")):
         out.update(checked=False,
@@ -302,7 +316,7 @@ def _manuscripts_unsigned(store: Any) -> dict[str, Any]:
     return out
 
 
-def pending_reading(store: Any) -> dict[str, Any]:
+def pending_reading(store: Any, *, role: str = "", instance: str = "") -> dict[str, Any]:
     """本工作区"研究还没做完"的读数（纯读；返回 `checked / pending / gaps ...`）。
 
     ## 返回键
@@ -321,6 +335,12 @@ def pending_reading(store: Any) -> dict[str, Any]:
 
     三态纪律见模块 docstring：读不出来时 `checked=False` 且 `pending=True`，
     绝不折成"研究做完了"。
+
+    ## `role` / `instance`：按实例读数（K8）
+
+    不给 ⇒ 工作区级（M 的巡查；M 是主控，全局就是「我名下」）。给了 ⇒
+    `manuscript_unsigned` 只数这个实例产出的稿，同族里没有实例归属的稿进
+    `counts["manuscript_unsigned_unattributed"]`（不静默算给任何实例）。
     """
     out: dict[str, Any] = {
         "checked": False, "pending": True, "gaps": [], "next_action": None,
@@ -374,7 +394,7 @@ def pending_reading(store: Any) -> dict[str, Any]:
                         "reason": f"{type(exc).__name__}: {exc}"}
     # 盘上「已登记、V 签还没到」的 F 稿（INV7）。与上面的命题行读数分开取、分开列：
     # 它们量的是不同阶段（命题台账行 vs 盘上的稿），一份稿在 B 收录之前没有 statements 行。
-    manuscripts = _manuscripts_unsigned(store)
+    manuscripts = _manuscripts_unsigned(store, role=role, instance=instance)
 
     counts: dict[str, Any] = {
         "concepts": len(concepts),
@@ -383,6 +403,7 @@ def pending_reading(store: Any) -> dict[str, Any]:
         "statements": len(live_statements),
         "statements_unsigned": int(unsigned.get("count") or 0),
         "manuscript_unsigned": int(manuscripts.get("count") or 0),
+        "manuscript_unsigned_unattributed": len(manuscripts.get("unattributed") or ()),
         "documents": len(documents),
         "literature": len(literature),
         "questions_open": len(open_questions),

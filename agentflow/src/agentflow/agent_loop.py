@@ -5145,6 +5145,42 @@ def closing_gate_requirement(loop: "AgentLoop") -> dict[str, Any]:
     return out
 
 
+def loop_instance(loop: Any) -> dict[str, Any]:
+    """这一趟的实例标签（K8/K9 共用；不是角色、也不是台账号）。
+
+    唯一来源是 `identity.resolve_identity`（名册名 > 召唤标签 > `tasks.instance`），
+    但有一条刻意的收窄：台账号不算实例标签。`resolve_identity` 在四路都空时
+    退到 `task_id`（那是"至少还有个稳定键"的兜底），而这里问的是「同族的哪一趟
+    是我」—— 拿台账号当标签会让"我名下"随台账号漂移（同一实例换个号就认不出
+    自己上一趟的稿，正是 K9 记的病）。所以退到台账号那一档按「没有实例标记」读。
+
+    模块级函数（不是方法）：`_final_gate_reading` 那一路有只带四格属性的壳
+    （`tests/test_yi_unsigned_plan_blocks_closing.py` 的 `_Shell`），它也要问这一格。
+
+    返回 `{checked, instance, source, why, actor}`（`checked=False` = 身份读不成，
+    调用方按三态处置，不折成「没有实例」）。
+    """
+    try:
+        from . import identity as _ID
+
+        got = dict(_ID.resolve_identity(
+            getattr(loop, "store", None), str(getattr(loop, "role", "")),
+            task_id=getattr(loop, "my_task_id", ""),
+            instance=str(getattr(loop, "instance", "") or "")))
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        return {"checked": False, "instance": "", "source": "", "actor": "",
+                "why": f"实例身份读不出来（{type(exc).__name__}: {exc}）"}
+    if str(got.get("source") or "") == "task_id":
+        return {"checked": bool(got.get("checked")), "instance": "", "source": "",
+                "actor": "", "why": ("实例身份只读得到台账号 ⇒ 不拿台账号当实例标签"
+                                     "（这一趟按角色级读）")}
+    return {"checked": bool(got.get("checked")),
+            "instance": str(got.get("instance") or ""),
+            "source": str(got.get("source") or ""),
+            "actor": str(got.get("actor") or ""),
+            "why": str(got.get("conflict") or "")}
+
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -7270,6 +7306,10 @@ class AgentLoop:
                                or "先查 `conductor.state` 的 research 读数"))
         return "\n".join(lines) + "\n"
 
+    def _my_instance(self) -> dict[str, Any]:
+        """这一趟的实例标签（`loop_instance` 的薄包装；见那一处的口径）。"""
+        return loop_instance(self)
+
     def _manuscript_pending(self) -> dict[str, Any]:
         """产出者名下「已登记、V 签还没到」的稿（本拍有没有待办的第 4 条）。
 
@@ -7285,9 +7325,10 @@ class AgentLoop:
         - 哪些角色是产出者：`manuscriptopen.ROLE_FAMILIES`（手稿写口的角色面，
           唯一一张角色-族表）⇒ 今天就是 F / E / B；不在表里的角色返回"查过了、
           这一条与它无关"（`checked=True, count=0`），不因这一条被拦；
-        - 这一份稿的产出者是谁：`agent_f.pending.unsubmitted_reading(producer=…)`
-          → `manuscript_producer`（台账 `producer` 字段优先、稿族兜底，见那一处
-          的 docstring）。
+        - 这一份稿的产出者是谁：`agent_f.pending.unsubmitted_reading(owner=…)`
+          → `manuscript_producer`（台账 `producer` / `instance` 优先、稿族兜底）。
+          「我名下」是实例，不是角色（K8）：`_my_instance()` 读得到实例标签时
+          只留这个实例产出的稿；同族里没有实例归属的稿进 `unattributed`，不算给谁。
 
         ## 三态
 
@@ -7295,7 +7336,9 @@ class AgentLoop:
         fail-closed 挡挂机（"不知道有没有等签的稿"不许折成"没有"）。
         """
         empty: dict[str, Any] = {"checked": True, "count": 0, "items": [],
-                                 "why": "", "problems": [], "producer": ""}
+                                 "why": "", "problems": [], "producer": "",
+                                 "owner_instance": "", "owner_source": "",
+                                 "unattributed": []}
         role = str(self.role)
         try:
             from .agent_f import pending as _FP
@@ -7315,8 +7358,14 @@ class AgentLoop:
         if not root:
             return {**empty, "checked": False, "producer": role,
                     "why": "没有工作区根 ⇒ 已登记稿这一格没查成（不是「没有稿」）"}
+        # K8（业主 2026-11-18）：问的是「我名下」的稿 —— 实例标签读得到就按实例
+        # 过滤（两个 F 实例各有一份待签稿时各自只读到 1 份）；读不到实例标签的那一
+        # 档（直调 / 单实例装配 / 只拿得到台账号）按角色级读，与改前同一口径。
+        me = self._my_instance()
+        instance = str(me.get("instance") or "")
         try:
-            got = dict(_FP.unsubmitted_reading(root, producer=role))
+            got = dict(_FP.unsubmitted_reading(
+                root, owner=instance or None, producer=role))
         except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"，不是"没有"
             return {**empty, "checked": False, "producer": role,
                     "why": (f"已登记稿读数没查成（{type(exc).__name__}: {exc}）"
@@ -7325,7 +7374,10 @@ class AgentLoop:
                 "items": [dict(x) for x in (got.get("items") or [])],
                 "why": str(got.get("why") or ""),
                 "problems": [str(x) for x in (got.get("problems") or [])],
-                "producer": role}
+                "producer": role,
+                "owner_instance": instance,
+                "owner_source": str(me.get("source") or ""),
+                "unattributed": [dict(x) for x in (got.get("unattributed") or [])]}
 
     def _manuscript_block(self) -> str:
         """提示词里那段「你名下已登记、还没送 V 的稿」（产出者专用；没有 ⇒ 空串）。
@@ -8453,10 +8505,13 @@ class AgentLoop:
                             "不知道有没有未签的计划/稿 ⇒ 按『没查成』挡（不是『都签了』）"))
             return out
         families = producer_families[role]
+        # K8：这一道收工门也只量「我名下」的稿（别人的待签稿不是我的欠账）。
+        gate_instance = str(loop_instance(self).get("instance") or "")
         try:
             from .manuscriptclosing import signed_candidates
 
-            scan = signed_candidates(root, families=families, role=role)
+            scan = signed_candidates(root, families=families, role=role,
+                                     owner=gate_instance)
         except Exception as exc:  # noqa: BLE001 —— 读不成不许折成「都签了」
             out.update(applicable=True, checked=False, complete=False,
                        reason=f"{type(exc).__name__}: {exc}",
