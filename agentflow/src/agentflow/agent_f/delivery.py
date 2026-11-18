@@ -501,6 +501,81 @@ def _assessment_conflicts(assessment: Mapping[str, Any], *, total: int,
     return out
 
 
+#: 计划进终态的闸读出来的那一格（`step` 的返回值 / `_derive_status` 共读）。
+#:
+#: 业主 2026-11-18 逐字：「逻辑反了。稿没完工，计划本身就关不掉」——所以计划进
+#: `stalled` / `resolved` / `supported_not_proved` 之前必须先问一句"它名下的稿拿到
+#: V 签了没有"。这一格就是那一问的读数；`finished=False` ⇒ 计划不许关。
+FINISH_GATE_WHY_PREFIX = "稿没完工，计划本身就关不掉"
+
+
+def unfinished_manuscripts(reading: Mapping[str, Any]) -> dict[str, Any]:
+    """这一份交差读数里「还没拿到 V 签的稿」逐条（业主 2026-11-18 的「完工」判据）。
+
+    ## 判据只读稿，不读计划状态
+
+    「完工」在这里是「稿级」事实：`out/vsigns/` 的颁发表里有一份签指着这份稿的现行
+    正文（`vsign.delivery_reading` 四档里的 `signed`）。计划状态（`attacking` /
+    `stalled` / `resolved` …）一个字都不参与 —— 那是这次要修的反向逻辑：
+    “计划停了所以稿也不能写”。判据反过来：稿没签，所以计划不许停。
+
+    ## 读哪一格、为什么不是 `still_unsubmitted`
+
+    `delivery_summary` 的 `still_unsubmitted` 回答的是「还没提交的稿」（含已签、
+    只是没写进 `tasks.artifacts` 的那些 —— 那一格里的 `signed` 恒为假，不代表"没签"），
+    拿它判「完工」会把签好的稿也算成未完工。`unfinished` 是成果级读数（含没有稿
+    身份的 statements 行）。所以这一格读 `outputs`（逐条成果的全文读数）里有稿身份、
+    且 `claim != proof` 的那些：`claim` 的口径只有一处（:func:`claim_of`），
+    `proof` 就是"有 V 签"。明确放弃（`abandoned`）的不算未完工 —— 那是处置过了。
+
+    一份计划名下没有要签的稿（0 条成果，或成果已经签了）⇒ 没有「稿没完工」这回事。
+
+    三态纪律：`checked=False`（交差读数没查成）不许折成「没有未签稿」——
+    说不出「完工」就不许关计划，理由如实写出来。
+    """
+    got = dict(reading or {})
+    checked = bool(got.get("checked"))
+    items: list[dict[str, Any]] = []
+    for one in got.get("outputs") or ():
+        row = dict(one or {})
+        if not (str(row.get("manuscript") or "").strip()
+                or str(row.get("manuscript_id") or "").strip()):
+            continue          # 没有稿身份的成果不归这一格（它没有可"完工"的稿）
+        if bool((row.get("abandoned") or {}).get("abandoned")):
+            continue          # 明确放弃是处置过了（不计入"未完工"）
+        if str(row.get("claim") or "") == CLAIM_PROOF or row.get("signed") is True:
+            continue          # 有 V 签 = 完工
+        items.append(row)
+    out: dict[str, Any] = {
+        "checked": checked,
+        "finished": False,
+        "unfinished": True,
+        "count": len(items) if checked else None,
+        "items": items,
+        "why": "",
+    }
+    if not checked:
+        out["why"] = (
+            "交差读数没查成 ⇒ 说不出「稿已完工」，按不会完处理（"
+            + str(got.get("coverage_why") or got.get("why") or "没有理由")
+            + "）")
+        return out
+    if items:
+        named = "、".join(
+            str(x.get("manuscript") or f"mss:{x.get('manuscript_id')}")
+            + f"[{x.get('claim_label') or x.get('state') or '未签'}]"
+            for x in items[:6])
+        out["unfinished"] = True
+        out["why"] = (f"{FINISH_GATE_WHY_PREFIX}：还有 {len(items)} 份稿没拿到 V 签"
+                      f"（{named}{' 等' if len(items) > 6 else ''}）⇒ 计划不进终态；"
+                      "拿签或 F 自己放弃（`attack.abandon_plan`）才是出路")
+        return out
+    out.update(finished=True, unfinished=False,
+               why=("查过了：这一条计划名下的稿都已拿到 V 签（或没有要签的稿）"
+                    "⇒ 稿已完工，计划可以进终态"))
+    return out
+
+
 def delivery_summary(*, outputs: Sequence[Mapping[str, Any]],
             history: Sequence[Mapping[str, Any]] = (),
             subgoals: Sequence[Mapping[str, Any]] = (), rounds: int = 0,

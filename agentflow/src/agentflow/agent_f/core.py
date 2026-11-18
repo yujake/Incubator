@@ -4718,23 +4718,86 @@ class _Core:
             "in_flight": True,
             "count_attempt": True,
         }
-    def _derive_status(self, subgoals: Sequence[Mapping[str, Any]], row: Mapping[str, Any]) -> str:
-        """按子目标的状态推导计划状态（FC-22 / FC-25 的落地）。"""
+    def _finish_gate(self, plan: Mapping[str, Any]) -> dict:
+        """这一条计划的稿「完工了没有」—— 计划进终态的唯一闸（业主 2026-11-18）。
+
+        业主逐字：「逻辑反了。稿没完工，计划本身就关不掉」。改前 `stalled` /
+        `resolved` / `supported_not_proved` 三条路都只读计划自己的字段
+        （`history` 的 `outcome` / `rounds` / 子目标状态），一条都不读 V 签；
+        而计划一进终态，`step` 的终态早退就把 `attack.step(product=…)` 这个唯一写口
+        也关掉了（F 没有 `fs.write` 自己那份稿的权限）⇒ 未签稿被实质锁死。
+
+        这里的判据只有一个：`agent_f/delivery.py::unfinished_manuscripts` ——
+        它读「稿级」的签（`vsigns` 的颁发表），不读计划状态。返回
+        `{checked, finished, unfinished, count, items, why}`：
+
+        - `finished=True` ⇒ 计划可以进终态（稿都拿到 V 签，或这条计划没有要签的稿）；
+        - `finished=False` ⇒ 不许进终态（含"没查成"：说不出完工就不许关）；
+        - `items` 逐份点名还没签的稿（稿路径 / 稿号 / 签的档位），让下一步可执行。
+
+        为什么把这一格放在 `AgentF` 上、而不是每个调用点各读一次：`step` 的四处
+        （终态早退 / 连续无进展 / 轮数用尽 / 子目标全关）与 `_derive_status` 都要问
+        同一句话，各写一份就会漂成"这一处按签、那一处按计划状态"。
+        """
+        from . import delivery as _DL
+
+        row = dict(plan or {})
+        out: dict = {"checked": False, "finished": False, "unfinished": True,
+                     "count": None, "items": [], "why": ""}
+        try:
+            reading = self._delivery_reading(row)
+        except Exception as exc:  # noqa: BLE001 —— 读不成是「说不出完工」，不是「已完工」
+            out["why"] = (
+                "交差读数没跑成（"
+                f"{type(exc).__name__}: {exc}）⇒ 说不出「稿已完工」，按不会完处理")
+            return out
+        got = _DL.unfinished_manuscripts(reading)
+        out.update(checked=bool(got.get("checked")),
+                   finished=bool(got.get("finished")),
+                   unfinished=bool(got.get("unfinished")),
+                   count=got.get("count"),
+                   unfinished_count=got.get("count"),
+                   items=list(got.get("items") or []),
+                   why=str(got.get("why") or ""),
+                   delivery_state=str(reading.get("state") or ""))
+        return out
+
+    def _derive_status(self, subgoals: Sequence[Mapping[str, Any]],
+                       row: Mapping[str, Any], *,
+                       finish_gate: Mapping[str, Any] | None = None) -> str:
+        """按子目标的状态推导计划状态（FC-22 / FC-25 的落地）。
+
+        ## 2026-11-18：`resolved` / `supported_not_proved` 也要过「稿已完工」这道闸
+
+        改前这里只看子目标状态：三条子目标全 `closed` 就直接 `resolved` ——
+        而子目标"关"与"稿拿到 V 签"是两件事（`closed` 的凭据是 proof 级实验 /
+        穷举；稿的签由 V 的颁发表给）。计划一 `resolved`，`step` 的终态早退就关掉了
+        它唯一的写口 ⇒ 稿还没签也改不动。业主 2026-11-18：「稿没完工，计划本身就关不掉」。
+
+        所以 `resolved` / `supported_not_proved` 现在都要先问
+        :meth:`_finish_gate`；`finished=False` ⇒ 保持 `attacking`（推进态），
+        让 `step` 继续把稿写下去。`finish_gate` 可以由调用方传入（`step` 已经算过一次，
+        避免同一拍读两遍盘）；不传就在这里现算。
+        """
         if not subgoals:
             # 空计划：没有待办也没有证据。这与"全部 closed"在字面上true，
             # 但在语义上是"这个计划什么都没做" —— 所以不当成 resolved。
             return str(row.get("status") or "open")
 
         statuses = [str(s.get("status") or "") for s in subgoals]
+        candidate = ""
         if all(st == "closed" for st in statuses):
-            return "resolved"
-
-        if all(st in ("closed", "supported_not_proved") for st in statuses):
-            if not any(s.get("proof_experiment_ids") for s in subgoals):
-                # 关键一分：子目标都有数值支持，但一条 proof 级证据都没有。
-                # 这时若返回 resolved 就是把 cross_check 当成了证明（FC-22 要防的正是这件事）。
-                return "supported_not_proved"
-            return "resolved"
+            candidate = "resolved"
+        elif all(st in ("closed", "supported_not_proved") for st in statuses):
+            # 关键一分：子目标都有数值支持，但一条 proof 级证据都没有。
+            # 这时若返回 resolved 就是把 cross_check 当成了证明（FC-22 要防的正是这件事）。
+            candidate = ("resolved" if any(s.get("proof_experiment_ids") for s in subgoals)
+                         else "supported_not_proved")
+        if not candidate:
+            return "attacking"
+        gate = dict(finish_gate) if finish_gate is not None else self._finish_gate(row)
+        if gate.get("finished"):
+            return candidate
         return "attacking"
     def _compose_best_partial(self, subgoals: Sequence[Mapping[str, Any]], rounds: int) -> str:
         """由各子目标的实际进展合成一段 `best_partial`。

@@ -4,9 +4,17 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、298,859 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、299,134 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-18 PLANLIFE①（计划生命周期：稿没完工，计划本身就关不掉）**：
+> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,881（HEAD `cd072285` 现算）→ **299,134**
+> （本笔 src 增量 +253：`agent_f/step.py` +104（四条进终态的路各过 `_finish_gate`）、
+> `agent_f/delivery.py` +75（`unfinished_manuscripts`：只读稿级的签）、
+> `agent_f/core.py` +63（`_finish_gate` + `_derive_status` 的闸）、
+> `agent_f/create_plan.py` +11（名额与判重共用 `TERMINAL_STATUSES`））。
+> 95 个 `>200` 行函数与 2 段重复 docstring 两格不变（三个新函数都在 200 行线内；
+> 三格现盘复测 75 / 95 / 2）。§3 表不动（本笔没动那几行）。
 > **2026-11-18 LAST2（`_quote_carrier_write` 的守卫：同一份载体同一遍不回写，标记的稿号 / 稿名只增不减）**：
 > 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,835 → **298,859**（本笔 src 增量 +24：
 > `agent_b/register_statement.py` +24 —— 重复登记那一支不再把只换了 `at` 的同一份标记回写成

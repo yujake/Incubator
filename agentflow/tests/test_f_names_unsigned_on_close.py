@@ -13,11 +13,19 @@
 
 | # | 造什么 | 期望 |
 |---|---|---|
-| a | F 名下 2 条未签、它走到收工出口 | 收工读数逐条点名这 2 条（命题号 + 手稿）+ 出路举例；`legal_stop` 假 |
+| a | F 名下 2 条未签、它走到「轮数用尽」那一拍 | 计划不关（业主 2026-11-18），交差读数逐条点名这 2 条 + 出路举例；`legal_stop` 假 |
 | b | 同上，但 F 写了 `next_move` / `why` | 留痕被读到（不判它选了哪条）；未签仍拦着收工 |
 | c | 研究了、尽力了、0 条成果 | 自评=没成果；`is_failure` 假、`legal_stop` 真（合法收工） |
 | d | 明确放弃一条（带时间与理由） | 不再算未签；`state=outputs_settled`、`legal_stop` 真 |
 | e | 反真空：把「点名未签」打桩成空 | a 那组断言必须红（静默收工不许通过） |
+
+## 2026-11-18：a/b 的出口从「stop」改成「不关」
+
+业主裁定逐字：「逻辑反了。稿没完工，计划本身就关不掉」。改前 a/b 走的正是"轮数用尽 ⇒
+`action=stop` + 逐条点名未签"那一拍 —— 而那一步同时关掉了 `attack.step(product=…)`
+这个唯一写口（真机 lp-ball-8 的 v3 就是这样被挡在 19:47:39）。现在轮数用尽也不再关：
+`action` 不是 `stop`、计划保持 `attacking`，未签的逐条点名照旧（判据的核心没变，
+变的是"点名之后能不能关"）。b 与 e 的判据一字未动，只是跟着这条出口换读数。
 """
 from __future__ import annotations
 
@@ -116,11 +124,13 @@ def _two_unsigned_outputs(st: Store) -> tuple[AgentF, str, list[str]]:
     return f, str(pid), sids
 
 
-def _close_reading(f: AgentF, pid: str) -> dict:
-    """走到收工出口（轮数用尽 ⇒ stop），把那一趟的返回值拿回来。"""
-    out = f.step(pid)
-    assert out.get("action") == "stop", out
-    return out
+def _step_once(f: AgentF, pid: str) -> dict:
+    """走到「轮数用尽」那一拍，把那一趟的返回值拿回来。
+
+    2026-11-18 起这一拍不再是收工出口（稿没签就关不掉），所以这里不断言 `stop`：
+    它只负责"走一趟、把读数拿回来"，出口口径由各条判据自己钉。
+    """
+    return f.step(pid)
 
 
 def _assert_close_names(reading: dict, sids: list[str]) -> None:
@@ -146,16 +156,20 @@ def _assert_close_names(reading: dict, sids: list[str]) -> None:
 
 # ============================================================ a：2 条未签 ⇒ 逐条点名
 def test_a_closing_with_two_unsigned_outputs_names_both(tmp_path):
-    """a 造「F 名下 2 条未签、它走到收工出口」⇒ 逐条点名 + 两条出路（举例）+ 不许收工。"""
+    """a 造「F 名下 2 条未签、它走到轮数用尽那一拍」⇒ 逐条点名 + 两条出路（举例）+ 不许收工。"""
     st = _ws(tmp_path)
     f, pid, sids = _two_unsigned_outputs(st)
-    out = _close_reading(f, pid)
+    out = _step_once(f, pid)
     _assert_close_names(dict(out.get("delivery") or {}), sids)
+    # 2026-11-18：稿没签 ⇒ 计划不关（轮数用尽也不许），写口因此不会被终态早退关掉。
+    assert out.get("action") != "stop", out
+    assert out.get("status") == "attacking", out
+    assert dict(out.get("finish_gate") or {}).get("finished") is False, out
     # 交差说明里也逐条点名了它们（不只在结构化读数里）
     reason = str(out.get("reason") or "")
     for sid in sids:
-        assert f"stmt:{sid}" in reason, reason
-    assert "不许静默收工" in reason or "没签" in reason, reason
+        assert f"reports/f-proof-{sid}.md" in reason, reason
+    assert "没拿到 V 签" in reason or "不许静默收工" in reason, reason
 
 
 # ============================================================ b：留痕
@@ -171,14 +185,15 @@ def test_b_the_trail_is_recorded_but_the_choice_is_the_agents(tmp_path):
         "partial_output": "partial_output", "next_move": choice,
         "why": "A 的第三步缺一条工具引理，拆开更好核"}
     f._write_plan(row, note="test:trail")
-    out = _close_reading(f, pid)
+    out = _step_once(f, pid)
     delivery = dict(out.get("delivery") or {})
     trail = dict(delivery.get("trail") or {})
     assert trail.get("checked") is True, trail
     assert trail.get("choice") == choice, trail
-    # 留痕不等于可以收工：未签的还在
+    # 留痕不等于可以收工：未签的还在（计划也不因此关掉）
     assert delivery.get("legal_stop") is False, delivery
     assert delivery.get("unfinished_count") == 2, delivery
+    assert out.get("status") == "attacking", out
 
 
 # ============================================================ c：没成果是合法收工
@@ -312,22 +327,29 @@ def test_the_f_manual_teaches_the_three_criteria_and_the_two_exits():
 
 # ============================================================ e：反真空
 def test_e_stubbing_the_naming_back_to_empty_turns_a_red(tmp_path, monkeypatch):
-    """e 反真空：把「点名未签成果」打桩成空（静默收工）⇒ a 那组断言必须红。"""
+    """e 反真空：把「点名未签成果」打桩成空（静默收工）⇒ a 那组断言必须红。
+
+    2026-11-18：这一格同时是「稿已完工」那道的反真空 —— 交差读数被打桩成"没有未签稿"
+    之后，计划才真的会关（`action=stop`）；而 a 的逐条点名断言当场红。
+    """
     st = _ws(tmp_path)
     f, pid, sids = _two_unsigned_outputs(st)
     real = FD.delivery_summary
 
     def _silent(*a, **kw):
         got = real(*a, **kw)
+        got["outputs"] = []            # 「稿已完工」的闸读的就是这一格
         got["unfinished"] = []
         got["unfinished_count"] = 0
+        got["still_unsubmitted"] = []
         got["close_problems"] = []
         got["legal_stop"] = True
         return got
 
     monkeypatch.setattr(FD, "delivery_summary", _silent)
-    out = _close_reading(f, pid)
+    out = _step_once(f, pid)
     silent = dict(out.get("delivery") or {})
     assert silent.get("legal_stop") is True, silent          # 打桩之后它"静默收工"了
+    assert out.get("action") == "stop", out
     with pytest.raises(AssertionError):
         _assert_close_names(silent, sids)

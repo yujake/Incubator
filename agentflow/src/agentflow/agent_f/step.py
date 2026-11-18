@@ -164,29 +164,49 @@ class _Step:
         # 只在某一条路上给会让"有没有读数"取决于这一轮走了哪条分支。
         reading = self.budget_of_round()
 
-        # ---- 终结状态：不再推进（终态先到先得，不许被重入改写）
+        # ---- 终态：不再推进（终态先到先得，不许被重入改写）
+        #
+        # 例外（业主 2026-11-18：「稿没完工，计划本身就关不掉」）：`stalled` /
+        # `resolved` / `supported_not_proved` 只有在「这条计划的稿已拿到 V 签」时才算
+        # 合法终态。稿还没签而计划已经在终态的（旧盘、或把闸打桩掉的运行），按推进态
+        # 继续 —— 否则 `attack.step(product=…)` 这个唯一写口会被一个不合法的终态关掉
+        # （真机 lp-ball-8：19:44:39 plan 000000 被判 stalled，19:47:39 的 v3 就在这一
+        # 步被挡住，而同一份返回里已经写着 `delivery.state=outputs_unsigned`）。
+        # `abandoned` 不在此列：那是 F 自己的决定，不是程序关计划。
+        reopened_from = ""
+        gate: dict | None = None
         if status in TERMINAL_STATUSES:
-            return self._close_reading({
-                "plan_id": row.get("plan_id"),
-                "round": rounds,
-                "sid": None,
-                "action": "stop",
-                "outcome": "no_change",
-                "status": status,
-                "budget_left": budget_left,
-                "budget_known": reading["status"] == "known",
-                "budget_reading": reading,
-                "reason": (
-                    f"计划已是终结状态 {status!r} ⇒ 不再推进。"
-                    "「不再推进」不是「推进了但没有进展」：终态先到先得，"
-                    "自动重入会把它当活计划重新拾起，于是终止条件形同虚设"
-                ),
-            }, row)
+            if status != "abandoned":
+                gate = self._finish_gate(row)
+                if not gate.get("finished"):
+                    reopened_from = status
+            if not reopened_from:
+                out = self._close_reading({
+                    "plan_id": row.get("plan_id"),
+                    "round": rounds,
+                    "sid": None,
+                    "action": "stop",
+                    "outcome": "no_change",
+                    "status": status,
+                    "budget_left": budget_left,
+                    "budget_known": reading["status"] == "known",
+                    "budget_reading": reading,
+                    "reason": (
+                        f"计划已是终结状态 {status!r} ⇒ 不再推进。"
+                        "「不再推进」不是「推进了但没有进展」：终态先到先得，"
+                        "自动重入会把它当活计划重新拾起，于是终止条件形同虚设"
+                        + (f"。稿这一侧：{gate.get('why')}" if gate is not None else "")
+                    ),
+                }, row)
+                if gate is not None:
+                    out["finish_gate"] = dict(gate)
+                return out
+            # 终态不成立 ⇒ 这一轮按推进态继续（末尾由 `_derive_status` 现算状态）
 
         subgoals: list[dict] = [dict(s) for s in (row.get("subgoals") or [])]
         history: list[dict] = [dict(h) for h in (row.get("history") or [])]
 
-        # ---- [1] 轮数用尽 ⇒ stalled + best_partial（必须非空，且必须如实）
+        # ---- [1] 两条停止判据（连续无进展 / 轮数用尽）⇒ stalled + best_partial
         #
         # 在它之前先判一次连续无进展（来自对 dsh 数学模式的观摩）：
         # 那种模式要求"连续 N 轮无进展就提前终止"。我们此前只按 `max_rounds` 停，
@@ -194,83 +214,126 @@ class _Step:
         # 这正是本项目自己总结过的 P4（"检测到了却没有消费"）的又一处实例。
         # 后果：一个"卡在未接线子目标上"的攻坚计划会把预算完整烧完才停，
         # 而它从第一轮起就不可能再有任何进展。
+        #
+        # 2026-11-18（业主：「稿没完工，计划本身就关不掉」）：这两条停止判据都只判
+        # "不再烧预算"，而一个还没拿到 V 签的稿需要的恰恰是"再写一轮" —— 所以它们
+        # 先过 `_finish_gate`：稿没完工 ⇒ 不 stalled，这一轮照常推进。
         stall_after = int(self.cfg.get("stall_after_no_progress_rounds", 3))
         recent = [str(h.get("outcome") or "") for h in (row.get("history") or [])][-stall_after:]
-        if stall_after > 0 and len(recent) == stall_after and all(o == "no_change" for o in recent):
-            row["status"] = "stalled"
-            row["best_partial"] = (
-                f"[提前停止] 连续 {stall_after} 轮无进展（全部 outcome=no_change）⇒ 不再烧预算。\n"
-                + self._compose_best_partial(subgoals, rounds)
-            )
-            row["updated_at"] = self._stamp()
-            self._write_plan(row, note=f"f.step:stall_after_{stall_after}_no_progress")
-            self._log(f"plan {row.get('plan_id')} stalled after {stall_after} no-progress rounds")
-            out = self._close_reading({
-                "plan_id": row.get("plan_id"),
-                "round": rounds,
-                "sid": None,
-                "action": "stall_detected",
-                "outcome": "no_change",
-                "status": "stalled",
-                "budget_left": _budget_left(budget, rounds),
-                "budget_known": reading["status"] == "known",
-                "budget_reading": reading,
-                "reason": (
-                    f"连续 {stall_after} 轮 outcome=no_change ⇒ 提前判 stalled。"
-                    "不是失败，也不是成功：当前最好的部分结果已写入 best_partial。"
-                    "（这个信号此前被生产出来却无人消费 —— 见 LESSONS 的 P4）"
-                ),
-            }, row)
-            self.last_step = out
-            return out
+        no_progress = bool(stall_after > 0 and len(recent) == stall_after
+                           and all(o == "no_change" for o in recent))
         #
         # 这里显式传 depth=0：`can_round` 会同时检查轮数与深度，而"深度到顶"
         # 的后果是"不能再分子问题"，不是"这个计划该停了"。把后者也当成终止判据，
         # 会让一个深度恰好到顶的计划连第一轮都跑不了 —— 那是把"不能再分子问题"
         # 读成了"这个问题不能做"（见 attack_tools 模块 docstring 的同一段说明）。
-        if not AT.can_round(budget, rounds_done=rounds, depth=0)["allowed"]:
-            row["status"] = "stalled"
-            row["best_partial"] = self._compose_best_partial(subgoals, rounds)
-            detail = (
-                f"轮数已用尽（{rounds}/{budget.get('max_rounds')}）⇒ 停止并交出 best_partial。"
-                "stalled 既不是失败也不是成功：它表示'预算内没做出来'"
-            )
-            # 只有还有位子时才追加 history：`AttackPlan.validate` 要求
-            # `len(history) <= max_rounds × 子目标数`（"有轮次没被预算约束"的守卫）。
-            # 轮数用尽时正好顶到那个上限 —— 再追加一条"停止"记录会违反 schema，
-            # 于是这条计划永远写不回去（"说停"本身被 schema 挡住了）。
-            # 所以把停止理由记进计划级的 best_partial（它是计划级的交接记录），
-            # 而不是挤进已经被预算占满的 history。
-            if len(history) < int(budget.get("max_rounds", 0)) * max(1, len(subgoals)):
-                history.append(
-                    {
-                        "round": rounds + 1,
+        rounds_cap = int(budget.get("max_rounds", 0))
+        budget_out = not AT.can_round(budget, rounds_done=rounds, depth=0)["allowed"]
+        if no_progress or budget_out:
+            if gate is None:
+                gate = self._finish_gate(row)
+            if gate.get("finished"):
+                if no_progress:
+                    row["status"] = "stalled"
+                    row["best_partial"] = (
+                        f"[提前停止] 连续 {stall_after} 轮无进展（全部 outcome=no_change）⇒ 不再烧预算。\n"
+                        + self._compose_best_partial(subgoals, rounds)
+                    )
+                    row["updated_at"] = self._stamp()
+                    self._write_plan(row, note=f"f.step:stall_after_{stall_after}_no_progress")
+                    self._log(f"plan {row.get('plan_id')} stalled after {stall_after} no-progress rounds")
+                    out = self._close_reading({
+                        "plan_id": row.get("plan_id"),
+                        "round": rounds,
                         "sid": None,
-                        "action": "stop",
+                        "action": "stall_detected",
                         "outcome": "no_change",
-                        "detail": detail,
-                        "evidence": [],
-                        "at": self._stamp(),
-                    }
+                        "status": "stalled",
+                        "budget_left": _budget_left(budget, rounds),
+                        "budget_known": reading["status"] == "known",
+                        "budget_reading": reading,
+                        "reason": (
+                            f"连续 {stall_after} 轮 outcome=no_change ⇒ 提前判 stalled。"
+                            "不是失败，也不是成功：当前最好的部分结果已写入 best_partial。"
+                            "（这个信号此前被生产出来却无人消费 —— 见 LESSONS 的 P4）"
+                        ),
+                    }, row)
+                    out["finish_gate"] = dict(gate)
+                    self.last_step = out
+                    return out
+                row["status"] = "stalled"
+                row["best_partial"] = self._compose_best_partial(subgoals, rounds)
+                detail = (
+                    f"轮数已用尽（{rounds}/{budget.get('max_rounds')}）⇒ 停止并交出 best_partial。"
+                    "stalled 既不是失败也不是成功：它表示'预算内没做出来'"
                 )
-            row["best_partial"] = f"[停止] {detail}\n{row['best_partial']}"
-            row["history"] = history
-            row["updated_at"] = self._stamp()
-            self._write_plan(row, note="f.step:stalled")
-            self._log(f"plan {row.get('plan_id')} stalled")
-            return self._close_reading({
-                "plan_id": row.get("plan_id"),
-                "round": rounds,
-                "sid": None,
-                "action": "stop",
-                "outcome": "no_change",
-                "status": "stalled",
-                "budget_left": _budget_left(budget, rounds),
-                "budget_known": reading["status"] == "known",
-                "budget_reading": reading,
-                "best_partial": row["best_partial"],
-                "reason": detail,
-            }, row)
+                # 只有还有位子时才追加 history：`AttackPlan.validate` 要求
+                # `len(history) <= max_rounds × 子目标数`（"有轮次没被预算约束"的守卫）。
+                # 轮数用尽时正好顶到那个上限 —— 再追加一条"停止"记录会违反 schema，
+                # 于是这条计划永远写不回去（"说停"本身被 schema 挡住了）。
+                # 所以把停止理由记进计划级的 best_partial（它是计划级的交接记录），
+                # 而不是挤进已经被预算占满的 history。
+                if len(history) < rounds_cap * max(1, len(subgoals)):
+                    history.append(
+                        {
+                            "round": rounds + 1,
+                            "sid": None,
+                            "action": "stop",
+                            "outcome": "no_change",
+                            "detail": detail,
+                            "evidence": [],
+                            "at": self._stamp(),
+                        }
+                    )
+                row["best_partial"] = f"[停止] {detail}\n{row['best_partial']}"
+                row["history"] = history
+                row["updated_at"] = self._stamp()
+                self._write_plan(row, note="f.step:stalled")
+                self._log(f"plan {row.get('plan_id')} stalled")
+                out = self._close_reading({
+                    "plan_id": row.get("plan_id"),
+                    "round": rounds,
+                    "sid": None,
+                    "action": "stop",
+                    "outcome": "no_change",
+                    "status": "stalled",
+                    "budget_left": _budget_left(budget, rounds),
+                    "budget_known": reading["status"] == "known",
+                    "budget_reading": reading,
+                    "best_partial": row["best_partial"],
+                    "reason": detail,
+                }, row)
+                out["finish_gate"] = dict(gate)
+                return out
+        # 稿没完工 ⇒ 两条停止判据都不成立：这一轮照常推进。
+        # 轮数已用尽时这一轮是"超预算修补轮"：`rounds` 不涨（schema 的硬上限不许越，
+        # `AttackPlan.validate` 会因为 rounds > max_rounds 整笔拒写），history 如实记一轮
+        # （上限是 `max_rounds × 子目标数 + 1`，那条 +1 就是留给"说停/修补"这一行的）。
+        over_budget = bool(budget_out and rounds >= rounds_cap
+                           and not (gate or {}).get("finished"))
+        if over_budget:
+            hist_cap = rounds_cap * max(1, len(subgoals) or 1) + 1
+            if len(history) + 1 > hist_cap:
+                out = self._close_reading({
+                    "plan_id": row.get("plan_id"),
+                    "round": rounds,
+                    "sid": None,
+                    "action": "stop",
+                    "outcome": "no_change",
+                    "status": "attacking",
+                    "budget_left": _budget_left(budget, rounds),
+                    "budget_known": reading["status"] == "known",
+                    "budget_reading": reading,
+                    "reason": (
+                        "轮数已用尽、台账允许的 history 行数也已顶满（schema 硬上限 "
+                        f"{hist_cap}），而这条计划的稿仍没拿到 V 签 ⇒ 计划不关"
+                        "（业主：稿没完工，计划本身就关不掉），但这一轮记不进台账。"
+                        "出路只有两条：让 V 签下这一份稿，或 F 自己 "
+                        "`attack.abandon_plan` 放弃这条计划"
+                    ),
+                }, row)
+                out["finish_gate"] = dict(gate or {})
+                return out
 
         # ---- [2] 选子目标（复用 attack_tools.pick_next_subgoal）
         #
@@ -283,38 +346,60 @@ class _Step:
         pickable = [s for s in subgoals if not s.get("in_flight")]
         picked = AT.pick_next_subgoal(pickable)
         if not picked["picked"]:
-            # 无可推进的子目标：这在两种情况下发生 —— 全 closed（成功收口）、
+            # 无可推进的子目标：这在两种情况下发生 —— 全 closed（候选"成功收口"）、
             # 或全是 dropped/blocked（需要人来解开卡点）。两者都不该静默变成"没轮次"。
-            history.append(
-                {
-                    "round": rounds + 1,
-                    "sid": None,
-                    "action": "stop",
-                    "outcome": "no_change",
-                    "detail": f"没有可推进的子目标：{picked['reason']}",
-                    "evidence": [],
-                    "at": self._stamp(),
-                }
-            )
+            #
+            # 2026-11-18：全 closed 只是「候选」终态；`_derive_status` 会再过
+            # `_finish_gate`，稿没签就保持 attacking —— 这一支于是成了"子目标都关了、
+            # 只剩稿没签"的那一拍的如实读数（不是静默成功）。
+            gate = self._finish_gate(row)
+            hist_cap = rounds_cap * max(1, len(subgoals) or 1) + 1
+            new_round = rounds if over_budget else rounds + 1
+            room = len(history) + 1 <= hist_cap
+            if room:
+                history.append(
+                    {
+                        "round": new_round,
+                        "sid": None,
+                        "action": "stop",
+                        "outcome": "no_change",
+                        "detail": f"没有可推进的子目标：{picked['reason']}",
+                        "evidence": [],
+                        "at": self._stamp(),
+                    }
+                )
             row["subgoals"] = subgoals
             row["history"] = history
-            row["rounds"] = rounds + 1
-            row["status"] = self._derive_status(subgoals, row)
+            row["rounds"] = new_round
+            row["status"] = self._derive_status(subgoals, row, finish_gate=gate)
             row["updated_at"] = self._stamp()
-            row["best_partial"] = self._compose_best_partial(subgoals, rounds + 1)
+            row["best_partial"] = self._compose_best_partial(subgoals, new_round)
             self._write_plan(row, note="f.step:no_pickable")
-            return self._close_reading({
+            reason = picked["reason"]
+            if not gate.get("finished"):
+                reason = (str(reason).rstrip()
+                          + "；" + str(gate.get("why") or "稿还没完工")
+                          + "（计划因此保持 attacking，不是 resolved）")
+            if not room:
+                reason = (str(reason).rstrip()
+                          + "；台账允许的 history 行数已顶满（schema 硬上限 "
+                          + f"{hist_cap}），这一轮记不进台账")
+            out = self._close_reading({
                 "plan_id": row.get("plan_id"),
-                "round": rounds + 1,
+                "round": new_round,
                 "sid": None,
                 "action": "stop",
                 "outcome": "no_change",
                 "status": row["status"],
-                "budget_left": _budget_left(budget, rounds + 1),
+                "budget_left": _budget_left(budget, new_round),
                 "budget_known": reading["status"] == "known",
                 "budget_reading": reading,
-                "reason": picked["reason"],
+                "reason": reason,
             }, row)
+            out["finish_gate"] = dict(gate)
+            if reopened_from:
+                out["plan_status_reopened"] = reopened_from
+            return out
 
         sg = picked["subgoal"]
         sid = str(sg.get("sid"))
@@ -404,8 +489,11 @@ class _Step:
         for raw_new in (deploy.get("new_subgoals") or []):
             subgoals.append(self._normalize_subgoal(dict(raw_new), len(subgoals)))
 
+        # 2026-11-18：轮数用尽而稿未签的那一拍是"超预算修补轮"——`rounds` 不涨
+        # （schema 的 `rounds <= max_rounds` 是硬约束），history 仍如实记这一轮。
+        new_round = rounds if over_budget else rounds + 1
         history_row = {
-            "round": rounds + 1,
+            "round": new_round,
             "sid": sid,
             "action": deploy["action"],
             # 收口到 `STEP_OUTCOMES`（`G-24②`）：词表外的取值在写入前就炸，
@@ -516,26 +604,42 @@ class _Step:
         history.append(history_row)
         row["subgoals"] = subgoals
         row["history"] = history
-        row["rounds"] = rounds + 1
-        row["status"] = self._derive_status(subgoals, row)
+        row["rounds"] = new_round
+        # 「稿完工了没有」这一格在 history 写回之后现算：这一轮刚落的那一份稿
+        # 也必须在读数里（否则"这一轮刚产出第一份稿"会被当成"没有要签的稿"）。
+        gate = self._finish_gate(row)
+        row["status"] = self._derive_status(subgoals, row, finish_gate=gate)
         row["updated_at"] = self._stamp()
-        row["best_partial"] = self._compose_best_partial(subgoals, rounds + 1)
+        row["best_partial"] = self._compose_best_partial(subgoals, new_round)
         if row["status"] == "stalled" and not str(row["best_partial"]).strip():
             row["best_partial"] = NO_PROGRESS_NOTE
         self._write_plan(row, note=f"f.step:{deploy['action']}")
 
         out = {
             "plan_id": row.get("plan_id"),
-            "round": rounds + 1,
+            "round": new_round,
             "sid": sid,
             "action": deploy["action"],
             "outcome": _step_outcome(deploy["outcome"]),
             "status": row["status"],
-            "budget_left": _budget_left(budget, rounds + 1),
+            "budget_left": _budget_left(budget, new_round),
             "budget_known": reading["status"] == "known",
             "budget_reading": reading,
             "reason": deploy["detail"],
         }
+        # 计划生命周期的那两格（2026-11-18）：这一轮的稿完工了没有；以及
+        # "计划原先的终态不成立、这一轮按推进态继续"这件事（没有就不给这一格）。
+        out["finish_gate"] = dict(gate)
+        if reopened_from:
+            out["plan_status_reopened"] = reopened_from
+            out["reason"] = (str(out["reason"]).rstrip()
+                             + f"；计划原先的终态 {reopened_from!r} 不成立"
+                             + f"（{gate.get('why') or '稿还没完工'}）⇒ 按推进态继续")
+        elif over_budget:
+            out["reason"] = (str(out["reason"]).rstrip()
+                             + "；轮数已用尽但稿还没拿签 ⇒ 这一轮是超预算修补轮"
+                             "（rounds 不涨，稿照写；拿到 V 签或 F 自己放弃才结束）"
+                             + f"；{gate.get('why') or ''}")
         # P3-6：产物落点也进返回值（调用方不必再读一遍 history 才知道去哪看）。
         if deploy.get("statement_id"):
             out["statement_id"] = str(deploy["statement_id"])

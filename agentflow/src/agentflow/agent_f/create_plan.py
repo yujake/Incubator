@@ -20,12 +20,22 @@ FORMAL_IS_NOT_F_TODO = "formal_is_not_f_todo"
 #: > 「若一个F开了多plan且未finish的同时推进的大于2个（已finish或放弃的不计入该数），
 #: >   系统需拦截并给出提醒」
 #:
-#: 计数口径按业主字面（Q4 裁定）：只有 `resolved`（finish）与 `abandoned`（放弃）不计入，
-#: 其余一律计入 —— `stalled` / `supported_not_proved` 也占一个位置。理由：`stalled` 的
-#: 计划不该白占名额，要腾位就先把它放弃成「不再需要」（`attack.abandon_plan`）。
-#: 刻意不复用 `TERMINAL_STATUSES`（那四档是"不再推进"，比业主的"finish/放弃"宽）——
-#: 两者混用会让"上游把 stalled 排除在外"这条口径静默变成"stalled 不占位"。
-PLAN_CAP_TERMINAL_STATUSES: tuple[str, ...] = ("resolved", "abandoned")
+#: 计数口径（2026-11-18 核准，随「稿没完工，计划本身就关不掉」）：**四个退场态
+#: 都不计入**（`resolved` / `abandoned` / `stalled` / `supported_not_proved`）——
+#: 也就是与判重口径共用同一份 `TERMINAL_STATUSES`。理由三条，缺一条都会打架：
+#:
+#: ① 新口径下 `stalled` / `supported_not_proved` **只可能在稿已拿到 V 签（或这条
+#:    计划没有要签的稿）时出现** —— 它们不再表示"还有一份没签的稿被锁在里面"，而是
+#:    "预算/子目标这条轴走完了"；那已经不是"同时在推"的计划。
+#: ② 旧口径说"要腾位就先把它放弃成「不再需要」"，而 `attack.abandon_plan` 对
+#:    `TERMINAL_STATUSES` 里的状态是受控拒（已终态不许再放弃）⇒ 那句指引走不通。
+#: ③ 判重（本文件下面那条 `status not in TERMINAL_STATUSES`）一直把 `stalled` 当
+#:    退场：同一个 `problem_key` 可以另立新计划。若名额这边仍把它计入，就会出现
+#:    "允许另立、但先把名额占满"——正是业主点名不许打架的那一处。
+#:
+#: 与旧注释的差别只在 `stalled` / `supported_not_proved` 两档；`resolved` / `abandoned`
+#: 的排除一个字没变（业主 2026-11-13 的原话）。
+PLAN_CAP_TERMINAL_STATUSES: tuple[str, ...] = TERMINAL_STATUSES
 PARALLEL_PLANS_LIMIT = 2
 
 #: 拦下来时逐字给模型的提醒（业主原话；末句按业主补完「让父派其它F攻坚」）。
@@ -141,8 +151,9 @@ class _CreatePlan:
             ids = "、".join(str(r.get("plan_id") or "") for r in live)
             msg = (f"拒绝创建：{PARALLEL_PLANS_LIMIT_TEXT}"
                    f"（你名下在推的计划已有 {len(live)} 条：{ids}。"
-                   "「已 finish / 已放弃」的不计入，「stalled」计入 —— 要腾位就先把它放弃成"
-                   "「不再需要」（`attack.abandon_plan`））")
+                   "「已 finish / 已放弃 / 已 stalled / 有支持未证」的都不计入"
+                   "（它们都不再推进，与判重口径同一份名单）"
+                   "）")
             return refuse(
                 PARALLEL_PLANS_LIMIT_KIND, msg,
                 # `reason` 这一键既有调用方与既有判据在读：统一形态不许把它们的读数弄丢。

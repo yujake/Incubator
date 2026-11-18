@@ -290,6 +290,9 @@ def test_h_the_close_gate_also_sees_the_registered_unsigned_manuscript(tmp_path)
 
     真机 INV7 的第二步风险：即使挂机判据修好了，F 走到轮数用尽那一拍也可能
     `legal_stop=True` 静默收工 —— 那时同样没有任何模型回合去派 V。
+    2026-11-18（业主：「稿没完工，计划本身就关不掉」）：这一拍现在不再 `stop`
+    （改前 `action=stop` 的出口把唯一写口也关了），但"收工门看见这份未签稿"的
+    读数一个字没少：仍读成 `outputs_unsigned`、`legal_stop=False`、逐条点名它。
     """
     st, _cond, ws = _ws(tmp_path)
     rel, sha = _write_registered_manuscript(ws)
@@ -310,7 +313,9 @@ def test_h_the_close_gate_also_sees_the_registered_unsigned_manuscript(tmp_path)
     row["rounds"] = 1
     f._write_plan(row, note="test:inv7-close")
     out = f.step(pid)
-    assert str(out.get("action") or "") == "stop", out
+    assert str(out.get("action") or "") != "stop", out
+    assert out.get("status") == "attacking", out
+    assert dict(out.get("finish_gate") or {}).get("finished") is False, out
     delivery = dict(out.get("delivery") or {})
     assert delivery.get("state") == "outputs_unsigned", delivery
     assert delivery.get("legal_stop") is False, delivery
