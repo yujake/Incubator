@@ -4,9 +4,15 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19 CLOSE1 K1 收尾①）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **322 个 `.py`、302,893 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **322 个 `.py`、302,900 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,219 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-19 CLOSE1 既有红（test_a2：登记元信息清单手抄一份，K6④ 加两行时没跟上）：**
+> 322 个 `.py` 与 75 个 `>800` 两格不变；**302,900** 行（上一格 302,893；本笔 src 净增 +7：
+> `proofregistry.py` 把 `_rewrite_head` 里那份内联顺序提成 `HEAD_META_ORDER`，并作为
+> 「哪些行属于登记元信息」的唯一来源）。判据侧不再手抄六行（改从 `HEAD_META_ORDER` +
+> `LEGACY_KIND_MARK` 取），另加两条断言：B 的稿头那两行确实在、而且 `parse_entry` 读得回来。
+> 函数体量三格现盘复测 75 / 95 / 2 逐格未抬。
 > **2026-11-19 CLOSE1 K1 收尾②（V / G / A / E / F 的写者身份收到实例级）：**
 > 322 个 `.py` 与 75 个 `>800` 两格不变；**302,893** 行（上一格 302,816 是收尾①的读数；
 > 本笔 src 净增 +77：`tools/verify_tools.py` +17（`_agent_v` 按 `identity` 现算 actor，

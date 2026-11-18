@@ -35,6 +35,7 @@ from agentflow import bmanuscript as BM  # noqa: E402
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import manuscriptform as MF  # noqa: E402
 from agentflow import manuscriptids as MIDS  # noqa: E402
+from agentflow import proofregistry as PR  # noqa: E402
 from agentflow import verifications as VR  # noqa: E402
 from agentflow import vsigns as VS  # noqa: E402
 from agentflow.agent_f import AgentF  # noqa: E402
@@ -197,9 +198,14 @@ def _role_normalized(text: str) -> str:
     （`publish_manuscript` / `bmanuscript.land_rewrite`）只落骨架、不补这几行。
     这一条判的要证明的是"两族落的是同一份骨架" ⇒ 比的是骨架；登记元信息有它自己的
     判据（`tests/test_proof_registration_is_decoupled.py` 的 a / i），不在这里重复比。
+
+    2026-11-19（这条判据自己红的原因）：元信息清单原来是手抄的六行，K6④ 给稿头加了
+    「`- 稿族：` / `- 产出者：`」两行而这里没跟着加 ⇒ a2 红，红在"B 的稿多了两行"，不是
+    "两族不是同一份骨架"。修法不是再手抄一遍：清单改从产品自己的单一来源取
+    （`proofregistry.HEAD_META_ORDER` + 旧名 `LEGACY_KIND_MARK`），以后加一行元信息
+    这里自动跟上，不会再有一次假红。
     """
-    marks = ("- 正文sha：", "- 命题指纹：", "- 登记时间：", "- 版本：", "- 命题类型：",
-             "- 证据种类：")   # 旧名也抹掉：盘上老稿仍可能带着它（读兼容）
+    marks = tuple(PR.HEAD_META_ORDER) + (PR.VERSION_MARK, PR.LEGACY_KIND_MARK)
     body = "\n".join(line for line in str(text).replace("\r\n", "\n").split("\n")
                      if not line.strip().startswith(marks))
     return (body.replace("# F 的证明手稿：", "# R 的证明手稿：")
@@ -724,6 +730,11 @@ def test_a2_the_real_entries_land_the_same_manuscript(tmp_path: pathlib.Path) ->
     # 2026-11-13 业主裁定：稿里没有命题号 ⇒ 两族新写的稿也都没有 `- 命题号：`。
     for mark in ("- 计划：", "- 依赖面洗稿："):
         assert mark in b_text, (mark, b_text.split("\n")[:8])
+    # 登记元信息那两行确实在、而且读得回来 —— `_role_normalized` 排除它们不是"遮住差异"：
+    # 它们属于登记那一档（K6④ 的口径，判据自己的用例是 `test_k5_k6_k7_*` 的 d3）。
+    entry = PR.parse_entry(b_text)
+    assert entry.get("family") == "b-proof", entry
+    assert str(entry.get("producer") or "").startswith("agent-B"), entry
     assert "- 命题号：" not in b_text, b_text.split("\n")[:8]
     assert "- 命题号：" not in f_unsigned, f_unsigned.split("\n")[:8]
     assert "- 证明号：" not in b_text, b_text.split("\n")[:8]

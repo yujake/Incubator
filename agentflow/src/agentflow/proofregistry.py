@@ -98,6 +98,14 @@ LEGACY_KIND_MARK = _MK.LEGACY_PROPOSITION_KIND_MARK
 REGISTERED_AT_MARK = "- 登记时间："
 VERSION_MARK = "- 版本："
 
+#: 稿头登记元信息那几行的顺序（`_rewrite_head` 用），同时是「哪些行属于登记元信息」的
+#: 唯一来源。`_rewrite_head` 实际按 `[*HEAD_META_ORDER, VERSION_MARK]` 走。
+#: 判据侧（`tests/test_f_and_b_manuscripts_are_one_implementation.py`）也从这里取：
+#: 手抄一份清单在这里会漂 —— 2026-11-19 那条判据就漏掉了 K6④ 新加的
+#: `- 稿族：` / `- 产出者：` 两行，于是「两族骨架相同」读成了假红。
+HEAD_META_ORDER = (FAMILY_MARK, OWNER_MARK, SHA_MARK, FINGERPRINT_MARK, KIND_MARK,
+                   REGISTERED_AT_MARK, _MF.LABEL_MARK)
+
 #: 受控码（写读两侧共用，不另起第二套词）：定义点在 `proofoutcomes.py`
 #: （与「跑闸 / 解释拒收」和「幂等保留」两段读数同一处）。这里从它回引同样的名字，
 #: 所以 `proofregistry.REFUSED_*` 这个公开面一个字没变。
@@ -389,8 +397,7 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     读侧（`parse_entry` / `depsection.manuscript_proof_no`）照旧读得出那个号。
     """
     lines = head.split("\n")
-    order = [FAMILY_MARK, OWNER_MARK, SHA_MARK, FINGERPRINT_MARK, KIND_MARK,
-             REGISTERED_AT_MARK, _MF.LABEL_MARK]
+    order = list(HEAD_META_ORDER)
     touched: set[str] = set()
     out: list[str] = []
     for line in lines:
