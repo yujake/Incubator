@@ -1187,6 +1187,17 @@ def estimate_write_conflict(a: Any, b: Any) -> bool:
     第 3 条是唯一的条件判据，真身在 `rowscope`（与"哪张表有行级归属"同一处）。
     为什么不是"按角色一张白名单"：同一个角色的不同动作写面不同（B 的 `register_statement`
     有锁内判重与按路径占用，`run` 没有）—— 按角色给豁免就会把后者一起放过去。
+
+    ## 空动作 = 委派（2026-11-19 补的一格）
+
+    `summon_many` 的两条生产入口（工具入口 `conductor_tools.conductor_summon_many`、
+    形状入口 `agent_loop._do_summon_many`）一律把 `action` 传空 —— 口径 S2
+    「父代理只派活、不点动作，动作由接活的自己选」。空动作不是"这个动作没有行级
+    互斥"，是"这一笔还没有动作"：把它当成表外动作判冲突，等于把实例轴在生产路径上
+    整个关掉（K14 之后 14 条既有判据因此从"3 个孩子同波"读成 `[1,1,1]`）。
+    所以第 3 条只对「已知动作」生效；委派下去的实际写仍由写入面各自守：`experiments` /
+    `documents` 的行级归属（`rowscope.write_refusal`）、手稿的按路径占用
+    （`manuscriptids.claim_for_write`）、`review_findings` 的 K14 事务内重算。
     """
     if _same_role_other_instance(a, b):
         return False
@@ -1205,11 +1216,28 @@ def _action_of(x: Any) -> str:
     return str(getattr(x, "action", "") or "")
 
 
+def _row_mutex_or_delegated(role: Any, action: Any) -> bool:
+    """这一笔的写面有没有行级互斥（空动作 = 委派 ⇒ 这一层不判，见 `estimate_write_conflict`）。
+
+    空动作放行的理由只此一条：`action=""` 是生产路径上唯一的派活形态（口径 S2），
+    它回答的是"动作还没定"，不是"这个动作没有行级互斥"；真正的写发生在子代理拿到
+    自己的动作之后，由那时的行级判据与事务锁守。已知动作一律问
+    `rowscope.row_isolated`（`ROW_MUTEX_ACTIONS` 的唯一读口）。
+    """
+    act = str(action or "")
+    if not act:
+        return True
+    from . import rowscope as _RS
+
+    return _RS.row_isolated(role, act)
+
+
 def _same_role_other_instance(a: Any, b: Any) -> bool:
     """这一对调用够不够格拿"同角色不同实例"的并发豁免（判据见 `estimate_write_conflict`）。
 
-    四个条件缺一不可：两边都显式给实例、实例不同、角色相同、两个动作都有行级互斥。
-    最后一条经 `rowscope.row_isolated`（`ROW_MUTEX_ACTIONS` 的唯一读口）——
+    四个条件缺一不可：两边都显式给实例、实例不同、角色相同、两个动作都有行级互斥
+    （空动作按委派放行，见 `_row_mutex_or_delegated`）。最后一条经
+    `rowscope.row_isolated`（`ROW_MUTEX_ACTIONS` 的唯一读口）——
     写成"同角色就豁免"正是 K14 要删掉的那一条（SH-05）。
     """
     ia, ib = _instance_of(a), _instance_of(b)
@@ -1218,10 +1246,8 @@ def _same_role_other_instance(a: Any, b: Any) -> bool:
     ra, rb = _role_of(a), _role_of(b)
     if not (isinstance(ra, str) and ra == rb):
         return False
-    from . import rowscope as _RS
-
-    return (_RS.row_isolated(ra, _action_of(a))
-            and _RS.row_isolated(rb, _action_of(b)))
+    return (_row_mutex_or_delegated(ra, _action_of(a))
+            and _row_mutex_or_delegated(rb, _action_of(b)))
 
 
 def waves_of(calls: Sequence[Any], *, limit: int | None = None) -> list[list[int]]:
