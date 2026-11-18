@@ -3230,6 +3230,7 @@ class _Core:
         else:
             template_now = str(manuscript_text or "")
             proof_now = str(body or "")
+        _ident_now = self._refresh_identity()
         got = _PR.register_or_rewrite(
             root, family=_MF.FAMILY_F, label=label, proposition=proposition,
             proof_text=proof_now, dependency_rows=list(dependency_rows or []),
@@ -3238,7 +3239,11 @@ class _Core:
             kind=kind_now, template=template_now, gate=_gate,
             # `author` 是既有形参（此前无人用）：`register_or_rewrite` 拿它当
             # `ARTIFACTS.jsonl` 的 producer（K1/K2），不再新增形参、不抬体量基线。
-            author=str(self.actor or ""))
+            author=str(self.actor or ""),
+            # K5：占用登记要带实例与台账号（重写支按它核"是不是我的稿"）。
+            task_id=str(_ident_now.get("task_id") or ""),
+            instance=str(_ident_now.get("instance") or ""),
+            identity=_ident_now)
         refused_kind = str(got.get("refused") or "")
         if not got.get("ok"):
             why = str(got.get("why") or "手稿登记没成")

@@ -152,6 +152,19 @@ def family_of_rel(rel: Any) -> str:
     return fam if fam in FAMILY_COUNTERS else ""
 
 
+def identity_key(family: Any, manuscript_id: Any) -> str:
+    """稿身份键：`<族>:<稿号>`（K6② —— 稿身份是 `(族, 稿号)`，不是裸号）。
+
+    `f-proof:000000` 与 `b-proof:000000` 是两个不同的键；同族同号仍是同一个键
+    （幂等判据用它）。族或号缺一 ⇒ 空串（不拼一个看起来像身份的键）。
+    """
+    fam = str(family or "").strip()
+    mid = str(manuscript_id or "").strip()
+    if not fam or not is_manuscript_id(mid):
+        return ""
+    return f"{fam}:{mid}"
+
+
 def _root_of(root: Any) -> Any:
     """`root` 可以是工作区路径，也可以是带 `.root` 的 `Store`。
 
@@ -312,37 +325,88 @@ def claim_for_write(root: Any, rel: Any, *, owner: Any = "", role: Any = "",
                         "不据此互斥"))
         return out
     with _LOCK:
-        claims, ok = _read_claims(root)
-        if not ok:
-            out.update(checked=False, state="unknown",
-                       why=(f"`{CLAIMS_REL}` 读不出来 ⇒ 占用判据没查成"
-                            "（不是「没人占」）"))
-            return out
-        holder = dict(claims.get(rel_txt) or {})
-        held = str(holder.get("owner") or "")
-        if held and held != who:
-            out.update(state="other", holder=holder,
-                       why=(f"`{rel_txt}` 已经由 {held} 占着"
-                            f"（task={holder.get('task_id') or '未记'}，"
-                            f"at={holder.get('at') or '未记'}）⇒ 不许两个写者共用同一个文件名"))
-            return out
-        fresh = {"owner": who, "role": str(role or ""),
-                 "task_id": str(task_id or ""),
-                 # 实例身份三格（K1/K2）：`instance` 是规范标签、`attributed` 是
-                 # 「真的归因了吗」、`identity_conflict` 是未归因的原因（空串 = 没有
-                 # 冲突）。老行没有这三格时读侧按「未记」处理（新键不改旧键）。
-                 "instance": str(instance or dict(identity or {}).get("instance") or ""),
-                 "attributed": bool(dict(identity or {}).get("attributed", False)),
-                 "identity_conflict": str(dict(identity or {}).get("conflict") or ""),
-                 "at": _now_iso()}
-        claims[rel_txt] = fresh
+        # ---- 跨进程互斥（K5，2026-11-18） --------------------------------------
+        #
+        # 模块级 RLock 只罩得住同一个解释器；真机是两个进程各写各的 claim 文件。
+        # 占用登记是"同一路径只允许一个实例写"的判据本体，读-改-写必须在跨进程锁里
+        # （与 `vreviews.record_review` 的两层锁同形）。拿不到锁 ⇒ `unknown`（判不了
+        # 也是拒，不是"没人占"）。
+        lock_path = claims_path(root).with_name(claims_path(root).name + ".lock")
         try:
-            _write_claims(root, claims)
-        except ManuscriptIdError as exc:
-            out.update(checked=False, state="unknown", why=str(exc))
+            from filelock import FileLock, Timeout
+
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            _gate = FileLock(str(lock_path), timeout=10.0)
+            _gate.acquire()
+        except Timeout:
+            out.update(checked=False, state="unknown",
+                       why=(f"`{CLAIMS_REL}` 的写锁等不到（另一个写者卡住了）⇒ "
+                            "占用判据没查成（不是「没人占」）"))
             return out
-        out.update(state=("mine" if held == who else "free"), holder=fresh, why="")
-        return out
+        except OSError as exc:
+            out.update(checked=False, state="unknown",
+                       why=(f"`{CLAIMS_REL}` 的写锁建不出来（{type(exc).__name__}: {exc}）"
+                            "⇒ 占用判据没查成（不是「没人占」）"))
+            return out
+        try:
+            claims, ok = _read_claims(root)
+            if not ok:
+                out.update(checked=False, state="unknown",
+                           why=(f"`{CLAIMS_REL}` 读不出来 ⇒ 占用判据没查成"
+                                "（不是「没人占」）"))
+                return out
+            holder = dict(claims.get(rel_txt) or {})
+            held = str(holder.get("owner") or "")
+            if held and held != who:
+                out.update(state="other", holder=holder,
+                           why=(f"`{rel_txt}` 已经由 {held} 占着"
+                                f"（task={holder.get('task_id') or '未记'}，"
+                                f"at={holder.get('at') or '未记'}）⇒ 不许两个写者共用同一个文件名"))
+                return out
+            fresh = {"owner": who, "role": str(role or ""),
+                     "task_id": str(task_id or ""),
+                     # 实例身份三格（K1/K2）：`instance` 是规范标签、`attributed` 是
+                     # 「真的归因了吗」、`identity_conflict` 是未归因的原因（空串 = 没有
+                     # 冲突）。老行没有这三格时读侧按「未记」处理（新键不改旧键）。
+                     "instance": str(instance or dict(identity or {}).get("instance") or ""),
+                     "attributed": bool(dict(identity or {}).get("attributed", False)),
+                     "identity_conflict": str(dict(identity or {}).get("conflict") or ""),
+                     "at": _now_iso()}
+            claims[rel_txt] = fresh
+            try:
+                _write_claims(root, claims)
+            except ManuscriptIdError as exc:
+                out.update(checked=False, state="unknown", why=str(exc))
+                return out
+            out.update(state=("mine" if held == who else "free"), holder=fresh, why="")
+            return out
+        finally:
+            try:
+                _gate.release()
+            except Exception:  # noqa: BLE001 —— 释放失败不改变本笔已落盘的结论
+                pass
+
+
+def claim_refusal(claim: Mapping[str, Any], rel: Any, *, path_taken: str,
+                  unchecked: str) -> dict[str, Any] | None:
+    """占用判定的受控拒读数（`None` = 放行）；两个受控码由调用方给。
+
+    把 `claim_for_write` 的 `other` / `unknown` 两档翻成同一形状，供 F 写稿口
+    的两支（新稿 / 重写）共用 —— 两支各写一遍必然漂，而漂的那一支正好会漏判。
+    """
+    state = str((claim or {}).get("state") or "")
+    if state not in ("other", "unknown"):
+        return None
+    holder = dict((claim or {}).get("holder") or {})
+    code = str(path_taken if state == "other" else unchecked)
+    if state == "other":
+        why = (f"`{rel}` 已经归另一个写者（{holder.get('owner') or '未记'}，"
+               f"task={holder.get('task_id') or '未记'}）⇒ 这一份稿不落盘："
+               "同一路径不许两个写者共用。要写自己的证明，用新的稿号另开一份")
+    else:
+        why = (f"`{rel}` 的占用判据没查成（{(claim or {}).get('why') or '没有原因'}）"
+               "⇒ 这一份稿不落盘：判不了「这一份是不是别人的」就不写")
+    return {"refused": code, "kind": code, "claim": dict(claim or {}), "why": why}
 
 
 def _claimed_by_other(root: Any, manuscript_id: str, *, family: Any,

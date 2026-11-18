@@ -7,6 +7,7 @@ from ._support import Any, E_NO_FORMAL_REASON, ExperimentError, Mapping, S, Sequ
 from .. import artifacts as _ART
 from .. import conjectureledger as CL
 from .. import exhaustionreport as _ER
+from .. import identity as _IDENTITY
 from .. import numericproof as _NP
 from .. import verifications as VR
 
@@ -603,6 +604,9 @@ class _RunExperiment:
             # `temp/walk-e2e-20261105/REPORT.md` §四 D5）。
             # 现在直接传 `row.evidence_kind`：两处只有一个来源（那一行），不在这里再算
             # 一遍 —— 再算一遍就是第二个来源，正是这一条要消掉的东西。
+            _e_ident = _IDENTITY.resolve_identity(
+                self.store, "E", actor=str(self.actor or ""))
+            _e_owner = str(_e_ident.get("actor") or self.actor or "")
             if _wants_proof:
                 manuscript = _ER.land_manuscript(
                     self.workspace_root, experiment_id=eid, claim=claim,
@@ -615,7 +619,12 @@ class _RunExperiment:
                     kind=kind_now,
                     # 2026-11-13（统一开稿四步）：开稿口的形态闸读数就是 [4e] 那一份
                     # （同一段字节、同一个判定）—— 开稿口不再问第二次模型。
-                    form_reading=_form)
+                    form_reading=_form,
+                    # K5：E 落稿也登记 claim（owner + task_id + instance）。
+                    owner=_e_owner,
+                    task_id=str(_e_ident.get("task_id") or ""),
+                    instance=str(_e_ident.get("instance") or ""),
+                    identity=_e_ident)
                 if manuscript.get("problems"):
                     _manuscript_note = (
                         "[manuscript] E 的证明手稿没有落成："
@@ -645,7 +654,12 @@ class _RunExperiment:
                     observations=derived.get("observations"),
                     search_bound=bound_arg, result=derived.get("result"),
                     exit_code=run["exit_code"], runtime_sec=run["runtime_sec"],
-                    evidence_kind=row.evidence_kind)
+                    evidence_kind=row.evidence_kind,
+                    # K5：数值手稿同样登记 claim（E 侧此前 claims_E=0）。
+                    owner=_e_owner,
+                    task_id=str(_e_ident.get("task_id") or ""),
+                    instance=str(_e_ident.get("instance") or ""),
+                    identity=_e_ident)
                 if numeric_manuscript.get("problems"):
                     _num_note = (
                         "[manuscript] E 的数值实验手稿没有落成："

@@ -6991,12 +6991,21 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             section = _DS.parse_dependency_section(template)
             if section.get("present") and not section.get("refused"):
                 rows = [dict(x) for x in (section.get("rows") or [])]
+        from .. import identity as _IDENTITY_B
+
+        _b_ident = _IDENTITY_B.resolve_identity(
+            self.store, "B", actor=str(getattr(self, "actor", "") or ""))
         got = _PR.register_or_rewrite(
             self.store.root, family=_MF.FAMILY_B, label=label,
             proposition=proposition, proof_text=str(proof_text or ""),
             dependency_rows=rows, statement_id=sid, kind=str(row.get("kind") or ""),
             manuscript_id=str(manuscript_id or ""),
-            template=template, gate=self._declared_kind_gate())
+            template=template, gate=self._declared_kind_gate(),
+            # K5：重写支也核占用（B 的改写稿不是别人可写的同一份文件）。
+            author=str(_b_ident.get("actor") or getattr(self, "actor", "") or "agent-B"),
+            task_id=str(_b_ident.get("task_id") or ""),
+            instance=str(_b_ident.get("instance") or ""),
+            identity=_b_ident)
         out = dict(got)
         out["text"] = ""
         target = str(got.get("manuscript_path") or "")
@@ -7043,18 +7052,31 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                         "result": {"written": False,
                                    "reason": f"`statements` 里没有 {stmt_id} 这一行"}}
             new = dict(row)
+            # K6②：稿身份 = `(族, 稿号)`；裸 `manuscript_id` 跨族会撞（000000 在
+            # f-proof / b-proof 各一份）。族从载体路径现认，认不出就给空串（不猜）。
+            from .. import manuscriptids as _MID_FAMILY
+
+            fam = _MID_FAMILY.family_of_rel(rel)
             if group >= 1:
                 per = dict(row.get("manuscripts") or {})
-                if str(per.get(str(group)) or "") == str(rel):
+                same_path = str(per.get(str(group)) or "") == str(rel)
+                same_family = (not fam or str(row.get("manuscript_family") or "") == fam)
+                if same_path and same_family:
                     return {"write": False, "result": {"written": False, "preserved": True}}
                 per[str(group)] = str(rel)
                 new["manuscripts"] = per
+                if fam:
+                    new["manuscript_family"] = fam
                 return {"write": True, "row": new,
                         "result": {"written": True, "path_group": group}}
-            if mid and str(row.get("manuscript_id") or "") != mid:
+            if mid and (str(row.get("manuscript_id") or "") != mid
+                        or (fam and str(row.get("manuscript_family") or "") != fam)):
                 new["manuscript_id"] = mid
+                if fam:
+                    new["manuscript_family"] = fam
                 return {"write": True, "row": new,
-                        "result": {"written": True, "manuscript_id": mid}}
+                        "result": {"written": True, "manuscript_id": mid,
+                                   "manuscript_family": fam}}
             return {"write": False, "result": {"written": False, "preserved": True}}
 
         try:

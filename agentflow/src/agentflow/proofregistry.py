@@ -79,9 +79,10 @@ from . import manuscriptform as _MF
 from . import manuscriptkind as _MK  # 命题类型那一轴（标签 / 交叉核对）的唯一权威来源
 from . import verifications as _VR
 from .proofoutcomes import (  # 登记这一步的三段结局读数
+    FAMILY_MARK, OWNER_MARK, REFUSED_CLAIM_NOT_YOURS, REFUSED_CLAIM_UNCHECKED,
     REFUSED_GATE, REFUSED_PATH, REFUSED_READ, REFUSED_SHAPE, REFUSED_TEXT_CHANGED,
-    REFUSED_WRITE, amend_statement, form_gate_reading, manuscript_artifact,
-    preserved_reading,
+    REFUSED_WRITE, amend_statement, claim_guard, form_gate_reading, head_for_new_version,
+    manuscript_artifact, preserved_reading,
 )
 from .proofrevisions import (  # 收工读数那一半
     entries_on_disk, proof_revisions, registration_note,
@@ -291,6 +292,8 @@ def parse_entry(text: Any) -> dict[str, Any]:
         "statement_id": "", "plan_id": "", "sid": "", "label": "", "proof_no": 0,
         "sha256": "", "fingerprint": "", "kind": "", "kind_label": "",
         "registered_at": "", "versions": [], "checked": False, "problems": [],
+        #: K6④：稿的族与产出者实例（老稿没有这两行 ⇒ 空串 = 未记，不猜）。
+        "family": "", "producer": "",
     }
     for line in head.split("\n"):
         raw = line.strip()
@@ -327,6 +330,10 @@ def parse_entry(text: Any) -> dict[str, Any]:
                 out["kind_label"] = "证据种类（老盘旧名）"
         elif raw.startswith(REGISTERED_AT_MARK):
             out["registered_at"] = raw[len(REGISTERED_AT_MARK):].strip()
+        elif raw.startswith(FAMILY_MARK):
+            out["family"] = raw[len(FAMILY_MARK):].strip()
+        elif raw.startswith(OWNER_MARK):
+            out["producer"] = raw[len(OWNER_MARK):].strip()
         elif raw.startswith(VERSION_MARK):
             payload = raw[len(VERSION_MARK):].strip()
             for item in payload.split(_VERSION_SEP):
@@ -382,7 +389,8 @@ def _rewrite_head(head: str, values: Mapping[str, str]) -> str:
     读侧（`parse_entry` / `depsection.manuscript_proof_no`）照旧读得出那个号。
     """
     lines = head.split("\n")
-    order = [SHA_MARK, FINGERPRINT_MARK, KIND_MARK, REGISTERED_AT_MARK, _MF.LABEL_MARK]
+    order = [FAMILY_MARK, OWNER_MARK, SHA_MARK, FINGERPRINT_MARK, KIND_MARK,
+             REGISTERED_AT_MARK, _MF.LABEL_MARK]
     touched: set[str] = set()
     out: list[str] = []
     for line in lines:
@@ -573,29 +581,8 @@ def _legacy_proof_no_of(rel: Any, entry: Mapping[str, Any]) -> int:
     return 1
 
 
-def _head_for_new_version(text: str, *, proof_no: int, new_sha: str, new_fp: str,
-                          label: Any, kind: Any, mode: str, entry: Mapping[str, Any],
-                          at_text: str, versions_line: str) -> str:
-    """把稿头元信息改成本笔这一版（`## 证明` 之后一个字节不动）。
-
-    稿里没有命题号（业主 2026-11-13 裁定逐字：「稿里没有命题号，任何稿里都没有命题
-    号」）⇒ 改前在这里补 `- 命题号：stmt:<号>` 那一步（`ensure_statement_line`）已删：
-    写稿那一刻本来也拿不到号，号只落在 `statements` 那一行上。盘上老稿若还留着那一行，
-    本函数不动它（读侧照旧读得回）。
-    """
-    head_now = _head_of(text)
-    head_new = _rewrite_head(head_now, {
-        SHA_MARK: new_sha, FINGERPRINT_MARK: new_fp,
-        _MF.LABEL_MARK: str(label or ""),
-        KIND_MARK: (str(kind or "") if mode == MODE_REGISTERED
-                    else str(kind or entry.get("kind") or "")),
-        REGISTERED_AT_MARK: (at_text if mode == MODE_REGISTERED
-                             else str(entry.get("registered_at") or at_text)),
-        VERSION_MARK: versions_line,
-    })
-    return head_new + text[len(head_now):]
-
-
+# 头部改写实现住在 `proofoutcomes.head_for_new_version`（控本文件体量）。
+_head_for_new_version = head_for_new_version
 def register_or_rewrite(
     root: Any, *, family: Any, label: str, proposition: str, proof_text: str,
     dependency_rows: Sequence[Mapping[str, Any]] = (),
@@ -603,6 +590,7 @@ def register_or_rewrite(
     manuscript_id: Any = "",
     kind: Any = "", author: Any = "", at: Any = "", template: str = "",
     gate: Callable[..., Mapping[str, Any]] | None = None,
+    task_id: Any = "", instance: Any = "", identity: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """登记一条新命题（过闸一次）／重写一条已登记命题的证明（不过闸、不登记）。
 
@@ -629,7 +617,7 @@ def register_or_rewrite(
         "proof_no": 0, "manuscript_path": rel, "sha256": "", "deps_rows": [],
         "problems": [], "refused": "", "why": "", "entry": {}, "gate": {},
         "written": False, "section_hashes": {}, "migrated": False, "preserved": False,
-        "relocated_from": "",
+        "relocated_from": "", "claim": {},
     }
     if not rel:
         out.update(refused=REFUSED_PATH,
@@ -637,6 +625,16 @@ def register_or_rewrite(
                         f"statement_id={statement_id!r}、plan_id={plan_id!r}）"
                         "⇒ 不登记、不写盘"))
         return out
+    # K5：落盘前核占用（改前重写支直接 `_atomic_write`，三个非属主实例重写过同一份稿）。
+    _who = str(author or "").strip()
+    _guard = claim_guard(root, rel, owner=author, role=family, task_id=task_id,
+                         instance=instance, identity=identity)
+    if not _guard.get("ok"):
+        out.update(checked=(_guard.get("refused") == REFUSED_CLAIM_NOT_YOURS),
+                   refused=str(_guard.get("refused") or ""),
+                   why=str(_guard.get("why") or ""), claim=dict(_guard.get("claim") or {}))
+        return out
+    out["claim"] = dict(_guard.get("claim") or {})
     before = read_entry(root, family=family, statement_id=statement_id,
                         plan_id=plan_id, manuscript_id=mid)
     if not before.get("checked"):
@@ -646,18 +644,14 @@ def register_or_rewrite(
     old_text = str(before.get("text") or "")
     entry = dict(before.get("entry") or {})
     new_fp = proposition_fingerprint(proposition)
-    # ---- 槽位识别（A1）：先看规范路径；不在册/路径换了再看同一槽的旧落点 -----------
-    #
-    # `checked` 是"这是不是一条登记条目"的判据（A3）：手写稿可以自己写一行
-    # `- 标签：`，但它没有正文 sha / 命题指纹 / 版本记录 ⇒ 不是在册条目。
+    # 槽位识别（A1）：规范路径优先；没有稿号时才去找同一槽的旧落点。
     same_slot = bool(before.get("exists") and entry.get("checked")
                      and (bool(mid)  # 稿号就是槽位：同一个号 = 同一份稿
                           or same_slot_reading(entry, statement_id=statement_id,
                                                plan_id=plan_id, sid=sid, label=label)))
     relocated_from = ""
     if not same_slot and not mid:
-        # 老盘上的槽位搬家（`f-proof-plan-*` → `f-proof-<号>` 那一代）只在没有稿号时
-        # 才找旧落点：有了稿号，路径本身就是身份，去别处认领一份稿会是"别人的稿"。
+        # 有稿号时路径本身就是身份；去别处认领一份稿会是"别人的稿"。
         found = _find_registered_text(root, family=family, statement_id=statement_id,
                                       plan_id=plan_id, sid=sid, label=label,
                                       exclude=rel)
@@ -670,8 +664,7 @@ def register_or_rewrite(
     old_fp = str(entry.get("fingerprint") or "")
     migrated = False
     if same_slot and not old_fp:
-        # 旧稿（解耦之前落的那一批）没有指纹行：这一笔是"给旧稿补上登记元信息"，不是"改命题"。
-        # 补的时候不拿旧稿的 `## 命题` 去拒新正文 —— 权威判定在调用方（F 已按 statements 核过）。
+        # 旧稿没有指纹行：这一笔是补登记元信息，不是改命题（权威判定在调用方）。
         _head, sections = split_sections(old_text)
         old_prop = next((body for name, body in sections if name == "命题"), "")
         entry["fingerprint"] = proposition_fingerprint(old_prop) if old_prop.strip() else ""
@@ -689,10 +682,7 @@ def register_or_rewrite(
             return out
         old_text = str(amend.get("text") or old_text)
     mode = MODE_REWRITTEN if same_slot else MODE_REGISTERED
-    # ---- 幂等：同一份正文再挂一次 ⇒ 一个字节都不动（版本号也不涨） ------------------
-    #
-    # D 的交付动作每写一份报告都会把同一批稿再递一遍（`write_report` 每次都跑），
-    # 而"同一份正文"不该被记成第 N+1 版 —— 否则 `proof_no` 会被重复递交顶高、台账被灌满。
+    # 幂等：同一份正文再挂一次 ⇒ 一个字节都不动（版本号也不涨）。
     preserved = preserved_reading(
         entry, mode=mode, rewritten=(mode == MODE_REWRITTEN), new_fp=new_fp,
         proof_text=proof_text, old_text=old_text, dependency_rows=dependency_rows)
@@ -711,13 +701,7 @@ def register_or_rewrite(
     rows = [dict(r) for r in (dependency_rows or [])]
     deps_section = _DS.render_dependency_section(rows)
     new_sha = proof_sha(proof_text)
-    # ---- 一个稿号 = 一份文件 = 一份证明（逐字） ------------------------------------
-    #
-    #   「同稿号多个版本是错误的，一个稿号就相当于是该稿的文件名，不再细分 version 几，
-    #     应该在改正文时 edit 它。于是拿 V 签冻结后交哪份是明确的（一个稿号只有一份）。」
-    #
-    # ⇒ 重写不涨版本号（`proof_no` 恒 1，改正文就是就地改那一节）。老盘 `-pN`（N≥2）那几份
-    # 是历史：命中它们时沿用文件名里那个 N（否则一次重写等于给老稿改名）。新写路径不再产生。
+    # 一个稿号 = 一份文件 = 一份证明：重写不涨版本号；老盘 `-pN` 沿用文件名里的 N。
     if mode == MODE_REWRITTEN:
         proof_no = _legacy_proof_no_of(rel, entry)
     else:
@@ -764,10 +748,12 @@ def register_or_rewrite(
                      if deps_section.startswith(_DS.SECTION_HEADING) else deps_section)
         text, _ok_deps = _replace_section(text, "依赖", deps_body)
     # 头部元信息就地更新（其余字节原样 —— 判据 i 的"只动那一块"）。
+    from . import manuscriptids as _MID_HEAD
+
     text = _head_for_new_version(
         text, proof_no=proof_no, new_sha=new_sha, new_fp=new_fp, label=label,
-        kind=kind, mode=mode, entry=entry, at_text=at_text,
-        versions_line=versions_line)
+        kind=kind, mode=mode, entry=entry, at_text=at_text, versions_line=versions_line,
+        family=_MID_HEAD.family_of_rel(rel) or str(family or ""), author=_who)
     # ---- 落盘（框架写；原子替换） ------------------------------------------------
     target = Path(str(root or "")) / rel
     try:

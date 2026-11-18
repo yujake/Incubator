@@ -283,7 +283,8 @@ def compose_report(*, experiment_id: Any, claim: Any, claim_key: Any,
 
 
 def _record_product(root: Any, *, rel: Any, kind: str, producer: str,
-                    task_id: Any = "", note: Any = "") -> str:
+                    task_id: Any = "", note: Any = "", instance: Any = "",
+                    family: Any = "", identity_conflict: Any = "") -> str:
     """把刚落到盘上的产物登进 `<工作区>/ARTIFACTS.jsonl`；返回问题（空串 = 登记成了）。
 
     为什么三个写口共用一个私有函数：`kind` / `producer` 的口径必须只有一处，
@@ -295,7 +296,9 @@ def _record_product(root: Any, *, rel: Any, kind: str, producer: str,
 
     _entry, problem = A.record_or_problem(
         root, path=rel, producer=producer, kind=kind,
-        task_id=str(task_id or ""), note=str(note or ""))
+        task_id=str(task_id or ""), note=str(note or ""),
+        instance=str(instance or ""), family=str(family or ""),
+        identity_conflict=str(identity_conflict or ""))
     return problem
 
 
@@ -757,6 +760,28 @@ def _open_skeleton(root: str | Path, *, family: str, proposition: Any,
         fix=str(fix or ""), next_step=str(next_step or ""))
 
 
+def _claim_e_manuscript(root: str | Path, rel: Any, facts: Mapping[str, Any]) -> dict[str, Any]:
+    """E 落稿前的占用登记（K5）：owner / task_id / instance 从 `facts` 取。
+
+    改前 E 侧连登记都不做：`land_manuscript` / `land_numeric_manuscript` 直接
+    `write_bytes`，于是 `runs/manuscript-claims.json` 里 claims_E=0 —— 同一份
+    `e-proof-<号>.md` 可以被两个 E 实例同时写，而 claim 那一侧看不见任何一行。
+    判据本体仍是 `manuscriptids.claim_for_write`（一处实现）；本函数只做字段归一。
+    """
+    owner = str(facts.get("owner") or "").strip()
+    if not owner:
+        # 没有写者身份（直调 / 夹具）：不据此互斥，也不写一条空 owner 的假登记。
+        return {"checked": False, "state": "unknown", "rel": str(rel or ""),
+                "holder": {}, "why": "没有写者身份（owner 为空）⇒ 判不了这一份稿是不是别人的"}
+    from . import manuscriptids as _MID
+
+    return _MID.claim_for_write(
+        root, rel, owner=owner, role="E",
+        task_id=str(facts.get("task_id") or ""),
+        instance=str(facts.get("instance") or ""),
+        identity=facts.get("identity") if isinstance(facts.get("identity"), Mapping) else None)
+
+
 def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
     """把 E 的证明手稿写进 `reports/e-proof-<E稿号>.md`，读回来记下事实。
 
@@ -829,6 +854,20 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         return out
     out["path"] = rel
     out["manuscript_id"] = mid
+    # ---- K5：落稿前核占用（不是我的稿 ⇒ 受控拒，一个字节都不写） -----------------
+    _claim = _claim_e_manuscript(root, rel, facts)
+    out["claim"] = dict(_claim)
+    if _claim.get("state") == "other":
+        holder = dict(_claim.get("holder") or {})
+        problems.append(
+            f"`{rel}` 已经由 {holder.get('owner') or '另一个写者'} 占着"
+            f"（task={holder.get('task_id') or '未记'}）⇒ 这一条实验的手稿不落盘："
+            "同一路径只允许一个实例写")
+        return out
+    if _claim.get("state") == "unknown" and str(facts.get("owner") or "").strip():
+        problems.append(
+            f"`{rel}` 的占用判据没查成（{_claim.get('why') or '没有原因'}）⇒ 不落盘")
+        return out
     text = compose_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "script_path", "script_sha256",
         "design", "enumeration", "search_space", "result", "evidence_kind",
@@ -855,7 +894,12 @@ def land_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         problems.append(f"手稿写成了，但 `{MANUSCRIPT_PROOF_HEADING}` 那一节读不出正文：{rel}")
     # ---- 产物归属：手稿已落盘。登记失败进读数（`problems`），不让它静默消失。
     _reg_problem = _record_product(
-        root, rel=rel, kind="e-proof-manuscript", producer="E",
+        root, rel=rel, kind="e-proof-manuscript",
+        producer=str(facts.get("owner") or "E"),
+        instance=facts.get("instance"), family="e-proof",
+        identity_conflict=(facts.get("identity") or {}).get("conflict")
+        if isinstance(facts.get("identity"), Mapping) else "",
+        task_id=facts.get("task_id"),
         note=f"exp:{eid} 的 V 签手稿（exhaustionreport.land_manuscript）")
     if _reg_problem:
         problems.append(f"{_reg_problem}；手稿本身已落盘（{rel}）")
@@ -1105,6 +1149,20 @@ def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         return out
     out["path"] = rel
     out["manuscript_id"] = mid
+    # ---- K5：落稿前核占用（与 `land_manuscript` 同一条判据） ---------------------
+    _claim = _claim_e_manuscript(root, rel, facts)
+    out["claim"] = dict(_claim)
+    if _claim.get("state") == "other":
+        holder = dict(_claim.get("holder") or {})
+        problems.append(
+            f"`{rel}` 已经由 {holder.get('owner') or '另一个写者'} 占着"
+            f"（task={holder.get('task_id') or '未记'}）⇒ 这一条实验的数值手稿不落盘："
+            "同一路径只允许一个实例写")
+        return out
+    if _claim.get("state") == "unknown" and str(facts.get("owner") or "").strip():
+        problems.append(
+            f"`{rel}` 的占用判据没查成（{_claim.get('why') or '没有原因'}）⇒ 不落盘")
+        return out
     text = compose_numeric_manuscript(**{k: facts.get(k) for k in (
         "experiment_id", "claim", "claim_key", "method", "params", "observations",
         "search_bound", "result", "exit_code", "runtime_sec", "evidence_kind")})
@@ -1132,7 +1190,12 @@ def land_numeric_manuscript(root: str | Path, **facts: Any) -> dict[str, Any]:
         problems.extend(list(got.get("problems") or []))
     # ---- 产物归属：手稿已落盘。登记失败进读数（`problems`），不让它静默消失。
     _reg_problem = _record_product(
-        root, rel=rel, kind="e-num-manuscript", producer="E",
+        root, rel=rel, kind="e-num-manuscript",
+        producer=str(facts.get("owner") or "E"),
+        instance=facts.get("instance"), family="e-num",
+        identity_conflict=(facts.get("identity") or {}).get("conflict")
+        if isinstance(facts.get("identity"), Mapping) else "",
+        task_id=facts.get("task_id"),
         note=f"exp:{eid} 的普通数值手稿（exhaustionreport.land_numeric_manuscript）")
     if _reg_problem:
         problems.append(f"{_reg_problem}；手稿本身已落盘（{rel}）")

@@ -27,6 +27,74 @@ REFUSED_PATH = "manuscript_path_unavailable"
 REFUSED_READ = "manuscript_unreadable"
 REFUSED_WRITE = "manuscript_write_failed"
 REFUSED_SHAPE = "manuscript_shape_refused"
+#: K5（2026-11-18）：落盘之前核占用登记的两种受控拒。
+REFUSED_CLAIM_NOT_YOURS = "claim_not_yours"
+REFUSED_CLAIM_UNCHECKED = "claim_unchecked"
+
+#: K6④（2026-11-18）：稿头带「族」与「产出者实例」。标记定义在本模块只为把
+#: `proofregistry` 的体量留在 800 行线内；读侧仍是 `proofregistry.parse_entry`。
+FAMILY_MARK = "- 稿族："
+OWNER_MARK = "- 产出者："
+
+
+def head_for_new_version(text: Any, *, proof_no: int, new_sha: str, new_fp: str,
+                         label: Any, kind: Any, mode: str, entry: Mapping[str, Any],
+                         at_text: str, versions_line: str,
+                         family: Any = "", author: Any = "") -> str:
+    """把稿头元信息改成本笔这一版（`proofregistry._head_for_new_version` 的实现）。
+
+    住在 `proofoutcomes` 只为控 `proofregistry` 的体量（它是 800 行线的顶格文件）；
+    头部改写仍只用 `proofregistry` 的那两把尺（`_head_of` / `_rewrite_head`），
+    不另写一份切节实现。
+    """
+    from . import manuscriptform as _MF_PO
+    from . import proofregistry as _PR_PO
+
+    head_now = _PR_PO._head_of(text)
+    head_new = _PR_PO._rewrite_head(head_now, {
+        FAMILY_MARK: str(family or ""),
+        OWNER_MARK: str(author or ""),
+        _PR_PO.SHA_MARK: new_sha, _PR_PO.FINGERPRINT_MARK: new_fp,
+        _MF_PO.LABEL_MARK: str(label or ""),
+        _PR_PO.KIND_MARK: (str(kind or "") if mode == _PR_PO.MODE_REGISTERED
+                           else str(kind or entry.get("kind") or "")),
+        _PR_PO.REGISTERED_AT_MARK: (at_text if mode == _PR_PO.MODE_REGISTERED
+                                    else str(entry.get("registered_at") or at_text)),
+        _PR_PO.VERSION_MARK: versions_line,
+    })
+    return head_new + text[len(head_now):]
+
+
+def claim_guard(root: Any, rel: Any, *, owner: Any, role: Any,
+                task_id: Any = "", instance: Any = "",
+                identity: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """落盘前核「这一份稿归谁写」；返回 `{ok, claim, refused, why}`（K5）。
+
+    判据本体只有 :func:`manuscriptids.claim_for_write` 一处；本函数只把它的四档
+    （free / mine / other / unknown）翻译成登记写口的受控结局。没有写者身份
+    （直调 / 夹具）⇒ 不据此互斥（`ok=True`、`claim={}`），盘上老调用点行为不变。
+    """
+    who = str(owner or "").strip()
+    if not who:
+        return {"ok": True, "claim": {}, "refused": "", "why": ""}
+    from . import manuscriptids as _MID
+
+    claim = _MID.claim_for_write(
+        root, rel, owner=who, role=str(role or ""), task_id=str(task_id or ""),
+        instance=str(instance or ""), identity=identity)
+    state = str(claim.get("state") or "")
+    if state == "other":
+        holder = dict(claim.get("holder") or {})
+        return {"ok": False, "claim": dict(claim), "refused": REFUSED_CLAIM_NOT_YOURS,
+                "why": (f"`{rel}` 已经由 {holder.get('owner') or '另一个写者'} 占着"
+                        f"（task={holder.get('task_id') or '未记'}，"
+                        f"at={holder.get('at') or '未记'}）⇒ 这一份稿不是我的："
+                        "同一路径只允许一个实例写；要写自己的证明请另开一份稿（新的稿号）")}
+    if state == "unknown":
+        return {"ok": False, "claim": dict(claim), "refused": REFUSED_CLAIM_UNCHECKED,
+                "why": (f"`{rel}` 的占用判据没查成（{claim.get('why') or '没有原因'}）"
+                        "⇒ 不写：判不了「这一份是不是别人的」就不写（判不了 ≠ 可以写）")}
+    return {"ok": True, "claim": dict(claim), "refused": "", "why": ""}
 
 
 def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any,
@@ -70,7 +138,7 @@ def manuscript_artifact(out: dict[str, Any], root: Any, *, rel: Any, family: Any
     _entry, problem = A.record_or_problem(
         root, path=rel, producer=(who or role),
         kind=f"{name}-manuscript" if name else "manuscript",
-        task_id=tid, instance=inst,
+        task_id=tid, instance=inst, family=name,
         note=f"手稿 `{rel}`（proofregistry.register_or_rewrite，mode={mode}）")
     if not problem:
         return True
