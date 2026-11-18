@@ -992,7 +992,22 @@ def _quote_carrier_write(row: dict, out: dict, *, quote_pass: Any, body: Any,
 
     `quote_pass` 只在 `QUOTE_PASSES` 两档里才写；`body` 空（合并支：正文已由秘书写进
     在册行，这一笔只带 `canonical=""`）⇒ 按行上现在那份 `proof_text` 写。两者都空
-    ⇒ 不写。返回写进去的那条标记（空 dict = 这一笔不涉及引文两遍）。
+    ⇒ 不写。返回写进去的那条标记（空 dict = 这一笔不涉及引文两遍，或这一笔没有
+    新东西可落）。
+
+    ## 同一份载体同一遍 ⇒ 不回写（2026-11-18，LAST2）
+
+    这条守卫是 `test_intake_actions::test_b_register_statement_refuses_a_hollow_page_range`
+    打红之后补的：那一笔是"同一条命题原样再交一次"，行上已经有等价的标记，而回写
+    一个只换了 `at` 的新标记会让 `_attach_proofs` 的"这一笔写了东西"判成真 ⇒ 重复
+    登记从受控拒 `duplicate_statement` 翻成 `ok=True`（`errorstats` 里那一档的产出
+    点就此静默消失）。`at` 只是时刻、不是状态，同一份载体同一遍重复登记时行不该动。
+
+    另一半：标记里的 `manuscript_id` / `manuscript` 只增不减。重复登记那一支不带
+    稿（`canonical=""`，调用方也没给 `manuscript`），改前的回写会把第一遍落下的
+    `manuscript_id=000000 / manuscript=reports/b-proof-000000.md` 覆盖成两个空串
+    —— 收工门（`agent_loop._sign_gate_b`）正是按稿号把"这一份稿"对回落盘标记的，
+    覆盖成空就等于把那份稿从豁免名单里静默摘掉。
     """
     if str(quote_pass or "") not in _EB.QUOTE_PASSES:
         return {}
@@ -1009,9 +1024,18 @@ def _quote_carrier_write(row: dict, out: dict, *, quote_pass: Any, body: Any,
         from .. import vsigns as _VS_MID
 
         mid = str(_VS_MID.manuscript_id_of(rel) or "")
+    prev = row.get(_EB.QUOTE_CARRIER_KEY)
+    prev_ok = isinstance(prev, Mapping) and str(prev.get("pass") or "") in _EB.QUOTE_PASSES
+    if prev_ok and str(prev.get("pass") or "") == str(quote_pass):
+        # 同一遍：缺的轴从既有标记补齐（不许把它覆盖成空）。
+        mid = mid or str(prev.get("manuscript_id") or "")
+        rel = rel or str(prev.get("manuscript") or "")
     mark = _EB.quote_carrier_mark(
         pass_=str(quote_pass), manuscript_id=mid,
         manuscript=rel, body=text, at=S.now_iso())
+    if prev_ok and all(str(prev.get(k) or "") == str(mark.get(k) or "")
+                       for k in ("pass", "manuscript_id", "manuscript", "body_sha256")):
+        return {}
     row[_EB.QUOTE_CARRIER_KEY] = mark
     out["quote_carrier"] = dict(mark)
     return dict(mark)

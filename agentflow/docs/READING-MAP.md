@@ -4,9 +4,16 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-18，
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **319 个 `.py`、298,835 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **319 个 `.py`、298,859 行**，**75 个文件超过 800 行**（**全仓最大的是 `secretary.py`，16204 行（`agent_loop.py`，15057 行）**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
 > 复跑命令（三格一次打全）：
 > `python -c "import pathlib;fs=sorted((pathlib.Path('src')).rglob('*.py'));L=[len(p.read_text(encoding='utf-8').splitlines()) for p in fs];print(len(fs), sum(L), sum(1 for n in L if n>800))"`
+> **2026-11-18 LAST2（`_quote_carrier_write` 的守卫：同一份载体同一遍不回写，标记的稿号 / 稿名只增不减）**：
+> 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,835 → **298,859**（本笔 src 增量 +24：
+> `agent_b/register_statement.py` +24 —— 重复登记那一支不再把只换了 `at` 的同一份标记回写成
+> 一笔"写了东西"（`duplicate_statement` 的产出点自此不再随秒边界时有时无），
+> 且稿号 / 稿名缺的轴从既有标记补齐、不被空串覆盖）；
+> 95 个 `>200` 行函数与 2 段重复 docstring 两格不变（守卫写在既有 `_quote_carrier_write` 里，
+> 没有新增函数；三格现盘复测 75 / 95 / 2）。§3 表不动。
 > **2026-11-18 Z3FIX1（全量第一遍 Z3 的 15 条红：F 的 `_landed` 未初始化、B 的重复登记读音、G 的 PAPER_PACK 主语笔误、attack.step 的 `proof_output_count` 声明）**：
 > 319 个 `.py` 与 75 个 `>800` 两格不变；总行数 298,816 → **298,835**（本笔 src 增量 +19：
 > `agent_prompts.py` +13（p295 版本账；正文只把 `B 可以直接派 B` 的第二个 `B` 改成 `V`）、
