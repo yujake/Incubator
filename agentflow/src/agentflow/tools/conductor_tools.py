@@ -1477,7 +1477,14 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     try:
         from .. import obligations as _OBL
 
-        _obligations = _OBL.reconcile(store=store, root=root, caller="conductor.closing")
+        # 工作区根的口径与下面 `reviewaccept.check_review` / `verdict_written`
+        # 那两处逐字相同：会话根优先，退回 store.root。改前这里写的是一个
+        # 不存在的局部名 `root`（函数签名里没有它）⇒ NameError 被下面的
+        # `except Exception` 吞成 `checked=False`，义务对账这一格从此永远
+        # 「没跑成」，而收工门照样返回读数（真机 lp-ball-9 两次 closing 都是这一格）。
+        _obligations = _OBL.reconcile(
+            store=store, root=session_root or getattr(store, "root", ""),
+            caller="conductor.closing")
     except Exception as exc:  # noqa: BLE001 —— 对账没跑成不许带走收工读数
         _obligations = {"checked": False,
                         "reason": (f"义务对账没跑成（{type(exc).__name__}: {exc}）"
