@@ -136,10 +136,17 @@ def _run(tmp_path, replies, *, role: str = "D", max_steps: int = 6,
     gw.store = st
     reg = build_registry(store=st, conductor=cond).registry
     backend.registry = reg
-    run = run_role(role, task, store=st, registry=reg, conductor=cond,
-                   seam=LlmSeam(role=role, session_root=ws, gateway=gw, price=(0.0, 0.0), sid="n1"),
-                   session_root=ws, workspace_root=str(ws), sid="n1",
-                   max_steps=max_steps, from_env=False)
+    # 本文件测的是"树没清 ⇒ final 被拒"那一档：把 R9FIX-D5 的收工前自动收尾关掉，
+    # 否则静默子代理会在 final 那一拍被框架销掉，这一档就测不到拒绝。
+    _auto = AgentLoop.auto_retire_before_final
+    AgentLoop.auto_retire_before_final = False
+    try:
+        run = run_role(role, task, store=st, registry=reg, conductor=cond,
+                       seam=LlmSeam(role=role, session_root=ws, gateway=gw, price=(0.0, 0.0), sid="n1"),
+                       session_root=ws, workspace_root=str(ws), sid="n1",
+                       max_steps=max_steps, from_env=False)
+    finally:
+        AgentLoop.auto_retire_before_final = _auto
     return ws, run
 
 

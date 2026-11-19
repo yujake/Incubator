@@ -78,3 +78,12 @@ def test_a_real_user_stop_still_says_user():
 
     assert "用户叫停" in text, text
     assert "主控" not in text, text
+
+
+def test_the_headline_and_the_note_read_the_same_payload():
+    """`_stop_headline` 与 `_stop_note` 同源（会话 note 与 final 不许说两套）。"""
+    loop = _Loop()
+    loop._stop_payload = {"reason": "budget", "by": "M", "force": False}
+    head = AgentLoop._stop_headline(loop, "stop_file")
+    assert "主控 M 自己" in head and "预算保留线" in head, head
+    assert head in _note(loop._stop_payload), (head, _note(loop._stop_payload))

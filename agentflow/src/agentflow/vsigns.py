@@ -337,7 +337,8 @@ def note_missed_issue(root: Any, *, artifact_sha: Any, manuscript: str = "",
                         and str(old.get("reason") or "") == entry["reason"]):
                     return rel(path, root)
         with open(path, "a", encoding="utf-8", newline="\n") as fh:
-            fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+            fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True,
+                                default=str) + "\n")
     except OSError:
         return ""
     return rel(path, root)

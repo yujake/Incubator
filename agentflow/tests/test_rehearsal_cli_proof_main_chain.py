@@ -226,14 +226,22 @@ def _run(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, *,
     monkeypatch.setenv("AGENTFLOW_LEAN_ENABLED", str(lean))
     monkeypatch.setattr(MG, "urllib_transport", wire)
     out, err = io.StringIO(), io.StringIO()
+    # 这一组彩排钉的是"注册缺口 ⇒ final_refused"的旧现场：把 R9FIX-D5 的收工前
+    # 自动收尾关掉，否则静默子代理会在 final 那一拍被框架销掉、rc 变 0。
+    from agentflow.agent_loop import AgentLoop
+    _auto = AgentLoop.auto_retire_before_final
+    AgentLoop.auto_retire_before_final = False
     try:
-        with redirect_stdout(out), redirect_stderr(err):
-            rc = cli.main(["start", "--mode", "research", "--root", str(st.root),
-                           "--sid", "rc2-main-chain", "--task",
-                           f"把 {MANUSCRIPT} 收录进命题台账", "--max-steps", "6",
-                           "--subagents"])
-    except SystemExit as exc:                     # `cli.main` 正常是 return，不是 raise
-        rc = int(exc.code or 0)
+        try:
+            with redirect_stdout(out), redirect_stderr(err):
+                rc = cli.main(["start", "--mode", "research", "--root", str(st.root),
+                               "--sid", "rc2-main-chain", "--task",
+                               f"把 {MANUSCRIPT} 收录进命题台账", "--max-steps", "6",
+                               "--subagents"])
+        except SystemExit as exc:                 # `cli.main` 正常是 return，不是 raise
+            rc = int(exc.code or 0)
+    finally:
+        AgentLoop.auto_retire_before_final = _auto
     return {"rc": int(rc), "ws": pathlib.Path(st.root), "store": Store(st.root),
             "wire": wire, "stdout": out.getvalue(), "stderr": err.getvalue()}
 
