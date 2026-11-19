@@ -167,6 +167,14 @@ class _Revise:
             # "审批过的版本"与"被引用的版本"不许静默分家。
             doc["revision"] = int(doc.get("revision") or 0) + 1
             doc["content_sha256"] = SIG.content_sha256_of(doc)
+            # R9FIX-D9：新版本 = 旧判词不能再挂在它名下。改前这里只前进 revision，
+            # `review_verdict` / `reviewed_at` 原样留着 ⇒ 盘上出现"新一版 + 上一版
+            # 的裁决"（真机 lp-ball-9：G 09:34:28 改稿后，行上仍是 09:27:27 那一轮）。
+            # 清空不是"没审过"的假读数：下一轮 H 的 `review.report` 会按读到的那一版
+            # 重新写（`_stamp_review_axis`）；在那之前它就该是"没有针对这一版的判词"。
+            doc["review_verdict"] = ""
+            doc["reviewed_at"] = ""
+            doc["reviewed_by"] = ""
             row = S.row_from_dict("documents", doc)
             row.validate()
             payload = row.to_dict()

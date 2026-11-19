@@ -2630,6 +2630,65 @@ def list_findings(
 DEFAULT_REPORT_SUBDIR = "out/review"
 
 
+def _stamp_review_axis(store: Any, doc: Mapping[str, Any], *, actor: str,
+                       verdict: str, round_no: int) -> dict[str, Any]:
+    """把这一轮审校报告的裁决回写到 `documents` 的审核轴（判词挂读到的那一版）。
+
+    ## 为什么必须回写（R9FIX-D9）
+
+    真机 lp-ball-9：H 的 round-2 `review.report`（09:39:11）只把 `revise_again` 写进
+    `review_findings` 与 final，`documents` 行的 `reviewed_at` 停在上一轮 09:27:27 ——
+    读台账的人会以为"最后一轮复审是 09:27 那次"。G 在 09:34:28 又改过稿，于是
+    "判词"与"它判的那一版"在盘上分家。
+
+    ## 三态与"判词挂读到的那一版"
+
+    写之前在同一笔事务里重读那一行：`content_sha256` / `revision` 与本次读到的
+    那一版不一致 ⇒ **不回写**（读的是旧版，判词不许盖到新版上），返回
+    `written=False` + 两版读数。读不到那一行 / 写入失败同样不静默。
+
+    只改审核轴三格（`review_verdict` / `reviewed_at` / `reviewed_by`），**不碰
+    `status`** —— 生命周期仍由 H 的 `review` / `verify_fixes` 决定。
+    """
+    from datetime import datetime as _dt
+
+    axis = "成立" if str(verdict or "") == "accepted" else "有毛病"
+    out: dict[str, Any] = {"written": False, "verdict": axis, "report_verdict":
+                           str(verdict or ""), "at": "", "reason": "",
+                           "read_sha": str(doc.get("content_sha256") or ""),
+                           "current_sha": "", "read_revision": int(doc.get("revision") or 0),
+                           "current_revision": 0}
+    doc_id = str(doc.get("doc_id") or "")
+    try:
+        with store.tx("documents", actor=actor,
+                      note=f"review axis from report doc:{doc_id} round {round_no}") as tx:
+            row = tx.find("documents", doc_id=doc_id)
+            if row is None:
+                out["reason"] = f"`documents` 里没有 {doc_id} 这一行 ⇒ 审核轴没回写"
+                return out
+            out["current_sha"] = str(row.get("content_sha256") or "")
+            out["current_revision"] = int(row.get("revision") or 0)
+            if (out["current_sha"] != out["read_sha"]
+                    or out["current_revision"] != out["read_revision"]):
+                out["reason"] = (
+                    f"判词读到的是 revision={out['read_revision']} / sha={out['read_sha'][:12]}…，"
+                    f"盘上已是 revision={out['current_revision']} / "
+                    f"sha={out['current_sha'][:12]}… ⇒ 不回写（判词只挂读到的那一版）")
+                return out
+            at = _dt.now().astimezone().isoformat(timespec="seconds")
+            row["review_verdict"] = axis
+            row["reviewed_at"] = at
+            row["reviewed_by"] = str(actor or "")
+            tx.upsert("documents", row, note=f"review axis doc:{doc_id} round {round_no}")
+    except Exception as exc:  # noqa: BLE001 —— 回写失败要变成读数，不许静默
+        out["reason"] = (f"审核轴没回写成（{type(exc).__name__}: {exc}）"
+                         "⇒ 这一轮判词仍只在报告与 final 里")
+        return out
+    out["written"] = True
+    out["at"] = at
+    return out
+
+
 def review_report(
     store: Any,
     doc_id: str,
@@ -2653,8 +2712,11 @@ def review_report(
     这一轮犯的错』一节（G15）：`own_errors` 是必填参数；`None` ⇒ 抛（"没写"不等于"没犯错"），`[]` ⇒ 合法（显式声明零错误）。 3. 零发现自
     证（G13）：每道报"零发现"的门都必须带"我用了什么过程、数出了什么数字" —— 由 `gates.GateResult` 的构造期校验保证， G13 再独立复核一遍。
     ## 它写哪里、写什么
-    只写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），不碰任何数据表、不碰 `claims`。这
-    是 `AgentH` 落库代理的一个入口，因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
+    写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），并把这一轮
+    裁决回写到 `documents` 的审核轴三格（`review_verdict` / `reviewed_at` /
+    `reviewed_by`；2026-11-19 R9FIX-D9）。回写只挂"读到的那一版"（事务里复核
+    sha/revision）、**不碰 `status`**，也**不碰 `claims`**。
+    这是 `AgentH` 落库代理的一个入口，因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
     三态：`dependencies` 省略 = 从库里读该稿件的依赖（查过）；显式 `None` = 没查（`dep_check.checked=False`）。
     """
     if own_errors is None:
@@ -2723,6 +2785,23 @@ def review_report(
     # 与 `review_document` 同一份判据源（`scan_document`），所以两处不会给出两个数。
     coverage = scan_document(doc, dependencies=deps if deps_checked else None,
                              semantic_judge=semantic_judge)["coverage"]
+    # ---- R9FIX-D9：把这一轮裁决回写到 `documents` 的审核轴 -------------------
+    #
+    # 报告是交付物，不是台账行；H 的 round-3 只调了这一件时，`revise_again` 就只
+    # 留在报告与 final 里（真机 lp-ball-9 的 `reviewed_at` 因此停在上一轮）。
+    # 回写只挂"读到的那一版"（`_stamp_review_axis` 在事务里复核 sha/revision），
+    # 且不碰 status —— 生命周期仍归 `review` / `verify_fixes`。
+    writeback = _stamp_review_axis(store, doc, actor=actor,
+                                   verdict=str(report["verdict"]["verdict"]),
+                                   round_no=int(round_no))
+    if not writeback.get("written"):
+        note = ("\n\n## 附：`documents` 审核轴没有回写\n"
+                f"- {writeback.get('reason') or '没有理由'}\n")
+        markdown += note
+        try:
+            absolute.write_text(markdown, encoding="utf-8")
+        except OSError:
+            pass      # 报告已经落过一次；补注写不成不改变"这一轮判词没有台账行"这件事
 
     return {
         "doc_id": str(doc_id),

@@ -518,6 +518,29 @@ def test_revise_refuses_to_touch_a_finding_of_another_document(g: AgentG, g_stor
     assert g_store.rows("review_findings")[0]["status"] == "open"
 
 
+def test_revise_clears_the_previous_versions_review_axis(g: AgentG, g_store: Store):
+    """R9FIX-D9：改稿 = 新的一版 ⇒ 上一版的判词不许留在这一行上。
+
+    改前红（真机 lp-ball-9）：G 09:34:28 改稿后，`documents` 行仍是
+    `review_verdict=有毛病` / `reviewed_at=09:27:27` —— 判词与它判的那一版分家。
+    """
+    doc = g.build_document("paper", "初稿", claims=_clean_claims(g))
+    doc_id = doc["doc_id"]
+    with g_store.tx("documents", actor="agent-H", note="seed review axis") as tx:
+        row = tx.find("documents", doc_id=doc_id)
+        row["review_verdict"] = "有毛病"
+        row["reviewed_at"] = "2026-11-19T09:27:27+08:00"
+        row["reviewed_by"] = "agent-H"
+        tx.upsert("documents", row)
+
+    g.revise(doc_id, note="按 H 的意见再改一版")
+
+    row = g_store.rows("documents")[0]
+    assert row["revision"] == int(doc["revision"]) + 1, row
+    assert row["review_verdict"] == "", row
+    assert row["reviewed_at"] == "" and row["reviewed_by"] == "", row
+
+
 # ============================================================ [5] 工具装配
 
 
