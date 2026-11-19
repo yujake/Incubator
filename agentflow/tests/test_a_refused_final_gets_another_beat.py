@@ -161,6 +161,9 @@ def _run_m(env: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
     mine = str(env["owner"])
     monkeypatch.setattr(Conductor, "open_top_level_run",
                         lambda self, role, task: mine)
+    # 本文件测的是"模型自己销号"那条补救路：把 R9FIX-D5 的收工前自动收尾关掉，
+    # 否则静默子代理会在 final 那一拍被框架销掉，这条判据就测不到补救拍。
+    monkeypatch.setattr(AgentLoop, "auto_retire_before_final", False)
     gate = _Gate(replies)
     reg = build_registry(store=store, conductor=cond).registry
     run = run_role("M", "夹具：Q12 的补救拍", store=store, registry=reg, conductor=cond,

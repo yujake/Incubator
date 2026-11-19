@@ -30,7 +30,7 @@ import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any, ClassVar, Mapping, Sequence
 
 from . import agent_prompts as AP
 from . import capabilities as C
@@ -5277,6 +5277,9 @@ class AgentLoop:
     #: 再给三次），并且刻意不接进 `max_steps` 那套口径 —— 那是"跑了多少步"的报数量，
     #: 不是"补救几次"的判据（步数本来没有硬闸，钱由预算与墙钟管）。
     max_final_refused: int = 3
+    #: 收工前是否自动收尾（R9FIX-D5）：把「静默且无未消项」的子树替 M 销掉。
+    #: 默认开；判据里要专门测"模型自己销号"那条路的，可以把它关掉复现旧现场。
+    auto_retire_before_final: ClassVar[bool] = True
     #: 收工时的 `notify` 表最多被打回几次。
     #:
     #: L-05e 之后这个数不再是判据（`draft/52` F 组 / P-10）：强制闸门已经降级成
@@ -8678,6 +8681,100 @@ class AgentLoop:
                          "查过了：证明稿有签或已撤销；普通数值实验都有稿")
         return out
 
+    def _auto_retire_ready(self, cond: Any, root: str,
+                           run: "AgentLoop.LoopRun | None" = None) -> dict[str, Any]:
+        """收工前替 M 把「静默且无未消项」的子树销掉（R9FIX-D5，方向：停前自动收尾）。
+
+        ## 为什么是这一档（而不是给产品加一个"批量销号"工具）
+
+        真机 lp-ball-9：`final` 被拒时名下有 44/49 个节点还在册，而 `retire_child`
+        全程只调了 2 次；M 在 $1.00 保留线以内算过"44 个销号调用做不到"。
+        批量销号要动工具面（新参数/新工具 ⇒ 冻结快照重冻 + 抬版本），代价远大于
+        这里要解决的问题；而"收工前把**已经静默、没有未消项**的子树收掉"不新增任何
+        入口 —— 它只是把 M 本来要逐个做的动作，在 `final` 那一步一次做完。
+
+        ## 判据（一条都不放宽）
+
+        只销 `retire_ready` 判 `waiting_no_children` 且 `items_open == 0` 的节点；
+        有未消项 / 还在飞 / 待机 / 有活跃子 / 有程序在跑 / 三态读不到 —— 一律不碰，
+        留给 M 按拒信逐条处置。销号仍是 `Secretary.retire`（唯一写口），从最深的开始，
+        所以父在子之后；循环到没有进展为止（最多 6 轮，防病态树）。
+
+        返回读数：`checked` / `retired` / `kept` / `problems` / `rounds`。
+        """
+        out: dict[str, Any] = {"checked": False, "retired": [], "kept": [],
+                               "problems": [], "rounds": 0}
+        sec = getattr(cond, "secretary", None)
+        if sec is None or not callable(getattr(sec, "retire", None)):
+            out["problems"].append("没有秘书 ⇒ 自动收尾没有写口（留给 M 逐条销）")
+            return out
+        try:
+            order = cond.subtree_postorder(root)
+        except Exception as exc:  # noqa: BLE001 —— 读不到就留给 M，不猜
+            out["problems"].append(f"子树次序读不成（{type(exc).__name__}: {exc}）")
+            return out
+        if not order.get("checked"):
+            out["problems"].append(f"子树次序没查成（{order.get('reason')}）")
+            return out
+        out["checked"] = True
+        ordered = [str(t) for t in (order.get("order") or []) if str(t) and str(t) != root]
+        parent_of = dict(order.get("parent_of") or {})
+        for _round in range(6):
+            out["rounds"] = _round + 1
+            ready: dict[str, dict[str, Any]] = {}
+            for pid in [root] + ordered:
+                try:
+                    got = cond.retire_ready(pid)
+                except Exception as exc:  # noqa: BLE001 —— 一层读不成不许带走其余
+                    out["problems"].append(f"{pid} 的就绪读数没查成（{type(exc).__name__}: {exc}）")
+                    continue
+                if not got.get("checked"):
+                    out["problems"].append(f"{pid} 的就绪读数没查成（{got.get('reason')}）")
+                    continue
+                for item in got.get("ready") or []:
+                    tid = str(item.get("task_id") or "")
+                    reading = dict(item.get("reading") or {})
+                    if (str(item.get("branch") or "") == "waiting_no_children"
+                            and int(reading.get("items_open") or 0) == 0):
+                        ready[tid] = item
+            progress = False
+            for tid in ordered:              # 深 → 浅：父在子之后
+                if tid not in ready:
+                    continue
+                owner = str(parent_of.get(tid) or root)
+                try:
+                    name, why = sec.name_of(owner=owner, task_id=tid)
+                except Exception as exc:  # noqa: BLE001
+                    out["kept"].append({"task_id": tid, "why":
+                                        f"名册名没读到（{type(exc).__name__}: {exc}）"})
+                    continue
+                if not name:
+                    out["kept"].append({"task_id": tid, "why": f"名册名没读到（{why}）"})
+                    continue
+                try:
+                    got = sec.retire(
+                        owner=owner, name=name, by_task_id=root,
+                        reason="收工前自动收尾：静默且无未消项（R9FIX-D5）")
+                except Exception as exc:  # noqa: BLE001 —— 一条销不成不许带走其余
+                    out["kept"].append({"task_id": tid, "why":
+                                        f"销号抛了（{type(exc).__name__}: {exc}）"})
+                    continue
+                if str(got.get("action") or "") == "retired":
+                    out["retired"].append(tid)
+                    progress = True
+                else:
+                    out["kept"].append({"task_id": tid,
+                                        "why": "；".join(str(x) for x in (got.get("why") or []))
+                                               or f"action={got.get('action') or '?'}"})
+            if not progress:
+                break
+        if run is not None and (out["retired"] or out["kept"]):
+            run.notes.append(
+                f"收工前自动收尾：销掉 {len(out['retired'])} 个静默且无未消项的节点"
+                + (f"（{'、'.join(out['retired'][:8])}）" if out["retired"] else "")
+                + (f"；{len(out['kept'])} 个没销（留给 M 按拒信处置）" if out["kept"] else ""))
+        return out
+
     def _final_gate_reading(self, run: "AgentLoop.LoopRun | None" = None
                             ) -> dict[str, Any]:
         """收工前的结构完整性闸：M 名下整棵树是不是已经全部销号（三态）。
@@ -8874,6 +8971,28 @@ class AgentLoop:
                 run.notes.append(f"收工前的销号完整性没查成（{reading.get('reason')}）")
             return reading
         reading["complete"] = bool(reading.get("complete"))
+        # ---- R9FIX-D5：收工前自动收尾（只销"静默且无未消项"的子树） ----------
+        #
+        # 只有"树没清"时才试：已经 complete 的树不做一次多余的 retire_ready 扫描。
+        # 销完再读一次 retire_integrity —— 这读数是门自己用的，不许拿销号前的快照
+        # 报"干净"或"不干净"。
+        if not reading["complete"] and getattr(self, "auto_retire_before_final", True):
+            auto = self._auto_retire_ready(cond, mine, run)
+            reading["auto_retire"] = auto
+            if auto.get("retired"):
+                try:
+                    got2 = look(mine)
+                except Exception as exc:  # noqa: BLE001 —— 销完读不回来照样按"没查成"
+                    reading["checked"] = False
+                    reading["reason"] = (f"自动收尾之后 retire_integrity 读不成"
+                                        f"（{type(exc).__name__}: {exc}）")
+                else:
+                    if isinstance(got2, Mapping):
+                        for key in reading:
+                            if key in got2:
+                                reading[key] = got2[key]
+                        reading["applicable"] = True
+                        reading["complete"] = bool(reading.get("complete"))
         # ---- 程序读数（G2 第 ② 条，业主 2026-10-26：「注销前检测的能力」）
         #
         # 三件事，顺序不能换：
