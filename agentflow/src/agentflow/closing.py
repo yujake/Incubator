@@ -4024,7 +4024,7 @@ class ClosingReport:
     #: 时置真）。只有它是真，`verdict` 才可能是 `pass` —— 缩过面的那一份读数不是
     #: "权威结论"（把一格当八格，正是"6/8 也能 exit 0"的同族错误）。
     full_gate: bool = False
-    #: 这一次门是不是"权威的一次"：完整八格 **且** 给了 `project_dir` 与 `report_path`。
+    #: 这一次门是不是"权威的一次"：完整八格且给了 `project_dir` 与 `report_path`。
     #: 没有这两个入参时，`report_shape` / `acceptance` / `artifact_ledger` 只能记
     #: unknown —— 那是"只问了几格"，不是"这一趟交付的结论"；运行收工的退出码只在
     #: 权威的那一次上改（ROOTGATE-②），否则链条彩排/部分读数会被一律判成没完成。
@@ -9473,7 +9473,7 @@ def machine_feeders(store: Any, *, root_task_id: str = "") -> dict[str, Any]:
     根台账号的取法（2026-11-03，153-U-01/U-02 第 2 笔）：给了就用；不给就取台账里最近一条
     顶趟行（`called_by="user"` 且 `parent_task_id` 空 —— 与 `Conductor.open_top_level_run` 写的那一行同形）。
     三态（`:func:`top_level_task_lookup``）：
-    - 台账里**一条任务行都没有** ⇒ 空树本来就是干净的：`retire.complete=True`、
+    - 台账里一条任务行都没有 ⇒ 空树本来就是干净的：`retire.complete=True`、
       `programs` 按整个工作区读（否则干净工作区上的 `agentflow closing` 永远 not_wired、
       永远 exit 2 —— 2026-11-19 业主指出的接线缺口）；
     - 有任务行、但没有顶趟行 / 台账读不成 ⇒ 两个喂参都是 `None`（不猜：没喂 ⇒

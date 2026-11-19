@@ -100,15 +100,15 @@ def test_both_exits_feed_the_same_caliber(tmp_path: pathlib.Path) -> None:
 
 def test_both_exits_say_not_wired_when_the_caliber_cannot_be_fed(
         tmp_path: pathlib.Path) -> None:
-    """② 喂不上（没有顶趟行）：三边都记 `not_wired`，没有一边把它读成"可以交"。
+    """喂不上（没有顶趟行）：三边都记 `not_wired`，没有一边把它读成"可以交"。
 
     2026-11-19（ROOTGATE-①）之后 `can_close` 还读八格：这一份空工作区的 `substance`
     是 fail ⇒ 权威结论 fail（不是 None）。所以这一条钉的是机器那一格没接线
     （`machine_caliber.checked=False` + `not_wired` 出现在三个出口），而不是
     "can_close 一定是 None" —— 后者只在八格全 pass 时才成立。
 
-    2026-11-19 业主口径：台账里**没有树**是查过的干净（干净工作区必须 pass/0），
-    所以"喂不上"要造一支**断头的树**（有父行、没有顶趟行）—— 那才是"根判不了"。
+    2026-11-19 业主口径：台账里没有树是查过的干净（干净工作区必须 pass/0），
+    所以"喂不上"要造一支断头的树（有父行、没有顶趟行）—— 那才是"根判不了"。
     """
     st = _ws(tmp_path, top_level=False)
     with st.tx("tasks", actor="test") as tx:
