@@ -1845,6 +1845,16 @@ def _link_request(tx: Any, request_id: str | None, lit_id: str | None, warnings:
     ids = set(req.get("result_lit_ids") or [])
     ids.add(lit_id)
     req["result_lit_ids"] = S.sorted_unique(ids)
+    # 有文献挂在请求上 ⇒ 这一问的终局是「取回了东西」（`outcome=ok`），不是
+    # 「零命中」。这一格与 demo 路径（`demo.py:366-380`）同一条口径：
+    # 回填 `result_lit_ids` 与写终局必须同时发生 —— 改前这里只写 ids，而
+    # `run_once` 在判收之前已经把 `outcome=no_results` + 过期 `last_error`
+    # （「入库 0 条、待裁 N 条」）留在盘上，于是真机上 `lit.admit_all` 收完
+    # 4 条之后 R2（检索真的取回）仍只数到 1 条（`r-000001/2/5/7` 全是
+    # `result_lit_ids` 非空 + `outcome=no_results`）。schema 的校验也要求
+    # `outcome=ok` 时 `result_lit_ids` 非空 —— 这里刚刚 add 过，恒成立。
+    req["outcome"] = "ok"
+    req["last_error"] = None
     try:
         # 先校验再写：请求行可能处于"done=true 但三样凭据都没有"的历史脏状态，
         # 那种行本该由 rebuild/verify 处理，不该被本工具的写入顺手"修好"或炸掉。

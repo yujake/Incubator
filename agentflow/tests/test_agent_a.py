@@ -181,9 +181,9 @@ def test_run_once_is_idempotent_and_accumulates_source_requests(store):
     一处读数缺口（B1）已修：`lit.admit` 的登记路径现在把候选行的 `request_id` 带给
     `search.register`（2026-10-27），所以判收造出来的行一开始就带 `['r-0001']`、
     另一条请求命中同一篇之后是 `['r-0001', 'r-0002']` —— 这里因此钉字面值（改前那一格
-    是空的，只敢钉"只增不减"）。请求行的 `result_lit_ids` 也跟着回填了，但它这一轮的
-    `outcome` 仍是 `no_results`（那是这一轮自己的结论，只有下一次跑同一条请求才会
-    自愈成 `ok`），所以来源那一侧钉 `result_lit_ids`，不钉 `outcome`。
+    是空的，只敢钉"只增不减"）。请求行的 `result_lit_ids` 也跟着回填了，而且
+    （R9FIX-D2）回填与终局在同一处：有文献挂上来的这一问 `outcome` 必须是 `ok`、
+    过期的 `last_error` 必须清掉（改前它停在 `no_results`，收工门 R2 因此数不到这一条）。
     """
     provider = StubProvider([_cand()])
     a = _agent_a(store, provider, OkDownloader())
@@ -216,6 +216,9 @@ def test_run_once_is_idempotent_and_accumulates_source_requests(store):
     assert rows[0]["source_request_ids"] == ["r-0001"], rows[0]["source_request_ids"]
     # B1 的下半：请求行的 `result_lit_ids` 也回填了（改前永不回填）
     assert store.rows("search_requests")[0]["result_lit_ids"] == [lit_id], (
+        store.rows("search_requests")[0])
+    # R9FIX-D2：回填与终局在同一处 —— 有文献落库的这一问不许再挂着 no_results。
+    assert store.rows("search_requests")[0]["outcome"] == "ok", (
         store.rows("search_requests")[0])
 
     # ---- 第三段：另一条请求命中同一篇文献：只追加来源，不新建行（顺带把字节补上）
