@@ -8253,7 +8253,13 @@ class Conductor:
         try:
             # 父 = 这一趟自己的绝对编号（2026-10-20：改前这里不给 ⇒ 认领出来的 A 行
             # `parent_task_id=None`，成了名册外的孤儿 t-000019）。
-            self.consume_pending_search_requests(trigger="finish", parent_task_id=task_id)
+            # R9FIX-D3：认领内部会再调 `summon("A", …)`；置上防递归标记，否则
+            # `summon` 那一层的扫队又会在收尾点里再扫一轮。
+            self._queue_sweeping = True
+            try:
+                self.consume_pending_search_requests(trigger="finish", parent_task_id=task_id)
+            finally:
+                self._queue_sweeping = False
         except Exception as exc:  # noqa: BLE001 - 扫队失败不许带走收行
             self._log(f"收尾扫队失败：{type(exc).__name__}: {exc}")
         # 秘书职责 3（闭环提醒）的生产调用点（`draft/53` §2；主控 2026-10-04 裁定"接上"）：
@@ -8798,7 +8804,7 @@ class Conductor:
         # ---- R9FIX-D3：单件派活也要扫一次待认领队列 -------------------------
         #
         # 改前只有 `summon_many` / `run_plan` 与顶趟收尾扫队。真机 lp-ball-9
-        # （08:53:39，`r-000009`）是 M 在初始批次之后**一直用单件 `conductor.summon`**
+        # （08:53:39，`r-000009`）是 M 在初始批次之后一直用单件 `conductor.summon`
         # 派活（09:11 / 09:14 / 09:19 三次），于是 D 提交的那一条检索请求到收工
         # 都没人认领（`attempts=0`）⇒ R11 红。
         # 判据只挂在"M 自己发起的单件派活"上：`run_plan` / `summon_many` 已经扫过
