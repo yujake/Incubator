@@ -22,6 +22,7 @@ import type {
   LibraryView,
   LiveView,
   MachineView,
+  ObligationsView,
   PackageView,
   RosterView,
   RunEventsView,
@@ -73,6 +74,9 @@ export const ENDPOINTS = {
   // 整棵名册树（父/子/绝对编号/角色/深度/收件箱三格）。
   // 只读一条 —— 这个端点在路由表里没有配对的 POST，前端也不该有写它的函数。
   roster: "/api/roster",
+  // 板上三族义务（b-register / v-resubmit / b-awake）的收件人读数。
+  // 只读一条 —— 没有配对的 POST：销号只发生在 conductor 的收口那一路。
+  obligations: "/api/obligations",
   // 两档提示词缓存的状态读数（只读）与预热（写，会花钱）。两条的形状与
   // `webui/cacheface.py` 的两个处理器逐字对应。
   cache: "/api/cache",
@@ -581,6 +585,16 @@ export const api = {
    * **不是**"这个工作区没有子代理"—— 面板必须把这两档画成两句话。
    */
   getRoster: (): Promise<RosterView> => getJSON<RosterView>(ENDPOINTS.roster),
+  /**
+   * 板上三族义务（`GET /api/obligations`，2026-11-19 的 ⑥）。
+   *
+   * 两条轴分开给：`recipient_instance`（收件实例 = 板项行的 `instance` 列，
+   * 由 `obligations.recipient_reading` 判）与 `parent_task_id`（父台账号）。
+   * 两轴都空 ⇒ `addressed="unowned"`（没人收）—— 名册收件箱看不见这种项，所以单开一面。
+   * **只读**：没有写函数（销号只发生在 conductor 的写路径上）。
+   */
+  getObligations: (): Promise<ObligationsView> =>
+    getJSON<ObligationsView>(ENDPOINTS.obligations),
   /**
    * 两档提示词缓存的状态（`GET /api/cache`，2026-10-23）。
    *

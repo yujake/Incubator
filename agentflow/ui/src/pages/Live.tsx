@@ -26,6 +26,7 @@ import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Money } from "../components/Money";
+import { ObligationsPanel } from "../components/Obligations";
 import { RosterPanel } from "../components/Roster";
 import { Table, buckets, cell } from "../components/Table";
 import { StopButtons } from "../components/Stop";
@@ -141,6 +142,10 @@ export function Live() {
       {/* 名册那一棵树（2026-10-21）：父→子 + 绝对编号 + 深度 + 收件箱积压。
           紧挨着「在飞」那张卡，因为"谁在跑"与"它是谁的子"是同一个问题。 */}
       <RosterPanel />
+
+      {/* 板上三族义务的收件人读数（b-register / v-resubmit / b-awake）：
+          名册收件箱按父台账号分，父为空的板项只有这一块看得见。 */}
+      <ObligationsPanel />
 
       <Card
         title="停机开关与历史"

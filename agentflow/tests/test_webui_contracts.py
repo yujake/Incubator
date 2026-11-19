@@ -655,6 +655,12 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     # `answer="unknown"` 那一档，顶层 15 个键照样在；行一级的五个类型恒为空数组，
     # 逐个登记在 `readers.UNCHECKED_TYPES` 里（理由与 BudgetView 那一批同族）。
     out["RosterView"] = set(RD.roster_face(root))
+    # 板上三族义务（b-register / v-resubmit / b-awake，2026-11-19 的 ⑥）：顶层键与
+    # families[] 在夹具上都在（夹具的 tasks 行里没有这类板项 ⇒ rows[] 是空数组，
+    # 行一级登记在 `readers.UNCHECKED_TYPES`）。
+    ob = RD.obligations_face(root)
+    out["ObligationsView"] = set(ob)
+    _take(ob.get("families"), "ObligationFamily")
 
     # 文献库那一面（2026-10-24 的 `GET /api/literature`，D-57）：同一个口径 —— 新面落地后
     # 要让后端那一侧真的去读它，否则 `LibraryView` 会"既不在受核对名单、也没在欠账名单"。

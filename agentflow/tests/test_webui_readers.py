@@ -778,6 +778,11 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     # 那一档 —— 但顶层 15 个键照样在（这正是 `roster_face` 的规格：每一档键集合同一批），
     # 所以它和上面四周一样有落脚点；行一级的五个类型登记在 `UNCHECKED_TYPES` 里。
     got["RosterView"] = set(R.roster_face(artifacts_ws))
+    # 板上三族义务（2026-11-19 的 ⑥）：顶层键与 families[] 在夹具上都读得出来
+    # （夹具没有这类板项 ⇒ rows[] 是空数组，行一级登记在 `UNCHECKED_TYPES`）。
+    ob = R.obligations_face(artifacts_ws)
+    got["ObligationsView"] = set(ob)
+    got["ObligationFamily"] = set(ob["families"][0])
     # 2026-10-24（D-57 的文献库那一面）：夹具工作区里 `literature` 是 0 行，读数落在
     # "读到了、里面 0 条"那一档 —— 五键外壳照样在，所以它与上面几面一样有落脚点；
     # `data` 与三条行一级的类型登记在 `UNCHECKED_TYPES` 里。
@@ -912,6 +917,8 @@ def test_the_route_table_hands_our_endpoints_to_our_handlers() -> None:
                     "handle_chat",
                     # 2026-10-21（业主的「名册监视」）：整棵名册树那一条只读端点
                     "handle_roster",
+                    # 2026-11-19（对齐第 ⑥ 项）：板上三族义务的收件人读数（只读）
+                    "handle_obligations",
                     # 2026-10-24（D-57）：文献库那一面（只读；只算正式入库的那一档）
                     "handle_library",
                     # 2026-11-01（块 3）：论文包三块 + 原文窗口（两条都只读）

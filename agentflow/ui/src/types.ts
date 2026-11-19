@@ -1167,6 +1167,48 @@ export interface RosterCoverage {
   unrostered: number | null;
 }
 
+/** 出处：obligations_face() 的 families[] —— 一族义务（b-register / v-resubmit / b-awake）的计数。`prefix` 逐字来自 `obligations` 的三个常量；`unowned` 是「父台账号与收件实例都空」的那些（没人收）；`summoned` 只对 b-register 有意义。 */
+export interface ObligationFamily {
+  name: string;
+  role: string;
+  why: string;
+  prefix: string;
+  open: number;
+  unowned: number;
+  summoned: number;
+  instances: string[];
+}
+
+/** 出处：obligations_face() 的 rows[] —— 一条还开着的板项（收件实例 / 父台账号 / 项状态 / 叫醒行）。`recipient_instance` 是板项行的 instance 列（`obligations.recipient_reading` 的落点）；`addressed` 是 instance / parent / unowned 三档。 */
+export interface ObligationRow {
+  task_id: string;
+  key: string;
+  family: string;
+  role: string;
+  recipient_instance: string;
+  parent_task_id: string;
+  item_state: string;
+  item_close: string;
+  opened_at: string;
+  wake_task_id: string;
+  addressed: string;
+  detail: string;
+}
+
+/** 出处：obligations_face() —— 板上三族义务的收件人读数（只读；销号不经过网页）。 */
+export interface ObligationsView {
+  tri: Tri;
+  reason: string;
+  source: SourceRef;
+  checked: boolean;
+  families: ObligationFamily[];
+  rows: ObligationRow[];
+  counts: Record<string, Record<string, number>>;
+  recipient_rule: string;
+  addressing: Record<string, unknown>;
+  problems: string[];
+}
+
 /** 出处：library_face() —— 文献库那一面：只算「正式入库」的文献 + 每篇被哪些命题／哪一份证明用过（`state` 只有 computed / unknown 两档；`unknown` 有两支 ——台账没读成、以及「没有候选台账 ⇒ 入库判不出」，两支的 `data.count` 都是 null，不是 0）。 */
 export interface LibraryView {
   checked: boolean;

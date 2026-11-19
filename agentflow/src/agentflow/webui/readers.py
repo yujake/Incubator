@@ -171,6 +171,9 @@ ROUTES: tuple[tuple[str, str, str], ...] = (
     # 只读一条：这个端点的消费者是只读面板，写面为零（表里没有与它配对的 POST，
     # 判据 `tests/test_webui_roster_panel.py` 的第三条就钉着这一条）。
     ("GET", "/api/roster", "handle_roster"),
+    # 板上三族义务的收件人读数（b-register / v-resubmit / b-awake）：只读一条，
+    # 没有配对的 POST（销号只发生在 conductor 的收口那一路）。
+    ("GET", "/api/obligations", "handle_obligations"),
     # 真身在 `webui/sse.py`（`GET /api/stream` 的推送流）。
     ("GET", "/api/stream", "handle_stream"),
     # 文献库那一面（业主报过「ui侧文献库无法读出，请确认」）。
@@ -216,6 +219,9 @@ CHECKED_TYPES: tuple[str, ...] = (
     # （名册目录不在 ⇒ `answer=unknown` 也是同一批键，见 `roster_face` 里那张表），
     # 所以它进受核对名单；行一级的五个类型见 `UNCHECKED_TYPES` 的理由。
     "RosterView",
+    # 板上三族义务（b-register / v-resubmit / b-awake）的收件人读数：顶层键在任何
+    # 工作区上都在（表不在 ⇒ not_applicable；families 恒为三族），所以进受核对名单。
+    "ObligationsView", "ObligationFamily",
     # 文献库那一面的五键外壳在每一档上都是同一批键
     # （表不在盘上 / 坏 JSON / 空表都只是 `state` 的另一档，不是"读不出键"），
     # 所以它进受核对名单；`data` 与三条行一级的类型见 `UNCHECKED_TYPES` 的理由。
@@ -260,6 +266,10 @@ UNCHECKED_TYPES: dict[str, str] = {
     # 而"为什么这里没有读数"就写在上面这一句里（三态纪律：不是把接口删掉假装不存在）。
     "RosterNode": "夹具没有 `out/roster/<父编号>.jsonl`（名册只在派人时落）"
                   "⇒ `nodes[]` 是空数组，形状以 `roster_face` 在真工作区上的读数为准",
+    # 义务板项：夹具的 `tasks` 行里没有三族义务（b-register / v-resubmit / b-awake）
+    # 的板项 ⇒ `rows[]` 是空数组；族级形状（`families[]`）夹具上有，所以它进受核对名单。
+    "ObligationRow": "夹具没有三族义务的板项行 ⇒ `rows[]` 是空数组；"
+                     "形状以 `obligations_face` 在真工作区上的读数为准",
     # 错误动作那一页的三组读数：下面四个是 `ErrorStatsData` 的
     # 子形状，夹具（`artifacts_ws`）没有 `verifications/` / `out/roster/refusals/` /
     # `out/secretary/` 的拒信与判词，也没有收工门的 blocker ⇒ 样本 / blocker 数组是空的。
@@ -3722,6 +3732,158 @@ def live_face(root: str | Path) -> dict[str, Any]:
     }
 
 
+# ====================================================================== 8b 义务与板项
+#: 三族义务：`(族名, 幂等键前缀, 负责人角色, 一句话)`。前缀的真身在
+#: `obligations`（`REGISTER_PREFIX` / `RESUBMIT_PREFIX` / `REGISTER_WAKE_PREFIX`），
+#: 本层不另写一份字面量 —— 那一份漂了，页面会显示一族不存在的义务。
+def _obligation_families() -> tuple[tuple[str, str, str, str], ...]:
+    from .. import obligations as OB
+
+    return (
+        ("b-register", OB.REGISTER_PREFIX, OB.REGISTER_ROLE,
+         "签了但没人收录（收口：命题出现正文且 reviewed=true）"),
+        ("v-resubmit", OB.RESUBMIT_PREFIX, "V",
+         "审稿要求重送（收口：重送那一版落地并拿到新签）"),
+        ("b-awake", OB.REGISTER_WAKE_PREFIX, OB.REGISTER_ROLE,
+         "签落地后叫醒 B（召唤行；它本身不是义务，是「叫过没有」的读数）"),
+    )
+
+
+def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
+    """`GET /api/obligations` 的读模型：板上三族义务的**收件人**读数。
+
+    为什么要有这一条：名册的收件箱按 `parent_task_id`（父台账号）分，而一条板项
+    可以只带**收件实例**（`Task.instance`，`conductor.open_item(recipient_instance=…)`
+    写进去的那一格）—— 父为空的项不挂在任何人的收件箱上，页面就看不见它，
+    真机 lp-ball 的两条 `b-register@` 至今如此。这一面把"投给谁"与"谁是父"
+    两条轴分开摆出来，让"没人收"变成一句看得见的读数。
+
+    ## 两条轴（不许折成一句"有没有收件人"）
+
+    - `recipient_instance`：板项行的 `instance` 列。它的值由
+      `obligations.recipient_reading` 判（调用方点名 > 命题登记实例 > 角色地址），
+      写进板项行之后就是事实；`Conductor.open_items_for(role, instance)` 正是按
+      这一列取件（`instance` 相等，或 `instance` 为空且 `role` 相等）。
+    - `parent_task_id`：父台账号（`open_items_of` 那一轴，名册收件箱用它）。
+    两轴都空 ⇒ `addressed="unowned"`（板上的孤儿项，等主控派人）。
+
+    ## 三态
+
+    表不在盘上 ⇒ `tri="not_applicable"` + 理由（这个工作区还没有板项，是事实）；
+    表读不出来 ⇒ `tri="unreadable"` + `problems`；读到了 ⇒ `computed`（哪怕 0 行）。
+
+    ## 只读
+
+    本函数不写盘、不开项、不销号：销号只发生在 `conductor.open_item` / 收口那一路。
+    """
+    from .. import obligations as OB
+
+    root_p = Path(str(root))
+    try:
+        if store is None:
+            from ..store import Store
+
+            store = Store(root_p)
+        rows, tasks_tri = _table_state(store, "tasks")
+    except Exception as exc:  # noqa: BLE001 —— 读不到就是没查成（不是"没有义务"）
+        return {"tri": TRI_UNREADABLE,
+                "reason": f"tasks 台账读不出来：{type(exc).__name__}: {exc}",
+                "source": _src("data/tasks.json", label="板项"),
+                "checked": False, "families": [], "rows": [], "counts": {},
+                "recipient_rule": "", "addressing": {"by_instance": {},
+                                                     "by_role": {}, "unowned": 0},
+                "problems": [f"{type(exc).__name__}: {exc}"]}
+    if tasks_tri == TRI_NOT_APPLICABLE:
+        return {"tri": TRI_NOT_APPLICABLE,
+                "reason": "还没有这张表：data/tasks.json 不在盘上（这个工作区还没开过项）",
+                "source": _src("data/tasks.json", label="板项"),
+                "checked": True, "families": [], "rows": [], "counts": {},
+                "recipient_rule": "", "addressing": {"by_instance": {},
+                                                     "by_role": {}, "unowned": 0},
+                "problems": []}
+    awake_prefix = next(pre for name, pre, _role, _why in _obligation_families()
+                        if name == "b-awake")
+    #: 叫醒行的落点：`{input_key: task_id}`（只看还开着的召唤行）。
+    wakes: dict[str, str] = {}
+    for row in rows:
+        key = str(row.get("input_key") or "")
+        if key.startswith(awake_prefix) and str(row.get("item_state") or "") != "done":
+            wakes.setdefault(key, str(row.get("task_id") or ""))
+    families: dict[str, dict[str, Any]] = {
+        name: {"name": name, "role": role, "why": why,
+               "prefix": pre, "open": 0, "unowned": 0, "summoned": 0,
+               "instances": []}
+        for name, pre, role, why in _obligation_families()
+    }
+    detail_rows: list[dict[str, Any]] = []
+    by_instance: dict[str, int] = {}
+    by_role: dict[str, int] = {}
+    unowned = 0
+    for row in rows:
+        key = str(row.get("input_key") or "")
+        family = next((name for name, pre, _role, _why in _obligation_families()
+                       if key.startswith(pre)), "")
+        if not family:
+            continue
+        if str(row.get("item_state") or "") == "done":
+            continue
+        fam = families[family]
+        fam["open"] = int(fam["open"]) + 1
+        role = str(row.get("role") or fam["role"])
+        instance = str(row.get("instance") or "")
+        parent = str(row.get("parent_task_id") or "")
+        if not parent and not instance:
+            fam["unowned"] = int(fam["unowned"]) + 1
+            unowned += 1
+        if instance:
+            fam["instances"] = sorted({*fam["instances"], instance})
+            by_instance[instance] = by_instance.get(instance, 0) + 1
+        else:
+            by_role[role] = by_role.get(role, 0) + 1
+        wake_key = ""
+        if family == "b-register":
+            sha = OB.register_sha_of(key)
+            label = key[len(OB.REGISTER_PREFIX):].partition("@")[0]
+            wake_key = OB.register_wake_key(f"{label}#p1", sha)
+            if wakes.get(wake_key):
+                fam["summoned"] = int(fam["summoned"]) + 1
+        detail_rows.append({
+            "task_id": str(row.get("task_id") or ""),
+            "key": key,
+            "family": family,
+            "role": role,
+            "recipient_instance": instance,
+            "parent_task_id": parent,
+            "item_state": str(row.get("item_state") or ""),
+            "item_close": str(row.get("item_close") or ""),
+            "opened_at": str(row.get("started_at") or ""),
+            "wake_task_id": wakes.get(wake_key, "") if wake_key else "",
+            "addressed": ("instance" if instance else
+                          ("parent" if parent else "unowned")),
+            "detail": str(row.get("detail") or "")[:200],
+        })
+    counts = {name: {"open": f["open"], "unowned": f["unowned"],
+                     "summoned": f["summoned"]} for name, f in families.items()}
+    problems: list[str] = []
+    return {
+        "tri": TRI_COMPUTED,
+        "reason": "；".join(f"{n}：开 {c['open']}（没人收 {c['unowned']}）"
+                           for n, c in counts.items() if c["open"]),
+        "source": _src("data/tasks.json", label="板项"),
+        "checked": True,
+        "families": [families[name] for name in families],
+        "rows": detail_rows,
+        "counts": counts,
+        "recipient_rule": ("收件实例 = 板项行的 `instance` 列（`conductor.open_item` 的 "
+                           "`recipient_instance`，其值由 `obligations.recipient_reading` "
+                           "判：调用方点名 > 命题登记实例 > 角色地址）；父台账号看 "
+                           "`parent_task_id`（名册收件箱那一轴）。两轴都空 = 没人收。"),
+        "addressing": {"by_instance": by_instance, "by_role": by_role,
+                       "unowned": unowned},
+        "problems": problems,
+    }
+
+
 # ====================================================================== 9 用量
 def usage_face(root: str | Path) -> dict[str, Any]:
     """`GET /api/usage` 的读模型：`usage_ledger` 的汇总（总计 + 两个归口 + 最近几笔）。
@@ -5421,6 +5583,18 @@ def handle_roster(handler: Any, params: Mapping[str, str],
     _json_of(handler, roster_face(handler.root))
 
 
+def handle_obligations(handler: Any, params: Mapping[str, str],
+                       query: Mapping[str, Sequence[str]]) -> None:
+    """`GET /api/obligations`：板上三族义务的收件人读数（只读）。
+
+    消费者是「在飞」页的义务卡。这个端点没有配对的 POST：收口（销号）只发生在
+    `conductor` 的写路径上，网页不替人销号 —— 那样会让"这一条收过了"变成一次点击
+    就能伪造的事实。
+    """
+    del params, query
+    _json_of(handler, obligations_face(handler.root))
+
+
 # ====================================================================== 类型声明
 # 前端唯一类型来源（`ui/src/types.ts`）由 `agentflow/web/emit_types.py` 生成，它把三条
 # 零交线各自的 `type_decls()` 拼起来（`draft/78 §3`）。本模块这一份是六个只读面。
@@ -6179,6 +6353,31 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     # 文献库那一面（「ui侧文献库无法读出，请确认」是它的来由）。
     # 五键外壳里 `state` 只有两档（computed / unknown）：`unknown` 是"这一面没读成"
     # （表不在盘上 / 坏 JSON），而 `count` 那一格在那一档是 null —— 不是 0。
+    ("ObligationFamily",
+     "obligations_face() 的 families[] —— 一族义务（b-register / v-resubmit / "
+     "b-awake）的计数。`prefix` 逐字来自 `obligations` 的三个常量；`unowned` 是"
+     "「父台账号与收件实例都空」的那些（没人收）；`summoned` 只对 b-register 有意义",
+     (("name", "string"), ("role", "string"), ("why", "string"),
+      ("prefix", "string"), ("open", "number"), ("unowned", "number"),
+      ("summoned", "number"), ("instances", "string[]"))),
+    ("ObligationRow",
+     "obligations_face() 的 rows[] —— 一条还开着的板项（收件实例 / 父台账号 / "
+     "项状态 / 叫醒行）。`recipient_instance` 是板项行的 instance 列"
+     "（`obligations.recipient_reading` 的落点）；`addressed` 是 instance / parent / "
+     "unowned 三档",
+     (("task_id", "string"), ("key", "string"), ("family", "string"),
+      ("role", "string"), ("recipient_instance", "string"),
+      ("parent_task_id", "string"), ("item_state", "string"),
+      ("item_close", "string"), ("opened_at", "string"),
+      ("wake_task_id", "string"), ("addressed", "string"), ("detail", "string"))),
+    ("ObligationsView",
+     "obligations_face() —— 板上三族义务的收件人读数（只读；销号不经过网页）",
+     (("tri", "Tri"), ("reason", "string"), ("source", "SourceRef"),
+      ("checked", "boolean"), ("families", "ObligationFamily[]"),
+      ("rows", "ObligationRow[]"),
+      ("counts", "Record<string, Record<string, number>>"),
+      ("recipient_rule", "string"), ("addressing", "Record<string, unknown>"),
+      ("problems", "string[]"))),
     ("LibraryView",
      "library_face() —— 文献库那一面：只算「正式入库」的文献 + 每篇被哪些命题／"
      "哪一份证明用过（`state` 只有 computed / unknown 两档；`unknown` 有两支 ——"
@@ -6624,6 +6823,7 @@ HANDLERS.update({
     "handle_status_reports": handle_status_reports,
     "handle_chat": handle_chat,
     "handle_roster": handle_roster,
+    "handle_obligations": handle_obligations,
 })
 
 def _roster_from_tasks(root_p: Path) -> dict[str, Any]:
