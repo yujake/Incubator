@@ -3158,6 +3158,13 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
     #: 惰性算一次，行循环里那一格用；算不出来时不许读成"没有未消化"（那正是
     #: 这一条要防的形态：写出 32 却被当成 pass）。
     _unprocessed_cache: dict[str, Any] = {}
+    #: 表里有没有专管「文献消化队列」的那一行（`literature_unprocessed_rows`）。
+    #: 有它时，"未消化"由那一行自己判（R9FIX-D4：`unprocessed_reason` 要写在它那一行
+    #: —— 它才是这一档的落点）；没有它时才退回"请求闭环"那一行的旧耦合。
+    has_lit_queue_row = any(
+        isinstance(r, Mapping)
+        and str(r.get("kind") or "") == "literature_unprocessed_rows"
+        for r in rows)
     seen_ids: set[str] = set()
     duplicate_ids: list[str] = []
 
@@ -3356,7 +3363,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         #   - `unprocessed > 0` 且写了 `unprocessed_reason` ⇒ 这一行 `unknown`（读数留着）；
         #   - `unprocessed > 0` 而没写理由 ⇒ `unmet`（blocker）：不许静默带着队列收工；
         #   - 读不到 `literature` ⇒ `unknown`（"读不到"绝不是"清零了"）。
-        if kind == "unfinished_request_rows" and ok_row:
+        if kind == "unfinished_request_rows" and ok_row and not has_lit_queue_row:
             u = _unprocessed()
             count = u.get("count")
             reason = str(row.get("unprocessed_reason") or "").strip()
@@ -3390,8 +3397,52 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                                          "reason": why, "unprocessed_reason": reason})
                     rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
                                                 "warning", f"验收行 {cid}：{why}"))
-        # ---- 接 V 的回路的收工侧：计划 `history` 里的 `statement_id`
-        # 必须在 `verifications` 里有一行，否则「攻」这一行记 `unknown`（不是 `pass`）。
+        # ---- R9FIX-D4：「文献消化队列」那一行自己判 `unprocessed_reason` -------------
+        #
+        # 改前这一格只挂在 `unfinished_request_rows`（请求闭环）上，而 R12 这一行的
+        # `note` 却写着「必须写清为什么（`unprocessed_reason`）」—— 照它写在 R12 上
+        # 的说明不会被读（真机 lp-ball-9 的 R12 就是这么写的：读数 3、没有理由，
+        # 而理由字段真正的读点在别一行）。现在：表里有 `literature_unprocessed_rows`
+        # 时，由**这一行**判；没有这一行才退回旧耦合（兼容老工作区）。
+        #
+        # 三态：读不到 ⇒ unknown；>0 且写了理由 ⇒ unknown（读数留着）；
+        # >0 而没写 ⇒ unmet（blocker，两条出口逐字给出）。
+        if kind == "literature_unprocessed_rows":
+            u = _unprocessed()
+            count = u.get("count")
+            reason = str(row.get("unprocessed_reason") or "").strip()
+            if isinstance(detail, dict):
+                detail["literature_unprocessed"] = count
+            if count is None:
+                why = (f"`literature.unprocessed` **读不到**（{u.get('reason')}）⇒ "
+                       "「文献消化队列清没清零」判不了 ⇒ 这一行记 `unknown`，不记 `pass`")
+                row_out.update({"state": "unknown", "ok": False, "unknown": True,
+                                "reason": why})
+                unknown_rows.append({"id": cid, "kind": kind, "unprocessed": None,
+                                     "reason": why})
+                rep.findings.append(Finding("acceptance", "acceptance_unprocessed_unreadable",
+                                            "warning", f"验收行 {cid}：{why}"))
+                ok_row = True          # 已按 unknown 处置，不再走下面的通用 unmet
+            elif int(count) > 0 and reason:
+                why = (f"`literature.unprocessed` = {count} > 0 ⇒ 这一行记 `unknown`、"
+                       f"不记 `pass`；可带着收工的理由已写在 `unprocessed_reason`：{reason}")
+                row_out.update({"state": "unknown", "ok": False, "unknown": True,
+                                "reason": why, "unprocessed_reason": reason})
+                unknown_rows.append({"id": cid, "kind": kind, "unprocessed": int(count),
+                                     "reason": why, "unprocessed_reason": reason})
+                rep.findings.append(Finding("acceptance", "acceptance_unprocessed_carried",
+                                            "warning", f"验收行 {cid}：{why}"))
+                ok_row = True          # 已按 unknown 处置，不再走下面的通用 unmet
+            elif int(count) > 0:
+                unmet.append(
+                    f"{cid}（{name or '待入库文献表清空'}）：`literature.unprocessed` = "
+                    f"{count} > 0，而这一行没写 `unprocessed_reason` ⇒ 队列没清零时不许"
+                    "记 pass。两条出口：① 派 B 把剩下的消化掉（`B.run_once`）；"
+                    "② 在这一行写 `unprocessed_reason`，逐字说清**为什么可以带着它收工**"
+                    "（这一档的读点就在这里；改前它被读在「请求闭环」那一行，照本条"
+                    "`note` 写在这里的理由读不到）")
+                ok_row = True          # 已按 unmet 处置，不再走下面的通用 unmet
+
         #
         # 为什么必须在这里说，而不是只靠 M 的提示词：`F.step` 把论证落成 `statements`
         # 的一行之后，`statement_id` 进了 `attack_plans.history`（P3-6），而"后来有没有

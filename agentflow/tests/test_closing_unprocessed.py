@@ -172,6 +172,60 @@ def test_a_dirty_queue_with_a_reason_downgrades_to_unknown(tmp_path: pathlib.Pat
         [f.detail for f in rep.findings]
 
 
+def test_a_dirty_queue_with_a_reason_on_its_own_row_downgrades_to_unknown(
+        tmp_path: pathlib.Path) -> None:
+    """R9FIX-D4：`unprocessed_reason` 写在 `literature_unprocessed_rows` 那一行上也要算。
+
+    改前红（真机 lp-ball-9 的 R12）：这一行的 `note` 说「必须写清为什么
+    （`unprocessed_reason`）」，而代码只从「请求闭环」那一行读它 —— 照本条说明
+    写在这里的理由读不到，R12 照样以 `上限 0` 判 fail。
+    """
+    def seed(s: Store) -> None:
+        _seed_legs(s)
+        _seed_literature(s, unprocessed=3, processed=3)
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, _legs() + [{
+        "id": "R12", "name": "待入库文献表清空",
+        "kind": "literature_unprocessed_rows", "max": 0,
+        "unprocessed_reason": "剩下 3 条是 metadata-only（无本地全文），processed 永远为假",
+    }], st=st)
+
+    rep = _gate(st, report)
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R12")
+    assert row["state"] == "unknown" and row["ok"] is False, row
+    assert row["detail"]["literature_unprocessed"] == 3, row["detail"]
+    assert rep.status["acceptance"] == "unknown", rep.to_dict()
+    # 有 R12 时 R11（请求闭环）不再被文献队列连带降级（各判各的那一条队列）。
+    r11 = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "P10")
+    assert r11["state"] == "computed" and r11["ok"] is True, r11
+    assert "acceptance_unprocessed_carried" in [
+        f.code for f in rep.findings if f.check == "acceptance"], rep.findings
+
+
+def test_a_dirty_queue_without_a_reason_on_its_own_row_is_a_blocker(
+        tmp_path: pathlib.Path) -> None:
+    """R9FIX-D4 负控：R12 没写理由 ⇒ 仍是 blocker（不是被新分支放行）。"""
+    def seed(s: Store) -> None:
+        _seed_legs(s)
+        _seed_literature(s, unprocessed=3, processed=3)
+
+    st = _project(tmp_path, seed=seed)
+    report = _write_report(tmp_path)
+    _acceptance_checks(tmp_path, _legs() + [{
+        "id": "R12", "name": "待入库文献表清空",
+        "kind": "literature_unprocessed_rows", "max": 0,
+    }], st=st)
+
+    rep = _gate(st, report)
+    row = next(r for r in rep.readings["acceptance"]["rows"] if r["id"] == "R12")
+    assert row["state"] == "computed" and row["ok"] is False, row
+    assert rep.status["acceptance"] == "fail", rep.to_dict()
+    detail = "；".join(str(f.detail) for f in rep.findings if f.check == "acceptance")
+    assert "R12" in detail and "unprocessed_reason" in detail, detail
+
+
 # ============================================================ 第三条队列自己有读数
 
 def test_the_third_queue_has_its_own_leg(tmp_path: pathlib.Path) -> None:
