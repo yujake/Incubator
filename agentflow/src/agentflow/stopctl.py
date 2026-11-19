@@ -473,14 +473,14 @@ def stop_reason_of(state: Mapping[str, Any] | None) -> str:
 
 
 def stop_attribution_of(state: Mapping[str, Any] | None) -> dict[str, Any]:
-    """开关负载 → 「谁在叫停、为什么」的人话（**不改** :func:`stop_reason_of` 的理由码）。
+    """开关负载 → 「谁在叫停、为什么」的人话（不改 :func:`stop_reason_of` 的理由码）。
 
     为什么另开一格：`stop_reason_of` 回答的是"哪一档停止"（它决定退出码与
     `USER_STOP_REASONS` 的分类），而"谁按的、按的是什么理由"只写在开关负载的
     `by` / `reason` 里。把两者折成一格，要么改掉退出码语义、要么把负载丢掉 ——
     真机 lp-ball-9 的末行就是这么写的：`by=M`、`reason=budget`（主控自己按
     $1.00 保留线叫停），而 `agent_loop._stop_note` 只有一个 `stop_file` 码，
-    于是渲染成「**用户**叫停」。这里把负载原样翻成人话，理由码一个字不动。
+    于是渲染成「用户叫停」。这里把负载原样翻成人话，理由码一个字不动。
 
     三态：不是 Mapping / 空 ⇒ `checked=False`（"没读到" ≠ "用户叫停"）。
     """

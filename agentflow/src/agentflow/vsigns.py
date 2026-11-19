@@ -304,13 +304,13 @@ def note_missed_issue(root: Any, *, artifact_sha: Any, manuscript: str = "",
 
     ## 为什么需要它（R9FIX 追补，真机 lp-ball-9 08:30:09）
 
-    第 4 个 3/3 clean 组（正文 sha `e863773…`）在盘上**没有签文件、也没有任何失败记录**：
+    第 4 个 3/3 clean 组（正文 sha `e863773…`）在盘上没有签文件、也没有任何失败记录：
     拒签的理由只活在 `verify.verify_proof` 的返回值里（那一趟是
     `PROOF_CHANGED_SINCE_DISPATCH` —— 读到 e863，盘上已改成 a724）。返回值读过就没了，
     事后只能靠"签文件不在"倒推，而"没发"与"没查"在盘上同形。
 
     这条记录补齐第三态：`should_issue=true` 且 `written=false`，逐字带理由码与两把 sha。
-    它**不是**判据：没有任何门读它来决定通过/不通过；它只是让"该发签却没发"在事后
+    它不是判据：没有任何门读它来决定通过/不通过；它只是让"该发签却没发"在事后
     可查、可复算。
 
     幂等：同一 `(artifact_sha, code, reason)` 重复调用只追加一次（读已有行判重）。

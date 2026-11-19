@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""R9FIX · D3：主控改走**单件** `conductor.summon` 时，待认领队列也要被扫到。
+"""R9FIX · D3：主控改走单件 `conductor.summon` 时，待认领队列也要被扫到。
 
 ## 改前红（真机 lp-ball-9，08:53:39，`r-000009`）
 

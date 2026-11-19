@@ -3403,7 +3403,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         # `note` 却写着「必须写清为什么（`unprocessed_reason`）」—— 照它写在 R12 上
         # 的说明不会被读（真机 lp-ball-9 的 R12 就是这么写的：读数 3、没有理由，
         # 而理由字段真正的读点在别一行）。现在：表里有 `literature_unprocessed_rows`
-        # 时，由**这一行**判；没有这一行才退回旧耦合（兼容老工作区）。
+        # 时，由这一行判；没有这一行才退回旧耦合（兼容老工作区）。
         #
         # 三态：读不到 ⇒ unknown；>0 且写了理由 ⇒ unknown（读数留着）；
         # >0 而没写 ⇒ unmet（blocker，两条出口逐字给出）。

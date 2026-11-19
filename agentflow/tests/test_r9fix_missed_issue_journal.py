@@ -3,8 +3,8 @@
 
 ## 改前（真机 lp-ball-9，08:30:09，正文 sha e863773…）
 
-第 4 个 3/3 clean 组（`review_call=aa5bac98f15b`，passes 1/2/3）没有签文件，也**没有
-任何失败记录**：拒签理由只是 `verify.verify_proof` 返回值里的一句话
+第 4 个 3/3 clean 组（`review_call=aa5bac98f15b`，passes 1/2/3）没有签文件，也没有
+任何失败记录：拒签理由只是 `verify.verify_proof` 返回值里的一句话
 （`proof_changed_since_dispatch`：读到 e863，盘上已改成 a724）。返回值读过就没了，
 事后只能靠"签文件不在"倒推 —— 「没发」与「没查」在盘上同形。
 

@@ -2644,11 +2644,11 @@ def _stamp_review_axis(store: Any, doc: Mapping[str, Any], *, actor: str,
     ## 三态与"判词挂读到的那一版"
 
     写之前在同一笔事务里重读那一行：`content_sha256` / `revision` 与本次读到的
-    那一版不一致 ⇒ **不回写**（读的是旧版，判词不许盖到新版上），返回
+    那一版不一致 ⇒ 不回写（读的是旧版，判词不许盖到新版上），返回
     `written=False` + 两版读数。读不到那一行 / 写入失败同样不静默。
 
-    只改审核轴三格（`review_verdict` / `reviewed_at` / `reviewed_by`），**不碰
-    `status`** —— 生命周期仍由 H 的 `review` / `verify_fixes` 决定。
+    只改审核轴三格（`review_verdict` / `reviewed_at` / `reviewed_by`），不碰
+    `status` —— 生命周期仍由 H 的 `review` / `verify_fixes` 决定。
     """
     from datetime import datetime as _dt
 
@@ -2715,7 +2715,7 @@ def review_report(
     写一个 markdown 文件（默认 `<workspace>/out/review/<doc_id>-review.md`），并把这一轮
     裁决回写到 `documents` 的审核轴三格（`review_verdict` / `reviewed_at` /
     `reviewed_by`；2026-11-19 R9FIX-D9）。回写只挂"读到的那一版"（事务里复核
-    sha/revision）、**不碰 `status`**，也**不碰 `claims`**。
+    sha/revision）、不碰 `status`，也不碰 `claims`。
     这是 `AgentH` 落库代理的一个入口，因此它属于"能被显式拒绝的写工具"那一类（`include_writers=True` 才装配）。
     三态：`dependencies` 省略 = 从库里读该稿件的依赖（查过）；显式 `None` = 没查（`dep_check.checked=False`）。
     """

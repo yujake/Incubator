@@ -3,7 +3,7 @@
 
 ## 改前红（真机 lp-ball-9，10:01:39，L3003）
 
-末行 `agent_run_end.final` 写「**用户**叫停（开关文件 .agentflow-stop）：第 64 步
+末行 `agent_run_end.final` 写「用户叫停（开关文件 .agentflow-stop）：第 64 步
 之后收工」，而 `runs/stop-history.jsonl` 是 `by=M` / `reason=budget` —— 那是主控
 自己按 $1.00 保留线叫停（框架预算还剩 $0.98）。`stopctl.stop_reason_of` 对所有
 开关一律返回 `stop_file`，负载里的 `by` / `reason` 只进了 stop-history，没进
