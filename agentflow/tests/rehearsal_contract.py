@@ -87,6 +87,22 @@ FLOW_CRITERIA_FILES = (
     "test_rehearsal_a_literature_flow_criteria.py",
 )
 
+#: 收工闸八格的判据文件（2026-11-19 REH8）：与上面两组判据同形，但排它的理由更硬。
+#:
+#: 业主裁定（逐字）：「除非彩排能做出来收工闸全过，不然不轻易动」。这一份要回答的正是
+#: "八格能不能同时 pass"，所以它的八条反真空必须逐格把产品里的一处真弄坏
+#: （删报告、塞一条 disputed 依赖、清空五张表、把承重断言的引文从 T3 换成数值行…）——
+#: 这与「打桩只许五类」的静态判据天然冲突（打桩清单里根本没有"报告文件 / 台账行"这一层）。
+#:
+#: 第二层理由：收工门那八格本身零模型调用（`closing.check_closing` 不调模型），
+#: 所以 `triplet_probe` 的三格在这一份里结构性没有对象（那三格量的是"这一趟真的走了一遍
+#: 模型循环"，本文件量的不是那件事）。把它当彩排扫，只会得到一条"这一趟没有真模型调用"
+#: 的假红 —— 而那条红要说的事，`test_rehearsal_c12_closing.py` 已经用 CLI 入口 + 真
+#: `LlmSeam` 证明过了（它复用的正控工作区与本文件参照的是同一种）。
+CLOSING_CRITERIA_FILES = (
+    "test_rehearsal_closing_eight_cells.py",
+)
+
 #: 「真机前置证据」的正面登记：这些彩排走的是 CLI 入口 + 真 `LlmSeam` + 真账本 + 三格探针。
 #:
 #: 为什么要有它：`CHAIN_ONLY` 是一张「不是同一条路」的黑名单，单靠它回答不了
@@ -100,7 +116,8 @@ SAME_PATH_EVIDENCE: tuple[str, ...] = (
 )
 
 _EXCLUDED = frozenset({CONTRACT_FILE, CONTRACT_TEST_FILE,
-                       *WF_CRITERIA_FILES, *FLOW_CRITERIA_FILES})
+                       *WF_CRITERIA_FILES, *FLOW_CRITERIA_FILES,
+                       *CLOSING_CRITERIA_FILES})
 
 # ============================================================ 一 入口表
 
