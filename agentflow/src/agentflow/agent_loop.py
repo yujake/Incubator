@@ -10805,6 +10805,10 @@ class AgentLoop:
         settlement_note = self._emit_settlement(run)
         if settlement_note:
             run.notes.append(settlement_note)
+        # ---- R9FIX-D9：H 的审校报告裁决回写 documents 审核轴（判词挂读到的那一版）
+        review_note = self._stamp_h_review_axis(run)
+        if review_note:
+            run.notes.append(review_note)
         # ---- 状态报告强制（`draft/38` §7 第三组判据的那一格；模型没调就框架补落）
         # 同样放在 `agent_run_end` 之前：那句读数要跟着这一条事件落盘，事后读得到
         # "这一格是模型落的还是框架补的"。
@@ -13792,6 +13796,79 @@ class AgentLoop:
         except Exception as exc:  # noqa: BLE001 - fail-open
             out["handoffs_digest_problem"] = f"{type(exc).__name__}: {exc}（这一格没读成）"
         return out
+
+    def _stamp_h_review_axis(self, run: "AgentLoop.LoopRun") -> str:
+        """H 这一趟最后一份审校报告的裁决回写到 `documents` 的审核轴（R9FIX-D9）。
+
+        ## 为什么写在这里，而不是 `review.report` 里
+
+        `review.report` 的契约是「只写一个报告文件，不碰任何数据表」
+        （`tests/test_review_report_writes_back_verdict.py`）—— 它一旦写 `documents`，
+        `capabilities.assert_capabilities` 的只读例外写集就会对不上（那条登记在禁改区）。
+        所以由框架在 H 这一趟收尾时，按 H 自己那份报告的裁决、用 H 的身份写：
+        H 的工具面仍然一个写工具都没有。
+
+        ## 判词挂读到的那一版
+
+        只在三种条件同时成立时写：① 这一趟真有 `review.report` 且裁决是
+        accepted/rejected；② 报告钉的 `revision_hash` 与 `documents` 现行 claims 的
+        现算 hash 逐字相同（G 在报告之后又改过 ⇒ 不写，判词不盖到新版上）；
+        ③ 这一行现在的 `review_verdict` 是空串（G 的 revise 已清掉旧版判词）。
+        ③ 是"别覆盖这一趟 `verify_fixes` 刚写的那一版"的护栏。
+
+        返回一句读数（空串 = 这一趟没有可回写的判词）。
+        """
+        if str(self.role) != "H" or self.store is None:
+            return ""
+        data: dict[str, Any] = {}
+        for step in reversed(list(run.steps)):
+            if str(getattr(step, "shape", "") or "") != "tool":
+                continue
+            payload = step.payload if isinstance(step.payload, Mapping) else {}
+            if str(payload.get("name") or "") != "review.report":
+                continue
+            result = step.result if isinstance(step.result, Mapping) else {}
+            if result.get("ok") is False:
+                continue
+            inner = result.get("data")
+            if isinstance(inner, Mapping) and str(inner.get("doc_id") or ""):
+                data = dict(inner)
+            elif str(result.get("doc_id") or ""):
+                data = dict(result)
+            break
+        if not data:
+            return ""
+        verdict = str(data.get("verdict") or "")
+        if verdict not in ("accepted", "rejected"):
+            return ""
+        axis = "成立" if verdict == "accepted" else "有毛病"
+        doc_id = str(data.get("doc_id") or "")
+        expected_hash = str(data.get("revision_hash") or "")
+        from . import claimanatomy as CA
+
+        try:
+            with self.store.tx("documents", actor=f"agent-{self.role}",
+                               note=f"H review.report verdict doc:{doc_id}") as tx:
+                row = tx.find("documents", doc_id=doc_id)
+                if row is None:
+                    return f"H 的审校裁决没回写：documents 里没有 {doc_id} 这一行"
+                current_hash = CA.revision_hash(row)
+                if expected_hash and current_hash != expected_hash:
+                    return ("H 的审校裁决没回写：报告钉的版本 "
+                            f"{expected_hash[:12]}… 已不是现行版（{current_hash[:12]}…）"
+                            " ⇒ 判词只挂读到的那一版")
+                if str(row.get("review_verdict") or ""):
+                    return ""
+                row["review_verdict"] = axis
+                row["reviewed_at"] = S.now_iso()
+                row["reviewed_by"] = f"agent-{self.role}"
+                tx.upsert("documents", row,
+                          note=f"H review.report verdict doc:{doc_id}")
+        except Exception as exc:  # noqa: BLE001 —— 回写失败只落读数，不许带走收工
+            return (f"H 的审校裁决没回写成（{type(exc).__name__}: {exc}）"
+                    "⇒ 这一轮判词仍只在报告与 final 里")
+        return (f"H 的审校裁决已回写 documents doc:{doc_id}："
+                f"review_verdict={axis}（报告 verdict={verdict}）")
 
     def _ensure_status_report(self, run: LoopRun) -> str:
         """M 收工前保证有一份状态报告落盘（模型没调就框架补落）。返回一句读数（空 = 不用管）。

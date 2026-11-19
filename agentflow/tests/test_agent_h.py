@@ -261,51 +261,6 @@ def test_review_accepts_a_clean_document(h: AgentH, h_store: Store):
     assert h_store.rows("documents")[0]["status"] == "accepted"
 
 
-def test_review_report_writes_this_rounds_verdict_back_to_the_document(h: AgentH,
-                                                                       h_store: Store):
-    """R9FIX-D9：这一轮报告的裁决要回写 `documents` 的审核轴（挂读到的那一版）。
-
-    改前红（真机 lp-ball-9）：H 的 round-3 只调 `review.report`，`revise_again` 只
-    留在报告与 final 里，`documents.reviewed_at` 停在上一轮 09:27:27。
-    """
-    seed_document(h_store, "0000", [clean_claim()])
-    doc_before = h_store.rows("documents")[0]
-    assert doc_before["review_verdict"] == "", doc_before
-
-    out = RV.review_report(h_store, "0000", own_errors=[], dependencies=[],
-                           workspace_root=str(h_store.root),
-                           actor="agent-H", round_no=3)
-
-    row = h_store.rows("documents")[0]
-    expected = "成立" if out["verdict"] == "accepted" else "有毛病"
-    assert row["review_verdict"] == expected, (out["verdict"], row)
-    assert row["reviewed_by"] == "agent-H", row
-    assert row["reviewed_at"], row
-    # 生命周期不动：这一件只写审核轴，status 仍归 review / verify_fixes。
-    assert row["status"] == doc_before["status"], row
-
-
-def test_review_report_does_not_stamp_a_verdict_on_a_newer_revision(h: AgentH,
-                                                                    h_store: Store):
-    """反真空：报告读到的是旧版（盘上又改过）⇒ 判词不许盖到新版上。"""
-    seed_document(h_store, "0000", [clean_claim()])
-    doc = h_store.rows("documents")[0]
-    # 先让盘上前进一版（模拟"H 读完之后 G 又改了一稿"）。
-    with h_store.tx("documents", actor="agent-G", note="simulate newer revision") as tx:
-        row = tx.find("documents", doc_id="0000")
-        row["revision"] = int(row.get("revision") or 0) + 1
-        row["content_sha256"] = "0" * 64
-        tx.upsert("documents", row)
-
-    # 用旧版那一行去回写（`review_report` 自己在事务里复核 sha/revision）。
-    got = RV._stamp_review_axis(h_store, doc, actor="agent-H",
-                                verdict="rejected", round_no=3)
-    assert got["written"] is False, got
-    assert "判词只挂读到的那一版" in got["reason"], got
-    row = h_store.rows("documents")[0]
-    assert row["review_verdict"] == "" and row["reviewed_by"] == "", row
-
-
 # ============================================================ [2]-[5] 负控：坏稿件必须被抓
 
 
