@@ -472,6 +472,35 @@ def stop_reason_of(state: Mapping[str, Any] | None) -> str:
     return "force_stop" if bool(state.get("force")) else "stop_file"
 
 
+def stop_attribution_of(state: Mapping[str, Any] | None) -> dict[str, Any]:
+    """开关负载 → 「谁在叫停、为什么」的人话（**不改** :func:`stop_reason_of` 的理由码）。
+
+    为什么另开一格：`stop_reason_of` 回答的是"哪一档停止"（它决定退出码与
+    `USER_STOP_REASONS` 的分类），而"谁按的、按的是什么理由"只写在开关负载的
+    `by` / `reason` 里。把两者折成一格，要么改掉退出码语义、要么把负载丢掉 ——
+    真机 lp-ball-9 的末行就是这么写的：`by=M`、`reason=budget`（主控自己按
+    $1.00 保留线叫停），而 `agent_loop._stop_note` 只有一个 `stop_file` 码，
+    于是渲染成「**用户**叫停」。这里把负载原样翻成人话，理由码一个字不动。
+
+    三态：不是 Mapping / 空 ⇒ `checked=False`（"没读到" ≠ "用户叫停"）。
+    """
+    if not isinstance(state, Mapping) or not state:
+        return {"checked": False, "by": "", "reason": "", "actor": "", "label": ""}
+    by = str(state.get("by") or "?")
+    reason = str(state.get("reason") or DEFAULT_REASON)
+    if by in ("user", "?"):
+        actor = "用户"
+    elif by == "M":
+        actor = "主控 M 自己"
+    else:
+        actor = f"{by} 自己"
+    label = f"{actor}叫停"
+    if reason == "budget":
+        # 这一档是"按钱叫停"：真机是 M 自设的 $1.00 保留线，不是框架预算耗尽。
+        label = f"{actor}按预算保留线叫停"
+    return {"checked": True, "by": by, "reason": reason, "actor": actor, "label": label}
+
+
 def history_path(root: str | Path) -> Path:
     """停机历史（每一次"被消费掉的叫停"一行 JSON）——审计记录不随开关一起消失。"""
     return Path(root) / PID_DIR_NAME / "stop-history.jsonl"

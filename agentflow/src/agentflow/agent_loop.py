@@ -9478,7 +9478,8 @@ class AgentLoop:
                     run.notes.append(out)
                 SS.append(self.session_root, {
                     "kind": "agent_note", "role": self.role,
-                    "note": (f"用户叫停（{stop_reason}）⇒ 第 {step} 步之后收工；"
+                    "note": (f"{self._stop_headline(stop_reason)}（{stop_reason}）"
+                             f"⇒ 第 {step} 步之后收工；"
                              "已做过的事留在台账与会话记录里，步检查点由 run_role 落盘"),
                 }, sid=self.sid)
                 break
@@ -11303,6 +11304,8 @@ class AgentLoop:
                     verdict = _SC.interrupt_applies(sig, self.my_task_id)
                     if verdict.get("checked") and verdict.get("applies"):
                         _SC.consume_interrupt(self.session_root, self.my_task_id, sid=self.sid)
+                        # R9FIX-D6：父叫停那一档也把负载留给人话渲染（不是"用户"）。
+                        self._stop_payload = dict(sig)
                         return str(sig.get("reason") or _SC.INTERRUPT_REASON)
                     if not verdict.get("checked"):
                         run.notes.append(f"有一份中断信号，但作用面判不了 ⇒ 不停"
@@ -11323,6 +11326,9 @@ class AgentLoop:
                     run.notes.append(f"停机开关在盘上，但{verdict['why']}")
                     return ""
                 reason = "force_stop" if bool(state.get("force")) else "stop_file"
+                # R9FIX-D6：把开关负载留在这一趟上 —— `_stop_note` 要用它区分
+                # 「用户按的」与「主控自己按保留线停的」。停止理由码不动。
+                self._stop_payload = dict(state)
                 # G4：停机对程序的那一半（强停杀掉、优雅停提醒 + 宽限并点名）。
                 # 读数进 `run.notes`，同一份随这一笔审计落 `runs/stop-history.jsonl`。
                 programs = self._stop_programs_for_stop(reason, state=state)
@@ -11355,7 +11361,8 @@ class AgentLoop:
                 run.notes.append(f"停机开关在盘上，但{verdict['why']}")
                 return ""
             reason = "force_stop" if bool(state.get("force")) else "stop_file"
-            # G4：停机对程序的那一半（与上面显式路径那一支同一份实现、同一份读数）。
+            # R9FIX-D6：与上面显式路径那一支同一格（`_stop_note` 的归属读数）。
+            self._stop_payload = dict(state)
             programs = self._stop_programs_for_stop(reason, state=state)
             if str(programs.get("notice") or ""):
                 run.notes.append(str(programs["notice"]))
@@ -11386,13 +11393,42 @@ class AgentLoop:
             break                      # 只看"开始之后最近的那一条"
         return ""
 
+    def _stop_headline(self, stop_reason: str) -> str:
+        """叫停那一句的"谁/为什么"（与 `_stop_note` 同源，R9FIX-D6）。"""
+        from . import stopctl
+
+        attr = stopctl.stop_attribution_of(getattr(self, "_stop_payload", None))
+        if stop_reason == "force_stop":
+            return f"{attr['actor'] or '用户'}强制停止"
+        return str(attr.get("label") or "叫停")
+
     def _stop_note(self, stop_reason: str, step: int) -> str:
-        """人叫停时写进 `final` 的那句话（要能直接告诉人"停在哪儿、怎么接着跑"）。"""
-        what = {"stop_file": f"用户叫停（开关文件 {self.stop_file or '.agentflow-stop'}）",
-                        "force_stop": "用户强制停止（直接停，不等待收尾）"}.get(
-                    stop_reason, f"用户叫停（{stop_reason}）")
+        """叫停时写进 `final` 的那句话（要能直接告诉人"停在哪儿、怎么接着跑"）。
+
+        ## 谁按的停不是猜的（R9FIX-D6）
+        `stop_reason` 只有 `stop_file` / `force_stop` 两档，**它不携带"谁"**：真机
+        lp-ball-9 的开关是 `by=M` / `reason=budget`（主控自己按 $1.00 保留线停的），
+        而这里按码渲染成「用户叫停」，读日志的人会把自停读成外部叫停。归属与理由
+        由 :func:`stopctl.stop_attribution_of` 从负载原样翻出来（停止理由码与退出码
+        一个字不动），负载由 `_user_stop_reason` 留在 `self._stop_payload` 上。
+
+        开头写清"是哪一趟"：这一句会被子代理的终态回报带到父的板上（真机
+        `t-000211` 就是 D 的这句话挂在 M 名下），不写角色时会让人以为 0 步是 M 的。
+        """
+        from . import stopctl
+
+        attr = stopctl.stop_attribution_of(getattr(self, "_stop_payload", None))
+        if stop_reason == "force_stop":
+            what = f"{attr['actor'] or '用户'}强制停止（直接停，不等待收尾）"
+        else:
+            where = self.stop_file or ".agentflow-stop"
+            what = (f"{attr['label']}（开关文件 {where}"
+                    + (f"；`by={attr['by']}`、`reason={attr['reason']}`"
+                       if attr.get("checked") else "")
+                    + "）")
         sid_arg = f" --sid {self.sid}" if self.sid else ""
-        return (f"{what}：第 {step} 步之后收工。已经做过的事都留在台账与盘上；"
+        return (f"{self.role} 这一趟：{what}：第 {step} 步之后收工。"
+                "已经做过的事都留在台账与盘上；"
                 f"要看这一趟做了什么用 `agentflow --root {self.session_root} runs`，"
                 f"要接着跑用 `agentflow --root {self.session_root} run-agent --resume "
                 f"--task \"<接着做什么>\"{sid_arg}`")
