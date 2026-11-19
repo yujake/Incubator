@@ -36,6 +36,7 @@ from agentflow import sessions as SS
 from agentflow import userio as U
 from agentflow.webui import readers as R
 from agentflow.webui import routes
+from agentflow.webui import writes as WR
 from agentflow.webui.state import _read_report
 
 #: 夹具工作区里那一段会话的号（与 `conftest.make_artifacts_sample` 的默认值一致）。
@@ -1088,9 +1089,15 @@ def test_the_state_endpoint_now_belongs_to_readers(artifacts_ws: pathlib.Path) -
     want = W_snapshot(artifacts_ws)
     assert set(got) == set(want), (sorted(got), sorted(want))
     for key in want:
-        if key == "generated_at":
+        if key in ("generated_at", "writes_allowed", "writes_reason"):
+            # 这两格是**服务进程**的事实（`--allow-writes`），不是工作区的事实：
+            # `snapshot(root)` 直调时是"没问过"（None / 空串），端点则一定问过
+            # （`writes.writes_allowed`）。下面单独断言它们。
             continue
         assert got[key] == want[key], key
+    assert want["writes_allowed"] is None and want["writes_reason"] == "", want
+    assert got["writes_allowed"] is False, got["writes_allowed"]
+    assert got["writes_reason"] == WR.WRITES_OFF_REASON, got["writes_reason"]
     # 公开面是裸快照，不是三态包装：错了这一条，前端与 `_verify_w0.py` 会一起错
     assert "tri" not in got and "snapshot" not in got, sorted(got)
     assert "pending_questions" in got and "sessions" in got, sorted(got)

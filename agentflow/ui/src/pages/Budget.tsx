@@ -23,14 +23,16 @@
  */
 import { useState } from "preact/hooks";
 
-import { api, postBudget, whyOf } from "../api";
+import { api, postBudget } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
+import { ErrorBlock, faceOfError, faceOfWrite } from "../components/ErrorBlock";
+import type { ErrorFace } from "../components/ErrorBlock";
 import { Money, formatUsd } from "../components/Money";
 import { Table, buckets, cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
-import { useFace } from "../live";
+import { useFace, useLive } from "../live";
 
 /** 追加历史一行（`budget.reading()` 的 `added[]`）。 */
 interface EntryRow extends Record<string, unknown> {
@@ -43,10 +45,14 @@ interface EntryRow extends Record<string, unknown> {
 
 export function Budget() {
   const face = useFace(() => api.getBudget());
+  const live = useLive();
   const [amount, setAmount] = useState("1");
   const [note, setNote] = useState("");
-  const [result, setResult] = useState("");
+  const [feed, setFeed] = useState<ErrorFace | null>(null);
   const [busy, setBusy] = useState(false);
+  // 只读档（没开 --allow-writes）：按钮直接禁用并写出理由，不许让人按出 403。
+  const readOnly = live.writesAllowed === false;
+  const why = readOnly ? live.writesReason : "";
 
   if (face.data === null) {
     return (
@@ -79,14 +85,14 @@ export function Budget() {
 
   const submit = (which: "add" | "set"): void => {
     setBusy(true);
-    setResult("");
+    setFeed(null);
     postBudget({ action: which, usd: parsed, note })
       .then((got) => {
-        setResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
+        setFeed(faceOfWrite(got));
         face.reload();
       })
       .catch((exc: unknown) => {
-        setResult(`写请求失败：${whyOf(exc)}`);
+        setFeed(faceOfError(exc));
       })
       .finally(() => {
         setBusy(false);
@@ -204,13 +210,15 @@ export function Budget() {
             onConfirm={() => {
               submit("add");
             }}
-            disabled={busy || !Number.isFinite(parsed)}
+            disabled={busy || readOnly || !Number.isFinite(parsed)}
             note={
-              !Number.isFinite(parsed)
-                ? "金额读不成数字 —— 先改成数字（按钮点不动，也不假装成功）"
-                : busy
-                  ? "正在写……"
-                  : "写面没开（agentflow web --allow-writes）时后端回 403，回执如实显示"
+              readOnly
+                ? why
+                : !Number.isFinite(parsed)
+                  ? "金额读不成数字 —— 先改成数字（按钮点不动，也不假装成功）"
+                  : busy
+                    ? "正在写……"
+                    : "写面没开（agentflow web --allow-writes）时按钮会先被禁用，不必按出 403"
             }
           />
         </div>
@@ -223,17 +231,19 @@ export function Budget() {
             onConfirm={() => {
               submit("set");
             }}
-            disabled={busy || !Number.isFinite(parsed)}
+            disabled={busy || readOnly || !Number.isFinite(parsed)}
             note={
-              !Number.isFinite(parsed)
-                ? "金额读不成数字 —— 先改成数字"
-                : busy
-                  ? "正在写……"
-                  : "覆盖式：旧总额只留在追加历史里"
+              readOnly
+                ? why
+                : !Number.isFinite(parsed)
+                  ? "金额读不成数字 —— 先改成数字"
+                  : busy
+                    ? "正在写……"
+                    : "覆盖式：旧总额只留在追加历史里"
             }
           />
         </div>
-        {result === "" ? null : <div class="readings">{result}</div>}
+        {feed === null ? null : <ErrorBlock face={feed} />}
       </Card>
 
       <Card title="追加历史" subtitle="谁在何时改了多少">

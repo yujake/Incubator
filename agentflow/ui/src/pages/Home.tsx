@@ -28,11 +28,12 @@
  */
 import { useState } from "preact/hooks";
 
-import { api, postAnswer, postInterject, postRun, whyOf } from "../api";
-import type { WriteOutcome } from "../api";
+import { api, postAnswer, postInterject, postRun } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { ConfirmButton } from "../components/ConfirmButton";
+import { ErrorBlock, faceOfError, faceOfOutcome, faceOfWrite } from "../components/ErrorBlock";
+import type { ErrorFace } from "../components/ErrorBlock";
 import { CachePanel } from "../components/PromptCache";
 import { formatUsd } from "../components/Money";
 import { Table, cell } from "../components/Table";
@@ -179,8 +180,12 @@ export function Home() {
   const [text, setText] = useState("");
   const [team, setTeam] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [outcome, setOutcome] = useState<WriteOutcome | null>(null);
-  const [result, setResult] = useState("");
+  // 一次写动作的结局（成功回执或失败异常）归一成一块：`ErrorBlock` 只在失败时
+  // 把状态码 / 后端档名 / how_to_fix 一起摆出来（鲁棒 e）。
+  const [feed, setFeed] = useState<ErrorFace | null>(null);
+  // 只读档：写按钮直接禁用并写出理由（鲁棒 f）。
+  const readOnly = live.writesAllowed === false;
+  const writesWhy = readOnly ? live.writesReason : "";
   // 「当前会话」由服务端交代（`serve(sid=…)` ← `start --watch --project P` 定的那个号）。
   // 只在它**真的在盘上**时才拿它当默认选中项（`current.found`）：命令行先起网页、
   // 再开跑的那一刻这一段会话文件还不存在，此时硬钉一个空会话会让对话面报
@@ -249,9 +254,8 @@ export function Home() {
       : "还没有会话（或读不到原来的任务）⇒ 这一句会起一趟 —— 会花预算",
   };
 
-  const done = (msg: string): void => {
-    setResult(msg);
-    setOutcome(null);
+  const done = (f: ErrorFace): void => {
+    setFeed(f);
     live.refresh();
     chat.reload();
     liveFace.reload();
@@ -259,14 +263,13 @@ export function Home() {
 
   const send = (): void => {
     const body = text.trim();
-    if (body === "") {
+    if (body === "" || readOnly) {
       return;
     }
     setBusy(true);
-    setResult("");
-    setOutcome(null);
+    setFeed(null);
     const fail = (exc: unknown): void => {
-      setResult(`没成：${whyOf(exc)}`);
+      setFeed(faceOfError(exc));
     };
     if (mode === "answer") {
       if (firstQ === undefined) {
@@ -275,8 +278,7 @@ export function Home() {
       }
       postAnswer({ qid: firstQ.qid, sid: firstQ.sid, custom: body, selected: [] })
         .then((got) => {
-          setOutcome(got);
-          done(`${got.ok ? "已提交" : "没提交"}（tri=${got.tri}）：${got.reason}`);
+          done(faceOfOutcome(got));
         })
         .catch(fail)
         .finally(() => {
@@ -286,7 +288,7 @@ export function Home() {
     }
     if (mode === "interject") {
       postInterject({ body, sid })
-        .then((got) => done(`${got.ok ? "已插话" : "没插上"}（tri=${got.tri}）：${got.reason}`))
+        .then((got) => done(faceOfWrite(got)))
         .catch(fail)
         .finally(() => {
           setBusy(false);
@@ -302,9 +304,7 @@ export function Home() {
             resume: true,
           }),
         )
-        .then((got) =>
-          done(`${got.ok ? "已唤醒这一段" : "没唤醒"}（tri=${got.tri}）：${got.reason}`),
-        )
+        .then((got) => done(faceOfWrite(got)))
         .catch(fail)
         .finally(() => {
           setBusy(false);
@@ -312,7 +312,7 @@ export function Home() {
       return;
     }
     postRun({ task: body })
-      .then((got) => done(`${got.ok ? "已起一趟" : "没起来"}（tri=${got.tri}）：${got.reason}`))
+      .then((got) => done(faceOfWrite(got)))
       .catch(fail)
       .finally(() => {
         setBusy(false);
@@ -322,14 +322,13 @@ export function Home() {
   /** 点选项 = 用**这一条问题自己的** sid/qid 提交 `selected`。 */
   const answerOption = (q: PendingQuestion, selected: string[]): void => {
     setBusy(true);
-    setResult("");
+    setFeed(null);
     postAnswer({ qid: q.qid, sid: q.sid, selected, custom: "" })
       .then((got) => {
-        setOutcome(got);
-        done(`${got.ok ? "已提交" : "没提交"}（tri=${got.tri}）：${got.reason}`);
+        done(faceOfOutcome(got));
       })
       .catch((exc: unknown) => {
-        setResult(`没成：${whyOf(exc)}`);
+        setFeed(faceOfError(exc));
       })
       .finally(() => {
         setBusy(false);
@@ -514,35 +513,31 @@ export function Home() {
               action="送出"
               impact={MODE_WORDS[mode] ?? ""}
               onConfirm={send}
-              disabled={busy || text.trim() === ""}
+              disabled={busy || readOnly || text.trim() === ""}
               note={
-                busy
-                  ? "正在提交……"
-                  : text.trim() === ""
-                    ? "先写一句要说的话"
-                    : "写面没开（agentflow web --allow-writes）时后端回 403"
+                readOnly
+                  ? writesWhy
+                  : busy
+                    ? "正在提交……"
+                    : text.trim() === ""
+                      ? "先写一句要说的话"
+                      : "会花预算：写面没开时按钮会先被禁用，不必按出 403"
               }
             />
           ) : (
             <button
               class="btn"
               type="button"
-              disabled={busy || text.trim() === ""}
+              disabled={busy || readOnly || text.trim() === ""}
               onClick={send}
+              title={readOnly ? writesWhy : undefined}
             >
               {busy ? "提交中……" : mode === "answer" ? "提交回答" : "送出"}
             </button>
           )}
         </div>
         <div class="readings">{MODE_WORDS[mode]}</div>
-        {result === "" ? null : <div class="readings">{result}</div>}
-        {outcome === null ? null : (
-          <TriState
-            tri={outcome.tri}
-            label={outcome.ok ? "这一句话" : "这一句话没落地"}
-            reason={outcome.reason}
-          />
-        )}
+        {feed === null ? null : <ErrorBlock face={feed} />}
       </Card>
 
       {snapshot.problems.length > 0 ? (

@@ -222,14 +222,21 @@ export class ApiError extends Error {
   readonly reason: string;
   /** 失败的种类（鲁棒 c：超时 / 网络 / HTTP / 正文不是 JSON 是四件不同的事）。 */
   readonly kind: ApiErrorKind;
+  /** 后端给的失败档名（`kind` 字段；读请求不一定有，缺省空串）。 */
+  readonly backendKind: string;
+  /** 后端给的"怎么办"（`how_to_fix` 字段；缺省空串）。 */
+  readonly howToFix: string;
 
-  constructor(code: number, tri: Tri, reason: string, kind: ApiErrorKind = "http") {
+  constructor(code: number, tri: Tri, reason: string, kind: ApiErrorKind = "http",
+              backendKind: string = "", howToFix: string = "") {
     super(`${code} ${reason}`);
     this.name = "ApiError";
     this.code = code;
     this.tri = tri;
     this.reason = reason;
     this.kind = kind;
+    this.backendKind = backendKind;
+    this.howToFix = howToFix;
   }
 
   /** 这一次失败值不值得重试（幂等读才有这一档；写请求一律不自动重试）。 */
@@ -306,12 +313,28 @@ function csrf(): string {
 async function readJSON<T>(resp: Response): Promise<T> {
   const text = await resp.text();
   if (!resp.ok) {
-    throw new ApiError(
-      resp.status,
-      "unreadable",
-      text.trim().slice(0, 300) || "服务端没有给正文",
-      "http",
-    );
+    // 鲁棒 e：后端把失败写成 JSON（`kind` / `how_to_fix` / `reason`）时原样读出来，
+    // 页面据此渲染错误块；不是 JSON（或没有那几栏）就退回正文前 300 字。
+    let reason = text.trim().slice(0, 300) || "服务端没有给正文";
+    let backendKind = "";
+    let howToFix = "";
+    try {
+      const body = JSON.parse(text) as Record<string, unknown>;
+      if (body !== null && typeof body === "object") {
+        if (typeof body.reason === "string" && body.reason.trim() !== "") {
+          reason = body.reason;
+        }
+        if (typeof body.kind === "string") {
+          backendKind = body.kind;
+        }
+        if (typeof body.how_to_fix === "string") {
+          howToFix = body.how_to_fix;
+        }
+      }
+    } catch {
+      // 正文不是 JSON：保留正文前 300 字（那种情况后端没给 kind/how_to_fix）。
+    }
+    throw new ApiError(resp.status, "unreadable", reason, "http", backendKind, howToFix);
   }
   try {
     return JSON.parse(text) as T;

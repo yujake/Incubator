@@ -7,27 +7,34 @@
  * 「一趟详情」里 —— 用户要叫停时待的却是「在飞」那一页。
  *
  * 两次确认由 `ConfirmButton` 负责（第一次点击只"上膛"并把影响写给人看）；回执按
- * 三态原样显示，不折成"成功"。
+ * 三态原样显示，不折成"成功"。只读档（没开 `--allow-writes`）时两个按钮直接禁用，
+ * 理由写在按钮旁（`writes_reason`，后端逐字给）—— 不许让人按出 403 才知道没权限。
  */
 import { useState } from "preact/hooks";
 
-import { postStop, whyOf } from "../api";
+import { postStop } from "../api";
+import { ErrorBlock, faceOfError, faceOfWrite } from "./ErrorBlock";
+import type { ErrorFace } from "./ErrorBlock";
 import { ConfirmButton } from "./ConfirmButton";
+import { useLive } from "../live";
 
 export function StopButtons(props: { onDone?: () => void }) {
-  const [result, setResult] = useState("");
+  const live = useLive();
+  const [feed, setFeed] = useState<ErrorFace | null>(null);
+  const readOnly = live.writesAllowed === false;
+  const why = readOnly ? live.writesReason : "";
 
   const fire = (force: boolean): void => {
-    setResult("");
+    setFeed(null);
     postStop({ reason: "user", force })
       .then((got) => {
-        setResult(`${got.ok ? "成了" : "没成"}（tri=${got.tri}）：${got.reason}`);
+        setFeed(faceOfWrite(got));
         if (props.onDone !== undefined) {
           props.onDone();
         }
       })
       .catch((exc: unknown) => {
-        setResult(`写请求失败：${whyOf(exc)}`);
+        setFeed(faceOfError(exc));
       });
   };
 
@@ -40,7 +47,8 @@ export function StopButtons(props: { onDone?: () => void }) {
           onConfirm={() => {
             fire(false);
           }}
-          note="优雅停：正在跑的活收尾、没做完的标成「停在这里」；写面没开时后端回 403"
+          disabled={readOnly}
+          note={readOnly ? why : "优雅停：正在跑的活收尾、没做完的标成「停在这里」"}
         />
       </div>
       <div class="readings">
@@ -51,10 +59,11 @@ export function StopButtons(props: { onDone?: () => void }) {
             fire(true);
           }}
           requireForce
-          note="不可逆：要勾选确认才允许按第二次"
+          disabled={readOnly}
+          note={readOnly ? why : "不可逆：要勾选确认才允许按第二次"}
         />
       </div>
-      {result === "" ? null : <div class="readings">{result}</div>}
+      {feed === null ? null : <ErrorBlock face={feed} />}
     </>
   );
 }

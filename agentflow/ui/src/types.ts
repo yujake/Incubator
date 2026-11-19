@@ -74,6 +74,8 @@ export interface StateSnapshot {
   last_run: RunRow | null;
   ledger: LedgerReading;
   problems: string[];
+  writes_allowed: boolean | null;
+  writes_reason: string;
 }
 
 /** 出处：snapshot() 的 `sessions[]` —— 一段会话的读盘读数。 */
@@ -1749,6 +1751,8 @@ export interface WriteResult {
   ok: boolean;
   tri: Tri;
   reason: string;
+  kind?: string;
+  how_to_fix?: string;
   id?: string;
   state?: string;
   extra?: Record<string, unknown>;

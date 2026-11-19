@@ -134,6 +134,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "写面端点的统一回执（判据 C 不覆盖它；`id`/`extra` 只是"
      "「有就带上」的两栏，所以写成可选）",
      (("ok", "boolean"), ("tri", "Tri"), ("reason", "string"),
+      # 失败那几档自带（鲁棒 e：页面据此分档并给出"怎么办"）；成功那几档不带。
+      ("kind?", "string"), ("how_to_fix?", "string"),
       ("id?", "string"), ("state?", "string"), ("extra?", "Record<string, unknown>"))),
 )
 
@@ -175,6 +177,34 @@ _TRI_FOR_CODE = {403: TRI_NOT_APPLICABLE, 400: TRI_NOT_APPLICABLE, 500: TRI_UNRE
 #: 一个文件，页面只画 `/api/cache` 带出来的 `writes_reason`（与 `active.text` 同一条
 #: 口径：两处各拼一份文案，两句话迟早会漂，而漂了没有地方会报错）。
 WRITES_OFF_REASON = "本服务未开 --allow-writes，写按钮不可用；重启时加该参数即可"
+
+
+def refusal_reading(code: int, reason: str) -> tuple[str, str]:
+    """一次写失败 ⇒ `(kind, how_to_fix)`（鲁棒 e：错误块要能说清是哪一档、怎么办）。
+
+    `kind` 是闭集（页面据此分档，不必读中文）；`how_to_fix` 是一句能直接照做的人话。
+    为什么按理由串判而不是让 `authorize` 多返回一位：`authorize` 的签名
+    `(放行吗, 状态码, 理由)` 是既有公开面（六个写端点与判据都按它解包），
+    改元数会让"少接一位"变成运行时错；而这里的理由串全部是本模块的常量。
+    """
+    text = str(reason or "")
+    if code == 403:
+        if "CSRF" in text:
+            return "csrf_token", "刷新页面重新拿令牌（每进程换一个）；不要手工拼 POST"
+        if "写面没开" in text:
+            return "writes_off", "用 `agentflow web --allow-writes` 重启服务（缺省只读，只读档不写盘）"
+        if "设置写面" in text:
+            return "settings_off", "重启时不要加 `--no-settings-write`"
+        return "foreign_origin", "从本机浏览器打开这一页（跨站来源一律拒）"
+    if code == 400:
+        if "confirm" in text:
+            return "confirm_required", "带 confirm=1 重试（不可逆动作要显式确认一次）"
+        return "bad_request", "读回执里那句理由，改参数后重试"
+    if code == 409:
+        return "conflict", "这一条已被处理或不存在；刷新后再看"
+    if code >= 500:
+        return "internal", "这一份没写成（盘上没被动过）：把这一行与时间报给维护者"
+    return "refused", "读回执里那句理由"
 
 
 def writes_allowed(handler: Any) -> bool:
@@ -325,6 +355,12 @@ def _finish(handler: Any, *, endpoint: str, source: str, params: Mapping[str, An
     """
     tri = tri or (TRI_COMPUTED if ok else _TRI_FOR_CODE.get(code, TRI_NOT_APPLICABLE))
     body: dict[str, Any] = {"ok": ok, "tri": tri, "reason": result}
+    if not ok:
+        # 鲁棒 e：4xx/5xx 的回执自带「哪一档（kind）」与「怎么办（how_to_fix）」，
+        # 页面据此渲染错误块，不必从中文理由里猜。成功那一支一个字节都不加。
+        kind, how_to_fix = refusal_reading(code, result)
+        body["kind"] = kind
+        body["how_to_fix"] = how_to_fix
     if ident:
         body["id"] = ident
     if state:

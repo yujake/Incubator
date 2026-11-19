@@ -650,12 +650,21 @@ def current_reading(root: str | Path, sid: str = "", *,
     }
 
 
-def snapshot(root: str | Path, *, sid: str = "") -> dict[str, Any]:
+def snapshot(root: str | Path, *, sid: str = "",
+             writes_allowed: bool | None = None,
+             writes_reason: str = "") -> dict[str, Any]:
     """把工作区盘上的事实读成一份快照（纯函数：只读盘，不缓存、不写任何东西）。
 
     返回：`{"root", "generated_at", "project", "current", "sessions",
     "pending_questions", "runs", "orphans", "orphan_summary", "last_run", "ledger",
-    "problems"}`。
+    "problems", "writes_allowed", "writes_reason"}`。
+
+    `writes_allowed` / `writes_reason` 是 2026-11-19 补的两格（鲁棒 f）：写权限是
+    **服务进程**的事实（`--allow-writes` 开没开），不是工作区的事实，所以由调用方
+    （`readers.handle_state` 从 handler 上读 `writes.writes_allowed`）交下来；
+    直接调 `snapshot(root)` 的场合不给 ⇒ `None`（"没问过"，不是"不能写"）。
+    页面据此把写按钮禁用并把 `writes_reason` 写在按钮旁 —— 不许让人按出 403
+    才知道自己没权限（与 `cacheface` 的 `writes_allowed` 同一条口径）。
 
     `project` / `current` 是 2026-11-14 补的两格（见 :func:`project_reading` /
     :func:`current_reading`）：命令行 `start --watch --project P` 印出来的
@@ -798,6 +807,10 @@ def snapshot(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         "last_run": last_run,
         "ledger": ledger,
         "problems": problems,
+        # 写权限是服务进程的事实（调用方交下来）；`None` = 没问过（直接调本函数），
+        # 不是"不能写"。页面只在 `=== false` 时禁用按钮并写出理由。
+        "writes_allowed": writes_allowed,
+        "writes_reason": ("" if writes_allowed is not False else str(writes_reason or "")),
     }
 
 
@@ -980,7 +993,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("sessions", "SessionRow[]"), ("pending_questions", "PendingQuestion[]"),
       ("runs", "RunRow[]"), ("orphans", "OrphanRow[]"),
       ("orphan_summary", "OrphanSummary"), ("last_run", "RunRow | null"),
-      ("ledger", "LedgerReading"), ("problems", "string[]"))),
+      ("ledger", "LedgerReading"), ("problems", "string[]"),
+      # 写权限（服务进程事实）：`null` = 调用方没问过（不是"不能写"）；
+      # 理由只在 `false` 时非空（真身是 `writes.WRITES_OFF_REASON`）。
+      ("writes_allowed", "boolean | null"), ("writes_reason", "string"))),
     ("SessionRow",
      "snapshot() 的 `sessions[]` —— 一段会话的读盘读数",
      (("sid", "string"), ("path", "string"), ("events_seen", "number"),

@@ -615,6 +615,9 @@ class WebHandler(BaseHTTPRequestHandler):
                 # 与 GET 同一条口径（裁定 Q1）：`/api/*` 未知一律 JSON 404，
                 # 免得前端在读 JSON 时拿到一支 HTML。
                 self._json(404, {"ok": False, "tri": "not_applicable",
+                                 "kind": "unknown_endpoint",
+                                 "how_to_fix": ("路由表里没有这一条 —— 前端与后端"
+                                                "可能不是同一版；刷新页面，仍不行就重启服务"),
                                  "reason": f"没有这个端点：{path}", "path": path})
                 return
             self._html(404, _error_page(404, "没有这个页面",
@@ -678,7 +681,10 @@ class WebHandler(BaseHTTPRequestHandler):
             if drain is not None:
                 drain()
             try:
-                self._json(500, {"ok": False, "kind": "handler_crashed",
+                self._json(500, {"ok": False, "tri": "unreadable",
+                                 "kind": "handler_crashed",
+                                 "how_to_fix": ("这是服务端缺陷：这一条读数没查成，"
+                                                "盘上一个字节没动；把这一行与时间报给维护者"),
                                  "handler": str(name),
                                  "reason": f"{type(exc).__name__}: {exc}"})
             except Exception:  # noqa: BLE001 —— 连回话都写不出去时只能放弃
@@ -912,6 +918,9 @@ class WebHandler(BaseHTTPRequestHandler):
         path = self._path
         if path.startswith("/api/"):
             self._json(404, {"ok": False, "tri": "not_applicable",
+                             "kind": "unknown_endpoint",
+                             "how_to_fix": ("路由表里没有这一条 —— 前端与后端"
+                                            "可能不是同一版；刷新页面，仍不行就重启服务"),
                              "reason": f"没有这个端点：{path}", "path": path})
             return
         if self._wants_html():

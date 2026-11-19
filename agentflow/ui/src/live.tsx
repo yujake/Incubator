@@ -34,6 +34,13 @@ export interface LiveValue {
   connection: Connection;
   /** 流里每来一条事件 +1（页面的取数 effect 依赖它）。 */
   version: number;
+  /**
+   * 本服务开没开写权限（`writes_allowed`，鲁棒 f）：`null` = 还没读到 / 调用方没问过
+   * （不是"不能写"）。为 `false` 时页面必须把写按钮禁用，并把 `writesReason` 写在旁边。
+   */
+  writesAllowed: boolean | null;
+  /** 没开写权限时的理由（后端逐字给；开了就是空串）。 */
+  writesReason: string;
   /** 手动重取一次快照（Home 的"回答"之后用它把面板刷掉）。 */
   refresh: () => void;
 }
@@ -43,6 +50,8 @@ const LIVE_ZERO: LiveValue = {
   problem: "",
   connection: "connecting",
   version: 0,
+  writesAllowed: null,
+  writesReason: "",
   refresh: () => undefined,
 };
 
@@ -184,6 +193,8 @@ export function LiveProvider(props: LiveProviderProps) {
     problem,
     connection,
     version,
+    writesAllowed: snapshot === null ? null : snapshot.writes_allowed,
+    writesReason: snapshot === null ? "" : snapshot.writes_reason,
     refresh: pull,
   };
   return <LiveContext.Provider value={value}>{props.children}</LiveContext.Provider>;

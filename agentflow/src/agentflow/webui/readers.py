@@ -507,7 +507,9 @@ def _face(records: list[dict], state: str, why: str, *, what: str) -> dict[str, 
 
 
 # ====================================================================== 1 快照
-def state_face(root: str | Path, *, sid: str = "") -> dict[str, Any]:
+def state_face(root: str | Path, *, sid: str = "",
+               writes_allowed: bool | None = None,
+               writes_reason: str = "") -> dict[str, Any]:
     """`GET /api/state` 的读模型：`{tri, snapshot, reason}`。
 
     `snapshot` 就是 `webui.state.snapshot()` 的返回值逐字（键集合与拆包前一致，
@@ -527,7 +529,8 @@ def state_face(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     """
     from .state import snapshot
 
-    snap = snapshot(root, sid=sid)
+    snap = snapshot(root, sid=sid, writes_allowed=writes_allowed,
+                    writes_reason=writes_reason)
     problems = [str(p) for p in (snap.get("problems") or [])]
     if problems:
         return {"tri": TRI_UNREADABLE, "reason": "；".join(problems[:5]), "snapshot": snap}
@@ -3810,7 +3813,14 @@ def handle_state(handler: Any, params: Mapping[str, str],
     要三态读数的地方读 `readers.state_face` 这个函数（它是读模型，不是端点）。
     """
     del params, query
-    _json_of(handler, state_face(handler.root, sid=getattr(handler, "sid", ""))["snapshot"])
+    # 写权限读数（鲁棒 f）：判定口径只有 `writes.writes_allowed` 一处；
+    # 关着的时候把 `writes.WRITES_OFF_REASON` 逐字带出去，页面据此禁用写按钮。
+    from . import writes as WR
+
+    allowed = WR.writes_allowed(handler)
+    _json_of(handler, state_face(handler.root, sid=getattr(handler, "sid", ""),
+                                 writes_allowed=allowed,
+                                 writes_reason="" if allowed else WR.WRITES_OFF_REASON)["snapshot"])
 
 
 def handle_run_view(handler: Any, params: Mapping[str, str],
