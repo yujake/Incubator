@@ -426,6 +426,23 @@ export function Run(props: RunProps) {
               （<span class="mono">out/vsigns/</span> 下全部 JSON，含 issued.json；
               有效签只数能复算的凭据，与文件个数、已签证明位都不是同一个数）
             </div>
+            {/* 签文件 vs 签台账：目录里有两类 .json，形状相同、含义不同。前一版把
+                `issued.json` 当成第 4 份签（"3 份签 + 1 份台账 ⇒ 4 份签"）。 */}
+            <div class="readings">
+              逐份签文件（不含台账）{" "}
+              <span class="mono">{num(digest.data.signs.files)}</span> 份 · 复算不上{" "}
+              <span class="mono">{num(digest.data.signs.unbacked)}</span> 份 · 签台账{" "}
+              <span class="mono">issued.json</span>{" "}
+              {digest.data.signs.ledger_present ? (
+                <Badge kind="badge-na" text="在盘上（台账，不是签）" />
+              ) : (
+                <Badge kind="badge-na" text="不在盘上" />
+              )}{" "}
+              <span class="mono">{digest.data.signs.ledger_path}</span>
+              {digest.data.signs.why === "" ? null : (
+                <span class="tri-reason">{digest.data.signs.why}</span>
+              )}
+            </div>
             <div class="readings">
               花了多少（收工行自报）{" "}
               <Money

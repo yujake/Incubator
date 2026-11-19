@@ -198,6 +198,9 @@ CHECKED_TYPES: tuple[str, ...] = (
     "RunProduct", "CheckpointView", "CheckpointSpendView", "CheckpointCacheView",
     "ReportReadingView",
     "RunView", "RunDigestView", "EventRow", "RunEventsView",
+    # `run_digest()` 的 `signs` 那一块（签文件 / 签台账分开数）：键在任何工作区上都在
+    # （目录不在 ⇒ 0 / `ledger_present=False`，键集合不变），所以进受核对名单。
+    "SignsView",
     "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
@@ -829,6 +832,10 @@ def _digest_sign_files(root: Path) -> int | None:
     这个数字回答的是"签文件目录里有几份文件"，不是"签了几个证明位"。
     三态：目录不在 ⇒ 0（这个工作区还没有签，是事实不是"没查成"）；
     目录在而列不出来 ⇒ `None`（没查成，绝不折成 0）。
+
+    它不是"签了几份"的读数：那个数只在 `signs.recomputable` 那一格
+    （见 :func:`_digest_sign_reading`）。前一版网页把这一格当成签数 ⇒
+    "3 份签 + 1 份台账"被读成 4 份签（真机 lp-ball-10 的现场）。
     """
     folder = Path(str(root)) / DIGEST_SIGNS_DIR
     if not folder.is_dir():
@@ -837,6 +844,46 @@ def _digest_sign_files(root: Path) -> int | None:
         return sum(1 for p in folder.glob("*.json") if p.is_file())
     except OSError:
         return None
+
+
+def _digest_sign_reading(root: Path) -> dict[str, Any]:
+    """签文件与签台账分开的读数（`out/vsigns/` 里的两类 `.json`）。
+
+    目录里有两类东西，形状相同、含义不同：
+
+    - 逐份签文件 `<artifact_sha>.json`：证据（一份稿一份签，B 收录时只读它）；
+    - 派生归档 `issued.json`：台账 / 索引（"V 侧发过哪些签"的一眼清单，
+      `vsigns.INDEX_NAME`；它谁都不许拿来下结论，也不参与"签了几份"）。
+
+    把两者一起数会把"3 份签 + 1 份台账"读成"4 份签" —— 那正是本函数存在的理由：
+    `files` 只数逐份签文件（口径的单一来源是 `vsigns.credentials_reading`，它自己
+    就排除了 `INDEX_NAME`；本层不另写一份 glob 过滤），`ledger_present` 单独回答
+    "盘上有没有那份台账"，两者不许折成一格。
+
+    三态：目录不在 ⇒ `checked=True` / `files=0` / `ledger_present=False`
+    （这个工作区还没有签，是事实不是"没查成"）；目录在而列不出来 ⇒
+    `checked=False` / `files=None`（不折成 0）。
+    """
+    from .. import vsigns as _VS
+
+    got = _VS.credentials_reading(root)
+    folder = Path(str(root)) / DIGEST_SIGNS_DIR
+    ledger = folder / _VS.INDEX_NAME
+    try:
+        present = bool(ledger.is_file())
+    except OSError:
+        present = False
+    checked = bool(got.get("checked"))
+    return {
+        "checked": checked,
+        "dir": DIGEST_SIGNS_DIR,
+        "files": (int(got.get("files") or 0) if checked else None),
+        "recomputable": (int(got.get("recomputable") or 0) if checked else None),
+        "unbacked": (int(got.get("unbacked") or 0) if checked else None),
+        "ledger_present": present,
+        "ledger_path": f"{DIGEST_SIGNS_DIR}/{_VS.INDEX_NAME}",
+        "why": str(got.get("why") or ""),
+    }
 
 
 def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
@@ -877,6 +924,12 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
       它确实是"文件个数"，保留原名；它与 `signed_proofs` 是两个数、两套口径
       （84 的现场：前者 3、后者 31 —— 两件事曾共用 `signed` 一格，读的人会把 31 读成
       "签了 31 份"）。目录不在 ⇒ 0；目录在而列不出来 ⇒ `None`（没查成，不是 0）；
+      它不是"签了几份"：那一问问 `signs.recomputable`（见下一格）；
+    - `signs`：签文件与签台账分开的读数（`vsigns.credentials_reading` 逐字）：
+      `files` 是逐份签文件数（不含 `issued.json`）、`recomputable` 是复算通过
+      （"签数"的唯一读数）、`unbacked` 是文件在而复算不上的份数、
+      `ledger_present` / `ledger_path` 单独回答"盘上那份台账在不在"。前一版把
+      `issued.json` 当成第 4 份签（"3 份签 + 1 份台账 ⇒ 4"）就是少了这一格；
     - `recomputable_signs`：复算通过的凭据份数（"签数"的唯一读数）。
       与 `sign_files` 的区别：文件在但 `passes` 点不出 need 行（自指签 / 无轴 / 不齐）
       不计入。目录不在 ⇒ 0；读不出来 ⇒ `None`。前端改读这一格；
@@ -899,6 +952,7 @@ def run_digest(root: str | Path, sid: str = "") -> dict[str, Any]:
         "dispatched": None, "dispatched_missing_runs": None,
         "verified": None, "signed_proofs": None,
         "sign_files": _digest_sign_files(root_p),
+        "signs": _digest_sign_reading(root_p),
         "recomputable_signs": (_creds.get("recomputable")
                                if _creds.get("checked") else None),
         "gaps_missing_runs": None,
@@ -5408,14 +5462,24 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 两个数、两套口径（84 的现场：signed_proofs=31 而 sign_files=3）：
       # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
       # `out/vsigns/*.json` 的文件数（含 issued.json 归档）。不共用一格。
-      # 三个数、三套口径（84 的现场：signed_proofs=31、sign_files=3、recomputable_signs=2）：
       # `signed_proofs` 是收工读数里已签的证明位数；`sign_files` 是
       # `out/vsigns/*.json` 的文件数（含 issued.json 归档）；`recomputable_signs` 是
-      # 复算通过的凭据份数（"签数"的唯一读数，前端读它）。
+      # 复算通过的凭据份数（"签数"的唯一读数，前端读它）；`signs` 把签文件与签台账
+      # 分开（见 `SignsView`：`files` 不含 `issued.json`，`ledger_present` 另算）。
       ("signed_proofs", "number | null"), ("sign_files", "number | null"),
-      ("recomputable_signs", "number | null"),
+      ("recomputable_signs", "number | null"), ("signs", "SignsView"),
       ("gaps_missing_runs", "number | null"),
       ("stop_reasons", "Record<string, number>"))),
+    ("SignsView",
+     "run_digest() 的 `signs` —— `out/vsigns/` 里两类东西分开数：逐份签文件"
+     "（`files`，不含派生归档 `issued.json`）与那份台账本身"
+     "（`ledger_present` / `ledger_path`）。口径单一来源是 "
+     "`vsigns.credentials_reading`（它自己就排除了 INDEX_NAME）；"
+     "`recomputable` 才是「签了几份」，`files` 是「目录里有几份签文件」。",
+     (("checked", "boolean"), ("dir", "string"),
+      ("files", "number | null"), ("recomputable", "number | null"),
+      ("unbacked", "number | null"), ("ledger_present", "boolean"),
+      ("ledger_path", "string"), ("why", "string"))),
     ("EvidenceView",
      "evidence_chain() —— 证据链八栏（各栏另带 `<栏>_tri`）",
      (("tri", "Tri"), ("reason", "string"), ("store_problems", "string[]"),

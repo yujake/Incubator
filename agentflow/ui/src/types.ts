@@ -317,8 +317,21 @@ export interface RunDigestView {
   signed_proofs: number | null;
   sign_files: number | null;
   recomputable_signs: number | null;
+  signs: SignsView;
   gaps_missing_runs: number | null;
   stop_reasons: Record<string, number>;
+}
+
+/** 出处：run_digest() 的 `signs` —— `out/vsigns/` 里两类东西分开数：逐份签文件（`files`，不含派生归档 `issued.json`）与那份台账本身（`ledger_present` / `ledger_path`）。口径单一来源是 `vsigns.credentials_reading`（它自己就排除了 INDEX_NAME）；`recomputable` 才是「签了几份」，`files` 是「目录里有几份签文件」。。 */
+export interface SignsView {
+  checked: boolean;
+  dir: string;
+  files: number | null;
+  recomputable: number | null;
+  unbacked: number | null;
+  ledger_present: boolean;
+  ledger_path: string;
+  why: string;
 }
 
 /** 出处：evidence_chain() —— 证据链八栏（各栏另带 `<栏>_tri`）。 */

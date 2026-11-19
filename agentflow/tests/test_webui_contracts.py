@@ -601,6 +601,9 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     # 也没在欠账名单"。它从事件流现算、不读索引 ⇒ 夹具这一段会话上一定读得出来。
     if sid:
         out["RunDigestView"] = set(RD.run_digest(root, sid))
+        # 签文件 / 签台账分开的那一块（`signs`）：键在任何工作区上都在
+        # （目录不在 ⇒ 0 / `ledger_present=False`，键集合不变）。
+        out["SignsView"] = set(RD.run_digest(root, sid)["signs"])
 
     # 对话那一面（R92 新增的 `GET /api/chat`）。与 `EventRow` 同一条口径：
     # 新面落地后要让后端那一侧真的去读它，否则它会"既不在受核对名单、也没在欠账名单"。
