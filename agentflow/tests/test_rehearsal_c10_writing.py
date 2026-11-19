@@ -49,6 +49,17 @@ H 的 `verify_fixes` 回执 `verdict="unresolved_review"` 且逐条列出 `still
 `unresolved_review`。它证明"H 自行收尾"这件事真的压在 H 给的那一格上，不是轮数
 到点或别的什么东西顺手带出来的。
 
+## 收工门：走权威门，如实失败（2026-11-19 业主裁定 ②/③）
+
+M 调 `conductor.closing` 时带全 `project_dir` / `report_path`（漏传 ⇒ 交 final 会被
+受控拒 `closing_not_authoritative`，见 `tests/test_a_non_authoritative_final_is_refused.py`）。
+这一趟的权威结论是 `fail`：`close_as` 那一档 `contradictions` 红（稿件停在
+`unresolved_review`，正是这条链要演的回路），外加 `mapping_package_missing` 与
+`quote_verified_without_span` 两条 blocker ⇒ 运行退出码 1。改前是 rc=0（非权威
+读数不参与退出码）—— 那正是业主 2026-11-19 叫停的"静默 rc=0"。
+拿掉 `close_as` 的那一档同理：八格全 pass，但两条 blocker 仍把权威结论压成 fail ⇒
+同样 rc=1（"红的不一定是格子"这件事在这条链上看得见）。
+
 ## Lean 两档
 
 `AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍：这条链不碰形式化，两档的盘上读数应当一致。
@@ -133,7 +144,12 @@ class _Wire:
         # 项目"，M 在 final 之前必须先跑一次收工门。彩排照真机形态补这一拍。
         if not self._closed:
             self._closed = True
+            # 权威门的两个参数都带上（业主 2026-11-19 裁定 ②）：这一趟有论文包
+            # （`out/paper/main.tex`）⇒ 门对它有对象；漏传的话交 final 会被受控拒。
+            # `report_path` 指到 G 真写出来的那份渲染稿上（存在性那一格才有对象）。
             return _json({"tool": "conductor.closing", "args": {
+                "project_dir": ".",
+                "report_path": "documents/000000.md",
                 "goal": "C10 成文 / 审校回路跑通（H 自行 close_as）",
                 "goal_met": True,
                 "basis": "documents 一行 unresolved_review、review_findings 一行 dangling_dep、"
@@ -303,6 +319,39 @@ def _rows(store: Store, table: str) -> list[dict]:
     return [dict(r) for r in store.rows(table)]
 
 
+#: 这一趟的权威结论红在哪几格（负控读数，业主 2026-11-19 裁定 ③）。
+#:
+#: 两种形态各自如实报（都是这条链故意留下的缺口，不是彩排出错）：
+#:
+#: - `close_as` 那一档（H 自行收尾）：`contradictions` 红 —— 稿件停在
+#:   `unresolved_review`（H 自己判的），这是 C10 要演的那个回路；加上两条 blocker
+#:   （`mapping_package_missing`：没有 `out/paper/MAPPING.json`；
+#:   `quote_verified_without_span`：种子关系带 `quote_verified=True` 却没有逐字区间）。
+#: - 拿掉 `close_as`（反真空）：稿件停在 `in_review` ⇒ 八格全 pass，红的只有那两条
+#:   blocker —— 所以 `red` 是空、`codes` 点两条。
+#:
+#: 退出码都是 1（权威结论 fail）。改前是 rc=0：非权威读数不参与退出码。
+RED_CLOSED: tuple[str, ...] = ("contradictions",)
+CODES_CLOSED: tuple[str, ...] = ("review_unresolved", "mapping_package_missing",
+                                 "quote_verified_without_span")
+RED_NOT_CLOSED: tuple[str, ...] = ()
+CODES_NOT_CLOSED: tuple[str, ...] = ("mapping_package_missing",
+                                     "quote_verified_without_span")
+
+
+def _assert_honest_failure(got: dict[str, Any], *,
+                           red: tuple[str, ...] | None = None,
+                           codes: tuple[str, ...] | None = None) -> None:
+    """权威门在这份彩排里必须读到：`verdict=fail`、`rc==1`、红格/blocker 点名。"""
+    closed = bool(got.get("close_as", True))
+    problems = RC.authoritative_failure_problems(
+        got.get("rc", -1), RC.closing_verdict(got["ws"]),
+        red=red if red is not None else (RED_CLOSED if closed else RED_NOT_CLOSED),
+        codes=codes if codes is not None else (CODES_CLOSED if closed else CODES_NOT_CLOSED))
+    if problems:
+        raise AssertionError("C10 的权威门读数不对：\n- " + "\n- ".join(problems))
+
+
 def _reading(got: dict[str, Any]) -> dict[str, Any]:
     st, ws = got["store"], got["ws"]
     events = _events(ws)
@@ -392,7 +441,7 @@ def test_the_writing_chain_runs_from_the_cli_and_h_closes_it(
     reading = _reading(got)
 
     # ---- 入口与"只换了网线"
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
     assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
     assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
@@ -430,7 +479,7 @@ def test_without_close_as_h_does_not_close_the_document(
     """
     got = _run(tmp_path, monkeypatch, lean="0", close_as=False)
     reading = _reading(got)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     data = reading["verified"]["data"]
     assert str(data.get("verdict") or "") == "revise_again", data.get("verdict")
     assert data.get("still_open"), "没修好的发现必须逐条列出（不许隐藏）"
@@ -449,7 +498,7 @@ def test_every_real_call_has_exactly_one_ledger_row(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
     """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行（Lean 开/关各一遍）。"""
     got = _run(tmp_path, monkeypatch, lean=lean)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     reading = RC.ledger_identity(got["ws"], got["store"])
     print(f"[一行账] lean={lean} 真调用={reading['calls']} 出网={len(got['wire'].bodies)} "
           f"账本行={reading['rows']} duplicate={len(reading['duplicates'])} "
@@ -469,7 +518,7 @@ def test_every_llm_call_lands_in_this_runs_session(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
     """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
     got = _run(tmp_path, monkeypatch, lean=lean)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     split = RC.session_split(got["ws"], SID)
     print(f"[会话归口] lean={lean} 本趟={len(split['in_run'])} "
           f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
@@ -487,7 +536,7 @@ def test_the_chain_runs_in_both_lean_modes(
         lean: str, verdict: str, hidden: bool) -> None:
     """Lean 开/关两档：同一条链照跑、H 照样自行收尾；关档下名册里没有 L。"""
     got = _run(tmp_path, monkeypatch, lean=lean, close_as=True)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_honest_failure(got)
     reading = LS.lean_reading()
     assert reading.verdict == verdict, reading.to_dict()
     assert LS.is_hidden("L") is hidden, (lean, reading.to_dict())

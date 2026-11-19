@@ -51,6 +51,22 @@ approve 后 apply）。「没 apply 之前」，`lit.admit` 写 `qualified` 会�
 本文件链判据红。那份文件命中 `rehearsal_contract.FLOW_CRITERIA_FILES`，因为它必须
 打桩产品那一格；本文件只替换网线。
 
+## 收工门：走权威门（2026-11-19 业主裁定 ②/③）
+
+M 调 `conductor.closing` 时带全 `project_dir` / `report_path`，所以那一份是权威结论
+（`authoritative=True`）：full 链八格全 pass ⇒ `verdict=pass` / `rc=0`；两条负控
+（判收-only / skip_submit）⇒ 第八格 `literature_pending` 红、`verdict=fail`、`rc=1`
+（改前它们是 rc=0：非权威读数不参与退出码）。漏传这两个参数的交 final 会被受控拒
+`closing_not_authoritative`（判据：`tests/test_a_non_authoritative_final_is_refused.py`）。
+
+工作区为什么带一份前序交付物与体例声明：`closing.SUBSTANCE_TABLES` 那五张表本趟
+一张都不写（A 的写集只有 `literature` / `lit_candidates`），空工作区永远过不了
+`substance`；`_seed_prior_products` 里逐字登记了这件事（与
+`tests/test_rehearsal_closing_eight_cells.py::_seed_tables` 同一做法）。验收表刻意不写：
+一旦盘上有 `out/paper/ACCEPTANCE-CHECKS.json`，`acceptance` 就按整份研究交付的自动分支
+判（`paper_mapping_rows` / `document_body_rows` / `reviewed_current_rows` / 交接模板 /
+五条内容判据），那不是文献链的形态 —— 那份形态由 REH8 的十二行彩排覆盖。
+
 ## Lean 两档
 
 `AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍：文献链与形式化开关无关，但"两档都干净"必须
@@ -117,34 +133,24 @@ REPORT_PATH = f"reports/lit-{RID}.md"
 #: 工作区的前序交付物（`closing.SUBSTANCE_TABLES` 里 `documents` 的那一行）。
 #:
 #: 为什么要有它：`substance` 问的是"五张实质表里有没有非空的"。这条链本身只写
-#: `literature` / `lit_candidates`（A 的写集），**这五张表一张都不写** —— 空工作区
+#: `literature` / `lit_candidates`（A 的写集），这五张表一张都不写 —— 空工作区
 #: 永远过不了权威门，而彩排要判的是"权威门这条路"，不是"文献链产出全部实质表"。
 #: 所以按 `tests/test_rehearsal_closing_eight_cells.py::_seed_tables` 的同一做法，
-#: 把一份**前序交付物**放进工作区（它与 c9 的 `_workspace` 先种一张概念图同形），
+#: 把一份前序交付物放进工作区（它与 c9 的 `_workspace` 先种一张概念图同形），
 #: 并在 docstring 里如实写明：`substance` 的 pass 来自前序产出，不是本趟产出。
 PRIOR_DOC_TITLE = "阿贝尔群文献综述（本工作区的前序交付物）"
 
-#: 验收表的机器可判行（业主口径：表是人的声明，每一行都现算自台账）。
+#: 验收表的机器可判行 —— 本工作区刻意不写这张表（理由见下面的长注记）。
 #:
-#: 四行都取自**本趟真的跑出来的**读数：检索请求真的入队并跑完（`done=True` /
-#: `outcome=ok`）、队列闭环（没有没做完的请求）、交付物在册（`documents` 一行）。
-#: `unfinished_request_rows` 那一行必须写 `unprocessed_reason`：本趟 `literature`
-#: 那一行 `processed=False`（B 还没消化），而"带着没消化的文献收工"按产品口径记
-#: `unknown` —— 写清为什么是**如实读数**，不是豁免。
-ACCEPTANCE_ROWS: tuple[dict[str, Any], ...] = (
-    {"id": "L1", "name": "检索真的跑过", "kind": "retrieval_attempts", "min": 1,
-     "note": "`search_requests` 里 done=True 的行"},
-    {"id": "L2", "name": "检索真的取回", "kind": "retrieval_ok_rows", "min": 1,
-     "note": "outcome=ok 的检索行"},
-    {"id": "L3", "name": "请求队列闭环", "kind": "unfinished_request_rows", "max": 0,
-     "unprocessed_reason": "本彩排只跑 A 侧文献链：`literature` 的消化是 B 的活，不在这一趟里",
-     "note": "没做完的请求 + pending 重抽取"},
-    {"id": "L4", "name": "交付物在册", "kind": "document_rows", "min": 1,
-     "note": "`documents` 的行数"},
-)
-
-#: M 声明的报告体例（R9：体例归 M，门只核"你说的和你写的一致"）。
-#: 这三节正是 `litstage.write_report` 真会写出来的小标题（不凑节名）。
+#: 为什么不留一张验收表（这条不是省事，是口径）：`out/paper/ACCEPTANCE-CHECKS.json`
+#: 一旦在盘上，`closing._check_acceptance` 就按整份研究交付的自动分支判它 ——
+#: `paper_mapping_rows` / `document_body_rows` / `reviewed_current_rows` /
+#: `manuscript_rows`（"交接账本里 N 行全是框架派生的模板"）/ 五条 `content_leg_unmet`，
+#: 每一档都要求这份工作区里有 D/E/F/G/H 的产物。这条彩排只跑 A 侧文献链（写集只有
+#: `literature` / `lit_candidates`），塞一张验收表只会把 `acceptance` 判红，而红点
+#: 与文献链无关 —— 那是 `tests/test_rehearsal_closing_eight_cells.py` 那份"八格全过"
+#: 的彩排要覆盖的形态（它有十二行验收表与对应产物）。
+#: 没有表时产品的口径是 `pass` + 读数"这个项目没有 ACCEPTANCE-CHECKS.json"（非研究型）。
 STYLE_SECTIONS: tuple[str, ...] = ("已入库", "未入库", "待裁")
 
 
@@ -291,7 +297,7 @@ PRIOR_DOC_SHA = "b" * 64
 
 
 def _seed_prior_products(store: Store) -> None:
-    """把**前序交付物**放进工作区（`substance` 那五张表里 `documents` 的一行）。
+    """把前序交付物放进工作区（`substance` 那五张表里 `documents` 的一行）。
 
     如实登记（不许把它读成"本趟产出"）：这条链的写集只有 `literature` /
     `lit_candidates`，`closing.SUBSTANCE_TABLES` 的五张表它一张都不写。空工作区永远
@@ -319,21 +325,14 @@ def _seed_prior_products(store: Store) -> None:
         tx.upsert("documents", row.to_dict())
 
 
-def _seed_acceptance(root: pathlib.Path) -> None:
-    """验收表 + M 的体例声明（权威门的另外两格：`acceptance` / `report_shape`）。
+def _seed_report_style(root: pathlib.Path) -> None:
+    """M 的体例声明（`report_shape` 那格的"你说的和你写的一致"）。
 
-    - `out/paper/ACCEPTANCE-CHECKS.json`：四行机器可判的验收口径（见 `ACCEPTANCE_ROWS`）；
-    - `out/review/REPORT-STYLE.json`：M 声明的节名（见 `STYLE_SECTIONS`）—— 门逐节核
-      "你声明的节有没有出现在报告的小标题里"。
-
-    有了验收表，这个工作区就是**有门的项目**（`closing_gate_requirement.required=True`）：
-    `conductor.closing` 漏传 `project_dir` / `report_path` 时，交 final 会被受控拒
-    （这正是 `tests/test_a_non_authoritative_final_is_refused.py` 的 b 档要的形态）。
+    `out/review/REPORT-STYLE.json` 写的是 `STYLE_SECTIONS` —— 那三节正是
+    `litstage.write_report` 真会写出来的小标题（`## 已入库` / `## 未入库` / `## 待裁`），
+    门逐节核"声明的节有没有出现在报告的标题行里"，缺一节才红。不声明也能过（读数里
+    如实写 `none`），写它是为了把这条判据也走一遍。
     """
-    checks = root / "out" / "paper" / "ACCEPTANCE-CHECKS.json"
-    checks.parent.mkdir(parents=True, exist_ok=True)
-    checks.write_text(_json({"checks": [dict(r) for r in ACCEPTANCE_ROWS]}),
-                      encoding="utf-8", newline="\n")
     style = root / "out" / "review" / "REPORT-STYLE.json"
     style.parent.mkdir(parents=True, exist_ok=True)
     style.write_text(_json({"sections": list(STYLE_SECTIONS)}),
@@ -349,9 +348,9 @@ def _workspace(base: pathlib.Path) -> Store:
     (root / "books" / "notes.txt").write_text(TEXT, encoding="utf-8")
     (root / "demo" / "fixtures").mkdir(parents=True, exist_ok=True)
     (root / "demo" / "fixtures" / "candidates.json").write_text("[]", encoding="utf-8")
-    # 权威门要的三类产物（见 `_seed_prior_products` / `_seed_acceptance`）。
+    # 权威门要的两类产物（见 `_seed_prior_products` / `_seed_report_style`）。
     _seed_prior_products(st)
-    _seed_acceptance(root)
+    _seed_report_style(root)
     return st
 
 
@@ -520,7 +519,7 @@ def test_judging_is_qualified_not_registered(
     ## 它是负控（2026-11-19 裁定 ③）
 
     只判收、不交 ⇒ 收工门第八格 `literature_pending` 红（`undecided_candidates`：
-    暂存表里还有没判的那一条）⇒ 权威结论 `fail` ⇒ 运行退出码 **1**。改前这一趟是
+    暂存表里还有没判的那一条）⇒ 权威结论 `fail` ⇒ 运行退出码 1。改前这一趟是
     rc=0（非权威读数不参与退出码）—— 那正是本轮要钉掉的"静默 rc=0"。
     """
     got = _run(tmp_path, monkeypatch, lean="0", skip=("reject", "submit"))
@@ -663,37 +662,19 @@ def _closing_problems(got: dict[str, Any], *, want: str) -> list[str]:
 def closing_verdict_of(got: dict[str, Any]) -> dict[str, Any]:
     """M 那一次 `conductor.closing` 回执里的那一份权威结论（`readings.verdict`）。
 
-    读的是真工具的读数（不是会话里的 `ok=True`）：`verdict` / `exit_code` /
-    `authoritative` / `cells` 四格就是"这一趟到底过没过门"的全部读数。
+    判据本体只有一份：`rehearsal_contract.closing_verdict`（c9 / c10 读同一份）。
     """
-    data = _tool_data(got["events"], role="M", tool="conductor.closing")
-    return dict((data.get("readings") or {}).get("verdict") or {})
+    return RC.closing_verdict(got["ws"])
 
 
 def _authoritative_problems(got: dict[str, Any]) -> list[str]:
-    """权威门（业主 2026-11-19 裁定 ②）：full 链必须真的过了权威门。
+    """权威门（业主 2026-11-19 裁定 ②/③）：full 链必须真的过了权威门。
 
     四条逐字：`verdict == "pass"` / `authoritative is True` / `exit_code == 0` /
-    八格逐格 `pass`（格子名单取自产品自己的 `DEFAULT_CHECKS`，不在这里另写一张）。
+    八格逐格 `pass`（格子名单取自产品自己的 `DEFAULT_CHECKS`）。
+    判据本体在 `rehearsal_contract.authoritative_problems`。
     """
-    problems: list[str] = []
-    verdict = closing_verdict_of(got)
-    if verdict.get("verdict") != "pass":
-        problems.append(f"权威结论应是 pass，实得 {verdict.get('verdict')!r}"
-                        f"（reason={str(verdict.get('reason'))[:240]!r}）")
-    if verdict.get("authoritative") is not True:
-        problems.append("这一份不是权威的那一次（`authoritative` 不是 True）⇒ 它不改退出码，"
-                        "而彩排要判的正是权威门")
-    if int(verdict.get("exit_code", -1)) != 0:
-        problems.append(f"`exit_code` 应为 0，实得 {verdict.get('exit_code')!r}")
-    cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
-    want = list(CL.DEFAULT_CHECKS)
-    if sorted(cells) != sorted(want):
-        problems.append(f"八格的格子名单不对：{sorted(cells)} ≠ {sorted(want)}")
-    red = {k: v for k, v in cells.items() if v != "pass"}
-    if red:
-        problems.append(f"这八格里有没 pass 的：{red}")
-    return problems
+    return RC.authoritative_problems(closing_verdict_of(got))
 
 
 def _honest_failure_problems(got: dict[str, Any], *, red: Sequence[str],
@@ -701,28 +682,10 @@ def _honest_failure_problems(got: dict[str, Any], *, red: Sequence[str],
     """负控（判收-only / skip_submit 等）：如实断言 `verdict=fail`、`rc==1`、红格点名。
 
     业主 2026-11-19 裁定 ③：「判收-only / skip_submit 等负控 ⇒ 如实断言 verdict=fail +
-    rc==1 + 红格点名」。所以这里判五件事：权威（`authoritative=True`，不是退回非权威）、
-    `verdict == "fail"`、`exit_code == 1`、运行退出码 `rc == 1`、红格恰好是点名的那几格，
-    且 blocker 的 `code` 里有那几个受控理由码。
+    rc==1 + 红格点名」。判据本体在 `rehearsal_contract.authoritative_failure_problems`。
     """
-    problems: list[str] = []
-    verdict = closing_verdict_of(got)
-    if verdict.get("authoritative") is not True:
-        problems.append("负控也必须是权威的那一次（否则 rc 不受它影响，这不是诚实失败）")
-    if verdict.get("verdict") != "fail":
-        problems.append(f"`verdict` 应为 fail，实得 {verdict.get('verdict')!r}")
-    if int(verdict.get("exit_code", -1)) != 1:
-        problems.append(f"`exit_code` 应为 1，实得 {verdict.get('exit_code')!r}")
-    if int(got.get("rc", -1)) != 1:
-        problems.append(f"运行退出码应为 1（权威结论 fail），实得 {got.get('rc')!r}")
-    cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
-    red_cells = sorted(k for k, v in cells.items() if v != "pass")
-    if red_cells != sorted(red):
-        problems.append(f"红的格子应恰好是 {sorted(red)}，实得 {red_cells}")
-    fired = [str(b.get("code")) for b in (verdict.get("blockers") or [])]
-    if codes and not set(codes) <= set(fired):
-        problems.append(f"blocker 里应点名 {list(codes)}，实得 {fired}")
-    return problems
+    return RC.authoritative_failure_problems(
+        got.get("rc", -1), closing_verdict_of(got), red=red, codes=codes)
 
 
 def _full_problems(got: dict[str, Any]) -> list[str]:
@@ -800,7 +763,7 @@ def test_before_clearing_the_gate_blocks_and_the_report_is_rerendered(
 
     ## 它是负控（2026-11-19 裁定 ③）
 
-    收工门第八格 `literature_pending` 红 ⇒ 权威结论 `fail` ⇒ 运行退出码 **1**
+    收工门第八格 `literature_pending` 红 ⇒ 权威结论 `fail` ⇒ 运行退出码 1
     （改前这一趟是 rc=0：非权威读数不参与退出码）。
     """
     got = _run(tmp_path, monkeypatch, lean="0", skip=("submit",))
@@ -916,6 +879,9 @@ def test_the_chain_runs_in_both_lean_modes_and_l_is_isolated_when_off(
     roles = set(LS.visible_roles(S.ROLES))
     assert ("L" in roles) is (not hidden), sorted(roles)
     _expect(_full_problems(got), got, label=f"Lean {verdict} 档的完整链")
+    gate_problems = _authoritative_problems(got)
+    assert not gate_problems, (f"Lean {verdict} 档的权威门读数不对：\n- "
+                               + "\n- ".join(gate_problems))
 
 
 if __name__ == "__main__":  # pragma: no cover - 手工复跑用

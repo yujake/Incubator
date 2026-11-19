@@ -44,6 +44,14 @@ B --own.resolve_structural_duplicate--> 真合并：墓碑 + 关系改写（reje
 且概念表逐字不变 —— 它证明 merge 那一条的墓碑不是"resolve 恒写"：结构等价 ≠ 同义，
 合并决定权在 B，拒的那一档连墓碑都不落。
 
+## 收工门：走权威门，如实失败（2026-11-19 业主裁定 ②/③）
+
+M 调 `conductor.closing` 时带全 `project_dir` / `report_path`（漏传 ⇒ 交 final 会被
+受控拒 `closing_not_authoritative`，见 `tests/test_a_non_authoritative_final_is_refused.py`）。
+于是这一趟的收工结论是权威的 `fail`：`contradictions`（图上现算的 strong 对立对
+没有裁决行）与 `acceptance`（研究型项目却没有验收表）两格红 ⇒ 运行退出码 1。
+改前这一趟是 rc=0（非权威读数不参与退出码）—— 它不是"跑成了"，是"门没被判"。
+
 ## Lean 两档
 
 `AGENTFLOW_LEAN_ENABLED` 开/关各跑一遍：这条链不碰 `formal.*`；关档下名册里没有 L。
@@ -196,7 +204,11 @@ class _Wire:
             return nxt
         if not self.closed:
             self.closed = True
+            # 权威门的两个参数都带上（业主 2026-11-19 裁定 ②）：这一趟立起了
+            # research_questions ⇒ 门对它有对象；漏传的话交 final 会被受控拒。
             return _json({"tool": "conductor.closing", "args": {
+                "project_dir": ".",
+                "report_path": "reports/000002-paths.md",
                 "goal": "C9 概念图链跑通（读图 → 立题 → 结构重复裁决）",
                 "goal_met": True,
                 "basis": "analysis_reports 三行（gaps×2 + paths×1）、research_questions 一行、"
@@ -456,6 +468,30 @@ def _tool_result(events: list[dict], *, role: str, tool: str, index: int = 0) ->
             "error": str(got.get("error") or "")}
 
 
+#: 这一趟的权威结论红在哪几格（负控读数，业主 2026-11-19 裁定 ③）。
+#:
+#: - `contradictions`：图上现算的 strong 对立对没有裁决行（这一趟没立矛盾问题）；
+#: - `acceptance`：研究型项目（`research_questions` 一行）却没有
+#:   `out/paper/ACCEPTANCE-CHECKS.json` ⇒ 这一趟没有可复算的验收口径。
+#:
+#: 两条都是这条链如实的缺口，不是彩排出错：C9 判的是"概念图这条路跑得通"，
+#: 不是"这一项研究可以交付"。所以它照实红、退出码 1（改前是 rc=0：非权威读数
+#: 不参与退出码）。`quote_evidence` 那条 blocker（种子关系带 `quote_verified=True`
+#: 却没有逐字区间）也一并留下 —— 三格名单一起点名。
+RED_CELLS: tuple[str, ...] = ("acceptance", "contradictions")
+RED_CODES: tuple[str, ...] = ("contradiction_unadjudicated",
+                              "acceptance_missing_for_research",
+                              "quote_verified_without_span")
+
+
+def _assert_honest_failure(got: dict[str, Any]) -> None:
+    """权威门在这份彩排里必须读到：`verdict=fail`、`rc==1`、红格点名。"""
+    problems = RC.authoritative_failure_problems(
+        got.get("rc", -1), RC.closing_verdict(got["ws"]), red=RED_CELLS, codes=RED_CODES)
+    if problems:
+        raise AssertionError("C9 的权威门读数不对：\n- " + "\n- ".join(problems))
+
+
 def _chain_reading(got: dict[str, Any]) -> dict[str, Any]:
     st = got["store"]
     events = _events(got["ws"])
@@ -583,7 +619,7 @@ def test_the_concept_graph_chain_runs_through_tool_dispatch(
     """正控：C 读数登记 → D 缺口立题 → B 结构重复裁决（merge 落墓碑、异名 reject）。"""
     got = _run(tmp_path, monkeypatch, lean="0")
     reading = _chain_reading(got)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     assert got["wire"].bodies, "出网层一次都没被调到 ⇒ 这一趟没有真模型调用"
     assert MG.urllib_transport is got["wire"], "出网层没被替换（这一条会打真网络）"
     assert cli._agent_seam_factory.__module__ == "agentflow.cli", (
@@ -621,7 +657,7 @@ def test_every_real_call_has_exactly_one_ledger_row(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
     """判据①：这一趟的每一次真调用，`usage_ledger` 里有且只有一行（Lean 开/关各一遍）。"""
     got = _run(tmp_path, monkeypatch, lean=lean)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     reading = RC.ledger_identity(got["ws"], got["store"])
     print(f"[一行账] c9 lean={lean} 真调用={reading['calls']} "
           f"出网={len(got['wire'].bodies)} 账本行={reading['rows']} "
@@ -641,7 +677,7 @@ def test_every_llm_call_lands_in_this_runs_session(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch, lean: str) -> None:
     """判据②：这一趟所有 `llm_call` 事件都落在本趟 `sid`，缺省会话 0 条。"""
     got = _run(tmp_path, monkeypatch, lean=lean)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    _assert_honest_failure(got)
     split = RC.session_split(got["ws"], SID)
     print(f"[会话归口] c9 lean={lean} 本趟={len(split['in_run'])} "
           f"别处={len(split['elsewhere'])} 会话={sorted(split['by_session'])}")
@@ -659,7 +695,7 @@ def test_the_concept_graph_chain_is_the_same_in_both_lean_modes(
         lean: str, verdict: str, hidden: bool) -> None:
     """Lean 开/关两档：同一条链照跑，三段读数不变。"""
     got = _run(tmp_path, monkeypatch, lean=lean)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_honest_failure(got)
     reading = LS.lean_reading()
     assert reading.verdict == verdict, reading.to_dict()
     assert LS.is_hidden("L") is hidden, (lean, reading.to_dict())

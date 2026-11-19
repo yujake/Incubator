@@ -51,6 +51,7 @@ from test_rehearsal_a_literature_flow import (
     _blocked_reason,
     _events,
     _full_problems,
+    _honest_failure_problems,
     _presubmit_problems,
     _report,
     _rows,
@@ -60,6 +61,20 @@ from test_rehearsal_a_literature_flow import (
 
 #: 受控理由码（被拒那一条在定稿里的理由）。
 REJECT_CODE = "rejected_off_topic"
+
+
+def _assert_authoritative_fail(got: Any) -> None:
+    """负控的诚实读数（业主 2026-11-19 裁定 ③）：`verdict=fail` + `rc==1` + 红格点名。
+
+    改前这七条负控都写 `assert got["rc"] == 0` —— 那时收工门手里那一份不是权威结论
+    （M 没给 `project_dir` / `report_path`），所以 `rc` 不参与。2026-11-19 之后彩排照
+    真机形态带全两个参数 ⇒ 权威结论 = `fail`（这一趟的交付缺了它该有的东西）⇒ 运行
+    退出码 1。这里只钉"权威门说 fail、rc 真的是 1、红的恰好是 `literature_pending`"
+    —— 各条自己的 `_full_problems` / `_presubmit_problems` 已经逐格判过细节。
+    """
+    problems = _honest_failure_problems(got, red=["literature_pending"])
+    if problems:
+        raise AssertionError("负控读数不对：\n- " + "\n- ".join(problems))
 
 
 def _ready_or_xfail() -> None:
@@ -115,7 +130,7 @@ def test_without_the_readback_the_judge_refuses_to_change_status(
     """
     _ready_or_xfail()
     got = _run(tmp_path, monkeypatch, skip=("readback",))
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     refused = _tool_result(_events(got["ws"]), role="A", tool="lit.admit")
     assert refused["ok"] is False, refused
     assert (refused.get("meta") or {}).get("kind") == "no_readback", refused.get("meta")
@@ -137,7 +152,7 @@ def test_without_the_read_receipt_the_judge_refuses_to_change_status(
     """
     _ready_or_xfail()
     got = _run(tmp_path, monkeypatch, skip=("extract",))
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     refused = _tool_result(_events(got["ws"]), role="A", tool="lit.admit")
     assert refused["ok"] is False, refused
     meta = dict(refused.get("meta") or {})
@@ -166,7 +181,7 @@ def test_an_empty_backfill_turns_the_submit_red(
         got = _run(tmp_path, monkeypatch)
     finally:
         L._decisions_from = original
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     refused = _tool_result(_events(got["ws"]), role="A", tool="lit.admit_all")
     assert refused["ok"] is False, refused
     assert (refused.get("meta") or {}).get("kind") in ("not_registered", "report_violations"), \
@@ -205,7 +220,7 @@ def test_a_dirty_submitted_report_blocks_the_registration(
         got = _run(tmp_path, monkeypatch)
     finally:
         L._rejected_entry = original
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     refused = _tool_result(_events(got["ws"]), role="A", tool="lit.admit_all")
     assert refused["ok"] is False, refused
     assert (refused.get("meta") or {}).get("kind") == "report_violations", refused.get("meta")
@@ -242,7 +257,7 @@ def test_a_final_report_without_numbers_blocks_the_clearing(
         got = _run(tmp_path, monkeypatch)
     finally:
         L._numbered_entry = original
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     refused = _tool_result(_events(got["ws"]), role="A", tool="lit.admit_all")
     assert refused["ok"] is False, refused
     assert (refused.get("meta") or {}).get("kind") == "report_violations", refused.get("meta")
@@ -268,7 +283,7 @@ def test_skipping_the_submit_leaves_the_closing_gate_red(
     """
     _ready_or_xfail()
     got = _run(tmp_path, monkeypatch, skip=("submit",))
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     rep = CL.check_closing(got["store"], checks=("literature_pending",))
     assert rep.status["literature_pending"] == "fail", rep.to_dict()
     assert "delegation_not_cleared" in _codes(rep), rep.to_dict()
@@ -291,7 +306,7 @@ def test_stubbing_judged_state_makes_the_undecided_blocker_disappear(
     """
     _ready_or_xfail()
     got = _run(tmp_path, monkeypatch, skip=("submit",), pending_extra=True)
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
+    _assert_authoritative_fail(got)
     before = CL.check_closing(got["store"], checks=("literature_pending",))
     assert before.status["literature_pending"] == "fail", before.to_dict()
     assert "undecided_candidates" in _codes(before), before.to_dict()

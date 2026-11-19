@@ -5126,7 +5126,7 @@ def _summon_batch_counts(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 #: 研究型 / 有门的项目，在 M 发 final 之前从未跑过收工门时的受控拒理由码（22B）。
 CLOSING_NOT_RUN_CODE = "closing_not_run_before_final"
 
-#: 交 final 的那一刻手里那一份收工读数**不是权威结论**时的受控拒理由码（FINALAUTH，2026-11-19）。
+#: 交 final 的那一刻手里那一份收工读数不是权威结论时的受控拒理由码（FINALAUTH，2026-11-19）。
 #:
 #: 与 22B 的 `CLOSING_NOT_RUN_CODE` 同一族、同一处：都长在 `_final_gate_reading` 上，
 #: 都走 `final_refused` 那条补救拍（连着被拒满 `max_final_refused` 拍 ⇒ 退出码 5）。
@@ -5134,7 +5134,7 @@ CLOSING_NOT_RUN_CODE = "closing_not_run_before_final"
 #: 为什么要有这一档（业主 2026-11-19 裁定 ②）：`conductor.closing` 只给
 #: `goal` / `goal_met` / `basis` / `task_list`、不给 `project_dir` / `report_path` 时，
 #: `ClosingReport.authoritative=False` ⇒ `final_stop_reason` 按保留设计不改退出码
-#: ⇒ **`rc=0` 而八格 `verdict=fail`**。中途拿来看的那一份读数这样处理是对的（①）；
+#: ⇒ 结论是 `rc=0` 而八格 `verdict=fail`。中途拿来看的那一份读数这样处理是对的（①）；
 #: 但"交 final 的那一刻"必须有一份权威结论 —— 否则漏传两个参数就是静默 rc=0。
 CLOSING_NOT_AUTHORITATIVE_CODE = "closing_not_authoritative"
 
@@ -5168,9 +5168,9 @@ def final_stop_reason(loop: Any, run: Any = None) -> str:
     """final 那一拍该落哪个 `stop_reason`（只读 `conductor.closing` 的那一份结论）。
 
     - 没跑过收工门 / 结论是 `pass` ⇒ `"final"`（0）；
-    - 只有**权威的那一次门**（完整八格且给了 `project_dir` / `report_path`）才改停止
+    - 只有权威的那一次门（完整八格且给了 `project_dir` / `report_path`）才改停止
       理由：部分读数（链条彩排只跑门、不交项目根）是读数，不是"这一趟交付的结论"；
-    - **非权威的那一份在这里仍然读作 `final`**（业主 2026-11-19 裁定 ①「运行中途的
+    - 非权威的那一份在这里仍然读作 `final`（业主 2026-11-19 裁定 ①「运行中途的
       closing 只取读数，允许，不参与退出码」）：它不改退出码；"交 final 的那一刻必须
       是权威的"那一半由 :func:`closing_final_authority` 受控拒（裁定 ②）。
       两处是同一份裁定的两半，别在任何一处把另一半重算一遍。
@@ -5212,16 +5212,16 @@ def closing_final_authority(
         loop: Any, *, gate_req: Mapping[str, Any] | None = None,
         consulted: Mapping[str, Any] | None = None,
         exemption: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    """交 final 的那一刻，手里那份收工读数算不算**权威结论**（唯一判据）。
+    """交 final 的那一刻，手里那份收工读数算不算权威结论（唯一判据）。
 
     业主 2026-11-19 的两句话是本函数的全部规格：
 
-    - ①「**运行中途**的 closing（只取读数）= 非权威，允许，不参与退出码」——
-      所以这一格**不**看中途那些调用、也不自己改 `stop_reason`；那一半留在
+    - ①「运行中途的 closing（只取读数）= 非权威，允许，不参与退出码」——
+      所以这一格不看中途那些调用、也不自己改 `stop_reason`；那一半留在
       :func:`final_stop_reason`（它见到非权威就读作 `final`，设计保留）。
-    - ②「但**交 final 的那一刻**必须有一份**权威**结论：若 final 时拿到的是
+    - ②「但交 final 的那一刻必须有一份权威结论：若 final 时拿到的是
       non-authoritative ⇒ 受控拒，让 M 带上 `project_dir` / `report_path` 重交；
-      **不许 rc=0**」—— 这一格判的就是"final 时手里那一份"。
+      不许 rc=0」—— 这一格判的就是"final 时手里那一份"。
 
     为什么要单开一个函数、而不是把判断塞进 `_final_gate_reading` 的 if 里：
     反真空用例只打这一处桩（与 :func:`closing_gate_consulted` 同一条纪律）——
@@ -5231,17 +5231,17 @@ def closing_final_authority(
     输入（都可省略，省略时按 `loop` 现读）：
 
     - `gate_req`：:func:`closing_gate_requirement` 的读数。`required=False`
-      （非研究型、也没有门）⇒ 这一格没有对象，**不拒**：那正是①说的"允许"。
+      （非研究型、也没有门）⇒ 这一格没有对象，不拒：那正是①说的"允许"。
     - `consulted`：:func:`closing_gate_consulted` 的读数（`last` 是最后一次成功调用的读数）。
     - `exemption`：`NO-GATE.json` 的读数。显式豁免仍是显式豁免。
 
     返回 `{"refuse", "code", "authoritative", "checked", "why", "how_to_fix", "last"}`：
 
     - `checked=False`：这一趟没跑过门 / 这一趟没有门对象 / 最后一次调用没回
-      `readings.verdict`。三态里的"没查成"，**不折成"非权威"**（也绝不折成"权威"）；
+      `readings.verdict`。三态里的"没查成"，不折成"非权威"（也绝不折成"权威"）；
     - `authoritative=True`：最后一次调用就是权威的一次（`project_dir` 与 `report_path`
       都给全了、八格也跑全了）⇒ `refuse=False`；
-    - `authoritative=False`：**判过了、结论是非权威** ⇒ `refuse=True`，`code` 是
+    - `authoritative=False`：判过了、结论是非权威 ⇒ `refuse=True`，`code` 是
       :data:`CLOSING_NOT_AUTHORITATIVE_CODE`，`why` 与 `how_to_fix` 点名两个参数。
     """
     gate = dict(gate_req) if gate_req is not None else closing_gate_requirement(loop)
@@ -9221,11 +9221,11 @@ class AgentLoop:
             run.notes.append(f"收工门这一道按 no_gate 声明放行：{exemption.get('reason')}")
         elif not gate_req.get("checked") and run is not None:
             run.notes.append(f"收工门这一道没查成（不据此拦）：{gate_req.get('why')}")
-        # ---- FINALAUTH（2026-11-19，业主裁定 ②）：交 final 时要的是**权威**的那一份结论。
+        # ---- FINALAUTH（2026-11-19，业主裁定 ②）：交 final 时要的是权威的那一份结论。
         #
         # 现场（本仓 31 条彩排 + 真机漏传两参数的形态）：`conductor.closing` 只给
         # `goal` / `goal_met` / `basis` / `task_list` ⇒ `ClosingReport.authoritative=False`
-        # ⇒ `final_stop_reason` 按保留设计回 `"final"` ⇒ **rc=0 而 `verdict=fail`**。
+        # ⇒ `final_stop_reason` 按保留设计回 `"final"` ⇒ 结论是 rc=0 而 `verdict=fail`。
         # 裁定 ① 说中途拿这份读数来看是允许的（不参与退出码），裁定 ② 说交 final 的那一刻
         # 必须换成权威的那一份 —— 所以受控拒落在这里：final 被拒（还有补救拍，M 可以带上
         # `project_dir` / `report_path` 重新问一次门再发 final），连着被拒满

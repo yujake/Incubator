@@ -978,3 +978,95 @@ def session_problems(split: Mapping[str, Any]) -> list[str]:
             f"{len(elsewhere)} 条 `llm_call` 落在本趟 `sid={split.get('sid')}` 之外："
             f"{[(c.get('session'), c.get('role'), c.get('task_id')) for c in elsewhere]}")
     return problems
+
+
+#: 「权威门」那一组读数（FINALAUTH，2026-11-19 业主裁定 ②/③）：三条彩排
+#: （文献链 / c9 概念图 / c10 成文）判的是同一件事 —— M 交 final 时手里那份收工结论
+#: 是不是权威的那一次、它说 pass 还是 fail、运行退出码跟不跟它。
+#:
+#: 为什么搬到这里：三份彩排各写一遍"从事件里读 verdict / 逐格点名"就是同一判据的
+#: 三份实现（本仓反复踩过的坑）。本文件只给读数，报红在各自的判据里。
+
+#: `conductor.closing` 回执里 `readings.verdict` 的路径（一段，不许在别处抄第二份）。
+CLOSING_VERDICT_PATH: tuple[str, str] = ("readings", "verdict")
+
+
+def closing_verdict(ws: Path | str, *, role: str = "M") -> dict[str, Any]:
+    """M 那一次 `conductor.closing` 的权威结论（`readings.verdict`；空 dict = 没调到）。
+
+    读的是真工具的读数，不是会话里的 `ok=True`：`verdict` / `exit_code` /
+    `authoritative` / `cells` / `blockers` 五格就是"这一趟到底过没过门"的全部读数。
+    """
+    import json
+
+    for path in sorted((Path(ws) / "sessions").glob("*.jsonl")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if event.get("kind") != "agent_step" or str(event.get("role")) != role:
+                continue
+            if str((event.get("payload") or {}).get("name") or "") != "conductor.closing":
+                continue
+            result = dict(event.get("result") or {})
+            data = result.get("data")
+            if hasattr(data, "to_dict"):
+                data = dict(data.to_dict())
+            got: Any = data if isinstance(data, Mapping) else {}
+            for key in CLOSING_VERDICT_PATH:
+                got = (got or {}).get(key) if isinstance(got, Mapping) else None
+            return dict(got) if isinstance(got, Mapping) else {}
+    return {}
+
+
+def authoritative_problems(verdict: Mapping[str, Any]) -> list[str]:
+    """正控：full 链必须真的过了权威门（`verdict=pass` / 权威 / 八格逐格 pass）。"""
+    from agentflow import closing as CL
+
+    problems: list[str] = []
+    if verdict.get("verdict") != "pass":
+        problems.append(f"权威结论应是 pass，实得 {verdict.get('verdict')!r}"
+                        f"（reason={str(verdict.get('reason'))[:240]!r}）")
+    if verdict.get("authoritative") is not True:
+        problems.append("这一份不是权威的那一次（`authoritative` 不是 True）⇒ 它不改退出码，"
+                        "而彩排要判的正是权威门")
+    if int(verdict.get("exit_code", -1)) != 0:
+        problems.append(f"`exit_code` 应为 0，实得 {verdict.get('exit_code')!r}")
+    cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
+    want = list(CL.DEFAULT_CHECKS)
+    if sorted(cells) != sorted(want):
+        problems.append(f"八格的格子名单不对：{sorted(cells)} ≠ {sorted(want)}")
+    red = {k: v for k, v in cells.items() if v != "pass"}
+    if red:
+        problems.append(f"这八格里有没 pass 的：{red}")
+    return problems
+
+
+def authoritative_failure_problems(rc: int, verdict: Mapping[str, Any], *,
+                                   red: Sequence[str],
+                                   codes: Sequence[str] = ()) -> list[str]:
+    """负控（裁定 ③）：如实断言 `verdict=fail`、`rc==1`、红格点名（空 = 绿）。纯函数。
+
+    "诚实失败"的五件事：权威（`authoritative=True`，不是退回非权威 —— 否则 rc 不受它
+    影响，那不是失败读数）、`verdict == "fail"`、`exit_code == 1`、运行退出码 `rc == 1`、
+    红的格子恰好是点名的那几格（`red` 里可以有 `"none"` 表示"没有红格、红的是 blocker"）。
+    `codes` 给了就要求 blocker 里点得到那几个受控理由码。
+    """
+    problems: list[str] = []
+    if verdict.get("authoritative") is not True:
+        problems.append("负控也必须是权威的那一次（否则 rc 不受它影响，这不是诚实失败）")
+    if verdict.get("verdict") != "fail":
+        problems.append(f"`verdict` 应为 fail，实得 {verdict.get('verdict')!r}")
+    if int(verdict.get("exit_code", -1)) != 1:
+        problems.append(f"`exit_code` 应为 1，实得 {verdict.get('exit_code')!r}")
+    if int(rc) != 1:
+        problems.append(f"运行退出码应为 1（权威结论 fail），实得 {rc!r}")
+    cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
+    red_cells = sorted(k for k, v in cells.items() if v != "pass")
+    if red_cells != sorted(str(x) for x in red):
+        problems.append(f"红的格子应恰好是 {sorted(red)}，实得 {red_cells}")
+    fired = [str(b.get("code")) for b in (verdict.get("blockers") or [])]
+    if codes and not set(codes) <= set(fired):
+        problems.append(f"blocker 里应点名 {list(codes)}，实得 {fired}")
+    return problems
