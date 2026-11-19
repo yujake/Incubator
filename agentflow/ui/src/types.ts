@@ -83,6 +83,7 @@ export interface SessionRow {
   events_seen: number;
   events_listed: number | null;
   bad_lines: number;
+  bad_line_notes: string[];
   first_ts: string;
   last_ts: string;
   last_kind: string;

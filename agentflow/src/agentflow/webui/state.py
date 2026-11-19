@@ -736,6 +736,11 @@ def snapshot(root: str | Path, *, sid: str = "") -> dict[str, Any]:
             "events_seen": got["events_seen"],
             "events_listed": item.get("events"),
             "bad_lines": len(bad),
+            # 坏在哪几行（逐字来自 `jsonlfile.read_jsonl_state`：单行「第 N 行…」，
+            # 连续同因的一整段折成「第 A–B 行读不出来（N 行；首条：…）」）。页面据此
+            # 显示"哪几行读不出来"，不再只给一个条数（条数说不出是哪里）。
+            # 注意 `bad_lines` 数的是这些说明的条数（折段之后），不是物理坏行数。
+            "bad_line_notes": list(bad),
             "first_ts": _text(item.get("first_ts")),
             "last_ts": _text(item.get("last_ts")),
             "last_kind": got["last_kind"] or "unknown",
@@ -979,7 +984,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("SessionRow",
      "snapshot() 的 `sessions[]` —— 一段会话的读盘读数",
      (("sid", "string"), ("path", "string"), ("events_seen", "number"),
-      ("events_listed", "number | null"), ("bad_lines", "number"),
+      ("events_listed", "number | null"),
+      # `bad_lines` 是「坏行说明」的条数（= `jsonlfile.read_jsonl_state` 折段之后的
+      # problems 条数），不是物理坏行数：连续同因的一整段折成一条，那条里带着
+      # 「N 行」。物理行数看 `bad_line_notes` 里每条的括号。
+      ("bad_lines", "number"),
+      # 坏在哪几行（逐字来自 `jsonlfile._line_problems` 的口径：单行带行号，
+      # 连续同因的一整段折成「第 A–B 行读不出来（N 行；首条：…）」）。它回答
+      # "哪几行读不出来"；`bad_lines` 只回答"几条"。两个数不许互相顶替。
+      ("bad_line_notes", "string[]"),
       ("first_ts", "string"), ("last_ts", "string"), ("last_kind", "string"),
       ("last_seq", "number"), ("pending", "number"), ("runs", "number"),
       ("orphans", "number"),

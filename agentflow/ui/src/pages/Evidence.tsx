@@ -328,6 +328,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.statements_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : ev.statements_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.statements}
@@ -448,6 +450,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.conjectures_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : ev.conjectures_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.conjectures}
@@ -483,6 +487,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.experiments_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : ev.experiments_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.experiments}
@@ -527,6 +533,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.review_findings_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : ev.review_findings_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.review_findings}
@@ -556,6 +564,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.documents_tri) ? (
           <span class="empty">这一栏没查成（不是"0 份"）。</span>
+        ) : ev.documents_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.documents}
@@ -581,6 +591,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.relations_tri) ? (
           <span class="empty">这一栏没查成 —— 那五个数不是 0，是没读到。</span>
+        ) : ev.relations_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <>
             <div class="readings">
@@ -635,6 +647,8 @@ export function Evidence() {
         </div>
         {isUnreadable(ev.verifications_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : ev.verifications_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.verifications}
@@ -678,6 +692,8 @@ export function Evidence() {
       >
         {isUnreadable(ev.secretary_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : ev.secretary_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={ev.secretary}

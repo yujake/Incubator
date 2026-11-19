@@ -590,12 +590,32 @@ export function Home() {
               },
               {
                 key: "bad_lines",
-                title: "坏行",
+                // 这一格数的是「坏行说明」的条数（后端折段之后：连续同因的一整段
+                // 折成一条，那条里带「N 行」）。物理行数看右边那一列。
+                title: "坏行说明（条）",
                 render: (s) =>
                   s.bad_lines > 0 ? (
                     <Badge kind="badge-fail" text={cell(s.bad_lines)} />
                   ) : (
                     <span class="mono">0</span>
+                  ),
+              },
+              {
+                // 第 9 项（会话只有一份 `sessions/<sid>.jsonl`，坏行要说清"哪几行"）：
+                // 逐字显示后端给的「第 A–B 行读不出来（N 行；首条：…）」，不是空白、
+                // 也不是一个只有条数的红点。行界口径与后端同一份实现
+                // （`jsonlfile.read_jsonl_state` 只按 `\n` 切，U+0085 不再切断）。
+                key: "bad_line_notes",
+                title: "坏在哪几行",
+                render: (s) =>
+                  s.bad_line_notes.length === 0 ? (
+                    <span class="mono">—</span>
+                  ) : (
+                    <div class="readings">
+                      {s.bad_line_notes.map((note, i) => (
+                        <div class="mono" key={i}>{note}</div>
+                      ))}
+                    </div>
                   ),
               },
               { key: "pending", title: "待答（全局待答清单）" },

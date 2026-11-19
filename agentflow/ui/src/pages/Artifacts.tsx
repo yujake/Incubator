@@ -321,6 +321,8 @@ export function Artifacts() {
       >
         {isUnreadable(art.ledger_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
+        ) : art.ledger_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={art.ledger}
@@ -367,6 +369,8 @@ export function Artifacts() {
       >
         {isUnreadable(art.ledger_verify_tri) ? (
           <span class="empty">这一栏没查成（不是"全部对得上"）。</span>
+        ) : art.ledger_verify_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={art.ledger_verify}
@@ -431,6 +435,8 @@ export function Artifacts() {
       >
         {isUnreadable(art.handoffs_tri) ? (
           <span class="empty">这一栏没查成（不是"0 条"）。</span>
+        ) : art.handoffs_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={art.handoffs}
@@ -556,6 +562,8 @@ export function Artifacts() {
         >
           {isUnreadable(art.products_tri) ? (
             <span class="empty">这一栏没查成（不是"六件都不在"）。</span>
+          ) : art.products_tri === "not_applicable" ? (
+            <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
           ) : (
             <Table
               rows={art.products}
@@ -652,6 +660,8 @@ export function Artifacts() {
       >
         {isUnreadable(art.tasks_tri) ? (
           <span class="empty">这一栏没查成（不是"0 行"）。</span>
+        ) : art.tasks_tri === "not_applicable" ? (
+          <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
           <Table
             rows={art.tasks}
