@@ -6359,8 +6359,19 @@ class AgentLoop:
         # `usage_task_total_mismatch`（"两处对同一次召唤给出不同数字"）。抄不回来就留 0 并
         # 记一条 note —— 抄账是旁路，不许把"结算"这一步带走。
         meter = getattr(cond, "meter", None)
+        # 账本只读一次：花销与调用数都从这一份现算（与 `tasks.tokens/usd` 同源）。
+        # 读不成 ⇒ 空表 + 一条问题（抄账是旁路，不许把结算带走）。
+        _ledger: list[dict[str, Any]] = []
+        try:
+            if getattr(cond, "store", None) is not None:
+                _ledger = [dict(r) for r in cond.store.rows("usage_ledger")]
+        except Exception as exc:  # noqa: BLE001 —— 抄不到就记 0 / None 的理由见下
+            out["problems"].append(
+                f"账本没读成（{type(exc).__name__}: {exc}）⇒ 退场结算的 tokens/usd 记 0")
         for tid in [str(t) for t in tids if str(t)]:
-            tokens, usd = 0, 0.0
+            _mine = [r for r in _ledger if str(r.get("task_id") or "") == tid]
+            tokens = sum(int(r.get("tokens_total") or 0) for r in _mine)
+            usd = round(sum(float(r.get("usd") or 0.0) for r in _mine), 6)
             if meter is not None:
                 try:
                     tokens = int(meter.tokens_for(tid))
@@ -6378,6 +6389,25 @@ class AgentLoop:
             got = str(getattr(res, "outcome", None) or "")
             if got == "cut_off_by_parent":
                 out["written"].append(tid)
+                # ---- R9FIX-D8：父的退场结算必须给子这一趟补一条 `agent_run_end` ----
+                #
+                # 现场（真机 lp-ball-9，V 的 t-000186/t-000191）：子线程被父的退场
+                # 掐断，`tasks` 行由这里写成 `cut_off_by_parent`，但会话里只有
+                # `agent_run_start`、没有 `agent_run_end` ⇒ `sessions.runs_in_session`
+                # 的 `spend_usd` 是 `None`，两趟的 $0.615 在会话口径里没有主人。
+                # 这里补的是"这一趟怎么结束的"那一条读数：花销从账本抄（与上面
+                # `tasks.tokens/usd` 同源），`settled_by` 标明是父的退场结算写的。
+                # 幂等：子线程若晚一步写出自己那条 end，读侧按 `task_id` 配对，
+                # 先到的那条就是终态（`runs_in_session` 的既有口径），不会双计。
+                SS.append(self.session_root, {
+                    "kind": "agent_run_end", "role": str(getattr(res, "role", "") or ""),
+                    "task_id": tid, "stop_reason": got,
+                    "final": detail, "final_chars": len(detail),
+                    "spend": {"calls": len(_mine), "usd": float(usd),
+                              "unknown_usd_calls": 0},
+                    "settled_by": "parent_exit", "synthetic": True,
+                    "ts": S.now_iso(),
+                }, sid=self.sid)
             else:
                 # 幂等分支：这一行已经是终态（例如优雅停止那一支把它翻成了 block）。
                 # 那是它自己的档 —— 不改写，也不并进"被掐断"（判据 d 守这一条）。
