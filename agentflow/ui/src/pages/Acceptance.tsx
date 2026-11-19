@@ -19,6 +19,7 @@ import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { SourceLink } from "../components/SourceLink";
+import { formatCount, formatUsd } from "../components/Money";
 import { blank } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
@@ -26,14 +27,6 @@ import { useFace } from "../live";
 /** 后端 `closing` 的 detail 里带 `**`；源码不是 Markdown，上屏前逐字去掉。 */
 function plain(text: string): string {
   return text.split("**").join("");
-}
-
-function num(value: number | null | undefined): string {
-  return value === null || value === undefined ? "没读到" : String(value);
-}
-
-function usd(value: number | null | undefined): string {
-  return value === null || value === undefined ? "没读到" : value.toFixed(6);
 }
 
 /** 一条命题的 review state（六态；不认识的词原样显示，不假装认识）。 */
@@ -188,17 +181,17 @@ export function Acceptance() {
         ) : (
           <>
             <div class="readings">
-              正文定理类环境 <span class="mono">{num(proofs.paper_theorem_envs)}</span> ·
-              有证明的命题 <span class="mono">{num(proofs.propositions_with_proof)}</span> ·
-              台账定理类 <span class="mono">{num(proofs.ledger_theorem_kinds)}</span> ·
-              V 已签 <span class="mono">{num(proofs.signed)}</span>
+              正文定理类环境 <span class="mono">{formatCount(proofs.paper_theorem_envs)}</span> ·
+              有证明的命题 <span class="mono">{formatCount(proofs.propositions_with_proof)}</span> ·
+              台账定理类 <span class="mono">{formatCount(proofs.ledger_theorem_kinds)}</span> ·
+              V 已签 <span class="mono">{formatCount(proofs.signed)}</span>
               <SourceLink source={proofs.source} label="验收表" />
             </div>
             <div class="readings">{proofs.coverage_note}</div>
             <div class="readings">
               C3「{proofs.c3.name || "逐行走查签字的证明"}」：
-              <span class="mono">{num(proofs.c3.got)}</span> / 要求 ≥
-              <span class="mono">{num(proofs.c3.min)}</span> ·
+              <span class="mono">{formatCount(proofs.c3.got)}</span> / 要求 ≥
+              <span class="mono">{formatCount(proofs.c3.min)}</span> ·
               {proofs.c3.ok ? " 过了" : " 没过"} <SourceLink source={proofs.c3.source} label="验收表" />
             </div>
 
@@ -316,24 +309,24 @@ export function Acceptance() {
         ) : (
           <>
             <div class="readings">
-              正文 <span class="mono">{num(structure.paper.lines)}</span> 行 ·
-              <span class="mono">{num(structure.paper.sections)}</span> 节 ·
+              正文 <span class="mono">{formatCount(structure.paper.lines)}</span> 行 ·
+              <span class="mono">{formatCount(structure.paper.sections)}</span> 节 ·
               定理类 <span class="mono">
                 {(structure.paper.env_counts.theorem ?? 0)
                   + (structure.paper.env_counts.lemma ?? 0)
                   + (structure.paper.env_counts.proposition ?? 0)
                   + (structure.paper.env_counts.corollary ?? 0)}
-              </span> 个 · PDF <span class="mono">{num(structure.paper.pdf_pages)}</span> 页 ·
+              </span> 个 · PDF <span class="mono">{formatCount(structure.paper.pdf_pages)}</span> 页 ·
               编译回执 <span class="mono">{structure.paper.receipt_verdict}</span>
               <SourceLink source={structure.source} label="正文" />
             </div>
             <div class="readings">
-              定理类环境 <span class="mono">{num(structure.ledger.statement_envs)}</span> ·
-              proof 环境 <span class="mono">{num(structure.ledger.proof_envs)}</span> ·
-              台账行 <span class="mono">{num(structure.ledger.ledger_rows)}</span> ·
-              命题 <span class="mono">{num(structure.ledger.ledger_propositions)}</span> ·
-              台账定理类 <span class="mono">{num(structure.ledger.ledger_theorem_kinds)}</span> ·
-              对应表 <span class="mono">{num(structure.ledger.mapping_rows)}</span> ·
+              定理类环境 <span class="mono">{formatCount(structure.ledger.statement_envs)}</span> ·
+              proof 环境 <span class="mono">{formatCount(structure.ledger.proof_envs)}</span> ·
+              台账行 <span class="mono">{formatCount(structure.ledger.ledger_rows)}</span> ·
+              命题 <span class="mono">{formatCount(structure.ledger.ledger_propositions)}</span> ·
+              台账定理类 <span class="mono">{formatCount(structure.ledger.ledger_theorem_kinds)}</span> ·
+              对应表 <span class="mono">{formatCount(structure.ledger.mapping_rows)}</span> ·
               surplus <span class="mono">{structure.ledger.statement_surplus.length}</span>
             </div>
 
@@ -497,27 +490,27 @@ export function Acceptance() {
             </div>
 
             <div class="readings">
-              成本：事件求和 <span class="mono">${usd(closing.cost.event_usd)}</span> ·
-              收工行自报 <span class="mono">${usd(closing.cost.spend_usd)}</span> ·
-              无人认领 <span class="mono">${usd(closing.cost.unattributed_usd)}</span> ·
+              成本：事件求和 <span class="mono">{formatUsd(closing.cost.event_usd)}</span> ·
+              收工行自报 <span class="mono">{formatUsd(closing.cost.spend_usd)}</span> ·
+              无人认领 <span class="mono">{formatUsd(closing.cost.unattributed_usd)}</span> ·
               没有自报账的趟 <span class="mono">{closing.cost.runs_without_spend}</span> ·
-              usage_ledger <span class="mono">${usd(closing.cost.ledger_usd)}</span>
-              （<span class="mono">{num(closing.cost.ledger_rows)}</span> 行）
+              usage_ledger <span class="mono">{formatUsd(closing.cost.ledger_usd)}</span>
+              （<span class="mono">{formatCount(closing.cost.ledger_rows)}</span> 行）
               <SourceLink source={closing.cost.source} label="台账" />
             </div>
 
             <div class="readings">
-              时间轴：<span class="mono">{num(closing.runtime.runs_total)}</span> 趟 ·
-              未闭合 <span class="mono">{num(closing.runtime.open_runs)}</span> ·
-              已跑 <span class="mono">{num(closing.runtime.elapsed_sec)}</span> 秒 ·
+              时间轴：<span class="mono">{formatCount(closing.runtime.runs_total)}</span> 趟 ·
+              未闭合 <span class="mono">{formatCount(closing.runtime.open_runs)}</span> ·
+              已跑 <span class="mono">{formatCount(closing.runtime.elapsed_sec)}</span> 秒 ·
               最后收工读数 <span class="mono">{blank(closing.runtime.last_closing_at)}</span>
             </div>
             <div class="readings">
               名册：节点 <span class="mono">{closing.runtime.roster_nodes}</span> ·
-              台账子 <span class="mono">{num(closing.runtime.children_in_ledger)}</span> ·
-              名册项 <span class="mono">{num(closing.runtime.roster_child_count)}</span> ·
-              未销号 <span class="mono">{num(closing.runtime.children_unretired)}</span> ·
-              活跃 <span class="mono">{num(closing.runtime.active_child_count)}</span> ·
+              台账子 <span class="mono">{formatCount(closing.runtime.children_in_ledger)}</span> ·
+              名册项 <span class="mono">{formatCount(closing.runtime.roster_child_count)}</span> ·
+              未销号 <span class="mono">{formatCount(closing.runtime.children_unretired)}</span> ·
+              活跃 <span class="mono">{formatCount(closing.runtime.active_child_count)}</span> ·
               未登记 <span class="mono">{closing.runtime.unplaced}</span>
               <SourceLink source={closing.runtime.source} label="会话" />
             </div>

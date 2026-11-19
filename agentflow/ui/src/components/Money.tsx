@@ -21,6 +21,21 @@ function num(value: number | null | undefined): string {
 }
 
 /**
+ * 计数 / 数字读数的唯一写法（鲁棒 h：各页不许各写一套）。
+ *
+ * `null` / `undefined` ⇒ `unknown` —— "没读到"不许折成 0。页面要显示别的词
+ * （例如"没读到"）时也只能在这里改一次，不许在页面里再抄一份。
+ */
+export function formatCount(value: number | null | undefined): string {
+  return num(value);
+}
+
+/** 文本读数的唯一写法：空串 ⇒ `unknown`（"没写"与"没读到"在读数层是同一条口径）。 */
+export function formatText(value: string | null | undefined): string {
+  return value === null || value === undefined || value === "" ? "unknown" : value;
+}
+
+/**
  * 一笔金额的写法（`Money` 自己也用它）。
  *
  * 金额的写法只留这一处：散在各页里，同一个读数就会在「预算」页与「一趟详情」

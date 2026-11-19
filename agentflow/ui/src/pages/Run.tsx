@@ -38,7 +38,7 @@ import { api, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { StopButtons } from "../components/Stop";
-import { Money, formatUsd } from "../components/Money";
+import { Money, formatCount, formatText, formatUsd } from "../components/Money";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -67,15 +67,6 @@ function spendOf(ck: CheckpointView | null): CheckpointSpendView | null {
     return s as CheckpointSpendView;
   }
   return null;
-}
-
-function text(value: string): string {
-  return value === "" ? "unknown" : value;
-}
-
-/** 数字读数的通用写法：`null` ⇒ `unknown`（不是 0）—— 三态纪律在数字上的落点。 */
-function num(value: number | null): string {
-  return value === null ? "unknown" : String(value);
 }
 
 /** 停止理由的计数：空字典是"读到了、没有理由可数"，不是"没读成"。 */
@@ -217,8 +208,8 @@ function EventTimeline(props: { sid: string }) {
         columns={[
           { key: "index", title: "#" },
           { key: "kind", title: "kind" },
-          { key: "ts", title: "时间", render: (e) => text(e.ts) },
-          { key: "role", title: "角色", render: (e) => text(e.role) },
+          { key: "ts", title: "时间", render: (e) => formatText(e.ts) },
+          { key: "role", title: "角色", render: (e) => formatText(e.role) },
           { key: "shape", title: "形态" },
           { key: "ok", title: "成功" },
           {
@@ -411,18 +402,18 @@ export function Run(props: RunProps) {
         ) : (
           <>
             <div class="readings">
-              起 <span class="mono">{text(digest.data.start_ts)}</span> · 止{" "}
-              <span class="mono">{text(digest.data.end_ts)}</span> · 趟数{" "}
-              <span class="mono">{num(digest.data.runs)}</span>（未收工{" "}
-              <span class="mono">{num(digest.data.unfinished)}</span>）
+              起 <span class="mono">{formatText(digest.data.start_ts)}</span> · 止{" "}
+              <span class="mono">{formatText(digest.data.end_ts)}</span> · 趟数{" "}
+              <span class="mono">{formatCount(digest.data.runs)}</span>（未收工{" "}
+              <span class="mono">{formatCount(digest.data.unfinished)}</span>）
             </div>
             <div class="readings">
-              步数 <span class="mono">{num(digest.data.steps)}</span> · 派了多少活{" "}
-              <span class="mono">{num(digest.data.dispatched)}</span> · 验了几条{" "}
-              <span class="mono">{num(digest.data.verified)}</span> · 已签证明位{" "}
-              <span class="mono">{num(digest.data.signed_proofs)}</span> · 有效签（复算通过）{" "}
-              <span class="mono">{num(digest.data.recomputable_signs)}</span> · 签文件{" "}
-              <span class="mono">{num(digest.data.sign_files)}</span>
+              步数 <span class="mono">{formatCount(digest.data.steps)}</span> · 派了多少活{" "}
+              <span class="mono">{formatCount(digest.data.dispatched)}</span> · 验了几条{" "}
+              <span class="mono">{formatCount(digest.data.verified)}</span> · 已签证明位{" "}
+              <span class="mono">{formatCount(digest.data.signed_proofs)}</span> · 有效签（复算通过）{" "}
+              <span class="mono">{formatCount(digest.data.recomputable_signs)}</span> · 签文件{" "}
+              <span class="mono">{formatCount(digest.data.sign_files)}</span>
               （<span class="mono">out/vsigns/</span> 下全部 JSON，含 issued.json；
               有效签只数能复算的凭据，与文件个数、已签证明位都不是同一个数）
             </div>
@@ -430,8 +421,8 @@ export function Run(props: RunProps) {
                 `issued.json` 当成第 4 份签（"3 份签 + 1 份台账 ⇒ 4 份签"）。 */}
             <div class="readings">
               逐份签文件（不含台账）{" "}
-              <span class="mono">{num(digest.data.signs.files)}</span> 份 · 复算不上{" "}
-              <span class="mono">{num(digest.data.signs.unbacked)}</span> 份 · 签台账{" "}
+              <span class="mono">{formatCount(digest.data.signs.files)}</span> 份 · 复算不上{" "}
+              <span class="mono">{formatCount(digest.data.signs.unbacked)}</span> 份 · 签台账{" "}
               <span class="mono">issued.json</span>{" "}
               {digest.data.signs.ledger_present ? (
                 <Badge kind="badge-na" text="在盘上（台账，不是签）" />
@@ -497,14 +488,14 @@ export function Run(props: RunProps) {
               // 162 ②：自报账里"算不出价钱"的那几次。单独一列，因为它是 `number | null` ——
               // 硬塞进 Money 的 `unknownCalls` 会把 `null` 折成 0（"没报"读成"零次"）。
               { key: "spend_unknown_usd_calls", title: "算不出价钱（自报）" },
-              { key: "last_shape", title: "最后一步形态", render: (r) => text(r.last_shape) },
-              { key: "stop_reason", title: "停止理由", render: (r) => text(r.stop_reason) },
+              { key: "last_shape", title: "最后一步形态", render: (r) => formatText(r.last_shape) },
+              { key: "stop_reason", title: "停止理由", render: (r) => formatText(r.stop_reason) },
               { key: "waiting_on", title: "在等哪个问题" },
               // 162 ③：一格是"占了几行下标"（跨度，含别人的），一格是"归到这一趟的"。
               { key: "events_span", title: "趟内事件（跨度）" },
               { key: "events_owned", title: "趟内事件（自己的）" },
               { key: "start_ts", title: "起" },
-              { key: "end_ts", title: "止", render: (r) => text(r.end_ts) },
+              { key: "end_ts", title: "止", render: (r) => formatText(r.end_ts) },
             ]}
           />
         )}
@@ -628,7 +619,7 @@ export function Run(props: RunProps) {
               { key: "index", title: "事件下标" },
               { key: "kind", title: "kind" },
               { key: "role", title: "角色" },
-              { key: "ts", title: "时间", render: (o) => text(o.ts) },
+              { key: "ts", title: "时间", render: (o) => formatText(o.ts) },
             ]}
           />
         )}

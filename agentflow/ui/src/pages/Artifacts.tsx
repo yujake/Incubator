@@ -47,7 +47,8 @@ import { api } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Consistency } from "../components/Consistency";
-import { Table, cell, plain } from "../components/Table";
+import { PagedTable } from "../components/PagedTable";
+import { cell, plain } from "../components/Table";
 import { formatUsd } from "../components/Money";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -200,7 +201,7 @@ function libraryBody(view: LibraryView | null, problem: string): ComponentChildr
   }
   return (
     <>
-      <Table
+      <PagedTable
         rows={data.works}
         empty="没有入库文献。"
         columns={[
@@ -324,7 +325,7 @@ export function Artifacts() {
         ) : art.ledger_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={art.ledger}
             empty="暂无产物台账行。"
             columns={[
@@ -372,7 +373,7 @@ export function Artifacts() {
         ) : art.ledger_verify_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={art.ledger_verify}
             empty="没有可对账的台账行（台账是空的）。"
             columns={[
@@ -438,7 +439,7 @@ export function Artifacts() {
         ) : art.handoffs_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={art.handoffs}
             empty="交接台账 0 条（读到了，里面是空的）。"
             columns={[
@@ -486,7 +487,7 @@ export function Artifacts() {
             还没走到那一步就没有它（不是"0 行"，也不是没查成）。
           </span>
         ) : (
-          <Table
+          <PagedTable
             rows={art.checks}
             empty="验收表还没写（合法初态：这一趟还没声明机器可判行）。"
             columns={[
@@ -565,7 +566,7 @@ export function Artifacts() {
           ) : art.products_tri === "not_applicable" ? (
             <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
           ) : (
-            <Table
+            <PagedTable
               rows={art.products}
               empty="六件产物一件都没有（读到了，里面是空的）。"
               columns={[
@@ -620,7 +621,7 @@ export function Artifacts() {
               : art.experiment_spots_reason}
           </div>
         ) : (
-          <Table
+          <PagedTable
             rows={art.experiment_spots}
             empty="这一趟还没有实验产物。"
             columns={[
@@ -663,7 +664,7 @@ export function Artifacts() {
         ) : art.tasks_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={art.tasks}
             empty="tasks 台账为空。"
             columns={[

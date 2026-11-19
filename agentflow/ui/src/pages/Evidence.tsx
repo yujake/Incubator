@@ -47,7 +47,9 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Consistency } from "../components/Consistency";
 import { Nontriviality } from "../components/Nontriviality";
-import { Table, cell } from "../components/Table";
+import { formatUsd } from "../components/Money";
+import { PagedTable } from "../components/PagedTable";
+import { cell } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 import type { ExperimentRow, RelationRow, StatementRow } from "../types";
@@ -331,7 +333,7 @@ export function Evidence() {
         ) : ev.statements_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.statements}
             empty="暂无命题（已读出）。"
             columns={[
@@ -453,7 +455,7 @@ export function Evidence() {
         ) : ev.conjectures_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.conjectures}
             empty="0 条猜想（读到了，里面是空的）。"
             columns={[
@@ -490,7 +492,7 @@ export function Evidence() {
         ) : ev.experiments_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.experiments}
             empty="0 条实验（读到了，里面是空的）。"
             columns={[
@@ -536,7 +538,7 @@ export function Evidence() {
         ) : ev.review_findings_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.review_findings}
             empty="0 条审校发现（读到了，里面是空的）。"
             columns={[
@@ -567,7 +569,7 @@ export function Evidence() {
         ) : ev.documents_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.documents}
             empty="0 份稿件（读到了，里面是空的）。"
             columns={[
@@ -605,7 +607,7 @@ export function Evidence() {
                 没有不是「逐字 / 语义」通过的引文。
               </span>
             ) : (
-              <Table
+              <PagedTable
                 rows={notClean}
                 empty="没有不是「逐字 / 语义」通过的引文。"
                 columns={[
@@ -650,7 +652,7 @@ export function Evidence() {
         ) : ev.verifications_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.verifications}
             empty="暂无验证台账（合法初态）。"
             columns={[
@@ -695,7 +697,7 @@ export function Evidence() {
         ) : ev.secretary_tri === "not_applicable" ? (
           <span class="empty">还没有这张表（这个工作区里这一栏一次都没落过盘） —— 不是"读到了、里面是 0 行"。</span>
         ) : (
-          <Table
+          <PagedTable
             rows={ev.secretary}
             empty="还没有秘书决策台账（合法初态）。"
             columns={[
@@ -726,7 +728,7 @@ export function Evidence() {
                         text={checked === true ? "查过" : "没查成"}
                       />
                       {typeof usd === "number" ? (
-                        <span class="mono"> ${usd.toFixed(6)}</span>
+                        <span class="mono"> {formatUsd(usd)}</span>
                       ) : null}
                     </>
                   );
