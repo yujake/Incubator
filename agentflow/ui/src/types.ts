@@ -465,7 +465,7 @@ export interface BudgetEntry {
   note: string;
 }
 
-/** 出处：budget_face() —— 总额度（寄存器）+ 已花（`usage_ledger`）与两个归口。 */
+/** 出处：budget_face() —— 总额度（寄存器）+ 已花（`usage_ledger`）与两个归口 + 收工储备线（`budget.paperwork_first_reading` 的 reserve_usd / below_reserve / note）+ 无人认领那笔钱（会话口径，`sessions.unattributed_usd_of`）。 */
 export interface BudgetView {
   tri: Tri;
   reason: string;
@@ -486,6 +486,13 @@ export interface BudgetView {
   added_count: number;
   by_role: Record<string, UsageBucket>;
   by_scope: Record<string, UsageBucket>;
+  reserve_usd: number | null;
+  below_reserve: boolean | null;
+  note: string;
+  paperwork_first_rule: string;
+  unattributed_usd: number | null;
+  unattributed_reason: string;
+  unattributed_source: string;
 }
 
 /** 出处：tokenmeter.by_role() / by_scope() 的一格（`{tokens, usd, entries, attempts[, roles]}`）。 */

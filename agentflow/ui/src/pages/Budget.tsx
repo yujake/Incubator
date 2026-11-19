@@ -13,6 +13,13 @@
  *    而金额那两栏显 `unknown`，**不许折成 $0.000000**；
  * 3. **抠完为负**：`exceeded` 是读数不是错误（业主：「可能会继续扣成负的一点点，
  *    但无大碍」）—— 剩余为负时显示成一条明确的读数，而不是把它藏起来。
+ * 4. **为什么停了**：`reserve_usd` / `below_reserve` / `note` 三格来自
+ *    `budget.paperwork_first_reading()` —— M 按 $1.00 收工储备线叫停时，
+ *    只看"剩余"读不出这件事（阈值真身在 `budget.PAPERWORK_RESERVE_USD`，本页不写死）。
+ * 5. **账本行不是 llm_call 总数**：`entries` 是行数，`by_scope` 按 reason / summon /
+ *    extract 等归口拆开（一次调用可能记 0..n 行）。
+ * 6. **无人认领（会话口径）**：`unattributed_usd` 与 `/api/state`、收工面同一个函数
+ *    （`sessions.unattributed_usd_of`）；读不出来是 `None` + 原因，不是 0。
  */
 import { useState } from "preact/hooks";
 
@@ -58,6 +65,17 @@ export function Budget() {
   const byRole = buckets(b.by_role as unknown as Record<string, unknown>);
   const byScope = buckets(b.by_scope as unknown as Record<string, unknown>);
   const parsed = Number(amount);
+  // 三类账本行（reason / summon / extract）与"其余"几个归口：`buckets()` 已经把
+  // 每一格收成字符串（读不到就是 `unknown`），这里只做查表，不另写一处格式化。
+  const scopeEntries = (name: string): string => {
+    const row = byScope.find((one) => one.name === name);
+    return row === undefined ? "unknown" : row.entries;
+  };
+  const three = ["reason", "summon", "extract"];
+  const threeSum = three.every((name) => scopeEntries(name) !== "unknown")
+    ? String(three.reduce((acc, name) => acc + Number(scopeEntries(name)), 0))
+    : "unknown";
+  const otherScopes = ["experiment", "review", "search"];
 
   const submit = (which: "add" | "set"): void => {
     setBusy(true);
@@ -96,6 +114,38 @@ export function Budget() {
             <Badge kind="badge-unknown" text="已越上限" />
           ) : (
             <Badge kind="badge-pass" text="还没越上限" />
+          )}
+        </div>
+        {/* 收工储备线：M 按 $1.00 自己叫停时（stopctl 的口径），只看"剩余"这一格
+            读不出"为什么停"。阈值真身在 budget.PAPERWORK_RESERVE_USD，本页不写死。 */}
+        <div class="readings">
+          收工储备线 <span class="mono">{formatUsd(b.reserve_usd)}</span> ·{" "}
+          {b.below_reserve === null ? (
+            <Badge kind="badge-unknown" text="判不了（剩余算不出来）" />
+          ) : b.below_reserve ? (
+            <Badge kind="badge-fail" text="余量已低于储备线" />
+          ) : (
+            <Badge kind="badge-pass" text="余量还在储备线之上" />
+          )}
+        </div>
+        {b.note === "" ? null : <div class="readings">{b.note}</div>}
+        <div class="readings">
+          账本行 <span class="mono">{cell(b.entries)}</span> 行（不是 llm_call 总数：
+          一次调用可能记 0..n 行，重试另记 attempts）· 三类合计{" "}
+          <span class="mono">{threeSum}</span> = reason{" "}
+          <span class="mono">{scopeEntries("reason")}</span> + summon{" "}
+          <span class="mono">{scopeEntries("summon")}</span> + extract{" "}
+          <span class="mono">{scopeEntries("extract")}</span>
+          {otherScopes.map((name) => ` · ${name} ${scopeEntries(name)}`).join("")}
+          {" · 编外 "}
+          <span class="mono">{scopeEntries("unclassified")}</span>
+        </div>
+        <div class="readings">
+          无人认领（会话口径）<span class="mono">{formatUsd(b.unattributed_usd)}</span>
+          {b.unattributed_reason === "" ? (
+            <span class="tri-reason"> · {b.unattributed_source}</span>
+          ) : (
+            <span class="tri-reason"> · {b.unattributed_reason}</span>
           )}
         </div>
         <div class="readings">

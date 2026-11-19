@@ -3489,6 +3489,29 @@ def budget_face(root: str | Path) -> dict[str, Any]:
     ⇒ `tri="unreadable"` + `problem` 原样带出（`budget.reading` 那一档已经这么做了，
     这一层只透传，不二次判断）。寄存器不在盘上 ⇒ `not_applicable`（还没设过预算，
     合法初态），而不是"没查成"。
+
+    ## 储备线与"为什么停了"（2026-11-19 对齐）
+
+    这一格用 `budget.paperwork_first_reading()` 而不是 `reading()`：前者在完全相同的
+    那批键之外多给 `reserve_usd` / `below_reserve` / `note` / `paperwork_first_rule`
+    （真实现在 `budget.py`，本层不另写一份阈值）。为什么必须给：M 自己按 $1.00
+    收工储备线叫停时（`stopctl` 的口径），页面上只剩"剩余 1.32"这一个数 ——
+    "为什么停"看不见。`note` 是那一句能直接读的人话（预算读数不是硬闸，只用来
+    分辨「没写」与「写得不对」）。
+
+    ## 无人认领那笔钱（会话口径）
+
+    `unattributed_usd` 与 `/api/state` 的 `sessions[].unattributed_usd`、
+    收工面 `closing.cost.unattributed_usd` 是同一个函数算的
+    （`sessions.unattributed_usd_of`）：事件流里归不到任何一趟的那些
+    `llm_call.usd`。会话读不出来 ⇒ `None` + `unattributed_reason`（不是 0）。
+
+    ## 账本行不是 llm_call 总数
+
+    `entries` 是 `usage_ledger` 的行数；`by_scope` 把它按 `schema.USAGE_SCOPES`
+    六档加 `unclassified` 拆开（真机 lp-ball-10：reason 1200 + summon 55 +
+    extract 0 = 1255 行）。一次模型调用可能记 0..n 行（重试另记 `attempts`），
+    所以"行数"与"调用次数"是两个数，页面不许互相顶替。
     """
     from .. import budget as B
     from ..store import Store
@@ -3507,8 +3530,25 @@ def budget_face(root: str | Path) -> dict[str, Any]:
     except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
         spent_problem = (f"usage_ledger 读不出来：{type(exc).__name__}: {exc}"
                          "（已花那一栏记「没查成」，不记 0）")
-    snap = B.reading(root_p,
-                     spent_usd=(float(spent["usd"]) if spent else None))
+    snap = B.paperwork_first_reading(root_p,
+                                     spent_usd=(float(spent["usd"]) if spent else None))
+    # 无人认领的那笔钱按会话口径算（与 `/api/state` 的 `sessions[].unattributed_usd`
+    # 和收工面 `closing.cost.unattributed_usd` 同一个函数：`sessions.unattributed_usd_of`）。
+    # 为什么这一页也要给：预算页是"钱"的唯一落点，"账本说花了多少"与"会话说花了多少、
+    # 其中多少没有任何一趟认领"必须并排 —— 只给账本那一半，读的人会把
+    # "已花 3.676321" 读成"每一笔都有主"。
+    unattributed: float | None = None
+    unattributed_problem = ""
+    try:
+        records, info = SS.read_all_sessions(root_p)
+        if info.get("checked"):
+            unattributed = SS.unattributed_usd_of(records, SS.runs_in_session(records))
+        else:
+            unattributed_problem = (f"会话读不出来（{info.get('reason') or '没查成'}）"
+                                    "⇒ 无人认领那笔钱算不出来（不是 0）")
+    except Exception as exc:  # noqa: BLE001 - 读数层：读不到就如实说没查成
+        unattributed_problem = (f"会话读不出来（{type(exc).__name__}: {exc}）"
+                                "⇒ 无人认领那笔钱算不出来（不是 0）")
     snap.update({
         "spent_tri": TRI_UNREADABLE if spent_problem else TRI_COMPUTED,
         "spent_reason": spent_problem,
@@ -3518,6 +3558,11 @@ def budget_face(root: str | Path) -> dict[str, Any]:
         "added_count": len(snap.get("added") or []),
         "by_role": by_role,
         "by_scope": by_scope,
+        # 无人认领（会话口径）：事件流里归不到任何一趟的那些 `llm_call.usd`。
+        # 三态：会话读不出来 ⇒ `None` + `unattributed_reason`，不折成 0。
+        "unattributed_usd": unattributed,
+        "unattributed_reason": unattributed_problem,
+        "unattributed_source": "sessions.unattributed_usd_of（会话口径）",
     })
     if spent_problem and snap.get("tri") != TRI_UNREADABLE:
         snap["tri"] = TRI_UNREADABLE
@@ -5568,7 +5613,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      (("kind", "string"), ("usd", "number"), ("by", "string"), ("at", "string"),
       ("note", "string"))),
     ("BudgetView",
-     "budget_face() —— 总额度（寄存器）+ 已花（`usage_ledger`）与两个归口",
+     "budget_face() —— 总额度（寄存器）+ 已花（`usage_ledger`）与两个归口 + "
+     "收工储备线（`budget.paperwork_first_reading` 的 reserve_usd / below_reserve / "
+     "note）+ 无人认领那笔钱（会话口径，`sessions.unattributed_usd_of`）",
      (("tri", "Tri"), ("reason", "string"), ("path", "string"), ("exists", "boolean"),
       ("source", "string"), ("total_usd", "number | null"),
       ("spent_usd", "number | null"), ("remaining_usd", "number | null"),
@@ -5577,7 +5624,15 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("entries", "number | null"), ("tokens", "number | null"),
       ("attempts", "number | null"), ("added_count", "number"),
       ("by_role", "Record<string, UsageBucket>"),
-      ("by_scope", "Record<string, UsageBucket>"))),
+      ("by_scope", "Record<string, UsageBucket>"),
+      # 收工储备线（M 自设 $1.00）：`below_reserve` 为 null 只可能是"剩余算不出来"
+      # （没设过预算 / 账本读不成），不是"还剩很多"。
+      ("reserve_usd", "number | null"), ("below_reserve", "boolean | null"),
+      ("note", "string"), ("paperwork_first_rule", "string"),
+      # 无人认领的钱（会话口径）：会话读不出来 ⇒ `unattributed_usd` 为 null 且
+      # `unattributed_reason` 非空（不是 0）。
+      ("unattributed_usd", "number | null"), ("unattributed_reason", "string"),
+      ("unattributed_source", "string"))),
     ("UsageBucket",
      "tokenmeter.by_role() / by_scope() 的一格（`{tokens, usd, entries, attempts[, roles]}`）",
      (("tokens", "number"), ("usd", "number"), ("entries", "number"),

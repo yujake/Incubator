@@ -732,6 +732,9 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     # 所以它和其它面一样在受核对名单里要有落脚点（不读索引，删掉索引也读得出来）。
     digest = R.run_digest(artifacts_ws, SID)
     got["RunDigestView"] = set(digest)
+    # `run_digest()` 的 `signs` 那一块（签文件 / 签台账分开数）：键在任何工作区上都
+    # 在（目录不在 ⇒ 0 / `ledger_present=False`），所以也要有落脚点。
+    got["SignsView"] = set(digest["signs"])
     assert digest["tri"] == "computed", digest
     art = R.artifacts_face(artifacts_ws)
     got["ArtifactsView"] = set(art)
