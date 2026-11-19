@@ -4124,11 +4124,19 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
         except (OSError, UnicodeDecodeError):
             _cur_sha = ""
         if _cur_sha and _cur_sha != str(sha or "").strip().lower():
+            _reason = (f"`{_mc}` 在 V 读到的那一版之后又改过"
+                       f"（读到 {str(sha)[:12]}…，盘上 {_cur_sha[:12]}…）⇒ "
+                       "不签发：判词 / V 稿 / 台账行只挂读到的那一版；"
+                       "请把这一份重新送审")
             out.update(checked=True, code=PROOF_CHANGED_SINCE_DISPATCH,
-                       reason=(f"`{_mc}` 在 V 读到的那一版之后又改过"
-                               f"（读到 {str(sha)[:12]}…，盘上 {_cur_sha[:12]}…）⇒ "
-                               "不签发：判词 / V 稿 / 台账行只挂读到的那一版；"
-                               "请把这一份重新送审"))
+                       reason=_reason)
+            # R9FIX 追补：门槛够了而签没发 ⇒ 盘上要有这一条（真机 lp-ball-9
+            # 08:30:09 的第 4 个 3/3 clean 组就是这样：签文件不在、失败记录也没有）。
+            if holds.get("streak_ok"):
+                _VS.note_missed_issue(
+                    root, artifact_sha=sha, manuscript=_mc,
+                    streak=holds.get("streak"), need=holds.get("need") or need,
+                    code=PROOF_CHANGED_SINCE_DISPATCH, reason=_reason)
             return out
     need = int(holds.get("need") or SIGN_STREAK_NEED)
     # ---- 收方秘书是谁：调用方给了就用；没给就按这一趟的父角色现读（权威来源）----
@@ -4180,6 +4188,16 @@ def _vsigns_write_after_flip(store: Any, *, row: Mapping[str, Any], ledger: Path
     out.update({k: got.get(k) for k in ("written", "idempotent", "conflict", "path",
                                         "archive_error", "reason", "sign", "envelope",
                                         "code", "refused_below_need", "submission")})
+    # R9FIX 追补：门槛够了而这一签没落地 ⇒ 落一条「该发签却没发」的记录。
+    # 三档「没写成」各自会带 code/reason；`idempotent`（签早在盘上）与 `conflict`
+    # （盘上那份不是这一版的签，交人看）不是"该发没发"，不记。
+    if (holds.get("streak_ok")
+            and not (out.get("written") or out.get("idempotent") or out.get("conflict"))):
+        _VS.note_missed_issue(
+            root, artifact_sha=sha, manuscript=_mc,
+            streak=holds.get("streak"), need=holds.get("need") or need,
+            code=str(out.get("code") or "not_written"),
+            reason=str(out.get("reason") or "这一签没有落盘"))
     if got.get("written") or got.get("idempotent"):
         try:
             landed = _VS.land(

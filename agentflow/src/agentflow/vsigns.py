@@ -114,6 +114,8 @@ SIGNS_DIR = "out/vsigns"
 INDEX_NAME = "issued.json"
 #: 归档失败的那一条 appended 记录（点开头 = 机器产物，不给人当签读）。
 ERRORS_NAME = ".archive-errors.jsonl"
+#: 「门槛够了、签没发出去」的那一条 appended 记录（R9FIX 追补；见 `note_missed_issue`）。
+MISSED_ISSUE_NAME = ".issuance-missed.jsonl"
 
 #: 签文件的 schema 名（与 `issued.json` 分开：两份东西两个版本号）。
 SIGN_SCHEMA = "vsign/1"
@@ -288,6 +290,57 @@ def index_path(root: Any) -> Path:
 def errors_path(root: Any) -> Path:
     """归档失败的 appended 记录（`out/vsigns/.archive-errors.jsonl`）。"""
     return signs_dir(root) / ERRORS_NAME
+
+
+def missed_issue_path(root: Any) -> Path:
+    """「该发签却没发」的 appended 记录（`out/vsigns/.issuance-missed.jsonl`）。"""
+    return signs_dir(root) / MISSED_ISSUE_NAME
+
+
+def note_missed_issue(root: Any, *, artifact_sha: Any, manuscript: str = "",
+                      streak: Any = 0, need: Any = 0, code: str = "",
+                      reason: str = "", at: str = "") -> str:
+    """把一次「门槛够了、签没发出去」落成一条 appended 记录（读数是证据，不是判据）。
+
+    ## 为什么需要它（R9FIX 追补，真机 lp-ball-9 08:30:09）
+
+    第 4 个 3/3 clean 组（正文 sha `e863773…`）在盘上**没有签文件、也没有任何失败记录**：
+    拒签的理由只活在 `verify.verify_proof` 的返回值里（那一趟是
+    `PROOF_CHANGED_SINCE_DISPATCH` —— 读到 e863，盘上已改成 a724）。返回值读过就没了，
+    事后只能靠"签文件不在"倒推，而"没发"与"没查"在盘上同形。
+
+    这条记录补齐第三态：`should_issue=true` 且 `written=false`，逐字带理由码与两把 sha。
+    它**不是**判据：没有任何门读它来决定通过/不通过；它只是让"该发签却没发"在事后
+    可查、可复算。
+
+    幂等：同一 `(artifact_sha, code, reason)` 重复调用只追加一次（读已有行判重）。
+    返回落点（相对工作区）；写不成返回空串（调用方不必为一条日志改判）。
+    """
+    import json
+
+    key = _sha_key(artifact_sha) if artifact_sha else ""
+    path = missed_issue_path(root)
+    entry = {"at": str(at or _now_iso()), "artifact_sha": key,
+             "manuscript": str(manuscript or ""), "streak": int(streak or 0),
+             "need": int(need or 0), "should_issue": True, "written": False,
+             "code": str(code or ""), "reason": str(reason or "")}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                try:
+                    old = json.loads(line)
+                except ValueError:
+                    continue
+                if (str(old.get("artifact_sha") or "") == key
+                        and str(old.get("code") or "") == entry["code"]
+                        and str(old.get("reason") or "") == entry["reason"]):
+                    return rel(path, root)
+        with open(path, "a", encoding="utf-8", newline="\n") as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    except OSError:
+        return ""
+    return rel(path, root)
 
 
 def _sha_key(value: Any) -> str:
