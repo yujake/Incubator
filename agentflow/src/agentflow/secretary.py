@@ -10872,18 +10872,66 @@ class Secretary:
                 str(data.get("proof_text") or "").strip()
                 or list(data.get(VR.PROOFS_KEY) or []))
             _rel_ms = str(body.get("manuscript_path") or "").strip().replace("\\", "/")
-            if _rel_ms and not _receipt_will_write:
-                if not _is_not_applicable_kind(kind):
-                    data["manuscripts"] = {str(int(_new_path_no)): _rel_ms}
-                from . import manuscriptids as _MID_FAM
-                from . import vsigns as _VS_MS
+            # ---- 2026-11-20（WIRE1）：别条命题已经收进那一行的稿，这一笔不许认领 ------
+            #
+            # 现场（`tests/test_dependency_wiring_is_live.py::test_..._v_sign`，全量快照
+            # 里最后一条红）：B 收录一笔"研究手稿引用了 F 的证明手稿"的新命题，正文留待
+            # V 签过之后再交（2026-11-02 准入闸的三步次序：先落行与依赖面、V 签那份
+            # 正文、B 再交正文）。这一笔选的稿是 D 携带过来的 F 稿 —— 那是 stmt:000002
+            # 的稿。上面这一臂把它写进新行 ⇒ 新行声称"我的稿是 000000"，而它这时还没有
+            # 自己的正文；V 的在册闸（`agent_v/core.py::_decide_registered_manuscript_identity`，
+            # 2026-11-05「签不许盖错对象」那张判据）只认行上那一格与逐路径记录 ⇒ V 签不了
+            # 这条命题自己那份稿（`bad_manuscript_name`），而那份稿本来要等到第 ③ 步
+            # 收录回执才记到这一行上（`_attach_proofs` 的 `write_proof_receipt`）。
+            #
+            # 判据是「这一份稿是不是已经被别条命题收进它那一行」（`manuscriptretire.
+            # statement_of_manuscript` 的收录两源；不读签行 —— 问的是"收进了哪一行"，
+            # 不是"谁签过它"）：已被别条命题认领 ⇒ 这一笔不写，把这两格留给第 ③ 步。
+            # 一份稿只能属于一条命题，这条 1:1 是 `statement_of_manuscript` 自己写在
+            # 读数里的（"同时被 N 条命题指向 —— 1:1 的判据被破了"）；这一臂造出的正是
+            # 那个形态，于是反过来把 V 的认稿闸顶死。
+            #
+            # 稿名那条查询是族安全的（路径带前缀）；稿号那条不是（裸号跨族会撞，K6②
+            # 因此把稿身份定成 `(族, 稿号)`）⇒ 同号不同族时宁可不认领：代价只是这一
+            # 行暂时没有回指那一格（FIX186 的原始缺口，第 ③ 步的收录回执仍会写），反过
+            # 来写错一格却会让那条命题永远签不下去。
+            #
+            # 三态：`checked=False`（台账读不出来）也不写 —— 「判不了这一份是不是
+            # 别条的稿」不等于「可以认领」。两种情况都进 `out["manuscript_link"]` 的读数，
+            # 不静默（`written` 是这一格写没写，`why` 是没写的原因）。
+            from . import manuscriptids as _MID_FAM
+            from . import vsigns as _VS_MS
 
-                _mid_ms = str(_VS_MS.manuscript_id_of(_rel_ms) or "")
-                if _mid_ms:
-                    data["manuscript_id"] = _mid_ms
-                    _fam_ms = _MID_FAM.family_of_rel(_rel_ms)
-                    if _fam_ms:
-                        data["manuscript_family"] = _fam_ms
+            _mid_ms = str(_VS_MS.manuscript_id_of(_rel_ms) or "")
+            _link: dict = {"written": False, "checked": False, "claimed_by": "",
+                           "manuscript": _rel_ms, "why": ""}
+            if _rel_ms and not _receipt_will_write:
+                from . import manuscriptretire as _MR_MS
+
+                _owner = dict(_MR_MS.statement_of_manuscript(
+                    self.store, rel=_rel_ms, manuscript_id=_mid_ms,
+                    sign_rows=False) or {})
+                _holder = str(_owner.get("stmt_id") or "")
+                _link["checked"] = bool(_owner.get("checked"))
+                if not _owner.get("checked"):
+                    _link["why"] = (f"这一份稿的归属没查成（{_owner.get('why') or '没有读数'}）"
+                                    " ⇒ 不认领：判不了它是不是别条命题的稿")
+                elif bool(_owner.get("found")) and _holder != str(stmt_id):
+                    _link["claimed_by"] = _holder
+                    _link["why"] = (f"`{_rel_ms}`（稿号 {_mid_ms or '认不出'}）已经收进 "
+                                    f"stmt:{_holder} 那一行 ⇒ 这一笔不认领它（一份稿只能"
+                                    "属于一条命题；这一条的稿等收录回执写）")
+                else:
+                    if not _is_not_applicable_kind(kind):
+                        data["manuscripts"] = {str(int(_new_path_no)): _rel_ms}
+                    if _mid_ms:
+                        data["manuscript_id"] = _mid_ms
+                        _fam_ms = _MID_FAM.family_of_rel(_rel_ms)
+                        if _fam_ms:
+                            data["manuscript_family"] = _fam_ms
+                        _link["written"] = True
+            if _rel_ms:
+                out["manuscript_link"] = _link
             # ---- 交付说这一份是 #pN（N>1）⇒ 它进 `proofs` 清单，不进 canonical ----
             #
             # 2026-11-04（缺口 ①）：新建那一支同样要认交付里的号。canonical（`proof_text`）

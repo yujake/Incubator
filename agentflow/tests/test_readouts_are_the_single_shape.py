@@ -315,7 +315,7 @@ def test_an_empty_table_body_still_draws_the_header_and_the_rule() -> None:
     `max` 会把这个 int 当可迭代 ⇒ `TypeError: 'int' object is not iterable`。
     四个调用点（errors / flow / cost / gates）都先判过非空，所以现盘走不到 ——
     但"走不到"不等于"不会炸"：新加一个空表调用点就会炸，而不是画一张只有表头的表。
-    搬走前的 `readouts._table` 在同样输入下返回「表头 + 分隔线」，这里钉的就是那份旧行为。
+    搬走前 readouts 那张小表在同样输入下返回「表头 + 分隔线」（实现已并入 errorstats._table_lines），这里钉的就是那份旧行为。
 
     反真空：把实现打回旧算式（本函数里逐字重放的那个 `_old_widths`）在同一输入上必抛
     TypeError —— 所以 `len(lines) == 2` 不是恒真式，它钉的是"这一支真的被修过"。

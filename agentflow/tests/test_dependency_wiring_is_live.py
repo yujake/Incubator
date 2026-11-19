@@ -968,6 +968,14 @@ def test_the_whole_chain_f_write_d_carry_b_read_v_sign(
     assert got.get("ok") is True, got
     assert str(got.get("manuscript_source")) == SRC_CARRIED, got
     b_stmt = str(got["stmt_id"])
+    # 2026-11-20（WIRE1）：这一笔没有正文（正文留到第 ③ 步才交）⇒ 稿留给收录回执那一
+    # 笔写，这一行这时不许认领 D 携带过来的那份 F 稿 —— 那份稿是 stmt:<f_stmt> 的稿
+    # （一份稿只能属于一条命题，`manuscriptretire.statement_of_manuscript` 的 1:1）。
+    # 认领了，V 的在册闸（「签不许盖错对象」）就签不了这条命题自己那份稿，第 ② 步必红。
+    _b_row = next(dict(r) for r in store.rows("statements")
+                  if str(r.get("stmt_id")) == b_stmt)
+    assert not str(_b_row.get("manuscript_id") or ""), _b_row
+    assert not dict(_b_row.get("manuscripts") or {}), _b_row
     # 只核 B 新登记那一条的依赖面：F 那一轮现在也经 B 的登记落自己的依赖边
     # （D8：命题只经 B 的 `register_statement` 写），所以整张表里会有两组。
     rows = [r for r in _deps(store) if str(r.get("used_by")) == f"stmt:{b_stmt}"]
