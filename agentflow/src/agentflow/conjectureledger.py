@@ -75,6 +75,18 @@ OWNERS: tuple[str, ...] = ("E", "F", "B")
 #: 猜想行自己的状态仍是它被证据支持到的那一档（`supported_not_proved` 等）。
 PROMOTED_TO_STATEMENT = "promoted_to_statement"
 
+#: 落盘的"已登记"格（FIX186-E，2026-11-19）：这条猜想被 B 收录成了哪一条命题。
+#:
+#: 与 `promoted_to_statement` 的分工：那个是"按正文现算的读数"（只在收录那一刻算一次、
+#: 改写即丢、无消费者）；这一格是写在行上的事实 —— 收录成功即写、后续写不改它。
+#: 于是「待登记」视图与收工门的 `conjecture_rows` 能读到"这一条已经从猜想台账毕业了"，
+#: 已登记的从活跃集消失（业主三态口径：放弃 / 完工的条目直接踢出）。
+#:
+#: 为什么是"多一格可选字段"而不是 `status="registered"`：`CONJECTURE_STATUSES` 是受控
+#: 词表，加一档等于放宽一整根轴（FC-27）；而"进了命题台账"不是猜想自己的证据状态
+#: （它可能同时是 supported_not_proved / refuted）。老行没有这一格 ⇒ 读成空串（未登记）。
+REGISTERED_STMT_ID = "registered_stmt_id"
+
 
 class ConjectureError(ValueError):
     """业务失败（带受控 `kind`），与"调用方写错了"分开报。"""
@@ -129,6 +141,7 @@ def register(*, store: Any = None, tx: Any = None, statement: str, origin: str,
              promoted_to: Mapping[str, Any] | None = None,
              known_lit_id: str | None = None,
              withdraw_reason: str | None = None,
+             registered_stmt_id: str | None = None,
              notes: str | None = None,
              defaults: Mapping[str, Any] | None = None,
              force_new: bool = False,
@@ -179,7 +192,8 @@ def register(*, store: Any = None, tx: Any = None, statement: str, origin: str,
             proof_experiment_id=proof_experiment_id,
             counterexample_experiment_id=counterexample_experiment_id,
             refusal_ref=refusal_ref, promoted_to=promoted_to, known_lit_id=known_lit_id,
-            withdraw_reason=withdraw_reason, notes=notes, defaults=defaults,
+            withdraw_reason=withdraw_reason, registered_stmt_id=registered_stmt_id,
+            notes=notes, defaults=defaults,
             force_new=force_new, actor=actor)
     if store is None:
         raise ConjectureError("store 与 tx 至少要给一个（没接线不是『库里没有猜想』）",
@@ -193,7 +207,8 @@ def register(*, store: Any = None, tx: Any = None, statement: str, origin: str,
             proof_experiment_id=proof_experiment_id,
             counterexample_experiment_id=counterexample_experiment_id,
             refusal_ref=refusal_ref, promoted_to=promoted_to, known_lit_id=known_lit_id,
-            withdraw_reason=withdraw_reason, notes=notes, defaults=defaults,
+            withdraw_reason=withdraw_reason, registered_stmt_id=registered_stmt_id,
+            notes=notes, defaults=defaults,
             force_new=force_new, actor=actor)
 
 
@@ -203,7 +218,8 @@ def _upsert(tx: Any, *, statement: str, origin: str, conjecture_id: str | None,
             experiment_ids: Sequence[str] | None, proof_experiment_id: str | None,
             counterexample_experiment_id: str | None, refusal_ref: str | None,
             promoted_to: Mapping[str, Any] | None, known_lit_id: str | None,
-            withdraw_reason: str | None, notes: str | None,
+            withdraw_reason: str | None, registered_stmt_id: str | None,
+            notes: str | None,
             defaults: Mapping[str, Any] | None, force_new: bool, actor: str) -> dict:
     """在给定事务里落一行（判重 / 合并 / 单行判据 / 跨对象存在性）。"""
     key = norm_statement(statement)
@@ -240,10 +256,31 @@ def _upsert(tx: Any, *, statement: str, origin: str, conjecture_id: str | None,
             return fallbacks[name]
         return default
 
-    exp_given = experiment_ids
-    if exp_given is None:
-        exp_given = prev.get("experiment_ids") or []
-    exp_ids = sorted({_text(x) for x in exp_given if _text(x)})
+    # ---- FIX186-F（2026-11-19）：`experiment_ids` 是并集，不是替换 ---------
+    #
+    # 改前 `experiment_ids` 给了就用给的、不给才用库里的 ⇒ "最后一次写的人说了算"。
+    # lp-ball-11 的 c000002 共 11 次写（`data/events.jsonl` seq=1036…1541），每一笔只带
+    # 自己那条实验号 ⇒ 最终行上只剩 exp:000017，前十条证据从读数里消失。
+    prev_exp = [_text(x) for x in (prev.get("experiment_ids") or []) if _text(x)]
+    exp_ids = sorted({*prev_exp, *[_text(x) for x in (experiment_ids or []) if _text(x)]})
+    # ---- FIX186-F：反例号不许被「非反例的那一笔」清空 --------------------------
+    #
+    # `agent_e/run_experiment.py` 的台账那一笔总是显式传
+    # `counterexample_experiment_id=(eid if refutes else "")` ⇒ 一次 supports / testing
+    # 就把已经记下的反例抹掉（c000002：最终 status=supported_not_proved、反例号为空，
+    # 而 notes 里还写着 exp:000002 refutes —— 行自己跟自己矛盾）。
+    prev_cex = _text(prev.get("counterexample_experiment_id"))
+    counterexample = _text(counterexample_experiment_id) or prev_cex
+    # ---- FIX186-F：`refuted` 是终态，后来的实验不许把它静默改成「有支持」 ------
+    #
+    # 只有显式撤下（`withdrawn`，schema 要求带理由）才允许越过这一格。判据读的是行上
+    # 已有的证据（反例实验号 / 拒收引用）—— 两条都在才谈得上"已经判死"。
+    status_given = _text(pick("status", status, "proposed"))
+    prev_status = _text(prev.get("status"))
+    if (prev_status == "refuted"
+            and (prev_cex or _text(prev.get("refusal_ref")))
+            and status_given not in ("refuted", "withdrawn")):
+        status_given = "refuted"
     row_obj = S.Conjecture(
         conjecture_id=cid,
         statement=_text(statement),
@@ -252,11 +289,10 @@ def _upsert(tx: Any, *, statement: str, origin: str, conjecture_id: str | None,
         testable=dict(testable if testable is not None
                       else (prev.get("testable") or fallbacks.get("testable") or {})),
         origin=_text(origin),
-        status=_text(pick("status", status, "proposed")),
+        status=status_given,
         experiment_ids=exp_ids,
         proof_experiment_id=_text(pick("proof_experiment_id", proof_experiment_id)),
-        counterexample_experiment_id=_text(
-            pick("counterexample_experiment_id", counterexample_experiment_id)),
+        counterexample_experiment_id=counterexample,
         refusal_ref=_text(pick("refusal_ref", refusal_ref)),
         promoted_to=dict(promoted_to if promoted_to is not None
                          else (prev.get("promoted_to") or fallbacks.get("promoted_to") or {})),
@@ -288,6 +324,11 @@ def _upsert(tx: Any, *, statement: str, origin: str, conjecture_id: str | None,
             "『别人证过』这句话必须指向一篇真的在库里的文献",
             kind="dangling_lit", conjecture_id=cid, lit_id=row_obj.known_lit_id)
     data = row_obj.to_dict()
+    # FIX186-E：这一格不在 `Conjecture` 的字段里（不抬 schema 版本），但它是落盘的
+    # 事实：`tx.upsert` 原样写、`rebuild` 会把非 schema 键原样保留（见 store 的
+    # "合并而非替换"）。读侧（"待登记"视图 / 收工门 `conjecture_rows`）按它判"毕业"。
+    # 给空串也是一个值（"查过了、还没登记"）—— 与"没有这一格"（老行）分开。
+    data[REGISTERED_STMT_ID] = _text(pick(REGISTERED_STMT_ID, registered_stmt_id))
     # 读数：这一次是"命中既有行"还是"真的新建"，命中的是哪一条。调用方要能机械地
     # 看到"我这次的登记没有产生新行"，那才是"重复登记"这个病被治好的证据。
     data["duplicate"] = bool(dup_of)

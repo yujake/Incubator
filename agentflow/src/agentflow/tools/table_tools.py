@@ -499,13 +499,22 @@ _REF_SPECS: dict[str, tuple[tuple[str, str, str], ...]] = {
     ),
     "research_questions": (),
     "analysis_reports": (),
+    # FIX186-G（2026-11-19）：猜想行被谁引用 —— `attack_plans.problem_key` 就是它的
+    # `conjecture_id`（F 立项「problem_key 用猜想的 conjecture_id」，`fs_tools` 的同一句）。
+    # 没有这一条，`table.delete("conjectures")` 在"已经有人拿它立项"时也照删，
+    # 留下的悬空引用只有 `verify` 事后才报，而那时已查不出是谁删的。
+    "conjectures": (
+        ("attack_plans", "problem_key", "plan_id"),
+    ),
 }
 
 #: 这些表的行一旦被引用，删除必须硬拒绝。
 #: `relations` / `search_requests` 不在其中：DESIGN-TOOLS 明确"删 relations 没事"，
 #: 且它们被引用的后果是可恢复的（`duplicate_of` 只是警告级）—— 所以对它们
 #: 采取"放行但在 meta 里如实列出将变成悬空引用的行"，而不是一刀切拦住。
-_BLOCKING_TARGETS: tuple[str, ...] = ("statements", "literature")
+#: `conjectures` 在列（FIX186-G）：它是第二份命题台账，被一条攻坚计划的 `problem_key`
+#: 指着时删掉它 = 让那条计划指着一个不存在的命题（`verify` 的 `dangling_*` 事后才报）。
+_BLOCKING_TARGETS: tuple[str, ...] = ("statements", "literature", "conjectures")
 
 
 def _ref_tables(target: str) -> tuple[str, ...]:

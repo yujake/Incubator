@@ -407,6 +407,10 @@ UNCHECKED_TYPES: dict[str, str] = {
                    "⇒ `gates.blockers[]` 是空数组；形状以 `closing.Finding.to_dict()` 为准",
     "MachineCaliber": "夹具的 retire/programs 读数存在但节点/程序为空；"
                       "形状以 `closing.machine_caliber` 的返回为准",
+    "ClosingVerdict": "嵌套在 `GateTable.closing_verdict` 里；夹具上收工门不一定按"
+                      "完整八格 + 项目根/报告路径问过 ⇒ 这一份是部分读数（unknown），"
+                      "形状以 `closing.closing_verdict` 的返回为准",
+    "ClosingVerdictCell": "`GateTable.closing_verdict.cells[]`；同上（夹具上是部分读数）",
     "CostView": "夹具只有一条 usage 行、没有 llm_call 事件 ⇒ 三源里两源是 0/null；"
                 "形状以 `sessions.runs_in_session` / `unattributed_usd_of` 为准",
     "RuntimeView": "夹具只有一趟会话、没有名册 ⇒ 时间轴与名册计数大多是 0/null；"
@@ -2979,6 +2983,9 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
              "can_close": getattr(rep, "can_close", None),
              "can_close_reason": str(getattr(rep, "can_close_reason", "") or ""),
              "closable": bool(getattr(rep, "closable", False)),
+             # 一份权威结论（ROOTGATE-②）：verdict + 八格逐格 + 红格的 why + 机器读数；
+             # 页面必须并列显示它，不许让一个绿色 badge 盖住红格。
+             "closing_verdict": dict(getattr(rep, "verdict", {}) or {}),
              "verdict_at": str(verdict.get("at") or ""),
              "verdict_met": (bool(verdict.get("met")) if verdict else None),
              # 两条来源分开点名：一个空 `blockers` 不等于"门没拦住"，
@@ -2995,10 +3002,15 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
                "value": caliber.get("value"), "reason": str(caliber.get("reason") or ""),
                "retire_checked": bool(retire.get("checked")),
                "retire_complete": bool(retire.get("complete")),
+               "retire_projected": bool(retire.get("projected")),
+               "retire_auto_retire": dict(retire.get("auto_retire") or {}),
                "retire_open_items": int(retire.get("root_open_items") or 0),
                "retire_nodes": int(retire.get("total") or 0),
                "retire_states": dict(retire.get("states") or {}),
                "programs_checked": bool(programs.get("checked")),
+               "programs_ok": (bool(programs.get("checked"))
+                               and int(programs.get("running_count") or 0) == 0
+                               and not programs.get("unowned")),
                "programs_running_count": int(programs.get("running_count") or 0),
                "programs_unowned": list(programs.get("unowned") or []),
                "source": _src(
@@ -3163,11 +3175,14 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                                       "machine_pass": False, "m_says_done": False,
                                       "can_close": None, "can_close_reason": reason,
                                       "closable": False, "verdict_at": "",
-                                      "verdict_met": None},
+                                      "verdict_met": None,
+                                      "closing_verdict": None},
                             "machine": {"checked": False, "value": None, "reason": reason,
                                         "retire_checked": False, "retire_complete": False,
+                                        "retire_projected": False, "retire_auto_retire": {},
                                         "retire_open_items": 0, "retire_nodes": 0,
                                         "retire_states": {}, "programs_checked": False,
+                                        "programs_ok": False,
                                         "programs_running_count": 0, "programs_unowned": [],
                                         "source": _src("")},
                             "undelivered": dict(_empty_proofs(reason)["receipt"]),
@@ -3750,10 +3765,10 @@ def _obligation_families() -> tuple[tuple[str, str, str, str], ...]:
 
 
 def obligations_face(root: str | Path, store: Any = None) -> dict[str, Any]:
-    """`GET /api/obligations` 的读模型：板上三族义务的**收件人**读数。
+    """`GET /api/obligations` 的读模型：板上三族义务的收件人读数。
 
     为什么要有这一条：名册的收件箱按 `parent_task_id`（父台账号）分，而一条板项
-    可以只带**收件实例**（`Task.instance`，`conductor.open_item(recipient_instance=…)`
+    可以只带收件实例（`Task.instance`，`conductor.open_item(recipient_instance=…)`
     写进去的那一格）—— 父为空的项不挂在任何人的收件箱上，页面就看不见它，
     真机 lp-ball 的两条 `b-register@` 至今如此。这一面把"投给谁"与"谁是父"
     两条轴分开摆出来，让"没人收"变成一句看得见的读数。
@@ -6648,12 +6663,26 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("can_close", "boolean | null"), ("can_close_reason", "string"),
       ("closable", "boolean"), ("verdict_at", "string"),
       ("verdict_met", "boolean | null"),
+      # 一份权威结论（ROOTGATE-②）：verdict + 八格逐格 + 红格的 why 都在这一格里，
+      # 页面必须与 machine_pass / m_says_done 并列显示（旧后端没有这一格时是 null）。
+      ("closing_verdict", "ClosingVerdict | null"),
       # `machine_pass=false` 的两条来源分开点名 —— 只看
       # `blockers=[]` 会把"格失败"读成"门没拦住"，只看 counts 又会漏掉不进八格的
       # blocker。`machine_pass_cause` 是受控词：pass / cells / blockers / blockers+cells
       # / unknown（最后一档是"两条都空而 machine_pass 假"的缺陷读数）。
       ("blockers", "GateBlocker[]"), ("blocking_cells", "GateCell[]"),
       ("machine_pass_cause", "string"))),
+    ("ClosingVerdict",
+     "GateTable.closing_verdict —— `closing.closing_verdict` 的逐字读数"
+     "（一份权威结论：verdict / exit_code / 八格逐格 / 机器读数 / blockers）",
+     (("verdict", "string"), ("exit_code", "number"),
+      ("authoritative", "boolean"), ("cells", "ClosingVerdictCell[]"),
+      ("counts", "Record<string, number>"), ("m_says_done", "boolean"),
+      ("retire", "Record<string, unknown>"), ("programs", "Record<string, unknown>"),
+      ("blockers", "GateBlocker[]"), ("machine_pass", "boolean"),
+      ("can_close", "boolean | null"), ("reason", "string"))),
+    ("ClosingVerdictCell", "GateTable.closing_verdict.cells[] —— 一格（三态 + why 原话）",
+     (("check", "string"), ("status", "string"), ("why", "string"))),
     ("GateBlocker",
      "GateTable.blockers[] —— 不进八格、却拦 machine_pass 的一条 Finding"
      "（`closing.Finding.to_dict()` 的 check / code / level / detail）",
@@ -6667,8 +6696,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "ClosingView.machine —— `closing.machine_caliber` + retire / programs",
      (("checked", "boolean"), ("value", "boolean | null"), ("reason", "string"),
       ("retire_checked", "boolean"), ("retire_complete", "boolean"),
+      # ROOTGATE-③：retire 的"收尾前自动收尾之后"那份投影（与 final 闸同一份判据）。
+      ("retire_projected", "boolean"), ("retire_auto_retire", "Record<string, unknown>"),
       ("retire_open_items", "number"), ("retire_nodes", "number"),
       ("retire_states", "Record<string, number>"), ("programs_checked", "boolean"),
+      ("programs_ok", "boolean"),
       ("programs_running_count", "number"), ("programs_unowned", "string[]"),
       ("source", "SourceRef"))),
     ("CostView",

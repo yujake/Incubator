@@ -1501,6 +1501,18 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "写它的那一支笔」（同一组归属两格；删别人的稿受控拒）。变化格 = E / G，"
               "其余九格与 p297 逐字相同（逐格读数见 `test_agent_prompts.py` 上方那一段）。"
               "facts 键集仍 15 格、落点没动。"},
+     # p298 → p299（2026-11-19，FIXBATCH）：`lit.stage_reject` 加批量形参 `slots`，
+     # 它的 summary 改了一句 ⇒ A 的 tools_lines 换值（变化格 = A）；`lit.stage_list`
+     # 的 note 是运行时返回值、不进段。facts 键集与落点一格没动
+     # ⇒ count / keys_sha256 与 p298 同值。
+     {"version": "p299", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p299（2026-11-19，FIXBATCH）：`lit.stage_reject` 收批量形参 `slots`"
+              "（一次调用判拒多个槽位；内部逐条仍走 `litstage.reject` 的逐行写口）。"
+              "它的 roles 只有 A ⇒ 变化格 = A（A 13e23d0b… → 34047f10…），其余十格与 p298 "
+              "逐字相同（逐格读数见 `test_agent_prompts.py` 上方那一段）。另一笔"
+              "「`done=True` ≠ 清表」落在 `litstage._stage_list_note`，那是运行时返回值、"
+              "不进任何段。facts 键集仍 15 格、落点没动。"},
 
 )
 

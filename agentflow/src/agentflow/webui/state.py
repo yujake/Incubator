@@ -660,7 +660,7 @@ def snapshot(root: str | Path, *, sid: str = "",
     "problems", "writes_allowed", "writes_reason"}`。
 
     `writes_allowed` / `writes_reason` 是 2026-11-19 补的两格（鲁棒 f）：写权限是
-    **服务进程**的事实（`--allow-writes` 开没开），不是工作区的事实，所以由调用方
+    服务进程的事实（`--allow-writes` 开没开），不是工作区的事实，所以由调用方
     （`readers.handle_state` 从 handler 上读 `writes.writes_allowed`）交下来；
     直接调 `snapshot(root)` 的场合不给 ⇒ `None`（"没问过"，不是"不能写"）。
     页面据此把写按钮禁用并把 `writes_reason` 写在按钮旁 —— 不许让人按出 403

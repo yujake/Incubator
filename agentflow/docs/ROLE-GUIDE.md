@@ -96,7 +96,7 @@
 | `lit.overlap_check` | **不联网**：这一条与本地库重叠多少？DOI 完全相同 ⇒ 视为重复；否则标题词集 Jaccard（阈值 0.60）≥ 阈值 ⇒ 必须给 new_content 才许入库。 | `read` | `title` |
 | `lit.stage_add` | 把广搜结果追加进本次委托的待新增列表（一次任意条，超过 10 条也允许）：同一委托内同一篇只占一个槽 —— 命中未判的那一槽就把 relevance/摘要补进去（updated[]），不发新号；槽位号只增不复用、注册即待裁。逐条入库是 lit.admit（每条要带 relevance）；判完一批就由 lit.admit_all 点名那一批的槽提交，剩下的未判槽保持 pending 进下一批。 | `write_local` | `request_id`、`entries` |
 | `lit.stage_list` | 查待新增列表：默认只看当前委托（列表按委托重置）。status 按三态筛：`pending` 待裁 / `admitted` 入库 / `rejected` 拒收（词表真身在 `litstage.CANDIDATE_DECISIONS`）；盘上的历史档 `cleared` / `withdrawn` 读成 `rejected` + 受控理由码，按老名字也查得到那几条。撤掉的空槽位照样在列表里（`rejected` + 理由，序号不复用）。 | `read` | （无） |
-| `lit.stage_reject` | 审内容后拒收某一槽：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。 | `write_local` | `slot`、`reason_code` |
+| `lit.stage_reject` | 审内容后拒收：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。**一次可判拒多个槽位**（`slots=[…]`，按委托分批用）：有效的照常落盘，无效的受控拒并逐条点名，不许一条坏的把整批作废。 | `write_local` | `reason_code` |
 | `lit.stage_withdraw` | 撤掉某一槽：落 `rejected` + 受控理由码 `withdrawn_by_reviewer` + 一句说明；序号不变、不物理删除。撤掉是终态判断：只是缺 relevance 时别撤 —— 用 lit.stage_add 带 relevance 重进同一篇即补进原槽；撤了之后再登记会另占一个新槽，报告上同一篇会同时出现在已入库与未入库两块。 | `write_local` | `slot`、`reason_code` |
 | `manuscripts.list` | 列交接手稿（默认最近 50 份）。`to` 给角色号只看发给它的（`ALL` 广播）；交接前先看这里，别重复别人的结论。 | `read` | （无） |
 | `manuscripts.read` | 按编号读一份交接手稿的全文（留言里给你的编号）。编号不存在时如实说没有，而不是返回空文本（『没有这份』≠『这是空的』）。 | `read` | `id` |

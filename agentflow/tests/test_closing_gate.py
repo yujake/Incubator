@@ -194,10 +194,14 @@ def _good(tmp_path: pathlib.Path):
 
 
 def _gate(st: Store, report: pathlib.Path | None, *, project_dir: pathlib.Path | None = None):
+    # 2026-11-19（ROOTGATE-①）：完整的八格门要给机器读数两个喂参才不会落 unknown；
+    # 这一份夹具的"好工作区"本来就没有在跑的树与程序，所以喂"已清 / 已停"。
     return CL.check_closing(
         st,
         project_dir=str(project_dir if project_dir is not None else st.root),
         report_path=str(report) if report is not None else "",
+        retire={"checked": True, "complete": True, "reason": "夹具：名册树已清"},
+        programs={"checked": True, "running_count": 0, "reason": "夹具：没有在跑的程序"},
     )
 
 
@@ -227,6 +231,8 @@ def test_a_ready_workspace_passes_every_check(tmp_path: pathlib.Path):
     judged = CL.check_closing(st, project_dir=".", report_path=str(report),
                               goal="把论文包审完并交付修订稿",
                               goal_met=True, basis="P2/P7/P8/P9 全绿",
+                              retire={"checked": True, "complete": True, "reason": "夹具"},
+                              programs={"checked": True, "running_count": 0, "reason": "夹具"},
                               task_list=[{"what": "逐条核引文", "state": "done"},
                                          {"what": "形式化核两条定理", "state": "done"}])
     assert judged.m_says_done and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
@@ -1096,6 +1102,8 @@ def test_the_user_pending_check_goes_red_alone(tmp_path: pathlib.Path):
     assert CL.tri_state_exit_code(rep2) == 2, "没人判过 ⇒ 没查成（不是可以交）"
     judged = CL.check_closing(st, project_dir=str(st.root), report_path=str(report),
                               goal="审完交付", goal_met=True,
+                              retire={"checked": True, "complete": True, "reason": "夹具"},
+                              programs={"checked": True, "running_count": 0, "reason": "夹具"},
                               task_list=[{"what": "审完", "state": "done"}])
     assert judged.m_says_done and CL.tri_state_exit_code(judged) == 0, judged.to_dict()
 

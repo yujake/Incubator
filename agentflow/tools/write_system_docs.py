@@ -258,10 +258,12 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "一次运行能不能说完成：八格逐格三态加内容级验收读数（论文那一格不在门里，由 M 判断时机；"
         "2026-11-16 Q1 加的第 8 格是 literature_pending）。",
         "check_closing 跑 DEFAULT_CHECKS 八格（每格兜异常，抛了记 unknown 加原因）；"
-        "ClosingReport（`m_says_done` = M 在 `m_verdict.met` 里说的那一句；`can_close` 是"
-        "机器口径 `bool | None`，`None` = 没接线、不许读成通过；八格 `status` 与 "
-        "`machine_pass` 是读数 —— 业主 2026-10-09 与 2026-11-03 的裁定）；"
-        "tri_state_exit_code（0 要 M 说达成且机器读数也过，否则 1 或 2）。",
+        "ClosingReport（`m_says_done` = M 在 `m_verdict.met` 里说的那一句；"
+        "`closing_verdict` 是**一份权威结论**：八格逐格 ∧ `m_says_done` ∧ "
+        "`retire.complete` ∧ `programs_ok` ∧ 没有 blocker ⇒ `pass`/`fail`/`unknown` 三态，"
+        "`can_close` 与 `machine_pass` 都从它派生（`None`/unknown = 没查成，不许读成通过）；"
+        "任一格 unknown ⇒ 整份 unknown —— 业主 2026-10-09、2026-11-03 与 2026-11-19「要修根因」的裁定）；"
+        "tri_state_exit_code（0 只在整份结论 pass 时给，fail ⇒ 1、unknown ⇒ 2）。",
         "读 data 与 out/paper；CLI closing",
         "tests/test_closing_gate.py、tests/test_a_crashed_cell_is_unknown_not_a_traceback.py",
     ),

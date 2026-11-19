@@ -161,8 +161,9 @@ def _m_skills() -> tuple[Skill, ...]:
    只有用户能定的，用 `ask_user` 当面问（主控特权，见循环协议第 6 条）；别自己替他定。
 2. **三件活**（缺哪件补哪件，不是每趟都要三件）：
    - **要外部事实** ⇒ 派 `A.search_literature`（它落 `search_requests` → 回文献行）；
-   - **要内部结论** ⇒ 派 `D.propose_question` / `D.research`（它落 `research_questions` /
-     待登记命题（表 `conjectures`）），D 会自己往下派 E/F；
+   - **要内部结论** ⇒ 派 `D.propose_question` / `D.research`（它落 `research_questions`；
+     **它不写 `conjectures`** —— 待登记命题由产出侧 E / F / B 在产出那一刻落行，
+     与 A 那一条「不造概念」政策同一条口径），D 会自己往下派 E/F；
    - **要可复现的数** ⇒ 派 `E.run_experiment`（它落 `experiments`，证明/数值都在那一张表）。
 3. **每件活都写 `notify`**（`summary` + `body`）：这是交接留痕，也是被派人拿到的全部背景。
    没写 = 这一趟没有手稿，接手的人只能去翻会话记录。
@@ -664,7 +665,8 @@ blocker），但读错会派错人：`from_lit` 的活归 B 按文献侧原口�
 **不在**你直接出边里的有三个：
 
 - **F（攻坚）**：走 `M → D → F` —— 把"要证哪一条、卡在哪一步"写进**给 D 的派活**；
-  开这一腿是**D 自己的事**（它的政策写着：登记完猜想之后自己把它交给 F）。
+  开这一腿是**D 自己的事**（它的政策写着：把要证的那一条写进给 F 的派活；
+  猜想由产出侧 E / F / B 落行，**D 不写 `conjectures`**）。
   **你既没有边、也不该替它选动作** —— 你要做的是把要证的那一条写清楚，
   然后**看它交回来的读数**：计划建了没有（`attack_plans` 有没有行），没建就问 D 卡在哪。
   （**第 10 趟 T5 实测**：主控在这里猜了一个 D 上的"建计划"动词 ⇒ `unknown_action`，
@@ -768,7 +770,7 @@ A → B → C → D → F → V；再 D → B(收录证明)
 | **A** 检索 | 问题已翻译成该方向的规范术语（题面式说法不算入口：查不到不等于没有） | 待新增文献列表（每委托重置，可增/删/查）；逐条判收 = `qualified`（**不注册、还没有号**），再由**提交**那一步批量注册 ≤10 篇并回填号、落带号定稿报告、清表 | 入库 ≤10 且报告里"已入库（含一句摘要）/未入库（含筛除理由）"两块都在；**提交才注册**（判收之后没有号是正常的） | 拿不到就写 `unresolved`，不许拿"没搜到"当"不存在"；待裁没判完 ⇒ 整批提交会被拒 |
 | **B** 概念与关系 | 已有入库文献 | `statements` 一行一条（`kind=concept`）＋ `relations`（`kind` / `quote` / `quote_verified` 三格） | 关系能回答"这两个概念什么关系、凭哪一句原文"；**空边不许产出** | 抽不完就报"未抽取 K 篇"，不许假装抽完 |
 | **C** 关系分析 | 图上已有概念与关系 | `analysis_reports` 一条：**候选的更短路径** ＋ **关键那一步是什么** ＋ 为什么因此更短 | 能说清"删掉/替换掉哪一步" | 图太空就如实写"数据未抽取，算不出"（回头要 B 补抽），不许硬编候选 |
-| **D** 立可判猜想 | C 报了候选路径（**C 的那份报告已经在盘上**） | **待登记命题**（`conjectures`）一条，`testable` 非空且写清"若成立则省掉哪一步" | `testable` 是**可执行/可判**的（不是"值得研究"这种） | 立不出就逐条写"C 的哪一条为什么立不出"，不许跳过不读 |
+| **D** 定可判方向 | C 报了候选路径（**C 的那份报告已经在盘上**） | `research_questions` 一行 ＋ 给 E / F 的派活文本（**不写 `conjectures`**：待登记命题由 E / F / B 在产出那一刻落行，D 不写这张表 —— 与 A 那一条「不造概念」政策同一条口径）；写清"若成立则省掉哪一步" | 方向是**可执行/可判**的（不是"值得研究"这种） | 定不出就逐条写"C 的哪一条为什么定不出"，不许跳过不读 |
 | **F** 攻坚 | 有一条 `testable` 猜想 | `attack_plans` 的 `history` 每一轮一个受控产物：reduction / proof / counterexample_request / dead_end | 每一轮都让**卡点更具体一步**；`no_change` **不是产物** | 走不通落 dead_end：写清卡在哪一步、缺什么才能往下 |
 | **V** 走查 | F 交出了证明级断言 | `verifications/<命题号>.jsonl` 一行（`verdict` / `unresolved_errors` / `proof_sha256` / `citation_checks`） | 只有「成立」且 `unresolved_errors=0`、且引用核实那四格没有挡签的档（`stronger` / `unrelated` / `inadmissible` / `unknown`）才算签过；**先判哪一步承重**并指出步号与原句 | 签不了就让它空着，不许拿"我大致看过了"补 |
 | **B** 收录证明 | V 已签「成立」且 `proof_sha256` 与现行正文相符，**且那一份稿在盘上**（`reports/f-proof-*` / `e-proof-*` / `b-proof-*`）；**普通数值那一档例外**：`reports/e-num-*`（`## 命题` + `## 数值结果`）**不过 V**，`proof_text` 留空、等级最多 `strong_conjecture` | `statements` 一行：等级按凭据给（文字证明 + V 签 ⇒ `pre_theorem`；**穷举程序 + V 签 ⇒ `theorem`**，与 Lean 同级；普通数值 ⇒ `strong_conjecture`；`evidence_kind` 只是历史列，由等级反算）、`proof_text` 从稿上收进（`e-num` 那一档为空）、`origin=own_result` | 走 B 自己的入库正路（工具名逐字 own.register_statement）：同一份内容再交一次即**就地升档、不新建行**；`bits` 由秘书算 | 闸拒收就把**拒收理由原话**写进报告，不许硬降档、不许虚报 |
@@ -4739,5 +4741,6 @@ def _role_tool_surface(problems: list[str]) -> dict[str, set[str]]:
     except Exception as exc:  # noqa: BLE001
         problems.append(f"读不到按角色的工具面（这一格没查成）：{type(exc).__name__}: {exc}")
         return {}
+
 
 

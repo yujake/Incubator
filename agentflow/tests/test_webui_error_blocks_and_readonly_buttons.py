@@ -6,7 +6,7 @@
   `writes._finish` 里对失败那一支加 `kind` / `how_to_fix`（成功那一支一个字节都不加），
   `/api/*` 的未知端点 404 也带同一对；前端 `ApiError` 把它们读出来，`ErrorBlock`
   一起摆到屏幕上。
-- f：写权限是**服务进程**的事实（`--allow-writes`）。`/api/state` 现在带
+- f：写权限是服务进程的事实（`--allow-writes`）。`/api/state` 现在带
   `writes_allowed` / `writes_reason`（判定口径只有 `writes.writes_allowed` 一处），
   页面据此把写按钮禁用并把理由写在按钮旁 —— 不许让人按出 403 才知道自己没权限。
 

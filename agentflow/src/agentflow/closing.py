@@ -51,7 +51,11 @@ from . import quoteevidence as QE
 # 引文回验的两档口径（业主 2026-10-14）：`quote_state` 是唯一读口径 ——
 # "true 而说不清怎么通过的"按没查算，收工门这一格必须跟着它走（见 `quote_verified_rows`）。
 from . import evidencebits as EB
+from . import lifecycle as _L   # 三态的唯一入口（FIX186-A：本文件不许再自写名单）
 from . import proofregistry as _PR
+#: 收工前自动收尾的只读判据（ROOTGATE-③）：`final` 闸真的销号、
+#: `machine_feeders` 只读地投影"会销哪些"——两处读同一份，retire 快照不再错位。
+from . import autoretire as _AR
 
 #: 检查的名字（顺序就是报告里的顺序）。
 #:
@@ -906,9 +910,20 @@ def own_result_manuscript_link(root: Any, *, statement_id: Any,
         signed = _VR.signed_rows(rows)
         if signed:
             last = dict(signed[-1])
-            out.update(linked=True, basis="v-review",
-                       where=(f"verifications/{sid}.jsonl"
-                              f"#{str(last.get('verification_id') or '')}"))
+            # `where` 必须指得到真的那一份文件（FIX186-D1）：先签后收录那一签住在
+            # `verifications/pending/<载体 sha>.jsonl`，在册台账可能根本不存在
+            # （lp-ball-11 的 000005 就是）。`landed=pending` 是那一行的落盘标记。
+            _vid = str(last.get("verification_id") or "")
+            if str(last.get("landed") or "") == "pending" and str(
+                    last.get("object_sha256") or "").strip():
+                _where = (f"verifications/pending/"
+                          f"{str(last.get('object_sha256') or '').strip()}.jsonl#{_vid}")
+            elif (Path(str(root or "")) / "verifications" / f"{sid}.jsonl").is_file():
+                _where = f"verifications/{sid}.jsonl#{_vid}"
+            else:
+                _where = (f"verifications/pending/（载体 sha 没记在行上）"
+                          f"#{_vid}")
+            out.update(linked=True, basis="v-review", where=_where)
             return out
     except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成
         problems.append(f"v-review 台账读不出来（{type(exc).__name__}: {exc}）")
@@ -2768,15 +2783,25 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                      "正确的做法是如实写「这一轮没跑出支持性结论」—— 那也意味着这一档不成立"),
         }
     if kind == "conjecture_rows":
-        rows = [r for r in store.rows("conjectures")
+        # FIX186-E（2026-11-19）：已登记进命题台账的猜想从活跃集消失（业主三态口径：
+        # 完工/放弃的条目直接踢出）。判据是行上落盘的 `registered_stmt_id`（B 收录成功
+        # 即写），不是 `status` —— 一条猜想可以同时是 supported/refuted 而已经毕业。
+        all_rows = [dict(r) for r in store.rows("conjectures")]
+        registered = {str(r.get("registered_stmt_id") or "").strip()
+                      for r in all_rows if str(r.get("registered_stmt_id") or "").strip()}
+        rows = [r for r in all_rows
                 if str(r.get("statement") or "").strip()
-                and dict(r.get("testable") or {})]
+                and dict(r.get("testable") or {})
+                and not str(r.get("registered_stmt_id") or "").strip()]
         return len(rows), {"conjectures": [
             {"id": str(r.get("conjecture_id") or ""), "form": str(r.get("form") or ""),
              "status": str(r.get("status") or ""),
              "testable_keys": sorted(str(k) for k in dict(r.get("testable") or {})),
              "known_lit_id": str(r.get("known_lit_id") or "")} for r in rows[:8]],
-            "total_conjectures": len(store.rows("conjectures")),
+            "total_conjectures": len(all_rows),
+            #: 已登记（已毕业）的条数 —— 它们不进这一档的计数（FIX186-E）。
+            "registered_conjectures": len(registered),
+            "pending_conjectures": len(rows),
             #: 这棵树里猜想行的作者集合，以及"这些行是不是历史行"（新增键，不改既有键的形状）。
             #:
             #: 业主 2026-11-13 裁定甲之后，没有任何角色有"立一条猜想"这个动作：台账的唯一
@@ -3867,7 +3892,10 @@ VERDICT_NOTE = (
     "收工与否由 M 判（业主 2026-10-09：「是否收工不要用机械判据，由 M 制定的目标是否达成为准」"
     "＋「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令"
     "给自己设计任务列表」）：`m_says_done` = M 在 `m_verdict.met` 里说的那一句（它按自己列的"
-    "`tasks` 判『活做完了没有』）；机器七格（`status` / `machine_pass`）是读数。"
+    "`tasks` 判『活做完了没有』）。但『这一趟能不能交』只有一份权威结论（`closing_verdict`）："
+    "**八格逐格 ∧ `m_says_done` ∧ `retire.complete` ∧ `programs_ok` ∧ 没有 blocker**；"
+    "任一格没查成 ⇒ `unknown`（不许折成 pass，也不许折成 fail）。`machine_pass` 是那一份结论"
+    "里的八格轴读数、`can_close` 是它的三态出口，`tri_state_exit_code` 也由它派生。"
     "两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` 逐项点名"
     "—— 判据归 M，读数照旧一格不减。M 没提交判据 ⇒ `m_says_done=false`（『没人判过』不是"
     "『判过能交』）。"
@@ -3976,7 +4004,15 @@ class ClosingReport:
 
     `m_verdict`：M 自己的判据 ——
     `{"goal": "我这一趟的目标", "met": True/False, "basis": "依据哪几条读数", "at": …}`。
-    `m_says_done` 由它决定；机器口径是 `can_close`（`bool | None`，`None` = 算不出来，不许读成通过），那七格（`status` / `machine_pass`）退成读数。
+    `m_says_done` 由它决定。
+
+    ## 一份权威结论（ROOTGATE-①，业主 2026-11-19「要修根因」）
+
+    改前有两个互不相干的结论：`can_close`（不读八格）与 `machine_pass`（不读机器口径），
+    退出码再各取一半 —— 于是八格 6/8 的那一趟 `can_close=true`、`exit 0`。现在只有一个
+    入口 :func:`closing_verdict`：`can_close` / `machine_pass` / `tri_state_exit_code`
+    全部从它派生（`machine_pass` 是它里面的"八格轴"那一格读数，不再自己算）。
+    `can_close` 仍是三态（`bool | None`，`None` = 没查成/没接线，不许读成通过）。
     """
 
     status: dict[str, str] = field(default_factory=dict)
@@ -3984,6 +4020,15 @@ class ClosingReport:
     readings: dict[str, Any] = field(default_factory=dict)
     #: M 的判据（`None` = 它没提交 ⇒ `m_says_done=false` + "没人判过"的读数）。
     m_verdict: dict[str, Any] | None = None
+    #: 这一份是不是完整的八格门（`check_closing` 在 `checks` 覆盖 `DEFAULT_CHECKS`
+    #: 时置真）。只有它是真，`verdict` 才可能是 `pass` —— 缩过面的那一份读数不是
+    #: "权威结论"（把一格当八格，正是"6/8 也能 exit 0"的同族错误）。
+    full_gate: bool = False
+    #: 这一次门是不是"权威的一次"：完整八格 **且** 给了 `project_dir` 与 `report_path`。
+    #: 没有这两个入参时，`report_shape` / `acceptance` / `artifact_ledger` 只能记
+    #: unknown —— 那是"只问了几格"，不是"这一趟交付的结论"；运行收工的退出码只在
+    #: 权威的那一次上改（ROOTGATE-②），否则链条彩排/部分读数会被一律判成没完成。
+    authoritative: bool = False
 
     @property
     def blockers(self) -> list[Finding]:
@@ -4013,12 +4058,21 @@ class ClosingReport:
 
     @property
     def machine_pass(self) -> bool:
-        """机器读数：门里那七格每条都 `pass` 且没有 blocker（老口径的机械合取）。
+        """八格轴：门里那几格每条都 `pass` 且没有 blocker（由 `verdict` 派生）。
 
-        它只是一个读数（收工不由它定）：
-        「是否收工不要用机械判据，由 M 制定的目标是否达成为准」。
+        它不再是一个独立的结论：`verdict["machine_pass"]` 与它同源（ROOTGATE-①）。
+        它仍然是读数（收工由整份 `verdict` 定），只是不再与 `can_close` 各算一套。
         """
-        return all(v == "pass" for v in self.status.values()) and not self.blockers
+        return bool(self.verdict.get("machine_pass"))
+
+    @property
+    def verdict(self) -> dict[str, Any]:
+        """一份权威结论：`verdict`（pass/fail/unknown）+ 八格逐格 + 四格机器读数。
+
+        `can_close` / `machine_pass` / `tri_state_exit_code` 都从这一份派生，
+        不许在别处重算（唯一实现是模块级 :func:`closing_verdict`）。
+        """
+        return closing_verdict(self)
 
     @property
     def m_says_done(self) -> bool:
@@ -4040,40 +4094,37 @@ class ClosingReport:
 
     @property
     def can_close(self) -> bool | None:
-        """机器口径：这一趟能不能交。三态。
+        """机器口径：这一趟能不能交。三态（读八格 + 机器口径的那一份结论）。
 
-        - `True`：机器口径成立（`m_says_done` ∧ `retire_integrity.complete` ∧ `programs_ok`）；
-        - `False`：机器口径不成立；
-        - `None`：算不出来 —— 还没接线（`retire_integrity` / `programs` 的读数没喂进来），
-          或喂进来的某一格自己没查成。
+        - `True`：`verdict == "pass"` —— 八格全 pass ∧ `m_says_done` ∧ `retire.complete`
+          ∧ `programs_ok` ∧ 没有 blocker；
+        - `False`：`verdict == "fail"`（查过了、结论是坏）；
+        - `None`：`verdict == "unknown"`（有格没查成 / 机器口径没接线 / 没人判过）。
 
         两句硬话：
         1. `m_says_done` 是 M 的判断，不是机器口径 —— 要问"谁说的"看那个名字；
         2. `can_close=None` 不许被读成通过：它既不是过也不是不过，是"这一格没查成"。
            拿它当布尔的人必须走 :attr:`closable`，或者显式判 `is True`。
 
-        为什么名字与三态先摆正、接线另算：接线（把 `retire_integrity` / `programs` 的读数
-        喂进 `check_closing`）是可单独回退的一笔。
+        改前（2026-11-03 裁决 ①=乙）这里只读 `m_says_done ∧ retire.complete ∧
+        programs_ok`，**不读那八格** —— 真机 `lp-ball-11` 八格 6/8 仍 `exit 0` 的根因。
+        现在它由 :func:`closing_verdict` 一处算出（ROOTGATE-①）。
         """
-        return self._machine_caliber_value
+        return self.verdict.get("can_close")
 
     @property
     def can_close_reason(self) -> str:
-        """`can_close` 为什么是现在这个值（`None` 时给"没接线"的那句原因）。"""
-        return self._machine_caliber.get("reason") or ""
+        """`can_close` 为什么是现在这个值（`None` 时给"没查成/没接线"的那句原因）。"""
+        return str(self.verdict.get("reason") or "")
 
     @property
     def closable(self) -> bool:
-        """这一趟到底可不可以交（调用方唯一该问的布尔）。
+        """这一趟到底可不可以交（调用方唯一该问的布尔）：`verdict == "pass"`。
 
-        机器口径给了（`can_close is not None`）就听它；没给（还没接线）就退回
-        "M 说达成 ∧ 机器七格过 + 没有 blocker" —— 与 `tri_state_exit_code` 的 0 同一判据，
-        于是"能不能交"在接线前后都是同一个意思，不会因为接线而换口径。
+        改前 `can_close=None` 时会退回到 "M 说达成 ∧ 机器七格过"，于是"没查成"被读成
+        "能停"；现在只有完整的八格门给出 `pass` 才是 `True`（ROOTGATE-①）。
         """
-        machine = self.can_close
-        if machine is not None:
-            return bool(machine)
-        return bool(self.m_says_done and self.machine_pass)
+        return bool(self.verdict.get("verdict") == "pass")
 
     @property
     def _machine_caliber_value(self) -> bool | None:
@@ -4082,22 +4133,27 @@ class ClosingReport:
 
     @property
     def _machine_caliber(self) -> dict[str, Any]:
-        """机器口径那一格的三态来源（`{"checked", "value", "reason"}`）。
+        """机器读数那一格的三态来源（`{"checked", "value", "retire", "programs", "reason"}`）。
 
-        第二笔会把它接到 `retire_integrity.complete` 与 `programs_ok`：喂齐了 `checked=True`，
-        值 = `m_says_done ∧ retire.complete ∧ programs_ok`；没喂 ⇒ `checked=False`（不是
-        `False` —— `False` 会被读成"机器说不通过"）。今天的默认值就是"没接线"。
+        喂齐了 `checked=True`，值 = `m_says_done ∧ retire.complete ∧ programs_ok`；
+        没喂 ⇒ `checked=False`（不是 `False` —— `False` 会被读成"机器说不通过"）。
+        `retire` / `programs` 两格原样透传（`machine_caliber()` 已经把它们归一成
+        "检查过没有 / 干净没有 / 停在跑"），报告与网页要并列显示它们（ROOTGATE-②）。
         """
         got = self.readings.get("machine_caliber")
         if isinstance(got, Mapping) and "checked" in got:
-            if not got.get("checked"):
-                return {"checked": False, "value": None,
-                        "reason": str(got.get("reason")
-                                      or "not_wired: 这一格还没接线"
-                                         "（retire_integrity / programs 没喂进来）")}
-            return {"checked": True, "value": got.get("value"),
-                    "reason": str(got.get("reason") or "")}
-        return {"checked": False, "value": None,
+            out = dict(got)
+            out["retire"] = dict(out.get("retire") or {})
+            out["programs"] = dict(out.get("programs") or {})
+            if not out.get("checked"):
+                out["value"] = None
+                out["reason"] = str(out.get("reason")
+                                    or "not_wired: 这一格还没接线"
+                                       "（retire_integrity / programs 没喂进来）")
+            else:
+                out["reason"] = str(out.get("reason") or "")
+            return out
+        return {"checked": False, "value": None, "retire": {}, "programs": {},
                 "reason": ("not_wired: 这一格还没接线（retire_integrity / programs 没喂进来）"
                            "⇒ can_close 是 None：既不是过也不是不过，不许读成通过")}
 
@@ -4224,11 +4280,20 @@ class ClosingReport:
             "failed": self.failed,
             "unknowns": self.unknowns,
             "findings": [f.to_dict() for f in self.findings],
-            "readings": dict(self.readings),
+            # 一份权威结论（ROOTGATE-①）：`verdict` 是唯一判据，`can_close` /
+            # `machine_pass` / 退出码都从它派生。放在 `readings` 里（已声明的键）——
+            # 不新增顶层键，工具面的声明与快照因此不用重冻。
+            "readings": {**dict(self.readings), "verdict": self.verdict},
         }
 
     def summary(self) -> str:
         """一句话读数（给 CLI 与交付说明用；不许盖过明细）。"""
+        verdict = self.verdict
+        head = (f"收工结论：{verdict['verdict']}（exit {verdict['exit_code']}）"
+                f" · 八格 {verdict['counts']['pass']}/{len(verdict['cells'])} pass"
+                f" · m_says_done={verdict['m_says_done']}"
+                f" · retire={verdict['retire']['state']}"
+                f" · programs={verdict['programs']['state']}；")
         machine = (f"机器七格：pass {sum(1 for v in self.status.values() if v == 'pass')}/"
                    f"{len(self.status)}"
                    + (f"；fail={self.failed}" if self.failed else "")
@@ -4312,7 +4377,7 @@ class ClosingReport:
             if dep.get("checked") and int(dep.get("inconsistent") or 0):
                 dep_note += f"（说不一致 {int(dep['inconsistent'])} 条，读数不拦门）"
         if not self.m_verdict:
-            return (f"收工门：{machine} —— M 没有提交自己的判据（它按自己列的任务列表判"
+            return (head + f"收工门：{machine} —— M 没有提交自己的判据（它按自己列的任务列表判"
                     f"『活做完了没有』）⇒ `m_says_done=false`{sum_note}{ros_note}{cc_note}"
                     f"{map_note}{dep_note}")
         tasks = [t for t in (self.m_verdict.get("tasks") or []) if isinstance(t, Mapping)]
@@ -4323,7 +4388,7 @@ class ClosingReport:
                 if self.verdict_conflicts else "")
         gaps = self.escalation_gaps
         gap_note = (f"；没上报的项：{[x.get('what') for x in gaps]}" if gaps else "")
-        return (f"收工门：M 判「我这一趟的活{met}」⇒ m_says_done={self.m_says_done}"
+        return (head + f"收工门：M 判「我这一趟的活{met}」⇒ m_says_done={self.m_says_done}"
                 f"（机器口径 can_close={self.can_close}，{self.can_close_reason or '已接线'}"
                 f"{machine}{list_note}{tail}{gap_note}{sum_note}{ros_note}{cc_note}"
                 f"{map_note}{dep_note}）")
@@ -5664,7 +5729,6 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
     读数经 `out` 与 `pending_rows` 带出，不开新返回值。
     """
     from . import evidencebits as _EB
-    from . import manuscriptretire as _MR
     from . import statementabandon as _SA
     from . import verifications as _VR
     from . import vsigns as _VSP
@@ -5683,29 +5747,33 @@ def _unsigned_rows_reading(rows: Mapping[str, Any], *, out: dict[str, Any],
         # 计成一档（`abandoned_without_reason`）—— 标个状态不能绕过整条裁定。
         # 错误那一档同一条纪律：判它错的凭据由唯一读口判（`errorstate.statement_refuted`），
         # 读不出来的行记 `error_without_evidence`（说不出凭什么判它错）。
-        status_now = str(row.get("status") or "")
-        if status_now in _MR.RETIRED_STATUSES:
-            if status_now == "abandoned":
-                got = _SA.parse_abandon(row.get("quote_reason"))
-                if not got.get("checked"):
+        #
+        # 2026-11-19（FIX186-A）：退休与否只读 `lifecycle.state_of_statement`（改前这里
+        # 自写 `status in RETIRED_STATUSES`，与 :5929 / :6157 / 原 agent_loop:4890 各一份）；
+        # 「放弃」还是「错误」仍由错误那一档的词表分（`errorstate.ERROR_WORDS`，唯一真身）。
+        reading = _L.state_of_statement(row)
+        if reading.get("state") == _L.ABANDONED:
+            if str(reading.get("raw") or "") in _ES.ERROR_WORDS:
+                error_reading = _ES.statement_refuted(row=row)
+                if error_reading["state"] != _ES.STATE_ERROR:
                     out["rows"].append({
-                        "stmt_id": sid, "kind": kind, "class": "abandoned_without_reason",
+                        "stmt_id": sid, "kind": kind, "class": "error_without_evidence",
                         "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
                         "owner": "", "owner_known": False, "proofs": [],
-                        "why": f"status=abandoned 而拿不出理由与时间（{got.get('why') or '没读成'}）"
-                               "⇒ 不算明确放弃"})
-                    out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
+                        "why": (f"status={reading['raw']} 而这一行读不出「错误」"
+                                f"（{error_reading['conflict'] or error_reading['state']}："
+                                f"{error_reading['why']}）⇒ 说不出凭什么判它错")})
+                    out["problems"].append(f"{sid}：错误那一档读不出来（凭什么错读不出来）")
                 continue
-            reading = _ES.statement_refuted(row=row)
-            if reading["state"] != _ES.STATE_ERROR:
+            got = _SA.parse_abandon(row.get("quote_reason"))
+            if not got.get("checked"):
                 out["rows"].append({
-                    "stmt_id": sid, "kind": kind, "class": "error_without_evidence",
+                    "stmt_id": sid, "kind": kind, "class": "abandoned_without_reason",
                     "last_verdict": "", "fault_at": "", "hung_seconds": None, "hung": "",
                     "owner": "", "owner_known": False, "proofs": [],
-                    "why": (f"status={status_now} 而这一行读不出「错误」"
-                            f"（{reading['conflict'] or reading['state']}：{reading['why']}）"
-                            "⇒ 说不出凭什么判它错")})
-                out["problems"].append(f"{sid}：错误那一档读不出来（凭什么错读不出来）")
+                    "why": f"status={reading['raw']} 而拿不出理由与时间"
+                           f"（{got.get('why') or '没读成'}）⇒ 不算明确放弃"})
+                out["problems"].append(f"{sid}：{got.get('why') or '放弃标记读不出来'}")
             continue
         # ---- 引文占位 ≠ 欠签（业主 2026-11-14：「引文收录阶段的 V 签由引文占位」）------
         #
@@ -5908,7 +5976,6 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
     `statements` 读不出来 ⇒ `checked=False` + `reason`：没查成不是「一条都不欠洗」。
     """
     from . import evidencebits as _EB
-    from . import manuscriptretire as _MR
     from . import statementabandon as _SA
     from . import verifications as _VR
 
@@ -5925,13 +5992,16 @@ def statements_unoptimized_reading(store: Any) -> dict[str, Any]:
         # 明确放弃的命题不在这一格里追（它不是「等洗」，是「不做了」；那一档有
         # `statements_abandoned` 专门数）。自称放弃而标记读不出来的照旧算等洗 ——
         # 标个状态不能把它从这一格里摘掉。
-        status_now = str(row.get("status") or "")
-        if status_now == "abandoned":
+        #
+        # 2026-11-19（FIX186-A）：退休与否只读 `lifecycle.state_of_statement`；
+        # 「放弃」与「错误」的分界仍读 `errorstate.ERROR_WORDS`（唯一真身）。
+        lifecycle_reading = _L.state_of_statement(row)
+        if lifecycle_reading.get("state") == _L.ABANDONED:
+            if str(lifecycle_reading.get("raw") or "") in _ES.ERROR_WORDS:
+                # 标记为错误：不做了的命题不再等洗。
+                continue
             if _SA.parse_abandon(row.get("quote_reason")).get("checked"):
                 continue
-        elif status_now in _MR.RETIRED_STATUSES:
-            # `refuted`（标记为错误）同一条纪律：不做了的命题不再等洗。
-            continue
         # ---- 「等洗」的判据是「有没有可优化的正文」，不是「是哪一种 kind」-------
         #
         # 2026-11-14 业主改口径（一般性规定，针对优化侧）：「系统取未优化的命题号及
@@ -6134,7 +6204,6 @@ def statements_optimization_candidates(store: Any) -> dict[str, Any]:
     "没开过"再让人重复开。`source_key` 与开稿那一笔写的 `source` 是同一枚记号。
     """
     from . import evidencebits as _EB
-    from . import manuscriptretire as _MR
     from . import statementabandon as _SA
     from . import verifications as _VR
     from . import vsigns as _VS
@@ -6153,12 +6222,15 @@ def statements_optimization_candidates(store: Any) -> dict[str, Any]:
     signed_paths = _optimization_signed_paths(root, _VS)
     for sid, row in sorted(rows.items()):
         out["scanned"] += 1
-        status_now = str(row.get("status") or "")
-        if status_now == "abandoned":
+        status_now = str(row.get("status") or "")      # 审计面：原始 status 原样保留
+        # 2026-11-19（FIX186-A）：判据只读三态（`lifecycle`）；「放弃/错误」的分界
+        # 仍读 `errorstate.ERROR_WORDS`。
+        lifecycle_reading = _L.state_of_statement(row)
+        if lifecycle_reading.get("state") == _L.ABANDONED:
+            if str(lifecycle_reading.get("raw") or "") in _ES.ERROR_WORDS:
+                continue
             if _SA.parse_abandon(row.get("quote_reason")).get("checked"):
                 continue
-        elif status_now in _MR.RETIRED_STATUSES:
-            continue
         kind = str(row.get("kind") or "")
         origin = str(row.get("origin") or "")
         proofs = [(int(no), str(text)) for no, text in _VR.proof_list(row)
@@ -6847,8 +6919,7 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
         out["relabeled"]["reason"] = why
         return out
     for sid, row in sorted(rows.items()):
-        status_now = str(row.get("status") or "")
-        reading = _ES.statement_refuted(row=row)
+        reading = _ES.statement_refuted(row=row)      # 原始 status 在 `reading["status"]` 里
         if reading["state"] == _ES.STATE_ERROR:
             payload = dict(reading.get("voided_by") or {})
             out["error"].append({
@@ -6863,7 +6934,11 @@ def statements_abandoned_reading(store: Any) -> dict[str, Any]:
                              ("experiment_id", "defect_ref", "construction", "script", "sha")
                              if payload.get(k)}})
             continue
-        if status_now != "abandoned":
+        # 只有「放弃」进这一格（错误那一档上一支已经单列）；判据只读三态（FIX186-A）。
+        lifecycle_reading = _L.state_of_statement(row)
+        if lifecycle_reading.get("state") != _L.ABANDONED:
+            continue
+        if str(lifecycle_reading.get("raw") or "") in _ES.ERROR_WORDS:
             continue
         got = _SA.parse_abandon(row.get("quote_reason"))
         if not got.get("checked"):
@@ -8832,6 +8907,12 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
   `verdict_conflicts` 再点名自述与任务列表对不上）—— 判据归 M，读数的可见性不减。
     """
     rep = ClosingReport()
+    # 只有完整的八格门才可能给出权威结论 `pass`（ROOTGATE-①）：缩过面的那一份
+    # （`checks=("paper",)` / `reviewaccept` 的 `checks=("load_bearing",)`）是读数，
+    # 不是"这一趟能不能交"的结论。
+    rep.full_gate = set(DEFAULT_CHECKS) <= set(checks)
+    rep.authoritative = bool(rep.full_gate and str(project_dir or "").strip()
+                             and str(report_path or "").strip())
     tasks = [dict(t) for t in (task_list or ()) if isinstance(t, Mapping)]
     root = session_root if session_root is not None else getattr(store, "root", None)
     # ---- 会话身份先过闸：号不在盘上 ⇒ 门不跑、马上受控拒绝。
@@ -9391,28 +9472,65 @@ def machine_feeders(store: Any, *, root_task_id: str = "") -> dict[str, Any]:
 
     根台账号的取法（2026-11-03，153-U-01/U-02 第 2 笔）：给了就用；不给就取台账里最近一条
     顶趟行（`called_by="user"` 且 `parent_task_id` 空 —— 与 `Conductor.open_top_level_run` 写的那一行同形）。
-    找不到顶趟行 / 读不成 ⇒ 两个喂参都是 `None`（不猜：没喂 ⇒ `can_close=None` + `not_wired`）。
+    三态（`:func:`top_level_task_lookup``）：
+    - 台账里**一条任务行都没有** ⇒ 空树本来就是干净的：`retire.complete=True`、
+      `programs` 按整个工作区读（否则干净工作区上的 `agentflow closing` 永远 not_wired、
+      永远 exit 2 —— 2026-11-19 业主指出的接线缺口）；
+    - 有任务行、但没有顶趟行 / 台账读不成 ⇒ 两个喂参都是 `None`（不猜：没喂 ⇒
+      `can_close=None` + `not_wired`；不知道哪一棵树是这一趟的，比"算不出来"更不能猜）。
     为什么不退回"最近一条任务行"或"随便挑一个 M 行"：机器口径回答的是"这一趟能不能交"，
     拿错根就会把别人那一支的销号状态当成自己的 —— 那比"算不出来"坏得多（算不出来只是不知道，
     拿错根是说了假话）。
 
     为什么在 closing 这一侧现算而不是让每个调用方各自拼：两个入口（运行内的
     `conductor.closing`、运行外的 `agentflow closing`）必须喂同一份口径，否则又是"两个出口各说一套"。
+
+    ## `retire` 是"收尾前自动收尾之后"的那一份（ROOTGATE-③，2026-11-19）
+
+    `final` 闸会在收工前替 M 把"静默且无未消项"的子树销掉（`_auto_retire_ready`）。
+    改前这里的 `retire` 读的是销号前的快照 ⇒ 最后一次 closing 必写"retire 不干净"，
+    而 38 秒后框架自己清干净（真机 lp-ball-11：18:20:40–43 销了 20 个）。现在这一格
+    走 :func:`autoretire.project_retire` 的只读投影（与 `_auto_retire_ready` 同一份
+    "静默且无未消项"判据）：会销哪些逐条写在 `retire.auto_retire.would_retire` 里，
+    `retire.complete` 是"销完之后干不干净"。有未消项时投影仍是不干净（反真空）。
     """
     root = str(root_task_id or "")
-    out: dict[str, Any] = {"retire": None, "programs": None, "root": root, "why": ""}
+    out: dict[str, Any] = {"retire": None, "programs": None, "root": root, "why": "",
+                           "root_reading": None}
     try:
-        from .conductor import Conductor
+        from .conductor import Conductor, programs_reading
 
         cond = Conductor(store)
         if not root:
-            root = latest_top_level_task_id(store)
+            lookup = top_level_task_lookup(store)
+            out["root_reading"] = dict(lookup)
+            if not lookup.get("checked"):
+                out["why"] = str(lookup.get("reason") or "根台账号没查成")
+                return out
+            root = str(lookup.get("root") or "")
             out["root"] = root
         if not root:
-            out["why"] = ("没给根台账号，台账里也找不到顶趟行（`called_by=user` 且"
-                          " `parent_task_id` 空）⇒ 机器口径算不出来")
+            # 没有顶趟行、也没有带父的任务行：这是"没有树"（查过的结论），不是"没查成"。
+            # 空树本来就是干净的；程序读数按整个工作区读（无主程序另计）。
+            out["retire"] = {
+                "checked": True, "complete": True, "root": "", "nodes": [], "dirty": [],
+                "count": 0, "total": 0, "projected": False,
+                "reason": ("台账里没有顶趟行、也没有带父的任务行 ⇒ 名下没有树可清"
+                           "（这是查过的结论，不是「没查成」）")}
+            out["programs"] = dict(programs_reading(getattr(store, "root", ""),
+                                                    task_ids=()) or {})
             return out
-        out["retire"] = dict(cond.retire_integrity(root) or {})
+        retire = dict(cond.retire_integrity(root) or {})
+        # ROOTGATE-③：收工门只读，但它的 retire 格要与 final 闸读同一份「收尾前自动
+        # 收尾之后」的事实 —— 否则最后一次 closing 必写"不干净"，38 秒后 final 闸
+        # 自己清干净（lp-ball-11 的 20 个节点就是这么被销的）。
+        try:
+            out["retire"] = _AR.project_retire(cond, root, retire)
+        except Exception as exc:  # noqa: BLE001 —— 投影读不成只丢投影，不动原始读数
+            retire["auto_retire"] = {"checked": False, "would_retire": [], "kept": [],
+                                     "problems": [f"{type(exc).__name__}: {exc}"],
+                                     "reason": "收尾前自动收尾的投影没读成（不是「没有可销的」）"}
+            out["retire"] = retire
         out["programs"] = dict(cond.programs_in_subtree(root) or {})
     except Exception as exc:  # noqa: BLE001 —— 读不成 ⇒ 没喂（None），不是"不通过"
         out["why"] = f"{type(exc).__name__}: {exc}"
@@ -9421,27 +9539,78 @@ def machine_feeders(store: Any, *, root_task_id: str = "") -> dict[str, Any]:
     return out
 
 
-def latest_top_level_task_id(store: Any) -> str:
-    """台账里最近一条顶趟行的 `task_id`（没有 ⇒ 空串，不猜）。"""
+def top_level_task_lookup(store: Any) -> dict[str, Any]:
+    """这一趟的根台账号是哪一条（三态）：`{checked, root, rows, reason}`。
+
+    - 台账读不成 ⇒ `checked=False`（不折成"没有"）；
+    - 台账里没有顶趟行、也没有带父的任务行 ⇒ `checked=True, root=""` —— "没有树"是
+      查过的结论，空树本来就是干净的（否则干净工作区上的 `agentflow closing` 会永远
+      `not_wired`）；
+    - 有任务行带父、却没有顶趟行 ⇒ `checked=False`：台账里有一支断头的树，
+      不知道哪一棵是这一趟的，不猜（拿错根比"算不出来"坏得多）；
+    - 有顶趟行 ⇒ `checked=True, root=最近一条`。
+    """
     try:
         rows = [dict(r) for r in store.rows("tasks")]
-    except Exception:  # noqa: BLE001 —— 读不成 = 没有（调用方据此给 None）
-        return ""
+    except Exception as exc:  # noqa: BLE001 —— 读不成是"没查成"
+        return {"checked": False, "root": "", "rows": 0,
+                "reason": f"tasks 台账读不成（{type(exc).__name__}: {exc}）"}
     tops = [r for r in rows
             if str(r.get("called_by") or "") == "user"
             and not str(r.get("parent_task_id") or "")]
-    if not tops:
-        return ""
-    tops.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
-    return str(tops[-1].get("task_id") or "")
+    if tops:
+        tops.sort(key=lambda r: (str(r.get("started_at") or ""), str(r.get("task_id") or "")))
+        return {"checked": True, "root": str(tops[-1].get("task_id") or ""),
+                "rows": len(rows), "reason": ""}
+    # 没有顶趟行时，只有"没有带父的任务行"才能说"没有树"：有父行而没有根，
+    # 说明台账里有一支断头的树 —— 那是判不了，不是干净。
+    orphans = [r for r in rows
+               if not str(r.get("kind") or "")            # 板项不是树节点
+               and str(r.get("parent_task_id") or "")]
+    if orphans:
+        return {"checked": False, "root": "", "rows": len(rows),
+                "reason": (f"台账里有 {len(orphans)} 行任务带父、却没有顶趟行"
+                           "（`called_by=user` 且 `parent_task_id` 空）⇒ 不知道哪一棵树是这一趟的")}
+    return {"checked": True, "root": "", "rows": len(rows),
+            "reason": ("台账里没有顶趟行、也没有带父的任务行 ⇒ 名下没有树可清"
+                       "（查过的结论，不是没查成）")}
+
+
+def latest_top_level_task_id(store: Any) -> str:
+    """台账里最近一条顶趟行的 `task_id`（没有 ⇒ 空串，不猜；三态见 `top_level_task_lookup`）。"""
+    return str(top_level_task_lookup(store).get("root") or "")
+
+
+def _retire_cell(retire: Any) -> dict[str, Any]:
+    """retire 那个喂参的可读三态（不把整棵树的 `nodes` 抄进结论）。"""
+    got = dict(retire) if isinstance(retire, Mapping) else {}
+    return {"checked": bool(got.get("checked")), "complete": bool(got.get("complete")),
+            "projected": bool(got.get("projected")),
+            "state": ("不适用" if not got.get("checked")
+                      else ("干净" if got.get("complete") else "不干净")),
+            "reason": str(got.get("reason") or ""),
+            "auto_retire": dict(got.get("auto_retire") or {})}
+
+
+def _programs_cell(programs: Any) -> dict[str, Any]:
+    """programs 那个喂参的可读三态（`ok` 只在查成了时才有意义）。"""
+    got = dict(programs) if isinstance(programs, Mapping) else {}
+    checked = bool(got.get("checked"))
+    running = int(got.get("running_count") or 0)
+    unowned = list(got.get("unowned") or ())
+    ok = bool(checked and running == 0 and not unowned)
+    return {"checked": checked, "ok": ok, "running_count": running,
+            "unowned_count": len(unowned),
+            "state": ("不适用" if not checked else ("已停" if ok else "没停")),
+            "reason": str(got.get("reason") or "")}
 
 
 def machine_caliber(*, m_says_done: bool, retire: Any = None,
                     programs: Any = None) -> dict[str, Any]:
-    """机器口径那一格的三态读数：`{checked, value, reason}`（2026-11-03，153-U-01/U-02 第 2 笔）。
+    """机器读数那一格：`{checked, value, retire, programs, reason}`。
 
-    口径（业主 2026-11-03 的裁决 ①=乙）：
-    `can_close = m_says_done ∧ retire_integrity.complete ∧ programs_ok`。
+    口径（业主 2026-11-03 的裁决 ①=乙，ROOTGATE-① 之后仍是它的机器那半边）：
+    `m_says_done ∧ retire_integrity.complete ∧ programs_ok`。
 
     三态纪律（这一格的全部意义都在这里）：
     - 两个喂参都给了、且各自 `checked` 都是真 ⇒ `checked=True`，`value` 是真/假，
@@ -9451,12 +9620,15 @@ def machine_caliber(*, m_says_done: bool, retire: Any = None,
     - 给了但那个它自己 `checked=False`（台账读不成 / 程序读数没查成）⇒ 同样 `None`，
       reason 点名是哪一格没查成（没查成 ≠ 不通过）。
 
-    两条轴别混（读这一格的人最容易错的地方）：格表那条轴（`status` / `machine_pass`）问的是
-    "那八条判据过没过"，机器口径这一格问的是"M 说做完了 ∧ 树清干净了 ∧ 程序停了没有"。
-    两者可以同时出现"格表 fail 而机器口径 True"（那个工作区的格表里有一条与这三件事无关）；
-    所以看到 `can_close=True` 而 `exit_code==1` 并不矛盾 —— 前者是机器口径，后者还要过
-    `machine_pass`（见 :func:`tri_state_exit_code`）。
+    ## 与八格的关系（2026-11-19，ROOTGATE-①）
+
+    2026-11-03 的裁决把"能不能交"拆成两条轴时，这一格不读那八格；真机
+    `lp-ball-11` 因此出现"八格 6/8、`can_close=true`、`exit 0`"。现在最终结论只由
+    :func:`closing_verdict` 给出，这一格是它的机器读数半边（`retire` / `programs`
+    逐格带出来，供报告与网页并列显示），不再单独冒充"可以交"。
     """
+    retire_cell = _retire_cell(retire)
+    programs_cell = _programs_cell(programs)
     missing: list[str] = []
     if retire is None:
         missing.append("retire_integrity")
@@ -9464,6 +9636,7 @@ def machine_caliber(*, m_says_done: bool, retire: Any = None,
         missing.append("programs")
     if missing:
         return {"checked": False, "value": None,
+                "retire": retire_cell, "programs": programs_cell,
                 "reason": (f"not_wired: 这一格还没接线（{' / '.join(missing)} 没喂进来）"
                            "⇒ can_close 是 None：既不是过也不是不过，不许读成通过")}
     retire_map = dict(retire) if isinstance(retire, Mapping) else {}
@@ -9475,10 +9648,10 @@ def machine_caliber(*, m_says_done: bool, retire: Any = None,
         unreadable.append(f"programs 那一格没查成（{prog_map.get('reason') or '没给原因'}）")
     if unreadable:
         return {"checked": False, "value": None,
+                "retire": retire_cell, "programs": programs_cell,
                 "reason": "；".join(unreadable) + " —— 算不出来，不许读成不通过"}
     retire_ok = bool(retire_map.get("complete"))
-    programs_ok = (int(prog_map.get("running_count") or 0) == 0
-                   and not prog_map.get("unowned"))
+    programs_ok = bool(programs_cell["ok"])
     bad: list[str] = []
     if not m_says_done:
         bad.append("m_says_done 是假（M 自己说没做完）")
@@ -9488,30 +9661,168 @@ def machine_caliber(*, m_says_done: bool, retire: Any = None,
         bad.append(f"programs 没停（还有 {int(prog_map.get('running_count') or 0)} 个程序在跑）")
     value = not bad
     return {"checked": True, "value": value,
+            "retire": retire_cell, "programs": programs_cell,
             "reason": "" if value else "机器口径不成立：" + "；".join(bad)}
 
 
+def _cell_why(rep: ClosingReport, name: str) -> str:
+    """一格为什么是现在这个状态（blocker 原话优先，其次 warning，最后读数自己的 reason）。"""
+    parts: list[str] = []
+    for finding in rep.findings:
+        if finding.check == name and finding.level == "blocker":
+            parts.append(f"{finding.code}: {finding.detail}")
+    if not parts:
+        for finding in rep.findings:
+            if finding.check == name:
+                parts.append(finding.detail)
+    if not parts:
+        got = rep.readings.get(name)
+        if isinstance(got, Mapping):
+            reason = str(got.get("reason") or "")
+            if reason:
+                parts.append(reason)
+    return "；".join(p for p in parts if p)
+
+
+def closing_verdict(rep: ClosingReport) -> dict[str, Any]:
+    """一份权威结论：这一趟能不能交，只由这一处算（ROOTGATE-①，2026-11-19）。
+
+    返回::
+
+        {
+          "verdict": "pass" | "fail" | "unknown",
+          "exit_code": 0 | 1 | 2,
+          "cells": [{"check", "status", "why"}…],      # 八格逐格
+          "counts": {"pass": n, "fail": n, "unknown": n},
+          "m_says_done": bool,                          # M 自己说的那一句
+          "retire": {"checked", "complete", "projected", "state", "reason", "auto_retire"},
+          "programs": {"checked", "ok", "running_count", "unowned_count", "state", "reason"},
+          "blockers": [{"check", "code", "why"}…],
+          "machine_pass": bool,                         # 八格轴（由同一份 cells 算）
+          "can_close": True | False | None,             # pass / fail / unknown
+          "authoritative": bool,                        # 完整八格 + 给了 project_dir/report_path
+          "reason": str,
+        }
+
+    规则（业主 2026-11-19「要修根因」）：:
+
+        verdict = "pass" ⟺ 八格全 pass ∧ m_says_done ∧ retire.complete ∧ programs_ok
+                           ∧ 没有 blocker
+
+    三态不许折平：
+    - 任一格 `unknown`（或这一份根本没跑完整八格 / M 没提交判据 / 机器读数没查成）
+      ⇒ `unknown` —— 没查成既不是过也不是不过，退出码 2；
+    - 查过了、结论是坏（格 fail / blocker / M 说没做完 / retire 不干净 / 程序没停）
+      ⇒ `fail`，退出码 1；
+    - 只有全过才是 `pass`，退出码 0。
+
+    改前这里不存在：`can_close` 不读八格、`machine_pass` 不读机器口径、退出码各取一半
+    —— 真机 `projects/lp-ball-11` 因此八格 6/8 仍 `exit 0`。现在
+    `can_close` / `machine_pass` / `tri_state_exit_code` 全部从这一份派生，
+    不许在别处重算（判据：`tests/test_rootgate_verdict_is_the_single_conclusion.py`）。
+    """
+    status = dict(getattr(rep, "status", None) or {})
+    # 完整的八格门：格子名单就是 DEFAULT_CHECKS（少一格 ⇒ 那一格 unknown，不许"没跑"= "过"）。
+    # 缩过面的那一份（`checks=("load_bearing",)` / `checks=()`）只列它真跑的那几格，
+    # 并且永远不可能 pass（`full_gate=False` ⇒ unknown）。
+    names = list(DEFAULT_CHECKS) if getattr(rep, "full_gate", False) else list(status)
+    cells: list[dict[str, Any]] = []
+    for name in names:
+        state = str(status.get(name) or "unknown")
+        if state not in ("pass", "fail", "unknown", "na"):
+            state = "unknown"
+        why = _cell_why(rep, name)
+        if state == "unknown" and not why:
+            why = ("这一格没查成（门没有给出这一格的读数）"
+                   if getattr(rep, "full_gate", False) else "这一份没有跑这一格")
+        cells.append({"check": name, "status": state, "why": why})
+    counts = {s: sum(1 for c in cells if c["status"] == s)
+              for s in ("pass", "fail", "unknown")}
+    blockers = [{"check": f.check, "code": f.code, "why": f.detail}
+                for f in rep.blockers]
+    machine_pass = all(c["status"] == "pass" for c in cells) and not blockers
+    caliber = rep._machine_caliber
+    retire = dict(caliber.get("retire") or {})
+    programs = dict(caliber.get("programs") or {})
+    unknown_cells = [c["check"] for c in cells if c["status"] == "unknown"]
+    fail_cells = [c["check"] for c in cells if c["status"] not in ("pass", "unknown")]
+    reasons: list[str] = []
+    # 判序（三态不许折平）：确定的坏（格 fail / blocker / M 说没做完 / retire 不干净 /
+    # 程序没停）先落 fail —— 它不许被旁边的 unknown 掩盖；没有确定的坏、但有没查成的
+    # 那一格（或这一份不是完整八格 / 机器读数没接线）才落 unknown。
+    hard: list[str] = []
+    if fail_cells:
+        hard.append("格 fail：" + "、".join(fail_cells))
+    if blockers:
+        hard.append("blocker：" + "、".join(sorted({b["check"] for b in blockers})))
+    if rep.m_verdict and not rep.m_says_done:
+        hard.append("m_says_done=false（M 自己说没做完）")
+    if rep.m_verdict and caliber.get("checked") and not retire.get("complete"):
+        hard.append(f"retire 不干净（{retire.get('reason') or '名下还有在册节点'}）")
+    if rep.m_verdict and caliber.get("checked") and not programs.get("ok"):
+        hard.append(f"programs 没停（还有 {int(programs.get('running_count') or 0)} 个程序在跑）")
+    if rep.refusal:
+        verdict = "unknown"
+        reasons.append(f"门没跑（受控拒绝：{rep.refusal.get('code')}）")
+    elif not rep.m_verdict:
+        verdict = "unknown"
+        reasons.append("M 没有提交自己的判据（没人判过）⇒ 没查成，不是可以交")
+    elif hard:
+        verdict = "fail"
+        reasons = hard
+        if caliber.get("reason"):
+            reasons.append(str(caliber["reason"]))
+    elif not getattr(rep, "full_gate", False):
+        verdict = "unknown"
+        reasons.append("这一份不是完整的八格门（`checks` 缩过面 / 直接构造的读数）"
+                       "⇒ 不能当『这一趟能不能交』的权威结论")
+    elif unknown_cells:
+        verdict = "unknown"
+        reasons.append("这些格没查成：" + "、".join(
+            f"{c['check']}（{c['why'] or '没给原因'}）" for c in cells
+            if c["status"] == "unknown"))
+    elif not caliber.get("checked"):
+        verdict = "unknown"
+        reasons.append(str(caliber.get("reason") or "机器读数没查成（retire / programs）"))
+    else:
+        verdict = "pass"
+        reasons.append("八格全 pass ∧ m_says_done ∧ retire 干净 ∧ 程序已停")
+    can_close = {"pass": True, "fail": False, "unknown": None}[verdict]
+    exit_code = {"pass": 0, "fail": 1, "unknown": 2}[verdict]
+    return {
+        "verdict": verdict,
+        "exit_code": exit_code,
+        "cells": cells,
+        "counts": counts,
+        "m_says_done": bool(rep.m_says_done),
+        "retire": retire,
+        "programs": programs,
+        "blockers": blockers,
+        "machine_pass": machine_pass,
+        "can_close": can_close,
+        "authoritative": bool(getattr(rep, "authoritative", False)),
+        "reason": "；".join(r for r in reasons if r),
+    }
+
+
 def tri_state_exit_code(rep: ClosingReport) -> int:
-    """CLI 的三态退出码：0 可交付 / 1 被拦住 / 2 没查成。
+    """三态退出码：0 可交付 / 1 被拦住 / 2 没查成（只读 `closing_verdict` 的那一份）。
 
     域 × 码对照见 `agentflow.stop_reasons.EXIT_CODE_DOMAINS["gate"]`，全仓统一的三条口径见
     `stop_reasons.EXIT_CODE_UNIFIED`（`R-BE1` 的 ③-6，2026-10-27）。这一域没有 `3/4/5`。
 
-    口径（业主 2026-10-09 的裁定 + 2026-11-03 的裁决 ②）：
-    - M 没提交判据 ⇒ 2（"没人判过" = 没查成，不是"被拦住"也不是"可交付"）；
-    - 其余情况 0 只在两边都说行时给：M 判了"达成"（`m_says_done`）并且机器读数也
-      说行（`machine_pass`：七格全 pass 且 `blockers` 为空 —— 引文无区间 / 对应表缺失 /
-      回执无背书那三条 blocker 都在这里）；
-    - 剩下的一律 1（被拦住）。
+    口径（业主 2026-10-09 的裁定 + 2026-11-03 的裁决 ② + 2026-11-19「要修根因」）：
+    - `verdict == "unknown"` ⇒ 2（任一格没查成 / M 没提交判据 / 机器读数没接线 ——
+      没查成不是"被拦住"也不是"可交付"）；
+    - `verdict == "fail"` ⇒ 1（八格有 fail / blocker / M 说没做完 / retire 不干净 /
+      程序没停）；
+    - `verdict == "pass"` ⇒ 0（八格全 pass ∧ `m_says_done` ∧ `retire.complete`
+      ∧ `programs_ok` ∧ 没有 `blockers`）。
 
-    2026-11-03 之前这一支只看 `can_close`：机器八格 unknown/fail、而 M 说达成的那一趟
-    会退出 0（"可交付"），与机器读数互相打脸。机器说不行时退出码不许是 0。
+    改前这一支只看 `can_close` 与 `machine_pass` 两条互不相干的轴：八格 6/8 而
+    `can_close=true` 的那一趟会退出 0。现在 0 只由那一份权威结论给（ROOTGATE-①）。
     """
-    if not rep.m_verdict:
-        return 2
-    if rep.closable and rep.machine_pass:
-        return 0
-    return 1
+    return int(rep.verdict.get("exit_code", 2))
 
 # ---------------------------------------------------------------- 论文证明的可查性（S2）
 #
@@ -9545,8 +9856,16 @@ def _ledger_rows(root: str | Path, table: str) -> list[dict[str, Any]]:
 
 
 def _paper_statement_rows(root: str | Path) -> list[dict[str, Any]]:
-    """读论文侧要用的台账行（自成一路：不改既有的 `_statement_rows(root, store)`）。"""
-    return _ledger_rows(root, "statements")
+    """读论文侧要用的台账行（自成一路：不改既有的 `_statement_rows(root, store)`）。
+
+    FIX186-B：放弃的命题不进这一集（业主口径「放弃态的条目直接踢出」）。判据只读
+    `lifecycle.state_of_statement` —— 错误那一档同属退休，一并踢出。这一格只影响
+    论文侧的三条检查（证明可查 / 指针 / 框架没被塞走）与 T3/T4 清单；全量分布计数
+    另走 :func:`nontriviality_reading` 的全量读数（放弃的行照实报，但不进分母）。
+    """
+    rows = _ledger_rows(root, "statements")
+    return [r for r in rows
+            if _L.state_of_statement(r).get("state") != _L.ABANDONED]
 
 
 def _norm(text: str) -> str:
@@ -9683,18 +10002,40 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
     这么写了；这一格此前没有这一支，于是 `check_closing(None, …)`（"没有工作区"这个
     合法调用形态）在 `Path(None)` 上抛 `TypeError` —— 一格读不到把整份收工报告打掉，
     读的人拿到的是崩溃而不是"这一格没读到"。
+
+    ## 五种结局，各自一栏（FIX186-B，业主 2026-11-19 口径）
+
+    | 栏 | 是什么 | 进不进分母 |
+    |---|---|---|
+    | `T0`…`T4` | 判出来的五档 | 是（活着的那几条） |
+    | `not_applicable` | 「这一问对它不成立」（概念行没有证明正文） | 不进 |
+    | `unjudged` | 「该判而没判」（台账里没有 / 判不了） | 是 |
+
+    改前 `applicable:false` 一律计进 `unjudged`：lp-ball-11 的 35 条概念行把
+    「不适用」压成「未判 36/37」，屏幕上一个真档都看不见。现在两栏分开计。
+    `counts` 是全量审计读数（已放弃的行也照实报它当年落在哪个结局）；
+    `statements_total` 是分母：可判命题 = 有可判对象且没被放弃的行 —— 不适用与
+    已放弃都不进（业主：「放弃态的条目直接踢出，然后监测活跃条目」）。
     """
     from . import secretary as _SEC
     counts = {f"T{level}": 0 for level in _SEC.NONTRIVIALITY_LEVELS}
+    counts["not_applicable"] = 0
     counts["unjudged"] = 0
     if not str(root or "").strip():
-        return {"checked": False, "statements_total": 0, "counts": counts, "high_tier": [],
-                "high_tier_total": 0, "paper_scaffolding_problems": [],
+        return {"checked": False, "statements_total": 0, "rows_total": 0, "counts": counts,
+                "not_applicable_total": 0, "abandoned_total": 0, "unjudged_abandoned": 0,
+                "high_tier": [], "high_tier_total": 0, "paper_scaffolding_problems": [],
                 "t4_ladder_problems": [], "sid": str(sid or ""),
                 "reason": "没有工作区根 ⇒ 非平凡性这一格没读到（不是\"全是 T1\"）"}
-    rows = _paper_statement_rows(root)
+    # 全量（审计面：放弃的行也照实报）与论文侧（放弃的不进）分开读 ——
+    # `_paper_statement_rows` 是三态过滤的唯一落点，这里不抄第二份名单。
+    rows = _ledger_rows(root, "statements")
     high: list[dict[str, Any]] = []
     t0_ids: list[str] = []
+    judgeable = 0
+    not_applicable_total = 0
+    abandoned_total = 0
+    unjudged_abandoned = 0
     #: 逐条的 `(stmt_id, 正文, 档位)`：`t4_ladder_problems` 与本函数用的是同一批行、同一份
     #: 档位判定，改前它自己又跑了一遍（每条命题再读一次整份 `nontriviality.jsonl`）——
     #: 400 条命题的夹具上实测 `nontriviality_of` 被调 800 次 / 2035 ms。读数逐字不变
@@ -9719,6 +10060,27 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
         level = got.get("level")
         paths = [dict(p) for p in (got.get("paths") or []) if isinstance(p, Mapping)]
         min_of = [int(x) for x in (got.get("min_of") or []) if isinstance(x, int)]
+        lifecycle_reading = _L.state_of_statement(row)
+        abandoned = lifecycle_reading.get("state") == _L.ABANDONED
+        tri = str(got.get("tri") or "")
+        not_applicable = tri == "not_applicable" or got.get("applicable") is False
+        if not_applicable:
+            # 「这一问对它不成立」与「该判而没判」分开计 —— 折平就是 lp-ball-11 的
+            # 「未判 36/37」那个假读数。
+            counts["not_applicable"] += 1
+            not_applicable_total += 1
+        elif level is None:
+            counts["unjudged"] += 1
+            if abandoned:
+                unjudged_abandoned += 1
+        else:
+            counts[f"T{level}"] += 1
+        if abandoned:
+            # 放弃的不进分母、不进 T0 清单、不进 T3/T4 与造梯子清单（业主口径）。
+            abandoned_total += 1
+            continue
+        if not not_applicable:
+            judgeable += 1
         paths_total += len(paths)
         if got.get("partial"):
             partial_total += 1
@@ -9726,7 +10088,6 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
                        "level": level, "paths": paths, "min_of": min_of,
                        "partial": bool(got.get("partial")),
                        "paths_unjudged": list(got.get("paths_unjudged") or [])})
-        counts["unjudged" if level is None else f"T{level}"] += 1
         if level == 0:
             t0_ids.append(str(row.get("stmt_id") or ""))
         if level is not None and level >= 3:
@@ -9743,8 +10104,15 @@ def nontriviality_reading(root: str | Path, *, sid: str = "") -> dict[str, Any]:
                          "paths_unjudged": list(got.get("paths_unjudged") or [])})
     return {
         "checked": bool(rows),
-        "statements_total": len(rows),
+        #: 分母 = 可判命题数（不适用与已放弃都不进；业主 2026-11-19 口径）。
+        #: 想读「台账里一共几行」看 `rows_total`（审计面）。
+        "statements_total": judgeable,
+        "rows_total": len(rows),
         "counts": counts,
+        "not_applicable_total": not_applicable_total,
+        "abandoned_total": abandoned_total,
+        #: `counts["unjudged"]` 里有多少条其实是已放弃的行（审计面；它们不进分母）。
+        "unjudged_abandoned": unjudged_abandoned,
         # 平凡 ⇒ 落 T0，不拒收（业主 2026-10-23）：这一格让"降为 T0"在收工读数上看得到，
         # 而不是只在秘书台账里躺着。
         "downgraded_to_t0": t0_ids,

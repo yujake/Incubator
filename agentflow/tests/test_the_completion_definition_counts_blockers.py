@@ -56,10 +56,17 @@ def test_paper_pack_completion_definition_includes_blockers() -> None:
 
 
 def test_machine_pass_is_eight_cells_and_no_blocker() -> None:
-    """反真空：真身必须是「八格 ∧ 无 blocker」——否则上面那条只是在追文案。"""
+    """反真空：真身必须是「八格 ∧ 无 blocker」——否则上面那条只是在追文案。
+
+    2026-11-19（ROOTGATE-①）：`machine_pass` 从 `ClosingReport` 搬到唯一的
+    `closing_verdict` 里，但仍然必须是 `cells 全 pass ∧ 没有 blocker` 这个合取；
+    锚点跟着搬，判据一个字不放宽。
+    """
     from agentflow import closing
 
     src = pathlib.Path(closing.__file__).read_text(encoding="utf-8")
-    assert "not self.blockers" in src, (
-        "`closing.machine_pass` 不再看 blockers ⇒ 完成定义那句「且没有 blocker」就成了假话")
+    assert "def closing_verdict" in src, "唯一结论入口不见了（锚点没有落脚点）"
+    assert "and not blockers" in src, (
+        "`closing_verdict.machine_pass` 不再看 blockers ⇒ 完成定义那句"
+        "「且没有 blocker」就成了假话")
     assert len(closing.DEFAULT_CHECKS) == 8, len(closing.DEFAULT_CHECKS)

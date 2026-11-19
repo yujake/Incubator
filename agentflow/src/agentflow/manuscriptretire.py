@@ -163,10 +163,22 @@ def manuscripts_of_statement(store: Any, statement_id: Any) -> dict[str, Any]:
     return out
 
 
+def _exp_id_of(row: Mapping[str, Any]) -> str:
+    """命题行上记的「它来自哪一条实验」（`line_range.label = "exp:<号>"`；没有 ⇒ 空串）。
+
+    E 的数值稿按实验号命名（`reports/e-num-<实验号>.md`，族人一册、见
+    `agent_skills` 的「手稿从哪来」那张表）。这一格只把那一枚写好了的号读回来，
+    不猜任何路径 —— 猜路径等于给"稿↔命题"造第二个真身。
+    """
+    line_range = row.get("line_range")
+    label = str(line_range.get("label") or "") if isinstance(line_range, Mapping) else ""
+    return label[4:].strip() if label.startswith("exp:") else ""
+
+
 def statement_of_manuscript(store: Any, *, rel: Any = "",
                             manuscript_id: Any = "",
                             sign_rows: bool = True) -> dict[str, Any]:
-    """反查：这一份稿属于哪一条命题（唯一实现；反查的三源与正查同一个并集）。
+    """反查：这一份稿属于哪一条命题（唯一实现；反查的源与正查同一个并集）。
 
     返回 `{checked, found, stmt_id, status, retired, rel, why}`。
     三态：`checked=False` ⇒ 台账读不出来（没查成）；`found=False` ⇒ 查过了、三源都不指向
@@ -178,6 +190,14 @@ def statement_of_manuscript(store: Any, *, rel: Any = "",
     哪一行"（`obligations.registration_gap` 的「必须收录」义务）时，签行回答的是
     "谁签过它"—— 一份稿可以先被签在 A 上、后来收进 B，拿签行认领会把义务引到错的行。
     默认 `True` 让既有调用方（退休判据那三源）一个字节都不变。
+
+    ## 第四源（2026-11-19 FIX186-C）：由命题反查它的稿
+
+    前三源都要求"稿↔命题"在某处被记过。新行现在由 `register_statement` 同笔写
+    `manuscript_id` / `manuscripts`；存量行（lp-ball-11 的 `stmt:000006`）没有这两格，
+    但命题行上记着来路：`line_range.label = "exp:<号>"` ⇒ E 的数值稿就是
+    `reports/e-num-<号>.md`。这一源只认这一条写死了的命名约定，且只在"三源都没命中"
+    时走 —— 于是它不会盖过任何一条真的登记记录，也不会拿路径去猜。
     """
     text = str(rel or "").strip().replace("\\", "/")
     mid = str(manuscript_id or "").strip()
@@ -202,14 +222,20 @@ def statement_of_manuscript(store: Any, *, rel: Any = "",
         if text and isinstance(per, Mapping) and text in {
                 str(v or "").strip().replace("\\", "/") for v in per.values()}:
             hits.append(sid)
+    if not hits and text:
+        # 第四源：由命题反查（`exp:<号>` ⇒ `reports/e-num-<号>.md`）。
+        for sid, row in sorted(rows.items()):
+            exp = _exp_id_of(row)
+            if exp and text == f"reports/e-num-{exp}.md":
+                hits.append(sid)
     if not hits and text and sign_rows:
-        # 第三源（签行）单独查：它按命题逐条读，成本高，只在前面两源都没命中时走。
+        # 第三源（签行）单独查：它按命题逐条读，成本高，只在前面几源都没命中时走。
         for sid, _row in sorted(rows.items()):
             verified, _vwhy = _verified_manuscripts(store, sid)
             if text in verified:
                 hits.append(sid)
     if not hits:
-        out.update(checked=True, why=(f"三源里没有一行指向 {text or mid!r} ⇒ 这一份稿不在册"
+        out.update(checked=True, why=(f"四源里没有一行指向 {text or mid!r} ⇒ 这一份稿不在册"
                                       "（本判据对它不说话）"))
         return out
     if len(hits) > 1:
@@ -251,11 +277,19 @@ def flow_reading(store: Any, *, rel: Any = "", manuscript_id: Any = "") -> dict[
     """
     out: dict[str, Any] = {"checked": False, "found": False, "retired": False,
                            "hard_to_prove": {}, "stmt_id": "", "status": "",
-                           "row": {}, "why": ""}
+                           "row": {}, "why": "",
+                           #: 三态读数（FIX186-A）：原始 `status` 保留作审计，判据只读它。
+                           #: 唯一入口是 `lifecycle.state_of_manuscript`（放弃压过完工；
+                           #: 没签且没退休 ⇒ 活跃；读不出来 ⇒ 空串，不折成活跃）。
+                           "lifecycle_state": ""}
     got = statement_of_manuscript(store, rel=rel, manuscript_id=manuscript_id)
     out.update(checked=bool(got.get("checked")), found=bool(got.get("found")),
                retired=bool(got.get("retired")), stmt_id=str(got.get("stmt_id") or ""),
                status=str(got.get("status") or ""), why=str(got.get("why") or ""))
+    if str(rel or "").strip():
+        from . import lifecycle as _LC
+
+        out["lifecycle_state"] = str(_LC.state_of_manuscript(store, rel).get("state") or "")
     if not out["found"]:
         return out
     try:

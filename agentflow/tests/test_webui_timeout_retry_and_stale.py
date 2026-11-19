@@ -6,7 +6,7 @@
    `REQUEST_TIMEOUT_MS`（15 秒）后真把请求掐掉 —— 不是"等它自己回来"。
    没有这一条，`/api/state` 慢或后端卡住时页面就是无限转圈。
 2. 读请求有有界重试：网络 / 超时 / 5xx 最多再试 `RETRY_LIMIT`（2）次，退避
-   `RETRY_BASE_MS * 2^n`；**写请求不自动重试**（同一次写重放 = 两次副作用：
+   `RETRY_BASE_MS * 2^n`；写请求不自动重试（同一次写重放 = 两次副作用：
    回答两次、追加两次预算）。
 3. SSE 降级之后不是终点：轮询期间每隔 `STREAM_REOPEN_MS` 再试着把 SSE 接回来；
    轮询连续失败到 `STALE_AFTER_POLL_FAILS` 就把连接态报成 `stale`，顶部横幅

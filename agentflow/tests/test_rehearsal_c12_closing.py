@@ -41,10 +41,11 @@ M --final--> _final_gate_reading（整树已销号）
 
 `userio.ask_user(..., sid=本趟)` 在开跑前登记一个没被回答的问题（这就是循环里
 「问了就停」的那条路，产品自己的 API），⇒ 真 `closing.check_closing` 的
-`user_pending` 必须 `fail` ⇒ `machine_pass=False`；而 `m_says_done` / `closable`
-仍是 `True`（收工由 M 判，业主 2026-10-09）—— 两条轴分开正是这一条要钉住的读数。
-它证明「机器七格」不是摆设：M 说做完了，机器那一半照样记红。这条只造一格红，
-其余六格照旧 `pass`。
+`user_pending` 必须 `fail` ⇒ `machine_pass=False`；2026-11-19（ROOTGATE-①）之后
+`can_close` / `closable` 也读那八格 ⇒ 同一份权威结论 `fail`、运行以
+`closing_failed` 收尾（退出码 1，不再是 0）。它证明「八格」不是摆设：
+M 说做完了，机器的这一半照样记红，而"能不能交"只有一份结论。这条只造一格红，
+其余七格照旧 `pass`。
 
 ## Lean 两档
 
@@ -265,28 +266,33 @@ def test_the_closing_gate_passes_all_seven_cells_from_the_cli(
 # ============================================================ ② 反真空：一格造红 ⇒ machine_pass 假
 
 
-def test_one_red_cell_turns_machine_pass_false_while_m_still_says_done(
+def test_one_red_cell_turns_the_whole_verdict_red_while_m_still_says_done(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """反真空：一个没被回答的问题 ⇒ `user_pending` 红 ⇒ `machine_pass=False`（M 仍说做完了）。
+    """反真空：一个没被回答的问题 ⇒ `user_pending` 红 ⇒ 整份结论 fail、退出码 1。
 
-    这条只造一格红：其余六格照旧 pass。它证明链级的 `machine_pass` 真的压在七格
-    的合取上，而不是"M 说了达成"的另一种写法。逐格各自的造红形态在
-    `tests/test_closing_gate.py`（那里每格一条负控 + 一条反真空）。
+    这条只造一格红：其余七格照旧 pass。它证明链级的权威结论真的压在八格的合取上，
+    而且运行收工也读同一份：改前八格 6/8 仍 `stop_reason=final` ⇒ 退出码 0
+    （真机 `lp-ball-11` 的根因）；现在 `closing_failed` ⇒ 退出码 1。
+    逐格各自的造红形态在 `tests/test_closing_gate.py`。
     """
     got = _run(tmp_path, monkeypatch, lean="0", pending_question=True)
     closing = _closing_result(_events(got["ws"]))
     data = closing["data"]
     status = dict(data.get("status") or {})
-    assert got["rc"] == 0, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    assert got["rc"] == 1, (got["rc"], got["stdout"][-2000:], got["stderr"][-2000:])
+    ends = [e for e in _events(got["ws"]) if e.get("kind") == "agent_run_end"]
+    assert ends and ends[-1].get("stop_reason") == "closing_failed", ends[-1:]
     assert str(status.get("user_pending") or "") == "fail", status
-    # 只该红这一格：其余六格照旧 pass（定位不是"整张门都炸了"）。
+    # 只该红这一格：其余七格照旧 pass（定位不是"整张门都炸了"）。
     assert {k for k, v in status.items() if v != "pass"} == {"user_pending"}, status
     assert data["machine_pass"] is False, data["machine_pass"]
     assert data["failed"], data.get("failed")
-    # M 的自述没变：机器那一半变假了，而 `closable` 是另一条轴（收工由 M 判，
-    # 业主 2026-10-09）—— 两条轴分开正是这里要钉住的读数。
+    # M 的自述没变：它仍说"做完了"；红的是同一份权威结论（can_close 也读八格）。
     assert data["m_says_done"] is True, data.get("m_says_done")
-    assert data["closable"] is True, data.get("closable")
+    assert data["can_close"] is False, data.get("can_close")
+    assert data["closable"] is False, data.get("closable")
+    verdict = dict((data.get("readings") or {}).get("verdict") or {})
+    assert verdict.get("verdict") == "fail", verdict
     assert "user_pending" in [str(x) for x in (data.get("failed") or [])], data.get("failed")
 
 

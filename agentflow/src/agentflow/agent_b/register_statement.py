@@ -3507,13 +3507,25 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                                     statement: str = "",
                                     proof_text: str = "",
                                     proofs: Sequence[Mapping] | None = None,
-                                    kind: str = "", source: str = "") -> dict:
+                                    kind: str = "", source: str = "",
+                                    stmt_id: str = "", path_group: int = 0) -> dict:
         """B 处理一条收录任务的第一个动作：先用这一份稿判一次非平凡度（不写盘）。
 
         业主 2026-11-15 裁定（逐字要点）：「评价非平凡性需在将手稿录入台账前完成（即 B
         秘书处理一条录入任务时，第一个要做的是评价非平凡度）」。所以它排在
         `record_statement` / `_attach_proofs` 之前，也排在同一性判定（`adjudicate_proposition`）
         之前 —— 位置见 `_register_statement_impl` 与 `_ingest_apply` 的调用点。
+
+        ## 同一份材料只判一次（业主 2026-11-19）
+
+        业主逐字：「第一次录入时会经 B 秘书，优化表达后是直接登记，多路径时是各路径自己
+        有非平凡度，设计上不可能撞车」。所以判之前先问 `_prior_filing_nontriviality`：
+        同一 `(stmt 身份, judged_body_sha)` 已判过 ⇒ 直接沿用那条读数，不发调用、不写
+        决定台账。只有材料变了（sha 不同）或路径号不同（多路径各自判）才判。
+
+        这一格必须在短路（`register_statement.py` 的「收方读稿登记」早退支路）之前：
+        改前 D 的 `own.write_report` 把同一份稿再递一次，判在 4625 的早退之前发生 ⇒
+        又判一次（lp-ball-11 17:59:35，$0.002274），而档位台账一行都没落。
 
         ## 材料取稿，不取调用方入参
 
@@ -3524,22 +3536,32 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         ## 判完不落
 
-        号（`stmt_id`）与路径号（`path_group`）是秘书在写事务里现发的 ⇒ 判的时候还没有。
-        落行统一在 `_record_filing_nontriviality`（拿到号之后），拿不到号就 `unrecorded`
-        + 决定台账留痕（钱已经花了，"判过"必须可见）。
+        号（`stmt_id`）与路径号（`path_group`）是秘书在写事务里现发的 ⇒ 判的时候不一定
+        有。落行统一在 `_record_filing_nontriviality`（拿到号之后），拿不到号就
+        `unrecorded` + 决定台账留痕（钱已经花了，"判过"必须可见）。
 
         判档炸了 fail-open：收录照旧，但往秘书台账补一行"这一格没查成"（不许静默）。
         """
+        material = {"statement_full": str(statement_full or ""),
+                    "proof_text": str(proof_text or "")}
+        # ---- 同一份材料只判一次（排在任何模型调用 / 任何台账写之前） ----------
+        prior = self._prior_filing_nontriviality(
+            stmt_id=stmt_id, statement_full=material["statement_full"],
+            proof_text=material["proof_text"], path_group=path_group)
+        if prior is not None:
+            return prior
         sec = self._statement_secretary()
         if sec is None or not hasattr(sec, "judge_statement"):
-            return {"checked": False, "nontriviality": None,
-                    "nontriviality_tri": "unjudged",
-                    "reason": "这一趟没有可用的秘书 ⇒ 档位未判（收录不受影响）"}
+            return self._filing_reading(
+                {"checked": False, "nontriviality": None,
+                 "nontriviality_tri": "unjudged",
+                 "reason": "这一趟没有可用的秘书 ⇒ 档位未判（收录不受影响）"},
+                material=material, stmt_id=stmt_id, path_group=path_group)
         try:
-            return dict(sec.judge_statement(
-                statement_full=str(statement_full or ""),
+            got = dict(sec.judge_statement(
+                statement_full=material["statement_full"],
                 statement=str(statement or ""),
-                proof_text=str(proof_text or ""),
+                proof_text=material["proof_text"],
                 proofs=list(proofs or []) or None,
                 source=str(source or ""), kind=str(kind or ""),
                 task_id=str(getattr(self, "task_id", "") or "")) or {})
@@ -3551,9 +3573,96 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     target="statement_aesthetic", after="收录照旧（判档 fail-open）")
             except Exception:  # noqa: BLE001 —— 连留痕都写不成时不再往上抛
                 pass
-            return {"checked": False, "nontriviality": None,
-                    "nontriviality_tri": "unjudged",
-                    "reason": f"判档炸了：{type(exc).__name__}: {exc}"}
+            return self._filing_reading(
+                {"checked": False, "nontriviality": None,
+                 "nontriviality_tri": "unjudged",
+                 "reason": f"判档炸了：{type(exc).__name__}: {exc}"},
+                material=material, stmt_id=stmt_id, path_group=path_group)
+        return self._filing_reading(got, material=material, stmt_id=stmt_id,
+                                    path_group=path_group)
+
+    @staticmethod
+    def _filing_reading(got: Mapping | None, *, material: Mapping,
+                        stmt_id: str, path_group: int) -> dict:
+        """判档读数 + "判的是哪一份材料 / 哪一条 (stmt, path)"（落行那一臂要它）。
+
+        为什么把材料放回返回值：落行在收尾那一臂（`_finish_filing_nontriviality`），
+        它手里只有这份读数。改前 `_record_filing_nontriviality` 在这一臂恒拿空材料、
+        空号 ⇒ 即便补落也只能写一条「判过未落」，永远落不成档位行。
+        """
+        from .. import secretary as _SEC
+
+        out = dict(got or {})
+        out["statement_full"] = str(material.get("statement_full") or "")
+        out["proof_text"] = str(material.get("proof_text") or "")
+        out.setdefault("judged_body_sha256",
+                       _SEC._judged_body_sha(out["statement_full"], out["proof_text"]))
+        out.setdefault("stmt_id", str(stmt_id or ""))
+        out.setdefault("path_group", int(path_group or 0))
+        return out
+
+    def _prior_filing_nontriviality(self, *, stmt_id: str, statement_full: str,
+                                    proof_text: str, path_group: int = 0) -> dict | None:
+        """同一 `(stmt 身份, judged_body_sha)` 已经判过 ⇒ 那一条读数（不再判、不再写账）。
+
+        ## 判据（业主 2026-11-19 逐字）
+
+        「第一次录入时会经 B 秘书，优化表达后是直接登记，多路径时是各路径自己有非平凡度，
+          设计上不可能撞车」⇒ 同一份材料只能判一次；只有材料变了（`judged_body_sha`
+        不同）或路径号不同（多路径各自判）才判。
+
+        `path_group=0` = 这一笔还不知道第几条（新建 / 收方读稿登记）：按"同一条"读 ——
+        另一条路径必然换一份证明（sha 不同，上面那一比就放行），所以这里不会把多路径
+        挡掉（正控见 `tests/test_the_same_material_is_judged_once.py` 的 b）。
+
+        ## 读不到台账 ⇒ 返回 `None`（回去正常判一次）
+
+        多花一次判档的钱，好过把"读不到"折成"判过了、跳过" —— 那一笔读数就永远没有。
+        `nontriviality_rows` 的三态就是为了这个：`checked=False` 在这里当"没查到"。
+        """
+        sid = str(stmt_id or "").strip()
+        if not sid:
+            return None
+        from .. import secretary as _SEC
+
+        judged = _SEC._judged_body_sha(statement_full, proof_text)
+        got = _SEC.nontriviality_rows(getattr(self.store, "root", ""), stmt_id=sid)
+        if not got.get("checked"):
+            return None
+        want = int(path_group or 0)
+        for row in reversed(list(got.get("rows") or [])):
+            if str(row.get("judged_body_sha256") or "") != judged:
+                continue
+            # 旧行没有 `path_group` = 路径 1；坏值按 1 读（与读侧 `_fold_nontriviality`
+            # 同一个判据函数，不在这里另写一份容错）。
+            no = _SEC._row_path_group(row) or 1
+            if want >= 1 and no != want:
+                continue
+            level = _SEC._nontriviality_level(row.get("nontriviality"))
+            if level is None:
+                continue
+            label = _SEC.nontriviality_label(level)
+            material = {"statement_full": str(statement_full or ""),
+                        "proof_text": str(proof_text or "")}
+            return self._filing_reading(
+                {"checked": True, "decision": label, "nontriviality": level,
+                 "label": label, "nontriviality_tri": "computed",
+                 "nontriviality_basis": str(row.get("basis") or ""),
+                 "reason": ("同一 (stmt 身份, judged_body_sha) 已判过 ⇒ 不再判"
+                            "（业主 2026-11-19：同一份材料只能判一次）；"
+                            "读数沿用台账里那一行"),
+                 "reused": True,
+                 "reused_from": {"at": str(row.get("at") or ""),
+                                 "path_group": no, "judged_body_sha256": judged},
+                 "cost": {"ledger": "",
+                          "reason": "没发调用（同一份材料已判过）"},
+                 # 档位台账里已经有那一行 ⇒ 这一笔不重落（幂等），也不留「判过未落」。
+                 "record": {"recorded": False, "tri": "computed", "level": level,
+                            "label": label, "stmt_id": sid, "path_group": no,
+                            "reused": True,
+                            "reason": "同一材料已判过 ⇒ 不重判、也不重落"}},
+                material=material, stmt_id=sid, path_group=no)
+        return None
 
     def _record_filing_nontriviality(self, reading: Mapping | None, *, stmt_id: str,
                                      path_group: int, statement_full: str = "",
@@ -3571,12 +3680,30 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         return dict(sec.record_nontriviality(
             reading, stmt_id=stmt_id, path_group=int(path_group or 0),
-            statement_full=statement_full,
-            judged_body_sha256=_SEC._judged_body_sha(statement_full, proof_text),
+            statement_full=(str(statement_full or "")
+                            or str(reading.get("statement_full") or "")),
+            #: 判的是哪一版材料：判档那一格已经算过（`_filing_reading`）就用它 ——
+            #: 这里重算一次会让"判的"与"记的"分成两个公式。
+            judged_body_sha256=(str(reading.get("judged_body_sha256") or "")
+                                or _SEC._judged_body_sha(statement_full, proof_text)),
             landed_body_sha256=landed_body_sha256) or {})
 
     def _finish_filing_nontriviality(self, out: dict, reading: Mapping | None) -> dict:
-        """收尾这一笔的判档读数：成功已落 / 拒了留 unrecorded；T0 读数放回执给模型。
+        """收尾这一笔的判档读数：判过就必须有落处；T0 读数放回执给模型。
+
+        ## 不变式（业主 2026-11-19）
+
+        判过一次 ⇒ 要么档位台账多一行，要么决定台账多一行「判过未落」
+        （`fail_open=true`）。两本账都不许沉默。
+
+        改前这一臂只在 `out.ok is not True` 时才补留痕 ⇒「收方读稿登记」那条
+        成功早退（`ok=True`、回执里没有 `record` 键）两本账都沉默
+        （lp-ball-11 17:59:35：判了 T1、$0.002274，档位台账一笔都没有）。
+        现在改成"没有 `record` 就补"：成功那一笔把号与路径号交出来 ⇒ 落档位行；
+        交不出号 / 路径号 ⇒ `record_nontriviality` 留「判过未落」那一行。
+
+        受控拒 / 半途失败照旧用空号：那一笔的号可能不属于这次判的那一份材料，
+        拿它落行会把读数记到别的命题上。
 
         "只保留把 T0 读给模型"这一格住在动作层（判档也在这里，两件事不跨层）；
         `agent_loop._do_tool` 只把 `out["statement_tier"]` 抬到顶层形状。
@@ -3584,20 +3711,57 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if not isinstance(out, dict) or not isinstance(reading, Mapping) or not reading:
             return out
         got = dict(reading)
-        if not isinstance(got.get("record"), Mapping) and out.get("ok") is not True:
-            # 受控拒 / 半途失败：钱已经花了，号也没拿到 ⇒ 不落档位行，但留痕。
+        if not isinstance(got.get("record"), Mapping):
+            ok = out.get("ok") is True
             got["record"] = self._record_filing_nontriviality(
-                got, stmt_id="", path_group=0,
-                statement_full=str(got.get("statement_full") or ""))
+                got,
+                stmt_id=(str(got.get("stmt_id") or out.get("stmt_id") or "")
+                         if ok else ""),
+                path_group=(self._receipt_path_group(out, got) if ok else 0),
+                statement_full=str(got.get("statement_full") or ""),
+                proof_text=str(got.get("proof_text") or ""))
         from .. import secretary as _SEC
 
-        tier = _SEC.filing_tier_reading(got, stmt_id=str(out.get("stmt_id") or ""))
+        #: 号也认判档读数里那一格：`_filing_reading` 把它记在那一笔判的读数上，
+        #: 回执里未必有（成功早退那一支就是：`received` 有 `stmt_id`，不一定有路径号）。
+        _sid = str(out.get("stmt_id") or got.get("stmt_id") or "")
+        tier = _SEC.filing_tier_reading(got, stmt_id=_sid)
         if tier:
             out["statement_tier"] = dict(tier)
         rec = got.get("record")
         if isinstance(rec, Mapping):
             out.setdefault("nontriviality_record", dict(rec))
         return out
+
+    @staticmethod
+    def _receipt_path_group(out: Mapping, got: Mapping) -> int:
+        """这一笔落行的路径号（回执 / 判档读数 / 在册那一条的 canonical 号）。
+
+        三种形状都认：`path_group` 是 int、是 mapping（秘书回执）、或住在
+        `path_group_reading` 里（`_ingest_apply` 的读数）。都没有时退回在册那一行的
+        `proof_no` —— 能走到"成功已判"这一臂的，是"正文与在册那一版没有不同"那一档
+        （`carries_write=False`），它就是那一条命题已有的那条路径；
+        `_ingest_apply_with_nontriviality` 的 `want_no` 兜底是同一条口径。
+
+        没有在册行（例如新建那一笔的回执里没带号）⇒ 0：`record_nontriviality` 会因此
+        留「判过未落」，不猜一个号把读数记到别的路径上。
+        """
+        for src in (got.get("path_group"), out.get("path_group"),
+                    out.get("path_group_reading")):
+            raw = src.get("path_group") if isinstance(src, Mapping) else src
+            try:
+                no = int(raw or 0)
+            except (TypeError, ValueError):
+                no = 0
+            if no >= 1:
+                return no
+        row = out.get("row") if isinstance(out.get("row"), Mapping) else None
+        if row:
+            try:
+                return max(1, int(row.get("proof_no") or 1))
+            except (TypeError, ValueError):
+                return 1
+        return 0
 
     def _register_statement_impl(
         self,
@@ -3744,6 +3908,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                 "（2026-11-10 业主裁定 甲：概念与一般手稿同一条链，只是稿由 B 产出）。"
                 "这一笔整笔不写（`statements` 零新行、盘上零新文件）。",
                 proof_manuscript=str(proof_manuscript)[:120])
+        #: 这一条命题是不是已经在册（按 `statement_full` 的规范化值，判据在
+        #: `_existing_statement_for`）。为什么要在寻址之前算出来：D 的携带单是按
+        #: 命题号点名的，而 B 在"命题已在册、这一笔只是把 D 的稿收进来"这一档上手里
+        #: 唯一的号就是这个 —— 不把它喂进候选，携带单里的那一行永远对不上号
+        #: （`read_carried_manuscript` 只剩"按正文 sha 撞"那一条路，而正文恰好也还没写）。
+        #:
+        #: 2026-11-19（FIXJUDGE）：提到 NT2 判档之前 —— 判之前要先问"这一份材料是不是
+        #: 已经判过"（同一 `(stmt 身份, judged_body_sha)` 只判一次），而"stmt 身份"就是
+        #: 这一行。本函数只读 `statements`，`full` 在这之前之后都不再变，搬上来不改读数。
+        redelivery = self._existing_statement_for(full)
         # ---- NT2（2026-11-15 业主裁定）：判档是 B 处理一条收录的第一个动作 ----------
         #
         # "第一个"指第一个语义判断，不是第一个动作 —— 排在前面的只有确定性参数闸
@@ -3761,7 +3935,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         _nt.update(self._judge_filing_nontriviality(
             statement_full=full, statement=str(statement_text or ""),
             proof_text=str(proof_text or ""),
-            proofs=proofs, kind=kind_now))
+            proofs=proofs, kind=kind_now,
+            #: 判之前先按这一条在册命题问"同一份材料判过没有"（FIXJUDGE）。
+            #: 路径号此刻还不知道（归秘书）；不知道 ≠ 另一条路径 ⇒ 按"同一条"读。
+            stmt_id=str((redelivery or {}).get("stmt_id") or "")))
         origin = str(origin or "external_lit")
         if origin not in S.STATEMENT_ORIGINS:
             return _refuse("bad_origin",
@@ -3949,12 +4126,6 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                      f"（{type(exc).__name__}: {exc}）⇒ 整笔不写（读不到的稿不能当没有）"),
                     manuscript_source=_DS.SOURCE_NONE, manuscript_path=_raw_param)
             param_manuscript_path = _raw_param
-        #: 这一条命题是不是已经在册（按 `statement_full` 的规范化值，判据在
-        #: `_existing_statement_for`）。为什么要在寻址之前算出来：D 的携带单是按
-        #: 命题号点名的，而 B 在"命题已在册、这一笔只是把 D 的稿收进来"这一档上手里
-        #: 唯一的号就是这个 —— 不把它喂进候选，携带单里的那一行永远对不上号
-        #: （`read_carried_manuscript` 只剩"按正文 sha 撞"那一条路，而正文恰好也还没写）。
-        redelivery = self._existing_statement_for(full)
         # ---- 2026-11-08（业主）：收录时按语义查一圈"是不是在册的同一条" -------------
         #
         # 判据只有一处（`_resolve_same_statement`：秘书挑关键词 -> 台账检索 -> 秘书认定），
@@ -4646,6 +4817,19 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                     source=str(manuscript_source or ""))
                 if promotion:
                     received = {**received, "promoted_manuscript": promotion}
+                # ---- 2026-11-19（FIXJUDGE）：这一笔判的是哪一条 (stmt, 路径) --------
+                #
+                # 收尾那一臂（`_finish_filing_nontriviality`）要凭这两个号才落得下
+                # "一个路径一行"。改前这一支 `return` 时回执里没有路径号、判档读数里
+                # 也没有号 ⇒ 即便补落也只能写一条「判过未落」（lp-ball-11 17:59:35
+                # 就是两本账都沉默）。号从逐路径记录读（唯一实现 `_proof_path_reading`）；
+                # 读不出来就交 0，由收尾那一臂留痕，不猜。
+                _path_here = _path_read or self._proof_path_reading(
+                    stmt_id=str(redelivery.get("stmt_id") or ""),
+                    row=dict(redelivery or {}),
+                    manuscript_path=manuscript_path, proof_text=str(proof_text or ""))
+                _nt["stmt_id"] = str(redelivery.get("stmt_id") or "")
+                _nt["path_group"] = int(_path_here.get("path_group") or 0)
                 return received
 
         # 第九级：出处页码/行号的类型在写库前归一。
@@ -6628,6 +6812,10 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
                         store=self.store, statement=text,
                         origin=_ledger_origin(self.store, text),
                         notes=_landed_notes(self.store, text, stmt_id),
+                        # FIX186-E：把"这一条已经从猜想台账毕业"写成落盘事实（不是
+                        # 只在 notes 里留一句自由文本）——「待登记」视图与收工门的
+                        # `conjecture_rows` 都读这一格，已登记的从活跃集消失。
+                        registered_stmt_id=stmt_id,
                         actor=self.actor)
                 ledger = {"ok": bool(stmt_id), CL.PROMOTED_TO_STATEMENT: stmt_id,
                           "landing": dict(landed)}
@@ -8774,12 +8962,16 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             statement_full=str(row.get("statement_full") or ""),
             statement=str(row.get("statement_text") or ""),
             proof_text=str((cells.get("proof_text") or {}).get("value") or ""),
-            kind=str(row.get("kind") or "")))
+            kind=str(row.get("kind") or ""),
+            # FIXJUDGE：按目标命题问"这一份材料判过没有"；路径号用调用方点名的那一条
+            # （没点名就是 canonical 那条）—— 与下面落行用的是同一个号，两处不许分家。
+            stmt_id=str(target or ""),
+            path_group=int(path_group or want_no or 0)))
         got = self._ingest_apply(
             reading=reading, row=row, plan=plan, out=out, requested=requested,
             family=family, want_no=want_no, target=target, path=path,
             path_group=path_group)
-        if got.get("ok"):
+        if got.get("ok") and not isinstance(_nt.get("record"), Mapping):
             from .. import secretary as _SEC
 
             _pg = got.get("path_group")

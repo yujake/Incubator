@@ -1544,6 +1544,15 @@ def _stage_list_note(waiting_count: int) -> str:
         "判收（`lit.admit`）**不发号**：正式文献号由 `lit.admit_all` 在提交那一刻"
         "批量注册并回填，随后清表（`cleared_at` 打上、整份行归档在 "
         "data/lit_candidates/archive-<request_id>.jsonl）。"
+        # 2026-11-19（FIXBATCH ②）：这一句原先只活在收工门
+        # （`closing._check_literature_pending` 的 docstring）里 —— 那是收工那一刻才
+        # 跑到、模型读不到的地方。真机 lp-ball-11：`search_requests` 七条全部
+        # `done=true`，而 `lit_candidates` 还挂着 60 条 pending、`lit.stage_reject`
+        # 事件 0 条；A 在 final 里把"待裁还剩多少"读成"这一档已经收过工"。
+        # 落点选 `lit.stage_list` 的返回文案（A 每趟判收前都会读它），不动
+        # `closing.py`、也不动禁改区的 `specs/a.py`：事实不变，只换落点。
+        "A 的 `done=True` 只表示「这一条检索请求跑完了」，不等于「清表」；"
+        "收工闸数的是**全表**，不是当前委托、也不是那一条检索请求。"
         "标 `readable` 之前先 `text.extract(path=<全文路径>, lit_id=\"cand:<槽位>\")` "
         "抽出正文、再用 `fs.read` 读那份 `.txt` —— 没有这两步的事实，"
         "`lit.admit` 会以 `no_read_evidence` 整批拒并逐槽点名；"

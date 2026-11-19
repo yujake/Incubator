@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 import pytest
 
@@ -142,18 +143,32 @@ def test_the_pipeline_domain_covers_every_code_the_pipeline_can_emit() -> None:
 
 
 def test_the_gate_domain_covers_the_three_shapes(tmp_path: pathlib.Path) -> None:
-    """`tri_state_exit_code` 的三种形态（达成 / 没判 / 判了没达成）都 ⊆ gate 域。"""
+    """`tri_state_exit_code` 的三种形态（达成 / 没判 / 判了没达成）都 ⊆ gate 域。
+
+    2026-11-19（ROOTGATE-①）之后 0 只给完整的八格门 + 两条机器读数都真；
+    所以三态按 `closing.closing_verdict` 的入口造（不是拿一格 `status={"a": "pass"}`
+    的缩面报告去冒充八格）。
+    """
     ws = tmp_path / "ws"
     ws.mkdir()
     Store(ws).init()
-    # 2026-11-03（153-U-03）：这一条问的是"gate 域里有哪几个码"，三态直接按
-    # `ClosingReport` 造：空工作区的机器八格不全 pass ⇒ 造不出 0 那一档，而 0 只在
-    # "两边都说行"时给（见 `closing.tri_state_exit_code`）。
-    rep = CL.ClosingReport(status={"a": "pass"}, m_verdict=None)
-    codes = {CL.tri_state_exit_code(rep)}
-    rep_met = CL.ClosingReport(status={"a": "pass"}, m_verdict={"met": True})
-    rep_not = CL.ClosingReport(status={"a": "pass"}, m_verdict={"met": False})
-    codes |= {CL.tri_state_exit_code(rep_met), CL.tri_state_exit_code(rep_not)}
+    clean_retire = {"checked": True, "complete": True, "reason": "夹具：树已清"}
+    clean_programs = {"checked": True, "running_count": 0, "reason": "夹具：程序已停"}
+
+    def _rep(*, met: Any = True, wired: bool = True) -> CL.ClosingReport:
+        caliber = (CL.machine_caliber(m_says_done=bool(met), retire=clean_retire,
+                                      programs=clean_programs)
+                   if wired else CL.machine_caliber(m_says_done=bool(met)))
+        return CL.ClosingReport(
+            status={name: "pass" for name in CL.DEFAULT_CHECKS},
+            full_gate=True,
+            m_verdict=None if met is None else {"met": bool(met)},
+            readings={"machine_caliber": caliber})
+
+    codes = {CL.tri_state_exit_code(_rep()),                 # pass ⇒ 0
+             CL.tri_state_exit_code(_rep(met=None)),         # 没人判过 ⇒ 2
+             CL.tri_state_exit_code(_rep(met=False)),        # M 说没做到 ⇒ 1
+             CL.tri_state_exit_code(_rep(wired=False))}      # 机器读数没接线 ⇒ 2
     assert codes == {0, 1, 2}, codes
     assert codes <= set(DOMAINS["gate"]), sorted(codes - set(DOMAINS["gate"]))
 

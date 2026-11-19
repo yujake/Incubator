@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""稿与计划的三态生命周期：活跃 / 完工 / 放弃 —— 以及「活跃集」的唯一读数。
+"""稿、计划与命题的三态生命周期：活跃 / 完工 / 放弃 —— 以及「活跃集」的唯一读数。
 
 ## 业主口径（2026-11-18，逐字）
 
@@ -43,15 +43,33 @@
 活跃集，但放弃是更具体的那个事实）。`unchecked`（颁发表读不出来 / 命题台账读不出来）
 ⇒ `checked=False` + 空 `state`：不折成活跃（三态纪律：没查成不等于还活着）。
 
+## 命题的三态（2026-11-19，FIX186-A）
+
+命题面（`statements.status`）也必须走同一入口：:func:`state_of_statement`。
+三档按「它还占不占活跃集」划，词表仍以 `schema.STATEMENT_STATUSES` 为唯一真身，
+本模块只写「哪一档落哪一类」这张映射：
+
+| 原始 `status` | 三态 | 为什么 |
+|---|---|---|
+| `active` / `disputed` / `pending_definition` | `active` | 还在推（争议未裁、定义待补都不是「结束」） |
+| `superseded` | `completed` | 被后来的一条取代：走到了头（取代者还在） |
+| `abandoned` / 错误那一档 | `abandoned` | 放弃与「标记为错误」都是退休态，从活跃集踢出 |
+
+错误那一档不从本模块另抄一份词：映射按补集从 `STATEMENT_STATUSES` 派生
+（未落在活跃 / 完工两档的全部归「放弃」），于是 `refuted` 与将来的 `error`
+自动同档，而新增一个状态词时导入期的分区断言会先炸。
+
 ## 读不到 / 未知状态
 
 计划行上出现不在 `ATTACK_STATUSES` 里的状态 ⇒ `checked=False` + 空 `state`，并在
 :func:`active_plans` 的 `unjudged` 里逐条列出 —— 不许把它读成活跃（也没资格读成完工）。
+命题行同理（不在 `STATEMENT_STATUSES` 里 ⇒ `checked=False`）。
 """
 from __future__ import annotations
 
 from typing import Any, Mapping
 
+from . import errorstate as _ES
 from . import schema as _S
 
 #: 三态（闭集）。
@@ -71,6 +89,47 @@ PLAN_STATE_OF: dict[str, str] = {
     **{s: COMPLETED for s in PLAN_COMPLETED_STATUSES},
     ABANDONED: ABANDONED,
 }
+
+#: 命题的三档原始状态（不写词表里的具体词，只写「哪几档是活跃 / 完工」）。
+#:
+#: 「放弃」那一档不列：它是 `STATEMENT_STATUSES` 的补集 —— 错误那一档的词
+#: （今天 `refuted`，词表补丁落地后 `error`）由 `errorstate.ERROR_WORDS` 定义，
+#: 本模块抄一份就会在补丁落地那天分家。补集写法的负控见
+#: `tests/test_lifecycle_three_states_single_source.py` 的 f 条（打桩成全是活跃 ⇒ 红）。
+STATEMENT_ACTIVE_STATUSES: tuple[str, ...] = ("active", "disputed", "pending_definition")
+STATEMENT_COMPLETED_STATUSES: tuple[str, ...] = ("superseded",)
+
+#: 命题的三态映射（`status` ⇒ 三态；闭集，键都在 `STATEMENT_STATUSES` 里）。
+STATEMENT_STATE_OF: dict[str, str] = {
+    **{s: ACTIVE for s in STATEMENT_ACTIVE_STATUSES},
+    **{s: COMPLETED for s in STATEMENT_COMPLETED_STATUSES},
+    **{s: ABANDONED for s in _S.STATEMENT_STATUSES
+       if s not in STATEMENT_ACTIVE_STATUSES
+       and s not in STATEMENT_COMPLETED_STATUSES},
+}
+
+#: 导入期分区断言：活跃 / 完工两档都在词表里，且「放弃」恰是退休那一列
+#: （`abandoned` + `errorstate.ERROR_WORDS`，与 `manuscriptretire.RETIRED_STATUSES`
+#: 同一个派生）。新增一个状态词而没在活跃 / 完工两档里点名 ⇒ 它会被静默算成「放弃」；
+#: 这里先炸（三态是闭集，不许靠补集悄悄收编新词）。
+_NAMED_STATEMENT_STATES: set[str] = (
+    set(STATEMENT_ACTIVE_STATUSES) | set(STATEMENT_COMPLETED_STATUSES)
+)
+_STATEMENT_RETIRED_STATUSES: set[str] = {ABANDONED, *_ES.ERROR_WORDS}
+assert _NAMED_STATEMENT_STATES <= set(_S.STATEMENT_STATUSES), (
+    "lifecycle 的命题三档点名了词表里没有的状态："
+    f"{sorted(_NAMED_STATEMENT_STATES - set(_S.STATEMENT_STATUSES))}"
+)
+assert set(STATEMENT_STATE_OF) == set(_S.STATEMENT_STATUSES), (
+    "命题三态映射没有覆盖 STATEMENT_STATUSES："
+    f"缺 {sorted(set(_S.STATEMENT_STATUSES) - set(STATEMENT_STATE_OF))}"
+)
+assert set(STATEMENT_STATE_OF) - _NAMED_STATEMENT_STATES == _STATEMENT_RETIRED_STATUSES, (
+    "命题三态映射的「放弃」那一档与 errorstate 的退休词表分家了："
+    f"映射多出 {sorted(set(STATEMENT_STATE_OF) - _NAMED_STATEMENT_STATES - _STATEMENT_RETIRED_STATUSES)}、"
+    f"少了 {sorted(_STATEMENT_RETIRED_STATUSES - set(STATEMENT_STATE_OF))}"
+    " ⇒ 新增状态词要先在这里点名（活跃 / 完工），或先认它是不是退休"
+)
 
 
 def _reading(kind: str, ref: Any, *, state: str = "", raw: str = "",
@@ -110,6 +169,41 @@ def state_of_plan(row: Any) -> dict[str, Any]:
     state = PLAN_STATE_OF[status]
     return _reading("plan", ref, state=state, raw=status,
                     why=(f"status={status!r} ⇒ {state}"))
+
+
+def state_of_statement(row: Any) -> dict[str, Any]:
+    """命题行（或裸 `status` 字符串）⇒ 三态读数（`kind="statement"`）。
+
+    这是命题面唯一的「它还占不占活跃集」入口：`closing` / `agent_loop` 那几处
+    原先各自写 `if status == "abandoned": continue`，改后一律调本函数
+    （静态判据 `tests/test_lifecycle_three_states_single_source.py` 的 g 条守着）。
+
+    - 行上没有 `status` ⇒ 按 `active`（`Statement` 的默认值；老行可能缺这一格）；
+    - 状态不在 `STATEMENT_STATUSES` 里 ⇒ `checked=False` + `state=""`（不折成活跃，
+      也不折成放弃）；
+    - `raw` 原样保留：调用方要写"凭什么退休"（放弃标记 / 错误凭据）时读它，
+      但"还在不在活跃集"只读 `state`。
+    """
+    if isinstance(row, Mapping):
+        got = dict(row)
+        status = str(got.get("status") or ACTIVE)
+        ref = str(got.get("stmt_id") or got.get("statement_id") or "")
+    else:
+        status = str(row or ACTIVE)
+        ref = ""
+    if status not in STATEMENT_STATE_OF:
+        return _reading("statement", ref, raw=status, checked=False,
+                        why=(f"命题状态 {status!r} 不在 STATEMENT_STATUSES "
+                             f"{list(_S.STATEMENT_STATUSES)} 里 ⇒ 这一格判不了"
+                             "（不折成活跃，也不折成放弃）"))
+    state = STATEMENT_STATE_OF[status]
+    return _reading("statement", ref, state=state, raw=status,
+                    why=f"status={status!r} ⇒ {state}")
+
+
+def statement_is_active(row: Any) -> bool:
+    """这一行命题现在还在活跃集里吗（`state_of_statement` 的薄包装，供判据读）。"""
+    return is_active(state_of_statement(row))
 
 
 def state_of_manuscript(store: Any, rel: Any) -> dict[str, Any]:
@@ -221,6 +315,8 @@ def plan_is_active(row: Any) -> bool:
 __all__ = [
     "ACTIVE", "COMPLETED", "ABANDONED", "STATES",
     "PLAN_COMPLETED_STATUSES", "PLAN_STATE_OF",
-    "is_active", "plan_is_active", "state_of_plan", "state_of_manuscript",
+    "STATEMENT_ACTIVE_STATUSES", "STATEMENT_COMPLETED_STATUSES", "STATEMENT_STATE_OF",
+    "is_active", "plan_is_active", "statement_is_active",
+    "state_of_plan", "state_of_statement", "state_of_manuscript",
     "active_plans",
 ]

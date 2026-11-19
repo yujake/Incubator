@@ -75,7 +75,8 @@ COST_DATA_KEYS: tuple[str, ...] = ("by_role", "by_scope", "total")
 #: 盘上 / 不是一个号），那一份 data 里的 `cells` 是空的而不是七格 `unknown` ——
 #: "门根本没跑"与"跑了、七格都没查成"必须长得不一样。
 GATES_DATA_KEYS: tuple[str, ...] = ("cells", "counts", "machine_pass", "m_says_done",
-                                    "can_close", "closable", "verdict", "refusal")
+                                    "can_close", "closable", "verdict",
+                                    "closing_verdict", "refusal")
 
 #: 读数名 → 它的 `data` 键集。判据从这一张表取期望值（不在测试里手抄第二份）。
 READOUT_DATA_KEYS: dict[str, tuple[str, ...]] = {
@@ -582,7 +583,8 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
     why = _scan_problem(scanned, need=("events", "sessions"))
     empty = {"cells": [], "counts": {s: 0 for s in CELL_STATES},
              "machine_pass": False, "m_says_done": False, "can_close": None,
-             "closable": False, "verdict": None, "refusal": None}
+             "closable": False, "verdict": None, "closing_verdict": None,
+             "refusal": None}
     if why:
         return _envelope(checked=False, reason=why, data=empty)
     store = scanned.get("store")
@@ -637,6 +639,9 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
             "要看某一趟用 `agentflow closing --sid <号>`（或 API `gates_readout(sid=…)`）。")))
     # 逐格与计数只从这一处取（与网页那头同一个函数，见 `gate_cells` 的注释）。
     cells, counts = gate_cells(report)
+    # 一份权威结论（ROOTGATE-②）：`closing_verdict` 是唯一判据；`verdict` 这个键
+    # 早已是 M 的 `m_verdict`，所以权威结论另起一格，两个名字不混。
+    authoritative = getattr(report, "verdict", None)
     data: dict[str, Any] = {
         "cells": cells, "counts": counts,
         "machine_pass": bool(report.machine_pass),
@@ -646,6 +651,8 @@ def gates_readout(target: Any, *, project_dir: str = "", report_path: str = "",
         "can_close": report.can_close,
         "closable": bool(report.closable),
         "verdict": dict(report.m_verdict) if report.m_verdict else None,
+        "closing_verdict": (dict(authoritative)
+                            if isinstance(authoritative, Mapping) else None),
         "refusal": None,
     }
     return _envelope(checked=True, reason="", data=data, problems=problems)
@@ -659,16 +666,11 @@ READOUTS = {"errors": errors_readout, "flow": flow_readout,
 # ---------------------------------------------------------------- 人读的呈现
 
 
-def _shown_width(text: str) -> int:
-    """显示宽度（CJK 占两格）。表格对齐只靠它——靠 `len` 会把中文表头错开。"""
-    shown = 0
-    for ch in text:
-        shown += 2 if ord(ch) > 0x2E7F else 1
-    return shown
-
-
-def _pad(text: str, width: int) -> str:
-    return text + " " * max(0, width - _shown_width(text))
+#: 等宽小表不在这里实现：`errorstats._table_lines` 是唯一真身（本模块与
+#: `agentflow stats` 的文本输出共用同一份对齐规则）。2026-11-19 SPLITREAD：
+#: 此前 `_shown_width` / `_pad` / `_table` 是那一份的逐行副本，只在 docstring 上不同。
+#: 调用点一律写 `ES._table_lines(...)` —— 走模块属性而不是 `from ... import`，
+#: 这样把 `errorstats` 那一份打成空表时，这里的表也跟着消失（判据的机器读数）。
 
 
 #: 人读表里那一列原话最多显示多少字（全文在 `--json` 的 `data.cells[].detail` 里）。
@@ -679,21 +681,6 @@ def _clip(text: str, limit: int = DETAIL_COL_CHARS) -> str:
     """缩到 `limit` 字（超了打一个省略号）。只改呈现，不改 `data` 里的原文。"""
     one = " ".join(str(text or "").split())
     return one if len(one) <= limit else one[:limit] + "…"
-
-
-def _table(head: list[str], rows: list[list[str]]) -> list[str]:
-    """等宽小表（按显示宽度对齐；每列至少四格）。"""
-    widths: list[int] = []
-    for i in range(len(head)):
-        widest = _shown_width(head[i])
-        for row in rows:
-            widest = max(widest, _shown_width(row[i]))
-        widths.append(max(widest, 4))
-    lines = ["  ".join(_pad(head[i], widths[i]) for i in range(len(head))).rstrip(),
-             "  ".join("-" * widths[i] for i in range(len(head)))]
-    lines += ["  ".join(_pad(row[i], widths[i]) for i in range(len(head))).rstrip()
-              for row in rows]
-    return lines
 
 
 def _head(kind: str, readout: Mapping[str, Any]) -> list[str]:
@@ -732,7 +719,7 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
                     + [str((data.get("role_total") or {}).get(role, 0))]
                     for role in sorted(data.get("role_total") or {})]
             rows.append(["合计"] + [str(n) for _c, n in cats] + [str(data.get("total", 0))])
-            lines += ["", *_table(head, rows)]
+            lines += ["", *ES._table_lines(head, rows)]
             lines += ["", "类目释义："]
             meanings = dict(ES.ERROR_CATEGORIES)
             lines += [f"  {c}: {meanings.get(c, '')}" for c, _n in cats]
@@ -750,7 +737,7 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
             t = data.get("totals") or {}
             rows.append(["合计", str(t.get("steps", 0)), str(t.get("blocked", 0)),
                          str(t.get("relayed", 0)), ""])
-            lines += ["", *_table(head, rows)]
+            lines += ["", *ES._table_lines(head, rows)]
     elif kind == "cost":
         for label, key in (("按角色", "by_role"), ("按阶段（scope）", "by_scope")):
             slots = data.get(key) or {}
@@ -764,7 +751,7 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
                      str(v.get("tokens_out", 0)), str(v.get("tokens_total", 0)),
                      str(v.get("attempts", 0)), str(v.get("rows", 0))]
                     for name, v in slots.items()]
-            lines += _table(head, rows)
+            lines += ES._table_lines(head, rows)
         total = data.get("total") or {}
         lines += ["", "合计：" + (f"{total.get('usd', 0):.6f} 美元 / "
                                  f"{total.get('tokens_total', 0)} token / "
@@ -780,7 +767,7 @@ def render_readout(kind: str, readout: Mapping[str, Any]) -> list[str]:
             head = ["格", "四态", "原话（缩 46 字，全文见 --json）"]
             rows = [[c.get("name", ""), c.get("status", ""), _clip(str(c.get("detail") or ""))]
                     for c in cells]
-            lines += ["", *_table(head, rows)]
+            lines += ["", *ES._table_lines(head, rows)]
             counts = data.get("counts") or {}
             lines += ["", "计数：" + "  ".join(f"{s}={counts.get(s, 0)}" for s in CELL_STATES),
                       f"机器口径 machine_pass={bool(data.get('machine_pass'))}；"

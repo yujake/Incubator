@@ -1685,9 +1685,33 @@ export interface GateTable {
   closable: boolean;
   verdict_at: string;
   verdict_met: boolean | null;
+  closing_verdict: ClosingVerdict | null;
   blockers: GateBlocker[];
   blocking_cells: GateCell[];
   machine_pass_cause: string;
+}
+
+/** 出处：GateTable.closing_verdict —— `closing.closing_verdict` 的逐字读数（一份权威结论：verdict / exit_code / 八格逐格 / 机器读数 / blockers）。 */
+export interface ClosingVerdict {
+  verdict: string;
+  exit_code: number;
+  authoritative: boolean;
+  cells: ClosingVerdictCell[];
+  counts: Record<string, number>;
+  m_says_done: boolean;
+  retire: Record<string, unknown>;
+  programs: Record<string, unknown>;
+  blockers: GateBlocker[];
+  machine_pass: boolean;
+  can_close: boolean | null;
+  reason: string;
+}
+
+/** 出处：GateTable.closing_verdict.cells[] —— 一格（三态 + why 原话）。 */
+export interface ClosingVerdictCell {
+  check: string;
+  status: string;
+  why: string;
 }
 
 /** 出处：GateTable.blockers[] —— 不进八格、却拦 machine_pass 的一条 Finding（`closing.Finding.to_dict()` 的 check / code / level / detail）。 */
@@ -1713,10 +1737,13 @@ export interface MachineCaliber {
   reason: string;
   retire_checked: boolean;
   retire_complete: boolean;
+  retire_projected: boolean;
+  retire_auto_retire: Record<string, unknown>;
   retire_open_items: number;
   retire_nodes: number;
   retire_states: Record<string, number>;
   programs_checked: boolean;
+  programs_ok: boolean;
   programs_running_count: number;
   programs_unowned: string[];
   source: SourceRef;

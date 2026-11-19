@@ -551,7 +551,10 @@ def test_the_gate_lists_unsigned_without_blocking(tmp_path):
     _verify(st)
     rep = _closing(st)
     assert rep.machine_pass is True, rep.to_dict()
-    assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()
+    # 2026-11-19（ROOTGATE-①）：这一份只跑读数层（`checks=()`），不是完整的八格门
+    # ⇒ 权威结论是 unknown（退出码 2）。0 只给八格全过的那一份；读数层不拦门
+    # 这件事由 `blockers == []` / `machine_pass` 证明，不由 0 证明。
+    assert CL.tri_state_exit_code(rep) == 2, rep.to_dict()
     assert [f for f in rep.blockers if f.check == "statements_unsigned"] == []
     reading = rep.readings["statements_unsigned"]
     items = list(reading.get("unsigned_manuscripts") or [])
@@ -596,7 +599,8 @@ def test_the_gate_is_green_when_every_statement_is_signed_or_abandoned(tmp_path)
     rep = _closing(st)
     assert rep.blockers == [], [f.to_dict() for f in rep.findings]
     assert rep.machine_pass is True, rep.to_dict()
-    assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()
+    # 同上：读数层（`checks=()`）不是完整八格门 ⇒ 2（没查成），不是 0。
+    assert CL.tri_state_exit_code(rep) == 2, rep.to_dict()
 
 
 # ------------------------------------------------------------------ ③ 放弃出口（写侧）

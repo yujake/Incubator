@@ -2519,7 +2519,8 @@ def _h_lit_stage_withdraw(ctx: _Ctx, slot: str, reason_code: str, note: str = ""
     })
 
 
-def _h_lit_stage_reject(ctx: _Ctx, slot: str, reason_code: str, note: str = "") -> Any:
+def _h_lit_stage_reject(ctx: _Ctx, slot: str | None = None, reason_code: str = "",
+                        note: str = "", slots: Iterable[str] | None = None) -> Any:
     """``lit.stage_reject``：审内容后拒收 —— 写 `reject_reason` + 受控 `reason_code`，保留行。
 
     `reason_code` 用 `rejected_off_topic` / `rejected_low_quality` /
@@ -2528,7 +2529,30 @@ def _h_lit_stage_reject(ctx: _Ctx, slot: str, reason_code: str, note: str = "") 
     可读性判定不在这里收（这一件是拒收，不是入库）：判拒时若已经有判定（例如先试过
     `lit.admit` 带 `availability=extract_failed` 被闸挡下），台账里那一条会原样留着，
     报告照常逐条列；没有就显示 `未查`。要补可读性判定走 `lit.stage_list` 看回读后的那一格。
+
+    ## 两种目标形（2026-11-19 FIXBATCH ①）
+
+    - `slot=<一个槽位>`：老的单槽形，返回那七格（逐字不动）；
+    - `slots=[…]`：批量形 —— 一次调用判拒多个槽位，内部对每一条仍然调
+      `litstage.reject`（受控理由码 + 逐行写 `reject_reason`，写口一个字没动）。
+      存在的理由（真机 lp-ball-11）：60 条待裁跨 6 个委托，A 的 final 逐字写
+      「逐槽判拒需 60 次调用，超出剩余预算」而按委托分批只要 6 次。批量只省调用
+      次数，不省逐条判定：混进无效槽位时，有效的照样落盘、无效的受控拒并
+      点名（`refused[]`），不许一条坏的全笔作废；一条都没落成时回 `kind=all_refused`
+      （"都没落"不许读成"都落了"）。
     """
+    if slots is not None:
+        return _h_lit_stage_reject_many(ctx, slots, reason_code, note)
+    if not str(slot or "").strip():
+        # `slot` 不再是 schema 的必填格（批量形不给它）⇒ 两个都没给时在这里受控拒，
+        # 而不是拿 None 去查表（那样报的是 `unknown_slot`，会把人指向错误的下一步）。
+        return fail("判拒要给一个槽位（`slot`）或一组槽位（`slots`）",
+                    kind="no_target")
+    return _h_lit_stage_reject_one(ctx, slot, reason_code, note)
+
+
+def _h_lit_stage_reject_one(ctx: _Ctx, slot: str, reason_code: str, note: str = "") -> Any:
+    """单槽形（老路）：落一行、回那七格。判拒的写口与口径都在 `litstage.reject` 里。"""
     from ..litstage import reject
 
     try:
@@ -2543,6 +2567,47 @@ def _h_lit_stage_reject(ctx: _Ctx, slot: str, reason_code: str, note: str = "") 
         "title": got["title"],
         "request_id": got["request_id"],
         "batch": got["batch"],
+    })
+
+
+def _h_lit_stage_reject_many(ctx: _Ctx, slots: Iterable[str], reason_code: str,
+                             note: str = "") -> Any:
+    """批量形：逐条判拒，有效的落盘、无效的受控拒并点名（正文见 `_h_lit_stage_reject`）。
+
+    逐条各自成一个 `litstage.reject` 事务（不合成一个事务）：行级写口只此一处
+    （`litstage._terminal`），批量这一层只负责"跑完这一列并如实分别记账"。合进一个
+    事务会让一条坏槽位把整批回滚 —— 那正是这条判据要防的"整体失败"。
+    """
+    from ..litstage import reject
+
+    wanted = [str(s).strip() for s in (slots or []) if str(s or "").strip()]
+    if not wanted:
+        return fail("批量判拒要至少给一个槽位（空列表不许当成「都判过了」）",
+                    kind="no_target")
+    rejected: list[dict] = []
+    refused: list[dict] = []
+    for slot in wanted:
+        try:
+            got = reject(ctx.store, slot, reason_code, note, actor=ctx.actor)
+        except (LitStageError, StoreError, ValueError, TypeError) as exc:  # noqa: BLE001
+            # 逐槽受控拒：`kind` 从 `litstage` 的受控错里取（`unknown_slot` /
+            # `not_pending` / `bad_reason_code` …），不自己另造一套分类。
+            refused.append({
+                "slot": slot,
+                "why": str(exc) or type(exc).__name__,
+                "code": str(getattr(exc, "kind", "") or "unexpected"),
+            })
+            continue
+        rejected.append(got)
+    if not rejected:
+        return fail(
+            f"这一批 {len(wanted)} 个槽位一条都没判成（全表状态没有任何一行被改成 rejected）",
+            kind="all_refused", count=0, slots=wanted, refused=refused)
+    return ok({
+        "slots": wanted,
+        "count": len(rejected),
+        "rejected": rejected,
+        "refused": refused,
     })
 
 
@@ -2947,29 +3012,47 @@ def _lit_stage_withdraw(ctx, slot, reason_code, note=""):
 
 @tool(
     "lit.stage_reject",
-    "审内容后拒收某一槽：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / "
-    "overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。",
+    "审内容后拒收：落 `rejected` + 受控理由码（rejected_off_topic / rejected_low_quality / "
+    "overlap_without_new_content / duplicate_doi）+ 一句说明；行保留、不物理删除。"
+    "**一次可判拒多个槽位**（`slots=[…]`，按委托分批用）：有效的照常落盘，无效的受控拒并"
+    "逐条点名，不许一条坏的把整批作废。",
     {
         "type": "object",
         "properties": {
-            "slot": {"type": "string", "minLength": 1, "maxLength": 40},
+            "slot": {"type": "string", "minLength": 1, "maxLength": 40,
+                     "description": "单槽形：判拒这一个槽位（与 slots 二选一）"},
+            "slots": {"type": "array", "items": {"type": "string", "minLength": 1,
+                                                 "maxLength": 40},
+                      "minItems": 1, "maxItems": 200,
+                      "description": "批量形：一次判拒这几个槽位（同一个理由码与说明）；"
+                                     "逐条落盘，无效的进 refused[] 点名"},
             "reason_code": {"type": "string", "enum": list(S.CANDIDATE_REASON_CODES)},
             "note": {"type": "string", "maxLength": 400},
         },
-        "required": ["slot", "reason_code"],
+        "required": ["reason_code"],
         "additionalProperties": False,
     },
     side_effect="write_local",
     roles=("A",),
+    # 2026-11-19（FIXBATCH ①）：批量形。单槽形那七格逐字不动（老读者照读）；
+    # 批量形另给 slots / count / rejected[] / refused[]。为什么必须分开写：
+    # 单槽形是"一次判决一份回执"，批量形是"逐条判决 + 逐条点名"，两者的键不能混。
     returns=(
-        "{'slot','status','reason_code','reason','title','request_id','batch'}；"
-        "失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)"
+        "单槽形（给 slot）：{'slot','status','reason_code','reason','title','request_id','batch'}；"
+        "批量形（给 slots）：{'slots','count','rejected','refused'}；"
+        "slots[] 是这一次点名要判拒的槽位号；"
+        "rejected[] 每项是 {'slot','status','reason_code','reason','title','request_id','batch'}"
+        "（与单槽形同形）；"
+        "refused[] 每项是 {'slot','why','code'}（无效 / 已判过的槽位在这里逐条点名，"
+        "有效的那些照常落盘）；"
+        "失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/no_target/"
+        "all_refused/store_error) 之一 + 明细"
     ),
     tags=("lit", "stage", "reject"),
 )
-def _lit_stage_reject(ctx, slot, reason_code, note=""):
+def _lit_stage_reject(ctx, slot=None, reason_code="", note="", slots=None):
     """lit.stage_reject 的工具体。"""
-    return _h_lit_stage_reject(ctx, slot, reason_code, note)
+    return _h_lit_stage_reject(ctx, slot, reason_code, note, slots)
 
 
 @tool(

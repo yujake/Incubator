@@ -1715,6 +1715,15 @@ CONDITIONAL_KEYS: dict[str, frozenset[str]] = {
     # `test_the_incomplete_path_returns_the_problem_cells_it_declares` 单独取样。
     # 这不是放宽：主路径那次观测仍逐格核其余声明键，两条路子合起来每条声明都见过一次实跑。
     "doc.mapping_cells": frozenset({"cell", "why"}),
+    # 2026-11-19（FIXBATCH ①）：`lit.stage_reject` 有两形 —— 单槽形（`slot=`，探针走的就是
+    # 这一支：七格）与批量形（`slots=[…]`：`slots` / `count` / `rejected[]` / `refused[]`，
+    # 其中 `refused[]` 的元素带 `why` / `code`）。批量形那一次调用的入参与单槽形不同，
+    # 探针只喂得进一种，所以这六格按"另一条取样路径"核：
+    # `test_the_batch_path_returns_the_conditional_reject_keys`（真的带一条有效槽 +
+    # 一条无效槽，`refused[]` 因此非空）。这不是放宽：删掉这六格登记，
+    # `test_declared_keys_are_a_subset_of_what_the_handler_actually_returns` 立刻会报
+    # "声明了但实现没给"。
+    "lit.stage_reject": frozenset({"slots", "count", "rejected", "refused", "why", "code"}),
 }
 
 
@@ -1986,6 +1995,68 @@ def test_the_loop_path_returns_the_conditional_keys_it_declares(
         "其余声明键在阻塞档上缺席了 —— 条件键的登记不该顺带放过任何一条：",
         sorted(rest - (blocking.keys or set())),
     )
+
+
+def _batch_reject_data(registry: ToolRegistry) -> dict:
+    """按批量形取样 `lit.stage_reject`：一条有效槽 + 一条无效槽。
+
+    为什么必须带那条无效槽：`refused[]` 是"无效 / 已判过的槽位逐条点名"那一格，
+    只喂有效槽时它恒为 `[]`，元素里的 `why` / `code` 两格就永远观察不到 ——
+    而它们正是"混合批次不许整体失败"这条承诺的读数。
+    """
+    added = registry.call("lit.stage_add", request_id="r-000901",
+                          entries=[{"title": "批量判拒取样", "doi": "10.9101/fixbatch",
+                                    "provider": "stub", "year": 2026, "type_code": "J",
+                                    "relevance": "取样：只验批量形的键集合"}])
+    assert added.ok, added.error
+    slot = str(added.data["staged"][0]["slot"])
+    res = registry.call("lit.stage_reject", slots=[slot, "999998"],
+                        reason_code="rejected_off_topic", note="取样：批量形")
+    assert res.ok, (res.meta.get("kind"), res.error)
+    return dict(res.data)
+
+
+def test_the_batch_path_returns_the_conditional_reject_keys(
+    registry: ToolRegistry, observations: dict[str, Observation]
+) -> None:
+    """批量形那六格按「一次判拒多个槽位」取样：真的都在，且读数不是空壳。
+
+    补的是 `test_declared_keys_are_a_subset_of_what_the_handler_actually_returns` 的
+    取样口径（见 `CONDITIONAL_KEYS` 的第三条）：探针一次只喂得进一种目标形，
+    所以批量形的六格换一条路径来核 —— 扣掉它们之后，其余声明键仍由探针那次
+    真调用逐格核；两条路子合起来，`returns=` 里每一条都仍然有过一次"实现真给了"。
+
+    读数的另一半同样是判据：`count==1`（无效那条不许算成落盘）、`refused` 恰好一条
+    且点名那条无效槽 —— 六格若是空壳（`0` / `[]`），"声明 ⊆ 实跑"照样成立而承诺的
+    事情没发生。
+    """
+    name = "lit.stage_reject"
+    data = _batch_reject_data(registry)
+    # 六格里四格在顶层、两格（`why` / `code`）在 `refused[]` 的元素上 —— 声明是"任意嵌套层
+    # 取并集"，所以登记表也只记那六格；但"真的在"必须逐层看，不能拿顶层 `in` 蒙过去。
+    top = {"slots", "count", "rejected", "refused"}
+    nested = CONDITIONAL_KEYS[name] - top
+    assert top | nested == set(CONDITIONAL_KEYS[name])
+    for key in sorted(top):
+        assert key in data, (f"声明里承诺的 `{key}` 在批量形上也没出现", sorted(data))
+    for key in sorted(nested):
+        assert key in data["refused"][0], (
+            f"声明里承诺的 `{key}` 在 `refused[]` 的元素上没出现", data["refused"])
+    assert data["count"] == 1, data
+    assert len(data["rejected"]) == 1 and data["rejected"][0]["status"] == "rejected", data
+    assert len(data["refused"]) == 1 and data["refused"][0]["slot"] == "999998", data
+    assert data["refused"][0]["code"] == "unknown_slot", data["refused"]
+    assert str(data["refused"][0]["why"]).strip(), data["refused"]
+    # 单槽形那一次观测必须仍然是"其余声明键一条不缺"（否则这条只是把缺口挪走了）。
+    blocking = observations[name]
+    assert blocking.comparable, (blocking.ok, blocking.kind, blocking.error)
+    rest = shared_declaration.declared_keys(registry.get(name).returns) - CONDITIONAL_KEYS[name]
+    assert not (rest - (blocking.keys or set())), (
+        "其余声明键在单槽形上缺席了 —— 批量形的登记不该顺带放过任何一条：",
+        sorted(rest - (blocking.keys or set())),
+    )
+
+
 def test_the_proof_path_returns_the_conditional_v_sign_keys(
     registry: ToolRegistry, observations: dict[str, Observation],
     monkeypatch: pytest.MonkeyPatch,

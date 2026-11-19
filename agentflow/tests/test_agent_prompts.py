@@ -2680,7 +2680,14 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   （版本行已归一）。逐格旧值 → 新值：E 36668798… → f1dbf365…；G 88294e2d… → 46333999…。
 # 十一格不是手抄：`temp/batch5/recompute_digests.py`（导入本文件的 `_surface_digest`，
 # 先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段）现算，changed = ['E','G']。
-_FROZEN_PROMPT_VERSION = "p298"
+# p298 → p299（2026-11-19，FIXBATCH）：`lit.stage_reject` 收批量形参 `slots`（一次调用
+#   判拒多个槽位；内部逐条仍走 `litstage.reject`），它的 summary 因此改了一句 ——
+#   `lit.stage_reject` 的 roles 只有 A ⇒ A 的 `tools_lines` 那一行换值，其余十格逐字未动。
+#   变化格 = ['A']；A 13e23d0b… → 34047f10…。
+#   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
+#   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
+#   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
+_FROZEN_PROMPT_VERSION = "p299"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2949,7 +2956,7 @@ _FROZEN_PROMPT_VERSION = "p298"
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "13e23d0b525887e72ad2482dbb392ca56a3185bb3479a9ddf43e21ea8a5e692b",
+    "A": "34047f10032c8180865468aa7b3e87ee8888fe978733f2601bce31e5ed7e5f29",
     "B": "46ff85a47a26cbc6ccb8a8156d94523363e9f07f0077dd9c6aa963fb3571ff8f",
     "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
     "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",

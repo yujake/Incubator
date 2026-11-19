@@ -199,7 +199,9 @@ def test_d_the_reading_does_not_block_the_gate(tmp_path: pathlib.Path) -> None:
     assert int(reading.get("count") or 0) == 1, reading
     assert rep.machine_pass is True, ([f.to_dict() for f in rep.findings], rep.to_dict())
     assert rep.blockers == [], [f.to_dict() for f in rep.blockers]
-    assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()
+    # 2026-11-19（ROOTGATE-①）：这一份只跑读数层（`checks=()`），不是完整八格门
+    # ⇒ 权威结论 unknown / 退出码 2。读数层不拦门由 `machine_pass` 与 `blockers` 证明。
+    assert CL.tri_state_exit_code(rep) == 2, rep.to_dict()
     assert not [f for f in rep.findings if f.check == "suspected_splits"
                 and f.level == "blocker"], [f.to_dict() for f in rep.findings]
 

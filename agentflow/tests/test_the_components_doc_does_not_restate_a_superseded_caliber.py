@@ -103,7 +103,12 @@ def test_the_anchor_is_still_the_m_verdict() -> None:
     2026-11-03（153-U-01/U-02）：那一格改名叫 `m_says_done`；`can_close` 变成了机器口径
     （`bool | None`，`None` = 没接线）。所以锚点也搬过去 —— 文档里"`m_says_done` = M 在
     `m_verdict.met` 里说的那一句"这句话的真身是那个属性。
+
+    2026-11-19（ROOTGATE-①）：`can_close` 不再自己读机器读数，它由
+    `closing.closing_verdict` 一处算出；"机器那一格"的真身因此搬到那个函数里
+    （`_machine_caliber`），本判据跟着搬，不把旧位置当成永久契约。
     """
+    from agentflow import closing as CL
     from agentflow.closing import ClosingReport
 
     prop = ClosingReport.m_says_done
@@ -112,8 +117,11 @@ def test_the_anchor_is_still_the_m_verdict() -> None:
         "`ClosingReport.m_says_done` 不再读 `m_verdict` ⇒ 真值换人了，"
         "`docs/SYSTEM-COMPONENTS.md` 那一条说法必须重新裁一次，不能继续绿着：\n"
         f"{source}")
-    machine = ClosingReport.can_close
-    machine_src = inspect.getsource(machine.fget if isinstance(machine, property) else machine)
-    assert "_machine_caliber" in machine_src, (
-        "`ClosingReport.can_close` 不再是机器口径那一格（2026-11-03 裁决 ①=乙）：\n"
-        f"{machine_src}")
+    verdict_src = inspect.getsource(CL.closing_verdict)
+    assert "_machine_caliber" in verdict_src, (
+        "`closing_verdict` 不再读机器读数那一格（2026-11-03 裁决 ①=乙）：\n"
+        f"{verdict_src[:800]}")
+    assert ClosingReport.can_close.fget.__doc__ and (
+        "closing_verdict" in ClosingReport.can_close.fget.__doc__), (
+        "`can_close` 的 docstring 没点名唯一来源 `closing_verdict` —— "
+        "读者会以为它还在自己算")

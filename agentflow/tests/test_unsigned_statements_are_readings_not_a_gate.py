@@ -110,9 +110,11 @@ def test_f_a_manuscript_without_a_sign_does_not_fail_the_closing_gate(tmp_path):
     _fault(st)
 
     rep = _closing(st)
-    # ① 不拦：没有 blocker、machine_pass 仍为真、退出码 0
+    # ① 不拦：没有 blocker、machine_pass 仍为真；退出码 2（这一份只跑读数层，
+    #    `checks=()` 不是完整八格门 ⇒ ROOTGATE-① 之后 unknown 记 2，不再拿 0 冒充
+    #    "可以交"）。"读数不拦门"由 `machine_pass` / `blockers` 证明，不由 0 证明。
     assert rep.machine_pass is True, [f.to_dict() for f in rep.blockers]
-    assert CL.tri_state_exit_code(rep) == 0, rep.to_dict()
+    assert CL.tri_state_exit_code(rep) == 2, rep.to_dict()
     assert [f for f in rep.blockers if f.check == "statements_unsigned"] == []
     # ② 读数里逐份列出（族 / 号 / sha / 为什么没签）
     reading = rep.readings["statements_unsigned"]

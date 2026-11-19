@@ -18,6 +18,9 @@
 1. 扫描面：`src/agentflow/**/*.py` 与 `tests/**/*.py` 的文件数、总行数。
    行数用 `splitlines()` 的条数（末尾无换行不多算一行）。
 2. 大文件：`>800` / `>1500` / `>3000` 行的 src 文件数与清单（各取前 N，默认 10）。
+   同一批行数还附一格顶格读数（`cap_files`：恰好 `800` 行 / `799–800` 行，
+   只报不判）—— `800` 行是软基线，这一格不判定好坏，只让"这批已经顶格"
+   先出现在读数里，而不是等谁再加一行、越线之后才由软判据红。
 3. 长定义：`def` 与 `class` 的源码跨度（`end_lineno - lineno + 1`）`>200` /
    `>300` / `>500` 的个数与前 N。函数与类分开给，也合并给 —— 两个口径都成立，
    合成一个数就会在两个口径之间来回漂（本项目最贵的那类缺陷）。
@@ -181,6 +184,17 @@ def survey(
         big_counts[f"gt{th}"] = len(rows)
         big_lists[f"gt{th}"] = rows[: max(top, 0)]
 
+    # ---- 2b. 顶格读数（只报不判）----
+    #
+    # `800` 行是软基线（`tests/test_repo_survey_does_not_get_worse.py` 的 `gt800`），
+    # 不是缺陷：恰好 800 行 = 再加一行就会越线。这一格不进 `BASELINE`、不参与
+    # `baseline_problems` 的比较，只把"这批已经顶格"照实报出来。
+    # `near_cap` 含恰好 800（区间 799..800），所以 at_cap ⊆ near_cap 恒成立。
+    at_cap = [{"path": _rel(p, root), "lines": n}
+              for p, n in sorted(src_lines.items()) if n == 800]
+    near_cap = [{"path": _rel(p, root), "lines": n}
+                for p, n in sorted(src_lines.items()) if 799 <= n <= 800]
+
     # ---- 3. 长定义（函数与类分开给，也合并给） ----
     rows: list[dict] = []
     bad_files: list[str] = []
@@ -263,6 +277,8 @@ def survey(
         },
         "big_files": big_counts,
         "big_files_top": big_lists,
+        # 顶格读数（只报不判）：恰好 800 行 / 799–800 行。
+        "cap_files": {"at_cap": at_cap, "near_cap": near_cap},
         "long_defs": long_counts,
         "long_defs_top": long_lists,
         "density": density,
@@ -297,6 +313,16 @@ def format_text(data: dict) -> str:
         out.append(f"  > {th:5d} 行：{n} 个")
         for r in data["big_files_top"][f"gt{th}"]:
             out.append(f"      {r['lines']:6d}  {r['path']}")
+
+    cap = data.get("cap_files") or {}
+    out.append("")
+    out.append("顶格读数（只报不判；800 行是软基线，不是缺陷，越线才由软判据拦）：")
+    out.append(f"  恰好 800 行：{len(cap.get('at_cap') or [])} 个（再加 1 行就越线）")
+    for r in cap.get("at_cap") or []:
+        out.append(f"      {r['lines']:6d}  {r['path']}")
+    out.append(f"  区间 799–800 行：{len(cap.get('near_cap') or [])} 个")
+    for r in cap.get("near_cap") or []:
+        out.append(f"      {r['lines']:6d}  {r['path']}")
 
     out.append("")
     out.append("长定义（src，源码跨度 end_lineno - lineno + 1，严格大于）：")

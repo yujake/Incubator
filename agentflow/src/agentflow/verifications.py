@@ -4859,6 +4859,55 @@ def _superseded_reading(row: Mapping[str, Any], *, streak: Any = None) -> dict[s
     }
 
 
+def _pending_standing_rows(root: str | Path, *, statement_id: str, sha: str,
+                           proof_no: int, proof_text: str) -> dict[str, Any] | None:
+    """`review_standing` 的 pending 回退：把「先签后收录」那一叠行交出来（FIX186-D1）。
+
+    ## 为什么需要它
+
+    「先签后收录」是主路：V 在命题还没在册时审、B 收录时才拿到号 ⇒ 那一签住在
+    `verifications/pending/<载体 sha>.jsonl`，在册台账 `verifications/<命题号>.jsonl`
+    可能根本不存在（lp-ball-11 的 000005：pending 里同一个 `review_call` 3/3「成立」，
+    在册台账没有这个文件）。`proof_review_gap` 早就有这条回退
+    （`:5960-5988` 的 `_pending_signed`），`review_standing` 没有 ⇒ 同一件事两个
+    读口两个答案：`statement_review_reading` 读成 unsigned、`final_gaps` 因此 +1、
+    acceptance 的 `construct_leg.linked.where` 指向一个不存在的文件。
+
+    本函数只负责"把哪一批行交给 `review_standing`"，判定仍只有那一套
+    （`_hold_runs` / `row_signable` / `signs_bit3`）—— 不新造第二份判据。
+
+    返回 `{rows, ledger, rows_total}` 或 `None`（pending 里也没有盖住这一份的签）。
+    认领给别的命题的行一律不交出去（借光会让别人的签变成这一条的凭据）。
+    """
+    if not str(proof_text or "").strip():
+        return None
+    try:
+        got = pending_sign(root, proof_shas=(sha,))
+    except VerificationError:
+        return None
+    if not got.get("found"):
+        return None
+    row = dict(got.get("row") or {})
+    claimed = str(row.get("stmt_id") or row.get("statement_id") or "").strip()
+    want = str(statement_id or "").strip()
+    if claimed and want and claimed != want:
+        return None
+    passes = [dict(r) for r in (got.get("passes") or []) if isinstance(r, Mapping)]
+
+    def _claimed_of(one: Mapping[str, Any]) -> str:
+        return str(one.get("stmt_id") or one.get("statement_id") or "").strip()
+
+    mine = [r for r in passes
+            if proof_no_of(r) == int(proof_no)
+            and str(r.get("proof_sha256") or "").strip().lower() == str(sha).lower()
+            # 同一叠里混着"认给别的命题"的行也不许借（逐行判，而不只看认到的那一行）。
+            and (_claimed_of(r) in ("", want))]
+    if not mine:
+        return None
+    return {"rows": mine, "ledger": str(got.get("ledger") or ""),
+            "rows_total": len(passes)}
+
+
 def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
                     proof_no: int = 1) -> dict[str, Any]:
     """一条证明的第 3 位相对「它现在这一份正文」的读数（唯一判定口，纯读）。
@@ -4913,6 +4962,15 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
     `as_proof_no(proof_no) or 1`：一个坏号拿到的是 `#p1` 的读数，而读的人看不出号给错了
     （同样的折平还在 :func:`proof_text_of` / :func:`proof_label` 里，三处一起改的）。
     这一档是"没查成"（问的是哪一份都没有答案），不是"查过了、没签过"。
+
+    ## 在册台账缺席 / 为空 ⇒ 回退到 `verifications/pending/`（FIX186-D1，2026-11-19）
+    「先签后收录」是主路：V 在命题还没在册时审、B 收录时才拿到号 ⇒ 那一签住在
+    `verifications/pending/<载体 sha>.jsonl`，在册台账可能根本不存在。改前这里只读
+    在册台账 ⇒ 同一件事两个读口两个答案（`proof_review_gap` 早就有 pending 回退）。
+    现在只在"在册台账读不出行"时回退（有行以正本为准），回退之后 `ledger` /
+    `rows` / `review_source` 都指回真的那一份文件；判定仍走本函数同一套
+    （`_hold_runs` / `row_signable` / `signs_bit3`），票数按尾行那一趟送审数
+    （`_pending_claim_streak`，与签发那一侧同一把尺）。
     """
     sid = str(statement_id or "").strip()
     no = _read_proof_no(proof_no)
@@ -4954,18 +5012,41 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         return out
     out["ledger"] = f"{VERIFICATIONS_DIR}/{sid}.jsonl"
     out["ledger_present"] = path.is_file()
-    if not out["ledger_present"]:
-        out.update(checked=True,
-                   why=f"`{out['ledger']}` 不在盘上 ⇒ 一次审校都没有（不是签过过期）")
-        return out
-    rows, problems = JF.read_jsonl(path)
-    out["rows"] = len(rows)
-    out["problems"] = list(problems)
-    if problems:
-        out.update(state="unreadable",
-                   why=(f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
-                        "第 3 位没查成（不是「没签过」，也不是「签过过期」）"))
-        return out
+    rows: list[dict[str, Any]] = []
+    problems: list[str] = []
+    if out["ledger_present"]:
+        rows, problems = JF.read_jsonl(path)
+        out["rows"] = len(rows)
+        out["problems"] = list(problems)
+        if problems:
+            out.update(state="unreadable",
+                       why=(f"`{out['ledger']}` 有读不出来的行（{problems[:3]}）⇒ "
+                            "第 3 位没查成（不是「没签过」，也不是「签过过期」）"))
+            return out
+    # ---- FIX186-D1：在册台账缺席 / 为空 ⇒ 回退到「先签后收录」那一叠 ------------
+    #
+    # 只在"在册台账读不出行"时才回退：有行就以在册台账为准（两处都有时不让 pending
+    # 盖过正本）。回退之后 `ledger` / `rows` / `review_source` 都指回真的那一份文件。
+    pending_mode = False
+    if not rows:
+        pending = _pending_standing_rows(root, statement_id=sid, sha=sha,
+                                         proof_no=no, proof_text=proof_text)
+        if pending is not None:
+            rows = list(pending.get("rows") or [])
+            pending_mode = True
+            out.update(ledger=str(pending.get("ledger") or ""),
+                       ledger_present=True, rows=int(pending.get("rows_total") or 0),
+                       review_source="pending", counted_by="pending:issued_call")
+    if not pending_mode:
+        if not out["ledger_present"]:
+            out.update(checked=True,
+                       why=f"`{out['ledger']}` 不在盘上 ⇒ 一次审校都没有（不是签过过期）")
+            return out
+        if not rows:
+            out.update(checked=True, why=(
+                f"`{out['ledger']}` 是空文件 ⇒ 一次审校都没落过"
+                "（「有这个文件」不等于「审过」）"))
+            return out
     out["checked"] = True
     if not str(proof_text or "").strip():
         # 空正文不是"签过过期"：没有被审的对象，「签没签过」这件事无从谈起。
@@ -5029,6 +5110,15 @@ def review_standing(root: str | Path, *, statement_id: str, proof_text: str,
         "secretary_judged": secretary_judged(chosen),
         "secretary_unjudged": secretary_unjudged(chosen),
     })
+    if pending_mode:
+        # FIX186-D1：pending 那一支的票数要按「这一份正文在尾行那一趟送审里签了几转」数
+        # （与签发那一侧 `sign_counting.count_rows` 同一把尺，见 `_pending_claim_streak`）。
+        # 不用 `_hold_runs` 的跨送审累计数：那会把"上一趟 2 转 + 这一趟 3 转"读成 5/3，
+        # 而签发那一侧只认这一趟的 3 转 —— 判定与读数不许各说一个数。
+        _counted = _pending_claim_streak(mine, sha)
+        chosen_run = int(_counted.get("votes") or 0)
+        out.update(streak=chosen_run, streak_ok=bool(_counted.get("ok")),
+                   counted_by=f"pending:{_counted.get('counted_by') or 'issued_call'}")
     if covering and 0 <= cut < len(runs_void) and runs_void[cut]:
         # ---- 2026-11-06（业主裁定 3 的准确含义）：这一签落在"打回之后又起转"的那一趟上 --
         #
@@ -5151,9 +5241,12 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
     - `checked` / `ledger_present` / `problems` / `why`。
     """
     from . import evidencebits as _EB   # 惰性：等级的唯一入口
+    from . import lifecycle as _LC      # FIX186-A：三态的唯一入口
     sid = str(row.get("stmt_id") or row.get("statement_id") or "")
     kind = str(row.get("kind") or "")
     bits = _EB.bits_from_row(row)
+    #: 这条命题现在占不占活跃集（三态；原始 `status` 仍在行上，判据只读这一格）。
+    lifecycle_state = str(_LC.state_of_statement(row).get("state") or "")
     if kind == "concept":
         # ---- 概念行短路（2026-10-22 审计的第 5 条） -----------------------------
         #
@@ -5191,6 +5284,7 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
             "proofs_superseded": [],
             "superseded_total": 0,
             "problems": [],
+            "lifecycle_state": lifecycle_state,
             "why": (f"{sid or '（没有编号）'} 是概念行（kind='concept'）：概念不参与"
                     "等级链，没有「审过的证明」这一档 ⇒ reviewed=False、"
                     "grade=not_applicable，也不计入 R10"),
@@ -5302,6 +5396,8 @@ def statement_review_reading(root: str | Path, row: Mapping[str, Any]) -> dict[s
         "proofs_superseded": superseded_labels,
         "superseded_total": len(superseded_labels),
         "problems": problems,
+        #: 三态（FIX186-A）：这条命题现在占不占活跃集（原始 `status` 在行上作审计）。
+        "lifecycle_state": lifecycle_state,
         "why": why,
     }
 

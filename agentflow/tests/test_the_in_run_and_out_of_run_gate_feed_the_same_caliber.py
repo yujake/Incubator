@@ -78,9 +78,13 @@ def test_both_exits_feed_the_same_caliber(tmp_path: pathlib.Path) -> None:
     tool = _tool(st)
     code, out = _cli(st)
     api = _api(st)
-    assert tool.get("can_close") is True, (tool.get("can_close"), tool.get("can_close_reason"))
+    # 2026-11-19（ROOTGATE-①）：空工作区的 `substance` 是 fail ⇒ 权威结论 fail
+    # （`can_close=false`）。这一条问的不是"能不能交"，而是"三个出口喂的是不是同一份
+    # 机器读数" —— 所以先钉住机器那一格真的被喂进来了，再钉三边逐字相等。
+    assert tool["readings"]["machine_caliber"]["checked"] is True, tool.get("readings")
+    assert tool.get("can_close") is False, (tool.get("can_close"), tool.get("can_close_reason"))
     assert tool.get("can_close") == CL.check_closing(
-        st, checks=("substance",), sid=SID, goal_met=True,
+        st, sid=SID, goal_met=True,
         retire=CL.machine_feeders(st).get("retire"),
         programs=CL.machine_feeders(st).get("programs")).can_close
     # API 出口也必须是从盘上现算的同一个值（它此前不喂机器口径 ⇒ None）。
@@ -89,25 +93,43 @@ def test_both_exits_feed_the_same_caliber(tmp_path: pathlib.Path) -> None:
     assert api["data"]["closable"] == tool["closable"], (api["data"], tool["closable"])
     # CLI 出口那一份必须是从盘上现算的同一个值：打出来给读的人看
     assert "can_close" in out, out
-    assert ("can_close=True" in out or "can_close=true" in out), (
-        "运行外那一趟没有把 `can_close=True` 打出来（它没喂机器口径 ⇒ None）：\n" + out)
-    assert code in (0, 1), (code, out)
+    assert "can_close=False" in out, (
+        "运行外那一趟没有把 `can_close=False` 打出来：\n" + out)
+    assert code == 1, (code, out)
 
 
-def test_both_exits_say_unknown_when_the_caliber_cannot_be_fed(
+def test_both_exits_say_not_wired_when_the_caliber_cannot_be_fed(
         tmp_path: pathlib.Path) -> None:
-    """② 喂不上（没有顶趟行）：三边都 None + `not_wired`，不许一边说可以交。"""
+    """② 喂不上（没有顶趟行）：三边都记 `not_wired`，没有一边把它读成"可以交"。
+
+    2026-11-19（ROOTGATE-①）之后 `can_close` 还读八格：这一份空工作区的 `substance`
+    是 fail ⇒ 权威结论 fail（不是 None）。所以这一条钉的是机器那一格没接线
+    （`machine_caliber.checked=False` + `not_wired` 出现在三个出口），而不是
+    "can_close 一定是 None" —— 后者只在八格全 pass 时才成立。
+
+    2026-11-19 业主口径：台账里**没有树**是查过的干净（干净工作区必须 pass/0），
+    所以"喂不上"要造一支**断头的树**（有父行、没有顶趟行）—— 那才是"根判不了"。
+    """
     st = _ws(tmp_path, top_level=False)
+    with st.tx("tasks", actor="test") as tx:
+        tx.upsert("tasks", {"task_id": "t-000002", "role": "C", "action": "run_once",
+                            "called_by": "M", "parent_task_id": "t-000099",
+                            "status": "done", "outcome": "ok",
+                            "detail": "断头树里的子行（没有顶趟行）",
+                            "started_at": "2026-11-19T18:00:00+08:00",
+                            "ended_at": "2026-11-19T18:01:00+08:00"})
     tool = _tool(st)
     code, out = _cli(st)
     api = _api(st)
-    assert tool.get("can_close") is None, tool.get("can_close")
+    caliber = dict((tool.get("readings") or {}).get("machine_caliber") or {})
+    assert caliber.get("checked") is False, caliber
+    assert "not_wired" in str(caliber.get("reason") or ""), caliber
+    assert tool.get("can_close") is False, tool.get("can_close")
     assert "not_wired" in str(tool.get("can_close_reason") or ""), tool.get("can_close_reason")
-    assert api["data"]["can_close"] is None, api["data"]
-    assert ("can_close=None" in out or "can_close=null" in out
-            or "can_close 算不出来" in out), (
-        "运行外那一趟没有如实打出『算不出来』（`can_close` 三态里 None 不许被折成 False）：\n" + out)
-    assert "not_wired" in out, out
+    assert api["data"]["can_close"] == tool["can_close"], (api["data"], tool["can_close"])
+    assert "not_wired" in out, (
+        "运行外那一趟没有如实打出『机器读数没接线』：\n" + out)
+    assert code == 1, (code, out)
 
 
 def test_the_api_refuses_a_session_that_is_not_on_disk(tmp_path: pathlib.Path) -> None:

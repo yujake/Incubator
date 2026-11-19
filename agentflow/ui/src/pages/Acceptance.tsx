@@ -137,6 +137,18 @@ export function Acceptance() {
   // 各扫两遍（some 判有没有 + filter 取清单），这里分两组各扫一遍，两句各取一组。
   const failedCells = gates.blocking_cells.filter((one) => one.status === "fail");
   const notPassCells = gates.blocking_cells.filter((one) => one.status !== "fail");
+  // 一份权威结论（ROOTGATE-②）：verdict · 八格逐格 · 红格的 why · m_says_done 并列显示。
+  // 没有这一格（旧后端）时退回逐格读数，不假装"没有结论"。
+  const authority = gates.closing_verdict ?? null;
+  const redCells = authority === null
+    ? []
+    : authority.cells.filter((one) => one.status !== "pass");
+  const authorityRetire = authority === null
+    ? "没查成"
+    : String((authority.retire["state"] as string | undefined) ?? "没查成");
+  const authorityPrograms = authority === null
+    ? "没查成"
+    : String((authority.programs["state"] as string | undefined) ?? "没查成");
 
   return (
     <>
@@ -412,6 +424,34 @@ export function Acceptance() {
               {gates.can_close_reason === "" ? "" : `；${plain(gates.can_close_reason)}`}
               <SourceLink source={closing.source} label="判据行" />
             </div>
+
+            {/* 一份权威结论（ROOTGATE-②）：结论 + m_says_done + retire/programs 并列；
+                红格逐条列出 why —— 不许让上面任何一行绿色读数盖住它们。 */}
+            {authority === null ? null : (
+              <div class="readings">
+                收工结论：
+                <span class="mono">{` ${authority.verdict} `}</span>
+                （exit <span class="mono">{String(authority.exit_code)}</span>）·
+                m_says_done <span class="mono">{String(authority.m_says_done)}</span> ·
+                retire <span class="mono">{authorityRetire}</span> ·
+                programs <span class="mono">{authorityPrograms}</span>
+                {authority.reason === "" ? null : (
+                  <div class="caption">{plain(authority.reason)}</div>
+                )}
+                {redCells.length === 0 ? null : (
+                  <ul class="caption">
+                    {redCells.map((one) => (
+                      <li>
+                        <span class="mono">{one.check}</span>
+                        {" = "}
+                        {one.status}
+                        {one.why === "" ? "" : `：${plain(one.why)}`}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
 
             <table class="grid">
               <thead>

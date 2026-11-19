@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, ClassVar, Mapping, Sequence
 
 from . import agent_prompts as AP
+from . import autoretire as _AR      # 收工前自动收尾的只读判据（ROOTGATE-③）
 from . import capabilities as C
 from . import clock as CLK
 from . import leanscope as _LEANSCOPE
@@ -4851,6 +4852,8 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
             "plan_id") or "")
         if pid:
             by_plan.setdefault(pid, []).append(mid)
+    from . import lifecycle as _LC
+
     for row in plans:
         pid = str(row.get("plan_id") or "")
         mids: list[str] = []
@@ -4887,7 +4890,9 @@ def _sign_gate_f(store: Any, root: str, cands: Mapping[str, Mapping[str, Any]],
                        why=(f"还没收工：稿↔命题的退休读数读不出来"
                             f"（{type(exc).__name__}: {exc}）⇒ 按『没查成』挡"))
             return
-        abandoned = str(row.get("status") or "") == "abandoned"
+        # 「放弃」只有一份判据：`lifecycle.state_of_plan`（改前本行自写一份名单，
+        # 与 closing 的三处、`create_plan` 的判重各写一遍 —— FIX186-A）。
+        abandoned = _LC.state_of_plan(row).get("state") == _LC.ABANDONED
         out["plans"].append({
             "plan_id": pid, "abandoned": abandoned,
             "manuscripts": mids, "signed_manuscripts": signed,
@@ -5121,6 +5126,18 @@ def _summon_batch_counts(items: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
 #: 研究型 / 有门的项目，在 M 发 final 之前从未跑过收工门时的受控拒理由码（22B）。
 CLOSING_NOT_RUN_CODE = "closing_not_run_before_final"
 
+#: 交 final 的那一刻手里那一份收工读数**不是权威结论**时的受控拒理由码（FINALAUTH，2026-11-19）。
+#:
+#: 与 22B 的 `CLOSING_NOT_RUN_CODE` 同一族、同一处：都长在 `_final_gate_reading` 上，
+#: 都走 `final_refused` 那条补救拍（连着被拒满 `max_final_refused` 拍 ⇒ 退出码 5）。
+#:
+#: 为什么要有这一档（业主 2026-11-19 裁定 ②）：`conductor.closing` 只给
+#: `goal` / `goal_met` / `basis` / `task_list`、不给 `project_dir` / `report_path` 时，
+#: `ClosingReport.authoritative=False` ⇒ `final_stop_reason` 按保留设计不改退出码
+#: ⇒ **`rc=0` 而八格 `verdict=fail`**。中途拿来看的那一份读数这样处理是对的（①）；
+#: 但"交 final 的那一刻"必须有一份权威结论 —— 否则漏传两个参数就是静默 rc=0。
+CLOSING_NOT_AUTHORITATIVE_CODE = "closing_not_authoritative"
+
 #: 「这一趟不设门」的显式声明落点（项目根相对）。它必须带理由 ——
 #: 一个可以由模型随手写、又不写理由的豁免，等于没有这道闸。
 NO_GATE_DECLARATION_NAME = "out/review/NO-GATE.json"
@@ -5136,6 +5153,144 @@ def closing_gate_consulted(loop: "AgentLoop") -> dict[str, Any]:
     calls = [dict(x) for x in (getattr(loop, "_closing_gate_readings", None) or [])]
     return {"consulted": bool(calls), "calls": len(calls),
             "last": calls[-1] if calls else {}}
+
+
+#: 收工结论不是 pass 时 final 那一拍的受控停止理由（ROOTGATE-②，2026-11-19）。
+#:
+#: 为什么要有这两档：改前 final 那一拍一律 `stop_reason="final"` ⇒ 退出码 0，
+#: 而八格 6/8 的那一趟正是这么被读成"跑成了"（真机 `projects/lp-ball-11`）。
+#: `closing_failed` 归 1（查过了、结论是坏），`closing_unknown` 归 2（没查成）。
+CLOSING_FAILED_STOP = "closing_failed"
+CLOSING_UNKNOWN_STOP = "closing_unknown"
+
+
+def final_stop_reason(loop: Any, run: Any = None) -> str:
+    """final 那一拍该落哪个 `stop_reason`（只读 `conductor.closing` 的那一份结论）。
+
+    - 没跑过收工门 / 结论是 `pass` ⇒ `"final"`（0）；
+    - 只有**权威的那一次门**（完整八格且给了 `project_dir` / `report_path`）才改停止
+      理由：部分读数（链条彩排只跑门、不交项目根）是读数，不是"这一趟交付的结论"；
+    - **非权威的那一份在这里仍然读作 `final`**（业主 2026-11-19 裁定 ①「运行中途的
+      closing 只取读数，允许，不参与退出码」）：它不改退出码；"交 final 的那一刻必须
+      是权威的"那一半由 :func:`closing_final_authority` 受控拒（裁定 ②）。
+      两处是同一份裁定的两半，别在任何一处把另一半重算一遍。
+    - 结论 `fail` ⇒ `"closing_failed"`（1）；
+    - 结论 `unknown` ⇒ `"closing_unknown"`（2）—— 但只在"这一趟本来就要过门"时
+      生效（研究型 / 有门的项目）：非研究型项目顺手跑一次门读到 unknown，不该把一趟
+      正常收工改判成"没查成"。
+    - `NO-GATE.json` 明确声明不设门 ⇒ 不据此改停止理由（显式豁免仍是显式豁免）。
+
+    2026-11-19 之前这里不存在：`stop_reason=final` 一律 0，八格 6/8 也 0。
+    """
+    calls = [dict(x) for x in (getattr(loop, "_closing_gate_readings", None) or [])]
+    if not calls:
+        return "final"
+    verdict = dict((calls[-1] or {}).get("verdict") or {})
+    state = str(verdict.get("verdict") or "")
+    if state in ("", "pass"):
+        return "final"
+    if not verdict.get("authoritative", False):
+        # 这一趟没有按"完整交付门"问过（没给项目根 / 报告路径）⇒ 那几格只能说
+        # unknown；拿它改运行收工的退出码，会让所有链条彩排一律变成"没完成"。
+        return "final"
+    root = str(getattr(getattr(loop, "store", None), "root", "")
+               or getattr(loop, "workspace_root", "") or "")
+    exempt = no_gate_declaration(root) if root else {"declared": False}
+    if exempt.get("declared"):
+        return "final"
+    if state == "unknown" and not closing_gate_requirement(loop).get("required"):
+        return "final"
+    if run is not None:
+        run.notes.append(
+            f"收工结论是 {state}（不是 pass）⇒ 这一趟不以 final 收工"
+            f"（`stop_reason={CLOSING_FAILED_STOP if state == 'fail' else CLOSING_UNKNOWN_STOP}`）："
+            f"{verdict.get('reason') or '见收工门读数'}")
+    return CLOSING_FAILED_STOP if state == "fail" else CLOSING_UNKNOWN_STOP
+
+
+def closing_final_authority(
+        loop: Any, *, gate_req: Mapping[str, Any] | None = None,
+        consulted: Mapping[str, Any] | None = None,
+        exemption: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    """交 final 的那一刻，手里那份收工读数算不算**权威结论**（唯一判据）。
+
+    业主 2026-11-19 的两句话是本函数的全部规格：
+
+    - ①「**运行中途**的 closing（只取读数）= 非权威，允许，不参与退出码」——
+      所以这一格**不**看中途那些调用、也不自己改 `stop_reason`；那一半留在
+      :func:`final_stop_reason`（它见到非权威就读作 `final`，设计保留）。
+    - ②「但**交 final 的那一刻**必须有一份**权威**结论：若 final 时拿到的是
+      non-authoritative ⇒ 受控拒，让 M 带上 `project_dir` / `report_path` 重交；
+      **不许 rc=0**」—— 这一格判的就是"final 时手里那一份"。
+
+    为什么要单开一个函数、而不是把判断塞进 `_final_gate_reading` 的 if 里：
+    反真空用例只打这一处桩（与 :func:`closing_gate_consulted` 同一条纪律）——
+    把它打桩成 `{"refuse": False}` ⇒ "非权威 final 被拒"那条判据必须红。
+    判据只有一份实现，拒绝文案也只有一份（拒信里要点名那两个参数）。
+
+    输入（都可省略，省略时按 `loop` 现读）：
+
+    - `gate_req`：:func:`closing_gate_requirement` 的读数。`required=False`
+      （非研究型、也没有门）⇒ 这一格没有对象，**不拒**：那正是①说的"允许"。
+    - `consulted`：:func:`closing_gate_consulted` 的读数（`last` 是最后一次成功调用的读数）。
+    - `exemption`：`NO-GATE.json` 的读数。显式豁免仍是显式豁免。
+
+    返回 `{"refuse", "code", "authoritative", "checked", "why", "how_to_fix", "last"}`：
+
+    - `checked=False`：这一趟没跑过门 / 这一趟没有门对象 / 最后一次调用没回
+      `readings.verdict`。三态里的"没查成"，**不折成"非权威"**（也绝不折成"权威"）；
+    - `authoritative=True`：最后一次调用就是权威的一次（`project_dir` 与 `report_path`
+      都给全了、八格也跑全了）⇒ `refuse=False`；
+    - `authoritative=False`：**判过了、结论是非权威** ⇒ `refuse=True`，`code` 是
+      :data:`CLOSING_NOT_AUTHORITATIVE_CODE`，`why` 与 `how_to_fix` 点名两个参数。
+    """
+    gate = dict(gate_req) if gate_req is not None else closing_gate_requirement(loop)
+    calls = dict(consulted) if consulted is not None else closing_gate_consulted(loop)
+    exempt = (dict(exemption) if exemption is not None
+              else no_gate_declaration(gate.get("root")))
+    last = dict((calls.get("last") or {}).get("verdict") or {})
+    out: dict[str, Any] = {
+        "refuse": False, "code": "", "authoritative": None, "checked": False,
+        "why": "", "how_to_fix": "", "last": last,
+        "required": bool(gate.get("required")), "consulted": bool(calls.get("consulted")),
+        "exempt": bool(exempt.get("declared")),
+    }
+    if not gate.get("required"):
+        out["why"] = ("非研究型、也没有门（没有研究问题 / 验收表 / 论文包）⇒ 这一格没有对象："
+                      "中途拿来看的那一份非权威读数允许存在，不影响退出码（裁定 ①）")
+        return out
+    if exempt.get("declared"):
+        out["why"] = f"这一趟按 no_gate 声明放行：{exempt.get('reason') or '（已声明）'}"
+        return out
+    if not calls.get("consulted"):
+        # 从未跑过门由 22B 那一档拒（`CLOSING_NOT_RUN_CODE`）；这里不重复报同一个病。
+        out["why"] = "这一趟没跑过收工门 ⇒ 这一格没有可判的读数（22B 那一档负责拒）"
+        return out
+    if not last:
+        out["why"] = ("最后一次 `conductor.closing` 没回 `readings.verdict` ⇒ "
+                      "这一格没查成（不折成「非权威」，也不折成「权威」）")
+        return out
+    out["checked"] = True
+    out["authoritative"] = bool(last.get("authoritative", False))
+    if out["authoritative"]:
+        out["why"] = "最后一次收工门是权威的一次（完整八格 + 给了 project_dir / report_path）"
+        return out
+    out.update(
+        refuse=True, code=CLOSING_NOT_AUTHORITATIVE_CODE,
+        why=("还没收工：交 final 需要一份**权威**的收工结论，而手里这一份不是 —— "
+             "最后一次 `conductor.closing` 没有同时给 `project_dir` 与 `report_path` ⇒ "
+             "`authoritative=False`：`report_shape` / `acceptance` / `artifact_ledger` "
+             "那几格只能说「没查成」，它不是「这一趟能不能交」的结论。"
+             "（按裁定 ①：运行中途拿这份读数来看是允许的，它不参与退出码；"
+             "但**交 final 的那一刻**必须换成权威的那一份。）"),
+        how_to_fix=("重跑一次 `conductor.closing`，把两个参数都带上：`project_dir` 给项目根"
+                    "（这个工作区就是根 ⇒ `\".\"`；给 `out/paper` 会把 `out/paper` 再拼一次），"
+                    "`report_path` 给报告路径（`out/review/REPORT.md`）。"
+                    "拿到权威读数之后，按它的 `failed` / `unknowns` 逐条处置，再发 final。"
+                    "若这一趟应当明确不设门：写 `out/review/NO-GATE.json`"
+                    "（`{\"no_gate\": true, \"reason\": \"…为什么这一趟不需要收工门…\"}`）再发 final。"),
+    )
+    return out
 
 
 def no_gate_declaration(project_root: Any) -> dict[str, Any]:
@@ -8877,7 +9032,8 @@ class AgentLoop:
         只销 `retire_ready` 判 `waiting_no_children` 且 `items_open == 0` 的节点；
         有未消项 / 还在飞 / 待机 / 有活跃子 / 有程序在跑 / 三态读不到 —— 一律不碰，
         留给 M 按拒信逐条处置。销号仍是 `Secretary.retire`（唯一写口），从最深的开始，
-        所以父在子之后；循环到没有进展为止（最多 6 轮，防病态树）。
+        所以父在子之后；循环到没有进展为止（最多 `autoretire.MAX_ROUNDS` 轮，防病态树）。
+        候选判据本身在 `autoretire.ready_now`（`closing.machine_feeders` 读同一份）。
 
         返回读数：`checked` / `retired` / `kept` / `problems` / `rounds`。
         """
@@ -8897,30 +9053,18 @@ class AgentLoop:
             return out
         out["checked"] = True
         ordered = [str(t) for t in (order.get("order") or []) if str(t) and str(t) != root]
-        parent_of = dict(order.get("parent_of") or {})
-        for _round in range(6):
+        for _round in range(_AR.MAX_ROUNDS):
             out["rounds"] = _round + 1
-            ready: dict[str, dict[str, Any]] = {}
-            for pid in [root] + ordered:
-                try:
-                    got = cond.retire_ready(pid)
-                except Exception as exc:  # noqa: BLE001 —— 一层读不成不许带走其余
-                    out["problems"].append(f"{pid} 的就绪读数没查成（{type(exc).__name__}: {exc}）")
-                    continue
-                if not got.get("checked"):
-                    out["problems"].append(f"{pid} 的就绪读数没查成（{got.get('reason')}）")
-                    continue
-                for item in got.get("ready") or []:
-                    tid = str(item.get("task_id") or "")
-                    reading = dict(item.get("reading") or {})
-                    if (str(item.get("branch") or "") == "waiting_no_children"
-                            and int(reading.get("items_open") or 0) == 0):
-                        ready[tid] = item
+            # 判据只有一处（`autoretire.ready_now`）：静默且无未消项。`closing.machine_feeders`
+            # 读同一份（只读投影），所以"会销哪些"与"真的销了哪些"不会各说一套。
+            now = _AR.ready_now(cond, root, ordered)
+            out["problems"].extend(now["problems"])
+            ready = dict(now["ready"])
             progress = False
             for tid in ordered:              # 深 → 浅：父在子之后
                 if tid not in ready:
                     continue
-                owner = str(parent_of.get(tid) or root)
+                owner = str(ready[tid].get("owner") or root)
                 try:
                     name, why = sec.name_of(owner=owner, task_id=tid)
                 except Exception as exc:  # noqa: BLE001
@@ -8963,7 +9107,7 @@ class AgentLoop:
 
         返回 `{"checked","applicable","complete","root","nodes","dirty","count",
         "total","root_open_items","stalled","stalled_count","states","programs",
-        "programs_ok","why","reason"}`：
+        "programs_ok","why","reason","how_to_fix","closing_authority"}`：
 
         - `applicable`：这道闸对这一趟有没有对象 —— 只有主控 M 有（其余角色名下没有
           "整棵树"这回事），所以非 M 一律 `applicable=False, complete=True`（放行，且
@@ -8983,7 +9127,12 @@ class AgentLoop:
           `programs.checked=False`（程序那一格没查成）不拦收工，但 `run.notes` 与这里都
           必须写"没查成"；无主程序与"账说收口了而进程还在"的那两类只点名、不拦
           （无主进程读数是读数，不是门）；
-        - `why`：不干净时那一句人话（逐节点点名 + 未消项条数 + 还在跑的程序 + 处置路径）。
+        - `why`：不干净时那一句人话（逐节点点名 + 未消项条数 + 还在跑的程序 + 处置路径）；
+        - `how_to_fix` / `closing_authority`：FINALAUTH（2026-11-19 裁定 ②）那一档的
+          改法与判据读数。`how_to_fix` 非空时 `code` 是
+          `closing_not_authoritative`，点名"把 `project_dir` 与 `report_path` 传给
+          `conductor.closing`"；`closing_authority` 是 :func:`closing_final_authority`
+          的原样读数（`refuse` / `authoritative` / `checked` / `last`），供事后复核。
 
         为什么只有这一处：业主那句说的是"不记 final"，而 `final` 落盘的唯一入口是
         `run()` 里 `shape == "final"` 那一支 —— 门放在别处就成了"记了 final 又提醒"。
@@ -9006,6 +9155,10 @@ class AgentLoop:
                          "unowned": [], "unowned_count": 0,
                          "orphans": {}, "orphan_count": 0, "reason": ""},
             "programs_ok": True,
+            # FINALAUTH（2026-11-19 裁定 ②）：非权威的收工读数在 final 那一刻的受拒。
+            # 两格都常驻（形状稳定）：`code` 空 = 这一格没拒；`how_to_fix` 是逐字的改法
+            # （拒信要说得清"把 project_dir 与 report_path 传给 conductor.closing"）。
+            "how_to_fix": "", "closing_authority": {},
         }
         # ---- 按签拦收工：见 `_v_wait_gate_reading` ----
         #
@@ -9068,6 +9221,26 @@ class AgentLoop:
             run.notes.append(f"收工门这一道按 no_gate 声明放行：{exemption.get('reason')}")
         elif not gate_req.get("checked") and run is not None:
             run.notes.append(f"收工门这一道没查成（不据此拦）：{gate_req.get('why')}")
+        # ---- FINALAUTH（2026-11-19，业主裁定 ②）：交 final 时要的是**权威**的那一份结论。
+        #
+        # 现场（本仓 31 条彩排 + 真机漏传两参数的形态）：`conductor.closing` 只给
+        # `goal` / `goal_met` / `basis` / `task_list` ⇒ `ClosingReport.authoritative=False`
+        # ⇒ `final_stop_reason` 按保留设计回 `"final"` ⇒ **rc=0 而 `verdict=fail`**。
+        # 裁定 ① 说中途拿这份读数来看是允许的（不参与退出码），裁定 ② 说交 final 的那一刻
+        # 必须换成权威的那一份 —— 所以受控拒落在这里：final 被拒（还有补救拍，M 可以带上
+        # `project_dir` / `report_path` 重新问一次门再发 final），连着被拒满
+        # `max_final_refused` 拍 ⇒ `stop_reason=final_refused`（退出码 5，不许 rc=0）。
+        authority = closing_final_authority(
+            self, gate_req=gate_req, consulted=consulted, exemption=exemption)
+        reading["closing_authority"] = dict(authority)
+        if authority.get("refuse"):
+            reading.update(applicable=True, checked=True, complete=False,
+                           code=str(authority.get("code") or ""),
+                           why=str(authority.get("why") or ""),
+                           how_to_fix=str(authority.get("how_to_fix") or ""))
+            if run is not None:
+                run.notes.append(reading["why"])
+            return reading
         # ---- 任何 final 都要清仓，没有例外 ----
         #
         # "监控/被唤醒的回合不判"那条例外会是绕闸的口子 —— M 只要在一次被唤醒的回合里
@@ -10413,7 +10586,17 @@ class AgentLoop:
                         step_result = {**step_result, "multi_call": batch}
                 run.steps.append(LoopStep(step, shape, payload, step_result,
                                           cache=step_cache))
-                run.stop_reason = "final"
+                # 收工结论不是 pass ⇒ 这一拍不以 final 收工（ROOTGATE-②）：八格 6/8
+                # 仍 `stop_reason=final` 会让退出码 0，正是 lp-ball-11 的根因。
+                # 字面量赋值刻意分开写：`test_run_agent_exit_code_table` 的 AST 扫描
+                # 只认 `run.stop_reason = "<取值>"` 这一形。
+                _closing_stop = final_stop_reason(self, run)
+                if _closing_stop == CLOSING_FAILED_STOP:
+                    run.stop_reason = "closing_failed"
+                elif _closing_stop == CLOSING_UNKNOWN_STOP:
+                    run.stop_reason = "closing_unknown"
+                else:
+                    run.stop_reason = "final"
                 break
             # ---- 主控派活时的留痕（`draft/39` §3.3；L-05e 之后同样是读数不是闸门）
             #
@@ -12674,6 +12857,10 @@ class AgentLoop:
                 "can_close": data.get("can_close"),
                 "machine_pass": data.get("machine_pass"),
                 "closable": data.get("closable"),
+                # 一份权威结论（ROOTGATE-①）：final 那一拍要用它决定 stop_reason ——
+                # 八格 6/8 而 `stop_reason=final` ⇒ 退出码 0，正是 lp-ball-11 的根因。
+                "verdict": dict((data.get("readings") or {}).get("verdict") or {}),
+                "failed": list(data.get("failed") or ()),
             })
         # `draft/97` §15.4 的载体那一半：工具把"哪几条定义待补"报回来 ⇒ 这一步就地
         # 向直接父发一条报文（父通常就是 A，原文在它手里）。不这样做的话，"定义待补"

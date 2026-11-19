@@ -4929,6 +4929,30 @@ def _finish_closing(args, root: Path, rep) -> int:
     return code
 
 
+def _nontriviality_line(nt: Mapping[str, Any]) -> str:
+    """非平凡性那一行（唯一拼装口；FIX186-B）。
+
+    业主要的口径逐字是「T0/T1/T2/T3/T4 + 不适用 N + 未判 M（共 K 条可判命题）」：
+    五档全印（T0 也要印 —— 它是真的第一档，改前不印就等于屏幕上只剩"未判"）、
+    「不适用」与「未判」分栏、分母只算可判命题（不适用与已放弃都不进）。
+    """
+    counts = dict(nt.get("counts") or {})
+    not_applicable = int(nt.get("not_applicable_total",
+                                counts.get("not_applicable", 0)) or 0)
+    abandoned = int(nt.get("abandoned_total") or 0)
+    unjudged_abandoned = int(nt.get("unjudged_abandoned") or 0)
+    # 已放弃的行若都落在「未判」那一栏里，上面那句已经说清了；再补一句就是重复计数。
+    extra_abandoned = max(0, abandoned - unjudged_abandoned)
+    return (
+        "非平凡性："
+        + " / ".join(f"T{level} {counts.get(f'T{level}', 0)}" for level in (0, 1, 2, 3, 4))
+        + f" / 不适用 {not_applicable} / 未判 {counts.get('unjudged', 0)}"
+        + f"（共 {nt.get('statements_total', 0)} 条可判命题"
+        + (f"；其中 {unjudged_abandoned} 条已放弃、不进分母" if unjudged_abandoned else "")
+        + (f"；另有已放弃 {extra_abandoned} 条不进分母" if extra_abandoned else "")
+        + f"；T3/T4 {nt.get('high_tier_total', 0)} 条）")
+
+
 def cmd_closing(args) -> int:
     """跑收工门。退出码：0 可交付 / 1 被拦住 / 2 没查成。
 
@@ -5003,10 +5027,23 @@ def cmd_closing(args) -> int:
                            goal=str(getattr(args, "goal", "") or ""),
                            goal_met=getattr(args, "goal_met", None),
                            basis=str(getattr(args, "basis", "") or ""))
-    for name in CL.DEFAULT_CHECKS:
-        state = rep.status.get(name, "?")
-        mark = {"pass": "通过", "fail": "拦住", "unknown": "没查成"}.get(state, state)
-        print(tty.bullet(f"{name}：{mark}"))
+    # 一份权威结论（ROOTGATE-①②）：verdict + 八格逐格 + 红格的 why + m_says_done，
+    # 全部并列打出来 —— 不许让后面某一行绿色读数盖住前面一格红。
+    _verdict = rep.verdict
+    _retire = dict(_verdict.get("retire") or {})
+    _programs = dict(_verdict.get("programs") or {})
+    print(tty.bullet(
+        f"收工结论：{_verdict.get('verdict')}（exit {_verdict.get('exit_code')}）"
+        f" · m_says_done={_verdict.get('m_says_done')}"
+        f" · retire={_retire.get('state') or '没查成'}"
+        f" · programs={_programs.get('state') or '没查成'}"))
+    for _cell in _verdict.get("cells") or []:
+        _state = str(_cell.get("status") or "unknown")
+        _mark = {"pass": "通过", "fail": "拦住", "unknown": "没查成"}.get(_state, _state)
+        _why = f" —— {_cell.get('why')}" if _cell.get("why") else ""
+        print(tty.bullet(f"{_cell.get('check')}：{_mark}{_why}"))
+    if _verdict.get("reason") and _verdict.get("verdict") != "pass":
+        print(tty.bullet(f"收工结论的理由：{_verdict.get('reason')}"))
     # 论文那一格不再是门（业主 2026-11-14「是否出 paper 退出收工判定，由 M 自行判断是否
     # 到这个时机」）：但读数必须看得见 —— M 判断该不该出论文，依据就是这一格。
     _paper = (rep.readings or {}).get("paper") or {}
@@ -5023,12 +5060,7 @@ def cmd_closing(args) -> int:
     _nt = (rep.readings or {}).get("nontriviality") or {}
     if _nt:
         if _nt.get("checked"):
-            _counts = _nt.get("counts") or {}
-            print(tty.bullet(
-                "非平凡性："
-                + " / ".join(f"T{level} {_counts.get(f'T{level}', 0)}" for level in (1, 2, 3, 4))
-                + f" / 未判 {_counts.get('unjudged', 0)}"
-                + f"（共 {_nt.get('statements_total', 0)} 条命题；T3/T4 {_nt.get('high_tier_total', 0)} 条）"))
+            print(tty.bullet(_nontriviality_line(_nt)))
             # 逐路径读数（NT2，2026-11-15 业主裁定「一个路径一个」）：命题级是各路径的
             # min；还有路径没判时明说（不许折成"已算全"）。
             _paths = int(_nt.get("paths_total") or 0)

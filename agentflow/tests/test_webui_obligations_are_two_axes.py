@@ -8,7 +8,7 @@
 - `instance`：收件实例 —— `obligations.recipient_reading` 判出来的落点，
   `Conductor.open_items_for(role, instance)` 按它取件。
 
-父为空、只带收件实例的项**不挂在任何人的收件箱上**：真机 lp-ball 的两条
+父为空、只带收件实例的项不挂在任何人的收件箱上：真机 lp-ball 的两条
 `b-register@` 至今如此（`parent_task_id=None`），页面上一条都看不见。
 `/api/obligations` 就是把这两条轴分开摆出来的只读面，三族分别是
 `b-register` / `v-resubmit` / `b-awake`（前缀逐字来自 `obligations` 三个常量）。
@@ -21,7 +21,7 @@
 - `recipient_instance` 逐字是行上的 `instance`，`parent_task_id` 逐字是行上的父；
   `addressed` 三档（instance / parent / unowned）；
 - 表不在盘上 ⇒ `not_applicable`（不是"没有义务"）；表读不出来 ⇒ `unreadable`；
-- 页面：`components/Obligations.tsx` 读这两条轴，且**没有** post（网页不销号）。
+- 页面：`components/Obligations.tsx` 读这两条轴，且没有 post（网页不销号）。
 
 反真空（两条负控）：把一条项标成 done ⇒ 它从计数里消失；给一条 unowned 的项填上
 父台账号 ⇒ 它不再算"没人收"。

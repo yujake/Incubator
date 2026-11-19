@@ -389,6 +389,48 @@ def test_baseline_criterion_has_teeth():
     assert not baseline_problems(equal), "读数恰好等于基线就被判红 —— 基线的语义写错了"
 
 
+def test_cap_files_reading_is_reported_but_does_not_judge(tmp_path, capsys):
+    """③ 顶格读数（只报不判）：恰好 800 行 / 799–800 行的文件清单要出现在读数里。
+
+    为什么只报不判：800 行是软基线，不是缺陷。这一格要回答的是"下一次谁再加一行，
+    读数里先看见这批已经顶格"；把"有文件顶格"变成红，等于把软基线偷偷抬成硬门。
+    所以这条不对真实仓库的清单内容下判断（那会随施工变），它只做两件事：
+    ① 把当次清单打出来（人读）；② 在合成树上证明量法按 800/799 切得准（反真空）。
+    基线三格（75 / 95 / 2）一个字节都没动，也不由这条判据改。
+    """
+    mod = _load_survey()
+    data = mod.survey(REPO)
+    assert data.get("scanned_ok"), data.get("vacuum_reason")
+    cap = data.get("cap_files")
+    assert isinstance(cap, dict) and set(cap) == {"at_cap", "near_cap"}, (
+        f"读数里没有 cap_files 的 at_cap/near_cap 两格：{cap!r}")
+    at_cap, near_cap = cap["at_cap"], cap["near_cap"]
+    assert all(isinstance(r.get("path"), str) and isinstance(r.get("lines"), int)
+               for r in at_cap + near_cap), (at_cap, near_cap)
+    assert all(r["lines"] == 800 for r in at_cap), at_cap
+    assert all(799 <= r["lines"] <= 800 for r in near_cap), near_cap
+    assert {r["path"] for r in at_cap} <= {r["path"] for r in near_cap}, (
+        "at_cap 不是 near_cap 的子集 —— 两格的区间口径分家了")
+    # 只报：当次清单无条件打出来（不看它是不是空、也不因它非空而红）。
+    with capsys.disabled():
+        print(f"\n[顶格读数·只报不判] at_cap={[r['path'] for r in at_cap]}")
+        print(f"[顶格读数·只报不判] near_cap="
+              f"{[(r['path'], r['lines']) for r in near_cap]}")
+
+    # 反真空（合成树）：量法必须按「恰好 800」与「799–800」切，
+    # 不靠真实仓库里碰巧有谁顶格。
+    src = tmp_path / "src" / "agentflow"
+    src.mkdir(parents=True)
+    for name, n in (("at.py", 800), ("almost.py", 799), ("below.py", 798), ("over.py", 801)):
+        (src / name).write_text("\n".join(["x = 0"] * n) + "\n", encoding="utf-8")
+    got = mod.survey(tmp_path, src_rel="src/agentflow", tests_rel="tests")
+    assert got.get("scanned_ok"), got.get("vacuum_reason")
+    fake = got["cap_files"]
+    assert fake["at_cap"] == [{"path": "src/agentflow/at.py", "lines": 800}], fake
+    assert fake["near_cap"] == [{"path": "src/agentflow/almost.py", "lines": 799},
+                                {"path": "src/agentflow/at.py", "lines": 800}], fake
+
+
 def test_json_flag_prints_parseable_readings():
     """正向（可复跑）：`--json` 那一档真的能被打成 JSON 并读回同样的三格。
 

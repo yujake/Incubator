@@ -252,12 +252,86 @@ def test_an_empty_workspace_is_all_zero_and_checked(tmp_path: pathlib.Path) -> N
 # ---------------------------------------------------------------- 呈现
 
 
-def test_every_readout_renders_a_table_from_its_own_data(tmp_path: pathlib.Path) -> None:
-    """呈现层也只许从 `data` 取数：四条读数各自渲染得出来，且没查成时说清"不是没有"。"""
+def _is_table_rule(line: str) -> bool:
+    """表格的分隔线（只有连字符与空格，且分得出一列以上）。
+
+    用它当"表画出来了"的判据：分隔线是表头与数据行之间那一行，整张表消失时它先没。
+    """
+    bare = line.strip()
+    return bool(bare) and set(bare) <= {"-", " "} and "  " in bare
+
+
+def test_every_readout_renders_a_table_from_its_own_data(
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """呈现层也只许从 `data` 取数：四条读数各自渲染得出来，且没查成时说清"不是没有"。
+
+    2026-11-19 SPLITREAD 加强（此前只断言"某一行里有 `<kind>` 这两个字" ——
+    把整张表删掉、或表格退化成空表，那条照样绿）：gates 那张表必须
+    表头 + 分隔线 + 每格一行，行数从 `CL.DEFAULT_CHECKS` 现读（当前 8 格 ⇒ 10 行）。
+
+    末尾那一段是反真空：把 `errorstats` 里那份共享的表格实现打成"什么都不画"，
+    gates 那张表必须跟着消失。readouts 若又抄了第三份 `_table`，打桩打在共享真身上，
+    表照样画出来 ⇒ 这一条红。这是"readouts 真的在用 errorstats 那一份"的机器读数。
+    """
     ws = _fixture_workspace(tmp_path / "ws")
     for kind in KINDS:
         lines = R.render_readout(kind, R.READOUTS[kind](ws))
         assert lines and isinstance(lines[0], str), kind
         assert any(kind in line for line in lines), (kind, lines[:2])
+    # ④ gates：整张表逐格画出来，不是"某一行碰巧含 gates"。
+    gates = R.render_readout("gates", R.READOUTS["gates"](ws))
+    names = list(CL.DEFAULT_CHECKS)
+    head_at = next((i for i, line in enumerate(gates)
+                    if "格" in line and "四态" in line and "原话" in line), None)
+    assert head_at is not None, ("gates 那张表没有表头（整张表被删掉了？）", gates)
+    assert _is_table_rule(gates[head_at + 1]), (
+        "表头下面不是分隔线", gates[head_at:head_at + 2])
+    first = head_at + 2
+    end = first
+    while end < len(gates) and gates[end].strip():
+        end += 1
+    rows = gates[first:end]
+    assert len(rows) == len(names), (
+        f"gates 表画了 {len(rows)} 行，`CL.DEFAULT_CHECKS` 有 {len(names)} 格", gates)
+    for name, row in zip(names, rows):
+        assert row.split()[:1] == [name], (name, row)
+    # 反真空：打桩共享实现 ⇒ 这张表必须消失（另抄一份的话它照样在）。
+    monkeypatch.setattr(ES, "_table_lines", lambda *_a, **_k: [])
+    patched = R.render_readout("gates", R.READOUTS["gates"](ws))
+    assert not any(_is_table_rule(line) for line in patched), (
+        "把 `errorstats` 的表格实现打成空表之后 gates 仍画出了表 ⇒ "
+        "readouts 用的不是那一份（又抄了一份自己的）", patched)
     unknown = R.render_readout("errors", R.errors_readout(tmp_path / "gone"))
     assert any("不是" in line and "没查成" in line for line in unknown), unknown
+
+
+# ---------------------------------------------------------------- ⑥ 空表体
+
+
+def test_an_empty_table_body_still_draws_the_header_and_the_rule() -> None:
+    """⑥ 空表体（`rows=[]`）⇒ 表头 + 分隔线两行，不抛（SPLITREAD 的已知边界）。
+
+    缺陷形态：宽度算式曾是 `max(表头宽, *())`；`rows=[]` 时只剩一个 int 参数，
+    `max` 会把这个 int 当可迭代 ⇒ `TypeError: 'int' object is not iterable`。
+    四个调用点（errors / flow / cost / gates）都先判过非空，所以现盘走不到 ——
+    但"走不到"不等于"不会炸"：新加一个空表调用点就会炸，而不是画一张只有表头的表。
+    搬走前的 `readouts._table` 在同样输入下返回「表头 + 分隔线」，这里钉的就是那份旧行为。
+
+    反真空：把实现打回旧算式（本函数里逐字重放的那个 `_old_widths`）在同一输入上必抛
+    TypeError —— 所以 `len(lines) == 2` 不是恒真式，它钉的是"这一支真的被修过"。
+    """
+    head = ["格", "四态"]
+    lines = ES._table_lines(head, [])
+    assert len(lines) == 2, f"空表体应给「表头 + 分隔线」两行，实际 {lines!r}"
+    assert [c for c in head if c in lines[0]] == head, (
+        f"第一行不是这两列的表头：{lines[0]!r}")
+    assert _is_table_rule(lines[1]), f"第二行不是分隔线：{lines[1]!r}"
+
+    def _old_widths(rows: list[list[str]]) -> list[int]:
+        """搬走前那条算式（只在 `rows=[]` 时炸；非空时与现实现等价）。"""
+        return [max(ES._shown_width(head[i]),
+                    *(ES._shown_width(r[i]) for r in rows))
+                for i in range(len(head))]
+
+    with pytest.raises(TypeError):
+        _old_widths([])

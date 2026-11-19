@@ -1097,7 +1097,7 @@ def test_the_state_endpoint_now_belongs_to_readers(artifacts_ws: pathlib.Path) -
     assert set(got) == set(want), (sorted(got), sorted(want))
     for key in want:
         if key in ("generated_at", "writes_allowed", "writes_reason"):
-            # 这两格是**服务进程**的事实（`--allow-writes`），不是工作区的事实：
+            # 这两格是服务进程的事实（`--allow-writes`），不是工作区的事实：
             # `snapshot(root)` 直调时是"没问过"（None / 空串），端点则一定问过
             # （`writes.writes_allowed`）。下面单独断言它们。
             continue

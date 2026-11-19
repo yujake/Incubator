@@ -2819,7 +2819,32 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   （facts 键集仍 15 格、count / keys_sha256 与 p297 同值 —— 本批只换段文本，没有哪一格
 #:   事实换过落点）；两份 golden 按现值重冻；ROLE-GUIDE 重生成；读图行数；
 #:   warm 两档重跑（真调模型，cap 0.10）。
-PROMPT_VERSION = "p298"
+#: p298 → p299（2026-11-19，FIXBATCH：`lit.stage_reject` 收批量形参）：
+#:   ① `tools/search_tools.py` 的 `lit.stage_reject` 加 `slots`（数组，1..200）：一次调用
+#:     可判拒多个槽位，内部对每一条仍走 `litstage.reject` 的逐行写口（判定口径零改动）。
+#:     真机 lp-ball-11 的现场：60 条待裁跨 6 个委托，A 的 final 逐字写「逐槽判拒需 60 次
+#:     调用，超出剩余预算（$3.23）」—— 按委托分批只要 6 次（60 × $0.0030 ≈ $0.18）。
+#:   ② `litstage._stage_list_note` 加一句「A 的 `done=True` 只表示「这一条检索请求跑完了」，
+#:     不等于「清表」；收工闸数的是全部委托」—— 这句原先只活在
+#:     `closing._check_literature_pending` 的 docstring 里（收工那一刻才跑到、模型读不到）。
+#:     落点是 `lit.stage_list` 的返回文案，不动 `closing.py`、也不动 `specs/a.py`。
+#:   变化格 = A（一格）：`lit.stage_reject` 的 roles 只有 A，它的 summary 那句改成
+#:   「一次可判拒多个槽位」⇒ A 的 `tools_lines` 那一行换值（A 13e23d0b… → 34047f10…）；
+#:   其余十格逐字未动（版本行已归一）。`params` / `returns` 本身只进声明快照
+#:   （见 `tools/base.py` 的 `ToolFace.description` 一节），`lit.stage_list` 的 `note`
+#:   是运行时返回值、也不进任何角色段。十一格是 `temp/fixbatch/digest2.py` 现算
+#:   （导入判据自己的 `_surface_digest`，先钉 `AGENTFLOW_LEAN_ENABLED=1`，一次算全
+#:   十一格、不跳段），不是手抄。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 只换 A 那一格 + `_FROZEN_PROMPT_VERSION`（p299）+
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格、count / keys_sha256 与
+#:   p298 同值）。两份 golden 按现值重冻（tool 面 `lit.stage_reject` 的 params / returns
+#:   各变一格；agent 面 11 条版本行 + A 那一格）；`tests/fixtures/
+#:   tool_declaration_baseline.json` 补两条带 reason 的 amendment；ROLE-GUIDE 重生成
+#:   （`lit.stage_reject` 那一行的说明 / 必填两栏跟着变）。读图三格按现算追平
+#:   （本批 src 两处加行）。warm 两档没有重跑：要真调上游（模型）、本路拿不到凭据
+#:   ⇒ `tests/test_prompt_cache_warm.py` 的新鲜度判据是已知待办（与 p220 / p221 / p222
+#:   那几格同一句），不许写成"已重跑"。
+PROMPT_VERSION = "p299"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：

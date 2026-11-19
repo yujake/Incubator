@@ -48,7 +48,10 @@ class _ListPlans:
                 {
                     "plan_id": r.get("plan_id"),
                     "problem_key": r.get("problem_key"),
+                    # 原始 status 保留（审计），另给一格三态：判据只读 `lifecycle_state`
+                    # （FIX186-A：`include_terminal` 的过滤已经是 `L.plan_is_active`）。
                     "status": r.get("status"),
+                    "lifecycle_state": L.state_of_plan(r).get("state"),
                     "rounds": r.get("rounds"),
                     "max_rounds": (r.get("budget") or {}).get("max_rounds"),
                     "subgoals": len(r.get("subgoals") or []),

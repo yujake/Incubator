@@ -10840,6 +10840,50 @@ class Secretary:
             data = self._annotate_proposition(
                 row.to_dict(), adj, proof_no=(requested_no if requested_no >= 1 else 1),
                 route=route)
+            # ---- C（2026-11-19 FIX186）：命题行同笔能指回它的稿 --------------------
+            #
+            # 改前 `manuscript_id` / `manuscripts` 只在"往在册那一行追加证明"
+            # （`_attach_proofs`）那一笔写；新建那一笔（尤其 E 的 `e-num-*` 数值稿）
+            # 一个字节都不写 ⇒ 稿↔命题的对应关系断了：`manuscriptretire` 三源都反查
+            # 不到，放弃那条命题之后它的稿仍被 `lifecycle.state_of_manuscript` 读成
+            # 活跃（lp-ball-11 的 stmt:000006 ↔ reports/e-num-000008.md 就是这一形态）。
+            # 路径号是这一笔刚分配的（`_new_path_no`，唯一来源），稿号由稿路径现认
+            # （`vsigns.manuscript_id_of`，与签块 / 收录回执同一口径）。
+            # 概念 / 定义行只写 `manuscript_id`，不写逐路径那一格：那一格是"每条证明
+            # 路径各一份稿"，概念没有证明路径 —— 给它写一格会让 `_path_groups_of`
+            # 读成"这一条该有第 1 条路径"，非平凡度那一栏就多出一条永远没判的路径。
+            #
+            # ---- 2026-11-19（SEC1 回归修复）：有收录回执的那一笔不预写回执的格 ----
+            #
+            # `_attach_proofs` 那一笔的 `write_proof_receipt`（`agent_b/proof_receipt.py`）
+            # 写的是同样这几格，而且它经 `land_statement` 的
+            # `STATEMENT_LAND_OPS["attach_proofs"]` 白名单差分落盘（越界 ⇒
+            # `statement_patch_key_not_allowed`，整笔不写）。新建这一臂若先把同样的
+            # 值写进行里，白名单差分就看不见这一格：值已经在盘上、Δ 为空 ⇒ 那一笔
+            # 再也不会拒，闸退化成摆设。2026-11-19 的现场就是这样：把
+            # `manuscripts` 从白名单里拿掉，`register_statement` 仍回 `ok=True`
+            # （`tests/test_manuscripts_are_per_path.py::test_e`）。
+            #
+            # 所以这一臂只补"没有回执可写"的那一档：E 的 `e-num-*` 数值稿没有证明
+            # 正文 ⇒ `write_proof_receipt` 不进来（它的 `_body_present` 恒假），
+            # FIX186 要的"命题行同笔指回它的稿"只能由这里写。有正文的一档把这几格
+            # 留给回执 —— 值与改前逐字相同，只是写口回到那张白名单后面。
+            _receipt_will_write = bool(
+                str(data.get("proof_text") or "").strip()
+                or list(data.get(VR.PROOFS_KEY) or []))
+            _rel_ms = str(body.get("manuscript_path") or "").strip().replace("\\", "/")
+            if _rel_ms and not _receipt_will_write:
+                if not _is_not_applicable_kind(kind):
+                    data["manuscripts"] = {str(int(_new_path_no)): _rel_ms}
+                from . import manuscriptids as _MID_FAM
+                from . import vsigns as _VS_MS
+
+                _mid_ms = str(_VS_MS.manuscript_id_of(_rel_ms) or "")
+                if _mid_ms:
+                    data["manuscript_id"] = _mid_ms
+                    _fam_ms = _MID_FAM.family_of_rel(_rel_ms)
+                    if _fam_ms:
+                        data["manuscript_family"] = _fam_ms
             # ---- 交付说这一份是 #pN（N>1）⇒ 它进 `proofs` 清单，不进 canonical ----
             #
             # 2026-11-04（缺口 ①）：新建那一支同样要认交付里的号。canonical（`proof_text`）
@@ -14779,6 +14823,41 @@ def _fold_nontriviality(rows: Sequence[Mapping[str, Any]], *, matched_by: str,
             "paths": detail, "min_of": min_of,
             "paths_unjudged": unjudged_paths,
             "partial": bool(unjudged_paths), "statement_level": level}
+
+
+def nontriviality_rows(root: str | Path, *, stmt_id: str = "") -> dict[str, Any]:
+    """这条命题在档位台账里的全部原始行（只读；解析只走 `_nontriviality_index`）。
+
+    ## 它答的那一问
+
+    `nontriviality_of` 折的是"这条命题现在读成哪一档"（命题级取各路径历史 min），
+    它答不了"这一份材料判过没有" —— 后者要按 `(stmt_id, judged_body_sha256)`
+    逐行看。B 的收录动作在判档之前问的正是这一问（业主 2026-11-19：同一份材料只能
+    判一次，见 `agent_b.register_statement._prior_filing_nontriviality`）。
+
+    ## 三态
+
+    | 结局 | 返回 |
+    |---|---|
+    | 台账读成了（有 / 没有这一条的行都算读成） | `checked=True` + `rows`（append 顺序） |
+    | 台账没读成 | `checked=False` + `why`；调用方不许折成"没判过" |
+
+    为什么"没读成"要单列：折成"没判过"会让同一份材料被再判一次（多花钱但读数不丢）；
+    折成"判过了"则会让那一笔永远没有档位行（静默丢读数）。前者是可接受的代价，
+    后者是这次要修的缺陷 —— 所以调用方拿 `checked=False` 时必须回去正常判一次。
+    """
+    out: dict[str, Any] = {"checked": False, "rows": [], "why": ""}
+    path = nontriviality_path(root)
+    if not path.is_file():
+        out.update(checked=True, why=f"{path} 不在盘上 ⇒ 这条命题还没有档位行")
+        return out
+    by_id, _by_sha, why = _nontriviality_index(path)
+    if why:
+        out["why"] = why
+        return out
+    want = str(stmt_id or "").strip()
+    out.update(checked=True, rows=[dict(r) for r in (by_id.get(want) or [])] if want else [])
+    return out
 
 
 def nontriviality_of(root: str | Path, statement_full: str, *,

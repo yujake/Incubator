@@ -131,7 +131,12 @@ def _good_clean(tmp_path):
 
 
 def _good_clean_and_sid(tmp_path):
-    """`_good_clean` + 一笔"M 说达成"的判据 + 会话号（落盘那一条走 `_m_verdict`）。"""
+    """`_good_clean` + 一笔"M 说达成"的判据 + 会话号（落盘那一条走 `_m_verdict`）。
+
+    2026-11-19（ROOTGATE-①）：`can_close` 也读八格，而机器读数那两个喂参在
+    `closing.machine_feeders` 里现算 —— 台账里连任务行都没有时，空树是查过的干净
+    （不是 not_wired），所以这个夹具不需要再补一条顶趟行。
+    """
     st, report = _good_clean(tmp_path)
     _m_verdict(tmp_path, met=True, basis="机械干净 + 八格读数")
     return st, report, SS.session_id()
@@ -577,7 +582,10 @@ def test_the_tool_readings_are_recomputed_not_hand_copied(tmp_path):
                            cap_usd=1.0, sid=sid)
     assert before.ok and before.data["review_acceptance"]["passed"] is True, before.data
     assert before.data["m_says_done"] is True, before.data
-    assert before.data["can_close"] is None, before.data  # 机器口径第 1 笔还没接线
+    # 2026-11-19（ROOTGATE-①）：`can_close` 也读八格 —— 这个夹具没有论文对应表，
+    # `mapping` 那条 blocker 让结论是 fail（改前它不读八格，所以是 None）。
+    assert before.data["can_close"] is False, before.data
+    assert "mapping" in str(before.data["can_close_reason"]), before.data["can_close_reason"]
 
     key, _name = RX.CRITERIA[0]
     _stmt(st, "0002", page_range=_S.PageRange())          # 缺页码 ⇒ 这一条必须红
@@ -810,7 +818,7 @@ def test_ms_verdict_survives_the_run_through_the_tool_exit(tmp_path):
                         task_list=[{"what": "把交付做完", "state": "done"}])
     assert res.ok, (res.error, res.meta)
     assert res.data["m_says_done"] is True, res.data
-    assert res.data["can_close"] is None, res.data
+    assert res.data["can_close"] is True, res.data  # 顶趟行在、八格过、机器读数真
     assert res.data["verdict_written"]["ok"] is True, res.data["verdict_written"]
     got = _CL.read_m_verdict(st.root)
     assert got["checked"] and got["count"] == 1, got

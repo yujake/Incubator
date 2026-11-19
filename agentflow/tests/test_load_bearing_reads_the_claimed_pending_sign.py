@@ -26,7 +26,7 @@
 | # | 判据 | 造的是什么现场 |
 |---|---|---|
 | a | 已认领的 pending 3/3 签 ⇒ `_statement_reviewed=True`、`prose_reviewed_ids` 非空、断言 `backed_by=v_sign` | 先签后收录的主路 |
-| a-反真空 | 旧读口在同一现场仍然回 False | 证明 a 的红绿确实由换读口决定 |
+| a-反真空 | 把 pending 回退打桩掉 ⇒ 旧读口回到 False（FIX186-D1 之后两把尺同一个答案） | 证明 a 的绿来自那一签本身 |
 | b | 未认领的 pending 签不算（`proof` 断言仍 fail） | 旧射程：pending 只够过准入闸 |
 | c | `proof_review` 断言不算承重，但进 `claims_below_theorem`（读数，不改判定） | 真机手稿 claim-4 |
 
@@ -132,10 +132,13 @@ def test_a_the_claimed_pending_sign_counts_as_the_current_v_sign(
 
 
 def test_a2_the_old_reader_is_still_false_on_the_same_workspace(
-        tmp_path: pathlib.Path) -> None:
-    """a-反真空：旧读口（`statement_review_reading().reviewed`）在同一现场仍是 False。
+        tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """a-反真空（FIX186-D1 之后）：旧读口也有 pending 回退，所以要打桩它才回 False。
 
-    这一条把"换读口"这件事本身钉住：如果旧读口也回 True，a 的绿灯就与这一笔无关。
+    改前 `statement_review_reading` 只读在册台账 ⇒ 同一现场回 False（那一笔"换读口"
+    的理由）。D1 把 pending 回退补进 `review_standing` 之后，两把尺对同一件事给同一个
+    答案；这一条把回退打桩掉 ⇒ 旧读口回到 `unsigned` —— 证明它的 `True` 确实来自
+    "先签后收录"那一叠，而不是来自它本来就不看台账。
     """
     st = _store(tmp_path)
     rel, text = _manuscript()
@@ -144,9 +147,12 @@ def test_a2_the_old_reader_is_still_false_on_the_same_workspace(
     sid = _register(st, rel)
     row = _row(st, sid)
     assert VR.proof_review_gap(st.root, row).get("ok") is True, VR.proof_review_gap(st.root, row)
-    old = bool(VR.statement_review_reading(st.root, row).get("reviewed"))
-    assert old is False, (
-        "旧读口在这个现场也回 True ⇒『换成 proof_review_gap』这一笔不是 a 的绿灯来源", old)
+    assert VR.statement_review_reading(st.root, row).get("reviewed") is True, (
+        "D1 之后旧读口必须与 proof_review_gap 同一个答案")
+    monkeypatch.setattr(VR, "_pending_standing_rows",
+                        lambda *a, **k: None)  # noqa: ARG005 —— 打桩签名与实现同形
+    assert VR.statement_review_reading(st.root, row).get("reviewed") is False, (
+        "打桩掉 pending 回退之后旧读口仍回 True ⇒ 它看的不是那一叠签")
 
 
 # ============================================================ b 未认领不算

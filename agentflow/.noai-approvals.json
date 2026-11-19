@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-19T02:52:23+08:00",
+  "generated_at": "2026-11-19T21:57:58+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -505,10 +505,10 @@
       "path": "tests/golden/agent_surface_snapshot.json",
       "glob": "tests/golden/agent_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "9f6244d8b3772f1aa3327e051608147e4fea5385f6eca0812cf6f2023d1e1784",
+      "sha256": "5c1eabf0e1d5d91589e81df602c836d6ddebb015a16a2c8589483d23e222e927",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "BATCH5（p298）：K11 行级归属（Experiment/Document 的 owner_task/owner_instance；rowscope 一处判据；table.* 读侧收窄与 create/update/delete 三处写闸）、K12 E 台账按实例认行（撤销/复用/progress/会审）、K13 实验号按角色分号段（schema.ID_SEGMENTS + alloc_id(segment=) + verify 逐段核）。业主 2026-11-19 授权动禁改区；登记≠批准，reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐行走查。",
+      "change_note": "FIXBATCH（p299，2026-11-19）：lit.stage_reject 收批量形参 slots（一次调用判拒多个槽位；真机 lp-ball-11 的 60 条待裁跨 6 个委托，A 的 final 明写『逐槽判拒需 60 次调用』）；lit.stage_list 的 note 补「done=True ≠ 清表，收工闸数全表」。tool 面 lit.stage_reject 的 params/returns/summary 各变一格；agent 面 11 条版本行 + A 那一格（lit.stage_reject 只在 A 的 tools_lines 里）。登记≠批准：reviewers=[] 保持、不伪造批准；这两份快照的 diff 需 2 名 reviewer 逐格看过（tool 面 = 4 处声明格，agent 面 = 每角色一行版本行）。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],
@@ -531,10 +531,10 @@
       "path": "tests/golden/tool_surface_snapshot.json",
       "glob": "tests/golden/tool_surface_snapshot.json",
       "category": "eval-criteria",
-      "sha256": "db4f89d42bdd7beb8828eb506b8e515ec4de73afaad3f261330c65a44382aad1",
+      "sha256": "03636887ff2848872e9c113c0ebf0a2b972cfe4be288e206f6683e53f21477e0",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "BATCH3（p297）：agent golden 按 p297 版本行与 F init_signature 现值重冻；tool golden 只有 attack.step / attack.create_plan 两处 returns。业主已授权先apply；登记≠批准，reviewers=[] 保持、不伪造批准，需 2 名 reviewer 逐格看过。",
+      "change_note": "FIXBATCH（p299，2026-11-19）：lit.stage_reject 收批量形参 slots（一次调用判拒多个槽位；真机 lp-ball-11 的 60 条待裁跨 6 个委托，A 的 final 明写『逐槽判拒需 60 次调用』）；lit.stage_list 的 note 补「done=True ≠ 清表，收工闸数全表」。tool 面 lit.stage_reject 的 params/returns/summary 各变一格；agent 面 11 条版本行 + A 那一格（lit.stage_reject 只在 A 的 tools_lines 里）。登记≠批准：reviewers=[] 保持、不伪造批准；这两份快照的 diff 需 2 名 reviewer 逐格看过（tool 面 = 4 处声明格，agent 面 = 每角色一行版本行）。",
       "changed_this_session": true,
       "reviewers": [],
       "audits": [],

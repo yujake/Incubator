@@ -110,11 +110,13 @@ cli_tools_role_v       = 29
 cli_tools_role_l       = 39
 cli_tools_role_m       = 41
 webui_modules           = 11   # `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`
-webui_routes            = 34   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`
-webui_routes_get        = 26   # 同上，按 `x[0] == 'GET'` 计数
+webui_routes            = 35   # `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES))"`（2026-11-19 按现盘复跑追平：34 → 35）
+webui_routes_get        = 27   # 同上，按 `x[0] == 'GET'` 计数（2026-11-19 按现盘复跑追平：26 → 27）
 webui_routes_post       = 8    # 同上，按 `x[0] == 'POST'` 计数
+webui_routes_reader     = 18   # `len(r.READER_ROUTES)`（同上那条复跑命令的第四个数；只读面子表）
+webui_routes_writer     = 9    # `len(r.WRITE_ROUTES)`（同上那条复跑命令的第五个数；写面子表）
 webui_event_kinds       = 6    # `python -c "...from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`
-webui_test_files        = 36   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-14 复跑：+test_webui_cli_landing_alignment.py ⇒ 35 → 36）
+webui_test_files        = 45   # `(Get-ChildItem tests -Filter 'test_webui*.py').Count`（2026-11-19 按现盘复跑追平：36 → 45；2026-11-14 那次是 +test_webui_cli_landing_alignment.py ⇒ 35 → 36）
 LIVE-READINGS:END
 ```
 
@@ -380,15 +382,18 @@ LIVE-READINGS:END
 - **入口文件**：
   - 命令行入口是 `web` 子命令：`python -m agentflow.cli --help` 里逐字
     「`web   起用户端网页（本地小服务：待回答面板 / 运行态 / 事件回放）`」；
-  - 服务端 `src/agentflow/webui/` —— **9 个模块**（`__init__.py` / `__main__.py` /
-    `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `audit.py`）；
+  - 服务端 `src/agentflow/webui/` —— **11 个模块**（`__init__.py` / `__main__.py` /
+    `routes.py` / `server.py` / `state.py` / `writes.py` / `readers.py` / `sse.py` / `audit.py` /
+    `cacheface.py` / `facecache.py`）；
     复跑 `(Get-ChildItem src/agentflow/webui -Filter '*.py').Count`，键 `webui_modules`；
-  - 端点清单的唯一来源是 `webui/routes.py` 的 `ROUTES`：**26 条**（GET **19** / POST **7**；
-    按读写二分 `READER_ROUTES` **14** / `WRITE_ROUTES` **7**，余 **5** 条是自有端点与外壳/静态：
-    `/`、`/index.html`、`/run/{sid}`、`/static/{file...}`、`/api/run-index` —— 最后这条是 A 线自有端点，
-    不属于只读面那六个）。2026-10-21 实测，复跑
-    `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES),len(r.READER_ROUTES),len(r.WRITE_ROUTES))"`
-    ⇒ `26 14 7`；键 `webui_routes` / `webui_routes_get` / `webui_routes_post`；
+  - 端点清单的唯一来源是 `webui/routes.py` 的 `ROUTES`：**35 条**（GET **27** / POST **8**；
+    按读写二分 `READER_ROUTES` **18** / `WRITE_ROUTES` **9**，余 **8** 条是 A 线自有端点与外壳/静态：
+    `/`、`/index.html`、`/run/{sid}`、`/static/{file...}`、`/api/run-index`、`/api/run-digest`、
+    `/api/errors`、`/api/errors/categories` —— 这 8 条读的是 A 线自己的页面 / 静态 / 派生读数，
+    不属于 B 线只读面）。2026-11-19 实测，复跑
+    `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import routes as r;print(len(r.ROUTES),sum(1 for x in r.ROUTES if str(x[0]).upper()=='GET'),sum(1 for x in r.ROUTES if str(x[0]).upper()=='POST'),len(r.READER_ROUTES),len(r.WRITE_ROUTES))"`
+    ⇒ `35 27 8 18 9`；键 `webui_routes` / `webui_routes_get` / `webui_routes_post` /
+    `webui_routes_reader` / `webui_routes_writer`；
   - 事件种类在 `webui/sse.py` 的 `EVENT_KINDS`：**6** 个
     （`state` / `question` / `answered` / `checkpoint` / `stop` / `heartbeat`）。复跑
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
@@ -410,11 +415,11 @@ LIVE-READINGS:END
   - 另外两条形态被单独钉住：**静态路由与目录穿越**（`GET /static/<file>` 只服务
     `web/static/` 之下的文件，穿越一律 404、**不回落 `index.html`**）、
     **`/api/*` 未知路径不许吐 HTML**（给 API 客户端一段 HTML 比 404 更坏）；
-  - 判据文件共 **15** 个：`test_webui{,_contracts,_help_is_current,_pages,_readers,_readings_format,_roster_panel,_settings_write,_sse,_static,_writes,_browser,_ledger_counts_writes,_live_names_the_host_process,_pending_is_one_list}.py`；
-    复跑 `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`（2026-10-23 复跑实测：15；
-    这一格随并行施工变 —— 本节第一次量到的是 10，`test_webui_help_is_current.py` 落地后变 11，
-    2026-10-22 的三条（台账写入计数 / 直播点名宿主进程 / 待答只有一张清单）落地后变 14，
-    之后再量到 15：多出来的那一件是 `test_webui_readings_format.py`）。
+  - 判据文件共 **45** 个（`test_webui*.py`）；复跑
+    `(Get-ChildItem tests -Filter 'test_webui*.py').Count`，键 `webui_test_files`
+    （2026-11-19 按现盘复跑实测：45；这一格随并行施工变 —— 本节第一次量到的是 10，
+    2026-10-23 是 15，之后每落一条 `test_webui*.py` 就加一；所以散文只钉当次数，
+    45 个文件名不逐个抄进来，免得名单本身成为第二份会漂的口径）。
 - **已知边界**（照实写，**不许写成"已解决"**）：
   1. `draft/35` 的七层里**没有这一层**（整份文件里 `webui` / `web/` / `Web 端` **0 命中**，
      复跑 `Select-String -Path 'draft\35-… .md' -Pattern 'webui|web/|Web 端'`）——

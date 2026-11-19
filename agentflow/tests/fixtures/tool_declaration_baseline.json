@@ -7261,6 +7261,57 @@
           "to": "{'checked','total','returned','truncated','experiments','scope','reason'}"
         }
       ]
+    },
+    {
+      "tools": [
+        "lit.stage_reject"
+      ],
+      "key": "params",
+      "reason": "FIXBATCH ①（2026-11-19）：`lit.stage_reject` 加批量形参 `slots`。真机 lp-ball-11 60 条待裁跨 6 个委托，A 的 final 逐字写「逐槽判拒需 60 次调用，超出剩余预算」——而按委托分批只要 6 次。`slot` 从 `required` 移出（保留为单槽形、行为逐字不动），新增 `slots`（数组，1..200，同一个受控理由码），两种目标形二选一。判定口径一个字没改：每一条仍然走 `litstage.reject` 的逐行写口。",
+      "date": "2026-11-19",
+      "edits": [
+        {
+          "op": "add_key",
+          "path": "params/properties/slot/description",
+          "value": "单槽形：判拒这一个槽位（与 slots 二选一）"
+        },
+        {
+          "op": "add_key",
+          "path": "params/properties/slots",
+          "value": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "批量形：一次判拒这几个槽位（同一个理由码与说明）；逐条落盘，无效的进 refused[] 点名"
+          }
+        },
+        {
+          "op": "remove_item",
+          "path": "params/required",
+          "item": "slot"
+        }
+      ]
+    },
+    {
+      "tools": [
+        "lit.stage_reject"
+      ],
+      "key": "returns",
+      "reason": "FIXBATCH ① 的同一笔：单槽形那七格逐字不动（老读者照读），批量形另给 `slots` / `count` / `rejected[]` / `refused[]`。`refused[]` 是「无效或已判过的槽位逐条点名」那一格 —— 混合批次里有效的照常落盘、无效的受控拒，一条坏的绝不许把整批作废（判据：`tests/test_lit_stage_reject_takes_a_batch.py`）。",
+      "date": "2026-11-19",
+      "edits": [
+        {
+          "op": "set_scalar",
+          "path": "returns",
+          "from": "{'slot','status','reason_code','reason','title','request_id','batch'}；失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/store_error)",
+          "to": "单槽形（给 slot）：{'slot','status','reason_code','reason','title','request_id','batch'}；批量形（给 slots）：{'slots','count','rejected','refused'}；slots[] 是这一次点名要判拒的槽位号；rejected[] 每项是 {'slot','status','reason_code','reason','title','request_id','batch'}（与单槽形同形）；refused[] 每项是 {'slot','why','code'}（无效 / 已判过的槽位在这里逐条点名，有效的那些照常落盘）；失败：ok=False + kind(no_store/bad_reason_code/unknown_slot/not_pending/no_target/all_refused/store_error) 之一 + 明细"
+        }
+      ]
     }
   ],
   "summary_lens_before": {

@@ -1347,10 +1347,11 @@ def cli_tools_readings() -> dict[str, int]:
 
 
 def webui_readings() -> dict[str, int]:
-    """第八层（Web / 用户端）的四个读数：模块数 / 端点三条 / 事件种类 / 判据文件数。
+    """第八层（Web / 用户端）的读数：模块数 / 端点总数 / GET / POST / 读写两半 / 判据文件数。
 
     端点的唯一来源是 `webui/routes.py` 的 `ROUTES`（与文档里那句"权威清单在
-    `ROUTES`"逐字对应）；`GET`/`POST` 两格是同一张表按方法数出来的，不是另抄一份。
+    `ROUTES`"逐字对应）；`GET`/`POST` 是同一张表按方法数出来的，`READER_ROUTES` /
+    `WRITE_ROUTES` 数的是同一份总表的两条子表 —— 都不是另抄一份。
     """
     from agentflow.webui import routes as W  # noqa: PLC0415
 
@@ -1359,6 +1360,8 @@ def webui_readings() -> dict[str, int]:
         "webui_routes": len(W.ROUTES),
         "webui_routes_get": sum(1 for r in W.ROUTES if str(r[0]).upper() == "GET"),
         "webui_routes_post": sum(1 for r in W.ROUTES if str(r[0]).upper() == "POST"),
+        "webui_routes_reader": len(W.READER_ROUTES),
+        "webui_routes_writer": len(W.WRITE_ROUTES),
         "webui_event_kinds": _webui_event_kind_count(),
         "webui_test_files": len(list((REPO / "tests").glob("test_webui*.py"))),
     }
@@ -1441,6 +1444,77 @@ def live_reading_problems(declared: dict[str, int], measured: dict[str, int]) ->
     return problems
 
 
+# ---- 2026-11-19 LEFT1：第八层散文里的 webui 读数也必须与实测一致
+#
+# 缺陷形态：`LIVE-READINGS` 块由 `live_reading_problems()` 逐键钉住，但 §2 第八层那段
+# 散文里的同一批数没有判据 —— 块已追平到 35/27/8/18/9，散文还停在 26/19/7/14/7，
+# 同一份文件里两种值。这一段把散文也变成判据的对象：口径只有一个（`measured_readings()`），
+# 两个落位（块 + 散文）各由一条判据盯着；红时报错会说清是"块漂了"还是"散文漂了"。
+
+#: 散文里那几个数的写法（只认第八层那一节里的固定搭配，避免扫到别层的同名数字）。
+_WEBUI_PROSE_RES: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("webui_modules", re.compile(r"webui/`\s*——\s*\*\*(\d+)\s*个模块\*\*")),
+    ("webui_routes", re.compile(r"`ROUTES`：\*\*(\d+)\s*条\*\*")),
+    ("webui_routes_get", re.compile(r"GET\s*\*\*(\d+)\*\*")),
+    ("webui_routes_post", re.compile(r"POST\s*\*\*(\d+)\*\*")),
+    ("webui_test_files", re.compile(r"判据文件共\s*\*\*(\d+)\*\*\s*个")),
+)
+
+#: 复跑命令那一行打印的五个数（总 / GET / POST / 只读面 / 写面）。
+_WEBUI_PROSE_RUN_RE = re.compile(r"⇒\s*`(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)`")
+
+#: 那行复跑读数的五个数逐格对应的键（顺序就是命令 `print` 的顺序）。
+_WEBUI_PROSE_RUN_KEYS: tuple[str, ...] = (
+    "webui_routes", "webui_routes_get", "webui_routes_post",
+    "webui_routes_reader", "webui_routes_writer",
+)
+
+
+def webui_prose_section(text: str) -> str:
+    """§2 第八层（`**⑧ Web / 用户端**`）那一节的原文；读不到 ⇒ 空串（判据要报失去对象）。"""
+    begin = text.find("**⑧ Web / 用户端**")
+    if begin < 0:
+        return ""
+    end = text.find("\n---", begin)
+    return text[begin:end if end >= 0 else len(text)]
+
+
+def webui_prose_claim_problems(text: str, measured: dict[str, int]) -> list[str]:
+    """第八层散文里写死的 webui 读数 vs 实测 ⇒ 问题清单（空 = 成立）。
+
+    为什么单列一条而不并进 `live_reading_problems()`：那一支的对象是块，这一支的对象
+    是散文；两处都得有，但红的时候要能一眼看出是"块漂了"还是"散文漂了"。
+    反真空的形态与那一条同族：读不到第八层、或某个数一个都读不到 ⇒ 报失去对象，
+    不把"没读到"折成"没问题"。负控见 `test_the_documented_readings_criterion_is_not_vacuous`。
+    """
+    section = webui_prose_section(text)
+    if not section:
+        return ["读不到 §2 第八层（`**⑧ Web / 用户端**`）⇒ 判据失去对象"
+                "（删掉那一节不等于数字是对的）"]
+    problems: list[str] = []
+    for key, rx in _WEBUI_PROSE_RES:
+        hits = rx.findall(section)
+        if len(hits) != 1:
+            problems.append(f"散文里 `{key}` 那一条命中 {len(hits)} 次（要恰好一次）"
+                            " ⇒ 判据失去对象，或同一个数又有了第二个落位")
+            continue
+        got = int(hits[0])
+        if got != measured[key]:
+            problems.append(f"散文里把 `{key}` 写成 {got}，实测 {measured[key]}"
+                            "（块里是当次值，散文也必须跟同一份实测）")
+    runs = _WEBUI_PROSE_RUN_RE.findall(section)
+    if len(runs) != 1:
+        problems.append(f"散文里的复跑读数（`⇒ \\`N N N N N\\``）命中 {len(runs)} 次，"
+                        "要恰好一次")
+    else:
+        got = tuple(int(x) for x in runs[0])
+        want = tuple(measured[k] for k in _WEBUI_PROSE_RUN_KEYS)
+        if got != want:
+            problems.append(f"散文里那行复跑读数写成 {got}，实测 {want}"
+                            f"（键：{list(_WEBUI_PROSE_RUN_KEYS)}）")
+    return problems
+
+
 #: `error A / warning B / info C` 这种 linter 读数三元组。
 _TALLY_RE = re.compile(r"error\s*(\d+)\s*/\s*warning\s*(\d+)\s*/\s*info\s*(\d+)")
 
@@ -1515,6 +1589,7 @@ def test_development_md_linter_readings_and_rule_range_match_the_repo():
     problems = live_reading_problems(live_readings(text), measured_readings())
     problems += rule_claim_problems(text, rule_numbers())
     problems += tally_claim_problems(text, measured_readings())
+    problems += webui_prose_claim_problems(text, measured_readings())
     assert not problems, problems
 
 
@@ -1559,6 +1634,20 @@ def test_the_documented_readings_criterion_is_not_vacuous():
     )
     assert tally_claim_problems("这一段里没有 linter 读数。", measured), (
         "一处三元组都读不到时必须报失去对象"
+    )
+
+    # 2026-11-19 LEFT1：第八层散文里的数也要被钉住 —— 把路由总数改回旧值（35 → 26）⇒ 必红。
+    section = webui_prose_section(text)
+    assert section, "夹具前提：文档里有第八层（Web / 用户端）那一节"
+    stale_section = section.replace(f"**{measured['webui_routes']} 条**",
+                                    f"**{measured['webui_routes'] - 9} 条**", 1)
+    assert stale_section != section, "夹具前提：散文里有路由总数可改"
+    stale_prose = text.replace(section, stale_section, 1)
+    assert webui_prose_claim_problems(stale_prose, measured), (
+        "把散文里的路由总数改回旧值之后判据必须红"
+        "（`R7-R6-2` 的同族：块改了、散文没改）")
+    assert webui_prose_claim_problems(text.replace(section, "", 1), measured), (
+        "把第八层那一节删掉之后判据必须报失去对象"
     )
 
 
@@ -3259,6 +3348,20 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                         "连续 clean 的现数；`vsigns.issue` 只认它的 ok，调用方递进来的数"
                         "（within_call / len(judged) / 台账尾数）只是读数；老行显式 "
                         "`legacy:*`、单轮会审显式 single_round —— 纯读、零写盘、零工具注册",
+    # 2026-11-19（ROOTGATE-③：收工门 retire 格读的是销号前的快照 ⇒ 最后一次 closing 必写
+    # "retire 不干净"，而 38 秒后 final 闸自己把它清干净 —— 读数与事实错位）：
+    # 同一份「哪些静默且无未消项的节点会被销掉」的判据有两个读者，一个写盘、一个不许写：
+    # `agent_loop._auto_retire_ready` 在 final 闸真的调 `Secretary.retire`，
+    # `closing.machine_feeders` 只读（`check_closing` 不写任何东西）。挂在任一角色/循环里
+    # 都会让另一侧反向依赖；它只读（不写盘、不注册工具、零模型调用），判据能直接拿假
+    # `cond` 核三态，所以必须是顶层模块。
+    "autoretire.py": "收工前自动收尾的只读判据（ROOTGATE-③，2026-11-19）：MAX_ROUNDS / "
+                     "ready_now（逐父读 `retire_ready`，只收 branch == "
+                     "\"waiting_no_children\" 且 items_open == 0）/ plan_retire（只读闭包："
+                     "父在它那些活跃子全成候选之后才就绪，轮数上限与 `_auto_retire_ready` "
+                     "同为 MAX_ROUNDS）/ project_retire（把 `retire_integrity` 的读数换成"
+                     "「收尾前自动收尾之后」的那一份）—— 纯读、零写盘、零工具注册；"
+                     "`agent_loop` 的 final 闸与 `closing.machine_feeders` 读同一份",
 }
 
 

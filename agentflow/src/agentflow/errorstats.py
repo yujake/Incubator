@@ -1349,7 +1349,8 @@ def _read_closing(root: Path) -> dict[str, Any]:
     """
     reading: dict[str, Any] = {"checked": False, "state": "unknown", "reason": "",
                                "blockers": [], "status": {}, "machine_pass": False,
-                               "can_close": None, "can_close_reason": "", "source": "closing.check_closing"}
+                               "can_close": None, "can_close_reason": "",
+                               "closing_verdict": None, "source": "closing.check_closing"}
     if not (root / "out").is_dir():
         reading.update(checked=True, state="not_applicable",
                        reason="这个工作区没有 out/ ⇒ 收工门没有对象（不是'通过了'）")
@@ -1377,7 +1378,9 @@ def _read_closing(root: Path) -> dict[str, Any]:
                    status={str(k): str(v) for k, v in (getattr(rep, "status", None) or {}).items()},
                    machine_pass=bool(getattr(rep, "machine_pass", False)),
                    can_close=getattr(rep, "can_close", None),
-                   can_close_reason=str(getattr(rep, "can_close_reason", "") or ""))
+                   can_close_reason=str(getattr(rep, "can_close_reason", "") or ""),
+                   # 一份权威结论（ROOTGATE-②）：错误动作页也要能读到"为什么不算完成"。
+                   closing_verdict=dict(getattr(rep, "verdict", {}) or {}))
     return reading
 
 
@@ -2091,8 +2094,17 @@ def _pad(text: str, width: int) -> str:
 
 
 def _table_lines(head: list[str], rows: list[list[str]]) -> list[str]:
-    """一张按显示宽度对齐的小表（表头 + 分隔线 + 各行）。错误表与拆分读数表共用这一份。"""
-    widths = [max(_shown_width(head[i]), *(_shown_width(r[i]) for r in rows))
+    """一张按显示宽度对齐的小表（表头 + 分隔线 + 各行）。错误表与拆分读数表共用这一份。
+
+    `rows=[]` 是合法输入：返回「表头 + 分隔线」两行，不抛。这不是防御性代码，
+    而是搬走前 `readouts._table` 的既有行为（SPLITREAD 的已知边界）—— 四个调用点
+    都先判过非空，所以它走不到；但"走不到"不等于"不会炸"：将来新增一个空表调用点，
+    旧写法 `max(x, *())` 会把 int 当可迭代抛 TypeError，而不是画一张只有表头的表。
+    """
+    # 宽度取「表头 + 每一行」的最大值。必须把表头放进可迭代里再 `max`：
+    # `max(表头, *别的)` 在 rows 为空时只剩一个参数（int），Python 会试着把它当可迭代。
+    widths = [max([_shown_width(head[i])]
+                  + [_shown_width(r[i]) for r in rows])
               for i in range(len(head))]
     widths = [max(w, 4) for w in widths]
     out = ["  ".join(_pad(head[i], widths[i]) for i in range(len(head))).rstrip(),

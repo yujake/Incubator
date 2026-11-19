@@ -65,9 +65,9 @@ EXIT_CODE_UNIFIED: dict[int, str] = {
 EXIT_CODE_DOMAINS: dict[str, dict[int, str]] = {
     # 单趟循环与多轮驱动（`agentflow run-agent` / `--rounds N`）。表体在 `STOP_REASONS`。
     "loop": {
-        0: "正常完成（给了 final）",
-        1: "行为异常（只留给真出事；未登记的停止理由也落这里，好让它当场可见）",
-        2: "研究启动失败（一步模型都没调就交回去了）",
+        0: "正常完成（给了 final，且收工门的权威结论是 pass / 这一趟没有门）",
+        1: "行为异常（真出事；收工门判不过 closing_failed；未登记的停止理由也落这里）",
+        2: "研究启动失败 / 收工门没查成（closing_unknown：一步模型都没调，或门没给出结论）",
         3: "等待用户（人答完 --resume 接着跑）",
         4: "正常且中途停止：用户 / 父 / 钱叫停（含 budget）",
         5: "正常且自行停止但没有 final（原地打转 / escalated / final_refused）",
@@ -133,6 +133,12 @@ STOP_REASONS: dict[str, tuple[int | None, str, str, bool]] = {
     # `run.final` 留空、循环自己 break。归 5 而不是 1：门按设计挡住了，没有东西坏掉；
     # 下一步是"先销号，再 --resume 重发 final"，不是去查模型故障。
     "final_refused": (5, "badge-unknown", "收工被拒（树未销净）", True),
+    # `closing_failed` / `closing_unknown`（ROOTGATE-②，2026-11-19）：
+    # 模型发了 final，但 `conductor.closing` 的权威结论不是 pass。改前这一拍一律
+    # `stop_reason="final"` ⇒ 退出码 0，八格 6/8 的真机 lp-ball-11 就是这么被读成
+    # "跑成了"。fail 归 1（查过了、结论是坏），unknown 归 2（没查成）—— 三态不折平。
+    "closing_failed": (1, "badge-fail", "收工门判不过", True),
+    "closing_unknown": (2, "badge-unknown", "收工门没查成", True),
     # `max_steps`（裁定 12-K 之前的历史读数）：循环今天不再产生它，但旧会话记录里
     # 真有。只有徽标、没有退出码；旧会话在退出码那一侧按未登记兜底成 1。
     "max_steps": (None, "badge-unknown", "步数用尽（旧读数）", False),

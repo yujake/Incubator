@@ -7662,6 +7662,11 @@ class Conductor:
         items: list[dict[str, Any]] = []
         for c in cons:
             cid = str(c.get("conjecture_id") or "")
+            # FIX186-E（2026-11-19）：已登记进命题台账的猜想不算「待登记」——
+            # 「待登记」视图读的是行上落盘的 `registered_stmt_id`（B 收录成功即写），
+            # 而不是"它现在叫什么状态"：一条猜想可以同时是 supported/refuted 且已毕业。
+            if str(c.get("registered_stmt_id") or "").strip():
+                continue
             # 2026-10-17（T2b 真机读数）：状态机是
             # `proposed → testing → (supported_not_proved | refuted | proved) → promoted`。
             # 原先只认 `proposed`，而 T2b 里那条猜想停在 `testing` 且没有任何计划 ——
