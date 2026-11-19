@@ -8795,6 +8795,22 @@ class Conductor:
 
         参数说明在 `summon_begin`（唯一的一份）。
         """
+        # ---- R9FIX-D3：单件派活也要扫一次待认领队列 -------------------------
+        #
+        # 改前只有 `summon_many` / `run_plan` 与顶趟收尾扫队。真机 lp-ball-9
+        # （08:53:39，`r-000009`）是 M 在初始批次之后**一直用单件 `conductor.summon`**
+        # 派活（09:11 / 09:14 / 09:19 三次），于是 D 提交的那一条检索请求到收工
+        # 都没人认领（`attempts=0`）⇒ R11 红。
+        # 判据只挂在"M 自己发起的单件派活"上：`run_plan` / `summon_many` 已经扫过
+        # （`_consume_queue_before_dispatch`），子角色派活不替 M 收研究链的队列。
+        # `_queue_sweeping` 防递归：认领本身就是一次 `summon("A","run_once")`。
+        if (not getattr(self, "_queue_sweeping", False)
+                and current_caller_role() == S.CONDUCTOR_ROLE):
+            self._queue_sweeping = True
+            try:
+                self._consume_queue_before_dispatch()
+            finally:
+                self._queue_sweeping = False
         return self.summon_run(self.summon_begin(
             role, action, params, by=by, parent_task_id=parent_task_id,
             input_key=input_key, budget=budget, token=token, lineage=lineage,
@@ -9941,10 +9957,12 @@ class Conductor:
         return handle if preemptible else handle.results()
 
     def _consume_queue_before_dispatch(self) -> None:
-        """`run_plan` 与 `summon_many` 共用的那一步：派活之前扫一次待认领的队列。
+        """`run_plan` / `summon_many` / 单件 `summon` 共用的那一步：派活之前扫一次待认领的队列。
 
-        抽成一个方法是因为两条拼法都要它（D-64）：只给 `run_plan` 会变成
-        "阻塞式派活顺手认领、可抢占派活不认领" —— 同一件事两条口径。
+        抽成一个方法是因为三条拼法都要它（D-64；R9FIX-D3 补单件那一档）：只给
+        `run_plan` 会变成"阻塞式派活顺手认领、可抢占派活不认领" —— 同一件事两条口径；
+        只给批量那两档时，主控在初始批次之后改走单件 `conductor.summon`，队列就永远
+        没人扫（真机 lp-ball-9 的 `r-000009`）。
         """
         try:
             self.consume_pending_search_requests(trigger="dispatch")
