@@ -128,3 +128,38 @@ def test_an_unreadable_subtree_retires_nothing():
     got = _auto(cond)
     assert got["checked"] is False and got["retired"] == [], got
     assert "台账读不成" in "；".join(got["problems"]), got
+
+
+def test_the_final_gate_auto_retires_and_then_records_the_final(
+        tmp_path, monkeypatch) -> None:
+    """接线判据：`_final_gate_reading` 真的调了它 —— 静默子代理使 final 直接成立。
+
+    反真空：同一份夹具把 `auto_retire_before_final` 关掉，`final` 必须被拒
+    （`test_a_refused_final_gets_another_beat` 守的就是那一档）。
+    """
+    import test_a_refused_final_gets_another_beat as Q12
+    from agentflow.agent_loop import AgentLoop, run_role
+    from agentflow.conductor import Conductor
+    from agentflow.llmseam import LlmSeam
+    from agentflow.tools import build_registry
+
+    env = Q12._workspace(tmp_path)
+    owner = str(env["owner"])
+    child = Q12._child(env["cond"], owner)
+    Q12._roster(env, child)
+    monkeypatch.setattr(Conductor, "open_top_level_run",
+                        lambda self, role, task: owner)
+    monkeypatch.setattr(AgentLoop, "auto_retire_before_final", True)
+    gate = Q12._Gate([Q12._final_reply()])
+    reg = build_registry(store=env["store"], conductor=env["cond"]).registry
+    run = run_role("M", "夹具：D5 自动收尾", store=env["store"], registry=reg,
+                   conductor=env["cond"],
+                   seam=LlmSeam(role="M", session_root=env["root"], gateway=gate,
+                                price=(0.0, 0.0), sid=Q12.SID),
+                   session_root=env["root"], workspace_root=str(env["root"]),
+                   sid=Q12.SID, from_env=False)
+
+    assert run.stop_reason == "final", run.to_dict()
+    rows, bad = env["sec"].retired_names(owner)
+    assert not bad, bad
+    assert child in [str(r.get("task_id") or "") for r in rows], rows
