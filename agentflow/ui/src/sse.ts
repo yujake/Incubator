@@ -31,11 +31,20 @@ export type Handlers = {
   [K in Kind]?: (data: unknown) => void;
 };
 
-/** 连接态（三档，页面顶部据此说清"现在这份读数是推来的还是轮来的"）。 */
-export type Connection = "connecting" | "live" | "degraded";
+/** 连接态（四档，页面顶部据此说清"现在这份读数是推来的、轮来的、还是可能过期"）。 */
+export type Connection = "connecting" | "live" | "degraded" | "stale";
 
 /** 重连退避的上限（次）：到这个数还没连上就降级为轮询。 */
 export const MAX_RETRIES = 3;
+
+/** 降级之后轮询的间隔（毫秒）。 */
+export const POLL_INTERVAL_MS = 2000;
+
+/** 降级之后再试着把 SSE 接回来的间隔（毫秒）：轮询不是终点。 */
+export const STREAM_REOPEN_MS = 20000;
+
+/** 轮询连续失败到几次就把连接态报成 `stale`（"数据可能过期"）。 */
+export const STALE_AFTER_POLL_FAILS = 2;
 
 /**
  * 流端点的落点（与 `api.ts` 的 `ENDPOINTS.stream` 同源 —— 那个表是端点的唯一出口，
@@ -62,6 +71,8 @@ export function subscribe(
   let lastId = typeof opts.since === "number" ? opts.since : 0;
   let source: EventSource | null = null;
   let poll: number | null = null;
+  let reopen: number | null = null;
+  let pollFails = 0;
   let tries = 0;
   let closed = false;
 
@@ -70,6 +81,10 @@ export function subscribe(
       window.clearInterval(poll);
       poll = null;
     }
+    if (reopen !== null) {
+      window.clearInterval(reopen);
+      reopen = null;
+    }
   };
 
   const startPolling = (): void => {
@@ -77,18 +92,34 @@ export function subscribe(
       return;
     }
     opts.onStatus?.("degraded");
+    pollFails = 0;
     poll = window.setInterval(() => {
       void api
         .getState()
         .then((snapshot) => {
+          pollFails = 0;
           if (h.state) {
             h.state({ snapshot });
           }
         })
         .catch(() => {
-          // 轮询也失败：连接态留在 degraded（那是"没查成"，不是"没有事件"）。
+          // 轮询也失败：连续失败到阈值就把连接态报成 `stale`（"数据可能过期"）——
+          // 停在 degraded 会让读的人以为"轮询在动、只是不是推来的"。
+          pollFails += 1;
+          if (pollFails >= STALE_AFTER_POLL_FAILS) {
+            opts.onStatus?.("stale");
+          }
         });
-    }, 2000);
+    }, POLL_INTERVAL_MS);
+    // 轮询不是终点：每隔一会儿再试着把 SSE 接回来。接回来时 `open` 的
+    // open 事件会 stopPolling()（轮询与重连定时器一起清掉）。
+    reopen = window.setInterval(() => {
+      if (closed || source !== null) {
+        return;
+      }
+      tries = 0;
+      open();
+    }, STREAM_REOPEN_MS);
   };
 
   const open = (): void => {

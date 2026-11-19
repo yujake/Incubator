@@ -12,7 +12,9 @@
  *   只取自己那一条端点（不把六个面堆进一条流）。
  *
  * 降级：`subscribe()` 三次重连失败后改成轮询 `/api/state`，并把连接态报成
- * `degraded`；顶部横幅据此显示"实时已降级为轮询"。轮询期间读数照样动。
+ * `degraded`；轮询连续失败到阈值报成 `stale`（顶部横幅显示"数据可能过期"）。
+ * 轮询期间读数照样动，且每隔 `STREAM_REOPEN_MS` 会再试着把 SSE 接回来 ——
+ * 轮询不是终点。
  */
 import { createContext } from "preact";
 import type { ComponentChildren } from "preact";
@@ -190,6 +192,17 @@ export function LiveProvider(props: LiveProviderProps) {
 /** 连接态与快照问题的那一条横幅（九个页面共用一个，口径只有一处）。 */
 export function ConnectionBanner() {
   const live = useLive();
+  if (live.connection === "stale") {
+    return (
+      <div class="card problem">
+        <span class="badge badge-fail">数据可能过期</span>
+        <span class="readings">
+          SSE 没接上，轮询也连续失败 —— 页面上这一份读数是最后一次成功拿到的，
+          可能已经不是盘上的现状。网络恢复后会自动重连（先重试 SSE，再退回轮询）。
+        </span>
+      </div>
+    );
+  }
   if (live.connection === "degraded") {
     return (
       <div class="card problem">

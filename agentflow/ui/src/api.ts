@@ -220,13 +220,73 @@ export class ApiError extends Error {
   readonly code: number;
   readonly tri: Tri;
   readonly reason: string;
+  /** 失败的种类（鲁棒 c：超时 / 网络 / HTTP / 正文不是 JSON 是四件不同的事）。 */
+  readonly kind: ApiErrorKind;
 
-  constructor(code: number, tri: Tri, reason: string) {
+  constructor(code: number, tri: Tri, reason: string, kind: ApiErrorKind = "http") {
     super(`${code} ${reason}`);
     this.name = "ApiError";
     this.code = code;
     this.tri = tri;
     this.reason = reason;
+    this.kind = kind;
+  }
+
+  /** 这一次失败值不值得重试（幂等读才有这一档；写请求一律不自动重试）。 */
+  get retryable(): boolean {
+    if (this.kind === "timeout" || this.kind === "network") {
+      return true;
+    }
+    return this.kind === "http" && this.code >= 500;
+  }
+}
+
+/** 失败种类（`ApiError.kind` 的闭集）。 */
+export type ApiErrorKind = "timeout" | "network" | "http" | "bad-json";
+
+/** 一次读请求的超时（毫秒）。超时不是"没有数据"，页面据此写「没查成」。 */
+export const REQUEST_TIMEOUT_MS = 15000;
+
+/** 读请求的总重试次数（首次之外再试几次）；退避 400ms、800ms。 */
+export const RETRY_LIMIT = 2;
+
+/** 退避基数（毫秒）：第 n 次重试等 `RETRY_BASE_MS * 2^n`。 */
+export const RETRY_BASE_MS = 400;
+
+/** 等一会儿（重试退避；只在浏览器里跑）。 */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+/**
+ * 带超时的 fetch（一次）。超时用 `AbortController` 真把请求掐掉，
+ * 不靠"等它自己回来"—— 后者在 `/api/state` 慢或后端卡住时就是无限转圈。
+ */
+async function fetchOnce(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (exc) {
+    if (controller.signal.aborted) {
+      throw new ApiError(
+        0,
+        "unreadable",
+        `请求超时（${timeoutMs} 毫秒没有响应）—— 这一份读数没查成，不是"没有数据"`,
+        "timeout",
+      );
+    }
+    throw new ApiError(0, "unreadable", `请求没发出去：${String(exc)}`, "network");
+  } finally {
+    window.clearTimeout(timer);
   }
 }
 
@@ -246,24 +306,47 @@ function csrf(): string {
 async function readJSON<T>(resp: Response): Promise<T> {
   const text = await resp.text();
   if (!resp.ok) {
-    throw new ApiError(resp.status, "unreadable", text.trim().slice(0, 300) || "服务端没有给正文");
+    throw new ApiError(
+      resp.status,
+      "unreadable",
+      text.trim().slice(0, 300) || "服务端没有给正文",
+      "http",
+    );
   }
   try {
     return JSON.parse(text) as T;
   } catch {
-    throw new ApiError(resp.status, "unreadable", "正文不是 JSON（没查成，不是空读数）");
+    throw new ApiError(
+      resp.status,
+      "unreadable",
+      "正文不是 JSON（没查成，不是空读数）",
+      "bad-json",
+    );
   }
 }
 
-/** 读一个 JSON 端点。失败抛 ApiError（不返回空对象）。 */
+/**
+ * 读一个 JSON 端点。失败抛 ApiError（不返回空对象）。
+ *
+ * 鲁棒 c：超时与断流不许变成无限转圈 —— 超时 15 秒、最多再重试 2 次
+ * （网络 / 超时 / 5xx 才重试；4xx 与"正文不是 JSON"当场抛，重试也读不出来）。
+ */
 export async function getJSON<T>(url: string): Promise<T> {
-  let resp: Response;
-  try {
-    resp = await fetch(url, { headers: { Accept: "application/json" } });
-  } catch (exc) {
-    throw new ApiError(0, "unreadable", `请求没发出去：${String(exc)}`);
+  let last: unknown = null;
+  for (let attempt = 0; attempt <= RETRY_LIMIT; attempt += 1) {
+    try {
+      const resp = await fetchOnce(url, { headers: { Accept: "application/json" } });
+      return await readJSON<T>(resp);
+    } catch (exc) {
+      last = exc;
+      const err = exc instanceof ApiError ? exc : null;
+      if (err === null || !err.retryable || attempt === RETRY_LIMIT) {
+        throw exc;
+      }
+      await sleep(RETRY_BASE_MS * Math.pow(2, attempt));
+    }
   }
-  return await readJSON<T>(resp);
+  throw last instanceof Error ? last : new ApiError(0, "unreadable", String(last), "network");
 }
 
 async function postForm(
@@ -282,20 +365,17 @@ async function postForm(
     }
     form.append(key, value);
   }
-  try {
-    return await fetch(url, {
-      method: "POST",
-      redirect,
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
-        "X-CSRF-Token": csrf(),
-        Accept: "application/json",
-      },
-      body: form.toString(),
-    });
-  } catch (exc) {
-    throw new ApiError(0, "unreadable", `请求没发出去：${String(exc)}`);
-  }
+  // 写请求只加超时，不自动重试：同一次写重放一次就是两次副作用（回答两次 / 追加两次预算）。
+  return await fetchOnce(url, {
+    method: "POST",
+    redirect,
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      "X-CSRF-Token": csrf(),
+      Accept: "application/json",
+    },
+    body: form.toString(),
+  });
 }
 
 /** 写一个 JSON 端点（表单编码 + CSRF 头）。失败抛 ApiError。 */
