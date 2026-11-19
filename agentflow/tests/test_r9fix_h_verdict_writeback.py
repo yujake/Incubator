@@ -38,8 +38,9 @@ class _Loop:
 
 
 class _Run:
-    def __init__(self, steps) -> None:
+    def __init__(self, steps, *, started_at: str = "") -> None:
         self.steps = list(steps)
+        self.started_at = started_at
 
 
 def _step(*, doc_id: str, verdict: str, revision_hash: str, ok: bool = True):
@@ -101,7 +102,7 @@ def test_a_report_for_a_newer_revision_is_not_written(tmp_path: pathlib.Path):
 
 
 def test_an_existing_verdict_is_not_overwritten(tmp_path: pathlib.Path):
-    """反真空：这一趟 `verify_fixes` 已经写过审核轴 ⇒ 不覆盖。"""
+    """反真空：这一趟 `verify_fixes` 已经写过审核轴（晚于 run.started_at）⇒ 不覆盖。"""
     store = Store(tmp_path / "ws")
     store.init()
     seed_document(store, "0000", [clean_claim()])
@@ -113,10 +114,31 @@ def test_an_existing_verdict_is_not_overwritten(tmp_path: pathlib.Path):
         tx.upsert("documents", row)
     current = _doc(store)
     _stamp(store, _Run([_step(doc_id="0000", verdict="accepted",
-                              revision_hash=CA.revision_hash(current))]))
+                              revision_hash=CA.revision_hash(current))],
+                       started_at="2026-11-19T09:20:00+08:00"))
     row = _doc(store)
     assert row["review_verdict"] == "有毛病", row
     assert row["reviewed_at"] == "2026-11-19T09:27:27+08:00", row
+
+
+def test_a_stale_verdict_from_a_previous_round_is_refreshed(tmp_path: pathlib.Path):
+    """上一轮留下的旧判词（早于这一趟开跑）⇒ 按本报告刷新（G 走 fs.edit 那一档）。"""
+    store = Store(tmp_path / "ws")
+    store.init()
+    seed_document(store, "0000", [clean_claim()])
+    with store.tx("documents", actor="agent-H") as tx:
+        row = tx.find("documents", doc_id="0000")
+        row["review_verdict"] = "有毛病"
+        row["reviewed_at"] = "2026-11-19T09:27:27+08:00"
+        row["reviewed_by"] = "agent-H"
+        tx.upsert("documents", row)
+    current = _doc(store)
+    _stamp(store, _Run([_step(doc_id="0000", verdict="accepted",
+                              revision_hash=CA.revision_hash(current))],
+                       started_at="2026-11-19T09:33:00+08:00"))
+    row = _doc(store)
+    assert row["review_verdict"] == "成立", row
+    assert row["reviewed_at"] != "2026-11-19T09:27:27+08:00", row
 
 
 def test_an_unverified_report_does_not_stamp(tmp_path: pathlib.Path):

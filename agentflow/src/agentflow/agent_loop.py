@@ -13857,7 +13857,14 @@ class AgentLoop:
                     return ("H 的审校裁决没回写：报告钉的版本 "
                             f"{expected_hash[:12]}… 已不是现行版（{current_hash[:12]}…）"
                             " ⇒ 判词只挂读到的那一版")
-                if str(row.get("review_verdict") or ""):
+                existing_at = str(row.get("reviewed_at") or "")
+                run_started = str(getattr(run, "started_at", "") or "")
+                # 这一行已经有判词：只有"这一趟自己刚写过"才不覆盖（`verify_fixes`
+                # 在本次 H 运行里落的 `reviewed_at` 晚于 run.started_at）。上一轮留下的
+                # 旧判词（或 G 走 `fs.edit` 没清掉的那一格）要按本报告更新 ——
+                # 否则 `documents.reviewed_at` 会永远停在上一次。
+                if (str(row.get("review_verdict") or "") and existing_at and run_started
+                        and existing_at >= run_started):
                     return ""
                 row["review_verdict"] = axis
                 row["reviewed_at"] = S.now_iso()
