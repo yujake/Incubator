@@ -355,6 +355,19 @@ export function Evidence() {
               { key: "kind", title: "类别", render: (r) => cell(r.kind) },
               { key: "label", title: "标签", render: (r) => cell(r.label) },
               {
+                // 归属（第 ⑧ 项）：这一行是谁写的。`by_role` 是读侧按 `created_by`
+                // 反查出的实例标签（`by_role_source` 说它从哪一格来）—— 两个 F 并发时
+                // 只有这一列分得开；空串 = 盘上那一行没记（老行），写「—」，不猜。
+                key: "by_role",
+                title: "写它的实例",
+                render: (r) => (
+                  <span class="mono">
+                    {r.by_role === "" ? "—（盘上没记）" : r.by_role}
+                    {r.by_role_source === "" ? "" : `（${r.by_role_source}）`}
+                  </span>
+                ),
+              },
+              {
                 // 派生等级（五元位现算：任一路径通过即正式定理）。它不是谁自报的，
                 // 所以与下面五格并排读：一个说多不平凡、一个说到没到定理。
                 key: "grade",

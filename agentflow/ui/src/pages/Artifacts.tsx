@@ -48,7 +48,7 @@ import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { Consistency } from "../components/Consistency";
 import { PagedTable } from "../components/PagedTable";
-import { cell, plain } from "../components/Table";
+import { blank, cell, plain } from "../components/Table";
 import { formatUsd } from "../components/Money";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -670,8 +670,23 @@ export function Artifacts() {
             columns={[
               { key: "task_id", title: "任务号" },
               { key: "role", title: "角色" },
+              // 实例身份（`identity.py` 的规范实例标签，落点是 `tasks.instance`）：
+              // 两个 F 一起干活时只有这一列分得开谁是谁；空串 = 这一行没有实例身份
+              // （直调 / 老行），页面写「—」，不拿角色名冒充实例。
+              {
+                key: "instance",
+                title: "实例",
+                render: (r) => (
+                  <span class="mono">
+                    {r.instance === "" ? "—（没有实例身份）" : r.instance}
+                  </span>
+                ),
+              },
               { key: "action", title: "动作" },
               { key: "called_by", title: "谁调的" },
+              // `seen_step`：这一行第一次被看到时主控在第几步（台账里没有"步"这一列，
+              // 只有这一格读数；读不到 ⇒ —，不是 0）。
+              { key: "seen_step", title: "看到它的步", render: (r) => blank(r.seen_step) },
               // 状态列读后端现算的 `status_reading`（D12 ②）：板项行
               // （`kind` 非空）的 `status` 在台账里恒为 `pending`（那是"这一行是板项"
               // 的类型标记），真正的收口在 `item_state`/`item_close`。直接印 `status`
