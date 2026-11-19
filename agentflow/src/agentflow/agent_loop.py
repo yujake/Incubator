@@ -2258,6 +2258,18 @@ MAILBOX_LIMIT: int = 8
 #: 那一条永久滤掉。这里用"被撤项的编号"另起一个键空间，与任何 task_id 都不会撞。
 REVOKED_RECENT_KEY_PREFIX: str = "revoked-recent@"
 
+#: 「这一拍读不成的说明」在渲染集（`AgentLoop._mailbox_rendered`）里的键前缀。
+#:
+#: 为什么它也要进渲染集（R10FIX-D1 的第三半）：会话文件里真有读不出来的行时，
+#: `read_session` 每一拍都会把同一批说明交回来，而 `mailbox_digest` 此前把它们
+#: 原样塞进 `run.notes` —— 真机 lp-ball-10 的顶趟因此把同一批 84 个坏行号重报了
+#: 55 次（4589 条 note，`agent_run_end.notes` 9167 条）。"没查成"必须每拍都算
+#: （`checked=False` 照旧），但同一句说明这一趟只让 M 看一次。
+#:
+#: 键里放整句说明：说明文本本身带行号（或行号范围），所以"另一批坏行"会得到
+#: 另一个键、照常报出来 —— 去重的是重复，不是问题。
+MAILBOX_PROBLEM_KEY_PREFIX: str = "mailbox-problem@"
+
 #: 信箱投递事件的 `kind`（append-only 的审计面）。
 #:
 #: 为什么不复用 `agent_inbox`：那一条的键是 `delivered`（留言的 msg_id），投递登记的
@@ -2456,7 +2468,13 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
                    rendered: Sequence[str] = (),
                    instance: str = "") -> dict[str, Any]:
     """投给我、还没读过的那一批：`{checked, text, item_ids, msg_ids, problems,
-    backlog, reason, items, revoked_recent, revoked_ids}`。
+    problem_ids, problems_repeated, backlog, reason, items, revoked_recent,
+    revoked_ids}`。
+
+    `problems` 是这一拍要报出去的那几条（已经被前面某一拍报过的不在其中，
+    见 `MAILBOX_PROBLEM_KEY_PREFIX`）；`problem_ids` 是它们的渲染键（投递点把它并进
+    `AgentLoop._mailbox_rendered`）；`problems_repeated` 是这一拍被折掉的重复条数
+    （读数：去重不是"没问题"）。
 
     ## 「最近被撤销的项」为什么在这里
 
@@ -2610,6 +2628,15 @@ def mailbox_digest(conductor: Any, session_root: Path | str, role: str, *,
         got["text"] = ("【信箱】这一段是本次投递的增量（不是这一趟的开场快照；"
                        "开场那一段只放这一趟的事实，流水在这里现念）：\n\n"
                        + "\n\n".join(blocks))
+    # ---- 「读不成」这一趟只让 M 看一次（R10FIX-D1 的第三半，理由见
+    # `MAILBOX_PROBLEM_KEY_PREFIX`）。`checked` / `reason` 照旧每拍都算：这里只
+    # 折"重报"，不折"没查成"。`problem_ids` 交给投递点并进渲染集（它是这一趟的
+    # "已经让 M 看过哪几句"），下一个 `mailbox_digest` 就按同一份集合滤。
+    fresh_problems = [p for p in got["problems"]
+                      if f"{MAILBOX_PROBLEM_KEY_PREFIX}{p}" not in already]
+    got["problem_ids"] = [f"{MAILBOX_PROBLEM_KEY_PREFIX}{p}" for p in fresh_problems]
+    got["problems_repeated"] = len(got["problems"]) - len(fresh_problems)
+    got["problems"] = fresh_problems
     return got
 
 
@@ -5226,6 +5253,154 @@ def loop_instance(loop: Any) -> dict[str, Any]:
             "why": str(got.get("conflict") or "")}
 
 
+def dispatch_arg_refusal(name: str, args: Mapping[str, Any]) -> dict[str, str]:
+    """模型把调用信封又包了一层时，给一句受控拒信（空 dict = 形状没问题）。
+
+    ## 现场（R10FIX-D3，真机 lp-ball-10 会话行 3419，2026-11-19 14:18:09）
+
+    M 那一拍给 `conductor.closing` 的 `args` 是 `{"name": "conductor.closing",
+    "args": {…全量实参…}}` —— 整个调用信封被多包了一层。分发点是
+    `self.registry.call(name, role=..., **args)`，于是 `name` 与位置参数重名 ⇒
+    `TypeError: ToolRegistry.call() got multiple values for argument 'name'` 冒到
+    结果里（没有 `data` / `meta` / `kind`，也没有"怎么改"）。11 秒后 M 按正确形状
+    重发才成功 —— 一次真调用白花，而读数里只有一行 Python 异常。
+
+    形状判据（只认会崩的那一个键，不顺带改别的）：`args` 里出现 `name`。它不是
+    任何工具的声明参数（`tools/base.py` 的 docstring 把"吞参数"的两个名字列为
+    `role` / `args`，`name` 不在其中），所以它一定是被多包的那一层。
+
+    返回 `{"kind", "how_to_fix", "reason"}`：
+
+    - `kind="param_error"`（与参数门那一档同一个词，下游按它分类处置）；
+    - `how_to_fix` 是逐字的改法（把内层实参直接当这件工具的实参）；
+    - `reason` 是给模型看的整句。
+    """
+    if not isinstance(args, Mapping) or "name" not in args:
+        return {}
+    inner = args.get("args")
+    detail = ""
+    if isinstance(inner, Mapping):
+        keys = "、".join(str(k) for k in list(inner)[:8])
+        detail = f"（内层 `args` 里是这 {len(inner)} 个键：{keys}）"
+    return {
+        "kind": "param_error",
+        "how_to_fix": ("把内层 `args` 里的那几个键**直接**作为这件工具的实参传"
+                       "（`{\"name\": \"<工具名>\", \"args\": {…}}` 这层信封只属于"
+                       "`SHAPES` 的调用记录，不属于工具实参）；工具名只写在调用的 "
+                       "`name` 字段，别再放进 `args`"),
+        "reason": (f"参数形状不对：`args` 里带了 `name`（={args.get('name')!r}）{detail} "
+                   f"⇒ 工具分发会把 `name` 与工具名重名、直接崩在解释器上"
+                   f"（这一次没有执行 {name}）。"),
+    }
+
+
+def _write_report_axis(loop, data: Mapping[str, Any], *, run_started: str = "") -> str:
+    """`review.report` 那一支的写回（返回空串 = 没写；理由见调用方 docstring）。"""
+    verdict = str(data.get("verdict") or "")
+    if verdict not in ("accepted", "rejected"):
+        return ""
+    axis = "成立" if verdict == "accepted" else "有毛病"
+    doc_id = str(data.get("doc_id") or "")
+    expected_hash = str(data.get("revision_hash") or "")
+    from . import claimanatomy as CA
+
+    try:
+        with loop.store.tx("documents", actor=f"agent-{loop.role}",
+                           note=f"H review.report verdict doc:{doc_id}") as tx:
+            row = tx.find("documents", doc_id=doc_id)
+            if row is None:
+                return f"H 的审校裁决没回写：documents 里没有 {doc_id} 这一行"
+            current_hash = CA.revision_hash(row)
+            if expected_hash and current_hash != expected_hash:
+                return ("H 的审校裁决没回写：报告钉的版本 "
+                        f"{expected_hash[:12]}… 已不是现行版（{current_hash[:12]}…）"
+                        " ⇒ 判词只挂读到的那一版")
+            existing_at = str(row.get("reviewed_at") or "")
+            run_started = str(run_started or "")
+            # 这一行已经有判词：只有"这一趟自己刚写过"才不覆盖（`verify_fixes`
+            # 在本次 H 运行里落的 `reviewed_at` 晚于 run.started_at）。上一轮留下的
+            # 旧判词（或 G 走 `fs.edit` 没清掉的那一格）要按本报告更新 ——
+            # 否则 `documents.reviewed_at` 会永远停在上一次。
+            if (str(row.get("review_verdict") or "") and existing_at and run_started
+                    and existing_at >= run_started):
+                return ""
+            row["review_verdict"] = axis
+            row["reviewed_at"] = S.now_iso()
+            row["reviewed_by"] = f"agent-{loop.role}"
+            tx.upsert("documents", row,
+                      note=f"H review.report verdict doc:{doc_id}")
+    except Exception as exc:  # noqa: BLE001 —— 回写失败只落读数，不许带走收工
+        return (f"H 的审校裁决没回写成（{type(exc).__name__}: {exc}）"
+                "⇒ 这一轮判词仍只在报告与 final 里")
+    return (f"H 的审校裁决已回写 documents doc:{doc_id}："
+            f"review_verdict={axis}（报告 verdict={verdict}）")
+
+
+def _stamp_open_finding_axis(loop) -> str:
+    """按「最新一条 open finding」把文档级判词更新到不早于它（R10FIX-D6）。
+
+    ## 现场（真机 lp-ball-10，2026-11-19）
+
+    H 最后一趟 `t-000189`（13:54:12→14:04:06）没有再跑 `review.report` —— 它只补了
+    一条手工 finding `000010`（14:03:36，`inconsistent_number` @claim-12）。而
+    改前这一格只在"这一趟真有 review.report"时写 ⇒ `documents.reviewed_at` 停在
+    13:54:11（round-5 的 `verify_fixes`），比那条 open finding 早 9 分 25 秒。
+    收工门读的正是这个差（「有 open findings 而这一版没有复审记录」）。
+
+    ## 口径（只写「有毛病」，不写「成立」）
+
+    - 阳性判词（成立）必须钉在"读到的那一版"上，由签名链负责；这一格一个字不碰；
+    - 阴性判词的对象是当前这一版还有未处置的缺陷 —— 只要盘上还有
+      `status=open` 的 finding，这句话在收尾这一刻为真，与它早于/晚于哪一版无关
+      （finding 说的是"这一版仍有缺陷"，不是"这一版被驳回"）；
+    - 只在「最新 open finding 的时刻晚于 `documents.reviewed_at`」时写：幂等，
+      也不会把 `review.report` / `verify_fixes` 刚写的那一条覆盖回去；
+    - 写入的时刻取 finding 自己的 `created_at`（判词挂的就是它读到的那一刻），
+      不取收尾的 now（那会让判词看起来比缺陷更晚，掩盖"中间没人复看过"这段事实）。
+    """
+    try:
+        findings = [dict(r) for r in loop.store.rows("review_findings")
+                    if str(r.get("status") or "") == "open"]
+    except Exception as exc:  # noqa: BLE001 —— 读不成只落读数，不许带走收工
+        return f"H 的 finding 判词没回写：review_findings 读不出来（{type(exc).__name__}: {exc}）"
+    latest: dict[str, str] = {}
+    counts: dict[str, int] = {}
+    for f in findings:
+        did = str(f.get("doc_id") or "")
+        if not did:
+            continue
+        at = str(f.get("created_at") or "")
+        counts[did] = int(counts.get(did) or 0) + 1
+        if at > str(latest.get(did) or ""):
+            latest[did] = at
+    if not latest:
+        return ""
+    notes: list[str] = []
+    try:
+        with loop.store.tx("documents", actor=f"agent-{loop.role}",
+                           note="H open findings verdict") as tx:
+            for did in sorted(latest):
+                row = tx.find("documents", doc_id=did)
+                if row is None:
+                    continue
+                if str(latest[did] or "") <= str(row.get("reviewed_at") or ""):
+                    continue
+                row["review_verdict"] = "有毛病"
+                row["reviewed_at"] = str(latest[did])
+                row["reviewed_by"] = f"agent-{loop.role}"
+                tx.upsert("documents", row,
+                          note=f"H open findings verdict doc:{did}")
+                notes.append(f"{did}（{counts[did]} 条 open finding，"
+                             f"最新 {latest[did]}）")
+    except Exception as exc:  # noqa: BLE001 —— 同上
+        return (f"H 的 finding 判词没回写成（{type(exc).__name__}: {exc}）"
+                "⇒ 文档判词仍早于最后一条 open finding")
+    if not notes:
+        return ""
+    return ("H 的 finding 判词已回写 documents：" + "；".join(notes)
+            + "（这一趟没有可回写的 review.report 判词 ⇒ 按最新一条 open finding "
+            "更新；阳性判词只走报告与签名链）")
+
 @dataclass
 class AgentLoop:
     """一个角色的一次循环。跑完即弃（没有可复用的状态，避免两次运行互相污染）。"""
@@ -6561,6 +6736,10 @@ class AgentLoop:
         problems = list(got.get("problems") or ())
         for p in problems:
             run.notes.append(str(p))
+        # 「这一拍报过了」要立刻记账（R10FIX-D1）：下一拍 `mailbox_digest` 按同一份
+        # 渲染集滤掉重复的读不成说明。它记在空投递那一支之前 —— 那一支也把
+        # `problems` 记进 `run.notes` 了，漏记就会让同一句每一拍重来一次。
+        self._mailbox_rendered.update(str(x) for x in (got.get("problem_ids") or ()))
         item_ids = [x for x in got.get("item_ids") or () if x]
         msg_ids = [x for x in got.get("msg_ids") or () if x]
         # 「最近被撤销」的键只进渲染集（这一格没有状态机可推进：被撤的行已经是 done）。
@@ -12383,6 +12562,14 @@ class AgentLoop:
         if name not in known and f"own.{raw}" in known:
             name, aliased_from = f"own.{raw}", raw
         args = dict(payload.get("args") or {})
+        # ---- 信封被多包一层 ⇒ 受控拒（R10FIX-D3，判据本体 `dispatch_arg_refusal`）
+        reserved = dispatch_arg_refusal(name, args)
+        if reserved:
+            return {"tool": name, "ok": False, "error": reserved["reason"],
+                    "kind": reserved["kind"],
+                    "meta": {"kind": reserved["kind"],
+                             "how_to_fix": reserved["how_to_fix"]},
+                    **({"aliased_from": aliased_from} if aliased_from else {})}
         # ---- 读写面（S1n-b，业主 T23）：子代理只能读写父切割给它的面。
         #
         # 判据在这一层（不是工具层）：`self.surface` 是这一趟的面（绝对路径），
@@ -13816,6 +14003,15 @@ class AgentLoop:
         ③ 这一行现在的 `review_verdict` 是空串（G 的 revise 已清掉旧版判词）。
         ③ 是"别覆盖这一趟 `verify_fixes` 刚写的那一版"的护栏。
 
+        ## 2026-11-19（R10FIX-D6）：没有 `review.report` 时按 open findings 更新阴性判词
+
+        改前这一格只有一条路：这一趟必须真有一份 `review.report`。而 H 完全可能
+        最后一趟只补一条手工 finding（真机 lp-ball-10 的 `t-000189` 就是这样）⇒
+        `documents.reviewed_at` 停在"上一条判词"的时刻、比最后一条 open finding 还早，
+        收工门于是报「有 open findings 而这一版没有复审记录」。所以 `review.report`
+        那一支没写成时落到 `_stamp_open_finding_axis`（只写「有毛病」、幂等、时刻取
+        finding 自己的 `created_at`）；阳性判词仍只走报告与签名链（判词挂读到的那一版）。
+
         返回一句读数（空串 = 这一趟没有可回写的判词）。
         """
         if str(self.role) != "H" or self.store is None:
@@ -13836,46 +14032,14 @@ class AgentLoop:
             elif str(result.get("doc_id") or ""):
                 data = dict(result)
             break
-        if not data:
-            return ""
-        verdict = str(data.get("verdict") or "")
-        if verdict not in ("accepted", "rejected"):
-            return ""
-        axis = "成立" if verdict == "accepted" else "有毛病"
-        doc_id = str(data.get("doc_id") or "")
-        expected_hash = str(data.get("revision_hash") or "")
-        from . import claimanatomy as CA
-
-        try:
-            with self.store.tx("documents", actor=f"agent-{self.role}",
-                               note=f"H review.report verdict doc:{doc_id}") as tx:
-                row = tx.find("documents", doc_id=doc_id)
-                if row is None:
-                    return f"H 的审校裁决没回写：documents 里没有 {doc_id} 这一行"
-                current_hash = CA.revision_hash(row)
-                if expected_hash and current_hash != expected_hash:
-                    return ("H 的审校裁决没回写：报告钉的版本 "
-                            f"{expected_hash[:12]}… 已不是现行版（{current_hash[:12]}…）"
-                            " ⇒ 判词只挂读到的那一版")
-                existing_at = str(row.get("reviewed_at") or "")
-                run_started = str(getattr(run, "started_at", "") or "")
-                # 这一行已经有判词：只有"这一趟自己刚写过"才不覆盖（`verify_fixes`
-                # 在本次 H 运行里落的 `reviewed_at` 晚于 run.started_at）。上一轮留下的
-                # 旧判词（或 G 走 `fs.edit` 没清掉的那一格）要按本报告更新 ——
-                # 否则 `documents.reviewed_at` 会永远停在上一次。
-                if (str(row.get("review_verdict") or "") and existing_at and run_started
-                        and existing_at >= run_started):
-                    return ""
-                row["review_verdict"] = axis
-                row["reviewed_at"] = S.now_iso()
-                row["reviewed_by"] = f"agent-{self.role}"
-                tx.upsert("documents", row,
-                          note=f"H review.report verdict doc:{doc_id}")
-        except Exception as exc:  # noqa: BLE001 —— 回写失败只落读数，不许带走收工
-            return (f"H 的审校裁决没回写成（{type(exc).__name__}: {exc}）"
-                    "⇒ 这一轮判词仍只在报告与 final 里")
-        return (f"H 的审校裁决已回写 documents doc:{doc_id}："
-                f"review_verdict={axis}（报告 verdict={verdict}）")
+        if data:
+            written = _write_report_axis(
+                self, data, run_started=str(getattr(run, "started_at", "") or ""))
+            if written:
+                return written
+        # ---- 这一趟没有可回写的报告判词（或它没写成）：新落的 open finding 本身就是
+        # 「这一版仍有缺陷」的判词（R10FIX-D6，判据见 `_stamp_open_finding_axis`）。
+        return _stamp_open_finding_axis(self)
 
     def _ensure_status_report(self, run: LoopRun) -> str:
         """M 收工前保证有一份状态报告落盘（模型没调就框架补落）。返回一句读数（空 = 不用管）。

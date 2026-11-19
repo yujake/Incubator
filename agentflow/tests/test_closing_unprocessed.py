@@ -143,6 +143,10 @@ def test_a_dirty_queue_without_a_reason_is_a_blocker(tmp_path: pathlib.Path) -> 
     detail = "；".join(str(f.detail) for f in rep.findings if f.check == "acceptance")
     assert "literature.unprocessed" in detail and "32" in detail, detail
     assert "unprocessed_reason" in detail, detail
+    # 2026-11-19（R10FIX）：出口必须点明"`processed` 只由 B 的抽取支标记"——
+    # 真机 lp-ball-10 的 18 条就是 B 用 `table.create` 手工建行、没走 `run_once` 漏下的；
+    # 只说"派 B 消化"会让 M 以为 B 手工建概念/关系也算消化。
+    assert "run_once" in detail and "table.create" in detail, detail
 
 
 # ============================================================ 负控：有理由 ⇒ unknown（不是 pass）

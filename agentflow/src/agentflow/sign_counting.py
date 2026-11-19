@@ -331,7 +331,9 @@ def read_rows(path: Any) -> tuple[list[dict[str, Any]], list[str]]:
         return [], [f"`{target}` 不在盘上"]
     rows: list[dict[str, Any]] = []
     problems: list[str] = []
-    for n, line in enumerate(target.read_text(encoding="utf-8").splitlines(), 1):
+    #: 行界只有 `\n`（与 `jsonlfile` 同一口径，R10FIX-D1）：台账里的判词文本可能带
+    #: U+0085 一类 Unicode 行界，`splitlines()` 会把一行切碎、票数当场数成 0。
+    for n, line in enumerate(target.read_text(encoding="utf-8").split("\n"), 1):
         if not line.strip():
             continue
         try:

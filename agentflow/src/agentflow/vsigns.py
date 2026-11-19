@@ -327,7 +327,8 @@ def note_missed_issue(root: Any, *, artifact_sha: Any, manuscript: str = "",
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         if path.is_file():
-            for line in path.read_text(encoding="utf-8").splitlines():
+            # 行界只有 `\n`（与 `jsonlfile` 同一口径，R10FIX-D1）。
+            for line in path.read_text(encoding="utf-8").split("\n"):
                 try:
                     old = json.loads(line)
                 except ValueError:
@@ -2196,7 +2197,9 @@ def sign_ledger_backing(root: Any, ledger: Any, *, proof_sha256: Any) -> dict[st
             "但那一份台账一次审校都没落过）"))
         return out
     row: dict[str, Any] | None = None
-    for line in raw.splitlines():
+    #: 行界只有 `\n`（与 `jsonlfile` 同一口径，R10FIX-D1）：V 台账的 `why` / `findings`
+    #: 带文献抽取文本时会有 U+0085 一类 Unicode 行界，`splitlines()` 会把一行切碎。
+    for line in raw.split("\n"):
         if not line.strip():
             continue
         try:
@@ -3749,6 +3752,12 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
     pending 认领是"没有签文件、没有签块也能翻第 3 位"的唯一一条正路。它的合法性来自
     「V 在命题还没在册时对一份稿出的结论」—— 那一份稿是这一签的载体。纯内联旧行
     （`object_path=""`）没有载体，不许认领（`_pending_carrier_path`）。
+
+    ## 2026-11-19（R10FIX-D2）：认哪一行由 `verifications.pending_sign` 一处决定
+
+    "尾行不是结论时改认已发签锚在的那一行"那条判据落在 `pending_sign`（它是"这一份
+    正文有没有签"的唯一读口，认领 / 凭据 / B 的入库闸都从它取数）。这里只把它的
+    `anchored_at_issued_sign` 读数原样转出去。
     """
     from . import verifications as _VR
 
@@ -3761,6 +3770,8 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
                         f"（{type(exc).__name__}: {exc}）⇒ 认签这一格没查成（不是「没有签」）"))
         return dict(bits), out
     out["checked"] = True
+    if got.get("anchored_at_issued_sign"):
+        out["anchored_at_issued_sign"] = dict(got["anchored_at_issued_sign"])
     if not got.get("found"):
         out["why"] = (f"`verifications/{_VR.PENDING_DIR_NAME}/` 里没有盖住这一份正文的签"
                       "（它是新建的，V 也没在它登记之前审过）⇒ 第 3 位保持假")
@@ -3770,8 +3781,8 @@ def _claim_pending_sign(bits: Mapping[str, Any], *, root: Any, sha: str,
     ledger = str(got.get("ledger") or "")
     claim = {"ledger": ledger,
              "verification_id": str(ledger).split("#")[-1],
-             "proof_sha256": str(got.get("proof_sha256") or ""),
-             "object_sha256": str(got.get("object_sha256") or ""),
+             "proof_sha256": str(row.get("proof_sha256") or got.get("proof_sha256") or ""),
+             "object_sha256": str(row.get("object_sha256") or got.get("object_sha256") or ""),
              "bound_id": "", "bound": False}
     # ---- 2026-11-05 晚（业主）：sha 必须逐字相同 --------------------------------
     #

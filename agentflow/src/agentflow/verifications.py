@@ -836,9 +836,66 @@ def pending_rows(root: str | Path) -> tuple[list[dict[str, Any]], list[str]]:
     return [row for _file, rows in ledgers for row in rows], problems
 
 
+def _issued_anchor_of_pending(root: str | Path, *, sha: str,
+                              tail: Mapping[str, Any]) -> dict[str, Any] | None:
+    """尾行不是结论时，认「已经发出去的那一签」锚在的那一行（R10FIX-D2）。
+
+    ## 断链在哪（真机 lp-ball-10，2026-11-19）
+
+    `reports/f-proof-000001.md` 的 3/3 签在 13:42:16 由 `sign_counting` 数出来并颁发了
+    （`out/vsigns/4e418348….json`，`ledger=verifications/pending/ef286c92….jsonl#u-000024`）。
+    11 秒后 V 又对同一份稿跑了一趟，那一趟的第 2 轮落成 `u-000025`，秘书判 没查成
+    （`axis=""`、`checked=false`）。而 `pending_sign` 的认领口径是"最后扫到的那一行说了
+    算" ⇒ 它交回的是 `u-000025`、`row_signable` 为假 ⇒ 认领与凭据读数双双 fail-closed：
+    B 收录那一笔不回写 `statement_id`、`kind` 停在 `conjecture`，验收表 R7 读成
+    `unknown`（「plan 点名了 stmt:000015 而 verifications 没有对应的行」）。
+
+    ## 判据（三态，不折平）
+
+    - 尾行自己签得住（`row_signable`）⇒ 不改判（照旧"最近一次审校说了算"）；
+    - 尾行的轴是 `fault` ⇒ 不改判：那是"后来那一趟说它坏了"，旧签不许复活；
+    - 尾行只是没判成 / 没轴（不是结论）且这一份正文有一份复算通过的签 ⇒ 认那一签
+      锚在的那一行；
+    - 其余（没有签文件 / 复算不通过 / 锚点不在 pending / 那一行也签不住）⇒ `None`，
+      调用方照旧按尾行判（fail-closed）。
+
+    读数只取两份既有实现：`vsigns.credential_reading`（签文件存在 + 票数是同一趟数出
+    来的）与 `vsigns.sign_ledger_backing`（锚点那一行在盘上、sha 相符、自己签得住）。
+
+    返回 `{"row", "path"}`（`path` 是锚点那一行所在的那叠台账 —— 同一份正文住两叠时，
+    票数只能在那一叠里数）；不适用 ⇒ `None`，调用方照旧按尾行判。
+    """
+    if not str(sha or "").strip():
+        return None
+    if row_signable(tail):
+        return None
+    if str(ledger_axis(tail) or "") == "fault":
+        return None
+    try:
+        from . import vsigns as _VS
+
+        cred = _VS.credential_reading(root, sha)
+        if not cred.get("recomputable"):
+            return None
+        where = str(cred.get("where") or "").replace("\\", "/")
+        if not where.startswith(f"{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/"):
+            return None
+        backing = _VS.sign_ledger_backing(root, where, proof_sha256=sha)
+    except Exception:  # noqa: BLE001 —— 读不动 ⇒ 不改判（fail-closed）
+        return None
+    if not backing.get("ok"):
+        return None
+    row = dict(backing.get("row") or {})
+    if not row:
+        return None
+    #: `path` 交回去：PASSROWS1 起同一份正文可以住在两叠待认领台账里，锚点那一行
+    #: 可能在另一叠。调用方要拿它把 `passes` 换成锚点那一叠（票数只能在那一叠里数）。
+    return {"row": row, "path": str(backing.get("path") or "")}
+
+
 def pending_sign(root: str | Path, *, object_sha256: Any = "",
                  proof_shas: Sequence[str] = ()) -> dict[str, Any]:
-    """按对象内容的 sha 认领 pending 台账里的那一签（最近一次审校说了算）。
+    """按对象内容的 sha 认领 pending 台账里的那一签（最近一次有结论的审校说了算）。
 
     返回 `{"found","verdict","proof_sha256","object_sha256","ledger","row","passes",
     "why"}`。`found=False` 只表示"pending 里没有盖住这一份的签"，不是"没查成"；
@@ -860,6 +917,14 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
     3 行两种，登记出来的 kind 随之在 `conjecture` / `theorem` 之间跳（真值 4 行 =
     V 的三转 + 准入门那一份前提签，`theorem`）。所以改成按"这一份正文在该叠里有几行"
     取最大，同票数仍按文件名序；`hit_rows` 仍是那一叠（`passes` 的射程不动）。
+
+    ## 2026-11-19（R10FIX-D2）：尾行不是结论时，认已发签锚在的那一行
+
+    上面那条"最后一行说了算"只在最后一行是结论时成立。V 完全可以在一份稿拿到
+    签之后再跑一趟（真机 lp-ball-10 的 13:42:52 那一趟），而那一趟可能没判成 / 没
+    留下轴 —— 那一行不是结论，却把之前那份 3/3 的签盖掉了。判据本体在
+    :func:`_issued_anchor_of_pending`（尾行 `fault` 仍按尾行算；没签文件仍按尾行算）。
+    `anchored_at_issued_sign` 是这一格的读数（读的人能看出"这不是尾行"）。
     """
     out: dict[str, Any] = {"found": False, "verdict": "", "proof_sha256": "",
                            "object_sha256": "", "ledger": "", "row": {},
@@ -901,6 +966,29 @@ def pending_sign(root: str | Path, *, object_sha256: Any = "",
         out["why"] = (f"`{VERIFICATIONS_DIR}/{PENDING_DIR_NAME}/` 里没有盖住这一份"
                       f"（{where}）的签 —— 命题还没在册时 V 也没审过它")
         return out
+    # ---- R10FIX-D2：尾行不是结论时，认已经发出去的那一签锚在的那一行 ----------
+    # 位置在这里（而不是调用方）：`pending_sign` 是"这一份正文有没有签"的唯一读口，
+    # 认领 / 凭据（`proof_review_gap`）/ B 的入库闸都从它取数；在调用方各修一遍
+    # 会让"哪一行算这一签"出现第二份口径。
+    anchored = _issued_anchor_of_pending(
+        root, sha=str(hit.get("proof_sha256") or ""), tail=hit)
+    if anchored is not None:
+        out["anchored_at_issued_sign"] = {
+            "tail": str(hit.get("verification_id") or ""),
+            "verification_id": str((anchored.get("row") or {}).get("verification_id") or ""),
+            "why": ("尾行不是结论（没判成 / 没轴）而这一份正文已经发过签 ⇒ "
+                    "认那一签锚在的那一行（fault 与没签文件两档仍按尾行算）"),
+        }
+        hit = dict(anchored.get("row") or {})
+        # 同一份正文可能住在两叠台账里（PASSROWS1）：票数只能在锚点那一叠里数。
+        # `sign_ledger_backing` 交回的是相对路径（`verifications/pending/<sha>.jsonl`），
+        # 而 `ledgers` 里是绝对的 —— 按文件名比（pending 台账的文件名就是它自己的键）。
+        _anchor_name = Path(str(anchored.get("path") or "")).name
+        if _anchor_name:
+            for _file, rows in ledgers:
+                if Path(str(_file)).name == _anchor_name:
+                    hit_rows = rows
+                    break
     out.update(found=True, verdict=str(hit.get("verdict") or ""),
                proof_sha256=str(hit.get("proof_sha256") or ""),
                object_sha256=str(hit.get("object_sha256") or ""),
@@ -5334,7 +5422,7 @@ def _pending_signed(root: str | Path, proof_text: Any) -> dict[str, Any] | None:
 
 
 def _pending_claim_streak(passes: Sequence[Mapping[str, Any]],
-                          proof_sha256: Any) -> dict[str, Any]:
+                          proof_sha256: Any, *, review_call: str = "") -> dict[str, Any]:
     """一叠 pending 台账的尾部连续票数 / 是不是同一份正文（纯读；p284）。
 
     ## 为什么这一格必须存在（根因）
@@ -5360,6 +5448,11 @@ def _pending_claim_streak(passes: Sequence[Mapping[str, Any]],
     """
     rows = [dict(r) for r in (passes or ()) if isinstance(r, Mapping)]
     want_sha = str(proof_sha256 or "").strip().lower()
+    #: `review_call` 是"这一票数的是哪一趟送审"（R10FIX-D2）：`pending_sign` 在"尾行不是
+    #: 结论"时会改认已发签锚在的那一行，票数就必须按那一行所在的送审数 —— 否则 3/3
+    #: 签会被它之后一笔没判完的送审（`review_pass=2`、缺 1/3）数成 0 票。
+    #: 缺省 = 尾行那一趟（改前逐字不变）。`tail_sha` 仍取台账尾部那一行：它回答
+    #: "最新一票签的是不是本条正文"（三票不同 sha 那一档靠它，不靠数出来的那一组）。
     tail_sha = str(rows[-1].get("proof_sha256") or "").strip().lower() if rows else ""
     same_sha = bool(tail_sha) and bool(want_sha) and tail_sha == want_sha
     need = int(SIGN_STREAK_NEED)
@@ -5375,7 +5468,8 @@ def _pending_claim_streak(passes: Sequence[Mapping[str, Any]],
     # 与签发那条路的兼容门逐字同义）。
     from . import sign_counting as _SC
 
-    tail_call = str(rows[-1].get("review_call") or "").strip() if rows else ""
+    tail_call = (str(review_call or "").strip()
+                 or (str(rows[-1].get("review_call") or "").strip() if rows else ""))
     if tail_call:
         counted = _SC.count_rows(rows, review_call=tail_call,
                                  proof_sha256=want_sha, need=need)
@@ -5481,7 +5575,9 @@ def _gap_from_pending(out: dict[str, Any], checks: list[dict[str, Any]],
     out["pending"] = not bool(own)
     # 票数与"三票同一份正文"（p284）：认领之后这一签会被当作升档依据，所以它必须过
     # 台账那一路的同一道闸。未认领那一档只作读数（抬档由 `pending=True` 挡住）。
-    streak_read = _pending_claim_streak(got.get("passes") or (), row.get("proof_sha256"))
+    streak_read = _pending_claim_streak(
+        got.get("passes") or (), row.get("proof_sha256"),
+        review_call=str(row.get("review_call") or ""))
     out["streak"] = int(streak_read.get("votes") or 0)
     out["need"] = int(streak_read.get("need") or SIGN_STREAK_NEED)
     out["streak_ok"] = bool(streak_read.get("ok"))

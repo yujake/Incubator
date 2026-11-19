@@ -402,7 +402,10 @@ def test_g_anti_vacuum_without_the_same_body_streak_rule_e_and_f_go_red(
     """
     real = VR._pending_claim_streak
 
-    def _always_ok(passes, proof_sha256):
+    # 2026-11-19（R10FIX-D2）：`_pending_claim_streak` 多了一个关键字 `review_call`
+    # （"票数按哪一趟送审数"）⇒ 替身跟着收下它。判据本体一个字没放宽：它仍然恒报
+    # `ok=True`，e / f 也仍然必须因此抬成 theorem（打桩的射程不变）。
+    def _always_ok(passes, proof_sha256, **_kwargs):
         read = dict(real(passes, proof_sha256))
         read.update(checked=True, same_sha=True, ok=True,
                     votes=int(VR.SIGN_STREAK_NEED),

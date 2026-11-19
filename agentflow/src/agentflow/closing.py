@@ -3179,6 +3179,29 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                     {"count": None, "reason": f"{type(exc).__name__}: {exc}"})
         return _unprocessed_cache
 
+    def _unprocessed_unmet(cid: str, name: str, count: int, *, own_row: bool) -> str:
+        """`literature.unprocessed > 0` 且这一行没写理由时那句 unmet（两处调用共用一份文本）。
+
+        为什么两处：表里有 `literature_unprocessed_rows` 时由那一行判（R9FIX-D4），
+        没有它时退回「请求闭环」那一行的旧耦合（兼容老工作区）。同一件事的说明
+        只能有一份 —— 两处各写一段，改了一处另一处就漂了。
+        `own_row=True` 是"新落点"那一份，多一句"这个理由该写在哪一行"。
+        """
+        text = (f"{cid}（{name or '待入库文献表清空'}）：`literature.unprocessed` = "
+                f"{count} > 0，而这一行没写 `unprocessed_reason` ⇒ 队列没清零时不许"
+                "记 pass。两条出口：① 派 B 把剩下的消化掉 —— `literature.processed` "
+                "**只由 `B.run_once` / `B.run` 那一支标**（B 用 `table.create` 手工建行"
+                "不会标它，真机 lp-ball-10 的 18 条全是这么漏的）⇒ 出口是 "
+                "`conductor.summon(role=\"B\", action=\"run_once\")`，不是让 B 直接写表；"
+                "② 在这一行写 `unprocessed_reason`，逐字说清**为什么可以带着它收工**"
+                "（例如「剩下的是 metadata-only 无全文，`processed` 永远为假」）。"
+                "这一行的 `detail` 里有 `ids` / `titles`，先照它核一遍"
+                "「哪几篇是真没消化、哪几篇是消化了但没标」")
+        if own_row:
+            text += ("（这一档的读点就在这里；改前它被读在「请求闭环」那一行，"
+                     "照本条 `note` 写在这里的理由读不到）")
+        return text
+
     #: 攻坚计划 `history` 里的 `statement_id` 有没有对应的 `verifications` 行。
     #:
     #: 惰性算一次（只有真出现 `plan_progress_rows` 那一行时才需要它）—— 判据本体在
@@ -3381,13 +3404,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             elif int(count) > 0:
                 if not reason:
                     unmet.append(
-                        f"{cid}（{name or '请求闭环'}）：`literature.unprocessed` = {count} > 0，"
-                        f"而这一行没写 `unprocessed_reason` ⇒ 队列没清零时不许记 pass。"
-                        f"两条出口：① 派 B 把剩下的消化掉（`B.run_once`）；"
-                        f"② 在这一行写 `unprocessed_reason`，逐字说清**为什么可以带着它收工**"
-                        f"（例如「剩下的是 metadata-only 无全文，`processed` 永远为假」）。"
-                        f"注意：这个读数此前已经如实写在报告里（`mp2` 记 32、`mp3` 记 20、"
-                        f"`t3d` 记 12），红的原因不是「你没写」，而是「没有一行判它」")
+                        _unprocessed_unmet(cid, name or "请求闭环", count, own_row=False)
+                        + "。注意：这个读数此前已经如实写在报告里（`mp2` 记 32、"
+                          "`mp3` 记 20、`t3d` 记 12），红的原因不是「你没写」，"
+                          "而是「没有一行判它」")
                 else:
                     why = (f"`literature.unprocessed` = {count} > 0 ⇒ 这一行记 `unknown`、"
                            f"不记 `pass`；可带着收工的理由已写在 `unprocessed_reason`：{reason}")
@@ -3434,13 +3454,8 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                                             "warning", f"验收行 {cid}：{why}"))
                 ok_row = True          # 已按 unknown 处置，不再走下面的通用 unmet
             elif int(count) > 0:
-                unmet.append(
-                    f"{cid}（{name or '待入库文献表清空'}）：`literature.unprocessed` = "
-                    f"{count} > 0，而这一行没写 `unprocessed_reason` ⇒ 队列没清零时不许"
-                    "记 pass。两条出口：① 派 B 把剩下的消化掉（`B.run_once`）；"
-                    "② 在这一行写 `unprocessed_reason`，逐字说清**为什么可以带着它收工**"
-                    "（这一档的读点就在这里；改前它被读在「请求闭环」那一行，照本条"
-                    "`note` 写在这里的理由读不到）")
+                unmet.append(_unprocessed_unmet(cid, name or "待入库文献表清空", count,
+                                                own_row=True))
                 ok_row = True          # 已按 unmet 处置，不再走下面的通用 unmet
 
         #
@@ -7474,10 +7489,35 @@ def _statement_reviewed(root: Any, row: Mapping[str, Any]) -> bool:
     它也是那条"反真空"判据的打桩点（`tests/test_load_bearing_without_lean.py`：把这一格
     打桩成恒真 ⇒ 缺背书的那条断言必须不再判 fail）。概念行由调用方先跳过（概念没有
     "审过的证明"这一档）；这里对概念行也只回 False，不另开一条路。
+
+    ## 2026-11-19（R10FIX-D4）：判据换成 `proof_review_gap`
+
+    改前读的是 `statement_review_reading(…).reviewed`，而那个读数只走
+    `review_standing`（在册台账 `verifications/<命题号>.jsonl`）。"先签后收录"是主路
+    （V 在命题还没在册时审、B 收录时才拿到号）⇒ 那一签住在
+    `verifications/pending/<载体 sha>.jsonl`，在册台账里根本没有这一行 ⇒ 这个函数
+    对每一条这样的命题都回 False。真机 lp-ball-10 的读数就是这个形状：
+    `prose_reviewed_ids=[]`（而 `proof_review_gap` 对 000013 / 000017 都是
+    `checked=True, claimed=True, streak=3/3, ok=True`）。于是 Lean 关时那条替代口径
+    （"引用的命题现行版有 V 签"）在这条主路上从来没生效过，`load_bearing` 不是
+    "没看见承重断言"就是"看见了也证明不了"。
+
+    `proof_review_gap` 是"现行版有没有 V 签"的既有唯一读口（它同时认在册台账与
+    已认领的 pending 行，且要求 sha 与现行正文逐字相同、票数满 `SIGN_STREAK_NEED`）。
+    换过去之后，"签的是旧版"（stale）与"一次都没签"（unsigned）仍然都是 False —— 三态
+    不折。概念行那一档照旧先挡掉。
+    未认领的 pending（命题还没在册时审的那一签、行上还没有号）也不算：`gap.ok` 在
+    那一档只表示"行局部签得住"（D-34 的准入闸），`gap.pending=True` 才是它的完整读数 ——
+    拿它当"这条命题的现行版有 V 签"会把"B 还没收录"读成"已经收录并签过"
+    （判据 b：`test_load_bearing_reads_the_claimed_pending_sign.py`）。
     """
     from . import verifications as _VR
 
-    return bool(_VR.statement_review_reading(root, row).get("reviewed"))
+    if str(row.get("kind") or "") == "concept":
+        return False
+    gap = _VR.proof_review_gap(root, row)
+    return (bool(gap.get("checked")) and bool(gap.get("ok"))
+            and not bool(gap.get("pending")))
 
 def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     """承重结论必须有 T3 或已降档（§10.2 的四条"必须上 T3"在收工门上的形态）。
@@ -7614,6 +7654,13 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     #: 逐条断言的判据读数（"逐条给理由"的落点）：`backed_by` 三档 `t3` / `v_sign` / 空。
     #: 空那一档的 `why` 就是它为什么没背书（与下面 `bad` 里那句同文）。
     claims_reading: list[dict[str, Any]] = []
+    #: 「门槛以下但已带证据」的正文断言（R10FIX-D4 的第二半）：`proof_review`
+    #: （= pre_theorem，"有 V 签、但不是机器可核"）那一档。它不算承重
+    #: （§10.2 ① 的"作为定理写进正文"只认 theorem 档；把它抬进来等于让
+    #: "V 签过的猜想"也背上 T3 的义务 —— 那不是这张表的口径，而且 Lean 关时
+    #: 手稿按 `claimanatomy` 的用词上限本来就该写 `proof_review`），但它也不是
+    #: "一条断言都没有" ⇒ 记成读数，好让 `pass` 与"真空"分得开。
+    claims_below: list[dict[str, Any]] = []
     #: 被正文引到的"自签穷举行"的四结局读数（按实验号去重 —— 一条行可以被多条断言引到）。
     #: 判据本体 `numericproof.exhaustion_backing`，与下面 `_has_t3` 的穷举支路同一个函数。
     backing_by_eid: dict[str, dict[str, Any]] = {}
@@ -7626,8 +7673,20 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             # 2026-11-05：承重断言的口径统一到等级（`theorem`）。这是 `documents.claims`
             # 自己的证据轴（`claimanatomy` 的 status × evidence_kind），词表与命题等级不同名；
             # 走 `KIND_TO_GRADE` 反算成等级再比 —— 与承重命题支、T3 实验支同一个阈值。
-            if _tier_grade(claim) != "theorem":
-                continue          # 非承重 / 已降档 ⇒ 这条门不管它（降档是允许的出路）
+            _claim_grade = _tier_grade(claim)
+            if _claim_grade != "theorem":
+                # 非承重 / 已降档 ⇒ 这条门不管它（降档是允许的出路），但如果它是
+                # `pre_theorem` 那一档，留一行读数（"不是承重"≠"没有断言"）。
+                if _claim_grade == "pre_theorem":
+                    claims_below.append({
+                        "doc_id": str(doc.get("doc_id") or ""),
+                        "claim_id": str(claim.get("claim_id") or ""),
+                        "evidence_kind": str(claim.get("evidence_kind") or ""),
+                        "grade": _claim_grade,
+                        "text": str(claim.get("text") or "")[:40],
+                        "citations": [str(c) for c in (claim.get("citations") or [])][:6],
+                    })
+                continue
             load_bearing += 1
             cites = {str(c) for c in (claim.get("citations") or [])}
             cited = [(eid, row) for eid, row in exps.items() if f"exp:{eid}" in cites]
@@ -7740,6 +7799,15 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
                   else ("fail" if bad else "pass")),
         "lean": "on" if lean_on else "off",
         "claims": claims_reading,
+        #: 门槛以下的正文断言（`proof_review` = pre_theorem 那一档）：不算承重，
+        #: 但也不许让"零承重"读成"稿里没有一条带证据的结论"（R10FIX-D4）。
+        "claims_below_theorem": len(claims_below),
+        "claims_below_theorem_rows": claims_below[:8],
+        "claims_below_theorem_note": (
+            "这一档是 `evidence_kind=proof_review`（= pre_theorem：有 V 签、不是机器可核）。"
+            "它不进承重集合（§10.2 ① 只认 `theorem` 档），也不因此判 fail；列在这里是为了"
+            "让 `state=not_applicable` 能与「稿里一条带证据的结论都没有」分开读。"
+            if claims_below else ""),
         "statements_load_bearing": stmt_load_bearing,
         "statements_downgraded": downgraded,
         "must_t3_conditions": [{"condition": c, "mechanical": m, "status": s}
@@ -7779,7 +7847,11 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
             "命题现行版有 V 签（不是 `na`，也不是自动通过）。"
             f"这一趟有 {load_bearing} 条承重断言，{len(bad)} 条拿不出背书；"
             f"V 逐行走查签住的命题 {len(prose_reviewed)} 条。"
-            "要回到 T3 判据：把设置文件 `toolchain` 段的 `lean_enabled` 改成 true"
+            + (f"另有 {len(claims_below)} 条 `proof_review`（pre_theorem）断言 —— "
+               "它们不算承重（§10.2 ① 只认 theorem 档），所以这一格不是「稿里没有"
+               "带证据的结论」，而是「没有升到 theorem 档的结论」。"
+               if claims_below else "")
+            + "要回到 T3 判据：把设置文件 `toolchain` 段的 `lean_enabled` 改成 true"
             "（或 `AGENTFLOW_LEAN_ENABLED=1`）再跑。",
         ))
     # 去重（2026-11-03）：承重门那一条 finding 已经逐条点名过的行，这里不再说第二遍
