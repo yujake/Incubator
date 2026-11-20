@@ -5006,4 +5006,4 @@ def selftest() -> int:
     return 0
 
 
-__all__ = ["conductor_for", "reset_cache", "register", "selftest", "NotWiredError"]
+__all__ = ["conductor_for", "register", "selftest", "NotWiredError"]

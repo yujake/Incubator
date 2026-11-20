@@ -62,7 +62,6 @@ __all__ = [
     "RECORD_REASONS",
     "SELFCHECK_REASONS",
     "STATEMENT_CLAIM_KEY_PREFIX",
-    "THREE_STATES",
     "_Record",
     "declaration_name_in",
     "install_l_tools",

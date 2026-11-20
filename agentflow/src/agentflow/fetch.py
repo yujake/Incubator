@@ -40,7 +40,6 @@ from typing import Any, Callable, Mapping, Protocol, Sequence
 
 __all__ = [
     "FetchResult",
-    "Downloader",
     "DownloadError",
     "HttpDownloader",
     "default_downloader",

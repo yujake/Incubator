@@ -32,7 +32,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-__all__ = ["READ_STATES", "read_jsonl", "read_jsonl_state"]
+__all__ = ["read_jsonl", "read_jsonl_state"]
 
 #: `read_jsonl_state` 的四个取值。三态纪律在这里是"四态"：`absent` 与 `empty` 是两种
 #: 不同的"没有记录"（一个是还没写过、一个是写了但没内容），`unreadable` 是"没查成"。

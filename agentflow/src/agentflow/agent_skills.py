@@ -35,8 +35,8 @@ import dataclasses
 import pathlib
 import re
 
-__all__ = ["SKILLS_DIR", "SURVEY", "Skill", "CATALOG", "skills_for", "index_block",
-           "materialize", "validate", "builtin_sources"]
+__all__ = ["SKILLS_DIR", "Skill", "CATALOG", "skills_for", "index_block",
+           "materialize", "validate"]
 
 #: 工作区里那一层目录名（相对工作区根）。
 SKILLS_DIR = "skills"

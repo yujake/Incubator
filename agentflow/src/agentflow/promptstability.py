@@ -66,17 +66,13 @@ __all__ = [
     "split_facts",
     "first_difference",
     "volatile_facts_digest",
-    "facts_migration_problem",
     "step_stability",
     "stability_problem",
     "dynamic_sections",
-    "unregistered_dynamic_sections",
     "prompt_cache_record",
     "summarize_prompt_cache",
     "cache_sentence",
-    "missing_prompt_cache_steps",
     "cache_summary_problem",
-    "checkpoint_prompt_cache_problem",
 ]
 
 #: 一份缓存汇总（:func:`summarize_prompt_cache` 的产出）必须有的 11 个键。

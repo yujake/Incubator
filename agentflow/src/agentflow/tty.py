@@ -42,7 +42,6 @@ __all__ = [
     "bullet",
     "panel",
     "paint",
-    "progress_line",
     "rule",
     "set_style",
     "style_enabled",

@@ -37,7 +37,6 @@ __all__ = [
     "CONJECTURE_PREFIX_RE",
     "conjecture_ids_of",
     "d_dispatch_records",
-    "dispatch_directions",
     "dispatch_text_problems",
 ]
 

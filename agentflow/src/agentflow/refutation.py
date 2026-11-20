@@ -467,9 +467,6 @@ __all__ = [
     "STATE_UNREADABLE",
     "UNKNOWN_PROOF_PATH",
     "UNKNOWN_STATEMENT",
-    "conjecture_refuted",
-    "refutation_of",
-    "refute_by_sign",
     "sign_payload",
     "statement_refuted",
 ]

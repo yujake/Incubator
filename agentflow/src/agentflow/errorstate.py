@@ -305,6 +305,5 @@ __all__ = [
     "STATE_ERROR",
     "STATE_NOT_ERROR",
     "STATE_UNKNOWN",
-    "conjecture_refuted",
     "statement_refuted",
 ]

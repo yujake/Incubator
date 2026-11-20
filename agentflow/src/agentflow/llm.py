@@ -44,7 +44,6 @@ __all__ = [
     "ConceptDraft",
     "DEFAULT_PROMPT_TEMPLATE",
     "ExtractionError",
-    "Extractor",
     "LLMExtractor",
     "NullExtractor",
     "RelationDraft",

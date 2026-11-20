@@ -313,10 +313,10 @@ def plan_is_active(row: Any) -> bool:
 
 
 __all__ = [
-    "ACTIVE", "COMPLETED", "ABANDONED", "STATES",
+    "ACTIVE", "COMPLETED", "ABANDONED",
     "PLAN_COMPLETED_STATUSES", "PLAN_STATE_OF",
     "STATEMENT_ACTIVE_STATUSES", "STATEMENT_COMPLETED_STATUSES", "STATEMENT_STATE_OF",
-    "is_active", "plan_is_active", "statement_is_active",
+    "is_active", "plan_is_active",
     "state_of_plan", "state_of_statement", "state_of_manuscript",
     "active_plans",
 ]

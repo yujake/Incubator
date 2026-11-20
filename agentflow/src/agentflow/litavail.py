@@ -84,7 +84,6 @@ __all__ = [
     "read_records",
     "record_availability",
     "record_read",
-    "tier_of_literature",
     "tiers_by_slot",
 ]
 

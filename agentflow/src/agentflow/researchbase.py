@@ -56,7 +56,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-__all__ = ["RESEARCH_BASE_STATES", "research_base", "signs_reading", "writing_gate"]
+__all__ = ["research_base", "signs_reading", "writing_gate"]
 
 
 #: 三态（见模块 docstring）。`unreadable` 不是"没有成果"。

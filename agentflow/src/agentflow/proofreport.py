@@ -312,7 +312,6 @@ def deliver(*, sender: str, to: str, item: Mapping[str, Any], subject: str, body
 
 __all__ = [
     "FAILURE_TYPES",
-    "REPORT_KEYS",
     "REPORT_SUBJECT",
     "SEVERITIES",
     "SUGGESTIONS",

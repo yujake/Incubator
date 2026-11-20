@@ -43,7 +43,6 @@ from ..extract import ExtractError, extract_text, page_count
 from ..store import Store
 
 __all__ = [
-    "OcrBackend",
     "OcrError",
     "EasyOcrBackend",
     "PytesseractBackend",

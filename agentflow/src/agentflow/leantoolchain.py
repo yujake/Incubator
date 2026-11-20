@@ -120,11 +120,8 @@ __all__ = [
     "EXPECTED_LEAN_MAJOR",
     "GRAPH_NAME",
     "MATHLIB_GRAPH_MODULE",
-    "MATHLIB_STATES",
     "NEGATIVE_NAME",
     "POSITIVE_NAME",
-    "SOURCES",
-    "STATES",
     "VERSION_TIMEOUT_SEC",
     "evidence_state_problem",
     "expected_version",
@@ -132,7 +129,6 @@ __all__ = [
     "lean_selfcheck_reading",
     "mathlib_command",
     "mathlib_reading",
-    "reset_reading_cache",
     "selfcheck",
 ]
 

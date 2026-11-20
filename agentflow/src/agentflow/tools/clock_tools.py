@@ -1936,4 +1936,4 @@ def register(registry: ToolRegistry, *, store: Any = None, root: Any = None,
     return names
 
 
-__all__ = ["DUE_PREFIX", "DUE_PREFIXES", "PATROL_PREFIX", "register"]
+__all__ = ["DUE_PREFIX", "PATROL_PREFIX", "register"]

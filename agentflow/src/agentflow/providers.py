@@ -46,7 +46,6 @@ __all__ = [
     "topic_selfcheck",
     "mark_topic_selfcheck",
     "query_applicability",
-    "QUERY_APPLICABILITY_STATES",
     "QUERY_NOT_APPLICABLE_CJK",
     "QUERY_EMPTY",
     "QueryApplicability",

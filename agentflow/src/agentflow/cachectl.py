@@ -126,7 +126,6 @@ __all__ = [
     "TIER_LABEL",
     "TIERS",
     "active_reading",
-    "add_subcommands",
     "annotate_run",
     "fingerprint",
     "key_reading",

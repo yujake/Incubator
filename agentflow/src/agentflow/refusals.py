@@ -24,7 +24,7 @@ from . import schema as S
 
 __all__ = ["PRECONDITION_REASON", "EMPTY_STATEMENT_TEXT", "EMPTY_PROOF_TEXT",
            "SAME_STATEMENT_UNJUDGED", "REFUSAL_LEDGER_NAME",
-           "refusal_ledger_path", "record_refusal", "refusal_records", "refuse"]
+           "refusal_ledger_path", "record_refusal", "refuse"]
 
 #: 前置条件不满足时用的那一档受控理由。集中一处：散在各文件的字面量一旦漂移，
 #: `Task.validate` 会在写库那一刻抛 —— 那时"拒绝"已经变成"崩溃"了。

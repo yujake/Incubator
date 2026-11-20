@@ -35,9 +35,9 @@
    "name": "BLOCKING_KINDS",
    "rel": "agent_h/mapping_judge.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 9 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "BODY_STATE_WORDS",
@@ -51,9 +51,9 @@
    "name": "B_LIBRARY_KEYS",
    "rel": "agent_l/formalize.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "CACHE_FIELDS",
@@ -195,17 +195,17 @@
    "name": "DUE_PREFIXES",
    "rel": "tools/clock_tools.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "Downloader",
    "rel": "fetch.py",
    "kind": "ClassDef",
-   "categories": "all_export,docs",
+   "categories": "docs",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 文档；文档侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：文档；名字保留，待接线或下一批删"
   },
   {
    "name": "ENTRY_KEYS",
@@ -243,9 +243,9 @@
    "name": "Extractor",
    "rel": "llm.py",
    "kind": "ClassDef",
-   "categories": "all_export,prose,tests,docs",
+   "categories": "prose,tests,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试 / 文档；测试侧 1 处提及；文档侧 4 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试 / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "FANOUT_LIMIT_BY_ROLE",
@@ -275,9 +275,9 @@
    "name": "FORMAL_REASON_BY_TOOL_REASON",
    "rel": "agent_l/_support.py",
    "kind": "Assign",
-   "categories": "all_export,docs",
+   "categories": "docs",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 文档；文档侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：文档；名字保留，待接线或下一批删"
   },
   {
    "name": "FULLTEXT_TIERS",
@@ -315,9 +315,9 @@
    "name": "L_STATEMENT_AND_FAITHFULNESS_REASONS",
    "rel": "agent_l/formalize.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 6 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "MANUSCRIPT_ID_STATES",
@@ -339,9 +339,9 @@
    "name": "MATHLIB_STATES",
    "rel": "leantoolchain.py",
    "kind": "Assign",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "OPTIMIZATION_PROMPT_CLASSES",
@@ -363,9 +363,9 @@
    "name": "OVERLAP_KINDS",
    "rel": "litstage.py",
    "kind": "Assign",
-   "categories": "all_export,prose,docs",
+   "categories": "prose,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 文档；文档侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "OWN_RESULT_LINK_SOURCES",
@@ -379,9 +379,9 @@
    "name": "OcrBackend",
    "rel": "tools/ocr_tools.py",
    "kind": "ClassDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "PARK_STATES",
@@ -419,9 +419,9 @@
    "name": "QUERY_APPLICABILITY_STATES",
    "rel": "providers.py",
    "kind": "Assign",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "QUOTE_STATES",
@@ -451,9 +451,9 @@
    "name": "READ_STATES",
    "rel": "jsonlfile.py",
    "kind": "Assign",
-   "categories": "all_export,prose,tests",
+   "categories": "tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "REFUSAL_SLOT_HEADS",
@@ -467,17 +467,17 @@
    "name": "REPORT_KEYS",
    "rel": "proofreport.py",
    "kind": "Assign",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "RESEARCH_BASE_STATES",
    "rel": "researchbase.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "RETURN_KEYS",
@@ -523,9 +523,9 @@
    "name": "SOURCES",
    "rel": "leantoolchain.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 4 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "SOURCE_BYTES_MAX",
@@ -539,17 +539,17 @@
    "name": "SPLIT_STATUSES",
    "rel": "claims.py",
    "kind": "Assign",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "STATES",
    "rel": "leantoolchain.py",
    "kind": "Assign",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 3 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "STATIC_PREFIX",
@@ -571,9 +571,9 @@
    "name": "SURVEY",
    "rel": "agent_skills.py",
    "kind": "Assign",
-   "categories": "all_export,prose,tests,docs",
+   "categories": "prose,tests,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试 / 文档；测试侧 10 处提及；文档侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试 / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "TASK_AUDIT_CODES",
@@ -587,9 +587,9 @@
    "name": "THREE_STATES",
    "rel": "agent_l/_support.py",
    "kind": "Assign",
-   "categories": "import,all_export,prose,tests,docs",
+   "categories": "import,prose,tests,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试 / 文档；测试侧 5 处提及；文档侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：re-export / 注释/docstring / 测试 / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "UNCHECKED_TYPES",
@@ -611,9 +611,9 @@
    "name": "VERSION_STATUSES",
    "rel": "formalgw.py",
    "kind": "Assign",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "VOID_CONDITIONS",
@@ -643,9 +643,9 @@
    "name": "add_subcommands",
    "rel": "cachectl.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "admissible_evidence_kinds",
@@ -723,9 +723,9 @@
    "name": "builtin_sources",
    "rel": "agent_skills.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "cache_entry",
@@ -747,9 +747,9 @@
    "name": "cand_ref",
    "rel": "litstage.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "check_params",
@@ -763,9 +763,9 @@
    "name": "checkpoint_prompt_cache_problem",
    "rel": "promptstability.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests,docs",
+   "categories": "tests,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试 / 文档；测试侧 7 处提及；文档侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试 / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "clamp_timeout",
@@ -811,9 +811,9 @@
    "name": "conjecture_refuted",
    "rel": "errorstate.py",
    "kind": "FunctionDef",
-   "categories": "import,all_export,prose,tests,docs",
+   "categories": "import,prose,tests,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试 / 文档；测试侧 6 处提及；文档侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：re-export / 注释/docstring / 测试 / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "cost_reading",
@@ -827,9 +827,9 @@
    "name": "count_by_code",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "declaration_divergences_for",
@@ -843,17 +843,17 @@
    "name": "declaration_names",
    "rel": "formalgw.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "dispatch_directions",
    "rel": "dispatchpolicy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 8 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "dispatch_fit_rows",
@@ -883,9 +883,9 @@
    "name": "facts_migration_problem",
    "rel": "promptstability.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 7 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "foreign_refusal",
@@ -915,9 +915,9 @@
    "name": "has_issue",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "hook_problems",
@@ -1035,9 +1035,9 @@
    "name": "lifecycle_verdict",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 4 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "list_models",
@@ -1115,9 +1115,9 @@
    "name": "missing_prompt_cache_steps",
    "rel": "promptstability.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 12 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "move_theorem",
@@ -1147,9 +1147,9 @@
    "name": "new_field_names",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 6 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "numeric_conclusions",
@@ -1187,9 +1187,9 @@
    "name": "optional_field_names",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "paper_heading_problems",
@@ -1227,9 +1227,9 @@
    "name": "progress_line",
    "rel": "tty.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "proof_manuscript_relpath",
@@ -1291,9 +1291,9 @@
    "name": "refusal_records",
    "rel": "refusals.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 3 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "refusal_shape_problems",
@@ -1307,17 +1307,17 @@
    "name": "refutation_of",
    "rel": "refutation.py",
    "kind": "Assign",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "refute_by_sign",
    "rel": "refutation.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 19 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "registration_digest",
@@ -1371,9 +1371,9 @@
    "name": "required_field_names",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "reserved_manuscript_id",
@@ -1387,9 +1387,9 @@
    "name": "reset_cache",
    "rel": "tools/conductor_tools.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 46 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "reset_costs",
@@ -1427,17 +1427,17 @@
    "name": "reset_readbacks",
    "rel": "litstage.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 12 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "reset_reading_cache",
    "rel": "leantoolchain.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 23 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "resubmit_digest",
@@ -1539,9 +1539,9 @@
    "name": "statement_is_active",
    "rel": "lifecycle.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "statement_manuscript_identity",
@@ -1571,9 +1571,9 @@
    "name": "summary_counts",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,tests",
+   "categories": "tests",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：测试；名字保留，待接线或下一批删"
   },
   {
    "name": "summon_consumption_verdict",
@@ -1595,17 +1595,17 @@
    "name": "tier_of_literature",
    "rel": "litavail.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose",
+   "categories": "prose",
    "action": "drop_export_or_wire",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring；名字保留，待接线或下一批删"
   },
   {
    "name": "to_storage_claim",
    "rel": "claimanatomy.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose,tests,docs",
+   "categories": "prose,tests,docs",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试 / 文档；测试侧 7 处提及；文档侧 2 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试 / 文档；名字保留，待接线或下一批删"
   },
   {
    "name": "ts_fields",
@@ -1619,9 +1619,9 @@
    "name": "unregistered_dynamic_sections",
    "rel": "promptstability.py",
    "kind": "FunctionDef",
-   "categories": "all_export,prose,tests",
+   "categories": "prose,tests",
    "action": "wire_or_delete",
-   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 6 处提及"
+   "why": "生产侧零读者；`__all__` 导出已摘（DELPUB2 4/N，2026-11-20）；现有引用类别：注释/docstring / 测试；名字保留，待接线或下一批删"
   },
   {
    "name": "unregistered_missing_in_actions",

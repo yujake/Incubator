@@ -1080,11 +1080,9 @@ def _checker_name(given: str, derived: str) -> str:
 
 
 __all__ = [
-    "B_LIBRARY_KEYS",
     "FAITHFULNESS_KEYS",
     "FAITHFULNESS_REASONS",
     "HOW_VALUES",
-    "L_STATEMENT_AND_FAITHFULNESS_REASONS",
     "QUOTE_CHARS",
     "STATEMENT_REASONS",
     "STEP_ROW_KEYS",
