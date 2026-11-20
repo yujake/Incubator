@@ -2537,6 +2537,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                 "out/clock/state.json）/ now / start_timer / start_alarm / "
                 "cancel_timer / timers / due_timers / fire_due / record_wake / "
                 "read_wakes / pending_wakes / consume_wakes / set_due_handler",
+    # 2026-11-20（业主「还有超800的？派人拆」）：`clock.py` 6,777 行按依赖方向由底向上拆，
+    # 这一条是拆出来的第一层。为什么仍是顶层模块：它是全套时钟模块的**最底层**，
+    # 只 import 标准库与 `canonical`，上层（`clockrun` / `clocktimer` / `clockbook` /
+    # `clockprogram` / `clockfire` …）各自单向 import 它；放在任何角色包里都会让
+    # "取时口"变成某个角色的一份实现，而时钟是系统级能力面（不属于任何角色、任何循环）。
+    "clockbase.py": "系统时钟的底座（2026-11-20 从 `clock.py` 拆出）：状态词表与落盘位置"
+                    "常量（READING_STATES / TIMER_STATES / STATE_REL / SCHEMA …）/ 时钟异常族"
+                    "（ClockError 及子类）/ 两条受控拒绝的拼句（waiter_refusal / "
+                    "no_timers_refusal）/ 三态读数 Reading 与时间往返（_iso / _parse_iso / "
+                    "human_sec / near_seconds）/ wait_for 的解析 parse_wait_for / 巡查文案常量 / "
+                    "事件总线原语（ObservedEvent / _EVENTS / _event_seq）—— 只被上层 import，"
+                    "自己不 import 本包内任何时钟模块（依赖方向单向）",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
