@@ -559,8 +559,14 @@ def handle_stream(handler: Any, params: Mapping[str, str],
     """`GET /api/stream`：`text/event-stream` 的推送流。
 
     流程（`draft/73` §2.4）：先回响应头（`no-store` + `no-cache` + `keep-alive`）⇒
-    按 `?since=` 补发缓冲里能补的那些（补不齐就先发一条全量 `state`）⇒
-    进入循环：有新事件就发，闲着就按 `heartbeat_sec` 发心跳，客户端断开就退出。
+    连上立刻发一份当前快照（首帧不等心跳；这一帧不带 `id:`）⇒ 按 `?since=` 补发缓冲里
+    能补的那些（补不齐再补一条全量 `state`）⇒ 进入循环：有新事件就发，闲着就按
+    `heartbeat_sec` 发心跳，客户端断开就退出。
+
+    为什么首帧是快照而不是心跳（2026-11-20，WEBCLEAN）：真机上干净重连的客户端在
+    第一帧之前只收到 215B 响应头，之后要等 15s 的心跳（`draft/187` P3-3 的读数）——
+    "连上了"与"收到第一帧"之间那段空窗会被读成卡死。首帧不带 `id:` 是硬要求：
+    它没有被 publish 过，吃一个编号会让同一客户端的下一次 `?since=` 跳过一段真实事件。
 
     心跳周期取默认广播器上那个可注入的值。
 
@@ -585,14 +591,23 @@ def handle_stream(handler: Any, params: Mapping[str, str],
         handler.send_header("Connection", "keep-alive")
         handler.send_header("X-Accel-Buffering", "no")
         handler.end_headers()
+        # ⓪ 首帧：连上就发一份当前快照（2026-11-20，WEBCLEAN）。
+        # 改前这里只在 `?since=` 补不齐时补发，于是干净重连的客户端要等第一帧心跳
+        # （真机 15s，`draft/187` P3-3 的现场读数：连上只收到 215B 响应头，第一帧在
+        # 15.1s）—— 首屏看起来"卡住了"，而其实首屏本来靠 `/api/state`。
+        # 这一帧不带 `id:`（它没有被 publish 过，不许吃广播器的编号：吃了会让下一次
+        # `?since=` 跳过一段真实事件）。页面按 `kind=state` + `snapshot` 处置。
+        from .readers import state_face
+
+        first = state_face(handler.root, sid=serving_sid())
+        handler.wfile.write(format_event(
+            kind="state", data={"snapshot": first.get("snapshot"), "reason": ""}))
         # ① 补发
         if since > 0:
             frames, why = bc.replay_since(since)
             for _event_id, frame in frames:
                 handler.wfile.write(frame)
             if why:
-                from .readers import state_face
-
                 face = state_face(handler.root, sid=serving_sid())
                 miss = format_event(kind="state",
                                     data={"snapshot": face.get("snapshot"),

@@ -584,7 +584,15 @@ def test_acceptance_face_reads_the_five_criteria_and_five_aux(
     assert set(got["criteria"]) == {k for k, _d in CRITERIA}, got["criteria"]
     assert set(got["auxiliary"]) == {k for k, _d in AUXILIARY_SIGNALS}, got["auxiliary"]
     assert set(got["details"]) == {k for k, _d in CRITERIA}
-    assert got["failed"] == sorted(k for k, v in got["criteria"].items() if v != "pass")
+    # `failed` 只装"判过了、不过"；"没查成"单列 —— 上游 `reviewaccept` 的
+    # `acc.failed` 把两档混装，透传它会让这一条端点与 `/api/package` 的
+    # `closing.content` 在**同一组入参**下报出两个"几条真不过"（`draft/187` P1-3）。
+    # 2026-11-20（WEBCLEAN）：断言改成与收工面同一算式，并同时钉住 `unchecked`。
+    assert got["failed"] == sorted(k for k, v in got["criteria"].items() if v == "fail")
+    assert got["unchecked"] == sorted(k for k, v in got["criteria"].items()
+                                      if v == "unknown")
+    assert not (set(got["failed"]) & set(got["unchecked"])), (
+        "同一格既算真不过又算没查成 ⇒ 两档被折平了")
     assert got["auxiliary_note"], "辅助读数那句『只供人看』必须带回来"
 
 
@@ -762,6 +770,9 @@ def test_the_checked_types_really_have_readings(artifacts_ws: pathlib.Path) -> N
     got["ProofView"] = set(pkg["proofs"])
     got["StructureView"] = set(pkg["structure"])
     got["ClosingView"] = set(pkg["closing"])
+    # 2026-11-20（WEBCLEAN）：成本对账那一格（`closing.cost.reconciliation`）的键
+    # 在任何工作区上都在（归口读不出来 ⇒ 各值 null，键集合不变），所以受核对。
+    got["CostReconciliation"] = set(pkg["closing"]["cost"]["reconciliation"])
     # 2026-11-01（块 3）：`/api/source` 的窗口读数（夹具上读它自己那份报告）。
     got["SourceWindow"] = set(R.source_window(artifacts_ws, "out/review/REPORT.md"))
     mach = R.machine_face(artifacts_ws)

@@ -205,6 +205,9 @@ CHECKED_TYPES: tuple[str, ...] = (
     # （目录不在 ⇒ 0 / `ledger_present=False`，键集合不变），所以进受核对名单。
     "SignsView",
     "EvidenceView", "ArtifactsView", "AcceptanceView", "SettingsReading",
+    # 成本对账那一格（`ClosingView.cost.reconciliation`）的键在任何工作区上都在
+    # （归口读不出来 ⇒ 各值 null，键集合不变），所以进受核对名单。
+    "CostReconciliation",
     "MachineView", "ArtifactRow", "LedgerVerifyRow", "HandoffRow", "SecretaryDecision",
     "AcceptanceCheck", "ReportStyle", "TaskRow", "VerificationRow",
     # 这四面的顶层键在任何工作区上都在（寄存器缺席、账本为空、没有进程都只是
@@ -1830,6 +1833,127 @@ def _quote_state_rows(rows: list[dict]) -> list[dict[str, Any]]:
     return out
 
 
+# ================================================================ 状态：三态 + 人话 + 原 token
+# 证据面那几张表的 `status` 列一直是原始英文 token（`refuted` / `supported_not_proved`
+# / `voided` / `needs_evidence` …）并排印在屏幕上，没有三态、也没有中文（WEBCAP B5）。
+#
+# 两条口径，只有这两条：
+#   · 命题面的"它还占不占活跃集"只读 `lifecycle.state_of_statement`（唯一入口，
+#     本文件不另写一份 `if status == ...`）⇒ `lifecycle_state` = active / completed /
+#     abandoned（读不出来是空串 + `lifecycle_checked=False`）；
+#   · 其余几张表没有 lifecycle 入口，就只译词（`status_word`），不编三态 ——
+#     "译成人话"与"发明一个新状态机"是两件事，后者该由人裁定。
+#
+# 词表外的 token 原样印（不折成 unknown：读不出来与不认识是两件事）。
+
+#: 命题的 lifecycle 三态词（`lifecycle.STATES` 的呈现面；页面印这个词，不印英文）。
+LIFECYCLE_WORDS: dict[str, str] = {
+    "active": "活跃",
+    "completed": "完工",
+    "abandoned": "放弃",
+}
+
+#: 命题原始 `status` 的中文（`schema.STATEMENT_STATUSES` 全覆盖；原文进 tooltip）。
+STATEMENT_STATUS_WORDS: dict[str, str] = {
+    "active": "活跃",
+    "disputed": "争议中",
+    "refuted": "已证否",
+    "superseded": "已被取代",
+    "pending_definition": "定义待补",
+    "abandoned": "已放弃",
+}
+
+#: 猜想状态的中文（`schema.CONJECTURE_STATUSES` 全覆盖）。
+CONJECTURE_STATUS_WORDS: dict[str, str] = {
+    "proposed": "刚提出",
+    "needs_evidence": "待证据",
+    "testing": "检验中",
+    "supported_not_proved": "有支持未证明",
+    "refuted": "已否证",
+    "proved": "已证明",
+    "promoted": "已升格",
+    "known_in_literature": "文献已知",
+    "withdrawn": "已撤回",
+}
+
+#: 实验状态的中文（`schema.EXPERIMENT_STATUSES` 全覆盖）。
+EXPERIMENT_STATUS_WORDS: dict[str, str] = {
+    "active": "有效",
+    "voided": "已作废",
+}
+
+#: 稿件状态的中文（`schema.DOC_STATUSES` 全覆盖）。
+DOCUMENT_STATUS_WORDS: dict[str, str] = {
+    "draft": "草稿",
+    "in_review": "审校中",
+    "revised": "已修订",
+    "accepted": "已接收",
+    "rejected": "已退回",
+    "unresolved_review": "审校未决",
+}
+
+#: 审校发现状态的中文（`schema.FINDING_STATUSES` 全覆盖）。
+FINDING_STATUS_WORDS: dict[str, str] = {
+    "open": "未处理",
+    "fixed": "已修",
+    "wontfix": "不修",
+    "disputed": "有争议",
+    "superseded": "已被取代",
+}
+
+#: 表名 → 那一张状态词表（键集合必须等于 `schema` 里对应的 `*_STATUSES`；
+#: 判据 `tests/test_webui_status_words_cover_the_vocabulary.py` 逐个钉住）。
+STATUS_WORDS: dict[str, dict[str, str]] = {
+    "statements": STATEMENT_STATUS_WORDS,
+    "conjectures": CONJECTURE_STATUS_WORDS,
+    "experiments": EXPERIMENT_STATUS_WORDS,
+    "documents": DOCUMENT_STATUS_WORDS,
+    "review_findings": FINDING_STATUS_WORDS,
+}
+
+
+def _status_reading(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
+    """一行状态的呈现读数：`{status_word, lifecycle_state, lifecycle_checked}`。
+
+    - `status_word`：给人读的那个词（词表见 :data:`STATUS_WORDS`；词表外的 token
+      原样返回 —— 不认识不等于没读到）；
+    - `lifecycle_state` / `lifecycle_checked`：只有命题面有（`lifecycle.state_of_statement`
+      是唯一入口）；其余表分别是 `""` / `None`（"这张表没有三态入口"，不是"判成活跃"）。
+
+    判据：`tests/test_webui_status_words_cover_the_vocabulary.py`。
+    """
+    raw = str(row.get("status") or "")
+    word = (STATUS_WORDS.get(table) or {}).get(raw, raw)
+    out: dict[str, Any] = {"status_word": word, "lifecycle_state": "",
+                           "lifecycle_checked": None}
+    if table != "statements":
+        return out
+    from .. import lifecycle as _LC
+
+    got = _LC.state_of_statement(row)
+    state = str(got.get("state") or "")
+    out["lifecycle_state"] = state
+    out["lifecycle_checked"] = bool(got.get("checked"))
+    # 有 lifecycle 读数时，页面上印的那一格用三态词（命题的"结束"只有两种：完工 / 放弃）；
+    # 读不出来时退回原始 token 的译名，并把 `lifecycle_checked=False` 一起给出去。
+    if state in LIFECYCLE_WORDS:
+        out["status_word"] = LIFECYCLE_WORDS[state]
+    return out
+
+
+def _status_readings(table: str, rows: list[dict]) -> list[dict[str, Any]]:
+    """整张表逐行补状态呈现读数（非 Mapping 的行原样返回，不猜）。"""
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            out.append(row)
+            continue
+        got = dict(row)
+        got.update(_status_reading(table, row))
+        out.append(got)
+    return out
+
+
 def _verification_consistency(rows: list[dict],
                               statements: Mapping[str, Mapping[str, Any]]
                               ) -> list[dict[str, Any]]:
@@ -2113,6 +2237,10 @@ def evidence_chain(root: str | Path, store: Any = None) -> dict[str, Any]:
     out["relations"] = _quote_state_rows(out.get("relations") or [])
     out["experiments"] = _experiment_code_consistency(root_p,
                                                       out.get("experiments") or [])
+    # ---- 状态列：三态（只有命题面有 lifecycle 入口）+ 人话 + 原文留 tooltip。
+    # 放在最后：它只加三格呈现读数，不改上面任何一格的判定。
+    for _table, _key, _src in _EVIDENCE_TABLES:
+        out[_key] = _status_readings(_table, out.get(_key) or [])
     # 索引的构造只有一处（查口 `index_by_id`）：非 Mapping / 没号的行由它跳过。
     by_sid = SL.index_by_id(out["statements"])
     out["verifications"] = _verification_consistency(out.get("verifications") or [],
@@ -2568,6 +2696,17 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
     - 不给 `cap_usd` ⇒「在成本上限内」那一格是 `unknown`（没查成，不是"通过了"）；
     - 不给 `sid` ⇒ `triage_branch_recorded` 是 `unknown`（不知道读哪一段会话）；
     - `store` / `reviewaccept` 抛异常 ⇒ 整面 `unreadable` + `reason`。
+
+    ## `failed` 只装"真不过"，"没查成"单列（2026-11-20，WEBCLEAN）
+
+    上游 `reviewaccept.check_review` 的 `acc.failed` 把 `unknown` 与 `fail` 混装在同一
+    个清单里（它的 docstring 说的是"没过的那些"）。同一个工作区、同一组入参，
+    `/api/package` 的 `closing.content` 一直是 `failed=1 / unchecked=2`，而这一条端点
+    给出 `failed=3` —— 两个出口对"几条真不过"说两句话。口径的真身在
+    `_closing_block` 的 `content` 那一段（`failed = v=="fail"` / `unchecked = v=="unknown"`），
+    这里改成逐格判 `criteria` 的同一条算式：不再透传 `acc.failed`。
+
+    判据：`tests/test_webui_acceptance_failed_is_not_unchecked.py`。
     """
     from ..reviewaccept import AUXILIARY_SIGNALS, CRITERIA, check_review
     from ..store import Store
@@ -2582,19 +2721,30 @@ def acceptance_face(root: str | Path, store: Any = None, *, project_dir: str = "
         return {"tri": TRI_UNREADABLE, "reason": f"reviewaccept.check_review 读不出来："
                                                 f"{type(exc).__name__}: {exc}",
                 "criteria": {}, "auxiliary": {}, "details": {}, "failed": [],
+                "unchecked": [],
                 "rows": _acceptance_rows({}, {}),
+                "note": ("`failed` 是真不过，`unchecked` 是没查成 —— 两档不许折平"
+                         "（与 `/api/package` 的 `closing.content` 同一算式）"),
                 "auxiliary_note": ""}
     criteria = {str(k): str((acc.criteria or {}).get(k, "unknown")) for k, _d in CRITERIA}
     details = {str(k): str((acc.details or {}).get(k, "")) for k, _d in CRITERIA}
     aux = {str(k): _as_text((acc.auxiliary or {}).get(k)) for k, _d in AUXILIARY_SIGNALS}
     unresolved = sorted(k for k, v in criteria.items() if v == "unknown")
+    # `failed` 只装"判过了、不过"；"没查成"单列 —— 与 `_closing_block` 的 `content`
+    # 同一算式（`v=="fail"` / `v=="unknown"`）。上游 `acc.failed` 把两档混装，
+    # 透传它会让同参数下这里报 3 条、收工面报 1 fail + 2 unchecked。
+    failed = sorted(k for k, v in criteria.items() if v == "fail")
+    unchecked = sorted(k for k, v in criteria.items() if v == "unknown")
     return {"tri": TRI_COMPUTED,
             "reason": ("这些格子没查成（不是通过）：" + "、".join(unresolved)
                        if unresolved else ""),
             "criteria": criteria, "details": details, "auxiliary": aux,
             # 逐条行（每一行带"谁 / 哪一趟"那三格，这一面的三格恒为"编号不适用"）
             "rows": _acceptance_rows(criteria, details),
-            "failed": sorted(acc.failed), "auxiliary_note": str(
+            "failed": failed, "unchecked": unchecked,
+            "note": ("`failed` 是真不过，`unchecked` 是没查成 —— 两档不许折平"
+                     "（与 `/api/package` 的 `closing.content` 同一算式）"),
+            "auxiliary_note": str(
                 (acc.to_dict() or {}).get("auxiliary_note", ""))}
 
 
@@ -2770,8 +2920,15 @@ def _empty_proofs(reason: str) -> dict[str, Any]:
             "coverage_note": "分母读不到 ⇒ 不给比例（0 不是「没有」）。",
             "review_states": {}, "rows": [],
             "vsign": {"tri": TRI_UNREADABLE, "reason": reason, "files": 0,
+                      "recomputable": None,
                       "signed": [], "backed": [], "without_sign": [], "orphan_signs": [],
-                      "source": _src("out/vsigns/", label="V 签")},
+                      # 整块没查成时"台账在不在"是 `None`（不知道），不是 `False`（不在）。
+                      "ledger_present": None,
+                      "ledger_path": "out/vsigns/issued.json",
+                      "note": ("「签了几份」只认复算通过的 `<sha>.json`（`recomputable`）；"
+                               "`signed` 是第 3 位为真的命题，`without_sign` 是其中盘上补不出"
+                               "侧文件的那几条（子集，不是另一个签数）；`issued.json` 是索引。"),
+                      "source": _src("out/vsigns/", label="签文件（逐份 <sha>.json）")},
             "receipt": {"checked": False, "reason": reason, "receipts": 0,
                         "statements": 0, "delivered": 0, "dispatched": 0,
                         "not_dispatched": 0, "undelivered": 0, "undelivered_ids": [],
@@ -2872,23 +3029,41 @@ def _proofs_block(root_p: Path, store: Any, rep: Any,
     envs = ledger.get("statement_envs")
     note = ("正文定理类环境 / 有证明的命题 / 台账定理类三个分母并列："
             "签覆盖率不合成一个比例（分母不同，合成会撒谎）。")
+    # ---- 签的读数只认 `<sha>.json`（2026-11-20，WEBCLEAN）
+    # 上一版这一块的 `source.path` 指向 `out/vsigns/issued.json` —— 那是派生台账
+    # （索引），`vsigns.INDEX_NAME` 的 docstring 逐字说"谁都不许拿它下结论，也不参与
+    # 『签了几份』"。而同一块里 `signed`（第 3 位为真，含历史签）与 `without_sign`
+    # （其中盘上没有侧文件的那些）并排印，读者读成两个互相打架的签数。
+    # 这一版把三件事分开放：
+    #   · `recomputable` = 复算通过的签文件份数 —— 唯一的"签了几份"口径；
+    #   · `signed` / `backed` / `without_sign` = 第 3 位为真的命题（含历史签），
+    #     `without_sign` 是 `signed` 的子集（"签过、但盘上补不出侧文件"），不是另一个签数；
+    #   · `ledger_present` / `ledger_path` = 台账在不在（索引，不是签）。
+    ledger_path = "out/vsigns/issued.json"
+    vsign = {"tri": str(backed.get("tri") or TRI_UNREADABLE),
+             "reason": str(backed.get("reason") or ""), "files": files,
+             "recomputable": recomputable,
+             "signed": list(backed.get("signed") or []),
+             "backed": list(backed.get("backed") or []),
+             "without_sign": list(backed.get("without_sign") or []),
+             "orphan_signs": list(backed.get("orphan_signs") or []),
+             "ledger_present": (root_p / "out" / "vsigns" / "issued.json").is_file(),
+             "ledger_path": ledger_path,
+             "note": ("「签了几份」只认复算通过的 `<sha>.json`（`recomputable`）；"
+                      "`signed` 是第 3 位为真的命题（含历史签 / 直调写的签），"
+                      "`without_sign` 是其中盘上补不出侧文件的那几条 —— 它是 `signed` 的"
+                      "子集，不是另一个签数；`issued.json` 是索引，不是签。"
+                      "另：proofs.signed 是 review 状态为 signed 的命题数（阅签台账口径），"
+                      "与这里的 `signed`（第 3 位）是两个读数，不许互相顶替。"),
+             "source": _src(_newest_sign_file(root_p) or "out/vsigns/",
+                            label="签文件（逐份 <sha>.json）")}
     return {"tri": TRI_COMPUTED, "reason": "",
             "source": _src("out/paper/ACCEPTANCE-CHECKS.json", label="C3"),
             "paper_theorem_envs": envs, "propositions_with_proof": with_proof,
             "ledger_theorem_kinds": ledger.get("ledger_theorem_kinds"),
             "signed": signed, "coverage_note": note,
             "review_states": states, "rows": proof_rows[:PACKAGE_ROWS_MAX],
-            "vsign": {"tri": str(backed.get("tri") or TRI_UNREADABLE),
-                      "reason": str(backed.get("reason") or ""), "files": files,
-                      "recomputable": recomputable,
-                      "signed": list(backed.get("signed") or []),
-                      "backed": list(backed.get("backed") or []),
-                      "without_sign": list(backed.get("without_sign") or []),
-                      "orphan_signs": list(backed.get("orphan_signs") or []),
-                      "source": _src(
-                          "out/vsigns/issued.json"
-                          if (root_p / "out" / "vsigns" / "issued.json").is_file()
-                          else "out/vsigns/", label="V 签")},
+            "vsign": vsign,
             "receipt": {"checked": bool(receipt.get("checked")),
                         "source": _src(_newest_file(root_p, "verifications")
                                        or "verifications/", label="回执"),
@@ -2916,6 +3091,27 @@ def _newest_file(root_p: Path, rel: str, pattern: str = "*.jsonl") -> str:
     if not folder.is_dir():
         return ""
     files = sorted((p for p in folder.glob(pattern) if p.is_file()),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    return str(files[0].relative_to(root_p)).replace("\\", "/") if files else ""
+
+
+def _newest_sign_file(root_p: Path) -> str:
+    """`out/vsigns/` 里最新的逐份签文件（工作区相对路径；没有 ⇒ 空串）。
+
+    为什么不能直接 `_newest_file(root_p, "out/vsigns")`：那个 glob 会把 `issued.json`
+    （派生台账）也算进来。台账是本目录里最常被重写的文件，按 mtime 取最新必然选它 ——
+    "签"这一格的原文出处于是指着一份谁都不许拿来下结论的索引
+    （`vsigns.INDEX_NAME` 的 docstring 逐字如此）。这一格只认 `<artifact_sha>.json`。
+
+    判据：`tests/test_webui_sign_reading_is_side_files_only.py`。
+    """
+    from .. import vsigns as _VSP
+
+    folder = root_p / "out" / "vsigns"
+    if not folder.is_dir():
+        return ""
+    files = sorted((p for p in folder.glob("*.json")
+                    if p.is_file() and p.name != _VSP.INDEX_NAME),
                    key=lambda p: p.stat().st_mtime, reverse=True)
     return str(files[0].relative_to(root_p)).replace("\\", "/") if files else ""
 
@@ -3044,6 +3240,40 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
             "unattributed_usd": unattributed, "runs_without_spend": runs_without_spend,
             "ledger_usd": ledger_usd, "ledger_rows": (len(ledger_rows) if ledger_usd is not None else None),
             "source": _src("data/usage_ledger.json", label="usage_ledger")}
+    # ---- 成本对账（2026-11-20，WEBCLEAN）：四个数并排却不给差额的解释
+    # 真机 lp-ball-11 的现场：事件求和 2.422720 / 自报 2.271637 / 无人认领 0.151083 /
+    # usage_ledger 2.543759。前两只差恰好是无人认领那一笔（自洽），而
+    # `账本 − 事件 = 0.121039 = by_scope.extract.usd` —— 账本里有 14 行 extract，
+    # 事件流里没有这 14 笔调用。页面上没有这句话，读者只能说"四个数里三个对不上"。
+    #
+    # 归口的唯一出处是 `tokenmeter.TokenMeter.by_scope()`（本层不另算一遍分组）；
+    # 事件里的调用数取 `Σ runs[].llm_calls`（与 "账本行数" 是两个数，见 budget_face）。
+    by_scope: dict[str, Any] = {}
+    try:
+        from ..tokenmeter import TokenMeter
+
+        by_scope = dict(TokenMeter(store).by_scope() or {})
+    except Exception:  # noqa: BLE001 - 读数层：读不到就如实说没查成（不写 0）
+        by_scope = {}
+    extract_usd = (round(float((by_scope.get("extract") or {}).get("usd") or 0), 6)
+                   if by_scope else None)
+    ledger_minus_event = (round(ledger_usd - event_usd, 6)
+                          if (ledger_usd is not None and event_usd is not None) else None)
+    explained = (None if (ledger_minus_event is None or extract_usd is None)
+                 else abs(ledger_minus_event - extract_usd) < 1e-6)
+    cost["reconciliation"] = {
+        "by_scope": by_scope,
+        "extract_usd": extract_usd,
+        "extract_entries": (int((by_scope.get("extract") or {}).get("entries") or 0)
+                            if by_scope else None),
+        "event_llm_calls": (sum(int(r.get("llm_calls") or 0) for r in runs)
+                            if sessions_ok else None),
+        "ledger_minus_event_usd": ledger_minus_event,
+        "explained_by_extract": explained,
+        "note": ("账本 − 事件 = 归口里 extract 那几笔（事件流里没有这些调用）；"
+                 "`ledger_rows` 是账本行数，`event_llm_calls` 是事件里的调用数 —— "
+                 "一次调用可能记 0..n 行，两个数不许互相顶替。"),
+    }
     starts = [str(r.get("start_ts") or "") for r in runs if r.get("start_ts")]
     ends = [str(r.get("end_ts") or r.get("start_ts") or "") for r in runs]
     first, last = (min(starts) if starts else ""), (max(ends) if ends else "")
@@ -3190,6 +3420,12 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                                      "spend_usd": None, "spend_unknown_usd_calls": None,
                                      "unattributed_usd": None, "runs_without_spend": 0,
                                      "ledger_usd": None, "ledger_rows": None,
+                                     "reconciliation": {
+                                         "by_scope": {}, "extract_usd": None,
+                                         "extract_entries": None, "event_llm_calls": None,
+                                         "ledger_minus_event_usd": None,
+                                         "explained_by_extract": None,
+                                         "note": "整面没查成 ⇒ 成本对账也算不出来（不是 0）"},
                                      "source": _src("data/usage_ledger.json")},
                             "runtime": {"first_start_ts": "", "last_event_ts": "",
                                         "elapsed_sec": None, "runs_total": None,
@@ -5769,6 +6005,8 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 也得有"行"这个东西可挂那三格（`criteria` 是 Record，挂不上）。
       ("rows", "AcceptanceRow[]"),
       ("auxiliary", "Record<string, string>"), ("failed", "string[]"),
+      # `failed` 只装"真不过"；"没查成"单列（两档不许折平；与收工面同一算式）。
+      ("unchecked", "string[]"), ("note", "string"),
       ("auxiliary_note", "string"))),
     ("AcceptanceRow",
      "acceptance_face() 的 rows[] —— 一条验收判据一行（键名来自 reviewaccept.CRITERIA；"
@@ -5914,6 +6152,10 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("markdown_path", "string | null"),
       ("sections", "Record<string, unknown>[]"), ("claims", "Record<string, unknown>[]"),
       ("open_problems", "string[]"), ("status", "string"),
+      # 状态呈现读数（`_status_reading`）：人话 + 三态（只有命题面有 lifecycle
+      # 入口，其余表 `lifecycle_state=""` / `lifecycle_checked=null`）。
+      ("status_word", "string"), ("lifecycle_state", "string"),
+      ("lifecycle_checked", "boolean | null"),
       ("review_rounds", "number"), ("review_verdict", "string"),
       ("reviewed_at", "string"), ("reviewed_by", "string"),
       ("created_at", "string"), ("updated_at", "string"), ("revision", "number"),
@@ -5931,6 +6173,11 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 于是这条错误只在 `tsc` 那一侧沉默）。
       ("bits", "Record<string, unknown>"),
       ("status", "string"), ("derived_from", "string"), ("doc_id", "string"),
+      # 状态呈现读数：命题面走 `lifecycle.state_of_statement`（唯一入口）⇒
+      # `lifecycle_state` 是 active / completed / abandoned（读不出来是空串 +
+      # `lifecycle_checked=false`），`status_word` 是页面上印的那个人话词。
+      ("status_word", "string"), ("lifecycle_state", "string"),
+      ("lifecycle_checked", "boolean | null"),
       ("line_range", "string"), ("created_at", "string"), ("created_by", "string"),
       # 命题要标注非平凡度、第 4 位按路径显示、引文读数分档：
       # 这十一格都是读模型的现算读数（`_statement_readings`），不是 `schema.Statement`
@@ -6015,6 +6262,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("level", "string"), ("target", "string"), ("evidence", "string"),
       ("message", "string"), ("round", "number"), ("suggestion", "string"),
       ("status", "string"), ("resolution_note", "string"), ("created_at", "string"),
+      # 状态呈现读数（这一张表没有 lifecycle 入口 ⇒ 只译词，`lifecycle_*` 空）。
+      ("status_word", "string"), ("lifecycle_state", "string"),
+      ("lifecycle_checked", "boolean | null"),
       ("created_by", "string"), ("axis", "string"), ("line", "number | null"),
       ("verbatim_quote", "string"), ("maths", "string"),
       ("line_unavailable_reason", "string"),
@@ -6033,6 +6283,9 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       # 引文五档（`_quote_state_rows`；含 `no_evidence` —— 说通过而拿不出
       # 可复核区间的那一档，折进"未查"就把它欠的东西读错了）。
       ("quote_state", "string"),
+      # 状态呈现读数（关系表没有 lifecycle 入口 ⇒ 只译词，`lifecycle_*` 空）。
+      ("status_word", "string"), ("lifecycle_state", "string"),
+      ("lifecycle_checked", "boolean | null"),
       ("by_role", "string"), ("by_role_source", "string"),
       ("by_task_id", "string"),
       ("by_task_id_tri", "string"))),
@@ -6209,13 +6462,22 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "store.rows(\"conjectures\")（真机 p9b/data/conjectures.json；无样本时以 "
      "`schema.Conjecture` 为准）",
      (("conjecture_id", "string"), ("statement", "string"), ("status", "string"),
-      ("form", "string"), ("testable", "boolean | null"), ("origin", "string"),
+      # `testable` 的真身是 `schema.Conjecture.testable: dict`（`{"params", "bounds",
+      # "why"}`），不是 `boolean | null`。声明成标量时 `tsc` 抓不到
+      # `String(r.testable)` —— 真机 13 行全印 `[object Object]`（`draft/187` P2-1）。
+      ("form", "string"), ("testable", "Record<string, unknown>"), ("origin", "string"),
       ("created_by", "string"), ("created_at", "string"), ("updated_at", "string"),
       ("experiment_ids", "string[]"),
       ("counterexample_experiment_id", "string | null"),
       ("proof_experiment_id", "string | null"), ("negation_statement", "string"),
-      ("known_lit_id", "string"), ("notes", "string"), ("promoted_to", "string"),
+      ("known_lit_id", "string"), ("notes", "string"),
+      # 真身同样是 dict（`{"kind": …, "id": …}`）；声明成 string 时页面会印
+      # `[object Object]`（或 `tsc` 放行一次错误的 String()）。
+      ("promoted_to", "Record<string, unknown>"),
       ("withdraw_reason", "string"), ("duplicate", "boolean | null"),
+      # 状态呈现读数：这一张表没有 lifecycle 入口 ⇒ 只译词。
+      ("status_word", "string"), ("lifecycle_state", "string"),
+      ("lifecycle_checked", "boolean | null"),
       # `conj:` 不是 `schema.CITATION_PREFIXES` 登记的前缀，裸六位号又会误命中
       # ⇒ 这一栏的编号那一格是 `not_applicable`（见 `_LEDGER_ROW_TOKENS`）。
       ("by_role", "string"), ("by_role_source", "string"),
@@ -6226,15 +6488,31 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
      "`schema.Experiment` 为准）",
      (("experiment_id", "string"), ("method", "string"), ("result", "string"),
       ("evidence_kind", "string"), ("negation_kind", "string"), ("claim", "string"),
-      ("claim_key", "string"), ("certificate", "string"),
-      ("counterexample", "string"), ("search_bound", "string"),
+      ("claim_key", "string"),
+      # 这四格的真身都是 dict（`schema.Experiment`），`counterexample` / `certificate`
+      # 另可为 None。声明成 string 时页面会印 `[object Object]`（或 `tsc` 放行一次
+      # 错误的 String()）—— WEBCAP 的 type_drift 逐格报过这四格。
+      ("certificate", "Record<string, unknown> | null"),
+      ("counterexample", "Record<string, unknown> | null"),
+      ("search_bound", "Record<string, unknown>"),
       ("verifier_output", "string"), ("verifier_subject_key", "string"),
       ("code_path", "string"), ("code_hash", "string"),
       ("exit_code", "number | null"), ("artifact_paths", "string[]"),
-      ("observations", "string"), ("params", "Record<string, unknown>"),
+      ("observations", "Record<string, unknown>"), ("params", "Record<string, unknown>"),
       ("runtime_sec", "number | null"), ("notes", "string"),
       ("created_at", "string"), ("created_by", "string"),
-      ("for_question_id", "string"),
+      ("for_question_id", "string | null"),
+      # `status` 是真身的一列（`schema.Experiment.status`：`active` / `voided`）。
+      # 改前这里漏了它 ⇒ `types.ts` 里 ExperimentRow 没有 status，页面想印"状态"就
+      # 得 `as unknown as`（`tsc` 抓不到的那种缺格）。作废那四格同批补上。
+      ("status", "string"),
+      ("voided_by", "string"), ("voided_at", "string"),
+      ("void_reason_code", "string"), ("voided_code_to", "string"),
+      # 归属那两格：盘上不一定有（老行），声明成可选。
+      ("owner_task?", "string"), ("owner_instance?", "string"),
+      # 状态呈现读数（这一张表没有 lifecycle 入口 ⇒ 只译词）。
+      ("status_word", "string"), ("lifecycle_state", "string"),
+      ("lifecycle_checked", "boolean | null"),
       # sha 原文不显示：`code_sha_consistency` 是"台账钉的代码 sha
       # vs 盘上现在这一份脚本"的读数（`code_hash` 留在数据里，页面不印）。
       # 改脚本后重新登记并撤销老登记 ⇒ 它多了第四档 `revoked`，
@@ -6603,8 +6881,13 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("VsignView",
      "package_face() 的 proofs.vsign —— `vsigns.backed_reading`（side files / 覆盖率）",
      (("tri", "Tri"), ("reason", "string"), ("files", "number"),
+      # 「签了几份」的唯一口径：复算通过的 `<sha>.json` 份数。
+      ("recomputable", "number | null"),
       ("signed", "string[]"), ("backed", "string[]"),
       ("without_sign", "string[]"), ("orphan_signs", "string[]"),
+      # 台账（`issued.json`）是索引，不是签：在不在单独一格（整块没查成 ⇒ null）。
+      ("ledger_present", "boolean | null"), ("ledger_path", "string"),
+      ("note", "string"),
       ("source", "SourceRef"))),
     ("ReceiptView",
      "package_face() 的 proofs.receipt / closing.undelivered —— `vsigns.receipt_digest`",
@@ -6710,7 +6993,16 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("spend_unknown_usd_calls", "number | null"),
       ("unattributed_usd", "number | null"), ("runs_without_spend", "number"),
       ("ledger_usd", "number | null"), ("ledger_rows", "number | null"),
+      # 四个数并排却不给差额的解释 = 读者只能说"三个对不上"（WEBCAP B10）。
+      ("reconciliation", "CostReconciliation"),
       ("source", "SourceRef"))),
+    ("CostReconciliation",
+     "ClosingView.cost.reconciliation —— 账本 − 事件 = extract 那几笔；账本行数 ≠ 调用数",
+     (("by_scope", "Record<string, UsageBucket>"),
+      ("extract_usd", "number | null"), ("extract_entries", "number | null"),
+      ("event_llm_calls", "number | null"),
+      ("ledger_minus_event_usd", "number | null"),
+      ("explained_by_extract", "boolean | null"), ("note", "string"))),
     ("RuntimeView",
      "ClosingView.runtime —— 时间轴与名册两个读数",
      (("first_start_ts", "string"), ("last_event_ts", "string"),

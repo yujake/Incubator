@@ -54,6 +54,38 @@ import { TriState, isUnreadable } from "../components/TriState";
 import { useFace } from "../live";
 import type { ExperimentRow, RelationRow, StatementRow } from "../types";
 
+/** 状态那一格：人话（`status_word`）上屏，原始 token 进 tooltip；命题面另报三态。
+ *
+ * 为什么不再直接印 `status`：真机上这一列是 `refuted` / `supported_not_proved` /
+ * `voided` / `needs_evidence` 这些原始 token 并排（`draft/187` P1-4）—— 读的人得自己
+ * 翻译，而 `supported_not_proved` 与 `refuted` 在屏幕上长得一样"都是英文"。
+ *
+ * 三态只在命题面上有（`lifecycle.state_of_statement`，唯一入口）：
+ * `lifecycle_checked === false` ⇒ 这一格判不了（`unknown`），**不折成"活跃"**；
+ * 其余几张表没有 lifecycle 入口，`lifecycle_state` 是空串 —— 那不是"判成活跃"。
+ */
+export function statusCell(r: {
+  status: string;
+  status_word?: string;
+  lifecycle_state?: string;
+  lifecycle_checked?: boolean | null;
+}) {
+  const word = (r.status_word ?? "") === "" ? cell(r.status) : (r.status_word as string);
+  const tip = `盘上的原始 status=${r.status === "" ? "（空串）" : r.status}`;
+  if (r.lifecycle_checked === false) {
+    return (
+      <span class="tri-reason" title={tip}>
+        {word}（三态判不了：status 不在词表里，不折成活跃）
+      </span>
+    );
+  }
+  return (
+    <span class="mono" title={tip}>
+      {word}
+    </span>
+  );
+}
+
 /** 引文状态的五档（后端 `evidencebits.QUOTE_STATES`；词表外的值原样印，不折成"通过"）。 */
 const QUOTE_WORDS: Record<string, { text: string; kind: string }> = {
   verbatim: { text: "逐字通过", kind: "badge-pass" },
@@ -339,19 +371,27 @@ export function Evidence() {
             columns={[
               { key: "stmt_id", title: "命题号" },
               {
-                // 一格 `T0`–`T4` 或"未判"，hover 给这一档的语义。
-                // 未判不是 T0（T0 是一档真的档位）。
-                key: "nontriviality_label",
+                // 一格 `T0`–`T4` / `不适用` / `未判`：显示词由后端 `nontriviality_word` 给
+                // （三个词只有一个判断点）。`label` 仍传：它是"有没有档位"那个判据，
+                // 也是旧后端（没有 word）时的兜底。
+                key: "nontriviality_word",
                 title: "非平凡度",
                 render: (r) => (
                   <Nontriviality
+                    word={r.nontriviality_word}
                     label={r.nontriviality_label}
                     meaning={r.nontriviality_meaning}
                     tri={r.nontriviality_tri}
                   />
                 ),
               },
-              { key: "status", title: "状态", render: (r) => cell(r.status) },
+              {
+                // 状态：人话（`status_word`）上屏，原始 token 进 tooltip。
+                // 命题面另带 `lifecycle_state`（三态：活跃 / 完工 / 放弃，读不出来是空串）。
+                key: "status_word",
+                title: "状态",
+                render: (r) => statusCell(r),
+              },
               { key: "kind", title: "类别", render: (r) => cell(r.kind) },
               { key: "label", title: "标签", render: (r) => cell(r.label) },
               {
@@ -473,12 +513,19 @@ export function Evidence() {
             empty="0 条猜想（读到了，里面是空的）。"
             columns={[
               { key: "conjecture_id", title: "猜想号" },
-              { key: "status", title: "状态", render: (r) => cell(r.status) },
+              { key: "status_word", title: "状态", render: (r) => statusCell(r) },
               { key: "form", title: "形态", render: (r) => cell(r.form) },
               {
+                // `testable` 的真身是 dict（`{"params","bounds","why"}`，`schema.Conjecture`）。
+                // 改前这里是 `String(r.testable)` ⇒ 真机 13 行全印 `[object Object]`；
+                // `cell()` 对对象走 `JSON.stringify`，至少是真的读数、读得懂。
+                // 空对象印「—（盘上没写）」—— 那是"这一格没有内容"，不是"没读到"。
                 key: "testable",
                 title: "可检验",
-                render: (r) => (r.testable === null ? "unknown" : String(r.testable)),
+                render: (r) => {
+                  const t: Record<string, unknown> = r.testable ?? {};
+                  return Object.keys(t).length === 0 ? "—（盘上没写）" : cell(t);
+                },
               },
               { key: "statement", title: "陈述" },
               {
@@ -510,6 +557,7 @@ export function Evidence() {
             empty="0 条实验（读到了，里面是空的）。"
             columns={[
               { key: "experiment_id", title: "实验号" },
+              { key: "status_word", title: "状态", render: (r) => statusCell(r) },
               { key: "method", title: "方法", render: (r) => cell(r.method) },
               { key: "result", title: "结论", render: (r) => cell(r.result) },
               { key: "evidence_kind", title: "证据档", render: (r) => cell(r.evidence_kind) },
@@ -566,7 +614,7 @@ export function Evidence() {
                 render: (r) => (r.line === null ? "unknown（没记行号）" : String(r.line)),
               },
               { key: "message", title: "正文" },
-              { key: "status", title: "状态", render: (r) => cell(r.status) },
+              { key: "status_word", title: "状态", render: (r) => statusCell(r) },
             ]}
           />
         )}
@@ -589,7 +637,7 @@ export function Evidence() {
               { key: "doc_id", title: "稿件号", render: (r) => cell(r.doc_id) },
               { key: "kind", title: "种类", render: (r) => cell(r.kind) },
               { key: "title", title: "标题", render: (r) => cell(r.title) },
-              { key: "status", title: "状态", render: (r) => cell(r.status) },
+              { key: "status_word", title: "状态", render: (r) => statusCell(r) },
               { key: "review_rounds", title: "审校轮次" },
               { key: "review_verdict", title: "审校结论", render: (r) => cell(r.review_verdict) },
               { key: "revision", title: "修订号" },

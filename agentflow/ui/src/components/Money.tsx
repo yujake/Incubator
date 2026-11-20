@@ -36,6 +36,22 @@ export function formatText(value: string | null | undefined): string {
 }
 
 /**
+ * 时刻的唯一写法（`checkpoint.at` 那一类）：盘上没写时区时把它标出来。
+ *
+ * 为什么要有这一档：同一页里 `ts` 是 `2026-11-19T18:20:43+08:00`，而检查点的 `at`
+ * 是 `2026-11-19T18:20:44`（**没有时区**，`runs/<role>-*.json` 里就是这么写的）。
+ * 两个格式并排印，读的人会把后者读成同一时区里的一刻 —— 它其实是"本机时刻但没标"。
+ * 这一层不改盘上的值（改了就是编一个时区），只把"没写时区"这件事印出来。
+ */
+export function formatStamp(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") {
+    return "unknown";
+  }
+  // ISO8601 的时区标记：末尾 `Z` 或 `±HH:MM` / `±HHMM`。
+  return /(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ? value : `${value}（盘上没写时区）`;
+}
+
+/**
  * 一笔金额的写法（`Money` 自己也用它）。
  *
  * 金额的写法只留这一处：散在各页里，同一个读数就会在「预算」页与「一趟详情」

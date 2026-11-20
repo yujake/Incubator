@@ -413,6 +413,8 @@ export interface AcceptanceView {
   rows: AcceptanceRow[];
   auxiliary: Record<string, string>;
   failed: string[];
+  unchecked: string[];
+  note: string;
   auxiliary_note: string;
 }
 
@@ -626,6 +628,9 @@ export interface DocumentRow {
   claims: Record<string, unknown>[];
   open_problems: string[];
   status: string;
+  status_word: string;
+  lifecycle_state: string;
+  lifecycle_checked: boolean | null;
   review_rounds: number;
   review_verdict: string;
   reviewed_at: string;
@@ -655,6 +660,9 @@ export interface StatementRow {
   status: string;
   derived_from: string;
   doc_id: string;
+  status_word: string;
+  lifecycle_state: string;
+  lifecycle_checked: boolean | null;
   line_range: string;
   created_at: string;
   created_by: string;
@@ -732,6 +740,9 @@ export interface ReviewFindingRow {
   status: string;
   resolution_note: string;
   created_at: string;
+  status_word: string;
+  lifecycle_state: string;
+  lifecycle_checked: boolean | null;
   created_by: string;
   axis: string;
   line: number | null;
@@ -762,6 +773,9 @@ export interface RelationRow {
   created_at: string;
   supporting_lit_ids: string[];
   quote_state: string;
+  status_word: string;
+  lifecycle_state: string;
+  lifecycle_checked: boolean | null;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -950,7 +964,7 @@ export interface ConjectureRow {
   statement: string;
   status: string;
   form: string;
-  testable: boolean | null;
+  testable: Record<string, unknown>;
   origin: string;
   created_by: string;
   created_at: string;
@@ -961,9 +975,12 @@ export interface ConjectureRow {
   negation_statement: string;
   known_lit_id: string;
   notes: string;
-  promoted_to: string;
+  promoted_to: Record<string, unknown>;
   withdraw_reason: string;
   duplicate: boolean | null;
+  status_word: string;
+  lifecycle_state: string;
+  lifecycle_checked: boolean | null;
   by_role: string;
   by_role_source: string;
   by_task_id: string;
@@ -979,22 +996,32 @@ export interface ExperimentRow {
   negation_kind: string;
   claim: string;
   claim_key: string;
-  certificate: string;
-  counterexample: string;
-  search_bound: string;
+  certificate: Record<string, unknown> | null;
+  counterexample: Record<string, unknown> | null;
+  search_bound: Record<string, unknown>;
   verifier_output: string;
   verifier_subject_key: string;
   code_path: string;
   code_hash: string;
   exit_code: number | null;
   artifact_paths: string[];
-  observations: string;
+  observations: Record<string, unknown>;
   params: Record<string, unknown>;
   runtime_sec: number | null;
   notes: string;
   created_at: string;
   created_by: string;
-  for_question_id: string;
+  for_question_id: string | null;
+  status: string;
+  voided_by: string;
+  voided_at: string;
+  void_reason_code: string;
+  voided_code_to: string;
+  owner_task?: string;
+  owner_instance?: string;
+  status_word: string;
+  lifecycle_state: string;
+  lifecycle_checked: boolean | null;
   code_sha_consistency: string;
   code_sha_from: string;
   code_sha_to: string;
@@ -1567,10 +1594,14 @@ export interface VsignView {
   tri: Tri;
   reason: string;
   files: number;
+  recomputable: number | null;
   signed: string[];
   backed: string[];
   without_sign: string[];
   orphan_signs: string[];
+  ledger_present: boolean | null;
+  ledger_path: string;
+  note: string;
   source: SourceRef;
 }
 
@@ -1760,7 +1791,19 @@ export interface CostView {
   runs_without_spend: number;
   ledger_usd: number | null;
   ledger_rows: number | null;
+  reconciliation: CostReconciliation;
   source: SourceRef;
+}
+
+/** 出处：ClosingView.cost.reconciliation —— 账本 − 事件 = extract 那几笔；账本行数 ≠ 调用数。 */
+export interface CostReconciliation {
+  by_scope: Record<string, UsageBucket>;
+  extract_usd: number | null;
+  extract_entries: number | null;
+  event_llm_calls: number | null;
+  ledger_minus_event_usd: number | null;
+  explained_by_extract: boolean | null;
+  note: string;
 }
 
 /** 出处：ClosingView.runtime —— 时间轴与名册两个读数。 */

@@ -236,7 +236,9 @@ def test_the_heartbeat_period_is_injectable(tmp_path: pathlib.Path) -> None:
         try:
             beats: list[float] = []
             began = time.monotonic()
-            got = _read_frames(resp, want=3, timeout=3.0)
+            # 2026-11-20（WEBCLEAN）：连上的第一帧是「当前快照」（首帧不等心跳）。
+            # 它是起流那一帧、不属于心跳，所以多要一帧：3 次心跳 + 1 帧快照。
+            got = _read_frames(resp, want=4, timeout=3.0)
             beats = [time.monotonic() - began for k, _i, _d in got if k == "heartbeat"]
             assert len(beats) >= 3, (len(beats), got)
             assert beats[-1] < 2.0, f"三次心跳用了 {beats[-1]:.2f}s ⇒ 周期没被注入？"
@@ -248,7 +250,7 @@ def test_since_replays_only_the_events_after_it(tmp_path: pathlib.Path) -> None:
     """判据④：`?since=N` 只补发 id > N 的事件。"""
     root = tmp_path / "ws"
     root.mkdir()
-    with _bound_server(root) as srv:
+    with _bound_server(root, heartbeat_sec=0.2) as srv:
         bc = sse.default_broadcaster()
         first = bc.publish("state", {"n": 1})
         second = bc.publish("question", {"qid": "q0001", "sid": "t"})
@@ -256,6 +258,11 @@ def test_since_replays_only_the_events_after_it(tmp_path: pathlib.Path) -> None:
         host, port = srv.server_address[0], srv.server_address[1]
         resp = _open(f"{host}:{port}", f"/api/stream?since={first}")
         try:
+            # 2026-11-20（WEBCLEAN）：连上的第一帧是「当前快照」（不带 `id:`，不是广播）。
+            # 先读掉它，补发那一条才是这一条判据要测的东西。
+            opening = _read_frames(resp, want=1, timeout=2.0)
+            assert opening and opening[0][0] == "state", opening
+            assert opening[0][1] is None, f"起流快照带了 id={opening[0][1]}（它没被 publish 过）"
             got = _read_frames(resp, want=1, timeout=2.0)
             assert got, "补发一条都没到"
             assert got[0][0] == "question", got

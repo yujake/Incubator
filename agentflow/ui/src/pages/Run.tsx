@@ -38,7 +38,7 @@ import { api, whyOf } from "../api";
 import { Badge } from "../components/Badge";
 import { Card } from "../components/Card";
 import { StopButtons } from "../components/Stop";
-import { Money, formatCount, formatText, formatUsd } from "../components/Money";
+import { Money, formatCount, formatStamp, formatText, formatUsd } from "../components/Money";
 import { Table } from "../components/Table";
 import { TriState, isUnreadable } from "../components/TriState";
 import { useFace, useLive } from "../live";
@@ -163,38 +163,38 @@ function EventTimeline(props: { sid: string }) {
     );
   }
 
-  if (data.tri !== "computed") {
-    return (
-      <Card
-        title="逐条事件（一趟回放）"
-        subtitle={`会话 ${props.sid}`}
-        tone="problem"
-        right={<TriState tri={data.tri} label="逐条事件" reason={data.reason} />}
-      >
-        <span class="empty">
-          {data.tri === "unreadable"
-            ? `这一栏没查成（不是一张空列表）：${data.reason}`
-            : `这一趟还没有事件可回放（合法初态，不是一张空列表）：${data.reason}`}
-        </span>
-        <div class="readings">
-          事件条数那一格因此是 <span class="mono">unknown</span>，不是 0：没读到就不写数。
-        </div>
-      </Card>
-    );
-  }
-
+  // `tri=unreadable` 是「有坏行」，不是「一格都没有」：后端的 `run_events` 在坏行时
+  // **照常给** `total` 与读得出来的那几条（`readers.run_events` 的 docstring 逐字：
+  // "有坏行时读得出来的照常算"）。改前这里直接 return 一句"这一栏没查成"，把已经
+  // 算出来的 `total=1916` 与手上那几条一起丢掉 —— 读者看到的是"一无所有"，
+  // 而实际是"读到 1916 条、其中 3 行读不出来"（`draft/187` P3-1 / B7）。
+  const partial = data.tri !== "computed";
   const rows = data.events.concat(older);
   const more = data.total !== null && cursor !== null && cursor < data.total;
   return (
     <Card
       title="逐条事件（一趟回放）"
       subtitle={`会话 ${props.sid} · 已给 ${rows.length} 条`}
+      tone={partial ? "problem" : "plain"}
       right={<TriState tri={data.tri} label="逐条事件" reason={data.reason} />}
     >
+      {partial ? (
+        <div class="readings">
+          <Badge kind="badge-unknown" text="有坏行：读得出来的照常算" />{" "}
+          <span class="tri-reason">
+            {data.tri === "unreadable"
+              ? `这一栏没查成、但读出来的照常给（不是一张空列表）：${data.reason}`
+              : `这一档没查成（不是一张空列表）：${data.reason}`}
+          </span>
+        </div>
+      ) : null}
       <div class="readings">
-        事件总条数 <span class="mono">{data.total}</span> · 本页区间{" "}
+        事件总条数 <span class="mono">{formatCount(data.total)}</span> · 本页区间{" "}
         <span class="mono">[{data.from_index}, {data.to_index})</span> · 还没给完{" "}
         <span class="mono">{String(data.truncated)}</span>
+        {partial
+          ? "（坏行让这一档成了 unreadable；条数与已经读出来的那几条都不丢）"
+          : ""}
       </div>
       <div class="readings">
         <span class="mono">index</span> 与「趟次」那张表的 <span class="mono">start_index</span> /{" "}
@@ -204,7 +204,11 @@ function EventTimeline(props: { sid: string }) {
       </div>
       <Table
         rows={rows}
-        empty="这一页是空的（读到了，游标已经到末尾 —— 不是「没查成」）。"
+        empty={
+          partial
+            ? "已经读出来的这一段里没有可显示的事件（坏行之外没有别的行 —— 不是「一无所有」）"
+            : "这一页是空的（读到了，游标已经到末尾 —— 不是「没查成」）。"
+        }
         columns={[
           { key: "index", title: "#" },
           { key: "kind", title: "kind" },
@@ -389,18 +393,19 @@ export function Run(props: RunProps) {
       >
         {digest.data === null ? (
           <span class="readings">{digest.problem === "" ? "正在读盘……" : digest.problem}</span>
-        ) : digest.data.tri !== "computed" ? (
-          <>
-            <div class="readings">
-              这一格没查成（不是一份 0 档案）：<span class="mono">{digest.data.reason}</span>
-            </div>
-            <span class="empty">
-              趟数 / 步数 / 花销 / 派活 / 验签那几格因此是 unknown，不是 0：这一条读数只从
-              这个工作区的会话事件流现算，事件流不在就没有可现算的源。
-            </span>
-          </>
         ) : (
           <>
+            {/* 坏行（`tri=unreadable`）不是"少给数"：`run_digest` 的 docstring 逐字
+                "有坏行时…读得出来的那些行照常算（少给数会让『这一趟 0 步』变成一句假话）"。
+                改前这里整块换成一句"因此是 unknown"，把已经算好的 22 趟 / 475 步 /
+                $2.42272 全丢掉（`draft/187` P3-1 / B7）。现在：理由单独一条，
+                下面每一格照印它自己的值（真的是 `null` 的那格由 formatCount 印 unknown）。 */}
+            {digest.data.tri !== "computed" ? (
+              <div class="readings">
+                <Badge kind="badge-unknown" text="有坏行：读得出来的照常算" />{" "}
+                <span class="tri-reason">{digest.data.reason}</span>
+              </div>
+            ) : null}
             <div class="readings">
               起 <span class="mono">{formatText(digest.data.start_ts)}</span> · 止{" "}
               <span class="mono">{formatText(digest.data.end_ts)}</span> · 趟数{" "}
@@ -545,7 +550,7 @@ export function Run(props: RunProps) {
           <span class="mono">
             {ckpt === null
               ? `unknown（${v.checkpoint_reason === "" ? "没读到" : v.checkpoint_reason}）`
-              : `${ckpt.role} / step ${ckpt.step} / ${ckpt.at}`}
+              : `${ckpt.role} / step ${ckpt.step} / ${formatStamp(ckpt.at)}`}
           </span>
         </div>
         <div class="readings tri-reason">

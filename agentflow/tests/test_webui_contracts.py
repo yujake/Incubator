@@ -679,6 +679,11 @@ def _backend_keys(root: pathlib.Path) -> dict[str, set[str]]:
     out["ProofView"] = set(pkg["proofs"])
     out["StructureView"] = set(pkg["structure"])
     out["ClosingView"] = set(pkg["closing"])
+    # 2026-11-20（WEBCLEAN）：成本对账那一格（`closing.cost.reconciliation`）的键
+    # 在任何工作区上都在（归口读不出来 ⇒ 各值 null，键集合不变），所以它受核对。
+    rec = ((pkg.get("closing") or {}).get("cost") or {}).get("reconciliation")
+    if isinstance(rec, dict):
+        out["CostReconciliation"] = set(rec)
     out["SourceWindow"] = set(RD.source_window(root, "out/review/REPORT.md"))
 
     # 错误动作那一面（2026-10-27 业主裁定 ⑥-5 / W4）：这两族的形状从 `ui/src/api.ts`

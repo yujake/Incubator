@@ -37,6 +37,7 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 
 import { api, whyOf } from "../api";
+import { humanDetail } from "../humanize";
 import type {
   ErrorCategoryGlossary,
   ErrorClassRow,
@@ -458,7 +459,8 @@ export function RoleErrors() {
       <div class="readings">
         逐类三态：
         <span class="mono">
-          15 类里读到 {tally.checked} / 没查成 {tally.unknown} / 不适用 {tally.na}
+          {(view.data.classes ?? []).length} 类里读到 {tally.checked} / 没查成{" "}
+          {tally.unknown} / 不适用 {tally.na}
         </span>
         <span class="tri-reason">
           {" "}
@@ -493,7 +495,7 @@ export function RoleErrors() {
         <ul class="list">
           {view.problems.map((one) => (
             <li key={one.code} class="tri-reason">
-              {one.code}：{one.detail}
+              {one.code}：{humanDetail(one.detail)}
             </li>
           ))}
         </ul>

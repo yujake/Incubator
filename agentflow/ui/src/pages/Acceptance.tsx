@@ -177,7 +177,12 @@ export function Acceptance() {
             }}
           />
           <span class="readings">
-            当前：<span class="mono">{cap === null || Number.isNaN(cap) ? "没给（那一格必为没查成）" : `$${cap}`}</span>
+            当前：
+            <span class="mono">
+              {cap === null || Number.isNaN(cap)
+                ? "没给（那一格必为没查成）"
+                : formatUsd(cap)}
+            </span>
           </span>
         </div>
       </Card>
@@ -196,7 +201,8 @@ export function Acceptance() {
               正文定理类环境 <span class="mono">{formatCount(proofs.paper_theorem_envs)}</span> ·
               有证明的命题 <span class="mono">{formatCount(proofs.propositions_with_proof)}</span> ·
               台账定理类 <span class="mono">{formatCount(proofs.ledger_theorem_kinds)}</span> ·
-              V 已签 <span class="mono">{formatCount(proofs.signed)}</span>
+              V 已签（阅签状态为 signed 的命题）{" "}
+              <span class="mono">{formatCount(proofs.signed)}</span>
               <SourceLink source={proofs.source} label="验收表" />
             </div>
             <div class="readings">{proofs.coverage_note}</div>
@@ -209,14 +215,31 @@ export function Acceptance() {
 
             <div class="readings">
               V 签侧文件：<span class="mono">out/vsigns/</span> 在盘上
-              <span class="mono">{proofs.vsign.files}</span> 份 · 状态
-              <span class="mono">{proofs.vsign.tri}</span> · 已签
-              <span class="mono">{proofs.vsign.signed.length}</span> · 有侧文件
-              <span class="mono">{proofs.vsign.backed.length}</span> · 无侧文件
-              <span class="mono">{proofs.vsign.without_sign.length}</span> · 孤儿签
-              <span class="mono">{proofs.vsign.orphan_signs.length}</span>
+              <span class="mono">{proofs.vsign.files}</span> 份 · 复算通过（这就是「签了几份」）{" "}
+              <span class="mono">{formatCount(proofs.vsign.recomputable)}</span> 份 · 状态
+              <span class="mono">{proofs.vsign.tri}</span>
               <SourceLink source={proofs.vsign.source} label="签文件" />
             </div>
+            <div class="readings">
+              第 3 位为真（签过）<span class="mono">{proofs.vsign.signed.length}</span> 条 ·
+              其中盘上有对应签文件 <span class="mono">{proofs.vsign.backed.length}</span> 条 ·
+              其中没有侧文件 <span class="mono">{proofs.vsign.without_sign.length}</span> 条
+              （历史签 / 直调写的签：它是 `signed` 的子集，不是另一个签数）· 孤儿签{" "}
+              <span class="mono">{proofs.vsign.orphan_signs.length}</span> 份
+            </div>
+            <div class="readings">
+              签台账 <span class="mono">{proofs.vsign.ledger_path}</span>{" "}
+              {proofs.vsign.ledger_present === null ? (
+                <Badge kind="badge-unknown" text="不知道（整块没查成）" />
+              ) : proofs.vsign.ledger_present ? (
+                <Badge kind="badge-na" text="在盘上（索引，不是签）" />
+              ) : (
+                <Badge kind="badge-na" text="不在盘上" />
+              )}
+            </div>
+            {proofs.vsign.note === "" ? null : (
+              <div class="readings tri-reason">{proofs.vsign.note}</div>
+            )}
             {proofs.vsign.reason === "" ? null : (
               <div class="readings">{proofs.vsign.reason}</div>
             )}
@@ -537,6 +560,27 @@ export function Acceptance() {
               usage_ledger <span class="mono">{formatUsd(closing.cost.ledger_usd)}</span>
               （<span class="mono">{formatCount(closing.cost.ledger_rows)}</span> 行）
               <SourceLink source={closing.cost.source} label="台账" />
+            </div>
+            {/* 四个数并排却不给差额的解释 = 读者只能说"三个对不上"（`draft/187` P4-1 / B10）。
+                差额 = 归口里 extract 那几笔（事件流里没有这些调用）；账本行数另不等于
+                事件里的调用数（一次调用可记 0..n 行）。 */}
+            <div class="readings">
+              成本对账：账本 − 事件 ={" "}
+              <span class="mono">{formatUsd(closing.cost.reconciliation.ledger_minus_event_usd)}</span>
+              {closing.cost.reconciliation.explained_by_extract === null
+                ? "（有一边没读到 ⇒ 差额算不出来，不是 0）"
+                : closing.cost.reconciliation.explained_by_extract
+                  ? " = 归口里 extract 那几笔（事件流里没有这些调用）"
+                  : " ≠ 归口里 extract 那几笔（差额还有别的来源，别当它是 extract）"}
+              ：extract <span class="mono">{formatUsd(closing.cost.reconciliation.extract_usd)}</span>
+              （<span class="mono">{formatCount(closing.cost.reconciliation.extract_entries)}</span> 笔）
+              · 账本行 <span class="mono">{formatCount(closing.cost.ledger_rows)}</span> 行 vs
+              事件里的调用{" "}
+              <span class="mono">{formatCount(closing.cost.reconciliation.event_llm_calls)}</span>{" "}
+              次（不是同一个数）
+              {closing.cost.reconciliation.note === "" ? null : (
+                <div class="caption">{closing.cost.reconciliation.note}</div>
+              )}
             </div>
 
             <div class="readings">

@@ -958,6 +958,13 @@ def test_a_session_write_reaches_the_stream_through_serve(tmp_path: pathlib.Path
             assert resp.status == 200, resp.status
             assert (resp.getheader("Content-Type") or "").startswith("text/event-stream"), (
                 resp.getheader("Content-Type"))
+            # 2026-11-20（WEBCLEAN）：连上会先收到一帧「当前快照」（首帧不等心跳，
+            # `draft/187` P3-3）。它是起流那一帧、不是广播事件 —— 先把它读掉，
+            # 下面那次写产生的 `state` 才是"装配真的通了"的证据（否则这一条会被
+            # 起流快照蒙过去：钩子断了也照样看到一帧 state）。
+            opening = _stream_frames(resp, want=1, timeout=8.0)
+            assert [k for k, _d in opening] == ["state"], opening
+            assert "snapshot" in opening[0][1], opening[0][1][:200]
             SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "装配判据"},
                       sid=sid)
             frames = _stream_frames(resp, want=1, timeout=8.0)
@@ -975,6 +982,8 @@ def test_a_session_write_reaches_the_stream_through_serve(tmp_path: pathlib.Path
         conn2.request("GET", "/api/stream")
         resp2 = conn2.getresponse()
         try:
+            # 同上：先读掉起流快照，负控测的是"写一次会话不再产生 state 广播"。
+            assert [k for k, _d in _stream_frames(resp2, want=1, timeout=2.0)] == ["state"]
             SS.append(root, {"kind": "agent_step", "role": "M", "index": 0,
                              "shape": "fs.write"}, sid=sid)
             later = _stream_frames(resp2, want=1, timeout=2.0)
