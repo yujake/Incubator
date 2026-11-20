@@ -566,15 +566,7 @@ _EVENTS: list[ObservedEvent] = []
 
 _EVENT_COUNTS: dict[str, int] = {k: 0 for k in EVENT_KINDS}
 
-_EVENT_SEQ = 0
-
 _EVENT_LOCK = threading.Lock()
-
-
-def _event_seq() -> int:
-    """当前事件序号（起表时记下来，只有这之后的事件才算"被等对象的新动静"）。"""
-    with _EVENT_LOCK:
-        return int(_EVENT_SEQ)
 
 
 def _parse_target_loose(value: Any) -> tuple[str, str] | None:

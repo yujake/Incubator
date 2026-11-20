@@ -219,8 +219,6 @@ from .clockbase import (  # noqa: F401 — 再导出，保持公开面不变
     _EVENTS,
     _EVENT_COUNTS,
     _EVENT_LOCK,
-    _EVENT_SEQ,
-    _event_seq,
     _hhmmss,
     _iso,
     _looks_like_task_id,
@@ -4239,9 +4237,16 @@ def current_run_identity() -> tuple[str, str]:
 #: 进程内的事件流上限：这是"最近发生了什么"的观测窗，不是审计账（审计在会话记录里）。
 EVENT_BUFFER: int = 512
 
+#: 事件序号：观测窗内的先后次序由它给（`_event_seq()` 是它唯一的读口）。
+#: 它必须和两个重新赋值的落点（`observe_event` / `reset_observed_events`）同处一个模块
+#: —— 跨模块 `global` 只会改到本模块自己那一份，序号会静默地不前进。
+_EVENT_SEQ = 0
 
 
-
+def _event_seq() -> int:
+    """当前事件序号（起表时记下来，只有这之后的事件才算"被等对象的新动静"）。"""
+    with _EVENT_LOCK:
+        return int(_EVENT_SEQ)
 
 
 def observe_event(kind: str, *, task_id: str = "", from_task_id: str = "",
