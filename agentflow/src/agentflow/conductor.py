@@ -3392,14 +3392,17 @@ class Conductor:
         # 放在登记之后、且只在"这一条真的写成"时跑 ⇒ 自愈只补历史漏行，不补刚被拒的这一条
         # （拒绝在上面那条早返里已经交回父了）。
         try:
-            fixed, why, skipped = sink.roster_repair(owner=str(owner))  # type: ignore[attr-defined]
+            repair_named: list[dict[str, Any]] = []
+            fixed, why, skipped = sink.roster_repair(  # type: ignore[attr-defined]
+                owner=str(owner), named=repair_named)
         except Exception as exc:  # noqa: BLE001 —— 自愈失败不许带走这次派活
             fixed, why, skipped = 0, f"{type(exc).__name__}: {exc}", []
+            repair_named = []
         if fixed:
             note = (note + "；" if note else "") + f"兜底自愈：补了 {fixed} 条当时没写进名册的代理行"
         # 补名必须说清"它当初点名要什么、现在叫什么" ——
         # 否则读回执的人只会看到"多了一行"，而名字在人的视角里像是丢了。
-        named = list(getattr(sink, "last_repair_named", None) or [])
+        named = repair_named
         if named:
             bits: list[str] = []
             for x in named[:5]:

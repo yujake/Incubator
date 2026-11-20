@@ -3006,6 +3006,7 @@ class Secretary:
                  registry: Any = None, seam: Any = None, log: Any = None,
                  deadline_sec: float = DEFAULT_DEADLINE_SEC,
                  enable_model: bool = False, sid: str | None = None,
+                 model_source: str = "",
                  same_proposition_jaccard: float = SAME_PROPOSITION_JACCARD,
                  proof_same_jaccard: float = PROOF_SAME_JACCARD) -> None:
         self.role = str(role)
@@ -3042,24 +3043,25 @@ class Secretary:
         #: 秘书这一趟的模型是从哪一档来的（读数：`secretary（…）` / `body（…）`）。
         #: 它回答"这次判断花的是共用那把 key，还是本体那把" —— 而这正是
         #: 「所有智能体的秘书另外共用一个 api key」是否生效的唯一机器读数。
-        self.model_source: str = ""
+        #:
+        #: 构造参数，不是构造之后补写的字段：装配层本来就先算出缝与来源
+        #: （`for_role_wired` / `agent_loop._secretary_for`），再构造秘书。此前它先造
+        #: 对象、再补 `sec.model_source = source`，于是"补之前"的任何一次 `judge()`
+        #: 读到的都是空串 —— 读数里少了「为什么没有判断面」那一句。现在它和 `seam=`
+        #: 同生：没有来源就没有这条缝，两者在构造期一起定下。
+        self.model_source: str = str(model_source or "")
         #: 写集的声明式落点：它让"秘书有没有写集、写哪几张表"成为一个可读的事实，
         #: 而不是"读遍本文件找不到 store.tx 所以大概没有"。
         #: 不是空集：B 的写入代理要落 `statements`（含概念行）与 `dependencies`，
         #: 只走 :meth:`record_statement` 一处。
         self.writes: frozenset[str] = frozenset(STATEMENT_WRITE_TABLES)
-        #: 最近一次销号名单读数（由 :meth:`retired_ledger` 写）。
-        #:
-        #: 为什么单列一格：`retired_names` 只回 `(行, 坏行)`、`_is_retired` 只回一个布尔，
-        #: 于是"这一份读不全"（认不出来的行 / 整份读不出来 / 不可信的分片）在任何返回值上
-        #: 都无处可报，被读成"没销号"。
-        #: 形状见 :meth:`retired_ledger` 的返回值；它是读数，不是判据。
-        self.last_retired_ledger: dict[str, Any] = {}
         self._negotiations: list[dict[str, Any]] = []
         #: 这个秘书服务的实例（台账号）。由 `bind_task` 在循环开跑时绑上：
         #: 绑上之后台账分片到 `out/secretary/<role>-<task_id>.jsonl`，于是同角色的并发实例
         #: 各写各的片（今天只有角色维度 ⇒ 两个 D 实例会把记录写进同一个文件，读的人分不出是谁）。
-        self.task_id: str = ""
+        #: 存储格是 `_task_id`（不是公开字段）：读走只读属性 :attr:`task_id`，
+        #: 写只有 :meth:`bind_task` 一处 —— 理由见该属性的 docstring。
+        self._task_id: str = ""
         #: 最近一次判断的墙钟（秒）—— 读数，不是判据（fail-open 的代价要看得见，
         #: 但不许拿它去卡任何一条委托）。
         #:
@@ -3092,7 +3094,21 @@ class Secretary:
 
     # ------------------------------------------------------------ 台账（E 类：记录）
 
-    def bind_task(self, task_id: str) -> None:
+    @property
+    def task_id(self) -> str:
+        """这一名秘书绑到的实例号（只读；全仓唯一写点是 :meth:`bind_task`）。
+
+        为什么做成只读属性：2026-11-20 的取证（`05-VERDICT.md` §顺带上报）里有两处
+        `xxx.task_id = ...` 绕过 `bind_task`。其中 `conductor.guide` 那一支连存活标记
+        都没落，于是 `secretary_alive()` 把"绑过、只是没标记"读成"没绑过实例"；
+        `_peer_secretary` 那一支代表的是另一个号（转发链下一跳），它本来就不该
+        写标记。一个可直写的字段让"绑上"与"落标记"在类型上分不开；只读之后，
+        外部那一句是 `AttributeError`，纪律不再靠自觉。
+        判据：`tests/test_secretary_task_id_has_one_write_point.py`。
+        """
+        return self._task_id
+
+    def bind_task(self, task_id: str, *, mark_alive: bool = True) -> None:
         """把这一名秘书绑到它服务的实例上。绑上之后台账分片。
 
         为什么必须有这一步：秘书的台账若只有角色维度
@@ -3100,9 +3116,15 @@ class Secretary:
         会写进同一个文件 —— 读的人分不出哪一行是哪一个代理写的。
         绑定之后每一实例一片（`<role>-<task_id>.jsonl`），一个写者一片。
         同时写一份存活标记（`secretary_alive` 读它）——"与它同生同死"的第一半。
+
+        `mark_alive=False` 是"代表别人"那一档（全仓只有 :meth:`_peer_secretary` 用）：
+        转发链的下一跳不是"这一趟循环"，替它写标记等于伪造"它活着"（标记的语义见
+        :meth:`secretary_alive`：标记在 = 绑过，pid 活着 = 真的在跑）。这一档只拿分片，
+        不碰存活标记；它是 `bind_task` 的一个分支，不是第二个写点 ——
+        `_task_id` 全仓只有这一处能写。
         """
-        self.task_id = str(task_id or "")
-        if not self.task_id:
+        self._task_id = str(task_id or "")
+        if not self._task_id or not mark_alive:
             return
         try:
             path = self.decisions_path()
@@ -6927,6 +6949,11 @@ class Secretary:
           文件不存在就是"还没人销过号"这条查过的事实（`absent` + `checked=True`）；
         - `False`：来自扫目录 / 调用方猜的 ⇒ 文件不存在证明不了任何事（`checked=False`）。
         把这两档折在一起，就是那条洞（"读不成"被写成"查过了、没有"）。
+
+        「读不全」只从这一次的返回值读：`checked` / `bad` / `unattributable` 三格是
+        它唯一的落点，不另存实例字段。另存一份"最后一次"会让"这是哪一次读的"变成一个
+        没有答案的问题（同一名秘书上两次读之间，字段会盖掉前一次的坏行）；调用方那一层
+        的同一份事实由 `Conductor.last_retired_reading` 承担，那一格有读者。
         """
         from . import jsonlfile as JF
 
@@ -6953,7 +6980,6 @@ class Secretary:
                 out["reason"] = f"{len(problems)} 行读不全（{problems[0]}）"
             elif state == "absent":
                 out["reason"] = ("还没有人销过号（这一份名单还不存在；分片名来自台账那一行）")
-        self.last_retired_ledger = dict(out)
         return out
 
     def _used_names(self, owner: str) -> dict[str, str]:
@@ -7090,8 +7116,9 @@ class Secretary:
         """销号名单里的名字（"扫已销号的名字"这一步单独一处，判据可以把它打桩成跳过）。
 
         走 :meth:`retired_ledger`（写侧的分片名就是"我这个父"，所以 `trusted_shard=True`）：
-        `bad` / `unattributable` 不再被 `_bad` 丢掉 —— 它们留在 `self.last_retired_ledger`
-        里，"这一格读不全"从此是一个读得出来的事实，而不是一个被吞掉的返回值。
+        `bad` / `unattributable` 都在这一次的返回值里（`checked` 跟着它们变假）——"这一格
+        读不全"是一个读得出来的事实，而不是一个被吞掉的返回值。本方法只取名字那一半；
+        要"读不全"的调用方直接读那个字典。
         """
         got = self.retired_ledger(owner, trusted_shard=True)
         return [str(r.get("name") or "") for r in (got.get("rows") or [])
@@ -12611,12 +12638,19 @@ class Secretary:
             return ""
 
     @_roster_guarded
-    def roster_repair(self, *, owner: str) -> tuple[int, str, list[str]]:
+    def roster_repair(self, *, owner: str,
+                      named: list[dict[str, Any]] | None = None) -> tuple[int, str, list[str]]:
         """补登记（自愈）：把"台账里有、名册里没有"的代理行补上。
 
         返回 `(补了几条, 问题, 因为"在飞"而跳过的号)`。第三格是号清单而不是计数：
         "因为还没登记所以不补"必须在读数上看得见，否则它下次真变成"该补没补"时，
         没有任何入口能查出是哪个号、为什么被跳过。
+
+        `named` 是"补成了谁"的出参（调用方给的清单，本方法往里追加；不给就不记）：
+        补名之后两个读者（:meth:`retire` 的回执、`conductor` 的派活回执）都要说清"它
+        当初点名要什么、现在叫什么"。此前这件事存在实例字段 `self.last_repair_named`
+        上，读的人必须"刚跑完就立刻读"——那是构造之后补写的隐式上下文；出参把它变成
+        调用方自己的一份读数，跨模块搬运时不会一半写、一半读（2026-11-20 SECSPLIT 前置）。
 
         只在写路径被调用（查只报不修）。补的时候按 `task_id` 升序，整段（读历史 → 判 →
         两笔 append）在 `_roster_section` 的 per-owner 临界区里，于是两个并发修复既不会
@@ -12653,12 +12687,11 @@ class Secretary:
         add 行多三格：`named_after_run`（是不是跑过之后才补的名）、`requested_name`
         （它当初点名要的那个，原样保留 —— 那是"它曾经想叫 E2"的记录）、`refusal_code`
         （哪一档拒的）。名册是 JSONL、没有 schema 契约，加键不改旧键。回执逐条说清
-        "你点的 E2 被拒，它叫 E4"；`self.last_repair_named` 是这两处读的同一份读数。
+        "你点的 E2 被拒，它叫 E4"；这两处读的是同一份出参：调用方传进来的 `named`。
         """
         cond = self._conductor()
         if cond is None:
             return 0, "没有 store ⇒ 读不到台账，补不了", []
-        self.last_repair_named = []
         try:
             rows = [r for r in cond._tasks()
                     if r.get("parent_task_id") == owner and not str(r.get("kind") or "")]
@@ -12743,10 +12776,11 @@ class Secretary:
             if not ok2:
                 return fixed, f"名册补写没成：{why2}", skipped
             fixed += 1
-            self.last_repair_named.append({
-                "task_id": tid, "name": name, "role": role,
-                "named_after_run": bool(ran), "requested_name": want_name,
-                "refusal_code": refusal_code, "surface": slot})
+            if named is not None:
+                named.append({
+                    "task_id": tid, "name": name, "role": role,
+                    "named_after_run": bool(ran), "requested_name": want_name,
+                    "refusal_code": refusal_code, "surface": slot})
         return fixed, "", skipped
 
     def resolve_down(self, *, owner: str, name: str) -> tuple[str, str]:
@@ -13740,12 +13774,14 @@ class Secretary:
         # `named_after_run` / `requested_name` / `refusal_code` 三格留痕，被拒的那个名字不复用）。
         # 下面把"谁补成了什么"原样写进回执 —— 否则读回执的人会以为名字丢了。
         repaired = 0
+        repair_named: list[dict[str, Any]] = []
         try:
-            repaired, _repair_why, _repair_skipped = self.roster_repair(owner=str(owner))
+            repaired, _repair_why, _repair_skipped = self.roster_repair(
+                owner=str(owner), named=repair_named)
         except Exception as exc:  # noqa: BLE001 —— 兜底失败不许带走这次销号
             repaired, _repair_why, _repair_skipped = 0, f"{type(exc).__name__}: {exc}", []
         named_notes: list[str] = []
-        for x in (getattr(self, "last_repair_named", None) or []):
+        for x in repair_named:
             if str(x.get("requested_name") or ""):
                 named_notes.append(
                     f"补名：{x.get('task_id')} 当初点名的 {x.get('requested_name')} 被拒"
@@ -14307,11 +14343,14 @@ class Secretary:
                 "at": _now_iso()}
 
     def _peer_secretary(self, task_id: str) -> tuple[Any, str]:
-        """链上下一跳那一位秘书（角色从台账读；只设 `task_id`，不写存活标记）。
+        """链上下一跳那一位秘书（角色从台账读；只分片，不写存活标记）。
 
-        为什么不调 `bind_task`：那一步会写 `<role>-<task>.alive`，把它读成"有一个
-        进程正在跑"—— 而转发是一次请求，不是一次接管。存活标记只该由真正跑起来的
-        循环写（`agent_loop` 那一路），秘书替它写等于伪造"它活着"。
+        为什么走 `bind_task(..., mark_alive=False)` 而不是裸赋值：`task_id` 现在是只读
+        属性，唯一的写点就是 `bind_task`；而 `bind_task` 的默认那一档会写
+        `<role>-<task>.alive`，把它读成"有一个进程正在跑" —— 转发是一次请求，不是
+        一次接管。存活标记只该由真正跑起来的循环写（`agent_loop` 那一路），秘书替它
+        写等于伪造"它活着"（`secretary_alive` 会把发送方进程的 pid 读成下一跳的，
+        "上次没善终"从此读错）。所以这里用 `bind_task` 的"代表别人"那一档：只拿分片。
         """
         cond = self._conductor()
         if cond is None:
@@ -14329,7 +14368,7 @@ class Secretary:
             peer = Secretary(role, root=self.root, store=self.store, sid=self.sid)
         except Exception as exc:  # noqa: BLE001 —— 造不出秘书要如实说
             return None, f"造不出 {task_id} 的秘书（{type(exc).__name__}: {exc}）"
-        peer.task_id = str(task_id)
+        peer.bind_task(str(task_id), mark_alive=False)
         return peer, ""
 
     # ---- 名册的内部小工具
@@ -14356,8 +14395,8 @@ class Secretary:
         """这个名字是不是销过号（写侧的复用闸）。
 
         走 :meth:`retired_ledger` 而不是 `retired_names`：语义一个字不改（"读到一行
-        名字对得上"就是真），但坏行 / 认不出来的行现在留在 `self.last_retired_ledger`
-        里。写侧的"复活"风险（`draft/145` H14：`bad` 被 `_bad` 丢掉 ⇒ 已销号的名字
+        名字对得上"就是真），但坏行 / 认不出来的行在这一次的返回值里（`checked` 跟着
+        变假）。写侧的"复活"风险（`draft/145` H14：`bad` 被 `_bad` 丢掉 ⇒ 已销号的名字
         还能被 `reuse` 回来）从这里开始有了一个可读的读数；本方法仍只回那个布尔。
         """
         got = self.retired_ledger(owner, trusted_shard=True)
@@ -16083,13 +16122,9 @@ def for_role_wired(role: str, *, root: str | Path, seam: Any = None,
         sid = _ambient_session_sid()
     seam_now, source = seam_for_secretary(str(role), root=root, seam=seam, sid=sid,
                                           store=store)
-    sec = Secretary(str(role), root=Path(str(root)), store=store, registry=registry,
-                    seam=seam_now, sid=sid, enable_model=bool(enable_model), **kw)
-    try:
-        sec.model_source = source
-    except Exception:  # noqa: BLE001 —— 留痕写不上不许把秘书造失败（判断面还在）
-        pass
-    return sec
+    return Secretary(str(role), root=Path(str(root)), store=store, registry=registry,
+                     seam=seam_now, sid=sid, enable_model=bool(enable_model),
+                     model_source=source, **kw)
 
 
 def concept_identity_gate(tx: Any, *, label: str, full: str = "",

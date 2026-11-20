@@ -15410,13 +15410,9 @@ def _secretary_for(role: str, *, root: Path | str, store: Any, registry: Any,
 
     seam_for_secretary, source = _secretary_seam(role, root=root, seam=seam, sid=sid,
                                                  mg=_MG)
-    sec = _SEC.for_role(role, root=root, store=store, registry=registry,
-                        seam=seam_for_secretary, enable_model=True, sid=sid)
-    try:
-        sec.model_source = source
-    except Exception:  # noqa: BLE001 —— 留痕失败不许带走秘书
-        pass
-    return sec
+    return _SEC.for_role(role, root=root, store=store, registry=registry,
+                         seam=seam_for_secretary, enable_model=True, sid=sid,
+                         model_source=source)
 
 
 def _secretary_seam(role: str, *, root: Path | str, seam: Any, sid: str | None,
