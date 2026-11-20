@@ -3078,6 +3078,14 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                        "`WAIT_ANY_REL` / `request_wait_any` / `wait_any_reading` / "
                        "`cancel_wait_any` / `record_handoff` / `mark_handoff_seen` / "
                        "`read_handoffs` / `reset_handoffs` —— `wait_any` 不落「醒没醒」（醒没醒只能由到点/事件现算）；交差与消息分得开（消息 ≠ 交差）",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第十一层 = 等待账 + 两把普查。
+    # 为什么是一个模块：`set_census_roots` 一次重设三个“扫描根”可变量
+    # （`_CENSUS_ROOTS` / `_CENSUS_CACHE` / `_PROGRAM_CENSUS_CACHE`），写点与读点必须
+    # 同处一份；等待账与普查读的是同一本账，`coverage` 是它们的合成读数。
+    # 为什么 `await_io` 反而留在 `clock.py`：`ALLOWED_RAW_WAITS` 按“路径 + 函数名”认，
+    # 主时钟本体那一条是 `agentflow/clock.py::await_io`；搬走它就得同步改豁免表或
+    # 改主时钟本体的判定 —— 那等于让判据跟实现一起漂，所以写入口留在本体。
+    "clockwaits.py": "等待账与两把普查（2026-11-20 从 `clock.py` 拆出）：`note_wait` / `note_process_wait` / `waits` / `reset_waits` / `flush_waits`（等待账）+ `raw_wait_census`（原始等待普查）+ `program_census`（起进程普查）+ `coverage`（合成读数）+ 三张逐条登记的例外表 —— 三个扫描根可变量的唯一写点与读点同处一份（`await_io` 本体留在 `clock.py`）",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，

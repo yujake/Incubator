@@ -41,6 +41,7 @@ from typing import Any
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockwaits as CW
 from agentflow.conductor import Conductor, LocalBackend, calling_as
 from agentflow.store import Store
 from agentflow.tools import build_registry
@@ -152,7 +153,9 @@ def test_programs_outside_clock_is_on_the_coverage_readout(tmp_path, bench,
 
     # 反真空：让普查报两处"起进程没进账" ⇒ 同一格必须变成 2（证明它读的是普查，
     # 不是一个恒 0 的常量）。
-    monkeypatch.setattr(CLK, "program_census", lambda **_kw: {
+    # 2026-11-20（拆 clock.py）：`coverage` 与 `program_census` 一起搬进 `clockwaits`，
+    # 打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CW, "program_census", lambda **_kw: {
         "checked": True, "files": 7,
         "findings": [{"where": "a.py:1（f）"}, {"where": "b.py:2（g）"}],
         "governed": [], "spans": [], "unbooked": [], "reason": ""})
@@ -161,7 +164,9 @@ def test_programs_outside_clock_is_on_the_coverage_readout(tmp_path, bench,
     assert got["programs_outside_where"] == ["a.py:1（f）", "b.py:2（g）"], got
 
     # 普查"没查成"⇒ 这一格是 None，不是 0（三态不许折平）。
-    monkeypatch.setattr(CLK, "program_census", lambda **_kw: {
+    # 2026-11-20（拆 clock.py）：`coverage` 与 `program_census` 一起搬进 `clockwaits`，
+    # 打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CW, "program_census", lambda **_kw: {
         "checked": False, "files": 0, "findings": [], "governed": [], "spans": [],
         "unbooked": [], "reason": "判据：读不成"})
     broke = CLK.coverage(refresh=True)
