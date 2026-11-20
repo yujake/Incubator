@@ -2,9 +2,13 @@
 
 > **这份文件回答一个问题：我现在要改的东西，代码在哪、判据在哪。**
 >
-> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-19 CLOSE1 K1 收尾①）：**
+> 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-20 READMAP 追平）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **326 个 `.py`、308,279 行**，**75 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,862 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **392 个 `.py`、309,165 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,858 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **2026-11-20 READMAP 追平（观测 11:1x）：** 三格与 `agent_loop.py` 按现盘重算（上一格是
+> 2026-11-19 的 326 / 308,279 / 75 / 15,862）；§3 表六行按现算改（`agent_loop` / `providers` /
+> `gates` / `schema` / `cli` / `claimanatomy`）；另给 2026-11-20 拆出来的 66 个模块补了位置
+> （§1.1：12 个 `clock*` 在第 6 层、36 个 `secretary_*` 与 18 个 `v_*` 在第 4 层）。
 > **2026-11-20 ROLECLEAN 多路收口（观测 08:3x，七路并行改动同树）：** 行数 306,616 → **308,292**
 > （B/D/A 的提示词对齐与死入口清理、M/H/L/V 的旧路清扫、WEBUI/FINALAUTH/CLOCK 的增量一起落在这一格；
 > `.py` 数 323 → **325**：`clockbase.py` / `clockrun.py` / `clockevents.py` / `clockbookindex.py`
@@ -1090,6 +1094,85 @@
 `agentflow/tests/`（判据）、`agentflow/tools/`（发布门）、`agentflow/scripts/`（lint 与 FC-27 门）、
 `agentflow/docs/`（角色规格 `ROLE-SPECS.md`、提案 `PROPOSALS.md`、治理 `NOAI-GOVERNANCE.md`）。
 
+### §1.1 2026-11-20 拆出来的 66 个模块（新模块在这里有位置）
+
+> 这些是 2026-11-20（`5d28929c` 收口检查点）从三个超大文件里**逐字搬出**的模块：
+> `clock.py` → 12 个 `clock*`（第 6 层 · 编排面）、`secretary.py` → 36 个 `secretary_*`
+> （第 4 层 · 公共零件）、`verifications.py` → 18 个 `v_*`（第 4 层 · V 的台账零件）。
+> 宿主文件仍在原层当门面（`clock.py` / `secretary.py` / `verifications.py`），对外名字
+> 一个字没改；搬出的块逐字未动，等价性各自在 `temp/` 的对应目录里可复算。
+> **行数一律现算**：这张表的行与 §3 同形，`tests/test_reading_map.py` 的 §3 行数判据
+> 顺带盯着它们 —— 手抄的数不许漂。
+
+| 模块 | 行数 | 一句话职责 | 它在哪一层 |
+|---|---:|---|---|
+| `clockcost.py` | 160 | 到点判定的成本读数：最近一拍花了多少、下一拍该在多少秒后醒 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockfire.py` | 714 | 到点那一整层：`_DUE_HANDLER` / `fire_due` / 投递 / 周期补拍 / 成本读数 / 假时钟 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockmem.py` | 396 | 计时器 / 闹钟 / 周期巡查的申请面：起表、补目的、取消、读清单 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockpatrol.py` | 444 | 巡查文案与异常清单：`patrol_*` 那一整层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockprobe.py` | 99 | 「等谁」的探针与判定：把外部读口折成三态的那一层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockprogram.py` | 463 | 程序计时器：起程序、挂 pid、收口、读程序账、`program_span` 上下文 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockpublic.py` | 179 | 公开面清单：`clock.__all__` 的那 150 个名字 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockstop.py` | 537 | 停程序那一层：探活、两刀（温和 / 强制）、收口、唤醒等它的人 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clocktimer.py` | 797 | 计时器与簿记的环核：`Timer` / `TimerBook` / `book()` / `target_state()` | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockwaitany.py` | 435 | `wait_any` 与交差账：等任意计时器返回的意图账 + 交接（handoff）的读写 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockwaits.py` | 719 | 等待账（`out/clock/` 下那一个 waits 文件）与两把普查：原始等待 / 起进程 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `clockwakes.py` | 388 | 唤醒标记与兜底计时器（lifeline）：到点之后「叫醒谁」的那一层 | 第 6 层 · 时钟零件（`clock.py` 拆出） |
+| `secretary_addressing.py` | 575 | 秘书的寻址与父子计数（U08 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_axes.py` | 316 | 秘书的四本判定旁支台账：append / rows / of / path（U30） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_axis.py` | 235 | 秘书的行轴与活口（唯一判据，U08 尾段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_concept.py` | 603 | 秘书的概念行：一个概念一行（U24） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_decl.py` | 144 | 秘书的共享声明面：命题 / 档位 / 证明 / 概念几个轴共用的键与形状 | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_deps.py` | 753 | 秘书的依赖面：不少一环（U23） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_evidence.py` | 701 | 秘书的证据升档与正文签闸（U22 证据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_handoff.py` | 593 | 秘书的交接稿与稿通道（U11） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_identity.py` | 683 | 秘书的命题同一性判定：判不了不许新建 / 合并（U21 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_identity_side.py` | 500 | 秘书的挑词、形态闸与修稿同一性（U21 后半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_inbox.py` | 482 | 秘书的收件箱与闭环提醒：两栏不混（U10+U28+U29） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_judge.py` | 596 | 秘书的判断内核：一次模型判断的整条链（U15+U14） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_label.py` | 187 | 秘书的标签洗：内部工作名 → 名字（U20） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_ledger.py` | 428 | 秘书的台账底座：落点、追加口、发号、名册写临界区（U01+U02+U03） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_merge.py` | 711 | 秘书的并进在册：同一命题 / 第 N 份证明（U22 合并侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_outbound.py` | 727 | 秘书的发件口：不替本体表态（U17） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_port.py` | 53 | 秘书的装配口：造一名 `Secretary` 只经这一处（混入模块那一侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_prompts.py` | 340 | 秘书的判断提示词：system 段逐字节稳定（U16） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_proofkind.py` | 335 | 秘书的同种证明判定（U22 证明种侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_relay.py` | 286 | 秘书的转发链：正文只在链尾（U12） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_retire.py` | 561 | 秘书的销号：静默闸 + 级联 + 台账落终态（U09） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_roster_read.py` | 649 | 秘书的名册读侧与视图：事件流折叠与三态读数（U04） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_roster_write.py` | 708 | 秘书的名册写口与名字身份（U06+U05） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_session.py` | 292 | 秘书的实例台账读写：一实例一片（U13） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_sign.py` | 790 | 秘书的签：决定 ≠ 落地（U26） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement.py` | 499 | 秘书的登记外壳与形状闸（U22 外壳） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement_meta.py` | 556 | 秘书的元数据改写与两个新终态（U22 元数据侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_statement_tx.py` | 706 | 秘书的登记事务：一笔全落或一字节不落（U22 事务侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_surface.py` | 471 | 秘书的读写面池：一槽一主（U07） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_tier_judge.py` | 605 | 秘书的档位判据：力气读数 + 指路（U25 前半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_tier_ledger.py` | 586 | 秘书的档位读侧：折叠与三态（U25 中段） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_tier_record.py` | 240 | 秘书的档位落行：一个路径一行（U25 后半） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_time.py` | 61 | 秘书台账的时间戳口径（U29） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_vacant.py` | 262 | 秘书的空号替换：四样一起换（U22 空号侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_vocab.py` | 485 | 秘书的受控词表：一个词只有一个定义（U15/U17/U18/U25/U26 等单元的常量） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `secretary_wash.py` | 776 | 秘书的两段式洗 / 请示 / 确认（U18+U19+U23 洗侧） | 第 4 层 · 秘书零件（`secretary.py` 拆出） |
+| `v_citation.py` | 316 | 引用核实：V 核 F 在 `dependencies` 上登记的引用，够不够格被引 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_defect.py` | 458 | 缺陷分类与投票（纯读） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_evidence.py` | 173 | 证据同一性：同一份读数只算一份 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_gap_read.py` | 784 | 凭据缺口读数（pending / 短回路） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_grades.py` | 282 | 等级反算（apply 才写盘） | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_ledger_write.py` | 511 | 台账写口：追加 + 可撤回 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_paths.py` | 385 | 台账路径 + 证明号 / 哈希 / 判词解析 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_pending_read.py` | 540 | pending 读侧：哪一行算那一签 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_pending_write.py` | 266 | pending 写口：两层锁 + 跨文件发号 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_prompt.py` | 357 | 冷启动提示词：只有对象，没有句柄 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_rowread.py` | 709 | 行轴与签资格：轴只由秘书给 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_selftest.py` | 101 | 自检 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_sign.py` | 572 | 签落位：台账与 statements 同一次写 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_sign_flip.py` | 757 | 签落位：翻位 / 降级 / 义务 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_standing.py` | 641 | 第 3 位读数：签的是哪一份 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_streak.py` | 270 | 连续票与打回：同一份正文才算数 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_unverified.py` | 226 | 未审命题：在册 / pending 两路 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+| `v_vocab.py` | 434 | 词表与常量 | 第 4 层 · V 的台账零件（`verifications.py` 拆出） |
+
 ---
 
 ## §2 想改什么 ⇒ 读哪几个文件（3 跳以内）
@@ -1133,17 +1216,17 @@
 | 文件 | 行数 | 它的边界 | 为什么大（不是"没整理"，是职责本身宽） |
 |---|---:|---|---|
 | `agent_d/core.py` | 1744 | D 的全部动作（14 个，**拆包**：一个动作一个文件；`agent_d/core.py` 是其余成员（含 core 自身共 1707 行）；`agent_d/_support.py` 是模块级 helper 与常量，867 行）：摄入 / 溯源 / 评估 / 提问（`propose_question`）/ 裁决 / 研究 / 汇报（批 R22 把两处请求账本收成一处 `_d_requests`，1702 → 1772 行） | 每个动作都自带"数据面前置检查 + 落库 + 三态"三段，15 个叠起来就是几千行 |
-| `agent_loop.py` | 15862 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
+| `agent_loop.py` | 15858 | 角色循环：模型决定调哪个工具 / 唤起谁 / 给谁留言，框架负责执行与留痕（**批 R40 补进本表** —— 它此前只在 §2 的用途表里；2026-11-16 读数：全仓最大的是 `secretary.py`，本表里最大的一行仍是它）。批 R62：`max_output_tokens` 8,192 → 32,768（严格口径 T1 的 `ModelReplyNotOk` 与 2026-10-03 第八趟的整份重写被截断，是同一格）。批 R68：新增一档 `no_reply`（"没拿到可用的回复"：超时与"思考吃光输出预算"分开计数、分开收场，各配一句只对它说的纠正）。批 R105：新增 `_registry_with_own_action`（把"我这一趟被派的那个动作"包成 `own.<动作>` 交给循环 —— `--subagents` 那一档的收尾）。批 R119：新增 B 入库前的秘书判档（只在那件动作**真在注册表里**时才问）；NT2（2026-11-15）判/落拆段之后，判在 `Secretary.judge_statement`、落行在 `Secretary.record_nontriviality`（拿到命题号与路径号之后），本文件只把回执抬成 `out["tier"]` | 一次循环要管八种形状、每一步的提醒/闸门/读数与续跑重建 |
 | `agent_c/core.py` | 1139 | C 的 10 个纯读分析动作（**拆包**：一个动作一个文件；`agent_c/core.py` 是其余成员（含 core 自身共 1087 行）（批 R54 的 CS-10 ② 加了 `_report` 的产出即登记）；`agent_c/_support.py` 是模块级 helper 与常量，268 行）（批 R22 把 payload 里那句取不到的 `graph.*` 换成 `detail_reading`） | 分析类动作的**输出形状**很宽（每条都要给人读的措辞 + 给机器读的结构） |
 | `capabilities.py` | 3368 | 动作表 + 写集 + 边表 + 导入期交叉断言（批 R21 加了空写集的并发含义表 `EMPTY_WRITE_SETS` 与它的两条反真空断言：2490 → 2569 行；2026-10-15 加 `A.walk_citations` 之后两层对账的读数更新为 61 = 22 + 39 + 0；2026-11-09 T1 加 B 的两条动作之后两层对账读数更新为 66 = 25 + 41 + 0；2026-11-11 `open_polish_copy` 进 unmatched 之后现算 67 = 25 + 42 + 0，只动注释、+2 行） | 声明本身不长，长的是**逐条理由**与断言（禁改区，必须写清为什么） |
 | `agent_skills.py` | 4752 | 各智能体的 skills（业主 2026-10-14「现做现读」）：**45 条**操作手册的**目录 + 正文 + 索引**（一处定义）、`SURVEY`（38 个来源 skill 的调研记录）、`validate()`（动作可达 + 工具在**本角色**的面上 + **正文里点名**的动作/工具也算 + **落点必须在登记过的根下** + slug 可当文件名，配一张具名的"指到别人"豁免表）与 `materialize()`（2026-10-15：A/C/B/D 各补手册 + A 一条讲引文图，38 → 40；同日再加 `shared/取数-编号一律从台账读`，40 → 41 条 shared→**44 条**；2026-10-16：第 10 趟 T5 真机读数驱动 D 的攻坚口径更正；2026-10-30：F 的两份手册从三态收成两态） | 正文是**给人（模型）读的操作手册**，一条一大段；叠起来就是两千多行 —— 但它**不占前置提示词**（前置里只有索引），这正是"现做现读"要换来的东西 |
-| `providers.py` | 3356 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
-| `gates.py` | 2923 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
-| `schema.py` | 4213 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
+| `providers.py` | 3344 | 每个数据源一个 `_parse_*` + 查询编排 + 限速重试（2026-10-15 两件：① `_europepmc_urls` 不再把 Europe PMC 报来的 `?pdf=render` 网站页当下载直链 —— 它永远 403；有 `pmcid` 且 `isOpenAccess=Y` 时走 EBI 的 OA 全文路由，T5 的可读语料 6 → 11 篇；② 新增 `walk_citations` / `_fetch_one_work` 给新动作 `A.walk_citations`，`SELECT_FIELDS` 加 `referenced_works`；**取不到源记录时抛错而不是返回空表**） | 上游越多、字段越脏，解析越长（禁改区） |
+| `gates.py` | 2914 | G1–G15 十五道独立检查器 | 一道门一个函数，每道门都带判据说明与负控 |
+| `schema.py` | 4217 | 17 张表的 dataclass + 词表 + 校验 | 字段多、每个字段都带契约注释（禁改区）。S1r 并表（2026-10-10）：`concepts` 从 `TABLES` 退役、`SCHEMA_VERSION=2` |
 | `runflow.py` | 1733 | 一次 `run` 的全流程（取材料 → 跑模型 → 落六件产物） | 主路径把每个阶段的失败分支都写全了；`run_topic` 已按 `T-7` 拆成 6 个 `_phase_*`（最长 228 行）+ 130 行编排层。批 R113：单价改成按**这一趟自己的时间戳**取（`price_of(cfg, at=stamp)`），不再读结账时的墙钟 |
 | `evidence.py` | 1909 | 检索 + 逐字回验 + 来源登记 | 三档回验级别各一套路径 |
-| `cli.py` | 6220 | 29 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
-| `claimanatomy.py` | 1893 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
+| `cli.py` | 6236 | 29 个子命令的入口与打印 | 每个子命令的 `--help`、三态 / 六档退出码（门是三态 `0/1/2`；`run-agent` 是六档 `0/1/2/3/4/5`，见 `cli.EXIT_CODE_BY_STOP`）、卡片式输出 |
+| `claimanatomy.py` | 1885 | 断言解剖学（每条断言的可判定性）；批 R71 加了第 5 族的第二个码 `uncontrolled_disclaimer`（自造免责声明不再过关，见 `draft/116`） | 判据多且互相独立 |
 | `agent_b/core.py` | 1380 | B 的 10 个动作（**拆包**：一个动作一个文件；`agent_b/core.py` 是其余成员（含 core 自身共 1377 行）；`agent_b/_support.py` 是模块级 helper 与常量，273 行）：入库 / 重抽取 / 结构重复裁决 / 登记命题 / 显式落稿 / 按位置与格收录 | 回验是"每条关系都要过"，代码密度高 |
 | `verify.py` | 2183 | 全局不变量审计（`verify_all` 已按 `T-5` 拆成 14 个 `_check_*` + 30 行编排层；批 R19 在 `_check_2` 里加了 I7 在途上限的两条读数） | 40 多条不变量平铺（禁改区，见 T-5） |
 | `tools/text_tools.py` | 450 | 文字层抽取 `text.extract`（2026-10-17 新增；业主口径：**A 负责搜索/下载/转纯文字稿入库**，其它角色只读那份纯文字稿；**原 PDF 原样保留**）—— 读 PDF 自带文字层、页间插 `===== page N =====`、写 `library/<编号>.txt`；**写盘前核质量**（NUL/替换字符/控制字符占比超标 ⇒ `garbled_text`，不写盘） | 不读写任何表 |
