@@ -1026,7 +1026,7 @@ def authoritative_problems(verdict: Mapping[str, Any], *,
 
     ## `allow_na`（2026-11-20 EMPTYCELL 之后）
 
-    `closing._verdict_payload` 给"没有可判对象"的格落了第四档 `na`（`acceptance` 在
+    `closing._m_verdict_payload` 给"没有可判对象"的格落了第四档 `na`（`acceptance` 在
     没有 `ACCEPTANCE-CHECKS.json`、且 `research_questions` 也一行没有时就是这一档；
     `literature_pending` 在整趟没有待裁过文献时也是）。`na` 既不是 pass、也不是 fail：
     产品自己的 `verdict` 只把它点名进 reason，不让它进分母。所以"八格逐格 pass"这条

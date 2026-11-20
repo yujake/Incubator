@@ -192,7 +192,7 @@ def test_b_a_validation_refusal_carries_every_problem_the_validator_computed(
     # 可执行的下一步也要在（只说"校验失败"没有可操作性）
     assert "再把同一份交一次" in reason
     # 这一条拒收没有落任何稿：拒信不许含糊（P0-2 的反面也要求说清）
-    assert "这一轮没有落稿" in reason
+    assert "没有落稿、没有登记" in reason
 
 
 def test_b_the_exception_path_does_not_swallow_the_verdict(

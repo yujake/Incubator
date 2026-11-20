@@ -5,7 +5,7 @@
 
 2026-11-20 的 VERSPLIT2 把 `verifications.py` 拆成 18 个 `v_*.py`，门面只做再导出。
 拆分时写进每个分文件 docstring 的承诺是：测试 `monkeypatch.setattr(verifications, "X", ...)`
-打的只是门面那一格字典，而搬走的代码必须写成 `verifications.X` —— 门面字典在调用那一刻
+打的只是门面那一格字典，而搬走的代码必须写成 `verifications.<名字>` —— 门面字典在调用那一刻
 才查，所以单点打桩仍然到得了实现。`from .v_paths import X` 是快照，补丁到不了。
 
 这条承诺当时只靠「反真空」一条行为判据自证（`test_k14` 的 a′：把锁打桩成
