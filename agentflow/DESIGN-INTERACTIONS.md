@@ -11,7 +11,8 @@
 > 框架的**权威现状描述与逐项路径索引**见
 > [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
 > 本文交互的落点（相对工作区根）：`agentflow/src/agentflow/interactions.py`（I1–I7 的冻结契约与闸门）、
-> `agentflow/src/agentflow/agent_c.py`（C 的查询面）、`agentflow/src/agentflow/schema.py`（`reprocess_requests` 等表）。
+> `agentflow/src/agentflow/agent_c/`（C 的查询面；**2026-10 起角色已拆成一角色一包**，顶层 `agent_c.py` 不再存在）、
+> `agentflow/src/agentflow/schema.py`（`reprocess_requests` 等表）。
 
 ---
 
@@ -51,7 +52,8 @@ D 在追问某个问题时需要"这两个概念之间到底有哪些链条"，�
 **接口**：C 暴露一个**同步、只读、有界**的查询 API；D 通过工具层调用（`graph.*` / `trace.*` 已具备大部分）。
 
 ```python
-# D 侧（实测这些方法都在 `agentflow/src/agentflow/agent_c.py`）
+# D 侧（这些方法今天在 `agentflow/src/agentflow/agent_c/` 包里；`paths` / `neighbors` /
+# `structural_duplicates` 等仍逐字同名，`python -m agentflow.agent_c` 自检可复核）
 c = AgentC(store)                      # 只读，可反复调用
 rep = c.paths("0000", "0002", max_paths=5, max_len=4)
 nodes = c.neighbors("0000")
@@ -112,7 +114,8 @@ C **重新检查这两个具体的关系**（而不是重跑整个分析）
 
 **闸门**：
 - 只允许 **approved 的 candidate_gaps**（过了 veto 门 + `confidence >= medium`）；
-- 单次 `gaps` 最多提交 `max_gap_requests_per_run`（默认 3），按净分降序；
+- 单次 `gaps` 最多提交 `interactions.DEFAULTS["max_gap_requests_per_run"]` 条（**不抄值**：
+  这个上限会被裁定抬高；现读命令 `python -c "import sys;sys.path.insert(0,'src');from agentflow import interactions as I;print(I.DEFAULTS['max_gap_requests_per_run'])"`），按净分降序；
 - 与已有未完成请求**主题去重**（复用 `research.submit_gap` 的查重思路）。
 
 **如何验证**：断言 `gaps` 跑完后 `search_requests` 新增 ≤ 3 条，且每条的主题能对应到某个 `candidate_gap`。

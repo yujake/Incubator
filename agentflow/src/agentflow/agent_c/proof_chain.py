@@ -42,7 +42,7 @@ from pathlib import Path
 
 import json
 
-from ._support import Any, Mapping, S, Sequence, _cfg_int, tool  # noqa: F401
+from ._support import Any, Mapping, Sequence
 # 依赖的 `used_by` 尾巴（`#pN`）只有一个解析点（`proofloc`）：两份解析意味着
 # "台账上是第 2 条证明、读出来是第 1 条"这种错没有任何东西会报（业主 2026-10-22）。
 from .. import proofloc as _PL  # noqa: E402

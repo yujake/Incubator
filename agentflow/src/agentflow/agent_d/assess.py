@@ -46,9 +46,10 @@ class _Assess:
         verdict = analyze_gaps(
             # 2026-10-17（agents #4）：`claims` 可能是 str 或 `{代号: 行}` 字典 ——
             # 只收 Mapping 元素（字典按值迭代，`c["relation_id"]` 就不会撞到 str）。
-            # `_claim_rows` 会逐条 `dict(c)`，所以只调一次：改前两个实参各调一次，
-            # 等于把同一批 claims 拷两遍。
-            [c["relation_id"] for c in claim_rows],
+            # `_claim_rows` 会逐条 `dict(c)`，所以只调一次。
+            # 2026-11-20：改前这里还额外现造过一份 `[c["relation_id"] …]` 送给形参
+            # `relation_ids`，而那个形参函数体一次都没读 ⇒ 连同号表一起删掉
+            # （关系号就在 `claim_rows` 每一行里）。
             claim_rows,
             keywords=keywords,
             degree=degree,

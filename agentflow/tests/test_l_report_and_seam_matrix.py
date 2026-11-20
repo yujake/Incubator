@@ -12,7 +12,7 @@
 |---|---|---|
 | D9 | L 判"漏一步"⇒ B 的收件箱里真有一条汇报（点名 stmt_id 与失败类型）；检查器自己那一档（源码编译不过）不汇报（负控） | 改前没有 `agent_l` / `proofreport`，`formalize` 的失败只落在返回值里，一条消息都没有 ⇒ B 的收件箱是空的 |
 | D10 | B 覆盖 canonical（旧文进 `proof_history`）之后重新过 V ⇒ 旧签转 stale、新签是新号；L 再形式化那一版 ⇒ 12/12 之外那一档真的变成 verified | 前半（canonical / 新旧签）改前就有，是正控；红的是与 L 相连的那两格（L 判失败与新证明形式化 ⇒ 改前 ImportError） |
-| D11 | `severity="research"` ⇒ D 收到研究请求；`normal` ⇒ 一条都不写（负控）；两跳都绕不开边表 | 改前 `B` 的出边是 `('C','H','V')`、也没有 `escalate_proof_research` ⇒ AttributeError 红 |
+| D11 | 两跳分开钉：第一跳（代码） L 判 `statement_mismatch` ⇒ B 的收件箱里一条汇报、`severity="research"` 原样带上；第二跳（模型）B 走 `summon` 形状派 D —— 边在 / D 可召唤 / `policy.check` 放行，而 D 的收件箱一条都没有（这一跳不经收件箱） | 改前这一格调 `B.escalate_proof_research`：它不在 `ACTIONS` 里（模型调到它只会 `unknown_action`）、src 0 个调用方 ⇒ 那个入口已退场（改前红：`hasattr(AgentB, …)` 为真）；两跳的正控改前就绿，它守的是"迁移没有把升级这条路一起删掉" |
 | F16 | E 的工具面没有 `verify.check_formal`，但 `verify_tools.check_formal` 的函数实体仍在且可调用 | 改前 `verify.check_formal` 那件工具的 `roles` 是 `_ROLES_WRITE`（E/F/G）⇒ "E 的工具面上没有它"当场红；函数实体一直在 |
 
 ## 真 Lean 与零模型
@@ -455,25 +455,39 @@ def test_d10_b_rewrites_the_proof_then_v_signs_again(
 # ============================================================ D11 升级到 D
 
 
-def test_d11_only_research_severity_disturbs_d(
+def test_d11_the_upgrade_to_d_is_the_summon_path_not_an_inbox_message(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """D11：`severity="research"` ⇒ D 收到研究请求；普通 ⇒ 不打扰 D（负控）。
+    """D11：两跳各钉各的 —— 第一跳是代码（L→B 收件箱），第二跳是模型（B→D 走 `summon`）。
 
-    改前红：改前 `B` 的出边是 `('C','H','V')`、`AgentB` 上也没有
-    `escalate_proof_research` ⇒ AttributeError 红。
+    ## 为什么这一格在 2026-11-20 换了被测对象（PROOFCHAN，不是放宽判据）
 
-    零 Lean：L 这一趟走"转述 vs 实测正文"那条受控拒绝（在写盘与起检查器之前就结束），
-    而它的失败类型由受控映射决定 severity —— 不是 L 自己填一个自由文本。
+    改前这一格调 `B.escalate_proof_research`：它不在 `specs/b.py` 的 `ACTIONS` 里
+    ⇒ 模型照它调只会拿到 `unknown_action`；src 里 0 个调用方，只有测试在调。而模型侧
+    真正的路早在 2026-11-05（审计② 第 ⑪ 条）就锚到 `summon` 形状了。那个程序入口已退场，
+    所以这一格把两跳拆开、各自钉死，强度不减：
 
-    反真空：D 的收件箱按 `read_messages` 读；递送绕不开边表（摘掉 B → D 之后同一次
-    升级读成 `refused/no_collab_edge`，一行都不写）。
+    - 第一跳（代码，活的）：L 判「与台账对不上」⇒ B 的收件箱里真有一条汇报，
+      `severity="research"` 是 L 的读数，原样带到 B 手上（B 才有判断的素材）；
+    - 第二跳（模型，提示词教的）：B 走 `summon` 形状派 D —— 边 / 可召唤 / 闸三层
+      都放行；而 D 的收件箱一条都没有：这一跳不再经收件箱（改前那条"研究请求"
+      是收件箱消息，改后 `summon` 是派活，两者不是一件事）；
+    - 仍然绕不开边表：摘掉 L 与 B 两向的边 ⇒ 同一次汇报当场
+      `refused/no_collab_edge`、一行都不写（`proofreport.deliver` 的那道闸是唯一一份；
+      改前这条控制钉在 B→D 上，现在钉在仍然活着的那一跳上）；
+    - 负控（普通缺陷）：`severity` 普通的那一档照样汇报给 B（L 不替 B 判），而提示词
+      明写「普通缺陷不进 D 的收件箱」—— 程序侧的 severity 闸随入口一起退场，所以这一档
+      只剩提示词这一处，直接钉它的原话；
+    - 反真空：受控拒绝那一档（失败类型不在词表）⇒ `refused/invalid_params`，零写入。
+
+    零 Lean：两趟 formalize 都在写盘与起检查器之前被受控拒绝（转述 vs 实测正文）。
     """
     _lean_env(monkeypatch, False)
     st, ws = _workspace(tmp_path)
     agent = _agent_l(st, ws)
-    b = _agent_b(st, ws)
 
-    # ---- L 判"与台账对不上"⇒ 汇报里的 severity 是 research（受控映射）
+    # ---- 第一跳：L 判"与台账对不上"⇒ B 的收件箱里一条汇报（severity 是读数）
+    b_before = len(_inbox(ws, "B"))
+    d_before = len(_inbox(ws, "D"))
     bad = agent.formalize(PARAPHRASE, source=_source(), statement_id=STMT_ID)
     assert bad.get("refused") is True, bad.get("refused")
     report = dict(bad.get("report") or {})
@@ -482,45 +496,59 @@ def test_d11_only_research_severity_disturbs_d(
     assert payload.get("failure_type") == "statement_mismatch", payload
     assert payload.get("severity") == "research", payload
     assert PR.severity_for(str(payload.get("failure_type"))) == "research"
-
-    # ---- B 原样转达：D 真的收到"研究请求"
-    before = len(_inbox(ws, "D"))
-    escalated = b.escalate_proof_research(**payload)
-    assert escalated.get("state") == "escalated", escalated
-    assert str(escalated.get("msg_id") or ""), escalated
-    inbox = _inbox(ws, "D")
-    assert len(inbox) == before + 1, inbox
-    hit = inbox[-1]
-    assert str(hit.get("from")) == "B", hit
-    assert "研究请求" in str(hit.get("subject") or ""), hit.get("subject")
-    request = dict(hit.get("research_request") or {})
-    assert request.get("statement_id") == STMT_ID, request
-    assert request.get("failure_type") == "statement_mismatch", request
-    assert request.get("severity") == "research", request
+    inbox_b = _inbox(ws, "B")
+    assert len(inbox_b) == b_before + 1, inbox_b
+    hit = inbox_b[-1]
+    assert str(hit.get("from")) == "L", hit
     assert STMT_ID in str(hit.get("body") or ""), hit.get("body")
+    assert "research" in str(hit.get("body") or ""), (
+        "L 的汇报正文里必须带上它建议的严重度读数 —— B 靠这一格决定要不要派 D")
 
-    # ---- 负控：普通缺陷一条都不写
-    normal = b.escalate_proof_research(statement_id=STMT_ID,
-                                       failure_type="unfaithful_step", step=STEPS,
-                                       severity="normal")
-    assert normal.get("state") == "skipped", normal
-    assert normal.get("reason") == "not_research", normal
-    assert len(_inbox(ws, "D")) == before + 1, "普通缺陷也去打扰 D 了"
-
-    # ---- 这条递送绕不开边表：把 B 与 D 之间那条边整个摘掉，同一次升级当场不成立。
-    # 准入判据是"任一方向有边"（`message_admission` 读的是两个方向的出边），所以两边
-    # 都要摘：只摘 B → D 时，"D 能派 B"这一半仍然把这一对放行。
+    # ---- 第二跳：B 走 `summon` 形状派 D（边 / 可召唤 / 闸三层都放行）
     from agentflow import capabilities as C
+    from agentflow import policy as P
+    from agentflow.agentspec import builtin_registry
 
-    assert AL.message_admission("B", "D") == "", AL.message_admission("B", "D")
+    assert "D" in C.ALLOWED_EDGES["B"], sorted(C.ALLOWED_EDGES["B"])
+    assert "D" not in C.NON_SUMMONABLE, sorted(C.NON_SUMMONABLE)
+    assert "D" in builtin_registry().summonable_roles()
+    assert P.check(P.Policy(), P.Decision(frm="B", to="D", action="")) is None
+    # 而这一跳不再经收件箱：整趟下来 D 的收件箱一条都没有
+    assert d_before == 0 and _inbox(ws, "D") == [], (
+        f"D 的收件箱被写了东西：{_inbox(ws, 'D')} —— 改后升级走 summon，不经收件箱")
+
+    # ---- 负控 1：普通缺陷那一档 —— L 照样汇报（B 才有判断素材），D 的收件箱不动
+    normal = agent.report_to_b(statement_id=STMT_ID, failure_type="unfaithful_step",
+                               step=STEPS, severity=PR.severity_for("unfaithful_step"))
+    assert normal.get("state") == "reported", normal
+    assert dict(normal.get("payload") or {}).get("severity") == "normal", normal.get("payload")
+    assert len(_inbox(ws, "B")) == b_before + 2
+    assert _inbox(ws, "D") == [], "普通缺陷那一档也被写成 D 的收件箱消息了"
+    # 提示词那一处的负控（B 被明写「普通缺陷不进 D 的收件箱」）由
+    # `tests/test_proofchan_upgrade_is_the_summon_path.py` 在 Lean 开着那一档逐字钉着
+    # —— 本文件跑在关档，PROOF_CHANNEL 整段被换成 `*_NO_LEAN`，这里渲染不出那一句。
+
+    # ---- 仍然绕不开边表：把 L 与 B 之间那条边整个摘掉（两向都摘：准入看任一方向有边）
+    assert AL.message_admission("L", "B") == "", AL.message_admission("L", "B")
     patched = {role: frozenset(targets) for role, targets in C.ALLOWED_EDGES.items()}
-    patched["B"] = patched["B"] - {"D"}
-    patched["D"] = patched["D"] - {"B"}
+    patched["L"] = patched["L"] - {"B"}
+    patched["B"] = patched["B"] - {"L"}
     monkeypatch.setattr(C, "ALLOWED_EDGES", patched)
-    blocked = b.escalate_proof_research(**payload)
+    before_blocked = len(_inbox(ws, "B"))
+    blocked = agent.report_to_b(statement_id=STMT_ID, failure_type="statement_mismatch",
+                                severity="research")
     assert blocked.get("state") == "refused", blocked
     assert blocked.get("reason") == "no_collab_edge", blocked
-    assert len(_inbox(ws, "D")) == before + 1, "没有 B→D 这条边，研究请求仍然送到了"
+    assert len(_inbox(ws, "B")) == before_blocked, "没有 L→B 这条边，汇报仍然送到了"
+
+    # ---- 反真空：受控拒绝那一档零写入（词表外的失败类型）
+    monkeypatch.undo()
+    before_bad = len(_inbox(ws, "B"))
+    invalid = agent.report_to_b(statement_id=STMT_ID, failure_type="不认识的类型",
+                                severity="research")
+    assert invalid.get("state") == "refused", invalid
+    assert invalid.get("reason") == "invalid_params", invalid
+    assert len(_inbox(ws, "B")) == before_bad, "受控拒绝也写了东西"
 
 
 # ============================================================ F16 E 的接缝

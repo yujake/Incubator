@@ -333,12 +333,13 @@ def _rebuild_args(root) -> list[str]:
     return ["--root", str(root), "rebuild", "--no-backup"]
 
 
-def test_rebuild_cli_prints_the_skip_breakdown_when_there_is_one(store, capsys) -> None:
-    """判据（`46-01 §2.2(b)` STEP-3 逐字：明细没有人看得见就等于没做）：CLI 要把它打出来。
+def test_rebuild_cli_is_retired_and_points_at_the_library_instead(store, capsys) -> None:
+    """A4（2026-11-20）：`agentflow rebuild` 已退场 —— 退出码 2 + 替代指引，不再重建。
 
-    改前必红：`cmd_rebuild` 只打印"应用 N 条，跳过 M 条"—— `M` 是个整数，
-    读的人不知道跳过了什么（`store.rebuild` 那时也确实没有明细；R-06 补上两键之后，
-    若 CLI 不打印，那两键仍然只有测试看得见）。
+    改前这一格守的是"CLI 要把 `skipped_by_reason` 打出来"（明细要有人看得见）。
+    命令退场之后那个可见面不存在了，所以判据换成退场契约本身：它不许冒充一次成功
+    （stdout 一个字都不许有），替代指引必须指到真正的重放入口（库接口
+    `Store.rebuild` / `make_store(...).rebuild()`）—— 后者仍在，由上面那些库级判据守着。
     """
     from agentflow import cli
 
@@ -349,29 +350,34 @@ def test_rebuild_cli_prints_the_skip_breakdown_when_there_is_one(store, capsys) 
     # `statements`（概念行的新家）。
     _append_event(store, {"op": "upsert", "table": "statements",
                           "row": {"origin": "own_result", "label": "没有号"}})
-    out = store.rebuild(backup=False)
-    assert out["skipped"] == 1, out
 
-    # 直接调 cmd_rebuild 会再重建一次（幂等，但事件日志里的坏行仍在）⇒ 打印里必须有分类
     rc = cli.cmd_rebuild(cli.build_parser().parse_args(_rebuild_args(store.root)))
-    text = capsys.readouterr().out
-    assert rc == 0, text
-    assert "跳过的分类计数" in text, text
-    assert "shape_broken=1" in text, text
-    assert "跳过明细" in text, text
+    out, err = capsys.readouterr()
+    assert rc == 2, (rc, out, err)
+    assert out == "", f"退场层不许在 stdout 上冒充一次成功的重建：{out!r}"
+    assert "已从事件日志重建" not in out, out
+    assert "已退场" in err and "agentflow verify" in err, err
+    assert "make_store" in err and ".rebuild()" in err, err
 
 
-def test_rebuild_cli_stays_quiet_on_a_clean_rebuild(store, capsys) -> None:
-    """反负控（别把噪音当读数）：没有跳过 ⇒ 不打印分类与明细。"""
+def test_rebuild_cli_does_not_touch_the_snapshots_it_used_to_rewrite(store, capsys) -> None:
+    """反方向：退场之后它一个字节都不许写（改前这条命令会覆盖 `data/*.json`）。
+
+    只核退出码是不够的：一个仍然调 `Store.rebuild()` 的实现也可以返回 2（先写后报错）。
+    所以逐字节比对 `data/` 下的快照 —— 退场层"一行都不碰盘"才是这条命令现在的契约。
+    """
     from agentflow import cli
 
     _seed(store)
+    data_dir = store.root / "data"
+    before = {p.name: p.read_bytes() for p in sorted(data_dir.glob("*.json"))}
+    assert before, "夹具没造出快照 ⇒ 这条判据没有可比对的对象"
+
     rc = cli.cmd_rebuild(cli.build_parser().parse_args(_rebuild_args(store.root)))
-    text = capsys.readouterr().out
-    assert rc == 0, text
-    assert "跳过的分类计数" not in text, text
-    assert "跳过明细" not in text, text
-    assert "已从事件日志重建" in text, text
+    out, _err = capsys.readouterr()
+    assert rc == 2, (rc, out)
+    after = {p.name: p.read_bytes() for p in sorted(data_dir.glob("*.json"))}
+    assert after == before, "退场层改写了快照：它仍然在重建，只是把退出码改成了 2"
 
 
 def test_rebuild_reports_shape_broken_rows_and_does_not_narrow_the_except(store):

@@ -17,10 +17,10 @@
 | `conductor.cancel` | write_local | 硬取消（不等收尾，协作式） |
 | `conductor.ensure_project` | write_local | 冷启动 / 热启动由 M 决定（四态如实给） |
 | `conductor.state` | read | 只读状态视图（给 M 判断用） |
-| `conductor.role_spec` | read | 某角色的动作与工具面（派给谁、怎么写 brief） |
+| `conductor.role_spec` | read | 某角色的描述（职责 / 交付 / 边界 / 政策 / 立场；不列动作与工具名） |
 | `conductor.summon_many` | write_local | 批量派活（分波与峰值在返回里；同角色多实例） |
 | `conductor.acceptance` | read | 读项目的验收表（哪几行成立、读数原文可引用） |
-| `conductor.closing` | read | 跑收工门七格 + 同一次调用里的内容级验收读数（两层各自三态；`can_close` = M 自己交的判据 `goal_met`，七格退成读数 `status` / `machine_pass`；`paper` 不是门，落 `readings.paper` 由 M 判断） |
+| `conductor.closing` | read | 跑收工门八格 + 同一次调用里的内容级验收读数（两层各自三态）。一份权威结论（`closing_verdict`）：八格全 pass ∧ M 交的 `goal_met` ∧ 名册全部销号 ∧ 程序都停了 ∧ 没有 blocker；`can_close` / `machine_pass` / 退出码全由它派生（`machine_pass` 只是其中"八格轴"的读数）。`paper` 不是门，落 `readings.paper` 由 M 判断 |
 | `conductor.board` | read | 板上还挂着什么（工作项 + 走到哪一档 + 谁读的） |
 
 写侧工具改的是编排状态（台账行、取消信号、工作区目录、停止回执）：
@@ -1312,7 +1312,7 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
 
 @tool(
     "conductor.closing",
-    "只读：跑收工门（八格）。每格三态，unknown 不算通过；`substance` 要 `statements` 等表非空；`literature_pending` 要待入库表清空。`can_close` 是机器口径；`closable` 给调用方。另回 `review_acceptance` 与 `cap_usd`。",
+    "只读：跑收工门（八格）（三态，unknown 不算通过）。**一份权威结论**（`closing_verdict`）：八格全过 ∧ `goal_met` ∧ 名册净 ∧ 程序停 ∧ 无 blocker；`substance` 要 `statements` 等表非空；`can_close` 是它的三态出口。另回 `review_acceptance` 与 `cap_usd`。",
     {
         "type": "object",
         "properties": {
@@ -1327,15 +1327,16 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
                                        "「在成本上限内」那一格用它判；不给 ⇒ 那一格是"
                                        "「没查成」而不是通过（负数会被参数校验拒成 param_error）"},
             "goal": {"type": "string",
-                     "description": "你这一趟的目标（一句话）。收工由你判 ⇒ 先说清目标是什么"},
+                     "description": "你这一趟的目标（一句话）。收工门要你交这一格：目标没交 ⇒ "
+                                    "那一份结论是 unknown（不是「可以交」）"},
             "goal_met": {"type": "boolean",
-                         "description": "**你的判断**：目标达成了没有（业主 2026-10-09："
-                                        "「是否收工不要用机械判据，由 M 制定的目标是否达成为准」）。"
-                                        "不给 ⇒ 这一趟没有收工判据（`m_says_done` 是你的判断，"
-                                        "不交即 `false`）"},
+                         "description": "**你的判断**：目标达成了没有（它只是那一份权威结论的"
+                                        "一格，不是它的替身 —— 2026-11-19 起「八格全过 ∧ 你这一句 "
+                                        "∧ 名册销干净 ∧ 程序停干净 ∧ 无 blocker」合成一个结论）。"
+                                        "不给 ⇒ 这一格 `m_says_done=false`，整份结论 unknown"},
             "basis": {"type": "string",
                       "description": "你凭哪几条读数这么判（可写台账计数 / 交付物路径 / "
-                                     "与机器七格不一致时你为什么不认它）"},
+                                     "哪一格没过时你打算怎么把它做成 pass）"},
             "task_list": {
                 "type": "array",
                 "description": "**你自己列的任务列表**（业主 2026-10-09：「所有智能体是否能停"
@@ -1366,16 +1367,19 @@ def conductor_acceptance(store, project_dir: str = "", rel_path: str = "",
              "'m_verdict','overrode','verdict_conflicts',"
              "'verdict_note','verdict_written',"
              "'status','failed','unknowns','findings','readings','summary','review_acceptance'}；"
-             "**`m_says_done` 是 M 的判据**（它按自己列的 `task_list` 判『活做完了没有』，"
-             "结论写在 `goal_met`），机器七格退成读数（`status`/`machine_pass`），"
-             "两者不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 `verdict_conflicts` "
-             "逐项点名；M 没给判据 ⇒ `m_says_done=false` + 读数说明『没人判过』；"
-             "`can_close` 是**机器口径**（`bool | None`：`None` = 没接线/算不出来，"
-             "既不是过也不是不过，不许读成通过）；`closable` 是给调用方的那个布尔（会不会交）；"
+             "**`can_close` 是那一份权威结论的三态出口**（`bool | None`：`None` = 没查成，"
+             "既不是过也不是不过，不许读成通过）；结论 = 八格全 pass ∧ `m_says_done` ∧ "
+             "`retire.complete` ∧ `programs_ok` ∧ 没有 blocker（`closing_verdict` 一处算）。"
+             "`m_says_done` 是其中 M 的那一格（按自己列的 `task_list` 判『活做完了没有』，"
+             "结论写在 `goal_met`），`machine_pass` 是同一份结论里「八格轴」的读数；"
+             "两者与整份结论不一致时 `overrode` 逐格点名、自述与自己的列表对不上时 "
+             "`verdict_conflicts` 逐项点名；M 没给判据 ⇒ 整份结论 unknown + 『没人判过』；"
+             "`closable` 是给调用方的那个布尔（会不会交）；"
              "M 给了判据 ⇒ 那一次调用把它落到 `out/review/m-verdicts.jsonl`"
              "（运行外那一趟/发布门读同一份），落盘结果在 `verdict_written` 里；"
-             "status 的键是七格检查（contradictions/load_bearing/report_shape/"
-             "user_pending/substance/acceptance/artifact_ledger），值是三态之一（通过 / 拦住 / 没查成）；"
+             "status 的键是八格检查（contradictions/load_bearing/report_shape/"
+             "user_pending/substance/acceptance/artifact_ledger/literature_pending），"
+             "值是三态之一（通过 / 拦住 / 没查成）；"
              "`paper` 不是门的一格：它落在 `readings.paper`（verdict 四档），由 M 判断该不该出论文；"
              "acceptance 那一格的 readings 里逐行给出：判据号、名称、受控档位、阈值、"
              "台账现算值、是否满足（不满足的那几行同时进 findings）；"
@@ -1405,13 +1409,16 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     `conductor.closing` 拿到 `can_close: true, failed: []`，而同一次运行外部带 `sid=real11` 的读数报 `failed: ['user_pending']` ——工具体此前按 
     `sid=None` 走到了缺省会话文件 `sessions/<今天>.jsonl`，而那一趟的提问落在 `sessions/real11.jsonl`。没注入时按 `closing.NO_SESSION` 传下去 ⇒ 那一格记 
     `unknown`（不是 pass，也不是"读今天那份"——三态纪律）。
-    收工那一步也要看得见内容级验收（所有者 2026-10-07 裁定「题 13 选 B」）决定收工的人是主控，而"能不能交"有两层问法：收工门的七格问结构与凭据，`reviewaccept` 问同一份交付的内容层（定理台账有没有假设与出处、三态分
-    支、成本上限、每跳的输入可读、附件诚实）。第二层此前只有 CLI 出口（`agentflow closing`）能看见，运行内的主控看不见 —— 于是它做收工决定时手里只有七格。
+    收工那一步也要看得见内容级验收（所有者 2026-10-07 裁定「题 13 选 B」）决定收工的人是主控，而"能不能交"有两层问法：收工门的八格问结构与凭据，`reviewaccept` 问同一份交付的内容层（定理台账有没有假设与出处、三态分
+    支、成本上限、每跳的输入可读、附件诚实）。第二层此前只有 CLI 出口（`agentflow closing`）能看见，运行内的主控看不见 —— 于是它做收工决定时手里只有八格。
     为什么与 CLI 出口同形：两个入口读的是同一批入参（`project_dir` /`report_path` / `session_root` / `sid` / 成本上限），就该给出同一栏读数 ——判据名、判据顺序、辅助读数的标签与那句禁令
     全部现取自 `reviewaccept`（`CRITERIA` / `AUXILIARY_SIGNALS` / `to_dict`），本文件不抄第二份。
     `cap_usd` 不给时成本那一格是「没查成」而不是「通过」（与 CLI 那边的缺省一致）。
-    收工由 M 判（业主 2026-10-09）「是否收工不要用机械判据，由 M 制定的目标是否达成为准」⇒ 本工具新增`goal` / `goal_met` / `basis` 三个入参：`m_says_done` 是 M 的判据，机器那七格退成读数
-    （`status` / `machine_pass`），两者不一致时 `overrode` 逐格点名。 M 不给 `goal_met` ⇒ `m_says_done=false` + 「没人判过」的读数（不是「可以交」）。内容级验收（`review_acceptance`）
+    收工门是一份权威结论（2026-11-19 追认，推翻 2026-10-09 的"两条轴"）：
+    `goal` / `goal_met` / `basis` / `task_list` 是 M 交给那一份结论的一格，不是它的替身；
+    结论 = 八格全 pass ∧ `m_says_done` ∧ `retire.complete` ∧ `programs_ok` ∧ 没有 blocker，
+    由 `closing_verdict` 一处算、`can_close` / `machine_pass` / 退出码全从它派生。
+    M 不给 `goal_met` ⇒ 整份结论 unknown（不是「可以交」）。内容级验收（`review_acceptance`）
     照旧只是读数 —— 它从不参与 `can_close`，这一条从裁定题 13 起就没变过。
     判据由 M 在运行内给，而门还有运行外的出口（`agentflow closing` / 发布门）：两处必须得出同一个结论（`draft/37` §63 记过一次"运行内 `can_close=true`、外部 `failed=[...]`"的
     假绿）。所以 M 给判据的那一次调用把它落到`out/review/m-verdicts.jsonl`（append-only，取最后一行）—— 运行外那一趟没有显式入参时读它。门本身仍然只读：`check_closing` 不写任何东西，写这
@@ -1498,8 +1505,9 @@ def conductor_closing(store, session=None, project_dir: str = "", report_path: s
     acc = RX.check_review(store, project_dir=project_dir, report_path=report_path,
                           session_root=session_root, cost_cap_usd=cap_usd, sid=sid)
     ra = acc.to_dict()
-    # 2026-11-03（153-U-01/U-02）：能不能交看 `rep.closable`（机器口径给了就听它，没接线就
-    # 退回 M 的判据 ∧ 机器七格）；`can_close` 本身是三态（None = 没接线，不许读成通过）。
+    # 2026-11-03（153-U-01/U-02）起"能不能交"看 `rep.closable`；2026-11-19 之后它读的是
+    # `closing_verdict` 那一份唯一结论（不再退回任何一条单轴）；`can_close`
+    # 本身仍是三态（None = 没查成，不许读成通过）。
     kind = "" if rep.closable else ("closing_unknown" if CL.tri_state_exit_code(rep) == 2
                                     else "closing_blocked")
     return ok({
@@ -3387,7 +3395,14 @@ def conductor_guide(_conductor: Any, store: Any, *, to: str, text: str) -> ToolR
     # 带缝的那一支（`for_role_wired`）：转发本身不需要模型，但"这一位秘书将来要判东西"
     # 时，裸 `for_role(...)` 结构上判不了 —— 与 `agent_b` / `table_tools` 同一条口径。
     sender_secretary = SEC.for_role_wired(sender_role, root=root, store=store_now, sid=_sid)
-    sender_secretary.task_id = sender
+    # 绑到"发起这次调用的代理自己的号"（`sender` = `current_task_id()`）：走 `bind_task`，
+    # 不是裸写 `task_id`。差别就在 `bind_task` 的第二半 —— 存活标记
+    # （`out/secretary/<role>-<task>.jsonl.alive`，`secretary_alive` 读它）。
+    # 改前这一行是裸赋值：分片照样生效（`decisions_path` 只读 `task_id`），但标记一个
+    # 字节都没落 ⇒ `secretary_alive()` 把"绑过、只是没标记"读成"没绑过实例"
+    # （三态纪律里最忌的那种折平：一个假事实）。判据
+    # `tests/test_secretary_task_id_has_one_write_point.py`。
+    sender_secretary.bind_task(sender)
     receipt = sender_secretary.relay_out(
         chain=list(resolved.get("chain") or ()), body=body,
         subject="", sender_role=sender_role)

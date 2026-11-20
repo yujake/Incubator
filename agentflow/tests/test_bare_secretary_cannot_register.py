@@ -73,7 +73,8 @@ _EXEMPT: dict[tuple[str, str], str] = {
         "`for_role_wired`）。",
     ("secretary.py", "Secretary._peer_secretary"):
         "只给转发链的下一跳造一名秘书，由 `relay_out` / `relay_in` 写一条 `relay_hop` "
-        "记录；不碰 `statements`、不判命题（它连 `bind_task` 都不调，见方法 docstring）。",
+        "记录；不碰 `statements`、不判命题（它只按 '代表别人' 那一档调 "
+        "`bind_task(task_id, mark_alive=False)`：只分片、不写存活标记，见方法 docstring）。",
     ("secretary.py", "selftest"):
         "模块自检探针：只在 `python -m agentflow.secretary` 那一支里造两名临时秘书，"
         "验台账分片 / 存活读数，不判命题。",
@@ -83,9 +84,15 @@ _EXEMPT: dict[tuple[str, str], str] = {
     ("statusreport.py", "collect"):
         "只取 `child_counts()`（名册两个读数），口径只有 `Secretary.child_counts` 一处；"
         "从不调 `adjudicate_proposition`。",
-    ("webui/readers.py", "_closing_block"):
+    ("webui/readers.py", "_closing_runtime"):
         "只取 `child_counts()`（收工区块显示『名下还有几个未收尾的子项』），与 "
-        "`statusreport.py` 同形。",
+        "`statusreport.py` 同形。2026-11-20 对表（FN200 拆分）：`_closing_block` 已被拆成 "
+        "`_closing_gates` / `_closing_machine` / `_closing_sessions` / `_closing_last_at` / "
+        "`_closing_cost` / `_closing_runtime` / `_closing_content`（拆分后 `_closing_block` "
+        "只剩装配，逐块调上面这几个），而那句裸构造跟着它唯一做的事（`child_counts()`）"
+        "整体搬进了 `_closing_runtime` —— 豁免语义没有拆散（仍是一处只读名册的裸构造），"
+        "所以仍是一条登记，只把键换到新单元名下；旧键 `_closing_block` 今天已不含任何"
+        "构造点，继续挂着就是一条永不生效的豁免。",
 }
 
 

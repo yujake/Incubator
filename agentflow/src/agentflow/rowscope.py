@@ -51,7 +51,6 @@ from . import schema as _S
 #: 两张归属两格的字段名（唯一定义处）。
 OWNER_TASK = "owner_task"
 OWNER_INSTANCE = "owner_instance"
-OWNER_FIELDS: tuple[str, str] = (OWNER_TASK, OWNER_INSTANCE)
 
 #: 有行级归属的表 → 「哪几个角色会产出这张表的行」。
 #:

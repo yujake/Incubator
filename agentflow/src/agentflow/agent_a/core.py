@@ -193,7 +193,7 @@ class _Core:
                 skipped_reason=reason,
             )
     @staticmethod
-    def _query_description(topic: str, description: str) -> str:
+    def _query_description(description: str) -> str:
         """挑"能进查询串的那一份 description"：只留英文关键词，非 ASCII 的部分丢掉。
 
         真机读数：G 写了一段中文 description，`precise` 把它拼进查询串 ⇒ OpenAlex 0 条；
@@ -307,7 +307,7 @@ class _Core:
         limit = int(self.limits.get(mode, 10))
         # 查询串里只用"含 ASCII 关键词"的那一份描述（理由见 `_query_description`）。
         # 请求行上的 `content_description` 一字不动 —— 那是审计留痕，不是查询串。
-        query_desc = self._query_description(req.get("topic") or "", req.get("content_description") or "")
+        query_desc = self._query_description(req.get("content_description") or "")
         named = [str(x) for x in (req.get("providers") or [])]
         # 角色级接线名只点一次：点名分支里"可用名单"与返回值里的 role_providers
         # 读的是同一份名单（改前按 missing 条数各算一遍）。

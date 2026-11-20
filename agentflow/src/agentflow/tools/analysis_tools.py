@@ -89,7 +89,7 @@ def _persist_analysis_report(
 @tool(
     "analysis.register_report",
     (
-        "把**你自己产出的**分析登记进 `analysis_reports`（kind 取 `hottest|paths|cold|gaps`）—— 只读角色唯一写入口，不登记=没发生。"
+        "把**你自己产出的**分析登记进 `analysis_reports`（`kind` 取参数里那张受控词表，别抄旧名单）—— 只读角色唯一写入口，不登记=没发生。"
     ),
     {
         "type": "object",
@@ -99,7 +99,8 @@ def _persist_analysis_report(
                 "enum": list(REPORT_KINDS),
                 "description": (f"报告档位（受控词表 {list(REPORT_KINDS)}）："
                                 "hottest=最热门概念、paths=两概念间的链条/图读数、"
-                                "cold=冷门概念、gaps=候选研究缺口"),
+                                "cold=冷门概念、gaps=候选研究缺口、"
+                                "proof_chain=证明链的路径分析（依赖边走到哪、哪一条承重）"),
             },
             "summary": {"type": "string", "minLength": 1,
                         "description": "一句话结论（D 的第一入口就是它；不许写成「见正文」）"},

@@ -97,10 +97,12 @@ class ToolSpec:
 > `A`–`H` 八个 + `M` + `V`。**本文不再手抄这张名单** —— 现算
 > `python -m agentflow.cli tools --role <X>`（`docs/ROLE-SPECS.md` §0.3 是同一口径）。
 >
-> ⚠️ **本表已不完整（本机实测）**：它只列了写作时那一批。今天工具层是
-> **13 个已装模块 / 79 个工具**（观测 2026-10-13（`paper_package` 整条退场后复算）；
-> 复算 `$env:PYTHONPATH='src'; python -m agentflow.cli tools` 的第一行
-> `工具总数：79（已装模块 13：…）`），另有 `conjecture.register_conjecture` 一条不在 `build_registry` 里。
+> ⚠️ **本表已不完整（本机实测）**：它只列了写作时那一批。**观测当时**（2026-10-13，
+> `paper_package` 整条退场后复算）工具层是 13 个已装模块 / 79 个工具；**这两个数是读数不是规格**，
+> 今天的值现算 `$env:PYTHONPATH='src'; python -m agentflow.cli tools` 的第一行。
+> 另：**`conjecture.register_conjecture` 已于 2026-11-13 撤除**（业主裁定「猜想台账的唯一写点在
+> 产出侧」：`D` 没有这个动作，也从不直写 `conjectures`）—— 本段旧文把它列成"一条不在
+> `build_registry` 里的工具"是那条裁定之前的写法。
 > 逐模块条数与路径（复跑：`python -m agentflow.cli tools`；实测 2026-09-30）：
 >
 > | 模块（相对工作区根） | 工具前缀 | 条数 |
@@ -117,9 +119,9 @@ class ToolSpec:
 > | `agentflow/src/agentflow/tools/doc_tools.py` | `doc.*` | 10 |
 > | `agentflow/src/agentflow/tools/review_tools.py` | `review.*` | 2 |
 > | `agentflow/src/agentflow/tools/conductor_tools.py` | `conductor.*`（M 专用） | 9 |
-> | `agentflow/src/agentflow/tools/conjecture_tools.py` | `conjecture.register_conjecture`（**不在** `build_registry`，由 `agentflow/src/agentflow/agent_d.py::install_d_tools` 另挂） | 1 |
 >
-> 逐角色条数（同一条命令的另一半输出）：
+> 逐角色条数（同一条命令的另一半输出；**当时只有 9 个角色**，今天的 11 个角色与逐角色条数一律现算
+> `python -m agentflow.cli tools`，不抄在这里）：
 > `A 23 / B 18 / C 19 / D 37 / E 21 / F 32 / G 37 / H 25 / M 9`。
 
 **注意 `graph.*` 与 `trace.*` 的第一根轴都是 `read`（纯读），第二根轴都是 `none`** —— C 的核心诉求是"用程序分析"，
@@ -134,8 +136,8 @@ class ToolSpec:
 
 在 `DESIGN.md` §1 的四张表之外新增两张（同样 4 位 ID、同样受 `Store.tx` 保护）：
 `research_questions` 与 `analysis_reports` —— 两张今天都在
-`agentflow/src/agentflow/schema.py::TABLES` 里（实测：正式版共 **16** 张表，
-复跑 `python -c "import sys;sys.path.insert(0,'agentflow/src');import agentflow.schema as s;print(len(s.TABLES))"`）。
+`agentflow/src/agentflow/schema.py::TABLES` 里（表数以当次现算为准，不抄在这里：
+`python -c "import sys;sys.path.insert(0,'agentflow/src');import agentflow.schema as s;print(len(s.TABLES))"`）。
 
 ### 2.1 `data/research_questions.json`（D 的工作台）
 
@@ -381,32 +383,35 @@ test/test1/src/abflow/
 └── pipeline.py              A→B→C→D 编排
 ```
 
-正式版（下面每条都是本次实测存在的文件；相对工作区根）：
+正式版（**以下是 2026-09 的历史快照**，不是今天的盘点）：
 
 ```
 agentflow/src/agentflow/
 ├── tools/
 │   ├── __init__.py          装配点：build_registry / build_for_role / ROLES / READ_ONLY_ROLES
 │   ├── base.py              ToolSpec / ToolResult / ToolRegistry / 参数校验（禁改区）
-│   ├── table_tools.py       表 CRUD（8 条）
-│   ├── fs_tools.py          文件 CRUD（7 条，沙箱在工作区内）
-│   ├── search_tools.py      A：检索 / 下载 / 去重检查 / 本地书架（8 条）
-│   ├── ocr_tools.py         B：OCR（3 条，后端可插拔）
-│   ├── graph_tools.py       C/D：图索引与查询（4 条）
-│   ├── trace_tools.py       C/D：代号溯源（4 条）
-│   ├── research_tools.py    D：问题与缺口（5 条）
-│   ├── verify_tools.py      E：数值实验与形式化验证（6 条）
-│   ├── attack_tools.py      F：多轮难题攻坚（6 条）
-│   ├── doc_tools.py         G：稿件与论文（6 条）
-│   ├── review_tools.py      H：审校（2 条）
-│   ├── conductor_tools.py   M：主控动作（9 条）
-│   └── conjecture_tools.py  猜想台账（1 条，不在 build_registry 里）
-├── agent_c.py               关系分析
-├── agent_d.py               研究循环（含 install_d_tools）
-├── agent_e.py … agent_h.py  E/F/G/H
+│   ├── table_tools.py       表 CRUD
+│   ├── fs_tools.py          文件 CRUD（沙箱在工作区内）
+│   ├── search_tools.py      A：检索 / 下载 / 去重检查 / 本地书架
+│   ├── ocr_tools.py         B：OCR（后端可插拔）
+│   ├── graph_tools.py       C/D：图索引与查询
+│   ├── trace_tools.py       C/D：代号溯源
+│   ├── research_tools.py    D：问题与缺口
+│   ├── verify_tools.py      E：数值实验（形式化入口现归 L，见下）
+│   ├── attack_tools.py      F：多轮难题攻坚
+│   ├── doc_tools.py         G：稿件与论文
+│   ├── review_tools.py      H：审校
+│   ├── conductor_tools.py   M：主控动作
+│   └── formal_tools.py      L：形式化（2026-10-22 新设，只在 Lean 开关打开时装配）
+├── agent_a/ … agent_h/ · agent_l/ · agent_v/   角色包（一个动作一个文件 + core.py；今天没有顶层 agent_*.py）
+├── specs/                   逐角色声明（ACTIONS / SPEC）—— capabilities 四张表的真身（M3 起）
 ├── conductor.py             主控编队：Conductor / LocalBackend / SubagentBackend
 └── pipeline.py              A→B→C→D 编排
 ```
+
+> 目录现值以 `DEVELOPMENT-SPEC.md` §4.1 为准。两点在这个旧树里是**已废案**：
+> ① `conjecture_tools.py` 不存在（2026-11-13 随「猜想唯一写点在产出侧」撤除）；
+> ② 顶层 `agent_c.py` / `agent_d.py` / `agent_e.py …` 已拆成 `agent_<角色>/` 包。
 
 - C 的报告与 D 的研究报告落在**项目工作区**里（`agentflow/src/agentflow/projects.py` 的"一个项目一个文件夹"），
   而不是仓库内的 `reports/`。

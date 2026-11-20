@@ -409,13 +409,10 @@ ADJUDICATION_CODES = (
     "new_conflict",  # 原有那条已解决/未决，但冒出了涉及同一条关系的新矛盾
 )
 
-#: 策略层的理由码（由调用方 D 产出，不由本模块产出）。
-#: 单列出来，是为了让"本词表里没有它"成为一个显式事实，而不是一个疏漏。
-ADJUDICATION_POLICY_CODES = (
-    "weak_only_signal",  # 只剩 weak 线索 ⇒ 判 persistent，不再追问
-    "inflight_limit",  # I7 在途配额挡住了追问
-    "quota_exhausted",  # 全局矛盾请求配额用尽
-)
+#: 策略层的理由码由调用方 D 产出（不在本词表里，见上面三条）。本模块不另立一份：
+#: 一份没有生产者的副本曾把第三条写成另一个码，而 D 真正产出的是 `budget_exhausted`
+#: —— 两个码各说各话（该副本零调用，已删；判据
+#: `tests/test_sysclean_design_side_is_current.py::test_the_policy_codes_match_their_producer`）。
 
 
 def adjudicate_contradiction(

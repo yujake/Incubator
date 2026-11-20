@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""形式化困难的受控汇报形态：L 向 B 汇报（`L → B`）与 B 向 D 升级（`B → D`）。
+"""形式化困难的受控汇报形态：L 向 B 汇报（`L → B`）。
 
 ## 这个模块为什么存在（业主的协作面裁定）
 
@@ -7,15 +7,25 @@ L 的协作面特别简单：只有 B 可以派 L，L 允许派 C 来梳理证�
 可向 B 汇报形式化过程中遇到的困难、要求 B 完善证明并重新得到 V 签；若缺陷严重，
 B 应通知 D 开展研究处理证明难点。
 
-裁定里的两句话是"递送"，它们必须有落点（板项或消息），不许只写日志。两边的落点
-都是既有的 `agent_message` 收件箱（`agent_loop.send_message` 写、`read_messages` 读），
+裁定里属于「递送」的那一句是"L 向 B 汇报"，它必须有落点（板项或消息），不许只写日志：
+落点是既有的 `agent_message` 收件箱（`agent_loop.send_message` 写、`read_messages` 读），
 本模块只负责把"这一条汇报说的是什么"压成一个受控形态：
 
 - 失败类型是受控词表 :data:`FAILURE_TYPES` 的四个取值之一 —— 自由文本没法被下游
   按类分派，而"漏了一步"与"命题本身不对"该做的事完全不同；
 - 严重度 :data:`SEVERITIES` 只有两档：`normal`（B 改证明就够）与 `research`
   （路线本身可能不成立 ⇒ B 要通知 D 开展研究）。两档的分界是"B 判断"，本模块
-  不替 B 判，但它把这一格钉成受控值，于是"没有 severity"与"severity 普通"分得开。
+  不替 B 判，也不替 B 递送 —— 它只把这一个读数原样交给 B（`severity_for`），
+  B 读到它之后按 `specs/b.py` 的 `PROOF_CHANNEL` 第⑥步处置：走 `summon` 形状派 D。
+
+## 为什么 B→D 那一跳不在这里（2026-11-20，PROOFCHAN）
+
+改前这里还有一份 `B → D` 的"研究请求"形态（`RESEARCH_SUBJECT` / `research_subject` /
+`research_body`），配一个 `AgentB.escalate_proof_research` 程序入口。那个入口
+src 里 0 个调用方、模型侧也调不到（它不在 `specs/b.py` 的 `ACTIONS` 里 ⇒ 召唤它会拿到
+`unknown_action`），只有测试在调；而模型侧真正的路早在 2026-11-05（审计② 第 ⑪ 条）
+就改锚到 `summon` 形状了。两边分家的那一条已经退场（同一批判据：
+`tests/test_proofchan_upgrade_is_the_summon_path.py`）。所以本模块只剩 L→B 一跳。
 
 ## 为什么"失败类型 → 建议补什么"也在这里
 
@@ -56,7 +66,8 @@ FAILURE_TYPES: tuple[str, ...] = (
     "statement_mismatch",
 )
 
-#: 严重度两档（`research` 才会打扰 D）。
+#: 严重度两档（L 的建议读数：`research` = 路线可能不成立 ⇒ B 该派 D；`normal` = 补一块就够）。
+#: 它不是闸：`research` 也只是把读数交给 B，由 B 自己判（见 `severity_for`）。
 SEVERITIES: tuple[str, ...] = ("normal", "research")
 
 #: 每一档"建议 B 补什么"（`{step}` 会被换成受影响的步号；B 照着它动手）。
@@ -77,9 +88,6 @@ SUGGESTIONS: dict[str, str] = {
 
 #: 汇报的标题前缀（机器可识别的那一位：判据与审计按它捞）。
 REPORT_SUBJECT = "形式化困难上报"
-
-#: 研究请求的标题前缀（B → D）。
-RESEARCH_SUBJECT = "研究请求"
 
 #: 一条汇报的键集合（每条分支上都必须有这几格 —— 缺一格下游就读不到那一件事）。
 REPORT_KEYS: tuple[str, ...] = (
@@ -116,7 +124,7 @@ def payload(*, statement_id: str, failure_type: str, step: Any = 0,
             statement_label: str = "", suggestion: str = "",
             severity: str = "normal", detail: str = "",
             proof_chars: Any = 0, dependency_steps: Any = 0) -> dict[str, Any]:
-    """一条汇报/研究请求的结构化正文（键集合固定 = :data:`REPORT_KEYS`）。"""
+    """一条汇报的结构化正文（键集合固定 = :data:`REPORT_KEYS`）。"""
     step_no = _int(step)
     kind = str(failure_type or "")
     return {
@@ -187,11 +195,15 @@ def issues(*, reason: str = "", coverage: Mapping[str, Any] | None = None,
 
 
 def severity_for(failure_type: str) -> str:
-    """L 对这一档的严重度建议（B 仍然自己判：`escalate_proof_research` 收的是 B 给的 severity）。
+    """L 对这一档的严重度建议（B 仍然自己判：这一格只是读数，不是闸）。
 
     口径：`statement_mismatch` 意味着"要形式化的那一条与台账对不上" —— 那有可能是
     这条证明的路线本身不成立（业主给的例子），所以 L 建议 `research`；其余三档
     都是"证明里缺一块"，B 补上就该够。
+
+    B 读到这一格之后按 `specs/b.py` 的 `PROOF_CHANNEL` 第⑥步处置：路线本身不成立的，
+    走 `summon` 形状派 D 开展研究；普通缺陷不派 D。本模块只把读数交过去，不替 B 递送
+    —— 改前那个替 B 递送的程序入口已经退场（见模块 docstring）。
     """
     return "research" if str(failure_type or "") == "statement_mismatch" else "normal"
 
@@ -215,26 +227,6 @@ def report_body(item: Mapping[str, Any]) -> str:
         f"L 建议的严重度 {item.get('severity')}",
         f"现象：{item.get('detail')}",
         "L 这一趟的结论是 unknown（不是「命题不成立」）：证明链路接不上，需要 B 完善后再过 V 的签。",
-    ])
-
-
-def research_subject(item: Mapping[str, Any]) -> str:
-    """B → D 的标题（`研究请求` 是机器可识别的那一位）。"""
-    return (f"{RESEARCH_SUBJECT}（{item.get('failure_type')}）："
-            f"{item.get('statement_id')} 的证明难点")
-
-
-def research_body(item: Mapping[str, Any]) -> str:
-    """B → D 的正文：把 L 的汇报原样带过去，并写清要 D 做什么。"""
-    label = str(item.get("statement_label") or "").strip()
-    return "\n".join([
-        f"命题：{item.get('statement_id')}" + (f"（{label}）" if label else ""),
-        f"难点类型：{item.get('failure_type')}",
-        f"卡在哪一步：第 {item.get('step')} 步" if _int(item.get("step")) > 0 else "卡在哪一步：整条路线",
-        f"形式化给的读数：{item.get('detail')}",
-        f"L 的建议（B 原样转达）：{item.get('suggestion')}",
-        "B 的判断：这一条的缺陷在证明路线本身（不是补一块就够）⇒ 请 D 开展研究处理这个证明难点；"
-        "研究有结论后按 B 的登记路径重交证明，再过 V 的签。",
     ])
 
 
@@ -280,7 +272,7 @@ def session_identity(*, session_root: Any = "", sid: Any = "",
 def deliver(*, sender: str, to: str, item: Mapping[str, Any], subject: str, body: str,
             extra_key: str, session_root: Any = "", sid: Any = "",
             fallback_root: Any = "") -> dict[str, Any]:
-    """把一条汇报/研究请求投进对方的收件箱（`agent_loop.send_message` 是唯一落点）。
+    """把一条汇报投进对方的收件箱（`agent_loop.send_message` 是唯一落点）。
 
     返回的 `state` 三档（见模块 docstring）。投递前先过协作边那一道准入
     （`agent_loop.message_admission` 是唯一实现）：边不在就 `refused/no_collab_edge`，
@@ -322,7 +314,6 @@ __all__ = [
     "FAILURE_TYPES",
     "REPORT_KEYS",
     "REPORT_SUBJECT",
-    "RESEARCH_SUBJECT",
     "SEVERITIES",
     "SUGGESTIONS",
     "deliver",
@@ -330,8 +321,6 @@ __all__ = [
     "payload",
     "report_body",
     "report_subject",
-    "research_body",
-    "research_subject",
     "session_identity",
     "severity_for",
     "suggestion_for",

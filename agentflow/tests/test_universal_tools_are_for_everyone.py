@@ -461,3 +461,71 @@ def test_f_post_task_is_a_universal_tool_so_the_declaration_matches_the_surface(
             assert role in flat, (
                 f"撤掉之后判据没有点名 {role}（它正是被剥掉的那一档）：{drift2}")
 
+
+# ================================================ g) 装配期就跑一次（A5-c，2026-11-20）
+#
+# 改前：`universal_tool_violations` 是 `__all__` 导出的纯函数、只有 `tests/` 读它；
+# `build_registry()` 不调用 ⇒ "装配出来的树上这件通用工具到底写不写知识表"只有跑测试时
+# 才知道，而测试不是装配期的事实。现在装配期跑一次，违规即报（`strict` 直接抛，
+# 非严格档记进 `skipped` 里，与其他装配期判据同一处置口径）。
+
+
+def _assembly_universal_problems(tmp_path) -> list[str]:
+    """在一份真的装配上跑一次：只收"通用工具写集"那一栏的报错原文。
+
+    不调用任何工具（零调用）：违规是在 `build_registry` 里被看见的，不是某次 `call()`
+    的副作用 —— 这正是"接进装配期"与"接进某个调用点"的区别。
+    被测的通用集合由调用方 monkeypatch `T.UNIVERSAL_TOOLS` 决定。
+    """
+    T = _tools()
+    root = tmp_path / "ws"
+    root.mkdir(parents=True, exist_ok=True)
+    store = Store(root)
+    store.init()
+    build = T.build_registry(store=store, workspace_root=root, strict=False)
+    return [row["error"] for row in build.skipped
+            if row["module"] == "<universal-write-sets>"]
+
+
+def _violating_table():
+    """一件"登记写知识表"的通用工具，套在一个真的在树上的名字上。"""
+    T = _tools()
+    return {"conductor.post_task": T.UniversalTool(
+        "判据探针：登记写 statements（只为证明装配期会报）", frozenset({"statements"}))}
+
+
+def test_g_assembly_reports_a_universal_tool_that_declares_knowledge_tables(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """造一个违规注册表 ⇒ `build_registry` 当场报（零调用），严格档直接抛。"""
+    T = _tools()
+    monkeypatch.setattr(T, "UNIVERSAL_TOOLS", _violating_table(), raising=True)
+
+    problems = _assembly_universal_problems(tmp_path)
+    assert len(problems) == 1, f"装配期没有（或重复）报出这个违规：{problems}"
+    assert "conductor.post_task" in problems[0], problems
+    assert "statements" in problems[0] and "知识表" in problems[0], problems
+
+    # 严格档：装配期判据与 `roles` / 参数接缝那两条同一处置 —— 直接抛，不留下半份面。
+    root = tmp_path / "ws-strict"
+    root.mkdir(parents=True, exist_ok=True)
+    store = Store(root)
+    store.init()
+    with pytest.raises(T.ToolError, match="通用工具"):
+        T.build_registry(store=store, workspace_root=root, strict=True)
+
+
+def test_g2_stubbing_the_assembly_judgement_off_turns_the_criterion_red(
+        tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """反真空：把 `universal_tool_violations` 打桩成"永远不违规" ⇒ 上面那条判据必红。
+
+    判据本体是那句 `assert problems`：打桩之后同一份装配不再报任何东西，
+    于是"装配期真的在看"这句话才不是空的（没有这一条，g 的绿只证明"有个列表是空的"）。
+    """
+    T = _tools()
+    monkeypatch.setattr(T, "UNIVERSAL_TOOLS", _violating_table(), raising=True)
+    monkeypatch.setattr(T, "universal_tool_violations", lambda *a, **k: {}, raising=True)
+
+    with pytest.raises(AssertionError, match="装配期没有"):
+        assert _assembly_universal_problems(tmp_path), (
+            "装配期没有报出这个违规")
+

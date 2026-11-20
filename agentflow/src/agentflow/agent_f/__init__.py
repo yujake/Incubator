@@ -6,11 +6,14 @@
 
 1. 终止条件是预算，不是"看起来差不多了"（FC-18）：`rounds` 的上界由
    `budget.max_rounds` 硬性给出，用尽即 `stalled`（不是失败，也不是成功）。
-2. `step` 按子目标的 `owner` 分派，而"分派"必须落在真的被接线的动作上：`E` ⇒
-   `AgentE.run_experiment`（带 `script_path` 时）；`A` / `B` ⇒ 各自的准入闸门 + 写请求
-   行；`C`/`D`/`F` ⇒ 没有自动推理可调，记 `outcome="no_change"`。最后一行是刻意的：
-   本框架尚未接线自动推理，所以 F 只能如实写"未推进"；把它写成
-   `outcome="progress"` + 空证据是静默失败的典型形态。
+2. `step` 按子目标的 `owner` 分派，每一档都有落点：`E` ⇒ `AgentE.run_experiment`
+   （带 `script_path` 时）；`A` / `B` ⇒ 各自的准入闸门 + 写请求行；`F` ⇒ 它自己的
+   推理（业主 2026-10-26：「这个就是 F 的工作方式，没有开关的说法」⇒ 缝无条件装配；
+   每一轮必须交四件产物之一：reduction / proof / counterexample_request / dead_end，
+   `attackround` 把 `no_change` 当不成形打回）；`C` / `D` ⇒ 没有可自动调用的推理
+   入口，这是结构事实（不是某个开关没打开）⇒ 这一轮落 `dead_end` 产物、`outcome`
+   记 `no_change`（步级读数，不是产物）。把任何一档写成 `outcome="progress"` +
+   空证据，都是静默失败的典型形态。
 3. 数值支持不能关闭子目标（FC-22）：E 返回 `evidence_kind="cross_check"` 时子目标最多
    标 `supported_not_proved`；`closed` 只认由 V 会审成立的穷举证明
    （`proof_reason=exhaustion`，签名 `signed_by=V`）。形式化不在 E 身上

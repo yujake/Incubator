@@ -27,7 +27,7 @@ if str(SRC) not in sys.path:
 from agentflow import agent_skills as AS  # noqa: E402
 
 #: M 的收工手册与 E 的穷举手册。
-M_SLUG = "收工-门是读数不是判决"
+M_SLUG = "收工-一份权威结论"
 E_SLUG = "穷举证明-拿签与上报收养"
 
 #: 改后必须逐字读到的真路径（M / E 两本都要有）。

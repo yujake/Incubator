@@ -9204,7 +9204,7 @@ class AgentLoop:
             why = (
                 f"还没收工：这是个研究型 / 有门的项目（{gate_req.get('why')}），"
                 "而这一趟**从未成功调用过** `conductor.closing` ⇒ "
-                "「收工门跑没跑、机器那七格说了什么」在盘上没有任何读数。"
+                "「收工门跑没跑、机器那八格说了什么」在盘上没有任何读数。"
                 "M 在 final 里把「跑收工门」列成待办然后交 final，正是真机 "
                 "`projects/lp-ball-2` 的形态（AH2b：全表 0 次调用）。"
                 "处置：现在调 `conductor.closing`（给 `goal_met` 与 `basis`，"

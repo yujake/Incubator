@@ -16,7 +16,6 @@ from ..agentspec import (
     _ARR_S,
     _B,
     _I,
-    _N,
     _OBJ,
     _S,
     ActionSpec,

@@ -2373,19 +2373,23 @@ class _Core:
                       plan: Mapping[str, Any], proof_manuscript: str = "",
                       manuscript_id: str = "",
                       form_reading: Mapping[str, Any] | None = None) -> dict:
-        """把这一轮的 `proof` 交给 B 的登记正路（P3-6 的第一半）。
+        """把这一轮的 `proof` 落成 / 更新 F 自己的手稿登记条目（不是交给 B 登记）。
 
         2026-10-26（D8）：改前这一格在 F 进程里直接开一笔 `statements` 事务，落下来的行
         `created_by=agent-F`、`bits={}`、依赖 0 行、非平凡度台账不存在、定理名还是派活
         工作名。原因是那笔事务的 `note` 是 `f.step:proof:<sid>`（不是 `tool:` 记号），
-        绕过了通用写口那道闸。现在 F 不再持有 `statements` 的写权限：内容与手稿交给
-        `B.register_statement`，五元位、依赖边、非平凡度、洗定理名都在那一笔里完成。
+        绕过了通用写口那道闸。现在 F 不再持有 `statements` 的写权限 —— 但它也不再把
+        「命题 + 证明」交给 B 登记**（改前那个说法在 2026-11-07 裁掉 `F -> B` 直连边之后
+        就不成立了）：这一格收口到 :meth:`_hand_proof`，只调 `proofregistry` 落 F 自己的
+        手稿（`reports/f-proof-<稿号>.md`），`statements` 那一行由 B 在 V 签之后读稿收录
+        （F 只向上走 D，D 携带给 B）。五元位、依赖边、非平凡度、洗定理名都在 B 那一笔里完成。
 
         等级怎么定（2026-10-19 晚改：改前写死 `heuristic`）按 `_proof_tier` 现算：
         「V 那一签在盘上且盖的正是这一版正文 ⇒ `proof_review`；否则 `heuristic`」。
         这不是"自报"：判据读的是 `verifications/<命题号>.jsonl`（V 的账本），F 写不了
-        那里一个字节。新的一行还没有命题号 ⇒ 只能按 `heuristic` 交，V 签完之后再交一次
-        由 B 的同一笔登记升档。
+        那里一个字节。新的一行还没有命题号 ⇒ 这一格按 `heuristic` 交（V 的签如果已经落在
+        `verifications/pending/<正文 sha>.jsonl` 上，`_proof_tier` 会读到它并升档 ——
+        第一阶段不依赖命题已在册）。
 
         幂等：同一条子目标交出逐字相同的论证（真机 mp3 `000001` 的 r1/r3/r4 就是这样），
         不再登记第二行 —— B 的查重会判"已在册"，这一格只如实回报复用。

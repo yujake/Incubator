@@ -42,10 +42,13 @@ DELIVERY_LABELS: dict[str, str] = {
 }
 
 #: 签是从哪一条通道读到的（读数格 `channel` 的取值）。
-CHANNEL_MANUSCRIPT = "manuscript"
+#:
+#: 只有这两个取值：签的来路统一走 `vsigns.sign_reading` 之后，只剩「侧文件（颁发表）」
+#: 与「`verifications/pending/` 那一行」两处。旧的三条路（手稿签块 / 侧文件 / pending
+#: 各认一次）里的 `manuscript` / `ledger` 两档已经没有任何产出点 —— 留着它们会让读
+#: `channel` 的人以为那两条通道还在（判据：`tests/test_roleclean2_c_e_f_g_residue.py` ①）。
 CHANNEL_ON_SHELF = "on_shelf"
 CHANNEL_PENDING = "pending"
-CHANNEL_LEDGER = "ledger"
 
 
 def _empty(state: str = STATE_UNKNOWN, why: str = "") -> dict[str, Any]:

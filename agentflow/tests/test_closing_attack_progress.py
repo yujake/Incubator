@@ -119,18 +119,26 @@ def test_the_dead_plan_alone_reads_zero_and_says_why(store: Store):
     assert detail["total_plans"] == 1
     assert detail["advanced_plans"] == []
     gone = detail["plans"][0]
-    assert gone["history_len"] == 2 and gone["no_progress_rounds"] == 2, gone
+    assert gone["history_len"] == 2 and gone["unadvanced_rounds"] == 2, gone
+    # 语义修正（P6FIX）：`unadvanced_rounds` 与 `no_change_rounds` 是两个数。
+    assert gone["no_change_rounds"] == 2, gone
+    # 逐轮 why 必须在 `plans[]` 里就读得到（不再只在 `advanced_plans` 里外露）。
+    assert [g["round"] for g in gone["not_advanced_rounds"]] == [1, 2], gone
 
 
 def test_the_old_criterion_would_make_the_two_plans_equal(store: Store, monkeypatch):
-    """负控（证明修好前会红）：口径换回"`history` 非空即算" ⇒ 两份计划读数相等。"""
+    """负控（证明修好前会红）：口径换回"`history` 非空即算" ⇒ 两份计划读数相等。
+
+    P6FIX2 起判据本体是 `_round_advanced_by`（`(算不算, 档名, 为什么)`）；这里把它
+    换成旧口径 —— 打桩点必须与生产口径是同一个函数，否则这条负控测的是空气。
+    """
     _plan(store, "000000", [_dead_round(1), _dead_round(2)])
     _plan(store, "000001", [_proof_round(1)])
 
-    def old(rec):
-        return (bool(rec), "旧口径：history 里有记录就算")
+    def old(rec, **_kw):
+        return (bool(rec), "round", "旧口径：history 里有记录就算")
 
-    monkeypatch.setattr(CL, "_round_advanced", old)
+    monkeypatch.setattr(CL, "_round_advanced_by", old)
     got_old, detail_old = _got(store)
     assert got_old == 2, detail_old           # 改前：两份都算"推进过"（= 台账里有几份就数几份）
     by_id = {p["id"]: p for p in detail_old["plans"]}

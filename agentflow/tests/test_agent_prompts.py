@@ -2687,7 +2687,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
 #   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
 #   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
-_FROZEN_PROMPT_VERSION = "p299"
+_FROZEN_PROMPT_VERSION = "p301"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2956,17 +2956,17 @@ _FROZEN_PROMPT_VERSION = "p299"
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
-    "A": "34047f10032c8180865468aa7b3e87ee8888fe978733f2601bce31e5ed7e5f29",
-    "B": "46ff85a47a26cbc6ccb8a8156d94523363e9f07f0077dd9c6aa963fb3571ff8f",
-    "C": "5edce17709665a2cedd49f8f15c3dc3e40b61d79803bf6fa2be164d383fca7b8",
-    "D": "5c8620831cd6a4beb05546f6c44130c82530bf56c674693fa638981f0c3c8e33",
-    "E": "f1dbf3651733508c11a9e1f932ef30cdec5242028da40760f6103175e26f9274",
-    "F": "8cc8874360d832eb143caadd89663e8ea34b2081f90aae637a13aff9b59258c4",
-    "G": "46333999e030602bd2264e6d3007f1359aefc1f8dcd8d1868e830855344f701a",
-    "H": "ba8c5a25eff0f8d8a3eda962d352c2886361beb82bda38b864fafcef13747f48",
-    "L": "f1bca10c393724aeee2e5df956b14d839723b37a10a7dfa34da9b87d472ad388",
-    "M": "2ce5f4920c379a68c850d845d3d48b7508431834223ef131592e817214349eca",
-    "V": "b310667d411639045a9db2f3064715864e28d9ece3e8b3b1a606913a0f47d2a2",
+    "A": "6963db9ce3f898e160ab1062de61669b5ac2982f94fe861811ed9d832de9b6de",
+    "B": "7b2cbd802b39f547e7d3c1ba343fb04c2c25a23b83abddd7f2db3814ed5e504f",
+    "C": "8714395d743d47cf5b20d9eca674e83b230286307b59421244b5840e9f6b3fd4",
+    "D": "b433b897cc36e3c87f2131e4095b885183251a29db895f1bc289f26d7d3606eb",
+    "E": "94e6d38d97695c0e15f40573f88da66f4ccaf4d2ebc35e1142d2653d54bb0d25",
+    "F": "fba23f8a75d1cd10dbecc3ece85dc101dc1461799decf83d9c78b4630c6251f4",
+    "G": "6f502f63be7e4c6db77ac24248441e7c84eed616647e6fef6fc8f4027f216be1",
+    "H": "91a7b32b7bc7da04527cb8ae414650eff45b0382040a891e9695ab2628bb167e",
+    "V": "d931f421d6715cca68fcea6f966062e737ecf04f2a5672d9a78dbe60a948010d",
+    "L": "94288b2ba83f498aea8a6e41b57e384b1e807246030e42cb2dc929c5be899951",
+    "M": "dd78c8d7c7a39f7912582f1cef83331ef0542258b9a49a56e3b3306d1ab76b9d",
 }
 
 

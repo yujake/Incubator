@@ -58,8 +58,9 @@ def test_a_broken_table_makes_exactly_one_cell_unknown(tmp_path: pathlib.Path):
     为什么"其余格照常"要断言：整份塌与"几格 unknown"在 CLI 上都只是一行字，
     只有逐格比较才区分得开 —— 而"整份塌"是这一条要修的那个形态。
     变的那三格正是读 `statements` 的那三格（`contradictions` / `load_bearing` /
-    `substance`）；`user_pending` 这种与那张表无关的格必须逐字不变、且仍是 `pass`
-    （不是"一片 unknown"）。
+    `substance`）；`user_pending` 这种与那张表无关的格必须逐字不变（不是"一片
+    unknown"）。它在这个空工作区上是 `na`（2026-11-20 EMPTYCELL：没有会话记录 ⇒
+    没有可判对象），坏表前后都必须是同一个值。
     """
     ws = _ws(tmp_path)
     before = _status(ws)
@@ -74,7 +75,7 @@ def test_a_broken_table_makes_exactly_one_cell_unknown(tmp_path: pathlib.Path):
     changed = {k for k in rep.status if rep.status[k] != before.get(k)}
     assert changed == {"contradictions", "load_bearing", "substance"}, (
         "只有读 statements 的那三格该变；其余格逐格相同", changed, rep.status, before)
-    assert rep.status["user_pending"] == before["user_pending"] == "pass", rep.status
+    assert rep.status["user_pending"] == before["user_pending"] == "na", rep.status
     # 那几格不许同时留下 blocker：unknown 不折成"被拦住"
     assert not [f for f in rep.blockers if f.check in changed], rep.blockers
 

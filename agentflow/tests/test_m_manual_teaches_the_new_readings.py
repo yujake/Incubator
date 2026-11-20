@@ -31,7 +31,7 @@ from agentflow import capabilities as C
 _EMPHASIS = re.compile(r"[\s*`]+")
 
 #: 手册里「收工」那一条。
-_CLOSING_SLUG = "收工-门是读数不是判决"
+_CLOSING_SLUG = "收工-一份权威结论"
 #: 手册里「研究攻坚链」那一条。
 _CHAIN_SLUG = "研究攻坚链-文献到收录证明"
 

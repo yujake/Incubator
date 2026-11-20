@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import pathlib
 
+from agentflow import cli
 from agentflow import stopctl
 
 
@@ -117,3 +118,101 @@ def test_the_tombstone_is_append_only_across_stops(tmp_path: pathlib.Path) -> No
     assert got["count"] == 2, got
     assert got["last"]["sid"] == "s-2", got
     assert got["last"]["reason"] == "第二次", got
+
+
+# ============================================================ A5-b：接线（2026-11-20）
+#
+# `stop_closure` 改前只有 `tests/` 读它：CLI 与派活判据都没接线，于是"停过"这件事
+# 在用户能看见的地方与"从没停过"同形。下面三条钉住两处接线：派活读数（`dispatch_stop_reading`）
+# 与 `agentflow stop --status`；最后一条反真空把读口打桩掉 ⇒ 判据当场红。
+
+
+def test_the_dispatch_reading_carries_the_tombstone_state(tmp_path: pathlib.Path) -> None:
+    """开关已被消费 ⇒ `state=none`，但 `closure=closed` 且 `why` 点名"停过 N 次（历史）"。"""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    stopctl.request_stop(ws, reason="业主叫停", by="user")
+    stopctl.consume_stop(ws, sid="s-dispatch", remove=True)
+
+    got = stopctl.dispatch_stop_reading(ws)
+    assert got["checked"] is True, got
+    assert got["stopped"] is False, got                  # 当前没有开关 ⇒ 照常派活
+    assert got["state"] == "none", got
+    closure = got["closure"]
+    assert closure["checked"] is True and closure["state"] == "closed", closure
+    assert "停过 1 次" in got["why"], got["why"]
+    assert "停机历史" in got["why"] and "不是当前开关" in got["why"], got["why"]
+
+
+def test_the_dispatch_reading_says_no_history_not_unreadable(tmp_path: pathlib.Path) -> None:
+    """反方向：真没停过 ⇒ `closure=none`，理由逐字说"也没有停机记录"（不是"读不出来"）。"""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    got = stopctl.dispatch_stop_reading(ws)
+    assert got["closure"]["state"] == "none", got
+    assert "也没有停机记录" in got["why"], got["why"]
+
+
+def test_the_dispatch_reading_keeps_unknown_unknown(tmp_path: pathlib.Path) -> None:
+    """墓碑读不出来 ⇒ `closure=unknown`，`why` 说"停机历史没查成，别读成「没停过」"。"""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    path = stopctl.closed_path(ws)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{坏行\n", encoding="utf-8", newline="\n")
+
+    got = stopctl.dispatch_stop_reading(ws)
+    assert got["stopped"] is False, got                  # 历史读不出来不影响"这一趟不拦"
+    assert got["closure"]["state"] == "unknown", got
+    assert "停机历史没查成" in got["why"], got["why"]
+
+
+def _status_text(capsys, root: pathlib.Path) -> str:
+    assert cli.main(["--root", str(root), "stop", "--status"]) == 0
+    return capsys.readouterr().out
+
+
+def _status_problems(out: str, *, state: str, needle: str) -> list[str]:
+    """`--status` 那一行该说什么；返回问题清单（空 = 对）。"""
+    problems: list[str] = []
+    if f"停机历史（墓碑三态）：{state}" not in out:
+        problems.append(f"`stop --status` 没把墓碑状态打成 {state}：{out!r}")
+    if needle not in out:
+        problems.append(f"`stop --status` 的输出里缺 {needle!r}：{out!r}")
+    return problems
+
+
+def test_stop_status_shows_the_tombstone_before_and_after_a_consumed_stop(
+        tmp_path: pathlib.Path, capsys) -> None:
+    """用户能看见的那一处：`agentflow stop --status` 逐态打出墓碑三态。"""
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    problems = _status_problems(_status_text(capsys, ws), state="none", needle="没有停机记录")
+    assert not problems, "\n".join(problems)
+
+    stopctl.request_stop(ws, reason="用户叫停", by="user")
+    stopctl.consume_stop(ws, sid="s-status", remove=True)
+    out = _status_text(capsys, ws)
+    problems = _status_problems(out, state="closed", needle="停过 1 次")
+    assert not problems, "\n".join(problems)
+    assert "s-status" in out and "用户叫停" in out, out
+
+
+def test_anti_vacuum_stubbing_the_closure_reader_off_turns_the_status_red(
+        tmp_path: pathlib.Path, capsys, monkeypatch) -> None:
+    """反真空：把 `stop_closure` 打桩成永远 `none` ⇒ 同一条判据必红。
+
+    证明 `--status` 里那个 `closed` 不是自己算的、也不是白给的：它来自墓碑读口。
+    """
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    stopctl.request_stop(ws, reason="用户叫停", by="user")
+    stopctl.consume_stop(ws, sid="s-anti", remove=True)
+
+    assert not _status_problems(_status_text(capsys, ws), state="closed", needle="停过 1 次")
+
+    monkeypatch.setattr(stopctl, "stop_closure", lambda root: {
+        "checked": True, "state": "none", "count": 0, "last": {},
+        "path": str(stopctl.closed_path(root)), "problems": [], "why": "桩：永远 none"})
+    problems = _status_problems(_status_text(capsys, ws), state="closed", needle="停过 1 次")
+    assert problems, "把墓碑读口打桩成 none 之后 `--status` 仍然报 closed ⇒ 接线是假的"

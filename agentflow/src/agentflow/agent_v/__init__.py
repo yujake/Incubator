@@ -10,8 +10,11 @@ H 是稿件级正式审查（五元位第 5 位），V 是证明级验证（第 
 `tools.READ_ONLY_ROLES` 含 `"V"` ⇒ `ToolRegistry.for_role` 结构性剥掉一切
 `side_effect` 为写的工具；③ 接口 —— 拼审校提示词的
 `verifications.cold_start_prompt` 只收字符串，没有 store / conductor / registry 句柄
-参数。它唯一的产物是 `<工作区>/verifications/<命题号>.jsonl` 里的一行 —— 一个文件，
-不是一张表，所以 `WRITE_SETS["V"]` 是空集。
+参数。V 的产物是工作区里的三处、不是任何数据表：在册审校落
+`verifications/<命题号>.jsonl` 一行；未在册审校先落 `verifications/pending/<正文 sha>.jsonl`
+（B 登记拿到号后按正文 sha 认领）；签的侧文件落 `out/vsigns/<被审正文的 sha>.json`
+（未在册档由 V 颁发，在册档由框架侧签发判定落盘）。手稿签块与五元位第 3 位由收方秘书落，
+不在 V 手上。所以 `WRITE_SETS["V"]` 是空集 —— 空集说的是"不写任何数据表"，不是"没有写盘动作"。
 """
 from __future__ import annotations
 

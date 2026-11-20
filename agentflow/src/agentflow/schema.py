@@ -869,8 +869,12 @@ class Relation:
 
 # ---------------------------------------------------------------- C/D 新增：受控词表
 
-#: C 的分析报告类型。与需求里的四类需求一一对应。
-REPORT_KINDS = ("hottest", "paths", "cold", "gaps")
+#: C 的分析报告类型（`analysis_reports.kind` 的受控词表）。
+#: 前四档是需求里的四类分析、与需求一一对应；第五档 `proof_chain` 是证明链路径分析
+#: （`agent_c/proof_chain.py` 的 `_report("proof_chain", …)`）。2026-11-20 并入：
+#: 改前它产出的 kind 不在本词表里 ⇒ `_report` 的"产出即登记"分支恒不命中，同族分析器
+#: 里唯一一个只活在返回值里的报告（`tests/test_wireup_residue.py` 钉住它今天登记得成）。
+REPORT_KINDS = ("hottest", "paths", "cold", "gaps", "proof_chain")
 
 #: D 的研究问题状态机（DESIGN-TOOLS.md §4.1）：
 #:   open            —— 刚提取出来，尚未评估证据
@@ -898,12 +902,13 @@ CONJECTURE_STATUSES = ("proposed", "needs_evidence", "testing", "supported_not_p
 #: 猜想的形态受控词表（写进 `form`）。
 CONJECTURE_FORMS = ("universal", "existential", "identity", "bound", "structural")
 
-#: 陈述句里出现这些词 ⇒ 它是问题而不是猜想（`Conjecture.validate` 用它拒收）。
+#: 猜想必须是可检验的陈述句：疑问句由下面的 `CONJECTURE_QUESTION_MARKS` +
+#: `CONJECTURE_QUESTION_PATTERNS` 判（唯一入口 `looks_like_a_question()`，
+#: `Conjecture.validate` 与工具层拒信都调它）。
 #:
-#: 按子串匹配会误伤普通陈述句里的 `which`/`what`（定义句 "…in which every edge …"
-#: 会被拒，`somewhat` 含 `what` 也会），于是"猜想的可检验形式"那一步整条落不了库。
-#: 所以按"疑问句形态"判：见 `CONJECTURE_QUESTION_PATTERNS` 与 `looks_like_a_question()`。
-CONJECTURE_QUESTION_WORDS = ("谁", "什么", "是否", "吗", "？", "?", "which", "what", "whether")
+#: 旧做法是"出现 谁 / 什么 / which / what 这些词就算问题"。按子串匹配会误伤普通陈述句
+#: 里的 `which`/`what`（定义句 "…in which every edge …" 会被拒，`somewhat` 含 `what` 也会），
+#: 于是"猜想的可检验形式"那一步整条落不了库 —— 那张词表因此退役（零调用，已删）。
 
 #: 疑问句的字面标记（出现在任何位置都算 —— 它们几乎只在问句里出现，
 #: 且不会像 `which` 那样嵌在数学术语里）。`?`/`？` 单列在这里而不是当正则，

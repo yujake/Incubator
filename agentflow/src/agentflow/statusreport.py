@@ -562,7 +562,7 @@ def _next_steps(report: Mapping[str, Any]) -> list[str]:
                    + "）⇒ 那是「没读成」，不是「没有调用」")
     elif landing.get("calls") and not landing.get("landed"):
         out.append(f"D 调用过 `write_report` {landing['calls']} 次，而台账里没有一张表收得下它"
-                   "（**有产物无台账**：`REPORT_KINDS` 四档是 C 的报告种类、"
+                   "（**有产物无台账**：`REPORT_KINDS` 里的档位全是 C 的分析器产出（现读五档）、"
                    "`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports`）⇒ 要么人裁扩 kind / 新开表，"
                    "要么把这条读数当结论读（`44 J-01` 的裁定：本轮只做读数）")
     # ---- S-02：声明了、但一条召唤行都没有的动作（诊断；判定在 `conductor` 那份读数里）

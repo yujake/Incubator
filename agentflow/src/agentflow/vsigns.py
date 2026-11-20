@@ -3,8 +3,9 @@
 
 ## 这一层解决的是什么断链
 
-「有毛病」是给提供证明的一方看的，具体信息是叫它们优化证明，只有连续三次审核通过才叫
-V 签。V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到；B 侧自己写的证明
+「有毛病」是给提供证明的一方看的，具体信息是叫它们优化证明，只有连续 `need` 次审核通过才叫
+V 签（F / B 是 3；E 的穷举档按 2026-11-17 业主裁定是 1 —— 实验侧报告不承重，承重的是程序）。
+V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时读到；B 侧自己写的证明
 想要 V 签时一样是拿到 V 签，B 再录入。
 
 若「签」这个事实只活在两处：`statements.bits.reviewed`（行内一个布尔）与
@@ -3268,7 +3269,9 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
     problems, reason}`：
     - `signed`：命题行现算第 3 位为真的命题号（`evidencebits.bits_from_row`，不看盘上缓存）
       —— 概念行也在内（它的良定义论证被 V 签过时，同一套第 3 位为真）；
-    - `backed`：其中"这一份正文的签文件真的在盘上"的那些；
+    - `backed`：其中"这一份正文的签文件真的在盘上"的那些（归属按
+      :func:`_sign_names_statement`：签里那格命题号为空 = 签发时尚在收录之前，
+      是常态，按正文 sha 认；非空且是别人的号 ⇒ 仍不算有主）；
     - `without_sign`：`signed` 里没有侧文件的那些（「读数，不是红」：历史签 / 直调写的签）；
     - `orphan_signs`：签文件在、而盘上没有任何命题的正文 sha 等于它（「这一档可以红」）。
     """
@@ -3321,10 +3324,17 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
     out["checked"] = not out["problems"]
     out["tri"] = "computed" if out["checked"] else "unreadable"
     # 命题行现在的正文 sha ⇒ 哪些签文件有主（`used_by` 已经算好，这里只反向查）。
+    #
+    # 归属判据只有一处（`_sign_names_statement`，与 `_sign_is_for_this_path` 同源）：
+    # 签发生在收录之前是常态，那时签文件里那一格 `statement_id` 是空串 —— 空串是
+    # "还没有号"，不是"别人的号"。这一格从前自己写了一遍"逐字相等"，于是同一份签
+    # 在复算读口里"签了"、在这一格读成"无侧文件"（真机 lp-ball-11 / lp-ball-12 的
+    # 全部 7 份签都是这一档）。判据同源之后，两个读口对同一份签给同一个归属。
     backed: list[str] = []
     for sid in signed:
         sha = next((s for s, ids in out["used_by"].items() if sid in ids), "")
-        if sha and sha in on_disk and str(on_disk[sha].get("statement_id") or "") == sid:
+        if (sha and sha in on_disk
+                and _sign_names_statement(on_disk[sha].get("statement_id"), sid)):
             backed.append(sid)
     out["backed"] = backed
     out["without_sign"] = [sid for sid in signed if sid not in backed]
@@ -4612,6 +4622,26 @@ def _filed_reading(*, store: Any, statement_id: str, sha: str,
     return filed, abandoned, (f"{sid}#p{match_no} 在册；第 3 位={filed}（{abandoned_why}）")
 
 
+def _sign_names_statement(cred_statement_id: Any, sid: Any) -> bool:
+    """签文件里那一格命题号，是不是指向 `stmt:<sid>`（归属判据的唯一实现）。
+
+    规则只有一条（2026-11-11 裁定）：「两边都有才比」。签往往发生在收录之前，那时
+    `statement_id` 是空串 —— 空串不是"另一个号"，是"还没有号"，身份是正文 sha。
+    只有"签说它是 A 的、而问的是 B"这一档才算别人的签（`borrowed`）。
+
+    为什么抽成函数：同一份签的归属有两个读口 —— :func:`_sign_is_for_this_path`
+    （签的唯一读口 `sign_reading` 走它）与 :func:`backed_reading`（门 / 页面的
+    `vsign.backed` / `without_sign` 走它）。两处各写一遍时，`backed_reading` 那一份
+    是"`doc.statement_id` 与 `sid` 逐字相等"⇒ 空号签（正是新锚之后最常见的那一档）
+    在复算读口里"签了"、在侧文件读口里"无侧文件"。判据同源之后，这一档只有一个答案。
+
+    `sid` 为空（问的是"这份签有没有主"而不是"是不是这一行的"）⇒ 不比，返回真。
+    """
+    cred = str(cred_statement_id or "").strip()
+    want = str(sid or "").strip()
+    return not (want and cred and cred != want)
+
+
 def _sign_is_for_this_path(sign: Mapping[str, Any], *, sid: str,
                            no: int) -> tuple[bool, str]:
     """这份签是不是「`stmt:<sid>` 的第 `no` 号证明」的签（`borrowed` 的唯一判据）。
@@ -4636,7 +4666,7 @@ def _sign_is_for_this_path(sign: Mapping[str, Any], *, sid: str,
     不能因此判成借光；号认不出（`"abc"`）⇒ 判不了归属，按借光处理（不是放行）。
     """
     cred_sid = str(sign.get("statement_id") or "").strip()
-    if sid and cred_sid and cred_sid != sid:
+    if not _sign_names_statement(cred_sid, sid):
         return False, f"它是 stmt:{cred_sid} 的签，不是 stmt:{sid} 的"
     raw_no = sign.get("proof_no")
     if raw_no in (None, ""):

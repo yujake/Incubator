@@ -37,6 +37,21 @@ def _path_group_parameter(value: Any, mode: str) -> tuple[int, str, str]:
     return named, "", ""
 
 
+def _ingested_statement_id(out: Mapping[str, Any]) -> str:
+    """这一笔收录落在哪一条命题上（登记支 `register` / 回填支 `target` 各一格）。
+
+    空串 = 这一笔没有命题号。两个支的读数形状不同、号只在同一个键上，所以取法
+    只有这一处：调用方拿它去回写认领（`_bind_ingested_claim`）与收口义务
+    （`_settle_registration_duty`）时读的是同一个号。
+    """
+    for one in ((out or {}).get("register"), (out or {}).get("target")):
+        if isinstance(one, Mapping):
+            stmt_id = str(one.get("stmt_id") or "").strip()
+            if stmt_id:
+                return stmt_id
+    return str((out or {}).get("stmt_id") or "").strip()
+
+
 class _IngestManuscript:
     def ingest_manuscript(self, *, manuscript: str, target_stmt_id: str = "",
                           cells: Sequence[str] = (), conflict: str = "refuse",
@@ -66,14 +81,17 @@ class _IngestManuscript:
         刻意不跑同一性判定（判了就可能并到调用方没点名的行）。
 
         返回固定键：`ok / mode / manuscript / target / requested_cells / cells / diff /
-        derived_write / write / refused / reason`。`diff` 是"请求格 vs 实填格"的逐格
-        对拍；I1/I2 由 `_ingest_invariant_problem` 机器核（不成立 ⇒ 整笔 `ok=False`）。
+        derived_write / write / refused / reason / caller_reason`。`diff` 是"请求格 vs 实填格"的逐格
+        对拍；`caller_reason` 原样带回调用方那一句「为什么录」（不参与判据）；I1/I2 由
+        `_ingest_invariant_problem` 机器核（不成立 ⇒ 整笔 `ok=False`）。
         """
         from .. import manuscriptfamily as _MFAM
         from .. import manuscriptintake as _MI
 
         rel = _norm_manuscript_rel(manuscript)
         out = self._ingest_empty_envelope(rel, mode)
+        #: 调用方那一句「为什么录」：读数不是判据（与失败那一格 `reason` 分开）。
+        out["caller_reason"] = str(reason or "")
         #: 判/落拆段的回传槽（NT2）：判在写之前（`_ingest_register` / `_ingest_apply`
         #: 的第一件事），落在拿到 `stmt_id` + `path_group` 之后；这一层只负责收尾。
         _nt: dict = {}
@@ -211,8 +229,7 @@ class _IngestManuscript:
             _pg_reg_no = (int((_pg_reg or {}).get("path_group") or 0)
                           if isinstance(_pg_reg, Mapping) else int(_pg_reg or 0))
             return self._finish_filing_nontriviality(
-                self._mark_ingested(got, rel=rel, family=family,
-                                    path_group=_pg_reg_no), _nt)
+                self._mark_ingested(got, rel=rel, path_group=_pg_reg_no), _nt)
         path_no, _code, _why = 0, "", ""
         got_cells = {cell: reading["cells"][cell]
                      for cell in requested if cell in (reading.get("cells") or {})}
@@ -235,7 +252,7 @@ class _IngestManuscript:
         _pg = got.get("path_group")
         _pg_no = int((_pg or {}).get("path_group") or 0) if isinstance(_pg, Mapping) else int(_pg or 0)
         return self._finish_filing_nontriviality(
-            self._mark_ingested(got, rel=rel, family=family, path_group=_pg_no), _nt)
+            self._mark_ingested(got, rel=rel, path_group=_pg_no), _nt)
 
     def _ingest_intake_register(self, out: dict, *, rel: str, family: str,
                                 target: str, reading: Mapping) -> dict | None:
@@ -341,6 +358,100 @@ class _IngestManuscript:
                 stmt_id=target, row=row, manuscript_path=rel, proof_text=value)
         return not bool(reading.get("same_proof"))
 
+    def _bind_ingested_claim(self, out: dict) -> dict:
+        """收录落成之后：把这一笔认到的那一签绑到命题号上（回写 pending 台账行）。
+
+        ## 为什么补这一拍（2026-11-20，BWRITE；真机 `projects/lp-ball-10` 的 stmt:000015）
+
+        主路是「先签后收录」：V 在命题还没号时审、签落
+        `verifications/pending/<载体 sha>.jsonl`（`verifications.record_pending_sign`）。
+        `mode=apply` 这一笔会调 `vsigns.bits_after_sign`（唯一的认签口）把那一签认到
+        第 3 位 —— 认得不差：行上 `bits.evidence.reviewed_by.evidence` 就指着
+        `verifications/pending/<sha>.jsonl#u-…`。可它交回来的 `claim` 只被读成了回执
+        （`out["evidence"]["sign_claim"]["claim"]`），没有写回 pending 行。
+
+        改前唯一调 `vsigns.bind_pending_claim` 的地方是 `register_statement` 的
+        「新建」支（号有了、`bits.reviewed` 为真时）。于是"先登记、后收录"这条路
+        （lp-ball-10 的现场：13:39 落 4 行 pending，13:46 登记，13:47 用
+        `own.ingest_manuscript` 把签收进 000015#p1）从头到尾没有回写 —— 盘上那 4 行
+        `statement_id` / `stmt_id` 全空，`verifications._claimed_pending_rows` 认不到它，
+        V2FIX 第二路（`unverified_statement_refs`）照旧记 `missing`：签在盘上、号在
+        行上，两个从不相遇。
+
+        ## 判据（一条，不在这里另立口径）
+
+        这一笔真的落成了（`out["ok"]` 为真）、并且认签那一格交回了一份 pending 台账的
+        `claim` ⇒ 交唯一写口 `vsigns.bind_pending_claim` 去绑。它自己判"同一份正文只
+        认领一次"（`bound_elsewhere` / `already`）、自己拒空号 —— 本函数不判第二遍、
+        不写第二份实现。
+
+        ## 三态
+
+        `checked=True` = 查过了（`bound` / `already` / `bound_elsewhere` / 这一笔没有
+        pending 认领）；`checked=False` = 没写成（没落成 / 没有号 / 写口读不出来），
+        读数在 `why` 里，绝不折成"已经绑了"。
+
+        ## 为什么写失败不把这一笔收录判死
+
+        `land_statement` 那一笔已经提交（正文、位、等级都在盘上），把整笔改判成失败
+        只会让调用方重交一次已经写好的东西。`bind_pending_claim` 是幂等的（重放那一笔
+        会补上剩下的几份，见它的 `bound_files`）⇒ 读数如实留在 `pending_claim` 里，
+        下一趟收录（幂等重放）自愈。这与 :meth:`_settle_registration_duty` 同一条纪律。
+        """
+        from .. import vsigns as _VS
+
+        if not isinstance(out, dict):
+            return out
+        out["pending_claim"] = {"checked": False, "bound": False, "already": False,
+                                "statement_id": "", "ledger": "", "bound_files": [],
+                                "bound_elsewhere": "", "why": ""}
+        evidence = out.get("evidence")
+        sign_claim = dict((evidence or {}).get("sign_claim") or {}) \
+            if isinstance(evidence, Mapping) else {}
+        claim = dict(sign_claim.get("claim") or {})
+        if not bool(out.get("ok")):
+            out["pending_claim"]["why"] = (
+                "这一笔没落成（ok=False）⇒ 不回写 pending 台账行：收录失败不许在盘上"
+                "留下「这一签已经认给某条命题」的记号")
+            return out
+        if not claim:
+            out["pending_claim"].update(checked=True, why=(
+                "这一笔没有认到 pending 台账上的签（`evidence.sign_claim.claim` 空）"
+                "⇒ 没有要回写的行"))
+            return out
+        stmt_id = _ingested_statement_id(out)
+        if not stmt_id:
+            out["pending_claim"]["why"] = (
+                "这一笔拿到了 pending 认领、却没有命题号 ⇒ 不猜（不写空号冒充认领；"
+                "那几行仍然算未认领）")
+            return out
+        try:
+            bound = _VS.bind_pending_claim(
+                getattr(self.store, "root", ""), claim=claim, statement_id=stmt_id)
+        except Exception as exc:  # noqa: BLE001 —— 写口抛了 = 没写成，不是"已经绑了"
+            out["pending_claim"]["why"] = (
+                f"回写 pending 台账那一笔抛了（{type(exc).__name__}: {exc}）⇒ 没写成"
+                "（这一格幂等：下一趟收录会补上）")
+            return out
+        out["pending_claim"].update(
+            checked=bool(bound.get("checked")), bound=bool(bound.get("bound")),
+            already=bool(bound.get("already")), statement_id=stmt_id,
+            ledger=str(bound.get("ledger") or ""),
+            bound_files=list(bound.get("bound_files") or []),
+            bound_elsewhere=str(bound.get("bound_elsewhere") or ""),
+            why=str(bound.get("why") or ""))
+        # 认领读数并回认签那一格：`bits.evidence.reviewed_by.evidence` 指着的
+        # 那一行，现在真的写着这条命题的号（同一笔里两个回执说同一句话）。
+        sign_claim["claim"] = dict(
+            claim, bound=bool(out["pending_claim"]["bound"]),
+            bound_id=(stmt_id if out["pending_claim"]["bound"]
+                      else str(out["pending_claim"]["bound_elsewhere"] or "")),
+            bind=dict(bound))
+        evidence = dict(evidence or {})
+        evidence["sign_claim"] = sign_claim
+        out["evidence"] = evidence
+        return out
+
     def _settle_registration_duty(self, out: dict, *, rel: str) -> dict:
         """收录落成之后：把板上那条「必须收录」义务按证据收口（写点，不是等收工对账）。
 
@@ -381,7 +492,7 @@ class _IngestManuscript:
         out["registration_settled"] = dict(got)
         return out
 
-    def _mark_ingested(self, out: dict, *, rel: str, family: str,
+    def _mark_ingested(self, out: dict, *, rel: str,
                        path_group: int = 0) -> dict:
         """收录成功之后：B 自己的 `b-proof` 稿在 B 那一行 task 上置「已提交」。
 
@@ -389,14 +500,24 @@ class _IngestManuscript:
         已提交」。只加一枚 `mss:` 记号（格式复用 F 那一套），台账业务字段一个不动；
         受控拒 / 别的族 / 没有 task 行 ⇒ 原样返回并把理由写进 `b_submission`。
 
+        族不再往 `autosubmit` 传：那一层按稿路径现判（`manuscriptsubmission.producer_of`）。
+        改前这里收一个 `family` 形参、转发给一个同样吞掉它的形参 —— 接口看着收得下、
+        实现一个字节都不认（2026-11-20 那一层删了这个形参，这里随之删掉，不留第二个假面）。
+
         同一笔里把秘书分配的路径号回写到覆盖这份正文的 `verifications` 行：
         两件事都在"收录成功"这一刻发生，不另查一遍台账（号从回执里来，不在这里算）。
 
         「必须收录」义务的消账也挂在入口这里（`_settle_registration_duty`）：两个出口
         （`mode=register` 与按格回填）都从这里过，所以义务不会因为走了哪条分支而漏收口。
+
+        认领回写（`_bind_ingested_claim`）也挂在入口这里：`mode=apply` 把 pending 那
+        一签认进第 3 位之后，命题号必须落回 pending 台账行 —— 那也是"收录成功"这一刻
+        的事，且同样两个出口都从这里过（register 支没有 `evidence`，本方法自己跳过）。
         """
         from . import autosubmit as _BAS
 
+        if isinstance(out, dict):
+            self._bind_ingested_claim(out)
         if bool(out.get("ok")) and int(path_group or 0) >= 1:
             from .. import manuscriptsubmission as _MSUB
             from .. import proofregistry as _PR
@@ -410,8 +531,7 @@ class _IngestManuscript:
                 statement_id=str((out.get("target") or {}).get("stmt_id") or ""),
                 body_sha=body_sha, manuscript=rel, path_group=int(path_group))
         got = _BAS.mark_b_ingested(
-            self.store, getattr(self.store, "root", ""), manuscript=rel,
-            family=family, out=out)
+            self.store, getattr(self.store, "root", ""), manuscript=rel, out=out)
         # 收录成功之后把这件事记进猜想台账（业主 2026-11-13 裁定甲/①/②）。
         # 与 `register_statement` 共用同一个实现（`_note_conjecture_landing`）：
         # 收录这条路也是"B 收下了这条命题"，两个入口对台账必须说同一句话。

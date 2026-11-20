@@ -95,8 +95,8 @@ class _SearchLiterature:
         from .. import providers as P
 
         # 实际进查询串的那份描述只算一次：上面这条 applicability 判据与下面的
-        # `query_description` 读数用的是同一对 `(topic, desc)`（desc 此后不再变）。
-        query_desc = self._query_description(topic, desc)
+        # `query_description` 读数用的是同一份 `desc`（此后不再变）。
+        query_desc = self._query_description(desc)
         decision = P.query_applicability(topic, query_desc)
         if not decision.applicable:
             return {

@@ -17,11 +17,6 @@ from __future__ import annotations
 
 from ._support import Any, ReviewError, _UNSPECIFIED  # noqa: F401  - 与同目录其余动作同源
 
-#: 「这条引文喂给语义判据」的四栏（调用方给；H 不自己去猜）：
-#: `quote`（待核引文）· `span`（来源里那一段，逐字取来）· `statement`（它要支撑的断言，
-#: 可空）· `where`（落点：文件/页码，给人看的）。
-_MATERIAL_KEYS = ("quote", "span", "statement", "where")
-
 
 class _JudgeQuoteSemantics:
     def judge_quote_semantics(self, *, quote: str = "", span: str = "",

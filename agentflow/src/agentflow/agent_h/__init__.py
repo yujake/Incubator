@@ -14,7 +14,8 @@
 （写 `review_findings`、改 `documents.status`）走显式的"代理注册表"（`self.writers`，
 `include_writers=True`），这两个工具的落点固定：不碰 `claims`，不碰任何知识表。
 ③ 可核对的运行期断言 —— 审校前后 `concepts/relations/literature` 逐字节不变；
-`documents.json` 的唯一变化点是 `status`（连 `updated_at` 都不碰）。
+`documents.json` 的变化点只有 `status` 与审核轴三格（`review_verdict` / `reviewed_at` /
+`reviewed_by`）以及跟着复审走的 `review_rounds`（连 `updated_at` 都不碰）。
 
 H 的三态纪律：`dependencies` 没查（显式 `None`）与"查了、依赖都闭合"是两件事 ——
 前者必须报 `dep_check.checked is False` 且不许判 `accepted`；`AgentD` 的

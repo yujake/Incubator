@@ -389,8 +389,11 @@ agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … �
 | `budget` | `agentflow inspect budget` | | |
 
 旧名**这一版全部保留**（业主口径：新指令接管且行为确认正常之后再清理；清理不是这一版的事）。
-`repair` / `rebuild` / `demo` / `evidence migrate` 四条的实现在这一版已经搬出 CLI
-（`tools/legacy_cli/`），CLI 里只剩一行转发 —— 下一版删除时只删那一行与那个目录。
+例外是四条移植期工具：`repair` / `rebuild` / `demo` / `evidence migrate` 的实现在
+2026-11-20（业主批准 A4）连同 `tools/legacy_cli/` 一起删了。命令名仍留在 CLI 里，
+但只做**受控退场**：明确错误 + 替代指引，退出码 `2`（没查成）—— 不是静默消失，
+也不是 `0` 那种"跑过了没问题"。仍在的那一半：`agentflow repair --backfill-grades`
+（按现行 V 签重算 `evidence_kind`，缺省 dry-run）。
 
 ### 7.3 `stats` 的四张读数
 
@@ -399,10 +402,10 @@ agentflow run topic --topic "Saxl 猜想"      # 与 agentflow run --topic … �
 
 | 读数 | 回答什么问题 | 数据源 | 主要字段 |
 |---|---|---|---|
-| `errors` | 每种角色犯了几次"错误动作"，各属哪一类 | `events.jsonl` 的 `tasks` 行 + `sessions/*.jsonl` | `by_role` / `role_total` / `total` / `categories` |
+| `errors` | 每种角色犯了几次"错误动作"，各属哪一类 | `events.jsonl` 的 `tasks` 行 + `sessions/*.jsonl` | `by_role` / `role_total` / `total` / `categories` / `system` / `state_readings` / `classes`（另有 `sources` / `samples` / `run_boundary`） |
 | `flow` | 每种角色走了几步、各是什么形状、被拦下多少、转投多少 | 同一批会话记录（`agent_step` 的 `shape` 与 `result`） | `roles[角色].steps/shapes/blocked/relayed`、`totals` |
 | `cost` | 钱与 token 按角色、按阶段怎么分布 | `data/usage_ledger.json` | `by_role` / `by_scope` / `total`（`usd` / `tokens_*` / `attempts` / `rows`） |
-| `gates` | 收工门的 8 格各是什么状态（三态一张表；`DEFAULT_CHECKS`，含 2026-11-16 Q1 加的 `literature_pending`；`paper` 是读数不是门） | 现跑 `closing.check_closing`（不读缓存） | `cells` / `counts` / `machine_pass` / `can_close` / `verdict` |
+| `gates` | 收工门的 8 格各是什么状态（四态一张表；`DEFAULT_CHECKS`，含 2026-11-16 Q1 加的 `literature_pending`；`paper` 是读数不是门） | 现跑 `closing.check_closing`（不读缓存） | `cells` / `counts` / `machine_pass` / `m_says_done` / `can_close` / `closable` / `verdict` / `closing_verdict` / `refusal` |
 
 三态在这里是硬口径：
 

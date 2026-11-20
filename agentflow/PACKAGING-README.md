@@ -20,7 +20,7 @@ python -m agentflow --version
 
 `python -m agentflow` 与 `agentflow` 是同一条命令（`pyproject.toml` 的
 `[project.scripts]` 转发到 `agentflow.cli:main`，`agentflow/__main__.py` 也是同一句转发）。
-CLI 的四组入口是 `incubate` / `inspect` / `run` / `serve`，28 个旧命令名一个都没删。
+CLI 的四组入口是 `incubate` / `inspect` / `run` / `serve`，29 个旧命令名一个都没删。
 
 ## 打包注意
 

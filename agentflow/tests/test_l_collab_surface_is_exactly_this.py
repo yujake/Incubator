@@ -16,7 +16,7 @@
 | 3 | L 读 B 的库：12 步 proof ⇒ `b_library` 读数齐全；不存在的编号 ⇒ 拒且不写盘 | 改前返回值里没有 `b_library` 这一格 ⇒ `KeyError` / 断言红；`coverage` 里也没有 |
 | 4 | L→B 汇报：造一次"漏一步"的形式化失败 ⇒ B 的收件箱里出现一条汇报（含 stmt_id 与失败类型） | 改前 `formalize` 的失败只落在返回值里，一条消息都没有 ⇒ B 的收件箱是空的 |
 | 5 | B 重做后重新过 V：B 覆盖 canonical ⇒ `proof_history` 有旧文 ⇒ 再跑 V 的 `verify_proof` ⇒ 签更新 | 改前这条链的每一格都已有（B/V 那两件是既有机制），本文件把它当成"接线之后仍然成立"的正控；它红的方式是接线改坏了（例如 B 的写路径被收紧成只增不改） |
-| 6 | B→D 升级：`severity="research"` ⇒ D 的收件箱里出现"研究请求"；`severity` 普通 ⇒ 不打扰 D（负控） | 改前 `B` 的出边是 `{C,H,V}`、没有 `B.escalate_proof_research` ⇒ 升级这条路整条不存在 |
+| 6 | B→D 升级走模型真能走的那条路（`summon` 形状派 D）：边在、D 可召唤、`policy.check` 放行 B→D 且 B 的越权边照旧 `forbidden_edge`；改前那个 `AgentB.escalate_proof_research` 程序入口已退场（它不在动作表里 ⇒ 模型照它调只会 `unknown_action`） | 两条腿：改前红的是"已退场"那半（改前 `hasattr(AgentB, "escalate_proof_research")` 为真、模块在盘上 ⇒ 断言当场红）；正控那半（边 / 召唤面 / 闸）改前就绿，它守的是"迁移没有把路一起删掉" |
 | 7 | 反真空：把"只有 B 能派 L"的判据 monkeypatch 成恒真 ⇒ 判据 1 必红 | 若判据 1 只在一张好表上成立，它可能在读一句恒真的话；把判据替换成恒过之后它必须变红 |
 
 ## 零模型
@@ -622,44 +622,62 @@ def test_five_b_rewrites_the_proof_and_v_signs_again(tmp_path: pathlib.Path) -> 
 # ============================================================ 6. B → D 升级
 
 
-def test_six_only_a_serious_defect_disturbs_d(tmp_path: pathlib.Path) -> None:
-    """判据 6：`severity="research"` ⇒ D 收到"研究请求"；普通缺陷 ⇒ 不打扰 D（负控）。
+def test_six_the_upgrade_to_d_is_the_summon_path(tmp_path: pathlib.Path) -> None:
+    """判据 6：B→D 升级走 `summon` 形状派 D —— 模型真能走的那条路。
 
-    改前红：`edges["B"]` 没有 D、`AgentB` 上没有 `escalate_proof_research` ⇒ AttributeError。
+    ## 为什么这一格在 2026-11-20 换了被测对象（PROOFCHAN，不是放宽判据）
 
-    反真空：普通那一档必须真的"一条都没写"（前后收件箱条数相等），
-    而不是"写了一条款式不同、读起来像没写"的东西。
+    改前这一格调的是 `AgentB.escalate_proof_research`：它不在 `specs/b.py` 的
+    `ACTIONS` 里 ⇒ `CAPABILITIES["B"]` 里没有它 ⇒ 模型照它调只会拿到 `unknown_action`
+    （2026-11-05 审计② 第 ⑪ 条就是为此把提示词锚从它改到 `summon` 的）；它
+    src 里 0 个调用方，只有测试在调。钉一个谁也走不到的入口，绿了也证明不了
+    "升级这条路存在"。所以这一格改钉模型侧真走的那条路，强度按三件分开摆：
+
+    - 正控（改前就绿，迁移必须保住）：B 的出边里有 D；D 不在 `NON_SUMMONABLE`
+      里；`policy.check` 对 B→D 放行 —— 三条缺一条，召唤 D 就派不出去；
+    - 仍然绕不开边表：同一条闸对 B→F / B→G 照旧 `forbidden_edge`（改前那条
+      "递送绕不开边表"盯的是 `message_admission`，现在 `Conductor.summon` 第 [4] 步
+      读的就是 `policy.check`，钉同一条闸的召唤面）；
+    - 改前红（退场那半）：`AgentB` 上不许再有这个入口、模块不许再在盘上。
+
+    提示词那一处的负控（"普通缺陷不进 D 的收件箱"）在
+    `tests/test_l_report_and_seam_matrix.py` 的 D11 里逐字钉着。
     """
-    from agentflow.store import Store
+    from agentflow import policy as P
+    from agentflow.tools import build_registry
 
-    ws = tmp_path / "ws"
-    st = Store(ws)
-    st.init()
-    b = _agent_b(st, ws)
-    base = {"statement_id": STMT_ID, "failure_type": "unfaithful_step",
-            "step": LINKS + 1, "detail": f"第 {LINKS + 1} 步在 Lean 里没有落点",
-            "statement_label": LABEL}
+    # ---- 正控：升级这条路在结构上真的存在（边 / 召唤面 / 闸三层）
+    from agentflow import policy as P
+    from agentflow.agentspec import builtin_registry
 
-    before = len(_inbox(ws, "D"))
-    normal = b.escalate_proof_research(**base, severity="normal")
-    assert normal.get("state") == "skipped", normal
-    assert normal.get("reason") == "not_research", normal
-    assert len(_inbox(ws, "D")) == before, "普通缺陷也去打扰 D 了"
+    assert "D" in C.ALLOWED_EDGES["B"], sorted(C.ALLOWED_EDGES["B"])
+    assert "D" not in C.NON_SUMMONABLE, (
+        f"D 在不可召唤名单里 ⇒ 边在也派不动它：{sorted(C.NON_SUMMONABLE)}")
+    assert "D" in builtin_registry().summonable_roles(), (
+        builtin_registry().summonable_roles())
+    assert "summon" in AL.SHAPES, AL.SHAPES
+    allowed = P.check(P.Policy(), P.Decision(frm="B", to="D", action=""))
+    assert allowed is None, (
+        f"B 派 D 被闸拒了（{getattr(allowed, 'reason', '')}）⇒ 升级这条路整条不存在")
 
-    serious = b.escalate_proof_research(**base, severity="research")
-    assert serious.get("state") == "escalated", serious
-    inbox = [m for m in _inbox(ws, "D") if str(m.get("from")) == "B"]
-    assert len(inbox) == 1, inbox
-    hit = inbox[0]
-    assert "研究请求" in str(hit.get("subject") or ""), hit.get("subject")
-    payload = dict(hit.get("research_request") or {})
-    assert payload.get("statement_id") == STMT_ID, payload
-    assert payload.get("failure_type") == "unfaithful_step", payload
-    assert int(payload.get("step") or 0) == LINKS + 1, payload
-    assert STMT_ID in str(hit.get("body") or ""), hit.get("body")
+    # ---- 绕不开边表：同一条闸，B 的越权边照旧拒
+    for outside in ("F", "G"):
+        refused = P.check(P.Policy(), P.Decision(frm="B", to=outside, action=""))
+        assert refused is not None, f"B 派 {outside} 竟然放行了"
+        assert refused.reason == "forbidden_edge", (outside, refused.reason)
+        assert refused.limit == "edge", (outside, refused.limit, refused.limit)
+    assert "F" not in C.ALLOWED_EDGES["B"] and "G" not in C.ALLOWED_EDGES["B"]
 
-    # ---- 这条递送绕不开边表：摘掉 B→D，升级当场不成立
-    assert AL.message_admission("B", "D") == "", AL.message_admission("B", "D")
+    # ---- 改前红：那个只活在测试里的程序入口已退场（改前这里 `hasattr` 为真 ⇒ 红）
+    from agentflow.agent_b import AgentB
+
+    assert not hasattr(AgentB, "escalate_proof_research"), (
+        "`AgentB` 上又出现了这个入口 —— 它不在 `ACTIONS` 里，模型调到它在循环里只会拿到 "
+        "`unknown_action`；要让 B 能调它就必须先进动作表（那是改权限面，不是改测试）")
+    import importlib.util
+
+    assert importlib.util.find_spec("agentflow.agent_b.proof_research") is None, (
+        "`agentflow.agent_b.proof_research` 又回到盘上了 ⇒ 旧路复活")
 
 
 def test_six_two_the_upgrade_edge_is_exactly_one(
@@ -667,24 +685,30 @@ def test_six_two_the_upgrade_edge_is_exactly_one(
     """判据 6 的第二半：为了这一条升级只加了一条边（B→D），没有别的。
 
     改前红：`edges["B"]` 是 `{C,H,V}` ⇒ 第一句红。
+
+    末段那一条（受控拒绝一行都不写）迁移到仍然活着的那个入口上：改前它调
+    `escalate_proof_research(severity="research", failure_type="不认识的类型")`，现在
+    同一份受控形态（`proofreport` 的 `payload` + `violations`）由 L 的 `report_to_b`
+    走 —— 那一条是活的（`formalize` 的失败分支真的调它），闸与词表是同一份。
     """
     assert "D" in C.ALLOWED_EDGES["B"], sorted(C.ALLOWED_EDGES["B"])
     assert C.ALLOWED_EDGES["B"] == frozenset({"C", "D", "H", "L", "V"}), (
         sorted(C.ALLOWED_EDGES["B"]))
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"}), (
         sorted(C.ALLOWED_EDGES["D"]))
-    # 负控：普通缺陷那一档不写任何东西（把 severity 关掉的那一支钉住）
+    # 负控：受控拒绝那一档一行都不写（词表外失败类型 ⇒ `invalid_params`，收件箱不动）
     from agentflow.store import Store
 
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
-    b = _agent_b(st, ws)
-    refused = b.escalate_proof_research(statement_id=STMT_ID, failure_type="不认识的类型",
-                                        severity="research")
+    agent = _agent_l(st, ws)
+    b_inbox_before = len(_inbox(ws, "B"))
+    refused = agent.report_to_b(statement_id=STMT_ID, failure_type="不认识的类型",
+                                severity="research")
     assert refused.get("state") == "refused", refused
     assert refused.get("reason") == "invalid_params", refused
-    assert _inbox(ws, "D") == [], "受控拒绝也写了东西"
+    assert len(_inbox(ws, "B")) == b_inbox_before, "受控拒绝也写了东西"
 
 
 # ============================================================ 7. 反真空

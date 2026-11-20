@@ -257,7 +257,9 @@ def test_analyze_gaps_and_detect_contradictions_are_pure_functions():
         {"relation_id": "0000", "concept_pair_key": "0000|0001", "statement": "A 是 B", "quote_verified": None},
         {"relation_id": "0001", "concept_pair_key": "0000|0002", "statement": "A 不是 C", "quote_verified": False},
     ]
-    out = analyze_gaps(["0000", "0001"], rels, keywords=["完全不存在的词"], degree=1, degree_threshold=2, concept_count=2)
+    # 2026-11-20：改前第一个位置参数是死形参 `relation_ids`，这里跟着调用面一起删
+    # （关系号就在 `rels` 每一行的 `relation_id` 里）。
+    out = analyze_gaps(rels, keywords=["完全不存在的词"], degree=1, degree_threshold=2, concept_count=2)
     assert out["insufficient"] is True
     assert {c["id"] for c in out["criteria"]} == {"a_no_keyword_hit", "b_low_degree_unverified"}
     assert out["verified_count"] == 0

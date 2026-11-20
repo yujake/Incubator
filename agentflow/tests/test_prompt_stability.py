@@ -1513,6 +1513,25 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
               "逐字相同（逐格读数见 `test_agent_prompts.py` 上方那一段）。另一笔"
               "「`done=True` ≠ 清表」落在 `litstage._stage_list_note`，那是运行时返回值、"
               "不进任何段。facts 键集仍 15 格、落点没动。"},
+     {"version": "p300", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p300（2026-11-20，ROLECLEAN3）：M / H / L / V 的旧路残留清扫。"
+              "本路只认领 M / L / V 三格（M：收工门的说明与手册改成 `closing_verdict` 的"
+              "单一结论；V：发签计数由框架现数、秘书只落签；L：删掉不可达的「开关关着」"
+              "文案）。H 的四处都不进提示词。facts 键集仍 15 格、落点没动 ⇒ "
+              "count / keys_sha256 与 p299 同值；其余格的现值差异来自并行路的未提交改动，"
+              "本路不认领，十一格按现算值一并冻结。"},
+     {"version": "p301", "count": 15,
+      "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+      "note": "抬版本 p301（2026-11-20，WIREUP）：三处提示词可见的活陷阱收口 —— "
+              "① C 的 boundary「你的可召唤边是空的」改成「你的出边是空的」（C 是"
+              "`summonable=True`、`D → C` 在边表里 ⇒ 旧句按入边读是假话）；"
+              "② F 的 stance 删掉「你没有到 D 的出边」（同一份 prompt 另一行就写着"
+              "`F → D` 是直接边）；③ `attack.step` 的 summary 不再把 F 说成"
+              "「推理未接线」（`UNWIRED_OWNERS` 只有 C/D），`analysis.register_report` 的"
+              "summary 不再抄 kind 名单。本路只认领 C / F 两格；B / D / G / L / M 的现值"
+              "差异来自并行路的未提交改动，本路不认领。"
+              "facts 键集仍 15 格、落点一格没动 ⇒ count / keys_sha256 与 p300 同值。"},
 
 )
 

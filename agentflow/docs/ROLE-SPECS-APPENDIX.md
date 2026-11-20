@@ -81,9 +81,12 @@ python -c "import collections,functools,tempfile,pathlib;from agentflow.store im
 本节只登记**当次复核结论**（下面三条是 2026-10-18 的读数；14 → 9 的那次复核见正文 §R0.2）：
 
 - 9 个 `graph.*` 的 `roles=("C","D")` —— **当次未逐字复核**（`agent_c.register_tools`）。
-- 3 个 `trace.*` 替身的 `roles=("agent-C","agent-D")` **仍带 `agent-` 前缀** ——
-  `install_d_tools` 直接构造 `ToolRegistry` 并 `register_function`，**不过那段校验**
+- 3 个 `trace.*` 替身的 `roles=("agent-C","agent-D")` **当时**还带 `agent-` 前缀 ——
+  `install_d_tools` 直接构造 `ToolRegistry` 并 `register_function`，**当时不过那段校验**
   ⇒ `for_role("C")`/`for_role("D")` 永远拿不到这 3 个替身。**当次未复算**（S2 #5 仍挂"未复跑"）。
+  **2026-11-20 现读（本条的上半段已被取代，留作历史）**：`install_d_tools` 仍在
+  （`agent_d/_support.py`，不是顶层 `agent_d.py`），但末尾调 `validate_tool_roles`；3 个替身的
+  `roles` 已改成 `("C","D")` ⇒ 这条路今天拿得到它们。
 - `AgentH.install_h_tools` **不是新工具**：它把 `build_registry` 的 H 子集复制进新注册表，
   并用 `filter_readonly_h_surface` 再做一次显式拒绝 + 留痕（`refused_write_tools`）。
 

@@ -775,101 +775,106 @@ def cmd_verify(args) -> int:
     return 1 if (args.strict and rep.warnings) else 0
 
 
-#: 移植期工具的落点。
+#: 四条移植期工具的退场表（2026-11-20 业主批准 A4）：命令标签 -> 现在该走哪条路。
 #:
-#: 四条命令（`repair` / `rebuild` / `demo` / `evidence migrate`）的实现搬到了
-#: `tools/legacy_cli/<名字>.py`，CLI 里只留同名命令做一行转发。目的：让"下一版删掉
-#: 它们"变成一次机械操作（删那个目录 + 删这几个一行函数），其余代码一行都不用动。
+#: 为什么命令名还留在 argparse 里：删掉 parser 之后调用方拿到的是 argparse 的
+#: `invalid choice`，那句话只说"不认识"，不说"它去哪了、现在该用什么"。
+#: 退场必须是受控的 —— 明确错误 + 替代指引 + 退出码 2（没查成），而不是 0
+#: （0 会把"这条路没了"读成"跑过了没问题"）。
 #:
-#: 为什么按文件路径加载而不是 `import tools.legacy_cli.rebuild`：`tools/` 只在源码仓库里，
-#: 不在 `src/` 下，也不是装好的包的一部分。按 `__file__` 往上两级定位仓库根，得到的
-#: 行为是确定的：源码仓库里跑 ⇒ 找得到；装好的包里跑 ⇒ 那句人话（退出码 2），
-#: 而不是一个 import 栈。
-_LEGACY_TOOLS_DIR = "legacy_cli"
+#: 这四条命令此前只是一条转发：实现在 `tools/legacy_cli/<名字>.py`，CLI 里留一行
+#: `_legacy_module(...).main(args)`。本版把那四个模块与转发一起删了；库里真正干活的
+#: 实现（`demo.run_demo` / `Store.rebuild` / ...）一件都没删。
+RETIRED_COMMANDS: dict[str, str] = {
+    "rebuild": (
+        "重建快照不再是 CLI 动词（它是数据维护动作，正常使用不该出现）。"
+        "核对不变量用 `agentflow verify`（退出码 1 = 查出问题，2 = 没查成）；"
+        "确需从 `events.jsonl` 重放，用库接口（同一处实现）："
+        'python -c "import sys; sys.path.insert(0, \'src\'); '
+        "from agentflow.cli import make_store; print(make_store(r'<工作区>').rebuild())"
+    ),
+    "repair": (
+        "`--related` 已退场：`related_concepts` 随并表退役（S1r）—— 那是老表专有的一列，"
+        "读侧由 `relations` 现算，没有可重算的落点。核对图与关系的偏离用 "
+        "`agentflow verify`（`related_drift` 那一档）；要重放老库同样用库接口 "
+        "`Store.rebuild()`。按现行 V 签重算等级仍可用：`agentflow repair --backfill-grades`"
+        "（缺省 dry-run，`--apply` 才写）。"
+    ),
+    "demo": (
+        "离线演示的命令行这一层退场了，演示的真身仍在库里："
+        'python -c "import sys; sys.path.insert(0, \'src\'); from pathlib import Path; '
+        "from agentflow.demo import run_demo; "
+        "raise SystemExit(run_demo(Path('demo/run').resolve()))"
+        "。只想看这台机器行不行，用不花钱的 `agentflow doctor`。"
+    ),
+    "evidence migrate": (
+        "内联正文迁移是一次性动作（`draft/30` §T0-7），迁完就没有对象了，移植期实现已删。"
+        "证据面还剩两件可用的：`agentflow evidence verify <run_dir>`（核引用）与 "
+        "`agentflow evidence store <project_dir>`（盘正文库）。"
+    ),
+}
 
 
-def _legacy_module(name: str):
-    """加载 `tools/legacy_cli/<name>.py`（按仓库根定位，不依赖 `sys.path`）。
+def _retired(command: str) -> int:
+    """受控退场：一条命令为什么没了 + 现在走哪条路 + 退出码 2；不读不写盘。
 
-    缓存进 `sys.modules`：同一进程里连跑两次不会重新执行模块体（模块体里有 import，
-    重复执行在多线程下会出怪相）。
+    三态口径与全仓一致：2 = 没查成（这条路已经不存在了），不是 0（跑过了没问题）、
+    也不是 1（查过了、发现问题 —— 那会让"命令退场"看起来像一次缺陷）。
     """
-    key = f"_agentflow_legacy_cli_{name}"
-    # 先判文件、再看缓存：反过来会让"文件已经不在了"被一个上次缓存的模块盖住，
-    # 于是"装好的包里没有 tools/"那句话永远走不到（判据靠它）。
-    root = Path(__file__).resolve().parents[2]
-    path = root / "tools" / _LEGACY_TOOLS_DIR / f"{name}.py"
-    if not path.is_file():
-        raise ImportError(
-            f"移植期工具不在盘上：{path}\n"
-            f"  `{name}` 的实现已经搬出 CLI（tools/{_LEGACY_TOOLS_DIR}/{name}.py）。"
-            "装好的包里没有 tools/ 目录 ⇒ 这条命令只能在源码仓库里跑；"
-            "下一版它会连同那个目录一起被删掉。")
-    cached = sys.modules.get(key)
-    if cached is not None:
-        return cached
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(key, path)
-    if spec is None or spec.loader is None:  # pragma: no cover - 文件刚判过存在
-        raise ImportError(f"读不了这个文件：{path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[key] = module
-    try:
-        spec.loader.exec_module(module)
-    except BaseException:  # noqa: BLE001 模块体炸了 ⇒ 不留半成品在缓存里
-        sys.modules.pop(key, None)
-        raise
-    return module
+    print(f"[{command}] 这条命令已退场（2026-11 业主批准 A4：移植期工具删除）。",
+          file=sys.stderr)
+    print(f"[{command}] 替代：{RETIRED_COMMANDS[command]}", file=sys.stderr)
+    print(f"[{command}] 退出码 2 = 没查成（这条路已经不存在了，不是「跑过了没问题」）。",
+          file=sys.stderr)
+    return 2
 
 
 def cmd_rebuild(args) -> int:
-    """从 `events.jsonl` 重放重建全部快照（数据出事时的逃生门）。
+    """已退场（A4）：从 `events.jsonl` 重建快照不再是 CLI 动词。
 
-    legacy：真实现在 `tools/legacy_cli/rebuild.py`，下一版删除，先确认行为无差异。
-    转发的只是调用这一层 —— 输出、退出码、旗标与搬走前逐字节相同
-    （判据 `tests/test_legacy_cli_forwards.py` 拿搬走前实测的指纹对拍）。
+    保留这个 argparse 挂点只为把"它去哪了、现在用什么"说清楚：明确错误 + 替代指引，
+    退出码 2（没查成）。删掉挂点会让调用方只看到 argparse 的 `invalid choice` ——
+    那句只说"不认识"，不说下一步做什么。
 
-    读写了哪些表或文件：读 `data/events.jsonl`，覆盖 `data/*.json` 各表快照，
-    缺省先在 `data/` 下留一份备份（`--no-backup` 关掉）。
+    读写了哪些表或文件：不读不写（退场层一行都不碰盘）。
+    实现方式一句话：`_retired("rebuild")`。
     """
-    return _legacy_module("rebuild").main(args)
+    return _retired("rebuild")
 
 
 def cmd_repair(args) -> int:
-    """重算派生列 `related_concepts`（`--related` 必须显式给；写 concepts 表）。
+    """已退场（A4）：`related_concepts` 随并表退役，没有可重算的落点。
 
-    legacy：真实现在 `tools/legacy_cli/repair.py`，下一版删除，先确认行为无差异。
-    并表之后这一列已随老表退役，所以今天它基本只会走进"受控退出 + 指路"那一支。
+    保留这个 argparse 挂点只为把"现在走哪条路"说清楚（`--backfill-grades` 仍在，
+    见 `_repair_dispatch`），退出码 2（没查成）。
 
-    读写了哪些表或文件：读 `relations` 与 concepts 表；只有在真的需要重算时才写
-    concepts（缺省 fail-closed，一行都不写，退出码 2）。
+    读写了哪些表或文件：不读不写（退场层一行都不碰盘）。
+    实现方式一句话：`_retired("repair")`。
     """
-    return _legacy_module("repair").main(args)
+    return _retired("repair")
 
 
 def _repair_dispatch(args) -> int:
-    """`repair` 的前置分派：带 `--backfill-grades` 走新实现，否则原样转发 legacy。
+    """`repair` 的前置分派：带 `--backfill-grades` 走仍在的那条实现，否则受控退场。
 
-    为什么这一层不写在 `cmd_repair` 里（与"给 `cmd_repair` 加前置分支"差一层，理由
-    可机器复核）：`tests/test_legacy_cli_forwards.py::test_each_forward_is_exactly_one_layer`
-    把 `cmd_repair` 的函数体钉成「只有一处 return，且就是 `_legacy_module('repair').main(args)`」，
-    连一个 `if` 都不许有 —— 在它里面加分支不是实现新功能，是把那条判据改绿。
-    所以前置分派落在这一层：不带旗标时调到的仍然是 `cmd_repair` 本身（legacy 一个
-    字节不动），带旗标才换实现。
+    留下的那一半是"按现行 V 签重算 `evidence_kind`"（`cmd_repair_backfill_grades`）；
+    退场的那一半是重算派生列 `related_concepts`（那一列随老表退役，读侧由
+    `relations` 现算，没有落点）。所以这里不是"整条命令消失"：带旗标照旧有活干，
+    不带旗标得到的是明确错误 + 替代指引（退出码 2），不是 argparse 的不认识。
 
-    `--apply` 单独出现是用法错（退出码 2）：legacy 不认识它，静默忽略会让"我以为
-    写了"变成一次没发生的写操作。
+    `--apply` 单独出现是用法错（退出码 2）：它只与 `--backfill-grades` 连用，
+    静默忽略会让"我以为写了"变成一次没发生的写操作。
 
     读写：这一层自己不读不写任何文件；带旗标时交给 `cmd_repair_backfill_grades`
-    （dry-run 只读、`--apply` 写 `statements`），不带旗标时交给 legacy。
+    （dry-run 只读、`--apply` 写 `statements`），不带旗标时交给退场层（不碰盘）。
     实现方式一句话：一个二选一的分派，判据仍是 `args.backfill_grades`。
     """
     if bool(getattr(args, "backfill_grades", False)):
         return cmd_repair_backfill_grades(args)
     if bool(getattr(args, "apply", False)):
         print("[用法错误] `--apply` 只与 `--backfill-grades` 连用；不带旗标时 `repair` "
-              "仍走 legacy（它不认识 `--apply`，不会写任何东西）。", file=sys.stderr)
+              "已退场（没有可重算的 `related_concepts` 落点，一个字节都不会写）。",
+              file=sys.stderr)
         return 2
     return cmd_repair(args)
 
@@ -1003,15 +1008,15 @@ def cmd_repair_backfill_grades(args) -> int:
 
 
 def cmd_demo(args) -> int:
-    """离线端到端演示（不联网、不花钱；`--keep` 保留上次的演示数据）。
+    """已退场（A4）：离线演示不再是 CLI 动词；演示的真身 `demo.run_demo` 仍在库里。
 
-    legacy：真实现在 `tools/legacy_cli/demo.py`，下一版删除，先确认行为无差异；
-    执行体本身在库里（`demo.run_demo`），这里只是把两个旗标翻成两个入参。
+    保留这个 argparse 挂点只为说清"现在怎么跑演示"（库接口那条一行命令），
+    退出码 2（没查成）。删掉挂点会让调用方只看到 argparse 的 `invalid choice`。
 
-    读写了哪些表或文件：在 `<root>/demo/run` 下建一整套演示工作区（会写盘），
-    缺省先清掉上次那一份。
+    读写了哪些表或文件：不读不写（退场层一行都不碰盘）。
+    实现方式一句话：`_retired("demo")`。
     """
-    return _legacy_module("demo").main(args)
+    return _retired("demo")
 
 
 def cmd_tools(args) -> int:
@@ -1103,7 +1108,6 @@ def cmd_analyze(args) -> int:
     读写：只读 relations / statements / research_questions 与概念视图；分析结果由 `agent_c` 落 `analysis_reports`（本层不另写表）。
     实现方式一句话：`agent_c.handle` 分派到四个分析入口（hottest / cold / gaps / paths）。
     """
-    """运行 C 的关系分析（四类需求之一）。"""
     root = _root_of(args)
     cfg = load_config(root, args.config)
     st, c = _build_agent_c(root, cfg)
@@ -1188,7 +1192,6 @@ def cmd_pipeline(args) -> int:
     读写：读 `search_requests` / `literature`；A/B 那一趟的写口各写自己的表，C 的报告落 `analysis_reports`。
     实现方式一句话：`pipeline.run_pipeline`（A/B 传 None 就是「不检索」，语义只在一处）。
     """
-    """把 A→B→C→D 串起来跑（DESIGN-TOOLS.md §5）。"""
     from . import host as H
     from agentflow.agent_a import AgentA
     from agentflow.agent_b import AgentB
@@ -1339,7 +1342,7 @@ START_PLAN_KEYS: tuple[str, ...] = ("mode", "task", "workspace", "project", "mod
 #:
 #: ## 为什么要这一层，又为什么旧名一个都不删
 #:
-#: 二十八个平铺的动词对读 `--help` 的人不友好（"doctor 和 verify 该先跑哪个"、
+#: 二十九个平铺的动词对读 `--help` 的人不友好（"doctor 和 verify 该先跑哪个"、
 #: "stats 跟 status 有什么不一样"）；但它们每一个都已经被真机上的脚本、文档与
 #: 用户肌肉记忆用着。所以这一轮只做"加一层入口"：
 #:
@@ -1357,7 +1360,7 @@ START_PLAN_KEYS: tuple[str, ...] = ("mode", "task", "workspace", "project", "mod
 #:
 #: ## 四组之外有没有漏的
 #:
-#: 旧名 28 个，这张表覆盖 28 个（判据 `tests/test_cli_grouped_entry_points.py` 断言并集
+#: 旧名 29 个，这张表覆盖 29 个（判据 `tests/test_cli_grouped_entry_points.py` 断言并集
 #: 相等）。其中 `verify` / `doctor` 归 `inspect`、`closing` 归 `run` 是本次归纳时补的
 #: （业主给的名单里只点到 25 个）：不补它们就成了新体系里的孤儿，而"能不能交"与"这台
 #: 机器行不行"显然都是查看类。要改回去就删这三行，判据会跟着红并点名。
@@ -1413,9 +1416,9 @@ def command_paths() -> tuple[tuple[str, str], ...]:
     return tuple(pairs.items())
 
 
-#: 旧名清单（28 个）。`build_parser()` 的 choices 必须与它同集：判据是集合相等
+#: 旧名清单（29 个）。`build_parser()` 的 choices 必须与它同集：判据是集合相等
 #: （`tests/test_cli_grouped_entry_points.py`），表序由 `build_parser` 的登记顺序
-#: 决定，不是抄这一份的序。原先这里写"必须逐字等于它"—— 两个 28 元组顺序不同，
+#: 决定，不是抄这一份的序。原先这里写"必须逐字等于它"—— 两个元组顺序不同，
 #: 逐字相等当场为 False，而判据从来只比 set。
 LEGACY_COMMANDS: tuple[str, ...] = tuple(old for old, _path in command_paths())
 
@@ -2499,26 +2502,26 @@ def _evidence_store(project_dir: Path) -> int:
 
 
 def _evidence_migrate(args) -> int:
-    """把历史产物里的内联正文迁成引用形态（默认 dry-run，`--apply` 才动盘）。
+    """已退场（A4）：把历史内联正文迁成引用形态是一次性动作，移植期实现已删。
 
-    legacy：真实现在 `tools/legacy_cli/evidence_migrate.py`，下一版删除，
-    先确认行为无差异（判据 `tests/test_legacy_cli_forwards.py` 拿搬走前实测的指纹对拍）。
+    保留 `evidence migrate` 这个词只为把"证据面还剩哪两件"说清楚（`verify` / `store`
+    仍在），退出码 2（没查成）。不给 argparse 的 `invalid choice`：那句只说"不认识"。
 
-    读写了哪些表或文件：读 `<项目根>/out/run-*/evidence.json`；`--apply` 时写
-    `.fulltext/` 正文库（`fulltextstore.put`）、改写那些产物，并先在
-    `<项目根>/../temp/evidence-migrate-<stamp>/` 留一份逐份备份。
+    读写了哪些表或文件：不读不写（退场层一行都不碰盘）。
+    实现方式一句话：`_retired("evidence migrate")`。
     """
-    return _legacy_module("evidence_migrate").main(args)
+    return _retired("evidence migrate")
 
 
 def cmd_evidence(args) -> int:
-    """证据面三件事：核引用 / 盘正文库 / 迁移历史产物（依据 `draft/30` §T0-7）。
+    """证据面：核引用 / 盘正文库（`migrate` 已退场，走受控退出 + 替代指引）。
 
     三态（与全仓同一条纪律）：0 = 查过、都对得上；1 = 查过了、有坏引用；
-    2 = 没查成（目标不在 / 读不了）。
+    2 = 没查成（目标不在 / 读不了 / `migrate` 这条路已不存在）。
 
-    读写：读 `out/run-*/evidence.json` 与 `.fulltext/` 正文库；`migrate --apply` 会写正文库并改写那些产物（逐份先备份）。
-    实现方式一句话：`fulltextstore` 的 `verify_ref` / `inventory` / `put`，本文件只做分派与呈现。
+    读写：读 `out/run-*/evidence.json` 与 `.fulltext/` 正文库；`verify` / `store` 只读
+    （`migrate` 退场后不再有会改写历史产物的分支）。
+    实现方式一句话：`fulltextstore` 的 `verify_ref` / `inventory`，本文件只做分派与呈现。
     """
     target = Path(args.target)
     if args.action == "verify":
@@ -3231,13 +3234,6 @@ EXIT_CODE_BY_STOP: dict[str, int] = {
 #: 没登记的 `stop_reason` 一律归这里。不许改成 0：那会把"新增了一档而没人归类"
 #: 读成"做完了"—— 一次新故障变成绿灯，且没有任何地方会红。
 EXIT_CODE_WHEN_UNKNOWN: int = 1
-
-#: 已知 `stop_reason` 的清单（表里登记过的那些）。
-#:
-#: 刻意从表派生而不是手抄第二份：手抄一份会与表两处漂移，而"两处漂移"恰恰是这条
-#: 纪律想治的病。真正独立的那一腿在判据里 —— 它从 `agent_loop.py` 的源码现扫
-#: 生产点，与这里对拍（少一条就红）。
-KNOWN_STOP_REASONS: frozenset[str] = frozenset(EXIT_CODE_BY_STOP)
 
 
 def _run_agent_exit_code(run) -> int:
@@ -4642,6 +4638,21 @@ def cmd_stop(args) -> int:
                       f"{'，force' if h.get('force') else ''}"
                       f" ⇒ 由 sid={h.get('consumed_by_sid') or '（无 sid）'} 在 "
                       f"{h.get('consumed_at', '?')} 收工时用掉")
+        # B5 墓碑三态（`stop_closure`，2026-11-20 接线）：开关被消费之后
+        # `read_stop()` 返回 None，与"从来没人叫停"同形；这一行回答的是历史。
+        # 三态都要显式打出来 —— `none`（没有停机记录）也是答案，不许因为"空"就不打。
+        closure = stopctl.stop_closure(root)
+        print(f"[stop] 停机历史（墓碑三态）：{closure['state']}"
+              f"（{closure['path']}）")
+        if closure["state"] == "closed":
+            last = dict(closure.get("last") or {})
+            print(f"[stop]   停过 {closure.get('count')} 次并已消费；最后一次在 "
+                  f"{last.get('closed_at') or '?'}，理由 {last.get('reason') or '?'}，"
+                  f"由 sid={last.get('sid') or '（无 sid）'} 用掉")
+        elif closure["state"] == "unknown":
+            print(f"[stop]   {closure['why']}", file=sys.stderr)
+        elif closure["state"] == "none":
+            print("[stop]   这个工作区没有停机记录（不是「读不出来」）")
         print(f"[stop] 登记着的活进程：{len(live)} 个"
               + ("：" + "、".join(f"{p['role']}#{p['pid']}" for p in live) if live else ""))
         # D07（`draft/39` §2）：显式回答"在跑的循环：有/没有" —— 只报 pid 登记时，
@@ -4727,7 +4738,7 @@ STATS_KINDS: tuple[tuple[str, str], ...] = (
     ("errors", "按角色 × 类目统计错误动作计数（附合计、类目释义与三态）"),
     ("flow", "按角色的动作分布：走了几步、各是什么形状、被拦下多少、转投多少"),
     ("cost", "钱与 token 的分布：按角色、按阶段（usage_ledger 的 scope）"),
-    ("gates", "收工门八格三态一张表（现算；不给 --project-dir 时那几格如实记 unknown）"),
+    ("gates", "收工门八格四态一张表（现算；不给 --project-dir 时那几格如实记 unknown）"),
     ("all", "上面四项一起打（三态取合取：有一条没查成就整条记 unknown）"),
 )
 
@@ -5171,7 +5182,7 @@ def _render_group_help(group: str, parser: argparse.ArgumentParser) -> str:
 
     只讲三件事：这个组管什么、组里有哪些成员（每个一句）、以及"旧名仍然直接用"。
     为什么要有这一页：新入口的第一跳是组名，而 argparse 没有"组"这个东西 —— 它只认
-    `choices` 里的 28 个旧名。不给人这一页，用户敲 `agentflow inspect` 会拿到
+    `choices` 里的 29 个旧名。不给人这一页，用户敲 `agentflow inspect` 会拿到
     `invalid choice: 'inspect'`，那等于把"分层"这件事藏进文档里。
     """
     members = GROUP_MEMBERS[group]
@@ -5205,7 +5216,7 @@ def _render_legacy_help() -> str:
     """旧名 → 新路径的全文对照表（`agentflow --help-legacy`）。
 
     单独一页的理由：`--help` 首屏要能一眼读完（`draft/145` 的 F5 说的是"二十多个子命令
-    分两页才看全"），而 28 行对照表塞进去就又是两页。这张表与 `command_paths()` 同源，
+    分两页才看全"），而 29 行对照表塞进去就又是两页。这张表与 `command_paths()` 同源，
     所以改分层只改那一处。
     """
     lines = ["旧名 → 新路径（本轮一个旧名都没删；两边行为逐字相同）", ""]
@@ -5223,7 +5234,7 @@ def _render_legacy_help() -> str:
 
 
 class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """首屏按 `COMMAND_GROUPS` 印四个入口，并把 28 个旧名的一句话说明收进"旧名仍可用"。
+    """首屏按 `COMMAND_GROUPS` 印四个入口，并把 29 个旧名的一句话说明收进"旧名仍可用"。
 
     为什么只能在这一层做（`draft/145` 的 F5）：argparse 没有给 subparsers 分组的能力
     （`_SubParsersAction` 只认一张 `choices` 字典），而三处既有判据正是靠"唯一一个
@@ -5280,11 +5291,11 @@ class _GroupedHelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """建整张命令行表：28 个旧命令 + 顶层开关（四个组由 `canonical_argv` 折回这里）。
+    """建整张命令行表：29 个旧命令 + 顶层开关（四个组由 `canonical_argv` 折回这里）。
 
     读写：不读不写任何文件（`--help` 之所以能在 0 毫秒内给出来，就是因为这一层只装表）。
     实现方式一句话：每个子命令一个 `add_parser` + 一句 `set_defaults(func=cmd_xxx)`；
-    首屏的分组只发生在呈现层（`_GroupedHelpFormatter`），`choices` 仍然是那 28 个名字
+    首屏的分组只发生在呈现层（`_GroupedHelpFormatter`），`choices` 仍然是那 29 个名字
     —— 三处判据（子命令数、分组覆盖、`--json` 契约）都靠这个唯一的 subparsers action。
 
     加一条命令时要一起改的地方（顺序即"漏了会红"的顺序）：
@@ -5305,7 +5316,6 @@ def build_parser() -> argparse.ArgumentParser:
                    help="关掉颜色（管道里本来就会自动关；这个开关是给『想强制关』的人）")
     p.add_argument("--plain", action="store_true",
                    help="纯 ASCII 输出（制表符/勾号都不画；老终端或想粘到邮件里时用）")
-    p.add_argument("--compact", action="store_true", help="少画框、少空行")
     # 版本号出口。为什么要这一格：`agentflow/__init__.py` 的 `__version__` 与
     # `pyproject.toml` 的 `version` 是两个各自写死的字面量，而在此之前 CLI 里
     # 一条命令都读不到它们 —— "发出去的东西有版本号、用的人只能在 `pip show` 里查"
@@ -5314,7 +5324,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--version", action="version",
                    version=f"agentflow {_PKG_VERSION}",
                    help="印版本号并以 0 结束")
-    # 旧名 → 新路径的全文对照表（28 行）。单独一页而不是塞进 `--help`：首屏要能一眼读完，
+    # 旧名 → 新路径的全文对照表（29 行）。单独一页而不是塞进 `--help`：首屏要能一眼读完，
     # 而这张表与 `command_paths()` 同源，改分层只改那一处。
     p.add_argument("--help-legacy", action="store_true",
                    help="打印旧名 → 新路径的全文对照表（本轮一个旧名都没删，两边逐字等价）")
@@ -5380,14 +5390,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--json", action="store_true")
     sp.set_defaults(func=cmd_verify)
 
-    sp = sub.add_parser("rebuild", help="从 events.jsonl 重建快照")
+    sp = sub.add_parser("rebuild", help="已退场：只给替代指引（退出码 2）")
     sp.add_argument("--no-backup", action="store_true")
     sp.set_defaults(func=cmd_rebuild)
 
-    sp = sub.add_parser("repair", help="重算派生字段")
-    sp.add_argument("--related", action="store_true", help="重算 related_concepts")
+    sp = sub.add_parser("repair", help="已退场：等级重算走 --backfill-grades（无旗标 ⇒ 退出码 2）")
+    sp.add_argument("--related", action="store_true", help="已退场（related_concepts 随并表退役）")
     # 2026-11-04：`--backfill-grades` 接进 CLI（只做 dry-run 入口；`--apply` 是写入口）。
-    # 分派在 `_repair_dispatch`：不带旗标 ⇒ `cmd_repair`（legacy 一个字节不动）。
+    # 分派在 `_repair_dispatch`：带旗标 ⇒ 仍在这一半（`cmd_repair_backfill_grades`），
+    # 不带旗标 ⇒ 退场层（明确错误 + 替代指引，退出码 2）。
     sp.add_argument("--backfill-grades", action="store_true",
                     help="按现行 V 签重算 evidence_kind（缺省 dry-run，一个字节都不写）")
     sp.add_argument("--apply", action="store_true",
@@ -5395,8 +5406,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--json", action="store_true", help="四栏读数打成 JSON")
     sp.set_defaults(func=_repair_dispatch)
 
-    sp = sub.add_parser("demo", help="离线端到端演示（不访问网络）")
-    sp.add_argument("--keep", action="store_true", help="保留上次演示数据")
+    sp = sub.add_parser("demo", help="已退场：只给替代指引（退出码 2）")
+    sp.add_argument("--keep", action="store_true", help="（退场前保留演示数据；今天不起作用）")
     sp.set_defaults(func=cmd_demo)
 
     # ---- 工具层与新智能体（DESIGN-TOOLS.md）
@@ -5640,16 +5651,17 @@ def build_parser() -> argparse.ArgumentParser:
                     help="覆盖逐页正文的落点（不给就用 <项目根>/.fulltext，见 T0-6 的默认）")
     sp.set_defaults(func=cmd_project, budget_usd_given=False)
 
-    # 证据面工具：核引用、盘 store、把历史内联产物迁成引用形态（依据 draft/30 §T0-7）。
+    # 证据面工具：核引用、盘 store（`migrate` 已退场，保留词位只为给替代指引）。
     sp = sub.add_parser(
         "evidence",
-        help="证据面：verify 核一个运行的全文引用 / store 盘一个项目的正文库 / migrate 迁移历史产物",
+        help="证据面：verify 核一个运行的全文引用 / store 盘一个项目的正文库 / "
+             "migrate 已退场（退出码 2 + 替代指引）",
     )
     sp.add_argument("action", choices=["verify", "store", "migrate"],
-                    help="verify <run_dir>；store <project_dir>；migrate <project_dir> [--apply]")
-    sp.add_argument("target", help="verify 给运行目录；store/migrate 给项目目录")
+                    help="verify <run_dir>；store <project_dir>；migrate 已退场")
+    sp.add_argument("target", help="verify 给运行目录；store 给项目目录；migrate 给项目目录")
     sp.add_argument("--apply", action="store_true",
-                    help="migrate 真的改写产物（缺省只 dry-run：这一步改的是历史证据本体）")
+                    help="（migrate 退场前用于真的改写产物；今天不起作用）")
     # B 格：这一轮新加的开关 ⇒ 外层四格（`data.text` 是它打印的那份读数）。
     sp.add_argument("--json", action="store_true",
                     help="机器可读：外层四格（ok/state/data/problems），data.text 是读数原文")
@@ -6127,7 +6139,7 @@ def main(argv: list[str] | None = None) -> int:
     把 `agentflow <组> <成员>` 折回旧名（`canonical_argv`），并把三类"没跑成"翻成退出码
     2：源码/import 坏了（C6 那一级，报 `文件:行`）、`StoreError`、以及 Ctrl-C。
     实现方式一句话：解析层一个字不动，分层与外壳都发生在"进 handler 之前"那几行 ——
-    于是 28 个旧命令的 `args`、旗标、输出与退出码全部保持原样。
+    于是 29 个旧命令的 `args`、旗标、输出与退出码全部保持原样。
     退出码：handler 返回什么就是什么（0 / 1 / 2 的三态口径在各命令自己的 docstring 里）。
     """
     # 真机日志要能边跑边看（2026-10-27）：stdout 重定向到文件时 Python 默认块缓冲，
@@ -6149,7 +6161,7 @@ def main(argv: list[str] | None = None) -> int:
     if not raw:
         return shell()
     # ---- 新分层（`COMMAND_GROUPS`）的两个入口：组页与"这个组里没有它"的人话。
-    # 为什么必须在 `parse_args` 之前：argparse 不认识组名（`choices` 里只有 28 个旧名），
+    # 为什么必须在 `parse_args` 之前：argparse 不认识组名（`choices` 里只有 29 个旧名），
     # 让它先看到 `inspect` 只会得到 `invalid choice: 'inspect'` —— 分层就被藏进文档里了。
     request = _group_request(raw)
     if request is not None:

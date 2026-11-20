@@ -545,7 +545,7 @@ def _attack_abandon_plan(_need_store, store, plan_id, reason, basis="",
             # 摘要只留一句指路（压缩批次的体量口径按全 cohort 算，见
             # `tests/test_tool_descriptions_are_compressed.py`）：完整教法在 `product`
             # 那一格的 description 与 `specs/f.py` 的 policy 里，不在这儿铺开。
-            "推进攻坚计划的一轮：按 owner 分派（E 做实验 / A 提检索 / B 提重抽取），C/D/F 的推理未接线则如实记 no_change。"
+            "推进攻坚计划一轮：按 owner 分派（E 实验/A 检索/B 重抽取/F 自推），C/D 无推理入口 ⇒ 记 no_change。"
             "交证明用 `product`。"
             ),
     {

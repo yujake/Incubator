@@ -184,7 +184,6 @@ def detect_contradictions(relations: Sequence[Mapping[str, Any]]) -> list[dict]:
     """
     return IX.detect_contradictions(relations)
 def analyze_gaps(
-    relation_ids: Sequence[str],
     relations: Sequence[Mapping[str, Any]],
     *,
     keywords: Sequence[str],
@@ -193,6 +192,15 @@ def analyze_gaps(
     concept_count: int = 0,
 ) -> dict:
     """按 §4.4 的三条可核实判据评估"知识是否不足"。
+
+    ## 为什么形参只剩 `relations`（2026-11-20，WIREUP 路）
+    改前第一个位置参数是 `relation_ids: Sequence[str]`，函数体一次都没读它，
+    两个调用点却都为它现造一份列表（`agent_d/assess.py` 的 `[c["relation_id"] …]`
+    与 `tests/test_agent_d.py` 的字面量）。关系号本身就在 `relations` 每一行的
+    `relation_id` 里，判据（关键词命中 / 度数 / 核验数 / 矛盾对）一个都不用"另一份号表" ——
+    所以删掉它：少一处"传了等于没传"的假接口，也不再有第二份号表可能和行不一致。
+    判据：`tests/test_wireup_residue.py`（正控：旧签名接受第一个位置参数 ⇒ 红）。
+
     返回 ``{"insufficient": bool, "criteria": [...], "priority": str, "confidence": str}``以及
     全部中间值（命中数、度数、已验证条数、矛盾对数），使结论可以被逐项复核。
     判据与优先级：
@@ -561,8 +569,8 @@ _REPORT_LANDING_CALIBER = (
 def report_landing_reading(store) -> dict:
     """S-07 的读数：D 的 `write_report` "有调用、但台账里没有落点"（只读）。
     ## 为什么只做读数（`44 J-01` 的裁定，逐字的意思）
-    D 的研究报告落不进 `analysis_reports`：`schema.REPORT_KINDS` 只收`hottest/paths/cold/gaps` 四档（那是 C 的报告），而 
-    `WRITE_SETS["D"]` 里也没有那张表⇒ 给 D 的报告"找个落点"要么扩 `REPORT_KINDS`、要么新开一张表，两件都是"改硬契约"（前者是禁改区字段、后者要人裁）。
+    D 的研究报告落不进 `analysis_reports`：`schema.REPORT_KINDS` 里全是 C 的分析器档位（现读五档，2026-11-20 起含 `proof_chain`；没有"研究报告"这一档），而
+    `WRITE_SETS["D"]` 里也没有那张表 ⇒ 给 D 的报告"找个落点"要么扩 `REPORT_KINDS`、要么新开一张表，两件都是"改硬契约"（前者是禁改区字段、后者要人裁）。
     - 有调用：`tasks` 里 `role="D"` 且 `action="write_report"` 的终态行数（真的被调过几次）；- 无落点：能给这份报告当落点的台账表 —— 按 
     `capabilities.WRITE_SETS["D"]` 与`schema.REPORT_KINDS` 现算，结构性为 0（不是"这次没写"，是"没有那张表"）；- 三态：
     `checked=False` + `reason` = 这一格没读成（表读不出来）。
@@ -604,10 +612,10 @@ def report_landing_reading(store) -> dict:
         "calls": len(calls),
         "landed": 0,                      # 结构性：今天没有一张表能收 D 的报告
         "landing_tables": landing,
-        "kind_writable": False,           # `REPORT_KINDS` 四档里没有"研究报告"这一档
+        "kind_writable": False,           # `REPORT_KINDS` 里没有"研究报告"这一档（全是 C 的分析器档位）
         "task_ids": [str(r.get("task_id") or "") for r in calls[:10]],
         "note": ("D 的 `write_report` 只落磁盘（`reports/` 下的文件）：`schema.REPORT_KINDS` "
-                 "四档是 C 的报告种类，`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports` "
+                 "里的档位全是 C 的分析器产出（现读五档），`WRITE_SETS[\"D\"]` 里也没有 `analysis_reports` "
                  "⇒ 台账里没有它的落点（`44 J-01`：扩 kind 或新开表都属改硬契约，不裁）。 "
                  "这份读数就是让\"有调用、无落点\"这件事**看得见**。"),
     }
@@ -619,8 +627,19 @@ def report_landing_reading(store) -> dict:
 _OVERCLAIM_MARKERS = ("证明了", "证毕", "必然", "确定成立", "定理", "已成定理", "毫无疑问")
 _HEDGE_MARKERS = ("也许", "可能", "推测", "不确定", "尚不清楚", "有待", "疑似", "大概")
 
+#: 置信度档名 → 这一条判据的两个门槛（0.5 / 0.8）上的数字替身。
+#:
+#: 为什么需要这道桥：`research` 那一格的 `confidence` 是受控档名
+#: （`CONFIDENCE_LEVELS`：high / medium / low），而这个判据的两条阈值是数字
+#: （< 0.5 判夸大、>= 0.8 判保守）。改前它只做 `float(confidence)` ⇒ 收到 D 自己产出的
+#: 那一档永远落 `checked=False`（"不是数字"）—— 判据在真实调用面上一次都查不成，
+#: 只有测试直接喂浮点数时才绿。桥只服务这一条判据：low 落 0.5 以下、high 落 0.8 以上、
+#: medium 落在两条门槛之间（两个方向都不判），于是"低档说满了 / 高档留余地"各有一档
+#: 能命中，而"中档"不被任何一端误伤。
+_CONFIDENCE_NUMBERS: dict[str, float] = {"low": 0.3, "medium": 0.6, "high": 0.9}
 
-def conclusion_consistency_reading(*, conclusion: str, confidence: float | None) -> dict:
+
+def conclusion_consistency_reading(*, conclusion: str, confidence: float | str | None) -> dict:
     """S-09 的判据（非 LLM 半）：`conclusion` 的措辞与 `confidence` 数字一致吗？
     ## 为什么这是一条判据而不是"让 LLM 自己注意"（`44 S-09`）
     真机缺陷形态：`_llm_refine` 只夹数字、文本原样采用 ⇒ 数字 0.3 而措辞写"证明了"。那是报告层面的夸大：读报告的人（与下游的引用者）看的是措辞，不是那个
@@ -630,6 +649,8 @@ def conclusion_consistency_reading(*, conclusion: str, confidence: float | None)
     "数字高、措辞也硬"与"数字低、措辞也软"） || `checked=False` | `confidence is None`（没给数字 ⇒ 这一格没查成，不是"一致"）
     |
     三态纪律：`confidence=None` 不许折成 `"consistent"` —— 那会把"没有数字可比"读成"比过了、一致"。
+    置信度的两种写法都收：浮点数字，或 D 真正产出的档名（`CONFIDENCE_LEVELS`；经
+    `_CONFIDENCE_NUMBERS` 折成门槛上的数字）。只有别的字符串才落 `checked=False`。
     """
     text = str(conclusion or "")
     if confidence is None:
@@ -638,8 +659,11 @@ def conclusion_consistency_reading(*, conclusion: str, confidence: float | None)
     try:
         conf = float(confidence)
     except (TypeError, ValueError):
-        return {"checked": False, "verdict": "",
-                "reason": f"confidence 不是数字（{confidence!r}）⇒ 这一格没查成"}
+        conf = _CONFIDENCE_NUMBERS.get(str(confidence).strip())
+        if conf is None:
+            return {"checked": False, "verdict": "",
+                    "reason": f"confidence 既不是数字也不是受控档名"
+                              f"（{confidence!r}）⇒ 这一格没查成"}
     over = [w for w in _OVERCLAIM_MARKERS if w in text]
     hedge = [w for w in _HEDGE_MARKERS if w in text]
     verdict = "consistent"
@@ -694,7 +718,7 @@ def model_kind(llm: Any) -> str:
 
 
 def _json_object(text: str) -> dict[str, Any] | None:
-    """从一段文本里取第一个 `{...}` 并解析成对象（`core._parse_json_block` 的唯一实现）。"""
+    """从一段文本里取第一个 `{...}` 并解析成对象（解析口径只此一处）。"""
     first, last = text.find("{"), text.rfind("}")
     if not (0 <= first < last):
         return None

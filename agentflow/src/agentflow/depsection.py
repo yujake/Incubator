@@ -191,6 +191,18 @@ REFUSED_UNKNOWN_SOURCE = "dependency_source_not_registered"
 REFUSED_SOURCE_STATUS = "dependency_source_not_usable"
 REFUSED_LEVEL_UNREADABLE = "citation_level_unreadable"
 REFUSED_LEVEL_TOO_LOW = "citation_below_proof_review"
+#: 「这一条本来就不在可引池里」—— 与「等级读不出来」是两件事（E7 归因，2026-11-20）。
+#:
+#: 现场：`projects/lp-ball-12/verifications/reviews/v-review-000002.md`（2026-11-20T04:09:29）
+#: 第 2 步把 `stmt:000030` 判成 `citation_level_unreadable`。而那一行是
+#: `kind=concept` / `origin=external_lit`，盘上从来没有、也不会有 `reports/f-proof-000030.md`：
+#: `evidencebits.derive_grade` 对 `kind=concept` 短路成 `not_applicable` ⇒ 它不进等级链，
+#: 所以"盘上没有它的稿"是结构（它名下不会有稿），不是"读不到"。旧读数把这两件事
+#: 并进一个码，那句 fix 还去叫 F 给一条概念写证明稿 —— 一条永远不会被执行的下一步。
+#:
+#: 门槛一个字不动：这一档与 `REFUSED_LEVEL_UNREADABLE` 都拒（`level=error`、这一签
+#: 签不下来），改的只是"该去补什么"：后者补一份稿就能进池，前者补不出东西。
+REFUSED_NOT_IN_POOL = "citation_not_in_citable_pool"
 #: 兜底审计（2026-10-27）：盘上那份 `reports/f-proof-*.md` 缺洗稿元信息 ⇒
 #: 它不是框架渲染的产物（手写 / 换名绕过），整笔拒绝，请 F 用 `proof` 动作重写。
 REFUSED_NOT_WASHED = "manuscript_not_washed"
@@ -241,6 +253,7 @@ CITATION_KIND_LABELS: dict[str, str] = {
     REFUSED_SOURCE_STATUS: "该条不可用（状态不是 active）",
     REFUSED_LEVEL_UNREADABLE: "等级读不出来（判不了）",
     REFUSED_LEVEL_TOO_LOW: "等级不到可引门槛",
+    REFUSED_NOT_IN_POOL: "不进可引池（这一条本来就不会有证明稿）",
     REFUSED_TABLE_DISAGREES: "表述错误·表与正文的引用集合不一致",
     REFUSED_STEP_MISMATCH: "表述错误·步号对不上",
     REFUSED_QUOTE_MISMATCH: "表述错误·引文与被引命题的原文对不上",
@@ -2124,6 +2137,43 @@ def manuscript_citation_resolver(
     return _resolve
 
 
+def _out_of_pool_reason(item: Mapping[str, Any]) -> str:
+    """这一条为什么"本来就不在可引池里"（空串 = 不是这一档，照旧按"读不出来"报）。
+
+    ## 只认结构性的那一条
+    `kind` 落在"等级链对它短路"的那一档 —— 现在就是 `concept`：
+    `evidencebits.derive_grade` 把它直读成 `not_applicable`（概念没有真值可言，
+    它只有"良定义没良定义"）。这一档的命题名下不会有一份证明稿，所以
+    "盘上没有它的稿"是结构，不是"读不到"：给它补一份稿也补不出它的等级，
+    而"等级读不出来"那一档的下一步恰恰是"补一份稿、再签"。
+
+    ## 为什么 `origin=external_lit` 单独不算这一档
+    引文侧的普通命题（非 concept）按 2026-11-13（甲′）由 B 在登记时落一份 b-稿
+    ⇒ 它缺稿是"还没落"（可补、下一步明确），与"永远不会有"是两件事。把这两件事
+    并成一个新码，读的人就拿不到那句正确的下一步 —— 业主 2026-11-06：
+    「不许把两类混成一句」。
+
+    ## 前提：真读到台账那一行
+    `in_ledger` 不为真 ⇒ 不许替它断言"它是概念行"（V 读不到册时说那句话就是编）。
+    那时返回空串，调用方退回 :data:`REFUSED_LEVEL_UNREADABLE`（"判不了"）——
+    fail-closed 的方向不变，只是不许编原因。
+    """
+    if not bool(item.get("in_ledger")):
+        return ""
+    kind = str(item.get("kind") or "").strip().lower()
+    if not kind:
+        return ""
+    try:
+        grade = EB.derive_grade({}, kind=kind)
+    except Exception:  # noqa: BLE001 —— 算不出来就不许断言"它不进池"（读不到 ≠ 不是）
+        return ""
+    if str(grade or "") != str(EB.GRADE_NOT_APPLICABLE):
+        return ""
+    return (f"这一条不进可引池：`kind={kind}` 不进等级链"
+            f"（`evidencebits.derive_grade` 对它短路成 `{EB.GRADE_NOT_APPLICABLE}`），"
+            "名下不会有一份证明稿")
+
+
 def manuscript_uncitable_finding(
         sid: str, cited: Mapping[str, Mapping[str, Any]], *,
         where: str = "", line: int = 0, step: Any = None) -> dict[str, Any]:
@@ -2134,17 +2184,34 @@ def manuscript_uncitable_finding(
     `reports/b-proof-<号>.md`），而且那份稿的现在这一份正文上盖着一份 V 签
     （`vsigns.manuscript_sign_standing` 的 `signed`）。
 
-    两档受控码刻意复用既有码，不新造：
-    - 手稿不在 / 读不成 ⇒ `REFUSED_LEVEL_UNREADABLE`（"等级读不出来（判不了）"）——
-      读不到正文与签，就判不了它够不够格；
+    ## 三档受控码（2026-11-20 E7：读不到 / 不在池 / 不够格，各一档）
+
+    - 这一条本来就不在可引池里（`kind` 落在等级链对它短路的那一档，
+      见 :func:`_out_of_pool_reason`）⇒ `REFUSED_NOT_IN_POOL`。它名下不会有稿，
+      所以"盘上没有它的稿"不是证据缺失，而是它压根不该被当定理引；
+    - 手稿不在 / 读不成（该有稿而没读到）⇒ `REFUSED_LEVEL_UNREADABLE`
+      （"等级读不出来（判不了）"）—— 读不到正文与签，就判不了它够不够格；
     - 手稿在、没有盖住现行正文的签 ⇒ `REFUSED_LEVEL_TOO_LOW`（"等级不到可引门槛"）。
-    两档的期望 / 实得 / 怎么改都按"稿"写，不冒充"不在册"（V 读不到册，说"不在册"
-    就是编一句它没查过的话）。
+
+    后两档的期望 / 实得 / 怎么改都按"稿"写，不冒充"不在册"（V 读不到册，说"不在册"
+    就是编一句它没查过的话）。三档都拒（`level=error`）—— 归因分了，门槛没动。
     """
     site = str(where or "").strip()
     where_text = _citation_where(step=step, line=line, site=site or "依赖段")
     item = dict(cited.get(str(sid)) or {})
     if not item.get("found"):
+        out_of_pool = _out_of_pool_reason(item)
+        if out_of_pool:
+            return citation_finding(
+                stmt_id=str(sid), where=where_text, kind=REFUSED_NOT_IN_POOL,
+                expected=(f"被引的是一条进得了可引池的命题（门槛 {CITATION_MIN_LEVEL}："
+                          "手稿在盘上、且盖着 V 的签）"),
+                got=(out_of_pool
+                     + f"（盘上也确实没有它的稿：找过 {item.get('tried') or '（没记）'}）"),
+                fix=("改号或去掉这一引：这一档的命题不靠「稿上的 V 签」取等级 ⇒ 引它"
+                     "取不到任何等级。概念该写进正文（`## 命题` 里说清定义），"
+                     "不要当定理引；要引就引一条有稿有签的命题"),
+                step=step)
         return citation_finding(
             stmt_id=str(sid), where=where_text, kind=REFUSED_LEVEL_UNREADABLE,
             expected=(f"盘上有一份这一条命题的手稿（`reports/f-proof-<号>.md`；"

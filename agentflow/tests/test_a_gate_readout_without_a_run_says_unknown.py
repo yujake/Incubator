@@ -29,7 +29,7 @@
 | a | 不给 `sid` ⇒ `user_pending` 是 `unknown`，且读数点名"没给运行号" | 同一份工作区显式给号 ⇒ `fail`（那个问题真的在盘上，不是"文件里没东西"） |
 | b | 给真实 sid 且会话里有未答问题 ⇒ `fail` + blocker 点名 qid | —— |
 | c | 给真实 sid 且无未答 ⇒ `pass` | 与 b 同一副夹具，只差那一行提问 |
-| d | 把缺省值打桩回改前的 `None` ⇒ a 必须红 | 证明 a 不是恒绿：旧缺省在同一个工作区上给的是 `pass` |
+| d | 把缺省值打桩回改前的 `None` ⇒ a 仍不是 `unknown` | 证明 a 不是恒绿：旧缺省在同一个工作区上给的是 `na`（2026-11-20 四态；改前是假绿 `pass`） |
 | e | `gates_readout` 的缺省值逐字等于 `closing.NO_SESSION` | 两处字面量漂开时这条红（`session_path` 的缺省回落会重新生效） |
 
 e 是这一组的"词表钉"：`closing.NO_SESSION == ""` 由
@@ -136,10 +136,16 @@ def test_c_a_real_run_number_without_questions_is_pass(tmp_path: pathlib.Path) -
 
 def test_d_stubbing_the_default_back_to_none_brings_the_false_green_back(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """d（负控）：把缺省值打桩回改前的 `None` ⇒ 同一个工作区上 a 必红。
+    """d（负控）：把缺省值打桩回改前的 `None` ⇒ 同一个工作区上 a 仍不是 unknown。
 
     打的是「缺省值本身」（`__kwdefaults__`），不是把 `gates_readout` 整个换掉 ——
     换掉的话证明的是"夹具能红"，不是"这一行改动是拦住假绿的那一行"。
+
+    2026-11-20（EMPTYCELL）：旧的缺省（`sid=None` 去读缺省会话）在这副夹具上曾经给出
+    `pass` —— 那是这一条最初要复现的假绿。四态落地之后，那个文件不在盘上会让这一格
+    记 `na`（没有提问可判），于是旧缺省现在给 `na` 而不是 `pass`：假绿被两层同时挡住
+    （调用方不给号 ⇒ unknown；判据层没有会话记录 ⇒ na），a 的分辨力仍在
+    （`unknown` 与 `na` 不是同一个词）。
     """
     ws = _ws(tmp_path, ask=True)
     assert _cell(R.gates_readout(ws), "user_pending")["status"] == "unknown", (
@@ -147,8 +153,9 @@ def test_d_stubbing_the_default_back_to_none_brings_the_false_green_back(
 
     monkeypatch.setitem(R.gates_readout.__kwdefaults__, "sid", None)  # ← 改前的缺省
     old = R.gates_readout(ws)
-    assert _cell(old, "user_pending")["status"] == "pass", (
-        "改前的缺省（sid=None）在这副夹具上没有给出假绿 ⇒ 这条负控失去对象")
+    assert _cell(old, "user_pending")["status"] == "na", (
+        "改前的缺省（sid=None）在这副夹具上读缺省会话文件；那个文件不在盘上 ⇒ 这一格"
+        f"记 na（没有提问可判），不是 pass 也不是 unknown：{_cell(old, 'user_pending')}")
     assert not _no_sid_problem(old), old["problems"]
 
 

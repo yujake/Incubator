@@ -7739,12 +7739,15 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
     #
     # 与 B-2（「无引文的必须从猜想注册」）的分工写在一处（判定顺序）：
     #   1. `kind="concept"` ⇒ 概念行先短路（来源分档那一套在更上面）；
-    #   2. `kind="conjecture"` ⇒ 猜想放行（猜想本来就要先落库才审得动：V 只审在册的命题）；
+    #   2. `kind="conjecture"` ⇒ 猜想放行（按最弱那一档注册：V 审的是手稿、签落在稿上，
+    #      在册是 B 在签之后的收录 —— 2026-11-02 / 11-08 起顺序就是"签先落稿、再收录"，
+    #      不是"先有册才审得动"）；
     #   3. `origin=own_result` 或 `source_lit_id` 空 ⇒ 判「杜撰」，要 V 的签；
     #   4. 有签 ⇒ 放行（读数进返回值）；没有 ⇒ `self_authored_needs_v`。
     # 于是「从猜想升成 theorem/lemma 的那一步」才是要签的那一步，而「按猜想注册」不受阻。
 
-    #: 不受这条闸管束的两种 kind：猜想（先落库才审得动）与概念（不走等级链）。
+    #: 不受这条闸管束的两种 kind：猜想（按最弱那一档注册，登记那一刻没有签可要）
+    #: 与概念（不走等级链）。
     _NON_THEOREM_KINDS: tuple[str, ...] = ("conjecture", "concept")
 
     #: 这条闸的受控拒绝码（调用方据它分辨「参数不对」与「还欠 V 一签」）。
@@ -9480,8 +9483,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         `reviewed=True` 且 `proof_sha256` 等于这一份正文的那些。
 
         ## 为什么按正文认命题（而不是按编号）
-        `register_statement` 在写库之前没有号（号是秘书在事务里现发的），而 V 只审在册
-        的命题（`AgentV.verify_proof` 对不在册的命题直接 `statement_missing`）。所以
+        `register_statement` 在写库之前没有号（号是秘书在事务里现发的），而 V 审的是手稿、
+        签落在稿上，在册是 B 在签之后的收录（2026-11-02 业主：「V 签先放在 F 的手稿里，
+        让 B 录入」；2026-11-08 `f0772d4b`：V 只对手稿负责，签只落稿）。所以
         「这一条有没有签」只能问「册上那条同文的命题有没有签」—— 按号问的话，第一次
         登记永远问不到，闸就变成了不可能通过的死闸。
 
@@ -9683,8 +9687,8 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
 
         1. `kind="concept"` ⇒ 概念行短路（概念不参与等级链，
            `evidencebits.derive_grade` 对它短路）；
-        2. `kind="conjecture"` ⇒ 这一闸不管，猜想照常注册（猜想本来就要先落库才审得动：
-           V 的 `verify_proof` 对不在册的命题直接报 `statement_missing`）；
+        2. `kind="conjecture"` ⇒ 这一闸不管，猜想照常注册（按最弱那一档注册：V 审的是
+           手稿、签落在稿上，在册是 B 在签之后的收录 —— 登记那一刻本来就没有签可要）；
         3. 自产（`origin="own_result"` 或 `source_lit_id` 空）+ 定理级 + 册上还没有
            同一条命题 ⇒ 这一档的拒收码用 B-2 的那个 `must_start_as_conjecture`
            （调用点在 `register_statement` 里：B-2 的白名单与拒信函数先返回）；
@@ -9708,8 +9712,9 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         if kind_now in self._NON_THEOREM_KINDS:
             reading["why"] = (
                 f"kind={kind_now!r} 不在这一条闸的射程里："
-                + ("猜想本来就要先落库才审得动（V 只审在册的命题）⇒ 按猜想注册不受阻，"
-                   "从猜想升成 theorem/lemma 的那一步才要 V 的签"
+                + ("按最弱那一档注册不受阻（V 审的是手稿、签落在稿上，"
+                   "在册是 B 在签之后的收录）⇒ 从猜想升成 theorem/lemma 的那一步"
+                   "才要 V 的签"
                    if kind_now == "conjecture" else
                    "概念不走等级链（`evidencebits.derive_grade` 对它短路）"))
             return {"needs_v": False, "refused": "", "reason": "", "reading": reading}

@@ -18,8 +18,12 @@ from .. import manuscriptsubmission as _MS
 
 
 def mark_b_ingested(store: Any, root: Any, *, manuscript: Any, out: dict[str, Any],
-                    family: str = "", task_id: str = "", stamp: str = "") -> dict[str, Any]:
-    """薄转发 `manuscriptsubmission.mark_ingested`（丙那一笔的唯一实现）。"""
-    _ = family  # 族由 `producer_of` 现判；这里收这一格只为调用方读得顺
+                    task_id: str = "", stamp: str = "") -> dict[str, Any]:
+    """薄转发 `manuscriptsubmission.mark_ingested`（丙那一笔的唯一实现）。
+
+    不收 `family`：族由 `manuscriptsubmission.producer_of` 从稿路径现判。改前这里收一个
+    `family` 形参、函数体第一行 `_ = family` 把它吞掉 —— 调用方以为自己传了「这一份稿属于
+    哪一族」，而它一个字节都没被读；那种形参是"接口看着收得下、实现其实不认"的假面。
+    """
     return _MS.mark_ingested(store=store, root=root, manuscript=manuscript,
                              out=out, task_id=task_id, stamp=stamp)

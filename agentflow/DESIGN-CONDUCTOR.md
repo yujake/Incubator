@@ -51,15 +51,17 @@
   `agentflow/src/agentflow/schema.py`），"谁能召唤谁"的策略表对 M 同样生效。
   特例化会是权限模型最容易漏的地方。
 
-### 1.2 A–H 既可以被动召唤，也可以主动召唤
+### 1.2 A–L 既可以被动召唤，也可以主动召唤
 
 - **被动**：`M → A`（用户让主控去检索）。
 - **主动（同伴召唤）**：`D → C`（D 要问图上具体是什么情况）、`E → B`（E 发现引文不可核实，要 B 重抽取）、
-  `F → A`（攻坚中发现新缺口要去查）、`H → G`（审校发现问题，请 G 修订）。
+  `F → A`（攻坚中发现新缺口要去查）、`B → V`（整理完送审）。**`H → G` 已不存在**（2026-11-11）：
+  改稿由 G 自己做，H 只判、只落发现；H 今天的出边是 `A` / `E`。
+  逐角色的当前出边以 §3.1 的表为准（那是 `capabilities.ALLOWED_EDGES` 的现读）。
 - **同伴召唤不是"自由发挥"**，它受三条约束（见 §3）：
-  1. **边必须被策略允许**（`capabilities.ALLOWED_EDGES`，实测在
+  1. **边必须被策略允许**（`capabilities.ALLOWED_EDGES` 在
      `agentflow/src/agentflow/capabilities.py`；`policy.check_edge` 读的就是它）；
-  2. **深度有限**（默认 3：`M(1) → A(2) → B(3)` 已到底）；
+  2. **深度有限**（`max_chain_depth=6` 跳 = 链上 7 个代理，2026-11-05 业主抬到 6；见 §3.2）；
   3. **同一 `(role, action, input_key)` 不得在祖先链上重复**（防 A→B→A→B 的活锁）。
 
 ### 1.3 角色即"子智能体"，可以并发
@@ -70,7 +72,8 @@
 - 我们的框架**不自己 spawn 进程**（那会让离线、确定性、可复现全部失守）。
   并发通过**有界线程池 + 每个角色一份独立的 `Store` 连接语义**实现，
   真正的隔离来自 `Store` 的文件锁与事务（那是它本来就有的能力）。
-- 并发上限是**策略**而不是常量：`max_concurrency`（默认 4）。
+- 并发上限是**策略**而不是常量：`max_concurrency`（**默认 `None` = 不设限**；2026-11-05
+  业主「丙：全局不设限」—— 只有显式给正整数时 `concurrency_exceeded` 才会发生）。
 - **可并发 / 不可并发的判据是"它们会不会写同一张表的同一批行"**：
   - 可并发：`M → (C 分析, E 实验, H 审校)` —— C 只读、H 只读、E 只写 `experiments`；
   - **不可并发**：两个 `B`（都写 `relations`，虽然事务是安全的，但语义上会让判重互相看不见）、
@@ -172,31 +175,35 @@ class Policy:
 
 `ALLOWED_EDGES: dict[str, frozenset[str]]` —— **谁能召唤谁，写在一处**。
 它**不在 `policy.py` 里，而在 `agentflow/src/agentflow/capabilities.py`**
-（`policy.check_edge` 读它）。实测 26 条召唤边，逐角色与下表逐条一致
-（复跑：`python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as C;print(sorted(C.ALLOWED_EDGES))"`）：
+（`policy.check_edge` 读它）。**这份表是当次现读，不抄历史读数** —— 下表是本文
+对齐 2026-11-16 盘面的结果（`docs/DESIGN-BASELINE.md` B07/B08 是同一份口径；边总数
+与逐行都以 `capabilities.ALLOWED_EDGES` 为准，复跑：
+`python -c "import sys;sys.path.insert(0,'src');from agentflow import capabilities as C;print(C.ALLOWED_EDGES)"`）：
 
 ```
-M → A B C D E F G H
-A → B            # 检索完请 B 整理（A 不自己抽概念）
-B → C            # 整理完请 C 看图的形状
-C → (只读，不召唤任何人)      # ⚠️ C 是只读角色，它连"请求"都不直接发；见下
-D → A B C E F    # 研究需要：补检索 / 重抽取 / 问图 / 做实验 / 立项攻坚
-E → B D          # 实验失败/引文不可核实 → 请 B 重抽取；发现反例 → 回 D
-F → A B C D E    # 攻坚需要一切
-G → D E F        # 写稿时发现缺证据 → 回去要
-H → G            # 审校发现问题 → 请 G 修订（H 不改稿）
+M → A B C D E G H   # 不直连 F / V / L：F 走 M→D→F，V 走 M→B→V / M→D→F→V
+A → B               # 检索完请 B 整理（A 不自己抽概念）
+B → C D H L V       # 整理完请 C 看图；改稿/收稿管道另有 D/H；形式化归 L；送审给 V
+C → （无出边）       # C 是只读角色，它连"请求"都不直接发；见下
+D → A B C E F       # 研究需要：补检索 / 重抽取 / 问图 / 做实验 / 立项攻坚
+E → B D V           # 引文不可核实 → B 重抽取；反例 → 回 D；E 的报告送 V
+F → A C D E V       # 2026-11-07：删 F→B、加 F→D（交稿只向上走 D）
+G → C D H           # 写稿时问 C / 要 D 补料 / 请 H 审
+H → A E             # 审校发现问题 → 核实原文 / 要实验证据（2026-11-11 去掉 G）
+V → （无出边）       # 2026-11-05「V 不应该有出边」：退回写在回执里
+L → C               # 形式化之后请 C 梳理证明链（入边只有 B）
 ```
 
-**C 的边刻意是空的**，理由与"C 永远只读"同源：C 一旦能发起动作，
+**C 的边刻意是空的**，理由与"C 对别人的产出只读"同源：C 一旦能发起动作，
 它就成了"绕过 B 引文回验"的写入路径。C 的 `candidate_gaps`/`structural_duplicates`
 是**产出**，由 D 或编排层决定要不要变成请求。
 
-**H 只能召唤 G**：审校者若能让别人改数据，它就同时是发现者与修正者。
-（这条与"H 的写面钉死在两处登记例外上"是同一约束的两个面，都由结构保证：
-`tools/base.py` 的 `for_role` 对只读角色一律剥掉写工具，放行的只有
+**H 的出边只有 `A` / `E`**：审校者若能让别人改数据，它就同时是发现者与修正者。
+（这条与"H 的写面钉死在登记例外上"是同一约束的两个面，都由结构保证：
+`tools/base.py` 的 `for_role` 对只读角色一律剥掉 `fs.*` / `table.*` 写工具，放行的只有
 `READONLY_CALL_EXCEPTIONS['H']` 那 4 件**该角色自己的落库代理**，外加
-`UNIVERSAL_TOOLS` 里那 4 件通用能力（`clock.timer_start` / `clock.timer_cancel` /
-`clock.alarm_start` / `conductor.ack` —— 业主 2026-10-26：「通用能力根本不该出现
+`UNIVERSAL_TOOLS` 里的通用簿记写工具（`clock.*` 七件 + `conductor.ack` /
+`conductor.post_task` / `conductor.escalate` —— 业主 2026-10-26：「通用能力根本不该出现
 谁能用这个说法」）。H 仍然拿不到任何 `fs.*` / `table.*` 写工具。）
 
 ### 3.2 循环与活锁
@@ -295,7 +302,7 @@ run_tasks(plan: Sequence[TaskCall], *, policy, conductor) -> list[SummonResult]
 | I-2 | 终态不可改写 | 对已结束任务再调 `finish()` ⇒ **零变更**（逐字节比对 `tasks.json`） |
 | I-3 | 深度单调不减 | 子任务的 `depth` 恒等于父 `depth + 1` |
 | I-4 | 拒绝必须带受控理由 | `outcome="refused"` ⇒ `refusal_reason ∈ REFUSAL_REASONS`（实测该词表在 `agentflow/src/agentflow/schema.py`，11 个取值） |
-| I-5 | 并发度不超上限 | 峰值同时 `running` 的行数 ≤ `max_concurrency` |
+| I-5 | 并发度不超上限（**只对显式设了正整数的策略**） | 峰值同时 `running` 的行数 ≤ `max_concurrency`；缺省 `None` = 不设限 ⇒ 不产生 `concurrency_exceeded`（2026-11-05「丙：全局不设限」） |
 | I-6 | 写集相交不并发 | 任一波浪内不存在两个任务写集相交 |
 | I-7 | 预算耗尽后不再新开任务 | 预算用尽 ⇒ 后续召唤 `refused/budget_exceeded` |
 | I-8 | 取消是协作式且不自动重试 | 取消后不产生新任务；被取消任务的 `outcome="cancelled"` |
@@ -304,10 +311,13 @@ run_tasks(plan: Sequence[TaskCall], *, policy, conductor) -> list[SummonResult]
 
 ---
 
-## 8. 待决问题
+## 8. 待决问题（第 1 条已落定，位置保留）
 
-1. **主控自己的"思考"放哪？** 本轮：`M` 是**确定性的策略执行者**（不做 LLM 推理），
-   "想做什么"由调用方给出 `plan`。真 LLM 主控由 `SubagentBackend` 承担（不在本轮测试范围）。
+1. **主控自己的"思考"放哪？** **已落定，不再是待决**：`M` 与其余角色走同一个
+   `agent_loop`（`agent_prompts.ROLE_BRIEFS` 里有它那一份），由模型决定下一步调哪个工具；
+   它的**动作表为空**（`CAPABILITIES["M"] == ()`）、**写集为空**，所以"模型驱动"不等于
+   "它产出领域对象"——它只经 `conductor.*` 派活/销号/收敛。
+   旧文写的"`M` 是确定性策略执行者、不做 LLM 推理、由调用方给 `plan`"是这条落地之前的形态。
 2. **跨会话恢复**：`tasks` 表的 `pending/running` 行在重启后如何处置？
    本轮：**不自动续跑**（僵尸 `running` 会被 `verify` 报出来，交人决定），
    因为"自动续跑一个可能已经写了半张表的任务"比重跑一遍危险。

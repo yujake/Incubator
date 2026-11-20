@@ -53,8 +53,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Mapping
 
-#: 交付/待办读数里一条「稿」的身份前缀（命题号的身份前缀是 `stmt:`；两者不混）。
-MANUSCRIPT_OUTPUT_PREFIX = "mss:"
+# 「稿」的身份前缀 `mss:` 不在这里定义：写记号那一侧的真身是
+# `agent_f/submission.py::SUBMISSION_PREFIX`（本模块只读盘，不写 `tasks.artifacts`）。
+# 改前这里留过一份零引用的 `MANUSCRIPT_OUTPUT_PREFIX = "mss:"` —— 第三份字面量，
+# 读的人会以为待办扫描按它发号（判据：`tests/test_roleclean2_c_e_f_g_residue.py` ②）。
 
 
 def _empty(why: str = "") -> dict[str, Any]:

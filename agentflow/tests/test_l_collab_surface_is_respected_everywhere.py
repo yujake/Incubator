@@ -124,9 +124,11 @@ M_DISPATCH: tuple[str, str] = ("M 的动作为派 B（M→B）", "你的动作�
 #: 判据 2 里"升级路径"那一步的锚点（缺陷严重 ⇒ B 通知 D 开展研究）。
 #:
 #: 2026-11-05（审计② 第 ⑪ 条）：原来锚的是 `escalate_proof_research` —— 那是
-#: `AgentB` 上的一个方法，不在 `CAPABILITIES["B"]` 的 7 件动作里，模型照它
-#: 调只会拿到 `unknown_action`。改锚到模型真能走的入口：`summon` 形状派 D
-#: （`B → D` 是直接边）。方法本身仍在（`agent_b/proof_research.py`），不动动作面。
+#: `AgentB` 上的一个方法，不在 `CAPABILITIES["B"]` 的动作里，模型照它调只会拿到
+#: `unknown_action`。改锚到模型真能走的入口：`summon` 形状派 D（`B → D` 是直接边）。
+#: 2026-11-20（PROOFCHAN）：那个方法整个退场了（src 0 调用、只有测试在调），所以这一格
+#: 现在是这条路上**唯一**的锚点；三方一致（提示词 / 动作表 / 实现类）由
+#: `tests/test_proofchan_upgrade_is_the_summon_path.py` 逐条钉着。
 B_ESCALATION = "用 `summon` 形状直接派 D"
 
 #: 判据 3 的尺子：非 B 角色的提示词里不许再拿"禁止自己做形式化"顶替权限判断。

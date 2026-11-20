@@ -132,7 +132,7 @@
 页面顶部那三个数（角色侧 X / 系统侧 Y / 状态读数 Z）刻意不相加：把"谁做错了"与"系统
 哪里坏了"加起来得不到任何一个有名字的量。
 
-### 三、六档归属（`ATTRIBUTION_BUCKETS` / `attribution_of`）
+### 三、六档归属
 
 归属原本只有两档（`CALLER_ATTRIBUTED_CODES` 记 `called_by`，其余记 `role`）。新类里有四种
 "错的那一方不是记录里那个人"的形态，所以扩成六档，逐档写明理由：
@@ -423,16 +423,6 @@ PROCESS_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in PROCESS_
 STRUCTURAL_ONLY_CATEGORIES: frozenset[str] = frozenset(
     EXPANDED_ROLE_CATEGORIES | SYSTEM_CATEGORY_NAMES | STATE_CATEGORY_NAMES)
 
-#: 六档归属（模块 docstring 第三节）。顺序就是 `attribution_of` 的判定顺序。
-ATTRIBUTION_BUCKETS: tuple[tuple[str, str], ...] = (
-    ("actor", "动作方：这条记录就是它自己的动作回执（默认档）"),
-    ("caller", "发起方：结构判据说这次派活 / 这次送审派错了"),
-    ("author", "命题作者：证明本身有毛病 ⇒ 记写出这条证明的那一方（不是复核者 V）"),
-    ("recipient", "收件人：板项没被 ack ⇒ 记该 ack 的那一方（不是发送方）"),
-    ("roster", "名册发起方：写口拒了一个名字 ⇒ 记要这个名字的那一方"),
-    ("system", "系统侧：判据没判成 / 外部面掉了 / 收工门拦下 ⇒ 不进角色合计"),
-)
-
 #: 记 `called_by` 的类目（码那一档仍用 `CALLER_ATTRIBUTED_CODES`，两处并存：
 #: 老类目按码分，新类目按类目分 —— 因为新类目根本不是靠码命中的）。
 CALLER_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({
@@ -444,6 +434,7 @@ AUTHOR_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({"proof_defect_found"})
 
 #: 记名册发起方（`owner` 那一行的 `role`）的类目。
 ROSTER_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({"roster_write_refused"})
+
 
 #: 系统侧那一档的"角色"名。它不是一个角色（`schema.ROLES` 里没有），所以
 #: `_known_role` 对它一律回 False —— 于是它永远不会被当成 `called_by` 命中。
@@ -809,39 +800,6 @@ def primary_code(*texts: Any) -> tuple[str, str] | None:
         if code in blob:
             return (code, cat)
     return None
-
-
-def attribution_of(code: str, category: str) -> str:
-    """这一条该记谁：返回 `ATTRIBUTION_BUCKETS` 里的一个档名。
-
-    判定顺序就是本函数的分支顺序，理由逐条：
-
-    1. `system` 先判：系统侧类目（`SYSTEM_CATEGORIES`）的 "角色" 永远是 `SYSTEM_ACTOR`，
-       这一点不受别的规则影响 —— 若放到后面，一个凑巧在 `CALLER_ATTRIBUTED_CODES` 里的码
-       会把它拖进角色表；
-    2. 状态读数（`STATE_CATEGORIES`）记收件人：板项行的 `role` 就是收件人
-       （`parent_task_id` 那一方），记录里已经没有"动作方"这一档了；
-    3. 名册类记发起方：`owner` 那一行的 `role`；
-    4. 证明缺陷记作者：`proof_authors` → `created_by`；
-    5. 新类里那两个"送审派错了 / 父先退了"记 `called_by`；
-    6. 老类目按码分（`CALLER_ATTRIBUTED_CODES`），其余是 `actor`。
-
-    为什么不让调用点自己决定档位：档位是类目的属性（"证明有毛病"永远该记作者，
-    与它在哪张表里被读出来无关）。放调用点上，第二个读同一件事的人一定会写错。
-    """
-    if category in SYSTEM_CATEGORY_NAMES:
-        return "system"
-    if category in STATE_CATEGORY_NAMES:
-        return "recipient"
-    if category in ROSTER_ATTRIBUTED_CATEGORIES:
-        return "roster"
-    if category in AUTHOR_ATTRIBUTED_CATEGORIES:
-        return "author"
-    if category in CALLER_ATTRIBUTED_CATEGORIES:
-        return "caller"
-    if code in CALLER_ATTRIBUTED_CODES:
-        return "caller"
-    return "actor"
 
 
 # ---------------------------------------------------------------- 结果形状
@@ -2232,7 +2190,7 @@ def render_text(stats: ErrorStats) -> list[str]:
         "『步被拆分』与『转交办成』本身都不是失败。")
 
     lines.append("")
-    lines.append("口径：角色归属见 errorstats 模块 docstring（六档 `ATTRIBUTION_BUCKETS`："
+    lines.append("口径：角色归属见 errorstats 模块 docstring（六档归属："
                  "召唤期结构判据记 called_by、证明有毛病记命题作者、板项没 ack 记收件人、"
                  "名册写口拒绝记要名字的那一方、系统侧不进角色表）；"
                  "一条记录只算一次，主码 = 类目表靠前的类目优先、同类目里长码优先。"

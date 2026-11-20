@@ -108,10 +108,6 @@ def stop_reasons_in_source(src: str) -> set[str]:
 _TABLE_ONLY_TODAY: dict[str, str] = {
     "no_notify": "L-05e 之后循环不再产生它（已降级成读数）；留给旧会话记录，"
                  "取值本身仍是「收工没按格式填表」⇒ 异常",
-    # `escalated` 的那条线已经落地（`agent_loop.py` 里确有
-    # `run.stop_reason = "escalated"`），所以它今天不在「表里有、代码里没有」那一栏里
-    # —— 这一行是预登记时的理由留痕，删不删都不改变任何判定（不放宽、也不收紧）。
-    "escalated": "预登记：交给召唤者、本趟自行收工 ⇒ 归「它自己决定停」那一族（5）",
 }
 
 
@@ -284,8 +280,6 @@ def test_the_scan_is_not_vacuous() -> None:
     # 表这一侧也要有量：六档一个都不许空。
     assert set(CLI.EXIT_CODE_BY_STOP.values()) == {0, 1, 2, 3, 4, 5}, (
         f"六档必须每一档都有登记的取值，实测 {sorted(set(CLI.EXIT_CODE_BY_STOP.values()))}")
-    assert CLI.KNOWN_STOP_REASONS == frozenset(CLI.EXIT_CODE_BY_STOP), (
-        "`KNOWN_STOP_REASONS` 与表漂了（它必须从表派生）")
 
 
 def test_negative_control_a_new_unregistered_stop_reason_goes_red() -> None:

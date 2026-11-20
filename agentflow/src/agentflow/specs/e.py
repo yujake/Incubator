@@ -9,9 +9,6 @@
 from __future__ import annotations
 
 from ..agentspec import (
-    _ARR_I,
-    _ARR_OBJ,
-    _ARR_S,
     _B,
     _I,
     _N,

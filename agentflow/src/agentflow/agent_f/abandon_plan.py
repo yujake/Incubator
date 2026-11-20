@@ -6,7 +6,7 @@ import copy
 from ._support import Any, Mapping, PlanError, Sequence, _history_round
 from .. import lifecycle as L
 from .. import statementabandon as SA
-from ..planabandon import (PLAN_ABANDON_EVIDENCE_REASONS, PLAN_ABANDON_NOT_NEEDED,
+from ..planabandon import (PLAN_ABANDON_EVIDENCE_REASONS,
                            PLAN_ABANDON_REASONS)
 
 #: 五条拒信的读指标签（写进拒信正文，便于人/模型逐条对得上）。

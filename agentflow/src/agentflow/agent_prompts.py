@@ -2844,7 +2844,70 @@ from .promptkit import PromptError, PromptRegistry, Scope, Section, SECTION_ORDE
 #:   （本批 src 两处加行）。warm 两档没有重跑：要真调上游（模型）、本路拿不到凭据
 #:   ⇒ `tests/test_prompt_cache_warm.py` 的新鲜度判据是已知待办（与 p220 / p221 / p222
 #:   那几格同一句），不许写成"已重跑"。
-PROMPT_VERSION = "p299"
+#: p299 → p300（2026-11-20，ROLECLEAN3：M / H / L / V 的旧路残留清扫 + 提示词对齐）：
+#:   本路只认领四处：
+#:   ① M：收工门的说明与 `LOOP_PROTOCOL` 之外那份 M 交付说明还写着 2026-10-09 的"两条轴"
+#:     （`can_close` = 机器口径 / 机器七格退成读数）—— 2026-11-19 的 `closing_verdict` 已把它
+#:     合成一份权威结论（八格全 pass ∧ `m_says_done` ∧ `retire.complete` ∧ `programs_ok` ∧
+#:     无 blocker）。`tools/conductor_tools.py` 的 `conductor.closing` summary / 三个参数说明 /
+#:     returns / 工具体 docstring 与 M 的完成定义、`agent_skills` 的收工手册（slug 从
+#:     `收工-门是读数不是判决` 改成 `收工-一份权威结论`）一起改到同一口径。
+#:   ② V：`specs/v.py` 与 `agent_skills` 的 V 手册不再说"发不发签由你的秘书判定"—— 计数与
+#:     门槛自 2026-11-17 起由框架从台账现数（`sign_counting`），秘书只执行落签；`vsigns`
+#:     的模块 docstring 把"连续三次"改成按 `need`（F/B 是 3、E 的穷举档是 1）；
+#:     `agent_v/__init__.py` 的"唯一产物是一行台账"改成三处工作区产物。
+#:   ③ L：`specs/l.py` / `tools/formal_tools.py` 的「unknown 原因」删掉「开关关着」（关着时 L
+#:     不存在，那一条不可达）；`agent_l/_support.py` 的 off 档不再教 L「改走逐行审阅」；
+#:     `agent_l/__init__.py` 不再说「E 的代码一行没删、行为没改」（E 的动作面已无形式化）。
+#:   ④ H：`agent_h/judge_quote_semantics.py` 删零引用常量 `_MATERIAL_KEYS`；
+#:     `agent_h/__main__.py` 不再指向不存在的 `agent_h/selftest.py`；`agent_h/__init__.py`
+#:     的"documents.json 唯一变化点是 status"改成 status + 审核轴三格 + `review_rounds`；
+#:     `agent_skills` 的 H 手册把 `H.review_report` 从"审报告"改成"产出审校报告"。
+#:   变化格（本路）：M / L / V；H 的四处都不进提示词（H 那一格的现值差异来自并行路，本路不认领）。
+#:   其余格的现值差异也来自并行路的未提交改动，本路不认领，但 `_FROZEN_PROMPT_DIGESTS` 是一份全表 ⇒
+#:   冻结时按现算值一并落（逐格见 `tests/test_agent_prompts.py` 的现算表）。
+#:   并行路 ROLECLEAN1（A / B / D，同一棵树上，本格只登记、不另抬版本）改了两段正文：
+#:     ⑤ B：`specs/b.py` 的 boundary 把「命题台账三件套缺一不可」改成现行口径
+#:        「完整形态三项 + 缺证明不拒收（P-06）」（与同一份 spec 的动作摘要「没有稿不拒收」、
+#:        `register_statement.py` 的「现在不拦：落库 + 按既有字段如实标记」对齐）；同文件
+#:        `ingest_manuscript` 的 `reason` 参数说明从「只进读数与台账 note」改成「落进返回值的
+#:        `caller_reason`」—— 实现补上了那一格（改前形参一次都没被读），返回键表同步。
+#:     ⑥ D：`specs/d.py` 的 boundary 把「猜想九状态硬条件」逐条对齐
+#:        `schema.Conjecture.validate`（`refuted` 补第二条来路 `refusal_ref`、`promoted` 补
+#:        `proof_experiment_id`、九状态补 `needs_evidence` 的 `notes`）。
+#:     ⇒ 本并行路的摘要差异落在 B / D 两格（`tests/test_roleclean1_abd_residue.py` 逐条钉住）。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 十一格 + `_FROZEN_PROMPT_VERSION`（p300）；
+#:   两份 golden 按现值重冻；`ROLE-GUIDE` 重生成；warm 两档见本批报告（真调上游，cap 0.10）。
+#: p300 → p301（2026-11-20，WIREUP：「只登记未修」里那三条提示词可见的残留收口）：
+#:   本路只认领三处，三处都是"读的人会照着做错"的活陷阱（不是措辞偏好）：
+#:   ① C（`specs/c.py` 的 boundary）：`（你的可召唤边是空的）` → `（你的出边是空的：别人
+#:     可以召唤你，你唤不起任何人）`。原句的「可召唤边」既可读成"我能召唤的（出边）"、也可
+#:     读成"能召唤我的（入边）"；C 的 `summonable=True` 且 `D → C` 在 `ALLOWED_EDGES` 里 ⇒
+#:     按后一种读法字面为假，而它正好写在"不许直接向别人发请求"这一句的括号里。
+#:   ② F（`specs/f.py` 的 stance 第 2 条）：`（要 D 统筹就用 conductor.escalate 写进召唤者
+#:     的收件箱 —— 你没有到 D 的出边）` → `（要 D 统筹就直接派 D —— F → D 是直接边；
+#:     conductor.escalate 只用来向 M 请求指导，不是找 D 的替代路）`。同一份渲染后的 prompt
+#:     第 89 行本来就写着「F → D 是直接边」（`SPEC.edges` 含 `'D'`），旧句会把人送去走一条
+#:     不存在的代唤路。
+#:   ③ `attack.step` 的 summary（`tools/attack_tools.py`，roles 只有 F）：
+#:     `C/D/F 的推理未接线则如实记 no_change` → `E 实验/A 检索/B 重抽取/F 自推；
+#:     C/D 无推理入口 ⇒ 记 no_change`。旧句把 F 也列进"未接线"，与三处现口径相抵：
+#:     `agent_f/_support.py` 的 `UNWIRED_OWNERS = ("C","D")`、`attackround` 的四产物判据
+#:     （`no_change` 不是产物）、以及 `agent_f/__init__.py` 的"F 的推理就是它的工作方式，
+#:     没有开关"。同一笔的 `analysis.register_report` 的 summary 也不再抄那份 kind 名单
+#:     （现读词表见参数面）—— 它是 C 的工具面，所以 C 那格也含这一句的现值。
+#:   变化格（本路）：C / F。B / D / G / L / M 的现值差异来自并行路的未提交改动（p300 冻结
+#:   之后仍有落盘），本路不认领，但十一格是一份全表 ⇒ 冻结时按现算值一并落
+#:   （与 p300 对 p299 的处理同一口径）。
+#:   连带：`_FROZEN_PROMPT_DIGESTS` 十一格 + `_FROZEN_PROMPT_VERSION`（p301）；
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格、count / keys_sha256 与 p300
+#:   同值 —— 本批只换段文本，没有哪一格事实换过落点）；两份 golden 按现值重冻（agent 面
+#:   11 条版本行 + 各格现值；tool 面 `attack.step` 的 summary + `analysis.register_report`
+#:   的 kind enum）；`tests/fixtures/tool_declaration_baseline.json` 补一条带 reason 的
+#:   amendment（`analysis.register_report` 的 kind enum 追加 `proof_chain` —— 那是 C5
+#:   "proof_chain 分析报告永不登记"的修法，词表在 `schema.REPORT_KINDS`）；
+#:   `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成；warm 两档重跑（真调上游，cap 0.10）。
+PROMPT_VERSION = "p301"
 #: 循环协议：模型与框架之间唯一的约定。工具结果会作为下一条 user 消息回给模型。
 #:
 #: 两条"提示词指名了不存在的工具"的历史（`draft/105` 的 B1/B2，2026-10-11 批 Q1 改掉）：
@@ -3060,10 +3123,12 @@ LOOP_PROTOCOL = """\
   ② 有没有还没做完但能做的一步？有就做完再收工。两步都查过了，才输出 final。
 - **"能不能收工"由你自己判**（业主 2026-10-09：「所有智能体是否能停都是看自己被派的活
   有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」）：
-  判据是**你被派的活做完了没有**，不是"步数用尽了"、也不是"机器说没事"。
+  判据是**你被派的活做完了没有**，不是"步数用尽了"。
   主控收工前调 `conductor.closing` 时要交出**你自己列的任务列表**（`task_list`：每一项写
   `what` 与 `state` ∈ done/not_done/cannot）和你的结论（`goal_met`）。
-  机器报的那些格是读数，不是判决 —— 你不认它就写明理由，但**不许**把它盖掉当没看见。
+  **主控**：收工门那一份结论（`closing_verdict`）不是读数 —— 八格全过 ∧ 你交的 `goal_met` ∧
+  名册全部销号 ∧ 程序都停了 ∧ 没有 blocker，五者缺一都不许说完成；哪一格没过就把那一格
+  做成 pass，或如实写缺口。不许把它读成通过，也不许拿你自己的判断去盖它。
 - **派活那一刻，秘书还会替你看一遍"这件活在被派人的读写面里做不做得成"**
   （业主 2026-10-09：「"超越职责"的一个主要可能是无法在被分配的读写面内完成任务，
   这个秘书也要帮忙看，不只是看任务是否符合角色设计」）：这一步的结果里有 `surface_fit`
@@ -3895,7 +3960,7 @@ PAPER_PACK = """\
   H 和 V 为中心的智能体协作工程」）：B 给逐字出处与命题台账、V 给证明的逐行签名、H 拿这两样判稿
   —— 正文里每一条承重断言都要能顺着这条链找到「原文长什么样」与「谁签过字」。
 
-五、完成定义（收工门八格全过 **且没有 blocker** 才算交付，两者缺一都不许说"完成"）：八格是 `contradictions` /
+五、完成定义（**一份权威结论**才算交付：收工门八格全过 ∧ 你交的 `goal_met` ∧ 名册全部销号 ∧ 程序都停了 ∧ 没有 blocker；任一不成立都不许说"完成"）：八格是 `contradictions` /
 `load_bearing` / `report_shape` / `user_pending` / `substance` / `acceptance` / `artifact_ledger` / `literature_pending`
 （待入库文献表：全表还有 `pending` ⇒ `fail`；当前委托提交之后没清表 —— 行上没有 `cleared_at` ⇒ `fail`；表读不到 ⇒
 `unknown`，**不是**"没有待裁"）；逐格判据以 `conductor.closing` 的当次读数为准，下面只写**论文交付**那五条 —— 其余三格
@@ -4003,9 +4068,11 @@ PAPER_PACK = """\
 - `conductor.closing` 仍要跑（它是收工门）：两个参数都给对 —— `project_dir` 是项目根
   （这个工作区就是根 ⇒ 给 `"."`；给了 `out/paper` 它会把 `out/paper` 再拼一次），
   `report_path` 给 `out/review/REPORT.md`。它报出来的缺口按原因行读。
-  三个名字别混：`m_says_done` 是**你的**判断（你自己列的任务列表做完了没有）；
-  `can_close` 是**机器口径**；`can_close=null`（没接线/算不出来）**不是通过**，
-  它既不是过也不是不过 —— 不许把它读成通过，也不许把 `can_close=false` 说成"我说没做完"。
+  **它给的是这一趟能不能交的唯一结论**（`closing_verdict`）：八格全 pass ∧ 你交的
+  `m_says_done`（`goal_met` + `task_list`）∧ 名册全部销号 ∧ 程序都停了 ∧ 没有 blocker。
+  `can_close` 是那份结论的三态出口：`null`（没查成）**不是通过**，`false` 也不是
+  "我说没做完"—— 它是上面五样里至少一样没成立。`machine_pass` 只是其中"八格轴"的读数，
+  不是另一份判决；你也不能拿自己的 `goal_met` 去盖掉任何一格。
 - 关键取舍要问用户（`ask_user` 那条形状）：问过的问题会落盘；在没人值守的运行里，
   提问会停在"等待用户"，等回答回来再继续。这不是麻烦，是这道门的一条读数
   （`triage_branch_recorded`：一次都没问过 ⇒ 那一格只能记"没查成"）。

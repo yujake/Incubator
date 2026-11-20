@@ -90,11 +90,6 @@ LEVEL_INFO = "info"
 LEVEL_WARNING = "warning"
 
 
-def is_objective(kind: Any) -> bool:
-    """这个 kind 属于客观档吗（判出来就拦门）。"""
-    return str(kind or "") in BLOCKING_KINDS
-
-
 def is_subjective(kind: Any) -> bool:
     """这个 kind 属于主观档吗（只点名、不拦门）。"""
     return str(kind or "") in SUBJECTIVE_KINDS
@@ -176,6 +171,6 @@ __all__ = [
     "BLOCKING_KINDS", "CITATION_OBJECTIVE_KINDS", "LEAN_OBJECTIVE_KINDS",
     "LEAN_WARN_KINDS", "LEVEL_BLOCKER", "LEVEL_INFO", "LEVEL_WARNING",
     "MAPPING_OBJECTIVE_KINDS", "MD_OBJECTIVE_KINDS", "NUMERIC_OBJECTIVE_KINDS",
-    "PAPER_OBJECTIVE_KINDS", "SUBJECTIVE_KINDS", "findings_of", "is_objective",
+    "PAPER_OBJECTIVE_KINDS", "SUBJECTIVE_KINDS", "findings_of",
     "is_subjective", "is_warning", "level_of", "problem_counts", "warnings_of",
 ]

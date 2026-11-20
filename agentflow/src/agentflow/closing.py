@@ -1,16 +1,30 @@
 # -*- coding: utf-8 -*-
-"""收工门：把"能不能交"从一句判断变成七格各自能造红的读数。
+"""收工门：把"能不能交"从一句判断变成八格各自能造红的读数。
 
-判据：`DEFAULT_CHECKS` 七格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
+判据：`DEFAULT_CHECKS` 八格，每格都能单独造红（`tests/test_closing_gate.py`：每条一条负控 + 一条反真空）。
 
 论文那一格（`paper`）不在门里（业主 2026-11-14 裁定：「是否出 paper 退出收工判定，
 由 M 自行判断是否到这个时机」）：它照旧算、照旧落在 `readings["paper"]`，
 但不进 `status`、不进 `machine_pass` —— 判断该不该出论文的人读那一格，
 门不拿它当交付前提。
-三态纪律：`pass` / `fail` / `unknown`，`unknown` 不是通过（"没查成"与"查过了没问题"必须分得开）；
-`machine_pass` 只在每格都 `pass` 时为真。最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件
-事：包是旧的（锚 `drifted`）、有一条依赖还挂着争议、承重的那条结论只有数值支持却写着"已证明"、报告
-缺了三节、还有一个问题在等用户回答。
+四态纪律（2026-11-20，EMPTYCELL 把"真空通过"拆出来）：
+
+- `pass` / `fail`：这一格依赖的东西存在、而且判过；
+- `unknown`：存在但读不成（没查成）—— 绝不折成 `pass`，也绝不折成 `na`；
+- `na`：这一格依赖的东西整个不存在（表不在盘上 / 表在盘上但一行都没有 / 没有会话记录）
+  ⇒ 没有可判对象。`na` 不是通过（根本没判过）、不是失败（没判出坏）、也不是"没查成"
+  （不是读不成）。它不进 `pass` 计数、不进 `fail` 计数，也不进分母
+  （可判的格数 = pass + fail + unknown）。
+
+`na` 的判据是"这一格问的东西在不在"，不是"答案好不好"：空工作区上六格 `pass` 曾经是
+"没有东西可判"冒充"判过且合格"——`counts={pass:6, fail:2}` 让读者从"6/8 过"里读不出
+"这 6 格根本没法判"。所以八格全 `na` 时 `closing_verdict` 记 `unknown`（没有一格判过，
+exit 2），不许当"可以交"；`machine_pass`（旧口径：八格全 pass）在有任何 `na` 格时是假，
+它是读数，不参与"能不能交"的判定。
+
+最贵的一类失败不是"做错了"，而是"做完了"与"能交"被当成同一件事：包是旧的（锚 `drifted`）、
+有一条依赖还挂着争议、承重的那条结论只有数值支持却写着"已证明"、报告缺了三节、还有一个
+问题在等用户回答。
 
 | 检查 | 判什么 |
 |---|---|
@@ -33,7 +47,7 @@ import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping, NamedTuple, Sequence
+from typing import Any, Container, Iterable, Mapping, NamedTuple, Sequence
 
 from . import errorstate as _ES   # 「这条命题是不是错了」的唯一读口（三态）
 from . import interactions as IX  # I2 的矛盾检测/裁决闭环（这里只调用，不改它）
@@ -69,7 +83,7 @@ from . import autoretire as _AR
 #: 由 M 自行判断是否到这个时机」。论文正文与 PDF 对不对得上仍是 `readings["paper"]`
 #: （`_check_paper` 保留、照旧算），但它不再是一格：M 读那一格决定该不该出论文，
 #: 门不拿它当交付前提。显式把 `"paper"` 写进 `checks=` 的调用方仍会得到那一格
-#: （既有夹具与论文那一路的负控要它），但缺省七格里没有它。
+#: （既有夹具与论文那一路的负控要它），但缺省八格里没有它。
 DEFAULT_CHECKS: tuple[str, ...] = (
     "contradictions", "load_bearing", "report_shape", "user_pending", "substance",
     "acceptance",
@@ -95,6 +109,95 @@ DEFAULT_CHECKS: tuple[str, ...] = (
 #: （T1 就是 30 行 tasks、0 行产出）。
 SUBSTANCE_TABLES: tuple[str, ...] = ("documents", "relations", "experiments",
                                       "review_findings", "statements")
+
+
+def _no_judgeable_rows(store: Any, tables: Sequence[str]) -> tuple[bool, str]:
+    """这些表里有没有哪怕一行可判的东西：`(True, why)` = 没有（这一格记 `na`）。
+
+    ## 为什么要它（2026-11-20，EMPTYCELL）
+
+    `store.rows(table)` 对"表文件不在盘上"与"表在盘上但一行都没有"都回 `[]`，于是那些
+    "扫一遍表找坏东西"的格在空工作区上全成了 `pass` —— 六格 pass / 两格 fail 的读数里，
+    读者无法从"6/8 过"看出"这 6 格没有东西可查"。这两件事都不是"判过且合格"：
+
+    - 表不在盘上（还没写过）/ 表在盘上但零行（没做）⇒ 这一格依赖的对象整个不存在
+      ⇒ `na`（不适用）；
+    - 有哪怕一行 ⇒ 照常判 `pass` / `fail`；
+    - 读不成（坏 JSON / 半截表）⇒ 这里回 `(False, "")`，交给各格自己的异常路径记
+      `unknown` —— "读不成"不是"没有"，把坏表折成 `na` 等于把缺陷说成不适用。
+
+    判据只读两样：表文件在不在（`store.data / schema.TABLES[table]["file"]`）与
+    `store.rows(table)` 的行数。它不 import 各格自己的读数函数，所以不会变成第二套判据。
+    """
+    if store is None:
+        return (False, "")
+    data = getattr(store, "data", None)
+    absent: list[str] = []
+    blank: list[str] = []
+    for table in tables:
+        spec = S.TABLES.get(table) or {}
+        name = str(spec.get("file") or table)
+        on_disk = bool(data is not None and (Path(str(data)) / name).is_file())
+        try:
+            rows = store.rows(table)
+        except Exception:  # noqa: BLE001 —— 读不成 ⇒ 不判 na，由调用方记 unknown
+            return (False, "")
+        if rows:
+            return (False, "")
+        (blank if on_disk else absent).append(name)
+    if absent and blank:
+        why = ("这一格依赖的表不在盘上或一行都没有（不在盘上："
+               + "、".join(absent) + "；在盘上但零行：" + "、".join(blank) + "）")
+    elif absent:
+        why = "这一格依赖的表都不在盘上（" + "、".join(absent) + "）"
+    else:
+        why = "这一格依赖的表都在盘上但一行都没有（" + "、".join(blank) + "）"
+    return (True, why + "⇒ 没有可判对象，记 na（不是 pass：没判过；也不是 unknown：不是读不成）")
+
+
+#: `contradictions` 那一格问"有没有矛盾"时要看的表。任何一张有行 ⇒ 有可判对象。
+#: 少了 `relations` 会漏掉"图上现算的对立对"；少了 `documents` 会漏掉"正文断言压在被证否
+#: 命题上"那一条污染面（`statements_cited_by_claims` 读它）。
+CONTRADICTION_TABLES: tuple[str, ...] = (
+    "literature", "dependencies", "statements", "relations", "documents")
+
+#: `load_bearing` 那一格问"承重结论有没有背书"时要看的表：断言在 `documents.claims`，
+#: 背书来自 `experiments` 与 `statements`。三张都空 ⇒ 没有可判对象。
+LOAD_BEARING_TABLES: tuple[str, ...] = ("documents", "statements", "experiments")
+
+
+def _session_record_exists(session_root: Any, sid: str | None) -> bool:
+    """这一趟的会话记录在不在盘上（`user_pending` 的 na 判据点）。
+
+    单独成函数是为了让判据能在这一处打桩：`tests/test_emptycell_four_states.py` 把它
+    换成恒真 ⇒"没有会话记录 ⇒ na"那一条必须当场变红（判据没接线时它会静默变绿）。
+    """
+    from . import sessions as _SESS
+    return _SESS.session_path(session_root, sid).is_file()
+
+
+def _record_not_applicable(rep: ClosingReport, name: str, why: str,
+                           reading: Mapping[str, Any] | None = None) -> None:
+    """把一格记成 `na`（不适用：这一格依赖的东西整个不存在，没有可判对象）。
+
+    八格第四态的唯一落点。四个纪律都在这一处：
+
+    - `na` 不是 `pass`：不从"没查到坏东西"推"合格"；八格全 `na` 时
+      `closing_verdict` 落 `unknown`（没有一格判过）；
+    - `na` 不是 `fail` / `unknown`：它不进 `hard`、不进 `unknown_cells`、也不进分母；
+    - 必须带 why：原话进 `readings[name]["reason"]`，`closing_verdict` 的
+      `cells[].why` 与网页的每一格都从这一处取（`na` 不是没有理由的空状态）；
+    - 这一条也是反真空的打桩点：把它换回"记 pass"（改前的行为）⇒
+      `tests/test_emptycell_four_states.py` 的 a 必红。
+
+    `reading` 是各格自己的读数形状（照常保留它原本的键，只补 `na` / `state` / `reason`）。
+    """
+    rep.status[name] = "na"
+    got = dict(reading or {})
+    got["na"] = True
+    got.setdefault("state", "not_applicable")
+    got["reason"] = why
+    rep.readings[name] = got
 
 #: 「这一趟的验收表里，机器可判的那几行」落在哪张文件上（项目根相对）。
 #:
@@ -124,9 +227,14 @@ LEG_CHECK_KINDS: dict[str, str] = {
                            "里 `quote_verified` 非 null 的行）",
     "proof_experiment_rows": "台账里的 proof 级机器核验行数（`experiments` 里 "
                              "`method=formal` 且 `evidence_kind=proof` 的行）",
-    "reviewed_proof_rows": "**我方**走完「有证明过程 + 审过」的命题行数（`statements` 里"
-                           "五元位派生出 `预备定理级` / `正式定理` 的行，且 `origin != external_lit`）"
-                           "—— 引用命题不算：它的第 2 位凭据是文献代号，不是我们造的东西"
+    "reviewed_proof_rows": "**我方**走完「有证明过程 + 审过」的命题行数 —— 两条并列来源："
+                           "① `statements` 里五元位派生出 `预备定理级` / `正式定理` 的行"
+                           "（且 `origin != external_lit`）；② 盘上 `reports/{f,b,e}-proof-*.md`"
+                           " 的稿 + 稿上的 V 签（`out/vsigns/<正文sha>.json`：`verdict=成立`、"
+                           "`streak>=need`、复算得上、且没有被后来的否决盖过）"
+                           "—— 2026-11-02 起 V 签先落稿、B 之后才收录，第一阶段没有在册命题"
+                           "（`draft/189`），所以「稿+签」单独也满足这一档。"
+                           "引用命题不算：它的第 2 位凭据是文献代号，不是我们造的东西"
                            "（`draft/39` §3.17 A5：非数值方向的项目靠这一档满足「算或造」）",
     "accepted_documents": "**通过**了我方稿件行数：`documents` 里 `review_verdict == '成立'` 的行（「通过」与 V 的裁决同形；与「审过」是两件事）",
     "reviewed_documents": "被审到有裁决的我方稿件行数（`documents` 里审核轴上是「成立」或"
@@ -344,11 +452,23 @@ LEG_CHECK_KINDS: dict[str, str] = {
                       "在台账上没有落点",
     "plan_progress_rows": "**真的被推进过**的攻坚计划数（`attack_plans` 里至少有一轮 "
                           "`outcome=progress` 且该轮有 `cites` / 新子目标 / 新实验的行，见 "
-                          "`_round_advanced`）—— 立项 ≠ 推进，被 step 过也 ≠ 推进："
+                          "`_round_advanced_by`；**或**第五档「自足证明」：`action=proof` 且"
+                          "该轮 `## 依赖` 是空表、稿已落地（`proof_registered=True` 且 sha "
+                          "非空，或该 sha 命中 `out/vsigns/` 的颁发表；业主 2026-11-20 裁定"
+                          "「自足证明是几乎唯一的生产方式」，见 `_round_dependency_empty` / "
+                          "`_proof_landed`）；**或**两条计划级并列通路：① 计划名下的稿拿到 V 的"
+                          "「成立」签（`out/vsigns/` 的颁发表，`verdict=成立` 且 "
+                          "`streak>=need`，见 `_signed_manuscripts_of`），② 次一档，"
+                          "`proof_registered=True` 且正文 sha 在两轮之间变过（「稿在写」，见 "
+                          "`_manuscript_drafting_rounds`））—— 立项 ≠ 推进，被 step 过也 ≠ 推进："
                           "T2 里 `attack_plans` 有 2 行，`history` 一次都没长过，"
                           "而计划的意义正是「一轮一轮逼近」（子目标进展 + 终止原因）；"
                           "2026-10-19 之前这一档只数 `history` 非空 ⇒ 两轮全 `no_change` 的"
-                          "计划与四轮全 `progress` 的计划**等值**（mp3 实测），这一格因此量不到东西",
+                          "计划与四轮全 `progress` 的计划**等值**（mp3 实测），这一格因此量不到东西。"
+                          "2026-11-20 lp-ball-12 两次补：P6FIX 补上两条计划级并列通路（旧四档对 "
+                          "`action=proof` 只认 `cites`，于是「稿改到拿到签」的 27 轮 progress "
+                          "在计划级全读 0），P6FIX2 再把第五档落进**轮级**判据（那 27 轮里"
+                          "有稿的 12 轮逐轮改记 `advanced_by=self_contained_proof`）",
     "counterexample_or_proof_rows": "判决性证据行数：`experiments` 里 `evidence_kind=proof` 的行，"
                                     "或 `result=refutes` 且带非空 `counterexample` 的行 —— "
                                     "数学研究的推进只有三种：证明、反例、以及诚实的「还没有」；"
@@ -418,7 +538,7 @@ REVIEWED_DOC_STATUSES: tuple[str, ...] = ("accepted", "revised")
 
 #: 「研究链的六个环节」——从零做研究时，验收表每个环节至少要有一行（`draft/37` §137）。
 #: 为什么需要（T2 四趟真机读数，`draft/37` §133）：那张表是 M 自己写的，于是写的是最容易满足的几行，而真正
-#: 决定"有没有往前走"的四件事（猜想、计划推进、文献进稿、留下界）一行都没有 ⇒ `can_close=true`、七格全绿，
+#: 决定"有没有往前走"的四件事（猜想、计划推进、文献进稿、留下界）一行都没有 ⇒ `can_close=true`、七格全绿（T2 四趟真机读数时门是七格），
 #: 而 `conjectures`/`statements` 0 行、`attack_plans` 0 推进、手稿零引文。它只做一件事：让"没看那一格"变成
 #: 不可能 —— 不要求读数为正（0 也是读数，那一行照样要写出来），要求的是那一行存在：写着"猜想 0 条"的交付与
 #: 根本没提猜想的交付是两件事，后者此前没有任何读数能区分（覆盖面与阈值是两件事：写着 0 的那行仍按它自己那一档
@@ -451,7 +571,7 @@ RESEARCH_CHAIN_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("看（关系分析）", ("c_analysis_runs",)),
     # 「攻（攻坚推进）」那一环（D59；2026-10-19 收窄成员）：从原来的「交（文献进稿、计划推进）」里分出来。
     # 动机是真机读数（T5 第 6 趟 `p8f`）：任务原文是"交付进展手稿与说明"，而盘上 `documents` 0 行 —— M 把
-    # `plan_progress_rows`（F 的计划推进）填进"交"那一环 ⇒ 七格全绿、`can_close=true`，而 M 自己在报告里写着
+    # `plan_progress_rows`（F 的计划推进）填进"交"那一环 ⇒ 七格全绿（T5 第 6 趟 p8f 时门是七格）、`can_close=true`，而 M 自己在报告里写着
     # 「`documents` 0 行：没有稿件」。根因：那一环的成员混进了与交付物无关的档 —— F 的推进是"攻"，不是"交"。
     # 2026-10-19 再收一次（同族错、方向相反）：`attack_plan_rows`（立项计数）此前与 `plan_progress_rows`（真推进
     # 计数）同列，于是"只凭立过项"（验收表写 `attack_plan_rows: min 1`）就能让这一格 pass ⇒ 现在通过只由 `plan_progress_rows` 决定：非 `na` 行一律记
@@ -968,6 +1088,8 @@ def own_result_manuscript_links(store: Any, root: Any,
     - `checked`：三态 —— 没有任何一处的 `checked` 被读坏才为真；
     - `own_result` / `with_signed_manuscript`：N / M（读数点名用）；
     - `linked`：命中了的那些（`stmt_id` / `basis` / `where`，截前 8 条）；
+    - `linked_ids`：命中了的全部 `stmt_id`（不截断）—— 调用方要用它判「这条册行覆盖的稿
+      归哪一路数」，截断会让第 9 条以后的册行被误记成「册行没数」；
     - `unlinked_ids`：三处都查过、确实没有稿关联的那些（读数点名用）；
     - `unreadable`：台账读不出来的那些（`stmt_id` / `why`）—— 与"没有"分开；
     - `why`：一句话说清这一格是怎么得出的（或为什么没查成）。
@@ -980,7 +1102,8 @@ def own_result_manuscript_links(store: Any, root: Any,
     own = [s for s in stmts if str(s.get("origin") or "") == "own_result"]
     out: dict[str, Any] = {"checked": True, "own_result": len(own),
                            "with_signed_manuscript": 0, "linked": [],
-                           "unlinked_ids": [], "unreadable": [], "why": ""}
+                           "linked_ids": [], "unlinked_ids": [], "unreadable": [],
+                           "why": ""}
     for stmt in own:
         sid = str(stmt.get("stmt_id") or "")
         got = own_result_manuscript_link(root, statement_id=sid, row=stmt)
@@ -988,6 +1111,7 @@ def own_result_manuscript_links(store: Any, root: Any,
             out["unreadable"].append({"stmt_id": sid, "why": str(got.get("why") or "")})
         elif got.get("linked"):
             out["with_signed_manuscript"] += 1
+            out["linked_ids"].append(sid)
             if len(out["linked"]) < 8:
                 out["linked"].append({"stmt_id": sid, "basis": str(got.get("basis") or ""),
                                       "where": str(got.get("where") or "")})
@@ -1008,6 +1132,127 @@ def own_result_manuscript_links(store: Any, root: Any,
         out["why"] = (f"{len(own)} 条自产命题里 {out['with_signed_manuscript']} 条在台账里"
                       "有与它关联的稿/签")
     return out
+
+
+def _construct_leg_unmet(store: Any, project_root: Path,
+                         stmts: Sequence[Mapping[str, Any]]
+                         ) -> tuple[list[str], dict[str, Any]]:
+    """「造」这一格：册行 ∨「稿 + 成立签」，三态不折平 ⇒ `(unmet, readings)`。
+
+    返回值与改前 `content_leg_unmet` 的 ② 兼容（同样的 `linked` / `unlinked_ids` /
+    `checked` / `why` 读数与同一句 blocker），另加四格：
+
+    - `state`：`pass` / `unmet` / `unknown` 三态。`unknown` 不进 unmet，由调用方落进
+      `readings["unknown_branches"]`，整格记 `unknown`（没查成不等于没有，也不等于通过）；
+    - `by_source`：`registered` / `manuscript_sign` / `both` 三格互斥（与 E3 的
+      `by_source` 同形、同一条纪律）：`registered` = 只有册行那一路看得见，
+      `manuscript_sign` = 只有「稿 + 签」看得见（第一阶段的形态），`both` = 两路都看得见；
+    - `why_not`：不算的逐条一句话（稿有没签 / 签不够 / 被后来的否决盖过 / 册行覆盖而
+      册行没数 / 签有稿找不到 / 读不成 / 册行没关联），读的人能直接看出这一格为什么红；
+    - `manuscript_sign`：新链那一路的逐条读数（E3 的同一份实现，不另写第二份）。
+
+    判据与 E3 完全同一套（`_manuscript_sign_reading`）：稿在盘上、这一版有签文件、
+    `verdict=成立`、`streak>=need`、凭据复算通过、同一份正文后来的否决没盖过它 ——
+    才算一份「造」。归属纪律也一样：一条册行覆盖的稿，它的判定归册行那一路（册行数了
+    记 `both`，册行没数记 `covered_unmet`，新链不补，否则等于绕过等级与最新判词）。
+    """
+    links = own_result_manuscript_links(store, project_root, stmts)
+    own_ids = [str(s.get("stmt_id") or "") for s in stmts
+               if str(s.get("origin") or "") == "own_result"]
+    linked_ids = {str(x) for x in (links.get("linked_ids") or [])}
+    try:
+        ms = _manuscript_sign_reading(project_root, stmts, linked_ids)
+    except Exception as exc:  # noqa: BLE001 —— 没查成要落 unknown，不许当 0
+        ms = {"checked": False, "scanned": 0, "counted": [], "counted_total": 0,
+              "counted_keys": [], "both_ids": [], "covered_unmet": [], "unsigned": [],
+              "unbacked": [], "superseded": [], "unreadable": [],
+              "sign_without_manuscript": [], "problems": [],
+              "why": f"「造」的新链那一路抛了（{type(exc).__name__}: {exc}）"}
+    with_signed = int(links.get("with_signed_manuscript") or 0)
+    both_ids = [str(sid) for sid in (ms.get("both_ids") or []) if str(sid) in linked_ids]
+    by_source = {
+        "registered": max(0, with_signed - len(both_ids)),
+        "manuscript_sign": int(ms.get("counted_total") or 0),
+        "both": len(both_ids),
+    }
+    why_not: list[str] = []
+    for bucket in ("unsigned", "unbacked", "superseded", "covered_unmet",
+                   "sign_without_manuscript", "unreadable"):
+        for item in (ms.get(bucket) or [])[:8]:
+            why_not.append(f"[{bucket}] {item.get('why') or ''}")
+    if links.get("checked"):
+        for sid in (links.get("unlinked_ids") or [])[:8]:
+            why_not.append(f"[unlinked] stmt:{sid}：台账三处都查过，没有与它关联的稿/签")
+    else:
+        for item in (links.get("unreadable") or [])[:8]:
+            why_not.append(f"[unreadable] stmt:{item.get('stmt_id')}："
+                           f"{item.get('why') or ''}")
+    if not own_ids and not int(ms.get("scanned") or 0):
+        why_not.append("[no_source] `statements` 里 `origin=own_result` 的 0 行；"
+                       "`reports/` 里也没有签载体稿")
+    readings: dict[str, Any] = {
+        "statements": len(stmts),
+        "own_result": int(links.get("own_result") or 0),
+        "with_signed_manuscript": with_signed,
+        "own_ids": own_ids[:8],
+        "linked": list(links.get("linked") or []),
+        "unlinked_ids": list(links.get("unlinked_ids") or [])[:8],
+        "unreadable": list(links.get("unreadable") or [])[:8],
+        "checked": bool(links.get("checked")),
+        "why": str(links.get("why") or ""),
+        "by_source": by_source,
+        "why_not": why_not,
+        "manuscript_sign": {
+            "checked": bool(ms.get("checked")),
+            "scanned": int(ms.get("scanned") or 0),
+            "counted": list(ms.get("counted") or [])[:8],
+            "counted_total": int(ms.get("counted_total") or 0),
+            "both_ids": both_ids[:8],
+            "unreadable": list(ms.get("unreadable") or [])[:8],
+            "problems": list(ms.get("problems") or [])[:4],
+            "why": str(ms.get("why") or ""),
+        },
+    }
+    registered_ok = bool(links.get("checked")) and with_signed > 0
+    new_ok = bool(ms.get("checked")) and int(ms.get("counted_total") or 0) > 0
+    if registered_ok or new_ok:
+        readings["state"] = "pass"
+        return [], readings
+    if not links.get("checked") or not ms.get("checked"):
+        # 三态：有一条来路没查成 ⇒ 这一格判不了（不是「没有」，更不是「通过」）。
+        readings["state"] = "unknown"
+        readings["why_unknown"] = (
+            f"「造」这一格没查成：册行那一路 checked={bool(links.get('checked'))}"
+            f"（{links.get('why') or '（没有理由）'}）；新链那一路 checked="
+            f"{bool(ms.get('checked'))}（{ms.get('why') or '（没有理由）'}）⇒ "
+            "没查成不算通过，也不算没有")
+        return [], readings
+    readings["state"] = "unmet"
+    unmet: list[str] = []
+    if not own_ids:
+        unmet.append(
+            f"「造」那一环既没有我方自产的命题，也没有一份「稿 + 成立签」："
+            f"`statements` {len(stmts)} 行里 `origin=own_result` 的 0 行；盘上的签载体稿 "
+            f"{int(ms.get('scanned') or 0)} 份，「稿 + 成立签」0 份"
+            "（不算的逐条见 `content_branches.construct_leg.why_not`）—— "
+            "「造」= 我方自己提出并证明的命题；第一阶段的凭据是稿上的 V 签"
+            "（verdict=成立、streak>=need、复算通过、没被后来的否决盖过），在册册行是"
+            "另一种来源：把稿与签落在盘上（派 V 用 `verify.verify_proof` 带 "
+            "`proof_manuscript` 审那一份稿），或等 B 收录（`B.register_statement`）")
+    else:
+        own_ref = "、".join(f"`stmt:{x}`" for x in (readings["unlinked_ids"] or [])[:6])
+        unmet.append(
+            f"「造」那一环没有一份签过的稿：`statements` {len(stmts)} 行里 "
+            f"`origin=own_result` 的 {len(own_ids)} 行"
+            f"（{own_ref}），台账里**没有任何一行有与它关联的稿/签**"
+            "（`verifications/` 的 v-review、`out/vsigns/` 的签、稿上的签块，三处都查过）；"
+            "盘上的签载体稿里也没有一份「稿 + 成立签」"
+            "（逐条见 `content_branches.construct_leg.why_not`）—— "
+            "「造」= 我方自己提出并证明的命题；而「自产」这件事的证据是**有一份签过的稿**"
+            "（不是写一个 `derived_from`）：派 V 用 `verify.verify_proof` 带 "
+            "`proof_manuscript` 审那一份稿，签落回稿后再交上来登记"
+            "（`B.register_statement`）")
+    return unmet, readings
 
 
 def content_leg_unmet(store: Any, project_root: Path, *,
@@ -1054,50 +1299,29 @@ def content_leg_unmet(store: Any, project_root: Path, *,
             "（给出 `search_bound` / `certificate`，形式化那一支给出 `verifier_output`），"
             "或者如实把结论写成「这一族在界 B 内无反例（证书 …）」")
 
-    # ---- ② 「造」那一环要我方自产的命题，而且台账里得有一份与它关联的稿/签。
+    # ---- ② 「造」那一环：两条并列来源 —— 册行 ∨「稿 + 稿上的成立签」。
     #
     # 业主 2026-11-17（语义纠正）：「own_result 还有什么来路？"来路"这种陈述是过时的，
     # 以前设计这种语义就是为了指到证明手稿，现在已经在台账里体现了。所以只是一个
-    # 状态：自产/引用」⇒ 判据换成「台账里有没有与这条命题关联的稿/签」：签台账
-    # （`out/vsigns/`）、v-review（`verifications/`）、稿上的签块，任一命中即算。
-    # 「自产」的证据是「有一份签过的稿」，不是载荷里写了一个 `derived_from`。
+    # 状态：自产/引用」⇒ 「自产」的证据是「有一份签过的稿」，不是载荷里的 `derived_from`。
+    # 2026-11-20（RETIRE-D66FIX，业主「速修，把旧链退场」）：旧链把 `statements` 行当成
+    # 唯一读数，而 2026-11-02 起 V 签落在稿上、B 之后才收录 ⇒ 第一阶段只有稿与签。
+    # 新链与 E3 的 `reviewed_proof_rows` 共用同一份判定（`_manuscript_sign_reading`），
+    # 册行那一路的读数与改前逐字一致（正控不降）。
     if kinds & {"reviewed_proof_rows", "counterexample_or_proof_rows"}:
-        stmts = [dict(r) for r in store.rows("statements")]
-        links = own_result_manuscript_links(store, project_root, stmts)
-        readings["construct_leg"] = {
-            "statements": len(stmts),
-            "own_result": int(links.get("own_result") or 0),
-            "with_signed_manuscript": int(links.get("with_signed_manuscript") or 0),
-            "own_ids": [str(s.get("stmt_id") or "") for s in stmts
-                        if str(s.get("origin") or "") == "own_result"][:8],
-            "linked": list(links.get("linked") or []),
-            "unlinked_ids": list(links.get("unlinked_ids") or [])[:8],
-            "unreadable": list(links.get("unreadable") or [])[:8],
-            "checked": bool(links.get("checked")),
-            "why": str(links.get("why") or ""),
-        }
-        if not links.get("checked"):
-            unmet.append(
-                f"「造」那一环的台账没查成：{links.get('why') or '（没有理由）'} —— "
-                "没查成不算通过：把 `verifications/<命题号>.jsonl` / `out/vsigns/` 读到能读"
-                "（或修好那一份坏行）再收工")
-        elif not int(links.get("own_result") or 0):
-            unmet.append(
-                f"「造」那一环没有我方自产的命题：`statements` {len(stmts)} 行里 "
-                "`origin=own_result` 的 0 行 —— 「造」= 我方自己提出并证明的命题；"
-                "把命题与它的证明稿一起登记（`B.register_statement`；猜想的立案与落行归"
-                "产出侧 —— F 开稿 / E 实验 / B 收录，D 没有登记猜想的动作）")
-        elif not int(links.get("with_signed_manuscript") or 0):
-            own_ids = "、".join(f"`stmt:{x}`" for x in (links.get("unlinked_ids") or [])[:6])
-            unmet.append(
-                f"「造」那一环没有一份签过的稿：`statements` {len(stmts)} 行里 "
-                f"`origin=own_result` 的 {int(links.get('own_result') or 0)} 行"
-                f"（{own_ids}），台账里**没有任何一行有与它关联的稿/签**"
-                "（`verifications/` 的 v-review、`out/vsigns/` 的签、稿上的签块，三处都查过）—— "
-                "「造」= 我方自己提出并证明的命题；而「自产」这件事的证据是**有一份签过的稿**"
-                "（不是写一个 `derived_from`）：派 V 用 `verify.verify_proof` 带 "
-                "`proof_manuscript` 审那一份稿，签落回稿后再交上来登记"
-                "（`B.register_statement`）")
+        try:
+            stmts = [dict(r) for r in store.rows("statements")]
+            construct_unmet, construct = _construct_leg_unmet(
+                store, project_root, stmts)
+        except Exception as exc:  # noqa: BLE001 —— 读不出来 = 没查成，不是「没有」
+            construct_unmet = []
+            construct = {"state": "unknown", "checked": False,
+                         "why": (f"「造」这一格没查成（{type(exc).__name__}: {exc}）"
+                                 "⇒ 不是「没有自产命题」")}
+        readings["construct_leg"] = construct
+        unmet.extend(construct_unmet)
+        if construct.get("state") == "unknown":
+            readings.setdefault("unknown_branches", []).append("construct_leg")
 
 
     # ---- ③ C 的分析产物要进交付面（D67）。
@@ -1240,29 +1464,101 @@ def artifact_ledger_reading(project_root: Path) -> tuple[int, dict[str, Any]]:
     return got, detail
 
 
-def _round_advanced(rec: Mapping[str, Any]) -> tuple[bool, str]:
+#: 「攻（攻坚推进）」那一格的档名（`advanced_by` 的取值）。旧四档（`cites` / 新子目标 /
+#: E 子目标 / 新实验）共用 `round`；第五档单独一个名字 —— 业主 2026-11-20 裁定
+#: 「自足证明是几乎唯一的生产方式」，它说的是"这一轮交了一份不欠别人的证明"，
+#: 既不是"引到了在册命题"，也不是"这份稿拿到了签"，三件事不许折成同一档。
+ADVANCED_BY_ROUND = "round"
+ADVANCED_BY_SELF_CONTAINED_PROOF = "self_contained_proof"
+
+
+def _round_dependency_empty(product: Mapping[str, Any]) -> tuple[bool, str]:
+    """这一轮产物的 `## 依赖` 是不是空表（第五档的第一条）。
+
+    `## 依赖` 不是模型手写的：它由框架按 `steps[].cites` 现渲染
+    （`agent_f/manuscript.py`），所以"表 0 行"与"所有步的 `cites` 都为空"是同一件事，
+    而后者在 `history` 里就有（`product_detail.steps`）—— 这一档因此不必读盘。
+
+    同义出口是 `assumption: true`：`attackround._clean_step` 保证每一步"要么有 `cites`、
+    要么显式声明成前提"，所以一份"每步都声明成前提"的 proof 就是自足形态（它一个在册
+    id 都不欠，`## 依赖` 只能是空表）。两条同时不成立 ⇒ 判不了，按 0 算。
+
+    返回 `(算不算, 为什么)`：`why` 是读数 —— 一份计划为什么没被这一档认，要能从这一句
+    直接看出来（三态纪律：判不了与"依赖不是空表"是两个理由，都点名）。
+    """
+    steps = [s for s in (product.get("steps") or []) if isinstance(s, Mapping)]
+    cites = [str(c) for s in steps for c in (s.get("cites") or [])]
+    if cites:
+        return False, f"产物引了 {len(cites)} 个 id（`## 依赖` 不是空表）"
+    if not steps:
+        return False, "产物里没有 `steps` ⇒ 读不出依赖面（空产物不是自足证明）"
+    if not any(s.get("assumption") is True for s in steps):
+        return False, ("产物零 `cites`，但没有一步声明成前提（`assumption: true`）"
+                       "⇒ 判不了「`## 依赖` 是空表」")
+    return True, f"`## 依赖` 空表（{len(steps)} 步、0 条 `cites`、每步都声明成前提）"
+
+
+def _proof_landed(rec: Mapping[str, Any],
+                  signed_shas: Container[str] | None = None) -> tuple[bool, str]:
+    """这一轮的稿落地了没有（第五档的第二条）。
+
+    两条路，任一成立即算：
+
+    1. `proof_registered=True` 且 `proof_sha256` 非空 —— 稿被框架登记过，那一版
+       正文的 sha 就钉在这一行上（"登记那一刻落的那一版"）；
+    2. `proof_sha256` 命中 `out/vsigns/` 的颁发表（`signed_shas`）—— 真机上有一档
+       "签了、但还没登记"（lp-ball-12 的 27 轮里 6 轮是这样）：签文件
+       `out/vsigns/<sha>.json` 只在"连续 `need` 次成立"那一刻才写（`vsigns.issue`），
+       所以它出现 = 那一版正文真的在盘上、真的被 V 审过。
+
+    不是"有 `manuscript_path` 就算"：路径是"打算写到哪"，不是"已经落成什么"
+    （负控：`action=proof` 而没稿、没 sha ⇒ 这一档仍然是 0）。
+    """
+    sha = str(rec.get("proof_sha256") or "").strip().lower()
+    if rec.get("proof_registered") is True and sha:
+        return True, f"稿已登记（正文 sha {sha[:12]}…，`proof_registered=True`）"
+    if sha and signed_shas and sha in signed_shas:
+        return True, (f"稿已落地（正文 sha {sha[:12]}… 命中 `out/vsigns/` 的颁发表；"
+                      "这一轮还没登记，但那一版正文真的被 V 审过）")
+    if sha:
+        return False, ("有正文 sha，但既没登记（`proof_registered` 不是 True）、"
+                       "也没命中 `out/vsigns/` 的颁发表 ⇒ 这一轮的稿没落地")
+    return False, "没有正文 sha ⇒ 这一轮没有落地的稿（只有「打算写」不算）"
+
+
+def _round_advanced_by(rec: Mapping[str, Any], *,
+                       signed_shas: Container[str] | None = None
+                       ) -> tuple[bool, str, str]:
     """这一条 `attack_plans.history` 记录算不算"这一轮真的推进了"（`plan_progress_rows` 的唯一口径）。
+
+    档名（第二个返回值）就是 `advanced_by` 的取值：旧四档统一记
+    :data:`ADVANCED_BY_ROUND`，第五档单独记 :data:`ADVANCED_BY_SELF_CONTAINED_PROOF`
+    —— 两者不许混档，理由见 `_round_dependency_empty` 的模块注释。
 
 只判"`history` 非空"是不够的：两轮全 `no_change` 与四轮全 `progress` 的计划会在
 「攻（攻坚推进）」那一格上等值 —— 这一格就什么都没量到。
 
-判据三条（`outcome` 那一半与"产出了什么"那一半缺一不可）：
+判据五档（`outcome` 那一半与"产出了什么"那一半缺一不可）：
 ① `outcome == "progress"` —— `no_change` / `blocked` 都不是推进：前者是"这一轮没有新事实"
    （`dead_end` 逐轮落库时就是它），后者是"卡住了"（等回填 / 不成形 / 假引用被拒）；
 ② 有据可依：产物里有 `cites`（`proof` 的 `steps[].cites`、`dead_end` 的 `best_partial[].ids`）；
 ③ 或者产出了新东西：`reduction` 的 `new_subgoals` 非空、`counterexample_request` 派出了 E 子目标、
    `run_experiment` 落了一行实验。
+④ 或者第五档：`action=proof` + 该轮 `## 依赖` 是空表 + 稿已落地
+   （:func:`_round_dependency_empty` + :func:`_proof_landed`，业主 2026-11-20 裁定
+   「自足证明是几乎唯一的生产方式」）。它排在旧四档之后：`cites` 引到在册命题的轮
+   仍按原口径读（`why` 也仍是原来那句），第五档只认"既没引谁、又真的交了稿"的轮。
 
 ②与③是"或"：一条纯粹派发检索请求的轮（`submit_search_request`）两条都不满足 ⇒ 不算推进 —— 把活递出
 去（`search_requests` / `reprocess_requests`）会在台账上多一行请求，但难题本身一步没动；它该由
 「闭（请求闭环）」那一档读，不该让「攻」变绿。
 
-返回 `(算不算, 为什么)`：`why` 是读数，不是装饰 —— 一份计划为什么读到 0，要能从这一格里直接看出来
+返回 `(算不算, 档名, 为什么)`：`why` 是读数，不是装饰 —— 一份计划为什么读到 0，要能从这一格里直接看出来
 （三态纪律：读不到 0 与 真的是 0 必须分得开）。
     """
     outcome = str(rec.get("outcome") or "")
     if outcome != "progress":
-        return False, f"outcome={outcome or '（空）'}（不是 progress）"
+        return False, "", f"outcome={outcome or '（空）'}（不是 progress）"
     raw_detail = rec.get("product_detail")
     product = dict(raw_detail) if isinstance(raw_detail, Mapping) else {}
     cites: list[str] = []
@@ -1273,18 +1569,287 @@ def _round_advanced(rec: Mapping[str, Any]) -> tuple[bool, str]:
         if isinstance(item, Mapping):
             cites += [str(x) for x in (item.get("ids") or [])]
     if cites:
-        return True, f"产物引到 {len(cites)} 个在册 id"
+        return True, ADVANCED_BY_ROUND, f"产物引到 {len(cites)} 个在册 id"
     new_goals = [g for g in (product.get("new_subgoals") or []) if isinstance(g, Mapping)]
     if new_goals:
-        return True, f"归约出 {len(new_goals)} 条新子目标（计划里真的多了行）"
+        return (True, ADVANCED_BY_ROUND,
+                f"归约出 {len(new_goals)} 条新子目标（计划里真的多了行）")
     action = str(rec.get("action") or "")
     evidence = [str(x) for x in (rec.get("evidence") or [])]
     if action == "counterexample_request" and evidence:
-        return True, f"派出一条 E 子目标 {evidence[:3]}（实验请求已落地）"
+        return (True, ADVANCED_BY_ROUND,
+                f"派出一条 E 子目标 {evidence[:3]}（实验请求已落地）")
     if action == "run_experiment" and evidence:
-        return True, f"落了一行实验 {evidence[:3]}"
-    return False, (f"action={action or '（空）'}：既没有 cites、也没有新子目标/新实验"
-                   "（派出去的请求不算攻坚推进 —— 那是「闭」那一档的事）")
+        return True, ADVANCED_BY_ROUND, f"落了一行实验 {evidence[:3]}"
+    # ---- 第五档（P6FIX2）：自足证明 --------------------------------------------------
+    if action == "proof":
+        deps_empty, deps_why = _round_dependency_empty(product)
+        if not deps_empty:
+            return False, "", f"action=proof：{deps_why} ⇒ 这份证明不是自足形态"
+        landed, landed_why = _proof_landed(rec, signed_shas)
+        if not landed:
+            return False, "", f"action=proof：{deps_why}；{landed_why} ⇒ 不算推进"
+        return True, ADVANCED_BY_SELF_CONTAINED_PROOF, f"自足证明：{deps_why}；{landed_why}"
+    return False, "", (f"action={action or '（空）'}：既没有 cites、也没有新子目标/新实验"
+                       "（派出去的请求不算攻坚推进 —— 那是「闭」那一档的事）")
+
+
+def _round_advanced(rec: Mapping[str, Any], *,
+                    signed_shas: Container[str] | None = None) -> tuple[bool, str]:
+    """`(算不算, 为什么)` 的薄包装 —— 判据本体与档名在 :func:`_round_advanced_by`。
+
+    保留这一个名字是因为它已经是一处被引用的读口（旧四档那一批调用方与判据）；
+    要读档名（`advanced_by`）就走 `_round_advanced_by`。
+    """
+    ok, _tier, why = _round_advanced_by(rec, signed_shas=signed_shas)
+    return ok, why
+
+
+#: V 的审核词表里唯一算签的 `verdict`（`vsigns.issue` 只发这一种）。
+SIGN_VERDICT_ESTABLISHED = "成立"
+
+
+def _norm_manuscript_path(value: Any) -> str:
+    """稿路径归一：反斜杠换正斜杠、去掉开头的 `./`（只用于比较，不碰盘上任何东西）。"""
+    text = str(value or "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text
+
+
+def _signed_manuscript_index(root: Any) -> dict[str, Any]:
+    """「稿拿到 V 签」的颁发表，按正文 sha 与稿路径两把钥匙索引（只读，不落任何新账）。
+
+    数据只从两处读，与 :func:`vsigns.signed_table` 同一套来源：
+
+    - `out/vsigns/<正文 sha>.json`（逐份签文件，权威）；
+    - `out/vsigns/issued.json`（派生归档：V 侧"我发过哪些签"的一眼清单）。
+
+    为什么要读 `issued.json`：`plan_progress_rows`（「攻」）问的是「计划名下的稿拿到签了
+    没有」，而归档正是那张「哪些稿、哪一版正文拿过签」的清单 —— 同一份盘上已有的凭据，
+    零新表。两份都在时以签文件为准（`vsigns` 的纪律：归档只用来对账，不拿它下结论）；
+    只在归档里出现的 sha 记 `via="issued.json"` 并进 `problems`，让"归档里有一条、签文件
+    却不在"这件事在读数里看得见 —— 它不静默变成一条签。
+
+    三态：`checked=False` ⇒ 目录列不出来 / 签表读不出来（没查成，绝不等价于"没有签"）；
+    `checked=True` 且 `by_sha` 空 ⇒ 查过了、这个工作区一份签都没有。
+
+    返回 `{checked, by_sha, by_path, problems, why}`。每一项（`by_sha` / `by_path` 的值）：
+    `{artifact_sha, artifact_path, verdict, streak, need, at, via}`。
+    """
+    out: dict[str, Any] = {"checked": False, "by_sha": {}, "by_path": {},
+                           "problems": [], "why": ""}
+    try:
+        from . import vsigns as VS
+
+        table = VS.signed_table(root)
+        index_doc, index_problem = VS.load_index(root)
+    except Exception as exc:  # noqa: BLE001 —— 读不到 = 没查成（不是"没有签"）
+        out["why"] = f"{type(exc).__name__}: {exc}"
+        return out
+    out["checked"] = bool(table.get("checked"))
+    out["problems"] = [str(p) for p in (table.get("problems") or [])]
+    entries: list[dict[str, Any]] = []
+    for entry in table.get("entries") or []:
+        if not isinstance(entry, Mapping):
+            continue
+        entries.append({
+            "artifact_sha": str(entry.get("artifact_sha") or "").strip().lower(),
+            "artifact_path": str(entry.get("artifact_path") or ""),
+            "verdict": str(entry.get("verdict") or ""),
+            "streak": int(entry.get("streak") or 0),
+            "need": int(entry.get("need") or 0),
+            "at": str(entry.get("at") or ""),
+            "via": "sign_file",
+        })
+    listed = {e["artifact_sha"] for e in entries if e["artifact_sha"]}
+    if index_doc is None:
+        out["problems"].append(
+            f"`out/vsigns/` 的派生归档读不出来（{index_problem or '（没有理由）'}）"
+            "⇒ 只按逐份签文件读")
+    else:
+        for entry in index_doc.get("signs") or []:
+            if not isinstance(entry, Mapping):
+                continue
+            sha = str(entry.get("artifact_sha") or "").strip().lower()
+            if not sha or sha in listed:
+                continue
+            listed.add(sha)
+            out["problems"].append(
+                f"{sha[:12]}… 只在派生归档 `issued.json` 里、盘上没有对应的签文件"
+                "（按归档计入，`via=issued.json`）")
+            entries.append({
+                "artifact_sha": sha,
+                "artifact_path": str(entry.get("artifact_path") or ""),
+                "verdict": str(entry.get("verdict") or ""),
+                "streak": int(entry.get("streak") or 0),
+                "need": int(entry.get("need") or 0),
+                "at": str(entry.get("at") or ""),
+                "via": "issued.json",
+            })
+    for entry in entries:
+        sha = entry["artifact_sha"]
+        if sha:
+            out["by_sha"].setdefault(sha, entry)
+        path = _norm_manuscript_path(entry["artifact_path"])
+        if path:
+            out["by_path"].setdefault(path, entry)
+    out["why"] = ("" if out["checked"]
+                  else "颁发表没查成（不是「没有签」）：" + "；".join(out["problems"]))
+    return out
+
+
+def _signed_manuscripts_of(hist: Sequence[Mapping[str, Any]],
+                           index: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """这份计划名下的稿里，哪几份「拿到 V 签」（`verdict=成立` 且 `streak>=need`）。
+
+    命中靠两把钥匙：`history[*].proof_sha256`（被签的那一版正文，更强）或
+    `history[*].manuscript_path`（稿名）。同一份签只记一行（`rounds` 是引用它的轮），
+    不按轮重复计数 —— 否则同一份签会在读数里变成四条"得签的稿"。
+
+    门槛必须真的够：`need >= 1` 且 `streak >= need`。没有门槛的签（`need=0`）不算 ——
+    否则 `0/0` 会静默变成一份签（这个格子的反真空就是靠这一条）。
+    """
+    if not index.get("checked"):
+        return []
+    by_sha = dict(index.get("by_sha") or {})
+    by_path = dict(index.get("by_path") or {})
+    found: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _signed_entry(rec: Mapping[str, Any], hit: Mapping[str, Any],
+                      matched_by: str) -> dict[str, Any] | None:
+        verdict = str(hit.get("verdict") or "")
+        need = int(hit.get("need") or 0)
+        streak = int(hit.get("streak") or 0)
+        if verdict != SIGN_VERDICT_ESTABLISHED or need < 1 or streak < need:
+            return None
+        return {
+            "round": int(rec.get("round") or 0),
+            "manuscript_path": (_norm_manuscript_path(rec.get("manuscript_path"))
+                                or _norm_manuscript_path(hit.get("artifact_path"))),
+            "artifact_sha": str(hit.get("artifact_sha") or ""),
+            "verdict": verdict,
+            "streak": streak,
+            "need": need,
+            "at": str(hit.get("at") or ""),
+            "matched_by": matched_by,
+            "via": str(hit.get("via") or ""),
+            "rounds": [],
+        }
+
+    # ① 先按 `proof_sha256` 认（它钉住被签的那一版正文）：同一份签只记一行，
+    #    把引用它的轮都收进 `rounds`。
+    for rec in hist:
+        sha = str(rec.get("proof_sha256") or "").strip().lower()
+        hit = by_sha.get(sha) if sha else None
+        if not isinstance(hit, Mapping):
+            continue
+        item = _signed_entry(rec, hit, "proof_sha256")
+        if item is None:
+            continue
+        key = str(item.get("artifact_sha") or "")
+        if key in seen:
+            row = next(r for r in found if r.get("artifact_sha") == key)
+            if item["round"] not in row["rounds"]:
+                row["rounds"].append(item["round"])
+            continue
+        seen.add(key)
+        item["rounds"] = [item["round"]]
+        found.append(item)
+    # ② 再按 `manuscript_path` 认（"这份计划名下的稿拿过签"）：只补前面没认到的那一份签，
+    #    且 `rounds` 收的是引用这条稿路径的全部轮 —— 一份签仍然只记一行。
+    for rec in hist:
+        path = _norm_manuscript_path(rec.get("manuscript_path"))
+        hit = by_path.get(path) if path else None
+        if not isinstance(hit, Mapping):
+            continue
+        key = str(hit.get("artifact_sha") or "")
+        if key in seen:
+            continue
+        item = _signed_entry(rec, hit, "manuscript_path")
+        if item is None:
+            continue
+        seen.add(key)
+        item["rounds"] = sorted({int(h.get("round") or 0) for h in hist
+                                 if _norm_manuscript_path(h.get("manuscript_path")) == path})
+        found.append(item)
+    return found
+
+
+def _manuscript_drafting_rounds(hist: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """次一档：「稿真的在写」—— `proof_registered=True` 且 `proof_sha256` 在两轮之间变过。
+
+    这一档不是"得签"：它只证明稿被一遍一遍改过，不证明改对了。所以它在读数里单独
+    记 `advanced_by="manuscript_in_progress"` / `why_advanced` 里带"按稿在写计的"，
+    与 `signed_manuscript` 分开，不许混成同一档。
+
+    反真空：同一版正文重交（`proof_sha256` 只有一个取值）不算 —— 那种轮的产物是同一份
+    字节，难题一步没动。
+    """
+    shas = [str(h.get("proof_sha256") or "").strip().lower() for h in hist]
+    distinct: list[str] = []
+    for sha in shas:
+        if sha and sha not in distinct:
+            distinct.append(sha)
+    if len(distinct) < 2:
+        return []
+    found: list[dict[str, Any]] = []
+    seen: set[tuple[int, str]] = set()
+    for rec in hist:
+        if rec.get("proof_registered") is not True:
+            continue
+        sha = str(rec.get("proof_sha256") or "").strip().lower()
+        if not sha:
+            continue
+        key = (int(rec.get("round") or 0), sha)
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append({
+            "round": int(rec.get("round") or 0),
+            "manuscript_path": _norm_manuscript_path(rec.get("manuscript_path")),
+            "proof_sha256": sha,
+            "first_sha": distinct[0],
+            "latest_sha": distinct[-1],
+            "versions": len(distinct),
+        })
+    return found
+
+
+def _plan_proof_advance(hist: Sequence[Mapping[str, Any]],
+                        signed_index: Mapping[str, Any]) -> dict[str, Any]:
+    """一份计划的「证明轮推进」读数：两条并列通路（得签 / 按稿在写计）。
+
+    与同格已有的负向读 :func:`_proof_review_backlog`（点名了命题却没人签 ⇒ unknown）
+    对称补齐：那边是"没人签"，这边是"签到了"。
+
+    返回 `{signed_manuscripts, draft_manuscript_rounds, draft_why, advanced_by, why_advanced}`：
+    只有"得签"这一档在这里就定 `advanced_by="signed_manuscript"`；"按稿在写计"的
+    `draft_why` 先算好、由调用方在旧四档也不成立时才用它（`manuscript_in_progress`
+    是次一档 —— 旧四档认得出推进时，`advanced_by` 要留 `round`，不许被更弱的一档顶掉）。
+    """
+    signed = _signed_manuscripts_of(hist, signed_index)
+    drafting = _manuscript_drafting_rounds(hist)
+    tier = ""
+    why = ""
+    draft_why = ""
+    if signed:
+        first = signed[0]
+        tier = "signed_manuscript"
+        why = (f"稿 {first.get('manuscript_path') or '（没有稿名）'} 拿到 V 签"
+               f"（sha {str(first.get('artifact_sha') or '')[:12]}…，"
+               f"streak {first.get('streak')}/{first.get('need')}，"
+               f"{first.get('at') or '（没有 at）'}）")
+    if drafting:
+        first = drafting[0]
+        draft_why = (f"按稿在写计的：稿 {first.get('manuscript_path') or '（没有稿名）'} "
+                     f"已登记，正文在两轮之间改过"
+                     f"（{str(first.get('first_sha') or '')[:12]}… → "
+                     f"{str(first.get('latest_sha') or '')[:12]}…，"
+                     f"共 {first.get('versions')} 版）—— 这不是「得签」那一档")
+    return {"signed_manuscripts": signed, "draft_manuscript_rounds": drafting,
+            "draft_why": draft_why, "advanced_by": tier, "why_advanced": why}
 
 
 def _review_locator(bits: Mapping[str, Any]) -> str:
@@ -1635,6 +2200,290 @@ def _conjecture_authors_reading(store: Any) -> dict[str, Any]:
     return out
 
 
+#: 「造」这一格的新链证据面（RETIRE-E3，业主 2026-11-20「速修，把旧链退场」）：
+#: 稿 + 稿上的 V 签，不要求在册。
+#:
+#: ## 为什么这一格必须能从「稿 + 签」独立读出
+#:
+#: 旧链（2026-10-02～10-19）里「造」只有一处读数来源：B 把 proof 落成 `statements`
+#: 一行，V 审那一行。2026-11-02 业主「V 签先放在 F 的手稿里，让 B 录入」把顺序
+#: 倒过来；2026-11-13 又把稿里的命题号切掉 ⇒ 第一阶段（V 已签、B 还没收录）在盘上
+#: 只有稿与签、没有册行（`draft/189`；`temp/rootledger/ROOTLEDGER-在册判据来路.md` 的 E3）。
+#: 于是 `statements` 行退回成「其中一种来源」，不再唯一。
+#:
+#: ## 这一层怎么判（三态不折平）
+#:
+#: 对每一份签载体稿（`reports/{f,b,e}-proof-*.md`，判据是既有的
+#: `vsigns.is_sign_carrier`，不另写第二份名字表）：
+#:
+#:   ① 现算正文 sha（`proofregistry.proof_sha`：与 V 签盖的是同一把尺）；
+#:   ② 找 `out/vsigns/<sha>.json`（`vsigns.sign_of`）。没有签文件 ⇒ `unsigned`
+#:      （「稿在、没签」——记下缺的是哪一版正文，不是折成 0 条了事）；
+#:   ③ 签文件要 `verdict=成立`、`need>=1`、`streak>=need`（与「攻」那一格的
+#:      `_signed_manuscripts_of` 同一门槛：`0/0` 不许静默变成一份签）；
+#:   ④ 要能复算（`vsigns.credential_reading`：锚点那本台账里真的点得出 need 行）。
+#:      「文件在」不算签 —— `out/vsigns/` 是可写目录，谁写一份 JSON 都能点亮这一格；
+#:   ⑤ 同一份正文上「后来的否决必须盖过更早的成立」（`verifications.review_standing`
+#:      的纪律）：锚点台账里这一 sha 的最后一行若不是票（V 后来判「有毛病」）⇒ 不算，
+#:      记 `superseded`。少了这一条，这一格会把 V 已经打回的稿重新算成「造」——
+#:      真机 `lp-ball-12` 的 `reports/f-proof-000004.md` 正是这个形状（签于 05:18:58，
+#:      05:21:57 被 u-000045 判「有毛病」）；
+#:   ⑥ 读不成（签的目录列不出来 / 稿读不出来 / 对应 sha 的签文件在盘上却解析不了）
+#:      ⇒ `checked=False`：这是没查成，调用方要把它落成 `unknown`，不是 0。
+#:
+#: ## 与在册那一路的关系：不借道、不互相顶替
+#:
+#: 一条册行覆盖的稿（`manuscript_id` 相等 / `proof_sha256` 相等 / 它的某一份证明
+#: 正文的 sha 相等）⇒ 这一份的判定归在册那一路：在册那一路数了它，这里记进
+#: `both_ids`；在册那一路没数它（低档 / rejected / stale / holding）⇒ 这里也不补。
+#: 否则「稿+签」就成了绕过等级与最新判词的后门 —— 那不是「补并列来源」，那是降闸。
+#: `counted` 因此只装没有册行覆盖的稿（第一阶段的形态）。
+def _one_manuscript_sign(project_root: Path, rel: str, *,
+                         by_mid: Mapping[str, list[str]],
+                         by_sha: Mapping[str, list[str]],
+                         counted_ids: Container[str]) -> dict[str, Any]:
+    """一份签载体稿的判定 ⇒ 带 `bucket` 的一条读数（纯读）。
+
+    `bucket` 是这一条的结论，只有七档（三态不折平）：
+
+    | bucket | 含义 |
+    |---|---|
+    | `counted` | 数进这一档（稿 + 成立签 + 复算通过 + 没被后来的否决盖过、且没有册行覆盖） |
+    | `both` | 册行那一路也数了它（`ids` 是重合的行号） |
+    | `covered_unmet` | 稿被册行覆盖、而册行那一路没数它（以册行为准，这里不补） |
+    | `unsigned` | 稿在、这一版没有签文件 |
+    | `unbacked` | 签文件在，但判词不是成立 / 门槛不够 / 复算不上（文件在不算签） |
+    | `superseded` | 签过，但同一份正文上 V 后来判了有毛病（后来的否决盖过更早的成立） |
+    | `unreadable` | 读不成（稿读不出来 / 签文件在盘上却解析不了 / 台账读不成）⇒ 没查成 |
+
+    判据逐条写在 `_manuscript_sign_reading` 上面那段注释里（那一处是口径的唯一落点）。
+    """
+    from . import verifications as _E3_VR
+    from . import vsigns as _E3_VS
+
+    signed_rel = _E3_VS.rel(_E3_VS.signs_dir(project_root), project_root)
+    out: dict[str, Any] = {"bucket": "unreadable", "path": rel, "sha": "",
+                           "manuscript_id": "", "why": ""}
+    try:
+        text = (project_root / rel).read_text(encoding="utf-8")
+    except OSError as exc:  # noqa: BLE001 —— 读不成要说出来（不是「没签」）
+        out["why"] = f"稿读不出来（{type(exc).__name__}: {exc}）⇒ 这一份的签判不了"
+        return out
+    sha = _PR.proof_sha(text)
+    mid = _E3_VS.manuscript_id_of(rel)
+    out.update(sha=sha, manuscript_id=mid)
+    got_sign = _E3_VS.sign_of(project_root, sha)
+    if not got_sign.get("checked"):
+        out["why"] = (f"签的读口没查成（{got_sign.get('why') or '（没有理由）'}）⇒ "
+                      "这一份的签判不了")
+        return out
+    if not got_sign.get("found"):
+        sign_file = _E3_VS.sign_path(project_root, sha)
+        if sign_file.is_file():
+            # 文件在、读不成（不是"没有签"）：这一格没查成。三态纪律点名的就是它。
+            out["why"] = (f"`{_E3_VS.rel(sign_file, project_root)}` 在盘上却读不成"
+                          f"（{got_sign.get('why') or '（没有理由）'}）⇒ 这一份的签判不了")
+            return out
+        out.update(bucket="unsigned", why=(
+            f"稿在盘上（正文 sha {sha[:12]}…），而这一版没有 "
+            f"`{signed_rel}/<sha>.json` ⇒ 稿有、没签（缺的是 V 对这一版的那份签）"))
+        return out
+    sign = dict(got_sign.get("sign") or {})
+    if str(sign.get("artifact_sha") or "").strip().lower() != sha:
+        out["why"] = (f"`{signed_rel}/{sha[:12]}…json` 里的 artifact_sha 对不上自己的"
+                      "文件名 ⇒ 这份签说不清它签的是谁，这一份的签判不了")
+        return out
+    verdict = str(sign.get("verdict") or "")
+    try:
+        need = int(sign.get("need") or 0)
+        streak = int(sign.get("streak") or 0)
+    except (TypeError, ValueError):
+        need, streak = 0, 0
+    if verdict != SIGN_VERDICT_ESTABLISHED:
+        out.update(bucket="unbacked", why=(
+            f"签文件里的判词是 {verdict or '（空）'!r}（签只能是「成立」）⇒ "
+            "这一份不算「造」"))
+        return out
+    if need < 1 or streak < need:
+        out.update(bucket="unbacked", why=(
+            f"签文件自己写的连续读数是 {streak}/{need} ⇒ 未达门槛（0/0 不算一份签）"))
+        return out
+    cred = _E3_VS.credential_reading(project_root, sha)
+    if not cred.get("checked"):
+        out["why"] = (f"这一份签的复算没查成（{cred.get('why') or '（没有理由）'}）⇒ "
+                      "这一份的签判不了")
+        return out
+    if not cred.get("recomputable"):
+        out.update(bucket="unbacked", why=(
+            f"签文件在，但复算不上（{cred.get('problem') or '?'}："
+            f"{cred.get('why') or ''}）⇒ 文件在不算签"))
+        return out
+    # ---- 后来的否决盖过更早的成立（`review_standing` 的同一条纪律）-------------
+    #
+    # 判据只认"秘书判成 fault"那一档（`verifications.ledger_axis`，轴的唯一来源）。
+    # 为什么不用 verdict 字面：「成立」但不构成票的行（秘书没判 / 引用核实挡签）不是
+    # 否决 —— 把它读成"后来推翻了"会写出一句自相矛盾的话（"后来判成立，所以否决"）。
+    anchor = _E3_VS._ledger_rows_at(project_root, sign.get("ledger"))
+    if not anchor.get("checked"):
+        out["why"] = (f"签的锚点台账读不成（{anchor.get('why') or '（没有理由）'}）⇒ "
+                      "这一份的签判不了")
+        return out
+    covering = [r for r in (anchor.get("rows") or [])
+                if str(r.get("proof_sha256") or "") == sha]
+    passes = [p for p in (sign.get("passes") or []) if isinstance(p, Mapping)]
+    last_pass_vid = str((passes[-1].get("verification_id") if passes else "") or "")
+    last_row = covering[-1] if covering else {}
+    if (last_row and last_pass_vid
+            and str(last_row.get("verification_id") or "") != last_pass_vid
+            and _E3_VR.ledger_axis(last_row) == "fault"):
+        out.update(bucket="superseded", why=(
+            f"这一签之后 V 又审了同一份正文并判了有毛病"
+            f"（{last_row.get('verification_id')}："
+            f"{str(last_row.get('verdict') or '') or '（空判词）'}）⇒ 后来的否决"
+            "盖过更早的成立，不算「造」"))
+        return out
+    # ---- 归属：这条稿归在册那一路，还是归新链？ ------------------------------
+    owners = list(by_mid.get(mid, [])) if mid else []
+    for sid in by_sha.get(sha, []):
+        if sid not in owners:
+            owners.append(sid)
+    if owners:
+        hit = [sid for sid in owners if sid in counted_ids]
+        if hit:
+            out.update(bucket="both", ids=hit)
+        else:
+            out.update(bucket="covered_unmet", stmt_ids=owners[:4], why=(
+                f"稿已在册（{'、'.join('stmt:' + s for s in owners[:4])}），"
+                "而在册那一路没把它算进这一档 ⇒ 以在册行为准，这里不补"
+                "（否则等于绕过等级与最新判词）"))
+        return out
+    out.update(bucket="counted", key=(mid or rel), why=(
+        f"稿 + 签齐（{verdict} {streak}/{need}，复算通过），且没有册行覆盖 ⇒ "
+        "这一份算「造」"),
+               verdict=verdict, streak=streak, need=need)
+    return out
+
+
+def _manuscript_sign_reading(project_root: Path,
+                             rows: Sequence[Mapping[str, Any]],
+                             counted_ids: Container[str]) -> dict[str, Any]:
+    """「造」的新链读数：盘上每一份签载体稿拿到 V 签了没有（纯读，不写盘）。
+
+    返回 `{checked, scanned, counted, counted_total, counted_keys, both_ids,
+    covered_unmet, unsigned, unbacked, superseded, unreadable,
+    sign_without_manuscript, problems, why}`：
+
+    - `checked=False` ⇒ 这一路没查成（不是「没有签」）；
+    - `counted` ⇒ 数进这一档的稿（`{path, manuscript_id, sha, verdict, streak, need}`）；
+    - `counted_keys` ⇒ 同一批的计数键（裸稿号；认不出号时用稿路径 —— 一份稿只算一次）；
+    - `both_ids` ⇒ 与在册那一路重合的行号（构成读数的 `both` 那一格）；
+    - `covered_unmet` ⇒ 稿被册行覆盖、而册行那一路没数它（以册行为准，这里不补）；
+    - `unsigned` / `unbacked` / `superseded` / `unreadable` / `sign_without_manuscript`
+      ⇒ 不算的五种来路，逐条带 `why`（`why_not` 就是从它们抄出来的）。
+
+    单份稿的判定在 :func:`_one_manuscript_sign`（一份稿一条读数，桶是受控七档）。
+    """
+    out: dict[str, Any] = {
+        "checked": False, "scanned": 0, "counted": [], "counted_total": 0,
+        "counted_keys": [], "both_ids": [], "covered_unmet": [],
+        "unsigned": [], "unbacked": [], "superseded": [], "unreadable": [],
+        "sign_without_manuscript": [], "problems": [], "why": "",
+    }
+    from . import verifications as _E3_VR
+    from . import vsigns as _E3_VS
+
+    table = _E3_VS.signed_table(project_root)
+    out["problems"] = [str(p) for p in (table.get("problems") or [])]
+    if not table.get("checked"):
+        out["why"] = (f"签的目录读不成（{table.get('why') or '（没有理由）'}）⇒ "
+                      "「造」的新链这一路没查成（不是「这个工作区一份签都没有」）")
+        return out
+    shots = project_root / "reports"
+    files: list[Path] = []
+    if shots.is_dir():
+        try:
+            files = sorted(p for p in shots.glob("*.md") if p.is_file())
+        except OSError as exc:  # noqa: BLE001 —— 列不出来 = 没查成
+            out["why"] = (f"`reports/` 列不出来（{type(exc).__name__}: {exc}）⇒ "
+                          "「造」的新链这一路没查成")
+            return out
+    # ---- 在册那一路的「覆盖面」：稿号 / 证明 sha（行上的 + 证明清单里的）---------
+    # 只用来判「这一份稿归谁判」，不参与计数：一件在册行覆盖的稿，它的档由现算的
+    # 五位等级 + 最新判词决定（那件事已经在上面那一段分支里做过了，这里不重做）。
+    by_mid: dict[str, list[str]] = {}
+    by_sha: dict[str, list[str]] = {}
+    for row in rows:
+        sid = str(row.get("stmt_id") or row.get("id") or "")
+        mid = str(row.get("manuscript_id") or "").strip()
+        if mid:
+            by_mid.setdefault(mid, []).append(sid)
+        shas = {str(row.get("proof_sha256") or "").strip().lower()}
+        for _no, text in _E3_VR.proof_list(row):
+            if str(text or "").strip():
+                shas.add(_PR.proof_sha(text))
+        for sha in shas:
+            if sha:
+                by_sha.setdefault(sha, []).append(sid)
+    seen_keys: set[str] = set()
+    for path in files:
+        rel = _E3_VS.rel(path, project_root)
+        if not _E3_VS.is_sign_carrier(rel):
+            continue
+        out["scanned"] += 1
+        got = _one_manuscript_sign(project_root, rel, by_mid=by_mid, by_sha=by_sha,
+                                   counted_ids=counted_ids)
+        bucket = str(got.get("bucket") or "unreadable")
+        if bucket == "both":
+            out["both_ids"].extend(str(x) for x in (got.get("ids") or []))
+        elif bucket == "counted":
+            key = str(got.get("key") or rel)
+            if key in seen_keys:
+                # 同一份稿被两个族各写了一份（`b-proof-000000` 与 `f-proof-000000`）：
+                # 它是一份稿，不许被数成两份「造」。
+                continue
+            seen_keys.add(key)
+            out["counted_keys"].append(key)
+            out["counted"].append({
+                "path": rel, "manuscript_id": str(got.get("manuscript_id") or ""),
+                "sha": str(got.get("sha") or ""),
+                "verdict": str(got.get("verdict") or ""),
+                "streak": int(got.get("streak") or 0),
+                "need": int(got.get("need") or 0)})
+        else:
+            out[bucket].append(dict(got))
+    # ---- 「签有、稿找不到」：签文件点了某份稿，而那份稿不在盘上 ------------------
+    for entry in table.get("entries") or []:
+        rel = str(entry.get("artifact_path") or "").strip().replace("\\", "/")
+        if not rel:
+            continue
+        if (project_root / rel).is_file():
+            continue
+        out["sign_without_manuscript"].append({
+            "artifact_sha": str(entry.get("artifact_sha") or ""),
+            "artifact_path": rel,
+            "why": (f"签文件指的那份稿不在盘上：{rel} ⇒ 签有、稿找不到，不算「造」")})
+    out["counted_total"] = len(out["counted_keys"])
+    out["both_ids"] = sorted(set(out["both_ids"]))
+    out["checked"] = not out["unreadable"]
+    if not out["checked"]:
+        out["why"] = ("；".join(str(x.get("why") or "")
+                                for x in out["unreadable"][:2])
+                      + " ⇒ 「造」的新链这一路没查成（不是「没有签」）")
+    elif not out["scanned"]:
+        out["why"] = ("查过了：`reports/` 里没有签载体稿"
+                      "（`f-proof-*` / `b-proof-*` / `e-proof-*`）"
+                      + ("" if shots.is_dir() else " —— 这个工作区连 `reports/` 都还没有"))
+    else:
+        out["why"] = (
+            f"签载体稿 {out['scanned']} 份：数进这一档 {out['counted_total']} 份"
+            f"（另有 {len(out['both_ids'])} 条与在册那一路重合）；"
+            f"没签 {len(out['unsigned'])}、签不够 {len(out['unbacked'])}、"
+            f"被后来的否决盖过 {len(out['superseded'])}、"
+            f"册行覆盖而册行没数 {len(out['covered_unmet'])}、"
+            f"签有稿找不到 {len(out['sign_without_manuscript'])}")
+    return out
+
+
 def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[str, Any]]:
     """按受控档位现算一行验收读数 ⇒ `(条数, 明细)`。
 
@@ -1949,7 +2798,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         return len(pinned), detail
     if kind == "manuscript_edited":
         # 任务原文第一句（"改掉正文里的问题"）的机器可判形式：可改的主稿与只读基线不同。
-        # 为什么必须有一档盯它：三条腿的凭据可以全齐、收工门七格全过，而主稿一个字节
+        # 为什么必须有一档盯它：三条腿的凭据可以全齐、收工门八格全过，而主稿一个字节
         # 都没改 —— "引文核过、形式化验过"与"把正文里的问题改掉"是三件事，
         # 前两件有判据，第三件没有这一档就没有读数。
         draft = project_root / "out" / "paper" / "main.tex"
@@ -2197,7 +3046,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #    （缺省 `min` 变成 0、`max` 缺省取这一档给的上限）。
         #
         # 一条请求可以提交完就停在那里：`done=false` / `claimed_by=null` / `attempts=0`，
-        # 而计划那一行写着「等 A 完成检索请求」，收工门七格却全绿 —— 这一档读数就是那件事。
+        # 而计划那一行写着「等 A 完成检索请求」，收工门七格却全绿（T5 第 5 趟 `p8e`，当时门是七格）—— 这一档读数就是那件事。
         search_rows = [dict(r) for r in store.rows("search_requests")]
         try:
             repro_rows = [dict(r) for r in store.rows("reprocess_requests")]
@@ -2285,7 +3134,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         #
         # 为什么必须单列这一档：C 的八个动作产物就是返回值本身、不落台账 ——
         # 于是"这一趟到底用没用 C"在收工门上无处可读。用户点名"重点考察 C"也可以
-        # 而 `tasks` 表里 role=C 的行是 0、七格全绿、无人察觉。
+        # 而 `tasks` 表里 role=C 的行是 0、七格全绿（当时门是七格）、无人察觉。
         # 这一档数的是任务行（`tasks` 里 role=C 且跑过的），不是 C 的产物 ——
         # 因为 C 的产物本来就不落盘；"它被用过没有"只有任务行能回答。
         rows = [dict(r) for r in store.rows("tasks")
@@ -2505,6 +3354,35 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                     counted.append({"stmt_id": sid, "proof_no": no,
                                     "grade": proof_grade,
                                     "label": str(r.get("label") or "")[:60]})
+        # ---- 新链（2026-11-02 起、11-13 定型）：「造」= 稿 + 稿上的 V 签 ----------
+        #
+        # 上面那一段是旧链的读法（B 收录的 `statements` 行 + V 审那一行）；这一段是
+        # 新链的读法（V 签落在稿上，B 之后才收录 ⇒ 第一阶段没有在册命题）。
+        # 两路并列：在册那一路数过的一条不少（正控不许降），新链只补"没有册行
+        # 覆盖"的稿。两路怎么分工、为什么"稿+签"不许给已覆盖的稿翻案，逐条写在
+        # `_manuscript_sign_reading` 的 docstring 里（`draft/189`；`temp/rootledger` 的 E3）。
+        ms_rows = _manuscript_sign_reading(project_root, rows, counted_stmts)
+        if not ms_rows.get("checked"):
+            # 读不成 ⇒ 抛出去 ⇒ 调用方落 `unknown`（不许折成 0，也不许折成 pass）。
+            raise RuntimeError(
+                "「造」这一格的新链那一路没查成：" + str(ms_rows.get("why") or "（没有理由）"))
+        ms_keys = [str(k) for k in (ms_rows.get("counted_keys") or [])]
+        both_ids = [str(x) for x in (ms_rows.get("both_ids") or [])
+                    if str(x) in counted_stmts]
+        #: 这一档的构成（三格相加 = 腿的读数）。`registered` = 只有册行那一路看得见；
+        #: `manuscript_sign` = 只有「稿+签」看得见（第一阶段的形态）；`both` = 两路都看得见。
+        by_source = {
+            "registered": len(counted_stmts) - len(both_ids),
+            "manuscript_sign": len(ms_keys),
+            "both": len(both_ids),
+        }
+        #: 逐条 why_not：不算的五个来路（稿有没签 / 签不够 / 被后来的否决盖过 /
+        #: 册行覆盖而册行没数 / 签有稿找不到）。前 8 条逐条给，余下的只给条数。
+        why_not: list[str] = []
+        for bucket in ("unsigned", "unbacked", "superseded", "covered_unmet",
+                       "sign_without_manuscript", "unreadable"):
+            for item in (ms_rows.get(bucket) or [])[:8]:
+                why_not.append(f"[{bucket}] {item.get('why') or ''}")
         detail: dict[str, Any] = {
             "statements": len(rows),
             # ---- 三态的逐档读数（分母必须并列，否则"0 条高档"读不出是哪一种 0）
@@ -2564,13 +3442,45 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "是文献代号，不是我们自己的证明过程与审校）。这一档数的是「我方造出的判决性"
                 "证据」，把别人的定理算进来就等于拿引用满足了「我们自己造」；"
                 "引用命题的承重与证据链归 `load_bearing` 那一格管，不归这里"),
+            # ---- 腿的构成（RETIRE-E3）：旧链与「稿+签」各数了几条 ------------------
+            #: 三格相加 = 腿的读数（`registered` + `manuscript_sign` + `both`）。
+            #: 为什么要分开记：只报一个总数，读的人分不出「第一阶段（只有稿+签）」
+            #: 与「第二阶段（册行也到了）」—— 而这两件事的处置完全不同（前者等 B 收录、
+            #: 后者什么都不用等）。`both` 是两路各自独立都看得见的那几条。
+            "by_source": by_source,
+            #: 新链那一路的逐条读数（RETIRE-E3）。"造"不再只由 `statements` 行回答：
+            #: 稿在盘上 + 稿上的 V 签成立且仍站得住 ⇒ 也算（`draft/189`）。
+            "manuscript_sign": {
+                "checked": bool(ms_rows.get("checked")),
+                "scanned": int(ms_rows.get("scanned") or 0),
+                "counted": list(ms_rows.get("counted") or [])[:8],
+                "counted_total": int(ms_rows.get("counted_total") or 0),
+                "both_ids": both_ids[:8],
+                # 不算的五种来路（前 8 条；`why_not` 是同一批的逐条一句话）
+                "unsigned": list(ms_rows.get("unsigned") or [])[:8],
+                "unbacked": list(ms_rows.get("unbacked") or [])[:8],
+                "superseded": list(ms_rows.get("superseded") or [])[:8],
+                "covered_unmet": list(ms_rows.get("covered_unmet") or [])[:8],
+                "sign_without_manuscript":
+                    list(ms_rows.get("sign_without_manuscript") or [])[:8],
+                "unreadable": list(ms_rows.get("unreadable") or [])[:8],
+                "problems": list(ms_rows.get("problems") or [])[:4],
+                "why": str(ms_rows.get("why") or ""),
+            },
+            #: 逐条 why_not（不算的每一份稿一行）。缺什么、缺在哪一版，逐条点名 ——
+            #: 只给一个"不算"的读数，读的人不知道下一步该派给谁。
+            "why_not": why_not,
             "note": (
                 "三态分开读：①没有位记录的行 = 产出方没走过（老数据）⇒ 它们的等级是按"
                 "「五位全空」现算的（唯一的例外是 `origin=external_lit` 且逐字核过的引用命题，"
                 "那种行即使没有位记录也能派生到预备定理级）—— 见 `statements_without_bits`；"
                 "②有记录但只到 `conjecture` = 算出来了、就是低档（见 `grades_with_bits`）；"
                 "③有记录且我方到 `pre_theorem`/`theorem` = 这一档要数的（见 `counted`）。"
-                "「没算过」不等于「算了、不够档」，所以这两件事的分母必须分开给"),
+                "「没算过」不等于「算了、不够档」，所以这两件事的分母必须分开给。"
+                "**这一档有两路并列的来源**（RETIRE-E3）：册行那一路（上面那三态）与"
+                "「稿 + 稿上的 V 签」那一路（`manuscript_sign`）。2026-11-02 起 V 签落在稿上、"
+                "B 之后才收录，所以第一阶段盘上只有稿与签 ⇒ 两条路都算，构成见 `by_source`；"
+                "不算的逐条见 `why_not`"),
         }
         # ---- 签的侧文件 + "没送到"的判决（只读数，「不参与任何等级」） --
         #
@@ -2615,7 +3525,7 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
                 "undelivered": 0, "undelivered_ids": [],
                 "reason": (f"打回与送达那一格没查成（{type(exc).__name__}: {exc}）"
                            "⇒ 不是「没有打回」"), "problems": []}
-        if rows and not counted:
+        if rows and not counted and not ms_keys:
             # ---- 「0 条高档」是哪一种 0：四种原因分开给，不折成一句"没审过"。
             #
             # "要么没有证明过程、要么没审过"不够用：这两种的下一步完全不同
@@ -2656,7 +3566,11 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # 腿的读数是定理级汇总数（按命题去重）：一条命题三条证明都审过仍只算一条 ——
         # "造了几条判决性证据"问的是命题，不是证明的份数。逐条证明的明细在 `counted`
         # （键 `(stmt_id, proof_no)`）与 `counted_total` 里。
-        return len(counted_stmts), detail
+        #
+        # RETIRE-E3：新链那一路上数进来的稿加在这里（不是在册那一路的替换）——
+        # 在册行数过的一条不少（正控不许降），没有册行覆盖的稿由「稿+签」补上。
+        # 两路各自的正控/负控见 `tests/test_retire_e3_manuscript_sign_counts.py`。
+        return len(counted_stmts) + len(ms_keys), detail
     if kind == "numeric_experiment_rows":
         # 这一档从「跑过多少次数值实验」改成「跑出过几个结论」—— 只数
         # `method="numeric"` 的话，全 `inconclusive` 也能让「算」那一环变绿。
@@ -2836,40 +3750,125 @@ def _leg_reading(store: Any, kind: str, project_root: Path) -> tuple[int, dict[s
         # "这份计划被 step 过没有"不等于"step 出了什么"：
         # 两轮全 `no_change` 的计划（`dead_end` 逐轮落库、子目标一条没动）与四轮全
         # `progress` 的计划若在这一格上等值，那一格就量不到任何东西。
-        # 判据本体在 :func:`_round_advanced`（一处口径，读不到两种说法）。
+        # 判据本体在 :func:`_round_advanced_by`（旧四档 + 第五档「自足证明」）
+        # + 两条计划级并列通路
+        # （:func:`_plan_proof_advance`：① 稿拿到 V 签 ② 按稿在写计的）。
+        #
+        # 为什么要有第五档：`_round_advanced` 旧四档对 `action=proof` 只认 `cites`
+        # 一条，而"自足证明"（`## 依赖` 空表）本来就是合法的生产形态 —— 业主 2026-11-20
+        # 裁定「自足证明是几乎唯一的生产方式」。lp-ball-12 的 27 轮 proof 全部零 `cites`，
+        # 只把"得签"补到计划级，逐轮读数仍说这 27 轮一步没走（`not_advanced_rounds`
+        # 里逐条写着"既没有 cites"）—— 那是读数自相矛盾，不是"F 没推进"。
+        #
+        # 为什么还要两条计划级并列通路：第五档要求"稿已落地"，而真机上还有
+        # "稿改到拿到 V 签"这一层推进（lp-ball-12：5 条计划名下 6 份签全是
+        # `verdict=成立 / streak=3 / need=3`）。同格已有的负向读 `_proof_review_backlog`
+        # （点名了命题却没人签 ⇒ unknown）现在有了正向的对称那一半。
         rows = list(store.rows("attack_plans"))
+        signed_index = _signed_manuscript_index(project_root)
+        #: 颁发表里的 sha 集合：第五档「稿已落地」要认"签了、但还没登记"的那几轮
+        #: （真机 lp-ball-12 的 27 轮里 6 轮是这一形态）—— 只给 `_proof_landed` 用。
+        signed_shas = {str(k) for k in dict(signed_index.get("by_sha") or {})}
         plans: list[dict[str, Any]] = []
         advanced: list[dict[str, Any]] = []
+        progress_outcome_rounds = 0
         for r in rows:
             hist = [h for h in (r.get("history") or []) if isinstance(h, Mapping)]
-            hits = [(h, *_round_advanced(h)) for h in hist]
+            hits = [(h, *_round_advanced_by(h, signed_shas=signed_shas)) for h in hist]
             gone = [{"round": int(h.get("round") or 0),
                      "action": str(h.get("action") or ""),
                      "outcome": str(h.get("outcome") or ""), "why": why}
-                    for h, ok, why in hits if not ok]
+                    for h, ok, _tier, why in hits if not ok]
             progressed = [{"round": int(h.get("round") or 0),
-                           "action": str(h.get("action") or ""), "why": why}
-                          for h, ok, why in hits if ok]
+                           "action": str(h.get("action") or ""),
+                           "advanced_by": tier, "why": why}
+                          for h, ok, tier, why in hits if ok]
+            no_change = sum(1 for h in hist
+                            if str(h.get("outcome") or "") == "no_change")
+            progress_outcome_rounds += sum(
+                1 for h in hist if str(h.get("outcome") or "") == "progress")
+            proof_adv = _plan_proof_advance(hist, signed_index)
+            advanced_by = str(proof_adv.get("advanced_by") or "")
+            why_advanced = str(proof_adv.get("why_advanced") or "")
+            if not advanced_by and progressed:
+                # 旧四档先于第五档（也先于"次一档"）：两边都有凭据时记旧四档 `round`，
+                # 第五档只在"没有任何一轮引到在册命题/产出新东西"时才当代表。
+                pick = next((p for p in progressed
+                             if p["advanced_by"] == ADVANCED_BY_ROUND), progressed[0])
+                advanced_by = str(pick.get("advanced_by") or "")
+                why_advanced = str(pick.get("why") or "")
+            if not advanced_by and proof_adv.get("draft_manuscript_rounds"):
+                advanced_by = "manuscript_in_progress"
+                why_advanced = str(proof_adv.get("draft_why") or "")
             entry = {"id": str(r.get("plan_id") or r.get("id") or ""),
                      "status": str(r.get("status") or ""),
                      "rounds": int(r.get("rounds") or 0),
                      "history_len": len(hist),
                      "subgoals": len(list(r.get("subgoals") or [])),
+                     #: 过了 `_round_advanced`（五档）的轮数。
                      "progress_rounds": len(progressed),
-                     "no_progress_rounds": len(gone)}
+                     #: 其中靠第五档（自足证明）认下的轮数 —— 是上面那个数的一部分，
+                     #: 不是另加一档总数（两者相加会重复计数）。
+                     "self_contained_proof_rounds": sum(
+                         1 for p in progressed
+                         if p["advanced_by"] == ADVANCED_BY_SELF_CONTAINED_PROOF),
+                     #: 没过 `_round_advanced`（五档）的轮数（不是 `outcome=no_change`
+                     #: 的轮数：`proof` 轮也可能落在这里 —— 稿没落地的那种）。
+                     "unadvanced_rounds": len(gone),
+                     #: `outcome=no_change` 的轮数（与上一格是两个数，别读成一个）。
+                     "no_change_rounds": no_change,
+                     #: 逐轮 why：始终给（0 推进时也在这里），不再只在
+                     #: `advanced_plans` 里外露 —— 改前 `advanced_plans=[]` 会把理由整段丢掉。
+                     "not_advanced_rounds": gone,
+                     #: 逐轮"算推进"的读数（`advanced_by` 逐轮分开记：`round` / 第五档）。
+                     #: P6FIX2 起它直接挂在 `plans[]` 上 —— 改前只在 `advanced_plans` 里，
+                     #: 于是"计划绿了、逐轮读数却说这 12 轮没推进"这种矛盾没人看得见。
+                     "advanced_rounds": progressed,
+                     #: 计划名下「拿到 V 签」的稿（`verdict=成立` 且 `streak>=need`）。
+                     "signed_manuscripts": list(proof_adv.get("signed_manuscripts") or []),
+                     #: 次一档：`proof_registered=True` 且正文 sha 在两轮之间变过。
+                     "draft_manuscript_rounds": list(
+                         proof_adv.get("draft_manuscript_rounds") or []),
+                     #: `signed_manuscript`（得签）/ `manuscript_in_progress`（按稿在写计的）
+                     #: / `round`（旧四档）/ `self_contained_proof`（第五档：自足证明）/
+                     #: 空串（这一份计划没有推进）。
+                     "advanced_by": advanced_by,
+                     "why_advanced": why_advanced}
             plans.append(entry)
-            if progressed:
-                advanced.append({**entry, "advanced_rounds": progressed,
-                                 "not_advanced_rounds": gone})
+            if advanced_by:
+                advanced.append(dict(entry))
+        zero_hint = ""
+        if not advanced and progress_outcome_rounds:
+            zero_hint = (
+                f"0 条不等于「F 没推进」：`attack_plans.history` 里有 "
+                f"{progress_outcome_rounds} 轮 `outcome=progress`，但旧四档"
+                f"（`cites` / 新子目标 / 新实验）一条都没认，第五档（自足证明）与"
+                f"两条计划级并列通路（稿拿到 V 签、稿在两轮之间改过）也一条都没命中 ⇒ "
+                f"这是「推进口径不认证明轮」，不是「F 没推进」")
         return len(advanced), {
             "plans": plans[:8], "total_plans": len(rows),
             "advanced_plans": advanced[:8],
+            #: `outcome=progress` 的轮数（写侧的读数；与 `progress_rounds` 不是同一件事）。
+            "progress_outcome_rounds": progress_outcome_rounds,
+            "zero_reading_hint": zero_hint,
             "note": ("「立项」不算推进、「被 step 过」也不算：这一档数的是**至少有一轮"
-                     "真推进**的计划（`outcome=progress` 且该轮有 `cites` 或产出新子目标/"
-                     "新实验）。只派检索/重抽取请求的那种轮**不算推进** —— 把活递出去会在"
-                     "台账上多一行请求，但难题一步没动，那是「闭（请求闭环）」那一档的读数。"
-                     "逐轮读数在 `advanced_plans` 里 —— 每一轮为什么算/不算都写在那句 `why` 上，"
-                     "读不到两种说法")}
+                     "真推进**的计划。旧四档：`outcome=progress` 且该轮有 `cites` 或产出"
+                     "新子目标/新实验；第五档：`action=proof` + 该轮 `## 依赖` 是空表 + "
+                     "稿已落地（`proof_registered=True` 且 sha 非空，或该 sha 命中 "
+                     "`out/vsigns/` 的颁发表）—— 业主 2026-11-20 裁定「自足证明是几乎唯一"
+                     "的生产方式」；两条计划级并列通路：① 计划名下的稿拿到 V 的「成立」签"
+                     "（`out/vsigns/` 的颁发表，`verdict=成立` 且 `streak>=need`）；"
+                     "② 次一档，`proof_registered=True` 且正文 sha 在两轮之间变过"
+                     "（「稿在写」）。第五档与`round` 分开记在 `advanced_by` 上（逐轮在 "
+                     "`plans[].advanced_rounds[].advanced_by`），①②分开记在 `advanced_by` / "
+                     "`why_advanced` 上，都不混成同一档。只派检索/重抽取请求的那种轮**不算推进**"
+                     " —— 把活递出去会在台账上多一行请求，但难题一步没动，那是"
+                     "「闭（请求闭环）」那一档的读数。"
+                     "逐轮读数在 `plans[].not_advanced_rounds` / `advanced_rounds`"
+                     "（0 推进时也在）与 `advanced_plans` 里 —— 每一轮为什么算/不算都写在"
+                     "那句 `why` 上。`unadvanced_rounds` 是「没过 `_round_advanced`（五档）"
+                     "的轮数」，`no_change_rounds` 是「`outcome=no_change` 的轮数」——"
+                     "两个数不是一回事")}
     if kind == "counterexample_or_proof_rows":
         proof = [r for r in _active_experiment_rows(store)
                  if str(r.get("evidence_kind") or "") == "proof"]
@@ -3090,7 +4089,10 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
 
 三态（按结构级 / 行级分界）：
 
-- 文件不在 ⇒ `pass` 并写明"这个项目没有机器可判的验收行"（"没有这一栏"）；
+- 文件不在、`research_questions` 也一行都没有 ⇒ `na`（没有可判的验收口径；改前记
+  `pass`，那是空工作区上的真空通过：状态栏说"过"而实际没有东西可判）；
+- 文件不在、但这是个研究型项目（`research_questions` 有行）⇒ `fail`（缺表是没写，
+  不是不需要写）；
 - 结构级读不懂（顶层不是 JSON / 不是数组）⇒ 整格 `unknown`（没有行可读）；
 - 行级读不懂（一行不是对象 / 词表外 `kind` / `na` 无理由 / `na` 非布尔 / `min`·`max` 非整数 / 台账
   读不到 / id 缺失或重复）⇒ 该行 `unreadable`，其余行照常判；整格 = 有好行不达标 ⇒ `fail`，否则有
@@ -3143,8 +4145,17 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                 "缺的是那一行，不是那个数。"
                 + str(_budget.get("note") or "")))
         else:
-            rep.status["acceptance"] = "pass"
-            rep.readings["acceptance"]["note"] = f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}"
+            # 2026-11-20（EMPTYCELL）：没有验收表、研究问题表也一行没有 ⇒ 这个项目连
+            # "该验收什么"都没立起来，这一格没有可判对象 ⇒ `na`。
+            # 改前这里落 `pass`（"这个项目没有机器可判的验收行"）—— 空工作区的一格
+            # 真空通过。研究型项目（`research_questions` 有行）缺表仍判 `fail`：
+            # 那是真的没写，不是"不需要写"。
+            why = (f"这个项目没有 {ACCEPTANCE_CHECKS_NAME}，`research_questions` 表也没有"
+                   "一行 ⇒ 没有可判对象（没有可判的验收口径），记 na（不是 pass：没判过；"
+                   "也不是 unknown：不是读不成）")
+            _record_not_applicable(rep, "acceptance", why,
+                                   rep.readings.get("acceptance") or {})
+            rep.readings["acceptance"]["note"] = why
         return
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -3496,6 +4507,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                     "checked": b.get("checked"),
                     "total": b.get("total", 0),
                     "missing": [m.get("statement_id") for m in (b.get("missing") or [])][:8],
+                    # 逐条 why（读数）：两路并读之后"缺"有几种来路 —— 在册台账没有它 /
+                    # pending 里没人认领给它 / 认领了但尾行签不住 —— 处置完全不同。
+                    "missing_why": [str(m.get("why") or "") for m in (b.get("missing") or [])][:8],
                 }
             if not b.get("checked"):
                 why = (f"攻坚计划的 `statement_id` 有没有人签 —— 这一格**没查成**"
@@ -3512,12 +4526,14 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
                     f"plan {m.get('plan_id')} 第 {m.get('round')} 轮 ⇒ stmt:{m.get('statement_id')}"
                     for m in (b.get("missing") or [])[:6])
                 why = (f"攻坚计划的 `history` 里点名了 {len(b['missing'])} 条命题"
-                       f"（{names}），而 `verifications` 里**没有它们对应的行** ⇒ "
+                       f"（{names}），而 `verifications` 的两路都**没有认领给它们的、签得住的行**"
+                       f"（在册 `verifications/<命题号>.jsonl` ∨ 已认领的 "
+                       f"`verifications/pending/`）⇒ "
                        f"这一行记 `unknown`、不记 `pass`。"
                        "「攻」问的是「这一跳真的往前走了吗」：F 交了论证"
                        "（`statement_id` 有了）而没有人签，等于那一条还停在「自称被审过」。"
-                       f"处置：派 D 去核签那几条（D 会让 F 补签；产物就是 "
-                       f"`verifications/<命题号>.jsonl` 的那一行），回来再收工")
+                       f"处置：派 D 去核签那几条（D 会让 F 补签；产物是在册台账里的一行，"
+                       f"或 `verifications/pending/` 里认领给它的那一行签得住），回来再收工")
                 row_out.update({"state": "unknown", "ok": False, "unknown": True, "reason": why})
                 unknown_rows.append({"id": cid, "kind": kind,
                                      "unverified_statements":
@@ -3531,7 +4547,20 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             else:
                 why = (f"{got} 条，上限 {want_max} 条（这一档要的是「上限」："
                        f"越多越不达标 —— 0 才是达标）")
-            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{why} —— 读数 {detail}"
+            # 「攻」那一格 0 推进时把话说全：0 条可能不是"F 没推进"，而是"没有一份
+            # 推进凭据被这一格的判据认出来"。`zero_reading_hint` 由 `_leg_reading`
+            # 只在这一档、只在"有 progress 轮却读 0"时给出；别的档读不到它。
+            hint = ""
+            if kind == "plan_progress_rows" and isinstance(detail, Mapping):
+                hint = str(detail.get("zero_reading_hint") or "")
+            # 读数原样出去，只把已经单独说过的 `zero_reading_hint` 从这一份副本里拿掉
+            # （不拿掉这一行会把同一句长话打印两遍）。
+            shown_detail = dict(detail) if isinstance(detail, dict) else detail
+            if isinstance(shown_detail, dict):
+                shown_detail.pop("zero_reading_hint", None)
+            unmet.append(f"{cid}（{name or LEG_CHECK_KINDS[kind]}）：{why}"
+                         + (f"；{hint}" if hint else "")
+                         + f" —— 读数 {shown_detail}"
                          + (f"；{note}" if note else "")
                          # 同一环里现在就能达标的其它成员档：
                          # M 可以把"想"那一环声明成 `conjecture_rows`（0 条），而同一环的
@@ -3648,7 +4677,7 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             rep.readings["acceptance"].get("problems") or []) + [absent_reason]
     # ---- 稿子改完之后有没有再复核：验收表里没写这一档时，
     # 门替它报出来 —— 否则「G.revise 追加的断言从未被审过」可以整趟静默留下
-    # （`review_findings` 0 条、七格全绿，而现行版没有任何签名）。
+    # （`review_findings` 0 条、七格全绿（当时门是七格），而现行版没有任何签名）。
     # 这一档写进验收表时由它自己那一行判（含 `na` + 理由那条出口），门不重复说话。
     if "reviewed_current_rows" not in computed_kinds:
         try:
@@ -3757,6 +4786,9 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
         content_readings = {"unreadable": f"{type(exc).__name__}: {exc}"}
     rep.readings["acceptance"]["content_branches"] = content_readings
     unmet.extend(content_unmet)
+    #: 内容判据里「没查成」的那些（`content_leg_unmet` 自己落的三态读数）。
+    #: 它们不进 unmet（那是「不满足」），但整格也不许记 pass —— 没查成不是通过。
+    content_unknown = list(content_readings.get("unknown_branches") or [])
     if unmet:
         rep.status["acceptance"] = "fail"
         rep.findings.append(Finding(
@@ -3787,6 +4819,21 @@ def _check_acceptance(rep: ClosingReport, store: Any, project_dir: str) -> None:
             "读数留在 `rows` 里（`state == unknown`），理由逐条在上面 —— "
             "「带着没消化的队列收工」是一条可以被接受的判断，但它必须**说得出来**，"
             "而说出来的那一趟不该被显示成 pass"))
+    elif content_unknown:
+        # 内容判据自己落的三态：`unknown` 不是「不满足」（不进 unmet、不报 blocker），
+        # 但更不是「通过」。这一支只在这几档没查成、而其它行都过时命中 —— 于是
+        # 「签文件坏掉」不会再被折成 pass（折成 fail 也是错的：那会把「没查成」说成
+        # 「查过了、没有」）。
+        _ub = "；".join(
+            str((content_readings.get(k) or {}).get("why_unknown")
+                or (content_readings.get(k) or {}).get("why") or k)
+            for k in content_unknown)
+        rep.status["acceptance"] = "unknown"
+        rep.findings.append(Finding(
+            "acceptance", "acceptance_content_unknown", "warning",
+            f"验收表里机器可判的行都过了，但有内容判据**没查成**"
+            f"（{'、'.join(content_unknown)}）：{_ub} —— 这一格记 `unknown`"
+            "（不是「通过」，也不是「不满足」）"))
     else:
         rep.status["acceptance"] = "pass"
 
@@ -3880,7 +4927,7 @@ def closing_session_identity(root: Any, given: str | None) -> SessionIdentity:
         return SessionIdentity(
             "", "",
             f"拒绝：没有会话 {sid!r}（sessions/{sid}.jsonl 不在盘上）"
-            f" ⇒ 不跑收工门（退出码 2，不出一份「七格全是没查成」的空读数）。{hint}",
+            f" ⇒ 不跑收工门（退出码 2，不出一份「八格全是没查成」的空读数）。{hint}",
             NO_SUCH_SESSION)
     return SessionIdentity(
         sid, f"{sid}（`--sid` 显式给的那一段：sessions/{sid}.jsonl）", "", "")
@@ -4046,7 +5093,7 @@ class ClosingReport:
 
         形状：`{"code","sid","detail","exit_code"}`。`detail` 就是 CLI 打出来的那一句
         （`closing_session_identity()` 的 `problem`）—— 只写一处，两个出口同文同码。
-        拒绝发生时 `status` 是空的：这不是"七格全是没查成"的空读数，而是"门根本没跑"。
+        拒绝发生时 `status` 是空的：这不是"八格全是没查成"的空读数，而是"门根本没跑"。
         """
         got = self.readings.get("refusal")
         return dict(got) if isinstance(got, Mapping) and got.get("code") else None
@@ -4058,10 +5105,12 @@ class ClosingReport:
 
     @property
     def machine_pass(self) -> bool:
-        """八格轴：门里那几格每条都 `pass` 且没有 blocker（由 `verdict` 派生）。
+        """八格轴（旧口径）：门里那几格每条都 `pass` 且没有 blocker（由 `verdict` 派生）。
 
         它不再是一个独立的结论：`verdict["machine_pass"]` 与它同源（ROOTGATE-①）。
         它仍然是读数（收工由整份 `verdict` 定），只是不再与 `can_close` 各算一套。
+        `na` 不是 `pass` ⇒ 有 na 格时它是假；权威结论里 `na` 不进分母（见
+        :func:`closing_verdict` 的 docstring），所以 `can_close=True` 与它并存是允许的。
         """
         return bool(self.verdict.get("machine_pass"))
 
@@ -4080,7 +5129,7 @@ class ClosingReport:
 
         - M 提交了 `m_verdict.met=True` ⇒ `True`（哪怕机器某几格是 fail/unknown：
           那些格子照样进读数与 `overrode`，不是静默放行）；
-        - M 提交了 `met=False` ⇒ `False`（哪怕机器七格全 pass —— 那是"机器觉得没问题、
+        - M 提交了 `met=False` ⇒ `False`（哪怕机器八格全 pass —— 那是"机器觉得没问题、
           它自己知道没做到"，也必须由它说了算）；
         - M 没提交 ⇒ `False` + `m_verdict=False` 那一档的读数（"没人判过" ≠ "判过能交"）。
 
@@ -4096,8 +5145,8 @@ class ClosingReport:
     def can_close(self) -> bool | None:
         """机器口径：这一趟能不能交。三态（读八格 + 机器口径的那一份结论）。
 
-        - `True`：`verdict == "pass"` —— 八格全 pass ∧ `m_says_done` ∧ `retire.complete`
-          ∧ `programs_ok` ∧ 没有 blocker；
+        - `True`：`verdict == "pass"` —— 没有 fail / unknown 格、至少一格 pass（`na` 格
+          不进分母）、`m_says_done`、`retire.complete`、`programs_ok`、没有 blocker；
         - `False`：`verdict == "fail"`（查过了、结论是坏）；
         - `None`：`verdict == "unknown"`（有格没查成 / 机器口径没接线 / 没人判过）。
 
@@ -4163,7 +5212,7 @@ class ClosingReport:
 
         两个方向都记（这就是"不许静默放行"的落点）：
         - M 说达成、而某几格是 `fail`/`unknown` ⇒ 逐格点名；
-        - M 说没达成、而七格全 `pass` ⇒ 记一格 `"*"`（机器觉得没问题，它自己知道没做到）。
+        - M 说没达成、而八格全 `pass` ⇒ 记一格 `"*"`（机器觉得没问题，它自己知道没做到）。
         """
         if not self.m_verdict:
             return []
@@ -4177,7 +5226,7 @@ class ClosingReport:
                     for f in self.blockers if f.check not in seen]
             return bad
         if not bad and self.machine_pass:
-            return [{"check": "*", "state": "pass", "why": "机器七格全 pass，而 M 判没达成"}]
+            return [{"check": "*", "state": "pass", "why": "机器八格全 pass，而 M 判没达成"}]
         return []
 
     @property
@@ -4294,10 +5343,12 @@ class ClosingReport:
                 f" · m_says_done={verdict['m_says_done']}"
                 f" · retire={verdict['retire']['state']}"
                 f" · programs={verdict['programs']['state']}；")
-        machine = (f"机器七格：pass {sum(1 for v in self.status.values() if v == 'pass')}/"
+        machine = (f"机器八格：pass {sum(1 for v in self.status.values() if v == 'pass')}/"
                    f"{len(self.status)}"
                    + (f"；fail={self.failed}" if self.failed else "")
-                   + (f"；unknown={self.unknowns}" if self.unknowns else ""))
+                   + (f"；unknown={self.unknowns}" if self.unknowns else "")
+                   + (f"；na={[k for k, v in self.status.items() if v == 'na']}"
+                      if any(v == "na" for v in self.status.values()) else ""))
         # 子产出处理那一格（业主裁定：父必须处理子代理的产出）：只在真的没处理时
         # 往这句话里加一句 —— 它是读数不是判据，所以既不影响 `m_says_done`，
         # 也不给"这一格没查成/没有对象"的寻常日子加噪声（三态仍在 `readings` 里）。
@@ -4954,7 +6005,7 @@ def _check_mapping(rep: ClosingReport, project_dir: str, store: Any) -> None:
     对应表要说清每条定理、引理、命题、例子、实验对应产出物的真实文件与序号 ——
     H 依据它核查，G 依据它写作。
 
-    为什么不把它加成 `DEFAULT_CHECKS` 的第九格：既有的七格各有各的语义
+    为什么不把它加成 `DEFAULT_CHECKS` 的第九格：既有的八格各有各的语义
     （`status` 里每一格都参与 `machine_pass` 与退出码），加一格就会改变"收工门几格"
     这个读数与 `tri_state_exit_code` 的分布。这一格照着 `roster_registration` /
     `nontriviality` 的形状落 `readings`，并且仍然给 `Finding`（表在而对不上时拦门）：
@@ -7281,6 +8332,48 @@ def _apply_relation_contradictions(rep: ClosingReport, store: Any) -> None:
         rep.status["contradictions"] = "unknown"
 
 
+def _contradiction_unchecked_reading(rep: ClosingReport) -> None:
+    """`contradictions` 没 store 时的读数（2026-11-20 抽出来：让判据本体留在 200 行内）。
+
+    没查成也要留读数（三态纪律）：改前 `store=None` 时这一格整格缺席，于是"没查成"与
+    "没有这一格"同形 —— 读的人只能去猜。没查成的那两格给 `None`（不是 `{}`）：空字典
+    会被读成"查过了、没有"。
+    """
+    rep.status["contradictions"] = "unknown"
+    rep.readings["contradictions"] = {
+        "wrong_paper": [], "disputed_source": [], "own_hole": [],
+        "review_unresolved": [], "pollution": {},
+        "pollution_states": {}, "pollution_unreadable": ["没有 store ⇒ 污染面没查成"],
+        "pollution_scope": pollution_scope_text(),
+        "pollution_proposition_level": proposition_level_pollution(None),
+        "pollution_assertion_level": assertion_level_pollution(None),
+        "pollution_assertions": None,
+        "pollution_dangling_statements": None,
+        **relation_contradiction_reading(None)["reading"],
+    }
+    rep.findings.append(Finding("contradictions", "no_store", "warning",
+                                "没有 store ⇒ 矛盾没查成（不是没有矛盾）"))
+
+
+def _contradiction_absent_reading(rep: ClosingReport, store: Any, why: str) -> None:
+    """`contradictions` 没有可判对象时的状态与读数（四态里的 `na` 那一档）。
+
+    这一格问的是"这几张台账里有没有对立 / 争议 / 被证否 / 未决审校"。表都不在或都零行
+    ⇒ 没有可判对象；记 `na` 而不是 `pass`：`pass` 会被读成"扫过一遍、干净"。
+    关系图那一格也照常给读数（它读的是 `relations`，这一档已经确定读得成）。
+    """
+    _record_not_applicable(rep, "contradictions", why, {
+        **relation_contradiction_reading(store)["reading"],
+        "wrong_paper": [], "disputed_source": [], "own_hole": [],
+        "review_unresolved": [], "pollution": {},
+        "pollution_states": {}, "pollution_unreadable": [],
+        "pollution_scope": pollution_scope_text(),
+        "pollution_proposition_level": proposition_level_pollution(None),
+        "pollution_assertion_level": assertion_level_pollution(None),
+        "pollution_assertions": {}, "pollution_dangling_statements": [],
+    })
+
+
 def _check_contradictions(rep: ClosingReport, store: Any) -> None:
     """未裁决的矛盾：三种病因各自一个 code（`draft/37` §8 / R19）+ 污染面（R20）。
 
@@ -7296,22 +8389,12 @@ def _check_contradictions(rep: ClosingReport, store: Any) -> None:
 前三种正是 §17.1 要求"三种病因各一条负控"的那三条；第四种来自 §14.4 的报告第九节，单列是因为它的处置是"回稿子"而不是"回证据"。
     """
     if store is None:
-        rep.status["contradictions"] = "unknown"
-        # 没查成也要留读数（三态纪律）：改前 `store=None` 时这一格整格缺席，
-        # 于是"没查成"与"没有这一格"同形 —— 读的人只能去猜。
-        rep.readings["contradictions"] = {
-            "wrong_paper": [], "disputed_source": [], "own_hole": [],
-            "review_unresolved": [], "pollution": {},
-            "pollution_states": {}, "pollution_unreadable": ["没有 store ⇒ 污染面没查成"],
-            "pollution_scope": pollution_scope_text(),
-            "pollution_proposition_level": proposition_level_pollution(None),
-            "pollution_assertion_level": assertion_level_pollution(None),
-            # 没查成的那两格给 `None`（不是 `{}`）：空字典会被读成"查过了、没有"。
-            "pollution_assertions": None,
-            "pollution_dangling_statements": None, **relation_contradiction_reading(None)["reading"],
-        }
-        rep.findings.append(Finding("contradictions", "no_store", "warning",
-                                    "没有 store ⇒ 矛盾没查成（不是没有矛盾）"))
+        _contradiction_unchecked_reading(rep)
+        return
+    absent, why = _no_judgeable_rows(store, CONTRADICTION_TABLES)
+    if absent:
+        # 四态里的第四档（2026-11-20，EMPTYCELL）：没有可判对象 ⇒ na（见那个 helper）。
+        _contradiction_absent_reading(rep, store, why)
         return
     wrong_paper: list[str] = []
     disputed_source: list[str] = []
@@ -7617,16 +8700,38 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     降档是允许的出路。零承重断言 ⇒ `pass` + 读数 `state="not_applicable"`
     （学 `paper` 那一格；"没有对象要判"不是"没查成"）。
 
+    2026-11-20（EMPTYCELL）再拆一刀：三张表（`documents` / `statements` /
+    `experiments`）在盘上都一行没有 ⇒ 连"有没有承重断言"都无从判起 ⇒ `na`。
+    表里有行、只是没有承重断言 ⇒ 仍 `pass` + 读数 `state="not_applicable"`（判过了）。
+
     判据 `tests/test_load_bearing_without_lean.py`：a) 缺背书 ⇒ fail 且点名该断言、
     b) 有现行 V 签 ⇒ pass、c) 零承重 ⇒ pass + `not_applicable`、d) 把
     `_statement_reviewed` 打桩成恒真 ⇒ a 必红、e) Lean 关且有证据的工作区
     `machine_pass` 能变真。`na` 不许折回 pass 混进 `machine_pass`（那会把"没判"
-    记成"没问题"），所以这一格只写 `pass` / `fail`。
+    记成"没问题"），所以这一格只写 `pass` / `fail` / `na`。
     """
     if store is None:
         rep.status["load_bearing"] = "unknown"
         rep.findings.append(Finding("load_bearing", "no_store", "warning",
                                     "没有 store ⇒ 承重结论没查成"))
+        return
+    absent, why = _no_judgeable_rows(store, LOAD_BEARING_TABLES)
+    if absent:
+        # 2026-11-20（EMPTYCELL）：承重这一格问"正文里 proof 级断言有没有背书"。
+        # 稿件 / 命题 / 实验三张表都没有一行 ⇒ 没有断言可判，记 `na`。
+        # 改前这一支落 `pass` + 读数 `state="not_applicable"`：状态栏说"过"、
+        # 读数说"没有对象"，读状态栏的人就把它当成了"判过且合格"。
+        # `na` 与"三张表都有行、只是一条承重断言都没有"（仍是 `pass` + 读数
+        # `state="not_applicable"`）分得开：后者判过了，前者没有东西可判。
+        _record_not_applicable(rep, "load_bearing", why, {
+            "state": "not_applicable",
+            "claims_with_proof": 0, "claims_without_t3": 0, "claims": [],
+            "statements_load_bearing": 0, "statements_downgraded": 0,
+            "claims_below_theorem": 0, "claims_below_theorem_rows": [],
+            "must_t3_conditions": [{"condition": c, "mechanical": m, "status": s}
+                                   for c, m, s in MUST_T3_CONDITIONS],
+            "must_t3_gap": MUST_T3_GAP_NOTE,
+        })
         return
     # ---- 可疑的自签背书（2026-10-27，R-EVID 的 D4；业主裁定「先报不拦」）----------
     #
@@ -8175,8 +9280,9 @@ def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> 
 - 只有 `changed` ⇒ `pass` + warning（D9，2026-10-09 裁定"收窄"）：比对口径改成按路径取最后一条登记，
   而"最后一次登记之后又被改写"是常态（真机 t1u：23 条全是框架自己幂等重写的 `out/tasks/*.json`）⇒
   不再把这一格读成 `unknown`（旧口径下任何有派活的跑批都收不了工；台账是 append-only 历史）；
-- 台账不在盘上 ⇒ `pass` + 读数写明"没有这一栏"（`absent: true`）—— 与 `acceptance` 对非研究型项目的
-  口径一致："没有这一栏"不是"没查成"（`entries: 0` 与 `absent: true` 分得开）。
+- 台账不在盘上 ⇒ `na` + 读数写明"没有这一栏"（`absent: true`）—— 没有可对的东西，
+  既不是"判过且一致"，也不是"没查成"（`entries: 0` 与 `absent: true` 分得开：
+  后者是"有台账、零条登记"，照样 `pass`）。
     """
     if not str(project_dir or "").strip():
         rep.status["artifact_ledger"] = "unknown"
@@ -8188,9 +9294,13 @@ def _check_artifact_ledger(rep: ClosingReport, store: Any, project_dir: str) -> 
     try:
         got, detail = artifact_ledger_reading(root)
     except LegNotApplicable as exc:
-        rep.status["artifact_ledger"] = "pass"
-        rep.readings["artifact_ledger"] = {"reason": exc.reason, "absent": True,
-                                           "entries": 0, "implicit_max": 0}
+        # 2026-11-20（EMPTYCELL）：台账整份不在盘上 ⇒ 没有登记过的东西可对 ⇒ `na`。
+        # 改前这一支落 `pass`（"没有这一栏"），空工作区的一格真空通过；`absent: true`
+        # 与 `entries: 0` 仍分得开：前者是"没有台账"，后者是"有台账、零条登记"
+        # （零条登记的台账照样判 pass —— 那是判过的结果）。
+        _record_not_applicable(rep, "artifact_ledger",
+                               exc.reason + "⇒ 没有可判对象，记 na（不是 pass，也不是 unknown）",
+                               {"absent": True, "entries": 0, "implicit_max": 0})
         return
     except Exception as exc:  # noqa: BLE001 —— 读不到就落 unknown
         rep.status["artifact_ledger"] = "unknown"
@@ -8281,7 +9391,9 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
       `litstage.pending_all_delegations` / `pending_scope_note`（提交闸与 A 读同一份）；
     - 当前委托（槽位号最大那一行所属）的行非空但没清表（行上没有 `cleared_at`）⇒
       `fail` + blocker："报告已写 / 注册已做，但没收口：先 `lit.admit_all` 清表"；
-    - 两者都空 ⇒ `pass`，读数里写 `closed_delegations`（归档里有几份）。
+    - 两者都空 ⇒ `pass`；但表里一行都没有、归档也是空 ⇒ 这一趟从来没有待裁过文献，
+      没有可判对象 ⇒ `na`（改前记 `pass`，空工作区上的真空通过）。表零行而归档里有
+      委托（清表 + 归档已完成）⇒ 仍 `pass`：那是判过的结果。
 
     为什么是 blocker 而不是纯读数（VC1 P0-2 的读数逐字）：「只加 readings 不改
     `can_close` 不会拦 final」。`machine_pass` 只看 `blockers`，所以这一格必须落
@@ -8311,6 +9423,16 @@ def _check_literature_pending(rep: ClosingReport, store: Any) -> None:
         archives = L.archived_request_ids(store.root)
     except Exception as exc:  # noqa: BLE001 - 这一格读不到 ⇒ unknown（见 docstring 三态）
         _unreadable(f"{type(exc).__name__}: {exc}")
+        return
+    absent, why = _no_judgeable_rows(store, ("lit_candidates",))
+    if absent and not archives:
+        # 2026-11-20（EMPTYCELL）：待入库文献表整份不在 / 一行都没有，而且一份收过工的
+        # 委托归档也没有 ⇒ 这一趟从来没有待裁过任何文献，没有可判对象 ⇒ `na`。
+        # 表里零行但归档里有委托（清表 + 归档已完成）⇒ 仍走下面的 `pass`：那是判过的结果。
+        _record_not_applicable(rep, "literature_pending", why, {
+            "checked": True, "pending": 0, "rows": [], "more": 0, "request_id": "",
+            "by_delegation": {}, "pending_delegations": 0, "delegation_rows": 0,
+            "cleared": False, "closed_delegations": 0, "who_can_clear": ""})
         return
     try:
         waiting = [r for r in rows if L.judged_state(r) == "pending"]
@@ -8489,6 +9611,10 @@ def _check_user_pending(rep: ClosingReport, session_root: Any,
     第三个输入是修法 B 加的：装配期没把 sid 注入进来时，按缺省会话读会得出
     "没问过用户"——而真机每一趟都有自己的 sid（实测 `real11`：
     运行内报 pass、外部带 sid 报 fail）。「不许」用缺省值冒充"查过了"。
+
+    第四个状态（2026-11-20，EMPTYCELL）：那个会话记录文件整份不在盘上 ⇒ `na`
+    （没有提问可判）。改前这一支落 `pass`，空工作区因此多一格真空通过。会话文件在、
+    只是没有问题 ⇒ 仍 `pass`（真的判过了）；文件在而读不成 ⇒ `unknown`（不是 `na`）。
     """
     if session_root is None:
         rep.status["user_pending"] = "unknown"
@@ -8506,6 +9632,18 @@ def _check_user_pending(rep: ClosingReport, session_root: Any,
         return
     # `sid` 必须跟着运行走（`draft/37` §58）：不带它时按默认会话读，
     # 而真机每一趟都有自己的 sid ⇒ 待答问题会被读成「没问过」。
+    from . import sessions as _SESS
+    _sess_path = _SESS.session_path(session_root, sid)
+    if not _session_record_exists(session_root, sid):
+        # 2026-11-20（EMPTYCELL）：这一格问"有没有还在等用户回答的问题"。
+        # 会话记录整份不在盘上 ⇒ 没有提问可判（"没问过"不是"查过了没问题"）。
+        # 改前这一支落 `pass`：空工作区的一格真空通过。会话在、只是没有问题 ⇒ 仍是 `pass`
+        # （真的判过了）；会话文件在但读不成 ⇒ 异常照旧落 `unknown`（不是 `na`）。
+        _record_not_applicable(rep, "user_pending", (
+            f"这一趟没有会话记录（{_sess_path} 不在盘上）⇒ 没有可判对象"
+            "（没有待答问题可判），记 na（不是 pass，也不是 unknown）"), {
+                "pending": [], "answered": 0, "asked": 0})
+        return
     pending = U.pending_questions(session_root, sid=sid)
     replies = U.read_replies(session_root, sid=sid)
     rep.readings["user_pending"] = {
@@ -8597,7 +9735,7 @@ def summon_consumption_reading(session_root: Any, *, sid: str | None = None) -> 
     """收工门的「子产出处理」格：这一段会话里各趟运行自报的读数汇总。
 
 它为什么在收工门上（业主裁定：「父代理必须处理子代理的产出」）：这条规矩「不 fail 收工」，但必须可见 ——
-一趟 run 派了子、拿到结果、直接 `final`，其它七格「一格都看不出来」：`tasks` 那几行是 `done`、
+一趟 run 派了子、拿到结果、直接 `final`，其它八格「一格都看不出来」：`tasks` 那几行是 `done`、
 `substance` 非空、报告也在盘上。于是这一格读 `agent_run_end.summon_consumption`（每趟运行自己算的那一份，
 `agent_loop.summon_consumption` 是唯一实现）—— 只汇总，不重算（两处各算一份必然分叉："事件说处理了、门说没有"）。
 
@@ -8665,7 +9803,7 @@ def roster_registration_reading(session_root: Any, *, sid: str | None = None,
 
     名册是"代理之间的通信必须经名册"那条纪律的地址面（父 + 直接子 + 绝对编号），而"这一趟派活
     有没有把子代理写进名册"在收工读数里「一格都没有」：`summon_consumption` 只问"子产出处理了
-    没有"，七格问的都是交付面 —— 名册 0 行与名册都写上了，两种日子长得一样。这一格只回答一个
+    没有"，八格问的都是交付面 —— 名册 0 行与名册都写上了，两种日子长得一样。这一格只回答一个
     数：`with_problem` = `roster_problem`（单个 summon）与 `roster_problems`（批量逐项问题）非空
     的「条数」；`registered` 是成功登记的名字条数（与 `with_problem` 对照）。
 
@@ -8895,15 +10033,15 @@ def check_closing(store: Any, *, project_dir: str = "", report_path: str = "",
 报告里 `readings["refusal"]` 非空（`{"code","sid","detail","exit_code": 2}`），`status` 为空。
 CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.closing`）问的是
 同一个 :func:`closing_session_identity` ⇒ 同一句话、同一个码；"门根本没跑"与"跑了、
-七格都没查成"因此长得不一样。
+八格都没查成"因此长得不一样。
 
 收工由 M 判：第一句「是否收工不要用机械判据，由 M 制定的目标是否达成为准」；第二句「所有智能体是否能停都是看自己被派的活有没有做完，M 也不例外，只是 M 需要根据用户指令给自己设计任务列表」
-⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是那七格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
+⇒ `task_list` 是 M 列的任务（`[{what, state: done|not_done|cannot, why}]`），停的判据是它而不是那八格；`goal_met` 是 M 的一句话结论（`None` = 没判 ⇒ `m_says_done=false` + 「没人判过」）；
   `retire` / `programs` 是机器口径的两个喂参：
   `retire` 是 `Conductor.retire_integrity` 的读数（要 `checked` / `complete`），`programs` 是程序读数
   （要 `checked` / `running_count`）。两个都给了才可能算出 `can_close` 的真/假；没给 ⇒ `None`
   （`not_wired`，既不是过也不是不过）。见 :func:`machine_caliber`。
-  `goal` / `basis` 是自述。七格照旧逐格现算作读数（`status` / `machine_pass` / `overrode` 逐格点名不一致，
+  `goal` / `basis` 是自述。八格照旧逐格现算作读数（`status` / `machine_pass` / `overrode` 逐格点名不一致，
   `verdict_conflicts` 再点名自述与任务列表对不上）—— 判据归 M，读数的可见性不减。
     """
     rep = ClosingReport()
@@ -8918,7 +10056,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     # ---- 会话身份先过闸：号不在盘上 ⇒ 门不跑、马上受控拒绝。
     #
     # 为什么必须在跑门之前：门自己会把每一格兜成 `unknown`，"号不在盘上"与"查过了、
-    # 七格都没查成"在出口上会长得一模一样；闸放在这个唯一入口上，API 那几个出口
+    # 八格都没查成"在出口上会长得一模一样；闸放在这个唯一入口上，API 那几个出口
     # 于是也拿到同一个拒绝。
     identity = closing_session_identity(root, sid)
     if identity.problem:
@@ -9002,13 +10140,13 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
     elif set(checks) >= set(DEFAULT_CHECKS):
         _run_paper_reading(rep, project_dir, store)
     # ---- G8 的回执有没有台账背书（D-41，2026-10-24 真机 r34d）：与 `quote_evidence`
-    # 同一层的读数 —— 它不是第七格之一（格表的语义与退出码一个都不动），但它是 blocker：
+    # 同一层的读数 —— 它不是那八格之一（格表的语义与退出码一个都不动），但它是 blocker：
     # "文件在"与"本轮真的重跑过"是两件事，而此前的门只数得清前一件。
     # 跟 `acceptance` 那一格同进退（G8 是 M 的那张验收表里的一行）：调用方把这一格
     # 缩掉时，不该多出这一面的读数与 Finding。
     if "acceptance" in checks:
         _run_reading(rep, "run_evidence", _check_run_evidence, rep, store, project_dir)
-    # 上报那一格（业主 2026-10-09 第三句）：它不属于那七格，是 M 的判据的伴生读数 ——
+    # 上报那一格（业主 2026-10-09 第三句）：它不属于那八格，是 M 的判据的伴生读数 ——
     # "干不了/没做完的项有没有说出来"。放这里是因为它要读会话，而会话根只在这个入口有。
     if rep.m_verdict:
         rep.readings["verdict_escalation"] = _run_reading(
@@ -9023,7 +10161,7 @@ CLI（`agentflow closing`）与 API（`readouts.gates_readout` / `conductor.clos
         _run_reading(rep, "mapping", _check_mapping, rep, project_dir, store)
     # ---- 子产出处理那一格（业主裁定：父代理必须处理子代理的产出）
     #
-    # 为什么不进 `DEFAULT_CHECKS`（它不是七格之一，是格表之外的读数）、也不进退出码：业主逐字
+    # 为什么不进 `DEFAULT_CHECKS`（它不是那八格之一，是格表之外的读数）、也不进退出码：业主逐字
     # 「不一定要 fail，但必须可见」。它是一格读数，落 `readings`（`to_dict()`
     # 与服务端都能读到）+ 一条 `warning`（`summons_unconsumed > 0` 时，它会被
     # `agentflow closing` 逐条打出来）—— `machine_pass` 只看 `blocker`，
@@ -9692,8 +10830,8 @@ def closing_verdict(rep: ClosingReport) -> dict[str, Any]:
         {
           "verdict": "pass" | "fail" | "unknown",
           "exit_code": 0 | 1 | 2,
-          "cells": [{"check", "status", "why"}…],      # 八格逐格
-          "counts": {"pass": n, "fail": n, "unknown": n},
+          "cells": [{"check", "status", "why"}…],      # 八格逐格（四态）
+          "counts": {"pass": n, "fail": n, "unknown": n, "na": n},
           "m_says_done": bool,                          # M 自己说的那一句
           "retire": {"checked", "complete", "projected", "state", "reason", "auto_retire"},
           "programs": {"checked", "ok", "running_count", "unowned_count", "state", "reason"},
@@ -9704,17 +10842,39 @@ def closing_verdict(rep: ClosingReport) -> dict[str, Any]:
           "reason": str,
         }
 
-    规则（业主 2026-11-19「要修根因」）：:
+    规则（业主 2026-11-19「要修根因」，2026-11-20 EMPTYCELL 补 `na`）：:
 
-        verdict = "pass" ⟺ 八格全 pass ∧ m_says_done ∧ retire.complete ∧ programs_ok
+        verdict = "pass" ⟺ 没有 fail 格 ∧ 没有 unknown 格 ∧ 至少一格 pass
+                           ∧ m_says_done ∧ retire.complete ∧ programs_ok
                            ∧ 没有 blocker
+
+    ## `na`（不适用）怎么进这一份结论
+
+    八格依赖的东西整个不存在（表不在盘上 / 表在盘上零行 / 没有会话记录）的那几格记
+    `na` —— 没有可判对象。这条规则选「甲」而不是「乙」：
+
+    - 甲：没有 fail / unknown 且至少一格 pass ⇒ pass（本实现）；
+    - 乙：na 视为满足 ⇒ pass。
+
+    为什么是甲：乙只要八格全是 na 就能给 pass —— 那正是这次要拆掉的"真空通过"
+    （空工作区上没有任何一格判过，却给出"可以交"）。甲多要一条"至少一格 pass"，
+    于是"八格全 na ⇒ unknown（没有一格判过，exit 2）"；同时 na 不拦真正的通过：
+    它不进分母（可判的格数 = pass + fail + unknown），也不进制裁 —— 真 fail / blocker /
+    unknown 照样先落 fail / unknown，na 藏不住它们。
+
+    `na` 不进 `counts` 的分母：`counts` 四档各数各的，"几格判过"= pass + fail + unknown。
+    换句话说，`na` 既不进 `pass` 计数、也不进 `fail` 计数、也不进分母。
+    `machine_pass` 仍是旧口径（八格全 `pass` 且没有 blocker）：`na` 不是 `pass`，
+    所以有 na 格时它是假。它是读数，不参与这里的判定 —— `verdict` 只看
+    `fail` / `unknown` / 至少一格 `pass`；两栏并列时 `reason` 里点名是哪些 na 格。
 
     三态不许折平：
     - 任一格 `unknown`（或这一份根本没跑完整八格 / M 没提交判据 / 机器读数没查成）
       ⇒ `unknown` —— 没查成既不是过也不是不过，退出码 2；
     - 查过了、结论是坏（格 fail / blocker / M 说没做完 / retire 不干净 / 程序没停）
       ⇒ `fail`，退出码 1；
-    - 只有全过才是 `pass`，退出码 0。
+    - 八格全 `na` ⇒ `unknown`（一格都没判过：既不是"可以交"，也不是"被拦住"）；
+    - 没有 fail / unknown、至少一格 pass、其余至多 na ⇒ `pass`，退出码 0。
 
     改前这里不存在：`can_close` 不读八格、`machine_pass` 不读机器口径、退出码各取一半
     —— 真机 `projects/lp-ball-11` 因此八格 6/8 仍 `exit 0`。现在
@@ -9737,15 +10897,26 @@ def closing_verdict(rep: ClosingReport) -> dict[str, Any]:
                    if getattr(rep, "full_gate", False) else "这一份没有跑这一格")
         cells.append({"check": name, "status": state, "why": why})
     counts = {s: sum(1 for c in cells if c["status"] == s)
-              for s in ("pass", "fail", "unknown")}
+              for s in ("pass", "fail", "unknown", "na")}
     blockers = [{"check": f.check, "code": f.code, "why": f.detail}
                 for f in rep.blockers]
+    pass_cells = [c["check"] for c in cells if c["status"] == "pass"]
+    unknown_cells = [c["check"] for c in cells if c["status"] == "unknown"]
+    na_cells = [c["check"] for c in cells if c["status"] == "na"]
+    # `na` 既不进 pass、也不进 fail、也不进分母：这里点名的"坏格"只收 fail。
+    # 改前这一行是 `status not in ("pass", "unknown")` —— 加进第四档之后，`na` 会被
+    # 当成 fail 落进 `hard`，于是"不适用"把门拦成红（四态退化成三态）。
+    fail_cells = [c["check"] for c in cells if c["status"] not in ("pass", "unknown", "na")]
+    # 八格轴（旧口径，2026-11-14 起就是这一句）：门里那几格每条都 `pass` 且没有 blocker。
+    # `na` 不是 `pass` ⇒ 有 na 格时这一格是假（webui 的判据
+    # `test_webui_gate_failure_causes.py` 用它点名"格没全 pass"）。它是读数：
+    # 权威结论只看 `fail` / `unknown` / 至少一格 `pass`（na 不进分母），所以
+    # `verdict=pass` 与 `machine_pass=False` 可以同时成立 —— 页面两栏并列，
+    # `closing_verdict.reason` 里点名是哪些 na 格。
     machine_pass = all(c["status"] == "pass" for c in cells) and not blockers
     caliber = rep._machine_caliber
     retire = dict(caliber.get("retire") or {})
     programs = dict(caliber.get("programs") or {})
-    unknown_cells = [c["check"] for c in cells if c["status"] == "unknown"]
-    fail_cells = [c["check"] for c in cells if c["status"] not in ("pass", "unknown")]
     reasons: list[str] = []
     # 判序（三态不许折平）：确定的坏（格 fail / blocker / M 说没做完 / retire 不干净 /
     # 程序没停）先落 fail —— 它不许被旁边的 unknown 掩盖；没有确定的坏、但有没查成的
@@ -9781,12 +10952,23 @@ def closing_verdict(rep: ClosingReport) -> dict[str, Any]:
         reasons.append("这些格没查成：" + "、".join(
             f"{c['check']}（{c['why'] or '没给原因'}）" for c in cells
             if c["status"] == "unknown"))
+    elif not pass_cells:
+        # 四态：八格全是 na（没有 fail / unknown，也没有一格 pass）⇒ 一格都没判过。
+        # 甲 规则要求"至少一格 pass"，所以这不是"可以交"；它也不是"被拦住"（没有证据
+        # 说坏），只能落 unknown —— 没有可判对象不等于没有风险。
+        verdict = "unknown"
+        reasons.append("八格全是 na（没有一格判过 ⇒ 没有可判对象）⇒ 没查成，不是可以交："
+                       + "、".join(na_cells))
     elif not caliber.get("checked"):
         verdict = "unknown"
         reasons.append(str(caliber.get("reason") or "机器读数没查成（retire / programs）"))
     else:
         verdict = "pass"
-        reasons.append("八格全 pass ∧ m_says_done ∧ retire 干净 ∧ 程序已停")
+        reasons.append("八格没有 fail / unknown（na 不进分母）∧ 至少一格判过且 pass "
+                       "∧ m_says_done ∧ retire 干净 ∧ 程序已停")
+        if na_cells:
+            reasons.append("na 格（没有可判对象：不拦、也当不了通过）："
+                           + "、".join(na_cells))
     can_close = {"pass": True, "fail": False, "unknown": None}[verdict]
     exit_code = {"pass": 0, "fail": 1, "unknown": 2}[verdict]
     return {
@@ -9816,8 +10998,8 @@ def tri_state_exit_code(rep: ClosingReport) -> int:
       没查成不是"被拦住"也不是"可交付"）；
     - `verdict == "fail"` ⇒ 1（八格有 fail / blocker / M 说没做完 / retire 不干净 /
       程序没停）；
-    - `verdict == "pass"` ⇒ 0（八格全 pass ∧ `m_says_done` ∧ `retire.complete`
-      ∧ `programs_ok` ∧ 没有 `blockers`）。
+    - `verdict == "pass"` ⇒ 0（没有 fail / unknown 格、至少一格 pass —— `na` 不进分母；
+      `m_says_done` ∧ `retire.complete` ∧ `programs_ok` ∧ 没有 `blockers`）。
 
     改前这一支只看 `can_close` 与 `machine_pass` 两条互不相干的轴：八格 6/8 而
     `can_close=true` 的那一趟会退出 0。现在 0 只由那一份权威结论给（ROOTGATE-①）。

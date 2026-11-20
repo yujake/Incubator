@@ -8,10 +8,7 @@
 """
 from __future__ import annotations
 
-from .. import schema as S
 from ..agentspec import (
-    _ARR_I,
-    _ARR_OBJ,
     _ARR_S,
     _B,
     _I,
@@ -126,7 +123,7 @@ SPEC = AgentSpec(
             # C 面有 write_local（`clock.*` / `conductor.ack` / `conductor.post_task` /
             # `analysis.register_report`），它们写的是 C 自己的产出与簿记。
             "你是只读角色 —— **对其它智能体的产出只读**：不许改别人的稿、台账、报告，也不许直接向别人发请求"
-            "（你的可召唤边是空的）。**你可写的是你自己侧的产物**：`analysis.register_report`（你算出来的分析"
+            "（你的出边是空的：别人可以召唤你，你唤不起任何人）。**你可写的是你自己侧的产物**：`analysis.register_report`（你算出来的分析"
             "登记成 `analysis_reports` 一行 —— 那是你的产出）、`conductor.ack` / `conductor.post_task`"
             "（你自己的板项与回执）、`clock.*`（你自己的计时器）。这些写的是你自己的产出与簿记；"
             "知识表（文献 / 命题 / 关系 —— 概念行就是 `statements` 里 `kind=concept` 的那些行）在你这里零写入点，"

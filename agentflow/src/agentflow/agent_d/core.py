@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from ._support import Any, C_API_MISSING_REASON, C_NO_EVIDENCE, IX, KIND_CLIENT, KIND_NONE, Mapping, Path, RT, S, STATE_FAILED, STATE_NOT_WIRED, Sequence, Store, StoreError, ToolRegistry, _C_AUTO, _digest, _json_object, _rank, _rank_min, current_summon_task_id, install_d_tools, invented_facts, json, load_trace_tools, model_json_call, model_kind, re, spend_reading
+from ._support import Any, C_API_MISSING_REASON, C_NO_EVIDENCE, IX, KIND_CLIENT, KIND_NONE, Mapping, Path, RT, S, STATE_FAILED, STATE_NOT_WIRED, Sequence, Store, StoreError, ToolRegistry, _C_AUTO, _digest, _rank, _rank_min, current_summon_task_id, install_d_tools, invented_facts, json, load_trace_tools, model_json_call, model_kind, re, spend_reading
 from .. import conceptrows as _CR   # 并表过渡期：概念行读合成视图（老表 + 新标准同号去重）
 from .probe_c import _ProbeC
 from .ingest import _Ingest
@@ -1410,10 +1410,6 @@ class _Core:
         sugg = payload.get("suggestions") or []
         payload["suggestions"] = [str(s) for s in sugg] if isinstance(sugg, list) else [str(sugg)]
         return payload, reading
-    @staticmethod
-    def _parse_json_block(text: str) -> dict | None:
-        """取文本里第一个 JSON 对象（实现只有一份：`_support._json_object`）。"""
-        return _json_object(text)
     def _render_claims(self, claims: Sequence[Mapping[str, Any]], *, marker: str = "",
                        numbered: bool = False) -> list[str]:
         """把一组 L1 表述渲染成报告行。

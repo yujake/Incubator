@@ -58,7 +58,10 @@ def test_a_a_seam_refusal_leaves_the_original_text(tmp_path: pathlib.Path) -> No
     """a：秘书缝上的受控拒 ⇒ 盘上有一行原文（含 kind/why/时刻/角色/委托）。"""
     root, store = _ws(tmp_path)
     sec = Secretary("B", root=root, store=store, seam=None, enable_model=False)
-    sec.task_id = "t-000054"
+    # 绑实例只走 `bind_task`（`task_id` 是只读属性；裸赋值会 AttributeError）。
+    # 这里要的是"这一笔的 task_id 落成 t-000054"，分片与存活标记一并落 —— 与本判据无关，
+    # 但也不许为了一条夹具去绕开唯一绑定点。
+    sec.bind_task("t-000054")
 
     out = sec.record_statement(PAYLOAD, role="B")
     assert out.get("checked") is False, out

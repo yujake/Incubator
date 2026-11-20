@@ -520,6 +520,15 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
     `store` 只用来读被引行的 `manuscript_id` 这一格；不给 ⇒ 与改前逐字一致
     （只按命题号 / 族拼名）。
 
+    ## 2026-11-20（E7）：多带三格台账读数，好让"没有稿"能分两档
+
+    `in_ledger` / `kind` / `origin`：被引命题在 `statements` 里那一行的三格。
+    为什么要它们：`depsection.manuscript_uncitable_finding` 要把"这一条本来就不在
+    可引池里"（`kind=concept`：等级链对它短路，名下不会有证明稿）与"该有稿而盘上
+    没有"分成两个码 —— 而"是不是概念行"这件事只有台账那一行说得清（V 不猜）。
+    读不到台账 / 没给 `store` ⇒ `in_ledger=False`（三格空串），判据退回"读不出来"
+    那一档（fail-closed：不许凭没有的读数断言人家是概念行）。
+
     `signed` = :func:`vsigns.manuscript_sign_standing` 对这份稿现在这一份正文
     判出的 `signed`：可引门槛 `pre_theorem` 的口径就是"有 V 签"，所以这一格同时回答
     "够不够格被引"，不需要读 `statements.bits` 的等级。
@@ -544,13 +553,21 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
         hit: tuple[str, str] | None = None
         #: 被引命题行上记的稿号（读不到 ⇒ 空串，退回按命题号拼名）。
         row_mid = ""
+        #: 台账那一行的三格（E7：`kind=concept` ⇒ 它不进可引池，不是"读不出等级"）。
+        row_kind = ""
+        row_origin = ""
+        in_ledger = False
         if store is not None:
             try:
                 got = _SL.by_id(store, stmt_id=sid, rows=statement_rows)
             except Exception:  # noqa: BLE001 —— 读不成按"没有这一格"退回（下面读数照给）
                 got = {"checked": False}
             if got.get("checked") and got.get("found"):
-                row_mid = str((dict(got.get("row") or {})).get("manuscript_id") or "").strip()
+                _row = dict(got.get("row") or {})
+                in_ledger = True
+                row_mid = str(_row.get("manuscript_id") or "").strip()
+                row_kind = str(_row.get("kind") or "").strip()
+                row_origin = str(_row.get("origin") or "").strip()
         # 2026-11-09（T2 收编）：拼名只走 `manuscriptfamily.relpath`（设计 3.2 第 11 处）。
         # 2026-11-10：行上稿号的 f/b 两族排在最前（稿号只说"哪一份"，不说"哪一族"）。
         cands: list[str] = []
@@ -577,6 +594,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
                 "statement_digest": "", "signed": False, "grade": "",
                 "evidence_kind": "", "tried": tried,
                 "row_manuscript_id": row_mid,
+                "in_ledger": in_ledger, "kind": row_kind, "origin": row_origin,
                 "why": ("盘上没有这一条命题的手稿（找过 "
                         + " / ".join(f"`{one}`" for one in tried) + "）"),
             }
@@ -599,6 +617,7 @@ def _cited_manuscripts(root: Any, deps_rows: Sequence[Mapping[str, Any]],
             "evidence_kind": (_EB.kind_from_grade("pre_theorem") if signed else ""),
             "proof_body_state": str(proof_reading.get("state") or ""),
             "row_manuscript_id": row_mid,
+            "in_ledger": in_ledger, "kind": row_kind, "origin": row_origin,
             "why": str(block.get("why") or ""), "tried": tried,
         }
     return out

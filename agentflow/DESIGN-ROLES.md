@@ -11,7 +11,8 @@
 > [`../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md`](../draft/35-框架现状：正式版 agentflow 的分层结构（逐项带工作区相对路径）.md)。
 > 本文件四条硬约束的落点（相对工作区根）：
 > `agentflow/src/agentflow/schema.py`（`validate()` 与各受控词表）、
-> `agentflow/src/agentflow/agent_e.py` / `agent_f.py` / `agent_g.py` / `agent_h.py`、
+> `agentflow/src/agentflow/agent_e/` / `agent_f/` / `agent_g/` / `agent_h/`（2026-10 起角色是包，
+> 不再是顶层 `agent_e.py` 这类单文件）、
 > `agentflow/src/agentflow/tools/doc_tools.py::CROSS_CHECK_DISCLAIMER`、
 > `agentflow/src/agentflow/gates.py`（H 的 15 道门）。
 
@@ -61,14 +62,24 @@ A/B/C/D 覆盖了"文献 → 知识 → 分析 → 问题"这条链，但**数�
 **违反即拒绝落库**（实现落点：`agentflow/src/agentflow/schema.py`，
 对应的 `validate` 方法分别在 `Experiment` / `AttackPlan` / `Document` 的 dataclass 上）：
 
-### 1.1 E：计算类方法**永远**拿不到 `proof` 等级（FC-22）
+### 1.1 E：计算类方法的 `proof` 只在**穷尽证据齐备**时成立（FC-22）
+
+> **2026-10-23 追裁（穷举证明链，`3d1b4b91` / `12529ed5`）**：本节原来的全称否定（计算类方法
+> 到不了 `proof`）已被推翻 —— 纯数值/穷举实验把**整个论域**证掉时可以拿 `proof`（签名主体仍是 V，
+> 证明栏写「程序地址 + 程序设计 + 穷举论证」，后两段由 E 写）。
+> 今天的口径在 `schema.Experiment.validate`：计算类要 `proof` 必须过
+> `numericproof.exhaustion_problems` 的四件（搜索空间 / `exhaustive` / 覆盖说明 / 程序路径），
+> 缺任何一条 ⇒ 拒，拒信逐条点名缺什么。
 
 ```python
 if self.method != "formal" and self.evidence_kind == "proof":
-    raise ValueError(...)
+    problems = numericproof.exhaustion_problems(...)   # 穷尽四件
+    if problems:
+        raise ValueError(...)                          # 缺一条 ⇒ 拒（不是无条件拒）
 ```
-`method ∈ {numeric, symbolic, exhaustive_search}` 时 `evidence_kind` 只能是
-`cross_check` 或 `heuristic`。要主张"已证明"，必须 `method="formal"` **且**给出
+`method ∈ {numeric, symbolic, exhaustive_search}` 时 `evidence_kind` 默认只能是
+`cross_check` 或 `heuristic`（自报的 `proof` 由 §2.1 先降级为 `cross_check`）；
+要留在 `proof`，要么穷尽四件齐备，要么 `method="formal"` **且**给出
 `verifier_output`（检查器原始输出）。
 
 **为什么必须机械执行**：论文 `test/main.pdf` 第 404 行自己写着
@@ -99,20 +110,27 @@ if ek == "cross_check" and not str(c.get("disclaimer") or "").strip():
 
 ## 2. 四个角色的接口
 
-四个角色各自的实现文件（相对工作区根）：
-`agentflow/src/agentflow/agent_e.py`、`agentflow/src/agentflow/agent_f.py`、
-`agentflow/src/agentflow/agent_g.py`、`agentflow/src/agentflow/agent_h.py`。
-本节下面列出的签名都在这四个文件里（本机实测：逐个方法名都对得上）。
+四个角色各自的实现包（相对工作区根；2026-10 起一角色一包，不再是顶层单文件）：
+`agentflow/src/agentflow/agent_e/`、`agentflow/src/agentflow/agent_f/`、
+`agentflow/src/agentflow/agent_g/`、`agentflow/src/agentflow/agent_h/`。
+本节下面列出的签名都在这些包里（本机实测：逐个方法名都对得上）。
 
 ### 2.1 E —— 数值实验与形式化验证
 
-`agentflow/src/agentflow/agent_e.py`：
+`agentflow/src/agentflow/agent_e/`：
 
 ```
-run_experiment(claim, claim_key, script_path, *, params, method, for_question_id, timeout) -> dict
-check_formal(claim, *, script_path) -> dict          # 无后端 → checked=False, reason="no_backend"
+run_experiment(claim, claim_key, script_path, *, params, method, for_question_id, timeout,
+               design, enumeration, exhaustive, search_space, kind, ...) -> dict
+list_experiments(*, claim_key=None, limit=None) -> dict
 evidence_for(claim_key=None, *, for_question_id=None) -> dict
+run_script_experiment(claim, claim_key, script_path, **kw) -> dict
 ```
+
+> **`check_formal` 不在 E 的接口里（2026-10-22 业主最终裁定）**：形式化那一岗归 L
+> （`specs/l.py` 的三件 `formalize` / `check_formal` / `record`，入边只有 `B`）。
+> 本节原文把 `check_formal` 列在 E 名下，是那条裁定之前的写法；
+> 形式化的桥接层实现（`verify_tools.detect_verifier` / `check_formal`）仍是一份，E 不再有入口。
 
 **证据等级推导规则**（唯一权威，写在 `run_experiment` 的 docstring 里）：
 
@@ -128,7 +146,7 @@ evidence_for(claim_key=None, *, for_question_id=None) -> dict
 
 ### 2.2 F —— 多轮难题攻坚
 
-`agentflow/src/agentflow/agent_f.py`：
+`agentflow/src/agentflow/agent_f/`：
 
 ```
 create_plan(problem, problem_key, *, for_question_id, subgoals, budget, depth, parent_plan_id) -> dict
@@ -147,18 +165,20 @@ status(plan_id) -> dict
 | `E` | 有 `script_path` 就调 `AgentE.run_experiment`，把 `experiment_id` 记进 `experiment_ids`；`evidence_kind=="proof"` 时同时记进 `proof_experiment_ids` |
 | `A` | 过 `interactions.admit_search_request` 闸门后提交检索请求 |
 | `B` | 过 `interactions.admit_reprocess_request` 闸门后提交重抽取请求 |
-| `C`/`D`/`F` | **记录一条 `outcome="no_change"` 的轮次**，`detail` 写明"需要 C/D/F 的推理，本框架尚未接线自动推理 ⇒ **未推进**" |
+| `C`/`D`/`F` | **F 自己推理推进**（2026-10-26 业主逐字：「没有默认开，这个就是 F 的工作方式，没有开关的说法」）：每一轮必须交四档产物之一（`reduction` / `proof` / `counterexample_request` / `dead_end`），**没有 `no_change` 这一档**；缺模型缝时落 `dead_end`，写明缺哪一股缝并向上报 |
 
 最后一行是刻意的：**不允许把"没做"写成"做了但没结果"**。
 一个"假装在思考"的攻坚循环比一个不存在的循环更危险，因为它会产出一堆
-看起来在推进的轮次记录。
+看起来在推进的轮次记录 —— 这也是 `no_change` 那一档被整条删掉的原因
+（`attackround.py`：四种产物里不含它；`attack_plans.history` 的每一轮都要能看出
+这一轮做了什么）。
 
 **终止**：轮数用尽 ⇒ `status="stalled"` 且 **`best_partial` 必填**。
 "绝不谎报成功"不等于"什么都不报"。
 
 ### 2.3 G —— 论文撰写
 
-`agentflow/src/agentflow/agent_g.py`（稿件面）与
+`agentflow/src/agentflow/agent_g/`（稿件面）与
 `agentflow/src/agentflow/tools/doc_tools.py`（动作面）：
 
 ```
@@ -180,12 +200,16 @@ schema 只能检查"字段非空"，**"这个 lit_id 真的存在"必须由 G �
 
 ### 2.4 H —— 审校（**只读**）
 
-`agentflow/src/agentflow/agent_h.py`（门引擎在 `agentflow/src/agentflow/gates.py`，15 道有名字的门）：
+`agentflow/src/agentflow/agent_h/`（门引擎在 `agentflow/src/agentflow/gates.py`，15 道有名字的门）：
 
 ```
 review(doc_id, *, round_no=None, dependencies=<未指定>) -> dict
-verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
+verify_fixes(doc_id, *, round_no, dependencies=<未指定>, close_as=None) -> dict
 ```
+
+> **`close_as` 是 2026-11-15 裁定后唯一的收尾入口**（撤轮数上限）：不给它 ⇒ 本趟只重审、
+> 逐条列 `still_open`；显式 `close_as="unresolved_review"` 才交人复核。没有轮次读数
+> （`max_review_rounds` 已不存在），收不收尾由 H 判断，不由计数器触发。
 
 （签名按 2026-09-29 的实测抄：`dependencies` 的三态是**同一套** —— 不传 = 从库里读该稿件的依赖；
 显式 `None` = 没查（结论不覆盖依赖闭合这一维）；显式给行序列 = 按给的清单查。）
@@ -198,8 +222,13 @@ verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
 > 写明要重新 review；要回到 accepted 就再走一次 `review`（H 的唯一签发入口）。
 > 判据本体 `signatures.signed_revision`；规格见 `docs/ROLE-SPECS.md` §G.5(a)。
 
-**H 的工具面全部 `side_effect ∈ {"none","read"}`。** 理由不是洁癖：
-若审校者能直接改，它就同时是"发现者"与"修正者"，
+**H 的只读面是「对其它智能体的产出只读」，不是「零 `write_local`」**（口径见 2026-11-01
+裁定，`tools.READ_ONLY_ROLES`）。它自己侧的产物可写：4 件**落库代理**
+（`review.review_document` / `review.verify_fixes` / `review.report` / `review.record_finding`，
+由 `READONLY_CALL_EXCEPTIONS['H']` 逐条产生）＋ 通用簿记写工具（`clock.*` / `conductor.ack` /
+`conductor.post_task` / `conductor.escalate`）。结构性拦截只剥 `fs.*` / `table.*` 的写工具 ——
+所以 H 既拿不到改别人稿的手，也写不了别人的台账。
+理由不是洁癖：若审校者能直接改别人的产出，它就同时是"发现者"与"修正者"，
 于是**"发现问题"与"掩盖问题"在结构上无法区分**。
 
 **告警分级（FC-13）—— 两句话，必须记牢**：
@@ -310,7 +339,10 @@ verify_fixes(doc_id, *, round_no, dependencies=<未指定>) -> dict
 2. **H 能否发现"数学错误"？** **不能**，本轮明确不做。H 只判"稿件有没有把自己说清楚"
    （有没有引用、证据等级有没有被夸大、依赖有没有闭合）。
    把这两件事分清是审校可被信任的前提 —— 一个声称"我检查了证明"的自动审校器是危险的。
-3. **E 的 `formal` 方法在本环境无法使用**（无 Lean/Coq），因此 `evidence_kind="proof"`
-   这条路径只能靠**手工构造的测试数据**验证，不能端到端跑通。这一点必须如实报告。
-4. **F 的 `owner ∈ {C,D,F}` 子目标不会被自动推进**（见 §2.2）——
-   这意味着"攻坚"目前只能被"外部工具型子目标"驱动。这是本轮**最大的能力边界**。
+3. **形式化（Lean）那一岗归 L，且只在 Lean 开关打开时存在**（2026-10-22 业主裁定）：
+   关档下 `formal.*` 不装配、`for_role("L")` 是空集；开档下 `detect_verifier` 探测本机
+   工具链，探测不到 ⇒ 受控失败 `not_wired`，不是"猜测可用"。穷举那一档（2026-10-23）
+   不再依赖 Lean，因此 `proof` 的到达路径不止"手工构造的测试数据"这一条。
+4. **F 的推理依赖模型缝**（2026-10-26 起：推理就是它的工作方式，没有开关）：
+   缺缝时落 `dead_end` 并向上报，不再有"未接线 ⇒ 记 `no_change`"这条路（见 §2.2）。
+   能力边界因此变成"模型缝在不在、预算够不够"，而不是"框架有没有替它想"。

@@ -483,15 +483,6 @@ def direct_write_route(table: str, intent: str = "") -> tuple[str, str, str, str
     return None
 
 
-def direct_write_backstop(table: str) -> str:
-    """这张表的兜底方（`secretary` / `literal`）；不可路由 ⇒ 空串。"""
-    name = str(table or "")
-    for row in DIRECT_WRITE_ROUTES:
-        if row[0] == name:
-            return row[1]
-    return ""
-
-
 def routable_direct_write_tables() -> tuple[str, ...]:
     """全部可路由的表（去重后按 `DIRECT_WRITE_ROUTES` 的顺序）。
 

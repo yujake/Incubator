@@ -323,9 +323,14 @@ ACTIONS: tuple[ActionSpec, ...] = (
             "mode": {"type": "string", "enum": list(_MI.INGEST_MODES),
                      "description": "`preview`=只提取+预检、零写入；`apply`=按格回填在册行；`register`=登记新命题（继承按手稿路径收录那条路）"},
             "if_match_proof_sha256": {**_S, "description": "可选（并发纪律）：我以为这一行现在的正文 sha；不符 ⇒ 受控拒 `stale_target`"},
-            "reason": {**_S, "description": "可选：一句话说明这一笔为什么录（只进读数与台账 note，不参与判据）"},
+            # 2026-11-20（提示词对齐）：改前这句写「只进读数与台账 note」，而实现
+            # 一次都没读过这个形参（传了等于没传）。现在它真的落进返回值的
+            # `caller_reason`（`ingest_manuscript.py` 的入口第一笔），措辞跟着改成实现
+            # 做得到的那一件；台账 note 那半句删掉 —— 台账那一笔的 note 是框架拼的，
+            # 不读调用方这一格。
+            "reason": {**_S, "description": "可选：一句话说明这一笔为什么录（落进返回值的 `caller_reason`，不参与判据）"},
         }, ("manuscript",)),
-        "dict（ok / mode / manuscript / target / requested_cells / cells / diff / derived_write / write / refused / reason）—— `diff` 逐格拉平「请求格 vs 实填格」；`mode=register` 另带 `register` 与 `pointer` 读数",
+        "dict（ok / mode / manuscript / target / requested_cells / cells / diff / derived_write / write / refused / reason / caller_reason）—— `diff` 逐格拉平「请求格 vs 实填格」；`mode=register` 另带 `register` 与 `pointer` 读数",
         side_effect="write_local", handler_name="ingest_manuscript", external="none",
     ),
 
@@ -416,9 +421,16 @@ SPEC = AgentSpec(
             "没有逐字引文支撑的关系不许产出。",
             "缺模型、缺正文、抽取失败都不许假装整理过。",
             "同一篇文献不要重复抽取；已有关系的重复判定交给判重口径，不要自己另立标准。",
-            "命题台账（statements）三件套缺一不可：含完整假设的命题正文（statement_full）、"
+            "命题台账（statements）的**完整形态**是三项：含完整假设的命题正文（statement_full）、"
             "证明正文（**自产命题由手稿 `proof_manuscript` 带进来** —— 在册也给稿；文献侧是逐字 `proof_text`）、"
-            "出处（source_lit_id + page_range）。省掉假设的命题会被下游当成无条件成立 —— 那是 FC-23 在命题级的同一种病。",
+            "出处（source_lit_id + page_range）。省掉假设的命题会被下游当成无条件成立 —— 那是 FC-23 在命题级的同一种病。"
+            # 2026-11-20（P-06 的对齐）：改前这一句是「三件套缺一不可」，而实现早就不这样
+            # 判了 —— 缺证明的那一笔照常登记（落最低等级「猜想」并进待办，见本文件
+            # `register_statement` 的动作摘要「没有稿不拒收」与 `register_statement.py`
+            # 里「现在不拦：落库 + 按既有字段如实标记」那一支）。文案说「缺一不可」会让
+            # B 在只有命题正文与出处时拒收自己的活，而闸根本不拦 —— 口径与实现必须是同一句。
+            "缺的是**命题正文或出处**才拒收；**缺证明不拒收**（P-06：落最低等级「猜想」并进待办，"
+            "补的是稿，不是往参数里贴一段正文）。",
             "quote_verified 是三态：true 逐字通过 / false 比对不一致 / null 还没查。不是 true 就必须写 quote_reason（哪里不一致、或者为什么还没查）。",
         ),
         policy=(
@@ -712,9 +724,14 @@ SPEC = AgentSpec(
     #:   （判据：`tests/test_l_collab_surface_is_exactly_this.py` 逐角色断言）；
     #: - `D`：缺陷严重时的升级出口。B 收到 L 的汇报后自己改证明（覆盖 canonical，
     #:   旧正文进 `proof_history`），再请 V 重签（`B → V` 这条既有边）—— 若 B 判断缺陷
-    #:   在证明路线本身（`severity="research"`），这一条边是唯一能把"这个证明难点该做
-    #:   研究了"交给 D 的路（实现在 `agent_b/proof_research.py`，落点是 D 的收件箱，
-    #:   标题前缀 `研究请求`）。
+    #:   在证明路线本身（L 的汇报里 `severity="research"`），这一条边是唯一能把"这个
+    #:   证明难点该做研究了"交给 D 的路。
+    #:   落点 = `summon` 形状（`role="D"`，见 `PROOF_CHANNEL` 第⑥步），不是收件箱：
+    #:   2026-11-20（PROOFCHAN）退场了改前那个 `AgentB.escalate_proof_research` 程序入口
+    #:   —— 它不在本文件的 `ACTIONS` 里（模型照它调只会拿到 `unknown_action`）、src 里
+    #:   0 个调用方，只有测试在调；而模型侧的路早在 2026-11-05（审计② 第 ⑪ 条）就锚到
+    #:   `summon` 了。两边分家过的那一条现在有判据守着
+    #:   （`tests/test_proofchan_upgrade_is_the_summon_path.py`）。
     #: 这两条之外没有放宽任何别的边：B 不会因此够得到 A / E / F / G，
     #: 也不替 D 做研究判断（它只交一条带读数的问题，研究怎么做归 D）。
     edges=('C', 'D', 'H', 'L', 'V'),

@@ -8,18 +8,12 @@
 """
 from __future__ import annotations
 
-from .. import schema as S
 #: 交进来的产物那一格的形状（与 `tools/attack_tools.py` 的 `attack.step` 共用一处）。
 #: 两处各写一份 schema 会漂，而漂了的形态是"动作表说收、工具层拒"或反过来。
 from .. import attackround as _AR
 from ..agentspec import (
-    _ARR_I,
-    _ARR_OBJ,
-    _ARR_S,
     _B,
     _I,
-    _N,
-    _OBJ,
     _S,
     ActionSpec,
     AgentBrief,
@@ -437,7 +431,8 @@ SPEC = AgentSpec(
         stance=(
             "攻坚的产物是'离解决还差什么'，不是'我们做了很多轮'：每一轮都要让卡点更具体一点。",
             "允许提猜想：把猜想写成可判定的形式（谁、在什么条件下、能不能被一个反例推翻），然后交给 E 去验"
-            "（要 D 统筹就用 `conductor.escalate` 写进召唤者的收件箱 —— 你没有到 D 的出边）。",
+            "（要 D 统筹就直接派 D —— `F → D` 是直接边；`conductor.escalate` 只用来向 M 请求指导，"
+            "不是找 D 的替代路）。",
             "被预算逼停时，把'停在哪里、下一步该从哪继续'写清楚 —— 那是下一轮能接着干的唯一理由。",
         ),
     ),
@@ -496,7 +491,10 @@ SPEC = AgentSpec(
                      # 成为一条可选后门。
                      # `statements` 也不在 F 的写集里 —— 权限面以秘书那一层为准
                      # （`secretary.STATEMENT_WRITER_ROLES = ("B",)`，命题只经秘书 / B 登记）：
-                     # F 把命题正文与证明全文交给 B，由 B 登记。这一格连着两个更细的口径：
+                     # F 把命题正文与证明全文落成自己的手稿（`reports/f-proof-<稿号>.md`），
+                     # 经 D 携带给 B、B 在 V 签之后读稿收录（`F -> B` 直连边 2026-11-07
+                     # 已裁掉；改前这一句写的是「把命题与证明直接交给 B」，那是直连
+                     # 时代的说法）。这一格连着两个更细的口径：
                      # ① `bits` 不许由 F 填（五位里第 3 位的 owner 是 V），而
                      # `table_tools._NOT_ROUTABLE_KEYS` 把空对象也算作"碰了派生面"
                      # ⇒ 写 `bits={}` 会被判 direct_write；② 档位（`evidence_kind`）由

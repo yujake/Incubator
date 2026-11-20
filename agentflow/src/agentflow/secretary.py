@@ -118,66 +118,94 @@ from .secretary_axes import (  # noqa: F401 — 再导出，保持公开面不�
     statement_same_rows,
 )
 
-#: 发件/收件的单次模型调用上限（`draft/55` §5.2：1 次调用、≤3 秒，超时放行）。
-DEFAULT_DEADLINE_SEC = 3.0
-#: 秘书 ⇄ 秘书协商的轮数上限（`draft/55` §5.2：最多 2 轮，之后上报本体）。
-MAX_NEGOTIATION_ROUNDS = 2
-#: 一次最多几条闭环提醒（`draft/55` §5.2：默认 5，避免刷屏）。
-MAX_REMINDERS = 5
-#: 六种事件名（`draft/55` §5.1）—— 常量在这里是为了让"冒充本体"这件事结构上不可能：
-#: 秘书发出的每一条都带 `secretary/` 前缀。
-KIND_OPTIMIZED = "secretary_optimized"
-KIND_HANDOFF = "secretary_handoff"
-KIND_NOTICE = "secretary_notice"
-KIND_PROPOSAL = "secretary_proposal"
-KIND_NEGOTIATION = "secretary_negotiation"
-KIND_DECISION = "secretary_decision"
-#: 秘书的判断结论词表（`draft/55` §2 的 B 类）——派活那一轴的结论。
-DECISIONS = ("可派", "建议重排", "建议改派", "建议不派", "已优化", "已提醒", "已执笔")
+# 2026-11-20（业主口径：体量软基线不抬，只拆）：下面这些名字的实现在
+# `secretary_vocab.py`，这里按原样再导出 —— 所有 `from .clock import ...` 的调用点
+# 一个字都不用改，依赖方向是 `secretary` → `secretary_vocab`（单向）。
+from .secretary_vocab import (  # noqa: F401 — 再导出，保持公开面不变
+    ACCEPT_PROPOSAL,
+    BRIEF_MAX,
+    CLUE_NOTE,
+    CLUE_VERB,
+    CONCEPT_IDENTITY_KINDS,
+    CONCEPT_IDENTITY_UNJUDGED,
+    DECISIONS,
+    DECISION_ACCEPTED,
+    DECISION_PROPOSED,
+    DECISION_READDRESS,
+    DECISION_REARRANGE,
+    DECISION_REJECTED,
+    DEFAULT_DEADLINE_SEC,
+    DEPS_MISSING_ABSENT,
+    DEPS_MISSING_NOT_APPLICABLE,
+    DEPS_MISSING_PRESENT,
+    DEPS_MISSING_STATES,
+    DISPATCH_FIT_OK,
+    DISPATCH_FIT_QUESTION,
+    DISPATCH_FIT_UNSUITABLE,
+    DISPATCH_FIT_VERDICTS,
+    DISPATCH_VERB,
+    JUDGE_UNCHECKED,
+    JUDGE_VERDICTS,
+    KIND_DECISION,
+    KIND_HANDOFF,
+    KIND_NEGOTIATION,
+    KIND_NOTICE,
+    KIND_OPTIMIZED,
+    KIND_PROPOSAL,
+    LABEL_FROM_STATEMENT_CHARS,
+    LABEL_WASH_ROUTE,
+    LABEL_WASH_WORKING,
+    LABEL_WORKING_NAME_RULES,
+    LIVE_TASK_STATUSES,
+    MAX_NEGOTIATION_ROUNDS,
+    MAX_REMINDERS,
+    NONTRIVIALITY_LEVELS,
+    OUTCOME_WASH_PROPOSED,
+    PROOF_KIND_VERDICTS,
+    PROPOSAL_KEYS,
+    PROPOSITION_FORM_REFUSED,
+    PROPOSITION_VERDICTS,
+    RAN_STATUSES,
+    REJECT_PROPOSAL,
+    ROW_AXIS_AGENT,
+    ROW_AXIS_ITEM_CLOSED,
+    ROW_AXIS_ITEM_OPEN,
+    ROW_AXIS_OTHER,
+    ROW_AXIS_ROOT,
+    SAME_AS_WRAPPER_CHARS,
+    SIGN_ISSUE,
+    SIGN_WITHHOLD,
+    STATEMENT_VERDICTS,
+    STATE_LABELS,
+    TASK_TEXT_MAX,
+    TOP_LEVEL_ACTION,
+    V_REPLY_AXIS,
+    V_REPLY_CLEAN,
+    V_REPLY_FAULT,
+    V_REPLY_VERDICTS,
+    _JUDGE_UNDECIDED,
+    _NONTRIVIALITY_LABELS,
+    _SENTENCE_END,
+    _nontriviality_level,
+    nontriviality_label,
+)
 
-# ---------------------------------------------------------------- 两段式：洗 → 请示 → 确认
-#
-# 业主裁定（2026-10-21）：派活时的"委托秘书洗一遍格式"是两段，不是一段：
-#
-# | 段 | 谁做 | 产物 |
-# |---|---|---|
-# | ① 洗 + 请示 | 发件方秘书 | `washed == original` ⇒ 无事发生（直接执行，不多花一轮）；有差异 ⇒ 不执行，出一份受控的请示读数（`outcome=wash_proposed` + `proposal_id` + 逐字段 diff） |
-# | ② 确认 | 发起方（父） | `accept_proposal=<id>` ⇒ 用 `washed` 执行；`reject_proposal=<id>` ⇒ 用 `original` 执行并留痕 |
-#
-# 为什么不是"直接应用"（S1g 的旧形态）：那等于秘书替本体表态（`draft/53` §2 的两条红线），
-# 而与它相对的那一版（"永远只建议"）又把洗格式变成摆设（`draft/90` E5 的差）。
-# 两段式把"洗"与"要不要按洗过的派"分开：洗是格式面的确定性命中，要不要是父的事。
-#
-# 受控词：确认/拒绝的字段名、请示的 `outcome` 取值 —— 三者都只有这一份定义。
-ACCEPT_PROPOSAL = "accept_proposal"
-REJECT_PROPOSAL = "reject_proposal"
-PROPOSAL_KEYS: tuple[str, ...] = (ACCEPT_PROPOSAL, REJECT_PROPOSAL)
-#: 第一段的受控 `outcome` 值（步骤结果里就这一个词说"这一步没有派活"）。
-OUTCOME_WASH_PROPOSED = "wash_proposed"
-#: 执行那一趟台账 `decision` 那一格的受控取值（请示 / 接受 / 拒绝，只有这三个词）。
-#: 三个都只在 :meth:`Secretary.optimize_outbound` 那一处产生，且与步骤结果的
-#: `outcome` / `accepted` 一一对应（读台账的人不必再去猜"这一行是请示还是确认"）。
-DECISION_PROPOSED = "洗出格式差异 ⇒ 请示"
-DECISION_ACCEPTED = "接受了秘书的格式洗"
-DECISION_REJECTED = "拒绝了秘书的格式洗"
+# 2026-11-20（业主口径：体量软基线不抬，只拆）：下面这些名字的实现在
+# `secretary_prompts.py`，这里按原样再导出 —— 所有 `from .clock import ...` 的调用点
+# 一个字都不用改，依赖方向是 `secretary` → `secretary_prompts`（单向）。
+from .secretary_prompts import (  # noqa: F401 — 再导出，保持公开面不变
+    JUDGE_MATERIAL_CAP,
+    _abandon_difficulty_system,
+    _judge_material,
+    _judge_prompt,
+    _judge_system,
+    _proposition_form_system,
+    _statement_keywords_system,
+    _wash_v_system,
+)
 
-#: 非平凡性的五档（T0–T4）：它回答"多不平凡"，同时是判档那一问的词表
-#: （`STATEMENT_VERDICTS` 从它派生）—— 一根轴，不是两根。
-#:
-#: T0 不是"次品档"、不是"未评级"，它是同一根轴上的第一档：
-#: 平凡但真的那些（`a+b=b+a` 那一类，以及由数值实验直接穷举出来的基础事实）落在 T0，
-#: 而它们"能进表"这件事由 T0 这一档保证。
-#:
-#: | 档 | 语义 |
-#: |---|---|
-#: | 0 | 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些） |
-#: | 1 | 有一定价值的非平凡结论 |
-#: | 2 | 证明方法都是平凡的，但工作量较大 |
-#: | 3 | 需要用较多的技巧或跨领域工具 |
-#: | 4 | 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造 |
-#:
-#: "判不了"不再用 0 表示（0 从这一天起是一档真的档位）：见 :data:`NONTRIVIALITY_UNJUDGED`。
-NONTRIVIALITY_LEVELS: tuple[int, ...] = (0, 1, 2, 3, 4)
+
+
 
 #: "这一格没判成"的取值（三态里的第三态）。它不在 `NONTRIVIALITY_LEVELS` 里：
 #:
@@ -194,15 +222,6 @@ NONTRIVIALITY_UNJUDGED: None = None
 #: 没有这一格的历史行按旧刻度读（0 = 判不了）。
 NONTRIVIALITY_SCALE = "T0-T4"
 
-#: 判档位那一趟交给模型的材料（user 消息那一段）最多多少字。
-#:
-#: 2026-10-24 之前是 4000，而且没有任何一格说"被截了"。真机读数（sylow4）：一条正文
-#: 8375 字，材料 JSON 在 4000 字处被切断，模型读到半句证明，于是给出"证明截断，无法
-#: 定档"，台账落成 `nontriviality: null` + basis "材料不足"。业主裁定（2026-10-24）：
-#: 正文被截断要显式报 `text_truncated`，并说清"档位判不了是因为输入不完整，不是因为
-#: 材料不足"。所以这里两件事一起改：上限抬到与逐字段上限同量级（20 000），且超限时
-#: 必须由 :func:`material_truncation` 报出精确的截断点。
-JUDGE_MATERIAL_CAP = 24_000
 
 #: 判档位读"力气"的那份正文最多读多少字（超出 ⇒ 这一趟的档位落「判不了 + 被截断」）。
 #:
@@ -219,80 +238,12 @@ PROOF_BODY_CAP = 20_000
 #: 字面量的真身住在 `refusals.py`：同一句拒绝在写侧与判档位这一侧必须说同一个词。
 EMPTY_STATEMENT_TEXT = R.EMPTY_STATEMENT_TEXT
 
-def _nontriviality_level(value: Any) -> int | None:
-    """把模型给的档位收敛到 `0|1|2|3|4`；别的（含缺省）一律 `None` = 判不了。
-
-    2026-10-23 起 `0` 是一档真的档位（T0 基础定理或初步结论），所以"判不了"必须
-    换一个值：`None`。这里刻意不把坏输入折成 0 —— 那会把"模型给了 `1.9`"读成
-    "这是一条基础定理"，正是"静默降级"的形态。同理也不许折成 1。
-
-    只认整数（或纯数字字符串）：`1.9` 不是"第 1 档"，它是坏输入。
-
-    2026-11-01：`nontriviality_label` 与 `STATEMENT_VERDICTS` 在 import 期就要用它
-    （词表从档位轴派生），所以它住在档位常量旁边、必须定义在它们之前。
-    """
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        got: Any = value
-    elif isinstance(value, str):
-        raw = value.strip()
-        upper = raw.upper()
-        if upper.startswith("T") and upper[1:].isdigit():
-            # 2026-10-29：判档那一问的 decision 词表就是 T0..T4，这里原先只认数字
-            # ⇒ 模型答 "T3" 永远解析成 None（"交给模型判"在结构上走不通）。
-            got = int(upper[1:])
-        elif raw.isdigit():
-            got = int(raw)
-        else:
-            return None
-    else:
-        return None
-    return got if got in NONTRIVIALITY_LEVELS else None
 
 
-#: 档位的显示名（`0 -> "T0"`）。读侧一律调 :func:`nontriviality_label`，不各写一份。
-_NONTRIVIALITY_LABELS: dict[int, str] = {level: f"T{level}" for level in NONTRIVIALITY_LEVELS}
 
 
-def nontriviality_label(level: Any) -> str:
-    """档位号 → 显示名（`0 -> "T0"` … `4 -> "T4"`；判不了 ⇒ 空串）。"""
-    got = _nontriviality_level(level)
-    return _NONTRIVIALITY_LABELS.get(got, "") if got is not None else ""
 
 
-#: 判档那一问的结论词表（业主 2026-11-01 裁定：审美轴三格退场，直接只用 T0 到 T4）。
-#:
-#: 2026-11-01 之前这里是 `("合格", "太平凡", "判不了")`：一根"收不收"的审美轴，与
-#: `NONTRIVIALITY_LEVELS`（"多不平凡"）并排。裁定之后这一问只剩一根轴 —— `decision`
-#: 就是档位，三个旧词退场。从档位轴派生（不写第二份字面量）：两张表漂了，就会出现
-#: "词表里有 T5、档位轴没有"这种只在提示词里成立的档位。
-#:
-#: ## 两态（2026-11-01 第二刀：判不了退场为"没查成"）
-#: | 结局 | 盘上那一格 |
-#: |---|---|
-#: | 有档 | `decision` = `"T0"`…`"T4"`（决定台账同值；档位台账 `nontriviality` 0..4 + `label`） |
-#: | 没查成 | `judge.checked=false`；决定台账 `decision="没查成"`；没有档位行 |
-#:
-#: "判不了"不是一种判定结果，是"我们没拿到判定"（模型给 null / 旧词 / 坏 JSON，
-#: 调用失败，正文被截断，一项力气读数都取不到）—— 它的处置是"重试 / 重交 / 人看"，
-#: 所以它必须长成"没查成"，而不是第四档，也不是一条 `nontriviality: null` 的行。
-#:
-#: 概念 / 定义行另有一态 `not_applicable`（见 :meth:`Secretary.not_applicable_nontriviality`）：
-#: 那是"这一问对它不成立"，不是"没查成"，两回事，不许折平。
-#:
-#: ## 旧行怎么读（只影响读旧台账；写侧与新行一个字都不产生这三个词）
-#: | 老 `decision` | 折算出的档位 | 判据 |
-#: |---|---|---|
-#: | `T0`…`T4` | 同名档位 | 老台账里的同名档位 |
-#: | `太平凡` | T0 | 这个结论只剩"力气小 ⇒ 落 T0"这一层意思 |
-#: | `合格` | 读 `judge.nontriviality`（或同号 `nontriviality.jsonl` 那一行）；都没有 ⇒ 未判 | 它当年只表示"收"，从不携带档位 |
-#: | `判不了` | 未判（`None`） | 它是"该判而没判"，不是一档 |
-#:
-#: 唯一实现是 :func:`_tier_from_legacy_decision`（读旧行的唯一折算口）。判据
-#: `tests/test_the_statement_vocabulary_is_only_the_five_tiers.py` 钉着"旧词只许出现在它里面"。
-STATEMENT_VERDICTS: tuple[str, ...] = tuple(
-    nontriviality_label(level) for level in NONTRIVIALITY_LEVELS)
 
 
 #: 没有"证明正文"这一档、因而不做力气判档的那几档 kind（"不适用"的适用范围，唯一一处）。
@@ -328,17 +279,6 @@ def _is_trivial_verdict(decision: Any) -> bool:
     """
     return _nontriviality_level(decision) == 0
 
-#: 「这一条与在册的哪一条是同一条命题」的结论词表（两档）。
-#:
-#: 准绳：「定理描述一致（什么条件推出什么结论），就是一个定理」。这一问不许有第三种
-#: 结论 —— 读不清就是没判成，不是一种判词。
-#:
-#: 所以这一问只有两个结论：同一组条件推出同一组结论（same）/ 不是（different）。
-#: 「没有第三种结论词」：读不清（缺条件 / 结论写不清 / same 点不出候选号 / 词表外结论 /
-#: 超时 / 坏 JSON / 没缝）不是一种判定，而是「没判成」 —— `checked=False`，上层按 fail-closed
-#: 处置（不新建、不合并、受控拒）。"没判成"与"判过了、不同"必须在盘上分得开：
-#: 前者是 `checked=False`，后者是 `checked=True` + `verdict="different"`。
-PROPOSITION_VERDICTS: tuple[str, ...] = ("same", "different")
 
 
 #: 一次判定一页给几条候选（分页的页大小，不是截断）。
@@ -365,32 +305,8 @@ PROPOSITION_VERDICT_TEXT_CHARS = 1200
 #: 键是证明号的字符串形式（JSON 的键只能是字符串），读侧一律走 :func:`proof_route_of`。
 PROOF_ROUTES_KEY = "_proof_routes"
 
-#: V 的回复有没有指出缺陷（两档）。
-#:
-#: 为什么另立一张表而不复用 `STATEMENT_VERDICTS`（`合格` / `太平凡` / `判不了`）：
-#: 那是 B 的审美轴（这条命题够不够格入库），这里是 V 的结论轴（这段审阅回复
-#: 到底有没有指出缺陷）。两根轴共用一张词表之后，"太平凡"会被当成一种"有缺陷"——
-#: 而它们在台账上是两件事（前者不改任何签，后者清零连续次数）。
-#:
-#: 这一根轴的词表只有两格：「不可能有判不了。只要不是完全没毛病都叫有毛病」。
-#: 拿不准、只挑出一处小记号问题、说"我没逐行验证"——统统算「有缺陷要指出」。
-#: 模型若答词表外的值，`judge()` 判它"不在词表里 ⇒ 不采信" ⇒ `checked=False`
-#: （"没查成"，见 :meth:`Secretary.judge_v_reply`），不会被当成第三种结论，也不会在
-#: 台账上留下一个 `判不了` 的判词。
-#: 老台账行上那个轴名也不再是一格：`verifications.SECRETARY_JUDGE_HISTORICAL_AXES` 与
-#: `secretary_axis` 的兼容支都没有了，老行上那个值读出来是空轴（"这一行没有轴"）。
-V_REPLY_CLEAN = "没问题"
-V_REPLY_FAULT = "有缺陷要指出"
 
-#: `v_reply_defect` 那一类的词表（两格，顺序 = 由"没问题"到"有缺陷要指出"）。
-V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT)
 
-#: 词表取值 ⇒ 台账上那条轴的两档（与 `verifications.SECRETARY_JUDGE_AXES` 逐字同一套）。
-#: 为什么要有这一张映射而不是直接把中文写进台账：台账那一格是给代码读的
-#: （`verifications._hold_run_lengths` 按 `fault` 分流），中文词表是给模型读的。
-#: 两者之间只有这一处翻译，改词不改轴；这张映射里没有第三条出路 ——
-#: "拿不准"落在 `V_REPLY_FAULT` 那一格（业主逐字：只要不是完全没毛病都叫有毛病）。
-V_REPLY_AXIS: dict[str, str] = {V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault"}
 
 
 def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
@@ -452,107 +368,12 @@ def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
     return out
 
 
-#: V 的秘书「发不发这一签」（2026-11-16 裁定 ③：不再问模型，只留两个读数词）。
-#:
-#: 地板（同一趟送审内连续 clean 达到门槛）过了即发；没过就是 `不签发`。
-#: 这两个词现在只是读数标签，不是一张要模型逐字取自的词表 ——
-#: `SIGN_ISSUANCE_VERDICTS` 与 `_judge_system` 的 `sign_issuance` 那一问都已删除。
-SIGN_ISSUE = "签发"
-SIGN_WITHHOLD = "不签发"
 
-#: 判定"没查成"时，台账那一行的 `decision` 该写什么。
-#:
-#: 「没查成」不是一种判定 ⇒ 台账上也不许写成一个结论词。这一格因此用
-#: `没查成` 这个专用词：它不在任何一张 `JUDGE_VERDICTS` 里，读的人一眼看得出"这一趟没有
-#: 结论"，不会把它当成某一档（也不给"判不了"留位置）。
-JUDGE_UNCHECKED = "没查成"
 
-#: 判断类别 → 它允许的结论词表（唯一一处把"哪类判断有哪些结论"写下来的地方）。
-#:
-#: 加一类判断时只加一行：`Secretary.JUDGE_KINDS` 与 `judge()` 的校验都从这张表派生，
-#: 于是"新类别悄悄用了别的轴的词"这件事在结构上就发生不了。
-#: 同种证明的判定词表（二态、语义；判不了走 `checked=False`，不设第三档）。
-#: 定义必须早于 `JUDGE_VERDICTS`（那张表在模块加载期就取它）。
-PROOF_KIND_VERDICTS: tuple[str, ...] = ("same", "different")
 
-#: 「这一条派给 F 的活，是不是一个研究方向」那一轴的词表（两态、语义）。
-#:
-#: 业主 2026-11-13 的裁定（本批 R1/R2）：「plan由F自己决定，所以D不可能做出按plan个数派F，
-#: 于是D只能按研究方向开多个F而非把一堆方向委托给一个F」——D 的秘书要审这一件事，
-#: 不合适时给提醒（不是拒收）。两档：
-#:   `是一个方向`   —— 这一条交给 F 的是一件事（要弄清什么、可试哪条路），一个 F 接得住；
-#:   `不是一个方向` —— 一条派活里捆了多个互不相干的研究方向（该按方向拆成多个 F），
-#:                    或者它其实是一张"计划列表 / 进度督办"（plan 由 F 自己决定，
-#:                    派活不该点名它们）。
-#: 判不了 ⇒ `checked=False`（不设第三档：第三档会被读成一个结论词）。
-#:
-#: 为什么不用「合适 / 不合适」：`_judge_system` 的泄漏判据是子串判的
-#: （`test_the_head_is_the_one_of_that_kind_not_a_placeholder`：别的轴的词不许整张混进
-#: 这一类的题面），而「合适」是「更合适」的子串（派活轴 rearrange 那一问里就有
-#: "换一个收件方更合适"）⇒ 一加就会把那一问判红。这两个词是这一问自己的说法，
-#: 不与任何别的轴共用字串。
-DISPATCH_FIT_OK = "是一个方向"
-DISPATCH_FIT_UNSUITABLE = "不是一个方向"
-DISPATCH_FIT_VERDICTS: tuple[str, ...] = (DISPATCH_FIT_OK, DISPATCH_FIT_UNSUITABLE)
 
-JUDGE_VERDICTS: dict[str, tuple[str, ...]] = {
-    "duplicate_retry": DECISIONS,
-    "tool_name": DECISIONS,
-    "rearrange": DECISIONS,
-    "statement_aesthetic": STATEMENT_VERDICTS,
-    # 命题同一性：结论词表就是二态。
-    "proposition_identity": PROPOSITION_VERDICTS,
-    # V 的回复有没有指出缺陷。独立一张表，不复用审美轴。
-    "v_reply_defect": V_REPLY_VERDICTS,
-    # 2026-11-16 裁定 ③：这里没有 `sign_issuance` —— 发签不再是一问，
-    # 地板过了即由秘书自动发（见 `decide_sign_issuance`）。
-    # 这一份证明与在册各路径是不是同一套证法（二态、语义：对比证明方法，不做任何机械闸）。
-    # 不加第三档：判不了走 `checked=False`（fail-closed，调用方不收录）。
-    "proof_kind": PROOF_KIND_VERDICTS,
-    # 这一条 D 派给 F 的活是不是一个研究方向（二态：合适 / 不合适）。
-    # 独立一张表：它不复用派活轴的 `DECISIONS`（"建议重排"是处置，不是"合不合适"）。
-    "dispatch_fit": DISPATCH_FIT_VERDICTS,
-}
 
-#: `dispatch_fit` 那一问的题面（模块级常量，`_judge_system` 只引用它）。
-#:
-#: 为什么不住在 `_judge_system` 的函数体里：那一格是软基线
-#: `src_functions_gt200_lines` 盯着的函数（业主口径 92 不许抬），二十来行题面塞进函数体
-#: 会把它顶过 200 行。题面本身只取决于 `kind`、与材料无关，抽成常量不改变缓存纪律
-#: （它照样进 `system` 那一段）。
-DISPATCH_FIT_QUESTION: str = (
-    "问题：下面这一条是 D 派给 F 的活（材料里的 `task` 是派活原文，"
-    "`action` / `params` 是随附的调用面，可能为空）。它是不是**一个研究方向**？\n"
-    "判据只有一条：这条派活交给 F 的是**一件事**（要弄清什么、可以试哪条路），"
-    "而不是**几件互不相干的事**。\n"
-    "几件事（判「不是一个方向」）：\n"
-    "- 一条派活里捆了几个不同的研究方向，要一个 F 同时攻几条线；\n"
-    "- 它其实是一张**计划列表 / 进度督办**（点名多条计划、多个要证的命题、要求逐个推进），"
-    "而 plan 由 F 自己决定 —— D 派活该按研究方向派，不该按计划个数派；\n"
-    "- 它把「汇报 / 盯进度」写成了一次攻坚方向（那不是方向，是流程要求）。\n"
-    "一件事（判「是一个方向」）：只写方向、约束、可试的路，没有把几个方向捆在一起，"
-    "也没有替 F 决定它要开几条计划、先推哪一条。\n"
-    "不参与判定的东西：这条方向难不难、值不值得做、F 能不能证出来 —— 那些是研究判断，"
-    "不是这一问。\n"
-    "读不清（原文被截断、只有编号、没有可读的方向文字）时不要猜：把 decision 留成空串，"
-    "框架把它当「没判成」处理（这一条只提醒、不拦派活）。\n"
-    "decision 取「是一个方向」/「不是一个方向」之一；reason 一句话；"
-    "basis 引派活原文里的字句。"
-    "判「不是一个方向」时 reason 必须写清**该拆成几件事、每件事各派一个 F 的话该怎么写**"
-    "（这是给 D 的提醒，不是拒收）。"
-)
 
-#: 判断"没查成"时，台账那一行的 `decision` 该写什么（按类别）。
-#:
-#: 为什么需要这张小表：`_record_judge` 的缺省是 `"建议重排"`（派活那一轴的词）——
-#: 对这几种判断，`checked=False` 时写"建议重排"是一句假话。这里给它们一个专用词
-#: （`没查成`，不是任何一档结论），其余类别原样保留旧缺省：改它们的词会改历史读数。
-#: 每一类都得在表里：漏一类，它在没查成时写的就是派活轴的"建议重排"（错轴）。
-_JUDGE_UNDECIDED: dict[str, str] = {
-    "v_reply_defect": JUDGE_UNCHECKED,
-    "statement_aesthetic": JUDGE_UNCHECKED, "proof_kind": JUDGE_UNCHECKED,
-    "dispatch_fit": JUDGE_UNCHECKED,
-}
 
 
 
@@ -666,10 +487,6 @@ def registration_refusals(root: str | Path, *, owner: str = "") -> dict[str, Any
             "path": str(paths[0]) if len(paths) == 1 else str(base)}
 
 
-#: 「真跑过」的终态（`tasks.status` 那一格）。为什么不用 `tokens > 0` 当判据：81 趟实测
-#: `t-000073` 真跑了 18 分钟也 `tokens=0`（记账在 `usage_ledger` 那一侧，`tasks.tokens`
-#: 回答的是"这一行抄回来多少"，不是"它跑没跑"）。`draft/160` §三-6 的丁案把它列成前提假设之一。
-RAN_STATUSES: tuple[str, ...] = ("done", "failed", "cancelled")
 
 
 def ran_but_unnamed(row: Mapping[str, Any],
@@ -936,18 +753,9 @@ def _fold_index(rows: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]:
     return [items[k] for k in sorted(items)]
 
 
-#: 名册简介的字数上限 —— 与内容闸是同一个数（`roster_add` 里 `len(text) > 60` 那一档）。
-#: 代写那一支必须自己截到这个长度以内：否则秘书写出来的那句话会被秘书自己的闸拒，
-#: "没给简介"就变成"永远登记不上"（死角）。
-BRIEF_MAX = 60
-
-#: 句末标点（取"第一句"时截到它为止，含它）。刻意不收 `.`：小数（`1.5`）、
-#: 文献号、相对路径（`../x`）里的点会把一句话切碎，而任务原文的句末几乎总是这几个。
-_SENTENCE_END: tuple[str, ...] = ("。", "！", "？", "!", "?", "；", ";")
 
 
-#: 名册里保存的任务原文上限（业主 2026-10-27：「自动以 task 填充目的」+「截断到 200 字」）。
-TASK_TEXT_MAX: int = 200
+
 
 
 def _task_text(task: Any) -> str:
@@ -984,9 +792,6 @@ def brief_from_task(task: str, *, limit: int = BRIEF_MAX) -> str:
     return flat[:min(cut, int(limit))].strip()
 
 
-#: `state` 的五档（不许增删：`roster_view` 的对外取值域，前端与读侧都按它显示）。
-#: "判不了"不是第六档 —— 它是旁边那一格 `state_checked=False`（2026-10-27）。
-STATE_LABELS: tuple[str, ...] = ("活跃", "待命", "已停", "已退役", "未登记")
 
 
 def _state_reading(branch: str, retired: bool, cond: Any, task_id: str, *,
@@ -1059,42 +864,6 @@ def _status_enum(facts: Mapping[str, Any], *, retired: bool) -> str:
     return "idle"
 
 
-# ---------------------------------------------------------------- 台账行分轴（Q18，2026-10-26）
-#
-# 一条 `tasks` 行到底是"在跑的子代理"、"板项"还是"顶趟行"，这个判断只许有一处。
-# 散在多处时各写一遍（扇出轴 / 未消项轴 / 闭环轴），而闭环轴那一份没读 `kind`：
-# 30 条板项行（`status` 恒为 `pending`）会被数成"running 5 条"（`MAX_REMINDERS` 截断），
-# 而那一刻 18 条代理行全部 done、台账里一个在跑的子都没有。
-#
-# 落点为什么在秘书而不在 conductor：收件箱一族归秘书。
-#
-# 上面那一处判据同时回答了两个问题 —— "这一行是什么"（轴）与
-# "它还活不活"。要"所有代理行（含终态）"的读点拿不到它（终态代理行被折进 `other`），
-# 要"活着的代理"的读点又得自己再写一遍 `status ∈ {pending, running}`。所以拆成两件：
-# `row_axis(row)` 只回答轴（五档），
-# `is_live_agent(row)` 只回答"是不是一个活着的代理"（= 轴是 agent）。判据仍然只有这一处，
-# 读点调哪一个由它问的问题决定，不许再内联 `kind` / `status`。
-#: 代理行：`kind` 为空、不是顶趟行、`status` 还没终态。
-ROW_AXIS_AGENT = "agent"
-#: 板项行：`kind` 非空且 `item_state != "done"`（还没收口）。
-ROW_AXIS_ITEM_OPEN = "item_open"
-#: 板项行：`kind` 非空且已经收口（`item_state == "done"`）。
-ROW_AXIS_ITEM_CLOSED = "item_closed"
-#: 顶趟行：`open_top_level_run` 开的那一行（`action="run"`、没有父）。
-ROW_AXIS_ROOT = "root"
-#: 其余（代理行的历史终态行等）：两根轴都不进。
-ROW_AXIS_OTHER = "other"
-#: 顶趟行的动作哨兵（`conductor.open_top_level_run` 与 `_open_consume_root` 写的）。
-TOP_LEVEL_ACTION = "run"
-#: "还没终态"的两档（`schema.TASK_STATUSES` 里的活档；与 conductor 的扇出判据同一批）。
-#:
-#: 这一行是全仓唯一的真身：conductor 的 `UNFINISHED_STATUSES` 是它对
-#: 这一行的转发（`tuple(SEC.LIVE_TASK_STATUSES)`），不再是第二份字面量。方向是这样选的，
-#: 不是反过来：`conductor` 顶层 import `secretary`（那一行要读 `MAX_REMINDERS`），
-#: 而 `secretary` 顶层不 import `conductor` —— 这样两种导入顺序都无环。
-#: 判据：`tests/test_live_statuses_single_source.py`（两个名字取到的必须是同一个元组，
-#: 且这两个文件里除本行之外不再有 `("pending", "running")` 字面量）。
-LIVE_TASK_STATUSES = ("pending", "running")
 
 
 def row_axis(row: Mapping[str, Any]) -> str:
@@ -1197,12 +966,6 @@ def declarations_candidates(name: str, names: Iterable[str], *, limit: int = 3) 
 STATEMENT_WRITE_TABLES: tuple[str, str] = ("statements", "dependencies")
 #: 谁可以交命题内容给这一条路径（写入侧是 B 的活，别的人交 ⇒ 受控拒绝）。
 STATEMENT_WRITER_ROLES: tuple[str, ...] = ("B",)
-#: `deps_missing` 的三档（三态：不把「不适用」折成「缺」，也不把「缺」折成「零依赖」）。
-DEPS_MISSING_PRESENT = "present"
-DEPS_MISSING_ABSENT = "missing"
-DEPS_MISSING_NOT_APPLICABLE = "not_applicable"
-DEPS_MISSING_STATES: tuple[str, ...] = (DEPS_MISSING_PRESENT, DEPS_MISSING_ABSENT,
-                                        DEPS_MISSING_NOT_APPLICABLE)
 #: 一条命题载荷认得的字段（正名）。别名表见 `STATEMENT_KEY_ALIASES`。
 STATEMENT_PARAM_KEYS: frozenset[str] = frozenset({
     "statement_full", "statement_text", "kind", "label", "proof_text", "origin",
@@ -1270,12 +1033,6 @@ PROOF_SAME_KIND = "proof_same_kind"
 #: 折平会把"没判成"读成"判过了、不同"（于是照旧新增证明号）或"同种"（于是静默拒收）
 #: —— 前者是同一种证法被并列记录，后者是一份真的另一种证法被拒，两种都错。
 PROOF_KIND_UNJUDGED = "proof_kind_unjudged"
-#: 概念同一性"没判成"的受控码（同上）。
-#:
-#: 概念这一档是确定性判据（`same_concept`，零模型调用），但"两侧都抽不出定义项"仍是
-#: 判不了：折成 different 就会照旧新建第二行（同一个概念两行，正是这一档要治的形态），
-#: 所以调用方受控拒，不是"照常新建"。
-CONCEPT_IDENTITY_UNJUDGED = "concept_identity_unjudged"
 #: 参与"同一命题"判定的 kind（命题性的那几档）。
 #:
 #: 为什么需要这一格：`Statement.kind` 刻意是自由文本（`schema.Statement` 的类 docstring
@@ -1793,13 +1550,6 @@ def _signed_exhaustion_terminal(*, root: Any, row: Mapping[str, Any],
     return out
 
 
-#: `same_as` 归一化时要剥掉的外壳字符：模型把候选号写成了 Python/JSON 列表字面量
-#: （`"['000003']"`）或加了引号 / 空白（`'"000003"'` / `" 000003 "`）。
-#:
-#: 为什么集中成一个常量：真机 82 的 52 处坏值只出现三种外形（见
-#: `temp/probe_82_errors/same_as_hits.txt`），而"外壳有哪些字符"是这件事的唯一判据；
-#: 散在分支里写两遍，下一次多一种外形就会有半处漏掉。
-SAME_AS_WRAPPER_CHARS = "[]'\"` \t\r\n"
 
 
 def normalize_same_as(value: Any) -> tuple[str, int]:
@@ -1928,13 +1678,6 @@ STATEMENT_LAND_OPS: dict[str, tuple[str, ...]] = {
     "numeric_evidence": ("bits",),
 }
 
-#: 同一性按"定义项相同"判的那几档 kind（概念行没有条件 → 结论，命题那一套判据对它失效）。
-#:
-#: 为什么只有 `concept` 一档、不顺手带上 `definition`：这一档的判据是"标签（或正文里
-#: 被定义的那个术语）规范化后相同"，而 `definition` 行在真机台账里常常把标签留着空
-#: （命题本体写在 `statement_full` 里），拿它当键会把一堆不相关的定义并到同一行 ——
-#: 并错一条的代价比漏并大（与 `PROPOSITION_KINDS` 的取舍同一条理由）。
-CONCEPT_IDENTITY_KINDS: tuple[str, ...] = ("concept",)
 
 
 def _is_concept_kind(kind: Any) -> bool:
@@ -1942,42 +1685,8 @@ def _is_concept_kind(kind: Any) -> bool:
     return str(kind or "").strip().lower() in CONCEPT_IDENTITY_KINDS
 
 
-#: 洗名洗掉的那两类（`label_washed["class"]` 的取值）—— 读的人要能分辨"哪一类触发了"。
-LABEL_WASH_ROUTE = "路线/自证草稿/待审签"
-LABEL_WASH_WORKING = "内部工作名"
 
-#: 从正文里抽标签时最多留多少字（超出就截断：名字是用来念的，不是第二份正文）。
-LABEL_FROM_STATEMENT_CHARS = 60
 
-#: 内部工作名词表：`(这一类的名字, 正则)`。命中的那一段从标签里删掉，并在
-#: `label_washed["class"]` 里点名这一类的名字。
-#:
-#: 真机读数（`projects/mp3-r2/data/statements.json` 的 000000 / 000001）：两行的 label
-#: 逐字都是「F 攻坚 000000 子目标 S2」—— 派活台账里的内部工作名成了定理名，于是
-#: 同一条定理的两份证明看起来是两条不同的定理。改前的洗名只洗"路线 / 自证草稿 /
-#: 要 V 审签"那一类（见 `_judge_system("proposition_identity")` 里 canonical_name 那
-#: 一句），工作名不在那一类里，原样落了盘。
-#:
-#: 为什么是一张可清空的表而不是几条 if：判据要能被反真空验证（把这张表清空 ⇒
-#: 真机那两个 label 必须原样保留），而 if 链清不空，那条反真空用例就会打空炮。
-LABEL_WORKING_NAME_RULES: tuple[tuple[str, str], ...] = (
-    # 「<角色> 攻坚 <编号>」：角色是一两个字母（F / B2），编号可能省略。
-    # 末尾那个否定前瞻是"词尾"判据：`攻坚计划` 里的"攻坚"不是工作名（后面还接着汉字）。
-    ("攻坚子目标", r"[A-Za-zＡ-Ｚａ-ｚ]{1,2}\s*攻坚\s*[0-9０-９]*"
-                  r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
-    # 「子目标 S<n>」（编号可能省略）
-    ("子目标编号", r"子目标\s*[SＳs]?\s*[0-9０-９]*"
-                  r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
-    # 「第 n 步」/「第 n 轮」：派活台账里的步号
-    ("第几步", r"第\s*[0-9０-９一二三四五六七八九十百]+\s*(?:步|轮)"
-              r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
-    # 「待推进」这一档状态词（贴在首尾时算修饰；整条都是它 ⇒ 那不是名字）
-    ("待推进", r"(?:待推进|待办|待下一步)\s*[:：,，·—\-]?"
-              r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
-    # 「草稿」这一档（「自证草稿」「待 V 审签」是它的两种写法）
-    ("草稿/待审签", r"(?:自证草稿|草稿|待\s*V\s*审签|待审签)\s*[:：,，·—\-]?"
-                  r"(?![\u3400-\u4dbf\u4e00-\u9fffA-Za-z0-9])"),
-)
 
 
 def _tidy_label(text: Any) -> str:
@@ -2613,20 +2322,11 @@ def _resolve_dep_steps(groups: Iterable[Iterable[Mapping[str, Any]]],
 # `public_is_not_a_conversation`）；名册与公告那两条判据本体由调用方注入
 # （与 `admission=message_admission` 同一种做法，本文件不抄第二份）。
 
-#: 「这一条在讲派活」的机械线索词（受控词表，只有一个取值）。
-DISPATCH_VERB = "派活"
 
 #: 「点名之后跟一句说明」的括号写法（派活清单在正文里就是这种形态）。
 _TARGET_OPENERS: dict[str, str] = {"（": "）", "(": ")", "【": "】", "[": "]", "〔": "〕"}
 
-#: :func:`dispatch_targets` 认的两条线索名（进读数：判据要能回答"凭什么说它是派活对象"）。
-CLUE_VERB = "紧跟派活动词"
-CLUE_NOTE = "名字后跟一句括注"
 
-#: 内容与收件面不符时那一行台账的结论。沿用 `DECISIONS` 里既有的两档，不新造词：
-#: 一份稿子里装了多件派活 ⇒ 建议按收件人重排；公告里点名并下指令 ⇒ 建议改派成私聊。
-DECISION_REARRANGE = "建议重排"
-DECISION_READDRESS = "建议改派"
 
 
 def _dispatch_clue(body: str, token: str) -> tuple[int, str]:
@@ -15106,8 +14806,6 @@ def material_truncation(context: Mapping[str, Any]) -> dict[str, Any]:
 
 
 
-#: 这一闸的受控码（模型读得到的那一个）。
-PROPOSITION_FORM_REFUSED = "proposition_form_refused"
 
 
 
@@ -15173,310 +14871,18 @@ def proof_route_of(row: Mapping[str, Any], proof_no: Any = 1) -> str:
     return proof_routes_of(row).get(int(proof_no or 0) or 1, "")
 
 
-def _judge_system(kind: str) -> str:
-    """判断类的稳定头（进 `system` 那一位）：契约三句 + 这一类自己的问题。
-
-    契约三句：① 只回一个 JSON 对象；② `decision` 必须取自这一类自己那张词表（`JUDGE_VERDICTS[kind]`；
-    词表外的结论一律不采信，见 :meth:`Secretary.judge`）；③ `basis` 写"你凭什么"。为什么把词表写进提示词：
-    模型给的自由文本结论无法与台账的 `decision` 栏对齐，而"结论栏里出现第八种写法"正是同一件事两个名字的老毛病。
-    ## 为什么它与 :func:`_judge_material` 是两段（2026-10-21 的缓存轴）：这一段只取决于 `kind` —— 同一个
-    类别，任何两趟、任何一份材料，它逐字节相同。材料必须留在 user 消息里，缓存照样能在"下一次调用"时命中
-    system 那一段；合成一份（改前的 `_judge_prompt`）时稳定头与材料挤在同一个 user 位里，而那个位每问一次都
-    变 ⇒ 前缀命中不了（真机：`hit=0/miss=175` 连发两趟）。分开放之后，稳定头第一次就把索引建起来，第二次起 `hit>0`。
-    ## 这一行必须按类别取词表（2026-10-14 真机读数）：加 `statement_aesthetic` 那一类时漏改成了按类别取
-    —— 仍把 `DECISIONS`（派活那一轴：「可派」/「建议重排」…）写进提示词，而 `judge()` 的校验已经换成按类别
-    取。后果在真机上一次就现形：B 的秘书被问"这条命题太平凡吗"，它照提示词答了 `建议不派`，然后被校验层当场
-    判"不在 statement_aesthetic 的词表里 ⇒ 不采信"。现在两处都从 :data:`JUDGE_VERDICTS` 取。
-    """
-    verdicts = JUDGE_VERDICTS.get(kind, DECISIONS)
-    head = (f"你是「秘书」的判断面（类别：{kind}）。只回一个 JSON 对象，字段："
-            f'decision（必须逐字取自 {list(verdicts)} —— 这是这一类的词表，'
-            "别的类别的词一律不采信）、reason（一句话）、basis（字符串数组，"
-            "写清你凭什么，例如 `specs/d.py` 的哪一条或 `tasks` 里的哪一行）")
-    if kind == "statement_aesthetic":
-        # ---- 2026-11-01 业主两刀：审美轴三格退场，判档那一问只剩 T0–T4；
-        # "判不了"也不是第四档 —— 材料不足 / 正文被截断的情况框架在发问之前就挡住了，
-        # 走到这里就必须给出一档。模型若给 null / 旧词 / 别的一律"没查成"，不落档位行。
-        #
-        # 为什么不再要第二个字段：2026-11-01 的 82 现场正是"两字段两轴"的形态 ——
-        # 模型把档位写进 reason、decision 写了旧词、nontriviality 给了 null，
-        # 读侧一个字段都认不到。一根轴一个字段，题面就不再有两套指令打架。
-        head += ('；另外，decision 就是这条命题的档位：逐字取自 '
-                 '"T0"/"T1"/"T2"/"T3"/"T4" 之一（材料不足的情况框架会先挡住，'
-                 '不会把这一问发给你）')
-    head += "。"
-    if kind == "duplicate_retry":
-        ask = ("问题：同一个 (role, action, input_key) 已经有下面这些终态行。这一次是"
-               "正当的重试，还是重复委托？判『可派』= 这次该照派；判『建议不派』= 别重复派。")
-    elif kind == "tool_name":
-        ask = ("问题：本体写的工具名不在注册表里。要映到下面哪一个候选吗？"
-               "判『建议重排』= 映到某一个（在 reason 里写清是哪一个）；"
-               "判『建议不派』= 一个都不映（这次不该调工具）。")
-    elif kind == "statement_aesthetic":
-        # 业主 2026-10-29：「全交给模型判，5 个等级的自然语言描述应该还在吧」。
-        # 改前这一支让模型"复述机器算好的分数"（nontriviality_basis 要写
-        # 「分数 7 = 体量 5164 字/2 + …」），档位实际由分数落格决定；现在把业主
-        # 那五句定义原样放进题面，判定归模型，`effort` 只作参考读数。
-        ask = (
-            "问题：本体（B）要把下面这条命题收进 `statements`（定理与证明收录表）。"
-            "请按下面这五档的自然语言定义判它落在哪一档（业主原话）：\n"
-            "- T0 基础定理或初步结论（平凡但真；含由数值实验直接穷举得出的那些）\n"
-            "- T1 有一定价值的非平凡结论\n"
-            "- T2 证明方法都是平凡的，但工作量较大\n"
-            "- T3 需要用较多的技巧或跨领域工具\n"
-            "- T4 需要天才般的洞察力，或思维链极长，或是偏离主流研究方向的神奇构造\n"
-            "判的是这份证明本身：思路、承重步骤、用到的工具、有没有真技巧。\n"
-            "材料里的 `effort`（体量/步骤/引理/工具簇/绕路与分数）只是机器数出来的"
-            "参考读数，不要拿它当判据：写得长不等于难，步数多也不等于难；"
-            "也不要只在 basis 里复述那几个数字。\n"
-            "decision 就是这条命题的档位：取 \"T0\"/\"T1\"/\"T2\"/\"T3\"/\"T4\" 之一；"
-            "必须给出一档（材料不全会先被框架挡住，不会走到这一问）。\n"
-            "reason 一句话；basis 写清你凭证明里的哪几步这么判（可以引用正文里的步骤，"
-            "但不要用分数当理由）。"
-        )
-    elif kind == "proposition_identity":
-        ask = (
-            "问题：下面这一条命题（条件 ⇒ 结论）与候选表里的每一条，是不是同一个定理？"
-            "候选表是秘书从命题台账里取出来的那几条 —— 它只决定给你看哪几条，"
-            "判定只看条件与结论。"
-            "业主定的准绳逐字是：「定理描述一致（什么条件推出什么结论），就是一个定理」。"
-            "所以判据只有一条 —— 条件组与结论组是否一致。三种情形逐条写清："
-            "① 同一组条件推出同一组结论 ⇒ 判 same，并在 same_as 里给出候选的 stmt_id"
-            "（只给一个号，且必须是候选表里的号）；"
-            "② 条件是包含关系（一条更强 / 一条更弱）⇒ 判 different，basis 里写明"
-            "『条件强弱不同』，不许因为『看起来是同一个主题』就判 same；"
-            "③ 结论相同、条件只是同一条件的另一种记号或等价改写（换变量名、换记号、"
-            "把『有限群』写成『阶有限的群』这一类）⇒ 仍判 same。"
-            "判词只有两档：same / different —— 没有第三档，也不许自己造一个像结论的词。"
-            "读不清（缺假设、只给了名字、正文被截断）时不要猜：把 decision 留成空串"
-            "（或写『没判成』），框架把它当「没判成」处理（不新建、不合并、受控拒）；"
-            "那不是你的判词。"
-            "不参与判定的东西：定理叫什么名字、证明走哪条路线、证明手法、表述风格 ——"
-            "这些都不是『条件 ⇒ 结论』的一部分。"
-            "另加四个字段（同一趟判断的输出，不另发调用）："
-            "canonical_name（把这一条的标签洗成干净的定理名：只留定理名，把"
-            "『（路线一：…）』『（自证草稿，待 V 审签）』『独立证明』这类修饰去掉；"
-            "两三条写法不同的同一命题要洗成同一个名字）、"
-            "route（被洗掉的那句路线/草稿状态，收敛成一句话，作为证明这一层的路线说明；"
-            "标签里本来没有路线就填空串）、"
-            "condition（一句话：这一条的条件是什么）、"
-            "conclusion（一句话：这一条的结论是什么）。"
-            "basis 里必须分别对条件与结论各给一句比对（例如『条件：都是有限群 + p 是素数，"
-            "一致；结论：都是 Sylow p-子群存在，一致』）—— 不许只给一个总分。")
-    elif kind == "proof_kind":
-        # 业主 2026-11-12 的场景逐字：「两个 F 分别独立交了关于某个命题的证明……后录入的
-        # 稿子 B 秘书识别到是同一命题，在对比证明方法后发现几乎一致，于是不收录；另一种
-        # 情况：对比证明方法后发现有很大差别（语义判别，千万别做任何机械闸，结论是二态的：
-        # 一致/不同），于是注册了该命题号下的第 2 路径」。
-        #
-        # 这一问只回答"证法是不是同一套"，不回答"命题是不是同一条"（那是
-        # `proposition_identity`），也不回答"证明对不对"（那是 V 的轴）。题面刻意不提
-        # 字数 / 相似度 / 关键词：机械读数不是判据（材料里的 `material_similarity` 只是
-        # 给人看的参考，模型不许拿它当理由）。
-        ask = (
-            "问题：同一条命题下，新交来的这一份证明（材料里的 `proof_text`）与在册各条"
-            "证明路径（材料里的 `proofs`，每项有 `path_group` 与 `text`）是不是同一套证法？"
-            "只判『证明方法』这一件事：核心思路、承重步骤、用到的工具是否同一路；"
-            "换措辞、换记号、换变量名、把同一步展开或压缩，都仍是同一套证法。"
-            "结论只有两档：same（与某一条在册路径是同一套证法）/ different（是一套"
-            "不同的证法，可以并列为另一条路径）——没有第三档，也不许自己造一个词。"
-            "判 same 时必须在 `same_path` 里给出它对应的是哪一条在册路径的 `path_group`"
-            "（整数，必须是材料里出现过的号）；判 different 时 `same_path` 给 0。"
-            "读不清（正文缺关键步骤、被截断、只是重复了命题）时不要猜：把 decision 留成"
-            "空串，框架把它当「没判成」处理（fail-closed，不收录），那不是你的判词。"
-            "不参与判定的东西：定理叫什么名字、证明写得多长、用了哪些字词、文风、"
-            "材料里机器算出的相似度读数 —— 那些都不是『证明方法』本身。"
-            "reason 一句话；basis 写清你凭哪几步这么判（引证明里的步骤，不要引相似度数字）。"
-        )
-    elif kind == "dispatch_fit":
-        # 业主 2026-11-13（本批 R1/R2 的裁定，逐字）：「plan由F自己决定，所以D不可能做出
-        # 按plan个数派F，于是D只能按研究方向开多个F而非把一堆方向委托给一个F」。
-        # 这一问只判方向个数这一件事：D 交给 F 的是"一件事"，还是"几件事捆在一起"。
-        # 题面住在 :data:`DISPATCH_FIT_QUESTION`（模块级常量）：它只取决于 kind、与材料
-        # 无关（缓存纪律同 `_judge_system` 的抬头），而且 `_judge_system` 是软基线
-        # `src_functions_gt200_lines` 盯着的那一类函数 —— 把二十来行题面塞回它的函数体
-        # 会把那一格 92 抬到 93（业主口径：这一格不许抬）。
-        ask = DISPATCH_FIT_QUESTION
-    elif kind == "v_reply_defect":
-        # 题面只给两档（「不可能有判不了。你告诉我啥叫判不了？只要不是完全没毛病都叫有毛病」），
-        # 并逐字写清"拿不准就按有缺陷处理"——没有中间档可退。
-        # why：`verifications.parse_verdict` 只能挡住结构不合格，它挡不住"整体很好，只是有
-        # 一个缺陷需要指出"——那种回复按字面读成「成立」时，它明明指出了一个缺陷。
-        # 轴只由这一问给；V 的 verdict 只是陈述，不得按字面定轴；
-        # 判 fault 还要给出 defect_step（V 没给时由这一问定出那一步）。
-        # 把「程序性」与「数学缺陷」分开记 —— 判 fault 时还要给 defect_kind；
-        # 「没记录反例尝试」不是判据（缺了写 report_gap）。
-        ask = (
-            "问题：下面这段是验证者（V）对一份证明的审阅回复。它到底有没有指出缺陷？"
-            "只有两档，没有中间档：\n"
-            "有缺陷要指出（只要不是完全没毛病，就判这一档）：\n"
-            "- 「整体很好，只是有一个缺陷需要指出……」；\n"
-            "- 「思路没问题，但是有一个记号问题需要强调……」；\n"
-            "- 「我找不到反例，但某对象似乎没有定义」；\n"
-            "- 「我觉得没问题但我没逐行验证」——没验证过就不是没问题（这一类是程序性："
-            "它没有做出判定）；\n"
-            "- 拿不准、说不清、只挑出一处小记号问题：一律判这一档。\n"
-            "没问题：它真的逐条走查过，并且没有指出这份证明的任何缺陷"
-            "（「我试了几种反例构造都失败、未发现问题」是好报告的样例；但有没有写反例"
-            "尝试的记录不是判据 —— 缺了就记进 report_gap，不要因此判有缺陷）。\n"
-            "它的依据落在不归 F 的那几样上（文献真伪/页码核对、实验数值复现、稿件排版"
-            "与术语统一）也不是没问题 —— 那说明它没审证明本身，按有缺陷处理（文风类）。\n"
-            "「判不了」不是一种结论：判不出来就说明它没有证明「没问题」，按有缺陷处理。"
-            "只判这段回复说了什么：不要替它补它没说过的检查，也不要因为语气自信就判没问题。\n"
-            "两个「判不了」别混：① 被审的 V 回复里写「判不了」—— 那是它的陈述，按上面"
-            "这一条判「有缺陷要指出」；② 你自己（秘书）不能拿「判不了」当结论 —— 你只从"
-            "「没问题」/「有缺陷要指出」两档里选一档，选不出来时按「有缺陷要指出」收。\n"
-            "decision 取「没问题」/「有缺陷要指出」之一；reason 一句话；"
-            "basis 里引回复原文的片段（逐字，不要改写）。\n"
-            "另加三格（与 decision 同一趟给，不另发调用）：\n"
-            "① defect_kind：decision=「有缺陷要指出」时必给，逐字取自 "
-            '["math", "procedural", "style", "contract"] 之一：\n'
-            "  · math = 证明链本身的错或洞（指到某一步、缺依据、常数矛盾、结论没覆盖）；\n"
-            "  · procedural = V 自己说「我没逐行验证 / 我判不了」——它没有做出判定；\n"
-            "  · style = 依据落在排版 / 术语 / 文风 / 价值判断（不归 V 判的面）；\n"
-            "  · contract = 稿的形态或契约不合格（缺节、正文 sha 不符、引用不可核）。\n"
-            "  decision=「没问题」⇒ defect_kind 给空串。\n"
-            "② defect_step（只在 decision=「有缺陷要指出」时要，整数或 null）："
-            "这段回复指到的是证明里的第几步；回复里点了步号就用它，没点就按它描述的缺陷"
-            "落在哪一步给出最早的那一步；实在定位不到才给 null，并在 defect_step_basis 里"
-            "写清为什么。decision=「没问题」⇒ defect_step=null。\n"
-            "③ report_gap（decision=「没问题」时的一格报告质量读数，可空）：只记"
-            "「V 的报告缺了什么记录」（例：没写反例尝试的位置、没写逐关核对），"
-            "它不影响判定、不挡签。"
-        )
-    else:
-        ask = ("问题：这条委托照声明看不合规（或与收件方的角色定位不匹配）。"
-               "该重排成什么？判『建议重排』并在 reason 里给出重排后的说法；"
-               "判『建议改派』= 换一个收件方更合适；判『建议不派』= 别派这条。")
-    return f"{head}\n\n{ask}\n\n"
 
 
-def _wash_v_system() -> str:
-    """洗稿那一趟的稳定头（进 `system` 位）：纪律 + 输出形状。
-
-    与 :func:`_judge_system` 同一条缓存纪律：这一段只取决于"这是洗稿"，不取决于材料
-    （任何两趟、任何一份回复，它逐字节相同），所以它能进前缀；材料留在 user 位。
-    为什么它不说"你是 V 的秘书"以外的事：洗稿的判据只有三条（逐字引、不添意思、
-    不评价价值），多写只会让模型在这些轴上自由发挥。
-    """
-    return (
-        "你是「秘书」的洗稿面：把验证者（V）的审阅回复改写成转达给作者的工作意见。"
-        "纪律三条：① 只写原文里有的意思，不许添；② findings 里每一条 `quote` 必须与原文"
-        "逐字相同（只允许空白差异）—— 改了字就不采信；③ 不评价作者思路好不好、不写"
-        "「这篇论文有没有价值」这类价值判断（那不是 V 的判据面）。"
-        "只回一个 JSON 对象，字段：text（改写后的正文）、findings（对象数组：quote + why）、"
-        "step（整数或 null）。\n\n"
-    )
 
 
-def _proposition_form_system() -> str:
-    """命题形态闸的稳定头（进 `system` 位）：只问一件事 + 输出形状。
-
-    业主 2026-11-07 逐字：「命题登记时需过 F 秘书闸，审查命题描述是否规范，是否明确了
-    从什么条件导出什么结论」。
-
-    与 :func:`_judge_system` / :func:`_wash_v_system` 同一条缓存纪律：这一段只取决于
-    "这是命题形态闸"，逐字节稳定（材料留在 user 位）。为什么把"不判什么"也写进
-    稳定头：本仓反复踩过"两根轴混进同一格"（非平凡性 vs 正确性），把边界写在
-    提示词里比写在注释里更能拦住下一次改动。
-    """
-    return (
-        "你是「命题形态闸」：只回答一件事 —— 这段描述有没有明确「从什么条件导出什么结论」。"
-        "**不判它对不对**（那是验证者的轴），**不判它是否平凡/是否已知**（那是另一根轴），"
-        "也不评价它的价值。"
-        "判据四条：① 前提（条件 / 假设 / 量词范围）在描述里写得出来；"
-        "② 结论是一个**可判真假的断言**；"
-        "③ 二者由「若…则…」「设…则…」一类结构连起来，而不是一段流程要求；"
-        "④ 描述里没有混进作业/验收规格（「本轮产物必须是 proof」「判据是 "
-        "manuscript_published=true」「原样提交 reports/xxx.md」这类不是数学断言）。"
-        "只回一个 JSON 对象，字段：well_formed（布尔，只有两态，不许给 "
-        "true/false 以外的值）、conditions（你读出的前提，字符串）、"
-        "conclusion（你读出的结论，字符串）、problems（字符串数组：不合格时逐条说缺什么，"
-        "例如「没有写清前提」「结论不是可判真假的断言」「这是流程要求，不是命题」，"
-        "合格时给空数组）、decision（一句话判词）。\n\n"
-    )
 
 
-def _statement_keywords_system() -> str:
-    """命题台账检索的挑词稳定头（进 `system` 位）。
-
-    业主 2026-11-08 逐字：「B秘书要学会在命题台账里按关键词搜索」。
-    与 :func:`_proposition_form_system` 同一条缓存纪律：这一段只取决于"这是挑检索词"，
-    逐字节稳定；待收命题留在 user 位。
-
-    为什么不设词数上限：词数是判定的一部分 —— 挑几个、挑哪些，由模型按"能不能把
-    同义的那条捞出来"自己定。代码里写"最多 N 个"会把一个判定问题降成机械配额。
-    """
-    return (
-        "你是「命题台账检索」：给一条待收命题挑能在台账里捞到同义命题的关键词。"
-        "只挑数学内容：对象（群、图、矩阵、函数…）、结构（有限、交换、连通…）、"
-        "关键量（阶、秩、维数、误差…）、结论形态（同构、收敛、成立、整除…）。"
-        "不要挑「设」「则」「若」「对所有」这类虚词，也不要挑标点。"
-        "同义的那条可能换了写法：条件写得更全或更简、结论同一 —— 请挑两边都会出现的"
-        "数学词，别挑只在这一条里出现的措辞。"
-        "词数由你自己定（以能把同义的那条捞出来为度）。"
-        "只回一个 JSON 对象，字段：keywords（字符串数组）、"
-        "why（一句话：这几个词为什么能把同义的那条捞出来）。\n\n"
-    )
 
 
-def _abandon_difficulty_system() -> str:
-    """放弃闸 difficulty 档的稳定头（进 `system` 位）：只问两件事 + 输出形状。
-
-    业主 2026-11-07 逐字：「对于2，需指出困难，并将原先证明中可取之处拆出落成引理」。
-
-    与 `_proposition_form_system` 同一条缓存纪律：只取决于"这是难度判定"，
-    逐字节稳定；材料（命题 / 旧证明 / difficulty / salvaged 各行）留在 user 位。
-    """
-    return (
-        "你是「放弃命题的难度判定」：只回答两件事 —— "
-        "① `difficulty` 这一段是不是在说**真实的数学困难**、难在哪（卡在哪条引理 / 哪一步 / "
-        "哪条假设），而不是「做不动了」「太难了」「时间不够」这类没有内容的话；"
-        "② `salvaged` 里那几条引理是不是**从这条命题的原证明里拆出来的可取之处**，"
-        "而不是随便一条在册引理、更不是这条命题自己。"
-        "**不判**这条命题对不对、也**不判**该不该放弃。"
-        "只回一个 JSON 对象，字段：genuine（**布尔**，只有两态：这一段是不是真困难）、"
-        "where（你读出的难在哪；genuine=true 时不许为空）、"
-        "salvaged_from_proof（**布尔**：那几条引理是不是从原证明里拆出来的）、"
-        "problems（字符串数组：genuine=false 或 salvaged_from_proof=false 时逐条说为什么，"
-        "两样都为真时给空数组）、decision（一句话判词）。\n\n"
-    )
 
 
-def _judge_material(context: Mapping[str, Any]) -> str:
-    """判断类的可变部分（留在 user 消息里）：这一趟的材料。
-
-    它每问一次都变（命题正文 / 候选表 / 重复行），所以不许进 system ——
-    上游前缀缓存要求前缀逐字节相同，把材料写进前缀等于每一问都换一段前缀。
-    与 :func:`_judge_system` 合起来逐字节等于改前那条整提示词（判据钉着这一点：
-    `tests/test_secretary_system_carries_the_head.py`）。
-
-    ## 2026-10-24：这一格不再静默截断
-    改前是 `json.dumps(...)[:4000]`：一条 8375 字的正文在 4000 字处被切断，而材料里
-    没有一个字说"被切了"。模型的反应是"证明截断，无法定档"，台账落成 None + basis
-    "材料不足" —— 那是把"我们没给它看全"记成了"它给的材料不够"。
-    现在两条：上限抬到 :data:`JUDGE_MATERIAL_CAP`；真的超了就在材料尾部写下截断点与
-    那两句话（"输入不完整"不是"材料不足"），并由 :func:`material_truncation` 把同一个
-    截断点交给结果与台账。两处必须同时成立：只写一句提示而不抬高上限，等于把
-    "看不全"写成一句免责声明。
-    """
-    body = json.dumps(dict(context), ensure_ascii=False, sort_keys=True, default=str)
-    total = len(body)
-    if total > JUDGE_MATERIAL_CAP:
-        note = (f"\n…【材料在 {JUDGE_MATERIAL_CAP} 字处被截断：这一条正文共 {total} 字，"
-                f"只给了前 {JUDGE_MATERIAL_CAP} 字。这是输入不完整，不是材料不足】\n")
-        return f"材料：\n{body[:JUDGE_MATERIAL_CAP]}{note}"
-    return f"材料：\n{body}\n"
 
 
-def _judge_prompt(kind: str, context: Mapping[str, Any]) -> str:
-    """判断类的整条提示词（稳定头 + 材料，逐字节等于改前那一版）。
-
-    保留它是为了"把两条消息念成一条"的读者（判据、审计、以及 `_judge_prompt` 的
-    既有调用点）：`Secretary.judge` 自己发的是两条（system + user），
-    见 :func:`_judge_system` / :func:`_judge_material`。
-    """
-    return _judge_system(kind) + _judge_material(context)
 
 
 def for_role(role: str, *, root: str | Path, **kw: Any) -> Secretary:

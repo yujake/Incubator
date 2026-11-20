@@ -16,6 +16,40 @@
 2. `ONE_IMPLEMENTATION`：点名的那几个概念，真实现必须恰好一处
    （转发不算实现）。
 3. git 顶层不许有未跟踪目录。
+4. `tests/fixtures/public_dead_baseline.json`：`src/agentflow` 里"生产侧零读者"的公开
+   模块级名字（函数 / 类 / 常量），必须逐条落在基线或白名单里；实测集合与两者之并逐条相等。
+
+## 第 5 条为什么必须存在（一条已经漏过的缝）
+
+第 1 条刻意只量私有函数。公开名于是长期没有判据：`identity.conflict_line`、
+`rowscope.OWNER_FIELDS`、`interactions.ADJUDICATION_POLICY_CODES`、
+`store.direct_write_backstop`、`schema.CONJECTURE_QUESTION_WORDS` 这五个公开名
+零调用地活到了 2026-11-20，才由人逐条删掉 —— 全程没有任何判据变红。
+第 5 条堵的就是这条缝：公开名同样要有一个生产侧读者，或者逐条登记它为什么还在。
+
+## 第 5 条的口径（"什么算引用"写死在这里）
+
+一个公开名"有读者"只有一类：生产代码里真的读了它。生产侧 =
+`src/` + `scripts/` + `tools/`。其余的提及各自成类，逐条可查，但都不单独构成"活"：
+
+- `import`：只在 import 行里被 re-export。转发不是读者；下游真用到时那次使用
+  会落在 `production` 类里，于是"re-export 且下游有用"自然算活。
+- `all_export`：名字被某个 `__all__` 列出。它算一种"公开声明"，但不许拿它掩盖
+  死代码：只有 `all_export` 而没有生产读者的名字仍然进基线（或进白名单并写清理由）。
+- `dynamic`：名字作为字符串被 `getattr` / `setattr` / `hasattr` / `delattr` 或
+  `globals()[...]` / `locals()[...]` / `vars(...)[...]` 取。静态看不见那条边，
+  所以它进白名单并写清取它的位置；它不自动算活。
+- `prose`：只在生产侧的注释或 docstring 里被提到。叙述不是读者。
+- `tests`：只在 `tests/` 的代码里被读。这正是要抓的缝 —— 它不算读者；
+  要留就进白名单并写理由。
+- `docs`：只在 `*.md` 里被提到。文档不是读者。
+
+判据把"有生产读者"记成 `production` 一类；一个名字 `production` 计数为 0 时，
+本判据把它判成待处理，并逐条列出其余哪几类引用存在（报告里那张表就是这个读数）。
+白名单只收"确认要留"的名字：每条必须写清它凭哪一类引用留下，且那一类必须实测存在
+（塞一个真死的名字进白名单会报"白名单里的名字其实是死的"）。
+基线只收"还没处理"的名字：它是棘轮，不是赦免 —— 新出现的死名字会红，
+处理掉一个而没从基线删掉那一行也会红。
 
 ## 口径（写死在这里，否则下一个人无法判断这条判据量的是什么）
 
@@ -42,14 +76,29 @@
   已知盲区）。方向上只会多报、不会漏报；多报的逐条登记进台账并写清差哪一根线。
 - 第 2 条只守那几个「点过名」的概念，不是"全仓零重复"。全仓同名多实现由
   `scripts/lint_rules.py` 的 R003 报（清洁那一轮 20 条 → 17 条，逐条判定见报告）。
+
+第 5 条另有它自己的盲区，写在这里免得被读成比它实际更强：
+
+- 名字级读数：同名多定义时，一份定义被活的那一份遮住（漏报方向）；与第 1 条同口径。
+- "动态取"只认 `getattr` 一族的字符串参数与 `globals()` 一族的字符串下标。
+  走注册表字符串（`{"handler": "foo"}`）分发的名字看不见，会落进 `production`
+  （字符串里的词也算代码），于是漏报而不是误报。
+- import 行被从代码里抹掉后再计数：只被 re-export、没有下游读者的名字会报；
+  但"下游用到的"是靠下游那次提及认出来的，认不出的是别名链，方向仍是漏报。
+- 基线是一份快照，不是规格：别的路改了 `src/` 之后它可能过期，重跑本判据并
+  按失败信息增删那一行即可（判据自己会点名哪一条过期）。
 """
 
 from __future__ import annotations
 
 import ast
+import functools
+import io
+import json
 import pathlib
 import re
 import subprocess
+import tokenize
 from collections import Counter
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -380,6 +429,579 @@ def test_the_diagnostic_face_check_is_two_way() -> None:
     assert "probe.py::vanished" in got, got                  # 定义不见了
     assert any("生产侧现在有读者" in x for x in got.get("probe.py::supply", [])), got
     assert any("靶子没了" in x for x in got.get("probe.py::gone_target", [])), got
+
+
+# ============================================================ 第 5 条：公开死名字
+
+#: 引用类别的唯一词表。`PRODUCTION` 是唯一让名字"活"的那一类；
+#: 其余六类各自可查、可写进白名单，但都不单独构成"有读者"。
+REF_PRODUCTION = "production"
+REF_IMPORT = "import"
+REF_ALL_EXPORT = "all_export"
+REF_DYNAMIC = "dynamic"
+REF_PROSE = "prose"
+REF_TESTS = "tests"
+REF_DOCS = "docs"
+REF_CATEGORIES = (REF_PRODUCTION, REF_IMPORT, REF_ALL_EXPORT, REF_DYNAMIC,
+                  REF_PROSE, REF_TESTS, REF_DOCS)
+
+#: 按名字取值的调用。第二个位置参数是字符串常量时，那个字符串算 `dynamic` 类。
+_DYNAMIC_CALLS = frozenset({"getattr", "setattr", "hasattr", "delattr"})
+#: `globals()["x"]` / `locals()["x"]` / `vars(obj)["x"]` 这一族的字符串下标。
+_DYNAMIC_SUBSCRIPTS = frozenset({"globals", "locals", "vars"})
+
+#: 第 5 条的白名单：名字 -> (凭哪几类引用留下, 为什么）。
+#:
+#: 白名单只收"确认要留"的名字，不收"还没轮到处理"的名字（后者进基线）。
+#: 每一条的两个字段都判据会核：理由空着会红；声称的引用类别实测不存在会红；
+#: 一个引用都没有的名字放进白名单，会报"白名单里的名字其实是死的"。
+PUBLIC_REFERENCE_WHITELIST: dict[str, tuple[frozenset[str], str]] = {
+    "FakeClock": (
+        frozenset({REF_ALL_EXPORT, REF_TESTS}),
+        "测试用的假时钟（时钟注入点 `use` 的另一半）：生产侧从不实例化它，"
+        "`tests/` 里 30+ 处用它把墙钟与单调钟钉死。`__all__` 是它的公开声明，"
+        "不是掩盖：删了它，那批判据只能各自造一个私有假钟。"),
+    "reset_books": (
+        frozenset({REF_ALL_EXPORT, REF_TESTS}),
+        "测试隔离面：清时钟账本。生产侧零读者，18 份测试用它保证用例之间不串账；"
+        "`__all__` 导出是给测试面用的公开声明。"),
+    "reset_observed_events": (
+        frozenset({REF_ALL_EXPORT, REF_TESTS}),
+        "测试隔离面：清观测定时器。生产侧零读者，22 份测试用它重置挂机读数；"
+        "与 `reset_books` 同族，`__all__` 导出。"),
+    "reset_waits": (
+        frozenset({REF_ALL_EXPORT, REF_TESTS}),
+        "测试隔离面：清等待账本。生产侧零读者，19 份测试用它重置等待态；"
+        "与 `reset_books` 同族，`__all__` 导出。"),
+    "run_gate": (
+        frozenset({REF_ALL_EXPORT, REF_TESTS}),
+        "逐门入口：生产主路径走 `run_all_gates`，不直接调它；52 处测试逐门拿读数。"
+        "它是 gate 判据的靶子（`__all__` 导出是公开声明），删了那批测试就只剩复刻。"),
+    # 2026-11-20（LEGACY A5）：`universal_tool_violations` 已接进 `build_registry`
+    # 的装配期（违规即报），`stop_closure` 已接进 `dispatch_stop_reading` 与
+    # `agentflow stop --status` —— 两者都有了生产读者，白名单里那两行按判据的
+    # 失败信息删掉了（白名单只收"生产侧零读者、确认要留"的名字）。
+    "PINNED_MATHLIB_TAG": (
+        frozenset({REF_DYNAMIC}),
+        "被 `toolchain.py` 的 `getattr(FG, \"PINNED_MATHLIB_TAG\", \"\")` 按名字取："
+        "动态边，静态看不见；`__all__` 导出是它的公开声明。"),
+    "NO_LEAN_REPLACEMENTS": (
+        frozenset({REF_DYNAMIC}),
+        "B / E / G 三份「关掉 Lean 之后怎么改写」表，被 `agent_prompts._no_lean_tables` "
+        "按名字 `getattr` 逐份取（specs/b.py、specs/e.py、specs/g.py 各一份）；"
+        "动态边，静态看不见。"),
+    "NO_LEAN_DROP_LINE_MARKERS": (
+        frozenset({REF_DYNAMIC}),
+        "E 的「关掉 Lean 之后哪些行要摘掉」表，被 `agent_prompts._no_lean_tables` "
+        "按名字 `getattr` 取；动态边，静态看不见。"),
+    "NO_LEAN_DROP_BLOCKS": (
+        frozenset({REF_DYNAMIC}),
+        "E 的「关掉 Lean 之后哪几段要摘掉」表，被 `agent_prompts._no_lean_tables` "
+        "按名字 `getattr` 取；动态边，静态看不见。"),
+}
+
+
+def _char_col(lines: list[str], lineno: int, byte_col: int) -> int:
+    """`ast` 的字节列 -> 字符列（源码里有中文时两者不等，混用会抹错区间）。"""
+    if not 1 <= lineno <= len(lines):
+        return byte_col
+    return len(lines[lineno - 1].encode("utf-8")[:byte_col].decode("utf-8", "ignore"))
+
+
+def mask_python(text: str) -> tuple[str, set[str], set[str], set[str], str]:
+    """把一份源码拆成 (代码文本, import 名, `__all__` 名, 动态取名, 注释与 docstring 文本)。
+
+    注释、docstring、import 行、`__all__` 里的字符串、`getattr` 一族的字符串
+    都从代码文本里抹掉 —— 判据要数的"生产读者"只认代码里的真实读取。
+    抹掉的东西各自记成自己的类别，于是失败信息能说清"哪一类引用是 0"。
+    """
+    text = text.replace("\r\n", "\n")
+    lines = text.splitlines()
+    grid = [list(line) for line in lines]
+    imported: set[str] = set()
+    all_names: set[str] = set()
+    dynamic: set[str] = set()
+    prose: list[str] = []
+
+    def blank(lineno: int, start: int, end_lineno: int, end: int) -> None:
+        for ln in range(lineno, end_lineno + 1):
+            if not 1 <= ln <= len(grid):
+                continue
+            a = start if ln == lineno else 0
+            b = end if ln == end_lineno else len(grid[ln - 1])
+            for i in range(a, min(b, len(grid[ln - 1]))):
+                grid[ln - 1][i] = " "
+
+    def at(node: ast.AST) -> tuple[int, int, int, int]:
+        return (node.lineno, _char_col(lines, node.lineno, node.col_offset),
+                node.end_lineno, _char_col(lines, node.end_lineno, node.end_col_offset))
+
+    def slice_of(node: ast.AST) -> str:
+        a, b, c, d = at(node)
+        if a == c:
+            return lines[a - 1][b:d]
+        return "\n".join([lines[a - 1][b:]] + lines[a:c - 1] + [lines[c - 1][:d]])
+
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return text, imported, all_names, dynamic, ""
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name != "*":
+                    imported.add(alias.asname or alias.name.split(".")[0])
+            blank(*at(node))
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(t, ast.Name) and t.id == "__all__" for t in targets):
+                value = node.value
+                if isinstance(value, (ast.List, ast.Tuple)):
+                    for element in value.elts:
+                        if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                            all_names.add(element.value)
+                            blank(*at(element))
+        elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name) \
+                and node.func.id in _DYNAMIC_CALLS:
+            if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant) \
+                    and isinstance(node.args[1].value, str):
+                dynamic.add(node.args[1].value)
+                blank(*at(node.args[1]))
+        elif isinstance(node, ast.Subscript) and isinstance(node.value, ast.Call) \
+                and isinstance(node.value.func, ast.Name) \
+                and node.value.func.id in _DYNAMIC_SUBSCRIPTS:
+            if isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, str):
+                dynamic.add(node.slice.value)
+                blank(*at(node.slice))
+
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        body = getattr(node, "body", None)
+        if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant) \
+                and isinstance(body[0].value.value, str):
+            prose.append(slice_of(body[0].value))
+            blank(*at(body[0].value))
+
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(text).readline):
+            if token.type == tokenize.COMMENT:
+                prose.append(token.string)
+                blank(token.start[0], token.start[1], token.end[0], token.end[1])
+    except tokenize.TokenError:
+        pass
+
+    return "\n".join("".join(row) for row in grid), imported, all_names, dynamic, "\n".join(prose)
+
+
+def public_definitions(root: pathlib.Path) -> list[dict]:
+    """一棵树里"模块级公开名"的定义点：函数 / 类 / 常量（跳过下划线名与嵌套定义）。"""
+    out: list[dict] = []
+    for path in _py_files(root):
+        rel = path.relative_to(root).as_posix()
+        try:
+            tree = _parse(path)
+        except SyntaxError:
+            continue
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                name, kind = node.name, type(node).__name__
+            elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+                name, kind = "", "Assign"
+                for target in (node.targets if isinstance(node, ast.Assign) else [node.target]):
+                    if isinstance(target, ast.Name):
+                        name = target.id
+            else:
+                continue
+            if name and not name.startswith("_"):
+                out.append({"rel": rel, "name": name, "kind": kind, "line": node.lineno})
+    return out
+
+
+def _scan_python_corpus(roots: list[pathlib.Path]) -> dict[str, object]:
+    """生产侧所有源码按类别收一次：代码词 / import / `__all__` / 动态 / 散文。"""
+    words: Counter[str] = Counter()
+    prose: Counter[str] = Counter()
+    imported: set[str] = set()
+    all_names: set[str] = set()
+    dynamic: set[str] = set()
+    for root in roots:
+        for path in _py_files(root):
+            try:
+                code, imp, alls, dyn, text = mask_python(
+                    path.read_text(encoding="utf-8", errors="replace"))
+            except (OSError, SyntaxError):
+                continue
+            words.update(_WORD.findall(code))
+            prose.update(_WORD.findall(text))
+            imported |= imp
+            all_names |= alls
+            dynamic |= dyn
+    return {"words": words, "prose": prose, "imported": imported,
+            "all_names": all_names, "dynamic": dynamic}
+
+
+def _scan_words(roots: list[pathlib.Path]) -> Counter[str]:
+    """只数词（不抹注释）：给测试侧与文档侧用。
+
+    测试侧的注释/docstring 里出现的名字最多让它落进 `tests` 类，而 `tests` 类
+    本身不构成"活"；所以这里不需要 tokenize，省下的时间用来把源码侧抹干净。
+    """
+    words: Counter[str] = Counter()
+    for root in roots:
+        for path in _py_files(root):
+            words.update(_WORD.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return words
+
+
+def _scan_md_corpus(paths: list[pathlib.Path]) -> Counter[str]:
+    words: Counter[str] = Counter()
+    for path in paths:
+        words.update(_WORD.findall(path.read_text(encoding="utf-8", errors="replace")))
+    return words
+
+
+def public_doc_files() -> list[pathlib.Path]:
+    """第 5 条读的文档面：`docs/` 全部 + 项目根的全部 `.md`（含 DESIGN-*.md）。"""
+    out = [p for p in sorted((REPO / "docs").rglob("*.md"))] if (REPO / "docs").is_dir() else []
+    out += [p for p in sorted(REPO.glob("*.md"))]
+    return out
+
+
+def classify_public(defs: list[dict], prod: dict[str, object],
+                    test_words: Counter[str], docs: Counter[str]) -> dict[str, dict]:
+    """逐条公开名算七个引用类别的读数（键 = `rel::name`）。"""
+    defined: Counter[str] = Counter(d["name"] for d in defs)
+    prod_words = prod["words"]
+    prod_prose = prod["prose"]
+    out: dict[str, dict] = {}
+    for d in defs:
+        name = d["name"]
+        # 定义行自己也有一处名字：按同名定义数扣掉，剩下的才是"别人读它"。
+        production = int(prod_words.get(name, 0)) - defined[name]
+        out[f"{d['rel']}::{name}"] = {
+            REF_PRODUCTION: max(0, production),
+            REF_IMPORT: name in prod["imported"],
+            REF_ALL_EXPORT: name in prod["all_names"],
+            REF_DYNAMIC: name in prod["dynamic"],
+            REF_PROSE: int(prod_prose.get(name, 0)),
+            REF_TESTS: int(test_words.get(name, 0)),
+            REF_DOCS: int(docs.get(name, 0)),
+        }
+    return out
+
+
+def is_public_dead(refs: dict, *, count_tests: bool = False,
+                   count_docs: bool = False) -> bool:
+    """没有生产读者就是死名。两个开关只给反真空用：打开即"把那一类当读者"。"""
+    if int(refs[REF_PRODUCTION]) > 0:
+        return False
+    if count_tests and int(refs[REF_TESTS]) > 0:
+        return False
+    if count_docs and int(refs[REF_DOCS]) > 0:
+        return False
+    return True
+
+
+def measured_dead_public(defs: list[dict], refs: dict[str, dict], *,
+                         count_tests: bool = False,
+                         count_docs: bool = False) -> set[str]:
+    """实测的"生产侧零读者"公开名集合（键 = 名字）。
+
+    按名字收而不是按 `rel::name` 收：这一条的读数是名字级的（见文件头的盲区），
+    文件只是证据。并行开发下模块搬家（`clock.py` -> `clockrun.py` 那一类）很常见，
+    按文件收会把一次搬家记成"删一个 + 加一个"，于是棘轮每次搬家都要重冻。
+    """
+    return {d["name"] for d in defs
+            if is_public_dead(refs[f"{d['rel']}::{d['name']}"],
+                              count_tests=count_tests, count_docs=count_docs)}
+
+
+def references_by_name(defs: list[dict], refs: dict[str, dict]) -> dict[str, dict]:
+    """同名多定义合并成一条名字级读数（同名定义共享同一份名字级计数）。"""
+    out: dict[str, dict] = {}
+    for d in defs:
+        out.setdefault(d["name"], refs[f"{d['rel']}::{d['name']}"])
+    return out
+
+
+def public_whitelist_problems(refs_by_name: dict[str, dict],
+                              whitelist: dict[str, tuple[frozenset[str], str]]
+                              ) -> dict[str, list[str]]:
+    """白名单逐条核：名字还在、理由非空、声称的引用类别实测存在。
+
+    没有这一条，白名单会退化成"把死名字塞进去就绿"。
+    """
+    out: dict[str, list[str]] = {}
+    for name, (claimed, reason) in whitelist.items():
+        refs_one = refs_by_name.get(name)
+        if refs_one is None:
+            out[name] = ["定义不见了 ⇒ 登记过期，删掉这一行"]
+            continue
+        issues: list[str] = []
+        if not str(reason).strip():
+            issues.append("理由空着")
+        if int(refs_one[REF_PRODUCTION]) > 0:
+            issues.append("生产侧已有读者 ⇒ 它不再是死名，删掉这一行")
+        present = {c for c in REF_CATEGORIES if c != REF_PRODUCTION and refs_one[c]}
+        claimed = frozenset(claimed)
+        if not claimed:
+            issues.append("没写它凭哪一类引用留下")
+        missing = claimed - present
+        if missing:
+            issues.append(f"声称有 {sorted(missing)} 类引用，实测没有")
+        if claimed and not (claimed & present):
+            issues.append("白名单里的名字其实是死的：它连声称的那一类引用都没有")
+        if issues:
+            out[name] = issues
+    return out
+
+
+def load_public_dead_baseline(path: pathlib.Path) -> dict[str, dict]:
+    """读第 5 条的基线：每一行必须写清 name / 处置 / 理由（空着就判据红）。"""
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    rows = raw.get("rows")
+    assert isinstance(rows, list) and rows, f"{path} 没有 rows：基线不许空"
+    out: dict[str, dict] = {}
+    for row in rows:
+        name = str(row.get("name") or "").strip()
+        assert name, f"{path} 有一行没写 name：{row}"
+        assert name not in out, f"{path} 里 {name} 重复了"
+        assert str(row.get("action") or "").strip(), f"{path} 的 {name} 没写处置"
+        assert str(row.get("why") or "").strip(), f"{path} 的 {name} 没写理由"
+        out[name] = row
+    return out
+
+
+def public_dead_baseline_path() -> pathlib.Path:
+    return REPO / "tests" / "fixtures" / "public_dead_baseline.json"
+
+
+@functools.lru_cache(maxsize=1)
+def _real_public_scan() -> tuple[list[dict], dict[str, dict]]:
+    """现盘扫一次（缓存）：公开名定义 + 七类引用读数。"""
+    defs = public_definitions(SRC)
+    refs = classify_public(
+        defs,
+        _scan_python_corpus([SRC, SCRIPTS, TOOLS]),
+        _scan_words([TESTS]),
+        _scan_md_corpus(public_doc_files()),
+    )
+    return defs, refs
+
+
+def effective_public_whitelist() -> dict[str, tuple[frozenset[str], str]]:
+    """第 5 条的白名单 = 本文件登记的 + `DIAGNOSTIC_FACE`（那份台账已有理由，不重复抄）。
+
+    `DIAGNOSTIC_FACE` 只把模块级名字并进来：它收的是"公开函数/方法"，
+    而第 5 条只扫模块级公开名（类方法不在它的面上）。
+    """
+    out = dict(PUBLIC_REFERENCE_WHITELIST)
+    for key, reason in DIAGNOSTIC_FACE.items():
+        qual = key.split("::", 1)[1]
+        if "." in qual:
+            continue
+        out.setdefault(qual, (frozenset({REF_TESTS}), reason))
+    return out
+
+
+def test_no_public_dead_name_outside_the_baseline_or_whitelist() -> None:
+    """第 5 条：实测的公开死名字集合，必须与"基线 + 白名单"逐条相等。
+
+    四向都红：
+    - 实测有、两者都没写 ⇒ 新出现一个生产侧零读者的公开名；
+    - 基线写了、实测没有 ⇒ 已经处理掉了（接线或删了），基线该收一行；
+    - 白名单写了、实测没有 ⇒ 同上；
+    - 基线写了、实测也还在，但白名单也写了 ⇒ 同一件事两处记账。
+    """
+    defs, refs = _real_public_scan()
+    measured = measured_dead_public(defs, refs)
+    baseline = load_public_dead_baseline(public_dead_baseline_path())
+    whitelist = effective_public_whitelist()
+
+    both = sorted(set(baseline) & set(whitelist))
+    assert not both, f"这些名字同时进了基线与白名单（同一件事只许记一处）：{both}"
+
+    listed = set(baseline) | set(whitelist)
+    refs_by_name = references_by_name(defs, refs)
+    fresh = sorted(measured - listed)
+    detail = "\n    ".join(
+        f"{name}：生产读者 0；还有 "
+        + (", ".join(c for c in REF_CATEGORIES
+                     if c != REF_PRODUCTION and refs_by_name[name][c]) or "（一类都没有）")
+        for name in fresh)
+    assert measured == listed, (
+        "公开死名字与基线/白名单不符。\n"
+        f"  实测有、两处都没写：{fresh}"
+        "（接线、删掉，或写进基线并写清处置）\n"
+        + (f"  新出现的每一条的引用类别：\n    {detail}\n" if fresh else "")
+        + f"  写了、实测已经没有：{sorted(listed - measured)}"
+        "（处理掉了，把那一行删掉）\n"
+        f"  基线 {len(baseline)} 条 / 白名单 {len(whitelist)} 条 / "
+        f"实测 {len(measured)} 条 ⇒ 净额 {len(measured - listed)}"
+    )
+
+    problems = public_whitelist_problems(refs_by_name, whitelist)
+    assert not problems, (
+        "白名单与实测不符：\n  "
+        + "\n  ".join(f"{k}：{'；'.join(v)}" for k, v in sorted(problems.items()))
+    )
+
+
+def test_the_public_scan_sees_a_resurrected_name(tmp_path: pathlib.Path) -> None:
+    """改前红：5 个已经删掉的公开名"复活"之后，第 5 条必须逐条点出来。
+
+    这五个正是 2026-11-20 从第 1 条下面漏过、由人删掉的样本。判据不许依赖
+    "它们今天不在盘上" —— 所以这里在副本里把它们造回来，走同一条扫描。
+    """
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "identity.py").write_text(
+        "def conflict_line(reading):\n    return reading\n", encoding="utf-8")
+    (src / "rowscope.py").write_text(
+        "OWNER_FIELDS = ('task_id', 'instance')\n", encoding="utf-8")
+    (src / "interactions.py").write_text(
+        "ADJUDICATION_POLICY_CODES = {'a': 'b'}\n", encoding="utf-8")
+    (src / "store.py").write_text(
+        "def direct_write_backstop(table):\n    return table\n", encoding="utf-8")
+    (src / "schema.py").write_text(
+        "CONJECTURE_QUESTION_WORDS = ('which', 'what')\n", encoding="utf-8")
+
+    defs = public_definitions(src)
+    refs = classify_public(defs, _scan_python_corpus([src]),
+                           _scan_words([]), Counter())
+    got = measured_dead_public(defs, refs)
+    expected = {
+        "conflict_line",
+        "OWNER_FIELDS",
+        "ADJUDICATION_POLICY_CODES",
+        "direct_write_backstop",
+        "CONJECTURE_QUESTION_WORDS",
+    }
+    assert expected <= got, f"复活版里这些没被点出来：{sorted(expected - got)}"
+    assert got == expected, f"副本里还有不该报的：{sorted(got - expected)}"
+
+
+#: 正控样本：这些公开名在现盘上真的被 `src/` 读。它们一个都不许被第 5 条误报。
+#: 20 个是下限（"不误报"必须在一批真名字上成立，不能在空集上成立）。
+LIVE_PUBLIC_SAMPLES = frozenset({
+    "actor_for",
+    "resolve_identity",
+    "split_actor",
+    "from_actor",
+    "OWNER_TASK",
+    "TABLES",
+    "LOCK_ORDER",
+    "agent_state",
+    "most_active_state",
+    "retire_blocking",
+    "check_conflict",
+    "ALLOWED_EDGES",
+    "CAPABILITIES",
+    "AgentSpec",
+    "Policy",
+    "build_role_registry",
+    "type_decls",
+    "decide_relation",
+    "EXIT_CODE_BY_STOP",
+    "ToolRegistry",
+    "normalize_doi",
+})
+
+
+def test_the_public_scan_does_not_flag_names_production_reads() -> None:
+    """正控：真被 `src/` 读的公开名不许误报（至少 20 个样本，且样本必须还在盘上）。"""
+    defs, refs = _real_public_scan()
+    names = {d["name"] for d in defs}
+    missing = sorted(LIVE_PUBLIC_SAMPLES - names)
+    assert not missing, f"正控样本的定义找不到（判据与现盘脱节）：{missing}"
+    dead = measured_dead_public(defs, refs)
+    false_positives = sorted(LIVE_PUBLIC_SAMPLES & dead)
+    assert not false_positives, (
+        f"这些公开名确实被生产侧读者读着，却被第 5 条判成死的：{false_positives}")
+    assert len(LIVE_PUBLIC_SAMPLES) >= 20, "正控样本少于 20 个，不足以证明不误报"
+
+
+def _probe_tree(tmp_path: pathlib.Path) -> pathlib.Path:
+    """负控用的小树：一个只被测试读、一个只被文档提、一个真死、一个生产真读。"""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "probe.py").write_text(
+        "def only_in_tests():\n    return 1\n\n\n"
+        "def only_in_docs():\n    return 2\n\n\n"
+        "def dead_everywhere():\n    return 3\n\n\n"
+        "def live_one():\n    return 4\n",
+        encoding="utf-8")
+    (src / "consumer.py").write_text(
+        "from .probe import live_one\n\n\ndef use():\n    return live_one()\n",
+        encoding="utf-8")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_probe.py").write_text(
+        "from .probe import only_in_tests\n\n\ndef test_x():\n    only_in_tests()\n",
+        encoding="utf-8")
+    docs = tmp_path / "docs"
+    docs.mkdir()
+    (docs / "note.md").write_text("只在文档里提到的名字：only_in_docs。\n", encoding="utf-8")
+    return tmp_path
+
+
+def _probe_dead(root: pathlib.Path, *, count_tests: bool = False,
+                count_docs: bool = False) -> set[str]:
+    src = root / "src"
+    defs = public_definitions(src)
+    refs = classify_public(defs, _scan_python_corpus([src]),
+                           _scan_words([root / "tests"]),
+                           _scan_md_corpus([root / "docs" / "note.md"]))
+    return measured_dead_public(defs, refs, count_tests=count_tests, count_docs=count_docs)
+
+
+def test_the_public_scan_sees_test_only_and_doc_only_names(tmp_path: pathlib.Path) -> None:
+    """负控：只被测试用、只被文档提到，都必须报；生产真读的那个不许报。
+
+    没有这一条，"生产侧零读者"可以退化成"谁都不算读者"，而判据照样绿。
+    """
+    dead = _probe_dead(_probe_tree(tmp_path))
+    assert "only_in_tests" in dead, "只被测试用的公开名没被报出来"
+    assert "only_in_docs" in dead, "只被文档提到的公开名没被报出来"
+    assert "dead_everywhere" in dead, "全仓零提及的公开名没被报出来"
+    assert "live_one" not in dead, "生产侧真读着的公开名被误报了"
+
+
+def test_counting_tests_or_docs_as_readers_would_hide_the_gap(tmp_path: pathlib.Path) -> None:
+    """反真空：把"只被测试用不算引用"打桩成"算引用" ⇒ 负控必红。
+
+    `is_public_dead` 的 `count_tests` / `count_docs` 就是这个桩。打开之后，
+    负控里那两个名字不能再被判死 —— 否则说明判据根本没按这两类口径分档，
+    上面那条负控是碰巧绿的。
+    """
+    root = _probe_tree(tmp_path)
+    assert "only_in_tests" not in _probe_dead(root, count_tests=True), (
+        "打桩成'测试算引用'之后，只被测试用的名字仍然被判死 ⇒ 口径没有真的分档")
+    assert "only_in_docs" not in _probe_dead(root, count_docs=True), (
+        "打桩成'文档算引用'之后，只被文档提到的名字仍然被判死 ⇒ 口径没有真的分档")
+    # 真死的那个不受两个桩影响：它连测试/文档读者都没有。
+    assert "dead_everywhere" in _probe_dead(root, count_tests=True,
+                                            count_docs=True)
+
+
+def test_a_dead_name_in_the_whitelist_is_reported() -> None:
+    """白名单反真空：塞一个真死的名字进白名单 ⇒ 必报"其实是死的"。
+
+    两向都验：真死的名字放进去要红；有测试读者的名字放进去不红。
+    """
+    zero = {c: 0 for c in REF_CATEGORIES}
+    refs_by_name = {
+        "ghost": dict(zero),
+        "target": {**zero, REF_TESTS: 3},
+    }
+    problems = public_whitelist_problems(
+        refs_by_name, {"ghost": (frozenset({REF_TESTS}), "样例：声称测试读它")})
+    assert any("其实是死的" in msg for msg in problems.get("ghost", [])), problems
+    ok = public_whitelist_problems(
+        refs_by_name, {"target": (frozenset({REF_TESTS}), "样例：判据靶子")})
+    assert not ok, f"有测试读者的白名单条目被误报：{ok}"
 
 
 # ============================================================ 第 2 条：重复实现

@@ -42,7 +42,8 @@ from agentflow.store import Store
 
 from _credential_fixture import issue_credential
 from test_closing_gate import (
-    _numeric_experiment, _paper_with_claim, _project, _t3_experiment, _write_report,
+    _numeric_experiment, _paper_with_claim, _project, _seed_gate_subjects,
+    _t3_experiment, _write_report,
 )
 
 #: 一条有证明过程、可以送 V 审的命题正文（与 `tests/test_lean_switch.py` 同形）。
@@ -201,21 +202,31 @@ def test_stubbing_the_v_sign_criterion_turns_the_red_green(
 
 def test_machine_pass_can_become_true_on_a_lean_off_workspace_with_evidence(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """e) Lean 关 + 有证据（一条 V 签住的命题）⇒ 七格全 pass、零 blocker、`machine_pass` 为真。
+    """e) Lean 关 + 有证据（一条 V 签住的命题）⇒ 没有 fail / unknown 格 ⇒ `machine_pass` 真。
 
     这是改前"永远真不了"的反面：那一版把 `load_bearing` 记成 `na`，而 `na` 不是 `pass`
     ⇒ 同一份工作区 `machine_pass` 恒为 false（真机 0/107）。工作区里没有任何
     formal 实验行（`method="formal"` 一条都没跑），所以这不是靠 T3 那条路过的。
+
+    2026-11-20（EMPTYCELL）：四态落地后"没有可判对象"的格记 `na`，而 `machine_pass`
+    仍是"八格全 pass"的旧口径 ⇒ 要让这一条继续有意义，夹具必须让八格都真的判过。
+    `_seed_gate_subjects` 补的正是那三样（会话记录 / 验收表两行 / 文献归档）—— 它们
+    不是为了让读数变绿：没有它们，`user_pending` / `acceptance` / `literature_pending`
+    三格是 `na`（不适用），`machine_pass` 当然为假。补完之后八格全 pass 才是这条要证的
+    "Lean 关 + 有证据 ⇒ 机器口径能成立"。
     """
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "0")
     st = _project(tmp_path)
     _statement(st)
     _v_sign(tmp_path)
     _paper_with_claim(st, citations=["stmt:0000"])
+    _seed_gate_subjects(tmp_path)
     report = _write_report(tmp_path)
     rep = _gate(st, report)
 
     assert dict(rep.status) == {name: "pass" for name in CL.DEFAULT_CHECKS}, rep.to_dict()
+    assert rep.verdict["counts"] == {"pass": 8, "fail": 0, "unknown": 0, "na": 0}, \
+        rep.verdict["counts"]
     assert rep.blockers == [], [f.to_dict() for f in rep.blockers]
     assert rep.machine_pass is True, rep.to_dict()
     # 反真空：不是空工作区（没有实质产出时 `substance` 自己会红）

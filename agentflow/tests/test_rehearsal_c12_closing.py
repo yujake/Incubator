@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""彩排（真路径）C12 · 收工链 + 七格门：CLI 入口 → M 调 `conductor.closing` → 收工。
+"""彩排（真路径）C12 · 收工链 + 八格门：CLI 入口 → M 调 `conductor.closing` → 收工。
 
 ## 这条链与真机差在哪（逐项）
 
@@ -8,7 +8,7 @@
 | 入口 | `agentflow start --mode research` | 同一行：`cli.main(["start", "--mode", "research", …])` |
 | 执行体 | `_run_spec` → `_exec_role` → `host.wired_llm_conductor` → `LlmBackend` → `AgentLoop.run` | 同一条 |
 | 派活 | `Conductor.summon`（本趟派一个 H 读一眼收工读数；它让循环本体在 `calling_as` 里花一次钱，三格②有对象） | 同一条 |
-| 收工门 | `conductor.closing` 工具 → `closing.check_closing`（七格现算） | 同一条：判据本体、格表、`machine_pass` 全是产品原物 |
+| 收工门 | `conductor.closing` 工具 → `closing.check_closing`（八格现算） | 同一条：判据本体、格表、`machine_pass` 全是产品原物 |
 | M 的判据 | `goal_met` / `task_list` 由 M 交，落 `out/review/m-verdicts.jsonl` | 同一条：落盘由工具自己那一笔写 |
 | M 的 final | `_final_gate_reading`（整树销号） | 同一条（H 先被销号，M 才 final） |
 | 模型缝 | 真 `LlmSeam`（`_agent_seam_factory` / `for_role` / `for_secretary`） | 同一条：构造点一个都没替换 |
@@ -23,13 +23,13 @@
 
 ```text
 M --summon--> H（读一眼）--> M 销号 H
-M --conductor.closing(goal_met=true, task_list=[…])--> closing.check_closing 现算七格
-        ⇒ status 七格全 pass / machine_pass=True / can_close=True / closable=True
+M --conductor.closing(goal_met=true, task_list=[…])--> closing.check_closing 现算八格
+        ⇒ status 八格全 pass / machine_pass=True / can_close=True / closable=True
         ⇒ 判据落 out/review/m-verdicts.jsonl（运行外那一趟读同一份）
 M --final--> _final_gate_reading（整树已销号）
 ```
 
-判据读盘：`conductor.closing` 的回执里 `status` 恰好七格且全 `pass`、`machine_pass=True`、
+判据读盘：`conductor.closing` 的回执里 `status` 恰好八格且全 `pass`、`machine_pass=True`、
 `failed=[]`、`unknowns=[]`、`verdict_written.ok=True`；`m-verdicts.jsonl` 末行 `met=true`
 且 `sid` 是本趟；`tasks` 里 H 行 `outcome="ok"`；钱账干净。
 
@@ -107,8 +107,8 @@ class _Wire:
                                    "report_path": "out/review/REPORT.md",
                                    "goal": "把这一项研究做到可交付",
                                    "goal_met": True,
-                                   "basis": "七格读数都过、没有 blocker",
-                                   "task_list": [{"what": "收工门七格", "state": "done"}]}})
+                                   "basis": "八格读数都过、没有 blocker",
+                                   "task_list": [{"what": "收工门八格", "state": "done"}]}})
         return _json({"final": "M 收工", "evidence": []})
 
     def _reply(self, system: str, prompt: str) -> str:
@@ -144,7 +144,7 @@ class _Wire:
 
 def _run(base: pathlib.Path, monkeypatch: pytest.MonkeyPatch, *,
          lean: str = "0", pending_question: bool = False) -> dict[str, Any]:
-    """真工作区（七格全过的底座）→ 从 CLI 入口真跑一趟；只替换出网那一层。"""
+    """真工作区（八格全过的底座）→ 从 CLI 入口真跑一趟；只替换出网那一层。"""
     base.mkdir(parents=True, exist_ok=True)
     st, _report = _good(base)
     if pending_question:
@@ -208,12 +208,12 @@ def _verdict_rows(ws: pathlib.Path) -> list[dict]:
     return [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines() if x]
 
 
-# ============================================================ ① 正控：七格全过、machine_pass 真
+# ============================================================ ① 正控：八格全过、machine_pass 真
 
 
-def test_the_closing_gate_passes_all_seven_cells_from_the_cli(
+def test_the_closing_gate_passes_all_eight_cells_from_the_cli(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """正控：M 在真循环里调 `conductor.closing` ⇒ 七格全 pass、`machine_pass=True`。"""
+    """正控：M 在真循环里调 `conductor.closing` ⇒ 八格全 pass、`machine_pass=True`。"""
     got = _run(tmp_path, monkeypatch, lean="0")
     events = _events(got["ws"])
     closing = _closing_result(events)
@@ -228,7 +228,7 @@ def test_the_closing_gate_passes_all_seven_cells_from_the_cli(
     assert [e for e in events if e.get("kind") == "llm_call"], (
         "会话里一条 llm_call 都没有 ⇒ 走的不是真 LlmSeam")
 
-    # ---- 七格：恰好那七格、且全 pass（键集取自产品自己的 DEFAULT_CHECKS）
+    # ---- 八格：恰好那八格、且全 pass（键集取自产品自己的 DEFAULT_CHECKS）
     assert closing["ok"] is True, closing
     status = dict(data.get("status") or {})
     assert set(status) == set(CL.DEFAULT_CHECKS), sorted(status)

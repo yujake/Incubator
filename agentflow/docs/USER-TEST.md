@@ -250,7 +250,7 @@ python -B -m agentflow.cli --root . closing --project-dir . --report out\review\
   · substance：通过
   · acceptance：通过
   · artifact_ledger：通过
-收工门：八格全过 ⇒ 可交付（当时；现在的门是七格）
+收工门：八格全过 ⇒ 可交付（当时；现在的门仍八格，组成换过：2026-11-16 起 `literature_pending` 进格、`paper` 出格）
 ```
 
 退出码 **0**。网页运行态里那一趟的 `stop_reason` 应是 `final`，花费与终端打印的一致。

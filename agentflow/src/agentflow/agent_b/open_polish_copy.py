@@ -547,13 +547,6 @@ class _OpenPolishCopy:
 
         return source_manuscript_rel(root, row)
 
-    @staticmethod
-    def _source_matches_row(text: Any, row: dict[str, Any]) -> bool:
-        """这份稿的 `## 证明` 是不是这一行上某一份证明（判据本体在 manuscriptpaths）。"""
-        from ..manuscriptpaths import manuscript_matches_row
-
-        return manuscript_matches_row(text, row)
-
     def _statement_manuscript_id(self, sid: str) -> dict[str, Any]:
         """第 ③ 条证据源：这条命题的 `statements` 行上记的稿号与逐路径稿。
 

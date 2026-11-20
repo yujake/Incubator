@@ -307,7 +307,7 @@ M 的其余七条一条没少、端到端 `M→V ⇒ forbidden_edge`、把 V 加
 | `C` | `analysis_reports`, `search_requests`（**两格都是只读角色的显式登记例外**：`analysis_reports` 是 `handle` 的产出登记口，`search_requests` 是 I3 直连那条通道；真身 `specs/c.py` 的 `write_set`，两条理由见 §C 的那张表与 `agent_c/core.py` 的注释） |
 | `D` | `research_questions`, `search_requests`（**不含** `relations`，也**不含** `conjectures` / `attack_plans`：D 对关系与猜想台账都是**读**；`attack_plans` 由 F 的 `attack.*` 落。真身 `specs/d.py` 的 `write_set`） |
 | `E` | `conjectures`, `experiments`（`conjectures`：`run_experiment` 落实验行的**同一个事务**里把这条命题记进猜想台账，`conjectureledger.register`；真身 `specs/e.py`） |
-| `F` | `attack_plans`, `conjectures`, `search_requests`, `reprocess_requests`（**没有 `statements`，也没有 `dependencies`**：命题只经秘书 / B 登记（`secretary.STATEMENT_WRITER_ROLES = ("B",)`）；依赖边由 B 读 F 的证明手稿登记（`used_by="stmt:<命题号>#pN"` + `path_group`）。F 的活是把证明与手稿里那一节 `## 依赖` **三列表**写清楚（`reports/f-proof-<命题号>.md`；2026-11-13 起三列，老盘四列仍读得回），登记由收方读稿产生；`conjectures` 是 F 落稿那一刻记「我提出过这条」；`evidence_kind` 由 V 在 `verifications/<命题号>.jsonl` 里的签名现算；真身 `specs/f.py` 的 `write_set`） |
+| `F` | `attack_plans`, `conjectures`, `search_requests`, `reprocess_requests`（**没有 `statements`，也没有 `dependencies`**：命题只经秘书 / B 登记（`secretary.STATEMENT_WRITER_ROLES = ("B",)`）；依赖边由 B 读 F 的证明手稿登记（`used_by="stmt:<命题号>#pN"` + `path_group`）。F 的活是把证明与手稿里那一节 `## 依赖` 的**三列必填表**写清楚（`quote` 引文 / `stmt_id` 命题号 / `step` 用在哪一步；`path_group` 路径号不进稿、由 B 收录时分配；`reports/f-proof-<命题号>.md`；2026-11-13 起三列必填，老盘带路径号那一列的四列仍读得回、解析侧照收），登记由收方读稿产生；`conjectures` 是 F 落稿那一刻记「我提出过这条」；`evidence_kind` 由 V 在 `verifications/<命题号>.jsonl` 里的签名现算；真身 `specs/f.py` 的 `write_set`） |
 | `G` | `documents`, `dependencies`, `review_findings` |
 | `H` | `review_findings`, `documents`（只读角色的显式登记例外） |
 | `V` | （空 ⇒ 不写任何**数据表**：它写的是自己维护的凭据台账 `verifications/<命题号>.jsonl`（工作区文件）与签的侧文件；`READ_ONLY_ROLES` 里的 `"V"` 与 `READONLY_CALL_EXCEPTIONS["V"]` 一起守它） |
@@ -418,7 +418,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 | 3 | `attack.list_plans` | 列出全部攻坚计划（可按 `problem_key` 过滤） | `read` | 否 | F D G H | include_terminal, problem_key | `{checked,total,plans}` | `test_agent_f.py` | INVENTORY 4.5#13：handler 默认 `include_terminal=True`，显式传 `null` 被当 `False`（静默反转默认值） |
 | 4 | `attack.pick_next_subgoal` | 按确定性次序选出下一个要推进的子目标（开始过的优先，卡住的最后） | `none` | 否 | F D G H | **subgoals** | `{picked,subgoal,reason}` | `test_agent_f.py` | INVENTORY 4.3(b)：`subgoals=null` 过校验 → `TypeError` |
 | 5 | `attack.status` | 读一个攻坚计划的完整可读视图（子目标状态计数、预算余量、history 尾部） | `read` | 否 | F D G H | **plan_id** | `{checked,plan_id,status,rounds,subgoal_counts,history_tail,…,stale_blocked}` | `test_agent_f.py` | INVENTORY 4.3(c)：计划不存在时 `ok=True` + `checked=False`（**必须看 `checked` 而不是 `ok`**） |
-| 6 | `attack.step` | 推进攻坚计划一轮：按 owner 分派（E 做实验/A 提检索/B 提重抽取）；C/D/F 的推理未接线则如实记 `no_change` | `write_local` | **是** | F | **plan_id** | `{plan_id,round,sid,action,outcome,status,budget_left,reason,budget_known,budget_reading}` | `test_agent_f.py` | INVENTORY 4.4：经 `_deploy_e` 跑 E 的脚本子进程（**声明里没有"执行进程"这一档**）；`budget_known`/`budget_reading` 是 P-09 的预算读数（读不到时 `status="unknown"` + `why`，**不据此否决**花钱） |
+| 6 | `attack.step` | 推进攻坚计划一轮：按 owner 分派（E 做实验/A 提检索/B 提重抽取；F 走它自己的推理、每轮交四件产物之一）；C/D 没有可自动调用的推理入口 ⇒ 落 `dead_end` 产物并记 `no_change`（步级读数，不是产物） | `write_local` | **是** | F | **plan_id** | `{plan_id,round,sid,action,outcome,status,budget_left,reason,budget_known,budget_reading}` | `test_agent_f.py` | INVENTORY 4.4：经 `_deploy_e` 跑 E 的脚本子进程（**声明里没有"执行进程"这一档**）；`budget_known`/`budget_reading` 是 P-09 的预算读数（读不到时 `status="unknown"` + `why`，**不据此否决**花钱） |
 | 8 | `doc.build_document` | 写一行 documents 并渲染 markdown 到工作区内（逐条机械检查后再落库；`out_path` 越界即拒绝） | `write_local` | **是** | G | **kind**,**title**,**claims**；open_problems, out_path, sections | 落库后的 documents 行（12 个字段，含 `doc_id`/`markdown_path`/`content_sha256`/`revision`） | `test_agent_g.py` | INVENTORY 4.3(a)②：`citations:["lit:9999"]` 可通过全部闸门并落库（**引用存在性不核**）；4.3(b) `StoreError` 逃逸 |
 | 9 | `doc.compose_claim` | 构造一条合规断言：`cross_check` 自动补"不构成证明"；无引用/否定未分类/过度声称在构造时就抛错 | `none` | 否 | G H F D | **text**,**citations**,**evidence_kind**,**section**；claim_id, is_negative, negation_kind | 合规的 claim dict（含 `claim_id`/`disclaimer`/`revision_hash`/`scope_caveat`） | `test_agent_g.py` | INVENTORY 总表：三态位 **无**（据 INVENTORY，未在代码中核实） |
 | 10 | `doc.list_documents` | 只读列举稿件（代号/类型/标题/状态/审校轮次/断言数与 markdown 路径） | `read` | 否 | G H F D | kind, status | `{count,documents:[{doc_id,kind,title,status,review_rounds,claim_count,markdown_path}]}` | `test_agent_g.py` | INVENTORY 4.3(b)：`StoreError` 逃逸 |
@@ -562,7 +562,7 @@ python -c "import sys;sys.path.insert(0,'src');from agentflow import agent_promp
 > 来自 `tools/trace_tools.py` 的正常注册（`roles=("C","D")`）；`review_tools` 的 4 件写侧
 > 自 2026-10-17（业主裁定「方案 1」）起由装配器自动 `include_writers=True` 装进主表
 > （`roles=("H",)`，见 §H.4）。
-> ⚠️ 那 3 个替身的 `roles=("agent-C","agent-D")` **带 `agent-` 前缀**（不是 `"C"`/`"D"`），而 `install_d_tools` 又直接构造注册表 ⇒ `for_role("C")`/`for_role("D")` **永远拿不到它们** —— 正是 `build_registry` 专门加断言要拦的那类错误。
+> ⚠️ 那 3 个替身的 `roles` **现读是 `("C","D")`**（`agent_d/_support.py::_fallback_trace_tools`，与 `schema.ROLES` 逐字一致）。历史（2026-10-18）：它们曾写成带 `agent-` 前缀的 `("agent-C","agent-D")`，而 `install_d_tools` 自建注册表、当时不过角色断言 ⇒ 那时 `for_role("C")`/`for_role("D")` 过滤不出它们。**2026-11-20 现读已改对**：角色名就是 `"C"`/`"D"`，`install_d_tools` 末尾调 `validate_tool_roles`（并把 `bound_role` 绑成 `"D"`），所以这条路今天拿得到那 3 件；`build_registry` 那条断言是同一判据的另一处执行点。
 > `AgentH.install_h_tools` **不是新工具**：它复制 H 子集并用 `filter_readonly_h_surface` 再拒一次 + 留痕（`refused_write_tools`）。
 
 ## A —— 文献检索
@@ -1178,10 +1178,10 @@ C 的产出有两类，状态语义完全不同。
 | F-1 | 立项（**预算四类键缺一不可，不完整就拒绝创建**） | `agent_f.AgentF.create_plan`；`attack.check_budget` |
 | F-2 | 按确定性次序选下一个子目标 | `attack.pick_next_subgoal`（"开始过的优先，卡住的最后"） |
 | F-3 | 推进一轮：按 `owner` 分派（E 做实验 / A 提检索 / B 提重抽取） | `agent_f.AgentF.step` |
-| F-4 | **C/D/F 的推理未接线时如实记 `no_change`，绝不假装做了** | `attack.step` 的 `summary` 逐字 |
+| F-4 | **C/D 没有可自动调用的推理入口时如实落 `dead_end` + 记 `no_change`，绝不假装做了**（F 不在这一档：推理就是它的工作方式，每轮交四件产物之一） | `attack.step` 的 `summary` 逐字 |
 | F-5 | 到终止条件时交 `best_partial`：**不是失败，也不是成功** | `status="stalled"` |
 | F-6 | 数值实验**不许关闭子目标**（FC-22） | 自检实测："数值实验**不许**关闭子目标（FC-22）" |
-| F-7 | **写证明手稿**（`reports/f-proof-<命题号>.md`），末尾带 `## 依赖` 三列表（引文 / 命题号 / 第几步；路径号不进稿、由 B 收录时分配）；手稿要过秘书洗稿才算可交（缺那一节就补空的、有引用的核号、洗不干净打回）（2026-10-27 口径） | `agent_f.manuscript.proof_manuscript` / `depsection.render_dependency_section`；`tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py` |
+| F-7 | **写证明手稿**（`reports/f-proof-<命题号>.md`），末尾带 `## 依赖` 三列必填表（引文 / 命题号 / 第几步；路径号不进稿、由 B 收录时分配；老盘带路径号那一列的四列仍读得回）；手稿要过秘书洗稿才算可交（缺那一节就补空的、有引用的核号、洗不干净打回）（2026-10-27 口径） | `agent_f.manuscript.proof_manuscript` / `depsection.render_dependency_section`；`tests/test_dependency_face_is_read_from_f_manuscript.py`、`tests/test_f_secretary_washes_dependencies.py` |
 
 ### F.3 明确不负责
 

@@ -212,9 +212,9 @@ _MODULES: tuple[str, ...] = (
     # （`analysis.register_report`）。组前缀 `analysis` 由模块名机械派生
     # （`_TOOL_GROUP_PREFIXES`），所以这一行也等于给那件工具一个可核的组前缀。
     "analysis_tools",
-    # 2026-10-22（业主施工单：新设 L 这个 Lean 形式化者）：L 的两件工具
-    # （`formal.formalize` / `formal.check_formal`）。组前缀 `formal` 由模块名
-    # 机械派生；工具只挂给 L（`roles=("L",)`），所以 E 的工具面一个字都没变。
+    # 2026-10-22（业主施工单：新设 L 这个 Lean 形式化者）：L 的工具首批两件
+    # （`formal.formalize` / `formal.check_formal`）；2026-11-05 起加 `formal.record`（三件）。
+    # 组前缀 `formal` 由模块名机械派生；工具只挂给 L（`roles=("L",)`），所以 E 的工具面一个字都没变。
     "formal_tools",
     # 2026-10-27（`R-BE4` 的 D1 Phase A，业主批准）：D 的主力动作
     # `register_conjecture` 的落地工具（`conjecture.register_conjecture`）。
@@ -923,6 +923,38 @@ def build_registry(
         # 「严格模式下不允许模块被跳过」—— 两个退出点会让"严格档到底为什么失败"
         # 取决于哪一条先跑到，而那种先后关系没有人维护。
         skipped.append({"module": "<universal-tools>", "stage": "validate", "error": msg})
+
+    # ---- 通用工具的写集判据（A5-c，2026-11-20）：接在装配期，不再只留给测试
+    #
+    # `universal_tool_violations` 是纯函数（`{工具名: 写集}` -> `{工具名: [违规理由]}`）。
+    # 它此前只有 `tests/test_universal_tools_are_for_everyone.py` 在读：装配出来的树上，
+    # 一件通用工具到底写不写知识表，只有跑测试时才知道 —— 而"测试读过"不是装配期的事实。
+    # 现在在这里跑一次，核的是**这棵树上真的注册了的那几件**（没注册的由上面
+    # `stale_universal_tools` 点名，不在这里重复报）。
+    #
+    # 写集从实现算（`capabilities._tool_write_set_from_source` 的 AST 扫描，与只读例外
+    # 那条判据同一份实现，不复制第二份）：算不出来（`None`）本身就是违规 ——
+    # "没查成"不许折成"没有写"。
+    registered_universal = {name: UNIVERSAL_TOOLS[name]
+                           for name in reg._specs if name in UNIVERSAL_TOOLS}
+    if registered_universal:
+        from ..capabilities import _tool_write_set_from_source
+
+        universal_write_violations = universal_tool_violations(
+            {name: _tool_write_set_from_source(name) for name in registered_universal},
+            universal=registered_universal,
+        )
+        if universal_write_violations:
+            msg = (
+                f"这些通用工具的写集不合规：{universal_write_violations}。"
+                "通用工具只许写通信/簿记类表（实现 ⊆ 登记 ⊆ BOOKKEEPING_TABLES）；"
+                "写进知识表就等于给只读角色开了一个改知识库的后门 —— "
+                "把越界的那张表从实现里摘掉，或者把它从 UNIVERSAL_TOOLS 撤掉"
+            )
+            if strict:
+                raise ToolError(msg)
+            skipped.append({"module": "<universal-write-sets>", "stage": "validate",
+                            "error": msg})
 
     if strict and skipped:
         raise ToolError(f"严格模式下不允许模块被跳过：{skipped}")

@@ -300,11 +300,3 @@ def owner_for(store: Any, role: Any, *, actor: Any = "", task_id: Any = None,
         return base
     return resolve_identity(store, role, task_id=task_id, instance=instance, actor=actor)
 
-
-def conflict_line(reading: Mapping[str, Any] | None) -> str:
-    """把身份读数收成一句「未归因」的说明（已归因 ⇒ 空串）。"""
-    got = dict(reading or {})
-    if got.get("attributed"):
-        return ""
-    return str(got.get("conflict") or "实例身份未解析（原因未记录）")
-

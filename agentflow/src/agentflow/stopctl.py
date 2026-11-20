@@ -182,6 +182,23 @@ def stop_scope(state: Mapping[str, Any] | None) -> dict[str, Any]:
             "reason": ""}
 
 
+def _closure_reading(root: str | Path) -> dict[str, Any]:
+    """墓碑三态的安全读法：`stop_closure` 不抛时原样返回，抛了也降级成 `unknown`。
+
+    为什么派活判据要单独包一层：`dispatch_stop_reading` 是"派活前问一句"的读口，
+    它的契约是**不因为它读的东西坏了而抛**（读不成要留读数，见下面 `checked=False`
+    那一档）。墓碑是历史，不是当前开关 —— 历史读不出来不许连累"这一趟能不能派活"，
+    但也绝不许折成"没停过"（三态纪律）。
+    """
+    try:
+        return stop_closure(root)
+    except Exception as exc:  # noqa: BLE001 —— 读历史失败不是"没有历史"
+        return {"checked": False, "state": "unknown", "count": 0, "last": {},
+                "path": str(closed_path(root)), "problems": [],
+                "why": (f"停机历史读不成（{type(exc).__name__}: {exc}）⇒ 这一格没查成；"
+                        "别把它读成「没停过」")}
+
+
 def dispatch_stop_reading(root: str | Path, *, parent_task_id: str = "",
                           inside: "Callable[[str, str], Mapping[str, Any]] | None" = None,
                           explicit: str | Path | None = None) -> dict[str, Any]:
@@ -191,7 +208,7 @@ def dispatch_stop_reading(root: str | Path, *, parent_task_id: str = "",
     的 `_user_stop_reason` 也是这三个），不新造第二套。差别只在"我是谁"的取法：步首
     问"我是哪一趟"，这里问"我要往哪一支派活"（`parent_task_id`）。
 
-    返回 `{checked, stopped, state, reason, path, why}`：
+    返回 `{checked, stopped, state, reason, path, why, closure}`：
 
     | `state` | `stopped` | 含义 |
     |---|---|---|
@@ -202,9 +219,16 @@ def dispatch_stop_reading(root: str | Path, *, parent_task_id: str = "",
     | `unknown_scope` | False | 子树开关、但判不了在不在那一支 ⇒ 不停（判不了 ≠ 适用） |
 
     `checked=False` 是第四态：连开关都读不成（异常）⇒ 不停，但 `why` 里说明没查成。
+
+    `closure` 是墓碑三态读口（`stop_closure`）的读数，**不是**对当前开关的又一次判定：
+    开关被消费掉之后 `read_stop()` 返回 `None`，与"从来没人叫停"同形；`closure` 就是
+    补那一格的。所以 `state="none"` 有两档，`why` 会分开说："没有停机记录" 与
+    "开关已消费、这个工作区停过 N 次（历史）"。`unknown` 那一档也照实说"历史没查成"。
     """
+    closure = _closure_reading(root)
     out: dict[str, Any] = {"checked": False, "stopped": False, "state": "unknown_scope",
-                           "reason": "", "path": str(stop_path(root, explicit)), "why": ""}
+                           "reason": "", "path": str(stop_path(root, explicit)), "why": "",
+                           "closure": closure}
     try:
         state = read_stop(root, explicit=explicit)
     except Exception as exc:  # noqa: BLE001 —— 读不成不是"没人叫停"，要留读数
@@ -213,7 +237,20 @@ def dispatch_stop_reading(root: str | Path, *, parent_task_id: str = "",
         return out
     out["checked"] = True
     if state is None:
-        out.update(state="none", why="盘上没有停机开关 ⇒ 照常派活")
+        closure_state = str(closure.get("state") or "")
+        if closure_state == "closed":
+            out.update(state="none",
+                       why=(f"盘上没有停机开关 ⇒ 照常派活；但这个工作区停过 "
+                            f"{closure.get('count')} 次并已消费（最后一次 "
+                            f"{dict(closure.get('last') or {}).get('closed_at') or '?'}）"
+                            "—— 那是停机历史，不是当前开关"))
+        elif closure_state == "unknown":
+            out.update(state="none",
+                       why=("盘上没有停机开关 ⇒ 照常派活；但墓碑在盘上却读不出来 ⇒ "
+                            "停机历史没查成，别读成「没停过」"))
+        else:
+            out.update(state="none",
+                       why="盘上没有停机开关 ⇒ 照常派活；这个工作区也没有停机记录")
         return out
     out["reason"] = stop_reason_of(state)
     if "unreadable" in state:
@@ -1091,19 +1128,16 @@ STOP_PROGRAM_POLL_SEC: float = 0.2
 #: 强停之后最多再等它从进程表上消失多久；等不到就如实报"还在跑"。
 STOP_PROGRAM_WAIT_SEC: float = 5.0
 
-#: 逐条程序的处理档（一档都不许折平）：
-#:
-#: - `killed`：强停把它收掉了（账上 pending 的那一行按 `outcome="killed"` 收口）；
-#: - `killed_orphan`：强停收掉了进程，但账上那一行早就收口了（收口之后进程还在跑的那一类
-#:   —— 昨晚 15 个野进程大半是这一档），行一个字都不改；
-#: - `still_running`：优雅停的宽限窗口过了它还在跑（只点名，不杀）；
-#: - `exited_in_grace`：优雅停的宽限窗口里它不在了（自己走的，或看见开关之后收尾的）；
-#: - `already_exited`：查的时候它就不在了 / 账上早已收口（幂等那一档：查过了，不是又杀成一次）；
-#: - `no_pid`：账上说在跑，但没有 pid（`attach_program_pid` 没补上）⇒ 没有可停的对象，点名；
-#: - `failed`：动了手，窗口过了仍然在（杀不动）。
-PROGRAM_STOP_STATUSES: tuple[str, ...] = ("killed", "killed_orphan", "still_running",
-                                          "exited_in_grace", "already_exited", "no_pid",
-                                          "failed")
+# `stop_programs` 逐条程序的处理档（一档都不许折平；`_program_stop_notice` 逐档翻成人话）：
+#
+# - `killed`：强停把它收掉了（账上 pending 的那一行按 `outcome="killed"` 收口）；
+# - `killed_orphan`：强停收掉了进程，但账上那一行早就收口了（收口之后进程还在跑的那一类
+#   —— 昨晚 15 个野进程大半是这一档），行一个字都不改；
+# - `still_running`：优雅停的宽限窗口过了它还在跑（只点名，不杀）；
+# - `exited_in_grace`：优雅停的宽限窗口里它不在了（自己走的，或看见开关之后收尾的）；
+# - `already_exited`：查的时候它就不在了 / 账上早已收口（幂等那一档：查过了，不是又杀成一次）；
+# - `no_pid`：账上说在跑，但没有 pid（`attach_program_pid` 没补上）⇒ 没有可停的对象，点名；
+# - `failed`：动了手，窗口过了仍然在（杀不动）。
 
 
 def _program_knife(pid: int, *, force: bool) -> dict[str, Any]:

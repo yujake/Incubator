@@ -1,12 +1,12 @@
 """角色 D 的动作 `research`（一动作一文件；判据 `tests/test_agent_split_is_one_action_one_file.py`）。"""
 from __future__ import annotations
 
-from ._support import C_NO_EVIDENCE, S
+from ._support import C_NO_EVIDENCE, S, conclusion_consistency_reading
 
 class _Research:
     def research(self, qid: str) -> dict:
         """对就绪问题做初步研究，产出研究笔记（§4.1 的第 5 步）。
-        产出 ``{"question_id","confidence","analysis","conclusion","suggestions","evidence","llm_used","c_queries","c_evidence"}``。
+        产出 ``{"question_id","confidence","analysis","conclusion","suggestions","evidence","llm_used","c_queries","c_evidence","conclusion_consistency"}``。
         置信度由:func:`evidence_confidence` 决定；LLM 只能把它调低（``_rank_min``）。
         ## I1：研究前必须先向 C 点一次菜
         ``research()`` 一定会带上 ``c_queries``（每条含
@@ -26,6 +26,13 @@ class _Research:
         confidence = verdict["confidence"]
         analysis, conclusion, suggestions, llm_used = self._compose(ev, verdict)
         conclusion, suggestions = self._apply_c_evidence_caveat(ev, verdict, conclusion, list(suggestions))
+        # ---- S-09（非 LLM 半）：措辞与置信度方向一致吗（`_support.conclusion_consistency_reading`）
+        # 这一格是读数不是闸：判据只钉"低档说满了 / 高档留余地"两个方向，不拦这一段
+        # 结论（内容对错归 V）。它必须落进返回值才能在报告侧被读到 —— 改前这个判据只有
+        # 测试在调，`research` 一次都没算过，于是"数字 0.3 而措辞写'证明了'"在盘上
+        # 没有任何读数。`confidence` 是档名（high/medium/low），判据自己把它折成门槛上的数字。
+        consistency = conclusion_consistency_reading(conclusion=conclusion,
+                                                     confidence=confidence)
 
         # ---- 落库：笔记 + 证据文献 + 状态
         lit_ids = S.sorted_unique([str(c.get("lit_id")) for c in ev.get("claims") or [] if c.get("lit_id")])
@@ -59,6 +66,9 @@ class _Research:
                         f"{sum(1 for c in claims if c.get('quote_verified') is True)} 条；"
                         f"C 查询成功 {csum['ok']}/{csum['attempted']}；"
                         f"LLM={'yes' if llm_used else 'no'}）"
+                        + ("" if consistency.get("verdict") in ("", "consistent") else
+                           " ⚠️ 结论措辞与置信度方向不一致（"
+                           f"{consistency.get('verdict')}：{consistency.get('reason')}）")
                         + ("" if csum["any_success"] else f" ⚠️ {C_NO_EVIDENCE}：结论未经 C 的图查询核对")
                     )
                     row["notes"] = ((row.get("notes") or "") + "\n" + note)[:20000]
@@ -80,6 +90,9 @@ class _Research:
             "analysis": analysis,
             "conclusion": conclusion,
             "suggestions": suggestions,
+            # S-09（非 LLM 半）的读数：`checked` / `verdict`（overstated / understated /
+            # consistent）/ `reason` / 命中的措辞。报告侧按它说清"这一段的话说得比数字满"。
+            "conclusion_consistency": consistency,
             "evidence": ev,
             "llm_used": llm_used,
             # 三态读数（`R1-A1`）：`llm_used=False` 分不出"没接线"与"接了但失败"，

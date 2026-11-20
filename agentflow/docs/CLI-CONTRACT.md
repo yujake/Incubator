@@ -61,7 +61,7 @@
 ### 3.2 `inspect stats`
 
 - 用途：四个只读读数（`errors` 错误动作 / `flow` 动作分布 / `cost` 钱与 token /
-  `gates` 收工门七格）与一条合计 `all`。
+  `gates` 收工门八格）与一条合计 `all`。
 - 参数：`stats <errors|flow|cost|gates|all> [--root <工作区>] [--json]`；
   `gates`/`all` 另有 `--project-dir`、`--report`（不给 ⇒ 那几格如实记 unknown）；
   `errors` 另有 `--readout`（给新的五键形状；不给则保持老形态）。
@@ -69,9 +69,13 @@
   `problems` 里点名 `no_session`（`sessions/<今天>.jsonl` 不是"这一趟"：真机上它 106/107
   不存在，按它读会把"问了还没答"读成 pass）。这一层没有 `--sid`；要看某一趟用
   `agentflow closing --sid <号>`，要看工作区整体在等什么用 `agentflow inbox`。
-- `data`：`errors` → `by_role` / `role_total` / `total` / `categories` / `sources`；
+- `data`：`errors` → `by_role` / `role_total` / `total` / `categories` / `sources` /
+  `system` / `system_total` / `state_readings` / `state_readings_total` / `classes` /
+  `class_state` / `samples` / `run_boundary`（键集真身是 `readouts.ERRORS_DATA_KEYS`）；
   `flow` → `roles` / `totals`；`cost` → `by_role` / `by_scope` / `total`；
-  `gates` → `cells` / `counts` / `machine_pass` / `can_close` / `verdict`；
+  `gates` → `cells` / `counts` / `machine_pass` / `m_says_done` / `can_close` /
+  `closable` / `verdict` / `closing_verdict` / `refusal`（真身
+  `readouts.GATES_DATA_KEYS`）；
   `all` → `errors` / `flow` / `cost` / `gates` 四栏。
 - 三态：`0` 查过了（含全 0）；`2` 没查成（`state="unknown"`，`problems` 里逐条原因）。
   没有 `1`：这一层不是判据，它不判"错误太多"。
@@ -84,9 +88,11 @@
 - 参数：`evidence <verify|store|migrate> <目标> [--apply] [--json]`。
 - `data`：`{"text": <读数原文>}`。
 - 三态：`0` 查过、都对得上；`1` 查过了、有坏引用（`verify` 那一档）；
-  `2` 没查成（目标不是目录 / 读不了）。
-- 实现：`_evidence_verify` / `_evidence_store` 现读现算；`migrate` 的真实现在
-  `tools/legacy_cli/evidence_migrate.py`（移植期工具，下一版删除）。
+  `2` 没查成（目标不是目录 / 读不了 / `migrate` 这条路已不存在）。
+- 实现：`_evidence_verify` / `_evidence_store` 现读现算；`migrate` 已退场
+  （2026-11-20 业主批准 A4：移植期工具 `tools/legacy_cli/` 连同转发一起删除），
+  现在只回一条明确的退场说明与替代指引（`evidence verify` / `evidence store`），
+  退出码 `2` —— 不是静默消失，也不是冒充成功。
 
 ### 3.4 `inspect artifacts`
 

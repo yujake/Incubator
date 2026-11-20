@@ -604,8 +604,10 @@ class _Core:
         `search_requests` | 本条：受控例外（不是知识） | 本方法，`submit_requests=True` 才开启 |`graph.gaps` 刻意不暴露 `submit_requests`（见 `register_tools` 里那段注释），所以"C 的推理链不能写任何东
         西"这一条没有被破 —— 权限面（工具）与这条确定性代码路径是两件事。`search_requests` 是"请 A 去查一查"的请求；`literature` / `concepts` / `relations` 三张知识表在 C 里零写入点（`tests/test_agent_c_service.py::test_the_four_service_methods_do_not_touch_a_single_byte`
         与本文件的 `test_agent_c_writes_only_analysis_reports_and_never_the_knowledge_tables`都断言了这一点）。 3. 默认关闭（`submit_requests=False`），且只能由编排层显式开启。默认路径上 C 的写入
-        面就只有 `analysis_reports`。`capabilities.WRITE_SETS["C"]` 需要登记这条例外（登记动作在 conductor 一侧，不在本模块）。在登记落地之前，静态写集与这里的实际行为是不一致的 ——而那种不一致正是本项目最恨的形态：
-        `assert_capabilities()` 查不出来，只有某天有人对着表问"C 凭什么能写 search_requests"时才会暴露。开启时的全部动作都在一个 `store.tx("search_requests")` 里完成—— 不是"图省事"，而是因为配额判定（`admit_search_request`）
+        面就只有 `analysis_reports`。这条例外已经登记在静态写集里：
+        `capabilities.WRITE_SETS["C"]` 含 `search_requests`（真身 `specs/c.py::SPEC.write_set`），
+        所以"表说能写什么"与"这段代码真的写什么"是同一句话 —— 改前这里写着「写集还没
+        登记时两边不一致」那一档旧状态，它不是现在盘上的事实。开启时的全部动作都在一个 `store.tx("search_requests")` 里完成—— 不是"图省事"，而是因为配额判定（`admit_search_request`）
         与写入必须看到同一份在途清单：分成两个事务的话，两次判定之间另一个提交方可能已经占满配额，于是"闸门说可以"与"实际写进去"不再对应，配额形同虚设。三条闸门（缺一条都会把 A 的队列淹掉）： 1. 只收通过 veto 且 confidence >= medium 的候选 —— 它们就是 
         `gaps` 里已经算好的 `candidate_gaps`。 2. 单次最多`interactions.DEFAULTS["max_gap_requests_per_run"]` 条，按净分降序； 3. 全局在途上限由 `interactions.admit_search_request`
         判定，超限就拒绝并把理由留在`rejected_requests` 里 —— 拒绝会把压力传导回提交方，而"无限排队"只会让所有请求（包括最关键的那条矛盾）一起变慢。主题去重与已有未完成请求比对（复用 `textutil.normalize`，不另写规范化）。

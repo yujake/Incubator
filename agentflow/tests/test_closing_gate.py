@@ -33,6 +33,7 @@ from agentflow import closing as CL
 from agentflow import papercompile as PC
 from agentflow import papermapping as PM
 from agentflow import schema as S
+from agentflow import sessions as SS
 from agentflow import userio as U
 from agentflow.store import Store
 
@@ -180,8 +181,49 @@ def _paper_with_claim(store: Store, *, evidence_kind: str = "proof",
     return row.to_dict()
 
 
+def _seed_gate_subjects(root: pathlib.Path) -> None:
+    """把三格"没有可判对象"的东西补上（2026-11-20 EMPTYCELL 四态之后的正控前提）。
+
+    八格现在分四态：表 / 文件整个不存在（或零行）的那几格记 `na`（不适用），不是
+    `pass`。正控要求"每条都过"，所以这三格必须真的有东西可判：
+
+    - `user_pending`：一份会话记录（`sessions/<today>.jsonl`，`sid=None` 读的就是它）；
+    - `acceptance`：验收表里两行真的按台账现算的口径（`document_rows` 与
+      `manuscript_rows`，后者写 `min: 0`）。为什么 `manuscript_rows` 也要有一行：
+      它在 `computed_kinds` 里时，验收表那一条"交接账本被模板灌满"的自动分支才会退场
+      （C12 的彩排那一趟自己会派生一条模板交接，只写 `document_rows` 会让它撞上那条
+      分支 ⇒ acceptance 红，而这不是本路要改的东西）；这一趟不用交接手稿 ⇒ 0 行是
+      读数、不是缺，所以 `min: 0` 是如实声明的门槛，不是"写一行把它关掉"；
+    - `literature_pending`：一份收过工的文献委托归档（清表 + 归档的留痕）。
+
+    验收表那一行的读数由真台账撑着：`documents` 一行（`_paper_with_claim`）。
+
+    这不是为了让判据变绿：`na` 本身就会让"每格都判过"不成立，而这三格原本正是空工作区
+    上真空通过的那几格。
+    """
+    SS.append(root, {"kind": "agent_run_start", "role": "M"}, sid=None)
+    out = root / "out" / "paper"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "ACCEPTANCE-CHECKS.json").write_text(json.dumps(
+        {"checks": [
+            {"id": "R1", "kind": "document_rows", "min": 1,
+             "note": "夹具：交付稿件至少一份（按 documents 台账现算）"},
+            {"id": "R2", "kind": "manuscript_rows", "min": 0,
+             "note": "夹具：这一趟不用交接手稿 ⇒ 0 行是读数；写这一行只为让自动分支退场"},
+        ]}, ensure_ascii=False), encoding="utf-8")
+    arch = root / "data" / "lit_candidates"
+    arch.mkdir(parents=True, exist_ok=True)
+    (arch / "archive-r-000001.jsonl").write_text(
+        json.dumps({"request_id": "r-000001", "slot": "001", "status": "admitted",
+                    "cleared_at": TS}, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def _good(tmp_path: pathlib.Path):
-    """各格全过的那个工作区（正控的底座）：先写台账，再写正文并编一遍，最后写报告。"""
+    """各格全过的那个工作区（正控的底座）：先写台账，再写正文并编一遍，最后写报告。
+
+    `_seed_gate_subjects` 补的是"四态里没有可判对象那三格"的对象（见它的 docstring）：
+    不补的话正控会变成"五格 pass、三格 na"，而它要证的是"每格都判过且过"。
+    """
     def seed(st: Store) -> None:
         """台账里的两条行：一条 T3 实验 + 一条引到它的 proof 级断言。"""
         _t3_experiment(st)
@@ -189,6 +231,7 @@ def _good(tmp_path: pathlib.Path):
 
     st = _project(tmp_path, seed=seed)
     seed_writing_material(st)
+    _seed_gate_subjects(tmp_path)
     report = _write_report(tmp_path)
     return st, report
 
@@ -897,15 +940,18 @@ def test_the_review_files_row_counts_review_reports_not_the_agents_own_report(
 
 
 def test_the_acceptance_cell_separates_no_rows_from_not_checked(tmp_path: pathlib.Path):
-    """三态（这一格最容易做错的地方）：没有这一栏 ⇒ `pass`；读不懂 ⇒ `unknown`。
+    """四态（这一格最容易做错的地方）：没有这一栏 ⇒ `na`；读不懂 ⇒ `unknown`。
 
-    "这个项目没有机器可判的验收行"与"有、但我没查成"必须分得开 ——
-    把后者读成 `pass` 就是本项目最忌的形态（把"没查"折成"没问题"）。
+    "这个项目没有机器可判的验收行（没有可判对象）"与"有、但我没查成"必须分得开 ——
+    把后者读成 `na` 或 `pass` 就是本项目最忌的形态（把"没查"折成"没问题"）。
+    2026-11-20（EMPTYCELL）：改前第一档记 `pass`，那是空工作区上的真空通过。
     """
     st, report = _good(tmp_path)
+    # 先把正控夹具补的那份验收表删掉：这一条问的正是"没有这一栏"那一档。
+    (tmp_path / "out" / "paper" / "ACCEPTANCE-CHECKS.json").unlink()
     rep = _gate(st, report)
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
-    assert "没有" in rep.readings["acceptance"]["note"], rep.readings["acceptance"]
+    assert rep.status["acceptance"] == "na", rep.to_dict()
+    assert "没有可判对象" in rep.readings["acceptance"]["reason"], rep.readings["acceptance"]
 
     (tmp_path / "out" / "paper" / "ACCEPTANCE-CHECKS.json").write_text("{坏 JSON", encoding="utf-8")
     bad = _gate(st, report)
@@ -926,8 +972,8 @@ def test_the_paper_reading_goes_red_alone_but_does_not_gate(tmp_path: pathlib.Pa
     """负控①（论文）：封好（编过一遍）之后改一次正文 ⇒ PDF 过期。
 
     2026-11-14（业主裁定）之后这一条分两半判：
-    ① 缺省表（七格）：`paper` 只是读数 —— `verdict="drifted"`、一条 warning，
-       不进 `status`、不进 `blockers`，于是七格全绿时 `machine_pass` 仍为真
+    ① 缺省表（八格）：`paper` 只是读数 —— `verdict="drifted"`、一条 warning，
+       不进 `status`、不进 `blockers`，于是八格全绿时 `machine_pass` 仍为真
        （它是"出不出论文由 M 判断"这句话的机器形态）；
     ② 显式点名 `checks=("paper",)`：判据本体照旧单独造红（`status="paper"=fail` +
        blocker `paper_pdf_is_stale`），M 说"达成"时 `overrode` 逐格点名它 ——
@@ -939,7 +985,7 @@ def test_the_paper_reading_goes_red_alone_but_does_not_gate(tmp_path: pathlib.Pa
     (tmp_path / "out" / "paper" / "main.tex").write_text(
         "改过了\n" + PM.APPENDIX_INPUT + "\n", encoding="utf-8")
 
-    # ① 缺省七格：读数红、门不红
+    # ① 缺省八格：读数红、门不红
     rep = _gate(st, report)
     assert "paper" not in rep.status, rep.to_dict()
     assert rep.readings["paper"]["verdict"] == "drifted", rep.readings["paper"]
@@ -1191,7 +1237,10 @@ def test_the_substance_check_goes_red_alone(tmp_path: pathlib.Path):
     assert [f.code for f in rep.blockers] == ["no_substantive_output"], rep.to_dict()
     assert "实质产出" in rep.findings[0].detail, rep.findings[0].detail
     # 其余各条不被这一条带红（除了锚：没有台账就没有渲染锚 ⇒ 那是另一条自己的红）
-    assert rep.status["contradictions"] == "pass", rep.to_dict()
+    # 2026-11-20（EMPTYCELL）：这个夹具一张台账行都没有 ⇒ contradictions 没有可判对象，
+    # 记 `na`（不是 pass）；report_shape 有报告、照旧 pass。
+    assert rep.status["contradictions"] == "na", rep.to_dict()
+    assert "没有可判对象" in rep.readings["contradictions"]["reason"], rep.readings["contradictions"]
     assert rep.status["report_shape"] == "pass", rep.to_dict()
 
 
@@ -1243,6 +1292,8 @@ def test_a_research_project_must_leave_an_acceptance_checks_file(
     于是"没写验收表"与"写了且全过"在收工门上长得一模一样（三态被折平的那种形态）。
     """
     st, report = _good(tmp_path)
+    # 这一条问的是"研究型项目没有这份表"那一档：先把正控夹具补的那份删掉。
+    (tmp_path / "out" / "paper" / "ACCEPTANCE-CHECKS.json").unlink()
     _as_research(st, monkeypatch)
     rep = _gate(st, report)
 
@@ -1303,15 +1354,19 @@ def test_a_review_project_is_not_touched_by_the_coverage_rule(tmp_path: pathlib.
 
     为什么这条边界必须显式测：T1 的验收表是任务书给的 P1–P11，与"研究链六环节"
     无关 —— 把这条判据撒到它头上会让 T1 那一线当场变红（而它已经通过了 15 趟）。
-    改前"没有验收表 ⇒ pass + 一句读数"，那一条对 review 项目保持不变。
+    改前"没有验收表 ⇒ pass + 一句读数"；2026-11-20（EMPTYCELL）之后这一档记 `na`
+    （没有可判的验收口径 = 没有可判对象，不是"抽查过了"）—— 对 review 项目仍然不判红、
+    不增加 blocker，差别只在状态词与 why。
     """
-    st, report = _good(tmp_path)                     # 不给 research_questions、不给验收表
+    st, report = _good(tmp_path)
+    (tmp_path / "out" / "paper" / "ACCEPTANCE-CHECKS.json").unlink()  # 不给验收表
     rep = _gate(st, report)
 
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
+    assert rep.status["acceptance"] == "na", rep.to_dict()
     assert rep.readings["acceptance"]["research_chain"]["researched"] is False, \
         rep.readings["acceptance"]["research_chain"]
-    assert "没有" in rep.readings["acceptance"]["note"], rep.readings["acceptance"]
+    assert "没有可判对象" in rep.readings["acceptance"]["reason"], rep.readings["acceptance"]
+    assert not [f for f in rep.blockers if f.check == "acceptance"], rep.to_dict()
 
 
 # ============================================================ 交接手稿那一档（§140）
@@ -2820,8 +2875,9 @@ def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
     三档分开、强度不同（这是 C4 的核心，避免把正常产物读成坏）：
 
     - `missing`（登记过、盘上没了）/ `unreadable` ⇒ `fail`；
-    - 只有 `changed`（登记之后又被正常改写）⇒ `unknown`（真机根 B 589 条 ≈18.75%）；
-    - 全 `ok` ⇒ `pass`；台账不在盘上 ⇒ `pass` + 读数 `absent: true`（"没有这一栏"）。
+    - 只有 `changed`（登记之后又被正常改写）⇒ `pass` + warning（D9 收窄）;
+    - 全 `ok` ⇒ `pass`；台账不在盘上 ⇒ `na` + 读数 `absent: true`（"没有这一栏" ——
+      2026-11-20 EMPTYCELL：没有可对的东西，不是"判过且一致"，也不是"没查成"）。
     """
     from agentflow import artifacts as A
 
@@ -2868,12 +2924,14 @@ def test_the_artifact_ledger_must_match_the_disk(tmp_path: pathlib.Path):
     assert rep.readings["artifact_ledger"]["missing"] == 1, rep.readings
     assert [f.code for f in rep.findings] == ["artifact_ledger_bad_rows"], rep.to_dict()
 
-    # ④ 台账不在盘上 ⇒ pass + 读数写明"没有这一栏"（与 acceptance 对非研究型项目同口径）
+    # ④ 台账不在盘上 ⇒ na + 读数写明"没有这一栏"（2026-11-20 EMPTYCELL：
+    #    没有可对的东西，既不是"判过且一致"，也不是"没查成"）
     (tmp_path / "ARTIFACTS.jsonl").unlink()
     rep = CL.check_closing(st, project_dir=str(tmp_path), report_path=str(report),
                            checks=("artifact_ledger",))
-    assert rep.status["artifact_ledger"] == "pass", rep.to_dict()
+    assert rep.status["artifact_ledger"] == "na", rep.to_dict()
     assert rep.readings["artifact_ledger"]["absent"] is True, rep.readings
+    assert "没有可判对象" in rep.readings["artifact_ledger"]["reason"], rep.readings
 
 
 def test_the_ledger_compares_against_the_last_registration_per_path(tmp_path: pathlib.Path):
@@ -3448,6 +3506,193 @@ def test_a_statement_named_by_a_plan_must_be_signed_before_the_attack_cell_passe
     rep_v = VY.verify_all(st)
     # 这条命题是 `heuristic` ⇒ 不归 `proof_review` 那条审计判据管（反真空）
     assert [i for i in rep_v.issues if i.code == VR.CODE_AUDIT] == [], rep_v.issues
+
+
+# ============================== V2FIX：签住在 pending 的那一签也算「有人签过」
+#
+# 本仓的主路是「先签后收录」：V 在命题还没号时审、签落
+# `verifications/pending/<载体 sha>.jsonl`（`record_pending_sign`），B 收录拿到号之后
+# 只在那一行上回写 `statement_id`（`vsigns.bind_pending_claim`，不搬文件）。
+# 而 `unverified_statement_refs` 改前只问 `verifications/<号>.jsonl` 这个文件在不在
+# ⇒ 只要某计划 `history` 带 `statement_id` 而签住在 pending，P6 就掉 `unknown`
+# （lp-ball-10 / lp-ball-12 的现场）。下面三条钉的就是这个形态：
+# ① 已认领的 pending 签算在（正控）+ 把 pending 那一路打桩掉必回红（反真空）；
+# ② 已认领、但尾行签不住（`verdict=有毛病`）⇒ 仍 missing（负控）；
+# ③ 未认领的 pending（行上还没有号）⇒ 仍 missing（负控）。
+
+
+def _plan_naming_statement(st: Store, statement_id: str = "0000") -> list[dict]:
+    """把 `statement_id` 写进那份计划第 1 轮的 history（真机形态：F 交了论证）。"""
+    plan = dict(st.rows("attack_plans")[0])
+    plan["history"] = [dict(h) for h in plan["history"]]
+    plan["history"][0]["statement_id"] = statement_id
+    with st.tx("attack_plans", actor="test", note="closing:statement_id") as tx:
+        tx.upsert("attack_plans", plan)
+    return [plan]
+
+
+def _sign_in_pending(ws: pathlib.Path, *, verdict: dict, secretary_judge: dict) -> dict:
+    """按生产写口把一签落进 pending（不手写台账）；返回那一行。"""
+    from agentflow import verifications as VR
+
+    return VR.record_pending_sign(
+        ws, proof_text="（逐步论证）", verdict=dict(verdict),
+        object_path="reports/f-proof-000000.md",
+        secretary_judge=dict(secretary_judge))
+
+
+def _claim_pending(ws: pathlib.Path, row: dict, statement_id: str) -> dict:
+    """按生产认领口把那一签认给 `statement_id`（只回写号，文件不搬）。"""
+    from agentflow import verifications as VR
+    from agentflow import vsigns as VS
+
+    key = str(row.get("object_sha256") or row.get("proof_sha256") or "")
+    got = VS.bind_pending_claim(
+        ws, claim={"ledger": (f"{VR.VERIFICATIONS_DIR}/{VR.PENDING_DIR_NAME}/{key}.jsonl"
+                              f"#{row.get('verification_id')}"),
+                   "verification_id": str(row.get("verification_id") or ""),
+                   "proof_sha256": str(row.get("proof_sha256") or "")},
+        statement_id=statement_id)
+    assert got.get("bound") is True, got
+    return got
+
+
+def test_a_plan_statement_signed_in_pending_is_not_unknown(
+        tmp_path: pathlib.Path, monkeypatch):
+    """③a（lp-ball-12 现场）：签只在 pending、且已认领给那条命题 ⇒ P6 不再是 `unknown`。
+
+    底座是 `_research_ready`（八环节本来就全过）。把某个计划的 `history` 造上
+    `statement_id="0000"`、再让那一签只住在 `verifications/pending/<载体 sha>.jsonl`
+    （收录时只回写号、不搬文件）—— 改前这一格读成 `unknown`（理由逐字：
+    「`verifications` 里没有它们对应的行」），改后必须读成「有人审过它」。
+
+    ④ 反真空（同一个用例里）：把 `_claimed_pending_rows` 打桩成恒空 ⇒ 同一份盘必须
+    回红。没有这一条，"绿"可能只是那一格恒真。
+    """
+    from agentflow import verifications as VR
+
+    st, report, ws = _research_ready(tmp_path)
+    plans = _plan_naming_statement(st)
+    _claim_pending(ws, _sign_in_pending(
+        ws, verdict={"verdict": "成立", "findings": []},
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：秘书判 clean"}),
+        "0000")
+
+    refs = VR.unverified_statement_refs(ws, plans)
+    assert refs["checked"] is True, refs["problems"]
+    assert refs["total"] == 1, refs
+    assert refs["missing"] == [], (
+        "签住在 `verifications/pending/` 且已认领给这一条命题，却仍被读成"
+        f"『没有对应的行』⇒ P6 会掉 unknown：{refs['refs']}")
+    one = refs["refs"][0]
+    assert one["pending_rows"] == 1 and one["pending_signable"] is True, one
+
+    green = _gate(st, report)
+    assert green.status["acceptance"] == "pass", _acc_detail(green) or green.to_dict()
+    assert _acc_row(green, "R6")["detail"]["verifications_backlog"]["missing"] == [], \
+        _acc_row(green, "R6")
+
+    # ---- ④ 反真空：把 pending 那一路打桩掉 ⇒ 同一份盘必须回红（绿的是那一路）
+    monkeypatch.setattr(VR, "_claimed_pending_rows",
+                        lambda root, statement_id="": ([], []))
+    off = VR.unverified_statement_refs(ws, plans)
+    assert [r["statement_id"] for r in off["missing"]] == ["0000"], off
+    red = _gate(st, report)
+    assert red.status["acceptance"] == "unknown", red.to_dict()
+    assert _acc_row(red, "R6")["detail"]["verifications_backlog"]["missing"] == ["0000"], \
+        _acc_row(red, "R6")
+
+
+def test_negative_control_a_claimed_pending_sign_that_does_not_sign_is_still_missing(
+        tmp_path: pathlib.Path):
+    """③b 负控：认领了、但尾行签不住（`verdict=有毛病` 且秘书轴 fault）⇒ 仍 missing。
+
+    认领只回写 `statement_id`、不改判词 ⇒ "行上有号"不等于"这一条被签过"。这一条钉的是
+    三态不许折平：把"认领了但判定有毛病"读成"有人签过"，等于让一条被否决的证明混过 P6。
+    """
+    from agentflow import verifications as VR
+
+    st, report, ws = _research_ready(tmp_path)
+    plans = _plan_naming_statement(st)
+    _claim_pending(ws, _sign_in_pending(
+        ws, verdict={"verdict": "有毛病", "defect_step": 1, "why": "第 1 步没有依据"},
+        secretary_judge={"checked": True, "axis": "fault",
+                         "decision": "有毛病", "reason": "夹具：秘书判 fault"}),
+        "0000")
+
+    refs = VR.unverified_statement_refs(ws, plans)
+    assert refs["checked"] is True, refs["problems"]
+    assert [r["statement_id"] for r in refs["missing"]] == ["0000"], refs
+    one = refs["refs"][0]
+    assert one["pending_rows"] == 1 and one["pending_signable"] is False, one
+    assert "签不住" in one["why"], one
+    red = _gate(st, report)
+    assert red.status["acceptance"] == "unknown", red.to_dict()
+
+
+def test_negative_control_an_unclaimed_pending_sign_is_still_missing(
+        tmp_path: pathlib.Path):
+    """③c 负控：pending 里那一签没有认领（行上还没有号）⇒ 仍 missing。
+
+    未认领的行不属于任何命题（`_claimed_pending_rows` 的口径）：它只说明"V 审过某一份
+    还没号的载体"，不能替这条命题背书 —— 否则任何 pending 签都能让任意命题的 P6 变绿。
+    """
+    from agentflow import verifications as VR
+
+    st, report, ws = _research_ready(tmp_path)
+    plans = _plan_naming_statement(st)
+    _sign_in_pending(
+        ws, verdict={"verdict": "成立", "findings": []},
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：秘书判 clean"})
+
+    refs = VR.unverified_statement_refs(ws, plans)
+    assert refs["checked"] is True, refs["problems"]
+    assert [r["statement_id"] for r in refs["missing"]] == ["0000"], refs
+    one = refs["refs"][0]
+    assert one["pending_rows"] == 0 and one["pending_signable"] is False, one
+    red = _gate(st, report)
+    assert red.status["acceptance"] == "unknown", red.to_dict()
+
+
+def test_pending_ledger_corruption_matters_only_when_the_fallback_decides(
+        tmp_path: pathlib.Path):
+    """第二路的坏行只在"答案由它给"时承重（读数精度，不折平）。
+
+    两侧：① 已认领的那一签签得住 ⇒ 答案已经成立，另一本 pending 台账里读不出来的行
+    不该把整格「攻」连坐成 `unknown`；② 没有认领到任何行（答案正是第二路给的"没有"）
+    ⇒ 那一行坏行可能藏着一份签住的签，必须记"没查成"（`checked=False`），
+    既不折成"确实没有"、也不折成"有"。
+    """
+    from agentflow import verifications as VR
+
+    st, report, ws = _research_ready(tmp_path)
+    plans = _plan_naming_statement(st)
+    row = _sign_in_pending(
+        ws, verdict={"verdict": "成立", "findings": []},
+        secretary_judge={"checked": True, "axis": "clean",
+                         "decision": "没问题", "reason": "夹具：秘书判 clean"})
+    _claim_pending(ws, row, "0000")
+    #: 一本与这条命题无关、读不动的 pending 台账（模拟盘上坏行）：
+    bad_ledger = ws / "verifications" / "pending" / f"{'f' * 64}.jsonl"
+    bad_ledger.write_text('{"verification_id": "u-999999"\n', encoding="utf-8")
+
+    ok = VR.unverified_statement_refs(ws, plans)
+    assert ok["checked"] is True and ok["missing"] == [], ok
+
+    # ---- ② 把那一签的认领撤掉（行上不再有号）⇒ 答案由第二路的"没有"给出 ⇒ 必须没查成。
+    pending_file = VR.pending_ledger_path(
+        ws, str(row.get("object_sha256") or row.get("proof_sha256") or ""))
+    cleared = [{**dict(r), "statement_id": "", "stmt_id": "", "claimed_at": ""}
+               for r in (VR.pending_rows(ws)[0])]
+    pending_file.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in cleared),
+                            encoding="utf-8")
+    unknown = VR.unverified_statement_refs(ws, plans)
+    assert unknown["checked"] is False, unknown
+    assert unknown["problems"], unknown
+    red = _gate(st, report)
+    assert red.status["acceptance"] == "unknown", red.to_dict()
 
 
 # ============================================================ 论文对应表那一格（业主 2026-10-22）

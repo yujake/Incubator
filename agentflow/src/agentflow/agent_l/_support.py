@@ -18,7 +18,7 @@ L 照 E 的 Lean 面复制而来，E 的代码一行不删、行为不改。所�
 
 | 理由码 | 自检状态 | 处置 |
 |---|---|---|
-| `lean_selfcheck_off` | `off`（`toolchain.lean_enabled=false`） | 用户关掉了这条路：改走逐行审阅，别去查环境 |
+| `lean_selfcheck_off` | `off`（`toolchain.lean_enabled=false`） | 这一档下 L 不存在（`leanscope`）⇒ 产品路径走不到这里；只有直接构造 AgentL 时才读得到，按「没查成」处理 |
 | `lean_selfcheck_unusable` | `unusable`（找不到 / 版本不符 / 正样例不过 / 反控没失败） | 查过了：这台机器上的 lean 不构成检查器（去查 `AGENTFLOW_LEAN_BIN`） |
 | `lean_selfcheck_unknown` | `unknown`（没查成） | 我们没查成：既不是通过、也不是不可用 |
 

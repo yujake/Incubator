@@ -124,7 +124,7 @@ def _record_tool(store: Any, root: Any, *, statement_id: str, code_path: str,
     (
         "把一条命题写成 Lean 源码、落盘到 `code/formal/<声明名>.lean`，再交给检查器真跑一次。"
         "结论三态：verified（检查器说通过）/ failed（检查器说不通过）/ unknown（没查成，"
-        "带原因：开关关着 / 自检不过 / 没有检查器 / 超时）。返回里带 `path` / `sha256` / "
+        "带原因：自检不是 usable / 没有检查器 / 超时）。返回里带 `path` / `sha256` / "
         "`exit_code` / `verifier_output` —— 只写「通过」而没有这三样的不算数"
     ),
     {

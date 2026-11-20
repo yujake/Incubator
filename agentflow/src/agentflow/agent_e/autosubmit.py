@@ -15,9 +15,15 @@ from __future__ import annotations
 from typing import Any
 
 from .. import manuscriptclosing as _MC
+from .. import manuscriptopen as _MO
 
-#: E 的两族（`manuscriptfamily.FAMILY_ORDER` 里的名字；不在这里另写前缀）。
-FAMILIES_E: tuple[str, ...] = ("e-proof", "e-num")
+#: E 的两族 —— 现读角色-族表（`manuscriptopen.ROLE_FAMILIES["E"]`，唯一真身）。
+#:
+#: 改前这里把 `("e-proof", "e-num")` 又写了一遍：2026-11-18 业主裁定「谁写稿，谁就对稿
+#: 负责」之后，收工这一侧的角色-族绑定已经收到 `manuscriptopen.ROLE_FAMILIES` 一处，
+#: 本模块再抄一份就是第二个要同步的地方（判据：
+#: `tests/test_roleclean2_c_e_f_g_residue.py` ③）。
+FAMILIES_E: tuple[str, ...] = tuple(_MO.families_of("E"))
 
 
 def auto_submit_at_close(*, store: Any, root: Any, task_id: str = "",

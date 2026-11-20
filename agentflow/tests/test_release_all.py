@@ -3910,6 +3910,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "secretary_axes.py": "秘书的四本判定旁支台账（2026-11-20 从 secretary.py 的 U30 拆出）："
                          "append / rows / of / path 三态读侧 —— 判定面与台账面之间那一层，"
                          "只依赖 secretary_ledger 与 secretary_time",
+    # 2026-11-20（SECSPLIT 刀2）：词表与提示词是声明面，判据面在别处。它们必须先落地 ——
+    # 后面每一刀都要 import 词表；晚切则五刀各改一次同一个 import 面。
+    "secretary_vocab.py": "秘书的受控词表（2026-11-20 从 secretary.py 的 U15/U17/U18/U25/U26 "
+                          "等单元的常量拆出）：KIND_* / DECISIONS / JUDGE_* / SIGN_* / "
+                          "DISPATCH_* / ROW_AXIS_* / DEPS_MISSING_* / NONTRIVIALITY_* / "
+                          "BRIEF_MAX —— 一个词只有一个定义；判据面与提示词面 import 同一个常量",
+    "secretary_prompts.py": "秘书的判断提示词（2026-11-20 从 secretary.py 的 U16 拆出）："
+                            "_judge_system / _judge_material / _judge_prompt / _wash_v_system / "
+                            "_proposition_form_system 等 —— system 段只取决于 kind、逐字节稳定，"
+                            "材料留在 user 位；只依赖 secretary_vocab",
 }
 
 

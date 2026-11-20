@@ -162,8 +162,10 @@ def test_allowed_edges_match_design_table():
     # 这一次给 B 加了两条边，各自只承担那一句里的一件事：
     #   L = 形式化的唯一入口（B 是 statements 的唯一登记方，所以"只让 B 派 L"结构上
     #       就是"L 形式化的东西一定出自 B 的库"）；
-    #   D = 缺陷严重时的升级出口（B 判断路线本身不成立时交给 D 开展研究，
-    #       实现在 agent_b/proof_research.py，落点是 D 的收件箱）。
+    #   D = 缺陷严重时的升级出口（B 判断路线本身不成立时交给 D 开展研究；落点是
+    #       `summon` 形状派 D，见 `specs/b.py` 的 `PROOF_CHANNEL` 第⑥步 ——
+    #       2026-11-20（PROOFCHAN）退场了改前那个只活在测试里的 `escalate_proof_research`
+    #       程序入口；判据 `tests/test_proofchan_upgrade_is_the_summon_path.py`）。
     # 这两条之外没有放宽任何别的边（A / E / F / G 仍然不在 B 的出边里）。
     assert C.ALLOWED_EDGES["B"] == frozenset({"C", "D", "H", "L", "V"})
     assert C.ALLOWED_EDGES["D"] == frozenset({"A", "B", "C", "E", "F"})

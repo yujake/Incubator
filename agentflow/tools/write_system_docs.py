@@ -118,7 +118,7 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "src/agentflow/host.py",
         "把一个角色装配成能跑的东西：注册表、模型缝、工作区、工具面。",
         "build_registry 造工具面（按 roles 过滤）；build_role_registry 按角色裁面；"
-        "AGENT_CLASSES 把 specs 里 class_path 指向的实现类实例化；main 是 run-agent 的落点。",
+        "specs 里声明的 AgentSpec.build 工厂把实现类实例化；main 是 run-agent 的落点。",
         "读 specs 与 capabilities 与 tools.build_registry；写工作区 data 与 out",
         "tests/test_host_wiring.py",
     ),
@@ -289,7 +289,8 @@ COMPONENTS: tuple[tuple[str, str, str, str, str, str], ...] = (
         "手稿与论文",
         "src/agentflow/manuscripts.py",
         "证明正文与论文的落盘形态，以及把 out/paper/main.tex 编成 PDF。",
-        "manuscripts（write 与 row_of 与 read_rows，带解析缓存）、depsection（四列依赖表解析）、"
+        "manuscripts（write 与 row_of 与 read_rows，带解析缓存）、depsection（三列依赖表解析；"
+        "老盘带路径号那一列的四列仍读得回）、"
         "papermapping（论文到命题的对应表）、papercompile（xelatex 三遍，失败分类）。",
         "写 manuscripts/ 与 out/paper；读 reports/*-proof-*.md",
         "tests/test_manuscript_handoff.py、tests/test_paper_pack.py",

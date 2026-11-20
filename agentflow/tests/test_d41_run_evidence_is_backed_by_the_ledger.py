@@ -118,8 +118,11 @@ def test_six_cited_conclusions_with_a_complete_ledger_are_backed(tmp_path: pathl
     assert reading["backed_experiments"] == ids, reading
     assert reading["missing_conclusions"] == [], reading
     assert _findings(rep) == [], [f.to_dict() for f in rep.findings]
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
-    assert rep.machine_pass, rep.to_dict()
+    # 2026-11-20（EMPTYCELL）：这个夹具没有验收表、也没有 research_questions ⇒
+    # acceptance 记 `na`（没有可判对象），不是 `pass`；旧口径的 machine_pass（八格全 pass）
+    # 因此为假 —— G8 这条 reading 不受影响，这一条判的就是它。
+    assert rep.status["acceptance"] == "na", rep.to_dict()
+    assert rep.machine_pass is False, rep.to_dict()
 
 
 def test_a_ledger_row_must_carry_a_code_hash(tmp_path: pathlib.Path, monkeypatch):
@@ -198,8 +201,11 @@ def test_a_manuscript_without_numeric_conclusions_is_not_applicable(
     reading = rep.readings[CL.RUN_EVIDENCE_READING]
     assert reading["state"] == "not_applicable", reading
     assert _findings(rep) == [], [f.to_dict() for f in rep.findings]
-    assert rep.status["acceptance"] == "pass", rep.to_dict()
-    assert rep.machine_pass, rep.to_dict()
+    # 2026-11-20（EMPTYCELL）：这个夹具没有验收表、也没有 research_questions ⇒
+    # acceptance 记 `na`（没有可判对象），不是 `pass`；旧口径的 machine_pass（八格全 pass）
+    # 因此为假 —— G8 这条 reading 不受影响，这一条判的就是它。
+    assert rep.status["acceptance"] == "na", rep.to_dict()
+    assert rep.machine_pass is False, rep.to_dict()
 
 
 # ============================================================ f 反真空
