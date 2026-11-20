@@ -60,6 +60,7 @@ from typing import Any, Callable, Sequence
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockmem as CLKMEM
 from agentflow import conductor as COND
 from agentflow.agent_loop import AgentLoop
 from agentflow.conductor import Conductor, LocalBackend
@@ -245,7 +246,9 @@ def test_a2_without_the_fill_the_same_row_is_purposeless(
         got["task_text"] = ""      # 名册那一行"还在"，只是没有原文可用
         return got
 
-    monkeypatch.setattr(CLK, "_probe_read", hollow_probe)
+    # 2026-11-20（拆 clock.py）：`_new_timer` 搬进 `clockmem`，探针的模块级全局查找
+    # 发生在那一份里 —— 打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CLKMEM, "_probe_read", hollow_probe)
     armed = cond.arm_child_waiter(child, parent_task_id=parent, role="D", task_text="")
     assert armed["armed"] is True, armed
     assert armed["purpose_missing"] is True, armed

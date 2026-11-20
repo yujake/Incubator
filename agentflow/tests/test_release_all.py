@@ -2963,6 +2963,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                      "`TimerBook(_BookIndexMixin)`（簿记本体：载入 / 保存 / 增删 / 取用 / "
                      "到点判定）/ `book(workspace)` / `target_state(workspace, kind, ref)` —— "
                      "四者是一个运行期成环的整体，拆开必有环",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第七层 = 计时器/闹钟/周期巡查的申请面。
+    # 为什么是一个模块：三档起表（timer / alarm / periodic）都经 `_new_timer` 一处建表，
+    # `set_purpose` 补的是同一条而不是新建一条，`timers` / `periodics` 是它们的读侧 ——
+    # 申请的写口与读口放两份就会让"补目的"与"起表"各认一套形状（p210 那次的错位）。
+    # 可变量：没有（`_PROBE_CALLS` 在 `clockrun.py`），依赖方向单向。
+    "clockmem.py": "计时器/闹钟/周期巡查的申请面（2026-11-20 从 `clock.py` 拆出）："
+                   "`_new_timer`（唯一建表点）/ `_waiter_handle_hint` / `start_timer` / "
+                   "`start_alarm` / `start_periodic` / `stop_periodic` / `periodics` / "
+                   "`set_purpose` / `timers_missing_purpose` / `cancel_timer` / `timers` —— "
+                   "申请的写口与读口同处一个模块，目的缺失的追问与补填只有一份形状",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
