@@ -325,7 +325,6 @@ from .clockevents import (  # noqa: F401 — 再导出，保持公开面不变
     _unregister_parked,
     event_close_reading,
     observe_event,
-    observe_message,
     observe_work,
     observed_events,
     reset_event_close,
@@ -363,6 +362,56 @@ from .clockevents import (  # noqa: F401 — 再导出，保持公开面不变
 #: 用 `set_patrol_probe` 把它接上（与 `set_due_handler` 同一处：`clock_tools.register`）。
 _PATROL_PROBE: Callable[[str, str], Mapping[str, Any]] | None = None
 
+
+def observe_message(rec: Mapping[str, Any]) -> ObservedEvent | None:
+    """从一条会话事件里认出"发消息 / 答复"，转成时钟事件。返回 `None` = 不关时钟的事。
+
+    认法（三态归到三类里，不许漏）：
+
+    - `kind != "agent_message"` => 不是消息，返回 `None`；
+    - `progress` 为真 => 「只落消息、不记事件」，返回 `None`（D11 第③件：进度对账
+      不许唤醒"等它"的计时器；消息本身已由 `send_message` 落在会话里，父照常读得到）；
+    - 有 `reply_to` => `reply`（对某条消息的答复）；
+    - 其余 => `message`。
+
+    `target`（谁产生的）优先取 `from_task_id`（发信人那件活），其次取 `from`
+    （角色名）—— 等的是任务号就按任务号对上，等的是角色就按角色对上。
+    """
+    if str(rec.get("kind") or "") != "agent_message":
+        return None
+    if rec.get("progress"):
+        #: 进度上报（D11 第③件，2026-11-09）：`send_message(..., extra={"progress": True})`
+        #: 标记的是"还在跑"的对账（每满 N 步的步数报告），不是"被等对象说了话"。
+        #: 消息本身已经落进会话（`send_message` 先 append，本钩子只是旁路）⇒ 父下一步
+        #: 照常从收件箱读到；这里只是「不」把它记成时钟事件 ⇒ 不参与 `_event_hits`、
+        #: 也不触发 `target_event` 唤醒（否则父的等待计时器会被一条进度留言叫醒，
+        #: 真机 33 条「时间到」里有 8 条就是这么来的）。
+        return None
+    body = str(rec.get("body") or "")
+    subject = str(rec.get("subject") or "")
+    content = f"{subject}：{body}" if subject else body
+    kind = "reply" if str(rec.get("reply_to") or "") else "message"
+    sender = str(rec.get("from_task_id") or "")
+    recipient = str(rec.get("to") or "")
+    event = observe_event(
+        kind,
+        task_id=sender,
+        from_task_id=sender,
+        to_task_id=recipient,
+        role=str(rec.get("from") or ""),
+        content=content,
+        message_id=str(rec.get("msg_id") or ""),
+    )
+    # 投递这一侧再记一格（业主 2026-10-26：「等父也要真的能醒」）：`message` 认的是
+    # "谁说的"，而"等父"要认的是"父给我投来了一条话" —— 父不交差（那是 handoff），
+    # 它只会发消息；两档分开记，读的人（与判据）能看见投递这件事真的发生过。
+    try:
+        observe_event("delivery", task_id=sender, from_task_id=sender,
+                      to_task_id=recipient, role=str(rec.get("from") or ""),
+                      content=content, message_id=str(rec.get("msg_id") or ""))
+    except ClockError:  # pragma: no cover - 受控词表刚加这一档，这里只做防御
+        pass
+    return event
 
 def set_patrol_probe(probe: Callable[[str, str], Mapping[str, Any]] | None
                      ) -> Callable[[str, str], Mapping[str, Any]] | None:
