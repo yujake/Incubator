@@ -3,28 +3,28 @@
 
 ## 这个模块为什么存在
 
-2026-11-20 业主「还有超800的？派人拆」⇒ `clock.py` 由底向上拆的第十一刀。
-业主 2026-10-25：「让老的未依赖时钟的计时工具退场」。这件事不能靠一句声明，要有机器判据：
-`raw_wait_census()` 用 AST 扫 `src/agentflow` 下全部模块，把 `time.sleep` / 阻塞原语
-的每一处点名；`program_census()` 扫"起进程却没进程序计时器"的地方。两把普查各自
-只报读数，缺口为 0 才算"所有计时类工作都在主时钟的账上"。
+2026-11-20 业主「还有超800的？派人拆」⇒ `clock.py` 由底向上拆的第十一刀（收口前又补了
+主时钟本体这一块，见下）。业主 2026-10-25：「让老的未依赖时钟的计时工具退场」。
+这件事不能靠一句声明，要有机器判据：`raw_wait_census()` 用 AST 扫 `src/agentflow` 下
+全部模块，把 `time.sleep` / 阻塞原语的每一处点名；`program_census()` 扫"起进程却没进
+程序计时器"的地方。两把普查各自只报读数，缺口为 0 才算"所有计时类工作都在主时钟的账上"。
 
 等待账与两把普查放在同一个模块，是因为它们共用同一份"扫描根"可变量：`set_census_roots`
 同时重设 `_CENSUS_ROOTS` / `_CENSUS_CACHE` / `_PROGRAM_CENSUS_CACHE` —— 三个写点与
 读点跨模块就会 split-brain（`from .mod import X` 是快照）。
 
-## 为什么 `await_io` 反而留在 `clock.py`
+## 主时钟本体（`await_io`）与它的豁免表
 
-`ALLOWED_RAW_WAITS` 是按"路径 + 函数名"认的：主时钟本体那一条写的是
-`agentflow/clock.py::await_io`（真睡那一句 + 那个 `= time.sleep` 的绑定）。
-`await_io` 就是这本账的写入口。把它搬进本模块只有两条路：要么改豁免表的路径，
-要么让主时钟本体的判定跟着换文件 —— 两条都等于让判据跟实现一起漂。
-所以它留在主时钟本体，本模块只放账与普查（它调 `note_wait` 记账，见 `clock.py`）。
+`await_io` 是这本账的写入口：它真睡 `seconds` 秒，并以 `note_wait` 记一条。
+`ALLOWED_RAW_WAITS` 那两条（`sleep` / `sleep_ref`）登记的就是它 —— 那是"它本来就是
+写入口"，不是"放它一马"。搬家的顺序因此是：先让 `coverage()` 按**函数名**认
+"主时钟本体"（见 0ad6c55c，按文件名认会让判据跟实现一起漂），再把 `await_io` 搬进来、
+把豁免表的路径同步改成 `agentflow/clockwaits.py`。豁免面一个字节没放宽。
 
 ## 装了什么
 
 等待账：`waits_path` / `_LEDGER` / `_LEDGER_LOCK` / `_LEDGER_WRITTEN` / `_ledger_key` /
-`note_wait` / `note_process_wait` / `waits` / `reset_waits` / `flush_waits`；
+`note_wait` / `await_io` / `note_process_wait` / `waits` / `reset_waits` / `flush_waits`；
 原始等待普查：`CENSUS_FORMS` / `ALLOWED_RAW_WAITS` / `GOVERNED_PRIMITIVE_WAITS` /
 `EXEMPT_PRIMITIVE_WAITS` / `_CENSUS_ROOTS` / `_CENSUS_CACHE` / `set_census_roots` /
 `_census_roots` / `_wait_form` / `_WaitVisitor` / `_iter_source_files` / `_exempt_for` /
@@ -34,8 +34,9 @@
 
 ## 等价性
 
-逐名 AST dump 全等，`clock.py` 原样再导出；`coverage` 的调用点（`clock.now` 工具）
-与判据都不用改。
+`await_io` 逐字搬移（AST dump 全等）；唯一跟着改的是 `ALLOWED_RAW_WAITS` 里那两条的
+`path`（`agentflow/clock.py` → `agentflow/clockwaits.py`）与 `coverage` 的主时钟判定
+（0ad6c55c，单独的提交）。其余 32 块纯搬移，`clock.py` 原样再导出。
 """
 
 from __future__ import annotations
@@ -301,6 +302,40 @@ def note_wait(seconds: float, purpose: str, *, kind: str = "io", where: str = ""
             row["skipped"] = int(row["skipped"]) + 1
         _LEDGER_WRITTEN += 1
         return dict(row)
+
+
+def await_io(seconds: float, purpose: str, *, kind: str = "io", where: str = "",
+             waited_for: str = "", sleep: Callable[[float], None] | None = None
+             ) -> dict[str, Any]:
+    """真睡 `seconds` 秒（保持原语义），并在主时钟的账上记一条。
+
+    这是框架内部所有"等一会儿"的唯一入口。`kind` 说这是哪一类等待（`retry` /
+    `rate_limit` / `poll` / `drain` / `user` …），`where` 说它落在哪个位置
+    （`fetch._download_via` 这种），`purpose` 说为什么等 —— 三样都进账，
+    `clock.now` 的复合读数把账汇总成 `waits_recorded`。
+
+    假时钟在装的时候不免掉真睡是不可接受的：判据里等 20 分钟没有意义，而且
+    "主时钟是假的"本来就意味着"时间由我拨"。所以当前时钟是假的时候真睡被免掉，
+    账上照记，`skipped` 计数 +1（读数里看得见"这几条没真等"）。
+    """
+    body = str(purpose or "").strip()
+    if not body:
+        raise ClockParamError(
+            "框架内部的等待必须写目的（purpose）：写不出目的的等待不许存在")
+    step = float(seconds)
+    if step < 0:
+        raise ClockParamError(f"等待时长不能是负数，收到 {seconds!r}")
+    fake = str(getattr(current(), "name", "real") or "") == "fake"
+    do_sleep = sleep if sleep is not None else (None if fake else time.sleep)
+    took = 0.0
+    if do_sleep is not None and step > 0:
+        start = time.monotonic()
+        do_sleep(step)
+        took = time.monotonic() - start
+    return note_wait(step, body, kind=kind, where=where, waited_for=waited_for,
+                     slept=took if do_sleep is not None else 0.0,
+                     skipped=fake or do_sleep is None)
+
 def note_process_wait(elapsed_sec: float, *, where: str, waited_for: str = "",
                       purpose: str = "等外部进程退出（实测耗时，不是 timeout 上限）"
                       ) -> dict[str, Any]:
@@ -370,10 +405,10 @@ CENSUS_FORMS: tuple[str, ...] = ("sleep", "sleep_ref", "wait", "blocking_io")
 #: 每条必须写 `why`（为什么它可以不记账）与 `blocked_by`（谁挡着没改）。
 #: 空 `blocked_by` = 这一处本来就该留在账外（只有主时钟本体这一条）。
 ALLOWED_RAW_WAITS: tuple[dict[str, str], ...] = (
-    {"path": "agentflow/clock.py", "func": "await_io", "form": "sleep",
+    {"path": "agentflow/clockwaits.py", "func": "await_io", "form": "sleep",
      "why": "主时钟本体的真睡：它就是这本账的写入口，不能再由别人来记",
      "blocked_by": ""},
-    {"path": "agentflow/clock.py", "func": "await_io", "form": "sleep_ref",
+    {"path": "agentflow/clockwaits.py", "func": "await_io", "form": "sleep_ref",
      "why": "同上（`await_io` 里那个 `... else time.sleep` 的绑定是它的实现本体）",
      "blocked_by": ""},
 )

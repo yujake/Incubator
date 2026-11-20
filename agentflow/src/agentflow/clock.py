@@ -457,6 +457,7 @@ from .clockwaits import (  # noqa: F401 — 再导出，保持公开面不变
     _ledger_key,
     _primitive_governed,
     _wait_form,
+    await_io,
     coverage,
     flush_waits,
     note_process_wait,
@@ -1159,38 +1160,6 @@ def programs_owned(workspace: str | Path, *, task_id: str = "",
 
 # ---------------------------------------------------------------- 唤醒标记
 
-
-def await_io(seconds: float, purpose: str, *, kind: str = "io", where: str = "",
-             waited_for: str = "", sleep: Callable[[float], None] | None = None
-             ) -> dict[str, Any]:
-    """真睡 `seconds` 秒（保持原语义），并在主时钟的账上记一条。
-
-    这是框架内部所有"等一会儿"的唯一入口。`kind` 说这是哪一类等待（`retry` /
-    `rate_limit` / `poll` / `drain` / `user` …），`where` 说它落在哪个位置
-    （`fetch._download_via` 这种），`purpose` 说为什么等 —— 三样都进账，
-    `clock.now` 的复合读数把账汇总成 `waits_recorded`。
-
-    假时钟在装的时候不免掉真睡是不可接受的：判据里等 20 分钟没有意义，而且
-    "主时钟是假的"本来就意味着"时间由我拨"。所以当前时钟是假的时候真睡被免掉，
-    账上照记，`skipped` 计数 +1（读数里看得见"这几条没真等"）。
-    """
-    body = str(purpose or "").strip()
-    if not body:
-        raise ClockParamError(
-            "框架内部的等待必须写目的（purpose）：写不出目的的等待不许存在")
-    step = float(seconds)
-    if step < 0:
-        raise ClockParamError(f"等待时长不能是负数，收到 {seconds!r}")
-    fake = str(getattr(current(), "name", "real") or "") == "fake"
-    do_sleep = sleep if sleep is not None else (None if fake else time.sleep)
-    took = 0.0
-    if do_sleep is not None and step > 0:
-        start = time.monotonic()
-        do_sleep(step)
-        took = time.monotonic() - start
-    return note_wait(step, body, kind=kind, where=where, waited_for=waited_for,
-                     slept=took if do_sleep is not None else 0.0,
-                     skipped=fake or do_sleep is None)
 
 __all__ = [
     "ALLOWED_RAW_WAITS",
