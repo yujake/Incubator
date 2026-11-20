@@ -2574,6 +2574,21 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                       "_unregister_parked / reset_parked / _close_waiters_for_event / "
                       "event_close_reading / reset_event_close —— `_EVENT_SEQ` 的两个赋值点"
                       "与两个读点同处这一个模块（跨模块 `global` 只改到本模块那一份）",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第四层 = 簿记的索引面（混入类）。
+    # 为什么这一次是"抽混入"而不是"搬顶层块"：`Timer` / `TimerBook` / `book()` /
+    # `target_state()` 四者是一个运行期成环的整体（Timer.due_reason 问 target_state，
+    # target_state 问 book，book 造 TimerBook，TimerBook 存 Timer）—— 拆成两个模块必有环。
+    # 所以把 TimerBook 里"只碰自己的索引/热集/到点读法"的 24 个方法抽成混入类，
+    # 让核心那一刀（Timer + TimerBook + book + target_state）落进 800 行内。
+    # 方法体逐字未改（逐方法 AST dump 比对），TimerBook 的公开方法面一个字没变。
+    "clockbookindex.py": "计时器簿记的索引面（2026-11-20 从 `clock.py` 抽出）：`_BookIndexMixin`"
+                         "（_heap_due / _rebuild_index / _ensure_index / _index_one / "
+                         "_unindex_one / sync_index / waiters_of / waiters_count / pending_count / "
+                         "total_count / heap_size / mark_hot / hot_count / pop_hot / clear_hot / "
+                         "next_due_epoch / next_reconcile_epoch / next_wake_epoch / mark_reconciled / "
+                         "reconcile_count / _periodics_quiet / needs_full_scan / can_early_exit / "
+                         "pop_due）+ `_target_key` + `Periodic`（周期记录）—— 它坐在 Timer 之下："
+                         "不 import `clocktimer`，`Timer` 只出现在注解里",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
