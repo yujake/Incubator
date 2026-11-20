@@ -61,6 +61,7 @@ import pytest
 
 from agentflow import clock as CLK
 from agentflow import clockprogram as CPROG
+from agentflow import clockwaitany as CLKWA
 from agentflow import clockmem as CLKMEM
 from agentflow import conductor as COND
 from agentflow.agent_loop import AgentLoop
@@ -791,6 +792,9 @@ def test_o_without_the_wake_step_the_handoff_judges_go_red(
         return real(kind, **kw)
 
     monkeypatch.setattr(CLK, "observe_event", silent_observe)
+    # 2026-11-20（拆 clock.py）：`record_handoff` 搬进 `clockwaitany`，它按模块级名字调
+    # `observe_event` —— 同一个桩也装到那一份上（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CLKWA, "observe_event", silent_observe)
     CLK.record_handoff(ws, task_id=child, parent_task_id=me, role="D", reason="交差")
     assert CLK.fire_due(ws)["fired"] == [], (
         "唤醒那一步被打桩掉了，这条表居然还是醒了 ⇒ 判据没有真的依赖那一步")
@@ -825,7 +829,9 @@ def test_o3_without_counting_the_live_timers_the_gate_goes_green(
         def all_periodics(self) -> list[Any]:
             return []
 
-    monkeypatch.setattr(CLK, "book", lambda _ws: _PretendLive())
+    # 2026-11-20（拆 clock.py）：`request_wait_any`（数表那一步的唯一调用点）搬进
+    # `clockwaitany`，打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CLKWA, "book", lambda _ws: _PretendLive())
     row = CLK.request_wait_any(ws, task_id=child, role="D")   # 改前会拒，这里不拒
     assert row["wait_id"].startswith(WAIT_PREFIX), (
         "数表那一步被打桩成恒 >=1，却还是拒了 ⇒ 判据 n 没有真的依赖那一步")

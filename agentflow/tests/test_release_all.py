@@ -3070,6 +3070,14 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                        "`is_my_program` / `not_mine_refusal` / `ProgramSpan` / `program_span` / "
                        "`_note_unbooked` / `programs` / `programs_running` / `argv_digest` / "
                        "`program_message` / `program_purpose` —— 起表到收口只有一份判据",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第十层 = `wait_any` 意图账 + 交差账。
+    # 为什么是一个模块：两者共用同一套落盘与三态口径（`checked` / `reason` 读得出
+    # "没查成"），且 `request_wait_any` 的前置判据（名下现存计时器数 >= 1）要读同一份
+    # 簿记；把"等任意"与"交差"分成两处，就会出现"信号到了但没人认领"的第二套解释。
+    "clockwaitany.py": "`wait_any` 与交差账（2026-11-20 从 `clock.py` 拆出）："
+                       "`WAIT_ANY_REL` / `request_wait_any` / `wait_any_reading` / "
+                       "`cancel_wait_any` / `record_handoff` / `mark_handoff_seen` / "
+                       "`read_handoffs` / `reset_handoffs` —— `wait_any` 不落「醒没醒」（醒没醒只能由到点/事件现算）；交差与消息分得开（消息 ≠ 交差）",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
