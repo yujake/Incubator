@@ -4,11 +4,14 @@
 ## 背景
 
 `Secretary.next_name` 今天不能拒：它最后一句是
-`return f"{role}{max(seen, default=0) + 1}", ""` —— 第二个分量恒为空串
-（`secretary.py:4877`）。而两处调用点还留着 `if problem:` 的出口：
+`return f"{role}{max(seen, default=0) + 1}", ""` —— 第二个分量恒为空串。而两处调用点
+还留着 `if problem:` 的出口：
 
-- `Secretary._roster_add`（`secretary.py:5095-5098`）
-- `Secretary.roster_repair`（`secretary.py:7788-7790`）
+- `Secretary._roster_add`
+- `Secretary.roster_repair`
+
+（2026-11-20 SECSPLIT 起这三处都住在 `secretary_roster_write.py` 一份里；本判据按
+`_secretary_home.source_of` 定位那一份，不再写死 `secretary.py`。）
 
 151 判过："删掉会削掉'将来发号器可能拒'的显式出口，保留则要接受这两行永远不被执行"
 —— 结论是保留。但 151 只记了一处，后一个人照着删就会只删一处，于是同一件事在
@@ -32,7 +35,12 @@ from __future__ import annotations
 import ast
 import pathlib
 
-SECRETARY = pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow" / "secretary.py"
+import _secretary_home as HOME
+
+#: 判据的对象 = `next_name` 那一份声明住的地方（按声明定位，不写死文件名：
+#: 2026-11-20 SECSPLIT 把它连同两处调用点一起搬进了 `secretary_roster_write.py`）。
+SECRETARY = (pathlib.Path(__file__).resolve().parents[1] / "src" / "agentflow"
+             / HOME.source_of("Secretary.next_name")[0])
 
 #: 登记过的两处死分支（所在函数名）。加/删一处必须同时改这里与文件里的注释 —— 这条判据
 #: 就是"下一个人不许只删一处"的那道门。
@@ -50,7 +58,7 @@ def _method(name: str) -> ast.FunctionDef:
     for node in ast.walk(_tree()):
         if isinstance(node, ast.FunctionDef) and node.name == name:
             return node
-    raise AssertionError(f"secretary.py 里找不到 {name}() ⇒ 判据的对象没了")
+    raise AssertionError(f"{SECRETARY.name} 里找不到 {name}() ⇒ 判据的对象没了")
 
 
 def test_next_name_cannot_refuse_today() -> None:

@@ -3005,3 +3005,24 @@
 #:   （a / a2 / a3 渲染产物断言 + b 派活时机 + c `optimized_signature` 语义链 + d 反真空四处）。
 #:   `specs/b.py` / `specs/b_ingest_policy.py` / `specs/b_sign_policy.py` / `specs/m.py` 都在
 #:   FC-27 auth-audit ⇒ `noai_gate --paths … --baseline` 已刷新（`reviewers=[]`，待人类走查）。
+#: p304 → p305（2026-11-20，RESTORE：还原 `2ab3bbdb` 误清的 60 处强调 —— 按字符串字面量
+#:   逐处核是 65 行 / 69 对）：
+#:   事故：`2ab3bbdb`（提交说明写"清 4 处 R009 强调标记"）实际按行改了 143 行，
+#:   其中 65 行落在 R009 射程之外（`agent_f/core.py` 的普通字符串字面量），把 F 的
+#:   动作提示词正文与读数正文里的 69 对 `**` 抹掉了（`old.replace("**", "") == new`
+#:   逐条成立，SELFSCAN 取证）。
+#:   本笔按 `git show 2ab3bbdb^:agentflow/src/agentflow/agent_f/core.py` 逐字还原这 65 处
+#:   字面量：还原后除 docstring 里那一处 R009「合规清理」（`core.py:2375` 的孤立 `**`，
+#:   不属误伤）外，与 `2ab3bbdb^` 逐字节相等；逻辑 / 缩进 / 其它行一字未动
+#:   （归一字符串常量后的 AST dump 与还原前相等）。
+#:   十一格 system 摘要逐字未动：`agent_f/core.py` 的正文进的是 F 每次 `attack.step`
+#:   现拼的动作提示词（`_attack_prompt`）与读数正文，「不进」`system_prompt` ⇒ 本版号
+#:   记的是"模型读到的 F 动作提示词换了一份"，不是 system 段改了。两份 golden 重冻：
+#:   agent 面 11 行版本行 p304 → p305（其余逐字相同）、tool 面 0 行差异；
+#:   `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成 0 字符差异；
+#:   `_VOLATILE_FACT_SETS` 末尾追加一格（facts 键集仍 15 格，count / keys_sha256 与 p304 同值）。
+#:   判据：`tests/test_verbatim_expectations_match_the_product_side.py`（3 passed）/
+#:   `tests/test_lint_rules.py`（含 R009 只扫注释与 docstring 的行为判据）/
+#:   `scripts/lint_rules.py`（error 0）/ `tests/test_agent_prompts.py`（含
+#:   `test_the_prompt_version_moves_with_the_sections`）/ `test_prompt_cache_warm`
+#:   （warm 两档真跑，cap 0.10，23 passed）/ `test_reading_map*`。

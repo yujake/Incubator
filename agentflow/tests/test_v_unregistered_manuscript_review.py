@@ -335,9 +335,14 @@ def _sign_writer_calls(path: pathlib.Path) -> list[tuple[str, int]]:
 
 
 def test_d_the_sign_write_entries_are_reached_only_from_the_secretary():
-    """④ 结构判据：`agent_v/**` 里 0 处签写口；同一扫描在 `secretary.py` 找到 1 处 land。
+    """④ 结构判据：`agent_v/**` 里 0 处签写口；同一扫描在秘书那一层找到 1 处 land。
 
-    反真空：如果 `secretary.py` 里那一处也找不到，说明扫描器失效（或落签又搬回了 V）——
+    2026-11-20（SECSPLIT）：`secretary.py` 拆成 31 个 `secretary_*.py`，落签搬进
+    `secretary_sign.py`。判据的射程跟着改成"整个秘书层"（`secretary*.py` 合计恰好
+    1 处）—— 不是把"1 处"放宽成"每份文件各一处"，而是让"落签只在秘书那一侧"
+    这句话在拆分之后仍然量得到。
+
+    反真空：如果秘书那一层一处也找不到，说明扫描器失效（或落签又搬回了 V）——
     这一条必须红。"0 处"不许由"扫不到"冒充。
     """
     root = pathlib.Path(__file__).resolve().parents[1]
@@ -348,10 +353,15 @@ def test_d_the_sign_write_entries_are_reached_only_from_the_secretary():
         for name, line in _sign_writer_calls(path):
             found.append(f"{path.relative_to(root)}:{line}: {name}(")
     assert found == [], "V 的代码里还直接调签写口：\n" + "\n".join(found)
-    sec = root / "src" / "agentflow" / "secretary.py"
-    landed = [line for name, line in _sign_writer_calls(sec) if name == "land"]
+    secretary = sorted((root / "src" / "agentflow").glob("secretary*.py"))
+    assert secretary, "扫描器没找到秘书层的源码 ⇒ 这一格没查成"
+    landed: list[str] = []
+    for path in secretary:
+        for name, line in _sign_writer_calls(path):
+            if name == "land":
+                landed.append(f"{path.relative_to(root)}:{line}")
     assert len(landed) == 1, (
-        f"`secretary.py` 里 `land` 调用有 {len(landed)} 处（期望 1 处）⇒ "
+        f"秘书层里 `land` 调用有 {len(landed)} 处（期望 1 处）⇒ "
         "扫描失效，或者落签不在秘书那一侧")
 
 

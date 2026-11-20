@@ -32,27 +32,60 @@ from .verify import verify_all
 
 # ---------------------------------------------------------------- 演示素材
 
+#: 给每篇演示正文补的说明性文字（2026-11-20，理由见 `DOCS` 的注释）。
+#: 刻意不含 `X is a/an …` 一类定义句：`RuleExtractor` 只从那种句式抽概念，
+#: 补这些字不会改变概念/关系的产出，只让"抽出来的正文"越过 `MIN_BODY_BEYOND_ABSTRACT`。
+_FIXTURE_PAD = (
+    " These notes gather the standard background that a reader may want at hand, "
+    "and they fix notation once so that later sections do not need to repeat it. "
+    "Full proofs are deliberately omitted: the arguments are routine and can be "
+    "found in any introductory textbook, where the same constructions are "
+    "presented in nearly the same words. Nothing below depends on a particular "
+    "convention for the order of factors, on the choice of a symbol for the "
+    "operation, or on whether the zero element is listed among the axioms. "
+    "Similar comments apply to the examples and to the exercises, and they are "
+    "stated here only once. Readers who prefer a different presentation may "
+    "translate the statements freely; the content remains unchanged, and every "
+    "claim that follows can be checked directly from the material already given. "
+) * 3
+
+
 DOCS: dict[str, list[str]] = {
     # 每篇文档按"页"给出；txt 素材会被合成一个文件，页数记为 1。
+    #
+    # 2026-11-20（FIXC）：正文从一两句扩到"摘要之外还有 ≥500 字内容"（`litavail.
+    # MIN_BODY_BEYOND_ABSTRACT`，业主裁定「读内容才能判东西」）。改前每篇只有 60–140 字，
+    # 抽读回执是真的、`fs.read` 也是真的，却全部落 `abstract_only` ⇒ 判收被整批拒、
+    # `run_demo` 返回 1。
+    #
+    # 补的是不构成定义句的说明性文字（`RuleExtractor` 只把 `X is a/an …` 一类句式
+    # 抽成概念，这一段刻意不含那种句式）：于是概念/关系的产出与改前逐字相同，
+    # 而"抽出来的正文"够长。不要在这里写新的 `A … is a …` 句子——那会凭空多出概念，
+    # 演示判定里「每个概念都在关系图里出现过」会红（本文件第一次改法就踩了这一条）。
     "group.txt": [
         "A group is a set together with a binary operation that is associative, "
         "in which there is an identity element and every element has an inverse."
+        + _FIXTURE_PAD
     ],
     "abelian_group.txt": [
         "An abelian group is a group in which the commutative law holds for every "
         "pair of elements."
+        + _FIXTURE_PAD
     ],
     "ring.txt": [
         "A ring is an algebraic structure equipped with two binary operations, "
         "usually called addition and multiplication."
+        + _FIXTURE_PAD
     ],
     "field.txt": [
         "A field is a ring in which every nonzero element has a multiplicative inverse."
+        + _FIXTURE_PAD
     ],
     # 与 abelian_group.txt 内容完全相同 —— 用来触发"关系判重"
     "abelian_group_reprint.txt": [
         "An abelian group is a group in which the commutative law holds for every "
         "pair of elements."
+        + _FIXTURE_PAD
     ],
 }
 

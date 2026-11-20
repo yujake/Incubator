@@ -168,9 +168,9 @@ PROOF_DISPATCH_SECTION: tuple[str, ...] = (
     "",
     "## 2.2 这一轮落了 `manuscript_path` ⇒ 下一轮开头先派 V 审它",
     "`F.step` 返回 `manuscript_path` / `manuscript_id` 的那一刻，这一份稿就已经在等 V 的签"
-    "—— 送审是你自己的动作，`F.step` 不替你送（`F → V` 是直接边）：下一轮开头用 "
+    "—— **送审是你自己的动作，`F.step` 不替你送**（`F → V` 是直接边）：下一轮开头用 "
     "`framework_summon` 唤起 `role=\"V\"`，`task` 写「审这一份证明稿 <manuscript_path>」；"
-    "V 用 `verify_proof`，`proof_manuscript` 就点这一份稿（在册也给稿，不给命题号）。"
+    "V 用 `verify_proof`，**`proof_manuscript` 就点这一份稿**（在册也给稿，不给命题号）。"
     "返回里的 `still_unsubmitted[].next_action` 就是这一句的机器形状；`v_sign` 读成"
     "「待签」或 `delivery.unfinished` 里还有它 ⇒ 这一拍就派，别等下一轮、"
     "也别改去写第二份稿。",
@@ -452,14 +452,14 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     # ---- 第 0/1 段：受控词表在最前面（mp4-6：词表在末尾时重问三次仍交 `no_change`）
     lines = [
         "你是 F：多轮难题攻坚。这一轮只做一件事 —— 推进下面这一条子目标，"
-        "并按受控形状交出一件产物。",
+        "并按受控形状交出**一件产物**。",
         "",
         "## 0. 受控词表（先读这一段，再读别的）",
-        f"你这一轮只能输出四种产物之一（填在 `product` 字段里）：{AR.PRODUCT_MENU}。",
-        "反例（写了这些词这一轮就判不成形、当场打回）："
+        f"你这一轮**只能**输出四种产物之一（填在 `product` 字段里）：{AR.PRODUCT_MENU}。",
+        "反例（写了这些词这一轮就判**不成形**、当场打回）："
         "`no_change` 不是产物、`ok` / `success` / `done` 也不是。",
         "什么都做不了 ⇒ 落 `dead_end`（受控理由 + 证据 + `best_partial`）——"
-        "不要写 `no_change`。",
+        "**不要**写 `no_change`。",
         "",
         "## 1. 每种的必填字段（`product` 选哪一档，就按那一档给全）",
     ]
@@ -482,17 +482,17 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         # 业主明确要求"阈值保持现状"。所以这一段只改提示词，别在解析层拦它
         # （下一批人若要把它做成门，先按 FC-27 之外的裁定流程走，别顺手加）。
         "## 2. 这一轮必须产出一批新事实（至少 3 条）—— 这就是「推进」的定义",
-        "这一轮必须产出一批新事实：至少 3 条，可以跨类型组合（不必四条路都走），"
+        "这一轮**必须产出一批新事实：至少 3 条**，可以跨类型组合（不必四条路都走），"
         "四条路是：",
-        "① 一条新的引理 / 命题陈述（台账里还没出现过的断言）；",
-        "② 一个新的反例或反例族（带具体参数与检验方式）；",
-        "③ 一个新的数值界 / 不等式（带可复现的算法与参数域）；",
-        "④ 一步新的归约（把当前目标化归到一个更小的、可判的子目标，并说明为什么它更小）。",
-        "这 ≥3 条要能逐条点名（每条一句话 + 它算哪一类），并落进这一轮的产物里 ——"
+        "① 一条**新的引理 / 命题陈述**（台账里还没出现过的断言）；",
+        "② 一个**新的反例或反例族**（带具体参数与检验方式）；",
+        "③ 一个**新的数值界 / 不等式**（带可复现的算法与参数域）；",
+        "④ 一步**新的归约**（把当前目标化归到一个更小的、可判的子目标，并说明为什么它更小）。",
+        "这 ≥3 条要能**逐条点名**（每条一句话 + 它算哪一类），并落进这一轮的产物里 ——"
         "`new_subgoals` / `statements` / `experiments` / `cites` 任一处查得到。",
-        "只整理不算推进：复述已知结论、把文献结论换个措辞、重排章节、"
+        "**只整理不算推进**：复述已知结论、把文献结论换个措辞、重排章节、"
         "罗列「还需要什么」、把同一脚本再跑一遍 —— 这些一条都不算那 3 条里的任何一条。",
-        "只给 1 条（或 0 条）也不算推进；确实产不出这一批 ⇒ 落 `dead_end`，"
+        "只给 1 条（或 0 条）也不算推进；确实产不出这一批 ⇒ **落 `dead_end`**，"
         "并在受控理由里写清「卡在哪一步、缺什么才能产出这一批」。",
         "",
         # ---- 第 2.1 段：proof 档的明确出口（2026-10-26，死结 3 的修法）
@@ -523,7 +523,7 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         # ---- 第 4 段：引用纪律 + 当轮可引用 id（R-03：mp4-6 计划 000001 编了一条 §A5）
         "## 4. 引用纪律（`cites` / `best_partial[].ids` 里能写什么）",
         AR.CITE_DISCIPLINE,
-        f"本轮可引用的 id（现算自台账，只许从这里挑）：{AR.citable_ids_line(citable_ids)}",
+        f"本轮**可引用的 id**（现算自台账，只许从这里挑）：{AR.citable_ids_line(citable_ids)}",
         "",
         # ---- 第 4.1 段：写证明时可读可引的在册命题（业主 2026-10-24：「依赖由 F 写」）
         #
@@ -540,12 +540,12 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
         "格式逐字：`| 引用（F 的原话） | 命题号（stmt:NNNNNN） | 用在哪一步 |`；一行一条引用。"
         "路径号不进稿（它是第四列，由 B 的秘书在收录事务里分配 —— 第 2 条证明的依赖因此"
         "落 `stmt:<命题号>#p2` 那一组）。",
-        "引用门槛是 proof_review 级及以上（业主同一天加码裁定，逐字："
-        "「proof_review级及以上才可引用」）：下面列出来的命题都是够格的；标着 "
-        "`kind=concept` 的那几条是已签概念——可读但不可引（可引门只放命题："
+        "**引用门槛是 proof_review 级及以上**（业主同一天加码裁定，逐字："
+        "「proof_review级及以上才可引用」）：下面列出来的**命题**都是够格的；标着 "
+        "`kind=concept` 的那几条是**已签概念**——**可读但不可引**（可引门只放命题："
         "概念没有等级轴，不在可引池里），别把它们的号写进 `cites`。档位更低的"
         "（cross_check / heuristic）或档位读不到的，B 读稿时会整笔拒收并点名。",
-        "引了却不写进 `cites`、也不写依赖段，B 会整笔拒收：手稿没有 `## 依赖` 那一节而正文里"
+        "**引了却不写进 `cites`、也不写依赖段，B 会整笔拒收**：手稿没有 `## 依赖` 那一节而正文里"
         "引用了在册命题时，B 的受控码是 `dependency_section_missing`（补上那一节再交）；"
         "一条在册引用都没有的自足证明不适用这一条（`deps_missing` 读 `not_applicable`）。",
     ]
@@ -559,19 +559,19 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     # ---- P2-3：证据正文（不只是 id）
     if evidence:
         lines += [
-            "这些证据已经在本台账里了，正文摘要如下（不要当成没做过、也不要再引一个"
+            "这些证据**已经在本台账里了**，正文摘要如下（不要当成没做过、也不要再引一个"
             f"台账里没有的 id）：每条最多 {_EVIDENCE_ITEM_CHARS} 字、整块最多 "
             f"{_EVIDENCE_BLOCK_CHARS} 字，超出即截断（截断处会写明原长）——",
         ]
         lines += [f"- {line}" for line in evidence]
         lines.append("")
     else:
-        lines += ["这条子目标还没有任何证据正文可读（`evidence_ids` 是空的）—— "
+        lines += ["这条子目标**还没有任何证据正文可读**（`evidence_ids` 是空的）—— "
                   "这一轮的产物要么造出新东西（新子目标 / 实验判据），要么如实 `dead_end`。", ""]
     # ---- P2-4：上一轮/前几轮发生了什么（history 回灌）
     if history:
         lines += [
-            "## 5. 此前几轮已经发生过的事（按轮给；别把它们当成没做过，也别逐字重说一遍）",
+            "## 5. 此前几轮**已经发生过**的事（按轮给；别把它们当成没做过，也别逐字重说一遍）",
         ]
         lines += [f"- {line}" for line in history]
         lines.append("")
@@ -580,7 +580,7 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     if retry_note:
         lines += [
             "## 6. 上一次的产物不成形 ⇒ 带着原因重说一次",
-            "⚠️ 你上一次的产物不成形；按下面这几条重说一次"
+            "⚠️ 你上一次的产物**不成形**；按下面这几条重说一次"
             "（只改不成形的地方，别把已经想对的部分丢掉）：",
         ]
         lines += [f"- {seg}" for seg in str(retry_note).splitlines() if seg.strip()]
@@ -594,18 +594,18 @@ def _attack_prompt(*, plan: Mapping[str, Any], sg: Mapping[str, Any], owner: str
     lines += [
         "",
         "## 7. 交差自评（每一轮都顺带写一格 `self_assessment`；它不是收工开关）",
-        "一个任务可以产出多条成果，不要因为一条拿到签就收工。你的交差读数按条读"
+        "一个任务可以产出多条成果，**不要因为一条拿到签就收工**。你的交差读数按条读"
         "（`F.step` 的 `delivery`：`signed_count` / `pending_count` / `unsigned_count` / "
         "`coverage` / `self_assessment`）。收不收工由你自己判，三条各给一档：",
         "1. `comprehensive`：是否全面研究了 D 交给你的攻坚任务 —— `comprehensive`"
         "（每条子目标都研究过）/ `partial`（只研究了一部分）/ `not_comprehensive`（还没开始）；",
-        "2. `enough_output`：是否尽力做出了足够多的成果（也可以是没成果）—— "
+        "2. `enough_output`：是否尽力做出了足够多的成果（**也可以是没成果**）—— "
         "`enough_output`（成果都签了）/ `some_output`（有成果、还没全签）/ `no_output`"
-        "（研究了、尽力了、0 条成果 —— 这是合法的收工理由）；",
+        "（研究了、尽力了、0 条成果 —— 这是**合法的收工理由**）；",
         "3. `partial_output`：即使没完成原定任务，是否产出了一些小的阶段性成果 —— "
         "`partial_output`（归约 / 反例族 / 排除的路 / 部分引理）/ `none`（没有）。",
         "还有两类要一起写（交差读数会逐条点名还没签的成果，并要你留痕）：",
-        "- `next_move`：还没签的那些你打算怎么办 —— 由你定，举例（不是枚举）："
+        "- `next_move`：还没签的那些你打算怎么办 —— **由你定**，举例（不是枚举）："
         "换一条证明路线重做那一步 / 把命题拆成几条更弱的引理 / 去补缺的工具或引理 / "
         "减弱自己的断言（定理→条件性结论/猜想）/ 明确放弃该命题 / 判断是 V 的误判、"
         "带理由再送一次（代价由你承担）；",
@@ -1102,7 +1102,7 @@ class _Core:
             _head = f"subgoals[{index}] 缺少 {_missing[0]}{_why[_missing[0]]}"
             raise PlanError(
                 _head
-                + (f" 这一个子目标还缺：{'、'.join(_missing)} —— 一次给齐就不用再来回问。"
+                + (f" **这一个子目标还缺**：{'、'.join(_missing)} —— 一次给齐就不用再来回问。"
                    if len(_missing) > 1 else "")
             )
         # ---- 可检验形式这一格（2026-10-26，死结 3 的第二层） ------------------------
@@ -1365,7 +1365,7 @@ class _Core:
     #: （改用列出的真实 id／显式写 `assumption: true`）。字数控制在证据行 200 字上限内
     #: （`_EVIDENCE_ITEM_CHARS`），否则 `_clip` 会把后半句截掉。
     _NOT_ON_LEDGER_NOTE = (
-        "这一条不在册（台账里没有这个 id）⇒ 禁止引它：引了算伪造引用（R-03），"
+        "**这一条不在册**（台账里没有这个 id）⇒ **禁止**引它：引了算伪造引用（R-03），"
         "这一轮当场拒收。正确做法二选一：改成「本轮可引用的 id」里真的那条，"
         "或把这一步写成 `assumption: true`")
 
@@ -1442,7 +1442,7 @@ class _Core:
                        "不是「没有这条证据」：" + "；".join(unreadable) + "）")
         if skipped:
             out.append(f"（另有 {skipped} 条证据没列出来：这一块的字数上限是 "
-                       f"{_EVIDENCE_BLOCK_CHARS} 字 —— 它们在册，只是没进这一轮的提示词）")
+                       f"{_EVIDENCE_BLOCK_CHARS} 字 —— 它们**在册**，只是没进这一轮的提示词）")
         return out, citable
 
     def _history_digest(self, plan: Mapping[str, Any],
@@ -1533,7 +1533,7 @@ class _Core:
                     break
             fresh = [s for s in AR.STRATEGIES if s not in tried_set]
             if run >= 2:
-                switch = (f"⚠️ 同一招「{last}」已经连续 {run} 轮了 ⇒ 这一轮换一招："
+                switch = (f"⚠️ 同一招「{last}」已经**连续 {run} 轮**了 ⇒ 这一轮**换一招**："
                           f"还没试过的有 {fresh or '（九招都用过了：那就换子目标或交 dead_end）'}。"
                           "把同一招做得更用力不是换路（`draft/44` P2-4 要的正是这一句显式的话）。")
             elif len(strategies) != len(set(strategies)):
@@ -1637,7 +1637,7 @@ class _Core:
                     "action": "no_change",
                     "outcome": "no_change",
                     "detail": (f"子目标 {sg.get('sid')}（owner={owner}）的推理缝没查成："
-                               f"{J.reason_of(problem, point='F.step')} ⇒ 未推进"
+                               f"{J.reason_of(problem, point='F.step')} ⇒ **未推进**"
                                "（不是'做了但没结果'，也不是'这条路死了'）"),
                     "evidence": [],
                     "status": "blocked",
@@ -1681,10 +1681,10 @@ class _Core:
             return self._with_checks({
                 "action": "no_change",
                 "outcome": "no_change",
-                "detail": (f"子目标 {sg.get('sid')} 的这一轮不成形（{last_error}）⇒ 未推进；"
+                "detail": (f"子目标 {sg.get('sid')} 的这一轮不成形（{last_error}）⇒ **未推进**；"
                            f"已按预算里的 `max_persist_attempts={persist}` 带着原因重问了 "
                            f"{persist} 次，四种产物与九招工具箱的受控值写在提示词里 —— "
-                           "这一条没有被永久封存（下一次仍会重试它），但重问次数已到上限"),
+                           "**这一条没有被永久封存**（下一次仍会重试它），但重问次数已到上限"),
                 "evidence": [],
                 "status": "blocked",
                 "blocked_reason": f"这一轮不成形（已重问 {persist} 次）：{last_error}",
@@ -1711,10 +1711,10 @@ class _Core:
             return self._with_checks({
                 "action": "no_change",
                 "outcome": "no_change",
-                "detail": (f"子目标 {sg.get('sid')} 的这一轮拒收：它引了台账里不存在的 id "
+                "detail": (f"子目标 {sg.get('sid')} 的这一轮**拒收**：它引了台账里不存在的 id "
                            f"{foreign[:4]} ⇒ 未推进。伪造引用是不可逆损失（R-03）："
                            f"{legal_note}—— 要么把 id 改成这些里真的那条，要么显式把它声明成前提"
-                           "（`assumption: true`）。拒收的是引用，不是产物形态："
+                           "（`assumption: true`）。拒收的是**引用**，不是产物形态："
                            f"四种产物仍是 {AR.PRODUCT_MENU}，按其中一档重交即可"),
                 "evidence": [],
                 "status": "blocked",
@@ -1835,19 +1835,19 @@ class _Core:
                              " 子目标正文不是命题；改法说明写进 `steps` 或 `label`，"
                              "再把同一份 `product` 交一次")
                 detail = (
-                    f"子目标 {sid} 的这一轮拒收：你用 `attack.step(product=…)` 交进来的"
+                    f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
                     "这一份没有 `proposition`（proof 档必填）——\n"
                     + "\n".join(f"- {p}" for p in problems)
-                    + f"\n下一步：{next_step}。这一轮没有落稿、没有登记，"
+                    + f"\n下一步：{next_step}。这一轮**没有落稿、没有登记**，"
                     "也没有花推理的那一笔")
             else:
                 next_step = ("按上面逐条改那几步 / 那几格，再把同一份 `product` "
                              "交一次（`attack.step(plan_id=…, product=…)`）")
                 detail = (
-                    f"子目标 {sid} 的这一轮拒收：你用 `attack.step(product=…)` 交进来的"
-                    "这一份没通过既有的产物校验（一条闸都没有放宽）。逐条如下：\n"
+                    f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
+                    "这一份没通过**既有的产物校验**（一条闸都没有放宽）。逐条如下：\n"
                     + "\n".join(f"- {p}" for p in problems)
-                    + "\n改这几处，再把同一份交一次（这一轮没有落稿、没有登记，"
+                    + "\n改这几处，再把同一份交一次（这一轮**没有落稿、没有登记**，"
                     "也没有花推理的那一笔）")
             return {
                 "action": "no_change",
@@ -1884,11 +1884,11 @@ class _Core:
                 for h in hits
             ]
             detail = (
-                f"子目标 {sid} 的这一轮拒收：你用 `attack.step(product=…)` 交进来的"
+                f"子目标 {sid} 的这一轮**拒收**：你用 `attack.step(product=…)` 交进来的"
                 "这一份引了台账里不存在的 id（R-03：伪造引用是不可逆损失）。逐条点名：\n"
                 + "\n".join(f"- {line}" for line in lines)
                 + f"\n{legal_note} —— 要么把 id 改成这些里真的那条，要么显式把这一步"
-                "声明成前提（`assumption: true`）。这一轮没有落稿、没有登记")
+                "声明成前提（`assumption: true`）。这一轮**没有落稿、没有登记**")
             return {
                 "action": "no_change",
                 "outcome": "no_change",
@@ -2037,7 +2037,7 @@ class _Core:
                         "缺缝这件事只落在本行读数里")
             esc_short = "没有可用的主控，未上报"
         detail = (f"子目标 {sid} 有判据但没有脚本，而 E 没能把它写出来（no_seam）⇒ "
-                  f"缺的是 E 的模型缝，不是脚本（没有脚本就没有实验可跑；"
+                  f"**缺的是 E 的模型缝，不是脚本**（没有脚本就没有实验可跑；"
                   f"这不是'跑了但没结果'）。{note}{spec_line}"
                   f"；要打开的是 `--experiment-reasoning`（给 E 接缝）{esc_line}")
         product = AR.dead_end_row(
@@ -2153,8 +2153,8 @@ class _Core:
         return (
             f"# 攻坚台账：{plan.get('problem')}\n\n"
             f"- plan_id：`{plan.get('plan_id')}`；problem_key：`{plan.get('problem_key')}`\n"
-            "- 一条一行：轮次 · 状态 · 依据 · 下一步。\n"
-            "- 这一份是给人读的推进台账；可复核的那一份在 `statements`（行里写着 `stmt:` 编号）。\n"
+            "- 一条一行：**轮次 · 状态 · 依据 · 下一步**。\n"
+            "- 这一份是**给人读的推进台账**；可复核的那一份在 `statements`（行里写着 `stmt:` 编号）。\n"
             "- 状态口径：`progress` = 这一轮产出了新东西；`no_change` = 这一轮没有新事实"
             "（卡点见「状态」那一格）。\n\n"
         )
@@ -2510,8 +2510,8 @@ class _Core:
                 "proposition_text_changed",
                 ("同一 label（" + label_for_sid + "）下已经登记的是另一条命题（"
                  f"stmt:{row.get('stmt_id')}），而这一轮的命题正文不同 ⇒ 受控拒。"
-                 "这是新命题（把它登记成新的一条），或者走「放弃 + 换号」；"
-                 "不要用挂证明改命题正文 —— 改证明只动 `## 证明` 那一节"),
+                 "这是**新命题**（把它登记成新的一条），或者走「放弃 + 换号」；"
+                 "**不要用挂证明改命题正文** —— 改证明只动 `## 证明` 那一节"),
                 refused_kind="proposition_text_changed",
                 statement_id=str(row.get("stmt_id") or ""), reused=True,
                 promoted=False, manuscript_received=manuscript_received,
@@ -3976,7 +3976,7 @@ class _Core:
                 # 于是 F 的下一步材料（下一轮提示词里的 history）看得到"哪一行怎么改"。
                 findings = [dict(x) for x in (wash.get("deps_refused_findings") or [])]
                 detail = (f"打回重写：依赖面这一遍核不过（{wash.get('deps_refused')}）⇒ "
-                          f"这一份没有提交给 V、也没有登记；共 {len(findings)} 条："
+                          f"这一份**没有提交给 V**、也没有登记；共 {len(findings)} 条："
                           + ("；".join(
                               f"第 {f.get('line')} 行「{_clip(str(f.get('quote') or ''), 40)}」"
                               f"写的是 {f.get('got')}，{f.get('why')} ⇒ 怎么改：{f.get('how_to_fix')}"
@@ -4381,7 +4381,7 @@ class _Core:
                 "；这条子目标只有 `testable`（" + _clip(testable, 120) + "）、没有三件套判据"
                 "（判据 / 参数 / 期望界），而 F 这一次没有接推理缝 ⇒ 没法把它变成能跑的判据")}
         prompt = "\n".join([
-            "你在给一条攻坚子目标造一次能判决它的实验判据（只造判据，不写脚本）。",
+            "你在给一条**攻坚子目标**造一次能判决它的实验判据（只造判据，不写脚本）。",
             "",
             f"难题：{plan.get('problem')}",
             f"子目标：{sg.get('text')}",
@@ -4556,7 +4556,7 @@ class _Core:
                 "action": "no_change",
                 "outcome": "no_change",
                 "detail": (
-                    f"子目标 {sid} 已有实验记录 {claimed} ⇒ 本轮不重复执行"
+                    f"子目标 {sid} 已有实验记录 {claimed} ⇒ 本轮**不重复执行**"
                     "（重复登记会让 experiments 表堆满同一件事，attempts 虚高）"
                 ),
                 "evidence": claimed,
@@ -4600,7 +4600,7 @@ class _Core:
                 "action": "no_change",
                 "outcome": "no_change",
                 "detail": (
-                    f"子目标 {sid} 派给 E，但没有给 `script_path` ⇒ 未推进"
+                    f"子目标 {sid} 派给 E，但没有给 `script_path` ⇒ **未推进**"
                     "（没有脚本就没有实验可跑；这不是'跑了但没结果'）" + derived_note
                 ),
                 "evidence": [],
@@ -4616,7 +4616,7 @@ class _Core:
                 "action": "no_change",
                 "outcome": "no_change",
                 "detail": (
-                    f"子目标 {sid} 派给 E，但 E 不可用（{type(ex).__name__}: {ex}）⇒ 未推进。"
+                    f"子目标 {sid} 派给 E，但 E **不可用**（{type(ex).__name__}: {ex}）⇒ **未推进**。"
                     "未接线/不可用必须是显式事实，不许静默降级为空"
                 ),
                 "evidence": [],
@@ -4662,7 +4662,7 @@ class _Core:
                     "outcome": "no_change",
                     "detail": (
                         f"子目标 {sid} 有判据但没有脚本，而 E 没能把它写出来"
-                        f"（{code}）⇒ 未推进（没有脚本就没有实验可跑；"
+                        f"（{code}）⇒ **未推进**（没有脚本就没有实验可跑；"
                         f"这不是'跑了但没结果'）。{note}{spec_line}"
                     ),
                     "evidence": [],
@@ -4721,9 +4721,9 @@ class _Core:
                 "action": "experiment_failed",
                 "outcome": "blocked",
                 "detail": (
-                    f"子目标 {sid} 的实验执行失败：{type(ex).__name__}: {ex}"
+                    f"子目标 {sid} 的实验**执行失败**：{type(ex).__name__}: {ex}"
                     f"（脚本 {script_path!r}）。已如实记为 blocked 并保留错误原文；"
-                    "其它子目标继续推进，但本计划在这一点解决前不可能标记为 resolved"
+                    "**其它子目标继续推进**，但本计划在这一点解决前不可能标记为 resolved"
                 ),
                 "evidence": [],
                 "status": "blocked",
@@ -4771,7 +4771,7 @@ class _Core:
                 "outcome": "progress",
                 "detail": (
                     f"实验 {eid}：result=supports，evidence_kind={kind} ⇒ 子目标 {sid} 标 "
-                    "supported_not_proved（数值支持不是证明，FC-22）"
+                    "supported_not_proved（**数值支持不是证明**，FC-22）"
                 ),
                 "evidence": [eid],
                 "experiment_ids": [eid],
@@ -4786,7 +4786,7 @@ class _Core:
             "outcome": "no_change",
             "detail": (
                 f"实验 {eid}：result={result}（negation_kind={res.get('negation_kind')}，"
-                f"exit_code={res.get('exit_code')}）⇒ 子目标 {sid} 未取得可判定结论，"
+                f"exit_code={res.get('exit_code')}）⇒ 子目标 {sid} **未取得可判定结论**，"
                 "保持 in_progress（崩溃/无结论不得被写成支持）"
             ),
             "evidence": [eid],
@@ -4825,7 +4825,7 @@ class _Core:
                 return {
                     "action": "submit_search_request",
                     "outcome": "no_change",
-                    "detail": f"检索请求被闸门拒绝（未提交任何请求）：{gate['reason']}",
+                    "detail": f"检索请求被闸门拒绝（**未提交任何请求**）：{gate['reason']}",
                     "evidence": [],
                     "status": "blocked",
                     "blocked_reason": gate["reason"],
@@ -4863,7 +4863,7 @@ class _Core:
             "outcome": "progress",
             "detail": (
                 f"已向 A 提交检索请求 {req_id}（priority={gate['priority']}，mode={mode}）"
-                f"⇒ 子目标 {sid} 转 in_progress 并等 A 的回填（在这一轮里它还没有证据）"
+                f"⇒ 子目标 {sid} 转 in_progress 并等 A 的回填（**在这一轮里它还没有证据**）"
             ),
             "evidence": [req_id],
             # `evidence` 与 `evidence_ids` 是两个不同的落点，不能省掉任何一个：
@@ -4892,7 +4892,7 @@ class _Core:
                 "action": "submit_reprocess_request",
                 "outcome": "no_change",
                 "detail": (
-                    f"子目标 {sid} 派给 B，但没有给 `relation_ids` ⇒ 未推进"
+                    f"子目标 {sid} 派给 B，但没有给 `relation_ids` ⇒ **未推进**"
                     "（无目标的重抽取会退化成全量重抽，是 I4 明令禁止的）"
                 ),
                 "evidence": [],
@@ -4911,7 +4911,7 @@ class _Core:
                 return {
                     "action": "submit_reprocess_request",
                     "outcome": "no_change",
-                    "detail": f"重抽取请求被闸门拒绝（未提交）：{gate['reason']}",
+                    "detail": f"重抽取请求被闸门拒绝（**未提交**）：{gate['reason']}",
                     "evidence": [],
                     "status": "blocked",
                     "blocked_reason": gate["reason"],
@@ -5042,7 +5042,7 @@ class _Core:
             if s.get("proof_experiment_ids"):
                 bits.append(f"proof 级实验 {s['proof_experiment_ids']}")
             elif s.get("experiment_ids"):
-                bits.append(f"实验 {s['experiment_ids']}（仅交叉验证，不构成证明）")
+                bits.append(f"实验 {s['experiment_ids']}（**仅交叉验证，不构成证明**）")
             if s.get("evidence_ids"):
                 bits.append(f"证据 {s['evidence_ids']}")
             if s.get("blocked_reason"):
@@ -5060,7 +5060,7 @@ class _Core:
         )
         parts = [f"已进行 {rounds} 轮。子目标进展（按'离终结有多近'排序）："]
         parts += [f"- {brief(s)}" for s in ranked]
-        parts.append("以上均为过程记录：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。")
+        parts.append("**以上均为过程记录**：标了 supported_not_proved 或只有 experiment_ids 的条目都还不是证明。")
         return "\n".join(parts)
     @staticmethod
     def _validated_plan(row: Mapping[str, Any]) -> Any:
@@ -5078,7 +5078,7 @@ class _Core:
             return obj
         except ValueError as e:
             raise PlanError(
-                f"计划 {row.get('plan_id')!r} 的写回内容不合 schema 硬约束 ⇒ 未写回：{e}"
+                f"计划 {row.get('plan_id')!r} 的写回内容不合 schema 硬约束 ⇒ **未写回**：{e}"
             ) from e
 
     def _write_plan(self, row: Mapping[str, Any], *, note: str,

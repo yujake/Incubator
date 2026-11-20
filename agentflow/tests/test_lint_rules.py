@@ -774,6 +774,31 @@ def test_r009_flags_bold_and_emoji_in_comment_and_docstring(tmp_path):
     assert "2 处" in errors[0].message
 
 
+def test_r009_ignores_bold_inside_plain_string_literals(tmp_path):
+    """射程负控：普通字符串字面量（不是 docstring）里的成对星号，R009 一个都不报。
+
+    为什么单钉这一条：这条规则的名字是"注释里的装饰"，而 2026-11-20 那次清理
+    （`2ab3bbdb`）把代码里的字符串字面量也一起清了 —— 提示词正文与读数正文里的
+    强调排版被抹掉，而 R009 对它们从来没有报过一条。规则射程与清理射程不一致时，
+    "lint 清零"这句话会被读成"这些字面量也该清"。所以把边界钉在行为上：同一份
+    源码里，星号在注释 ⇒ error（上一条）；星号在 docstring ⇒ error（上一条的
+    第二处）；星号在普通字符串字面量 ⇒ 一个 error 都没有（本用例）。
+
+    这三档必须分开测：合成树里既有"该报的"又有"不该报的"，才能说明尺子读的是
+    区间而不是"这段文字里有没有星号"。
+    """
+    root = _tree(tmp_path, {"a.py": (
+        '"""干净的模块说明。"""\n'
+        "\n"
+        "BOLD = '" + "**" + "模型可见的强调" + "**" + "'\n"
+        "\n"
+        "\n"
+        "def f():\n"
+        "    return BOLD\n"
+    )})
+    assert [f for f in L.rule_R009_decoration_in_comments(root) if f.level == "error"] == []
+
+
 def test_r009_ignores_stars_inside_code_spans(tmp_path):
     """负控：反引号里的星号是示例，不是装饰。
 

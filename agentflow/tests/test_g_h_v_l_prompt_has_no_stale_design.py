@@ -419,19 +419,25 @@ def check_prefixes_are_real(*, prefix_line: str = "") -> list[str]:
 
 
 def check_out_edges_comment(t: Corpus, *, source: str = "", edges: Any = None) -> list[str]:
-    """出边非空的角色名单（注释级读数）与边表读数一致。"""
+    """出边为空的角色名单（注释级读数）与边表读数一致。
+
+    2026-11-20：`agent_prompts.py` 里那句"出边非空的八个（…）"的清点注释在收口时被
+    删掉了；现文案把同一件事写在 `loop_protocol_for` 的残桩分支上 ——
+    「一个伙伴都唤不动（今天 C / V）」。锚点换成这一句（唯一、可复算），判据的强度
+    不变：注释点名的"空出边"集合必须逐字等于 `ALLOWED_EDGES` 现算的空集。
+    """
     table = C.ALLOWED_EDGES if edges is None else edges
-    live = sorted(role for role, targets in table.items()
-                  if targets and role != S.CONDUCTOR_ROLE)
+    live_empty = sorted(role for role, targets in table.items()
+                        if not targets and role != S.CONDUCTOR_ROLE)
     text = t.file("agent_prompts.py") if not source else source
-    match = re.search(r"出边非空的([一二三四五六七八九十]+)个（([A-Z/]+)）", text)
+    match = re.search(r"一个伙伴都唤不动（今天 ([A-Z](?: / [A-Z])*)）", text)
     if not match:
-        return [f"[出边] 找不到那句注释（{_at('agent_prompts.py', '出边非空的')}）"
+        return [f"[出边] 找不到那句注释（{_at('agent_prompts.py', '一个伙伴都唤不动')}）"
                 "⇒ 这一条是真空的"]
-    said = match.group(2).split("/")
-    if sorted(said) != live:
-        return [f"[出边] 注释说的是 {said}，边表里出边非空的是 {live}"
-                f"（{_at('agent_prompts.py', '出边非空的')}）"]
+    said = match.group(1).split(" / ")
+    if sorted(said) != live_empty:
+        return [f"[出边] 注释说的是 {said}，边表里出边为空的是 {live_empty}"
+                f"（{_at('agent_prompts.py', '一个伙伴都唤不动')}）"]
     return []
 
 
@@ -800,8 +806,8 @@ def test_mutation_control_characters_turn_rendering_red(corpus: Corpus) -> None:
 
 
 def test_mutation_out_edge_comment_turns_red(corpus: Corpus) -> None:
-    """反真空（出边）：把那句注释改回「九个（…V）」⇒ 必红。"""
-    broken = corpus.replaced(rel="agent_prompts.py", old="出边非空的八个（A/B/D/E/F/G/H/L）",
-                             new="出边非空的九个（A/B/D/E/F/G/H/L/V）")
+    """反真空（出边）：把注释里的空出边名单多写一个 L ⇒ 必红。"""
+    broken = corpus.replaced(rel="agent_prompts.py", old="一个伙伴都唤不动（今天 C / V）",
+                             new="一个伙伴都唤不动（今天 C / V / L）")
     problems = check_out_edges_comment(broken)
     assert any(problem.startswith("[出边]") for problem in problems), problems

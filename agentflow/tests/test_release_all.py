@@ -3616,6 +3616,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "refusals.py": "角色动作的「拒绝」形态（一处定义）：`refuse(kind, error, **extra)` ⇒ "
                    "`ok=False` + 受控 `refusal_reason`。终态映射据此把拒绝落成 `refused` 而不是 `ok`"
                    "（T1 第 2 趟真机：8 次 `ok=False` 被记成 `outcome=ok`，而 `statements` 是 0 行）",
+    # 2026-11-20（GUARDFIX，业主立案「拒信必须说真话」）：框架内部错误的分档与拒信正文
+    # （真机 `projects/lp-ball-13`：15 次 `attack.step` 全拒，框架自己的 TypeError 被说成
+    # "你交的东西不合格"）。为什么必须是顶层模块：`tools/attack_tools.py` 与
+    # `agent_f/step.py` 两处都要用它，而两份文件都在 800 行软基线附近；口径也自成一件事
+    # （"一次拒绝的回执该说什么"），放进任何角色包都会让另一条路径 import 一个角色模块。
+    # 它 2026-11-20 落盘时漏登记（`R6-AN-1` 的形态）⇒ 本行按现盘补上并写清理由。
+    "refusalfault.py": "框架内部错误的分档与拒信真身（GUARDFIX）：`FRAMEWORK_ERROR_KIND` / "
+                       "`FRAMEWORK_FAULTS`（类型表，负控的打桩点）/ `REFUSAL_AUDIT_MARKER` / "
+                       "`refuse_framework_fault` / `disk_state` / `landing_reading` / "
+                       "`landing_sentence` / `problems_of` / `record_step_refusal` —— "
+                       "attack_tools 与 agent_f.step 共用，`_guard` 的分档与 errorstats 的 "
+                       "framework_error 码都指向这一份",
     "runflow.py": "端到端一条命令：一个主题 + 一个美元上限 → 一份可复核的运行记录",
     "scheduler.py": "调度：按写集互斥分波并发",
     "schema.py": "数据模型与校验",

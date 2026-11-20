@@ -1567,6 +1567,14 @@ _VOLATILE_FACT_SETS: tuple[dict[str, Any], ...] = (
                "「优化-登记完一批就逐个洗」。变化格 = B / M（A / D / E 的现值差异来自并行路的"
                "未提交改动，本路不认领，冻结时按现算值一并落）。本笔只换段文本，没有哪一格"
                "事实换过落点 ⇒ facts 键集仍 15 格，count / keys_sha256 与 p303 同值。"},
+      {"version": "p305", "count": 15,
+       "keys_sha256": "21314a392c60f8559e101f0c59759d3cd1726a861954c7bfb7d3a0459ab2ffe3",
+       "note": "抬版本 p305（2026-11-20，RESTORE：还原 2ab3bbdb 误清的强调）。"
+               "`agent_f/core.py` 的 65 处代码字符串字面量（69 对加粗标记）按 "
+               "`git show 2ab3bbdb^:agentflow/src/agentflow/agent_f/core.py` 逐字还原；"
+               "它进的是 F 的 attack 动作提示词（`_attack_prompt`）与读数正文，不进 "
+               "system 段。本笔只换动作提示词正文，没有哪一格事实换过落点 ⇒ facts 键集"
+               "仍 15 格，count / keys_sha256 与 p304 同值。"},
 
 )
 

@@ -759,11 +759,12 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     # `projects/lp-ball-13` 里 `attack.step` 15 次全拒、5 连拒之后
     # `no_progress_limit` 收工，而 errorstats 的类目里一个字都读不到"框架 bug"这件事 ——
     # 它被折进 `validation_error`，与"模型的输入不合格"同档。码名就是工具层
-    # `meta.kind` 的字面量（`_guard` 的分档，`attack_tools.FRAMEWORK_ERROR_KIND`），
+    # `meta.kind` 的字面量（`_guard` 的分档，`refusalfault.FRAMEWORK_ERROR_KIND`；
+    # `attack_tools` 只转发这个名字、真身在新模块），
     # 所以 `_step_text` 扫得到它、`_refusal_key` 也据此另立一个新键（连击不再与
     # 校验失败混着数）。
     ("framework_error", "framework_error",
-     "src/agentflow/tools/attack_tools.py::FRAMEWORK_ERROR_KIND"
+     "src/agentflow/refusalfault.py::FRAMEWORK_ERROR_KIND"
      "（`_guard` 的分档：TypeError / AttributeError / KeyError 一族 ⇒ 受控码，"
      "拒信明说「这是框架侧的问题、换措辞重试没有用」并带落库事实与校验器的逐条读数）"),
 )

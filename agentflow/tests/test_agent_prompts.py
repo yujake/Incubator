@@ -2698,7 +2698,7 @@ _VERSION_LINE = re.compile(r"(?m)^- 提示词版本：.*$")
 #   十一格是 `temp/fixbatch/digest2.py` 现算（导入本文件的 `_surface_digest`，先钉
 #   `AGENTFLOW_LEAN_ENABLED=1`，一次算全十一格、不跳段），不是手抄。
 #   另一笔（`lit.stage_list` 的 `note` 加「`done=True` ≠ 清表」）是运行时返回值，不进任何段。
-_FROZEN_PROMPT_VERSION = "p304"
+_FROZEN_PROMPT_VERSION = "p305"
 # 2026-10-24（D-66）：D 与 M 的 policy 各加了一条「收口 ≠ 销号，再派同类子代理要新建」
 # （业主裁：收口可再接活、销号不可用；用过的名字顺延成 G2/G3，绝不回收）。这一段
 # 改的是段文本，而当时那一轮的边界把 `PROMPT_VERSION` 钉在 p200（不许抬）⇒ 只重算了
@@ -2966,6 +2966,13 @@ _FROZEN_PROMPT_VERSION = "p304"
 #:   先钉 `AGENTFLOW_LEAN_ENABLED=1`）现算，changed = ['B', 'F']：
 #:   B d21f8265… → 4a815263…；F 9e449b3e… → b6c803c1…；
 #:   A / C / D / E / G / H / L / M / V 逐字不动。
+#: p304 → p305（2026-11-20，RESTORE：还原 `2ab3bbdb` 误清的 60 处强调）：`agent_f/core.py`
+#:   里 F 的动作提示词正文与读数正文被那次"lint 清零"抹掉了 69 对加粗标记（65 处字符串
+#:   字面量），本笔按 `git show 2ab3bbdb^:agentflow/src/agentflow/agent_f/core.py` 逐字还原。
+#:   它改的是 F 每次 `attack.step` 时现拼的那份 user 消息（`_attack_prompt`），不进
+#:   `system_prompt` ⇒ 十一格 system 段摘要逐字未动（11 格哈希与 p304 完全相同）；抬版本
+#:   是因为"模型读到的 F 动作提示词"确实换了一份。这也说明这张表钉的是 system 段，
+#:   钉不住动作提示词那一面。
 _FROZEN_PROMPT_DIGESTS: dict[str, str] = {
     "A": "5144e9782819e306d7e3f4ab3e57448bb245ff5143090d9d38cd1848abbd13a7",
     "B": "316e9508bf1a3919cadec8b3c4bc778e6d4679380062c5668785190991e216ed",

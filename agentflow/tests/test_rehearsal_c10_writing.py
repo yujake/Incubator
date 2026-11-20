@@ -331,7 +331,14 @@ def _rows(store: Store, table: str) -> list[dict]:
 #:   blocker —— 所以 `red` 是空、`codes` 点两条。
 #:
 #: 退出码都是 1（权威结论 fail）。改前是 rc=0：非权威读数不参与退出码。
+#:
+#: 另有两只 `na` 格（2026-11-20 EMPTYCELL），不进 `red`、也不进分母：它们不是失败，
+#: 是"这一趟没有可判对象"的诚实读数。`acceptance`：这一趟没有
+#: `out/paper/ACCEPTANCE-CHECKS.json`、`research_questions` 也一行没有 ⇒ 没有可判的
+#: 验收口径。`literature_pending`：这一趟一张 `lit_candidates` 都没写、也没有清过表
+#: 的归档 ⇒ 没有待裁可判。两者都单独登记在 `NA_CELLS`（必须真的是 `na` 且带原因）。
 RED_CLOSED: tuple[str, ...] = ("contradictions",)
+NA_CELLS: tuple[str, ...] = ("acceptance", "literature_pending")
 CODES_CLOSED: tuple[str, ...] = ("review_unresolved", "mapping_package_missing",
                                  "quote_verified_without_span")
 RED_NOT_CLOSED: tuple[str, ...] = ()
@@ -347,7 +354,8 @@ def _assert_honest_failure(got: dict[str, Any], *,
     problems = RC.authoritative_failure_problems(
         got.get("rc", -1), RC.closing_verdict(got["ws"]),
         red=red if red is not None else (RED_CLOSED if closed else RED_NOT_CLOSED),
-        codes=codes if codes is not None else (CODES_CLOSED if closed else CODES_NOT_CLOSED))
+        codes=codes if codes is not None else (CODES_CLOSED if closed else CODES_NOT_CLOSED),
+        na=NA_CELLS)
     if problems:
         raise AssertionError("C10 的权威门读数不对：\n- " + "\n- ".join(problems))
 

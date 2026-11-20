@@ -1209,7 +1209,11 @@ def test_negative_control_the_gate_judge_sees_both_directions():
 
 
 def _message_payload(**over) -> dict:
-    row = {"to": "#public", "subject": "主题", "body": "正文"}
+    # 2026-11-20（BCRETIRE）：`to=ALL` / `#public` 已受控拒绝（`broadcast_retired`），
+    # 而这一组量的是"message 过不过秘书那道发件门" ⇒ 收件人取一个硬闸放行、
+    # 又不需要名册实例的对等目标（M 是顶层发起方，`message_admission` 明文放行）。
+    # 广播那一档本身在下面第一条用例里单独钉（受控拒 + 码，且秘书不被调用）。
+    row = {"to": "M", "subject": "主题", "body": "正文"}
     row.update(over)
     return row
 
@@ -1221,6 +1225,11 @@ def test_message_goes_through_the_secretary_gate_and_leaves_a_duty_1_row(tmp_pat
     assert "alarms" in out, f"message 没进门 ⇒ 秘书没被调用（出站门元组）：{out}"
     assert out["alarms"] == [] and out["fail_open"] is False, out
     assert sec.decisions()[-1]["duty"] == 1, sec.decisions()[-1]
+    # 2026-11-20（BCRETIRE）：广播在秘书那一道之前受控拒绝，秘书一个字都不判。
+    before = len(sec.decisions())
+    retired = loop._outbound_hook("message", _message_payload(to="#public"))
+    assert retired.get("_broadcast_retired", {}).get("refused") == "broadcast_retired", retired
+    assert len(sec.decisions()) == before, sec.decisions()
     # 门不是"所有形状都过"：不属于结构化交互的形状不进秘书（反真空）
     assert loop._outbound_hook("tool", _message_payload()) == {}
     assert loop._outbound_hook("note", _message_payload()) == {}

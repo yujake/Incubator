@@ -37,14 +37,37 @@ def _run(tmp_path: pathlib.Path, replies: list[str], *, max_steps: int = 8):
 
 
 def test_to_all_is_the_public_channel(tmp_path: pathlib.Path):
-    """正控：`{"message": {"to": "ALL"}}` 与 `#public` 等价（同一个概念两个写法归一）。"""
-    from agentflow.agent_loop import ALL
+    """`ALL` 与 `#public` 仍是同一个写法；但写入口 2026-11-20 已受控拒绝 `to=ALL`。
+
+    旧口径断言"`to=ALL` 会发出去、`messages_sent == [ALL]`"。广播通道面退场之后，
+    这条写入被受控拒绝（`broadcast_retired`）：不记 `bad_args`、不记 `bad_json`
+    （它不是"形状错"也不是"值写错"，是收件面不存在），一个字节都没落盘。
+    读侧兼容另给正控：旧行（`channel="public"` / `to="ALL"`）仍读得出、`message_source`
+    仍标 `broadcast`。
+    """
+    from agentflow.agent_loop import ALL, message_source, read_messages, send_message
 
     run = _run(tmp_path, [_reply({"message": {"to": "ALL", "subject": "结论", "body": "见手稿 0001"}}),
                           _reply({"final": "发完了"})])
     assert run.stop_reason == "final", run.to_dict()
     assert not run.bad_json and not run.bad_args, run.to_dict()
-    assert run.messages_sent == [ALL], run.to_dict()
+    assert run.messages_sent == [], run.to_dict()
+    first = run.steps[0].result
+    assert first.get("ok") is False, first
+    assert first.get("refused") == "broadcast_retired", first
+    assert first.get("to") == ALL, first
+    assert first.get("message") == "未发出", first
+
+    # 旧行读侧兼容的正控：走底层 append（旧写法照旧能落），读出来仍标 broadcast。
+    root = tmp_path / "ws"
+    mid, problem = send_message(root, sender="M", to=ALL, subject="旧广播",
+                                body="旧正文", sid="test-run")
+    assert not problem, problem
+    got, problems = read_messages(root, "D", sid="test-run", parent_role="M")
+    assert not problems, problems
+    old = next(m for m in got if m["msg_id"] == mid)
+    assert old["to"] == ALL and old["channel"] == "public", old
+    assert message_source(old)["kind"] == "broadcast", message_source(old)
 
 
 def test_a_wrong_value_is_a_correction_not_a_shape_drift(tmp_path: pathlib.Path):

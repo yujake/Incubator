@@ -131,7 +131,10 @@ def test_the_old_words_live_only_in_the_legacy_decision_reader() -> None:
     # `_tier_from_legacy_decision` 的定义处已经在上面的严格检查里逐个核过（只许在折算
     # 函数里），这里放行它 —— 按声明定位，不写死文件名（刀3 之后它搬进了
     # `secretary_tier_ledger.py`）。
-    registered = {home_name, "verifications.py", "conductor.py", "gates.py",
+    # 2026-11-20 VERSPLIT2：V 判词那几张词表（含 `_SELF_DECLARED_MARKERS` 里那个
+    # "判不了"）从 `verifications.py` 搬进 `v_vocab.py` ⇒ 这里是换名，不是新增：
+    # `verifications.py` 现在一个旧词字面量都没有了。
+    registered = {home_name, "v_vocab.py", "conductor.py", "gates.py",
                   "errorstats.py"}
     src_root = pathlib.Path(SEC.__file__).resolve().parents[1]
     seen: dict[str, int] = {}

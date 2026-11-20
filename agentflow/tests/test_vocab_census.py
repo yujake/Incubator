@@ -122,12 +122,25 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     ## 2026-11-13（业主裁定「清死代码」）：`reproduction_report` / `自证` / `未决` 已删
 
     三条都 0 行 / 无读点 / 无写入口 ⇒ 词表值与登记表条目一起删。`reserved` 栏的非真空
-    改由「今天仍然死的两条」钉住（`CONJECTURE_FORMS.existential`、
+    当时改由「仍然死的两条」钉住（`CONJECTURE_FORMS.existential`、
     `CONJECTURE_STATUSES.known_in_literature`），条数写死到 2（不是删掉这条断言）。
+    （2026-11-20 之后 `known_in_literature` 因读侧字面量挪进栏一附，见下一节；这里的 2 是
+    2026-11-13 那天的历史计数。）
     为什么不是 3：并行路当晚落的 `conjectureledger.py:112`（`return "testing"`）让
     `testing` 从死取值里出来了 —— 那是一条真的产出点，属于好消息；本批的硬计数按
     当次 census 钉在 2，两路合流后按同一条口径复跑再钉一次（判据形态不变）。删掉的三个取值另有
     一条反向断言：它们不许在任何栏、任何词表、任何登记里留痕（与 `E-10` 同一条纪律）。
+
+    ## 2026-11-20：`CONJECTURE_STATUSES.known_in_literature` 挪进栏一附（读侧字面量）
+
+    旧期望把它和 `CONJECTURE_FORMS.existential` 一起钉在 `reserved`（"今天仍然死的两条"）。
+    这一批 `src/agentflow/webui/readers.py` 新增了猜想状态的中文投影
+    `CONJECTURE_STATUS_WORDS`（九个状态逐一给中文；`known_in_literature` 那一格是
+    "文献已知"）—— 那是展示标签，不是产出点，但普查按带引号的字面量判"有没有产出"，
+    分不出"写进数据"与"翻译给页面看" ⇒ 它按 `proposition` / `prior_art` 同样的口径
+    落进 `registered_not_dead`（栏一附：照样打印、照样带登记理由，没有被静默豁免）。
+    所以 `reserved` 的非真空改由 `CONJECTURE_FORMS.existential` 一条钉住；
+    `known_in_literature` 挪进下面那圈"两栏都算登记过"的判据，`unclaimed` 那条不许松。
 
     ## 2026-10-26：`DEP_KINDS.prior_art` 按同一条口径从 `reserved` 挪进 `registered_not_dead`
 
@@ -140,10 +153,9 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
     result = V.census(REPO)
     assert result["checked"] is True, result
     # 普查看得见它们是死取值、且已登记 ⇒ 必须在 `reserved` 栏。
-    # 条数写死到 3：删掉一条预留之后，剩下的必须一条不少地仍然在栏一里
+    # 条数写死到 1：删掉/挪走一条预留之后，剩下的必须一条不少地仍然在栏一里
     # （业主口径：删的是其中一档，就改「剩下的都出现」并把数量写死，不是删掉断言）。
-    _still_dead = (("CONJECTURE_FORMS", "existential"),
-                   ("CONJECTURE_STATUSES", "known_in_literature"))
+    _still_dead = (("CONJECTURE_FORMS", "existential"),)
     for vocab, value in _still_dead:
         assert value in result["reserved"].get(vocab, []), (vocab, value, result["reserved"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])
@@ -172,11 +184,13 @@ def test_the_real_repo_reports_the_registered_dead_values() -> None:
             f"词表值 {vocab}.{value} 已经删了，登记表里却还留着它 —— 那是一条『登记已过期』")
         for column in ("dead", "reserved", "unclaimed", "registered_not_dead"):
             assert value not in result[column].get(vocab, []), (column, vocab, value, result[column])
-    # "同形不同义 / 读侧字面量"的五条：普查看不见它们是死取值（字面量在别的命名空间
+    # "同形不同义 / 读侧字面量"的六条：普查看不见它们是死取值（字面量在别的命名空间
     # 或读侧命中），所以它们落在 `registered_not_dead` 里 —— 但必须照样打印，不许静默。
     for vocab, value in (("DOC_KINDS", "survey"), ("DEP_KINDS", "lemma"),
                          ("DEP_KINDS", "proposition"),
-                         ("DEP_KINDS", "prior_art")):
+                         ("DEP_KINDS", "prior_art"),
+                         # 2026-11-20：webui 的中文投影表（读侧展示标签，不是产出点）
+                         ("CONJECTURE_STATUSES", "known_in_literature")):
         assert value in result["registered_not_dead"].get(vocab, []), (vocab, value, result["registered_not_dead"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])
         assert value not in result["unclaimed"].get(vocab, []), (vocab, value, result["unclaimed"])
@@ -197,10 +211,11 @@ def test_unregistering_a_reserved_value_moves_it_to_unclaimed(monkeypatch) -> No
     上面那条正控在"登记表被清空"时也会绿（因为那时 `reserved` 是空字典，
     `in []` 为假……但它会被 `reserved_total` 那条抓住一部分）。所以这条负控是必需的。
 
-    对象是 `CONJECTURE_STATUSES.known_in_literature`（`reproduction_report` 已于 2026-11-13
+    对象是 `CONJECTURE_FORMS.existential`（`known_in_literature` 2026-11-20 起因 webui 的
+    中文投影表落进栏一附，`reserved` 里不再有它；`reproduction_report` 已于 2026-11-13
     删掉，拿它当夹具会失去对象；`testing` 当晚因并行路新增产出点而离开死取值，也不能用）。
     """
-    key = ("CONJECTURE_STATUSES", "known_in_literature")
+    key = ("CONJECTURE_FORMS", "existential")
     vocab, value = key
     assert key in V.RESERVED_VALUES, "登记表里没有这一条 ⇒ 本负控失去对象"
     before = V.census(REPO)

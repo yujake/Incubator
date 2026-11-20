@@ -112,14 +112,17 @@ def test_negative_control_an_unwashed_format_face_turns_the_reading_red(
     """反真空：把洗格式关掉（错名的候选表读不出来）⇒ 正控① 的读数必须红。
 
     注入点只有一处：`declarations_candidates`（"这个错名该映到哪个真名"的唯一判据）。
+    2026-11-20（SECSPLIT）：`secretary.py` 拆成 31 个 `secretary_*.py`，洗格式的
+    实现在 `secretary_wash.py` 里、按模块级名字直接 import 了 `declarations_candidates`
+    ⇒ 打桩要打在它真正读的那个模块上（打 `secretary.py` 的再导出不会影响它）。
     让它一律返回空 ⇒ 秘书不再改写 `action`，载荷原样发出去（这就是"未洗的样子"）。
     没有这一条，正控①的绿可能只是"`check_form` 本来就等于 `check_formal`"这类空话：
     这里读到的 `washed=False` / `changes=[]` 说明那两条断言确实对着"洗过"这件事。
     """
-    import agentflow.secretary as sec_mod
+    import agentflow.secretary_wash as wash_mod
 
     sec, _st, _root = _sec(tmp_path)
-    monkeypatch.setattr(sec_mod, "declarations_candidates", lambda *a, **k: [], raising=True)
+    monkeypatch.setattr(wash_mod, "declarations_candidates", lambda *a, **k: [], raising=True)
     got = sec.wash_delegation("summon", {"role": "L", "action": "check_form", "params": {}})
     assert got["payload"]["action"] == "check_form", got["payload"]   # 还原成未洗的样子
     assert got["washed"] is False and got["changes"] == [], got

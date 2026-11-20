@@ -52,10 +52,22 @@ def _barrier(directory: Path, name: str, n: int, timeout: float) -> None:
 
 
 def _run_pending(args: argparse.Namespace) -> dict:
+    # 打桩位置（2026-11-20 VERSPLIT2）：这两格的定义已经搬进 `v_pending_write.py`，
+    # `verifications.<name>` 只是再导出那一格。函数体里读的是自己模块的全局，所以
+    # 只打门面那一格等于打空气（实测：`--no-lock` 下仍然两个号，反真空静默变绿）。
+    # 两处都打：定义处（现在生效）与门面那一格（将来若有人把函数体改回按门面查，也在）。
+    from agentflow import v_pending_write as VPW
+
+    for _mod, _name in ((VPW, "pending_write_lock"), (VPW, "_next_pending_verification_id"),
+                        (VR, "pending_write_lock"), (VR, "_next_pending_verification_id")):
+        if not hasattr(_mod, _name):
+            raise SystemExit(
+                f"{_mod.__name__}.{_name} 不存在 ⇒ 反真空打桩的位置又搬了，先改这里")
     if args.no_lock:
         # 反真空：把修后那把跨进程锁换回"无锁"（= 修前形态）。
-        VR.pending_write_lock = lambda _root: contextlib.nullcontext()  # type: ignore[assignment]
-    real = VR._next_pending_verification_id
+        for _mod in (VPW, VR):
+            _mod.pending_write_lock = lambda _root: contextlib.nullcontext()  # type: ignore[assignment]
+    real = VPW._next_pending_verification_id
     hold = float(args.hold_after_id or 0.0)
 
     def _slow(root_):  # noqa: ANN001, ANN202 - 钩子签名与 `_next_pending_verification_id` 一致
@@ -64,7 +76,8 @@ def _run_pending(args: argparse.Namespace) -> dict:
             time.sleep(hold)
         return got
 
-    VR._next_pending_verification_id = _slow  # type: ignore[assignment]
+    for _mod in (VPW, VR):
+        _mod._next_pending_verification_id = _slow  # type: ignore[assignment]
     row = VR.record_pending_sign(
         Path(args.root),
         proof_text=args.proof_text,

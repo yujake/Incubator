@@ -2,7 +2,7 @@
 """pending 写口（两层锁 + 跨文件发号）。
 
 2026-11-20（VERSPLIT2）：`v_pending_write.py` 是从 `verifications.py` 搬出的 6 块 / 266 行（块
-逐字未动，逐名 AST 全等在 `temp/versplit2/` 可复算）。对 32 个被测试打桩的名字，读
+逐字未动，逐名 AST 全等在 `temp/versplit2/` 可复算）。对 34 个被测试打桩的名字，读
 一律写成 `verifications.<name>` —— 门面字典在调用那一刻才查，所以
 `monkeypatch.setattr(verifications, ...)` 仍然到得了这里（`from .x import X` 是快照，
 补丁到不了）。跨模块 import 放在文件末尾：模块之间有互相引用，定义全跑完再 import
@@ -171,13 +171,13 @@ def record_pending_sign(root: str | Path, *, proof_text: str, verdict: Mapping[s
     key = obj or sha
     path = pending_ledger_path(root, key)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with pending_write_lock(root):
+    with verifications.pending_write_lock(root):
         rows, problems = JF.read_jsonl(path)
         if problems:
             raise VerificationError(f"pending 台账有读不出来的行：{problems[:3]}")
         row = {
             # 跨文件唯一（K6③）：`u-<号>` 不再按"这一份台账第几行"发，而是全目录取最大 +1。
-            "verification_id": _next_pending_verification_id(root),
+            "verification_id": verifications._next_pending_verification_id(root),
             # 没有命题号是这一档的定义（命题还没在册）：两个键都留空串而不是缺键 ——
             # 读的人要能分辨"这一行不属于任何命题"与"这一行是旧格式、没有这个键"。
             "statement_id": "", "stmt_id": "",

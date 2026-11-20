@@ -478,7 +478,12 @@ def _tool_result(events: list[dict], *, role: str, tool: str, index: int = 0) ->
 #: 不是"这一项研究可以交付"。所以它照实红、退出码 1（改前是 rc=0：非权威读数
 #: 不参与退出码）。`quote_evidence` 那条 blocker（种子关系带 `quote_verified=True`
 #: 却没有逐字区间）也一并留下 —— 三格名单一起点名。
+#:
+#: `literature_pending` 是第四档 `na`（2026-11-20 EMPTYCELL）：这一趟一张
+#: `lit_candidates` 都没写、也没有清过表的归档 ⇒ 没有可判对象。它不是 pass
+#: （没判过），也不是 fail（没有证据说坏），所以单独登记在 `NA_CELLS`。
 RED_CELLS: tuple[str, ...] = ("acceptance", "contradictions")
+NA_CELLS: tuple[str, ...] = ("literature_pending",)
 RED_CODES: tuple[str, ...] = ("contradiction_unadjudicated",
                               "acceptance_missing_for_research",
                               "quote_verified_without_span")
@@ -487,7 +492,8 @@ RED_CODES: tuple[str, ...] = ("contradiction_unadjudicated",
 def _assert_honest_failure(got: dict[str, Any]) -> None:
     """权威门在这份彩排里必须读到：`verdict=fail`、`rc==1`、红格点名。"""
     problems = RC.authoritative_failure_problems(
-        got.get("rc", -1), RC.closing_verdict(got["ws"]), red=RED_CELLS, codes=RED_CODES)
+        got.get("rc", -1), RC.closing_verdict(got["ws"]), red=RED_CELLS,
+        codes=RED_CODES, na=NA_CELLS)
     if problems:
         raise AssertionError("C9 的权威门读数不对：\n- " + "\n- ".join(problems))
 

@@ -45,7 +45,7 @@ from agentflow.tools import ocr_tools as OT
 from agentflow.tools import search_tools as ST
 from agentflow.tools.base import ToolRegistry, ToolSpec
 
-from conftest import add_concept, add_literature, add_relation, add_request, write_library_file
+from conftest import add_concept, add_literature, add_relation, add_request, write_library_file, lit_availability
 from test_tools_audit_fixes import declared_keys, parse_declared_keys
 
 #: 共享判据所在的模块。判据的「判据」必须走模块属性取函数（不能只捕获 import 进来的
@@ -384,9 +384,25 @@ def _seed_mapping_cells_probe(registry: "ToolRegistry") -> None:
         encoding="utf-8", newline="")
 
 
+def _seed_readable_evidence(registry: "ToolRegistry") -> None:
+    """`lit.admit` 探针的前置：给 000000 / 000004 两槽铺"读过正文"的证据。
+
+    为什么是前置而不是 `_seed`：装配注册表时 `fs_tools.register` 会清空
+    `fs_observation` 的观察台账，`_seed` 里写下的 `fs.read` 观察活不到探针那一趟；
+    前置在 `calling_as(...)` 里、装配之后执行，owner 与探针那一趟相同。
+    证据形态由 `conftest.lit_availability` 一处给（与真机 `text.extract` → `fs.read`
+    同形，正文须比摘要多 ≥500 字）。
+    """
+    lit_availability(registry.probe_store, "r-000001", ["000000", "000004"], "readable")
+
+
 #: 前置的两档：`(工具名, 参数)` = 先跑那次工具调用；直接给一个可调用 = 铺数据（不走工具）。
 _PREREQS: dict[str, Any] = {
     "fs.edit": ("fs.read", {"path": "out/edit-target.txt"}),
+    # `lit.admit`：两槽的"读过正文"证据必须在注册表装配之后、`calling_as` 里铺
+    # （`fs_tools.register` 会清观察台账）；理由见 `_seed_readable_evidence` 与
+    # `_seed` 里 2026-11-20 那段注释。
+    "lit.admit": _seed_readable_evidence,
     # 批量重取（2026-10-28，阶段 ③ 2B）：先真落一行「有元数据、有下载地址、没全文」的
     # literature —— 没有它，这一趟的 `rows[]` 会是空的，而 `rows[]` 的十二个键就
     # 全成了"声明了却没给"的假红（探针必须打在主路径上，见本文件 docstring 的
@@ -784,9 +800,11 @@ def tool_params() -> dict[str, dict]:
                              "note": "探针：与本次检索无关"},
         # 2026-11-16：`lit.admit` 的探针改用 `items` 形态，逐条带可读性判定
         # （业主裁定 ②：只凭 relevance 不再是判过的全部证据；`litavail` 的四档是
-        # 零 schema 的旁路台账）。`000004` 仍是 DOI 重复样本（必须落 refused）。
-        "lit.admit": {"items": [{"slot": "000000", "availability": "metadata_only"},
-                                {"slot": "000004", "availability": "metadata_only"}],
+        # 零 schema 的旁路台账）。2026-11-20（裁定 ①）起「仅题录」不再是入库券 ⇒
+        # 两条都报 `readable`（证据由 `_PREREQS["lit.admit"]` 在装配之后铺好）。
+        # `000004` 仍是 DOI 重复样本（必须落 refused）。
+        "lit.admit": {"items": [{"slot": "000000", "availability": "readable"},
+                                {"slot": "000004", "availability": "readable"}],
                       "request_id": "r-000001"},
         "lit.admit_all": {"request_id": "r-000002"},
         "table.count": {"table": "statements"},
@@ -1396,22 +1414,20 @@ def _seed(store: Store, root: Path) -> None:
             row.validate()
             tx.upsert("lit_candidates", row.to_dict(), note="fixture")
             staged_rows[slot] = row
-    # 抽读回执（2026-11-17，P287）：`lit.admit` 的探针报 `metadata_only`，而业主
-    # 2026-11-16 裁定（AR1）起「仅题录」不是零读可入：它必须有一条「试过、但拿不到
-    # 可读文本」的 `extract_failed` 回执（闸在 `litstage::_read_evidence_gate`）。
-    # 夹具从前一份回执都没铺 ⇒ 探针落在 `no_read_evidence` 那条受控拒上，被判据记成
-    # 「没跑起来」（`skipped`），于是 `lit.admit` 声明的键集合一个都没被验到。
-    # 这里补的是探针的前置数据（与 `text.extract` 抽失败时写下的那一行同形），
-    # 不是放宽判据：声明面一个字没动，闸的口径也没动。
-    from agentflow import litavail as LAV
-    from agentflow import litread as LR
-
-    for slot in ("000000", "000004"):
-        LAV.record_read(
-            root, "r-000001", slot, LR.FULLTEXT_EXTRACT_FAILED,
-            source="fixturestub", note="夹具：抽过但拿不到可读文本（仅题录探针的前提）",
-            candidate=staged_rows[slot].to_dict(),
-        )
+    # 抽读回执 / `readable` 证据不在这里铺：`fs_tools.register` 装配注册表时会
+    # `fs_observation.clear()`（一次性装配清空观察台账），于是 `_seed` 里写下的
+    # `fs.read` 观察活不到探针那一趟。它落在 `_PREREQS["lit.admit"]`
+    # （`_seed_readable_evidence`）：那次在 `calling_as` 里、注册表已经装好之后执行。
+    #
+    # 2026-11-20（业主裁定 ①「没有正文不许判收」）：`metadata_only` 不再是入库券 ——
+    # 它连同 `extract_failed` 一起在 `litstage._read_evidence_gate` 里落 `no_content`，
+    # 整批受控拒。于是探针从前那两条 `metadata_only` + `extract_failed` 的样本会
+    # 变成"没跑起来"（`skipped`），`lit.admit` 声明的键集合一个都验不到。
+    # 现在前置铺的是闸要的三样证据（`cand-<槽>.txt` 的抽读回执 + 版本 + `fs.read`
+    # 观察 + 正文比摘要多 ≥500 字），与真机 `text.extract` → `fs.read` 的路径同形；
+    # 000004 仍是 DOI 重复样本：它只有在"可读"这一档才走得到逐条 DOI 判重，
+    # 于是 `refused[]` 的 `why` / `code` / `overlap` 三格才有观测对象。
+    # 声明面一个字没动，闸的口径也没动 —— 改的是探针前置数据。
     # 第 2 个委托 `r-000002`：铺的时候就已经判完（零条待裁），是 `lit.admit_all` 探针
     # 唯一能走到 ok 分支的形状（Q16 的提交闸：本委托只要还有一条没判，整批都不许入库）。
     # 两行刻意一条 admitted、一条 rejected：报告的两个块（已入库 / 未入库）都有真行可数，

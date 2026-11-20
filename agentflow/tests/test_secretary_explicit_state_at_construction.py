@@ -39,6 +39,8 @@ from agentflow.conductor import Conductor, LocalBackend
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 
+import _secretary_home as HOME
+
 REPO = pathlib.Path(__file__).resolve().parents[1]
 SCAN_ROOTS: tuple[str, ...] = ("src", "tools", "scripts")
 BR = "2026-11-20T09:00:00+08:00"
@@ -130,8 +132,10 @@ def test_last_repair_named_is_gone_everywhere() -> None:
                 bad.append(f"{module}:{node.lineno}")
     assert not bad, bad
     # 正控：`named` 这个出参确实在写侧出现过（否则上面那条是真空的）。
-    src = (REPO / "src/agentflow/secretary.py").read_text(encoding="utf-8")
-    assert "named.append(" in src, "补名的出参不见了 ⇒ 上面的'字段已消失'没有对象"
+    # 2026-11-20 SECSPLIT：`roster_repair` 搬进 `secretary_roster_write.py`，所以正控按
+    # "秘书家族全部源码"找（上面那条"全仓没有这个字段"照旧扫 src/tools/scripts）。
+    assert "named.append(" in HOME.family_text(), (
+        "补名的出参不见了 ⇒ 上面的'字段已消失'没有对象")
 
 
 def test_the_factory_hands_the_source_to_the_constructor() -> None:

@@ -147,6 +147,10 @@ def test_the_cli_exits_two_instead_of_a_traceback(tmp_path: pathlib.Path):
     assert "Traceback" not in out, out[-2000:]
     assert proc.returncode == 2, (proc.returncode, out[-2000:])
     assert "contradictions" in out and "没查成" in out, out[-2000:]
-    # 改前这里是"一行 `[store 错误] …`、一格读数都没有"：机器七格的那句汇总必须出现，
+    # 改前这里是"一行 `[store 错误] …`、一格读数都没有"：门自己那句汇总必须出现，
     # 说明门自己跑完了（`_print_review_acceptance` 之后仍可能落到 CLI 兜底，那不是门）。
-    assert "机器七格" in out, out[-2000:]
+    # 2026-11-20：第八格 `literature_pending` 入列之后，那句汇总逐字是「机器八格」
+    # （`closing.ClosingReport.summary`）—— 下面的格数自证它跟着 `DEFAULT_CHECKS` 走，
+    # 不是写死的一个字。
+    assert len(CL.DEFAULT_CHECKS) == 8, CL.DEFAULT_CHECKS
+    assert "机器八格：pass" in out, out[-2000:]

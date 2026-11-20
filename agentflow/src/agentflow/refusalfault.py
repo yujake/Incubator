@@ -16,7 +16,7 @@
 
 ## 四条判据的唯一落点
 
-- 分档：`_FRAMEWORK_FAULTS`（类型表）＋ `framework_failure`（受控码 `FRAMEWORK_ERROR_KIND`）；
+- 分档：`FRAMEWORK_FAULTS`（类型表）＋ `framework_failure`（受控码 `FRAMEWORK_ERROR_KIND`）；
   负控打桩点就是那张类型表：把它清空 ⇒ 同一支 TypeError 又回校验失败那一档。
 - 落库：`disk_state`（前后两次读数）＋ `landing_reading`（三态对比）＋ `landing_sentence`
   （拒信里那句"有没有落库"只许照它说，`checked=False` 时不许说"没有"）。

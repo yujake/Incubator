@@ -1020,8 +1020,20 @@ def closing_verdict(ws: Path | str, *, role: str = "M") -> dict[str, Any]:
     return {}
 
 
-def authoritative_problems(verdict: Mapping[str, Any]) -> list[str]:
-    """正控：full 链必须真的过了权威门（`verdict=pass` / 权威 / 八格逐格 pass）。"""
+def authoritative_problems(verdict: Mapping[str, Any], *,
+                           allow_na: Sequence[str] = ()) -> list[str]:
+    """正控：full 链必须真的过了权威门（`verdict=pass` / 权威 / 八格逐格 pass）。
+
+    ## `allow_na`（2026-11-20 EMPTYCELL 之后）
+
+    `closing._verdict_payload` 给"没有可判对象"的格落了第四档 `na`（`acceptance` 在
+    没有 `ACCEPTANCE-CHECKS.json`、且 `research_questions` 也一行没有时就是这一档；
+    `literature_pending` 在整趟没有待裁过文献时也是）。`na` 既不是 pass、也不是 fail：
+    产品自己的 `verdict` 只把它点名进 reason，不让它进分母。所以"八格逐格 pass"这条
+    断言要能把点名登记的 na 格放过去 —— 但它不是放宽：`allow_na` 里的每一格
+    必须真的是 `na`、且带非空 `why`（"没判过"要说得出为什么没判）；落在 `allow_na`
+    之外的任何非 pass 格仍然逐格报红。
+    """
     from agentflow import closing as CL
 
     problems: list[str] = []
@@ -1034,24 +1046,42 @@ def authoritative_problems(verdict: Mapping[str, Any]) -> list[str]:
     if int(verdict.get("exit_code", -1)) != 0:
         problems.append(f"`exit_code` 应为 0，实得 {verdict.get('exit_code')!r}")
     cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
+    why_of = {str(c.get("check")): str(c.get("why") or "") for c in (verdict.get("cells") or [])}
     want = list(CL.DEFAULT_CHECKS)
     if sorted(cells) != sorted(want):
         problems.append(f"八格的格子名单不对：{sorted(cells)} ≠ {sorted(want)}")
-    red = {k: v for k, v in cells.items() if v != "pass"}
+    allowed = {str(x) for x in allow_na}
+    red = {k: v for k, v in cells.items() if v != "pass" and k not in allowed}
     if red:
         problems.append(f"这八格里有没 pass 的：{red}")
+    # `allow_na` 不是"随便放过"：登记的那几格必须真是 na，且写清为什么没有可判对象。
+    wrong = {k: cells.get(k) for k in allowed if cells.get(k) not in ("pass", "na")}
+    if wrong:
+        problems.append(f"登记为 na 的格实得 {wrong}（既不是 pass 也不是 na）")
+    no_why = sorted(k for k in allowed if cells.get(k) == "na" and not why_of.get(k))
+    if no_why:
+        problems.append(f"这些格记了 na 却没说为什么没有可判对象：{no_why}")
     return problems
 
 
 def authoritative_failure_problems(rc: int, verdict: Mapping[str, Any], *,
                                    red: Sequence[str],
-                                   codes: Sequence[str] = ()) -> list[str]:
+                                   codes: Sequence[str] = (),
+                                   na: Sequence[str] = ()) -> list[str]:
     """负控（裁定 ③）：如实断言 `verdict=fail`、`rc==1`、红格点名（空 = 绿）。纯函数。
 
     "诚实失败"的五件事：权威（`authoritative=True`，不是退回非权威 —— 否则 rc 不受它
     影响，那不是失败读数）、`verdict == "fail"`、`exit_code == 1`、运行退出码 `rc == 1`、
     红的格子恰好是点名的那几格（`red` 里可以有 `"none"` 表示"没有红格、红的是 blocker"）。
     `codes` 给了就要求 blocker 里点得到那几个受控理由码。
+
+    ## `na`（2026-11-20 EMPTYCELL）
+
+    `na` 是"没有可判对象"的第四档（不是失败）。负控这一趟里也可能有这种格
+    （例如文献链的 `acceptance`：本趟只写 `literature` / `lit_candidates`，没有验收表
+    也没有研究问题）。所以"非 pass 的格子恰好是点名的那些"这一条把 `na` 单列：
+    `red` 是查过了、结论是坏的格；`na` 是登记在案的"没有对象"。每一个 `na` 格必须
+    真的是 `na` 且带非空 `why` —— 否则它就是一条没判成的读数，不许当 na 混过去。
     """
     problems: list[str] = []
     if verdict.get("authoritative") is not True:
@@ -1062,10 +1092,19 @@ def authoritative_failure_problems(rc: int, verdict: Mapping[str, Any], *,
         problems.append(f"`exit_code` 应为 1，实得 {verdict.get('exit_code')!r}")
     if int(rc) != 1:
         problems.append(f"运行退出码应为 1（权威结论 fail），实得 {rc!r}")
-    cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
+    rows = [dict(c) for c in (verdict.get("cells") or [])]
+    cells = {str(c.get("check")): str(c.get("status")) for c in rows}
+    why_of = {str(c.get("check")): str(c.get("why") or "") for c in rows}
     red_cells = sorted(k for k, v in cells.items() if v != "pass")
-    if red_cells != sorted(str(x) for x in red):
-        problems.append(f"红的格子应恰好是 {sorted(red)}，实得 {red_cells}")
+    want = sorted({str(x) for x in red} | {str(x) for x in na})
+    if red_cells != want:
+        problems.append(f"红的格子应恰好是 {want}，实得 {red_cells}")
+    wrong = {k: cells.get(k) for k in na if cells.get(k) != "na"}
+    if wrong:
+        problems.append(f"登记为 na 的格实得 {wrong}（既不是 pass 也不是 na）")
+    no_why = sorted(str(k) for k in na if cells.get(k) == "na" and not why_of.get(k))
+    if no_why:
+        problems.append(f"这些格记了 na 却没说为什么没有可判对象：{no_why}")
     fired = [str(b.get("code")) for b in (verdict.get("blockers") or [])]
     if codes and not set(codes) <= set(fired):
         problems.append(f"blocker 里应点名 {list(codes)}，实得 {fired}")

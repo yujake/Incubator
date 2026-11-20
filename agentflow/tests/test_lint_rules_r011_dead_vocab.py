@@ -70,16 +70,25 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     钉住；`proposition` 必须出现在栏一附里（照样打印、照样带理由），且两栏都不许
     出现 `unclaimed`（那一档才是要变红的那一档，一条都没放松）。
 
+     ## 2026-11-20：`known_in_literature` 也挪进栏一附（第三个同机制样本）
+
+     这一批 `src/agentflow/webui/readers.py` 新增了猜想状态的中文投影
+     `CONJECTURE_STATUS_WORDS`（`known_in_literature` 那格是"文献已知"）—— 那是展示标签，
+     不是产出点，而普查按字面量判读写 ⇒ 它按 `proposition` / `prior_art` 同样的口径落进
+     栏一附（照样打印、照样带理由）。`reserved` 栏的非真空改由剩下的
+     `CONJECTURE_FORMS.existential` 一条钉住；`unclaimed` 那条一刀没松。
+
     ## 2026-10-26：`prior_art` 也挪进栏一附（同一个机制，第二次）
 
     旧期望把 `prior_art` 钉在 `reserved`。这一批 `src/agentflow/depsection.py:182`
     有了 `"prior_art": "prior_art"` —— 那是依赖小节解析的读侧别名表（把正文里的词
     映射到 `Dependency.kind`），不是产出点，而普查按字面量判读写，分不出这两件事
     ⇒ 它按 `proposition` / `lemma` 同样的口径落进栏一附。
-    现在 `reserved` 栏的非真空改由今天仍然死的那两条钉住
+    2026-10-26 当时 `reserved` 栏的非真空改由「仍然死的那两条」钉住
     （`CONJECTURE_FORMS.existential` / `CONJECTURE_STATUSES.known_in_literature` ——
     2026-11-13 删掉 `reproduction_report` / `自证` / `未决` 之后剩下的、仍然「死且已登记」
-    的那两条；`testing` 当晚因并行路新增产出点 `conjectureledger.py:112` 而离开死取值），
+    的那两条；`testing` 当晚因并行路新增产出点 `conjectureledger.py:112` 而离开死取值 ——
+    2026-11-20 之后 `known_in_literature` 也挪进栏一附，见上一节），
     `prior_art` 与 `proposition` 一起落栏一附，两栏都照旧不许出现 `unclaimed`，
     且每一条都必须带着登记表里那段理由打印出来 —— 这三件事一条都没放松。
     删掉的 `reproduction_report` 另有一条反向断言：R011 的任何一栏都不许再出现它。
@@ -88,10 +97,10 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     reserved = " ".join(f.message for f in got if "[栏一 reserved]" in f.message)
     registered = " ".join(f.message for f in got if "[栏一附]" in f.message)
     unclaimed = " ".join(f.message for f in got if "[栏二 unclaimed]" in f.message)
-    # 栏一 reserved 的非真空：这两条今天仍无产出点（条数写死，不是删掉断言）。
-    # 为什么不是三条：并行路当晚落的 `conjectureledger.py:112` 让 `testing` 有了产出点
-    # （那是好消息），本批按当次 census 钉在两条。
-    for name in ("existential", "known_in_literature"):
+    # 栏一 reserved 的非真空：这一条今天仍无产出点（条数写死，不是删掉断言）。
+    # 为什么不是两条：`CONJECTURE_STATUSES.known_in_literature` 这一批因 webui 的中文投影表
+    # （读侧字面量）落进栏一附 —— 见本函数 docstring 的 2026-11-20 那一节。
+    for name in ("existential",):
         assert name in reserved, f"{name} 不在 reserved 栏：{reserved}"
         assert name not in unclaimed, f"{name} 被挪进了 unclaimed 栏：{unclaimed}"
     # 2026-11-13 删掉的三个 C 值：R011 输出里不许留痕
@@ -99,9 +108,9 @@ def test_r011_reports_the_registered_dead_values_in_the_reserved_column() -> Non
     for gone in ("reproduction_report", "自证", "未决"):
         assert gone not in reserved, f"reserved 栏里还有 {gone}：{reserved}"
         assert gone not in registered, f"栏一附里还有 {gone}（登记已过期）：{registered}"
-    # `proposition` / `prior_art` 今天落栏一附（同形不同义的读侧字面量）：
+    # `proposition` / `prior_art` / `known_in_literature` 今天落栏一附（同形不同义的读侧字面量）：
     # 仍然必须在报告里被点名、带理由，且两栏都不许出现 unclaimed。
-    for name in ("proposition", "prior_art"):
+    for name in ("proposition", "prior_art", "known_in_literature"):
         assert name in registered, f"{name} 不在栏一附里：{registered}"
         assert name not in unclaimed, f"{name} 被挪进了 unclaimed 栏：{unclaimed}"
     assert "（死取值" in registered or "预留" in registered, (

@@ -839,9 +839,11 @@ def test_c4_vs_visible_surfaces_do_not_mention_washing(tmp_path):
     assert "派活先过秘书" in around, (
         "唯一那一处 `wash` 不在『派活先过秘书』那一句里 ⇒ 它可能是在说『V 的意见会被洗』："
         + around)
-    # 正控：这一条不是"全文都没有 wash"那种假绿
-    assert "wash_v_reply" in json.dumps(
-        {k: str(v) for k, v in SEC.Secretary.__dict__.items()}), "洗稿那个方法不见了"
+    # 正控：这一条不是"全文都没有 wash"那种假绿。
+    # 2026-11-20（SECSPLIT）：`wash_v_reply` 随 `secretary.py` 拆进 `SignMixin`，
+    # 不再在 `Secretary.__dict__` 里 —— 按 MRO 逐层看，仍然要求它真在秘书那一侧。
+    assert any("wash_v_reply" in vars(klass) for klass in SEC.Secretary.__mro__), \
+        "洗稿那个方法不见了"
 
 
 def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_path):
@@ -865,20 +867,30 @@ def test_c8_vs_prompt_and_manual_say_the_signature_belongs_to_the_secretary(tmp_
     assert sent, "这一趟没有提示词 ⇒ 判据扫不到可见面（假绿）"
     body = "\n".join(s.body for s in SK.skills_for("V"))
 
-    def _missing(text: str) -> list[str]:
-        """这一份可见文本缺了哪几条必须出现的句子（空列表 = 齐了）。"""
-        need = ["秘书判定并落盘", "发不发签", "你看不到审阅之外的任何东西",
+    def _missing(text: str, *, extra: tuple[str, ...] = ()) -> list[str]:
+        """这一份可见文本缺了哪几条必须出现的句子（空列表 = 齐了）。
+
+        2026-11-20（ROLECLEAN-3）：两份面说"签由秘书"的句子不是同一句 ——
+        冷启动写「在册档发不发签由你的秘书判定并落盘」，技能手册写
+        「够数之后由你的秘书落签」。逐面取各自的现文案（锚点唯一、可复算），
+        不取一份两边都得有的模糊子串。
+        """
+        need = ["发不发签", "你看不到审阅之外的任何东西",
                 "这是嘱托，不是门", "DEVELOPMENT-SPEC.md", "§13",
                 "H-1", "H-5", "T-1", "T-8", "N-1", "N-4", "C-1", "C-4", "不归 F"]
-        return [p for p in need if p not in text]
+        return [p for p in (*need, *extra) if p not in text]
 
-    for name, text in (("冷启动提示词", sent), ("技能手册", body)):
-        assert not _missing(text), (name, "缺了这些句子/条目：", _missing(text))
+    cold_sign = "在册档发不发签由你的秘书判定并落盘"
+    skill_sign = "够数之后由你的秘书落签"
+    for name, text, extra in (("冷启动提示词", sent, (cold_sign,)),
+                              ("技能手册", body, (skill_sign,))):
+        assert not _missing(text, extra=extra), (
+            name, "缺了这些句子/条目：", _missing(text, extra=extra))
     # 负控（§13.2「没有负控的判据不算判据」）：把「签由秘书」那一句从同一份提示词里挖掉，
     # 上面那个算式必须当场看见 —— 否则它量的只是"文本很长"，而不是那几句话在不在。
-    stripped = sent.replace("秘书判定并落盘", "")
-    assert _missing(stripped), "负控失效：挖掉『签由秘书』之后同一个算式仍然说齐了"
-    assert "秘书判定并落盘" in _missing(stripped)
+    stripped = sent.replace(cold_sign, "")
+    assert _missing(stripped, extra=(cold_sign,)), "负控失效：挖掉『签由秘书』之后同一个算式仍然说齐了"
+    assert cold_sign in _missing(stripped, extra=(cold_sign,))
     # ⑤ 索引里点得到那份手册（正文按需读，索引是唯一入口）
     system = AP.system_prompt("V", registry=build_registry().registry)
     idx = SK.skill_path("V", "产出-只产意见-签分两档")

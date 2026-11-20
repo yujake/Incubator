@@ -645,6 +645,11 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
     # 空壳（措辞藏在实现里也看不见，那是假绿）。
     for _p in sorted(src.glob("v_*.py")):
         v_chain[_p.name] = _p
+    # 2026-11-20（SECSPLIT）：`secretary.py` 也拆成了 31 个 `secretary_*.py`，V 的判定面
+    # （`judge_v_reply` / `wash_v_reply`）搬进 `secretary_sign.py`。改前只扫 `secretary.py`
+    # 会扫到门面、漏掉实现 —— 与上面 v_*.py 同一形态，所以把秘书整层一并扫进来。
+    for _p in sorted(src.glob("secretary_*.py")):
+        v_chain[_p.name] = _p
     scanned: dict[str, str] = {}
     for name, path in v_chain.items():
         assert path.is_file(), f"{name} 不在盘上：{path}"
@@ -654,7 +659,7 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
     # 反真空：这几份源码确实带着本批改过的那几格（扫错文件会假绿）。
     assert "verify_proof" in scanned["agent_v/core.py"], "扫的不是 V 的实现"
     assert "consecutive_holds" in scanned["v_streak.py"], "扫的不是台账读数"
-    assert "judge_v_reply" in scanned["secretary.py"], "扫的不是秘书的判定面"
+    assert "judge_v_reply" in scanned["secretary_sign.py"], "扫的不是秘书的判定面"
     assert "v_rejections_digest" in scanned["agent_loop.py"], "扫的不是读侧"
 
     # ① 三种"还差次数"的终局措辞：一处都不许有（白名单刻意为空）。

@@ -57,6 +57,7 @@ from . import statementbody as _SB   # D2：命题正文的唯一读口（真身
 from . import statementledger as SL  # 命题台账的查口（按号 / 按关键词，只读、零模型）
 from . import textutil as T
 from . import userio as U
+from . import verifications as _VR  # V 的判词词表真身（`VERDICTS`，按位置引用）
 # 引文回验的四态读数（B-4）：`no_source_backed` / `no_source_unbacked` /
 # `no_source_absent` / `not_applicable` 的唯一判据在 `quoteevidence.no_source_state`。
 # 模块级导入：本文件里有一处函数内的 `import EB` 会把 `EB` 变成局部名（历史坑，
@@ -1606,7 +1607,10 @@ def _round_advanced(rec: Mapping[str, Any], *,
 
 
 #: V 的审核词表里唯一算签的 `verdict`（`vsigns.issue` 只发这一种）。
-SIGN_VERDICT_ESTABLISHED = "成立"
+#: 按位置取词表真身 `verifications.VERDICTS` 的最后一档（定义在 `v_vocab`），
+#: 不再自抄一份字面量 —— 否则它就是判决词的第五份副本。`numericproof` 与
+#: `exhaustionreport` 那两处是判据容许的既有落点，这里不新增第三处。
+SIGN_VERDICT_ESTABLISHED = _VR.VERDICTS[-1]
 
 
 def _norm_manuscript_path(value: Any) -> str:

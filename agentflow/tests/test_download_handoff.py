@@ -97,42 +97,47 @@ def _agent_a(store, provider, downloader) -> AgentA:
     )
 
 
-def _judge_and_admit(store, request_id: str, slot: str,
-                     relevance: str = "与本次检索直接相关") -> dict:
-    """Q16 的入库入口：先给原槽补一句 relevance，再逐条入库（才有 literature 行）。
+def _legacy_literature_without_bytes(store, request_id: str, url: str) -> str:
+    """落一行"改前已入库、盘上没有字节"的存量文献（补下载这一支的对象）。
 
-    两步都是 A 自己的活；`lit.stage_add` 带 relevance 重进同一篇按 G9 补进原槽
-    （不发新号、不先撤再进）。
+    ## 为什么不再走 `lit.admit` 造这一行（2026-11-20 ALITCONTENT）
+
+    判收口径已经收紧成「读到正文才准入」（`litavail.ADMITTABLE_TIERS == (readable,)`），
+    所以"仅题录"再也不能经判收入库 —— 那个状态今天只以改前的存量行存在
+    （`test_a_admit_needs_read_content.py` 的 e 格：存量仅题录行仍读得出、只是不再进新库）。
+    本用例测的是下载交接（`content_type_mismatch` 必须降级并保留字节），
+    不是"谁准入了这一行"；让这一行按存量形态直接落盘，判据与产品口径各自钉各自的事。
+
+    定位符（`download.url`）照真机存量行的形状写着：补下载失败时它仍是"这篇从哪来"
+    的唯一读数（与 `litavail.locator_of` 同一份口径）。
     """
-    from agentflow.tools import build_for_role
+    doi = "10.1090/s0025-5718-1987-0866109-5"
+    row = add_literature(
+        store, "000000", title="Elliptic curve cryptosystems", doi=doi, year=1987,
+        path=None, processed=False, source_request_ids=[request_id],
+        dedup_key=f"doi:{doi}",
+        download={"status": "skipped", "http_status": None, "bytes": 0,
+                  "sha256": None, "error": "no_local_path", "url": url},
+        sync=True,
+    )
+    return str(row["lit_id"])
 
-    row = next(r for r in store.rows("lit_candidates") if str(r.get("slot")) == str(slot))
-    reg = build_for_role("A", store=store, workspace_root=store.root).registry
-    reg.bound_role = "A"
-    entry: dict = {"title": str(row["title"]), "relevance": relevance}
-    if row.get("doi"):
-        entry["doi"] = str(row["doi"])
-    topped = reg.call("lit.stage_add", request_id=request_id, entries=[entry])
-    assert topped.ok, topped.error
-    assert [u["slot"] for u in topped.unwrap()["updated"]] == [str(slot)], (
-        f"补 relevance 必须落在原槽（G9），实得 {topped.unwrap()}")
-    # 2026-11-16 裁定 ①②：回读 + 可读性判定（这一档测的是交接，不是自审）。
-    readback = reg.call("lit.stage_list", request_id=request_id)
-    assert readback.ok, readback.error
-    from agentflow import litavail as AV
-    from agentflow import litread as LR
-    AV.record_availability(store.root, request_id, str(slot), AV.METADATA_ONLY)
-    # 仅题录也要有"试过、拿不到可读文本"的回执（AR1）：夹具直接落一条 extract_failed，
-    # 否则入库闸会按零读取尝试拒掉（这不是本文件要测的那件事）。
-    AV.record_read(store.root, request_id, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
-                   source="fixture:no-bytes", note="text.extract.no_text_layer")
-    got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
-    assert got.ok, got.error
-    # 2026-11-16（Q1）：判收不发号 ⇒ 注册与回填在提交那一刻。
-    done = reg.call("lit.admit_all", request_id=request_id)
-    assert done.ok, done.error
-    assert done.unwrap()["registered"] == 1, done.unwrap()
-    return done.unwrap()
+
+def _legacy_admitted_candidate(store, slot: str, lit_id: str) -> None:
+    """把第一轮暂存的那一槽标成"改前已判收"（admitted），让补下载那一支有对象。
+
+    为什么需要这一步：自动链路按 Q16 只暂存，`fresh_entries` 会把"还停在 pending"
+    的同身份候选剔掉 —— 那一轮根本不会去碰已在库的那一行。改前这条用例是用
+    `lit.admit` 造出 admitted 的；新口径下那次判收必须带正文，而本用例的对象是
+    "补下载把 HTML 落进一条没有字节的存量行"，不是"判收要不要正文"。
+    所以这里直接把那一槽按存量形态标成 admitted（带 lit_id），不伪造任何抽读证据。
+    """
+    with store.tx("lit_candidates", actor="test", note="fixture_legacy_admitted") as tx:
+        row = next(r for r in tx.rows("lit_candidates") if str(r.get("slot")) == str(slot))
+        row["status"] = "admitted"
+        row["lit_id"] = str(lit_id)
+        row["relevance"] = "与本次检索直接相关（存量候选）"
+        tx.upsert("lit_candidates", row, note="fixture_legacy_admitted")
 
 
 # --------------------------------------------------------------------------- A 侧
@@ -159,7 +164,10 @@ def test_content_type_mismatch_downgrades_status_but_keeps_evidence(store):
     assert first.registered == 0 and first.download_suspect == 0, first.to_dict()
     assert store.rows("literature") == [], "Q16：还没判过 ⇒ 一行都不许入库"
 
-    _judge_and_admit(store, "r-0001", "000000")
+    # 补下载的对象是一行"改前已入库、没有本地字节"的存量行（见两个 helper 的 docstring）。
+    slot = str(store.rows("lit_candidates")[0]["slot"])
+    legacy_id = _legacy_literature_without_bytes(store, "r-0001", _cand().pdf_url or "")
+    _legacy_admitted_candidate(store, slot, legacy_id)
     set_request_done(store, "r-0001", False)
     res = a.run_once()
     assert res.registered == 0, res.to_dict()

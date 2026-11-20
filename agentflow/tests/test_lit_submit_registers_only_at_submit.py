@@ -230,7 +230,12 @@ def test_b_admitted_rows_carry_numbers_rejected_rows_do_not(store: Store, reg) -
 def test_c_a_non_empty_list_blocks_closing_and_clearing_releases_it(store: Store, reg) -> None:
     """c. 待入库表非空 ⇒ 收工受控拒（blocker，不是读数）；清表之后放行。"""
     rep = CL.check_closing(store, checks=("literature_pending",))
-    assert rep.status["literature_pending"] == "pass", rep.to_dict()
+    # 2026-11-20（EMPTYCELL）：一张候选都没有、也没有清过表的归档 ⇒ 没有可判对象，
+    # 这一格记 `na`（不是 pass：没判过；也不是 unknown：读得动）。改前这里断言 `pass`，
+    # 那是空表上的真空通过。
+    assert rep.status["literature_pending"] == "na", rep.to_dict()
+    assert "没有可判对象" in str(rep.readings["literature_pending"].get("reason") or ""), (
+        rep.to_dict())
 
     slots = _stage(reg, ["Gate one", "Gate two"])
     rep = CL.check_closing(store, checks=("literature_pending",))

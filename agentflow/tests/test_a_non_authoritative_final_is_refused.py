@@ -273,12 +273,16 @@ def test_c_the_full_rehearsal_passes_the_authoritative_gate(
     assert int(got["rc"]) == 0, (got["rc"], got["stdout"][-1500:], got["stderr"][-1500:])
     cells = {str(c.get("check")): str(c.get("status")) for c in (verdict.get("cells") or [])}
     assert sorted(cells) == sorted(CL.DEFAULT_CHECKS), sorted(cells)
-    assert all(status == "pass" for status in cells.values()), cells
+    # 2026-11-20（EMPTYCELL）：`acceptance` 在"没有验收表、`research_questions` 也一行
+    # 没有"的项目上是 `na`（没有可判对象），不是 pass。这一趟只写文献表，正是那种项目；
+    # 除它之外每一格都必须 pass。
+    assert cells.get("acceptance") == "na", cells
+    assert all(v == "pass" for k, v in cells.items() if k != "acceptance"), cells
     assert verdict.get("blockers") == [], verdict.get("blockers")
     ends = [e for e in got["events"]
             if e.get("kind") == "agent_run_end" and e.get("role") == "M"]
     assert ends and ends[-1].get("stop_reason") == "final", ends[-1:]
-    gate_problems = RC.authoritative_problems(verdict)
+    gate_problems = RC.authoritative_problems(verdict, allow_na=("acceptance",))
     assert not gate_problems, gate_problems
 
 

@@ -4,7 +4,13 @@
 >
 > 起因（`draft/36` §3）：`src/agentflow` 里文件多、单文件大。**当次读数（观测 2026-11-20 BDUTY）：**
 > 口径：`src/` 下全部 `*.py`（`__pycache__` 不在里面），逐文件 `read_text().splitlines()` 求和）：
-> **393 个 `.py`、311,239 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,953 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **393 个 `.py`、311,279 行**，**72 个文件超过 800 行**（**全仓最大的是 `agent_loop.py`，15,953 行**；§3 那张表里最大的一行同为 `agent_loop.py` —— 批 R40 把它补进了那张表）。
+> **2026-11-20 RESTORE（观测 21:5x，本路）：** 三格与 `agent_loop.py` 按现盘重算（上一格
+> BDUTY 是 310,195 行；差额来自并行路的未提交改动 —— 本路 `src/` 行数净变 0）。`.py` 数 **393**、
+> **72 个 >800**、`agent_loop.py` **15,953** 行三格不动（三格 72 / 95 / 2 未抬）。
+> 本路还原 `2ab3bbdb` 误清的 `agent_f/core.py` 65 处代码字符串字面量（69 对强调；逻辑与行数
+> 一字未动）⇒ 提示词 p304 → **p305**（十一格 system 摘要逐字未动、两份 golden 重冻 0 行差异、
+> `ROLE-GUIDE` / `SYSTEM-COMPONENTS` 重生成后逐字一致、warm 两档真跑，cap 0.10）。
 > **2026-11-20 BCRETIRE（观测 12:5x，本路）：** 行数 309,165 → **309,278**（`agent_loop.py` 15,858 → **15,953**：
 > 广播通道退场的写入口受控拒 `broadcast_retired`（`_broadcast_retired_refusal` + 两个写入口 + 发件钩子）
 > 与几处注释；`agent_prompts.py` 3,618 行，只换段文本（`LOOP_PROTOCOL` / `HANDOFF_PROTOCOL` / 官能表），

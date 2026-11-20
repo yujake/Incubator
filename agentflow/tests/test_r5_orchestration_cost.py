@@ -1149,6 +1149,31 @@ _REF_KNOWN_MISSING_TEMP: tuple[str, ...] = (
     # 它是历史读数出处、按 R2「探针与证据只放 temp/、跑完即清」删掉了本体；
     # 引用留着是为了让人能复核"当时钉的是哪几条缺口"，不是"照着找能得到东西"。
     "temp/AUDIT-VD",
+    # 2026-11-20（FIXC 收口：按现盘复跑本判据时，扫描面 = git 跟踪的全部文件，
+    # 于是 `docs/` 与 `scripts/` 里的历史出处也一并被看见）。这 8 条都是"历史读数出处 /
+    # 已提升进 scripts 的原稿"，不是新写的坏引用；按本表口径逐条登记（不删引用 ——
+    # 删掉会让史实少一条可复核的出处）。
+    #   · `temp/_contract_out.txt`：docs/DEVELOPMENT-SPEC.md:2119 的 amendment 批处理叙述
+    #     （01:19 的脚本从这份判据打印里取 json 块）；
+    #   · `temp/_owner_probe_after.out.txt`：tests/test_abandon_gate_is_not_bypassable.py:5
+    #     的改前 / 改后对照读数；
+    #   · `temp/_p240_refreeze_goldens.py`：scripts/refreeze_goldens.py:8 记的原稿
+    #     （2026-11-20 提升进 `scripts/`，temp 那份按 R2 清掉）；
+    #   · `temp/_p242_commit_msg.txt`：docs/DEVELOPMENT-SPEC.md:2159 引的那条提交纪律原文；
+    #   · `temp/_p249_digest_table.txt`：docs/PROMPT-HISTORY.md:1894 的逐格读数出处；
+    #   · `temp/msg_note_49729b99_attribution.txt`：docs/DEVELOPMENT-SPEC.md:2158 的归因更正说明；
+    #   · `temp/pytest-all`：scripts/pytest_all.py:673 的旧 run 目录、src/agentflow/webui/server.py:491
+    #     与 tests/test_prompt_cache_is_callable.py:505 引的历史复现读数目录；
+    #   · `temp/recompute_map_headline.py`：scripts/recompute_map_headline.py:8 记的原稿
+    #     （2026-11-20 提升进 `scripts/`）。
+    "temp/_contract_out.txt",
+    "temp/_owner_probe_after.out.txt",
+    "temp/_p240_refreeze_goldens.py",
+    "temp/_p242_commit_msg.txt",
+    "temp/_p249_digest_table.txt",
+    "temp/msg_note_49729b99_attribution.txt",
+    "temp/pytest-all",
+    "temp/recompute_map_headline.py",
 )
 
 
@@ -1206,6 +1231,11 @@ _REF_KNOWN_MENTION_TOKENS = (
     "_mark_dirty",                # 已删 helper 的残骸讨论（`draft/28` §176 删除；`table_tools.py` 的注释在解释它为什么没了）
     "_target_text",               # 负控叙述里被删掉的字段名
     "_diag",                      # 举例用的"谁都不认识的键"
+    # 2026-11-20（BCRETIRE，收口批次）：判据⑤的 docstring 在解释「那个方法全仓没有 def」
+    # 这条反例（`tests/test_roster_registration_holes.py:336`：改前两支都落公共频道，
+    # 而 `_message_my_children` 从来没被定义 ⇒ `AttributeError`；补回它更糟，会把老语义复活）。
+    # 那条提及是历史叙述，不是新写错的引用 ⇒ 按本表的口径逐条登记，不改写判据正文。
+    "_message_my_children",       # 已删/从未存在的方法名（判据⑤在讲"为什么它仍然必须不存在"）
     # —— 2026-10-19：`_plan` 从本表退出（同一条等额纪律，登记过期）——
     # 它原登记为"早期散文写法（今天真名是 `_plan_mode`）"，唯一的文本提及是
     # `providers.py` 里那句 ``_plan``。这一批新增的 `tests/test_closing_attack_progress.py`

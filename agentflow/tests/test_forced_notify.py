@@ -489,7 +489,13 @@ def test_a_malformed_dispatch_notify_still_dispatches_and_falls_back(tmp_path):
 
 
 def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_path):
-    """`summon_many` 一波算一次派活、写一行；`to` 缺省 ⇒ `ALL`（多目标）。
+    """`summon_many` 一波算一次派活；多目标时模型自写的 `notify` 缺省 `to="ALL"`。
+
+    2026-11-20（BCRETIRE）：`to=ALL` 已随广播通道面退场，写入口受控拒绝
+    `broadcast_retired` ⇒ 这次留痕一行都不落（`MS.rows` 为空），拒信带在
+    `dispatch_handoff` 里。这不是把判据放宽：旧口径断言"会写一行 `to=ALL`"，
+    新口径断言"受控拒 + 码 + 一个字节都没落"，并另给一条旧行读侧的兼容正控
+    （旧账本里 `to="ALL"` 的行仍读得出、仍按原样返回）。
 
     D-68 之后这一趟要两个子代理都销掉才收得了工：脚本按台账逐个销，
     所以"两步销号 + 一步收工"在这里同时是"整棵树都清过"的证据。
@@ -511,8 +517,17 @@ def test_a_multi_target_dispatch_defaults_the_handoff_to_the_public_channel(tmp_
     assert [s.shape for s in run.steps] == ["summon_many", "tool", "tool", "final"], \
         [s.shape for s in run.steps]
     rows = MS.rows(ws)
-    assert len(rows) == 1, rows
-    assert rows[0]["to"] == "ALL", rows[0]
+    assert rows == [], rows
+    handoff = run.steps[0].result.get("dispatch_handoff") or {}
+    assert handoff.get("ok") is False, handoff
+    assert handoff.get("refused") == "broadcast_retired", handoff
+    assert handoff.get("to") == "ALL", handoff
+    assert handoff.get("handoff") == "未写成", handoff
+    # 旧行读侧兼容的正控：旧账本里 `to="ALL"` 的行仍读得出来（退场只关写入口，不破读侧）。
+    legacy = MS.write(ws, sender="M", recipient="ALL",
+                      summary="旧广播手稿", body="旧正文。\n", sid="")
+    assert legacy["to"] == "ALL", legacy
+    assert [r["to"] for r in MS.rows(ws) if r["id"] == legacy["id"]] == ["ALL"], MS.rows(ws)
 
 
 def test_a_plain_role_does_not_need_a_notify_on_its_dispatches(tmp_path):

@@ -573,12 +573,24 @@ def test_the_closing_cell_says_not_applicable_instead_of_red(
 
 def test_the_closing_cell_is_unchanged_when_the_switch_is_on(
         tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """负控：开着 ⇒ 老判据照旧（没有 proof 断言时 pass，读数里没有 disabled 那一格）。"""
+    """负控：开着 ⇒ 老判据照旧（没有 proof 断言时 pass，读数里没有 disabled 那一格）。
+
+    2026-11-20（EMPTYCELL）：三张表一行都没有时这一格改记 `na`（"没有可判对象"与
+    "判过了、只是零承重断言"分开）。要走到 Lean 开的老判据，工作区里必须先有一行
+    可判对象（这里落一条 `cross_check` 命题）；否则量到的是 EMPTYCELL 那一支。
+    """
     ws = tmp_path / "ws"
     st = Store(ws)
     st.init()
+    with st.tx("statements", actor="test") as tx:
+        tx.upsert("statements", {"stmt_id": "0000", "status": "active",
+                                 "evidence_kind": "cross_check",
+                                 "statement_full": "命题", "proof_text": "证明：一行",
+                                 "quote_reason": "夹具：这一行只为这一格的读数而造，不涉及外部原文",
+                                 "origin": "own_result"})
     monkeypatch.setenv(SET.ENV_LEAN_ENABLED, "1")
     rep = _Rep()
     CL._check_load_bearing(rep, st)
     assert rep.status["load_bearing"] == "pass", rep.status
+    assert rep.readings["load_bearing"]["state"] == "not_applicable", rep.readings
     assert "disabled" not in rep.readings["load_bearing"]

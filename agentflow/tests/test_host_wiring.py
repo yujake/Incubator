@@ -577,12 +577,11 @@ def _judge_and_admit(store, request_id: str, slot: str,
     # 2026-11-16 裁定 ①②：回读 + 可读性判定（这一档测的是接线，不是自审）。
     readback = reg.call("lit.stage_list", request_id=request_id)
     assert readback.ok, readback.error
-    from agentflow import litavail as AV
-    from agentflow import litread as LR
-    AV.record_availability(store.root, request_id, str(slot), AV.METADATA_ONLY)
-    # 仅题录同样要有一条"试过、拿不到可读文本"的回执（AR1）。
-    AV.record_read(store.root, request_id, str(slot), LR.FULLTEXT_EXTRACT_FAILED,
-                   source="fixture:no-bytes", note="text.extract.no_text_layer")
+    # 2026-11-20（ALITCONTENT）：判收只接受 `readable`。本文件测的是 host 接线，
+    # 所以用 conftest 的公共夹具造一份"真读到的正文"（抽读回执 + 版本 + fs.read +
+    # 摘要之外 500 字以上），而不是把这一档也变成"HOST 接线要不要正文"的判据。
+    from conftest import lit_availability
+    lit_availability(store, request_id, [str(slot)])
     got = reg.call("lit.admit", request_id=request_id, slots=[str(slot)])
     assert got.ok, got.error
     # 2026-11-16（Q1）：判收不发号 —— `lit_id` 只从提交那一刻的批量注册出来。
@@ -708,7 +707,12 @@ def test_a_summoned_literature_search_really_lands_in_the_library(tmp_path: Path
     assert rows[0]["lit_id"] == lit_id
     assert rows[0]["title"] == "The extremal process of branching Brownian motion"
     assert rows[0]["doi"] == "10.1007/s00440-012-0464-x"
-    assert rows[0]["path"] is None, "没有 PDF URL ⇒ path 为空（不是编一个路径）"
+    # 2026-11-20（ALITCONTENT）：判收要求读到正文，所以这一行一定有本地字节
+    # （候选期抽读件被收编进 library，`download.fulltext` 落 `ok`）。改前这里断言
+    # `path is None`（"没有 PDF URL ⇒ path 为空"）—— 那条口径已经不允许入库了。
+    assert rows[0]["path"], "读到正文才判收 ⇒ path 应指向收编进 library 的那份正文"
+    assert (st.library / rows[0]["path"]).is_file(), rows[0]
+    assert (rows[0].get("download") or {}).get("fulltext") == "ok", rows[0]
     # 来源链：候选行记着"这条请求查回来的那一篇是哪个 lit_id"。
     # （请求行的 `result_lit_ids` 这一格今天不会被判收回填 —— `lit.admit` 的登记路径
     #   没有把候选行的 request_id 传下去，已登记为产品缺陷，不属本文件可改范围。）

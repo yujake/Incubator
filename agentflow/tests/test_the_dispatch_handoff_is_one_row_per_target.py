@@ -16,8 +16,9 @@ M 第 13 步一次 `summon_many` 派了 A、D、D 三个目标，而它没填 `n
 
 1. 正题：派生支在多目标时 ⇒ N 条，`to` 各是各的目标角色，正文只含它自己那一条；
 2. 单目标 ⇒ 仍是一条、`to` 是那个角色（老行为逐字不变）；
-3. 模型自己写了 `notify` 的那一支不动：多目标仍是一条、缺省 `to="ALL"`
-   （判据 `tests/test_forced_notify.py` 那条，与这里并存）；
+3. 模型自己写了 `notify` 的那一支：多目标缺省 `to="ALL"`，而 `to=ALL` 已随广播
+   通道面退场（2026-11-20）⇒ 这次留痕受控拒绝 `broadcast_retired`、一行都不落
+   （读侧兼容另由旧行正控钉住）；
 4. 反真空：拆条的条数必须等于目标数，且不许多写一个 `to="ALL"`。
 """
 from __future__ import annotations
@@ -117,18 +118,32 @@ def test_a_single_target_keeps_one_row_addressed_to_it(tmp_path: pathlib.Path):
 
 
 def test_the_model_written_notify_still_goes_out_as_one_public_note(tmp_path: pathlib.Path):
-    """模型自己写了 `notify`（没写 to）⇒ 仍是一条 `to="ALL"`：它写的是一段共同的话。"""
+    """模型自己写了 `notify`（没写 to）⇒ 缺省 `to="ALL"` ⇒ 受控拒绝 `broadcast_retired`。
+
+    广播通道面退场（2026-11-20）之后，"多目标默认发公共频道"这一档不再是可写的
+    收件面：写入口受控拒绝、一行都不落。旧账本里 `to="ALL"` 的历史行仍读得出
+    （本用例末段给读数正控）。
+    """
     payload = {**TWO, "summon_many": {**TWO["summon_many"],
                                       "notify": {"summary": "派两条活",
                                                  "body": "## 派什么活\n甲 + 乙。\n"}}}
-    ws, _run_obj, _gate = _run(tmp_path, [payload,
-                                          {"tool": "conductor.retire_child",
-                                           "args": {"child_name": "D1"}},
-                                          {"tool": "conductor.retire_child",
-                                           "args": {"child_name": "E1"}}, FINISH])
+    ws, run, _gate = _run(tmp_path, [payload,
+                                     {"tool": "conductor.retire_child",
+                                      "args": {"child_name": "D1"}},
+                                     {"tool": "conductor.retire_child",
+                                      "args": {"child_name": "E1"}}, FINISH])
     rows = MS.rows(ws)
-    assert len(rows) == 1, rows
-    assert rows[0]["to"] == "ALL", rows[0]
+    assert rows == [], rows
+    handoff = run.steps[0].result.get("dispatch_handoff") or {}
+    assert handoff.get("ok") is False, handoff
+    assert handoff.get("refused") == "broadcast_retired", handoff
+    assert handoff.get("to") == "ALL", handoff
+    assert handoff.get("handoff") == "未写成", handoff
+    # 旧行读侧兼容：退场只关写入口，历史行仍按原样读得出来。
+    legacy = MS.write(ws, sender="M", recipient="ALL", summary="旧广播手稿",
+                      body="旧正文。\n")
+    assert legacy["to"] == "ALL", legacy
+    assert [r["to"] for r in MS.rows(ws) if r["id"] == legacy["id"]] == ["ALL"], MS.rows(ws)
 
 
 def test_the_step_result_says_how_many_rows_were_written(tmp_path: pathlib.Path):

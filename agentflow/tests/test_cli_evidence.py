@@ -122,7 +122,13 @@ def test_store_counts_references(tmp_path: Path, capsys: pytest.CaptureFixture):
 
 
 def test_migrate_dry_run_does_not_touch_the_artifact(tmp_path: Path, capsys: pytest.CaptureFixture):
-    """`migrate` 默认 dry-run：产物逐字节不动（改的是历史证据本体，必须人点头）。"""
+    """`migrate` 已退场（A4，2026-11）：退出码 2 + 替代指引，且产物逐字节不动。
+
+    改前这一条测的是"默认 dry-run 不动盘"。2026-11-20 业主批准 A4 之后整个命令
+    退场了（移植期工具删除；退出码 2 = 没查成），所以同一条判据改成钉退场后的
+    受控形态：不再有任何一条路能悄悄改写历史证据，且用户拿到的是"已退场 + 去哪
+    核引用 / 看盘正文库"的原话，而不是一句通用的失败。
+    """
     project, run_dir = _make_run(tmp_path, ["a", "b"])
     ev_path = run_dir / "evidence.json"
     # 先把这份产物改成"内联形态"，模拟历史产物
@@ -137,13 +143,22 @@ def test_migrate_dry_run_does_not_touch_the_artifact(tmp_path: Path, capsys: pyt
     before = ev_path.read_bytes()
 
     rc = cli.main(["--plain", "evidence", "migrate", str(project)])
-    out = capsys.readouterr().out
-    assert rc == 0 and "dry-run" in out
-    assert ev_path.read_bytes() == before, "dry-run 绝不许动盘"
+    out = capsys.readouterr().err
+    assert rc == 2, out
+    assert "已退场" in out, out
+    assert "没查成" in out, out
+    # 替代指引必须点名两条还活着的证据面命令（不是把用户丢在"已删除"上）。
+    assert "evidence verify" in out and "evidence store" in out, out
+    assert ev_path.read_bytes() == before, "退场后的命令绝不许动盘"
 
 
 def test_migrate_apply_rewrites_and_backs_up(tmp_path: Path, capsys: pytest.CaptureFixture):
-    """`--apply` 才改写：产物变成引用形态、有备份，而且改完仍能被 verify 核过。"""
+    """`--apply` 同样已退场：不重写、不备份，并明说没查成。
+
+    改前这一条测"`--apply` 才改写，且逐份备份"。A4 退场之后这两件事都不该发生：
+    最坏的历史证据改动是"命令不存在了，但你原来那份还在"。所以这里断言退出码 2、
+    原件仍是内联形态、盘上没有迁移备份 —— 三格一起才钉得住"退场不是换个名字继续写"。
+    """
     project, run_dir = _make_run(tmp_path, [f"page one says {QUOTE}"], rec_page=1)
     ev_path = run_dir / "evidence.json"
     ev = json.loads(ev_path.read_text(encoding="utf-8"))
@@ -156,13 +171,15 @@ def test_migrate_apply_rewrites_and_backs_up(tmp_path: Path, capsys: pytest.Capt
                        encoding="utf-8", newline="\n")
 
     rc = cli.main(["--plain", "evidence", "migrate", str(project), "--apply"])
-    out = capsys.readouterr().out
-    assert rc == 0 and "已迁移" in out
+    out = capsys.readouterr().err
+    assert rc == 2, out
+    assert "已退场" in out and "没查成" in out, out
     after = json.loads(ev_path.read_text(encoding="utf-8"))["sources"][0]["fulltext"]
-    assert after["text_store"] == "ref" and "text_ref" in after and "text_pages" not in after
-
+    assert after["text_store"] == "inline" and "text_pages" in after, after
+    assert "text_ref" not in after, after
     backups = list((project / "temp").glob("evidence-migrate-*/run-1-evidence.json"))
-    assert backups, "改历史证据必须先备份"
+    assert not backups, f"退场后的命令仍然写备份：{backups}"
 
+    # 退场只删"迁移"这条路：核引用那条命令仍然照常给出结论。
     rc2 = cli.main(["--plain", "evidence", "verify", str(run_dir)])
     assert rc2 == 0, capsys.readouterr().out

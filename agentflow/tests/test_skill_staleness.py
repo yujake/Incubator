@@ -138,6 +138,15 @@ _STALE_IDENTITY = (
     re.compile(r"看标题判重"),
 )
 
+#: 「定理名」被当成命名/判同依据的写法（2026-11-20 收窄）。
+#:
+#: 改前这一支只问"正文里有没有『定理名』"—— 而手册里出现「定理名」不等于在教命名
+#: 口径：A 的检索手册新加的那句「写定理名、具体数值这类内容性断言」说的是
+#: `content_read=false` 时的内容性断言，与命题同一性无关，旧锚点会把它误判成过时。
+#: 锚点收窄到"拿定理名当依据"的那几种写法（同样可复算），而不是把这一支删掉。
+_STALE_THEOREM_NAME = re.compile(
+    r"(?:按|用|看|以|凭|拿)\s*定理名|定理名(?:相同|一样|一致|就算|即|判)")
+
 #: 依赖面里那条"F 自己写台账"的旧说法（分工是 F 写手稿、B 读稿登记）。
 _F_WRITES_STATEMENTS = re.compile(r"F\s*(?:自己)?写\s*`?statements")
 
@@ -216,8 +225,10 @@ def _rule_proposition_identity(role: str, sk: AS.Skill) -> str | None:
         m = pat.search(sk.body)
         if m:
             return f"旧判据「{m.group(0)}」：同一性由秘书读条件与结论判，不按字符串"
-    if "定理名" in sk.body and "路线" not in sk.body:
-        return "讲了定理名却没讲「路线进证明层、不进定理名」"
+    m = _STALE_THEOREM_NAME.search(sk.body)
+    if m and "路线" not in sk.body:
+        return (f"旧判据「{m.group(0)}」：定理名不是命名/判同依据 —— "
+                f"路线进证明层、不进定理名")
     return None
 
 
@@ -367,6 +378,19 @@ def test_every_rule_has_a_negative_control_and_it_bites() -> None:
         role, text = RULE_NEGATIVES[rid]
         hit = fires(role, _synthetic(role, text))
         assert hit, f"规则 {rid} 没咬到它自己的反例：{text}"
+
+
+def test_the_theorem_name_branch_still_bites_and_does_not_overfire() -> None:
+    """反真空（`proposition-identity` 的第二支）：锚点收窄，不是放宽。
+
+    ① 把「定理名」当命名/判同依据 ⇒ 规则必须咬到（新锚点真的在量这件事）；
+    ② 只是提到「定理名」的内容性句子（不提"路线"）⇒ 不许误伤（旧锚点过宽的那一半）。
+    """
+    hit = _rule_proposition_identity("A", _synthetic("A", "按定理名判同一条。"))
+    assert hit, "把「定理名」当命名依据之后规则不红了 ⇒ 收窄把这一支删成了空转"
+    miss = _rule_proposition_identity(
+        "A", _synthetic("A", "`content_read=false` 时写定理名、具体数值这类内容性断言。"))
+    assert miss is None, f"只提到「定理名」的内容性句子被误判成过时：{miss}"
 
 
 def test_negative_control_the_old_message_wording_turns_the_criterion_red(monkeypatch) -> None:

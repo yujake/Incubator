@@ -21,7 +21,7 @@
     M22 <- M25  PROPOSITION_KINDS
     M24 <- M34  经 _is_concept_kind（概念种类判定，三个模块都要问）
 
-每一组的箭头两端都是模块级名字（方法之间走 `self.`，不产生 import）。把它们里"本来
+每一组的两端都是模块级名字（方法之间走 `self.`，不产生 import）。把它们里"本来
 就是声明"的那几个提前抽成一个叶子，环上各方都从叶子 import，谁都不再从对方 import ——
 依赖方向重新变成单向的 `secretary -> decl -> {vocab, refusals}`。
 

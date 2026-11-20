@@ -23,6 +23,7 @@ from pathlib import Path
 import pytest
 
 from agentflow import dedup as D
+from agentflow import litavail as LAV
 from agentflow import litstage as L
 from agentflow import schema as S
 from agentflow.agent_a import AgentA
@@ -143,13 +144,19 @@ def test_hits_that_all_stay_pending_do_not_read_as_a_bare_no_results(store):
 
 
 def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, reg):
-    """2. 入库的那一行必须有定位栏（候选 url）并标"本次无全文"；B 读得出它在哪。
+    """2. 入库的那一行必须有定位栏（候选 url）；仅题录的存量行仍读得出它在哪。
 
     改前读数：literature 行 `path=null`、`download={"status":"skipped",
     "error":"no_local_path"}`；B 领取后只能写 `no_local_file`，说不出这篇从哪来。
 
     Q16 之后路径变了（`lit.admit_all` 不再搬库，逐条 `lit.admit` 才是入库口），
-    但这一条守的东西一个字没变：不管从哪条入库路径进来的行，都得带上候选行的 url。
+    但这一条守的东西一个字没变：不管从哪条入库路径进来的行，都得指得出处
+    （产品自己的读法是 `litavail.locator_of`：规范化 DOI 优先，其次 `download.url`）。
+
+    2026-11-20（ALITCONTENT）：判收只接受 `readable`，所以新入库那一行一定有正文
+    （候选期抽读件被收编进 `library/`，`download.fulltext=ok`）—— 「仅题录也能入库」
+    这条口径已经退场。仅题录只剩改前已入库的存量行（不追溯删除）：本用例的下半场
+    仍然钉它"读得出、B 的点名里带着定位符"，只是它不再来自一次新的判收。
     """
     url = "https://example.invalid/locate-me.pdf"
     staged = reg.call("lit.stage_add", request_id=RID, entries=[{
@@ -174,12 +181,30 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
 
     row = next(r for r in store.rows("literature") if r["lit_id"] == lit_id)
     dl = dict(row.get("download") or {})
-    assert row["path"] is None, row
-    assert dl.get("url") == url, dl
-    # 2026-11-05（M3）：`download.fulltext` 改成现算三档后，这一档的受控取值是
-    # `no_fulltext`（改前是只有写点、没有清除点的 `no_fulltext_this_time`）。
-    # 判据守的东西一个字没变：盘上"这一篇没有字节"必须是一个机器读得出来的档位。
-    assert dl.get("fulltext") == "no_fulltext", dl
+    # 读到正文才判收 ⇒ 这一行有本地字节（收编进 library/）。
+    assert row["path"], row
+    assert (store.library / row["path"]).is_file(), row
+    assert dl.get("fulltext") == "ok", dl
+    # 定位符按产品自己的那一把尺子读（`litavail.locator_of`：规范化 DOI 优先、
+    # 其次 `download.url`）。可读那一行的字节是从候选期抽读件收编来的，
+    # `_mark_candidate_locator` 对"有字节"的行只清旧标签、不写"本次无全文"的 url，
+    # 所以这一行的定位符是 DOI；读取侧（探针 / 报告 / B）读的是同一个函数。
+    assert LAV.locator_of(row) == "doi:10.55/locate", row
+
+    # ---- 存量兼容：改前已入库的"仅题录"行仍读得出，B 的点名里带着定位符。
+    legacy_url = "https://example.invalid/legacy-locate-me.pdf"
+    legacy_id = add_literature(
+        store, "000001", title="Legacy migration without bytes",
+        doi="10.55/legacy-locate", year=2010, path=None, processed=False,
+        dedup_key="doi:10.55/legacy-locate",
+        download={"status": "skipped", "http_status": None, "bytes": 0, "sha256": None,
+                  "error": "no_local_path", "url": legacy_url, "fulltext": "no_fulltext"},
+    )["lit_id"]
+    # 新入库那一行这一趟已经交过了；B 这一轮只领那条存量行。
+    with store.tx("literature", actor="test", note="fixture") as tx:
+        settled_row = tx.find("literature", lit_id=lit_id)
+        settled_row["processed"] = True
+        tx.upsert("literature", settled_row, note="fixture")
 
     # B 的读侧实跑：原因必须点到那个定位符（不是一条说不出位置的 unreadable）
     b = AgentB(store, extractor=_StubExtractor(), extract_text=None,
@@ -190,10 +215,10 @@ def test_one_click_migration_leaves_a_locator_so_b_can_tell_where_it_is(store, r
     reason = str(res.details[0].get("skipped") or "")
     # 2026-11-16（裁定 ⑦）：这一档现在点名 `metadata_only`（仅题录早退），
     # 原来的 `no_fulltext_this_time: <定位符>` 逐字保留在后半段。
-    assert reason == f"availability=metadata_only; no_fulltext_this_time: {url}", reason
+    assert reason == f"availability=metadata_only; no_fulltext_this_time: {legacy_url}", reason
     assert "unreadable" not in reason
     assert str(next(r for r in store.rows("literature")
-                    if r["lit_id"] == lit_id)["last_mine_error"]) == reason
+                    if r["lit_id"] == legacy_id)["last_mine_error"]) == reason
 
 
 # ---------------------------------------------------------------- 3. 报告按 lit_id 计数

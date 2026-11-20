@@ -251,7 +251,10 @@ _ABANDONED_LITERALS_OUTSIDE_LIFECYCLE: dict[str, str] = {
     "obligations.py": "义务读数：放弃不算欠、放弃要留理由 —— 按标记读，不是三态入口",
     "researchpending.py": "待办清单排除已放弃的研究问题（那一列没有 lifecycle 映射）",
     "schema.py": "`Statement.validate` 的单行内判据：abandoned 必须带 quote_reason",
-    "secretary.py": "放弃动作的写侧：改 status 之前先判「本来就是 abandoned 吗」（幂等）",
+    # 2026-11-20 SECSPLIT：`Secretary._abandon_reason_gate` 搬进 `secretary_statement_meta.py`
+    # （`StatementMetaMixin`），两处字面比较一个字节都没变 —— 改前它们在 `secretary.py` 的
+    # 同一函数里（8428 / 8461），所以这里是换名，不是新增豁免。
+    "secretary_statement_meta.py": "放弃动作的写侧：改 status 之前先判「本来就是 abandoned 吗」（幂等）",
     "statementabandon.py": "放弃标记的解析/生成本体（`abandoned@…` 就是它的词）",
     "statementrefute.py": "错误 / 放弃两条终态的读侧分派（先看标记再看凭据）",
     "tools/table_tools.py": "`table.create` 的放弃动作路由：只有 status=abandoned 才转给秘书",

@@ -2121,7 +2121,8 @@ FINDING_STATUS_WORDS: dict[str, str] = {
 }
 
 #: 表名 → 那一张状态词表（键集合必须等于 `schema` 里对应的 `*_STATUSES`；
-#: 判据 `tests/test_webui_status_words_cover_the_vocabulary.py` 逐个钉住）。
+#: 判据 `tests/test_webui_pages_show_the_words_the_backend_gives.py` 的
+#: `test_the_status_words_cover_the_vocabulary_exactly` 逐个钉住）。
 STATUS_WORDS: dict[str, dict[str, str]] = {
     "statements": STATEMENT_STATUS_WORDS,
     "conjectures": CONJECTURE_STATUS_WORDS,
@@ -2139,7 +2140,8 @@ def _status_reading(table: str, row: Mapping[str, Any]) -> dict[str, Any]:
     - `lifecycle_state` / `lifecycle_checked`：只有命题面有（`lifecycle.state_of_statement`
       是唯一入口）；其余表分别是 `""` / `None`（"这张表没有三态入口"，不是"判成活跃"）。
 
-    判据：`tests/test_webui_status_words_cover_the_vocabulary.py`。
+    判据：`tests/test_webui_pages_show_the_words_the_backend_gives.py`
+    （`test_the_status_words_cover_the_vocabulary_exactly` / `test_a_row_carries_its_word_and_only_the_statement_has_a_lifecycle_state`）。
     """
     raw = str(row.get("status") or "")
     word = (STATUS_WORDS.get(table) or {}).get(raw, raw)

@@ -375,7 +375,10 @@ def _pa4_surfaces() -> dict[str, tuple[str, tuple[str, ...]]]:
     """PA4 扫出的其余模型可见面：名字 → `(这一面模型看得到的文字, 必须保住的正句)`。"""
     from agentflow import closing as _CL
     from agentflow import conceptrows as _CR
-    from agentflow import secretary as _SEC
+    # 2026-11-20（VERSPLIT2 / SECSPLIT）：这两句模型可见文案随拆分搬进了
+    # `v_gap_read` / `secretary_sign`；针（needle）一个字没改，只把读口跟着搬。
+    from agentflow import secretary_sign as _SSIGN
+    from agentflow import v_gap_read as _VGR
     from agentflow import vsigns as _VS
     from agentflow import vreviews as _VRV
     from agentflow.agent_b import optimize_prompts as _OP
@@ -399,9 +402,9 @@ def _pa4_surfaces() -> dict[str, tuple[str, tuple[str, ...]]]:
         "V 送审工具的参数说明": (
             _module_strings(_VT), ("签到位后签块由收方秘书",)),
         "台账读数的 holding why": (
-            _module_strings(VR), ("门槛由框架按这一趟送审自己数", "跨趟不累计")),
+            _module_strings(_VGR), ("门槛由框架按这一趟送审自己数", "跨趟不累计")),
         "V 秘书的发签材料": (
-            _module_strings(_SEC), ("门槛由框架按这一趟送审自己数",)),
+            _module_strings(_SSIGN), ("门槛由框架按这一趟送审自己数",)),
         "V 的审阅通知（vreviews.py）": (
             _module_strings(_VRV), ("这一签已到位",)),
         "签文件的复算读数": (

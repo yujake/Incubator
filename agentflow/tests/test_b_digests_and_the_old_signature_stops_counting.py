@@ -52,6 +52,7 @@ from agentflow.agent_b.register_statement import (  # noqa: E402
 from agentflow.store import Store  # noqa: E402
 
 from conftest import seed_statement_row  # noqa: E402
+import _secretary_home as HOME  # noqa: E402 — 按声明定位秘书源码（拆模块之后不再写死一份）
 
 #: 一条自产命题（B 从 F 的手稿登记进来的那一种）。
 STATEMENT = "设 L 是椭圆上的弦长函数；则 L 不是常值函数。"
@@ -248,16 +249,21 @@ def test_a2_the_negative_control_no_prose_criterion_on_the_secretary_side():
     """a2（负控）：秘书侧没有"消化 / 箭头密度 / 散文与否"这类判据。
 
     两半都要：
-    ① 现在的 `secretary.py` 扫出来是空的（`箭头` 0 次、`连贯` 0 次、`完整句` 0 次；
-       `散文` 两次都在委托解析的样例里，不判 `proof_text`；`消化` 两次都是业主原话的
-       分工句 —— 所以这一条按"判据形态共现"判，不裸 grep）；
+    ① 现在的秘书源码（全部 `secretary*.py`，2026-11-20 SECSPLIT 起是 30+ 份）扫出来是空的
+       （`箭头` 0 次、`连贯` 0 次、`完整句` 0 次；`散文` 两次都在委托解析的样例里，不判
+       `proof_text`；`消化` 两次都是业主原话的分工句 —— 所以这一条按"判据形态共现"判，
+       不裸 grep）；
     ② 反真空：把一行判据摆进去，扫描器必须当场咬住（否则①的绿只是"没查"）。
     """
-    path = _SRC / "agentflow" / "secretary.py"
-    text = path.read_text(encoding="utf-8")
+    #: 扫描面 = 秘书家族全部源码。改前只扫 `secretary.py` 一份；拆成 36 份之后那一份只剩
+    #: 46KB，只扫它等于把余下 35 份的判据面留在盲区里 —— 这里按 `secretary*.py` 全扫，
+    #: 比改前宽，不是窄。
+    text = HOME.family_text()
     assert _prose_criteria_problems(text) == [], _prose_criteria_problems(text)
-    # 装置自控：被扫的确实是那个文件（不是一段空文本）
-    assert "def record_statement" in text and len(text) > 100000
+    # 装置自控：扫的确实是那个家族（不是一段空文本，也不是只剩一份分文件）。
+    assert "def record_statement" in text, "被扫的不是秘书家族（找不到 `record_statement`）"
+    assert text.count("# ---- secretary") >= 30, (
+        f"只扫到 {text.count('# ---- secretary')} 份分文件 ⇒ 家族扫描面没接上")
 
     planted = text + ("\n# 判据：消化度低于 0.6 ⇒ 拒收\n"
                       "# 箭头密度 > 2 判不通过\n")
