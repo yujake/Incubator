@@ -970,7 +970,7 @@ def advance(seconds: float) -> Reading:
     这个模块级别名只是为了少写一个变量名，语义与 `FakeClock.advance` 逐字相同
     （推进之后同样会跑一次 `fire_due()`）。
     """
-    step = getattr(_CLOCK, "advance", None)
+    step = getattr(current(), "advance", None)
     if not callable(step):
         raise ClockParamError(
             f"当前时钟是 {type(_CLOCK).__name__}，没有 advance() —— 只有假时钟能前进")
@@ -1357,7 +1357,7 @@ class Timer:
         """
         if self.state != "pending" or reading.status == "unknown":
             return False
-        token = str(getattr(_CLOCK, "token", "") or "")
+        token = str(getattr(current(), "token", "") or "")
         if (self.clock_token and token and self.clock_token == token
                 and self.due_mono is not None and reading.monotonic is not None):
             return reading.monotonic >= self.due_mono
@@ -1448,7 +1448,7 @@ class Timer:
             return None
         if self.due_datetime() is None:
             return None
-        token = str(getattr(_CLOCK, "token", "") or "")
+        token = str(getattr(current(), "token", "") or "")
         if (self.clock_token and token and self.clock_token == token
                 and self.due_mono is not None and got.monotonic is not None):
             return max(0.0, float(self.due_mono) - float(got.monotonic))
@@ -2182,7 +2182,7 @@ class TimerBook:
         doc = {
             "schema": SCHEMA,
             "saved_at": _iso(reading.wall) if reading.wall is not None else "",
-            "clock_token": str(getattr(_CLOCK, "token", "") or ""),
+            "clock_token": str(getattr(current(), "token", "") or ""),
             "next_seq": self._next_seq,
             # 终态条目的上限与它清掉了多少（读数：清了就要说得出来）
             "dropped_terminal": self._terminal_dropped,
@@ -2464,7 +2464,7 @@ def _new_timer(workspace: str | Path, *, kind: str, reason: str, to: str,
         due_at=_iso(due) if due is not None else "",
         due_epoch=due.timestamp() if due is not None else None,
         due_mono=due_mono,
-        clock_token=str(getattr(_CLOCK, "token", "") or ""),
+        clock_token=str(getattr(current(), "token", "") or ""),
         state="pending",
         wait_for=target,
         wait_for_resolved=(resolved if target else ""),
@@ -2575,7 +2575,7 @@ def start_periodic(workspace: str | Path, *, every_sec: float, purpose: str = ""
         wait_state=wait_state,
         next_mono=(reading.monotonic + step
                    if reading.monotonic is not None else None),
-        clock_token=str(getattr(_CLOCK, "token", "") or ""),
+        clock_token=str(getattr(current(), "token", "") or ""),
     )
     bucket.add_periodic(periodic)
     return periodic
@@ -2821,7 +2821,7 @@ def start_program(workspace: str | Path, *, program: str, argv: Iterable[Any] | 
         workspace=str(Path(workspace).resolve()),
         created_at=stamp,
         due_at="",
-        clock_token=str(getattr(_CLOCK, "token", "") or ""),
+        clock_token=str(getattr(current(), "token", "") or ""),
         state="pending",
         purpose_source=source,
         program=str(program or ""),
@@ -5486,7 +5486,7 @@ def await_io(seconds: float, purpose: str, *, kind: str = "io", where: str = "",
     step = float(seconds)
     if step < 0:
         raise ClockParamError(f"等待时长不能是负数，收到 {seconds!r}")
-    fake = str(getattr(_CLOCK, "name", "real") or "") == "fake"
+    fake = str(getattr(current(), "name", "real") or "") == "fake"
     do_sleep = sleep if sleep is not None else (None if fake else time.sleep)
     took = 0.0
     if do_sleep is not None and step > 0:
