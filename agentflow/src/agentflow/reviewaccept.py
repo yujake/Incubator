@@ -53,7 +53,12 @@ AUXILIARY_SIGNALS: tuple[tuple[str, str], ...] = (
     ("pdf_pages", "页数对得上"),
     ("receipt_matches_tex", "这份 PDF 是从盘上这份 tex 编的（单项不算通过）"),
     ("task_rows", "任务数增加"),
-    ("ledger_rows", "台账行数增加"),
+    # 键名曾是 `ledger_rows`，与 usage_ledger 的行数同名不同物：这里数的是概念图
+    # 三张表（`literature` + 概念行 + `relations`）的行数，见 `_auxiliary`。
+    # 刻意不取 `acceptance_rows`：`closing` 里已有 `acceptance_rows_unreadable` /
+    # `acceptance_rows_unknown` 两个码，指的是「验收表的行」，取那个名会造出新的
+    # 一名两义。
+    ("concept_graph_rows", "台账行数增加（文献 + 概念 + 关系）"),
 )
 
 #: 本模块不判报告形状：报告体例归 M，核对只核对"M 声明的体例有没有兑现" ——
@@ -606,13 +611,16 @@ def _auxiliary(acc: ReviewAcceptance, store: Any, project_dir: str) -> None:
     aux["receipt_matches_tex"] = ("unknown" if _matched is None
                                  else ("consistent" if _matched else "drifted"))
     aux["task_rows"] = len(store.rows("tasks")) if store is not None else 0
-    # 台账行数：概念那一份读合成视图（并表过渡期：老表 + 新标准 `kind="concept"`，
-    # 同号去重）—— 它是给人看的辅助读数，读一边都会在迁移前后各错一次。
+    # 概念图行数（验收口径）：概念那一份读合成视图（并表过渡期：老表 + 新标准
+    # `kind="concept"`，同号去重）—— 它是给人看的辅助读数，读一边都会在迁移前后各错一次。
+    # 名字里带 `concept_graph`：它数的是 文献 + 概念 + 关系（概念图三张表），不是
+    # `usage_ledger` 的行数（那个数在 `readers._closing_cost` /
+    # `modelcost.reconcile_usage` 的 `usage_ledger_rows` 上）。
     _ledger_concepts = (CR.view(store) if store is not None else {"checked": False, "rows": []})
-    aux["ledger_rows"] = ((len(store.rows("literature")) + len(_ledger_concepts["rows"])
-                           + len(store.rows("relations"))) if store is not None else 0)
+    aux["concept_graph_rows"] = ((len(store.rows("literature")) + len(_ledger_concepts["rows"])
+                                  + len(store.rows("relations"))) if store is not None else 0)
     if store is not None and not _ledger_concepts["checked"]:
-        aux["ledger_rows_problem"] = "概念那一份没读成（合成视图 checked=False）"
+        aux["concept_graph_rows_problem"] = "概念那一份没读成（合成视图 checked=False）"
     acc.auxiliary = aux
 
 

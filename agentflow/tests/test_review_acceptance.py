@@ -503,7 +503,7 @@ def test_pretty_auxiliary_signals_cannot_fake_a_pass(tmp_path):
     U.ask_user(st.root, role="M", question="要不要重取?", timeout_sec=0.0, qid="q0009")
     _task(st, "t-0003")
     _task(st, "t-0004")
-    # 概念行并表之后住 `statements`（`kind="concept"`）：辅助读数 `ledger_rows` 数的
+    # 概念行并表之后住 `statements`（`kind="concept"`）：辅助读数 `concept_graph_rows` 数的
     # 正是 `conceptrows.view` 里那些行（见 `reviewaccept._auxiliary`）⇒ 这一格必须落
     # 一条真概念行（别的 kind 不会让"台账行数增加"这个读数动，那样这条用例就白跑了）。
     _stmt(st, "0000", kind="concept", label="室图", statement_text="室图", statement_full="d")
@@ -514,7 +514,7 @@ def test_pretty_auxiliary_signals_cannot_fake_a_pass(tmp_path):
     # 辅助读数确实漂亮
     assert acc.auxiliary["receipt_matches_tex"] == "consistent", acc.auxiliary
     assert acc.auxiliary["tex_sha256"], acc.auxiliary
-    assert acc.auxiliary["task_rows"] >= 3 and acc.auxiliary["ledger_rows"] >= 1, acc.auxiliary
+    assert acc.auxiliary["task_rows"] >= 3 and acc.auxiliary["concept_graph_rows"] >= 1, acc.auxiliary
     # 页数是辅助读数里最脆的一个：夹具的 PDF 是假的（`%PDF-1.4 fake`，没有真页）
     # ⇒ `page_count` 如实返回 None，不编一个数。这恰好演示了辅助读数的性质：
     # 它可读可不读，而无论读得到读不到，都不该参与"通过"。

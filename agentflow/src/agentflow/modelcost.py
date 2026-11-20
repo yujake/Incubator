@@ -610,7 +610,9 @@ def reconcile_usage(store: Any) -> dict:
             "settled": _settled_mark() in [str(x) for x in (row.get("inputs") or [])],
         })
     return {
-        "ledger_rows": len(ledger),
+        # 键名曾叫 `ledger_rows`（与验收辅助读数 / statements 台账行数同名不同物）。
+        # 这里数的只有 `usage_ledger` 的行数。
+        "usage_ledger_rows": len(ledger),
         "task_rows": len(tasks),
         "ledger_usd": round(ledger_micro / 1_000_000, 6),
         "tasks_usd": round(tasks_micro / 1_000_000, 6),

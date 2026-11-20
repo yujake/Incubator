@@ -103,7 +103,7 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
 | `/run/:sid` | `Run.tsx` | `GET /api/run/{sid}` + `GET /api/run-index` + `GET /api/run/{sid}/events`（`?since_index=` `?limit=`） | `runs[]`（`steps`/`llm_calls`/`usd`/`unknown_usd`/`last_shape`/`stop_reason`/`waiting_on`/`events_in_run`）· `report`（`ok`/`missing`/`unknown`）· `checkpoint.spend`（首选花销）· `drift`/`usable`/`tri`（趟次索引对账）· `orphans`/`orphan_summary` · 逐条事件：`total`/`from_index`/`to_index`/`truncated`/`events[]`（每条 `index`/`kind`/`ts`/`role`，另有"有就带上"的 `shape`/`ok`/`usd`/`tokens_in`/`tokens_out`/`payload`/`result`/`text`/`stopped`） | "这一段会话里一趟都没有" + "没有轮次之外的零散事件" + 逐条事件"游标已经到末尾" | 索引 `tri != computed` ⇒ 显红并说明"本页回退现算"；两个花销来源都读到才谈"是否一致"，任一边没读到 ⇒ "没查成"；交付说明走 `ReportTri` 那一套词；逐条事件 `unreadable` ⇒ 显"没查成（不是一张空列表）"、计数栏是 `unknown` 而不是 0（`not_applicable` = 会话在盘上但还没有事件） |
 | `/evidence` | `Evidence.tsx` | `GET /api/evidence` | `statements` · `conjectures`（含 `counterexample_experiment_id`）· `experiments` · `review_findings` · `relations.quote_verified`（真/假/未查三个数）· `verifications` · `secretary` | 每一栏各自的 `<栏>_tri == computed` 且 0 行 ⇒ "0 条（读到了，里面是空的）" | **逐栏**读 `<栏>_tri`（整面一个词会吞掉"哪一栏没读成"）；`quote_verified !== true` 必须连 `quote_reason` 一起看 |
 | `/artifacts` | `Artifacts.tsx` | `GET /api/artifacts` | `ledger` · `ledger_verify`（台账钉的 sha vs 盘上现在这一版）· `handoffs`（`body` 按 `CLIP=400` 截断）· `checks` · `style.sections` · `secretary` · `products`（六件，裁定 J2 的夹具样本）· `tasks` | 逐栏："台账 0 行（读到了，里面是空的）" | 逐栏 `<栏>_tri`；`products_tri == not_applicable` ⇒ "这一路本机还没跑过"，不是"六件都不在" |
-| `/acceptance` | `Acceptance.tsx` | `GET /api/acceptance`（`?project_dir=` `?report_path=` `?cap_usd=`） | `criteria`（5 条，值 `pass`/`fail`/`unknown`）· `details` · `auxiliary`（5 条）· `failed` · `auxiliary_note` | "一条判据都没读到"（判据名表来自 `reviewaccept.CRITERIA`，页面不另抄） | `unknown` 显成"没查成（不是通过）"；**不给 `cap_usd` ⇒「在成本上限内」那一格必为 `unknown`** |
+| `/acceptance` | `Acceptance.tsx` | `GET /api/acceptance`（`?project_dir=` `?report_path=` `?cap_usd=`；页面本体读 `/api/package`） | `criteria`（5 条，值 `pass`/`fail`/`unknown`）· `details` · `auxiliary`（5 条：`tex_sha256` / `pdf_pages` / `receipt_matches_tex` / `task_rows` / `concept_graph_rows`）· `failed` · `auxiliary_note` | "一条判据都没读到"（判据名表来自 `reviewaccept.CRITERIA`，页面不另抄） | `unknown` 显成"没查成（不是通过）"；**不给 `cap_usd` ⇒「在成本上限内」那一格必为 `unknown`** |
 | `/machine` | `Machine.tsx` | `GET /api/machine` + `POST /api/settings` | `provers`（含 `checked` 与 `sources` —— "从哪一档找到的"）· `mathlib` · `lean_ready`/`can_do_formal` · `settings.path`/`exists`/三段 · `settings.model.configured`（**永无 key 值**）；写面：`toolchain.*` / `model.*` / `workspace.*` 逐格 + `confirm=1` | "探测读数里一格都没有" | `provers.checked=false` ⇒ 整面 `unreadable`（探测没跑完 ≠ 一个都没找到）；`lean_ready`/`can_do_formal` 的 `null` 显 `unknown`，不折成 `false`；写面 403（没开 `--allow-writes`）如实显示回执 |
 | `/budget` | `Budget.tsx` | `GET /api/budget` + `POST /api/budget` | `total_usd`/`spent_usd`/`remaining_usd`/`exceeded`/`source`/`problem` · `added[]`（`kind`/`usd`/`by`/`at`/`note`）· `by_role`/`by_scope` · `spent_tri`/`spent_reason`；写面：`action=add\|set` · `usd` · `note` · `confirm=1` | "还没有任何追加/重设记录（寄存器里 added[] 是空的）" | 寄存器缺席 ⇒ `not_applicable`（还没设过，不是"没查成"）；寄存器读不出来 ⇒ `unreadable` + `problem`，且**不许显示成"不限量"**；账本读不出来 ⇒ `spent_tri=unreadable` 且金额显示 `unknown`（**不是 $0.000000**）；`exceeded` 是读数不是错误 |
 | `/live` | `Live.tsx` | `GET /api/live` + `GET /api/status-reports` + `GET /api/usage` + `GET /api/roster`（名册树：父/子/绝对编号/深度/收件箱三格） | `answer`/`running[]`/`live[]`/`unreadable_sessions`/`switch`/`switch_present`/`history[]`/`interrupts[]` · 进程面：`pid`（列名逐字"宿主进程 pid"——同一趟 run 里所有角色共用同一个宿主进程，多行会印同一个号）/`role`/`sid`/`started_at` · 名册：`nodes[].inbox.unread`（queued + claimed）/`.seen_not_acked`（seen）/`.open_total`（未消总数）与徽标"未读 N · 已读未 ack M"、`nodes[].in_flight`（实例行的 `pending`/`running`） · `reports[]`（`ts`/`name`/`bytes`/`json_path`）· `spent`/`by_role`/`by_scope`/`entries` | "会话面：没有在跑的循环（每一趟起过的都收到了工）" | `answer` 有三档字面量（"有" / "没有" / "没查成"）：读不出来时 **必须**显"没查成"——那一格正是用户决定要不要叫停时看的；名册 `answer="unknown"` ⇒ 徽标显"收件箱：未读到"（不是 0 条） |
@@ -143,6 +143,35 @@ DSH 的色板是**两层**的，这是我们最该抄的一条结构：
   `review_acceptance` 子树）与"污染面"不在 `AcceptanceView` 里：**仍是缺口**。
 
 缺口那一档的处置没变：页面把这件事写在卡片上（指名"要加哪一条端点"），而不是显示一个 0。
+
+### §3.1.1 键名变更：`ledger_rows` 拆成三个名字（2026-11-20，A2FIX，破坏性）
+
+改前同一个键名 `ledger_rows` 在三个面上指三件不同的东西，页面/脚本无法区分：
+
+| 面（产出点） | 旧键名 | 旧类型 | 它到底数什么 | 新键名 | 新类型 |
+|---|---|---|---|---|---|
+| `GET /api/acceptance` 的 `auxiliary`（`reviewaccept._auxiliary`） | `ledger_rows` | `"55"`（字符串） | 概念图三张表：`literature` + `kind="concept"` 概念行 + `relations` 的行数 | `concept_graph_rows` | `string`（文本面，见下） |
+| `GET /api/package` 的 `structure.ledger`（`texaudit._scan_ledger`） | `ledger_rows` | `22`（数字） | `statements` 表的行数（命题台账） | `statement_ledger_rows` | `number \| null` |
+| `GET /api/package` 的 `closing.cost`（`readers._closing_cost`）与 `modelcost.reconcile_usage` | `ledger_rows` | `663`（数字） | `data/usage_ledger.json` 的行数（用量账本） | `usage_ledger_rows` | `number \| null`（`reconcile_usage` 里是 `int`） |
+
+**为什么第一个不叫 `acceptance_rows`**：`closing` 里已有 `acceptance_rows_unreadable` /
+`acceptance_rows_unknown` 两个码，指的是**验收表的行**；把辅助读数叫 `acceptance_rows`
+会立刻造出新的"一名两义"。它数的东西有现成名字——概念图三张表（`graph.build` 的
+"从三张表重建概念图"就是同一批表）。
+
+**兼容说明**：这是业主批准的破坏性变更，**不保留旧键的双写**——留着旧键等于把"一个名字两件事"
+继续发出去。旧消费者按下表改一行键名即可，**数值口径一个都没变**（同一个工作区、
+同一组入参，改名前后读出的数逐字相同：`"55"` / `22` / `663`）。仓内消费点已全部改完：
+`ui/src/types.ts`（由 `readers._TS_TYPES` 重新生成）、`ui/src/pages/Acceptance.tsx`、
+`tests/` 里 12 处 `money["usage_ledger_rows"]` 与各面读数。
+
+**类型为什么这样对上**：`concept_graph_rows` 仍是字符串，因为 `/api/acceptance` 的
+`auxiliary` 是**文本面**（`Record<string, string>`，`readers._as_text` 统一转文本，
+读不出来写 `""`）；它不再叫 `ledger_rows`，所以不会再被当成"账本行数"这个数字口径。
+两个数字口径（`statement_ledger_rows` / `usage_ledger_rows`）在 Python 与
+`types.ts` 里都是数字，`None`/`null` 仍是"没读成"，不是 0。判据
+`tests/test_ledger_rows_names_are_unambiguous.py` 从产出点现读这三个键的名/值/类型，
+并用 AST/JSON 扫描钉住"旧键名不许再作为键出现"。
 
 **九页面全部由 SPA 提供（裁定 P1 走完了，2026-10-08；后三页 2026-10-13）**：`GET /` 与 `GET /index.html`
 （第一块，2026-10-07）与 `GET /run/{sid}`（最后一块，W5 清仓）今天都吐同一支

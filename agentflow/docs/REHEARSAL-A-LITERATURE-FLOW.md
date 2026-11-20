@@ -57,7 +57,7 @@ cli.main(["start", "--mode", "research", "--sid", …])
   （现值 `('pending','withdrawn','rejected','admitted','cleared')`）；
 - 运行期读数（同一趟，13 次真调用）：`llm_call=13 / 出网=13 / 账本行=13 /
   duplicate=0 / 未配对=0 / 未认领=0`；会话归口 `本趟=13 / 别处=0`；
-  三格 `resolved=13/13`、`caller_role=['A']`、`ledger_rows=14`、`unattributed=0`、`dangling=0`。
+  三格 `resolved=13/13`、`caller_role=['A']`、`usage_ledger_rows=14`、`unattributed=0`、`dangling=0`。
 
 会话里卡点的原文：`lit.admit` 回执 `ok=False, kind=unexpected`，错误文本
 「status 必须是 ('pending','withdrawn','rejected','admitted','cleared') 之一，收到

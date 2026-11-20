@@ -556,7 +556,7 @@ def test_the_rejection_rewrite_and_resign_run_from_the_cli(
     from agentflow.modelcost import reconcile_usage
 
     money = reconcile_usage(reading["store"])
-    assert money["ledger_rows"] > 0, money
+    assert money["usage_ledger_rows"] > 0, money
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money

@@ -407,7 +407,7 @@ def test_the_wake_happens_inside_the_multi_round_drive(
     from agentflow.modelcost import reconcile_usage
 
     money = reconcile_usage(reading["store"])
-    assert money["ledger_rows"] > 0, money
+    assert money["usage_ledger_rows"] > 0, money
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money

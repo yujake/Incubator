@@ -461,7 +461,7 @@ def test_the_writing_chain_runs_from_the_cli_and_h_closes_it(
     from agentflow.modelcost import reconcile_usage
 
     money = reconcile_usage(reading["store"])
-    assert money["ledger_rows"] > 0, money
+    assert money["usage_ledger_rows"] > 0, money
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money

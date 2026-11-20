@@ -1684,7 +1684,7 @@ export interface StructureFinding {
 export interface LedgerFacts {
   statement_envs: number | null;
   proof_envs: number | null;
-  ledger_rows: number | null;
+  statement_ledger_rows: number | null;
   ledger_propositions: number | null;
   ledger_theorem_kinds: number | null;
   mapping_rows: number | null;
@@ -1790,7 +1790,7 @@ export interface CostView {
   unattributed_usd: number | null;
   runs_without_spend: number;
   ledger_usd: number | null;
-  ledger_rows: number | null;
+  usage_ledger_rows: number | null;
   reconciliation: CostReconciliation;
   source: SourceRef;
 }

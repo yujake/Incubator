@@ -643,7 +643,7 @@ def test_the_concept_graph_chain_runs_through_tool_dispatch(
     from agentflow.modelcost import reconcile_usage
 
     money = reconcile_usage(reading["store"])
-    assert money["ledger_rows"] > 0, money
+    assert money["usage_ledger_rows"] > 0, money
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money

@@ -699,7 +699,7 @@ def test_acceptance_page_passes_the_project_root_and_report_path(
         assert aux["pdf_pages"] == "1", aux
         assert aux["receipt_matches_tex"] == "consistent", aux
         assert aux["task_rows"].isdigit(), aux
-        assert aux["ledger_rows"].isdigit(), aux
+        assert aux["concept_graph_rows"].isdigit(), aux
         # 报告在盘上 ⇒ 附件诚实那一格从 unknown 变成 pass（同一批入参的另一半）
         assert acc["criteria"]["attachment_is_honest"] == "pass", acc["criteria"]
 

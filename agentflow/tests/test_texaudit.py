@@ -376,7 +376,7 @@ def test_ledger_match_without_a_project_is_not_checked(tmp_path: pathlib.Path) -
     result = _scan(root, kinds=["ledger_match"])
     assert result["checked"] is False
     assert any(item["kind"] == "ledger_match" for item in result["bad"])
-    assert result["counts"]["facts"]["ledger_rows"] is None
+    assert result["counts"]["facts"]["statement_ledger_rows"] is None
 
 
 def test_ledger_match_without_a_statements_table_is_not_checked(tmp_path: pathlib.Path) -> None:
@@ -418,7 +418,7 @@ def test_ledger_match_returns_five_numbers_and_surplus(tmp_path: pathlib.Path) -
     facts = result["counts"]["facts"]
     assert facts["proof_envs"] == 2
     assert facts["statement_envs"] == 2
-    assert facts["ledger_rows"] == 1
+    assert facts["statement_ledger_rows"] == 1
     assert facts["ledger_theorem_kinds"] == 1
     assert facts["mapping_rows"] == 0
     assert isinstance(facts["statement_surplus"], list)

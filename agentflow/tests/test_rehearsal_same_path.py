@@ -310,7 +310,7 @@ def _reconcile_of(roots: list[str]) -> dict[str, Any]:
     from agentflow.store import Store
     from agentflow.modelcost import reconcile_usage
 
-    agg: dict[str, Any] = {"ledger_rows": 0, "task_rows": 0, "unattributed": 0,
+    agg: dict[str, Any] = {"usage_ledger_rows": 0, "task_rows": 0, "unattributed": 0,
                            "unattributed_usd": 0.0, "dangling": [], "problems": []}
     for root in sorted(set(roots)):
         try:
@@ -318,7 +318,7 @@ def _reconcile_of(roots: list[str]) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001 —— 读不出是一条读数，不是"没有账"
             agg["problems"].append(f"{root}: 账本读不出（{type(exc).__name__}: {exc}）")
             continue
-        agg["ledger_rows"] += int(got.get("ledger_rows") or 0)
+        agg["usage_ledger_rows"] += int(got.get("usage_ledger_rows") or 0)
         agg["task_rows"] += int(got.get("task_rows") or 0)
         agg["unattributed"] += int((got.get("unattributed") or {}).get("count") or 0)
         agg["unattributed_usd"] += float((got.get("unattributed") or {}).get("usd") or 0.0)
@@ -339,7 +339,7 @@ def triplet_probe(request: pytest.FixtureRequest) -> Iterator[dict[str, Any]]:
     ② 至少一次 `current_caller_role() != ""`（`⇔` 在 `calling_as` 里）
        —— 挂点是 `agent_loop.py:13575`（循环本体）/ `:11659`（工具分发）；
        从 `LocalBackend.call` 进只有 ambient 没有 caller_role，那不是同一条路。
-    ③ `ledger_rows > 0` 且 `unattributed.count == 0` 且 `dangling` 空
+    ③ `usage_ledger_rows > 0` 且 `unattributed.count == 0` 且 `dangling` 空
        —— 0 行时 0 是「第零态假绿」，不是「干净」。
     """
     from agentflow import conductor as CND
@@ -387,9 +387,9 @@ def triplet_probe(request: pytest.FixtureRequest) -> Iterator[dict[str, Any]]:
     print(f"[三格] {node.nodeid}  ①resolved={len(resolved)}/{len(live)}  "
           f"②caller_role={sorted({r['caller_role'] for r in inside})}  "
           f"live_meter={sum(1 for r in live if r['has_meter'])}  "
-          f"③ledger_rows={got['ledger_rows']} unattributed={got['unattributed']} "
+          f"③usage_ledger_rows={got['usage_ledger_rows']} unattributed={got['unattributed']} "
           f"dangling={len(got['dangling'])}")
-    assert got["ledger_rows"] > 0, (
+    assert got["usage_ledger_rows"] > 0, (
         "格③失败：这一趟 usage_ledger 一行都没有 ⇒ `unattributed==0` 是第零态（假绿）。"
         f"说明调用没接 meter，或走的是不落账的替身缝。读数：{got}")
     assert got["unattributed"] == 0, (

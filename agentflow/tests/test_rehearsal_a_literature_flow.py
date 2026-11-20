@@ -739,7 +739,7 @@ def test_the_full_a_flow_runs_from_the_cli_with_only_the_wire_replaced(
     from agentflow.modelcost import reconcile_usage
 
     money = reconcile_usage(got["store"])
-    assert money["ledger_rows"] > 0, money
+    assert money["usage_ledger_rows"] > 0, money
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money

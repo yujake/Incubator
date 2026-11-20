@@ -619,7 +619,7 @@ def test_pretty_auxiliary_readings_cannot_print_a_pass(tmp_path):
     U.ask_user(st.root, role="M", question="要不要重取?", timeout_sec=0.0, qid="q0009")
     _task(st, "t-0003")
     _task(st, "t-0004")
-    # 概念行并表之后住 `statements`（`kind="concept"`）：辅助读数 `ledger_rows` 数的
+    # 概念行并表之后住 `statements`（`kind="concept"`）：辅助读数 `concept_graph_rows` 数的
     # 正是 `conceptrows.view` 里那些行 ⇒ 这一格必须落一条真概念行（别的 kind 不会让
     # 这个读数动，那样这条用例就白跑了）。
     _stmt(st, "0000", kind="concept", label="室图", statement_text="室图", statement_full="d")

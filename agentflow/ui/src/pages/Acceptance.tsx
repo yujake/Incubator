@@ -358,7 +358,7 @@ export function Acceptance() {
             <div class="readings">
               定理类环境 <span class="mono">{formatCount(structure.ledger.statement_envs)}</span> ·
               proof 环境 <span class="mono">{formatCount(structure.ledger.proof_envs)}</span> ·
-              台账行 <span class="mono">{formatCount(structure.ledger.ledger_rows)}</span> ·
+              命题台账行 <span class="mono">{formatCount(structure.ledger.statement_ledger_rows)}</span> ·
               命题 <span class="mono">{formatCount(structure.ledger.ledger_propositions)}</span> ·
               台账定理类 <span class="mono">{formatCount(structure.ledger.ledger_theorem_kinds)}</span> ·
               对应表 <span class="mono">{formatCount(structure.ledger.mapping_rows)}</span> ·
@@ -558,7 +558,7 @@ export function Acceptance() {
               无人认领 <span class="mono">{formatUsd(closing.cost.unattributed_usd)}</span> ·
               没有自报账的趟 <span class="mono">{closing.cost.runs_without_spend}</span> ·
               usage_ledger <span class="mono">{formatUsd(closing.cost.ledger_usd)}</span>
-              （<span class="mono">{formatCount(closing.cost.ledger_rows)}</span> 行）
+              （<span class="mono">{formatCount(closing.cost.usage_ledger_rows)}</span> 行）
               <SourceLink source={closing.cost.source} label="台账" />
             </div>
             {/* 四个数并排却不给差额的解释 = 读者只能说"三个对不上"（`draft/187` P4-1 / B10）。
@@ -574,7 +574,7 @@ export function Acceptance() {
                   : " ≠ 归口里 extract 那几笔（差额还有别的来源，别当它是 extract）"}
               ：extract <span class="mono">{formatUsd(closing.cost.reconciliation.extract_usd)}</span>
               （<span class="mono">{formatCount(closing.cost.reconciliation.extract_entries)}</span> 笔）
-              · 账本行 <span class="mono">{formatCount(closing.cost.ledger_rows)}</span> 行 vs
+              · usage_ledger 行 <span class="mono">{formatCount(closing.cost.usage_ledger_rows)}</span> 行 vs
               事件里的调用{" "}
               <span class="mono">{formatCount(closing.cost.reconciliation.event_llm_calls)}</span>{" "}
               次（不是同一个数）

@@ -95,7 +95,7 @@ def test_the_cost_difference_is_explained_by_the_extract_scope(
     assert recon["explained_by_extract"] is True, recon
     assert recon["extract_entries"] == 1, recon
     assert recon["event_llm_calls"] == 2, recon
-    assert cost["ledger_rows"] == 3, cost
+    assert cost["usage_ledger_rows"] == 3, cost
     # 「账本行」与「调用数」是两个数（一次调用可记 0..n 行）——这一句也要在。
     assert "不许互相顶替" in recon["note"], recon["note"]
 

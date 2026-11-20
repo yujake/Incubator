@@ -402,8 +402,8 @@ LIVE-READINGS:END
     `python -c "import sys;sys.path.insert(0,'src');from agentflow.webui import sse;print(len(sse.EVENT_KINDS))"`，
     键 `webui_event_kinds`；
   - 静态产物在 **`src/agentflow/web/static/`**：外壳 `static/index.html`（1760 B）+
-    `static/assets/index.Bt8KeCwm.js`（207324 B）+ `static/assets/index.DmDNFyNv.css`（26536 B）；
-    （2026-11-20 实测（`9c07e61d` 之后），复跑 `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`；
+    `static/assets/index.CPdMD0B3.js`（207359 B）+ `static/assets/index.DmDNFyNv.css`（26536 B）；
+    （2026-11-20 实测（A2FIX 重建之后；上一次实测是 `9c07e61d` 之后），复跑 `(Get-ChildItem src/agentflow/web -Recurse -File | Select-Object Name,Length)`；
     文件名带构建哈希 ⇒ 重建前端就会换名；这三个名字 / 字节数与盘上不一致时
     `tests/test_release_all.py` 的静态资产判据会红 —— 按盘上事实改这一处，别在别处另抄一份）；
     `src/agentflow/web/` 根一层是**源码/生成器**（`__init__.py` 1645 B、`assets.py` 23428 B、

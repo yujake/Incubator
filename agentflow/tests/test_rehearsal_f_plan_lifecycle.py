@@ -719,7 +719,7 @@ def test_the_plan_lifecycle_runs_in_fs_step_loop_with_the_real_secretary(
     from agentflow.modelcost import reconcile_usage
 
     money = reconcile_usage(reading["store"])
-    assert money["ledger_rows"] > 0, money
+    assert money["usage_ledger_rows"] > 0, money
     assert money["unattributed"]["count"] == 0, money["unattributed"]
     assert money["dangling"] == [], money["dangling"]
     assert money["equal"] is True, money

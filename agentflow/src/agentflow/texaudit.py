@@ -566,15 +566,19 @@ def _scan_ledger(
     root: Path | None, project: Path | None, corpus: _Corpus,
     ledger: Mapping[str, Sequence[Mapping[str, Any]]] | None,
 ) -> tuple[list[dict], dict, str, list[str]]:
-    """五个数 + `statement_surplus`（不发明 `==`，见模块 docstring）。"""
+    """五个数 + `statement_surplus`（不发明 `==`，见模块 docstring）。
+
+    `statement_ledger_rows` 数的是 `statements` 表的行数（键名曾叫 `ledger_rows`，
+    与 `usage_ledger` 的行数同名不同物）。
+    """
     if project is None:
-        return [], {"ledger_rows": None}, (
+        return [], {"statement_ledger_rows": None}, (
             "没有给 project（论文项目根）⇒ 台账与对应表这一档没查成（不是「对得上」）"), []
     if ledger is None:
-        return [], {"ledger_rows": None}, "台账读不到（盘上没有 statements 表）⇒ 这一档没查成", []
+        return [], {"statement_ledger_rows": None}, "台账读不到（盘上没有 statements 表）⇒ 这一档没查成", []
     statements = ledger.get("statements")
     if statements is None:
-        return [], {"ledger_rows": None}, "台账里没有 statements 这一张表 ⇒ 这一档没查成", []
+        return [], {"statement_ledger_rows": None}, "台账里没有 statements 这一张表 ⇒ 这一档没查成", []
     reading = PM.mapping_reading(project, workspace_root=root)
     propositions = PM.proposition_statement_ids(ledger)
     theorem_kinds = {"theorem", "lemma", "proposition", "corollary"}
@@ -585,7 +589,7 @@ def _scan_ledger(
     facts = {
         "proof_envs": proof_envs,
         "statement_envs": int(reading.get("statement_envs") or 0),
-        "ledger_rows": len(statements),
+        "statement_ledger_rows": len(statements),
         "ledger_propositions": len(propositions),
         "ledger_theorem_kinds": len(thm_rows),
         "mapping_rows": int(reading.get("rows") or 0),

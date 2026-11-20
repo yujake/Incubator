@@ -2850,7 +2850,7 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
     from .. import texaudit as TEX
 
     paper = _paper_facts(project)
-    empty_ledger = {"statement_envs": None, "proof_envs": None, "ledger_rows": None,
+    empty_ledger = {"statement_envs": None, "proof_envs": None, "statement_ledger_rows": None,
                     "ledger_propositions": None, "ledger_theorem_kinds": None,
                     "mapping_rows": None, "statement_surplus": [], "mapping_state": ""}
     empty_checks = {kind: {"checked": False, "reason": "还没扫", "findings": 0, "counts": {}}
@@ -2900,7 +2900,7 @@ def _structure_block(root_p: Path, project: str) -> dict[str, Any]:
                 for f in (scan.get("findings") or [])][:PACKAGE_ROWS_MAX]
     ledger = {"statement_envs": facts.get("statement_envs"),
               "proof_envs": facts.get("proof_envs"),
-              "ledger_rows": facts.get("ledger_rows"),
+              "statement_ledger_rows": facts.get("statement_ledger_rows"),
               "ledger_propositions": facts.get("ledger_propositions"),
               "ledger_theorem_kinds": facts.get("ledger_theorem_kinds"),
               "mapping_rows": facts.get("mapping_rows"),
@@ -3266,17 +3266,19 @@ def _closing_cost(store: Any, records: Sequence[Any], runs: Sequence[Any],
     runs_without_spend = sum(1 for r in runs if r.get("spend_usd") is None)
     unattributed = SS.unattributed_usd_of(records, runs) if sessions_ok else None
     try:
-        ledger_rows = list(store.rows("usage_ledger"))
-        ledger_usd = round(sum(float(r.get("usd") or 0) for r in ledger_rows), 6)
+        usage_rows = list(store.rows("usage_ledger"))
+        ledger_usd = round(sum(float(r.get("usd") or 0) for r in usage_rows), 6)
     except Exception:  # noqa: BLE001
-        ledger_rows, ledger_usd = [], None
+        usage_rows, ledger_usd = [], None
     cost = {"checked": sessions_ok,
             "reason": "" if sessions_ok else str(sessions_reason or "会话没查成"),
             "event_usd": event_usd, "spend_usd": spend_usd,
             "spend_unknown_usd_calls": (sum(int(r.get("spend_unknown_usd_calls") or 0)
                                             for r in runs) if sessions_ok else None),
             "unattributed_usd": unattributed, "runs_without_spend": runs_without_spend,
-            "ledger_usd": ledger_usd, "ledger_rows": (len(ledger_rows) if ledger_usd is not None else None),
+            "ledger_usd": ledger_usd,
+            # 键名曾叫 `ledger_rows`，与验收辅助读数 / statements 台账行数同名不同物。
+            "usage_ledger_rows": (len(usage_rows) if ledger_usd is not None else None),
             "source": _src("data/usage_ledger.json", label="usage_ledger")}
     # ---- 成本对账（2026-11-20，WEBCLEAN）：四个数并排却不给差额的解释
     # 真机 lp-ball-11 的现场：事件求和 2.422720 / 自报 2.271637 / 无人认领 0.151083 /
@@ -3309,8 +3311,8 @@ def _closing_cost(store: Any, records: Sequence[Any], runs: Sequence[Any],
         "ledger_minus_event_usd": ledger_minus_event,
         "explained_by_extract": explained,
         "note": ("账本 − 事件 = 归口里 extract 那几笔（事件流里没有这些调用）；"
-                 "`ledger_rows` 是账本行数，`event_llm_calls` 是事件里的调用数 —— "
-                 "一次调用可能记 0..n 行，两个数不许互相顶替。"),
+                 "`usage_ledger_rows` 是 usage_ledger 的账本行数，`event_llm_calls` 是"
+                 "事件里的调用数 —— 一次调用可能记 0..n 行，两个数不许互相顶替。"),
     }
     return cost
 
@@ -3490,7 +3492,7 @@ def package_face(root: str | Path, store: Any = None, *, project_dir: str = "",
                             "cost": {"checked": False, "reason": reason, "event_usd": None,
                                      "spend_usd": None, "spend_unknown_usd_calls": None,
                                      "unattributed_usd": None, "runs_without_spend": 0,
-                                     "ledger_usd": None, "ledger_rows": None,
+                                     "ledger_usd": None, "usage_ledger_rows": None,
                                      "reconciliation": {
                                          "by_scope": {}, "extract_usd": None,
                                          "extract_entries": None, "event_llm_calls": None,
@@ -6999,7 +7001,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
     ("LedgerFacts",
      "StructureView.ledger —— `texaudit._scan_ledger` 的五个数 + surplus",
      (("statement_envs", "number | null"), ("proof_envs", "number | null"),
-      ("ledger_rows", "number | null"), ("ledger_propositions", "number | null"),
+      ("statement_ledger_rows", "number | null"), ("ledger_propositions", "number | null"),
       ("ledger_theorem_kinds", "number | null"),
       ("mapping_rows", "number | null"), ("statement_surplus", "string[]"),
       ("mapping_state", "string"))),
@@ -7063,7 +7065,7 @@ _TS_TYPES: tuple[tuple[str, str, tuple[tuple[str, str], ...]], ...] = (
       ("event_usd", "number | null"), ("spend_usd", "number | null"),
       ("spend_unknown_usd_calls", "number | null"),
       ("unattributed_usd", "number | null"), ("runs_without_spend", "number"),
-      ("ledger_usd", "number | null"), ("ledger_rows", "number | null"),
+      ("ledger_usd", "number | null"), ("usage_ledger_rows", "number | null"),
       # 四个数并排却不给差额的解释 = 读者只能说"三个对不上"（WEBCAP B10）。
       ("reconciliation", "CostReconciliation"),
       ("source", "SourceRef"))),
