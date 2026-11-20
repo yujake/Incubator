@@ -14,6 +14,7 @@ import tempfile
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockwakes as WAKE
 
 
 def _workspace() -> pathlib.Path:
@@ -88,7 +89,9 @@ def test_the_cross_process_boundary_is_written_down() -> None:
     """
     import inspect
 
-    src = inspect.getsource(CLK)
+    # 2026-11-20（拆 clock.py）：兜底计时器那一层搬进 `clockwakes`，那段边界注释
+    # 跟着实现在那一份里 —— 判据读两个模块的源码（同一处断言、一个字没改）。
+    src = inspect.getsource(CLK) + inspect.getsource(WAKE)
     assert "不做自动唤醒" in src, "边界那句话被删掉了"
     assert "M 侧发指令" in src and "被动" in src, "边界那句话被改写成了半边"
     assert "听上级指挥" in src, "「由上级指挥、不许无脑全重启」那条裁定被删掉了"

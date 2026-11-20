@@ -3086,6 +3086,11 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 主时钟本体那一条是 `agentflow/clock.py::await_io`；搬走它就得同步改豁免表或
     # 改主时钟本体的判定 —— 那等于让判据跟实现一起漂，所以写入口留在本体。
     "clockwaits.py": "等待账与两把普查（2026-11-20 从 `clock.py` 拆出）：`note_wait` / `note_process_wait` / `waits` / `reset_waits` / `flush_waits`（等待账）+ `raw_wait_census`（原始等待普查）+ `program_census`（起进程普查）+ `coverage`（合成读数）+ 三张逐条登记的例外表 —— 三个扫描根可变量的唯一写点与读点同处一份（`await_io` 本体留在 `clock.py`）",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第十二层 = 唤醒标记 + 兜底计时器。
+    # 为什么是一个模块：`_LIFELINE_WAKE_HANDLER` 的唯一写点（set_lifeline_wake_handler）
+    # 与唯一读点（`_renew_lifeline`）必须同处一份；`_LIVE_LOOPS` 的四个读口与两处写口
+    # 也一样。到点层（`clockfire.py`）反过来 import `_renew_lifeline`，依赖方向单向。
+    "clockwakes.py": "唤醒标记与兜底计时器（2026-11-20 从 `clock.py` 拆出）：`record_wake` / `read_wakes` / `pending_wakes` / `consume_wakes` / `wake_path`；`lifeline_of` / `arm_lifeline` / `_new_lifeline_timer` / `_renew_lifeline` / `set_lifeline_wake_handler` / `loop_started` / `loop_ended` / `loop_is_live` / `live_loops` / `lifeline_suppressed` / `kill_lifeline` —— 唤醒边界的口径（不做自动唤醒 / 靠 M 发指令 / 听上级指挥）就在这一份的注释里",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
