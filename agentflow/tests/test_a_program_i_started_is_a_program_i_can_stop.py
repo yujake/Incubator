@@ -49,6 +49,7 @@ import sys
 import pytest
 
 from agentflow import clock as C
+from agentflow import clockstop as CSTOP
 from agentflow import stopctl as SC
 from agentflow.conductor import Conductor, calling_as
 from agentflow.store import Store
@@ -407,9 +408,12 @@ def test_f_stubbing_the_real_kill_makes_b_red(tmp_path, monkeypatch) -> None:
     span, proc = _start_sleeper(root, task_id=me, role="E")
     try:
         # ---- 前半：只打桩两刀，探活是真的 ⇒ 账上只能写 timeout
-        monkeypatch.setattr(C, "_terminate_pid",
+        # 2026-11-20（拆 clock.py）：三个被桩的探活/两刀与它们的调用者
+        # `_stop_one_program` 一起搬进 `clockstop`，打桩点跟着实现走
+        # （同一处判据、断言一个字没改）。
+        monkeypatch.setattr(CSTOP, "_terminate_pid",
                             lambda pid: {"sent": False, "via": "", "why": "判据：打桩"})
-        monkeypatch.setattr(C, "_force_kill_pid",
+        monkeypatch.setattr(CSTOP, "_force_kill_pid",
                             lambda pid: {"killed": False, "via": "stub",
                                          "why": "判据：打桩（没有真杀）"})
         got = _call(reg, "program.stop", me, timer_id=span.timer.timer_id)
@@ -424,17 +428,20 @@ def test_f_stubbing_the_real_kill_makes_b_red(tmp_path, monkeypatch) -> None:
             _assert_program_is_really_gone(proc, row)
 
         # ---- 后半：连探活一起打桩（第一次真、之后一律"已经死了"）⇒ 账写 killed 而进程还在
-        real_alive = C.process_alive
+        real_alive = CSTOP.process_alive
         calls = {"n": 0}
 
         def lying(pid: int) -> bool:
             calls["n"] = int(calls["n"]) + 1
             return bool(real_alive(pid)) if calls["n"] <= 1 else False
 
-        monkeypatch.setattr(C, "process_alive", lying)
-        monkeypatch.setattr(C, "_terminate_pid",
+        monkeypatch.setattr(CSTOP, "process_alive", lying)
+        # 2026-11-20（拆 clock.py）：三个被桩的探活/两刀与它们的调用者
+        # `_stop_one_program` 一起搬进 `clockstop`，打桩点跟着实现走
+        # （同一处判据、断言一个字没改）。
+        monkeypatch.setattr(CSTOP, "_terminate_pid",
                             lambda pid: {"sent": False, "via": "", "why": "判据：打桩"})
-        monkeypatch.setattr(C, "_force_kill_pid",
+        monkeypatch.setattr(CSTOP, "_force_kill_pid",
                             lambda pid: {"killed": False, "via": "stub",
                                          "why": "判据：打桩（没有真杀）"})
         lied = _call(reg, "program.stop", me, timer_id=span.timer.timer_id)

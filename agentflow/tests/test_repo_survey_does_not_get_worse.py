@@ -128,7 +128,15 @@ BASELINE: dict[str, int] = {
     # `specs/b.py` 在原位置用 `*INGEST_POLICY` 原样摊回去 ⇒ 渲染出来的提示词一个字没变
     # （十一格摘要不变），而 `specs/b.py` 824 → 773 行。`self_authored` 参数与那条教法都留在
     # 原处。判据语义一个字没动：只许降、不许再涨。
-    "src_files_gt800_lines": 75,
+    # 2026-11-20（CLOCK 路收口：SPLIT-1 4 刀 + CLOCK2 12 刀）：75 → 74。理由一格能点名：
+    # `src/agentflow/clock.py` 6,777 → 687 行，按依赖方向由底向上拆成 16 个顶层模块
+    # （clockbase / clockrun / clockevents / clockbookindex / clockprobe / clocktimer /
+    # clockmem / clockpatrol / clockprogram / clockwaitany / clockwaits / clockwakes /
+    # clockcost / clockfire / clockstop / clockpublic），每一个都 ≤ 800 行（clocktimer 797、
+    # clockwaits 719、clockfire 714、clock.py 687 …）。逐文件比对拆分前那 75 个过线文件
+    # 与现盘：只有 `clock.py` 这一条掉回线下，没有别的新过线。这一格的语义一个字没动：
+    # 只许降、不许再涨。
+    "src_files_gt800_lines": 74,
     # 2026-10-30：79 → 83。四格都能点名，全是"连续 3 次才发签"那一批新落的函数
     # （`eab9f85` 之后新过 200 行的，逐条按 `(文件, 函数名)` 比对过，没有一条是
     # 既有函数被写胖，也没有一条掉回线下）：
@@ -269,7 +277,7 @@ BASELINE: dict[str, int] = {
 #: （2026-11-10 现量过）。判据语义一个字没动：只许降、不许再涨。
 #: 2026-11-17：三格复测 75 / 95 / 2，dup 那一格按现盘 5 → 2 收紧（逐段点名见文件头
 #: 那条 2026-11-17 注）；另外两格一格未动。
-BASELINE_OBSERVED = "2026-11-17"
+BASELINE_OBSERVED = "2026-11-20"
 
 
 def _load_survey():

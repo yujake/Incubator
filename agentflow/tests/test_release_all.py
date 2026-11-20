@@ -3103,6 +3103,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 续兜底表）→ `_fire_periodics`（补拍）是一条链。`FakeClock.advance` 顺带调
     # `fire_due`，所以它也在这一份（判据“拨表”的入口）。
     "clockfire.py": "到点那一整层（2026-11-20 从 `clock.py` 拆出）：`_DUE_HANDLER` / `set_due_handler` / `_FIRE_LOCK` / `_deliver_one` / `_deliver_one_locked` / `fire_due` / `_remember_wait_state` / `_fire_periodics` / `PeriodicShot` / `MAX_CATCHUP_FIRES` / `_probe_targets` / `due_timers` / `_select_due` / `waiters` / `next_due` / `FakeClock` —— 到点动作的注册与投递只有一份实现；它 import `clocktimer` / `clockpatrol` / `clockwakes` / `clockcost`，方向单向",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第十四层（收口）= 停程序那一层。
+    # 为什么是一个模块：停机的判据只有「程序真的没了」（探活 → 温和一刀 → 强杀一刀 →
+    # 停完再探一次），三步写在两处就会有一处编出「已经杀了」的假读数；收口之后还要把
+    # 等它的人叫醒（`_wake_waiters`），所以它坐在 `clockfire` 之上、依赖方向单向。
+    "clockstop.py": "停程序那一层（2026-11-20 从 `clock.py` 拆出）：`process_alive` / `_terminate_pid` / `_force_kill_pid` / `_wait_until_gone` / `_stop_one_program` / `stop_program` / `programs_owned` / `_wake_waiters` / `PROGRAM_STOP_*` —— 停机三步只有一份实现（真没了才算停掉），停完再探一次",
+    # 2026-11-20（收口）：`clock.py` 的公开面清单单独一份。
+    # 为什么：`__all__` 是 150 名 / 152 行的名字表，不承载实现 —— 留在门面里会让
+    # 门面停在 863 行（越过 800）；而这张表是「对外名字面」的唯一定义，改它应该动
+    # 一个专门的模块，而不是混在实现里被顺手改。`clock.py` 用
+    # `from .clockpublic import __all__` 再导出，判据 `clock.__all__` 150 名全可取。
+    "clockpublic.py": "系统时钟的公开面清单（2026-11-20 从 `clock.py` 拆出）：`__all__`（150 个名字，顺序与内容逐字保留）—— 不承载实现，只为让门面落回 800 行内、并把「对外名字面」的改动收在一处",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
@@ -3953,6 +3964,19 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                             "_judge_system / _judge_material / _judge_prompt / _wash_v_system / "
                             "_proposition_form_system 等 —— system 段只取决于 kind、逐字节稳定，"
                             "材料留在 user 位；只依赖 secretary_vocab",
+    # 2026-11-20（SECSPLIT2 刀3 前置，业主批准的破环方式①与②）：拆到刀3 时模块地图里露出了
+    # 一个九模块的真 import 环（tier / 命题登记 / 合并 / 证据 / 依赖 / 概念 / 标签两两互引）。
+    # 这两条是破环的两块底座，必须先落地 —— 晚一步，刀3 之后的每一刀都要反向 import 回
+    # secretary.py（那就是组装层与混入层的环）。
+    "secretary_decl.py": "秘书的共享声明面（2026-11-20 从 secretary.py 逐字搬出）："
+                         "NONTRIVIALITY_SCALE / NOT_APPLICABLE_KINDS / EMPTY_STATEMENT_TEXT / "
+                         "PROPOSITION_KINDS / STATEMENT_BITS_KEYS / STATEMENT_WRITE_TABLES / "
+                         "PROOF_ROUTES_KEY / _is_concept_kind —— 九个模块都要问同一份声明，"
+                         "而它只依赖 vocab 与 refusals（闭包 15 行），所以是破环的那片叶子",
+    "secretary_port.py": "秘书的装配口（2026-11-20，业主批准的破环方式②）：混入模块造下一跳"
+                         "秘书只经 `new_secretary` / `Secretary._new_secretary` —— 它不 import "
+                         "任何秘书模块，`secretary.py` 在类定义之后把类登记进来；混入层因此"
+                         "永远不必 `from .secretary import Secretary`（那句就是真环）",
 }
 
 
