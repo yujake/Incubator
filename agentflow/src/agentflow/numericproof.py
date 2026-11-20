@@ -527,9 +527,6 @@ def proof_column_script(text: Any) -> str:
 #: "枚举了多少例"的候选键（按优先级；脚本自报时常见的那几种写法）。
 CASE_COUNT_KEYS: tuple[str, ...] = ("n_cases", "cases", "enumerated_total", "n_enumerated")
 
-#: 上界与枚举量比对的三档读数。它不是判据：`mismatch` 只让读数可见，不改任何档。
-BOUND_CHECK_VERDICTS: tuple[str, ...] = ("consistent", "mismatch", "no_bound")
-
 
 def _case_count_of(*maps: Mapping[str, Any]) -> int | None:
     """从三处读"枚举了多少例"（读到第一个正整数就停；没读到 ⇒ `None`）。"""

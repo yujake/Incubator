@@ -39,10 +39,6 @@ from . import schema as _S
 from . import statementabandon as _SA
 from . import statementledger as _SL
 
-#: 作废证据三档：实验反例 / 一条构造 / 一行判词（`verifications/<号>.jsonl#v-…`）。
-#: 多给一档 ⇒ 受控拒：凭哪一条作废必须说得清（"两件证据说不清"就是给自己留后路）。
-REFUTE_EVIDENCE = ("experiment_id", "construction", "defect_ref")
-
 
 class _InvariantBroken(ValueError):
     """同事务读回时"两处读法不恒等"（`status=错误` 而等级 / 载荷对不上）。

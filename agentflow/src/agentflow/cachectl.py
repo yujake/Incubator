@@ -185,9 +185,6 @@ REASON_RUN_RECORD_UNREADABLE = "run_record_unreadable"
 #: 起来的），这一格是给"命令行里没有 --root、但调用方知道工作区"的场合留的出口。
 ENV_WORKSPACE_ROOT = "AGENTFLOW_WORKSPACE_ROOT"
 
-#: 读数文件的缺省落点。真身是 `warm_prompt_cache.DEFAULT_READINGS`，这里在调用期取，
-#: 不另抄一份路径（抄一份就会在别人搬家时静默指向旧位置）。
-DEFAULT_READINGS_HINT = "tests/fixtures/prompt_cache_warm.json"
 
 #: 渲染结果的进程内缓存：提示词在一次进程生命周期里不会变，而网页的读数面板会
 #: 跟着每条 SSE 事件重取一次 —— 不缓存的话每次要重新渲染十二个 system。

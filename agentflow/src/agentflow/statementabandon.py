@@ -102,10 +102,6 @@ ABANDON_KINDS: tuple[str, ...] = (ABANDON_KIND_MATH_ERROR, ABANDON_KIND_DIFFICUL
                                   ABANDON_KIND_COUNTEREXAMPLE,
                                   ABANDON_KIND_SPACE_TOO_LARGE)
 
-#: E 侧那两档（"数值证明路线"的两条放弃理由）。判定口与 F 那两档共用同一个
-#: :func:`check_abandon_reason` —— 这里只给读数与措辞一个可引用的名字，不是第二份判定。
-ABANDON_E_SIDE_KINDS: tuple[str, ...] = (ABANDON_KIND_COUNTEREXAMPLE,
-                                         ABANDON_KIND_SPACE_TOO_LARGE)
 
 #: 写口要认的那几个键（两个必填 + 各档按需）。工具声明与白名单都从这里取。
 #:

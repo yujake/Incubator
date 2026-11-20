@@ -1720,15 +1720,6 @@ def _root_of(store: Any, fallback: Any = "") -> str:
 
 # ------------------------------------------------------------------ 键与明细
 
-def key_of(label: str, verification_id: str, recipient: str) -> str:
-    """判词板项的键：`v-verdict@<label>@<vid>@<recipient>`（只用于读旧盘）。
-
-    写它的不是本模块：`agent_loop.deliver_v_verdicts` 只在收件人下一次起跑时按台账
-    递送。本模块只在 [:func:`reconcile`] 里读它认"这一条判词当时投给了谁"。
-    带收件人的理由是历史键（无后缀）认不出收件人；这里不改写、不重开。
-    """
-    return f"{_prefix()}{label}@{verification_id}@{recipient}"
-
 
 def legacy_key_of(label: str, verification_id: str) -> str:
     """没有收件人后缀的旧键：只用于读旧盘，不许用它写新项。"""

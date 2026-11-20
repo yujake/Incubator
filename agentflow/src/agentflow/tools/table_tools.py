@@ -812,8 +812,6 @@ STATEMENT_BODY_PATCH_KEYS: frozenset[str] = frozenset({
     "evidence_kind", "proof_manuscript",
 })
 
-#: 非正文写口被白名单拒时的码（可定位：模型读得到"我多给了哪一格"）。
-STATEMENT_PATCH_KEY_NOT_ALLOWED = "statement_patch_key_not_allowed"
 
 #: `statements` 的登记归属（2026-10-26，D8）：只有 B 的 `register_statement` 能写。
 #:

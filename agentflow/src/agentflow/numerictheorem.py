@@ -62,12 +62,6 @@ BLOCK_DESIGN = ER.BLOCK_DESIGN
 #: ③ 这一块的标题（E 写的"确实穷举的论证"）。
 BLOCK_EXHAUSTION = ER.BLOCK_EXHAUSTION
 
-#: ① 那一块的标题（程序相对地址）。
-#:
-#: 程序路径住在 `experiments.code_path`，证明栏里没有这一段 ——
-#: `numericproof.PART_NAMES` 也不再含 `script`。这里仍留一个只用于读数展示的
-#: 字面量（`exhaustionreport` 的报告那一块叫「运行环境」+ 程序地址，判据不读它）。
-BLOCK_PROGRAM = "程序"
 
 #: 第三件：运行环境（版本、随机种子若有）。它与程序地址合成业主口径里的第三块。
 BLOCK_ENVIRONMENT = ER.BLOCK_ENVIRONMENT

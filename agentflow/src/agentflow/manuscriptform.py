@@ -105,9 +105,6 @@ DEPENDENCY_SECTION_MISSING = _DS.REFUSED_SECTION_MISSING
 #: 落边那一步没成 ⇒ 整笔回滚（不是"稿在、边缺一条"）。
 DEPENDENCY_EDGES_NOT_WRITTEN = "dependency_edges_not_written"
 
-REFUSAL_CODES: tuple[str, ...] = (
-    MULTIPLE_PROPOSITIONS, NOT_WASHED, BAD_MANUSCRIPT_NAME, NO_PROOF_SECTION,
-    DEPENDENCY_SECTION_MISSING, DEPENDENCY_EDGES_NOT_WRITTEN)
 
 #: 五个共用的 detail 文本模板（`.format` 的键逐条写在函数里，别在调用点手拼）。
 DETAILS: dict[str, str] = {

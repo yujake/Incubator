@@ -59,7 +59,6 @@ KIND_OPTIMIZED = "secretary_optimized"
 KIND_HANDOFF = "secretary_handoff"
 KIND_NOTICE = "secretary_notice"
 KIND_PROPOSAL = "secretary_proposal"
-KIND_QUESTION = "secretary_question"
 KIND_NEGOTIATION = "secretary_negotiation"
 KIND_DECISION = "secretary_decision"
 #: 秘书的判断结论词表（`draft/55` §2 的 B 类）——派活那一轴的结论。
@@ -327,19 +326,6 @@ V_REPLY_VERDICTS: tuple[str, ...] = (V_REPLY_CLEAN, V_REPLY_FAULT)
 #: 两者之间只有这一处翻译，改词不改轴；这张映射里没有第三条出路 ——
 #: "拿不准"落在 `V_REPLY_FAULT` 那一格（业主逐字：只要不是完全没毛病都叫有毛病）。
 V_REPLY_AXIS: dict[str, str] = {V_REPLY_CLEAN: "clean", V_REPLY_FAULT: "fault"}
-
-#: `v_reply_defect` 的第三格：缺陷类别。
-#:
-#: 轴仍然只有 `clean` / `fault` 两档（`V_REPLY_AXIS` 不动）；这一格回答"判 fault 时，
-#: fault 的内容是哪一类" —— 词表本体只有一处（`verifications.FAULT_KINDS`），这里不抄。
-#: 为什么由秘书这一问给、不给 V 加必填字段：只走"秘书语义判 `defect_kind` ＋ 写侧护栏"
-#: 这一条路；给 V 加必填字段等于把句式要求换个地方钉。
-V_REPLY_DEFECT_KIND_FIELD = "defect_kind"
-
-#: 秘书这一问的"报告质量读数"那一格：判「没问题」时可以顺带记一句
-#: "这份报告缺了什么记录"（例：没写反例尝试的位置）。它不是判据、不进 fault 轴，
-#: 也不挡签；写侧把它原样落进 `secretary_judge.report_gap`，读侧只作质量读数。
-V_REPLY_REPORT_GAP_FIELD = "report_gap"
 
 
 def v_reply_fault_reading(*, decision: str, defect_kind: Any = "",
@@ -1476,9 +1462,6 @@ SAME_PROPOSITION_JACCARD = _PK.SAME_PROPOSITION_JACCARD
 #: （`Secretary.judge("proof_kind", …)`：语义判别，不做机械闸，结论只有一致/不同）；
 #: 相似度只作材料读数，不参与收不收。
 PROOF_SAME_JACCARD = _PK.PROOF_SAME_JACCARD
-#: 同一命题命中的两条依据（进返回值与拒信：读的人要能分辨"凭什么并的"）。
-MERGED_BY_KEY = _PK.BASIS_KEY
-MERGED_BY_SIMILARITY = _PK.BASIS_SIMILARITY
 #: 第三种依据：秘书那一趟模型判定说"同一条"（`adjudicate_proposition`）。
 #:
 #: 它必须与上面两条分开命名：键相同 / 相似度兜底都是机械读数，而这一条是"读了条件与结论
@@ -16142,10 +16125,6 @@ def concept_identity_gate(tx: Any, *, label: str, full: str = "",
                                       exclude_id=str(exclude_id or ""))
     return {key: got.get(key) for key in
             ("checked", "state", "basis", "reason", "candidates")}
-
-
-#: 概念同一性闸的三种处置（`concept_identity_action` 的唯一取值表）。
-CONCEPT_IDENTITY_ACTIONS: tuple[str, ...] = ("created", "merged", "refused")
 
 
 def concept_identity_action(gate: Mapping[str, Any]) -> dict[str, Any]:

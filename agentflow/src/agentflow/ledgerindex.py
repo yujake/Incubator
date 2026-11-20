@@ -451,16 +451,6 @@ def cached_from_store(store: Any) -> LedgerIndex:
     return index
 
 
-def reset_index_cache() -> None:
-    """清掉进程内缓存（测试 / 长驻进程要重读台账时用；这不是"顺手写盘"）。
-
-    名字刻意不叫 `clear_cache`：那个名字在 `webui/facecache.py` 已有一份独立实现，
-    同名会被 lint R003 读成"同一判据的两份实现"。
-    """
-    _INDEX_CACHE.clear()
-    _DELIVERED.clear()
-
-
 def _delivered_key(root: str, sid: str, depth: int, direction: str) -> tuple:
     return (str(root or ""), str(sid), int(depth), str(direction))
 

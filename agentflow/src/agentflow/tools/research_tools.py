@@ -652,19 +652,6 @@ def install(registry: Any, store: Any) -> list[str]:
     return names
 
 
-def iter_questions(store: Any) -> Iterator[dict]:
-    """按稳定顺序迭代全部研究问题。
-
-    稳定顺序（priority, question_id）是刻意的：D 的每一轮都按同一顺序处理，
-    报告与台账对得上；否则同一份数据两次跑会得到两篇不同的报告，
-    "可审计"就无从谈起。
-    """
-    rows = list(store.rows("research_questions"))
-    prio_rank = {p: i for i, p in enumerate(S.PRIORITIES)}
-    rows.sort(key=lambda r: (prio_rank.get(r.get("priority"), 9), str(r.get("question_id") or "")))
-    yield from rows
-
-
 # ---------------------------------------------------------------- 自检
 
 if __name__ == "__main__":  # pragma: no cover - 手工运行的自检块

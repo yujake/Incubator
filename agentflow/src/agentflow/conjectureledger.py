@@ -60,9 +60,6 @@ __all__ = [
     "status_for_experiment",
 ]
 
-#: 三族（生产侧）—— 台账行的来源只该是它们。不是权限面（这里没有角色判据），
-#: 是"这句话是谁说的"的登记：写在 `origin` 里，人一眼看得见。
-OWNERS: tuple[str, ...] = ("E", "F", "B")
 
 #: 台账里"已进命题台账"的那一条读数的键名（`promoted_to_statement`）。
 #:

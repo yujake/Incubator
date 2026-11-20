@@ -33,7 +33,6 @@ from . import ToolResult, ToolSpec, fail, ok, tool
 from .ocr_tools import _Ctx as _OcrCtx, _pick_workspace, _target_path
 
 PAGE_MARKER = "===== page {n} ====="
-DEFAULT_OUT_DIR = ""          # 空 = 落在 library/（"入库"）
 
 
 def _safe_stem(raw: str, fallback: str = "text") -> str:

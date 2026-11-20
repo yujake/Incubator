@@ -1,0 +1,1931 @@
+{
+ "_meta": {
+  "_what": "公开死名字基线（第 5 条判据的棘轮）",
+  "_why_frozen": "2026-11-20 业主裁定甲条：死代码判据从私有函数扩到公开零调用名。这是当次实测的完整清单 —— 每一条都还没有生产读者，基线的语义是'已知欠账、由 lead 逐条处置'，不是'这些名字可以留'。新出现的死名字会红；处理掉一个而没删掉这一行也会红。",
+  "_keying": "按名字收（不是按 rel::name）：这一条的读数是名字级的，文件只是证据。并行开发下模块搬家不该被记成'删一个加一个'。",
+  "_regenerate": "python -B temp/deadpublic/build_baseline.py --write（判据与本脚本共用 test_clean_invariant 的同一个扫描器）",
+  "_frozen_at": "2026-11-20"
+ },
+ "rows": [
+  {
+   "name": "ADDRESS_MODES",
+   "rel": "depsection.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "ADJUDICATION_CODES",
+   "rel": "interactions.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "ALL_PROBLEM_KINDS",
+   "rel": "papermapping.py",
+   "kind": "Assign",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 12 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "AUTHOR_ATTRIBUTED_CATEGORIES",
+   "rel": "errorstats.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "AXIS_UNDECIDED",
+   "rel": "gates.py",
+   "kind": "Assign",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "BLOCKING_KINDS",
+   "rel": "agent_h/mapping_judge.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 9 处提及"
+  },
+  {
+   "name": "BODY_STATE_WORDS",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "B_LIBRARY_KEYS",
+   "rel": "agent_l/formalize.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "CACHE_FIELDS",
+   "rel": "webui/facecache.py",
+   "kind": "Assign",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "CALLER_ATTRIBUTED_CATEGORIES",
+   "rel": "errorstats.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "CANCEL_BY_VALUES",
+   "rel": "cancellation.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 9 处提及"
+  },
+  {
+   "name": "CENSUS_FORMS",
+   "rel": "clock.py",
+   "kind": "Assign",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "CHAIN_DELIVERY_STATES",
+   "rel": "conductor.py",
+   "kind": "Assign",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 3 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "CHAIN_HOP_ROSTER",
+   "rel": "conductor.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 1 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "CHAIN_REFUSAL_REASONS",
+   "rel": "conductor.py",
+   "kind": "Assign",
+   "categories": "docs",
+   "action": "wire_or_delete",
+   "why": "生产/测试零读者；只在 .md 文档里被提到；文档侧 1 处提及"
+  },
+  {
+   "name": "CHECKED_TYPES",
+   "rel": "webui/readers.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 11 处提及"
+  },
+  {
+   "name": "CHILD_COUNT_CALIBERS",
+   "rel": "conductor.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 6 处提及"
+  },
+  {
+   "name": "CODE_PLAN_NOT_SIGN",
+   "rel": "manuscriptfamily.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "CODE_PROVENANCE",
+   "rel": "errorstats.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
+  },
+  {
+   "name": "CONDITIONAL_ROW_FIELDS",
+   "rel": "papermapping.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "CONFIDENCE_LEVELS",
+   "rel": "agent_d/_support.py",
+   "kind": "Assign",
+   "categories": "import,prose",
+   "action": "drop_reexport_or_wire",
+   "why": "生产侧零读者；现有引用类别：re-export / 注释/docstring"
+  },
+  {
+   "name": "COUNTER_KEY",
+   "rel": "manuscriptids.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "CURRENT_SOURCES",
+   "rel": "webui/state.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "DEFAULT_LLM_LOOPS",
+   "rel": "host.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "DEPS_MISSING_STATES",
+   "rel": "secretary.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 2 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "DETAIL_KEYS",
+   "rel": "texaudit.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "DIRECT_OWNER",
+   "rel": "fs_observation.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "DUE_PREFIXES",
+   "rel": "tools/clock_tools.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "Downloader",
+   "rel": "fetch.py",
+   "kind": "ClassDef",
+   "categories": "all_export,docs",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 文档；文档侧 2 处提及"
+  },
+  {
+   "name": "ENTRY_KEYS",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "ERROR_CATEGORY_NAMES",
+   "rel": "errorstats.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 5 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "EXIT_CODE_DOMAINS",
+   "rel": "stop_reasons.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "EXIT_CODE_UNIFIED",
+   "rel": "stop_reasons.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "Extractor",
+   "rel": "llm.py",
+   "kind": "ClassDef",
+   "categories": "all_export,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试 / 文档；测试侧 1 处提及；文档侧 4 处提及"
+  },
+  {
+   "name": "FANOUT_LIMIT_BY_ROLE",
+   "rel": "policy.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "FILE_STATES",
+   "rel": "papermapping.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "FINDING_CELLS",
+   "rel": "depsection.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "FINDING_KEYS",
+   "rel": "texaudit.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "FORMAL_REASON_BY_TOOL_REASON",
+   "rel": "agent_l/_support.py",
+   "kind": "Assign",
+   "categories": "all_export,docs",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 文档；文档侧 1 处提及"
+  },
+  {
+   "name": "FORMAL_SLOT_KINDS",
+   "rel": "numericproof.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "FULLTEXT_TIERS",
+   "rel": "litread.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "GATE_AXIS",
+   "rel": "gates.py",
+   "kind": "Assign",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "GROUP_NAMES",
+   "rel": "cli.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "JSON_ENVELOPE_STATES",
+   "rel": "cli.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "KNOWN_STOP_REASONS",
+   "rel": "cli.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "LATER_EDGES",
+   "rel": "specs/l.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 1 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "L_STATEMENT_AND_FAITHFULNESS_REASONS",
+   "rel": "agent_l/formalize.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 6 处提及"
+  },
+  {
+   "name": "MANUSCRIPT_ID_STATES",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "MANUSCRIPT_NAME_PLAN",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 9 处提及"
+  },
+  {
+   "name": "MATHLIB_STATES",
+   "rel": "leantoolchain.py",
+   "kind": "Assign",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "OPTIMIZATION_PROMPT_CLASSES",
+   "rel": "closing.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "OPTIONAL_ROW_FIELDS",
+   "rel": "papermapping.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "OUTPUT_CLAIMS",
+   "rel": "agent_f/delivery.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
+  },
+  {
+   "name": "OVERLAP_KINDS",
+   "rel": "litstage.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 文档；文档侧 1 处提及"
+  },
+  {
+   "name": "OWN_RESULT_LINK_SOURCES",
+   "rel": "closing.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "OcrBackend",
+   "rel": "tools/ocr_tools.py",
+   "kind": "ClassDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "PARK_STATES",
+   "rel": "clockbase.py",
+   "kind": "Assign",
+   "categories": "import,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / 注释/docstring / 测试 / 文档；测试侧 2 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "PART_NAMES",
+   "rel": "numericproof.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "PENDING_ENDPOINTS",
+   "rel": "webui/readers.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 5 处提及"
+  },
+  {
+   "name": "POST_TASK_STATES",
+   "rel": "tools/conductor_tools.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 2 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "PROBE_STATUSES",
+   "rel": "formalgw.py",
+   "kind": "Assign",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "PROOF_NO_PREFIX",
+   "rel": "bmanuscript.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "QUERY_APPLICABILITY_STATES",
+   "rel": "providers.py",
+   "kind": "Assign",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "QUOTE_STATES",
+   "rel": "evidencebits.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 6 处提及"
+  },
+  {
+   "name": "READOUT_DATA_KEYS",
+   "rel": "readouts.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 5 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "READOUT_KEYS",
+   "rel": "readouts.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 5 处提及"
+  },
+  {
+   "name": "READ_STATES",
+   "rel": "jsonlfile.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "REASON_ABSENT",
+   "rel": "cachectl.py",
+   "kind": "Assign",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "REFUSAL_SLOT_HEADS",
+   "rel": "policy.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "REFUTATION_VOID_KINDS",
+   "rel": "evidencebits.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "REPORT_KEYS",
+   "rel": "proofreport.py",
+   "kind": "Assign",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "RESEARCH_BASE_STATES",
+   "rel": "researchbase.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "RETURN_KEYS",
+   "rel": "texaudit.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "ROSTER_ATTRIBUTED_CATEGORIES",
+   "rel": "errorstats.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "RUN_ROW_KEYS",
+   "rel": "webui/readers.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "RoleBrief",
+   "rel": "agent_prompts.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "SIGNABLE_STATUS",
+   "rel": "signatures.py",
+   "kind": "Assign",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 1 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "SIGN_GATE_CODES",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "SIGN_READING_WORDS",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "SIGN_REFRESH_STATES",
+   "rel": "vsigns.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "SOURCES",
+   "rel": "leantoolchain.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "SOURCE_BYTES_MAX",
+   "rel": "webui/readers.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "SPLIT_STATUSES",
+   "rel": "claims.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "STATES",
+   "rel": "leantoolchain.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "STATIC_PREFIX",
+   "rel": "webui/server.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "SUMMON_WEAK_EVIDENCE",
+   "rel": "agent_loop.py",
+   "kind": "Assign",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 1 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "SURVEY",
+   "rel": "agent_skills.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试 / 文档；测试侧 10 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "TASK_AUDIT_CODES",
+   "rel": "capabilities.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "THREE_STATES",
+   "rel": "agent_l/_support.py",
+   "kind": "Assign",
+   "categories": "import,all_export,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试 / 文档；测试侧 5 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "TOPIC_SELFCHECK_STATES",
+   "rel": "providers.py",
+   "kind": "Assign",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "UNCHECKED_TYPES",
+   "rel": "webui/readers.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 22 处提及"
+  },
+  {
+   "name": "UNSIGNED_PROOF_INTAKE_STATES",
+   "rel": "agent_b/register_statement.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "VERSION_STATUSES",
+   "rel": "formalgw.py",
+   "kind": "Assign",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "VOID_CONDITIONS",
+   "rel": "evidencebits.py",
+   "kind": "Assign",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "VerificationWiringError",
+   "rel": "agent_v/core.py",
+   "kind": "ClassDef",
+   "categories": "import,all_export",
+   "action": "drop_reexport_or_wire",
+   "why": "生产侧零读者；现有引用类别：re-export / __all__"
+  },
+  {
+   "name": "WARM_JOB_STATES",
+   "rel": "webui/cacheface.py",
+   "kind": "Assign",
+   "categories": "all_export,prose,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 文档；文档侧 1 处提及"
+  },
+  {
+   "name": "WASH_REFUSED_UNKNOWN",
+   "rel": "depsection.py",
+   "kind": "Assign",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "WELL_DEFINEDNESS_STATES",
+   "rel": "conceptrows.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "WIRING_STATES",
+   "rel": "host.py",
+   "kind": "Assign",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "abandon_proposition_kinds",
+   "rel": "statementabandon.py",
+   "kind": "FunctionDef",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "add_subcommands",
+   "rel": "cachectl.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "admissible_evidence_kinds",
+   "rel": "verifications.py",
+   "kind": "FunctionDef",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 3 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "api_paths",
+   "rel": "webui/routes.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 9 处提及"
+  },
+  {
+   "name": "apply_amendment",
+   "rel": "statementamend.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "apply_cascade",
+   "rel": "evidencebits.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "assertions_pressing_on",
+   "rel": "closing.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "assign_paper_numbers",
+   "rel": "paperledger.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 6 处提及"
+  },
+  {
+   "name": "audit_registry",
+   "rel": "agentspec.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "bit3_already_signed",
+   "rel": "verifications.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "bit_ledger",
+   "rel": "evidencebits.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "builtin_sources",
+   "rel": "agent_skills.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "cache_entry",
+   "rel": "webui/facecache.py",
+   "kind": "FunctionDef",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "can_derive",
+   "rel": "tools/attack_tools.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 19 处提及；文档侧 7 处提及"
+  },
+  {
+   "name": "cand_ref",
+   "rel": "litstage.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "check_params",
+   "rel": "capabilities.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 5 处提及"
+  },
+  {
+   "name": "checkpoint_prompt_cache_problem",
+   "rel": "promptstability.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试 / 文档；测试侧 7 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "clamp_timeout",
+   "rel": "tool_timeout.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "clean_statement_ids",
+   "rel": "evidencebits.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 10 处提及"
+  },
+  {
+   "name": "clear_cache",
+   "rel": "webui/facecache.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "clear_provider_cooldowns",
+   "rel": "providers.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 6 处提及"
+  },
+  {
+   "name": "clear_render_cache",
+   "rel": "cachectl.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "concept_similarity",
+   "rel": "propositionkey.py",
+   "kind": "FunctionDef",
+   "categories": "docs",
+   "action": "wire_or_delete",
+   "why": "生产/测试零读者；只在 .md 文档里被提到；文档侧 1 处提及"
+  },
+  {
+   "name": "conjecture_refuted",
+   "rel": "errorstate.py",
+   "kind": "FunctionDef",
+   "categories": "import,all_export,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试 / 文档；测试侧 6 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "cost_reading",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 12 处提及"
+  },
+  {
+   "name": "count_by_code",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "declaration_divergences_for",
+   "rel": "capabilities.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "declaration_names",
+   "rel": "formalgw.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "dispatch_directions",
+   "rel": "dispatchpolicy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 8 处提及"
+  },
+  {
+   "name": "dispatch_fit_rows",
+   "rel": "secretary.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "document_artifact_readings",
+   "rel": "tools/doc_tools.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "estimate_tools_tokens",
+   "rel": "tokenestimate.py",
+   "kind": "FunctionDef",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "event_close_reading",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 11 处提及"
+  },
+  {
+   "name": "facts_migration_problem",
+   "rel": "promptstability.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "find_review",
+   "rel": "vreviews.py",
+   "kind": "FunctionDef",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "foreign_refusal",
+   "rel": "manuscriptopen.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "grade_index",
+   "rel": "evidencebits.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "handler_names",
+   "rel": "webui/routes.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
+  },
+  {
+   "name": "has_issue",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "hook_problems",
+   "rel": "webui/sse.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 10 处提及"
+  },
+  {
+   "name": "id_allocator_kind",
+   "rel": "schema.py",
+   "kind": "FunctionDef",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 6 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "identity_key",
+   "rel": "manuscriptids.py",
+   "kind": "FunctionDef",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 6 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "index_drift",
+   "rel": "vsigns.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 9 处提及"
+  },
+  {
+   "name": "inherit_defects",
+   "rel": "attackround.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 6 处提及"
+  },
+  {
+   "name": "is_canonical",
+   "rel": "proofloc.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
+  },
+  {
+   "name": "is_framework_manuscript",
+   "rel": "depsection.py",
+   "kind": "FunctionDef",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "is_legacy",
+   "rel": "refvocab.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "is_legacy_id",
+   "rel": "schema.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "is_problem",
+   "rel": "refvocab.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 8 处提及"
+  },
+  {
+   "name": "is_toy_example",
+   "rel": "agent_e/run_experiment.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "iter_edges",
+   "rel": "policy.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "json_rules_problems",
+   "rel": "judges.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "kv_lines",
+   "rel": "tty.py",
+   "kind": "FunctionDef",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "latest_top_level_task_id",
+   "rel": "closing.py",
+   "kind": "FunctionDef",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "lifecycle_verdict",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "link_status",
+   "rel": "faculty_checks.py",
+   "kind": "FunctionDef",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "list_models",
+   "rel": "modelgw.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 8 处提及"
+  },
+  {
+   "name": "live_loops",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "",
+   "action": "delete",
+   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
+  },
+  {
+   "name": "loop_ended",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "loop_started",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "manuscript_sign_gate",
+   "rel": "vsigns.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 5 处提及"
+  },
+  {
+   "name": "manuscript_write_reading",
+   "rel": "vsigns.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "manuscripts_of_statement",
+   "rel": "manuscriptretire.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
+  },
+  {
+   "name": "map_theorem",
+   "rel": "paperledger.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "message_sequence_problem",
+   "rel": "agent_loop.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 10 处提及"
+  },
+  {
+   "name": "missing_prompt_cache_steps",
+   "rel": "promptstability.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 12 处提及"
+  },
+  {
+   "name": "move_theorem",
+   "rel": "paperledger.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "name_for",
+   "rel": "manuscripts.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "near_seconds",
+   "rel": "clockbase.py",
+   "kind": "FunctionDef",
+   "categories": "import,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / 注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "new_field_names",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 6 处提及"
+  },
+  {
+   "name": "numeric_conclusions",
+   "rel": "closing.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "numeric_manuscript_relpath",
+   "rel": "exhaustionreport.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "opened_polish_sources",
+   "rel": "agent_b/open_polish_copy.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "optimization_prompt",
+   "rel": "agent_b/optimize_prompts.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "optional_field_names",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "paper_heading_problems",
+   "rel": "papermapping.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 6 处提及"
+  },
+  {
+   "name": "pollution_set",
+   "rel": "closing.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "producer_reading",
+   "rel": "verifications.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 4 处提及"
+  },
+  {
+   "name": "programs_running",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "progress_line",
+   "rel": "tty.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "proof_manuscript_relpath",
+   "rel": "exhaustionreport.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 7 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "proof_nos_of",
+   "rel": "proofloc.py",
+   "kind": "FunctionDef",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 6 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "read_actions",
+   "rel": "webui/audit.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 20 处提及"
+  },
+  {
+   "name": "read_rewrite",
+   "rel": "bmanuscript.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "reap",
+   "rel": "jobobject.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 9 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "receipt_of",
+   "rel": "vsigns.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "ref_name",
+   "rel": "fulltextstore.py",
+   "kind": "FunctionDef",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "ref_readings",
+   "rel": "manuscripts.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "refusal_records",
+   "rel": "refusals.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "refusal_shape_problems",
+   "rel": "policy.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 5 处提及"
+  },
+  {
+   "name": "refutation_of",
+   "rel": "refutation.py",
+   "kind": "Assign",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "refute_by_sign",
+   "rel": "refutation.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 19 处提及"
+  },
+  {
+   "name": "registration_digest",
+   "rel": "obligations.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "registration_note",
+   "rel": "proofrevisions.py",
+   "kind": "FunctionDef",
+   "categories": "import,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / 测试 / 文档；测试侧 1 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "render_all",
+   "rel": "cachectl.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "render_change_notice",
+   "rel": "instructions.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
+  },
+  {
+   "name": "reply_view",
+   "rel": "userio.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "report_as_json",
+   "rel": "gates.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "required_field_names",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "reserved_manuscript_id",
+   "rel": "manuscriptids.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "reset_cache",
+   "rel": "tools/conductor_tools.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 46 处提及"
+  },
+  {
+   "name": "reset_costs",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "reset_event_close",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "reset_handoffs",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "reset_parked",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 32 处提及"
+  },
+  {
+   "name": "reset_readbacks",
+   "rel": "litstage.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 12 处提及"
+  },
+  {
+   "name": "reset_reading_cache",
+   "rel": "leantoolchain.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 23 处提及"
+  },
+  {
+   "name": "resubmit_digest",
+   "rel": "obligations.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "resume_transcript",
+   "rel": "agent_loop.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 6 处提及"
+  },
+  {
+   "name": "retire_hint",
+   "rel": "clockbase.py",
+   "kind": "FunctionDef",
+   "categories": "import,all_export,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试 / 文档；测试侧 1 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "routable_direct_write_tables",
+   "rel": "store.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "run_tasks",
+   "rel": "scheduler.py",
+   "kind": "FunctionDef",
+   "categories": "docs",
+   "action": "wire_or_delete",
+   "why": "生产/测试零读者；只在 .md 文档里被提到；文档侧 3 处提及"
+  },
+  {
+   "name": "scopes_without_producer",
+   "rel": "schema.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "set_census_roots",
+   "rel": "clock.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "set_role_config",
+   "rel": "llmseam.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 11 处提及"
+  },
+  {
+   "name": "settlement_readings",
+   "rel": "litstage.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "slot_of_cand",
+   "rel": "litstage.py",
+   "kind": "FunctionDef",
+   "categories": "all_export",
+   "action": "drop_export_or_wire",
+   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
+  },
+  {
+   "name": "stale_action_only_entries",
+   "rel": "capabilities.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
+  },
+  {
+   "name": "stale_missing_in_action_entries",
+   "rel": "capabilities.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
+  },
+  {
+   "name": "stamp_step",
+   "rel": "conductor.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 6 处提及"
+  },
+  {
+   "name": "statement_is_active",
+   "rel": "lifecycle.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "statement_manuscript_identity",
+   "rel": "statementledger.py",
+   "kind": "FunctionDef",
+   "categories": "tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 5 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "stop_badge",
+   "rel": "webui/server.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "store_dir_for",
+   "rel": "fulltextstore.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 13 处提及"
+  },
+  {
+   "name": "summary_counts",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "summon_consumption_verdict",
+   "rel": "agent_loop.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 13 处提及"
+  },
+  {
+   "name": "table_reading",
+   "rel": "tool_timeout.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
+  },
+  {
+   "name": "tier_of_literature",
+   "rel": "litavail.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
+  },
+  {
+   "name": "to_storage_claim",
+   "rel": "claimanatomy.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试 / 文档；测试侧 7 处提及；文档侧 2 处提及"
+  },
+  {
+   "name": "ts_fields",
+   "rel": "webui/readers.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,tests",
+   "action": "drop_export_or_wire",
+   "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 7 处提及"
+  },
+  {
+   "name": "unregistered_dynamic_sections",
+   "rel": "promptstability.py",
+   "kind": "FunctionDef",
+   "categories": "all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 6 处提及"
+  },
+  {
+   "name": "unregistered_missing_in_actions",
+   "rel": "capabilities.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
+  },
+  {
+   "name": "usage_scope_production",
+   "rel": "schema.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "using_workspace",
+   "rel": "clockrun.py",
+   "kind": "FunctionDef",
+   "categories": "import,all_export,prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试；测试侧 5 处提及"
+  },
+  {
+   "name": "verifier_covers",
+   "rel": "numericproof.py",
+   "kind": "FunctionDef",
+   "categories": "prose",
+   "action": "delete",
+   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
+  },
+  {
+   "name": "verifier_problems",
+   "rel": "numericproof.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 10 处提及"
+  },
+  {
+   "name": "verify_quote_evidence",
+   "rel": "quoteevidence.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 6 处提及；文档侧 1 处提及"
+  },
+  {
+   "name": "verify_signature",
+   "rel": "signatures.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
+  },
+  {
+   "name": "wave_summary",
+   "rel": "scheduler.py",
+   "kind": "FunctionDef",
+   "categories": "docs",
+   "action": "wire_or_delete",
+   "why": "生产/测试零读者；只在 .md 文档里被提到；文档侧 1 处提及"
+  },
+  {
+   "name": "wired_tool_registry",
+   "rel": "host.py",
+   "kind": "FunctionDef",
+   "categories": "tests",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
+  },
+  {
+   "name": "write_sets_intersect",
+   "rel": "capabilities.py",
+   "kind": "FunctionDef",
+   "categories": "prose,tests,docs",
+   "action": "wire_or_delete",
+   "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 2 处提及；文档侧 2 处提及"
+  }
+ ]
+}

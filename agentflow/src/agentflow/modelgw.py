@@ -1003,8 +1003,6 @@ class ModelGateway:
 
 # ---------------------------------------------------------------------- 自检
 
-SELFTEST_BODIES: dict[str, tuple[int, str]] = {}
-
 
 def _fake_transport(status: int, body: str) -> Transport:
     """造一个固定应答的传输层（自检与测试共用同一种造法）。"""

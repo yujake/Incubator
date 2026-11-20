@@ -131,9 +131,6 @@ ARCHIVED_BY = "agentflow.vsigns.archive"
 #: （夹具 / `record_verification(flip=True)`，没有收方秘书）仍写这个值：两者都真实发生过，
 #: 把后者也写成 secretary 会让"这张签是谁发的"变成假话。
 WRITTEN_BY_DIRECT = "sign_statement(direct)"
-#: 历史取值（84 的两份签文件写的就是它）：只读，不再写。
-#: 读侧不许因为它是旧值就把它读成"没有写签者"。
-WRITTEN_BY_SECRETARY = "secretary"
 
 #: 收方秘书的身份值（业主 2026-11-02：`by=` 必填，只认"送审那一方的秘书"）。
 #:
@@ -1663,8 +1660,6 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
 # `checked=False` 只用于"这一格没查成"（手稿读不出来 / 台账读不出来），不许折成
 # "刷过了"或"没有要刷的"。
 
-#: 签块里「跟着台账走」的那两格（业主 2026-11-05 择 a：只刷这两格）。
-SIGN_BLOCK_TRACKED_KEYS: tuple[str, ...] = ("台账", "时间")
 
 #: :func:`refresh_manuscript_sign` 的结局词表（每一次刷块都要落在其中一档上）。
 SIGN_REFRESH_STATES: tuple[str, ...] = (
@@ -3254,14 +3249,6 @@ def receipt_digest(root: Any, store: Any = None, *, limit: int = 8,
     return out
 
 
-def undelivered_reading(root: Any, store: Any = None) -> dict[str, Any]:
-    """只要"没送到"的那几条（M 侧巡查 / 收工前检查用；形状与 :func:`receipt_digest` 同源）。"""
-    got = receipt_digest(root, store, limit=10_000)
-    keep = [r for r in (got.get("rows") or []) if r.get("state") != "delivered"]
-    return {"checked": bool(got.get("checked")), "count": len(keep), "rows": keep,
-            "reason": str(got.get("reason") or "")}
-
-
 # ---------------------------------------------------------------- 门读数
 
 def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
@@ -3692,25 +3679,6 @@ def _apply_review_to_bits(bits: Mapping[str, Any], *, verification_id: str,
     new["evidence"] = ev
     return _EBmod.normalize_raw(new, origin=str(new.get("origin") or "own_result"),
                                 kind=str(kind or ""))
-
-
-#: pending 台账行允许的载体（业主 2026-11-04 裁定 · 乙-14；2026-11-05 晚收紧）。
-#:
-#: 为什么要有这一格：pending 台账是"命题还没在册时 V 审过"的落点，`bits_after_sign`
-#: 在新建命题那一档按正文 sha 认领它、直接写 `bits.reviewed=True` —— 这一笔没有签文件、
-#: 也没有手稿签块。改前只要 pending 里有这一份正文就能认领，于是纯内联旧行
-#: （`object_path=""`）也能把第 3 位翻上去。业主要的口径：只认 pending 行的
-#: `object_path` 是一份手稿（`reports/(f|b|e)-proof-<数字>.md`）或 E 的穷举读数报告
-#: （`out/experiments/<实验号>/exhaustion.md`）的认领；纯内联旧行不认。
-#:
-#: 2026-11-05 晚：判据搬进 :func:`_pending_carrier_path` 的唯一实现（要认 `-pN`
-#: 多证明名），这里只留一句话的读数面 —— 两个字面量各写一遍就会分家。
-#: 2026-11-10（业主裁定「计划不拥有稿件」）：老盘计划名与数字名同权；同一天起"载体"
-#: 还要求它是一份真文件的名字（缺 `.md` 不算），与 :func:`sign_carrier_reading` 同源。
-PENDING_CARRIER_RULE = (
-    "pending 行可被认领的载体只有 `reports/(f|b|e)-proof-<数字>[-pN].md` "
-    "（真文件的名字，缺 `.md` 不算；老盘 `f-proof-plan-*` 与数字名同等）"
-    "与 `out/experiments/<实验号>/exhaustion.md`（纯内联旧行不算）")
 
 
 def _pending_carrier_path(row: Mapping[str, Any]) -> str:

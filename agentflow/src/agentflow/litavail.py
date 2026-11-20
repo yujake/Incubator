@@ -463,19 +463,6 @@ def tier_of_literature(row: Mapping[str, Any], root: Path | str) -> str:
     return UNKNOWN
 
 
-def batch_tiers(records: Iterable[Mapping[str, Any]]) -> dict[str, str]:
-    """把一列记录压成 `slot -> tier`（只认四档；`kind` 不是 availability 的记录不看）。"""
-    out: dict[str, str] = {}
-    for rec in records:
-        if str(rec.get("kind") or "availability") != "availability":
-            continue
-        slot = str(rec.get("slot") or "").strip()
-        tier = str(rec.get("tier") or "").strip()
-        if slot and tier in AVAILABILITY_TIERS:
-            out[slot] = tier
-    return out
-
-
 def missing_tiers(rows: Sequence[Mapping[str, Any]], tiers: Mapping[str, str]
                   ) -> list[str]:
     """这些行里还没有可读性判定的槽位（按槽位号排序）。

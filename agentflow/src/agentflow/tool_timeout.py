@@ -388,11 +388,6 @@ def tool_deadline(name: str, *, overrides: Mapping[str, Any] | None = None) -> _
     return _Deadline(name, overrides=overrides)
 
 
-def current_scope() -> DeadlineScope | None:
-    """当前执行上下文里的那口钟（不在工具调用里时是 `None`）。"""
-    return _CURRENT_SCOPE.get()
-
-
 def raise_if_timed_out() -> None:
     """处理函数在检查点调它（模块级形态，供没有实例的地方调用）。
 

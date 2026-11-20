@@ -255,8 +255,6 @@ from . import numerictheorem as NT
 from . import schema as S
 from . import verifications as V
 
-#: 论文包相对项目根的落点（与 `papercompile.package_dir` 同一个目录）。
-PACKAGE_SUBDIR: tuple[str, ...] = ("out", "paper")
 
 #: 机器读那一份的文件名。
 MAPPING_JSON_NAME = "MAPPING.json"
@@ -403,8 +401,6 @@ LEDGER_KIND_FIELD = "ledger_kind"
 #: V 那一签那一格（逐份证明的读数 + 判决原话）。
 REVIEWED_FIELD = "reviewed"
 
-#: 这两格的键（写进 json、进 md、进附录，三处同源）。
-LEDGER_CELL_FIELDS: tuple[str, str] = (LEDGER_KIND_FIELD, REVIEWED_FIELD)
 
 #: 四档里"读不到"那一档的写法（台账文件在但读不出 / statements 行读不到）。
 #:
