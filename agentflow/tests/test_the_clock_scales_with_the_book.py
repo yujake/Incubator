@@ -55,6 +55,7 @@ from typing import Any, Mapping, Sequence
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockfire as CFIRE
 
 WALL = "2026-10-27T09:00:00+00:00"
 SEED = 20261027
@@ -93,12 +94,15 @@ def _tick(monkeypatch: pytest.MonkeyPatch, bench, seconds: float) -> None:
     于是这里把模块级的 `fire_due` 临时换成空桩 —— `advance` 里那一句 `fire_due()`
     走的是模块全局查找，所以桩打得进去；调用方自己用返回的真身去推。
     """
-    real = CLK.fire_due
-    monkeypatch.setattr(CLK, "fire_due", lambda *a, **k: {"checked": True, "fired": []})
+    real = CFIRE.fire_due
+    # 2026-11-20（拆 clock.py）：`FakeClock.advance` 与 `fire_due` 一起搬进
+    # `clockfire`，模块级全局查找发生在那一份里 —— 打桩点跟着实现走
+    # （同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CFIRE, "fire_due", lambda *a, **k: {"checked": True, "fired": []})
     try:
         bench.advance(seconds)
     finally:
-        monkeypatch.setattr(CLK, "fire_due", real)
+        monkeypatch.setattr(CFIRE, "fire_due", real)
 
 
 def _row(seq: int, *, workspace: Path, due_after: float | None = None,
@@ -443,8 +447,11 @@ def test_c3_the_patrol_timer_is_not_swallowed_by_the_early_exit(
     CLK.fire_due(str(ws))                      # 第一拍：对账
     # 一小步一小步地拨（每一小步都 < 对账间隔 ⇒ 这些拍真的走的是早退那一档），
     # 于是"轮查到期那一拍不早退"是逐拍读出来的，不是靠一次大跳碰上的。
-    real = CLK.fire_due
-    monkeypatch.setattr(CLK, "fire_due", lambda *a, **k: {"checked": True, "fired": []})
+    real = CFIRE.fire_due
+    # 2026-11-20（拆 clock.py）：`FakeClock.advance` 与 `fire_due` 一起搬进
+    # `clockfire`，模块级全局查找发生在那一份里 —— 打桩点跟着实现走
+    # （同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CFIRE, "fire_due", lambda *a, **k: {"checked": True, "fired": []})
     quiet_pumps = 0
     reconciles = 0
     fired_at: list[str] = []
@@ -466,7 +473,7 @@ def test_c3_the_patrol_timer_is_not_swallowed_by_the_early_exit(
             assert cost["early_exit"] is True, ("安静的一拍没有早退", cost)
             quiet_pumps += 1
     finally:
-        monkeypatch.setattr(CLK, "fire_due", real)
+        monkeypatch.setattr(CFIRE, "fire_due", real)
     assert quiet_pumps > 60, ("安静拍太少 ⇒ 这条判据没测到早退那一档", quiet_pumps)
     assert reconciles > 30, ("一路上一次对账都没发生 ⇒ 读数不对", reconciles)
     assert fired_at == [timer.timer_id], ("轮查到点被早退吃掉了", fired_at)
@@ -792,7 +799,9 @@ def test_g_the_root_cache_follows_the_workspace_switch(
     assert cost_b["pending_count"] == 2, cost_b
 
     # 反真空：缓存打桩成"恒返回第一次的根" ⇒ 上面那条钉子必须红
-    monkeypatch.setattr(CLK, "_resolve_root", lambda workspace: root_a)
+    # 2026-11-20（拆 clock.py）：`fire_due` / `cost_reading` 搬进 `clockfire`，
+    # 它们按模块级名字调 `_resolve_root` —— 打桩点跟着调用者走（断言未改）。
+    monkeypatch.setattr(CFIRE, "_resolve_root", lambda workspace: root_a)
     CLK.reset_costs()
     CLK.reset_books()
     with CLK.using_workspace(str(ws_b)):

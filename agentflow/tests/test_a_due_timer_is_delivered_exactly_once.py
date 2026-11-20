@@ -21,6 +21,7 @@ import threading
 import time
 
 from agentflow import clock as C
+from agentflow import clockfire as CFIRE
 
 
 def _due_timer(tmp_path: pathlib.Path) -> tuple[C.TimerBook, C.Timer]:
@@ -95,7 +96,9 @@ def test_the_lock_is_load_bearing(tmp_path: pathlib.Path, monkeypatch) -> None:
     book, timer = _due_timer(tmp_path)
     receipts: list[dict] = []
     _slow_handler(receipts)
-    monkeypatch.setattr(C, "_FIRE_LOCK", _NoopLock())
+    # 2026-11-20（拆 clock.py）：`_FIRE_LOCK` 与 `fire_due` 一起搬进 `clockfire`，
+    # 打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CFIRE, "_FIRE_LOCK", _NoopLock())
     try:
         time.sleep(0.05)
         barrier = threading.Barrier(2)

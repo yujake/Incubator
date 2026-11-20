@@ -55,6 +55,7 @@ import pytest
 from agentflow import agent_loop as AL
 from agentflow import clock as CLK
 from agentflow import clockpatrol as CP
+from agentflow import clockfire as CFIRE
 from agentflow import schema as S
 from agentflow import stopctl
 from agentflow.agent_loop import AgentLoop
@@ -211,7 +212,10 @@ def _park_run(tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch, *,
     if no_sop:
         # 反真空（e1）：把 SOP 正文渲染换成空串。`fire_due` 按名字调模块级函数，
         # 于是这个桩打到的正是"到点那一下正文从哪来"那一处。
-        monkeypatch.setattr(CLK, "patrol_sop_text", lambda **kw: "")
+        # 2026-11-20（拆 clock.py）：调 `patrol_sop_text` 的 `_deliver_one_locked`
+        # 搬进 `clockfire`，模块级全局查找发生在那一份里 —— 打桩点跟着调用者走
+        # （同一处判据、断言一个字没改）。
+        monkeypatch.setattr(CFIRE, "patrol_sop_text", lambda **kw: "")
     if no_dedupe:
         # 反真空（e2）：让"已经有一条了吗"永远回答"没有" —— 恰好一条的判据就被拿掉了。
         # 2026-11-20（拆 clock.py）：`next_patrol` 与它的调用者 `start_patrol_timer`

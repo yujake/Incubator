@@ -3091,6 +3091,18 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     # 与唯一读点（`_renew_lifeline`）必须同处一份；`_LIVE_LOOPS` 的四个读口与两处写口
     # 也一样。到点层（`clockfire.py`）反过来 import `_renew_lifeline`，依赖方向单向。
     "clockwakes.py": "唤醒标记与兜底计时器（2026-11-20 从 `clock.py` 拆出）：`record_wake` / `read_wakes` / `pending_wakes` / `consume_wakes` / `wake_path`；`lifeline_of` / `arm_lifeline` / `_new_lifeline_timer` / `_renew_lifeline` / `set_lifeline_wake_handler` / `loop_started` / `loop_ended` / `loop_is_live` / `live_loops` / `lifeline_suppressed` / `kill_lifeline` —— 唤醒边界的口径（不做自动唤醒 / 靠 M 发指令 / 听上级指挥）就在这一份的注释里",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第十三层（前半）= 到点判定的成本读数。
+    # 为什么单独一个模块：`fire_due` / `due_timers` 每一拍都调 `_cost_note` 记一笔，
+    # 它与到点动作是同一拍的两半；但两块放一起是 833 行（越过 800），于是按
+    # “读数 / 动作”切开。`_COST` / `_COST_LAST` 的读写点全部在本模块内（快照陷阱）。
+    "clockcost.py": "到点判定的成本读数（2026-11-20 从 `clock.py` 拆出）：`_COST` / `_COST_LAST` / `COST_FIELDS` / `_cost_blank` / `_cost_note` / `cost_reading` / `reset_costs` —— 三态读数（读不成是 `None` 不是 0），每一拍由 `fire_due` / `due_timers` 记一笔",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第十三层（后半）= 到点那一整条链。
+    # 为什么整层搬：`_DUE_HANDLER` 是进程级可变量（`set_due_handler` 唯一写，
+    # `_deliver_one_locked` / `_fire_periodics` 读），三个点必须同处一份；
+    # `fire_due` → `_deliver_one`（持锁）→ `_deliver_one_locked`（调 handler、落 fired、
+    # 续兜底表）→ `_fire_periodics`（补拍）是一条链。`FakeClock.advance` 顺带调
+    # `fire_due`，所以它也在这一份（判据“拨表”的入口）。
+    "clockfire.py": "到点那一整层（2026-11-20 从 `clock.py` 拆出）：`_DUE_HANDLER` / `set_due_handler` / `_FIRE_LOCK` / `_deliver_one` / `_deliver_one_locked` / `fire_due` / `_remember_wait_state` / `_fire_periodics` / `PeriodicShot` / `MAX_CATCHUP_FIRES` / `_probe_targets` / `due_timers` / `_select_due` / `waiters` / `next_due` / `FakeClock` —— 到点动作的注册与投递只有一份实现；它 import `clocktimer` / `clockpatrol` / `clockwakes` / `clockcost`，方向单向",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
