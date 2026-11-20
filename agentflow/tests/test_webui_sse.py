@@ -75,33 +75,65 @@ def _open(base: str, path: str) -> http.client.HTTPResponse:
     return conn.getresponse()
 
 
-def _read_frames(resp: http.client.HTTPResponse, *, want: int, timeout: float = 3.0,
-                 ) -> list[tuple[str, int | None, str]]:
-    """读 `want` 帧；返回 `[(kind, id, data), ...]`（超时就返回已读到的）。"""
-    out: list[tuple[str, int | None, str]] = []
-    resp.fp.raw._sock.settimeout(timeout)  # noqa: SLF001 - 判据要能超时收手
-    buf = b""
-    while len(out) < want:
-        try:
-            chunk = resp.fp.read1(4096)  # noqa: SLF001
-        except (socket.timeout, TimeoutError, OSError):
-            break
-        if not chunk:
-            break
-        buf += chunk
-        while b"\n\n" in buf:
-            raw, buf = buf.split(b"\n\n", 1)
-            kind, eid, data = None, None, ""
-            for line in raw.decode("utf-8", errors="replace").splitlines():
-                if line.startswith("event: "):
-                    kind = line[7:]
-                elif line.startswith("id: "):
-                    eid = int(line[4:])
-                elif line.startswith("data: "):
-                    data = line[6:]
-            if kind is not None:
-                out.append((kind, eid, data))
-    return out
+def _parse_frame(raw: bytes) -> tuple[str, int | None, str] | None:
+    """把一帧的原始字节解成 `(kind, id, data)`；没有 `event:` 行就不是一帧。"""
+    kind, eid, data = None, None, ""
+    for line in raw.decode("utf-8", errors="replace").splitlines():
+        if line.startswith("event: "):
+            kind = line[7:]
+        elif line.startswith("id: "):
+            eid = int(line[4:])
+        elif line.startswith("data: "):
+            data = line[6:]
+    return None if kind is None else (kind, eid, data)
+
+
+class _Frames:
+    """一条流的读帧器：按帧返回，多读到的帧留给下一次，跨 TCP 分段安全。
+
+    为什么不能"读够 `want` 就把这一批丢掉"（2026-11-21 隔离修）：
+
+    `handle_stream` 先写首帧快照，紧接着写 `?since=` 的补发帧，然后只 flush 一次 ——
+    这两段字节到客户端时可能落进同一个 `read1(4096)`。旧帮手在切帧时只认 `\\n\\n`、
+    不看 `want`，于是 `want=1` 也会把补发帧一起收进返回值；调用方只取 `[0]`，补发帧
+    就被丢掉了，紧接着那一次读到的是 0.2 秒后的心跳。全量里 CPU 忙、客户端读得晚，
+    正好是这个形态（`temp/_full_CLOSE3.txt`：`got[0][0] == 'heartbeat'`，而单跑时
+    快照与补发分在两个分段里 ⇒ 绿）。判据因此会依赖"服务端两次 write 会不会被 TCP
+    合并"这种与调度有关的细节 —— 那是顺序依赖，不是被测行为。
+
+    现在多出来的帧留在 `self.buf` 里，由下一次 `read()` 接着取；`want` 是"这一次最多
+    交几帧"，判据读到的事件条数不变（补发帧不再被静默吞掉）。
+    """
+
+    def __init__(self, resp: http.client.HTTPResponse) -> None:
+        self.resp = resp
+        self.buf = b""
+
+    def read(self, *, want: int, timeout: float = 3.0,
+             ) -> list[tuple[str, int | None, str]]:
+        """读 `want` 帧（最多等 `timeout` 秒；没读够就返回已读到的）。"""
+        out: list[tuple[str, int | None, str]] = []
+        end = time.monotonic() + timeout
+        while len(out) < want:
+            while len(out) < want and b"\n\n" in self.buf:
+                raw, self.buf = self.buf.split(b"\n\n", 1)
+                frame = _parse_frame(raw)
+                if frame is not None:
+                    out.append(frame)
+            if len(out) >= want:
+                break
+            remaining = end - time.monotonic()
+            if remaining <= 0:
+                break
+            self.resp.fp.raw._sock.settimeout(remaining)  # noqa: SLF001 - 判据要能超时收手
+            try:
+                chunk = self.resp.fp.read1(4096)  # noqa: SLF001
+            except (socket.timeout, TimeoutError, OSError):
+                break
+            if not chunk:
+                break
+            self.buf += chunk
+        return out
 
 
 def _wait_for(predicate: Any, *, timeout: float = 3.0, step: float = 0.02) -> bool:
@@ -213,7 +245,7 @@ def test_the_first_event_arrives_within_a_second(tmp_path: pathlib.Path) -> None
         resp = _open(f"{host}:{port}", "/api/stream")
         try:
             began = time.monotonic()
-            got = _read_frames(resp, want=1, timeout=1.0)
+            got = _Frames(resp).read(want=1, timeout=1.0)
             elapsed = time.monotonic() - began
             assert got, f"1 秒内一帧都没收到（{elapsed:.2f}s）"
             assert elapsed < 1.0, elapsed
@@ -238,7 +270,7 @@ def test_the_heartbeat_period_is_injectable(tmp_path: pathlib.Path) -> None:
             began = time.monotonic()
             # 2026-11-20（WEBCLEAN）：连上的第一帧是「当前快照」（首帧不等心跳）。
             # 它是起流那一帧、不属于心跳，所以多要一帧：3 次心跳 + 1 帧快照。
-            got = _read_frames(resp, want=4, timeout=3.0)
+            got = _Frames(resp).read(want=4, timeout=3.0)
             beats = [time.monotonic() - began for k, _i, _d in got if k == "heartbeat"]
             assert len(beats) >= 3, (len(beats), got)
             assert beats[-1] < 2.0, f"三次心跳用了 {beats[-1]:.2f}s ⇒ 周期没被注入？"
@@ -257,13 +289,15 @@ def test_since_replays_only_the_events_after_it(tmp_path: pathlib.Path) -> None:
         assert (first, second) == (1, 2), (first, second)
         host, port = srv.server_address[0], srv.server_address[1]
         resp = _open(f"{host}:{port}", f"/api/stream?since={first}")
+        frames = _Frames(resp)
         try:
             # 2026-11-20（WEBCLEAN）：连上的第一帧是「当前快照」（不带 `id:`，不是广播）。
             # 先读掉它，补发那一条才是这一条判据要测的东西。
-            opening = _read_frames(resp, want=1, timeout=2.0)
-            assert opening and opening[0][0] == "state", opening
+            opening = frames.read(want=1, timeout=2.0)
+            assert len(opening) == 1, f"首帧只该有一帧（多读到的帧会挤掉补发）：{opening}"
+            assert opening[0][0] == "state", opening
             assert opening[0][1] is None, f"起流快照带了 id={opening[0][1]}（它没被 publish 过）"
-            got = _read_frames(resp, want=1, timeout=2.0)
+            got = frames.read(want=1, timeout=2.0)
             assert got, "补发一条都没到"
             assert got[0][0] == "question", got
             assert got[0][1] == second, got
@@ -284,14 +318,15 @@ def test_a_new_event_on_disk_shows_up_in_the_stream(tmp_path: pathlib.Path) -> N
     with _bound_server(root) as srv:
         host, port = srv.server_address[0], srv.server_address[1]
         resp = _open(f"{host}:{port}", "/api/stream")
+        frames = _Frames(resp)
         try:
-            assert _read_frames(resp, want=1, timeout=1.0), "流没起来"
+            assert frames.read(want=1, timeout=1.0), "流没起来"
             # 盘上真的新增一条会话事件
             SS.append(root, {"kind": "agent_run_start", "role": "M", "task": "端到端"},
                       sid="t")
             assert (root / "sessions" / "t.jsonl").is_file(), "会话没落盘"
             sse.publish("state", {"snapshot": {"root": str(root)}})
-            got = _read_frames(resp, want=1, timeout=2.0)
+            got = frames.read(want=1, timeout=2.0)
             assert any(k == "state" for k, _i, _d in got), got
         finally:
             resp.close()
@@ -299,15 +334,16 @@ def test_a_new_event_on_disk_shows_up_in_the_stream(tmp_path: pathlib.Path) -> N
         with _bound_server(root) as srv2:
             host, port = srv2.server_address[0], srv2.server_address[1]
             resp2 = _open(f"{host}:{port}", "/api/stream")
+            frames2 = _Frames(resp2)
             try:
-                assert _read_frames(resp2, want=1, timeout=1.0), "第二条流没起来"
+                assert frames2.read(want=1, timeout=1.0), "第二条流没起来"
                 out = U.ask_user(root, role="M", question="端到端：要不要保留？",
                                  timeout_sec=0, sid="t")
                 sse.publish("question", {"qid": out.qid, "sid": "t", "role": "M",
                                          "text": "端到端：要不要保留？",
                                          "options": [], "multi": False,
                                          "ts": "", "timeout_sec": 0})
-                got2 = _read_frames(resp2, want=1, timeout=2.0)
+                got2 = frames2.read(want=1, timeout=2.0)
                 assert any(k == "question" for k, _i, _d in got2), got2
                 assert any(out.qid in d for k, _i, d in got2 if k == "question"), got2
             finally:

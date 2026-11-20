@@ -510,7 +510,10 @@ def test_the_committed_dist_is_what_a_fresh_build_produces(tmp_path: pathlib.Pat
         ⇒ skip，理由里带上真实的退出码与错误尾巴。
 
     真的跑起来时它比"内容"：手改了产物一个字节 ⇒ 与重新构建的结果对不上 ⇒ 红。
-    构建落在 `tmp_path` 里（见 `_fresh_build`），盘上那份产物全程一个字节都不动。
+    构建落在 `tmp_path` 里（见 `_fresh_build`），盘上那份产物必须全程一个字节都不动：
+    "不动"这件事由本用例在构建前后各拍一次 `_tree_hashes(STATIC)` 来证（2026-11-21
+    隔离修）—— 只信 `--outDir` 一定生效，等于让这条判据可以把被测的那棵树先换一遍，
+    而紧随其后的文档读数判据会读到刚重建的产物（顺序依赖的入口在这里被堵死）。
     """
     index = STATIC / "index.html"
     if not index.is_file():
@@ -522,14 +525,29 @@ def test_the_committed_dist_is_what_a_fresh_build_produces(tmp_path: pathlib.Pat
     if not (UI / "node_modules" / "vite" / "bin" / "vite.js").is_file():
         pytest.skip("前端依赖没装（ui/node_modules/vite 不在）⇒ dist 新鲜度记 unknown（不记 pass）")
     fresh = tmp_path / "fresh-dist"
+    # 2026-11-21 隔离修：构建前后各拍一次入库产物树，证明这条判据没有改写它判的东西。
+    # 改前这里只信 `--outDir` 一定生效：若哪天有人把构建改成落 `web/static`（或缺了
+    # `--outDir`、或 `vite.config.ts` 的 outDir 盖过了 CLI），这条判据会先把盘上产物
+    # 换一遍再拿换前/换后去比 —— 于是它自己的红与它改坏的东西混在一起，紧随其后的
+    # 文档读数判据也会读到刚重建的产物。现在构建一落地就必须证明"这棵树一个字节没动"。
+    committed_before = _tree_hashes(STATIC)
     try:
         code, tail = _fresh_build(fresh)
     except (OSError, subprocess.SubprocessError) as exc:
+        touched = _tree_problems(committed_before, _tree_hashes(STATIC))
+        assert not touched, (
+            "构建这一步抛异常之前已经改写了入库的产物树（判据不许改写它判的东西）："
+            + "；".join(touched[:6]))
         pytest.skip(f"构建这一步没查成（{type(exc).__name__}: {exc}）"
                     "⇒ dist 新鲜度记 unknown（不记 pass）")
+    committed_after = _tree_hashes(STATIC)
+    touched = _tree_problems(committed_before, committed_after)
+    assert not touched, (
+        "这次构建改写了入库的产物树（web/static 的字节变了）—— 判据不许改写它判的东西："
+        + "；".join(touched[:6]) + "。构建必须落临时目录（`_fresh_build` 的 `--outDir`）")
     if code != 0:
         pytest.skip(f"构建这一步没查成（exit {code}）⇒ dist 新鲜度记 unknown（不记 pass）：{tail}")
-    problems = _tree_problems(_tree_hashes(STATIC), _tree_hashes(fresh))
+    problems = _tree_problems(committed_after, _tree_hashes(fresh))
     assert not problems, (
         "盘上的产物与重新构建的结果不一致（手改过、或者改了前端没重建）："
         + "；".join(problems[:6]) + "。重建之后连同产物一起提交（裁定 B1）")
