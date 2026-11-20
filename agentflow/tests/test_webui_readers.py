@@ -586,7 +586,7 @@ def test_acceptance_face_reads_the_five_criteria_and_five_aux(
     assert set(got["details"]) == {k for k, _d in CRITERIA}
     # `failed` 只装"判过了、不过"；"没查成"单列 —— 上游 `reviewaccept` 的
     # `acc.failed` 把两档混装，透传它会让这一条端点与 `/api/package` 的
-    # `closing.content` 在**同一组入参**下报出两个"几条真不过"（`draft/187` P1-3）。
+    # `closing.content` 在同一组入参下报出两个"几条真不过"（`draft/187` P1-3）。
     # 2026-11-20（WEBCLEAN）：断言改成与收工面同一算式，并同时钉住 `unchecked`。
     assert got["failed"] == sorted(k for k, v in got["criteria"].items() if v == "fail")
     assert got["unchecked"] == sorted(k for k, v in got["criteria"].items()
