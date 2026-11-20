@@ -42,7 +42,6 @@ __all__ = [
     "estimate_messages",
     "estimate_structural_block",
     "estimate_text_tokens",
-    "estimate_tools_tokens",
     "selftest",
 ]
 
@@ -141,18 +140,6 @@ def estimate_message(message: Mapping[str, Any], *,
         tokens += estimate_text_tokens(message.get("tool_call_id"),
                                        chars_per_token=chars_per_token)
     return tokens + ROLE_OVERHEAD
-
-
-def estimate_tools_tokens(header: Mapping[str, Any] | None, *,
-                          chars_per_token: float | None = None) -> int:
-    """工具面（`tools` 那一段 JSON）的估价；DSH 只给这一个字段计价。"""
-    if not isinstance(header, Mapping):
-        return 0
-    tools = header.get("tools")
-    if tools is None or (isinstance(tools, Sequence) and not tools):
-        return 0
-    text = json.dumps(tools, ensure_ascii=False, sort_keys=True, default=str)
-    return int(-(-len(text) // _rate(chars_per_token))) + BLOCK_OVERHEAD
 
 
 @dataclass(frozen=True)

@@ -40,7 +40,6 @@ __all__ = [
     "Style",
     "badge",
     "bullet",
-    "kv_lines",
     "panel",
     "paint",
     "progress_line",
@@ -263,16 +262,6 @@ def rule(title: str = "", *, char: str | None = None) -> str:
         return paint(ch * w, "grey")
     head = f"{ch}{ch} {title} "
     return paint(head + ch * max(0, w - display_width(head)), "grey")
-
-
-def kv_lines(pairs: Iterable[tuple[str, Any]], *, key_width: int = 18,
-             indent: str = "  ") -> list[str]:
-    """键值对的多行呈现：键按显示宽度对齐、值过长截断而不是撑破屏幕。"""
-    out: list[str] = []
-    for key, value in pairs:
-        text = truncate(value, max(8, width() - key_width - display_width(indent) - 4))
-        out.append(f"{indent}{paint(pad(key, key_width), 'grey')}{text}")
-    return out
 
 
 def panel(title: str, pairs: Iterable[tuple[str, Any]] = (), *,

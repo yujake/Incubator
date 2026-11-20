@@ -69,8 +69,6 @@ __all__ = [
     "GATES",
     "GATE_IDS",
     "AXES",
-    "GATE_AXIS",
-    "AXIS_UNDECIDED",
     "GATE_CRITERIA_REVISION",
     "GateContext",
     "GateResult",
@@ -95,9 +93,6 @@ __all__ = [
 #: 另一套口径，而没有任何判据会发现它（`temp/DRIFT-LIST.md` §2.2 登记过这一处）。
 AXES = ("数学", "体例", "工程", "证据")
 
-#: 门判不了轴时的占位（不是一个轴）。刻意与 `AXES` 分开：
-#: 把"轴未知"塞进 `AXES` 会让"每条发现都有轴"这句话在计数上永远成立。
-AXIS_UNDECIDED = "（轴未定）"
 
 #: 15 个门号 —— 硬编码成元组是刻意的：它是"15 道门都在跑"这句话的机器可读形式。
 #: `tests/test_gates.py::test_every_gate_id_from_the_spec_exists` 逐条比对。
@@ -2628,10 +2623,6 @@ GATE_CRITERIA_REVISION: dict[str, str] = {
     "G14": "适配：降级的载体是 §8.3 的 allowed_use 与 status（`main_body_claims` 是同一份判据）",
     "G15": "逐字照搬 §8.4（并把它做成必填参数：不写就 fail）",
 }
-
-
-#: 门号 → 轴（从声明表派生，不写第二份）。
-GATE_AXIS: dict[str, str] = {g: str(spec["axis"]) for g, spec in GATES.items()}
 
 
 def known_gate_ids() -> tuple[str, ...]:

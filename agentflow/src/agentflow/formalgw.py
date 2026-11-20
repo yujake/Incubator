@@ -83,7 +83,6 @@ __all__ = [
     "BACKEND_NAME",
     "STATUSES",
     "PROOF_STATUS",
-    "PROBE_STATUSES",
     "ALLOWED_AXIOMS",
     "FORBIDDEN_AXIOMS",
     "detect_backend",
@@ -146,9 +145,6 @@ STATUSES: tuple[str, ...] = (
 #: 唯一允许的"证明通过"结论。
 PROOF_STATUS = "verified"
 
-#: `detect_backend` 的三态。注意它不是 `STATUSES` 的子集：
-#: 探测回答的是"后端在不在"，检查回答的是"这次算不算证明"。
-PROBE_STATUSES: tuple[str, ...] = ("available", "no_backend", "probe_failed")
 
 #: 允许出现的公理（Lean 4 / Mathlib 的常规三条）。
 ALLOWED_AXIOMS = frozenset({"propext", "Classical.choice", "Quot.sound"})

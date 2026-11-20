@@ -40,14 +40,6 @@
    "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
   },
   {
-   "name": "AXIS_UNDECIDED",
-   "rel": "gates.py",
-   "kind": "Assign",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
-  },
-  {
    "name": "BLOCKING_KINDS",
    "rel": "agent_h/mapping_judge.py",
    "kind": "Assign",
@@ -336,14 +328,6 @@
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
   },
   {
-   "name": "GATE_AXIS",
-   "rel": "gates.py",
-   "kind": "Assign",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
-  },
-  {
    "name": "GROUP_NAMES",
    "rel": "cli.py",
    "kind": "Assign",
@@ -488,14 +472,6 @@
    "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 2 处提及；文档侧 2 处提及"
   },
   {
-   "name": "PROBE_STATUSES",
-   "rel": "formalgw.py",
-   "kind": "Assign",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
-  },
-  {
    "name": "PROOF_NO_PREFIX",
    "rel": "bmanuscript.py",
    "kind": "Assign",
@@ -542,14 +518,6 @@
    "categories": "all_export,prose,tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring / 测试；测试侧 2 处提及"
-  },
-  {
-   "name": "REASON_ABSENT",
-   "rel": "cachectl.py",
-   "kind": "Assign",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
   },
   {
    "name": "REFUSAL_SLOT_HEADS",
@@ -718,14 +686,6 @@
    "categories": "import,all_export,prose,tests,docs",
    "action": "wire_or_delete",
    "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试 / 文档；测试侧 5 处提及；文档侧 2 处提及"
-  },
-  {
-   "name": "TOPIC_SELFCHECK_STATES",
-   "rel": "providers.py",
-   "kind": "Assign",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
   },
   {
    "name": "UNCHECKED_TYPES",
@@ -1048,14 +1008,6 @@
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
   },
   {
-   "name": "estimate_tools_tokens",
-   "rel": "tokenestimate.py",
-   "kind": "FunctionDef",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
-  },
-  {
    "name": "event_close_reading",
    "rel": "clock.py",
    "kind": "FunctionDef",
@@ -1214,14 +1166,6 @@
    "categories": "tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 2 处提及"
-  },
-  {
-   "name": "kv_lines",
-   "rel": "tty.py",
-   "kind": "FunctionDef",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
   },
   {
    "name": "latest_top_level_task_id",
@@ -1726,14 +1670,6 @@
    "categories": "prose,tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 7 处提及"
-  },
-  {
-   "name": "slot_of_cand",
-   "rel": "litstage.py",
-   "kind": "FunctionDef",
-   "categories": "all_export",
-   "action": "drop_export_or_wire",
-   "why": "只在 __all__ 里被列出，没有任何读者（__all__ 不许当读者）"
   },
   {
    "name": "stale_action_only_entries",

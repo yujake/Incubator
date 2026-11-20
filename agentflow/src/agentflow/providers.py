@@ -43,8 +43,6 @@ __all__ = [
     "dedup_key_of",
     "DEDUP_KEY_UNIDENTIFIED",
     "keyword_hit",
-    # 2026-10-28（阶段 ③ 2C）：broad 模式的主题相关性自检（只标不删）。
-    "TOPIC_SELFCHECK_STATES",
     "topic_selfcheck",
     "mark_topic_selfcheck",
     "query_applicability",
@@ -2018,15 +2016,6 @@ def _precise_keep(topic: str, title: str, description: str) -> tuple[bool, str]:
         # description 命中是更强的相关性信号；这里只记录，过滤仍以 topic 为准（§5.1）。
         note += ";description_used_as_primary_query"
     return False, note
-
-
-#: broad 模式「主题相关性自检」的三档（`mark_topic_selfcheck` 写进 `raw.topic_selfcheck`）。
-#: 三档都是一种处置，不是三档形容词：
-#:   related   —— 判得出、且判为相关 ⇒ 正常送去判官
-#:   off_topic —— 判得出、且判为不相关 ⇒ 别为它花判官那一次调用（真机 O-05 的噪声）
-#:   unknown   —— 判不了（topic 抽不出英文关键词 / 标题不是英文）⇒ 仍要 A 自己看一眼
-#: 把 unknown 折进 off_topic 就是「判不了」冒充「判过了」；折进 related 则等于没做自检。
-TOPIC_SELFCHECK_STATES: tuple[str, ...] = ("related", "off_topic", "unknown")
 
 
 def topic_selfcheck(topic: str, title: str, description: str = "") -> tuple[str, str]:

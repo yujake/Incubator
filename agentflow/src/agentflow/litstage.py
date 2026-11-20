@@ -113,7 +113,6 @@ __all__ = [
     "report_snapshot_path",
     "write_report",
     "report_violations",
-    "slot_of_cand",
     "archive_path",
     "archived_request_ids",
     "clear_delegation",
@@ -229,15 +228,6 @@ def cand_ref(slot: Any) -> str:
     """
     text = str(slot or "").strip()
     return f"cand:{text}" if text else ""
-
-
-def slot_of_cand(ref: Any) -> str:
-    """`cand:<槽位>` ⇒ `<槽位>`（不是这个形态 ⇒ 空串；解析只此一处，供报告与清表用）。"""
-    text = str(ref or "").strip()
-    for prefix in ("cand:", "candidate:", "slot:"):
-        if text.startswith(prefix):
-            return text[len(prefix):].strip()
-    return ""
 
 
 def fold_legacy(row: Mapping[str, Any]) -> dict:

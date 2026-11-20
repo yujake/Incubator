@@ -112,7 +112,6 @@ __all__ = [
     "EXIT_FRESH",
     "EXIT_STALE",
     "EXIT_UNKNOWN",
-    "REASON_ABSENT",
     "REASON_KEY_FINGERPRINT_MISSING",
     "REASON_NO_READINGS",
     "REASON_RUN_RECORD_UNREADABLE",
@@ -163,8 +162,6 @@ EXIT_UNKNOWN = 2
 REASON_NO_READINGS = "cache_missing_for_lean_state"
 REASON_KEY_FINGERPRINT_MISSING = "key_fingerprint_missing"
 
-#: 受控缺席（这一档按产品设计不存在那个目标）的词，来自读数行的 `kind="absent"`。
-REASON_ABSENT = "lean_off"
 
 #: "当前使用哪一档"的三层来源（`active.source`）：运行记录 / 本进程开关 / 读不出来。
 SOURCE_RUN = "run"
