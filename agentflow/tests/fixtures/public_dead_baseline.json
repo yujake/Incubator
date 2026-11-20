@@ -32,14 +32,6 @@
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试 / 文档；测试侧 12 处提及；文档侧 1 处提及"
   },
   {
-   "name": "AUTHOR_ATTRIBUTED_CATEGORIES",
-   "rel": "errorstats.py",
-   "kind": "Assign",
-   "categories": "",
-   "action": "delete",
-   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
-  },
-  {
    "name": "BLOCKING_KINDS",
    "rel": "agent_h/mapping_judge.py",
    "kind": "Assign",
@@ -70,14 +62,6 @@
    "categories": "all_export,prose",
    "action": "drop_export_or_wire",
    "why": "生产侧零读者；现有引用类别：__all__ / 注释/docstring"
-  },
-  {
-   "name": "CALLER_ATTRIBUTED_CATEGORIES",
-   "rel": "errorstats.py",
-   "kind": "Assign",
-   "categories": "",
-   "action": "delete",
-   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
   },
   {
    "name": "CANCEL_BY_VALUES",
@@ -550,14 +534,6 @@
    "categories": "all_export,tests",
    "action": "drop_export_or_wire",
    "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 3 处提及"
-  },
-  {
-   "name": "ROSTER_ATTRIBUTED_CATEGORIES",
-   "rel": "errorstats.py",
-   "kind": "Assign",
-   "categories": "",
-   "action": "delete",
-   "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
   },
   {
    "name": "RUN_ROW_KEYS",

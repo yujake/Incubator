@@ -423,18 +423,6 @@ PROCESS_CATEGORY_NAMES: frozenset[str] = frozenset(cat for cat, _why in PROCESS_
 STRUCTURAL_ONLY_CATEGORIES: frozenset[str] = frozenset(
     EXPANDED_ROLE_CATEGORIES | SYSTEM_CATEGORY_NAMES | STATE_CATEGORY_NAMES)
 
-#: 记 `called_by` 的类目（码那一档仍用 `CALLER_ATTRIBUTED_CODES`，两处并存：
-#: 老类目按码分，新类目按类目分 —— 因为新类目根本不是靠码命中的）。
-CALLER_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({
-    "child_cut_off", "verdict_missing",
-})
-
-#: 记命题作者（`statements.proof_authors` → `created_by`）的类目。
-AUTHOR_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({"proof_defect_found"})
-
-#: 记名册发起方（`owner` 那一行的 `role`）的类目。
-ROSTER_ATTRIBUTED_CATEGORIES: frozenset[str] = frozenset({"roster_write_refused"})
-
 
 #: 系统侧那一档的"角色"名。它不是一个角色（`schema.ROLES` 里没有），所以
 #: `_known_role` 对它一律回 False —— 于是它永远不会被当成 `called_by` 命中。
