@@ -5,7 +5,7 @@
 
 ## 为什么它能单独成文件（依赖方向）
 
-它只 import 比它更低的那几层（词表 / 台账 / 时戳 / 装配口），反向 import 为零 ——
+`secretary_label` 只 import 比它更低的那几层（词表 / 台账 / 时戳 / 装配口），反向 import 为零 ——
 本文件里不许出现 `from .secretary import ...`：那一句会让「组装层 -> 混入层」与
 「混入层 -> 组装层」同时成立，是为真 import 环。方法之间只经 `self.xxx` 互相调用
 （那走 MRO，不产生 import），所以一个方法搬进混入类与留在 `class Secretary` 里
@@ -13,7 +13,7 @@ AST dump 完全相同 —— 「搬」不算「改」，`temp/secsplit/bodies_al
 
 ## 对外名字
 
-类由 `secretary.py` 组装（`class Secretary(..., <X>Mixin, ...)`），所以本文件的公开面
+（`secretary_label` 这一份）类由 `secretary.py` 组装（`class Secretary(..., <X>Mixin, ...)`），所以本文件的公开面
 是这个混入类；`secretary.py` 对搬走的模块级名字仍按原样再导出，外部 import 一个字不改。
 """
 

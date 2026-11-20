@@ -302,7 +302,7 @@ def apply_citation_gate(verdict: Mapping[str, Any],
 # 跨模块引用放在文件末尾：这些名字的实现在别的模块里，而两个模块可能互相引用
 # （顶层 `from .x import y` 在环里会在对方还没定义完时执行）。引用点全部在函数体
 # 里，所以只要定义都跑完了，谁先被导入都拿得到。
-# 2026-11-20（VERSPLIT2）：指向**定义处**，不指向门面 —— 门面 `verifications` 要先
+# 2026-11-20（VERSPLIT2）：指向定义处，不指向门面 —— 门面 `verifications` 要先
 # import 完这 18 个模块才轮得到再导出本模块，从它取会撞上"还没再导出"的中间态。
 from .v_paths import (  # noqa: F401 — 实现在 v_paths.py
     VerificationError,

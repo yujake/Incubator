@@ -4,8 +4,8 @@
 ## 现场（只读取证，2026-11-20）
 
 `projects/lp-ball-10` 的 `stmt:000015`：`verifications/pending/ef286c92….jsonl` 里有
-**4 行**盖住同一份正文（u-000022..u-000025，`成立` / 未解决 error 0），而四行的
-`statement_id` / `stmt_id` **全空**、没有 `claimed_at`：
+4 行盖住同一份正文（u-000022..u-000025，`成立` / 未解决 error 0），而四行的
+`statement_id` / `stmt_id` 全空、没有 `claimed_at`：
 
 | 时刻 | 事件 | 证据 |
 |---|---|---|
@@ -14,7 +14,7 @@
 | 13:46:35 | `own.register_statement` 落 `stmt:000015`（`bits.reviewed=false`） | `runs/B-20261119-134835-001.json` 第 5 步 |
 | 13:47:02 | `own.ingest_manuscript(mode=apply, cells=[proof_text], target=000015)` 把那一签认进第 3 位 | 同文件第 7 步：`evidence.sign_claim.claim.bound=false` |
 
-根因不是判据该放宽，而是**认领这一拍没有写口调用**：`vsigns.bits_after_sign` 交回来的
+根因不是判据该放宽，而是认领这一拍没有写口调用：`vsigns.bits_after_sign` 交回来的
 `claim` 只在 `register_statement` 的"新建"支被交给 `vsigns.bind_pending_claim`
 （那里要求 `bits.reviewed` 为真，而登记那一笔还是 false）；`ingest_manuscript`
 这一支（先登记、后收录）只把 `claim` 当回执带出去，pending 行一个字节都没改。

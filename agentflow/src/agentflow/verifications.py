@@ -96,7 +96,7 @@ V 逐条给一档结论（:data:`CITATION_VERDICTS`：`consistent` / `weaker` / 
 # 的全局字典，而搬走的代码对那 32 个名字的读全部写成 `verifications.X` —— 调用那
 # 一刻才查这张字典，所以单点打桩仍然到得了实现（判据见 `temp/versplit2/`）。
 
-# 下面这一段是**搬家前的同一张 import 表**，刻意留在门面上：它此前是"公开面"的一部分
+# 下面这一段是搬家前的同一张 import 表，刻意留在门面上：它此前是"公开面"的一部分
 # （`VR.JF.read_jsonl` / `VR.S` / `VR.DEFAULT_PROOF_NO` 这类读法在测试与调用方里都有），
 # 搬走的块各自 import 自己那一份，而这一份只为了让 `verifications.<名字>` 一个都不少。
 from __future__ import annotations

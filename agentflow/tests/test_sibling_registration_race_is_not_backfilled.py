@@ -327,7 +327,7 @@ def test_repair_reads_tasks_before_the_in_flight_set(tmp_path) -> None:
 
     read_cond._tasks = tasks  # type: ignore[method-assign]
     # 刀4 之后 roster_repair 住在 secretary_roster_write.py，而它读的 `roster_pending`
-    # 是**它自己那份模块的全局**（从 secretary_ledger import 进来的另一格绑定）。所以桩
+    # 是它自己那份模块的全局（从 secretary_ledger import 进来的另一格绑定）。所以桩
     # 要打在家族里全部绑着原对象的那几格上：只打 SEC 会让读序断言静默失去对象。
     restore_pending = HOME.rebind("roster_pending", pending)
     try:

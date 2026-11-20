@@ -504,7 +504,7 @@ DANGLING_ALLOWED: dict[str, str] = {
         "活陷阱：`STOP_TOKEN` 撤掉之后，任何还引用它的代码会立刻 NameError —— "
         "这一句是「旁路没了、别再把它加回来」的唯一说明，删掉下一个人会重新加一个字面匹配",
     # 2026-11-20（PROMPTHIST）：`src/agentflow/agent_prompts.py` 那一行从台账删除 ——
-    # 那两句点名的旧符号都写在**版本账**里，而账已整块搬进 `docs/PROMPT-HISTORY.md`
+    # 那两句点名的旧符号都写在版本账里，而账已整块搬进 `docs/PROMPT-HISTORY.md`
     # （本判据的测量面只收 `.py`，文档不在其中）：源码里一处命中都没有了，留着它反而会
     # 掩盖"这两句已经不在这个文件里"这个事实。
     "src/agentflow/secretary.py":
