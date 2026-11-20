@@ -808,14 +808,6 @@
    "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
   },
   {
-   "name": "concept_similarity",
-   "rel": "propositionkey.py",
-   "kind": "FunctionDef",
-   "categories": "docs",
-   "action": "wire_or_delete",
-   "why": "生产/测试零读者；只在 .md 文档里被提到；文档侧 1 处提及"
-  },
-  {
    "name": "conjecture_refuted",
    "rel": "errorstate.py",
    "kind": "FunctionDef",
@@ -1678,14 +1670,6 @@
    "categories": "prose,tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 2 处提及"
-  },
-  {
-   "name": "wave_summary",
-   "rel": "scheduler.py",
-   "kind": "FunctionDef",
-   "categories": "docs",
-   "action": "wire_or_delete",
-   "why": "生产/测试零读者；只在 .md 文档里被提到；文档侧 1 处提及"
   },
   {
    "name": "wired_tool_registry",

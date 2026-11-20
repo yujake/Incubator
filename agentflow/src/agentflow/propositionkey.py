@@ -730,18 +730,6 @@ def same_concept(a_label: str, a_full: str = "", b_label: str = "",
                      "定义项，判据会判 different 并照常新建")
     return out
 
-
-def concept_similarity(a_label: str, a_full: str = "", b_label: str = "",
-                       b_full: str = "") -> float:
-    """概念这一档的读数：判成同一个概念是 1.0，其余（different / 没判成）是 0.0。
-
-    只给"排个序、读个数"用，不参与判据 —— 判据只有 `same_concept` 一处，这里是它的
-    读数投影（两处各算一遍判据是同一件事两个实现的老毛病）。
-    """
-    got = same_concept(a_label, a_full, b_label, b_full)
-    return 1.0 if str(got.get("state") or "") == STATE_SAME else 0.0
-
-
 def selftest() -> int:
     """自检：各条判据的最小形态（不读盘、不写盘）。返回 0 = 全过。"""
     a = "设 G 是 3-正则群；则弦长函数不是常值。"

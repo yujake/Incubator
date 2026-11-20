@@ -263,8 +263,8 @@ class CancelToken:
 run_tasks(plan: Sequence[TaskCall], *, policy, conductor) -> list[SummonResult]
 ```
 
-（实测该模块的三个公开入口：`run_waves` / `run_tasks` / `wave_summary`；
-分波判据 `policy.waves_of`。）
+（该模块的公开入口：`run_waves`（阻塞式）/ `run_tasks`（它的别名）/ `start_waves`
+（拿句柄继续走）；分波判据 `policy.waves_of`。）
 
 - **波浪（wave）执行**：同一批里，**写集互不相交**的任务并发跑（线程池，上限 `max_concurrency`）；
   写集相交的**串行**。一个波浪全部结束再进下一波。

@@ -735,26 +735,3 @@ def run_tasks(calls: Sequence[TaskCall], *, policy: P.Policy, conductor: Any, to
     一种文档漂移。这里两个都导出，且指向同一个实现（不是第二份代码）。
     """
     return run_waves(calls, conductor=conductor, policy=policy, token=token)
-
-
-def wave_summary(calls: Sequence[TaskCall], *, policy: P.Policy) -> list[dict]:
-    """只算不跑：把分波结果显示成人可读的摘要（CLI / 报告用）。
-
-    为什么值得一个公开函数：分波是唯一决定"谁和谁并发"的地方。
-    能把它单独打印出来，就让"为什么这两个任务串行了"有一个可读的答案，
-    而不是只能靠读代码猜。
-    """
-    calls = list(calls)
-    waves = P.waves_of(calls, limit=policy.max_concurrency)
-    return [
-        {
-            "wave": n,
-            "size": len(w),
-            "calls": [
-                {"role": calls[i].role, "action": calls[i].action,
-                 "write_set": sorted(C.write_set_of(calls[i].role))}
-                for i in w
-            ],
-        }
-        for n, w in enumerate(waves)
-    ]
