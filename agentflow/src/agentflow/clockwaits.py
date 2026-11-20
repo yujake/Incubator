@@ -641,9 +641,15 @@ def coverage(*, source_root: str | Path | Iterable[str | Path] | None = None,
     ungoverned = [f for f in prims if not f.get("governed")]
     # 主时钟本体那一条不是"绕过账的等待"：它就是这本账的写入口。单列一格，
     # 不并进 `waits_exempt`（并进去会让"还有几处没进账"这个读数虚高一处）。
+    #
+    # 2026-11-20（拆 clock.py 收口）：这一格的判定从"路径以 clock.py 结尾"改成
+    # "函数名就是 `await_io`"。为什么：主时钟本体的实现会从一个模块搬到另一个模块
+    # （`await_io` 已搬进本模块），按文件名认的判据会跟着实现漂、或在搬家那一步
+    # 把写入口误报成缺口。按函数名认才是那句话的本意（"这本账的写入口"），
+    # 函数名比文件名稳。豁免面一个字节没放宽（仍然是那两条 sleep / sleep_ref）。
     exempt_all = list(census["exempt"])
-    master = [e for e in exempt_all if str(e.get("path") or "").endswith("clock.py")]
-    exempt = [e for e in exempt_all if not str(e.get("path") or "").endswith("clock.py")]
+    master = [e for e in exempt_all if str(e.get("func") or "") == "await_io"]
+    exempt = [e for e in exempt_all if str(e.get("func") or "") != "await_io"]
     blocked = [e for e in exempt if str(e.get("blocked_by") or "").strip()]
     reason = ""
     if outside:
