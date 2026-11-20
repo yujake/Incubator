@@ -46,10 +46,26 @@ def _sec():
     return importlib.import_module("agentflow.secretary")
 
 
+def _defining_source(name: str) -> str:
+    """`<name>` 这个声明所在的那一份源码。
+
+    为什么不再读 `SEC.__file__`：SECSPLIT 把秘书按不变式拆成 `secretary*.py` 之后，
+    `NONTRIVIALITY_LEVELS` 的声明搬到了 `secretary_vocab.py`。判据的对象是"这个声明带着
+    业主原话"，不是"它恰好住在哪个文件名里"；所以按声明本身定位文件，而不是放宽成整包
+    扫描 —— 整包扫描会让提示词里重复的同一句把这条判据喂饱，那样它就失去了对象。
+    """
+    base = pathlib.Path(SEC.__file__).parent
+    for path in sorted(base.glob("secretary*.py")):
+        text = path.read_text(encoding="utf-8")
+        if f"\n{name}: " in text or f"\n{name} = " in text:
+            return text
+    raise AssertionError(f"{name} 的声明找不到（判据失去对象）")
+
+
 def test_the_five_levels_are_declared_with_the_owner_semantics() -> None:
     """五档的语义是业主原话，不是随手写的 0..4；判不了不在档位里（它是 None）。"""
     assert SEC.NONTRIVIALITY_LEVELS == (0, 1, 2, 3, 4)
-    src_text = pathlib.Path(SEC.__file__).read_text(encoding="utf-8")
+    src_text = _defining_source("NONTRIVIALITY_LEVELS")
     for phrase in ("基础定理或初步结论", "有一定价值的非平凡结论",
                    "工作量较大", "跨领域工具", "天才般的洞察力"):
         assert phrase in src_text, f"五档的语义丢了这一条：{phrase!r}"

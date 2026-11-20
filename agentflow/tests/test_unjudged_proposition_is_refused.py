@@ -206,13 +206,20 @@ def test_a_judged_different_still_creates_the_new_row(tmp_path: pathlib.Path) ->
 
 # ============================================================ d：判定面里没有第三种词
 
-_SOURCE = pathlib.Path(SEC.__file__).read_text(encoding="utf-8")
+_SOURCE = "\n".join(
+    path.read_text(encoding="utf-8")
+    for path in sorted(pathlib.Path(SEC.__file__).parent.glob("secretary*.py")))
 
 #: 判定面 = 词表常量 + 入口 + 可见性格 + 题面那一支。「刻意不把」概念同一性
 #: （`same_concept`，判的是"同一个概念"、不是"同一条命题"）、同种证明（`same_kind_proof`）、
 #: 名册三态、回执状态这些算进来：它们是另外几根轴，各自的两/三档由各自的判据钉着。
+#:
+#: 2026-11-20（SECSPLIT 刀2）：第一段的起点在 `secretary_vocab.py`，原终点标记
+#: （`PROPOSITION_VERDICT_LEDGER` 的注释）随路径常量搬进了 `secretary_ledger.py`；
+#: 所以终点改成同一段词表之后的下一条轴标题 —— 切片钉的还是"命题同一性判定面的词表"
+#: 这一块，对象没换，只是文件换了。
 _FACE_SLICES: tuple[tuple[str, str], ...] = (
-    ("#: 「这一条与在册的哪一条是同一条命题」", "#: 命题同一性判定的旁支台账"),
+    ("#: 「这一条与在册的哪一条是同一条命题」", "#: V 的回复有没有指出缺陷（两档）"),
     ("    def adjudicate_proposition(", "    @staticmethod\n    def _with_adjudication_visibility("),
     ("    @staticmethod\n    def _with_adjudication_visibility(",
      "    @staticmethod\n    def _annotate_proposition("),
