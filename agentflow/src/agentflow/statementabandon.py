@@ -191,26 +191,6 @@ def is_abandon_exempt(kind: Any) -> bool:
     """这个 `kind` 是不是"明确非命题"（`concept` / `definition`）⇒ 不归放弃闸管。"""
     return str(kind or "").strip().lower() in abandon_exempt_kinds()
 
-
-def abandon_proposition_kinds() -> tuple[str, ...]:
-    """哪些 `kind` 算"命题"（读侧/报错文案用的正向词表）。
-
-    真身是 `secretary.PROPOSITION_KINDS`（theorem / lemma / proposition /
-    corollary / conjecture）：`schema` 对 `statements.kind` 没有词表
-    （`Statement.kind` 是自由字符串，见 `schema.py:2363` 一带），"可判真假的断言类"
-    只在这一处被定义过。
-
-    ## 它与放行面的关系
-    放弃闸若用"`kind in abandon_proposition_kinds()` 才拦"，词表外的
-    kind（`example` / `remark` / 空串）就直接不拦。放行面才是判据：
-    :func:`is_abandon_exempt` 只认 `concept` / `definition` 两档，其余（含认不出的）
-    全按命题处理。这个函数因此只用于读数与措辞，不再被当作"要不要拦"的分界线。
-    """
-    from . import secretary as _SEC
-
-    return tuple(str(k) for k in _SEC.PROPOSITION_KINDS)
-
-
 def _step_pattern(step: int) -> re.Pattern[str]:
     """`<理由>` 里点名第 `step` 步的几种写法（中文与英文，空格可有可无）。"""
     n = int(step)

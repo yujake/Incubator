@@ -29,9 +29,6 @@ from . import schema as S
 #: 本文件读它两处：接线态读数（`status`）与按声明取角色（`_build` 的 `get` 会拒绝）。
 from . import leanscope as _LEANSCOPE
 
-#: 角色的接线态。刻意只有两格：`wired` 与"需要一个我没拿到的东西"。
-WIRING_STATES: tuple[str, ...] = ("wired", "no_provider")
-
 #: 登记项的形态（与 `conductor.LocalBackend.resolve` 的契约逐字对应）：
 #: `("factory", fn)` 且 `fn(*, store=...)`。类是不允许的（backend 会明确拒绝）。
 Factory = tuple[str, Callable[..., Any]]
@@ -327,7 +324,7 @@ class _Builder:
         return self._made[key]
 
     def status(self) -> dict[str, str]:
-        """逐角色的接线态（`WIRING_STATES` 之一）。
+        """逐角色的接线态（`wired` / `no_provider` 之一）。
 
         业主（「在 Lean 开关没开时隔绝 L」）：由 Lean 开关决定存在性的角色在
         开关关着时不出现在这份读数里 —— 否则它会被读成"这个角色接了线、只是没用到"，

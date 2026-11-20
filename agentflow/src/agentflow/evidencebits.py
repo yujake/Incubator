@@ -327,13 +327,6 @@ REFUTATION_SIGN_REQUIRED: tuple[str, ...] = ("artifact_sha", "ledger", "at")
 REFUTATION_EVIDENCE_KINDS: tuple[str, ...] = (
     "numeric_counterexample", "construction", "defect_ref",
 )
-#: 证伪凭据的全族（含证伪签）：读口判"这一行的载荷自称什么"时用。
-#: 注意 `derive_grade` 只对 :data:`REFUTATION_EVIDENCE_KINDS` 无条件给「错误」——
-#: 证伪签那一档要先过"签读得出来"（`refutation_sign`），坏签不许否决、也不许冒充「错误」。
-REFUTATION_VOID_KINDS: tuple[str, ...] = (
-    REFUTATION_SIGN_KIND, *REFUTATION_EVIDENCE_KINDS,
-)
-
 
 def refutation_reading(bits: Any) -> dict[str, Any]:
     """证伪签的唯一读口（三态：有且合规 / 没有 / 读不出来）。
@@ -1586,7 +1579,7 @@ def derive_grade(bits: Mapping[str, Any], *, kind: str = "") -> str:
 
     ## 两种作废都读「错误」（业主 2026-11-13 第二次裁定改口径）
     凭反例实验 / 一条构造 / 一行「有毛病」判词作废的那条路，`bits.voided_by.kind` 落在
-    :data:`REFUTATION_VOID_KINDS` 里 ⇒ 同样读「错误」。改前这里把两种作废分开
+    证伪凭据的全族（含证伪签）里 ⇒ 同样读「错误」。改前这里把两种作废分开
     （"证伪签⇒错误、其它作废⇒清零回猜想"），那条口径已被业主推翻：`status=错误` 与
     等级「错误」是同一个概念的两处读法，一个有一个没有就是缺陷
     （判据在 `errorstate.statement_refuted`）。

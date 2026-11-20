@@ -68,15 +68,9 @@ def store_dir_for(project_dir: str | Path) -> Path:
 
 
 def _ref_name_with_hash(pdf_sha256: str, text_sha256: str) -> str:
-    """由两个已算好的哈希拼文件名（`ref_name` 与 `put` 共用同一份拼法）。"""
+    """由两个已算好的哈希拼文件名（`put` 与它共用同一份拼法）。"""
     pdf = str(pdf_sha256 or "").strip().lower()[:HASH_PREFIX] or "0" * HASH_PREFIX
     return f"{pdf}-{str(text_sha256 or '')[:HASH_PREFIX]}.json"
-
-
-def ref_name(pdf_sha256: str, pages: Sequence[str]) -> str:
-    """算出一份正文在 store 里的文件名（`<pdf8…>-<text8…>.json`）。"""
-    return _ref_name_with_hash(pdf_sha256, pages_text_sha256(pages))
-
 
 def put(pages: Sequence[str], *, store_dir: str | Path, pdf_sha256: str = "",
         pdf_path: str = "", pdf_bytes: int = 0, backend: str = "",

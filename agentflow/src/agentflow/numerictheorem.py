@@ -54,7 +54,7 @@ from . import numericproof as NP
 
 #: ② 这一块的标题（E 写的"程序设计思路"，G 原样引用）。
 #:
-#: 字面取自 `exhaustionreport` 与 `numericproof.PART_NAMES`：证明栏那三段（程序 / 程序设计 /
+#: 字面取自 `exhaustionreport`：证明栏那三段（程序 / 程序设计 /
 #: 穷举论证）与那份读数的三块标题都只有一个真身，这里是它的读侧别名 —— 两边各写一份，
 #: 迟早会漂成两种说法（`exhaustionreport` 的 docstring 也点名要按 `blocks_missing` 核）。
 BLOCK_DESIGN = ER.BLOCK_DESIGN

@@ -136,14 +136,6 @@
    "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 3 处提及"
   },
   {
-   "name": "CONDITIONAL_ROW_FIELDS",
-   "rel": "papermapping.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
    "name": "CONFIDENCE_LEVELS",
    "rel": "agent_d/_support.py",
    "kind": "Assign",
@@ -264,14 +256,6 @@
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 1 处提及"
   },
   {
-   "name": "FILE_STATES",
-   "rel": "papermapping.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
    "name": "FINDING_CELLS",
    "rel": "depsection.py",
    "kind": "Assign",
@@ -294,14 +278,6 @@
    "categories": "all_export,docs",
    "action": "drop_export_or_wire",
    "why": "生产侧零读者；现有引用类别：__all__ / 文档；文档侧 1 处提及"
-  },
-  {
-   "name": "FORMAL_SLOT_KINDS",
-   "rel": "numericproof.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "FULLTEXT_TIERS",
@@ -376,14 +352,6 @@
    "why": "生产侧零读者；现有引用类别：注释/docstring / 测试；测试侧 3 处提及"
   },
   {
-   "name": "OPTIONAL_ROW_FIELDS",
-   "rel": "papermapping.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
    "name": "OUTPUT_CLAIMS",
    "rel": "agent_f/delivery.py",
    "kind": "Assign",
@@ -422,14 +390,6 @@
    "categories": "import,prose,tests,docs",
    "action": "wire_or_delete",
    "why": "生产侧零读者；现有引用类别：re-export / 注释/docstring / 测试 / 文档；测试侧 2 处提及；文档侧 2 处提及"
-  },
-  {
-   "name": "PART_NAMES",
-   "rel": "numericproof.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "PENDING_ENDPOINTS",
@@ -504,14 +464,6 @@
    "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
   },
   {
-   "name": "REFUTATION_VOID_KINDS",
-   "rel": "evidencebits.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
    "name": "REPORT_KEYS",
    "rel": "proofreport.py",
    "kind": "Assign",
@@ -560,28 +512,12 @@
    "why": "生产侧零读者；现有引用类别：测试 / 文档；测试侧 1 处提及；文档侧 2 处提及"
   },
   {
-   "name": "SIGN_GATE_CODES",
-   "rel": "vsigns.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
    "name": "SIGN_READING_WORDS",
    "rel": "vsigns.py",
    "kind": "Assign",
    "categories": "tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 1 处提及"
-  },
-  {
-   "name": "SIGN_REFRESH_STATES",
-   "rel": "vsigns.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "SOURCES",
@@ -710,30 +646,6 @@
    "categories": "",
    "action": "delete",
    "why": "全仓零提及：定义行之外，生产代码 / 测试 / 文档 / __all__ / 动态取都没有第二处"
-  },
-  {
-   "name": "WELL_DEFINEDNESS_STATES",
-   "rel": "conceptrows.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
-   "name": "WIRING_STATES",
-   "rel": "host.py",
-   "kind": "Assign",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
-   "name": "abandon_proposition_kinds",
-   "rel": "statementabandon.py",
-   "kind": "FunctionDef",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "add_subcommands",
@@ -992,14 +904,6 @@
    "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 7 处提及"
   },
   {
-   "name": "find_review",
-   "rel": "vreviews.py",
-   "kind": "FunctionDef",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
-  },
-  {
    "name": "foreign_refusal",
    "rel": "manuscriptopen.py",
    "kind": "FunctionDef",
@@ -1150,14 +1054,6 @@
    "categories": "all_export,tests",
    "action": "drop_export_or_wire",
    "why": "生产侧零读者；现有引用类别：__all__ / 测试；测试侧 4 处提及"
-  },
-  {
-   "name": "link_status",
-   "rel": "faculty_checks.py",
-   "kind": "FunctionDef",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "list_models",
@@ -1398,14 +1294,6 @@
    "categories": "tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；只被测试代码读（测试不是生产读者）；测试侧 4 处提及"
-  },
-  {
-   "name": "ref_name",
-   "rel": "fulltextstore.py",
-   "kind": "FunctionDef",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "ref_readings",
@@ -1774,14 +1662,6 @@
    "categories": "import,all_export,prose,tests",
    "action": "wire_or_delete",
    "why": "生产侧零读者；现有引用类别：re-export / __all__ / 注释/docstring / 测试；测试侧 5 处提及"
-  },
-  {
-   "name": "verifier_covers",
-   "rel": "numericproof.py",
-   "kind": "FunctionDef",
-   "categories": "prose",
-   "action": "delete",
-   "why": "生产侧零读者；只在注释或 docstring 里被提到（叙述不是读者）"
   },
   {
    "name": "verifier_problems",

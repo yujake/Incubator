@@ -15,7 +15,7 @@
 2. 签名主体：签字由 V，`signed_by` 只能是
    :data:`PROOF_SIGNER`（V），不许出现 `signed_by="E"`；E 是 :data:`NUMERIC_AUTHOR`，
    写进 `proof_authors`（②③ 的原作者）。V 的逐行走查仍不覆盖数值证据 ——
-   "签字"与"逐行审阅"是两件事（见 :func:`verifier_covers` / :func:`verifier_problems`）。
+   "签字"与"逐行审阅"是两件事（见 :func:`verifier_problems`）。
    B 不许给自己产出的命题自签 proof。
 3. 证明栏（现行口径：只写 ③ 穷举论证；旧的"三段式"只用于读历史行）：只写 ③ 穷举论证 ——
    搜索空间多大、怎么算出、对称性/剪枝、为什么不漏、边界怎么处理。
@@ -137,8 +137,6 @@ PROOF_AUTHORS_KEY = "proof_authors"
 PROOF_PARTS: tuple[tuple[str, str], ...] = (
     ("穷举论证", "enumeration"),
 )
-#: 段名 → 标签（同一份表派生，不写第二份）。
-PART_NAMES: dict[str, str] = {name: label for label, name in PROOF_PARTS}
 
 #: 旧三段式证明栏里的那两段。它们不再住证明栏：
 #: ① 程序 → `experiments.code_path`、② 程序设计 → `experiments.observations["design"]`。
@@ -177,18 +175,6 @@ def signer_of(method: Any) -> str:
 def author_of(method: Any) -> str:
     """证明材料（②③ / `.lean` 程序）的作者：计算类归 E，形式化归 L。"""
     return NUMERIC_AUTHOR if is_calculation(method) else FORMAL_AUTHOR
-
-
-def verifier_covers(method: Any) -> bool:
-    """V 的逐行走查（`verify.verify_proof` 那一趟"审每步依据"的活）覆不覆盖这一类证据。
-
-    签名主体是 V（见 :func:`signer_of`），但"签字"与"逐行走查"是两件事：
-    数值证据的材料是程序 + E 的 ②③，V 没有跑过那份程序，所以逐行走查不覆盖它 ——
-    这一签是数值证据的背书，不是对一段自然语言证明的逐行审阅（两条读数分开写，
-    见 `verifier_problems`）。把它折成"V 审过了"就是替 E 说话。
-    """
-    return not is_calculation(method)
-
 
 def is_script_path(text: Any) -> bool:
     """这一串字是不是"工作区内的程序脚本相对路径"（证明栏的合法形态）。
@@ -2205,12 +2191,11 @@ def verifier_problems(statement: Mapping[str, Any],
 #: 两者占同一格，填的东西不同；混着填就是"拿另一类定理的证据冒充这一类"。
 FORMAL_SLOT_NUMERIC = "numeric_program"
 FORMAL_SLOT_LEAN = "lean_program"
-FORMAL_SLOT_KINDS: tuple[str, ...] = (FORMAL_SLOT_NUMERIC, FORMAL_SLOT_LEAN)
 
 #: 证明通道的三个取值（`proof_channel` 的返回值；空串 = 这一格对它不适用）。
 #:
 #: 为什么单独拎出来：`formal_slot` 的 `channel` 与 `kind` 是两件事 —— `kind` 说"该填哪一类"
-#: （`FORMAL_SLOT_KINDS`），`channel` 说"这条命题的证明走哪条路"（这里这三个）。
+#: （`numeric_program` / `lean_program` 两档），`channel` 说"这条命题的证明走哪条路"（这里这三个）。
 #: 把两者混用（拿 `kind` 去比 `channel`）会让"通道是空的"与"通道是数值的"读成同一个。
 PROOF_CHANNEL_NUMERIC = "numeric"
 PROOF_CHANNEL_FORMAL = "formal"
@@ -2299,7 +2284,7 @@ def formal_slot(statement: Mapping[str, Any],
     `statements.proof_text` 的第 ① 段来喂）。返回：
 
     - `channel`：`"numeric"` / `"formal"` / `""`（这一格对它不适用）；
-    - `kind`：这一格应当填哪一类（`FORMAL_SLOT_KINDS` 之一；通道为空时也空）；
+    - `kind`：这一格应当填哪一类（`numeric_program` / `lean_program`；通道为空时也空）；
     - `path`：这一格应当填的那份程序（通道为空时为空）；数值通道那份是实验行的
       `code_path`（2026-11-08：程序不再住在证明栏里）；formal 通道取的那一行必须
       绑到这条命题（`evidencebits.formal_row_bound_to` 的四处绑定点）—— 台账里别的命题

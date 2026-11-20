@@ -491,19 +491,13 @@ THEOREM_ENV_KINDS: tuple[str, ...] = ("theorem", "lemma")
 #: 台账里"还只是猜想"的那一档（落差读数的一半）。
 CONJECTURE_KIND = "conjecture"
 
-#: 每一行的必填字段（其余见 `OPTIONAL_ROW_FIELDS` 与 `CONDITIONAL_ROW_FIELDS`）。
+#: 每一行的必填字段。
 ROW_FIELDS: tuple[str, ...] = (
     "kind", "label", "env_no", "ledger_id", "proof_no", "file",
 )
 
 #: 数值实验定理那两格（业主 2026-10-23，E-1）：口径与判定在 `numerictheorem`，这里只转发。
 NUMERIC_ROW_FIELDS: tuple[str, ...] = NT.NUMERIC_ROW_FIELDS
-
-#: 可以不给的字段。
-OPTIONAL_ROW_FIELDS: tuple[str, ...] = ("page_or_section",)
-
-#: 按来源决定要不要给的字段（口径见模块 docstring 的 `citation_loc` 三态）。
-CONDITIONAL_ROW_FIELDS: tuple[str, ...] = ("citation_loc", "citation_loc_reason")
 
 #: `citation_loc` 里三种区间（至少给一种）。
 RANGE_KEYS: tuple[str, ...] = ("page_range", "line_range", "char_range")
@@ -582,9 +576,6 @@ ALL_PROBLEM_KINDS: tuple[str, ...] = (
 
 #: 三态取值。
 STATES: tuple[str, ...] = ("pass", "fail", "unknown")
-
-#: `file` 的五个状态（`present` 之外的四个各自有判据）。
-FILE_STATES: tuple[str, ...] = ("present", "empty", "missing", "directory", "outside")
 
 #: 正文里定理类环境的开 / 闭标记（允许带星号，`end` 必须同名同星号）。
 #:
@@ -1674,7 +1665,7 @@ def fill_ledger_cells(ledger_root: str | Path,
 def file_state(package_root: str | Path, rel: Any) -> dict[str, Any]:
     """`file` 那一栏在论文包里是什么状态。
 
-    五态（`FILE_STATES`）：`present`（在、非空）· `empty`（在、0 字节）·
+    五态：`present`（在、非空）· `empty`（在、0 字节）·
     `missing`（路径不存在）· `directory`（路径在、但它是个目录）·
     `outside`（不是包内相对路径，或指到了论文包之外）。
 

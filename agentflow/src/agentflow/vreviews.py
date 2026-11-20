@@ -103,7 +103,7 @@ class ReviewIdExhausted(ValueError):
     ## 为什么是一个具名异常，而不是回绕到 `000001`
 
     回绕（或顺手发一个 7 位号）会让两件事同时发生：覆盖盘上已有的那一份正文，
-    且索引里出现同号两行 —— 而索引既是 `_read_index` 的输入、也是 `find_review`
+    且索引里出现同号两行 —— 而索引既是 `_read_index` 的输入、也是它的读数出口
     的返回值，它不会报错，它只会返回"000001 指向两份报告"。这正是本模块要挡的
     那种静默损坏，所以到顶时受控抛错，让人来处理 `verifications/reviews/`。
 
@@ -234,17 +234,6 @@ def next_review_id(rows: list[Mapping[str, Any]], taken: Iterable[int]) -> str:
 
 def _anchor(row: Mapping[str, Any]) -> tuple[str, str]:
     return (str(row.get("ledger") or ""), str(row.get("verification_id") or ""))
-
-
-def find_review(root: str | Path, *, ledger: str,
-                verification_id: str) -> dict[str, Any] | None:
-    """按台账锚点找已经落过的那一份（找不到 ⇒ `None`）。"""
-    rows, _problems = _read_index(root)
-    want = (str(ledger or ""), str(verification_id or ""))
-    if not want[1]:
-        return None
-    return next((dict(r) for r in rows if _anchor(r) == want), None)
-
 
 def _rel(root: str | Path, path: Path) -> str:
     try:

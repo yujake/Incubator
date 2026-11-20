@@ -373,9 +373,6 @@ def _from_legacy(row: Mapping[str, Any]) -> dict[str, Any]:
 WELL_DEFINEDNESS_SIGNED = "signed"
 WELL_DEFINEDNESS_UNSIGNED = "unsigned"
 WELL_DEFINEDNESS_REJECTED = "rejected"
-WELL_DEFINEDNESS_STATES: tuple[str, ...] = (
-    WELL_DEFINEDNESS_SIGNED, WELL_DEFINEDNESS_UNSIGNED, WELL_DEFINEDNESS_REJECTED)
-
 
 def concept_bits(*, origin: str, source_lit_id: str = "", proof_text: str = "",
                  sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
@@ -443,7 +440,7 @@ def well_definedness_reading(root: Any, row: Mapping[str, Any], *,
                              sign: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """概念行的「良定义证明」读数（三态 + 来源；纯读，零写）。
 
-    三态逐字是 :data:`WELL_DEFINEDNESS_STATES`：
+    三态逐字是 `signed` / `unsigned` / `rejected`：
 
     - `signed`：这一行 `proof_text` 非空，且 `vsigns.sign_reading` 说这一版正文
       `state == "signed"`（凭据可复算）—— 那一份良定义证明已被 V 签在稿上并收录；

@@ -154,7 +154,7 @@ def relation_index(store: Any) -> tuple[dict[frozenset[str], str], dict[str, set
 
 def _link_status(pairs: Mapping[frozenset[str], str], adj: Mapping[str, set[str]],
                  a: str, b: str) -> tuple[str, str]:
-    """`link_status` 的判定本体：索引由调用方给（同一批概念对只建一次索引）。"""
+    """两个概念之间三态判定的本体：索引由调用方给（同一批概念对只建一次索引）。"""
     if frozenset({a, b}) in pairs:
         return "direct", pairs[frozenset({a, b})]
     seen, queue = {a}, [a]
@@ -168,13 +168,6 @@ def _link_status(pairs: Mapping[frozenset[str], str], adj: Mapping[str, set[str]
                 queue.append(nxt)
     return "none", ""
 
-
-def link_status(store: Any, a: str, b: str) -> tuple[str, str]:
-    """两个概念之间是 `direct` / `path` / `none`，以及证据说明。"""
-    pairs, adj = relation_index(store)
-    return _link_status(pairs, adj, a, b)
-
-
 def overview_findings(store: Any, text: str, *, claimed_pairs: Sequence[Sequence[str]] = (),
                       ) -> dict[str, Any]:
     """高观点的机械半：引用落地 + 声称的概念对有没有图上的支撑。
@@ -184,7 +177,7 @@ def overview_findings(store: Any, text: str, *, claimed_pairs: Sequence[Sequence
     """
     unknown = unknown_ids(store, text)
     unsupported: list[dict[str, str]] = []
-    # 关系表只读一次：同一批概念对共用一张索引（原先每条 `link_status` 都重扫一遍关系表）。
+    # 关系表只读一次：同一批概念对共用一张索引（原先每条都重扫一遍关系表）。
     index: tuple[dict[frozenset[str], str], dict[str, set[str]]] | None = None
     for pair in claimed_pairs:
         if len(pair) < 2:

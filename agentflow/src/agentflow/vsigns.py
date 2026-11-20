@@ -1657,39 +1657,9 @@ def write_manuscript_sign(root: Any, manuscript_path: Any, *,
 # - :func:`land` 里那两格改成从台账现锚（:func:`ledger_anchor`），不再是抄签文件：
 #   重签同一份正文时 `issue` 不动签文件，抄它就会退回旧那一行。
 #
-# 三态：刷块的每一档结局都写在 :data:`SIGN_REFRESH_STATES` 里，没有一档叫"没事"；
+# 三态：刷块的每一档结局都有名有姓（`refreshed` / `unchanged` / …），没有一档叫"没事"；
 # `checked=False` 只用于"这一格没查成"（手稿读不出来 / 台账读不出来），不许折成
 # "刷过了"或"没有要刷的"。
-
-
-#: :func:`refresh_manuscript_sign` 的结局词表（每一次刷块都要落在其中一档上）。
-SIGN_REFRESH_STATES: tuple[str, ...] = (
-    #: 两格刷到了台账上更新的那一行（`成立` 那一档）
-    "refreshed",
-    #: 已经是最新那一行（幂等：一个字节都没写）
-    "unchanged",
-    #: 同 sha 的新行判的是「有毛病」⇒ 整块降为未签
-    "demoted",
-    #: 这一份稿里没有签块（"没有可刷的"，不是"刷过了"）
-    "no_block",
-    #: 块盖的是另一份正文（sha 不同）⇒ 不拿这一行去刷别人的块
-    "not_this_sha",
-    #: 这份稿的「## 证明」正文已经不是被签的那一份 ⇒ 块是 stale，不许给它一个新锚
-    "body_changed",
-    #: 块没有命题号（未在册那一档）⇒ 没有台账可锚
-    "no_statement",
-    #: 台账里没有盖着这个 sha 的行 ⇒ 不猜
-    "no_row",
-    #: 已经是「未签」那一档：单行成立不足以重签，块停在打回那一行
-    "unsigned_until_resigned",
-    #: 找不到这一份正文的落点（没点名、也没有签文件）
-    "manuscript_missing",
-    #: 稿读不出来（OSError / 非 UTF-8）—— 这一格没查成
-    "unreadable",
-    #: 台账读不出来 —— 这一格没查成
-    "ledger_unreadable",
-)
-
 
 def manuscript_path_for(root: Any, *, artifact_sha: Any = "", statement_id: str = "",
                         manuscript: str = "") -> dict[str, Any]:
@@ -1855,7 +1825,7 @@ def refresh_manuscript_sign(root: Any, *, artifact_sha: Any = "", statement_id: 
     什么时候调：每一行台账落下之后（`verifications.record_verification` 的三个追加
     分支），以及任何"想确认块与账对得上"的地方。
 
-    判据（缺一条就走对应的那一档，见 :data:`SIGN_REFRESH_STATES`）：
+    判据（缺一条就走对应的那一档，见 `refresh_manuscript_sign`）：
 
     1. 这一份正文有签块（没有 ⇒ `no_block`）；
     2. 块盖的就是这一行落的 sha（不是 ⇒ `not_this_sha`：不拿别人的签刷这一份）；
@@ -3350,19 +3320,6 @@ def backed_reading(root: Any, rows: Iterable[Mapping[str, Any]],
 
 # ---------------------------------------------------------------- 签 → 五元位（B 收录时用）
 
-#: B 收录时"这一块不能认"的三档原因码（2026-11-02 业主）。
-#:
-#: 每一档都带一句原因 + 一句建议（建议必须点名真工具 / 真字段，收方照着就能改）：
-#:
-#: | 码 | 什么时候 | 建议指向 |
-#: |---|---|---|
-#: | `manuscript_id_missing` | 签块没有第 9 格「手稿号」（旧 8 格块 / 空格） | `vsigns.land` 会写第 9 格 |
-#: | `manuscript_id_unresolved` | 格里的号解析不到在册命题 / 与它所在那份稿对不上 | `register_statement` 拿号，或让 D 的清单把地址写对 |
-#: | `manuscript_not_of_this_statement` | 号解析成了别的命题，或这份稿的正文 sha 与要登记的正文不符 | 交这一条自己的稿 / 用 `vsigns.land` 把签落回它自己的稿 |
-SIGN_GATE_CODES: tuple[str, ...] = ("manuscript_id_missing", "manuscript_id_unresolved",
-                                    "manuscript_not_of_this_statement")
-
-
 def _mark_pending_candidate(out: dict[str, Any], *, statement_id: Any,
                             code: Any, why: str = "") -> None:
     """`manuscript_id_unresolved` 遇到"正在新建命题"时留一格"可以继续按正文 sha 认领"。
@@ -3394,9 +3351,10 @@ def manuscript_sign_gate(reading: Mapping[str, Any], *, statement_id: str = "",
 
     判据一：手稿号 → 在册命题的映射（第 9 格那一族）；
     判据二：正文逐字相同（`body_mismatch`：签块盖的是不是这份稿里现在这一份正文）。
-    两道都过、且块是「成立」⇒ `admitted=True`；否则 `code` 是 :data:`SIGN_GATE_CODES`
-    里的一档（`code=""` 且 `admitted=False` 的那两档是"没有块"与"块判过没过"，
-    它们由调用方按既有读数处置，不在这里冒充"号有问题"）。
+    两道都过、且块是「成立」⇒ `admitted=True`；否则 `code` 是那三档原因码之一
+    （`manuscript_id_missing` / `manuscript_id_unresolved` /
+    `manuscript_not_of_this_statement`；`code=""` 且 `admitted=False` 的那两档是
+"没有块"与"块判过没过"，它们由调用方按既有读数处置，不在这里冒充"号有问题"）。
 
     为什么这一层不写任何东西：它是 B 的读侧判据。B 的写路径一个字都不动
     （业主：B 的写路径不许改；这里只加只读判据与受控拒信）。
