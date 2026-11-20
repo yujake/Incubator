@@ -60,6 +60,7 @@ from typing import Any, Callable, Sequence
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockprogram as CPROG
 from agentflow import clockmem as CLKMEM
 from agentflow import conductor as COND
 from agentflow.agent_loop import AgentLoop
@@ -289,7 +290,9 @@ def test_b2_without_the_program_fill_it_is_unavailable(
         tmp_path, bench, monkeypatch: pytest.MonkeyPatch) -> None:
     """e) 反真空（b 的那一半）：把程序目的的自动填打桩成不填 ⇒ b) 的三条断言必红。"""
     _, _, ws = _ws(tmp_path, "program-hollow")
-    monkeypatch.setattr(CLK, "program_purpose", lambda **kw: "")
+    # 2026-11-20（拆 clock.py）：`program_purpose` 的唯一调用者 `start_program` 搬进
+    # `clockprogram`，打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CPROG, "program_purpose", lambda **kw: "")
     timer = CLK.start_program(ws, program="lean", argv=["lean", "--version"])
     row = _disk_row(ws, timer.timer_id)
     assert row["purpose"] == "", row["purpose"]

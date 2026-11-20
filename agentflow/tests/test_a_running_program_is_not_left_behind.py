@@ -72,6 +72,7 @@ from typing import Any, Iterator
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockprogram as CPROG
 from agentflow.agent_loop import AgentLoop
 from agentflow.conductor import Conductor, LocalBackend, calling_as
 from agentflow.conductor import programs_reading
@@ -557,8 +558,10 @@ def test_e_the_ownerless_reading_names_the_two_anomalies(
         raise RuntimeError("登记那一步坏了（打桩）")
 
     CLK.reset_programs()
-    real_start = CLK.start_program
-    monkeypatch.setattr(CLK, "start_program", boom)
+    real_start = CPROG.start_program
+    # 2026-11-20（拆 clock.py）：`start_program` 与唯一调用它的 `ProgramSpan.open`
+    # 一起搬进 `clockprogram`，打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CPROG, "start_program", boom)
     try:
         with CLK.program_span(program="python", argv=["python", "-c", "print(1)"],
                               workspace=str(env["root"])) as span:
@@ -591,7 +594,7 @@ def test_e_the_ownerless_reading_names_the_two_anomalies(
                 problems.append(f"conductor.state 的 programs.named 没点名那台程序："
                                 f"{grid.get('named')!r}")
     finally:
-        monkeypatch.setattr(CLK, "start_program", real_start)
+        monkeypatch.setattr(CPROG, "start_program", real_start)
         CLK.reset_programs()
     assert problems == [], problems
 

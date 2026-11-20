@@ -3060,6 +3060,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                       "`patrol_text` / `patrol_section` / `patrol_sop_text` / `next_patrol` / "
                       "`start_patrol_timer` —— 读口唯一写点与读点同处一份；清单只拼句，"
                       "不读台账 / 板项 / 名册（那些经读口接进来）",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第九层 = 程序计时器那一整条链。
+    # 为什么是一个模块：起表（`start_program`）→ 挂 pid（`attach_program_pid`）→
+    # 收口（`finish_program`）→ 读侧（`programs`）是一条链，调用形状 `program_span`
+    # 与"起了却没进账"的 `_note_unbooked` 读数也挂在同一处；拆两份会让"程序算不算
+    # 结束了"出现两个判据。停程序那一层（`clockstop`）反过来 import 它的收口口。
+    "clockprogram.py": "程序计时器（2026-11-20 从 `clock.py` 拆出）：`start_program` / "
+                       "`attach_program_pid` / `finish_program` / `program_owner` / "
+                       "`is_my_program` / `not_mine_refusal` / `ProgramSpan` / `program_span` / "
+                       "`_note_unbooked` / `programs` / `programs_running` / `argv_digest` / "
+                       "`program_message` / `program_purpose` —— 起表到收口只有一份判据",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，

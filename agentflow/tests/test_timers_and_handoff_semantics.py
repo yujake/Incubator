@@ -44,6 +44,7 @@ from typing import Any, Callable, Sequence
 import pytest
 
 from agentflow import clock as CLK
+from agentflow import clockprogram as CPROG
 from agentflow import conductor as COND
 from agentflow import sessions as SS
 from agentflow.agent_loop import AgentLoop
@@ -344,7 +345,9 @@ def test_a4_a_failed_booking_is_visible_not_silent(tmp_path, bench,
     def boom(*a: Any, **k: Any) -> Any:
         raise CLK.ClockStateError("判据：簿记故意写不成")
 
-    monkeypatch.setattr(CLK, "start_program", boom)
+    # 2026-11-20（拆 clock.py）：`start_program` 与 `program_span` 一起搬进
+    # `clockprogram`，打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CPROG, "start_program", boom)
     with CLK.program_span(program="make-believe", argv=["make-believe", "--x"],
                           workspace=ws, where="judge") as span:
         pass
