@@ -3134,16 +3134,14 @@ def _gate_source(name: str, root_p: Path) -> dict[str, Any]:
     return table.get(name, _src(""))
 
 
-def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
-                   structure: Mapping[str, Any], proofs: Mapping[str, Any],
-                   root_p: Path, store: Any) -> dict[str, Any]:
-    """C 块：八格四态 + 机器口径 + 回执 + 成本 + 时间轴/名册 + 内容级验收（折叠）。"""
-    from .. import closing as CL
-    from ..reviewaccept import CRITERIA
+def _closing_gates(rep: Any, root_p: Path) -> dict[str, Any]:
+    """八格四态 + `machine_pass` 的两条来源。
 
-    # ---- 八格（与 `readouts.gates_readout` 逐格同一份读数：两边都调
-    #      `readouts.gate_cells(report)`，不存在"第二套计数"；判据
-    #      `tests/test_the_gate_table_is_computed_once.py` 用反真空证明这一点）。
+    不变式：`cells` 逐格取自 `readouts.gate_cells(rep)`（与 `readouts.gates_readout`
+    同一份计数，本层不另数 —— 判据 `tests/test_the_gate_table_is_computed_once.py`
+    用反真空钉住这一点）；`machine_pass` 变假的两条来源（格没全 pass / blocker）各自
+    点名，两栏不许因为"另一栏空着"而合流，逻辑上到不了的形态显式记 `unknown`。
+    """
     from .. import readouts as RD
 
     cells, counts = RD.gate_cells(rep)
@@ -3173,56 +3171,96 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
         # 逻辑上到不了（machine_pass 的定义就是这两条的合取）；真到了也不许静默：
         # 页面会把这一档显成"缺陷读数"，而不是空白。
         cause = "unknown"
-    gates = {"cells": cells, "counts": counts,
-             "machine_pass": machine_pass,
-             "m_says_done": bool(getattr(rep, "m_says_done", False)),
-             "can_close": getattr(rep, "can_close", None),
-             "can_close_reason": str(getattr(rep, "can_close_reason", "") or ""),
-             "closable": bool(getattr(rep, "closable", False)),
-             # 一份权威结论（ROOTGATE-②）：verdict + 八格逐格 + 红格的 why + 机器读数；
-             # 页面必须并列显示它，不许让一个绿色 badge 盖住红格。
-             "closing_verdict": dict(getattr(rep, "verdict", {}) or {}),
-             "verdict_at": str(verdict.get("at") or ""),
-             "verdict_met": (bool(verdict.get("met")) if verdict else None),
-             # 两条来源分开点名：一个空 `blockers` 不等于"门没拦住"，
-             # 也不等于"格失败"—— 读的人必须能看出是哪一半把 machine_pass 打假的。
-             "blockers": blockers,
-             "blocking_cells": blocking_cells,
-             "machine_pass_cause": cause}
+    return {"cells": cells, "counts": counts,
+            "machine_pass": machine_pass,
+            "m_says_done": bool(getattr(rep, "m_says_done", False)),
+            "can_close": getattr(rep, "can_close", None),
+            "can_close_reason": str(getattr(rep, "can_close_reason", "") or ""),
+            "closable": bool(getattr(rep, "closable", False)),
+            # 一份权威结论（ROOTGATE-②）：verdict + 八格逐格 + 红格的 why + 机器读数；
+            # 页面必须并列显示它，不许让一个绿色 badge 盖住红格。
+            "closing_verdict": dict(getattr(rep, "verdict", {}) or {}),
+            "verdict_at": str(verdict.get("at") or ""),
+            "verdict_met": (bool(verdict.get("met")) if verdict else None),
+            # 两条来源分开点名：一个空 `blockers` 不等于"门没拦住"，
+            # 也不等于"格失败"—— 读的人必须能看出是哪一半把 machine_pass 打假的。
+            "blockers": blockers,
+            "blocking_cells": blocking_cells,
+            "machine_pass_cause": cause}
 
-    # ---- 机器口径（retire / programs）
+
+def _closing_machine(feed: Mapping[str, Any], rep: Any,
+                     root_p: Path) -> dict[str, Any]:
+    """机器口径：退场（retire）与程序（programs）两组读数。
+
+    不变式：两组各自带 `checked`，且 `checked=False` 时读数原样保留（本层不把
+    "没查成"折成 0 / 空清单）；`retire` 的 `source` 指向本次运行那份台账文件，
+    文件不在才回落到目录 —— 两种落点都必须读得出来。
+    """
     retire = dict(feed.get("retire") or {})
     programs = dict(feed.get("programs") or {})
     caliber = dict((getattr(rep, "readings", {}) or {}).get("machine_caliber") or {})
-    machine = {"checked": bool(caliber.get("checked")),
-               "value": caliber.get("value"), "reason": str(caliber.get("reason") or ""),
-               "retire_checked": bool(retire.get("checked")),
-               "retire_complete": bool(retire.get("complete")),
-               "retire_projected": bool(retire.get("projected")),
-               "retire_auto_retire": dict(retire.get("auto_retire") or {}),
-               "retire_open_items": int(retire.get("root_open_items") or 0),
-               "retire_nodes": int(retire.get("total") or 0),
-               "retire_states": dict(retire.get("states") or {}),
-               "programs_checked": bool(programs.get("checked")),
-               "programs_ok": (bool(programs.get("checked"))
-                               and int(programs.get("running_count") or 0) == 0
-                               and not programs.get("unowned")),
-               "programs_running_count": int(programs.get("running_count") or 0),
-               "programs_unowned": list(programs.get("unowned") or []),
-               "source": _src(
-                   (f"out/roster/{retire.get('root')}.jsonl"
-                    if retire.get("root") and (root_p / "out" / "roster" /
-                                               f"{retire.get('root')}.jsonl").is_file()
-                    else "out/roster/"), label="retire_integrity")}
+    return {"checked": bool(caliber.get("checked")),
+            "value": caliber.get("value"), "reason": str(caliber.get("reason") or ""),
+            "retire_checked": bool(retire.get("checked")),
+            "retire_complete": bool(retire.get("complete")),
+            "retire_projected": bool(retire.get("projected")),
+            "retire_auto_retire": dict(retire.get("auto_retire") or {}),
+            "retire_open_items": int(retire.get("root_open_items") or 0),
+            "retire_nodes": int(retire.get("total") or 0),
+            "retire_states": dict(retire.get("states") or {}),
+            "programs_checked": bool(programs.get("checked")),
+            "programs_ok": (bool(programs.get("checked"))
+                            and int(programs.get("running_count") or 0) == 0
+                            and not programs.get("unowned")),
+            "programs_running_count": int(programs.get("running_count") or 0),
+            "programs_unowned": list(programs.get("unowned") or []),
+            "source": _src(
+                (f"out/roster/{retire.get('root')}.jsonl"
+                 if retire.get("root") and (root_p / "out" / "roster" /
+                                            f"{retire.get('root')}.jsonl").is_file()
+                 else "out/roster/"), label="retire_integrity")}
 
-    # ---- 成本（三源并排：事件求和 / 收工行自报 / 无人认领）+ 时间轴
+
+def _closing_sessions(root_p: Path) -> tuple[list[Any], list[Any], bool, str]:
+    """会话事件 → (原始记录, 本趟 runs, 查成没有, 原因)。
+
+    不变式：读不成时 `records=[]`、`runs=[]`、`checked=False`（原因随行），绝不返回
+    "0 趟"这种看起来像读数的形态 —— 下游四个成本数与时间轴因此一起变 None，而不是 0。
+    """
     try:
         records, info = SS.read_all_sessions(root_p)
         runs = SS.runs_in_session(records)
     except Exception as exc:  # noqa: BLE001
-        records, runs = [], []
-        info = {"checked": False, "reason": f"会话读不出来（{type(exc).__name__}: {exc}）"}
-    sessions_ok = bool(info.get("checked"))
+        return [], [], False, f"会话读不出来（{type(exc).__name__}: {exc}）"
+    if bool(info.get("checked")):
+        return list(records), list(runs), True, ""
+    return list(records), list(runs), False, str(info.get("reason") or "会话没查成")
+
+
+def _closing_last_at(rep: Any) -> str:
+    """最后收工时刻：M 判据的 `at`，缺了回落到 `readings.verdict_source.at`。
+
+    不变式：只算一次、只从这两处取（读不到就是空串）；顶层的 `source.match` 与
+    时间轴的 `last_closing_at` 用的是同一个值，"这份判据指向哪一版"与"最后收工
+    什么时候"不许各说各话。
+    """
+    verdict = getattr(rep, "m_verdict", None) or {}
+    at = str(verdict.get("at") or "")
+    if not at:
+        at = str(((getattr(rep, "readings", {}) or {})
+                  .get("verdict_source") or {}).get("at") or "")
+    return at
+
+
+def _closing_cost(store: Any, records: Sequence[Any], runs: Sequence[Any],
+                  sessions_ok: bool, sessions_reason: str) -> dict[str, Any]:
+    """成本四数（事件求和 / 收工行自报 / 无人认领 / 账本）+ 对账。
+
+    不变式：每个成本数只在会话读成时给值（否则 None，不是 0）；"账本 − 事件"的
+    差额解释只由 `tokenmeter.TokenMeter.by_scope()` 提供，本层不另算一遍分组 ——
+    归口只有一个出处，两个数（账本行数 / 事件调用数）不许互相顶替。
+    """
     event_usd = round(sum(float(r.get("usd") or 0) for r in runs), 6) if sessions_ok else None
     spend_usd = round(sum(float(r.get("spend_usd") or 0) for r in runs), 6) if sessions_ok else None
     runs_without_spend = sum(1 for r in runs if r.get("spend_usd") is None)
@@ -3233,7 +3271,7 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
     except Exception:  # noqa: BLE001
         ledger_rows, ledger_usd = [], None
     cost = {"checked": sessions_ok,
-            "reason": "" if sessions_ok else str(info.get("reason") or "会话没查成"),
+            "reason": "" if sessions_ok else str(sessions_reason or "会话没查成"),
             "event_usd": event_usd, "spend_usd": spend_usd,
             "spend_unknown_usd_calls": (sum(int(r.get("spend_unknown_usd_calls") or 0)
                                             for r in runs) if sessions_ok else None),
@@ -3274,13 +3312,20 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
                  "`ledger_rows` 是账本行数，`event_llm_calls` 是事件里的调用数 —— "
                  "一次调用可能记 0..n 行，两个数不许互相顶替。"),
     }
+    return cost
+
+
+def _closing_runtime(root_p: Path, store: Any, runs: Sequence[Any], sessions_ok: bool,
+                     last_closing_at: str) -> dict[str, Any]:
+    """时间轴（起止 / 趟数 / 在飞）+ 名册两个读数 + 子项计数。
+
+    不变式：每个读数读不到时是 None（不是 0）；`first` / `last` 取自同一批 runs
+    （`first_start_ts ≤ last_event_ts` 由构造保证）；名册与子项计数各自 try，坏一个
+    不许把另一个也拖成 0。
+    """
     starts = [str(r.get("start_ts") or "") for r in runs if r.get("start_ts")]
     ends = [str(r.get("end_ts") or r.get("start_ts") or "") for r in runs]
     first, last = (min(starts) if starts else ""), (max(ends) if ends else "")
-    last_closing_at = str(verdict.get("at") or "")
-    if not last_closing_at:
-        last_closing_at = str(((getattr(rep, "readings", {}) or {})
-                               .get("verdict_source") or {}).get("at") or "")
 
     # ---- 名册两个读数（`children_unretired` 与 `children_in_ledger` 是两个量）
     roster_nodes = 0
@@ -3304,24 +3349,32 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
         child = Secretary(_S.CONDUCTOR_ROLE, root=root_p, store=store).child_counts()
     except Exception:  # noqa: BLE001
         child = {"checked": False, "children_unretired": None, "active_child_count": None}
-    runtime = {"first_start_ts": first, "last_event_ts": last,
-               "elapsed_sec": _seconds_between(first, last),
-               "runs_total": len(runs) if sessions_ok else None,
-               "open_runs": (sum(1 for r in runs if r.get("end_index") is None)
-                             if sessions_ok else None),
-               "in_flight_agents": (sum(1 for r in runs if r.get("end_index") is None)
-                                    if sessions_ok else None),
-               "last_closing_at": last_closing_at,
-               "roster_nodes": roster_nodes,
-               "children_in_ledger": children_in_ledger,
-               "roster_child_count": roster_child_count,
-               "children_unretired": child.get("children_unretired"),
-               "active_child_count": child.get("active_child_count"),
-               "unplaced": unplaced,
-               "source": _src(_newest_file(root_p, "sessions") or "sessions/",
-                              label="runs")}
+    return {"first_start_ts": first, "last_event_ts": last,
+            "elapsed_sec": _seconds_between(first, last),
+            "runs_total": len(runs) if sessions_ok else None,
+            "open_runs": (sum(1 for r in runs if r.get("end_index") is None)
+                          if sessions_ok else None),
+            "in_flight_agents": (sum(1 for r in runs if r.get("end_index") is None)
+                                 if sessions_ok else None),
+            "last_closing_at": last_closing_at,
+            "roster_nodes": roster_nodes,
+            "children_in_ledger": children_in_ledger,
+            "roster_child_count": roster_child_count,
+            "children_unretired": child.get("children_unretired"),
+            "active_child_count": child.get("active_child_count"),
+            "unplaced": unplaced,
+            "source": _src(_newest_file(root_p, "sessions") or "sessions/",
+                           label="runs")}
 
-    # ---- 内容级验收（五条；只读、不进机器门）
+
+def _closing_content(acc: Mapping[str, Any], root_p: Path) -> dict[str, Any]:
+    """内容级验收（五条；只读、不进机器门）。
+
+    不变式：`fail` 与 `unknown` 分两栏（`failed` / `unchecked`），`passed` 是"有判据
+    且全 pass" —— "没查成"不许折成"不过"（三态纪律），两档也不许折平成一档。
+    """
+    from ..reviewaccept import CRITERIA
+
     criteria = {str(k): str(v) for k, v in (acc.get("criteria") or {}).items()}
     details = {str(k): str(v) for k, v in (acc.get("details") or {}).items()}
     content_sources = {
@@ -3333,16 +3386,34 @@ def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
         "statements_have_assumptions_and_source": _src("data/statements.json",
                                                        label="命题台账"),
     }
-    content = {"tri": str(acc.get("tri") or TRI_UNREADABLE),
-               "reason": str(acc.get("reason") or ""),
-               "criteria": criteria, "details": details,
-               "titles": {str(k): str(t) for k, t in CRITERIA},
-               "sources": content_sources,
-               "failed": sorted(k for k, v in criteria.items() if v == "fail"),
-               "unchecked": sorted(k for k, v in criteria.items() if v == "unknown"),
-               "passed": bool(criteria) and all(v == "pass" for v in criteria.values()),
-               "note": ("内容级验收只读、不进机器门；`failed` 是真不过，"
-                        "`unchecked` 是没查成 —— 两档不许折平。")}
+    return {"tri": str(acc.get("tri") or TRI_UNREADABLE),
+            "reason": str(acc.get("reason") or ""),
+            "criteria": criteria, "details": details,
+            "titles": {str(k): str(t) for k, t in CRITERIA},
+            "sources": content_sources,
+            "failed": sorted(k for k, v in criteria.items() if v == "fail"),
+            "unchecked": sorted(k for k, v in criteria.items() if v == "unknown"),
+            "passed": bool(criteria) and all(v == "pass" for v in criteria.values()),
+            "note": ("内容级验收只读、不进机器门；`failed` 是真不过，"
+                     "`unchecked` 是没查成 —— 两档不许折平。")}
+
+
+def _closing_block(rep: Any, feed: Mapping[str, Any], acc: Mapping[str, Any],
+                   structure: Mapping[str, Any], proofs: Mapping[str, Any],
+                   root_p: Path, store: Any) -> dict[str, Any]:
+    """C 块：八格四态 + 机器口径 + 回执 + 成本 + 时间轴/名册 + 内容级验收（折叠）。
+
+    这一层只做装配：六块各由上面一个单元算（每块自己的不变式写在各函数 docstring），
+    这里钉的是顺序与共用读数 —— 八格 → 机器口径 → 会话（成本与时间轴共用同一批
+    runs，只读一次盘）→ 内容；顶层 `tri` / `reason` 仍由 `rep.refusal` 一处决定。
+    """
+    gates = _closing_gates(rep, root_p)
+    machine = _closing_machine(feed, rep, root_p)
+    records, runs, sessions_ok, sessions_reason = _closing_sessions(root_p)
+    last_closing_at = _closing_last_at(rep)
+    cost = _closing_cost(store, records, runs, sessions_ok, sessions_reason)
+    runtime = _closing_runtime(root_p, store, runs, sessions_ok, last_closing_at)
+    content = _closing_content(acc, root_p)
 
     tri = TRI_COMPUTED
     reason = ""
