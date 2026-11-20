@@ -31,6 +31,7 @@ import os
 import re
 import subprocess
 import sys
+import tokenize
 from pathlib import Path
 
 import pytest
@@ -1186,6 +1187,7 @@ def doc_path(rel: str) -> Path:
 
 
 DEV_MD = REPO / "docs" / "DEVELOPMENT-SPEC.md"
+ROLE_SPECS_MD = REPO / "docs" / "ROLE-SPECS.md"
 README_MD = doc_path("README.md")
 DESIGN_TOOLS_MD = REPO / "DESIGN-TOOLS.md"
 
@@ -1649,6 +1651,355 @@ def test_the_documented_readings_criterion_is_not_vacuous():
     assert webui_prose_claim_problems(text.replace(section, "", 1), measured), (
         "把第八层那一节删掉之后判据必须报失去对象"
     )
+
+
+# ---- 2026-11-20 DOCFIX：三处散文与真身的一致性
+#
+# 乙：ROLE-SPECS 的 F 行 / F-7 行说依赖段"三列必填、路径号不进稿、老盘四列仍读得回"，
+#     列数从 `depsection.COLUMN_KEYS` 现读（必填列 = 除 `path_group` 之外的那几列）。
+# 丙：DEVELOPMENT-SPEC §2 第八层的静态产物名字 / 字节数从 `web/static/index.html`
+#     与 `assets/` 现读；那七个 web 读数仍由 `webui_prose_claim_problems()` 对
+#     `measured_readings()`（内含 `webui_readings()`）。
+# ③：closing.py 的注释 / docstring 与两份测试里的"收工门N格M态"从
+#     `len(DEFAULT_CHECKS)` / `len(CELL_STATES)` 现读；历史句带 T1 / T2 / T5 /
+#     "当时" / "改前" / "真机" 等出处的不算现时陈述（它们说的是当时门几格）。
+# 三条都各带一条反真空：对象读不到 ⇒ 报问题；把真身数字改回旧值 ⇒ 必红。
+
+_CN_DIGITS: tuple[tuple[str, int], ...] = (
+    ("一", 1), ("二", 2), ("三", 3), ("四", 4), ("五", 5),
+    ("六", 6), ("七", 7), ("八", 8), ("九", 9), ("十", 10),
+)
+
+#: 中文数字 → 整数（判据把真身格数写成散文里的那一个字，再从散文读回来对账）。
+_CN_VALUE: dict[str, int] = dict(_CN_DIGITS)
+
+
+def _cn(n: int) -> str:
+    """1..10 的中文数字（只用于把真身的格数写成散文里的那一个字）。"""
+    for ch, val in _CN_DIGITS:
+        if val == n:
+            return ch
+    raise ValueError(f"判据只写到十：{n}")
+
+
+_F_ROW_RE = re.compile(r"^\|\s*`F`\s*\|(?=[^\n]*attack_plans)(.+)$", re.M)
+_F7_ROW_RE = re.compile(r"^\|\s*F-7\s*\|(.+)$", re.M)
+
+
+def role_specs_dependency_claim_problems(text: str, *, columns: int, required: int) -> list[str]:
+    """ROLE-SPECS 的 F 行与 F-7 行必须与 `depsection.COLUMN_KEYS` 的列数一致。
+
+    `columns` 是总列数（含可省的路径号），`required` 是必填列数。文档要同时说清三件：
+    必填几列、路径号不进稿、老盘带那一列的四列仍读得回（老盘不是"不支持"）。
+    读不到那两行 ⇒ 报失去对象，不把"没读到"折成"没问题"。
+    """
+    if not (1 <= required < columns):
+        return [f"真身列数不成立：required={required}, columns={columns}"
+                "（必填列必须少于总列数）"]
+    problems: list[str] = []
+    for label, rx in (("§0.6 的 F 行", _F_ROW_RE), ("§R0 的 F-7 行", _F7_ROW_RE)):
+        rows = rx.findall(text)
+        if len(rows) != 1:
+            problems.append(f"`{ROLE_SPECS_MD.name}` 里 `{label}` 命中 {len(rows)} 次"
+                            "（要恰好一次）⇒ 判据失去对象，或同一句话又有了第二个落位")
+            continue
+        row = rows[0]
+        want_required = f"{_cn(required)}列必填表"
+        if want_required not in row:
+            problems.append(f"`{label}` 没写「{want_required}」：依赖段现是 "
+                            f"{required} 列必填（`depsection.COLUMN_KEYS` 共 {columns} 列）")
+        if "路径号不进稿" not in row:
+            problems.append(f"`{label}` 没写「路径号不进稿」：路径号由 B 收录时分配")
+        if not ("老盘" in row and f"{_cn(columns)}列" in row and "读得回" in row):
+            problems.append(f"`{label}` 没写「老盘带路径号那一列的老盘仍读得回」"
+                            f"（老盘是 {columns} 列，解析侧仍收 —— 不许说成不支持）")
+    return problems
+
+
+_STATIC_ASSET_ENTRY_RE = re.compile(r"`static/([^`]+)`（(\d+)\s*B）")
+_STATIC_ASSET_REF_RE = re.compile(r"""(?:src|href)=["'](?:[^"']*/)?assets/([^"']+)["']""")
+
+
+def webui_static_asset_claim_problems(text: str, static_dir: Path) -> list[str]:
+    """§2 第八层里那三个静态产物的名字 / 字节数必须与 `static_dir` 的现盘一致。
+
+    名字与字节数都从盘上现读：`index.html` 自己点名了 JS / CSS 的文件名，判据按它
+    取 `assets/` 下那两个文件 —— 不在判据里另抄一份清单。文件不在盘上 ⇒ 报问题
+    （构建产物缺失不是"没问题"）；文档里带字节数的条目不是恰好三个 ⇒ 报失去对象。
+    """
+    section = webui_prose_section(text)
+    if not section:
+        return ["读不到 §2 第八层（`**⑧ Web / 用户端**`）⇒ 判据失去对象"
+                "（删掉那一节不等于静态产物是对的）"]
+    hits = _STATIC_ASSET_ENTRY_RE.findall(section)
+    if len(hits) != 3:
+        return [f"第八层里带字节数的静态产物条目命中 {len(hits)} 个（要恰好 3 个："
+                "index.html / 一个 JS / 一个 CSS）⇒ 判据失去对象"]
+    declared = {rel: int(size) for rel, size in hits}
+    index = static_dir / "index.html"
+    if not index.is_file():
+        return [f"构建产物不在盘上：{index}"]
+    refs = _STATIC_ASSET_REF_RE.findall(index.read_text(encoding="utf-8", errors="replace"))
+    want = {"index.html": index.stat().st_size}
+    for ref in refs:
+        path = static_dir / "assets" / ref
+        if not path.is_file():
+            return [f"`index.html` 点名的静态产物不在盘上：{path}"]
+        want[f"assets/{ref}"] = path.stat().st_size
+    problems: list[str] = []
+    if set(declared) != set(want):
+        problems.append(f"第八层列的静态产物与盘上不一致：文档 {sorted(declared)}，"
+                        f"盘上 {sorted(want)}")
+    for rel in sorted(set(declared) & set(want)):
+        if declared[rel] != want[rel]:
+            problems.append(f"第八层把 `static/{rel}` 写成 {declared[rel]} B，"
+                            f"盘上是 {want[rel]} B（重建后按盘上事实改这一处）")
+    return problems
+
+
+#: 判"这一句七格是历史读数"的记号（行级）：带它的行说的是当时门几格，不是今天。
+_CLOSING_HISTORY_MARKERS: tuple[str, ...] = (
+    "第七格", "T1", "T2", "T5", "当时", "改前", "真机", "历史",
+)
+
+
+def _closing_prose_lines(text: str) -> list[tuple[int, str]]:
+    """`closing.py` 的注释与 docstring 行（行号, 正文）；函数体里的运行时字符串不算。
+
+    为什么只扫这两类：本批的处置面就是注释 / docstring。运行时字符串（`summary()` 的
+    "机器七格："等）不在本路可动范围内，它们由另一条口径单独看（见本路报告）。
+    """
+    out: list[tuple[int, str]] = []
+    tree = ast.parse(text)
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if not isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if not body:
+            continue
+        first = body[0]
+        value = getattr(first, "value", None)
+        if isinstance(first, ast.Expr) and isinstance(value, ast.Constant) \
+                and isinstance(value.value, str):
+            for offset, line in enumerate(value.value.splitlines()):
+                out.append((first.lineno + offset, line))
+    for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+        if tok.type == tokenize.COMMENT:
+            out.append((tok.start[0], tok.string))
+    return out
+
+
+def closing_count_claim_problems(text: str, checks: int) -> list[str]:
+    """`closing.py` 的注释 / docstring 里，现时陈述必须写"八格"（历史句带出处）。
+
+    判据对象两件：
+    1. 模块 docstring 要写 `{checks}格`，且不能把今天的门写成七格；
+    2. 注释 / docstring 里每一处"七格"都必须带历史记号（T1 / T2 / T5 / 当时 /
+       改前 / 真机），否则它是在说今天的门 —— 而今天 `DEFAULT_CHECKS` 有 `checks` 格。
+    "第七格"是序数，不是格数，跳过。
+    """
+    problems: list[str] = []
+    doc = ast.get_docstring(ast.parse(text)) or ""
+    if not doc:
+        return ["读不到 `closing.py` 的模块 docstring ⇒ 判据失去对象"]
+    want = f"{_cn(checks)}格"
+    if want not in doc:
+        problems.append(f"`closing.py` 模块 docstring 没写「{want}」"
+                        f"（`DEFAULT_CHECKS` 现是 {checks} 格）")
+    for lineno, line in _closing_prose_lines(text):
+        for m in re.finditer("七格", line):
+            if line[max(0, m.start() - 1):m.start()] == "第":
+                continue
+            if any(mark in line for mark in _CLOSING_HISTORY_MARKERS):
+                continue
+            problems.append(f"`closing.py:{lineno}` 把收工门写成七格：{line.strip()[:100]}")
+    return problems
+
+
+_GATE_STATE_RE = re.compile(r"收工门([一二三四五六七八九十])格([一二三四五六七八九十])态")
+_CURRENT_GATE_RE = re.compile(r"现在的门(?:仍|是|仍是|也是)?([一二三四五六七八九十])格")
+
+
+def gate_state_claim_problems(text: str, checks: int, states: int) -> list[str]:
+    """文本里的"收工门N格M态"必须与 `DEFAULT_CHECKS` / `CELL_STATES` 的现读一致。
+
+    读不到这种写法 ⇒ 报失去对象（把句子删掉不等于格数 / 态数是对的）。
+    """
+    hits = _GATE_STATE_RE.findall(text)
+    if not hits:
+        return ["读不到「收工门N格M态」这种写法 ⇒ 判据失去对象"]
+    problems: list[str] = []
+    for got_cells, got_states in hits:
+        got = (_CN_VALUE.get(got_cells), _CN_VALUE.get(got_states))
+        if got != (checks, states):
+            problems.append(f"这一处写「{got_cells}格{got_states}态」，"
+                            f"实测是 {checks} 格 / {states} 态")
+    return problems
+
+
+def user_test_gate_word_problems(text: str, checks: int) -> list[str]:
+    """`USER-TEST.md` 里"现在的门…N格"那一句必须与 `DEFAULT_CHECKS` 的现读一致。
+
+    那一屏真机记录的上半段本来就是八行，括号里那句"现在是几格"是读者判断它是否为
+    当次读数的唯一线索。读不到那一句 ⇒ 报失去对象，不把"没读到"折成"没问题"。
+    """
+    lines = [line for line in text.splitlines() if "现在的门" in line]
+    if len(lines) != 1:
+        return [f"`USER-TEST.md` 里「现在的门」那一句命中 {len(lines)} 次（要恰好一次）"
+                " ⇒ 判据失去对象，或同一句话又有了第二个落位"]
+    hits = _CURRENT_GATE_RE.findall(lines[0])
+    if len(hits) != 1:
+        return [f"`USER-TEST.md` 那一句里读不到「现在的门…N格」：{lines[0].strip()[:100]}"]
+    if _CN_VALUE.get(hits[0]) != checks:
+        return [f"`USER-TEST.md` 把现在的门写成 {hits[0]}格，实测 {checks} 格："
+                f"{lines[0].strip()[:100]}"]
+    return []
+
+
+def test_role_specs_keeps_the_dependency_face_at_three_required_columns():
+    """正控（乙）：ROLE-SPECS 的依赖段措辞必须与 `depsection.COLUMN_KEYS` 一致。"""
+    from agentflow import depsection as DS  # noqa: PLC0415
+
+    required = [f for f, _keys, _name in DS.COLUMN_KEYS if f != "path_group"]
+    columns = len(DS.COLUMN_KEYS)
+    assert columns == 4, (
+        f"`depsection.COLUMN_KEYS` 现是 {columns} 列；2026-11-13 起路径号那一列可省，"
+        "老盘带那一列的四列表仍读得回")
+    assert len(required) == 3, f"必填列现是 {required}（路径号是唯一可省的那一列）"
+    text = ROLE_SPECS_MD.read_text(encoding="utf-8")
+    problems = role_specs_dependency_claim_problems(
+        text, columns=columns, required=len(required))
+    assert not problems, problems
+
+
+def test_role_specs_dependency_claim_criterion_is_not_vacuous():
+    """负控（乙）：把三列改回四列 / 删掉路径号那句 / 删掉老盘那句 ⇒ 判据必红。"""
+    from agentflow import depsection as DS  # noqa: PLC0415
+
+    required = [f for f, _keys, _name in DS.COLUMN_KEYS if f != "path_group"]
+    columns = len(DS.COLUMN_KEYS)
+    text = ROLE_SPECS_MD.read_text(encoding="utf-8")
+    good = role_specs_dependency_claim_problems(
+        text, columns=columns, required=len(required))
+    assert not good, good
+
+    stale = text.replace("三列必填表", "四列必填表", 1)
+    assert stale != text, "夹具前提：F 行写着「三列必填」"
+    assert role_specs_dependency_claim_problems(
+        stale, columns=columns, required=len(required)), (
+        "把三列改回四列之后判据必须红（依赖段现是三列必填）")
+
+    no_path = text.replace("路径号不进稿", "", 1)
+    assert no_path != text, "夹具前提：F 行写着「路径号不进稿」"
+    assert role_specs_dependency_claim_problems(
+        no_path, columns=columns, required=len(required)), (
+        "删掉「路径号不进稿」之后判据必须红")
+
+    no_legacy = text.replace("老盘带路径号那一列的四列仍读得回", "", 1)
+    assert no_legacy != text, "夹具前提：F 行写着老盘四列仍读得回"
+    assert role_specs_dependency_claim_problems(
+        no_legacy, columns=columns, required=len(required)), (
+        "删掉「老盘四列仍读得回」之后判据必须红（不许把老盘说成不支持）")
+
+    gone = text.replace("| `F` | `attack_plans`", "| `Z` | `attack_plans`", 1)
+    assert gone != text, "夹具前提：F 行的第一格是 `F`"
+    assert role_specs_dependency_claim_problems(
+        gone, columns=columns, required=len(required)), (
+        "F 行读不到时必须报失去对象")
+
+
+def test_development_spec_webui_static_assets_match_the_build():
+    """正控（丙）：§2 第八层的静态资产名 / 字节数与七个 web 读数都必须与现盘一致。"""
+    text = DEV_MD.read_text(encoding="utf-8")
+    static_dir = REPO / "src" / "agentflow" / "web" / "static"
+    problems = webui_static_asset_claim_problems(text, static_dir)
+    problems += webui_prose_claim_problems(text, measured_readings())
+    assert not problems, problems
+
+
+def test_development_spec_static_asset_claim_is_not_vacuous():
+    """负控（丙）：旧 bundle 名 / 删掉那三条 / 把 web 读数打回旧值 ⇒ 判据必红。"""
+    text = DEV_MD.read_text(encoding="utf-8")
+    static_dir = REPO / "src" / "agentflow" / "web" / "static"
+    good = webui_static_asset_claim_problems(text, static_dir)
+    assert not good, good
+
+    index = (static_dir / "index.html").read_text(encoding="utf-8", errors="replace")
+    refs = _STATIC_ASSET_REF_RE.findall(index)
+    assert refs, "夹具前提：`index.html` 点名了 assets/ 下的构建产物"
+    js = refs[0]
+    stale = text.replace(f"`static/assets/{js}`", "`static/assets/index.D_uyFXzU.js`", 1)
+    assert stale != text, "夹具前提：第八层写着当次的 JS 名"
+    assert webui_static_asset_claim_problems(stale, static_dir), (
+        "把 bundle 名改回旧值之后判据必须红")
+
+    gone = _STATIC_ASSET_ENTRY_RE.sub("", text)
+    assert gone != text, "夹具前提：第八层有三个带字节数的静态产物条目"
+    assert webui_static_asset_claim_problems(gone, static_dir), (
+        "删掉那三个条目之后判据必须报失去对象")
+
+    measured = measured_readings()
+    cur = measured["webui_test_files"]
+    stale_reading = text.replace(f"判据文件共 **{cur}** 个", f"判据文件共 **{cur - 7}** 个", 1)
+    assert stale_reading != text, "夹具前提：散文里有 `webui_test_files` 当次值"
+    assert webui_prose_claim_problems(stale_reading, measured), (
+        "把 web 读数打回旧值之后判据必须红")
+
+
+def test_closing_gate_prose_matches_the_gate_and_cell_state_tables():
+    """正控（③）：closing.py 与两份测试的"八格N态"必须与两个真身常量一致。"""
+    from agentflow import closing as CL  # noqa: PLC0415
+    from agentflow import readouts as R  # noqa: PLC0415
+
+    checks, states = len(CL.DEFAULT_CHECKS), len(R.CELL_STATES)
+    assert checks == 8, f"`DEFAULT_CHECKS` 现是 {checks} 格（本判据写于八格时）"
+    assert states == 4, f"`CELL_STATES` 现是 {states} 态（本判据写于四态时）"
+    text = (REPO / "src" / "agentflow" / "closing.py").read_text(encoding="utf-8")
+    problems = closing_count_claim_problems(text, checks)
+    for rel in ("tests/test_cli_stats_four_tables.py", "tests/test_release_all.py"):
+        blob = (REPO / rel).read_text(encoding="utf-8")
+        problems += gate_state_claim_problems(blob, checks, states)
+    problems += user_test_gate_word_problems(
+        (REPO / "docs" / "USER-TEST.md").read_text(encoding="utf-8"), checks)
+    assert not problems, problems
+
+
+def test_closing_gate_prose_claim_criterion_is_not_vacuous():
+    """负控（③）：把八格改回七格、把四态改回三态 ⇒ 判据必红。"""
+    from agentflow import closing as CL  # noqa: PLC0415
+    from agentflow import readouts as R  # noqa: PLC0415
+
+    checks, states = len(CL.DEFAULT_CHECKS), len(R.CELL_STATES)
+    text = (REPO / "src" / "agentflow" / "closing.py").read_text(encoding="utf-8")
+    good = closing_count_claim_problems(text, checks)
+    assert not good, good
+
+    stale = text.replace("八格", "七格", 1)
+    assert stale != text, "夹具前提：模块 docstring 写着八格"
+    assert closing_count_claim_problems(stale, checks), (
+        "把模块 docstring 的八格改回七格之后判据必须红")
+
+    stale_line = text.replace("它不是那八格之一", "它不是那七格之一", 1)
+    assert stale_line != text, "夹具前提：注释里写着「它不是那八格之一」"
+    assert closing_count_claim_problems(stale_line, checks), (
+        "把一句现时陈述改回七格之后判据必须红（历史句才允许七格）")
+
+    for rel in ("tests/test_cli_stats_four_tables.py", "tests/test_release_all.py"):
+        blob = (REPO / rel).read_text(encoding="utf-8")
+        bad_phrase = "收工门" + "八格" + "三态"
+        swapped = blob.replace("收工门八格四态", bad_phrase, 1)
+        assert swapped != blob, f"夹具前提：`{rel}` 写着「八格四态」"
+        assert gate_state_claim_problems(swapped, checks, states), (
+            f"把 `{rel}` 的四态改回三态之后判据必须红")
+    assert gate_state_claim_problems("这一段里没有那句话。", checks, states), (
+        "读不到「收工门N格M态」时必须报失去对象")
+
+    user_test = (REPO / "docs" / "USER-TEST.md").read_text(encoding="utf-8")
+    assert not user_test_gate_word_problems(user_test, checks)
+    stale_ut = _CURRENT_GATE_RE.sub("现在的门是七格", user_test, count=1)
+    assert stale_ut != user_test, "夹具前提：USER-TEST 写着「现在的门…八格」"
+    assert user_test_gate_word_problems(stale_ut, checks), (
+        "把 USER-TEST 那句「现在的门」改回七格之后判据必须红")
 
 
 # ---- `R7-R6-2`：`.noai-paths` 的计数在本文里只允许一个口径（同一口径只写一处 + 判据守着）
@@ -2589,6 +2940,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "reconcile_count / _periodics_quiet / needs_full_scan / can_early_exit / "
                          "pop_due）+ `_target_key` + `Periodic`（周期记录）—— 它坐在 Timer 之下："
                          "不 import `clocktimer`，`Timer` 只出现在注解里",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第五层 = “等谁”的探针与判定。
+    # 为什么仍是顶层模块、且为什么可变量必须在这里：`_TARGET_PROBE` 由
+    # `set_target_probe` 重新赋值、由 `_probe_read` 读 —— 两个读写点必须同处一个模块
+    # （跨模块 `global` 只改本模块命名空间，与 `clockrun.py` 那条理由同形）。
+    # 它坐在 `clockrun` 之上、环核 `clocktimer` 之下：`target_state` 留在环核，
+    # 所以这里不 import `clocktimer`（依赖方向仍单向）。
+    "clockprobe.py": "“等谁”的探针与判定（2026-11-20 从 `clock.py` 拆出）："
+                     "`_TARGET_PROBE` / `set_target_probe` / `_probe_read` / "
+                     "`_judge_target` —— 唯一写点与唯一读点同处一个模块；它把外部读口"
+                     "折成 closed / open / unjudgeable 三态（三态不许折平），自己不碰簿记",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
@@ -2606,7 +2967,7 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "readouts.py": "四个只读读数的统一外层（checked/state/reason/data/problems）："
                    "errors_readout（复用 errorstats 的计数）/ flow_readout（按角色的动作、"
                    "被拦、转投分布）/ cost_readout（usage_ledger 按角色与 scope 的花费与 "
-                   "token）/ gates_readout（收工门八格三态一张表，现算不读缓存）/ scan（四条"
+                   "token）/ gates_readout（收工门八格四态一张表，现算不读缓存）/ scan（四条"
                    "读数共用的那一次读盘）/ READOUT_DATA_KEYS（每张表的键集，判据从它取）/ "
                    "render_text（人读的呈现）",
     # 2026-10-26（B 类补登：这四条是各 lane 新落的顶层模块，判据逐名点名）：
