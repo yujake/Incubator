@@ -39,6 +39,7 @@ import agentflow.secretary as SEC
 from agentflow import statusreport as SR
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 TS = "2026-10-26T00:00:00+08:00"
 
@@ -351,7 +352,7 @@ def test_d_stubbing_the_liveness_makes_the_two_columns_red(
     base = _b_problems(baseline, agents, items)
     assert base == [], base
 
-    monkeypatch.setattr(SEC, "is_live_agent", lambda row: True)
+    HOME.patch(monkeypatch, "is_live_agent", lambda row: True)
     stub = _env(tmp_path / "b1")
     stub_agents, stub_items = _fixture_48(stub)
     got = stub["sec"].inbox_todos()
@@ -389,7 +390,7 @@ def test_e_stubbing_the_status_makes_the_p0_comparison_red(
     base = _c_problems(baseline)
     assert base == [], base
 
-    monkeypatch.setattr(SEC, "row_axis", _axis_status_always_live)
+    HOME.patch(monkeypatch, "row_axis", _axis_status_always_live)
     stub = _p0_env(tmp_path / "c1")
     red = _c_problems(stub)
     assert red, ("把 row_axis 打桩成'status 恒活'，P0 两处的对拍却仍然绿 ⇒ "

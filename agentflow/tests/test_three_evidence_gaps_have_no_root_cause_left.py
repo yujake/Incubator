@@ -53,6 +53,7 @@ from agentflow.agent_b import AgentB
 from agentflow.store import Store
 
 from conftest import seed_statement_row
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 真机夹具（只读）。用例在这一棵树不存在时 skip，不去凭空造一份"像 sylow3"的东西。
 SYLOW3 = pathlib.Path(__file__).resolve().parents[1] / "projects" / "sylow3"
@@ -608,7 +609,7 @@ def test_d_anti_vacuum_both_guards_are_load_bearing(tmp_path, monkeypatch):
     assert _a_holds({"deps_missing": missing, "deps_written": 0}), missing
 
     # 打桩：把读数函数换成空字典（= 改前那一格根本不存在）
-    monkeypatch.setattr(SEC, "_deps_missing_reading", lambda **kw: {})
+    HOME.patch(monkeypatch, "_deps_missing_reading", lambda **kw: {})
     stubbed = _read_only_deps_reading(miss_body)
     assert not _a_holds({"deps_missing": stubbed, "deps_written": 0}), (
         "把 `deps_missing` 的读数打桩成空之后判据 a 还是绿的 ⇒ a 没接在那根线上")

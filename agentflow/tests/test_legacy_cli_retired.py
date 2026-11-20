@@ -5,7 +5,8 @@
 
 2026-11-20 业主批准 A4：`tools/legacy_cli/`（`demo` / `rebuild` / `repair` /
 `evidence_migrate` 四个模块）与 CLI 里那层 `_legacy_module(...)` 转发一起删。
-**删的是命令行这一层**；库里真正干活的实现（`demo.run_demo` / `Store.rebuild` /
+删的是命令行这一层；
+库里的实现（`demo.run_demo` / `Store.rebuild` /
 `fulltextstore` 那一套）一件都没删。
 
 ## 为什么命令名还留着
@@ -17,7 +18,7 @@
 
 ## 三态口径
 
-退出码必须是 `2`（没查成）：**这条路已经不存在了**。不许是 `0`（那会把"没有这条路"
+退出码必须是 `2`（没查成）：这条路已经不存在了。不许是 `0`（那会把"没有这条路"
 读成"跑过了没问题"），也不许是 `1`（那是"查过了、发现问题"，会把一次退场读成缺陷）。
 
 ## 反真空
@@ -39,7 +40,7 @@ REPO = pathlib.Path(__file__).resolve().parents[1]
 
 #: 每一条：命令行、退场标签、替代指引里必须出现的那几段。
 #:
-#: 期望值是**独立抄写**的（不从 `cli.RETIRED_COMMANDS` 现读）：读被测表来给自己判卷
+#: 期望值是独立抄写的（不从 `cli.RETIRED_COMMANDS` 现读）：读被测表来给自己判卷
 #: 会让"指引被改空"与"判据没查"变成同一件事。四个标签各至少一条；`repair` 那一半
 #: 还在的 `--backfill-grades` 也要被点到（退场不等于整条命令消失）。
 CASES: tuple[tuple[tuple[str, ...], str, tuple[str, ...]], ...] = (

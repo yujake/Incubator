@@ -8,7 +8,7 @@
 | 1 | D 的「猜想九状态」硬条件清单与 `schema.Conjecture.validate` 逐条一致 | 清单停在 2026-11-13 裁定 ② 之前：`refuted` 漏了第二条来路 `refusal_ref`、`promoted` 漏了 `proof_experiment_id`、九状态里漏了 `needs_evidence` 的 `notes` ⇒ 照文案做的模型会在"V 判有毛病"时去造一个反例实验 |
 | 2 | B 的 boundary 不再说「三件套缺一不可」，并写明「缺证明不拒收」 | 实现（P-06）缺证明照常登记、落最低等级；文案与它同文件的动作摘要「没有稿不拒收」互相矛盾 |
 | 3 | `B.ingest_manuscript(reason=…)` 的 `reason` 真的落进返回值 | 改前形参在函数体里一次都没被读（传了等于没传），而文案说它进读数 |
-| 4 | 两个零调用方的死入口不许长回来（`_source_matches_row` / `_parse_json_block`） | 改前它们是零引用的包装壳：定义还在，全仓无人调 |
+| 4 | 两个零调用方的死入口不许长回来（原名 _source_matches_row / _parse_json_block 的两个包装壳） | 改前它们是零引用的包装壳：定义还在，全仓无人调 |
 | 5 | S-09 的判据收 D 真正产出的置信度档名（high / medium / low），且 `research` 真的算它 | 改前只 `float(confidence)`，收到档名永远 `checked=False` —— 判据只有测试直接喂浮点数时才绿 |
 
 ## 反真空
@@ -170,11 +170,13 @@ def test_the_dead_wrappers_are_gone_and_stay_gone() -> None:
     from agentflow.agent_d import AgentD
 
     assert not hasattr(AgentB, "_source_matches_row"), (
-        "`_source_matches_row` 长回来了：它只是 `manuscriptpaths.manuscript_matches_row` "
-        "的包装壳，全仓零调用（ROLECLEAN-1 取证时 src/refs=0、tests/refs=0）")
+        "B 的那个已删包装壳（原名 _source_matches_row）长回来了：它只是 "
+        "`manuscriptpaths.manuscript_matches_row` 的包装壳，全仓零调用"
+        "（ROLECLEAN-1 取证时 src/refs=0、tests/refs=0）")
     assert not hasattr(AgentD, "_parse_json_block"), (
-        "`_parse_json_block` 长回来了：它只是 `_support._json_object` 的包装壳，"
-        "全仓零调用；解析实现只有 `_support._json_object` 一处")
+        "D 的那个已删包装壳（原名 _parse_json_block）长回来了：它只是 "
+        "`_support._json_object` 的包装壳，全仓零调用；解析实现只有 "
+        "`_support._json_object` 一处")
     # 反真空：被包装的那两份实现仍然在（删的是壳，不是真身）。
     from agentflow import manuscriptpaths
     from agentflow.agent_d import _support as support

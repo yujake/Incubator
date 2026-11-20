@@ -43,7 +43,8 @@ EXPECTED: tuple[tuple[str, str, str], ...] = (
     ("dependency_section_missing", "src/agentflow/depsection.py",
      "REFUSED_SECTION_MISSING"),
     ("dependency_section_unreadable", "src/agentflow/depsection.py", "REFUSED_SECTION"),
-    ("proof_review_without_evidence", "src/agentflow/verifications.py", "CODE_WRITE"),
+    # 2026-11-20（VERSPLIT2）：`CODE_WRITE` 随词表搬进 `v_vocab.py`（`verifications.py` 成了门面）。
+    ("proof_review_without_evidence", "src/agentflow/v_vocab.py", "CODE_WRITE"),
 )
 
 

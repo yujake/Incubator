@@ -155,8 +155,10 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
     },
     "F3_old_retire_gate": {
         "src/agentflow/agent_prompts.py":
-            "该删，已转持有方：提示词摘要冻结。其中一处是负控 `for stale in (...)`（判据读它），"
-            "另两处是变更记录",
+            "该删，已转持有方：提示词摘要冻结。盘上只剩那一处负控 `for stale in (...)`（判据读它）",
+        "docs/PROMPT-HISTORY.md":
+            "2026-11-20 版本账整块从 `agent_prompts.py` 逐字节搬进这份文档（方案 C）："
+            "原先记在账里的那两处变更记录跟着搬过来 —— 账不是活文案，就地保留",
     },
     "F5_two_nontrivial_questions": {
         "tests/test_filing_tier_carries_the_proof.py":
@@ -167,8 +169,9 @@ PHRASE_ALLOWED: dict[str, dict[str, str]] = {
             "判据读它：逐句扫「F 自己落 statements」三种改前写法（负控）",
     },
     "F4_every_parent_must_know": {
-        "src/agentflow/agent_prompts.py":
-            "该删，已转持有方：提示词摘要冻结。两处是变更记录，一处是负控 `for stale in (...)`（判据读它）",
+        "docs/PROMPT-HISTORY.md":
+            "2026-11-20 版本账整块从 `agent_prompts.py` 搬进这份文档（方案 C）："
+            "那两处是变更记录，讲的是旧的『每一级父都要知道』口径 —— 账不是活文案，就地保留",
         "src/agentflow/tools/conductor_tools.py": "该删，已转持有方（热文件，本轮只读）",
         "docs/ROLE-SPECS.md": "该删，已转持有方（docs 与 draft 另有一单在管）",
         "tests/test_guide_goes_down_the_secretary_chain.py":
@@ -500,9 +503,10 @@ DANGLING_ALLOWED: dict[str, str] = {
     "src/agentflow/autonomy.py":
         "活陷阱：`STOP_TOKEN` 撤掉之后，任何还引用它的代码会立刻 NameError —— "
         "这一句是「旁路没了、别再把它加回来」的唯一说明，删掉下一个人会重新加一个字面匹配",
-    "src/agentflow/agent_prompts.py":
-        "该删，已转持有方（提示词 lane 持有该文件）：两处指路名已经不在树里"
-        "（一处现名 `_receipt_for`、一处现名 `FACULTY_LOCAL`）",
+    # 2026-11-20（PROMPTHIST）：`src/agentflow/agent_prompts.py` 那一行从台账删除 ——
+    # 那两句点名的旧符号都写在**版本账**里，而账已整块搬进 `docs/PROMPT-HISTORY.md`
+    # （本判据的测量面只收 `.py`，文档不在其中）：源码里一处命中都没有了，留着它反而会
+    # 掩盖"这两句已经不在这个文件里"这个事实。
     "src/agentflow/secretary.py":
         "该删，已转持有方（secretary lane 持有该文件）：那一句的旧名已经不在树里"
         "（NT2 之后判档归 `Secretary.judge_statement`、落行归 `Secretary.record_nontriviality`）",
@@ -517,6 +521,15 @@ DANGLING_ALLOWED: dict[str, str] = {
     "tests/test_review_acceptance.py":
         "判据读它：这一条判「`REPORT_SECTIONS` / `SPLIT_MARKERS` 已经不在 closing 里」，"
         "名字必须写出来才有守的对象",
+    # 2026-11-20：以下一行是 SECSPLIT 的在飞面（`secretary_vocab.py` 是 secretary 拆分
+    # 产出的新文件，本轮只读、不许改）。它仍用点号旧名指着
+    # `verifications.SECRETARY_JUDGE_HISTORICAL_AXES`，而那个常量已不在树里。
+    # 命中类型是「该删，已转持有方」：持有方把那句改成非点号写法之后，实测不再命中，
+    # 这一行必须跟着删（两向比对会把留下的一行判成台账过期）。
+    "src/agentflow/secretary_vocab.py":
+        "该删，已转持有方（SECSPLIT 在飞文件，本轮只读）：那句点名的 "
+        "`verifications.SECRETARY_JUDGE_HISTORICAL_AXES` 已经不在树里，"
+        "改成非点号写法即可；改完删掉这一行",
 }
 
 #: 各种文件后缀：`` `conductor.py` `` 这种不是"模块.符号"。

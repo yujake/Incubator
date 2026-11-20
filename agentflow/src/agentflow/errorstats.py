@@ -720,7 +720,7 @@ CODE_TABLE: tuple[tuple[str, str, str], ...] = (
     ("dependency_section_unreadable", "tool_refused_controlled",
      "src/agentflow/depsection.py::REFUSED_SECTION（依赖段解析失败 ⇒ 整笔拒收）"),
     ("proof_review_without_evidence", "tool_refused_controlled",
-     "src/agentflow/verifications.py::CODE_WRITE"
+     "src/agentflow/v_vocab.py::CODE_WRITE"
      "（写入期闸：声称 `proof_review` 却没有证据 ⇒ 当场拒收）"),
 )
 

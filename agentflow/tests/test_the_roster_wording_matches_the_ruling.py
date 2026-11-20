@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import pathlib
 import re
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PKG = ROOT / "src" / "agentflow"
@@ -54,11 +56,13 @@ DEPRECATED_FACT_PHRASE = "让秘书顺延发号"
 FACT_PHRASE = "按序号发下一个未用名"
 
 #: 事实句一旦被替换，这三处（模型看得见的声明 + 拒信）必须都换上新的说法。
+#: 第三处落在秘书家族里：刀4 之后 `retire` 已搬进 `secretary_retire.py`，这里改成按声明
+#: 定位（写死文件名的那一版在搬家后红的是"这段文字不在这个文件名里"，不是行为变了）。
 FACT_PHRASE_OWNERS: tuple[str, ...] = (
     "src/agentflow/specs/d.py",
     "src/agentflow/specs/m.py",
-    "src/agentflow/secretary.py",
 )
+FACT_PHRASE_SECRETARY: tuple[str, ...] = ("Secretary.roster_add",)
 
 
 def _texts() -> list[pathlib.Path]:
@@ -105,8 +109,9 @@ def test_the_repair_docstring_names_the_real_concurrency_mechanism() -> None:
 
 def test_the_retire_backstop_comment_still_exists_and_names_the_ruling() -> None:
     """反真空：扫描面没跑偏 —— `retire` 的收工兜底那一段仍在，且说到 `name_taken`。"""
-    src = (PKG / "secretary.py").read_text(encoding="utf-8")
-    assert "收工兜底" in src, "扫描面跑偏了：`secretary.py` 里找不到'收工兜底'"
+    src = HOME.source_of("Secretary.retire")[1]
+    assert "收工兜底" in src, (
+        "扫描面跑偏了：`retire` 的定义处（按声明定位）里找不到'收工兜底'")
     window = src[max(0, src.index("收工兜底") - 200): src.index("收工兜底") + 1200]
     assert "name_taken" in window, (
         "收工兜底那一段没有再提 `name_taken`：它必须说清'派活那一刻撞名是拒绝、"
@@ -140,6 +145,11 @@ def test_the_new_wording_landed_and_the_history_keeps_its_word() -> None:
         assert FACT_PHRASE in text, (
             f"{rel} 里没有「{FACT_PHRASE}」：事实句被删掉了，而不是换了词面"
             "（业主 2026-11-02 的口径：事实保留、只统一词面）")
+    for qualname in FACT_PHRASE_SECRETARY:
+        name, text = HOME.source_of(qualname)
+        assert FACT_PHRASE in text, (
+            f"`{name}`（`{qualname}` 的定义处）里没有「{FACT_PHRASE}」：事实句被删掉了，"
+            "而不是换了词面（业主 2026-11-02 的口径：事实保留、只统一词面）")
     # 已删行为的历史留痕：`_register_roster` 的注释仍逐字说明"改前改发顺延的新名字"。
     conductor = (PKG / "conductor.py").read_text(encoding="utf-8")
     assert "顺延" in conductor, (

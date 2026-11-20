@@ -44,6 +44,7 @@ import types
 import pytest
 
 from agentflow import secretary as SEC
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 OLD = ("合格", "太平凡", "判不了")
 STATEMENT = "命题：任意有限群 G 的 Sylow p-子群两两共轭。"
@@ -113,7 +114,8 @@ def test_the_old_words_live_only_in_the_legacy_decision_reader() -> None:
     别的模块里的命中各属别的轴（V 判词折成"成立" / 状态标签 / 错误桶名），这里只要求
     "没有新模块/新函数开始产生这三个词"：旧词命中的模块集合必须是已登记的那几个。
     """
-    tree = ast.parse(pathlib.Path(SEC.__file__).read_text(encoding="utf-8"))
+    home_name, home_text = HOME.source_of("_tier_from_legacy_decision")
+    tree = ast.parse(home_text)
     readers = [n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name == "_tier_from_legacy_decision"]
     assert len(readers) == 1, f"读旧行的折算口应当只有一处：{[n.name for n in readers]}"
@@ -126,8 +128,10 @@ def test_the_old_words_live_only_in_the_legacy_decision_reader() -> None:
         "`_tier_from_legacy_decision` 里被折算：\n  " + "\n  ".join(outside))
 
     # 别的模块：只许已登记的那几个（V 判词折档 / 状态标签 / 门禁显示 / 错误桶名）。
-    # secretary.py 已经在上面的严格检查里逐个核过（只许在折算函数里），这里放行它。
-    registered = {"secretary.py", "verifications.py", "conductor.py", "gates.py",
+    # `_tier_from_legacy_decision` 的定义处已经在上面的严格检查里逐个核过（只许在折算
+    # 函数里），这里放行它 —— 按声明定位，不写死文件名（刀3 之后它搬进了
+    # `secretary_tier_ledger.py`）。
+    registered = {home_name, "verifications.py", "conductor.py", "gates.py",
                   "errorstats.py"}
     src_root = pathlib.Path(SEC.__file__).resolve().parents[1]
     seen: dict[str, int] = {}

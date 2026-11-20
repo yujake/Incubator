@@ -49,6 +49,7 @@ from agentflow import secretary as SEC
 from agentflow import webui as W
 from agentflow.store import Store
 from agentflow.webui import readers as R
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 交付包根（`agentflow/`）。
 REPO = pathlib.Path(__file__).resolve().parents[1]
@@ -427,7 +428,7 @@ def test_criterion_2_negative_control_folding_unjudged_into_t0_is_reported(
         del root, statement_full, stmt_id, path_groups
         return {"tri": "computed", "level": 0, "label": "T0", "basis": "打桩"}
 
-    monkeypatch.setattr(SEC, "nontriviality_of", _stub)
+    HOME.patch(monkeypatch, "nontriviality_of", _stub)
     after = R.evidence_chain(format_ws)["statements"]
     assert _tier_words(after)["000003"] == "T0", _tier_words(after)
     with pytest.raises(AssertionError):

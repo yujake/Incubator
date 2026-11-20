@@ -1,6 +1,6 @@
 {
   "ledger_version": 1,
-  "generated_at": "2026-11-20T09:14:40+08:00",
+  "generated_at": "2026-11-20T10:03:13+08:00",
   "entries": [
     {
       "path": ".noai-approvals.json",
@@ -414,11 +414,11 @@
       "path": "src/agentflow/tools/__init__.py",
       "glob": "src/agentflow/tools/__init__.py",
       "category": "auth-audit",
-      "sha256": "65c66dffb0bda98fcd42d3115c4751a9004a0649f7c9f07a6d23566f29da4691",
+      "sha256": "68bab4a1899af3c674e370a1e1f1b327b5a6486e9e124da8ab86b98c625ba4d1",
       "authored": "ai-agent",
       "authored_basis": "attested",
-      "change_note": "（未提供变更说明：内容 hash 从 5b07e7a47422 变为 65c66dffb0bd，改动内容需人补 —— 登记只记 hash，不假装知道改了什么）",
-      "changed_this_session": null,
+      "change_note": "FN200B（draft/190 口径）：把装配完之后的校验按语义拆成 _validate_registry（角色词表 / PARAM_SEAMS 孤儿 / UNIVERSAL_TOOLS 孤儿 / 通用工具写集四条同一处置口径），build_registry 只留装配主干 + 一次按序调用 + 严格档收尾；fn>200 计数 96 -> 95。台账 hash 已 stale：上一版 65c66dffb0bd ≠ 在飞版（LEGACY 接线那一笔）e93b5f4805ac，本版 68bab4a1899a。本次只登记 hash，reviewers 仍为空 —— 登记 != 批准，走查需人 --approve。",
+      "changed_this_session": true,
       "reviewers": [],
       "audits": [],
       "also_hits": []

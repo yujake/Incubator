@@ -13,7 +13,7 @@
 | A | 收工门是一份权威结论（`closing_verdict`） | M 的工具说明 / 手册还把 `can_close` 说成"机器口径"、把八格说成"读数"，M 的判断是另一条轴（2026-10-09 的口径，已被 2026-11-19 推翻） |
 | B | 发签的计数与门槛由框架现数（`sign_counting`） | V 的声明 / 手册还写"发不发签由你的秘书判定"（2026-11-17 之前的口径） |
 | C | L 只有"开着"这一种存在形态 | `formal.formalize` 与 L 的声明还把"开关关着"列为 unknown 的原因；L 的自检表还教它"改走逐行审阅" |
-| D | H 的四处死/旧文案 | 零引用常量 `_MATERIAL_KEYS`、指向不存在的 `agent_h/selftest.py`、"documents.json 唯一变化点是 status"、把 `review_report` 说成"审报告" |
+| D | H 的四处死/旧文案 | 零引用的材料键常量（原名 _MATERIAL_KEYS）、指向不存在的 `agent_h/selftest.py`、"documents.json 唯一变化点是 status"、把 `review_report` 说成"审报告" |
 
 零模型：不联网、不起子进程、不写工作区。
 """

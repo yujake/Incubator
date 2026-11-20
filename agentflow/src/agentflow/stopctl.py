@@ -186,7 +186,7 @@ def _closure_reading(root: str | Path) -> dict[str, Any]:
     """墓碑三态的安全读法：`stop_closure` 不抛时原样返回，抛了也降级成 `unknown`。
 
     为什么派活判据要单独包一层：`dispatch_stop_reading` 是"派活前问一句"的读口，
-    它的契约是**不因为它读的东西坏了而抛**（读不成要留读数，见下面 `checked=False`
+    它的契约是不因为它读的东西坏了而抛（读不成要留读数，见下面 `checked=False`
     那一档）。墓碑是历史，不是当前开关 —— 历史读不出来不许连累"这一趟能不能派活"，
     但也绝不许折成"没停过"（三态纪律）。
     """
@@ -220,7 +220,7 @@ def dispatch_stop_reading(root: str | Path, *, parent_task_id: str = "",
 
     `checked=False` 是第四态：连开关都读不成（异常）⇒ 不停，但 `why` 里说明没查成。
 
-    `closure` 是墓碑三态读口（`stop_closure`）的读数，**不是**对当前开关的又一次判定：
+    `closure` 是墓碑三态读口（`stop_closure`）的读数，不是对当前开关的又一次判定：
     开关被消费掉之后 `read_stop()` 返回 `None`，与"从来没人叫停"同形；`closure` 就是
     补那一格的。所以 `state="none"` 有两档，`why` 会分开说："没有停机记录" 与
     "开关已消费、这个工作区停过 N 次（历史）"。`unknown` 那一档也照实说"历史没查成"。

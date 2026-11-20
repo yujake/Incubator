@@ -40,7 +40,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 import agentflow.agent_b.register_statement as RS  # noqa: E402
-import agentflow.secretary as SEC  # noqa: E402
+import agentflow.secretary as SEC
 from agentflow import depsection as DS  # noqa: E402
 from agentflow import evidencebits as EB  # noqa: E402
 from agentflow import schema as S  # noqa: E402
@@ -49,6 +49,7 @@ from agentflow import vsigns as VS  # noqa: E402
 from agentflow.agent_b import AgentB  # noqa: E402
 from agentflow.secretary import Secretary  # noqa: E402
 from agentflow.store import Store  # noqa: E402
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 FULL_A = "命题 A：1+1=2。"
 BODY_A = "1. 按自然数的后继定义，1+1 就是 s(1)，而 s(1)=2。\n2. 因此 1+1=2。"
@@ -329,7 +330,7 @@ def _no_upgrade_basis(monkeypatch: pytest.MonkeyPatch) -> None:
     ⇒ 只要 B 与秘书按三路判据读，台账那一支照样能把档位顶上去，而 `D2 c` 要量的
     是"没有凭据就不许升"。两处一起摘，判据才量得到"升档真的靠凭据"。
     """
-    monkeypatch.setattr(SEC, "_manuscript_upgrade_basis",
+    HOME.patch(monkeypatch, "_manuscript_upgrade_basis",
                         lambda **kw: {"checked": True, "signed": False,
                                       "basis": "", "why": "打桩：手稿那一支不存在",
                                       "manuscript": {}})
@@ -431,7 +432,7 @@ def test_d3_c_reverse_vacuum_putting_label_back_splits_the_edge(
     def _with_kind_and_label(row):
         return saved(row) + (str(row.get("kind") or ""), str(row.get("label") or ""))
 
-    monkeypatch.setattr(SEC, "_dep_step_key", _with_kind_and_label)
+    HOME.patch(monkeypatch, "_dep_step_key", _with_kind_and_label)
     st = _ws(tmp_path, "d3c")
     _register_conjecture(st, FULL_A)
     _register_conjecture(st, FULL_B)

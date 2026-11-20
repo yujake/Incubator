@@ -790,8 +790,9 @@ RETIRED_COMMANDS: dict[str, str] = {
         "重建快照不再是 CLI 动词（它是数据维护动作，正常使用不该出现）。"
         "核对不变量用 `agentflow verify`（退出码 1 = 查出问题，2 = 没查成）；"
         "确需从 `events.jsonl` 重放，用库接口（同一处实现）："
-        'python -c "import sys; sys.path.insert(0, \'src\'); '
-        "from agentflow.cli import make_store; print(make_store(r'<工作区>').rebuild())"
+        "python -c \"import sys; sys.path.insert(0, 'src'); "
+        "from agentflow.cli import make_store; "
+        "print(make_store(r'<工作区>').rebuild())\""
     ),
     "repair": (
         "`--related` 已退场：`related_concepts` 随并表退役（S1r）—— 那是老表专有的一列，"
@@ -802,9 +803,9 @@ RETIRED_COMMANDS: dict[str, str] = {
     ),
     "demo": (
         "离线演示的命令行这一层退场了，演示的真身仍在库里："
-        'python -c "import sys; sys.path.insert(0, \'src\'); from pathlib import Path; '
-        "from agentflow.demo import run_demo; "
-        "raise SystemExit(run_demo(Path('demo/run').resolve()))"
+        "python -c \"import sys; sys.path.insert(0, 'src'); "
+        "from pathlib import Path; from agentflow.demo import run_demo; "
+        "raise SystemExit(run_demo(Path('demo/run').resolve()))\""
         "。只想看这台机器行不行，用不花钱的 `agentflow doctor`。"
     ),
     "evidence migrate": (

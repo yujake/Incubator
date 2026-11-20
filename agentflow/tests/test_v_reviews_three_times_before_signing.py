@@ -638,18 +638,22 @@ def test_t6_no_not_enough_wording_and_no_unsure_as_a_conclusion(tmp_path):
     """
     src = pathlib.Path(VR.__file__).resolve().parent
     v_chain = {"agent_v/core.py": src / "agent_v" / "core.py",
-               "verifications.py": src / "verifications.py",
                "secretary.py": src / "secretary.py",
                "agent_loop.py": src / "agent_loop.py"}
+    # 2026-11-20（VERSPLIT2）：`verifications.py` 已经落成门面，实现按 SPLIT-2 的设计搬进
+    # 18 个 `v_*.py` ——「V 那一链的四份源码」现在是这 3 份 + 那 18 份；只扫门面等于扫了个
+    # 空壳（措辞藏在实现里也看不见，那是假绿）。
+    for _p in sorted(src.glob("v_*.py")):
+        v_chain[_p.name] = _p
     scanned: dict[str, str] = {}
     for name, path in v_chain.items():
         assert path.is_file(), f"{name} 不在盘上：{path}"
         text = path.read_text(encoding="utf-8")
         assert text.strip(), f"{name} 是空的 ⇒ 判据扫不到东西（假绿）"
         scanned[name] = text
-    # 反真空：这四份源码确实带着本批改过的那几格（扫错文件会假绿）。
+    # 反真空：这几份源码确实带着本批改过的那几格（扫错文件会假绿）。
     assert "verify_proof" in scanned["agent_v/core.py"], "扫的不是 V 的实现"
-    assert "consecutive_holds" in scanned["verifications.py"], "扫的不是台账读数"
+    assert "consecutive_holds" in scanned["v_streak.py"], "扫的不是台账读数"
     assert "judge_v_reply" in scanned["secretary.py"], "扫的不是秘书的判定面"
     assert "v_rejections_digest" in scanned["agent_loop.py"], "扫的不是读侧"
 

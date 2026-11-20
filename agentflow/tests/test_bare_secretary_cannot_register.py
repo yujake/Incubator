@@ -17,8 +17,12 @@
    `for_role(...)`（`for_role` 不传 `seam=` 时与裸构造同义）。
 2. 其余裸构造逐个登记理由：`_EXEMPT` 是"确实不需要缝"的白名单（只取 `child_counts`
    的 `statusreport.py` / `webui/readers.py`、工厂函数本体、模块自检探针、只读
-   `surface_of` 的那一处、只转发交接的 `_peer_secretary`）。白名单与实际"逐条对表"
+   `surface_of` 的那一处）。白名单与实际"逐条对表"
    （多一条、少一条都红）—— 一张永不生效的豁免表会腐烂成"看起来还在挡着什么"。
+   `_peer_secretary` 的豁免在 SECSPLIT2 刀6 已撤：它现在走装配口
+   `self._new_secretary(...)`（`secretary_relay.py` 里一个 `Secretary(` 都没有），
+   所以它不是"裸构造"，留着这一条就是永不生效的豁免。判据见
+   `tests/test_secretary_has_one_assembly_port.py`。
 3. 反真空：把 `agent_b/core.py::_Core._statement_secretary` 的 `for_role_wired(...)`
    换成裸 `Secretary(...)`，本判据必须红（见 `test_anti_vacuum_...`）；同时正面钉住
    "它今天是带缝的"—— 否则"没有违规"可能只是"什么都没扫到"。
@@ -71,10 +75,6 @@ _EXEMPT: dict[tuple[str, str], str] = {
         "工厂本体：它把 `**kw` 原样交给 `Secretary(...)`，塞不塞缝由调用方决定"
         "（生产调用方 `agent_loop._secretary_for` 显式传 `seam=`；要判命题的调用方走"
         "`for_role_wired`）。",
-    ("secretary.py", "Secretary._peer_secretary"):
-        "只给转发链的下一跳造一名秘书，由 `relay_out` / `relay_in` 写一条 `relay_hop` "
-        "记录；不碰 `statements`、不判命题（它只按 '代表别人' 那一档调 "
-        "`bind_task(task_id, mark_alive=False)`：只分片、不写存活标记，见方法 docstring）。",
     ("secretary.py", "selftest"):
         "模块自检探针：只在 `python -m agentflow.secretary` 那一支里造两名临时秘书，"
         "验台账分片 / 存活读数，不判命题。",

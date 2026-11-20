@@ -583,14 +583,28 @@ def _roles_and_prompts() -> dict[str, str]:
 
 
 def _secretary_source() -> str:
+    # 刀3–刀6 之后实现分住在 secretary_*.py：扫描面是家族全体，不是 secretary.py 一份。
+    # 这一格只回答"这些符号还在不在"，所以按家族读；写死一份会让搬家后的判据红在
+    # "文件名变了"上，而不是"接住方没了"。
+    return _family_text()
+
+
+def _family_text() -> str:
     import agentflow.secretary as SEC
 
-    return pathlib.Path(SEC.__file__).read_text(encoding="utf-8")
+    pkg = pathlib.Path(SEC.__file__).resolve().parent
+    parts = []
+    for path in sorted(pkg.glob("secretary*.py")):
+        parts.append(path.read_text(encoding="utf-8"))
+    return "\n".join(parts)
 
 
 def _src_text(rel: str) -> str:
     import agentflow
 
+    if rel.startswith("secretary"):
+        # 表里的 where 写的是"秘书那一侧"：搬家之后它是家族全体（见 _family_text）。
+        return _family_text()
     return (pathlib.Path(agentflow.__file__).parent / rel).read_text(encoding="utf-8")
 
 

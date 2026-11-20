@@ -51,6 +51,7 @@ import pytest
 from agentflow import conceptrows as CR
 from agentflow import secretary as SEC
 from agentflow.store import Store
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -353,7 +354,10 @@ def test_d2_only_the_two_documented_callers_may_switch_the_judgment_off() -> Non
         assert signature.parameters[name].default is False, name
 
     assert _true_callers("transition_sync") == [("conceptrows.py", "sync_from_legacy")]
-    assert _true_callers("d12_pending") == [("secretary.py", "_record_pending_concept")]
+    # 按声明定位（刀5 之后 `_record_pending_concept` 搬进了 `secretary_concept.py`）：
+    # 写死文件名的那一版在搬家后红的是"文件名变了"，不是"多了一个后门开关"。
+    concept_home = HOME.module_rel("Secretary._record_pending_concept").split("/")[-1]
+    assert _true_callers("d12_pending") == [(concept_home, "_record_pending_concept")]
 
 
 # ============================================================ 入口 3：_record_pending_concept
@@ -746,7 +750,7 @@ def test_e_removing_the_disposition_turns_the_synonym_checks_red(
                 "candidates": [str(x) for x in (got.get("candidates") or [])],
                 "reason": str(got.get("reason") or "")}
 
-    monkeypatch.setattr(SEC, "concept_identity_action", _always_created)
+    HOME.patch(monkeypatch, "concept_identity_action", _always_created)
 
     # ---- 入口 1：`CR.upsert`（a1 的场景）
     st = _ws(tmp_path)

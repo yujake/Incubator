@@ -739,6 +739,145 @@ def _call_register(mod: Any, registry: ToolRegistry, deps: dict[str, Any]) -> in
     raise ToolError(f"{mod.__name__} 既没有 register()/install()，也没有 ALL_TOOLS")
 
 
+def _validate_registry(
+    reg: ToolRegistry,
+    *,
+    strict: bool,
+    skipped: list[dict],
+) -> None:
+    """装配完之后的校验：把装配出来的树与三张登记表逐项对齐（装配期的最后一道）。
+
+    为什么单列一个函数、而不是继续摊在 `build_registry` 里：这四条判据的被测对象都是
+    "装配完才存在的那棵树"，输入只有 `reg` / `strict` / 那一份 `skipped`，与装配主干
+    （惰性 import、按签名注入依赖、逐模块 `_call_register`）没有共享状态。抽出来之后
+    `build_registry` 只剩"装配主干 + 一次按序调用 + 严格档收尾"，读的人不必在
+    "怎么装"与"装完判什么"之间来回跳。
+
+    四个方向各自留下一种静默失配（"登记了"与"生效了"分家，且没有任何地方会报）：
+    1. 逐工具声明的角色都在 `TOOL_ROLES` 里 —— 拼法不同会让 `build_for_role` 静默漏工具；
+    2. `PARAM_SEAMS` 里没有指向空气或已闭合的条目 —— 只增不减的登记表会烂成噪音，
+       噪音里的真违约就没人看了；
+    3. `UNIVERSAL_TOOLS` 里的名字真的在树上 —— 拼错的名字只会让那条通用能力
+       按普通工具的判据被只读角色剥掉，静默的能力缺失；
+    4. 树上的通用工具，实现算出的写集不碰知识表 —— 否则只读角色多一条改知识库的后门。
+
+    处置口径四条一致，也是它们能共处一个函数的原因：非严格档记进 `skipped`
+    （可见、可诊断），严格档当场抛 `ToolError`；先后次序就是下面书写的次序。
+
+    这里刻意不做"严格档最终那一抛"：那一条还要覆盖装配主干那一半的 `skipped`
+    （模块 import / register 失败），所以留在 `build_registry` 的收尾处 ——
+    两个退出点会让"严格档到底为什么失败"取决于谁先跑到，而那种先后关系没有人维护。
+
+    `skipped` 是装配那一侧传进来的同一个列表：这里只追加，不重排、不去重。
+    """
+    # 断言所有工具声明的角色都在 ROLES 里。
+    #
+    # 为什么必须有这一句：`roles` 是跨模块的字符串约定。曾经 `research_tools` 写的是
+    # `roles=("agent-D",)` 而全项目其余地方按 `"D"` 过滤 —— 结果是
+    # `build_for_role('D')` 静默少 5 个工具，没有任何地方报错，直到测试才被抓到。
+    # 这类"字符串拼法不同导致静默失配"的 bug，唯一的通用解法就是在校验点上炸出来。
+    bad_roles: dict[str, list[str]] = {}
+    for spec in reg._specs.values():
+        # 与注册期那处（`base.ToolRegistry._reject_unknown_roles`）同一条判据、同一个词表：
+        # `TOOL_ROLES` = 可被召唤的 A–H + 主控 M。两处分开写会让"注册期放行、装配期拒绝"
+        # 这种自相矛盾的行为出现（实测撞过：只改了一处，strict=True 的装配就炸）。
+        unknown = [r for r in spec.roles if r not in TOOL_ROLES]
+        if unknown:
+            bad_roles[spec.name] = unknown
+    if bad_roles:
+        msg = (
+            f"以下工具声明了不在 TOOL_ROLES{TOOL_ROLES} 里的角色：{bad_roles}。"
+            "角色名是跨模块约定，拼法不一致会让 build_for_role() 静默漏掉这些工具。"
+        )
+        if strict:
+            raise ToolError(msg)
+        skipped.append({"module": "<roles>", "stage": "validate", "error": msg})
+
+    # 遗留取值 `network` 的装配期翻译检查已随 B3 收官删除。
+    #
+    # 它曾经在这里做什么：`side_effect="network"` 的逐工具原意（它到底写不写
+    # 我们的东西）写在 `base.LEGACY_EFFECTS_BY_TOOL` 里，而新加一个声明了
+    # `network` 的工具却忘了登记时，`ToolSpec.effect` 会退回翻译表的默认值 ——
+    # 于是"写盘的事实被丢掉"会重演，且没有任何地方报错。
+    #
+    # 为什么现在可以不查：那个取值本身已从 `base.SIDE_EFFECTS` 里删掉，
+    # 任何声明 `network` 的 `ToolSpec` 在 `__post_init__` 就被 `ValueError` 拒了
+    # （负控见 `tests/test_tools_base.py`）。判据从"装配期查表"前移成
+    # "构造期拒绝"：更强的形态，且少了一张必须与真实树同步维护的表。
+
+    # ---- `N-5`（工具侧）：参数接缝表的「整体」判据（逐条工具那条在 `register` 里）
+    #
+    # `register` 里的 `check_param_seams` 是逐工具 fail-closed 的；它看不见
+    # 两种"整体"事实，而这两种都只能在这里核（装配完才知道树上有哪些工具）：
+    #   ① 接缝表里有指向不存在工具的键（拼错 / 工具改名后留下的孤儿）；
+    #   ② 接缝表里的条目现在「已经不需要了」（handler 开始收得下它了）——
+    #      只增不减的登记表会烂成噪音，噪音里的真违约就没人看了。
+    #
+    # 处置口径与上面那条 `roles` 判据逐字一致：非严格档记进 `skipped`（可见），
+    # 严格档直接抛。「不改」成无条件抛：`build_registry` 允许部分模块缺席
+    # （那是它的既定契约），在这里无条件抛会把"某个并行开发的模块还没落地"
+    # 升级成"整个工具层不可用"。
+    stale_seams = stale_tool_param_seams(reg._specs)
+    if stale_seams:
+        msg = (
+            f"PARAM_SEAMS 里这些条目已经不需要了或指向不存在的工具：{stale_seams}。"
+            "那个 property 要么已被 handler 接受，要么工具名已经不是注册表里的名字 —— "
+            "请删掉这些登记（登记表不许烂成噪音，同 `capabilities.stale_param_seams`）"
+        )
+        if strict:
+            raise ToolError(msg)
+        skipped.append({"module": "<param-seams>", "stage": "validate", "error": msg})
+
+    # ---- 通用能力集合的孤儿判据（与参数接缝那条同一处置口径）
+    #
+    # `_check_universal_tools_are_registered()` 只能核"这张表自己的形态"（导入期树上一个
+    # 工具都没有）；"登记的名字到底有没有人产出"只能在这里核。拼错的名字不会报错，
+    # 它只会让那条通用工具按普通工具的判据被只读角色剥掉 —— 静默的能力缺失。
+    stale_universal = stale_universal_tools(reg._specs)
+    if stale_universal:
+        msg = (
+            f"UNIVERSAL_TOOLS 里这些名字在装配出来的树上不存在：{stale_universal}。"
+            "要么工具名改了而登记没跟着改，要么那条登记本来就写错了 —— "
+            "两种都会让『通用能力对所有人可用』静默失效（登记表不许烂成噪音）"
+        )
+        # 只记进 `skipped`，不在这里单独抛：`strict=True` 的唯一出口是
+        # `build_registry` 收尾处那道「严格模式下不允许模块被跳过」—— 两个退出点会让
+        # "严格档到底为什么失败"取决于哪一条先跑到，而那种先后关系没有人维护。
+        skipped.append({"module": "<universal-tools>", "stage": "validate", "error": msg})
+
+    # ---- 通用工具的写集判据（A5-c，2026-11-20）：接在装配期，不再只留给测试
+    #
+    # `universal_tool_violations` 是纯函数（`{工具名: 写集}` -> `{工具名: [违规理由]}`）。
+    # 它此前只有 `tests/test_universal_tools_are_for_everyone.py` 在读：装配出来的树上，
+    # 一件通用工具到底写不写知识表，只有跑测试时才知道 —— 而"测试读过"不是装配期的事实。
+    # 现在在这里跑一次，核的是这棵树上真的注册了的那几件（没注册的由上面
+    # `stale_universal_tools` 点名，不在这里重复报）。
+    #
+    # 写集从实现算（`capabilities._tool_write_set_from_source` 的 AST 扫描，与只读例外
+    # 那条判据同一份实现，不复制第二份）：算不出来（`None`）本身就是违规 ——
+    # "没查成"不许折成"没有写"。
+    registered_universal = {name: UNIVERSAL_TOOLS[name]
+                           for name in reg._specs if name in UNIVERSAL_TOOLS}
+    if registered_universal:
+        from ..capabilities import _tool_write_set_from_source
+
+        universal_write_violations = universal_tool_violations(
+            {name: _tool_write_set_from_source(name) for name in registered_universal},
+            universal=registered_universal,
+        )
+        if universal_write_violations:
+            msg = (
+                f"这些通用工具的写集不合规：{universal_write_violations}。"
+                "通用工具只许写通信/簿记类表（实现 ⊆ 登记 ⊆ BOOKKEEPING_TABLES）；"
+                "写进知识表就等于给只读角色开了一个改知识库的后门 —— "
+                "把越界的那张表从实现里摘掉，或者把它从 UNIVERSAL_TOOLS 撤掉"
+            )
+            if strict:
+                raise ToolError(msg)
+            skipped.append({"module": "<universal-write-sets>", "stage": "validate",
+                            "error": msg})
+
+
 def build_registry(
     *,
     store: Any = None,
@@ -846,116 +985,22 @@ def build_registry(
         else:
             loaded.append(mod_name)
 
-    # 断言所有工具声明的角色都在 ROLES 里。
+    # ---- 装配完之后的校验：装配出来的树 ↔ 三张登记表（按语义抽成一处，见 `_validate_registry`）
     #
-    # 为什么必须有这一句：`roles` 是跨模块的字符串约定。曾经 `research_tools` 写的是
-    # `roles=("agent-D",)` 而全项目其余地方按 `"D"` 过滤 —— 结果是
-    # `build_for_role('D')` 静默少 5 个工具，没有任何地方报错，直到测试才被抓到。
-    # 这类"字符串拼法不同导致静默失配"的 bug，唯一的通用解法就是在校验点上炸出来。
-    bad_roles: dict[str, list[str]] = {}
-    for spec in reg._specs.values():
-        # 与注册期那处（`base.ToolRegistry._reject_unknown_roles`）同一条判据、同一个词表：
-        # `TOOL_ROLES` = 可被召唤的 A–H + 主控 M。两处分开写会让"注册期放行、装配期拒绝"
-        # 这种自相矛盾的行为出现（实测撞过：只改了一处，strict=True 的装配就炸）。
-        unknown = [r for r in spec.roles if r not in TOOL_ROLES]
-        if unknown:
-            bad_roles[spec.name] = unknown
-    if bad_roles:
-        msg = (
-            f"以下工具声明了不在 TOOL_ROLES{TOOL_ROLES} 里的角色：{bad_roles}。"
-            "角色名是跨模块约定，拼法不一致会让 build_for_role() 静默漏掉这些工具。"
-        )
-        if strict:
-            raise ToolError(msg)
-        skipped.append({"module": "<roles>", "stage": "validate", "error": msg})
-
-    # 遗留取值 `network` 的装配期翻译检查已随 B3 收官删除。
+    # 四条判据的被测对象都是"装配完才存在的那棵树"，输入只有 `reg` / `strict` /
+    # `skipped`，与上面的装配主干没有共享状态；处置口径也一致（非严格档记进 `skipped`
+    # 让它可见，严格档当场抛）。所以它们按一个语义单元抽出去，装配主干只留这一次按序调用。
     #
-    # 它曾经在这里做什么：`side_effect="network"` 的逐工具原意（它到底写不写
-    # 我们的东西）写在 `base.LEGACY_EFFECTS_BY_TOOL` 里，而新加一个声明了
-    # `network` 的工具却忘了登记时，`ToolSpec.effect` 会退回翻译表的默认值 ——
-    # 于是"写盘的事实被丢掉"会重演，且没有任何地方报错。
-    #
-    # 为什么现在可以不查：那个取值本身已从 `base.SIDE_EFFECTS` 里删掉，
-    # 任何声明 `network` 的 `ToolSpec` 在 `__post_init__` 就被 `ValueError` 拒了
-    # （负控见 `tests/test_tools_base.py`）。判据从"装配期查表"前移成
-    # "构造期拒绝"：更强的形态，且少了一张必须与真实树同步维护的表。
-
-    # ---- `N-5`（工具侧）：参数接缝表的「整体」判据（逐条工具那条在 `register` 里）
-    #
-    # `register` 里的 `check_param_seams` 是逐工具 fail-closed 的；它看不见
-    # 两种"整体"事实，而这两种都只能在这里核（装配完才知道树上有哪些工具）：
-    #   ① 接缝表里有指向不存在工具的键（拼错 / 工具改名后留下的孤儿）；
-    #   ② 接缝表里的条目现在「已经不需要了」（handler 开始收得下它了）——
-    #      只增不减的登记表会烂成噪音，噪音里的真违约就没人看了。
-    # 覆盖率（`params_checked`）单独计数：判据的结论是"零违反"，而
-    # "零违反"与"一个工具都没核到"在输出上一模一样（P16）。
-    #
-    # 处置口径与上面那条 `roles` 判据逐字一致：非严格档记进 `skipped`（可见），
-    # 严格档直接抛。「不改」成无条件抛：`build_registry` 允许部分模块缺席
-    # （那是它的既定契约），在这里无条件抛会把"某个并行开发的模块还没落地"
-    # 升级成"整个工具层不可用"。
+    # 覆盖率读数（`params_checked`）留在装配这一侧算：`register` 里那条逐工具判据
+    # 每装一件就走一次，所以它等于装配出来的工具数。判据的结论是"零违反"，而
+    # "零违反"与"一个工具都没核到"在输出上一模一样（P16）—— 这个数字就是让两者
+    # 分得开的那一格（字段注释见 `RegistryBuild.params_checked`）。
     params_checked = len(reg)
-    stale_seams = stale_tool_param_seams(reg._specs)
-    if stale_seams:
-        msg = (
-            f"PARAM_SEAMS 里这些条目已经不需要了或指向不存在的工具：{stale_seams}。"
-            "那个 property 要么已被 handler 接受，要么工具名已经不是注册表里的名字 —— "
-            "请删掉这些登记（登记表不许烂成噪音，同 `capabilities.stale_param_seams`）"
-        )
-        if strict:
-            raise ToolError(msg)
-        skipped.append({"module": "<param-seams>", "stage": "validate", "error": msg})
+    _validate_registry(reg, strict=strict, skipped=skipped)
 
-    # ---- 通用能力集合的孤儿判据（与参数接缝那条同一处置口径）
-    #
-    # `_check_universal_tools_are_registered()` 只能核"这张表自己的形态"（导入期树上一个
-    # 工具都没有）；"登记的名字到底有没有人产出"只能在这里核。拼错的名字不会报错，
-    # 它只会让那条通用工具按普通工具的判据被只读角色剥掉 —— 静默的能力缺失。
-    stale_universal = stale_universal_tools(reg._specs)
-    if stale_universal:
-        msg = (
-            f"UNIVERSAL_TOOLS 里这些名字在装配出来的树上不存在：{stale_universal}。"
-            "要么工具名改了而登记没跟着改，要么那条登记本来就写错了 —— "
-            "两种都会让『通用能力对所有人可用』静默失效（登记表不许烂成噪音）"
-        )
-        # 只记进 `skipped`，不在这里单独抛：`strict=True` 的唯一出口是下面那道
-        # 「严格模式下不允许模块被跳过」—— 两个退出点会让"严格档到底为什么失败"
-        # 取决于哪一条先跑到，而那种先后关系没有人维护。
-        skipped.append({"module": "<universal-tools>", "stage": "validate", "error": msg})
-
-    # ---- 通用工具的写集判据（A5-c，2026-11-20）：接在装配期，不再只留给测试
-    #
-    # `universal_tool_violations` 是纯函数（`{工具名: 写集}` -> `{工具名: [违规理由]}`）。
-    # 它此前只有 `tests/test_universal_tools_are_for_everyone.py` 在读：装配出来的树上，
-    # 一件通用工具到底写不写知识表，只有跑测试时才知道 —— 而"测试读过"不是装配期的事实。
-    # 现在在这里跑一次，核的是**这棵树上真的注册了的那几件**（没注册的由上面
-    # `stale_universal_tools` 点名，不在这里重复报）。
-    #
-    # 写集从实现算（`capabilities._tool_write_set_from_source` 的 AST 扫描，与只读例外
-    # 那条判据同一份实现，不复制第二份）：算不出来（`None`）本身就是违规 ——
-    # "没查成"不许折成"没有写"。
-    registered_universal = {name: UNIVERSAL_TOOLS[name]
-                           for name in reg._specs if name in UNIVERSAL_TOOLS}
-    if registered_universal:
-        from ..capabilities import _tool_write_set_from_source
-
-        universal_write_violations = universal_tool_violations(
-            {name: _tool_write_set_from_source(name) for name in registered_universal},
-            universal=registered_universal,
-        )
-        if universal_write_violations:
-            msg = (
-                f"这些通用工具的写集不合规：{universal_write_violations}。"
-                "通用工具只许写通信/簿记类表（实现 ⊆ 登记 ⊆ BOOKKEEPING_TABLES）；"
-                "写进知识表就等于给只读角色开了一个改知识库的后门 —— "
-                "把越界的那张表从实现里摘掉，或者把它从 UNIVERSAL_TOOLS 撤掉"
-            )
-            if strict:
-                raise ToolError(msg)
-            skipped.append({"module": "<universal-write-sets>", "stage": "validate",
-                            "error": msg})
-
+    # 严格档的最终一道：它还要覆盖装配主干那一半的 `skipped`（模块 import / register
+    # 失败），所以留在装配这一侧、不折进 `_validate_registry` —— 两个退出点会让
+    # "严格档到底为什么失败"取决于哪一条先跑到，而那种先后关系没有人维护。
     if strict and skipped:
         raise ToolError(f"严格模式下不允许模块被跳过：{skipped}")
     return RegistryBuild(registry=reg, loaded=loaded, skipped=skipped, params_checked=params_checked,

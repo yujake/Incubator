@@ -40,6 +40,7 @@ from agentflow.conductor import Conductor, LocalBackend
 from agentflow.secretary import STATEMENT_BITS_KEYS, Secretary
 from agentflow.store import Store
 from agentflow.tools import build_registry
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 000019 那一行的形状（逐字取 `events.jsonl:3671` 的载荷：B 用 `table.create` 交的那一份）。
 #: 刻意不带 `bits` —— 这就是现场。
@@ -173,8 +174,7 @@ def test_negative_control_without_the_completion_step_refuses_the_write(
     """
     from agentflow import secretary as SEC
 
-    monkeypatch.setattr(
-        SEC, "_complete_statement_bits",
+    HOME.patch(monkeypatch, "_complete_statement_bits",
         lambda body, *, kind, origin: dict(body.get("bits") or {}),
         raising=True)
     st, registry = _world(tmp_path)
@@ -201,7 +201,7 @@ def test_negative_control_a_none_in_one_bit_is_refused(tmp_path: pathlib.Path,
         bits["grade"] = None          # ← 这一格是 None
         return bits
 
-    monkeypatch.setattr(SEC, "_complete_statement_bits", _with_a_none, raising=True)
+    HOME.patch(monkeypatch, "_complete_statement_bits", _with_a_none, raising=True)
     st, registry = _world(tmp_path)
     res = _create_via_table_tool(registry, _ROW_000019)
     assert res.ok is False, (res.error, res.meta)

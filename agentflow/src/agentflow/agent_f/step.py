@@ -302,7 +302,6 @@ class _Step:
                         ),
                     }, row)
                     out["finish_gate"] = dict(gate)
-                    self.last_step = out
                     return out
                 row["status"] = "stalled"
                 row["best_partial"] = self._compose_best_partial(subgoals, rounds)
@@ -765,5 +764,4 @@ class _Step:
         # —— 调用方（D / M / 人）要能直接读到"这条边不存在，需要 B 派 L"。
         if deploy.get("formal_dispatch"):
             out["formal_dispatch"] = dict(deploy["formal_dispatch"])
-        self.last_step = out
         return out

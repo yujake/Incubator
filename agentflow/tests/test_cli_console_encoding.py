@@ -31,10 +31,11 @@ ROOT = Path(__file__).resolve().parents[1]
 #: 成本取舍（实测）：`coverage_zero_test.py` 全量跑一次要 68 秒，而它在这个矩阵里只是"又一个入口"，所以用它的
 #: `--selftest`（324 毫秒，同一条 `main()` 与打印路径）；代价是"打印含 `⇒` 的发现行"这一格不再由它覆盖 ——
 #: 那一格由 `lint_rules` 覆盖（它的 R006/R010/R009 消息里就有 `⇒`，6 秒）。慢的门最后会被跳过，所以必须便宜。
-#: 第三列（`needs_root`）为什么必须存在：`cli demo` 的 `run_demo()` 会 `rmtree(root / "demo" / "run")` 再重建；
-#: 不给 `--root` 时它按 `DEFAULT_ROOT` 落在仓库内 ⇒ "跑一次这个测试"就等于改写了被跟踪的 `agentflow/demo/run/
-#: data/*`，而"仓库冻结、sha256 前后不变"那类断言恰恰以这个仓库为前提（实测：无 `--root` 跑一次，5 个文件的
-#: sha256 都变了；负控见 `temp/i1-neg-before.txt` 与 `temp/i1-neg-after.txt`）。给 `--root <tmp_path>` 之后它就 只在临时目录里造数据（顶层的 `--root` 必须写在子命令之前）。
+#: 第三列（`needs_root`）为什么必须存在：这一栏要一个真的会写盘的 CLI 入口，
+#: 否则"补了 `--root`"与"`--root` 被 argparse 吃掉、实际仍写仓库"在输出上完全一样。
+#: 2026-11-20（A4）之前这一格是 `cli demo`（它会 `rmtree(root / "demo" / "run")` 再重建）；
+#: `demo` 退场之后换成 `cli init`（在 `<root>/data/` 下建表）—— 它同样会写盘，
+#: 而且不依赖那条已经删掉的移植期工具。
 ENTRIES: list[tuple[str, list[str], bool]] = [
     ("lint_rules", ["scripts/lint_rules.py"], False),
     ("noai_consistency", ["scripts/noai_gate.py", "--check-consistency"], False),
@@ -44,7 +45,7 @@ ENTRIES: list[tuple[str, list[str], bool]] = [
     # ⇒ 默认 GBK 下 stdout 空、rc=1，那个 1 与「有缺口」同码（2026-11-15 实测）。
     ("render_registration_skeletons", ["scripts/render_registration_skeletons.py"], False),
     ("cli_tools", ["-m", "agentflow.cli", "tools", "--role", "A"], False),
-    ("cli_demo", ["-m", "agentflow.cli", "demo"], True),
+    ("cli_init", ["-m", "agentflow.cli", "init"], True),
 ]
 
 
@@ -81,8 +82,8 @@ def test_entry_point_survives_gbk(
     label: str, argv: list[str], needs_root: bool, tmp_path: Path
 ) -> None:
     """GBK 下：不吐 Traceback、退出码仍在三态里，且 `1` 必须伴随"说清楚问题是什么"。"""
-    # `needs_root` 的入口必须在临时工作区里跑：它们会写数据（`cli demo` 甚至会先
-    # `rmtree` 再重建），落在仓库里就等于"测试改写了被测仓库"（见 `ENTRIES` 上的注释）。
+    # `needs_root` 的入口必须在临时工作区里跑：它们会写数据（`cli init` 会建出
+    # `<root>/data/`），落在仓库里就等于"测试改写了被测仓库"（见 `ENTRIES` 上的注释）。
     p = _run(argv, gbk=True, root=(tmp_path / label) if needs_root else None)
     out = (p.stdout + p.stderr).decode("utf-8", "replace")
     assert "Traceback" not in out, f"{label} 在 GBK 下崩了：\n{out[-2000:]}"

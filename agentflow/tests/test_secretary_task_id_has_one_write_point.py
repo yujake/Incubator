@@ -47,6 +47,7 @@ from agentflow import secretary as SEC
 from agentflow.conductor import Conductor, LocalBackend, calling_as
 from agentflow.store import Store
 from agentflow.tools import build_registry
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 
@@ -275,9 +276,11 @@ def test_no_bare_task_id_write_in_a_module_that_can_hold_a_secretary() -> None:
     storage = [w for w in all_writes if w.attr == "_task_id"]
     # 两处，且只有这两处：构造函数落初值（"还没绑"），`bind_task` 落绑定。初值不是绑定
     # （它把 `task_id` 置空、分片随即退回老文件），真正的写点是 `bind_task`。
-    assert {(w.module, w.qualname) for w in storage} == {
-        ("src/agentflow/secretary.py", "Secretary.__init__"),
-        ("src/agentflow/secretary.py", "Secretary.bind_task"),
+    # 搬家之后 qualname 是 SessionMixin.bind_task（方法进了混入类）：比"最后一段"，
+    # 因为这一条钉的是"哪两个地方写"，不是"类叫什么名"。模块按声明定位。
+    assert {(w.module, w.qualname.split(".")[-1]) for w in storage} == {
+        (HOME.module_rel("Secretary.__init__"), "__init__"),
+        (HOME.module_rel("Secretary.bind_task"), "bind_task"),
     }, ("`_task_id`（task_id 的存储格）只许构造函数与 bind_task 写：\n" + _describe(storage))
 
     # 两个现场走的是 bind_task，且"代表别人"那一档显式声明了不写标记。
@@ -288,8 +291,8 @@ def test_no_bare_task_id_write_in_a_module_that_can_hold_a_secretary() -> None:
     assert "mark_alive" not in guide[0][3], (
         "conductor.guide 是'我自己这一趟'的秘书，必须走会写存活标记的那一档", guide[0])
     peer = [c for c in calls
-            if c[0] == "src/agentflow/secretary.py"
-            and c[2] == "Secretary._peer_secretary"]
+            if c[0] == HOME.module_rel("Secretary._peer_secretary")
+            and c[2].split(".")[-1] == "_peer_secretary"]
     assert len(peer) == 1, peer
     assert peer[0][3].get("mark_alive") == "False", (
         "转发链下一跳只许分片、不许伪造存活标记：mark_alive=False 是显式契约", peer[0])
@@ -426,13 +429,13 @@ def test_putting_the_bare_write_back_turns_a_red() -> None:
     assert _could_hold_a_secretary(put_back), (
         "放回去的源码不在'可能持有秘书'的扫描面里 ⇒ 这条反真空证明不了第 1 条有牙")
 
-    sec_rel = "src/agentflow/secretary.py"
+    sec_rel = HOME.module_rel("Secretary.bind_task")
     sec = sources[sec_rel]
     storage = 'self._task_id = str(task_id or "")'
     assert storage in sec, "反真空的前提变了：bind_task 的存储格不是预期写法"
     old = sec.replace(storage, 'self.task_id = str(task_id or "")')
     caught2 = [w for w in _writes({sec_rel: old}) if w.attr == "task_id"]
-    assert caught2 and caught2[0].qualname == "Secretary.bind_task", caught2
+    assert caught2 and caught2[0].qualname.split(".")[-1] == "bind_task", caught2
 
 
 def test_stubbing_bind_task_to_a_bare_write_loses_the_marker(

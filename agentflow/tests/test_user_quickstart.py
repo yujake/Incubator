@@ -58,23 +58,24 @@ def test_help_lists_the_subcommands_the_readme_talks_about(tmp_path: Path):
         assert name in out, f"--help 里没有 {name}"
 
 
-def test_the_offline_demo_passes(tmp_path: Path):
-    """README §0 的第二步：`demo` 自建素材并跑完整条链路，退出码 0 才是通过。
+def test_the_offline_demo_passes(tmp_path: Path, capsys):
+    """README §3 的离线演示：库入口 `demo.run_demo` 自建素材并跑完整条链路，退出码 0。
 
-    `--root` 必须给，而且必须写在子命令之前。为什么：`cmd_demo` 会
-    `rmtree(root / "demo" / "run")` 再重建，不给 `--root` 时它按 `DEFAULT_ROOT`
-    落在仓库内 ⇒ "跑一次这条测试"就等于改写被跟踪的 `demo/run/data/*`，
-    而别处"仓库冻结、sha256 前后不变"那类断言正是以这个仓库为前提的。
-    （这条坑本项目已经用负控登记过，见 `tests/test_cli_console_encoding.py` 里
-    `ENTRIES` 第三列 `needs_root` 的注释与 `temp/i1-neg-{before,after}.txt`；
-    我写这条测试的第一版照样踩了它 —— 实测跑完 `demo/run/data/` 里 5 个文件的
-    sha256 全变了，所以这里把 `--root` 钉住。）
+    A4（2026-11-20）退场的是命令行那一层（`cli demo` 现在退出码 2 + 替代指引，
+    由 `tests/test_legacy_cli_retired.py` 钉住）；演示本身仍在库里，这一条改成直接
+    调库入口 —— 退场不许把"离线端到端还能跑通"这件事一起丢掉。
+
+    根由调用方显式给（`run_demo(root)` 会 `rmtree(root / "demo" / "run")` 再重建），
+    所以这里不存在"不给 `--root` 就落进仓库"的那条坑：落点就是 `tmp_path`。
     """
-    root = str(tmp_path / "ws")
-    code, out = _run(["--root", root, "demo"])
+    from agentflow.demo import run_demo
+
+    root = tmp_path / "ws"
+    code = run_demo(root, reset=True)
+    out = capsys.readouterr().out
     assert code == 0, out[-1200:]
     assert "演示成功" in out, out[-400:]
-    assert (tmp_path / "ws" / "demo").exists(), "demo 应当落在 --root 指定的目录里"
+    assert (root / "demo").exists(), "demo 应当落在调用方给的那个根里"
 
 
 def test_status_and_tools_work_on_a_fresh_workspace(tmp_path: Path):

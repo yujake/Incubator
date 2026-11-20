@@ -40,6 +40,7 @@ from agentflow.secretary import Secretary
 from agentflow.store import Store
 
 from conftest import seed_statement_row
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 在册的那一条（夹具直接铺行：这一份测的是判定失败时的处置，不是登记路径）。
 IN_LEDGER = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在。"
@@ -273,7 +274,7 @@ def test_without_the_fail_closed_refusal_the_unjudged_cases_write_a_row(
 
     证明 c 的绿是那条 fail-closed 给的，不是夹具自带的。
     """
-    monkeypatch.setattr(SEC, "_proposition_judgment_missing",
+    HOME.patch(monkeypatch, "_proposition_judgment_missing",
                         lambda kind, adj: "")
     for label, seam in (
         ("same-empty", _Seam(reply={"decision": "same", "same_as": ""})),

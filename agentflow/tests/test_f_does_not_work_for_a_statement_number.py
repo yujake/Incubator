@@ -474,9 +474,14 @@ _REPO_LITERAL_WHITELIST: dict[str, tuple[int, str, str]] = {
         1, "历史", "点名「被停掉的旧口径」，同一句已写明收方现在按稿号读盘"),
     "agentflow/src/agentflow/agent_f/manuscript.py": (
         1, "历史", "publish_manuscript 的旧改名口径；紧接的下一句就是现行稿号口径"),
-    "agentflow/src/agentflow/agent_prompts.py": (
+    # 2026-11-20（PROMPTHIST）：这一行原先登记的是 `src/agentflow/agent_prompts.py`（4 条，
+    # 业主明示保留的变更日志）。那 4 条全在版本账里，而账已整块逐字节搬进
+    # `docs/PROMPT-HISTORY.md` ⇒ 登记跟着账走：源码那一格现在一处命中都没有（留着它
+    # 会被判成"登记过期"），文档那一格照现值记 4 条。
+    "agentflow/docs/PROMPT-HISTORY.md": (
         4, "历史",
-        "2026-11 的变更日志四行（:3145 / :3810 / :3874 / :3877；业主明示保留，不当漏网）"),
+        "2026-11-20 版本账整块从 `agent_prompts.py` 搬进这份文档（逐字节）："
+        "那 4 处是账里的变更记录，讲的是改前的旧稿名字面，就地保留；账不是活文案"),
     "agentflow/src/agentflow/depsection.py": (
         1, "历史",
         "ramsey-4-4-87 真机读数；同一段已就地在上面注明 2026-11-10 后稿按稿号命名"),
@@ -518,8 +523,14 @@ def _git_grep_fixed(literal: str) -> list[tuple[str, int, str]]:
     assert top.returncode == 0, (
         f"`git rev-parse --show-toplevel` 没查成（退出码 {top.returncode}）："
         f"{top.stderr.strip()[:300]} —— 这条判据不知道仓库根在哪，本次没有真正检查")
+    # 2026-11-20（PROMPTHIST）：加 `--untracked`。`git grep` 默认只看「已跟踪」文件，
+    # 于是"新落一份文档/一段账、还没 `git add`"的那一窗里，它在这条判据的扫描面上等于
+    # 不存在 —— 而本仓已经在 `scripts/noai_gate.py --git` 上踩过同一个坑并写明
+    # （`AGENTS.md`：`git diff` 只报已跟踪文件，所以在清单登记过的路径上新建文件同样
+    # 看不见）。这一改只加宽扫描面（更严），不搬动任何白名单条数；被 ignore 的文件
+    # （`temp/`）仍不在面上。
     proc = subprocess.run(
-        ["git", "grep", "-n", "-F", literal],
+        ["git", "grep", "--untracked", "-n", "-F", literal],
         cwd=top.stdout.strip(), capture_output=True, text=True,
         encoding="utf-8", errors="replace")
     if proc.returncode == 1:

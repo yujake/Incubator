@@ -49,6 +49,7 @@ from agentflow import secretary as SEC
 from agentflow.agent_b import AgentB
 from agentflow.secretary import Secretary
 from agentflow.store import Store
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 真机那两行的 label 逐字（`000000` 与 `000001` 是同一个字符串）。
 REAL_LABEL = "F 攻坚 000000 子目标 S2"
@@ -202,7 +203,7 @@ def test_c_emptying_the_rule_table_turns_a_red(tmp_path: pathlib.Path,
     改前那个字符串。没有这一条，"洗掉了"可能只是巧合（例如别的规则顺手改了它）。
     """
     assert SEC.wash_working_name(REAL_LABEL, statement_full=REAL_FULL, kind="lemma") is not None
-    monkeypatch.setattr(SEC, "LABEL_WORKING_NAME_RULES", ())
+    HOME.patch(monkeypatch, "LABEL_WORKING_NAME_RULES", ())
     assert SEC.wash_working_name(REAL_LABEL, statement_full=REAL_FULL, kind="lemma") is None
     st = _ws(tmp_path)
     got = _agent(st).register_statement(**_own(REAL_FULL, REAL_LABEL), proof_text="")
@@ -228,11 +229,11 @@ def test_the_on_record_work_name_is_repaired_when_a_proof_merges_in(
     # `AgentB.register_statement` 的包装一起撤掉（同一只 monkeypatch），
     # 于是第二笔又回到"没补稿"的形态 —— 那测的就不是这一条判据了。
     real_wash = SEC.wash_working_name
-    monkeypatch.setattr(SEC, "wash_working_name", lambda *a, **k: None)
+    HOME.patch(monkeypatch, "wash_working_name", lambda *a, **k: None)
     first = _agent(st).register_statement(**_own(FULL_A, REAL_LABEL), proof_text="")
     assert first.get("ok") is True, first
     assert _labels(st) == [REAL_LABEL], _labels(st)
-    monkeypatch.setattr(SEC, "wash_working_name", real_wash)
+    HOME.patch(monkeypatch, "wash_working_name", real_wash)
     # 第二笔：同一条命题的另一种写法 + 一份证明 ⇒ 并进去，顺手修名。
     #
     # 2026-11-02 准入闸 strict：并进来的那一份正文必须已有一份覆盖它的 V 签。
@@ -261,7 +262,7 @@ def test_before_this_feature_exists_the_work_name_lands_verbatim(
     这不是另写一份假代码：`wash_working_name` 就是这一笔新加的确定性洗名，把它退回
     `None` 精确等于改前的形态（那时 label 只经过模型那一趟，而模型没接上就原样落盘）。
     """
-    monkeypatch.setattr(SEC, "wash_working_name", lambda *a, **k: None)
+    HOME.patch(monkeypatch, "wash_working_name", lambda *a, **k: None)
     st = _ws(tmp_path)
     got = _agent(st).register_statement(**_own(REAL_FULL, REAL_LABEL), proof_text="")
     assert got.get("ok") is True, got

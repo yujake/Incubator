@@ -56,6 +56,7 @@ from agentflow.agent_e import AgentE  # noqa: E402
 from agentflow.agent_loop import AgentLoop  # noqa: E402
 from agentflow.agent_v import AgentV  # noqa: E402
 from agentflow.store import Store  # noqa: E402
+import _secretary_home as HOME  # noqa: E402 — 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 TS = "2026-10-23T00:00:00+08:00"
 
@@ -893,7 +894,7 @@ def test_criterion5b_stubbing_trivial_detection_makes_the_nontrivial_branch_red(
     没有这一条，③ 的绿色可能来自"什么都被判成 T0"。
     """
     store = _store(tmp_path)
-    monkeypatch.setattr(SEC, "_is_trivial_verdict", lambda *a, **k: True)
+    HOME.patch(monkeypatch, "_is_trivial_verdict", lambda *a, **k: True)
     with pytest.raises(AssertionError):
         _assert_nontrivial_branch_keeps_its_tier(store)
 

@@ -43,6 +43,7 @@ from agentflow import secretary as SEC
 from agentflow.secretary import Secretary
 from agentflow.store import Store
 from agentflow.webui import readers as R
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 一条概念（定义就在正文里，没有证明）。
 CONCEPT_LABEL = "有限维李代数"
@@ -266,7 +267,7 @@ def test_the_concept_branch_costs_no_model_call(tmp_path: pathlib.Path,
         "真命题判档一次调用都没发 ⇒ 上面那个 [] 说明不了'早退挡住了调用'")
     # (2) 两态：关掉"不适用"那一档，概念行仍然不发调用（挡它的是另一支：没证明正文
     #     ⇒ 没查成），而读数落到"未判"而不是"不适用" —— 这一条把两个词钉开。
-    monkeypatch.setattr(SEC, "_is_not_applicable_kind", lambda kind: False, raising=True)
+    HOME.patch(monkeypatch, "_is_not_applicable_kind", lambda kind: False)
     seen = len(seam.calls)
     other = sec.judge_statement(statement_full=CONCEPT_DEF, kind="concept", task_id="t-3")
     assert len(seam.calls) == seen, (
@@ -283,7 +284,7 @@ def test_stubbing_the_not_applicable_branch_turns_the_word_into_unjudged(
     打桩的是"哪几档 kind 判档不适用"这一条判据本身（`_is_not_applicable_kind`），
     于是走的是改前那条路：概念行不进早退支、也不落任何台账行 —— 读侧只剩"未判"。
     """
-    monkeypatch.setattr(SEC, "_is_not_applicable_kind", lambda kind: False, raising=True)
+    HOME.patch(monkeypatch, "_is_not_applicable_kind", lambda kind: False)
     st = _ws(tmp_path)
     sec = Secretary("B", root=st.root, store=st)
     row = _concept(sec)

@@ -731,10 +731,6 @@ class _Core:
         self.log = log
 
         # ---- 阈值全部来自 config（与 A–E 的既有做法一致）
-        #: 一轮里最多推进几个子目标（瞬时并发，FC-18 的 `max_parallel_subgoals`）。
-        #: 默认 1：一次推进多个子目标会让"这一轮发生了什么"变成一串并列事件，
-        #: 而 `history` 的用途正是"按顺序把这个难题读一遍"。
-        self.max_subgoals_per_round = int(self.cfg.get("max_subgoals_per_round", 1))
         #: A 的检索请求默认 mode（`broad`/`topical`/`precise`）。
         #: 攻坚里的检索请求面向某个具体子目标，因此默认 `precise`
         #: —— 但 `precise` 在 schema 里要求非空 `content_description`，
@@ -756,8 +752,6 @@ class _Core:
         #: 而生产路径用真的。`None` 表示"还没构造"，不是"禁用 E"。
         self._e = e
 
-        self.last_step: dict[str, Any] = {}
-        self.last_tool_errors: list[dict] = []
         self.tools = tools if tools is not None else install_f_tools(self.store)
         # ---- 绑定角色（`P-14`）：注入的注册表同样要绑（`AgentD` 那条注释同族）。
         if self.tools.bound_role is None:
@@ -1057,10 +1051,9 @@ class _Core:
             )
         return self._e
     def _call(self, name: str, **params: Any) -> Any:
-        """调工具并解开 `ToolResult`；失败返回 None 并留痕（同 `AgentD._call`）。"""
+        """调工具并解开 `ToolResult`；失败返回 None（本层不留错误账本 —— F 侧零读者）。"""
         res = self.tools.call(name, **params)
         if not res.ok:
-            self.last_tool_errors.append({"tool": name, "error": res.error, "kind": res.meta.get("kind")})
             return None
         return res.data
     def _plan_row(self, plan_id: str) -> dict | None:

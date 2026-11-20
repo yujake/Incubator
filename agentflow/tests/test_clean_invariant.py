@@ -21,10 +21,10 @@
 
 ## 第 5 条为什么必须存在（一条已经漏过的缝）
 
-第 1 条刻意只量私有函数。公开名于是长期没有判据：`identity.conflict_line`、
-`rowscope.OWNER_FIELDS`、`interactions.ADJUDICATION_POLICY_CODES`、
-`store.direct_write_backstop`、`schema.CONJECTURE_QUESTION_WORDS` 这五个公开名
-零调用地活到了 2026-11-20，才由人逐条删掉 —— 全程没有任何判据变红。
+第 1 条刻意只量私有函数。公开名于是长期没有判据：`identity` 的 `conflict_line`、
+`rowscope` 的 `OWNER_FIELDS`、`interactions` 的 `ADJUDICATION_POLICY_CODES`、
+`store` 的 `direct_write_backstop`、`schema` 的 `CONJECTURE_QUESTION_WORDS` 这五个
+公开名零调用地活到了 2026-11-20，才由人逐条删掉 —— 全程没有任何判据变红。
 第 5 条堵的就是这条缝：公开名同样要有一个生产侧读者，或者逐条登记它为什么还在。
 
 ## 第 5 条的口径（"什么算引用"写死在这里）

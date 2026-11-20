@@ -35,6 +35,7 @@ from agentflow.llmseam import LlmSeam
 from agentflow.specs import builtin_specs
 from agentflow.store import Store
 from agentflow.tools import build_registry
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 SID = "s-brief-by-secretary"
 ROLE = "M"
@@ -137,7 +138,7 @@ def test_negctl_turning_the_derivation_off_is_red(
     """
     env = _env(tmp_path)
     tid = _child(env["cond"], env["owner"], key="brief@c")
-    monkeypatch.setattr(SEC, "brief_from_task", lambda *a, **k: "")
+    HOME.patch(monkeypatch, "brief_from_task", lambda *a, **k: "")
     got = env["sec"].roster_add(owner=env["owner"], role=CHILD, task_id=tid,
                                 brief="", task=TASK_TWO_SENTENCES)
     assert got.get("problem") and "简介" in got["problem"], got
@@ -168,7 +169,7 @@ def test_negctl_letting_it_through_is_red(tmp_path: pathlib.Path,
     """② 负控：改成放行（派生函数对着空任务也吐一句"编的"）⇒ 判据必红。"""
     env = _env(tmp_path)
     tid = _child(env["cond"], env["owner"], key="brief@e")
-    monkeypatch.setattr(SEC, "brief_from_task", lambda *a, **k: "一句编出来的简介")
+    HOME.patch(monkeypatch, "brief_from_task", lambda *a, **k: "一句编出来的简介")
     got = env["sec"].roster_add(owner=env["owner"], role=CHILD, task_id=tid,
                                brief="", task="")
     with pytest.raises(AssertionError):
@@ -225,7 +226,7 @@ def test_negctl_without_the_clip_it_hits_the_content_gate(
     """
     env = _env(tmp_path)
     tid = _child(env["cond"], env["owner"], key="brief@g")
-    monkeypatch.setattr(SEC, "brief_from_task", lambda task, **k: str(task))
+    HOME.patch(monkeypatch, "brief_from_task", lambda task, **k: str(task))
     got = env["sec"].roster_add(owner=env["owner"], role=CHILD, task_id=tid,
                                 brief="", task=LONG_TASK)
     assert got.get("problem") and "60" in got["problem"], got

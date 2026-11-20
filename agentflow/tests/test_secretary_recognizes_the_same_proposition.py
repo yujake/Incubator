@@ -62,6 +62,7 @@ from agentflow.agent_b import AgentB
 from agentflow.agent_c.proof_chain import _DepGraph
 from agentflow.secretary import MERGED_BY_ADJUDICATION, Secretary
 from agentflow.store import Store
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 #: 第一条命题（登记工作区里的第一行，号由 store 发，实得 `000000`）。
 SID = S.format_id(0)
@@ -597,7 +598,7 @@ def test_merge_true_overwrites_canonical_and_requires_a_fresh_v_signature(
     # 打桩放行，好让合并那一笔走到本用例要判的几格上。
     import agentflow.secretary as SEC
 
-    monkeypatch.setattr(SEC, "proof_text_manuscript_sign_gate",
+    HOME.patch(monkeypatch, "proof_text_manuscript_sign_gate",
                         lambda *a, **k: {"checked": True, "required": True,
                                          "ok": True, "refused": "", "reason": "",
                                          "statement_id": "", "proof_no": 1,

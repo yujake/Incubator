@@ -5594,7 +5594,7 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
         # ---- 落点：这一笔是"新的一条证明路径"还是"改在册那一份的正文" ------------
         #
         # 号不在这里算（见上）：这一格只回答"要不要让秘书为这一笔分一个新号"。
-        # 判据是稿的身份（`_rewrite_is_the_same_proof`）：同一份稿改正文 ⇒ 改稿；
+        # 判据是稿的身份（`_proof_path_reading` 的 `same_proof` 那一格）：同一份稿改正文 ⇒ 改稿；
         # 换了一份稿 ⇒ 新路径。秘书在重复那一支里看到这个标记才分配 N+1。
         _proof_path_kind = (
             "new_path"
@@ -7471,17 +7471,6 @@ class _RegisterStatement(_LandManuscript, _IngestManuscript):
             if rec:
                 return rec == rel, "canonical_verification"
         return rel.startswith("reports/b-proof-"), "b_proof_prefix"
-
-    def _rewrite_is_the_same_proof(self, *, stmt_id: str, row: Mapping,
-                                   manuscript_path: str, proof_text: str) -> bool:
-        """这一笔是"改在册同一份证明的正文"还是"同一命题的另一条证明路径"（bool 包装）。
-
-        判据本体在 :meth:`_proof_path_reading`（逐路径记录优先）。保留这个名字是因为
-        登记入口只关心"要不要走 B 的改写载体"这一问；要号 / 要认法读那个 dict。
-        """
-        return bool(self._proof_path_reading(
-            stmt_id=str(stmt_id or ""), row=row, manuscript_path=manuscript_path,
-            proof_text=str(proof_text or "")).get("same_proof"))
 
     def _existing_statement_for(self, full: str) -> dict | None:
         """按 `statement_full` 的规范化值找在册那一行（"是不是同一条"的唯一判据在

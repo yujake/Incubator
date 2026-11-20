@@ -35,6 +35,7 @@ from agentflow.secretary import Secretary
 from agentflow.store import Store
 from agentflow.tools import table_tools as TT
 from agentflow.tools.base import ToolRegistry
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 TS = "2026-11-04T00:00:00+00:00"
 STATEMENT = "设 f 连续，则 f 在紧集上一致连续。"
@@ -144,7 +145,7 @@ def test_a_table_create_with_inline_proof_text_is_refused(tmp_path):
 
     monkeypatch = pytest.MonkeyPatch()
     try:
-        monkeypatch.setattr(SEC, "proof_text_manuscript_sign_gate",
+        HOME.patch(monkeypatch, "proof_text_manuscript_sign_gate",
                             lambda *a, **k: {"checked": True, "required": True,
                                              "ok": True, "refused": "", "reason": "",
                                              "statement_id": "", "proof_no": 1,
@@ -183,7 +184,7 @@ def test_b_table_update_may_not_smuggle_a_new_row_with_proof_text(tmp_path):
 
     monkeypatch = pytest.MonkeyPatch()
     try:
-        monkeypatch.setattr(SEC, "_bits_bear_evidence", lambda bits: bool(bits),
+        HOME.patch(monkeypatch, "_bits_bear_evidence", lambda bits: bool(bits),
                             raising=False)
         with calling_as("t-000001", "B"):
             res2 = reg.call("table.update", table="statements", id=sid,

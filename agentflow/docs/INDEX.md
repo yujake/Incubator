@@ -29,6 +29,7 @@
 | [`LEAN-MODES.md`](LEAN-MODES.md) | 有 Lean / 无 Lean 两模式的完整矩阵：开关、动作可用面、证据上限、收工门各格 |
 | [`TWO-AXES-GRADE-AND-KIND.md`](TWO-AXES-GRADE-AND-KIND.md) | **等级（`GRADES`）与档位（`EVIDENCE_KINDS`）是两个轴**：五元位 ⇒ 等级（32 组现算）、五元位 ⇒ 档位（逐格标"不由五元位决定"并给出三处真落点）、等级 ⇄ 档位的现场横表（真机 77 工作区 / 3627 行 + 夹具）与两组反例；术语校准表（"证据等级"→"证据档位"）逐处登记。表由 `tests/test_two_axes_grade_and_kind.py` 逐格比对（改错一格即红） |
 | [`READING-MAP.md`](READING-MAP.md) | 大文件的行数与「该读哪一段」的索引 |
+| [`PROMPT-HISTORY.md`](PROMPT-HISTORY.md) | **提示词版本账**：每抬一格 `agent_prompts.PROMPT_VERSION` 在这里追加一段（2026-11-20 从 `agent_prompts.py` 逐字节搬出，2,879 行）。抬版本时往本文件末尾写；判据 `tests/test_the_prompt_history_is_the_only_ledger.py` 钉两件事 —— 源码里一段不留、本文件末节标题 == `PROMPT_VERSION` |
 | [`USER-GUIDE.md`](USER-GUIDE.md) | 用户视角：从哪进、怎么建项目、产物在哪、出错先看哪（CLI 一节含四个入口与 28 行新老对照表） |
 | [`CLI-CONTRACT.md`](CLI-CONTRACT.md) | `inspect` 那一组 `--json` 的机器可读契约：外层四格 / 每条命令的 `data` 字段 / 三态语义 |
 | [`USER-TEST.md`](USER-TEST.md) | 用户侧验收剧本 |

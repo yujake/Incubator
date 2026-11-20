@@ -8677,6 +8677,66 @@ def _statement_reviewed(root: Any, row: Mapping[str, Any]) -> bool:
     return (bool(gap.get("checked")) and bool(gap.get("ok"))
             and not bool(gap.get("pending")))
 
+
+def _record_suspect_self_signed(rep: ClosingReport, store: Any, *,
+                                na_reason: str = "") -> list[dict[str, Any]]:
+    """把「可疑的自签背书」这一格的读数落进 `rep.readings`，返回逐条可疑行。
+
+    ## 为什么单独成一个落点（2026-11-20，EMPSUSPECT）
+
+    这一格是读数、不是判定（业主 2026-10-27：「先报不拦」）。改前读数与判定一起写在
+    `_check_load_bearing` 的中段，而承重门在「三张表一行都没有」那一条 EMPTYCELL 的
+    `na` 早退（`_no_judgeable_rows`）上直接 return ⇒ 空工区上
+    `readings.suspect_self_signed` 是 `None`，读的人分不清「查过了、没有可疑行」与
+    「压根没有产出这一格读数」。所以落点提到早退之前：`na` 说的是「这一格没有可判
+    对象」，不等于「这一格不产出读数」。
+
+    三态由 `checked` 与 `na_reason` 两格分开（不许把三档折平）：
+
+    - `checked=True` 且 `na_reason` 为空：查过了 —— 有行可判，`total` 就是可疑行数；
+    - `checked=True` 且 `na_reason` 非空：三张表一行都没有 ⇒ 这一格不适用（读数里带
+      `na=True` 与 `reason`），读数照给：`signer_required` 仍是 `V`、`e_signature_backed`
+      是 0、分布与逐条读数都是空的那一份 —— 不是「查过且合格」；
+    - `checked=False`：没查成（没给工作区根，或读台账抛异常），`why` 说原因；
+      这一档由调用方补一条 warning，不是「没有可疑行」。
+
+    为什么读数的判据只有 `numericproof.suspect_self_signed`：它覆盖全工作区的
+    `is_signed_exhaustion` 行（承重门只判被正文引到的那些），且与承重门的穷举支路共用
+    `numericproof.exhaustion_backing`（2026-11-03，`draft/154` 业主裁定「V 要签的是 E
+    那份报告的理论论证部分」）—— 这里再算一遍就会有两个「什么算可疑」的答案。
+    """
+    from . import numericproof as _NP
+
+    try:
+        suspect = _NP.suspect_self_signed(store.rows("experiments"), root=store.root,
+                                          statements=store.rows("statements"))
+    except Exception as exc:  # noqa: BLE001 —— 这一格坏了不许拖垮承重门
+        suspect = {"checked": False, "suspects": [], "total": 0,
+                   "why": f"没查成（{type(exc).__name__}: {exc}）"}
+    reading: dict[str, Any] = {
+        "checked": bool(suspect.get("checked")),
+        "total": int(suspect.get("total") or 0),
+        "ids": [str(s.get("experiment_id") or "") for s in (suspect.get("suspects") or [])][:20],
+        "why": str(suspect.get("why") or ""),
+        # 2026-11-03（153-U-06 的丙+乙）：这三格是读数，与 `total` 一样只报不拦。
+        # `signer_required` 说清这一签应当由谁签（V；E 只是 ②③ 的作者），
+        # `e_signature_backed` / `third_party_verdicts` 分辨「V 审过判了有毛病」与
+        # 「压根没签」，`by_project` 给出本工作区那三个计数（跨工作区的合计不在这里编造）。
+        "signer_required": str(suspect.get("signer_required") or ""),
+        "e_signature_backed": int(suspect.get("e_signature_backed") or 0),
+        "third_party_verdicts": dict(suspect.get("third_party_verdicts") or {}),
+        "by_project": dict(suspect.get("by_project") or {}),
+        # 2026-11-03（154）：四结局的逐条分布与逐行读数（与承重门同一份判据）。
+        "states": dict(suspect.get("states") or {}),
+        "rows": list(suspect.get("rows") or [])[:20],
+    }
+    if na_reason:
+        reading["na"] = True
+        reading["reason"] = na_reason
+    rep.readings["suspect_self_signed"] = reading
+    return [dict(s) for s in (suspect.get("suspects") or [])]
+
+
 def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     """承重结论必须有 T3 或已降档（§10.2 的四条"必须上 T3"在收工门上的形态）。
 
@@ -8716,6 +8776,10 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
                                     "没有 store ⇒ 承重结论没查成"))
         return
     absent, why = _no_judgeable_rows(store, LOAD_BEARING_TABLES)
+    # 2026-11-20（EMPSUSPECT）：读数必须在下面那条 `na` 早退之前落下 —— `na` 说的是
+    # 「这一格没有可判对象」，不是「这一格不产出读数」。三态见
+    # `_record_suspect_self_signed` 的 docstring。
+    suspect_rows = _record_suspect_self_signed(rep, store, na_reason=why if absent else "")
     if absent:
         # 2026-11-20（EMPTYCELL）：承重这一格问"正文里 proof 级断言有没有背书"。
         # 稿件 / 命题 / 实验三张表都没有一行 ⇒ 没有断言可判，记 `na`。
@@ -8738,43 +8802,21 @@ def _check_load_bearing(rep: ClosingReport, store: Any) -> None:
     # 这一格覆盖全工作区的 `is_signed_exhaustion` 行（承重门只判被正文引到的那些），
     # 判据只写一遍：`numericproof.exhaustion_backing` —— 承重门的穷举支路调的是同一个
     # 函数（2026-11-03，`draft/154` 业主裁定「V 要签的是 E 那份报告的理论论证部分」）。
-    # 放在这个位置（在 Lean 开关那一支之前）：E 的穷举自签在 lean 关掉的那些趟里一样
-    # 存在，所以这条读数必须两条支路都跑到（放函数末尾会让 lean 关掉的绝大多数趟
-    # 直接漏掉它）。
+    # 读数已由函数入口的 `_record_suspect_self_signed` 落下：那里在 `na` 早退之前
+    # （空工区也要有读数，2026-11-20 EMPSUSPECT），也在 Lean 开关那一支之前 ——
+    # E 的穷举自签在 lean 关掉的那些趟里一样存在，所以这条读数两条支路都读得到。
     #
     # 只报不拦：`warning` 不进 `blockers`、也不改 `status`（业主 2026-10-27 的口径）。
     # 去重（2026-11-03）：被正文引到、且承重门那一条 finding 已经逐条点名的行，
     # 这里不再说第二遍 —— 同一份判据、同一句话，只留一处（见下面 `residual`）。
+    # 下面穷举支路还要用 `numericproof`（函数内导入、别名 `_NP`，与 `_has_t3` 同一写法）。
     from . import numericproof as _NP
 
-    try:
-        suspect = _NP.suspect_self_signed(store.rows("experiments"), root=store.root,
-                                          statements=store.rows("statements"))
-    except Exception as exc:  # noqa: BLE001 —— 这一格坏了不许拖垮承重门
-        suspect = {"checked": False, "suspects": [], "total": 0,
-                   "why": f"没查成（{type(exc).__name__}: {exc}）"}
-    rep.readings["suspect_self_signed"] = {
-        "checked": bool(suspect.get("checked")),
-        "total": int(suspect.get("total") or 0),
-        "ids": [str(s.get("experiment_id") or "") for s in (suspect.get("suspects") or [])][:20],
-        "why": str(suspect.get("why") or ""),
-        # 2026-11-03（153-U-06 的丙+乙）：这三格是读数，与 `total` 一样只报不拦。
-        # `signer_required` 说清这一签应当由谁签（V；E 只是 ②③ 的作者），
-        # `e_signature_backed` / `third_party_verdicts` 分辨"V 审过判了有毛病"与"压根没签"，
-        # `by_project` 给出本工作区那三个计数（跨工作区的合计不在这一格里编造）。
-        "signer_required": str(suspect.get("signer_required") or ""),
-        "e_signature_backed": int(suspect.get("e_signature_backed") or 0),
-        "third_party_verdicts": dict(suspect.get("third_party_verdicts") or {}),
-        "by_project": dict(suspect.get("by_project") or {}),
-        # 2026-11-03（154）：四结局的逐条分布与逐行读数（与承重门同一份判据）。
-        "states": dict(suspect.get("states") or {}),
-        "rows": list(suspect.get("rows") or [])[:20],
-    }
-    suspect_rows = [dict(s) for s in (suspect.get("suspects") or [])]
-    if not suspect.get("checked"):
+    suspect_reading = rep.readings.get("suspect_self_signed") or {}
+    if not suspect_reading.get("checked"):
         rep.findings.append(Finding(
             "load_bearing", "suspect_self_signed_unchecked", "warning",
-            f"可疑自签背书这一格没查成：{suspect.get('why')}（不是「没有可疑行」）"))
+            f"可疑自签背书这一格没查成：{suspect_reading.get('why')}（不是「没有可疑行」）"))
     # ---- 两条口径（业主 2026-11-14 拍板）：Lean 关不再记 `na` ----------------------
     #
     # 改前：Lean 关（产品缺省，`settings.DEFAULT_LEAN_ENABLED = False`）时这一格直接写

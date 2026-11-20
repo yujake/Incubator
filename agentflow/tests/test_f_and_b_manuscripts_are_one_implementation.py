@@ -684,8 +684,9 @@ def _real_entries_run(st: Store) -> tuple[str, str, str]:
     assert str(published.get("path") or "") == rel_f, published
     f_unsigned = (pathlib.Path(st.root) / rel_f).read_text(encoding="utf-8")
     body = DS.proof_body(f_unsigned).strip("\n")
-    # 这一份 F 稿就是这条命题自己那一份稿（2026-11-12：`_rewrite_is_the_same_proof`
-    # 按"稿身份"判改稿 / 新路径；行上记的稿号等于这份稿的稿号才是"改这一份的正文"）。
+    # 这一份 F 稿就是这条命题自己那一份稿（2026-11-12：按"稿身份"判改稿 / 新路径，
+    # 判据在 `_proof_path_reading` 的 `same_proof` 那一格；行上记的稿号等于这份稿的
+    # 稿号才是"改这一份的正文"）。
     # 不写这一格，B 会把"同一命题 + 一份还没认领的 F 稿"读成第 2 条路径，于是不落
     # B 的改写载体 —— 本文件量的正是"两族经真实入口落下来的稿同一个骨架"，前提是
     # 这一笔确实是改写这条命题那一份稿。断言一个字都没改。

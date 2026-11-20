@@ -3426,19 +3426,22 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "__init__.py": "包入口：包级版本号与公开面（`import agentflow` 的第一落点）",
     "__main__.py": "`python -m agentflow` 的入口（只做转发）",
     # `goal-7f5116c1` M6/M7：八个角色（除主控 M）都改成了包，一个动作一个文件
-    # （A 3 / B 6 / C 9 / D 14 / E 5 / F 4 / G 6 / H 4 个动作各自一个模块）+
+    # （A 6 / B 10 / C 10 / D 14 / E 4 / F 5 / G 7 / H 5 个动作各自一个模块）+
     # `core.py`（其余成员与 mixin 组装）+ `_support.py`（模块级 helper 与常量）+
     # `__main__.py`（`python -m agentflow.<角色>` 的自检入口）。
     # 拆法是逐字搬移（一次性证明 `temp/_m6_verify_verbatim.py`：28/28），这条清单守的是
     # "拆完之后还保持这个形状"（判据 `tests/test_agent_split_is_one_action_one_file.py`）。
-    "agent_a/": "智能体 A：文献搜索（拆包：3 个动作各一个文件 + core + _support + __main__）",
-    "agent_b/": "智能体 B：文献整理（拆包：6 个动作各一个文件 + core + _support + __main__）",
-    "agent_c/": "智能体 C：关系分析（拆包：9 个动作各一个文件 + core + _support + __main__）",
+    # 上面那串数字与下面每一行的「拆包：N 个动作」都是读数，不是规格：判据
+    # `test_packaging_action_counts_in_the_registry_match_the_live_action_tables`
+    # 按 `capabilities.actions_for(角色)` 的现读核它们（改错一格就红 —— F-4，2026-11-20）。
+    "agent_a/": "智能体 A：文献搜索（拆包：6 个动作各一个文件 + core + _support + __main__）",
+    "agent_b/": "智能体 B：文献整理（拆包：10 个动作各一个文件 + core + _support + __main__）",
+    "agent_c/": "智能体 C：关系分析（拆包：10 个动作各一个文件 + core + _support + __main__）",
     "agent_d/": "智能体 D：研究循环（拆包：14 个动作各一个文件 + core + _support + __main__）",
-    "agent_e/": "智能体 E：数值实验与形式化验证（拆包：5 个动作各一个文件 + core + _support + __main__）",
-    "agent_f/": "智能体 F：多轮难题攻坚（拆包：4 个动作各一个文件 + core + _support + __main__）",
-    "agent_g/": "智能体 G：论文撰写（拆包：6 个动作各一个文件 + core + _support + __main__）",
-    "agent_h/": "智能体 H：审校（拆包：4 个动作各一个文件 + core + _support + __main__）",
+    "agent_e/": "智能体 E：数值实验与形式化验证（拆包：4 个动作各一个文件 + core + _support + __main__）",
+    "agent_f/": "智能体 F：多轮难题攻坚（拆包：5 个动作各一个文件 + core + _support + __main__）",
+    "agent_g/": "智能体 G：论文撰写（拆包：7 个动作各一个文件 + core + _support + __main__）",
+    "agent_h/": "智能体 H：审校（拆包：5 个动作各一个文件 + core + _support + __main__）",
     # B 线（F-02 / `draft/54 §1`）新建的角色 V（验证者）。登记在这里是事实登记：
     # 盘上确实多了这个包；它该不该存在由 B 线的 13 步施工单负责（`specs/v.py` 已登记
     # 进 `.noai-paths`）。A 线不改它的任何内容，只是不让"包目录里凭空多出一个模块"
@@ -3630,6 +3633,30 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
     "verifications.py": "验证者 V 的证明级审校台账：`verifications/<命题号>.jsonl` 追加式一行一次审校、"
                         "冷启动提示词（`cold_start_prompt`，签名里没有句柄）、三态结论、签五元位第 3 位"
                         "（`signs_bit3`/`bit3_payload`）—— `draft/39` §3.21",
+    # 2026-11-20（VERSPLIT2）：`verifications.py` 落成门面（6,907 → 356 行），177 个顶层名字按
+    # SPLIT-2 的 18 个模块搬进下面这些 `v_*.py`。为什么必须是顶层模块而不是子包：模块之间有
+    # 真环（`v_pending_read ↔ v_rowread` / `v_ledger_write ↔ v_sign`），跨模块 import 一律放在
+    # 文件末尾，"定义全跑完再 import"这条次序要成立就得是同一层的兄弟模块；子包只会给环多加
+    # 一个 `__init__` 入口。为什么不再拆细：每块都 ≤800 行（拆的唯一目的是体量）。
+    # 判据与读数在 `temp/versplit2/`（逐名 AST 全等 + 32 个打桩名逐名"打得到"）。
+    "v_citation.py": "引用核实（签字前置，纯函数）：`citation_gate` 判 F 登记的引用够不够格",
+    "v_vocab.py": "V 侧的词表与常量（唯一来源）：结论两态 / 证据档 / 拒因码 / 台账目录名 —— 常量被七个模块读，只能一份",
+    "v_paths.py": "台账路径 + 证明号/哈希/判词解析：`VerificationError` 与那一族解析口",
+    "v_pending_write.py": "pending 写口：两层锁 + 跨文件发号 + `_PENDING_LOCKS`",
+    "v_pending_read.py": "pending 读侧：「哪一行算那一签」的唯一实现",
+    "v_prompt.py": "V 的冷启动提示词（只有对象、没有句柄）",
+    "v_ledger_write.py": "台账写口：追加 + 可撤回",
+    "v_rowread.py": "行轴与签资格：轴只由秘书给，`ledger_axis` / `secretary_axis` 一族",
+    "v_defect.py": "缺陷分类与投票（纯读）+ 硬禁令短语命中",
+    "v_streak.py": "连续票与打回：同一份正文才算数",
+    "v_sign.py": "签落位：台账与 `statements` 同一次写",
+    "v_sign_flip.py": "签落位续：翻位 / 降级 / 签后义务",
+    "v_standing.py": "五元位第 3 位读数：签的是哪一份",
+    "v_gap_read.py": "凭据缺口读数：pending / 短回路",
+    "v_grades.py": "等级反算：apply 才写盘",
+    "v_unverified.py": "未审命题：在册 / pending 两路",
+    "v_evidence.py": "证据同一性：同一份读数只算一份",
+    "v_selftest.py": "V 侧自检（`python -m agentflow.verifications` 的入口）",
     # 业主 2026-11-01（逐字）：「V 签不直接进台账，进手稿，随 B 侧将手稿中的定理或命题收录时
     # 读到。」改前"签"只活在 `statements.bits.reviewed` 与台账尾部连续数里，两处都按命题号
     # 索引 ⇒ B 拿着手稿问不出"这一份稿签过没有"。这一格就是那条断链的补口：按被签正文的
@@ -3977,6 +4004,70 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "秘书只经 `new_secretary` / `Secretary._new_secretary` —— 它不 import "
                          "任何秘书模块，`secretary.py` 在类定义之后把类登记进来；混入层因此"
                          "永远不必 `from .secretary import Secretary`（那句就是真环）",
+    # 2026-11-20（SECSPLIT2 刀3–刀6）：`class Secretary` 的 193 个方法与其余模块级名字按
+    # 03 号文的模块地图由底向上搬进混入类。每个文件只保证一条不变式（下面逐条写），
+    # 全部 ≤800 行；`class Secretary(...)` 仍在 `secretary.py` 里组装一次，118 个 import
+    # 一个字不改（靠再导出兜住）。为什么必须是顶层模块而不是角色包里的实现：秘书不属于
+    # 某个角色（每角色一份配置、同一个类），放进任何角色包都会让"一套判据"变成"每角色一份"。
+    "secretary_judge.py": "判断内核与知识面/预筛（刀3）：judge / _judge_core / JUDGE_KINDS / "
+                          "prescreen / knowledge / should_engage —— 一次判断只有三态，判与记账分离",
+    "secretary_tier_judge.py": "档位判据（刀3）：judge_statement / filing_tier_reading / "
+                               "proof_effort_readings —— 档位由力气读数定、材料截断必须点名",
+    "secretary_tier_ledger.py": "档位读侧（刀3）：nontriviality_of / nontriviality_rows —— "
+                                "一路径一行、命题级取历史 min（不回升）",
+    "secretary_tier_record.py": "档位落行（刀3）：record_nontriviality / not_applicable_… —— "
+                                "没号不落行但留 unrecorded（「没记」与「没号可记」分得开）",
+    "secretary_sign.py": "签（刀3）：decide_sign_issuance / land_unregistered_sign / judge_v_reply / "
+                         "wash_v_reply —— 发签决定 ≠ 落签，收方身份只有一个来源",
+    "secretary_axis.py": "行轴与活口（刀4）：row_axis / is_live_agent —— 一行属于哪根轴与它是不是"
+                         "活口各只有一处判，别的模块只许问它",
+    "secretary_roster_read.py": "名册读侧与视图（刀4）：roster_view / roster_rows / retired_ledger —— "
+                                "四态读；视图只读且一拍一快照",
+    "secretary_addressing.py": "寻址与父子计数（刀4）：name_of / parent_of / child_counts / resolve_* —— "
+                               "一个号一个名字，两义即判不了（受控拒）",
+    "secretary_retire.py": "销号（刀4）：retire / settle_retired_row —— 只销静默；销一项 = 销它"
+                           "绑过的全部号",
+    "secretary_inbox.py": "收件箱与闭环提醒（刀4）：inbox_todos / pending_inbox / remind_closure —— "
+                          "在跑的子与待办项两栏不混，提醒 ≠ 被处理",
+    "secretary_roster_write.py": "名册写口与名字身份（刀4）：roster_add / roster_repair / next_name —— "
+                                 "被拒也是一条落盘记录；名字是身份、用过永不回收",
+    "secretary_session.py": "实例台账读写（刀4）：bind_task / note_decision / decisions / close —— "
+                            "一实例一片、一片一个写者；task_id 的唯一写点是 bind_task",
+    "secretary_wash.py": "两段式洗/请示/确认（刀5）：wash_delegation / plan_wash / find_proposal / "
+                         "normalize_same_as —— 洗不改实质，有差异必请示（编号 + 指纹）",
+    "secretary_label.py": "标签洗（刀5）：wash_working_name / normalize_same_as 的标签侧 —— "
+                          "静默改名不许（from / to / class / why 四格）",
+    "secretary_identity.py": "命题同一性判定（刀5）：adjudicate_proposition / judge_same_proposition / "
+                             "pick_statement_keywords —— 判不了不许新建/合并，只缓存判成了的",
+    "secretary_proofkind.py": "同种证明判定（刀5）：PROOF_SAME_KIND / _proof_kind_for_existing —— "
+                              "二态判定，不是阈值；判不了就是判不了",
+    "secretary_evidence.py": "证据升档与正文签闸（刀5）：proof_text_manuscript_sign_gate / "
+                             "_bits_bear_evidence / _semantic_quote_evidence_refusal —— "
+                             "凭据不够不升档，且说清缺什么",
+    "secretary_statement.py": "登记外壳与形状闸（刀5）：record_statement / land_statement / "
+                              "amend_statement_meta 的外壳 —— statements/dependencies 只有这一个写者",
+    "secretary_deps.py": "依赖面（刀5）：record_proof_deps / _stamp_path_number / _note_path_material —— "
+                         "依赖少一环不许静默；路径号只在锁内分",
+    "secretary_concept.py": "概念行（刀5）：write_concept_row / concept_identity_gate / "
+                            "concept_identity_action —— 一个概念一行；先判后发号",
+    "secretary_merge.py": "并进在册（刀5）：_merge_into_proposition / _same_proposition_candidate / "
+                          "proof_routes_of —— 第 N 份证明 = 第 N 条路径；判不了不并",
+    "secretary_statement_tx.py": "登记事务（刀5）：_record_statement_tx —— 一笔全落或一字节不落；"
+                                 "锁里不许有网络等待（所以判断在事务外）",
+    "secretary_statement_meta.py": "元数据改写与两个新终态（刀5）：五张 STATEMENT_* 键的白名单 —— "
+                                   "能改哪一格只有一张表",
+    "secretary_vacant.py": "空号替换（刀5）：_fill_vacant_path_in_tx / _reset_optimization_column —— "
+                           "四样一起换（号 / 行 / 绑定 / 计数）",
+    "secretary_identity_side.py": "挑词与形态闸（刀5）：judge_proposition_form / _statement_keywords —— "
+                                  "形态闸只判形状、不判对错",
+    "secretary_outbound.py": "发件口（刀6）：optimize_outbound / assess_delegation / judge_recipient_face / "
+                             "reach_fit —— 不替本体表态；不符收件面就一字节不出",
+    "secretary_handoff.py": "交接稿与稿通道（刀6）：handoff_add / handoff_revise / extract_manuscript —— "
+                            "执笔失败必须报错（唯一的非 fail-open）",
+    "secretary_relay.py": "转发链（刀6）：relay_out / relay_in / _peer_secretary —— 正文只在链尾交给"
+                          "本人；造下一跳秘书只经装配口 `self._new_secretary(...)`",
+    "secretary_surface.py": "读写面池（刀6）：surface_of / surface_alloc / surface_release / "
+                            "surface_readings —— 一槽一主；退役即归还",
 }
 
 
@@ -4105,4 +4196,114 @@ def test_the_agentflow_module_registry_criterion_is_not_vacuous():
 
     assert any("失去对象" in p for p in agentflow_module_inventory_problems([])), (
         "空集合必须报失去对象（P16：判据解析出空集会无条件通过）")
+
+
+#: `agent_<角色>/` 的登记行里那句「拆包：N 个动作各一个文件」。N 是读数，不是规格。
+#:
+#: 为什么必须由判据守着（F-4，2026-11-20）：这条门此前只比名字集合与条数，一个字都不看
+#: 理由串 ⇒ `agent_f/` 那一行写「4 个动作」而盘上实为 5，挂了一个多月没有任何地方会红。
+#: 理由串读起来像「有人看过了」，而它是错的。同一个数字出现在第二个地方，第二个地方就有
+#: 了自己的寿命 —— 要它不死，就得让判据去读它（这是「读数不许手抄」的一般形态）。
+_PACKAGING_COUNT_RE = re.compile(r"拆包：(\d+)\s*个动作各一个文件")
+
+#: 登记表上方那条汇总注释（八个角色包的动作数）。
+_PACKAGING_NOTE_RE = re.compile(
+    r"（A (\d+) / B (\d+) / C (\d+) / D (\d+) / E (\d+) / F (\d+) / G (\d+) / H (\d+)"
+    r" 个动作各自一个模块）")
+
+#: 带「拆包：N 个动作」的登记行下限（今天 = A–H 八个角色包）。读到的行数低于它
+#: 就说明扫描器接错了 —— 那不是「都对」，是判据失去对象。
+_PACKAGING_MIN_ROWS = 8
+
+
+def _live_action_count(role: str) -> int:
+    """角色现盘的动作数（唯一真身：`capabilities.actions_for`）。"""
+    from agentflow import capabilities as CAP  # noqa: PLC0415
+
+    return len(CAP.actions_for(role))
+
+
+def packaging_action_count_problems(registry: dict[str, str], note: str) -> list[str]:
+    """理由串 / 汇总注释里的动作数 vs 现读（空 = 相等）。
+
+    输入全部作为参数：负控（把某个数改错一格）跑的才是同一段逻辑，而不是「另写一条会红的判据」。
+    """
+    problems: list[str] = []
+    seen = 0
+    for name, reason in registry.items():
+        m = _PACKAGING_COUNT_RE.search(str(reason))
+        if not m:
+            continue
+        seen += 1
+        role = name.strip("/").rsplit("_", 1)[-1].upper()
+        declared, live = int(m.group(1)), _live_action_count(role)
+        if declared != live:
+            problems.append(
+                f"`{name}` 的理由串写「拆包：{declared} 个动作各一个文件」，"
+                f"而 `capabilities.actions_for({role!r})` 现读 {live} 个 —— "
+                "理由串里的数字是读数不是规格：动作表变了，这一行必须同笔改")
+    if seen < _PACKAGING_MIN_ROWS:
+        problems.append(
+            f"只读到 {seen} 行带「拆包：N 个动作各一个文件」的登记（应 >= "
+            f"{_PACKAGING_MIN_ROWS} = A–H）⇒ 判据失去对象，不是「都对」")
+    m_note = _PACKAGING_NOTE_RE.search(str(note))
+    if not m_note:
+        problems.append(
+            "读不到登记表上方那条「（A … / H … 个动作各自一个模块）」汇总注释 ⇒ "
+            "判据失去对象，不是「都对」")
+    else:
+        for role, raw in zip("ABCDEFGH", m_note.groups()):
+            live = _live_action_count(role)
+            if int(raw) != live:
+                problems.append(
+                    f"汇总注释写 `{role} {raw}` 个动作，而现读 {role} 有 {live} 个")
+    return problems
+
+
+def _packaging_note_in_source() -> str:
+    """本文件里那条汇总注释的原文（读不到 = 空串，由判据报「失去对象」）。"""
+    m = _PACKAGING_NOTE_RE.search(Path(__file__).read_text(encoding="utf-8"))
+    return m.group(0) if m else ""
+
+
+def test_packaging_action_counts_in_the_registry_match_the_live_action_tables():
+    """正控（F-4）：登记行与汇总注释里的动作数必须等于现读。
+
+    改前（2026-11-20 实盘）红：`agent_f/` 写 4、现读 5；`agent_a/` 写 3、现读 6；
+    B/C/E/G/H 同样过期 —— 而旧门只比名字集合与条数，这一整类错误它看不见。
+    """
+    problems = packaging_action_count_problems(
+        _AGENTFLOW_TOP_LEVEL_MODULES, _packaging_note_in_source())
+    assert not problems, "理由串 / 汇总注释里的动作数与现读不符：\n" + "\n".join(problems)
+
+
+def test_the_packaging_action_count_criterion_is_not_vacuous():
+    """负控（F-4）：改错一个数必须点名；两处都读不到必须报「失去对象」。
+
+    ① 理由串：把 `agent_f/` 那一行的数字改错一格 ⇒ 必须点名它；
+    ② 汇总注释：把 F 那一格改错 ⇒ 必须点名 F；
+    ③ 反真空：空登记 + 空注释 ⇒ 两条「失去对象」，不是通过。
+    """
+    note = _packaging_note_in_source()
+    assert packaging_action_count_problems(_AGENTFLOW_TOP_LEVEL_MODULES, note) == [], (
+        "夹具前提：当次盘上的登记是干净的")
+
+    live_f = _live_action_count("F")
+
+    wrong = dict(_AGENTFLOW_TOP_LEVEL_MODULES)
+    key = "agent_f/"
+    wrong[key] = wrong[key].replace(
+        f"拆包：{live_f} 个动作", f"拆包：{live_f + 1} 个动作")
+    assert wrong[key] != _AGENTFLOW_TOP_LEVEL_MODULES[key], (
+        "夹具前提：F 那一行带「拆包：N 个动作」")
+    hits = packaging_action_count_problems(wrong, note)
+    assert any("agent_f/" in p and f"现读 {live_f} 个" in p for p in hits), hits
+
+    bad_note = note.replace(f"F {live_f} ", f"F {live_f + 1} ")
+    assert bad_note != note, "夹具前提：汇总注释里有 F 那一格"
+    hits = packaging_action_count_problems(_AGENTFLOW_TOP_LEVEL_MODULES, bad_note)
+    assert any("汇总注释" in p and f"F {live_f + 1}" in p for p in hits), hits
+
+    nothing = packaging_action_count_problems({}, "")
+    assert len([p for p in nothing if "失去对象" in p]) == 2, nothing
 

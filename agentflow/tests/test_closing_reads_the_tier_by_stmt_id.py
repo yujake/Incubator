@@ -46,8 +46,9 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from agentflow import closing as CL  # noqa: E402
-from agentflow import secretary as SEC  # noqa: E402
+from agentflow import secretary as SEC
 from agentflow.webui import readers as R  # noqa: E402
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 _SID = "000201"
 #: 判档那一刻的正文：台账落在这一份的 sha 上。
@@ -259,7 +260,7 @@ def test_d_dropping_the_id_turns_that_site_red(
         kw.pop("stmt_id", None)          # 这一处不传号（改前的形态）
         return real(root_, statement_full, **kw)
 
-    monkeypatch.setattr(SEC, "nontriviality_of", dropped)
+    HOME.patch(monkeypatch, "nontriviality_of", dropped)
     assert _degraded(site, root), f"{site} 不传号却仍读得到 ⇒ 它的绿不是号给的"
 
 
@@ -286,7 +287,7 @@ def test_e_the_three_sites_read_the_same_level_and_the_same_matched_by(
                      "matched_by": str(got.get("matched_by") or "")})
         return got
 
-    monkeypatch.setattr(SEC, "nontriviality_of", spy)
+    HOME.patch(monkeypatch, "nontriviality_of", spy)
 
     def reading_of(call: Any) -> tuple[int | None, str]:
         seen.clear()

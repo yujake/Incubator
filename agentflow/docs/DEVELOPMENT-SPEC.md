@@ -605,6 +605,7 @@ agentflow/
 ├── docs/                      规格文档（份数按 `(Get-ChildItem docs -Filter '*.md').Count` 当次读）
 │   ├── DEVELOPMENT-SPEC.md    ← 本文（规范）
 │   ├── DEVELOPMENT-APPENDIX.md ← 历史（不构成判据）
+│   ├── PROMPT-HISTORY.md      ← 提示词版本账（每抬一格 `PROMPT_VERSION` 追加一段）：抬版本时往本文件末尾写，判据 `tests/test_the_prompt_history_is_the_only_ledger.py` 钉「末节标题 == `PROMPT_VERSION`」
 │   └── …
 ├── src/agentflow/             包（包根一层的 `.py` 清单与份数见本节上方那条命令）
 │   ├── schema.py              ★ 数据模型 + 行级校验 + **全部受控词表**（单一来源）

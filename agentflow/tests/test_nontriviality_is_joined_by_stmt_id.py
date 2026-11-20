@@ -37,6 +37,7 @@ if str(_SRC) not in sys.path:
 
 from agentflow import secretary as SEC  # noqa: E402
 from agentflow.webui import readers as R  # noqa: E402
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 _SID = "000123"
 _BODY = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在。"
@@ -258,7 +259,7 @@ def test_e_stubbing_the_id_lookup_off_turns_case_b_red(
     root = _root(tmp_path)
     _judge_one(root)
     changed = _BODY + "（补一句）"
-    monkeypatch.setattr(SEC, "_row_matches_stmt_id", lambda row, stmt_id: False)
+    HOME.patch(monkeypatch, "_row_matches_stmt_id", lambda row, stmt_id: False)
     tier = R._statement_tier_reading(
         root, {"stmt_id": _SID, "statement_full": changed})
     assert tier["tri"] == "unknown", tier

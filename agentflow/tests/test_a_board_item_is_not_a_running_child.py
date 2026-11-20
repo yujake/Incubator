@@ -36,6 +36,7 @@ import pytest
 import agentflow.secretary as SEC
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.store import Store
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 TS = "2026-10-26T00:00:00+08:00"
 
@@ -307,7 +308,7 @@ def test_d_stubbing_the_axis_makes_a_red(
     baseline = _a_problems(tmp_path / "a0")
     assert baseline == [], baseline
 
-    monkeypatch.setattr(SEC, "is_live_agent", lambda row: _old_axis(row) == "agent")
+    HOME.patch(monkeypatch, "is_live_agent", lambda row: _old_axis(row) == "agent")
     a = _a_problems(tmp_path / "a1")
     assert a, "把分轴判据打桩成旧行为，(a) 却仍然绿 ⇒ 这条判据没在看分轴这件事"
     assert any("在跑的子代理" in x and "30" in x for x in a), a

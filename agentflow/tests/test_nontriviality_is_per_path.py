@@ -43,6 +43,7 @@ if str(_SRC) not in sys.path:
 from agentflow import closing as CL  # noqa: E402
 from agentflow import secretary as SEC  # noqa: E402
 from agentflow.webui import readers as R  # noqa: E402
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 _SID = "000901"
 _TEXT = "设 G 是有限群，p 是素数；则 G 的 Sylow p-子群存在。"
@@ -321,7 +322,7 @@ def test_n1_a_last_wins_fold_turns_p1_and_p3_red(
     _append(root, stmt_id=_SID, path_group=1, level=0, proof=_PROOF_1)
     _append(root, stmt_id=_SID, path_group=2, level=3, proof=_PROOF_2)
     assert SEC.nontriviality_of(root, _TEXT, stmt_id=_SID)["level"] == 0
-    monkeypatch.setattr(SEC, "_fold_nontriviality", _last_wins_fold, raising=True)
+    HOME.patch(monkeypatch, "_fold_nontriviality", _last_wins_fold)
     red = SEC.nontriviality_of(root, _TEXT, stmt_id=_SID)
     assert red["level"] == 3, "打桩成最后一行胜之后仍读到 min ⇒ 上面那条绿不是折叠给的"
     assert red["paths"] == [] and red["min_of"] == [], red
@@ -337,7 +338,7 @@ def test_n2_a_record_without_the_path_dimension_turns_the_per_path_read_red(
         kw["path_group"] = 0
         real(root_, **kw)
 
-    monkeypatch.setattr(SEC, "append_nontriviality", _drop_path, raising=True)
+    HOME.patch(monkeypatch, "append_nontriviality", _drop_path)
     for no, level, proof in ((1, 0, _PROOF_1), (2, 3, _PROOF_2)):
         before = len(_ledger(root))
         SEC.append_nontriviality(
@@ -407,7 +408,7 @@ def test_n5_and_n6_only_one_side_fixed_leaves_p1_red(
     root2 = _ws(tmp_path / "two", rows=[{"stmt_id": _SID, "statement_full": _TEXT}])
     _append(root2, stmt_id=_SID, path_group=1, level=0, proof=_PROOF_1)
     _append(root2, stmt_id=_SID, path_group=2, level=3, proof=_PROOF_2)
-    monkeypatch.setattr(SEC, "_fold_nontriviality", _last_wins_fold, raising=True)
+    HOME.patch(monkeypatch, "_fold_nontriviality", _last_wins_fold)
     red = SEC.nontriviality_of(root2, _TEXT, stmt_id=_SID)
     assert red["level"] == 3 and red["paths"] == [], red
 
@@ -426,7 +427,7 @@ def test_n7_a_stubbed_unknown_reader_turns_every_positive_control_red(
                 "paths_unjudged": [], "partial": False, "statement_level": None}
 
     assert SEC.nontriviality_of(root, _TEXT, stmt_id=_SID)["level"] == 0
-    monkeypatch.setattr(SEC, "nontriviality_of", _unknown, raising=True)
+    HOME.patch(monkeypatch, "nontriviality_of", _unknown, raising=True)
     assert SEC.nontriviality_of(root, _TEXT, stmt_id=_SID)["tri"] == "unknown"
     assert CL.nontriviality_reading(root)["counts"]["unjudged"] == 1
     assert R._statement_tier_reading(root, {"stmt_id": _SID,

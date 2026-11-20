@@ -109,12 +109,16 @@ python -m agentflow.cli --root workspace init
 This exercises the whole record path without touching the network.
 
 ```bash
-python -m agentflow.cli --root workspace demo
+python -c "import sys; sys.path.insert(0, 'src'); from pathlib import Path; \
+           from agentflow.demo import run_demo; raise SystemExit(run_demo(Path('workspace').resolve()))"
 ```
 
 > `cli demo` is the **old path**（旧路径）: the **offline smoke test**, kept reachable, needs no model
-> key, and never touches the network. The main path is the one entry point documented in §One Entry
-> Point; the demo stays as the end-to-end check that the record path works with no provider at all.
+> key, and never touches the network. This release retired the CLI layer (A4): `agentflow demo`
+> now exits `2` with a pointer instead of running; the demo itself still lives in the library as
+> `agentflow.demo.run_demo` (the one-line command above). The main path is the one entry point
+> documented in §One Entry Point; the demo stays as the end-to-end check that the record path works
+> with no provider at all.
 
 ### 4. Start a research run
 
@@ -506,15 +510,18 @@ The legacy names, grouped the way they were before this change (kept here as an 
 
 运维（数据维护与界面）
   init         initialize data directories and empty tables
-  rebuild      rebuild snapshots from events.jsonl
-  repair       recompute derived fields
-  demo         offline end-to-end demo
+  rebuild      retired (A4): exits 2 with a pointer; replay via `Store.rebuild()`
+  repair       retired except `--backfill-grades` (recompute evidence_kind)
+  demo         retired (A4): exits 2 with a pointer; run `agentflow.demo.run_demo`
   web          start the user-facing web server
 ```
 
-`repair`, `rebuild`, `demo`, and `evidence migrate` are staging tools: their implementation now
-lives in `tools/legacy_cli/` and the CLI keeps a one-line forward (byte-identical output; the next
-version deletes them).
+`repair`, `rebuild`, `demo`, and `evidence migrate` were staging tools: their implementation lived
+in `tools/legacy_cli/` and the CLI kept a one-line forward. 2026-11-20 (owner approval A4) deleted
+both the directory and the forward. The command names stay in the parser, but they are now
+**controlled retirements**: an explicit error plus a replacement pointer, exit code `2`
+("could not check") — not silence, and not `0` (which would read as "ran fine"). The library
+implementations (`Store.rebuild()` / `agentflow.demo.run_demo`) were not deleted.
 
 Four of them are aliases of the `start` execution body (`cli._run_spec`) and keep their old flags,
 defaults, and `--help` output verbatim: `run`, `run-agent`, `project run`, and `web`.

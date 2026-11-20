@@ -11,7 +11,7 @@ docstring 逐字承诺「坏行 / 认不出来的行留在 `self.last_retired_le
 - 那一格：写 2 处（`__init__` 初值 + `retired_ledger` 末尾），读 0 处；
 - 同一份事实在调用方那一层有活的孪生格 `Conductor.last_retired_reading`：
   写 2 处、读 4 处（`_retired_unchecked_note` / `_retired_reason` /
-  `_retired_first_problem`）。
+  `_retired_first_problem()`）。
 
 所以处置是删字段，不是补一个读点：实例字段只保留"最后一次"，而调用方拿到的
 永远是"这一次"的返回值；两者并存时"这是哪一次读的"没有答案，加一个读者只是把
@@ -36,6 +36,8 @@ import pytest
 
 from agentflow import jsonlfile as JF
 from agentflow import secretary as SEC
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
+
 
 REPO = pathlib.Path(__file__).resolve().parents[1]
 SRC = REPO / "src" / "agentflow"
@@ -65,12 +67,13 @@ def _field_hits(text: str) -> list[tuple[int, str]]:
 
 def _docstrings() -> dict[str, str]:
     """`PROMISE_DOCS` 里那几个函数的 docstring（找不到 ⇒ 判据失去对象，红）。"""
-    tree = _parse((SRC / "secretary.py").read_text(encoding="utf-8"))
     wanted = set(PROMISE_DOCS)
     out: dict[str, str] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted:
-            out[node.name] = ast.get_docstring(node) or ""
+    for path in sorted(SRC.glob("secretary*.py")):
+        tree = _parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted:
+                out[node.name] = ast.get_docstring(node) or ""
     return out
 
 
@@ -161,9 +164,9 @@ def test_putting_the_field_and_promise_back_turns_a_red() -> None:
     assert [n for n, _line in _field_hits(OLD_FIELD_LINES)] == [1, 2], _field_hits(OLD_FIELD_LINES)
     assert _field_hits(OLD_PROMISE), "旧承诺句里居然没有那一格 —— 夹具写错了"
     # 正控：真源码这一条现在命中 0 处（不是"什么都没扫到"）。
-    real = (SRC / "secretary.py").read_text(encoding="utf-8")
+    real = HOME.family_text()
     assert _field_hits(real) == [], _field_hits(real)
-    assert "def bind_task(" in real, "夹具前提变了：secretary.py 里找不到 bind_task"
+    assert "def bind_task(" in real, "夹具前提变了：秘书家族里找不到 bind_task"
 
 
 def test_stubbing_the_bad_lines_away_makes_the_fact_disappear(

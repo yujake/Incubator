@@ -318,7 +318,10 @@ def test_cli_repair_related_exits_2_with_a_pointer_and_writes_nothing(tmp_path: 
     assert "并表退役" in err and "relations" in err, err
     # 指路必须指到真能回答"图与关系偏没偏"的入口（派生真相由 `relations` 回答）
     assert "agentflow verify" in err and "related_drift" in err, err
-    assert "agentflow rebuild" in err, err
+    # A4（2026-11-20）：`agentflow rebuild` 自己也退场了，指引不许再指向它 ——
+    # 重放那一半只走库接口（`Store.rebuild()` / `make_store(...).rebuild()`）。
+    assert "agentflow rebuild" not in err, err
+    assert "Store.rebuild" in err or ".rebuild()" in err, err
     assert read_data_bytes(st) == before, "受控退出却改了知识表：一个字节都不许动"
 
 

@@ -107,9 +107,11 @@ def test_every_agent_v_record_verification_passes_flip_false() -> None:
 
 
 def test_every_vsigns_land_call_passes_ledger_bit_false() -> None:
-    """两处生产落签（`verifications.py` 的 V 侧 / `secretary.py` 的收方）都显式关位。"""
+    """两处生产落签（`v_sign_flip.py` 的 V 侧 / `secretary_sign.py` 的收方）都显式关位。"""
     calls = []
-    for name in ("verifications.py", "secretary.py"):
+    # 2026-11-20（VERSPLIT2）：V 侧那两处 `vsigns.land` 随实现搬进 `v_*.py`；收方那一处
+    # 随 SECSPLIT 搬进 `secretary_sign.py`。两条都是"按声明定位"，判据口径没动。
+    for name in ("v_sign_flip.py", "secretary_sign.py"):
         calls.extend({**c, "file": name}
                      for c in _calls(SRC / name, name="land"))
     assert len(calls) >= 2, calls
@@ -124,7 +126,9 @@ def test_the_secretary_landing_does_not_read_statements_for_the_obligation() -> 
     剩下的那一处（`sign_statement` 的末尾）仍用默认 False —— 它是历史直调 / 夹具那条
     兼容门（docstring 写着"保留给历史直调 / 夹具"），不属生产签后义务。
     """
-    calls = _calls(SRC / "verifications.py", name="_registration_after_vsign")
+    # 2026-11-20（VERSPLIT2）：两处调用点（`land_sign_without_ledger` / `sign_statement`）
+    # 都搬进了 `v_sign.py`，`_registration_after_vsign` 的实现在 `v_sign_flip.py`。
+    calls = _calls(SRC / "v_sign.py", name="_registration_after_vsign")
     assert calls, "一个 _registration_after_vsign 调用都没扫到（判据真空）"
     landing = [c for c in calls if c["in_function"].endswith("land_sign_without_ledger")]
     assert landing, calls

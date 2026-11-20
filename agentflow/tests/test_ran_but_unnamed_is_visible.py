@@ -40,6 +40,7 @@ from agentflow import sessions as SS
 from agentflow.conductor import Conductor, LocalBackend
 from agentflow.secretary import Secretary
 from agentflow.store import Store
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 SID = "20261101"
 BR = "2026-11-01T03:00:00+08:00"
@@ -159,7 +160,7 @@ def test_negctl_stubbing_the_judge_makes_it_red(tmp_path: pathlib.Path,
                                                 monkeypatch: pytest.MonkeyPatch) -> None:
     """判据①的负控：把四条件判据打桩成恒假 ⇒ ① 必红（这一格不是恒真）。"""
     cond, top, _ws, ids = _built(tmp_path)
-    monkeypatch.setattr(SEC, "ran_but_unnamed", lambda row, known: False)
+    HOME.patch(monkeypatch, "ran_but_unnamed", lambda row, known: False)
     with pytest.raises(AssertionError):
         _a_really_ran_but_unnamed_is_named(cond, top, ids)
 

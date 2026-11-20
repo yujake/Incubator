@@ -44,7 +44,8 @@ if str(_SRC) not in sys.path:
 from agentflow import cli as CLI          # noqa: E402
 from agentflow import closing as CL      # noqa: E402
 from agentflow import lifecycle as L     # noqa: E402
-from agentflow import secretary as SEC   # noqa: E402
+from agentflow import secretary as SEC
+import _secretary_home as HOME  # 打桩打在定义处（搬家后 SEC 那一格只是再导出）
 
 CONCEPTS = 35
 T0_ID = "000100"
@@ -142,7 +143,7 @@ def test_d_without_the_not_applicable_mark_the_concepts_fold_back_into_unjudged(
         got.pop("applicable", None)
         return got
 
-    monkeypatch.setattr(SEC, "nontriviality_of", _blind)
+    HOME.patch(monkeypatch, "nontriviality_of", _blind)
     got = CL.nontriviality_reading(root)
     assert got["counts"]["not_applicable"] == 0, got["counts"]
     assert got["counts"]["unjudged"] == CONCEPTS + 1, got["counts"]
