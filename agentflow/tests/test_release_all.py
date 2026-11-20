@@ -2939,7 +2939,9 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                          "next_due_epoch / next_reconcile_epoch / next_wake_epoch / mark_reconciled / "
                          "reconcile_count / _periodics_quiet / needs_full_scan / can_early_exit / "
                          "pop_due）+ `_target_key` + `Periodic`（周期记录）—— 它坐在 Timer 之下："
-                         "不 import `clocktimer`，`Timer` 只出现在注解里",
+                         "不 import `clocktimer`，`Timer` 只出现在注解里；"
+                         "2026-11-20 同一批把 `MAX_TERMINAL_KEPT`（终态保留上界，TimerBook 读它）"
+                         "也挪到这里，只为把环核那一刀压进 800 行内",
     # 2026-11-20（同一批）：`clock.py` 拆出来的第五层 = “等谁”的探针与判定。
     # 为什么仍是顶层模块、且为什么可变量必须在这里：`_TARGET_PROBE` 由
     # `set_target_probe` 重新赋值、由 `_probe_read` 读 —— 两个读写点必须同处一个模块
@@ -2950,6 +2952,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                      "`_TARGET_PROBE` / `set_target_probe` / `_probe_read` / "
                      "`_judge_target` —— 唯一写点与唯一读点同处一个模块；它把外部读口"
                      "折成 closed / open / unjudgeable 三态（三态不许折平），自己不碰簿记",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第六层 = 计时器与簿记的环核。
+    # 为什么这四块必须同处一个模块（不能按 800 行继续切）：`Timer.due_reason` 问
+    # `target_state`，`target_state` 问 `book`，`book` 造 `TimerBook`，`TimerBook` 存
+    # `Timer` —— 四者是一个运行期成环的整体，拆成两个模块必有环。上一刀先把索引面抽成
+    # `clockbookindex._BookIndexMixin`，这一刀才落进 800 行内。可变量：本模块没有模块级
+    # 可变量，`_BOOKS` 仍在 `clockrun.py`（写点仍只有 `reset_books` / `reset` 两处）。
+    "clocktimer.py": "计时器与簿记的环核（2026-11-20 从 `clock.py` 拆出）：`Timer`（一条"
+                     "计时器/闹钟的完整形状：三态读数 / 等待对象反查 / 到点理由 / 落盘行）/ "
+                     "`TimerBook(_BookIndexMixin)`（簿记本体：载入 / 保存 / 增删 / 取用 / "
+                     "到点判定）/ `book(workspace)` / `target_state(workspace, kind, ref)` —— "
+                     "四者是一个运行期成环的整体，拆开必有环",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，

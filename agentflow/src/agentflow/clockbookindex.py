@@ -530,3 +530,15 @@ class Periodic:
 def _target_key(timer: Timer) -> str:
     """"等谁"的读口键：解析后的对象优先（起表时查过一次，不必每次重解析）。"""
     return timer.wait_for_resolved or timer.wait_for
+
+
+#: `state.json` 里最多留多少条终态计时器（fired / cancelled）。
+#:
+#: 为什么要有上限（真机 2026-10-28，projects/paper-rewrite-78，3 小时那一趟）：
+#: 50 分钟时 state.json 158 KB / 82 条（终态 72 = 88%），110 分钟 350 KB / 172 条；
+#: 斜率 1.6 KB/分钟 ⇒ 10 小时约 1 MB、24 小时约 2.4 MB。而 `save()` 每次都整份重写，
+#: 于是写放大随运行时长线性上升 —— 而这套东西的常态就是小时级、多子代理地跑。
+#: 终态条目只是历史（不进堆、不参与到点判定、不再被任何判据读），所以可以压。
+#: 200 条的取舍：一次 `conductor.patrol` 的读数窗口通常只看最近几十条；
+#: 而清掉多少条会记进 `dropped_terminal`（读数，不许静默丢）。
+MAX_TERMINAL_KEPT: int = 200
