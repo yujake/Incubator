@@ -2002,6 +2002,83 @@ def test_closing_gate_prose_claim_criterion_is_not_vacuous():
         "把 USER-TEST 那句「现在的门」改回七格之后判据必须红")
 
 
+# ---- ③ 运行时字符串：直接印给用户/模型的那几句话（不在注释 / docstring 里）
+
+#: `(文件, 正则, 出口名)`：每条正则的捕获组是格数词，必须与 `DEFAULT_CHECKS` 的现读一致。
+#: 这些句子长在函数体里（受控拒绝语 / `overrode` 的 why / `summary()` / agent_loop 的
+#: 拒信），`_closing_prose_lines` 刻意只扫注释与 docstring，所以另立这一条口径。
+_CLOSING_RUNTIME_GATE_RES: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    ("src/agentflow/closing.py",
+     re.compile(r"不出一份「([一二三四五六七八九十])格全是没查成」的空读数"),
+     "受控拒绝语"),
+    ("src/agentflow/closing.py",
+     re.compile(r"机器([一二三四五六七八九十])格全 pass，而 M 判没达成"),
+     "`overrode` 的 `why`"),
+    ("src/agentflow/closing.py",
+     re.compile(r"机器([一二三四五六七八九十])格：pass"),
+     "`summary()` 的「机器N格」"),
+    ("src/agentflow/agent_loop.py",
+     re.compile(r"机器那([一二三四五六七八九十])格说了什么"),
+     "`_final_gate_reading` 拒信里的「机器那N格」"),
+)
+
+
+def closing_runtime_gate_word_problems(texts: dict[str, str], checks: int) -> list[str]:
+    """函数体里的运行时字符串：格数词必须与 `DEFAULT_CHECKS` 的现读一致。
+
+    判据对象是四句直接印给用户 / 模型的话（不是注释、不是 docstring），逐句按出口
+    点名的写法钉住。读不到那一句 ⇒ 报失去对象 —— 把句子删掉不等于格数对了。
+    """
+    problems: list[str] = []
+    for rel, pattern, where in _CLOSING_RUNTIME_GATE_RES:
+        hits = pattern.findall(texts.get(rel) or "")
+        if not hits:
+            problems.append(f"`{rel}` 里读不到{where}那一句 ⇒ 判据失去对象")
+            continue
+        for got in hits:
+            if _CN_VALUE.get(got) != checks:
+                problems.append(f"`{rel}` 的{where}把收工门写成 {got}格，实测 {checks} 格")
+    return problems
+
+
+def _runtime_gate_texts() -> dict[str, str]:
+    rels = sorted({rel for rel, _pattern, _where in _CLOSING_RUNTIME_GATE_RES})
+    return {rel: (REPO / rel).read_text(encoding="utf-8") for rel in rels}
+
+
+def test_closing_runtime_strings_count_the_gate_as_it_is_now():
+    """正控（③-运行时）：四处直接印给用户/模型的格数词必须与 `DEFAULT_CHECKS` 一致。"""
+    from agentflow import closing as CL  # noqa: PLC0415
+
+    checks = len(CL.DEFAULT_CHECKS)
+    assert checks == 8, f"`DEFAULT_CHECKS` 现是 {checks} 格（本判据写于八格时）"
+    problems = closing_runtime_gate_word_problems(_runtime_gate_texts(), checks)
+    assert not problems, problems
+
+
+def test_closing_runtime_strings_criterion_is_not_vacuous():
+    """负控（③-运行时）：任一处八格改回七格 ⇒ 判据必红；删掉那一句 ⇒ 报失去对象。"""
+    from agentflow import closing as CL  # noqa: PLC0415
+
+    checks = len(CL.DEFAULT_CHECKS)
+    texts = _runtime_gate_texts()
+    assert not closing_runtime_gate_word_problems(texts, checks)
+
+    for rel, pattern, where in _CLOSING_RUNTIME_GATE_RES:
+        stale = pattern.sub(lambda m: m.group(0).replace("八格", "七格"),
+                            texts[rel], count=1)
+        assert stale != texts[rel], f"夹具前提：`{rel}` 的{where}写着「八格」"
+        mutated = {**texts, rel: stale}
+        assert closing_runtime_gate_word_problems(mutated, checks), (
+            f"把{where}改回「七格」之后判据必须红")
+
+    rel, pattern, where = _CLOSING_RUNTIME_GATE_RES[0]
+    gone = {**texts, rel: pattern.sub("", texts[rel], count=1)}
+    assert gone[rel] != texts[rel], f"夹具前提：`{rel}` 里扫得到{where}"
+    assert any("失去对象" in p for p in closing_runtime_gate_word_problems(gone, checks)), (
+        f"删掉{where}之后判据必须报失去对象")
+
+
 # ---- `R7-R6-2`：`.noai-paths` 的计数在本文里只允许一个口径（同一口径只写一处 + 判据守着）
 
 #: 带单位的 `.noai-paths` 计数写法（"（18 条、7 个类别）"那种旧写法也在内）。
@@ -2973,6 +3050,16 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                    "`start_alarm` / `start_periodic` / `stop_periodic` / `periodics` / "
                    "`set_purpose` / `timers_missing_purpose` / `cancel_timer` / `timers` —— "
                    "申请的写口与读口同处一个模块，目的缺失的追问与补填只有一份形状",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第八层 = 巡查文案与异常清单。
+    # 为什么是一个模块：`_PATROL_PROBE` 的写点（`set_patrol_probe`）与读点
+    # （`patrol_anomalies`）必须同处一份；而"清单拼进报醒"这件事的四个落点
+    # （`patrol_text` / `patrol_section` / `patrol_sop_text` / 起表时的 `patrol_checklist`）
+    # 共用同一套口径，拆两份就会出现"到点正文"与"起表预览"两套。
+    "clockpatrol.py": "巡查文案与异常清单（2026-11-20 从 `clock.py` 拆出）："
+                      "`_PATROL_PROBE` / `set_patrol_probe` / `patrol_anomalies` / "
+                      "`patrol_text` / `patrol_section` / `patrol_sop_text` / `next_patrol` / "
+                      "`start_patrol_timer` —— 读口唯一写点与读点同处一份；清单只拼句，"
+                      "不读台账 / 板项 / 名册（那些经读口接进来）",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
@@ -3798,6 +3885,21 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                      "同为 MAX_ROUNDS）/ project_retire（把 `retire_integrity` 的读数换成"
                      "「收尾前自动收尾之后」的那一份）—— 纯读、零写盘、零工具注册；"
                      "`agent_loop` 的 final 闸与 `closing.machine_feeders` 读同一份",
+    # 2026-11-20（SECSPLIT 刀1，业主批准「secretary.py 六刀拆分」）：`secretary.py` 16,341 行
+    # 按不变式由底向上拆，这三个是刀1 落下的底座。为什么仍是顶层模块：`Secretary` 还是
+    # 那一个类（118 个 import 一个字不改，靠 `secretary.py` 再导出兜住），底座只被
+    # `secretary.py` 单向 import；放进任何角色包都会让"台账落点"变成某个角色的一份实现，
+    # 而台账是跨角色共用的系统面。
+    "secretary_time.py": "秘书台账的时间戳唯一口径（2026-11-20 从 secretary.py 的 U29 拆出）："
+                         "_now_iso / _older_than / _as_mapping —— 所有落盘行的 at 只由它产生，"
+                         "单独成叶子后其余模块单向 import 它，不再从 secretary.py 反向 import",
+    "secretary_ledger.py": "秘书台账底座（2026-11-20 从 secretary.py 的 U01+U02+U03 拆出）："
+                           "落点路径函数 / _APPEND_LOCKS 与追加口 / _ROSTER_LOCKS 与在飞集合 —— "
+                           "两把锁同址才回答得出'不会互相嵌套'，seq 唯一发号与锁序 "
+                           "tasks->roster 都在这里",
+    "secretary_axes.py": "秘书的四本判定旁支台账（2026-11-20 从 secretary.py 的 U30 拆出）："
+                         "append / rows / of / path 三态读侧 —— 判定面与台账面之间那一层，"
+                         "只依赖 secretary_ledger 与 secretary_time",
 }
 
 

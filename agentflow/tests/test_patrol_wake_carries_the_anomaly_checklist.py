@@ -63,6 +63,7 @@ import pathlib
 import pytest
 
 from agentflow import clock as C
+from agentflow import clockpatrol as CP
 from agentflow import schema as S
 from agentflow import sessions as SS
 from agentflow.conductor import Conductor, LocalBackend, calling_as, stamp_step
@@ -340,7 +341,9 @@ def test_e_stubbing_the_checklist_turns_a_and_b_red(tmp_path, monkeypatch) -> No
 
     stubbed = _env(tmp_path / "stubbed")
     stub_child = _stall(stubbed, _child(stubbed, role="B", status="running"))
-    monkeypatch.setattr(C, "patrol_anomalies", lambda *a, **k: {})
+    # 2026-11-20（拆 clock.py）：`patrol_section` 与 `patrol_anomalies` 一起搬进
+    # `clockpatrol`，打桩点跟着实现走（同一处判据、断言一个字没改）。
+    monkeypatch.setattr(CP, "patrol_anomalies", lambda *a, **k: {})
     red = _fire(stubbed)
     assert _a_problems(red), f"打桩成空之后 a 仍然通过：{red!r}"
     assert _b_problems(red, stub_child, 1800), f"打桩成空之后 b 仍然通过：{red!r}"

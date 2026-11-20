@@ -54,6 +54,7 @@ import pytest
 
 from agentflow import agent_loop as AL
 from agentflow import clock as CLK
+from agentflow import clockpatrol as CP
 from agentflow import schema as S
 from agentflow import stopctl
 from agentflow.agent_loop import AgentLoop
@@ -213,7 +214,9 @@ def _park_run(tmp_path: pathlib.Path, bench, monkeypatch: pytest.MonkeyPatch, *,
         monkeypatch.setattr(CLK, "patrol_sop_text", lambda **kw: "")
     if no_dedupe:
         # 反真空（e2）：让"已经有一条了吗"永远回答"没有" —— 恰好一条的判据就被拿掉了。
-        monkeypatch.setattr(CLK, "next_patrol", lambda workspace: {
+        # 2026-11-20（拆 clock.py）：`next_patrol` 与它的调用者 `start_patrol_timer`
+        # 一起搬进 `clockpatrol`，打桩点跟着实现走（同一处判据、断言一个字没改）。
+        monkeypatch.setattr(CP, "next_patrol", lambda workspace: {
             "checked": True, "pending": False, "count": 0, "timer_id": "",
             "due_at": "", "remaining_sec": None, "reason": "打桩：永远说没有"})
 
