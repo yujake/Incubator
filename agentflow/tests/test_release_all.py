@@ -2563,6 +2563,17 @@ _AGENTFLOW_TOP_LEVEL_MODULES: dict[str, str] = {
                    "reset / reset_books / reset_programs / due_message / _atomic_json / "
                    "purpose_of / waiting_on_text / is_patrol_timer / is_lifeline —— "
                    "可变量的全部读写点与它同处一个模块（跨模块 `global` 不生效）",
+    # 2026-11-20（同一批）：`clock.py` 拆出来的第三层 = 观测窗 + 消账。
+    # 为什么仍是顶层模块：`observe_event` 与"被等对象收口"是同一件事的两半（事件落地就在
+    # 那一刻把在等的计时器叫醒），判据要能装假时钟、单独核观测窗与消账读数而不建 Store；
+    # 它只 import `clockbase` / `clockrun`，不 import `clocktimer`（`Timer` 只出现在注解里）。
+    "clockevents.py": "系统时钟的观测窗与消账（2026-11-20 从 `clock.py` 拆出）："
+                      "EVENT_BUFFER / _EVENT_SEQ / _event_seq / _event_hits / "
+                      "observe_event / observe_message / observe_work / observed_events / "
+                      "reset_observed_events / _PARKED / _register_parked / "
+                      "_unregister_parked / reset_parked / _close_waiters_for_event / "
+                      "event_close_reading / reset_event_close —— `_EVENT_SEQ` 的两个赋值点"
+                      "与两个读点同处这一个模块（跨模块 `global` 只改到本模块那一份）",
     # 2026-10-24（业主：「做一个统计量作为测试工具：对每种角色统计『错误动作计数』」）：
     # 只读统计量模块 —— 它不属于任何角色、也不属于任何循环，属"质量面"的读数。
     # 为什么必须落在顶层：CLI（`agentflow stats errors`）与将来的 UI 都要读同一份口径，
