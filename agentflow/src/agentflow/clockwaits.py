@@ -17,7 +17,7 @@
 
 `await_io` 是这本账的写入口：它真睡 `seconds` 秒，并以 `note_wait` 记一条。
 `ALLOWED_RAW_WAITS` 那两条（`sleep` / `sleep_ref`）登记的就是它 —— 那是"它本来就是
-写入口"，不是"放它一马"。搬家的顺序因此是：先让 `coverage()` 按**函数名**认
+写入口"，不是"放它一马"。搬家的顺序因此是：先让 `coverage()` 按函数名认
 "主时钟本体"（见 0ad6c55c，按文件名认会让判据跟实现一起漂），再把 `await_io` 搬进来、
 把豁免表的路径同步改成 `agentflow/clockwaits.py`。豁免面一个字节没放宽。
 
